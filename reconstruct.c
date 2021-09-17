@@ -89,7 +89,7 @@ static int64_t reconstruct_from_local_int (VBlock *vb, Context *ctx, char sepera
 
     // TO DO: RECONSTRUCT_INT won't reconstruct large uint64_t correctly
     if (reconstruct) { 
-        if (is_minus_1 && vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (ctx->dict_id)) {
+        if (is_minus_1 && VB_DT(DT_VCF) && dict_id_is_vcf_format_sf (ctx->dict_id)) {
             RECONSTRUCT1 ('.');
         } else {
             RECONSTRUCT_INT (num);

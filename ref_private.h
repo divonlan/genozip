@@ -10,6 +10,7 @@
 #include "reference.h"
 #include "sections.h"
 #include "mutex.h"
+#include "contigs.h"
 
 #pragma GENDICT_PREFIX REF
 #pragma GENDICT REF_CONTIG=DTYPE_FIELD=CONTIG 
@@ -19,14 +20,19 @@ typedef struct {
     PosType first_bit, len;
 } RegionToSet;
 
+typedef enum { CHROM_STYLE_UNKNOWN, CHROM_STYLE_chr22, CHROM_STYLE_22 } RefChromeStyle;
+
 typedef struct RefStruct {
 
-    // file
+    // file 
     const char *filename; // filename of external reference file
     const char *cache_fn;
     Digest file_md5;
     uint8_t genozip_version;
     
+    // features
+    RefChromeStyle chrom_style;
+
     // ZIP and PIZ, internal or external reference ranges. If in ZIP-INTERNAL we have REF_NUM_DENOVO_RANGES Range's - each allocated on demand. In all other cases we have one range per contig.
     Buffer ranges; 
 
@@ -53,10 +59,12 @@ typedef struct RefStruct {
     bool external_ref_is_loaded;
 
     // contigs loaded from a reference file
-    Buffer loaded_contigs; // array of RefContig
+    ContigPkg ctgs;
+    Buffer loaded_contigs; // array of Contig
     Buffer loaded_contigs_dict;
     Buffer loaded_contigs_by_name; // an array of uint32 of indexes into loaded_contigs - sorted by alphabetical order of the snip in contig_dict
     Buffer loaded_contigs_by_LN;
+    Buffer loaded_contigs_by_AC;
 
     // lock stuff
     Mutex *genome_muteces; // one spinlock per 16K bases - protects genome->is_set
@@ -76,14 +84,12 @@ extern void ref_lock_initialize_denovo_genome (Reference ref);
 extern void ref_lock_free (Reference ref);
 
 // contigs stuff
-extern const char *ref_contigs_get_chrom_snip (Reference ref, WordIndex chrom_index, const char **snip, uint32_t *snip_len);
-extern const RefContig *ref_contigs_get_contig (Reference ref, WordIndex chrom_index, bool soft_fail);
+extern const char *ref_contigs_get_name_by_chrom_index (Reference ref, WordIndex chrom_index, const char **snip, uint32_t *snip_len);
+extern const Contig *ref_contigs_get_contig_by_chrom_index (Reference ref, WordIndex chrom_index, bool soft_fail);
 extern PosType ref_contigs_get_genome_nbases (Reference ref);
 extern void ref_contigs_generate_data_if_denovo (Reference ref);
 extern WordIndex ref_seg_get_alt_chrom (VBlockP vb);
 extern void ref_contigs_compress (Reference ref);
-extern WordIndex ref_contigs_get_by_accession_number (Reference ref, const char *ac, unsigned ac_len);
-extern WordIndex ref_contigs_get_by_uniq_len (Reference ref, PosType LN);
 
 #define ranges_type(ref) (ref)->ranges.param
 

@@ -12,7 +12,7 @@
 #define HOOK 'G'
 #define HOOK_REV 'C' // complement of HOOK
 
-#define MAX_GPOS ((PosType)0xfffffffe)
+#define MAX_ALIGNER_GPOS ((PosType)0xfffffffe)
 #define NO_GPOS  ((PosType)0xffffffff)
 
 extern unsigned num_layers;
@@ -33,7 +33,7 @@ extern void refhash_calc_one_range (const Range *r, const Range *next_r);
 
 // stuff for loading and using refhash when ZIPping a fastq or fasta file
 extern void refhash_load_standalone (void);
-extern void refhash_create_cache_join (void);
+extern void refhash_create_cache_join (bool free_mem);
 extern void refhash_remove_cache (void);
 
 // globals

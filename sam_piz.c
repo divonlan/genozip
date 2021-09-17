@@ -116,7 +116,7 @@ void sam_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unused, 
     if (!pos || (vb->chrom_name_len==1 && vb->chrom_name[0]=='*')) {
         // case: compressed with a reference, using our aligner
         if (z_file->z_flags.aligner) {
-            aligner_reconstruct_seq ((VBlockP)vb, bitmap_ctx, vb->seq_len, false);
+            aligner_reconstruct_seq (VB, bitmap_ctx, vb->seq_len, false);
             nonref_ctx->next_local = ROUNDUP_TO_NEAREST_4 (nonref_ctx->next_local);
         }
         // case: no reference was used - in this case, the sequence is not encoded in the bitmap at all. we just copy it from NONREF
@@ -632,7 +632,7 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
 
     // --bases
     if (flag.bases && is_top_level && !vb->drop_curr_line && 
-        !(txt_file->data_type == DT_BAM ? iupac_is_included_bam   (last_txt (vb, SAM_SQBITMAP), ((BAMAlignmentFixed *)recon)->l_seq)
+        !(TXT_DT(DT_BAM) ? iupac_is_included_bam   (last_txt (vb, SAM_SQBITMAP), ((BAMAlignmentFixed *)recon)->l_seq)
                                         : iupac_is_included_ascii (last_txt (vb, SAM_SQBITMAP), vb->last_txt_len (SAM_SQBITMAP))))
         vb->drop_curr_line = "bases";
     

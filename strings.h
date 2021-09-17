@@ -23,6 +23,10 @@
 typedef struct { char s[80]; } StrText;
 
 extern StrText char_to_printable (char c);
+
+extern char *str_print_snip_do (const char *in, unsigned in_len, char *out);
+#define str_print_snip(in,in_len) ({ struct { char s[in_len+20]; } str; str_print_snip_do (in, in_len, str.s); str; })
+
 extern char *str_to_single_line_printable (const char *in, unsigned in_len, char *out);
 extern char *str_tolower (const char *in, char *out /* out allocated by caller - can be the same as in */);
 extern char *str_toupper (const char *in, char *out);
@@ -139,7 +143,7 @@ extern const char *type_name (unsigned item,
                               const char * const *name, // the address in which a pointer to name is found, if item is in range
                               unsigned num_names);
 
-extern void str_print_null_seperated_data (const char *data, unsigned len, _Bool add_newline, _Bool remove_equal_asterisk);
+extern void str_print_dict (const char *data, unsigned len, _Bool add_newline, _Bool remove_equal_asterisk);
 
 extern int str_print_text (const char **text, unsigned num_lines,
                            const char *wrapped_line_prefix, 

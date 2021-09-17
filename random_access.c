@@ -83,14 +83,6 @@ static void random_access_show_index (const Buffer *ra_buf, bool from_zip, DidIT
 // ZIP only
 void random_access_alloc_ra_buf (VBlock *vb, Coords dc, int32_t chrom_node_index)
 {
-/*    uint64_t old_len = vb->ra_buf.len;
-    uint64_t new_len = chrom_node_index + 2; // +2 because we store for chrom_node_index [-1, chrom_node_index]
-    if (new_len > old_len) {
-        buf_alloc (vb, &vb->ra_buf, 0, MAX_(new_len, 500), RAEntry, 2, "ra_buf");
-        memset (ENT (RAEntry, vb->ra_buf, old_len), 0, (new_len - old_len) * sizeof (RAEntry));
-        vb->ra_buf.len = new_len;
-    }*/
-
     vb->ra_buf[DC].len = MAX_(vb->ra_buf[DC].len, chrom_node_index + 2);
     buf_alloc_zero (vb, &vb->ra_buf[DC], 0, MAX_(vb->ra_buf[DC].len, 500), RAEntry, 2, "ra_buf");
 }
@@ -172,6 +164,20 @@ void random_access_update_last_pos (VBlock *vb, Coords dc, PosType last_pos)
     if (last_pos > ra_ent->max_pos) ra_ent->max_pos = last_pos;
 }
 
+void random_access_update_first_last_pos (VBlock *vb, Coords dc, STRp (first_pos), STRp (last_pos))
+{
+    ASSERTISALLOCED (vb->ra_buf[DC]);
+
+    PosType first_pos_value, last_pos_value;    
+    if (!str_get_int (STRa(first_pos), &first_pos_value)) return; // fail silently
+    if (!str_get_int (STRa(last_pos),  &last_pos_value )) return; 
+    
+    RAEntry *ra_ent = ENT (RAEntry, vb->ra_buf[DC], vb->chrom_node_index + 1); // chrom_node_index=-1 goes into entry 0 etc
+    if (first_pos_value < ra_ent->min_pos) ra_ent->min_pos = first_pos_value;
+    if (last_pos_value  > ra_ent->max_pos) ra_ent->max_pos = last_pos_value;
+}
+
+
 void random_access_update_to_entire_chrom (VBlockP vb, Coords dc, PosType first_pos_of_chrom, PosType last_pos_of_chrom)
 {
     ASSERTISALLOCED (vb->ra_buf[DC]);
@@ -185,6 +191,8 @@ void random_access_update_to_entire_chrom (VBlockP vb, Coords dc, PosType first_
 // note: the order of the merge is not necessarily the sequential order of VBs
 void random_access_merge_in_vb (VBlock *vb, Coords dc)
 {
+    if (!vb->ra_buf[DC].len) return; // nothing to merge
+
     Buffer *z_buf  = (dc == DC_PRIMARY) ? &z_file->ra_buf : &z_file->ra_buf_luft;
     ARRAY (const RAEntry, src_ra, vb->ra_buf[DC]);
      
@@ -192,7 +200,7 @@ void random_access_merge_in_vb (VBlock *vb, Coords dc)
 
     buf_alloc (evb, z_buf, 0, z_buf->len + src_ra_len, RAEntry, 2, "z_file->ra_buf"); 
 
-    Context *chrom_ctx = CTX(dc==DC_PRIMARY ? CHROM : ODID(oCHROM));
+    Context *chrom_ctx = CTX(dc==DC_PRIMARY ? DTF(prim_chrom) : DTF(luft_chrom));
     ASSERT0 (chrom_ctx, "cannot find chrom_ctx");
 
     for (unsigned i=0; i < src_ra_len; i++) {
@@ -236,6 +244,8 @@ int random_access_sort_by_vb_i (const void *a_, const void *b_)
 // ZIP (main thread) sort RA, update overflowing chroms, create and merge in evb ra
 void random_access_finalize_entries (Buffer *ra_buf)
 {
+    if (!ra_buf->len) return; // no random access
+
     // build an index into ra_buf that we will sort. we need that, because for same-vb entries we need to 
     // maintain their current order - sorted by the index
     int32_t *sorter = MALLOC (ra_buf->len * sizeof (int32_t));
@@ -281,9 +291,11 @@ void random_access_finalize_entries (Buffer *ra_buf)
 
 void random_access_compress (ConstBufferP ra_buf_, SectionType sec_type, Coords dc, const char *msg)
 {
+    if (!ra_buf_->len) return; // no random access
+
     BufferP ra_buf = (BufferP)ra_buf_; // we will restore everything so that Const is honoured
 
-    if (msg) random_access_show_index (ra_buf, true, dc==DC_LUFT ? ODID(oCHROM) : CHROM, msg);
+    if (msg) random_access_show_index (ra_buf, true, dc==DC_LUFT ? DTFZ(luft_chrom) : DTFZ(prim_chrom), msg);
     
     BGEN_random_access (ra_buf); // make ra_buf into big endian
 
@@ -415,8 +427,11 @@ void random_access_load_ra_section (SectionType sec_type, DidIType chrom_did_i, 
     if (!ra_sl) return; // section doesn't exist
 
     // if we're pizzing as lift-over, get the next section which has the Luft random access info (zfile_get_global_section will verify)
-    if (flag.luft) ra_sl++; 
-
+    if (flag.luft) {
+        ra_sl++; 
+        if (ra_sl->st != sec_type) return; // no luft over section
+    }
+    
     zfile_get_global_section (SectionHeader, sec_type, ra_sl, ra_buf, buf_name);
     
     if (ra_buf->len) {

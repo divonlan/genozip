@@ -189,8 +189,8 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
 {
     START_TIMER;
 
-    CTX(FASTQ_TOPLEVEL)->no_stons  = true; // keep in b250 so it can be eliminated as all_the_same
-    CTX(FASTQ_CONTIG)->flags.store = STORE_INDEX; // since v12
+    CTX(FASTQ_TOPLEVEL)->no_stons     = true; // keep in b250 so it can be eliminated as all_the_same
+    CTX(FASTQ_CONTIG)->flags.store    = STORE_INDEX; // since v12
 
     Context *gpos_ctx     = CTX(FASTQ_GPOS);
     Context *strand_ctx   = CTX(FASTQ_STRAND);
@@ -205,7 +205,7 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
     sqbitmap_ctx->ltype = LT_BITMAP; 
     sqbitmap_ctx->local_always = true;
 
-    codec_acgt_comp_init ((VBlockP)vb);
+    codec_acgt_comp_init (VB);
 
      if (flag.pair == PAIR_READ_2) {
 
@@ -214,7 +214,7 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
 
         gpos_ctx->pair_local = strand_ctx->pair_local = true;
 
-        piz_uncompress_all_ctxs ((VBlockP)vb, vb->pair_vb_i);
+        piz_uncompress_all_ctxs (VB, vb->pair_vb_i);
 
         vb->z_data.len = 0; // we've finished reading the pair file z_data, next, we're going to write to z_data our compressed output
     }
@@ -229,7 +229,7 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
     }
 
     // in --stats, consolidate stats into SQBITMAP
-    stats_set_consolidation ((VBlockP)vb, FASTQ_SQBITMAP, 4, FASTQ_NONREF, FASTQ_NONREF_X, FASTQ_GPOS, FASTQ_STRAND);
+    stats_set_consolidation (VB, FASTQ_SQBITMAP, 4, FASTQ_NONREF, FASTQ_NONREF_X, FASTQ_GPOS, FASTQ_STRAND);
 
     COPY_TIMER (seg_initialize);
 }
@@ -367,7 +367,7 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
     if (kraken_is_loaded) {
         unsigned qname_len = strcspn (FASTQ_DESC_str, " \t\r\n"); 
 
-        unsigned taxid_found = kraken_seg_taxid ((VBlockP)vb, FASTQ_TAXID, FASTQ_DESC_str, qname_len, false);
+        unsigned taxid_found = kraken_seg_taxid (VB, FASTQ_TAXID, FASTQ_DESC_str, qname_len, false);
 
         // if not found tax id for this read, try again, perhaps removing /1 or /2
         if (!taxid_found) {
@@ -375,7 +375,7 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
                 (FASTQ_DESC_str[qname_len-1] == '1' || FASTQ_DESC_str[qname_len-1] == '2'))
                 qname_len -= 2;
 
-            kraken_seg_taxid ((VBlockP)vb, FASTQ_TAXID, FASTQ_DESC_str, qname_len, true); // this fails if missing
+            kraken_seg_taxid (VB, FASTQ_TAXID, FASTQ_DESC_str, qname_len, true); // this fails if missing
         }
     }
 
@@ -386,7 +386,7 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
         vb->recon_size -= FASTQ_DESC_len - optimized_len;
     }
 
-    seg_compound_field ((VBlockP)vb, CTX(FASTQ_DESC), 
+    seg_compound_field (VB, CTX(FASTQ_DESC), 
                         flag.optimize_DESC ? vb->optimized_desc : FASTQ_DESC_str, 
                         flag.optimize_DESC ? optimized_len      : FASTQ_DESC_len, 
                         sep_with_space, 0, 0);
@@ -398,11 +398,11 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
 
     // case: compressing without a reference - all data goes to "nonref", and we have no bitmap
     if (flag.ref_use_aligner) 
-        aligner_seg_seq ((VBlockP)vb, CTX(FASTQ_SQBITMAP), FASTQ_SEQ_str, dl->seq_len);
+        aligner_seg_seq (VB, CTX(FASTQ_SQBITMAP), FASTQ_SEQ_str, dl->seq_len);
 
     else {
         Context *nonref_ctx = CTX(FASTQ_NONREF);
-        buf_alloc ((VBlockP)vb, &nonref_ctx->local, 0, MAX_(nonref_ctx->local.len + dl->seq_len + 3, vb->lines.len * (dl->seq_len + 5)), char, CTX_GROWTH, "contexts->local"); 
+        buf_alloc (VB, &nonref_ctx->local, 0, MAX_(nonref_ctx->local.len + dl->seq_len + 3, vb->lines.len * (dl->seq_len + 5)), char, CTX_GROWTH, "contexts->local"); 
         buf_add (&nonref_ctx->local, FASTQ_SEQ_str, dl->seq_len);
     }
 
@@ -410,7 +410,7 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
     char snip[10];
     snip[0] = SNIP_LOOKUP;
     unsigned seq_len_str_len = str_int (dl->seq_len, &snip[1]);
-    seg_by_ctx (vb, snip, 1 + seq_len_str_len, CTX(FASTQ_SQBITMAP), 0); 
+    seg_by_ctx (VB, snip, 1 + seq_len_str_len, CTX(FASTQ_SQBITMAP), 0); 
     CTX(FASTQ_NONREF)->txt_len += dl->seq_len; // account for the txt data in NONREF
 
     SEG_EOL (FASTQ_E2L, true);
@@ -424,17 +424,17 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
 
     // line3 can be either empty, or a copy of DESC.
     if (!FASTQ_LINE3_len) 
-        seg_by_did_i (vb, "", 0, FASTQ_LINE3, 0);
+        seg_by_did_i (VB, "", 0, FASTQ_LINE3, 0);
 
     else if (str_issame_ (FASTQ_LINE3_str, FASTQ_LINE3_len, FASTQ_DESC_str, FASTQ_DESC_len)) {
 
         // if --optimize-DESC, we always produce an empty line.
         if (flag.optimize_DESC) {
-            seg_by_did_i (vb, "", 0, FASTQ_LINE3, 0);
+            seg_by_did_i (VB, "", 0, FASTQ_LINE3, 0);
             vb->recon_size -= FASTQ_DESC_len;
         }
         else 
-            seg_by_did_i (vb, copy_desc_snip, copy_desc_snip_len, FASTQ_LINE3, (flag.optimize_DESC ? optimized_len : FASTQ_LINE3_len));
+            seg_by_did_i (VB, copy_desc_snip, copy_desc_snip_len, FASTQ_LINE3, (flag.optimize_DESC ? optimized_len : FASTQ_LINE3_len));
     }
 
     else 
@@ -594,7 +594,7 @@ static void fastq_update_coverage (VBlockFASTQ *vb)
     // 2nd file of a pair ("pair 2")
     else {
         // gpos: reconstruct, then cancel the reconstruction and just use last_value
-        reconstruct_from_ctx ((VBlockP)vb, FASTQ_GPOS, 0, false);
+        reconstruct_from_ctx (VB, FASTQ_GPOS, 0, false);
         gpos = gpos_ctx->last_value.i;
     }
 

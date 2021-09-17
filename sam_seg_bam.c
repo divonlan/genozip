@@ -105,7 +105,7 @@ void bam_seg_bin (VBlockSAM *vb, uint16_t bin /* used only in bam */, uint16_t s
     uint16_t reg2bin = bam_reg2bin (this_pos, last_pos); // zero-based, half-closed half-open [start,end)
 
     if (!is_bam || (last_pos <= MAX_POS_SAM && reg2bin == bin))
-        seg_by_did_i (vb, ((char []){ SNIP_SPECIAL, SAM_SPECIAL_BIN }), 2, SAM_BAM_BIN, is_bam ? sizeof (uint16_t) : 0);
+        seg_by_did_i (VB, ((char []){ SNIP_SPECIAL, SAM_SPECIAL_BIN }), 2, SAM_BAM_BIN, is_bam ? sizeof (uint16_t) : 0);
     
     else {
 #ifdef DEBUG // we show this warning only in DEBUG because I found actual files that have edge cases that don't work with our formula (no harm though)
@@ -137,7 +137,7 @@ static inline void bam_seg_ref_id (VBlockP vb, DidIType did_i, int32_t ref_id, i
         snip_len = 1;
     }
 
-    WordIndex chrom_index = seg_by_did_i (vb, snip, snip_len, did_i, sizeof (int32_t));
+    WordIndex chrom_index = seg_by_did_i (VB, snip, snip_len, did_i, sizeof (int32_t));
         
     if (did_i==CHROM) 
         random_access_update_chrom (vb, DC_PRIMARY, chrom_index, snip, snip_len);
@@ -201,7 +201,7 @@ static void bam_seg_cigar_field (VBlockSAM *vb, ZipDataLineSAM *dl, uint32_t l_s
     memcpy (&cigar_snip[cigar_snip_len], vb->textual_cigar.data, vb->textual_cigar.len);
     cigar_snip_len += vb->textual_cigar.len;
 
-    seg_by_did_i (vb, cigar_snip, cigar_snip_len, SAM_CIGAR, 
+    seg_by_did_i (VB, cigar_snip, cigar_snip_len, SAM_CIGAR, 
                   n_cigar_op * sizeof (uint32_t) /* cigar */ + sizeof (uint16_t) /* n_cigar_op */ );
 }
 

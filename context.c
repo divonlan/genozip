@@ -28,6 +28,8 @@
 #include "zip.h"
 #include "piz.h"
 #include "reconstruct.h"
+#include "contigs.h"
+#include "segconf.h"
 
 #define INITIAL_NUM_NODES 10000
 
@@ -173,7 +175,7 @@ WordIndex ctx_get_next_snip (VBlock *vb, Context *ctx, bool all_the_same, bool i
 
     // we check after (no risk of segfault because of buffer overflow protector) - since b250 word is variable length
     ASSERT (iterator->next_b250 <= AFTERENT (uint8_t, *b250), 
-            "while reconstrucing line %"PRIu64" (last line of vb is %"PRIu64") in vb_i=%u: iterator for %s %sreached end of data. b250.len=%"PRIu64, 
+            "while reconstructing line %"PRIu64" (last line of vb is %"PRIu64") in vb_i=%u: iterator for %s %sreached end of data. b250.len=%"PRIu64, 
             vb->line_i, vb->first_line + vb->lines.len - 1, vb->vblock_i, ctx->tag_name, is_pair ? "(PAIR) ": "", b250->len);
 
     // case: a Container item is missing (eg a subfield in a Sample, a FORMAT or Samples items in a file)
@@ -217,7 +219,7 @@ WordIndex ctx_get_next_snip (VBlock *vb, Context *ctx, bool all_the_same, bool i
 // Process and snip - return its node index, and enter it into the directory if its not already there. Called
 // 1. During segregate - as snips are encountered in the data. No base250 encoding yet
 // 2. During ctx_merge_in_vb_ctx_one_dict_id() - to enter snips into z_file->contexts - also encoding in base250
-static WordIndex ctx_evaluate_snip_merge (VBlock *merging_vb, Context *zctx, Context *vctx, 
+static WordIndex ctx_evaluate_snip_merge (VBlock *vb, Context *zctx, Context *vctx, 
                                           const char *snip, uint32_t snip_len, int64_t count,
                                           CtxNode **node, bool *is_new)  // out
 {
@@ -258,10 +260,14 @@ static WordIndex ctx_evaluate_snip_merge (VBlock *merging_vb, Context *zctx, Con
     // instead of the singleton node (which is guaranteed to be non-singleton, and hence >= 0)
     // note: local is dedicated to singletons and contains nothing else, since inst.no_stons is not set
     if (node_index < 0) {
-        seg_add_to_local_text (merging_vb, vctx, snip, snip_len, 0);
-        
+        seg_add_to_local_text (vb, vctx, snip, snip_len, 0);
+
+        if (flag.debug_seg)  
+            iprintf ("eval_merge: vb_i=%u %s: SINGLETON replaced by SNIP_LOCAL: snip=%s snip_len=%u\n", 
+                     vb->vblock_i, vctx->tag_name, str_print_snip (snip, snip_len).s, snip_len);
+
         static char lookup = SNIP_LOOKUP;
-        return ctx_evaluate_snip_merge (merging_vb, zctx, vctx, &lookup, 1, -1 /* not singleton */, node, is_new);
+        return ctx_evaluate_snip_merge (vb, zctx, vctx, &lookup, 1, -1 /* not singleton */, node, is_new);
     }
 
     // case: not singleton - we return this (new) node
@@ -280,25 +286,37 @@ static WordIndex ctx_evaluate_snip_merge (VBlock *merging_vb, Context *zctx, Con
 
 // Seg: inserts snip into the hash, nodes and dictionary, if it was not already there, and returns its node index.
 // Does NOT add the word index to b250.
-WordIndex ctx_evaluate_snip_seg (VBlock *segging_vb, Context *vctx, 
+WordIndex ctx_evaluate_snip_seg (VBlock *vb, Context *vctx, 
                                  const char *snip, uint32_t snip_len,
                                  bool *is_new /* out */)
 {
     ASSERTNOTNULL (vctx);
     ASSERT0 (vctx->dict_id.num, "vctx has no dict_id");
 
+    if (flag.debug_seg && !segconf.running) { 
+        if (snip) iprintf ("eval_seg: vb_i=%u %s: snip=%s snip_len=%u\n", vb->vblock_i, vctx->tag_name, str_print_snip (snip, snip_len).s, snip_len);
+        else      iprintf ("eval_seg: vb_i=%u %s: snip=NULL snip_len=0", vb->vblock_i, vctx->tag_name);
+    }
+
     if (!snip_len) {
         if (is_new) *is_new = false;
-        return (!snip || (segging_vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (vctx->dict_id) && *snip != ':')) 
+        return (!snip || (vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (vctx->dict_id) && *snip != ':')) 
                 ? WORD_INDEX_MISSING : WORD_INDEX_EMPTY;
     }
 
+    // short-circuit if identical to previous snip
+    if (str_issame (snip, vctx->last_snip)) {
+        (*ENT (int64_t, vctx->counts, vctx->last_snip_ni))++; 
+        if (is_new) *is_new = false;
+        return vctx->last_snip_ni;
+    }
+    
     WordIndex node_index_if_new = vctx->ol_nodes.len + vctx->nodes.len;
     
 #ifdef DEBUG // time consuming and only needed during development
     unsigned actual_len = strnlen (snip, snip_len);
     ASSERT (actual_len == snip_len, "vb=%u ctx=%s: snip_len=%u but unexpectedly has an 0 at index %u: \"%.*s\"", 
-            segging_vb->vblock_i, vctx->tag_name, snip_len, actual_len, snip_len, snip);
+            vb->vblock_i, vctx->tag_name, snip_len, actual_len, snip_len, snip);
 #endif
 
     ASSERT (node_index_if_new <= MAX_NODE_INDEX, 
@@ -307,18 +325,17 @@ WordIndex ctx_evaluate_snip_seg (VBlock *segging_vb, Context *vctx,
 
     // get the node from the hash table if it already exists, or add this snip to the hash table if not
     CtxNode *node;
-    WordIndex existing_node_index = hash_get_entry_for_seg (segging_vb, vctx, snip, snip_len, node_index_if_new, &node);
+    WordIndex existing_node_index = hash_get_entry_for_seg (vb, vctx, snip, snip_len, node_index_if_new, &node);
     if (existing_node_index != NODE_INDEX_NONE) {
         (*ENT (int64_t, vctx->counts, existing_node_index))++; // note: counts.len = nodes.len + ol_nodes.len
         if (is_new) *is_new = false;
         
-        // populate last_snip / last_snip_len if requested
-        if (vctx->keep_snip) {
-            bool is_ol = existing_node_index < vctx->ol_nodes.len; // is this entry from a previous vb (overlay buffer)
-            const Buffer *dict = is_ol ? &vctx->ol_dict : &vctx->dict;
-            vctx->last_snip = ENT (char, *dict, node->char_index);
-            vctx->last_snip_len = snip_len;
-        }
+        // populate last_snip 
+        bool is_ol = existing_node_index < vctx->ol_nodes.len; // is this entry from a previous vb (overlay buffer)
+        const Buffer *dict = is_ol ? &vctx->ol_dict : &vctx->dict;
+        vctx->last_snip     = ENT (char, *dict, node->char_index);
+        vctx->last_snip_len = snip_len;
+        vctx->last_snip_ni  = existing_node_index;
 
         return existing_node_index; // snip found - we're done
     }
@@ -326,20 +343,19 @@ WordIndex ctx_evaluate_snip_seg (VBlock *segging_vb, Context *vctx,
     // this snip isn't in the hash table - its a new snip
     ASSERT (vctx->nodes.len < MAX_NODE_INDEX, "too many words in dictionary %s (MAX_NODE_INDEX=%u)", vctx->tag_name, MAX_NODE_INDEX);
 
-    buf_alloc (segging_vb, &vctx->nodes,  1, INITIAL_NUM_NODES, CtxNode, CTX_GROWTH, "contexts->nodes");
-    buf_alloc (segging_vb, &vctx->counts, 1, INITIAL_NUM_NODES, int64_t, CTX_GROWTH, "contexts->counts");
+    buf_alloc (vb, &vctx->nodes,  1, INITIAL_NUM_NODES, CtxNode, CTX_GROWTH, "contexts->nodes");
+    buf_alloc (vb, &vctx->counts, 1, INITIAL_NUM_NODES, int64_t, CTX_GROWTH, "contexts->counts");
 
     NEXTENT (CtxNode, vctx->nodes) = (CtxNode){
         .snip_len     = snip_len,
-        .char_index   = ctx_insert_to_dict (segging_vb, vctx, DICT_VB, snip, snip_len),
+        .char_index   = ctx_insert_to_dict (vb, vctx, DICT_VB, snip, snip_len),
         .word_index.n = node_index_if_new
     };
 
     // populate last_snip / last_snip_len if requested
-    if (vctx->keep_snip) {
-        vctx->last_snip = ENT (char, vctx->dict, LASTENT (CtxNode, vctx->nodes)->char_index);
-        vctx->last_snip_len = snip_len;
-    }
+    vctx->last_snip     = ENT (char, vctx->dict, LASTENT (CtxNode, vctx->nodes)->char_index);
+    vctx->last_snip_len = snip_len;
+    vctx->last_snip_ni  = node_index_if_new;
 
     NEXTENT (int64_t, vctx->counts) = 1;
 
@@ -480,49 +496,33 @@ static void ctx_initialize_ctx (Context *ctx, DidIType did_i, DictId dict_id, Di
 }
 
 // ZIP main thread: 
-// 1. when starting to zip a new file, with pre-loaded external reference, we integrate the reference FASTA CONTIG
+// 1. when starting to zip a new file, with pre-loaded external reference, we integrate the reference's FASTA CONTIG
 //    dictionary as the chrom dictionary of the new file
 // 2. in SAM, DENOVO: after creating loaded_contigs from SQ records, we copy them to the RNAME dictionary
 // 3. When loading a chain file - copy tName word_list/dict read from the chain file to a context
-void ctx_build_zf_ctx_from_contigs (DidIType dst_did_i, ConstBufferP contigs_buf, ConstBufferP contigs_dict_buf)
+void ctx_build_zf_ctx_from_contigs (DidIType dst_did_i, ConstContigPkgP ctgs)
 {
     // note: in REF_INTERNAL it is possible that there are no contigs - unaligned SAM
-    if (flag.reference == REF_INTERNAL && (!contigs_buf || !contigs_buf->len)) return;
+    if (flag.reference == REF_INTERNAL && !ctgs->contigs.len) return;
 
-    ASSERT0 (buf_is_alloc (contigs_buf) && buf_is_alloc (contigs_dict_buf),
-             "expecting contigs and contigs_dict to be allocated");
+    ASSERT0 (buf_is_alloc (&ctgs->contigs) && buf_is_alloc (&ctgs->dict), "expecting contigs and dict to be allocated");
 
     Context *zctx = ZCTX(dst_did_i);
-    ASSERTNOTINUSE (zctx->dict); // make sure we only build it once... 
-    
     zctx->no_stons = true;
     zctx->st_did_i = DID_I_NONE;
+    
+    if (!buf_is_alloc (&zctx->global_hash))
+        hash_alloc_global (zctx, 0);
 
-    ARRAY (RefContig, contigs, *contigs_buf);
+    ARRAY (Contig, contigs, ctgs->contigs);
+    ARRAY (const char, dict, ctgs->dict);
 
-    // copy dict
-    buf_copy (evb, &zctx->dict, contigs_dict_buf, char, 0, 0, "z_file->contexts->dict");
-    buf_set_overlayable (&zctx->dict);
-
-    // build nodes from word_list
-    buf_alloc (evb, &zctx->nodes, 0, contigs_buf->len, CtxNode, 1, "z_file->contexts->nodes");
-    buf_set_overlayable (&zctx->nodes);
-    zctx->nodes.len = contigs_buf->len;
-
-    for (unsigned i=0 ; i < zctx->nodes.len; i++) {
-        CtxNode *node = ENT (CtxNode, zctx->nodes, i);
-        node->char_index = contigs[i].char_index;
-        node->snip_len   = contigs[i].snip_len;
-        node->word_index = base250_encode (i);
+    for (uint64_t i=0; i < contigs_len; i++) {
+        CtxNode *zf_node;
+        bool is_new;
+        WordIndex zf_node_index = ctx_evaluate_snip_merge (NULL, zctx, NULL, &dict[contigs[i].char_index], contigs[i].snip_len, 0, &zf_node, &is_new);
+        zf_node->word_index = base250_encode (zf_node_index);
     }
-
-    buf_alloc_zero (evb, &zctx->counts, 0, contigs_buf->len, int64_t, 1, "z_file->contexts->counts");
-    zctx->counts.len = contigs_buf->len;
-
-    // allocate and populate hash from zctx->nodes
-    hash_alloc_global (zctx, zctx->nodes.len);
-
-    z_file->num_contexts = MAX_(z_file->num_contexts, dst_did_i+1);
 }
 
 // find the z_file context that corresponds to dict_id. It could be possibly a different did_i
@@ -546,7 +546,7 @@ struct FlagsCtx ctx_get_zf_ctx_flags (DictId dict_id)
 }
 
 // ZIP only: called by merging VBs to add a new dict to z_file - copying some stuff from vctx
-static Context *ctx_add_new_zf_ctx (VBlock *merging_vb, const Context *vctx)
+static Context *ctx_add_new_zf_ctx (VBlock *vb, const Context *vctx)
 {
     // adding a new dictionary is proctected by a mutex. note that z_file->num_contexts is accessed by other threads
     // without mutex proction when searching for a dictionary - that's why we update it at the end, after the new
@@ -641,38 +641,38 @@ void ctx_commit_codec_to_zf_ctx (VBlock *vb, Context *vctx, bool is_lcodec)
 // ZIP only: this is called towards the end of compressing one vb - merging its dictionaries into the z_file 
 // each dictionary is protected by its own mutex, and there is one z_file mutex protecting num_dicts.
 // we are careful never to hold two muteces at the same time to avoid deadlocks
-static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
+static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *vb, unsigned did_i)
 {
-    Context *vctx = &merging_vb->contexts[did_i];
+    Context *vctx = &vb->contexts[did_i];
 
     // get the ctx or create a new one. note: ctx_add_new_zf_ctx() must be called before mutex_lock() because it locks the z_file mutex (avoid a deadlock)
     Context *zctx  = ctx_get_zf_ctx (vctx->dict_id);
-    if (!zctx) zctx = ctx_add_new_zf_ctx (merging_vb, vctx); 
+    if (!zctx) zctx = ctx_add_new_zf_ctx (vb, vctx); 
 
     { START_TIMER; 
       mutex_lock (zctx->mutex);
-      COPY_TIMER_VB (merging_vb, lock_mutex_zf_ctx);  
+      COPY_TIMER_VB (vb, lock_mutex_zf_ctx);  
     }
 
     START_TIMER; // note: careful not to count time spent waiting for the mutex
-    //iprintf ( ("Merging dict_id=%.8s into z_file vb_i=%u vb_did_i=%u z_did_i=%u\n", dis_dict_id (vctx->dict_id).s, merging_vb->vblock_i, did_i, z_did_i);
+    //iprintf ( ("Merging dict_id=%.8s into z_file vb_i=%u vb_did_i=%u z_did_i=%u\n", dis_dict_id (vctx->dict_id).s, vb->vblock_i, did_i, z_did_i);
 
     zctx->merge_num++; // first merge is #1 (first clone which happens before the first merge, will get vb-)
     zctx->num_new_entries_prev_merged_vb = vctx->nodes.len; // number of new words in this dict from this VB
-    zctx->num_singletons += vctx->num_singletons; // add singletons created by seg (i.e. SNIP_LOOKUP_* in b250, and snip in local)
+    zctx->num_singletons += vctx->num_singletons; // add singletons created by seg_by_ctx_ex (SNIP_LOOKUP b250 and snip in local)
     zctx->counts_section |= vctx->counts_section; // for use of ctx_compress_counts
     
-    if (merging_vb->vblock_i == 1)
+    if (vb->vblock_i == 1)
         zctx->flags = vctx->flags; // vb_1 flags will be the default flags for this context, used by piz in case there are no b250 or local sections due to all_the_same. see zip_generate_b250_section and piz_read_all_ctxs
 
     uint64_t ol_len = vctx->ol_nodes.len;
-    bool has_count = zctx->counts_section && !merging_vb->is_rejects_vb; // don't count rejects VB - these are duplicate lines counted in the normal VBs.
+    bool has_count = !vb->is_rejects_vb; // don't count rejects VB - these are duplicate lines counted in the normal VBs.
 
     if (flag.rejects_coord != DC_PRIMARY) // we don't include ##primary_only VBs as they are not in the primary reconstruction, but we do include ##luft_only
         zctx->txt_len += vctx->txt_len; // for stats
 
     if (vctx->st_did_i != DID_I_NONE && zctx->st_did_i == DID_I_NONE) {
-        Context *st_ctx = ctx_get_zf_ctx (merging_vb->contexts[vctx->st_did_i].dict_id);
+        Context *st_ctx = ctx_get_zf_ctx (vb->contexts[vctx->st_did_i].dict_id);
         if (st_ctx) zctx->st_did_i = st_ctx->did_i; // st_did_i is not necessarily the same for vb and zf
     }
 
@@ -689,7 +689,7 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
         // allocate hash table, based on the statitics gather by this first vb that is merging this dict and 
         // populate the hash table without needing to reevalate the snips (we know none are in the hash table, but all are in nodes and dict)
         if (zctx->global_hash.size <= 1) { // only initial allocation in zip_dict_data_initialize
-            uint32_t estimated_entries = hash_get_estimated_entries (merging_vb, zctx, vctx);
+            uint32_t estimated_entries = hash_get_estimated_entries (vb, zctx, vctx);
             hash_alloc_global (zctx, estimated_entries);
         }
     }
@@ -704,7 +704,7 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *merging_vb, unsigned did_i)
 
         // use evb and not vb because zf_context is z_file (which belongs to evb)
         WordIndex zf_node_index = 
-            ctx_evaluate_snip_merge (merging_vb, zctx, vctx, snip, vb_node->snip_len, count, &zf_node, &is_new);
+            ctx_evaluate_snip_merge (vb, zctx, vctx, snip, vb_node->snip_len, count, &zf_node, &is_new);
 
         ASSERT (zf_node_index >= 0 && zf_node_index < zctx->nodes.len, 
                 "zf_node_index=%d out of range - len=%i", zf_node_index, (uint32_t)vctx->nodes.len);
@@ -727,26 +727,26 @@ finish:
         for (uint64_t i=0; i < ol_len; i++) 
             *ENT (int64_t, zctx->counts, i) += *ENT (int64_t, vctx->counts, i);
 
-    COPY_TIMER_VB (merging_vb, ctx_merge_in_vb_ctx_one_dict_id)
+    COPY_TIMER_VB (vb, ctx_merge_in_vb_ctx_one_dict_id)
     mutex_unlock (zctx->mutex);
 }
 
 // ZIP only: merge new words added in this vb into the z_file.contexts, and compresses dictionaries.
-void ctx_merge_in_vb_ctx (VBlock *merging_vb)
+void ctx_merge_in_vb_ctx (VBlock *vb)
 {
     START_TIMER;
     
     // merge all contexts
-    for (DidIType did_i=0; did_i < merging_vb->num_contexts; did_i++) 
-        ctx_merge_in_vb_ctx_one_dict_id (merging_vb, did_i);
+    for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) 
+        ctx_merge_in_vb_ctx_one_dict_id (vb, did_i);
 
-    // note: z_file->num_contexts might be larger than merging_vb->num_contexts at this point, for example:
+    // note: z_file->num_contexts might be larger than vb->num_contexts at this point, for example:
     // vb_i=1 started, z_file is empty, created 20 contexts
     // vb_i=2 started, z_file is empty, created 10 contexts
     // vb_i=1 completes, merges 20 contexts to z_file, which has 20 contexts after
     // vb_i=2 completes, merges 10 contexts, of which 5 (for example) are shared with vb_i=1. Now z_file has 25 contexts after.
 
-    COPY_TIMER_VB (merging_vb, ctx_merge_in_vb_ctx);
+    COPY_TIMER_VB (vb, ctx_merge_in_vb_ctx);
 }
 
 // ZIP / PIZ : called from main thread
@@ -957,8 +957,8 @@ const char *ctx_get_snip_by_zf_node_index (const Buffer *nodes, const Buffer *di
 static Buffer *sorter_cmp_counts = NULL; // for use by sorter_cmp - used only in vblock_i=1, so no thread safety issues
 static int sorter_cmp(const void *a, const void *b)  
 { 
-    return (int)(ENT (int64_t, *sorter_cmp_counts, *(WordIndex *)b) -
-                 ENT (int64_t, *sorter_cmp_counts, *(WordIndex *)a));
+    return (int)(*ENT (int64_t, *sorter_cmp_counts, *(WordIndex *)b) -
+                 *ENT (int64_t, *sorter_cmp_counts, *(WordIndex *)a));
 }
 
 void ctx_sort_dictionaries_vb_1(VBlock *vb)
@@ -968,7 +968,7 @@ void ctx_sort_dictionaries_vb_1(VBlock *vb)
 
         Context *ctx = CTX(did_i);
 
-        if (ctx->no_vb1_sort) continue;
+        if (ctx->no_vb1_sort || !ctx->nodes.len) continue;
         
         // prepare sorter array containing indices into ctx->nodes. We are going to sort it rather than sort nodes directly
         // as the b250 data contains node indices into ctx->nodes.
@@ -981,34 +981,31 @@ void ctx_sort_dictionaries_vb_1(VBlock *vb)
         sorter_cmp_counts = &ctx->counts; // communicate the ctx to sorter_cmp via a global var
         qsort (sorter.data, ctx->nodes.len, sizeof (WordIndex), sorter_cmp);
 
-        // rebuild dictionary and counts is the sorted order, and update char and word indices in nodes
-        static Buffer old_dict   = EMPTY_BUFFER;
-        static Buffer old_counts = EMPTY_BUFFER;
-        buf_move (vb, &old_dict, vb, &ctx->dict);
-        buf_alloc (vb, &ctx->dict, 0, old_dict.len, char, CTX_GROWTH, "contexts->dict");
-        ctx->dict.len = old_dict.len;
+        // rebuild dictionary is the sorted order, and update char and word indices in nodes
+        static Buffer unsorted_dict   = EMPTY_BUFFER;
+        buf_move (vb, &unsorted_dict, vb, &ctx->dict);
+        buf_alloc (vb, &ctx->dict, 0, unsorted_dict.len, char, CTX_GROWTH, "contexts->dict");
+        ctx->dict.len = unsorted_dict.len;
 
-        if (ctx->counts_section && ctx->nodes.len) {
-            buf_move (vb, &old_counts, vb, &ctx->counts);
-            buf_alloc (vb, &ctx->counts, 0, old_counts.len, int64_t, 0, "contexts->counts");
-        }
-
+        // note: we sort dict and update nodes->char_index and word_index. nodes and counts are not sorted.
         char *next = FIRSTENT (char, ctx->dict);
         for (WordIndex i=0; i < (WordIndex)ctx->nodes.len; i++) {
             WordIndex node_index = *ENT (WordIndex, sorter, i);
             CtxNode *node = ENT (CtxNode, ctx->nodes, node_index);
-            memcpy (next, ENT (char, old_dict, node->char_index), node->snip_len + 1 /* +1 for SNIP_SEP */);
+            const char *snip = ENT (char, unsorted_dict, node->char_index); 
+            memcpy (next, snip, node->snip_len + 1 /* +1 for SNIP_SEP */);
             node->char_index = ENTNUM (ctx->dict, next);
             node->word_index.n = i;
             next += node->snip_len + 1;
 
-            if (ctx->counts_section)
-                NEXTENT (int64_t, ctx->counts) = *ENT (int64_t, old_counts, node_index);
+            if (flag.debug_seg)
+                iprintf ("ctx_sort_dictionaries_vb_1: %s: word_index=%u snip=%s snip_len=%u count=%"PRId64"\n",
+                          ctx->tag_name, i, str_print_snip (snip, node->snip_len).s, node->snip_len, 
+                          *ENT (int64_t, ctx->counts, ctx->ol_nodes.len + node_index));
         }
 
         buf_destroy (&sorter); // destroy and not free as it is first allocated by vb=0 and then again vb=1
-        buf_destroy (&old_dict);
-        buf_destroy (&old_counts);
+        buf_destroy (&unsorted_dict);
     }
 }
 
@@ -1061,7 +1058,7 @@ void ctx_free_context (Context *ctx)
     ctx->pair_b250_iter = (SnipIterator){};
     ctx->lcodec = ctx->bcodec = ctx->lsubcodec_piz = 0;
 
-    ctx->no_stons = ctx->pair_local = ctx->pair_b250 = ctx->stop_pairing = ctx->no_callback = ctx->keep_snip = ctx->line_is_luft_trans =
+    ctx->no_stons = ctx->pair_local = ctx->pair_b250 = ctx->stop_pairing = ctx->no_callback = ctx->line_is_luft_trans =
     ctx->local_param = ctx->no_vb1_sort = ctx->local_always = ctx->counts_section = ctx->no_all_the_same =
     ctx->dynamic_size_local = ctx->numeric_only = 0;
     ctx->local_hash_prime = 0;
@@ -1081,13 +1078,18 @@ void ctx_free_context (Context *ctx)
     ctx->iterator = (SnipIterator){};
     ctx->next_local = 0;
 
-    ctx->last_line_i = ctx->last_sample_i = 0; 
+    ctx->last_line_i = ctx->ctx_specific = 0; 
     ctx->last_value.i = 0;
     ctx->last_delta = 0;
     ctx->last_txt_index = ctx->last_txt_len = 0;
     ctx->semaphore = 0;
     ctx->compressor_time = 0;
     ctx->tag_i = 0;
+
+    ctx->last_snip = 0; 
+    ctx->last_snip_len = 0;
+    ctx->last_snip_ni = 0;
+
     memset (ctx->tag_name, 0, sizeof(ctx->tag_name));
 }
 
@@ -1193,11 +1195,11 @@ static void ctx_compress_one_dict_fragment (VBlockP vb)
     if (flag.show_dict || ctx_is_show_dict_id (vb->fragment_ctx->dict_id)) {
         iprintf ("%s (vb_i=%u, did=%u, num_snips=%u):\t", 
                  vb->fragment_ctx->tag_name, vb->vblock_i, vb->fragment_ctx->did_i, vb->fragment_num_words);
-        str_print_null_seperated_data (vb->fragment_start, vb->fragment_len, flag.show_dict, false);
+        str_print_dict (vb->fragment_start, vb->fragment_len, flag.show_dict, false);
     }
 
     if (flag.list_chroms && vb->fragment_ctx->did_i == CHROM)
-        str_print_null_seperated_data (vb->fragment_start, vb->fragment_len, false, vb->data_type == DT_SAM);
+        str_print_dict (vb->fragment_start, vb->fragment_len, false, VB_DT(DT_SAM));
 
     if (flag.show_time) codec_show_time (vb, "DICT", vb->fragment_ctx->tag_name, vb->fragment_codec);
 
@@ -1367,13 +1369,13 @@ void ctx_read_all_dictionaries (void)
             if (!ctx->dict.len) continue;
 
             if (flag.list_chroms && ((!flag.luft && ctx->did_i == CHROM) || (flag.luft && ctx->did_i == VCF_oCHROM)))
-                str_print_null_seperated_data (ctx->dict.data, (uint32_t)ctx->dict.len, true, z_file->data_type == DT_SAM);
+                str_print_dict (ctx->dict.data, (uint32_t)ctx->dict.len, true, Z_DT(DT_SAM));
             
             if (flag.show_dict || ctx_is_show_dict_id (ctx->dict_id)) {
                 iprintf ("%s (did_i=%u, num_snips=%u, dict_size=%u bytes):\t", 
                          ctx->tag_name, did_i, (uint32_t)ctx->word_list.len, (uint32_t)ctx->dict.len);
 
-                str_print_null_seperated_data (ctx->dict.data, (uint32_t)ctx->dict.len, true, false);
+                str_print_dict (ctx->dict.data, (uint32_t)ctx->dict.len, true, false);
             }
         }
         iprint0 ("\n");
@@ -1522,7 +1524,7 @@ TagNameEx ctx_tag_name_ex (ConstContextP ctx)
     if (!ctx) return (TagNameEx){ .s = "<none>" };
 
     unsigned start=0;
-    if (z_file && (z_file->data_type == DT_VCF || z_file->data_type == DT_BCF)) {
+    if (z_file && (Z_DT(DT_VCF) || Z_DT(DT_BCF))) {
         if      (dict_id_is_vcf_format_sf (ctx->dict_id)) { memcpy (s.s, "FORMAT/", 7); start = 7; }
         else if (dict_id_is_vcf_info_sf   (ctx->dict_id)) { memcpy (s.s, "INFO/",   5); start = 5; }
     }
@@ -1531,3 +1533,25 @@ TagNameEx ctx_tag_name_ex (ConstContextP ctx)
 
     return s;
 }
+
+// rolls back a context to the rollback point registered in ctx_create_rollback_point
+// NOTE: this rolls back b250, but not nodes / dict / hash. Therefore a future seg with the same snip will not be is_new.
+void ctx_rollback (VBlockP vb, Context *ctx)
+{
+    // if we evaluated this context since the rollback count - undo
+    while (ctx->b250.len > ctx->rback_b250_len) {
+        WordIndex node_index = *LASTENT (WordIndex, ctx->b250);
+        ctx_decrement_count (vb, ctx, node_index);
+        ctx->b250.len--;
+    }
+
+    ctx->local.len      = ctx->rback_local_len;
+    ctx->txt_len        = ctx->rback_txt_len;
+    ctx->num_singletons = ctx->rback_num_singletons;
+    ctx->last_value     = ctx->rback_last_value;
+    ctx->last_delta     = ctx->rback_last_delta;
+    ctx->last_txt_index = ctx->rback_last_txt_index;
+    ctx->last_txt_len   = ctx->rback_last_txt_len;
+    ctx->last_line_i    = LAST_LINE_I_INIT; // undo "encountered in line"
+}
+

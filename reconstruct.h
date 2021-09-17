@@ -20,7 +20,7 @@ extern LastValueType reconstruct_peek__do (VBlockP vb, DictId dict_id, const cha
 typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, DidIType did_i, DictId dict_id);
 
 // gets snip, snip_len from b250 data
-#define LOAD_SNIP(did_i) ctx_get_next_snip ((VBlockP)vb, CTX(did_i), CTX(did_i)->flags.all_the_same, false, &snip, &snip_len); 
+#define LOAD_SNIP(did_i) ctx_get_next_snip (VB, CTX(did_i), CTX(did_i)->flags.all_the_same, false, &snip, &snip_len); 
 
 #define RECONSTRUCT(s,len) buf_add (&vb->txt_data, (char*)(s), (len))
 #define RECONSTRUCT1(c) NEXTENT (char, vb->txt_data) = c

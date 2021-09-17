@@ -172,7 +172,7 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, in
         ASSINP0 (flag.reference != REF_EXTERNAL || !flag.show_ref_seq, "--show-ref-seq cannot be used on a file that requires a reference file: use genocat --show-ref-seq on the reference file itself instead");
 
         if (!flag.genocat_no_reconstruct || 
-            (flag.collect_coverage && z_file->data_type == DT_FASTQ)) { // in collect_coverage with FASTQ we read the non-data sections of the reference
+            (flag.collect_coverage && Z_DT(DT_FASTQ))) { // in collect_coverage with FASTQ we read the non-data sections of the reference
             SAVE_VALUE (z_file); // actually, read the reference first
             ref_load_external_reference (gref, NULL);
             RESTORE_VALUE (z_file);
@@ -223,10 +223,10 @@ static void main_test_after_genozip (const char *exec_name, const char *z_filena
     const char *password = crypt_get_password();
 
     // finish dumping reference and/or refhash to cache before destroying it...
-    ref_create_cache_join (gref);
-    ref_create_cache_join (prim_ref);
+    ref_create_cache_join (gref, true);
+    ref_create_cache_join (prim_ref, true);
 
-    refhash_create_cache_join();
+    refhash_create_cache_join(false);
     
     // On Windows and Mac that usually have limited memory, if ZIP consumed more than 2GB, free memory before PIZ. 
     // Note: on Windows, freeing memory takes considerable time.
@@ -285,7 +285,7 @@ static void main_genozip_open_z_file_write (const char **z_filename)
         // if the file has an extension matching its type, replace it with the genozip extension, if not, just add the genozip extension
         const char *genozip_ext = file_exts[file_get_z_ft_by_txt_in_ft (txt_file->data_type, txt_file->type)];
 
-        if (chain_is_loaded && txt_file->data_type == DT_VCF)
+        if (chain_is_loaded && TXT_DT(DT_VCF))
             genozip_ext = DVCF_GENOZIP_;
 
         if (file_has_ext (local_txt_filename, file_exts[txt_file->type]))
@@ -356,7 +356,7 @@ static void main_genozip (const char *txt_filename,
 
     file_close (&txt_file, false, !is_last_txt_file);  // no need to waste time closing the last file, the process termination will do that
 
-    bool is_chain = (z_file->data_type == DT_CHAIN);
+    bool is_chain = (Z_DT(DT_CHAIN));
 
     // close the file if its an open disk file AND we need to close it
     if (!flag.to_stdout && z_file && z_closes_after_me) {
@@ -524,7 +524,7 @@ int main (int argc, char **argv)
     profiler_initialize();
     buf_initialize(); 
     arch_initialize (argv[0]);
-    evb = vb_initialize_nonpool_vb(EVB, DT_NONE);
+    evb = vb_initialize_nonpool_vb(VB_ID_EVB, DT_NONE, "main_thread");
     threads_initialize(); // requires evb
     random_access_initialize();
     codec_initialize();
@@ -556,8 +556,10 @@ int main (int argc, char **argv)
             }
 
             // case: requesting to display the reference: genocat --reference <ref-file> and optionally --regions
-            if (exe_type == EXE_GENOCAT && (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE)) 
+            if (exe_type == EXE_GENOCAT && (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE)) {
+                flags_update (0, NULL);
                 ref_display_ref (gref);
+            }
 
             // otherwise: show help
             else
@@ -574,7 +576,7 @@ int main (int argc, char **argv)
     unsigned num_files = argc - optind;
     unsigned num_z_files;
     char **input_files = main_get_filename_list (&num_files, &argv[optind], &num_z_files);
-    
+
     // determine how many threads we have - either as specified by the user, or by the number of cores
     if (flag.threads_str) 
         ASSINP (str_get_int_range32 (flag.threads_str, 0, 1, 10000, (int32_t *)&global_max_threads),
@@ -592,8 +594,8 @@ int main (int argc, char **argv)
     if (command == LICENSE) { license_display();      return 0; }
     if (command == HELP)    { main_print_help (true); return 0; }
 
-    ASSINP (num_files || !isatty(0) || command != ZIP, "missing input file. Try: %s myfile.bam", global_cmd);
-    ASSINP (num_files || !isatty(0) || command != PIZ, "missing input file. Try: %s myfile.bam.genozip", global_cmd);
+    ASSINP (num_files || !isatty(0) || command != ZIP, "missing input file. Example: %s myfile.bam", global_cmd);
+    ASSINP (num_files || !isatty(0) || command != PIZ, "missing input file. Example: %s myfile.bam.genozip", global_cmd);
 
     primary_command = command; 
 
@@ -661,9 +663,9 @@ int main (int argc, char **argv)
         WARN0 ("All files are valid genozip files");
 
     // finish dumping reference and/or refhash to cache
-    ref_create_cache_join (gref);
-    ref_create_cache_join (prim_ref);
-    refhash_create_cache_join();
+    ref_create_cache_join (gref, false);
+    ref_create_cache_join (prim_ref, false);
+    refhash_create_cache_join(false);
 
     exit_ok();
     return 0;

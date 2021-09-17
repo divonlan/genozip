@@ -38,7 +38,7 @@ SRC_DIRS = zlib bzlib lzma bsc libdeflate compatibility
 MY_SRCS = genozip.c genols.c base250.c context.c container.c strings.c stats.c arch.c license.c \
 		  data_types.c bit_array.c progress.c coords.c writer.c tar.c\
           zip.c piz.c reconstruct.c seg.c zfile.c aligner.c flags.c digest.c mutex.c linesorter.c threads.c \
-		  txtheader.c reference.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_alt_chroms.c ref_iupacs.c \
+		  txtheader.c reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c map_chrom2ref.c ref_iupacs.c \
 		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c vcf_refalt.c vcf_tags.c \
           sam_seg.c sam_piz.c sam_seg_bam.c sam_shared.c sam_header.c \
 		  fasta.c fastq.c gff3.c me23.c phylip.c chain.c kraken.c generic.c \
@@ -68,9 +68,9 @@ CONDA_DOCS = LICENSE.txt AUTHORS README.md
 CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h bit_array.h progress.h website.h \
              base250.h endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h segconf.h \
              buffer.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h codec.h stats.h \
-             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h \
+             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h map_chrom2ref.h\
 			 reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h linesorter.h threads.h \
-			 arch.h license.h data_types.h base64.h txtheader.h writer.h bases_filter.h genols.h coords.h \
+			 arch.h license.h data_types.h base64.h txtheader.h writer.h bases_filter.h genols.h coords.h contigs.h \
 			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h fastq.h gff3.h phylip.h chain.h kraken.h generic.h \
              compatibility/mac_gettime.h  \
 			 zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h \
@@ -273,7 +273,7 @@ docs: docs/_build/html/.buildinfo docs/LICENSE.for-docs.txt
 	@git push > /dev/null
 
 docs-debug: docs/_build/html/.buildinfo
-	@(C:\\\\Program\\ Files\\ \\(x86\\)\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe file:///C:/Users/USER/projects/genozip/docs/_build/html/index.html; exit 0)
+	/c/Program\\ Files\\ \\(x86\\)/Google/Chrome/Application/chrome.exe file:///c:/Users/USER/projects/genozip/docs/_build/html/index.html
 
 testfiles : $(GENERATED_TEST_FILES)
 

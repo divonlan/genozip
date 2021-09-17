@@ -23,16 +23,17 @@ extern const char *seg_get_next_item (void *vb, const char *str, int *str_len,
                                       const char *item_name);
 extern const char *seg_get_next_line (void *vb_, const char *str, int *str_len, unsigned *len, bool must_have_newline, bool *has_13 /* out */, const char *item_name);
 
-extern WordIndex seg_by_ctx_do (VBlockP vb, const char *snip, unsigned snip_len, ContextP ctx, uint32_t add_bytes, bool *is_new);
-#define seg_by_ctx(vb,snip,snip_len,ctx,add_bytes)               seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), (ctx), (add_bytes), NULL)
-#define seg_by_dict_id(vb,snip,snip_len,dict_id,add_bytes)       seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), ctx_get_ctx ((vb), (dict_id)), (add_bytes), NULL)
-#define seg_by_did_i_ex(vb,snip,snip_len,did_i,add_bytes,is_new) seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), CTX(did_i), (add_bytes), (is_new))
-#define seg_by_did_i(vb,snip,snip_len,did_i,add_bytes)           seg_by_ctx_do ((VBlockP)(vb), (snip), (snip_len), CTX(did_i), (add_bytes), NULL)
+extern WordIndex seg_by_ctx_ex (VBlockP vb, const char *snip, unsigned snip_len, ContextP ctx, uint32_t add_bytes, bool *is_new);
+static inline WordIndex seg_by_ctx (VBlockP vb, STRp(snip), ContextP ctx, unsigned add_bytes)                      { return seg_by_ctx_ex (vb, STRa(snip), ctx, add_bytes, NULL); }
+static inline WordIndex seg_by_dict_id (VBlockP vb, STRp(snip), DictId dict_id, unsigned add_bytes)                { return seg_by_ctx_ex (vb, STRa(snip), ctx_get_ctx (vb, dict_id), add_bytes, NULL); }
+static inline WordIndex seg_by_did_i_ex (VBlockP vb, STRp(snip), DidIType did_i, unsigned add_bytes, bool *is_new) { return seg_by_ctx_ex (vb, STRa(snip), CTX(did_i), add_bytes, is_new); }
+static inline WordIndex seg_by_did_i (VBlockP vb, STRp(snip), DidIType did_i, unsigned add_bytes)                  { return seg_by_ctx_ex (vb, STRa(snip), CTX(did_i), add_bytes, NULL); }
 
 extern WordIndex seg_known_node_index (VBlockP vb, ContextP ctx, WordIndex node_index, unsigned add_bytes);
 #define seg_duplicate_last(vb,ctx,add_bytes) seg_known_node_index ((VBlockP)(vb), (ctx), *LASTENT (uint32_t, (ctx)->b250), (add_bytes))
 
-extern WordIndex seg_chrom_field (VBlockP vb, const char *chrom_str, unsigned chrom_str_len);
+extern WordIndex seg_chrom_field_ex (VBlockP vb, DidIType did_i, Coords dc, STRp(chrom), PosType LN, bool *is_alt_out, int add_bytes, bool *is_new);
+#define seg_chrom_field(vb, chrom, chrom_len) seg_chrom_field_ex ((VBlockP)(vb), CHROM, DC_NONE, (chrom), (chrom_len), 0, 0, (chrom_len)+1, NULL)
 
 extern WordIndex seg_integer_do (VBlockP vb, DidIType did_i, int64_t n, unsigned add_bytes); // segs integer as normal textual snip
 #define seg_integer(vb,did_i,n,add_sizeof_n) seg_integer_do((VBlockP)(vb), (did_i), (n), (add_sizeof_n) ? sizeof(n) : 0)
@@ -54,7 +55,7 @@ extern void seg_pos_field_cb (VBlockP vb, ContextP ctx, const char *pos_str, uns
 
 extern void seg_id_field_do (VBlockP vb, ContextP ctx, const char *id_snip, unsigned id_snip_len);
 #define seg_id_field(vb, ctx, id_snip, id_snip_len, account_for_separator) \
-    do { seg_id_field_do((VBlockP)vb, (ctx), (id_snip), (id_snip_len)); (ctx)->txt_len += !!(account_for_separator); } while(0)
+    do { seg_id_field_do(VB, (ctx), (id_snip), (id_snip_len)); (ctx)->txt_len += !!(account_for_separator); } while(0)
 
 extern Container seg_initialize_container_array_do (DictId dict_id, bool type_1_items, bool comma_sep);
 #define seg_initialize_container_array(dict_id, type_1_items, comma_sep) seg_initialize_container_array_do ((DictId)dict_id, type_1_items, comma_sep)
@@ -87,20 +88,8 @@ extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, 
 
 bool seg_set_last_txt (VBlockP vb, ContextP ctx, const char *value, unsigned value_len, StoreType store_type);
 
-// called before seg, to store the point to which we might roll back
-static inline void seg_create_rollback_point (ContextP ctx)
-{
-    ctx->rback_b250_len       = ctx->b250.len;
-    ctx->rback_local_len      = ctx->local.len;
-    ctx->rback_txt_len        = ctx->txt_len;
-    ctx->rback_num_singletons = ctx->num_singletons;
-    ctx->rback_last_value     = ctx->last_value;
-    ctx->rback_last_delta     = ctx->last_delta;
-    ctx->rback_last_txt_index = ctx->last_txt_index;
-    ctx->rback_last_txt_len   = ctx->last_txt_len;
-}
-
-extern void seg_rollback (VBlockP vb, ContextP ctx);
+extern void seg_create_rollback_point (VBlockP vb, unsigned num_ctxs, ...); // list of did_i
+extern void seg_rollback (VBlockP vb);
 
 // ------------------
 // Seg utilities
@@ -119,7 +108,7 @@ extern void seg_rollback (VBlockP vb, ContextP ctx);
 
 #define SEG_NEXT_ITEM(f) \
     GET_NEXT_ITEM (f); \
-    seg_by_did_i (vb, field_start, field_len, f, field_len+1)
+    seg_by_did_i (VB, field_start, field_len, f, field_len+1)
 
 #define GET_LAST_ITEM(f) \
     field_start = next_field; \
@@ -128,7 +117,7 @@ extern void seg_rollback (VBlockP vb, ContextP ctx);
 
 #define SEG_LAST_ITEM(f) do \
     GET_LAST_ITEM (f);\
-    seg_by_did_i (vb, field_start, field_len, f, field_len+1)
+    seg_by_did_i (VB, field_start, field_len, f, field_len+1)
 
 #define GET_MAYBE_LAST_ITEM(f) \
     field_start = next_field; \
@@ -137,7 +126,7 @@ extern void seg_rollback (VBlockP vb, ContextP ctx);
 
 #define SEG_MAYBE_LAST_ITEM(f)  \
     GET_MAYBE_LAST_ITEM (f); \
-    seg_by_did_i (vb, field_start, field_len, f, field_len+1)
+    seg_by_did_i (VB, field_start, field_len, f, field_len+1)
 
 // SPACE separator between fields
 
@@ -146,9 +135,9 @@ extern void seg_rollback (VBlockP vb, ContextP ctx);
     next_field = seg_get_next_item (vb, field_start, &len, GN_FORBIDEN, GN_SEP, GN_SEP, &field_len, &separator, NULL, #f); \
     FIELD (f)
 
-#define SEG_NEXT_ITEM_SP(f)  \
+#define SEG_NEXT_ITEM_SP(f) ({ \
     GET_NEXT_ITEM_SP (f); \
-    seg_by_did_i (vb, field_start, field_len, f, field_len+1);
+    seg_by_did_i (VB, field_start, field_len, f, field_len+1); })
 
 #define GET_LAST_ITEM_SP(f)  \
     field_start = next_field; \
@@ -157,7 +146,7 @@ extern void seg_rollback (VBlockP vb, ContextP ctx);
 
 #define SEG_LAST_ITEM_SP(f)  \
     GET_LAST_ITEM_SP (f); \
-    seg_by_did_i (vb, field_start, field_len, f, field_len+1)
+    seg_by_did_i (VB, field_start, field_len, f, field_len+1)
 
 #define GET_MAYBE_LAST_ITEM_SP(f)  \
     field_start = next_field; \
@@ -166,7 +155,7 @@ extern void seg_rollback (VBlockP vb, ContextP ctx);
 
 #define SEG_MAYBE_LAST_ITEM_SP(f)  \
     GET_MAYBE_LAST_ITEM_SP (f); \
-    seg_by_did_i (vb, field_start, field_len, f, field_len+1)
+    seg_by_did_i (VB, field_start, field_len, f, field_len+1)
 
 // NEWLINE separator
 
@@ -177,9 +166,9 @@ extern void seg_rollback (VBlockP vb, ContextP ctx);
 
 #define SEG_NEXT_ITEM_NL(f)  \
     GET_NEXT_ITEM_NL (f); \
-    seg_by_did_i (vb, field_start, field_len, f, field_len+1);
+    seg_by_did_i (VB, field_start, field_len, f, field_len+1);
 
-#define SEG_EOL(f,account_for_ascii10) do { seg_by_did_i (vb, *(has_13) ? "\r\n" : "\n", 1 + *(has_13), (f), (account_for_ascii10) + *(has_13)); } while (0)
+#define SEG_EOL(f,account_for_ascii10) do { seg_by_did_i (VB, *(has_13) ? "\r\n" : "\n", 1 + *(has_13), (f), (account_for_ascii10) + *(has_13)); } while (0)
 
 #define ASSSEG(condition, p_into_txt, format, ...) \
     ASSINP (condition, "Error in file %s: "format "\n\nvb_line_i:%"PRIu64" vb_i:%u pos_in_vb: %"PRIi64" pos_in_file: %"PRIi64\
@@ -208,7 +197,7 @@ extern void seg_rollback (VBlockP vb, ContextP ctx);
             /* snip start:        */    MAX_(p_into_txt-3, vb->txt_data.data) : "(inaccessible)"),\
             /* head/tail params:  */ codec_args[txt_file->codec].viewer, txt_name, vb->vb_position_txt_file + vb->txt_data.len, (uint32_t)vb->txt_data.len,\
             /* output filename:   */ vb->vblock_i, file_plain_ext_by_dt (vb->data_type),\
-            /* dump filename:     */ txtfile_dump_vb ((VBlockP)vb, txt_name))
+            /* dump filename:     */ txtfile_dump_vb (VB, txt_name))
 
 #define ASSSEG0(condition, p_into_txt, err_str) ASSSEG (condition, p_into_txt, err_str "%s", "")
 

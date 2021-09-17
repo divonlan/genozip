@@ -35,6 +35,8 @@
 #include "threads.h"
 #include "endianness.h"
 #include "segconf.h"
+#include "contigs.h"
+#include "map_chrom2ref.h"
 
 static Mutex wait_for_vb_1_mutex = {};
 
@@ -90,7 +92,7 @@ static void zip_display_compression_ratio (Digest md5, bool is_final_component)
         progress_finalize_component_time ("Done", md5);
 
     // when compressing BAM report only ratio_vs_comp (compare to BGZF-compress BAM - we don't care about the underlying plain BAM)
-    else if (z_file->data_type == DT_BAM) 
+    else if (Z_DT(DT_BAM)) 
             progress_finalize_component_time_ratio (dt_name (z_file->data_type), ratio_vs_comp, md5);
 
     else if (ratio_vs_comp >= 0) {
@@ -316,7 +318,7 @@ static void zip_handle_unique_words_ctxs (VBlock *vb)
         Context *ctx = CTX(did_i);
     
         if (!ctx->nodes.len || ctx->nodes.len != ctx->b250.len) continue; // check that all words are unique (and new to this vb)
-        if (vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (ctx->dict_id)) continue; // this doesn't work for FORMAT fields
+        if (VB_DT(DT_VCF) && dict_id_is_vcf_format_sf (ctx->dict_id)) continue; // this doesn't work for FORMAT fields
         if (ctx->nodes.len < vb->lines.len / 5) continue; // don't bother if this is a rare field less than 20% of the lines
         if (buf_is_alloc (&ctx->local))     continue; // skip if we are already using local to optimize in some other way
 
@@ -406,6 +408,10 @@ static void zip_compress_ctxs (VBlock *vb)
                 ctx_dump_binary (vb, ctx, false);
 
             if (flag.show_time) codec_show_time (vb, "B250", ctx->tag_name, ctx->bcodec);
+            
+            if (flag.debug_seg) iprintf ("zip_compress_ctxs: vb_i=%u %s: B250.len=%"PRIu64" NODES.len=%"PRIu64"\n", 
+                                         vb->vblock_i, ctx->tag_name, ctx->b250.len, ctx->nodes.len);
+
             zfile_compress_b250_data (vb, ctx);
         }
 
@@ -416,6 +422,9 @@ static void zip_compress_ctxs (VBlock *vb)
                 ctx_dump_binary (vb, ctx, true);
 
             if (flag.show_time) codec_show_time (vb, "LOCAL", ctx->tag_name, ctx->lcodec);
+
+            if (flag.debug_seg) iprintf ("zip_compress_ctxs: vb_i=%u %s: LOCAL.len=%"PRIu64" LOCAL.param=%"PRIu64"\n", 
+                                         vb->vblock_i, ctx->tag_name, ctx->local.len, ctx->local.param);
 
             zfile_compress_local_data (vb, ctx, 0);
         }
@@ -431,8 +440,8 @@ static void zip_compress_ctxs (VBlock *vb)
 static void zip_update_txt_counters (VBlock *vb)
 {
     // note: in case of an FASTQ with flag.optimize_DESC or VCF with add_line_numbers, we already updated this in *_zip_read_one_vb
-    if (!(flag.optimize_DESC && vb->data_type == DT_FASTQ) &&
-        !(flag.add_line_numbers && (vb->data_type == DT_VCF || vb->data_type == DT_BCF)))
+    if (!(flag.optimize_DESC && VB_DT(DT_FASTQ)) &&
+        !(flag.add_line_numbers && (VB_DT(DT_VCF) || VB_DT(DT_BCF))))
         txt_file->num_lines += (int64_t)vb->lines.len; // lines in this txt file
 
     // counters of data AS IT APPEARS IN THE TXT FILE
@@ -458,11 +467,8 @@ static void zip_update_txt_counters (VBlock *vb)
 static void zip_write_global_area (Digest single_component_digest)
 {
     // if we're making a reference, we need the RA data to populate the reference section chrome/first/last_pos ahead of ref_compress_ref
-    if (DTPZ(has_random_access)) 
-        random_access_finalize_entries (&z_file->ra_buf); // sort RA, update entries that don't yet have a chrom_index
-
-    if (DTPZ(has_random_access) && z_dual_coords)
-        random_access_finalize_entries (&z_file->ra_buf_luft); // sort RA, update entries that don't yet have a chrom_index
+    random_access_finalize_entries (&z_file->ra_buf); // sort RA, update entries that don't yet have a chrom_index
+    random_access_finalize_entries (&z_file->ra_buf_luft); 
 
     ctx_compress_dictionaries(); 
 
@@ -470,7 +476,7 @@ static void zip_write_global_area (Digest single_component_digest)
         
     // store a mapping of the file's chroms to the reference's contigs, if they are any different
     if (flag.reference == REF_EXT_STORE || flag.reference == REF_EXTERNAL || flag.reference == REF_MAKE_CHAIN) 
-        ref_alt_chroms_compress(gref);
+        map_chrom2ref_compress(gref);
 
     // output reference, if needed
     bool store_ref = flag.reference == REF_INTERNAL || flag.reference == REF_EXT_STORE || flag.make_reference;
@@ -487,11 +493,8 @@ static void zip_write_global_area (Digest single_component_digest)
     if (dict_id_aliases_buf->len) zfile_compress_section_data (evb, SEC_DICT_ID_ALIASES, dict_id_aliases_buf);
 
     // if this data has random access (i.e. it has chrom and pos), compress all random access records into evb->z_data
-    if (DTPZ(has_random_access)) 
-        random_access_compress (&z_file->ra_buf, SEC_RANDOM_ACCESS, DC_PRIMARY, flag.show_index ? RA_MSG_PRIM : NULL);
-
-    if (DTPZ(has_random_access) && z_dual_coords)
-        random_access_compress (&z_file->ra_buf_luft, SEC_RANDOM_ACCESS, DC_LUFT, flag.show_index ? RA_MSG_LUFT : NULL);
+    random_access_compress (&z_file->ra_buf,      SEC_RANDOM_ACCESS, DC_PRIMARY, flag.show_index ? RA_MSG_PRIM : NULL);
+    random_access_compress (&z_file->ra_buf_luft, SEC_RANDOM_ACCESS, DC_LUFT,    flag.show_index ? RA_MSG_LUFT : NULL);
 
     if (store_ref) 
         random_access_compress (ref_get_stored_ra (gref), SEC_REF_RAND_ACC, 0, flag.show_ref_index ? RA_MSG_REF : NULL);
@@ -560,11 +563,8 @@ static void zip_compress_one_vb (VBlock *vb)
     if (vb->vblock_i == 1) mutex_unlock (wait_for_vb_1_mutex); // locked in zip_one_file
 
     // merge in random access - IF it is used
-    if (DTP(has_random_access)) 
-        random_access_merge_in_vb (vb, DC_PRIMARY);
-     
-    if (DTP(has_random_access) && z_dual_coords)
-        random_access_merge_in_vb (vb, DC_LUFT);
+    random_access_merge_in_vb (vb, DC_PRIMARY);
+    random_access_merge_in_vb (vb, DC_LUFT);
 
     // compress b250 and local data for all ctxs (for reference files we don't output VBs)
     if (!flag.make_reference && !flag.seg_only) {
@@ -653,6 +653,48 @@ static void zip_complete_processing_one_vb (VBlockP vb)
     txt_file->num_vbs++;
 }
 
+// copy contigs from reference or header to CHROM (and if relevant - also oCHROM, RNEXT for SAM/BAM)
+static void zip_prepopulate_contig_ctxs (void)
+{
+    // First, copy the HEADER contigs (eg the BAM code relies on the chrom_index being the same as the contig index in the BAM data)
+    ConstContigPkgP txtheader_ctgs, txtheader_octgs;
+    txtheader_get_contig_bufs (&txtheader_ctgs, &txtheader_octgs);
+        
+    // note: index in contigs is by order of appearance in header, not the same as the reference
+    if (txtheader_ctgs) { // note: always true for BAM. for SAM and VCF - true if there are contigs in the header.
+        ctx_build_zf_ctx_from_contigs (DTFT (prim_chrom), txtheader_ctgs);
+
+        if (Z_DT (DT_SAM) || Z_DT (DT_BAM))
+            ctx_build_zf_ctx_from_contigs (SAM_RNEXT, txtheader_ctgs);
+    }
+
+    if (txtheader_octgs && txtheader_octgs->contigs.len)
+        ctx_build_zf_ctx_from_contigs (DTFT(luft_chrom), txtheader_octgs);
+
+    // Second, add the REFERENCE contigs that don't exist in the header (if a reference is loaded)
+    ConstContigPkgP ref_ctgs=NULL;
+
+    // Primary contigs
+    if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE || flag.reference == REF_MAKE_CHAIN || flag.reference == REF_LIFTOVER) { 
+        ref_contigs_get (flag.reference == REF_MAKE_CHAIN || flag.reference == REF_LIFTOVER ? prim_ref : gref, &ref_ctgs); 
+
+        if (ref_ctgs && ref_ctgs->contigs.len) {
+            ctx_build_zf_ctx_from_contigs (DTFT (prim_chrom), ref_ctgs); 
+
+            if (Z_DT (DT_SAM) || Z_DT (DT_BAM))
+                ctx_build_zf_ctx_from_contigs (SAM_RNEXT, ref_ctgs);
+        }
+        else
+            ASSERT (!flag.sort, "Cannot --sort, because there are not contigs: %s has no contigs in its header, and a reference file was not provided", txt_name);
+    }
+
+    // Luft contigs
+    if (flag.reference == REF_LIFTOVER || flag.reference == REF_MAKE_CHAIN) {
+        ref_contigs_get (gref, &ref_ctgs);
+        ctx_build_zf_ctx_from_contigs (DTFT(luft_chrom), ref_ctgs);
+    }
+}
+
 // this is the main dispatcher function. It first processes the txt header, then proceeds to read 
 // a variant block from the input file and send it off to a thread for computation. When the thread
 // completes, this function proceeds to write the output to the output file. It can dispatch
@@ -697,7 +739,7 @@ void zip_one_file (const char *txt_basename,
 
     // copy contigs from reference or txtheader to CHROM (and RNEXT too, for SAM/BAM)
     if (z_file->num_txt_components_so_far == 1 && DTPT (prepopulate_contigs_from_ref)) 
-        txtheader_zip_prepopulate_contig_ctxs();
+        zip_prepopulate_contig_ctxs();
 
     segconf_calculate();
 
@@ -734,7 +776,7 @@ finish:
     if (z_closes_after_me && !flag.seg_only) {
         zip_write_global_area (single_component_digest);
 
-        if (chain_is_loaded) vcf_liftover_display_lift_report();
+        if (chain_is_loaded && !Z_DT(DT_CHAIN)) vcf_liftover_display_lift_report();
     }
 
     zip_display_compression_ratio (flag.bind ? DIGEST_NONE : single_component_digest, z_closes_after_me); // Done for reference + final compression ratio calculation

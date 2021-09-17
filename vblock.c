@@ -29,7 +29,6 @@ VBlock *evb = NULL;
     func (&vb->ra_buf[0]);           \
     func (&vb->ra_buf[1]);           \
     func (&vb->compressed);          \
-    func (&vb->txt_data);            \
     func (&vb->z_data);              \
     func (&vb->z_section_headers);   \
     func (&vb->spiced_pw);           \
@@ -45,6 +44,7 @@ VBlock *evb = NULL;
     func (&vb->lo_rejects[1]);       \
     for (unsigned i=0; i < NUM_CODEC_BUFS; i++) func (&vb->codec_bufs[i]); \
     for (unsigned i=0; i < MAX_DICTS; i++) if (CTX(i)->dict_id.num) ctx_func (CTX(i)); \
+    func (&vb->txt_data); /* handle contexts first, as vcf_seg_FORMAT_GT overlays FORMAT_GT_HT on txt_data */ \
     if (vb->data_type_alloced != DT_NONE && dt_props[vb->data_type_alloced].vb_func) dt_props[vb->data_type_alloced].vb_func(vb);    
 
 // cleanup vb and get it ready for another usage (without freeing memory held in the Buffers)
@@ -54,7 +54,7 @@ void vb_release_vb_do (VBlock **vb_p, const char *func)
 
     if (!vb) return; // nothing to release
 
-    ASSERT (vb->in_use || vb==evb, "Cannot release VB because it is not in_use (called from %s): vb->id=%u vb->vblock_id=%u", 
+    ASSERT (vb->in_use || vb==evb, "Cannot release VB because it is not in_use (called from %s): vb->id=%d vb->vblock_id=%u", 
             func, vb->id, vb->vblock_i);
 
     threads_log_by_vb (vb, vb->compute_task ? vb->compute_task : func, "RELEASING VB", 0);
@@ -107,6 +107,8 @@ void vb_release_vb_do (VBlock **vb_p, const char *func)
     memset(vb->dict_id_to_did_i_map, 0, sizeof(vb->dict_id_to_did_i_map));
     vb->iupacs_last_range[0] = vb->iupacs_last_range[1] = NULL;
     vb->iupacs_last_pos[0] = vb->iupacs_last_pos[1] = vb->iupacs_next_pos[0] = vb->iupacs_next_pos[1] = 0;
+    vb->num_rollback_ctxs=0;
+    memset (vb->rollback_ctxs, 0, sizeof(vb->rollback_ctxs));
     mutex_destroy (vb->vb_ready_for_compute_thread);
 
     FINALIZE_VB_BUFS (buf_free, ctx_free_context, release_vb);
@@ -157,15 +159,16 @@ VBlockPool *vb_get_pool (void)
     return pool;
 }
 
-VBlockP vb_initialize_nonpool_vb (int vb_id, DataType dt)
+VBlockP vb_initialize_nonpool_vb (int vb_id, DataType dt, const char *task)
 {
     uint64_t sizeof_vb = (dt != DT_NONE && dt_props[dt].sizeof_vb) ? dt_props[dt].sizeof_vb(dt) : sizeof (VBlock);
 
-    VBlockP vb = CALLOC (sizeof_vb);
-    vb->data_type = DT_NONE;
-    vb->id = vb_id;
-    vb->compute_task = "main_thread";
-    vb->data_type = dt;
+    VBlockP vb       = CALLOC (sizeof_vb);
+    vb->data_type    = DT_NONE;
+    vb->id           = vb_id;
+    vb->compute_task = task;
+    vb->data_type    = dt;
+    vb->in_use       = true;
     return vb;
 }
 
@@ -302,7 +305,7 @@ const char *err_vb_pos (void *vb)
 {
     static char s[80];
     sprintf (s, "vb i=%u position in %s file=%"PRIu64, 
-             ((VBlockP)vb)->vblock_i, dt_name (txt_file->data_type), ((VBlockP)vb)->vb_position_txt_file);
+             (VB)->vblock_i, dt_name (txt_file->data_type), (VB)->vb_position_txt_file);
     return s;
 }
 

@@ -344,7 +344,4 @@ extern const LuftTransLateProp ltrans_props[NUM_VCF_TRANS];
 #define dict_id_is_vcf_info_sf   dict_id_is_type_1
 #define dict_id_is_vcf_format_sf dict_id_is_type_2
 
-enum { oCHROM, oPOS, oREF, oXSTRAND, oSTATUS }; // order of fields as defined in data_types.h
-#define ODID(offset) (DTFZ(ochrom)+(DidIType)(offset))
-
 #endif

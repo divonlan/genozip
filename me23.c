@@ -97,7 +97,7 @@ const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_
     GET_NEXT_ITEM (ME23_ID);
     seg_id_field (vb, CTX(ME23_ID), field_start, field_len, true);
 
-    GET_NEXT_ITEM (ME2_CHROM);
+    GET_NEXT_ITEM (ME23_CHROM);
     seg_chrom_field (vb, field_start, field_len);
 
     GET_NEXT_ITEM (ME23_POS);
@@ -113,7 +113,7 @@ const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_
     seg_add_to_local_fixed (vb, CTX(ME23_GENOTYPE), field_start, field_len); 
         
     char lookup[2] = { SNIP_LOOKUP, '0' + field_len };
-    seg_by_did_i (vb, lookup, 2, ME23_GENOTYPE, field_len + 1);
+    seg_by_did_i (VB, lookup, 2, ME23_GENOTYPE, field_len + 1);
 
     SEG_EOL (ME23_EOL, false);
     

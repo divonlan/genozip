@@ -21,6 +21,7 @@
 #include "txtheader.h"
 #include "kraken.h"
 #include "segconf.h"
+#include "contigs.h"
 
 static const StoreType optional_field_store_flag[256] = {
     ['c']=STORE_INT, ['C']=STORE_INT, 
@@ -395,7 +396,7 @@ void sam_seg_verify_rname_pos (VBlock *vb, const char *p_into_txt, PosType this_
     if (header_contigs) {
         // since this SAM file has a header, all RNAMEs must be listed in it
         ASSSEG (vb->chrom_node_index < header_contigs->len, p_into_txt, "RNAME \"%.*s\" does not have an SQ record in the header", vb->chrom_name_len, vb->chrom_name);
-        max_pos = ENT (RefContig, *header_contigs, vb->chrom_node_index)->max_pos;
+        max_pos = ENT (Contig, *header_contigs, vb->chrom_node_index)->max_pos;
     }
     else {
         WordIndex ref_contig = ref_contig_get_by_chrom (vb, gref, vb->chrom_node_index, vb->chrom_name, vb->chrom_name_len, &max_pos); // possibly an alt contig
@@ -433,23 +434,23 @@ void sam_seg_tlen_field (VBlockSAM *vb,
     // case 1
     if (tlen_value && tlen_value == -ctx->last_value.i) {
         char snip_delta[2] = { SNIP_SELF_DELTA, '-' };
-        seg_by_ctx (vb, snip_delta, 2, ctx, add_bytes);
+        seg_by_ctx (VB, snip_delta, 2, ctx, add_bytes);
     }
     // case 2:
     else if (tlen_value > 0 && pnext_pos_delta > 0 && cigar_seq_len > 0) {
         char tlen_by_calc[30] = { SNIP_SPECIAL, SAM_SPECIAL_TLEN };
         unsigned tlen_by_calc_len = str_int (tlen_value - pnext_pos_delta - (int64_t)cigar_seq_len, &tlen_by_calc[2]);
-        seg_by_ctx (vb, tlen_by_calc, tlen_by_calc_len + 2, ctx, add_bytes);
+        seg_by_ctx (VB, tlen_by_calc, tlen_by_calc_len + 2, ctx, add_bytes);
     }
     // case default: add as is (option 1)
     else if (tlen)
-        seg_by_ctx (vb, tlen, tlen_len, ctx, add_bytes);
+        seg_by_ctx (VB, tlen, tlen_len, ctx, add_bytes);
 
     // case default: add as is (option 2)
     else {
         char snip[20];
         unsigned snip_len = str_int (tlen_value, snip);
-        seg_by_ctx (vb, snip, snip_len, ctx, add_bytes);
+        seg_by_ctx (VB, snip, snip_len, ctx, add_bytes);
     }
 
     ctx->last_value.i = tlen_value;
@@ -480,7 +481,7 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
 
     // for unaligned lines, if we have refhash loaded, use the aligner instead of CIGAR-based segmenting
     if (!pos && flag.ref_use_aligner) {
-        aligner_seg_seq ((VBlockP)vb, bitmap_ctx, seq, seq_len);
+        aligner_seg_seq (VB, bitmap_ctx, seq, seq_len);
         goto align_nonref_local;
     }
 
@@ -505,7 +506,7 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
     if (seq[0] == '*') goto done; // we already handled a missing seq (SEQ="*") by adding a '-' to CIGAR - no data added here
 
     RefLock lock;
-    Range *range = ref_seg_get_locked_range ((VBlockP)vb, gref, vb->chrom_node_index, vb->chrom_name, vb->chrom_name_len, pos, vb->ref_consumed, seq, &lock);
+    Range *range = ref_seg_get_locked_range (VB, gref, vb->chrom_node_index, vb->chrom_name, vb->chrom_name_len, pos, vb->ref_consumed, seq, &lock);
 
     // Cases where we don't consider the refernce and just copy the seq as-is
     if (!range || // 1. (denovo:) this contig defined in @SQ went beyond the maximum genome size of 4B and is thus ignored
@@ -517,7 +518,7 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
         bit_array_clear_region (bitmap, bitmap_ctx->next_local, vb->ref_and_seq_consumed); // note: vb->ref_and_seq_consumed==0 if cigar="*"
         bitmap_ctx->next_local += vb->ref_and_seq_consumed;
 
-        random_access_update_last_pos ((VBlockP)vb, DC_PRIMARY, pos + vb->ref_consumed - 1);
+        random_access_update_last_pos (VB, DC_PRIMARY, pos + vb->ref_consumed - 1);
 
         if (range) ref_unlock (gref, lock);
         
@@ -661,10 +662,10 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
     }
     else { // update RA of the VB with last pos of this line as implied by the CIGAR string
         if (this_seq_last_pos <= range->last_pos) // always the case in INTERNAL and non-circular EXTERNAL 
-            random_access_update_last_pos ((VBlockP)vb, DC_PRIMARY, this_seq_last_pos);
+            random_access_update_last_pos (VB, DC_PRIMARY, this_seq_last_pos);
 
         else  // we circled back to the beginning for the chromosome - i.e. this VB RA is the entire chromosome
-            random_access_update_to_entire_chrom ((VBlockP)vb, DC_PRIMARY, range->first_pos, range->last_pos);
+            random_access_update_to_entire_chrom (VB, DC_PRIMARY, range->first_pos, range->last_pos);
     }
 align_nonref_local: {
     // we align nonref_ctx->local to a 4-character boundary. this is because CODEC_ACGT squeezes every 4 characters into a byte,
@@ -718,12 +719,12 @@ static void sam_seg_OA_field (VBlockSAM *vb, const char *field, unsigned field_l
 static void seg_xa_strand_pos_cb (VBlockP vb, ContextP ctx, const char *field, unsigned field_len)
 {
     if (field_len < 2 || (field[0] != '+' && field[0] != '-'))  // invalid format - expecting pos to begin with the strand
-        seg_by_ctx (vb, field, field_len, ctx, field_len);
+        seg_by_ctx (VB, field, field_len, ctx, field_len);
 
     else {
-        seg_by_did_i (vb, field, 1, OPTION_XA_STRAND, 1);
+        seg_by_did_i (VB, field, 1, OPTION_XA_STRAND, 1);
         seg_integer_or_not (vb, CTX(OPTION_XA_POS), &field[1], field_len-1, field_len-1);
-        seg_by_ctx (vb, xa_strand_pos_snip, xa_strand_pos_snip_len, ctx, 0); // pre-created constant container
+        seg_by_ctx (VB, xa_strand_pos_snip, xa_strand_pos_snip_len, ctx, 0); // pre-created constant container
     }
 }
 
@@ -809,7 +810,7 @@ static void sam_seg_MD_field (VBlockSAM *vb,  ZipDataLineSAM *dl, const char *fi
     bool success = sam_seg_get_shortened_MD (field, field_len, dl->seq_len, new_md, &new_md_len);
 
     // not sure which of these two is better....
-    seg_by_did_i (vb,                                 
+    seg_by_did_i (VB,                                 
                   success ? new_md     : field, 
                   success ? new_md_len : field_len,
                   OPTION_MD, add_bytes);
@@ -837,12 +838,12 @@ static inline void sam_seg_AS_field (VBlockSAM *vb, ZipDataLineSAM *dl, DictId d
         char new_snip[20] = { SNIP_SPECIAL, SAM_SPECIAL_AS };
         unsigned delta_len = str_int (dl->seq_len-as, &new_snip[2]);
 
-        seg_by_dict_id (vb, new_snip, delta_len+2, dict_id, add_bytes); 
+        seg_by_dict_id (VB, new_snip, delta_len+2, dict_id, add_bytes); 
     }
 
     // not possible - just store unmodified
     else
-        seg_by_dict_id (vb, snip, snip_len, dict_id, add_bytes); 
+        seg_by_dict_id (VB, snip, snip_len, dict_id, add_bytes); 
 }
 
 // mc:i: (output of bamsormadup and other biobambam tools - mc in small letters) 
@@ -854,11 +855,11 @@ static inline void sam_seg_mc_field (VBlockSAM *vb, DictId dict_id,
     
     // if snip is "-1", store as simple snip
     if (snip_len == 2 && snip[0] == '-' && snip[1] == '1')
-        seg_by_did_i (vb, snip, snip_len, mc_did_i, add_bytes);
+        seg_by_did_i (VB, snip, snip_len, mc_did_i, add_bytes);
     
     // delta vs PNEXT
     else
-        seg_pos_field ((VBlockP)vb, mc_did_i, SAM_PNEXT, SPF_BAD_SNIPS_TOO, 0, snip, snip_len, 0, add_bytes);
+        seg_pos_field (VB, mc_did_i, SAM_PNEXT, SPF_BAD_SNIPS_TOO, 0, snip, snip_len, 0, add_bytes);
 }
 
 // optimization for Ion Torrent flow signal (ZM) - negative values become zero, positives are rounded to the nearest 10
@@ -882,7 +883,7 @@ static void sam_seg_BD_BI_field (VBlockSAM *vb, ZipDataLineSAM *dl, const char *
     Context *this_ctx  = is_bi ? CTX(OPTION_BI) : CTX (OPTION_BD);
 
     if (field_len != dl->seq_len) {
-        seg_by_ctx (vb, field, field_len, this_ctx, field_len);
+        seg_by_ctx (VB, field, field_len, this_ctx, field_len);
         return;
     }
     
@@ -893,7 +894,7 @@ static void sam_seg_BD_BI_field (VBlockSAM *vb, ZipDataLineSAM *dl, const char *
     if (!dl->bdbi_data_start[!is_bi]) // the first of BD and BI increments local.len, so it is incremented even if just one of BD/BI appears
         CTX(OPTION_BD_BI)->local.len += field_len * 2;
 
-    seg_by_ctx (vb, ((char[]){ SNIP_SPECIAL, SAM_SPECIAL_BDBI }), 2, this_ctx, 0);
+    seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, SAM_SPECIAL_BDBI }), 2, this_ctx, 0);
 }
 
 
@@ -1005,7 +1006,7 @@ static void sam_seg_array_field (VBlock *vb, DictId dict_id, const char *value, 
         if (optimize && snip_len < 25)
             optimize (&snip, &snip_len, new_number_str);
 
-        seg_by_ctx (vb, snip, snip_len, element_ctx, IS_BAM ? 0 : number_len+1);
+        seg_by_ctx (VB, snip, snip_len, element_ctx, IS_BAM ? 0 : number_len+1);
         
         str_len--; // skip comma
         str++;
@@ -1047,7 +1048,7 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is
         // fields containing CIGAR format data - aliases of _OPTION_CIGAR (not the main CIGAR field that all snips have SNIP_SPECIAL)
         // MC: "Mate Cigar", added by eg https://manpages.debian.org/unstable/biobambam2/bamsort.1.en.html  
         case _OPTION_MC:
-        case _OPTION_OC: seg_by_did_i (vb, value, value_len, OPTION_CIGAR, add_bytes); break;
+        case _OPTION_OC: seg_by_did_i (VB, value, value_len, OPTION_CIGAR, add_bytes); break;
         
         case _OPTION_MD: sam_seg_MD_field (vb, dl, value, value_len, add_bytes); break;
 
@@ -1059,7 +1060,7 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is
         case _OPTION_mc: sam_seg_mc_field (vb, dict_id, value, value_len, add_bytes); break;
 
         // TX:i: - we seg this as a primary field SAM_TAX_ID
-        case _OPTION_TX: seg_by_did_i (vb, taxid_redirection_snip, taxid_redirection_snip_len, OPTION_TX, add_bytes); break;
+        case _OPTION_TX: seg_by_did_i (VB, taxid_redirection_snip, taxid_redirection_snip_len, OPTION_TX, add_bytes); break;
 
         //case _OPTION_E2: sam_seg_E2_field (vb, dl, value, value_len, add_bytes); // BROKEN. To do: fix.
 
@@ -1068,11 +1069,11 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is
         default:
             // Numeric array array
             if (bam_type == 'B') 
-                sam_seg_array_field ((VBlockP)vb, dict_id, value, value_len);
+                sam_seg_array_field (VB, dict_id, value, value_len);
 
             // All other subfields - normal snips in their own dictionary
             else        
-                seg_by_dict_id (vb, value, value_len, dict_id, add_bytes); 
+                seg_by_dict_id (VB, value, value_len, dict_id, add_bytes); 
     }
 
     // integer and float fields need to be STORE_INT/FLOAT to be reconstructable as BAM
@@ -1117,7 +1118,7 @@ static const char *sam_seg_get_kraken (VBlockSAM *vb, const char *next_field, bo
     *type       = 'i';
     *value      = taxid_str;
     *has_kraken = false;
-    *value_len  = kraken_seg_taxid_do ((VBlockP)vb, SAM_TAXID, last_txt (vb, SAM_QNAME), vb->last_txt_len (SAM_QNAME),
+    *value_len  = kraken_seg_taxid_do (VB, SAM_TAXID, last_txt (vb, SAM_QNAME), vb->last_txt_len (SAM_QNAME),
                                        taxid_str, true);
 
     vb->recon_size += is_bam ? 7 : (*value_len + 6); // txt modified
@@ -1226,7 +1227,7 @@ static void sam_seg_cigar_field (VBlockSAM *vb, ZipDataLineSAM *dl, unsigned las
     memcpy (&cigar_snip[cigar_snip_len], vb->last_cigar, last_cigar_len);
     cigar_snip_len += last_cigar_len;
 
-    seg_by_did_i (vb, cigar_snip, cigar_snip_len, SAM_CIGAR, last_cigar_len+1); // +1 for \t
+    seg_by_did_i (VB, cigar_snip, cigar_snip_len, SAM_CIGAR, last_cigar_len+1); // +1 for \t
 }
 
 void sam_seg_qual_field (VBlockSAM *vb, ZipDataLineSAM *dl, const char *qual, uint32_t qual_data_len, unsigned add_bytes)
@@ -1244,11 +1245,9 @@ void sam_seg_qname_field (VBlockSAM *vb, const char *qname, uint32_t qname_len, 
     // I tried: SNIP_COPY on collation (with segconf.is_collated) but QNAME.b250 worsening (from all_the_same) outweighs the b250 compression 
     // improvement of the container items
     ContextP ctx = CTX(SAM_QNAME);
-
     seg_compound_field (VB, ctx, qname, qname_len, sep_without_space, 0, add_additional_bytes);
 
-    ctx->last_txt_index = ENTNUM (vb->txt_data, qname); // store for kraken
-    ctx->last_txt_len   = qname_len;
+    seg_set_last_txt (VB, ctx, STRa(qname), STORE_NONE); // store for kraken
 }
 
 // test function called from main_load_reference -> txtfile_test_data: returns true if this line as pos=0 (i.e. unaligned)
@@ -1290,7 +1289,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     ASSSEG (str_get_int (field_start, field_len, &flag), field_start, "invalid FLAG field: %.*s", field_len, field_start);
 
     GET_NEXT_ITEM (SAM_RNAME);
-    seg_chrom_field (vb_, field_start, field_len);
+    seg_chrom_field (vb, field_start, field_len);
 
     // note: pos can have a value even if RNAME="*" - this happens if a SAM with a RNAME that is not in the header is converted to BAM with samtools
     GET_NEXT_ITEM (SAM_POS);

@@ -28,23 +28,27 @@ static void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char main_ref, char main_
     char new_ref=0, new_alt=0;
 
     // if we have a reference, we use it (we treat the reference as PRIMARY)
-    if ((flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) && vb->line_coords == DC_PRIMARY) {
+    // except: if --match-chrom, we assume the user just wants to match, and we don't burden him with needing the reference to decompress
+    if (((flag.reference == REF_EXTERNAL && !flag.match_chrom_to_reference) || flag.reference == REF_EXT_STORE) && vb->line_coords == DC_PRIMARY) {
         PosType pos = vb->last_int(VCF_POS);
 
         RefLock lock;
-        Range *range = ref_seg_get_locked_range ((VBlockP)vb, gref, vb->chrom_node_index, vb->chrom_name, vb->chrom_name_len, pos, 1, NULL, &lock);
-        uint32_t index_within_range = pos - range->first_pos;
 
-        ref_assert_nucleotide_available (range, pos);
-        char ref = ref_base_by_idx (range, index_within_range);
+        Range *range = ref_seg_get_locked_range (VB, gref, vb->chrom_node_index, vb->chrom_name, vb->chrom_name_len, pos, 1, NULL, &lock);
+        if (range) { // this chrom is in the reference
+            uint32_t index_within_range = pos - range->first_pos;
 
-        if (main_ref == ref) new_ref = '-'; // this should always be the case...
-        if (main_alt == ref) new_alt = '-'; 
+            ref_assert_nucleotide_available (range, pos);
+            char ref = ref_base_by_idx (range, index_within_range);
 
-        if (flag.reference == REF_EXT_STORE)
-            bit_array_set (&range->is_set, index_within_range);
+            if (main_ref == ref) new_ref = '-'; // this should always be the case...
+            if (main_alt == ref) new_alt = '-'; 
 
-        ref_unlock (gref, lock);
+            if (flag.reference == REF_EXT_STORE)
+                bit_array_set (&range->is_set, index_within_range);
+
+            ref_unlock (gref, lock);
+        }
     }
 
     // replace the most common SNP with +
@@ -65,7 +69,7 @@ static void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char main_ref, char main_
         refalt_special[2] = new_ref ? new_ref : main_ref;
         refalt_special[3] = new_alt ? new_alt : main_alt;
 
-        seg_by_did_i (vb, refalt_special, sizeof(refalt_special), SEL (VCF_REFALT, VCF_oREFALT), 0); // we do the accounting in vcf_refalt_seg_main_ref_alt
+        seg_by_did_i (VB, refalt_special, sizeof(refalt_special), SEL (VCF_REFALT, VCF_oREFALT), 0); // we do the accounting in vcf_refalt_seg_main_ref_alt
     }
     // if not - just the normal snip
     else {
@@ -73,7 +77,7 @@ static void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char main_ref, char main_
         refalt_normal[0] = main_ref;
         refalt_normal[2] = main_alt;
 
-        seg_by_did_i (vb, refalt_normal, sizeof(refalt_normal), SEL (VCF_REFALT, VCF_oREFALT), 0); // we do the account in vcf_refalt_seg_main_ref_alt
+        seg_by_did_i (VB, refalt_normal, sizeof(refalt_normal), SEL (VCF_REFALT, VCF_oREFALT), 0); // we do the account in vcf_refalt_seg_main_ref_alt
     }
 }
 
@@ -89,7 +93,7 @@ void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, STRp(ref), STRp(alt))
         ref_alt[ref_len] = '\t';
         memcpy (&ref_alt[ref_len+1], alt, alt_len);
 
-        seg_by_did_i (vb, ref_alt, ref_len + alt_len + 1, SEL (VCF_REFALT, VCF_oREFALT), 0);
+        seg_by_did_i (VB, ref_alt, ref_len + alt_len + 1, SEL (VCF_REFALT, VCF_oREFALT), 0);
     }
         
     if (vb->line_coords == DC_PRIMARY) // in the default reconstruction, this REFALT is in the main fields along with 2 tabs
@@ -591,10 +595,10 @@ LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool is
     if (!opos) return LO_OK_REF_SAME_SNP; // POS==oPOS==0 and REF==oREF=='.'
 
     // note: as we're using external references, the range is always the entire contig, and range->first_pos is always 1.
-    const Range *prim_range = ref_seg_get_locked_range ((VBlockP)vb, prim_ref, dl->chrom[0], vb->chrom_name, vb->chrom_name_len, pos, 1, ENT (char, vb->txt_data, vb->line_start), NULL); // doesn't lock as lock=NULL
+    const Range *prim_range = ref_seg_get_locked_range (VB, prim_ref, dl->chrom[0], vb->chrom_name, vb->chrom_name_len, pos, 1, ENT (char, vb->txt_data, vb->line_start), NULL); // doesn't lock as lock=NULL
     ASSVCF (prim_range, "Failed to find PRIM range for chrom=\"%.*s\"", vb->chrom_name_len, vb->chrom_name);
 
-    const Range *luft_range = ref_seg_get_locked_range ((VBlockP)vb, gref, dl->chrom[1], NULL, 0, opos, 1, ENT (char, vb->txt_data, vb->line_start), NULL);
+    const Range *luft_range = ref_seg_get_locked_range (VB, gref, dl->chrom[1], NULL, 0, opos, 1, ENT (char, vb->txt_data, vb->line_start), NULL);
     ASSVCF (luft_range, "Failed to find LUFT range for chrom=%d", dl->chrom[1]);
 
     str_toupper_(vb->main_refalt, ref, ref_len);
@@ -688,7 +692,7 @@ void vcf_refalt_seg_other_REFALT (VBlockVCFP vb, DidIType did_i, LiftOverStatus 
             snip[snip_len++] = vb->new_ref;
     }
 
-    seg_by_did_i (vb, snip, snip_len, did_i, add_bytes); 
+    seg_by_did_i (VB, snip, snip_len, did_i, add_bytes); 
 }
 
 // ---------
@@ -803,7 +807,7 @@ void vcf_refalt_seg_convert_to_primary (VBlockVCFP vb, LiftOverStatus ostatus)
     uint64_t save_txt_len = vb->txt_data.len;
     vb->txt_data.len = ENTNUM (vb->txt_data, vb->main_refalt);
 
-    vcf_reconstruct_other_REFALT_do ((VBlockP)vb, CTX(VCF_REFALT)->last_snip + 2, CTX(VCF_REFALT)->last_snip_len - 2, 
+    vcf_reconstruct_other_REFALT_do (VB, CTX(VCF_REFALT)->last_snip + 2, CTX(VCF_REFALT)->last_snip_len - 2, 
                                      *CTX(VCF_oXSTRAND)->last_snip == 'X', 
                                      vb->main_refalt, vb->main_ref_len+1+vb->main_alt_len, CTX(VCF_oREFALT)->tag_name);
 
@@ -845,7 +849,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_main_REFALT)
         PosType pos = CTX (VCF_POS)->last_value.i;
 
         const Range *range = ref_piz_get_range (vb, gref, pos, 1);
-        ASSPIZ (range, "failed to find range for chrom='%s' pos=%"PRId64, vb->chrom_name, pos);
+        ASSPIZ (range, "failed to find range for chrom='%s' pos=%"PRId64" in %s", vb->chrom_name, pos, ref_get_filename(gref));
         
         uint32_t idx = pos - range->first_pos;
         ASSPIZ (ref_is_nucleotide_set (range, idx), "reference is not set: chrom=%.*s pos=%"PRId64, range->chrom_name_len, range->chrom_name, pos);

@@ -17,6 +17,7 @@
 #include "strings.h"
 #include "dict_id.h"
 #include "website.h"
+#include "contigs.h"
 
 // Globals
 static VcfVersion vcf_version;
@@ -141,56 +142,19 @@ missing:
     ASSINP (!enforce, "missing attr %s in header line %.*s", attr, line_len, line);
 }
 
-// add contig to buffer if line is a valid contig, and fail silently if not
-static void vcf_header_consume_contig (STRp (contig_name), PosType length, bool liftover)
+// add contig to header contigs buffer if line is a valid contig, and fail silently if not
+static Contig *vcf_header_consume_contig (STRp (contig_name), PosType length, bool is_luft_contig)
 {
     // if its the 2nd+ file while binding in ZIP - we just check that the contigs are the same
     // (or a subset) of previous file's contigs (to do: merge headers, bug 327) 
     if (command == ZIP && flag.bind && z_file->num_txt_components_so_far /* 2nd+ file */) 
-        txtheader_verify_contig (contig_name, contig_name_len, length, (void *)liftover);
+        return txtheader_verify_contig (contig_name, contig_name_len, length, (void *)is_luft_contig);
 
     else {
-        txtheader_alloc_contigs (1, contig_name_len+1, liftover);
-        txtheader_add_contig (contig_name, contig_name_len, length, (void *)liftover);
+        txtheader_alloc_contigs (1, contig_name_len+1, is_luft_contig);
+        return txtheader_add_contig (contig_name, contig_name_len, length, (void *)is_luft_contig);
     }
 }
-
-static bool vcf_header_extract_contigs (STRp(line), void *dst_contigs_buf, void *unused2, unsigned unused3)
-{
-    const bool is_contig    = LINEIS ("##contig=");
-    const bool is_lo_contig = LINEIS (HK_LUFT_CONTIG);
-    const bool is_lb_contig = LINEIS (HK_PRIM_CONTIG);
-
-    if (!is_contig && !is_lo_contig && !is_lb_contig) goto done;
-
-    ASSERT0 (!chain_is_loaded || (!is_lo_contig && !is_lb_contig), "Cannot use --chain on this file because it already contains \""HK_LUFT_CONTIG"\" or \"" HK_PRIM_CONTIG"\" lines in its header");
-
-    STR (contig_name);
-    PosType length = 0;
-    unsigned key_len = is_contig ? 9 : (sizeof HK_LUFT_CONTIG - 1);
-    STR(snip);
-
-    // parse eg "##contig=<ID=NKLS02001838.1,length=29167>" and "##luft_contig=<ID=22>"
-    SAFE_NUL (&line[line_len]);
-    vcf_header_get_attribute (STRa(line), key_len, cSTR("ID="),     false, true,  pSTRa(contig_name));
-    vcf_header_get_attribute (STRa(line), key_len, cSTR("length="), false, false, pSTRa(snip));
-    str_get_int_range64 (snip, snip_len, 1, 1000000000000ULL, &length); // length stays 0 if snip_len=0
-    SAFE_RESTORE;
-
-    if ((is_contig && txt_file->coords == DC_LUFT) || is_lo_contig)
-        vcf_header_consume_contig (contig_name, contig_name_len, length, true);
-
-    else if (is_contig || is_lb_contig) 
-        vcf_header_consume_contig (contig_name, contig_name_len, length, false);
-
-    // case: --chain: collect all vcf_header_liftover_dst_contigs. non sorted/unique buf for now, will fix in vcf_header_zip_update_to_dual_coords
-    if (chain_is_loaded && !flag.rejects_coord && is_contig)
-        chain_append_all_luft_contig_index (contig_name, contig_name_len, (Buffer *)dst_contigs_buf);
-
-done:
-    return false; // continue iterating
-}
-
 
 static bool vcf_header_get_dual_coords (STRp(line), void *unused1, void *unused2, unsigned unused3)
 {
@@ -574,21 +538,75 @@ static void vcf_header_zip_update_to_dual_coords (Buffer *txt_header)
  
 static int dst_contigs_sorter (const void *a, const void *b) { return *(WordIndex *)a - *(WordIndex *)b; }
 
-// scan header for contigs - used to pre-populate z_file contexts in txtheader_zip_prepopulate_contig_ctxs
+// scan header for contigs - used to pre-populate z_file contexts in zip_prepopulate_contig_ctxs
 // in --chain - also builds vcf_header_liftover_dst_contigs 
-static void vcf_header_handle_contigs (Buffer *txt_header)
+static bool vcf_header_handle_contigs (STRp(line), void *new_txt_header_, void *unused1, unsigned unused2)
 {
-    ASSERTNOTINUSE (vcf_header_liftover_dst_contigs);
+    bool printed = false;
+    Buffer *new_txt_header = (Buffer *)new_txt_header_;
 
-    if (chain_is_loaded && !flag.rejects_coord)
-        buf_alloc (evb, &vcf_header_liftover_dst_contigs, 0, 100, WordIndex, 0, "codec_bufs[1]");
+    const bool is_contig    = LINEIS (HK_CONTIG);
+    const bool is_lo_contig = LINEIS (HK_LUFT_CONTIG);
+    const bool is_lb_contig = LINEIS (HK_PRIM_CONTIG);
 
-    txtheader_verify_contig_init();
-    txtfile_foreach_line (txt_header, false, vcf_header_extract_contigs, &vcf_header_liftover_dst_contigs, 0, 0, 0);
+    if (!is_contig && !is_lo_contig && !is_lb_contig) goto copy_line; // not a contig line
 
-    // sort (but not uniq)
-    if (chain_is_loaded && !flag.rejects_coord) 
-        qsort (vcf_header_liftover_dst_contigs.data, vcf_header_liftover_dst_contigs.len, sizeof (WordIndex), dst_contigs_sorter);
+    ASSERT0 (!chain_is_loaded || (!is_lo_contig && !is_lb_contig), "Cannot use --chain on this file because it already contains \""HK_LUFT_CONTIG"\" or \"" HK_PRIM_CONTIG"\" lines in its header");
+
+    PosType length = 0;
+    unsigned key_len = is_contig    ? STRLEN (HK_CONTIG)
+                     : is_lb_contig ? STRLEN (HK_PRIM_CONTIG)
+                     :                STRLEN (HK_LUFT_CONTIG);
+
+    // parse eg "##contig=<ID=NKLS02001838.1,length=29167>" and "##luft_contig=<ID=22>"
+    SAFE_NUL (&line[line_len]);
+    STR (contig_name);
+    vcf_header_get_attribute (STRa(line), key_len, cSTR("ID="),     false, true,  pSTRa(contig_name));
+    STR(length_str);
+    vcf_header_get_attribute (STRa(line), key_len, cSTR("length="), false, false, pSTRa(length_str));
+    str_get_int_range64 (STRa(length_str), 1, 1000000000000ULL, &length); // length stays 0 if length_str_len=0
+    SAFE_RESTORE;
+
+    // case: Luft contigs. These only in DVCF files, and when compressing them there is no Luft reference loaded
+    if ((is_contig && txt_file->coords == DC_LUFT) || is_lo_contig)
+        vcf_header_consume_contig (contig_name, contig_name_len, length, true); 
+
+    // case: Primary contigs
+    else if (is_contig || is_lb_contig) {
+
+        PosType length_accroding_to_header = length;
+
+        // case match_chrom_to_reference: update contig_name to the matching name in the reference
+        // Note: we match reference contigs by name only, not searching LN, we just verify the LN after the fact.
+        // This is so the process is the same when matching CHROM fields while segging, which will result in the header and lines
+        // behaving the same
+        if (flag.match_chrom_to_reference) {
+            Reference ref = chain_is_loaded ? prim_ref : gref;
+            WordIndex ref_index = ref_contigs_get_by_name (ref , STRa(contig_name), true, true);
+            if (ref_index != WORD_INDEX_NONE) {
+                contig_name = ref_contigs_get_name (ref, ref_index, &contig_name_len); // this contig as its called in the reference
+                length = ref_contigs_get_contig_length (ref, ref_index, 0, 0, true);   // update - we check later that it is consistent
+            }
+
+            bufprintf (evb, new_txt_header, "%.*s<ID=%.*s,length=%"PRIu64">\n", key_len, line, STRf(contig_name), length);
+            printed = true;
+        }
+
+        Contig *rc = vcf_header_consume_contig (contig_name, contig_name_len, length_accroding_to_header, false); // also verifies length
+        
+        if (rc && rc->chrom_index != WORD_INDEX_NONE)  // has reference match
+            length = MAX_(length, rc->max_pos); // either or both can be 0, but if not they are verified to be the same
+    }
+
+    // case: --chain: collect all vcf_header_liftover_dst_contigs. non sorted/unique buf for now, will fix in vcf_header_zip_update_to_dual_coords
+    if (chain_is_loaded && !flag.rejects_coord && is_contig)
+        chain_append_all_luft_contig_index (contig_name, contig_name_len, length, &vcf_header_liftover_dst_contigs);
+
+copy_line:
+    if (!printed) 
+        buf_add_more (NULL, new_txt_header, line, line_len, NULL); // unchanged
+    
+    return false; // continue iterating
 }
 
 static void vcf_header_add_FORMAT_lines (Buffer *txt_header)
@@ -606,15 +624,15 @@ static void vcf_add_all_primary_ref_contigs_to_header (Buffer *txt_header)
 {
     txt_header->len -= vcf_field_name_line.len; // remove field name line
 
-    ConstBufferP prim_contigs_buf, prim_contigs_dict;
-    ref_contigs_get (prim_ref, &prim_contigs_dict, &prim_contigs_buf);
-    ARRAY (const RefContig, ctgs, (*prim_contigs_buf));
+    ConstContigPkgP prim_contigs;
+    ref_contigs_get (prim_ref, &prim_contigs);
+    ARRAY (const Contig, ctgs, prim_contigs->contigs);
 
     for (uint64_t i=0; i < ctgs_len; i++) {
-        const char *contig_name = ENT (char, *prim_contigs_dict, ctgs[i].char_index);
+        const char *contig_name = ENT (char, prim_contigs->dict, ctgs[i].char_index);
         bufprintf (evb, txt_header, VCF_CONTIG_FMT"\n", ctgs[i].snip_len, contig_name, ctgs[i].max_pos);
 
-        chain_append_all_luft_contig_index (contig_name, ctgs[i].snip_len, &vcf_header_liftover_dst_contigs);
+        chain_append_all_luft_contig_index (contig_name, ctgs[i].snip_len, ctgs[i].max_pos, &vcf_header_liftover_dst_contigs);
     }
 
     // add back the field name (#CHROM) line
@@ -632,7 +650,15 @@ static bool vcf_inspect_txt_header_zip (Buffer *txt_header)
     txtfile_foreach_line (txt_header, false, vcf_header_get_dual_coords, 0, 0, 0, 0);
     
     // handle contig lines
-    vcf_header_handle_contigs (txt_header);
+    ASSERTNOTINUSE (vcf_header_liftover_dst_contigs);
+    if (chain_is_loaded && !flag.rejects_coord)
+        buf_alloc (evb, &vcf_header_liftover_dst_contigs, 0, 100, WordIndex, 0, "codec_bufs[1]");
+
+    txtheader_verify_contig_init();
+    vcf_header_rewrite_header (evb, txt_header, vcf_header_handle_contigs);
+
+    if (chain_is_loaded && !flag.rejects_coord)     // sort (but not uniq)
+        qsort (vcf_header_liftover_dst_contigs.data, vcf_header_liftover_dst_contigs.len, sizeof (WordIndex), dst_contigs_sorter);
 
     // in liftover, if header has no contigs, add reference contigs and derived ocontigs
     if (chain_is_loaded && !flag.rejects_coord && !txtheader_get_contigs()) 
@@ -816,7 +842,7 @@ static void vcf_header_trim_field_name_line (Buffer *vcf_header)
 
 uint32_t vcf_header_get_num_samples (void)
 {
-    if (z_file->data_type == DT_VCF || z_file->data_type == DT_BCF)
+    if (Z_DT(DT_VCF) || Z_DT(DT_BCF))
         return vcf_num_samples;
     else
         return 0;

@@ -14,8 +14,11 @@ typedef struct {
     // Seg parameters - general
     uint64_t vb_size;
 
-    // Seg parameters - FASTA
-    bool fasta_has_contigs;     // true if the sequences in this FASTA represent contigs (as opposed to reads) - in which case we have a FASTA_CONTIG dictionary and RANDOM_ACCESS
+    // FASTA stuff
+    bool fasta_has_contigs;     // the sequences in this FASTA represent contigs (as opposed to reads) - in which case we have a FASTA_CONTIG dictionary and RANDOM_ACCESS
+
+    // Chain stuff
+    bool mismatches_reference;  // Some contigs mismatch the reference files, so this chain file cannot be used with --chain
 } SegConf;
 
 extern SegConf segconf;

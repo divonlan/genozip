@@ -28,7 +28,7 @@ typedef struct {
     // ZIP: data modifying options
     int optimize, optimize_sort, optimize_phred, GL_to_PL, GP_to_PP, optimize_VQSLOD,  // optimize flags
         optimize_QUAL, optimize_Vf, optimize_ZM, optimize_DESC,
-        allow_ambiguous, add_line_numbers;
+        allow_ambiguous, add_line_numbers, match_chrom_to_reference;
     
     char *dvcf_rename, *dvcf_drop;
     
@@ -51,7 +51,7 @@ typedef struct {
         regions, gpos, samples, 
         drop_genotypes, gt_only, luft, sort, unsorted, snps_only, indels_only, // VCF options
         sequential, no_pg, extended_translation,
-        kraken_taxid, with_chr;
+        kraken_taxid;
     const char *regions_file;
     int64_t lines_first, lines_last, tail; // set by --lines 
     const char *grep; int grepw; unsigned grep_len; // set by --grep and --grep-w
@@ -94,7 +94,7 @@ typedef struct {
         show_reference, show_ref_hash, show_ref_index, show_ref_alts, show_ref_iupacs, show_chain,
         show_codec, show_containers, show_alleles, show_bgzf, show_txt_contigs,
         show_vblocks, show_threads, show_uncompress,
-        debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_allthesame, debug_recon_size,
+        debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_allthesame, debug_recon_size, debug_seg,
         seg_only, xthreads, show_flags, show_rename_tags,
         echo,    // show the command line in case of an error
         show_headers; // (1 + SectionType to display) or 0=flag off or -1=all sections

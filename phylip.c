@@ -142,13 +142,13 @@ const char *phy_seg_txt_line (VBlock *vb, const char *line, uint32_t remaining_t
 
     // ID
     static char id_lookup[3] = { SNIP_LOOKUP, '1', '0' }; // lookup 10 characters from local
-    seg_by_ctx (vb, id_lookup, sizeof (id_lookup), id_ctx, PHY_ID_LEN);
+    seg_by_ctx (VB, id_lookup, sizeof (id_lookup), id_ctx, PHY_ID_LEN);
     id_ctx ->local.len += PHY_ID_LEN;
 
     // SEQ
     static char seq_lookup[10] = { SNIP_LOOKUP }; 
     unsigned snip_len = 1 + str_int (phy_seq_len, &seq_lookup[1]);
-    seg_by_ctx (vb, seq_lookup, snip_len, seq_ctx, phy_seq_len);
+    seg_by_ctx (VB, seq_lookup, snip_len, seq_ctx, phy_seq_len);
     seq_ctx->local.len += phy_seq_len;
 
     // EOL

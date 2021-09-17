@@ -12,7 +12,7 @@
 #include "strings.h"
 #include "codec.h"
 
-SegConf segconf = {};
+SegConf segconf = {}; // system-wide global
 
 static void segconf_set_vb_size (const VBlock *vb)
 {
@@ -45,7 +45,7 @@ static void segconf_set_vb_size (const VBlock *vb)
     else if (flag.make_reference) 
         segconf.vb_size = VBLOCK_MEMORY_MAKE_REF;
 
-    else if (txt_file->data_type == DT_GENERIC) 
+    else if (TXT_DT(DT_GENERIC)) 
         segconf.vb_size = VBLOCK_MEMORY_GENERIC;
 
     // if we failed to calculate an estimated size or file is very small - use default
@@ -107,8 +107,7 @@ void segconf_calculate (void)
     segconf.vb_size = txt_file->codec == CODEC_BZ2 ? 1500000 // needs to be big enough to overcome the block nature of BZ2 (64K block -> 200-800K text) to get a reasonable size estimate
                     :                                300000; // big enough of a long-read SAM or FASTQ line
     
-    VBlock *vb = vb_initialize_nonpool_vb (SEGCONG, txt_file->data_type);
-    vb->in_use = true;
+    VBlockP vb = vb_initialize_nonpool_vb (VB_ID_SEGCONF, z_file->data_type, "segconf");
 
     txtfile_read_vblock (vb);
     if (!vb->txt_data.len) {
@@ -149,8 +148,7 @@ void segconf_calculate (void)
     txt_file->reject_bytes += save_luft_reject_bytes; // return reject bytes to txt_file, to be reassigned to VB
 
 done:
-    vb_release_vb (&vb);
-    FREE (vb);
+    vb_destroy_vb (&vb);
 
     // restore (used for --optimize-DESC / --add-line-numbers)
     txt_file->num_lines = 0;

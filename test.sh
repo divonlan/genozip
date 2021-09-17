@@ -17,6 +17,9 @@ cleanup() {
 }
 
 cmp_2_files() {
+    if [ ! -f $1 ] ; then echo "File $1 not found while in cmp_2_files()"; exit 1; fi
+    if [ ! -f $2 ] ; then echo "File $2 not found while in cmp_2_files()"; exit 1; fi
+
     if (( `$md5 $1 $2 | cut -d" " -f1 | uniq | wc -l` != 1 )) ; then
         echo "MD5 comparison FAILED: $1 $2"
         $md5 $1 $2
@@ -291,11 +294,11 @@ batch_basic()
     local file replace
     for file in ${basics[@]}; do
 
-        if [ $file == basic.chain ]; then
-            export GENOZIP_REFERENCE=${hg19}:${GRCh38}
-        else
-            unset GENOZIP_REFERENCE
-        fi
+        # if [ $file == basic.chain ]; then
+        #     export GENOZIP_REFERENCE=${hs37d5}:${GRCh38}
+        # else
+        #     unset GENOZIP_REFERENCE
+        # fi
 
         test_md5 $file # note: basic.bam needs to be non-BGZF for this to pass
 
@@ -405,11 +408,12 @@ batch_dvcf()
     local file
 
     # prepare chain file
-    $genozip -e $hg19 -e $GRCh38 ${chain%%.genozip} -fq || exit 1
+    test_header "${files[0]} - DVCF test - preparing chain file"
+    $genozip -e $hs37d5 -e $GRCh38 ${chain37_38%%.genozip} -fqo $chain --match-chrom || exit 1
 
     # test explicit reference
     test_header "${files[0]} - DVCF test - explicit reference"
-    $genozip ${TESTDIR}/${files[0]} -fo $output -C $chain -e $hg19 -e $GRCh38 || exit 1
+    $genozip ${TESTDIR}/${files[0]} -fo $output -C $chain -e $hs37d5 -e $GRCh38 || exit 1
 
     for file in ${files[@]}; do
         test_header "$file - DVCF test"
@@ -438,11 +442,33 @@ batch_dvcf()
         echo -n "Step 5: make ${primary2} from ${luft}.genozip : " 
         $genocat ${luft}.genozip --no-pg -fo ${primary2} || exit 1
         echo "Step 6: compare $primary to $primary2" 
-        cmp $primary $primary2 || exit 1
+        cmp_2_files $primary $primary2 
 
-        cleanup
         rm -f ${src}.noinfo ${primary}.genozip  ${primary}.noinfo ${luft} ${luft}.genozip ${primary2}
     done
+    cleanup
+}
+
+batch_match_chrom()
+{
+    batch_print_header
+
+    file=$TESTDIR/basic-dvcf-source.vcf # has contigs from both styles
+
+    # convert to CHROM_STYLE_22
+    $genozip --match-chrom $file -fo $OUTDIR/one.vcf.genozip -e $hg19 || exit 1
+    $genounzip $OUTDIR/one.vcf.genozip || exit 1
+
+    #convert CHROM_STYLE_chr22 and then to CHROM_STYLE_22
+    $genozip --match-chrom $file -fo $OUTDIR/two.vcf.genozip -e $hs37d5 || exit 1
+    $genounzip -f $OUTDIR/two.vcf.genozip || exit 1
+
+    $genozip --match-chrom $OUTDIR/two.vcf -fo $OUTDIR/three.vcf.genozip -e $hg19 || exit 1
+    $genounzip -f $OUTDIR/three.vcf.genozip || exit 1
+
+    cmp_2_files $OUTDIR/three.vcf $OUTDIR/one.vcf
+
+    cleanup
 }
 
 test_kraken() { # $1 file ; $2 1st genocat arguments ; $3 2nd genocat arguments
@@ -518,10 +544,10 @@ batch_single_thread()
     test_standard "-@1" "-@1" basic.vcf 
     
     # with reference
-    test_standard "-@1 -e$hg19 -e$GRCh38" "-@1" basic.chain 
+    test_standard "-@1 -e$hs37d5 -e$GRCh38" "-@1" basic.chain 
     
     # with chain and reference (note: cannot --test dual-coord files)
-    $genozip -@1 -C$chain ${TESTDIR}/basic-dvcf-source.vcf -f || exit 1
+    $genozip -@1 -C $chain37_38 ${TESTDIR}/basic-dvcf-source.vcf -f || exit 1
 
     # with kraken aux file
     $genozip -@1 ${TESTDIR}/basic.kraken -fo $kraken || exit 1
@@ -589,7 +615,7 @@ batch_23andMe_translations()
     local vcf=$OUTDIR/copy.vcf.gz
 
     $genozip -f $me23 -o $output       || exit 1
-    $genocat $output -fo $vcf -e $hg19 || exit 1
+    $genocat $output -fo $vcf -e $hs37d5 || exit 1
 
     cleanup
 }
@@ -611,7 +637,7 @@ batch_phylip_translations()
     $genocat $output --phylip -fo $phylip      || exit 1 # reconstruct as phylip
     $genozip $phylip -fo $output2              || exit 1 # compress the phylip
     $genocat $output2 --fasta -fo $multifasta2 || exit 1 # reconstruct as multifasta
-    cmp $multifasta2 $seq                      || exit 1 # compare
+    cmp_2_files $multifasta2 $seq                        # compare
 
     cleanup
 }
@@ -665,7 +691,7 @@ batch_grep_count_lines()
         if [ $file == basic.fa ] || [ $file == basic.bam ] || [ $file == basic.generic ]; then continue; fi
 
         if [ $file == basic.chain ]; then
-            export GENOZIP_REFERENCE=${hg19}:${GRCh38}
+            export GENOZIP_REFERENCE=${hs37d5}:${GRCh38}
         else
             unset GENOZIP_REFERENCE
         fi
@@ -741,7 +767,7 @@ batch_real_world_with_ref()
     cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
 
     # with two references
-    test_standard "-mf $1 -e $GRCh38 -e $hg19" " " test.GRCh38_to_GRCh37.chain 
+    test_standard "-mf $1 -e $GRCh38 -e $hs37d5" " " test.GRCh38_to_GRCh37.chain 
 
     # with a reference
     local files=( test.IonXpress.sam \
@@ -750,7 +776,7 @@ batch_real_world_with_ref()
                   test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq test.pacbio.10k.hg19.sam.gz )
 
     echo "subsets of real world files (with reference)"
-    test_standard "-mf $1 -e $hg19" " " ${files[*]}
+    test_standard "-mf $1 -e $hs37d5" " " ${files[*]}
 
     for f in $files test.GRCh38_to_GRCh37.chain; do rm -f ${TESTDIR}/${f}.genozip ; done
 }
@@ -802,12 +828,12 @@ batch_misc_cases()
     test_multi_bound test.human-collated.sam
 }
 
-# CRAM hg19
+# CRAM hs37d5
 batch_external_cram()
 {
     batch_print_header
     if `command -v samtools >& /dev/null`; then
-        test_standard "-E$hg19" " " test.human2.cram   
+        test_standard "-E$hs37d5" " " test.human2.cram   
     fi
 }
 
@@ -855,11 +881,11 @@ batch_reference()
     echo "SAM with --REFERENCE and --password" 
     test_standard "-E$GRCh38 --password 123" "-p123" test.human-collated.sam
     
-    echo "multiple bound VCF with --reference, --md5 using hg19, and unbind"
-    test_standard "COPY CONCAT -me$hg19" " " test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
+    echo "multiple bound VCF with --reference, --md5 using hs37d5, and unbind"
+    test_standard "COPY CONCAT -me$hs37d5" " " test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
 
-    echo "multiple VCF with --REFERENCE using hg19" 
-    test_standard "-mE$hg19" " " test.ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf test.human2.filtered.snp.vcf
+    echo "multiple VCF with --REFERENCE using hs37d5" 
+    test_standard "-mE$hs37d5" " " test.ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf test.human2.filtered.snp.vcf
 }
 
 batch_make_reference()
@@ -924,6 +950,7 @@ output=${OUTDIR}/output.genozip
 output2=${OUTDIR}/output2.genozip
 recon=${OUTDIR}/recon.txt
 kraken=${OUTDIR}/kraken.genozip
+chain=${OUTDIR}/chain.genozip
 
 is_windows=`uname|grep -i mingw`
 is_mac=`uname|grep -i Darwin`
@@ -932,9 +959,11 @@ if [ -n "$is_windows" ]; then
     make --quiet testfiles || exit 1
 fi
 
-hg19=data/hs37d5.ref.genozip
+# standard file - test.sh should change these
+hg19=data/hg19.p13.plusMT.full_analysis_set.ref.genozip
+hs37d5=data/hs37d5.ref.genozip
 GRCh38=data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
-chain=data/GRCh37_to_GRCh38.chain.genozip
+chain37_38=data/GRCh37_to_GRCh38.chain.genozip
 
 if (( $# < 1 )); then
     echo "Usage: test.sh [debug|opt] <batch_id-test> [optional-genozip-arg]"
@@ -1002,7 +1031,7 @@ cleanup
 # only if doing a full test (starting from 0) - delete genome and hash caches
 sparkling_clean()
 {
-    rm -f ${hg19}.*cache* ${GRCh38}.*cache* ${TESTDIR}/*.genozip ${TESTDIR}/*rejects*
+    rm -f ${hg19}.*cache* ${hs37d5}.*cache* ${GRCh38}.*cache* ${TESTDIR}/*.genozip ${TESTDIR}/*rejects*
 }
 
 # unfortunately Mac's bash doesn't support "case" with fall-through ( ;& )
@@ -1022,21 +1051,22 @@ if (( $1 <= 9  )) ; then  batch_phylip_translations    ; fi
 if (( $1 <= 10 )) ; then  batch_genocat_tests          ; fi
 if (( $1 <= 11 )) ; then  batch_grep_count_lines       ; fi
 if (( $1 <= 12 )) ; then  batch_backward_compatability ; fi
-if (( $1 <= 13 )) ; then  batch_kraken " " "-K$kraken" ; fi   # genocat loads kraken data
-if (( $1 <= 14 )) ; then  batch_kraken "-K$kraken" " " ; fi   # genozip loads kraken data
-if (( $1 <= 15 )) ; then  batch_single_thread          ; fi 
-if (( $1 <= 16 )) ; then  batch_iupac                  ; fi 
-if (( $1 <= 17 )) ; then  batch_real_world_small_vbs   ; fi 
-if (( $1 <= 18 )) ; then  batch_real_world_1           ; fi 
-if (( $1 <= 19 )) ; then  batch_real_world_with_ref    ; fi 
-if (( $1 <= 20 )) ; then  batch_multifasta             ; fi
-if (( $1 <= 21 )) ; then  batch_misc_cases             ; fi
-if (( $1 <= 22 )) ; then  batch_external_cram          ; fi
-if (( $1 <= 23 )) ; then  batch_external_bcf           ; fi
-if (( $1 <= 24 )) ; then  batch_external_unzip         ; fi
-if (( $1 <= 25 )) ; then  batch_reference              ; fi
-if (( $1 <= 26 )) ; then  batch_genols                 ; fi
-if (( $1 <= 27 )) ; then  batch_tar_files_from         ; fi
-if (( $1 <= 28 )) ; then  batch_make_reference         ; fi
+if (( $1 <= 13 )) ; then  batch_match_chrom            ; fi
+if (( $1 <= 14 )) ; then  batch_kraken " " "-K$kraken" ; fi   # genocat loads kraken data
+if (( $1 <= 15 )) ; then  batch_kraken "-K$kraken" " " ; fi   # genozip loads kraken data
+if (( $1 <= 16 )) ; then  batch_single_thread          ; fi 
+if (( $1 <= 17 )) ; then  batch_iupac                  ; fi 
+if (( $1 <= 18 )) ; then  batch_real_world_small_vbs   ; fi 
+if (( $1 <= 19 )) ; then  batch_real_world_1           ; fi 
+if (( $1 <= 20 )) ; then  batch_real_world_with_ref    ; fi 
+if (( $1 <= 21 )) ; then  batch_multifasta             ; fi
+if (( $1 <= 22 )) ; then  batch_misc_cases             ; fi
+if (( $1 <= 23 )) ; then  batch_external_cram          ; fi
+if (( $1 <= 24 )) ; then  batch_external_bcf           ; fi
+if (( $1 <= 25 )) ; then  batch_external_unzip         ; fi
+if (( $1 <= 26 )) ; then  batch_reference              ; fi
+if (( $1 <= 27 )) ; then  batch_genols                 ; fi
+if (( $1 <= 28 )) ; then  batch_tar_files_from         ; fi
+if (( $1 <= 29 )) ; then  batch_make_reference         ; fi
 
 printf "\nALL GOOD!\n"

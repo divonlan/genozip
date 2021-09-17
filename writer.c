@@ -165,7 +165,7 @@ static uint32_t writer_init_comp_info (void)
         ||
            (flag.luft && comp->rejects_coord == DC_LUFT && !flag.one_component)
         ||        
-           (comp->rejects_coord && flag.header_one && z_file->data_type == DT_VCF) // --header-one - we don't need the ##primary_only / ##luft_only lines
+           (comp->rejects_coord && flag.header_one && Z_DT(DT_VCF)) // --header-one - we don't need the ##primary_only / ##luft_only lines
         ||        
            (flag.one_component && flag.one_component-1 != comp_i); // --component specifies a single component, and this is not it 
 

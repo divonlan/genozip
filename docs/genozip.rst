@@ -105,6 +105,10 @@ Examples:
 
                      |
 
+.. option:: --match-chrom-to-reference  Used in combination with --reference. Contig (Chromosome) names are rewritten to match the names in the reference file provided. Examples: 22➔chr22 ; chrM➔MT
+
+                     |
+
 .. option:: -K, --kraken filename. Incorporate the Taxonomy ID of each line into the file. For use with genocat --taxid. For SAM/BAM it also adds a TX:i field. 
 
 | See: :ref:`kraken`
@@ -167,28 +171,28 @@ Examples:
 
 .. option:: --optimize-sort  INFO subfields are sorted alphabetically.               
 
-                              | Example: ``AN=21;AC=3`` -> ``AC=3;AN=21``
+                              | Example: ``AN=21;AC=3`` ➔ ``AC=3;AN=21``
                               |
 
 
 .. option:: --optimize-phred  Applied to FORMAT/PL FORMAT/PRI FORMAT/PP and (VCF v4.2 or earlier) FORMAT/GL - Phred scores are rounded to the nearest integer and capped at 60.
 
-                              | Example: ``0.40,17.75,270.4`` -> ``0,18,60``
+                              | Example: ``0.40,17.75,270.4`` ➔ ``0,18,60``
                               |
 
 .. option:: --GL-to-PL  The FORMAT/GL field is converted to PL and Phred values are capped at 60.
 
-                              | Example: GL= ``-7.61618,-0.447624,-0.193264`` -> PL= ``60,4,2``
+                              | Example: GL= ``-7.61618,-0.447624,-0.193264`` ➔ PL= ``60,4,2``
                               |
 
 .. option:: --GP-to-PP  Applicable to VCF v4.3 and later: The FORMAT/GP field is converted to PP and Phred values are capped at 60.
 
-                              | Example: GP= ``-7.61618,-0.447624,-0.193264`` -> PP= ``60,4,2``
+                              | Example: GP= ``-7.61618,-0.447624,-0.193264`` ➔ PP= ``60,4,2``
                               |
 
 .. option:: --optimize-VQSLOD  VQSLOD data: Number is rounded to 2 significant digits. 
 
-                              | Example: ``-4.19494`` -> ``-4.2``
+                              | Example: ``-4.19494`` ➔ ``-4.2``
 
 **SAM/BAM-specific options (ignored for other file types)**
 
@@ -208,14 +212,14 @@ Examples:
                      93           Unchanged
                      ============ ======
 
-                     | This assumes a standard Sanger format of `Phred quality scores <https://en.wikipedia.org/wiki/Phred_quality_score>`_ 0->93 encoded in ASCII 33->126
+                     | This assumes a standard Sanger format of `Phred quality scores <https://en.wikipedia.org/wiki/Phred_quality_score>`_ 0➔93 encoded in ASCII 33➔126
                      | Note: this follows `Illumina's quality bins <https://sapac.illumina.com/content/dam/illumina-marketing/documents/products/technotes/technote_understanding_quality_scores.pdf>`_ for values up to Phred 39, and extends with additional similar bins for values of 40 and above common in some non-Illumina technologies.
-                     | Example: ``LSVIHINKHK`` -> ``IIIIFIIIFI``
+                     | Example: ``LSVIHINKHK`` ➔ ``IIIIFIIIFI``
                      |
 
 .. option:: --optimize-ZM  ZM:B:s data: negative Ion Torrent flow signal values are changed to zero and positives are rounded to the nearest 10.  
 
-                     Example: ``-20,212,427`` -> ``0,210,430``
+                     Example: ``-20,212,427`` ➔ ``0,210,430``
                               
                                                             
 **FASTQ-specific options (ignored for other file types)**
@@ -228,7 +232,7 @@ Examples:
 
 .. option:: --optimize-DESC  Replaces the description line with @filename:read_number. Also - if the 3rd line (the '+' line) contains a copy of the description it is shortened to just '+'.
                      
-                     | Example: ``@A00488:61:HMLGNDSXX:4:1101:1561:1000 2:N:0:CTGAAGCT+ATAGAGGC`` -> ``@sample.fq.gz:100`` (100 is the read sequential number within this fastq file)
+                     | Example: ``@A00488:61:HMLGNDSXX:4:1101:1561:1000 2:N:0:CTGAAGCT+ATAGAGGC`` ➔ ``@sample.fq.gz:100`` (100 is the read sequential number within this fastq file)
                      |
 
 .. option:: --optimize-QUAL  The quality data is optimized as described for SAM above.
@@ -254,12 +258,12 @@ Examples:
    
 .. option:: --optimize-sort  Attributes are sorted alphabetically.
                      
-                     | Example: ``Notes=hi;ID=rs12`` -> ``ID=rs12;Notes=hi``
+                     | Example: ``Notes=hi;ID=rs12`` ➔ ``ID=rs12;Notes=hi``
                      |
 
 .. option:: --optimize-Vf  Variant_freq data: Number is rounded to 2 significant digits. 
                      
-                     | Example: ``0.006351`` -> ``0.0064``
+                     | Example: ``0.006351`` ➔ ``0.0064``
                      |
 
 **General options**

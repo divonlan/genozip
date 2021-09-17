@@ -217,7 +217,7 @@ static void zfile_dump_section (Buffer *uncompressed_data, SectionHeader *sectio
 
     // header
     sprintf (filename, "%s.%u.%s.header", st_name (section_header->section_type), vb_i, dis_dict_id (dict_id).s);
-    file_put_data (filename, section_header, section_header_len);
+    file_put_data (filename, section_header, section_header_len, 0);
 
     // body
     if (uncompressed_data->len) {
@@ -626,7 +626,7 @@ static void zfile_read_genozip_header_handle_ref_info (const SectionHeaderGenozi
             if (file_exists (prim_ref_filename) && file_exists (luft_ref_filename)) {
 
                 if (!flag.show_chain) 
-                    WARN_ONCE ("Note: using the reference file PRIMARY=%s LUFT=%s. You can override this with --reference, see: " WEBSITE_DVCF,
+                    WARN_ONCE ("Note: using the reference files PRIMARY=%s LUFT=%s. You can override this with --reference, see: " WEBSITE_DVCF,
                             prim_ref_filename, luft_ref_filename);
                     
                 ref_set_reference (gref, luft_ref_filename, REF_LIFTOVER, false);
@@ -725,7 +725,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeader *out_header) // optio
     DataType data_type = (DataType)(BGEN16 (header->data_type)); 
     ASSERT ((unsigned)data_type < NUM_DATATYPES, "unrecognized data_type=%d: please upgrade genozip to the latest version", data_type);
 
-    if (z_file->data_type == DT_NONE || z_file->data_type == DT_GENERIC) {
+    if (Z_DT(DT_NONE) || Z_DT(DT_GENERIC)) {
         z_file->data_type = data_type;
         z_file->type      = file_get_z_ft_by_dt (z_file->data_type);  
     }
@@ -733,12 +733,12 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeader *out_header) // optio
         ASSINP (z_file->data_type == data_type, "%s - file extension indicates this is a %s file, but according to its contents it is a %s", 
                 z_name, dt_name (z_file->data_type), dt_name (data_type));
 
-    flag.genocat_no_ref_file |= (z_file->data_type == DT_CHAIN && !flag.reading_chain); // initialized in flags_update: we only need the reference when using the chain file with --chain
+    flag.genocat_no_ref_file |= (Z_DT(DT_CHAIN) && !flag.reading_chain); // initialized in flags_update: we only need the reference when using the chain file with --chain
 
     if (txt_file && header->h.flags.genozip_header.txt_is_bin) // txt_file is still NULL when called from main_genozip
         txt_file->data_type = DTPZ (bin_type);
 
-    ASSINP (header->encryption_type != ENC_NONE || !crypt_have_password() || z_file->data_type == DT_REF, 
+    ASSINP (header->encryption_type != ENC_NONE || !crypt_have_password() || Z_DT(DT_REF), 
             "password provided, but file %s is not encrypted", z_name);
 
     ASSERT (BGEN32 (header->h.compressed_offset) == st_header_size (SEC_GENOZIP_HEADER),

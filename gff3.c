@@ -91,12 +91,12 @@ static bool gff3_seg_target (VBlockP vb, const char *value, unsigned value_len)
                        { .dict_id = { _ATTR_Target_STRAND }, .seperator = " " } }
     };
 
-    seg_by_did_i (vb, items[0], item_lens[0], ATTR_Target_ID, item_lens[0]);
+    seg_by_did_i (VB, items[0], item_lens[0], ATTR_Target_ID, item_lens[0]);
     seg_pos_field (vb, ATTR_Target_POS, ATTR_Target_POS, 0, 0, items[1], item_lens[1], 0, item_lens[1]);
     seg_pos_field (vb, ATTR_Target_POS, ATTR_Target_POS, 0, 0, items[2], item_lens[2], 0, item_lens[2]);
 
     if (n_items == 4)
-        seg_by_did_i (vb, items[3], item_lens[3], ATTR_Target_STRAND, item_lens[3]);
+        seg_by_did_i (VB, items[3], item_lens[3], ATTR_Target_STRAND, item_lens[3]);
 
     // TO DO: use seg_duplicate_last if n_items hasn't changed
     container_seg (vb, CTX (ATTR_Target), (ContainerP)&con, NULL, 0, n_items-1); // account for space separators
@@ -118,7 +118,7 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
         if (str_is_int (value, value_len))
             seg_pos_field (vb, ATTR_ID, ATTR_ID, SPF_BAD_SNIPS_TOO, 0, value, value_len, 0, value_len);
         else
-            seg_by_did_i (vb, value, value_len, ATTR_ID, value_len);
+            seg_by_did_i (VB, value, value_len, ATTR_ID, value_len);
         break;
 
     // Dbxref (example: "dbSNP_151:rs1307114892") - we divide to the non-numeric part which we store
@@ -224,7 +224,7 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
 
     default:
     plain_seg:
-        seg_by_ctx (vb, value, value_len, ctx, value_len);
+        seg_by_ctx (VB, value, value_len, ctx, value_len);
     }
 
     return dict_id;
@@ -234,7 +234,7 @@ static void gff3_seg_attrs_field (VBlock *vb, const char *field, unsigned field_
 {
     // case: "." field
     if (field_len == 1 && *field == '.') {
-        seg_by_did_i (vb, ".", 1, GFF3_ATTRS, 2);
+        seg_by_did_i (VB, ".", 1, GFF3_ATTRS, 2);
         return;
     }
 
@@ -282,7 +282,7 @@ const char *gff3_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_
         goto eol; // if we have a comment, then during piz, the other fields will be filtered out
     }
     else 
-        seg_by_did_i (vb, NULL, 0, GFF3_COMMENT, 0); // missing comment field
+        seg_by_did_i (VB, NULL, 0, GFF3_COMMENT, 0); // missing comment field
 
     GET_NEXT_ITEM (GFF3_SEQID);
     seg_chrom_field (vb, field_start, field_len);
@@ -306,7 +306,7 @@ const char *gff3_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_
         gff3_seg_attrs_field (vb, field_start, field_len);
     }
     else
-        seg_by_did_i (vb, NULL, 0, GFF3_ATTRS, 0); // NULL=MISSING so previous \t is removed
+        seg_by_did_i (VB, NULL, 0, GFF3_ATTRS, 0); // NULL=MISSING so previous \t is removed
 
 eol:             
     SEG_EOL (GFF3_EOL, false);

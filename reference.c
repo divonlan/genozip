@@ -26,8 +26,9 @@
 #include "threads.h"
 #include "website.h"
 #include "ref_iupacs.h"
+#include "map_chrom2ref.h"
 
-static RefStruct refs[2] = { };
+static RefStruct refs[2] = { { .ctgs.name = "gref" }, { .ctgs.name = "prim_ref"} };
 Reference gref     = &refs[0]; // global reference 
 Reference prim_ref = &refs[1]; // chain file primary coordinates reference
 
@@ -44,7 +45,8 @@ const char *ref_get_filename (const Reference ref) { return ref->filename; }
 uint8_t ref_get_genozip_version (const Reference ref) { return ref->genozip_version; }
 BufferP ref_get_stored_ra (Reference ref) { return &ref->stored_ra; }
 Digest ref_get_file_md5 (const Reference ref) { return ref->file_md5; }
-ConstBufferP ref_get_contigs (const Reference ref) { return &ref->loaded_contigs; }
+ConstBufferP ref_get_contigs (const Reference ref) { return &ref->ctgs.contigs; }
+ConstContigPkgP ref_get_ctgs (const Reference ref) { return &ref->ctgs; }
 
 void ref_get_genome (Reference ref, const BitArray **genome, const BitArray **emoneg, PosType *genome_nbases)
 {
@@ -84,7 +86,7 @@ static void ref_free_denovo_ranges (Reference ref)
 // free memory allocations between files, when compressing multiple non-bound files or decompressing multiple files
 void ref_unload_reference (Reference ref)
 {
-    ref_create_cache_join (ref); // wait for cache to finish writing, if applicable
+    ref_create_cache_join (ref, true); // wait for cache to finish writing, if applicable
 
     if (ranges_type(ref) == RT_DENOVO) 
         ref_free_denovo_ranges (ref);
@@ -102,12 +104,7 @@ void ref_unload_reference (Reference ref)
         buf_free (&ref->ref_external_ra);
         buf_free (&ref->ref_file_section_list);
         buf_free (&ref->genome_is_set_buf);
-        
-        buf_free (&ref->loaded_contigs);          
-        buf_free (&ref->loaded_contigs_dict);
-        buf_free (&ref->loaded_contigs_by_name);
-        buf_free (&ref->loaded_contigs_by_LN);
-
+        contigs_free (&ref->ctgs);
         ref->genome_nbases = 0;
 
         // locks
@@ -128,7 +125,7 @@ void ref_destroy_reference (Reference ref, bool destroy_only_if_not_mmap)
 {
     if (destroy_only_if_not_mmap && ranges_type(ref) == RT_CACHED) return;
 
-    ref_create_cache_join (ref); // wait for cache to finish writing, if applicable
+    ref_create_cache_join (ref, true); // wait for cache to finish writing, if applicable
 
     if (ranges_type(ref) == RT_DENOVO) ref_free_denovo_ranges (ref);
 
@@ -145,10 +142,7 @@ void ref_destroy_reference (Reference ref, bool destroy_only_if_not_mmap)
     FREE (ref->cache_fn);
 
     // ref contig stuff
-    buf_destroy (&ref->loaded_contigs);          
-    buf_destroy (&ref->loaded_contigs_dict);
-    buf_destroy (&ref->loaded_contigs_by_name);
-    buf_destroy (&ref->loaded_contigs_by_LN);
+    contigs_destroy (&ref->ctgs);
 
     // iupacs stuff
     buf_destroy (&ref->iupacs_buf);
@@ -193,8 +187,11 @@ const Range *ref_piz_get_range (VBlockP vb, Reference ref, PosType first_pos_nee
 
     // gets the index of the matching chrom in the reference - either its the chrom itself, or one with an alternative name
     // eg 'chr22' instead of '22'
-    WordIndex chrom_index = ref_alt_get_final_index (vb->chrom_node_index);
-    Range *r = ENT (Range, ref->ranges, chrom_index);
+    WordIndex ref_contig_index = map_chrom2ref (vb->chrom_node_index);
+    ASSPIZ (ref_contig_index < ref->ranges.len, "Expecting ref_contig_index=%d < ref->ranges.len=%"PRIu64 " in %s. FYI: z_file->chrom2ref_map.len=%"PRIu64, 
+            ref_contig_index, ref->ranges.len, ref_get_filename(ref), z_file->chrom2ref_map.len);
+
+    Range *r = ENT (Range, ref->ranges, ref_contig_index);
     if (!r->ref.nwords) return NULL; // this can ligitimately happen if entire chromosome is verbatim in SAM, eg. unaligned (pos=4) or SEQ or CIGAR are unavailable
 
     if (first_pos_needed + num_nucleotides_needed - 1 <= r->last_pos) {
@@ -265,11 +262,11 @@ Range *ref_get_range_by_chrom (Reference ref, WordIndex chrom, const char **chro
     return r;
 }
 
-Range *ref_get_range_by_ref_index (VBlockP vb, Reference ref, WordIndex ref_chrom_index)
+Range *ref_get_range_by_ref_index (VBlockP vb, Reference ref, WordIndex ref_contig_index)
 {
-    if (ref_chrom_index == WORD_INDEX_NONE || ref_chrom_index >= ref->ranges.len) return NULL;
+    if (ref_contig_index == WORD_INDEX_NONE || ref_contig_index >= ref->ranges.len) return NULL;
 
-    return ENT (Range, ref->ranges, ref_chrom_index); // in PIZ, we have one range per chrom
+    return ENT (Range, ref->ranges, ref_contig_index); // in PIZ, we have one range per chrom
 }
 
 // Print this array to a file stream.  Prints '0's and '1'.  Doesn't print newline.
@@ -553,15 +550,12 @@ void ref_load_stored_reference (Reference ref)
 
     ASSERTNOTINUSE (ref->ranges);
 
-    if (!(flag.show_headers && exe_type == EXE_GENOCAT)) {
+    ref_initialize_ranges (ref, RT_LOADED);
+    
+    sec = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
 
-        ref_initialize_ranges (ref, RT_LOADED);
-        
-        sec = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
-
-        spin_initialize (ref->region_to_set_list_spin);
-        buf_alloc (evb, &ref->region_to_set_list, 0, sections_count_sections (SEC_REFERENCE), RegionToSet, 1, "region_to_set_list");
-    }
+    spin_initialize (ref->region_to_set_list_spin);
+    buf_alloc (evb, &ref->region_to_set_list, 0, sections_count_sections (SEC_REFERENCE), RegionToSet, 1, "region_to_set_list");
     
     // decompress reference using Dispatcher
     bool external = flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE || 
@@ -640,7 +634,7 @@ void ref_create_cache_in_background (Reference ref)
 {
     if (flag.regions) return; // we can't create cache as we haven't loaded the entire reference
 
-    ref->cache_create_vb = vb_get_vb ("ref_create_cache_in_background", 0);
+    ref->cache_create_vb = vb_initialize_nonpool_vb (VB_ID_GCACHE_CREATE, DT_NONE, "ref_create_cache_in_background");
     ref->cache_create_vb->ref = ref;
     ref->cache_create_vb->compute_task = "create_reference_cache";
 
@@ -648,13 +642,13 @@ void ref_create_cache_in_background (Reference ref)
     ref->ref_cache_creation_thread_id = threads_create (ref_create_cache, ref->cache_create_vb);
 }
 
-void ref_create_cache_join (Reference ref)
+void ref_create_cache_join (Reference ref, bool free_mem)
 {
     if (!ref->cache_create_vb) return;
 
     threads_join (&ref->ref_cache_creation_thread_id, NULL);
 
-    vb_release_vb (&ref->cache_create_vb);
+    if (free_mem) vb_destroy_vb (&ref->cache_create_vb);
 }
 
 
@@ -743,7 +737,7 @@ static Range *ref_seg_get_locked_range_denovo (VBlockP vb, Reference ref, WordIn
     if (range->ref.nbits) {
 
         // check for hash conflict 
-        if ((range->range_i != range_i || vb->chrom_name_len != range->chrom_name_len || memcmp (vb->chrom_name, range->chrom_name, vb->chrom_name_len))) {
+        if (range->range_i != range_i || !str_issame (vb->chrom_name, range->chrom_name)) {
             *lock = ref_unlock (ref, *lock);
 
             ASSERTW (!flag.seg_only, "Warning: ref range contention: chrom=%.*s pos=%u (this slightly affects compression ratio, but is harmless)", 
@@ -803,9 +797,9 @@ static Range *ref_seg_get_locked_range_loaded (VBlockP vb, Reference ref, WordIn
             
             ref_index = WORD_INDEX_NONE;
             if (chrom < header_contigs->len)  
-                ref_index = ENT (RefContig, *header_contigs, chrom)->chrom_index; // possibly WORD_INDEX_NONE
+                ref_index = ENT (Contig, *header_contigs, chrom)->chrom_index; // possibly WORD_INDEX_NONE
 
-            // case: not in file header, check in reference
+            // case: not in file header, check in reference (including alt names)
             if (ref_index == WORD_INDEX_NONE) 
                 ref_index = ref_contigs_get_by_name (ref, chrom_name, chrom_name_len, true, true);
 
@@ -1241,7 +1235,7 @@ void ref_compress_ref (void)
 {
     if (!buf_is_alloc (&gref->ranges)) return;
 
-    ref_create_cache_join (gref); // finish dumping reference to cache before we modify it via compacting
+    ref_create_cache_join (gref, true); // finish dumping reference to cache before we modify it via compacting
 
     if ((ranges_type(gref) == RT_DENOVO) &&
         buf_is_alloc (&ZCTX(CHROM)->dict)) // did we have an aligned lines? (to do: this test is not enough)
@@ -1283,7 +1277,7 @@ void ref_compress_ref (void)
     // SAM require at least one reference section, but if the SAM is unaligned, there will be none - create one empty section
     // (this will also happen if SAM has just only reference section, we will just needlessly write another tiny section - no harm)
     // incidentally, this empty section will also be written in case of a small (one vb) reference - no harm
-    if (z_file->data_type == DT_SAM && num_vbs_dispatched==1) {
+    if (Z_DT(DT_SAM) && num_vbs_dispatched==1) {
         evb->range = NULL;
         ref_compress_one_range (evb); // written with vb_i=0, section header only (no body)
     }
@@ -1475,7 +1469,8 @@ void ref_load_external_reference (Reference ref, ContextP chrom_ctx)
 
     flag.reading_reference = ref; // tell file.c and fasta.c that this is a reference
     flag.no_writer = true;
-
+    flag.luft = false;
+    
     z_file = file_open (ref->filename, READ, Z_FILE, DT_FASTA);    
     z_file->basename = file_basename (ref->filename, false, "(reference)", NULL, 0);
 
@@ -1515,7 +1510,7 @@ static void ref_initialize_loaded_ranges (Reference ref, RangesType type)
     // but our CHROM contexts also includes alternate chrom names that aren't in the original reference that appear after the reference
     // chroms. we need to make sure ranges.len does not include alternate chroms as that's how we know a chrom is alternate in ref_piz_get_range
     // 3. in case loading from a reference file, the number of contigs will match the number of chroms, so no issues.
-    ref->ranges.len = IS_REF_INTERNAL (z_file) ? ZCTX(CHROM)->word_list.len : ref->loaded_contigs.len;
+    ref->ranges.len = IS_REF_INTERNAL (z_file) ? ZCTX(CHROM)->word_list.len : ref->ctgs.contigs.len;
 
     buf_alloc (evb, &ref->ranges, ref->ranges.len, 0, Range, 1, "ranges");     
     buf_zero (&ref->ranges);
@@ -1530,7 +1525,7 @@ static void ref_initialize_loaded_ranges (Reference ref, RangesType type)
         if (flag.reference == REF_STORED) 
             ctx_get_snip_by_word_index (chrom_ctx, r->chrom, &r->chrom_name, &r->chrom_name_len);
         else
-            ref_contigs_get_chrom_snip (ref, r->chrom, &r->chrom_name, &r->chrom_name_len);
+            ref_contigs_get_name_by_chrom_index (ref, r->chrom, &r->chrom_name, &r->chrom_name_len);
     }
 
     // we don't need is_set if we're compressing with REF_EXTERNAL 
@@ -1551,13 +1546,13 @@ static void overlay_ranges_on_loaded_genome (Reference ref)
     // which case their range is not initialized
     for (Range *r = FIRSTENT (Range, ref->ranges) ; r < AFTERENT (Range, ref->ranges); r++) {
         r->chrom = ENTNUM (ref->ranges, r);
-        const RefContig *rc = ref_contigs_get_contig (ref, r->chrom, true);
+        const Contig *rc = ref_contigs_get_contig_by_chrom_index (ref, r->chrom, true);
 
         if (rc) { // this chromosome has reference data 
             r->gpos      = rc->gpos;
             r->first_pos = rc->min_pos;
             r->last_pos  = rc->max_pos;
-            ref_contigs_get_chrom_snip (ref, r->chrom, &r->chrom_name, &r->chrom_name_len);
+            ref_contigs_get_name_by_chrom_index (ref, r->chrom, &r->chrom_name, &r->chrom_name_len);
             
             PosType nbases = rc->max_pos - rc->min_pos + 1;
 

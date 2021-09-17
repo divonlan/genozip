@@ -43,6 +43,7 @@ extern void chain_seg_initialize (VBlockP vb);
 extern void chain_seg_finalize (VBlockP vb);
 extern const char *chain_seg_txt_line (VBlockP vb, const char *line, uint32_t remaining_txt_len, bool *has_13);
 extern bool chain_seg_is_small (ConstVBlockP vb, DictId dict_id);
+extern bool chain_zip_dts_flag (void);
 
 // piz of a chain file
 extern bool chain_piz_initialize (void);
@@ -53,9 +54,9 @@ extern void chain_load (void);
 extern void chain_destroy (void);
 extern const char *chain_get_luft_contig (uint32_t contig_i, PosType *length);
 extern void chain_copy_contigs_to_z_file (DidIType luft_contig_did_i);
-extern WordIndex chain_get_prim_contig_index_by_name (const char *contig, unsigned contig_len, bool recursive);
+extern WordIndex chain_get_prim_contig_index (const char *contig, unsigned contig_len, PosType LN);
 extern uint64_t chain_get_num_prim_contigs (void);
-extern void chain_append_all_luft_contig_index (const char *prim_contig_name, unsigned prim_contig_name_len, Buffer *luft_contigs);
+extern void chain_append_all_luft_contig_index (const char *prim_contig_name, unsigned prim_contig_name_len, PosType LN, Buffer *luft_contigs);
 extern bool chain_get_liftover_coords (WordIndex prim_contig_index,  PosType prim_1pos, 
                                        WordIndex *luft_contig_index, PosType *luft_1pos, bool *is_xstrand, uint32_t *aln_i);
 extern PosType chain_get_aln_last_pos (uint32_t aln_i);
@@ -68,6 +69,6 @@ SPECIAL (CHAIN, 2, SIZE,      chain_piz_special_SIZE);
 #define NUM_CHAIN_SPECIAL 3
 
 extern char *chain_filename; // global
-#define chain_is_loaded ((bool)chain_filename)
+#define chain_is_loaded ((bool)chain_filename || flag.reference == REF_MAKE_CHAIN)
 
 #endif

@@ -12,6 +12,7 @@
 #include "strings.h"
 #include "vcf.h"
 #include "file.h"
+#include "contigs.h"
 
 // region as parsed from the --regions option
 typedef struct {
@@ -185,6 +186,8 @@ void regions_add_by_file (const char *regions_filename)
 
     for (unsigned i=0; i < n_lines; i++) { // -1 as last line (following terminating newline) is empty
 
+        if (lines[i][0] == '#') continue; // skip comment line
+        
         unsigned num_fields = str_count_char (lines[i], line_lens[i], '\t') + 1;
         ASSINP (num_fields == 2 || num_fields == 3, "Expecting either 2 or 3 tab-separated columns in line %u of %s, but found: \"%.*s\"",
                 i+1, regions_filename, line_lens[i], lines[i]);
@@ -237,7 +240,7 @@ void regions_make_chregs (ContextP chrom_ctx)
 
             // if we have a reference file loaded, try getting an alternative name
             if (chrom_word_index == WORD_INDEX_NONE)
-                chrom_word_index = ref_alt_chroms_get_alt_index (gref, regions[i].chrom, strlen (regions[i].chrom), 0, WORD_INDEX_NONE);
+                chrom_word_index = contigs_get_matching (ref_get_ctgs(gref), regions[i].chrom, strlen (regions[i].chrom), 0, NULL);
 
             // if the requested chrom does not exist in the file, we remove this region
             if (chrom_word_index == WORD_INDEX_NONE) continue;
@@ -381,8 +384,8 @@ bool regions_get_range_intersection (WordIndex chrom_word_index, PosType min_pos
 // a specific ra (i.e. chromosome)
 bool regions_is_site_included (VBlockP vb)
 {
-    DidIType chrom_did_i = flag.luft ? ODID (oCHROM) : CHROM;
-    DidIType pos_did_i   = flag.luft ? ODID (oPOS)   : DTF(pos);
+    DidIType chrom_did_i = flag.luft ? DTF(luft_chrom) : DTF(prim_chrom);
+    DidIType pos_did_i   = flag.luft ? DTF(luft_pos)   : DTF(pos);
 
     WordIndex chrom = vb->last_index (chrom_did_i);
     PosType pos = (pos_did_i != DID_I_NONE) ? vb->last_int (pos_did_i) : 1;

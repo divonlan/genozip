@@ -264,7 +264,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
     else 
         buf_add_bit (&strand_ctx->local, is_forward);
     
-    ASSSEG ((gpos >= 0 && gpos <= MAX_GPOS) || gpos == NO_GPOS, seq, "gpos=%"PRId64" is out of range [0,%"PRId64"]", gpos, MAX_GPOS);
+    ASSSEG ((gpos >= 0 && gpos <= MAX_ALIGNER_GPOS) || gpos == NO_GPOS, seq, "gpos=%"PRId64" is out of range [0,%"PRId64"]", gpos, MAX_ALIGNER_GPOS);
     
     // case: we're the 2nd of the pair - store a delta if its small enough, or a lookup from local if not
     bool store_local = true;
@@ -281,11 +281,11 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
 
             char delta_snip[30] = { SNIP_PAIR_DELTA };
             unsigned delta_str_len = str_int (gpos_delta, &delta_snip[1]);
-            seg_by_ctx (vb, delta_snip, delta_str_len + 1, gpos_ctx, 0);
+            seg_by_ctx (VB, delta_snip, delta_str_len + 1, gpos_ctx, 0);
         }
         else {
             static const char lookup[1] = { SNIP_LOOKUP }; // lookup from local
-            seg_by_ctx (vb, lookup, 1, gpos_ctx, 0);
+            seg_by_ctx (VB, lookup, 1, gpos_ctx, 0);
         }
     }
     

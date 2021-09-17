@@ -3,6 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
+#include <stdarg.h>
 #include "genozip.h"
 #include "profiler.h"
 #include "seg.h"
@@ -24,15 +25,17 @@
 #include "zip.h"
 #include "coords.h"
 #include "segconf.h"
+#include "coords.h"
+#include "website.h"
 
-WordIndex seg_by_ctx_do (VBlock *vb, const char *snip, unsigned snip_len, Context *ctx, uint32_t add_bytes,
+WordIndex seg_by_ctx_ex (VBlock *vb, const char *snip, unsigned snip_len, Context *ctx, uint32_t add_bytes,
                          bool *is_new) // optional out
 {
     ASSERTNOTNULL (ctx);
 
     buf_alloc (vb, &ctx->b250, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->b250");
     
-    WordIndex node_index = ctx_evaluate_snip_seg ((VBlockP)vb, ctx, snip, snip_len, is_new);
+    WordIndex node_index = ctx_evaluate_snip_seg (VB, ctx, snip, snip_len, is_new);
 
     ASSERT (node_index < ctx->nodes.len + ctx->ol_nodes.len || node_index == WORD_INDEX_EMPTY || node_index == WORD_INDEX_MISSING, 
             "out of range: dict=%s node_index=%d nodes.len=%u ol_nodes.len=%u",  
@@ -51,39 +54,44 @@ WordIndex seg_by_ctx_do (VBlock *vb, const char *snip, unsigned snip_len, Contex
 // segs the same node as previous seg
 WordIndex seg_known_node_index (VBlockP vb, ContextP ctx, WordIndex node_index, unsigned add_bytes) 
 { 
-    buf_alloc (vb, &ctx->b250, 1, vb->lines.len, uint32_t, CTX_GROWTH, NULL);
+    buf_alloc (vb, &ctx->b250, 1, vb->lines.len, uint32_t, CTX_GROWTH, "b250");
 
     NEXTENT (uint32_t, ctx->b250) = node_index; 
     ctx->txt_len += add_bytes;
+    
+    (*ENT (int64_t, ctx->counts, node_index))++;
 
     return node_index;
 }
 
-// rolls back a context to the rollback point registered in seg_create_rollback_point
-void seg_rollback (VBlockP vb, Context *ctx)
+// NOTE: this does not save recon_size - if the processing may change recon_size it must be saved and rolled back separately
+void seg_create_rollback_point (VBlockP vb, unsigned num_ctxs, ...)
 {
-    // if we evaluated this context since the rollback count - undo
-    while (ctx->b250.len > ctx->rback_b250_len) {
-        WordIndex node_index = *LASTENT (WordIndex, ctx->b250);
-        ctx_decrement_count (vb, ctx, node_index);
-        ctx->b250.len--;
-    }
+    va_list args;
+    va_start (args, num_ctxs);
 
-    ctx->local.len      = ctx->rback_local_len;
-    ctx->txt_len        = ctx->rback_txt_len;
-    ctx->num_singletons = ctx->rback_num_singletons;
-    ctx->last_value     = ctx->rback_last_value;
-    ctx->last_delta     = ctx->rback_last_delta;
-    ctx->last_txt_index = ctx->rback_last_txt_index;
-    ctx->last_txt_len   = ctx->rback_last_txt_len;
-    ctx->last_line_i    = LAST_LINE_I_INIT; // undo "encountered in line"
+#ifdef DEBUG
+    ASSERT (num_ctxs <= MAX_ROLLBACK_CTXS, "num_ctxs=%u > MAX_ROLLBACK_CTXS=%u", num_ctxs, MAX_ROLLBACK_CTXS);
+#endif
+
+    vb->num_rollback_ctxs = num_ctxs;
+
+    for (unsigned i=0; i < num_ctxs; i++) {
+        vb->rollback_ctxs[i] = CTX(va_arg (args, int)); // 'DidIType' {aka 'short unsigned int'} is promoted to 'int' when passed through '...'
+        ctx_create_rollback_point (vb->rollback_ctxs[i]);
+    }
 }
 
+void seg_rollback (VBlockP vb)
+{
+    for (unsigned i=0; i < vb->num_rollback_ctxs; i++) 
+        ctx_rollback (vb, vb->rollback_ctxs[i]);
+}
 
 void seg_simple_lookup (VBlockP vb, ContextP ctx, unsigned add_bytes)
 {
     static const char lookup[1] = { SNIP_LOOKUP };
-    seg_by_ctx (vb, lookup, 1, ctx, add_bytes);
+    seg_by_ctx (VB, lookup, 1, ctx, add_bytes);
 }
 
 const char *seg_get_next_item (void *vb_, const char *str, int *str_len, 
@@ -199,7 +207,7 @@ WordIndex seg_integer_do (VBlockP vb, DidIType did_i, int64_t n, unsigned add_by
 {
     char snip[40];
     unsigned snip_len = str_int (n, snip);
-    return seg_by_did_i (vb, snip, snip_len, did_i, add_bytes);
+    return seg_by_did_i (VB, snip, snip_len, did_i, add_bytes);
 }
 
 // prepare snips that contain code + dict_id + optional parameter (SNIP_LOOKUP_OTHER, SNIP_OTHER_DELTA, SNIP_REDIRECTION...)
@@ -217,19 +225,89 @@ void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, bool ha
         *snip_len += str_int (parameter, &snip[*snip_len]);
 }
 
-WordIndex seg_chrom_field (VBlock *vb, const char *chrom_str, unsigned chrom_str_len)
+WordIndex seg_chrom_field_ex (VBlock *vb, DidIType did_i, 
+                              Coords dc, // DC_PRIMARY or DC_LUFT only if two references are loaded ; DC_NONE if not
+                              STRp(chrom), 
+                              PosType LN,       // Used only in chain files and if flag.match_chrom_to_reference.
+                              bool *is_alt_out, // need iff flag.match_chrom_to_reference.
+                              int add_bytes,    // must be signed
+                              bool *is_new_out) // optional out
 {
-    ASSERT0 (chrom_str_len, "chrom_str_len=0");
+    ASSERTNOTZERO (chrom_len);
+    ContextP ctx = CTX(did_i);
+    Reference ref = (chain_is_loaded && dc==DC_PRIMARY) ? prim_ref : gref;
+    WordIndex chrom_node_index = WORD_INDEX_NONE;
+    int32_t chrom_name_growth=0;
+    bool is_new, is_alt=false;
+    const char *save_chrom = chrom;
+    uint32_t save_chrom_len = chrom_len;
 
-    bool is_new;
-    WordIndex chrom_node_index = seg_by_did_i_ex (vb, chrom_str, chrom_str_len, CHROM, chrom_str_len+1, &is_new);
+    // case: chrom is the same as previous line - use cached (note: might be different than ctx->last_snip if match_chrom_to_reference)
+    // TODO: we only really need to cache in case of ref_contigs_get_matching (i.e. evaluated snip different than txt snip), otherwise ctx_evaluate_snip_seg caches anyway
+    #define last_is_alt ctx_specific
+    #define last_growth last_delta
+    if (chrom_len == ctx->last_txt_len && !memcmp (chrom, last_txtx(vb, ctx), chrom_len)) {
+        if (is_alt_out) *is_alt_out = ctx->last_is_alt;
+        if (is_new_out) *is_new_out = false;
+        
+        vb->recon_size += ctx->last_growth;
 
-    // don't allow adding chroms if const_chroms (except "*")
-    ASSSEG (!is_new || !flag.const_chroms || (chrom_str_len == 1 && chrom_str[0] == '*'), 
-            chrom_str, "contig '%.*s' appears in file, but is missing in the %s header", chrom_str_len, chrom_str, dt_name (txt_file->data_type));
-            
-    random_access_update_chrom (vb, DC_PRIMARY, chrom_node_index, chrom_str, chrom_str_len);
+        chrom_node_index = seg_duplicate_last (vb, ctx, add_bytes + ctx->last_growth);
+        goto finalize;
+    }
+    
+    // case match_chrom_to_reference: rather than segging the chrom as in the txt_data, we seg the matching name in the reference, if there is one.
+    else if (flag.match_chrom_to_reference && 
+        (dc != DC_LUFT || chain_is_loaded) && // note: can't match the Luft reference of a DVCF (can only match Luft with --chain)
+        ref_contigs_get_matching (ref, LN, STRa(chrom), pSTRa(chrom), &is_alt, &chrom_name_growth)) {
+            if (is_alt_out) *is_alt_out = is_alt;
+            if (is_new_out) *is_new_out = false;
+            vb->recon_size += chrom_name_growth;
+            chrom_node_index = seg_by_ctx_ex (vb, STRa(chrom), ctx, add_bytes + chrom_name_growth, is_new_out); // seg modified chrom
+    }
+        
+    // case: either without --match-chrom-to-reference OR chrom not found in the reference
+    else {
+        chrom_node_index = seg_by_ctx_ex (vb, chrom, chrom_len, ctx, add_bytes, &is_new); // note: this is not the same as ref_index, bc ctx->nodes contains the header contigs first, followed by the reference contigs that are not already in the header
+        
+        // don't allow adding chroms if const_chroms (except "*") (used in SAM with a header and BAM)
+        ASSSEG (!is_new || !DTP(header_contigs) || !flag.const_chroms || (chrom_len == 1 && chrom[0] == '*'), 
+                chrom, "contig '%.*s' appears in file, but is missing in the %s header", chrom_len, chrom, dt_name (vb->data_type));
 
+        // warn if the file's contigs are called by a different name in the reference (eg 22/chr22)
+        static bool once[NUM_COORDS]={};
+        STR (ref_chrom);
+        if (is_new &&                                              // skip this test if we've seen the chrom before, including in the txt header
+            !once[dc] &&                                           // skip if we've shown the warning already
+            !segconf.running &&                                    // segconf runs with flag.quiet so the user won't see the warning
+            flag.reference && DTP(prepopulate_contigs_from_ref) && // we have a reference
+            !flag.match_chrom_to_reference &&                      // we didn't already attempt to match to the reference
+            ref_contigs_get_matching (ref, LN, STRa(chrom), pSTRa(ref_chrom), &is_alt, NULL) && is_alt) { // is_alt means that the reference has a different name for this contig
+                
+                if (VB_DT(DT_CHAIN))
+                    WARN ("Warning: Contig name mismatch between %s and reference file %s. For example: %s file: \"%.*s\" Reference file: \"%.*s\". "
+                           "You may use --match-chrom-to-reference to create %s with contigs matching those of the reference. This is required, if this file is for use with 'genozip --chain'. More info: %s\n",
+                           txt_name, ref_get_filename (ref), dt_name (vb->data_type), STRf(chrom), STRf(ref_chrom), z_name, WEBSITE_CHAIN);
+                else
+                    WARN ("FYI: Contigs name mismatch between %s and reference file %s. For example: %s file: \"%.*s\" Reference file: \"%.*s\". "
+                          "You may use --match-chrom-to-reference to create %s with contigs matching those of the reference. This makes no difference for the compression. More info: %s",
+                          txt_name, ref_get_filename (ref), dt_name (vb->data_type), STRf(chrom), STRf(ref_chrom), z_name, WEBSITE_GENOZIP);
+
+                once[dc] = true; // we don't use WARN_ONCE bc we want the "once" to also include ref_contigs_get_matching
+        }
+
+        if (is_new_out) *is_new_out = is_new;        
+        if (is_alt_out) *is_alt_out = false;
+    }
+
+    // cache
+    seg_set_last_txt (vb, ctx, STRa(save_chrom), STORE_NONE);
+    ctx->last_is_alt = is_alt;
+    ctx->last_growth = chrom_name_growth;
+    ctx->no_stons    = true; // needed for seg_duplicate_last
+
+finalize:
+    random_access_update_chrom (vb, (dc==DC_LUFT ? DC_LUFT : DC_PRIMARY), chrom_node_index, chrom, chrom_len); // also update vb->chrom*
     return chrom_node_index;
 }
 
@@ -287,7 +365,7 @@ PosType seg_pos_field (VBlock *vb,
 
         if (err) {
             SAFE_ASSIGN (pos_str-1, SNIP_DONT_STORE);
-            seg_by_ctx (vb, pos_str-1, pos_len+1, snip_ctx, add_bytes); 
+            seg_by_ctx (VB, pos_str-1, pos_len+1, snip_ctx, add_bytes); 
             SAFE_RESTORE;
             snip_ctx->last_delta = 0;  // on last_delta as we're PIZ won't have access to it - since we're not storing it in b250 
             return 0; // invalid pos
@@ -300,7 +378,7 @@ PosType seg_pos_field (VBlock *vb,
             err = ERR_SEG_OUT_OF_RANGE;
             char snip[15] = { SNIP_DONT_STORE };
             unsigned snip_len = 1 + str_int (this_pos, &snip[1]);
-            seg_by_ctx (vb, snip, snip_len, snip_ctx, add_bytes); 
+            seg_by_ctx (VB, snip, snip_len, snip_ctx, add_bytes); 
             snip_ctx->last_delta = 0;  // on last_delta as we're PIZ won't have access to it - since we're not storing it in b250 
             return 0; // invalid pos
         }
@@ -324,7 +402,7 @@ PosType seg_pos_field (VBlock *vb,
 
         // add a LOOKUP to b250
         static const char lookup[1] = { SNIP_LOOKUP };
-        seg_by_ctx (vb, lookup, 1, snip_ctx, 0);
+        seg_by_ctx (VB, lookup, 1, snip_ctx, 0);
 
         snip_ctx->last_delta = 0;  // on last_delta as we're PIZ won't have access to it - since we're not storing it in b250 
         return this_pos;
@@ -353,12 +431,12 @@ PosType seg_pos_field (VBlock *vb,
         unsigned delta_len = str_int (pos_delta, &pos_delta_str[total_len]);
         total_len += delta_len;
 
-        seg_by_ctx (vb, pos_delta_str, total_len, snip_ctx, add_bytes);
+        seg_by_ctx (VB, pos_delta_str, total_len, snip_ctx, add_bytes);
     }
     // case: the delta is the negative of the previous delta - add a SNIP_SELF_DELTA with no payload - meaning negated delta
     else {
         char negated_delta = SNIP_SELF_DELTA; // no delta means negate the previous delta
-        seg_by_did_i (vb, &negated_delta, 1, snip_did_i, add_bytes);
+        seg_by_did_i (VB, &negated_delta, 1, snip_did_i, add_bytes);
         snip_ctx->last_delta = 0; // no negated delta next time
     }
 
@@ -403,7 +481,7 @@ void seg_id_field_do (VBlock *vb, ContextP ctx, const char *id_snip, unsigned id
     // prefix the textual part with SNIP_LOOKUP_UINT32 if needed (we temporarily overwrite the previous separator or the buffer underflow area)
     unsigned new_len = id_snip_len - num_digits;
     SAFE_ASSIGN (&id_snip[-1], SNIP_LOOKUP); // we assign it anyway bc of the macro convenience, but we included it only if num_digits>0
-    seg_by_ctx (vb, id_snip-(num_digits > 0), new_len + (num_digits > 0), ctx, id_snip_len); // account for the entire length, and sometimes with \t
+    seg_by_ctx (VB, id_snip-(num_digits > 0), new_len + (num_digits > 0), ctx, id_snip_len); // account for the entire length, and sometimes with \t
     SAFE_RESTORE;
 }
 
@@ -428,14 +506,14 @@ bool seg_integer_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsig
         NEXTENT (uint32_t, ctx->local) = (uint32_t)ctx->last_value.i;
         
         // add to b250
-        seg_simple_lookup ((VBlockP)vb, ctx, add_bytes);
+        seg_simple_lookup (VB, ctx, add_bytes);
 
         return true;
     }
 
     // case: non-numeric snip
     else { 
-        seg_by_ctx (vb, this_value, this_value_len, ctx, add_bytes);
+        seg_by_ctx (VB, this_value, this_value_len, ctx, add_bytes);
         ctx->numeric_only = false;
         return false;
     }
@@ -465,14 +543,14 @@ bool seg_float_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsigne
         
         // add to b250
         snip[0] = SNIP_LOOKUP;
-        seg_by_ctx (vb, snip, 1 + format_len, ctx, add_bytes);
+        seg_by_ctx (VB, snip, 1 + format_len, ctx, add_bytes);
 
         return true;
     }
 
     // case: non-float snip
     else { 
-        seg_by_ctx (vb, this_value, this_value_len, ctx, add_bytes);
+        seg_by_ctx (VB, this_value, this_value_len, ctx, add_bytes);
         return false;
     }
 }
@@ -495,10 +573,10 @@ WordIndex seg_delta_vs_other (VBlock *vb, Context *ctx, Context *other_ctx,
     other_ctx->flags.store = STORE_INT;
 
     ctx->numeric_only = false;
-    return seg_by_ctx (vb, snip, snip_len, ctx, value_len);
+    return seg_by_ctx (VB, snip, snip_len, ctx, value_len);
 
 fallback:
-    return value ? seg_by_ctx (vb, value, value_len, ctx, value_len) : seg_integer_do (vb, ctx->did_i, ctx->last_value.i, value_len);
+    return value ? seg_by_ctx (VB, value, value_len, ctx, value_len) : seg_integer_do (vb, ctx->did_i, ctx->last_value.i, value_len);
 }
 
 #define MAX_COMPOUND_COMPONENTS 36
@@ -804,7 +882,7 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
                 if (is_int) this_item_value = arr_ctx->last_value.i;
             }
             else {
-                seg_by_ctx (vb, this_item, this_item_len, arr_ctx, this_item_len);
+                seg_by_ctx (VB, this_item, this_item_len, arr_ctx, this_item_len);
                 str_get_int (this_item, this_item_len, &arr_ctx->last_value.i); // sets last_value only if it is indeed an integer
             }
         }
@@ -815,7 +893,7 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
             char delta_snip[30] = { SNIP_SELF_DELTA };
             unsigned delta_snip_len = 1 + str_int (this_item_value - arr_ctx->last_value.i, &delta_snip[1]);
 
-            seg_by_ctx (vb, delta_snip, delta_snip_len, arr_ctx, this_item_len);
+            seg_by_ctx (VB, delta_snip, delta_snip_len, arr_ctx, this_item_len);
 
             ctx_set_last_value (vb, arr_ctx, this_item_value);
             arr_ctx->numeric_only = false;
@@ -823,7 +901,7 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
 
         // non-integer that cannot be delta'd - store as-is
         else {
-            seg_by_ctx (vb, this_item, this_item_len, arr_ctx, 0);
+            seg_by_ctx (VB, this_item, this_item_len, arr_ctx, 0);
             arr_ctx->numeric_only = false;
         }
 
@@ -852,7 +930,7 @@ void seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con,
     for (unsigned i=0; i < con.nitems_lo; i++) {
         ctxs[i] = ctx_get_ctx (vb, con.items[i].dict_id); 
         ctxs[i]->st_did_i = ctx->did_i;
-        seg_create_rollback_point (ctxs[i]);
+        ctx_create_rollback_point (ctxs[i]);
     }
     
     // get repeats
@@ -878,7 +956,7 @@ void seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con,
             if (callbacks && callbacks[i])
                 callbacks[i] (vb, ctxs[i], items[i], item_lens[i]);
             else
-                seg_by_ctx (vb, items[i], item_lens[i], ctxs[i], item_lens[i]);
+                seg_by_ctx (VB, items[i], item_lens[i], ctxs[i], item_lens[i]);
     }
 
     // finally, the Container snip itself - we attempt to use the known node_index if it is cached in con_index
@@ -905,10 +983,10 @@ void seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con,
 badly_formatted:
     // roll back all the changed data
     for (unsigned i=0; i < con.nitems_lo ; i++) 
-        seg_rollback (vb, ctxs[i]);
+        ctx_rollback (vb, ctxs[i]);
 
     // now just seg the entire snip
-    seg_by_ctx (vb, snip, snip_len, ctx, snip_len); 
+    seg_by_ctx (VB, snip, snip_len, ctx, snip_len); 
 }                           
 
 void seg_add_to_local_text (VBlock *vb, Context *ctx, 
@@ -1100,6 +1178,8 @@ void seg_all_data_lines (VBlock *vb)
         //fprintf (stderr, "vb->line_i=%u\n", vb->line_i);
         bool has_13 = false;
         vb->line_start = ENTNUM (vb->txt_data, field_start);
+
+        // Call the segmenter of the data type to segment one line
         const char *next_field = DT_FUNC (vb, seg_txt_line) (vb, field_start, remaining_txt_len, &has_13);
 
         vb->longest_line_len = MAX_(vb->longest_line_len, (next_field - field_start));
@@ -1124,7 +1204,7 @@ void seg_all_data_lines (VBlock *vb)
 
     DT_FUNC (vb, seg_finalize)(vb); // data-type specific finalization
 
-    if (!flag.make_reference && vb->id != SEGCONG) 
+    if (!flag.make_reference && !segconf.running) 
         seg_verify_file_size (vb);
 
     COPY_TIMER (seg_all_data_lines);

@@ -57,6 +57,9 @@ typedef struct RAEntry *RAEntryP;
 typedef const struct RAEntry *ConstRAEntryP;
 typedef struct Mutex *MutexP;
 typedef struct RefStruct *Reference;
+typedef struct Contig *RefContigP;
+typedef struct ContigPkg *ContigPkgP;
+typedef const struct ContigPkg *ConstContigPkgP;
 
 typedef void BgEnBufFunc (BufferP buf, uint8_t *lt); // we use uint8_t instead of LocalType (which 1 byte) to avoid #including sections.h
 typedef BgEnBufFunc (*BgEnBuf);
@@ -71,6 +74,9 @@ typedef enum { DT_NONE=-1, // used in the code logic, never written to the file
                DT_BAM=7, DT_BCF=8, DT_GENERIC=9, DT_PHYLIP=10, DT_CHAIN=11, DT_KRAKEN=12, 
                NUM_DATATYPES 
              } DataType; 
+#define Z_DT(dt) (z_file->data_type == (dt))
+#define TXT_DT(dt) (txt_file->data_type == (dt))
+#define VB_DT(dt) (vb->data_type == (dt))
 
 typedef enum { DTYPE_FIELD, DTYPE_1, DTYPE_2 } DictIdType;
 
@@ -156,10 +162,12 @@ typedef _Bool bool;
 #endif
 
 #define STR(x)   const char *x; unsigned x##_len
+#define STRl(name,len)   const char name[len]; unsigned name##_len
 #define STR0(x)  const char *x=NULL; unsigned x##_len=0
 #define STRp(x)  const char *x, unsigned x##_len // for function definitions 
 #define pSTRp(x) const char **x, unsigned *x##_len // for function definitions 
-#define STRa(x) x, x##_len // for function call arguments
+#define STRa(x) x, x##_len           // for function call arguments
+#define STRdid(x)  x##_str, x##_len  // for function call arguments
 #define STRi(x,i) x##s[i], x##_lens[i] // for function call arguments
 #define pSTRa(x) &x, &x##_len // for function call arguments
 #define STRf(x) x##_len, x  // for printf %.*s argument list
@@ -167,7 +175,8 @@ typedef _Bool bool;
 #define cSTR(x) x, sizeof x-1 // a constant string and its length
 #define STRcpy(dst,src) do { if (src##_len) { memcpy(dst,src,src##_len) ; dst##_len = src##_len; } } while(0)
 #define STRcpyi(dst,i,src) do { if (src##_len) { memcpy(dst##s[i],src,src##_len) ; dst##_lens[i] = src##_len; } } while(0)
-   
+#define STRLEN(string_literal) (sizeof string_literal - 1)
+
 #define ARRAYp(name) unsigned n_##name##s, const char *name##s[], unsigned name##_lens[] // function parameters
 #define ARRAYa(name) n_##name##s, name##s, name##_lens // function arguments
 
@@ -270,18 +279,22 @@ static inline void progress_newline(void) {
 #define ASSERT(condition, format, ...)       do { if (!(condition)) { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); exit_on_error(true); }} while(0)
 #define ASSERT0(condition, string)           do { if (!(condition)) { progress_newline(); fprintf (stderr, "Error in %s:%u: %s" SUPPORT, __FUNCTION__, __LINE__, string); exit_on_error(true); }} while(0)
 #define ASSERTNOTNULL(p)                     ASSERT0 (p, #p" is NULL")
-#define ASSERTW(condition, format, ...)      do { if (!(condition) && !flag.quiet) { progress_newline(); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); }} while(0)
-#define ASSERTW0(condition, string)          do { if (!(condition) && !flag.quiet) { progress_newline(); fprintf (stderr, "%s\n", string); } } while(0)
+#define ASSERTNOTZERO(p)                     ASSERT0 (p, #p"=0")
+#define ASSERTW(condition, format, ...)      do { if (!(condition) && !flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); }} while(0)
+#define ASSERTW0(condition, string)          do { if (!(condition) && !flag.quiet) { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); } } while(0)
 #define ASSRET(condition, ret, format, ...)  do { if (!(condition)) { progress_newline(); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); return ret; }} while(0)
 #define ASSRET0(condition, ret, string)      do { if (!(condition)) { progress_newline(); fprintf (stderr, "%s\n", string); return ret; } } while(0)
-#define RETURNW(condition, ret, format, ...) do { if (!(condition)) { if (!flag.quiet) { progress_newline(); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } return ret; }} while(0)
-#define RETURNW0(condition, ret, string)     do { if (!(condition)) { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s\n", string); } return ret; } } while(0)
+#define ASSERTRUNONCE(string)                do { static bool once = false; /* this code path should run only once */ \
+                                                  ASSINP0 (!once, string); \
+                                                  once = true; } while (0)
+#define RETURNW(condition, ret, format, ...) do { if (!(condition)) { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } return ret; }} while(0)
+#define RETURNW0(condition, ret, string)     do { if (!(condition)) { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); } return ret; } } while(0)
 #define ABORT(format, ...)                   do { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); exit_on_error(true);} while(0)
 #define ABORT_R(format, ...) /*w/ return 0*/ do { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); exit_on_error(true); return 0;} while(0)
 #define ABORT0(string)                       do { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, "%s" SUPPORT, string); exit_on_error(true);} while(0)
 #define ABORT0_R(string)                     do { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, "%s" SUPPORT, string); exit_on_error(true); return 0; } while(0)
-#define WARN(format, ...)                    do { if (!flag.quiet) { progress_newline(); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } } while(0)
-#define WARN0(string)                        do { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s\n", string); } } while(0)
+#define WARN(format, ...)                    do { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } } while(0)
+#define WARN0(string)                        do { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); } } while(0)
 
 #define WARN_ONCE(format, ...)               do { static bool warning_shown = false; \
                                                   if (!flag.quiet && !warning_shown) { \
@@ -296,10 +309,6 @@ static inline void progress_newline(void) {
                                                       warning_shown = true; \
                                                   } \
                                              } while(0) 
-
-#define ABORTINP0_ONCE(string)                  do { static bool once = false; \
-                                                     ASSINP0 (!once, string); \
-                                                     once = true; } while (0)
 
 #define ASSERTGOTO(condition, format, ...)   do { if (!(condition)) { progress_newline(); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); goto error; }} while(0)
 

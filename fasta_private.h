@@ -9,6 +9,7 @@
 #include "genozip.h"
 #include "vblock.h"
 #include "fasta.h"
+#include "contigs.h"
 
 #pragma GENDICT_PREFIX FASTA
 #pragma GENDICT FASTA_CONTIG=DTYPE_FIELD=CONTIG

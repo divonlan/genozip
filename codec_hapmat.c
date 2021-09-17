@@ -154,7 +154,7 @@ bool codec_hapmat_compress (VBlock *vb_,
     CodecCompress *compress = codec_args[sub_codec].compress;
 
     PAUSE_TIMER; //  don't include sub-codec compressor - it accounts for itself
-    bool success = compress ((VBlockP)vb, header, 0, uncompressed_len, codec_hapmat_compress_one_array, compressed, compressed_len, soft_fail);    
+    bool success = compress (VB, header, 0, uncompressed_len, codec_hapmat_compress_one_array, compressed, compressed_len, soft_fail);    
     RESUME_TIMER (compressor_hapmat);
 
     // build data in FORMAT_GT_HT_INDEX 

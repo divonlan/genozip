@@ -36,7 +36,7 @@ unsigned fasta_vb_zip_dl_size (void) { return sizeof (ZipDataLineFASTA); }
 
 void fasta_vb_release_vb (VBlockFASTA *vb)
 {
-    if (vb->data_type == DT_REF && command == PIZ) return; // this is actually a VBlock, not VBlockFASTA
+    if (VB_DT(DT_REF) && command == PIZ) return; // this is actually a VBlock, not VBlockFASTA
     
     memset ((char *)vb + sizeof (VBlock), 0, sizeof (VBlockFASTA) - sizeof (VBlock)); // zero all data unique to VBlockFASTA
     CTX(FASTA_NONREF)->local.len = 0; // len might be is used even though buffer is not allocated (in make-ref)
@@ -182,7 +182,7 @@ void fasta_seg_initialize (VBlock *vb)
 
         // if this FASTA contains unrelated contigs, we're better off with ACGT        
         if (!flag.multifasta)
-            codec_acgt_comp_init ((VBlockP)vb);
+            codec_acgt_comp_init (VB);
 
         // if the contigs in this FASTA are related, let codec_assign_best_codec assign the bext codec 
         else 
@@ -263,7 +263,7 @@ static void fasta_seg_desc_line (VBlockFASTA *vb, const char *line_start, uint32
     ASSSEG0 (chrom_name_len, line_start, "contig is missing a name");
 
     if (!flag.make_reference) {
-        seg_compound_field ((VBlockP)vb, CTX(FASTA_DESC), line_start, line_len, sep_with_space, 0, 0);
+        seg_compound_field (VB, CTX(FASTA_DESC), line_start, line_len, sep_with_space, 0, 0);
         
         char special_snip[100]; unsigned special_snip_len = sizeof (special_snip);
         seg_prepare_snip_other (SNIP_REDIRECTION, _FASTA_DESC, false, 0, &special_snip[2], &special_snip_len);
@@ -271,7 +271,7 @@ static void fasta_seg_desc_line (VBlockFASTA *vb, const char *line_start, uint32
         special_snip[0] = SNIP_SPECIAL;
         special_snip[1] = FASTA_SPECIAL_DESC;
 
-        seg_by_did_i (vb, special_snip, special_snip_len+2, FASTA_LINEMETA, 0);
+        seg_by_did_i (VB, special_snip, special_snip_len+2, FASTA_LINEMETA, 0);
         SEG_EOL (FASTA_EOL, true);
     }
 
@@ -279,17 +279,17 @@ static void fasta_seg_desc_line (VBlockFASTA *vb, const char *line_start, uint32
     else {
         const char *md_start = chrom_name + chrom_name_len + strspn (&chrom_name[chrom_name_len], " \t");
         unsigned md_len = MIN_(strcspn (md_start, "\n\r"), REFCONTIG_MD_LEN-1);
-        memcpy (vb->contig_metadata.s, md_start, md_len);
+        memcpy (vb->contig_metadata.str, md_start, md_len);
         vb->has_contig_metadata = true;        
     }
 
     // add contig to CONTIG dictionary (but not b250) and verify that its unique
     if (segconf.fasta_has_contigs || flag.make_reference || segconf.running) {
         bool is_new;
-        WordIndex chrom_node_index = ctx_evaluate_snip_seg ((VBlockP)vb, CTX(FASTA_CONTIG), chrom_name, chrom_name_len, &is_new);
-        ctx_decrement_count ((VBlockP)vb, CTX(FASTA_CONTIG), chrom_node_index);
+        WordIndex chrom_node_index = ctx_evaluate_snip_seg (VB, CTX(FASTA_CONTIG), chrom_name, chrom_name_len, &is_new);
+        ctx_decrement_count (VB, CTX(FASTA_CONTIG), chrom_node_index);
 
-        random_access_update_chrom ((VBlockP)vb, DC_PRIMARY, chrom_node_index, chrom_name, chrom_name_len);
+        random_access_update_chrom (VB, DC_PRIMARY, chrom_node_index, chrom_name, chrom_name_len);
         vb->ra_initialized = true;
 
         ASSINP (is_new, "Error: bad FASTA file - sequence \"%.*s\" appears more than once%s", chrom_name_len, chrom_name,
@@ -304,7 +304,7 @@ static void fasta_seg_desc_line (VBlockFASTA *vb, const char *line_start, uint32
 static void fast_seg_comment_line (VBlockFASTA *vb, const char *line_start, uint32_t line_len, bool *has_13)
 {
     if (!flag.make_reference) {
-        seg_add_to_local_text ((VBlockP)vb, CTX(FASTA_COMMENT), line_start, line_len, line_len); 
+        seg_add_to_local_text (VB, CTX(FASTA_COMMENT), line_start, line_len, line_len); 
 
         char special_snip[100]; unsigned special_snip_len = sizeof (special_snip);
         seg_prepare_snip_other (SNIP_OTHER_LOOKUP, _FASTA_COMMENT, false, 0, &special_snip[2], &special_snip_len);
@@ -312,7 +312,7 @@ static void fast_seg_comment_line (VBlockFASTA *vb, const char *line_start, uint
         special_snip[0] = SNIP_SPECIAL;
         special_snip[1] = FASTA_SPECIAL_COMMENT;
 
-        seg_by_did_i (vb, special_snip, special_snip_len+2, FASTA_LINEMETA, 0);
+        seg_by_did_i (VB, special_snip, special_snip_len+2, FASTA_LINEMETA, 0);
         SEG_EOL (FASTA_EOL, true);
     }
 
@@ -338,7 +338,7 @@ static void fasta_seg_seq_line_do (VBlockFASTA *vb, uint32_t line_len, bool is_f
         special_snip[0] = SNIP_SPECIAL;
         special_snip[1] = FASTA_SPECIAL_SEQ;
         special_snip[2] = '0' + is_first_line_in_contig; 
-        WordIndex node_index = seg_by_ctx (vb, special_snip, 3 + special_snip_len, lm_ctx, 0);  // the payload of the special snip, is the OTHER_LOOKUP snip...
+        WordIndex node_index = seg_by_ctx (VB, special_snip, 3 + special_snip_len, lm_ctx, 0);  // the payload of the special snip, is the OTHER_LOOKUP snip...
 
         // create cache if needed
         if (!is_first_line_in_contig && !vb->std_line_len) {
@@ -373,7 +373,7 @@ static void fasta_seg_seq_line (VBlockFASTA *vb, const char *line_start, uint32_
 
             // case last Seq line of VB, and this VB ends part-way through the Seq line (no newline)
             if (is_last_line_vb_no_newline && (i == vb->lines_this_contig - 1)) 
-                seg_by_did_i (vb, *has_13 ? "\r" : "", *has_13, FASTA_EOL, *has_13); // an EOL without \n
+                seg_by_did_i (VB, *has_13 ? "\r" : "", *has_13, FASTA_EOL, *has_13); // an EOL without \n
             else 
                 SEG_EOL (FASTA_EOL, true); 
         }        
@@ -385,11 +385,11 @@ static void fasta_seg_seq_line (VBlockFASTA *vb, const char *line_start, uint32_
     // case: this sequence is continuation from the previous VB - we don't yet know the chrom - we will update it,
     // and increment the min/max_pos relative to the beginning of the seq in the vb later, in random_access_finalize_entries
     if (!vb->chrom_name && !vb->ra_initialized) {
-        random_access_update_chrom ((VBlockP)vb, DC_PRIMARY, WORD_INDEX_NONE, 0, 0);
+        random_access_update_chrom (VB, DC_PRIMARY, WORD_INDEX_NONE, 0, 0);
         vb->ra_initialized = true;
     }
 
-    random_access_increment_last_pos ((VBlockP)vb, DC_PRIMARY, line_len); 
+    random_access_increment_last_pos (VB, DC_PRIMARY, line_len); 
 }
 
 // Fasta format(s): https://en.wikipedia.org/wiki/FASTA_format
@@ -418,7 +418,7 @@ const char *fasta_seg_txt_line (VBlockFASTA *vb, const char *line_start, uint32_
 
         if (kraken_is_loaded) {
             unsigned qname_len = strcspn (line_start + 1, " \t\r\n"); // +1 to skip the '>' or ';'
-            kraken_seg_taxid ((VBlockP)vb, FASTA_TAXID, line_start + 1, qname_len, true);
+            kraken_seg_taxid (VB, FASTA_TAXID, line_start + 1, qname_len, true);
         }
     }
 

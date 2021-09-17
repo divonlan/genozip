@@ -20,6 +20,7 @@
 #include "profiler.h"
 #include "threads.h"
 #include "segconf.h"
+#include "strings.h"
 
 // ref_hash logic:
 // we use the 28 bits (14 nucleotides) following a "G" hook, as the hash value, to index into a hash table with multiple
@@ -125,10 +126,11 @@ void refhash_calc_one_range (const Range *r, const Range *next_r /* NULL if r is
 
             // since our refhash entries are 32 bit, we cannot use the reference data beyond the first 4Gbp for creating the refhash
             // TO DO: make the hash entries 40bit (or 64 bit?) if genome size > 4Gbp (bug 150)
-            if (r->gpos + base_i > MAX_GPOS) {
+            if (r->gpos + base_i > MAX_ALIGNER_GPOS) {
                 static bool warning_given = false;
 
-                ASSERTW (warning_given, "Warning: %s contains more than %"PRId64" nucleaotides. When compressing a FASTQ, FASTA or unaligned SAM file using the reference being generated, only the first %"PRId64" nucleotides of the reference will be used (no such limitation when compressing other file types)", txt_name, MAX_GPOS, MAX_GPOS);
+                ASSERTW (warning_given, "FYI: %s contains more than %s nucleaotides. When compressing a FASTQ, FASTA or unaligned (i.e. missing RNAME, POS) SAM/BAM file using the reference being generated, only the first %s nucleotides of the reference will be used (no such limitation when compressing other file types). This might affect the compression ratio.", 
+                         txt_name, str_uint_commas (MAX_ALIGNER_GPOS).s, str_uint_commas (MAX_ALIGNER_GPOS).s);
                 warning_given = true; // display this warning only once
                 return;
             }
@@ -257,19 +259,20 @@ static void refhash_create_cache_in_background (void)
 {
     if (flag.regions) return; // can't create cache as reference isn't fully loaded
 
-    cache_create_vb = vb_get_vb ("refhash_create_cache_in_background", 0);
+    cache_create_vb = vb_initialize_nonpool_vb (VB_ID_HCACHE_CREATE, DT_NONE, "refhash_create_cache_in_background");
     cache_create_vb->compute_task = "create_refhash_cache";
 
     refhash_get_cache_fn(); // generate name before we close z_file
     refhash_cache_creation_thread_id = threads_create (refhash_create_cache, cache_create_vb);
 }
 
-void refhash_create_cache_join (void)
+void refhash_create_cache_join (bool free_mem)
 {
     if (!cache_create_vb) return;
 
-    threads_join (&refhash_cache_creation_thread_id, NULL);
-    vb_release_vb (&cache_create_vb);
+    threads_join (&refhash_cache_creation_thread_id, NULL);   
+
+    if (free_mem) vb_destroy_vb (&cache_create_vb);
 }
 
 // ----------------------------------------------------------------------------------------------
@@ -434,7 +437,7 @@ void refhash_initialize (bool *dispatcher_invoked)
 
 void refhash_destroy (void)
 {
-    refhash_create_cache_join(); // wait for cache writing, if we're writing
+    refhash_create_cache_join (true); // wait for cache writing, if we're writing
 
     buf_destroy (&refhash_buf);
     FREE (refhashs);

@@ -15,6 +15,7 @@
 #include "context.h"
 #include "file.h"
 #include "ref_iupacs.h"
+#include "contigs.h"
 
 SPINLOCK (make_ref_spin);
 #define MAKE_REF_NUM_RANGES 1000000 // should be more than enough (in GRCh38 we have 6389)

@@ -19,6 +19,8 @@
 
 typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
 
+#define MAX_ROLLBACK_CTXS NUM_CHAIN_FIELDS // chain_seg_txt_line() is currently the biggest consumer of rollback ctxs 
+
 // IMPORTANT: if changing fields in VBlockVCF, also update vb_release_vb
 #define VBLOCK_COMMON_FIELDS \
     uint32_t vblock_i;         /* number of variant block within VCF file */\
@@ -72,6 +74,9 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     uint8_t num_type1_subfields; \
     uint8_t num_type2_subfields; \
     RangeP range;              /* ZIP: used for compressing the reference ranges */ \
+    \
+    unsigned num_rollback_ctxs;/* ZIP: Seg rollback contexts */ \
+    ContextP rollback_ctxs[MAX_ROLLBACK_CTXS]; \
     \
     /* data for dictionary compressing */ \
     char *fragment_start;        \
@@ -184,9 +189,11 @@ extern VBlock *vb_get_vb (const char *task_name, uint32_t vblock_i);
 extern bool vb_has_free_vb (void);
 extern void vb_destroy_vb (VBlockP *vb_p);
 
-#define EVB     -1 // ID of VB used by main thread 
-#define SEGCONG -2 // ID of VB used by segconf_calculate
-extern VBlockP vb_initialize_nonpool_vb(int vb_id, DataType dt);
+#define VB_ID_EVB           -1 // ID of VB used by main thread 
+#define VB_ID_SEGCONF       -2 // ID of VB used by segconf_calculate
+#define VB_ID_GCACHE_CREATE -3 
+#define VB_ID_HCACHE_CREATE -4 
+extern VBlockP vb_initialize_nonpool_vb(int vb_id, DataType dt, const char *task);
 
 extern void vb_release_vb_do (VBlock **vb_p, const char *func);
 #define vb_release_vb(vb_p) vb_release_vb_do (vb_p, __FUNCTION__)
@@ -202,7 +209,7 @@ typedef struct {
 } VBlockPool;
 extern void vb_create_pool (unsigned num_vbs);
 extern VBlockPool *vb_get_pool(void);
-#define vb_get_from_pool(vb_i) (((vb_i) == EVB) ? evb : vb_pool->vb[vb_i])
+#define vb_get_from_pool(vb_i) (((vb_i) == VB_ID_EVB) ? evb : vb_pool->vb[vb_i])
 
 #endif
 

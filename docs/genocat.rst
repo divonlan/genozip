@@ -77,10 +77,10 @@ One or more file names must be given.
 .. option:: -R, --regions-file [^]filename.  (VCF SAM/BAM GFF3/GVF FASTA 23andMe Chain Reference) Show regions from a list in tab-separated file. To include all regions EXCEPT those in the file٫ prefix the filename with ^. If filename is - (or ^-) data is taken from stdin rather than a file.
 
 |
-| *Example of a valid file: The first two rows produce the same 100-base region, and the third row is a single base*:
+| *Example of a valid file: The first two rows (ignoring the comment line) produce the same 100-base region, and the third row is a single base*:
 
 ::
-
+   # Comment lines starting with a # are ignored. 
    chr22	17000000	17000099
    chr22	17000000	+100
    chr22	17000000

@@ -21,6 +21,8 @@ static char sb_snips[2][32], mb_snips[2][32], f2r1_snips[MAX_ARG_ARRAY_ITEMS][32
 static unsigned sb_snip_lens[2], mb_snip_lens[2], f2r1_snip_lens[MAX_ARG_ARRAY_ITEMS], adr_snip_lens[MAX_ARG_ARRAY_ITEMS], adf_snip_lens[MAX_ARG_ARRAY_ITEMS], 
                 af_snip_len, sac_snip_lens[MAX_ARG_ARRAY_ITEMS/2];
 
+#define last_sample_i ctx_specific // ZIP: like last_line_i, but used for VCF/FORMAT fields (0-based). Only meaningful if last_line_i indicates the line is the same vb->line_i
+
 #define vcf_encountered_in_sample_(vb, ctx) (ctx_encountered_in_line_(vb, ctx) && (ctx)->last_sample_i == ((VBlockVCFP)vb)->sample_i)
 #define vcf_encountered_in_sample(vb, dict_id, p_ctx) (ctx_encountered_in_line (vb, dict_id, p_ctx) && (*(p_ctx))->last_sample_i == ((VBlockVCFP)vb)->sample_i)
 #define vcf_has_value_in_sample_(vb, ctx) (ctx_has_value_in_line_(vb, ctx) && (ctx)->last_sample_i == (vb)->sample_i)
@@ -101,7 +103,7 @@ static inline WordIndex vcf_seg_FORMAT_transposed (VBlockVCF *vb, Context *ctx, 
     }
 
     // add a LOOKUP to b250
-    seg_by_ctx (vb, (char []){ SNIP_LOOKUP }, 1, ctx, add_bytes);
+    seg_by_ctx (VB, (char []){ SNIP_LOOKUP }, 1, ctx, add_bytes);
 
     return 0;
 }
@@ -115,7 +117,7 @@ static WordIndex vcf_seg_FORMAT_A_R_G (VBlockVCF *vb, Context *ctx, Container co
     str_split (value, value_len, MAX_ARG_ARRAY_ITEMS, ',', item, false);
     
     if (!(con.nitems_lo = n_items)) 
-        return seg_by_ctx (vb, value, value_len, ctx, value_len); // too many items - normal seg
+        return seg_by_ctx (VB, value, value_len, ctx, value_len); // too many items - normal seg
 
     Context *item_ctxs[con.nitems_lo];
     int64_t values[con.nitems_lo];
@@ -141,7 +143,7 @@ static WordIndex vcf_seg_FORMAT_A_R_G (VBlockVCF *vb, Context *ctx, Container co
     // case: seg items as normal snips
     else 
         for (unsigned i=0; i < con.nitems_lo; i++) 
-            seg_by_ctx (vb, items[i], item_lens[i], item_ctxs[i], item_lens[i]);
+            seg_by_ctx (VB, items[i], item_lens[i], item_ctxs[i], item_lens[i]);
 
     ctx->last_txt_len = con.nitems_lo; // seg only: for use by vcf_seg_*_items callbacks
 
@@ -167,7 +169,7 @@ static void vcf_seg_AD_items (VBlockVCFP vb, Context *ctx, unsigned num_items, C
         vcf_seg_FORMAT_transposed (vb, item_ctxs[0], items[0], item_lens[0], item_lens[0]);
 
         for (unsigned i=1; i < num_items; i++) 
-            seg_by_ctx (vb, items[i], item_lens[i], item_ctxs[i], item_lens[i]);
+            seg_by_ctx (VB, items[i], item_lens[i], item_ctxs[i], item_lens[i]);
     }
             
     // set sum of items for AD
@@ -194,7 +196,7 @@ static void vcf_seg_ADALL_items (VBlockVCFP vb, Context *ctx, unsigned num_items
     vcf_seg_FORMAT_transposed (vb, item_ctxs[0], items[0], item_lens[0], item_lens[0]);
 
     for (unsigned i=1; i < num_items; i++) 
-        seg_by_ctx (vb, items[i], item_lens[i], item_ctxs[i], item_lens[i]);
+        seg_by_ctx (VB, items[i], item_lens[i], item_ctxs[i], item_lens[i]);
 }
 
 //----------------------
@@ -218,13 +220,13 @@ static void vcf_seg_AD_complement_items (VBlockVCFP vb, Context *ctx, unsigned n
 
         // case: as expected, F1R2 + F2R1 = AD - seg as a F2R1 as a MINUS snip
         if (use_formula && vb->ad_values[i] == values[i] + ECTX (other_con->items[i].dict_id)->last_value.i) {
-            seg_by_ctx (vb, my_snips[i], my_snip_lens[i], item_ctxs[i], item_lens[i]); 
+            seg_by_ctx (VB, my_snips[i], my_snip_lens[i], item_ctxs[i], item_lens[i]); 
             item_ctxs[i]->no_stons = true; // enable "all_the_same"
         }
 
         // case: the formula doesn't work for this item - seg a normal snip
         else
-            seg_by_ctx (vb, items[i], item_lens[i], item_ctxs[i], item_lens[i]);
+            seg_by_ctx (VB, items[i], item_lens[i], item_ctxs[i], item_lens[i]);
     }
 }
 
@@ -267,12 +269,12 @@ static void vcf_seg_SB_items (VBlockVCFP vb, Context *ctx, unsigned num_items, C
 
         // seg odd-numbered element as AD - (even element), if the sum is correct
         if (use_formula && i%2 && vb->ad_values[i/2] == values[i-1] + values[i]) {
-            seg_by_ctx (vb, sb_snips[i/2], sb_snip_lens[i/2], item_ctxs[i], item_lens[i]); 
+            seg_by_ctx (VB, sb_snips[i/2], sb_snip_lens[i/2], item_ctxs[i], item_lens[i]); 
             item_ctxs[i]->no_stons = true; // to enable "all_the_same"
         }
         else {
             item_ctxs[i]->flags.store = STORE_INT; // consumed by the odd items ^
-            seg_by_ctx (vb, items[i], item_lens[i], item_ctxs[i], item_lens[i]);
+            seg_by_ctx (VB, items[i], item_lens[i], item_ctxs[i], item_lens[i]);
         }
     }
 }
@@ -293,12 +295,12 @@ static void vcf_seg_SAC_items (VBlockVCFP vb, Context *ctx, unsigned num_items, 
 
         // seg odd-numbered element as AD - (even element), if the sum is correct
         if (use_formula && i%2 && vb->ad_values[i/2] == values[i-1] + values[i]) {
-            seg_by_ctx (vb, sac_snips[i/2], sac_snip_lens[i/2], item_ctxs[i], item_lens[i]); 
+            seg_by_ctx (VB, sac_snips[i/2], sac_snip_lens[i/2], item_ctxs[i], item_lens[i]); 
             item_ctxs[i]->no_stons = true; // to enable "all_the_same"
         }
         else {
             item_ctxs[i]->flags.store = STORE_INT; // consumed by the odd items ^
-            seg_by_ctx (vb, items[i], item_lens[i], item_ctxs[i], item_lens[i]);
+            seg_by_ctx (VB, items[i], item_lens[i], item_ctxs[i], item_lens[i]);
         }
     }
 }
@@ -326,12 +328,12 @@ static void vcf_seg_MB_items (VBlockVCFP vb, Context *ctx, unsigned num_items, C
 
         // if possible, seg odd-numbered element as AD minus (even element), if the sum is correct
         else if (use_formula_odd && i%2 && vb->ad_values[i/2] == values[i-1] + values[i]) {
-            seg_by_ctx (vb, mb_snips[i/2], mb_snip_lens[i/2], item_ctxs[i], item_lens[i]); 
+            seg_by_ctx (VB, mb_snips[i/2], mb_snip_lens[i/2], item_ctxs[i], item_lens[i]); 
             item_ctxs[i]->no_stons = true; // to enable "all_the_same"
         }
         
         else { // fallback if formulas don't work
-            seg_by_ctx (vb, items[i], item_lens[i], item_ctxs[i], item_lens[i]);
+            seg_by_ctx (VB, items[i], item_lens[i], item_ctxs[i], item_lens[i]);
             item_ctxs[i]->flags.store = STORE_INT; // possibly consumed by the odd items (^)
         }
     }
@@ -362,7 +364,7 @@ static inline WordIndex vcf_seg_FORMAT_AF (VBlockVCF *vb, Context *ctx, const ch
         !z_dual_coords &&       // note: we can't use SNIP_COPY in dual coordinates, because when translating, it will translate the already-translated INFO/AF
         ctx_encountered_in_line_(vb, CTX(INFO_AF)) && 
         str_issame (cell, CTX(INFO_AF)->last_snip))
-        return seg_by_ctx (vb, af_snip, af_snip_len, ctx, cell_len);
+        return seg_by_ctx (VB, af_snip, af_snip_len, ctx, cell_len);
     else
         return vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_AF, cell, cell_len, STORE_NONE, NULL);
 }
@@ -378,7 +380,7 @@ static inline WordIndex vcf_seg_FORMAT_PS (VBlockVCF *vb, Context *ctx, const ch
 
     int64_t ps_value=0;
     if (str_get_int (cell, cell_len, &ps_value) && ps_value == ctx->last_value.i) // same as previous line
-        return seg_by_ctx (vb, ((char []){ SNIP_SELF_DELTA, '0' }), 2, ctx, cell_len);
+        return seg_by_ctx (VB, ((char []){ SNIP_SELF_DELTA, '0' }), 2, ctx, cell_len);
 
     return seg_delta_vs_other (VB, ctx, CTX(VCF_POS), cell, cell_len, 1000);
 }
@@ -498,13 +500,13 @@ static inline WordIndex vcf_seg_FORMAT_DS (VBlockVCF *vb, Context *ctx, const ch
     char snip[FLOAT_FORMAT_LEN + 20] = { SNIP_SPECIAL, VCF_SPECIAL_DS }; 
 
     if (dosage < 0 || !str_get_float (cell, cell_len, &ds_val, &snip[2], &format_len)) 
-        return seg_by_ctx (vb, cell, cell_len, ctx, cell_len);
+        return seg_by_ctx (VB, cell, cell_len, ctx, cell_len);
 
     unsigned snip_len = 2 + format_len;
     snip[snip_len++] = ' ';
     snip_len += str_int ((int64_t)((ds_val - dosage) * 1000000), &snip[snip_len]);
 
-    return seg_by_ctx (vb, snip, snip_len, ctx, cell_len);
+    return seg_by_ctx (VB, snip, snip_len, ctx, cell_len);
 }
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_DS)
@@ -616,13 +618,15 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
         vb->ploidy = gt.repeats; // very first sample in the vb
         vb->ht_per_line = vb->ploidy * vcf_num_samples;
     }
-
+/*
     if (CTX(FORMAT_GT_HT)->local.type != BUF_OVERLAY) { // first time
         // we overlay on the txt to save memory. since the HT data is by definition a subset of txt, we only overwrite txt
         // areas after we have already consumed them
         buf_set_overlayable (&vb->txt_data);
-        buf_overlay ((VBlockP)vb, &CTX(FORMAT_GT_HT)->local, &vb->txt_data, "contexts->local");
+        buf_overlay (VB, &CTX(FORMAT_GT_HT)->local, &vb->txt_data, "contexts->local");
     }
+*/
+    buf_alloc (vb, &CTX(FORMAT_GT_HT)->local, vb->ploidy, vb->ploidy * vcf_num_samples * vb->lines.len, char, CTX_GROWTH, "contexts->local");
 
     // note - ploidy of this sample might be smaller than vb->ploidy (eg a male sample in an X chromosesome that was preceded by a female sample, or "." sample)
     Allele *ht_data = ENT (Allele, CTX(FORMAT_GT_HT)->local, vb->line_i * vb->ht_per_line + vb->ploidy * vb->sample_i);
@@ -700,7 +704,7 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
 
     // shortcut if we have the same ploidy and phase as previous GT (saves re-genetrating base64 in container_seg)
     if (gt.repeats == vb->gt_prev_ploidy && gt.repsep[0] == vb->gt_prev_phase) 
-        return seg_duplicate_last ((VBlockP)vb, ctx, save_cell_len);
+        return seg_duplicate_last (VB, ctx, save_cell_len);
 
     else {
         vb->gt_prev_ploidy = gt.repeats;
@@ -829,7 +833,7 @@ static inline Context *vcf_seg_validate_luft_trans_one_sample (VBlockVCF *vb, Co
     for (unsigned i=0; i < n_items; i++) {
         if (needs_translation (ctxs[i]) && item_lens[i]) {
             if ((vb->line_coords == DC_LUFT && !vcf_lo_seg_cross_render_to_primary (vb, ctxs[i], STRi(item,i), NULL, NULL)) ||
-                (vb->line_coords == DC_PRIMARY && !(DT_FUNC(vb, translator)[ctxs[i]->luft_trans]((VBlockP)vb, ctxs[i], (char *)STRi(item,i), 0, true)))) {
+                (vb->line_coords == DC_PRIMARY && !(DT_FUNC(vb, translator)[ctxs[i]->luft_trans](VB, ctxs[i], (char *)STRi(item,i), 0, true)))) {
                 failed_ctx = ctxs[i];  // failed translation
                 break;
             }
@@ -902,7 +906,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
         unsigned modified_len = sf_lens[i]*2 + 10;
         char modified[modified_len]; // theoritcal risk of stack overflow if subfield value is very large
 
-#       define SEG_OPTIMIZED do { seg_by_ctx (vb, modified, modified_len, ctx, modified_len); \
+#       define SEG_OPTIMIZED do { seg_by_ctx (VB, modified, modified_len, ctx, modified_len); \
                                   int32_t shrinkage = (int)sf_lens[i] - (int)modified_len;    \
                                   vb->recon_size      -= shrinkage;                           \
                                   vb->recon_size_luft -= shrinkage; } while (0)
@@ -920,7 +924,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
         }
 
         if (!sf_lens[i])
-            seg_by_ctx (vb, "", 0, ctx, 0); // generates WORD_INDEX_EMPTY
+            seg_by_ctx (VB, "", 0, ctx, 0); // generates WORD_INDEX_EMPTY
 
         // note: cannot use switch bc dict_id_* are variables, not constants
 
@@ -1020,14 +1024,14 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
             vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_SAC, sfs[i], sf_lens[i], STORE_NONE, vcf_seg_SAC_items);
 
         else // default
-            seg_by_ctx (vb, sfs[i], sf_lens[i], ctx, sf_lens[i]);
+            seg_by_ctx (VB, sfs[i], sf_lens[i], ctx, sf_lens[i]);
 
         vcf_set_encountered_in_sample (ctx);
     }
 
     // missing subfields - defined in FORMAT but missing (not merely empty) in sample
     for (unsigned i=n_sfs; i < con_nitems (*samples); i++)  
-        seg_by_ctx (vb, NULL, 0, ctxs[i], 0); // generates WORD_INDEX_MISSING
+        seg_by_ctx (VB, NULL, 0, ctxs[i], 0); // generates WORD_INDEX_MISSING
 
     return n_sfs - 1; // number of colons
 }

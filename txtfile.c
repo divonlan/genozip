@@ -411,7 +411,7 @@ static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb)
             "- The file is not a %s file.\n"
             "VB dumped: %s\n",  
             vb->vblock_i, dt_name (txt_file->data_type), codec_name (txt_file->codec),
-            txt_file->data_type == DT_REF ? "FASTA" : dt_name (txt_file->data_type),
+            TXT_DT(DT_REF) ? "FASTA" : dt_name (txt_file->data_type),
             txtfile_dump_vb (vb, txt_name));
 
 done:

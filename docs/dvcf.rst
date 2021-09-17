@@ -430,7 +430,7 @@ Filtering out these variants can be done with:
 
 ``genocat myfile.d.vcf.genozip --luft --regions-file ^myfile.d.vcf.genozip.overlaps``
 
-The format of the ``.overlaps`` file is also compatible with ``bcftools view --regions-file``.
+The format of the ``.overlaps`` file, after removing the comment lines, is also compatible with ``bcftools view --regions-file``.
 
 **Viewing summary statistics**
 

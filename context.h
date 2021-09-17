@@ -42,7 +42,12 @@
 #define SNIP_DONT_STORE          '\xC'   // Reconcstruct the following value, but don't store it in last_value (overriding flags.store)
 #define SNIP_COPY                '\xE'   // Copy the last_txt of dict_id (same or other)
 #define SNIP_DUAL                '\xF'   // A snip containing two snips separated by a SNIP_DUAL - for Primary and Luft reconstruction respectively
+#define NUM_SNIP_CODES           16
 
+#define SNIP_CODES { "SNIP_SEP", "SNIP_LOOKUP", "SNIP_OTHER_LOOKUP", "SNIP_PAIR_LOOKUP",\
+                     "SNIP_CONTAINER", "SNIP_SELF_DELTA", "SNIP_OTHER_DELTA", "SNIP_PAIR_DELTA", \
+                     "SNIP_SPECIAL", "<TAB>", "<NL>", "SNIP_REDIRECTION",\
+                     "SNIP_DONT_STORE", "<LF>", "SNIP_COPY", "SNIP_DUAL" }
 #define SNIP(len) uint32_t snip_len=(len); char snip[len]
 
 typedef struct CtxNode {
@@ -165,12 +170,26 @@ extern void ctx_compress_dictionaries (void);
 extern void ctx_read_all_counts (void);
 extern void ctx_compress_counts (void);
 extern const char *ctx_get_snip_with_largest_count (DidIType did_i, int64_t *count);
-extern void ctx_build_zf_ctx_from_contigs (DidIType dst_did_i, ConstBufferP contigs, ConstBufferP contigs_dict);
+extern void ctx_build_zf_ctx_from_contigs (DidIType dst_did_i, ConstContigPkgP ctgs);
 
 extern void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local);
 
 typedef struct { char s[MAX_TAG_LEN+8]; } TagNameEx;
 TagNameEx ctx_tag_name_ex (ConstContextP ctx);
+
+// called before seg, to store the point to which we might roll back
+static inline void ctx_create_rollback_point (ContextP ctx)
+{
+    ctx->rback_b250_len       = ctx->b250.len;
+    ctx->rback_local_len      = ctx->local.len;
+    ctx->rback_txt_len        = ctx->txt_len;
+    ctx->rback_num_singletons = ctx->num_singletons;
+    ctx->rback_last_value     = ctx->last_value;
+    ctx->rback_last_delta     = ctx->last_delta;
+    ctx->rback_last_txt_index = ctx->last_txt_index;
+    ctx->rback_last_txt_len   = ctx->last_txt_len;
+}
+extern void ctx_rollback (VBlockP vb, ContextP ctx);
 
 // returns true if dict_id was *previously* segged on this line, and we stored a valid last_value (int or float)
 #define ctx_has_value_in_line_(vb, ctx) ((ctx)->last_line_i == (vb)->line_i)

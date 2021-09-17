@@ -7,6 +7,7 @@
 #include "genozip.h"
 #include "strings.h"
 #include "flags.h"
+#include "context.h"
 #ifndef WIN32
 #include <sys/ioctl.h>
 #else
@@ -46,6 +47,44 @@ StrText char_to_printable (char c)
             return p;
         }
     }
+}
+
+char *str_print_snip_do (const char *in, unsigned in_len, 
+                         char *out) // caller allocated - in_len+20
+{
+    char *save_out = out;
+
+    if (!in) strcpy (out, "NULL");
+    
+    else if (!in_len) strcpy (out, "\"\"");
+    
+    else {
+        if (in[0] < NUM_SNIP_CODES) {
+            static const char *snip_codes[NUM_SNIP_CODES] = SNIP_CODES;
+            unsigned len = strlen (snip_codes[(int)in[0]]);
+            strcpy (out, snip_codes[(int)in[0]]);
+            out[len] = ' ';
+            out += len+1;
+            in++;
+            in_len--;
+        }
+
+        *(out++) = '\"';
+
+        for (unsigned i=0; i < in_len; i++) 
+            switch ((uint8_t)in[i]) {
+                case 32 ... 126 :  *(out++) = in[i]; break;   // printable ASCII
+                case '\t'       : 
+                case '\n'       : 
+                case '\r'       :  *(out++) = ' '; break; // whitespace
+                default         :  *(out++) = '?'; 
+            }
+
+        *(out++) = '\"';
+        *(out++) = 0; // nul-terminate
+    }
+
+    return save_out;
 }
 
 // replaces \t, \n, \r, \b with "\t" etc, replaces unprintables with '?'. caller should allocate out. returns out.
@@ -540,7 +579,7 @@ const char *type_name (unsigned item,
     return *name;    
 }
 
-void str_print_null_seperated_data (const char *data, unsigned len, bool add_newline, bool remove_equal_asterisk)
+void str_print_dict (const char *data, unsigned len, bool add_newline, bool remove_equal_asterisk)
 {
     for (unsigned i=0; i < len; i++) {
         // in case we are showing chrom data in --list-chroms in SAM - don't show * and =

@@ -820,14 +820,14 @@ void buf_destroy_do (Buffer *buf, const char *func, uint32_t code_line)
         overlay_count = (*(uint16_t*)(buf->data + buf->size + sizeof(uint64_t)));
         mutex_unlock (overlay_mutex);            
     }
-    ASSERT (overlay_count==1, "cannot destroy buffer %s because it is currently overlaid", buf->name);
+    ASSERT (overlay_count==1, "called from %s:%u: cannot destroy buffer %s because it is currently overlaid", func, code_line, buf->name);
 
     switch (buf->type) {
         case BUF_REGULAR     : buf_low_level_free (buf->memory, func, code_line); break;
         case BUF_OVERLAY     : buf_free (buf);   /* stop overlaying */            break;
         case BUF_MMAP        : buf_free (buf);   /* stop mmap'ing   */            break;
         case BUF_UNALLOCATED :                                                    break;
-        default              : ABORT ("Error in buf_destroy_do: invalid buffer type %u", buf->type);
+        default              : ABORT ("called from %s:%u: Error in buf_destroy_do: invalid buffer type %u", func, code_line, buf->type);
     }
 
     memset (buf, 0, sizeof (Buffer)); // reset to factory defaults
@@ -1041,10 +1041,10 @@ bool buf_dump_to_file (const char *filename, const Buffer *buf, unsigned buf_wor
         ASSERT (*(uint64_t *)(buf->memory) == UNDERFLOW_TRAP, "dumping to %s: buffer has underflowed", filename);
         ASSERT (*(uint64_t *)(buf->data + buf->size) == OVERFLOW_TRAP, "dumping to %s: buffer has underflowed", filename);
 
-        return file_put_data (update_filename, buf->memory, buf->size + control_size);
+        return file_put_data (update_filename, buf->memory, buf->size + control_size, 0);
     }
     else
-        return file_put_data (update_filename, buf->data, buf->len * buf_word_width);
+        return file_put_data (update_filename, buf->data, buf->len * buf_word_width, 0);
 }
  
 void BGEN_u8_buf (Buffer *buf, LocalType *lt)

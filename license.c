@@ -359,7 +359,7 @@ void license_register (void)
              "(which is hosted on a Google server) is not accessible. If this problem persists, you can register manually by\n"
              "sending an email to register@genozip.com - copy & paste the lines between the \"======\" into the email message.\n");
 
-    ASSINP (file_put_data (filename, license_data.data, license_data.len), 
+    ASSINP (file_put_data (filename, license_data.data, license_data.len, S_IRUSR), 
             "Failed to write license file %s: %s. If this is unexpected, email "EMAIL_SUPPORT" for help.", filename, strerror (errno));
 
     if (!n_fields) 

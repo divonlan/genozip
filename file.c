@@ -578,7 +578,7 @@ static bool file_open_txt_write (File *file)
         flags_update_piz_one_file(-1); // update flags accordingly
     }
 
-    if (z_file->data_type == DT_ME23 && flag.out_dt == DT_VCF)
+    if (Z_DT(DT_ME23) && flag.out_dt == DT_VCF)
         ASSINP0 (flag.reference, "--reference must be specified when translating 23andMe to VCF");
 
     // get the codec    
@@ -685,7 +685,7 @@ static void file_initialize_z_file_data (File *file)
     INIT (ra_buf);
     INIT (ra_buf_luft);
     INIT (chroms_sorted_index);
-    INIT (alt_chrom_map);
+    INIT (chrom2ref_map);
     INIT (section_list_buf);
     INIT (stats_buf);
     INIT (STATS_buf);
@@ -1035,7 +1035,7 @@ void file_close (File **file_p,
         buf_destroy (&file->ra_buf);
         buf_destroy (&file->ra_buf_luft);
         buf_destroy (&file->chroms_sorted_index);
-        buf_destroy (&file->alt_chrom_map);
+        buf_destroy (&file->chrom2ref_map);
         buf_destroy (&file->section_list_buf);
         buf_destroy (&file->unconsumed_txt);
         buf_destroy (&file->bgzf_isizes);
@@ -1249,7 +1249,8 @@ void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *b
 
 // writes data to a file and flushes it, returns true if successful
 static char *put_data_tmp_filename = NULL; // never freed once allocated to reduce race conditions with file_put_data_abort
-bool file_put_data (const char *filename, const void *data, uint64_t len)
+bool file_put_data (const char *filename, const void *data, uint64_t len, 
+                    mode_t mode) // optional - ignored if 0
 {
     put_data_tmp_filename = MALLOC (strlen(filename)+10);
     // we first write to tmp_filename, and after we complete and flush, we rename to the final name
@@ -1273,7 +1274,9 @@ bool file_put_data (const char *filename, const void *data, uint64_t len)
         ASSERT (!rename (put_data_tmp_filename, filename), "failed to rename %s to %s: %s", 
                 put_data_tmp_filename, filename, strerror (errno));
 
-        ASSERT (!chmod (filename, S_IRUSR), "failed to chmod %s: %s", filename, strerror (errno));
+        if (mode)
+            ASSERT (!chmod (filename, mode), "failed to chmod %s: %s", filename, strerror (errno));
+
         return true;
     } 
     else {

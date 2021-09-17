@@ -18,6 +18,7 @@
 #include "profiler.h"
 #include "endianness.h"
 #include "segconf.h"
+#include "version.h"
 
 // an entry per VB
 typedef struct {
@@ -78,7 +79,7 @@ static void linesorter_merge_vb_do (VBlock *vb, bool is_luft)
     for (uint32_t line_i=0 ; line_i < vb->lines.len ; line_i++) {
         ZipDataLine *dl = (ZipDataLine *)(&vb->lines.data[dl_size * line_i]);
         PosType pos = dl->pos[is_luft];
-        WordIndex chrom_word_index = node_word_index (vb, (is_luft ? DTF(ochrom) : CHROM), dl->chrom[is_luft]);
+        WordIndex chrom_word_index = node_word_index (vb, (is_luft ? DTF(luft_chrom) : DTF(prim_chrom)), dl->chrom[is_luft]);
 
         // exclude rejected lines (we exclude here if sorted, and in vcf_lo_piz_TOPLEVEL_cb_filter_line if not sorted)
         if (chrom_word_index != WORD_INDEX_NONE) 
@@ -164,6 +165,19 @@ static void line_sorter_detect_duplicates (const Buffer *index_buf)
     ARRAY (uint32_t, index, *index_buf);
     ARRAY (const LineInfo, li, txt_file->line_info[1]);
 
+    char overlaps_fn[strlen(z_name) + 30];
+    sprintf (overlaps_fn, "%s.overlaps", z_name);
+
+    bufprintf (evb, &dups, "##fileformat=GENOZIP-REGIONS-FILE\n"
+                           "##contents=Luft coordinates of variants that have different coordinates in the Primary reference and the same coordinates in the Luft reference\n"
+                           "##reference=%s\n"
+                           "##usage_see_variants=genocat %s --luft --no-header --regions-file %s\n"
+                           "##usage_filter_out_variants=genocat %s --luft --regions-file ^%s\n"
+                           "##documentation=" WEBSITE_GENOCAT " and " WEBSITE_DVCF "\n"
+                           "#CHROM\tSTART\tEND\n", ref_get_filename(gref), z_name, overlaps_fn, z_name, overlaps_fn);
+
+    uint64_t empty_len = dups.len;
+
     int64_t last_dup=-1;
     for (int64_t index_i=1; index_i < index_len; index_i++) {
 
@@ -174,23 +188,21 @@ static void line_sorter_detect_duplicates (const Buffer *index_buf)
         bool is_dup_prim = (this_li->prim_chrom_wi == prev_li->prim_chrom_wi) && (this_li->prim_start_pos == prev_li->prim_start_pos);
         if (is_dup_luft && !is_dup_prim) {
             if (last_dup != index_i-1) // not duplicate duplicate (i.e. 3 or more variants are the same)
-                bufprintf (evb, &dups, "%s\t%"PRIu64"\t%"PRIu64"\n", ctx_get_zf_nodes_snip (ZCTX(DTFZ(ochrom)), this_li->chrom_wi), this_li->start_pos, this_li->start_pos);
+                bufprintf (evb, &dups, "%s\t%"PRIu64"\t%"PRIu64"\n", ctx_get_zf_nodes_snip (ZCTX(DTFZ(luft_chrom)), this_li->chrom_wi), this_li->start_pos, this_li->start_pos);
 
             last_dup = index_i;
         }
     }
 
-    if (dups.len) { 
-        char fn[strlen(z_name) + 30];
-        sprintf (fn, "%s.overlaps", z_name);
-        buf_dump_to_file (fn, &dups, 1, false, true, false);
+    if (dups.len > empty_len) { 
+        buf_dump_to_file (overlaps_fn, &dups, 1, false, true, false);
         
-        buf_free (&dups);
-
         WARN ("FYI: Genozip detected cases of two or more variants with different Primary coordinates, mapped to the same Luft coordinates.\n"
               "These duplicates (in Luft coordinates) were output to %s, and may be filtered out with:\ngenocat %s --luft --regions-file ^%s\n",
-              fn, z_name, fn);
+              overlaps_fn, z_name, overlaps_fn);
     }
+
+    buf_free (&dups);
 }
 
 static bool is_luft_sorter;

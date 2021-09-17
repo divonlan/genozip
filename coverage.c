@@ -8,6 +8,7 @@
 #include "file.h"
 #include "strings.h"
 #include "txtfile.h"
+#include "contigs.h"
 
 void coverage_initialize (VBlock *vb)
 {
@@ -62,8 +63,8 @@ static double coverage_get_autosome_depth (WordIndex index_chrX, WordIndex index
         unsigned cn_len;
         ctx_get_snip_by_word_index (&z_file->contexts[CHROM], i, 0, &cn_len);
         
-        PosType len = header_contigs ? ENT (RefContig, *header_contigs, i)->max_pos
-                    :                  ENT (RefContig, *loaded_contigs, i)->max_pos;
+        PosType len = header_contigs ? ENT (Contig, *header_contigs, i)->max_pos
+                    :                  ENT (Contig, *loaded_contigs, i)->max_pos;
 
         if (cn_len > 5 || len <= (1>>20)) continue; // not primary autosome (note: in SAM/BAM compression with REF_INTERNAL the minimum length of a contig 1MB)
 
@@ -82,29 +83,29 @@ void coverage_sex_classifier (bool is_first_z_file)
     const Buffer *header_contigs = txtheader_get_contigs();
     const Buffer *loaded_contigs = ref_get_contigs (gref);
 
-    if (z_file->data_type == DT_FASTQ && !loaded_contigs->len && !header_contigs) {
+    if (Z_DT(DT_FASTQ) && !loaded_contigs->len && !header_contigs) {
         WARN ("%s: %s: --sex for FASTQ only works on files compressed with a reference", global_cmd, z_name);
         return;
     }
 
-    bool is_sam   = (z_file->data_type == DT_SAM);
-    bool is_fastq = (z_file->data_type == DT_FASTQ);
+    bool is_sam   = (Z_DT(DT_SAM));
+    bool is_fastq = (Z_DT(DT_FASTQ));
 
     WordIndex index_chr1 = coverage_get_chrom_index ('1');
     WordIndex index_chrX = coverage_get_chrom_index ('X');
     WordIndex index_chrY = coverage_get_chrom_index ('Y');
 
     double len_chr1 = index_chr1 == WORD_INDEX_NONE ? 1
-                    : header_contigs                ? ENT (RefContig, *header_contigs, index_chr1)->max_pos
-                    :                                 ENT (RefContig, *loaded_contigs, index_chr1)->max_pos;
+                    : header_contigs                ? ENT (Contig, *header_contigs, index_chr1)->max_pos
+                    :                                 ENT (Contig, *loaded_contigs, index_chr1)->max_pos;
 
     double len_chrX = index_chrX == WORD_INDEX_NONE ? 1
-                    : header_contigs                ? ENT (RefContig, *header_contigs, index_chrX)->max_pos
-                    :                                 ENT (RefContig, *loaded_contigs, index_chrX)->max_pos;
+                    : header_contigs                ? ENT (Contig, *header_contigs, index_chrX)->max_pos
+                    :                                 ENT (Contig, *loaded_contigs, index_chrX)->max_pos;
 
     double len_chrY = index_chrY == WORD_INDEX_NONE ? 1
-                    : header_contigs                ? ENT (RefContig, *header_contigs, index_chrY)->max_pos
-                    :                                 ENT (RefContig, *loaded_contigs, index_chrY)->max_pos;
+                    : header_contigs                ? ENT (Contig, *header_contigs, index_chrY)->max_pos
+                    :                                 ENT (Contig, *loaded_contigs, index_chrY)->max_pos;
 
     ARRAY (uint64_t, coverage, txt_file->coverage);
 
@@ -187,7 +188,7 @@ void coverage_show_coverage (void)
     const Buffer *header_contigs = txtheader_get_contigs();
     const Buffer *loaded_contigs = ref_get_contigs (gref);
 
-    if (z_file->data_type == DT_FASTQ && !loaded_contigs->len && !header_contigs) {
+    if (Z_DT(DT_FASTQ) && !loaded_contigs->len && !header_contigs) {
         WARN ("%s: %s: --coverage for FASTQ only works on files compressed with a reference", global_cmd, z_name);
         return;
     }
@@ -227,8 +228,8 @@ void coverage_show_coverage (void)
         const char *chrom_name = ctx_get_snip_by_word_index (&z_file->contexts[CHROM], i, 0, &cn_len);
 
         PosType len = (cn_len==1 && chrom_name[0]=='*') ? 0
-                    : header_contigs                    ? ENT (RefContig, *header_contigs, i)->max_pos
-                    :                                     ENT (RefContig, *loaded_contigs, i)->max_pos;
+                    : header_contigs                    ? ENT (Contig, *header_contigs, i)->max_pos
+                    :                                     ENT (Contig, *loaded_contigs, i)->max_pos;
 
         if (flag.show_coverage == COV_ALL || (flag.show_coverage == COV_CHROM && cn_len <= 5))
             iprintf (is_info_stream_terminal ? "%-*s  %-8s  %-11s  %-10s  %-4.1f%%  %6.2f\n" : "%*s\t%s\t%s\t%s\t%4.1f\t%6.2f\n", 
@@ -278,7 +279,7 @@ void coverage_show_idxstats (void)
     const Buffer *header_contigs = txtheader_get_contigs();
     const Buffer *loaded_contigs = ref_get_contigs (gref);
 
-    if (z_file->data_type == DT_FASTQ && !loaded_contigs->len && header_contigs) {
+    if (Z_DT(DT_FASTQ) && !loaded_contigs->len && header_contigs) {
         WARN ("%s: %s: --idxstats for FASTQ only works on files compressed with a reference", global_cmd, z_name);
         return;
     }
@@ -292,8 +293,8 @@ void coverage_show_idxstats (void)
         const char *chrom_name = ctx_get_snip_by_word_index (&z_file->contexts[CHROM], i, 0, &cn_len);
 
         PosType len = (cn_len==1 && chrom_name[0]=='*') ? 0
-                    : header_contigs                ? ENT (RefContig, *header_contigs, i)->max_pos
-                    :                                 ENT (RefContig, *loaded_contigs, i)->max_pos;
+                    : header_contigs                ? ENT (Contig, *header_contigs, i)->max_pos
+                    :                                 ENT (Contig, *loaded_contigs, i)->max_pos;
 
         iprintf ("%.*s\t%"PRIu64"\t%"PRId64"\t%"PRIu64"\n", cn_len, chrom_name, len, read_count[i], unmapped_read_count[i]);
     }

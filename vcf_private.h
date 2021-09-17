@@ -180,6 +180,9 @@ typedef enum { IL_CHROM, IL_POS, IL_REF, IL_XSTRAND, NUM_IL_FIELDS } InfoLiftFie
 #define KH_INFO_PREJ    KH_INFO INFO_PREJ_NAME ",Number=1,Type=String,Description=\"Reason variant was rejected for PRIMARY coords\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
 #define KH_INFO_oSTATUS KH_INFO "oSTATUS,Number=1,Type=String,Description=\"Lift status\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
 
+// VCF standard keys
+#define HK_CONTIG      "##contig="
+
 // header keys that appear only in a Primary VCF file
 #define HK_LUFT_CONTIG "##luft_contig="     
 #define HK_LUFT_REF    "##luft_reference="

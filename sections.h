@@ -19,14 +19,14 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     SEC_REF_HASH        = 3,
     SEC_REF_RAND_ACC    = 4,
     SEC_REF_CONTIGS     = 5,
-    SEC_GENOZIP_HEADER  = 6, // SEC_GENOZIP_HEADER remains 6 as in v2-v5, to be able to read old versions' genozip header
+    SEC_GENOZIP_HEADER  = 6, // SEC_GENOZIP_HEADER has been 6 since v2, so we can always read old versions' genozip header
     SEC_DICT_ID_ALIASES = 7,
     SEC_TXT_HEADER      = 8, 
     SEC_VB_HEADER       = 9,
     SEC_DICT            = 10, 
     SEC_B250            = 11, 
     SEC_LOCAL           = 12, 
-    SEC_REF_ALT_CHROMS  = 13,
+    SEC_CHROM2REF_MAP   = 13,
     SEC_STATS           = 14,
     SEC_BGZF            = 15, // optionally appears per component (txt header) and contains the uncompressed sizes of the source file bgzf block
     SEC_RECON_PLAN      = 16, // introduced v12
@@ -51,7 +51,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     {"SEC_DICT",            sizeof (SectionHeaderDictionary)    }, \
     {"SEC_B250",            sizeof (SectionHeaderCtx)           }, \
     {"SEC_LOCAL",           sizeof (SectionHeaderCtx)           }, \
-    {"SEC_REF_ALT_CHROMS",  sizeof (SectionHeader)              }, \
+    {"SEC_CHROM2REF_MAP",   sizeof (SectionHeader)              }, \
     {"SEC_STATS",           sizeof (SectionHeader)              }, \
     {"SEC_BGZF",            sizeof (SectionHeader)              }, \
     {"SEC_RECON_PLAN",      sizeof (SectionHeaderReconPlan)     }, \
@@ -81,6 +81,7 @@ typedef union SectionFlags {
         // note: if updating dts_* flags, update in zfile_compress_genozip_header, zfile_show_header too
         #define dts_ref_internal dt_specific // SAM, BAM: REF_INTERNAL was used for compressing (i.e. SAM file without reference)
         #define dts_paired       dt_specific // FASTQ: This z_file contains one or more pairs of FASTQs compressed with --pair (introduced v9.0.13)
+        #define dts_mismatch     dt_specific // CHAIN: This chain file's contigs mismatch its references, so it cannot be used with --chain
         uint8_t dt_specific      : 1; // this flag has a different meaning depending on the data_type, may be one of the above ^ 
         uint8_t aligner          : 1; // our aligner was used to align sequences to the reference (always with FASTQ, sometimes with SAM)
         uint8_t txt_is_bin       : 1; // Source file is binary (BAM)
@@ -345,27 +346,14 @@ typedef struct RAEntry {
     PosType min_pos, max_pos;    // POS field value of smallest and largest POS value of this chrom in this VB (regardless of whether the VB is sorted)
 } RAEntry; 
 
-// the data of SEC_REF_RAND_ACC is an array of the following type
-typedef struct RefContig {
-    CharIndex char_index;        // char index in CHROM dictionary of this contig
-    uint32_t snip_len;
-    WordIndex chrom_index;
-    PosType min_pos, max_pos;    // POS field value of smallest and largest POS value of this contig
-    PosType gpos;                // The GPOS in genome matching min_pos in contig.
-
-    // Properties, as they appear in the DESC line of the reference FASTA (character arrays are 0-padded)
-    #define REFCONTIG_MD_LEN 96
-    char metadata[REFCONTIG_MD_LEN];  // nul-termianted string. note: prior to v12 this space was occupied by specific fields, which were never utilized
-} RefContig; 
-
 // the data of SEC_REF_IUPACS (added v12)
 typedef struct Iupac {
     PosType gpos;
     char iupac;
 } Iupac;
 
-// the data of SEC_REF_ALT_CHROMS
-typedef struct { WordIndex txt_chrom, ref_chrom; } AltChrom; 
+// the data of SEC_CHROM2REF_MAP
+typedef struct { WordIndex txt_chrom, ref_chrom; } ChromRefMap; 
 
 typedef union {
     SectionHeader common;

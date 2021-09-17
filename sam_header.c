@@ -94,11 +94,13 @@ incomplete_header:
 
 typedef struct { uint32_t num_contigs, dict_len; } NumRangesCbParam;
 
-static void sam_header_get_num_ranges_cb (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *cb_param)
+static RefContigP sam_header_get_num_ranges_cb (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *cb_param)
 {
     // note: for simplicity, we consider contigs to be in the range [0, last_pos] even though POS=0 doesn't exist - last_pos+1 loci
     ((NumRangesCbParam*)cb_param)->num_contigs++;
     ((NumRangesCbParam*)cb_param)->dict_len += chrom_name_len + 1;
+
+    return NULL;
 }
 
 // constructs header_contigs, and in ZIP, also initialzes refererence ranges and random_access
@@ -228,12 +230,13 @@ TXTHEADER_TRANSLATOR (txtheader_bam2sam)
     txtheader_sam_add_PG (txtheader_buf);
 }
 
-static void txtheader_sam2bam_count_sq (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *callback_param)
+static RefContigP txtheader_sam2bam_count_sq (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *callback_param)
 {
     (*(uint32_t *)callback_param)++;
+    return NULL;
 }
 
-static void txtheader_sam2bam_ref_info (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *callback_param)
+static RefContigP txtheader_sam2bam_ref_info (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *callback_param)
 {
     Buffer *txtheader_buf = (Buffer *)callback_param;
 
@@ -257,6 +260,8 @@ static void txtheader_sam2bam_ref_info (const char *chrom_name, unsigned chrom_n
 
     ASSINP (last_pos <= INT32_MAX, "Error: cannot convert to BAM because contig %.*s has length=%"PRId64" that exceeds BAM format maximum of %u", 
             chrom_name_len-1, chrom_name, last_pos, INT32_MAX);
+
+    return NULL;
 }
 
 // prepare BAM header from SAM header, according to https://samtools.github.io/hts-specs/SAMv1.pdf section 4.2

@@ -59,8 +59,11 @@ typedef struct Context {
                                // ZIP->PIZ zctx.nodes.param is transferred via SectionHeaderCounts.nodes_param if counts_section=true
     Buffer counts;             // ZIP/PIZ: counts of snips (array of int64_t)
     
-    const char *last_snip;     // Seg: point into dict or ol_dict of the last snip evaluated, used only if keep_snip=true
+    // Seg: snip (in dictionary) and node_index the last non-empty ("" or NULL) snip evaluated
+    const char *last_snip;     
     unsigned last_snip_len;
+    WordIndex last_snip_ni;   
+
     int tag_i;                 // ZIP dual-coordinates, VB only: index into vb->tags for tag renaming 
 
     // settings
@@ -83,7 +86,6 @@ typedef struct Context {
     bool numeric_only;         // if both numeric_only and dynamic_size_local are set, 
     bool is_stats_parent;      // other contexts have this context in st_did_i
     bool counts_section;       // output a SEC_COUNTS section for this context
-    bool keep_snip;            // it true, ctx_evaluate_snip_seg populates last_snip and last_snip_len
     bool line_is_luft_trans;   // Seg: true if current line, when reconstructed with --luft, should be translated with luft_trans (false if no
                                //      trans_luft exists for this context, or it doesn't trigger for this line, or line is already in LUFT coordinates)
     TranslatorId luft_trans;   // ZIP: Luft translator for the context, set at context init and immutable thereafter
@@ -125,7 +127,7 @@ typedef struct Context {
 
     LastValueType last_value;  // ZIP/PIZ: last value of this context (it can be a basis for a delta, used for BAM translation, and other uses)
     int64_t last_delta;        // last delta value calculated
-
+    
     #define INVALID_LAST_TXT_INDEX ((uint32_t)-1)
     uint32_t last_txt_index;   // ZIP/PIZ: index into vb->txt_data of last seg/reconstruction (always in PIZ, sometimes in Seg) (introduced 10.0.5)
     uint32_t last_txt_len;     // ZIP/PIZ: length (in vb->txt_data) of last seg/reconstruction (always in PIZ, sometimes in Seg)
@@ -133,7 +135,7 @@ typedef struct Context {
     #define LAST_LINE_I_INIT -0x7fffffff
     int32_t last_line_i;       // ZIP/PIZ: =vb->line_i this line, so far, generated a valid last_value that can be used by downstream fields 
                                //          =(-vb->line_i-1) means ctx encountered in this line (so far) but last_value was not set 
-    int32_t last_sample_i;     // ZIP: like last_line_i, but used for VCF/FORMAT fields (0-based). Only meaningful if last_line_i indicates the line is the same vb->line_i
+    int32_t ctx_specific;      // ZIP/PIZ: for context-specific usage 
     uint32_t next_local;       // PIZ: iterator on Context.local
     SnipIterator iterator;     // PIZ: used to iterate on the context, reading one b250 word_index at a time
     SnipIterator pair_b250_iter; // PIZ: Iterator on pair, if it contains b250 data  <--- LAST in RECONSTRUCT START

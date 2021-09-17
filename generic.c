@@ -27,7 +27,7 @@ void generic_seg_finalize (VBlockP vb)
     toplevel_ctx->no_stons = true; // keep in b250 so it can be eliminated as all_the_same
     
     static const char snip[2] = { SNIP_SPECIAL, GNRIC_SPECIAL_TOPLEVEL };
-    seg_by_ctx (vb, snip, 2, toplevel_ctx, 0); 
+    seg_by_ctx (VB, snip, 2, toplevel_ctx, 0); 
 }
 
 bool generic_seg_is_small (ConstVBlockP vb, DictId dict_id)

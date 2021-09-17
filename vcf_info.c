@@ -139,10 +139,10 @@ static void vcf_seg_INFO_SF_seg (VBlockVCF *vb)
     }
 
     if (vb->use_special_sf == USE_SF_YES) 
-        seg_by_ctx (vb, vb->sf_snip.data, vb->sf_snip.len, CTX(INFO_SF), vb->sf_txt.len);
+        seg_by_ctx (VB, vb->sf_snip.data, vb->sf_snip.len, CTX(INFO_SF), vb->sf_txt.len);
     
     else if (vb->use_special_sf == USE_SF_NO)
-        seg_by_ctx (vb, vb->sf_txt.data, vb->sf_txt.len, CTX(INFO_SF), vb->sf_txt.len);
+        seg_by_ctx (VB, vb->sf_txt.data, vb->sf_txt.len, CTX(INFO_SF), vb->sf_txt.len);
 
     buf_free (&vb->sf_txt);
     buf_free (&vb->sf_snip);
@@ -286,11 +286,11 @@ static void vcf_seg_INFO_allele (VBlock *vb_, Context *ctx, STRp(value)) // retu
     if (allele == -1) goto fail;
 
     char snip[] = { SNIP_SPECIAL, VCF_SPECIAL_ALLELE, '0' + vb->line_coords, '0' + allele /* ASCII 48...147 */ };
-    seg_by_ctx (vb, snip, sizeof (snip), ctx, value_len);
+    seg_by_ctx (VB, snip, sizeof (snip), ctx, value_len);
     return;
 
 fail:
-    seg_by_ctx (vb, value, value_len, ctx, value_len); 
+    seg_by_ctx (VB, value, value_len, ctx, value_len); 
 }
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_ALLELE)
@@ -389,7 +389,7 @@ static bool vcf_seg_INFO_BaseCounts (VBlockVCF *vb, Context *ctx_basecounts, STR
     sprintf (snip, "%c%c%u,%u,%u,%u", SNIP_SPECIAL, VCF_SPECIAL_BaseCounts, 
              sorted_counts[0], sorted_counts[1], sorted_counts[2], sorted_counts[3]);
 
-    seg_by_ctx (vb, snip, value_len+2, ctx_basecounts, value_len); 
+    seg_by_ctx (VB, snip, value_len+2, ctx_basecounts, value_len); 
     
     ctx_basecounts->flags.store = STORE_INT;
     ctx_set_last_value (VB, ctx_basecounts, sum);
@@ -473,12 +473,12 @@ static void vcf_seg_INFO_AC (VBlockVCF *vb, Context *ac_ctx, STRp(field))
         (int64_t)round (af_ctx->last_value.f * an_ctx->last_value.i) == ac) { // AF * AN == AC
 
         ac_ctx->no_stons = true;
-        seg_by_ctx (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_AC }), 2, ac_ctx, field_len);
+        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_AC }), 2, ac_ctx, field_len);
     }
 
     // case: AC is multi allelic, or an invalid value, or missing AN or AF or AF*AN != AC
     else 
-        seg_by_ctx (vb, field, field_len, ac_ctx, field_len);
+        seg_by_ctx (VB, field, field_len, ac_ctx, field_len);
 
     ac_ctx->flags.store = STORE_INT;
 }
@@ -697,8 +697,8 @@ static bool vcf_seg_INFO_HGVS_snp (VBlockVCFP vb, ContextP ctx, STRp(value))
     // seg special snips
     CTX(INFO_HGVS_snp_pos)->st_did_i = CTX(INFO_HGVS_snp_refalt)->st_did_i = ctx->did_i; // consolidate stats
 
-    seg_by_ctx (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_HGVS_SNP_POS    }), 2, CTX(INFO_HGVS_snp_pos),    pos_str_len);
-    seg_by_ctx (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_HGVS_SNP_REFALT }), 2, CTX(INFO_HGVS_snp_refalt), 3);
+    seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_HGVS_SNP_POS    }), 2, CTX(INFO_HGVS_snp_pos),    pos_str_len);
+    seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_HGVS_SNP_REFALT }), 2, CTX(INFO_HGVS_snp_refalt), 3);
 
     return true;
 }
@@ -804,15 +804,15 @@ static bool vcf_seg_INFO_HGVS_indel (VBlockVCFP vb, ContextP ctx, STRp(value), c
     
     // We pos_lens[1] only if the payload is longer than 1
     if (n_poss == 2)
-        seg_by_ctx (vb, ((char[]){ SNIP_SPECIAL, special_end_pos[t] }), 2, CTX(did_i_end_pos[t]), pos_lens[1]);
+        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, special_end_pos[t] }), 2, CTX(did_i_end_pos[t]), pos_lens[1]);
     else
-        seg_by_ctx (vb, NULL, 0, CTX(did_i_end_pos[t]), 0); // becomes WORD_INDEX_MISSING - container_reconstruct_do will remove the preceding _
+        seg_by_ctx (VB, NULL, 0, CTX(did_i_end_pos[t]), 0); // becomes WORD_INDEX_MISSING - container_reconstruct_do will remove the preceding _
 
     // the del payload is optional - we may or may not have it
     if (payload_len)
-        seg_by_ctx (vb, ((char[]){ SNIP_SPECIAL, special_payload[t] }), 2, CTX(did_i_payload[t]), payload_len);
+        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, special_payload[t] }), 2, CTX(did_i_payload[t]), payload_len);
     else
-        seg_by_ctx (vb, NULL, 0, CTX(did_i_payload[t]), 0); 
+        seg_by_ctx (VB, NULL, 0, CTX(did_i_payload[t]), 0); 
 
     return true;
 }
@@ -843,7 +843,7 @@ static void vcf_seg_INFO_HGVS (VBlock *vb_, ContextP ctx, STRp(value))
     if (success) return;
 
 fail:
-    seg_by_ctx (vb, value, value_len, ctx, value_len); 
+    seg_by_ctx (VB, value, value_len, ctx, value_len); 
 }
 
 static void vcf_piz_special_INFO_HGVS_INDEL_END_POS (VBlockP vb, HgvsType t)
@@ -1194,7 +1194,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
 
     // if SVLEN is negative, it is expected to be minus the delta between END and POS
     else if (dnum == _INFO_SVLEN && vcf_seg_test_SVLEN (vb, value, value_len)) 
-        CALL (seg_by_ctx (vb, ((char [2]){ SNIP_SPECIAL, VCF_SPECIAL_SVLEN }), 2, ctx, value_len));
+        CALL (seg_by_ctx (VB, ((char [2]){ SNIP_SPECIAL, VCF_SPECIAL_SVLEN }), 2, ctx, value_len));
 
     // ##INFO=<ID=BaseCounts,Number=4,Type=Integer,Description="Counts of each base">
     else if (dnum == _INFO_BaseCounts) 
@@ -1213,10 +1213,8 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
         seg_set_last_txt (VB, ctx, value, value_len, STORE_INT);
 
     // ##INFO=<ID=AF,Number=A,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed">
-    else if (dnum == _INFO_AF) {
+    else if (dnum == _INFO_AF) 
         seg_set_last_txt (VB, ctx, value, value_len, STORE_FLOAT);
-        ctx->keep_snip = true; // consumed by vcf_seg_FORMAT_AF
-    }
 
     // ##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">
     else if (dnum == _INFO_AC)
@@ -1272,7 +1270,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
         CALL (vcf_seg_INFO_ANN (vb, ctx, value, value_len));
 
     if (not_yet_segged) 
-        seg_by_ctx (vb, value, value_len, ctx, value_len);
+        seg_by_ctx (VB, value, value_len, ctx, value_len);
     
     ctx_set_encountered_in_line (ctx);
     
@@ -1294,7 +1292,7 @@ void vcf_seg_info_subfields (VBlockVCF *vb, const char *info_str, unsigned info_
 
     // case: INFO field is '.' (empty) (but not in DVCF as we will need to deal with DVCF items)
     if (!z_dual_coords && info_len == 1 && *info_str == '.') {
-        seg_by_did_i (vb, ".", 1, VCF_INFO, 2); // + 1 for \t or \n
+        seg_by_did_i (VB, ".", 1, VCF_INFO, 2); // + 1 for \t or \n
         return;
     }
 

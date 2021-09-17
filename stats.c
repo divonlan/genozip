@@ -74,20 +74,20 @@ static void stats_output_file_metadata (Buffer *buf)
                    flag.pair ? " (paired)" : "",
                    (int)z_file->bound_txt_names.len, z_file->bound_txt_names.data);
     
-    if (z_file->data_type == DT_CHAIN)
+    if (flag.reference == REF_MAKE_CHAIN)
         bufprintf (evb, buf, "PRIM reference: %s\n", ref_get_filename (prim_ref));
 
-    if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE || z_file->data_type == DT_CHAIN) 
-        bufprintf (evb, buf, "%sReference: %s\n", z_file->data_type == DT_CHAIN ? "LUFT " : "", ref_get_filename (gref));
+    if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE || flag.reference == REF_MAKE_CHAIN) 
+        bufprintf (evb, buf, "%sReference: %s\n", Z_DT(DT_CHAIN) ? "LUFT " : "", ref_get_filename (gref));
 
-    if (z_file->data_type == DT_VCF) 
+    if (Z_DT(DT_VCF)) 
         bufprintf (evb, buf, "Samples: %u   ", vcf_header_get_num_samples());
 
     bufprintf (evb, buf, "%s: %s   Dictionaries: %u   Vblocks: %u x %u MB  Sections: %u\n", 
                DTPZ (show_stats_line_name), str_uint_commas (z_file->num_lines).s, z_file->num_contexts, 
                z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), (uint32_t)z_file->section_list_buf.len);
 
-    if (z_file->data_type == DT_KRAKEN) {
+    if (Z_DT(DT_KRAKEN)) {
         int64_t dominant_taxid_count;
         const char *dominant_taxid = ctx_get_snip_with_largest_count (KRAKEN_TAXID, &dominant_taxid_count);
 
@@ -101,6 +101,8 @@ static void stats_output_file_metadata (Buffer *buf)
     else if (kraken_is_loaded) 
         bufprintf (evb, buf, "Features: Per-line taxonomy ID data\n%s", "");
 
+    else if (Z_DT(DT_CHAIN) && flag.reference == REF_MAKE_CHAIN && !segconf.mismatches_reference)
+        bufprintf (evb, buf, "Features: Chain file suitable for use with genozip --chain\n%s", "");
 
     if (chain_is_loaded || txt_file->coords) 
         bufprintf (evb, buf, "Features: Dual-coordinates\n%s", "");
@@ -365,8 +367,8 @@ void stats_compress (void)
 
         /* comp b250      */ s->comp_b250 = str_size (b250_compressed_size);
         /* comp data      */ s->comp_data = str_size (local_compressed_size);
-        /* % of txt       */ s->pc_of_txt = 100.0 * (double)s->txt_len / (double)z_file->txt_data_so_far_bind;
-        /* % of genozip   */ s->pc_of_z   = 100.0 * (double)s->z_size / (double)z_file->disk_so_far;
+        /* % of txt       */ s->pc_of_txt = z_file->txt_data_so_far_bind ? 100.0 * (double)s->txt_len / (double)z_file->txt_data_so_far_bind : 0;
+        /* % of genozip   */ s->pc_of_z   = z_file->disk_so_far          ? 100.0 * (double)s->z_size / (double)z_file->disk_so_far           : 0;
 
         s++;
     }
@@ -377,8 +379,8 @@ void stats_compress (void)
     // Therefore, in case of ZIP-modified txt, the sum of the (modified) fields in the TXT column will NOT equal the
     // TOTAL in the TXT column. That's ok.
     double all_comp_ratio = (double)z_file->txt_data_so_far_bind_0 /* without modifications */ / (double)all_z_size;
-    double all_pc_of_txt  = 100.0 * (double)all_txt_len / (double)z_file->txt_data_so_far_bind /* with modifications */;
-    double all_pc_of_z    = 100.0 * (double)all_z_size  / (double)z_file->disk_so_far;
+    double all_pc_of_txt  = z_file->txt_data_so_far_bind ? 100.0 * (double)all_txt_len / (double)z_file->txt_data_so_far_bind : 0 /* with modifications */;
+    double all_pc_of_z    = z_file->disk_so_far          ? 100.0 * (double)all_z_size  / (double)z_file->disk_so_far          : 0;
 
     // long form stats from --STATS    
     qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_z_size);  // sort by compressed size
@@ -391,7 +393,7 @@ void stats_compress (void)
     stats_consolidate_non_ctx (sbl, num_stats, 
                                flag.reference == REF_INTERNAL ? "SEQ" : "Reference", // when compressing SAM with REF_INTERNAL, count the internal reference data as part of SEQ
                                6, ST_NAME (SEC_REFERENCE), ST_NAME (SEC_REF_IS_SET), 
-                               ST_NAME (SEC_REF_CONTIGS), ST_NAME (SEC_REF_RAND_ACC), ST_NAME (SEC_REF_ALT_CHROMS),
+                               ST_NAME (SEC_REF_CONTIGS), ST_NAME (SEC_REF_RAND_ACC), ST_NAME (SEC_CHROM2REF_MAP),
                                ST_NAME (SEC_REF_IUPACS));
 
     stats_consolidate_non_ctx (sbl, num_stats, "Other", 16, "E1L", "E2L", "EOL", "SAMPLES", "OPTIONAL", 

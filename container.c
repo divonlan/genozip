@@ -66,7 +66,7 @@ WordIndex container_seg_do (VBlock *vb, Context *ctx, ConstContainerP con,
     ctx->no_stons = true; // we need the word index to for container caching
 
     // con=NULL means MISSING Container (see container_reconstruct_do)
-    if (!con) return seg_by_ctx (vb, NULL, 0, ctx, 0); 
+    if (!con) return seg_by_ctx (VB, NULL, 0, ctx, 0); 
     
     unsigned con_b64_size = base64_size(con_sizeof (*con));
     unsigned con1_snip_len = 1 + con_b64_size + prefixes_len;
@@ -97,7 +97,7 @@ WordIndex container_seg_do (VBlock *vb, Context *ctx, ConstContainerP con,
         iprint0 ("\n");
     }
 
-    return seg_by_ctx_do (vb, snip, snip_len, ctx, add_bytes, is_new); 
+    return seg_by_ctx_ex (vb, snip, snip_len, ctx, add_bytes, is_new); 
 }
 
 //----------------------
@@ -340,7 +340,7 @@ static inline LastValueType container_reconstruct_do (VBlock *vb, Context *ctx, 
                 && !piz_grep_match (rep_reconstruction_start, AFTERENT (char, vb->txt_data)))
                 vb->drop_curr_line = "grep";
 
-            if (!vb->drop_curr_line && txt_file->data_type == DT_FASTQ) {
+            if (!vb->drop_curr_line && TXT_DT(DT_FASTQ)) {
 
                 // in FASTQ --header-only - remove the 3 non-header lines only after --grep
                 if (flag.header_only_fast) 

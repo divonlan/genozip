@@ -78,8 +78,6 @@ void vcf_seg_initialize (VBlock *vb_)
     CTX(VCF_oCHROM)->  no_vb1_sort = true; // indices need to remain as in the Chain file
     CTX(VCF_oSTATUS)-> no_vb1_sort = true; // indices need to remaining matching to LiftOverStatus
     CTX(VCF_COORDS)->  no_vb1_sort = true; // indices need to remaining matching to Coords
-    CTX(VCF_REFALT)->  keep_snip   = true; // set ctx->last_snip after evaluating
-    CTX(VCF_oXSTRAND)->keep_snip   = true;
 
     CTX(VCF_oSTATUS)-> flags.store = STORE_INDEX;
     CTX(VCF_COORDS)->  flags.store = STORE_INDEX;
@@ -145,14 +143,14 @@ void vcf_seg_initialize (VBlock *vb_)
     ctx_evaluate_snip_seg (vb_, CTX(VCF_oXSTRAND), "X", 1, NULL);
     ctx_decrement_count (vb_, CTX(VCF_oXSTRAND), 1);
 
-    // create a b250 and dict entry for LIFT_REF, COPYSTAT and COPYPOS - these become "all_the_same" so no need to seg them explicitly hereinafter
-    seg_by_did_i (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_LIFT_REF }), 2, VCF_LIFT_REF, 0); 
+    // create a nodes and dict entry for LIFT_REF, COPYSTAT and COPYPOS - these become "all_the_same" so no need to seg them explicitly hereinafter
+    seg_by_did_i (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_LIFT_REF }), 2, VCF_LIFT_REF, 0); 
     ctx_decrement_count (vb_, CTX(VCF_LIFT_REF), 0);
 
-    seg_by_did_i (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPYSTAT }), 2, VCF_COPYSTAT, 0); 
+    seg_by_did_i (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPYSTAT }), 2, VCF_COPYSTAT, 0); 
     ctx_decrement_count (vb_, CTX(VCF_COPYSTAT), 0);
 
-    seg_by_did_i (vb, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPYPOS }), 2, VCF_COPYPOS, 0);
+    seg_by_did_i (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPYPOS }), 2, VCF_COPYPOS, 0);
     ctx_decrement_count (vb_, CTX(VCF_COPYPOS), 0);
 }             
 
@@ -303,7 +301,7 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, STRp(fmt))
     ASSVCF0 (fmt_len >= 1, "missing or invalid FORMAT field");
 
     if (!vcf_num_samples) {
-        seg_by_did_i_ex (vb, fmt, fmt_len, VCF_FORMAT, fmt_len + 1 /* \n */, NULL);
+        seg_by_did_i_ex (VB, fmt, fmt_len, VCF_FORMAT, fmt_len + 1 /* \n */, NULL);
         return; // if we're not expecting any samples, no need to analyze the FORMAT field
     }
 
@@ -315,7 +313,7 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, STRp(fmt))
 
     // case: FORMAT is the same as previous line - just use the same node_index, but only if there is no chance of conditional renaming
     if (fmt_len == vb->last_format.len && !memcmp (vb->last_format.data, fmt, fmt_len) && !possible_conditional_renaming) {
-        seg_duplicate_last ((VBlockP)vb, CTX(VCF_FORMAT), fmt_len + 1 /* \t or \n */);
+        seg_duplicate_last (VB, CTX(VCF_FORMAT), fmt_len + 1 /* \t or \n */);
         dl->format_node_i = (dl-1)->format_node_i;
         return;
     }   
@@ -392,7 +390,7 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, STRp(fmt))
     }
 
     bool is_new;
-    uint32_t node_index = seg_by_did_i_ex (vb, snip, snip_len, VCF_FORMAT, fmt_len + 1 /* \t or \n */, &is_new);
+    uint32_t node_index = seg_by_did_i_ex (VB, snip, snip_len, VCF_FORMAT, fmt_len + 1 /* \t or \n */, &is_new);
     
     dl->format_node_i = node_index;
 
@@ -454,7 +452,7 @@ static void vcf_seg_add_line_number (VBlockVCFP vb, unsigned VCF_ID_len)
     char line_num[20];
     unsigned line_num_len = str_int (vb->first_line + vb->line_i, line_num);
 
-    seg_pos_field ((VBlockP)vb, VCF_LINE_NUM, VCF_LINE_NUM, SPF_ZERO_IS_BAD, 0, line_num, line_num_len, 0, line_num_len + 1 + LN_PREFIX_LEN); // +1 for tab +3 for "LN="
+    seg_pos_field (VB, VCF_LINE_NUM, VCF_LINE_NUM, SPF_ZERO_IS_BAD, 0, line_num, line_num_len, 0, line_num_len + 1 + LN_PREFIX_LEN); // +1 for tab +3 for "LN="
     
     int shrinkage = (int)VCF_ID_len - line_num_len - LN_PREFIX_LEN;
     vb->recon_size -= shrinkage;
@@ -516,11 +514,12 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
 
     GET_NEXT_ITEM (VCF_CHROM);
     if (vb->line_coords == DC_PRIMARY) 
-        dl->chrom[0] = seg_chrom_field (vb_, VCF_CHROM_str, VCF_CHROM_len);
+        dl->chrom[0] = seg_chrom_field_ex (vb_, VCF_CHROM, DC_PRIMARY, STRdid(VCF_CHROM), 0, NULL, VCF_CHROM_len+1, NULL);
     
     else { // LUFT
-        dl->chrom[1] = seg_by_did_i (vb_, VCF_CHROM_str, VCF_CHROM_len, VCF_oCHROM, VCF_CHROM_len); // we will add_bytes of the CHROM field (not oCHROM) as genounzip reconstructs the PRIMARY
-        random_access_update_chrom (vb_, DC_LUFT, dl->chrom[1], VCF_CHROM_str, VCF_CHROM_len); // also sets vb->chrom_name
+        dl->chrom[1] = seg_chrom_field_ex (vb_, VCF_oCHROM, DC_LUFT, STRdid(VCF_CHROM), 0, NULL, VCF_CHROM_len, NULL);
+        //dl->chrom[1] = seg_by_did_i (vb_, VCF_CHROM_str, VCF_CHROM_len, VCF_oCHROM, VCF_CHROM_len); // we will add_bytes of the CHROM field (not oCHROM) as genounzip reconstructs the PRIMARY
+        //random_access_update_chrom (vb_, DC_LUFT, dl->chrom[1], VCF_CHROM_str, VCF_CHROM_len); // also sets vb->chrom_name
         CTX(vb->vb_coords==DC_LUFT ? VCF_oCHROM : VCF_CHROM)->txt_len++; // account for the tab - in oCHROM in the ##luft_only VB and in CHROM (on behalf on the primary CHROM) if this is a Dual-coord line (we will rollback accounting later if its not)
     }
 
@@ -611,13 +610,13 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
             next_field = vcf_seg_samples (vb, dl, &len, (char*)next_field, has_13, backup_luft_samples, backup_luft_samples_len); 
         }
         else 
-            seg_by_did_i (vb, NULL, 0, VCF_SAMPLES, 0); // case no samples: WORD_INDEX_MISSING
+            seg_by_did_i (VB, NULL, 0, VCF_SAMPLES, 0); // case no samples: WORD_INDEX_MISSING
     }
 
     // case no format or samples
     else {
-        seg_by_did_i (vb, NULL, 0, VCF_FORMAT, 0); 
-        seg_by_did_i (vb, NULL, 0, VCF_SAMPLES, 0);
+        seg_by_did_i (VB, NULL, 0, VCF_FORMAT, 0); 
+        seg_by_did_i (VB, NULL, 0, VCF_SAMPLES, 0);
     }
 
     // Adds DVCF items according to ostatus, finalizes INFO/SF and segs the INFO container
@@ -636,7 +635,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
 
         Coords reconstructable_coords = lo_ok ? DC_BOTH : vb->line_coords;
         const char *name = coords_name (reconstructable_coords); 
-        seg_by_did_i (vb, name, strlen (name), VCF_COORDS, 0); // 0 as its not in the txt data
+        seg_by_did_i (VB, name, strlen (name), VCF_COORDS, 0); // 0 as its not in the txt data
         
         if (reconstructable_coords & DC_PRIMARY) vb->recon_num_lines++;   // PRIMARY or BOTH
         if (reconstructable_coords & DC_LUFT) vb->recon_num_lines_luft++; // LUFT or BOTH

@@ -33,6 +33,7 @@
 #include "threads.h"
 #include "endianness.h"
 #include "website.h"
+#include "map_chrom2ref.h"
 
 bool piz_grep_match (const char *start, const char *after)
 {
@@ -88,17 +89,17 @@ bool piz_test_grep (VBlock *vb)
 
     // uncompress & map desc field (filtered by piz_is_skip_section)
     vb->grep_stages = GS_TEST; // tell piz_is_skip_section to skip decompressing sections not needed for determining the grep
-    piz_uncompress_all_ctxs ((VBlockP)vb, 0);
+    piz_uncompress_all_ctxs (VB, 0);
     vb->grep_stages = GS_UNCOMPRESS; // during uncompress in the compute thread, uncompress only what was not already uncompressed here
 
     // reconstruct each description line and check for string matching with flag.grep
     bool found = false, match = false;
 
-    Context *desc_ctx =  CTX(vb->data_type == DT_FASTQ ? FASTQ_DESC : FASTA_DESC);
+    Context *desc_ctx =  CTX(VB_DT(DT_FASTQ) ? FASTQ_DESC : FASTA_DESC);
     desc_ctx->iterator.next_b250 = FIRSTENT (uint8_t, desc_ctx->b250); 
 
     uint32_t num_descs; // number of desciption lines in this VB
-    if (vb->data_type == DT_FASTQ) {
+    if (VB_DT(DT_FASTQ)) {
         vb->line_i = 4 * vb->first_line;
         num_descs = (uint32_t)vb->lines.len; // every read has a description line
     }
@@ -118,16 +119,16 @@ bool piz_test_grep (VBlock *vb)
 
         if (match) { 
             found = true; // we've found a match to the grepped string
-            if (vb->data_type == DT_FASTQ) break; // for FASTA, we need to go until the last line, for FASTQ, we can break here
+            if (VB_DT(DT_FASTQ)) break; // for FASTA, we need to go until the last line, for FASTQ, we can break here
         }
 
-        if (vb->data_type == DT_FASTQ) vb->line_i += 4; // note: for FASTA we have no idea what txt line we're on, because we're only tracking DESC lines
+        if (VB_DT(DT_FASTQ)) vb->line_i += 4; // note: for FASTA we have no idea what txt line we're on, because we're only tracking DESC lines
     }
 
     // last FASTA - carry over whether its grepped to the next VB - in case next VB starts not from the description line
     // similarly, note whether the previous VB ended with a grepped sequence. If previous VB didn't have any description
     // i.e the entire VB was a sequence that started in an earlier VB - the grep status of the easier VB is carried forward
-    if (vb->data_type == DT_FASTA) 
+    if (VB_DT(DT_FASTA)) 
         // if the last contig of the previous vb was grepped in - then include this VB anyway
         found = fasta_piz_initialize_contig_grepped_out (vb, desc_ctx->b250.len > 0, match) || found;
 
@@ -155,7 +156,7 @@ bool piz_default_skip_section (VBlockP vb, SectionType st, DictId dict_id)
     // B250, LOCAL, COUNT sections
     bool skip = exe_type == EXE_GENOCAT && dict_id.num 
                             && dict_id.num != DTF(predefined)[CHROM].dict_id.num 
-                            && (!flag.luft || dict_id.num != DTF(predefined)[ODID(oCHROM)].dict_id.num) && (
+                            && (!flag.luft || dict_id.num != DTF(predefined)[DTF(luft_chrom)].dict_id.num) && (
     
     // sometimes we don't need dictionaries. but we always load CHROM.
         (flag.genocat_no_dicts && dict_id_typeless (dict_id).num != flag.show_one_counts.num)
@@ -365,7 +366,7 @@ DataType piz_read_global_area (Reference ref)
     if (!flag.header_only || z_dual_coords) { // dual coordinates need this stuff of for the rejects part of the header
 
         // mapping of the file's chroms to the reference chroms (for files originally compressed with REF_EXTERNAL/EXT_STORE and have alternative chroms)
-        ref_alt_chroms_load (ref); 
+        map_chrom2ref_load (ref); 
 
         ref_contigs_load_contigs (ref); // note: in case of REF_EXTERNAL, reference is already pre-loaded
 
@@ -379,8 +380,8 @@ DataType piz_read_global_area (Reference ref)
         ctx_read_all_counts(); // read all counts section
 
         // update chrom node indices using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
-        if (flag.regions && ZCTX(flag.luft ? ODID(oCHROM) : CHROM)->word_list.len) // FASTQ compressed without reference, has no CHROMs 
-            regions_make_chregs (&z_file->contexts[flag.luft ? ODID(oCHROM) : CHROM]);
+        if (flag.regions && ZCTX(flag.luft ? DTFZ(luft_chrom) : DTFZ(prim_chrom))->word_list.len) // FASTQ compressed without reference, has no CHROMs 
+            regions_make_chregs (&z_file->contexts[flag.luft ? DTFZ(luft_chrom) : DTFZ(prim_chrom)]);
 
         // if the regions are negative, transform them to the positive complement instead
         regions_transform_negative_to_positive_complement();
@@ -390,7 +391,7 @@ DataType piz_read_global_area (Reference ref)
         // note: in case of a data file with stored reference - SEC_REF_RAND_ACC will contain the random access of the reference
         // and SEC_RANDOM_ACCESS will contain the random access of the data. In case of a .ref.genozip file, both sections exist 
         // and are identical. It made the coding easier and their size is negligible.
-        random_access_load_ra_section (SEC_RANDOM_ACCESS, flag.luft ? ODID(oCHROM) : CHROM, &z_file->ra_buf, "z_file->ra_buf", 
+        random_access_load_ra_section (SEC_RANDOM_ACCESS, flag.luft ? DTFZ(luft_chrom) : DTFZ(prim_chrom), &z_file->ra_buf, "z_file->ra_buf", 
                                        !flag.show_index ? NULL : flag.luft ? RA_MSG_LUFT : RA_MSG_PRIM);
 
         random_access_load_ra_section (SEC_REF_RAND_ACC, CHROM, ref_get_stored_ra (ref), "ref_stored_ra", 
@@ -410,14 +411,16 @@ DataType piz_read_global_area (Reference ref)
             bool dispatcher_invoked = false;
 
             // attempt to mmap a cached reference, and if one doesn't exist, uncompress the reference file and cache it
-            if (!ref_mmap_cached_reference (ref)) {
-                ref_load_stored_reference (ref);
-                ref_generate_reverse_complement_genome (ref);
+            if (!flag.genocat_no_ref_file) {
+                if (!ref_mmap_cached_reference (ref)) {
+                    ref_load_stored_reference (ref);
+                    ref_generate_reverse_complement_genome (ref);
 
-                // start creating the genome cache now in a background thread, but only if we loaded the entire reference
-                if (!flag.regions) ref_create_cache_in_background (ref); 
+                    // start creating the genome cache now in a background thread, but only if we loaded the entire reference
+                    if (!flag.regions) ref_create_cache_in_background (ref); 
 
-                dispatcher_invoked = true;
+                    dispatcher_invoked = true;
+                }
             }
 
             // load the IUPACs list of the reference (rare non-ACTG "bases")
@@ -504,7 +507,7 @@ static bool piz_read_one_vb (VBlock *vb)
         iprintf ("READING(id=%d) vb_i=%u first_line=%"PRIu64" num_lines=%u recon_size=%u genozip_size=%u longest_line_len=%u\n",
                  vb->id, vb->vblock_i, vb->first_line, vb->recon_num_lines, vb->recon_size, BGEN32 (header->z_data_bytes), vb->longest_line_len);
 
-    ctx_overlay_dictionaries_to_vb ((VBlockP)vb); /* overlay all dictionaries (not just those that have fragments in this vblock) to the vb */ 
+    ctx_overlay_dictionaries_to_vb (VB); /* overlay all dictionaries (not just those that have fragments in this vblock) to the vb */ 
 
     buf_alloc (vb, &vb->z_section_headers, 0, MAX_DICTS * 2 + 50, uint32_t, 0, "z_section_headers"); // room for section headers  
 
