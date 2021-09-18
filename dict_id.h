@@ -27,7 +27,7 @@ static inline DictId dict_id_typeless(DictId dict_id) { dict_id.id[0] = (dict_id
 
 typedef struct { DictId alias, dst; } DictIdAlias;
 extern const DictIdAlias *dict_id_aliases;
-uint32_t dict_id_num_aliases;
+extern uint32_t dict_id_num_aliases;
 
 extern BufferP dict_id_create_aliases_buf (void);
 extern void dict_id_read_aliases (void) ;
