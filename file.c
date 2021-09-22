@@ -11,7 +11,7 @@
 #ifdef __APPLE__
     #define off64_t __int64_t
 #endif
-#include <bzlib.h>
+#include "bzlib/bzlib.h"
 #include "zlib/zlib.h"
 #include "genozip.h"
 #include "context.h"

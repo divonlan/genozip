@@ -13,11 +13,11 @@ ifdef BUILD_PREFIX
 IS_CONDA=1
 endif
 
-LDFLAGS     += -lpthread -lm 
+LDFLAGS += -lpthread -lm 
+CFLAGS  += -Wall -D_LARGEFILE64_SOURCE=1
 
 ifdef IS_CONDA 
-	CFLAGS  += -Wall -I. -D_LARGEFILE64_SOURCE=1 -DDISTRIBUTION=\"conda\"
-	LDFLAGS += -lbz2 # conda - dynamic linking with bz2
+	CFLAGS  += -DDISTRIBUTION=\"conda\"
 
 	ifeq ($(OS),Windows_NT)
 		CC=gcc # in Windows, override conda's default Visual C with gcc 
@@ -27,7 +27,6 @@ ifdef IS_CONDA
 
 else
 	CC=gcc
-	CFLAGS = -Wall -I. -Izlib -Ibzlib -Ilibdeflate -D_LARGEFILE64_SOURCE=1  
 endif 
 
 SRC_DIRS = zlib bzlib lzma bsc libdeflate compatibility
@@ -75,6 +74,7 @@ CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h tx
 			 zlib/zlib.h zlib/zutil.h \
 			 lzma/7zTypes.h lzma/Compiler.h lzma/LzFind.h lzma/LzFindMt.h lzma/LzHash.h lzma/LzmaDec.h lzma/LzmaEnc.h \
 			 lzma/Precomp.h lzma/Threads.h \
+			 bzlib/bzlib.h bzlib/bzlib_private.h \
 			 bsc/bwt.h bsc/coder.h bsc/divsufsort.h bsc/libbsc.h bsc/lzp.h bsc/platform.h \
 			 bsc/qlfc_model.h bsc/qlfc.h bsc/rangecoder.h bsc/tables.h \
  			 libdeflate/adler32_vec_template.h  libdeflate/crc32_table.h          libdeflate/unaligned.h \

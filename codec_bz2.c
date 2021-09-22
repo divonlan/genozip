@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#include <bzlib.h>
+#include "bzlib/bzlib.h"
 #include "genozip.h"
 #include "codec.h"
 #include "vblock.h"

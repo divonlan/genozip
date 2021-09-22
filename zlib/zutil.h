@@ -20,7 +20,7 @@
 #endif
 
 #include "zlib.h"
-#include "genozip.h"
+#include "../genozip.h"
 
 #if defined(STDC) && !defined(Z_SOLO)
 #  if !(defined(_WIN32_WCE) && defined(_MSC_VER))

@@ -8,7 +8,6 @@
 #endif
 #define Z_LARGE64
 #include <errno.h>
-#include <bzlib.h>
 #include "genozip.h"
 #include "txtfile.h"
 #include "vblock.h"
@@ -26,6 +25,7 @@
 #include "segconf.h"
 #include "zlib/zlib.h"
 #include "libdeflate/libdeflate.h"
+#include "bzlib/bzlib.h"
 
 const char *txtfile_dump_filename (VBlockP vb, const char *base_name, const char *ext) 
 {

@@ -31,13 +31,13 @@ extern char *str_to_single_line_printable (const char *in, uint32_t in_len, char
 extern char *str_tolower (const char *in, char *out /* out allocated by caller - can be the same as in */);
 extern char *str_toupper (const char *in, char *out);
 
-static _Bool inline str_issame_ (const char *str1, uint32_t str1_len, const char *str2, uint32_t str2_len) // true if the same
+static bool inline str_issame_ (const char *str1, uint32_t str1_len, const char *str2, uint32_t str2_len) // true if the same
 {
     return (str1_len == str2_len) && !memcmp (str1, str2, str1_len);
 }
 #define str_issame(str1,str2) str_issame_ (str1, str1##_len, str2, str2##_len)
 
-extern _Bool str_case_compare (const char *str1, const char *str2, _Bool *identical); // similar to stricmp that doesn't exist on all platforms
+extern bool str_case_compare (const char *str1, const char *str2, bool *identical); // similar to stricmp that doesn't exist on all platforms
 
 static inline char *str_tolower_(const char *in, char *out, uint32_t len)
 {
@@ -83,31 +83,31 @@ extern StrText str_int_s (int64_t n);
                        :                   ((int)log10(-(n))) + 2)
 
 extern uint32_t str_int (int64_t n, char *str /* out */);
-extern _Bool str_get_int (const char *str, uint32_t str_len, int64_t *value); // note: for a reason beyond me, Docker hub won't compile if its "bool" and not "_Bool"
-extern _Bool str_get_int_range8  (const char *str, uint32_t str_len, uint8_t  min_val, uint8_t  max_val, uint8_t  *value);
-extern _Bool str_get_int_range16 (const char *str, uint32_t str_len, uint16_t min_val, uint16_t max_val, uint16_t *value);
-extern _Bool str_get_int_range64 (const char *str, uint32_t str_len, int64_t  min_val, int64_t  max_val, int64_t  *value);
-extern _Bool str_get_int_range32 (const char *str, uint32_t str_len, int32_t  min_val, int32_t  max_val, int32_t  *value);
+extern bool str_get_int (const char *str, uint32_t str_len, int64_t *value); // note: for a reason beyond me, Docker hub won't compile if its "bool" and not "bool"
+extern bool str_get_int_range8  (const char *str, uint32_t str_len, uint8_t  min_val, uint8_t  max_val, uint8_t  *value);
+extern bool str_get_int_range16 (const char *str, uint32_t str_len, uint16_t min_val, uint16_t max_val, uint16_t *value);
+extern bool str_get_int_range64 (const char *str, uint32_t str_len, int64_t  min_val, int64_t  max_val, int64_t  *value);
+extern bool str_get_int_range32 (const char *str, uint32_t str_len, int32_t  min_val, int32_t  max_val, int32_t  *value);
 
-extern _Bool str_get_int_hex (const char *str, uint32_t str_len, uint64_t *value); 
-extern _Bool str_get_int_range_allow_hex8  (const char *str, uint32_t str_len, uint8_t  min_val, uint8_t  max_val, uint8_t  *value);
-extern _Bool str_get_int_range_allow_hex16 (const char *str, uint32_t str_len, uint16_t min_val, uint16_t max_val, uint16_t *value);
-extern _Bool str_get_int_range_allow_hex32 (const char *str, uint32_t str_len, uint32_t min_val, uint32_t max_val, uint32_t *value);
-extern _Bool str_get_int_range_allow_hex64 (const char *str, uint32_t str_len, uint64_t min_val, uint64_t max_val, uint64_t *value);
+extern bool str_get_int_hex (const char *str, uint32_t str_len, uint64_t *value); 
+extern bool str_get_int_range_allow_hex8  (const char *str, uint32_t str_len, uint8_t  min_val, uint8_t  max_val, uint8_t  *value);
+extern bool str_get_int_range_allow_hex16 (const char *str, uint32_t str_len, uint16_t min_val, uint16_t max_val, uint16_t *value);
+extern bool str_get_int_range_allow_hex32 (const char *str, uint32_t str_len, uint32_t min_val, uint32_t max_val, uint32_t *value);
+extern bool str_get_int_range_allow_hex64 (const char *str, uint32_t str_len, uint64_t min_val, uint64_t max_val, uint64_t *value);
 
 #define str_is_int(str,str_len) str_get_int ((str), (str_len), NULL)
 
-extern _Bool str_is_in_range (const char *str, uint32_t str_len, char first_c, char last_c);
+extern bool str_is_in_range (const char *str, uint32_t str_len, char first_c, char last_c);
 
 extern StrText str_pointer (const void *p);
 extern StrText str_time (void);
 
 #define FLOAT_FORMAT_LEN 12
-extern _Bool str_get_float (STRp(float_str), double *value, char format[FLOAT_FORMAT_LEN], uint32_t *format_len);
+extern bool str_get_float (STRp(float_str), double *value, char format[FLOAT_FORMAT_LEN], uint32_t *format_len);
 
-extern _Bool str_scientific_to_decimal (STRp(float_str), char *modified, uint32_t *modified_len, double *value);
+extern bool str_scientific_to_decimal (STRp(float_str), char *modified, uint32_t *modified_len, double *value);
 
-extern uint32_t str_split_do (STRp(str), uint32_t max_items, char sep, const char **items, uint32_t *item_lens, _Bool exactly, const char *enforce_msg);
+extern uint32_t str_split_do (STRp(str), uint32_t max_items, char sep, const char **items, uint32_t *item_lens, bool exactly, const char *enforce_msg);
 
 // name      : eg "item", macro defines variables "items" (array of pointers), item_lens (array or uint32_t), n_items (actual number of items)
 // max_items : maximum allowed items, or 0 if not known
@@ -127,13 +127,13 @@ extern void str_nul_separate_do (uint32_t n_items, const char **items, uint32_t 
 
 extern uint32_t str_remove_whitespace (const char *in, uint32_t in_len, char *out);
 
-extern uint32_t str_split_ints_do (const char *str, uint32_t str_len, uint32_t max_items, char sep, _Bool exactly, int64_t *items);
+extern uint32_t str_split_ints_do (const char *str, uint32_t str_len, uint32_t max_items, char sep, bool exactly, int64_t *items);
 #define str_split_ints(str,str_len,max_items,sep,name,exactly) \
     uint32_t n_##name##s = (max_items) ? (max_items) : str_count_char ((str), (str_len), (sep)) + 1; \
     int64_t name##s[n_##name##s]; \
     n_##name##s = str_split_ints_do ((str), (str_len), n_##name##s, (sep), (exactly), name##s); 
 
-extern uint32_t str_split_floats_do (const char *str, uint32_t str_len, uint32_t max_items, char sep, _Bool exactly, double *items);
+extern uint32_t str_split_floats_do (const char *str, uint32_t str_len, uint32_t max_items, char sep, bool exactly, double *items);
 #define str_split_floats(str,str_len,max_items,sep,name,exactly) \
     uint32_t n_##name##s = (max_items) ? (max_items) : str_count_char ((str), (str_len), (sep)) + 1; \
     double name##s[n_##name##s]; \
@@ -143,19 +143,19 @@ extern const char *type_name (uint32_t item,
                               const char * const *name, // the address in which a pointer to name is found, if item is in range
                               uint32_t num_names);
 
-extern void str_print_dict (const char *data, uint32_t len, _Bool add_newline, _Bool remove_equal_asterisk);
+extern void str_print_dict (const char *data, uint32_t len, bool add_newline, bool remove_equal_asterisk);
 
 extern int str_print_text (const char **text, uint32_t num_lines,
                            const char *wrapped_line_prefix, 
                            const char *newline_separator, 
                            uint32_t line_width /* 0=calcuate optimal */);
 
-typedef _Bool (*ResponseVerifier) (char *response, uint32_t response_size, const char *verifier_param);
+typedef bool (*ResponseVerifier) (char *response, uint32_t response_size, const char *verifier_param);
 extern void str_query_user (const char *query, char *response, uint32_t response_size, ResponseVerifier verifier, const char *verifier_param);
 
 // ResponseVerifier functions
-extern _Bool str_verify_y_n (char *response, uint32_t response_size, const char *y_or_n);
-extern _Bool str_verify_not_empty (char *response, uint32_t response_size, const char *unused);
+extern bool str_verify_y_n (char *response, uint32_t response_size, const char *y_or_n);
+extern bool str_verify_not_empty (char *response, uint32_t response_size, const char *unused);
 
 extern const char *str_win_error (void);
 
