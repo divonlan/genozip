@@ -170,7 +170,7 @@ typedef _Bool bool;
 #define STRdid(x)  x##_str, x##_len  // for function call arguments
 #define STRi(x,i) x##s[i], x##_lens[i] // for function call arguments
 #define pSTRa(x) &x, &x##_len // for function call arguments
-#define STRf(x) x##_len, x  // for printf %.*s argument list
+#define STRf(x) ((int)x##_len), x  // for printf %.*s argument list
 #define STRfi(x,i) x##_lens[i], x##s[i]  // for printf %.*s argument list
 #define cSTR(x) x, sizeof x-1 // a constant string and its length
 #define STRcpy(dst,src) do { if (src##_len) { memcpy(dst,src,src##_len) ; dst##_len = src##_len; } } while(0)

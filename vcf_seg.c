@@ -314,7 +314,7 @@ static DictId vcf_seg_get_format_sf_dict_id (STRp (sf_name))
     return dict_id; 
 }
 
-static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, STRp(fmt))
+static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char *fmt, int64_t fmt_len)
 {
     ASSVCF0 (fmt_len >= 1, "missing or invalid FORMAT field");
 
@@ -380,8 +380,9 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, STRp(fmt))
     
     char renamed_data[n_sf_names * MAX_TAG_LEN];
     const char *renamed = renamed_data;
-    unsigned renamed_len = possibly_rename ? vcf_tags_rename (vb, n_sf_names, ctxs, sf_names, sf_name_lens, NULL, renamed_data) : 0;
+    int64_t renamed_len = possibly_rename ? vcf_tags_rename (vb, n_sf_names, ctxs, sf_names, sf_name_lens, NULL, renamed_data) : 0;
 
+    // note: fmt_len and renamed_len need to be int64_t to avoid -Wstringop-overflow warning in gcc 10
     SNIP(6 + fmt_len + renamed_len); // maximum length in case of dual-snip with renaming
 
     if (renamed_len) {

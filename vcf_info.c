@@ -786,9 +786,11 @@ static bool vcf_seg_INFO_HGVS_indel (VBlockVCFP vb, ContextP ctx, STRp(value), c
                    { .dict_id = dict_id_payload[t]                     } } }; 
 
     // preper prefixes - a container-wide prefix, and the op is the prefix for item [2]
-    unsigned header_len = start_pos - value;
-    unsigned op_len = (t==DELINS ? 6 : 3);
-    unsigned prefixes_len = header_len + op_len + 5 /* separators */;
+    int64_t header_len = start_pos - value;  
+    int64_t op_len = (t==DELINS ? 6 : 3);
+    int64_t prefixes_len = header_len + op_len + 5 /* separators */;
+
+    // note: header_len, op_len and renamed_len prefixes_len to be int64_t to avoid -Wstringop-overflow warning in gcc 10
     char prefixes[prefixes_len];
     prefixes[0] = prefixes[header_len+1] = prefixes[header_len+2] = prefixes[header_len+3] = prefixes[header_len+4+op_len] = CON_PREFIX_SEP;
     memcpy (&prefixes[1], value, header_len);
