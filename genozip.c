@@ -119,7 +119,7 @@ static void main_print_help (bool explicit)
     // in Windows, we ask the user to click a key - this is so that if the user double clicks on the EXE
     // from Windows Explorer - the terminal will open and he will see the help
     if (flag.is_windows && !explicit && isatty(0) && isatty (1)) {
-        printf ("Press any key to continue...\n");
+        printf ("Press Enter to continue...\n");
         getc(stdin);
     }
 }
@@ -263,7 +263,7 @@ static void main_test_after_genozip (const char *exec_name, const char *z_filena
     int exit_code = stream_wait_for_exit (test);
 
     TEMP_VALUE (primary_command, TEST_AFTER_ZIP); // make exit_on_error NOT delete the genozip file in this case, so its available for debugging
-    ASSINP (!exit_code, "test exited with status %d\n", exit_code);
+    ASSERT (!exit_code, "%s: test exited with status %d\n", global_cmd, exit_code); // exit with error status 
     RESTORE_VALUE (primary_command); // recover in case of more non-concatenated files
 }
 
@@ -466,9 +466,9 @@ static void main_load_reference (const char *filename, bool is_first_file, bool 
 {
     if (flag.reference != REF_EXTERNAL && flag.reference != REF_EXT_STORE) return;
 
-    int old_ref_use_aligner = flag.ref_use_aligner;
+    int old_aligner_available = flag.aligner_available;
     DataType dt = main_get_file_dt (filename);
-    flag.ref_use_aligner = (old_ref_use_aligner || dt == DT_FASTQ || dt == DT_FASTA) && primary_command == ZIP;
+    flag.aligner_available = (old_aligner_available || dt == DT_FASTQ || dt == DT_FASTA) && primary_command == ZIP;
 
     // no need to load the reference if not needed (unless its genocat of the refernece file itself)
     if (flag.genocat_no_ref_file && dt != DT_REF) return;
@@ -477,13 +477,13 @@ static void main_load_reference (const char *filename, bool is_first_file, bool 
     if (flag.collect_coverage && dt != DT_FASTQ) return;
 
     // we also need the aligner if this is an unaligned SAM 
-    if (!flag.ref_use_aligner && dt==DT_SAM && primary_command==ZIP) {
+    if (!flag.aligner_available && dt==DT_SAM && primary_command==ZIP) {
 
         // open here instead of in main_genozip
         txt_file = file_open (filename, READ, TXT_FILE, 0);
 
         // use the aligner if over 5 of the 100 first lines of the file are unaligned
-        flag.ref_use_aligner = txt_file && txt_file->file && txtfile_test_data ('@', 100, 0.05, sam_zip_is_unaligned_line); 
+        flag.aligner_available = txt_file && txt_file->file && txtfile_test_data ('@', 100, 0.05, sam_zip_is_unaligned_line); 
     }
 
     RESET_VALUE (txt_file); // save and reset - for use by reference loader
@@ -503,7 +503,7 @@ static void main_load_reference (const char *filename, bool is_first_file, bool 
     }
 
     // Read the refhash and calculate the reverse compliment genome for the aligner algorithm - it was not used before and now it is
-    if (!old_ref_use_aligner && flag.ref_use_aligner) 
+    if (!old_aligner_available && flag.aligner_available) 
         refhash_load_standalone();
 
     RESTORE_VALUE (txt_file);

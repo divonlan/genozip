@@ -39,7 +39,8 @@ VBlock *evb = NULL;
     func (&vb->coverage);            \
     func (&vb->read_count);          \
     func (&vb->unmapped_read_count); \
-    func (&vb->chrom_map_vcf_to_chain); \
+    func (&vb->chrom2ref_map);       \
+    func (&vb->ol_chrom2ref_map);    \
     func (&vb->lo_rejects[0]);       \
     func (&vb->lo_rejects[1]);       \
     for (unsigned i=0; i < NUM_CODEC_BUFS; i++) func (&vb->codec_bufs[i]); \
@@ -65,7 +66,8 @@ void vb_release_vb_do (VBlockP *vb_p, const char *func)
     if (flag.show_time) 
         profiler_add (vb);
 
-    buf_test_overflows(vb, func); 
+    if (vb->id != VB_ID_EVB) // cannot test evb, see comment in buf_test_overflows_do
+        buf_test_overflows(vb, func); 
 
     // verify that gzip_compressor was released after use
     ASSERT (!vb->gzip_compressor, "vb=%u: expecting gzip_compressor=NULL", vb->vblock_i);
@@ -133,11 +135,9 @@ void vb_destroy_vb (VBlockP *vb_p)
     if (!vb) return;
 
     FINALIZE_VB_BUFS (buf_destroy, ctx_destroy_context, destroy_vb);
-    buf_destroy (&(*vb_p)->buffer_list); // purposely not destroyed by FINALIZE_VB_BUFS
 
     // test that vb_release_vb_do indeed frees everything
-    #ifdef DEBUG
-        VBlockP vb = *vb_p;
+    if (flag.debug && vb->in_use) {
         unsigned sizeof_vb = DT_FUNC(vb, sizeof_vb)(vb->data_type_alloced);
         DataType dt = vb->data_type_alloced;
 
@@ -145,18 +145,25 @@ void vb_destroy_vb (VBlockP *vb_p)
         vb = *vb_p; // re-initialize after release zeroed it
 
         // clear the few fields purposely not cleared by vb_release_vb_do
+        buf_destroy (&(*vb_p)->buffer_list); // used by vb_release_vb_do
         vb->data_type = vb->data_type_alloced = 0; 
         vb->id = 0;
         
         for (char *c=(char*)vb; c  < (char*)(vb) + sizeof_vb; c++)
             if (*c) {
                 #define REL_LOC(field) (((char*)(&((VBlock *)vb)->field)) - (char*)vb) // <-- to use private datatype VBlocks, temporarily include the private .h for debugging
-                fprintf (stderr, "sizeof_vb=%u sizeof(VBlock)=%u relative location of field: %u\n", 
-                         sizeof_vb, (int)sizeof (VBlock), (int)REL_LOC(id)); // <-- to find the offending field, plug in field names and run iteratively
+                fprintf (stderr, "sizeof_vb=%u sizeof(VBlock)=%u. Bad byte=%u Your field: %u\n", 
+                         sizeof_vb, (int)sizeof (VBlock), (unsigned)(c - (char*)vb), (int)REL_LOC(contexts[7].local_hash)); // <-- to find the offending field, plug in field names and run iteratively
                 
                 ABORT ("vb_release_vb_do of %s didn't fully clear the VB, byte %u != 0", dt_name(dt), (unsigned)(c - (char*)vb));
             }
-    #endif
+    }
+    else {
+        // clear the few fields purposely not cleared by vb_release_vb_do
+        buf_destroy (&(*vb_p)->buffer_list);
+        vb->data_type = vb->data_type_alloced = 0; 
+        vb->id = 0;
+    }
 
     FREE (*vb_p);
 }

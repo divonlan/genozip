@@ -1,4 +1,3 @@
-
 # ------------------------------------------------------------------
 #   Makefile
 #   Copyright (C) 2019-2021 Black Paw Ventures Limited
@@ -17,8 +16,7 @@ endif
 LDFLAGS     += -lpthread -lm 
 
 ifdef IS_CONDA 
-	CFLAGS  += -Wall -I. -D_LARGEFILE64_SOURCE=1 
-	LOCALFLAGS = -DDISTRIBUTION=\"conda\"
+	CFLAGS  += -Wall -I. -D_LARGEFILE64_SOURCE=1 -DDISTRIBUTION=\"conda\"
 	LDFLAGS += -lbz2 # conda - dynamic linking with bz2
 
 	ifeq ($(OS),Windows_NT)
@@ -30,19 +28,18 @@ ifdef IS_CONDA
 else
 	CC=gcc
 	CFLAGS = -Wall -I. -Izlib -Ibzlib -Ilibdeflate -D_LARGEFILE64_SOURCE=1  
-	LOCALFLAGS = -march=native -DDISTRIBUTION=\"github\"
 endif 
 
 SRC_DIRS = zlib bzlib lzma bsc libdeflate compatibility
 
 MY_SRCS = genozip.c genols.c base250.c context.c container.c strings.c stats.c arch.c license.c \
-		  data_types.c bit_array.c progress.c coords.c writer.c tar.c\
+		  data_types.c bit_array.c progress.c coords.c writer.c tar.c chrom.c \
           zip.c piz.c reconstruct.c seg.c zfile.c aligner.c flags.c digest.c mutex.c linesorter.c threads.c \
-		  txtheader.c reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c map_chrom2ref.c ref_iupacs.c \
+		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c \
 		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c vcf_refalt.c vcf_tags.c \
           sam_seg.c sam_piz.c sam_seg_bam.c sam_shared.c sam_header.c \
 		  fasta.c fastq.c gff3.c me23.c phylip.c chain.c kraken.c generic.c \
-		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c \
+		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c \
 		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c\
 		  codec_gtshark.c codec_pbwt.c codec_none.c \
 	      txtfile.c profiler.c file.c dispatcher.c crypt.c aes.c md5.c segconf.c \
@@ -68,9 +65,9 @@ CONDA_DOCS = LICENSE.txt AUTHORS README.md
 CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h bit_array.h progress.h website.h \
              base250.h endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h segconf.h \
              buffer.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h codec.h stats.h \
-             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h map_chrom2ref.h\
+             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h\
 			 reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h linesorter.h threads.h \
-			 arch.h license.h data_types.h base64.h txtheader.h writer.h bases_filter.h genols.h coords.h contigs.h \
+			 arch.h license.h data_types.h base64.h txtheader.h writer.h bases_filter.h genols.h coords.h contigs.h chrom.h \
 			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h fastq.h gff3.h phylip.h chain.h kraken.h generic.h \
              compatibility/mac_gettime.h  \
 			 zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h \
@@ -150,14 +147,14 @@ else
 	DEBUGFLAGS += -DDEBUG -g -O0
 endif
 
-all   : CFLAGS += $(LOCALFLAGS) $(OPTFLAGS) 
+all   : CFLAGS += $(OPTFLAGS) -march=native -DDISTRIBUTION=\"github\"
 all   : $(OBJDIR) $(EXECUTABLES) 
 	@chmod +x test.sh
 
-debug : CFLAGS += $(LOCALFLAGS) $(DEBUGFLAGS)
+debug : CFLAGS += $(DEBUGFLAGS) -march=native -DDISTRIBUTION=\"debug\"
 debug : $(OBJDIR) $(DEBUG_EXECUTABLES)
 
-opt   : CFLAGS += -g $(LOCALFLAGS) $(OPTFLAGS)
+opt   : CFLAGS += -g $(LOCALFLAGS) -march=native -DDISTRIBUTION=\"opt\"
 opt   : $(OBJDIR) $(OPT_EXECUTABLES)
 
 docker : CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"Docker\"

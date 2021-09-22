@@ -20,9 +20,6 @@
 #include "endianness.h"
 #include "contigs.h"
 
-// contigs loaded from the txt header (eg SAM or BAM, VCF header)
-static bool has_contigs = false;        // note: for BAM, this will be true even for contig-less header, indicting the file has no contigs (as opposed to contigs just not defined in the header)
-static ContigPkg contigs = { .name = "txtheader_contigs" }, ocontigs = { .name = "txtheader_ocontigs" };
 static bool is_first_txt = true; 
 static uint32_t total_bound_txt_headers_len = 0; 
 
@@ -31,104 +28,6 @@ static uint32_t total_bound_txt_headers_len = 0;
 //----------
 
 uint32_t txtheader_get_bound_headers_len(void) { return total_bound_txt_headers_len; }
-
-ConstBufferP txtheader_get_contigs      (void) { return has_contigs ? &contigs.contigs : NULL; } 
-ConstBufferP txtheader_get_contigs_dict (void) { return has_contigs ? &contigs.dict    : NULL; } 
-
-void txtheader_get_contig_bufs (ConstContigPkgP *contigs_out, ConstContigPkgP *ocontigs_out)
-{
-    *contigs_out  = !has_contigs ? NULL : &contigs;
-    *ocontigs_out = !has_contigs ? NULL : &ocontigs;
-}
-
-const char *txtheader_get_contig_name (uint32_t index, uint32_t *snip_len)
-{
-    Contig *rc = ENT (Contig, contigs.contigs, index);
-    if (snip_len) *snip_len = rc->snip_len;
-    return ENT (char, contigs.dict, rc->char_index);
-}
-
-void txtheader_finalize (void)
-{
-    if (!flag.bind) { // in ZIP with bind we keep the header contigs
-        contigs_free (&contigs);
-        contigs_free (&ocontigs);
-        has_contigs = false;
-    }
-}
-
-void txtheader_alloc_contigs (uint32_t more_contigs, uint32_t more_dict_len, bool liftover)
-{
-    has_contigs = true;
-    
-    buf_alloc (evb, liftover ? &ocontigs.contigs : &contigs.contigs, more_contigs, 100, Contig, 2, "ContigPkg->contigs"); 
-    buf_alloc (evb, liftover ? &ocontigs.dict    : &contigs.dict,    more_dict_len, 2000, char, 2, "ContigPkg->dict"); 
-}
-
-RefContigP txtheader_add_contig (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *is_luft_contig_)
-{
-    bool is_luft_contig = !!is_luft_contig_;
-
-    Buffer *this_contigs = is_luft_contig ? &ocontigs.contigs : &contigs.contigs;
-    Buffer *this_dict    = is_luft_contig ? &ocontigs.dict    : &contigs.dict;
-
-    // case: we have a reference, we use the reference chrom_index
-    WordIndex ref_index;
-    if (!is_luft_contig && (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE || flag.reference == REF_LIFTOVER))
-        ref_index = ref_contigs_ref_chrom_from_header_chrom (flag.reference == REF_LIFTOVER ? prim_ref : gref, 
-                                                             chrom_name, chrom_name_len, &last_pos, this_contigs->len);
-
-    // case: no reference, chrom_index is the index of the CHROM context, where these contigs will be copied by zip_prepopulate_contig_ctxs
-    // note: if is_luft_contig, then we're compressing a file that's already DVCF, so no --chain and we don't have a second reference
-    else
-        ref_index = WORD_INDEX_NONE; // this_contigs->len;
-
-    // add to contigs. note: index is this_contigs is by order of appearance in header, not the same as the reference
-    NEXTENT (Contig, *this_contigs) = (Contig){ 
-        .max_pos     = last_pos,        // if last_pos was provided, it is unchanged, and verified = the pos in ref. if not provided, it is what the reference says.
-        .char_index  = this_dict->len, 
-        .snip_len    = chrom_name_len,
-        .chrom_index = ref_index        // reference contig
-    };
-
-    if (flag.show_txt_contigs) 
-        iprintf ("%sindex=%u \"%.*s\" LN=%"PRId64" ref_index=%d snip_len=%u\n", 
-                 is_luft_contig ? "is_luft_contig: " : "", (unsigned)this_contigs->len-1, chrom_name_len, chrom_name, last_pos, ref_index, chrom_name_len);
-
-    // add to contigs_dict
-    buf_add (this_dict, chrom_name, chrom_name_len);
-    NEXTENT (char, *this_dict) = 0; // nul-termiante
-
-    return LASTENT (Contig, *this_contigs);
-}
-
-#define next_contig param // we use contigs.param as "next_contig"
-
-void txtheader_verify_contig_init (void) { contigs.contigs.next_contig = ocontigs.contigs.next_contig = 0; }
-
-RefContigP txtheader_verify_contig (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *liftover_)
-{
-    bool liftover = !!liftover_;
-
-    Buffer *this_contigs = liftover ? &ocontigs.contigs : &contigs.contigs;
-    Buffer *this_dict    = liftover ? &ocontigs.dict    : &contigs.dict;
-
-    ASSINP (this_contigs->next_contig < this_contigs->len, 
-            "Error: txt header: contigs mismatch between files: first file has %u %scontigs, but %s has more",
-             (unsigned)this_contigs->len, liftover ? "liftover " : "", txt_name);
-
-    Contig *rc = ENT (Contig, *this_contigs, this_contigs->next_contig++);
-    const char *rc_chrom_name = ENT (char, *this_dict, rc->char_index);
-    
-    ASSINP (chrom_name_len == rc->snip_len && !memcmp (chrom_name, rc_chrom_name, chrom_name_len),
-            "Error: SAM header contig=%u: contig name mismatch between files: in first file: \"%s\", in %s: \"%.*s\"",
-            (unsigned)this_contigs->next_contig, rc_chrom_name, txt_name, chrom_name_len, chrom_name);
-            
-    ASSINP (last_pos == rc->max_pos, "Error: SAM header in \"%s\": contig length mismatch between files: in first file: LN:%"PRId64", in %s: LN:%"PRId64,
-            rc_chrom_name, rc->max_pos, txt_name, last_pos);
-
-    return rc;
-}
 
 // ZIP: reads txt header and writes its compressed form to the GENOZIP file
 bool txtheader_zip_read_and_compress (uint64_t *txt_header_size)
@@ -237,7 +136,7 @@ Coords txtheader_piz_read_and_reconstruct (uint32_t component_i, Section sl)
             loaded = bgzf_load_isizes (sl); // also sets txt_file->bgzf_flags
 
         // case: user wants to see this section header, despite not needing BGZF data
-        else if (exe_type == EXE_GENOCAT && (flag.show_headers == SEC_BGZF+1 || flag.show_headers == -1)) {
+        else if (flag.only_headers == SEC_BGZF+1 || flag.only_headers == -1) {
             bgzf_load_isizes (sl); 
             buf_free (&txt_file->bgzf_isizes);
         }

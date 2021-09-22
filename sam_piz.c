@@ -135,7 +135,13 @@ void sam_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unused, 
     }
 
     const char *next_cigar = vb->last_cigar; // don't change vb->last_cigar as we may still need it, eg if we have an E2 optional field
-    range = vb->ref_consumed ? ref_piz_get_range (vb_, gref, pos, vb->ref_consumed) : NULL;
+    
+    // in an edge case, when all is_set bits are zero, the range might not even be written to the file
+    bool uses_ref_data = vb->ref_consumed && 
+                         (bit_array_num_bits_set_region (buf_get_bitarray (&bitmap_ctx->local), bitmap_ctx->next_local, vb->ref_and_seq_consumed) > 0);
+
+    range = uses_ref_data ? ref_piz_get_range (vb_, gref, pos, vb->ref_consumed) : NULL;
+
     PosType range_len = range ? (range->last_pos - range->first_pos + 1) : 0;
 
     while (seq_consumed < vb->seq_len || ref_consumed < vb->ref_consumed) {
@@ -155,7 +161,9 @@ void sam_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unused, 
                 if (!vb->drop_curr_line) { // note: if this line is excluded with --regions, then the reference section covering it might not be loaded
                     uint32_t idx = ((pos - range->first_pos) + ref_consumed) % range_len; // circle around (this can only happen when compressed with an external reference)
 
-                    if (!ref_is_nucleotide_set (range, idx)) { 
+                    if (!ref_is_nucleotide_set (range, idx) &&
+                         regions_is_site_included (VB)) { // if this line is not included, then possibly its reference range is not loaded. we complete consumption (resulting in bad reconstruction) and drop the line in container_reconstruct_do
+
                         ref_print_is_set (range, pos + ref_consumed, stderr);
                         ABORT ("Error in sam_reconstruct_seq: while reconstructing line %"PRIu64" (vb_i=%u: last_txt_line=%"PRIu64" num_lines=%"PRIu64"): reference is not set: chrom=%u \"%.*s\" pos=%"PRId64" range=[%"PRId64"-%"PRId64"]"
                                " (cigar=%s seq_start_pos=%"PRId64" ref_consumed=%u seq_consumed=%u)",
@@ -216,7 +224,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_CIGAR)
     const uint16_t sam_flag = vb->last_int(SAM_FLAG);
 
     // calculate seq_len (= l_seq, unless l_seq=0), ref_consumed and (if bam) vb->textual_cigar
-    sam_analyze_cigar (vb_sam, snip, snip_len, &vb->seq_len, &vb_sam->ref_consumed, NULL, &vb_sam->soft_clip); 
+    sam_analyze_cigar (vb_sam, snip, snip_len, &vb->seq_len, &vb_sam->ref_consumed, &vb_sam->ref_and_seq_consumed, &vb_sam->soft_clip); 
 
     if ((flag.out_dt == DT_SAM || (flag.out_dt == DT_FASTQ && flag.extended_translation)) 
     &&  reconstruct) {

@@ -18,10 +18,10 @@
 #include "aligner.h"
 #include "container.h"
 #include "stats.h"
-#include "txtheader.h"
 #include "kraken.h"
 #include "segconf.h"
 #include "contigs.h"
+#include "chrom.h"
 
 static const StoreType optional_field_store_flag[256] = {
     ['c']=STORE_INT, ['C']=STORE_INT, 
@@ -136,6 +136,25 @@ bool sam_zip_dts_flag (void)
 
 void sam_zip_initialize (void)
 {
+    bool has_hdr_contigs = sam_hdr_contigs && sam_hdr_contigs->contigs.len;
+    
+    // we can use the aligner for unaligned reads IF it is loaded and we have no header contigs 
+    segconf.sam_use_aligner = flag.aligner_available && !has_hdr_contigs; 
+
+    // Copy header contigs to RNAME and RNEXT upon first component. This is in the order of the
+    // header, as required by BAM (it encodes ref_id based on header order). Note, subsequent
+    // bound files are required to have the same contigs or at least a contiguous subset starting a contig 0.
+    // BAM always has header contigs (might be 0 of them, for an unaligned file), while SAM is allowed to be header-less
+    if (z_file->num_txt_components_so_far == 1 && has_hdr_contigs) { 
+        ctx_populate_zf_ctx_from_contigs (gref, SAM_RNAME, sam_hdr_contigs); 
+        ctx_populate_zf_ctx_from_contigs (gref, SAM_RNEXT, sam_hdr_contigs);
+    }
+
+    // with REF_EXTERNAL and unaligned data, we don't know which chroms are seen (bc unlike REF_EXT_STORE, we don't use is_set), so
+    // we just copy all reference contigs. this are not need for decompression, just for --coverage/--sex/--idxstats
+    if (z_file->num_txt_components_so_far == 1 && segconf.sam_use_aligner && flag.reference == REF_EXTERNAL) 
+        ctx_populate_zf_ctx_from_contigs (gref, SAM_RNAME, ref_get_ctgs (gref)); 
+
     taxid_redirection_snip_len = sizeof (taxid_redirection_snip);
     seg_prepare_snip_other (SNIP_REDIRECTION, _SAM_TAXID, false, 0, 
                             taxid_redirection_snip, &taxid_redirection_snip_len);
@@ -387,28 +406,27 @@ bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)
 
 void sam_seg_verify_rname_pos (VBlock *vb, const char *p_into_txt, PosType this_pos)
 {
-    const Buffer *header_contigs = txtheader_get_contigs();
-
-    if (flag.reference == REF_INTERNAL && (!header_contigs /* SQ-less SAM */ || !header_contigs->len /* SQ-less BAM */)) return;
+    if (flag.reference == REF_INTERNAL && (!sam_hdr_contigs /* SQ-less SAM */ || !sam_hdr_contigs->contigs.len /* SQ-less BAM */)) return;
     if (!this_pos) return; // unaligned
     
-    PosType max_pos;
-    if (header_contigs) {
-        // since this SAM file has a header, all RNAMEs must be listed in it
-        ASSSEG (vb->chrom_node_index < header_contigs->len, p_into_txt, "RNAME \"%.*s\" does not have an SQ record in the header", vb->chrom_name_len, vb->chrom_name);
-        max_pos = ENT (Contig, *header_contigs, vb->chrom_node_index)->max_pos;
+    PosType LN;
+    if (sam_hdr_contigs) {
+        // since this SAM file has a header, all RNAMEs must be listed in it (the header contigs appear first in CTX(RNAME), see sam_zip_initialize
+        ASSSEG (vb->chrom_node_index < sam_hdr_contigs->contigs.len, p_into_txt, "RNAME \"%.*s\" does not have an SQ record in the header", vb->chrom_name_len, vb->chrom_name);
+        LN = contigs_get_LN (sam_hdr_contigs, vb->chrom_node_index);
     }
-    else {
-        WordIndex ref_contig = ref_contig_get_by_chrom (vb, gref, vb->chrom_node_index, vb->chrom_name, vb->chrom_name_len, &max_pos); // possibly an alt contig
-        if (ref_contig == WORD_INDEX_NONE) {
+    else { // headerless SAM
+        WordIndex ref_index = chrom_2ref_seg_get (gref, vb, vb->chrom_node_index); // possibly an alt contig
+        if (ref_index == WORD_INDEX_NONE) {
             WARN_ONCE ("FYI: RNAME \"%.*s\" (and possibly others) is missing in the reference file. No harm.", 
                        vb->chrom_name_len, vb->chrom_name);
             return; // the sequence will be segged as unaligned
         }
+        LN = contigs_get_LN (ref_get_ctgs (gref), ref_index);
     }
 
-    ASSINP (this_pos <= max_pos, "%s: Error POS=%"PRId64" is beyond the size of \"%.*s\" which is %"PRId64". In vb=%u line_i=%"PRIu64" chrom_node_index=%d", 
-            txt_name, this_pos, vb->chrom_name_len, vb->chrom_name, max_pos, vb->vblock_i, vb->line_i, vb->chrom_node_index);
+    ASSINP (this_pos <= LN, "%s: Error POS=%"PRId64" is beyond the size of \"%.*s\" which is %"PRId64". In vb=%u line_i=%"PRIu64" chrom_node_index=%d", 
+            txt_name, this_pos, vb->chrom_name_len, vb->chrom_name, LN, vb->vblock_i, vb->line_i, vb->chrom_node_index);
 }
 
 // TLEN - 3 cases: 
@@ -480,7 +498,7 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
     bitmap_ctx->txt_len += add_bytes; // byte counts for --show-sections
 
     // for unaligned lines, if we have refhash loaded, use the aligner instead of CIGAR-based segmenting
-    if (!pos && flag.ref_use_aligner) {
+    if (!pos && segconf.sam_use_aligner) {
         aligner_seg_seq (VB, bitmap_ctx, seq, seq_len);
         goto align_nonref_local;
     }
@@ -492,8 +510,9 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
         ASSERTW (seq_len < 1000000, "Warning: sam_seg_seq_field: seq_len=%u is suspiciously high and might indicate a bug", seq_len);
 
         buf_alloc (vb, &bitmap_ctx->local, roundup_bits2bytes64 (vb->ref_and_seq_consumed), vb->lines.len * (vb->ref_and_seq_consumed+5) / 8, uint8_t, CTX_GROWTH, "contexts->local"); 
-        buf_extend_bits (&bitmap_ctx->local, vb->ref_and_seq_consumed);
-
+        buf_extend_bits (&bitmap_ctx->local, vb->ref_and_seq_consumed); 
+        bit_array_set_region (bitmap, bitmap_ctx->next_local, vb->ref_and_seq_consumed); // we initiaze all the bits to "set", and clear as needed.
+        
         buf_alloc (vb, &nonref_ctx->local, seq_len + 3, vb->lines.len * seq_len / 4, uint8_t, CTX_GROWTH, "contexts->local"); 
     }
 
@@ -505,14 +524,15 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
 
     if (seq[0] == '*') goto done; // we already handled a missing seq (SEQ="*") by adding a '-' to CIGAR - no data added here
 
+    bool no_cigar = cigar[0] == '*' && cigar[1] == 0; // there's no CIGAR. 
+
     RefLock lock;
-    Range *range = ref_seg_get_locked_range (VB, gref, vb->chrom_node_index, vb->chrom_name, vb->chrom_name_len, pos, vb->ref_consumed, seq, &lock);
+    Range *range = no_cigar ? NULL : ref_seg_get_locked_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, vb->ref_consumed, WORD_INDEX_NONE, seq, &lock);
 
     // Cases where we don't consider the refernce and just copy the seq as-is
-    if (!range || // 1. (denovo:) this contig defined in @SQ went beyond the maximum genome size of 4B and is thus ignored
+    if (!range) { // 1. (denovo:) this contig defined in @SQ went beyond the maximum genome size of 4B and is thus ignored
                   // 2. (loaded:) case contig doesn't exist in the reference
-        (cigar[0] == '*' && cigar[1] == 0)) { // case: there's no CIGAR. The sequence is not aligned to the reference even if we have RNAME and POS (and its length can exceed the reference contig)
-
+                  // 3. no cigar - the sequence is not aligned to the reference even if we have RNAME and POS (and its length can exceed the reference contig)
         buf_add (&nonref_ctx->local, seq, seq_len);
         
         bit_array_clear_region (bitmap, bitmap_ctx->next_local, vb->ref_and_seq_consumed); // note: vb->ref_and_seq_consumed==0 if cigar="*"
@@ -573,12 +593,12 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
                     
                     ref_set_nucleotide (range, actual_next_ref, seq[i]);
                     bit_array_set (&range->is_set, actual_next_ref); // we will need this ref to reconstruct
-                    bit_array_set (bitmap, bit_i); bit_i++; // cannot increment inside the macro
+                    bit_i++; // bit remains set. cannot increment inside the macro
                 }
 
                 // case our seq is identical to the reference at this site
                 else if (range && normal_base && seq[i] == ref_base_by_idx (range, actual_next_ref)) {
-                    bit_array_set (bitmap, bit_i); bit_i++;
+                    bit_i++; // bit remains set. 
 
                     if (flag.reference == REF_EXT_STORE)
                         bit_array_set (&range->is_set, actual_next_ref); // we will need this ref to reconstruct
@@ -694,7 +714,7 @@ static void sam_seg_SA_field (VBlockSAM *vb, const char *field, unsigned field_l
                                                                  { .dict_id = { _OPTION_SA_MAPQ   }, .seperator = {','} },  
                                                                  { .dict_id = { _OPTION_SA_NM     },                  } } };
 
-    SegCallback callbacks[6] = { [1] = seg_pos_field_cb, [3] = seg_add_to_local_text_cb };
+    SegCallback callbacks[6] = { [0]=chrom_seg_cb, [1]=seg_pos_field_cb, [3]=seg_add_to_local_text_cb };
     seg_array_of_struct (VB, CTX(OPTION_SA), container_SA, field, field_len, callbacks);
     CTX(OPTION_SA)->txt_len++; // 1 for \t in SAM and \0 in BAM 
 }
@@ -710,7 +730,7 @@ static void sam_seg_OA_field (VBlockSAM *vb, const char *field, unsigned field_l
                                                                  { .dict_id = { _OPTION_OA_MAPQ   }, .seperator = {','} },  
                                                                  { .dict_id = { _OPTION_OA_NM     },                    } } };
 
-    SegCallback callbacks[6] = { [1] = seg_pos_field_cb, [3] = seg_add_to_local_text_cb };
+    SegCallback callbacks[6] = { [0]=chrom_seg_cb, [1]=seg_pos_field_cb, [3]=seg_add_to_local_text_cb };
     seg_array_of_struct (VB, CTX(OPTION_OA), container_OA, field, field_len, callbacks);
     CTX(OPTION_OA)->txt_len++; // 1 for \t in SAM and \0 in BAM 
 }
@@ -742,7 +762,7 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
                          { .dict_id = { _OPTION_XA_CIGAR      }, .seperator = {','} }, // we don't mix the primary as the primary has a SNIP_SPECIAL
                          { .dict_id = { _OPTION_XA_NM         },                    } }  };
 
-    SegCallback callbacks[4] = { [1] = seg_xa_strand_pos_cb, [2] = seg_add_to_local_text_cb };
+    SegCallback callbacks[4] = { [0]=chrom_seg_cb, [1]=seg_xa_strand_pos_cb, [2]=seg_add_to_local_text_cb };
     seg_array_of_struct (VB, CTX(OPTION_XA), container_XA, field, field_len, callbacks);
     CTX(OPTION_XA)->txt_len++; // 1 for \t in SAM and \0 in BAM 
 }
@@ -1250,6 +1270,16 @@ void sam_seg_qname_field (VBlockSAM *vb, const char *qname, uint32_t qname_len, 
     seg_set_last_txt (VB, ctx, STRa(qname), STORE_NONE); // store for kraken
 }
 
+void sam_seg_rname_rnext (VBlockP vb, DidIType did_i, STRp (chrom), unsigned add_bytes)
+{
+    bool is_new;
+    chrom_seg_ex (VB, did_i, STRa(chrom), 0, NULL, add_bytes, &is_new);
+
+    // don't allow adding chroms to a BAM file or a SAM that has SQ lines in the header, but we do allow to add to a headerless SAM.
+    ASSSEG (!is_new || !sam_hdr_contigs || (chrom_len==1 && (*chrom=='*' || *chrom=='=')),
+            chrom, "contig '%.*s' appears in file, but is missing in the %s header", STRf(chrom), dt_name (vb->data_type));
+}
+
 // test function called from main_load_reference -> txtfile_test_data: returns true if this line as pos=0 (i.e. unaligned)
 bool sam_zip_is_unaligned_line (const char *line, int len)
 {
@@ -1275,62 +1305,65 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     unsigned field_len=0;
     char separator;
 
-    int32_t len = AFTERENT (char, vb->txt_data) - field_start_line;
+    int32_t len = REMAINING (vb->txt_data, field_start_line);
 
     // QNAME - We break down the QNAME into subfields separated by / and/or : - these are vendor-defined strings. Examples:
     // Illumina: <instrument>:<run number>:<flowcell ID>:<lane>:<tile>:<x-pos>:<y-pos> for example "A00488:61:HMLGNDSXX:4:1101:15374:1031" see here: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
     // PacBio BAM: {movieName}/{holeNumber}/{qStart}_{qEnd} see here: https://pacbiofileformats.readthedocs.io/en/3.0/BAM.html
     // BGI: E100020409L1C001R0030000234 (E100020409=Flow cell serial number, L1=Lane 1, C001R003=column 1 row 3, 0000234=Tile) Also see: https://github.com/IMB-Computational-Genomics-Lab/BGIvsIllumina_scRNASeq
     GET_NEXT_ITEM (SAM_QNAME);
-    sam_seg_qname_field (vb, SAM_QNAME_str, SAM_QNAME_len, 1);
+    sam_seg_qname_field (vb, STRdid(SAM_QNAME), 1);
 
     SEG_NEXT_ITEM (SAM_FLAG);
     int64_t flag;
-    ASSSEG (str_get_int (field_start, field_len, &flag), field_start, "invalid FLAG field: %.*s", field_len, field_start);
+    ASSSEG (str_get_int (STRdid(SAM_FLAG), &flag), field_start, "invalid FLAG field: %.*s", field_len, field_start);
 
     GET_NEXT_ITEM (SAM_RNAME);
-    seg_chrom_field (vb, field_start, field_len);
+    sam_seg_rname_rnext (VB, SAM_RNAME, STRdid(SAM_RNAME), SAM_RNAME_len+1);
 
     // note: pos can have a value even if RNAME="*" - this happens if a SAM with a RNAME that is not in the header is converted to BAM with samtools
     GET_NEXT_ITEM (SAM_POS);
-    PosType this_pos = seg_pos_field (vb_, SAM_POS, SAM_POS, 0, 0, field_start, field_len, 0, field_len+1);
-    sam_seg_verify_rname_pos (vb_, SAM_RNAME_str, this_pos);
+    PosType this_pos = seg_pos_field (VB, SAM_POS, SAM_POS, 0, 0, STRdid(SAM_POS), 0, SAM_POS_len+1);
     
-    random_access_update_pos (vb_, DC_PRIMARY, SAM_POS);
+    if (SAM_RNAME_len != 1 || *SAM_RNAME_str != '*')
+        sam_seg_verify_rname_pos (VB, SAM_RNAME_str, this_pos);
+    
+    random_access_update_pos (VB, DC_PRIMARY, SAM_POS);
 
     SEG_NEXT_ITEM (SAM_MAPQ);
 
     // CIGAR - we wait to get more info from SEQ and QUAL
     GET_NEXT_ITEM (SAM_CIGAR);
-    sam_analyze_cigar (vb, field_start, field_len, &dl->seq_len, &vb->ref_consumed, &vb->ref_and_seq_consumed, NULL);
-    vb->last_cigar = field_start;
-    unsigned last_cigar_len = field_len;
-    ((char *)vb->last_cigar)[field_len] = 0; // nul-terminate CIGAR string
+    sam_analyze_cigar (vb, STRdid(SAM_CIGAR), &dl->seq_len, &vb->ref_consumed, &vb->ref_and_seq_consumed, NULL);
+    vb->last_cigar = SAM_CIGAR_str;
+    unsigned last_cigar_len = SAM_CIGAR_len;
+    ((char *)vb->last_cigar)[SAM_CIGAR_len] = 0; // nul-terminate CIGAR string
 
-    SEG_NEXT_ITEM (SAM_RNEXT);
+    GET_NEXT_ITEM (SAM_RNEXT);
+    sam_seg_rname_rnext (VB, SAM_RNEXT, STRdid(SAM_RNEXT), SAM_RNEXT_len+1);
     
     GET_NEXT_ITEM (SAM_PNEXT);
-    seg_pos_field (vb_, SAM_PNEXT, SAM_POS, 0, 0, field_start, field_len, 0, field_len+1);
+    seg_pos_field (VB, SAM_PNEXT, SAM_POS, 0, 0, STRdid(SAM_PNEXT), 0, SAM_PNEXT_len+1);
 
     GET_NEXT_ITEM (SAM_TLEN);
-    sam_seg_tlen_field (vb, field_start, field_len, 0, CTX(SAM_PNEXT)->last_delta, dl->seq_len);
+    sam_seg_tlen_field (vb, STRdid(SAM_TLEN), 0, CTX(SAM_PNEXT)->last_delta, dl->seq_len);
 
     GET_NEXT_ITEM (SAM_SEQ);
 
-    ASSSEG (dl->seq_len == field_len || vb->last_cigar[0] == '*' || field_start[0] == '*', field_start, 
+    ASSSEG (dl->seq_len == field_len || vb->last_cigar[0] == '*' || SAM_SEQ_str[0] == '*', SAM_SEQ_str, 
             "seq_len implied by CIGAR=%s is %u, but actual SEQ length is %u, SEQ=%.*s", 
-            vb->last_cigar, dl->seq_len, field_len, field_len, field_start);
+            vb->last_cigar, dl->seq_len, SAM_SEQ_len, SAM_SEQ_len, SAM_SEQ_str);
 
     // calculate diff vs. reference (denovo or loaded)
     uint32_t save_ref_and_seq_consumed = vb->ref_and_seq_consumed; // save in case we have E2
-    sam_seg_seq_field (vb, SAM_SQBITMAP, field_start, field_len, this_pos, vb->last_cigar, 0, field_len, vb->last_cigar, field_len+1);
+    sam_seg_seq_field (vb, SAM_SQBITMAP, STRdid(SAM_SEQ), this_pos, vb->last_cigar, 0, field_len, vb->last_cigar, SAM_SEQ_len+1);
     vb->ref_and_seq_consumed = save_ref_and_seq_consumed; // restore
 
     GET_MAYBE_LAST_ITEM (SAM_QUAL);
-    sam_seg_qual_field (vb, dl, field_start, field_len, field_len + 1); 
+    sam_seg_qual_field (vb, dl, STRdid(SAM_QUAL), SAM_QUAL_len + 1); 
 
     // finally we can seg CIGAR now
-    sam_seg_cigar_field (vb, dl, last_cigar_len, SAM_SEQ_str, SAM_SEQ_len, field_start, field_len);
+    sam_seg_cigar_field (vb, dl, last_cigar_len, STRdid(SAM_SEQ), STRdid(SAM_QUAL));
     
     // add BIN so this file can be reconstructed as BAM
     bam_seg_bin (vb, 0, (uint16_t)flag, this_pos);

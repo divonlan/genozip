@@ -44,7 +44,7 @@ typedef struct Buffer {
 #define ARRAY(element_type, name, buf) \
     element_type *name = ((element_type *)((buf).data)); \
     const uint64_t name##_len __attribute__((unused)) = (buf).len; // read-only copy of len 
-
+    
 #define ENT(type, buf, index) ((type *)(&(buf).data[(index) * sizeof(type)]))
 #define FIRSTENT(type, buf)   ((type *)( (buf).data))
 #define LASTENT(type, buf)    ((type *)(&(buf).data[((buf).len-1) * sizeof(type)]))
@@ -62,6 +62,7 @@ static inline uint64_t NEXTENT_get_index (Buffer *buf, size_t size, const char *
 }
 #define NEXTENT(type, buf)    (*(type *)(&(buf).data[NEXTENT_get_index (&(buf), sizeof(type), __FUNCTION__, __LINE__)]))
 #define ENTNUM(buf, ent)      ((int32_t)((((char*)(ent)) - ((buf).data)) / (int32_t)sizeof (*(ent)))) // signed integer
+#define REMAINING(buf, ent)   ((buf).len - ENTNUM ((buf),(ent)))
 #define ISLASTENT(buf,ent)    (ENTNUM((buf),(ent)) == (buf).len - 1)
 #define ISAFTERENT(buf,ent)   (!(buf).data || ENTNUM((buf),(ent)) >= (buf).len)
 #define ISFIRSTENT(buf,ent)   (ENTNUM((buf),(ent)) == 0)

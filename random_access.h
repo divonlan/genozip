@@ -20,7 +20,7 @@ extern void random_access_update_chrom (VBlockP vb, Coords dc, WordIndex chrom_n
 extern void random_access_update_pos (VBlockP vb, Coords dc, DidIType did_i_pos);
 extern void random_access_increment_last_pos (VBlockP vb, Coords dc, PosType increment);
 extern void random_access_update_last_pos (VBlockP vb, Coords dc, PosType last_pos);
-extern void random_access_update_first_last_pos (VBlockP vb, Coords dc, STRp (first_pos), STRp (last_pos));
+extern void random_access_update_first_last_pos (VBlockP vb, Coords dc, WordIndex chrom_node_index, STRp (first_pos), STRp (last_pos));
 extern void random_access_update_to_entire_chrom (VBlockP vb, Coords dc, PosType first_pos_of_chrom, PosType last_pos_of_chrom);
 extern void random_access_merge_in_vb (VBlockP vb, Coords dc);
 extern void random_access_finalize_entries (BufferP ra_buf);

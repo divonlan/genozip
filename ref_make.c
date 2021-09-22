@@ -22,6 +22,19 @@ SPINLOCK (make_ref_spin);
 
 static Buffer contig_metadata = {}; // contig header of each contig, except for chrom name
 
+void ref_make_seg_initialize (VBlock *vb)
+{
+    START_TIMER;
+
+    ASSINP (vb->vblock_i > 1 || *FIRSTENT (char, vb->txt_data) == '>' || *FIRSTENT (char, vb->txt_data) == ';',
+            "Error: expecting FASTA file %s to start with a '>' or a ';'", txt_name);
+
+    CTX(FASTA_CONTIG)->no_vb1_sort = true; // keep contigs in the order of the reference, i.e. in the order they would appear in BAM header created with this reference 
+    CTX(FASTA_CONTIG)->no_stons = true; // needs b250 node_index for reference
+
+    COPY_TIMER (seg_initialize);
+}
+
 // called from ref_make_create_range, returns the range for this fasta VB. note that we have exactly one range per VB
 // as txtfile_read_vblock makes sure we have only one full or partial contig per VB (if flag.make_reference)
 static Range *ref_make_ref_get_range (uint32_t vblock_i)

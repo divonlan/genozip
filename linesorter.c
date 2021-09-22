@@ -22,8 +22,7 @@
 
 // an entry per VB
 typedef struct {
-    PosType last_line_pos;        // of last line in VB
-    WordIndex last_line_chrom_wi; // of last line in VB
+    LineCmpInfo last_line;        // data from the last line of this VB
     uint32_t start_i, len;        // index and length of this VB's data in txt_file->line_info
     uint32_t num_lines;           // number of lines in this VB
     uint32_t final_index_i;       // final index entry in which this vb appears
@@ -31,13 +30,12 @@ typedef struct {
     bool accessed;                // used for accounting for threads
 } LsVbInfo;
 
-// a txt_file->line_info entry - one per a group of consecutive lines of Primary or Luft
 typedef struct {
     uint32_t vblock_i;
+    LineCmpInfo info;
     uint32_t start_line, num_lines;
-    WordIndex chrom_wi, prim_chrom_wi;
-    PosType start_pos, prim_start_pos, end_pos;
-    uint32_t tie_breaker;
+    WordIndex prim_chrom_wi;
+    PosType prim_start_pos;
 } LineInfo;
 
 void linesorter_show_recon_plan (File *file, bool is_luft, uint32_t conc_writing_vbs, uint32_t vblock_mb)
@@ -72,8 +70,6 @@ static void linesorter_merge_vb_do (VBlock *vb, bool is_luft)
 
     buf_alloc (evb, &txt_file->line_info[is_luft], vb->lines.len, 0, LineInfo, CTX_GROWTH, 0); // added to evb buf_list in file_initialize_txt_file_data
 
-    WordIndex last_chrom_word_index = WORD_INDEX_NONE;
-    PosType last_pos = -1;
     uint32_t start_i = txt_file->line_info[is_luft].len;
 
     for (uint32_t line_i=0 ; line_i < vb->lines.len ; line_i++) {
@@ -84,33 +80,32 @@ static void linesorter_merge_vb_do (VBlock *vb, bool is_luft)
         // exclude rejected lines (we exclude here if sorted, and in vcf_lo_piz_TOPLEVEL_cb_filter_line if not sorted)
         if (chrom_word_index != WORD_INDEX_NONE) 
             NEXTENT (LineInfo, txt_file->line_info[is_luft]) = (LineInfo){
-                .vblock_i        = vb->vblock_i,
-                .start_line      = line_i,
-                .num_lines       = 1,
-                .chrom_wi        = chrom_word_index,
-                .start_pos       = pos,
-                .end_pos         = pos + MAX_(0, dl->end_delta),
-                .tie_breaker     = dl->tie_breaker,
+                .vblock_i         = vb->vblock_i,
+                .start_line       = line_i,
+                .num_lines        = 1,
+                .info.chrom_wi    = chrom_word_index,
+                .info.start_pos   = pos,
+                .info.end_pos     = pos + MAX_(0, dl->end_delta),
+                .info.tie_breaker = dl->tie_breaker,
 
                 // Primary coord data (for duplicate detection in Luft)
                 .prim_chrom_wi  = is_luft ? node_word_index (vb, CHROM, dl->chrom[0]) : WORD_INDEX_NONE,
                 .prim_start_pos = is_luft ? dl->pos[0] : 0,
             };
-        
-        last_pos = pos;
-        last_chrom_word_index = chrom_word_index;
     }
+
 
     // store information about this VB, that will help us figure out if the entire file is sorted or not
     buf_alloc_zero (evb, &txt_file->vb_info[is_luft], 0, MIN_(1000, vb->vblock_i), LsVbInfo, CTX_GROWTH, 0); // added to evb buf_list in file_initialize_txt_file_data
-    
+
+    LineInfo *last_line = LASTENT (LineInfo, txt_file->line_info[is_luft]);
+
     *ENT (LsVbInfo, txt_file->vb_info[is_luft], vb->vblock_i-1) = (LsVbInfo){ // -1 as vblock_i is 1-based
-        .is_unsorted        = vb->is_unsorted[is_luft],
-        .last_line_chrom_wi = last_chrom_word_index,
-        .last_line_pos      = last_pos,
-        .start_i            = start_i,
-        .len                = txt_file->line_info[is_luft].len - start_i,
-        .num_lines          = (uint32_t)vb->lines.len
+        .is_unsorted = vb->is_unsorted[is_luft],
+        .last_line   = last_line->info,
+        .start_i     = start_i,
+        .len         = txt_file->line_info[is_luft].len - start_i,
+        .num_lines   = (uint32_t)vb->lines.len
     };
 
     txt_file->vb_info[is_luft].len = MAX_(txt_file->vb_info[is_luft].len, vb->vblock_i); // note: vblock_i is 1-based
@@ -132,12 +127,10 @@ static bool linesorter_is_file_sorted (bool is_luft)
 
     for (uint32_t vb_i=0; vb_i < txt_file->num_vbs; vb_i++) {
         LsVbInfo *v = ENT (LsVbInfo, txt_file->vb_info[is_luft], vb_i);
-        
-        // cases file line order is NOT sorted 
+
         if (v->is_unsorted ||  // this vb is not sorted internally
-            (vb_i && (v->last_line_chrom_wi < last_v->last_line_chrom_wi || // this vb's first chrom is smaller than last vb's last chrom
-                     (v->last_line_chrom_wi == last_v->last_line_chrom_wi && v->last_line_pos < last_v->last_line_pos)))) // same chrom but decreasing pos 
-            return false;
+            (vb_i && linesorter_cmp (last_v->last_line, v->last_line) > 0)) // the previous and this VBs are unsorted between them
+            return false; 
 
         last_v = v;
     }
@@ -184,11 +177,13 @@ static void line_sorter_detect_duplicates (const Buffer *index_buf)
         const LineInfo *this_li = &li[index[index_i]];
         const LineInfo *prev_li = &li[index[index_i-1]];
 
-        bool is_dup_luft = (this_li->chrom_wi      == prev_li->chrom_wi)      && (this_li->start_pos      == prev_li->start_pos);
+        bool is_dup_luft = (this_li->info.chrom_wi == prev_li->info.chrom_wi) && (this_li->info.start_pos == prev_li->info.start_pos);
         bool is_dup_prim = (this_li->prim_chrom_wi == prev_li->prim_chrom_wi) && (this_li->prim_start_pos == prev_li->prim_start_pos);
         if (is_dup_luft && !is_dup_prim) {
             if (last_dup != index_i-1) // not duplicate duplicate (i.e. 3 or more variants are the same)
-                bufprintf (evb, &dups, "%s\t%"PRIu64"\t%"PRIu64"\n", ctx_get_zf_nodes_snip (ZCTX(DTFZ(luft_chrom)), this_li->chrom_wi), this_li->start_pos, this_li->start_pos);
+                bufprintf (evb, &dups, "%s\t%"PRIu64"\t%"PRIu64"\n", 
+                           ctx_get_zf_nodes_snip (ZCTX(DTFZ(luft_chrom)), this_li->info.chrom_wi), 
+                           this_li->info.start_pos, this_li->info.start_pos);
 
             last_dup = index_i;
         }
@@ -205,28 +200,42 @@ static void line_sorter_detect_duplicates (const Buffer *index_buf)
     buf_free (&dups);
 }
 
+#ifdef DEBUG
+typedef struct { char s[200]; } LcText;
+static LcText linesorter_dis_info (LineCmpInfo a)
+{
+    LcText s;
+    sprintf (s.s, "wi=%d start_pos=%"PRId64" end_pos=%"PRId64" tiebreaker=%u", a.chrom_wi, a.start_pos, a.end_pos, a.tie_breaker);
+    return s;
+}
+#endif
+
+int linesorter_cmp (LineCmpInfo a, LineCmpInfo b)
+{
+    if (a.chrom_wi != b.chrom_wi) return a.chrom_wi - b.chrom_wi;
+
+    // case: same chrom, different pos - order by start_pos
+    if (a.start_pos < b.start_pos) return -1; // a is smaller (don't use substraction as POS is 64b and return is 32b)
+    if (b.start_pos < a.start_pos) return +1; // b is smaller
+
+    // case: same chrom, same start_pos - order by end pos
+    if (a.end_pos < b.end_pos) return -1; // a is smaller (don't use substraction as POS is 64b and return is 32b)
+    if (b.end_pos < a.end_pos) return +1; // b is smaller
+
+    // same chrom and pos ranges - sort by tie_breaker
+    if (a.tie_breaker < b.tie_breaker) return -1; // a is smaller (don't use substraction as its unsigned 32b)
+    if (b.tie_breaker < a.tie_breaker) return +1; // b is smaller
+    
+    return 0; // same chrom, pos, tie-breaker -> undeterministic sorting, hopefully this doesn't happen too often
+}
+
 static bool is_luft_sorter;
 static int linesorter_line_cmp (const void *a_, const void *b_)
 {
     LineInfo *a = ENT (LineInfo, txt_file->line_info[is_luft_sorter], *(uint32_t *)a_);
     LineInfo *b = ENT (LineInfo, txt_file->line_info[is_luft_sorter], *(uint32_t *)b_);
 
-    // case: different chrome: order by chrom
-    if (a->chrom_wi != b->chrom_wi) return a->chrom_wi - b->chrom_wi;
-
-    // case: same chrom, different pos - order by start_pos
-    if (a->start_pos < b->start_pos) return -1; // a is smaller (don't use substraction as POS is 64b and return is 32b)
-    if (b->start_pos < a->start_pos) return +1; // b is smaller
-
-    // case: same chrom, same start_pos - order by end pos
-    if (a->end_pos < b->end_pos) return -1; // a is smaller (don't use substraction as POS is 64b and return is 32b)
-    if (b->end_pos < a->end_pos) return +1; // b is smaller
-
-    // same chrom and pos ranges - sort by tie_breaker
-    if (a->tie_breaker < b->tie_breaker) return -1; // a is smaller (don't use substraction as its unsigned 32b)
-    if (b->tie_breaker < a->tie_breaker) return +1; // b is smaller
-    
-    return 0; // same chrom, pos, tie-breaker -> undeterministic sorting, hopefully this doesn't happen too often
+    return linesorter_cmp (a->info, b->info);
 }
 
 static void linesorter_get_final_index_i (Buffer *line_info, Buffer *vb_info, Buffer *index_buf)
@@ -279,12 +288,9 @@ static uint32_t linesorter_plan_reconstruction (const Buffer *line_info, const B
 
         // verify sort
         #ifdef DEBUG
-        ASSERT (!prev_li || 
-                li->chrom_wi > prev_li->chrom_wi || 
-                (li->chrom_wi == prev_li->chrom_wi && li->start_pos >= prev_li->start_pos),
-                "line_info sorting: [%"PRIu64"]={chrom=%d,pos=%"PRId64"-%"PRId64",nlines=%u} [%"PRIu64"]={chrom=%d,pos=%"PRId64"-%"PRId64",nlines=%u}",
-                index_i-1, prev_li->chrom_wi, prev_li->start_pos, prev_li->end_pos, prev_li->num_lines, 
-                index_i, li->chrom_wi, li->start_pos, li->end_pos, li->num_lines);
+        ASSERT (!prev_li || linesorter_cmp (prev_li->info, li->info) <= 0,
+                "line_info sorting: [%"PRIu64"]={%s} [%"PRIu64"]={%s}", 
+                index_i-1, linesorter_dis_info (prev_li->info).s, index_i, linesorter_dis_info (li->info).s);
         #endif
     
         // same vb and consecutive lines - collapse to a single line

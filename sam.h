@@ -19,6 +19,8 @@ extern bool sam_zip_dts_flag (void);
 
 // HEADER stuff
 extern bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags);
+extern void sam_header_finalize (void);
+extern ContigPkgP sam_hdr_contigs;
 
 // SEG Stuff
 extern void sam_zip_initialize (void);
@@ -115,8 +117,8 @@ TRANSLATOR (SAM, FASTQ, 18, FLAG,       sam_piz_sam2fastq_FLAG)     // emit 1 if
                           sam_piz_sam2bam_QUAL, sam_piz_sam2bam_TLEN, sam_piz_sam2bam_OPTIONAL, sam_piz_sam2bam_OPTIONAL_SELF, \
                           sam_piz_sam2fastq_SEQ, sam_piz_sam2fastq_QUAL, sam_piz_sam2fastq_FLAG }
 
-TXTHEADER_TRANSLATOR (txtheader_bam2sam);
-TXTHEADER_TRANSLATOR (txtheader_sam2bam);
+TXTHEADER_TRANSLATOR (sam_header_bam2sam);
+TXTHEADER_TRANSLATOR (sam_header_sam2bam);
 TXTHEADER_TRANSLATOR (txtheader_sam2fq);
 
 #define SAM_CONTIG_FMT "@SQ	SN:%.*s	LN:%"PRId64

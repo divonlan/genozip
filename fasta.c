@@ -18,6 +18,7 @@
 #include "kraken.h"
 #include "reference.h"
 #include "segconf.h"
+#include "chrom.h"
 
 #define dict_id_is_fasta_desc_sf dict_id_is_type_1
 #define dict_id_fasta_desc_sf dict_id_type_1
@@ -116,7 +117,7 @@ int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *last_i)
             // i.e. one that the next character is >, or it is the end of the file
             // note: when compressing FASTA with a reference (eg long reads stored in a FASTA instead of a FASTQ), 
             // line cannot be too long - they must fit in a VB
-            if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE || flag.multifasta) {
+            if ((flag.reference & REF_ZIP_LOADED) || flag.multifasta) {
                 int is_end_of_contig = fasta_is_end_of_contig (vb, first_i, i);
 
                 switch (is_end_of_contig) {
@@ -175,37 +176,30 @@ void fasta_seg_initialize (VBlock *vb)
     ASSINP (vb->vblock_i > 1 || *FIRSTENT (char, vb->txt_data) == '>' || *FIRSTENT (char, vb->txt_data) == ';',
             "Error: expecting FASTA file %s to start with a '>' or a ';'", txt_name);
 
-    if (!flag.make_reference) {
-
-        CTX(FASTA_CONTIG)->flags.store = STORE_INDEX; // since v12
-        CTX(FASTA_LINEMETA)->no_stons  = true; // avoid edge case where entire b250 is moved to local due to singletons, because fasta_reconstruct_vb iterates on ctx->b250
-
-        // if this FASTA contains unrelated contigs, we're better off with ACGT        
-        if (!flag.multifasta)
-            codec_acgt_comp_init (VB);
-
-        // if the contigs in this FASTA are related, let codec_assign_best_codec assign the bext codec 
-        else 
-            CTX(FASTA_NONREF)->ltype  = LT_SEQUENCE;
-  
-        if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) 
-            CTX(FASTA_NONREF)->no_callback = true; // override callback if we are segmenting to a reference
-
-        // in --stats, consolidate stats into FASTA_NONREF
-        stats_set_consolidation (vb, FASTA_NONREF, 1, FASTA_NONREF_X);
-    }
-    else { // make-reference
-        CTX(FASTA_CONTIG)->no_vb1_sort = true; // keep contigs in the order of the reference, i.e. in the order they would appear in BAM header created with this reference 
-    }
-
-    CTX(FASTA_CONTIG  )->no_stons = true; // needs b250 node_index for reference
-    CTX(FASTA_TOPLEVEL)->no_stons = true; // keep in b250 so it can be eliminated as all_the_same
+    CTX(FASTA_TOPLEVEL)->no_stons  = true; // keep in b250 so it can be eliminated as all_the_same
+    CTX(FASTA_CONTIG)->flags.store = STORE_INDEX; // since v12
+    CTX(FASTA_CONTIG)->no_stons    = true; // needs b250 node_index for reference
+    CTX(FASTA_LINEMETA)->no_stons  = true; // avoid edge case where entire b250 is moved to local due to singletons, because fasta_reconstruct_vb iterates on ctx->b250
 
     if (kraken_is_loaded) {
         CTX(FASTA_TAXID)->flags.store    = STORE_INT;
         CTX(FASTA_TAXID)->no_stons       = true; // must be no_stons the SEC_COUNTS data needs to mirror the dictionary words
         CTX(FASTA_TAXID)->counts_section = true; 
     }
+
+    // if this FASTA contains unrelated contigs, we're better off with ACGT        
+    if (!flag.multifasta)
+        codec_acgt_comp_init (VB);
+
+    // if the contigs in this FASTA are related, let codec_assign_best_codec assign the bext codec 
+    else 
+        CTX(FASTA_NONREF)->ltype  = LT_SEQUENCE;
+
+    if (flag.reference & REF_ZIP_LOADED) 
+        CTX(FASTA_NONREF)->no_callback = true; // override callback if we are segmenting to a reference
+
+    // in --stats, consolidate stats into FASTA_NONREF
+    stats_set_consolidation (vb, FASTA_NONREF, 1, FASTA_NONREF_X);
 
     COPY_TIMER (seg_initialize);
 }
@@ -286,15 +280,13 @@ static void fasta_seg_desc_line (VBlockFASTA *vb, const char *line_start, uint32
     // add contig to CONTIG dictionary (but not b250) and verify that its unique
     if (segconf.fasta_has_contigs || flag.make_reference || segconf.running) {
         bool is_new;
-        WordIndex chrom_node_index = ctx_evaluate_snip_seg (VB, CTX(FASTA_CONTIG), chrom_name, chrom_name_len, &is_new);
-        ctx_decrement_count (VB, CTX(FASTA_CONTIG), chrom_node_index);
+        chrom_seg_no_b250 (VB, STRa(chrom_name), &is_new);
 
-        random_access_update_chrom (VB, DC_PRIMARY, chrom_node_index, chrom_name, chrom_name_len);
         vb->ra_initialized = true;
 
         ASSINP (is_new, "Error: bad FASTA file - sequence \"%.*s\" appears more than once%s", chrom_name_len, chrom_name,
                 flag.bind ? " (possibly in another FASTA being bound)" : 
-                (flag.reference==REF_EXTERNAL || flag.reference==REF_EXT_STORE) ? " (possibly the sequence size exceeds vblock size, try enlarging with --vblock)" : "");
+                (flag.reference & REF_ZIP_LOADED) ? " (possibly the sequence size exceeds vblock size, try enlarging with --vblock)" : "");
     }
 
     vb->last_line = FASTA_LINE_DESC;    
@@ -387,6 +379,7 @@ static void fasta_seg_seq_line (VBlockFASTA *vb, const char *line_start, uint32_
     if (!vb->chrom_name && !vb->ra_initialized) {
         random_access_update_chrom (VB, DC_PRIMARY, WORD_INDEX_NONE, 0, 0);
         vb->ra_initialized = true;
+        vb->chrom_node_index = WORD_INDEX_NONE; // the chrom started in a previous VB, we don't yet know its index
     }
 
     random_access_increment_last_pos (VB, DC_PRIMARY, line_len); 

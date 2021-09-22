@@ -50,11 +50,11 @@ static void random_access_show_index (const Buffer *ra_buf, bool from_zip, DidIT
     
     ARRAY (const RAEntry, ra, *ra_buf);
 
-    Context *ctx = &z_file->contexts[chrom_did_i];
+    Context *ctx = ZCTX (chrom_did_i);
 
     for (uint32_t i=0; i < ra_buf->len; i++) {
         
-        const char *chrom_snip; unsigned chrom_snip_len;
+        STR(chrom_snip);
         if (from_zip) {
             if (ra[i].chrom_index != WORD_INDEX_NONE) {
                 CtxNode *chrom_node = ctx_get_node_by_word_index (ctx, ra[i].chrom_index);
@@ -90,17 +90,16 @@ void random_access_alloc_ra_buf (VBlock *vb, Coords dc, int32_t chrom_node_index
 // ZIP only: called from Seg when the CHROM changed - this might be a new chrom, or
 // might be an exiting chrom (for example, in an unsorted SAM or VCF). we maitain one ra field per chrom per vb
 // chrom_node_index==WORD_INDEX_NONE if we don't yet know what chrom this is and we will update it later (see fasta_seg_txt_line)
-void random_access_update_chrom (VBlock *vb, Coords dc, 
-                                 WordIndex chrom_node_index, const char *chrom_name, unsigned chrom_name_len)
+void random_access_update_chrom (VBlock *vb, Coords dc, WordIndex chrom_node_index, STRp (chrom_name))
 {
     // note: when FASTA calls this for a sequence that started in the previous vb, and hence chrom is unknown, chrom_node_index==-1.
     ASSERT (chrom_node_index >= -1, "chrom_node_index=%d in vb_i=%u", chrom_node_index, vb->vblock_i);
 
-    // if this is an "unavailable" chrom ("*") we don't store it and signal not to store POS either
-    if (chrom_name_len == 1 && chrom_name[0] == '*') {
+    // if this is an "unavailable" chrom ("*" in SAM, "." in VCF) we don't store it and signal not to store POS either
+    if (chrom_name_len == 1 && (*chrom_name == '*' || *chrom_name == '.')) {
         vb->ra_buf[DC].param = RA_UNKNOWN_CHROM_SKIP_POS;
-        vb->chrom_name     = chrom_name;
-        vb->chrom_name_len = chrom_name_len;
+        vb->chrom_name       = chrom_name;
+        vb->chrom_name_len   = chrom_name_len;
         return;
     }
 
@@ -111,13 +110,6 @@ void random_access_update_chrom (VBlock *vb, Coords dc,
     if (!ra_ent->vblock_i) { // first occurance of this chrom
         ra_ent->chrom_index = chrom_node_index;
         ra_ent->vblock_i    = vb->vblock_i;
-    }
-
-    vb->chrom_node_index = chrom_node_index;
-
-    if (chrom_node_index != WORD_INDEX_NONE) {
-        vb->chrom_name     = chrom_name;
-        vb->chrom_name_len = chrom_name_len;
     }
 }
 
@@ -164,7 +156,7 @@ void random_access_update_last_pos (VBlock *vb, Coords dc, PosType last_pos)
     if (last_pos > ra_ent->max_pos) ra_ent->max_pos = last_pos;
 }
 
-void random_access_update_first_last_pos (VBlock *vb, Coords dc, STRp (first_pos), STRp (last_pos))
+void random_access_update_first_last_pos (VBlock *vb, Coords dc, WordIndex chrom_node_index, STRp (first_pos), STRp (last_pos))
 {
     ASSERTISALLOCED (vb->ra_buf[DC]);
 
@@ -172,7 +164,7 @@ void random_access_update_first_last_pos (VBlock *vb, Coords dc, STRp (first_pos
     if (!str_get_int (STRa(first_pos), &first_pos_value)) return; // fail silently
     if (!str_get_int (STRa(last_pos),  &last_pos_value )) return; 
     
-    RAEntry *ra_ent = ENT (RAEntry, vb->ra_buf[DC], vb->chrom_node_index + 1); // chrom_node_index=-1 goes into entry 0 etc
+    RAEntry *ra_ent = ENT (RAEntry, vb->ra_buf[DC], chrom_node_index + 1); // chrom_node_index=-1 goes into entry 0 etc
     if (first_pos_value < ra_ent->min_pos) ra_ent->min_pos = first_pos_value;
     if (last_pos_value  > ra_ent->max_pos) ra_ent->max_pos = last_pos_value;
 }
@@ -398,7 +390,7 @@ uint32_t random_access_num_chroms_start_in_this_vb (uint32_t vb_i)
 uint32_t random_access_verify_all_contigs_same_length (void)
 {
     static Buffer max_lens_buf = EMPTY_BUFFER;
-    const Context *ctx = &z_file->contexts[CHROM];
+    const Context *ctx = ZCTX(CHROM);
     buf_alloc (evb, &max_lens_buf, 0, ctx->word_list.len, PosType, 1, "max_lens");
     buf_zero (&max_lens_buf);
 
@@ -406,7 +398,7 @@ uint32_t random_access_verify_all_contigs_same_length (void)
     ARRAY (PosType, max_lens, max_lens_buf);
 
     PosType max_of_maxes=0;
-    for (uint32_t ra_i=0; ra_i < z_file->ra_buf.len; ra_i++) {
+    for (uint32_t ra_i=0; ra_i < ra_len; ra_i++) {
         max_lens[ra[ra_i].chrom_index] = MAX_(ra[ra_i].max_pos, max_lens[ra[ra_i].chrom_index]);
         max_of_maxes = MAX_(max_of_maxes, max_lens[ra[ra_i].chrom_index]);
     }

@@ -83,7 +83,7 @@ typedef union SectionFlags {
         #define dts_paired       dt_specific // FASTQ: This z_file contains one or more pairs of FASTQs compressed with --pair (introduced v9.0.13)
         #define dts_mismatch     dt_specific // CHAIN: This chain file's contigs mismatch its references, so it cannot be used with --chain
         uint8_t dt_specific      : 1; // this flag has a different meaning depending on the data_type, may be one of the above ^ 
-        uint8_t aligner          : 1; // our aligner was used to align sequences to the reference (always with FASTQ, sometimes with SAM)
+        uint8_t aligner          : 1; // our aligner may have used to align sequences to the reference (always with FASTQ, sometimes with SAM)
         uint8_t txt_is_bin       : 1; // Source file is binary (BAM)
         uint8_t bgzf             : 1; // Reconstruct as BGZF (user may override) (determined by the last component)
         uint8_t adler            : 1; // true if Adler32 is used, false if MD5 is used (>= v9) or (either MD5 or nothing) (v8)
@@ -295,7 +295,7 @@ typedef struct {
     PosType pos;               // first pos within chrom (1-based) of this range         
     PosType gpos;              // first pos within genome (0-based) of this range
     uint32_t num_bases;        // number of bases (nucleotides) in this range
-    uint32_t chrom_word_index; // index in context->word_list of the chrom of this reference range    
+    uint32_t chrom_word_index; // index in contexts[CHROM].word_list of the chrom of this reference range    
 } SectionHeaderReference;
 
 typedef struct {
@@ -351,9 +351,6 @@ typedef struct Iupac {
     PosType gpos;
     char iupac;
 } Iupac;
-
-// the data of SEC_CHROM2REF_MAP
-typedef struct { WordIndex txt_chrom, ref_chrom; } ChromRefMap; 
 
 typedef union {
     SectionHeader common;

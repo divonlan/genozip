@@ -23,7 +23,7 @@ void mutex_destroy_do (Mutex *mutex, const char *func)
     if (!mutex->initialized) return;
         
     pthread_mutex_destroy (&mutex->mutex); 
-    mutex->initialized = NULL; 
+    memset (mutex, 0, sizeof (Mutex));
 }
 
 void mutex_lock_do (Mutex *mutex, const char *func)   

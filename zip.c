@@ -36,7 +36,7 @@
 #include "endianness.h"
 #include "segconf.h"
 #include "contigs.h"
-#include "map_chrom2ref.h"
+#include "chrom.h"
 
 static Mutex wait_for_vb_1_mutex = {};
 
@@ -470,16 +470,23 @@ static void zip_write_global_area (Digest single_component_digest)
     random_access_finalize_entries (&z_file->ra_buf); // sort RA, update entries that don't yet have a chrom_index
     random_access_finalize_entries (&z_file->ra_buf_luft); 
 
+    // if we used the aligner with REF_EXT_STORE, we make sure all the CHROMs referenced are in the CHROM context, so
+    // as SEC_REF_CONTIGS refers to them. We do this by seeing which contigs have any bit set in is_set.
+    // note: in REF_EXTERNAL we don't use is_set, so we populate all contigs in zip_initialize
+    if (flag.aligner_available && flag.reference == REF_EXT_STORE)
+        ref_contigs_populate_aligned_chroms();
+
     ctx_compress_dictionaries(); 
 
     ctx_compress_counts();
         
     // store a mapping of the file's chroms to the reference's contigs, if they are any different
-    if (flag.reference == REF_EXT_STORE || flag.reference == REF_EXTERNAL || flag.reference == REF_MAKE_CHAIN) 
-        map_chrom2ref_compress(gref);
+    // note: not needed in REF_EXT_STORE, as we convert the stored ref_contigs to use chrom_index of the file's CHROM
+    if (flag.reference == REF_EXTERNAL) 
+        chrom_2ref_compress(gref);
 
     // output reference, if needed
-    bool store_ref = flag.reference == REF_INTERNAL || flag.reference == REF_EXT_STORE || flag.make_reference;
+    bool store_ref = (flag.reference & REF_STORED) || flag.make_reference;
     if (store_ref) 
         ref_compress_ref();
         
@@ -653,48 +660,6 @@ static void zip_complete_processing_one_vb (VBlockP vb)
     txt_file->num_vbs++;
 }
 
-// copy contigs from reference or header to CHROM (and if relevant - also oCHROM, RNEXT for SAM/BAM)
-static void zip_prepopulate_contig_ctxs (void)
-{
-    // First, copy the HEADER contigs (eg the BAM code relies on the chrom_index being the same as the contig index in the BAM data)
-    ConstContigPkgP txtheader_ctgs, txtheader_octgs;
-    txtheader_get_contig_bufs (&txtheader_ctgs, &txtheader_octgs);
-        
-    // note: index in contigs is by order of appearance in header, not the same as the reference
-    if (txtheader_ctgs) { // note: always true for BAM. for SAM and VCF - true if there are contigs in the header.
-        ctx_build_zf_ctx_from_contigs (DTFT (prim_chrom), txtheader_ctgs);
-
-        if (Z_DT (DT_SAM) || Z_DT (DT_BAM))
-            ctx_build_zf_ctx_from_contigs (SAM_RNEXT, txtheader_ctgs);
-    }
-
-    if (txtheader_octgs && txtheader_octgs->contigs.len)
-        ctx_build_zf_ctx_from_contigs (DTFT(luft_chrom), txtheader_octgs);
-
-    // Second, add the REFERENCE contigs that don't exist in the header (if a reference is loaded)
-    ConstContigPkgP ref_ctgs=NULL;
-
-    // Primary contigs
-    if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE || flag.reference == REF_MAKE_CHAIN || flag.reference == REF_LIFTOVER) { 
-        ref_contigs_get (flag.reference == REF_MAKE_CHAIN || flag.reference == REF_LIFTOVER ? prim_ref : gref, &ref_ctgs); 
-
-        if (ref_ctgs && ref_ctgs->contigs.len) {
-            ctx_build_zf_ctx_from_contigs (DTFT (prim_chrom), ref_ctgs); 
-
-            if (Z_DT (DT_SAM) || Z_DT (DT_BAM))
-                ctx_build_zf_ctx_from_contigs (SAM_RNEXT, ref_ctgs);
-        }
-        else
-            ASSERT (!flag.sort, "Cannot --sort, because there are not contigs: %s has no contigs in its header, and a reference file was not provided", txt_name);
-    }
-
-    // Luft contigs
-    if (flag.reference == REF_LIFTOVER || flag.reference == REF_MAKE_CHAIN) {
-        ref_contigs_get (gref, &ref_ctgs);
-        ctx_build_zf_ctx_from_contigs (DTFT(luft_chrom), ref_ctgs);
-    }
-}
-
 // this is the main dispatcher function. It first processes the txt header, then proceeds to read 
 // a variant block from the input file and send it off to a thread for computation. When the thread
 // completes, this function proceeds to write the output to the output file. It can dispatch
@@ -724,6 +689,8 @@ void zip_one_file (const char *txt_basename,
     if (!z_file->num_txt_components_so_far)  // first component of this z_file 
         ctx_initialize_predefined_ctxs (z_file->contexts, txt_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts);
 
+    segconf_initialize(); // before txtheader 
+
     // read the txt header, assign the global variables, and write the compressed header to the GENOZIP file
     off64_t txt_header_header_pos = z_file->disk_so_far;
     uint64_t txt_header_size;
@@ -736,10 +703,6 @@ void zip_one_file (const char *txt_basename,
     }
 
     DT_FUNC (txt_file, zip_initialize)();
-
-    // copy contigs from reference or txtheader to CHROM (and RNEXT too, for SAM/BAM)
-    if (z_file->num_txt_components_so_far == 1 && DTPT (prepopulate_contigs_from_ref)) 
-        zip_prepopulate_contig_ctxs();
 
     segconf_calculate();
 

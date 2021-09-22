@@ -9,6 +9,7 @@
 #include "sam.h"
 #include "vblock.h"
 #include "reference.h"
+#include "contigs.h"
 
 #define DTYPE_QNAME        DTYPE_1
 #define DTYPE_SAM_OPTIONAL DTYPE_2
@@ -209,13 +210,14 @@ extern const uint8_t cigar_lookup_bam[16];
 #define dict_id_is_sam_qname_sf dict_id_is_type_1
 #define dict_id_sam_qname_sf dict_id_type_1
 
-extern void sam_seg_qname_field (VBlockSAM *vb, const char *qname, uint32_t qname_len, unsigned add_additional_bytes);
-extern void sam_analyze_cigar (VBlockSAMP vb, const char *cigar, unsigned cigar_len, unsigned *seq_consumed, unsigned *ref_consumed, unsigned *seq_and_ref, unsigned *coverage);
-extern void sam_seg_tlen_field (VBlockSAM *vb, const char *tlen, unsigned tlen_len, int64_t tlen_value, PosType pnext_pos_delta, int32_t cigar_seq_len);
+extern void sam_seg_qname_field (VBlockSAM *vb, STRp(qname), unsigned add_additional_bytes);
+extern void sam_seg_rname_rnext (VBlockP vb, DidIType did_i, STRp (chrom), unsigned add_bytes);
+extern void sam_analyze_cigar (VBlockSAMP vb, STRp(cigar), unsigned *seq_consumed, unsigned *ref_consumed, unsigned *seq_and_ref, unsigned *coverage);
+extern void sam_seg_tlen_field (VBlockSAM *vb, STRp(tlen), int64_t tlen_value, PosType pnext_pos_delta, int32_t cigar_seq_len);
 extern void sam_seg_qual_field (VBlockSAM *vb, ZipDataLineSAM *dl, const char *qual, uint32_t qual_data_len, unsigned add_bytes);
-extern void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uint32_t seq_len, PosType pos, const char *cigar, unsigned recursion_level, uint32_t level_0_seq_len, const char *level_0_cigar, unsigned add_bytes);
+extern void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), PosType pos, const char *cigar, unsigned recursion_level, uint32_t level_0_seq_len, const char *level_0_cigar, unsigned add_bytes);
 extern const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char *next_field, int32_t len, bool *has_13, char separator, const char *after_field);
-extern void sam_foreach_SQ_line (const char *txt_header, RefContigsIteratorCallback callback, void *callback_param);
+extern void sam_foreach_SQ_line (const char *txt_header, ContigsIteratorCallback callback, void *callback_param);
 extern const char *bam_get_one_optional (VBlockSAM *vb, const char *next_field, const char **tag, char *type, const char **value, unsigned *value_len);
 extern uint16_t bam_reg2bin (int32_t first_pos, int32_t last_pos);
 extern void bam_seg_bin (VBlockSAM *vb, uint16_t bin, uint16_t flag, PosType this_pos);

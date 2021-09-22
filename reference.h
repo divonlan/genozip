@@ -26,7 +26,7 @@ typedef struct Range {
     int64_t num_set;             // used by ref_prepare_range_for_compress: number of set bits in in_set
     const char *chrom_name;
     unsigned chrom_name_len;
-    WordIndex chrom;             // index to the chrom of the external reference
+    WordIndex chrom;             // index to the contig of the in the CHROM of the file from which this reference was loaded.
     uint32_t range_i;            // range ordinal number within contig
     PosType first_pos, last_pos; // the range that includes all locii (note: in ZIP-INTERNAL it might include unset locii too)
     PosType gpos;                // position of this range in the "global position" 
@@ -70,7 +70,7 @@ extern void ref_destroy_reference (Reference ref, bool destroy_only_if_not_mmap)
 extern MemStats ref_memory_consumption (const Reference ref);
 extern const Range *ref_piz_get_range (VBlockP vb, Reference ref, PosType first_pos_needed, uint32_t num_nucleotides_needed);
 extern Range *ref_get_range_by_ref_index (VBlockP vb, Reference ref, WordIndex ref_contig_index);
-extern Range *ref_seg_get_locked_range (VBlockP vb, Reference ref, WordIndex chrom, const char *chrom_name, unsigned chrom_name_len, PosType pos, uint32_t seq_len, const char *field /* used for ASSSEG */, RefLock *lock);
+extern Range *ref_seg_get_locked_range (VBlockP vb, Reference ref, WordIndex chrom, STRp(chrom_name), PosType pos, uint32_t seq_len, WordIndex ref_index, const char *field /* used for ASSSEG */, RefLock *lock);
 extern const char *ref_get_cram_ref (const Reference ref);
 extern void ref_generate_reverse_complement_genome (Reference ref);
 extern const char *ref_get_filename (const Reference ref);
@@ -85,6 +85,7 @@ extern void ref_compress_ref (void);
 
 // make-reference stuff
 extern void ref_make_ref_init (void);
+extern void ref_make_seg_initialize (VBlockP vb);
 extern void ref_consume_ref_fasta_global_area (void);
 extern void ref_make_create_range (VBlockP vb);
 extern void ref_make_after_compute (VBlockP vb);
@@ -98,36 +99,35 @@ extern void ref_create_cache_join (Reference ref, bool free_mem);
 extern void ref_remove_cache (Reference ref);
 
 // contigs stuff
-extern WordIndex ref_contigs_get_by_name (Reference ref, const char *chrom_name, uint32_t chrom_name_len, bool alt_ok, bool soft_fail);
-extern bool ref_contigs_get_matching (Reference ref, PosType LN, STRp(txt_chrom), STRp(*ref_contig), bool *is_alt, int32_t *chrom_name_growth);
-extern const char *ref_contigs_get_name (Reference ref, WordIndex ref_index, unsigned *contig_name_len);
-extern ConstBufferP ref_get_contigs (const Reference ref);
+extern void ref_contigs_populate_aligned_chroms (void);
+extern WordIndex ref_contigs_get_by_name (const Reference ref, STRp(chrom_name), bool alt_ok, bool soft_fail);
+extern WordIndex ref_contigs_get_matching (const Reference ref, PosType LN, STRp(txt_chrom), STRp(*ref_contig), bool strictly_alt, bool *is_alt, int32_t *chrom_name_growth);
+extern const char *ref_contigs_get_name (const Reference ref, WordIndex ref_index, unsigned *contig_name_len);
 extern ConstContigPkgP ref_get_ctgs (const Reference ref);
-extern void ref_contigs_get (const Reference ref, ConstContigPkgP *contigs);
-extern uint32_t ref_num_loaded_contigs (const Reference ref);
-extern PosType ref_contigs_get_contig_length (const Reference ref, WordIndex ref_contig_index, const char *chrom_name, unsigned chrom_name_len, bool enforce);
-extern WordIndex ref_contigs_ref_chrom_from_header_chrom (const Reference ref, const char *chrom_name, unsigned chrom_name_len, PosType *last_pos, WordIndex header_chrom);
-extern void ref_contigs_sort_chroms (void);
+extern uint32_t ref_num_contigs (const Reference ref);
+extern PosType ref_contigs_get_contig_length (const Reference ref, WordIndex ref_contig_index, STRp(chrom_name), bool enforce);
+extern WordIndex ref_contigs_ref_chrom_from_header_chrom (const Reference ref, STRp(chrom_name), PosType *hdr_LN);
 extern void ref_contigs_load_contigs (Reference ref);
 
-typedef RefContigP (*RefContigsIteratorCallback)(const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *callback_param);
-extern void ref_contigs_iterate (const Reference ref, RefContigsIteratorCallback callback, void *callback_param);
 extern WordIndex ref_contig_get_by_gpos (const Reference ref, PosType gpos, PosType *pos);
-extern WordIndex ref_contig_get_by_chrom (ConstVBlockP vb, const Reference ref, WordIndex txt_chrom_index, const char *chrom_name, unsigned chrom_name_len, PosType *max_pos);
+
+extern const uint8_t acgt_encode[256];
+extern const char acgt_decode[4];
 
 // note that the following work on idx and not pos! (idx is the index within the range)
-#define ref_set_nucleotide(range,idx,value) { bit_array_assign (&(range)->ref, (idx) * 2,      acgt_encode[(uint8_t)value] & 1)       ;  \
-                                              bit_array_assign (&(range)->ref, (idx) * 2 + 1, (acgt_encode[(uint8_t)value] & 2) >> 1) ; }
+static inline void ref_set_nucleotide (RangeP range, uint32_t idx, uint8_t value) 
+    { bit_array_assign (&range->ref, idx * 2,      acgt_encode[value] & 1)       ; 
+      bit_array_assign (&range->ref, idx * 2 + 1, (acgt_encode[value] & 2) >> 1) ; }
 
-#define ref_is_nucleotide_set(range,idx) ((bool)bit_array_get (&(range)->is_set, (idx)))
+static inline bool ref_is_nucleotide_set (ConstRangeP range, uint32_t idx) { return (bool)bit_array_get (&range->is_set, idx); }
 
-#define ref_is_idx_in_range(range,idx) ((idx) < (range)->ref.nbits / 2)
+static inline bool ref_is_idx_in_range (ConstRangeP range, uint32_t idx) { return idx < range->ref.nbits / 2; }
 
-#define ref_base_by_idx(range,idx)  acgt_decode[(bit_array_get (&(range)->ref, (idx) * 2 + 1) << 1) | \
-                                                 bit_array_get (&(range)->ref, (idx) * 2)]
-#define ref_base_by_pos(range,pos) ref_base_by_idx((range), (pos)-(range)->first_pos)
+static inline char ref_base_by_idx (ConstRangeP range, uint32_t idx)  { return acgt_decode[(bit_array_get (&range->ref, idx * 2 + 1) << 1) | 
+                                                                                            bit_array_get (&range->ref, idx * 2)]; }
+static inline char ref_base_by_pos (ConstRangeP range, PosType pos) { return ref_base_by_idx (range, pos - range->first_pos); }
 
-static inline void ref_assert_nucleotide_available (const Range *range, PosType pos) {
+static inline void ref_assert_nucleotide_available (ConstRangeP range, PosType pos) {
     bool available;
     switch (flag.reference) {
         case REF_STORED    : available = ref_is_nucleotide_set (range, pos2range_idx (pos)); break;
@@ -139,7 +139,7 @@ static inline void ref_assert_nucleotide_available (const Range *range, PosType 
 
 // display
 typedef struct { char s[300]; } RangeStr;
-extern RangeStr ref_display_range (const Range *r);
+extern RangeStr ref_display_range (ConstRangeP r);
 extern void ref_print_bases_region (FILE *file, ConstBitArrayP bitarr, ConstBitArrayP is_set, PosType first_pos, uint64_t start_base, uint64_t num_of_bases, bool is_forward);
 extern void ref_print_subrange (const char *msg, const Range *r, PosType start_pos, PosType end_pos, FILE *file);
 extern void ref_print_is_set (const Range *r, PosType around_pos, FILE *file);

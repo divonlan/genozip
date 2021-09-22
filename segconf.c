@@ -16,7 +16,6 @@ SegConf segconf = {}; // system-wide global
 
 static void segconf_set_vb_size (const VBlock *vb)
 {
-    #define MAX_VBLOCK_MEMORY      2048         // in MB
     #define VBLOCK_MEMORY_MIN_DYN  (16   << 20) // VB memory - min/max when set in segconf_calculate
     #define VBLOCK_MEMORY_MAX_DYN  (512  << 20) 
     #define VBLOCK_MEMORY_FAST     (16   << 20) // VB memory with --fast
@@ -25,12 +24,13 @@ static void segconf_set_vb_size (const VBlock *vb)
 
     if (segconf.vb_size) {
         // already set from previous components of this z_file - do nothing (in particular, FASTQ PAIR_2 must have the same vb_size as PAIR_1)
+        // note: for 2nd+ components, we may set other aspects of segconf, but not vb_size
     }
 
     // if user requested explicit vblock - use it
     else if (flag.vblock) {
         int64_t mem_size_mb;
-        ASSINP (str_get_int_range64 (flag.vblock, 0, 1, MAX_VBLOCK_MEMORY, &mem_size_mb), 
+        ASSINP (str_get_int_range64 (flag.vblock, 0, MIN_VBLOCK_MEMORY, MAX_VBLOCK_MEMORY, &mem_size_mb), 
                 "invalid argument of --vblock: \"%s\". Expecting an integer between 1 and %u. The file will be read and processed in blocks of this number of megabytes.",
                 flag.vblock, MAX_VBLOCK_MEMORY);
 
@@ -92,14 +92,18 @@ static void segconf_set_vb_size (const VBlock *vb)
     }
 }
 
+void segconf_initialize (void)
+{
+    if (z_file->num_txt_components_so_far == 0)
+        segconf = (SegConf){}; // reset for new z_file
+}
+
 // ZIP: Seg a small sample of data of the beginning of the data, to pre-calculate several Seg configuration parameters
 void segconf_calculate (void)
 {
-    if (flag.pair && z_file->num_txt_components_so_far % 2 == 0)
+    if ((flag.pair && z_file->num_txt_components_so_far % 2 == 0) // FASTQ: no recalculating for 2nd pair 
+    ||  flag.rejects_coord)                                       // DVCF: no recalculating for reject components
         return; // in FASTQ pairs, we only calculate for the first one
-
-    if (z_file->num_txt_components_so_far == 1)
-        segconf = (SegConf){}; // reset for new z_file
 
     segconf.running = true;
 
@@ -111,7 +115,8 @@ void segconf_calculate (void)
 
     txtfile_read_vblock (vb);
     if (!vb->txt_data.len) {
-        segconf_set_vb_size (vb);
+        if (save_vb_size) segconf.vb_size = save_vb_size;
+        else              segconf_set_vb_size (vb);
         goto done; // cannot find a single line - vb_size set to default and other segconf fields remain default, or previous file's setting
     }
     

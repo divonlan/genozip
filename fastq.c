@@ -176,6 +176,11 @@ void fastq_zip_initialize (void)
 
     copy_desc_snip_len = sizeof copy_desc_snip;
     seg_prepare_snip_other (SNIP_COPY, _FASTQ_DESC, 0, 0, copy_desc_snip, &copy_desc_snip_len);
+
+    // with REF_EXTERNAL, we don't know which chroms are seen (bc unlike REF_EXT_STORE, we don't use is_set), so
+    // we just copy all reference contigs. this are not need for decompression, just for --coverage/--sex/--idxstats
+    if (flag.reference == REF_EXTERNAL && z_file->num_txt_components_so_far == 1) // first file
+        ctx_populate_zf_ctx_from_contigs (gref, FASTQ_CONTIG, ref_get_ctgs (gref)); 
 }
 
 // called by zfile_compress_genozip_header to set FlagsGenozipHeader.dt_specific
@@ -189,14 +194,14 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
 {
     START_TIMER;
 
-    CTX(FASTQ_TOPLEVEL)->no_stons     = true; // keep in b250 so it can be eliminated as all_the_same
-    CTX(FASTQ_CONTIG)->flags.store    = STORE_INDEX; // since v12
+    CTX(FASTQ_TOPLEVEL)->no_stons  = true; // keep in b250 so it can be eliminated as all_the_same
+    CTX(FASTQ_CONTIG)->flags.store = STORE_INDEX; // since v12
 
     Context *gpos_ctx     = CTX(FASTQ_GPOS);
     Context *strand_ctx   = CTX(FASTQ_STRAND);
     Context *sqbitmap_ctx = CTX(FASTQ_SQBITMAP);
 
-    if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) {
+    if (flag.reference & REF_ZIP_LOADED) {
         strand_ctx->ltype = LT_BITMAP;
         gpos_ctx->ltype   = LT_UINT32;
         gpos_ctx->flags.store = STORE_INT;
@@ -397,7 +402,7 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
     const char *FASTQ_LINE3_str = seg_get_next_item (vb, FASTQ_SEQ_str, &len, GN_SEP, GN_IGNORE, GN_IGNORE, &dl->seq_len, &separator, has_13, "SEQ");
 
     // case: compressing without a reference - all data goes to "nonref", and we have no bitmap
-    if (flag.ref_use_aligner) 
+    if (flag.aligner_available) 
         aligner_seg_seq (VB, CTX(FASTQ_SQBITMAP), FASTQ_SEQ_str, dl->seq_len);
 
     else {
@@ -598,15 +603,15 @@ static void fastq_update_coverage (VBlockFASTQ *vb)
         gpos = gpos_ctx->last_value.i;
     }
 
-    WordIndex chrom_index;
+    WordIndex ref_index;
     if (gpos != NO_GPOS && 
-        (chrom_index = ref_contig_get_by_gpos (gref, gpos, NULL)) != WORD_INDEX_NONE) {
+        (ref_index = ref_contig_get_by_gpos (gref, gpos, NULL)) != WORD_INDEX_NONE) {
 
         if (flag.show_coverage || flag.show_sex)
-            *ENT (uint64_t, vb->coverage, chrom_index) += vb->seq_len;
+            *ENT (uint64_t, vb->coverage, ref_index) += vb->seq_len;
 
         if (flag.show_coverage || flag.idxstats)
-            (*ENT (uint64_t, vb->read_count, chrom_index))++;
+            (*ENT (uint64_t, vb->read_count, ref_index))++;
     }
     else {
         if (flag.show_coverage || flag.show_sex)

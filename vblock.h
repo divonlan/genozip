@@ -132,6 +132,8 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     \
     /* reference stuff */ \
     Reference ref;             /* used by VBs created by dispatchers for uncompressing / compressing internal or external references. NOT used by VBs of the data type itself. */ \
+    Buffer chrom2ref_map;      /* ZIP: mapping from user file chrom to alternate chrom in reference file (new chroms in this VB) - incides much vb->contexts[CHROM].nodes */\
+    Buffer ol_chrom2ref_map;   /* ZIP: mapping from user file chrom to alternate chrom in reference file (chroms cloned) - incides much vb->contexts[CHROM].ol_nodes */\
     \
     /* reference range lookup caching */ \
     RangeP prev_range[2];        /* previous range returned by ref_seg_get_locked_range */ \
@@ -142,7 +144,6 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     Coords vb_coords;          /* ZIP: DC_PRIMARY, DC_LUFT or DC_BOTH */ \
                                /* PIZ: DC_PRIMARY or DC_LUFT - influenced by FlagsVbHeader.coords and flag.luft */ \
     Coords line_coords;        /* Seg: coords of current line - DC_PRIMARY or DC_LUFT */ \
-    Buffer chrom_map_vcf_to_chain;  /* ZIP with --chain: map from chrom_node_index (not word index!) to entry in primary contig in chain (not reference!) */ \
     uint32_t pos_aln_i;        /* ZIP: chain alignment of POS (used to compare to that of END) */\
     Buffer lo_rejects[2];      /* ZIP generating a dual-coordinates file: txt lines rejected for liftover */ \
     int32_t reject_bytes;      /* ZIP of a Luft file: number of bytes of reject data in this VB (data originating from ##primary_only/##luft_only) */ \

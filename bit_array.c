@@ -601,34 +601,33 @@ bit_index_t bit_array_num_bits_set (const BitArray *bitarr)
 // added by divon
 bit_index_t bit_array_num_bits_set_region(const BitArray* bitarr, bit_index_t start, bit_index_t length)
 {
-  if(length == 0) return 0;
+    if (length == 0) return 0;
 
-  word_addr_t first_word = bitset64_wrd(start);
-  word_addr_t last_word  = bitset64_wrd(start+length-1);
-  word_offset_t foffset  = bitset64_idx(start);
-  word_offset_t loffset  = bitset64_idx(start+length-1);
+    word_addr_t first_word = bitset64_wrd(start);
+    word_addr_t last_word  = bitset64_wrd(start+length-1);
+    word_offset_t foffset  = bitset64_idx(start);
 
-  bit_index_t num_of_bits_set = 0;
+    bit_index_t num_of_bits_set = 0;
 
-  if(first_word == last_word)
-  {
-    word_t mask = bitmask64(length) << foffset;
-    num_of_bits_set += POPCOUNT (bitarr->words[first_word] & mask);
-  }
-  else
-  {
-    // first word
-    num_of_bits_set += POPCOUNT (bitarr->words[first_word] & ~bitmask64(foffset));
+    if (first_word == last_word) {
+        word_t mask = bitmask64(length) << foffset;
+        num_of_bits_set += POPCOUNT (bitarr->words[first_word] & mask);
+    }
+    else {
+        word_offset_t loffset  = bitset64_idx(start+length-1);
+    
+        // first word
+        num_of_bits_set += POPCOUNT (bitarr->words[first_word] & ~bitmask64(foffset));
 
-    // whole words
-    for(word_addr_t i = first_word + 1; i < last_word; i++)
-      num_of_bits_set += POPCOUNT (bitarr->words[i]);
+        // whole words
+        for(word_addr_t i = first_word + 1; i < last_word; i++)
+            num_of_bits_set += POPCOUNT (bitarr->words[i]);
 
-    // last word
-    num_of_bits_set += POPCOUNT (bitarr->words[last_word] & bitmask64(loffset+1));
-  }
+        // last word
+        num_of_bits_set += POPCOUNT (bitarr->words[last_word] & bitmask64(loffset+1));
+    }
 
-  return num_of_bits_set;
+    return num_of_bits_set;
 }
 
 // Get the number of bits not set (1 - hamming weight)

@@ -154,7 +154,7 @@ static void flags_show_flags (void)
     iprintf ("show_reference=%s\n", TF(show_reference));
     iprintf ("show_ref_hash=%s\n", TF(show_ref_hash));
     iprintf ("show_ref_index=%s\n", TF(show_ref_index));
-    iprintf ("show_ref_alts=%s\n", TF(show_ref_alts));
+    iprintf ("show_chrom2ref=%s\n", TF(show_chrom2ref));
     iprintf ("show_ref_iupacs=%s\n", TF(show_ref_iupacs));
     iprintf ("show_chain=%s\n", TF(show_chain));
     iprintf ("show_codec=%s\n", TF(show_codec));
@@ -193,8 +193,7 @@ static void flags_show_flags (void)
     iprintf ("windows=%s\n", TF(is_windows));
     iprintf ("apple=%s\n", TF(is_mac));
     iprintf ("linux=%s\n", TF(is_linux));
-    iprintf ("ref_use_aligner=%s\n", TF(ref_use_aligner));
-    iprintf ("const_chroms=%s\n", TF(const_chroms));
+    iprintf ("aligner_available=%s\n", TF(aligner_available));
     iprintf ("reading_reference=%s\n", flag.reading_reference==gref ? "GREF" : flag.reading_reference==prim_ref ? "CHAIN_SRC" : "NONE");
     iprintf ("rejects_coord=%s\n", TF(rejects_coord));
     iprintf ("genocat_no_ref_file=%s\n", TF(genocat_no_ref_file));
@@ -455,7 +454,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _sC {"show-ref-contigs", no_argument,    &flag.show_ref_contigs, 1 }  
         #define _cC {"show-chain-contigs", no_argument,  &flag.show_chain_contigs, 1 }  
         #define _rI {"show-ref-iupacs", no_argument,     &flag.show_ref_iupacs,  1 }  
-        #define _rA {"show-ref-alts", no_argument,       &flag.show_ref_alts,    1 }  
+        #define _rA {"show-chrom2ref", no_argument,       &flag.show_chrom2ref,    1 }  
         #define _rS {"show-ref-seq",  no_argument,       &flag.show_ref_seq,     1 }  
         #define _cn {"show-containers", no_argument,     &flag.show_containers,  1 }  
         #define _hC {"show-txt-contigs", no_argument,    &flag.show_txt_contigs, 1 }
@@ -832,6 +831,8 @@ void flags_update (unsigned num_files, const char **filenames)
             iprintf ("\n%s\n%s\n", str_time().s, command_line.data);
     }
 
+    if (exe_type == EXE_GENOCAT) flag.only_headers = flag.show_headers;
+
     // cases where we don't need to load the reference file, even if the genozip file normally needs it
     // note: we don't exclude due to collect_coverage here, instead we do it in main_load_reference
     // note: this is here and not in flags_update_piz_one_file bc it is consumed by main_load_reference
@@ -902,10 +903,6 @@ void flags_update_zip_one_file (void)
 
     info_stream = stdout; // always stdout in zip
     is_info_stream_terminal = isatty (fileno (info_stream)); 
-
-    // downsample not possible for Generic or Chain
-    ASSINP (!flag.match_chrom_to_reference || DTPZ(prepopulate_contigs_from_ref), 
-            "%s: --match-chrom-to-reference is not supported for %s files", z_name, dt_name (z_file->data_type));
 
     ASSINP0 (!flag.match_chrom_to_reference || flag.reference, "--match-chrom-to-reference requires using --reference as well");
 
@@ -998,7 +995,7 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
         (flag.show_stats || flag.show_dict || flag.list_chroms || flag.show_one_dict ||
          flag.show_index || flag.show_one_counts.num ||
          flag.show_reference || flag.show_ref_contigs || 
-         flag.show_ref_index || flag.show_ref_hash || flag.show_ref_alts || 
+         flag.show_ref_index || flag.show_ref_hash || flag.show_chrom2ref || 
          flag.show_ref_seq || flag.show_aliases || flag.show_gheader ||
          (dt == DT_REF && flag.show_ref_iupacs));
 
@@ -1021,7 +1018,7 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
     flag.genocat_no_dicts = exe_type == EXE_GENOCAT &&
         (flag.show_stats || flag.show_index || flag.show_one_counts.num || // note: we need dicts for dump_b250 as we need to reconstruct
          flag.show_reference || flag.show_ref_contigs || 
-         flag.show_ref_index || flag.show_ref_hash || flag.show_ref_alts || 
+         flag.show_ref_index || flag.show_ref_hash || flag.show_chrom2ref || 
          flag.show_ref_seq || flag.show_aliases || flag.show_txt_contigs || flag.show_gheader || 
          flag.show_recon_plan);
 
@@ -1147,7 +1144,7 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
     // BAM limitations
     if (flag.out_dt == DT_BAM && flag.no_header == 1) {
         flag.no_header = 0;
-        WARN_ONCE ("ignoring --no-header: cannot output a BAM without a header. Try using --sam%s", "");
+        WARN_ONCE ("ignoring --no-header: cannot output a BAM without a header. Try using --sam.%s", "");
     }
 
     ASSINP0 (flag.out_dt != DT_BAM || z_file_i <= 0 || flag.test, "Cannot concatenate multiple BAM files. Try using --sam."); // TODO: bug 349

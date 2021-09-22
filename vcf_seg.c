@@ -13,6 +13,8 @@
 #include "codec.h"
 #include "strings.h"
 #include "coords.h"
+#include "chrom.h"
+#include "linesorter.h"
 #include "libdeflate/libdeflate.h"
 
 static MiniContainer line_number_container = {};
@@ -31,6 +33,22 @@ void vcf_zip_initialize (void)
             .nitems_lo = 1,
             .items     = { { .dict_id = { _VCF_LINE_NUM } } }
         };
+    }
+
+    // if flag.sort - we have to pre-populate header (in vcf_header_consume_contig) & reference contigs so that vb->is_unsorted is calculated correctly 
+    // in vcf_seg_evidence_of_unsorted() (if VBs have their chrom nodes, they might be in reverse order vs the eventual z_file chroms)
+
+    // NOTE: unlikely edge cases in which some variants sorted consistently:
+    // 1. Two variants with the same chrom, start_pos, end_pos and tie_breaker(=Adler32 of REF+ALT)
+    // 2. If two (or more) contigs appears in the variants but not in the VCF header nor in the reference file. If these first appear in
+    //    reverse order, in two VBs running in parallel, then the "wrong" VB (compared to the eventual zctx) will be mis-sorted.
+    if (flag.sort && z_file->num_txt_components_so_far == 1) {
+        if (chain_is_loaded) {
+            ctx_populate_zf_ctx_from_contigs (prim_ref, VCF_CHROM,  ref_get_ctgs (prim_ref)); 
+            ctx_populate_zf_ctx_from_contigs (gref,     VCF_oCHROM, ref_get_ctgs (gref));
+        }
+        else
+            ctx_populate_zf_ctx_from_contigs (gref, VCF_CHROM, ref_get_ctgs (gref)); 
     }
 }
 
@@ -422,29 +440,20 @@ static uint32_t vcf_seg_copy_line_to_reject (VBlockVCF *vb, const char *field_st
     return line_len;
 }
 
-static inline void vcf_seg_assign_dl_sorted (VBlockVCF *vb, ZipDataLineVCF *dl, DidIType chrom_did_i)
+static inline LineCmpInfo vcf_seg_make_lci (ZipDataLineVCF *dl, bool is_luft)
+{
+    return (LineCmpInfo){ .chrom_wi    = dl->chrom[is_luft],
+                          .start_pos   = dl->pos[is_luft],
+                          .end_pos     = dl->pos[is_luft] + MAX_(0, dl->end_delta),
+                          .tie_breaker = dl->tie_breaker };
+}  
+
+static inline void vcf_seg_evidence_of_unsorted (VBlockVCF *vb, ZipDataLineVCF *dl, DidIType chrom_did_i)
 {
     bool is_luft = !!chrom_did_i; // 0 for primary, 1 for last
 
-    if (!vb->is_unsorted[is_luft] && vb->line_i > 0) {
-        // cases where we have evidence this VB is NOT sorted:
-        int cmp_chrom = dl->chrom[is_luft] - (dl-1)->chrom[is_luft];
-        int cmp_pos   = dl->pos[is_luft]   - (dl-1)->pos[is_luft];
-
-        // 1. pos is out of order
-        if( (cmp_chrom == 0 && cmp_pos < 0)
-
-        // 2. rejected lift-over 
-        ||  (is_luft && dl->chrom[is_luft] == WORD_INDEX_NONE)
-
-        // 3. chrom os out of order (if chroms are in header, then this is by the header, otherwise by first appearance in file)
-        ||  cmp_chrom < 0
-
-        // 4. chrom and pos are the same, but tie_breaker is out of order           
-        ||  (cmp_chrom == 0 && cmp_pos == 0 && dl->tie_breaker < (dl-1)->tie_breaker))
-
-            vb->is_unsorted[is_luft] = true;
-    }
+    if (!vb->is_unsorted[is_luft] && vb->line_i > 0)     
+        vb->is_unsorted[is_luft] = linesorter_cmp (vcf_seg_make_lci (dl-1, is_luft), vcf_seg_make_lci (dl, is_luft)) > 0;
 }
 
 static void vcf_seg_add_line_number (VBlockVCFP vb, unsigned VCF_ID_len)
@@ -514,12 +523,10 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
 
     GET_NEXT_ITEM (VCF_CHROM);
     if (vb->line_coords == DC_PRIMARY) 
-        dl->chrom[0] = seg_chrom_field_ex (vb_, VCF_CHROM, DC_PRIMARY, STRdid(VCF_CHROM), 0, NULL, VCF_CHROM_len+1, NULL);
+        dl->chrom[0] = chrom_seg_by_did_i (VB, VCF_CHROM, STRdid(VCF_CHROM),VCF_CHROM_len+1);
     
     else { // LUFT
-        dl->chrom[1] = seg_chrom_field_ex (vb_, VCF_oCHROM, DC_LUFT, STRdid(VCF_CHROM), 0, NULL, VCF_CHROM_len, NULL);
-        //dl->chrom[1] = seg_by_did_i (vb_, VCF_CHROM_str, VCF_CHROM_len, VCF_oCHROM, VCF_CHROM_len); // we will add_bytes of the CHROM field (not oCHROM) as genounzip reconstructs the PRIMARY
-        //random_access_update_chrom (vb_, DC_LUFT, dl->chrom[1], VCF_CHROM_str, VCF_CHROM_len); // also sets vb->chrom_name
+        dl->chrom[1] = chrom_seg_by_did_i (VB, VCF_oCHROM, STRdid(VCF_CHROM), VCF_CHROM_len);
         CTX(vb->vb_coords==DC_LUFT ? VCF_oCHROM : VCF_CHROM)->txt_len++; // account for the tab - in oCHROM in the ##luft_only VB and in CHROM (on behalf on the primary CHROM) if this is a Dual-coord line (we will rollback accounting later if its not)
     }
 
@@ -664,8 +671,8 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
 
     // test if still sorted
     if (flag.sort) {
-        vcf_seg_assign_dl_sorted (vb, dl, VCF_CHROM);
-        if (z_dual_coords) vcf_seg_assign_dl_sorted (vb, dl, VCF_oCHROM);
+        vcf_seg_evidence_of_unsorted (vb, dl, VCF_CHROM);
+        if (z_dual_coords) vcf_seg_evidence_of_unsorted (vb, dl, VCF_oCHROM);
     }
 
     return next_field;

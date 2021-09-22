@@ -465,6 +465,8 @@ void txtfile_read_vblock (VBlock *vb)
     START_TIMER;
 
     ASSERT_DT_FUNC (txt_file, unconsumed);
+    ASSERT ((segconf.vb_size >= (MIN_VBLOCK_MEMORY << 20) && segconf.vb_size <= ((uint64_t)MAX_VBLOCK_MEMORY << 20)) || segconf.running,
+            "Invalid vb_size=%"PRIu64" component_i(1-based)=%u", segconf.vb_size, z_file->num_txt_components_so_far);
 
     buf_alloc (vb, &vb->txt_data, 0, segconf.vb_size, char, 1, "txt_data");    
 

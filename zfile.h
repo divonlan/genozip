@@ -59,7 +59,7 @@ extern void zfile_uncompress_section (VBlockP vb, void *section_header,
 
 #define zfile_get_global_section(HeaderType, sec,sl,out_buf,out_buf_name) \
     zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", (sec), (sl)); \
-    if (!flag.show_headers || (sec) == SEC_RANDOM_ACCESS) zfile_uncompress_section (evb, evb->z_data.data, (out_buf), (out_buf_name), 0, (sec)); \
+    if (!flag.only_headers || (sec) == SEC_RANDOM_ACCESS) zfile_uncompress_section (evb, evb->z_data.data, (out_buf), (out_buf_name), 0, (sec)); \
     HeaderType header __attribute__((unused)) = *(HeaderType *)evb->z_data.data; /* make a copy of the header */ \
     buf_free (&evb->z_data); 
 

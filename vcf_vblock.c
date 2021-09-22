@@ -27,6 +27,7 @@ void vcf_vb_release_vb (VBlockVCF *vb)
     vb->sample_i = 0;
     vb->new_ref = 0;
     vb->is_del_sv = 0;
+    vb->vcf_version = 0;
     
     buf_free (&vb->sf_txt);
     buf_free (&vb->sf_snip);

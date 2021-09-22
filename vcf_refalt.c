@@ -34,7 +34,7 @@ static void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char main_ref, char main_
 
         RefLock lock;
 
-        Range *range = ref_seg_get_locked_range (VB, gref, vb->chrom_node_index, vb->chrom_name, vb->chrom_name_len, pos, 1, NULL, &lock);
+        Range *range = ref_seg_get_locked_range (VB, gref, vb->chrom_node_index, vb->chrom_name, vb->chrom_name_len, pos, 1, WORD_INDEX_NONE, NULL, &lock);
         if (range) { // this chrom is in the reference
             uint32_t index_within_range = pos - range->first_pos;
 
@@ -583,9 +583,11 @@ static inline bool vcf_refalt_is_left_anchored (const char *ref, const char **al
 // --chain: set oref and update ostatus
 // Analyzes the variant's REF, ALT relative to the Primary and Luft references and the chain file data
 // and returns ostatus, possibly also updating the rejects report. It doesn't seg.
-LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool is_xstrand,
+LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool is_xstrand, WordIndex luft_ref_index,
                                 bool *is_left_anchored) // out - only relevant is return value is LO_IS_OK_INDEL()
 {
+    ASSERT0 (luft_ref_index != WORD_INDEX_NONE, "not expecting luft_ref_index=WORD_INDEX_NONE");
+
     PosType pos  = dl->pos[0];
     PosType opos = dl->pos[1];
     const unsigned ref_len = vb->main_ref_len;
@@ -595,10 +597,10 @@ LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool is
     if (!opos) return LO_OK_REF_SAME_SNP; // POS==oPOS==0 and REF==oREF=='.'
 
     // note: as we're using external references, the range is always the entire contig, and range->first_pos is always 1.
-    const Range *prim_range = ref_seg_get_locked_range (VB, prim_ref, dl->chrom[0], vb->chrom_name, vb->chrom_name_len, pos, 1, ENT (char, vb->txt_data, vb->line_start), NULL); // doesn't lock as lock=NULL
+    const Range *prim_range = ref_seg_get_locked_range (VB, prim_ref, dl->chrom[0], vb->chrom_name, vb->chrom_name_len, pos, 1, WORD_INDEX_NONE, ENT (char, vb->txt_data, vb->line_start), NULL); // doesn't lock as lock=NULL
     ASSVCF (prim_range, "Failed to find PRIM range for chrom=\"%.*s\"", vb->chrom_name_len, vb->chrom_name);
 
-    const Range *luft_range = ref_seg_get_locked_range (VB, gref, dl->chrom[1], NULL, 0, opos, 1, ENT (char, vb->txt_data, vb->line_start), NULL);
+    const Range *luft_range = ref_seg_get_locked_range (VB, gref, dl->chrom[1], NULL, 0, opos, 1, luft_ref_index, ENT (char, vb->txt_data, vb->line_start), NULL);
     ASSVCF (luft_range, "Failed to find LUFT range for chrom=%d", dl->chrom[1]);
 
     str_toupper_(vb->main_refalt, ref, ref_len);

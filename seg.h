@@ -32,9 +32,6 @@ static inline WordIndex seg_by_did_i (VBlockP vb, STRp(snip), DidIType did_i, un
 extern WordIndex seg_known_node_index (VBlockP vb, ContextP ctx, WordIndex node_index, unsigned add_bytes);
 #define seg_duplicate_last(vb,ctx,add_bytes) seg_known_node_index ((VBlockP)(vb), (ctx), *LASTENT (uint32_t, (ctx)->b250), (add_bytes))
 
-extern WordIndex seg_chrom_field_ex (VBlockP vb, DidIType did_i, Coords dc, STRp(chrom), PosType LN, bool *is_alt_out, int add_bytes, bool *is_new);
-#define seg_chrom_field(vb, chrom, chrom_len) seg_chrom_field_ex ((VBlockP)(vb), CHROM, DC_NONE, (chrom), (chrom_len), 0, 0, (chrom_len)+1, NULL)
-
 extern WordIndex seg_integer_do (VBlockP vb, DidIType did_i, int64_t n, unsigned add_bytes); // segs integer as normal textual snip
 #define seg_integer(vb,did_i,n,add_sizeof_n) seg_integer_do((VBlockP)(vb), (did_i), (n), (add_sizeof_n) ? sizeof(n) : 0)
 

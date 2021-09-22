@@ -74,11 +74,13 @@ static void stats_output_file_metadata (Buffer *buf)
                    flag.pair ? " (paired)" : "",
                    (int)z_file->bound_txt_names.len, z_file->bound_txt_names.data);
     
-    if (flag.reference == REF_MAKE_CHAIN)
+    if (flag.reference == REF_MAKE_CHAIN) {
         bufprintf (evb, buf, "PRIM reference: %s\n", ref_get_filename (prim_ref));
+        bufprintf (evb, buf, "LUFT reference: %s\n", ref_get_filename (gref));
+    }
 
-    if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE || flag.reference == REF_MAKE_CHAIN) 
-        bufprintf (evb, buf, "%sReference: %s\n", Z_DT(DT_CHAIN) ? "LUFT " : "", ref_get_filename (gref));
+    else if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE || flag.reference == REF_LIFTOVER) 
+        bufprintf (evb, buf, "Reference: %s\n", ref_get_filename (gref));
 
     if (Z_DT(DT_VCF)) 
         bufprintf (evb, buf, "Samples: %u   ", vcf_header_get_num_samples());
@@ -101,7 +103,7 @@ static void stats_output_file_metadata (Buffer *buf)
     else if (kraken_is_loaded) 
         bufprintf (evb, buf, "Features: Per-line taxonomy ID data\n%s", "");
 
-    else if (Z_DT(DT_CHAIN) && flag.reference == REF_MAKE_CHAIN && !segconf.mismatches_reference)
+    else if (Z_DT(DT_CHAIN) && flag.reference == REF_MAKE_CHAIN && !segconf.chain_mismatches_ref)
         bufprintf (evb, buf, "Features: Chain file suitable for use with genozip --chain\n%s", "");
 
     if (chain_is_loaded || txt_file->coords) 
@@ -302,7 +304,7 @@ void stats_compress (void)
 
     for (int i=-NUM_SEC_TYPES; i < (int)z_file->num_contexts; i++) { // sections go into -1 to -NUM_SEC_TYPES (see SEC())
 
-        Context *ctx = (i>=0) ? &z_file->contexts[i] : NULL;
+        Context *ctx = (i>=0) ? ZCTX(i) : NULL;
 
         if (SEC(i) == SEC_DICT || SEC(i) == SEC_B250 || SEC(i) == SEC_LOCAL || SEC(i) == SEC_COUNTS) continue; // these are covered by individual contexts
 

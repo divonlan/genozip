@@ -31,7 +31,7 @@
 #include "website.h"
 #include "random_access.h"
 #include "contigs.h"
-#include "map_chrom2ref.h"
+#include "chrom.h"
 
 typedef struct {
     WordIndex prim_chrom; // index in CHAIN_NAMEPRIM
@@ -102,11 +102,15 @@ void chain_zip_initialize (void)
 {
     ASSINP0 (flag.reference == REF_EXTERNAL || flag.force, "Please specify the destination reference file with --reference or use --force to override this");
 
-    if (flag.reference == REF_EXTERNAL) 
+    if (flag.reference == REF_EXTERNAL && z_file->num_txt_components_so_far == 1) {
         flag.reference = REF_MAKE_CHAIN; // since we're not attempting to use the data from the reference to compress the chain file itself
        
+        // initialize NAMEPRIM and NAMELUFT from references, so chain and ref contigs have identical indices
+        ctx_populate_zf_ctx_from_contigs (prim_ref, CHAIN_NAMEPRIM, ref_get_ctgs (prim_ref)); 
+        ctx_populate_zf_ctx_from_contigs (gref,     CHAIN_NAMELUFT, ref_get_ctgs (gref));
+    }
     else
-        segconf.mismatches_reference = true; // chain file can be compressed, but not used with --chain
+        segconf.chain_mismatches_ref = true; // chain file can be compressed, but not used with --chain
 }
 
 // Tests lengths of prim/luft contigs of first line in chain file vs the two references. Error if they don't match, but swapping them matches.
@@ -241,13 +245,13 @@ static bool chain_seg_verify_contig (VBlockCHAIN *vb, Reference ref, WordIndex n
                                      bool *mismatch) // out
 {
     WordIndex ref_index = name_index;
-    if (flag.reference && ref_index >= ref_num_loaded_contigs(ref)) { 
+    if (flag.reference && ref_index >= ref_num_contigs(ref)) { 
         *mismatch = true;
 
-        ref_index = contigs_get_matching (ref_get_ctgs(ref), STRa(name), size_according_to_chain, NULL);
+        ref_index = contigs_get_matching (ref_get_ctgs(ref), STRa(name), size_according_to_chain, true, NULL);
         
         // case: this contig is not in the reference, even with an alternate name. 
-        // note: if its in the reference with an alternate name, a warning was already displayed in seg_chrom_field_ex
+        // note: if its in the reference with an alternate name, a warning was already displayed in chrom_seg_ex
         if (ref_index == WORD_INDEX_NONE && !flag.match_chrom_to_reference && !(*once)) {
             iprintf ("\n\nWarning: Some contigs, for example \"%.*s\", appear the chain file %s, but don't appear in the %s reference %s. Use --match-chrom-to-reference to exclude these alignments from %s.\n", 
                         name_len, name, txt_name, ref==gref ? "LUFT" : "PRIMARY", ref_get_filename (ref), z_name);
@@ -256,15 +260,15 @@ static bool chain_seg_verify_contig (VBlockCHAIN *vb, Reference ref, WordIndex n
     }
 
     // case: contig is in the reference - verify its size
-    else if (name_index < ref_get_contigs (ref)->len) {
+    else if (name_index < ref_num_contigs (ref)) {
         
         PosType size_according_to_ref = ref_contigs_get_contig_length (ref, ref_index, 0, 0, true);
 
         if (size_according_to_chain != size_according_to_ref) {
             // output error in the first alignment of this contig
             ASSERTW (str_issame (name, last_name),
-                    "Size of \"%.*s\" in chain file is %"PRId64", but in %s it is %"PRId64". Excluding it.",
-                    name_len, name, size_according_to_chain, ref_get_filename (ref), size_according_to_ref);
+                    "Size of \"%.*s\" in chain file is %"PRId64", but in %s \"%s\" is %"PRId64". Excluding it.",
+                    name_len, name, size_according_to_chain, ref_get_filename (ref), ref_contigs_get_name (ref, ref_index, NULL), size_according_to_ref);
             return false;
         }
     }
@@ -272,27 +276,30 @@ static bool chain_seg_verify_contig (VBlockCHAIN *vb, Reference ref, WordIndex n
     return true; // verified
 }
 
-static bool chain_seg_name_and_size (VBlockCHAIN *vb, Reference ref, Coords dc, DidIType did_i_name, STRp(name), DidIType did_i_size, STRp(size), bool *mismatch)
+static WordIndex chain_seg_name_and_size (VBlockCHAIN *vb, Reference ref, Coords dc, DidIType did_i_name, STRp(name), DidIType did_i_size, STRp(size), 
+                                          bool *mismatch, bool *verified) // out
 {
     PosType size_value=0;
     ASSSEG (str_get_int_range64 (STRa(size), 1, 1000000000000000, &size_value),
             size, "Invalid size field of \"%.*s\": %.*s", STRf(name), STRf(size));;
 
     seg_by_did_i (VB, STRa(size), did_i_size, size_len+1);
-
+    
     bool is_alt;
-    WordIndex name_index = seg_chrom_field_ex (VB, did_i_name, dc, STRa (name), size_value, &is_alt, name_len+1, NULL);
+    WordIndex node_index = chrom_seg_ex (VB, did_i_name, STRa (name), size_value, &is_alt, name_len+1, NULL);
 
     static bool once[2] = {};
-    bool verified = is_alt || chain_seg_verify_contig (vb, ref, name_index, &once[dc-1], STRa (name), 
-                                                       last_txt(vb, did_i_name), vb->last_txt_len(did_i_name), size_value, mismatch);
+    *verified &= is_alt || chain_seg_verify_contig (vb, ref, node_index, &once[dc-1], STRa (name), 
+                                                    last_txt(vb, did_i_name), vb->last_txt_len(did_i_name), size_value, mismatch);
 
-    return verified;
+    seg_set_last_txt (VB, CTX(did_i_name), STRa(name), STORE_NONE); // note: in some cases, this is already done by chrom_seg_ex. no harm.
+
+    return node_index;
 }
 
 bool chain_zip_dts_flag (void)
 {
-    return segconf.mismatches_reference;
+    return segconf.chain_mismatches_ref;
 }
 
 const char *chain_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
@@ -313,7 +320,8 @@ const char *chain_seg_txt_line (VBlock *vb_, const char *field_start_line, uint3
     
     GET_NEXT_ITEM_SP (CHAIN_NAMEPRIM);
     GET_NEXT_ITEM_SP (CHAIN_SIZEPRIM);
-    bool verified = chain_seg_name_and_size (vb, prim_ref, DC_PRIMARY, CHAIN_NAMEPRIM, STRdid(CHAIN_NAMEPRIM), CHAIN_SIZEPRIM, STRdid(CHAIN_SIZEPRIM), &mismatch);
+    bool verified = true; // start optimistically
+    WordIndex prim_name_ni = chain_seg_name_and_size (vb, prim_ref, DC_PRIMARY, CHAIN_NAMEPRIM, STRdid(CHAIN_NAMEPRIM), CHAIN_SIZEPRIM, STRdid(CHAIN_SIZEPRIM), &mismatch, &verified);
 
     SEG_NEXT_ITEM_SP (CHAIN_STRNDPRIM);
 
@@ -323,11 +331,11 @@ const char *chain_seg_txt_line (VBlock *vb_, const char *field_start_line, uint3
     GET_NEXT_ITEM_SP (CHAIN_ENDPRIM);
     seg_pos_field (vb_, CHAIN_ENDPRIM, CHAIN_STARTPRIM, 0, 0, field_start, field_len, 0,field_len + 1);
 
-    random_access_update_first_last_pos (vb_, DC_PRIMARY, STRdid(CHAIN_STARTPRIM), STRdid (CHAIN_ENDPRIM));
+    random_access_update_first_last_pos (vb_, DC_PRIMARY, prim_name_ni, STRdid(CHAIN_STARTPRIM), STRdid (CHAIN_ENDPRIM));
 
     GET_NEXT_ITEM_SP (CHAIN_NAMELUFT);
     GET_NEXT_ITEM_SP (CHAIN_SIZELUFT);
-    verified &= chain_seg_name_and_size (vb, gref, DC_LUFT, CHAIN_NAMELUFT, STRdid(CHAIN_NAMELUFT), CHAIN_SIZELUFT, STRdid(CHAIN_SIZELUFT), &mismatch);
+    WordIndex luft_name_ni = chain_seg_name_and_size (vb, gref, DC_LUFT, CHAIN_NAMELUFT, STRdid(CHAIN_NAMELUFT), CHAIN_SIZELUFT, STRdid(CHAIN_SIZELUFT), &mismatch, &verified);
 
     seg_by_did_i (VB, verified ? "1" : "0", 1, CHAIN_VERIFIED, 0);
 
@@ -339,7 +347,7 @@ const char *chain_seg_txt_line (VBlock *vb_, const char *field_start_line, uint3
     GET_NEXT_ITEM_SP (CHAIN_ENDLUFT);
     chain_seg_luft_end_field (vb, field_start, field_len);
 
-    random_access_update_first_last_pos (vb_, DC_LUFT, CHAIN_STARTLUFT_str, CHAIN_STARTLUFT_len, CHAIN_ENDLUFT_str, CHAIN_ENDLUFT_len);
+    random_access_update_first_last_pos (vb_, DC_LUFT, luft_name_ni, STRdid(CHAIN_STARTLUFT), STRdid(CHAIN_ENDLUFT));
 
     // if ID is numeric, preferably store as delta, if not - normal snip
     GET_LAST_ITEM_SP (CHAIN_ID);
@@ -415,7 +423,7 @@ const char *chain_seg_txt_line (VBlock *vb_, const char *field_start_line, uint3
             vb->line_i--;
         }
         else
-            segconf.mismatches_reference = true; // mark this chain file as unsuitable for use with --chain (we only ever set this, never reset, so no thread safety issues)
+            segconf.chain_mismatches_ref = true; // mark this chain file as unsuitable for use with --chain (we only ever set this, never reset, so no thread safety issues)
     }
 
     return next_field;
@@ -431,7 +439,7 @@ bool chain_piz_initialize (void)
     mutex_initialize (chain_mutex);
 
     if (flag.reading_chain) {
-        contigs_build_contig_pkg_from_ctx (&prim_ctgs, ZCTX(CHAIN_NAMEPRIM), SORT_BY_ALL);
+        contigs_build_contig_pkg_from_ctx (&prim_ctgs, ZCTX(CHAIN_NAMEPRIM), SORT_BY_NAME | SORT_BY_AC);
         contigs_build_contig_pkg_from_ctx (&luft_ctgs, ZCTX(CHAIN_NAMELUFT), SORT_BY_NONE);
 
         // add length from reference - same index as the contigs were copied from the reference to the CHAIN_NAMELUFT ctx during ZIP
@@ -608,12 +616,10 @@ static inline void chain_piz_filter_ingest_alignmet (VBlockCHAIN *vb)
     // to record that this is a reverse strand
 
     NEXTENT (ChainAlignment, chain) = (ChainAlignment){ 
-        .prim_chrom      = vb->last_index(CHAIN_NAMEPRIM),
-        .prim_first_1pos = 1 + vb->next_prim_0pos,  // +1 bc our alignments are 1-based vs the chain file that is 0-based
+        .prim_chrom      = vb->last_index(CHAIN_NAMEPRIM), // same index as chain contigs must be --match-chroms to be used for --chain
+        .prim_first_1pos = 1 + vb->next_prim_0pos,         // +1 bc our alignments are 1-based vs the chain file that is 0-based
         .prim_last_1pos  = 1 + last_prim_0pos,
-
-        // use contigs as they appear in the reference file, rather than their name in the chain file 
-        .luft_chrom      = map_chrom2ref (vb->last_index(CHAIN_NAMELUFT)), // ref_contig_index is also an index into NAMELUFT bc ref contigs are first in the NAMELUFT context due to zip_prepopulate_contig_ctxs
+        .luft_chrom      = vb->last_index(CHAIN_NAMELUFT), // ditto
         .luft_first_1pos = is_xstrand ? (size_dst - last_luft_0pos) : 1 + vb->next_luft_0pos, // +1 to convert to 1-base. note that "size_dst" has a built-in +1.
         .luft_last_1pos  = is_xstrand ? (size_dst - vb->next_luft_0pos) : 1 + last_luft_0pos,
 
@@ -703,26 +709,6 @@ uint64_t chain_get_num_prim_contigs (void)
     return prim_ctgs.contigs.len;
 }
 
-// returns the contig index in prim_contigs, word WORD_INDEX_NONE if there is none
-WordIndex chain_get_prim_contig_index (STRp (contig), PosType LN /* optional */)
-{
-    bool is_alt; // providing is_alt = search exact name too
-    WordIndex ctg_i = contigs_get_matching (&prim_ctgs, STRa (contig), LN, &is_alt);
-
-    // note: PRIMNAME contains all contigs, copied from the primary reference. We check counts, to verify that the contig is actually used in the chain file.
-    if (ctg_i != WORD_INDEX_NONE && CONTIG(prim_ctgs, ctg_i)->metadata.parsed.count > 0)
-        return ctg_i;
-    else
-        return WORD_INDEX_NONE;
-}
-
-// called by vcf_lo_zip_initialize when zipping with --chain to copy luft_ctgs.contigs to z_file->ochrom and prim_contigs to z_file->CHROM
-void chain_copy_contigs_to_z_file (DidIType luft_contig_did_i)
-{
-    ctx_build_zf_ctx_from_contigs (luft_contig_did_i, &luft_ctgs);
-    // note: primary contigs are copied in zip_prepopulate_contig_ctxs
-}
-
 static void chain_contigs_show (Coords dc)
 {
     ContextP ctx = ZCTX (dc==DC_PRIMARY ? CHAIN_NAMEPRIM : CHAIN_NAMELUFT);
@@ -796,7 +782,7 @@ void chain_load (void)
         if (exe_type == EXE_GENOCAT) exit_ok();  // in genocat this, not the data
     }
 
-    // sort the alignmants by (luft_contig_index, qstart)
+    // sort the alignmants by (luft_ref_index, qstart)
     chain_sort_mark_dups();
         
     if (flag.show_chain) {
@@ -828,7 +814,7 @@ void chain_destroy (void)
 }
 
 // binary search for the first alignment of a src contig
-static ChainAlignment *chain_get_first_aln (WordIndex prim_contig_index, int32_t start, int32_t end) 
+static ChainAlignment *chain_get_first_aln (WordIndex prim_ref_index, int32_t start, int32_t end) 
 {
     if (end < start) return NULL; // prim_contig doesn't exist in chain file
 
@@ -836,29 +822,28 @@ static ChainAlignment *chain_get_first_aln (WordIndex prim_contig_index, int32_t
     ChainAlignment *aln = ENT (ChainAlignment, chain, mid);
 
     // case: success - same prim_contig, and previous aln has a different prim_contig 
-    if (aln->prim_chrom == prim_contig_index && (!mid || (aln-1)->prim_chrom != prim_contig_index))
+    if (aln->prim_chrom == prim_ref_index && (!mid || (aln-1)->prim_chrom != prim_ref_index))
         return aln;
 
     // case: prim_contig less than aln's, OR is the same, but aln isn't the first with this prim_contig - search lower half
-    if (prim_contig_index <= aln->prim_chrom)
-        return chain_get_first_aln (prim_contig_index, start, mid-1);
+    if (prim_ref_index <= aln->prim_chrom)
+        return chain_get_first_aln (prim_ref_index, start, mid-1);
     
     // case: prim_contig is more than aln's - search upper half
     else
-        return chain_get_first_aln (prim_contig_index, mid+1, end);
+        return chain_get_first_aln (prim_ref_index, mid+1, end);
 }
 
 // append luft_contigs buffer with all dst chroms indicies for which there exists alignment with prim_chrom
-void chain_append_all_luft_contig_index (const char *prim_contig_name, unsigned prim_contig_name_len, PosType LN, Buffer *luft_contigs)
+void chain_append_all_luft_ref_index (const char *prim_contig_name, unsigned prim_contig_name_len, PosType LN, Buffer *luft_contigs)
 {
-    bool is_alt; // is_alt means search for exact name too
-    WordIndex prim_contig_index = contigs_get_matching (&prim_ctgs, STRa(prim_contig_name), LN, &is_alt);
+    WordIndex prim_ref_index = contigs_get_matching (&prim_ctgs, STRa(prim_contig_name), LN, false, NULL);
     WordIndex prev_dst = WORD_INDEX_NONE;
 
-    if (prim_contig_index == WORD_INDEX_NONE) return; // this contig is not in the chain file
+    if (prim_ref_index == WORD_INDEX_NONE) return; // this contig is not in the chain file
 
-    for (ChainAlignment *aln = chain_get_first_aln (prim_contig_index, 0, chain.len-1);
-         aln && aln < LASTENT (ChainAlignment, chain) && aln->prim_chrom == prim_contig_index;
+    for (ChainAlignment *aln = chain_get_first_aln (prim_ref_index, 0, chain.len-1);
+         aln && aln < LASTENT (ChainAlignment, chain) && aln->prim_chrom == prim_ref_index;
          aln++)
          
          if (aln->luft_chrom != prev_dst) { // note: this prevents consecutive duplicates, but not non-consecutive duplicates
@@ -869,13 +854,13 @@ void chain_append_all_luft_contig_index (const char *prim_contig_name, unsigned 
 
 // get luft_contig, prim_pos from prim_contig, luft_pos (binary search on chain)
 // returns true if successful
-static bool chain_get_liftover_coords_do (WordIndex prim_contig_index, PosType prim_1pos, 
+static bool chain_get_liftover_coords_do (WordIndex prim_ref_index, PosType prim_1pos, 
                                           int32_t start, int32_t end,
-                                          WordIndex *luft_contig_index, PosType *luft_1pos, bool *is_xstrand, uint32_t *aln_i) // out
+                                          WordIndex *luft_ref_index, PosType *luft_1pos, bool *is_xstrand, uint32_t *aln_i) // out
 {
     // case: no mapping
     if (end < start) {
-        if (luft_contig_index) *luft_contig_index = WORD_INDEX_NONE;
+        if (luft_ref_index) *luft_ref_index = WORD_INDEX_NONE;
         if (luft_1pos) *luft_1pos = 0;
         if (is_xstrand) *is_xstrand = false;
         return false;
@@ -885,10 +870,10 @@ static bool chain_get_liftover_coords_do (WordIndex prim_contig_index, PosType p
     ChainAlignment *aln = ENT (ChainAlignment, chain, mid);
 
     // case: success
-    if (aln->prim_chrom == prim_contig_index && 
+    if (aln->prim_chrom == prim_ref_index && 
         aln->prim_first_1pos <= prim_1pos && 
         aln->prim_last_1pos >= prim_1pos) {
-            if (luft_contig_index) *luft_contig_index = aln->luft_chrom;
+            if (luft_ref_index) *luft_ref_index = aln->luft_chrom;
             
             PosType pos_offset = prim_1pos - aln->prim_first_1pos; // offset of POS from the beginning of the src (src is always positive strand)
             if (luft_1pos) *luft_1pos = aln->is_xstrand ? (aln->luft_last_1pos  - pos_offset)  // dst is reverse strand - offset is from the end of the alignment, going back
@@ -900,19 +885,19 @@ static bool chain_get_liftover_coords_do (WordIndex prim_contig_index, PosType p
         }
 
     // case: prim_contig, luft_pos is less than aln - search lower half
-    if (prim_contig_index < aln->prim_chrom ||
-        (prim_contig_index == aln->prim_chrom && prim_1pos < aln->prim_first_1pos))
-        return chain_get_liftover_coords_do (prim_contig_index, prim_1pos, start, mid-1, luft_contig_index, luft_1pos, is_xstrand, aln_i);
+    if (prim_ref_index < aln->prim_chrom ||
+        (prim_ref_index == aln->prim_chrom && prim_1pos < aln->prim_first_1pos))
+        return chain_get_liftover_coords_do (prim_ref_index, prim_1pos, start, mid-1, luft_ref_index, luft_1pos, is_xstrand, aln_i);
     
     // case: prim_contig,luft_pos is more than aln - search upper half
     else
-        return chain_get_liftover_coords_do (prim_contig_index, prim_1pos, mid+1, end, luft_contig_index, luft_1pos, is_xstrand, aln_i);
+        return chain_get_liftover_coords_do (prim_ref_index, prim_1pos, mid+1, end, luft_ref_index, luft_1pos, is_xstrand, aln_i);
 }
 
-bool chain_get_liftover_coords (WordIndex prim_contig_index, PosType prim_1pos, 
-                                WordIndex *luft_contig_index, PosType *luft_1pos, bool *is_xstrand, uint32_t *aln_i) // out
+bool chain_get_liftover_coords (WordIndex prim_ref_index, PosType prim_1pos, 
+                                WordIndex *luft_ref_index, PosType *luft_1pos, bool *is_xstrand, uint32_t *aln_i) // out
 {
-    return chain_get_liftover_coords_do (prim_contig_index, prim_1pos, 0, chain.len-1, luft_contig_index, luft_1pos, is_xstrand, aln_i);
+    return chain_get_liftover_coords_do (prim_ref_index, prim_1pos, 0, chain.len-1, luft_ref_index, luft_1pos, is_xstrand, aln_i);
 }
 
 PosType chain_get_aln_gap_after (uint32_t aln_i)

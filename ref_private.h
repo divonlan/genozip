@@ -29,6 +29,7 @@ typedef struct RefStruct {
     const char *cache_fn;
     Digest file_md5;
     uint8_t genozip_version;
+    bool is_primary;
     
     // features
     RefChromeStyle chrom_style;
@@ -60,11 +61,6 @@ typedef struct RefStruct {
 
     // contigs loaded from a reference file
     ContigPkg ctgs;
-    Buffer loaded_contigs; // array of Contig
-    Buffer loaded_contigs_dict;
-    Buffer loaded_contigs_by_name; // an array of uint32 of indexes into loaded_contigs - sorted by alphabetical order of the snip in contig_dict
-    Buffer loaded_contigs_by_LN;
-    Buffer loaded_contigs_by_AC;
 
     // lock stuff
     Mutex *genome_muteces; // one spinlock per 16K bases - protects genome->is_set
@@ -84,12 +80,13 @@ extern void ref_lock_initialize_denovo_genome (Reference ref);
 extern void ref_lock_free (Reference ref);
 
 // contigs stuff
-extern const char *ref_contigs_get_name_by_chrom_index (Reference ref, WordIndex chrom_index, const char **snip, uint32_t *snip_len);
-extern const Contig *ref_contigs_get_contig_by_chrom_index (Reference ref, WordIndex chrom_index, bool soft_fail);
+extern const char *ref_contigs_get_name_by_ref_index (Reference ref, WordIndex chrom_index, const char **snip, uint32_t *snip_len);
+extern const Contig *ref_contigs_get_contig_by_ref_index (Reference ref, WordIndex chrom_index, bool soft_fail);
 extern PosType ref_contigs_get_genome_nbases (Reference ref);
 extern void ref_contigs_generate_data_if_denovo (Reference ref);
 extern WordIndex ref_seg_get_alt_chrom (VBlockP vb);
-extern void ref_contigs_compress (Reference ref);
+extern void ref_contigs_compress_internal (Reference ref);
+extern void ref_contigs_compress_ext_store (Reference ref);
 
 #define ranges_type(ref) (ref)->ranges.param
 

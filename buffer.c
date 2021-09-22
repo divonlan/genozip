@@ -175,6 +175,7 @@ static bool buf_test_overflows_do (const VBlock *vb, bool primary, const char *m
 
     const Buffer *buf; // declare outside, so it is observable in the debugger in case of a crash
     for (unsigned buf_i=0; buf_i < vb->buffer_list.len; buf_i++) {
+        static const char *nl[2] = {"", "\n\n"};
 
         // IMPORTANT NOTE regarding evb: testing evb might FAIL and should not be done in production! this if another thread 
         // can modify its buffers (under mutex protection) concurrently with this test, causing in consistent state between eg data and memory
@@ -184,7 +185,15 @@ static bool buf_test_overflows_do (const VBlock *vb, bool primary, const char *m
         if (!(buf = *ENT (Buffer *, vb->buffer_list, buf_i)))
              continue; // buf was 'buf_destroy'd
 
-        static const char *nl[2] = {"", "\n\n"};
+#ifdef WIN32
+        if (IsBadReadPtr (buf, sizeof (Buffer))) {
+            fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (vb_i=%d) buffer=%s (buf_i=%u): buffer structure inaccessible (invalid pointer)\n", 
+                     nl[primary], msg, vb->id, vb->vblock_i, str_pointer(buf).s, buf_i);
+            corruption = 100;
+            break;
+        }
+#endif
+
         if (buf->memory && buf->memory != BUFFER_BEING_MODIFIED) {
 
             if (vb && buf->vb != vb) {
@@ -457,6 +466,8 @@ uint64_t buf_alloc_do (VBlock *vb,
     START_TIMER;
 
     if (!requested_size) return 0; // nothing to do
+
+    ASSERT ((int64_t)requested_size > 0, "called from %s:%u: negative requested_size=%"PRId64" for name=%s", func, code_line, requested_size, name);
 
 #define REQUEST_TOO_BIG_THREADSHOLD (3ULL << 30) // 3 GB
     if (requested_size > REQUEST_TOO_BIG_THREADSHOLD && !buf->can_be_big) // use WARN instead of ASSERTW to have a place for breakpoint

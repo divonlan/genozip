@@ -18,6 +18,7 @@
 #include "codec.h"
 #include "version.h"
 #include "website.h"
+#include "chrom.h"
 
 //-----------------------------------------
 // Header functions for 23andMe files
@@ -98,7 +99,7 @@ const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_
     seg_id_field (vb, CTX(ME23_ID), field_start, field_len, true);
 
     GET_NEXT_ITEM (ME23_CHROM);
-    seg_chrom_field (vb, field_start, field_len);
+    chrom_seg (vb, field_start, field_len);
 
     GET_NEXT_ITEM (ME23_POS);
     seg_pos_field (vb, ME23_POS, ME23_POS, 0, 0, field_start, field_len, 0, field_len+1);

@@ -292,36 +292,35 @@ batch_basic()
     batch_print_header
 
     local file replace
-    for file in ${basics[@]}; do
+    file=$1
 
-        # if [ $file == basic.chain ]; then
-        #     export GENOZIP_REFERENCE=${hs37d5}:${GRCh38}
-        # else
-        #     unset GENOZIP_REFERENCE
-        # fi
+    # if [ $file == basic.chain ]; then
+    #     export GENOZIP_REFERENCE=${hs37d5}:${GRCh38}
+    # else
+    #     unset GENOZIP_REFERENCE
+    # fi
 
-        test_md5 $file # note: basic.bam needs to be non-BGZF for this to pass
+    test_md5 $file # note: basic.bam needs to be non-BGZF for this to pass
 
-        if [ $file != basic.bam ] && [ $file != basic.generic ]; then # binary files have no \n 
-            test_unix_style $file
-            test_windows_style $file
-            replace=REPLACE
-        else
-            replace=
-        fi
+    if [ $file != basic.bam ] && [ $file != basic.generic ]; then # binary files have no \n 
+        test_unix_style $file
+        test_windows_style $file
+        replace=REPLACE
+    else
+        replace=
+    fi
 
-        test_standard "NOPREFIX CONCAT $ref" " " file://${path}${TESTDIR}/$file
-        test_standard "-p123 $ref" "--password 123" $file
-        if [ $file != basic.bam ] && [ $file != basic.generic ] && [ $file != basic.phy ]; then # issue with redirection on Windows of Phylip files (bug 339)
-            test_redirected $file
-            test_stdout $file
-        fi
-        test_standard "COPY $ref" " " $file
+    test_standard "NOPREFIX CONCAT $ref" " " file://${path}${TESTDIR}/$file
+    test_standard "-p123 $ref" "--password 123" $file
+    if [ $file != basic.bam ] && [ $file != basic.generic ] && [ $file != basic.phy ]; then # issue with redirection on Windows of Phylip files (bug 339)
+        test_redirected $file
+        test_stdout $file
+    fi
+    test_standard "COPY $ref" " " $file
 
-        test_multi_bound $file $replace # REPLACE to adjust the contig name for .fa as we can't have two contigs with the same name
-        test_optimize $file
-        unset GENOZIP_REFERENCE
-    done
+    test_multi_bound $file $replace # REPLACE to adjust the contig name for .fa as we can't have two contigs with the same name
+    test_optimize $file
+    unset GENOZIP_REFERENCE
 }
 
 # pre-compressed files (except BGZF) and non-precompressed BAM
@@ -535,6 +534,17 @@ batch_kraken() # $1 genozip arguments #2 genocat (one of them must include --kra
     cleanup
 }
 
+# unit test for ref_copy_compressed_sections_from_reference_file. 
+batch_copy_ref_section()
+{
+    batch_print_header
+
+    #created with -r1:9660000-10650000, and contains 99% of vb=11 of hs37d5.ref.genozip which is 3867649-4834572
+    local file=${TESTDIR}/unit-test.-E.copy-ref-section.sam.gz
+
+    $genozip -E $hs37d5 -p 123 -ft $file
+}    
+
 # test -@1 - different code paths
 batch_single_thread()
 {
@@ -734,6 +744,32 @@ batch_backward_compatability()
     done
 }
 
+batch_prod_compatability()
+{
+    batch_print_header
+
+    (cd ../genozip-prod; make ${debug:1})
+    
+    save_genozip=$genozip
+    genozip=../genozip-prod/$genozip
+
+    batch_basic basic.vcf        
+    #batch_dvcf
+    batch_reference_fastq
+    batch_reference_sam
+    batch_basic basic.bam        
+    batch_basic basic.fq         
+    batch_basic basic.fa         
+    batch_basic basic.chain      
+    batch_basic basic.gvf        
+    batch_basic basic.genome_Full.me23.txt 
+    batch_kraken " " "-K$kraken"     
+    batch_basic basic.phy        
+    batch_basic basic.generic    
+
+    genozip=$save_genozip
+}
+    
 batch_real_world_1()
 {
     batch_print_header
@@ -747,7 +783,7 @@ batch_real_world_1()
 
     # without reference
     local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*sam* test.*bam* \
-                   test.*fq* test.*fa* \ 
+                   test.*fq* test.*fa* \
                    basic.phy* test.*gvf* test.*gff* \
                    test.*txt* test.*kraken* | \
                    grep -v "$filter_out" | grep -v .genozip` )
@@ -855,7 +891,7 @@ batch_external_unzip()
     fi
 }
 
-batch_reference()
+batch_reference_fastq()
 {
     batch_print_header
 
@@ -865,8 +901,13 @@ batch_reference()
     echo "4 paired FASTQ with --REFERENCE (BGZF, decompress concatenated)"
     test_standard "COPY -E$GRCh38 --pair" " " test.human2-R1.100K.fq.gz test.human2-R2.100K.fq.gz
 
-    echo "4 paired FASTQ with --REFERENCE (BZ2, decompress unbound)"
-    test_standard "COPY CONCAT -E$GRCh38 -2" " " test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
+    echo "4 paired FASTQ with --REFERENCE (BZ2, decompress unbound) and password"
+    test_standard "COPY CONCAT -E$GRCh38 -2 -p 123" "-p123" test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
+}
+
+batch_reference_sam()
+{
+    batch_print_header
 
     echo "command line with mixed SAM and FASTQ files with --reference"
     echo "Note: '$GRCh38' needs to be up to date with the latest genozip format"
@@ -875,14 +916,19 @@ batch_reference()
     echo "multiple bound SAM with --REFERENCE" 
     test_standard "-mE$GRCh38" " " test.human-collated.sam test.human-sorted.sam
     
-    echo "SAM with --reference and --password" 
-    test_standard "-me$GRCh38 --password 123" "-p123 -e$GRCh38" test.human-collated.sam
-    
     echo "SAM with --REFERENCE and --password" 
     test_standard "-E$GRCh38 --password 123" "-p123" test.human-collated.sam
-    
-    echo "multiple bound VCF with --reference, --md5 using hs37d5, and unbind"
-    test_standard "COPY CONCAT -me$hs37d5" " " test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
+
+    echo "SAM with --reference and --password, alternate chrom names" 
+    test_standard "-me$hg19 --password 123" "-p123 -e$hg19" test.human2.sam    
+}
+
+batch_reference_vcf()
+{
+    batch_print_header
+
+    echo "multiple bound VCF with --reference, --md5 using hs37d5, and unbind ; alternate chroms names"
+    test_standard "COPY CONCAT -me$hg19" " " test.human2.filtered.snp.vcf
 
     echo "multiple VCF with --REFERENCE using hs37d5" 
     test_standard "-mE$hs37d5" " " test.ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf test.human2.filtered.snp.vcf
@@ -909,6 +955,9 @@ batch_make_reference()
 
     echo "unaligned SAM with --REFERENCE"
     test_standard "$REF" " " basic-unaligned.sam
+
+    echo "unalignable SAM with --REFERENCE"
+    test_standard "$REF" " " basic-unalignable.sam
 
     echo "unaligned BAM with --reference"
     test_standard "$ref" "$ref" basic-unaligned.bam
@@ -1040,33 +1089,47 @@ batch_id=$((batch_id - 1))
 
 if (( $1 <= 0  )) ; then  sparkling_clean              ; fi
 if (( $1 <= 1  )) ; then  batch_minimal                ; fi
-if (( $1 <= 2  )) ; then  batch_basic                  ; fi
-if (( $1 <= 3  )) ; then  batch_precompressed          ; fi
-if (( $1 <= 4  )) ; then  batch_bgzf                   ; fi
-if (( $1 <= 5  )) ; then  batch_special_algs           ; fi
-if (( $1 <= 6  )) ; then  batch_dvcf                   ; fi
-if (( $1 <= 7  )) ; then  batch_sam_translations       ; fi
-if (( $1 <= 8  )) ; then  batch_23andMe_translations   ; fi
-if (( $1 <= 9  )) ; then  batch_phylip_translations    ; fi
-if (( $1 <= 10 )) ; then  batch_genocat_tests          ; fi
-if (( $1 <= 11 )) ; then  batch_grep_count_lines       ; fi
-if (( $1 <= 12 )) ; then  batch_backward_compatability ; fi
-if (( $1 <= 13 )) ; then  batch_match_chrom            ; fi
-if (( $1 <= 14 )) ; then  batch_kraken " " "-K$kraken" ; fi   # genocat loads kraken data
-if (( $1 <= 15 )) ; then  batch_kraken "-K$kraken" " " ; fi   # genozip loads kraken data
-if (( $1 <= 16 )) ; then  batch_single_thread          ; fi 
-if (( $1 <= 17 )) ; then  batch_iupac                  ; fi 
-if (( $1 <= 18 )) ; then  batch_real_world_small_vbs   ; fi 
-if (( $1 <= 19 )) ; then  batch_real_world_1           ; fi 
-if (( $1 <= 20 )) ; then  batch_real_world_with_ref    ; fi 
-if (( $1 <= 21 )) ; then  batch_multifasta             ; fi
-if (( $1 <= 22 )) ; then  batch_misc_cases             ; fi
-if (( $1 <= 23 )) ; then  batch_external_cram          ; fi
-if (( $1 <= 24 )) ; then  batch_external_bcf           ; fi
-if (( $1 <= 25 )) ; then  batch_external_unzip         ; fi
-if (( $1 <= 26 )) ; then  batch_reference              ; fi
-if (( $1 <= 27 )) ; then  batch_genols                 ; fi
-if (( $1 <= 28 )) ; then  batch_tar_files_from         ; fi
-if (( $1 <= 29 )) ; then  batch_make_reference         ; fi
+if (( $1 <= 2  )) ; then  batch_basic basic.vcf        ; fi
+if (( $1 <= 3  )) ; then  batch_basic basic.bam        ; fi
+if (( $1 <= 4  )) ; then  batch_basic basic.sam        ; fi
+if (( $1 <= 5  )) ; then  batch_basic basic.fq         ; fi
+if (( $1 <= 6  )) ; then  batch_basic basic.fa         ; fi
+if (( $1 <= 7  )) ; then  batch_basic basic.chain      ; fi
+if (( $1 <= 8  )) ; then  batch_basic basic.gvf        ; fi
+if (( $1 <= 9  )) ; then  batch_basic basic.genome_Full.me23.txt ; fi
+if (( $1 <= 10 )) ; then  batch_basic basic.kraken     ; fi
+if (( $1 <= 11 )) ; then  batch_basic basic.phy        ; fi
+if (( $1 <= 12 )) ; then  batch_basic basic.generic    ; fi
+if (( $1 <= 13 )) ; then  batch_precompressed          ; fi
+if (( $1 <= 14 )) ; then  batch_bgzf                   ; fi
+if (( $1 <= 15 )) ; then  batch_special_algs           ; fi
+if (( $1 <= 16 )) ; then  batch_dvcf                   ; fi
+if (( $1 <= 17 )) ; then  batch_sam_translations       ; fi
+if (( $1 <= 18 )) ; then  batch_23andMe_translations   ; fi
+if (( $1 <= 19 )) ; then  batch_phylip_translations    ; fi
+if (( $1 <= 20 )) ; then  batch_genocat_tests          ; fi
+if (( $1 <= 21 )) ; then  batch_grep_count_lines       ; fi
+if (( $1 <= 22 )) ; then  batch_backward_compatability ; fi
+if (( $1 <= 23 )) ; then  batch_match_chrom            ; fi
+if (( $1 <= 24 )) ; then  batch_kraken " " "-K$kraken" ; fi   # genocat loads kraken data
+if (( $1 <= 25 )) ; then  batch_kraken "-K$kraken" " " ; fi   # genozip loads kraken data
+if (( $1 <= 26 )) ; then  batch_single_thread          ; fi 
+if (( $1 <= 27 )) ; then  batch_copy_ref_section       ; fi 
+if (( $1 <= 28 )) ; then  batch_iupac                  ; fi 
+if (( $1 <= 29 )) ; then  batch_real_world_small_vbs   ; fi 
+if (( $1 <= 30 )) ; then  batch_real_world_1           ; fi 
+if (( $1 <= 31 )) ; then  batch_real_world_with_ref    ; fi 
+if (( $1 <= 32 )) ; then  batch_multifasta             ; fi
+if (( $1 <= 33 )) ; then  batch_misc_cases             ; fi
+if (( $1 <= 34 )) ; then  batch_external_cram          ; fi
+if (( $1 <= 35 )) ; then  batch_external_bcf           ; fi
+if (( $1 <= 36 )) ; then  batch_external_unzip         ; fi
+if (( $1 <= 37 )) ; then  batch_reference_fastq        ; fi
+if (( $1 <= 38 )) ; then  batch_reference_sam          ; fi
+if (( $1 <= 39 )) ; then  batch_reference_vcf          ; fi
+if (( $1 <= 40 )) ; then  batch_genols                 ; fi
+if (( $1 <= 41 )) ; then  batch_tar_files_from         ; fi
+if (( $1 <= 42 )) ; then  batch_make_reference         ; fi
+if (( $1 <= 43 )) ; then  batch_prod_compatability     ; fi
 
 printf "\nALL GOOD!\n"

@@ -33,7 +33,8 @@
 #include "threads.h"
 #include "endianness.h"
 #include "website.h"
-#include "map_chrom2ref.h"
+#include "chrom.h"
+#include "txtheader.h"
 
 bool piz_grep_match (const char *start, const char *after)
 {
@@ -366,7 +367,7 @@ DataType piz_read_global_area (Reference ref)
     if (!flag.header_only || z_dual_coords) { // dual coordinates need this stuff of for the rejects part of the header
 
         // mapping of the file's chroms to the reference chroms (for files originally compressed with REF_EXTERNAL/EXT_STORE and have alternative chroms)
-        map_chrom2ref_load (ref); 
+        chrom_2ref_load (ref); 
 
         ref_contigs_load_contigs (ref); // note: in case of REF_EXTERNAL, reference is already pre-loaded
 
@@ -397,9 +398,10 @@ DataType piz_read_global_area (Reference ref)
         random_access_load_ra_section (SEC_REF_RAND_ACC, CHROM, ref_get_stored_ra (ref), "ref_stored_ra", 
                                        flag.show_ref_index && !flag.reading_reference ? RA_MSG_REF : NULL);
 
-        if ((flag.reference == REF_STORED || flag.reference == REF_EXTERNAL || flag.reference == REF_LIFTOVER) && 
-            !flag.reading_reference && !flag.genocat_no_reconstruct)
-            ref_contigs_sort_chroms(); // create alphabetically sorted index for user file (not reference) chrom word list
+
+        if ((flag.reference & REF_ZIP_CHROM2REF) && !flag.reading_reference && !flag.genocat_no_reconstruct)
+            // xxx is this actually used? 
+            chrom_index_by_name (CHROM); // create alphabetically sorted index for user file (not reference) chrom word list
 
         // case: reading reference file
         if (flag.reading_reference) {
@@ -427,7 +429,7 @@ DataType piz_read_global_area (Reference ref)
             ref_iupacs_load (ref);
 
             // load the refhash, if we are compressing FASTA or FASTQ, or if user requested to see it
-            if (  (primary_command == ZIP && flag.ref_use_aligner) ||
+            if (  (primary_command == ZIP && flag.aligner_available) ||
                   (flag.show_ref_hash && exe_type == EXE_GENOCAT)) {
                 
                 refhash_initialize (&dispatcher_invoked);
@@ -556,7 +558,7 @@ static Digest piz_one_verify_digest (void)
     }
     
     else if (flag.test) {
-        progress_finalize_component ("FAILED!!!");
+        progress_finalize_component ("FAILED!");
         ABORT ("Error: %s of original file=%s is different than decompressed file=%s\n",
                digest_name(), digest_display (original_digest).s, digest_display (decompressed_file_digest).s);
     }

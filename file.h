@@ -367,9 +367,9 @@ typedef struct File {
     Context contexts[MAX_DICTS];       // a merge of dictionaries of all VBs
     Buffer ra_buf;                     // ZIP/PIZ:  RAEntry records: ZIP: of DC_PRIMARY ; PIZ - PRIMARY or LUFT depending on flag.luft
     Buffer ra_buf_luft;                // ZIP only: RAEntry records of DC_LUFT
-    Buffer chroms_sorted_index;        // PIZ: index into contexts[CHROM]->word_list, sorted alphabetically by snip
     
     Buffer chrom2ref_map;              // ZIP/PIZ: mapping from user file chrom to alternate chrom in reference file
+    Buffer ref2chrom_map;              // ZIP: an inverted chrom2ref_map, created by ref_compress_ref
 
     // section list - used for READING and WRITING genozip files
     Buffer section_list_buf;           // section list to be written as the payload of the genotype header section

@@ -19,6 +19,7 @@
 #include "codec.h"
 #include "vcf.h"
 #include "dict_id_gen.h"
+#include "chrom.h"
 
 #define MAX_ENST_ITEMS 10 // maximum number of items in an enst structure. this can be changed without impacting backward compatability.
 
@@ -285,7 +286,7 @@ const char *gff3_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_
         seg_by_did_i (VB, NULL, 0, GFF3_COMMENT, 0); // missing comment field
 
     GET_NEXT_ITEM (GFF3_SEQID);
-    seg_chrom_field (vb, field_start, field_len);
+    chrom_seg (vb, field_start, field_len);
 
     SEG_NEXT_ITEM (GFF3_SOURCE);
     SEG_NEXT_ITEM (GFF3_TYPE);

@@ -309,7 +309,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
         bit_array_set_region (bitmap, bitmap_ctx->next_local, seq_len); // all bases match the reference
         bitmap_ctx->next_local += seq_len;
         
-        if (flag.reference == REF_EXT_STORE) 
+       if (flag.reference == REF_EXT_STORE) 
             ref_set_genome_is_used (gref, gpos, seq_len); // this region of the reference is used (in case we want to store it with REF_EXT_STORE)
 
         goto done;
@@ -332,7 +332,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
             if (seq_base == ref_base) {
                 
                 // TO DO: replace this with bit_array_or_with (dst, start, len, src, start) (dst=is_set, src=bitmap) (bug 174)
-                if (flag.reference == REF_EXT_STORE) 
+               if (flag.reference == REF_EXT_STORE) 
                     ref_set_genome_is_used (gref, ref_i, 1);  // we will need this ref to reconstruct
 
                 use_reference = true;
@@ -384,9 +384,11 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
             gpos = gpos_ctx->last_value.i;
         }
 
-        const BitArray *genome, *emoneg;
+        const BitArray *genome=NULL, *emoneg=NULL;
         PosType genome_nbases;
-        ref_get_genome (gref, &genome, &emoneg, &genome_nbases);
+        
+        if (gpos != NO_GPOS)
+            ref_get_genome (gref, &genome, &emoneg, &genome_nbases);
 
         // sanity check - the sequence is supposed to fit in the 
         ASSERT (gpos == NO_GPOS || gpos + seq_len <= genome->nbits / 2, "gpos=%"PRId64" is out of range: seq_len=%u and genome_nbases=%"PRIu64,

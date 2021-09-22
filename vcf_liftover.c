@@ -49,6 +49,7 @@
 #include "random_access.h"
 #include "reconstruct.h"
 #include "coords.h"
+#include "chrom.h"
 
 const char *dvcf_status_names[] = DVCF_STATUS_NAMES;
 const LuftTransLateProp ltrans_props[NUM_VCF_TRANS] = DVCF_TRANS_PROPS;
@@ -66,10 +67,6 @@ static bool lo_snip_initialized = false;
 // ZIP: called by the main thread from *_zip_initialize 
 void vcf_lo_zip_initialize (void)
 {
-    // case: --chain : create context from liftover contigs and dict
-    if (chain_is_loaded && z_file->num_txt_components_so_far == 1)  // copy only once
-        chain_copy_contigs_to_z_file (DTFZ(luft_chrom));
-
     if (lo_snip_initialized) return;
     lo_snip_initialized = true;
 
@@ -179,47 +176,20 @@ TranslatorId vcf_lo_luft_trans_id (DictId dict_id, char number)
     return TRANS_ID_NONE;
 }
 
-// SEG: map coordinates primary->luft. In case of failure, sets dst_contig_index, dst_1pos, xstrand to 0.
-LiftOverStatus vcf_lo_get_liftover_coords (VBlockVCFP vb, PosType pos, WordIndex *dst_contig_index, PosType *dst_1pos, bool *xstrand, uint32_t *aln_i) // out
+// SEG: map coordinates primary->luft. In case of failure, sets luft_ref_index, dst_1pos, xstrand to 0.
+LiftOverStatus vcf_lo_get_liftover_coords (VBlockVCFP vb, PosType pos, WordIndex *luft_ref_index, PosType *dst_1pos, bool *xstrand, uint32_t *aln_i) // out
 {
-    #define WORD_INDEX_NOT_IN_PRIM_REF -4
-
-    // extend vb->chrom_map_vcf_to_chain if needed - map between VCF node index (NOT word index) and chain primary contigs (NOT reference primary contigs)
-    if (vb->chrom_node_index >= vb->chrom_map_vcf_to_chain.len) { 
-        buf_alloc (vb, &vb->chrom_map_vcf_to_chain, 0, MAX_(vb->chrom_node_index+1, chain_get_num_prim_contigs()), WordIndex, 2, "chrom_map_vcf_to_chain");
-
-        // initialize new entries allocated to WORD_INDEX_MISSING
-        uint32_t size = vb->chrom_map_vcf_to_chain.size / sizeof (WordIndex);
-        for (uint32_t i=vb->chrom_map_vcf_to_chain.param; i < size; i++)
-            *ENT (WordIndex, vb->chrom_map_vcf_to_chain, i) = WORD_INDEX_MISSING;
-
-        vb->chrom_map_vcf_to_chain.param = size; // param holds the number of entries initialized >= len
-        vb->chrom_map_vcf_to_chain.len   = vb->chrom_node_index + 1;
-    }
-
-    ARRAY (WordIndex, map, vb->chrom_map_vcf_to_chain);
-
-    // if chrom is not yet mapped to src_contig, map it now:
-    // map from chrom_node_index (not word index!) to entry in chain_index
-    if (map[vb->chrom_node_index] == WORD_INDEX_MISSING) {
-        map[vb->chrom_node_index] = chain_get_prim_contig_index (vb->chrom_name, vb->chrom_name_len, 0);
-
-        // check if the error is due to missing contig in primary reference, or only chain file
-        if (map[vb->chrom_node_index] == WORD_INDEX_NONE &&
-            ref_contigs_get_by_name (prim_ref, vb->chrom_name, vb->chrom_name_len, false, true) == WORD_INDEX_NONE)
-            map[vb->chrom_node_index] = WORD_INDEX_NOT_IN_PRIM_REF;
-    }
-
-    if (map[vb->chrom_node_index] == WORD_INDEX_NONE || map[vb->chrom_node_index] == WORD_INDEX_NOT_IN_PRIM_REF) {
-        if (dst_contig_index) *dst_contig_index = WORD_INDEX_NONE;
+    WordIndex prim_ref_index = chrom_2ref_seg_get (prim_ref, VB, vb->chrom_node_index);
+    if (prim_ref_index == WORD_INDEX_NONE) { // primary CHROM is not in primary reference
+        if (luft_ref_index) *luft_ref_index = WORD_INDEX_NONE;
         if (dst_1pos) *dst_1pos = 0;
         if (xstrand) *xstrand = false;
         
-        return map[vb->chrom_node_index] == WORD_INDEX_NONE ? LO_CHROM_NOT_IN_CHAIN : LO_CHROM_NOT_IN_PRIM_REF;
+        return LO_CHROM_NOT_IN_PRIM_REF;
     }
     
     else {
-        bool mapping_ok = chain_get_liftover_coords (map[vb->chrom_node_index], pos, dst_contig_index, dst_1pos, xstrand, aln_i); // if failure, sets output to 0.
+        bool mapping_ok = chain_get_liftover_coords (prim_ref_index, pos, luft_ref_index, dst_1pos, xstrand, aln_i); // if failure, sets output to 0.
         return mapping_ok ? LO_OK : LO_NO_MAPPING_IN_CHAIN;
     }
 }                                
@@ -358,7 +328,8 @@ void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl)
     bool is_xstrand;
     PosType pos = vb->last_int(VCF_POS);
 
-    LiftOverStatus ostatus = vcf_lo_get_liftover_coords (vb, pos, &dl->chrom[1], &dl->pos[1], &is_xstrand, &vb->pos_aln_i);
+    WordIndex luft_ref_index; // note: chain file contigs are copied from the reference, so have the same indices
+    LiftOverStatus ostatus = vcf_lo_get_liftover_coords (vb, pos, &luft_ref_index, &dl->pos[1], &is_xstrand, &vb->pos_aln_i);
     unsigned oref_len;
 
     if (ostatus == LO_NO_MAPPING_IN_CHAIN) {
@@ -376,9 +347,16 @@ void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl)
         REJECT_MAPPING (".\tCHROM missing in Primary reference file");
     }
 
+    // Seg oCHROM
+    STR0(ochrom);
+    if (luft_ref_index != WORD_INDEX_NONE)
+        ochrom = ref_contigs_get_name (gref, luft_ref_index, &ochrom_len);
+
+    dl->chrom[1] = chrom_seg_by_did_i (VB, VCF_oCHROM, STRa(ochrom), ochrom_len);
+
     // REF & ALT - update ostatus based the relationship between REF, ALT, oREF and is_xstrand.
     bool is_left_anchored;
-    if (LO_IS_REJECTED (ostatus = vcf_refalt_lift (vb, dl, is_xstrand, &is_left_anchored))) {
+    if (LO_IS_REJECTED (ostatus = vcf_refalt_lift (vb, dl, is_xstrand, luft_ref_index, &is_left_anchored))) {
         vcf_lo_seg_rollback_and_reject (vb, ostatus, NULL);
         return;
     }
@@ -393,16 +371,6 @@ void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl)
     // Complex, that is not left-anchored (can be an inversion, del-ins, or right-aligned indel, see: http://varnomen.hgvs.org/recommendations/DNA/variant/delins/)
     if (is_xstrand && LO_IS_OK_COMPLEX(ostatus)) 
         dl->pos[1] -= oref_len - 1;
-
-    // Seg oCHROM
-    Context *ochrom_ctx = &vb->contexts[VCF_oCHROM];
-    STR0(ochrom);
-    
-    if (dl->chrom[1] != WORD_INDEX_NONE)
-        ctx_get_snip_by_zf_node_index (&ochrom_ctx->ol_nodes, &ochrom_ctx->ol_dict, dl->chrom[1], &ochrom, &ochrom_len);
-
-    seg_by_ctx (VB, ochrom, ochrom_len, ochrom_ctx, ochrom_len);
-    random_access_update_chrom (VB, DC_LUFT, dl->chrom[1], ochrom, ochrom_len);
 
     // we add oPOS, oCHROM, oREF and oXSTRAND-  only in case ostatus is LO_IS_OK - they will be consumed by the info_luft_snip container
     // note: no need to seg VCF_COPYPOS explicitly here, as it is all_the_same handled in vcf_seg_initialize
@@ -576,9 +544,7 @@ void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, ContextP ctx, STRp (value))
     if (LO_IS_REJECTED (ostatus)) return; // rolled back and segged *rej instead, due to rejection
 
     // Seg other (than vb->line_coords) coords' CHROM
-    // dl->chrom[SEL(1,0)] = seg_by_did_i (VB, info_chrom, info_chrom_len, SEL(VCF_oCHROM, VCF_CHROM), info_chrom_len);
-    // random_access_update_chrom (VB, SEL(DC_LUFT, DC_PRIMARY), dl->chrom[SEL(1,0)], info_chrom, info_chrom_len);
-    dl->chrom[SEL(1,0)] = seg_chrom_field_ex (VB, SEL(VCF_oCHROM, VCF_CHROM), SEL(DC_LUFT, DC_PRIMARY), STRa(info_chrom), 0, NULL, info_chrom_len, NULL);
+    dl->chrom[SEL(1,0)] = chrom_seg_by_did_i (VB, SEL(VCF_oCHROM, VCF_CHROM), STRa(info_chrom), info_chrom_len);
     
     // Seg other coord's POS
     // note: no need to seg VCF_COPYPOS explicitly here, as it is all_the_same handled in vcf_seg_initialize

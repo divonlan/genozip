@@ -142,18 +142,23 @@ missing:
     ASSINP (!enforce, "missing attr %s in header line %.*s", attr, line_len, line);
 }
 
-// add contig to header contigs buffer if line is a valid contig, and fail silently if not
-static Contig *vcf_header_consume_contig (STRp (contig_name), PosType length, bool is_luft_contig)
+void vcf_header_consume_contig (STRp (contig_name), PosType *LN, bool is_luft_contig)
 {
-    // if its the 2nd+ file while binding in ZIP - we just check that the contigs are the same
-    // (or a subset) of previous file's contigs (to do: merge headers, bug 327) 
-    if (command == ZIP && flag.bind && z_file->num_txt_components_so_far /* 2nd+ file */) 
-        return txtheader_verify_contig (contig_name, contig_name_len, length, (void *)is_luft_contig);
+    WordIndex ref_index = WORD_INDEX_NONE;
 
-    else {
-        txtheader_alloc_contigs (1, contig_name_len+1, is_luft_contig);
-        return txtheader_add_contig (contig_name, contig_name_len, length, (void *)is_luft_contig);
-    }
+    // case: we have a reference - verify length
+    if (!is_luft_contig && (flag.reference & REF_ZIP_LOADED))
+        ref_index = ref_contigs_ref_chrom_from_header_chrom (flag.reference == REF_LIFTOVER ? prim_ref : gref, 
+                                                             STRa(contig_name), LN);
+
+    // if flag.sort - we have to pre-populate header & reference contigs (in vcf_zip_initialize) so that vb->is_unsorted is calculated correctly 
+    // in vcf_seg_evidence_of_unsorted() (if VBs have their chrom nodes, they might be in reverse order vs the eventual z_file chroms)
+    if (flag.sort) 
+        ctx_populate_zf_ctx (is_luft_contig ? VCF_oCHROM : VCF_CHROM, STRa(contig_name), ref_index); 
+
+    if (flag.show_txt_contigs) 
+        iprintf ("%s \"%.*s\" LN=%"PRId64" ref_index=%d\n", 
+                 is_luft_contig ? "is_luft_contig: " : "", STRf(contig_name), *LN, ref_index);
 }
 
 static bool vcf_header_get_dual_coords (STRp(line), void *unused1, void *unused2, unsigned unused3)
@@ -215,13 +220,13 @@ static bool vcf_header_piz_single_coord (STRp(line), void *new_txt_header_, void
 }
 
 // PIZ with --luft: remove fileformat, update *contig, *reference, dual_coordinates keys to Luft format
-static void vcf_header_rewrite_header (VBlockP txt_header_vb, Buffer *txt_header, TxtIteratorCallback callback)
+static void vcf_header_rewrite_header (VBlockP txt_header_vb, Buffer *txt_header, TxtIteratorCallback callback, void *ret)
 {
     #define new_txt_header txt_header_vb->codec_bufs[0]
 
     buf_alloc (txt_header_vb, &new_txt_header, 0, txt_header->len, char, 0, "codec_bufs[0]"); // initial allocation (might be a bit bigger due to label changes)
 
-    txtfile_foreach_line (txt_header, false, callback, &new_txt_header, 0, 0, 0);
+    txtfile_foreach_line (txt_header, false, callback, &new_txt_header, ret, 0, 0);
 
     // replace txt_header with lifted back one
     buf_free (txt_header);
@@ -540,7 +545,7 @@ static int dst_contigs_sorter (const void *a, const void *b) { return *(WordInde
 
 // scan header for contigs - used to pre-populate z_file contexts in zip_prepopulate_contig_ctxs
 // in --chain - also builds vcf_header_liftover_dst_contigs 
-static bool vcf_header_handle_contigs (STRp(line), void *new_txt_header_, void *unused1, unsigned unused2)
+static bool vcf_header_handle_contigs (STRp(line), void *new_txt_header_, void *num_contig_lines, unsigned unused2)
 {
     bool printed = false;
     Buffer *new_txt_header = (Buffer *)new_txt_header_;
@@ -549,11 +554,13 @@ static bool vcf_header_handle_contigs (STRp(line), void *new_txt_header_, void *
     const bool is_lo_contig = LINEIS (HK_LUFT_CONTIG);
     const bool is_lb_contig = LINEIS (HK_PRIM_CONTIG);
 
+    if (is_contig) (*(uint32_t *)num_contig_lines)++;
+
     if (!is_contig && !is_lo_contig && !is_lb_contig) goto copy_line; // not a contig line
 
     ASSERT0 (!chain_is_loaded || (!is_lo_contig && !is_lb_contig), "Cannot use --chain on this file because it already contains \""HK_LUFT_CONTIG"\" or \"" HK_PRIM_CONTIG"\" lines in its header");
 
-    PosType length = 0;
+    PosType LN = 0;
     unsigned key_len = is_contig    ? STRLEN (HK_CONTIG)
                      : is_lb_contig ? STRLEN (HK_PRIM_CONTIG)
                      :                STRLEN (HK_LUFT_CONTIG);
@@ -564,17 +571,15 @@ static bool vcf_header_handle_contigs (STRp(line), void *new_txt_header_, void *
     vcf_header_get_attribute (STRa(line), key_len, cSTR("ID="),     false, true,  pSTRa(contig_name));
     STR(length_str);
     vcf_header_get_attribute (STRa(line), key_len, cSTR("length="), false, false, pSTRa(length_str));
-    str_get_int_range64 (STRa(length_str), 1, 1000000000000ULL, &length); // length stays 0 if length_str_len=0
+    str_get_int_range64 (STRa(length_str), 1, 1000000000000ULL, &LN); // length stays 0 if length_str_len=0
     SAFE_RESTORE;
 
     // case: Luft contigs. These only in DVCF files, and when compressing them there is no Luft reference loaded
     if ((is_contig && txt_file->coords == DC_LUFT) || is_lo_contig)
-        vcf_header_consume_contig (contig_name, contig_name_len, length, true); 
+        vcf_header_consume_contig (STRa(contig_name), &LN, true); 
 
     // case: Primary contigs
     else if (is_contig || is_lb_contig) {
-
-        PosType length_accroding_to_header = length;
 
         // case match_chrom_to_reference: update contig_name to the matching name in the reference
         // Note: we match reference contigs by name only, not searching LN, we just verify the LN after the fact.
@@ -585,22 +590,19 @@ static bool vcf_header_handle_contigs (STRp(line), void *new_txt_header_, void *
             WordIndex ref_index = ref_contigs_get_by_name (ref , STRa(contig_name), true, true);
             if (ref_index != WORD_INDEX_NONE) {
                 contig_name = ref_contigs_get_name (ref, ref_index, &contig_name_len); // this contig as its called in the reference
-                length = ref_contigs_get_contig_length (ref, ref_index, 0, 0, true);   // update - we check later that it is consistent
+                LN = ref_contigs_get_contig_length (ref, ref_index, 0, 0, true);   // update - we check later that it is consistent
             }
 
-            bufprintf (evb, new_txt_header, "%.*s<ID=%.*s,length=%"PRIu64">\n", key_len, line, STRf(contig_name), length);
+            bufprintf (evb, new_txt_header, "%.*s<ID=%.*s,length=%"PRIu64">\n", key_len, line, STRf(contig_name), LN);
             printed = true;
         }
 
-        Contig *rc = vcf_header_consume_contig (contig_name, contig_name_len, length_accroding_to_header, false); // also verifies length
-        
-        if (rc && rc->chrom_index != WORD_INDEX_NONE)  // has reference match
-            length = MAX_(length, rc->max_pos); // either or both can be 0, but if not they are verified to be the same
+        vcf_header_consume_contig (STRa (contig_name), &LN, false); // also verifies / updates length
     }
 
     // case: --chain: collect all vcf_header_liftover_dst_contigs. non sorted/unique buf for now, will fix in vcf_header_zip_update_to_dual_coords
     if (chain_is_loaded && !flag.rejects_coord && is_contig)
-        chain_append_all_luft_contig_index (contig_name, contig_name_len, length, &vcf_header_liftover_dst_contigs);
+        chain_append_all_luft_ref_index (STRa (contig_name), LN, &vcf_header_liftover_dst_contigs);
 
 copy_line:
     if (!printed) 
@@ -620,19 +622,18 @@ static void vcf_header_add_FORMAT_lines (Buffer *txt_header)
     buf_add_more (evb, txt_header, vcf_field_name_line.data, vcf_field_name_line.len, "txt_data");
 }
 
-static void vcf_add_all_primary_ref_contigs_to_header (Buffer *txt_header)
+static void vcf_add_all_ref_contigs_to_header (Buffer *txt_header)
 {
     txt_header->len -= vcf_field_name_line.len; // remove field name line
 
-    ConstContigPkgP prim_contigs;
-    ref_contigs_get (prim_ref, &prim_contigs);
+    ConstContigPkgP prim_contigs = ref_get_ctgs (prim_ref);
     ARRAY (const Contig, ctgs, prim_contigs->contigs);
 
     for (uint64_t i=0; i < ctgs_len; i++) {
         const char *contig_name = ENT (char, prim_contigs->dict, ctgs[i].char_index);
         bufprintf (evb, txt_header, VCF_CONTIG_FMT"\n", ctgs[i].snip_len, contig_name, ctgs[i].max_pos);
 
-        chain_append_all_luft_contig_index (contig_name, ctgs[i].snip_len, ctgs[i].max_pos, &vcf_header_liftover_dst_contigs);
+        chain_append_all_luft_ref_index (contig_name, ctgs[i].snip_len, ctgs[i].max_pos, &vcf_header_liftover_dst_contigs);
     }
 
     // add back the field name (#CHROM) line
@@ -653,16 +654,16 @@ static bool vcf_inspect_txt_header_zip (Buffer *txt_header)
     ASSERTNOTINUSE (vcf_header_liftover_dst_contigs);
     if (chain_is_loaded && !flag.rejects_coord)
         buf_alloc (evb, &vcf_header_liftover_dst_contigs, 0, 100, WordIndex, 0, "codec_bufs[1]");
-
-    txtheader_verify_contig_init();
-    vcf_header_rewrite_header (evb, txt_header, vcf_header_handle_contigs);
+    
+    uint32_t num_contig_lines;
+    vcf_header_rewrite_header (evb, txt_header, vcf_header_handle_contigs, &num_contig_lines);
 
     if (chain_is_loaded && !flag.rejects_coord)     // sort (but not uniq)
         qsort (vcf_header_liftover_dst_contigs.data, vcf_header_liftover_dst_contigs.len, sizeof (WordIndex), dst_contigs_sorter);
 
     // in liftover, if header has no contigs, add reference contigs and derived ocontigs
-    if (chain_is_loaded && !flag.rejects_coord && !txtheader_get_contigs()) 
-        vcf_add_all_primary_ref_contigs_to_header (txt_header);
+    if (chain_is_loaded && !flag.rejects_coord && !num_contig_lines) 
+        vcf_add_all_ref_contigs_to_header (txt_header);
 
     // add PP and/or PL INFO lines if needed
     if ((flag.GP_to_PP || flag.GL_to_PL) && !flag.rejects_coord)
@@ -732,10 +733,10 @@ static bool vcf_inspect_txt_header_piz (VBlock *txt_header_vb, Buffer *txt_heade
 
     // if needed, liftover the header
     if (flag.luft && !flag.header_one && !flag.rejects_coord) 
-        vcf_header_rewrite_header (txt_header_vb, txt_header, vcf_header_piz_liftover_header);
+        vcf_header_rewrite_header (txt_header_vb, txt_header, vcf_header_piz_liftover_header, NULL);
 
     if (flag.single_coord)
-        vcf_header_rewrite_header (txt_header_vb, txt_header, vcf_header_piz_single_coord);
+        vcf_header_rewrite_header (txt_header_vb, txt_header, vcf_header_piz_single_coord, NULL);
 
     // if needed, add ##INFO oSTATUS line
     if (flag.show_ostatus)

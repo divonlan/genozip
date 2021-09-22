@@ -154,7 +154,7 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 - Added better compression for FORMAT/PS, INFO/AC, INFO/AF, INFO/AN, INFO/SVLEN in VCF
 - Added --optimize-DESC for FASTQ optimization
 - Added --optimize-SEQ for FASTQ, FASTA, SAM optimization
-- Added many options including --list-chroms, --dump-one-local, --show-reference, --show-ref-index, --show-ref-seq, --show-ref-alts,
+- Added many options including --list-chroms, --dump-one-local, --show-reference, --show-ref-index, --show-ref-seq, --show-chrom2ref,
   --show-ref-contigs, --show-ref-hash
 - Removed backward compatability with versions v1 and v5. Use genozip version 5 to decompress files of all previous versions.
 
@@ -526,3 +526,15 @@ g. Much improved website genozip.com
 - More robust compression from a URL, even on flakey connections
 - Improved --STATS report
 - bug fixes
+
+12.0.35 
+- Add: genozip --match-chrom-to-reference: rewrite contig names to match the provided reference file (eg "22"->"chr22")
+- Chain files can now be subsetted with --regions
+- Removed obsolete --with-chr
+- Relax section 2f of the license
+- More accurate progress indicator
+- Better support for contigs named by accession number, eg "GL000192.1", "chrUn_JTFH01001867v2_decoy", "chr4_gl383528_alt"
+- New advanced option: --debug-seg
+- Advanced option --show-ref-alts renamed --show-chrom2ref
+- Bug fixes
+

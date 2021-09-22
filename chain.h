@@ -53,12 +53,10 @@ extern CONTAINER_FILTER_FUNC (chain_piz_filter);
 extern void chain_load (void);
 extern void chain_destroy (void);
 extern const char *chain_get_luft_contig (uint32_t contig_i, PosType *length);
-extern void chain_copy_contigs_to_z_file (DidIType luft_contig_did_i);
-extern WordIndex chain_get_prim_contig_index (const char *contig, unsigned contig_len, PosType LN);
 extern uint64_t chain_get_num_prim_contigs (void);
-extern void chain_append_all_luft_contig_index (const char *prim_contig_name, unsigned prim_contig_name_len, PosType LN, Buffer *luft_contigs);
-extern bool chain_get_liftover_coords (WordIndex prim_contig_index,  PosType prim_1pos, 
-                                       WordIndex *luft_contig_index, PosType *luft_1pos, bool *is_xstrand, uint32_t *aln_i);
+extern void chain_append_all_luft_ref_index (const char *prim_contig_name, unsigned prim_contig_name_len, PosType LN, Buffer *luft_contigs);
+extern bool chain_get_liftover_coords (WordIndex prim_ref_index,  PosType prim_1pos, 
+                                       WordIndex *luft_ref_index, PosType *luft_1pos, bool *is_xstrand, uint32_t *aln_i);
 extern PosType chain_get_aln_last_pos (uint32_t aln_i);
 extern PosType chain_get_aln_gap_after (uint32_t aln_i);
 
@@ -69,6 +67,6 @@ SPECIAL (CHAIN, 2, SIZE,      chain_piz_special_SIZE);
 #define NUM_CHAIN_SPECIAL 3
 
 extern char *chain_filename; // global
-#define chain_is_loaded ((bool)chain_filename || flag.reference == REF_MAKE_CHAIN)
+#define chain_is_loaded ((bool)chain_filename)
 
 #endif

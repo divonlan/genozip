@@ -240,7 +240,7 @@ void regions_make_chregs (ContextP chrom_ctx)
 
             // if we have a reference file loaded, try getting an alternative name
             if (chrom_word_index == WORD_INDEX_NONE)
-                chrom_word_index = contigs_get_matching (ref_get_ctgs(gref), regions[i].chrom, strlen (regions[i].chrom), 0, NULL);
+                chrom_word_index = contigs_get_matching (ref_get_ctgs(gref), regions[i].chrom, strlen (regions[i].chrom), 0, true, NULL);
 
             // if the requested chrom does not exist in the file, we remove this region
             if (chrom_word_index == WORD_INDEX_NONE) continue;
@@ -423,7 +423,8 @@ bool regions_is_range_included (WordIndex chrom_word_index, PosType start_pos, P
         if (end_pos >= chreg->start_pos && start_pos <= chreg->end_pos) { // requested range overlaps chreg
 
             // if we only need overlap, we're done
-            if (!completely_included) return true;
+            if (!completely_included) 
+                return true;
 
             // part of the region is covered, decided based on the remaining part (which can be either before or after this chreg or both)
             bool left_flanking_covered=true, right_flanking_covered=true;

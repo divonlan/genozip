@@ -226,7 +226,7 @@ extern void vcf_finalize_seg_info (VBlockVCF *vb);
 // Refalt stuff
 extern void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, STRp(ref), STRp(alt));
 extern void vcf_refalt_seg_other_REFALT (VBlockVCFP vb, DidIType did_i, LiftOverStatus ostatus, bool is_xstrand, unsigned add_bytes);
-extern LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool xstrand, bool *is_left_anchored);
+extern LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool xstrand, WordIndex luft_ref_index, bool *is_left_anchored);
 typedef enum { EQUALS_NEITHER, EQUALS_REF, EQUALS_ALT, EQUALS_MISSING } RefAltEquals;
 RefAltEquals vcf_refalt_oref_equals_ref_or_alt (char oref, char ref, STRp(alt), bool is_xstrand);
 extern bool vcf_refalt_piz_is_variant_snp (VBlockP vb);

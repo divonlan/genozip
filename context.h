@@ -7,7 +7,6 @@
 #define CONTEXT_INCLUDED
 
 #include "genozip.h"
-#include "buffer.h"
 #include "base250.h"
 #include "sections.h"
 #include "bit_array.h"
@@ -152,16 +151,18 @@ extern void ctx_destroy_context (Context *ctx);
 extern void ctx_map_aliases (VBlockP vb);
 extern bool ctx_is_show_dict_id (DictId dict_id);
 
-extern CtxNode *ctx_get_node_by_word_index (Context *ctx, WordIndex word_index);
-extern const char *ctx_get_snip_by_word_index (const Context *ctx, WordIndex word_index, 
+extern CtxNode *ctx_get_node_by_word_index (ConstContextP ctx, WordIndex word_index);
+extern const char *ctx_get_snip_by_word_index (ConstContextP ctx, WordIndex word_index, 
                                                const char **snip, uint32_t *snip_len);
-#define ctx_get_words_snip(ctx, word_index) ctx_get_snip_by_word_index ((ctx), (word_index), 0, 0)
+static inline const char *ctx_get_words_snip(ConstContextP ctx, WordIndex word_index) 
+    { return ctx_get_snip_by_word_index (ctx, word_index, 0, 0); }
 
-extern const char *ctx_get_snip_by_zf_node_index (const Buffer *nodes, const Buffer *dict, WordIndex node_index, 
+extern const char *ctx_get_snip_by_zf_node_index (ConstBufferP nodes, ConstBufferP dict, WordIndex node_index, 
                                                   const char **snip, uint32_t *snip_len);
-#define ctx_get_zf_nodes_snip(ctx, node_index) ctx_get_snip_by_zf_node_index (&(ctx)->nodes, &(ctx)->dict, (node_index), 0, 0)
+static inline const char *ctx_get_zf_nodes_snip(ConstContextP ctx, WordIndex node_index) 
+    { return ctx_get_snip_by_zf_node_index (&ctx->nodes, &ctx->dict, node_index, 0, 0); }
 
-extern WordIndex ctx_get_word_index_by_snip (const Context *ctx, const char *snip);
+extern WordIndex ctx_get_word_index_by_snip (ConstContextP ctx, const char *snip);
 
 extern void ctx_initialize_predefined_ctxs (Context *contexts /* an array */, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_contexts);
 
@@ -170,7 +171,8 @@ extern void ctx_compress_dictionaries (void);
 extern void ctx_read_all_counts (void);
 extern void ctx_compress_counts (void);
 extern const char *ctx_get_snip_with_largest_count (DidIType did_i, int64_t *count);
-extern void ctx_build_zf_ctx_from_contigs (DidIType dst_did_i, ConstContigPkgP ctgs);
+extern void ctx_populate_zf_ctx_from_contigs (Reference ref, DidIType dst_did_i, ConstContigPkgP ctgs);
+extern WordIndex ctx_populate_zf_ctx (DidIType dst_did_i, STRp (contig_name), WordIndex ref_index);
 
 extern void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local);
 

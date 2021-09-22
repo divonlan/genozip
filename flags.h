@@ -10,13 +10,16 @@
 #include "coords.h"
 
 typedef enum { 
-    REF_NONE,       // ZIP (except SAM) and PIZ when user didn't specify an external reference
-    REF_INTERNAL,   // ZIP SAM only: use did not specify an external reference - reference is calculated from file(s) data
-    REF_EXTERNAL,   // ZIP & PIZ: user specified --reference
-    REF_EXT_STORE,  // ZIP: user specified --REFERENCE
-    REF_STORED,     // PIZ: file contains REFERENCE sections (user cannot specify --reference)
-    REF_MAKE_CHAIN, // ZIP of a chain file
-    REF_LIFTOVER,   // ZIP: user specified --chain which uses a reference
+    REF_NONE          = 0,  // ZIP (except SAM) and PIZ when user didn't specify an external reference
+    REF_INTERNAL      = 1,  // ZIP SAM only: use did not specify an external reference - reference is calculated from file(s) data
+    REF_EXTERNAL      = 2,  // ZIP & PIZ: user specified --reference
+    REF_EXT_STORE     = 4,  // ZIP: user specified --REFERENCE
+    REF_MAKE_CHAIN    = 8,  // ZIP of a chain file
+    REF_LIFTOVER      = 16, // ZIP: user specified --chain which uses a reference
+
+    REF_STORED        = REF_INTERNAL | REF_EXT_STORE,                                 // ZIP/PIZ: file contains REFERENCE sections (==REF_STORED is only in PIZ; in ZIP only one of the bits is set)
+    REF_ZIP_LOADED    = REF_EXTERNAL | REF_EXT_STORE | REF_MAKE_CHAIN | REF_LIFTOVER, // ZIP: external reference is loaded
+    REF_ZIP_CHROM2REF = REF_EXTERNAL | REF_EXT_STORE | REF_LIFTOVER,                  // ZIP: chrom2ref mapping is stored
 } ReferenceType;
 
 typedef struct {
@@ -91,7 +94,7 @@ typedef struct {
     // stats / debug useful mostly for developers
     int show_memory, show_dict, show_b250, show_aliases, show_digest, show_recon_plan,
         show_index, show_gheader, show_ref_contigs, show_chain_contigs, show_ref_seq,
-        show_reference, show_ref_hash, show_ref_index, show_ref_alts, show_ref_iupacs, show_chain,
+        show_reference, show_ref_hash, show_ref_index, show_chrom2ref, show_ref_iupacs, show_chain,
         show_codec, show_containers, show_alleles, show_bgzf, show_txt_contigs,
         show_vblocks, show_threads, show_uncompress,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_allthesame, debug_recon_size, debug_seg,
@@ -110,8 +113,7 @@ typedef struct {
     Coords rejects_coord;    // ZIP only: currently zipping liftover rejects file / component containing only PRIMARY or LUFT variants
     bool debug,              // set if DEBUG is defined
          is_windows, is_mac, is_linux, // set according to OS
-         ref_use_aligner,    // ZIP: compression requires using the aligner
-         const_chroms,       // ZIP: chroms dictionary created from reference or file header and no more chroms can be added
+         aligner_available,    // ZIP: compression requires using the aligner
          genocat_no_ref_file,// PIZ (genocat): we don't need to load the reference data
          genocat_no_dicts,   // PIZ (genocat): we don't need to read the dicts
          genocat_global_area_only, // PIZ (genocat): we quit after processing the global area
@@ -130,6 +132,8 @@ typedef struct {
                              // ZIP: txt data is modified during Seg
          explicit_ref,       // ref->filename was set by --reference or --REFERENCE (as opposed to being read from the genozip header)
          collect_coverage;   // PIZ: collect coverage data for show_sex/show_coverage/idxstats
+    
+    int only_headers;        // genocat --show_headers (not genounzip) show only headers
 
     Reference reading_reference;  // system is currently reading a reference  as a result of --chain (not normal PIZ of a .chain.genozip)
 

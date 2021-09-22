@@ -83,7 +83,7 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
-.. option:: --show-ref-alts  ZUC. Show the details of the file contigs that are mapped to a different contig name in the reference (eg '22' ➔ 'chr22'). 
+.. option:: --show-chrom2ref  ZUC. Show the details of the file contigs that are mapped to a different contig name in the reference (eg '22' ➔ 'chr22'). 
 
           |
 

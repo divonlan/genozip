@@ -57,7 +57,7 @@ typedef struct RAEntry *RAEntryP;
 typedef const struct RAEntry *ConstRAEntryP;
 typedef struct Mutex *MutexP;
 typedef struct RefStruct *Reference;
-typedef struct Contig *RefContigP;
+typedef struct Contig *ContigP;
 typedef struct ContigPkg *ContigPkgP;
 typedef const struct ContigPkg *ConstContigPkgP;
 
@@ -161,11 +161,11 @@ typedef _Bool bool;
 #define false 0
 #endif
 
-#define STR(x)   const char *x; unsigned x##_len
-#define STRl(name,len)   const char name[len]; unsigned name##_len
-#define STR0(x)  const char *x=NULL; unsigned x##_len=0
-#define STRp(x)  const char *x, unsigned x##_len // for function definitions 
-#define pSTRp(x) const char **x, unsigned *x##_len // for function definitions 
+#define STR(x)   const char *x; uint32_t x##_len
+#define STRl(name,len)   const char name[len]; uint32_t name##_len
+#define STR0(x)  const char *x=NULL; uint32_t x##_len=0
+#define STRp(x)  const char *x, uint32_t x##_len // for function definitions 
+#define pSTRp(x) const char **x, uint32_t *x##_len // for function definitions 
 #define STRa(x) x, x##_len           // for function call arguments
 #define STRdid(x)  x##_str, x##_len  // for function call arguments
 #define STRi(x,i) x##s[i], x##_lens[i] // for function call arguments
@@ -175,9 +175,10 @@ typedef _Bool bool;
 #define cSTR(x) x, sizeof x-1 // a constant string and its length
 #define STRcpy(dst,src) do { if (src##_len) { memcpy(dst,src,src##_len) ; dst##_len = src##_len; } } while(0)
 #define STRcpyi(dst,i,src) do { if (src##_len) { memcpy(dst##s[i],src,src##_len) ; dst##_lens[i] = src##_len; } } while(0)
+#define STRset(dst,src) do { dst=src; dst##_len=src##_len; } while(0)
 #define STRLEN(string_literal) (sizeof string_literal - 1)
 
-#define ARRAYp(name) unsigned n_##name##s, const char *name##s[], unsigned name##_lens[] // function parameters
+#define ARRAYp(name) uint32_t n_##name##s, const char *name##s[], uint32_t name##_lens[] // function parameters
 #define ARRAYa(name) n_##name##s, name##s, name##_lens // function arguments
 
 #define SAVE_VALUE(var) typeof(var) save_##var = var 
@@ -186,7 +187,7 @@ typedef _Bool bool;
 #define RESTORE_VALUE(var) var = save_##var
 
 // returns true if new_value has been set
-#define SPECIAL_RECONSTRUCTOR(func) bool func (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len, LastValueType *new_value, bool reconstruct)
+#define SPECIAL_RECONSTRUCTOR(func) bool func (VBlockP vb, ContextP ctx, const char *snip, uint32_t snip_len, LastValueType *new_value, bool reconstruct)
 typedef SPECIAL_RECONSTRUCTOR ((*PizSpecialReconstructor));
 
 #define SPECIAL(dt,num,name,func) \
@@ -278,6 +279,7 @@ static inline void progress_newline(void) {
 #define SUPPORT "\nIf this is unexpected, please contact "EMAIL_SUPPORT".\n"
 #define ASSERT(condition, format, ...)       do { if (!(condition)) { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); exit_on_error(true); }} while(0)
 #define ASSERT0(condition, string)           do { if (!(condition)) { progress_newline(); fprintf (stderr, "Error in %s:%u: %s" SUPPORT, __FUNCTION__, __LINE__, string); exit_on_error(true); }} while(0)
+#define ASSERTISNULL(p)                      ASSERT0 (!p, "expecting "#p" to be NULL")
 #define ASSERTNOTNULL(p)                     ASSERT0 (p, #p" is NULL")
 #define ASSERTNOTZERO(p)                     ASSERT0 (p, #p"=0")
 #define ASSERTW(condition, format, ...)      do { if (!(condition) && !flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); }} while(0)

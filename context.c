@@ -30,6 +30,8 @@
 #include "reconstruct.h"
 #include "contigs.h"
 #include "segconf.h"
+#include "chrom.h"
+
 
 #define INITIAL_NUM_NODES 10000
 
@@ -278,7 +280,12 @@ static WordIndex ctx_evaluate_snip_merge (VBlock *vb, Context *zctx, Context *vc
         buf_alloc_zero (evb, &zctx->counts, 1, INITIAL_NUM_NODES, int64_t, CTX_GROWTH, "zctx->counts");
         zctx->counts.len++; // actually assigned in ctx_merge_in_vb_ctx_one_dict_id 
 
-        *is_new = true;
+        if (chrom_2ref_seg_is_needed (zctx->did_i)) { 
+            buf_alloc_255 (evb, &z_file->chrom2ref_map, 1, INITIAL_NUM_NODES, WordIndex, CTX_GROWTH, "z_file->chrom2ref_map");
+            z_file->chrom2ref_map.len++; // actually assigned in ctx_merge_in_vb_ctx_one_dict_id 
+        }
+
+        if (is_new) *is_new = true;
 
         return node_index; // >= 0
     }
@@ -410,7 +417,7 @@ void ctx_clone (VBlock *vb)
         Context *vctx = CTX(did_i);
         Context *zctx = ZCTX (did_i);
 
-        // case: this context doesn't really exist (happens when incrementing num_contexts when adding RNAME and RNEXT in ctx_build_zf_ctx_from_contigs)
+        // case: this context doesn't really exist (happens when incrementing num_contexts when adding RNAME and RNEXT in ctx_populate_zf_ctx_from_contigs)
         if (!zctx->mutex.initialized) continue;
 
         mutex_lock (zctx->mutex);
@@ -419,8 +426,8 @@ void ctx_clone (VBlock *vb)
 
             // overlay the global dict and nodes - these will not change by this (or any other) VB
             //iprintf ( ("ctx_clone: overlaying old dict %.8s, to vb_i=%u vb_did_i=z_did_i=%u\n", dis_dict_id (zctx->dict_id).s, vb->vblock_i, did_i);
-            buf_overlay (vb, &vctx->ol_dict,  &zctx->dict,  "ctx->ol_dict");   
-            buf_overlay (vb, &vctx->ol_nodes, &zctx->nodes, "ctx->ol_nodes");   
+            buf_overlay (vb, &vctx->ol_dict,  &zctx->dict,  "contexts->ol_dict");   
+            buf_overlay (vb, &vctx->ol_nodes, &zctx->nodes, "contexts->ol_nodes");   
 
             // overlay the hash table, that may still change by future vb's merging... this vb will only use
             // entries that are up to this merge_num
@@ -431,6 +438,7 @@ void ctx_clone (VBlock *vb)
 
             buf_alloc_zero (vb, &vctx->counts, 0, vctx->ol_nodes.len, int64_t, CTX_GROWTH, "contexts->counts");
             vctx->counts.len = vctx->ol_nodes.len;
+
         }
 
         vctx->did_i       = did_i;
@@ -453,6 +461,11 @@ void ctx_clone (VBlock *vb)
 
     vb->num_contexts = z_num_contexts;
 
+    if ((flag.reference & REF_ZIP_LOADED) && z_file->chrom2ref_map.len) {
+        buf_set_overlayable (&z_file->chrom2ref_map);
+        buf_overlay (vb, &vb->ol_chrom2ref_map, &z_file->chrom2ref_map, "ol_chrom2ref_map");
+    }
+    
     COPY_TIMER (ctx_clone);
 }
 
@@ -495,33 +508,69 @@ static void ctx_initialize_ctx (Context *ctx, DidIType did_i, DictId dict_id, Di
     } 
 }
 
+WordIndex ctx_populate_zf_ctx (DidIType dst_did_i, STRp (contig_name), WordIndex ref_index)
+{
+    Context *zctx = ZCTX(dst_did_i);
+    
+    if (!buf_is_alloc (&zctx->global_hash)) { // first call
+        zctx->no_stons = true;
+        zctx->st_did_i = DID_I_NONE;    
+        hash_alloc_global (zctx, 0);
+    }
+
+    if (flag.reference & REF_ZIP_LOADED)
+        buf_alloc_255 (evb, &z_file->chrom2ref_map, 1, INITIAL_NUM_NODES, WordIndex, 1, "z_file->chrom2ref_map");
+
+    bool is_primary = (dst_did_i == DTFZ (prim_chrom));
+    
+    CtxNode *zf_node;
+    WordIndex zf_node_index = ctx_evaluate_snip_merge (NULL, zctx, NULL, STRa(contig_name), 0, &zf_node, NULL);
+    zf_node->word_index = base250_encode (zf_node_index);
+
+    if (is_primary && ref_index != WORD_INDEX_NONE && (flag.reference & REF_ZIP_LOADED))
+        *ENT (WordIndex, z_file->chrom2ref_map, zf_node_index) = ref_index;
+
+    return zf_node_index;
+}
+
 // ZIP main thread: 
 // 1. when starting to zip a new file, with pre-loaded external reference, we integrate the reference's FASTA CONTIG
 //    dictionary as the chrom dictionary of the new file
-// 2. in SAM, DENOVO: after creating loaded_contigs from SQ records, we copy them to the RNAME dictionary
+// 2. in SAM, DENOVO: after creating contigs from SQ records, we copy them to the RNAME dictionary
 // 3. When loading a chain file - copy tName word_list/dict read from the chain file to a context
-void ctx_build_zf_ctx_from_contigs (DidIType dst_did_i, ConstContigPkgP ctgs)
+void ctx_populate_zf_ctx_from_contigs (Reference ref, DidIType dst_did_i, ConstContigPkgP ctgs)
 {
-    // note: in REF_INTERNAL it is possible that there are no contigs - unaligned SAM
-    if (flag.reference == REF_INTERNAL && !ctgs->contigs.len) return;
-
-    ASSERT0 (buf_is_alloc (&ctgs->contigs) && buf_is_alloc (&ctgs->dict), "expecting contigs and dict to be allocated");
+    if (!ctgs->contigs.len) return; // nothing to do
 
     Context *zctx = ZCTX(dst_did_i);
-    zctx->no_stons = true;
-    zctx->st_did_i = DID_I_NONE;
     
-    if (!buf_is_alloc (&zctx->global_hash))
+    if (!buf_is_alloc (&zctx->global_hash)) { // first call
+        zctx->no_stons = true;
+        zctx->st_did_i = DID_I_NONE;
         hash_alloc_global (zctx, 0);
+    }
 
     ARRAY (Contig, contigs, ctgs->contigs);
-    ARRAY (const char, dict, ctgs->dict);
+
+    if (flag.reference & REF_ZIP_LOADED)
+        buf_alloc_255 (evb, &z_file->chrom2ref_map, contigs_len, INITIAL_NUM_NODES, WordIndex, 1, "z_file->chrom2ref_map");
+
+    bool is_primary = (dst_did_i == DTFZ (prim_chrom));
 
     for (uint64_t i=0; i < contigs_len; i++) {
         CtxNode *zf_node;
         bool is_new;
-        WordIndex zf_node_index = ctx_evaluate_snip_merge (NULL, zctx, NULL, &dict[contigs[i].char_index], contigs[i].snip_len, 0, &zf_node, &is_new);
+
+        STR(contig_name);
+        contig_name = contigs_get_name (ctgs, i, &contig_name_len);
+
+        WordIndex zf_node_index = ctx_evaluate_snip_merge (NULL, zctx, NULL, STRa(contig_name), 0, &zf_node, &is_new);
         zf_node->word_index = base250_encode (zf_node_index);
+
+        if (is_new && is_primary && (flag.reference & REF_ZIP_LOADED))
+            *ENT (WordIndex, z_file->chrom2ref_map, zf_node_index) = (contigs[i].ref_index != WORD_INDEX_NONE) 
+                ? contigs[i].ref_index // header contigs also know the ref_index
+                : ref_contigs_get_matching (ref, 0, STRa(contig_name), NULL, NULL, false, NULL, NULL);
     }
 }
 
@@ -710,12 +759,16 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *vb, unsigned did_i)
                 "zf_node_index=%d out of range - len=%i", zf_node_index, (uint32_t)vctx->nodes.len);
 
         if (has_count) 
-            *ENT (int64_t, zctx->counts, zf_node_index) += *ENT (int64_t, vctx->counts, ol_len + i);
+            *ENT (int64_t, zctx->counts, zf_node_index) += *ENT (int64_t, vctx->counts, ol_len + i); // also allocs nodes, counts and chrom2ref_map
 
         // set word_index to be indexing the global dict - to be used by vcf_zip_generate_genotype_one_section() and zip_generate_b250_section()
-        if (is_new)
+        if (is_new) {
             vb_node->word_index = zf_node->word_index = base250_encode (zf_node_index);
-        else 
+
+            if (chrom_2ref_seg_is_needed(did_i)) 
+                *ENT (WordIndex, z_file->chrom2ref_map, zf_node_index) = *ENT (WordIndex, vb->chrom2ref_map, i);
+
+        } else 
             // a previous VB already already calculated the word index for this node. if it was done by vb_i=1,
             // then it is also re-sorted and the word_index is no longer the same as the node_index
             vb_node->word_index = zf_node->word_index;
@@ -899,7 +952,7 @@ void ctx_overlay_dictionaries_to_vb (VBlock *vb)
 }
 
 // used by random_access_show_index
-CtxNode *ctx_get_node_by_word_index (Context *ctx, WordIndex word_index)
+CtxNode *ctx_get_node_by_word_index (ConstContextP ctx, WordIndex word_index)
 {
     ARRAY (CtxNode, nodes, ctx->nodes);
 
@@ -910,9 +963,10 @@ CtxNode *ctx_get_node_by_word_index (Context *ctx, WordIndex word_index)
 }
 
 // PIZ: get snip by normal word index (doesn't support WORD_INDEX_*)
-const char *ctx_get_snip_by_word_index (const Context *ctx, WordIndex word_index, 
-                                        const char **snip, uint32_t *snip_len)
+const char *ctx_get_snip_by_word_index (ConstContextP ctx, WordIndex word_index, STRp(*snip))
 {
+    ASSERTISALLOCED (ctx->word_list);
+
     ASSERT ((uint32_t)word_index < ctx->word_list.len, "word_index=%d out of range: word_list.len=%u for ctx=%s",
             word_index, (uint32_t)ctx->word_list.len, ctx->tag_name);
 
@@ -926,7 +980,7 @@ const char *ctx_get_snip_by_word_index (const Context *ctx, WordIndex word_index
 }
 
 // returns word index of the snip, or WORD_INDEX_NONE if it is not in the dictionary
-WordIndex ctx_get_word_index_by_snip (const Context *ctx, const char *snip)
+WordIndex ctx_get_word_index_by_snip (ConstContextP ctx, const char *snip)
 {
     unsigned snip_len = strlen (snip);
     ARRAY (const CtxWord, words, ctx->word_list);
@@ -1064,6 +1118,7 @@ void ctx_free_context (Context *ctx)
     ctx->local_hash_prime = 0;
     ctx->num_new_entries_prev_merged_vb = 0;
     ctx->nodes_len_at_1_3 = ctx->nodes_len_at_2_3 = 0;
+    ctx->luft_trans = 0;
 
     ctx->global_hash_prime = 0;
     ctx->merge_num = 0;
@@ -1104,9 +1159,11 @@ void ctx_destroy_context (Context *ctx)
         ctx_free_context (ctx);
 
         #define REL_LOC(field) ((char*)(&ctx->field) - (char*)ctx)
-        //fprintf (stderr, "relative location for debugging: %"PRIu64"\n", REL_LOC(local_hash)); // help find the offending field
         for (char *c=(char*)ctx; c  < (char*)(ctx+1); c++)
-            ASSERT (! *c, "ctx_free_context didn't fully clear the context, byte %u != 0", (unsigned)(c - (char*)ctx));
+            if (*c) {
+                fprintf (stderr, "relative location for debugging: %"PRIu64"\n", REL_LOC(num_singletons)); // help find the offending field 
+                ABORT ("ctx_free_context didn't fully clear the context, byte %u != 0", (unsigned)(c - (char*)ctx)); 
+            }
     #endif
 
     memset (ctx, 0, sizeof (Context));
@@ -1211,7 +1268,7 @@ static void ctx_compress_one_dict_fragment (VBlockP vb)
     }
 
     if (flag.list_chroms && vb->fragment_ctx->did_i == CHROM)
-        str_print_dict (vb->fragment_start, vb->fragment_len, false, VB_DT(DT_SAM));
+        str_print_dict (vb->fragment_start, vb->fragment_len, false, VB_DT(DT_SAM) || VB_DT(DT_BAM));
 
     if (flag.show_time) codec_show_time (vb, "DICT", vb->fragment_ctx->tag_name, vb->fragment_codec);
 
@@ -1303,7 +1360,7 @@ done:
 // entry point of compute thread of dictionary decompression
 static void ctx_dict_uncompress_one_vb (VBlockP vb)
 {
-    if (!vb->fragment_ctx || (flag.show_headers && exe_type == EXE_GENOCAT)) goto done; // nothing to do in this thread
+    if (!vb->fragment_ctx || flag.only_headers) goto done; // nothing to do in this thread
     SectionHeaderDictionary *header = (SectionHeaderDictionary *)vb->z_data.data;
 
     ASSERT (vb->fragment_start + BGEN32 (header->h.data_uncompressed_len) <= AFTERENT (char, vb->fragment_ctx->dict), 
@@ -1323,7 +1380,9 @@ static void ctx_dict_build_word_lists (void)
 {    
     START_TIMER;
 
-    for (Context *ctx=z_file->contexts; ctx < &z_file->contexts[z_file->num_contexts]; ctx++) {
+    Context *last = ZCTX((flag.show_headers && exe_type == EXE_GENOCAT) ? CHROM : z_file->num_contexts);
+
+    for (Context *ctx=z_file->contexts; ctx <= last; ctx++) {
 
         if (!ctx->word_list.len || ctx->word_list.data) continue; // skip if 1. no words, or 2. already built
 
@@ -1371,8 +1430,7 @@ void ctx_read_all_dictionaries (void)
                              NULL);
 
     // build word lists in z_file->contexts with dictionary data 
-    if (!(flag.show_headers && exe_type == EXE_GENOCAT))
-        ctx_dict_build_word_lists();
+    ctx_dict_build_word_lists();
 
     // output the dictionaries if we're asked to
     if (flag.show_dict || flag.show_one_dict || flag.list_chroms) {
@@ -1513,7 +1571,7 @@ void ctx_read_all_counts (void)
         Context *ctx = ctx_get_zf_ctx (sl->dict_id);
         
         zfile_get_global_section (SectionHeaderCounts, SEC_COUNTS, sl, &ctx->counts, "counts");
-        if (flag.show_headers) continue; // only show headers
+        if (flag.only_headers) continue; // only show headers
 
         ctx->counts.len /= sizeof (int64_t);
         BGEN_u64_buf (&ctx->counts, NULL);

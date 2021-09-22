@@ -684,8 +684,8 @@ static void file_initialize_z_file_data (File *file)
     
     INIT (ra_buf);
     INIT (ra_buf_luft);
-    INIT (chroms_sorted_index);
     INIT (chrom2ref_map);
+    INIT (ref2chrom_map);
     INIT (section_list_buf);
     INIT (stats_buf);
     INIT (STATS_buf);
@@ -1034,8 +1034,8 @@ void file_close (File **file_p,
 
         buf_destroy (&file->ra_buf);
         buf_destroy (&file->ra_buf_luft);
-        buf_destroy (&file->chroms_sorted_index);
         buf_destroy (&file->chrom2ref_map);
+        buf_destroy (&file->ref2chrom_map);
         buf_destroy (&file->section_list_buf);
         buf_destroy (&file->unconsumed_txt);
         buf_destroy (&file->bgzf_isizes);
