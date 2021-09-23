@@ -32,152 +32,6 @@
 
 static const char *password_test_string = "WhenIThinkBackOnAllTheCrapIlearntInHighschool";
 
-void zfile_show_header (const SectionHeader *header, VBlock *vb /* optional if output to buffer */, uint64_t offset, char rw)
-{
-    if (flag_loading_auxiliary) return; // don't show headers of an auxiliary file
-    
-    if (  flag.show_headers   != -1 &&                 // we don't need to show all sections
-          flag.show_headers-1 != header->section_type) // we don't need to show this section
-        return;
-
-    bool is_dict_offset = (header->section_type == SEC_DICT && rw == 'W'); // at the point calling this function in zip, SEC_DICT offsets are not finalized yet and are relative to the beginning of the dictionary area in the genozip file
-    bool v12 = (command == ZIP || z_file->genozip_version >= 12);
-
-    char str[2048];
-    #define PRINT { if (vb) buf_add_string (vb, &vb->show_headers_buf, str); else iprintf ("%s", str); } 
-    #define SEC_TAB "            ++  "
-
-    sprintf (str, "%c %s%-*"PRIu64" %-19s %-4.4s %-4.4s vb=%-3u z_off=%-6u txt_len=%-7u z_len=%-7u enc_len=%-7u %s ",
-             rw, 
-             is_dict_offset ? "~" : "", 9-is_dict_offset, offset, 
-             st_name(header->section_type), 
-             codec_name (header->codec), codec_name (header->sub_codec),
-             BGEN32 (header->vblock_i), 
-             BGEN32 (header->compressed_offset), 
-             BGEN32 (header->data_uncompressed_len), 
-             BGEN32 (header->data_compressed_len), 
-             BGEN32 (header->data_encrypted_len), 
-             BGEN32 (header->magic) != GENOZIP_MAGIC ? "BAD-MAGIC" : ""); // usually, we don't want the magic to take up line real estatee
-    PRINT;
-
-    switch (header->section_type) {
-    case SEC_GENOZIP_HEADER: {
-        SectionHeaderGenozipHeader *h = (SectionHeaderGenozipHeader *)header;
-        struct FlagsGenozipHeader f = h->h.flags.genozip_header;
-        DataType dt = BGEN16 (h->data_type);
-        z_file->z_flags.adler = h->h.flags.genozip_header.adler; // needed by digest_display_ex
-        char dt_specific[REF_FILENAME_LEN + 200] = "";
-
-        if (dt == DT_CHAIN)
-            sprintf (dt_specific, SEC_TAB "prim=\"%.*s\" md5=%s\n", REF_FILENAME_LEN, h->dt_specific.chain.prim_filename, 
-                     digest_display_ex (h->dt_specific.chain.prim_file_md5, DD_MD5).s);
-
-        sprintf (str, "\n"SEC_TAB "ver=%u enc=%s dt=%s usize=%"PRIu64" lines=%"PRIu64" secs=%u txts=%u digest_bound=%s\n" 
-                      SEC_TAB "%s=%u aligner=%u txt_is_bin=%u bgzf=%u adler=%u dual_coords=%u ref=\"%.*s\" md5ref=%s\n"
-                      "%s" // dt_specific, if there is any
-                      SEC_TAB "created=\"%.*s\"\n",
-                 h->genozip_version, encryption_name (h->encryption_type), dt_name (dt), 
-                 BGEN64 (h->recon_size_prim), BGEN64 (h->num_lines_bound), BGEN32 (h->num_sections), BGEN32 (h->num_components),
-                 digest_display (h->digest_bound).s, 
-                 (dt==DT_FASTQ ? "dts_paired" : "dts_ref_internal"), f.dt_specific, 
-                 f.aligner, f.txt_is_bin, f.bgzf, f.adler, f.dual_coords,
-                 REF_FILENAME_LEN, h->ref_filename, digest_display_ex (h->ref_file_md5, DD_MD5).s,
-                 dt_specific, 
-                 FILE_METADATA_LEN, h->created);
-        break;
-    }
-
-    case SEC_TXT_HEADER: {
-        SectionHeaderTxtHeader *h = (SectionHeaderTxtHeader *)header;
-        sprintf (str, "\n"SEC_TAB "txt_data_size=%"PRIu64" txt_header_size=%"PRIu64" lines=%"PRIu64" max_lines_per_vb=%u md5_single=%s digest_header=%s\n" 
-                      SEC_TAB "txt_codec=%s (args=0x%02X.%02X.%02X) rejects_coord=%s is_txt_luft=%u txt_filename=\"%.*s\"\n",
-                 BGEN64 (h->txt_data_size), v12 ? BGEN64 (h->txt_header_size) : 0, BGEN64 (h->txt_num_lines), BGEN32 (h->max_lines_per_vb), 
-                 digest_display (h->digest_single).s, digest_display (h->digest_header).s, 
-                 codec_name (h->codec), h->codec_info[0], h->codec_info[1], h->codec_info[2], 
-                 coords_name (h->h.flags.txt_header.rejects_coord), h->h.flags.txt_header.is_txt_luft, TXT_FILENAME_LEN, h->txt_filename);
-        break;
-    }
-
-    case SEC_VB_HEADER: {
-        SectionHeaderVbHeader *h = (SectionHeaderVbHeader *)header;
-        sprintf (str, "\n"SEC_TAB "lines=(PRIM:%u, LUFT:%u) recon_size=(PRIM:%u, LUFT:%u) longest_line=%u z_data_bytes=%u digest_so_far=%s coords=%s\n",
-                 BGEN32 (h->num_lines_prim),  v12 ? BGEN32 (h->num_lines_luft)  : 0, 
-                 BGEN32 (h->recon_size_prim), v12 ? BGEN32 (h->recon_size_luft) : 0, 
-                 BGEN32 (h->longest_line_len), 
-                 BGEN32 (h->z_data_bytes), digest_display (h->digest_so_far).s, coords_name (h->h.flags.vb_header.coords));
-        break;
-    }
-
-    case SEC_REFERENCE:
-    case SEC_REF_IS_SET: {
-        SectionHeaderReference *h = (SectionHeaderReference *)header;
-        sprintf (str, "pos=%-9"PRIu64" gpos=%-9"PRIu64" num_bases=%-6u chrom_word_index=%-4d\n",
-                 BGEN64 (h->pos), BGEN64 (h->gpos), BGEN32 (h->num_bases), BGEN32 (h->chrom_word_index)); 
-        break;
-    }
-    
-    case SEC_REF_HASH: {
-        SectionHeaderRefHash *h = (SectionHeaderRefHash *)header;
-        sprintf (str, "num_layers=%u layer_i=%u layer_bits=%u start_in_layer=%u\n",
-                 h->num_layers, h->layer_i, h->layer_bits, BGEN32 (h->start_in_layer)); 
-        break;
-    }
-    
-    case SEC_RECON_PLAN: {
-        SectionHeaderReconPlan *h = (SectionHeaderReconPlan *)header;
-        sprintf (str, "conc_writing_vbs=%u luft=%u\n", BGEN32 (h->conc_writing_vbs), h->h.flags.recon_plan.luft); 
-        break;
-    }
-        
-    case SEC_RANDOM_ACCESS: {
-        SectionHeaderReconPlan *h = (SectionHeaderReconPlan *)header;
-        sprintf (str, SEC_TAB "luft=%u\n", h->h.flags.random_access.luft); 
-        break;
-    }
-        
-    case SEC_BGZF: {
-        SectionHeaderRefHash *h = (SectionHeaderRefHash *)header;
-        sprintf (str, SEC_TAB "level=%u has_eof=%u\n", h->h.flags.bgzf.level, h->h.flags.bgzf.has_eof_block); 
-        break;
-    }
-    
-    case SEC_B250: {
-        SectionHeaderCtx *h = (SectionHeaderCtx *)header;
-        static const char *store[4] = { [STORE_NONE]="NONE", [STORE_INT]="INT", [STORE_FLOAT]="FLOAT", [STORE_INDEX]="INDEX"};
-
-        sprintf (str, "%s/%-8s\tparam=%u store=%s paired=%u copy_param=%u all_the_same=%u ctx_specific=%u\n",
-                 dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s, h->param, store[h->h.flags.ctx.store], 
-                 h->h.flags.ctx.paired, h->h.flags.ctx.copy_param, h->h.flags.ctx.all_the_same, h->h.flags.ctx.ctx_specific); 
-        break;
-    }
-
-    case SEC_LOCAL: {
-        SectionHeaderCtx *h = (SectionHeaderCtx *)header;
-        sprintf (str, "%s/%-8s\tltype=%s param=%u paired=%u copy_param=%u ctx_specific=%u\n",
-                 dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s, lt_name (h->ltype), h->param, 
-                 h->h.flags.ctx.paired, h->h.flags.ctx.copy_param, h->h.flags.ctx.ctx_specific); 
-        break;
-    }
-
-    case SEC_DICT: {
-        SectionHeaderDictionary *h = (SectionHeaderDictionary *)header;
-        sprintf (str, "%s/%-8s\tnum_snips=%u\n", dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s, BGEN32 (h->num_snips)); 
-        break;
-    }
-
-    case SEC_COUNTS: {
-        SectionHeaderCounts *h = (SectionHeaderCounts *)header;
-        sprintf (str, "  %s/%-8s\t\n", dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s); 
-        break;
-    }
-
-    default: 
-        str[0] = '\n'; str[1] = 0; 
-    }
-
-    PRINT;
-}
-
 static void zfile_show_b250_section (void *section_header_p, const Buffer *b250_data)
 {
     static Mutex show_b250_mutex = {}; // protect so compute thread's outputs don't get mix
@@ -497,7 +351,7 @@ int32_t zfile_read_section_do (File *file,
     }
 
     if (flag.show_headers) {
-        zfile_show_header (header, NULL, sec ? sec->offset : 0, 'R');
+        sections_show_header (header, NULL, sec ? sec->offset : 0, 'R');
         if (exe_type == EXE_GENOCAT && (expected_sec_type == SEC_B250 || expected_sec_type == SEC_LOCAL || 
                                         expected_sec_type == SEC_DICT || expected_sec_type == SEC_COUNTS || 
                                         expected_sec_type == SEC_REFERENCE || expected_sec_type == SEC_REF_IS_SET))
@@ -1003,7 +857,7 @@ bool zfile_update_txt_header_section_header (uint64_t offset_in_z_file, uint32_t
     file_seek (z_file, 0, SEEK_END, false); // return to the end of the file
 
     if (flag.show_headers)
-        zfile_show_header ((SectionHeader *)curr_header, NULL, offset_in_z_file, 'W'); 
+        sections_show_header ((SectionHeader *)curr_header, NULL, offset_in_z_file, 'W'); 
 
     return true; // success
 }

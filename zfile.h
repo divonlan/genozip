@@ -65,12 +65,6 @@ extern void zfile_uncompress_section (VBlockP vb, void *section_header,
 
 extern DataType zfile_get_file_dt (const char *filename);
 
-// --------
-// General
-// --------
-
-extern void zfile_show_header (const SectionHeader *header, VBlockP vb /* optional if output to buffer */, uint64_t offset, char rw);
-
 #ifdef __APPLE__
 #define off64_t __int64_t // needed for conda mac - otherwise zlib.h throws compilation errors
 #endif

@@ -14,6 +14,7 @@
 #include "zfile.h"
 #include "piz.h"
 #include "endianness.h"
+#include "codec.h"
 
 typedef struct SectionEnt SectionEntModifiable;
 
@@ -184,57 +185,6 @@ void BGEN_sections_list (void)
         ent[i].offset   = BGEN64 (ent[i].offset);
         if (command==PIZ && z_file->genozip_version < 12) // flags were introduced in v12
             ent[i].flags.flags = 0;
-    }
-}
-
-void sections_show_gheader (const SectionHeaderGenozipHeader *header /* optional */)
-{
-    if (flag_loading_auxiliary) return; // don't show gheaders of an auxiliary file
-    
-    ARRAY (SectionEnt, ents, z_file->section_list_buf);
-
-    if (header) {
-        iprintf ("Contents of the SEC_GENOZIP_HEADER section (output of --show-gheader) of %s:\n", z_name);
-        iprintf ("  genozip_version: %u\n",         header->genozip_version);
-        iprintf ("  data_type: %s\n",               dt_name (BGEN16 (header->data_type)));
-        iprintf ("  encryption_type: %s\n",         encryption_name (header->encryption_type)); 
-        iprintf ("  recon_size_prim: %s\n",         str_uint_commas (BGEN64 (header->recon_size_prim)).s);
-        iprintf ("  num_lines_bound: %"PRIu64"\n",  BGEN64 (header->num_lines_bound));
-        iprintf ("  num_sections: %u\n",            (unsigned)ents_len);
-        iprintf ("  num_components: %u\n",          BGEN32 (header->num_components));
-        iprintf ("  digest_bound.md5: %s\n",        digest_display (header->digest_bound).s);
-        iprintf ("  created: %*s\n",                -FILE_METADATA_LEN, header->created);
-        iprintf ("  license_hash: %s\n",            digest_display (header->license_hash).s);
-        iprintf ("  reference filename: %s\n",      header->ref_filename);
-        iprintf ("  reference file hash: %s\n",     digest_display (header->ref_file_md5).s);
-
-        switch (BGEN16 (header->data_type)) {
-            case DT_CHAIN:
-                iprintf ("  primary-coordinates reference filename: %s\n", header->dt_specific.chain.prim_filename);
-                iprintf ("  primary-coordinates reference file hash: %s\n", digest_display (header->dt_specific.chain.prim_file_md5).s);
-                break;
-
-            default: break;
-        }
-    }
-
-    iprint0 ("  sections:\n");
-
-    for (unsigned i=0; i < ents_len; i++) {
-     
-        uint64_t this_offset = ents[i].offset;
-        
-        uint64_t next_offset = (i < ents_len-1) ? ents[i+1].offset
-                             : header               ? this_offset + BGEN32 (header->h.data_compressed_len) + BGEN32 (header->h.compressed_offset) + sizeof (SectionFooterGenozipHeader) // we're at the last section genozip header+footer
-                             :                        this_offset; // without the GenozipHeader, we can't know its length
-
-
-        iprintf ("%3u\t%-20.20s\t%s%s%-8.8s\tvb_i=%u\toffset=%-8"PRIu64"\tsize=%-6"PRId64"\tflags=%u\n", 
-                 i, st_name(ents[i].st), 
-                 ents[i].dict_id.num ? dtype_name_z(ents[i].dict_id) :"     ", 
-                 ents[i].dict_id.num ? "/" : "", 
-                 ents[i].dict_id.num ? dis_dict_id (ents[i].dict_id).s : "", 
-                 ents[i].vblock_i, this_offset, next_offset - this_offset, ents[i].flags.flags);
     }
 }
 
@@ -469,4 +419,246 @@ const char *lt_name (LocalType lt)
         return lt_desc[lt].name;
     else
         return "INVALID_LT";
+}
+
+typedef struct { char s[128]; } FlagStr;
+static FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt)
+{
+    static const char *store[4] = { [STORE_NONE]="NONE", [STORE_INT]="INT", [STORE_FLOAT]="FLOAT", [STORE_INDEX]="INDEX"};
+    static const char *dts[NUM_DATATYPES] = { [DT_FASTQ]="dts_paired", [DT_SAM]="dts_ref_internal", [DT_CHAIN]="dts_mismatch" };
+
+    FlagStr str;
+
+    switch (st) {
+        case SEC_GENOZIP_HEADER:
+            sprintf (str.s, "%s=%u aligner=%u txt_is_bin=%u bgzf=%u adler=%u dual_coords=%u has_taxid=%u",
+                     dts[dt] ? dts[dt] : "dt_specitic", f.genozip_header.dt_specific, f.genozip_header.aligner, 
+                     f.genozip_header.txt_is_bin, f.genozip_header.bgzf, f.genozip_header.adler, f.genozip_header.dual_coords,
+                     f.genozip_header.has_taxid);
+            break;
+
+        case SEC_TXT_HEADER:
+            sprintf (str.s, "rejects_coord=%s is_txt_luft=%u", coords_name (f.txt_header.rejects_coord), f.txt_header.is_txt_luft);
+            break;
+
+        case SEC_VB_HEADER:
+            sprintf (str.s, "coords=%s", coords_name (f.vb_header.coords));
+            break;
+
+        case SEC_BGZF:
+            sprintf (str.s, "level=%u has_eof=%u", f.bgzf.level, f.bgzf.has_eof_block); 
+            break;
+
+        case SEC_LOCAL:
+            sprintf (str.s, "store=%s paired=%u copy_param=%u all_the_same=%u",
+                     store[f.ctx.store], f.ctx.paired, f.ctx.copy_param, f.ctx.all_the_same); // note: we don't print ctx_specific as its not currently used
+            break;
+
+        case SEC_B250:
+            sprintf (str.s, "store=%s paired=%u copy_param=%u ctx_specific=%u",
+                     store[f.ctx.store], f.ctx.paired, f.ctx.copy_param, f.ctx.ctx_specific); 
+            break;
+ 
+        case SEC_RANDOM_ACCESS:
+        case SEC_RECON_PLAN:
+            sprintf (str.s, "rejects_coord=%s is_txt_luft=%u", coords_name (f.txt_header.rejects_coord), f.txt_header.is_txt_luft);
+            break;
+
+        default: 
+            str.s[0] = 0;
+    }
+
+    return str;
+}
+
+void sections_show_header (const SectionHeader *header, VBlock *vb /* optional if output to buffer */, uint64_t offset, char rw)
+{
+    if (flag_loading_auxiliary) return; // don't show headers of an auxiliary file
+    
+    if (  flag.show_headers   != -1 &&                 // we don't need to show all sections
+          flag.show_headers-1 != header->section_type) // we don't need to show this section
+        return;
+
+    bool is_dict_offset = (header->section_type == SEC_DICT && rw == 'W'); // at the point calling this function in zip, SEC_DICT offsets are not finalized yet and are relative to the beginning of the dictionary area in the genozip file
+    bool v12 = (command == ZIP || z_file->genozip_version >= 12);
+
+    char str[2048];
+    #define PRINT { if (vb) buf_add_string (vb, &vb->show_headers_buf, str); else iprintf ("%s", str); } 
+    #define SEC_TAB "            ++  "
+
+    sprintf (str, "%c %s%-*"PRIu64" %-19s %-4.4s %-4.4s vb=%-3u z_off=%-6u txt_len=%-7u z_len=%-7u enc_len=%-7u %s ",
+             rw, 
+             is_dict_offset ? "~" : "", 9-is_dict_offset, offset, 
+             st_name(header->section_type), 
+             codec_name (header->codec), codec_name (header->sub_codec),
+             BGEN32 (header->vblock_i), 
+             BGEN32 (header->compressed_offset), 
+             BGEN32 (header->data_uncompressed_len), 
+             BGEN32 (header->data_compressed_len), 
+             BGEN32 (header->data_encrypted_len), 
+             BGEN32 (header->magic) != GENOZIP_MAGIC ? "BAD-MAGIC" : ""); // usually, we don't want the magic to take up line real estatee
+    PRINT;
+
+    SectionFlags f = header->flags;
+    SectionType st = header->section_type;
+    DataType dt = z_file->data_type;
+
+    switch (st) {
+
+    case SEC_GENOZIP_HEADER: {
+        SectionHeaderGenozipHeader *h = (SectionHeaderGenozipHeader *)header;
+        z_file->z_flags.adler = h->h.flags.genozip_header.adler; // needed by digest_display_ex
+        char dt_specific[REF_FILENAME_LEN + 200] = "";
+
+        if (dt == DT_CHAIN)
+            sprintf (dt_specific, SEC_TAB "prim=\"%.*s\" md5=%s\n", REF_FILENAME_LEN, h->dt_specific.chain.prim_filename, 
+                     digest_display_ex (h->dt_specific.chain.prim_file_md5, DD_MD5).s);
+
+        sprintf (str, "\n"SEC_TAB "ver=%u enc=%s dt=%s usize=%"PRIu64" lines=%"PRIu64" secs=%u txts=%u digest_bound=%s\n" 
+                      SEC_TAB "%s ref=\"%.*s\" md5ref=%s\n"
+                      "%s" // dt_specific, if there is any
+                      SEC_TAB "created=\"%.*s\"\n",
+                 h->genozip_version, encryption_name (h->encryption_type), dt_name (dt), 
+                 BGEN64 (h->recon_size_prim), BGEN64 (h->num_lines_bound), BGEN32 (h->num_sections), BGEN32 (h->num_components),
+                 digest_display (h->digest_bound).s, sections_dis_flags (f, st, dt).s,
+                 REF_FILENAME_LEN, h->ref_filename, digest_display_ex (h->ref_file_md5, DD_MD5).s,
+                 dt_specific, 
+                 FILE_METADATA_LEN, h->created);
+        break;
+    }
+
+    case SEC_TXT_HEADER: {
+        SectionHeaderTxtHeader *h = (SectionHeaderTxtHeader *)header;
+        sprintf (str, "\n"SEC_TAB "txt_data_size=%"PRIu64" txt_header_size=%"PRIu64" lines=%"PRIu64" max_lines_per_vb=%u md5_single=%s digest_header=%s\n" 
+                      SEC_TAB "txt_codec=%s (args=0x%02X.%02X.%02X) %s txt_filename=\"%.*s\"\n",
+                 BGEN64 (h->txt_data_size), v12 ? BGEN64 (h->txt_header_size) : 0, BGEN64 (h->txt_num_lines), BGEN32 (h->max_lines_per_vb), 
+                 digest_display (h->digest_single).s, digest_display (h->digest_header).s, 
+                 codec_name (h->codec), h->codec_info[0], h->codec_info[1], h->codec_info[2], 
+                 sections_dis_flags (f, st, dt).s, TXT_FILENAME_LEN, h->txt_filename);
+        break;
+    }
+
+    case SEC_VB_HEADER: {
+        SectionHeaderVbHeader *h = (SectionHeaderVbHeader *)header;
+        sprintf (str, "\n"SEC_TAB "lines=(PRIM:%u, LUFT:%u) recon_size=(PRIM:%u, LUFT:%u) longest_line=%u z_data_bytes=%u digest_so_far=%s %s\n",
+                 BGEN32 (h->num_lines_prim),  v12 ? BGEN32 (h->num_lines_luft)  : 0, 
+                 BGEN32 (h->recon_size_prim), v12 ? BGEN32 (h->recon_size_luft) : 0, 
+                 BGEN32 (h->longest_line_len), 
+                 BGEN32 (h->z_data_bytes), digest_display (h->digest_so_far).s, sections_dis_flags (f, st, dt).s);
+        break;
+    }
+
+    case SEC_REFERENCE:
+    case SEC_REF_IS_SET: {
+        SectionHeaderReference *h = (SectionHeaderReference *)header;
+        sprintf (str, "pos=%-9"PRIu64" gpos=%-9"PRIu64" num_bases=%-6u chrom_word_index=%-4d\n",
+                 BGEN64 (h->pos), BGEN64 (h->gpos), BGEN32 (h->num_bases), BGEN32 (h->chrom_word_index)); 
+        break;
+    }
+    
+    case SEC_REF_HASH: {
+        SectionHeaderRefHash *h = (SectionHeaderRefHash *)header;
+        sprintf (str, "num_layers=%u layer_i=%u layer_bits=%u start_in_layer=%u\n",
+                 h->num_layers, h->layer_i, h->layer_bits, BGEN32 (h->start_in_layer)); 
+        break;
+    }
+    
+    case SEC_RECON_PLAN: {
+        SectionHeaderReconPlan *h = (SectionHeaderReconPlan *)header;
+        sprintf (str, "conc_writing_vbs=%u %s\n", BGEN32 (h->conc_writing_vbs), sections_dis_flags (f, st, dt).s); 
+        break;
+    }
+        
+    case SEC_BGZF:
+    case SEC_RANDOM_ACCESS: {
+        sprintf (str, SEC_TAB "%s\n", sections_dis_flags (f, st, dt).s); 
+        break;
+    }
+    
+    case SEC_B250: {
+        SectionHeaderCtx *h = (SectionHeaderCtx *)header;
+        sprintf (str, "%s/%-8s\tparam=%u %s\n",
+                 dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s, h->param, sections_dis_flags (f, st, dt).s); 
+        break;
+    }
+
+    case SEC_LOCAL: {
+        SectionHeaderCtx *h = (SectionHeaderCtx *)header;
+        sprintf (str, "%s/%-8s\tltype=%s param=%u %s\n",
+                 dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s, lt_name (h->ltype), h->param, sections_dis_flags (f, st, dt).s);
+        break;
+    }
+
+    case SEC_DICT: {
+        SectionHeaderDictionary *h = (SectionHeaderDictionary *)header;
+        sprintf (str, "%s/%-8s\tnum_snips=%u\n", dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s, BGEN32 (h->num_snips)); 
+        break;
+    }
+
+    case SEC_COUNTS: {
+        SectionHeaderCounts *h = (SectionHeaderCounts *)header;
+        sprintf (str, "  %s/%-8s\t\n", dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s); 
+        break;
+    }
+
+    default: 
+        str[0] = '\n'; str[1] = 0; 
+    }
+
+    PRINT;
+}
+
+void sections_show_gheader (const SectionHeaderGenozipHeader *header /* optional */)
+{
+    if (flag_loading_auxiliary) return; // don't show gheaders of an auxiliary file
+    
+    ARRAY (SectionEnt, ents, z_file->section_list_buf);
+
+    DataType dt = BGEN16 (header->data_type);
+    ASSERT (dt < NUM_DATATYPES, "Invalid data_type=%u", dt);
+    
+    if (header) {
+        iprintf ("Contents of the SEC_GENOZIP_HEADER section (output of --show-gheader) of %s:\n", z_name);
+        iprintf ("  genozip_version: %u\n",         header->genozip_version);
+        iprintf ("  data_type: %s\n",               dt_name (dt));
+        iprintf ("  encryption_type: %s\n",         encryption_name (header->encryption_type)); 
+        iprintf ("  recon_size_prim: %s\n",         str_uint_commas (BGEN64 (header->recon_size_prim)).s);
+        iprintf ("  num_lines_bound: %"PRIu64"\n",  BGEN64 (header->num_lines_bound));
+        iprintf ("  num_sections: %u\n",            (unsigned)ents_len);
+        iprintf ("  num_components: %u\n",          BGEN32 (header->num_components));
+        iprintf ("  digest_bound.md5: %s\n",        digest_display (header->digest_bound).s);
+        iprintf ("  created: %*s\n",                -FILE_METADATA_LEN, header->created);
+        iprintf ("  license_hash: %s\n",            digest_display (header->license_hash).s);
+        iprintf ("  reference filename: %s\n",      header->ref_filename);
+        iprintf ("  reference file hash: %s\n",     digest_display (header->ref_file_md5).s);
+        iprintf ("  flags: %s\n",                   sections_dis_flags (header->h.flags, SEC_GENOZIP_HEADER, dt).s);
+
+        switch (dt) {
+            case DT_CHAIN:
+                iprintf ("  primary-coordinates reference filename: %s\n", header->dt_specific.chain.prim_filename);
+                iprintf ("  primary-coordinates reference file hash: %s\n", digest_display (header->dt_specific.chain.prim_file_md5).s);
+                break;
+
+            default: break;
+        }
+    }
+
+    iprint0 ("  sections:\n");
+
+    for (unsigned i=0; i < ents_len; i++) {
+     
+        uint64_t this_offset = ents[i].offset;
+        
+        uint64_t next_offset = (i < ents_len-1) ? ents[i+1].offset
+                             : header               ? this_offset + BGEN32 (header->h.data_compressed_len) + BGEN32 (header->h.compressed_offset) + sizeof (SectionFooterGenozipHeader) // we're at the last section genozip header+footer
+                             :                        this_offset; // without the GenozipHeader, we can't know its length
+
+
+        iprintf ("%3u\t%-20.20s\t%s%s%-8.8s\tvb_i=%u\toffset=%-8"PRIu64"\tsize=%-6"PRId64"\t%s\n", 
+                 i, st_name(ents[i].st), 
+                 ents[i].dict_id.num ? dtype_name_z(ents[i].dict_id) :"     ", 
+                 ents[i].dict_id.num ? "/" : "", 
+                 ents[i].dict_id.num ? dis_dict_id (ents[i].dict_id).s : "", 
+                 ents[i].vblock_i, this_offset, next_offset - this_offset, sections_dis_flags (ents[i].flags, ents[i].st, dt).s);
+    }
 }

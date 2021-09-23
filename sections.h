@@ -78,7 +78,7 @@ typedef union SectionFlags {
     uint8_t flags;
 
     struct FlagsGenozipHeader {
-        // note: if updating dts_* flags, update in zfile_compress_genozip_header, zfile_show_header too
+        // note: if updating dts_* flags, update in zfile_compress_genozip_header, sections_show_header too
         #define dts_ref_internal dt_specific // SAM: REF_INTERNAL was used for compressing (i.e. SAM file without reference) (introduced v6)
         #define dts_paired       dt_specific // FASTQ: This z_file contains one or more pairs of FASTQs compressed with --pair (introduced v9.0.13)
         #define dts_mismatch     dt_specific // CHAIN: This chain file's contigs mismatch its references, so it cannot be used with --chain (introduced v12.0.35)
@@ -114,7 +114,7 @@ typedef union SectionFlags {
         uint8_t paired           : 1; // reconstruction of this context requires access to the same section from the same vb of the previous (paired) file
         uint8_t v8_container     : 1; // (canceled in 9 - files compressed with 8.0 will have this flag set for any context that contains 1 or more containers)
         uint8_t copy_param       : 1; // copy ctx.b250/local.param from SectionHeaderCtx.param
-        uint8_t all_the_same     : 1; // the b250 data contains only one element, and should be used to reconstruct any number of snips from this context
+        uint8_t all_the_same     : 1; // SEC_B250: the b250 data contains only one element, and should be used to reconstruct any number of snips from this context
         #define ctxs_dot_is_0    ctx_specific // used in _FORMAT_GT_SHARK_GT between 10.0.3 and 10.0.8
         uint8_t ctx_specific     : 1; // flag specific a context (introduced 10.0.3)
         uint8_t unused           : 1;
@@ -273,6 +273,7 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
    { "T64", 0,   8,  0,     BGEN_transpose_u64_buf   }, \
 }
 
+// used for SEC_LOCAL and SEC_B250
 typedef struct {
     SectionHeader h;
     LocalType ltype; // used by SEC_LOCAL: goes into ctx.ltype - type of data for the ctx.local buffer
@@ -405,8 +406,6 @@ extern const char *st_name (SectionType sec_type);
 extern SectionType sections_st_by_name (char *name);
 extern uint32_t st_header_size (SectionType sec_type);
 
-extern void sections_show_gheader (const SectionHeaderGenozipHeader *header /* optional */);
-
 extern void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_layer_bits);
 
 // z_file sizes
@@ -415,6 +414,9 @@ extern int64_t sections_get_vb_size (Section sl);
 extern int64_t sections_get_vb_skipped_sections_size (Section vb_header_sl);
 extern int64_t sections_get_ref_size (void);
 
+// display functions
+extern void sections_show_header (const SectionHeader *header, VBlockP vb /* optional if output to buffer */, uint64_t offset, char rw);
+extern void sections_show_gheader (const SectionHeaderGenozipHeader *header /* optional */);
 extern const char *lt_name (LocalType lt);
 
 #endif

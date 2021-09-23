@@ -9,8 +9,10 @@
 #include "genozip.h"
 #include "buffer.h"
 
-//-------------------------------------------------------------------------
-// these structs are part of the Genozip file format
+//--------------------------------------------------------------------------------------------------------------
+// NOTE: these structs are part of the Genozip file format - section SEC_REF_CONTIGS contains an array of Contig
+//--------------------------------------------------------------------------------------------------------------
+
 #pragma pack(1) // structures that are part of the genozip format are packed.
 
 // Accession Number: https://www.ncbi.nlm.nih.gov/genbank/acc_prefix/
