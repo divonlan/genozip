@@ -26,18 +26,19 @@
 #include "buffer.h"
 #include "strings.h"
 
-// private globals
-ContigPkgP sam_hdr_contigs = NULL; // points to contigs for: BAM (always) and headerful SAM and VCF
-
-#define foreach_SQ_line(cb,cb_param) (IS_BAM ? bam_foreach_SQ_line (txt_header->data, txt_header->len, cb, cb_param) : sam_foreach_SQ_line(txt_header->data, cb, cb_param))
-
 //---------------
 // Header contigs
 //---------------
 
+ContigPkgP sam_hdr_contigs = NULL; // If no contigs in header: BAM: empty structure (RNAME must be * for all lines); SAM: NULL (RNAME in lines may have contigs) 
+
+#define foreach_SQ_line(cb,cb_param,new_txt_header) (IS_BAM ? bam_foreach_SQ_line (txt_header->data, txt_header->len, cb, cb_param, new_txt_header) \
+                                                            : sam_foreach_SQ_line (txt_header->data, cb, cb_param, new_txt_header))
+
 // call a callback for each SQ line (contig). Note: callback function is the same as foreach_contig
-void sam_foreach_SQ_line (const char *txt_header, // nul-terminated string
-                          ContigsIteratorCallback callback, void *callback_param)
+static void sam_foreach_SQ_line (const char *txt_header, // nul-terminated string
+                                 ContigsIteratorCallback callback, void *callback_param,
+                                 Buffer *new_txt_header) // optional - if provided, all lines need to be copied (modified or not) to this buffer
 {
     const char *line = txt_header;
 
@@ -45,36 +46,52 @@ void sam_foreach_SQ_line (const char *txt_header, // nul-terminated string
         line = strchr (line, '@');
         if (!line) break;
 
+        char *newline = strchr (line, '\n');
+        *newline = 0;
+
+        bool add_line = !!new_txt_header; // replace contig with matching name from reference
+
         if (line[1] == 'S' && line[2] == 'Q') { // this test will always be in the buffer - possible in the overflow area
-            char *newline = strchr (line, '\n');
-            *newline = 0;
 
             // line looks something like: @SQ\tSN:chr10\tLN:135534747 (no strict order between SN and LN and there could be more parameters)
-            const char *chrom_name   = strstr (line, "SN:"); 
-            const char *last_pos_str = strstr (line, "LN:"); 
-
-            if (chrom_name && last_pos_str) {
+            const char *chrom_name = strstr (line, "SN:"); 
+            const char *pos_str    = strstr (line, "LN:"); 
+            if (chrom_name && pos_str) {
                 unsigned chrom_name_len = strcspn (&chrom_name[3], "\t\n\r");
-                PosType last_pos = (PosType)strtoull (&last_pos_str[3], NULL, 10);
+                const char *after_chrom = chrom_name + chrom_name_len + STRLEN("SN:");
+
+                PosType last_pos = (PosType)strtoull (&pos_str[3], NULL, 10);
 
                 ASSINP (last_pos <= MAX_POS_SAM, "Error: @SQ record in header contains LN:%"PRId64" which is beyond the maximum permitted by the SAM spec of %"PRId64,
                         last_pos, MAX_POS_SAM);
 
-                callback (&chrom_name[3], chrom_name_len, last_pos, callback_param);
+                WordIndex ref_index = WORD_INDEX_NONE; // of reference contig with matched name
+                callback (&chrom_name[3], chrom_name_len, last_pos, add_line ? &ref_index : callback_param);
+
+                // case --match-chrom-to-reference: we need to update the contig name from the reference, if this contig is in the reference
+                if (add_line && ref_index != WORD_INDEX_NONE) {
+                    add_line = false; // done
+                    bufprintf (evb, new_txt_header, "%.*s%s%.*s\n",
+                               (int)(chrom_name - line + STRLEN("SN:")), line,      // line beginning up to the contig name
+                               ref_contigs_get_name (gref, ref_index, NULL), // matched contig name from the reference
+                               (int)(newline - after_chrom), after_chrom);      // line after contig name
+                }
             }
-
-            line = newline+1;
-
-            *newline = '\n'; // restore
         }
-        else 
-            line++;
+
+        *newline = '\n'; // restore
+
+        if (add_line)
+            buf_add_more (NULL, new_txt_header, line, newline-line+1, NULL);
+
+        line = newline+1;
     }
 }
 
 // call a callback for each SQ line (contig). Note: callback function is the same as foreach_contig
 static void bam_foreach_SQ_line (const char *txt_header, uint32_t txt_header_len, // binary BAM header
-                                 ContigsIteratorCallback callback, void *callback_param)
+                                 ContigsIteratorCallback callback, void *callback_param,
+                                 Buffer *new_txt_header) // optional - if provided, all lines need to be copied (modified or not) to this buffer
 {
     #define HDRSKIP(n) if (txt_header_len < next + n) goto incomplete_header; next += n
     #define HDR32 (next + 4 <= txt_header_len ? GET_UINT32 (&txt_header[next]) : 0) ; if (txt_header_len < next + 4) goto incomplete_header; next += 4;
@@ -106,13 +123,11 @@ incomplete_header:
 }   
 
 typedef struct { uint32_t num_contigs, dict_len; } ContigsCbParam;
-static ContigP sam_header_count_contigs_cb (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *cb_param)
+static void sam_header_count_contigs_cb (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *cb_param)
 {
     // note: for simplicity, we consider contigs to be in the range [0, last_pos] even though POS=0 doesn't exist - last_pos+1 loci
     ((ContigsCbParam*)cb_param)->num_contigs++;
     ((ContigsCbParam*)cb_param)->dict_len += chrom_name_len + 1;
-
-    return NULL;
 }
 
 static void sam_header_alloc_contigs (BufferP txt_header)
@@ -120,7 +135,7 @@ static void sam_header_alloc_contigs (BufferP txt_header)
     sam_header_finalize(); // free previous header
 
     ContigsCbParam contigs_count = {}; 
-    foreach_SQ_line (sam_header_count_contigs_cb, &contigs_count);
+    foreach_SQ_line (sam_header_count_contigs_cb, &contigs_count, NULL);
 
     // note: In BAM, a contig-less header is considered an unaligned BAM in which all RNAME=*
     // In SAM, a contig-less header just means we don't know the contigs and they are defined in RNAME 
@@ -141,71 +156,51 @@ void sam_header_finalize (void)
     }    
 }
 
-static void sam_header_match_contig_to_reference ()
+static void sam_header_add_contig (STRp (contig_name), PosType LN, void *out_ref_index)
 {
-/*    // case match_chrom_to_reference: update contig_name to the matching name in the reference
-    // Note: we match reference contigs by name only, not searching LN, we just verify the LN after the fact.
-    // This is so the process is the same when matching CHROM fields while segging, which will result in the header and lines
-    // behaving the same
-    WordIndex ref_index = ref_contigs_get_by_name (gref , STRa(contig_name), true, true);
-    if (ref_index != WORD_INDEX_NONE) {
-        contig_name = ref_contigs_get_name (gref, ref_index, &contig_name_len); // this contig as its called in the reference
-        length = ref_contigs_get_contig_length (gref, ref_index, 0, 0, true);   // update - we check later that it is consistent
-    }
-
-    bufprintf (evb, new_txt_header, "%.*s<ID=%.*s,length=%"PRIu64">\n", key_len, line, STRf(contig_name), length);
-    printed = true;
-*/}
-
-static ContigP sam_header_add_contig (STRp (hdr_contig_name), PosType LN, void *unused)
-{
-    if (flag.match_chrom_to_reference)
-        sam_header_match_contig_to_reference();
-
     // case: we have a reference, we use the reference chrom_index
-    WordIndex ref_index;
-    if (flag.reference & REF_ZIP_LOADED)
-        ref_index = ref_contigs_ref_chrom_from_header_chrom (gref, STRa(hdr_contig_name), &LN);
+    WordIndex ref_index = WORD_INDEX_NONE;
+    if (flag.reference & REF_ZIP_LOADED) {
+        ref_index = ref_contigs_ref_chrom_from_header_chrom (gref, STRa(contig_name), &LN); // also verifies LN
 
-    // case: no reference, chrom_index is the index of the CHROM context, where these contigs will be copied by zip_prepopulate_contig_ctxs
-    // note: if is_luft_contig, then we're compressing a file that's already DVCF, so no --chain and we don't have a second reference
-    else
-        ref_index = WORD_INDEX_NONE; // this_contigs->len;
+        // case --match-chrom-to-reference
+        if (flag.match_chrom_to_reference) {
+            if (ref_index != WORD_INDEX_NONE) // udpate contig name, if this contig is in the reference
+                contig_name = ref_contigs_get_name (gref, ref_index, &contig_name_len);
+
+            *(WordIndex*)out_ref_index = ref_index;
+        }
+    }
 
     // add to contigs. note: index is sam_hdr_contigs is by order of appearance in header, not the same as the reference
     NEXTENT (Contig, sam_hdr_contigs->contigs) = (Contig){ 
         .max_pos    = LN,        // if last_pos was provided, it is unchanged, and verified = the pos in ref. if not provided, it is what the reference says.
         .char_index = sam_hdr_contigs->dict.len, 
-        .snip_len   = hdr_contig_name_len,
+        .snip_len   = contig_name_len,
         .ref_index  = ref_index  // matching reference contig (with possibly a different variation of the contig name)
     };
 
     if (flag.show_txt_contigs) 
         iprintf ("index=%u \"%.*s\" LN=%"PRId64" ref_index=%d snip_len=%u\n", 
-                 (unsigned)sam_hdr_contigs->contigs.len-1, STRf(hdr_contig_name), LN, ref_index, hdr_contig_name_len);
+                 (unsigned)sam_hdr_contigs->contigs.len-1, STRf(contig_name), LN, ref_index, contig_name_len);
 
     // add to contigs_dict
-    buf_add (&sam_hdr_contigs->dict, hdr_contig_name, hdr_contig_name_len);
+    buf_add_more (NULL, &sam_hdr_contigs->dict, contig_name, contig_name_len, NULL);
     NEXTENT (char, sam_hdr_contigs->dict) = 0; // nul-termiante
-
-    return LASTENT (Contig, sam_hdr_contigs->contigs);
 }
 
 // verify that this contig in this 2nd+ component, also exists (with the same LN) in the contig list created in the 1st component
 // Note: we don't allow components to add new contigs, as currently BAM expects header contigs to be first in the RNAME, and there might already
 // be additional contigs after (eg reference contigs added by zip_prepopulate_contig_ctxs and/or "*"). To do: fix this
-static ContigP sam_header_verify_contig (STRp (hdr_contig), PosType hdr_contig_LN, void *unused)
+static void sam_header_verify_contig (STRp (hdr_contig), PosType hdr_contig_LN, void *unused)
 {
     ASSINP (sam_hdr_contigs->cp_next < sam_hdr_contigs->cp_num_contigs, 
             "Error: txt header: contigs mismatch between files: first file has %u contigs, but %s has more",
              (unsigned)sam_hdr_contigs->cp_num_contigs, txt_name);
 
-    if (flag.match_chrom_to_reference)
-        sam_header_match_contig_to_reference();
-
     STR(sam_hdr_contig_name);
     sam_hdr_contig_name = contigs_get_name (sam_hdr_contigs, sam_hdr_contigs->cp_next, &sam_hdr_contig_name_len);
-    PosType sam_hdr_contig_LN   = contigs_get_LN (sam_hdr_contigs, sam_hdr_contigs->cp_next);
+    PosType sam_hdr_contig_LN = contigs_get_LN (sam_hdr_contigs, sam_hdr_contigs->cp_next);
     
     ASSINP (str_issame (hdr_contig, sam_hdr_contig_name),
             "Error: %s header contig=%u: contig name mismatch between files: in first file: \"%s\", in %s: \"%.*s\"",
@@ -214,7 +209,7 @@ static ContigP sam_header_verify_contig (STRp (hdr_contig), PosType hdr_contig_L
     ASSINP (hdr_contig_LN == sam_hdr_contig_LN, "Error: %s header in \"%s\": contig length mismatch between files: in first file: LN:%"PRId64", in %s: LN:%"PRId64,
             dt_name(txt_file->data_type), sam_hdr_contig_name, sam_hdr_contig_LN, txt_name, hdr_contig_LN);
 
-    return contigs_get_by_index (sam_hdr_contigs, sam_hdr_contigs->cp_next++);
+    contigs_get_by_index (sam_hdr_contigs, sam_hdr_contigs->cp_next++);
 }
 
 // constructs hdr_contigs, and in ZIP, also initialzes refererence ranges and random_access
@@ -241,14 +236,29 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
     // (or a subset) of previous file's contigs (to do: merge headers, bug 327) 
     if (sam_hdr_contigs && flag.bind && z_file->num_txt_components_so_far /* 2nd+ file */) {
         sam_hdr_contigs->cp_next = 0; 
-        foreach_SQ_line (sam_header_verify_contig, NULL);
+        foreach_SQ_line (sam_header_verify_contig, NULL, NULL);
     }
     
     // first bound file, or non-binding ; PIZ - 1st header when concatenating or all headers when unbinding 
     else {
         sam_header_alloc_contigs (txt_header); 
-        if (sam_hdr_contigs)
-            foreach_SQ_line (sam_header_add_contig, NULL);
+        if (sam_hdr_contigs) {
+
+            if (flag.match_chrom_to_reference) {
+                #define new_txt_header txt_header_vb->codec_bufs[0]
+                buf_alloc (txt_header_vb, &new_txt_header, 0, txt_header->len + 100, char, 0, "codec_bufs[0]"); // initial allocation (might be a bit bigger due to label changes)
+
+                foreach_SQ_line (sam_header_add_contig, NULL, &new_txt_header);
+
+                // replace txt_header with lifted back one
+                buf_free (txt_header);
+                buf_copy (txt_header_vb, txt_header, &new_txt_header, char, 0, 0, "txt_data");
+                buf_free (&new_txt_header);
+                #undef new_txt_header
+            }
+            else
+                foreach_SQ_line (sam_header_add_contig, NULL, NULL);
+        }
     }
 
     return true;
@@ -333,13 +343,12 @@ TXTHEADER_TRANSLATOR (sam_header_bam2sam)
     sam_header_add_PG (txtheader_buf);
 }
 
-static ContigP sam_header_sam2bam_count_sq (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *callback_param)
+static void sam_header_sam2bam_count_sq (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *callback_param)
 {
     (*(uint32_t *)callback_param)++;
-    return NULL;
 }
 
-static ContigP sam_header_sam2bam_ref_info (STRp (ref_contig_name), PosType last_pos, void *callback_param)
+static void sam_header_sam2bam_ref_info (STRp (ref_contig_name), PosType last_pos, void *callback_param)
 {
     Buffer *txtheader_buf = (Buffer *)callback_param;
 
@@ -363,8 +372,6 @@ static ContigP sam_header_sam2bam_ref_info (STRp (ref_contig_name), PosType last
 
     ASSINP (last_pos <= INT32_MAX, "Error: cannot convert to BAM because contig %.*s has length=%"PRId64" that exceeds BAM format maximum of %u", 
             ref_contig_name_len-1, ref_contig_name, last_pos, INT32_MAX);
-
-    return NULL;
 }
 
 // prepare BAM header from SAM header, according to https://samtools.github.io/hts-specs/SAMv1.pdf section 4.2
@@ -378,7 +385,7 @@ TXTHEADER_TRANSLATOR (sam_header_sam2bam)
 
     // n_ref = count SQ lines in text
     uint32_t n_ref=0;
-    sam_foreach_SQ_line (txtheader_buf->data, sam_header_sam2bam_count_sq, &n_ref);
+    sam_foreach_SQ_line (txtheader_buf->data, sam_header_sam2bam_count_sq, &n_ref, NULL);
 
     // we can't convert to BAM if its a SAM file with aligned reads but without SQ records, compressed with REF_INTERNAL - as using the REF_INTERNAL
     // contigs would produce lengths that don't match actual reference files - rendering the BAM file useless for downstream
@@ -411,7 +418,7 @@ TXTHEADER_TRANSLATOR (sam_header_sam2bam)
 
     // option 1: copy reference information from SAM SQ lines, if available
     if (from_SQ) 
-        sam_foreach_SQ_line (text, sam_header_sam2bam_ref_info, txtheader_buf);
+        sam_foreach_SQ_line (text, sam_header_sam2bam_ref_info, txtheader_buf, NULL);
 
     // option 2: copy reference information from ref_contigs if available - i.e. if pizzed with external or stored reference
     else if (ref_num_contigs (gref)) 

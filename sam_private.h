@@ -217,7 +217,6 @@ extern void sam_seg_tlen_field (VBlockSAM *vb, STRp(tlen), int64_t tlen_value, P
 extern void sam_seg_qual_field (VBlockSAM *vb, ZipDataLineSAM *dl, const char *qual, uint32_t qual_data_len, unsigned add_bytes);
 extern void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), PosType pos, const char *cigar, unsigned recursion_level, uint32_t level_0_seq_len, const char *level_0_cigar, unsigned add_bytes);
 extern const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char *next_field, int32_t len, bool *has_13, char separator, const char *after_field);
-extern void sam_foreach_SQ_line (const char *txt_header, ContigsIteratorCallback callback, void *callback_param);
 extern const char *bam_get_one_optional (VBlockSAM *vb, const char *next_field, const char **tag, char *type, const char **value, unsigned *value_len);
 extern uint16_t bam_reg2bin (int32_t first_pos, int32_t last_pos);
 extern void bam_seg_bin (VBlockSAM *vb, uint16_t bin, uint16_t flag, PosType this_pos);

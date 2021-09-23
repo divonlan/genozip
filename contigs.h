@@ -73,7 +73,7 @@ extern WordIndex contigs_get_by_ref_index (ConstContigPkgP ctgs,WordIndex ref_in
 static inline PosType contigs_get_LN (ConstContigPkgP ctgs, WordIndex index) { return ENT (Contig, ctgs->contigs, index)->max_pos; }
 
 // iterator
-typedef ContigP (*ContigsIteratorCallback)(STRp(contig_name), PosType last_pos, void *callback_param);
+typedef void (*ContigsIteratorCallback)(STRp(contig_name), PosType last_pos, void *callback_param);
 extern void foreach_contig (ConstContigPkgP ctgs, ContigsIteratorCallback callback, void *callback_param);
 
 // accession numbers
