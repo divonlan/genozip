@@ -79,15 +79,15 @@ typedef union SectionFlags {
 
     struct FlagsGenozipHeader {
         // note: if updating dts_* flags, update in zfile_compress_genozip_header, zfile_show_header too
-        #define dts_ref_internal dt_specific // SAM, BAM: REF_INTERNAL was used for compressing (i.e. SAM file without reference)
+        #define dts_ref_internal dt_specific // SAM: REF_INTERNAL was used for compressing (i.e. SAM file without reference) (introduced v6)
         #define dts_paired       dt_specific // FASTQ: This z_file contains one or more pairs of FASTQs compressed with --pair (introduced v9.0.13)
-        #define dts_mismatch     dt_specific // CHAIN: This chain file's contigs mismatch its references, so it cannot be used with --chain
+        #define dts_mismatch     dt_specific // CHAIN: This chain file's contigs mismatch its references, so it cannot be used with --chain (introduced v12.0.35)
         uint8_t dt_specific      : 1; // this flag has a different meaning depending on the data_type, may be one of the above ^ 
-        uint8_t aligner          : 1; // our aligner may have used to align sequences to the reference (always with FASTQ, sometimes with SAM)
-        uint8_t txt_is_bin       : 1; // Source file is binary (BAM)
+        uint8_t aligner          : 1; // SAM, FASTQ: our aligner may have used to align sequences to the reference (always with FASTQ, sometimes with SAM)
+        uint8_t txt_is_bin       : 1; // BAM: Source file is binary (BAM)
         uint8_t bgzf             : 1; // Reconstruct as BGZF (user may override) (determined by the last component)
         uint8_t adler            : 1; // true if Adler32 is used, false if MD5 is used (>= v9) or (either MD5 or nothing) (v8)
-        uint8_t dual_coords      : 1; // file supports dual coordinates - last two TXT sections are the "liftover rejects" data (v12)
+        uint8_t dual_coords      : 1; // VCF: file supports dual coordinates - last two TXT sections are the "liftover rejects" data (v12)
         uint8_t has_taxid        : 1; // each line in the file has Taxonomic ID information (v12)
         uint8_t unused           : 1;
     } genozip_header;

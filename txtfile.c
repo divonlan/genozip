@@ -432,9 +432,13 @@ static void txtfile_set_seggable_size (void)
         case CODEC_GZ:   // for internal compressors, we use the observed source-compression ratio
         case CODEC_BGZF:
         case CODEC_BZ2: {
-            double plain_len  = txt_file->txt_data_so_far_single + txt_file->unconsumed_txt.len;
-            double gz_bz2_len = file_tell (txt_file, false); // should always work for bz2 or gz. For BZ2 this includes up to 64K read from disk but still in its internal buffers
-            source_comp_ratio = plain_len / gz_bz2_len;
+            if (txt_file->is_remote || txt_file->redirected)
+                source_comp_ratio = 4;
+            else {    
+                double plain_len  = txt_file->txt_data_so_far_single + txt_file->unconsumed_txt.len;
+                double gz_bz2_len = file_tell (txt_file, false); // should always work for bz2 or gz. For BZ2 this includes up to 64K read from disk but still in its internal buffers
+                source_comp_ratio = plain_len / gz_bz2_len;
+            }
             break;
         }
         

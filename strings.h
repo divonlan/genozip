@@ -20,6 +20,9 @@
 #define UPPER_CASE(c) (IS_SLETTER(c) ? ((c)-32) : (c))
 #define LOWER_CASE(c) (IS_CLETTER(c) ? ((c)+32) : (c))
 
+#define TF(s) ((s) ? "true" : "false")
+#define S(s)  ((s) ? (s) : "(none)")
+
 typedef struct { char s[80]; } StrText;
 
 extern StrText char_to_printable (char c);

@@ -27,6 +27,7 @@
 #include "progress.h"
 #include "endianness.h"
 #include "tar.h"
+#include "mutex.h"
 
 // globals
 File *z_file   = NULL;
@@ -447,6 +448,20 @@ static bool file_open_txt_read (File *file)
             // case: this is not GZIP format at all. treat as a plain file, and put the data read in vb->compressed 
             // for later consumption is txtfile_read_block_plain
             else if (bgzf_uncompressed_size == BGZF_BLOCK_IS_NOT_GZIP) {
+
+                #define BZ2_MAGIC "BZh"
+                #define XZ_MAGIC (char[]){ 0xFD, '7', 'z', 'X', 'Z', 0 }
+
+                // we already open the file, so not easy to re-open with BZ2_bzopen as it would require injecting the read data into the BZ2 buffers
+                if (block_size >= 3 && !memcmp (block, BZ2_MAGIC, 3)) 
+                    ABORTINP0 ("The data seems to be in bz2 format. Please use --input to specify the type (eg: \"genozip --input sam.bz2\"");
+
+                if (block_size >= 6 && !memcmp (block, XZ_MAGIC, 6)) {
+                    if (file->redirected) ABORTINP0 ("Compressing piped-in data in xz format is not currently supported");
+                    if (file->is_remote) ABORTINP0 ("The data seems to be in xz format. Please use --input to specify the type (eg: \"genozip --input sam.xz\"");
+                    ABORTINP0 ("The data seems to be in xz format. Please use --input to specify the type (eg: \"genozip --input sam.xz\"");
+                }
+
                 file->codec = CODEC_NONE;
                 buf_add_more (evb, &evb->compressed, block, block_size, "compressed");
             }
@@ -456,7 +471,7 @@ static bool file_open_txt_read (File *file)
             // 3. The codec at this point is what the user declared in -i (we haven't tested for gz yet)
 #ifdef _WIN32 
             ASSINP0 (!flag.is_windows || !file->redirected || file->codec == CODEC_NONE, 
-                     "genozip on Windows supports piping in only plain (uncompressed) data");
+                    "genozip on Windows supports piping in only plain (uncompressed) data");
 #else
             ASSINP (!file->redirected || file->codec == CODEC_NONE || file->codec == CODEC_BGZF, 
                     "genozip only supports piping in data that is either plain (uncompressed) or compressed in BGZF format (typically with .gz extension) (codec=%s)", 
@@ -477,6 +492,8 @@ static bool file_open_txt_read (File *file)
             break;
 
         case CODEC_XZ:
+            if (file->redirected) ABORTINP0 ("Compressing piped-in data in xz format is not currently supported");
+
             input_decompressor = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 
                                                 file->is_remote ? file->name : NULL,     // url
                                                 file->redirected,
@@ -1179,8 +1196,8 @@ bool file_seek (File *file, int64_t offset,
         }
     } 
     else
-        ASSERT (!ret, "fseeko(offset=%"PRId64" whence=%d) failed on file %s: %s", 
-                       offset, whence, file_printname (file), strerror (errno));
+        ASSERT (!ret, "fseeko(offset=%"PRId64" whence=%d) failed on file %s (FILE*=%p remote=%s redirected=%s): %s", 
+                       offset, whence, file_printname (file), file->file, TF(file->is_remote), TF(file->redirected), strerror (errno));
 
     return !ret;
 }
@@ -1192,9 +1209,9 @@ int64_t file_tell_do (File *file, bool soft_fail, const char *func, unsigned lin
     
     if (command == ZIP && file->supertype == TXT_FILE && file->codec == CODEC_BZ2)
         return BZ2_consumed ((BZFILE *)file->file); 
-
     int64_t offset = ftello64 ((FILE *)file->file);
-    ASSERT (offset >= 0 || soft_fail, "called from %s:%u: ftello64 failed for %s: %s", func, line, file->name, strerror (errno));
+    ASSERT (offset >= 0 || soft_fail, "called from %s:%u: ftello64 failed for %s (FILE*=%p remote=%s redirected=%s): %s", 
+            func, line, file->name, file->file, TF(file->is_remote), TF(file->redirected), strerror (errno));
 
     if (offset < 0) return -1; // soft fail
 
@@ -1248,49 +1265,82 @@ void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *b
 }
 
 // writes data to a file and flushes it, returns true if successful
-static char *put_data_tmp_filename = NULL; // never freed once allocated to reduce race conditions with file_put_data_abort
+
+static Mutex put_data_mutex = {};
+#define MAX_PUT_DATA_FILES_PER_EXECUTION 10 // maximum files deletable at abort
+static const char *put_data_tmp_filenames[MAX_PUT_DATA_FILES_PER_EXECUTION] = {};
+static unsigned num_put_files=0;
+
 bool file_put_data (const char *filename, const void *data, uint64_t len, 
                     mode_t mode) // optional - ignored if 0
 {
-    put_data_tmp_filename = MALLOC (strlen(filename)+10);
+    char *tmp_filename = MALLOC (strlen(filename)+5);
     // we first write to tmp_filename, and after we complete and flush, we rename to the final name
     // this is important, eg for the reference cache files - if a file exists (in its final name) - then it is fully written
-    sprintf (put_data_tmp_filename, "%s.tmp", filename);
+    sprintf (tmp_filename, "%s.tmp", filename);
 
     file_remove (filename, true);
-    file_remove (put_data_tmp_filename, true);
+    file_remove (tmp_filename, true);
 
-    FILE *file = fopen (put_data_tmp_filename, "wb");
+    FILE *file = fopen (tmp_filename, "wb");
     if (!file) return false;
+
+    // save file name in put_data_tmp_filenames, to be deleted in case of aborting by file_put_data_abort
+    mutex_initialize (put_data_mutex); // first caller initializes. not thread safe, but good enough for the purpose.
+    mutex_lock (put_data_mutex);
     
+    unsigned my_file_i = num_put_files;
+
+    if (num_put_files < MAX_PUT_DATA_FILES_PER_EXECUTION) 
+        put_data_tmp_filenames[num_put_files++] = tmp_filename; 
+
+    mutex_unlock (put_data_mutex);
+
     size_t written = fwrite (data, 1, len, file);
     
     SAVE_VALUE (errno);
     fflush (file);    
-    FCLOSE (file, put_data_tmp_filename); 
+    FCLOSE (file, tmp_filename); 
     RESTORE_VALUE (errno); // in cases caller wants to print fwrite error
 
-    if (written == len) { // successful
-        ASSERT (!rename (put_data_tmp_filename, filename), "failed to rename %s to %s: %s", 
-                put_data_tmp_filename, filename, strerror (errno));
-
-        if (mode)
-            ASSERT (!chmod (filename, mode), "failed to chmod %s: %s", filename, strerror (errno));
-
-        return true;
-    } 
-    else {
+    if (written != len) {
+        put_data_tmp_filenames[my_file_i] = NULL; // no need to lock mutex
+        remove (tmp_filename);
         return false;
     }
+
+    // we can't enter if file_put_data_abort is active, or it needs to wait for us before deleting tmp files
+    mutex_lock (put_data_mutex);
+
+    int renamed_failed = rename (tmp_filename, filename);
+
+    put_data_tmp_filenames[my_file_i] = NULL; // remove tmp file name from list 
+    FREE (tmp_filename);
+    
+    mutex_unlock (put_data_mutex);
+
+    ASSERT (!renamed_failed, "failed to rename %s to %s: %s", tmp_filename, filename, strerror (errno));
+
+    if (mode) 
+        ASSERT (!chmod (filename, mode), "failed to chmod %s: %s", filename, strerror (errno));
+
+    return true;
 }
 
-// error handling: unlink the file currently being written (the actual writing will terminate when the thread terminates)
+// error handling: unlink files currently being written (the actual writing will terminate when the thread terminates)
 void file_put_data_abort (void)
 {
-    if (put_data_tmp_filename) {
-        unlink (put_data_tmp_filename); // ignore errors
-        remove (put_data_tmp_filename); // in case unlinked failed - eg NTFS - ignore errors
-    }
+    if (!put_data_mutex.initialized) return;
+
+    mutex_lock (put_data_mutex);
+
+    for (unsigned i=0; i < num_put_files; i++) 
+        if (put_data_tmp_filenames[i]) {
+            unlink (put_data_tmp_filenames[i]); // ignore errors
+            remove (put_data_tmp_filenames[i]); // in case unlinked failed - eg NTFS - ignore errors
+        }
+
+    // mutex remains locked - no more files can be put after this point
 }
 
 void file_assert_ext_decompressor (void)

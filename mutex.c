@@ -3,6 +3,7 @@
 //   Copyright (C) 2020-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
+#include <errno.h>
 #include "genozip.h"
 #include "mutex.h"
 #include "flags.h"
@@ -12,7 +13,8 @@ void mutex_initialize_do (Mutex *mutex, const char *name, const char *func)
     if (mutex->initialized) return;
 
     int ret = pthread_mutex_init (&mutex->mutex, 0); 
-    ASSERT (!ret, "pthread_mutex_init failed for %s from %s: %s", name, func, strerror (ret));
+    ASSERT (!ret || errno == EBUSY,  // EBUSY is not an error - the failure is bc a race condition and the mutex is already initialized - all good
+            "pthread_mutex_init failed for %s from %s: %s", name, func, strerror (ret)); 
 
     mutex->name = name;
     mutex->initialized = func;
