@@ -264,9 +264,11 @@ static WordIndex ctx_evaluate_snip_merge (VBlock *vb, Context *zctx, Context *vc
     if (node_index < 0) {
         seg_add_to_local_text (vb, vctx, snip, snip_len, 0);
 
-        if (flag.debug_seg)  
+        if (flag.debug_seg) {
+            char printable_snip[snip_len+20];
             iprintf ("eval_merge: vb_i=%u %s: SINGLETON replaced by SNIP_LOCAL: snip=%s snip_len=%u\n", 
-                     vb->vblock_i, vctx->tag_name, str_print_snip (snip, snip_len).s, snip_len);
+                     vb->vblock_i, vctx->tag_name, str_print_snip (snip, snip_len, printable_snip), snip_len);
+        }
 
         static char lookup = SNIP_LOOKUP;
         return ctx_evaluate_snip_merge (vb, zctx, vctx, &lookup, 1, -1 /* not singleton */, node, is_new);
@@ -301,7 +303,8 @@ WordIndex ctx_evaluate_snip_seg (VBlock *vb, Context *vctx,
     ASSERT0 (vctx->dict_id.num, "vctx has no dict_id");
 
     if (flag.debug_seg && !segconf.running) { 
-        if (snip) iprintf ("eval_seg: vb_i=%u %s: snip=%s snip_len=%u\n", vb->vblock_i, vctx->tag_name, str_print_snip (snip, snip_len).s, snip_len);
+        char printable_snip[snip_len+20];
+        if (snip) iprintf ("eval_seg: vb_i=%u %s: snip=%s snip_len=%u\n", vb->vblock_i, vctx->tag_name, str_print_snip (snip, snip_len, printable_snip), snip_len);
         else      iprintf ("eval_seg: vb_i=%u %s: snip=NULL snip_len=0", vb->vblock_i, vctx->tag_name);
     }
 
@@ -1052,10 +1055,12 @@ void ctx_sort_dictionaries_vb_1(VBlock *vb)
             node->word_index.n = i;
             next += node->snip_len + 1;
 
-            if (flag.debug_seg)
+            if (flag.debug_seg) {
+                char printable_snip[node->snip_len+20];
                 iprintf ("ctx_sort_dictionaries_vb_1: %s: word_index=%u snip=%s snip_len=%u count=%"PRId64"\n",
-                          ctx->tag_name, i, str_print_snip (snip, node->snip_len).s, node->snip_len, 
+                          ctx->tag_name, i, str_print_snip (snip, node->snip_len, printable_snip), node->snip_len, 
                           *ENT (int64_t, ctx->counts, ctx->ol_nodes.len + node_index));
+            }
         }
 
         buf_destroy (&sorter); // destroy and not free as it is first allocated by vb=0 and then again vb=1

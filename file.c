@@ -1315,11 +1315,11 @@ bool file_put_data (const char *filename, const void *data, uint64_t len,
     int renamed_failed = rename (tmp_filename, filename);
 
     put_data_tmp_filenames[my_file_i] = NULL; // remove tmp file name from list 
-    FREE (tmp_filename);
     
     mutex_unlock (put_data_mutex);
 
     ASSERT (!renamed_failed, "failed to rename %s to %s: %s", tmp_filename, filename, strerror (errno));
+    FREE (tmp_filename);
 
     if (mode) 
         ASSERT (!chmod (filename, mode), "failed to chmod %s: %s", filename, strerror (errno));

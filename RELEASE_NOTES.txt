@@ -527,15 +527,15 @@ g. Much improved website genozip.com
 - Improved --STATS report
 - bug fixes
 
-12.0.35 
-- Add: genozip --match-chrom-to-reference: rewrite contig names to match the provided reference file (eg "22"->"chr22")
+12.0.36 24/September/2021
+- New: genozip --match-chrom-to-reference: rewrite contig names to match the provided reference file (eg "22"->"chr22"), see https://genozip/match-chrom.html
 - Chain files can now be subsetted with --regions
-- Removed obsolete --with-chr
-- Relax section 2f of the license
 - More accurate progress indicator
 - Better support for contigs named by accession number, eg "GL000192.1", "chrUn_JTFH01001867v2_decoy", "chr4_gl383528_alt"
 - New advanced option: --debug-seg
 - Advanced option --show-ref-alts renamed --show-chrom2ref
 - faster --downsample when used with very large values 
+- Relax section 2f of the license
+- Removed obsolete --with-chr
 - Bug fixes
 

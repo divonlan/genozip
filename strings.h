@@ -27,8 +27,7 @@ typedef struct { char s[80]; } StrText;
 
 extern StrText char_to_printable (char c);
 
-extern char *str_print_snip_do (const char *in, uint32_t in_len, char *out);
-#define str_print_snip(in,in_len) ({ struct { char s[in_len+20]; } str; str_print_snip_do (in, in_len, str.s); str; })
+extern char *str_print_snip (const char *in, uint32_t in_len, char *out);
 
 extern char *str_to_single_line_printable (const char *in, uint32_t in_len, char *out);
 extern char *str_tolower (const char *in, char *out /* out allocated by caller - can be the same as in */);

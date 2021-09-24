@@ -49,8 +49,8 @@ StrText char_to_printable (char c)
     }
 }
 
-char *str_print_snip_do (const char *in, uint32_t in_len, 
-                         char *out) // caller allocated - in_len+20
+char *str_print_snip (const char *in, uint32_t in_len, 
+                      char *out) // caller allocated - in_len+20
 {
     char *save_out = out;
 
