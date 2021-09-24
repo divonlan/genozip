@@ -122,6 +122,7 @@ typedef struct {
          multiple_files,     // Command line includes multiple files
          reconstruct_as_src, // the reconstructed data type is the same as the source data type
          maybe_txt_header_modified,
+         maybe_lines_dropped_by_reconstructor,
          maybe_vb_modified_by_reconstructor,
          maybe_vb_modified_by_writer,
          maybe_vb_dropped_before_read,

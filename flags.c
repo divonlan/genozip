@@ -209,6 +209,7 @@ static void flags_show_flags (void)
     iprintf ("maybe_vb_dropped_after_read=%s\n", TF_(maybe_vb_dropped_after_read));
     iprintf ("missing_contexts_allowed=%s\n", TF_(missing_contexts_allowed));
     iprintf ("maybe_vb_modified_by_reconstructor=%s\n", TF_(maybe_vb_modified_by_reconstructor));
+    iprintf ("maybe_lines_dropped_by_reconstructor=%s\n", TF_(maybe_lines_dropped_by_reconstructor));
     iprintf ("maybe_vb_modified_by_writer=%s\n", TF_(maybe_vb_modified_by_writer));
     iprintf ("data_modified=%s\n", TF_(data_modified));
     iprintf ("explicit_ref=%s\n", TF_(explicit_ref));
@@ -291,8 +292,8 @@ static void flags_set_downsample (const char *optarg)
     char *comma = strchr (optarg, ',');
     unsigned downsample_len = comma ? (comma - optarg) : strlen(optarg);
 
-    ASSINP (str_get_int_range32 (optarg, downsample_len, 2, 1000000, (int32_t *)&flag.downsample), 
-            "--downsample: bad rate \"%.*s\", expecting an integer from 2 to 1000000", downsample_len, optarg);
+    ASSINP (str_get_int_range32 (optarg, downsample_len, 2, 1000000000, (int32_t *)&flag.downsample), 
+            "--downsample: bad rate \"%.*s\", expecting an integer from 2 to 1000000000", downsample_len, optarg);
 
     ASSINP (!comma || str_get_int_range32 (comma+1, 0, 0, flag.downsample-1, (int32_t *)&flag.shard), 
             "--downsample: bad shard \"%s\", expecting an integer from 0 to %u", comma+1, (int)flag.downsample-1);
@@ -1058,24 +1059,34 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
         ((flag.grep && (dt == DT_FASTQ || dt == DT_FASTA)) || // decided by piz_read_one_vb
          (flag.regions && dt == DT_FASTA)); // decided by piz_read_one_vb
 
-    flag.maybe_vb_modified_by_reconstructor = exe_type == EXE_GENOCAT && 
-         // translating to another data
-        (!flag.reconstruct_as_src || 
-         // VCF specific VB modifiers
-         (dt == DT_VCF   && (flag.samples || flag.drop_genotypes || flag.gt_only || flag.snps_only || flag.indels_only || 
-                             flag.show_dvcf || flag.show_ostatus)) || 
-         // FASTA specific modifiers
+    flag.maybe_lines_dropped_by_reconstructor = exe_type == EXE_GENOCAT && 
+         ((dt == DT_VCF   && (flag.snps_only || flag.indels_only)) || 
+         // FASTA specific line dropppers
          (dt == DT_FASTA && (flag.sequential || flag.header_only_fast || flag.header_one || flag.no_header)) || 
-         // FASTQ specific modifiers
-         (dt == DT_FASTQ && (flag.header_only_fast || flag.seq_only || flag.qual_only || flag.bases)) || 
-         // SAM specific modifiers
+         // FASTQ specific line dropppers
+         (dt == DT_FASTQ && (flag.bases)) || 
+         // SAM specific line dropppers
          (dt == DT_SAM   && (flag.sam_flag_filter || flag.sam_mapq_filter || flag.bases)) || 
-         // Dual-coordinate-file modifiers
+         // Dual-coordinate-file line dropppers
          z_dual_coords || // vcf_lo_piz_TOPLEVEL_cb_filter_line will drop lines of the wrong coordinate
          // general filters 
          flag.kraken_taxid != TAXID_NONE || flag.grep || flag.regions || flag.lines_first >= 0 || flag.tail ||
          // no-writer, but nevertheless modify the txt_data
          flag.collect_coverage || flag.count);
+
+    flag.maybe_vb_modified_by_reconstructor = exe_type == EXE_GENOCAT && 
+         // translating to another data
+        (!flag.reconstruct_as_src || 
+         // lines may be dropped by reconstructor
+         flag.maybe_lines_dropped_by_reconstructor || 
+         // VCF specific VB modifiers
+         (dt == DT_VCF   && (flag.samples || flag.drop_genotypes || flag.gt_only || flag.show_dvcf || flag.show_ostatus)) || 
+         // FASTA specific modifiers
+         (dt == DT_FASTA && (false)) || 
+         // FASTQ specific modifiers
+         (dt == DT_FASTQ && (flag.header_only_fast || flag.seq_only || flag.qual_only)) || // FASTQ "line" is for lines, so these are line modifications, not drops
+         // SAM specific modifiers
+         (dt == DT_SAM   && (false)));
 
     flag.maybe_vb_modified_by_writer = exe_type == EXE_GENOCAT && 
         (flag.downsample || // lines might be removed

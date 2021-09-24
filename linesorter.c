@@ -47,18 +47,19 @@ void linesorter_show_recon_plan (File *file, bool is_luft, uint32_t conc_writing
              (unsigned)plan_len, conc_writing_vbs, vblock_mb);
 
     for (uint32_t i=0; i < plan_len; i++)
-        iprintf ("vb=%u\t%s=%u\t%s=%s\n", plan[i].vb_i, 
-                 plan[i].plan_type == PLAN_INTERLEAVE ? "vb2"        
-               : plan[i].plan_type == PLAN_TXTHEADER  ? "component"
-               :                                        "start_line",
-                 plan[i].start_line, 
-                 plan[i].num_lines < 0xfffffff0        ? "num_lines"   
-               :                                         "plan_type",
-                 plan[i].plan_type == PLAN_END_OF_VB   ? "END_OF_VB"    
-               : plan[i].plan_type == PLAN_FULL_VB     ? "FULL_VB"     
-               : plan[i].plan_type == PLAN_INTERLEAVE  ? "INTERLEAVE"  
-               : plan[i].plan_type == PLAN_TXTHEADER   ? "TXTHEADER"   
-               :                                         str_int_s (plan[i].num_lines).s); 
+        iprintf ("vb=%u\t%s=%u\t%s=%s\n", plan[i].x.vb_i, 
+                 plan[i].x.plan_type == PLAN_INTERLEAVE  ? "vb2"        
+               : plan[i].x.plan_type == PLAN_TXTHEADER   ? "component"
+               :                                           "start_line",
+                 plan[i].range.start_line, 
+                 plan[i].range.num_lines < MIN_PLAN_TYPE ? "num_lines"   
+               :                                           "plan_type",
+                 plan[i].x.plan_type == PLAN_END_OF_VB   ? "END_OF_VB"    
+               : plan[i].x.plan_type == PLAN_FULL_VB     ? "FULL_VB"     
+               : plan[i].x.plan_type == PLAN_INTERLEAVE  ? "INTERLEAVE"  
+               : plan[i].x.plan_type == PLAN_TXTHEADER   ? "TXTHEADER"   
+               : plan[i].x.plan_type == PLAN_DOWNSAMPLE  ? "DOWNSAMPLE"   
+               :                                           str_int_s (plan[i].x.plan_type).s); 
 }
 
 static void linesorter_merge_vb_do (VBlock *vb, bool is_luft)
@@ -297,15 +298,15 @@ static uint32_t linesorter_plan_reconstruction (const Buffer *line_info, const B
         if (prev_li && 
             li->vblock_i == prev_li->vblock_i &&  
             prev_li->start_line + prev_li->num_lines == li->start_line)
-            LASTENT (ReconPlanItem, txt_file->recon_plan)->num_lines += li->num_lines;
+            LASTENT (ReconPlanItem, txt_file->recon_plan)->range.num_lines += li->num_lines;
 
         // different vb or non-consecutive lines - start new entry
         else {
             buf_alloc (evb, &txt_file->recon_plan, 1, 0, ReconPlanItem, 2, 0);
             NEXTENT (ReconPlanItem, txt_file->recon_plan) = (ReconPlanItem){
-                .vb_i       = li->vblock_i,
-                .start_line = li->start_line,
-                .num_lines  = li->num_lines
+                .range.vb_i       = li->vblock_i,
+                .range.start_line = li->start_line,
+                .range.num_lines  = li->num_lines
             };
         }
         
@@ -325,8 +326,8 @@ static uint32_t linesorter_plan_reconstruction (const Buffer *line_info, const B
 
             buf_alloc (evb, &txt_file->recon_plan, 1, 0, ReconPlanItem, 2, 0);
             NEXTENT (ReconPlanItem, txt_file->recon_plan) = (ReconPlanItem){ 
-                .vb_i      = li->vblock_i,
-                .num_lines = PLAN_END_OF_VB,
+                .end_of_vb.vb_i      = li->vblock_i,
+                .end_of_vb.plan_type = PLAN_END_OF_VB,
             }; 
         }
 

@@ -536,5 +536,6 @@ g. Much improved website genozip.com
 - Better support for contigs named by accession number, eg "GL000192.1", "chrUn_JTFH01001867v2_decoy", "chr4_gl383528_alt"
 - New advanced option: --debug-seg
 - Advanced option --show-ref-alts renamed --show-chrom2ref
+- faster --downsample when used with very large values 
 - Bug fixes
 

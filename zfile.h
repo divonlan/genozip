@@ -44,6 +44,8 @@ extern bool zfile_read_genozip_header (SectionHeaderGenozipHeader *header);
 
 extern SectionHeaderUnion zfile_read_section_header (VBlockP vb, uint64_t offset, uint32_t original_vb_i, SectionType expected_sec_type);
 
+extern uint64_t zfile_num_lines_in_vb (uint32_t vb_i);
+
 #define SECTION_SKIPPED ((int32_t)-1)
 extern int32_t zfile_read_section_do (FileP file, VBlockP vb, uint32_t original_vb_i, 
                                       BufferP data /* buffer to append */, const char *buf_name,

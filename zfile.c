@@ -433,6 +433,18 @@ SectionHeaderUnion zfile_read_section_header (VBlockP vb, uint64_t offset,
     return header;
 }
 
+// PIZ main thread
+uint64_t zfile_num_lines_in_vb (uint32_t vb_i)
+{
+    ASSERT0 (z_file->genozip_version >= 12, "this function is supported only for files compressed with v12 or later");
+
+    Section sec = sections_vb_first (vb_i, false);
+
+    SectionHeaderUnion header = zfile_read_section_header (evb, sec->offset, vb_i, SEC_VB_HEADER);
+
+    return BGEN32 (flag.luft ? header.vb_header.num_lines_luft : header.vb_header.num_lines_prim);
+}
+
 // check if reference filename exists in the absolute or relative path from the chain header, and if not, 
 // check the relative path from the chain file
 static const char *zfile_read_genozip_header_get_ref_filename (const char *header_fn)

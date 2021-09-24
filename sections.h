@@ -320,13 +320,51 @@ typedef struct SectionHeaderReconPlan {
 #define PLAN_FULL_VB     0xfffffffe
 #define PLAN_INTERLEAVE  0xfffffffd
 #define PLAN_TXTHEADER   0xfffffffc
-typedef struct {
-    uint32_t vb_i;               // 0 if PLAN_TXTHEADER
-    uint32_t start_line;         // 0-based line within vb_i
-    #define vb2_i start_line     // vb2_i is used in place of start_line with PLAN_INTERLEAVE
-    #define rp_comp_i start_line // rp_comp_i is used in place of start_line with PLAN_TXTHEADER
-    uint32_t num_lines;
-    #define plan_type num_lines  // one of PLAN*
+#define PLAN_DOWNSAMPLE  0xfffffffb
+#define MIN_PLAN_TYPE    0xfffffffb
+typedef union {
+    struct {
+        uint32_t vb_i;               
+        uint32_t start_line; // 0-based line within vb_i
+        uint32_t num_lines;
+    } range;
+
+    struct {
+        uint32_t vb_i;               
+        uint32_t unused;    
+        uint32_t plan_type;  // must be PLAN_END_OF_VB
+    } end_of_vb;
+
+    struct {
+        uint32_t vb_i;               
+        uint32_t unused;    
+        uint32_t plan_type;  // must be PLAN_FULL_VB
+    } full_vb;
+
+    struct {
+        uint32_t vb_i;               
+        uint32_t vb2_i;    
+        uint32_t plan_type;  // must be PLAN_INTERLEAVE
+    } interleave;
+
+    struct {
+        uint32_t vb_i;               
+        uint32_t rp_comp_i;    
+        uint32_t plan_type;  // must be PLAN_TXTHEADER
+    } txt_header;
+
+    struct {
+        uint32_t vb_i;               
+        uint32_t num_lines;  // copied from SectionHeaderVbHeader.num_lines_[prim|luft]   
+        uint32_t plan_type;  // must be PLAN_DOWNSAMPLE
+    } downsample;
+
+    struct {
+        uint32_t vb_i;               
+        uint32_t unused;    
+        uint32_t plan_type;  
+    } x; // generic
+
 } ReconPlanItem;
 
 // the data of SEC_SECTION_LIST is an array of the following type, as is the z_file->section_list_buf

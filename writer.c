@@ -22,6 +22,7 @@
 #include "codec.h" 
 #include "endianness.h"
 #include "bit_array.h"
+#include "version.h"
 
 // ---------------
 // Data structures
@@ -320,13 +321,50 @@ static void writer_add_txtheader_plan (CompInfo *comp)
     buf_alloc (evb, &z_file->recon_plan, 1, 1000, ReconPlanItem, 1.5, "recon_plan");
 
     NEXTENT (ReconPlanItem, z_file->recon_plan) = (ReconPlanItem){ 
-        .vb_i       = 0, // component, not VB
-        .rp_comp_i  = comp->info.comp_i,
-        .plan_type  = PLAN_TXTHEADER
+        .txt_header.plan_type  = PLAN_TXTHEADER,
+        .txt_header.vb_i       = 0, // component, not VB
+        .txt_header.rp_comp_i  = comp->info.comp_i
     };
 }
 
-// PIZ main thread: add "all vb" entry for each VB of the component
+// PIZ main thread: add "full vb" entry for each VB of the component
+static void writer_add_downsample_plan (const CompInfo *comp)
+{
+    buf_alloc (evb, &z_file->recon_plan, comp->num_vbs, 1000, ReconPlanItem, 1.5, "recon_plan");
+
+    uint64_t lines_so_far = 0;
+
+    for (uint32_t i=0; i < comp->num_vbs; i++) {
+        uint32_t vb_i = comp->first_vb_i + i;
+        VbInfo *v = ENT (VbInfo, vb_info, vb_i);
+
+        uint64_t num_lines_in_vb = zfile_num_lines_in_vb (vb_i); 
+
+        uint64_t num_lines_to_next = (flag.downsample - (lines_so_far % flag.downsample) + flag.shard) % flag.downsample;
+
+        // case: we need at least one line from this VB
+        if (num_lines_to_next <= num_lines_in_vb) 
+            NEXTENT (ReconPlanItem, z_file->recon_plan) = (ReconPlanItem){ 
+                .full_vb.plan_type  = PLAN_FULL_VB, // all lines
+                .full_vb.vb_i       = vb_i
+            };
+
+        // case: we don't need any line from this VB
+        else {
+            NEXTENT (ReconPlanItem, z_file->recon_plan) = (ReconPlanItem){ 
+                .downsample.plan_type = PLAN_DOWNSAMPLE, 
+                .downsample.vb_i      = vb_i,
+                .downsample.num_lines = num_lines_in_vb
+            };
+            v->no_read = true;
+            v->in_plan = false;
+        }
+
+        lines_so_far += num_lines_in_vb;
+    }
+}
+
+// PIZ main thread: add "full vb" entry for each VB of the component
 static void writer_add_trival_plan (const CompInfo *comp)
 {
     buf_alloc (evb, &z_file->recon_plan, comp->num_vbs, 1000, ReconPlanItem, 1.5, "recon_plan");
@@ -338,8 +376,8 @@ static void writer_add_trival_plan (const CompInfo *comp)
         if (!v->in_plan) continue;
 
         NEXTENT (ReconPlanItem, z_file->recon_plan) = (ReconPlanItem){ 
-            .vb_i       = vb_i,
-            .plan_type  = PLAN_FULL_VB // all lines
+            .full_vb.plan_type  = PLAN_FULL_VB, // all lines
+            .full_vb.vb_i       = vb_i
         };
     }
 }
@@ -365,9 +403,9 @@ static void writer_add_interleave_plan (const CompInfo *comp)
         if (v1->in_plan && v2->in_plan) {            
             buf_alloc (evb, &z_file->recon_plan, 2, 1000, ReconPlanItem, 1.5, "recon_plan");
             NEXTENT (ReconPlanItem, z_file->recon_plan) = (ReconPlanItem){ 
-                .vb_i      = sl1->vblock_i,
-                .vb2_i     = sl2->vblock_i,
-                .plan_type = PLAN_INTERLEAVE // all lines
+                .interleave.plan_type = PLAN_INTERLEAVE, 
+                .interleave.vb_i      = sl1->vblock_i,
+                .interleave.vb2_i     = sl2->vblock_i
             };
         }
         else // if one of them is filtered out, both are
@@ -414,14 +452,14 @@ static void writer_add_plan_from_recon_section (const CompInfo *comp, Section re
 
     Section sl = comp->txt_header_sl;
     for (uint64_t i=0; i < plan_len; i++) {
-        if (!ENT (VbInfo, vb_info, plan[i].vb_i)->in_plan) continue; // skip plan items from non-included VBs
+        if (!ENT (VbInfo, vb_info, plan[i].x.vb_i)->in_plan) continue; // skip plan items from non-included VBs
 
         NEXTENT (ReconPlanItem, z_file->recon_plan) = plan[i];
         
-        if (!vb_is_pulled_up[plan[i].vb_i - comp->first_vb_i]) { // first encounter with this VB in the plan
+        if (!vb_is_pulled_up[plan[i].x.vb_i - comp->first_vb_i]) { // first encounter with this VB in the plan
             // move all sections of vb_i to be immediately after sl ; returns last section of vb_i after move
-            sl = sections_pull_vb_up (plan[i].vb_i, sl); 
-            vb_is_pulled_up[plan[i].vb_i - comp->first_vb_i] = true;
+            sl = sections_pull_vb_up (plan[i].x.vb_i, sl); 
+            vb_is_pulled_up[plan[i].x.vb_i - comp->first_vb_i] = true;
         }
     }
     FREE (vb_is_pulled_up);
@@ -485,6 +523,10 @@ void writer_create_plan (void)
         // case: we have a SEC_RECON section (occurs in dual-coordinates files)
         else if (flag.sort && (recon_plan_sl = writer_get_recon_plan_sl (comp)))
             writer_add_plan_from_recon_section (comp, recon_plan_sl, &conc_writing_vbs, &vblock_mb);
+
+        // case: a fairly large downsample - if lines are not dropped or re-ordered (DVCF, interleave) - we may be able to drop some VBs
+        else if (flag.downsample > 100 && !flag.maybe_lines_dropped_by_reconstructor && !flag.interleave && z_file->genozip_version >= 12)
+            writer_add_downsample_plan (comp);
 
         // case: just a plain-vanilla VB
         else 
@@ -670,24 +712,24 @@ static void writer_main_loop (VBlockP wvb)
 
         ReconPlanItem *p = ENT (ReconPlanItem, txt_file->recon_plan, i);
 
-        ASSERT (p->vb_i >= 0 && p->vb_i <= vb_info.len, 
-                "plan[%u].vb_i=%u expected to be in range [1,%u] ", (unsigned)i, p->vb_i, (unsigned)vb_info.len);
+        ASSERT (p->x.vb_i >= 0 && p->x.vb_i <= vb_info.len, 
+                "plan[%u].vb_i=%u expected to be in range [1,%u] ", (unsigned)i, p->x.vb_i, (unsigned)vb_info.len);
 
-        VbInfo *v  = p->vb_i                        ? ENT (VbInfo, vb_info, p->vb_i) 
-                   : p->plan_type == PLAN_TXTHEADER ? &ENT (CompInfo, comp_info, p->rp_comp_i)->info
-                   :                                  NULL;
+        VbInfo *v  = p->x.vb_i ? ENT (VbInfo, vb_info, p->x.vb_i) 
+                   : p->txt_header.plan_type == PLAN_TXTHEADER ? &ENT (CompInfo, comp_info, p->txt_header.rp_comp_i)->info
+                   : NULL;
 
-        VbInfo *v2 = p->vb_i && flag.interleave ? ENT (VbInfo, vb_info, p->vb2_i) : NULL;
+        VbInfo *v2 = p->x.vb_i && flag.interleave ? ENT (VbInfo, vb_info, p->interleave.vb2_i) : NULL;
 
         // if data for this VB is not ready yet, wait for it
-        if (v && !v->is_loaded) 
+        if (v && !v->is_loaded && p->x.plan_type != PLAN_DOWNSAMPLE) 
             writer_load_vb (v);
 
         if (v2 && !v2->is_loaded) 
             writer_load_vb (v2);
 
         // case: free data if this is the last line of the VB
-        switch (p->num_lines) {
+        switch (p->x.plan_type) {
 
             case PLAN_TXTHEADER:   
                 writer_flush_vb (wvb, v->vb); // write the txt header in its entirety
@@ -705,6 +747,10 @@ static void writer_main_loop (VBlockP wvb)
                 vb_release_vb (&v->vb);
                 break;
 
+            case PLAN_DOWNSAMPLE:
+                txt_file->lines_written_so_far += p->downsample.num_lines;
+                break;
+
             case PLAN_END_OF_VB: // done with VB - free the memory (happens after a series of "default" line range entries)
                 vb_release_vb (&v->vb);
                 break;
@@ -716,7 +762,7 @@ static void writer_main_loop (VBlockP wvb)
                 break;
 
             default: 
-                writer_write_line_range (wvb, v, p->start_line, p->num_lines);
+                writer_write_line_range (wvb, v, p->range.start_line, p->range.num_lines);
                 break;
         }
 
