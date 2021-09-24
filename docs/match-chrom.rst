@@ -3,7 +3,7 @@
 Matching contig names of the file to those in the reference file
 ================================================================
 
-The unfortunate reality of the bioinformatics world is that contigs may appear with different names in different reference files, causing a problems in analysis pipelines.
+The unfortunate reality of the bioinformatics world is that contigs may appear with different names in different reference files, causing problems in analysis pipelines.
 
 Examples: 
 
