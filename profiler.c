@@ -188,6 +188,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
     }    
 
     PRINT (buf_alloc, 0);
+    PRINT (buf_mmap_do, 0);
     PRINT (dispatcher_recycle_vbs, 0);
     PRINT (generate_rev_complement_genome, 0);
     

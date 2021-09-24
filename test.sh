@@ -451,21 +451,32 @@ batch_dvcf()
 batch_match_chrom()
 {
     batch_print_header
+    
+    # note: we test Chain in batch_dvcf. To do: add a GFF3 test file 
+    local files=(basic-dvcf-source.vcf basic.genome_Full.me23.txt special.match.sam special.match.bam)
+    local file f
+    for f in ${files[@]}; do
 
-    file=$TESTDIR/basic-dvcf-source.vcf # has contigs from both styles
+        test_header "$f --match-chrom"
 
-    # convert to CHROM_STYLE_22
-    $genozip --match-chrom $file -fo $OUTDIR/one.vcf.genozip -e $hg19 || exit 1
-    $genounzip $OUTDIR/one.vcf.genozip || exit 1
+        file=$TESTDIR/$f # has contigs from both styles
+        one=$OUTDIR/one.$f
+        two=$OUTDIR/two.$f
+        three=$OUTDIR/three.$f
 
-    #convert CHROM_STYLE_chr22 and then to CHROM_STYLE_22
-    $genozip --match-chrom $file -fo $OUTDIR/two.vcf.genozip -e $hs37d5 || exit 1
-    $genounzip -f $OUTDIR/two.vcf.genozip || exit 1
+        # convert to CHROM_STYLE_22
+        $genozip --match-chrom $file -fo ${one}.genozip -e $hg19 || exit 1
+        $genounzip ${one}.genozip || exit 1
 
-    $genozip --match-chrom $OUTDIR/two.vcf -fo $OUTDIR/three.vcf.genozip -e $hg19 || exit 1
-    $genounzip -f $OUTDIR/three.vcf.genozip || exit 1
+        #convert CHROM_STYLE_chr22 and then to CHROM_STYLE_22
+        $genozip --match-chrom $file -fo ${two}.genozip -e $hs37d5 || exit 1
+        $genounzip -f ${two}.genozip || exit 1
 
-    cmp_2_files $OUTDIR/three.vcf $OUTDIR/one.vcf
+        $genozip --match-chrom $two -fo ${three}.genozip -e $hg19 || exit 1
+        $genounzip -f ${three}.genozip || exit 1
+
+        cmp_2_files $three $one 
+    done
 
     cleanup
 }

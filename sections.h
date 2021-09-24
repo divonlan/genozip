@@ -197,7 +197,7 @@ typedef struct {
 typedef struct {
     SectionHeader h;            
     uint32_t unused;                  // "unused" since v12 (up to v11 it was "uint32_t first_line; // if 0, this is the terminating section of the components")
-    uint32_t top_level_repeats;       // repeats of TOPLEVEL container in this VB (was called num_lines before b12)
+    uint32_t top_level_repeats;       // repeats of TOPLEVEL container in this VB (was called num_lines before v12)
     uint32_t recon_size_prim;         // size of vblock as it appears in the default PRIMARY reconstruction
     uint32_t z_data_bytes;            // total bytes of this vblock in the genozip file including all sections and their headers 
     uint32_t longest_line_len;        // length of the longest line in this vblock 

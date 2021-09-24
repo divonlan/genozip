@@ -647,6 +647,8 @@ bool buf_mmap_do (VBlock *vb, Buffer *buf, const char *filename,
                   bool read_only_buffer, // if false, make a copy-on-write memory mapping, creating private pages upon write
                   const char *func, uint32_t code_line, const char *name)
 {
+    START_TIMER;
+
     int fd = -1;
 
     if (!file_exists (filename)) return false; 
@@ -695,6 +697,8 @@ bool buf_mmap_do (VBlock *vb, Buffer *buf, const char *filename,
 
     // load entire buffer to memory (by accessing a single byte in each 4KB page) - this turns out to be much faster than loading on demand
     for (char *c = FIRSTENT(char, *buf); c < AFTERENT(char, *buf); c += 4096) dummy += *c;
+    
+    COPY_TIMER (buf_mmap_do);
     
     return true;
 

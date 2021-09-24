@@ -9,9 +9,10 @@
 #include "strings.h"
 #include "context.h"
 
-//------------------------------
-// Calculating Accession Numbers
-//------------------------------
+//------------------------------------------------------
+// Calculating Accession Numbers 
+// see: https://www.ncbi.nlm.nih.gov/genbank/acc_prefix/
+//------------------------------------------------------
 
 // turn contig name into a canonical AC: Supported formats:
 // hg19:   "chr4_gl383528_alt"           -> { "GL383528",     '1' }
@@ -249,8 +250,8 @@ WordIndex contigs_get_matching (ConstContigPkgP ctgs, STRp(name), PosType LN, /*
     if (is_alt) *is_alt = (ctg_i == WORD_INDEX_NONE);
     CHECK_IF_DONE;
 
-    // 22 -> chr22 (1->22, X, Y, M, MT chromosomes)
-    if ((name_len == 1 && (IS_DIGIT (name[0]) || name[0]=='X' || name[0]=='Y')) ||
+    // 22 -> chr22 (1->22, X, Y, W, Z chromosomes)
+    if ((name_len == 1 && (IS_DIGIT (name[0]) || (name[0]>='W' && name[0]<='Z'))) ||
         (name_len == 2 && ((IS_DIGIT (name[0]) && IS_DIGIT (name[1]))))) {
 
         char chr_chrom[5] = "chr";
@@ -261,7 +262,7 @@ WordIndex contigs_get_matching (ConstContigPkgP ctgs, STRp(name), PosType LN, /*
         CHECK_IF_DONE;
     }
 
-    // Chr? or Chr?? -> ? or ??
+    // chr? or chr?? -> ? or ??
     if ((name_len == 4 || name_len == 5) && !memcmp (name, "chr", 3)) {
         ctg_i = contigs_get_by_name (ctgs, &name[3], name_len-3);
         CHECK_IF_DONE;

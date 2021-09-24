@@ -1273,7 +1273,7 @@ void sam_seg_qname_field (VBlockSAM *vb, const char *qname, uint32_t qname_len, 
 void sam_seg_rname_rnext (VBlockP vb, DidIType did_i, STRp (chrom), unsigned add_bytes)
 {
     bool is_new;
-    chrom_seg_ex (VB, did_i, STRa(chrom), 0, NULL, add_bytes, &is_new);
+    chrom_seg_ex (VB, did_i, STRa(chrom), 0, NULL, add_bytes, !IS_BAM, &is_new);
 
     // don't allow adding chroms to a BAM file or a SAM that has SQ lines in the header, but we do allow to add to a headerless SAM.
     ASSSEG (!is_new || !sam_hdr_contigs || (chrom_len==1 && (*chrom=='*' || *chrom=='=')),

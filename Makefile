@@ -249,7 +249,7 @@ DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs
 	   docs/fastq-to-bam-pipeline.rst docs/coverage.rst docs/algorithms.rst docs/losslessness.rst docs/idxstats.rst \
 	   docs/downsampling.rst docs/applications.rst docs/capabilities.rst docs/kraken.rst \
 	   docs/sam2fq.rst docs/23andMe2vcf.rst docs/multifasta2phylip.rst docs/gatk-unexpected-base.rst docs/digest.rst docs/commercial.rst \
-	   docs/using-on-hpc.rst \
+	   docs/using-on-hpc.rst docs/match-chrom.rst \
 	   docs/dvcf.rst docs/dvcf-rendering.rst docs/chain.rst docs/dvcf-limitations.rst docs/dvcf-renaming.rst docs/dvcf-see-also.rst \
 	   docs/archiving.rst docs/encryption.rst \
 	   docs/data-types.rst docs/bam.rst docs/fastq.rst docs/vcf.rst docs/gff3.rst

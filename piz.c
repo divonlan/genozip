@@ -670,6 +670,8 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file)
 {
     bool is_last_txt_file = (z_file->num_txt_components_so_far == z_file->txt_file_info.len-1);
  
+    dispatcher_start_wallclock();
+
     if (DTPZ(piz_initialize) && !DTPZ(piz_initialize)())
         return false; // abort PIZ if piz_initialize says so
       

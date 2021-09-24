@@ -261,7 +261,7 @@ static void main_test_after_genozip (const char *exec_name, const char *z_filena
 
     // wait for child process to finish, so that the shell doesn't print its prompt until the test is done
     int exit_code = stream_wait_for_exit (test);
-
+    
     TEMP_VALUE (primary_command, TEST_AFTER_ZIP); // make exit_on_error NOT delete the genozip file in this case, so its available for debugging
     ASSERT (!exit_code, "%s: test exited with status %d\n", global_cmd, exit_code); // exit with error status 
     RESTORE_VALUE (primary_command); // recover in case of more non-concatenated files
@@ -403,8 +403,11 @@ static void main_genozip (const char *txt_filename,
 
 done: {
     SAVE_FLAG (data_modified); // propagate up
+    SAVE_FLAG (aligner_available);
     RESTORE_FLAGS;    
+
     if (flag.bind) RESTORE_FLAG (data_modified); 
+    RESTORE_FLAG (aligner_available);
 } }
 
 static inline DataType main_get_file_dt (const char *filename)
@@ -420,18 +423,16 @@ static int main_sort_input_filenames (const void *fn1, const void *fn2)
 {
     DataType dt1 = main_get_file_dt (*(char **)fn1);
     DataType dt2 = main_get_file_dt (*(char **)fn2);
-    
-    bool use_refhash1 = (dt1 == DT_FASTQ);
-    bool use_refhash2 = (dt2 == DT_FASTQ);
 
-    // refhash users - at the end of the list
-    if (use_refhash1 != use_refhash2) return (int)use_refhash1 - (int)use_refhash2;
+    int sizeof_vb1 = (dt_props[dt1].sizeof_vb ? dt_props[dt1].sizeof_vb : def_vb_size)(dt1);
+    int sizeof_vb2 = (dt_props[dt2].sizeof_vb ? dt_props[dt2].sizeof_vb : def_vb_size)(dt2);
 
-    // within refhash users, and within refhash non-users, sort by data type
-    if (dt1 != dt2) return (int)dt1 - (int)dt2;
+    // sort by VB type (assuming their size is unique)
+    if (sizeof_vb1 != sizeof_vb2) return sizeof_vb1 - sizeof_vb2;
 
-    // within files of the same data type, keep original order
-    return fn1 - fn2;
+    // within files of the same sizeof_vb, keep original order (note: we assume the order of filename pointers is consistent
+    // with their order on the command line. However, this isn't guaranteed. TODO: improve this by having a struct with the explict order in it)
+    return *(char **)fn1 - *(char **)fn2;
 }
 
 static char **main_get_filename_list (unsigned *num_files /* in/out */, char **filenames /* in */, unsigned *num_z_files /* out */) 

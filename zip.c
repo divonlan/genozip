@@ -670,6 +670,7 @@ void zip_one_file (const char *txt_basename,
 {
     static DataType last_data_type = DT_NONE;
     Dispatcher dispatcher = 0;
+    dispatcher_start_wallclock();
 
     z_file->txt_data_so_far_single = 0;
     evb->z_data.len                = 0;

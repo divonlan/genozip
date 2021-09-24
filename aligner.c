@@ -15,6 +15,7 @@
 #include "codec.h"
 #include "reconstruct.h"
 #include "piz.h"
+#include "segconf.h"
 
 #define MAX_GPOS_DELTA 1000 // paired reads are usually with a delta less than 300 - so this is more than enough
 
@@ -246,8 +247,8 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t
 
     // our aligner algorithm only works for short reads - long reads tend to have many Indel differences (mostly errors) vs the reference
     #define MAX_SHORT_READ_LEN 2500
-    PosType gpos = (seq_len <= MAX_SHORT_READ_LEN) ? aligner_best_match (VB, seq, seq_len, genome, emoneg, genome_nbases, &is_forward, &is_all_ref)
-                                                   : NO_GPOS; 
+    PosType gpos = (seq_len <= MAX_SHORT_READ_LEN && !segconf.running) 
+                 ? aligner_best_match (VB, seq, seq_len, genome, emoneg, genome_nbases, &is_forward, &is_all_ref) : NO_GPOS; 
 
     // case: we're the 2nd of the pair - the bit represents whether this strand is equal to the pair's strand (expecting
     // it to be 1 in most cases - making the bitmap highly compressible)

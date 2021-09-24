@@ -441,4 +441,6 @@ void refhash_destroy (void)
 
     buf_destroy (&refhash_buf);
     FREE (refhashs);
+
+    flag.aligner_available = false;
 }

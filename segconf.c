@@ -14,13 +14,15 @@
 
 SegConf segconf = {}; // system-wide global
 
-static void segconf_set_vb_size (const VBlock *vb)
+static void segconf_set_vb_size (const VBlock *vb, uint64_t curr_vb_size)
 {
     #define VBLOCK_MEMORY_MIN_DYN  (16   << 20) // VB memory - min/max when set in segconf_calculate
     #define VBLOCK_MEMORY_MAX_DYN  (512  << 20) 
     #define VBLOCK_MEMORY_FAST     (16   << 20) // VB memory with --fast
     #define VBLOCK_MEMORY_MAKE_REF (1    << 20) // VB memory with --make-reference - reference data 
     #define VBLOCK_MEMORY_GENERIC  (16   << 20) // VB memory for the generic data type
+
+    segconf.vb_size = curr_vb_size;
 
     if (segconf.vb_size) {
         // already set from previous components of this z_file - do nothing (in particular, FASTQ PAIR_2 must have the same vb_size as PAIR_1)
@@ -115,8 +117,7 @@ void segconf_calculate (void)
 
     txtfile_read_vblock (vb);
     if (!vb->txt_data.len) {
-        if (save_vb_size) segconf.vb_size = save_vb_size;
-        else              segconf_set_vb_size (vb);
+        segconf_set_vb_size (vb, save_vb_size);
         goto done; // cannot find a single line - vb_size set to default and other segconf fields remain default, or previous file's setting
     }
     
@@ -138,8 +139,7 @@ void segconf_calculate (void)
 
     RESTORE_FLAGS;
 
-    segconf.vb_size = save_vb_size;
-    segconf_set_vb_size (vb);
+    segconf_set_vb_size (vb, save_vb_size);
     
     // return the data to txt_file->unconsumed_txt - squeeze it in before the passed-up data
     buf_alloc (evb, &txt_file->unconsumed_txt, txt_data_copy.len, 0, char, 0, "txt_file->unconsumed_txt");

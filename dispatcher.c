@@ -80,13 +80,16 @@ static void dispatcher_show_progress (Dispatcher dispatcher)
     progress_update (&((DispatcherData *)dispatcher)->progress_prefix, sofar, total, done);
 }
 
+void dispatcher_start_wallclock (void)
+{
+    clock_gettime (CLOCK_REALTIME, &profiler_timer);
+}
+
 Dispatcher dispatcher_init (const char *task_name, unsigned max_threads, unsigned previous_vb_i,
                             bool test_mode, bool is_last_file, bool cleanup_after_me,
                             const char *filename, // filename, or NULL if filename is unchanged
                             ProgressType prog, const char *prog_msg /* used if prog=PROGRESS_MESSAGE */)   
 {
-    clock_gettime (CLOCK_REALTIME, &profiler_timer);
-
     DispatcherData *dd   = (DispatcherData *)CALLOC (sizeof(DispatcherData));
     dd->task_name        = task_name;
     dd->next_vb_i        = previous_vb_i;  // used if we're binding files - the vblock_i will continue from one file to the next

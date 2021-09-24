@@ -174,6 +174,7 @@ WordIndex chrom_seg_ex (VBlock *vb, DidIType did_i,
                         PosType LN,       // Optional, if readily known
                         bool *is_alt_out, // need iff flag.match_chrom_to_reference.
                         int add_bytes,    // must be signed
+                        bool recon_changes_if_match, // whether reconstruction changes in case of change in chrom name due to --match-chrom
                         bool *is_new_out) // optional out
 {
     ASSERTNOTZERO (chrom_len);
@@ -208,21 +209,26 @@ WordIndex chrom_seg_ex (VBlock *vb, DidIType did_i,
             return seg_duplicate_last (vb, ctx, add_bytes + ctx->last_growth);
         }
 
+        // test for ref match
+        ref_index = ref_contigs_get_matching (ref, LN, STRa(chrom), pSTRa(chrom), false, &is_alt, &chrom_name_growth); 
+        if (ref_index != WORD_INDEX_NONE) { // chrom/chrom_len are modified in-place
+            if (is_alt_out) *is_alt_out = is_alt;
+
+            if (!recon_changes_if_match) chrom_name_growth = 0; // in BAM, chroms are stored as a ref_id (=chrom_index), so no change in reconstruction size
+
+            vb->recon_size += chrom_name_growth;
+            
+            chrom_node_index = seg_by_ctx_ex (vb, STRa(chrom), ctx, add_bytes + chrom_name_growth, &is_new); // seg modified chrom
+        }
+
         // update cache
         seg_set_last_txt (vb, ctx, STRa(save_chrom), STORE_NONE);
         ctx->last_is_alt = is_alt;
         ctx->last_growth = chrom_name_growth;
         ctx->no_stons    = true; // needed for seg_duplicate_last
 
-        // test for ref match
-        ref_index = ref_contigs_get_matching (ref, LN, STRa(chrom), pSTRa(chrom), false, &is_alt, &chrom_name_growth); 
-        if (ref_index != WORD_INDEX_NONE) { // chrom/chrom_len are modified in-place
-            if (is_alt_out) *is_alt_out = is_alt;
-            vb->recon_size += chrom_name_growth;
-            
-            chrom_node_index = seg_by_ctx_ex (vb, STRa(chrom), ctx, add_bytes + chrom_name_growth, &is_new); // seg modified chrom
-            goto finalize;
-        }
+        // if a match was found, we're done
+        if (ref_index != WORD_INDEX_NONE) goto finalize;
     }
         
     // case: either without --match-chrom-to-reference OR chrom not found in the reference
@@ -275,7 +281,7 @@ finalize:
 
 WordIndex chrom_seg_no_b250 (VBlockP vb, STRp(chrom_name), bool *is_new)
 {
-    WordIndex chrom_node_index = chrom_seg_ex (VB, CHROM, STRa(chrom_name), 0, NULL, 0, is_new);
+    WordIndex chrom_node_index = chrom_seg_ex (VB, CHROM, STRa(chrom_name), 0, NULL, 0, false, is_new);
     ctx_decrement_count (VB, CTX(CHROM), chrom_node_index);
     CTX(CHROM)->b250.len--;
 
@@ -284,7 +290,7 @@ WordIndex chrom_seg_no_b250 (VBlockP vb, STRp(chrom_name), bool *is_new)
 
 void chrom_seg_cb (VBlockP vb, ContextP ctx, STRp (chrom))
 {
-    chrom_seg_ex (vb, ctx->did_i, STRa(chrom), 0, NULL, chrom_len, NULL);
+    chrom_seg_ex (vb, ctx->did_i, STRa(chrom), 0, NULL, chrom_len, true, NULL);
 }
 
 static int chrom_create_zip_sorter (const void *a, const void *b)

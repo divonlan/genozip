@@ -286,7 +286,7 @@ static WordIndex chain_seg_name_and_size (VBlockCHAIN *vb, Reference ref, Coords
     seg_by_did_i (VB, STRa(size), did_i_size, size_len+1);
     
     bool is_alt;
-    WordIndex node_index = chrom_seg_ex (VB, did_i_name, STRa (name), size_value, &is_alt, name_len+1, NULL);
+    WordIndex node_index = chrom_seg_ex (VB, did_i_name, STRa (name), size_value, &is_alt, name_len+1, false, NULL);
 
     static bool once[2] = {};
     *verified &= is_alt || chain_seg_verify_contig (vb, ref, node_index, &once[dc-1], STRa (name), 

@@ -51,10 +51,10 @@ genounzip, genocat, genols.
 
    e. For the purpose of evaluating Genozip, for a duration of 30 days.
 
-   f. For the purpose of distributing Genozip to others in unmodified
-form, including this license, via a platform that is both publicly
-accessible and free of charge, including but not limited to an Internet
-website.
+   f. For the purpose of distributing Genozip to others via a platform
+that is free of charge, including (but not limited to) an Internet
+website, a package or container management system, or a module on an
+institutional HPC.
 
 3. Additional Terms and conditions
 
