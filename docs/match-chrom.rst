@@ -69,3 +69,14 @@ chrUn_JTFH01001867v2_decoy Accession Number JTFH01001867 version 2
 GL000192.1                 Accession Number GL000192 version 1
 ========================== =======================================
 
+
+**About the reference file**
+
+The reference file (``hg19.p13.plusMT.full_analysis_set.ref.genozip`` in the example above) is created from a FASTA reference genome, for example:
+
+::
+
+    > genozip --make-reference hg19.p13.plusMT.full_analysis_set.fa.gz
+
+    genozip hg19.p13.plusMT.full_analysis_set.fa.gz : Done (8 minutes 59 seconds)
+
