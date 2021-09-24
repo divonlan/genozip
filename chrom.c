@@ -167,8 +167,6 @@ void chrom_calculate_ref2chrom (uint64_t num_ref_contigs)
 // Seg stuff
 //-------------
 
-static inline bool seg_chrom_is_missing (STRp(chrom)) { return !chrom_len || (chrom_len==1 && (*chrom=='.' || *chrom=='*' || *chrom=='=')); }
-
 WordIndex chrom_seg_ex (VBlock *vb, DidIType did_i, 
                         STRp(chrom), 
                         PosType LN,       // Optional, if readily known
