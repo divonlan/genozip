@@ -80,6 +80,9 @@ void main_exit (bool show_stack, bool is_error)
         if (save_name) file_remove (save_name, true);
     }
 
+    if (!is_error && (flag.echo || flag.debug || getenv ("GENOZIP_TEST"))) 
+        fprintf (stderr, "\nExiting %s (%s): Success\n", global_cmd, command==ZIP ? "ZIP" : command==PIZ ? "PIZ" : ""); 
+
     exit (is_error ? EXIT_GENERAL_ERROR : EXIT_OK);
 } 
 

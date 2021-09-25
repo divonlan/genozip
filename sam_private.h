@@ -158,11 +158,14 @@ typedef struct VBlockSAM {
     Buffer textual_cigar;          // ZIP: Seg of BAM
     Buffer textual_seq;            // ZIP: Seg of BAM
     Buffer textual_opt;            // ZIP: Seg of BAM
-    uint32_t ref_consumed;         // ZIP/PIZ: how many bp of reference are consumed according to the last_cigar
-    uint32_t ref_and_seq_consumed; // ZIP: how many bp in the last seq consumes both ref and seq, according to CIGAR
-    Buffer bd_bi_line;             // ZIP: interlaced BD and BI data for one line
 
-    uint32_t soft_clip;            // PIZ: number of bases that were soft-clipped in this line
+    // data set by sam_analyze_cigar
+    uint32_t ref_consumed;         // how many bp of reference are consumed according to the last_cigar
+    uint32_t ref_and_seq_consumed; // how many bp in the last seq consumes both ref and seq, according to CIGAR
+    uint32_t mismatch_bases;       // mismatch bases according to NM:i definition in https://samtools.github.io/hts-specs/SAMtags.pdf. This includes 'I' and 'D' bases.
+    uint32_t soft_clip;            // PIZnumber of bases that were soft-clipped in this line
+    
+    Buffer bd_bi_line;             // ZIP: interlaced BD and BI data for one line
     
     // data used in genocat --show-sex
     WordIndex x_index, y_index, a_index;    // word index of the X, Y and chr1 chromosomes
@@ -212,7 +215,7 @@ extern const uint8_t cigar_lookup_bam[16];
 
 extern void sam_seg_qname_field (VBlockSAM *vb, STRp(qname), unsigned add_additional_bytes);
 extern void sam_seg_rname_rnext (VBlockP vb, DidIType did_i, STRp (chrom), unsigned add_bytes);
-extern void sam_analyze_cigar (VBlockSAMP vb, STRp(cigar), unsigned *seq_consumed, unsigned *ref_consumed, unsigned *seq_and_ref, unsigned *coverage);
+extern void sam_analyze_cigar (VBlockSAMP vb, STRp(cigar), unsigned *seq_consumed);
 extern void sam_seg_tlen_field (VBlockSAM *vb, STRp(tlen), int64_t tlen_value, PosType pnext_pos_delta, int32_t cigar_seq_len);
 extern void sam_seg_qual_field (VBlockSAM *vb, ZipDataLineSAM *dl, const char *qual, uint32_t qual_data_len, unsigned add_bytes);
 extern void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), PosType pos, const char *cigar, unsigned recursion_level, uint32_t level_0_seq_len, const char *level_0_cigar, unsigned add_bytes);

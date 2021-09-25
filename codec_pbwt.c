@@ -447,7 +447,6 @@ void codec_pbwt_reconstruct (VBlock *vb, Codec codec, Context *ctx)
             RECONSTRUCT1 ('.'); // first % in "%|%" 
     }
 
-    else { // allele 10 to 99 (ascii 58 to 147)
+    else  // allele 10 to 99 (ascii 58 to 147)
         RECONSTRUCT_INT (ht - '0');
-    }
 }

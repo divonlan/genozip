@@ -43,6 +43,7 @@ mac/scripts/*
 *.bcf*
 *.sam*
 *.bam
+*.cram
 *.fastq*
 *.fq*
 *.fa
@@ -88,3 +89,4 @@ unused-code
 genozip.threads-log.*
 .genozip_license
 dict_id_gen.c
+core

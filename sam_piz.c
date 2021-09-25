@@ -176,8 +176,10 @@ void sam_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unused, 
                     RECONSTRUCT1 (ref); 
                 }
             }
-            else 
+            else {
+                vb->mismatch_bases += (cigar_op & CIGAR_CONSUMES_REFERENCE) > 0;
                 RECONSTRUCT1 (*nonref++);
+            }
 
             seq_consumed++;
         }
@@ -224,7 +226,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_CIGAR)
     const uint16_t sam_flag = vb->last_int(SAM_FLAG);
 
     // calculate seq_len (= l_seq, unless l_seq=0), ref_consumed and (if bam) vb->textual_cigar
-    sam_analyze_cigar (vb_sam, snip, snip_len, &vb->seq_len, &vb_sam->ref_consumed, &vb_sam->ref_and_seq_consumed, &vb_sam->soft_clip); 
+    sam_analyze_cigar (vb_sam, snip, snip_len, &vb->seq_len); 
 
     if ((flag.out_dt == DT_SAM || (flag.out_dt == DT_FASTQ && flag.extended_translation)) 
     &&  reconstruct) {
@@ -290,7 +292,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_TLEN)
 
     new_value->i = tlen_val;
 
-    if (reconstruct) { RECONSTRUCT_INT (tlen_val); }
+    if (reconstruct) RECONSTRUCT_INT (tlen_val);
 
     return true; // new value
 }
@@ -298,7 +300,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_TLEN)
 SPECIAL_RECONSTRUCTOR (sam_piz_special_AS)
 {
     new_value->i = vb->seq_len - atoi (snip);
-    if (reconstruct) { RECONSTRUCT_INT (new_value->i) };
+    if (reconstruct) RECONSTRUCT_INT (new_value->i);
     
     return true; // new value
 }
@@ -315,6 +317,23 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_MD)
     RECONSTRUCT_INT (vb->seq_len - partial_seq_len_by_md_field);
 
     return false; // no new value
+}
+
+SPECIAL_RECONSTRUCTOR (bam_piz_special_NM)
+{
+    if (*snip == 'i') 
+        new_value->i = ((VBlockSAMP)vb)->mismatch_bases;
+
+    else if (*snip == 'b')
+        new_value->i = ((VBlockSAMP)vb)->mismatch_bases > 0;
+
+    else 
+        ASSPIZ (false, "unrecognized opcode '%c'", *snip);
+
+    if (reconstruct) // will be false if BAM, reconstruction is done by translator based on new_value set here
+        RECONSTRUCT_INT (new_value->i);
+
+    return true; // has new value
 }
 
 // BD and BI - reconstruct from BD_BI context which contains interlaced BD and BI data. 

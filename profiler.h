@@ -25,7 +25,7 @@ typedef struct {
         lock_mutex_zf_ctx, aligner_get_match_len, generate_rev_complement_genome, ref_contigs_compress,
         linesorter_compress_qsort, linesorter_compress_recon_plan, 
         piz_read_global_area, ref_load_stored_reference, ctx_read_all_dictionaries, ctx_dict_build_word_lists, 
-        ref_read_one_range, ref_uncompress_one_range,
+        ref_read_one_range, ref_uncompress_one_range, vb_release_vb_do, vb_destroy_vb,
         tmp1, tmp2, tmp3, tmp4, tmp5;
 
         const char *next_name, *next_subname;

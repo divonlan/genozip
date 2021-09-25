@@ -287,9 +287,9 @@ void codec_hapmat_reconstruct (VBlock *vb_, Codec codec, Context *ctx)
         case '.': case '0' ... '9':
             RECONSTRUCT1 (ht); break;
 
-        case 58 ... 147: { // allele 10 to 99 (ascii 58 to 147)
+        case 58 ... 147:  // allele 10 to 99 (ascii 58 to 147)
             RECONSTRUCT_INT (ht - '0'); break;
-        }
+        
         case '-': // ploidy padding (starting 10.0.2) - appears as the 2nd+ HT - unlike '*', these are counted in GT.repeats
             vb->txt_data.len--; // remove previous phase character;
             break;

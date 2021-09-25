@@ -143,7 +143,7 @@ ifeq ($(CC),gcc)
 	OPTFLAGS += -Ofast -std=gnu99
 	DEBUGFLAGS += -std=gnu99 -DDEBUG -g -O0
 else
-	OPTFLAGS += -O2
+	OPTFLAGS += -O2 -DDEBUG 
 	DEBUGFLAGS += -DDEBUG -g -O0
 endif
 
@@ -305,6 +305,10 @@ clean-debug:
 clean-optimized:
 	@echo Cleaning up optimized
 	@rm -f $(OBJS) $(EXECUTABLES) $(OBJDIR)/*.o
+
+clean-opt:
+	@echo Cleaning up opt
+	@rm -f $(OPT_OBJS) $(EXECUTABLES) $(OPT_EXECUTABLES)/*.opt-o
 
 clean: clean-docs
 	@echo Cleaning up

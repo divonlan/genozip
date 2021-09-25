@@ -349,7 +349,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MINUS)
                    ECTX (two_dicts[1])->last_value.i;
 
     if (reconstruct)
-        { RECONSTRUCT_INT (new_value->i); }
+        RECONSTRUCT_INT (new_value->i); 
 
     return true; // has new_value
 }

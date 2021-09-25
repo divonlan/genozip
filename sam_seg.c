@@ -187,9 +187,10 @@ void sam_seg_initialize (VBlock *vb)
     CTX(SAM_TOP2FQ)->no_stons   = true;
     CTX(SAM_TOP2FQEX)->no_stons = true;
 
-    CTX(OPTION_BI)->no_stons = CTX(OPTION_BD)->no_stons = true; // we can't use local for singletons in BD or BI as next_local is used by sam_piz_special_BD_BI to point into BD_BI
-    CTX(OPTION_BI)->st_did_i = CTX(OPTION_BD)->st_did_i = OPTION_BD_BI; 
-    CTX(OPTION_BD_BI)->ltype = LT_SEQUENCE;
+    CTX(OPTION_BI)->no_stons    = CTX(OPTION_BD)->no_stons = true; // we can't use local for singletons in BD or BI as next_local is used by sam_piz_special_BD_BI to point into BD_BI
+    CTX(OPTION_BI)->st_did_i    = CTX(OPTION_BD)->st_did_i = OPTION_BD_BI; 
+    CTX(OPTION_BD_BI)->ltype    = LT_SEQUENCE;
+    CTX(OPTION_NM)->flags.store = STORE_INT;
 
     Context *rname_ctx = CTX(SAM_RNAME);
     Context *rnext_ctx = CTX(SAM_RNEXT);
@@ -608,6 +609,7 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
                 else {
                     NEXTENT (char, nonref_ctx->local) = seq[i];
                     bit_array_clear (bitmap, bit_i); bit_i++;
+                    vb->mismatch_bases++;
                 } 
 
                 subcigar_len--;
@@ -765,6 +767,36 @@ static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_l
     SegCallback callbacks[4] = { [0]=chrom_seg_cb, [1]=seg_xa_strand_pos_cb, [2]=seg_add_to_local_text_cb };
     seg_array_of_struct (VB, CTX(OPTION_XA), container_XA, field, field_len, callbacks);
     CTX(OPTION_XA)->txt_len++; // 1 for \t in SAM and \0 in BAM 
+}
+
+// --------------------------
+// NM "Number of differences"
+// --------------------------
+
+// Two variations:
+// 1) Integer NM per SAM specification https://samtools.github.io/hts-specs/SAMtags.pdf: "Number of differences (mismatches plus inserted and deleted bases) 
+// between the sequence and reference, counting only (case-insensitive) A, C, G and T bases in sequence and reference as potential matches, with everything
+// else being a mismatch. Note this means that ambiguity codes in both sequence and reference that match each other, such as ‘N’ in both, or compatible 
+// codes such as ‘A’ and ‘R’, are still counted as mismatches. The special sequence base ‘=’ will always be considered to be a match, even if the reference 
+// is ambiguous at that point. Alignment reference skips, padding, soft and hard clipping (‘N’, ‘P’, ‘S’ and ‘H’ CIGAR operations) do not count as mismatches,
+// but insertions and deletions count as one mismatch per base."
+// 2) Binary NM: 0 if sequence fully matches the reference when aligning according to CIGAR, 1 is not.
+static void sam_seg_NM_field (VBlockSAM *vb, const char *field, unsigned field_len, unsigned add_bytes)
+{
+    int32_t NM;
+    if (!str_get_int_range32 (STRa(field), 0, 10000000, &NM)) goto fallback;
+    
+    if (segconf.running && NM > 1) segconf.NM_is_integer = true; // we found evidence of integer NM
+
+    if (segconf.NM_is_integer && NM == vb->mismatch_bases)
+        seg_by_did_i (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'i'}, 3, OPTION_NM, add_bytes); 
+
+    else if (!segconf.NM_is_integer && (NM > 0) == (vb->mismatch_bases > 0))
+        seg_by_did_i (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'b'}, 3, OPTION_NM, add_bytes); 
+
+    else
+        fallback:
+        seg_by_did_i (VB, field, field_len, OPTION_NM, add_bytes); 
 }
 
 // ------------------
@@ -1072,6 +1104,8 @@ static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is
         
         case _OPTION_MD: sam_seg_MD_field (vb, dl, value, value_len, add_bytes); break;
 
+        case _OPTION_NM: sam_seg_NM_field (vb, value, value_len, add_bytes); break;
+
         case _OPTION_BD:
         case _OPTION_BI: sam_seg_BD_BI_field (vb, dl, value, value_len, dict_id, add_bytes); break;
         
@@ -1334,7 +1368,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
 
     // CIGAR - we wait to get more info from SEQ and QUAL
     GET_NEXT_ITEM (SAM_CIGAR);
-    sam_analyze_cigar (vb, STRdid(SAM_CIGAR), &dl->seq_len, &vb->ref_consumed, &vb->ref_and_seq_consumed, NULL);
+    sam_analyze_cigar (vb, STRdid(SAM_CIGAR), &dl->seq_len);
     vb->last_cigar = SAM_CIGAR_str;
     unsigned last_cigar_len = SAM_CIGAR_len;
     ((char *)vb->last_cigar)[SAM_CIGAR_len] = 0; // nul-terminate CIGAR string

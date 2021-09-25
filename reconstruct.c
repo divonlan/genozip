@@ -40,7 +40,7 @@ static int64_t reconstruct_from_delta (VBlock *vb,
         my_ctx->last_delta = (int64_t)strtoull (delta_snip, NULL, 10 /* base 10 */); // strtoull can handle negative numbers, despite its name
 
     int64_t new_value = base_ctx->last_value.i + my_ctx->last_delta;  
-    if (reconstruct) { RECONSTRUCT_INT (new_value) };
+    if (reconstruct) RECONSTRUCT_INT (new_value);
 
     return new_value;
 }
@@ -89,11 +89,11 @@ static int64_t reconstruct_from_local_int (VBlock *vb, Context *ctx, char sepera
 
     // TO DO: RECONSTRUCT_INT won't reconstruct large uint64_t correctly
     if (reconstruct) { 
-        if (is_minus_1 && VB_DT(DT_VCF) && dict_id_is_vcf_format_sf (ctx->dict_id)) {
+        if (is_minus_1 && VB_DT(DT_VCF) && dict_id_is_vcf_format_sf (ctx->dict_id)) 
             RECONSTRUCT1 ('.');
-        } else {
+        else 
             RECONSTRUCT_INT (num);
-        }
+        
         if (seperator) RECONSTRUCT1 (seperator);
     }
 
@@ -234,7 +234,7 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         int64_t pair_value = (int64_t) *ENT (uint32_t, snip_ctx->pair, fastq_line_i);  
         int64_t delta = (int64_t)strtoull (snip+1, NULL, 10 /* base 10 */); 
         new_value.i = pair_value + delta;
-        if (reconstruct) { RECONSTRUCT_INT (new_value.i); }
+        if (reconstruct) RECONSTRUCT_INT (new_value.i); 
         have_new_value = true;
         break;
     }

@@ -44,13 +44,15 @@ VBlock *evb = NULL;
     func (&vb->lo_rejects[0]);       \
     func (&vb->lo_rejects[1]);       \
     for (unsigned i=0; i < NUM_CODEC_BUFS; i++) func (&vb->codec_bufs[i]); \
-    for (unsigned i=0; i < MAX_DICTS; i++) if (CTX(i)->dict_id.num) ctx_func (CTX(i)); \
+    for (unsigned i=0; i < MAX_DICTS; i++) if (CTX(i)->dict_id.num || i < DTF(num_fields)) ctx_func (CTX(i)); /* note: always erase num_fields as they may be set in *_seg_initialize even if not used */\
     func (&vb->txt_data); /* handle contexts first, as vcf_seg_FORMAT_GT overlays FORMAT_GT_HT on txt_data */ \
     if (vb->data_type_alloced != DT_NONE && dt_props[vb->data_type_alloced].vb_func) dt_props[vb->data_type_alloced].vb_func(vb);    
 
 // cleanup vb and get it ready for another usage (without freeing memory held in the Buffers)
 void vb_release_vb_do (VBlockP *vb_p, const char *func) 
 {
+    START_TIMER;
+
     VBlock *vb = *vb_p;
 
     if (!vb) return; // nothing to release
@@ -124,15 +126,19 @@ void vb_release_vb_do (VBlockP *vb_p, const char *func)
         __atomic_store_n (&vb->in_use, (bool)0, __ATOMIC_RELAXED); // released the VB back into the pool - it may now be reused 
         *vb_p = NULL;
     }
+
+    if (vb->id >= 0) COPY_TIMER_VB (evb, vb_release_vb_do)
 }
 
 void vb_destroy_vb (VBlockP *vb_p)
 {
     ASSERTMAINTHREAD;
+    START_TIMER;
 
     VBlockP vb = *vb_p;
-
     if (!vb) return;
+
+    bool is_evb = vb->id == VB_ID_EVB;
 
     FINALIZE_VB_BUFS (buf_destroy, ctx_destroy_context, destroy_vb);
 
@@ -166,6 +172,8 @@ void vb_destroy_vb (VBlockP *vb_p)
     }
 
     FREE (*vb_p);
+
+    if (!is_evb) COPY_TIMER_VB (evb, vb_destroy_vb)
 }
 
 void vb_create_pool (unsigned num_vbs)

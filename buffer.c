@@ -301,7 +301,7 @@ static void buf_foreach_buffer (void (*callback)(const Buffer *, void *arg), voi
     VBlockPool *vb_pool = vb_get_pool ();
     if (!vb_pool) return;
 
-    for (int vb_i=-1; vb_i < (int)vb_pool->num_allocated_vbs; vb_i++) {
+    for (int vb_i=VB_ID_EVB; vb_i < (int)vb_pool->num_allocated_vbs; vb_i++) {
 
         VBlockP vb = vb_get_from_pool (vb_i);
         if (!vb) continue;

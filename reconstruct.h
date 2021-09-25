@@ -27,8 +27,8 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, DidIType did_i, 
 #define RECONSTRUCT_SEP(s,len,sep) do { RECONSTRUCT((s), (len)); RECONSTRUCT1 (sep); } while(0)
 #define RECONSTRUCT_TABBED(s,len) RECONSTRUCT_SEP (s, len, '\t')
 
-#define RECONSTRUCT_INT(n) unsigned n_len = str_int ((n), AFTERENT (char, vb->txt_data)); /* not in a block because some need access to n_len */ \
-                           vb->txt_data.len += n_len; 
+#define RECONSTRUCT_INT(n) ({ unsigned n_len = str_int ((n), AFTERENT (char, vb->txt_data)); \
+                              vb->txt_data.len += n_len; n_len; })
 
 #define RECONSTRUCT_FROM_DICT(did_i,add_tab) /* not a block so caller get the return value of ctx_get_next_snip */ \
     LOAD_SNIP (did_i);\

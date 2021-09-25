@@ -452,8 +452,8 @@ batch_match_chrom()
 {
     batch_print_header
     
-    # note: we test Chain in batch_dvcf. To do: add a GFF3 test file 
-    local files=(basic-dvcf-source.vcf basic.genome_Full.me23.txt special.match.sam special.match.bam)
+    # hg19 tests
+    local files=(basic-dvcf-source.vcf basic.genome_Full.me23.txt special.match.sam special.match.bam test.homo_sapiens_incl_consequences-chrY.gvf)
     local file f
     for f in ${files[@]}; do
 
@@ -1026,7 +1026,7 @@ GRCh38=data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
 chain37_38=data/GRCh37_to_GRCh38.chain.genozip
 
 if (( $# < 1 )); then
-    echo "Usage: test.sh [debug|opt] <batch_id-test> [optional-genozip-arg]"
+    echo "Usage: test.sh [debug|opt|prod] <batch_id-test> [optional-genozip-arg]"
     exit 0
 fi
 
@@ -1043,23 +1043,32 @@ if [ -n "$is_opt" ]; then
     shift
 fi
 
+is_prod=`echo $1|grep prod`
+if [ -n "$is_prod" ]; then 
+    dir=../genozip-prod
+    shift
+fi
+
+if [ ! -n "$dir" ]; then 
+    dir=.
+fi
 
 # -----------------
 # platform settings
 # -----------------
 if [ -n "$is_windows" ]; then
-    genozip_exe=./genozip${debug}.exe
-    genounzip_exe=./genounzip${debug}.exe
-    genocat_exe=./genocat${debug}.exe
-    genols_exe=./genols${debug}.exe 
+    genozip_exe=$dir/genozip${debug}.exe
+    genounzip_exe=$dir/genounzip${debug}.exe
+    genocat_exe=$dir/genocat${debug}.exe
+    genols_exe=$dir/genols${debug}.exe 
 #    zip_threads="-@3"
 #    piz_threads="-@5"
     path=`pwd| cut -c3-|tr / '\\\\'`\\
 else
-    genozip_exe=./genozip${debug}
-    genounzip_exe=./genounzip${debug}
-    genocat_exe=./genocat${debug}
-    genols_exe=./genols${debug} 
+    genozip_exe=$dir/genozip${debug}
+    genounzip_exe=$dir/genounzip${debug}
+    genocat_exe=$dir/genocat${debug}
+    genols_exe=$dir/genols${debug} 
     path=$PWD/
 fi
 

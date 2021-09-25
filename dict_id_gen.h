@@ -89,6 +89,7 @@
 #define _ATTR_sift_prediction ((uint64_t)7957695015476947443)
 #define _ATTR_polyphen_prediction ((uint64_t)7957695015561228272)
 #define _ATTR_variant_peptide ((uint64_t)7306080444208013814)
+#define _ATTR_chr ((uint64_t)7497955)
 #define _ENSTid ((uint64_t)110403549089349)
 #define _KRAKEN_CU ((uint64_t)21763)
 #define _KRAKEN_QNAME ((uint64_t)297648868881)
@@ -432,7 +433,7 @@ typedef enum { GNRIC_DATA, GNRIC_TOPLEVEL, NUM_GNRIC_FIELDS } GNRICFields;
     [GNRIC_TOPLEVEL] = { { _GNRIC_TOPLEVEL }, TAG(TOPLEVEL) }, \
 } 
 
-typedef enum { GFF3_SEQID, GFF3_SOURCE, GFF3_TYPE, GFF3_START, GFF3_END, GFF3_SCORE, GFF3_STRAND, GFF3_PHASE, GFF3_ATTRS, GFF3_EOL, GFF3_TOPLEVEL, GFF3_COMMENT, ATTR_ID, ATTR_Name, ATTR_Alias, ATTR_Parent, ATTR_Target, ATTR_Target_ID, ATTR_Target_POS, ATTR_Target_STRAND, ATTR_Gap, ATTR_Derives_from, ATTR_Note, ATTR_Dbxref, ATTR_Ontology_term, ATTR_Is_circular, ATTR_Variant_seq, ATTR_Reference_seq, ATTR_Variant_freq, ATTR_ancestral_allele, ATTR_Variant_effect, ATTR_sift_prediction, ATTR_polyphen_prediction, ATTR_variant_peptide, ENSTid, NUM_GFF3_FIELDS } GFF3Fields;
+typedef enum { GFF3_SEQID, GFF3_SOURCE, GFF3_TYPE, GFF3_START, GFF3_END, GFF3_SCORE, GFF3_STRAND, GFF3_PHASE, GFF3_ATTRS, GFF3_EOL, GFF3_TOPLEVEL, GFF3_COMMENT, ATTR_ID, ATTR_Name, ATTR_Alias, ATTR_Parent, ATTR_Target, ATTR_Target_ID, ATTR_Target_POS, ATTR_Target_STRAND, ATTR_Gap, ATTR_Derives_from, ATTR_Note, ATTR_Dbxref, ATTR_Ontology_term, ATTR_Is_circular, ATTR_Variant_seq, ATTR_Reference_seq, ATTR_Variant_freq, ATTR_ancestral_allele, ATTR_Variant_effect, ATTR_sift_prediction, ATTR_polyphen_prediction, ATTR_variant_peptide, ATTR_chr, ENSTid, NUM_GFF3_FIELDS } GFF3Fields;
 
 #define GFF3_PREDEFINED { \
     [GFF3_SEQID] = { { _GFF3_SEQID }, TAG(SEQID) }, \
@@ -469,6 +470,7 @@ typedef enum { GFF3_SEQID, GFF3_SOURCE, GFF3_TYPE, GFF3_START, GFF3_END, GFF3_SC
     [ATTR_sift_prediction] = { { _ATTR_sift_prediction }, TAG(sift_prediction) }, \
     [ATTR_polyphen_prediction] = { { _ATTR_polyphen_prediction }, TAG(polyphen_prediction) }, \
     [ATTR_variant_peptide] = { { _ATTR_variant_peptide }, TAG(variant_peptide) }, \
+    [ATTR_chr] = { { _ATTR_chr }, TAG(chr) }, \
     [ENSTid] = { { _ENSTid }, TAG(ENSTid) }, \
 } 
 

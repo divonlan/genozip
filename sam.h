@@ -57,7 +57,7 @@ extern unsigned sam_vb_zip_dl_size (void);
 
 // Special - used for SAM & BAM
 #define SAM_SPECIAL { sam_piz_special_CIGAR, sam_piz_special_TLEN, sam_piz_special_BD_BI, sam_piz_special_AS, \
-                      sam_piz_special_MD, bam_piz_special_FLOAT, bam_piz_special_BIN }
+                      sam_piz_special_MD, bam_piz_special_FLOAT, bam_piz_special_BIN, bam_piz_special_NM }
 SPECIAL (SAM, 0, CIGAR, sam_piz_special_CIGAR);
 SPECIAL (SAM, 1, TLEN,  sam_piz_special_TLEN);
 SPECIAL (SAM, 2, BDBI,  sam_piz_special_BD_BI);
@@ -65,7 +65,8 @@ SPECIAL (SAM, 3, AS,    sam_piz_special_AS);
 SPECIAL (SAM, 4, MD,    sam_piz_special_MD);
 SPECIAL (SAM, 5, FLOAT, bam_piz_special_FLOAT); // used in BAM to represent float optional values
 SPECIAL (SAM, 6, BIN,   bam_piz_special_BIN);   
-#define NUM_SAM_SPECIAL 7
+SPECIAL (SAM, 7, NM,    bam_piz_special_NM);    // introduced 12.0.37
+#define NUM_SAM_SPECIAL 8
 
 // note: we can't alias RNEXT to RNAME, because we can't alias to CHROM - see comment in reconstruct_from_ctx_do 
 #define SAM_DICT_ID_ALIASES                               \

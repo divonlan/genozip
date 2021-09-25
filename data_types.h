@@ -214,11 +214,11 @@ typedef struct DtTranslation {
 } DtTranslation;
 
 #define TRANSLATIONS { \
-    /*                           non-bin-dt  binary dst_txt_dt toplevel        factor  txtheader_transl.   trans_con. src_dt is_trans. */ \
-    /* SAM to BAM           */ { DT_SAM,     false, DT_BAM,    { _SAM_TOP2BAM },       2,   sam_header_sam2bam,   true,     false, NULL }, /* BAM is expected to be smaller, but in edge cases numbers "1\t" -> uint32 and QUAL="*"->0xff X seq_len */ \
+    /*                           non-bin-dt  binary dst_txt_dt toplevel        factor  txtheader_transl.        trans_con. src_dt is_trans. */ \
+    /* SAM to BAM           */ { DT_SAM,     false, DT_BAM,    { _SAM_TOP2BAM },       2,   sam_header_sam2bam,  true,     false, NULL }, /* BAM is expected to be smaller, but in edge cases numbers "1\t" -> uint32 and QUAL="*"->0xff X seq_len */ \
     /* SAM to FASTQ         */ { DT_SAM,     false, DT_FASTQ,  { _SAM_TOP2FQ },        1,   txtheader_sam2fq,    true,     false, NULL }, /* sizes of SEQ, QUAL, QNAME the same */ \
     /* SAM to FASTQ extend. */ { DT_SAM,     false, DT_FASTQ,  { _SAM_TOP2FQEX },      1.1, txtheader_sam2fq,    true,     false, NULL }, /* very slightly bigger due to added + */ \
-    /* Binary SAM to SAM    */ { DT_SAM,     true,  DT_SAM,    { _SAM_TOPLEVEL },      3,   sam_header_bam2sam,   false,    false, NULL }, /* BAM stores sequences in 2x and numbers in 1-2.5x */ \
+    /* Binary SAM to SAM    */ { DT_SAM,     true,  DT_SAM,    { _SAM_TOPLEVEL },      3,   sam_header_bam2sam,  false,    false, NULL }, /* BAM stores sequences in 2x and numbers in 1-2.5x */ \
     /* Binary SAM to BAM    */ { DT_SAM,     true,  DT_BAM,    { _SAM_TOP2BAM },       2,   NULL,                true,     true,  NULL }, /* BAM is expected to be smaller, but in edge cases numbers "1\t" -> uint32 */ \
     /* Binary BAM to FASTQ  */ { DT_SAM,     true,  DT_FASTQ,  { _SAM_TOP2FQ },        1.5, txtheader_sam2fq,    true,     false, NULL }, /* sizes of QNAME, QUAL the same, SEQ x2 */ \
     /* 23andMe to VCF       */ { DT_ME23,    false, DT_VCF,    { _ME23_TOP2VCF },      4,   txtheader_me232vcf,  true,     false, NULL }, \

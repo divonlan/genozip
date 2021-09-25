@@ -710,9 +710,8 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_SNP_POS)
     if (vb->vb_coords == DC_PRIMARY)
         RECONSTRUCT (last_txtx (vb, pos_ctx), pos_ctx->last_txt_len); // faster than RECONSTRUCT_INT
     
-    else { // if reconstructing Luft, VCF_POS just consumed and last_int set if in Luft coords (see top_luft container)
+    else  // if reconstructing Luft, VCF_POS just consumed and last_int set if in Luft coords (see top_luft container)
         RECONSTRUCT_INT (pos_ctx->last_value.i);
-    }
     
     return false; // no new value
 }
