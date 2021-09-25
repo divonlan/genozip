@@ -117,9 +117,9 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
     // sometimes it is something like this: c5312581-5d6e-4234-89d7-4974581f2993
     case _ATTR_ID: 
         if (str_is_int (value, value_len))
-            seg_pos_field (vb, ATTR_ID, ATTR_ID, SPF_BAD_SNIPS_TOO, 0, value, value_len, 0, value_len);
+            seg_pos_field (vb, ATTR_ID, ATTR_ID, SPF_BAD_SNIPS_TOO, 0, STRa(value), 0, value_len);
         else
-            seg_by_did_i (VB, value, value_len, ATTR_ID, value_len);
+            seg_by_did_i (VB, STRa(value), ATTR_ID, value_len);
         break;
 
     // Dbxref (example: "dbSNP_151:rs1307114892") - we divide to the non-numeric part which we store
@@ -129,7 +129,7 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
         break;
 
     case _ATTR_Target:
-        if (!gff3_seg_target (vb, value, value_len))
+        if (!gff3_seg_target (vb, STRa(value)))
             goto plain_seg;
         break;
 
@@ -139,7 +139,7 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
 
     // example: Parent=mRNA00001,mRNA00002,mRNA00003
     case _ATTR_Parent:
-        seg_array (vb, CTX(ATTR_Parent), ATTR_Parent, value, value_len, ',', 0, false, false, false);
+        seg_array (vb, CTX(ATTR_Parent), ATTR_Parent, STRa(value), ',', 0, false, false, false);
         break;
 
     //case _ATTR_Gap: // I tried: 1. array (no improvement) ; 2. string of op-codes in b250 + integers in local (negligible improvement)
@@ -156,7 +156,7 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
                              { .dict_id={.id="V2arEff" }, .seperator = {' '} },
                              { .dict_id={.num=_ENSTid  },                    } }
         };
-        seg_array_of_struct (vb, CTX(ATTR_Variant_effect), Variant_effect, value, value_len, (SegCallback[]){0,0,0,seg_id_field_do});
+        seg_array_of_struct (vb, CTX(ATTR_Variant_effect), Variant_effect, STRa(value), (SegCallback[]){0,0,0,seg_id_field_do});
         break;
     }
 
@@ -170,7 +170,7 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
                              { .dict_id={.id="S2iftPr" }, .seperator = {' '} },
                              { .dict_id={.num=_ENSTid  },                    } }
         };
-        seg_array_of_struct (vb, CTX(ATTR_sift_prediction), sift_prediction, value, value_len, (SegCallback[]){0,0,0,seg_id_field_do});
+        seg_array_of_struct (vb, CTX(ATTR_sift_prediction), sift_prediction, STRa(value), (SegCallback[]){0,0,0,seg_id_field_do});
         break;
     }
 
@@ -184,7 +184,7 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
                              { .dict_id={.id="P2olyPhP" }, .seperator = {' '} },
                              { .dict_id={.num=_ENSTid   },                    } }
         };
-        seg_array_of_struct (vb, CTX(ATTR_polyphen_prediction), polyphen_prediction, value, value_len, (SegCallback[]){0,0,0,seg_id_field_do});
+        seg_array_of_struct (vb, CTX(ATTR_polyphen_prediction), polyphen_prediction, STRa(value), (SegCallback[]){0,0,0,seg_id_field_do});
         break;
     }
 
@@ -197,7 +197,7 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
                              { .dict_id={.id="v1arPep"  }, .seperator = {' '} },
                              { .dict_id={.num=_ENSTid   },                    } }
         };
-        seg_array_of_struct (vb, CTX(ATTR_variant_peptide), variant_peptide, value, value_len, (SegCallback[]){0,0,seg_id_field_do});
+        seg_array_of_struct (vb, CTX(ATTR_variant_peptide), variant_peptide, STRa(value), (SegCallback[]){0,0,seg_id_field_do});
         break;
     }
 
@@ -206,7 +206,11 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
     case _ATTR_Reference_seq:
     case _ATTR_ancestral_allele: 
         // note: all three are stored together in _ATTR_Reference_seq as they are correlated
-        seg_add_to_local_text (vb, CTX(ATTR_Reference_seq), value, value_len, value_len); 
+        seg_add_to_local_text (vb, CTX(ATTR_Reference_seq), STRa(value), value_len); 
+        break;
+
+    case _ATTR_chr:
+        chrom_seg_by_did_i (vb, ATTR_chr, STRa(value), value_len);
         break;
 
     // Optimize Variant_freq
@@ -215,7 +219,7 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
             unsigned optimized_snip_len = value_len + 20;
             char optimized_snip[optimized_snip_len]; // used for 1. fields that are optimized 2. fields translated luft->primary
 
-            if (optimize_float_2_sig_dig (value, value_len, 0, optimized_snip, &optimized_snip_len)) {        
+            if (optimize_float_2_sig_dig (STRa(value), 0, optimized_snip, &optimized_snip_len)) {        
                 vb->recon_size -= (int)(value_len) - (int)optimized_snip_len;
                 value = optimized_snip;
                 value_len = optimized_snip_len;
@@ -225,7 +229,7 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
 
     default:
     plain_seg:
-        seg_by_ctx (VB, value, value_len, ctx, value_len);
+        seg_by_ctx (VB, STRa(value), ctx, value_len);
     }
 
     return dict_id;

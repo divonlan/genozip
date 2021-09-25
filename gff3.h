@@ -54,6 +54,9 @@
 #pragma GENDICT ATTR_polyphen_prediction=DTYPE_1=polyphen_prediction
 #pragma GENDICT ATTR_variant_peptide=DTYPE_1=variant_peptide
 
+// other fields
+#pragma GENDICT ATTR_chr=DTYPE_1=chr
+
 #pragma GENDICT ENSTid=DTYPE_2=ENSTid 
 
 // SEG Stuff

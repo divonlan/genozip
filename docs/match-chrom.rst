@@ -44,7 +44,7 @@ File type Fields updated
 SAM, BAM  @SQ lines in the file header; RNAME (column 3) and RNEXT (column 7); the contig name in the optional SA, OA and XA fields
 VCF       ##contig lines in the file header; CHROM (column 1)
 Chain     qName and tName fields
-GFF3, GVF SequenceId (column 1)
+GFF3, GVF SequenceId (column 1), optional "chr=" attribute
 23andMe   Chromosome (column 2)
 ========= ==========================================================================================
 
