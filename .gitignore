@@ -44,6 +44,7 @@ mac/scripts/*
 *.sam*
 *.bam
 *.cram
+*.crai
 *.fastq*
 *.fq*
 *.fa

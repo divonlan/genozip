@@ -27,8 +27,8 @@ typedef struct Buffer {
     // these 4 fields can be overlayed with a BitArray - their order and size is identical to BitArray
     BufferType type;
     char *data;       // ==memory+8 if buffer is allocated or NULL if not
-    int64_t param;    // parameter provided by allocator 
-    uint64_t len;     // used by the buffer user according to its internal logic. not modified by malloc/realloc, zeroed by buf_free
+    int64_t param;    // parameter provided by allocator (in BitArray - nbits)
+    uint64_t len;     // used by the buffer user according to its internal logic. not modified by malloc/realloc, zeroed by buf_free (in BitArray - nwords)
     //------------------------------------------------------------------------------------------------------
 
     char *memory;     // memory allocated to this buffer - amount is: size + 2*sizeof(longlong) to allow for OVERFLOW and UNDERFLOW)
@@ -103,24 +103,6 @@ extern uint64_t buf_alloc_do (VBlockP vb,
 extern bool buf_mmap_do (VBlockP vb, Buffer *buf, const char *filename, bool read_only_buffer, const char *func, uint32_t code_line, const char *name);
 #define buf_mmap(vb, buf, filename, read_only_buffer, name) \
     buf_mmap_do((VBlockP)(vb), (buf), (filename), (read_only_buffer), __FUNCTION__, __LINE__, (name))
-
-extern BitArrayP buf_alloc_bitarr_do (VBlockP vb, Buffer *buf, uint64_t nbits, const char *func, uint32_t code_line, const char *name);
-#define buf_alloc_bitarr(vb, buf, nbits, name) \
-    buf_alloc_bitarr_do((VBlockP)(vb), (buf), (nbits), __FUNCTION__, __LINE__, (name))
-
-extern BitArrayP buf_overlay_bitarr_do (VBlockP vb, Buffer *overlaid_buf, Buffer *regular_buf, uint64_t start_byte_in_regular_buf, uint64_t nbits, const char *func, uint32_t code_line, const char *name);
-#define buf_overlay_bitarr(vb, overlaid_buf, regular_buf, start_byte_in_regular_buf, nbits, name) \
-    buf_overlay_bitarr_do((VBlockP)(vb), (overlaid_buf), (regular_buf), (start_byte_in_regular_buf), (nbits), __FUNCTION__, __LINE__, (name))
-
-#define buf_set_overlayable(buf) (buf)->overlayable = true
-
-extern void buf_overlay_do (VBlockP vb, Buffer *overlaid_buf, Buffer *regular_buf,  uint64_t start_in_regular,  
-                            const char *func, uint32_t code_line, const char *name);
-#define buf_overlay(vb, overlaid_buf, regular_buf, name) \
-    buf_overlay_do((VBlockP)(vb), (overlaid_buf), (regular_buf), 0, __FUNCTION__, __LINE__, (name)) 
-
-#define buf_overlay_partial(vb, overlaid_buf, regular_buf, start, name) \
-    buf_overlay_do((VBlockP)(vb), (overlaid_buf), (regular_buf), (start), __FUNCTION__, __LINE__, (name)) 
 
 extern void buf_free_do (Buffer *buf, const char *func, uint32_t code_line);
 #define buf_free(buf) buf_free_do ((buf), __FUNCTION__, __LINE__);
@@ -222,7 +204,27 @@ extern void *buf_low_level_realloc (void *p, size_t size, const char *name, cons
 
 extern bool buf_dump_to_file (const char *filename, const Buffer *buf, unsigned buf_word_width, bool including_control_region, bool no_dirs, bool verbose);
 
+// ------------
 // bitmap stuff
+// ------------
+extern BitArrayP buf_alloc_bitarr_do (VBlockP vb, Buffer *buf, uint64_t nbits, const char *func, uint32_t code_line, const char *name);
+#define buf_alloc_bitarr(vb, buf, nbits, name) \
+    buf_alloc_bitarr_do((VBlockP)(vb), (buf), (nbits), __FUNCTION__, __LINE__, (name))
+
+extern BitArrayP buf_overlay_bitarr_do (VBlockP vb, Buffer *overlaid_buf, Buffer *regular_buf, uint64_t start_byte_in_regular_buf, uint64_t nbits, const char *func, uint32_t code_line, const char *name);
+#define buf_overlay_bitarr(vb, overlaid_buf, regular_buf, start_byte_in_regular_buf, nbits, name) \
+    buf_overlay_bitarr_do((VBlockP)(vb), (overlaid_buf), (regular_buf), (start_byte_in_regular_buf), (nbits), __FUNCTION__, __LINE__, (name))
+
+#define buf_set_overlayable(buf) (buf)->overlayable = true
+
+extern void buf_overlay_do (VBlockP vb, Buffer *overlaid_buf, Buffer *regular_buf,  uint64_t start_in_regular,  
+                            const char *func, uint32_t code_line, const char *name);
+#define buf_overlay(vb, overlaid_buf, regular_buf, name) \
+    buf_overlay_do((VBlockP)(vb), (overlaid_buf), (regular_buf), 0, __FUNCTION__, __LINE__, (name)) 
+
+#define buf_overlay_partial(vb, overlaid_buf, regular_buf, start, name) \
+    buf_overlay_do((VBlockP)(vb), (overlaid_buf), (regular_buf), (start), __FUNCTION__, __LINE__, (name)) 
+
 extern uint64_t buf_extend_bits (Buffer *buf, int64_t num_new_bits);
 extern void buf_add_bit (Buffer *buf, int64_t new_bit);
 extern BitArrayP buf_zfile_buf_to_bitarray (Buffer *buf, uint64_t nbits);

@@ -36,7 +36,7 @@ MY_SRCS = genozip.c genols.c base250.c context.c container.c strings.c stats.c a
           zip.c piz.c reconstruct.c seg.c zfile.c aligner.c flags.c digest.c mutex.c linesorter.c threads.c \
 		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c \
 		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c vcf_refalt.c vcf_tags.c \
-          sam_seg.c sam_piz.c sam_seg_bam.c sam_shared.c sam_header.c \
+          sam_seg.c sam_piz.c sam_seg_bam.c sam_shared.c sam_header.c sam_aux.c sam_md.c \
 		  fasta.c fastq.c gff3.c me23.c phylip.c chain.c kraken.c generic.c \
 		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c \
 		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c\
@@ -185,13 +185,13 @@ $(OBJDIR)/%.opt-o: %.c $(OBJDIR)/%.d
 private/test/%.bam : private/test/%.sam
 ifeq ($(OS),Windows_NT)
 	@echo "Generating $@ from $<"
-	@wsl bash -c "exec /home/divon/miniconda3/bin/samtools  view $< -OBAM | gunzip -c > $@ || exit 1"
+	@wsl bash -c "exec /home/divon/miniconda3/bin/samtools view $< -OBAM --no-PG | gunzip -c > $@ || exit 1"
 endif
 
 private/test/%.cram : private/test/%.sam
 ifeq ($(OS),Windows_NT)
 	@echo "Generating $@ from $<"
-	@wsl bash -c "exec /home/divon/miniconda3/bin/samtools view $< -OCRAM -o $@ -T data/GRCh38_full_analysis_set_plus_decoy_hla.fa.gz || exit 1"
+	@wsl bash -c "exec /home/divon/miniconda3/bin/samtools view $< -OCRAM --no-PG -o $@ -T data/GRCh38_full_analysis_set_plus_decoy_hla.fa.gz || exit 1"
 endif
 
 GENDICT_OBJS := $(addprefix $(OBJDIR)/, $(GENDICT_SRCS:.c=.o))

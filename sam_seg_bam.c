@@ -21,6 +21,7 @@
 #include "profiler.h"
 #include "context.h"
 #include "kraken.h"
+#include "segconf.h"
 
 // set an estimated number of lines, so that seg_all_data_lines doesn't call seg_estimate_num_lines which
 // won't work for BAM as it scans for newlines. Then proceed to sam_seg_initialize
@@ -94,6 +95,38 @@ int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
     }
 
     return -1; // we can't find any alignment - need more data (lower first_i)
+}
+
+static bool bam_seg_get_MD (VBlockSAM *vb, const char *aux, const char *after_aux, pSTRp(md))
+{
+    while (aux < after_aux) {
+
+        if (!memcmp (aux, "MDZ", 3)) {
+            *md = aux+3;
+            SAFE_NUL (after_aux);
+            *md_len =strlen (aux+3);
+            SAFE_RESTORE;
+
+            return true;
+        }
+    
+        static unsigned const size[256] = { ['A']=1, ['c']=1, ['C']=1, ['s']=2, ['S']=2, ['i']=4, ['I']=4, ['f']=4 };
+
+        if (aux[2] == 'Z' || aux[2] == 'H') {
+            SAFE_NUL (after_aux);
+            aux += strlen (aux+3) + 4; // add tag[2], type and \0
+            SAFE_RESTORE;
+        }
+        else if (aux[2] == 'B') {
+            aux += 8 + GET_UINT32 (aux+4) * size[(int)aux[3]]; 
+        }   
+        else if (size[(int)aux[2]])
+            aux += 3 + size[(int)aux[2]];
+        else
+            ABORT ("vb=%u line_i=%"PRIu64" Unrecognized aux type '%c' (ASCII %u)", vb->vblock_i, vb->line_i, aux[2], aux[2]);
+    }
+
+    return false; // MD:Z not found        
 }
 
 void bam_seg_bin (VBlockSAM *vb, uint16_t bin /* used only in bam */, uint16_t sam_flag, PosType this_pos)
@@ -312,7 +345,6 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     VBlockSAM *vb = (VBlockSAM *)vb_;
     ZipDataLineSAM *dl = DATA_LINE (vb->line_i);
     const char *next_field = alignment;
-
     // *** ingest BAM alignment fixed-length fields ***
     uint32_t block_size = NEXT_UINT32;
 
@@ -320,6 +352,8 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     ASSERT (block_size + 4 >= sizeof (BAMAlignmentFixed) && block_size + 4 <= remaining_txt_len, 
             "vb=%u line_i=%"PRIu64" (block_size+4)=%u is out of range - too small, or goes beyond end of txt data: remaining_txt_len=%u",
             vb->vblock_i, vb->line_i, block_size+4, remaining_txt_len);
+
+    const char *after = alignment + block_size + sizeof (uint32_t);
 
     int32_t ref_id      = (int32_t)NEXT_UINT32;     // corresponding to CHROMs in the BAM header
     PosType this_pos    = 1 + (int32_t)NEXT_UINT32; // pos in BAM is 0 based, -1 for unknown 
@@ -367,6 +401,13 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     // Segment BIN after we've gathered bin, flags, pos and vb->ref_confumed (and before sam_seg_seq_field which ruins vb->ref_consumed)
     bam_seg_bin (vb, bin, sam_flag, this_pos);
 
+    // we search forward for MD:Z now, as we will need it for SEQ if it exists
+    if (segconf.has_MD && !segconf.running) {
+        STR(md); 
+        if (bam_seg_get_MD (vb, next_field + (l_seq+1)/2 + l_seq, after, pSTRa(md)))
+            sam_md_analyze (vb, STRa(md), this_pos, FIRSTENT(char, vb->textual_cigar));
+    }
+
     // SEQ - calculate diff vs. reference (denovo or loaded)
     bam_rewrite_seq (vb, l_seq, next_field);
 
@@ -396,7 +437,7 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     bam_seg_cigar_field (vb, dl, l_seq, n_cigar_op);
 
     // OPTIONAL fields - up to MAX_FIELDS of them
-    next_field = sam_seg_optional_all (vb, dl, next_field, 0,0,0, alignment + block_size + sizeof (uint32_t));
+    next_field = sam_seg_optional_all (vb, dl, next_field, 0,0,0, after);
     
     buf_free (&vb->textual_cigar);
     buf_free (&vb->textual_seq);

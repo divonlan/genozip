@@ -21,6 +21,7 @@ typedef struct {
     // SAM/BAM stuff
     bool sam_use_aligner;       // use of aligner is possible if its flag.aligner_available and there are no header contigs
     bool NM_is_integer;         // true if NM is integer, false if it binary
+    bool has_MD;                // MD field was detected in the data
     
     // FASTA stuff
     bool fasta_has_contigs;     // the sequences in this FASTA represent contigs (as opposed to reads) - in which case we have a FASTA_CONTIG dictionary and RANDOM_ACCESS

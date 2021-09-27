@@ -1045,7 +1045,7 @@ bool buf_dump_to_file (const char *filename, const Buffer *buf, unsigned buf_wor
 
     if (no_dirs) {
         for (unsigned i=0; i < strlen(filename); i++)
-            if (filename[i] == '/' || filename[i] == '\\')
+            if (filename[i] == '/' || (flag.is_windows && (filename[i] == '\\' || filename[i] == ':')))
                 update_filename[i] = '-';
         filename = update_filename;
     }

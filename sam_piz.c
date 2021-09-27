@@ -139,8 +139,10 @@ void sam_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unused, 
     // in an edge case, when all is_set bits are zero, the range might not even be written to the file
     bool uses_ref_data = vb->ref_consumed && 
                          (bit_array_num_bits_set_region (buf_get_bitarray (&bitmap_ctx->local), bitmap_ctx->next_local, vb->ref_and_seq_consumed) > 0);
-
-    range = uses_ref_data ? ref_piz_get_range (vb_, gref, pos, vb->ref_consumed) : NULL;
+    bitmap_ctx->last_value.i = bitmap_ctx->next_local; // for SEQ, we use last_value for storing the beginning of the sequence
+    
+    range = uses_ref_data ? ref_piz_get_range (vb_, gref, pos, vb->ref_consumed) : NULL; 
+    vb->range = (RangeP)range; // store is vb->range too, for sam_piz_special_MD
 
     PosType range_len = range ? (range->last_pos - range->first_pos + 1) : 0;
 
@@ -193,8 +195,6 @@ void sam_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *unused, 
     ASSERT (seq_consumed == vb->seq_len,      "expecting seq_consumed(%u) == vb->seq_len(%u)", seq_consumed, vb->seq_len);
     ASSERT (ref_consumed == vb->ref_consumed, "expecting ref_consumed(%u) == vb->ref_consumed(%u)", ref_consumed, vb->ref_consumed);
 
-    bitmap_ctx->last_value.i = bitmap_ctx->next_local; // for SEQ, we use last_value for storing the beginning of the sequence
-    
     nonref_ctx->next_local += ROUNDUP_TO_NEAREST_4 (nonref - nonref_start);
 }
 
@@ -297,71 +297,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_TLEN)
     return true; // new value
 }
 
-SPECIAL_RECONSTRUCTOR (sam_piz_special_AS)
-{
-    new_value->i = vb->seq_len - atoi (snip);
-    if (reconstruct) RECONSTRUCT_INT (new_value->i);
-    
-    return true; // new value
-}
 
-// logic: snip is eg "119C" (possibly also "") - we reconstruct the original, eg "119C31" 
-// by concating a number which is (seq_len - partial_seq_len_by_md_field)
-SPECIAL_RECONSTRUCTOR (sam_piz_special_MD)
-{
-    if (!reconstruct) return false;
-    
-    if (snip_len) RECONSTRUCT (snip, snip_len);
-
-    unsigned partial_seq_len_by_md_field = sam_seg_get_seq_len_by_MD_field (snip, snip_len);
-    RECONSTRUCT_INT (vb->seq_len - partial_seq_len_by_md_field);
-
-    return false; // no new value
-}
-
-SPECIAL_RECONSTRUCTOR (bam_piz_special_NM)
-{
-    if (*snip == 'i') 
-        new_value->i = ((VBlockSAMP)vb)->mismatch_bases;
-
-    else if (*snip == 'b')
-        new_value->i = ((VBlockSAMP)vb)->mismatch_bases > 0;
-
-    else 
-        ASSPIZ (false, "unrecognized opcode '%c'", *snip);
-
-    if (reconstruct) // will be false if BAM, reconstruction is done by translator based on new_value set here
-        RECONSTRUCT_INT (new_value->i);
-
-    return true; // has new value
-}
-
-// BD and BI - reconstruct from BD_BI context which contains interlaced BD and BI data. 
-SPECIAL_RECONSTRUCTOR (sam_piz_special_BD_BI)
-{
-    if (!vb->seq_len || !reconstruct) goto done;
-
-    Context *bdbi_ctx = CTX(OPTION_BD_BI);
-
-    // note: bd and bi use their own next_local to retrieve data from bdbi_ctx. the actual index
-    // in bdbi_ctx.local is calculated given the interlacing
-    ASSERT (ctx->next_local + vb->seq_len * 2 <= bdbi_ctx->local.len, "Error reading txt_line=%"PRIu64": unexpected end of %s data", vb->line_i, dis_dict_id (ctx->dict_id).s);
-
-    char *dst        = AFTERENT (char, vb->txt_data);
-    const char *src  = ENT (char, bdbi_ctx->local, ctx->next_local * 2);
-    uint32_t seq_len = vb->seq_len; // automatic var for effeciency
-
-    if (ctx->dict_id.num == _OPTION_BD)
-        for (uint32_t i=0; i < seq_len; i++, src+=2, dst++) *dst = *src;
-    else
-        for (uint32_t i=0; i < seq_len; i++, src+=2, dst++) *dst = *src + *(src+1);
-    
-    vb->txt_data.len += vb->seq_len;    
-    ctx->next_local  += vb->seq_len;
-
-done:
-    return false; // no new value
-}
 
 // note of float reconstruction:
 // When compressing SAM, floats are stored as a textual string, reconstruced natively for SAM and via sam_piz_sam2bam_FLOAT for BAM.
@@ -451,7 +387,9 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_SEQ)
         // check for invalid characters - issue warning (only once per execution), and make then into an 'N'
         for (unsigned b=0; b < 2; b++)
             if (!base[b] && !(b==1 && (i+1)*2 > l_seq)) {
-                WARN_ONCE ("Warning: when converting SAM sequence data to BAM: invalid character encodered, it will be converted as 'N': '%c' (ASCII %u) (this warning will appear only once)", base[b], base[b]);
+                char printable[l_seq*2+1];
+                WARN_ONCE ("Warning: when converting SAM sequence data to BAM (QNAME=%.*s): invalid character encodered, it will be converted as 'N': '%c' (ASCII %u) (this warning will appear only once). SEQ=%s seq_i=%u", 
+                           vb->last_txt_len(SAM_QNAME), last_txt (vb, SAM_QNAME), base[b], base[b], str_to_printable (recon, l_seq, printable), i*2+b);
                 base[b] = 0x0f;
             }
 

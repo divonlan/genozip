@@ -284,7 +284,7 @@ static void fasta_seg_desc_line (VBlockFASTA *vb, const char *line_start, uint32
 
         vb->ra_initialized = true;
 
-        ASSINP (is_new, "Error: bad FASTA file - sequence \"%.*s\" appears more than once%s", chrom_name_len, chrom_name,
+        ASSINP (is_new || segconf.running, "Error: bad FASTA file - sequence \"%.*s\" appears more than once%s", chrom_name_len, chrom_name,
                 flag.bind ? " (possibly in another FASTA being bound)" : 
                 (flag.reference & REF_ZIP_LOADED) ? " (possibly the sequence size exceeds vblock size, try enlarging with --vblock)" : "");
     }

@@ -33,10 +33,12 @@ void sam_vb_release_vb (VBlockSAM *vb)
     vb->ref_consumed = vb->ref_and_seq_consumed = vb->soft_clip = vb->mismatch_bases = 0;
     vb->a_bases = vb->x_bases = vb->y_bases = 0;
     vb->a_index = vb->x_index = vb->y_index = 0;
+    vb->md_verified = 0;
     buf_free (&vb->bd_bi_line);
     buf_free (&vb->textual_cigar);
     buf_free (&vb->textual_seq);
     buf_free (&vb->textual_opt);
+    buf_free (&vb->md_M_is_ref);
 }
 
 void sam_vb_destroy_vb (VBlockSAM *vb)
@@ -45,6 +47,7 @@ void sam_vb_destroy_vb (VBlockSAM *vb)
     buf_destroy (&vb->textual_cigar);
     buf_destroy (&vb->textual_seq);
     buf_destroy (&vb->textual_opt);
+    buf_destroy (&vb->md_M_is_ref);
 }
 
 // calculate the expected length of SEQ and QUAL from the CIGAR string
@@ -68,6 +71,9 @@ void sam_analyze_cigar (VBlockSAMP vb, STRp(cigar), unsigned *seq_consumed)
         cigar++;
         cigar_len--;
     }
+
+    if (command == PIZ)
+        CTX(SAM_CIGAR)->last_snip = cigar; // store original textual CIGAR for use of sam_piz_special_MD, as in BAM it will be translated
 
     // if we're reconstructing a BAM, we will create the BAM cigar data in textual_cigar. 
     bool bam_piz = (command == PIZ && flag.out_dt == DT_BAM);

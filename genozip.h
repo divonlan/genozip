@@ -323,4 +323,5 @@ static inline void progress_newline(void) {
 #define EXIT_SIGHUP               5
 #define EXIT_SIGSEGV              6
 #define EXIT_ABNORMAL             7
+
 #endif

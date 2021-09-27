@@ -13,6 +13,9 @@
 #include "flags.h"
 #include "sections.h"
 
+#pragma GENDICT_PREFIX REF
+#pragma GENDICT REF_CONTIG=DTYPE_FIELD=CONTIG 
+
 // reference sequences - one per range of 1MB. ranges (chrom, pos) are mapped here with a hash function. In the rare case two unrelated ranges
 // are mapped to the same entry - only the first range will have a reference, and the other ones will not. this will hurt the compression ratio,
 // but not the correctness.

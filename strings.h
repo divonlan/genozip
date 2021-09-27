@@ -29,7 +29,7 @@ extern StrText char_to_printable (char c);
 
 extern char *str_print_snip (const char *in, uint32_t in_len, char *out);
 
-extern char *str_to_single_line_printable (const char *in, uint32_t in_len, char *out);
+extern char *str_to_printable (const char *in, uint32_t in_len, char *out);
 extern char *str_tolower (const char *in, char *out /* out allocated by caller - can be the same as in */);
 extern char *str_toupper (const char *in, char *out);
 

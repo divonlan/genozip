@@ -172,6 +172,9 @@ bool piz_default_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 
     skip |= flag.genocat_no_ref_file && (st == SEC_REFERENCE || st == SEC_REF_HASH || st == SEC_REF_IS_SET);
 
+    if (skip && EXE_GENOCAT && dict_id.num && dict_id.num == flag.dump_one_local_dict_id.num)
+        skip = false;
+        
     return skip;
 }
 

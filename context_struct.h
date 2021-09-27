@@ -60,7 +60,7 @@ typedef struct Context {
     Buffer counts;             // ZIP/PIZ: counts of snips (array of int64_t)
     
     // Seg: snip (in dictionary) and node_index the last non-empty ("" or NULL) snip evaluated
-    const char *last_snip;     
+    const char *last_snip;     // also used in PIZ SAM      
     unsigned last_snip_len;
     WordIndex last_snip_ni;   
 

@@ -73,7 +73,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     GrepStages grep_stages;    /* PIZ: tell piz_is_skip_section what to skip in case of --grep */\
     uint8_t num_type1_subfields; \
     uint8_t num_type2_subfields; \
-    RangeP range;              /* ZIP: used for compressing the reference ranges */ \
+    RangeP range;              /* ZIP: used for compressing the reference ranges. SAM PIZ: used */ \
     \
     unsigned num_rollback_ctxs;/* ZIP: Seg rollback contexts */ \
     ContextP rollback_ctxs[MAX_ROLLBACK_CTXS]; \

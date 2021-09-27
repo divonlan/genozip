@@ -89,7 +89,7 @@ char *str_print_snip (const char *in, uint32_t in_len,
 
 // replaces \t, \n, \r, \b with "\t" etc, replaces unprintables with '?'. caller should allocate out. returns out.
 // out should be allocated by caller to (in_len*2 + 1), out is null-terminated
-char *str_to_single_line_printable (STRp(in), char *out)
+char *str_to_printable (STRp(in), char *out)
 {
     char *start = out;
 

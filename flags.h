@@ -82,7 +82,7 @@ typedef struct {
     ReferenceType reference;
 
     // stats / metadata flags for end users
-    int show_stats, show_dvcf, show_ostatus, show_lift; 
+    int show_stats, show_dvcf, show_ostatus, show_lift, show_wrong_md; 
     enum { VLD_NONE, VLD_REPORT_INVALID, VLD_REPORT_VALID, VLD_INVALID_FOUND } validate; // genocat: tests if this is a valid genozip file (z_file opens correctly)
     
     // analysis

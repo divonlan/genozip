@@ -302,7 +302,7 @@ WordIndex ctx_evaluate_snip_seg (VBlock *vb, Context *vctx,
     ASSERTNOTNULL (vctx);
     ASSERT0 (vctx->dict_id.num, "vctx has no dict_id");
 
-    if (flag.debug_seg && !segconf.running) { 
+    if (flag.debug_seg) { 
         char printable_snip[snip_len+20];
         if (snip) iprintf ("eval_seg: vb_i=%u %s: snip=%s snip_len=%u\n", vb->vblock_i, vctx->tag_name, str_print_snip (snip, snip_len, printable_snip), snip_len);
         else      iprintf ("eval_seg: vb_i=%u %s: snip=NULL snip_len=0", vb->vblock_i, vctx->tag_name);

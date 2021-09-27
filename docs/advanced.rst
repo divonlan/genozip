@@ -197,6 +197,10 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
+.. option:: --show-wrong-md.  C. SAM with MD:Z field - shows cases where the special MD algorithm is not applied to the MD:Z in the data
+
+          |
+
 **Tracking compression performance**
 
 .. include:: opt-stats.rst

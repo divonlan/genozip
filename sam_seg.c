@@ -23,38 +23,6 @@
 #include "contigs.h"
 #include "chrom.h"
 
-static const StoreType optional_field_store_flag[256] = {
-    ['c']=STORE_INT, ['C']=STORE_INT, 
-    ['s']=STORE_INT, ['S']=STORE_INT,
-    ['i']=STORE_INT, ['I']=STORE_INT,
-    ['f']=STORE_FLOAT
-};
-
-static const char optional_sep_by_type[2][256] = { { // compressing from SAM
-        ['c']=CI_NATIVE_NEXT | CI_TRANS_NOR, ['C']=CI_NATIVE_NEXT | CI_TRANS_NOR, // reconstruct number and \t separator is SAM, and don't reconstruct anything if BAM (reconstruction will be done by translator)
-        ['s']=CI_NATIVE_NEXT | CI_TRANS_NOR, ['S']=CI_NATIVE_NEXT | CI_TRANS_NOR, // -"-
-        ['i']=CI_NATIVE_NEXT | CI_TRANS_NOR, ['I']=CI_NATIVE_NEXT | CI_TRANS_NOR, // -"-
-        ['f']=CI_NATIVE_NEXT | CI_TRANS_NOR,                                      // compressing SAM - a float is stored as text, and when piz with translate to BAM - is not reconstructed, instead - translated
-        ['Z']=CI_NATIVE_NEXT | CI_TRANS_NUL, ['H']=CI_NATIVE_NEXT | CI_TRANS_NUL, // reconstruct text and then \t seperator if SAM and \0 if BAM 
-        ['A']=CI_NATIVE_NEXT,                                                     // reconstruct character and then \t seperator if SAM and no seperator for BAM
-        ['B']=CI_NATIVE_NEXT                                                      // reconstruct array and then \t seperator if SAM and no seperator for BAM
-}, 
-{ // compressing from BAM
-        ['c']=CI_NATIVE_NEXT | CI_TRANS_NOR, ['C']=CI_NATIVE_NEXT | CI_TRANS_NOR, // reconstruct number and \t separator is SAM, and don't reconstruct anything if BAM (reconstruction will be done by translator)
-        ['s']=CI_NATIVE_NEXT | CI_TRANS_NOR, ['S']=CI_NATIVE_NEXT | CI_TRANS_NOR, // -"-
-        ['i']=CI_NATIVE_NEXT | CI_TRANS_NOR, ['I']=CI_NATIVE_NEXT | CI_TRANS_NOR, // -"-
-        ['f']=CI_NATIVE_NEXT,                                                     // compressing SAM - a float is stored as a SPECIAL, and the special reconstructor handles the SAM and BAM reconstructing
-        ['Z']=CI_NATIVE_NEXT | CI_TRANS_NUL, ['H']=CI_NATIVE_NEXT | CI_TRANS_NUL, // reconstruct text and then \t seperator if SAM and \0 if BAM 
-        ['A']=CI_NATIVE_NEXT,                                                     // reconstruct character and then \t seperator if SAM and no seperator for BAM
-        ['B']=CI_NATIVE_NEXT                                                      // reconstruct array and then \t seperator if SAM and no seperator for BAM
-} };
-
-static char taxid_redirection_snip[100], xa_strand_pos_snip[100];
-static unsigned taxid_redirection_snip_len, xa_strand_pos_snip_len;
-
-// ----------------------
-// Compressor callbacks
-// ----------------------
 
 // callback function for compress to get data of one line (called by codec_bz2_compress)
 void sam_zip_qual (VBlock *vb, uint64_t vb_line_i, char **line_qual_data, uint32_t *line_qual_len, uint32_t maximum_len) 
@@ -77,52 +45,6 @@ void sam_zip_qual (VBlock *vb, uint64_t vb_line_i, char **line_qual_data, uint32
     else if (flag.optimize_QUAL) 
         optimize_phred_quality_string (*line_qual_data, *line_qual_len);
 }
-
-// callback function for compress to get data of one line
-void sam_zip_u2 (VBlock *vb, uint64_t vb_line_i, char **line_u2_data,  uint32_t *line_u2_len, uint32_t maximum_len) 
-{
-    ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
-
-    *line_u2_len = MIN_(maximum_len, dl->u2_data_len);
-
-    if (!line_u2_data) return; // only lengths were requested
-
-    *line_u2_data = ENT (char, vb->txt_data, dl->u2_data_start);
-
-    if (flag.optimize_QUAL)
-        optimize_phred_quality_string (*line_u2_data, *line_u2_len);
-}
-
-// callback function for compress to get BD_BI data of one line: this is an
-// interlaced line containing a character from BD followed by a character from BI - since these two fields are correlated
-// note: if only one of BD or BI exists, the missing data in the interlaced string will be 0 (this should is not expected to ever happen)
-void sam_zip_bd_bi (VBlock *vb_, uint64_t vb_line_i, 
-                    char **line_data, uint32_t *line_len,  // out 
-                    uint32_t maximum_len)
-{
-    VBlockSAM *vb = (VBlockSAM *)vb_;
-    ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
-    
-    const char *bd = dl->bdbi_data_start[0] ? ENT (char, vb->txt_data, dl->bdbi_data_start[0]) : NULL;
-    const char *bi = dl->bdbi_data_start[1] ? ENT (char, vb->txt_data, dl->bdbi_data_start[1]) : NULL;
-    
-    if (!bd && !bi) return; // no BD or BI on this line
-
-    // note: maximum_len might be shorter than the data available if we're just sampling data in zip_assign_best_codec
-    *line_len  = MIN_(maximum_len, dl->seq_len * 2);
-
-    if (!line_data) return; // only length was requested
-
-    buf_alloc (vb, &vb->bd_bi_line, 0, dl->seq_len * 2, uint8_t, 2, "bd_bi_line");
-
-    // calculate character-wise delta
-    for (unsigned i=0; i < dl->seq_len; i++) {
-        *ENT (uint8_t, vb->bd_bi_line, i*2    ) = bd ? bd[i] : 0;
-        *ENT (uint8_t, vb->bd_bi_line, i*2 + 1) = bi ? bi[i] - (bd ? bd[i] : 0) : 0;
-    }
-
-    *line_data = FIRSTENT (char, vb->bd_bi_line);
-}   
 
 // called by zfile_compress_genozip_header to set FlagsGenozipHeader.dt_specific
 bool sam_zip_dts_flag (void)
@@ -155,13 +77,7 @@ void sam_zip_initialize (void)
     if (z_file->num_txt_components_so_far == 1 && segconf.sam_use_aligner && flag.reference == REF_EXTERNAL) 
         ctx_populate_zf_ctx_from_contigs (gref, SAM_RNAME, ref_get_ctgs (gref)); 
 
-    taxid_redirection_snip_len = sizeof (taxid_redirection_snip);
-    seg_prepare_snip_other (SNIP_REDIRECTION, _SAM_TAXID, false, 0, 
-                            taxid_redirection_snip, &taxid_redirection_snip_len);
-
-    static SmallContainer xa_strand_pos_con = { .repeats=1, .nitems_lo=2, .items = { { { _OPTION_XA_STRAND } }, { { _OPTION_XA_POS } } } };
-    xa_strand_pos_snip_len = sizeof (xa_strand_pos_snip);
-    container_prepare_snip ((ConstContainerP)&xa_strand_pos_con, 0, 0, xa_strand_pos_snip, &xa_strand_pos_snip_len); 
+    sam_aux_zip_initialize();
 }
 
 void sam_seg_initialize (VBlock *vb)
@@ -225,7 +141,7 @@ void sam_seg_finalize (VBlockP vb)
     if (!codec_domq_comp_init (vb, SAM_QUAL, sam_zip_qual)) 
         CTX(SAM_QUAL)->ltype  = LT_SEQUENCE; 
 
-    if (!codec_domq_comp_init (vb, OPTION_U2, sam_zip_u2)) 
+    if (!codec_domq_comp_init (vb, OPTION_U2, sam_zip_U2)) 
         CTX(OPTION_U2)->ltype  = LT_SEQUENCE; 
 
     // top level snip - reconstruction as SAM
@@ -405,8 +321,38 @@ bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)
         dict_id.num == _OPTION_CC;
 }
 
+static bool sam_seg_get_MD (const char *txt /* points to SEQ field */, uint32_t txt_len, pSTRp(md))
+{
+    const char *after = &txt[txt_len];
+    SAFE_ASSIGN(after, '\n'); // for safety
+
+    unsigned column = 9; // SEQ
+    *md = NULL;
+
+    for (;*txt != '\n'; txt++) 
+        if (*txt == '\t') {
+            if (! *md) { 
+                column++;
+                // case: start of MD
+                if (column >= 11 && after - txt > 6 && !memcmp (txt+1, "MD:Z:", 5)) 
+                    *md = txt+6; // skip \tMD:Z:
+            }
+            // case: \t at end of MD
+            else break;
+        }
+
+    // next currently points either to the \n or \t at after of the MD field
+    if (*md) *md_len = txt - *md;
+
+    SAFE_RESTORE;
+    
+    return *md != NULL;
+}
+
 void sam_seg_verify_rname_pos (VBlock *vb, const char *p_into_txt, PosType this_pos)
 {
+    if (segconf.running) return;
+
     if (flag.reference == REF_INTERNAL && (!sam_hdr_contigs /* SQ-less SAM */ || !sam_hdr_contigs->contigs.len /* SQ-less BAM */)) return;
     if (!this_pos) return; // unaligned
     
@@ -485,7 +431,7 @@ void sam_seg_tlen_field (VBlockSAM *vb,
 //   single entry, regardless of the number of entries indicated by CIGAR
 //
 // Best explanation of CIGAR operations: https://davetang.org/wiki/tiki-index.php?page=SAM
-void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uint32_t seq_len, PosType pos, const char *cigar, 
+void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), const PosType pos, const char *cigar, 
                         unsigned recursion_level, uint32_t level_0_seq_len, const char *level_0_cigar, unsigned add_bytes)
 {
     START_TIMER;
@@ -505,6 +451,7 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
     }
 
     BitArray *bitmap = buf_get_bitarray (&bitmap_ctx->local);
+    uint32_t bitmap_start = bitmap_ctx->next_local;        
 
     if (!recursion_level) {
 
@@ -513,8 +460,10 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
         buf_alloc (vb, &bitmap_ctx->local, roundup_bits2bytes64 (vb->ref_and_seq_consumed), vb->lines.len * (vb->ref_and_seq_consumed+5) / 8, uint8_t, CTX_GROWTH, "contexts->local"); 
         buf_extend_bits (&bitmap_ctx->local, vb->ref_and_seq_consumed); 
         bit_array_set_region (bitmap, bitmap_ctx->next_local, vb->ref_and_seq_consumed); // we initiaze all the bits to "set", and clear as needed.
-        
+
         buf_alloc (vb, &nonref_ctx->local, seq_len + 3, vb->lines.len * seq_len / 4, uint8_t, CTX_GROWTH, "contexts->local"); 
+    
+        if (segconf.running) return; // case segconf: we created the contexts for segconf_set_vb_size accounting. that's enough - actually segging will will mark is_set and break sam_md_analyze.
     }
 
     // we can't compare to the reference if it is unaligned: we store the seqeuence in nonref without an indication in the bitmap
@@ -523,7 +472,10 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
         goto align_nonref_local; 
     }
 
-    if (seq[0] == '*') goto done; // we already handled a missing seq (SEQ="*") by adding a '-' to CIGAR - no data added here
+    if (seq[0] == '*') {
+        vb->md_verified = false;    
+        goto done; // we already handled a missing seq (SEQ="*") by adding a '-' to CIGAR - no data added here
+    }
 
     bool no_cigar = cigar[0] == '*' && cigar[1] == 0; // there's no CIGAR. 
 
@@ -541,8 +493,6 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
 
         random_access_update_last_pos (VB, DC_PRIMARY, pos + vb->ref_consumed - 1);
 
-        if (range) ref_unlock (gref, lock);
-        
         // note: in case of a missing range (which can be the first range in this seq, or a subsequent range), we zero the entire remaining bitmap.
         // this is because, absent a reference, we don't know how much ref is consumed by this missing range.
         goto align_nonref_local; 
@@ -689,8 +639,26 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, const char *seq, uin
         else  // we circled back to the beginning for the chromosome - i.e. this VB RA is the entire chromosome
             random_access_update_to_entire_chrom (VB, DC_PRIMARY, range->first_pos, range->last_pos);
     }
+
+    // final verification step - does MD:Z correctly reflect matches and mismatches of M/X/=
+    if (!recursion_level) {
+        BitArray *M_is_ref = buf_get_bitarray (&vb->md_M_is_ref);
+
+        bool bitmap_matches_MD = vb->md_verified && 
+                                !bit_array_manhattan_distance (M_is_ref, 0, bitmap, bitmap_start, M_is_ref->nbits);
+
+        if (flag.show_wrong_md && vb->md_verified && !bitmap_matches_MD) {
+            iprintf ("vb=%u line=%"PRIu64" RNAME=%.*s POS=%"PRId64" CIGAR=%s MD=%.*s SEQ=%.*s\n", 
+                    vb->vblock_i, vb->line_i, STRf(vb->chrom_name), pos, vb->last_cigar, vb->last_txt_len(OPTION_MD), last_txt(vb, OPTION_MD), STRf(seq));
+            bit_array_print_substr ("SEQ match to ref", bitmap, bitmap_start, M_is_ref->nbits, info_stream);
+            bit_array_print_substr ("MD implied match", M_is_ref, 0, M_is_ref->nbits, info_stream); 
+        }
+
+        vb->md_verified = bitmap_matches_MD;
+    }
+
 align_nonref_local: {
-    // we align nonref_ctx->local to a 4-character boundary. this is because CODEC_ACGT squeezes every 4 characters into a byte,
+// we align nonref_ctx->local to a 4-character boundary. this is because CODEC_ACGT squeezes every 4 characters into a byte,
     // before compressing it with LZMA. In sorted SAM, we want subsequent identical sequences to have the same byte alignment
     // so that LZMA can catch their identicality.
     uint64_t add_chars = (4 - (nonref_ctx->local.len & 3)) & 3;
@@ -700,448 +668,26 @@ done:
     COPY_TIMER (sam_seg_seq_field);
 }
 
-// OA and SA format is: (rname ,pos ,strand ,CIGAR ,mapQ ,NM ;)+ . in OA - NM is optional (but its , is not)
-// Example SA:Z:chr13,52863337,-,56S25M70S,0,0;chr6,145915118,+,97S24M30S,0,0;chr18,64524943,-,13S22M116S,0,0;chr7,56198174,-,20M131S,0,0;chr7,87594501,+,34S20M97S,0,0;chr4,12193416,+,58S19M74S,0,0;
-// See: https://samtools.github.io/hts-specs/SAMtags.pdf
-// note: even though SA, OA, XA contain similar fields amongst each other and similar to the primary fields,
-// the values of subsequent lines tend to be similar for each one of them seperately, so we maintain separate contexts
-static void sam_seg_SA_field (VBlockSAM *vb, const char *field, unsigned field_len)
+static const char *sam_seg_get_kraken (VBlockSAM *vb, const char *next_field, bool *has_kraken, 
+                                       char *taxid_str, const char **tag, char *type,  // out
+                                       const char **value, unsigned *value_len, // out
+                                       bool is_bam)
 {
-    static const MediumContainer container_SA = { .nitems_lo = 6,      
-                                                  .repsep    = { ';' }, // including on last repeat    
-                                                  .items     = { { .dict_id = { _OPTION_SA_RNAME  }, .seperator = {','} },  
-                                                                 { .dict_id = { _OPTION_SA_POS    }, .seperator = {','} },  
-                                                                 { .dict_id = { _OPTION_SA_STRAND }, .seperator = {','} },  
-                                                                 { .dict_id = { _OPTION_SA_CIGAR  }, .seperator = {','} },  
-                                                                 { .dict_id = { _OPTION_SA_MAPQ   }, .seperator = {','} },  
-                                                                 { .dict_id = { _OPTION_SA_NM     },                  } } };
+    *tag        = "TX"; // genozip introduced tag (=taxid)
+    *type       = 'i';
+    *value      = taxid_str;
+    *has_kraken = false;
+    *value_len  = kraken_seg_taxid_do (VB, SAM_TAXID, last_txt (vb, SAM_QNAME), vb->last_txt_len (SAM_QNAME),
+                                       taxid_str, true);
 
-    SegCallback callbacks[6] = { [0]=chrom_seg_cb, [1]=seg_pos_field_cb, [3]=seg_add_to_local_text_cb };
-    seg_array_of_struct (VB, CTX(OPTION_SA), container_SA, field, field_len, callbacks);
-    CTX(OPTION_SA)->txt_len++; // 1 for \t in SAM and \0 in BAM 
-}
+    vb->recon_size += is_bam ? 7 : (*value_len + 6); // txt modified
 
-static void sam_seg_OA_field (VBlockSAM *vb, const char *field, unsigned field_len)
-{
-    static const MediumContainer container_OA = { .nitems_lo = 6,          
-                                                  .repsep    = { ';' }, // including on last repeat    
-                                                  .items     = { { .dict_id = { _OPTION_OA_RNAME  }, .seperator = {','} },  
-                                                                 { .dict_id = { _OPTION_OA_POS    }, .seperator = {','} },  
-                                                                 { .dict_id = { _OPTION_OA_STRAND }, .seperator = {','} },  
-                                                                 { .dict_id = { _OPTION_OA_CIGAR  }, .seperator = {','} },  
-                                                                 { .dict_id = { _OPTION_OA_MAPQ   }, .seperator = {','} },  
-                                                                 { .dict_id = { _OPTION_OA_NM     },                    } } };
-
-    SegCallback callbacks[6] = { [0]=chrom_seg_cb, [1]=seg_pos_field_cb, [3]=seg_add_to_local_text_cb };
-    seg_array_of_struct (VB, CTX(OPTION_OA), container_OA, field, field_len, callbacks);
-    CTX(OPTION_OA)->txt_len++; // 1 for \t in SAM and \0 in BAM 
-}
-
-// split the pos strand-pos string, eg "-10000" to strand "-" and pos "10000"
-static void seg_xa_strand_pos_cb (VBlockP vb, ContextP ctx, const char *field, unsigned field_len)
-{
-    if (field_len < 2 || (field[0] != '+' && field[0] != '-'))  // invalid format - expecting pos to begin with the strand
-        seg_by_ctx (VB, field, field_len, ctx, field_len);
-
-    else {
-        seg_by_did_i (VB, field, 1, OPTION_XA_STRAND, 1);
-        seg_integer_or_not (vb, CTX(OPTION_XA_POS), &field[1], field_len-1, field_len-1);
-        seg_by_ctx (VB, xa_strand_pos_snip, xa_strand_pos_snip_len, ctx, 0); // pre-created constant container
-    }
-}
-
-static void sam_seg_XA_field (VBlockSAM *vb, const char *field, unsigned field_len)
-{
-    // XA format is: (chr,pos,CIGAR,NM;)*  pos starts with +- which is strand
-    // Example XA:Z:chr9,-60942781,150M,0;chr9,-42212061,150M,0;chr9,-61218415,150M,0;chr9,+66963977,150M,1;
-    // See: http://bio-bwa.sourceforge.net/bwa.shtml
-    static const MediumContainer container_XA = {
-        .repeats     = 0, 
-        .nitems_lo   = 4, 
-        .repsep      = {';'}, // including last item
-        .items       = { { .dict_id = { _OPTION_XA_RNAME      }, .seperator = {','} }, // note: optional fields are DTYPE_2, in which short ids are left as-is, so we can skip dict_id_make
-                         { .dict_id = { _OPTION_XA_STRAND_POS }, .seperator = {','} },
-                         { .dict_id = { _OPTION_XA_CIGAR      }, .seperator = {','} }, // we don't mix the primary as the primary has a SNIP_SPECIAL
-                         { .dict_id = { _OPTION_XA_NM         },                    } }  };
-
-    SegCallback callbacks[4] = { [0]=chrom_seg_cb, [1]=seg_xa_strand_pos_cb, [2]=seg_add_to_local_text_cb };
-    seg_array_of_struct (VB, CTX(OPTION_XA), container_XA, field, field_len, callbacks);
-    CTX(OPTION_XA)->txt_len++; // 1 for \t in SAM and \0 in BAM 
-}
-
-// --------------------------
-// NM "Number of differences"
-// --------------------------
-
-// Two variations:
-// 1) Integer NM per SAM specification https://samtools.github.io/hts-specs/SAMtags.pdf: "Number of differences (mismatches plus inserted and deleted bases) 
-// between the sequence and reference, counting only (case-insensitive) A, C, G and T bases in sequence and reference as potential matches, with everything
-// else being a mismatch. Note this means that ambiguity codes in both sequence and reference that match each other, such as ‘N’ in both, or compatible 
-// codes such as ‘A’ and ‘R’, are still counted as mismatches. The special sequence base ‘=’ will always be considered to be a match, even if the reference 
-// is ambiguous at that point. Alignment reference skips, padding, soft and hard clipping (‘N’, ‘P’, ‘S’ and ‘H’ CIGAR operations) do not count as mismatches,
-// but insertions and deletions count as one mismatch per base."
-// 2) Binary NM: 0 if sequence fully matches the reference when aligning according to CIGAR, 1 is not.
-static void sam_seg_NM_field (VBlockSAM *vb, const char *field, unsigned field_len, unsigned add_bytes)
-{
-    int32_t NM;
-    if (!str_get_int_range32 (STRa(field), 0, 10000000, &NM)) goto fallback;
-    
-    if (segconf.running && NM > 1) segconf.NM_is_integer = true; // we found evidence of integer NM
-
-    if (segconf.NM_is_integer && NM == vb->mismatch_bases)
-        seg_by_did_i (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'i'}, 3, OPTION_NM, add_bytes); 
-
-    else if (!segconf.NM_is_integer && (NM > 0) == (vb->mismatch_bases > 0))
-        seg_by_did_i (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'b'}, 3, OPTION_NM, add_bytes); 
-
-    else
-        fallback:
-        seg_by_did_i (VB, field, field_len, OPTION_NM, add_bytes); 
-}
-
-// ------------------
-// MD
-// ------------------
-
-uint32_t sam_seg_get_seq_len_by_MD_field (const char *md_str, unsigned md_str_len)
-{
-    uint32_t result=0, curr_num=0;
-
-    for (unsigned i=0; i < md_str_len; i++) {   
-        if (IS_DIGIT (md_str[i])) 
-            curr_num = curr_num * 10 + (md_str[i] - '0');
-
-        else {
-            result += curr_num + 1; // number terminates here + one character
-            curr_num = 0;
-        }
-    }
-
-    result += curr_num; // in case the string ends with a number
-
-    return result;
-}
-
-// in the case where sequence length as calculated from the MD is the same as that calculated
-// from the CIGAR/SEQ/QUAL (note: this is required by the SAM spec but nevertheless genozip doesn't require it):
-// MD is shortened to replace the last number with a *, since it can be calculated knowing the length. The result is that
-// multiple MD values collapse to one, e.g. "MD:Z:119C30" and "MD:Z:119C31" both become "MD:Z:119C*" hence improving compression.
-// In the case where the MD is simply a number "151" and drop it altogether and keep just an empty string.
-static inline bool sam_seg_get_shortened_MD (const char *md_str, unsigned md_str_len, uint32_t seq_len,
-                                             char *new_md_str, unsigned *new_md_str_len)
-{
-    uint32_t seq_len_by_md = sam_seg_get_seq_len_by_MD_field (md_str, md_str_len);
-
-    if (seq_len_by_md != seq_len) return false;  // MD string doesn't comply with SAM spec and is therefore not changed
-    
-    // case - MD ends with a number eg "119C31" - we replace it with prefix+"119C". if its all digits then just prefix
-    if (IS_DIGIT (md_str[md_str_len-1])) {
-
-        int i=md_str_len-1; for (; i>=0; i--)
-            if (!IS_DIGIT (md_str[i])) break;
-
-        new_md_str[0] = SNIP_SPECIAL;
-        new_md_str[1] = SAM_SPECIAL_MD;
-        if (i >= 0) memcpy (&new_md_str[2], md_str, i+1);
-        
-        *new_md_str_len = i+3;
-        return true;
-    }
-
-    return false; // MD doesn't end with a number and is hence unchanged (this normally doesn't occur as the MD would finish with 0)
-}
-
-// MD's logical length is normally the same as seq_len, we use this to optimize it.
-// In the common case that it is just a number equal the seq_len, we replace it with an empty string.
-// if MD value can be derived from the seq_len, we don't need to store - store just an empty string
-static void sam_seg_MD_field (VBlockSAM *vb,  ZipDataLineSAM *dl, const char *field, unsigned field_len, unsigned add_bytes)
-{
-    char new_md[field_len + 10];
-    unsigned new_md_len = 0;
-
-    bool success = sam_seg_get_shortened_MD (field, field_len, dl->seq_len, new_md, &new_md_len);
-
-    // not sure which of these two is better....
-    seg_by_did_i (VB,                                 
-                  success ? new_md     : field, 
-                  success ? new_md_len : field_len,
-                  OPTION_MD, add_bytes);
-}
-
-// AS and XS are values (at least as set by BWA) at most the seq_len, and AS is often equal to it. we modify
-// it to be new_value=(value-seq_len) 
-static inline void sam_seg_AS_field (VBlockSAM *vb, ZipDataLineSAM *dl, DictId dict_id, 
-                                     const char *snip, unsigned snip_len, unsigned add_bytes)
-{
-    bool positive_delta = true;
-
-    // verify that its a unsigned number
-    for (unsigned i=0; i < snip_len; i++)
-        if (!IS_DIGIT (snip[i])) positive_delta = false;
-
-    int32_t as;
-    if (positive_delta) {
-        as = atoi (snip); // type i is signed 32 bit by SAM specification
-        if (dl->seq_len < as) positive_delta=false;
-    }
-
-    // if possible, store a special snip with the positive delta
-    if (positive_delta) {
-        char new_snip[20] = { SNIP_SPECIAL, SAM_SPECIAL_AS };
-        unsigned delta_len = str_int (dl->seq_len-as, &new_snip[2]);
-
-        seg_by_dict_id (VB, new_snip, delta_len+2, dict_id, add_bytes); 
-    }
-
-    // not possible - just store unmodified
-    else
-        seg_by_dict_id (VB, snip, snip_len, dict_id, add_bytes); 
-}
-
-// mc:i: (output of bamsormadup and other biobambam tools - mc in small letters) 
-// appears to be a pos value usually close to PNEXT, but it is -1 is POS=PNEXT.
-static inline void sam_seg_mc_field (VBlockSAM *vb, DictId dict_id, 
-                                     const char *snip, unsigned snip_len, unsigned add_bytes)
-{
-    uint8_t mc_did_i = ctx_get_ctx (vb, dict_id)->did_i;
-    
-    // if snip is "-1", store as simple snip
-    if (snip_len == 2 && snip[0] == '-' && snip[1] == '1')
-        seg_by_did_i (VB, snip, snip_len, mc_did_i, add_bytes);
-    
-    // delta vs PNEXT
-    else
-        seg_pos_field (VB, mc_did_i, SAM_PNEXT, SPF_BAD_SNIPS_TOO, 0, snip, snip_len, 0, add_bytes);
-}
-
-// optimization for Ion Torrent flow signal (ZM) - negative values become zero, positives are rounded to the nearest 10
-static void sam_optimize_ZM (const char **snip, unsigned *snip_len, char *new_str)
-{
-    char *after;
-    int number = strtoul (*snip, &after, 10);
-
-    if ((unsigned)(after - *snip) > 0) {
-        if (number >= 0) number = ((number + 5) / 10) * 10;
-        else             number = 0;
-
-        *snip_len = str_int (number, new_str);
-        *snip = new_str;
-    }    
-}
-
-static void sam_seg_BD_BI_field (VBlockSAM *vb, ZipDataLineSAM *dl, const char *field, unsigned field_len, DictId dict_id, unsigned add_bytes)
-{
-    bool is_bi = (dict_id.num == _OPTION_BI);
-    Context *this_ctx  = is_bi ? CTX(OPTION_BI) : CTX (OPTION_BD);
-
-    if (field_len != dl->seq_len) {
-        seg_by_ctx (VB, field, field_len, this_ctx, field_len);
-        return;
-    }
-    
-    dl->bdbi_data_start[is_bi] = ENTNUM (vb->txt_data, field);
-
-    CTX(OPTION_BD_BI)->txt_len += add_bytes; 
-
-    if (!dl->bdbi_data_start[!is_bi]) // the first of BD and BI increments local.len, so it is incremented even if just one of BD/BI appears
-        CTX(OPTION_BD_BI)->local.len += field_len * 2;
-
-    seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, SAM_SPECIAL_BDBI }), 2, this_ctx, 0);
+    return next_field; // unmodified
 }
 
 
-// E2 - SEQ data. Currently broken. To do: fix.
-/*static void sam_seg_E2_field (VBlockSAM *vb, ZipDataLineSAM *dl, const char *field, unsigned field_len, unsigned add_bytes)
-{
-    ASSSEG0 (dl->seq_len, field, "E2 tag without a SEQ"); 
-    ASSINP (field_len == dl->seq_len, 
-            "Error in %s: Expecting E2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
-            txt_name, dl->seq_len, field_len, field_len, field);
-
-    PosType this_pos = vb->last_int(SAM_POS);
-
-    sam_seg_seq_field (vb, OPTION_E2, (char *)field, field_len, this_pos, vb->last_cigar, 0, field_len, // remove const bc SEQ data is actually going to be modified
-                        vb->last_cigar, add_bytes); 
-}*/
-
-// U2 - QUAL data (note: U2 doesn't have a context - it shares with QUAL)
-static void sam_seg_U2_field (VBlockSAM *vb, ZipDataLineSAM *dl, const char *field, unsigned field_len, unsigned add_bytes)
-{
-    ASSSEG0 (dl->seq_len, field, "U2 tag without a SEQ"); 
-    ASSINP (field_len == dl->seq_len, 
-            "Error in %s: Expecting U2 data to be of length %u as indicated by CIGAR, but it is %u. U2=%.*s",
-            txt_name, dl->seq_len, field_len, field_len, field);
-
-    dl->u2_data_start = field - vb->txt_data.data;
-    dl->u2_data_len   = field_len;
-    CTX(OPTION_U2)->txt_len   += add_bytes;
-    CTX(OPTION_U2)->local.len += field_len;
-}
-
-static inline TranslatorId optional_field_translator (char type)
-{
-    switch (type) {
-        case 'c' : return SAM2BAM_I8;
-        case 'C' : return SAM2BAM_U8;
-        case 's' : return SAM2BAM_LTEN_I16;
-        case 'S' : return SAM2BAM_LTEN_U16;
-        case 'i' : return SAM2BAM_LTEN_I32;
-        case 'I' : return SAM2BAM_LTEN_U32;
-        case 'f' : return IS_BAM ? 0 : SAM2BAM_FLOAT; // when reconstucting BAM->BAM we use SPECIAL_FLOAT rather than a translator
-        default  : return 0;
-    }
-}
-
-static inline unsigned sam_seg_optional_add_bytes (char type, unsigned value_len, bool is_bam)
-{
-    if (is_bam)
-        switch (type) {
-            case 'c': case 'C': case 'A': return 1;
-            case 's': case 'S':           return 2;
-            case 'i': case 'I': case 'f': return 4;
-            case 'Z': case 'H':           return value_len + 1; // +1 for \0
-            default : return 0;
-        }
-    else // SAM
-        return value_len + 1; // +1 for \t
-}
-
-static inline char sam_seg_bam_type_to_sam_type (char type)
-{
-    return (type=='c' || type=='C' || type=='s' || type=='S' || type=='I') ? 'i' : type;
-}
-
-// an array - all elements go into a single item context, multiple repeats
-static void sam_seg_array_field (VBlock *vb, DictId dict_id, const char *value, unsigned value_len)
-{   
-    // get optimization function, if there is one
-    SegOptimize optimize = NULL;
-    if (flag.optimize_ZM && dict_id.num == _OPTION_ZM && value_len > 3 && value[0] == 's')  // XM:B:s,
-        optimize = sam_optimize_ZM;
-
-    // prepare array container - a single item, with number of repeats of array element. array type is stored as a prefix
-    Context *container_ctx     = ctx_get_ctx (vb, dict_id);
-
-    SmallContainer con = { .nitems_lo = 2, 
-                           .drop_final_item_sep_of_final_repeat = true, // TODO - get rid of this flag and move to making the seperators to be repeat seperators as they should have been, using drop_final_repeat_sep and obsoleting this flag 
-                           .repsep    = {0,0}, 
-                           .items     = { { .translator = SAM2BAM_ARRAY_SELF  },  // item[0] is translator-only item - to translate the Container itself in case of reconstructing BAM 
-                                          { .seperator  = {0, ','}            } } // item[1] is actual array item
-                         };
-    
-    char prefixes[] = { CON_PREFIX_SEP, value[0], ',', CON_PREFIX_SEP }; // prefix contains type eg "i,"
-    
-    const char *str = value + 2;      // remove type and comma
-    int str_len = (int)value_len - 2; // must be int, not unsigned, for the for loop
-
-    // prepare context where array elements will go in
-    char arr_dict_id_str[8]   = "XX_ARRAY";
-    arr_dict_id_str[0]        = FLIP_CASE (dict_id.id[0]);
-    arr_dict_id_str[1]        = FLIP_CASE (dict_id.id[1]);
-    con.items[1].dict_id      = dict_id_make (arr_dict_id_str, 8, DTYPE_SAM_OPTIONAL);
-    con.items[1].translator   = optional_field_translator ((uint8_t)value[0]); // instructions on how to transform array items if reconstructing as BAM (value[0] is the subtype of the array)
-    con.items[1].seperator[0] = optional_sep_by_type[IS_BAM][(uint8_t)value[0]];
-    
-    Context *element_ctx      = ctx_get_ctx (vb, con.items[1].dict_id);
-    element_ctx->st_did_i     = container_ctx->did_i;
-    element_ctx->flags.store  = optional_field_store_flag[(uint8_t)value[0]];
-
-    for (con.repeats=0; con.repeats < CONTAINER_MAX_REPEATS && str_len > 0; con.repeats++) { // str_len will be -1 after last number
-
-        const char *snip = str;
-        for (; str_len && *str != ','; str++, str_len--) {};
-
-        unsigned number_len = (unsigned)(str - snip);
-        unsigned snip_len   = number_len; // might be changed by optimize
-             
-        char new_number_str[30];
-        if (optimize && snip_len < 25)
-            optimize (&snip, &snip_len, new_number_str);
-
-        seg_by_ctx (VB, snip, snip_len, element_ctx, IS_BAM ? 0 : number_len+1);
-        
-        str_len--; // skip comma
-        str++;
-    }
-
-    ASSSEG (con.repeats < CONTAINER_MAX_REPEATS, value, "array has too many elements, more than %u", CONTAINER_MAX_REPEATS);
-
-    // add bytes here in case of BAM - all to main field
-    unsigned container_add_bytes=0;
-    if (IS_BAM) {
-        unsigned add_bytes_per_repeat = sam_seg_optional_add_bytes (value[0], 0, true);
-        container_add_bytes = add_bytes_per_repeat * con.repeats + 4 /* count */ + 1 /* type */ ;
-    }
-    else 
-        container_add_bytes = 2; // type - eg "i,"
-
-    container_seg (vb, container_ctx, (ContainerP)&con, prefixes, sizeof(prefixes), container_add_bytes);
-}
-
-// process an optional subfield, that looks something like MX:Z:abcdefg. We use "MX" for the field name, and
-// the data is abcdefg. The full name "MX:Z:" is stored as part of the OPTIONAL dictionary entry
-static DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam, 
-                                      const char *tag, char bam_type, const char *value, unsigned value_len)
-{
-    char sam_type = sam_seg_bam_type_to_sam_type (bam_type);
-    char dict_name[4] = { tag[0], tag[1], ':', sam_type };
-    DictId dict_id = dict_id_make (dict_name, 4, DTYPE_SAM_OPTIONAL);
-
-    unsigned add_bytes = sam_seg_optional_add_bytes (bam_type, value_len, is_bam);
-
-    switch (dict_id.num) {
-
-        case _OPTION_SA: sam_seg_SA_field (vb, value, value_len); break;
-
-        case _OPTION_OA: sam_seg_OA_field (vb, value, value_len); break;
-
-        case _OPTION_XA: sam_seg_XA_field (vb, value, value_len); break;
-
-        // fields containing CIGAR format data - aliases of _OPTION_CIGAR (not the main CIGAR field that all snips have SNIP_SPECIAL)
-        // MC: "Mate Cigar", added by eg https://manpages.debian.org/unstable/biobambam2/bamsort.1.en.html  
-        case _OPTION_MC:
-        case _OPTION_OC: seg_by_did_i (VB, value, value_len, OPTION_CIGAR, add_bytes); break;
-        
-        case _OPTION_MD: sam_seg_MD_field (vb, dl, value, value_len, add_bytes); break;
-
-        case _OPTION_NM: sam_seg_NM_field (vb, value, value_len, add_bytes); break;
-
-        case _OPTION_BD:
-        case _OPTION_BI: sam_seg_BD_BI_field (vb, dl, value, value_len, dict_id, add_bytes); break;
-        
-        case _OPTION_AS: sam_seg_AS_field (vb, dl, dict_id, value, value_len, add_bytes); break;
-        
-        case _OPTION_mc: sam_seg_mc_field (vb, dict_id, value, value_len, add_bytes); break;
-
-        // TX:i: - we seg this as a primary field SAM_TAX_ID
-        case _OPTION_TX: seg_by_did_i (VB, taxid_redirection_snip, taxid_redirection_snip_len, OPTION_TX, add_bytes); break;
-
-        //case _OPTION_E2: sam_seg_E2_field (vb, dl, value, value_len, add_bytes); // BROKEN. To do: fix.
-
-        case _OPTION_U2: sam_seg_U2_field (vb, dl, value, value_len, add_bytes); break;
-
-        default:
-            // Numeric array array
-            if (bam_type == 'B') 
-                sam_seg_array_field (VB, dict_id, value, value_len);
-
-            // All other subfields - normal snips in their own dictionary
-            else        
-                seg_by_dict_id (VB, value, value_len, dict_id, add_bytes); 
-    }
-
-    // integer and float fields need to be STORE_INT/FLOAT to be reconstructable as BAM
-    if (optional_field_store_flag[(uint8_t)sam_type]) {
-        Context *ctx;
-        if ((ctx = ECTX (dict_id)))
-            ctx->flags.store = optional_field_store_flag[(uint8_t)sam_type];
-    }
- 
-    return dict_id;
-}
-
-const char *sam_get_one_optional (VBlockSAM *vb, const char *next_field, int32_t len, char *separator_p, bool *has_13, 
-                                  const char **tag, char *type, const char **value, unsigned *value_len) // out
+static const char *sam_get_one_optional (VBlockSAM *vb, const char *next_field, int32_t len, char *separator_p, bool *has_13, 
+                                         const char **tag, char *type, const char **value, unsigned *value_len) // out
 {
     unsigned field_len;
     const char *field_start;
@@ -1161,23 +707,6 @@ const char *sam_get_one_optional (VBlockSAM *vb, const char *next_field, int32_t
     *separator_p = separator;
 
     return next_field;
-}
-
-static const char *sam_seg_get_kraken (VBlockSAM *vb, const char *next_field, bool *has_kraken, 
-                                       char *taxid_str, const char **tag, char *type,  // out
-                                       const char **value, unsigned *value_len, // out
-                                       bool is_bam)
-{
-    *tag        = "TX"; // genozip introduced tag (=taxid)
-    *type       = 'i';
-    *value      = taxid_str;
-    *has_kraken = false;
-    *value_len  = kraken_seg_taxid_do (VB, SAM_TAXID, last_txt (vb, SAM_QNAME), vb->last_txt_len (SAM_QNAME),
-                                       taxid_str, true);
-
-    vb->recon_size += is_bam ? 7 : (*value_len + 6); // txt modified
-
-    return next_field; // unmodified
 }
 
 const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char *next_field,
@@ -1310,7 +839,7 @@ void sam_seg_rname_rnext (VBlockP vb, DidIType did_i, STRp (chrom), unsigned add
     chrom_seg_ex (VB, did_i, STRa(chrom), 0, NULL, add_bytes, !IS_BAM, &is_new);
 
     // don't allow adding chroms to a BAM file or a SAM that has SQ lines in the header, but we do allow to add to a headerless SAM.
-    ASSSEG (!is_new || !sam_hdr_contigs || (chrom_len==1 && (*chrom=='*' || *chrom=='=')),
+    ASSSEG (!is_new || !sam_hdr_contigs || segconf.running || (chrom_len==1 && (*chrom=='*' || *chrom=='=')),
             chrom, "contig '%.*s' appears in file, but is missing in the %s header", STRf(chrom), dt_name (vb->data_type));
 }
 
@@ -1381,6 +910,13 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
 
     GET_NEXT_ITEM (SAM_TLEN);
     sam_seg_tlen_field (vb, STRdid(SAM_TLEN), 0, CTX(SAM_PNEXT)->last_delta, dl->seq_len);
+
+    // we search forward for MD:Z now, as we will need it for SEQ if it exists
+    if (segconf.has_MD && !segconf.running) {
+        STR(md); 
+        if (sam_seg_get_MD (next_field, remaining_txt_len, pSTRa(md)))
+            sam_md_analyze (vb, STRa(md), this_pos, vb->last_cigar);
+    }
 
     GET_NEXT_ITEM (SAM_SEQ);
 

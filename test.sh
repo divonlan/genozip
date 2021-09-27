@@ -9,6 +9,8 @@ shopt -s extglob  # Enables extglob - see https://mywiki.wooledge.org/glob
 export GENOZIP_TEST="Yes" # Causes output of debugger arguments
 unset GENOZIP_REFERENCE   # initialize
 
+ulimit -c unlimited # enable core dumps
+
 TESTDIR=private/test
 OUTDIR=$TESTDIR/tmp
 
@@ -1077,7 +1079,7 @@ genounzip="$genounzip_exe --echo $2 $piz_threads"
 genocat="$genocat_exe --echo $2 $piz_threads"
 genols=$genols_exe 
 
-basics=(basic.vcf basic.chain basic.bam basic.vcf basic.sam basic.fq basic.fa basic.gvf basic.genome_Full.me23.txt \
+basics=(basic.vcf basic.chain basic.sam basic.vcf basic.bam basic.fq basic.fa basic.gvf basic.genome_Full.me23.txt \
         basic.kraken basic.phy basic.generic)
 
 exes=($genozip_exe $genounzip_exe $genocat_exe $genols_exe)
