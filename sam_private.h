@@ -109,7 +109,7 @@ extern void sam_seg_qname_field (VBlockSAM *vb, STRp(qname), unsigned add_additi
 extern void sam_seg_rname_rnext (VBlockP vb, DidIType did_i, STRp (chrom), unsigned add_bytes);
 extern void sam_analyze_cigar (VBlockSAMP vb, STRp(cigar), unsigned *seq_consumed);
 extern void sam_seg_tlen_field (VBlockSAM *vb, STRp(tlen), int64_t tlen_value, PosType pnext_pos_delta, int32_t cigar_seq_len);
-extern void sam_seg_qual_field (VBlockSAM *vb, ZipDataLineSAM *dl, const char *qual, uint32_t qual_data_len, unsigned add_bytes);
+extern void sam_seg_qual_field (VBlockSAM *vb, ZipDataLineSAM *dl, int64_t flag, const char *qual, uint32_t qual_data_len, unsigned add_bytes);
 extern void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), PosType pos, const char *cigar, unsigned recursion_level, uint32_t level_0_seq_len, const char *level_0_cigar, unsigned add_bytes);
 extern const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char *next_field, int32_t len, bool *has_13, char separator, const char *after_field);
 extern const char *bam_get_one_optional (VBlockSAM *vb, const char *next_field, const char **tag, char *type, const char **value, unsigned *value_len);

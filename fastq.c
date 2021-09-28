@@ -25,6 +25,7 @@
 #include "writer.h"
 #include "kraken.h"
 #include "bases_filter.h"
+#include "compound.h"
 
 #define dict_id_is_fastq_desc_sf dict_id_is_type_1
 #define dict_id_fastq_desc_sf dict_id_type_1
@@ -153,18 +154,19 @@ void fastq_zip_read_one_vb (VBlockP vb)
 }
 
 // case of --optimize-DESC: generate the prefix of the read name from the txt file name
-// eg. "../../fqs/sample.1.fq.gz" -> "@sample-1:"
+// eg. "../../fqs/sample.1.fq.gz" -> "@sample-1."
 static void fastq_get_optimized_desc_read_name (VBlockFASTQ *vb)
 {
     vb->optimized_desc = MALLOC (strlen (txt_file->basename) + 30); // leave room for the line number to follow
     strcpy (vb->optimized_desc, txt_file->basename);
     file_get_raw_name_and_type (vb->optimized_desc, NULL, NULL); // remove file type extension
     vb->optimized_desc_len = strlen (vb->optimized_desc) + 1; // +1 for ':'
-    vb->optimized_desc[vb->optimized_desc_len-1] = ':';
 
-    // replace '.' in the filename with '-' as '.' is a separator in seg_compound_field and would needless inflate the number of contexts
-    for (unsigned i=0; i < vb->optimized_desc_len; i++)
+    // replace '.' in the filename with '-' as '.' is a separator in compound_seg and would needless inflate the number of contexts
+    for (unsigned i=0; i < vb->optimized_desc_len-1; i++)
         if (vb->optimized_desc[i] == '.') vb->optimized_desc[i] = '-';
+
+    vb->optimized_desc[vb->optimized_desc_len-1] = '.';
 }
 
 // called by main thread at the beginning of zipping this file
@@ -181,6 +183,8 @@ void fastq_zip_initialize (void)
     // we just copy all reference contigs. this are not need for decompression, just for --coverage/--sex/--idxstats
     if (flag.reference == REF_EXTERNAL && z_file->num_txt_components_so_far == 1) // first file
         ctx_populate_zf_ctx_from_contigs (gref, FASTQ_CONTIG, ref_get_ctgs (gref)); 
+
+    compound_zip_initialize ((DictId)_FASTQ_DESC);
 }
 
 // called by zfile_compress_genozip_header to set FlagsGenozipHeader.dt_specific
@@ -223,6 +227,8 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
 
         vb->z_data.len = 0; // we've finished reading the pair file z_data, next, we're going to write to z_data our compressed output
     }
+
+    compound_seg_initialize (VB, FASTQ_DESC);
 
     if (flag.optimize_DESC) 
         fastq_get_optimized_desc_read_name (vb);
@@ -391,7 +397,7 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
         vb->recon_size -= FASTQ_DESC_len - optimized_len;
     }
 
-    seg_compound_field (VB, CTX(FASTQ_DESC), 
+    compound_seg (VB, CTX(FASTQ_DESC), 
                         flag.optimize_DESC ? vb->optimized_desc : FASTQ_DESC_str, 
                         flag.optimize_DESC ? optimized_len      : FASTQ_DESC_len, 
                         sep_with_space, 0, 0);

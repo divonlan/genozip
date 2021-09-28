@@ -9,10 +9,30 @@
 #include "genozip.h"
 #include "sections.h"
 
+#pragma GENDICT_PREFIX FASTA
+#pragma GENDICT FASTA_CONTIG=DTYPE_FIELD=CONTIG
+#pragma GENDICT FASTA_LINEMETA=DTYPE_FIELD=LINEMETA
+#pragma GENDICT FASTA_EOL=DTYPE_FIELD=EOL
+#pragma GENDICT FASTA_DESC=DTYPE_FIELD=DESC
+#pragma GENDICT FASTA_Q0NAME=DTYPE_1=Q0NAME // dict_id Q?NAME is expected by compound.c
+#pragma GENDICT FASTA_Q1NAME=DTYPE_1=Q1NAME // fixed compound items must have a did_o directly after container's
+#pragma GENDICT FASTA_Q2NAME=DTYPE_1=Q2NAME
+#pragma GENDICT FASTA_Q3NAME=DTYPE_1=Q3NAME
+#pragma GENDICT FASTA_Q4NAME=DTYPE_1=Q4NAME
+#pragma GENDICT FASTA_Q5NAME=DTYPE_1=Q5NAME
+#pragma GENDICT FASTA_Q6NAME=DTYPE_1=Q6NAME
+#pragma GENDICT FASTA_Q7NAME=DTYPE_1=Q7NAME
+#pragma GENDICT FASTA_COMMENT=DTYPE_FIELD=COMMENT
+#pragma GENDICT FASTA_NONREF=DTYPE_FIELD=NONREF 
+#pragma GENDICT FASTA_NONREF_X=DTYPE_FIELD=NONREF_X
+#pragma GENDICT FASTA_TOPLEVEL=DTYPE_FIELD=TOPLEVEL
+#pragma GENDICT FASTA_TAXID=DTYPE_FIELD=TAXID
+
 // Txtfile stuff
 extern int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
 
 // ZIP Stuff
+extern void fasta_zip_initialize (void);
 COMPRESSOR_CALLBACK(fasta_zip_seq)
 extern void vcf_zip_after_compute (VBlockP vb);
 

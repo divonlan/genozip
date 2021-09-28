@@ -196,7 +196,7 @@ WordIndex chrom_seg_ex (VBlock *vb, DidIType did_i,
         (!is_luft || has_chain)) { // note: can't match the Luft reference of a DVCF (can only match Luft with --chain)
 
         // case: chrom is the same as previous line - use cached (note: might be different than ctx->last_snip since we match_chrom_to_reference)
-        #define last_is_alt ctx_specific
+        #define last_is_alt ctx_specific // CHROM: last CHROM was an alt
         #define last_growth last_delta
         if (vb->line_i && chrom_len == ctx->last_txt_len && ctx->last_txt_index != INVALID_LAST_TXT_INDEX && 
             !memcmp (chrom, last_txtx(vb, ctx), chrom_len)) {

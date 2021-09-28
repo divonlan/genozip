@@ -73,7 +73,7 @@ These are options that modify the file in ways that improve compression. ``--opt
 
 ``genozip myfile.fq.gz --reference hs37d5.ref.genozip --optimize-DESC`` 
 
-Replaces the description line with @filename:read_number. Also - if the 3rd line (the '+' line) contains a copy of the description it is shortened to just '+'.
+Replaces the description line with @filename.read_number. Also - if the 3rd line (the '+' line) contains a copy of the description it is shortened to just '+'.
 
 ``genozip myfile.fq.gz --reference hs37d5.ref.genozip --optimize-QUAL`` 
 

@@ -1087,25 +1087,9 @@ void ctx_update_stats (VBlock *vb)
     }
 }
 
-#define FINALIZE_CTX_BUFS(func) \
-    func (&ctx->dict);          \
-    func (&ctx->b250);          \
-    func (&ctx->local);         \
-    func (&ctx->pair);          \
-    func (&ctx->ol_dict);       \
-    func (&ctx->ol_nodes);      \
-    func (&ctx->nodes);         \
-    func (&ctx->counts);        \
-    func (&ctx->local_hash);    \
-    func (&ctx->global_hash);   \
-    func (&ctx->word_list);     \
-    func (&ctx->con_cache);     \
-    func (&ctx->con_index);     \
-    func (&ctx->con_len);      
-
 void ctx_free_context (Context *ctx)
 {
-    FINALIZE_CTX_BUFS (buf_free);
+    FOREACH_CTX_BUF (ctx, buf_free);
 
     memset ((char*)ctx->tag_name, 0, sizeof(ctx->tag_name));
     ctx->did_i = 0; 
@@ -1156,7 +1140,7 @@ void ctx_free_context (Context *ctx)
 // Called by file_close ahead of freeing File memory containing contexts
 void ctx_destroy_context (Context *ctx)
 {
-    FINALIZE_CTX_BUFS (buf_destroy);
+    FOREACH_CTX_BUF (ctx, buf_destroy);
     mutex_destroy (ctx->mutex);
 
     // test that ctx_free_context indeed frees everything

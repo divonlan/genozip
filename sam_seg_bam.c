@@ -425,11 +425,11 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
         has_qual = bam_rewrite_qual ((uint8_t *)next_field, l_seq); // add 33 to Phred scores to make them ASCII
     
     if (has_qual) // case we have both SEQ and QUAL
-        sam_seg_qual_field (vb, dl, next_field, l_seq, l_seq /* account for qual field */ );
+        sam_seg_qual_field (vb, dl, sam_flag, next_field, l_seq, l_seq /* account for qual field */ );
 
     else { // cases 1. were both SEQ and QUAL are '*' (seq_len=0) and 2. SEQ exists, QUAL not (bam_rewrite_qual returns false)
         *(char *)alignment = '*'; // overwrite as we need it somewhere in txt_data
-        sam_seg_qual_field (vb, dl, alignment, 1, l_seq /* account of l_seq 0xff */);
+        sam_seg_qual_field (vb, dl, 0, alignment, 1, l_seq /* account of l_seq 0xff */);
     }
     next_field += l_seq; 
 

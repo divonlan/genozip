@@ -285,20 +285,16 @@ SPECIAL_RECONSTRUCTOR (bam_piz_special_NM)
 // XS:i
 // ----------------------------------------------------------------------------------------------
 
-// AS and XS are values (at least as set by BWA) at most the seq_len, and AS is often equal to it. we modify
+// AS has a value (at least as set by BWA) of at most seq_len, and often equal to it. we modify
 // it to be new_value=(value-seq_len) 
-static inline void sam_seg_AS_field (VBlockSAM *vb, ZipDataLineSAM *dl, DictId dict_id, 
+static inline void sam_seg_AS_field (VBlockSAM *vb, ZipDataLineSAM *dl, 
                                      const char *snip, unsigned snip_len, unsigned add_bytes)
 {
-    bool positive_delta = true;
-
-    // verify that its a unsigned number
-    for (unsigned i=0; i < snip_len; i++)
-        if (!IS_DIGIT (snip[i])) positive_delta = false;
-
     int32_t as;
+    bool positive_delta = str_get_int_range32 (STRa(snip), 0, 10000, &as);
+    
     if (positive_delta) {
-        as = atoi (snip); // type i is signed 32 bit by SAM specification
+        ctx_set_last_value (VB, CTX (OPTION_AS), ((LastValueType){ .i = as }));
         if (dl->seq_len < as) positive_delta=false;
     }
 
@@ -307,12 +303,45 @@ static inline void sam_seg_AS_field (VBlockSAM *vb, ZipDataLineSAM *dl, DictId d
         char new_snip[20] = { SNIP_SPECIAL, SAM_SPECIAL_AS };
         unsigned delta_len = str_int (dl->seq_len-as, &new_snip[2]);
 
-        seg_by_dict_id (VB, new_snip, delta_len+2, dict_id, add_bytes); 
+        seg_by_ctx (VB, new_snip, delta_len+2, CTX (OPTION_AS), add_bytes); 
     }
 
     // not possible - just store unmodified
     else
-        seg_by_dict_id (VB, snip, snip_len, dict_id, add_bytes); 
+        seg_by_ctx (VB, snip, snip_len, CTX (OPTION_AS), add_bytes); 
+}
+/* doesn't help - variability vs AS is the same as independent variability 
+static inline void sam_seg_XS_field (VBlockSAM *vb, ZipDataLineSAM *dl, 
+                                     const char *snip, unsigned snip_len, unsigned add_bytes)
+{
+    int32_t xs;
+    if (ctx_encountered_in_line_(VB, CTX(OPTION_AS)) && str_get_int_range32 (STRa(snip), 0, 10000, &xs)) {
+        int32_t delta = xs - CTX(OPTION_AS)->last_value.i;
+
+        SNIP(100);
+        seg_prepare_snip_other (SNIP_OTHER_DELTA, _OPTION_AS, true, delta, snip, &snip_len);
+        seg_by_ctx (VB, STRa(snip), CTX(OPTION_XS), add_bytes);
+    }
+    else
+        seg_by_ctx (VB, snip, snip_len, CTX (OPTION_AS), add_bytes); 
+}*/
+
+// MQ:i is often very similar to MAPQ
+static inline void sam_seg_MQ_field (VBlockSAM *vb, ZipDataLineSAM *dl, 
+                                     const char *snip, unsigned snip_len, unsigned add_bytes)
+{
+    int32_t mq, mapq;
+    if (str_get_int_range32 (STRa(snip), 0, 1000, &mq) &&
+        str_get_int_range32 (last_txt(vb, SAM_MAPQ), vb->last_txt_len(SAM_MAPQ), 0, 1000, &mapq)) {
+        
+        int32_t delta = mq - mapq;
+
+        SNIP(100);
+        seg_prepare_snip_other (SNIP_OTHER_DELTA, _SAM_MAPQ, true, delta, snip, &snip_len);
+        seg_by_ctx (VB, STRa(snip), CTX(OPTION_MQ), add_bytes);
+    }
+    else
+        seg_by_ctx (VB, snip, snip_len, CTX (OPTION_MQ), add_bytes); 
 }
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_AS)
@@ -496,8 +525,12 @@ DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_BD:
         case _OPTION_BI: sam_seg_BD_BI_field (vb, dl, value, value_len, dict_id, add_bytes); break;
         
-        case _OPTION_AS: sam_seg_AS_field (vb, dl, dict_id, value, value_len, add_bytes); break;
-        
+        case _OPTION_AS: sam_seg_AS_field (vb, dl, value, value_len, add_bytes); break;
+
+        //case _OPTION_XS: sam_seg_XS_field (vb, dl, value, value_len, add_bytes); break;
+
+        case _OPTION_MQ: sam_seg_MQ_field (vb, dl, value, value_len, add_bytes); break;
+
         case _OPTION_mc: sam_seg_mc_field (vb, dict_id, value, value_len, add_bytes); break;
 
         // TX:i: - we seg this as a primary field SAM_TAX_ID

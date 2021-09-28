@@ -56,6 +56,7 @@ mac/scripts/*
 !test/*
 test/*_ONLY.vcf
 test/*rejects
+*.overlaps
 !test/back-compat/*/*
 test/*.genozip
 test/tmp

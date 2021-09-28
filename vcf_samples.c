@@ -16,10 +16,10 @@
 
 static Container con_FORMAT_AD={}, con_FORMAT_ADALL={}, con_FORMAT_ADF={}, con_FORMAT_ADR={}, con_FORMAT_SAC={}, 
                  con_FORMAT_F1R2={}, con_FORMAT_F2R1={}, con_FORMAT_MB={}, con_FORMAT_SB={}, con_FORMAT_AF={};
-static char sb_snips[2][32], mb_snips[2][32], f2r1_snips[MAX_ARG_ARRAY_ITEMS][32], adr_snips[MAX_ARG_ARRAY_ITEMS][32], adf_snips[MAX_ARG_ARRAY_ITEMS][32], 
-            af_snip[32], sac_snips[MAX_ARG_ARRAY_ITEMS/2][32];
-static unsigned sb_snip_lens[2], mb_snip_lens[2], f2r1_snip_lens[MAX_ARG_ARRAY_ITEMS], adr_snip_lens[MAX_ARG_ARRAY_ITEMS], adf_snip_lens[MAX_ARG_ARRAY_ITEMS], 
-                af_snip_len, sac_snip_lens[MAX_ARG_ARRAY_ITEMS/2];
+static char sb_snips[2][32], mb_snips[2][32], f2r1_snips[MAX_ARRAY_ITEMS][32], adr_snips[MAX_ARRAY_ITEMS][32], adf_snips[MAX_ARRAY_ITEMS][32], 
+            af_snip[32], sac_snips[MAX_ARRAY_ITEMS/2][32];
+static unsigned sb_snip_lens[2], mb_snip_lens[2], f2r1_snip_lens[MAX_ARRAY_ITEMS], adr_snip_lens[MAX_ARRAY_ITEMS], adf_snip_lens[MAX_ARRAY_ITEMS], 
+                af_snip_len, sac_snip_lens[MAX_ARRAY_ITEMS/2];
 
 #define last_sample_i ctx_specific // ZIP: like last_line_i, but used for VCF/FORMAT fields (0-based). Only meaningful if last_line_i indicates the line is the same vb->line_i
 
@@ -70,10 +70,10 @@ void vcf_samples_zip_initialize (void)
         vcf_seg_prepare_minus_snip (con_FORMAT_AD.items[i].dict_id, con_FORMAT_MB.items[i*2].dict_id, mb_snips[i], &mb_snip_lens[i]);
     }
 
-    for (unsigned i=0; i < MAX_ARG_ARRAY_ITEMS/2; i++) 
+    for (unsigned i=0; i < MAX_ARRAY_ITEMS/2; i++) 
         vcf_seg_prepare_minus_snip (con_FORMAT_AD.items[i].dict_id, con_FORMAT_SAC.items[i*2].dict_id, sac_snips[i], &sac_snip_lens[i]);
 
-    for (unsigned i=0; i < MAX_ARG_ARRAY_ITEMS; i++) {
+    for (unsigned i=0; i < MAX_ARRAY_ITEMS; i++) {
         vcf_seg_prepare_minus_snip (con_FORMAT_AD.items[i].dict_id, con_FORMAT_F1R2.items[i].dict_id, f2r1_snips[i], &f2r1_snip_lens[i]);
         vcf_seg_prepare_minus_snip (con_FORMAT_AD.items[i].dict_id, con_FORMAT_ADR.items[i].dict_id,  adr_snips[i],  &adr_snip_lens[i]);
         vcf_seg_prepare_minus_snip (con_FORMAT_AD.items[i].dict_id, con_FORMAT_ADF.items[i].dict_id,  adf_snips[i],  &adf_snip_lens[i]);
@@ -114,7 +114,7 @@ static WordIndex vcf_seg_FORMAT_A_R_G (VBlockVCF *vb, Context *ctx, Container co
                                        void (*seg_item_cb)(VBlockVCFP, Context *ctx, unsigned num_items, ContextP *item_ctxs, 
                                                            const char**, const unsigned*, const int64_t*))
 {   
-    str_split (value, value_len, MAX_ARG_ARRAY_ITEMS, ',', item, false);
+    str_split (value, value_len, MAX_ARRAY_ITEMS, ',', item, false);
     
     if (!(con.nitems_lo = n_items)) 
         return seg_by_ctx (VB, value, value_len, ctx, value_len); // too many items - normal seg

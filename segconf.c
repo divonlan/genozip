@@ -11,6 +11,7 @@
 #include "segconf.h"
 #include "strings.h"
 #include "codec.h"
+#include "arch.h"
 
 SegConf segconf = {}; // system-wide global
 
@@ -75,8 +76,9 @@ static void segconf_set_vb_size (const VBlock *vb, uint64_t curr_vb_size)
             iprintf ("\nDyamically set vblock_memory to %u MB (num_contexts=%u num_vcf_samples=%u)\n", 
                         (unsigned)(segconf.vb_size >> 20), num_used_contexts, vcf_header_get_num_samples());
 
-        // on Windows and Mac - which tend to have less memory in typical configurations, warn if we need a lot
-        #if defined _WIN32 || defined APPLE
+        // on Windows (inc. WSL2) and Mac - which tend to have less memory in typical configurations, warn if we need a lot
+        // (note: if user sets --vblock, we won't get here)
+        if (flag.is_windows || flag.is_mac || strstr (arch_get_os(), "microsoft-standard") /* WSL2 */) {
             segconf.vb_size = MIN_(segconf.vb_size, 32 << 20); // limit to 32MB per VB unless users says otherwise to protect OS UI interactivity 
 
             uint64_t concurrent_vbs = 1 + (txt_file->disk_size ? MIN_(1+ txt_file->disk_size / segconf.vb_size, global_max_threads)
@@ -90,7 +92,7 @@ static void segconf_set_vb_size (const VBlock *vb, uint64_t curr_vb_size)
                     "   --vblock to set the amount of input data (in MB) a thread processes (affects compression ratio)\n"
                     "   --quiet to silence this warning",
                     global_max_threads, (uint32_t)(segconf.vb_size >> 20));
-        #endif
+        }
     }
 }
 

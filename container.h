@@ -12,7 +12,7 @@
 #pragma pack(1)
 #define CONTAINER_MAX_PREFIXES_LEN (32 * MAX_FIELDS)    // max len of just the names string, without the data eg "INFO1=INFO2=INFO3="
 #define CON_PREFIX_SEP              '\x4'  // starts the prefix string and terminates every prefix within it
-#define CON_PREFIX_SEP_             "\x4"  // string version
+#define CON_PREFIX_SEP_             "\4"   // string version (careful not \x4 as it can combine with the next character to eg \x4F)
 #define CON_PREFIX_SEP_SHOW_REPEATS '\x5'  // an alternative terminator - outputs the number of repeats in LTEN32 after the prefix (used for BAM 'B' array count field)
 
 #define CONTAINER_MAX_REPEATS 0xfffffe     // 3 byte unsigned int (16M) (minus 1 for easier detection of overflows)

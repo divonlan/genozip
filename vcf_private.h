@@ -9,6 +9,7 @@
 #include "vblock.h"
 #include "vcf.h"
 #include "website.h"
+#include "seg.h"
 
 #define VCF_FIELD_NAMES "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO"
 #define VCF_FIELD_NAMES_LONG VCF_FIELD_NAMES "\tFORMAT"
@@ -56,8 +57,7 @@ typedef struct VBlockVCF {
     uint32_t last_end_line_i;       // PIZ: last line on which INFO/END was encountered
     
     // FORMAT/AD
-    #define MAX_ARG_ARRAY_ITEMS 36  // same as MAX_COMPOUND_COMPONENTS
-    int64_t ad_values[MAX_ARG_ARRAY_ITEMS];
+    int64_t ad_values[MAX_ARRAY_ITEMS];
 
     // FORMAT stuff 
     Buffer format_mapper_buf;       // ZIP only: an array of type Container - one entry per entry in CTX(VCF_FORMAT)->nodes   

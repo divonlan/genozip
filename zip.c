@@ -4,6 +4,8 @@
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include <math.h>
+#include <errno.h>
+#include <sys/types.h>
 #include "genozip.h"
 #include "profiler.h"
 #include "vblock.h"
@@ -693,7 +695,7 @@ void zip_one_file (const char *txt_basename,
     segconf_initialize(); // before txtheader 
 
     // read the txt header, assign the global variables, and write the compressed header to the GENOZIP file
-    off64_t txt_header_header_pos = z_file->disk_so_far;
+    uint64_t txt_header_header_pos = z_file->disk_so_far;
     uint64_t txt_header_size;
     bool success = txtheader_zip_read_and_compress (&txt_header_size); // also increments z_file->num_txt_components_so_far
     if (!success) goto finish; // eg 2nd+ VCF file cannot bind, because of different sample names

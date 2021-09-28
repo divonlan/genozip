@@ -19,6 +19,7 @@
 #include "reference.h"
 #include "segconf.h"
 #include "chrom.h"
+#include "compound.h"
 
 #define dict_id_is_fasta_desc_sf dict_id_is_type_1
 #define dict_id_fasta_desc_sf dict_id_type_1
@@ -155,6 +156,12 @@ out_of_data:
 // SEG & ZIP stuff
 //-------------------------
 
+// called by main thread at the beginning of zipping this file
+void fasta_zip_initialize (void)
+{
+    compound_zip_initialize ((DictId)_FASTA_DESC);
+}
+
 // callback function for compress to get data of one line (called by codec_lzma_data_in_callback)
 void fasta_zip_seq (VBlock *vb, uint64_t vb_line_i, 
                     char **line_seq_data, uint32_t *line_seq_len,  // out 
@@ -197,6 +204,8 @@ void fasta_seg_initialize (VBlock *vb)
 
     if (flag.reference & REF_ZIP_LOADED) 
         CTX(FASTA_NONREF)->no_callback = true; // override callback if we are segmenting to a reference
+
+    compound_seg_initialize (VB, FASTA_DESC);
 
     // in --stats, consolidate stats into FASTA_NONREF
     stats_set_consolidation (vb, FASTA_NONREF, 1, FASTA_NONREF_X);
@@ -257,7 +266,7 @@ static void fasta_seg_desc_line (VBlockFASTA *vb, const char *line_start, uint32
     ASSSEG0 (chrom_name_len, line_start, "contig is missing a name");
 
     if (!flag.make_reference) {
-        seg_compound_field (VB, CTX(FASTA_DESC), line_start, line_len, sep_with_space, 0, 0);
+        compound_seg (VB, CTX(FASTA_DESC), line_start, line_len, sep_with_space, 0, 0);
         
         char special_snip[100]; unsigned special_snip_len = sizeof (special_snip);
         seg_prepare_snip_other (SNIP_REDIRECTION, _FASTA_DESC, false, 0, &special_snip[2], &special_snip_len);

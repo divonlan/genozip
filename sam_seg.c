@@ -22,7 +22,7 @@
 #include "segconf.h"
 #include "contigs.h"
 #include "chrom.h"
-
+#include "compound.h"
 
 // callback function for compress to get data of one line (called by codec_bz2_compress)
 void sam_zip_qual (VBlock *vb, uint64_t vb_line_i, char **line_qual_data, uint32_t *line_qual_len, uint32_t maximum_len) 
@@ -78,6 +78,8 @@ void sam_zip_initialize (void)
         ctx_populate_zf_ctx_from_contigs (gref, SAM_RNAME, ref_get_ctgs (gref)); 
 
     sam_aux_zip_initialize();
+
+    compound_zip_initialize((DictId)_SAM_QNAME);
 }
 
 void sam_seg_initialize (VBlock *vb)
@@ -106,7 +108,8 @@ void sam_seg_initialize (VBlock *vb)
     CTX(OPTION_BI)->no_stons    = CTX(OPTION_BD)->no_stons = true; // we can't use local for singletons in BD or BI as next_local is used by sam_piz_special_BD_BI to point into BD_BI
     CTX(OPTION_BI)->st_did_i    = CTX(OPTION_BD)->st_did_i = OPTION_BD_BI; 
     CTX(OPTION_BD_BI)->ltype    = LT_SEQUENCE;
-    CTX(OPTION_NM)->flags.store = STORE_INT;
+    CTX(OPTION_NM)->flags.store = STORE_INT; // since v12.0.36
+    CTX(OPTION_AS)->flags.store = STORE_INT; // since v12.0.37
 
     Context *rname_ctx = CTX(SAM_RNAME);
     Context *rnext_ctx = CTX(SAM_RNEXT);
@@ -132,6 +135,11 @@ void sam_seg_initialize (VBlock *vb)
         CTX(SAM_TAXID)->counts_section = true; 
     }
 
+    compound_seg_initialize (VB, SAM_QNAME);
+    
+    if (segconf.running) 
+        segconf.sam_is_sorted = segconf.sam_is_collated = segconf.is_bgi_E9L1C3R10 = segconf.is_illumina_7 = true; // initialize optimistically
+    
     COPY_TIMER (seg_initialize);
 }
 
@@ -813,7 +821,7 @@ static void sam_seg_cigar_field (VBlockSAM *vb, ZipDataLineSAM *dl, unsigned las
     seg_by_did_i (VB, cigar_snip, cigar_snip_len, SAM_CIGAR, last_cigar_len+1); // +1 for \t
 }
 
-void sam_seg_qual_field (VBlockSAM *vb, ZipDataLineSAM *dl, const char *qual, uint32_t qual_data_len, unsigned add_bytes)
+void sam_seg_qual_field (VBlockSAM *vb, ZipDataLineSAM *dl, int64_t flag, const char *qual, uint32_t qual_data_len, unsigned add_bytes)
 {
     dl->qual_data_start = qual - vb->txt_data.data;
     dl->qual_data_len   = qual_data_len;
@@ -823,12 +831,25 @@ void sam_seg_qual_field (VBlockSAM *vb, ZipDataLineSAM *dl, const char *qual, ui
     qual_ctx->txt_len   += add_bytes;
 }
 
-void sam_seg_qname_field (VBlockSAM *vb, const char *qname, uint32_t qname_len, unsigned add_additional_bytes)
+void sam_seg_qname_field (VBlockSAM *vb, STRp(qname), unsigned add_additional_bytes)
 {
-    // I tried: SNIP_COPY on collation (with segconf.is_collated) but QNAME.b250 worsening (from all_the_same) outweighs the b250 compression 
+        // in segconf, identify if this file is collated (each QNAME appears in two or more consecutive lines)
+    if (segconf.running) {
+        if (segconf.sam_is_collated) { // still collated, try to find evidence to the contrary
+            #define last_is_new ctx_specific // QNAME is different than previous line's QNAME  
+            bool is_new = (qname_len != vb->last_txt_len (SAM_QNAME) || memcmp (qname, last_txt(vb, SAM_QNAME), qname_len));
+            if (is_new && CTX(SAM_QNAME)->last_is_new)
+                segconf.sam_is_collated = false; // two new QNAMEs in a row = not collated
+            CTX(SAM_QNAME)->last_is_new = is_new;
+        }
+        compound_segconf_test (STRa(qname));
+    }
+
+    // I tried: SNIP_COPY on collation (with segconf.sam_is_collated) but QNAME.b250 worsening (from all_the_same) outweighs the b250 compression 
     // improvement of the container items
     ContextP ctx = CTX(SAM_QNAME);
-    seg_compound_field (VB, ctx, qname, qname_len, sep_without_space, 0, add_additional_bytes);
+
+    compound_seg (VB, ctx, STRa(qname), sep_without_space, 0, add_additional_bytes);
 
     seg_set_last_txt (VB, ctx, STRa(qname), STORE_NONE); // store for kraken
 }
@@ -870,6 +891,9 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
 
     int32_t len = REMAINING (vb->txt_data, field_start_line);
 
+    WordIndex prev_line_chrom = vb->chrom_node_index;
+    PosType prev_line_pos = vb->last_int (SAM_POS);
+
     // QNAME - We break down the QNAME into subfields separated by / and/or : - these are vendor-defined strings. Examples:
     // Illumina: <instrument>:<run number>:<flowcell ID>:<lane>:<tile>:<x-pos>:<y-pos> for example "A00488:61:HMLGNDSXX:4:1101:15374:1031" see here: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
     // PacBio BAM: {movieName}/{holeNumber}/{qStart}_{qEnd} see here: https://pacbiofileformats.readthedocs.io/en/3.0/BAM.html
@@ -882,6 +906,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     ASSSEG (str_get_int (STRdid(SAM_FLAG), &flag), field_start, "invalid FLAG field: %.*s", field_len, field_start);
 
     GET_NEXT_ITEM (SAM_RNAME);
+
     sam_seg_rname_rnext (VB, SAM_RNAME, STRdid(SAM_RNAME), SAM_RNAME_len+1);
 
     // note: pos can have a value even if RNAME="*" - this happens if a SAM with a RNAME that is not in the header is converted to BAM with samtools
@@ -893,7 +918,13 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     
     random_access_update_pos (VB, DC_PRIMARY, SAM_POS);
 
+    // in segconf, identify if this file is sorted
+    if (segconf.running && segconf.sam_is_sorted) // still sorted, try to find evidence to the contrary
+        if (prev_line_chrom > vb->chrom_node_index || (prev_line_chrom == vb->chrom_node_index && prev_line_pos > this_pos))
+            segconf.sam_is_sorted = false;
+
     SEG_NEXT_ITEM (SAM_MAPQ);
+    seg_set_last_txt (VB, CTX(SAM_MAPQ), STRdid(SAM_MAPQ), STORE_NONE);
 
     // CIGAR - we wait to get more info from SEQ and QUAL
     GET_NEXT_ITEM (SAM_CIGAR);
@@ -930,7 +961,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     vb->ref_and_seq_consumed = save_ref_and_seq_consumed; // restore
 
     GET_MAYBE_LAST_ITEM (SAM_QUAL);
-    sam_seg_qual_field (vb, dl, STRdid(SAM_QUAL), SAM_QUAL_len + 1); 
+    sam_seg_qual_field (vb, dl, flag, STRdid(SAM_QUAL), SAM_QUAL_len + 1); 
 
     // finally we can seg CIGAR now
     sam_seg_cigar_field (vb, dl, last_cigar_len, STRdid(SAM_SEQ), STRdid(SAM_QUAL));

@@ -664,38 +664,8 @@ static bool file_open_txt_write (File *file)
     return file->file != 0;
 }
 
-// we insert all the z_file buffers into the buffer list in advance, to avoid this 
-// thread satety issue:
-// without our pre-allocation, some of these buffers will be first allocated by a compute threads 
-// when the first vb containing a certain did_i is merged in (for the contexts buffers) or
-// ra is merged (for ra_buf). while these operations 
-// are done while holding a mutex, so that compute threads don't run over each over, buf_alloc 
-// may change buf_lists in evb buffers, while the main thread might be doing so concurrently
-// resulting in data corruption in evb.buf_list. If evb.buf_list gets corrupted this might result in termination 
-// of the execution.
-// with these buf_add_to_buffer_list() the buffers will already be in evb's buf_list before any compute thread is run.
-static void file_initialize_z_file_data (File *file)
+static void file_initialize_bufs (File *file)
 {
-    memset (file->dict_id_to_did_i_map, 0xff, sizeof(file->dict_id_to_did_i_map)); // DID_I_NONE
-
-#define INIT(buf) file->contexts[i].buf.name  = #buf; \
-                  buf_add_to_buffer_list (evb, &file->contexts[i].buf);
-
-    for (unsigned i=0; i < MAX_DICTS; i++) {
-        INIT (dict);        
-        INIT (b250);
-        INIT (nodes);
-        INIT (global_hash);
-        INIT (ol_dict);
-        INIT (ol_nodes);
-        INIT (local_hash);
-        INIT (word_list);
-        INIT (con_cache);
-        INIT (con_index);
-        INIT (con_len);
-    }
-
-#undef INIT
 #define INIT(buf) file->buf.name = #buf; \
                   buf_add_to_buffer_list (evb, &file->buf);
     
@@ -712,25 +682,48 @@ static void file_initialize_z_file_data (File *file)
     INIT (txt_file_info);
     INIT (vb_info[0]);
     INIT (vb_info[1]);
+    INIT (line_info[0]);
+    INIT (line_info[1]);
     INIT (rejects_report);
     INIT (apriori_tags);
-}
-
-static void file_initialize_txt_file_data (File *file)
-{
     INIT (unconsumed_txt);
     INIT (bgzf_isizes);
     INIT (coverage);
     INIT (read_count);
     INIT (unmapped_read_count);
-    INIT (recon_plan);
-    INIT (line_info[0]);
-    INIT (line_info[1]);
-    INIT (vb_info[0]);
-    INIT (vb_info[1]);
+}
 
+// we insert all the z_file buffers into the buffer list in advance, to avoid this 
+// thread satety issue:
+// without our pre-allocation, some of these buffers will be first allocated by a compute threads 
+// when the first vb containing a certain did_i is merged in (for the contexts buffers) or
+// ra is merged (for ra_buf). while these operations 
+// are done while holding a mutex, so that compute threads don't run over each over, buf_alloc 
+// may change buf_lists in evb buffers, while the main thread might be doing so concurrently
+// resulting in data corruption in evb.buf_list. If evb.buf_list gets corrupted this might result in termination 
+// of the execution.
+// with these buf_add_to_buffer_list() the buffers will already be in evb's buf_list before any compute thread is run.
+static void file_initialize_z_add_to_buf_list (Buffer *buf)
+{
+    buf_add_to_buffer_list (evb, buf);
+}
+
+static void file_initialize_z_file_data (File *file)
+{
+    memset (file->dict_id_to_did_i_map, 0xff, sizeof(file->dict_id_to_did_i_map)); // DID_I_NONE
+
+    for (unsigned i=0; i < MAX_DICTS; i++) 
+        FOREACH_CTX_BUF (&file->contexts[i], file_initialize_z_add_to_buf_list);
+
+    file_initialize_bufs (file);
+}
+
+static void file_initialize_txt_file_data (File *file)
+{
     mutex_initialize (file->recon_plan_mutex[0]);
     mutex_initialize (file->recon_plan_mutex[1]);
+
+    file_initialize_bufs (file);
 }
 
 #undef INIT

@@ -58,7 +58,6 @@ const LuftTransLateProp ltrans_props[NUM_VCF_TRANS] = DVCF_TRANS_PROPS;
 #define LO_SNIP_LEN 200
 static char info_luft_snip[LO_SNIP_LEN]={}, info_prim_snip[LO_SNIP_LEN]={}, info_rejt_luft_snip[LO_SNIP_LEN]={}, info_rejt_prim_snip[LO_SNIP_LEN]={};
 static unsigned info_luft_snip_len=LO_SNIP_LEN, info_prim_snip_len=LO_SNIP_LEN, info_rejt_luft_snip_len=LO_SNIP_LEN, info_rejt_prim_snip_len=LO_SNIP_LEN;
-static bool lo_snip_initialized = false;
 
 // ---------------
 // ZIP & SEG stuff
@@ -67,6 +66,7 @@ static bool lo_snip_initialized = false;
 // ZIP: called by the main thread from *_zip_initialize 
 void vcf_lo_zip_initialize (void)
 {
+    static bool lo_snip_initialized = false;
     if (lo_snip_initialized) return;
     lo_snip_initialized = true;
 

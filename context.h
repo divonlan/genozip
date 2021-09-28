@@ -41,6 +41,7 @@
 #define SNIP_DONT_STORE          '\xC'   // Reconcstruct the following value, but don't store it in last_value (overriding flags.store)
 #define SNIP_COPY                '\xE'   // Copy the last_txt of dict_id (same or other)
 #define SNIP_DUAL                '\xF'   // A snip containing two snips separated by a SNIP_DUAL - for Primary and Luft reconstruction respectively
+
 #define NUM_SNIP_CODES           16
 
 #define SNIP_CODES { "SNIP_SEP", "SNIP_LOOKUP", "SNIP_OTHER_LOOKUP", "SNIP_PAIR_LOOKUP",\
@@ -89,6 +90,7 @@ static inline bool NEXTLOCALBIT(Context *ctx) { BitArrayP b = buf_get_bitarray (
 #define last_txt(vb, did_i) last_txtx (vb, &(vb)->contexts[did_i])
 #define last_txt_len(did_i) contexts[did_i].last_txt_len
 static inline bool is_last_txt_valid(ContextP ctx) { return ctx->last_txt_index != INVALID_LAST_TXT_INDEX; }
+static inline bool is_same_last_txt(VBlockP vb, ContextP ctx, STRp(str)) { return str_len == ctx->last_txt_len && !memcmp (str, last_txtx(vb, ctx), str_len); }
 
 static inline void ctx_init_iterator (Context *ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; ctx->next_local = 0; }
 

@@ -397,6 +397,7 @@ static void main_genozip (const char *txt_filename,
         // case: z_file has closed and tested if needed - remove all files included in this z_file 
         if (z_closes_after_me) {
             str_split (remove_list.data, remove_list.len-1, remove_list.param, '\0', rm_file, true); // -1 to remove last \0
+
             for (unsigned i=0; i < n_rm_files; i++)
                 file_remove (rm_files[i], true); 
             
@@ -427,8 +428,8 @@ static int main_sort_input_filenames (const void *fn1, const void *fn2)
     DataType dt1 = main_get_file_dt (*(char **)fn1);
     DataType dt2 = main_get_file_dt (*(char **)fn2);
 
-    int sizeof_vb1 = (dt_props[dt1].sizeof_vb ? dt_props[dt1].sizeof_vb : def_vb_size)(dt1);
-    int sizeof_vb2 = (dt_props[dt2].sizeof_vb ? dt_props[dt2].sizeof_vb : def_vb_size)(dt2);
+    int sizeof_vb1 = ((dt1 != DT_NONE && dt_props[dt1].sizeof_vb) ? dt_props[dt1].sizeof_vb : def_vb_size)(dt1);
+    int sizeof_vb2 = ((dt2 != DT_NONE && dt_props[dt2].sizeof_vb) ? dt_props[dt2].sizeof_vb : def_vb_size)(dt2);
 
     // sort by VB type (assuming their size is unique)
     if (sizeof_vb1 != sizeof_vb2) return sizeof_vb1 - sizeof_vb2;
@@ -513,13 +514,10 @@ static void main_load_reference (const char *filename, bool is_first_file, bool 
     RESTORE_VALUE (txt_file);
 }
 
-void TEST(char *str) {
-}
-
-#include "dict_id.h"
 int main (int argc, char **argv)
 {    
-    //TEST ("3.2E-003");
+    if (flag.debug || getenv ("GENOZIP_TEST"))
+        fprintf (stderr, "\nStarting %s %s\n", argv[0], argc>1 ? argv[1] : ""); 
 
     // sometimes the last 3 args are "2>CON", "1>CON", "<CON", not sure where is this from, perhaps the debugger?
     if (argc >= 4 && !strcmp (argv[argc-1], "<CON")) argc -= 3;

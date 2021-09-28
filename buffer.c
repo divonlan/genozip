@@ -301,15 +301,23 @@ static void buf_foreach_buffer (void (*callback)(const Buffer *, void *arg), voi
     VBlockPool *vb_pool = vb_get_pool ();
     if (!vb_pool) return;
 
-    for (int vb_i=VB_ID_EVB; vb_i < (int)vb_pool->num_allocated_vbs; vb_i++) {
+    // note: we don't cover EVB as it segfaults for an unknown reason (likely the Buffer structure itself resides with a structure
+    // that is freed (eg File)). TODO: debug this.
+    for (int vb_i=0; vb_i < (int)vb_pool->num_allocated_vbs; vb_i++) {
 
-        VBlockP vb = vb_get_from_pool (vb_i);
+        VBlockP vb = vb_i >= 0 ? vb_get_from_pool (vb_i) : evb;
         if (!vb) continue;
 
         ARRAY (const Buffer *, bl, vb->buffer_list);
         
-        for (uint32_t buf_i=0; buf_i < bl_len; buf_i++)
+        for (uint32_t buf_i=0; buf_i < bl_len; buf_i++) {
+            #ifdef WIN32
+            if (IsBadReadPtr (&bl[buf_i], sizeof (Buffer))) 
+                ABORT ("buffer structure inaccessible (invalid pointer) in buf_i=%u of vb_i=%d", buf_i, vb_i); 
+            #endif
+
             if (bl[buf_i] && bl[buf_i]->memory) callback (bl[buf_i], arg); // exclude destroyed, not-yet-allocated, overlay buffers and buffers that were src in buf_move
+        }
     }
 }
 
@@ -322,6 +330,7 @@ uint64_t buf_get_memory_usage (void)
 {
     uint64_t mem_usage=0;
     buf_foreach_buffer (buf_count_mem_usage, &mem_usage);
+
     return mem_usage;
 }
 

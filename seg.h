@@ -54,6 +54,7 @@ extern void seg_id_field_do (VBlockP vb, ContextP ctx, const char *id_snip, unsi
 #define seg_id_field(vb, ctx, id_snip, id_snip_len, account_for_separator) \
     do { seg_id_field_do(VB, (ctx), (id_snip), (id_snip_len)); (ctx)->txt_len += !!(account_for_separator); } while(0)
 
+#define MAX_ARRAY_ITEMS 36
 extern Container seg_initialize_container_array_do (DictId dict_id, bool type_1_items, bool comma_sep);
 #define seg_initialize_container_array(dict_id, type_1_items, comma_sep) seg_initialize_container_array_do ((DictId)dict_id, type_1_items, comma_sep)
 
@@ -71,10 +72,6 @@ extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, DidIType stats_c
 
 typedef void (*SegCallback) (VBlockP vb, ContextP ctx, STRp(value));
 extern void seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, const char *snip, unsigned snip_len, SegCallback *callbacks);
-
-extern const char sep_with_space[], sep_without_space[];
-extern void seg_compound_field (VBlockP vb, ContextP field_ctx, const char *field, unsigned field_len, 
-                                const char *is_sep, unsigned nonoptimized_len, unsigned add_additional_bytes);
 
 typedef void (*SegOptimize)(const char **snip, unsigned *snip_len, char *space_for_new_str);
 

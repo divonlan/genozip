@@ -130,13 +130,16 @@ void vb_release_vb_do (VBlockP *vb_p, const char *func)
     if (vb->id >= 0) COPY_TIMER_VB (evb, vb_release_vb_do)
 }
 
-void vb_destroy_vb (VBlockP *vb_p)
+void vb_destroy_vb_do (VBlockP *vb_p, const char *func)
 {
     ASSERTMAINTHREAD;
     START_TIMER;
 
     VBlockP vb = *vb_p;
     if (!vb) return;
+
+    if (flag.show_vblocks) 
+        iprintf ("VB_DESTROY(id=%d) vb_i=%d caller=%s\n", vb->id, vb->vblock_i, func);
 
     bool is_evb = vb->id == VB_ID_EVB;
 
