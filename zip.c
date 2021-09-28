@@ -363,7 +363,7 @@ static void zip_generate_ctxs (VBlock *vb)
 
             bool drop_section = zip_generate_b250_section (vb, ctx);
             if (drop_section) 
-                buf_free (&ctx->b250)
+                buf_free (&ctx->b250);
             else 
                 codec_assign_best_codec (vb, ctx, NULL, SEC_B250);
         }

@@ -326,6 +326,8 @@ void compound_seg (VBlock *vb,
                    unsigned nonoptimized_len,      // if non-zero, we don't account for the string given, instead, only for this amount (+add_for_eol)
                    unsigned add_additional_bytes)  // account for characters in addition to the field
 {
+    START_TIMER;
+
     bool success = false;
     
     // in sorted SAMs, there is a tiny advantage of copying consecutive identical QNAMEs. In collated mode,
@@ -342,6 +344,8 @@ void compound_seg (VBlock *vb,
     }*/
 
     if (!success) compound_seg_default (VB, ctx, STRa(qname), default_is_sep, nonoptimized_len, add_additional_bytes);
+
+    COPY_TIMER (compound_seg);
 }
 
 void compound_segconf_test (STRp(qname))

@@ -150,21 +150,4 @@ typedef struct Context {
     
 } Context;
 
-#define FOREACH_CTX_BUF(ctx, func) do {                                                       \
-    { Buffer *buf = &(ctx)->dict;        buf->name = "contexts->dict"        ; func (buf); }  \
-    { Buffer *buf = &(ctx)->b250;        buf->name = "contexts->b250"        ; func (buf); }  \
-    { Buffer *buf = &(ctx)->local;       buf->name = "contexts->local"       ; func (buf); }  \
-    { Buffer *buf = &(ctx)->pair;        buf->name = "contexts->pair"        ; func (buf); }  \
-    { Buffer *buf = &(ctx)->ol_dict;     buf->name = "contexts->ol_dict"     ; func (buf); }  \
-    { Buffer *buf = &(ctx)->ol_nodes;    buf->name = "contexts->ol_nodes"    ; func (buf); }  \
-    { Buffer *buf = &(ctx)->nodes;       buf->name = "contexts->nodes"       ; func (buf); }  \
-    { Buffer *buf = &(ctx)->counts;      buf->name = "contexts->counts"      ; func (buf); }  \
-    { Buffer *buf = &(ctx)->local_hash;  buf->name = "contexts->local_hash"  ; func (buf); }  \
-    { Buffer *buf = &(ctx)->global_hash; buf->name = "contexts->global_hash" ; func (buf); }  \
-    { Buffer *buf = &(ctx)->word_list;   buf->name = "contexts->word_list"   ; func (buf); }  \
-    { Buffer *buf = &(ctx)->con_cache;   buf->name = "contexts->con_cache"   ; func (buf); }  \
-    { Buffer *buf = &(ctx)->con_index;   buf->name = "contexts->con_index"   ; func (buf); }  \
-    { Buffer *buf = &(ctx)->con_len;     buf->name = "contexts->con_len"     ; func (buf); }  \
-} while(0)
-
 #endif

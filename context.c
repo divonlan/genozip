@@ -31,7 +31,7 @@
 #include "contigs.h"
 #include "segconf.h"
 #include "chrom.h"
-
+#include "buffer.h"
 
 #define INITIAL_NUM_NODES 10000
 
@@ -1087,9 +1087,9 @@ void ctx_update_stats (VBlock *vb)
     }
 }
 
-void ctx_free_context (Context *ctx)
+void ctx_free_context (Context *ctx, DidIType did_i)
 {
-    FOREACH_CTX_BUF (ctx, buf_free);
+    ctx_foreach_buffer (ctx, false, buf_free_do);
 
     memset ((char*)ctx->tag_name, 0, sizeof(ctx->tag_name));
     ctx->did_i = 0; 
@@ -1138,20 +1138,20 @@ void ctx_free_context (Context *ctx)
 }
 
 // Called by file_close ahead of freeing File memory containing contexts
-void ctx_destroy_context (Context *ctx)
+void ctx_destroy_context (Context *ctx, DidIType did_i)
 {
-    FOREACH_CTX_BUF (ctx, buf_destroy);
+    ctx_foreach_buffer (ctx, false, buf_destroy_do);
     mutex_destroy (ctx->mutex);
 
     // test that ctx_free_context indeed frees everything
     #ifdef DEBUG
-        ctx_free_context (ctx);
+        ctx_free_context (ctx, did_i);
 
         #define REL_LOC(field) ((char*)(&ctx->field) - (char*)ctx)
         for (char *c=(char*)ctx; c  < (char*)(ctx+1); c++)
             if (*c) {
                 fprintf (stderr, "relative location for debugging: %"PRIu64"\n", REL_LOC(num_singletons)); // help find the offending field 
-                ABORT ("ctx_free_context didn't fully clear the context, byte %u != 0", (unsigned)(c - (char*)ctx)); 
+                ABORT ("ctx_free_context didn't fully clear the context did_i=%u, byte %u != 0", did_i, (unsigned)(c - (char*)ctx)); 
             }
     #endif
 
@@ -1614,3 +1614,20 @@ void ctx_rollback (VBlockP vb, Context *ctx)
     ctx->last_line_i    = LAST_LINE_I_INIT; // undo "encountered in line"
 }
 
+void ctx_foreach_buffer(ContextP ctx, bool set_name, void (*func)(BufferP buf, const char *func, unsigned line)) 
+{
+    { Buffer *buf = &(ctx)->dict;        if (set_name) buf->name = "contexts->dict"        ; func (buf, __FUNCTION__, __LINE__); }  
+    { Buffer *buf = &(ctx)->b250;        if (set_name) buf->name = "contexts->b250"        ; func (buf, __FUNCTION__, __LINE__); }  
+    { Buffer *buf = &(ctx)->local;       if (set_name) buf->name = "contexts->local"       ; func (buf, __FUNCTION__, __LINE__); }  
+    { Buffer *buf = &(ctx)->pair;        if (set_name) buf->name = "contexts->pair"        ; func (buf, __FUNCTION__, __LINE__); }  
+    { Buffer *buf = &(ctx)->ol_dict;     if (set_name) buf->name = "contexts->ol_dict"     ; func (buf, __FUNCTION__, __LINE__); }  
+    { Buffer *buf = &(ctx)->ol_nodes;    if (set_name) buf->name = "contexts->ol_nodes"    ; func (buf, __FUNCTION__, __LINE__); }  
+    { Buffer *buf = &(ctx)->nodes;       if (set_name) buf->name = "contexts->nodes"       ; func (buf, __FUNCTION__, __LINE__); }  
+    { Buffer *buf = &(ctx)->counts;      if (set_name) buf->name = "contexts->counts"      ; func (buf, __FUNCTION__, __LINE__); }  
+    { Buffer *buf = &(ctx)->local_hash;  if (set_name) buf->name = "contexts->local_hash"  ; func (buf, __FUNCTION__, __LINE__); }  
+    { Buffer *buf = &(ctx)->global_hash; if (set_name) buf->name = "contexts->global_hash" ; func (buf, __FUNCTION__, __LINE__); }  
+    { Buffer *buf = &(ctx)->word_list;   if (set_name) buf->name = "contexts->word_list"   ; func (buf, __FUNCTION__, __LINE__); }  
+    { Buffer *buf = &(ctx)->con_cache;   if (set_name) buf->name = "contexts->con_cache"   ; func (buf, __FUNCTION__, __LINE__); }  
+    { Buffer *buf = &(ctx)->con_index;   if (set_name) buf->name = "contexts->con_index"   ; func (buf, __FUNCTION__, __LINE__); }  
+    { Buffer *buf = &(ctx)->con_len;     if (set_name) buf->name = "contexts->con_len"     ; func (buf, __FUNCTION__, __LINE__); }  
+}

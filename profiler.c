@@ -52,6 +52,7 @@ void profiler_add (ConstVBlockP vb)
     ADD(txtfile_read_header);
     ADD(seg_all_data_lines);
     ADD(seg_initialize);
+    ADD(compound_seg);
     ADD(ctx_merge_in_vb_ctx);
     ADD(codec_hapmat_count_alt_alleles);
     ADD(md5);
@@ -165,6 +166,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (aligner_get_match_len, 3);
         PRINT (aligner_get_word_from_seq, 3);
         PRINT (seg_initialize, 2);
+        PRINT (compound_seg,2);
         PRINT (sam_seg_seq_field,2);
         PRINT (ctx_merge_in_vb_ctx, 1);
         PRINT (lock_mutex_zf_ctx, 2);

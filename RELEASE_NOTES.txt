@@ -539,3 +539,7 @@ g. Much improved website genozip.com
 - Removed obsolete --with-chr
 - Bug fixes
 
+12.0.37
+- SAM/BAM: better NM:i, MD:Z, MQ:i, QNAME compression
+- FASTQ: --optimize-DESC now generates read names similar to the NCBI format, eg "@sample.6"
+- New advanced option: --show-wrong-md

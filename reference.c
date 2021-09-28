@@ -1355,7 +1355,7 @@ void ref_set_ref_file_info (Reference ref, Digest md5, const char *fasta_name, u
 // show a subset of the reference if --regions is specified - but only up to one region per chromosome
 void ref_display_ref (Reference ref)
 {
-    Context chrom_ctx = {};
+    static Context chrom_ctx = {}; // static because the contained buffers cannot be on the stack as they are added to buf_list
     ref_load_external_reference (ref, &chrom_ctx);
 
     if (flag.regions) regions_make_chregs (&chrom_ctx);
@@ -1409,7 +1409,7 @@ void ref_display_ref (Reference ref)
         }
     }
 
-    ctx_free_context (&chrom_ctx);
+    ctx_free_context (&chrom_ctx, DID_I_NONE);
 }
 
 #define REV_CODEC_GENOME_BASES_PER_THREAD (1 << 27) // 128Mbp

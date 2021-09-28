@@ -703,7 +703,7 @@ static void file_initialize_bufs (File *file)
 // resulting in data corruption in evb.buf_list. If evb.buf_list gets corrupted this might result in termination 
 // of the execution.
 // with these buf_add_to_buffer_list() the buffers will already be in evb's buf_list before any compute thread is run.
-static void file_initialize_z_add_to_buf_list (Buffer *buf)
+static void file_initialize_z_add_to_buf_list (Buffer *buf, const char *func, unsigned line)
 {
     buf_add_to_buffer_list (evb, buf);
 }
@@ -713,7 +713,7 @@ static void file_initialize_z_file_data (File *file)
     memset (file->dict_id_to_did_i_map, 0xff, sizeof(file->dict_id_to_did_i_map)); // DID_I_NONE
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
-        FOREACH_CTX_BUF (&file->contexts[i], file_initialize_z_add_to_buf_list);
+        ctx_foreach_buffer (&file->contexts[i], true, file_initialize_z_add_to_buf_list);
 
     file_initialize_bufs (file);
 }
@@ -1040,7 +1040,7 @@ void file_close (File **file_p,
             
         // always destroy all buffers even if unused - for saftey
         for (unsigned i=0; i < MAX_DICTS; i++) // we need to destory all even if unused, because they were initialized in file_initialize_z_file_data
-            ctx_destroy_context (&file->contexts[i]);
+            ctx_destroy_context (&file->contexts[i], i);
 
         buf_destroy (&file->ra_buf);
         buf_destroy (&file->ra_buf_luft);

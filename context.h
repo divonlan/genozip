@@ -148,8 +148,8 @@ extern void ctx_overlay_dictionaries_to_vb (VBlockP vb);
 extern void ctx_sort_dictionaries_vb_1(VBlockP vb);
 
 extern void ctx_update_stats (VBlockP vb);
-extern void ctx_free_context (Context *ctx);
-extern void ctx_destroy_context (Context *ctx);
+extern void ctx_free_context (Context *ctx, DidIType did_i);
+extern void ctx_destroy_context (Context *ctx, DidIType did_i);
 extern void ctx_map_aliases (VBlockP vb);
 extern bool ctx_is_show_dict_id (DictId dict_id);
 
@@ -224,5 +224,7 @@ static inline bool ctx_encountered_in_line_do (VBlockP vb, DictId dict_id, Conte
 #define ctx_set_encountered_in_line(ctx)  /* set encountered if not already ctx_set_last_value */  \
     if ((ctx)->last_line_i != vb->line_i) \
         (ctx)->last_line_i   = -(int32_t)vb->line_i - 1; 
+
+extern void ctx_foreach_buffer(ContextP ctx, bool set_name, void (*func)(BufferP buf, const char *func, unsigned line));
 
 #endif

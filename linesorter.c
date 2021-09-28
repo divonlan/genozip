@@ -363,7 +363,7 @@ static void linesorter_compress_recon_plan_do (bool is_luft)
 
     // create txt_file->recon_plan
     uint32_t conc_writing_vbs = linesorter_plan_reconstruction (&txt_file->line_info[is_luft], &txt_file->vb_info[is_luft], &index_buf);
-    buf_free (&index_buf)
+    buf_free (&index_buf);
 
     // get best codec for the reconstruction plan data
     Codec codec = codec_assign_best_codec (evb, 0, &txt_file->recon_plan, SEC_RECON_PLAN);

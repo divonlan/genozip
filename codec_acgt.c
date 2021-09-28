@@ -187,7 +187,7 @@ void codec_xcgt_uncompress (VBlock *vb, Codec codec, uint8_t param,
         else                                *nonref++ = acgt_x[i];                        // case non-0/1: use acgt_x (this is usually, but not necessarily, 'N')
     }
 
-    buf_free (&vb->compressed)
+    buf_free (&vb->compressed);
 }
 
 // Explanation of uncompression of data compressed with the ACGT codec:

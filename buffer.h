@@ -105,7 +105,7 @@ extern bool buf_mmap_do (VBlockP vb, Buffer *buf, const char *filename, bool rea
     buf_mmap_do((VBlockP)(vb), (buf), (filename), (read_only_buffer), __FUNCTION__, __LINE__, (name))
 
 extern void buf_free_do (Buffer *buf, const char *func, uint32_t code_line);
-#define buf_free(buf) buf_free_do ((buf), __FUNCTION__, __LINE__);
+#define buf_free(buf) buf_free_do ((buf), __FUNCTION__, __LINE__)
 
 extern void buf_destroy_do (Buffer *buf, const char *func, uint32_t code_line);
 #define buf_destroy(buf) buf_destroy_do ((buf), __FUNCTION__, __LINE__)

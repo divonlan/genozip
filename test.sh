@@ -423,21 +423,22 @@ batch_dvcf()
         local primary=$OUTDIR/primary.vcf
         local luft=$OUTDIR/luft.vcf
         local primary2=$OUTDIR/primary2.vcf
-
+        local dvcf=${primary%%.vcf}.d.vcf.genozip
+        
         # compare src to primary (ignoring header and INFO fields)
-        echo -n "Step 1: make ${primary}.genozip from $file : " 
+        echo -n "Step 1: make $dvcf from $file : " 
         if [ "$file" == basic-dvcf-luft.vcf ]; then # this file is already a Luft rendition
-            $genozip ${TESTDIR}/$file -fo ${primary}.genozip || exit 1
+            $genozip ${TESTDIR}/$file -fo $dvcf || exit 1
         else
-            $genozip -C $chain ${TESTDIR}/$file -fo ${primary}.genozip --dvcf-rename="FORMAT/QDF:STRAND>QDR,QDR:STRAND>QDF" --dvcf-drop="INFO/CLN:REFALT" || exit 1
+            $genozip -C $chain ${TESTDIR}/$file -fo $dvcf --dvcf-rename="FORMAT/QDF:STRAND>QDR,QDR:STRAND>QDF" --dvcf-drop="INFO/CLN:REFALT" || exit 1
         fi
 
-        echo -n "Step 2: make ${primary} from ${primary}.genozip : " 
-        $genocat ${primary}.genozip --no-pg -fo ${primary}
+        echo -n "Step 2: make ${primary} from $dvcf : " 
+        $genocat $dvcf --no-pg -fo ${primary}
 
         # convert primary -> luft -> primary
-        echo -n "Step 3: make ${luft} from ${primary}.genozip : " 
-        $genocat --luft --no-pg ${primary}.genozip -fo ${luft} || exit 1
+        echo -n "Step 3: make ${luft} from $dvcf : " 
+        $genocat --luft --no-pg $dvcf -fo ${luft} || exit 1
         echo -n "Step 4: make ${luft}.genozip from ${luft} : " 
         $genozip $luft -fo ${luft}.genozip || exit 1
         echo -n "Step 5: make ${primary2} from ${luft}.genozip : " 
@@ -445,7 +446,7 @@ batch_dvcf()
         echo "Step 6: compare $primary to $primary2" 
         cmp_2_files $primary $primary2 
 
-        rm -f ${src}.noinfo ${primary}.genozip  ${primary}.noinfo ${luft} ${luft}.genozip ${primary2}
+        rm -f ${src}.noinfo $dvcf ${primary}.noinfo ${luft} ${luft}.genozip ${primary2}
     done
     cleanup
 }
@@ -759,6 +760,8 @@ batch_backward_compatability()
 
 batch_prod_compatability()
 {
+    if [ ! -d genozip-prod ]; then return; fi
+
     batch_print_header
 
     (cd ../genozip-prod; make ${debug:1})

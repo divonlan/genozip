@@ -651,7 +651,6 @@ void buf_overlay_do (VBlock *vb,
 
 // creates a file mapping: data is mapping from a read-only file, any modifications are private
 // to the process and not written back to the file. buf->param is used for mmapping.
-char dummy=0; // non-static global so it doesn't get optimized away
 bool buf_mmap_do (VBlock *vb, Buffer *buf, const char *filename, 
                   bool read_only_buffer, // if false, make a copy-on-write memory mapping, creating private pages upon write
                   const char *func, uint32_t code_line, const char *name)
@@ -703,9 +702,6 @@ bool buf_mmap_do (VBlock *vb, Buffer *buf, const char *filename,
     // reset overlay counter    
     if (!read_only_buffer)
         *(uint16_t *)(buf->data + buf->size + sizeof (uint64_t)) = 1;
-
-    // load entire buffer to memory (by accessing a single byte in each 4KB page) - this turns out to be much faster than loading on demand
-    for (char *c = FIRSTENT(char, *buf); c < AFTERENT(char, *buf); c += 4096) dummy += *c;
     
     COPY_TIMER (buf_mmap_do);
     
