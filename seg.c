@@ -442,7 +442,7 @@ void seg_integer_or_not_cb (VBlockP vb, ContextP ctx, const char *int_str, unsig
 bool seg_float_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes)
 {
     // TO DO: implement reconstruction in reconstruct_one_snip-SNIP_LOOKUP
-    char snip[1 + FLOAT_FORMAT_LEN];
+    char snip[2 + FLOAT_FORMAT_LEN];
     unsigned format_len;
 
     // case: its an float

@@ -255,7 +255,9 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_MD)
                         ASSERTNOTNULL (vb->range);
                     }
 
-                    RECONSTRUCT_INT (count_match); count_match=0; // flush matches before reconstructing mismatch
+                    RECONSTRUCT_INT (count_match); // flush matches before reconstructing mismatch
+                    count_match=0;
+                    
                     RECONSTRUCT1 (ref_base_by_pos (vb->range, pos)); // vb->range set in sam_reconstruct_seq
                     subcigar_len--;
                     pos++;
@@ -265,8 +267,12 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_MD)
 
         else if (cigar_op=='D') {
             
-            if (op_i) RECONSTRUCT_INT (count_match); count_match=0; // flush matches before reconstructing deletion (but not if deletion is first)
-            
+             // flush matches before reconstructing deletion (but not if deletion is first)
+            if (op_i) { 
+                RECONSTRUCT_INT (count_match);
+                count_match=0;
+            }
+
             RECONSTRUCT1 ('^');
             while (subcigar_len) { 
                 RECONSTRUCT1 (ref_base_by_pos (vb->range, pos)); 
