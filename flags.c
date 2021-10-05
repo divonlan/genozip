@@ -1164,6 +1164,7 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
     ASSINP0 (flag.out_dt != DT_BAM || z_file_i <= 0 || flag.test, "Cannot concatenate multiple BAM files. Try using --sam."); // TODO: bug 349
 
     // -- grep doesn't work with binary files
+    ASSINP0 (!flag.grep || flag.out_dt != DT_BAM, "--grep is not supported when outputting BAM data. Tip: add --sam.");
     ASSINP (!flag.grep || !out_dt_is_binary, "--grep is not supported when outputting %s data", dt_name (flag.out_dt));
 
     // --gpos requires --reference
