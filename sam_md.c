@@ -232,7 +232,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_MD)
     bm_ctx->next_local = bm_ctx->last_value.i; // rewind back to beginning of the bits of this line (value stored by sam_reconstruct_seq)
 
     uint32_t count_match=0;
-    for (unsigned op_i=0; *cigar ; op_i++) {
+    for (unsigned op_i=0; *cigar && *cigar != '\t'; op_i++) {
 
         int subcigar_len = strtod (cigar, (char **)&cigar); // get number and advance next_cigar
         char cigar_op = *(cigar++);
