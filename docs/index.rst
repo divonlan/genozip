@@ -15,6 +15,7 @@ Genozip
    Source code <source>
    Publications & Citing <publications>
    License <license>
+   Release Notes <release-notes>
    Contact <contact>
   
 |

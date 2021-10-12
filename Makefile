@@ -101,6 +101,7 @@ ifeq ($(OS),Windows_NT)
 	LDFLAGS += -static -static-libgcc
 	LZMA_SRCS += lzma/Threads.c lzma/LzFindMt.c
 	OBJDIR=objdir.windows
+	WSL=wsl
 else
 	CFLAGS += -D_7ZIP_ST
     ifeq ($(uname),Linux)
@@ -236,25 +237,30 @@ DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs
 	   docs/sam2fq.rst docs/23andMe2vcf.rst docs/multifasta2phylip.rst docs/gatk-unexpected-base.rst docs/digest.rst docs/commercial.rst \
 	   docs/using-on-hpc.rst docs/match-chrom.rst \
 	   docs/dvcf.rst docs/dvcf-rendering.rst docs/chain.rst docs/dvcf-limitations.rst docs/dvcf-renaming.rst docs/dvcf-see-also.rst \
-	   docs/archiving.rst docs/encryption.rst \
+	   docs/archiving.rst docs/encryption.rst docs/release-notes.rst \
 	   docs/data-types.rst docs/bam.rst docs/fastq.rst docs/vcf.rst docs/gff3.rst
 
 docs/conf.py: docs/conf.template.py version.h
 	@sed -e "s/__VERSION__/$(version)/g" $< |sed -e "s/__YEAR__/`date +'%Y'`/g" > $@ 
 
 docs/LICENSE.for-docs.txt: genozip$(EXE) version.h
+	@echo Generating $@
 	@./genozip$(EXE) --license=74 --force > $@
 
-docs/_build/html/.buildinfo: docs/LICENSE.for-docs.txt docs/conf.py $(DOCS)
+docs/RELEASE_NOTES.for-docs.txt: RELEASE_NOTES.txt
+	@echo Generating $@
+	@fold -w 63 -s $< > $@
+	
+docs/_build/html/.buildinfo: docs/LICENSE.for-docs.txt docs/RELEASE_NOTES.for-docs.txt docs/conf.py $(DOCS)
 	@echo Building HTML docs
-	@wsl $(SPHINX) -M html docs docs/_build -q -a 
+	@$(WSL) $(SPHINX) -M html docs docs/_build -q -a 
 
-docs: docs/_build/html/.buildinfo docs/LICENSE.for-docs.txt
-	@(git commit -m "build docs" docs/conf.py docs/LICENSE.for-docs.txt ; exit 0) > /dev/null
+docs: docs/_build/html/.buildinfo docs/LICENSE.for-docs.txt docs/RELEASE_NOTES.for-docs.txt
+	@(git commit -m "build docs" docs/conf.py docs/LICENSE.for-docs.txt docs/RELEASE_NOTES.for-docs.txt ; exit 0) > /dev/null
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@git push > /dev/null
 
-docs-debug: docs/_build/html/.buildinfo
+docs-debug: docs/_build/html/.buildinfo 
 	/c/Program\\ Files\\ \\(x86\\)/Google/Chrome/Application/chrome.exe file:///c:/Users/USER/projects/genozip/docs/_build/html/index.html
 
 # this is used by build.sh to install on conda for Linux and Mac. Installation for Windows in in bld.bat
