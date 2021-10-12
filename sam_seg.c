@@ -155,10 +155,10 @@ void sam_seg_initialize (VBlock *vb)
     CTX(SAM_BUDDY)->st_did_i    = SAM_QNAME;
     
     if (segconf.sam_is_collated) 
-        CTX(SAM_POS)->flags.store_delta = true; // since v12.0.39
+        CTX(SAM_POS)->flags.store_delta = true; // since v12.0.41
 
     // we sometimes copy from buddy alignments (mates etc), but only in sorted files
-    if (segconf.sam_is_sorted) { // since v12.0.39
+    if (segconf.sam_is_sorted) { // since v12.0.41
         CTX(SAM_QNAME  )->flags.store_per_line = true; 
         CTX(SAM_FLAG   )->flags.store_per_line = true;
         CTX(SAM_POS    )->flags.store_per_line = true;

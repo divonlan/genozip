@@ -220,12 +220,12 @@ SPECIAL (SAM, 5,  FLOAT,             bam_piz_special_FLOAT);             // used
 SPECIAL (SAM, 6,  BIN,               bam_piz_special_BIN);   
 SPECIAL (SAM, 7,  NM,                bam_piz_special_NM);                // introduced 12.0.37
 SPECIAL (SAM, 8,  MD,                sam_piz_special_MD);                // introduced 12.0.37
-SPECIAL (SAM, 9,  REF_CONSUMED,      sam_piz_special_REF_CONSUMED);      // introduced 12.0.39: Reconstructs ref_consumed
-SPECIAL (SAM, 10, PNEXT_IS_PREV_POS, sam_piz_special_PNEXT_IS_PREV_POS); // introduced 12.0.39
-SPECIAL (SAM, 11, COPY_BUDDY_FLAG,   sam_piz_special_COPY_BUDDY_FLAG);   // introduced 12.0.39
-SPECIAL (SAM, 12, COPY_BUDDY_TLEN,   sam_piz_special_COPY_BUDDY_TLEN);   // introduced 12.0.39
-SPECIAL (SAM, 13, COPY_BUDDY_MC,     sam_piz_special_COPY_BUDDY_MC);     // introduced 12.0.39
-SPECIAL (SAM, 14, CONSUME_MC_Z,      sam_piz_special_CONSUME_MC_Z);      // introduced 12.0.39
+SPECIAL (SAM, 9,  REF_CONSUMED,      sam_piz_special_REF_CONSUMED);      // introduced 12.0.41: Reconstructs ref_consumed
+SPECIAL (SAM, 10, PNEXT_IS_PREV_POS, sam_piz_special_PNEXT_IS_PREV_POS); // introduced 12.0.41
+SPECIAL (SAM, 11, COPY_BUDDY_FLAG,   sam_piz_special_COPY_BUDDY_FLAG);   // introduced 12.0.41
+SPECIAL (SAM, 12, COPY_BUDDY_TLEN,   sam_piz_special_COPY_BUDDY_TLEN);   // introduced 12.0.41
+SPECIAL (SAM, 13, COPY_BUDDY_MC,     sam_piz_special_COPY_BUDDY_MC);     // introduced 12.0.41
+SPECIAL (SAM, 14, CONSUME_MC_Z,      sam_piz_special_CONSUME_MC_Z);      // introduced 12.0.41
 #define NUM_SAM_SPECIAL 15
 
 #define SAM_LOCAL_GET_LINE_CALLBACKS                      \

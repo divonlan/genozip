@@ -383,6 +383,7 @@ WINDOWS_INSTALLER_OBJS = windows/genozip.exe windows/genounzip.exe windows/genoc
 
 # this must be run ONLY has part of "make distribution" or else versions will be out of sync
 docs/genozip-installer.exe: clean-optimized $(WINDOWS_INSTALLER_OBJS) # clean first, as we will compile without -march=native
+	@(mkdir windows >& /dev/null ; exit 0)
 	@echo 'Creating Windows installer'
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@echo 'WINDOWS: Using the UI:'
@@ -393,15 +394,17 @@ docs/genozip-installer.exe: clean-optimized $(WINDOWS_INSTALLER_OBJS) # clean fi
 	@echo '  (4) Optionally: Click Yes, and copy the resulting files to releases/* and also c:\bin'	
 	@echo '  (5) Exit the UI (close the window)'
 	@if [ `basename ${PWD}` != genozip ] ; then cp $(WINDOWS_INSTALLER_OBJS) ../genozip/windows ; fi # so this works for genozip-prod too - because InstallForge uses absolute paths 
-	@(C:\\\\Program\\ Files\\ \\(x86\\)\\\\solicus\\\\InstallForge\\\\InstallForge.exe ; exit 0)
+	@(private/utils/InstallForge.exe ; exit 0)
 	@echo 'Committing Windows installer and pushing to repo'
 	@mv ../genozip/windows/genozip-installer.exe docs  # so this works for genozip-prod too - because InstallForge uses absolute paths
 	@(git stage genozip-installer.ifp $@ ; exit 0) > /dev/null
 	@(git commit -m windows_files_for_version_$(version) genozip-installer.ifp $@ ; exit 0) > /dev/null
 	@git push > /dev/null
 	@rm -f $(OBJDIR)/arch.o # remove this arch.o which contains DISTRIBUTION
+#	@(C:\\\\Program\\ Files\\ \\(x86\\)\\\\solicus\\\\InstallForge\\\\bin\\\\ifbuilderenvx86.exe ; exit 0)
 
 docs/genozip-linux-x86_64.tar.gz.build: genozip-linux-x86_64/LICENSE.txt 
+	@(mkdir genozip-linux-x86_64 >& /dev/null ; exit 0)
 	@wsl make docs/genozip-linux-x86_64.tar.gz
 	@(git commit -m linux_files_for_version_$(version) docs/genozip-linux-x86_64.tar.gz ; exit 0) > /dev/null
 	@git push > /dev/null

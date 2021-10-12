@@ -114,7 +114,7 @@ typedef struct Context {
     uint32_t num_singletons;   // True singletons that appeared exactly once in the entire file
 
     // PIZ-only
-    #define history local_hash // PIZ: used if FlagsCtx.store_per_line and also for lookback (for files compressed starting with v12.0.39)
+    #define history local_hash // PIZ: used if FlagsCtx.store_per_line and also for lookback (for files compressed starting with v12.0.41)
     #define per_line global_hash // PIZ: data copied from txt_data for fields with textual store_per_line, used in case txt_data line may be dropped
 
     #define CHAR_INDEX_IN_LOCAL    0xffffffff // PIZ: values that may go into ctx->history

@@ -66,7 +66,7 @@ void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(flag_str)/* optional,
         dl->FLAG.bits.next_rev_comp  == buddy_dl->FLAG.bits.rev_comp &&
         dl->FLAG.bits.is_first       == buddy_dl->FLAG.bits.is_last &&
         dl->FLAG.bits.is_last        == buddy_dl->FLAG.bits.is_first)
-        seg_by_did_i (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_COPY_BUDDY_FLAG }, 2, SAM_FLAG, add_bytes); // added 12.0.39
+        seg_by_did_i (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_COPY_BUDDY_FLAG }, 2, SAM_FLAG, add_bytes); // added 12.0.41
     
     // case: normal snip
     else {
@@ -118,7 +118,7 @@ void sam_seg_TLEN (VBlockSAM *vb, ZipDataLineSAM *dl,
     // case 1: tlen is minus its buddy in a sorted file - mate is likely close but not necessarily adjacent
     ZipDataLineSAM *buddy_dl = DATA_LINE (vb->buddy_line_i); // note: an invalid pointer if buddy_line_i is -1
     if (segconf.sam_is_sorted && tlen_value && vb->buddy_line_i != -1 && buddy_dl->TLEN == -tlen_value) 
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_COPY_BUDDY_TLEN }, 2, ctx, add_bytes); // added 12.0.39
+        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_COPY_BUDDY_TLEN }, 2, ctx, add_bytes); // added 12.0.41
 
     // case 2: tlen is minus previous tlen - usually adjacent mates in a collated file
     else if (tlen_value && tlen_value == -ctx->last_value.i) 
