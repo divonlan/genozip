@@ -141,7 +141,7 @@ void sam_md_analyze (VBlockSAMP vb, STRp(md), PosType pos, const char *cigar)
     RefLock lock;
 
     if (flag.show_wrong_md)
-        seg_set_last_txt (VB, CTX(OPTION_MD), STRa(md), STORE_NONE); // consumed in sam_seg_seq_field
+        seg_set_last_txt (VB, CTX(OPTION_MD_Z), STRa(md), STORE_NONE); // consumed in sam_seg_SEQ
 
     vb->md_verified = true; // initialize optimistically
     
@@ -202,7 +202,7 @@ not_verified:
 
     if (flag.show_wrong_md)
         iprintf ("vb=%u line=%"PRIu64" RNAME=%.*s POS=%"PRId64" CIGAR=%s MD=%.*s Special MD algorithm doesn't work on this MD (no harm)\n", 
-                vb->vblock_i, vb->line_i, STRf(vb->chrom_name), pos, vb->last_cigar, vb->last_txt_len(OPTION_MD), last_txt(vb, OPTION_MD));
+                vb->vblock_i, vb->line_i, STRf(vb->chrom_name), pos, vb->last_cigar, vb->last_txt_len(OPTION_MD_Z), last_txt(vb, OPTION_MD_Z));
 }
 
 // MD's logical length is normally the same as seq_len, we use this to optimize it.
@@ -213,9 +213,9 @@ void sam_md_seg (VBlockSAM *vb,  ZipDataLineSAM *dl, STRp(md), unsigned add_byte
     if (segconf.running) segconf.has_MD = true;
 
     if (vb->md_verified) 
-        seg_by_did_i (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_MD}, 2, OPTION_MD, add_bytes);
+        seg_by_did_i (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_MD}, 2, OPTION_MD_Z, add_bytes);
     else
-        seg_by_did_i (VB, STRa(md), OPTION_MD, add_bytes);
+        seg_by_did_i (VB, STRa(md), OPTION_MD_Z, add_bytes);
 }
 
 //---------
@@ -225,14 +225,14 @@ void sam_md_seg (VBlockSAM *vb,  ZipDataLineSAM *dl, STRp(md), unsigned add_byte
 SPECIAL_RECONSTRUCTOR (sam_piz_special_MD)
 {
     PosType pos = CTX(SAM_POS)->last_value.i;
-    const char *cigar = CTX(SAM_CIGAR)->last_snip; // note: we can't use last_txt as it is already translate to binary in BAM
+    const char *cigar = CTX(SAM_CIGAR)->last_snip; // note: we can't use last_txt as it is already translated to binary in BAM
 
-    ContextP bm_ctx = CTX(SAM_SQBITMAP);
-    uint32_t save_next_local = bm_ctx->next_local;
-    bm_ctx->next_local = bm_ctx->last_value.i; // rewind back to beginning of the bits of this line (value stored by sam_reconstruct_seq)
+    ContextP sqbitmap_ctx = CTX(SAM_SQBITMAP);
+    uint32_t save_next_local = sqbitmap_ctx->next_local;
+    sqbitmap_ctx->next_local = sqbitmap_ctx->last_value.i; // rewind back to beginning of the bits of this line (value stored by sam_reconstruct_seq)
 
     uint32_t count_match=0;
-    for (unsigned op_i=0; *cigar ; op_i++) {
+    for (uint32_t op_i=0; *cigar && *cigar != '\t' && *cigar != '\n'; op_i++) { 
 
         int subcigar_len = strtod (cigar, (char **)&cigar); // get number and advance next_cigar
         char cigar_op = *(cigar++);
@@ -242,7 +242,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_MD)
             // reconstruct a series of <number><base> where number can be 0 and the base of the last pair can be missing. eg: 0T12A4
             while (subcigar_len) {
 
-                while (subcigar_len && NEXTLOCALBIT (bm_ctx)) {
+                while (subcigar_len && NEXTLOCALBIT (sqbitmap_ctx)) {
                     count_match++;
                     subcigar_len--;
                     pos++;
@@ -265,7 +265,10 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_MD)
 
         else if (cigar_op=='D') {
             
-            if (op_i) RECONSTRUCT_INT (count_match); count_match=0; // flush matches before reconstructing deletion (but not if deletion is first)
+            if (op_i) {
+                RECONSTRUCT_INT (count_match); 
+                count_match=0; // flush matches before reconstructing deletion (but not if deletion is first)
+            }
             
             RECONSTRUCT1 ('^');
             while (subcigar_len) { 
@@ -283,7 +286,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_MD)
     if (count_match || !IS_DIGIT (*LASTENT (char, vb->txt_data))) 
         RECONSTRUCT_INT (count_match); // flush matches if any unflushed yet
 
-    ASSPIZ (save_next_local == bm_ctx->next_local, "expecting save_next_local=%u == bm_ctx->next_local=%u", save_next_local, bm_ctx->next_local);
+    ASSPIZ (save_next_local == sqbitmap_ctx->next_local, "expecting save_next_local=%u == sqbitmap_ctx->next_local=%u", save_next_local, sqbitmap_ctx->next_local);
 
     return false; // no new value
 }

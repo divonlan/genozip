@@ -210,7 +210,7 @@ uint32_t zfile_compress_local_data (VBlock *vb, Context *ctx, uint32_t sample_si
 {   
     struct FlagsCtx flags = ctx->flags; // make a copy
     flags.paired     = ctx->pair_local;
-    flags.copy_param = ctx->local_param;
+    flags.copy_local_param = ctx->local_param;
                     
     uint32_t uncompressed_len = ctx->local.len * lt_desc[ctx->ltype].width;
     
@@ -235,7 +235,7 @@ uint32_t zfile_compress_local_data (VBlock *vb, Context *ctx, uint32_t sample_si
         .h.flags.ctx             = flags,
         .dict_id                 = ctx->dict_id,
         .ltype                   = ctx->ltype,
-        .param                   = flags.copy_param ? (uint8_t)ctx->local.param : unused_bits,
+        .param                   = flags.copy_local_param ? (uint8_t)ctx->local.param : unused_bits,
     };
 
     LocalGetLineCB *callback = zfile_get_local_data_callback (vb->data_type, ctx);
@@ -770,7 +770,7 @@ void zfile_compress_genozip_header (Digest single_component_digest)
     // facilitating reading the genozip header in reverse from the end of the file
     SectionFooterGenozipHeader footer = { .magic                 = BGEN32 (GENOZIP_MAGIC),
                                           .genozip_header_offset = BGEN64 (genozip_header_offset) };
-    buf_add_more (evb, z_data, &footer, sizeof(SectionFooterGenozipHeader), "z_data");
+    buf_add_more (evb, z_data, (char*)&footer, sizeof(SectionFooterGenozipHeader), "z_data");
 
     zfile_output_processed_vb (evb); // write footer
 }

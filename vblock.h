@@ -75,6 +75,8 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     uint8_t num_type2_subfields; \
     RangeP range;              /* ZIP: used for compressing the reference ranges. SAM PIZ: used */ \
     \
+    int32_t buddy_line_i;      /* ZIP/PIZ: buddy line of current line (Seg: set in sam_seg_QNAME ; PIZ: set in reconstruct_from_buddy) */\
+    \
     unsigned num_rollback_ctxs;/* ZIP: Seg rollback contexts */ \
     ContextP rollback_ctxs[MAX_ROLLBACK_CTXS]; \
     \
@@ -184,6 +186,8 @@ typedef struct VBlock {
 typedef struct ZipDataLine {
     VBLOCK_COMMON_LINES_ZIP
 } ZipDataLine;
+
+#define NO_BUDDY (-1)
 
 extern void vb_cleanup_memory(void);
 extern VBlock *vb_get_vb (const char *task_name, uint32_t vblock_i);

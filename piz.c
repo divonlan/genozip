@@ -261,23 +261,28 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
         if      (is_pair_section) adjust_lens (ctx->pair)
         else if (is_local)        adjust_lens (ctx->local)
 
-        if (header->h.flags.ctx.copy_param)
+        if (header->h.flags.ctx.copy_local_param)
             target_buf->param = header->param;
-
-//skip_uncompress_due_to_old_bug:
-        // restore
-//        if (pair_vb_i && command == ZIP) { ctx->flags=save_flags; ctx->ltype=save_ltype; ctx->lcodec=save_lcodec; }
     }
 
-    // initialize pair iterators (pairs only exist in fastq)
     for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) {
         Context *ctx = CTX(did_i);
+
+        // initialize pair iterators (pairs only exist in fastq)
         if (buf_is_alloc (&ctx->pair))
             ctx->pair_b250_iter = (SnipIterator){ .next_b250 = FIRSTENT (uint8_t, ctx->pair),
                                                   .prev_word_index = -1 };
-    }
 
-    ctx_map_aliases (vb);
+        // initialize txt_per_prev buffer (eg for SAM QNAMEs)
+        if (ctx->flags.store_per_line) {
+            if (ctx->flags.store == STORE_INT)
+                buf_alloc_zero (vb, &ctx->history, 0, vb->lines.len, int64_t, 0, "history"); // initialize to exactly one per line (initialized to zero for lines that don't have it). it won't grow.
+            else 
+                buf_alloc_zero (vb, &ctx->history, 0, vb->lines.len, CtxWord, 0, "history"); 
+            
+            ctx->history.len = vb->lines.len;
+        }
+    }
 
     return section_i;
 }

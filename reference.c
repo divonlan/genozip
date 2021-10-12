@@ -794,7 +794,7 @@ static Range *ref_seg_get_locked_range_loaded (VBlockP vb, Reference ref, WordIn
 
     // when using an external refernce, pos has to be within the reference range
     // note: in SAM, if a read starts within the valid range, it is allowed to overflow beyond it - and we will circle
-    // around to the beginning of the range assuming its a circular chromosome (see in sam_seg_seq_field)
+    // around to the beginning of the range assuming its a circular chromosome (see in sam_seg_SEQ)
     ASSSEG ((pos >= range->first_pos && pos <= range->last_pos), field,
             "POS=%"PRId64" for contig \"%.*s\" (mapped to reference contig \"%.*s\" ref_index=%d), but this contig's range is %"PRId64" - %"PRId64". Likely this is because %s was created using a reference file other than %s.",
             pos, vb->chrom_name_len, vb->chrom_name, range->chrom_name_len, range->chrom_name, ref_index, range->first_pos, range->last_pos, txt_name, ref->filename);
@@ -1297,7 +1297,7 @@ void ref_set_reference (Reference ref, const char *filename, ReferenceType ref_t
     if (!filename) {
         const char *env = getenv ("GENOZIP_REFERENCE");
         if (!env) return; // nothing to set
-        str_split (env, strlen (env), 2, ':', ref_fn, false)
+        str_split (env, strlen (env), 2, ':', ref_fn, false);
         ASSERT (n_ref_fns, "Invalid value in $GENOZIP_REFERENCE=\"%s\"- expecting a reference file name or two file names separated by a ':'", env);
 
         ASSERT (ref == gref || n_ref_fns==2, "Invalid value in $GENOZIP_REFERENCE=\"%s\"- expecting two reference file names (Primary and Luft) separated by a ':'. See" WEBSITE_DVCF, env);

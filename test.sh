@@ -203,25 +203,9 @@ test_md5()
     cleanup
 }
 
-test_translate_bam_to_sam() # $1 bam file 
+test_translate_sam_to_bam_to_sam() # $1 bam file 
 {
-    test_header "$1 - translate BAM to SAM"
-
-    local bam=$TESTDIR/$1
-    local sam=${bam%.bam}.sam
-    local copy=$OUTDIR/copy.sam
-    if [ ! -f $bam ] ; then echo "$bam: File not found"; exit 1; fi
-    if [ ! -f $sam ] ; then echo "$sam: File not found"; exit 1; fi
-
-    $genozip -f $bam -o $output  || exit 1
-    $genocat $output --no-PG -fo $copy  || exit 1
-    cmp_2_files $sam $copy
-    cleanup
-}
-
-test_translate_sam_to_bam() # $1 bam file 
-{
-    test_header "$1 - translate SAM to BAM"
+    test_header "$1 - translate SAM to BAM to SAM"
 
     local bam=$TESTDIR/$1
     local sam=${bam%.bam}.sam
@@ -230,12 +214,24 @@ test_translate_sam_to_bam() # $1 bam file
     if [ ! -f $bam ] ; then echo "$bam: File not found"; exit 1; fi
     if [ ! -f $sam ] ; then echo "$sam: File not found"; exit 1; fi
 
+    # SAM -> BAM
+    echo "STEP 1: sam -> sam.genozip"
     $genozip -f $sam -o $output  || exit 1
+
+    echo "STEP 2: sam.genozip -> bam"
     $genocat $output --bam --no-PG -fo $new_bam || exit 1
-    
-    # we compare the BAMs on a textual basis as the original BAM might be produced with a different version
-    samtools view --no-PG -h $new_bam > $new_sam || exit 1
+
+    # BAM -> SAM
+    echo "STEP 3: bam -> bam.genozip"
+    $genozip -f $new_bam -o $output  || exit 1
+
+    echo "STEP 4: bam.genozip -> sam"
+    $genocat $output --sam --no-PG -fo $new_sam || exit 1
+
+    # compare original SAM and SAM created via sam->sam.genozip->bam->bam.genozip->sam
+    echo "STEP 5: compare original and output SAMs"
     cmp_2_files $sam $new_sam
+
     cleanup
 }
 
@@ -329,7 +325,7 @@ batch_basic()
 batch_precompressed()
 {
     batch_print_header
-    local files=(basic-gzip.sam.gz basic-bz2.sam.bz2 basic-xz.sam.xz basic-nobgzip.bam) 
+    local files=(basic-gzip.sam.gz basic-bz2.sam.bz2 basic-xz.sam.xz) 
     local file
     for file in ${files[@]}; do
 
@@ -493,13 +489,13 @@ test_kraken() { # $1 file ; $2 1st genocat arguments ; $3 2nd genocat arguments
 
     $genozip $1 -fo $output || exit 1
 
-    local lines_plus=`$genocat $output -Hq ${cat1_args[*]} --count`
+    local lines_plus=`$genocat_no_echo $output -Hq ${cat1_args[*]} --count`
     if [ "$lines_plus" == "" ] || [ "$lines_plus" -eq 0 ]; then echo "genocat error - \$lines_plus=\"$lines_plus\""; exit 1; fi
 
-    local lines_minus=`$genocat $output -Hq $3 --count`
+    local lines_minus=`$genocat_no_echo $output -Hq $3 --count`
     if [ "$lines_minus" == "" ] || [ "$lines_minus" -eq 0 ]; then echo "genocat error - \$lines_minus=\"$lines_minus\""; exit 1; fi
     
-    local lines=`$genocat -Hq $output --count`
+    local lines=`$genocat_no_echo -Hq $output --count`
     if [ "$lines" == "" ] || [ "$lines" -eq 0 ]; then echo "genocat error - \$lines=\"$lines\""; exit 1; fi
     
     echo "$file : lines_plus=$lines_plus lines_minus=$lines_minus lines=$lines"
@@ -589,13 +585,13 @@ batch_iupac()
 
     # BAM
     test_header "genocat --bases AGCTN --count --bam"
-    local count=`$genocat $output --echo -H --bam --bases AGCTN --count -q`
+    local count=`$genocat_no_echo $output -H --bam --bases AGCTN --count -q`
     if [ "$count" == "" ]; then echo genocat error; exit 1; fi
 
     if [ "$count" -ne $non_iupac_lines ]; then echo "bad count = $count"; exit 1; fi
 
     test_header "genocat --bases ^AGCTN --count --bam"
-    local count=`$genocat $output --echo -H --bam --bases ^AGCTN --count -q`
+    local count=`$genocat_no_echo $output -H --bam --bases ^AGCTN --count -q`
     if [ "$count" -ne 1 ]; then echo "bad count = $count"; exit 1; fi
 
     # FASTQ
@@ -604,22 +600,33 @@ batch_iupac()
 }
 
 # Test SAM/BAM translations
-batch_sam_translations()
+batch_sam_bam_translations()
 {
     batch_print_header
 
     # note: we have these files in both sam and bam versions generated with samtools
-    local files=(test.NA12878.chr22.1x.bam 
+    local files=(special.buddy.bam 
+                 test.NA12878.chr22.1x.bam 
                  test.pacbio.ccs.10k.bam  # unaligned SAM/BAM with no SQ records
                  test.human2.bam)
     local file
     for file in ${files[@]}; do
-        test_translate_bam_to_sam $file
+        test_translate_sam_to_bam_to_sam $file
+    done
+}
 
-        if command -v samtools &> /dev/null; then # test_translate_sam_to_bam requires samtools
-            test_translate_sam_to_bam $file
-        fi
+# Test SAM/BAM->FQ translations
+batch_sam_fq_translations()
+{
+    batch_print_header
 
+    # note: we have these files in both sam and bam versions generated with samtools
+    local files=(special.buddy.bam 
+                 test.NA12878.chr22.1x.bam 
+                 test.pacbio.ccs.10k.bam  # unaligned SAM/BAM with no SQ records
+                 test.human2.bam)
+    local file
+    for file in ${files[@]}; do
         test_translate_sambam_to_fastq $file
         test_translate_sambam_to_fastq ${file%.bam}.sam
     done
@@ -731,7 +738,7 @@ batch_grep_count_lines()
 
         # count
         $genozip $TESTDIR/$file -fo $output
-        local count=`$genocat --quiet --count $output || exit`
+        local count=`$genocat_no_echo --quiet --count $output || exit`
         if [ "$count" == "" ]; then echo genocat error; exit 1; fi
 
         # lines
@@ -1020,10 +1027,6 @@ chain=${OUTDIR}/chain.genozip
 is_windows=`uname|grep -i mingw`
 is_mac=`uname|grep -i Darwin`
 
-if [ -n "$is_windows" ]; then
-    make --quiet testfiles || exit 1
-fi
-
 # standard file - test.sh should change these
 hg19=data/hg19.p13.plusMT.full_analysis_set.ref.genozip
 hs37d5=data/hs37d5.ref.genozip
@@ -1079,6 +1082,7 @@ fi
 
 genozip="$genozip_exe --echo $2 $zip_threads"
 genounzip="$genounzip_exe --echo $2 $piz_threads"
+genocat_no_echo="$genocat_exe $2 $piz_threads"
 genocat="$genocat_exe --echo $2 $piz_threads"
 genols=$genols_exe 
 
@@ -1101,6 +1105,8 @@ fi
 
 mkdir $OUTDIR >& /dev/null
 cleanup
+
+make -C $TESTDIR --quiet || exit 1
 
 # only if doing a full test (starting from 0) - delete genome and hash caches
 sparkling_clean()
@@ -1129,32 +1135,33 @@ if (( $1 <= 13 )) ; then  batch_precompressed          ; fi
 if (( $1 <= 14 )) ; then  batch_bgzf                   ; fi
 if (( $1 <= 15 )) ; then  batch_special_algs           ; fi
 if (( $1 <= 16 )) ; then  batch_dvcf                   ; fi
-if (( $1 <= 17 )) ; then  batch_sam_translations       ; fi
-if (( $1 <= 18 )) ; then  batch_23andMe_translations   ; fi
-if (( $1 <= 19 )) ; then  batch_phylip_translations    ; fi
-if (( $1 <= 20 )) ; then  batch_genocat_tests          ; fi
-if (( $1 <= 21 )) ; then  batch_grep_count_lines       ; fi
-if (( $1 <= 22 )) ; then  batch_backward_compatability ; fi
-if (( $1 <= 23 )) ; then  batch_match_chrom            ; fi
-if (( $1 <= 24 )) ; then  batch_kraken " " "-K$kraken" ; fi   # genocat loads kraken data
-if (( $1 <= 25 )) ; then  batch_kraken "-K$kraken" " " ; fi   # genozip loads kraken data
-if (( $1 <= 26 )) ; then  batch_single_thread          ; fi 
-if (( $1 <= 27 )) ; then  batch_copy_ref_section       ; fi 
-if (( $1 <= 28 )) ; then  batch_iupac                  ; fi 
-if (( $1 <= 29 )) ; then  batch_real_world_small_vbs   ; fi 
-if (( $1 <= 30 )) ; then  batch_real_world_1           ; fi 
-if (( $1 <= 31 )) ; then  batch_real_world_with_ref    ; fi 
-if (( $1 <= 32 )) ; then  batch_multifasta             ; fi
-if (( $1 <= 33 )) ; then  batch_misc_cases             ; fi
-if (( $1 <= 34 )) ; then  batch_external_cram          ; fi
-if (( $1 <= 35 )) ; then  batch_external_bcf           ; fi
-if (( $1 <= 36 )) ; then  batch_external_unzip         ; fi
-if (( $1 <= 37 )) ; then  batch_reference_fastq        ; fi
-if (( $1 <= 38 )) ; then  batch_reference_sam          ; fi
-if (( $1 <= 39 )) ; then  batch_reference_vcf          ; fi
-if (( $1 <= 40 )) ; then  batch_genols                 ; fi
-if (( $1 <= 41 )) ; then  batch_tar_files_from         ; fi
-if (( $1 <= 42 )) ; then  batch_make_reference         ; fi
-if (( $1 <= 43 )) ; then  batch_prod_compatability     ; fi
+if (( $1 <= 17 )) ; then  batch_sam_bam_translations   ; fi
+if (( $1 <= 18 )) ; then  batch_sam_fq_translations    ; fi
+if (( $1 <= 19 )) ; then  batch_23andMe_translations   ; fi
+if (( $1 <= 20 )) ; then  batch_phylip_translations    ; fi
+if (( $1 <= 21 )) ; then  batch_genocat_tests          ; fi
+if (( $1 <= 22 )) ; then  batch_grep_count_lines       ; fi
+if (( $1 <= 23 )) ; then  batch_backward_compatability ; fi
+if (( $1 <= 24 )) ; then  batch_match_chrom            ; fi
+if (( $1 <= 25 )) ; then  batch_kraken " " "-K$kraken" ; fi   # genocat loads kraken data
+if (( $1 <= 26 )) ; then  batch_kraken "-K$kraken" " " ; fi   # genozip loads kraken data
+if (( $1 <= 27 )) ; then  batch_single_thread          ; fi 
+if (( $1 <= 28 )) ; then  batch_copy_ref_section       ; fi 
+if (( $1 <= 29 )) ; then  batch_iupac                  ; fi 
+if (( $1 <= 30 )) ; then  batch_real_world_small_vbs   ; fi 
+if (( $1 <= 31 )) ; then  batch_real_world_1           ; fi 
+if (( $1 <= 32 )) ; then  batch_real_world_with_ref    ; fi 
+if (( $1 <= 33 )) ; then  batch_multifasta             ; fi
+if (( $1 <= 34 )) ; then  batch_misc_cases             ; fi
+if (( $1 <= 35 )) ; then  batch_external_cram          ; fi
+if (( $1 <= 36 )) ; then  batch_external_bcf           ; fi
+if (( $1 <= 37 )) ; then  batch_external_unzip         ; fi
+if (( $1 <= 38 )) ; then  batch_reference_fastq        ; fi
+if (( $1 <= 39 )) ; then  batch_reference_sam          ; fi
+if (( $1 <= 40 )) ; then  batch_reference_vcf          ; fi
+if (( $1 <= 41 )) ; then  batch_genols                 ; fi
+if (( $1 <= 42 )) ; then  batch_tar_files_from         ; fi
+if (( $1 <= 43 )) ; then  batch_make_reference         ; fi
+if (( $1 <= 44 )) ; then  batch_prod_compatability     ; fi
 
 printf "\nALL GOOD!\n"

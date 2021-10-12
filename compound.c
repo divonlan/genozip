@@ -31,8 +31,8 @@ void compound_zip_initialize (DictId qname_dict_id)
     SmallContainer illumina_7_con = {
         .repeats             = 1,
         .nitems_lo           = 3,
-        .items               = { { .dict_id = { _SAM_Q0NAME }, .seperator = ":"  }, // note: _FASTQ_Q0NAME is the same dict_id "Q0NAME"
-                                 { .dict_id = { _SAM_Q1NAME }, .seperator = ":"  },
+        .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = ":"  }, // note: _FASTQ_Q0NAME is the same dict_id "Q0NAME"
+                                 { .dict_id = { _SAM_Q1NAME }, .separator = ":"  },
                                  { .dict_id = { _SAM_Q2NAME },                   } } };
     illumina_7_snip_len = sizeof illumina_7_snip;
     container_prepare_snip ((Container*)&illumina_7_con, 0, 0, illumina_7_snip, &illumina_7_snip_len);
@@ -50,8 +50,7 @@ void compound_zip_initialize (DictId qname_dict_id)
     bgi_snip_len = sizeof bgi_snip;
     container_prepare_snip ((Container*)&bgi_con, "\4\4E\4L\4C\4R\4", 10, bgi_snip, &bgi_snip_len);
 
-    copy_qname_len = sizeof copy_qname;
-    seg_prepare_snip_other (SNIP_COPY, qname_dict_id, false, 0, copy_qname, &copy_qname_len);
+    seg_prepare_snip_other (SNIP_COPY, qname_dict_id, false, 0, copy_qname);
 }
 
 void compound_seg_initialize (VBlockP vb, DidIType qname_did_i)
@@ -73,7 +72,7 @@ typedef struct {
     const char *item;       // pointer into field
     unsigned item_len;
     char sep;               // separator after item - 0 if none
-    char sep2;              // double space seperator - common in FASTA headers
+    char sep2;              // double space separator - common in FASTA headers
     bool is_int;
     int64_t value;          // in case of an int
     unsigned leading_zeros; // in case of an int - these will go into the container prefix
@@ -250,8 +249,8 @@ static void compound_seg_default (VBlock *vb,
         item_ctx->txt_len += nonoptimized_len ? 0 : original_item_len;
 
         // set separators
-        CI->seperator[0] = ci->sep;
-        CI->seperator[1] = ci->sep2;
+        CI->separator[0] = ci->sep;
+        CI->separator[1] = ci->sep2;
         num_seps += (ci->sep != 0) + (ci->sep2 != 0);
 
         // add the leading zeros to the container prefixes

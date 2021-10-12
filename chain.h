@@ -57,12 +57,12 @@ extern uint64_t chain_get_num_prim_contigs (void);
 extern void chain_append_all_luft_ref_index (const char *prim_contig_name, unsigned prim_contig_name_len, PosType LN, Buffer *luft_contigs);
 extern bool chain_get_liftover_coords (WordIndex prim_ref_index,  PosType prim_1pos, 
                                        WordIndex *luft_ref_index, PosType *luft_1pos, bool *is_xstrand, uint32_t *aln_i);
-extern PosType chain_get_aln_last_pos (uint32_t aln_i);
+extern PosType chain_get_aln_prim_last_pos (uint32_t aln_i);
 extern PosType chain_get_aln_gap_after (uint32_t aln_i);
 
 #define CHAIN_SPECIAL { chain_piz_special_BACKSPACE, chain_piz_special_ENDLUFT, chain_piz_special_SIZE }
 SPECIAL (CHAIN, 0, BACKSPACE, chain_piz_special_BACKSPACE);
-SPECIAL (CHAIN, 1, ENDLUFT,    chain_piz_special_ENDLUFT);
+SPECIAL (CHAIN, 1, ENDLUFT,   chain_piz_special_ENDLUFT);
 SPECIAL (CHAIN, 2, SIZE,      chain_piz_special_SIZE);
 #define NUM_CHAIN_SPECIAL 3
 

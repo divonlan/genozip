@@ -36,7 +36,7 @@ MY_SRCS = genozip.c genols.c base250.c context.c container.c strings.c stats.c a
           zip.c piz.c reconstruct.c seg.c zfile.c aligner.c flags.c digest.c mutex.c linesorter.c threads.c \
 		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c \
 		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c vcf_refalt.c vcf_tags.c \
-          sam_seg.c sam_piz.c sam_seg_bam.c sam_shared.c sam_header.c sam_aux.c sam_md.c \
+          sam_seg.c sam_piz.c sam_seg_bam.c sam_shared.c sam_header.c sam_md.c sam_cigar.c sam_fields.c lookback.c \
 		  fasta.c fastq.c gff3.c me23.c phylip.c chain.c kraken.c generic.c \
 		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c \
 		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c\
@@ -64,7 +64,7 @@ CONDA_DOCS = LICENSE.txt AUTHORS README.md
 CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h bit_array.h progress.h website.h \
              base250.h endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h segconf.h \
              buffer.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h codec.h stats.h \
-             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h compound.h \
+             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h compound.h lookback.h \
 			 reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h linesorter.h threads.h \
 			 arch.h license.h data_types.h base64.h txtheader.h writer.h bases_filter.h genols.h coords.h contigs.h chrom.h \
 			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h fastq.h gff3.h phylip.h chain.h kraken.h generic.h \
@@ -86,8 +86,6 @@ CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h tx
 			 libdeflate/common_defs.h           libdeflate/lib_common.h           libdeflate/x86_matchfinder_impl.h \
 			 libdeflate/compiler_gcc.h          libdeflate/libdeflate.h \
 			 libdeflate/cpu_features_common.h   libdeflate/matchfinder_common.h
-
-GENERATED_TEST_FILES = private/test/basic.bam private/test/minimal.bam # test/basic.cram test/minimal.cram (our test files don't fit a reference - which is required to make a CRAM)
 
 LINUXDIR = genozip-linux-x86_64 # directory for creating the Linux binaries distribution
 
@@ -153,7 +151,7 @@ all   : $(OBJDIR) $(EXECUTABLES)
 debug : CFLAGS += $(DEBUGFLAGS) -march=native -DDISTRIBUTION=\"debug\"
 debug : $(OBJDIR) $(DEBUG_EXECUTABLES)
 
-opt   : CFLAGS += -g $(LOCALFLAGS) -march=native -DDISTRIBUTION=\"opt\"
+opt   : CFLAGS += -g $(OPTFLAGS) -march=native -DDISTRIBUTION=\"opt\"
 opt   : $(OBJDIR) $(OPT_EXECUTABLES)
 
 docker : CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"Docker\"
@@ -181,18 +179,6 @@ $(OBJDIR)/%.opt-o: %.c $(OBJDIR)/%.d
 	@echo "Compiling $< (opt)"
 	@$(CC) -c -o $@ $< $(CFLAGS)
 
-private/test/%.bam : private/test/%.sam
-ifeq ($(OS),Windows_NT)
-	@echo "Generating $@ from $<"
-	@wsl bash -c "exec /home/divon/miniconda3/bin/samtools view $< -OBAM --no-PG | gunzip -c > $@ || exit 1"
-endif
-
-private/test/%.cram : private/test/%.sam
-ifeq ($(OS),Windows_NT)
-	@echo "Generating $@ from $<"
-	@wsl bash -c "exec /home/divon/miniconda3/bin/samtools view $< -OCRAM --no-PG -o $@ -T data/GRCh38_full_analysis_set_plus_decoy_hla.fa.gz || exit 1"
-endif
-
 GENDICT_OBJS := $(addprefix $(OBJDIR)/, $(GENDICT_SRCS:.c=.o))
 
 # dict_id_gen.h generation:
@@ -203,7 +189,7 @@ ifeq ($(OS),Windows_NT)
 
 dict_id_gen.h : $(shell grep -w "pragma GENDICT" *.h | cut -d: -f1 | uniq) dict_id_gen.sh
 	@echo Generating $@
-	@bash dict_id_gen.sh $(CC)
+	@./dict_id_gen.sh $(CC)
 
 endif # ugly hack to avoid conda failure due to bash issues in dict_id_gen.sh - pre-generate on Windows and check in to github
 
@@ -270,8 +256,6 @@ docs: docs/_build/html/.buildinfo docs/LICENSE.for-docs.txt
 
 docs-debug: docs/_build/html/.buildinfo
 	/c/Program\\ Files\\ \\(x86\\)/Google/Chrome/Application/chrome.exe file:///c:/Users/USER/projects/genozip/docs/_build/html/index.html
-
-testfiles : $(GENERATED_TEST_FILES)
 
 # this is used by build.sh to install on conda for Linux and Mac. Installation for Windows in in bld.bat
 install: genozip$(EXE)

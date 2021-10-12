@@ -152,7 +152,8 @@ typedef          __int128 int128_t;
 
 #define IS_FLAG(flag, mask) (((flag) & (mask)) == (mask))
 
-#define SWAP(a,b) do { typeof(a) tmp = a; a = b; b = tmp; } while(0)
+#define SWAP(a,b)  do { typeof(a) tmp = a; a = b; b = tmp; } while(0)
+#define SWAPbit(a,b) do { uint8_t tmp = a; a = b; b = tmp; } while(0)  // meant for bit fields 
 
 // we defined these ourselves (normally defined in stdbool.h), as not always available on all platforms (namely issues with Docker Hub)
 #ifndef __bool_true_false_are_defined
@@ -162,7 +163,7 @@ typedef _Bool bool;
 #endif
 
 #define STR(x)   const char *x; uint32_t x##_len
-#define STRl(name,len)   const char name[len]; uint32_t name##_len
+#define STRl(name,len) char name[len]; uint32_t name##_len
 #define STR0(x)  const char *x=NULL; uint32_t x##_len=0
 #define STRp(x)  const char *x, uint32_t x##_len // for function definitions 
 #define pSTRp(x) const char **x, uint32_t *x##_len // for function definitions 

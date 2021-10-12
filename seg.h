@@ -35,31 +35,32 @@ extern WordIndex seg_known_node_index (VBlockP vb, ContextP ctx, WordIndex node_
 extern WordIndex seg_integer_do (VBlockP vb, DidIType did_i, int64_t n, unsigned add_bytes); // segs integer as normal textual snip
 #define seg_integer(vb,did_i,n,add_sizeof_n) seg_integer_do((VBlockP)(vb), (did_i), (n), (add_sizeof_n) ? sizeof(n) : 0)
 
-extern void seg_integer_in_local (VBlockP vb, ContextP ctx, const char *int_str, unsigned int_str_len); // integer goes into local, with no lookup (no b250 in this ctx)
+extern WordIndex seg_self_delta (VBlockP vb, ContextP ctx, int64_t value, uint32_t value_str_len);
 
 extern void seg_simple_lookup (VBlockP vb, ContextP ctx, unsigned add_bytes);
 extern bool seg_integer_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes); // segs integer in local if possible
-extern void seg_integer_or_not_cb (VBlockP vb, ContextP ctx, const char *int_str, unsigned int_str_len);
+extern bool seg_integer_or_not_cb (VBlockP vb, ContextP ctx, STRp(int_str), uint32_t repeat);
 extern bool seg_float_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes);
 
-#define MAX_POS_DELTA 32000   // the max delta (in either direction) that we will put in a dictionary - above this it goes to random_pos. This number can be changed at any time without affecting backward compatability - it is used only by ZIP, not PIZ
-#define SPF_BAD_SNIPS_TOO  1  // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
-#define SPF_ZERO_IS_BAD    2  // whether 0 is considered a bad POS (if true and POS is 0, to be handled according to seg_bad_snips_too)
-#define SPF_UNLIMIED_DELTA 4  // Always use delta, even if larger than MAX_POS_DELTA
+#define MAX_POS_DELTA 32000    // the max delta (in either direction) that we will put in a dictionary - above this it goes to random_pos. This number can be changed at any time without affecting backward compatability - it is used only by ZIP, not PIZ
+#define SPF_BAD_SNIPS_TOO   1  // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
+#define SPF_ZERO_IS_BAD     2  // whether 0 is considered a bad POS (if true and POS is 0, to be handled according to seg_bad_snips_too)
+#define SPF_UNLIMITED_DELTA 4  // Always use delta, even if larger than MAX_POS_DELTA
+#define SPF_NO_DELTA        8  // All integer data goes into local
 extern PosType seg_pos_field (VBlockP vb, DidIType snip_did_i, DidIType base_did_i, unsigned opt, 
                               char missing, const char *pos_str, unsigned pos_len, PosType this_pos, unsigned add_bytes);
-extern void seg_pos_field_cb (VBlockP vb, ContextP ctx, const char *pos_str, unsigned pos_len);
+extern bool seg_pos_field_cb (VBlockP vb, ContextP ctx, const char *pos_str, unsigned pos_len, uint32_t repeat);
 
-extern void seg_id_field_do (VBlockP vb, ContextP ctx, const char *id_snip, unsigned id_snip_len);
+extern void seg_id_field_do (VBlockP vb, ContextP ctx, STRp(id_snip));
 #define seg_id_field(vb, ctx, id_snip, id_snip_len, account_for_separator) \
     do { seg_id_field_do(VB, (ctx), (id_snip), (id_snip_len)); (ctx)->txt_len += !!(account_for_separator); } while(0)
+extern bool seg_id_field_cb (VBlockP vb, ContextP ctx, STRp(id_snip), uint32_t repeat);
 
 #define MAX_ARRAY_ITEMS 36
 extern Container seg_initialize_container_array_do (DictId dict_id, bool type_1_items, bool comma_sep);
 #define seg_initialize_container_array(dict_id, type_1_items, comma_sep) seg_initialize_container_array_do ((DictId)dict_id, type_1_items, comma_sep)
 
 extern void seg_add_to_local_text   (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len, unsigned add_bytes);
-extern void seg_add_to_local_text_cb (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len);
 extern void seg_add_to_local_fixed  (VBlockP vb, ContextP ctx, const void *data, unsigned data_len);
 extern void seg_add_to_local_uint8  (VBlockP vb, ContextP ctx, uint8_t  value, unsigned add_bytes);
 extern void seg_add_to_local_uint16 (VBlockP vb, ContextP ctx, uint16_t value, unsigned add_bytes);
@@ -70,15 +71,22 @@ extern WordIndex seg_delta_vs_other (VBlockP vb, Context *ctx, Context *other_ct
 
 extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, DidIType stats_conslidation_did_i, const char *value, int32_t value_len, char sep, char subarray_sep, bool use_integer_delta, bool store_int_in_local, bool items_are_id);
 
-typedef void (*SegCallback) (VBlockP vb, ContextP ctx, STRp(value));
-extern void seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, const char *snip, unsigned snip_len, SegCallback *callbacks);
+typedef bool (*SegCallback) (VBlockP vb, ContextP ctx, STRp(value), uint32_t repeat);
+extern int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, const char *snip, unsigned snip_len, const SegCallback *callbacks);
 
 typedef void (*SegOptimize)(const char **snip, unsigned *snip_len, char *space_for_new_str);
 
 extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int32_t parameter, 
                                        char *snip, unsigned *snip_len /* in / out */);
-#define seg_prepare_snip_other(snip_code, other_dict_id, has_parameter, parameter, snip, snip_len) \
-    seg_prepare_snip_other_do ((snip_code), (DictId)(other_dict_id), (has_parameter), (parameter), (snip), (snip_len))
+#define seg_prepare_snip_other(snip_code, other_dict_id, has_parameter, parameter, snip) \
+    snip##_len = sizeof (snip);\
+    seg_prepare_snip_other_do ((snip_code), (DictId)(other_dict_id), (has_parameter), (parameter), (snip), &snip##_len)
+
+#define seg_prepare_snip_special_other(special_code, snip, other_dict_id) do { \
+    snip[0]=SNIP_SPECIAL; snip##_len=sizeof(snip)-1; \
+    seg_prepare_snip_other_do ((special_code), (DictId)(other_dict_id), 0, 0, &snip[1], &snip##_len); \
+    snip##_len++;\
+} while(0)
 
 bool seg_set_last_txt (VBlockP vb, ContextP ctx, const char *value, unsigned value_len, StoreType store_type);
 

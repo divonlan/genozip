@@ -22,14 +22,17 @@ typedef struct ContainerItem {
     DictId dict_id;                        // note: the code counts on this field being first (assigning "item = { dict_id }")
     uint8_t did_i_small;                   // PIZ only: can store dids 0->254, 255 means did_i too large to store
 
-    // seperator[0] values with bit 7 set (0x80) are interpreted as flags rather than a seperator, in 
-    // which case seperator[1] is a parameter of the flags
-    #define CI_ITEM_HAS_FLAG(item) ((uint8_t)(item)->seperator[0] & 0x80)
-    #define CI_TRANS_NUL   ((uint8_t)0x81) // In translated mode: '\0' seperator 
+    // separator[0] values with bit 7 set (0x80) are interpreted as flags rather than a separator, in 
+    // which case separator[1] is a parameter of the flags
+    #define CI_ITEM_HAS_FLAG(item) ((uint8_t)(item)->separator[0] & 0x80)
+    #define CI_TRANS_NUL   ((uint8_t)0x81) // In translated mode: '\0' separator 
     #define CI_TRANS_NOR   ((uint8_t)0x82) // In translated mode: reconstruct prefix, consume but don't reconstruct value. If item is a sub-container - NOT propagated to this sub-container.
-    #define CI_TRANS_MOVE  ((uint8_t)0x84) // (ORed) in addition: in translated: txt_data.len is moved seperator[1] bytes (0-255), after all recontruction and/or translation
-    #define CI_NATIVE_NEXT ((uint8_t)0x88) // in non-translated mode: seperator is in seperator[1]
-    uint8_t seperator[2];                  // 2 byte seperator reconstructed after the item (or flags)
+    #define CI_TRANS_MOVE  ((uint8_t)0x84) // (ORed) in addition: in translated: txt_data.len is moved separator[1] bytes (0-255), after all recontruction and/or translation
+    #define CI_NATIVE_NEXT ((uint8_t)0x88) // in non-translated mode: separator is in separator[1]
+
+    #define CI_INVISIBLE   ((uint8_t)0x01) // this item does not appear in the original or reconstructed text. it should be consumed with reconstruct=false
+
+    uint8_t separator[2];                  // 2 byte separator reconstructed after the item (or flags)
     
     TranslatorId translator;               // instructions how to translate this item, if this Container is reconstructed translating from one data type to another
 } ContainerItem;
@@ -57,7 +60,7 @@ typedef struct ContainerItem {
     uint8_t keep_empty_item_sep   : 1; /* normally, we delete the separator preceding an empty item. this flag supprnor its repeat separator is reconstructed */ \
     uint8_t callback              : 1; /* callback called after reconstruction of each repeat (introduced 10.0.6) */ \
     uint8_t drop_final_item_sep   : 1; /* drop separator of final item of each repeat (introduced v12) */ \
-    char repsep[2];                    /* repeat seperator - two bytes that appear at the end of each repeat (ignored if 0) */ \
+    char repsep[2];                    /* repeat separator - two bytes that appear at the end of each repeat (ignored if 0) */ \
     ContainerItem items[nitems];
 
 typedef struct Container       { CONTAINER_FIELDS(MAX_FIELDS) } Container;
@@ -83,7 +86,8 @@ extern WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con
 #define container_seg_with_rename(vb, ctx, con, prefixes, prefixes_len, ren_prefixes, ren_prefixes_len, add_bytes, is_new) container_seg_do ((VBlockP)(vb), (ctx), (con), (prefixes), (prefixes_len), (ren_prefixes), (ren_prefixes_len), (add_bytes), (is_new))
 #define container_seg_by_dict_id(vb,dict_id,con,add_bytes) container_seg (vb, ctx_get_ctx (vb, dict_id), con, NULL, 0, add_bytes)
 
-extern LastValueType container_reconstruct (VBlockP vb, ContextP ctx, WordIndex word_index, const char *snip, unsigned snip_len);
+extern LastValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, STRp(prefixes));
+extern ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, STRp(snip), pSTRp(out_prefixes));
 
 extern void container_display (ConstContainerP con);
 

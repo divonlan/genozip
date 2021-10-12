@@ -39,7 +39,7 @@ static bool contig_name_to_acc_num (STRp(contig), AccessionNumber *ac) // out - 
     if (contig_len < 11 || contig[0]!='c' || contig[1]!='h' || contig[2]!='r') return false;
 
     str_split (contig, contig_len, 3, '_', item, true);
-    if (!n_items || item_lens[1] < 6) return false; // the shortest an AC can be is 6
+    if (!n_items || item_lens[1] < 6 || item_lens[1] > ACCESSION_LEN) return false; // the shortest an AC can be is 6
 
     if (items[1][item_lens[1]-2] == 'v') {
         ac->version = items[1][item_lens[1]-1];

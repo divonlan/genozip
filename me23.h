@@ -24,8 +24,6 @@ extern void me23_seg_finalize (VBlockP vb);
 extern bool me23_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern bool me23_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags);
 
-#define ME23_DICT_ID_ALIASES
-
 // translator numbers must start from 1 - 0 is reserved for "none"
 TRANSLATOR (ME23, VCF, 1, GENOTYPE, sam_piz_m232vcf_GENOTYPE)   // reconstruct VCF GENOTYPE field as VCF - REF,ALT,QUAL,FILTER,INFO,FORMAT,Sample
 #define NUM_ME23_TRANS 2 // including "none"

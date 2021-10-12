@@ -114,7 +114,7 @@ typedef enum {
     LO_NEW_ALLELE_SNP            = 16, // The Luft reference represents an allele that is neither REF or ALT
     LO_REF_MULTIALT_SWITCH_INDEL = 17, // REF changes for a multi-allelic INDEL, or REF change would make a bi-allelic into a tri-allelic INDEL
     LO_NEW_ALLELE_INDEL          = 18, // The Luft reference represents an allele that is neither REF or ALT
-    LO_XSTRAND_NLA               = 19, // Genozip limiation: A complex indel variant mapped to the reverse strand
+    LO_XSTRAND_NLA               = 19, // Used in v12.0.0-12.0.37: Genozip limiation: A complex indel variant mapped to the reverse strand
     LO_NEW_ALLELE_NLA            = 20, // The Luft reference represents an allele that is neither REF or ALT
     LO_NEW_ALLELE_SV             = 21, // Genozip limiation: The Luft reference is different than REF for a variant with a symbolic ALT allele
     LO_XSTRAND_SV                = 22, // Genozip limiation: A variant with a symbolic ALT allele mapped to the reverse strand

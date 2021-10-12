@@ -450,13 +450,13 @@ static FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt)
             break;
 
         case SEC_LOCAL:
-            sprintf (str.s, "store=%s paired=%u copy_param=%u all_the_same=%u",
-                     store[f.ctx.store], f.ctx.paired, f.ctx.copy_param, f.ctx.all_the_same); // note: we don't print ctx_specific as its not currently used
+            sprintf (str.s, "store=%s,per_line=%u,delta=%u paired=%u cy_param=%u",
+                     store[f.ctx.store], f.ctx.store_per_line, f.ctx.store_delta, f.ctx.paired, f.ctx.copy_local_param); // note: we don't print ctx_specific as its not currently used
             break;
 
         case SEC_B250:
-            sprintf (str.s, "store=%s paired=%u copy_param=%u ctx_specific=%u",
-                     store[f.ctx.store], f.ctx.paired, f.ctx.copy_param, f.ctx.ctx_specific); 
+            sprintf (str.s, "store=%s,per_line=%u,delta=%u paired=%u cy_param=%u all_same=%u",
+                     store[f.ctx.store], f.ctx.store_per_line, f.ctx.store_delta, f.ctx.paired, f.ctx.copy_local_param, f.ctx.all_the_same); 
             break;
  
         case SEC_RANDOM_ACCESS:

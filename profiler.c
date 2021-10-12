@@ -43,7 +43,8 @@ void profiler_add (ConstVBlockP vb)
     ADD(piz_get_line_subfields);
     ADD(piz_read_one_vb);
     ADD(codec_hapmat_piz_get_one_line);
-    ADD(sam_seg_seq_field);
+    ADD(sam_seg_SEQ);
+    ADD(sam_cigar_seg);
     ADD(ctx_compress_one_dict_fragment);
     ADD(zfile_uncompress_section);
     ADD(buf_alloc);
@@ -52,6 +53,7 @@ void profiler_add (ConstVBlockP vb)
     ADD(txtfile_read_header);
     ADD(seg_all_data_lines);
     ADD(seg_initialize);
+    ADD(sam_seg_XA_pos);
     ADD(compound_seg);
     ADD(ctx_merge_in_vb_ctx);
     ADD(codec_hapmat_count_alt_alleles);
@@ -162,12 +164,14 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         iprintf ("GENOZIP compute threads %u\n", ms(p->compute));
         PRINT (ctx_clone, 1);
         PRINT (seg_all_data_lines, 1);
+        PRINT (sam_seg_XA_pos, 2);
         PRINT (aligner_best_match, 2);
         PRINT (aligner_get_match_len, 3);
         PRINT (aligner_get_word_from_seq, 3);
         PRINT (seg_initialize, 2);
         PRINT (compound_seg,2);
-        PRINT (sam_seg_seq_field,2);
+        PRINT (sam_cigar_seg,2);
+        PRINT (sam_seg_SEQ,2);
         PRINT (ctx_merge_in_vb_ctx, 1);
         PRINT (lock_mutex_zf_ctx, 2);
         PRINT (ctx_merge_in_vb_ctx_one_dict_id, 2);

@@ -60,7 +60,8 @@ static inline char *str_reverse (const char *in, char *out, uint32_t len)
 }
 
 extern const char COMPLEM[], UPPER_COMPLEM[];
-extern char *str_revcomp (char *seq, uint32_t seq_len);
+extern char *str_revcomp_in_out (char *dst_seq, const char *src_seq, uint32_t seq_len);
+static inline char *str_revcomp (char *seq, uint32_t seq_len) { return str_revcomp_in_out (seq, seq, seq_len); }
 
 static inline uint64_t str_count_char (const char *str, uint64_t len, char c)
 {
@@ -109,7 +110,7 @@ extern bool str_get_float (STRp(float_str), double *value, char format[FLOAT_FOR
 
 extern bool str_scientific_to_decimal (STRp(float_str), char *modified, uint32_t *modified_len, double *value);
 
-extern uint32_t str_split_do (STRp(str), uint32_t max_items, char sep, const char **items, uint32_t *item_lens, bool exactly, const char *enforce_msg);
+extern uint32_t str_split_do (STRp(str), uint32_t max_items, char sep, ConstContainerP con, const char **items, uint32_t *item_lens, bool exactly, const char *enforce_msg);
 
 // name      : eg "item", macro defines variables "items" (array of pointers), item_lens (array or uint32_t), n_items (actual number of items)
 // max_items : maximum allowed items, or 0 if not known
@@ -119,7 +120,12 @@ extern uint32_t str_split_do (STRp(str), uint32_t max_items, char sep, const cha
     uint32_t n_##name##s = (max_items) ? (max_items) : str_count_char ((str), (str_len), (sep)) + 1; /* 0 if str is NULL */ \
     const char *name##s[MAX_(n_##name##s, 1)]; \
     uint32_t name##_lens[MAX_(n_##name##s, 1)]; \
-    n_##name##s = str_split_do ((str), (str_len), n_##name##s, (sep), name##s, name##_lens, (exactly), (enforce)); 
+    n_##name##s = str_split_do ((str), (str_len), n_##name##s, (sep), NULL, name##s, name##_lens, (exactly), (enforce))
+
+#define str_split_by_container(str,str_len,container,name) \
+    const char *name##s[MAX_(con_nitems(*container), 1)];  \
+    uint32_t name##_lens[MAX_(con_nitems(*container), 1)]; \
+    uint32_t n_##name##s = str_split_do ((str), (str_len), con_nitems(*container), 0, (ConstContainerP)(container), name##s, name##_lens, true, NULL)
 
 extern void str_remove_CR_do (uint32_t n_lines, const char **lines, uint32_t *line_lens);
 #define str_remove_CR(name) str_remove_CR_do (n_##name##s, name##s, name##_lens)

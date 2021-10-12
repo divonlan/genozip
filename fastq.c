@@ -176,8 +176,7 @@ void fastq_zip_initialize (void)
     ZCTX(FASTQ_STRAND)->lcodec = CODEC_UNKNOWN;
     ZCTX(FASTQ_GPOS  )->lcodec = CODEC_UNKNOWN;
 
-    copy_desc_snip_len = sizeof copy_desc_snip;
-    seg_prepare_snip_other (SNIP_COPY, _FASTQ_DESC, 0, 0, copy_desc_snip, &copy_desc_snip_len);
+    seg_prepare_snip_other (SNIP_COPY, _FASTQ_DESC, 0, 0, copy_desc_snip);
 
     // with REF_EXTERNAL, we don't know which chroms are seen (bc unlike REF_EXT_STORE, we don't use is_set), so
     // we just copy all reference contigs. this are not need for decompression, just for --coverage/--sex/--idxstats

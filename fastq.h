@@ -67,8 +67,6 @@ extern unsigned fastq_vb_zip_dl_size (void);
 extern bool fastq_read_pair_1_data (VBlockP vb, uint32_t pair_vb_i, bool must_have);
 extern uint32_t fastq_get_pair_vb_i (VBlockP vb);
 
-#define FASTQ_DICT_ID_ALIASES 
-
 #define FASTQ_LOCAL_GET_LINE_CALLBACKS  \
     { DT_FASTQ, _FASTQ_QUAL, fastq_zip_qual },
 

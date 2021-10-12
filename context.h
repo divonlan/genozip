@@ -41,13 +41,14 @@
 #define SNIP_DONT_STORE          '\xC'   // Reconcstruct the following value, but don't store it in last_value (overriding flags.store)
 #define SNIP_COPY                '\xE'   // Copy the last_txt of dict_id (same or other)
 #define SNIP_DUAL                '\xF'   // A snip containing two snips separated by a SNIP_DUAL - for Primary and Luft reconstruction respectively
-
-#define NUM_SNIP_CODES           16
+#define SNIP_LOOKBACK            '\x10'  // Copy an earlier snip in the same context. Snip is dict_id from which to take the lookback offset, and an optional delta to be applied to the retrieved numeric value. note: line number of the previous snip is variable, but its offset back is fixed (introduced 12.0.38)
+#define SNIP_COPY_BUDDY          '\x11'  // Copy a snip on an earlier "buddy" line in the same or another context (note: offset back to the previous snip is variable, but its line number is fixed) (introduced 12.0.38)
+#define NUM_SNIP_CODES           18
 
 #define SNIP_CODES { "SNIP_SEP", "SNIP_LOOKUP", "SNIP_OTHER_LOOKUP", "SNIP_PAIR_LOOKUP",\
                      "SNIP_CONTAINER", "SNIP_SELF_DELTA", "SNIP_OTHER_DELTA", "SNIP_PAIR_DELTA", \
                      "SNIP_SPECIAL", "<TAB>", "<NL>", "SNIP_REDIRECTION",\
-                     "SNIP_DONT_STORE", "<LF>", "SNIP_COPY", "SNIP_DUAL" }
+                     "SNIP_DONT_STORE", "<LF>", "SNIP_COPY", "SNIP_DUAL", "SNIP_LOOKBACK" }
 #define SNIP(len) uint32_t snip_len=(len); char snip[len]
 
 typedef struct CtxNode {
@@ -60,6 +61,7 @@ typedef struct {
     CharIndex char_index;
     uint32_t snip_len;
 } CtxWord;
+#define WORD_IN_TXT_DATA(snip) ((CtxWord){ .char_index = ENTNUM (vb->txt_data, snip), .snip_len = snip##_len }) // get coordinates in txt_data
 
 // SIGNED NUMBERS ARE NOT UNTEST YET! NOT USE YET BY ANY SEG
 // for signed numbers, we store them in our "interlaced" format rather than standard ISO format 
@@ -94,11 +96,13 @@ static inline bool is_same_last_txt(VBlockP vb, ContextP ctx, STRp(str)) { retur
 
 static inline void ctx_init_iterator (Context *ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; ctx->next_local = 0; }
 
-extern WordIndex ctx_evaluate_snip_seg (VBlockP segging_vb, ContextP vctx, const char *snip, uint32_t snip_len, bool *is_new);
+extern WordIndex ctx_evaluate_snip_seg (VBlockP segging_vb, ContextP vctx, STRp (snip), bool *is_new);
+extern WordIndex ctx_create_node (VBlockP vb, DidIType did_i, STRp (snip));
 extern int64_t ctx_decrement_count (VBlockP vb, ContextP ctx, WordIndex node_index);
 extern void ctx_increment_count (VBlockP vb, ContextP ctx, WordIndex node_index);
 
-extern WordIndex ctx_get_next_snip (VBlockP vb, Context *ctx, bool all_the_same, bool is_pair, const char **snip, uint32_t *snip_len);
+extern WordIndex ctx_get_next_snip (VBlockP vb, ContextP ctx, bool all_the_same, bool is_pair, pSTRp (snip));
+extern WordIndex ctx_peek_next_snip (VBlockP vb, ContextP ctx, bool all_the_same, pSTRp (snip));  
 
 extern WordIndex ctx_search_for_word_index (Context *ctx, const char *snip, unsigned snip_len);
 extern void ctx_clone (VBlockP vb);
@@ -150,12 +154,13 @@ extern void ctx_sort_dictionaries_vb_1(VBlockP vb);
 extern void ctx_update_stats (VBlockP vb);
 extern void ctx_free_context (Context *ctx, DidIType did_i);
 extern void ctx_destroy_context (Context *ctx, DidIType did_i);
-extern void ctx_map_aliases (VBlockP vb);
 extern bool ctx_is_show_dict_id (DictId dict_id);
 
 extern CtxNode *ctx_get_node_by_word_index (ConstContextP ctx, WordIndex word_index);
 extern const char *ctx_get_snip_by_word_index (ConstContextP ctx, WordIndex word_index, 
                                                const char **snip, uint32_t *snip_len);
+extern CtxNodeP ctx_get_vb_node (ContextP vctx, WordIndex vb_node_index);
+
 static inline const char *ctx_get_words_snip(ConstContextP ctx, WordIndex word_index) 
     { return ctx_get_snip_by_word_index (ctx, word_index, 0, 0); }
 

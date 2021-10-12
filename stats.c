@@ -109,6 +109,11 @@ static void stats_output_file_metadata (Buffer *buf)
     if (chain_is_loaded || txt_file->coords) 
         bufprintf (evb, buf, "Features: Dual-coordinates\n%s", "");
 
+    if ((Z_DT(DT_SAM) || Z_DT(DT_BAM)) && segconf.sam_is_sorted)
+        bufprintf (evb, buf, "Features: Sorted by POS\n%s", "");
+
+    if ((Z_DT(DT_SAM) || Z_DT(DT_BAM)) && segconf.sam_is_collated)
+        bufprintf (evb, buf, "Features: Collated by QNAME\n%s", "");
 
     bufprintf (evb, buf, "Genozip version: %s %s\nDate compressed: %s\n", 
                GENOZIP_CODE_VERSION, DISTRIBUTION, str_time().s);
@@ -398,7 +403,7 @@ void stats_compress (void)
                                ST_NAME (SEC_REF_CONTIGS), ST_NAME (SEC_REF_RAND_ACC), ST_NAME (SEC_CHROM2REF_MAP),
                                ST_NAME (SEC_REF_IUPACS));
 
-    stats_consolidate_non_ctx (sbl, num_stats, "Other", 16, "E1L", "E2L", "EOL", "SAMPLES", "OPTIONAL", 
+    stats_consolidate_non_ctx (sbl, num_stats, "Other", 18, "E1L", "E2L", "EOL", "SAMPLES", "OPTIONAL", 
                                TOPLEVEL, "ToPLUFT", "TOP2BAM", "TOP2FQ", "TOP2FQEX", "TOP2VCF", "TOP2HASH", "LINEMETA", "CONTIG", 
                                ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_DICT_ID_ALIASES), 
                                ST_NAME (SEC_VB_HEADER), ST_NAME (SEC_BGZF));

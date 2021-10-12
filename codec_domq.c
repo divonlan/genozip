@@ -192,7 +192,7 @@ bool codec_domq_compress (VBlock *vb,
         ((SectionHeaderCtx *)header)->ltype = LT_SEQUENCE; // not LD_CODEC any more
         header->codec     = sub_codec;
         header->sub_codec = CODEC_UNKNOWN;
-        header->flags.ctx.copy_param = 0; // cancel flag
+        header->flags.ctx.copy_local_param = 0; // cancel flag
         buf_free (qual_buf);
         buf_free (qdomruns_buf);
         return compress (vb, header, NULL, uncompressed_len, callback, compressed, compressed_len, soft_fail);

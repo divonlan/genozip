@@ -12,6 +12,7 @@
 #include "vblock.h"
 #include "libdeflate/libdeflate.h"
 #include "vcf.h"
+#include "context.h"
 
 // globals externed in dict_id.h and initialized in dict_id_initialize
 static Buffer dict_id_aliases_buf  = EMPTY_BUFFER;

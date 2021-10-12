@@ -47,14 +47,14 @@ void gff3_seg_finalize (VBlockP vb)
         .filter_items = true,
         .nitems_lo = 11,
         .items     = { { .dict_id = { _GFF3_COMMENT },                  },
-                       { .dict_id = { _GFF3_SEQID },  .seperator = "\t" },
-                       { .dict_id = { _GFF3_SOURCE }, .seperator = "\t" },
-                       { .dict_id = { _GFF3_TYPE },   .seperator = "\t" },
-                       { .dict_id = { _GFF3_START },  .seperator = "\t" },
-                       { .dict_id = { _GFF3_END },    .seperator = "\t" },
-                       { .dict_id = { _GFF3_SCORE },  .seperator = "\t" },
-                       { .dict_id = { _GFF3_STRAND }, .seperator = "\t" },
-                       { .dict_id = { _GFF3_PHASE },  .seperator = "\t" },
+                       { .dict_id = { _GFF3_SEQID },  .separator = "\t" },
+                       { .dict_id = { _GFF3_SOURCE }, .separator = "\t" },
+                       { .dict_id = { _GFF3_TYPE },   .separator = "\t" },
+                       { .dict_id = { _GFF3_START },  .separator = "\t" },
+                       { .dict_id = { _GFF3_END },    .separator = "\t" },
+                       { .dict_id = { _GFF3_SCORE },  .separator = "\t" },
+                       { .dict_id = { _GFF3_STRAND }, .separator = "\t" },
+                       { .dict_id = { _GFF3_PHASE },  .separator = "\t" },
                        { .dict_id = { _GFF3_ATTRS },                    },
                        { .dict_id = { _GFF3_EOL },                      } }
     };
@@ -86,10 +86,10 @@ static bool gff3_seg_target (VBlockP vb, const char *value, unsigned value_len)
         .repeats   = 1,
         .nitems_lo = n_items,
         .drop_final_item_sep = true,
-        .items     = { { .dict_id = { _ATTR_Target_ID     }, .seperator = " " },
-                       { .dict_id = { _ATTR_Target_POS    }, .seperator = " " }, // START
-                       { .dict_id = { _ATTR_Target_POS    }, .seperator = " " }, // END
-                       { .dict_id = { _ATTR_Target_STRAND }, .seperator = " " } }
+        .items     = { { .dict_id = { _ATTR_Target_ID     }, .separator = " " },
+                       { .dict_id = { _ATTR_Target_POS    }, .separator = " " }, // START
+                       { .dict_id = { _ATTR_Target_POS    }, .separator = " " }, // END
+                       { .dict_id = { _ATTR_Target_STRAND }, .separator = " " } }
     };
 
     seg_by_did_i (VB, items[0], item_lens[0], ATTR_Target_ID, item_lens[0]);
@@ -151,12 +151,12 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
             .nitems_lo   = 4, 
             .drop_final_repeat_sep = true,
             .repsep      = {','},
-            .items       = { { .dict_id={.id="V0arEff" }, .seperator = {' '} },
-                             { .dict_id={.id="V1arEff" }, .seperator = {' '} },
-                             { .dict_id={.id="V2arEff" }, .seperator = {' '} },
+            .items       = { { .dict_id={.id="V0arEff" }, .separator = {' '} },
+                             { .dict_id={.id="V1arEff" }, .separator = {' '} },
+                             { .dict_id={.id="V2arEff" }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid  },                    } }
         };
-        seg_array_of_struct (vb, CTX(ATTR_Variant_effect), Variant_effect, STRa(value), (SegCallback[]){0,0,0,seg_id_field_do});
+        seg_array_of_struct (vb, CTX(ATTR_Variant_effect), Variant_effect, STRa(value), (SegCallback[]){0,0,0,seg_id_field_cb});
         break;
     }
 
@@ -165,12 +165,12 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
             .nitems_lo   = 4, 
             .drop_final_repeat_sep = true,
             .repsep      = {','},
-            .items       = { { .dict_id={.id="S0iftPr" }, .seperator = {' '} },
-                             { .dict_id={.id="S1iftPr" }, .seperator = {' '} },
-                             { .dict_id={.id="S2iftPr" }, .seperator = {' '} },
+            .items       = { { .dict_id={.id="S0iftPr" }, .separator = {' '} },
+                             { .dict_id={.id="S1iftPr" }, .separator = {' '} },
+                             { .dict_id={.id="S2iftPr" }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid  },                    } }
         };
-        seg_array_of_struct (vb, CTX(ATTR_sift_prediction), sift_prediction, STRa(value), (SegCallback[]){0,0,0,seg_id_field_do});
+        seg_array_of_struct (vb, CTX(ATTR_sift_prediction), sift_prediction, STRa(value), (SegCallback[]){0,0,0,seg_id_field_cb});
         break;
     }
 
@@ -179,12 +179,12 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
             .nitems_lo   = 4, 
             .drop_final_repeat_sep = true,
             .repsep      = {','},
-            .items       = { { .dict_id={.id="P0olyPhP" }, .seperator = {' '} },
-                             { .dict_id={.id="P1olyPhP" }, .seperator = {' '} },
-                             { .dict_id={.id="P2olyPhP" }, .seperator = {' '} },
+            .items       = { { .dict_id={.id="P0olyPhP" }, .separator = {' '} },
+                             { .dict_id={.id="P1olyPhP" }, .separator = {' '} },
+                             { .dict_id={.id="P2olyPhP" }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid   },                    } }
         };
-        seg_array_of_struct (vb, CTX(ATTR_polyphen_prediction), polyphen_prediction, STRa(value), (SegCallback[]){0,0,0,seg_id_field_do});
+        seg_array_of_struct (vb, CTX(ATTR_polyphen_prediction), polyphen_prediction, STRa(value), (SegCallback[]){0,0,0,seg_id_field_cb});
         break;
     }
 
@@ -193,11 +193,11 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
             .nitems_lo   = 3, 
             .drop_final_repeat_sep = true,
             .repsep      = {','},
-            .items       = { { .dict_id={.id="v0arPep"  }, .seperator = {' '} }, // small v to differentiate from Variant_effect, so that dict_id to did_i mapper can map both
-                             { .dict_id={.id="v1arPep"  }, .seperator = {' '} },
+            .items       = { { .dict_id={.id="v0arPep"  }, .separator = {' '} }, // small v to differentiate from Variant_effect, so that dict_id to did_i mapper can map both
+                             { .dict_id={.id="v1arPep"  }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid   },                    } }
         };
-        seg_array_of_struct (vb, CTX(ATTR_variant_peptide), variant_peptide, STRa(value), (SegCallback[]){0,0,seg_id_field_do});
+        seg_array_of_struct (vb, CTX(ATTR_variant_peptide), variant_peptide, STRa(value), (SegCallback[]){0,0,seg_id_field_cb});
         break;
     }
 
@@ -264,10 +264,10 @@ static void gff3_seg_attrs_field (VBlock *vb, const char *field, unsigned field_
         prefixes[prefixes_len-1] = CON_PREFIX_SEP;
 
         DictId dict_id = gff3_seg_attr_subfield (vb, STRi(tag_val, 0), STRi (tag_val, 1));
-        con.items[i] = (ContainerItem){ .dict_id = dict_id, .seperator = { ';' } }; 
+        con.items[i] = (ContainerItem){ .dict_id = dict_id, .separator = { ';' } }; 
     }
 
-    container_seg (vb, CTX(GFF3_ATTRS), &con, prefixes, prefixes_len, (prefixes_len-2) /* names inc. = and (; or \n) seperator */);
+    container_seg (vb, CTX(GFF3_ATTRS), &con, prefixes, prefixes_len, (prefixes_len-2) /* names inc. = and (; or \n) separator */);
 }
 
 const char *gff3_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts

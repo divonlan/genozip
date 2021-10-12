@@ -12,7 +12,7 @@
 
 static void *codec_bz2_alloc (void *vb_, int items, int size)
 {
-    return codec_alloc ((VBlock *)vb_, items * size, 1); // all bzlib buffers are constant in size between subsequent compressions
+    return codec_alloc ((VBlock *)vb_, (uint64_t)items * (uint64_t)size, 1); // all bzlib buffers are constant in size between subsequent compressions
 }
 
 static const char *BZ2_errstr (int err)

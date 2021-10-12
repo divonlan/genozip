@@ -220,7 +220,7 @@ void bgzf_uncompress_vb (VBlock *vb)
 
 static void *bgzf_alloc (void *vb_, unsigned items, unsigned size)
 {
-    return codec_alloc ((VBlock *)vb_, items * size, 1); // all bzlib buffers are constant in size between subsequent compressions
+    return codec_alloc ((VBlock *)vb_, (uint64_t)items * (uint64_t)size, 1); // all bzlib buffers are constant in size between subsequent compressions
 }
 
 void bgzf_libdeflate_initialize (void)

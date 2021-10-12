@@ -57,9 +57,9 @@ void me23_seg_finalize (VBlockP vb)
         .repeats   = vb->lines.len,
         .is_toplevel = true,
         .nitems_lo = 5,
-        .items     = { { .dict_id = { _ME23_ID },       .seperator = "\t" },
-                       { .dict_id = { _ME23_CHROM },    .seperator = "\t" },
-                       { .dict_id = { _ME23_POS },      .seperator = "\t" },
+        .items     = { { .dict_id = { _ME23_ID },       .separator = "\t" },
+                       { .dict_id = { _ME23_CHROM },    .separator = "\t" },
+                       { .dict_id = { _ME23_POS },      .separator = "\t" },
                        { .dict_id = { _ME23_GENOTYPE }                    },
                        { .dict_id = { _ME23_EOL },                        } }
     };
@@ -70,10 +70,10 @@ void me23_seg_finalize (VBlockP vb)
         .repeats   = vb->lines.len,
         .is_toplevel = true,
         .nitems_lo = 5,
-        .items     = { { .dict_id = { _ME23_CHROM },    .seperator = "\t" },
-                       { .dict_id = { _ME23_POS },      .seperator = "\t" },
-                       { .dict_id = { _ME23_ID },       .seperator = "\t" },
-                       { .dict_id = { _ME23_GENOTYPE }, .seperator = "\n", .translator = ME232VCF_GENOTYPE } }
+        .items     = { { .dict_id = { _ME23_CHROM },    .separator = "\t" },
+                       { .dict_id = { _ME23_POS },      .separator = "\t" },
+                       { .dict_id = { _ME23_ID },       .separator = "\t" },
+                       { .dict_id = { _ME23_GENOTYPE }, .separator = "\n", .translator = ME232VCF_GENOTYPE } }
     };
 
     container_seg (vb, CTX(ME23_TOP2VCF), (ContainerP)&top_level_to_vcf, 0, 0, 0);

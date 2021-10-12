@@ -150,8 +150,7 @@ WordIndex ctx_search_for_word_index (Context *ctx, const char *snip, unsigned sn
 }
 
 // PIZ and reading Pair1 in ZIP (uses word_list): returns word index, and advances the iterator
-WordIndex ctx_get_next_snip (VBlock *vb, Context *ctx, bool all_the_same, bool is_pair,
-                             const char **snip, uint32_t *snip_len) // optional out 
+WordIndex ctx_get_next_snip (VBlock *vb, Context *ctx, bool all_the_same, bool is_pair, pSTRp (snip)/*optional out*/)
 {
     ASSERT (ctx, "ctx is NULL. vb_i=%u", vb->vblock_i);
 
@@ -216,6 +215,15 @@ WordIndex ctx_get_next_snip (VBlock *vb, Context *ctx, bool all_the_same, bool i
     iterator->prev_word_index = word_index;    
 
     return word_index;
+}
+
+// similar to ctx_get_next_snip, except iterator is left intact 
+WordIndex ctx_peek_next_snip (VBlock *vb, Context *ctx, bool all_the_same, pSTRp (snip)/*optional out*/)  
+{
+    SnipIterator save_iterator = ctx->iterator;
+    WordIndex wi = ctx_get_next_snip (vb, ctx, all_the_same, false, STRa(snip));
+    ctx->iterator = save_iterator;
+    return wi;
 }
 
 // Process and snip - return its node index, and enter it into the directory if its not already there. Called
@@ -402,6 +410,15 @@ void ctx_increment_count (VBlock *vb, Context *ctx, WordIndex node_index)
     ASSERT (node_index < ctx->counts.len, "node_index=%d out of range counts[%s].len=%"PRIu64, node_index, ctx->tag_name, ctx->counts.len);
 
     (*ENT (int64_t, ctx->counts, node_index))++;
+}
+
+// Seg only: create a node without adding to counts
+WordIndex ctx_create_node (VBlockP vb, DidIType did_i, STRp (snip))
+{
+    WordIndex node_index = ctx_evaluate_snip_seg (vb, CTX(did_i), STRa(snip), NULL); 
+    ctx_decrement_count (vb, CTX(did_i), node_index);
+
+    return node_index;
 }
 
 // ZIP only: overlay and/or copy the current state of the global contexts to the vb, ahead of segging this vb.
@@ -818,19 +835,6 @@ void ctx_add_compressor_time_to_zf_ctx (VBlockP vb)
     }
 }
 
-// PIZ: add aliases to dict_id_to_did_i_map
-void ctx_map_aliases (VBlockP vb)
-{
-    if (!dict_id_aliases) return;
-
-    for (uint32_t alias_i=0; alias_i < dict_id_num_aliases; alias_i++)
-        for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) 
-            if (dict_id_aliases[alias_i].dst.num == CTX(did_i)->dict_id.num && 
-                vb->dict_id_to_did_i_map[dict_id_aliases[alias_i].alias.map_key] == DID_I_NONE)
-
-                vb->dict_id_to_did_i_map[dict_id_aliases[alias_i].alias.map_key] = did_i;    
-}
-
 // returns an existing did_i in this vb, or DID_I_NONE if there isn't one
 DidIType ctx_get_existing_did_i_if_not_found_by_inline (VBlockP vb, DictId dict_id)
 {
@@ -838,7 +842,7 @@ DidIType ctx_get_existing_did_i_if_not_found_by_inline (VBlockP vb, DictId dict_
     for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) 
         if (dict_id.num == CTX(did_i)->dict_id.num) return did_i;
 
-    // PIZ only: check if its an alias that's not mapped in ctx_map_aliases (due to contention)
+    // PIZ only: check if its an alias that's not mapped in ctx_initialize_predefined_ctxs (due to contention)
     if (command != ZIP && dict_id_aliases) {
         for (uint32_t alias_i=0; alias_i < dict_id_num_aliases; alias_i++)
             if (dict_id.num == dict_id_aliases[alias_i].alias.num) { // yes! its an alias
@@ -906,7 +910,8 @@ void ctx_initialize_predefined_ctxs (Context *contexts /* an array */,
         if (command != ZIP && dict_id_aliases) 
             for (uint32_t alias_i=0; alias_i < dict_id_num_aliases; alias_i++)
                 if (dict_id.num == dict_id_aliases[alias_i].alias.num) 
-                    dst_ctx = ctx_get_zf_ctx (dict_id_aliases[alias_i].dst);
+                    // note: all alias destinations that ever existed previous versions of Genozip must be defined in #pragma GENDICT for this to work
+                    dst_ctx = ctx_get_zf_ctx (dict_id_aliases[alias_i].dst); 
 
         if (!dst_ctx) // normal field, not an alias
             ctx_initialize_ctx (&contexts[did_i], did_i, dict_id, dict_id_to_did_i_map, 
@@ -914,6 +919,7 @@ void ctx_initialize_predefined_ctxs (Context *contexts /* an array */,
 
         else { // an alias
             contexts[did_i].did_i = dst_ctx->did_i;
+            contexts[did_i].dict_id = DICT_ID_NONE; // this is how reconstruct_from_ctx_do identifies it is an alias
             dict_id_to_did_i_map[dict_id.map_key] = dst_ctx->did_i;        
         }
     }
@@ -968,7 +974,7 @@ CtxNode *ctx_get_node_by_word_index (ConstContextP ctx, WordIndex word_index)
 // PIZ: get snip by normal word index (doesn't support WORD_INDEX_*)
 const char *ctx_get_snip_by_word_index (ConstContextP ctx, WordIndex word_index, STRp(*snip))
 {
-    ASSERTISALLOCED (ctx->word_list);
+    ASSERT (buf_is_alloc (&ctx->word_list), "word_list is not allocated for ctx=%s", ctx->tag_name);
 
     ASSERT ((uint32_t)word_index < ctx->word_list.len, "word_index=%d out of range: word_list.len=%u for ctx=%s",
             word_index, (uint32_t)ctx->word_list.len, ctx->tag_name);
@@ -1388,7 +1394,7 @@ static void ctx_dict_build_word_lists (void)
                 .char_index = word_start - ctx->dict.data
             };
 
-            word_start = c+1; // skip over the \0 seperator
+            word_start = c+1; // skip over the \0 separator
         }
     }
 
@@ -1511,6 +1517,16 @@ const char *ctx_get_snip_with_largest_count (DidIType did_i, int64_t *count)
         }
 
     return snip;
+}
+
+CtxNodeP ctx_get_vb_node (ContextP vctx, WordIndex vb_node_index)
+{
+    bool is_ol = vb_node_index < vctx->ol_nodes.len; // is this entry from a previous vb (overlay buffer)
+
+    CtxNode *node = is_ol ? ENT (CtxNode, vctx->ol_nodes, vb_node_index)
+                          : ENT (CtxNode, vctx->nodes, vb_node_index - vctx->ol_nodes.len);
+
+    return node;
 }
 
 void ctx_compress_counts (void)

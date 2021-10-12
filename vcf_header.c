@@ -873,6 +873,8 @@ static void vcf_header_subset_samples (Buffer *vcf_field_name_line)
     for (unsigned i=0; i < line_len; i++)
         if (line[i] == '\t') num_samples++;
         
+    ASSINP (num_samples >= 1, "Cannot use --samples with %s, as this file has no samples", z_name);
+    
     vcf_samples_is_included = MALLOC (num_samples);
     memset (vcf_samples_is_included, cmd_is_negative_samples, num_samples); // 0 if not included unless list says so (positive) and vice versa
 

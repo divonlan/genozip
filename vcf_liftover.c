@@ -76,10 +76,10 @@ void vcf_lo_zip_initialize (void)
         .nitems_lo           = NUM_IL_FIELDS,
         .drop_final_item_sep = true,
         .filter_items        = true, // needed for --single-coord
-        .items               = { [IL_CHROM  ]={ .dict_id = { _VCF_oCHROM },   .seperator = ","  },
-                                 [IL_POS    ]={ .dict_id = { _VCF_oPOS },     .seperator = ","  },
-                                 [IL_REF    ]={ .dict_id = { _VCF_LIFT_REF }, .seperator = ","  },
-                                 [IL_XSTRAND]={ .dict_id = { _VCF_oXSTRAND }, .seperator = ","  } } };
+        .items               = { [IL_CHROM  ]={ .dict_id = { _VCF_oCHROM },   .separator = ","  },
+                                 [IL_POS    ]={ .dict_id = { _VCF_oPOS },     .separator = ","  },
+                                 [IL_REF    ]={ .dict_id = { _VCF_LIFT_REF }, .separator = ","  },
+                                 [IL_XSTRAND]={ .dict_id = { _VCF_oXSTRAND }, .separator = ","  } } };
     container_prepare_snip ((Container*)&con, 0, 0, info_luft_snip, &info_luft_snip_len);
 
     con = (SmallContainer){
@@ -87,10 +87,10 @@ void vcf_lo_zip_initialize (void)
         .nitems_lo           = NUM_IL_FIELDS,
         .drop_final_item_sep = true,
         .filter_items        = true, // needed for --single-coord
-        .items               = { [IL_CHROM  ]={ .dict_id = { _VCF_CHROM },    .seperator = ","  },
-                                 [IL_POS    ]={ .dict_id = { _VCF_COPYPOS },  .seperator = ","  },
-                                 [IL_REF    ]={ .dict_id = { _VCF_LIFT_REF }, .seperator = ","  },
-                                 [IL_XSTRAND]={ .dict_id = { _VCF_oXSTRAND }, .seperator = ","  } } };
+        .items               = { [IL_CHROM  ]={ .dict_id = { _VCF_CHROM },    .separator = ","  },
+                                 [IL_POS    ]={ .dict_id = { _VCF_COPYPOS },  .separator = ","  },
+                                 [IL_REF    ]={ .dict_id = { _VCF_LIFT_REF }, .separator = ","  },
+                                 [IL_XSTRAND]={ .dict_id = { _VCF_oXSTRAND }, .separator = ","  } } };
     container_prepare_snip ((Container*)&con, 0, 0, info_prim_snip, &info_prim_snip_len);
 
     // for REJTOVER, appearing a line that has only PRIMARY coordinates, we include oCHROM, oPOS and oREFALT which will 
@@ -113,7 +113,7 @@ void vcf_lo_zip_initialize (void)
         .filter_items = true, // needed for --single-coord
         .items        = { { .dict_id = { _VCF_COPYSTAT } },
                           { .dict_id = { _VCF_CHROM }    },
-                          { .dict_id = { _VCF_COPYPOS }, .seperator = { CI_TRANS_NOR } }, // rather than segging "", we don't reconstruct. so we don't break the "all_the_same" of COPYPOS
+                          { .dict_id = { _VCF_COPYPOS }, .separator = { CI_TRANS_NOR } }, // rather than segging "", we don't reconstruct. so we don't break the "all_the_same" of COPYPOS
                           { .dict_id = { _VCF_REFALT }   } } };
     container_prepare_snip ((Container*)&con, 0, 0, info_rejt_prim_snip, &info_rejt_prim_snip_len);
 }
@@ -167,7 +167,10 @@ TranslatorId vcf_lo_luft_trans_id (DictId dict_id, char number)
     ||       vcf_lo_is_INFO_AF_type (dict_id))
           return VCF2VCF_A_1; // eg 0.150 -> 0.850 (upon REF⇄ALT SWITCH)
     else if (dict_id.num == _FORMAT_DS)       return VCF2VCF_PLOIDY; // eg (if ploidy=2): 1.25 -> 0.75 
-    else if (dict_id.num == _INFO_AA)         return VCF2VCF_ALLELE; 
+    else if (dict_id.num == _INFO_AA          
+    ||       dict_id.num == _INFO_CSQ_Allele
+    ||       dict_id.num == _INFO_ANN_Allele ) return VCF2VCF_ALLELE; 
+     
     else if (dict_id.num == _FORMAT_SAC       // eg 25,1,6,2 --> 6,2,25,1 (upon REF⇄ALT SWITCH)
     ||       dict_id.num == _FORMAT_SB        // SB and MB - I don't fully understand these, but at least for bi-allelic variants, empirically the sum of the first two values equals first value of AD and the sum of last two values adds up to the second value of AD
     ||       dict_id.num == _FORMAT_MB)       return VCF2VCF_R2;   
@@ -355,7 +358,7 @@ void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl)
     dl->chrom[1] = chrom_seg_by_did_i (VB, VCF_oCHROM, STRa(ochrom), ochrom_len);
 
     // REF & ALT - update ostatus based the relationship between REF, ALT, oREF and is_xstrand.
-    bool is_left_anchored;
+    bool is_left_anchored; // the amount by which we decremented POS due to Xstrand, beyond the flipped first base. Currently, 1 (if re-left-anchored) or 0
     if (LO_IS_REJECTED (ostatus = vcf_refalt_lift (vb, dl, is_xstrand, luft_ref_index, &is_left_anchored))) {
         vcf_lo_seg_rollback_and_reject (vb, ostatus, NULL);
         return;
@@ -384,7 +387,11 @@ void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl)
     // special snip for oREFALT - vcf_piz_special_oREF will reconstruct it based on REF, ALT, oStatus and xstrand
     vcf_refalt_seg_other_REFALT (vb, VCF_oREFALT, ostatus, is_xstrand, 0); // 0 as not reconstructed by genounzip
 
-    vb->last_index(VCF_oXSTRAND) = seg_by_did_i (VB, is_xstrand ? "X" : "-", 1, VCF_oXSTRAND, 1); // index used by vcf_seg_INFO_END
+    char xstrand = !is_xstrand      ? '-'   // is_xstrand=false
+                 : is_left_anchored ? '1'   // is_xstrand=true - REF and ALTs were rotated one base to the left due to re-left-anchoring
+                 :                    '0';  // is_xstrand=true - REF and ALTs were rev-comped in place
+
+    vb->last_index(VCF_oXSTRAND) = seg_by_did_i (VB, (char[]){xstrand}, 1, VCF_oXSTRAND, 1); // index used by vcf_seg_INFO_END
 
     // Add LUFT container - we modified the txt by adding these 4 fields to INFO/LUFT. We account for them now, and we will account for the INFO name etc in vcf_seg_info_field
     Context *luft_ctx = vcf_lo_seg_lo_snip (vb, info_luft_snip, info_luft_snip_len, _INFO_LUFT, 3);
@@ -430,23 +437,11 @@ static inline bool vcf_lo_is_same_seq (const char *seq1, unsigned seq1_len, cons
     return true;
 }
 
-// similar to vcf_refalt_is_left_anchored
-static inline bool vcf_lo_seg_is_left_anchored (VBlockVCFP vb, const char *ref, const char *alt, unsigned alt_len)
-{
-    // split ALT 
-    str_split (alt, alt_len, alt_len == 1 ? 1 : 0, ',', alt, false); // short circuit if alt_len=1
-    ASSVCF (n_alts, "Invalid ALT=\"%.*s\"", alt_len, alt);
-
-    for (unsigned alt_i=0; alt_i < n_alts; alt_i++)
-        if (alts[alt_i][0] != ref[0]) return false; // first base of ALT[alt_i] differs from first base of REF
-
-    return true;
-}
-
 // When segging INFO/LUFT or INFO/PRIM of a dual coordinate file, set the last_ostatus based on the observed relationship 
 // between the REF and ALT in the main VCF fields, and the REF in the INFO/LIFT[OVER|BACK] field
 // returns true if status OK and false if REJECTED
-static LiftOverStatus vcf_lo_seg_ostatus_from_LUFT_or_PRIM (VBlockVCFP vb, const char *field_name, bool is_xstrand,
+static LiftOverStatus vcf_lo_seg_ostatus_from_LUFT_or_PRIM (VBlockVCFP vb, const char *field_name, 
+                                                            bool is_xstrand, bool primary_is_left_anchored,
                                                             const char *main_ref, unsigned main_ref_len,
                                                             const char *info_ref, unsigned info_ref_len,
                                                             const char *main_alt, unsigned main_alt_len,
@@ -461,23 +456,23 @@ static LiftOverStatus vcf_lo_seg_ostatus_from_LUFT_or_PRIM (VBlockVCFP vb, const
     }
 
     bool is_snp = main_ref_len == 1 && (main_alt_len==1 || str_count_char (main_alt, main_alt_len, ',')*2+1 == main_alt_len);
-    bool is_left_anchored = !is_snp && vcf_lo_seg_is_left_anchored (vb, main_ref, main_alt, main_alt_len);
+ //  xxx bool is_left_anchored = !is_snp && vcf_lo_seg_is_left_anchored (vb, main_ref, main_alt, main_alt_len);
 
     // check for structural variant
     if (memchr (main_alt, '<', main_alt_len)) 
         ostatus = LO_OK_REF_SAME_SV;
 
     // check for no-base-change 
-    else if (vcf_lo_is_same_seq (main_ref, main_ref_len, info_ref, info_ref_len, is_xstrand, is_left_anchored))
-        ostatus = is_snp ? LO_OK_REF_SAME_SNP 
-                : is_left_anchored ? LO_OK_REF_SAME_INDEL
-                : LO_OK_REF_SAME_NLA;
+    else if (vcf_lo_is_same_seq (main_ref, main_ref_len, info_ref, info_ref_len, is_xstrand, primary_is_left_anchored))
+        ostatus = is_snp                   ? LO_OK_REF_SAME_SNP 
+                : primary_is_left_anchored ? LO_OK_REF_SAME_INDEL
+                :                            LO_OK_REF_SAME_NLA;
 
     // check for REF⇄ALT switch 
-    else if (vcf_lo_is_same_seq (main_alt, main_alt_len, info_ref, info_ref_len, is_xstrand, is_left_anchored))
-        ostatus = is_snp ? LO_OK_REF_ALT_SWITCH_SNP 
-                : is_left_anchored ? LO_OK_REF_ALT_SWITCH_INDEL 
-                : LO_OK_REF_ALT_SWITCH_NLA;
+    else if (vcf_lo_is_same_seq (main_alt, main_alt_len, info_ref, info_ref_len, is_xstrand, primary_is_left_anchored))
+        ostatus = is_snp                   ? LO_OK_REF_ALT_SWITCH_SNP 
+                : primary_is_left_anchored ? LO_OK_REF_ALT_SWITCH_INDEL 
+                :                            LO_OK_REF_ALT_SWITCH_NLA;
 
     else if (is_snp && main_alt_len == 1)
         ostatus = LO_OK_REF_NEW_SNP;
@@ -485,7 +480,7 @@ static LiftOverStatus vcf_lo_seg_ostatus_from_LUFT_or_PRIM (VBlockVCFP vb, const
     else { 
         // this can happen only when genozipping a DVCF file produced by a different tool, like a more advanced version of genozip...
         WARNVCF ("FYI: Unsupported REF/ALT configuration: REF=%.*s ALT=%.*s INFO/DVCF/REF=%.*s INFO/DVCF/XSTRAND=%c", 
-                  main_ref_len, main_ref, main_alt_len, main_alt, info_ref_len, info_ref, is_xstrand ? 'X' : '-');
+                  main_ref_len, main_ref, main_alt_len, main_alt, info_ref_len, info_ref, !is_xstrand ? '-' : primary_is_left_anchored ? '1' : '0');
         ostatus = LO_UNSUPPORTED_REFALT;
     }
 
@@ -529,13 +524,17 @@ void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, ContextP ctx, STRp (value))
     int64_t info_pos_value;
     unsigned info_pos_len   = str_lens[IL_POS];
     ASSVCF (str_get_int_range64 (strs[IL_POS], str_lens[IL_POS], 0, MAX_POS, &info_pos_value), "Invalid POS value in %s: \"%.*s\"", tag_name_ex.s, str_lens[IL_POS], strs[IL_POS]);
-    ASSVCF ((strs[IL_XSTRAND][0] == 'X' || strs[IL_XSTRAND][0] == '-') && str_lens[IL_XSTRAND] ==1,
-            "%s has an invalid XSTRAND=\"%.*s\" - expected \"-\" or \"X\"", tag_name_ex.s, str_lens[IL_XSTRAND], strs[IL_XSTRAND]);
-    bool is_xstrand = (strs[IL_XSTRAND][0] == 'X');
+    
+    char xstrand = strs[IL_XSTRAND][0];
+    ASSVCF ((xstrand=='-' || xstrand=='1' || xstrand=='0' || xstrand=='X') && str_lens[IL_XSTRAND] ==1,
+            "%s has an invalid XSTRAND=\"%.*s\" - expected \"-\", \"0\" or \"1\"", tag_name_ex.s, str_lens[IL_XSTRAND], strs[IL_XSTRAND]);
+    bool is_xstrand = xstrand!='-'; // '0', '1' or 'X' ('X' for back. compt. up to v12.0.37 - 'X' meant '1' and there was no '0')
+    bool primary_is_left_anchored = xstrand=='1' || xstrand=='X';
+
     ctx_set_last_value (VB, CTX(VCF_oXSTRAND), (int64_t)is_xstrand);
 
     LiftOverStatus ostatus = 
-        vcf_lo_seg_ostatus_from_LUFT_or_PRIM (vb, tag_name_ex.s, is_xstrand,
+        vcf_lo_seg_ostatus_from_LUFT_or_PRIM (vb, tag_name_ex.s, is_xstrand, primary_is_left_anchored,
                                               vb->main_refalt, vb->main_ref_len, 
                                               info_ref, info_ref_len, 
                                               vb->main_refalt + vb->main_ref_len + 1, vb->main_alt_len,
@@ -552,7 +551,7 @@ void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, ContextP ctx, STRp (value))
     if (dl->pos[SEL(1,0)])random_access_update_pos (VB, SEL(DC_LUFT, DC_PRIMARY), SEL (VCF_oPOS, VCF_POS));
 
     // Seg other coord's REFALT - this will be a SPECIAL that reconstructs from this coords REFALT + INFO_REF + XSTRAND
-    if (ostatus == LO_OK_REF_NEW_SNP || (LO_IS_OK_INDEL (ostatus) && is_xstrand))
+    if (ostatus == LO_OK_REF_NEW_SNP || (LO_IS_OK_INDEL (ostatus) && is_xstrand)) // note: INDELs reanchor while NotLeftAnchored (NLAs) do not.
         vb->new_ref = info_ref[0]; // new anchor or new REF SNP (consumed by vcf_refalt_seg_other_REFALT)
 
     vcf_refalt_seg_other_REFALT (vb, SEL(VCF_oREFALT, VCF_REFALT), ostatus, is_xstrand, SEL (0, info_ref_len + 2 + info_alt_len)); // account for REFALT + 2 tabs (primary coords) if we are segging it now (but not for oREFALT)

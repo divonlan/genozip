@@ -112,12 +112,13 @@ typedef union SectionFlags {
     struct FlagsCtx {
         StoreType store          : 2; // after reconstruction of a snip, store it in ctx.last_value
         uint8_t paired           : 1; // reconstruction of this context requires access to the same section from the same vb of the previous (paired) file
-        uint8_t v8_container     : 1; // (canceled in 9 - files compressed with 8.0 will have this flag set for any context that contains 1 or more containers)
-        uint8_t copy_param       : 1; // copy ctx.b250/local.param from SectionHeaderCtx.param
+        #define v8_container     store_delta  // in v8 files - if the context contains 1 or more containers
+        uint8_t store_delta      : 1; // introduced v12.0.38: after reconstruction of a snip, store last_delta. notes: 1. last_delta also stored in case of a delta snip. 2. if using this, store=STORE_INT must be set.
+        uint8_t copy_local_param       : 1; // copy ctx.b250/local.param from SectionHeaderCtx.param
         uint8_t all_the_same     : 1; // SEC_B250: the b250 data contains only one element, and should be used to reconstruct any number of snips from this context
         #define ctxs_dot_is_0    ctx_specific // used in _FORMAT_GT_SHARK_GT between 10.0.3 and 10.0.8
         uint8_t ctx_specific     : 1; // flag specific a context (introduced 10.0.3)
-        uint8_t unused           : 1;
+        uint8_t store_per_line   : 1; // introduced v12.0.38: store last_txt for each line - in context->txt_per_prev        
     } ctx;
 
     struct FlagsRandomAccess {
@@ -221,7 +222,7 @@ typedef struct {
 
 // LT_* values are consistent with BAM optional 'B' types (and extend them)
 typedef enum __attribute__ ((__packed__)) { // 1 byte
-    LT_TEXT      = 0,
+    LT_TEXT      = 0,   // 0-seperated snips
     LT_INT8      = 1,    
     LT_UINT8     = 2,
     LT_INT16     = 3,
@@ -277,7 +278,7 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
 typedef struct {
     SectionHeader h;
     LocalType ltype; // used by SEC_LOCAL: goes into ctx.ltype - type of data for the ctx.local buffer
-    uint8_t param;   // Three options: 1. goes into ctx.b250/local.param if flags.copy_param. (4/4/2021: actually NOT b250 bc not implemented in zfile_compress_b250_data) 
+    uint8_t param;   // Three options: 1. goes into ctx.b250/local.param if flags.copy_local_param. (4/4/2021: actually NOT b250 bc not implemented in zfile_compress_b250_data) 
                      //                2. given to comp_uncompress as a codec parameter
                      //                3. starting 9.0.11 for ltype=LT_BITMAP: number of unused bits in top bitarray word
     uint8_t ffu[2];

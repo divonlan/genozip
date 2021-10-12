@@ -79,8 +79,7 @@ void vcf_samples_zip_initialize (void)
         vcf_seg_prepare_minus_snip (con_FORMAT_AD.items[i].dict_id, con_FORMAT_ADF.items[i].dict_id,  adf_snips[i],  &adf_snip_lens[i]);
     }
 
-    af_snip_len = sizeof (af_snip);
-    seg_prepare_snip_other (SNIP_COPY, _INFO_AF, 0, 0, af_snip, &af_snip_len);
+    seg_prepare_snip_other (SNIP_COPY, _INFO_AF, 0, 0, af_snip);
 }
 
 // used for DP, GQ, A0D and otheres - store in transposed matrix in local 
@@ -588,7 +587,7 @@ static void vcf_seg_FORMAT_GT_increase_ploidy (VBlockVCF *vb, unsigned new_ploid
 
 static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataLineVCF *dl, const char *cell, unsigned cell_len)
 {
-    // the GT field is represented as a Container, with a single item repeating as required by poidy, and the seperator 
+    // the GT field is represented as a Container, with a single item repeating as required by poidy, and the separator 
     // determined by the phase
     MiniContainer gt = { .repeats = 1, 
                          .nitems_lo = 1, 

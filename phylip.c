@@ -111,8 +111,8 @@ void phy_seg_finalize (VBlockP vb)
         .repeats   = vb->lines.len,
         .is_toplevel = true,
         .nitems_lo = 2,
-        .items     = { { .dict_id = { _PHY_ID },  .seperator = "\n", .translator = PHYLIP2FASTA_ID },
-                       { .dict_id = { _PHY_SEQ }, .seperator = "\n\n" } }
+        .items     = { { .dict_id = { _PHY_ID },  .separator = "\n", .translator = PHYLIP2FASTA_ID },
+                       { .dict_id = { _PHY_SEQ }, .separator = "\n\n" } }
     };
 
     static const char fasta_prefix[] = { CON_PREFIX_SEP,        // has prefix 

@@ -58,7 +58,7 @@ static pid_t pipe_in_pid = 0;
 static char pipe_in_process_name[100] = "";
 
 // command line options that get assigned to other flags (they are not flags themselves)
-static int option_noisy=0, option_best=0;
+static int option_noisy=0;
 
 static void flags_show_flags (void)
 {
@@ -66,6 +66,7 @@ static void flags_show_flags (void)
     #define S_(f)  (flag.f ? flag.f : "(none)")
 
     iprintf ("fast=%s\n", TF_(fast));
+    iprintf ("best=%s\n", TF_(best));
     iprintf ("make_reference=%s\n", TF_(make_reference));
     iprintf ("multifasta=%s\n", TF_(multifasta));
     iprintf ("md5=%s\n", TF_(md5));
@@ -356,7 +357,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _m  {"md5",           no_argument,       &flag.md5,              1 }
         #define _t  {"test",          no_argument,       &flag.test,             1 }
         #define _fa {"fast",          no_argument,       &flag.fast,             1 }
-        #define _bs {"best",          no_argument,       &option_best,           1 }
+        #define _bs {"best",          no_argument,       &flag.best,             1 }
         #define _9  {"optimize",      no_argument,       &flag.optimize,         1 } // US spelling
         #define _99 {"optimise",      no_argument,       &flag.optimize,         1 } // British spelling
         #define _9s {"optimize-sort", no_argument,       &flag.optimize_sort,    1 }
@@ -438,6 +439,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _SC {"single-coord",  no_argument,       &flag.single_coord,     1 } 
         #define _XS {"show-rename-tags", no_argument,    &flag.show_rename_tags, 1 } 
         #define _sY {"show-ostatus",  no_argument,       &flag.show_ostatus,     1 } 
+        #define _sy {"show-ostatus-counts",  no_argument, 0, 131                   } 
         #define _sh {"show-headers",  optional_argument, 0, 10                     } 
         #define _si {"show-index",    no_argument,       &flag.show_index,       1 } 
         #define _Si {"show-ref-index",no_argument,       &flag.show_ref_index,   1 } 
@@ -492,10 +494,10 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _00 {0, 0, 0, 0                                                    }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _lg, _i, _I, _d, _f, _h,        _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th,     _o, _p, _e, _E, _ch,                                                                                                _sl, _ss, _SS, _sd, _sT, _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn,          _B, _xt, _dm, _dp, _dt, _dw, _dM, _dr, _dg,                   _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe,      _fa, _bs,                                  _rg, _sR,      _sC,      _hC, _rA, _rI, _rS, _me, _mf, _mF,     _s5, _sM, _sA, _sc, _sI, _cn,                                    _so, _SO, _s6, _kr,         _oe, _aa, _al, _Lf, _T, _TT, _Xr, _Xd, _XS, _MR, _wM, _wm, _00 };
-        static Option genounzip_lo[]  = { _lg,             _f, _h, _x,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                                                                                              _ss, _SS, _sd, _sT, _sF,      _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn,              _xt, _dm, _dp, _dt,                                                                                                           _pt,                                                 _sR,      _sC,      _hC, _rA,      _rS,                    _s5, _sM, _sA,      _sI, _cn, _pg, _PG, _sx, _SX, _ix,                     _s6,              _oe,                _T,                                    _00 };
-        static Option genocat_lo[]    = { _lg,             _f, _h, _x,    _L1, _L2, _q, _Q,          _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p,              _lo, _il, _r, _R, _Rg, _s, _sf, _sq, _G, _1, _H0, _H1, _H2, _H3, _Gt, _So, _Io, _IU, _iu, _GT,      _ss, _SS, _sd, _sT, _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sH, _sn, _ov, _oc,    _xt, _dm, _dp, _dt,                _ds, _sS, _SC, _sY,                                                                        _pt,                 _fs, _g, _gw, _n, _nt, _nh,     _sR,      _sC, _cC, _hC, _rA, _rI, _rS,                    _s5, _sM, _sA,      _sI, _cn, _pg, _PG, _sx, _SX, _ix, _ct, _vl,      _SO, _s6, _kr, _kR,    _oe,                _T,                                    _00 };
-        static Option genols_lo[]     = { _lg,             _f, _h,    _l, _L1, _L2, _q,              _V,                                                                                                      _p, _e,                                                                                                                                  _sF,                                                        _st, _sm,                                                                _dm,      _dt,                                                                                                                                                                                                                                _sM,                                                                                _b, _oe,                _T,                                    _00 };
+        static Option genozip_lo[]    = { _lg, _i, _I, _d, _f, _h,        _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th,     _o, _p, _e, _E, _ch,                                                                                                _sl, _ss, _SS, _sd, _sT, _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn,          _B, _xt, _dm, _dp, _dt, _dw, _dM, _dr, _dg,                _sy,    _dh,_dS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe,      _fa, _bs,                                  _rg, _sR,      _sC,      _hC, _rA, _rI, _rS, _me, _mf, _mF,     _s5, _sM, _sA, _sc, _sI, _cn,                                    _so, _SO, _s6, _kr,         _oe, _aa, _al, _Lf, _T, _TT, _Xr, _Xd, _XS, _MR, _wM, _wm, _00 };
+        static Option genounzip_lo[]  = { _lg,             _f, _h, _x,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                                                                                              _ss, _SS, _sd, _sT, _sF,      _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn,              _xt, _dm, _dp, _dt,                                    _sy,                                                                        _pt,                                                 _sR,      _sC,      _hC, _rA,      _rS,                    _s5, _sM, _sA,      _sI, _cn, _pg, _PG, _sx, _SX, _ix,                     _s6,              _oe,                _T,                                    _00 };
+        static Option genocat_lo[]    = { _lg,             _f, _h, _x,    _L1, _L2, _q, _Q,          _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p,              _lo, _il, _r, _R, _Rg, _s, _sf, _sq, _G, _1, _H0, _H1, _H2, _H3, _Gt, _So, _Io, _IU, _iu, _GT,      _ss, _SS, _sd, _sT, _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sH, _sn, _ov, _oc,    _xt, _dm, _dp, _dt,                _ds, _sS, _SC, _sY, _sy,                                                                        _pt,                 _fs, _g, _gw, _n, _nt, _nh,     _sR,      _sC, _cC, _hC, _rA, _rI, _rS,                    _s5, _sM, _sA,      _sI, _cn, _pg, _PG, _sx, _SX, _ix, _ct, _vl,      _SO, _s6, _kr, _kR,    _oe,                _T,                                    _00 };
+        static Option genols_lo[]     = { _lg,             _f, _h,    _l, _L1, _L2, _q,              _V,                                                                                                      _p, _e,                                                                                                                                  _sF,                                                        _st, _sm,                                                                _dm,      _dt,                                                                                                                                                                                                                                     _sM,                                                                                _b, _oe,                _T,                                    _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -593,6 +595,7 @@ verify_command:
                                 "--component expects a component number, the first component being 1"); break;
             case 15  : flag.log_filename  = optarg;  break;
             case 16  : flag.show_one_counts = dict_id_make (optarg, strlen (optarg), DTYPE_PLAIN); break;
+            case 131 : flag.show_one_counts = dict_id_make (cSTR("o$TATUS"), DTYPE_PLAIN); break;
             case 17  : sam_set_FLAG_filter (optarg) ; break; // filter by SAM FLAG
             case 18  : sam_set_MAPQ_filter (optarg) ; break; // filter by SAM MAPQ
             case 19  : flag.validate = optarg ? VLD_REPORT_VALID : VLD_REPORT_INVALID ; break;
@@ -674,7 +677,7 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
     CONFLICT (flag.md5,         flag.reading_chain,  OT("md5", "m"),       OT("chain", "C"));
     CONFLICT (flag.make_reference, flag.reading_chain, "--make-reference", OT("chain", "C"));
     CONFLICT (flag.samples,     flag.drop_genotypes, OT("samples", "s"),   OT("drop-genotypes", "G"));
-    CONFLICT (option_best,      flag.fast,           "--best",             OT("fast", "F"));
+    CONFLICT (flag.best,        flag.fast,           "--best",             OT("fast", "F"));
     CONFLICT (flag.show_sex,    flag.regions==1,     "--sex",              OT("regions", "r"));
     CONFLICT (flag.show_sex,    flag.out_filename,   "--sex",              OT("output", "o"));
     CONFLICT (flag.show_sex,    flag.grep,           "--sex",              OT("grep", "g"));
@@ -1069,7 +1072,7 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
          // FASTQ specific line dropppers
          (dt == DT_FASTQ && (flag.bases)) || 
          // SAM specific line dropppers
-         (dt == DT_SAM   && (flag.sam_flag_filter || flag.sam_mapq_filter || flag.bases)) || 
+         (dt == DT_SAM   && (flag.sam_flag_filter || flag.sam_mapq_filter || flag.bases || flag.out_dt == DT_FASTQ)) || 
          // Dual-coordinate-file line dropppers
          z_dual_coords || // vcf_lo_piz_TOPLEVEL_cb_filter_line will drop lines of the wrong coordinate
          // general filters 
@@ -1164,7 +1167,8 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
     ASSINP0 (flag.out_dt != DT_BAM || z_file_i <= 0 || flag.test, "Cannot concatenate multiple BAM files. Try using --sam."); // TODO: bug 349
 
     // -- grep doesn't work with binary files
-    ASSINP (!flag.grep || !out_dt_is_binary, "--grep is not supported when outputting %s data", dt_name (flag.out_dt));
+    ASSINP (!flag.grep || !out_dt_is_binary, "--grep is not supported when outputting %s data%s", 
+            dt_name (flag.out_dt), flag.out_dt == DT_BAM ? ". Tip: add --sam": "");
 
     // --gpos requires --reference
     ASSINP0 (!flag.gpos || flag.reference, "--gpos requires --reference");

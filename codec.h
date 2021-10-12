@@ -95,7 +95,7 @@ extern CodecEstSizeFunc codec_none_est_size, codec_bsc_est_size, codec_hapmat_es
 // non-codec-specific functions
 extern void codec_initialize (void);
 extern const char *codec_name (Codec codec);
-extern void *codec_alloc (VBlockP vb, int size, double grow_at_least_factor);
+extern void *codec_alloc (VBlockP vb, uint64_t size, double grow_at_least_factor);
 extern void codec_free (void *vb, void *addr);
 extern void codec_free_all (VBlockP vb);
 extern void codec_verify_free_all (VBlockP vb, const char *op, Codec codec);

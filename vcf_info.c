@@ -134,7 +134,7 @@ static void vcf_seg_INFO_SF_seg (VBlockVCF *vb)
     // case: SF data remains after all samples - copy it
     int32_t remaining_len = (uint32_t)(vb->sf_txt.len - vb->sf_txt.next); // -1 if all done, because we skipped a non-existing comma
     if (remaining_len > 0) {
-        buf_add_more (vb, &vb->sf_snip, ENT (char, vb->sf_txt, vb->sf_txt.next), remaining_len, "sf_snip");
+        buf_add_more (VB, &vb->sf_snip, ENT (char, vb->sf_txt, vb->sf_txt.next), remaining_len, "sf_snip");
         NEXTENT (char, vb->sf_snip) = ','; // buf_add_more allocates one character extra
     }
 
@@ -236,7 +236,7 @@ void vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VBlockVCFP vcf_vb)
     // if there are some items remaining in the snip (values that don't appear in samples) - copy them
     if (snip_i < sf_snip_len) {
         unsigned remaining_len = sf_snip_len - snip_i - 1; // all except the final comma
-        buf_add_more (vcf_vb, &vcf_vb->sf_txt, &sf_snip[snip_i], remaining_len, "sf_txt"); 
+        buf_add_more ((VBlockP)vcf_vb, &vcf_vb->sf_txt, &sf_snip[snip_i], remaining_len, "sf_txt"); 
     }
 
     // make room for the SF txt and copy it to its final location
@@ -258,39 +258,55 @@ void vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VBlockVCFP vcf_vb)
 // INFO/AA
 // -------
 
-// checks if value is identifcal to the REF or one of the ALT alleles, and if so segs a SPECIAL snip
-static void vcf_seg_INFO_allele (VBlock *vb_, Context *ctx, STRp(value)) // returns true if caller still needs to seg 
+// return 0 if the allele equals main REF, the alt number if it equals one of the ALTs, or -1 if none or -2 if '.'
+static int vcf_INFO_ALLELE_get_allele (VBlockVCFP vb, STRp (value))
 {
-    VBlockVCFP vb = (VBlockVCFP)vb_;
+    // check for '.'
+    if (value_len == 1 && *value == '.') return -2;
 
-    // short circuit in common case of '.'
-    if (value_len == 1 && *value == '.') goto fail; // caller should seg
-    
-    int allele = -1;
-    
     // check if its equal main REF (which can by REF or oREF)
     if (value_len == vb->main_ref_len && !memcmp (value, vb->main_refalt, value_len))
-        allele = 0;
+        return 0;
 
     // check if its equal one of the ALTs
-    else {
-        str_split (&vb->main_refalt[vb->main_ref_len+1], vb->main_alt_len, 0, ',', alt, false);
+    str_split (&vb->main_refalt[vb->main_ref_len+1], vb->main_alt_len, 0, ',', alt, false);
 
-        for (int alt_i=0; alt_i < n_alts; alt_i++) 
-            if (value_len == alt_lens[alt_i] && !memcmp (value, alts[alt_i], value_len)) {
-                allele = alt_i + 1;
-                break;
-            }
+    for (int alt_i=0; alt_i < n_alts; alt_i++) 
+        if (value_len == alt_lens[alt_i] && !memcmp (value, alts[alt_i], value_len)) 
+            return alt_i + 1;
+
+    // case: not REF or any of the ALTs
+    return -1;
+}
+
+// checks if value is identifcal to the REF or one of the ALT alleles, and if so segs a SPECIAL snip
+// Used for INFO/AA, INFO/CSQ/Allele, INFO/ANN/Allele. Any field using this should have the VCF2VCF_ALLELE translator set in vcf_lo_luft_trans_id.
+static bool vcf_seg_INFO_allele (VBlock *vb_, Context *ctx, STRp(value), uint32_t repeat) // returns true if caller still needs to seg 
+{
+    VBlockVCFP vb = (VBlockVCFP)vb_;
+    
+    int allele = vcf_INFO_ALLELE_get_allele (vb, STRa(value));
+
+    // case: this is one of the alleles in REF/ALT - our special alg will just copy from that allele
+    if (allele >= 0) {
+        char snip[] = { SNIP_SPECIAL, VCF_SPECIAL_ALLELE, '0' + vb->line_coords, '0' + allele /* ASCII 48...147 */ };
+        seg_by_ctx (VB, snip, sizeof (snip), ctx, value_len);
     }
 
-    if (allele == -1) goto fail;
+    // case: a unique allele and no xstrand - we just leave it as-is
+    else
+        seg_by_ctx (VB, value, value_len, ctx, value_len); 
 
-    char snip[] = { SNIP_SPECIAL, VCF_SPECIAL_ALLELE, '0' + vb->line_coords, '0' + allele /* ASCII 48...147 */ };
-    seg_by_ctx (VB, snip, sizeof (snip), ctx, value_len);
-    return;
+    // validate that the primary value (as received from caller or lifted back) can be luft-translated 
+    // note: for INFO/AA, but not for INFO/CSQ/Allele and INFO/ANN/Allele, this is done already in vcf_seg_info_one_subfield (no harm in redoing)
+    if (vb->line_coords == DC_PRIMARY && needs_translation (ctx)) {
+        if (allele != -1) 
+            ctx->line_is_luft_trans = true; // assign translator to this item in the container, to be activated with --luft
+        else 
+            REJECT_SUBFIELD (LO_INFO, ctx, ".\tCannot cross-render INFO subfield %s: \"%.*s\"", ctx->tag_name, value_len, value);            
+    }
 
-fail:
-    seg_by_ctx (VB, value, value_len, ctx, value_len); 
+    return true; // segged successfully
 }
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_ALLELE)
@@ -304,7 +320,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_ALLELE)
         allele = 1 - allele;
     }
 
-    ContextP refalt_ctx = vb->vb_coords == DC_PRIMARY ? CTX (VCF_REFALT) : CTX (VCF_oREFALT); // note: we can't rely on the constants VCF_* in PIZ
+    ContextP refalt_ctx = vb->vb_coords == DC_PRIMARY ? CTX (VCF_REFALT) : CTX (VCF_oREFALT); 
 
     const char *refalt = last_txtx (vb, refalt_ctx);
     unsigned refalt_len = refalt_ctx->last_txt_len;
@@ -328,7 +344,7 @@ done:
     return false; // no new value
 }
 
-// translator only validates - as vcf_piz_special_INFO_ALLELE copies verbatim
+// translator only validates - as vcf_piz_special_ALLELE copies verbatim (revcomp, if xstrand, is already done in REF/ALT)
 TRANSLATOR_FUNC (vcf_piz_luft_ALLELE)
 {
     VBlockVCFP vcf_vb = ((VBlockVCFP)vb);
@@ -336,6 +352,9 @@ TRANSLATOR_FUNC (vcf_piz_luft_ALLELE)
     // reject if LO_OK_REF_NEW_SNP and value is equal to REF
     if (validate_only && last_ostatus == LO_OK_REF_NEW_SNP && 
         recon_len == vcf_vb->main_ref_len && !memcmp (recon, vcf_vb->main_refalt, recon_len)) return false;
+
+    // reject if the value is not equal to REF, any ALT or '.'
+    if (validate_only && vcf_INFO_ALLELE_get_allele (vcf_vb, STRa(recon)) == -1) return false;
 
     return true;
 }
@@ -359,7 +378,7 @@ static bool vcf_seg_INFO_BaseCounts (VBlockVCF *vb, Context *ctx_basecounts, STR
     SAFE_NUL (&value[value_len]);
     for (unsigned i=0; i < 4; i++) {
         counts[i] = strtoul (str, &str, 10);
-        str++; // skip comma seperator
+        str++; // skip comma separator
         sum += counts[i];
     }
     SAFE_RESTORE;
@@ -409,7 +428,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_BaseCounts)
 
     for (unsigned i=0; i < 4; i++) {
         sorted_counts[i] = strtoul (str, &str, 10);
-        str++; // skip comma seperator
+        str++; // skip comma separator
         new_value->i += sorted_counts[i];
     }
 
@@ -532,7 +551,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_A_AN)
 static void vcf_seg_INFO_END (VBlockVCFP vb, Context *end_ctx, const char *end_str, unsigned end_len) // note: ctx is INFO/END *not* POS (despite being an alias)
 {
     // END is an alias of POS
-    seg_pos_field (VB, VCF_POS, VCF_POS, SPF_BAD_SNIPS_TOO | SPF_ZERO_IS_BAD | SPF_UNLIMIED_DELTA, 0, end_str, end_len, 0, end_len);
+    seg_pos_field (VB, VCF_POS, VCF_POS, SPF_BAD_SNIPS_TOO | SPF_ZERO_IS_BAD | SPF_UNLIMITED_DELTA, 0, end_str, end_len, 0, end_len);
 
     // add end_delta to dl for sorting. it is used only in case chrom and pos are identical
     DATA_LINE (vb->line_i)->end_delta = vb->last_delta (VCF_POS);
@@ -541,8 +560,8 @@ static void vcf_seg_INFO_END (VBlockVCFP vb, Context *end_ctx, const char *end_s
     // check that lifting-over of END is delta-encoded and is lifted over to the same, non-xstrand, Chain alignment, and reject if not
     if (chain_is_loaded && LO_IS_OK (last_ostatus)) { 
 
-        bool is_xstrand = vb->last_index (VCF_oXSTRAND); // set in vcf_lo_seg_generate_INFO_DVCF
-        PosType aln_last_pos = chain_get_aln_last_pos (vb->pos_aln_i); 
+        bool is_xstrand = (vb->last_index (VCF_oXSTRAND) > 0); // set in vcf_lo_seg_generate_INFO_DVCF
+        PosType aln_last_pos = chain_get_aln_prim_last_pos (vb->pos_aln_i); 
         PosType end = vb->last_int (VCF_POS); 
 
         // case: we don't yet handle END translation in case of a reverse strand
@@ -569,7 +588,7 @@ static void vcf_seg_INFO_END (VBlockVCFP vb, Context *end_ctx, const char *end_s
         else if (!vb->is_del_sv && end > aln_last_pos) 
             REJECT_SUBFIELD (LO_INFO, end_ctx, ".\tPOS and INFO/END=%.*s are not on the same chain file alignment", end_len, end_str);
 
-        // case: invalid value. since we use SPF_UNLIMIED_DELTA, any integer value should succeed
+        // case: invalid value. since we use SPF_UNLIMITED_DELTA, any integer value should succeed
         else if (!CTX(VCF_POS)->last_delta)
             REJECT_SUBFIELD (LO_INFO, end_ctx, ".\tINFO/END=%.*s has an invalid value", end_len, end_str);        
     }
@@ -780,7 +799,7 @@ static bool vcf_seg_INFO_HGVS_indel (VBlockVCFP vb, ContextP ctx, STRp(value), c
     SmallContainer con = { 
         .repeats   = 1,
         .nitems_lo = 3,
-        .items = { { .dict_id = dict_id_start_pos[t], .seperator = "_" }, // seperator deleted in container_reconstruct_do() if end_pos is missing
+        .items = { { .dict_id = dict_id_start_pos[t], .separator = "_" }, // separator deleted in container_reconstruct_do() if end_pos is missing
                    { .dict_id = dict_id_end_pos[t]                     },
                    { .dict_id = dict_id_payload[t]                     } } }; 
 
@@ -801,7 +820,7 @@ static bool vcf_seg_INFO_HGVS_indel (VBlockVCFP vb, ContextP ctx, STRp(value), c
     CTX(did_i_start_pos[t])->st_did_i = CTX(did_i_end_pos[t])->st_did_i = CTX(did_i_payload[t])->st_did_i = ctx->did_i; // consolidate stats
     CTX(did_i_start_pos[t])->flags.store = STORE_INT; // consumed by vcf_piz_special_INFO_HGVS_DEL_END_POS
 
-    seg_pos_field (VB, did_i_start_pos[t], VCF_POS, SPF_UNLIMIED_DELTA, 0, 0, 0, pos[0], pos_lens[0]);
+    seg_pos_field (VB, did_i_start_pos[t], VCF_POS, SPF_UNLIMITED_DELTA, 0, 0, 0, pos[0], pos_lens[0]);
     
     // We pos_lens[1] only if the payload is longer than 1
     if (n_poss == 2)
@@ -819,7 +838,7 @@ static bool vcf_seg_INFO_HGVS_indel (VBlockVCFP vb, ContextP ctx, STRp(value), c
 }
 
 // <ID=CLNHGVS,Number=.,Type=String,Description="Top-level (primary assembly, alt, or patch) HGVS expression.">
-static void vcf_seg_INFO_HGVS (VBlock *vb_, ContextP ctx, STRp(value))
+static bool vcf_seg_INFO_HGVS (VBlock *vb_, ContextP ctx, STRp(value), uint32_t repeat)
 {
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
@@ -827,7 +846,7 @@ static void vcf_seg_INFO_HGVS (VBlock *vb_, ContextP ctx, STRp(value))
         goto fail; // we can't use this if there is an END before CLNHGVS, as it will change last_int(VCF_POS) during reconstruction
 
     // if main->refalt is different than REFALT then we can't use this function, as reconstruction is based on VCF_REFALT
-    if (vb->line_coords == DC_LUFT && (LO_IS_OK_SWITCH (last_ostatus) || LO_IS_REJECTED (last_ostatus) || *CTX(VCF_oXSTRAND)->last_snip == 'X'))
+    if (vb->line_coords == DC_LUFT && (LO_IS_OK_SWITCH (last_ostatus) || LO_IS_REJECTED (last_ostatus) || *CTX(VCF_oXSTRAND)->last_snip != '-'))
         goto fail;
 
     SAFE_NULT (value);
@@ -841,10 +860,11 @@ static void vcf_seg_INFO_HGVS (VBlock *vb_, ContextP ctx, STRp(value))
     
     SAFE_RESTORE;
     
-    if (success) return;
+    if (success) return true; // indeed segged
 
 fail:
     seg_by_ctx (VB, value, value_len, ctx, value_len); 
+    return true; // indeed segged
 }
 
 static void vcf_piz_special_INFO_HGVS_INDEL_END_POS (VBlockP vb, HgvsType t)
@@ -918,75 +938,75 @@ static inline void vcf_seg_INFO_CSQ (VBlockVCF *vb, Context *ctx, STRp(value))
         .nitems_lo   = 70, 
         .drop_final_repeat_sep = true,
         .repsep      = {','},
-        .items       = { { .dict_id={ _INFO_CSQ_Allele             }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_Consequence        }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_IMPACT             }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_SYMBOL             }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_Gene               }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_Feature            }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_Feature            }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_Feature            }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_EXON               }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_INTRON             }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_HGVSc              }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_HGVSp              }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_cDNA_position      }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_CDS_position       }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_Protein_position   }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_Amino_acids        }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_Codons             }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_Existing_variation }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_ALLELE_NUM         }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_DISTANCE           }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_STRAND             }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_FLAGS              }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_VARIANT_CLASS      }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_MINIMISED          }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_SYMBOL_SOURCE      }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_HGNC_ID            }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_CANONICAL          }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_TSL                }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_APPRIS             }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_CCDS               }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_ENSP               }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_SWISSPROT          }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_TREMBL             }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_UNIPARC            }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_GENE_PHENO         }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_SIFT               }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_PolyPhen           }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_DOMAINS            }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_HGVS_OFFSET        }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_AF                 }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_CLIN_SIG           }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_SOMATIC            }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_PHENO              }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_PUBMED             }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_MOTIF_NAME         }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_MOTIF_POS          }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_HIGH_INF_POS       }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_MOTIF_SCORE_CHANGE }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_LoF                }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_LoF_filter         }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_LoF_flags          }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_LoF_info           }, .seperator = {'|'} },
-                         { .dict_id={ _INFO_CSQ_context            }, .seperator = {'|'} },
+        .items       = { { .dict_id={ _INFO_CSQ_Allele             }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_Consequence        }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_IMPACT             }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_SYMBOL             }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_Gene               }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_Feature            }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_Feature            }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_Feature            }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_EXON               }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_INTRON             }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_HGVSc              }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_HGVSp              }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_cDNA_position      }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_CDS_position       }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_Protein_position   }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_Amino_acids        }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_Codons             }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_Existing_variation }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_ALLELE_NUM         }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_DISTANCE           }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_STRAND             }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_FLAGS              }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_VARIANT_CLASS      }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_MINIMISED          }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_SYMBOL_SOURCE      }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_HGNC_ID            }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_CANONICAL          }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_TSL                }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_APPRIS             }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_CCDS               }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_ENSP               }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_SWISSPROT          }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_TREMBL             }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_UNIPARC            }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_GENE_PHENO         }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_SIFT               }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_PolyPhen           }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_DOMAINS            }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_HGVS_OFFSET        }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_AF                 }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_CLIN_SIG           }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_SOMATIC            }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_PHENO              }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_PUBMED             }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_MOTIF_NAME         }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_MOTIF_POS          }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_HIGH_INF_POS       }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_MOTIF_SCORE_CHANGE }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_LoF                }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_LoF_filter         }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_LoF_flags          }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_LoF_info           }, .separator = {'|'} },
+                         { .dict_id={ _INFO_CSQ_context            }, .separator = {'|'} },
                          { .dict_id={ _INFO_CSQ_ancestral          }                     } } };
 
     SegCallback callbacks[70] = { [ 0] =  vcf_seg_INFO_allele,  // INFO_CSQ_Allele
@@ -994,7 +1014,7 @@ static inline void vcf_seg_INFO_CSQ (VBlockVCF *vb, Context *ctx, STRp(value))
                                   [12] = seg_integer_or_not_cb, // INFO_CSQ_cDNA_position - usually "int", sometimes "int-int" where int is an integer or ? 
                                   [13] = seg_integer_or_not_cb, // INFO_CSQ_CDS_position
                                   [14] = seg_integer_or_not_cb, // INFO_CSQ_Protein_position
-                                  [17] = seg_id_field_do,       // INFO_CSQ_Existing_variation
+                                  [17] = seg_id_field_cb,       // INFO_CSQ_Existing_variation
                                   [19] = seg_integer_or_not_cb, // INFO_CSQ_DISTANCE 
                                 };
     seg_array_of_struct (VB, ctx, csq, value, value_len, callbacks);
@@ -1013,22 +1033,22 @@ static inline void vcf_seg_INFO_ANN (VBlockVCF *vb, Context *ctx, STRp(value))
         .nitems_lo   = 16, 
         .drop_final_repeat_sep = true,
         .repsep      = {','},
-        .items       = { { .dict_id={ _INFO_A0Allele             }, .seperator = {'|'} }, 
-                         { .dict_id={ _INFO_A1Annotation         }, .seperator = {'|'} }, 
-                         { .dict_id={ _INFO_A2Annotation_Impact  }, .seperator = {'|'} }, 
-                         { .dict_id={ _INFO_A3Gene_Name          }, .seperator = {'|'} }, 
-                         { .dict_id={ _INFO_A4Gene_ID            }, .seperator = {'|'} }, 
-                         { .dict_id={ _INFO_A5Feature_Type       }, .seperator = {'|'} }, 
-                         { .dict_id={ _INFO_A6Feature_ID         }, .seperator = {'|'} }, 
-                         { .dict_id={ _INFO_A7Transcript_BioType }, .seperator = {'|'} }, 
-                         { .dict_id={ _INFO_A8Rank               }, .seperator = {'|'} }, 
-                         { .dict_id={ _INFO_A9HGVS_c             }, .seperator = {'|'} }, 
-                         { .dict_id={ _INFO_AaHGVS_p             }, .seperator = {'|'} }, 
-                         { .dict_id={ _INFO_AbcDNA               }, .seperator = {'|'} }, 
-                         { .dict_id={ _INFO_AcCDS                }, .seperator = {'|'} }, 
-                         { .dict_id={ _INFO_AdAA                 }, .seperator = {'|'} }, 
-                         { .dict_id={ _INFO_AeDistance           }, .seperator = {'|'} }, 
-                         { .dict_id={ _INFO_AfErrors             }                     } } };
+        .items       = { { .dict_id={ _INFO_ANN_Allele             }, .separator = {'|'} }, 
+                         { .dict_id={ _INFO_ANN_Annotation         }, .separator = {'|'} }, 
+                         { .dict_id={ _INFO_ANN_Annotation_Impact  }, .separator = {'|'} }, 
+                         { .dict_id={ _INFO_ANN_Gene_Name          }, .separator = {'|'} }, 
+                         { .dict_id={ _INFO_ANN_Gene_ID            }, .separator = {'|'} }, 
+                         { .dict_id={ _INFO_ANN_Feature_Type       }, .separator = {'|'} }, 
+                         { .dict_id={ _INFO_ANN_Feature_ID         }, .separator = {'|'} }, 
+                         { .dict_id={ _INFO_ANN_Transcript_BioType }, .separator = {'|'} }, 
+                         { .dict_id={ _INFO_ANN_Rank               }, .separator = {'|'} }, 
+                         { .dict_id={ _INFO_ANN_HGVS_c             }, .separator = {'|'} }, 
+                         { .dict_id={ _INFO_ANN_HGVS_p             }, .separator = {'|'} }, 
+                         { .dict_id={ _INFO_ANN_cDNA               }, .separator = {'|'} }, 
+                         { .dict_id={ _INFO_ANN_CDS                }, .separator = {'|'} }, 
+                         { .dict_id={ _INFO_ANN_AA                 }, .separator = {'|'} }, 
+                         { .dict_id={ _INFO_ANN_Distance           }, .separator = {'|'} }, 
+                         { .dict_id={ _INFO_ANN_Errors             }                     } } };
 
     seg_array_of_struct (VB, ctx, ann, value, value_len, (SegCallback[]){vcf_seg_INFO_allele,0,0,0,0,0,0,0,0,vcf_seg_INFO_HGVS,0,0,0,0,0,0});
 }
@@ -1227,7 +1247,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
     // ##INFO=<ID=AA,Number=1,Type=String,Description="Ancestral Allele">
     else if ((z_dual_coords  && ctx->luft_trans == VCF2VCF_ALLELE) || // if DVCF - apply to all fields (perhaps including AA) with RendAlg=ALLELE
              (!z_dual_coords && dnum == _INFO_AA)) // apply to INFO/AA if not DVCF
-        CALL (vcf_seg_INFO_allele (VB, ctx, value, value_len));
+        CALL (vcf_seg_INFO_allele (VB, ctx, value, value_len, 0));
 
     // ##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|Existing_variation|ALLELE_NUM|DISTANCE|STRAND|FLAGS|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|GMAF|AFR_MAF|AMR_MAF|EAS_MAF|EUR_MAF|SAS_MAF|AA_MAF|EA_MAF|ExAC_MAF|ExAC_Adj_MAF|ExAC_AFR_MAF|ExAC_AMR_MAF|ExAC_EAS_MAF|ExAC_FIN_MAF|ExAC_NFE_MAF|ExAC_OTH_MAF|ExAC_SAS_MAF|CLIN_SIG|SOMATIC|PHENO|PUBMED|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info|context|ancestral">
     // Originating from the VEP software
@@ -1255,7 +1275,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
 
     // ##INFO=<ID=CLNHGVS,Number=.,Type=String,Description="Top-level (primary assembly, alt, or patch) HGVS expression.">
     else if (dnum == _INFO_CLNHGVS)
-        CALL (vcf_seg_INFO_HGVS (VB, ctx, value, value_len));
+        CALL (vcf_seg_INFO_HGVS (VB, ctx, value, value_len, 0));
 
     // ##INFO=<ID=CLNVI,Number=.,Type=String,Description="the variant's clinical sources reported as tag-value pairs of database and variant identifier">
     // example: CPIC:0b3ac4db1d8e6e08a87b6942|CPIC:647d4339d5c1ddb78daff52f|CPIC:9968ce1c4d35811e7175cd29|CPIC:PA166160951|CPIC:c6c73562e2b9e4ebceb0b8bc
@@ -1402,7 +1422,7 @@ void vcf_finalize_seg_info (VBlockVCF *vb)
         qsort (ii, ii_len, sizeof(InfoItem), sort_by_subfield_name);
 
     char prefixes[CONTAINER_MAX_PREFIXES_LEN];  // these are the Container prefixes
-    prefixes[0] = prefixes[1] = CON_PREFIX_SEP; // initial CON_PREFIX_SEP follow by seperator of empty Container-wide prefix
+    prefixes[0] = prefixes[1] = CON_PREFIX_SEP; // initial CON_PREFIX_SEP follow by separator of empty Container-wide prefix
     unsigned prefixes_len = 2;
 
     // Populate the Container 
@@ -1412,7 +1432,7 @@ void vcf_finalize_seg_info (VBlockVCF *vb)
         con.items[i] = (ContainerItem){ .dict_id   = !ii[i].value                               ? DICT_ID_NONE 
                                                    : ii[i].ctx->dict_id.num == _INFO_END ? (DictId)_VCF_POS
                                                    :                                              ii[i].ctx->dict_id,
-                                        .seperator = { ';' } }; 
+                                        .separator = { ';' } }; 
 
         // if we're preparing a dual-coordinate VCF and this line needs translation to Luft - assign the liftover-translator for this item,
         if (ii[i].ctx && ii[i].ctx->line_is_luft_trans) { // item was segged in Primary coords and needs a luft translator to be reconstruced in --luft

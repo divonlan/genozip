@@ -20,9 +20,10 @@ static void segconf_set_vb_size (const VBlock *vb, uint64_t curr_vb_size)
     #define VBLOCK_MEMORY_MIN_DYN  (16   << 20) // VB memory - min/max when set in segconf_calculate
     #define VBLOCK_MEMORY_MAX_DYN  (512  << 20) 
     #define VBLOCK_MEMORY_FAST     (16   << 20) // VB memory with --fast
+    #define VBLOCK_MEMORY_BEST     (512  << 20) // VB memory with --best 
     #define VBLOCK_MEMORY_MAKE_REF (1    << 20) // VB memory with --make-reference - reference data 
     #define VBLOCK_MEMORY_GENERIC  (16   << 20) // VB memory for the generic data type
-
+    
     segconf.vb_size = curr_vb_size;
 
     if (segconf.vb_size) {
@@ -94,6 +95,9 @@ static void segconf_set_vb_size (const VBlock *vb, uint64_t curr_vb_size)
                     global_max_threads, (uint32_t)(segconf.vb_size >> 20));
         }
     }
+    
+    if (flag.best)
+        segconf.vb_size = MAX_(segconf.vb_size, VBLOCK_MEMORY_BEST);
 }
 
 void segconf_initialize (void)
@@ -109,11 +113,16 @@ void segconf_calculate (void)
     ||  flag.rejects_coord)                                       // DVCF: no recalculating for reject components
         return; // in FASTQ pairs, we only calculate for the first one
 
+    if (TXT_DT(DT_GENERIC)) {                                     // nothing to calculate in generic files    
+        segconf.vb_size = VBLOCK_MEMORY_GENERIC;
+        return;
+    }
+    
     segconf.running = true;
 
     uint64_t save_vb_size = segconf.vb_size;
     segconf.vb_size = txt_file->codec == CODEC_BZ2 ? 1500000 // needs to be big enough to overcome the block nature of BZ2 (64K block -> 200-800K text) to get a reasonable size estimate
-                    :                                300000; // big enough of a long-read SAM or FASTQ line
+                    :                                300000; // big enough for a few long-read SAM or FASTQ lines
     
     VBlockP vb = vb_initialize_nonpool_vb (VB_ID_SEGCONF, z_file->data_type, "segconf");
 

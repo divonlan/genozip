@@ -393,8 +393,8 @@ bool regions_is_site_included (VBlockP vb)
     if (chrom == WORD_INDEX_NONE ||  
         (z_dual_coords && ((vb->vb_coords==DC_LUFT) != flag.luft))) return true; // always include all rejected variants in the vcf header
 
-    ASSERT (chrom >= 0 && chrom < num_chroms, "chrom=%d is out of range: chrom_did_i=%u vb_i=%u vb->line_i=%"PRIu64, 
-            chrom, chrom_did_i, vb->vblock_i, vb->line_i);
+    ASSERT (chrom >= 0 && chrom < num_chroms, "chrom=%d is out of range: num_chroms=%u chrom_did_i=%u vb_i=%u vb->line_i=%"PRIu64, 
+            chrom, num_chroms, chrom_did_i, vb->vblock_i, vb->line_i);
 
     // it sufficient that the site is included in one (positive) region
     Buffer *chregs_buf = &chregs[chrom];

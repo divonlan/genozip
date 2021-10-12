@@ -111,13 +111,11 @@ static void zip_display_compression_ratio (Digest md5, bool is_final_component)
 // of data in each context for the generic codecs to work well. if compressing multiple files,
 // we do this just for the first file, so VBs can be reused (typically, the files will be similar)
 
-static inline void zip_generate_one_b250 (VBlockP vb, ContextP ctx, uint32_t word_i,
+static inline void zip_generate_one_b250 (VBlockP vb, ContextP ctx, uint32_t word_i, WordIndex node_index,
                                           Buffer *b250_buf, 
                                           WordIndex *prev_word_index,  // in/out
                                           bool show)
 {
-    WordIndex node_index = *ENT(WordIndex, ctx->b250, word_i);
-
     if (node_index >= 0) { // normal index
 
         Base250 b250 = ctx_node_vb (ctx, node_index, NULL, NULL)->word_index;
@@ -174,19 +172,21 @@ static bool zip_generate_b250_section (VBlock *vb, Context *ctx)
 
     // we move the number of words to param, as len will now contain the of bytes. used by ctx_update_stats()
     ctx->b250.num_ctx_words = (int64_t)ctx->b250.len;
+    ARRAY (WordIndex, b250, ctx->b250);
+
     ctx->b250.len = 0; // we are going to overwrite b250 with the converted indices
 
-    WordIndex first_node_index = *ENT (WordIndex, ctx->b250, 0);
+    WordIndex first_node_index = b250[0]; 
     bool all_the_same = !ctx->no_all_the_same; // init to true, unless not allowed - are all the node_index of this context the same in this VB
 
     // we assign the b250 data back onto the same buffer. this words, because the b250 numerals are of length 1 or 4, 
     // therefore smaller than node_index
     WordIndex prev = WORD_INDEX_NONE; 
-    for (uint32_t word_i=0; word_i < (uint32_t)ctx->b250.num_ctx_words; word_i++) {
-        if (*ENT(WordIndex, ctx->b250, word_i) != first_node_index) // we found evidence that not all are the same
+    for (uint32_t word_i=0; word_i < (uint32_t)b250_len; word_i++) {
+        if (all_the_same && b250[word_i] != first_node_index) // we found evidence that not all are the same
             all_the_same = false;
 
-        zip_generate_one_b250 (vb, ctx, word_i, &ctx->b250, &prev, show);
+        zip_generate_one_b250 (vb, ctx, word_i, b250[word_i], &ctx->b250, &prev, show);
     }
 
     // if all the node_index of this context are the same in this VB, we store just one, and set a flag
@@ -290,7 +290,7 @@ static void zip_generate_transposed_local (VBlock *vb, Context *ctx)
 
     uint32_t rows = ctx->local.len / cols;
 
-    ctx->flags.copy_param = true;
+    ctx->flags.copy_local_param = true;
     
     for (uint32_t r=0; r < rows; r++) 
         for (uint32_t c=0; c < cols; c++) {

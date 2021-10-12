@@ -1,4 +1,4 @@
-#!bash 
+#!/usr/bin/bash 
 
 # ------------------------------------------------------------------
 #   dict_id_gen.sh
@@ -61,12 +61,12 @@ END
     max_fields=0 
 
     #pragma GENDICT REF_CONTIG=DTYPE_FIELD=CONTIG 
-    tags=`grep -w "#pragma GENDICT" ${files[*]} | cut -d" " -f3 | tr -d '\15' ` # remove windows \r
+    tags=`egrep -w "^#pragma GENDICT" ${files[*]} | cut -d" " -f3 | tr -d '\15' ` # remove windows \r
     num_tags=`echo $tags | wc -w`
 
     for t in $tags; do
 
-        IFS='=' # split seperator (much, much faster than invoking cut)
+        IFS='=' # split separator (much, much faster than invoking cut)
         read -a split <<< "$t" 
         
         var=${split[0]}
@@ -103,15 +103,15 @@ END
     max_fields=0 
 
     # add MAPPING
-    IFS='=' # split seperator
+    IFS='=' # split separator
     for f in ${files[@]} ; do
 
-        prefix=`grep -w "#pragma GENDICT_PREFIX" $f | head -1 | cut -d" " -f3 | tr -d '\15'`
+        prefix=`egrep -w "^#pragma GENDICT_PREFIX" $f | head -1 | cut -d" " -f3 | tr -d '\15'`
         if [ ${#prefix} -eq 0 ]; then echo "dict_id_gen.sh: Error: no GENDICT_PREFIX in $f"; exit 1; fi
 
         # note: readarray doesn't work on MacOS :(
-        readarray -t vars <<< `grep -w "#pragma GENDICT" $f | cut -d" " -f3 | cut -d"=" -f1`
-        readarray -t tags <<< `grep -w "#pragma GENDICT" $f | cut -d" " -f3 | cut -d"=" -f3 | cut -d"/" -f1 | sed 's/[^\!-~]//g'`
+        readarray -t vars <<< `egrep -w "^#pragma GENDICT" $f | cut -d" " -f3 | cut -d"=" -f1`
+        readarray -t tags <<< `egrep -w "^#pragma GENDICT" $f | cut -d" " -f3 | cut -d"=" -f3 | cut -d"/" -f1 | sed 's/[^\!-~]//g'`
 
         # calculate MAX_NUM_FIELDS_PER_DATA_TYPE
         if [ ${#vars[@]} -gt $max_fields ]; then max_fields=${#vars[@]}; fi
@@ -145,13 +145,13 @@ else
     dict_id_gen_exe=dict_id_gen
 fi
 
-files=(`grep "#pragma GENDICT" *.h | cut -d: -f1 | uniq`)
+files=(`egrep "^#pragma GENDICT" *.h | cut -d: -f1 | uniq`)
 
 generate_dict_id_gen_c
 
 # We accept CC as $1, used in conda when called from Makefile
 CC=$1
-if [ ${#CC} -eq 0 ]; then CC=gcc; fi
+if [ ${#CC} -eq 0 ]; then CC=/mingw64/bin/gcc; fi
     
 $CC dict_id_gen.c -o $dict_id_gen_exe
 

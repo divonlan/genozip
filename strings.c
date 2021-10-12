@@ -455,9 +455,12 @@ differ:
 
 // splits a string with up to (max_items-1) separators (doesn't need to be nul-terminated) to up to or exactly max_items
 // returns the actual number of items, or 0 is unsuccessful
-uint32_t str_split_do (const char *str, uint32_t str_len, uint32_t max_items, char sep,
-                       const char **items,  // out - array of char* of length max_items - one more than the number of separators
-                       uint32_t *item_lens, // optional out - corresponding lengths
+uint32_t str_split_do (const char *str, uint32_t str_len, 
+                       uint32_t max_items,        // optional - if not given, a count of sep is done first
+                       char sep,                  // option 1 - constant separator
+                       ConstContainerP con,       // option 2 - separators by container item[].separator[0]. max_items MUST be given
+                       const char **items,        // out - array of char* of length max_items - one more than the number of separators
+                       uint32_t *item_lens,       // optional out - corresponding lengths
                        bool exactly,
                        const char *enforce_msg)   // non-NULL if enforcement of length is requested
 
@@ -467,6 +470,14 @@ uint32_t str_split_do (const char *str, uint32_t str_len, uint32_t max_items, ch
     items[0] = str;
     uint32_t item_i=1;
 
+    if (con) { // option 2
+        sep = con->items[0].separator[0];
+        if (sep == CI_INVISIBLE) { // currently, we only support CI_INVISIBLE for the first item as there is no need yet for more
+            sep = con->items[item_i].separator[0];
+            items[item_i++] = str;
+        }
+    }
+
     for (uint32_t i=0; i < str_len ; i++) 
         if (str[i] == sep) {
             if (item_i == max_items) {
@@ -474,12 +485,16 @@ uint32_t str_split_do (const char *str, uint32_t str_len, uint32_t max_items, ch
                         max_items-1, enforce_msg, MIN_(str_len, 100), str);
                 return 0; // too many separators
             }
+            
+            if (con) sep = con->items[item_i].separator[0]; // option 2 - update to next separator
+            
             items[item_i++] = &str[i+1];
         }
 
     if (item_lens) {
         for (uint32_t i=0; i < item_i-1; i++)    
-            item_lens[i] = items[i+1] - items[i] - 1;
+            item_lens[i] = (items[i+1] > items[i]) ? items[i+1] - items[i] - 1 
+                                                   : 0; // items[i] is CI_INVISIBLE
             
         item_lens[item_i-1] = &str[str_len] - items[item_i-1];
     }
@@ -594,7 +609,7 @@ void str_print_dict (const char *data, uint32_t len, bool add_newline, bool remo
             case '\t'       : fwrite ("\\t", 1, 2, info_stream); break;
             case '\n'       : fwrite ("\\n", 1, 2, info_stream); break;
             case '\r'       : fwrite ("\\r", 1, 2, info_stream); break;
-            default         : iprintf ("\\x%x", data[i]);
+            default         : iprintf ("\\x%x", (uint8_t)data[i]);
         }
         }
 }
@@ -699,18 +714,18 @@ const char COMPLEM[256] = "-------------------------------- !\"#$\%&'()*+,-./012
 const char UPPER_COMPLEM[256] = "-------------------------------- !\"#$\%&'()*+,-./0123456789:;<=>?@TVGHEFCDIJMLKNOPQYSAUBWXRZ[\\]^_`TVGHEFCDIJMLKNOPQYSAUBWXRZ{|}~";
 
 // reverse-complements a string in-place
-char *str_revcomp (char *seq, uint32_t seq_len)
+char *str_revcomp_in_out (char *dst_seq, const char *src_seq, uint32_t seq_len)
 {
     for (uint32_t i=0; i < seq_len / 2; i++) {
-        char l_base = seq[i];
-        char r_base = seq[seq_len-1-i];
+        char l_base = src_seq[i];
+        char r_base = src_seq[seq_len-1-i];
 
-        seq[i]           = COMPLEM[(uint8_t)r_base];
-        seq[seq_len-1-i] = COMPLEM[(uint8_t)l_base];
+        dst_seq[i]           = COMPLEM[(uint8_t)r_base];
+        dst_seq[seq_len-1-i] = COMPLEM[(uint8_t)l_base];
     }
 
     if (seq_len % 2) // we have an odd number of bases - now complement the middle one
-        seq[seq_len/2] = COMPLEM[(uint8_t)seq[seq_len/2]];
+        dst_seq[seq_len/2] = COMPLEM[(uint8_t)src_seq[seq_len/2]];
 
-    return seq;
+    return dst_seq;
 }

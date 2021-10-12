@@ -53,9 +53,21 @@
         "url.h": "c",
         "limits": "cpp",
         "new": "cpp",
-        "threads.h": "c"
-        "arch.h": "c"
+        "threads.h": "c",
+        "arch.h": "c",
+        "libdeflate.h": "c",
+        "compare": "cpp"
     },
     "C_Cpp.dimInactiveRegions": false,
     "restructuredtext.confPath": "${workspaceFolder}\\docs",
+
+    "terminal.integrated.profiles.windows": {
+        "msys64": {
+            "path": "C:\\msys64\\usr\\bin\\bash.exe",
+            "env": { 
+                "CHERE_INVOKING" : "1" ,
+                "MSYSTEM": "MINGW64",
+            },
+        }
+      }
 }

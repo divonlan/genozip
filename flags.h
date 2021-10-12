@@ -25,7 +25,7 @@ typedef enum {
 typedef struct {
     
     // genozip options that affect the compressed file
-    int fast, make_reference, multifasta, md5;
+    int fast, best, make_reference, multifasta, md5;
     const char *vblock;
     
     // ZIP: data modifying options

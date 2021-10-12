@@ -279,16 +279,18 @@ finalize:
 
 WordIndex chrom_seg_no_b250 (VBlockP vb, STRp(chrom_name), bool *is_new)
 {
-    WordIndex chrom_node_index = chrom_seg_ex (VB, CHROM, STRa(chrom_name), 0, NULL, 0, false, is_new);
+    WordIndex chrom_node_index = chrom_seg_ex (VB, CHROM, STRa(chrom_name), 0, NULL, 0, false, is_new); // also adds to random access etc
     ctx_decrement_count (VB, CTX(CHROM), chrom_node_index);
     CTX(CHROM)->b250.len--;
 
     return chrom_node_index;
 }
 
-void chrom_seg_cb (VBlockP vb, ContextP ctx, STRp (chrom))
+bool chrom_seg_cb (VBlockP vb, ContextP ctx, STRp (chrom), uint32_t repeat)
 {
     chrom_seg_ex (vb, ctx->did_i, STRa(chrom), 0, NULL, chrom_len, true, NULL);
+
+    return true; // segged successfully
 }
 
 static int chrom_create_zip_sorter (const void *a, const void *b)

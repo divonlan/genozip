@@ -17,7 +17,7 @@ extern WordIndex chrom_seg_ex (VBlockP vb, DidIType did_i, STRp(chrom), PosType 
 static inline WordIndex chrom_seg (VBlockP vb, STRp(chrom)) { return chrom_seg_ex (vb, CHROM, STRa(chrom), 0, 0, chrom_len+1, true, NULL); }
 static inline WordIndex chrom_seg_by_did_i (VBlockP vb, DidIType did_i, STRp(chrom), unsigned add_bytes) 
     { return chrom_seg_ex (vb, did_i, STRa(chrom), 0, 0, add_bytes, true, NULL); }
-extern void chrom_seg_cb (VBlockP vb, ContextP ctx, STRp (chrom));
+extern bool chrom_seg_cb (VBlockP vb, ContextP ctx, STRp (chrom), uint32_t repeat);
 extern WordIndex chrom_seg_no_b250 (VBlockP vb, STRp(chrom), bool *is_new);
 
 // sorter

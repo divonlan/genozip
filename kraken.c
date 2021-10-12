@@ -92,8 +92,7 @@ void kraken_set_show_kraken (const char *optarg)
 
 void kraken_zip_initialize (void)
 {
-    copy_taxid_snip_len = sizeof (copy_taxid_snip);
-    seg_prepare_snip_other (SNIP_COPY, _KRAKEN_TAXID, 0, 0, copy_taxid_snip, &copy_taxid_snip_len);
+    seg_prepare_snip_other (SNIP_COPY, _KRAKEN_TAXID, 0, 0, copy_taxid_snip);
 
     compound_zip_initialize((DictId)_KRAKEN_QNAME);
 }
@@ -125,10 +124,10 @@ void kraken_seg_finalize (VBlockP vb)
         .is_toplevel  = true,
         .callback     = true,
         .nitems_lo    = 6,
-        .items        = { { .dict_id = { _KRAKEN_CU },     .seperator = {'\t'} },
-                          { .dict_id = { _KRAKEN_QNAME },  .seperator = {'\t'} },
-                          { .dict_id = { _KRAKEN_TAXID },  .seperator = {'\t'} },
-                          { .dict_id = { _KRAKEN_SEQLEN }, .seperator = {'\t'} },
+        .items        = { { .dict_id = { _KRAKEN_CU },     .separator = {'\t'} },
+                          { .dict_id = { _KRAKEN_QNAME },  .separator = {'\t'} },
+                          { .dict_id = { _KRAKEN_TAXID },  .separator = {'\t'} },
+                          { .dict_id = { _KRAKEN_SEQLEN }, .separator = {'\t'} },
                           { .dict_id = { _KRAKEN_KMERS },                      },
                           { .dict_id = { _KRAKEN_EOL },                        } }
     };
@@ -141,8 +140,8 @@ void kraken_seg_finalize (VBlockP vb)
         .is_toplevel    = true,
         .callback       = true,
         .nitems_lo      = 2,
-        .items          = { { .dict_id = { _KRAKEN_QNAME },  .seperator = { CI_TRANS_NUL /* '\0' */} },
-                            { .dict_id = { _KRAKEN_TAXID },  .seperator = { CI_TRANS_NOR /* no reconstruct */ } } },
+        .items          = { { .dict_id = { _KRAKEN_QNAME },  .separator = { CI_TRANS_NUL /* '\0' */} },
+                            { .dict_id = { _KRAKEN_TAXID },  .separator = { CI_TRANS_NOR /* no reconstruct */ } } },
     };
 
     container_seg (vb, CTX(KRAKEN_TOP2TAXID), (ContainerP)&top2taxid, 0, 0, 0);
@@ -188,7 +187,7 @@ static void kraken_seg_kmers (VBlock *vb, const char *value, int32_t value_len, 
         .repeats   = num_kmers, 
         .nitems_lo = 2,
         .repsep    = {' '},
-        .items     = { { .dict_id = { _KRAKEN_KMERTAX }, .seperator = {':'} },
+        .items     = { { .dict_id = { _KRAKEN_KMERTAX }, .separator = {':'} },
                        { .dict_id = { _KRAKEN_KMERLEN }                     } },
         .drop_final_repeat_sep = !final_space
     };
@@ -234,13 +233,13 @@ const char *kraken_seg_txt_line (VBlock *vb, const char *field_start_line, uint3
     if (memchr (field_start, '|', field_len)) { 
         // struct and not array, bc SEQLEN_2 is often a lot more random than SEQLEN_1 so better use different contexts
         static const MediumContainer con_SEQLEN = { .nitems_lo = 2,      
-                                                    .items     = { { .dict_id = { _KRAKEN_SEQLEN_1 }, .seperator = {'|'} },  
+                                                    .items     = { { .dict_id = { _KRAKEN_SEQLEN_1 }, .separator = {'|'} },  
                                                                    { .dict_id = { _KRAKEN_SEQLEN_2 },                    } } };
 
         seg_array_of_struct (VB, CTX(KRAKEN_SEQLEN), con_SEQLEN, field_start, field_len, (SegCallback[]){seg_pos_field_cb, 0}); // first element is good to delta, second is not
     }
     else 
-        seg_pos_field_cb (VB, CTX(KRAKEN_SEQLEN), field_start, field_len);
+        seg_pos_field_cb (VB, CTX(KRAKEN_SEQLEN), field_start, field_len, 0);
 
     CTX(KRAKEN_SEQLEN)->txt_len++; // \t
 
@@ -306,7 +305,7 @@ CONTAINER_CALLBACK (kraken_piz_container_cb)
 
             // if this is a paired read - ending with /1 or /2 - remove the suffix
             bool is_paired = false;
-            unsigned snip_len = recon_len - 1; // excluding the \0 seperator
+            unsigned snip_len = recon_len - 1; // excluding the \0 separator
             
             if (recon_len > 3 && recon[snip_len-2] == '/' &&
                 (recon[recon_len-2] == '1' || recon[snip_len-1] == '2')) {

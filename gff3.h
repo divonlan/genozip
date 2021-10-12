@@ -74,7 +74,7 @@ extern unsigned gff3_vb_size (DataType dt);
 CONTAINER_FILTER_FUNC (gff3_piz_filter);
 
 #define GFF3_DICT_ID_ALIASES \
-    /*          alias                           maps to this ctx          */  \
+    /*          alias                  maps to this ctx          */  \
     { DT_GFF3, _ATTR_Variant_seq  ,    _ATTR_Reference_seq }, \
     { DT_GFF3, _ATTR_ancestral_allele, _ATTR_Reference_seq }, 
 

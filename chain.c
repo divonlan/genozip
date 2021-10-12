@@ -73,6 +73,35 @@ void chain_vb_release_vb (VBlockCHAIN *vb)
     vb->next_luft_0pos = vb->next_prim_0pos = 0;
 }
 
+static void chain_display_alignments (void) 
+{
+    ARRAY (ChainAlignment, aln, chain);
+
+    iprint0 ("##fileformat=GENOZIP-CHAIN\n");
+    iprintf ("##primary_reference=%s\n", ref_get_filename (prim_ref));
+    iprintf ("##luft_reference=%s\n", ref_get_filename (gref));
+    iprint0 ("##documentation=" WEBSITE_CHAIN "\n");
+    iprint0 ("#ALN_I\tPRIM_CONTIG\tPRIM_START\tPRIM_END\tLUFT_CONTIG\tLUFT_START\tLUFT_ENDS\tXSTRAND\tALN_OVERLAP\n");
+
+    for (uint32_t i=0; i < chain.len; i++) {
+
+        if (aln[i].aln_i == -1) continue; // duplicate
+
+        const char *luft_chrom = ctx_get_words_snip (ZCTX(CHAIN_NAMELUFT), aln[i].luft_chrom);
+        const char *prim_chrom = ctx_get_words_snip (ZCTX(CHAIN_NAMEPRIM), aln[i].prim_chrom);
+
+        iprintf ("%u\t%s\t%"PRId64"\t%"PRId64"\t%s\t%"PRId64"\t%"PRId64"\t%c",
+                 aln[i].aln_i, prim_chrom, aln[i].prim_first_1pos, aln[i].prim_last_1pos, 
+                 luft_chrom, aln[i].luft_first_1pos, aln[i].luft_last_1pos,
+                 aln[i].is_xstrand ? 'X' : '-');
+
+        if (aln[i].overlap_aln_i)
+            iprintf ("\t%u\n", aln[i].overlap_aln_i);
+        else
+            iprint0 ("\n");
+    }
+}
+
 //-----------------------
 // TXTFILE stuff
 //-----------------------
@@ -181,18 +210,18 @@ void chain_seg_finalize (VBlockP vb)
         .is_toplevel  = true,
         .filter_items = true,
         .nitems_lo    = 16,
-        .items        = { { .dict_id = { _CHAIN_CHAIN },     .seperator = {' '} },  // 0
-                          { .dict_id = { _CHAIN_SCORE },     .seperator = {' '} },  // 1
-                          { .dict_id = { _CHAIN_NAMEPRIM },  .seperator = {' '} },  // 2
-                          { .dict_id = { _CHAIN_SIZEPRIM },  .seperator = {' '} },  // 3
-                          { .dict_id = { _CHAIN_STRNDPRIM }, .seperator = {' '} },  // 4
-                          { .dict_id = { _CHAIN_STARTPRIM }, .seperator = {' '} },  // 5
-                          { .dict_id = { _CHAIN_ENDPRIM },   .seperator = {' '} },  // 6
-                          { .dict_id = { _CHAIN_NAMELUFT },  .seperator = {' '} },  // 7
-                          { .dict_id = { _CHAIN_SIZELUFT },  .seperator = {' '} },  // 8
-                          { .dict_id = { _CHAIN_STRNDLUFT }, .seperator = {' '} },  // 9
-                          { .dict_id = { _CHAIN_STARTLUFT }, .seperator = {' '} },  // 10
-                          { .dict_id = { _CHAIN_ENDLUFT },   .seperator = {' '} },  // 11
+        .items        = { { .dict_id = { _CHAIN_CHAIN },     .separator = {' '} },  // 0
+                          { .dict_id = { _CHAIN_SCORE },     .separator = {' '} },  // 1
+                          { .dict_id = { _CHAIN_NAMEPRIM },  .separator = {' '} },  // 2
+                          { .dict_id = { _CHAIN_SIZEPRIM },  .separator = {' '} },  // 3
+                          { .dict_id = { _CHAIN_STRNDPRIM }, .separator = {' '} },  // 4
+                          { .dict_id = { _CHAIN_STARTPRIM }, .separator = {' '} },  // 5
+                          { .dict_id = { _CHAIN_ENDPRIM },   .separator = {' '} },  // 6
+                          { .dict_id = { _CHAIN_NAMELUFT },  .separator = {' '} },  // 7
+                          { .dict_id = { _CHAIN_SIZELUFT },  .separator = {' '} },  // 8
+                          { .dict_id = { _CHAIN_STRNDLUFT }, .separator = {' '} },  // 9
+                          { .dict_id = { _CHAIN_STARTLUFT }, .separator = {' '} },  // 10
+                          { .dict_id = { _CHAIN_ENDLUFT },   .separator = {' '} },  // 11
                           { .dict_id = { _CHAIN_ID }                            },  // 12
                           { .dict_id = { _CHAIN_EOL }                           },  // 13
                           { .dict_id = { _CHAIN_SET }                           },  // 14
@@ -520,10 +549,11 @@ static void chain_sort_mark_dups (void)
 
     qsort (chain.data, chain.len, sizeof (ChainAlignment), chain_sort_by_luft);
 
-    // mark duplicates alignments (can happeneg when chain file has both 1-> and chr-> and --match collapses them to the same contig)
+    // mark duplicates alignments (can happen when chain file has both 1-> and chr-> and --match collapses them to the same contig)
     #define REMOVED 0x7fffffff // MAX_INT
     for (int32_t i=1; i < chain.len; i++) 
-        if (aln[i].luft_chrom == aln[i-1].luft_chrom && aln[i].luft_first_1pos == aln[i-1].luft_first_1pos && aln[i].luft_last_1pos == aln[i-1].luft_last_1pos)
+        if (aln[i].luft_chrom == aln[i-1].luft_chrom && aln[i].luft_first_1pos == aln[i-1].luft_first_1pos && aln[i].luft_last_1pos == aln[i-1].luft_last_1pos &&
+            aln[i].prim_chrom == aln[i-1].prim_chrom && aln[i].prim_first_1pos == aln[i-1].prim_first_1pos && aln[i].prim_last_1pos == aln[i-1].prim_last_1pos)
             aln[i-1].aln_i = aln[i-1].luft_chrom = REMOVED;
 
     // sort again after de-dupping
@@ -545,35 +575,6 @@ static void chain_sort_mark_dups (void)
             }
 
     qsort (chain.data, chain.len, sizeof (ChainAlignment), chain_sort_by_aln_i);
-}
-
-static void chain_display_alignments (void) 
-{
-    ARRAY (ChainAlignment, aln, chain);
-
-    iprint0 ("##fileformat=GENOZIP-CHAIN\n");
-    iprintf ("##primary_reference=%s\n", ref_get_filename (prim_ref));
-    iprintf ("##luft_reference=%s\n", ref_get_filename (gref));
-    iprint0 ("##documentation=" WEBSITE_CHAIN "\n");
-    iprint0 ("#ALN_I\tPRIM_CONTIG\tPRIM_START\tPRIM_END\tLUFT_CONTIG\tLUFT_START\tLUFT_ENDS\tXSTRAND\tALN_OVERLAP\n");
-
-    for (uint32_t i=0; i < chain.len; i++) {
-
-        if (aln[i].aln_i == -1) continue; // duplicate
-
-        const char *luft_chrom = ctx_get_words_snip (ZCTX(CHAIN_NAMELUFT), aln[i].luft_chrom);
-        const char *prim_chrom = ctx_get_words_snip (ZCTX(CHAIN_NAMEPRIM), aln[i].prim_chrom);
-
-        iprintf ("%u\t%s\t%"PRId64"\t%"PRId64"\t%s\t%"PRId64"\t%"PRId64"\t%c",
-                 aln[i].aln_i, prim_chrom, aln[i].prim_first_1pos, aln[i].prim_last_1pos, 
-                 luft_chrom, aln[i].luft_first_1pos, aln[i].luft_last_1pos,
-                 aln[i].is_xstrand ? 'X' : '-');
-
-        if (aln[i].overlap_aln_i)
-            iprintf ("\t%u\n", aln[i].overlap_aln_i);
-        else
-            iprint0 ("\n");
-    }
 }
 
 // initialize alignment set from alignment set header
@@ -782,7 +783,7 @@ void chain_load (void)
         if (exe_type == EXE_GENOCAT) exit_ok();  // in genocat this, not the data
     }
 
-    // sort the alignmants by (luft_ref_index, qstart)
+    // sort the alignmants by (prim_ref_index, prim_start)
     chain_sort_mark_dups();
         
     if (flag.show_chain) {
@@ -913,7 +914,7 @@ PosType chain_get_aln_gap_after (uint32_t aln_i)
         return (aln+1)->prim_first_1pos - aln->prim_last_1pos - 1;
 }
 
-PosType chain_get_aln_last_pos (uint32_t aln_i)
+PosType chain_get_aln_prim_last_pos (uint32_t aln_i)
 {
     return ENT (const ChainAlignment, chain, aln_i)->prim_last_1pos;
 }

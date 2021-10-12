@@ -18,7 +18,7 @@
 
 // memory management for bzlib - tesing shows that compress allocates 4 times, and decompress 2 times. Allocations are the same set of sizes
 // every call to compress/decompress with the same parameters, independent on the contents or size of the compressed/decompressed data.
-void *codec_alloc (VBlock *vb, int size, double grow_at_least_factor)
+void *codec_alloc (VBlock *vb, uint64_t size, double grow_at_least_factor)
 {
     const char *names[NUM_CODEC_BUFS] = { "codec_bufs[0]", "codec_bufs[1]", "codec_bufs[2]", "codec_bufs[3]",
                                           "codec_bufs[4]", "codec_bufs[5]", "codec_bufs[6]" };
@@ -185,6 +185,7 @@ Codec codec_assign_best_codec (VBlockP vb,
         default: ASSERT (data, "expecting non-NULL data for section=%s", st_name (st));
     }
 
+    // sample from the end of the buffer, that is more likely to be representative of the data in the file (in particular  true for vb=1)
     uint64_t save_data_len = data->len;
     data->len = MIN_(data->len * (is_local ? lt_desc[ctx->ltype].width : 1), CODEC_ASSIGN_SAMPLE_SIZE);
 

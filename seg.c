@@ -28,14 +28,14 @@
 #include "coords.h"
 #include "website.h"
 
-WordIndex seg_by_ctx_ex (VBlock *vb, const char *snip, unsigned snip_len, Context *ctx, uint32_t add_bytes,
+WordIndex seg_by_ctx_ex (VBlockP vb, STRp(snip), ContextP ctx, uint32_t add_bytes,
                          bool *is_new) // optional out
 {
     ASSERTNOTNULL (ctx);
 
     buf_alloc (vb, &ctx->b250, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->b250");
     
-    WordIndex node_index = ctx_evaluate_snip_seg (VB, ctx, snip, snip_len, is_new);
+    WordIndex node_index = ctx_evaluate_snip_seg (VB, ctx, STRa(snip), is_new);
 
     ASSERT (node_index < ctx->nodes.len + ctx->ol_nodes.len || node_index == WORD_INDEX_EMPTY || node_index == WORD_INDEX_MISSING, 
             "out of range: dict=%s node_index=%d nodes.len=%u ol_nodes.len=%u",  
@@ -93,6 +93,7 @@ void seg_simple_lookup (VBlockP vb, ContextP ctx, unsigned add_bytes)
     static const char lookup[1] = { SNIP_LOOKUP };
     seg_by_ctx (VB, lookup, 1, ctx, add_bytes);
 }
+
 
 const char *seg_get_next_item (void *vb_, const char *str, int *str_len, 
                                GetNextAllow newline, GetNextAllow tab, GetNextAllow space,
@@ -205,7 +206,7 @@ bool seg_set_last_txt (VBlockP vb, ContextP ctx, const char *value, unsigned val
 
 WordIndex seg_integer_do (VBlockP vb, DidIType did_i, int64_t n, unsigned add_bytes)
 {
-    char snip[40];
+    char snip[24];
     unsigned snip_len = str_int (n, snip);
     return seg_by_did_i (VB, snip, snip_len, did_i, add_bytes);
 }
@@ -215,7 +216,7 @@ void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, bool ha
                                 char *snip, unsigned *snip_len) //  in / out
 {
     // make sure we have enough memory
-    unsigned required_len = 1 + base64_size (DICT_ID_LEN) + 11 /* max length of a int32 -1000000000 */ + 1 /* \0 */ ;
+    unsigned required_len = 1/*snip code*/ + 1/*\0*/ + base64_size (DICT_ID_LEN) + (has_parameter ?  11 : 0)/* max length of a int32 -1000000000 */;
     ASSERT (*snip_len >= required_len, "*snip_len=%u, but it needs to be at least %u", *snip_len, required_len);
 
     snip[0] = snip_code;
@@ -305,7 +306,8 @@ PosType seg_pos_field (VBlock *vb,
     // if the delta is too big, add this_pos (not delta) to local and put SNIP_LOOKUP in the b250
     // EXCEPT if it is the first vb (ie last_pos==0) because we want to avoid creating a whole RANDOM_POS
     // section in every VB just for a single entry in case of a nicely sorted file
-    if (!IS_FLAG (opt, SPF_UNLIMIED_DELTA) && (pos_delta > MAX_POS_DELTA || pos_delta < -MAX_POS_DELTA) && base_ctx->last_value.i) {
+    if ((!IS_FLAG (opt, SPF_UNLIMITED_DELTA) && (pos_delta > MAX_POS_DELTA || pos_delta < -MAX_POS_DELTA) && base_ctx->last_value.i) ||
+        IS_FLAG (opt, SPF_NO_DELTA)) {
 
         // store the value in in 32b local
         buf_alloc (vb, &snip_ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->local");
@@ -340,7 +342,7 @@ PosType seg_pos_field (VBlock *vb,
             total_len = 1;
         }
         else 
-            seg_prepare_snip_other (SNIP_OTHER_DELTA, base_ctx->dict_id, false, 0, pos_delta_str, &total_len);
+            seg_prepare_snip_other_do (SNIP_OTHER_DELTA, base_ctx->dict_id, false, 0, pos_delta_str, &total_len);
 
         unsigned delta_len = str_int (pos_delta, &pos_delta_str[total_len]);
         total_len += delta_len;
@@ -356,9 +358,10 @@ PosType seg_pos_field (VBlock *vb,
 
     return this_pos;
 }
-void seg_pos_field_cb (VBlockP vb, ContextP ctx, const char *pos_str, unsigned pos_len)
+bool seg_pos_field_cb (VBlockP vb, ContextP ctx, const char *pos_str, unsigned pos_len, uint32_t repeat)
 {
     seg_pos_field (vb, ctx->did_i, ctx->did_i, 0, 0, pos_str, pos_len, 0, pos_len);
+    return true; // segged successfully
 }
 
 // Commonly (but not always), IDs are SNPid identifiers like "rs17030902". We store the ID divided to 2:
@@ -399,13 +402,21 @@ void seg_id_field_do (VBlock *vb, ContextP ctx, const char *id_snip, unsigned id
     SAFE_RESTORE;
 }
 
+bool seg_id_field_cb (VBlockP vb, ContextP ctx, STRp(id_snip), uint32_t repeat)
+{
+    seg_id_field_do (vb, ctx, STRa(id_snip));
+    return true; // segged successfully
+}
+
 // returns true if it was an integer
-bool seg_integer_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes)
+bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsigned add_bytes)
 {
     // case: its an integer
     if (!ctx->no_stons && // we interpret no_stons as means also no moving ints to local (one of the reasons is that an int might actually be a float)
-        str_get_int (this_value, this_value_len, &ctx->last_value.i) &&
+        str_get_int (STRa(this_value), &ctx->last_value.i) &&
         ctx->last_value.i >= 0 && ctx->last_value.i <= 0xffffffffULL) {
+
+        ctx->last_line_i = vb->line_i;
 
         if (!ctx->local.len) { // first number 
             ctx->dynamic_size_local = true;
@@ -433,16 +444,17 @@ bool seg_integer_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsig
     }
 }
 
-void seg_integer_or_not_cb (VBlockP vb, ContextP ctx, const char *int_str, unsigned int_str_len)
+bool seg_integer_or_not_cb (VBlockP vb, ContextP ctx, STRp(int_str), uint32_t repeat)
 {
-    seg_integer_or_not (vb, ctx, int_str, int_str_len, int_str_len);
+    seg_integer_or_not (vb, ctx, STRa(int_str), int_str_len);
+    return true; // segged successfully
 }
 
 // if its a float, stores the float in local, and a LOOKUP in b250, and returns true. if not - normal seg, and returns false.
 bool seg_float_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes)
 {
     // TO DO: implement reconstruction in reconstruct_one_snip-SNIP_LOOKUP
-    char snip[1 + FLOAT_FORMAT_LEN];
+    char snip[2 + FLOAT_FORMAT_LEN];
     unsigned format_len;
 
     // case: its an float
@@ -481,7 +493,7 @@ WordIndex seg_delta_vs_other (VBlock *vb, Context *ctx, Context *other_ctx,
     if (max_delta >= 0 && (delta > max_delta || delta < -max_delta)) goto fallback;
 
     SNIP(100);
-    seg_prepare_snip_other (SNIP_OTHER_DELTA, other_ctx->dict_id, true, (int32_t)delta, snip, &snip_len);
+    seg_prepare_snip_other (SNIP_OTHER_DELTA, other_ctx->dict_id, true, (int32_t)delta, snip);
 
     other_ctx->no_stons = true;
     other_ctx->flags.store = STORE_INT;
@@ -504,10 +516,22 @@ Container seg_initialize_container_array_do (DictId dict_id, bool type_1_items, 
         char dict_id_str[8] = { id[0], base36(i), id[1], id[2], id[3], id[4], id[5], id[6] };
         
         con.items[i].dict_id = dict_id_make (dict_id_str, 8, type_1_items ? DTYPE_1 : DTYPE_2);
-        if (comma_sep) con.items[i].seperator[0] = ',';
+        if (comma_sep) con.items[i].separator[0] = ',';
     }
 
     return con;
+}
+
+// note: seg_initialize should set STORE_INT for this ctx
+WordIndex seg_self_delta (VBlockP vb, ContextP ctx, int64_t value, uint32_t value_str_len)
+{
+    char delta_snip[30];
+    delta_snip[0] = SNIP_SELF_DELTA;
+    unsigned delta_snip_len = 1 + str_int (value - ctx->last_value.i, &delta_snip[1]);
+
+    ctx_set_last_value (vb, ctx, value);
+
+    return seg_by_ctx (VB, delta_snip, delta_snip_len, ctx, value_str_len);
 }
 
 // an array or array of arrays
@@ -598,13 +622,7 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
 
         // case: delta of 2nd+ item
         else if (str_get_int (this_item, this_item_len, &this_item_value)) {
-
-            char delta_snip[30] = { SNIP_SELF_DELTA };
-            unsigned delta_snip_len = 1 + str_int (this_item_value - arr_ctx->last_value.i, &delta_snip[1]);
-
-            seg_by_ctx (VB, delta_snip, delta_snip_len, arr_ctx, this_item_len);
-
-            ctx_set_last_value (vb, arr_ctx, this_item_value);
+            seg_self_delta (vb, arr_ctx, this_item_value, this_item_len);
             arr_ctx->numeric_only = false;
         }
 
@@ -617,7 +635,7 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
         if (container_ctx->flags.store == STORE_INT)
             container_ctx->last_value.i += this_item_value;
 
-        value_len--; // skip seperator
+        value_len--; // skip separator
         value++;
     }
 
@@ -630,9 +648,9 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
 // The last item is treated as an ENST_ID (format: ENST00000399012) while the other items are regular dictionaries
 // the names of the dictionaries are the same as the ctx, with the 2nd character replaced by 1,2,3...
 // the field itself will contain the number of entries
-void seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, 
-                          const char *snip, unsigned snip_len, 
-                          SegCallback *callbacks) // optional - either NULL, or contains a seg callback for each item (any callback may be NULL)
+int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, 
+                             const char *snip, unsigned snip_len, 
+                             const SegCallback *callbacks) // optional - either NULL, or contains a seg callback for each item (any callback may be NULL)
 {
     ContextP ctxs[con.nitems_lo]; 
 
@@ -658,12 +676,15 @@ void seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con,
     for (unsigned r=0; r < n_repeats; r++) {
 
         // get items in each repeat
-        str_split (repeats[r], repeat_lens[r], con.nitems_lo, con.items[0].seperator[0], item, true);
+        str_split_by_container (repeats[r], repeat_lens[r], &con, item);
+        //str_split (repeats[r], repeat_lens[r], con.nitems_lo, con.items[0].separator[0], item, true);
         if (n_items != con.nitems_lo) goto badly_formatted;
 
         for (unsigned i=0; i < n_items; i++)
-            if (callbacks && callbacks[i])
-                callbacks[i] (vb, ctxs[i], items[i], item_lens[i]);
+            if (callbacks && callbacks[i]) {
+                if (!callbacks[i] (vb, ctxs[i], items[i], item_lens[i], r))
+                    goto badly_formatted;
+            }
             else
                 seg_by_ctx (VB, items[i], item_lens[i], ctxs[i], item_lens[i]);
     }
@@ -676,8 +697,13 @@ void seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con,
         ctx->con_index.len = ctx->con_index.len / sizeof (WordIndex);
     }
 
+    // count printable item separators
+    unsigned num_printable_separators=0;
+    for (unsigned i=0; i < con.nitems_lo; i++) 
+        if (con.items[i].separator[0] >= '\t') num_printable_separators++;
+
     WordIndex node_index = *ENT (WordIndex, ctx->con_index, n_repeats);
-    unsigned account_for = con.repeats * (con.nitems_lo-1) /* item seperators */ + con.repeats - con.drop_final_repeat_sep /* repeat separators */;
+    unsigned account_for = con.repeats * num_printable_separators /* item seperators */ + con.repeats - con.drop_final_repeat_sep /* repeat separators */;
 
     // case: first container with the many repeats - seg and add to cache
     if (node_index == WORD_INDEX_NONE) 
@@ -687,7 +713,7 @@ void seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con,
     else 
         seg_known_node_index (vb, ctx, node_index, account_for);
 
-    return;
+    return n_repeats;
 
 badly_formatted:
     // roll back all the changed data
@@ -696,10 +722,11 @@ badly_formatted:
 
     // now just seg the entire snip
     seg_by_ctx (VB, snip, snip_len, ctx, snip_len); 
+
+    return -1; // not segged as a container
 }                           
 
-void seg_add_to_local_text (VBlock *vb, Context *ctx, 
-                            const char *snip, unsigned snip_len, 
+void seg_add_to_local_text (VBlock *vb, Context *ctx, STRp (snip),
                             unsigned add_bytes)  // bytes in the original text file accounted for by this snip
 {
     buf_alloc (vb, &ctx->local, snip_len + 1, 0, char, CTX_GROWTH, "contexts->local"); // no multiplying by line.len, as snip can idiosyncratically be very large
@@ -708,11 +735,6 @@ void seg_add_to_local_text (VBlock *vb, Context *ctx,
 
     if (add_bytes) ctx->txt_len += add_bytes;
     ctx->local.num_ctx_words++;
-}
-
-void seg_add_to_local_text_cb (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len)
-{
-        seg_add_to_local_text (vb, ctx, snip, snip_len, snip_len);
 }
 
 void seg_add_to_local_fixed (VBlock *vb, Context *ctx, const void *data, unsigned data_len)  // bytes in the original text file accounted for by this snip
@@ -783,28 +805,6 @@ static void seg_set_hash_hints (VBlock *vb, int third_num)
     }
 }
 
-static uint32_t seg_estimate_num_lines (VBlock *vb)
-{
-#   define NUM_LINES_IN_TEST 10 // take an average of this number of lines
-    uint32_t len=0; 
-
-    if (!DTP (line_height)) return 0; // this data type doesn't use textual lines
-
-    ARRAY (char, txt, vb->txt_data);
-    int line_count=0; for (; line_count < DTP (line_height) * NUM_LINES_IN_TEST && len < txt_len; line_count++, len++)
-        for (; len < txt_len && txt[len] != '\n'; len++) {};
-
-    len /= MAX_(1, (line_count / DTP (line_height))); // average length of a line
-
-    ASSERT (txt_len, "vb=%u: txt_data is empty", vb->vblock_i); 
-
-    ASSSEG (line_count==DTP (line_height) || len < txt_len, txt, 
-            "a line in the file is longer than %s characters (a maximum defined by vblock). If this is intentional, use --vblock to increase the vblock size", 
-            str_uint_commas (segconf.vb_size).s);
-
-    return MAX_(100, (uint32_t)(((double)txt_len / (double)len) * 1.2));
-}
-
 // double the number of lines if we've run out of lines
 static void seg_more_lines (VBlock *vb, unsigned sizeof_line)
 {
@@ -863,11 +863,13 @@ void seg_all_data_lines (VBlock *vb)
     for (DidIType f=0; f < DTF(num_fields); f++) 
         buf_alloc (vb, &CTX(f)->b250, 0, vb->lines.len, WordIndex, 1, "contexts->b250");
     
-    DT_FUNC (vb, seg_initialize)(vb);  // data-type specific initialization
+    // set estimated number of lines
+    vb->lines.len = vb->lines.len    ? vb->lines.len // already set? don't change (eg 2nd pair FASTQ)
+                  : segconf.running  ? 5000 
+                  : segconf.line_len ? MAX_(1, vb->txt_data.len / segconf.line_len)
+                  :                    1;            // eg DT_GENERIC
 
-    // get estimated number of lines, if we haven't already (eg in bam_seg_initialize)
-    if (!vb->lines.len)
-        vb->lines.len = seg_estimate_num_lines(vb);
+    DT_FUNC (vb, seg_initialize)(vb);  // data-type specific initialization
 
     // allocate lines
     uint32_t sizeof_line = DT_FUNC_OPTIONAL (vb, sizeof_zip_dataline, 1)(); // 1 - we waste a little bit of memory to avoid making exceptions throughout the code logic
@@ -890,7 +892,8 @@ void seg_all_data_lines (VBlock *vb)
 
         // Call the segmenter of the data type to segment one line
         const char *next_field = DT_FUNC (vb, seg_txt_line) (vb, field_start, remaining_txt_len, &has_13);
-
+        if (!next_field) next_field = field_start + remaining_txt_len; // DT_GENERIC has no segmenter
+        
         vb->longest_line_len = MAX_(vb->longest_line_len, (next_field - field_start));
         field_start = next_field;
 
@@ -910,6 +913,8 @@ void seg_all_data_lines (VBlock *vb)
             hash_hints_set_2_3 = true;
         }
     }
+
+    if (segconf.running) segconf.line_len = (vb->txt_data.len / vb->line_i) + 1; // get average line length (rounded up) 
 
     DT_FUNC (vb, seg_finalize)(vb); // data-type specific finalization
 

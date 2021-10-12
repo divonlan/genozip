@@ -87,22 +87,22 @@
 
 // Ann field defined: https://pcingola.github.io/SnpEff/adds/VCFannotationformat_v1.0.pdf
 #pragma GENDICT INFO_ANN=DTYPE_1=ANN       // <ID=ANN,Number=.,Type=String,Description="Functional annotations: 'Allele | Annotation | Annotation_Impact | Gene_Name | Gene_ID | Feature_Type | Feature_ID | Transcript_BioType | Rank | HGVS.c | HGVS.p | cDNA.pos / cDNA.length | CDS.pos / CDS.length | AA.pos / AA.length | Distance | ERRORS / WARNINGS / INFO'">
-#pragma GENDICT INFO_A0Allele=DTYPE_1=A0Allele
-#pragma GENDICT INFO_A1Annotation=DTYPE_1=A1Annotation
-#pragma GENDICT INFO_A2Annotation_Impact=DTYPE_1=A2Annotation_Impact
-#pragma GENDICT INFO_A3Gene_Name=DTYPE_1=A3Gene_Name
-#pragma GENDICT INFO_A4Gene_ID=DTYPE_1=A4Gene_ID
-#pragma GENDICT INFO_A5Feature_Type=DTYPE_1=A5Feature_Type
-#pragma GENDICT INFO_A6Feature_ID=DTYPE_1=A6Feature_ID
-#pragma GENDICT INFO_A7Transcript_BioType=DTYPE_1=A7Transcript_BioType
-#pragma GENDICT INFO_A8Rank=DTYPE_1=A8Rank
-#pragma GENDICT INFO_A9HGVS_c=DTYPE_1=A9HGVS_c
-#pragma GENDICT INFO_AaHGVS_p=DTYPE_1=AaHGVS_p
-#pragma GENDICT INFO_AbcDNA=DTYPE_1=AbcDNA
-#pragma GENDICT INFO_AcCDS=DTYPE_1=AcCDS
-#pragma GENDICT INFO_AdAA=DTYPE_1=AdAA
-#pragma GENDICT INFO_AeDistance=DTYPE_1=AeDistance
-#pragma GENDICT INFO_AfErrors=DTYPE_1=AfErrors
+#pragma GENDICT INFO_ANN_Allele=DTYPE_1=@ANN_Allele // note: nice looking tag, as might be displayed in INFO/Lref
+#pragma GENDICT INFO_ANN_Annotation=DTYPE_1=A1Annotation
+#pragma GENDICT INFO_ANN_Annotation_Impact=DTYPE_1=A2Annotation_Impact
+#pragma GENDICT INFO_ANN_Gene_Name=DTYPE_1=A3Gene_Name
+#pragma GENDICT INFO_ANN_Gene_ID=DTYPE_1=A4Gene_ID
+#pragma GENDICT INFO_ANN_Feature_Type=DTYPE_1=A5Feature_Type
+#pragma GENDICT INFO_ANN_Feature_ID=DTYPE_1=A6Feature_ID
+#pragma GENDICT INFO_ANN_Transcript_BioType=DTYPE_1=A7Transcript_BioType
+#pragma GENDICT INFO_ANN_Rank=DTYPE_1=A8Rank
+#pragma GENDICT INFO_ANN_HGVS_c=DTYPE_1=A9HGVS_c
+#pragma GENDICT INFO_ANN_HGVS_p=DTYPE_1=AaHGVS_p
+#pragma GENDICT INFO_ANN_cDNA=DTYPE_1=AbcDNA
+#pragma GENDICT INFO_ANN_CDS=DTYPE_1=AcCDS
+#pragma GENDICT INFO_ANN_AA=DTYPE_1=AdAA
+#pragma GENDICT INFO_ANN_Distance=DTYPE_1=AeDistance
+#pragma GENDICT INFO_ANN_Errors=DTYPE_1=AfErrors
 
 // Added by GATK HaplotypeCaller in a gVCF: https://gatk.broadinstitute.org/hc/en-us/articles/360035531812-GVCF-Genomic-Variant-Call-Format
 #pragma GENDICT INFO_END=DTYPE_1=END           // <ID=END,Number=1,Type=Integer,Description="Stop position of the interval">
@@ -119,7 +119,7 @@
 #pragma GENDICT INFO_MAX_AF=DTYPE_1=MAX_AF     // highest allele frequency observed in any population from 1000 genomes, ESP or gnomAD
 
 #pragma GENDICT INFO_CSQ=DTYPE_1=CSQ           // <ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|Existing_variation|ALLELE_NUM|DISTANCE|STRAND|FLAGS|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|GMAF|AFR_MAF|AMR_MAF|EAS_MAF|EUR_MAF|SAS_MAF|AA_MAF|EA_MAF|ExAC_MAF|ExAC_Adj_MAF|ExAC_AFR_MAF|ExAC_AMR_MAF|ExAC_EAS_MAF|ExAC_FIN_MAF|ExAC_NFE_MAF|ExAC_OTH_MAF|ExAC_SAS_MAF|CLIN_SIG|SOMATIC|PHENO|PUBMED|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info|context|ancestral">
-#pragma GENDICT INFO_CSQ_Allele=DTYPE_1=c0SQ_Allele              // 0
+#pragma GENDICT INFO_CSQ_Allele=DTYPE_1=@CSQ_Allele              // 0 (note: nice looking tag, as might be displayed in INFO/Lref)
 #pragma GENDICT INFO_CSQ_Consequence=DTYPE_1=c1SQ_Consequence
 #pragma GENDICT INFO_CSQ_IMPACT=DTYPE_1=c2SQ_IMPACT
 #pragma GENDICT INFO_CSQ_SYMBOL=DTYPE_1=c3SQ_SYMBOL
@@ -333,7 +333,7 @@ extern const LuftTransLateProp ltrans_props[NUM_VCF_TRANS];
 #define needs_translation(ctx)  (z_dual_coords && (ctx)->luft_trans && \
     ((ltrans_props[(ctx)->luft_trans].upon == TW_REF_ALT_SWITCH && LO_IS_OK_SWITCH (last_ostatus)) || \
      (ltrans_props[(ctx)->luft_trans].upon == TW_ALWAYS         && LO_IS_OK (last_ostatus))        || \
-     (ltrans_props[(ctx)->luft_trans].upon == TW_XSTRAND        && LO_IS_OK (last_ostatus) && *CTX(VCF_oXSTRAND)->last_snip == 'X')))
+     (ltrans_props[(ctx)->luft_trans].upon == TW_XSTRAND        && LO_IS_OK (last_ostatus) && *CTX(VCF_oXSTRAND)->last_snip != '-')))
 
 #define VCF_DICT_ID_ALIASES \
     /*         alias             maps to this ctx  */  \

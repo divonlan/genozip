@@ -30,7 +30,7 @@ typedef struct Context {
     DictId dict_id;            // which dict_id is this MTF dealing with
     Buffer dict;               // tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
 
-    #define num_ctx_words param // b250.param, when it contains b250 data, holds the number of words (len is the number of bytes)
+    #define num_ctx_words param// b250.param, when it contains b250 data, holds the number of words (len is the number of bytes)
     Buffer b250;               // ZIP: During Seg, .data contains 32b indices into context->nodes. In zip_generate_b250_section, 
                                //      the "node indices" are converted into "word indices" - indices into the future 
                                //      context->word_list, in base-250. the number of words is moved from .len to .param. 
@@ -44,7 +44,7 @@ typedef struct Context {
     uint64_t rback_b250_len, rback_local_len, rback_txt_len; // ZIP: data to roll back the last seg
     uint32_t rback_num_singletons, rback_last_txt_index, rback_last_txt_len;
     LastValueType rback_last_value;
-    int64_t rback_last_delta;
+    int64_t rback_last_delta, rback_ctx_spec_param;
     
     // ----------------------------
     // ZIP only fields
@@ -53,12 +53,15 @@ typedef struct Context {
                                // ZIP zfile: singletons are stored here
                                // PIZ: counts are read to here (from SEC_COUNTS) - aligned to the words in word_list/dict
     Buffer ol_nodes;           // ZIP array of CtxNode - overlayed all previous VB dictionaries. char/word indices are into ol_dict.
-#define ston_nodes ol_nodes    // ZIP zfile: nodes of singletons
+    #define ston_nodes ol_nodes// ZIP z_file: nodes of singletons
+    
     Buffer nodes;              // ZIP: array of CtxNode - in this VB that don't exist in ol_nodes. char/word indices are into dict.
                                // PIZ: in kraken's KRAKEN_QNAME context - contains qname_nodes 
                                // ZIP->PIZ zctx.nodes.param is transferred via SectionHeaderCounts.nodes_param if counts_section=true
     Buffer counts;             // ZIP/PIZ: counts of snips (array of int64_t)
     
+    #define ctx_specific_buf word_list  // ZIP: use word_list as a context-specific buf
+
     // Seg: snip (in dictionary) and node_index the last non-empty ("" or NULL) snip evaluated
     const char *last_snip;     // also used in PIZ SAM      
     unsigned last_snip_len;
@@ -98,7 +101,7 @@ typedef struct Context {
                                // vctx: copied from zctx during clone, and used to initialize the size of local_hash
                                //         0 means no VB merged yet with this. if a previous vb had 0 new words, it will still be 1.
     Buffer global_hash;        // global hash table that is populated during merge in zctx and is overlayed to vctx during clone.
-    uint32_t global_hash_prime; // prime number - size of the core (without extensions) has table 
+    uint32_t global_hash_prime;// prime number - size of the core (without extensions) has table 
 
     uint32_t merge_num;        // in vctx: the merge_num when global_hash was cloned. only entries with merge_num <= this number 
                                // are valid. other entries may be added by later merges and should be ignored.
@@ -111,7 +114,15 @@ typedef struct Context {
     uint32_t num_singletons;   // True singletons that appeared exactly once in the entire file
 
     // PIZ-only
-    Buffer word_list;          // PIZ only: word list. an array of CtxWord - listing the snips in dictionary
+    #define history local_hash // PIZ: used if FlagsCtx.store_per_line and also for lookback (for files compressed starting with v12.0.38)
+    #define per_line global_hash // PIZ: data copied from txt_data for fields with textual store_per_line, used in case txt_data line may be dropped
+
+    #define CHAR_INDEX_IN_LOCAL    0xffffffff // PIZ: values that may go into ctx->history
+    #define CHAR_INDEX_IN_DICT     0xfffffffe 
+    #define CHAR_INDEX_IN_PER_LINE 0xfffffffd 
+    #define MIN_CHAR_INDEX_ALT_LOCATION CHAR_INDEX_IN_PER_LINE
+    
+    Buffer word_list;          // PIZ: word list. an array of CtxWord - listing the snips in dictionary ZIP: ctx_specific_buf
     bool semaphore;            // valid within the context of reconstructing a single line. MUST be reset ahead of completing the line.
 
     // ----------------------------

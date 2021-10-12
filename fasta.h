@@ -62,8 +62,6 @@ SPECIAL (FASTA, 1, COMMENT, fasta_piz_special_COMMENT);
 SPECIAL (FASTA, 2, DESC, fasta_piz_special_DESC);
 #define NUM_FASTA_SPECIAL 3
 
-#define FASTA_DICT_ID_ALIASES 
-
 #define FASTA_LOCAL_GET_LINE_CALLBACKS  \
     { DT_FASTA, _FASTA_NONREF, fasta_zip_seq }, 
 

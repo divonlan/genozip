@@ -23,6 +23,14 @@
 #include "contigs.h"
 #include "chrom.h"
 #include "compound.h"
+#include "lookback.h"
+#include "libdeflate/libdeflate.h"
+
+static char pos_buddy_snip[100], pnext_buddy_snip[100], cigar_buddy_snip[100];
+static uint32_t pos_buddy_snip_len, pnext_buddy_snip_len, cigar_buddy_snip_len;
+char taxid_redirection_snip[100], xa_strand_pos_snip[100], XS_snip[30], MC_buddy_snip[30], xa_lookback_snip[30];
+unsigned taxid_redirection_snip_len, xa_strand_pos_snip_len, XS_snip_len, MC_buddy_snip_len, xa_lookback_snip_len;
+WordIndex xa_lookback_strand_word_index = WORD_INDEX_NONE, xa_lookback_rname_word_index = WORD_INDEX_NONE;
 
 // callback function for compress to get data of one line (called by codec_bz2_compress)
 void sam_zip_qual (VBlock *vb, uint64_t vb_line_i, char **line_qual_data, uint32_t *line_qual_len, uint32_t maximum_len) 
@@ -30,14 +38,14 @@ void sam_zip_qual (VBlock *vb, uint64_t vb_line_i, char **line_qual_data, uint32
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
 
     // note: maximum_len might be shorter than the data available if we're just sampling data in zip_assign_best_codec
-    *line_qual_len  = MIN_(maximum_len, dl->qual_data_len);
+    *line_qual_len  = MIN_(maximum_len, dl->QUAL.snip_len);
     
     if (!line_qual_data) return; // only lengths were requested
 
-    *line_qual_data = ENT (char, vb->txt_data, dl->qual_data_start);
+    *line_qual_data = ENT (char, vb->txt_data, dl->QUAL.char_index);
 
     // if QUAL is just "*" (i.e. unavailable) replace it by " " because '*' is a legal PHRED quality value that will confuse PIZ
-    if (dl->qual_data_len == 1 && (*line_qual_data)[0] == '*') 
+    if (dl->QUAL.snip_len == 1 && (*line_qual_data)[0] == '*') 
         *line_qual_data = " "; // pointer to static string
 
     // note - we optimize just before compression - likely the string will remain in CPU cache
@@ -77,9 +85,53 @@ void sam_zip_initialize (void)
     if (z_file->num_txt_components_so_far == 1 && segconf.sam_use_aligner && flag.reference == REF_EXTERNAL) 
         ctx_populate_zf_ctx_from_contigs (gref, SAM_RNAME, ref_get_ctgs (gref)); 
 
-    sam_aux_zip_initialize();
+    seg_prepare_snip_other (SNIP_REDIRECTION, _SAM_TAXID, false, 0, taxid_redirection_snip);
+
+    static SmallContainer xa_strand_pos_con = { .repeats=1, .nitems_lo=2, .items = { { { _OPTION_XA_STRAND } }, { { _OPTION_XA_POS } } } };
+    xa_strand_pos_snip_len = sizeof (xa_strand_pos_snip);
+    container_prepare_snip ((ConstContainerP)&xa_strand_pos_con, 0, 0, xa_strand_pos_snip, &xa_strand_pos_snip_len); 
+
+    seg_prepare_snip_other (SNIP_COPY, _OPTION_AS_i, false, 0, XS_snip);
 
     compound_zip_initialize((DictId)_SAM_QNAME);
+    
+    seg_prepare_snip_other (SNIP_COPY_BUDDY, _SAM_PNEXT,   false, 0, pos_buddy_snip);
+    seg_prepare_snip_other (SNIP_COPY_BUDDY, _SAM_POS,     false, 0, pnext_buddy_snip);
+    seg_prepare_snip_other (SNIP_COPY_BUDDY, _OPTION_MC_Z, false, 0, cigar_buddy_snip);
+    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY_MC, MC_buddy_snip, _SAM_CIGAR);
+
+    seg_prepare_snip_other (SNIP_LOOKBACK, (DictId)_OPTION_XA_LOOKBACK, false, 0, xa_lookback_snip);
+}
+
+static void sam_seg_initialize_0X (VBlockP vb, uint32_t reps_per_line, 
+                                   DidIType lookback_did_i, DidIType rname_did_i, DidIType strand_did_i, DidIType pos_did_i, DidIType cigar_did_i)
+{
+    ContextP lookback_ctx = CTX(lookback_did_i); // invalid if lookback_did_i=DID_I_NONE, that's ok
+    ContextP rname_ctx    = CTX(rname_did_i);
+    ContextP strand_ctx   = CTX(strand_did_i);
+    ContextP pos_ctx      = CTX(pos_did_i);
+    ContextP cigar_ctx    = CTX(cigar_did_i);
+
+    // preallocate these large buffers to save many reallocs
+    if (reps_per_line) {
+        buf_alloc (vb, &rname_ctx ->b250, 0, reps_per_line * vb->lines.len, WordIndex, CTX_GROWTH, "contexts->b250"); // RNAME
+        buf_alloc (vb, &strand_ctx->b250, 0, reps_per_line * vb->lines.len, WordIndex, CTX_GROWTH, "contexts->b250"); // STRAND
+        buf_alloc (vb, &pos_ctx   ->b250, 0, reps_per_line * vb->lines.len, WordIndex, CTX_GROWTH, "contexts->b250"); // POS
+    }
+
+    // note: we need to allocate lookback even if reps_per_line=0, lest an XA shows up despite not being in segconf
+    if (lookback_did_i != DID_I_NONE) {
+        lookback_init (vb, rname_ctx,  STORE_INDEX);
+        lookback_init (vb, strand_ctx, STORE_INDEX);
+        lookback_init (vb, pos_ctx,    STORE_INT);
+
+        rname_ctx->no_stons  = true;  // as we store by index
+        strand_ctx->no_stons = true;
+        lookback_ctx->flags.store = STORE_INT;
+        lookback_ctx->ltype = LT_UINT32;
+    }
+
+    cigar_ctx->no_stons = true; // as we use local to store long CIGARs in sam_seg_0A_cigar_cb
 }
 
 void sam_seg_initialize (VBlock *vb)
@@ -99,17 +151,37 @@ void sam_seg_initialize (VBlock *vb)
     CTX(SAM_STRAND)->ltype      = LT_BITMAP;
     CTX(SAM_GPOS)->ltype        = LT_UINT32;
     CTX(SAM_GPOS)->flags.store  = STORE_INT;
+    CTX(SAM_BUDDY)->ltype       = LT_UINT32;
+    CTX(SAM_BUDDY)->st_did_i    = SAM_QNAME;
+    
+    if (segconf.sam_is_collated) 
+        CTX(SAM_POS)->flags.store_delta = true; // since v12.0.38
 
+    // we sometimes copy from buddy alignments (mates etc), but only in sorted files
+    if (segconf.sam_is_sorted) { // since v12.0.38
+        CTX(SAM_QNAME  )->flags.store_per_line = true; 
+        CTX(SAM_FLAG   )->flags.store_per_line = true;
+        CTX(SAM_POS    )->flags.store_per_line = true;
+        CTX(SAM_PNEXT  )->flags.store_per_line = true;
+        CTX(SAM_TLEN   )->flags.store_per_line = true;
+        CTX(SAM_CIGAR  )->flags.store_per_line = true;
+        CTX(OPTION_MC_Z)->flags.store_per_line = true;
+    }
+
+    if (segconf.sam_buddy_RG)
+        CTX(OPTION_RG_Z)->flags.store_per_line = true;
+    
     CTX(SAM_TOPLEVEL)->no_stons = true; // keep in b250 so it can be eliminated as all_the_same
     CTX(SAM_TOP2BAM)->no_stons  = true;
     CTX(SAM_TOP2FQ)->no_stons   = true;
     CTX(SAM_TOP2FQEX)->no_stons = true;
+    CTX(OPTION_RG_Z)->no_stons  = true;
 
-    CTX(OPTION_BI)->no_stons    = CTX(OPTION_BD)->no_stons = true; // we can't use local for singletons in BD or BI as next_local is used by sam_piz_special_BD_BI to point into BD_BI
-    CTX(OPTION_BI)->st_did_i    = CTX(OPTION_BD)->st_did_i = OPTION_BD_BI; 
+    CTX(OPTION_BI_Z)->no_stons    = CTX(OPTION_BD_Z)->no_stons = true; // we can't use local for singletons in BD or BI as next_local is used by sam_piz_special_BD_BI to point into BD_BI
+    CTX(OPTION_BI_Z)->st_did_i    = CTX(OPTION_BD_Z)->st_did_i = OPTION_BD_BI; 
     CTX(OPTION_BD_BI)->ltype    = LT_SEQUENCE;
-    CTX(OPTION_NM)->flags.store = STORE_INT; // since v12.0.36
-    CTX(OPTION_AS)->flags.store = STORE_INT; // since v12.0.37
+    CTX(OPTION_NM_i)->flags.store = STORE_INT; // since v12.0.36
+    CTX(OPTION_AS_i)->flags.store = STORE_INT; // since v12.0.37
 
     Context *rname_ctx = CTX(SAM_RNAME);
     Context *rnext_ctx = CTX(SAM_RNEXT);
@@ -119,13 +191,11 @@ void sam_seg_initialize (VBlock *vb)
 
     // in --stats, consolidate stats 
     stats_set_consolidation (vb, SAM_SQBITMAP, 4, SAM_NONREF, SAM_NONREF_X, SAM_GPOS, SAM_STRAND);
-    stats_set_consolidation (vb, OPTION_E2, 4, OPTION_2NONREF, OPTION_N2ONREFX, OPTION_2GPOS, OPTION_S2TRAND);
-    stats_set_consolidation (vb, OPTION_SA, 6, OPTION_SA_RNAME, OPTION_SA_POS, OPTION_SA_STRAND, OPTION_SA_CIGAR, OPTION_SA_MAPQ, OPTION_SA_NM);
-    stats_set_consolidation (vb, OPTION_OA, 6, OPTION_OA_RNAME, OPTION_OA_POS, OPTION_OA_STRAND, OPTION_OA_CIGAR, OPTION_OA_MAPQ, OPTION_OA_NM);
-    stats_set_consolidation (vb, OPTION_XA, 6, OPTION_XA_RNAME, OPTION_XA_POS, OPTION_XA_STRAND, OPTION_XA_CIGAR, OPTION_XA_NM, OPTION_XA_STRAND_POS);
-
-    CTX(OPTION_SA_CIGAR)->no_stons = CTX(OPTION_OA_CIGAR)->no_stons = CTX(OPTION_XA_CIGAR)->no_stons = true;
-    CTX(OPTION_SA_CIGAR)->ltype    = CTX(OPTION_OA_CIGAR)->ltype    = CTX(OPTION_XA_CIGAR)->ltype    = LT_TEXT;
+    stats_set_consolidation (vb, OPTION_E2_Z,  4, OPTION_2NONREF, OPTION_N2ONREFX, OPTION_2GPOS, OPTION_S2TRAND);
+    stats_set_consolidation (vb, OPTION_SA_Z,  6, OPTION_SA_RNAME, OPTION_SA_POS, OPTION_SA_STRAND, OPTION_SA_CIGAR, OPTION_SA_MAPQ, OPTION_SA_NM);
+    stats_set_consolidation (vb, OPTION_OA_Z,  6, OPTION_OA_RNAME, OPTION_OA_POS, OPTION_OA_STRAND, OPTION_OA_CIGAR, OPTION_OA_MAPQ, OPTION_OA_NM);
+    stats_set_consolidation (vb, OPTION_XA_Z,  7, OPTION_XA_RNAME, OPTION_XA_POS, OPTION_XA_STRAND, OPTION_XA_CIGAR, OPTION_XA_NM, OPTION_XA_STRAND_POS, OPTION_XA_LOOKBACK);
+    stats_set_consolidation (vb, SAM_OPTIONAL, 1, SAM_MC_Z);
 
     codec_acgt_comp_init (vb);
 
@@ -139,7 +209,22 @@ void sam_seg_initialize (VBlock *vb)
     
     if (segconf.running) 
         segconf.sam_is_sorted = segconf.sam_is_collated = segconf.is_bgi_E9L1C3R10 = segconf.is_illumina_7 = true; // initialize optimistically
-    
+
+    // initial allocations based on segconf data
+    if (!segconf.running && segconf.sam_is_sorted) 
+        buf_alloc_255 (vb, &((VBlockSAMP)vb)->qname_hash, 0, (1 << BUDDY_HASH_BITS), int32_t, 1, "qname_hash");    
+
+    sam_seg_initialize_0X (vb, segconf.XA_reps, (segconf.sam_is_sorted ? OPTION_XA_LOOKBACK : DID_I_NONE), OPTION_XA_RNAME, OPTION_XA_STRAND, OPTION_XA_POS, OPTION_XA_CIGAR);
+    sam_seg_initialize_0X (vb, segconf.SA_reps, DID_I_NONE, OPTION_SA_RNAME, OPTION_SA_STRAND, OPTION_SA_POS, OPTION_SA_CIGAR);
+    sam_seg_initialize_0X (vb, segconf.OA_reps, DID_I_NONE, OPTION_OA_RNAME, OPTION_OA_STRAND, OPTION_OA_POS, OPTION_OA_CIGAR);
+
+    // create XA_STRAND nodes (nodes will be deleted in sam_seg_finalize if not used)
+    ctx_create_node (vb, OPTION_XA_STRAND, cSTR("-"));
+    ctx_create_node (vb, OPTION_XA_STRAND, cSTR("+"));
+
+    // create an "all the same" node for SAM_MC_Z
+    ctx_create_node (vb, SAM_MC_Z, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_CONSUME_MC_Z }, 2);
+
     COPY_TIMER (seg_initialize);
 }
 
@@ -149,28 +234,30 @@ void sam_seg_finalize (VBlockP vb)
     if (!codec_domq_comp_init (vb, SAM_QUAL, sam_zip_qual)) 
         CTX(SAM_QUAL)->ltype  = LT_SEQUENCE; 
 
-    if (!codec_domq_comp_init (vb, OPTION_U2, sam_zip_U2)) 
-        CTX(OPTION_U2)->ltype  = LT_SEQUENCE; 
+    if (!codec_domq_comp_init (vb, OPTION_U2_Z, sam_zip_U2)) 
+        CTX(OPTION_U2_Z)->ltype  = LT_SEQUENCE; 
 
     // top level snip - reconstruction as SAM
     SmallContainer top_level_sam = { 
-        .repeats   = vb->lines.len,
-        .is_toplevel = true,
-        .callback  = true,
-        .nitems_lo = 13,
-        .items     = { { .dict_id = { _SAM_QNAME },    .seperator = "\t" },
-                       { .dict_id = { _SAM_FLAG },     .seperator = "\t" },
-                       { .dict_id = { _SAM_RNAME },    .seperator = "\t" },
-                       { .dict_id = { _SAM_POS },      .seperator = "\t" },
-                       { .dict_id = { _SAM_MAPQ },     .seperator = "\t" },
-                       { .dict_id = { _SAM_CIGAR },    .seperator = "\t" },
-                       { .dict_id = { _SAM_RNEXT },    .seperator = "\t" },
-                       { .dict_id = { _SAM_PNEXT },    .seperator = "\t" },
-                       { .dict_id = { _SAM_TLEN },     .seperator = "\t" },
-                       { .dict_id = { _SAM_SQBITMAP }, .seperator = "\t" },
-                       { .dict_id = { _SAM_QUAL },     .seperator = "\t" },
-                       { .dict_id = { _SAM_OPTIONAL },                   },
-                       { .dict_id = { _SAM_EOL },                        } }
+        .repeats      = vb->lines.len,
+        .is_toplevel  = true,
+        .callback     = true,
+        .filter_items = true,
+        .nitems_lo    = 13,
+        .items        = { { .dict_id = { _SAM_QNAME    }, .separator = "\t" },
+                          { .dict_id = { _SAM_FLAG     }, .separator = "\t" },
+                          { .dict_id = { _SAM_RNAME    }, .separator = "\t" },
+                          { .dict_id = { _SAM_POS      }, .separator = "\t" },
+                          { .dict_id = { _SAM_MAPQ     }, .separator = "\t" },
+                          { .dict_id = { _SAM_CIGAR    }, .separator = "\t" },
+                          { .dict_id = { _SAM_RNEXT    }, .separator = "\t" },
+                          { .dict_id = { _SAM_PNEXT    }, .separator = "\t" },
+                          { .dict_id = { _SAM_TLEN     }, .separator = "\t" },
+                          { .dict_id = { _SAM_SQBITMAP }, .separator = "\t" },
+                          { .dict_id = { _SAM_QUAL     }, .separator = "\t" },
+                          { .dict_id = { _SAM_OPTIONAL },                   },
+                          { .dict_id = { _SAM_EOL      },                   } 
+                        }
     };
     container_seg (vb, CTX(SAM_TOPLEVEL), (ContainerP)&top_level_sam, 0, 0, 0);
 
@@ -179,24 +266,25 @@ void sam_seg_finalize (VBlockP vb)
     // - read_name, cigar, seq and qual - and then go back and fill in the fixed-location fields
     // Translation (a feature of Container): items reconstruct their data and then call a translation function to translate it to the desired format
     SmallContainer top_level_bam = { 
-        .repeats   = vb->lines.len,
-        .is_toplevel = true,
-        .callback  = true,
-        .nitems_lo = 13,
-        .items     = { { .dict_id = { _SAM_RNAME },    .seperator = { CI_TRANS_NOR                    }, SAM2BAM_RNAME    }, // Translate - output word_index instead of string
-                       { .dict_id = { _SAM_POS },      .seperator = { CI_TRANS_NOR | CI_TRANS_MOVE, 1 }, SAM2BAM_POS      }, // Translate - output little endian POS-1
-                       { .dict_id = { _SAM_MAPQ },     .seperator = { CI_TRANS_NOR                    }, SAM2BAM_U8       }, // Translate - textual to binary number
-                       { .dict_id = { _SAM_BAM_BIN },  .seperator = { CI_TRANS_NOR | CI_TRANS_MOVE, 2 }, SAM2BAM_LTEN_U16 }, // Translate - textual to binary number
-                       { .dict_id = { _SAM_FLAG },     .seperator = { CI_TRANS_NOR | CI_TRANS_MOVE, 4 }, SAM2BAM_LTEN_U16 }, // Translate - textual to binary number
-                       { .dict_id = { _SAM_RNEXT },    .seperator = { CI_TRANS_NOR                    }, SAM2BAM_RNAME    }, // Translate - output word_index instead of string
-                       { .dict_id = { _SAM_PNEXT },    .seperator = { CI_TRANS_NOR | CI_TRANS_MOVE, 4 }, SAM2BAM_POS      }, // Translate - output little endian POS-1
-                       { .dict_id = { _SAM_QNAME },    .seperator = { CI_TRANS_NUL                    }                   }, // normal 
-                       { .dict_id = { _SAM_CIGAR },    .seperator = ""                                                    }, // handle in special reconstructor - translate textual to BAM CIGAR format + reconstruct l_read_name, n_cigar_op, l_seq
-                       { .dict_id = { _SAM_TLEN },     .seperator = { CI_TRANS_NOR                    }, SAM2BAM_TLEN     }, // must be after CIGAR bc sam_piz_special_TLEN needs vb->seq_num
-                       { .dict_id = { _SAM_SQBITMAP }, .seperator = "",                                  SAM2BAM_SEQ      }, // Translate - textual format to BAM format
-                       { .dict_id = { _SAM_QUAL },     .seperator = "",                                  SAM2BAM_QUAL     }, // Translate - textual format to BAM format, set block_size
-                       { .dict_id = { _SAM_OPTIONAL }, .seperator = { CI_TRANS_NOR                    }                   }, // up to v11, this had the SAM2BAM_OPTIONAL translator
-                     }
+        .repeats      = vb->lines.len,
+        .is_toplevel  = true,
+        .callback     = true,
+        .filter_items = true,
+        .nitems_lo    = 14,
+        .items        = { { .dict_id = { _SAM_RNAME    }, .separator = { CI_TRANS_NOR                    }, SAM2BAM_RNAME    }, // Translate - output word_index instead of string
+                          { .dict_id = { _SAM_POS      }, .separator = { CI_TRANS_NOR | CI_TRANS_MOVE, 1 }, SAM2BAM_POS      }, // Translate - output little endian POS-1
+                          { .dict_id = { _SAM_MAPQ     }, .separator = { CI_TRANS_NOR                    }, SAM2BAM_U8       }, // Translate - textual to binary number
+                          { .dict_id = { _SAM_BAM_BIN  }, .separator = { CI_TRANS_NOR | CI_TRANS_MOVE, 2 }, SAM2BAM_LTEN_U16 }, // Translate - textual to binary number
+                          { .dict_id = { _SAM_FLAG     }, .separator = { CI_TRANS_NOR | CI_TRANS_MOVE, 4 }, SAM2BAM_LTEN_U16 }, // Translate - textual to binary number
+                          { .dict_id = { _SAM_RNEXT    }, .separator = { CI_TRANS_NOR                    }, SAM2BAM_RNAME    }, // Translate - output word_index instead of string
+                          { .dict_id = { _SAM_PNEXT    }, .separator = { CI_TRANS_NOR | CI_TRANS_MOVE, 4 }, SAM2BAM_POS      }, // Translate - output little endian POS-1
+                          { .dict_id = { _SAM_QNAME    }, .separator = { CI_TRANS_NUL                    }                   }, // normal 
+                          { .dict_id = { _SAM_CIGAR    }, .separator = ""                                                    }, // handle in special reconstructor - translate textual to BAM CIGAR format + reconstruct l_read_name, n_cigar_op, l_seq
+                          { .dict_id = { _SAM_TLEN     }, .separator = { CI_TRANS_NOR                    }, SAM2BAM_TLEN     }, // must be after CIGAR bc sam_piz_special_TLEN needs vb->seq_num
+                          { .dict_id = { _SAM_SQBITMAP }, .separator = "",                                  SAM2BAM_SEQ      }, // Translate - textual format to BAM format
+                          { .dict_id = { _SAM_QUAL     }, .separator = "",                                  SAM2BAM_QUAL     }, // Translate - textual format to BAM format, set block_size
+                          { .dict_id = { _SAM_OPTIONAL }, .separator = { CI_TRANS_NOR                    }                   }, // up to v11, this had the SAM2BAM_OPTIONAL translator
+                        }
     };
 
     // no container wide-prefix, skip l_name with a 4-character prefix
@@ -211,21 +299,23 @@ void sam_seg_finalize (VBlockP vb)
     SmallContainer top_level_fastq = { 
         .repeats     = vb->lines.len,
         .is_toplevel = true,
-        .callback    = true,  // drop non-primary chimeric reads and reads without QUAL data
-        .nitems_lo   = 7,
-        .items       = { { .dict_id = { _SAM_QNAME },    .seperator = "\n"                 }, 
-                         { .dict_id = { _SAM_RNAME },    .seperator = { CI_TRANS_NOR }     }, // needed for reconstructing seq 
-                         { .dict_id = { _SAM_POS },      .seperator = { CI_TRANS_NOR }     }, // needed for reconstructing seq
-                         { .dict_id = { _SAM_FLAG },     .seperator = { CI_TRANS_NOR }, .translator = SAM2FASTQ_FLAG }, // need to know if seq is reverse complemented & if it is R2 ; reconstructs "1" for R1 and "2" for R2
-                         { .dict_id = { _SAM_CIGAR },    .seperator = { CI_TRANS_NOR }     }, // needed for reconstructing seq
-                         { .dict_id = { _SAM_SQBITMAP }, .seperator = "\n",             .translator =SAM2FASTQ_SEQ  }, 
-                         { .dict_id = { _SAM_QUAL },     .seperator = "\n",             .translator =SAM2FASTQ_QUAL }, // also moves fastq "line" to R2 (paired file) if needed
+        .callback    = true,  // drop supplementary alignments and alignments without QUAL data
+        .nitems_lo   = 9,
+        .items       = { { .dict_id = { _SAM_QNAME    }, .separator = "\n"                 }, 
+                         { .dict_id = { _SAM_RNAME    }, .separator = { CI_TRANS_NOR }     }, // needed for reconstructing seq 
+                         { .dict_id = { _SAM_POS      }, .separator = { CI_TRANS_NOR }     }, // needed for reconstructing seq
+                         { .dict_id = { _SAM_PNEXT    }, .separator = { CI_TRANS_NOR }     }, // needed for reconstructing POS (in case of BUDDY)
+                         { .dict_id = { _SAM_FLAG     }, .separator = { CI_TRANS_NOR }, .translator = SAM2FASTQ_FLAG }, // need to know if seq is reverse complemented & if it is R2 ; reconstructs "1" for R1 and "2" for R2
+                         { .dict_id = { _SAM_CIGAR    }, .separator = { CI_TRANS_NOR }     }, // needed for reconstructing seq
+                         { .dict_id = { _SAM_MC_Z     }, .separator = { CI_TRANS_NOR }     }, // consumes OPTION_MC_Z if its on this line, might be needed for buddy CIGAR
+                         { .dict_id = { _SAM_SQBITMAP }, .separator = "\n",             .translator = SAM2FASTQ_SEQ  }, 
+                         { .dict_id = { _SAM_QUAL     }, .separator = "\n",             .translator = SAM2FASTQ_QUAL }, // also moves fastq "line" to R2 (paired file) if needed
                        }
     };
 
     // add a '@' to the description line, use a prefix to add the + line    
     static const char fastq_line_prefix[] = { CON_PREFIX_SEP, CON_PREFIX_SEP, '@', CON_PREFIX_SEP, CON_PREFIX_SEP, CON_PREFIX_SEP, 
-                                              CON_PREFIX_SEP, CON_PREFIX_SEP, CON_PREFIX_SEP, '+', '\n', CON_PREFIX_SEP };
+                                              CON_PREFIX_SEP, CON_PREFIX_SEP, CON_PREFIX_SEP, CON_PREFIX_SEP, CON_PREFIX_SEP, '+', '\n', CON_PREFIX_SEP };
 
     container_seg (vb, CTX(SAM_TOP2FQ), (ContainerP)&top_level_fastq, fastq_line_prefix, sizeof(fastq_line_prefix), 0);
 
@@ -235,18 +325,18 @@ void sam_seg_finalize (VBlockP vb)
         .is_toplevel = true,
         .callback    = true,  // drop non-primary chimeric reads and reads without QUAL data
         .nitems_lo   = 12,
-        .items       = { { .dict_id = { _SAM_QNAME },    .seperator = "\t" }, 
-                         { .dict_id = { _SAM_FLAG },     .seperator = "\t", .translator = SAM2FASTQ_FLAG }, // need to know if seq is reverse complemented & if it is R2 ; reconstructs "1" for R1 and "2" for R2
-                         { .dict_id = { _SAM_RNAME },    .seperator = "\t" },
-                         { .dict_id = { _SAM_POS },      .seperator = "\t" },
-                         { .dict_id = { _SAM_MAPQ },     .seperator = "\t" },
-                         { .dict_id = { _SAM_CIGAR },    .seperator = "\t" },
-                         { .dict_id = { _SAM_RNEXT },    .seperator = "\t" },
-                         { .dict_id = { _SAM_PNEXT },    .seperator = "\t" },
-                         { .dict_id = { _SAM_TLEN },     .seperator = "\t" },
-                         { .dict_id = { _SAM_OPTIONAL }, .seperator = "\n" },
-                         { .dict_id = { _SAM_SQBITMAP }, .seperator = "\n", .translator =SAM2FASTQ_SEQ  }, 
-                         { .dict_id = { _SAM_QUAL },     .seperator = "\n", .translator =SAM2FASTQ_QUAL }, // also moves fastq "line" to R2 (paired file) if needed
+        .items       = { { .dict_id = { _SAM_QNAME    }, .separator = "\t"                               }, 
+                         { .dict_id = { _SAM_FLAG     }, .separator = "\t", .translator = SAM2FASTQ_FLAG }, // need to know if seq is reverse complemented & if it is R2 ; reconstructs "1" for R1 and "2" for R2
+                         { .dict_id = { _SAM_RNAME    }, .separator = "\t"                               },
+                         { .dict_id = { _SAM_POS      }, .separator = "\t"                               },
+                         { .dict_id = { _SAM_MAPQ     }, .separator = "\t"                               },
+                         { .dict_id = { _SAM_CIGAR    }, .separator = "\t"                               },
+                         { .dict_id = { _SAM_RNEXT    }, .separator = "\t"                               },
+                         { .dict_id = { _SAM_PNEXT    }, .separator = "\t"                               },
+                         { .dict_id = { _SAM_TLEN     }, .separator = "\t"                               },
+                         { .dict_id = { _SAM_OPTIONAL }, .separator = "\n"                               },
+                         { .dict_id = { _SAM_SQBITMAP }, .separator = "\n", .translator =SAM2FASTQ_SEQ   }, 
+                         { .dict_id = { _SAM_QUAL     }, .separator = "\n", .translator =SAM2FASTQ_QUAL  }, // also moves fastq "line" to R2 (paired file) if needed
                        }
     };
 
@@ -258,7 +348,7 @@ void sam_seg_finalize (VBlockP vb)
         'R','N','A','M','E',':', CON_PREFIX_SEP, 
         'P','O','S',':', CON_PREFIX_SEP, 
         'M','A','P','Q',':', CON_PREFIX_SEP, 
-        'C','I','G','A','R',':', CON_PREFIX_SEP, 
+        'C','I','G','A','R',':', CON_PREFIX_SEP,
         'R','N','E','X','T',':', CON_PREFIX_SEP, 
         'P','N','E','X','T',':', CON_PREFIX_SEP, 
         'T','L','E','N',':', CON_PREFIX_SEP, 
@@ -268,6 +358,22 @@ void sam_seg_finalize (VBlockP vb)
 
     container_seg (vb, CTX(SAM_TOP2FQEX), (ContainerP)&top_level_fastq_ext, 
                    fastq_ext_line_prefix, sizeof(fastq_ext_line_prefix), 0);
+
+    // finalize Seg configuration parameters    
+    if (segconf.running) {
+        segconf.sam_buddy_RG  = segconf.sam_is_sorted && (CTX(OPTION_RG_Z)->nodes.len >= BUDDY_MIN_RG_COUNT); // it only makes sense to buddy RGs in a sorted (not collated) file, and where there are "a lot" of RGs or else we would be increasing rather than decreasing entropy
+        segconf.sam_cigar_len = 1 + (segconf.sam_cigar_len / vb->lines.len); // set to the average CIGAR len (rounded up)
+        if (segconf.XA_reps) segconf.XA_reps = 1 + (segconf.XA_reps / vb->lines.len); // set to the average number of repeats per line (rounded up)
+        if (segconf.SA_reps) segconf.SA_reps = 1 + (segconf.SA_reps / vb->lines.len); 
+        if (segconf.OA_reps) segconf.OA_reps = 1 + (segconf.OA_reps / vb->lines.len); 
+    }
+
+    // get rid of the XA strand context (nodes added in sam_seg_initialize) if we ended up not having this tag
+    if (!CTX(OPTION_XA_Z)->b250.len) ctx_free_context (CTX(OPTION_XA_STRAND), OPTION_XA_STRAND);
+
+    // case: we have XA but didn't use lookback (because its a non-sorted file) - create an all-the-same XA_LOOKBACK dict
+    if (CTX(OPTION_XA_Z)->b250.len && !CTX(OPTION_XA_Z)->local.len)
+        ctx_create_node (vb, OPTION_XA_LOOKBACK, "0", 1);
 }
 
 bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)
@@ -280,53 +386,51 @@ bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)
         dict_id.num == _SAM_TOP2FQEX  ||
         dict_id.num == _SAM_FLAG      ||
         dict_id.num == _SAM_MAPQ      ||
-        dict_id.num == _OPTION_MAPQ   ||
         dict_id.num == _SAM_QNAME     ||
         dict_id.num == _SAM_OPTIONAL  ||
         dict_id.num == _SAM_EOL       ||
         dict_id.num == _SAM_TAXID     ||
+        dict_id.num == _SAM_BUDDY     ||
 
         // standard tags, see here: https://samtools.github.io/hts-specs/SAMtags.pdf
-        dict_id.num == _OPTION_AM ||
-        dict_id.num == _OPTION_AS ||
-        dict_id.num == _OPTION_CM ||
-        dict_id.num == _OPTION_LB ||
-        dict_id.num == _OPTION_FI ||
-        dict_id.num == _OPTION_H0 ||
-        dict_id.num == _OPTION_H1 ||
-        dict_id.num == _OPTION_H2 ||
-        dict_id.num == _OPTION_MQ ||
-        dict_id.num == _OPTION_NH ||
-        dict_id.num == _OPTION_NM ||
-        dict_id.num == _OPTION_OC ||
-        dict_id.num == _OPTION_PG ||
-        dict_id.num == _OPTION_PQ ||
-        dict_id.num == _OPTION_PU ||
-        dict_id.num == _OPTION_RG ||
-        dict_id.num == _OPTION_SA ||
-        dict_id.num == _OPTION_SM ||
-        dict_id.num == _OPTION_TC ||
-        dict_id.num == _OPTION_UQ ||
+        dict_id.num == _OPTION_AM_i   ||
+        dict_id.num == _OPTION_AS_i   ||
+        dict_id.num == _OPTION_CM_i   ||
+        dict_id.num == _OPTION_LB_Z   ||
+        dict_id.num == _OPTION_FI_i   ||
+        dict_id.num == _OPTION_H0_i   ||
+        dict_id.num == _OPTION_H1_i   ||
+        dict_id.num == _OPTION_H2_i   ||
+        dict_id.num == _OPTION_MQ_i   ||
+        dict_id.num == _OPTION_NH_i   ||
+        dict_id.num == _OPTION_NM_i   ||
+        dict_id.num == _OPTION_OC_Z   ||
+        dict_id.num == _OPTION_PG_Z   ||
+        dict_id.num == _OPTION_PQ_i   ||
+        dict_id.num == _OPTION_PU_Z   ||
+        dict_id.num == _OPTION_RG_Z   ||
+        dict_id.num == _OPTION_SA_Z   ||
+        dict_id.num == _OPTION_SM_i   ||
+        dict_id.num == _OPTION_TC_i   ||
+        dict_id.num == _OPTION_UQ_i   ||
         
         // bwa tags see here: http://bio-bwa.sourceforge.net/bwa.shtml : "SAM ALIGNMENT FORMAT"
-        dict_id.num == _OPTION_X0 ||
-        dict_id.num == _OPTION_X1 ||
-        dict_id.num == _OPTION_XA ||
-        dict_id.num == _OPTION_XN ||
-        dict_id.num == _OPTION_XM ||
-        dict_id.num == _OPTION_XO ||
-        dict_id.num == _OPTION_XG ||
-        dict_id.num == _OPTION_XS ||
-        dict_id.num == _OPTION_XE ||
+        dict_id.num == _OPTION_X0_i   ||
+        dict_id.num == _OPTION_X1_i   ||
+        dict_id.num == _OPTION_XA_Z   ||
+        dict_id.num == _OPTION_XN_i   ||
+        dict_id.num == _OPTION_XM_i   ||
+        dict_id.num == _OPTION_XO_i   ||
+        dict_id.num == _OPTION_XG_i   ||
+        dict_id.num == _OPTION_XS_i   ||
+        dict_id.num == _OPTION_XE_i   ||
         
         // biobambam tags        
-        dict_id.num == _OPTION_STRAND     ||            
 
         // typically smallish - a few thousands
-        dict_id.num == _SAM_RNAME ||
-        dict_id.num == _SAM_RNEXT ||
-        dict_id.num == _OPTION_RNAME      ||
-        dict_id.num == _OPTION_CC;
+        dict_id.num == _SAM_RNAME     ||
+        dict_id.num == _SAM_RNEXT     ||
+        dict_id.num == _OPTION_CC_Z;
 }
 
 static bool sam_seg_get_MD (const char *txt /* points to SEQ field */, uint32_t txt_len, pSTRp(md))
@@ -357,7 +461,7 @@ static bool sam_seg_get_MD (const char *txt /* points to SEQ field */, uint32_t 
     return *md != NULL;
 }
 
-void sam_seg_verify_rname_pos (VBlock *vb, const char *p_into_txt, PosType this_pos)
+void sam_seg_verify_RNAME_POS (VBlock *vb, const char *p_into_txt, PosType this_pos)
 {
     if (segconf.running) return;
 
@@ -384,51 +488,6 @@ void sam_seg_verify_rname_pos (VBlock *vb, const char *p_into_txt, PosType this_
             txt_name, this_pos, vb->chrom_name_len, vb->chrom_name, LN, vb->vblock_i, vb->line_i, vb->chrom_node_index);
 }
 
-// TLEN - 3 cases: 
-// 1. if a non-zero value that is the negative of the previous line - a SNIP_DELTA & "-" (= value negation)
-// 2. else, tlen>0 and pnext_pos_delta>0 and seq_len>0 tlen is stored as SNIP_SPECIAL & tlen-pnext_pos_delta-seq_len
-// 3. else, stored as is
-void sam_seg_tlen_field (VBlockSAM *vb, 
-                         const char *tlen, unsigned tlen_len, // option 1
-                         int64_t tlen_value, // option 2
-                         PosType pnext_pos_delta, int32_t cigar_seq_len)
-{
-    Context *ctx = CTX(SAM_TLEN);
-
-    if (tlen) { // option 1
-        ASSSEG0 (tlen_len, tlen, "empty TLEN");
-
-        bool is_int = str_get_int (tlen, tlen_len, &tlen_value); // note: tlen_value remains 0 if not a valid integer
-        ASSSEG (is_int, tlen, "expecting TLEN to be an integer, but found \"%.*s\"", tlen_len, tlen);
-    }
-
-    unsigned add_bytes = IS_BAM ? sizeof (uint32_t) : tlen_len + 1;
-
-    // case 1
-    if (tlen_value && tlen_value == -ctx->last_value.i) {
-        char snip_delta[2] = { SNIP_SELF_DELTA, '-' };
-        seg_by_ctx (VB, snip_delta, 2, ctx, add_bytes);
-    }
-    // case 2:
-    else if (tlen_value > 0 && pnext_pos_delta > 0 && cigar_seq_len > 0) {
-        char tlen_by_calc[30] = { SNIP_SPECIAL, SAM_SPECIAL_TLEN };
-        unsigned tlen_by_calc_len = str_int (tlen_value - pnext_pos_delta - (int64_t)cigar_seq_len, &tlen_by_calc[2]);
-        seg_by_ctx (VB, tlen_by_calc, tlen_by_calc_len + 2, ctx, add_bytes);
-    }
-    // case default: add as is (option 1)
-    else if (tlen)
-        seg_by_ctx (VB, tlen, tlen_len, ctx, add_bytes);
-
-    // case default: add as is (option 2)
-    else {
-        char snip[20];
-        unsigned snip_len = str_int (tlen_value, snip);
-        seg_by_ctx (VB, snip, snip_len, ctx, add_bytes);
-    }
-
-    ctx->last_value.i = tlen_value;
-}
-
 // Creates a bitmap from seq data - exactly one bit per base that is mapped to the reference (e.g. not for INSERT bases)
 // - Normal SEQ: tracking CIGAR, we compare the sequence to the reference, indicating in a SAM_SQBITMAP whether this
 //   base in the same as the reference or not. In case of REF_INTERNAL, if the base is not already in the reference, we add it.
@@ -439,7 +498,8 @@ void sam_seg_tlen_field (VBlockSAM *vb,
 //   single entry, regardless of the number of entries indicated by CIGAR
 //
 // Best explanation of CIGAR operations: https://davetang.org/wiki/tiki-index.php?page=SAM
-void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), const PosType pos, const char *cigar, 
+void sam_seg_SEQ (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), const PosType pos, const char *cigar, 
+                        uint32_t ref_consumed, uint32_t ref_and_seq_consumed,
                         unsigned recursion_level, uint32_t level_0_seq_len, const char *level_0_cigar, unsigned add_bytes)
 {
     START_TIMER;
@@ -463,11 +523,11 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), const Pos
 
     if (!recursion_level) {
 
-        ASSERTW (seq_len < 1000000, "Warning: sam_seg_seq_field: seq_len=%u is suspiciously high and might indicate a bug", seq_len);
+        ASSERTW (seq_len < 1000000, "Warning: sam_seg_SEQ: seq_len=%u is suspiciously high and might indicate a bug", seq_len);
 
-        buf_alloc (vb, &bitmap_ctx->local, roundup_bits2bytes64 (vb->ref_and_seq_consumed), vb->lines.len * (vb->ref_and_seq_consumed+5) / 8, uint8_t, CTX_GROWTH, "contexts->local"); 
-        buf_extend_bits (&bitmap_ctx->local, vb->ref_and_seq_consumed); 
-        bit_array_set_region (bitmap, bitmap_ctx->next_local, vb->ref_and_seq_consumed); // we initiaze all the bits to "set", and clear as needed.
+        buf_alloc (vb, &bitmap_ctx->local, roundup_bits2bytes64 (ref_and_seq_consumed), vb->lines.len * (ref_and_seq_consumed+5) / 8, uint8_t, CTX_GROWTH, "contexts->local"); 
+        buf_extend_bits (&bitmap_ctx->local, ref_and_seq_consumed); 
+        bit_array_set_region (bitmap, bitmap_ctx->next_local, ref_and_seq_consumed); // we initiaze all the bits to "set", and clear as needed.
 
         buf_alloc (vb, &nonref_ctx->local, seq_len + 3, vb->lines.len * seq_len / 4, uint8_t, CTX_GROWTH, "contexts->local"); 
     
@@ -488,7 +548,7 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), const Pos
     bool no_cigar = cigar[0] == '*' && cigar[1] == 0; // there's no CIGAR. 
 
     RefLock lock;
-    Range *range = no_cigar ? NULL : ref_seg_get_locked_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, vb->ref_consumed, WORD_INDEX_NONE, seq, &lock);
+    Range *range = no_cigar ? NULL : ref_seg_get_locked_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, ref_consumed, WORD_INDEX_NONE, seq, &lock);
 
     // Cases where we don't consider the refernce and just copy the seq as-is
     if (!range) { // 1. (denovo:) this contig defined in @SQ went beyond the maximum genome size of 4B and is thus ignored
@@ -496,10 +556,10 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), const Pos
                   // 3. no cigar - the sequence is not aligned to the reference even if we have RNAME and POS (and its length can exceed the reference contig)
         buf_add (&nonref_ctx->local, seq, seq_len);
         
-        bit_array_clear_region (bitmap, bitmap_ctx->next_local, vb->ref_and_seq_consumed); // note: vb->ref_and_seq_consumed==0 if cigar="*"
-        bitmap_ctx->next_local += vb->ref_and_seq_consumed;
+        bit_array_clear_region (bitmap, bitmap_ctx->next_local, ref_and_seq_consumed); // note: vb->ref_and_seq_consumed==0 if cigar="*"
+        bitmap_ctx->next_local += ref_and_seq_consumed;
 
-        random_access_update_last_pos (VB, DC_PRIMARY, pos + vb->ref_consumed - 1);
+        random_access_update_last_pos (VB, DC_PRIMARY, pos + ref_consumed - 1);
 
         // note: in case of a missing range (which can be the first range in this seq, or a subsequent range), we zero the entire remaining bitmap.
         // this is because, absent a reference, we don't know how much ref is consumed by this missing range.
@@ -514,8 +574,8 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), const Pos
     int subcigar_len=0;
     char cigar_op;
 
-    uint32_t ref_len_this_level = (flag.reference == REF_INTERNAL ? MIN_(vb->ref_consumed, range->last_pos - pos + 1)
-                                                                  : vb->ref_consumed); // possibly going around the end of the chromosome in case of a circular chromosome                                   
+    uint32_t ref_len_this_level = (flag.reference == REF_INTERNAL ? MIN_(ref_consumed, range->last_pos - pos + 1)
+                                                                  : ref_consumed); // possibly going around the end of the chromosome in case of a circular chromosome                                   
 
     uint32_t range_len = (range->last_pos - range->first_pos + 1);
     
@@ -574,7 +634,7 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), const Pos
                 next_ref++;
                 i++;
             }
-            vb->ref_and_seq_consumed -= (i - start_i); // update in case a range in a subsequent recursion level is missing and we need to clear the bitmap
+            ref_and_seq_consumed -= (i - start_i); // update in case a range in a subsequent recursion level is missing and we need to clear the bitmap
             bitmap_ctx->next_local = bit_i;
         } // end if 'M', '=', 'X'
 
@@ -591,10 +651,10 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), const Pos
 
         // for Deletion or Skipping - we move the next_ref ahead
         else if (cigar_op == 'D' || cigar_op == 'N') {
-            unsigned ref_consumed = (flag.reference == REF_INTERNAL ? MIN_(subcigar_len, range_len - next_ref)
-                                                                    : subcigar_len);
-            next_ref     += ref_consumed;
-            subcigar_len -= ref_consumed;
+            unsigned ref_consumed_skip = (flag.reference == REF_INTERNAL ? MIN_(subcigar_len, range_len - next_ref)
+                                                                         : subcigar_len);
+            next_ref     += ref_consumed_skip;
+            subcigar_len -= ref_consumed_skip;
         }
 
         // Hard clippping (H) or padding (P) - nothing much to do
@@ -603,10 +663,10 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), const Pos
         }
 
         else {
-            ASSSEG (cigar_op, vb->last_cigar, "Error in sam_seg_seq_field: End of CIGAR reached but we still have %u reference and %u sequence bases to consume"
-                    "(cigar=%s pos=%"PRId64" recursion_level=%u level_0_cigar=%s level_0_seq_len=%u) (vb->ref_consumed=%d next_ref=%u pos_index=%u ref_len_this_level=%u subcigar_len=%u range=[%.*s %"PRId64"-%"PRId64"])",
+            ASSSEG (cigar_op, vb->last_cigar, "Error in sam_seg_SEQ: End of CIGAR reached but we still have %u reference and %u sequence bases to consume"
+                    "(cigar=%s pos=%"PRId64" recursion_level=%u level_0_cigar=%s level_0_seq_len=%u) (ref_consumed=%d next_ref=%u pos_index=%u ref_len_this_level=%u subcigar_len=%u range=[%.*s %"PRId64"-%"PRId64"])",
                     pos_index + ref_len_this_level - next_ref, seq_len-i,   cigar, pos, recursion_level, level_0_cigar, level_0_seq_len,
-                    vb->ref_consumed, next_ref, pos_index, ref_len_this_level, subcigar_len, range->chrom_name_len, range->chrom_name, range->first_pos, range->last_pos);        
+                    ref_consumed, next_ref, pos_index, ref_len_this_level, subcigar_len, range->chrom_name_len, range->chrom_name, range->first_pos, range->last_pos);        
 
             ASSSEG (false, vb->last_cigar, "Invalid CIGAR op: '%c' (ASCII %u)", cigar_op, cigar_op);        
         }
@@ -633,12 +693,12 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), const Pos
                 pos, cigar, MAX_POS, next_ref, pos_index, ref_len_this_level, subcigar_len, 
                 range->chrom_name_len, range->chrom_name, range->first_pos, range->last_pos);
 
-        vb->ref_consumed -= ref_len_this_level;
-
         char updated_cigar[strlen (next_cigar) + 20];
         if (subcigar_len) sprintf (updated_cigar, "%u%c%s", subcigar_len, cigar_op, next_cigar);
 
-        sam_seg_seq_field (vb, bitmap_did, seq + i, seq_len - i, range->last_pos + 1, subcigar_len ? updated_cigar : next_cigar, recursion_level + 1, level_0_seq_len, level_0_cigar, 0);
+        sam_seg_SEQ (vb, bitmap_did, seq + i, seq_len - i, range->last_pos + 1, subcigar_len ? updated_cigar : next_cigar, 
+                           ref_consumed - ref_len_this_level, ref_and_seq_consumed,
+                           recursion_level + 1, level_0_seq_len, level_0_cigar, 0);
     }
     else { // update RA of the VB with last pos of this line as implied by the CIGAR string
         if (this_seq_last_pos <= range->last_pos) // always the case in INTERNAL and non-circular EXTERNAL 
@@ -657,7 +717,7 @@ void sam_seg_seq_field (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), const Pos
 
         if (flag.show_wrong_md && vb->md_verified && !bitmap_matches_MD) {
             iprintf ("vb=%u line=%"PRIu64" RNAME=%.*s POS=%"PRId64" CIGAR=%s MD=%.*s SEQ=%.*s\n", 
-                    vb->vblock_i, vb->line_i, STRf(vb->chrom_name), pos, vb->last_cigar, vb->last_txt_len(OPTION_MD), last_txt(vb, OPTION_MD), STRf(seq));
+                    vb->vblock_i, vb->line_i, STRf(vb->chrom_name), pos, vb->last_cigar, vb->last_txt_len(OPTION_MD_Z), last_txt(vb, OPTION_MD_Z), STRf(seq));
             bit_array_print_substr ("SEQ match to ref", bitmap, bitmap_start, M_is_ref->nbits, info_stream);
             bit_array_print_substr ("MD implied match", M_is_ref, 0, M_is_ref->nbits, info_stream); 
         }
@@ -673,7 +733,7 @@ align_nonref_local: {
     if (add_chars) buf_add (&nonref_ctx->local, "AAA", add_chars); // add 1 to 3 As
 }
 done:
-    COPY_TIMER (sam_seg_seq_field);
+    COPY_TIMER (sam_seg_SEQ);
 }
 
 static const char *sam_seg_get_kraken (VBlockSAM *vb, const char *next_field, bool *has_kraken, 
@@ -724,7 +784,7 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
     const bool is_bam = IS_BAM;
     Container con = { .repeats=1 };
     char prefixes[MAX_FIELDS * 6 + 3]; // each name is 5 characters per SAM specification, eg "MC:Z:" followed by CON_PREFIX_SEP ; +3 for the initial CON_PREFIX_SEP
-    prefixes[0] = prefixes[1] = prefixes[2] = CON_PREFIX_SEP; // initial CON_PREFIX_SEP follow by seperator of empty Container-wide prefix followed by seperator for empty prefix for translator-only item[0]
+    prefixes[0] = prefixes[1] = prefixes[2] = CON_PREFIX_SEP; // initial CON_PREFIX_SEP follow by separator of empty Container-wide prefix followed by separator for empty prefix for translator-only item[0]
     unsigned prefixes_len=3;
     const char *value, *tag;
     char type;
@@ -747,7 +807,7 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
         con.items[con_nitems(con)] = (ContainerItem) {
             .dict_id    = sam_seg_optional_field (vb, dl, is_bam, tag, type, value, value_len),
             .translator = optional_field_translator ((uint8_t)type), // how to transform the field if reconstructing to BAM
-            .seperator  = { optional_sep_by_type[is_bam][(uint8_t)type], '\t' },
+            .separator  = { optional_sep_by_type[is_bam][(uint8_t)type], '\t' },
         };
         con_inc_nitems (con);
 
@@ -765,9 +825,9 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
 
     uint32_t num_items = con_nitems(con);
     if (num_items > 1) { // we have Optional fields, not just the translator item
-        if (con.items[num_items-1].seperator[0] & 0x80) // is a flag
-            con.items[num_items-1].seperator[0] &= ~(CI_NATIVE_NEXT & ~(uint8_t)0x80); // last Optional field has no tab
-        con.items[num_items-1].seperator[1] = 0;
+        if (con.items[num_items-1].separator[0] & 0x80) // is a flag
+            con.items[num_items-1].separator[0] &= ~(CI_NATIVE_NEXT & ~(uint8_t)0x80); // last Optional field has no tab
+        con.items[num_items-1].separator[1] = 0;
         container_seg (vb, CTX(SAM_OPTIONAL), &con, prefixes, prefixes_len, (is_bam ? 3 : 5) * (num_items-1)); // account for : SAM: "MX:i:" BAM: "MXi"
     }
     else
@@ -778,60 +838,16 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
     return next_field;        
 }
 
-static void sam_seg_cigar_field (VBlockSAM *vb, ZipDataLineSAM *dl, unsigned last_cigar_len,
-                                 const char *seq,  uint32_t seq_data_len, 
-                                 const char *qual, uint32_t qual_data_len)
+void sam_seg_QUAL (VBlockSAM *vb, ZipDataLineSAM *dl, const char *qual_data, uint32_t qual_data_len, unsigned add_bytes)
 {
-    bool qual_is_available = (qual_data_len != 1 || *qual != '*');
-    bool seq_is_available  = (seq_data_len  != 1 || *seq  != '*');
-
-    ASSSEG (!(seq_is_available && *seq=='*'), seq, "seq=%.*s (seq_len=%u), but expecting a missing seq to be \"*\" only (1 character)", seq_data_len, seq, seq_data_len);
-
-    char cigar_snip[last_cigar_len + 50];
-    cigar_snip[0] = SNIP_SPECIAL;
-    cigar_snip[1] = SAM_SPECIAL_CIGAR;
-    unsigned cigar_snip_len=2;
-
-    // case: SEQ is "*" - we add a '-' to the CIGAR
-    if (!seq_is_available) cigar_snip[cigar_snip_len++] = '-';
-
-    // case: CIGAR is "*" - we get the dl->seq_len directly from SEQ or QUAL, and add the length to CIGAR eg "151*"
-    if (!dl->seq_len) { // CIGAR is not available
-        ASSSEG (!seq_data_len || !qual_is_available || seq_data_len==dl->qual_data_len, seq,
-                "Bad line: SEQ length is %u, QUAL length is %u, unexpectedly differ. SEQ=%.*s QUAL=%.*s", 
-                seq_data_len, dl->qual_data_len, seq_data_len, seq, dl->qual_data_len, qual);    
-
-        dl->seq_len = MAX_(seq_data_len, dl->qual_data_len); // one or both might be not available and hence =1
-
-        cigar_snip_len += str_int (dl->seq_len, &cigar_snip[cigar_snip_len]);
-    } 
-    else { // CIGAR is available - just check the seq and qual lengths
-        ASSSEG (!seq_is_available || seq_data_len == dl->seq_len, seq,
-                "Bad line: according to CIGAR, expecting SEQ length to be %u but it is %u. SEQ=%.*s", 
-                dl->seq_len, seq_data_len, seq_data_len, seq);
-
-        ASSSEG (!qual_is_available || qual_data_len == dl->seq_len, qual,
-                "Bad line: according to CIGAR, expecting QUAL length to be %u but it is %u. QUAL=%.*s", 
-                dl->seq_len, dl->qual_data_len, dl->qual_data_len, qual);    
-    }
-
-    memcpy (&cigar_snip[cigar_snip_len], vb->last_cigar, last_cigar_len);
-    cigar_snip_len += last_cigar_len;
-
-    seg_by_did_i (VB, cigar_snip, cigar_snip_len, SAM_CIGAR, last_cigar_len+1); // +1 for \t
-}
-
-void sam_seg_qual_field (VBlockSAM *vb, ZipDataLineSAM *dl, int64_t flag, const char *qual, uint32_t qual_data_len, unsigned add_bytes)
-{
-    dl->qual_data_start = qual - vb->txt_data.data;
-    dl->qual_data_len   = qual_data_len;
+    dl->QUAL = WORD_IN_TXT_DATA (qual_data);
 
     Context *qual_ctx = CTX(SAM_QUAL);
-    qual_ctx->local.len += dl->qual_data_len;
+    qual_ctx->local.len += dl->QUAL.snip_len;
     qual_ctx->txt_len   += add_bytes;
 }
 
-void sam_seg_qname_field (VBlockSAM *vb, STRp(qname), unsigned add_additional_bytes)
+void sam_seg_QNAME (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(qname), unsigned add_additional_bytes)
 {
         // in segconf, identify if this file is collated (each QNAME appears in two or more consecutive lines)
     if (segconf.running) {
@@ -845,16 +861,43 @@ void sam_seg_qname_field (VBlockSAM *vb, STRp(qname), unsigned add_additional_by
         compound_segconf_test (STRa(qname));
     }
 
-    // I tried: SNIP_COPY on collation (with segconf.sam_is_collated) but QNAME.b250 worsening (from all_the_same) outweighs the b250 compression 
-    // improvement of the container items
     ContextP ctx = CTX(SAM_QNAME);
 
-    compound_seg (VB, ctx, STRa(qname), sep_without_space, 0, add_additional_bytes);
+    // I tried: SNIP_COPY on collation (with segconf.sam_is_collated) but QNAME.b250 worsening (from all_the_same) outweighs the b250 compression 
+    // improvement of the container items
+    if (segconf.sam_is_sorted && !segconf.running) {
+        uint32_t hash = libdeflate_adler32 (1971, qname, qname_len) & ((1 << BUDDY_HASH_BITS)-1);
+        int32_t *hash_ent = ENT (int32_t, vb->qname_hash, hash);
+        int32_t buddy_line_i = *hash_ent;
+        
+        ZipDataLineSAM *buddy_dl = DATA_LINE (buddy_line_i); // possibly an invalid address if prev_line_i=-1, that's ok
+
+        // case: we found a previous line with an identical QNAME - that line is now our buddy
+        if (buddy_line_i != -1 && buddy_dl->QNAME.snip_len == qname_len && 
+            !memcmp (qname, ENT (char, vb->txt_data, buddy_dl->QNAME.char_index), qname_len)) {
+
+            seg_add_to_local_uint32 (VB, CTX(SAM_BUDDY), BGEN32 (vb->line_i - buddy_line_i), 0); // add buddy (delta) >= 1
+            
+            seg_by_ctx (VB, (char[]){ SNIP_COPY_BUDDY, SNIP_COPY_BUDDY }, 2, CTX(SAM_QNAME), qname_len + add_additional_bytes); // seg QNAME as copy-from-buddy (an extra SNIP_COPY_BUDDY indicates that reconstruct_from_buddy should set buddy_line_i here)
+            
+            vb->buddy_line_i = buddy_line_i; 
+        }
+
+        // update hash, possibly override existing value - that's ok, we prefer a line higher up (smaller delta)
+        // exception: if current read is Supplamentary and buddy is not, we keep it as is so it buddies with its mate and its additional supps too
+        if (buddy_line_i == -1 || (buddy_dl->FLAG.bits.supplementary) || !(dl->FLAG.bits.supplementary))
+            *hash_ent = vb->line_i; 
+    }
+
+    if (vb->buddy_line_i == -1)
+        compound_seg (VB, ctx, STRa(qname), sep_without_space, 0, add_additional_bytes);
 
     seg_set_last_txt (VB, ctx, STRa(qname), STORE_NONE); // store for kraken
+
+    dl->QNAME = (CtxWord){.char_index = ENTNUM (vb->txt_data, qname), .snip_len = qname_len };
 }
 
-void sam_seg_rname_rnext (VBlockP vb, DidIType did_i, STRp (chrom), unsigned add_bytes)
+void sam_seg_RNAME_RNEXT (VBlockP vb, DidIType did_i, STRp (chrom), unsigned add_bytes)
 {
     bool is_new;
     chrom_seg_ex (VB, did_i, STRa(chrom), 0, NULL, add_bytes, !IS_BAM, &is_new);
@@ -862,6 +905,77 @@ void sam_seg_rname_rnext (VBlockP vb, DidIType did_i, STRp (chrom), unsigned add
     // don't allow adding chroms to a BAM file or a SAM that has SQ lines in the header, but we do allow to add to a headerless SAM.
     ASSSEG (!is_new || !sam_hdr_contigs || segconf.running || (chrom_len==1 && (*chrom=='*' || *chrom=='=')),
             chrom, "contig '%.*s' appears in file, but is missing in the %s header", STRf(chrom), dt_name (vb->data_type));
+}
+
+PosType sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pos_str)/* option 1 */, PosType pos/* option 2 */, 
+                     WordIndex prev_line_chrom, PosType prev_line_pos, unsigned add_bytes)
+{
+    ZipDataLineSAM *buddy_dl = DATA_LINE (vb->buddy_line_i); // an invalid pointer if buddy_line_i is -1
+
+    if (!pos && !str_get_int (STRa(pos_str), &pos)) 
+        goto fallback;
+
+    // in a collated file, we expect that in about half of the lines, the POS will be equal to the previous PNEXT.
+    if (segconf.sam_is_collated && pos != CTX(SAM_POS)->last_value.i && pos == CTX(SAM_PNEXT)->last_value.i) {
+
+        seg_pos_field (VB, SAM_POS, SAM_PNEXT, 0, 0, 0, 0, pos, add_bytes);
+
+        CTX(SAM_POS)->last_delta = pos - prev_line_pos; // always store a self delta, even if we delta'd against PNEXT. This mirrors flags.store_delta we set for PIZ
+    }
+    
+    else if (segconf.sam_is_sorted && vb->buddy_line_i != -1 && buddy_dl->PNEXT == pos) {
+        seg_by_did_i (VB, STRa(pos_buddy_snip), SAM_POS, add_bytes); // copy POS from earlier-line buddy PNEXT
+        ctx_set_last_value (VB, CTX(SAM_POS), pos);
+    }
+
+    else  
+        fallback:
+        pos = seg_pos_field (VB, SAM_POS, SAM_POS, 0, 0, STRa(pos_str), pos, add_bytes);
+    
+    random_access_update_pos (VB, DC_PRIMARY, SAM_POS);
+
+    dl->POS = pos;
+
+    // in segconf, identify if this file is sorted
+    if (segconf.running && segconf.sam_is_sorted) // still sorted, try to find evidence to the contrary
+        if (prev_line_chrom > vb->chrom_node_index || (prev_line_chrom == vb->chrom_node_index && prev_line_pos > pos))
+            segconf.sam_is_sorted = false;
+
+    return pos;
+}
+
+void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pnext_str)/* option 1 */, PosType pnext/* option 2 */, PosType prev_line_pos, unsigned add_bytes)
+{
+    PosType this_pnext=0;
+    ZipDataLineSAM *buddy_dl = DATA_LINE (vb->buddy_line_i); // note: an invalid pointer if buddy_line_i is -1
+
+    if (!pnext) str_get_int (STRa(pnext_str), &pnext);
+
+    if (segconf.sam_is_collated && pnext) {
+
+        // case: 2nd mate - PNEXT = previous line POS 
+        if (pnext == prev_line_pos) {
+            seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_PNEXT_IS_PREV_POS}, 2, CTX(SAM_PNEXT), add_bytes);
+            ctx_set_last_value (VB, CTX(SAM_PNEXT), pnext);
+        }
+
+        // case: supplamentary alignment - PNEXT = previous line PNEXT
+        else if (this_pnext == CTX(SAM_PNEXT)->last_value.i)
+            seg_pos_field (VB, SAM_PNEXT, SAM_PNEXT, 0, 0, 0, 0, pnext, add_bytes);
+
+        else
+            seg_pos_field (VB, SAM_PNEXT, SAM_POS, 0, 0, 0, 0, pnext, add_bytes);
+    }
+
+    else if (segconf.sam_is_sorted && pnext && vb->buddy_line_i != -1 && buddy_dl->POS == pnext) {
+        seg_by_did_i (VB, STRa(pnext_buddy_snip), SAM_PNEXT, add_bytes); // copy PNEXT from earlier-line buddy POS
+        ctx_set_last_value (VB, CTX(SAM_PNEXT), pnext);
+    }
+
+    else
+        pnext = seg_pos_field (VB, SAM_PNEXT, SAM_POS, 0, 0, STRa(pnext_str), pnext, add_bytes);
+
+    dl->PNEXT = pnext;
 }
 
 // test function called from main_load_reference -> txtfile_test_data: returns true if this line as pos=0 (i.e. unaligned)
@@ -884,6 +998,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
 {
     VBlockSAM *vb = (VBlockSAM *)vb_;
     ZipDataLineSAM *dl = DATA_LINE (vb->line_i);
+    vb->buddy_line_i = NO_BUDDY; // initialize
 
     const char *next_field=field_start_line, *field_start;
     unsigned field_len=0;
@@ -899,48 +1014,40 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     // PacBio BAM: {movieName}/{holeNumber}/{qStart}_{qEnd} see here: https://pacbiofileformats.readthedocs.io/en/3.0/BAM.html
     // BGI: E100020409L1C001R0030000234 (E100020409=Flow cell serial number, L1=Lane 1, C001R003=column 1 row 3, 0000234=Tile) Also see: https://github.com/IMB-Computational-Genomics-Lab/BGIvsIllumina_scRNASeq
     GET_NEXT_ITEM (SAM_QNAME);
-    sam_seg_qname_field (vb, STRdid(SAM_QNAME), 1);
+    sam_seg_QNAME (vb, dl, STRdid(SAM_QNAME), 1);
 
-    SEG_NEXT_ITEM (SAM_FLAG);
-    int64_t flag;
-    ASSSEG (str_get_int (STRdid(SAM_FLAG), &flag), field_start, "invalid FLAG field: %.*s", field_len, field_start);
-
+    GET_NEXT_ITEM (SAM_FLAG);
+    sam_seg_FLAG (vb, dl, STRdid(SAM_FLAG), SAM_FLAG_len+1);
+    
     GET_NEXT_ITEM (SAM_RNAME);
 
-    sam_seg_rname_rnext (VB, SAM_RNAME, STRdid(SAM_RNAME), SAM_RNAME_len+1);
+    sam_seg_RNAME_RNEXT (VB, SAM_RNAME, STRdid(SAM_RNAME), SAM_RNAME_len+1);
 
     // note: pos can have a value even if RNAME="*" - this happens if a SAM with a RNAME that is not in the header is converted to BAM with samtools
     GET_NEXT_ITEM (SAM_POS);
-    PosType this_pos = seg_pos_field (VB, SAM_POS, SAM_POS, 0, 0, STRdid(SAM_POS), 0, SAM_POS_len+1);
-    
-    if (SAM_RNAME_len != 1 || *SAM_RNAME_str != '*')
-        sam_seg_verify_rname_pos (VB, SAM_RNAME_str, this_pos);
-    
-    random_access_update_pos (VB, DC_PRIMARY, SAM_POS);
+    PosType this_pos = sam_seg_POS (vb, dl, STRdid (SAM_POS), 0, prev_line_chrom, prev_line_pos, SAM_POS_len+1);
 
-    // in segconf, identify if this file is sorted
-    if (segconf.running && segconf.sam_is_sorted) // still sorted, try to find evidence to the contrary
-        if (prev_line_chrom > vb->chrom_node_index || (prev_line_chrom == vb->chrom_node_index && prev_line_pos > this_pos))
-            segconf.sam_is_sorted = false;
+    if (SAM_RNAME_len != 1 || *SAM_RNAME_str != '*')
+        sam_seg_verify_RNAME_POS (VB, SAM_RNAME_str, this_pos);
 
     SEG_NEXT_ITEM (SAM_MAPQ);
     seg_set_last_txt (VB, CTX(SAM_MAPQ), STRdid(SAM_MAPQ), STORE_NONE);
 
     // CIGAR - we wait to get more info from SEQ and QUAL
     GET_NEXT_ITEM (SAM_CIGAR);
-    sam_analyze_cigar (vb, STRdid(SAM_CIGAR), &dl->seq_len);
+    sam_cigar_analyze (vb, STRdid(SAM_CIGAR), &dl->seq_len);
     vb->last_cigar = SAM_CIGAR_str;
     unsigned last_cigar_len = SAM_CIGAR_len;
     ((char *)vb->last_cigar)[SAM_CIGAR_len] = 0; // nul-terminate CIGAR string
 
     GET_NEXT_ITEM (SAM_RNEXT);
-    sam_seg_rname_rnext (VB, SAM_RNEXT, STRdid(SAM_RNEXT), SAM_RNEXT_len+1);
+    sam_seg_RNAME_RNEXT (VB, SAM_RNEXT, STRdid(SAM_RNEXT), SAM_RNEXT_len+1);
     
     GET_NEXT_ITEM (SAM_PNEXT);
-    seg_pos_field (VB, SAM_PNEXT, SAM_POS, 0, 0, STRdid(SAM_PNEXT), 0, SAM_PNEXT_len+1);
+    sam_seg_PNEXT (vb, dl, STRdid (SAM_PNEXT), 0, prev_line_pos, SAM_PNEXT_len+1);
 
     GET_NEXT_ITEM (SAM_TLEN);
-    sam_seg_tlen_field (vb, STRdid(SAM_TLEN), 0, CTX(SAM_PNEXT)->last_delta, dl->seq_len);
+    sam_seg_TLEN (vb, dl, STRdid(SAM_TLEN), 0, CTX(SAM_PNEXT)->last_delta, dl->seq_len);
 
     // we search forward for MD:Z now, as we will need it for SEQ if it exists
     if (segconf.has_MD && !segconf.running) {
@@ -956,18 +1063,17 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
             vb->last_cigar, dl->seq_len, SAM_SEQ_len, SAM_SEQ_len, SAM_SEQ_str);
 
     // calculate diff vs. reference (denovo or loaded)
-    uint32_t save_ref_and_seq_consumed = vb->ref_and_seq_consumed; // save in case we have E2
-    sam_seg_seq_field (vb, SAM_SQBITMAP, STRdid(SAM_SEQ), this_pos, vb->last_cigar, 0, field_len, vb->last_cigar, SAM_SEQ_len+1);
-    vb->ref_and_seq_consumed = save_ref_and_seq_consumed; // restore
+    sam_seg_SEQ (vb, SAM_SQBITMAP, STRdid(SAM_SEQ), this_pos, vb->last_cigar, vb->ref_consumed, vb->ref_and_seq_consumed, 
+                       0, field_len, vb->last_cigar, SAM_SEQ_len+1);
 
     GET_MAYBE_LAST_ITEM (SAM_QUAL);
-    sam_seg_qual_field (vb, dl, flag, STRdid(SAM_QUAL), SAM_QUAL_len + 1); 
+    sam_seg_QUAL (vb, dl, STRdid(SAM_QUAL), SAM_QUAL_len + 1); 
 
     // finally we can seg CIGAR now
-    sam_seg_cigar_field (vb, dl, last_cigar_len, STRdid(SAM_SEQ), STRdid(SAM_QUAL));
+    sam_cigar_seg_textual (vb, dl, last_cigar_len, STRdid(SAM_SEQ), STRdid(SAM_QUAL));
     
     // add BIN so this file can be reconstructed as BAM
-    bam_seg_bin (vb, 0, (uint16_t)flag, this_pos);
+    bam_seg_BIN (vb, dl, 0, this_pos);
 
     // OPTIONAL fields - up to MAX_FIELDS of them
     next_field = sam_seg_optional_all (vb, dl, next_field, len, has_13, separator, 0);

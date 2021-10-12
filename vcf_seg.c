@@ -145,21 +145,15 @@ void vcf_seg_initialize (VBlock *vb_)
     }
 
     // evaluate oSTATUS and COORDS, XSTRAND snips in order, as we rely on their indices being identical to the order of these arrays
-    for (int i=0; i < NUM_LO_STATUSES; i++) {
-        WordIndex node_index = ctx_evaluate_snip_seg (vb_, CTX(VCF_oSTATUS), dvcf_status_names[i], strlen (dvcf_status_names[i]), NULL);
-        ctx_decrement_count (vb_, CTX(VCF_oSTATUS), node_index);
-    }
+    for (int i=0; i < NUM_LO_STATUSES; i++) 
+        ctx_create_node (VB, VCF_oSTATUS, dvcf_status_names[i], strlen (dvcf_status_names[i]));
 
-    for (int i=0; i < NUM_COORDS; i++) {
-        WordIndex node_index = ctx_evaluate_snip_seg (vb_, CTX(VCF_COORDS), coords_name(i), strlen (coords_name(i)), NULL);
-        ctx_decrement_count (vb_, CTX(VCF_COORDS), node_index);
-    }
+    for (int i=0; i < NUM_COORDS; i++) 
+        ctx_create_node (VB, VCF_COORDS, coords_name(i), strlen (coords_name(i)));
 
-    ctx_evaluate_snip_seg (vb_, CTX(VCF_oXSTRAND), "-", 1, NULL);
-    ctx_decrement_count (vb_, CTX(VCF_oXSTRAND), 0);
-
-    ctx_evaluate_snip_seg (vb_, CTX(VCF_oXSTRAND), "X", 1, NULL);
-    ctx_decrement_count (vb_, CTX(VCF_oXSTRAND), 1);
+    ctx_create_node (VB, VCF_oXSTRAND, cSTR("-")); // is_xstrand=false
+    ctx_create_node (VB, VCF_oXSTRAND, cSTR("0")); // is_xstrand=true - REF and ALTs where rev-comped in place
+    ctx_create_node (VB, VCF_oXSTRAND, cSTR("1")); // is_xstrand=true - REF and ALTs were rotated one base to the left due to re-left-anchoring
 
     // create a nodes and dict entry for LIFT_REF, COPYSTAT and COPYPOS - these become "all_the_same" so no need to seg them explicitly hereinafter
     seg_by_did_i (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_LIFT_REF }), 2, VCF_LIFT_REF, 0); 
@@ -189,18 +183,18 @@ void vcf_seg_finalize (VBlockP vb_)
         .callback     = (vb->use_special_sf == USE_SF_YES) || z_dual_coords, // cases where we need a callback
         .filter_items = true,
         .nitems_lo    = 12,                                                                 
-        .items        = { { .dict_id = { _VCF_COORDS },  .seperator = "\t" }, // suppressed by vcf_piz_filter unless --show-dvcf                                   
-                          { .dict_id = { _VCF_oSTATUS }, .seperator = "\t" }, // suppressed by vcf_piz_filter unless --show-dvcf                                   
-                          { .dict_id = { _VCF_CHROM },   .seperator = "\t" },
-                          { .dict_id = { _VCF_POS },     .seperator = "\t" },
-                          { .dict_id = { _VCF_ID },      .seperator = "\t" },
-                          { .dict_id = { _VCF_REFALT },  .seperator = "\t" },
-                          { .dict_id = { _VCF_QUAL },    .seperator = "\t" },
-                          { .dict_id = { _VCF_FILTER },  .seperator = "\t" },
-                          { .dict_id = { _VCF_INFO },    .seperator = "\t" }, // in dual-coordinates, contains INFO/LIFTOVER or INFO/REJTOVER that reconstructs oCHROM, oPOS, oREF, oXSTRAND
-                          { .dict_id = { _VCF_FORMAT },  .seperator = "\t" },
-                          { .dict_id = { _VCF_SAMPLES }, .seperator = ""   },
-                          { .dict_id = { _VCF_EOL },     .seperator = ""   } },
+        .items        = { { .dict_id = { _VCF_COORDS },  .separator = "\t" }, // suppressed by vcf_piz_filter unless --show-dvcf                                   
+                          { .dict_id = { _VCF_oSTATUS }, .separator = "\t" }, // suppressed by vcf_piz_filter unless --show-dvcf                                   
+                          { .dict_id = { _VCF_CHROM },   .separator = "\t" },
+                          { .dict_id = { _VCF_POS },     .separator = "\t" },
+                          { .dict_id = { _VCF_ID },      .separator = "\t" },
+                          { .dict_id = { _VCF_REFALT },  .separator = "\t" },
+                          { .dict_id = { _VCF_QUAL },    .separator = "\t" },
+                          { .dict_id = { _VCF_FILTER },  .separator = "\t" },
+                          { .dict_id = { _VCF_INFO },    .separator = "\t" }, // in dual-coordinates, contains INFO/LIFTOVER or INFO/REJTOVER that reconstructs oCHROM, oPOS, oREF, oXSTRAND
+                          { .dict_id = { _VCF_FORMAT },  .separator = "\t" },
+                          { .dict_id = { _VCF_SAMPLES }, .separator = ""   },
+                          { .dict_id = { _VCF_EOL },     .separator = ""   } },
     };
 
     Context *ctx = CTX(VCF_TOPLEVEL);
@@ -224,19 +218,19 @@ void vcf_seg_finalize (VBlockP vb_)
         .callback     = (vb->use_special_sf == USE_SF_YES) || z_dual_coords, // cases where we need a callback
         .filter_items = true,
         .nitems_lo    = 13,                                                                 
-        .items        = { { .dict_id = { _VCF_COORDS },  .seperator = "\t" }, // suppressed by vcf_piz_filter unless --show-dvcf                                   
-                          { .dict_id = { _VCF_oSTATUS }, .seperator = "\t" }, // suppressed by vcf_piz_filter unless --show-dvcf                                   
-                          { .dict_id = { _VCF_oCHROM },  .seperator = "\t" },
-                          { .dict_id = { _VCF_oPOS },    .seperator = "\t" },
-                          { .dict_id = { _VCF_ID },      .seperator = "\t" },
-                          { .dict_id = { _VCF_oREFALT }, .seperator = "\t" },
-                          { .dict_id = { _VCF_QUAL },    .seperator = "\t" },
-                          { .dict_id = { _VCF_FILTER },  .seperator = "\t" },
-                          { .dict_id = { _VCF_POS },     .seperator = { CI_TRANS_NOR } }, // consume POS before INFO, in case we have INFO/END
-                          { .dict_id = { _VCF_INFO },    .seperator = "\t" }, // in dual-coordinates, contains INFO/LIFTOVER or INFO/REJTOVER that reconstructs oCHROM, oPOS, oREF, oXSTRAND
-                          { .dict_id = { _VCF_FORMAT },  .seperator = "\t" },
-                          { .dict_id = { _VCF_SAMPLES }, .seperator = ""   },
-                          { .dict_id = { _VCF_EOL },     .seperator = ""   } }
+        .items        = { { .dict_id = { _VCF_COORDS },  .separator = "\t" }, // suppressed by vcf_piz_filter unless --show-dvcf                                   
+                          { .dict_id = { _VCF_oSTATUS }, .separator = "\t" }, // suppressed by vcf_piz_filter unless --show-dvcf                                   
+                          { .dict_id = { _VCF_oCHROM },  .separator = "\t" },
+                          { .dict_id = { _VCF_oPOS },    .separator = "\t" },
+                          { .dict_id = { _VCF_ID },      .separator = "\t" },
+                          { .dict_id = { _VCF_oREFALT }, .separator = "\t" },
+                          { .dict_id = { _VCF_QUAL },    .separator = "\t" },
+                          { .dict_id = { _VCF_FILTER },  .separator = "\t" },
+                          { .dict_id = { _VCF_POS },     .separator = { CI_TRANS_NOR } }, // consume POS before INFO, in case we have INFO/END
+                          { .dict_id = { _VCF_INFO },    .separator = "\t" }, // in dual-coordinates, contains INFO/LIFTOVER or INFO/REJTOVER that reconstructs oCHROM, oPOS, oREF, oXSTRAND
+                          { .dict_id = { _VCF_FORMAT },  .separator = "\t" },
+                          { .dict_id = { _VCF_SAMPLES }, .separator = ""   },
+                          { .dict_id = { _VCF_EOL },     .separator = ""   } }
     };
 
     if (vb->vb_coords == DC_BOTH)
@@ -366,7 +360,7 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
 
         if (possibly_rename) vcf_tags_add_tag (vb, ctxs[i], DTYPE_VCF_FORMAT, sf_names[i], sf_name_lens[i]);
 
-        format_mapper.items[i] = (ContainerItem) { .dict_id = dict_id, .seperator = {':'} };
+        format_mapper.items[i] = (ContainerItem) { .dict_id = dict_id, .separator = {':'} };
 
         // case: GL_to_PL:  FORMAT field snip is changed here to GL. Note: dict_id remains _FORMAT_GL.
         // so that vcf_seg_one_sample treats it as GL, and converts it to PL.
@@ -436,7 +430,7 @@ static uint32_t vcf_seg_copy_line_to_reject (VBlockVCF *vb, const char *field_st
     ASSERT (last, "Line has no newline: %.*s", remaining_txt_len, field_start_line);
 
     uint32_t line_len = last - field_start_line + 1;
-    buf_add_more (vb, &vb->lo_rejects[vb->line_coords-1], field_start_line, line_len, "lo_rejects");
+    buf_add_more (VB, &vb->lo_rejects[vb->line_coords-1], field_start_line, line_len, "lo_rejects");
 
     return line_len;
 }
