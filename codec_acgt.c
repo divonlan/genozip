@@ -105,7 +105,6 @@ bool codec_acgt_compress (VBlock *vb, SectionHeader *header,
 
     // option 1 - pack contiguous data
     if (uncompressed) {
-START_TIMER;        
         // overlay the NONREF.local to NONREF_X.local to avoid needing more memory, as NONREF.local is not needed after packing
         buf_set_overlayable (&nonref_ctx->local);
         buf_overlay (vb, &nonref_x_ctx->local, &nonref_ctx->local, "contexts->local");
@@ -115,13 +114,10 @@ START_TIMER;
         // calculate the exception in-place in NONREF.local also overlayed to NONREF_X.local
         for (uint32_t i=0; i < *uncompressed_len; i++) \
             ((uint8_t*)uncompressed)[i] = (uint8_t)(uncompressed[i]) ^ acgt_exceptions[(uint8_t)(uncompressed[i])];
-COPY_TIMER (tmp1);
     }
 
     // option 2 - callback to get each line
     else if (callback) {
-START_TIMER;        
-
         buf_alloc (vb, &nonref_x_ctx->local, 0, *uncompressed_len, uint8_t, CTX_GROWTH, "contexts->local");
         for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
 
@@ -135,7 +131,6 @@ START_TIMER;
             for (uint32_t i=0; i < data_1_len; i++) 
                 NEXTENT (uint8_t, nonref_x_ctx->local) = (uint8_t)(data_1[i]) ^ acgt_exceptions[(uint8_t)(data_1[i])];
         }
-COPY_TIMER (tmp2);
     }
     else 
         ABORT0 ("Error in codec_acgt_compress_nonref: neither src_data nor callback is provided");

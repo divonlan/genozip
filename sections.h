@@ -113,12 +113,12 @@ typedef union SectionFlags {
         StoreType store          : 2; // after reconstruction of a snip, store it in ctx.last_value
         uint8_t paired           : 1; // reconstruction of this context requires access to the same section from the same vb of the previous (paired) file
         #define v8_container     store_delta  // in v8 files - if the context contains 1 or more containers
-        uint8_t store_delta      : 1; // introduced v12.0.38: after reconstruction of a snip, store last_delta. notes: 1. last_delta also stored in case of a delta snip. 2. if using this, store=STORE_INT must be set.
+        uint8_t store_delta      : 1; // introduced v12.0.39: after reconstruction of a snip, store last_delta. notes: 1. last_delta also stored in case of a delta snip. 2. if using this, store=STORE_INT must be set.
         uint8_t copy_local_param       : 1; // copy ctx.b250/local.param from SectionHeaderCtx.param
         uint8_t all_the_same     : 1; // SEC_B250: the b250 data contains only one element, and should be used to reconstruct any number of snips from this context
         #define ctxs_dot_is_0    ctx_specific // used in _FORMAT_GT_SHARK_GT between 10.0.3 and 10.0.8
         uint8_t ctx_specific     : 1; // flag specific a context (introduced 10.0.3)
-        uint8_t store_per_line   : 1; // introduced v12.0.38: store last_txt for each line - in context->txt_per_prev        
+        uint8_t store_per_line   : 1; // introduced v12.0.39: store last_txt for each line - in context->txt_per_prev        
     } ctx;
 
     struct FlagsRandomAccess {
