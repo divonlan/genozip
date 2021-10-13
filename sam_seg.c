@@ -28,8 +28,8 @@
 
 static char pos_buddy_snip[100], pnext_buddy_snip[100], cigar_buddy_snip[100];
 static uint32_t pos_buddy_snip_len, pnext_buddy_snip_len, cigar_buddy_snip_len;
-char taxid_redirection_snip[100], xa_strand_pos_snip[100], XS_snip[30], MC_buddy_snip[30], xa_lookback_snip[30];
-unsigned taxid_redirection_snip_len, xa_strand_pos_snip_len, XS_snip_len, MC_buddy_snip_len, xa_lookback_snip_len;
+char taxid_redirection_snip[100], xa_strand_pos_snip[100], XS_snip[30], XM_snip[30], MC_buddy_snip[30], xa_lookback_snip[30];
+unsigned taxid_redirection_snip_len, xa_strand_pos_snip_len, XS_snip_len, XM_snip_len, MC_buddy_snip_len, xa_lookback_snip_len;
 WordIndex xa_lookback_strand_word_index = WORD_INDEX_NONE, xa_lookback_rname_word_index = WORD_INDEX_NONE;
 
 // callback function for compress to get data of one line (called by codec_bz2_compress)
@@ -92,6 +92,7 @@ void sam_zip_initialize (void)
     container_prepare_snip ((ConstContainerP)&xa_strand_pos_con, 0, 0, xa_strand_pos_snip, &xa_strand_pos_snip_len); 
 
     seg_prepare_snip_other (SNIP_COPY, _OPTION_AS_i, false, 0, XS_snip);
+    seg_prepare_snip_other (SNIP_COPY, _OPTION_NM_i, false, 0, XM_snip);
 
     compound_zip_initialize((DictId)_SAM_QNAME);
     

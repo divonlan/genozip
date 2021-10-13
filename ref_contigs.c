@@ -38,7 +38,7 @@ static void BGEN_ref_contigs (Buffer *contigs_buf)
     };
 }
 
-// in the case of data compressed with the aligner (FASTQ or unaligned SAM) in might not have all the contigs in CHROM
+// in the case of data compressed with the aligner (FASTQ or unaligned SAM) it might not have all the contigs in CHROM
 // (we might have some, eg in case of a SAM with mixed aligned and unaligned reads). If this is REF_EXT_STORE, the a 
 // SEC_REF_CONTIGS section is created, which refers to the CHROM dict for names, hence we add these chroms. 
 void ref_contigs_populate_aligned_chroms (void)

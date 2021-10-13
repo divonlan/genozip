@@ -523,6 +523,8 @@ static void sam_seg_NM_field (VBlockSAM *vb, STRp(field), unsigned add_bytes)
     
     if (segconf.running && NM > 1) segconf.NM_is_integer = true; // we found evidence of integer NM
 
+    ctx_set_last_value (VB, CTX (OPTION_NM_i), ((LastValueType){ .i = NM }));
+
     if (segconf.NM_is_integer && NM == vb->mismatch_bases)
         seg_by_did_i (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'i'}, 3, OPTION_NM_i, add_bytes); 
 
@@ -549,6 +551,31 @@ SPECIAL_RECONSTRUCTOR (bam_piz_special_NM)
         RECONSTRUCT_INT (new_value->i);
 
     return true; // has new value
+}
+
+// -------------------------------------------------------------------------------------------------------------------
+// XM:i Case 1: BWA: "Number of mismatches in the alignment" 
+//      Case 2: IonTorrent TMAP: "The target length, that is, the number of reference bases spanned by the alignment." 
+// -------------------------------------------------------------------------------------------------------------------
+
+static void sam_seg_XM_field (VBlockSAM *vb, STRp(xm_str), unsigned add_bytes)
+{
+    int64_t xm;
+    ContextP NM_ctx;
+    if (!str_get_int (STRa(xm_str), &xm))
+        goto fallback;
+    
+    // check for BWA case - XM is similar to NM - in our test file > 99% identical to NM.
+    if (ctx_has_value_in_line (vb, _OPTION_NM_i, &NM_ctx) && xm == NM_ctx->last_value.i) 
+        seg_by_did_i (VB, STRa(XM_snip), OPTION_XM_i, add_bytes); // copy from NM
+    
+    // check IonTorrent TMAP case - XM is supposed to be ref_consumed
+    else if (xm == vb->ref_consumed)                              
+        seg_by_did_i (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_REF_CONSUMED }, 2, OPTION_XM_i, add_bytes);
+        
+    else
+        fallback:
+        seg_by_did_i (VB, STRa(xm_str), OPTION_XM_i, add_bytes);  // normal seg
 }
 
 // ----------------------------------------------------------------------------------------------
@@ -604,17 +631,17 @@ static inline void sam_seg_XS_field (VBlockSAM *vb, STRp(xs_str), unsigned add_b
     int32_t xs = 0;
     if (ctx_has_value_in_line_(VB, CTX(OPTION_AS_i)) && str_get_int_range32 (STRa(xs_str), 0, 10000, &xs) && 
         xs == CTX(OPTION_AS_i)->last_value.i) 
-        seg_by_ctx (VB, STRa(XS_snip), CTX(OPTION_XS_i), add_bytes);
+        seg_by_did_i (VB, STRa(XS_snip), OPTION_XS_i, add_bytes);
 
     else if (xs) {
         // store a special snip with delta
         char new_snip[20] = { SNIP_SPECIAL, SAM_SPECIAL_REF_CONSUMED };
         unsigned delta_len = str_int (vb->ref_consumed-xs, &new_snip[2]);
 
-        seg_by_ctx (VB, new_snip, delta_len+2, CTX (OPTION_XS_i), add_bytes); 
+        seg_by_did_i (VB, new_snip, delta_len+2, OPTION_XS_i, add_bytes); 
     }
     else
-        seg_by_ctx (VB, STRa(xs_str),  CTX(OPTION_XS_i), add_bytes); 
+        seg_by_did_i (VB, STRa(xs_str),  OPTION_XS_i, add_bytes); 
 }
 
 // MQ:i is often very similar to MAPQ
@@ -833,6 +860,8 @@ DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_AS_i: sam_seg_AS_field (vb, STRa(value), add_bytes); break;
 
         case _OPTION_XS_i: sam_seg_XS_field (vb, STRa(value), add_bytes); break;
+
+        case _OPTION_XM_i: sam_seg_XM_field (vb, STRa(value), add_bytes); break;
 
         case _OPTION_MQ_i: sam_seg_MQ_field (vb, dl, STRa(value), add_bytes); break;
 

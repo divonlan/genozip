@@ -98,11 +98,12 @@
 // bwa tags see here: http://bio-bwa.sourceforge.net/bwa.shtml : "SAM ALIGNMENT FORMAT"
 #pragma GENDICT OPTION_X0_i=DTYPE_2=X0:i   // Number of best hits
 #pragma GENDICT OPTION_X1_i=DTYPE_2=X1:i   // Number of suboptimal hits found by BWA
+#pragma GENDICT OPTION_XC_i=DTYPE_2=XC:i   // ???
 #pragma GENDICT OPTION_XN_i=DTYPE_2=XN:i   // Number of ambiguous bases in the referenece
 #pragma GENDICT OPTION_XM_i=DTYPE_2=XM:i   // Number of mismatches in the alignment
 #pragma GENDICT OPTION_XO_i=DTYPE_2=XO:i   // Number of gap opens
 #pragma GENDICT OPTION_XG_i=DTYPE_2=XG:i   // Number of gap extentions
-// type not known #pragma GENDICT OPTION_XT_?=DTYPE_2=XT:?   // Unique/Repeat/N/Mate-sw
+#pragma GENDICT OPTION_XT_A=DTYPE_2=XT:A   // Unique/Repeat/N/Mate-sw
 #pragma GENDICT OPTION_XS_i=DTYPE_2=XS:i   // Suboptimal alignment score
 #pragma GENDICT OPTION_XE_i=DTYPE_2=XE:i   // Number of supporting seeds
 // type not known #pragma GENDICT OPTION_XF_?=DTYPE_2=XF:?  // Support from forward/reverse alignment  

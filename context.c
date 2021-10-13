@@ -476,15 +476,16 @@ void ctx_clone (VBlock *vb)
         
         ctx_init_iterator (vctx);
 
+        // note: chrom2ref_map is protected by ZCTX[CHROM]->mutex
+        if (chrom_2ref_seg_is_needed(did_i) && z_file->chrom2ref_map.len) {
+            buf_set_overlayable (&z_file->chrom2ref_map);
+            buf_overlay (vb, &vb->ol_chrom2ref_map, &z_file->chrom2ref_map, "ol_chrom2ref_map");
+        }
+
         mutex_unlock (zctx->mutex);
     }
 
     vb->num_contexts = z_num_contexts;
-
-    if ((flag.reference & REF_ZIP_LOADED) && z_file->chrom2ref_map.len) {
-        buf_set_overlayable (&z_file->chrom2ref_map);
-        buf_overlay (vb, &vb->ol_chrom2ref_map, &z_file->chrom2ref_map, "ol_chrom2ref_map");
-    }
     
     COPY_TIMER (ctx_clone);
 }
@@ -785,6 +786,7 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *vb, unsigned did_i)
         if (is_new) {
             vb_node->word_index = zf_node->word_index = base250_encode (zf_node_index);
 
+            // note: chrom2ref_map is protected by ZCTX[CHROM]->mutex
             if (chrom_2ref_seg_is_needed(did_i)) 
                 *ENT (WordIndex, z_file->chrom2ref_map, zf_node_index) = *ENT (WordIndex, vb->chrom2ref_map, i);
 

@@ -136,6 +136,8 @@ void chrom_2ref_load (Reference ref)
 static void chrom_2ref_seg_set (VBlockP vb, WordIndex chrom_node_index, WordIndex ref_index)
 {
     WordIndex index = chrom_node_index - vb->ol_chrom2ref_map.len;
+    ASSERT (index >= 0, "Expecting chrom_node_index=%d >= vb->ol_chrom2ref_map.len=%"PRIu64, 
+            chrom_node_index, vb->ol_chrom2ref_map.len);
 
     buf_alloc_255 (vb, &vb->chrom2ref_map, 0, index+1, WordIndex, CTX_GROWTH, "chrom2ref_map");
 

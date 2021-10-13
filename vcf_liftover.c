@@ -572,7 +572,7 @@ void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, ContextP ctx, STRp (value))
     Context *prim_ctx = vcf_lo_seg_lo_snip (vb, info_prim_snip, info_prim_snip_len, _INFO_PRIM, 0); // 0 as this container is not reconstructed in Primary coords
     
     if (ctx->dict_id.num == _INFO_LUFT) luft_ctx->last_txt_len = value_len;
-    else                                       prim_ctx->last_txt_len = value_len;
+    else                                prim_ctx->last_txt_len = value_len;
 }
 
 // Segging a Primary or Luft dual-coordinates VCF file, INFO/Prej or Lrej field:

@@ -198,7 +198,7 @@ static inline char sam_seg_bam_type_to_sam_type (char type)
 
 extern DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam, const char *tag, char bam_type, const char *value, unsigned value_len);
 
-extern char taxid_redirection_snip[100], xa_strand_pos_snip[100], XS_snip[30], MC_buddy_snip[30], xa_lookback_snip[30];
-extern unsigned taxid_redirection_snip_len, xa_strand_pos_snip_len, XS_snip_len, MC_buddy_snip_len, xa_lookback_snip_len;
+extern char taxid_redirection_snip[100], xa_strand_pos_snip[100], XS_snip[30], XM_snip[30], MC_buddy_snip[30], xa_lookback_snip[30];
+extern unsigned taxid_redirection_snip_len, xa_strand_pos_snip_len, XS_snip_len, XM_snip_len, MC_buddy_snip_len, xa_lookback_snip_len;
 
 #endif
