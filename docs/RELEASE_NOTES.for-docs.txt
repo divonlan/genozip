@@ -6,6 +6,10 @@ Minor version changes with bug fixes and minor feature updates
 Some minor versions are skipped due to failed deployment 
 pipelines
 
+12.0.42 13/October/2021
+- SAM/BAM: better compression for Z5:i, XM:i
+- bug fixes
+
 12.0.41 12/October/2021
 - SAM/BAM: significantly better compression for sorted (by 
 POS) files 
