@@ -171,7 +171,7 @@ LastValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP c
                      : con->items[i].did_i_small < 255 ? CTX(con->items[i].did_i_small)
                      :                                   ECTX (con->items[i].dict_id);
 
-    // for containers, new_value is the some of all its items, all repeats last_value (either int or float)
+    // for containers, new_value is the sum of all its items, all repeats last_value (either int or float)
     LastValueType new_value = {};
 
     if (flag.show_containers) // show container reconstruction 

@@ -552,7 +552,7 @@ void sam_seg_SEQ (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), const PosType p
 
     // Cases where we don't consider the refernce and just copy the seq as-is
     if (!range) { // 1. (denovo:) this contig defined in @SQ went beyond the maximum genome size of 4B and is thus ignored
-                  // 2. (loaded:) case contig doesn't exist in the reference
+                  // 2. (loaded:) case contig doesn't exist in the reference, or POS is out of range of contig (observed in the wild with chrM)
                   // 3. no cigar - the sequence is not aligned to the reference even if we have RNAME and POS (and its length can exceed the reference contig)
         buf_add (&nonref_ctx->local, seq, seq_len);
         

@@ -145,6 +145,10 @@
 #pragma GENDICT OPTION_mc_i=DTYPE_2=mc:i
 #pragma GENDICT OPTION_ms_i=DTYPE_2=ms:i
 
+// Novocraft tags: http://www.novocraft.com/documentation/novosort-2/
+#pragma GENDICT OPTION_Z5_i=DTYPE_2=Z5:i    // During the input phase for unsorted or name sorted alignments, Novosort calculates the signature of each read and adds this as a SAM tag (Z5:i:) to other segments of the template. Later, during the processing of the sorted alignments, we can determine the signature of a read and, from the Z5 tag, the signature of it’s pair. Reads are then grouped according to the two signatures, strand & library and duplicates detected within a group.
+#pragma GENDICT OPTION_Zq_i=DTYPE_2=Zq:i
+
 // added by GATK's BQSR (Base Quality Score Recalibration)
 #pragma GENDICT OPTION_BD_Z=DTYPE_2=BD:Z    // Deletion base quality  (not used in newer versions of GATK)
 #pragma GENDICT OPTION_BI_Z=DTYPE_2=BI:Z    // Insertion base quality (not used in newer versions of GATK)

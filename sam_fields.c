@@ -285,7 +285,7 @@ static bool sam_seg_0A_cigar_cb (VBlockP vb, ContextP ctx, STRp (cigar), uint32_
 {
     // complicated CIGARs, likely to be relatively uncommon, are better off in local - anything more than eg 112M39S 
     // note: we set no_stons=true in sam_seg_initialize_0X so we can use local for this rather than singletons
-    if (cigar_len > 7) {
+    if (cigar_len > 7 && !flag.best) {
         seg_add_to_local_text (vb, ctx, STRa(cigar), cigar_len);
         seg_simple_lookup (vb, ctx, 0);
     }
@@ -846,6 +846,10 @@ DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam,
         //case _OPTION_E2: sam_seg_E2_field (vb, dl, STRa(value), add_bytes); // BROKEN. To do: fix.
 
         case _OPTION_U2_Z: sam_seg_U2_field (vb, dl, STRa(value), add_bytes); break;
+
+        case _OPTION_Z5_i: if (value_len && IS_DIGIT(value[0])) seg_pos_field (VB, OPTION_Z5_i, SAM_PNEXT, 0, 0, STRa(value), 0, add_bytes); 
+                           else goto fallback; 
+                           break;
 
         default:
             fallback:
