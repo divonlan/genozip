@@ -65,10 +65,12 @@ Examples:
       | Note: files compressed with this option are NOT identical to the original file after decompression. For this reason, it is not possible to use this option in combination with --test or --md5.
       |
                                        
-.. option:: --best  Best compression but slower than --fast mode. This is the default mode of genozip - this flag has no additional effect.
+.. option:: --best  Best compression.
 
-                     |
-                     
+      | Note: Running with this option is a bit slower and consumes more memory. Also, subsetting the resulting genozip file (eg ``genocat --regions``) will be slower. 
+      | Tip: To avoid running out of memory on a low-resource personal computer, combine with limiting threads using ``--threads``.
+      |
+                            
 .. option:: -F, --fast  Fast compression but lower compression ratio than --best. Files compressed with this option also uncompress faster. Compressing with this option also consumes less memory.
 
                      |
