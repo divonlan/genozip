@@ -349,7 +349,7 @@ static void sam_seg_XA_pos (VBlockP vb, STRp(pos_str), uint32_t rep)
         seg_integer_or_not (vb, pos_ctx, STRa(pos_str), pos_str_len);
     }
 
-    seg_add_to_local_uint32 (vb, CTX(OPTION_XA_LOOKBACK), lookback, 0);
+    seg_add_to_local_uint (vb, CTX(OPTION_XA_LOOKBACK), lookback, 0);
 
     lookback_insert (vb, OPTION_XA_RNAME, rname_index, true);
     lookback_insert (vb, OPTION_XA_POS, pos, false);

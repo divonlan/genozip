@@ -29,11 +29,15 @@ void compound_zip_initialize (DictId qname_dict_id)
 {
     // Read names look like: "A00488:61:HMLGNDSXX:4:1101:4345:1000". First five go into item[0]
     SmallContainer illumina_7_con = {
-        .repeats             = 1,
-        .nitems_lo           = 3,
-        .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = ":"  }, // note: _FASTQ_Q0NAME is the same dict_id "Q0NAME"
-                                 { .dict_id = { _SAM_Q1NAME }, .separator = ":"  },
-                                 { .dict_id = { _SAM_Q2NAME },                   } } };
+        .repeats   = 1,
+        .nitems_lo = 7,
+        .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = ":" },  // note: _FASTQ_Q0NAME is the same dict_id "Q0NAME"
+                       { .dict_id = { _SAM_Q1NAME }, .separator = ":" },
+                       { .dict_id = { _SAM_Q2NAME }, .separator = ":" },
+                       { .dict_id = { _SAM_Q3NAME }, .separator = ":" },
+                       { .dict_id = { _SAM_Q4NAME }, .separator = ":" },
+                       { .dict_id = { _SAM_Q5NAME }, .separator = ":" },
+                       { .dict_id = { _SAM_Q6NAME },                  } } };
     illumina_7_snip_len = sizeof illumina_7_snip;
     container_prepare_snip ((Container*)&illumina_7_con, 0, 0, illumina_7_snip, &illumina_7_snip_len);
 
@@ -51,17 +55,6 @@ void compound_zip_initialize (DictId qname_dict_id)
     container_prepare_snip ((Container*)&bgi_con, "\4\4E\4L\4C\4R\4", 10, bgi_snip, &bgi_snip_len);
 
     seg_prepare_snip_other (SNIP_COPY, qname_dict_id, false, 0, copy_qname);
-}
-
-void compound_seg_initialize (VBlockP vb, DidIType qname_did_i)
-{
-    if (segconf.running) return;
-
-    if (segconf.is_illumina_7)
-        stats_set_consolidation (vb, qname_did_i, 3, qname_did_i+1, qname_did_i+2, qname_did_i+3);
-
-    if (segconf.is_bgi_E9L1C3R10)
-        stats_set_consolidation (vb, qname_did_i, 5, qname_did_i+1, qname_did_i+2, qname_did_i+3, qname_did_i+4, qname_did_i+5);
 }
 
 //--------------------------------------------
@@ -275,18 +268,45 @@ static bool __attribute__((unused))compound_is_illumina_7 (STRp(qname))
     return str_count_char (STRa(qname), ':') == 6;
 }
 
+static void compound_seg_initialize_illumina_7 (VBlockP vb, DidIType qname_did_i)
+{
+    stats_set_consolidation (vb, qname_did_i, 7, qname_did_i+1, qname_did_i+2, qname_did_i+3, qname_did_i+4, qname_did_i+5, qname_did_i+6, qname_did_i+7);
+
+    ContextP ctx = CTX(qname_did_i+1); // Q0NAME
+
+    if (segconf.sam_is_collated) {
+        (ctx+5)->flags.store = STORE_INT;
+        (ctx+6)->flags.store = STORE_INT;
+    }
+}
+
 // Illumina: <instrument>:<run number>:<flowcell ID>:<lane>:<tile>:<x-pos>:<y-pos> for example "A00488:61:HMLGNDSXX:4:1101:15374:1031" see here: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
-static bool __attribute__((unused))compound_seg_illumnina_7 (VBlock *vb, Context *ctx, STRp(qname),
+// Example: HWI-D00360:5:H814YADXX:1:1106:10370:52569
+static bool compound_seg_illumnina_7 (VBlock *vb, Context *qname_ctx, STRp(qname),
                                       unsigned add_additional_bytes)  // account for characters in addition to the field
 {
     str_split (qname, qname_len, 7, ':', item, true);
     if (!n_items) return false;
 
-    uint32_t five_items_len = qname_len - (1 + item_lens[5] + 1 + item_lens[6]);
-    seg_by_ctx (vb, STRa(illumina_7_snip), ctx,   2 + add_additional_bytes); // 2= two ':'
-    seg_by_ctx (vb, qname, five_items_len, ctx+1, five_items_len); // first 5 items concatenated (as they are correlated)
-    seg_by_ctx (vb, STRi(item, 5),         ctx+2, item_lens[5]); 
-    seg_by_ctx (vb, STRi(item, 6),         ctx+3, item_lens[6]); 
+    ContextP ctx = qname_ctx + 1;  // Q0NAME
+    
+    int64_t value;
+    if (segconf.sam_is_collated) {
+        for (unsigned item_i=0; item_i <= 4; item_i++)
+            seg_by_ctx (vb, STRi(item, item_i), ctx+item_i, item_lens[item_i]);      
+
+        for (unsigned item_i=5; item_i <= 6; item_i++)
+            if (str_get_int (STRi(item, item_i), &value)) 
+                seg_self_delta (vb, ctx+item_i, value, item_lens[item_i]);
+            else
+                seg_by_ctx (vb, STRi(item, item_i), ctx+item_i, item_lens[item_i]);
+    }
+    else {
+        for (unsigned item_i=0; item_i <= 6; item_i++)
+            seg_by_ctx (vb, STRi(item, item_i), ctx+item_i, item_lens[item_i]);    
+    } 
+
+    seg_by_ctx (vb, STRa(illumina_7_snip), qname_ctx, 6 + add_additional_bytes); // 6 colons
     
     return true;
 }
@@ -336,15 +356,25 @@ void compound_seg (VBlock *vb,
         return;
     }
 
-    /* not active yet - specific seggers don't yet perform better than the default (need to add diffs etc)
-    if (!nonoptimized_len) {
+    if (!nonoptimized_len && (VB_DT(DT_SAM) || VB_DT(DT_BAM))) {
         if (segconf.is_illumina_7)         success = compound_seg_illumnina_7   (VB, ctx, STRa(qname), add_additional_bytes);
-        else if (segconf.is_bgi_E9L1C3R10) success = compound_seg_bgi_E9L1C3R10 (VB, ctx, STRa(qname), add_additional_bytes);
-    }*/
+        //else if (segconf.is_bgi_E9L1C3R10) success = compound_seg_bgi_E9L1C3R10 (VB, ctx, STRa(qname), add_additional_bytes);
+    }
 
     if (!success) compound_seg_default (VB, ctx, STRa(qname), default_is_sep, nonoptimized_len, add_additional_bytes);
 
     COPY_TIMER (compound_seg);
+}
+
+void compound_seg_initialize (VBlockP vb, DidIType qname_did_i)
+{
+    if (segconf.running) return;
+
+    if (segconf.is_illumina_7 && (VB_DT(DT_SAM) || VB_DT(DT_BAM)))
+        compound_seg_initialize_illumina_7 (vb, qname_did_i);
+
+    if (segconf.is_bgi_E9L1C3R10)
+        stats_set_consolidation (vb, qname_did_i, 5, qname_did_i+1, qname_did_i+2, qname_did_i+3, qname_did_i+4, qname_did_i+5);
 }
 
 void compound_segconf_test (STRp(qname))
@@ -352,3 +382,4 @@ void compound_segconf_test (STRp(qname))
     segconf.is_bgi_E9L1C3R10 = segconf.is_bgi_E9L1C3R10 && compound_is_bgi_E9L1C3R10 (STRa(qname));
     segconf.is_illumina_7 = segconf.is_illumina_7 && compound_is_illumina_7 (STRa(qname));
 }
+

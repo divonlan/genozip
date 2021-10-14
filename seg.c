@@ -389,11 +389,11 @@ void seg_id_field_do (VBlock *vb, ContextP ctx, const char *id_snip, unsigned id
     // added to local if we have a trailing number
     if (num_digits) {
         uint32_t id_num = atoi (&id_snip[id_snip_len - num_digits]);
-        seg_add_to_local_uint32 (vb, ctx, id_num, 0);
+        seg_add_to_local_uint (vb, ctx, id_num, 0);
     }
 
     ctx->no_stons = true;
-    ctx->ltype  = LT_UINT32;
+    ctx->dynamic_size_local = true;
 
     // prefix the textual part with SNIP_LOOKUP_UINT32 if needed (we temporarily overwrite the previous separator or the buffer underflow area)
     unsigned new_len = id_snip_len - num_digits;
@@ -420,7 +420,6 @@ bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsigned ad
 
         if (!ctx->local.len) { // first number 
             ctx->dynamic_size_local = true;
-            ctx->ltype = LT_UINT32; // set only upon storing the first number - if there are no numbers, leave it as LT_TEXT so it can be used for singletons
             
             if (!ctx->b250.len) // no non-numbers yet
                 ctx->numeric_only = true; // until proven otherwise
@@ -749,38 +748,17 @@ void seg_add_to_local_uint8 (VBlockP vb, ContextP ctx, uint8_t value, unsigned a
 {
     buf_alloc (vb, &ctx->local, 1, vb->lines.len, uint8_t, CTX_GROWTH, "contexts->local");
 
-    if (lt_desc[ctx->ltype].is_signed) value = INTERLACE (int8_t, value);
     NEXTENT (uint8_t, ctx->local) = value;
 
     if (add_bytes) ctx->txt_len += add_bytes;
 }
 
-void seg_add_to_local_uint16 (VBlockP vb, ContextP ctx, uint16_t value, unsigned add_bytes)
-{
-    buf_alloc (vb, &ctx->local, 1, vb->lines.len, uint16_t, CTX_GROWTH, "contexts->local");
-
-    if (lt_desc[ctx->ltype].is_signed) value = INTERLACE (int16_t, value);
-    NEXTENT (uint16_t, ctx->local) = BGEN16 (value);
-
-    if (add_bytes) ctx->txt_len += add_bytes;
-}
-
-void seg_add_to_local_uint32 (VBlockP vb, ContextP ctx, uint32_t value, unsigned add_bytes)
+// requires setting ctx->dynamic_size_local=true in seg_initialize, but not need to set ltype as it will be set in zip_resize_local
+void seg_add_to_local_uint (VBlockP vb, ContextP ctx, uint32_t value, unsigned add_bytes)
 {
     buf_alloc (vb, &ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->local");
 
-    if (lt_desc[ctx->ltype].is_signed) value = INTERLACE (int32_t, value);
-    NEXTENT (uint32_t, ctx->local) = BGEN32 (value);
-
-    if (add_bytes) ctx->txt_len += add_bytes;
-}
-
-void seg_add_to_local_uint64 (VBlockP vb, ContextP ctx, uint64_t value, unsigned add_bytes)
-{
-    buf_alloc (vb, &ctx->local, 1, vb->lines.len, uint64_t, CTX_GROWTH, "contexts->local");
-
-    if (lt_desc[ctx->ltype].is_signed) value = INTERLACE (int64_t, value);
-    NEXTENT (uint64_t, ctx->local) = BGEN64 (value);
+    NEXTENT (uint32_t, ctx->local) = value;
 
     if (add_bytes) ctx->txt_len += add_bytes;
 }

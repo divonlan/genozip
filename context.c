@@ -239,7 +239,7 @@ static WordIndex ctx_evaluate_snip_merge (VBlock *vb, Context *zctx, Context *vc
     // 2. we insert it to ston_nodes instead of dict - i.e. it doesn't get written the dict section
     // 3. we move it to the local section of this vb
     // 4. we set the word_index of its nodes to be the word_index of the SNIP_LOOKUP snip
-    bool is_singleton_in_vb = (count == 1 && (vctx->ltype == LT_TEXT) && !vctx->no_stons); // is singleton in this VB
+    bool is_singleton_in_vb = (count == 1 && (vctx->ltype == LT_TEXT) && !vctx->dynamic_size_local && !vctx->no_stons); // is singleton in this VB
 
     // attempt to get the node from the hash table 
     WordIndex node_index = hash_global_get_entry (zctx, snip, snip_len, 

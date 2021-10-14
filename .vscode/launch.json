@@ -16,14 +16,15 @@
             //"program": "${workspaceFolder}/genounzip.exe",
             //"program": "${workspaceFolder}/genols-debug.exe",
             
-            "args" : ["--show-codec", "-f", "private/test/example.faa"],
+            "args" : ["-f", "private/test/test.human-sorted.sam"],
+            // "args" : [ "private/test/test.human-sorted.sam.genozip"],
             
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
             "externalConsole": false,
             "MIMode": "gdb",
-            "miDebuggerPath": "C:\\mingw-w64\\x86_64-8.1.0-posix-seh-rt_v6-rev0\\mingw64\\bin\\gdb.exe",
+            "miDebuggerPath": "c:\\msys64\\mingw64\\bin\\gdb.exe",
             "setupCommands": [
                 {
                     "description": "Enable pretty-printing for gdb",

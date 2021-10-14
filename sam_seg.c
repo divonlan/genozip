@@ -129,7 +129,7 @@ static void sam_seg_initialize_0X (VBlockP vb, uint32_t reps_per_line,
         rname_ctx->no_stons  = true;  // as we store by index
         strand_ctx->no_stons = true;
         lookback_ctx->flags.store = STORE_INT;
-        lookback_ctx->ltype = LT_UINT32;
+        lookback_ctx->dynamic_size_local = true;
     }
 
     cigar_ctx->no_stons = true; // as we use local to store long CIGARs in sam_seg_0A_cigar_cb
@@ -152,7 +152,7 @@ void sam_seg_initialize (VBlock *vb)
     CTX(SAM_STRAND)->ltype      = LT_BITMAP;
     CTX(SAM_GPOS)->ltype        = LT_UINT32;
     CTX(SAM_GPOS)->flags.store  = STORE_INT;
-    CTX(SAM_BUDDY)->ltype       = LT_UINT32;
+    CTX(SAM_BUDDY)->dynamic_size_local = true;
     CTX(SAM_BUDDY)->st_did_i    = SAM_QNAME;
     
     if (segconf.sam_is_collated) 
@@ -877,7 +877,7 @@ void sam_seg_QNAME (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(qname), unsigned add
         if (buddy_line_i != -1 && buddy_dl->QNAME.snip_len == qname_len && 
             !memcmp (qname, ENT (char, vb->txt_data, buddy_dl->QNAME.char_index), qname_len)) {
 
-            seg_add_to_local_uint32 (VB, CTX(SAM_BUDDY), BGEN32 (vb->line_i - buddy_line_i), 0); // add buddy (delta) >= 1
+            seg_add_to_local_uint (VB, CTX(SAM_BUDDY), BGEN32 (vb->line_i - buddy_line_i), 0); // add buddy (delta) >= 1
             
             seg_by_ctx (VB, (char[]){ SNIP_COPY_BUDDY, SNIP_COPY_BUDDY }, 2, CTX(SAM_QNAME), qname_len + add_additional_bytes); // seg QNAME as copy-from-buddy (an extra SNIP_COPY_BUDDY indicates that reconstruct_from_buddy should set buddy_line_i here)
             
