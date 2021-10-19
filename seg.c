@@ -882,7 +882,7 @@ void seg_all_data_lines (VBlock *vb)
     }
 
     if (segconf.running) {
-        segconf.line_len = (vb->txt_data.len / vb->lines.len) + 1; // get average line length (rounded up) 
+        segconf.line_len = (vb->lines.len ? (vb->txt_data.len / vb->lines.len) : 500) + 1; // get average line length (rounded up ; arbitrary 500 if the segconf data ended up not having any lines (example: all lines were non-matching lines dropped by --match in a chain file))
 
         for (DidIType did_i=0; did_i < DTF(num_fields); did_i++)
             if (CTX(did_i)->b250.len) 
