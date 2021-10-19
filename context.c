@@ -635,14 +635,14 @@ static Context *ctx_get_zf_ctx (DictId dict_id)
 
     for (DidIType did_i=0; did_i < z_num_contexts; did_i++)
         if (dict_id.num == ZCTX(did_i)->dict_id.num) 
-            return &z_file->contexts[did_i];
+            return ZCTX(did_i);
 
     return NULL;
 }
 
 static inline Context *ctx_get_zf_ctx_from_vctx (ConstContextP vctx)
 {
-    return vctx->did_i < DTFZ(num_fields) ? &z_file->contexts[vctx->did_i] : ctx_get_zf_ctx (vctx->dict_id);
+    return vctx->did_i < DTFZ(num_fields) ? ZCTX(vctx->did_i) : ctx_get_zf_ctx (vctx->dict_id);
 }
 
 // get zf_ctx flags, looking it it up by vctx
@@ -667,7 +667,7 @@ static Context *ctx_add_new_zf_ctx (VBlock *vb, const Context *vctx)
     ASSERT (z_file->num_contexts+1 < MAX_DICTS, // load num_contexts - this time with mutex protection - it could have changed
             "z_file has more dict_id types than MAX_DICTS=%u", MAX_DICTS);
 
-    zctx = &z_file->contexts[z_file->num_contexts];
+    zctx = ZCTX(z_file->num_contexts);
 
     mutex_initialize (zctx->mutex);
 
@@ -709,7 +709,7 @@ ContextP ctx_add_new_zf_ctx_from_txtheader (const char *tag_name, unsigned tag_n
     ASSERT (z_file->num_contexts+1 < MAX_DICTS, // load num_contexts - this time with mutex protection - it could have changed
             "z_file has more dict_id types than MAX_DICTS=%u", MAX_DICTS);
 
-    zctx = &z_file->contexts[z_file->num_contexts];
+    zctx = ZCTX(z_file->num_contexts);
 
     mutex_initialize (zctx->mutex);
 
@@ -974,7 +974,7 @@ void ctx_initialize_predefined_ctxs (Context *contexts /* an array */,
 void ctx_overlay_dictionaries_to_vb (VBlock *vb)
 {
     for (DidIType did_i=0; did_i < MAX_DICTS; did_i++) {
-        Context *zctx = &z_file->contexts[did_i];
+        Context *zctx = ZCTX(did_i);
         Context *vctx = CTX(did_i);
 
         if (!zctx->dict_id.num) continue;
@@ -1227,7 +1227,7 @@ static unsigned frag_size = 0;
 // compression and decompression
 static void ctx_prepare_for_dict_compress (VBlockP vb)
 {
-    while (frag_ctx < &z_file->contexts[z_file->num_contexts]) {
+    while (frag_ctx < ZCTX(z_file->num_contexts)) {
 
         if (!frag_next_node) {
             if (!frag_ctx->nodes.len) {
@@ -1469,7 +1469,7 @@ void ctx_read_all_dictionaries (void)
     // output the dictionaries if we're asked to
     if (flag.show_dict || flag.show_one_dict || flag.list_chroms) {
         for (uint32_t did_i=0; did_i < z_file->num_contexts; did_i++) {
-            Context *ctx = &z_file->contexts[did_i];
+            Context *ctx = ZCTX(did_i);
             if (!ctx->dict.len) continue;
 
             if (flag.list_chroms && ((!flag.luft && ctx->did_i == CHROM) || (flag.luft && ctx->did_i == VCF_oCHROM)))
@@ -1542,7 +1542,7 @@ static void ctx_show_counts (Context *zctx)
 
 const char *ctx_get_snip_with_largest_count (DidIType did_i, int64_t *count)
 {
-    Context *ctx = &z_file->contexts[did_i];
+    Context *ctx = ZCTX(did_i);
     ARRAY (CtxNode, nodes, ctx->nodes);
     ARRAY (int64_t, counts, ctx->counts);
 
@@ -1571,7 +1571,7 @@ CtxNodeP ctx_get_vb_node (ContextP vctx, WordIndex vb_node_index)
 void ctx_compress_counts (void)
 {
     for (DidIType did_i=0; did_i < z_file->num_contexts; did_i++) {
-        Context *ctx = &z_file->contexts[did_i];
+        Context *ctx = ZCTX(did_i);
 
         if (flag.show_one_counts.num == dict_id_typeless (ctx->dict_id).num) 
             ctx_show_counts (ctx);

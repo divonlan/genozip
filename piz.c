@@ -390,7 +390,7 @@ DataType piz_read_global_area (Reference ref)
 
         // update chrom node indices using the CHROM dictionary, for the user-specified regions (in case -r/-R were specified)
         if (flag.regions && ZCTX(flag.luft ? DTFZ(luft_chrom) : DTFZ(prim_chrom))->word_list.len) // FASTQ compressed without reference, has no CHROMs 
-            regions_make_chregs (&z_file->contexts[flag.luft ? DTFZ(luft_chrom) : DTFZ(prim_chrom)]);
+            regions_make_chregs (ZCTX(flag.luft ? DTFZ(luft_chrom) : DTFZ(prim_chrom)));
 
         // if the regions are negative, transform them to the positive complement instead
         regions_transform_negative_to_positive_complement();

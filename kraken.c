@@ -353,7 +353,7 @@ bool kraken_piz_initialize (void)
     ASSERT (z_file->num_components <= 2, "--kraken requires a .kraken.genozip file with up to 2 components, but %s has %u components",
             z_name, z_file->num_components);
 
-    Context *ctx = &z_file->contexts[KRAKEN_TAXID];
+    Context *ctx = ZCTX(KRAKEN_TAXID);
     ARRAY (int64_t, counts, ctx->counts);
 
     // verify that the user selected taxonomy ID is in the kraken data

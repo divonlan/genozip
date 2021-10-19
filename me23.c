@@ -145,7 +145,7 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
     buf_move (comp_vb, &comp_vb->compressed, comp_vb, txtheader_buf);
     ARRAY (char, header23, comp_vb->compressed);
 
-    Context *ctx = &z_file->contexts[ME23_CHROM];
+    Context *ctx = ZCTX(ME23_CHROM);
     uint32_t num_chroms = (uint32_t)ctx->word_list.len;
     
     buf_alloc (comp_vb, txtheader_buf, 0, 
