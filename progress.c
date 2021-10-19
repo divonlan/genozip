@@ -14,7 +14,7 @@ bool progress_newline_since_update = false; // global: might be not 100% with th
 
 static bool ever_start_time_initialized = false, test_mode, show_progress;
 static TimeSpecType ever_start_time, component_start_time;
-static double last_percent=0;
+static float last_percent=0;
 static unsigned last_seconds_so_far=0;
 static const char *component_name=NULL;
 static unsigned last_len=0; // so we know how many characters to erase on next update
@@ -105,11 +105,11 @@ void progress_update (char **prefix, uint64_t sofar, uint64_t total, bool done)
     
     int seconds_so_far = ((tb.tv_sec-component_start_time.tv_sec)*1000 + (tb.tv_nsec-component_start_time.tv_nsec) / 1000000) / 1000; 
 
-    double percent;
+    float percent;
     if (total > 10000000) // gentle handling of really big numbers to avoid integer overflow
-        percent = MIN_(((double)(sofar/100000ULL)*100) / (double)(total/100000ULL), 100.0); // divide by 100000 to avoid number overflows
+        percent = MIN_(((float)(sofar/100000ULL)*100) / (float)(total/100000ULL), 100.0); // divide by 100000 to avoid number overflows
     else
-        percent = MIN_(((double)sofar*100) / (double)total, 100.0); // divide by 100000 to avoid number overflows
+        percent = MIN_(((float)sofar*100) / (float)total, 100.0); // divide by 100000 to avoid number overflows
 
     // need to update progress indicator, max once a second or if 100% is reached
 
@@ -129,7 +129,7 @@ void progress_update (char **prefix, uint64_t sofar, uint64_t total, bool done)
         if (!done) { 
 
             // time remaining
-            unsigned secs = (100.0 - percent) * ((double)seconds_so_far / (double)percent);
+            unsigned secs = (100.0 - percent) * ((float)seconds_so_far / (float)percent);
             progress_human_time (secs, time_str);
 
             if (!flag.debug_progress)
@@ -193,7 +193,7 @@ void progress_finalize_component_time (const char *status, Digest md5)
     FINALIZE ("%s (%s)", status, progress_ellapsed_time (false));
 }
 
-void progress_finalize_component_time_ratio (const char *me, double ratio, Digest md5)
+void progress_finalize_component_time_ratio (const char *me, float ratio, Digest md5)
 {
     if (component_name)
         FINALIZE ("Done (%s, %s compression ratio: %1.1f)", progress_ellapsed_time (false), me, ratio)
@@ -201,7 +201,7 @@ void progress_finalize_component_time_ratio (const char *me, double ratio, Diges
         FINALIZE ("Time: %s, %s compression ratio: %1.1f", progress_ellapsed_time (false), me, ratio);
 }
 
-void progress_finalize_component_time_ratio_better (const char *me, double ratio, const char *better_than, double ratio_than, Digest md5)
+void progress_finalize_component_time_ratio_better (const char *me, float ratio, const char *better_than, float ratio_than, Digest md5)
 {
     if (component_name) 
         FINALIZE ("Done (%s, %s compression ratio: %1.1f - better than %s by a factor of %1.1f)", 

@@ -105,6 +105,9 @@ void vcf_seg_initialize (VBlock *vb_)
     CTX(VCF_POS)->     flags.store = STORE_INT;   // since v12
     CTX(VCF_oPOS)->    flags.store = STORE_INT;   // used by vcf_piz_luft_END
 
+    seg_id_field_init (CTX(VCF_ID));
+    seg_id_field_init (CTX(INFO_CSQ_Existing_variation));
+
     // counts sections
     CTX(VCF_CHROM)->   counts_section = true;
     CTX(VCF_oCHROM)->  counts_section = true;
@@ -135,9 +138,9 @@ void vcf_seg_initialize (VBlock *vb_)
     if (flag.add_line_numbers) {
         // create a b250 and dict entry for VCF_LINE_NUM, VCF_ID - these become "all_the_same" so no need to seg them explicitly hereinafter        
         #define LN_PREFIX_LEN 3 // "LN="
-        static const char prefix[] = { CON_PREFIX_SEP, // has prefix 
-                                       CON_PREFIX_SEP, // end of (empty) container-wide prefix
-                                       'L', 'N', '=', CON_PREFIX_SEP };  // NOTE: if changing prefix, update LN_PREFIX_LEN
+        static const char prefix[] = { CON_PX_SEP, // has prefix 
+                                       CON_PX_SEP, // end of (empty) container-wide prefix
+                                       'L', 'N', '=', CON_PX_SEP };  // NOTE: if changing prefix, update LN_PREFIX_LEN
 
         container_seg (vb, CTX(VCF_ID), (Container *)&line_number_container, prefix, sizeof prefix, 0); 
         ctx_decrement_count (vb_, CTX(VCF_ID), 0);
@@ -205,7 +208,7 @@ void vcf_seg_finalize (VBlockP vb_)
     // when processing the rejects file containing variants that are primary-only, we add a "##primary_only=" prefix to 
     // first item of each line, so that it reconstructs as part of the VCF header 
     else if (vb->vb_coords == DC_PRIMARY) { // primary-only variants 
-        static const char primary_only_prefix[] = CON_PREFIX_SEP_ CON_PREFIX_SEP_ HK_PRIM_ONLY CON_PREFIX_SEP_;
+        static const char primary_only_prefix[] = CON_PX_SEP_ CON_PX_SEP_ HK_PRIM_ONLY CON_PX_SEP_;
         container_seg (vb_, ctx, (ContainerP)&top_level, primary_only_prefix, strlen (primary_only_prefix), 0);
         vb->recon_size += (sizeof HK_PRIM_ONLY - 1) * vb->lines.len; // when reconstructing primary-only rejects, we also reconstruct a prefix for each line
         ctx->txt_len += (sizeof HK_PRIM_ONLY - 1) * vb->lines.len;
@@ -238,7 +241,7 @@ void vcf_seg_finalize (VBlockP vb_)
 
     // similarly, when processing the rejects file containing variants that are luft-only, we add a "##luft_only=" prefix
     else if (vb->vb_coords == DC_LUFT) { // luft-only variants 
-        static const char luft_only_prefix[] = CON_PREFIX_SEP_ CON_PREFIX_SEP_ HK_LUFT_ONLY CON_PREFIX_SEP_;
+        static const char luft_only_prefix[] = CON_PX_SEP_ CON_PX_SEP_ HK_LUFT_ONLY CON_PX_SEP_;
         container_seg (vb_, CTX(VCF_TOPLUFT), (ContainerP)&top_luft, luft_only_prefix, strlen (luft_only_prefix), (sizeof HK_LUFT_ONLY - 1) * vb->lines.len);
         vb->recon_size_luft += (sizeof HK_LUFT_ONLY - 1) * vb->lines.len; // when reconstructing luft-only rejects, we also reconstruct a prefix for each line
         // note: there is no equivalent of ctx->txt_len for Luft coordinates

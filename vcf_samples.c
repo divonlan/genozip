@@ -547,6 +547,8 @@ TRANSLATOR_FUNC (vcf_piz_luft_PLOIDY)
 // In this case, the haplotype matrix must include the lines without GT too
 void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCF *vb)
 {
+    buf_alloc (vb, &CTX(FORMAT_GT_HT)->local, 0, vb->lines.len * vb->ht_per_line, char, CTX_GROWTH, "contexts->local");
+
     for (vb->line_i=0; vb->line_i < (uint32_t)vb->lines.len; vb->line_i++) {
 
         if (CTX(FORMAT_GT_HT) && !DATA_LINE (vb->line_i)->has_haplotype_data) {
@@ -617,15 +619,8 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
         vb->ploidy = gt.repeats; // very first sample in the vb
         vb->ht_per_line = vb->ploidy * vcf_num_samples;
     }
-/*
-    if (CTX(FORMAT_GT_HT)->local.type != BUF_OVERLAY) { // first time
-        // we overlay on the txt to save memory. since the HT data is by definition a subset of txt, we only overwrite txt
-        // areas after we have already consumed them
-        buf_set_overlayable (&vb->txt_data);
-        buf_overlay (VB, &CTX(FORMAT_GT_HT)->local, &vb->txt_data, "contexts->local");
-    }
-*/
-    buf_alloc (vb, &CTX(FORMAT_GT_HT)->local, vb->ploidy, vb->ploidy * vcf_num_samples * vb->lines.len, char, CTX_GROWTH, "contexts->local");
+
+    buf_alloc (vb, &CTX(FORMAT_GT_HT)->local, vb->ploidy, vb->ht_per_line * vb->lines.len, char, CTX_GROWTH, "contexts->local");
 
     // note - ploidy of this sample might be smaller than vb->ploidy (eg a male sample in an X chromosesome that was preceded by a female sample, or "." sample)
     Allele *ht_data = ENT (Allele, CTX(FORMAT_GT_HT)->local, vb->line_i * vb->ht_per_line + vb->ploidy * vb->sample_i);

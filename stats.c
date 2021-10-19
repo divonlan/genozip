@@ -19,6 +19,7 @@
 #include "codec.h"
 #include "license.h"
 #include "segconf.h"
+#include "qname.h"
 
 static void stats_get_sizes (DictId dict_id /* option 1 */, SectionType non_ctx_sec /* option 2*/, 
                              int64_t *dict_compressed_size, int64_t *b250_compressed_size, int64_t *local_compressed_size,
@@ -95,7 +96,7 @@ static void stats_output_file_metadata (Buffer *buf)
 
         if (dominant_taxid_count != -1)
             bufprintf (evb, buf, "Dominant TaxID: %s  %s: %s (%-5.2f%%)\n", dominant_taxid, DTPZ (show_stats_line_name),
-                       str_uint_commas (dominant_taxid_count).s, 100.0 * (double)dominant_taxid_count / (double)z_file->num_lines); 
+                       str_uint_commas (dominant_taxid_count).s, 100.0 * (float)dominant_taxid_count / (float)z_file->num_lines); 
         else
             bufprint0 (evb, buf, "Dominant TaxID: No dominant species\n"); 
     }  
@@ -115,6 +116,9 @@ static void stats_output_file_metadata (Buffer *buf)
     if ((Z_DT(DT_SAM) || Z_DT(DT_BAM)) && segconf.sam_is_collated)
         bufprintf (evb, buf, "Features: Collated by QNAME\n%s", "");
 
+    if (segconf.qname_flavor) 
+        bufprintf (evb, buf, "Features: read name style: %s\n", qf_name(segconf.qname_flavor));
+
     bufprintf (evb, buf, "Genozip version: %s %s\nDate compressed: %s\n", 
                GENOZIP_CODE_VERSION, DISTRIBUTION, str_time().s);
 
@@ -128,7 +132,7 @@ typedef struct {
     const char *name;
     const char *type;
     StrText did_i, words, hash, uncomp_dict, comp_dict, comp_b250, comp_data;
-    double pc_of_txt, pc_of_z, pc_dict, pc_singletons, pc_failed_singletons, pc_hash_occupancy;
+    float pc_of_txt, pc_of_z, pc_dict, pc_singletons, pc_failed_singletons, pc_hash_occupancy;
 } StatsByLine;
 
 static int stats_sort_by_z_size(const void *a, const void *b)  
@@ -225,8 +229,8 @@ static void stats_consolidate_non_ctx (StatsByLine *sbl, unsigned num_stats, con
     va_end (args);
 }
 
-static void stats_output_stats (StatsByLine *s, unsigned num_stats, double src_comp_ratio, Codec codec,
-                                int64_t all_txt_len, int64_t all_txt_len_0, int64_t all_z_size, double all_pc_of_txt, double all_pc_of_z, double all_comp_ratio)
+static void stats_output_stats (StatsByLine *s, unsigned num_stats, float src_comp_ratio, Codec codec,
+                                int64_t all_txt_len, int64_t all_txt_len_0, int64_t all_z_size, float all_pc_of_txt, float all_pc_of_z, float all_comp_ratio)
 {
     bufprintf (evb, &z_file->stats_buf, "\nSections (sorted by %% of genozip file):%s\n", "");
     bufprintf (evb, &z_file->stats_buf, "NAME                   GENOZIP      %%      TXT       %%   RATIO\n%s", "");
@@ -236,8 +240,8 @@ static void stats_output_stats (StatsByLine *s, unsigned num_stats, double src_c
             bufprintf (evb, &z_file->stats_buf, "%-20.20s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
                        s->name, 
                        str_size (s->z_size).s, s->pc_of_z, // z size and % of total z that is in this line
-                       str_size ((double)s->txt_len).s, s->pc_of_txt, // txt size and % of total txt which is in this line
-                       (double)s->txt_len / (double)s->z_size); // ratio z vs txt
+                       str_size ((float)s->txt_len).s, s->pc_of_txt, // txt size and % of total txt which is in this line
+                       (float)s->txt_len / (float)s->z_size); // ratio z vs txt
 
     if (src_comp_ratio != 1)
         bufprintf (evb, &z_file->stats_buf, 
@@ -257,7 +261,7 @@ static void stats_output_stats (StatsByLine *s, unsigned num_stats, double src_c
 
 static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
                                 int64_t all_txt_len, int64_t all_uncomp_dict, int64_t all_comp_dict, int64_t all_comp_b250, int64_t all_comp_data, 
-                                int64_t all_z_size, double all_pc_of_txt, double all_pc_of_z, double all_comp_ratio)
+                                int64_t all_z_size, float all_pc_of_txt, float all_pc_of_z, float all_comp_ratio)
 {
 #define PC(pc) ((pc==0 || pc>=10) ? 0 : (pc<1 ? 2:1))
 
@@ -277,7 +281,7 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
                        PC (s->pc_dict), s->pc_dict, PC(s->pc_singletons), s->pc_singletons, PC(s->pc_failed_singletons), s->pc_failed_singletons, 
                        s->hash.s, s->pc_hash_occupancy, // Up to here - these don't appear in the total
                        s->uncomp_dict.s, s->comp_dict.s, s->comp_b250.s, s->comp_data.s, str_size (s->z_size).s, 
-                       str_size ((double)s->txt_len).s, (double)s->txt_len / (double)s->z_size, s->pc_of_txt, s->pc_of_z);
+                       str_size ((float)s->txt_len).s, (float)s->txt_len / (float)s->z_size, s->pc_of_txt, s->pc_of_z);
 
     bufprintf (evb, &z_file->STATS_buf, "TOTAL                                                                               "
                "%9s %9s %9s %9s %9s %9s %6.1fX %5.1f%% %5.1f%%\n", 
@@ -354,10 +358,10 @@ void stats_compress (void)
             s->st_did_i             = ctx->st_did_i;
             s->did_i                = str_uint_commas ((uint64_t)ctx->did_i); 
             s->words                = str_uint_commas_limit (n_words, 99999);
-            s->pc_dict              = !ctx->b250.num_ctx_words ? 0 : 100.0 * (double)ctx->nodes.len / (double)ctx->b250.num_ctx_words;
-            s->pc_singletons        = !ctx->b250.num_ctx_words ? 0 : 100.0 * (double)ctx->num_singletons / (double)ctx->b250.num_ctx_words;
-            s->pc_failed_singletons = !ctx->b250.num_ctx_words ? 0 : 100.0 * (double)ctx->num_failed_singletons / (double)ctx->b250.num_ctx_words;
-            s->pc_hash_occupancy    = !ctx->global_hash_prime   ? 0 : 100.0 * (double)(ctx->nodes.len + ctx->ol_nodes.len) / (double)ctx->global_hash_prime;
+            s->pc_dict              = !ctx->b250.num_ctx_words ? 0 : 100.0 * (float)ctx->nodes.len / (float)ctx->b250.num_ctx_words;
+            s->pc_singletons        = !ctx->b250.num_ctx_words ? 0 : 100.0 * (float)ctx->num_singletons / (float)ctx->b250.num_ctx_words;
+            s->pc_failed_singletons = !ctx->b250.num_ctx_words ? 0 : 100.0 * (float)ctx->num_failed_singletons / (float)ctx->b250.num_ctx_words;
+            s->pc_hash_occupancy    = !ctx->global_hash_prime   ? 0 : 100.0 * (float)(ctx->nodes.len + ctx->ol_nodes.len) / (float)ctx->global_hash_prime;
             s->hash                 = str_size (ctx->global_hash_prime);
             s->uncomp_dict          = str_size (ctx->dict.len);
             s->comp_dict            = str_size (dict_compressed_size);
@@ -374,8 +378,8 @@ void stats_compress (void)
 
         /* comp b250      */ s->comp_b250 = str_size (b250_compressed_size);
         /* comp data      */ s->comp_data = str_size (local_compressed_size);
-        /* % of txt       */ s->pc_of_txt = z_file->txt_data_so_far_bind ? 100.0 * (double)s->txt_len / (double)z_file->txt_data_so_far_bind : 0;
-        /* % of genozip   */ s->pc_of_z   = z_file->disk_so_far          ? 100.0 * (double)s->z_size / (double)z_file->disk_so_far           : 0;
+        /* % of txt       */ s->pc_of_txt = z_file->txt_data_so_far_bind ? 100.0 * (float)s->txt_len / (float)z_file->txt_data_so_far_bind : 0;
+        /* % of genozip   */ s->pc_of_z   = z_file->disk_so_far          ? 100.0 * (float)s->z_size / (float)z_file->disk_so_far           : 0;
 
         s++;
     }
@@ -385,9 +389,9 @@ void stats_compress (void)
     // (the original txt data size) and not all_txt_size (size after ZIP modifications like --optimize). 
     // Therefore, in case of ZIP-modified txt, the sum of the (modified) fields in the TXT column will NOT equal the
     // TOTAL in the TXT column. That's ok.
-    double all_comp_ratio = (double)z_file->txt_data_so_far_bind_0 /* without modifications */ / (double)all_z_size;
-    double all_pc_of_txt  = z_file->txt_data_so_far_bind ? 100.0 * (double)all_txt_len / (double)z_file->txt_data_so_far_bind : 0 /* with modifications */;
-    double all_pc_of_z    = z_file->disk_so_far          ? 100.0 * (double)all_z_size  / (double)z_file->disk_so_far          : 0;
+    float all_comp_ratio = (float)z_file->txt_data_so_far_bind_0 /* without modifications */ / (float)all_z_size;
+    float all_pc_of_txt  = z_file->txt_data_so_far_bind ? 100.0 * (float)all_txt_len / (float)z_file->txt_data_so_far_bind : 0 /* with modifications */;
+    float all_pc_of_z    = z_file->disk_so_far          ? 100.0 * (float)all_z_size  / (float)z_file->disk_so_far          : 0;
 
     // long form stats from --STATS    
     qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_z_size);  // sort by compressed size
@@ -415,7 +419,7 @@ void stats_compress (void)
     qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_z_size);  // re-sort after consolidation
 
     // source compression, eg BGZF, against txt before any modifications
-    double src_comp_ratio = (double)z_file->txt_data_so_far_bind_0 / (double)z_file->txt_disk_so_far_bind; 
+    float src_comp_ratio = (float)z_file->txt_data_so_far_bind_0 / (float)z_file->txt_disk_so_far_bind; 
 
     stats_output_stats (sbl, num_stats, src_comp_ratio, z_file->codec, all_txt_len, z_file->txt_data_so_far_bind_0, all_z_size, all_pc_of_txt, all_pc_of_z, all_comp_ratio);
 

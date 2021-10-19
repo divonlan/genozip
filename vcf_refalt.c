@@ -465,14 +465,6 @@ static LiftOverStatus vcf_refalt_lift_complex (VBlockVCFP vb, STRp(ref),
                                                const Range *prim_range, PosType pos, 
                                                const Range *luft_range, PosType opos)
 {
-/* xxx    
-    // rejecting a non-left-anchored complex with xstrand, because vcf_lo_seg_ostatus_from_LUFT_or_PRIM can't tell if its a
-    // left-anchored indel vs a non-left-anchored complex
-    //
-    { DEF_LUFT (ref_len);
-      REJECTIF (is_xstrand && !is_left_anchored, LO_XSTRAND_NLA, 
-                ALTF "Genozip limitation: " LUFTF "strand reversal not supported for non-left-anchored indels", ALT, LUFT); }
-*/
     // case: complex variant - but REF is unchanged (note: we don't check flanking regions, it is debatable if we should)
     if (vcf_refalt_is_REF_same_in_luft (vb, ref, ref_len, is_xstrand, prim_range, pos, luft_range, opos)) {
         if (is_left_anchored) {

@@ -115,9 +115,9 @@ void phy_seg_finalize (VBlockP vb)
                        { .dict_id = { _PHY_SEQ }, .separator = "\n\n" } }
     };
 
-    static const char fasta_prefix[] = { CON_PREFIX_SEP,        // has prefix 
-                                         CON_PREFIX_SEP,        // end of (empty) container-wide prefix
-                                         '>', CON_PREFIX_SEP }; // sequence ID prefix in fasta
+    static const char fasta_prefix[] = { CON_PX_SEP,        // has prefix 
+                                         CON_PX_SEP,        // end of (empty) container-wide prefix
+                                         '>', CON_PX_SEP }; // sequence ID prefix in fasta
 
     container_seg (vb, CTX(PHY_TOP2FASTA), (ContainerP)&top_level_to_fasta, fasta_prefix, sizeof (fasta_prefix), 0);
 }

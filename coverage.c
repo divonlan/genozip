@@ -57,7 +57,7 @@ static ConstContigPkgP coverage_get_contigs (const char *option_name)
 }
 
 // get coverage and length of primary autosome contigs
-static double coverage_get_autosome_depth (ConstContigPkgP contigs, WordIndex index_chrX, WordIndex index_chrY)
+static float coverage_get_autosome_depth (ConstContigPkgP contigs, WordIndex index_chrX, WordIndex index_chrY)
 {
     uint64_t coverage_AS=0, len_AS=0;
     
@@ -81,7 +81,7 @@ static double coverage_get_autosome_depth (ConstContigPkgP contigs, WordIndex in
 
     ASSERT0 (len_AS, "Cannot calculate autosome data, because autosome contigs are not loaded");
 
-    return (double)coverage_AS / (double)len_AS;
+    return (float)coverage_AS / (float)len_AS;
 }
 
 // output of genocat --sex, called from piz_one_txt_file
@@ -96,9 +96,9 @@ void coverage_sex_classifier (bool is_first_z_file)
     WordIndex index_chrX = coverage_get_chrom_index ('X');
     WordIndex index_chrY = coverage_get_chrom_index ('Y');
 
-    double len_chr1 = index_chr1 == WORD_INDEX_NONE ? 1 : contigs_get_LN (contigs, index_chr1);
-    double len_chrX = index_chrX == WORD_INDEX_NONE ? 1 : contigs_get_LN (contigs, index_chrX);
-    double len_chrY = index_chrY == WORD_INDEX_NONE ? 1 : contigs_get_LN (contigs, index_chrY);
+    float len_chr1 = index_chr1 == WORD_INDEX_NONE ? 1 : contigs_get_LN (contigs, index_chr1);
+    float len_chrX = index_chrX == WORD_INDEX_NONE ? 1 : contigs_get_LN (contigs, index_chrX);
+    float len_chrY = index_chrY == WORD_INDEX_NONE ? 1 : contigs_get_LN (contigs, index_chrY);
 
     ARRAY (uint64_t, coverage, txt_file->coverage);
 
@@ -112,20 +112,20 @@ void coverage_sex_classifier (bool is_first_z_file)
     
     // in SAM, it is sufficient to look at chr1 as it is already mapped. this allows as to run with --regions, 10 times faster
     // in FASTQ, we rely on our own approximate aligner, so we compare against all autosomes
-    double depth_AS   = is_sam ? (len_chr1 ? (double)coverage[index_chr1] / len_chr1 : 0)
+    float depth_AS   = is_sam ? (len_chr1 ? (float)coverage[index_chr1] / len_chr1 : 0)
                                : coverage_get_autosome_depth (contigs, index_chrX, index_chrY);
 
-    double depth_chrX = len_chrX ? (double)coverage[index_chrX] / len_chrX : 0;
-    double depth_chrY = len_chrY ? (double)coverage[index_chrY] / len_chrY : 0;
+    float depth_chrX = len_chrX ? (float)coverage[index_chrX] / len_chrX : 0;
+    float depth_chrY = len_chrY ? (float)coverage[index_chrY] / len_chrY : 0;
 
     // correct for Genozip Aligner's bias in favour X and Y (vs autosomes) in humans (in FASTQ)
-    double correction = is_fastq ? 1.333 : 1;
+    float correction = is_fastq ? 1.333 : 1;
 
-    double ratio_AS_X = !depth_AS   ? 0 
+    float ratio_AS_X = !depth_AS   ? 0 
                       : !depth_chrX ? 1000 
                       :               correction * depth_AS / depth_chrX;
     
-    double ratio_X_Y  = !depth_chrX ? 0 
+    float ratio_X_Y  = !depth_chrX ? 0 
                       : !depth_chrY ? 1000 
                       :               depth_chrX / depth_chrY;
     
@@ -219,8 +219,8 @@ void coverage_show_coverage (void)
         if (flag.show_coverage == COV_ALL || (flag.show_coverage == COV_CHROM && cn_len <= 5))
             iprintf (is_info_stream_terminal ? "%-*s  %-8s  %-11s  %-10s  %-4.1f%%  %6.2f\n" : "%*s\t%s\t%s\t%s\t%4.1f\t%6.2f\n", 
                      chr_width, chrom_name, str_bases(len).s, str_uint_commas (read_count[i]).s, str_bases(coverage[i]).s, 
-                     100.0 * (double)coverage[i] / (double)coverage_special[CVR_TOTAL], 
-                     len ? (double)coverage[i] / (double)len : 0);
+                     100.0 * (float)coverage[i] / (float)coverage_special[CVR_TOTAL], 
+                     len ? (float)coverage[i] / (float)len : 0);
 
         else {
             coverage_special[CVR_OTHER_CONTIGS]   += coverage[i]; // other non-chromosome contigs
@@ -232,7 +232,7 @@ void coverage_show_coverage (void)
 
     char all_coverage[7] = "0";
     if (genome_nbases) // avoid division by 0
-        sprintf (all_coverage, "%*.2f", (int)sizeof(all_coverage)-1, (double)coverage_special[CVR_ALL_CONTIGS] / (double)genome_nbases);
+        sprintf (all_coverage, "%*.2f", (int)sizeof(all_coverage)-1, (float)coverage_special[CVR_ALL_CONTIGS] / (float)genome_nbases);
 
     if (flag.show_coverage == COV_ONE) 
         iprintf ("%s:\t%s\n", z_name, all_coverage);
@@ -247,7 +247,7 @@ void coverage_show_coverage (void)
                         chr_width, cvr_names[i], "",
                         (i == CVR_SOFT_CLIP ? "" : str_uint_commas (read_count_special[i]).s),
                         str_bases(coverage_special[i]).s,
-                        100.0 * (double)coverage_special[i] / (double)coverage_special[CVR_TOTAL],
+                        100.0 * (float)coverage_special[i] / (float)coverage_special[CVR_TOTAL],
                         i == CVR_ALL_CONTIGS ? all_coverage : "");
             
             if (i == CVR_OTHER_CONTIGS && is_info_stream_terminal)

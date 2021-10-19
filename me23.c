@@ -48,6 +48,7 @@ void me23_seg_initialize (VBlock *vb)
     CTX(ME23_GENOTYPE)->ltype    = LT_SEQUENCE;
     CTX(ME23_TOPLEVEL)->no_stons = true; // keep in b250 so it can be eliminated as all_the_same
     CTX(ME23_TOP2VCF)->no_stons  = true;
+    seg_id_field_init (CTX(ME23_ID));
 }
 
 void me23_seg_finalize (VBlockP vb)

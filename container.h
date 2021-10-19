@@ -11,9 +11,9 @@
 
 #pragma pack(1)
 #define CONTAINER_MAX_PREFIXES_LEN (32 * MAX_FIELDS)    // max len of just the names string, without the data eg "INFO1=INFO2=INFO3="
-#define CON_PREFIX_SEP              '\x4'  // starts the prefix string and terminates every prefix within it
-#define CON_PREFIX_SEP_             "\4"   // string version (careful not \x4 as it can combine with the next character to eg \x4F)
-#define CON_PREFIX_SEP_SHOW_REPEATS '\x5'  // an alternative terminator - outputs the number of repeats in LTEN32 after the prefix (used for BAM 'B' array count field)
+#define CON_PX_SEP              '\x4'  // starts the prefix string and terminates every prefix within it
+#define CON_PX_SEP_             "\4"   // string version (careful not \x4 as it can combine with the next character to eg \x4F)
+#define CON_PX_SEP_SHOW_REPEATS '\x5'  // an alternative terminator - outputs the number of repeats in LTEN32 after the prefix (used for BAM 'B' array count field)
 
 #define CONTAINER_MAX_REPEATS 0xfffffe     // 3 byte unsigned int (16M) (minus 1 for easier detection of overflows)
 #define CONTAINER_MAX_SELF_TRANS_CHANGE 50
@@ -21,6 +21,11 @@
 typedef struct ContainerItem {
     DictId dict_id;                        // note: the code counts on this field being first (assigning "item = { dict_id }")
     uint8_t did_i_small;                   // PIZ only: can store dids 0->254, 255 means did_i too large to store
+
+    // special values of seperator[0]
+    #define CI_NONE        ((uint8_t)0x00) // no seperator 
+    #define CI_INVISIBLE   ((uint8_t)0x01) // this item does not appear in the original or reconstructed text. it should be consumed with reconstruct=false
+    #define CI_FIXED_0_PAD ((uint8_t)0x02) // fixed width, zero-left-padded, width in sep[2] (introduced 12.0.43)
 
     // separator[0] values with bit 7 set (0x80) are interpreted as flags rather than a separator, in 
     // which case separator[1] is a parameter of the flags
@@ -30,8 +35,6 @@ typedef struct ContainerItem {
     #define CI_TRANS_MOVE  ((uint8_t)0x84) // (ORed) in addition: in translated: txt_data.len is moved separator[1] bytes (0-255), after all recontruction and/or translation
     #define CI_NATIVE_NEXT ((uint8_t)0x88) // in non-translated mode: separator is in separator[1]
 
-    #define CI_INVISIBLE   ((uint8_t)0x01) // this item does not appear in the original or reconstructed text. it should be consumed with reconstruct=false
-
     uint8_t separator[2];                  // 2 byte separator reconstructed after the item (or flags)
     
     TranslatorId translator;               // instructions how to translate this item, if this Container is reconstructed translating from one data type to another
@@ -39,9 +42,9 @@ typedef struct ContainerItem {
 
 // container snip: it starts with SNIP_CONTAINER, following by a base64 of a big endian Container, with the number of
 // items actually used and optoinally followed by a prefix array.
-// The prefix array, if it exists, starts with CON_PREFIX_SEP followed by the container-wide prefix, followed
-// by a prefix for each item. Every prefix, if provided, is terminated by CON_PREFIX_SEP.
-// Only the container-wide prefix may alternatively be terminated by CON_PREFIX_SEP_SHOW_REPEATS.
+// The prefix array, if it exists, starts with CON_PX_SEP followed by the container-wide prefix, followed
+// by a prefix for each item. Every prefix, if provided, is terminated by CON_PX_SEP.
+// Only the container-wide prefix may alternatively be terminated by CON_PX_SEP_SHOW_REPEATS.
 
 #define CONTAINER_FIELDS(nitems)        \
     uint32_t nitems_hi            : 3;  /* nitems_lo+hi=11 bits, matches MAX_DICTS. MSB of num_items (until 9.0.22 it was MSB of repeats (after BGEN)), until 12.0.27 nitems_hi was 8 bits */ \
@@ -76,9 +79,9 @@ typedef struct MediumContainer { CONTAINER_FIELDS(80)         } MediumContainer;
 #define con_sizeof(con) (sizeof(con) - sizeof((con).items) + con_nitems (con) * sizeof((con).items[0]))
 
 // prefixes may be NULL, or:
-// [0] CON_PREFIX_SEP - start
-//     container-wide-prefix (may be empty)  + CON_PREFIX_SEP
-//     a prefix for each item (may be empty) + CON_PREFIX_SEP
+// [0] CON_PX_SEP - start
+//     container-wide-prefix (may be empty)  + CON_PX_SEP
+//     a prefix for each item (may be empty) + CON_PX_SEP
 // empty prefixes of trailing items may be omitted
 extern void container_prepare_snip (ConstContainerP con, const char *prefixes, unsigned prefixes_len, char *snip, unsigned *snip_len);
 extern WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con, const char *prefixes, unsigned prefixes_len, const char *ren_prefixes, unsigned ren_prefixes_len, unsigned add_bytes, bool *is_new);

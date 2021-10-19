@@ -21,6 +21,7 @@
 #include "bases_filter.h"
 #include "endianness.h"
 #include "lookback.h"
+#include "qname.h"
 
 bool sam_piz_read_one_vb (VBlockP vb, Section sl)
 {
@@ -55,7 +56,8 @@ bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
             !(dict_id.num == _SAM_STRAND   && flag.bases) && 
             !(dict_id.num == _SAM_TAXID    && flag.kraken_taxid != TAXID_NONE) && 
             !(dict_id.num == _SAM_QNAME    && kraken_is_loaded) && 
-            !(dict_id_is_sam_qname_sf(dict_id) && kraken_is_loaded) && 
+            !(dict_id.num == _SAM_BUDDY    && kraken_is_loaded) && // needed by QNAME
+            !(dict_id_is_qname_sf(dict_id) && kraken_is_loaded) && 
             !(dict_id.num == _SAM_POS      && flag.regions) && // BUDDY and PNEXT are needed for POS
             !(dict_id.num == _SAM_PNEXT    && flag.regions))) return true;
 
@@ -64,9 +66,6 @@ bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
         (     dict_id.num != _SAM_TOPLEVEL && 
               dict_id.num != _SAM_TOP2BAM  && 
               dict_id.num != _SAM_TOP2FQ   && 
-              dict_id.num != _SAM_TOP2FQEX && 
-              dict_id.num != _SAM_BUDDY    && 
-              dict_id.num != _SAM_QNAME    &&  // QNAME used to get BUDDY in sam_piz_filter
               dict_id.num != _SAM_TOP2FQEX && 
               dict_id.num != _SAM_RNAME    &&  // easier to always have RNAME
             !(flag.out_dt == DT_BAM        && flag.bases)&&  // if output is BAM we need the entire BAM record to correctly analyze the SEQ for IUPAC, as it is a structure.
@@ -78,7 +77,8 @@ bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
             !(dict_id.num == _SAM_GPOS     && flag.bases) && 
             !(dict_id.num == _SAM_STRAND   && flag.bases) && 
             !(dict_id.num == _SAM_TAXID    && flag.kraken_taxid != TAXID_NONE) && 
-            !(dict_id_is_sam_qname_sf(dict_id) && kraken_is_loaded) && 
+            !(dict_id.num == _SAM_QNAME    && kraken_is_loaded) && 
+            !(dict_id_is_qname_sf(dict_id) && kraken_is_loaded) && 
             !(dict_id.num == _SAM_POS      && flag.regions) &&
             !(dict_id.num == _SAM_PNEXT    && flag.regions) &&
             !(dict_id.num == _SAM_BUDDY    && flag.regions) // BUDDY and PNEXT are needed for POS
@@ -493,9 +493,9 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_ARRAY_SELF)
     ContainerP con = (ContainerP)recon;
     char *prefixes = &recon[con_sizeof (*con)];
 
-    // remove the ',' from the prefix, and terminate with CON_PREFIX_SEP_SHOW_REPEATS - this will cause
+    // remove the ',' from the prefix, and terminate with CON_PX_SEP_SHOW_REPEATS - this will cause
     // the number of repeats (in LTEN32) to be outputed after the prefix
-    prefixes[1] = CON_PREFIX_SEP_SHOW_REPEATS; // prefixes is now { type, CON_PREFIX_SEP_SHOW_REPEATS }
+    prefixes[1] = CON_PX_SEP_SHOW_REPEATS; // prefixes is now { type, CON_PX_SEP_SHOW_REPEATS }
     
     return -1; // change in prefixes length
 }
@@ -581,7 +581,8 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
 CONTAINER_FILTER_FUNC (sam_piz_filter)
 {
     // BAM: set buddy at the beginning of each line, as QNAME is reconstructed much later
-    if (dict_id.num == _SAM_TOP2BAM && item == 0) {
+    if (dict_id.num == _SAM_TOP2BAM && item == 0 && 
+        CTX(SAM_QNAME)->b250.len) { // might be 0 in special cases, like flag.count
         STR(snip);
         PEEK_SNIP(SAM_QNAME);
         if (snip_len && *snip == SNIP_COPY_BUDDY)

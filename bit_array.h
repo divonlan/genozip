@@ -270,7 +270,7 @@ extern void bit_array_set_region(BitArray* bitarr, bit_index_t start, bit_index_
 #define bit_array_clear_region(bitarr,start,len) bit_array_clear_region_do (bitarr, start, len, __FUNCTION__, __LINE__)
 extern void bit_array_clear_region_do (BitArray* bitarr, bit_index_t start, bit_index_t len, const char *func, unsigned code_line);
 
-extern uint32_t bit_array_manhattan_distance (const BitArray *bitarr1, bit_index_t index1, const BitArray *bitarr2, bit_index_t index2, bit_index_t len);
+extern uint32_t bit_array_hamming_distance (const BitArray *bitarr1, bit_index_t index1, const BitArray *bitarr2, bit_index_t index2, bit_index_t len);
 
 //
 // Set, clear and toggle all bits at once

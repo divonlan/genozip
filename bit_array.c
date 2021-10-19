@@ -1483,9 +1483,9 @@ static inline word_t _bit_array_combined_word (word_t word_a, word_t word_b, uin
 }
 
 // calculate the number of bits that are different between two bitarrays at arbitrary positions (divon)
-uint32_t bit_array_manhattan_distance (const BitArray *bitarr_1, bit_index_t index_1, 
-                                       const BitArray *bitarr_2, bit_index_t index_2, 
-                                       bit_index_t len)
+uint32_t bit_array_hamming_distance (const BitArray *bitarr_1, bit_index_t index_1, 
+                                     const BitArray *bitarr_2, bit_index_t index_2, 
+                                     bit_index_t len)
 {
     const word_t *words_1 = &bitarr_1->words[index_1 >> 6];
     uint8_t shift_1 = index_1 & bitmask64(6); // word 1 contributes (64-shift) most-significant bits, word 2 contribute (shift) least significant bits

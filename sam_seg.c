@@ -22,7 +22,7 @@
 #include "segconf.h"
 #include "contigs.h"
 #include "chrom.h"
-#include "compound.h"
+#include "qname.h"
 #include "lookback.h"
 #include "libdeflate/libdeflate.h"
 
@@ -94,7 +94,7 @@ void sam_zip_initialize (void)
     seg_prepare_snip_other (SNIP_COPY, _OPTION_AS_i, false, 0, XS_snip);
     seg_prepare_snip_other (SNIP_COPY, _OPTION_NM_i, false, 0, XM_snip);
 
-    compound_zip_initialize((DictId)_SAM_QNAME);
+    qname_zip_initialize ((DictId)_SAM_QNAME);
     
     seg_prepare_snip_other (SNIP_COPY_BUDDY, _SAM_PNEXT,   false, 0, pos_buddy_snip);
     seg_prepare_snip_other (SNIP_COPY_BUDDY, _SAM_POS,     false, 0, pnext_buddy_snip);
@@ -104,21 +104,13 @@ void sam_zip_initialize (void)
     seg_prepare_snip_other (SNIP_LOOKBACK, (DictId)_OPTION_XA_LOOKBACK, false, 0, xa_lookback_snip);
 }
 
-static void sam_seg_initialize_0X (VBlockP vb, uint32_t reps_per_line, 
-                                   DidIType lookback_did_i, DidIType rname_did_i, DidIType strand_did_i, DidIType pos_did_i, DidIType cigar_did_i)
+static void sam_seg_initialize_0X (VBlockP vb, DidIType lookback_did_i, DidIType rname_did_i, DidIType strand_did_i, DidIType pos_did_i, DidIType cigar_did_i)
 {
     ContextP lookback_ctx = CTX(lookback_did_i); // invalid if lookback_did_i=DID_I_NONE, that's ok
     ContextP rname_ctx    = CTX(rname_did_i);
     ContextP strand_ctx   = CTX(strand_did_i);
     ContextP pos_ctx      = CTX(pos_did_i);
     ContextP cigar_ctx    = CTX(cigar_did_i);
-
-    // preallocate these large buffers to save many reallocs
-    if (reps_per_line) {
-        buf_alloc (vb, &rname_ctx ->b250, 0, reps_per_line * vb->lines.len, WordIndex, CTX_GROWTH, "contexts->b250"); // RNAME
-        buf_alloc (vb, &strand_ctx->b250, 0, reps_per_line * vb->lines.len, WordIndex, CTX_GROWTH, "contexts->b250"); // STRAND
-        buf_alloc (vb, &pos_ctx   ->b250, 0, reps_per_line * vb->lines.len, WordIndex, CTX_GROWTH, "contexts->b250"); // POS
-    }
 
     // note: we need to allocate lookback even if reps_per_line=0, lest an XA shows up despite not being in segconf
     if (lookback_did_i != DID_I_NONE) {
@@ -154,6 +146,7 @@ void sam_seg_initialize (VBlock *vb)
     CTX(SAM_GPOS)->flags.store  = STORE_INT;
     CTX(SAM_BUDDY)->dynamic_size_local = true;
     CTX(SAM_BUDDY)->st_did_i    = SAM_QNAME;
+    CTX(SAM_QNAME)->no_stons    = true; // no singletons, bc sam_piz_filter uses PEEK_SNIP
     
     if (segconf.sam_is_collated) 
         CTX(SAM_POS)->flags.store_delta = true; // since v12.0.41
@@ -206,18 +199,20 @@ void sam_seg_initialize (VBlock *vb)
         CTX(SAM_TAXID)->counts_section = true; 
     }
 
-    compound_seg_initialize (VB, SAM_QNAME);
+    qname_seg_initialize (VB, SAM_QNAME);
     
-    if (segconf.running) 
-        segconf.sam_is_sorted = segconf.sam_is_collated = segconf.is_bgi_E9L1C3R10 = segconf.is_illumina_7 = true; // initialize optimistically
+    if (segconf.running) {
+        segconf.sam_is_sorted = segconf.sam_is_collated = true; // initialize optimistically
+        segconf.qname_flavor = 0; // unknown
+    }
 
     // initial allocations based on segconf data
     if (!segconf.running && segconf.sam_is_sorted) 
         buf_alloc_255 (vb, &((VBlockSAMP)vb)->qname_hash, 0, (1 << BUDDY_HASH_BITS), int32_t, 1, "qname_hash");    
 
-    sam_seg_initialize_0X (vb, segconf.XA_reps, (segconf.sam_is_sorted ? OPTION_XA_LOOKBACK : DID_I_NONE), OPTION_XA_RNAME, OPTION_XA_STRAND, OPTION_XA_POS, OPTION_XA_CIGAR);
-    sam_seg_initialize_0X (vb, segconf.SA_reps, DID_I_NONE, OPTION_SA_RNAME, OPTION_SA_STRAND, OPTION_SA_POS, OPTION_SA_CIGAR);
-    sam_seg_initialize_0X (vb, segconf.OA_reps, DID_I_NONE, OPTION_OA_RNAME, OPTION_OA_STRAND, OPTION_OA_POS, OPTION_OA_CIGAR);
+    sam_seg_initialize_0X (vb, (segconf.sam_is_sorted ? OPTION_XA_LOOKBACK : DID_I_NONE), OPTION_XA_RNAME, OPTION_XA_STRAND, OPTION_XA_POS, OPTION_XA_CIGAR);
+    sam_seg_initialize_0X (vb, DID_I_NONE, OPTION_SA_RNAME, OPTION_SA_STRAND, OPTION_SA_POS, OPTION_SA_CIGAR);
+    sam_seg_initialize_0X (vb, DID_I_NONE, OPTION_OA_RNAME, OPTION_OA_STRAND, OPTION_OA_POS, OPTION_OA_CIGAR);
 
     // create XA_STRAND nodes (nodes will be deleted in sam_seg_finalize if not used)
     ctx_create_node (vb, OPTION_XA_STRAND, cSTR("-"));
@@ -289,9 +284,9 @@ void sam_seg_finalize (VBlockP vb)
     };
 
     // no container wide-prefix, skip l_name with a 4-character prefix
-    static const char bam_line_prefix[] = { CON_PREFIX_SEP, // has prefix 
-                                            CON_PREFIX_SEP, // end of (empty) container-wide prefix
-                                            ' ',' ',' ',' ', CON_PREFIX_SEP }; // first item prefix - 4 spaces (place holder for block_size)
+    static const char bam_line_prefix[] = { CON_PX_SEP, // has prefix 
+                                            CON_PX_SEP, // end of (empty) container-wide prefix
+                                            ' ',' ',' ',' ', CON_PX_SEP }; // first item prefix - 4 spaces (place holder for block_size)
 
     container_seg (vb, CTX(SAM_TOP2BAM), (ContainerP)&top_level_bam, bam_line_prefix, sizeof(bam_line_prefix), 
                           IS_BAM ? sizeof (uint32_t) * vb->lines.len : 0); // if BAM, account for block_size
@@ -315,8 +310,8 @@ void sam_seg_finalize (VBlockP vb)
     };
 
     // add a '@' to the description line, use a prefix to add the + line    
-    static const char fastq_line_prefix[] = { CON_PREFIX_SEP, CON_PREFIX_SEP, '@', CON_PREFIX_SEP, CON_PREFIX_SEP, CON_PREFIX_SEP, 
-                                              CON_PREFIX_SEP, CON_PREFIX_SEP, CON_PREFIX_SEP, CON_PREFIX_SEP, CON_PREFIX_SEP, '+', '\n', CON_PREFIX_SEP };
+    static const char fastq_line_prefix[] = { CON_PX_SEP, CON_PX_SEP, '@', CON_PX_SEP, CON_PX_SEP, CON_PX_SEP, 
+                                              CON_PX_SEP, CON_PX_SEP, CON_PX_SEP, CON_PX_SEP, CON_PX_SEP, '+', '\n', CON_PX_SEP };
 
     container_seg (vb, CTX(SAM_TOP2FQ), (ContainerP)&top_level_fastq, fastq_line_prefix, sizeof(fastq_line_prefix), 0);
 
@@ -343,19 +338,19 @@ void sam_seg_finalize (VBlockP vb)
 
     // add a '@' to the description line, use a prefix to add the + line    
     static const char fastq_ext_line_prefix[] = { 
-        CON_PREFIX_SEP, CON_PREFIX_SEP, 
-        '@', CON_PREFIX_SEP, 
-        'F','L','A','G',':', CON_PREFIX_SEP, 
-        'R','N','A','M','E',':', CON_PREFIX_SEP, 
-        'P','O','S',':', CON_PREFIX_SEP, 
-        'M','A','P','Q',':', CON_PREFIX_SEP, 
-        'C','I','G','A','R',':', CON_PREFIX_SEP,
-        'R','N','E','X','T',':', CON_PREFIX_SEP, 
-        'P','N','E','X','T',':', CON_PREFIX_SEP, 
-        'T','L','E','N',':', CON_PREFIX_SEP, 
-        CON_PREFIX_SEP,              // optional
-        CON_PREFIX_SEP,              // SEQ
-        '+', '\n', CON_PREFIX_SEP }; // QUAL
+        CON_PX_SEP, CON_PX_SEP, 
+        '@', CON_PX_SEP, 
+        'F','L','A','G',':', CON_PX_SEP, 
+        'R','N','A','M','E',':', CON_PX_SEP, 
+        'P','O','S',':', CON_PX_SEP, 
+        'M','A','P','Q',':', CON_PX_SEP, 
+        'C','I','G','A','R',':', CON_PX_SEP,
+        'R','N','E','X','T',':', CON_PX_SEP, 
+        'P','N','E','X','T',':', CON_PX_SEP, 
+        'T','L','E','N',':', CON_PX_SEP, 
+        CON_PX_SEP,              // optional
+        CON_PX_SEP,              // SEQ
+        '+', '\n', CON_PX_SEP }; // QUAL
 
     container_seg (vb, CTX(SAM_TOP2FQEX), (ContainerP)&top_level_fastq_ext, 
                    fastq_ext_line_prefix, sizeof(fastq_ext_line_prefix), 0);
@@ -364,9 +359,6 @@ void sam_seg_finalize (VBlockP vb)
     if (segconf.running) {
         segconf.sam_buddy_RG  = segconf.sam_is_sorted && (CTX(OPTION_RG_Z)->nodes.len >= BUDDY_MIN_RG_COUNT); // it only makes sense to buddy RGs in a sorted (not collated) file, and where there are "a lot" of RGs or else we would be increasing rather than decreasing entropy
         segconf.sam_cigar_len = 1 + (segconf.sam_cigar_len / vb->lines.len); // set to the average CIGAR len (rounded up)
-        if (segconf.XA_reps) segconf.XA_reps = 1 + (segconf.XA_reps / vb->lines.len); // set to the average number of repeats per line (rounded up)
-        if (segconf.SA_reps) segconf.SA_reps = 1 + (segconf.SA_reps / vb->lines.len); 
-        if (segconf.OA_reps) segconf.OA_reps = 1 + (segconf.OA_reps / vb->lines.len); 
     }
 
     // get rid of the XA strand context (nodes added in sam_seg_initialize) if we ended up not having this tag
@@ -500,8 +492,8 @@ void sam_seg_verify_RNAME_POS (VBlock *vb, const char *p_into_txt, PosType this_
 //
 // Best explanation of CIGAR operations: https://davetang.org/wiki/tiki-index.php?page=SAM
 void sam_seg_SEQ (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), const PosType pos, const char *cigar, 
-                        uint32_t ref_consumed, uint32_t ref_and_seq_consumed,
-                        unsigned recursion_level, uint32_t level_0_seq_len, const char *level_0_cigar, unsigned add_bytes)
+                  uint32_t ref_consumed, uint32_t ref_and_seq_consumed,
+                  unsigned recursion_level, uint32_t level_0_seq_len, const char *level_0_cigar, unsigned add_bytes)
 {
     START_TIMER;
 
@@ -713,8 +705,7 @@ void sam_seg_SEQ (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), const PosType p
     if (!recursion_level) {
         BitArray *M_is_ref = buf_get_bitarray (&vb->md_M_is_ref);
 
-        bool bitmap_matches_MD = vb->md_verified && 
-                                !bit_array_manhattan_distance (M_is_ref, 0, bitmap, bitmap_start, M_is_ref->nbits);
+        bool bitmap_matches_MD = vb->md_verified && !bit_array_hamming_distance (M_is_ref, 0, bitmap, bitmap_start, M_is_ref->nbits);
 
         if (flag.show_wrong_md && vb->md_verified && !bitmap_matches_MD) {
             iprintf ("vb=%u line=%"PRIu64" RNAME=%.*s POS=%"PRId64" CIGAR=%s MD=%.*s SEQ=%.*s\n", 
@@ -784,8 +775,8 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
 {
     const bool is_bam = IS_BAM;
     Container con = { .repeats=1 };
-    char prefixes[MAX_FIELDS * 6 + 3]; // each name is 5 characters per SAM specification, eg "MC:Z:" followed by CON_PREFIX_SEP ; +3 for the initial CON_PREFIX_SEP
-    prefixes[0] = prefixes[1] = prefixes[2] = CON_PREFIX_SEP; // initial CON_PREFIX_SEP follow by separator of empty Container-wide prefix followed by separator for empty prefix for translator-only item[0]
+    char prefixes[MAX_FIELDS * 6 + 3]; // each name is 5 characters per SAM specification, eg "MC:Z:" followed by CON_PX_SEP ; +3 for the initial CON_PX_SEP
+    prefixes[0] = prefixes[1] = prefixes[2] = CON_PX_SEP; // initial CON_PX_SEP follow by separator of empty Container-wide prefix followed by separator for empty prefix for translator-only item[0]
     unsigned prefixes_len=3;
     const char *value, *tag;
     char type;
@@ -817,7 +808,7 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
         // in the optional field prefix (unlike array type), all integer types become 'i'.
         char prefix_type = sam_seg_bam_type_to_sam_type (type);
 
-        char prefix[6] = { tag[0], tag[1], ':', prefix_type, ':', CON_PREFIX_SEP}; 
+        char prefix[6] = { tag[0], tag[1], ':', prefix_type, ':', CON_PX_SEP}; 
         memcpy (&prefixes[prefixes_len], prefix, 6);
         prefixes_len += 6;
 
@@ -859,7 +850,9 @@ void sam_seg_QNAME (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(qname), unsigned add
                 segconf.sam_is_collated = false; // two new QNAMEs in a row = not collated
             CTX(SAM_QNAME)->last_is_new = is_new;
         }
-        compound_segconf_test (STRa(qname));
+        
+        if (vb->line_i==0)
+             qname_segconf_discover_flavor (VB, SAM_QNAME, STRa(qname));
     }
 
     ContextP ctx = CTX(SAM_QNAME);
@@ -891,9 +884,7 @@ void sam_seg_QNAME (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(qname), unsigned add
     }
 
     if (vb->buddy_line_i == -1)
-        compound_seg (VB, ctx, STRa(qname), sep_without_space, 0, add_additional_bytes);
-
-    seg_set_last_txt (VB, ctx, STRa(qname), STORE_NONE); // store for kraken
+        qname_seg (VB, ctx, STRa(qname), add_additional_bytes);
 
     dl->QNAME = (CtxWord){.char_index = ENTNUM (vb->txt_data, qname), .snip_len = qname_len };
 }

@@ -456,8 +456,7 @@ static LiftOverStatus vcf_lo_seg_ostatus_from_LUFT_or_PRIM (VBlockVCFP vb, const
     }
 
     bool is_snp = main_ref_len == 1 && (main_alt_len==1 || str_count_char (main_alt, main_alt_len, ',')*2+1 == main_alt_len);
- //  xxx bool is_left_anchored = !is_snp && vcf_lo_seg_is_left_anchored (vb, main_ref, main_alt, main_alt_len);
-
+ 
     // check for structural variant
     if (memchr (main_alt, '<', main_alt_len)) 
         ostatus = LO_OK_REF_SAME_SV;

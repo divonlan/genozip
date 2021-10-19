@@ -8,7 +8,7 @@
 
 #include "genozip.h"
 
-extern bool optimize_float_2_sig_dig (const char *snip, unsigned len, double cap_value_at /* 0 if no cap */,
+extern bool optimize_float_2_sig_dig (const char *snip, unsigned len, float cap_value_at /* 0 if no cap */,
                                       char *optimized_snip, unsigned *optimized_snip_len);
 
 extern bool optimize_vector_2_sig_dig (const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len);

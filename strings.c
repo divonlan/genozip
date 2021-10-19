@@ -224,6 +224,25 @@ str_get_int_range_type(16,uint16_t) // unsigned
 str_get_int_range_type(32,int32_t)  // signed
 str_get_int_range_type(64,int64_t)  // signed
 
+// get a positive decimal integer, may have leading zeros eg 005
+bool str_get_int_dec (STRp(str), 
+                      uint64_t *value) // out - modified only if str is an integer
+{
+    int64_t out = 0;
+
+    for (uint32_t i=0; i < str_len; i++) {
+        if (!IS_DIGIT(str[i])) return false;
+
+        uint64_t prev_out = out;
+        out = (out * 10) + (str[i] - '0');
+
+        if (out < prev_out) return false; // number overflowed beyond maximum uint64_t
+    }
+
+    if (value) *value = out; // update only if successful
+    return true;
+}
+
 // get a positive hexadecimal integer, may have leading zeros eg 00FFF
 bool str_get_int_hex (STRp(str), 
                       uint64_t *value) // out - modified only if str is an integer
@@ -459,6 +478,7 @@ uint32_t str_split_do (const char *str, uint32_t str_len,
                        uint32_t max_items,        // optional - if not given, a count of sep is done first
                        char sep,                  // option 1 - constant separator
                        ConstContainerP con,       // option 2 - separators by container item[].separator[0]. max_items MUST be given
+                       STRp(con_prefixes),        // optional - used only in option 2, and used only if container has fixed items 
                        const char **items,        // out - array of char* of length max_items - one more than the number of separators
                        uint32_t *item_lens,       // optional out - corresponding lengths
                        bool exactly,
@@ -467,18 +487,60 @@ uint32_t str_split_do (const char *str, uint32_t str_len,
 {
     if (!str) return 0;
     
-    items[0] = str;
-    uint32_t item_i=1;
+    uint32_t item_i;
+    uint32_t num_fixed_item=0;
 
     if (con) { // option 2
-        sep = con->items[0].separator[0];
+
+        // if we have prefixes, set px_i to the first item's prefix, after the container-wide prefix
+        unsigned px_i = 0; 
+        if (con_prefixes_len) {
+            px_i = 1;
+            while (con_prefixes[px_i] != CON_PX_SEP) px_i++; // skip over container-wide prefix
+            px_i++; // skip to first item prefix
+        }
+
+        sep = CI_FIXED_0_PAD; // previous fictuous item -1
+        unsigned fixed_len=0;
+        for (item_i=0; item_i < max_items; item_i++) {
+            items[item_i] = item_i ? items[item_i-1] : str;
+
+            // skip item prefix
+            if (px_i < con_prefixes_len) {
+                unsigned px_len=0; for (; con_prefixes[px_i] != CON_PX_SEP; px_i++) px_len++;
+                px_i++; // skip CON_PX_SEP
+                items[item_i] += px_len;
+            }
+
+            bool is_fixed = (sep == CI_FIXED_0_PAD); // previous item was fixed
+
+            // handle fixed items. not all items need to be fixed, but all the fixed items must be at the beginning of the container
+            if (is_fixed) 
+                items[item_i] += fixed_len;
+            
+            else if (sep != CI_FIXED_0_PAD)
+                break; // no more fixed items
+
+            sep = con->items[item_i].separator[0];
+            fixed_len = sep == CI_FIXED_0_PAD ? con->items[item_i].separator[1] : 0;
+
+            if (sep == CI_FIXED_0_PAD) {
+                num_fixed_item++;
+                if (item_lens) item_lens[item_i] = fixed_len;
+            }
+        }
+
         if (sep == CI_INVISIBLE) { // currently, we only support CI_INVISIBLE for the first item as there is no need yet for more
             sep = con->items[item_i].separator[0];
             items[item_i++] = str;
         }
     }
+    else {
+        items[0] = str;
+        item_i=1;
+    }
 
-    for (uint32_t i=0; i < str_len ; i++) 
+    for (uint32_t i=items[item_i-1]-str; i < str_len ; i++) 
         if (str[i] == sep) {
             if (item_i == max_items) {
                 ASSERT (!enforce_msg, "expecting up to %u %s separators but found more: (100 first) %.*s", 
@@ -492,7 +554,7 @@ uint32_t str_split_do (const char *str, uint32_t str_len,
         }
 
     if (item_lens) {
-        for (uint32_t i=0; i < item_i-1; i++)    
+        for (uint32_t i=num_fixed_item; i < item_i-1; i++)    
             item_lens[i] = (items[i+1] > items[i]) ? items[i+1] - items[i] - 1 
                                                    : 0; // items[i] is CI_INVISIBLE
             

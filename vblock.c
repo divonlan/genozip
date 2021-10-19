@@ -164,7 +164,7 @@ void vb_destroy_vb_do (VBlockP *vb_p, const char *func)
             if (*c) {
                 #define REL_LOC(field) (((char*)(&((VBlock *)vb)->field)) - (char*)vb) // <-- to use private datatype VBlocks, temporarily include the private .h for debugging
                 fprintf (stderr, "sizeof_vb=%u sizeof(VBlock)=%u. Bad byte=%u Your field: %u\n", 
-                         sizeof_vb, (int)sizeof (VBlock), (unsigned)(c - (char*)vb), (int)REL_LOC(contexts[7].local_hash)); // <-- to find the offending field, plug in field names and run iteratively
+                         sizeof_vb, (int)sizeof (VBlock), (unsigned)(c - (char*)vb), (int)REL_LOC(contexts[20])); // <-- to find the offending field, plug in field names and run iteratively
                 
                 ABORT ("vb_release_vb_do of %s didn't fully clear the VB, byte %u != 0", dt_name(dt), (unsigned)(c - (char*)vb));
             }

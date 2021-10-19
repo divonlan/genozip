@@ -54,7 +54,7 @@ void profiler_add (ConstVBlockP vb)
     ADD(seg_all_data_lines);
     ADD(seg_initialize);
     ADD(sam_seg_XA_pos);
-    ADD(compound_seg);
+    ADD(qname_seg);
     ADD(ctx_merge_in_vb_ctx);
     ADD(codec_hapmat_count_alt_alleles);
     ADD(md5);
@@ -169,7 +169,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (aligner_get_match_len, 3);
         PRINT (aligner_get_word_from_seq, 3);
         PRINT (seg_initialize, 2);
-        PRINT (compound_seg,2);
+        PRINT (qname_seg,2);
         PRINT (sam_cigar_seg,2);
         PRINT (sam_seg_SEQ,2);
         PRINT (ctx_merge_in_vb_ctx, 1);

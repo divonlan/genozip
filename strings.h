@@ -11,6 +11,8 @@
 #define IS_NUCLEOTIDE(c) ((c) == 'A' || (c) == 'T' || (c) == 'C' || (c) == 'G')
 #define IS_DIGIT(c)    ((c)>='0' && (c)<='9')
 #define IS_HEXDIGIT(c) (((c)>='0' && (c)<='9') || ((c)>='A' && (c)<='F') || ((c)>='a' && (c)<='f'))
+#define IS_HEXDIGITlo(c) (((c)>='0' && (c)<='9') || ((c)>='a' && (c)<='f'))
+#define IS_HEXDIGITUP(c) (((c)>='0' && (c)<='9') || ((c)>='A' && (c)<='F'))
 #define IS_CLETTER(c)  ((c)>='A' && (c)<='Z')
 #define IS_SLETTER(c)  ((c)>='a' && (c)<='z')
 #define IS_LETTER(c) (IS_CLETTER(c) || IS_SLETTER(c))
@@ -86,21 +88,27 @@ extern StrText str_int_s (int64_t n);
                        :                   ((int)log10(-(n))) + 2)
 
 extern uint32_t str_int (int64_t n, char *str /* out */);
-extern bool str_get_int (const char *str, uint32_t str_len, int64_t *value); // note: for a reason beyond me, Docker hub won't compile if its "bool" and not "bool"
-extern bool str_get_int_range8  (const char *str, uint32_t str_len, uint8_t  min_val, uint8_t  max_val, uint8_t  *value);
-extern bool str_get_int_range16 (const char *str, uint32_t str_len, uint16_t min_val, uint16_t max_val, uint16_t *value);
-extern bool str_get_int_range64 (const char *str, uint32_t str_len, int64_t  min_val, int64_t  max_val, int64_t  *value);
-extern bool str_get_int_range32 (const char *str, uint32_t str_len, int32_t  min_val, int32_t  max_val, int32_t  *value);
+extern bool str_get_int (STRp(str), int64_t *value); 
+extern bool str_get_int_range8  (STRp(str), uint8_t  min_val, uint8_t  max_val, uint8_t  *value);
+extern bool str_get_int_range16 (STRp(str), uint16_t min_val, uint16_t max_val, uint16_t *value);
+extern bool str_get_int_range64 (STRp(str), int64_t  min_val, int64_t  max_val, int64_t  *value);
+extern bool str_get_int_range32 (STRp(str), int32_t  min_val, int32_t  max_val, int32_t  *value);
 
-extern bool str_get_int_hex (const char *str, uint32_t str_len, uint64_t *value); 
-extern bool str_get_int_range_allow_hex8  (const char *str, uint32_t str_len, uint8_t  min_val, uint8_t  max_val, uint8_t  *value);
-extern bool str_get_int_range_allow_hex16 (const char *str, uint32_t str_len, uint16_t min_val, uint16_t max_val, uint16_t *value);
-extern bool str_get_int_range_allow_hex32 (const char *str, uint32_t str_len, uint32_t min_val, uint32_t max_val, uint32_t *value);
-extern bool str_get_int_range_allow_hex64 (const char *str, uint32_t str_len, uint64_t min_val, uint64_t max_val, uint64_t *value);
+extern bool str_get_int_dec (STRp(str), uint64_t *value); 
+extern bool str_get_int_hex (STRp(str), uint64_t *value); 
+extern bool str_get_int_range_allow_hex8  (STRp(str), uint8_t  min_val, uint8_t  max_val, uint8_t  *value);
+extern bool str_get_int_range_allow_hex16 (STRp(str), uint16_t min_val, uint16_t max_val, uint16_t *value);
+extern bool str_get_int_range_allow_hex32 (STRp(str), uint32_t min_val, uint32_t max_val, uint32_t *value);
+extern bool str_get_int_range_allow_hex64 (STRp(str), uint64_t min_val, uint64_t max_val, uint64_t *value);
 
-#define str_is_int(str,str_len) str_get_int ((str), (str_len), NULL)
+static bool inline str_is_int(STRp(str))     { return str_get_int (STRa(str), NULL); } // integer - leading zeros not allowed
+static bool inline str_is_numeric(STRp(str)) { for (int i=0; i<str_len; i++) if (!IS_DIGIT(str[i])) return false; return true; } // numeric - leading zeros ok
+static bool inline str_is_hex(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_HEXDIGIT(str[i])) return false; return true; } 
+static bool inline str_is_hexlo(STRp(str))   { for (int i=0; i<str_len; i++) if (!IS_HEXDIGITlo(str[i])) return false; return true; } 
+static bool inline str_is_hexup(STRp(str))   { for (int i=0; i<str_len; i++) if (!IS_HEXDIGITUP(str[i])) return false; return true; } 
+static bool inline str_is_no_ws(STRp(str))   { for (int i=0; i<str_len; i++) if (!IS_NON_WS_PRINTABLE(str[i])) return false; return true; } 
 
-extern bool str_is_in_range (const char *str, uint32_t str_len, char first_c, char last_c);
+extern bool str_is_in_range (STRp(str), char first_c, char last_c);
 
 extern StrText str_pointer (const void *p);
 extern StrText str_time (void);
@@ -110,7 +118,7 @@ extern bool str_get_float (STRp(float_str), double *value, char format[FLOAT_FOR
 
 extern bool str_scientific_to_decimal (STRp(float_str), char *modified, uint32_t *modified_len, double *value);
 
-extern uint32_t str_split_do (STRp(str), uint32_t max_items, char sep, ConstContainerP con, const char **items, uint32_t *item_lens, bool exactly, const char *enforce_msg);
+extern uint32_t str_split_do (STRp(str), uint32_t max_items, char sep, ConstContainerP con, STRp(con_prefixes), const char **items, uint32_t *item_lens, bool exactly, const char *enforce_msg);
 
 // name      : eg "item", macro defines variables "items" (array of pointers), item_lens (array or uint32_t), n_items (actual number of items)
 // max_items : maximum allowed items, or 0 if not known
@@ -120,12 +128,12 @@ extern uint32_t str_split_do (STRp(str), uint32_t max_items, char sep, ConstCont
     uint32_t n_##name##s = (max_items) ? (max_items) : str_count_char ((str), (str_len), (sep)) + 1; /* 0 if str is NULL */ \
     const char *name##s[MAX_(n_##name##s, 1)]; \
     uint32_t name##_lens[MAX_(n_##name##s, 1)]; \
-    n_##name##s = str_split_do ((str), (str_len), n_##name##s, (sep), NULL, name##s, name##_lens, (exactly), (enforce))
+    n_##name##s = str_split_do ((str), (str_len), n_##name##s, (sep), NULL, NULL, 0, name##s, name##_lens, (exactly), (enforce))
 
-#define str_split_by_container(str,str_len,container,name) \
+#define str_split_by_container(str,str_len,container,prefix,prefix_len,name) \
     const char *name##s[MAX_(con_nitems(*container), 1)];  \
     uint32_t name##_lens[MAX_(con_nitems(*container), 1)]; \
-    uint32_t n_##name##s = str_split_do ((str), (str_len), con_nitems(*container), 0, (ConstContainerP)(container), name##s, name##_lens, true, NULL)
+    uint32_t n_##name##s = str_split_do ((str), (str_len), con_nitems(*container), 0, (ConstContainerP)(container), (prefix), (prefix_len), name##s, name##_lens, true, NULL)
 
 extern void str_remove_CR_do (uint32_t n_lines, const char **lines, uint32_t *line_lens);
 #define str_remove_CR(name) str_remove_CR_do (n_##name##s, name##s, name##_lens)
@@ -135,13 +143,13 @@ extern void str_nul_separate_do (uint32_t n_items, const char **items, uint32_t 
 
 extern uint32_t str_remove_whitespace (const char *in, uint32_t in_len, char *out);
 
-extern uint32_t str_split_ints_do (const char *str, uint32_t str_len, uint32_t max_items, char sep, bool exactly, int64_t *items);
+extern uint32_t str_split_ints_do (STRp(str), uint32_t max_items, char sep, bool exactly, int64_t *items);
 #define str_split_ints(str,str_len,max_items,sep,name,exactly) \
     uint32_t n_##name##s = (max_items) ? (max_items) : str_count_char ((str), (str_len), (sep)) + 1; \
     int64_t name##s[n_##name##s]; \
     n_##name##s = str_split_ints_do ((str), (str_len), n_##name##s, (sep), (exactly), name##s); 
 
-extern uint32_t str_split_floats_do (const char *str, uint32_t str_len, uint32_t max_items, char sep, bool exactly, double *items);
+extern uint32_t str_split_floats_do (STRp(str), uint32_t max_items, char sep, bool exactly, double *items);
 #define str_split_floats(str,str_len,max_items,sep,name,exactly) \
     uint32_t n_##name##s = (max_items) ? (max_items) : str_count_char ((str), (str_len), (sep)) + 1; \
     double name##s[n_##name##s]; \
@@ -167,6 +175,6 @@ extern bool str_verify_not_empty (char *response, uint32_t response_size, const 
 
 extern const char *str_win_error (void);
 
-static inline char base36(uint32_t n) { return (n < 10) ? ('0' + n) : ('a' + (n-10)); };
+static inline char base36(uint32_t n) { return ((n) < 10) ? ('0' + (n)) : ('a' + ((n)-10)); };
 
 #endif

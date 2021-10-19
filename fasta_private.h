@@ -23,10 +23,6 @@ typedef struct VBlockFASTA {
     bool ra_initialized;            // ZIP: RA was initialized for this VB
     uint32_t lines_this_contig;     // ZIP
 
-    // caching of seq line snips
-    uint32_t std_line_len;          // ZIP: determined by first non-first-line seq line in VB 
-    WordIndex std_line_node_index;  // ZIP: node index for non-first lines, with same length as std_line_len
-
     // --make-reference
     bool has_contig_metadata;       // used by make-reference
     ContigMetadata contig_metadata; 

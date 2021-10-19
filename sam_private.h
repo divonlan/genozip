@@ -136,9 +136,6 @@ extern const uint8_t cigar_lookup_bam[16];
 #define NEXT_UINT16 GET_UINT16 (next_field); next_field += sizeof (uint16_t);
 #define NEXT_UINT32 GET_UINT32 (next_field); next_field += sizeof (uint32_t);
 
-#define dict_id_is_sam_qname_sf dict_id_is_type_1
-#define dict_id_sam_qname_sf dict_id_type_1
-
 extern void sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qname), unsigned add_additional_bytes);
 extern void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(flag_str), unsigned add_bytes);
 extern void sam_seg_RNAME_RNEXT (VBlockP vb, DidIType did_i, STRp (chrom), unsigned add_bytes);

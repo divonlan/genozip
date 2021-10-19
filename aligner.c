@@ -167,10 +167,10 @@ static inline PosType aligner_best_match (VBlock *vb, const char *seq, const uin
 #       define UPDATE_BEST(fwd)  {               \
             if (gpos != best_gpos) {             \
                 uint32_t match_len = (uint32_t)seq_bits.nbits - \
-                    bit_array_manhattan_distance ((fwd) ? genome : emoneg, \
-                                                  ((fwd) ? gpos : genome_nbases-1 - (gpos + seq_bits.nbits/2 -1)) * 2, \
-                                                  &seq_bits, 0, \
-                                                  seq_bits.nbits); \
+                    bit_array_hamming_distance ((fwd) ? genome : emoneg, \
+                                               ((fwd) ? gpos : genome_nbases-1 - (gpos + seq_bits.nbits/2 -1)) * 2, \
+                                               &seq_bits, 0, \
+                                               seq_bits.nbits); \
                 if (match_len > longest_len) {   \
                     longest_len     = match_len; \
                     best_gpos       = gpos;      \

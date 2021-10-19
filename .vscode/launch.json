@@ -11,13 +11,16 @@
             "program": "${workspaceFolder}/genozip-debug.exe",
             // "program": "${workspaceFolder}/genounzip-debug.exe",
             // "program": "${workspaceFolder}/genocat-debug.exe",
-            ///"program": "${workspaceFolder}/genozip-opt.exe",
-            //"program": "${workspaceFolder}/genozip.exe",
+            // "program": "${workspaceFolder}/genozip-opt.exe",
+            //"program": "${workspaceFolder}/genozip.exe",ionxpress
             //"program": "${workspaceFolder}/genounzip.exe",
             //"program": "${workspaceFolder}/genols-debug.exe",
             
-            "args" : ["-f", "private/test/test.human-sorted.sam"],
-            // "args" : [ "private/test/test.human-sorted.sam.genozip"],
+            // "args" : ["--decompress", "--test", "--echo", "private/test/tmp/unix-nl.basic.genome_Full.me23.txt.genozip"],
+            // "args" : ["private/test/tmp/output.genozip", "--sequent"],
+            // "args" : [ "bug.fq.genozip","--show-con"],
+            "args" : ["--echo", "-f", "bug1.vcf"],
+            // "args" : ["--echo", "-C", "private/test/tmp/chain.genozip", "-f", "bug.vcf"],
             
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

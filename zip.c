@@ -44,13 +44,13 @@ static Mutex wait_for_vb_1_mutex = {};
 
 static void zip_display_compression_ratio (Digest md5, bool is_final_component)
 {
-    double z_bytes        = MAX_((double)z_file->disk_so_far, 1.0); // at least one, to avoid division by zero in case of a z_bytes=0 issue
-    double plain_bytes    = (double)z_file->txt_data_so_far_bind;
-    double comp_bytes     = file_is_read_via_ext_decompressor (txt_file) 
-                              ? (double)txt_file->disk_size    // 0 if via pipe or url, as we have no knowledge of file size
-                              : (double)txt_file->disk_so_far; // unlike disk_size, works also for piped-in files (but not CRAM, BCF, XZ, ZIP)
-    double ratio_vs_plain = plain_bytes / z_bytes;
-    double ratio_vs_comp  = -1;
+    float z_bytes        = MAX_((float)z_file->disk_so_far, 1.0); // at least one, to avoid division by zero in case of a z_bytes=0 issue
+    float plain_bytes    = (float)z_file->txt_data_so_far_bind;
+    float comp_bytes     = file_is_read_via_ext_decompressor (txt_file) 
+                              ? (float)txt_file->disk_size    // 0 if via pipe or url, as we have no knowledge of file size
+                              : (float)txt_file->disk_so_far; // unlike disk_size, works also for piped-in files (but not CRAM, BCF, XZ, ZIP)
+    float ratio_vs_plain = plain_bytes / z_bytes;
+    float ratio_vs_comp  = -1;
 
     if (flag.debug_progress) 
         iprintf ("Ratio calculation: ratio_vs_plain=%f = plain_bytes=%"PRIu64" / z_bytes=%"PRIu64"\n",
@@ -59,7 +59,7 @@ static void zip_display_compression_ratio (Digest md5, bool is_final_component)
     // in bind mode, we don't show compression ratio for files except for the last one
     if (flag.bind) { 
 
-        static double comp_bytes_bind = 0;
+        static float comp_bytes_bind = 0;
         static FileType source_file_type = UNKNOWN_FILE_TYPE;
 
         // reset for every set of bound files (we might have multiple sets if --pair)
@@ -170,52 +170,44 @@ static bool zip_generate_b250_section (VBlock *vb, Context *ctx)
     bool show = flag.show_b250 || dict_id_typeless (ctx->dict_id).num == flag.dict_id_show_one_b250.num;
     if (show) bufprintf (vb, &vb->show_b250_buf, "vb_i=%u %s: ", vb->vblock_i, ctx->tag_name);
 
-    // we move the number of words to param, as len will now contain the of bytes. used by ctx_update_stats()
-    ctx->b250.num_ctx_words = (int64_t)ctx->b250.len;
+    if (ctx->flags.all_the_same) ctx->b250.len = 1;
+
     ARRAY (WordIndex, b250, ctx->b250);
 
-    ctx->b250.len = 0; // we are going to overwrite b250 with the converted indices
+    if (ctx->flags.all_the_same) { // all entries appended with ctx_append_b250 were the same node_index  
 
-    WordIndex first_node_index = b250[0]; 
-    bool all_the_same = !ctx->no_all_the_same; // init to true, unless not allowed - are all the node_index of this context the same in this VB
+        struct FlagsCtx my_flags = ctx->flags;
+        struct FlagsCtx vb_1_flags = vb->vblock_i > 1 ? ctx_get_zf_ctx_flags(ctx) : (struct FlagsCtx){};
+        my_flags.all_the_same = vb_1_flags.all_the_same = false; // compare flags, except for all_the_same
 
-    // we assign the b250 data back onto the same buffer. this words, because the b250 numerals are of length 1 or 4, 
-    // therefore smaller than node_index
-    WordIndex prev = WORD_INDEX_NONE; 
-    for (uint32_t word_i=0; word_i < (uint32_t)b250_len; word_i++) {
-        if (all_the_same && b250[word_i] != first_node_index) // we found evidence that not all are the same
-            all_the_same = false;
-
-        zip_generate_one_b250 (vb, ctx, word_i, b250[word_i], &ctx->b250, &prev, show);
-    }
-
-    // if all the node_index of this context are the same in this VB, we store just one, and set a flag
-    if (all_the_same) {
-
-        // if the entire section is word_index = 0 we can drop it, unless:
+        // case 1: we can drop the entire section, if the one word value in this b250 is 0. unless:
         // 1) it has local (bc if no-b250/dict-from-prev-vb/no-local piz can't distiguish between seg_id-with-b250-all-the-same-word-index-0 vs all-singleton-pushed-to-local)
         // 2) it has flags that need to be passed to piz (unless its vb_i>1 and flags are same as vb_i=1)
         // 3) the one snip is SELF_DELTA
-        uint8_t flags = ((SectionFlags)ctx->flags).flags;
-        if (base250_decode ((const uint8_t **)&ctx->b250.data, false, ctx->tag_name) == 0  
-        &&  !ctx->local.len 
-        &&  ((vb->vblock_i==1 && !flags) || (vb->vblock_i > 1 && flags == ((SectionFlags)ctx_get_zf_ctx_flags (ctx->dict_id)).flags)) // vb_i=1 with flags / vb_i>1 with flags different than vb_i=1 will fail this condition
-        &&  !ctx->pair_b250 && !ctx->pair_local // pair_b250/local will causes zfile_compress_b250/local_data to set flags.paired, which will be different than vb_i=1 flags
-        &&  *FIRSTENT (char, (ctx->ol_dict.len ? ctx->ol_dict : ctx->dict)) != SNIP_SELF_DELTA) { // word_index=0 is the first word in the dictionary
-         
+        if (b250[0] >= 0 && ctx_node_vb (ctx, b250[0], NULL, NULL)->word_index.n == 0
+            && !ctx->no_drop_b250  
+            && !ctx->local.len 
+            && ((SectionFlags)my_flags).flags == ((SectionFlags)vb_1_flags).flags
+            && !ctx->pair_b250 && !ctx->pair_local // pair_b250/local will causes zfile_compress_b250/local_data to set flags.paired, which will be different than vb_i=1 flags
+            && *FIRSTENT (char, (ctx->ol_dict.len ? ctx->ol_dict : ctx->dict)) != SNIP_SELF_DELTA) { // word_index=0 is the first word in the dictionary
+            
             if (flag.debug_allthesame) iprintf ("%s in vb_i=%u is \"all_the_same\" - dropped b250 section\n", ctx->tag_name, vb->vblock_i);
         
-            return true; 
+            return true; // drop this b250 section
         }
 
-        // all word_index in this b250 are the same, but section cannot be completely eliminated. as a second best, shorten the b250 to a single entry.
-        ctx->b250.len = base250_len (ctx->b250.data);
-        ctx->flags.all_the_same = true; 
-
-        if (flag.debug_allthesame) iprintf ("%s in vb_i=%u is \"all_the_same\" - shortened b250 section to 1 element\n", ctx->tag_name, vb->vblock_i);
+        // case 2: we cannot drop the entire b250 section - as a second best, shorten the b250 to a single entry
+        else 
+            if (flag.debug_allthesame) iprintf ("%s in vb_i=%u is \"all_the_same\" - shortened b250 section to 1 element\n", ctx->tag_name, vb->vblock_i);
     }
-    else
-        ctx->flags.all_the_same = false;
+
+    ctx->b250.num_ctx_words = b250_len; // we move the number of words to param, as len will now contain the of bytes. used by ctx_update_stats()
+    ctx->b250.len = 0; // we are going to overwrite b250 with the converted indices
+
+    // convert b250 from an array of node_index (4 bytes each) to word_index (1-4 bytes each)    
+    WordIndex prev = WORD_INDEX_NONE; 
+    for (uint64_t word_i=0; word_i < b250_len; word_i++) 
+        zip_generate_one_b250 (vb, ctx, word_i, b250[word_i], &ctx->b250, &prev, show);
 
     if (show) {
         bufprintf (vb, &vb->show_b250_buf, "%s", "\n");
@@ -230,30 +222,34 @@ static void zip_resize_local (VBlock *vb, Context *ctx)
 {
     ARRAY (uint32_t, src, ctx->local);
 
+    // search for the largest (stop if largest so far requires 32bit)
     uint32_t largest=0;
-    for (uint64_t i=0; i < ctx->local.len; i++)
-        if (src[i] > largest) largest = src[i];
-
+    for (uint64_t i=0; i < src_len; i++) 
+        if (src[i] > largest) {
+            largest = src[i];
+            if (largest > 0xffff) break;
+        }
+    
     // 8 bit
-    if (largest < 0xff) {
+    if (largest <= 0xff) {
         ctx->ltype = LT_UINT8;
         ARRAY (uint8_t, dst, ctx->local);
-        for (uint64_t i=0; i < ctx->local.len; i++)
+        for (uint64_t i=0; i < src_len; i++)
             dst[i] = (uint8_t)src[i];
     }
 
     // 16 bit
-    else if (largest < 0xffff) {
+    else if (largest <= 0xffff) {
         ctx->ltype = LT_UINT16;
         ARRAY (uint16_t, dst, ctx->local);
-        for (uint64_t i=0; i < ctx->local.len; i++)
+        for (uint64_t i=0; i < src_len; i++)
             dst[i] = BGEN16 ((uint16_t)src[i]);
     }
 
     // 32 bit
     else {
         ctx->ltype = LT_UINT32;
-        for (uint64_t i=0; i < ctx->local.len; i++)
+        for (uint64_t i=0; i < src_len; i++)
             src[i] = BGEN32 (src[i]);
     }
 }
@@ -326,8 +322,10 @@ static void zip_handle_unique_words_ctxs (VBlock *vb)
         if (buf_is_alloc (&ctx->local))     continue; // skip if we are already using local to optimize in some other way
 
         // don't move to local if its on the list of special dict_ids that are always in dict (because local is used for something else - eg pos or id data)
-        if (ctx->no_stons || ctx->ltype != LT_TEXT || ctx->dynamic_size_local) continue; // NO_STONS is implicit if ctx isn't text or dynamic_size_local
-
+        if (ctx->no_stons || 
+            ctx->ltype != LT_TEXT || ctx->dynamic_size_local || // NO_STONS is implicit if ctx isn't text or dynamic_size_local
+            ctx->b250.len == 1) continue; // handle with all_the_same rather than singleton
+         
         buf_move (vb, &ctx->local, vb, &ctx->dict);
         buf_free (&ctx->nodes);
         buf_free (&ctx->b250);
@@ -355,7 +353,7 @@ static void zip_generate_ctxs (VBlock *vb)
         Context *ctx = CTX(did_i);
 
         // case: the entire context is just numbers in local, and b250 is only SNIP_LOOKUPs. 
-        // ctx->numeric_only is set to indicate we get rid of the b250.
+        // ctx->numeric_only is set to indicate that we can get rid of the b250.
         if (ctx->numeric_only) 
             buf_free (&ctx->b250);
 

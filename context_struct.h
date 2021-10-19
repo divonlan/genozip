@@ -83,7 +83,7 @@ typedef struct Context {
     bool no_callback;          // don't use LOCAL_GET_LINE_CALLBACK for compressing, despite it being defined
     bool local_param;          // copy local.param to SectionHeaderCtx
     bool no_vb1_sort;          // don't sort the dictionary in ctx_sort_dictionaries_vb_1
-    bool no_all_the_same;      // the b250 section cannot be optimized away in no_all_the_same (eg if we need section header to carry a param)
+    bool no_drop_b250;         // the b250 section cannot be optimized away in zip_generate_b250_section (eg if we need section header to carry a param)
     bool local_always;         // always create a local section in zfile, even if it is empty 
     bool dynamic_size_local;   // resize LT_UINT32 according to data during generate (also do BGEN)
     bool numeric_only;         // if both numeric_only and dynamic_size_local are set, 

@@ -586,9 +586,9 @@ int main (int argc, char **argv)
 
     else global_max_threads = 
 #if defined _WIN32 || defined __APPLE__
-        (double)arch_get_num_cores() * 0.75; // under-subscribe on Windows / Mac to maintain UI interactivity
+        (float)arch_get_num_cores() * 0.75; // under-subscribe on Windows / Mac to maintain UI interactivity
 #else
-        (double)arch_get_num_cores() * 1.1;  // over-subscribe to keep all cores busy even when some threads are waiting on mutex or join
+        (float)arch_get_num_cores() * 1.1;  // over-subscribe to keep all cores busy even when some threads are waiting on mutex or join
 #endif
 
     // handle all commands except for ZIP, PIZ or LIST

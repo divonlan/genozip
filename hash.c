@@ -107,9 +107,9 @@ void hash_alloc_local (VBlock *segging_vb, Context *vctx)
 // is less likely to fit into the CPU memory caches
 uint32_t hash_get_estimated_entries (VBlock *merging_vb, Context *zctx, const Context *first_merging_vb_ctx)
 {
-    double effective_num_vbs   = 0; 
-    double estimated_num_vbs   = MAX_(1, (double)txtfile_get_seggable_size() / (double)merging_vb->txt_data.len);
-    double estimated_num_lines = estimated_num_vbs * (double)merging_vb->lines.len;
+    float effective_num_vbs   = 0; 
+    float estimated_num_vbs   = MAX_(1, (float)txtfile_get_seggable_size() / (float)merging_vb->txt_data.len);
+    float estimated_num_lines = estimated_num_vbs * (float)merging_vb->lines.len;
 
     if (flag.show_hash && first_merging_vb_ctx->did_i==0) 
         iprintf ("\n\nOutput of --show-hash:\n"
@@ -131,21 +131,21 @@ uint32_t hash_get_estimated_entries (VBlock *merging_vb, Context *zctx, const Co
     // which mostly show up in n1, and then a long tail of low frequency entries. The comparison of n2 to n3,
     // assuming that the new snips first introduced in them are mostly low frequency ones, will give us a more accurate predication
     // of the gradient appearance of new snips
-    double n1 = first_merging_vb_ctx->nodes_len_at_1_3;
-    double n2 = first_merging_vb_ctx->nodes_len_at_2_3 ? ((double)first_merging_vb_ctx->nodes_len_at_2_3 - (double)first_merging_vb_ctx->nodes_len_at_1_3) : 0;
-    double n3 = (double)first_merging_vb_ctx->nodes.len - n1 - n2;
+    float n1 = first_merging_vb_ctx->nodes_len_at_1_3;
+    float n2 = first_merging_vb_ctx->nodes_len_at_2_3 ? ((float)first_merging_vb_ctx->nodes_len_at_2_3 - (float)first_merging_vb_ctx->nodes_len_at_1_3) : 0;
+    float n3 = (float)first_merging_vb_ctx->nodes.len - n1 - n2;
 
-    double n1_lines      = (double)merging_vb->num_lines_at_1_3;
-    double n2_lines      = (double)merging_vb->num_lines_at_2_3 - n1_lines;
-    double n2_n3_lines   = (double)merging_vb->lines.len - n1_lines;
-    double n3_lines      = (double)merging_vb->lines.len - n1_lines - n2_lines;
+    float n1_lines      = (float)merging_vb->num_lines_at_1_3;
+    float n2_lines      = (float)merging_vb->num_lines_at_2_3 - n1_lines;
+    float n2_n3_lines   = (float)merging_vb->lines.len - n1_lines;
+    float n3_lines      = (float)merging_vb->lines.len - n1_lines - n2_lines;
 
-    double n1_density    = n1_lines    ? (n1 / n1_lines)         : 0; // might be more than 1 if multiple per line, eg VCF sample subfields
-    double n2_density    = n2_lines    ? (n2 / n2_lines)         : 0; // might be more than 1 if multiple per line, eg VCF sample subfields
-    double n2_n3_density = n2_n3_lines ? ((n2+n3) / n2_n3_lines) : 0;  
-    double n3_density    = n3_lines    ? (n3 / n3_lines)         : 0;
+    float n1_density    = n1_lines    ? (n1 / n1_lines)         : 0; // might be more than 1 if multiple per line, eg VCF sample subfields
+    float n2_density    = n2_lines    ? (n2 / n2_lines)         : 0; // might be more than 1 if multiple per line, eg VCF sample subfields
+    float n2_n3_density = n2_n3_lines ? ((n2+n3) / n2_n3_lines) : 0;  
+    float n3_density    = n3_lines    ? (n3 / n3_lines)         : 0;
 
-    double n2n3_density_ratio = n3_density ? n2_density/n3_density : 0;    
+    float n2n3_density_ratio = n3_density ? n2_density/n3_density : 0;    
 
     // my secret formula for arriving at these numbers: https://docs.google.com/spreadsheets/d/1UijOuPgquZ71kEdB7kUf1OYUMs-Xhu2gAOOHgy6QCIQ/edit#gid=0
     static struct { 
@@ -169,7 +169,7 @@ uint32_t hash_get_estimated_entries (VBlock *merging_vb, Context *zctx, const Co
     /* 16 */ { 1548983, 1744    },
     };
 
-    double estimated_entries=0;
+    float estimated_entries=0;
     unsigned gp=0;
 
     if (n3 == 0) 

@@ -12,14 +12,15 @@
 
 #pragma GENDICT KRAKEN_CU=DTYPE_FIELD=CU
 #pragma GENDICT KRAKEN_QNAME=DTYPE_FIELD=QNAME
-#pragma GENDICT KRAKEN_Q0NAME=DTYPE_1=Q0NAME // dict_id Q?NAME is expected by compound.c
-#pragma GENDICT KRAKEN_Q1NAME=DTYPE_1=Q1NAME // fixed compound items must have a did_o directly after container's
+#pragma GENDICT KRAKEN_Q0NAME=DTYPE_1=Q0NAME // MAX_QNAME_ITEMS - fixed qname items must have a did_i directly after container's (MUST be the same dict_id as in sam.h)
+#pragma GENDICT KRAKEN_Q1NAME=DTYPE_1=Q1NAME 
 #pragma GENDICT KRAKEN_Q2NAME=DTYPE_1=Q2NAME
 #pragma GENDICT KRAKEN_Q3NAME=DTYPE_1=Q3NAME
 #pragma GENDICT KRAKEN_Q4NAME=DTYPE_1=Q4NAME
 #pragma GENDICT KRAKEN_Q5NAME=DTYPE_1=Q5NAME
-#pragma GENDICT KRAKEN_Q6NAME=DTYPE_1=Q6NAME
-#pragma GENDICT KRAKEN_Q7NAME=DTYPE_1=Q7NAME
+#pragma GENDICT KRAKEN_Q6NAME=DTYPE_1=Q6NAME 
+#pragma GENDICT KRAKEN_Q7NAME=DTYPE_1=Q7NAME 
+#pragma GENDICT KRAKEN_QmatNAME=DTYPE_1=QmatNAME // QmatNAME reserved for mate number (always the last dict_id in the container)
 
 #pragma GENDICT KRAKEN_TAXID=DTYPE_FIELD=TAXID
 

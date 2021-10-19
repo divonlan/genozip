@@ -19,7 +19,7 @@
 #include "reference.h"
 #include "segconf.h"
 #include "chrom.h"
-#include "compound.h"
+#include "tokenizer.h"
 
 #define dict_id_is_fasta_desc_sf dict_id_is_type_1
 #define dict_id_fasta_desc_sf dict_id_type_1
@@ -159,7 +159,6 @@ out_of_data:
 // called by main thread at the beginning of zipping this file
 void fasta_zip_initialize (void)
 {
-    compound_zip_initialize ((DictId)_FASTA_DESC);
 }
 
 // callback function for compress to get data of one line (called by codec_lzma_data_in_callback)
@@ -204,8 +203,6 @@ void fasta_seg_initialize (VBlock *vb)
 
     if (flag.reference & REF_ZIP_LOADED) 
         CTX(FASTA_NONREF)->no_callback = true; // override callback if we are segmenting to a reference
-
-    compound_seg_initialize (VB, FASTA_DESC);
 
     // in --stats, consolidate stats into FASTA_NONREF
     stats_set_consolidation (vb, FASTA_NONREF, 1, FASTA_NONREF_X);
@@ -266,7 +263,7 @@ static void fasta_seg_desc_line (VBlockFASTA *vb, const char *line_start, uint32
     ASSSEG0 (chrom_name_len, line_start, "contig is missing a name");
 
     if (!flag.make_reference) {
-        compound_seg (VB, CTX(FASTA_DESC), line_start, line_len, sep_with_space, 0, 0);
+        tokenizer_seg (VB, CTX(FASTA_DESC), line_start, line_len, sep_with_space, 0);
         
         char special_snip[100]; unsigned special_snip_len = sizeof (special_snip);
         seg_prepare_snip_other_do (SNIP_REDIRECTION, (DictId)_FASTA_DESC, false, 0, &special_snip[2], &special_snip_len);
@@ -325,13 +322,11 @@ static void fasta_seg_seq_line_do (VBlockFASTA *vb, uint32_t line_len, bool is_f
     Context *lm_ctx  = CTX(FASTA_LINEMETA);
     Context *seq_ctx = CTX(FASTA_NONREF);
 
-    // cached node index
-    if (!is_first_line_in_contig && line_len == vb->std_line_len) {
-        buf_alloc (vb, &lm_ctx->b250, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->b250");
-        NEXTENT (WordIndex, lm_ctx->b250) = vb->std_line_node_index;
-    }
+    // line length is same as previous SEQ line
+    if (!is_first_line_in_contig && ctx_has_value_in_line_(vb, lm_ctx) && line_len == lm_ctx->last_value.i) 
+        seg_duplicate_last (vb, lm_ctx, 0);
 
-    else { // not cached
+    else { 
         char special_snip[100]; unsigned special_snip_len = sizeof (special_snip);
         seg_prepare_snip_other_do (SNIP_OTHER_LOOKUP, (DictId)_FASTA_NONREF, 
                                    true, (int32_t)line_len, &special_snip[3], &special_snip_len);
@@ -339,13 +334,11 @@ static void fasta_seg_seq_line_do (VBlockFASTA *vb, uint32_t line_len, bool is_f
         special_snip[0] = SNIP_SPECIAL;
         special_snip[1] = FASTA_SPECIAL_SEQ;
         special_snip[2] = '0' + is_first_line_in_contig; 
-        WordIndex node_index = seg_by_ctx (VB, special_snip, 3 + special_snip_len, lm_ctx, 0);  // the payload of the special snip, is the OTHER_LOOKUP snip...
+        seg_by_ctx (VB, special_snip, 3 + special_snip_len, lm_ctx, 0);  // the payload of the special snip, is the OTHER_LOOKUP snip...
 
-        // create cache if needed
-        if (!is_first_line_in_contig && !vb->std_line_len) {
-            vb->std_line_len = line_len;
-            vb->std_line_node_index = node_index;
-        }
+        // note: we don't set value for first line, so that seg_duplicate_last doesn't copy it - since special_snip[2] is different 
+        if (!is_first_line_in_contig) 
+            ctx_set_last_value (VB, lm_ctx, (LastValueType){ .i = line_len });
     }
 
     seq_ctx->txt_len   += line_len;

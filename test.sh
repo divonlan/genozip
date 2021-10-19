@@ -588,7 +588,7 @@ batch_iupac()
     local count=`$genocat_no_echo $output -H --bam --bases AGCTN --count -q`
     if [ "$count" == "" ]; then echo genocat error; exit 1; fi
 
-    if [ "$count" -ne $non_iupac_lines ]; then echo "bad count = $count"; exit 1; fi
+    if [ "$count" -ne $non_iupac_lines ]; then echo "bad count = $count, expecting $non_iupac_lines"; exit 1; fi
 
     test_header "genocat --bases ^AGCTN --count --bam"
     local count=`$genocat_no_echo $output -H --bam --bases ^AGCTN --count -q`
@@ -1024,7 +1024,7 @@ recon=${OUTDIR}/recon.txt
 kraken=${OUTDIR}/kraken.genozip
 chain=${OUTDIR}/chain.genozip
 
-is_windows=`uname|grep -i mingw`
+is_windows="`uname|grep -i mingw``uname|grep -i MSYS`"
 is_mac=`uname|grep -i Darwin`
 
 # standard file - test.sh should change these

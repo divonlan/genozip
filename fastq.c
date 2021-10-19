@@ -25,7 +25,7 @@
 #include "writer.h"
 #include "kraken.h"
 #include "bases_filter.h"
-#include "compound.h"
+#include "qname.h"
 
 #define dict_id_is_fastq_desc_sf dict_id_is_type_1
 #define dict_id_fastq_desc_sf dict_id_type_1
@@ -183,7 +183,7 @@ void fastq_zip_initialize (void)
     if (flag.reference == REF_EXTERNAL && z_file->num_txt_components_so_far == 1) // first file
         ctx_populate_zf_ctx_from_contigs (gref, FASTQ_CONTIG, ref_get_ctgs (gref)); 
 
-    compound_zip_initialize ((DictId)_FASTQ_DESC);
+    qname_zip_initialize ((DictId)_FASTQ_DESC);
 }
 
 // called by zfile_compress_genozip_header to set FlagsGenozipHeader.dt_specific
@@ -227,7 +227,7 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
         vb->z_data.len = 0; // we've finished reading the pair file z_data, next, we're going to write to z_data our compressed output
     }
 
-    compound_seg_initialize (VB, FASTQ_DESC);
+    qname_seg_initialize (VB, FASTQ_DESC);
 
     if (flag.optimize_DESC) 
         fastq_get_optimized_desc_read_name (vb);
@@ -240,6 +240,9 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
 
     // in --stats, consolidate stats into SQBITMAP
     stats_set_consolidation (VB, FASTQ_SQBITMAP, 4, FASTQ_NONREF, FASTQ_NONREF_X, FASTQ_GPOS, FASTQ_STRAND);
+
+    if (segconf.running) 
+        segconf.qname_flavor = 0; // unknown
 
     COPY_TIMER (seg_initialize);
 }
@@ -271,14 +274,14 @@ void fastq_seg_finalize (VBlockP vb)
     };
 
     // prefixes in this container were added in 12.0.14, before, '@' was part of DESC and '+' was a separator
-    static char prefixes[] = { CON_PREFIX_SEP,        // initial
-                               CON_PREFIX_SEP,        // terminator for empty container-wide prefix
-                               '@', CON_PREFIX_SEP,   // DESC prefix
-                               CON_PREFIX_SEP,        // empty E1L line prefix
-                               CON_PREFIX_SEP,        // empty SQBITMAP line prefix
-                               CON_PREFIX_SEP,        // empty E2L line prefix
-                               '+', CON_PREFIX_SEP,   // third line prefix
-                               CON_PREFIX_SEP      }; // END of prefixes
+    static char prefixes[] = { CON_PX_SEP,        // initial
+                               CON_PX_SEP,        // terminator for empty container-wide prefix
+                               '@', CON_PX_SEP,   // DESC prefix
+                               CON_PX_SEP,        // empty E1L line prefix
+                               CON_PX_SEP,        // empty SQBITMAP line prefix
+                               CON_PX_SEP,        // empty E2L line prefix
+                               '+', CON_PX_SEP,   // third line prefix
+                               CON_PX_SEP      }; // END of prefixes
 
     container_seg (vb, CTX(FASTQ_TOPLEVEL), (ContainerP)&top_level, prefixes, sizeof (prefixes), 2 * vb->lines.len); // account for the '@' and '+' - one of each for each line
 }
@@ -357,7 +360,6 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
 {
     ZipDataLineFASTQ *dl = DATA_LINE (vb->line_i);
 
-    // the leading @ - just verify it (it will be included in D0ESC subfield)
     ASSSEG0 (*line_start != '\n', line_start, "Invalid FASTQ file format: unexpected newline");
 
     ASSSEG (*line_start == '@', line_start, "Invalid FASTQ file format: expecting description line to start with @ but it starts with %c",
@@ -396,10 +398,16 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
         vb->recon_size -= FASTQ_DESC_len - optimized_len;
     }
 
-    compound_seg (VB, CTX(FASTQ_DESC), 
-                        flag.optimize_DESC ? vb->optimized_desc : FASTQ_DESC_str, 
-                        flag.optimize_DESC ? optimized_len      : FASTQ_DESC_len, 
-                        sep_with_space, 0, 0);
+    if (segconf.running && vb->line_i==0)
+        qname_segconf_discover_flavor (VB, FASTQ_DESC, 
+                                       flag.optimize_DESC ? vb->optimized_desc : FASTQ_DESC_str, 
+                                       flag.optimize_DESC ? optimized_len      : FASTQ_DESC_len);
+
+    // attempt to parse the desciption line as qname, and fallback to tokenizer no qname format matches
+    qname_seg (VB, CTX(FASTQ_DESC), 
+               flag.optimize_DESC ? vb->optimized_desc : FASTQ_DESC_str, 
+               flag.optimize_DESC ? optimized_len      : FASTQ_DESC_len, 
+               0);
     SEG_EOL (FASTQ_E1L, true);
 
     // SEQ - just get the whole line
@@ -526,7 +534,7 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
          dict_id.num == _FASTQ_QUAL     || 
          dict_id.num == _FASTQ_DOMQRUNS || 
          (dict_id.num == _FASTQ_STRAND   && !flag.bases)  ||
-         (dict_id.num == _FASTQ_NONREF   && !flag.bases)   || 
+         (dict_id.num == _FASTQ_NONREF   && !flag.bases)  || 
          (dict_id.num == _FASTQ_NONREF_X && !flag.bases))) 
         return true;
 

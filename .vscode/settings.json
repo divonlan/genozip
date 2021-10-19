@@ -56,7 +56,8 @@
         "threads.h": "c",
         "arch.h": "c",
         "libdeflate.h": "c",
-        "compare": "cpp"
+        "compare": "cpp",
+        "regions.h": "c"
     },
     "C_Cpp.dimInactiveRegions": false,
     "restructuredtext.confPath": "${workspaceFolder}\\docs",

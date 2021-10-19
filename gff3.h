@@ -58,8 +58,10 @@
 #pragma GENDICT ATTR_chr=DTYPE_1=chr
 
 #pragma GENDICT ENSTid=DTYPE_2=ENSTid 
+#pragma GENDICT EnNSTid=DTYPE_2=EnNSTid 
 
 // SEG Stuff
+extern void gff3_zip_initialize (void);
 extern const char *gff3_seg_txt_line (VBlockP vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
 extern void gff3_seg_initialize (VBlockP vb_);
 extern void gff3_seg_finalize (VBlockP vb);

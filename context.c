@@ -176,8 +176,8 @@ WordIndex ctx_get_next_snip (VBlock *vb, Context *ctx, bool all_the_same, bool i
 
     // we check after (no risk of segfault because of buffer overflow protector) - since b250 word is variable length
     ASSERT (iterator->next_b250 <= AFTERENT (uint8_t, *b250), 
-            "while reconstructing line %"PRIu64" (last line of vb is %"PRIu64") in vb_i=%u: iterator for %s %sreached end of data. b250.len=%"PRIu64, 
-            vb->line_i, vb->first_line + vb->lines.len - 1, vb->vblock_i, ctx->tag_name, is_pair ? "(PAIR) ": "", b250->len);
+            "while reconstructing line %"PRIu64" (last line of vb is %"PRIu64") in vb_i=%u: iterator for %s (did_i=%u) %sreached end of b250. b250.len=%"PRIu64, 
+            vb->line_i, vb->first_line + vb->lines.len - 1, vb->vblock_i, ctx->tag_name, ctx->did_i, is_pair ? "(PAIR) ": "", b250->len);
 
     // case: a Container item is missing (eg a subfield in a Sample, a FORMAT or Samples items in a file)
     if (word_index == WORD_INDEX_MISSING) {
@@ -308,7 +308,7 @@ WordIndex ctx_evaluate_snip_seg (VBlock *vb, Context *vctx,
                                  bool *is_new /* out */)
 {
     ASSERTNOTNULL (vctx);
-    ASSERT0 (vctx->dict_id.num, "vctx has no dict_id");
+    ASSERT (vctx->dict_id.num, "vctx has no dict_id (did_i=%u)", (unsigned)(vctx - vb->contexts));
 
     if (flag.debug_seg) { 
         char printable_snip[snip_len+20];
@@ -419,6 +419,37 @@ WordIndex ctx_create_node (VBlockP vb, DidIType did_i, STRp (snip))
     ctx_decrement_count (vb, CTX(did_i), node_index);
 
     return node_index;
+}
+
+void ctx_append_b250 (VBlockP vb, ContextP vctx, WordIndex node_index)
+{
+    // case: context is currently all_the_same - (ie len>=1, but only one actual entry)...
+    if (vctx->flags.all_the_same) {
+        WordIndex first_node_index; 
+
+        // ... and the new entry is more of the same
+        if (node_index == (first_node_index = *FIRSTENT (WordIndex,vctx->b250)))
+            vctx->b250.len++; // increment len, but don't actually grow the array
+
+        // ... and the new entry is different - add (len-1) copies of first_node, and the new one
+        else {
+            buf_alloc (vb, &vctx->b250, 1, AT_LEAST(vctx->did_i), WordIndex, CTX_GROWTH, "contexts->b250"); // add 1 more, meaning a total of len+1
+        
+            for (unsigned i=1; i < vctx->b250.len; i++) *ENT (WordIndex, vctx->b250, i) = first_node_index;
+            NEXTENT (uint32_t, vctx->b250) = node_index;
+
+            vctx->flags.all_the_same = false; // no longer all_the_same 
+        }
+    }
+
+    // b250 is not all_the_same: either it is empty, or it contains multiple different node_index values
+    else {
+        // case: this is the first entry - its all_the_same in a trivial way (still, we mark it so zip_generate_b250_section can potentially eliminate it)
+        if (!vctx->b250.len) vctx->flags.all_the_same = true;
+
+        buf_alloc (vb, &vctx->b250, 1, AT_LEAST(vctx->did_i), WordIndex, CTX_GROWTH, "contexts->b250");
+        NEXTENT (uint32_t, vctx->b250) = node_index;
+    }
 }
 
 // ZIP only: overlay and/or copy the current state of the global contexts to the vb, ahead of segging this vb.
@@ -609,9 +640,11 @@ static Context *ctx_get_zf_ctx (DictId dict_id)
     return NULL;
 }
 
-struct FlagsCtx ctx_get_zf_ctx_flags (DictId dict_id)
+// get zf_ctx flags, looking it it up by vctx
+struct FlagsCtx ctx_get_zf_ctx_flags (ConstContextP vctx)
 {
-    ContextP zctx = ctx_get_zf_ctx (dict_id);
+    ContextP zctx = vctx->did_i < DTFZ(num_fields) ? &z_file->contexts[vctx->did_i] : ctx_get_zf_ctx (vctx->dict_id);
+ 
     return zctx ? zctx->flags : (struct FlagsCtx){};
 }
 
@@ -1110,7 +1143,7 @@ void ctx_free_context (Context *ctx, DidIType did_i)
     ctx->lcodec = ctx->bcodec = ctx->lsubcodec_piz = 0;
 
     ctx->no_stons = ctx->pair_local = ctx->pair_b250 = ctx->stop_pairing = ctx->no_callback = ctx->line_is_luft_trans =
-    ctx->local_param = ctx->no_vb1_sort = ctx->local_always = ctx->counts_section = ctx->no_all_the_same =
+    ctx->local_param = ctx->no_vb1_sort = ctx->local_always = ctx->counts_section = ctx->no_drop_b250 =
     ctx->dynamic_size_local = ctx->numeric_only = ctx->is_stats_parent = 0;
     ctx->local_hash_prime = 0;
     ctx->num_new_entries_prev_merged_vb = 0;
@@ -1498,7 +1531,7 @@ static void ctx_show_counts (Context *zctx)
     if (total)
         for (uint32_t i=0; i < counts_len; i++) 
             iprintf ("%s\t%"PRId64"\t%-4.2f%%\n", counts[i].snip, counts[i].count, 
-                        100 * (double)counts[i].count / (double)total);
+                        100 * (float)counts[i].count / (float)total);
 
     if (exe_type == EXE_GENOCAT) exit_ok();
 }
@@ -1616,11 +1649,13 @@ TagNameEx ctx_tag_name_ex (ConstContextP ctx)
 void ctx_rollback (VBlockP vb, Context *ctx)
 {
     // if we evaluated this context since the rollback count - undo
-    while (ctx->b250.len > ctx->rback_b250_len) {
-        WordIndex node_index = *LASTENT (WordIndex, ctx->b250);
-        ctx_decrement_count (vb, ctx, node_index);
+    while (ctx->b250.len > ctx->rback_b250_len) { 
+        (*ENT (int64_t, ctx->counts, LASTb250(ctx)))--;
         ctx->b250.len--;
     }
+
+    // update all_the_same - true, if len is down to 1, and false if it is down to 0
+    if (ctx->b250.len <= 1) ctx->flags.all_the_same = (bool)ctx->b250.len;
 
     ctx->local.len      = ctx->rback_local_len;
     ctx->txt_len        = ctx->rback_txt_len;

@@ -10,16 +10,17 @@
 #include "sections.h"
 
 #pragma GENDICT_PREFIX FASTQ
-#pragma GENDICT FASTQ_CONTIG=DTYPE_FIELD=CONTIG
-#pragma GENDICT FASTQ_DESC=DTYPE_FIELD=DESC
-#pragma GENDICT FASTQ_Q0NAME=DTYPE_1=Q0NAME // dict_id Q?NAME is expected by compound.c
-#pragma GENDICT FASTQ_Q1NAME=DTYPE_1=Q1NAME // fixed compound items must have a did_o directly after container's
+#pragma GENDICT FASTQ_CONTIG=DTYPE_FIELD=CONTIG // must be first - did_i=0=CHROM
+#pragma GENDICT FASTQ_DESC=DTYPE_FIELD=DESC     // Q?NAME must immediately follow
+#pragma GENDICT FASTQ_Q0NAME=DTYPE_1=Q0NAME     // MAX_QNAME_ITEMS fixed qname items must have a did_i directly after container's (MUST be the same dict_id as in sam.h)
+#pragma GENDICT FASTQ_Q1NAME=DTYPE_1=Q1NAME 
 #pragma GENDICT FASTQ_Q2NAME=DTYPE_1=Q2NAME
 #pragma GENDICT FASTQ_Q3NAME=DTYPE_1=Q3NAME
 #pragma GENDICT FASTQ_Q4NAME=DTYPE_1=Q4NAME
 #pragma GENDICT FASTQ_Q5NAME=DTYPE_1=Q5NAME
-#pragma GENDICT FASTQ_Q6NAME=DTYPE_1=Q6NAME
-#pragma GENDICT FASTQ_Q7NAME=DTYPE_1=Q7NAME
+#pragma GENDICT FASTQ_Q6NAME=DTYPE_1=Q6NAME 
+#pragma GENDICT FASTQ_Q7NAME=DTYPE_1=Q7NAME 
+#pragma GENDICT FASTQ_QmatNAME=DTYPE_1=QmatNAME // QmatNAME reserved for mate number (always the last dict_id in the container)
 #pragma GENDICT FASTQ_E1L=DTYPE_FIELD=E1L
 #pragma GENDICT FASTQ_SQBITMAP=DTYPE_FIELD=SQBITMAP
 #pragma GENDICT FASTQ_NONREF=DTYPE_FIELD=NONREF

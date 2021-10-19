@@ -468,7 +468,7 @@ static void buf_init (Buffer *buf, char *memory, uint64_t size, uint64_t old_siz
 uint64_t buf_alloc_do (VBlock *vb,
                        Buffer *buf, 
                        uint64_t requested_size,
-                       double grow_at_least_factor, // IF we need to allocate or reallocate physical memory, we get this much more than requested
+                       float grow_at_least_factor, // IF we need to allocate or reallocate physical memory, we get this much more than requested
                        const char *func, uint32_t code_line,
                        const char *name)      
 {
@@ -501,7 +501,7 @@ uint64_t buf_alloc_do (VBlock *vb,
     }
 
     // add an epsilon to avoid floating point multiplication ending up slightly less than the integer
-    grow_at_least_factor = MAX_(1.00000001, grow_at_least_factor); 
+    grow_at_least_factor = MAX_(1.0001, grow_at_least_factor); 
 
     // grow us requested - rounding up to 64 bit boundary to avoid aliasing errors with the overflow indicator
     uint64_t new_size = (uint64_t)(requested_size * grow_at_least_factor + 7) & 0xfffffffffffffff8ULL; // aligned to 8 bytes

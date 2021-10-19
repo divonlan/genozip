@@ -20,8 +20,8 @@
 void lookback_init (VBlockP vb, ContextP ctx, StoreType store_type)
 {
     if (command == ZIP) {
-        ctx->flags.store      = store_type; // tell PIZ store store values, so that the container callback can insert them to the lookback
-        ctx->no_all_the_same  = true;   // we cannot have all_the_same, bc we need the b250 section to pass the param (lookback bits)
+        ctx->flags.store  = store_type; // tell PIZ store store values, so that the container callback can insert them to the lookback
+        ctx->no_drop_b250 = true;       // we cannot have all_the_same, bc we need the b250 section to pass the param (lookback bits)
     }
 
     buf_alloc (vb, lookback_buf(ctx), 0, lookback_size * (store_type == STORE_INT ? sizeof (int64_t) : sizeof (WordIndex)), char, 1, "lookback_buf");

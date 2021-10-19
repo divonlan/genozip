@@ -310,7 +310,7 @@ static void sam_seg_XA_pos (VBlockP vb, STRp(pos_str), uint32_t rep)
     ContextP pos_ctx   = CTX (OPTION_XA_POS);
 
     // look back for a node with this index and a similar POS - we use word_index to store the original rname_node_index, pos
-    WordIndex rname_index = *LASTENT (WordIndex, rname_ctx->b250);
+    WordIndex rname_index = LASTb250(rname_ctx);
     int64_t lookback = 0;
     PosType pos = -MAX_POS_DISTANCE; // initial to "invalid pos" - value chosen so we can storeit in poses, in lieu of an invalid non-integer value, without a future pos being considered close to it
 
@@ -337,17 +337,14 @@ static void sam_seg_XA_pos (VBlockP vb, STRp(pos_str), uint32_t rep)
                 snip_len = xa_lookback_snip_len + str_int (pos - lookback_pos, &snip[xa_lookback_snip_len]);
                 seg_by_ctx (vb, STRa(snip), pos_ctx, pos_str_len);
                 pos_ctx->numeric_only = false; // not all numeric (cancel the setting by seg_integer_or_not)
-//if (!segconf.running) printf ("xxx rep=%u Lookback: \"%.*s\" pos=%u prev_pos=%u delta=%d\n", rep, STRf(pos_str), pos, lookback_pos, pos - lookback_pos);     
-
+                
                 break;
             }
         }
     }
 
-    if (!lookback) {
-//if (!segconf.running)printf ("xxx rep=%u No lookback: %.*s\n", rep, STRf(pos_str));     
+    if (!lookback) 
         seg_integer_or_not (vb, pos_ctx, STRa(pos_str), pos_str_len);
-    }
 
     seg_add_to_local_uint (vb, CTX(OPTION_XA_LOOKBACK), lookback, 0);
 
@@ -425,8 +422,6 @@ static void sam_seg_BWA_XA_field (VBlockSAM *vb, STRp(xa))
         lookback_flush (VB, CTX(OPTION_XA_POS));
         lookback_flush (VB, CTX(OPTION_XA_STRAND));
     }
-    else if (segconf.running) 
-        segconf.XA_reps += repeats;
 }
 
 static int sam_seg_which_XA (STRp(xa))
@@ -473,11 +468,9 @@ static void sam_seg_SA_field (VBlockSAM *vb, STRp(field))
 
     SegCallback callbacks[6] = { [0]=chrom_seg_cb, [1]=seg_pos_field_cb, [3]=sam_seg_0A_cigar_cb };
      
-    int32_t repeats = seg_array_of_struct (VB, CTX(OPTION_SA_Z), container_SA, field, field_len, callbacks);
+    seg_array_of_struct (VB, CTX(OPTION_SA_Z), container_SA, field, field_len, callbacks);
 
     CTX(OPTION_SA_Z)->txt_len++; // 1 for \t in SAM and \0 in BAM 
-
-    if (segconf.running && repeats > 0) segconf.SA_reps += repeats;
 }
 
 // -------------------------
@@ -497,11 +490,9 @@ static void sam_seg_OA_field (VBlockSAM *vb, STRp(field))
 
     SegCallback callbacks[6] = { [0]=chrom_seg_cb, [1]=seg_pos_field_cb, [3]=sam_seg_0A_cigar_cb };
      
-    int32_t repeats = seg_array_of_struct (VB, CTX(OPTION_OA_Z), container_OA, field, field_len, callbacks);
+    seg_array_of_struct (VB, CTX(OPTION_OA_Z), container_OA, field, field_len, callbacks);
 
     CTX(OPTION_OA_Z)->txt_len++; // 1 for \t in SAM and \0 in BAM 
-
-    if (segconf.running && repeats > 0) segconf.SA_reps += repeats;
 }
 
 // ----------------------------
@@ -773,7 +764,7 @@ static void sam_seg_array_field (VBlock *vb, DictId dict_id, const char *value, 
                                           { .separator  = {0, ','}            } } // item[1] is actual array item
                          };
     
-    char prefixes[] = { CON_PREFIX_SEP, value[0], ',', CON_PREFIX_SEP }; // prefix contains type eg "i,"
+    char prefixes[] = { CON_PX_SEP, value[0], ',', CON_PX_SEP }; // prefix contains type eg "i,"
     
     const char *str = value + 2;      // remove type and comma
     int str_len = (int)value_len - 2; // must be int, not unsigned, for the for loop

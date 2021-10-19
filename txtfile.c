@@ -427,7 +427,7 @@ static void txtfile_set_seggable_size (void)
                        : flag.stdin_size     ? flag.stdin_size // user-provided size
                        :                       0; // our estimate will be 0 
 
-    double source_comp_ratio=1;
+    float source_comp_ratio=1;
     switch (txt_file->codec) {
         case CODEC_GZ:   // for internal compressors, we use the observed source-compression ratio
         case CODEC_BGZF:
@@ -435,8 +435,8 @@ static void txtfile_set_seggable_size (void)
             if (txt_file->is_remote || txt_file->redirected)
                 source_comp_ratio = 4;
             else {    
-                double plain_len  = txt_file->txt_data_so_far_single + txt_file->unconsumed_txt.len;
-                double gz_bz2_len = file_tell (txt_file, false); // should always work for bz2 or gz. For BZ2 this includes up to 64K read from disk but still in its internal buffers
+                float plain_len  = txt_file->txt_data_so_far_single + txt_file->unconsumed_txt.len;
+                float gz_bz2_len = file_tell (txt_file, false); // should always work for bz2 or gz. For BZ2 this includes up to 64K read from disk but still in its internal buffers
                 source_comp_ratio = plain_len / gz_bz2_len;
             }
             break;
@@ -451,7 +451,7 @@ static void txtfile_set_seggable_size (void)
         default: ABORT ("Error in txtfile_set_seggable_size: unspecified txt_file->codec=%s (%u)", codec_name (txt_file->codec), txt_file->codec);
     }
         
-    int64_t est_seggable_size = MAX_(0.0, (double)disk_size * source_comp_ratio - (double)txt_file->header_size);
+    int64_t est_seggable_size = MAX_(0.0, (float)disk_size * source_comp_ratio - (float)txt_file->header_size);
     __atomic_store_n (&txt_file->est_seggable_size, est_seggable_size, __ATOMIC_RELAXED); // atomic loading for thread safety
 
     if (segconf.running)
@@ -577,7 +577,7 @@ void txtfile_read_vblock (VBlock *vb)
 // that past the test is at least success_threashold
 bool txtfile_test_data (char first_char,            // first character in every header line
                         unsigned num_lines_to_test, // number of lines to test
-                        double success_threashold,  // proportion of lines that need to pass the test, for this function to return true
+                        float success_threashold,  // proportion of lines that need to pass the test, for this function to return true
                         TxtFileTestFunc test_func)
 {
     uint32_t line_start_i = 0;
@@ -610,7 +610,7 @@ bool txtfile_test_data (char first_char,            // first character in every 
     // note: read data is left in evb->txt_data for the use of txtfile_read_header
 
 done:
-    return (double)successes / (double)num_lines_so_far >= success_threashold;
+    return (float)successes / (float)num_lines_so_far >= success_threashold;
 }
 
 DataType txtfile_get_file_dt (const char *filename)

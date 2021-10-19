@@ -78,7 +78,7 @@ extern void buf_initialize(void);
 extern uint64_t buf_alloc_do (VBlockP vb,
                               Buffer *buf, 
                               uint64_t requested_size, 
-                              double grow_at_least_factor, // grow more than new_size   
+                              float grow_at_least_factor, // grow more than new_size   
                               const char *func, uint32_t code_line,
                               const char *name);
 

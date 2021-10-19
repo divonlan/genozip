@@ -67,7 +67,7 @@ void genols (const char *z_filename, bool finalize, const char *subdir, bool rec
     
     if (finalize) {
         if (files_listed > 1) {
-            double ratio = total_compressed_len ? ((double)total_uncompressed_len / (double)total_compressed_len) : 0;
+            float ratio = total_compressed_len ? ((float)total_uncompressed_len / (float)total_compressed_len) : 0;
 
             if (flag.bytes) 
                 bufprintf (evb, &str_buf, foot_format_bytes, files_listed, str_int_s (total_compressed_len).s, 
@@ -105,7 +105,7 @@ void genols (const char *z_filename, bool finalize, const char *subdir, bool rec
     if (!zfile_read_genozip_header (&header))
         goto finish;
 
-    double ratio = z_file->disk_size ? ((double)z_file->txt_data_so_far_bind / (double)z_file->disk_size) : 0;
+    float ratio = z_file->disk_size ? ((float)z_file->txt_data_so_far_bind / (float)z_file->disk_size) : 0;
     
     // TODO: have an option to print ref_file_name and ref_file_md5
 

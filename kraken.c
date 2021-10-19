@@ -24,7 +24,7 @@
 #include "hash.h"
 #include "progress.h"
 #include "website.h"
-#include "compound.h"
+#include "qname.h"
 
 // Search algorithm:
 // A. During kraken loading:
@@ -94,7 +94,7 @@ void kraken_zip_initialize (void)
 {
     seg_prepare_snip_other (SNIP_COPY, _KRAKEN_TAXID, 0, 0, copy_taxid_snip);
 
-    compound_zip_initialize((DictId)_KRAKEN_QNAME);
+    qname_zip_initialize ((DictId)_KRAKEN_QNAME);
 }
 
 void kraken_seg_initialize (VBlock *vb)
@@ -113,7 +113,7 @@ void kraken_seg_initialize (VBlock *vb)
     CTX(KRAKEN_EOL)->no_stons       = 
     CTX(KRAKEN_CU)->no_stons        = true; // no singletons, so b250 can be optimized away 
 
-    compound_seg_initialize (VB, KRAKEN_QNAME);
+    qname_seg_initialize (VB, KRAKEN_QNAME);
 }
 
 void kraken_seg_finalize (VBlockP vb)
@@ -224,7 +224,7 @@ const char *kraken_seg_txt_line (VBlock *vb, const char *field_start_line, uint3
 
     // QNAME - We break down the QNAME into subfields separated by / and/or : - these are vendor-defined strings. See examples in sam_seg_txt_line()
     GET_NEXT_ITEM (KRAKEN_QNAME);
-    compound_seg (VB, CTX(KRAKEN_QNAME), field_start, field_len, sep_without_space, 0, 1 /* \t */);
+    qname_seg (VB, CTX(KRAKEN_QNAME), field_start, field_len, 1 /* \t */);
 
     vb->last_int(KRAKEN_QNAME) += field_len+1; // count total QNAME lengths in this VB (+1 for separator)
 
@@ -269,10 +269,11 @@ bool kraken_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 
     if (flag.reading_kraken && // note: we only need some of the fields when ingesting loading kraken data
         dict_id.num != _KRAKEN_QNAME     &&
+        !dict_id_is_qname_sf(dict_id)    && 
         dict_id.num != _KRAKEN_TAXID     &&
         dict_id.num != _KRAKEN_EOL       &&
         dict_id.num != _KRAKEN_TOP2TAXID &&
-        dict_id_typeless (dict_id).id[0] != 'Q') // array item and compound items of QNAME  
+        dict_id_typeless (dict_id).id[0] != 'Q') // array item and compound items of QNAME (in files compressed with 12.0.42 or earlier)  
         return true;
 
     return false;

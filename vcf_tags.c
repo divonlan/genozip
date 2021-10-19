@@ -305,12 +305,8 @@ static void vcf_tags_add_system_default (DefaultTag new_tag)
 // called from vcf_inspect_txt_header_zip: we populate its apriori tags from the command line
 void vcf_tags_populate_tags_from_command_line (void)
 {
-    static bool once=false;
-    if (!once) { // command line tags never change after sorted here, so we only sort in the first call to this function
-        once = true;
-        // sort command line tags, as these will be searched when adding the header tags
-        qsort (command_line_tags.data, command_line_tags.len, sizeof (Tag), tags_sorter); 
-    }
+    // sort command line tags, as these will be searched when adding the header tags (command line tags never change after sorted here, so we only sort in the first call to this function)
+    DO_ONCE qsort (command_line_tags.data, command_line_tags.len, sizeof (Tag), tags_sorter); 
 
     if (command_line_tags.len && !z_file->apriori_tags.len) {
         buf_copy (evb, &z_file->apriori_tags, &command_line_tags, Tag, 0, 0, "z_file->apriori_tags");
@@ -562,7 +558,7 @@ unsigned vcf_tags_rename (VBlockVCFP vb,
     char *p = renamed;
 
     if (ii) {
-        p[0] = p[1] = CON_PREFIX_SEP;
+        p[0] = p[1] = CON_PX_SEP;
         p += 2;
     }
 
@@ -587,7 +583,7 @@ unsigned vcf_tags_rename (VBlockVCFP vb,
         
         else {
             if (ii[i].value) *(p++) = '=';
-            *(p++) = CON_PREFIX_SEP;
+            *(p++) = CON_PX_SEP;
         }
     }
 

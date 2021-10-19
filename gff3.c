@@ -20,8 +20,18 @@
 #include "vcf.h"
 #include "dict_id_gen.h"
 #include "chrom.h"
+#include "stats.h"
 
 #define MAX_ENST_ITEMS 10 // maximum number of items in an enst structure. this can be changed without impacting backward compatability.
+
+static STRl(ENST_snip, 200);
+
+void gff3_zip_initialize (void)
+{
+    static SmallContainer enst_con = { .repeats=1, .nitems_lo=1, .items = { { .dict_id = { _EnNSTid }, .separator = { CI_FIXED_0_PAD, 11 } } } };
+    ENST_snip_len = sizeof (ENST_snip);
+    container_prepare_snip ((ConstContainerP)&enst_con, "\4\4ENST\4", 7, ENST_snip, &ENST_snip_len); 
+}
 
 // called from seg_all_data_lines
 void gff3_seg_initialize (VBlock *vb)
@@ -36,6 +46,9 @@ void gff3_seg_initialize (VBlock *vb)
 
     CTX(ATTR_Target_ID)->st_did_i = CTX(ATTR_Target_POS)->st_did_i = CTX(ATTR_Target_STRAND)->st_did_i = ATTR_Target;
 
+    seg_id_field_init (CTX(ATTR_Dbxref));
+    seg_id_field_init (CTX(ATTR_Name));
+    stats_set_consolidation (vb, ENSTid, 1, EnNSTid);
 }
 
 void gff3_seg_finalize (VBlockP vb)
@@ -105,6 +118,16 @@ static bool gff3_seg_target (VBlockP vb, const char *value, unsigned value_len)
     return true;
 }
 
+static bool gff3_seg_ENSTid (VBlockP vb, ContextP ctx, STRp(enst_id), uint32_t repeat)
+{
+    if (enst_id_len != 15 || memcmp (enst_id, "ENST", 4) || !str_is_numeric (&enst_id[4], 11))
+        return false;
+
+    seg_by_did_i (vb, &enst_id[4], 11, EnNSTid, 11);
+    seg_by_ctx (vb, STRa(ENST_snip), ctx, 4);
+    return true;
+}
+
 static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, unsigned tag_name_len, const char *value, unsigned value_len)
 {
     DictId dict_id = dict_id_make (tag_name, tag_name_len, DTYPE_GFF3_ATTR);
@@ -125,7 +148,7 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
     // Dbxref (example: "dbSNP_151:rs1307114892") - we divide to the non-numeric part which we store
     // in a dictionary and the numeric part which store in a local
     case _ATTR_Dbxref:
-        seg_id_field (vb, CTX(ATTR_Dbxref), value, value_len, false); // discard the const as seg_id_field modifies
+        seg_id_field (vb, CTX(ATTR_Dbxref), value, value_len, false); 
         break;
 
     case _ATTR_Target:
@@ -139,7 +162,7 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
 
     // example: Parent=mRNA00001,mRNA00002,mRNA00003
     case _ATTR_Parent:
-        seg_array (vb, CTX(ATTR_Parent), ATTR_Parent, STRa(value), ',', 0, false, false, false);
+        seg_array (vb, CTX(ATTR_Parent), ATTR_Parent, STRa(value), ',', 0, false, false);
         break;
 
     //case _ATTR_Gap: // I tried: 1. array (no improvement) ; 2. string of op-codes in b250 + integers in local (negligible improvement)
@@ -156,7 +179,7 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
                              { .dict_id={.id="V2arEff" }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid  },                    } }
         };
-        seg_array_of_struct (vb, CTX(ATTR_Variant_effect), Variant_effect, STRa(value), (SegCallback[]){0,0,0,seg_id_field_cb});
+        seg_array_of_struct (vb, CTX(ATTR_Variant_effect), Variant_effect, STRa(value), (SegCallback[]){0,0,0,gff3_seg_ENSTid});
         break;
     }
 
@@ -170,7 +193,7 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
                              { .dict_id={.id="S2iftPr" }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid  },                    } }
         };
-        seg_array_of_struct (vb, CTX(ATTR_sift_prediction), sift_prediction, STRa(value), (SegCallback[]){0,0,0,seg_id_field_cb});
+        seg_array_of_struct (vb, CTX(ATTR_sift_prediction), sift_prediction, STRa(value), (SegCallback[]){0,0,0,gff3_seg_ENSTid});
         break;
     }
 
@@ -184,7 +207,7 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
                              { .dict_id={.id="P2olyPhP" }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid   },                    } }
         };
-        seg_array_of_struct (vb, CTX(ATTR_polyphen_prediction), polyphen_prediction, STRa(value), (SegCallback[]){0,0,0,seg_id_field_cb});
+        seg_array_of_struct (vb, CTX(ATTR_polyphen_prediction), polyphen_prediction, STRa(value), (SegCallback[]){0,0,0,gff3_seg_ENSTid});
         break;
     }
 
@@ -197,7 +220,7 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
                              { .dict_id={.id="v1arPep"  }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid   },                    } }
         };
-        seg_array_of_struct (vb, CTX(ATTR_variant_peptide), variant_peptide, STRa(value), (SegCallback[]){0,0,seg_id_field_cb});
+        seg_array_of_struct (vb, CTX(ATTR_variant_peptide), variant_peptide, STRa(value), (SegCallback[]){0,0,gff3_seg_ENSTid});
         break;
     }
 
@@ -246,7 +269,7 @@ static void gff3_seg_attrs_field (VBlock *vb, const char *field, unsigned field_
     Container con = { .repeats             = 1, 
                       .drop_final_item_sep = true };
     char prefixes[field_len + 2];
-    prefixes[0] = prefixes[1] = CON_PREFIX_SEP;
+    prefixes[0] = prefixes[1] = CON_PX_SEP;
     unsigned prefixes_len = 2;
 
     str_split (field, field_len, MAX_DICTS, ';', attr, false);
@@ -260,8 +283,8 @@ static void gff3_seg_attrs_field (VBlock *vb, const char *field, unsigned field_
         ASSSEG (n_tag_vals == 2 && tag_val_lens[0] > 0 && tag_val_lens[1] > 0, attrs[i], "Invalid attribute: %.*s", STRfi (attr, i));
 
         memcpy (&prefixes[prefixes_len], tag_vals[0], tag_val_lens[0] + 1);
-        prefixes_len += tag_val_lens[0] + 2; // including the '=' and CON_PREFIX_SEP
-        prefixes[prefixes_len-1] = CON_PREFIX_SEP;
+        prefixes_len += tag_val_lens[0] + 2; // including the '=' and CON_PX_SEP
+        prefixes[prefixes_len-1] = CON_PX_SEP;
 
         DictId dict_id = gff3_seg_attr_subfield (vb, STRi(tag_val, 0), STRi (tag_val, 1));
         con.items[i] = (ContainerItem){ .dict_id = dict_id, .separator = { ';' } }; 

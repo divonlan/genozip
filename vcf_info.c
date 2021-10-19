@@ -705,8 +705,8 @@ static bool vcf_seg_INFO_HGVS_snp (VBlockVCFP vb, ContextP ctx, STRp(value))
      }; 
 
     // temporarily surround prefix by separators, and seg container with prefix
-    SAFE_ASSIGNx (&value[-1], CON_PREFIX_SEP, 1);
-    SAFE_ASSIGNx (v,          CON_PREFIX_SEP, 2);
+    SAFE_ASSIGNx (&value[-1], CON_PX_SEP, 1);
+    SAFE_ASSIGNx (v,          CON_PX_SEP, 2);
 
     container_seg (vb, ctx, (ContainerP)&con, &value[-1], v - value + 2, value_len - pos_str_len - 3);
 
@@ -810,7 +810,7 @@ static bool vcf_seg_INFO_HGVS_indel (VBlockVCFP vb, ContextP ctx, STRp(value), c
 
     // note: header_len, op_len and renamed_len prefixes_len to be int64_t to avoid -Wstringop-overflow warning in gcc 10
     char prefixes[prefixes_len];
-    prefixes[0] = prefixes[header_len+1] = prefixes[header_len+2] = prefixes[header_len+3] = prefixes[header_len+4+op_len] = CON_PREFIX_SEP;
+    prefixes[0] = prefixes[header_len+1] = prefixes[header_len+2] = prefixes[header_len+3] = prefixes[header_len+4+op_len] = CON_PX_SEP;
     memcpy (&prefixes[1], value, header_len);
     memcpy (&prefixes[header_len+4], op, op_len);
     
@@ -1264,14 +1264,14 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
              dnum == _INFO_GQ_HIST ||
              dnum == _INFO_AGE_HISTOGRAM_HET ||
              dnum == _INFO_AGE_HISTOGRAM_HOM) 
-        CALL (seg_array (VB, ctx, ctx->did_i, value, value_len, ',', '|', false, true, false));
+        CALL (seg_array (VB, ctx, ctx->did_i, value, value_len, ',', '|', false, true));
 
     else if (dnum == _INFO_DP4) 
-        CALL (seg_array (VB, ctx, ctx->did_i, value, value_len, ',', 0, false, true, false));
+        CALL (seg_array (VB, ctx, ctx->did_i, value, value_len, ',', 0, false, true));
 
     // ##INFO=<ID=CLNDN,Number=.,Type=String,Description="ClinVar's preferred disease name for the concept specified by disease identifiers in CLNDISDB">
     else if (dnum == _INFO_CLNDN) 
-        CALL (seg_array (VB, ctx, ctx->did_i, value, value_len, '|', 0, false, false, false));
+        CALL (seg_array (VB, ctx, ctx->did_i, value, value_len, '|', 0, false, false));
 
     // ##INFO=<ID=CLNHGVS,Number=.,Type=String,Description="Top-level (primary assembly, alt, or patch) HGVS expression.">
     else if (dnum == _INFO_CLNHGVS)
@@ -1422,7 +1422,7 @@ void vcf_finalize_seg_info (VBlockVCF *vb)
         qsort (ii, ii_len, sizeof(InfoItem), sort_by_subfield_name);
 
     char prefixes[CONTAINER_MAX_PREFIXES_LEN];  // these are the Container prefixes
-    prefixes[0] = prefixes[1] = CON_PREFIX_SEP; // initial CON_PREFIX_SEP follow by separator of empty Container-wide prefix
+    prefixes[0] = prefixes[1] = CON_PX_SEP; // initial CON_PX_SEP follow by separator of empty Container-wide prefix
     unsigned prefixes_len = 2;
 
     // Populate the Container 
@@ -1448,7 +1448,7 @@ void vcf_finalize_seg_info (VBlockVCF *vb)
 
         memcpy (&prefixes[prefixes_len], ii[i].name, ii[i].name_len);
         prefixes_len += ii[i].name_len;
-        prefixes[prefixes_len++] = CON_PREFIX_SEP;
+        prefixes[prefixes_len++] = CON_PX_SEP;
 
         // don't include LIFTBACK or LIFTREJT because they are not reconstructed by default (genounzip) 
         // note: vcf_lo_seg_INFO_REJX / vcf_lo_seg_INFO_LUFT_and_PRIM already verified that this is a dual-coord file

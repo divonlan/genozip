@@ -18,7 +18,7 @@
 
 // memory management for bzlib - tesing shows that compress allocates 4 times, and decompress 2 times. Allocations are the same set of sizes
 // every call to compress/decompress with the same parameters, independent on the contents or size of the compressed/decompressed data.
-void *codec_alloc (VBlock *vb, uint64_t size, double grow_at_least_factor)
+void *codec_alloc (VBlock *vb, uint64_t size, float grow_at_least_factor)
 {
     const char *names[NUM_CODEC_BUFS] = { "codec_bufs[0]", "codec_bufs[1]", "codec_bufs[2]", "codec_bufs[3]",
                                           "codec_bufs[4]", "codec_bufs[5]", "codec_bufs[6]" };
@@ -111,8 +111,8 @@ void codec_initialize (void)
 
 typedef struct {
     Codec codec;
-    double size;
-    double clock;
+    float size;
+    float clock;
 } CodecTest;
 
 static int codec_assign_sorter (const CodecTest *t1, const CodecTest *t2)

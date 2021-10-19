@@ -921,7 +921,7 @@ static void ref_copy_compressed_sections_from_reference_file (Reference ref)
 
         // if this at least 95% of the RA is covered, just copy the corresponding FASTA section to our file, and
         // mark all the ranges as is_set=false indicating that they don't need to be compressed individually
-        if ((double)bits_is_set / (double)fasta_sec_len >= 0.95) {
+        if ((float)bits_is_set / (float)fasta_sec_len >= 0.95) {
             ref_copy_one_compressed_section (ref, ref_file, &fasta_sec[i], &sl);
             bit_array_clear_region (&contig_r->is_set, fasta_sec_start_in_contig_r, fasta_sec_len);
         }

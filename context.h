@@ -13,10 +13,11 @@
 #include "mutex.h"
 #include "context_struct.h"
 #include "vblock.h"
+#include "segconf.h"
 
 #define MAX_WORDS_IN_CTX 0x7ffffff0 // limit on nodes.len, word_list.len - partly because hash uses signed int32_t + 2 for singlton using index-2
 
-#define NODE_INDEX_NONE       -1
+#define NODE_INDEX_NONE    -1
 #define MAX_NODE_INDEX (MAX_WORDS_IN_CTX-1)
 
 #define MAX_WORD_INDEX (MAX_WORDS_IN_CTX-1)
@@ -98,6 +99,10 @@ static inline void ctx_init_iterator (Context *ctx) { ctx->iterator.next_b250 = 
 
 extern WordIndex ctx_evaluate_snip_seg (VBlockP segging_vb, ContextP vctx, STRp (snip), bool *is_new);
 extern WordIndex ctx_create_node (VBlockP vb, DidIType did_i, STRp (snip));
+
+#define LASTb250(ctx) ((ctx)->flags.all_the_same ? *FIRSTENT(WordIndex, (ctx)->b250) : *LASTENT(WordIndex, (ctx)->b250))
+extern void ctx_append_b250 (VBlockP vb, ContextP vctx, WordIndex node_index);
+
 extern int64_t ctx_decrement_count (VBlockP vb, ContextP ctx, WordIndex node_index);
 extern void ctx_increment_count (VBlockP vb, ContextP ctx, WordIndex node_index);
 
@@ -144,7 +149,7 @@ static inline ContextP ctx_get_existing_ctx_do (VBlockP vb, DictId dict_id)  // 
 }
 #define ECTX(dict_id) ctx_get_existing_ctx_do ((VBlockP)(vb), (DictId)(dict_id))
 
-extern struct FlagsCtx ctx_get_zf_ctx_flags (DictId dict_id);
+extern struct FlagsCtx ctx_get_zf_ctx_flags (ConstContextP vctx);
 
 extern ContextP ctx_add_new_zf_ctx_from_txtheader (const char *tag_name, unsigned tag_name_len, DictId dict_id, TranslatorId luft_translator);
 

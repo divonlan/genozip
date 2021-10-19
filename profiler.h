@@ -20,7 +20,7 @@ typedef struct {
         zfile_uncompress_section, codec_assign_best_codec, compressor_pbwt, sam_seg_XA_pos,
         reconstruct_vb, buf_alloc, dispatcher_recycle_vbs, txtfile_read_header, txtfile_read_vblock,
         seg_all_data_lines, compressor_hapmat, codec_hapmat_count_alt_alleles, seg_initialize,
-        ctx_clone, ctx_merge_in_vb_ctx_one_dict_id, compound_seg, sam_cigar_seg,
+        ctx_clone, ctx_merge_in_vb_ctx_one_dict_id, qname_seg, sam_cigar_seg,
         md5,ctx_compress_one_dict_fragment, aligner_best_match, aligner_get_word_from_seq,
         lock_mutex_zf_ctx, aligner_get_match_len, generate_rev_complement_genome, ref_contigs_compress,
         linesorter_compress_qsort, linesorter_compress_recon_plan, 

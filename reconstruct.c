@@ -48,8 +48,8 @@ static int64_t reconstruct_from_delta (VBlock *vb,
 
 #define ASSERT_IN_BOUNDS \
     ASSERT (ctx->next_local < ctx->local.len, \
-            "reconstructing txt_line=%"PRIu64" vb_i=%u: unexpected end of ctx->local data in %s (len=%u ltype=%s lcodec=%s)", \
-            vb->line_i, vb->vblock_i, ctx->tag_name, (uint32_t)ctx->local.len, lt_name (ctx->ltype), codec_name (ctx->lcodec))
+            "reconstructing txt_line=%"PRIu64" vb_i=%u: unexpected end of ctx->local data in %s (len=%u ltype=%s lcodec=%s did_i=%u)", \
+            vb->line_i, vb->vblock_i, ctx->tag_name, (uint32_t)ctx->local.len, lt_name (ctx->ltype), codec_name (ctx->lcodec), ctx->did_i)
 
 static uint32_t reconstruct_from_local_text (VBlock *vb, Context *ctx, bool reconstruct)
 {
@@ -139,7 +139,8 @@ Context *reconstruct_get_other_ctx_from_snip (VBlockP vb, pSTRp (snip))
     base64_decode ((*snip)+1, &b64_len, dict_id.id);
 
     Context *other_ctx = ECTX (dict_id);
-
+    ASSERT (other_ctx, "Failed to get other context: snip=%.*s dict_id=%s", STRf(*snip), dis_dict_id(dict_id).s);
+  
     *snip     += b64_len + 1;
     *snip_len -= b64_len + 1;
     

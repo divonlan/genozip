@@ -12,7 +12,7 @@
 extern const char *txtfile_piz_get_filename (const char *orig_name, const char *prefix, bool is_orig_name_genozip);
 
 typedef bool (*TxtFileTestFunc)(const char *, int);
-extern bool txtfile_test_data (char first_char, unsigned num_lines_to_test, double success_threashold, TxtFileTestFunc test_func);
+extern bool txtfile_test_data (char first_char, unsigned num_lines_to_test, float success_threashold, TxtFileTestFunc test_func);
 
 extern const char *txtfile_dump_filename (VBlockP vb, const char *base_name, const char *ext);
 extern const char *txtfile_dump_vb (VBlockP vb, const char *base_name);
