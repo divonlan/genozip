@@ -640,11 +640,15 @@ static Context *ctx_get_zf_ctx (DictId dict_id)
     return NULL;
 }
 
+static inline Context *ctx_get_zf_ctx_from_vctx (ConstContextP vctx)
+{
+    return vctx->did_i < DTFZ(num_fields) ? &z_file->contexts[vctx->did_i] : ctx_get_zf_ctx (vctx->dict_id);
+}
+
 // get zf_ctx flags, looking it it up by vctx
 struct FlagsCtx ctx_get_zf_ctx_flags (ConstContextP vctx)
 {
-    ContextP zctx = vctx->did_i < DTFZ(num_fields) ? &z_file->contexts[vctx->did_i] : ctx_get_zf_ctx (vctx->dict_id);
- 
+    ContextP zctx = ctx_get_zf_ctx_from_vctx (vctx);
     return zctx ? zctx->flags : (struct FlagsCtx){};
 }
 
@@ -657,7 +661,7 @@ static Context *ctx_add_new_zf_ctx (VBlock *vb, const Context *vctx)
     mutex_lock (z_file->dicts_mutex);
 
     // check if another thread raced and created this dict before us
-    Context *zctx = ctx_get_zf_ctx (vctx->dict_id);
+    Context *zctx = ctx_get_zf_ctx_from_vctx (vctx);
     if (zctx) goto finish;
 
     ASSERT (z_file->num_contexts+1 < MAX_DICTS, // load num_contexts - this time with mutex protection - it could have changed
@@ -727,7 +731,7 @@ finish:
 
 void ctx_commit_codec_to_zf_ctx (VBlock *vb, Context *vctx, bool is_lcodec)
 {
-    Context *zctx  = ctx_get_zf_ctx (vctx->dict_id);
+    Context *zctx  = ctx_get_zf_ctx_from_vctx (vctx);
     ASSERT (zctx, "zctx is missing for %s in vb=%u", vctx->tag_name, vb->vblock_i); // zctx is expected to exist as this is called after merge
 
     { START_TIMER; 
@@ -749,7 +753,7 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *vb, unsigned did_i)
     Context *vctx = &vb->contexts[did_i];
 
     // get the ctx or create a new one. note: ctx_add_new_zf_ctx() must be called before mutex_lock() because it locks the z_file mutex (avoid a deadlock)
-    Context *zctx  = ctx_get_zf_ctx (vctx->dict_id);
+    Context *zctx  = ctx_get_zf_ctx_from_vctx (vctx);
     if (!zctx) zctx = ctx_add_new_zf_ctx (vb, vctx); 
 
     { START_TIMER; 
@@ -775,7 +779,7 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *vb, unsigned did_i)
         zctx->txt_len += vctx->txt_len; // for stats
 
     if (vctx->st_did_i != DID_I_NONE && zctx->st_did_i == DID_I_NONE) {
-        Context *st_ctx = ctx_get_zf_ctx (vb->contexts[vctx->st_did_i].dict_id);
+        Context *st_ctx = ctx_get_zf_ctx_from_vctx (CTX(vctx->st_did_i));
         if (st_ctx) zctx->st_did_i = st_ctx->did_i; // st_did_i is not necessarily the same for vb and zf
     }
 
@@ -863,8 +867,8 @@ void ctx_add_compressor_time_to_zf_ctx (VBlockP vb)
     for (DidIType vb_did_i=0; vb_did_i < vb->num_contexts; vb_did_i++) {
         ContextP vctx = CTX(vb_did_i); 
         if (vctx->compressor_time) {
-            ContextP zctx = vctx->st_did_i != DID_I_NONE ? ctx_get_zf_ctx (CTX(vctx->st_did_i)->dict_id) // we accumulate at stats parent context if there is one
-                                                         : ctx_get_zf_ctx (vctx->dict_id);
+            ContextP zctx = vctx->st_did_i != DID_I_NONE ? ctx_get_zf_ctx_from_vctx (CTX(vctx->st_did_i)) // we accumulate at stats parent context if there is one
+                                                         : ctx_get_zf_ctx_from_vctx (vctx);
             zctx->compressor_time += vctx->compressor_time;
         }
     }
@@ -1116,7 +1120,7 @@ void ctx_update_stats (VBlock *vb)
     for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) {
         Context *vctx = CTX(did_i);
 
-        Context *zctx = ctx_get_zf_ctx (vctx->dict_id);
+        Context *zctx = ctx_get_zf_ctx_from_vctx (vctx);
         if (!zctx) continue; // this can happen if FORMAT subfield appears, but no line has data for it
 
         zctx->b250.num_ctx_words  += vctx->b250.num_ctx_words; // thread safety: no issues, this only updated only by the main thread
