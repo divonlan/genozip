@@ -65,7 +65,7 @@ Examples:
       | Note: files compressed with this option are NOT identical to the original file after decompression. For this reason, it is not possible to use this option in combination with --test or --md5.
       |
                                        
-.. option:: --best  Best compression.
+.. option:: --best  Best compression. For SAM/BAM and FASTQ, --reference must be used as well.
 
       | Note: Running with this option is a bit slower and consumes more memory. Also, subsetting the resulting genozip file (eg ``genocat --regions``) will be slower. 
       | Tip: To avoid running out of memory on a low-resource personal computer, combine with limiting threads using ``--threads``.

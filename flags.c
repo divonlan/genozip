@@ -889,6 +889,10 @@ void flags_update_zip_one_file (void)
     else flag.optimize = flag.optimize_sort || flag.optimize_phred || flag.GL_to_PL || flag.GP_to_PP || flag.optimize_VQSLOD ||
                          flag.optimize_QUAL || flag.optimize_Vf || flag.optimize_ZM || flag.optimize_DESC;
 
+    // force --reference if --best was selected for SAM/BAM/FASTQ
+    ASSINP (!(dt == DT_SAM || dt == DT_BAM || dt == DT_FASTQ) || !flag.best || flag.reference == REF_EXTERNAL, 
+            "Using of --best on a %s file also requires using --reference", dt_name(dt));
+
     // cases where txt data is modified during Seg - digest is not stored, it cannot be tested with --test and other limitations 
     // note: this flag is also set when the file header indicates that it's a Luft file. See vcf_header_get_dual_coords().
     // note: we don't set this for rejects_coord, bc when compressing a primary DC file it is reconstructed without modification
