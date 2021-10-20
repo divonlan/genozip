@@ -16,16 +16,17 @@ typedef struct {
     int64_t wallclock, read, compute, compressor_bz2, compressor_lzma, compressor_bsc, 
         write, piz_read_one_vb, codec_hapmat_piz_get_one_line, vb_get_vb, buf_mmap_do,
         sam_seg_SEQ, compressor_domq, compressor_actg, bgzf_io_thread, bgzf_compute_thread,
-        piz_get_line_subfields, zip_generate_ctxs, zip_compress_ctxs, ctx_merge_in_vb_ctx,
+        piz_get_line_subfields, zip_generate_b250, zip_generate_local, zip_compress_ctxs, ctx_merge_in_vb_ctx,
         zfile_uncompress_section, codec_assign_best_codec, compressor_pbwt, sam_seg_XA_pos,
         reconstruct_vb, buf_alloc, dispatcher_recycle_vbs, txtfile_read_header, txtfile_read_vblock,
         seg_all_data_lines, compressor_hapmat, codec_hapmat_count_alt_alleles, seg_initialize,
         ctx_clone, ctx_merge_in_vb_ctx_one_dict_id, qname_seg, sam_cigar_seg,
         md5,ctx_compress_one_dict_fragment, aligner_best_match, aligner_get_word_from_seq,
-        lock_mutex_zf_ctx, aligner_get_match_len, generate_rev_complement_genome, ref_contigs_compress,
+        aligner_get_match_len, generate_rev_complement_genome, ref_contigs_compress,
         linesorter_compress_qsort, linesorter_compress_recon_plan, 
         piz_read_global_area, ref_load_stored_reference, ctx_read_all_dictionaries, ctx_dict_build_word_lists, 
         ref_read_one_range, ref_uncompress_one_range, vb_release_vb_do, vb_destroy_vb,
+        lock_mutex_zf_ctx, wait_for_vb_1_mutex,
         tmp1, tmp2, tmp3, tmp4, tmp5;
 
         const char *next_name, *next_subname;

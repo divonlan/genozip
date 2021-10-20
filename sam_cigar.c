@@ -26,7 +26,7 @@ void sam_cigar_binary_to_textual (VBlockSAM *vb, uint16_t n_cigar_op, const uint
 {
     if (!n_cigar_op) {
         buf_alloc (vb, textual_cigar, 2, 0, char, 100, textual_cigar->name ? NULL : "textual_cigar");
-        NEXTENT (char, vb->textual_cigar) = '*';
+        NEXTENT (char, *textual_cigar) = '*';
         goto finish;
     }
 
@@ -75,6 +75,9 @@ void sam_cigar_analyze (VBlockSAMP vb, STRp(cigar),  unsigned *seq_consumed)
 
     ASSERT (cigar[0] != '*' || cigar_len == 1, "Invalid CIGAR: %.*s", cigar_len, cigar); // a CIGAR start with '*' must have 1 character
 
+    if (command == PIZ) 
+        vb->textual_cigar.len = 0;
+
     // ZIP case: if the CIGAR is "*", later sam_cigar_seg_textual uses the length from SEQ and store it as eg "151*". 
     // In PIZ it will be eg "151*" or "1*" if both SEQ and QUAL are "*", so this condition is always false
     if (cigar[0] == '*') return;
@@ -85,12 +88,15 @@ void sam_cigar_analyze (VBlockSAMP vb, STRp(cigar),  unsigned *seq_consumed)
         cigar_len--;
     }
 
-    if (command == PIZ)
-        CTX(SAM_CIGAR)->last_snip = cigar; // store original textual CIGAR for use of sam_piz_special_MD, as in BAM it will be translated
+    // store original textual CIGAR for use of sam_piz_special_MD, as in BAM it will be translated ; also cigar might point to buddy data in ctx->per_line - ctx->per_line might be realloced as we store this line's CIGAR in it 
+    if (command == PIZ) {
+        buf_add_more (VB, &vb->textual_cigar, STRa(cigar), "textual_cigar");
+        *AFTERENT (char, vb->textual_cigar) = 0; // nul-terminate (buf_add_more allocated space for it)
+    }
 
-    // if we're reconstructing a BAM, we will create the BAM cigar data in textual_cigar. 
+    // if we're reconstructing a BAM, we will create the BAM cigar data in binary_cigar. 
     bool bam_piz = (command == PIZ && flag.out_dt == DT_BAM);
-    if (bam_piz) buf_alloc (vb, &vb->textual_cigar, 0, cigar_len/2 /* max possible n_cigar_op */, uint32_t, 2, "textual_cigar");
+    if (bam_piz) buf_alloc (vb, &vb->binary_cigar, 0, cigar_len/2 /* max possible n_cigar_op */, uint32_t, 2, "binary_cigar");
 
     unsigned n=0;
     for (unsigned i=0; i < cigar_len; i++) {
@@ -114,13 +120,13 @@ void sam_cigar_analyze (VBlockSAMP vb, STRp(cigar),  unsigned *seq_consumed)
             if (c == 'I' || c == 'D') vb->mismatch_bases += n;
             else if (c == 'S') vb->soft_clip += n;
 
-            // note: piz: in case of eg "151*" - *seq_consumed will be updated to the length, but textual_cigar will be empty
+            // note: piz: in case of eg "151*" - *seq_consumed will be updated to the length, but binary_cigar will be empty
             if (bam_piz && c != '*') { 
                 // convert character CIGAR op to BAM cigar field op  "MIDNSHP=X" -> 012345678 
                 static const uint8_t cigar_char_to_op[256] = { ['M']=0, ['I']=1, ['D']=2, ['N']=3, ['S']=4, 
                                                                ['H']=5, ['P']=6, ['=']=7, ['X']=8           }; 
                 uint32_t bam_cigar = (n << 4) | (uint32_t)cigar_char_to_op[(uint8_t)c];
-                NEXTENT (uint32_t, vb->textual_cigar) = LTEN32 (bam_cigar);
+                NEXTENT (uint32_t, vb->binary_cigar) = LTEN32 (bam_cigar);
             }
             n = 0;
         }
@@ -323,8 +329,8 @@ SPECIAL_RECONSTRUCTOR (sam_cigar_special_CIGAR)
     if (snip[0] == COPY_BUDDY) 
         reconstruct_from_buddy_get_textual_snip (vb, CTX (OPTION_MC_Z), pSTRa(snip));
 
-    // calculate seq_len (= l_seq, unless l_seq=0), ref_consumed and (if bam) vb->textual_cigar (which will contain the CIGAR in binary BAM format)
-    sam_cigar_analyze (vb_sam, snip, snip_len, &vb->seq_len); 
+    // calculate seq_len (= l_seq, unless l_seq=0), ref_consumed and (if bam) vb->textual_cigar and vb->binary_cigar
+    sam_cigar_analyze (vb_sam, STRa(snip), &vb->seq_len); 
 
     if ((flag.out_dt == DT_SAM || (flag.out_dt == DT_FASTQ && flag.extended_translation)) 
     &&  reconstruct) {
@@ -338,16 +344,16 @@ SPECIAL_RECONSTRUCTOR (sam_cigar_special_CIGAR)
             RECONSTRUCT (snip, snip_len);    
     }
 
-    // BAM - output vb->textual_cigar generated in sam_cigar_analyze
+    // BAM - output vb->binary_cigar generated in sam_cigar_analyze
     else if (flag.out_dt == DT_BAM) {
         // now we have the info needed to reconstruct bin, l_read_name, n_cigar_op and l_seq
         BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)ENT (char, vb->txt_data, vb->line_start);
         alignment->l_read_name = AFTERENT (char, vb->txt_data) - alignment->read_name;
-        alignment->n_cigar_op  = LTEN16 (vb_sam->textual_cigar.len);
+        alignment->n_cigar_op  = LTEN16 (vb_sam->binary_cigar.len);
         alignment->l_seq       = (snip[0] == '-') ? 0 : LTEN32 (vb->seq_len);
 
-        RECONSTRUCT (vb_sam->textual_cigar.data, vb_sam->textual_cigar.len * sizeof (uint32_t));
-        buf_free (&vb_sam->textual_cigar);
+        RECONSTRUCT (vb_sam->binary_cigar.data, vb_sam->binary_cigar.len * sizeof (uint32_t));
+        buf_free (&vb_sam->binary_cigar);
 
         // if BIN is SAM_SPECIAL_BIN, inst.semaphone is set by bam_piz_special_BIN - a signal to us to calculate
         ContextP sam_bam_bin_ctx = CTX(SAM_BAM_BIN);
@@ -443,14 +449,16 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_CONSUME_MC_Z)
             snip_len=0;
 
         else
-            *ENT (CtxWord, mc_ctx->history, vb->line_i - vb->first_line) = (CtxWord){ .char_index = ENTNUM (mc_ctx->dict, snip), 
-                                                                                      .snip_len   = CHAR_INDEX_IN_DICT };
+            *ENT (HistoryWord, mc_ctx->history, vb->line_i - vb->first_line) = 
+                (HistoryWord){ .char_index = ENTNUM (mc_ctx->dict, snip), .snip_len = snip_len, .lookup = LookupDict };
     }
     
     // case: MC:Z is in local
-    if (!snip_len)  
-        *ENT (CtxWord, mc_ctx->history, vb->line_i - vb->first_line) = (CtxWord){ .char_index = LOAD_SNIP_FROM_LOCAL (mc_ctx), 
-                                                                                  .snip_len   = CHAR_INDEX_IN_LOCAL };
+    if (!snip_len) {
+        uint32_t char_index = LOAD_SNIP_FROM_LOCAL (mc_ctx);
+        *ENT (HistoryWord, mc_ctx->history, vb->line_i - vb->first_line) = 
+            (HistoryWord){ .char_index = char_index, .snip_len = snip_len, .lookup = LookupLocal }; 
+    }
 
 done:
     return false; // no new value 

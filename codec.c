@@ -157,6 +157,15 @@ static int codec_assign_sorter (const CodecTest *t1, const CodecTest *t2)
 //    context (compression runs after zip_assign_best_codec is completed already) - those codecs explicitly call us to get the
 //    codec for the subordinate context. Multiple of the early VBs may call in parallel, but future VBs will receive
 //    the codec during cloning    
+//
+// Codecs for contexts may be assigned in 3 stages:
+// 1. During Seg (a must for all complex codecs - eg HT, DOMQ, ACGT...)
+// 2. At merge - inherit from z_file->context if not set in Seg
+// 3. After merge before compress - if still not assigned - zip_assign_best_codec - which also commits back to z_file->context
+//    (this is the only place we commit to z_file, therefore z_file will only contain simple codecs)
+// Note: if vb=1 commits a codec, it will be during its lock, so that all subsequent VBs will inherit it. But for
+// contexts not committed by vb=1 - multiple contexts running in parallel may commit their codecs overriding each other. that's ok.
+
 Codec codec_assign_best_codec (VBlockP vb, 
                                ContextP ctx, /* for b250, local, dict */ 
                                BufferP data, /* non-context data */

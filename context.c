@@ -681,7 +681,7 @@ static Context *ctx_add_new_zf_ctx (VBlock *vb, const Context *vctx)
 
     // only when the new entry is finalized, do we increment num_contexts, atmoically , this is because
     // other threads might access it without a mutex when searching for a dict_id
-    __atomic_store_n (&z_file->num_contexts, z_file->num_contexts+1, __ATOMIC_RELAXED); // stamp our merge_num as the ones that set the b250
+    __atomic_store_n (&z_file->num_contexts, z_file->num_contexts+1, __ATOMIC_RELAXED); 
 
 finish:
     mutex_unlock (z_file->dicts_mutex);
@@ -721,7 +721,7 @@ ContextP ctx_add_new_zf_ctx_from_txtheader (const char *tag_name, unsigned tag_n
 
     // only when the new entry is finalized, do we increment num_contexts, atmoically , this is because
     // other threads might access it without a mutex when searching for a dict_id
-    __atomic_store_n (&z_file->num_contexts, z_file->num_contexts+1, __ATOMIC_RELAXED); // stamp our merge_num as the ones that set the b250
+    __atomic_store_n (&z_file->num_contexts, z_file->num_contexts+1, __ATOMIC_RELAXED); 
 
 finish:
     mutex_unlock (z_file->dicts_mutex);
@@ -732,7 +732,7 @@ finish:
 void ctx_commit_codec_to_zf_ctx (VBlock *vb, Context *vctx, bool is_lcodec)
 {
     Context *zctx  = ctx_get_zf_ctx_from_vctx (vctx);
-    ASSERT (zctx, "zctx is missing for %s in vb=%u", vctx->tag_name, vb->vblock_i); // zctx is expected to exist as this is called after merge
+    if (!zctx) zctx = ctx_add_new_zf_ctx (vb, vctx); // this context doesn't exist yet in z_file, because no VB with it has merged yet. create it now.
 
     { START_TIMER; 
       mutex_lock (zctx->mutex);
@@ -793,7 +793,7 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *vb, unsigned did_i)
     if (!buf_is_alloc (&vctx->dict)) goto finish; // no new snips introduced in this VB
  
     if (!buf_is_alloc (&zctx->dict)) {
-        // allocate hash table, based on the statitics gather by this first vb that is merging this dict and 
+        // allocate hash table, based on the statistics gather by this first vb that is merging this dict and 
         // populate the hash table without needing to reevalate the snips (we know none are in the hash table, but all are in nodes and dict)
         if (zctx->global_hash.size <= 1) { // only initial allocation in zip_dict_data_initialize
             uint32_t estimated_entries = hash_get_estimated_entries (vb, zctx, vctx);

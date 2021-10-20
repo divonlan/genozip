@@ -208,7 +208,7 @@ void sam_seg_initialize (VBlock *vb)
 
     // initial allocations based on segconf data
     if (!segconf.running && segconf.sam_is_sorted) 
-        buf_alloc_255 (vb, &((VBlockSAMP)vb)->qname_hash, 0, (1 << BUDDY_HASH_BITS), int32_t, 1, "qname_hash");    
+        buf_alloc_255 (vb, &VB_SAM->qname_hash, 0, (1 << BUDDY_HASH_BITS), int32_t, 1, "qname_hash");    
 
     sam_seg_initialize_0X (vb, (segconf.sam_is_sorted ? OPTION_XA_LOOKBACK : DID_I_NONE), OPTION_XA_RNAME, OPTION_XA_STRAND, OPTION_XA_POS, OPTION_XA_CIGAR);
     sam_seg_initialize_0X (vb, DID_I_NONE, OPTION_SA_RNAME, OPTION_SA_STRAND, OPTION_SA_POS, OPTION_SA_CIGAR);

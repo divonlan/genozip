@@ -530,10 +530,10 @@ static void sam_seg_NM_field (VBlockSAM *vb, STRp(field), unsigned add_bytes)
 SPECIAL_RECONSTRUCTOR (bam_piz_special_NM)
 {
     if (*snip == 'i') 
-        new_value->i = ((VBlockSAMP)vb)->mismatch_bases;
+        new_value->i = VB_SAM->mismatch_bases;
 
     else if (*snip == 'b')
-        new_value->i = ((VBlockSAMP)vb)->mismatch_bases > 0;
+        new_value->i = VB_SAM->mismatch_bases > 0;
 
     else 
         ASSPIZ (false, "unrecognized opcode '%c'", *snip);
@@ -606,7 +606,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_SEQ_LEN)
 // reconstruct ref_consumed or (ref_consumed-snip)
 SPECIAL_RECONSTRUCTOR (sam_piz_special_REF_CONSUMED)
 {
-    new_value->i = (int32_t)((VBlockSAMP)vb)->ref_consumed - atoi (snip); // ref_consumed if snip=""
+    new_value->i = (int32_t)VB_SAM->ref_consumed - atoi (snip); // ref_consumed if snip=""
     if (reconstruct) RECONSTRUCT_INT (new_value->i);
     
     return true; // new value

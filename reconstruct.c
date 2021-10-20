@@ -161,25 +161,21 @@ void reconstruct_from_buddy_get_textual_snip (VBlockP vb, ContextP ctx, pSTRp(sn
 {
     ASSPIZ0 (vb->buddy_line_i >= 0, "No buddy line is set for the current line");
 
-    CtxWord word = *ENT (CtxWord, ctx->history, vb->buddy_line_i);
-
-    if ((uint32_t)word.snip_len >= MIN_CHAR_INDEX_ALT_LOCATION) {
-        Buffer *buf = word.snip_len == CHAR_INDEX_IN_DICT  ? &ctx->dict 
-                    : word.snip_len == CHAR_INDEX_IN_LOCAL ? &ctx->local
-                    :                                        &ctx->per_line;
-        ASSPIZ (word.char_index < buf->len, "buddy word ctx=%s buddy_line_i=%d char_index=%"PRIu64" is out of range of buffer %s len=%"PRIu64, 
-                ctx->tag_name, vb->buddy_line_i, word.char_index, buf->name, buf->len);
-
-        *snip = ENT (char, *buf, word.char_index);
-        *snip_len = strlen (*snip);
+    HistoryWord word = *ENT (HistoryWord, ctx->history, vb->buddy_line_i);
+    Buffer *buf=NULL;
+    switch (word.lookup) {
+        case LookupTxtData : buf = &vb->txt_data  ; break;
+        case LookupDict    : buf = &ctx->dict     ; break;
+        case LookupLocal   : buf = &ctx->local    ; break;
+        case LookupPerLine : buf = &ctx->per_line ; break;
+        default : ASSPIZ (false, "Invalid value word.lookup=%d", word.lookup);
     }
-    else {
-        ASSPIZ (word.char_index < vb->txt_data.len, "buddy word ctx=%s buddy_line_i=%d char_index=%"PRIu64" is out of range of vb->txt_data len=%"PRIu64, 
-                ctx->tag_name, vb->buddy_line_i, word.char_index, vb->txt_data.len);
 
-        *snip = ENT (char, vb->txt_data, word.char_index);
-        *snip_len = word.snip_len;
-    }
+    ASSPIZ (word.char_index < buf->len, "buddy word ctx=%s buddy_line_i=%d char_index=%"PRIu64" is out of range of buffer %s len=%"PRIu64, 
+            ctx->tag_name, vb->buddy_line_i, word.char_index, buf->name, buf->len);
+
+    *snip = ENT (char, *buf, word.char_index);
+    *snip_len = word.snip_len;
 }
 
 // Copy from buddy: buddy is data that appears on a specific "buddy line", in this context or another one. Not all lines need
@@ -284,7 +280,7 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
                 reconstruct_from_local_text (vb, base_ctx, reconstruct); // this will call us back recursively with the snip retrieved
                 break;
                 
-            case LT_INT8 ...LT_UINT64:
+            case LT_INT8 ... LT_UINT64:
                 if (reconstruct && snip_len) RECONSTRUCT (snip, snip_len); // reconstruct this snip before adding the looked up data
                 new_value.i = reconstruct_from_local_int (vb, base_ctx, 0, reconstruct);
                 have_new_value = true;
@@ -306,7 +302,8 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
                 have_new_value = true;
                 break;
 
-            default: ABORT ("Error in reconstruct_one_snip: Unsupported lt_type=%u for SNIP_LOOKUP or SNIP_OTHER_LOOKUP", base_ctx->ltype);
+            default: ABORT ("Error in reconstruct_one_snip of %s in vb_i=%u: Unsupported lt_type=%s (%u) for SNIP_LOOKUP or SNIP_OTHER_LOOKUP. Please upgrade to the latest version of Genozip.", 
+                            base_ctx->tag_name, vb->vblock_i, lt_name(base_ctx->ltype), base_ctx->ltype);
         }
 
         break;
@@ -552,11 +549,14 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
         
         // case: textual value will remain in txt_data - just point to it
         else if (!flag.maybe_lines_dropped_by_reconstructor) 
-            *ENT (CtxWord, ctx->history, vb->line_i - vb->first_line) = (CtxWord){ .char_index = last_txt_index, .snip_len = ctx->last_txt_len };
+            *ENT (HistoryWord, ctx->history, vb->line_i - vb->first_line) = 
+                (HistoryWord){ .lookup = LookupTxtData, .char_index = last_txt_index, .snip_len = ctx->last_txt_len };
         
         // case: textual value might be removed from txt_data - copy it
         else {
-            *ENT (CtxWord, ctx->history, vb->line_i - vb->first_line) = (CtxWord){ .char_index = ctx->per_line.len, .snip_len = CHAR_INDEX_IN_PER_LINE };
+            *ENT (HistoryWord, ctx->history, vb->line_i - vb->first_line) = 
+                (HistoryWord){ .lookup = LookupPerLine, .char_index = ctx->per_line.len, .snip_len = ctx->last_txt_len };
+
             if (ctx->last_txt_len) {
                 buf_add_more (vb, &ctx->per_line, ENT (char, vb->txt_data, last_txt_index), ctx->last_txt_len, "per_line");
                 NEXTENT (char, ctx->per_line) = 0; // nul-terminate

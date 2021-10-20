@@ -72,7 +72,8 @@ typedef struct {
 typedef struct VBlockSAM {
     VBLOCK_COMMON_FIELDS
     const char *last_cigar;        // ZIP/PIZ: last CIGAR
-    Buffer textual_cigar;          // ZIP: Seg of BAM
+    Buffer textual_cigar;          // ZIP: Seg of BAM, PIZ: store CIGAR in sam_cigar_analyze
+    Buffer binary_cigar;           // PIZ: generate in sam_cigar_analyze, to reconstruct BAM
     Buffer textual_seq;            // ZIP: Seg of BAM
     Buffer textual_opt;            // ZIP: Seg of BAM
 
@@ -97,6 +98,8 @@ typedef struct VBlockSAM {
     Buffer buddy_textual_cigars;   // Seg of BAM (not SAM): an array of textual CIGARs referred to from DataLine->CIGAR
 
 } VBlockSAM;
+
+#define VB_SAM ((VBlockSAMP)vb)
 
 // fixed-field part of a BAM alignment, see https://samtools.github.io/hts-specs/SAMv1.pdf
 typedef struct __attribute__ ((__packed__)) {

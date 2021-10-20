@@ -34,7 +34,8 @@ void profiler_add (ConstVBlockP vb)
     ADD(compressor_actg);
     ADD(compressor_pbwt);
     ADD(compressor_hapmat);
-    ADD(zip_generate_ctxs);
+    ADD(zip_generate_b250);
+    ADD(zip_generate_local);
     ADD(zip_compress_ctxs);
     ADD(codec_assign_best_codec);
     ADD(bgzf_io_thread);
@@ -59,6 +60,7 @@ void profiler_add (ConstVBlockP vb)
     ADD(codec_hapmat_count_alt_alleles);
     ADD(md5);
     ADD(lock_mutex_zf_ctx);
+    ADD(wait_for_vb_1_mutex);
     ADD(ctx_merge_in_vb_ctx_one_dict_id);
     ADD(ctx_clone);
     ADD(ctx_dict_build_word_lists);
@@ -97,7 +99,7 @@ static void print_ctx_compressor_times (void)
 {
     for (DidIType did_i=0; did_i < z_file->num_contexts; did_i++) {
         ContextP ctx = ZCTX(did_i);
-        if (ctx->compressor_time)
+        if (ms(ctx->compressor_time))
             iprintf ("      %s: %u\n", ctx->tag_name, ms(ctx->compressor_time));
     }
 }
@@ -105,7 +107,7 @@ static void print_ctx_compressor_times (void)
 void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned used_threads, const char *filename, unsigned num_vbs)
 {
     static const char *space = "                                                   ";
-#   define PRINT(x, level) if (p->x) iprintf ("%.*s" #x ": %u\n", level*3, space, ms(p->x));
+#   define PRINT(x, level) if (ms(p->x)) iprintf ("%.*s" #x ": %u\n", level*3, space, ms(p->x));
     
     const char *os = flag.is_windows ? "Windows"
                    : flag.is_mac     ? "MacOS"
@@ -172,11 +174,13 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (qname_seg,2);
         PRINT (sam_cigar_seg,2);
         PRINT (sam_seg_SEQ,2);
+        PRINT (wait_for_vb_1_mutex, 1);
         PRINT (ctx_merge_in_vb_ctx, 1);
         PRINT (lock_mutex_zf_ctx, 2);
         PRINT (ctx_merge_in_vb_ctx_one_dict_id, 2);
-        PRINT (zip_generate_ctxs, 1);
         PRINT (zip_compress_ctxs, 1);
+        PRINT (zip_generate_b250, 2);
+        PRINT (zip_generate_local, 2);
         print_ctx_compressor_times();
 
         PRINT (ctx_compress_one_dict_fragment, 1);

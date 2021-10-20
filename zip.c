@@ -333,108 +333,123 @@ static void zip_handle_unique_words_ctxs (VBlock *vb)
 }
 
 // generate & write b250 data for all primary fields of this data type
-static void zip_generate_ctxs (VBlock *vb)
+static bool zip_generate_b250 (VBlockP vb, ContextP ctx)
+{
+    START_TIMER;
+        
+    // case: the entire context is just numbers in local, and b250 is only SNIP_LOOKUPs. 
+    // ctx->numeric_only is set to indicate that we can get rid of the b250.
+    if (ctx->numeric_only) 
+        buf_free (&ctx->b250);
+
+    if (ctx->b250.len) {
+        ASSERT (ctx->dict_id.num, "tag_name=%s did_i=%u: ctx->dict_id=0 despite ctx->b250 containing data", ctx->tag_name, (unsigned)(ctx - vb->contexts));
+
+        bool drop_section = zip_generate_b250_section (vb, ctx);
+        if (drop_section) 
+            buf_free (&ctx->b250);
+        else 
+            codec_assign_best_codec (vb, ctx, NULL, SEC_B250);
+    }
+
+    COPY_TIMER (zip_generate_b250);
+
+    return ctx->b250.len > 0;
+}
+
+static void zip_generate_local (VBlockP vb, ContextP ctx)
 {
     START_TIMER;
 
-    // Codecs for contexts may be assigned in 3 stages:
-    // 1. During Seg (a must for all complex codecs - eg HT, DOMQ, ACGT...)
-    // 2. At merge - inherit from z_file->context if not set in Seg
-    // 3. After merge before compress - if still not assigned - zip_assign_best_codec - which also commits back to z_file->context
-    //    (this is the only place we commit to z_file, therefore z_file will only contain simple codecs)
-    // Note: if vb=1 commits a codec, it will be during its lock, so that all subsequent VBs will inherit it. But for
-    // contexts not committed by vb=1 - multiple contexts running in parallel may commit their codecs overriding each other. that's ok.
-    if (flag.show_codec && vb->vblock_i == 1) 
-        iprintf ("\n\nThe output of --show-codec-test: Testing a sample of up %u bytes on ctx.local of each context.\n"
-                 "Results in the format [codec size clock] are in order of quality - the first was selected.\n", CODEC_ASSIGN_SAMPLE_SIZE);
+    ASSERT (ctx->dict_id.num, "tag_name=%s did_i=%u: ctx->dict_id=0 despite ctx->local containing data", ctx->tag_name, (unsigned)(ctx - vb->contexts));
 
-    // generate & write b250 data for all primary fields
-    for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
-        Context *ctx = CTX(did_i);
+    if (ctx->ltype == LT_BITMAP) 
+        LTEN_bit_array (buf_get_bitarray (&ctx->local));
 
-        // case: the entire context is just numbers in local, and b250 is only SNIP_LOOKUPs. 
-        // ctx->numeric_only is set to indicate that we can get rid of the b250.
-        if (ctx->numeric_only) 
-            buf_free (&ctx->b250);
+    else if (ctx->ltype == LT_UINT32_TR)
+        zip_generate_transposed_local (vb, ctx);
 
-        if (ctx->b250.len) {
-            ASSERT (ctx->dict_id.num, "did_i=%u: ctx->dict_id=0 despite ctx->b250 containing data", did_i);
+    else if (ctx->dynamic_size_local) 
+        zip_resize_local (vb, ctx);
 
-            bool drop_section = zip_generate_b250_section (vb, ctx);
-            if (drop_section) 
-                buf_free (&ctx->b250);
-            else 
-                codec_assign_best_codec (vb, ctx, NULL, SEC_B250);
-        }
+    else if (ctx->ltype == LT_FLOAT32)
+        BGEN_u32_buf (&ctx->local, NULL);
+        
+    else if (ctx->ltype == LT_FLOAT64)
+        BGEN_u64_buf (&ctx->local, NULL);
+        
+    codec_assign_best_codec (vb, ctx, NULL, SEC_LOCAL);
 
-        // local first - so zip_resize_local can eliminate b250 if needed
-        if (ctx->local.len || ctx->local_always) { 
-            ASSERT (ctx->dict_id.num, "did_i=%u: ctx->dict_id=0 despite ctx->local containing data", did_i);
-
-            if (ctx->ltype == LT_BITMAP) 
-                LTEN_bit_array (buf_get_bitarray (&ctx->local));
-
-            else if (ctx->ltype == LT_UINT32_TR)
-                zip_generate_transposed_local (vb, ctx);
-
-            else if (ctx->dynamic_size_local) 
-                zip_resize_local (vb, ctx);
-
-            else if (ctx->ltype == LT_FLOAT32)
-                BGEN_u32_buf (&ctx->local, NULL);
-                
-            else if (ctx->ltype == LT_FLOAT64)
-                BGEN_u64_buf (&ctx->local, NULL);
-                
-            codec_assign_best_codec (vb, ctx, NULL, SEC_LOCAL);
-        }
-    }
-
-    COPY_TIMER (zip_generate_ctxs);
+    COPY_TIMER (zip_generate_local);
 }
 
 // generate & write b250 data for all primary fields of this data type
-static void zip_compress_ctxs (VBlock *vb)
+static void zip_compress_b250 (VBlock *vb)
 {
     START_TIMER;
+    threads_log_by_vb (vb, "zip", "START COMPRESSING B250", 0);
 
     // generate & write b250 data for all primary fields
     for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
         Context *ctx = CTX(did_i);
 
-        START_TIMER;
+        if (!ctx->b250.len || 
+            !zip_generate_b250 (vb, ctx)) continue; // generate the final b250 buffers from their intermediate form
 
-        if (ctx->b250.len) {
-            if (dict_id_typeless (ctx->dict_id).num == flag.dump_one_b250_dict_id.num) 
-                ctx_dump_binary (vb, ctx, false);
+        if (dict_id_typeless (ctx->dict_id).num == flag.dump_one_b250_dict_id.num) 
+            ctx_dump_binary (vb, ctx, false);
 
-            if (flag.show_time) codec_show_time (vb, "B250", ctx->tag_name, ctx->bcodec);
-            
-            if (flag.debug_seg) iprintf ("zip_compress_ctxs: vb_i=%u %s: B250.len=%"PRIu64" NODES.len=%"PRIu64"\n", 
-                                         vb->vblock_i, ctx->tag_name, ctx->b250.len, ctx->nodes.len);
+        if (flag.show_time) codec_show_time (vb, "B250", ctx->tag_name, ctx->bcodec);
+        
+        if (flag.debug_seg) iprintf ("zip_compress_b250: vb_i=%u %s: B250.len=%"PRIu64" NODES.len=%"PRIu64"\n", 
+                                     vb->vblock_i, ctx->tag_name, ctx->b250.len, ctx->nodes.len);
 
-            zfile_compress_b250_data (vb, ctx);
-        }
+        START_TIMER; // for compressor_time
 
-        // local first - so zip_resize_local can eliminate b250 if needed
-        if (ctx->local.len || ctx->local_always) { 
+        zfile_compress_b250_data (vb, ctx);
 
-            if (dict_id_typeless (ctx->dict_id).num == flag.dump_one_local_dict_id.num) 
-                ctx_dump_binary (vb, ctx, true);
-
-            if (flag.show_time) codec_show_time (vb, "LOCAL", ctx->tag_name, ctx->lcodec);
-
-            if (flag.debug_seg) iprintf ("zip_compress_ctxs: vb_i=%u %s: LOCAL.len=%"PRIu64" LOCAL.param=%"PRIu64"\n", 
-                                         vb->vblock_i, ctx->tag_name, ctx->local.len, ctx->local.param);
-
-            zfile_compress_local_data (vb, ctx, 0);
-        }
-
-        if (flag.show_time && (ctx->b250.len || ctx->local.len)) 
-            ctx->compressor_time = CHECK_TIMER;
+        if (flag.show_time) 
+            ctx->compressor_time += CHECK_TIMER; // sum b250 and local
     }
 
-    COPY_TIMER (zip_compress_ctxs);
+    COPY_TIMER (zip_compress_ctxs); // same profiler for b250 and local as we breakdown by ctx underneath it
+}
+
+// generate & write b250 data for all primary fields of this data type
+static void zip_compress_local (VBlock *vb)
+{
+    START_TIMER;
+    threads_log_by_vb (vb, "zip", "START COMPRESSING LOCAL", 0);
+
+    // generate & write b250 data for all primary fields
+    for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
+        Context *ctx = CTX(did_i);
+
+        if (!ctx->local.len && !ctx->local_always) continue;
+
+        zip_generate_local (vb, ctx);
+
+        if (dict_id_typeless (ctx->dict_id).num == flag.dump_one_local_dict_id.num) 
+            ctx_dump_binary (vb, ctx, true);
+
+        if (flag.show_time) codec_show_time (vb, "LOCAL", ctx->tag_name, ctx->lcodec);
+
+        if (flag.debug_seg) iprintf ("zip_compress_local: vb_i=%u %s: LOCAL.len=%"PRIu64" LOCAL.param=%"PRIu64"\n", 
+                                      vb->vblock_i, ctx->tag_name, ctx->local.len, ctx->local.param);
+
+        START_TIMER; // for compressor_time
+
+        zfile_compress_local_data (vb, ctx, 0);
+
+        buf_free (&ctx->local); // so we don't compress it again
+        ctx->no_stons     = true; // since we had data on local, we don't allow ctx_evaluate_snip_merge to move singletons to local
+        ctx->no_drop_b250 = true; // since we had data in loca, we don't allow dropping of an all-the-same b250 section, as reconstruct will take data from local instead of dict[0] in this case
+        
+        if (flag.show_time) 
+            ctx->compressor_time += CHECK_TIMER; // sum b250 and local
+    }
+
+    COPY_TIMER (zip_compress_ctxs); // same profiler for b250 and local as we breakdown by ctx underneath it
 }
 
 // called by main thread after VB has completed processing
@@ -538,7 +553,7 @@ static void zip_compress_one_vb (VBlock *vb)
     threads_log_by_vb (vb, "zip", "START SEG", 0);
     seg_all_data_lines (vb);
 
-    // identify dictionaries that contain almost only unique words (eg a unique id) and move the data from dict to local
+    // identify dictionaries that contain only singleton words (eg a unique id) and move the data from dict to local
     zip_handle_unique_words_ctxs (vb);
 
     // for the first vb only - sort dictionaries so that the most frequent entries get single digit
@@ -549,9 +564,21 @@ static void zip_compress_one_vb (VBlock *vb)
 
     zfile_compress_vb_header (vb); // vblock header
 
-    // vb_i=1 merges first, as it has the sorted dictionaries, other vbs can go in arbitrary order. 
-    if (vb->vblock_i != 1) 
+    if (flag.show_codec) {
+        DO_ONCE iprintf ("\n\nThe output of --show-codec-test: Testing a sample of up %u bytes on ctx.local of each context.\n"
+                         "Results in the format [codec size clock] are in order of quality - the first was selected.\n", CODEC_ASSIGN_SAMPLE_SIZE);
+    }
+
+    if (vb->vblock_i != 1) {
+        if (!flag.make_reference && !flag.seg_only) 
+            // while vb_i=1 is busy merging, other VBs can handle local
+            zip_compress_local (vb); // not yet locals that consist of singletons transferred from dict to local in ctx_merge_in_vb_ctx (these will have len=0 at this point)
+        
+        // let vb_i=1 merge first, as it has the sorted dictionaries, other vbs can go in arbitrary order. 
+        START_TIMER;
         mutex_wait (wait_for_vb_1_mutex);
+        COPY_TIMER(wait_for_vb_1_mutex);
+    }
 
     // merge new words added in this vb into the z_file.contexts, ahead of zip_generate_b250_section().
     // writing indices based on the merged dictionaries. dictionaries are compressed. 
@@ -560,32 +587,27 @@ static void zip_compress_one_vb (VBlock *vb)
     threads_log_by_vb (vb, "zip", "START MERGE", 0);
     ctx_merge_in_vb_ctx(vb);
 
-    // generate the final local and b250 buffers from their intermediate form
-    if (!flag.make_reference && !flag.seg_only) 
-        zip_generate_ctxs (vb);
+    if (vb->vblock_i == 1) 
+        mutex_unlock (wait_for_vb_1_mutex); 
 
-    // case: we sorting - add line data to txt_file's line_info
+    if (!flag.make_reference && !flag.seg_only) {
+        zip_compress_local (vb); // for vb=1 - all locals ; for vb>1 - locals which consist of singletons set in ctx_merge_in_vb_ctx (other locals were already compressed above)
+        zip_compress_b250 (vb);
+    }
+
+    // case: we're sorting the file's lines - add line data to txt_file's line_info (VB order doesn't matter - we will sort them later)
     if (flag.sort) 
         linesorter_merge_vb (vb);
-
-    if (vb->vblock_i == 1) mutex_unlock (wait_for_vb_1_mutex); // locked in zip_one_file
 
     // merge in random access - IF it is used
     random_access_merge_in_vb (vb, DC_PRIMARY);
     random_access_merge_in_vb (vb, DC_LUFT);
-
-    // compress b250 and local data for all ctxs (for reference files we don't output VBs)
-    if (!flag.make_reference && !flag.seg_only) {
-        threads_log_by_vb (vb, "zip", "START COMPRESSING CONTEXTS", 0);
-        zip_compress_ctxs (vb);
-    }
     
     // compress data-type specific sections
     DT_FUNC (vb, compress)(vb);
 
     // tell dispatcher this thread is done and can be joined.
     // thread safety: this isn't protected by a mutex as it will just be false until it at some point turns to true
-    // this this operation needn't be atomic, but it likely is anyway
     vb->is_processed = true; 
 
     COPY_TIMER (compute);

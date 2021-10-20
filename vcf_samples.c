@@ -23,8 +23,8 @@ static unsigned sb_snip_lens[2], mb_snip_lens[2], f2r1_snip_lens[MAX_ARRAY_ITEMS
 
 #define last_sample_i ctx_specific // ZIP: like last_line_i, but used for VCF/FORMAT fields (0-based). Only meaningful if last_line_i indicates the line is the same vb->line_i
 
-#define vcf_encountered_in_sample_(vb, ctx) (ctx_encountered_in_line_(vb, ctx) && (ctx)->last_sample_i == ((VBlockVCFP)vb)->sample_i)
-#define vcf_encountered_in_sample(vb, dict_id, p_ctx) (ctx_encountered_in_line (vb, dict_id, p_ctx) && (*(p_ctx))->last_sample_i == ((VBlockVCFP)vb)->sample_i)
+#define vcf_encountered_in_sample_(vb, ctx) (ctx_encountered_in_line_(vb, ctx) && (ctx)->last_sample_i == VB_VCF->sample_i)
+#define vcf_encountered_in_sample(vb, dict_id, p_ctx) (ctx_encountered_in_line (vb, dict_id, p_ctx) && (*(p_ctx))->last_sample_i == VB_VCF->sample_i)
 #define vcf_has_value_in_sample_(vb, ctx) (ctx_has_value_in_line_(vb, ctx) && (ctx)->last_sample_i == (vb)->sample_i)
 #define vcf_has_value_in_sample(vb, dict_id, p_ctx) (ctx_has_value_in_line (vb, dict_id, p_ctx) && (*(p_ctx))->last_sample_i == (vb)->sample_i)
 #define vcf_set_last_sample_value(vb, ctx, last_value) do { ctx_set_last_value ((VBlockP)(vb), ctx, last_value); (ctx)->last_sample_i = (vb)->sample_i; } while (0);
@@ -536,7 +536,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_PLOIDY)
     if (!vcf_encountered_in_sample_(vb, CTX(FORMAT_GT))) return false; // we can't translate unless this variant as GT
 
     // use gt_prev_ploidy: in Seg, set by vcf_seg_FORMAT_GT, in validate and piz set by vcf_piz_luft_GT 
-    return vcf_piz_luft_trans_complement_to_max_value (vb, ctx, recon, recon_len, validate_only, ((VBlockVCFP)vb)->gt_prev_ploidy);
+    return vcf_piz_luft_trans_complement_to_max_value (vb, ctx, recon, recon_len, validate_only, VB_VCF->gt_prev_ploidy);
 }
 
 //----------
@@ -718,7 +718,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_GT)
     for (uint32_t i=1; i < recon_len; i += 2)  
         if (recon[i] != '/' && recon[i] != '|') return false;
 
-    ((VBlockVCFP)vb)->gt_prev_ploidy = (recon_len+1) / 2; // consumed by vcf_piz_luft_PLOIDY
+    VB_VCF->gt_prev_ploidy = (recon_len+1) / 2; // consumed by vcf_piz_luft_PLOIDY
 
     if (validate_only) return true;
 

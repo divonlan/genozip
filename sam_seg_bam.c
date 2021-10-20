@@ -28,7 +28,7 @@ void bam_seg_initialize (VBlock *vb)
     sam_seg_initialize (vb);
 
     if (!segconf.running && segconf.has_MC)
-        buf_alloc (vb, &((VBlockSAMP)vb)->buddy_textual_cigars, 0, segconf.sam_cigar_len * vb->lines.len, char, CTX_GROWTH, "buddy_textual_cigars");
+        buf_alloc (vb, &VB_SAM->buddy_textual_cigars, 0, segconf.sam_cigar_len * vb->lines.len, char, CTX_GROWTH, "buddy_textual_cigars");
 }
 
 // returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB

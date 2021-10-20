@@ -37,6 +37,7 @@ void sam_vb_release_vb (VBlockSAM *vb)
     
     buf_free (&vb->bd_bi_line);
     buf_free (&vb->textual_cigar);
+    buf_free (&vb->binary_cigar);
     buf_free (&vb->textual_seq);
     buf_free (&vb->textual_opt);
     buf_free (&vb->md_M_is_ref);

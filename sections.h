@@ -277,7 +277,7 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
 // used for SEC_LOCAL and SEC_B250
 typedef struct {
     SectionHeader h;
-    LocalType ltype; // used by SEC_LOCAL: goes into ctx.ltype - type of data for the ctx.local buffer
+    LocalType ltype; // populated in both SEC_B250 and SEC_LOCAL: goes into ctx.ltype - type of data for the ctx.local buffer
     uint8_t param;   // Three options: 1. goes into ctx.b250/local.param if flags.copy_local_param. (4/4/2021: actually NOT b250 bc not implemented in zfile_compress_b250_data) 
                      //                2. given to comp_uncompress as a codec parameter
                      //                3. starting 9.0.11 for ltype=LT_BITMAP: number of unused bits in top bitarray word

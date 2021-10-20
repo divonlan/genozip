@@ -116,7 +116,7 @@ void zfile_uncompress_section (VBlock *vb,
     ASSERT (section_header->section_type == expected_section_type, "expecting section type %s but seeing %s", st_name(expected_section_type), st_name(section_header->section_type));
     
     ASSERT (vblock_i == expected_vb_i || !expected_vb_i, // dictionaries are uncompressed by the main thread with pseduo_vb (vb_i=0) 
-            "bad vblock_i: vblock_i in file=%u but expecting it to be %u (section_type=%s)", 
+            "bad vblock_i: section_header->vblock_i=%u but expecting it to be %u (section_type=%s)", 
             vblock_i, expected_vb_i, st_name (expected_section_type));
 
     if (flag.show_uncompress)
@@ -208,8 +208,8 @@ LocalGetLineCB *zfile_get_local_data_callback (DataType dt, Context *ctx)
 // returns compressed size
 uint32_t zfile_compress_local_data (VBlock *vb, Context *ctx, uint32_t sample_size /* 0 means entire local buffer */)
 {   
-    struct FlagsCtx flags = ctx->flags; // make a copy
-    flags.paired     = ctx->pair_local;
+    struct FlagsCtx flags  = ctx->flags; // make a copy
+    flags.paired           = ctx->pair_local;
     flags.copy_local_param = ctx->local_param;
                     
     uint32_t uncompressed_len = ctx->local.len * lt_desc[ctx->ltype].width;

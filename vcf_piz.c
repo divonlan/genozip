@@ -18,7 +18,7 @@
 
 bool vcf_piz_read_one_vb (VBlock *vb, Section sl)
 { 
-    ((VBlockVCFP)vb)->last_end_line_i = LAST_LINE_I_INIT;
+    VB_VCF->last_end_line_i = LAST_LINE_I_INIT;
     return true;
 }
 

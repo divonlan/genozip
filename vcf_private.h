@@ -78,6 +78,7 @@ typedef struct VBlockVCF {
 } VBlockVCF;
 
 typedef VBlockVCF *VBlockVCFP;
+#define VB_VCF ((VBlockVCFP)vb)
 
 typedef ContextP ContextPBlock[MAX_FIELDS];
 

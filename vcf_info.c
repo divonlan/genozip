@@ -347,7 +347,7 @@ done:
 // translator only validates - as vcf_piz_special_ALLELE copies verbatim (revcomp, if xstrand, is already done in REF/ALT)
 TRANSLATOR_FUNC (vcf_piz_luft_ALLELE)
 {
-    VBlockVCFP vcf_vb = ((VBlockVCFP)vb);
+    VBlockVCFP vcf_vb = VB_VCF;
 
     // reject if LO_OK_REF_NEW_SNP and value is equal to REF
     if (validate_only && last_ostatus == LO_OK_REF_NEW_SNP && 
@@ -619,7 +619,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_END)
     else {
         translated_end = opos_ctx->last_value.i + pos_ctx->last_delta; ; // delta for generated this END value (END - POS)
 
-        ((VBlockVCFP)vb)->last_end_line_i = vb->line_i; // so vcf_piz_special_COPYPOS knows that END was reconstructed
+        VB_VCF->last_end_line_i = vb->line_i; // so vcf_piz_special_COPYPOS knows that END was reconstructed
     }
 
     // re-reconstruct END
@@ -634,7 +634,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_COPYPOS)
 {
     if (!reconstruct) return false; // no new value
     
-    bool has_end = ((VBlockVCFP)vb)->last_end_line_i == vb->line_i; // true if INFO/END was encountered
+    bool has_end = VB_VCF->last_end_line_i == vb->line_i; // true if INFO/END was encountered
 
     Context *pos_ctx = CTX (VCF_POS);
     int64_t pos;

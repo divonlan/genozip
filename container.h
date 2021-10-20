@@ -25,7 +25,7 @@ typedef struct ContainerItem {
     // special values of seperator[0]
     #define CI_NONE        ((uint8_t)0x00) // no seperator 
     #define CI_INVISIBLE   ((uint8_t)0x01) // this item does not appear in the original or reconstructed text. it should be consumed with reconstruct=false
-    #define CI_FIXED_0_PAD ((uint8_t)0x02) // fixed width, zero-left-padded, width in sep[2] (introduced 12.0.43)
+    #define CI_FIXED_0_PAD ((uint8_t)0x02) // fixed width, zero-left-padded, width in sep[2] (introduced v13)
 
     // separator[0] values with bit 7 set (0x80) are interpreted as flags rather than a separator, in 
     // which case separator[1] is a parameter of the flags

@@ -575,13 +575,7 @@ void sections_show_header (const SectionHeader *header, VBlock *vb /* optional i
         break;
     }
     
-    case SEC_B250: {
-        SectionHeaderCtx *h = (SectionHeaderCtx *)header;
-        sprintf (str, "%s/%-8s\tparam=%u %s\n",
-                 dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s, h->param, sections_dis_flags (f, st, dt).s); 
-        break;
-    }
-
+    case SEC_B250:
     case SEC_LOCAL: {
         SectionHeaderCtx *h = (SectionHeaderCtx *)header;
         sprintf (str, "%s/%-8s\tltype=%s param=%u %s\n",

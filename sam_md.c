@@ -224,8 +224,12 @@ void sam_md_seg (VBlockSAM *vb,  ZipDataLineSAM *dl, STRp(md), unsigned add_byte
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_MD)
 {
+    VBlockSAMP vb_sam = VB_SAM;
+
     PosType pos = CTX(SAM_POS)->last_value.i;
-    const char *cigar = CTX(SAM_CIGAR)->last_snip; // note: we can't use last_txt as it is already translated to binary in BAM
+
+    ASSERTISALLOCED (vb_sam->textual_cigar);
+    const char *cigar = FIRSTENT (char, vb_sam->textual_cigar);  // note: we can't use last_txt as it is already translated to binary in BAM (snips in dict/local are textual CIGARs)
 
     ContextP sqbitmap_ctx = CTX(SAM_SQBITMAP);
     uint32_t save_next_local = sqbitmap_ctx->next_local;
@@ -251,7 +255,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_MD)
                 if (subcigar_len) {
                     // case: no base in SEQ matched the reference - sam_reconstruct_seq set vb->range to NULL, so we set it here
                     if (!vb->range) {
-                        vb->range = (RangeP)ref_piz_get_range (vb, gref, vb->last_int(SAM_POS), ((VBlockSAMP)vb)->ref_consumed);
+                        vb->range = (RangeP)ref_piz_get_range (vb, gref, vb->last_int(SAM_POS), VB_SAM->ref_consumed);
                         ASSERTNOTNULL (vb->range);
                     }
 
@@ -289,11 +293,11 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_MD)
     if (count_match || !IS_DIGIT (*LASTENT (char, vb->txt_data))) 
         RECONSTRUCT_INT (count_match); // flush matches if any unflushed yet
 
-    ASSPIZ (save_next_local == sqbitmap_ctx->next_local, "expecting save_next_local=%u == sqbitmap_ctx->next_local=%u", save_next_local, sqbitmap_ctx->next_local);
+    ASSPIZ (save_next_local == sqbitmap_ctx->next_local, "expecting save_next_local=%u == sqbitmap_ctx->next_local=%u (buddy_line_i=%d RNAME=%s POS=%"PRId64" CIGAR=%s)", 
+            save_next_local, sqbitmap_ctx->next_local, vb->buddy_line_i, vb->chrom_name, CTX(SAM_POS)->last_value.i, VB_SAM->textual_cigar.data);
 
     return false; // no new value
 }
-
 
 // Used in files compressed with Genozip up to 12.0.36 - 
 // logic: snip is eg "119C" (possibly also "") - we reconstruct the original, eg "119C31" 

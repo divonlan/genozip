@@ -178,6 +178,18 @@ bool piz_default_skip_section (VBlockP vb, SectionType st, DictId dict_id)
     return skip;
 }
 
+static inline void piz_adjust_one_local (Buffer *local_buf, LocalType *ltype, uint8_t num_bits) 
+{ 
+    local_buf->len /= lt_desc[*ltype].width; 
+
+    if (*ltype == LT_BITMAP) { 
+        local_buf->param = local_buf->len * 64 - num_bits ; // number of bits 
+        LTEN_bit_array (buf_get_bitarray (local_buf)); 
+    } 
+    else if (lt_desc[*ltype].file_to_native)   
+        lt_desc[*ltype].file_to_native (local_buf, ltype); // BGEN, transpose etc - updates ltype in case of Transpose, after untransposing
+}
+ 
 // PIZ compute thread: decompress all contexts
 // ZIP compute thread in FASTQ: decompress pair_1 contexts when compressing pair_2
 uint32_t piz_uncompress_all_ctxs (VBlock *vb, 
@@ -195,17 +207,17 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
         if (!is_b250 && !is_local) break;
 
         Context *ctx = ctx_get_ctx (vb, header->dict_id); // gets the context (creating it if it doesn't already exist)
-
-        // case: in ZIP & we are PAIR_2, reading PAIR_1 info - save flags, ltype, lcodec to restore later
-        //struct FlagsCtx save_flags={}; LocalType save_ltype=0; Codec save_lcodec=0;
-        //if (pair_vb_i && command == ZIP) { save_flags=ctx->flags; save_ltype=ctx->ltype; save_lcodec=ctx->lcodec; }
         
         bool is_pair_section = (BGEN32 (header->h.vblock_i) == pair_vb_i); // is this a section of "pair 1" 
 
         if (!is_pair_section) {
             ctx->flags = header->h.flags.ctx; // overrides default inherited from vb_i=1 (assigned in piz_read_all_ctxs)
-            ctx->ltype = header->ltype;
-            if (is_local) ctx->lcodec = header->h.codec;
+            
+            if (is_local || !ctx->ltype) // a b250 can set ltype if its not already set by an earlier SEC_LOCAL section  
+                ctx->ltype = header->ltype; // in case of b250
+            
+            if (is_local) 
+                ctx->lcodec = header->h.codec;
         }
         else {
             // overcome bug in ZIP --pair - local sections with junk data created in addition to the expected b250.
@@ -248,18 +260,10 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
         if (!is_pair_section && !is_local && dict_id_typeless (ctx->dict_id).num == flag.dump_one_b250_dict_id.num) 
             ctx_dump_binary (vb, ctx, false);
 
-#           define adjust_lens(buf) { \
-            buf.len /= lt_desc[ctx->ltype].width; \
-            if (ctx->ltype == LT_BITMAP) { \
-                buf.param = buf.len * 64 - header->param ; /* number of bits */ \
-                LTEN_bit_array (buf_get_bitarray (&buf)); \
-            } \
-            else if (lt_desc[ctx->ltype].file_to_native)   \
-                lt_desc[ctx->ltype].file_to_native (&buf, &ctx->ltype); \
+        if (is_local) {
+            if (is_pair_section) piz_adjust_one_local (&ctx->pair,  &ctx->ltype, header->param);
+            else                 piz_adjust_one_local (&ctx->local, &ctx->ltype, header->param);
         }
-
-        if      (is_pair_section) adjust_lens (ctx->pair)
-        else if (is_local)        adjust_lens (ctx->local)
 
         if (header->h.flags.ctx.copy_local_param)
             target_buf->param = header->param;
@@ -278,7 +282,7 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
             if (ctx->flags.store == STORE_INT)
                 buf_alloc_zero (vb, &ctx->history, 0, vb->lines.len, int64_t, 0, "history"); // initialize to exactly one per line (initialized to zero for lines that don't have it). it won't grow.
             else 
-                buf_alloc_zero (vb, &ctx->history, 0, vb->lines.len, CtxWord, 0, "history"); 
+                buf_alloc_zero (vb, &ctx->history, 0, vb->lines.len, HistoryWord, 0, "history"); 
             
             ctx->history.len = vb->lines.len;
         }

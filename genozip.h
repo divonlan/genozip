@@ -155,7 +155,7 @@ typedef          __int128 int128_t;
 #define SWAP(a,b)  do { typeof(a) tmp = a; a = b; b = tmp; } while(0)
 #define SWAPbit(a,b) do { uint8_t tmp = a; a = b; b = tmp; } while(0)  // meant for bit fields 
 
-#define DO_ONCE static uint64_t done=0; if (!(done++)) 
+#define DO_ONCE static uint64_t do_once=0; if (!(do_once++))  // note: not thread-safe - in compute threads, in rare race-conditions, this can be executed more than once
 
 // we defined these ourselves (normally defined in stdbool.h), as not always available on all platforms (namely issues with Docker Hub)
 #ifndef __bool_true_false_are_defined

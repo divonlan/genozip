@@ -114,13 +114,8 @@ typedef struct Context {
     uint32_t num_singletons;   // True singletons that appeared exactly once in the entire file
 
     // PIZ-only
-    #define history local_hash // PIZ: used if FlagsCtx.store_per_line and also for lookback (for files compressed starting with v12.0.41)
-    #define per_line global_hash // PIZ: data copied from txt_data for fields with textual store_per_line, used in case txt_data line may be dropped
-
-    #define CHAR_INDEX_IN_LOCAL    0xffffffff // PIZ: values that may go into ctx->history
-    #define CHAR_INDEX_IN_DICT     0xfffffffe 
-    #define CHAR_INDEX_IN_PER_LINE 0xfffffffd 
-    #define MIN_CHAR_INDEX_ALT_LOCATION CHAR_INDEX_IN_PER_LINE
+    #define history local_hash // PIZ: used if FlagsCtx.store_per_line and also for lookback (for files compressed starting with v12.0.41) - contains an array of either int64_t (if STORE_INT) or HistoryWord
+    #define per_line global_hash // PIZ: data copied from txt_data for fields with textual store_per_line, used in case flag.maybe_lines_dropped_by_reconstructor
 
     Buffer word_list;          // PIZ: word list. an array of CtxWord - listing the snips in dictionary ZIP: ctx_specific_buf
     bool semaphore;            // valid within the context of reconstructing a single line. MUST be reset ahead of completing the line.

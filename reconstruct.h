@@ -8,6 +8,13 @@
 
 #include "genozip.h"
 
+// goes into ctx->history if not STORE_INT
+typedef struct {
+    CharIndex char_index;
+    uint32_t snip_len;
+    enum { LookupTxtData, LookupDict, LookupLocal, LookupPerLine } lookup;
+} HistoryWord;
+
 extern int32_t reconstruct_from_ctx_do (VBlockP vb, DidIType did_i, char sep, bool reconstruct, const char *func);
 #define reconstruct_from_ctx(vb,did_i,sep,reconstruct) reconstruct_from_ctx_do ((VBlockP)(vb),(did_i),(sep),(reconstruct), __FUNCTION__)
 

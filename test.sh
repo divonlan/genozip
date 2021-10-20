@@ -203,9 +203,9 @@ test_md5()
     cleanup
 }
 
-test_translate_sam_to_bam_to_sam() # $1 bam file 
+test_translate_sam_to_bam_to_sam() # $1 bam file $2 genocat options
 {
-    test_header "$1 - translate SAM to BAM to SAM"
+    test_header "$1 - translate SAM to BAM to SAM $2"
 
     local bam=$TESTDIR/$1
     local sam=${bam%.bam}.sam
@@ -216,17 +216,17 @@ test_translate_sam_to_bam_to_sam() # $1 bam file
 
     # SAM -> BAM
     echo "STEP 1: sam -> sam.genozip"
-    $genozip -f $sam -o $output  || exit 1
+    $genozip -f $sam -o $output || exit 1
 
     echo "STEP 2: sam.genozip -> bam"
-    $genocat $output --bam --no-PG -fo $new_bam || exit 1
+    $genocat $output --bam --no-PG -fo $new_bam $2 || exit 1
 
     # BAM -> SAM
     echo "STEP 3: bam -> bam.genozip"
-    $genozip -f $new_bam -o $output  || exit 1
+    $genozip -f $new_bam -o $output || exit 1
 
     echo "STEP 4: bam.genozip -> sam"
-    $genocat $output --sam --no-PG -fo $new_sam || exit 1
+    $genocat $output --sam --no-PG -fo $new_sam $2 || exit 1
 
     # compare original SAM and SAM created via sam->sam.genozip->bam->bam.genozip->sam
     echo "STEP 5: compare original and output SAMs"
@@ -603,6 +603,9 @@ batch_iupac()
 batch_sam_bam_translations()
 {
     batch_print_header
+
+    # test different buddy code path for subsetted file
+    test_translate_sam_to_bam_to_sam special.buddy.bam -r22
 
     # note: we have these files in both sam and bam versions generated with samtools
     local files=(special.buddy.bam 

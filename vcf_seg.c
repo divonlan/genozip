@@ -55,7 +55,7 @@ void vcf_zip_initialize (void)
 void vcf_zip_read_one_vb (VBlockP vb)
 {
     // set vcf_version in VB, since the the vcf_version in vcf_header might change as we might be reading the next txt file
-    ((VBlockVCFP)vb)->vcf_version = vcf_header_get_version();
+    VB_VCF->vcf_version = vcf_header_get_version();
 
     // in case we're replacing ID with the line number
     if (flag.add_line_numbers) {

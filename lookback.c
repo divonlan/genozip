@@ -78,7 +78,6 @@ uint32_t lookback_get_next (VBlockP vb, ContextP ctx, WordIndex search_for,
                             int64_t *iterator) // iterator should be initialized to -1 by caller. updates to the first item to be tested next call.
 {
     Buffer *buf = lookback_buf(ctx);
-//printf ("xxx search_for rname=%u iterator=%"PRId64"\n newest_index=%d gap_index=%d lookback_size=%d\n", search_for, *iterator, buf->newest_index, buf->gap_index, lookback_size);    
 
     if (buf->newest_index == buf->gap_index) return 0; // buffer is empty
     

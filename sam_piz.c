@@ -565,7 +565,7 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
         
         // count coverage, if needed    
         if ((flag.show_sex || flag.show_coverage) && is_top_level && !vb->drop_curr_line)
-            sam_piz_update_coverage (vb, vb->last_int(SAM_FLAG), ((VBlockSAMP)vb)->soft_clip);
+            sam_piz_update_coverage (vb, vb->last_int(SAM_FLAG), VB_SAM->soft_clip);
 
         if (flag.idxstats && !vb->drop_curr_line) {
             if (vb->last_int(SAM_FLAG) & SAM_FLAG_UNMAPPED)   

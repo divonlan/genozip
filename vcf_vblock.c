@@ -11,7 +11,7 @@
 
 unsigned vcf_vb_size (DataType dt) { return sizeof (VBlockVCF); }
 unsigned vcf_vb_zip_dl_size (void) { return sizeof (ZipDataLineVCF); }
-bool vcf_vb_has_haplotype_data (VBlockP vb) { return !!((VBlockVCFP)vb)->ht_matrix_ctx; }
+bool vcf_vb_has_haplotype_data (VBlockP vb) { return !!VB_VCF->ht_matrix_ctx; }
 
 // cleanup vb (except common) and get it ready for another usage (without freeing memory held in the Buffers)
 void vcf_vb_release_vb (VBlockVCF *vb) 
