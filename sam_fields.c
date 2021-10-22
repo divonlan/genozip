@@ -329,14 +329,13 @@ static void sam_seg_XA_pos (VBlockP vb, STRp(pos_str), uint32_t rep)
                 rname_ctx->b250.len--;
                 ctx_decrement_count (vb, rname_ctx, rname_index);
                 
-                seg_by_ctx (vb, STRa(xa_lookback_snip), rname_ctx, 0); // add_bytes=0 bc we already added them when we segged rname the first time
+                seg_by_ctx (vb, STRa(XA_lookback_snip), rname_ctx, 0); // add_bytes=0 bc we already added them when we segged rname the first time
 
                 // seg pos as a delta
                 SNIP(48);
-                memcpy (snip, xa_lookback_snip, xa_lookback_snip_len);
-                snip_len = xa_lookback_snip_len + str_int (pos - lookback_pos, &snip[xa_lookback_snip_len]);
+                memcpy (snip, XA_lookback_snip, XA_lookback_snip_len);
+                snip_len = XA_lookback_snip_len + str_int (pos - lookback_pos, &snip[XA_lookback_snip_len]);
                 seg_by_ctx (vb, STRa(snip), pos_ctx, pos_str_len);
-                pos_ctx->numeric_only = false; // not all numeric (cancel the setting by seg_integer_or_not)
                 
                 break;
             }
@@ -363,7 +362,7 @@ static void sam_seg_XA_strand (VBlockP vb, WordIndex strand_index)
     int64_t lookback = CTX(OPTION_XA_Z)->lookback_value; // calculated in sam_seg_XA_pos
 
     if (lookback && lookback_get_index (vb, strand_ctx, lookback) == strand_index) 
-        seg_by_ctx (vb, STRa(xa_lookback_snip), strand_ctx, 1);
+        seg_by_ctx (vb, STRa(XA_lookback_snip), strand_ctx, 1);
     else
         seg_known_node_index (vb, strand_ctx, strand_index, 1); 
 
@@ -613,43 +612,51 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_REF_CONSUMED)
 }
 
 // ----------------------------------------------------------------------------------------------
-// XS:i 
+// XS:i Suboptimal alignment score 
 // ----------------------------------------------------------------------------------------------
 
-// often its the same as AS:i
+// alignment score of second best alignment - delta vs AS
 static inline void sam_seg_XS_field (VBlockSAM *vb, STRp(xs_str), unsigned add_bytes)
 {
     int32_t xs = 0;
-    if (ctx_has_value_in_line_(VB, CTX(OPTION_AS_i)) && str_get_int_range32 (STRa(xs_str), 0, 10000, &xs) && 
-        xs == CTX(OPTION_AS_i)->last_value.i) 
-        seg_by_did_i (VB, STRa(XS_snip), OPTION_XS_i, add_bytes);
+    if (ctx_has_value_in_line_(VB, CTX(OPTION_AS_i)) && str_get_int_range32 (STRa(xs_str), 0, 10000, &xs) && xs) {
+    
+        int64_t delta = xs - CTX(OPTION_AS_i)->last_value.i;
 
-    else if (xs) {
-        // store a special snip with delta
-        char new_snip[20] = { SNIP_SPECIAL, SAM_SPECIAL_REF_CONSUMED };
-        unsigned delta_len = str_int (vb->ref_consumed-xs, &new_snip[2]);
-
-        seg_by_did_i (VB, new_snip, delta_len+2, OPTION_XS_i, add_bytes); 
+        SNIP(64);
+        seg_prepare_snip_other (SNIP_OTHER_DELTA, _OPTION_AS_i, true, delta, snip);
+        seg_by_did_i (VB, STRa(snip), OPTION_XS_i, add_bytes);
     }
     else
         seg_by_did_i (VB, STRa(xs_str),  OPTION_XS_i, add_bytes); 
 }
 
-// MQ:i is often very similar to MAPQ
+// MQ:i Mapping quality of the mate/next segment
+// Seg against buddy if we have one, or else against MAPQ as it is often very similar
 static inline void sam_seg_MQ_field (VBlockSAM *vb, ZipDataLineSAM *dl, 
                                      const char *snip, unsigned snip_len, unsigned add_bytes)
 {
-    int32_t mq, mapq;
-    if (str_get_int_range32 (STRa(snip), 0, 1000, &mq) &&
-        str_get_int_range32 (last_txt(vb, SAM_MAPQ), vb->last_txt_len(SAM_MAPQ), 0, 1000, &mapq)) {
-        
-        int32_t delta = mq - mapq;
+    if (segconf.running) segconf.has_MQ = true;
+
+    if (!str_get_int (STRa(snip), &dl->MQ)) goto fallback;
+
+    ZipDataLineSAM *buddy_dl = DATA_LINE (vb->buddy_line_i); // an invalid pointer if buddy_line_i is -1
+
+    int64_t mapq = ctx_has_value_in_line_(vb, CTX(SAM_MAPQ)) ? CTX(SAM_MAPQ)->last_value.i : -1;
+
+    if (!segconf.running && vb->buddy_line_i != -1 && dl->MQ != mapq && dl->MQ == buddy_dl->MAPQ)
+        seg_by_did_i (VB, STRa(MQ_buddy_snip), OPTION_MQ_i, add_bytes); // copy MAPQ from earlier-line buddy 
+
+    else if (mapq >= 0) {
+
+        int64_t delta = dl->MQ - mapq;
 
         SNIP(100);
         seg_prepare_snip_other (SNIP_OTHER_DELTA, _SAM_MAPQ, true, delta, snip);
         seg_by_ctx (VB, STRa(snip), CTX(OPTION_MQ_i), add_bytes);
     }
     else
+fallback:
         seg_by_ctx (VB, snip, snip_len, CTX (OPTION_MQ_i), add_bytes); 
 }
 
@@ -860,7 +867,7 @@ DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam,
 
         case _OPTION_RG_Z: sam_seg_RG_field (vb, dl, STRa(value), add_bytes); break;
 
-        // TX:i: - we seg this as a primary field SAM_TAX_ID
+        // tx:i: - we seg this as a primary field SAM_TAX_ID
         case _OPTION_TX_i: seg_by_did_i (VB, taxid_redirection_snip, taxid_redirection_snip_len, OPTION_TX_i, add_bytes); break;
 
         //case _OPTION_E2: sam_seg_E2_field (vb, dl, STRa(value), add_bytes); // BROKEN. To do: fix.

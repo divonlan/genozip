@@ -75,7 +75,7 @@ extern int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer co
 
 typedef void (*SegOptimize)(const char **snip, unsigned *snip_len, char *space_for_new_str);
 
-extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int32_t parameter, 
+extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int64_t parameter, 
                                        char *snip, unsigned *snip_len /* in / out */);
 #define seg_prepare_snip_other(snip_code, other_dict_id, has_parameter, parameter, snip) \
     snip##_len = sizeof (snip);\

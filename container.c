@@ -251,6 +251,9 @@ LastValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP c
         last_non_filtered_item_i = -1;
         unsigned num_preceding_seps = 0;
 
+        if (flag.show_containers) // show container reconstruction 
+            iprintf ("VB=%u Line=%"PRIu64" Repeat=%u LastRepeat=%u %s\n", vb->vblock_i, vb->line_i, rep_i, con->repeats-1, ctx->tag_name);
+
         for (unsigned i=0; i < num_items; i++) {
             const ContainerItem *item = &con->items[i];
             Context *item_ctx = item_ctxs[i];
@@ -270,7 +273,7 @@ LastValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP c
 
             if (flag.show_containers && item_ctx) // show container reconstruction 
                 iprintf ("VB=%u Line=%"PRIu64" Repeat=%u %s->%s trans_id=%u txt_data.len=%"PRIu64" (0x%04"PRIx64") reconstruct_prefix=%d reconstruct_value=%d\n", 
-                         vb->vblock_i, vb->line_i, rep_i, dis_dict_id (ctx->dict_id).s, item_ctx->tag_name,
+                         vb->vblock_i, vb->line_i, rep_i, ctx->tag_name, item_ctx->tag_name,
                          translating ? item->translator : 0, 
                          vb->vb_position_txt_file + vb->txt_data.len, vb->vb_position_txt_file + vb->txt_data.len,
                          reconstruct, reconstruct && !trans_nor);

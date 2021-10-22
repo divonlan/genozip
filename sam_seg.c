@@ -26,10 +26,12 @@
 #include "lookback.h"
 #include "libdeflate/libdeflate.h"
 
-static char pos_buddy_snip[100], pnext_buddy_snip[100], cigar_buddy_snip[100];
-static uint32_t pos_buddy_snip_len, pnext_buddy_snip_len, cigar_buddy_snip_len;
-char taxid_redirection_snip[100], xa_strand_pos_snip[100], XS_snip[30], XM_snip[30], MC_buddy_snip[30], xa_lookback_snip[30];
-unsigned taxid_redirection_snip_len, xa_strand_pos_snip_len, XS_snip_len, XM_snip_len, MC_buddy_snip_len, xa_lookback_snip_len;
+static char POS_buddy_snip[100], PNEXT_buddy_snip[100], CIGAR_buddy_snip[100];
+static uint32_t POS_buddy_snip_len, PNEXT_buddy_snip_len, CIGAR_buddy_snip_len;
+char taxid_redirection_snip[100], xa_strand_pos_snip[100], XS_snip[30], XM_snip[30], MC_buddy_snip[30], 
+     MQ_buddy_snip[30], MAPQ_buddy_snip[30], XA_lookback_snip[30];
+unsigned taxid_redirection_snip_len, xa_strand_pos_snip_len, XS_snip_len, XM_snip_len, MC_buddy_snip_len,
+     MQ_buddy_snip_len, MAPQ_buddy_snip_len, XA_lookback_snip_len;
 WordIndex xa_lookback_strand_word_index = WORD_INDEX_NONE, xa_lookback_rname_word_index = WORD_INDEX_NONE;
 
 // callback function for compress to get data of one line (called by codec_bz2_compress)
@@ -96,12 +98,14 @@ void sam_zip_initialize (void)
 
     qname_zip_initialize ((DictId)_SAM_QNAME);
     
-    seg_prepare_snip_other (SNIP_COPY_BUDDY, _SAM_PNEXT,   false, 0, pos_buddy_snip);
-    seg_prepare_snip_other (SNIP_COPY_BUDDY, _SAM_POS,     false, 0, pnext_buddy_snip);
-    seg_prepare_snip_other (SNIP_COPY_BUDDY, _OPTION_MC_Z, false, 0, cigar_buddy_snip);
+    seg_prepare_snip_other (SNIP_COPY_BUDDY, _SAM_PNEXT,   false, 0, POS_buddy_snip);
+    seg_prepare_snip_other (SNIP_COPY_BUDDY, _SAM_POS,     false, 0, PNEXT_buddy_snip);
+    seg_prepare_snip_other (SNIP_COPY_BUDDY, _OPTION_MC_Z, false, 0, CIGAR_buddy_snip);
+    seg_prepare_snip_other (SNIP_COPY_BUDDY, _SAM_MAPQ,    false, 0, MQ_buddy_snip);
+    seg_prepare_snip_other (SNIP_COPY_BUDDY, _OPTION_MQ_i, false, 0, MAPQ_buddy_snip);
     seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY_MC, MC_buddy_snip, _SAM_CIGAR);
 
-    seg_prepare_snip_other (SNIP_LOOKBACK, (DictId)_OPTION_XA_LOOKBACK, false, 0, xa_lookback_snip);
+    seg_prepare_snip_other (SNIP_LOOKBACK, (DictId)_OPTION_XA_LOOKBACK, false, 0, XA_lookback_snip);
 }
 
 static void sam_seg_initialize_0X (VBlockP vb, DidIType lookback_did_i, DidIType rname_did_i, DidIType strand_did_i, DidIType pos_did_i, DidIType cigar_did_i)
@@ -160,6 +164,8 @@ void sam_seg_initialize (VBlock *vb)
         CTX(SAM_TLEN   )->flags.store_per_line = true;
         CTX(SAM_CIGAR  )->flags.store_per_line = true;
         CTX(OPTION_MC_Z)->flags.store_per_line = true;
+        CTX(SAM_MAPQ   )->flags.store_per_line = true;
+        CTX(OPTION_MQ_i)->flags.store_per_line = true; // v13
     }
 
     if (segconf.sam_buddy_RG)
@@ -176,6 +182,7 @@ void sam_seg_initialize (VBlock *vb)
     CTX(OPTION_BD_BI)->ltype    = LT_SEQUENCE;
     CTX(OPTION_NM_i)->flags.store = STORE_INT; // since v12.0.36
     CTX(OPTION_AS_i)->flags.store = STORE_INT; // since v12.0.37
+    CTX(OPTION_MQ_i)->flags.store = STORE_INT; // since v13
 
     Context *rname_ctx = CTX(SAM_RNAME);
     Context *rnext_ctx = CTX(SAM_RNEXT);
@@ -202,7 +209,7 @@ void sam_seg_initialize (VBlock *vb)
     qname_seg_initialize (VB, SAM_QNAME);
     
     if (segconf.running) {
-        segconf.sam_is_sorted = segconf.sam_is_collated = true; // initialize optimistically
+        segconf.sam_is_sorted = segconf.sam_is_collated = segconf.MAPQ_has_single_value = true; // initialize optimistically
         segconf.qname_flavor = 0; // unknown
     }
 
@@ -470,7 +477,7 @@ void sam_seg_verify_RNAME_POS (VBlock *vb, const char *p_into_txt, PosType this_
     else { // headerless SAM
         WordIndex ref_index = chrom_2ref_seg_get (gref, vb, vb->chrom_node_index); // possibly an alt contig
         if (ref_index == WORD_INDEX_NONE) {
-            WARN_ONCE ("FYI: RNAME \"%.*s\" (and possibly others) is missing in the reference file. No harm.", 
+            WARN_ONCE ("FYI: RNAME \"%.*s\" (and possibly others) is missing in the reference file. This might impact the compression ratio.", 
                        vb->chrom_name_len, vb->chrom_name);
             return; // the sequence will be segged as unaligned
         }
@@ -733,7 +740,7 @@ static const char *sam_seg_get_kraken (VBlockSAM *vb, const char *next_field, bo
                                        const char **value, unsigned *value_len, // out
                                        bool is_bam)
 {
-    *tag        = "TX"; // genozip introduced tag (=taxid)
+    *tag        = "tx"; // genozip introduced tag (=taxid)
     *type       = 'i';
     *value      = taxid_str;
     *has_kraken = false;
@@ -889,6 +896,39 @@ void sam_seg_QNAME (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(qname), unsigned add
     dl->QNAME = (CtxWord){.char_index = ENTNUM (vb->txt_data, qname), .snip_len = qname_len };
 }
 
+// We seg against a previous buddy line's MQ if one exists, but not if this is a single-MAPQ-value file
+void sam_seg_MAPQ (VBlockP vb, ZipDataLineSAM *dl, STRp(mapq_str), uint8_t mapq, unsigned add_bytes)
+{
+    ContextP ctx = CTX(SAM_MAPQ);
+
+    if (!mapq_str)
+        dl->MAPQ = mapq;
+    
+    else if (!str_get_int (STRa(mapq_str), &dl->MAPQ))
+        goto fallback;
+
+    if (segconf.running && dl->MAPQ) {
+        if (!segconf.MAPQ_value) 
+            segconf.MAPQ_value = dl->MAPQ;
+        else if (segconf.MAPQ_value != dl->MAPQ) 
+            segconf.MAPQ_has_single_value = false;
+    }
+
+    ctx_set_last_value (vb, ctx, dl->MAPQ);
+
+    ZipDataLineSAM *buddy_dl = DATA_LINE (vb->buddy_line_i); // an invalid pointer if buddy_line_i is -1
+
+    if (!segconf.running && vb->buddy_line_i != -1 && dl->MAPQ && !segconf.MAPQ_has_single_value && dl->MAPQ == buddy_dl->MQ)
+        seg_by_ctx (VB, STRa(MAPQ_buddy_snip), ctx, add_bytes); // copy MQ from earlier-line buddy 
+
+    else
+fallback:
+        if (mapq_str)
+            seg_by_ctx (VB, STRa(mapq_str), ctx, add_bytes); 
+        else
+            seg_integer (VB, SAM_MAPQ, mapq, true);
+}
+
 void sam_seg_RNAME_RNEXT (VBlockP vb, DidIType did_i, STRp (chrom), unsigned add_bytes)
 {
     bool is_new;
@@ -916,7 +956,7 @@ PosType sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pos_str)/* option 1
     }
     
     else if (segconf.sam_is_sorted && vb->buddy_line_i != -1 && buddy_dl->PNEXT == pos) {
-        seg_by_did_i (VB, STRa(pos_buddy_snip), SAM_POS, add_bytes); // copy POS from earlier-line buddy PNEXT
+        seg_by_did_i (VB, STRa(POS_buddy_snip), SAM_POS, add_bytes); // copy POS from earlier-line buddy PNEXT
         ctx_set_last_value (VB, CTX(SAM_POS), pos);
     }
 
@@ -943,7 +983,7 @@ void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pnext_str)/* option 
 
     if (!pnext) str_get_int (STRa(pnext_str), &pnext);
 
-    if (segconf.sam_is_collated && pnext) {
+    if (segconf.sam_is_collated && pnext) { // note: if sam_is_sorted, this will be handled by buddy
 
         // case: 2nd mate - PNEXT = previous line POS 
         if (pnext == prev_line_pos) {
@@ -960,7 +1000,7 @@ void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pnext_str)/* option 
     }
 
     else if (segconf.sam_is_sorted && pnext && vb->buddy_line_i != -1 && buddy_dl->POS == pnext) {
-        seg_by_did_i (VB, STRa(pnext_buddy_snip), SAM_PNEXT, add_bytes); // copy PNEXT from earlier-line buddy POS
+        seg_by_did_i (VB, STRa(PNEXT_buddy_snip), SAM_PNEXT, add_bytes); // copy PNEXT from earlier-line buddy POS
         ctx_set_last_value (VB, CTX(SAM_PNEXT), pnext);
     }
 
@@ -1022,8 +1062,8 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     if (SAM_RNAME_len != 1 || *SAM_RNAME_str != '*')
         sam_seg_verify_RNAME_POS (VB, SAM_RNAME_str, this_pos);
 
-    SEG_NEXT_ITEM (SAM_MAPQ);
-    seg_set_last_txt (VB, CTX(SAM_MAPQ), STRdid(SAM_MAPQ), STORE_NONE);
+    GET_NEXT_ITEM (SAM_MAPQ);
+    sam_seg_MAPQ (VB, dl, STRdid(SAM_MAPQ), 0, SAM_MAPQ_len+1);
 
     // CIGAR - we wait to get more info from SEQ and QUAL
     GET_NEXT_ITEM (SAM_CIGAR);

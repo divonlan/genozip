@@ -61,7 +61,7 @@ void profiler_add (ConstVBlockP vb)
     ADD(md5);
     ADD(lock_mutex_zf_ctx);
     ADD(wait_for_vb_1_mutex);
-    ADD(ctx_merge_in_vb_ctx_one_dict_id);
+    ADD(ctx_merge_in_one_vctx);
     ADD(ctx_clone);
     ADD(ctx_dict_build_word_lists);
     ADD(aligner_best_match);
@@ -177,7 +177,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (wait_for_vb_1_mutex, 1);
         PRINT (ctx_merge_in_vb_ctx, 1);
         PRINT (lock_mutex_zf_ctx, 2);
-        PRINT (ctx_merge_in_vb_ctx_one_dict_id, 2);
+        PRINT (ctx_merge_in_one_vctx, 2);
         PRINT (zip_compress_ctxs, 1);
         PRINT (zip_generate_b250, 2);
         PRINT (zip_generate_local, 2);

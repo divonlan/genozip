@@ -253,9 +253,9 @@ bool str_get_int_hex (STRp(str),
         uint64_t prev_out = out;
         char c = str[i];
         
-        if      (c >= '0' && c <= '9') out = (out * 16) + (c - '0');
-        else if (c >= 'A' && c <= 'F') out = (out * 16) + (c - 'A' + 10);
-        else if (c >= 'a' && c <= 'f') out = (out * 16) + (c - 'a' + 10);
+        if      (c >= '0' && c <= '9') out = (out << 4) | (c - '0');
+        else if (c >= 'A' && c <= 'F') out = (out << 4) | (c - 'A' + 10);
+        else if (c >= 'a' && c <= 'f') out = (out << 4) | (c - 'a' + 10);
         else return false;
 
         if (out < prev_out) return false; // number overflowed beyond maximum uint64_t

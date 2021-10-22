@@ -273,7 +273,7 @@ finalize:
             STRset (vb->chrom_name, chrom);
     }
 
-    if (is_new && chrom_2ref_seg_is_needed (did_i)) // even if no reference, has ctx_merge_in_vb_ctx_one_dict_id expects
+    if (is_new && chrom_2ref_seg_is_needed (did_i)) // even if no reference, has ctx_merge_in_one_vctx expects
         chrom_2ref_seg_set (vb, chrom_node_index, ref_index);
 
     return chrom_node_index;

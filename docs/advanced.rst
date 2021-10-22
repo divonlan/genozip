@@ -161,7 +161,7 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
-.. option:: --debug-allthesame  Z. See contexts that are marked as "all the same" and are removed or shrunk.
+.. option:: --debug-generate  Z. See contexts that are marked as "all the same" and are removed or shrunk.
 
           |
 

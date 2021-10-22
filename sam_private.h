@@ -65,6 +65,7 @@ typedef struct {
     CtxWord QUAL, U2, BD_BI[2];    // coordinates in txt_data 
     CtxWord QNAME, RG, CIGAR, MC;  // coordinates in txt_data for buddy segging (except CIGAR in BAM - points instead into vb->buddy_textual_cigars)
     PosType POS, PNEXT, TLEN;
+    int64_t MAPQ, MQ;
     SamFlags FLAG;
     uint32_t seq_len;              // actual sequence length determined from any or or of: CIGAR, SEQ, QUAL. If more than one contains the length, they must all agree
 } ZipDataLineSAM;
@@ -143,6 +144,7 @@ extern void sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qname), unsig
 extern void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(flag_str), unsigned add_bytes);
 extern void sam_seg_RNAME_RNEXT (VBlockP vb, DidIType did_i, STRp (chrom), unsigned add_bytes);
 extern PosType sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pos_str)/* option 1 */, PosType pos/* option 2 */, WordIndex prev_line_chrom, PosType prev_line_pos, unsigned add_bytes);
+extern void sam_seg_MAPQ (VBlockP vb, ZipDataLineSAM *dl, STRp(mapq_str), uint8_t mapq, unsigned add_bytes);
 extern void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pnext_str)/* option 1 */, PosType pnext/* option 2 */, PosType prev_line_pos, unsigned add_bytes);
 extern void sam_seg_TLEN (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(tlen), int64_t tlen_value, PosType pnext_pos_delta, int32_t cigar_seq_len);
 extern void sam_seg_QUAL (VBlockSAM *vb, ZipDataLineSAM *dl, const char *qual, uint32_t qual_data_len, unsigned add_bytes);
@@ -198,7 +200,7 @@ static inline char sam_seg_bam_type_to_sam_type (char type)
 
 extern DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam, const char *tag, char bam_type, const char *value, unsigned value_len);
 
-extern char taxid_redirection_snip[100], xa_strand_pos_snip[100], XS_snip[30], XM_snip[30], MC_buddy_snip[30], xa_lookback_snip[30];
-extern unsigned taxid_redirection_snip_len, xa_strand_pos_snip_len, XS_snip_len, XM_snip_len, MC_buddy_snip_len, xa_lookback_snip_len;
+extern char taxid_redirection_snip[100], xa_strand_pos_snip[100], XS_snip[30], XM_snip[30], MC_buddy_snip[30], MQ_buddy_snip[30], XA_lookback_snip[30];
+extern unsigned taxid_redirection_snip_len, xa_strand_pos_snip_len, XS_snip_len, XM_snip_len, MC_buddy_snip_len,  MQ_buddy_snip_len, XA_lookback_snip_len;
 
 #endif

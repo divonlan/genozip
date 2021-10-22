@@ -173,7 +173,7 @@ static void flags_show_flags (void)
     iprintf ("debug_memory=%s\n", TF_(debug_memory));
     iprintf ("debug_threads=%s\n", TF_(debug_threads));
     iprintf ("debug_stats=%s\n", TF_(debug_stats));
-    iprintf ("debug_allthesame=%s\n", TF_(debug_allthesame)); 
+    iprintf ("debug_generate=%s\n", TF_(debug_generate)); 
     iprintf ("debug_recon_size=%s\n", TF_(debug_recon_size)); 
     iprintf ("debug_seg=%s\n", TF_(debug_seg)); 
     iprintf ("seg_only=%s\n", TF_(seg_only));
@@ -477,7 +477,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _dp {"debug-progress",no_argument,       &flag.debug_progress,   1 }  
         #define _dt {"debug-threads", no_argument,       &flag.debug_threads,    1 }  
         #define _dw {"debug-stats",   no_argument,       &flag.debug_stats,      1 }  
-        #define _dM {"debug-allthesame",no_argument,     &flag.debug_allthesame, 1 }  
+        #define _dM {"debug-generate",no_argument,     &flag.debug_generate, 1 }  
         #define _dr {"debug-recon-size",no_argument,     &flag.debug_recon_size, 1 }  
         #define _dg {"debug-seg",     no_argument,       &flag.debug_seg,        1 }  
         #define _oe {"echo",          no_argument,       &flag.echo,             1 }
@@ -901,7 +901,7 @@ void flags_update_zip_one_file (void)
                       || flag.match_chrom_to_reference
                       || (chain_is_loaded && dt == DT_VCF) // converting a standard VCF to a dual-coordinates VCF
                       || (flag.add_line_numbers && dt == DT_VCF)
-                      || (kraken_is_loaded && (dt == DT_SAM || dt == DT_BAM)); // adding a TX:i optional field
+                      || (kraken_is_loaded && (dt == DT_SAM || dt == DT_BAM)); // adding a tx:i optional field
 
     ASSINP0 (!flag.sort || dt == DT_VCF, "--sort is only supported for VCF files");
 

@@ -15,9 +15,10 @@
 //------------------------------------------------------
 
 // turn contig name into a canonical AC: Supported formats:
-// hg19:   "chr4_gl383528_alt"           -> { "GL383528",     '1' }
-// GRCh38: "chrUn_JTFH01001867v2_decoy"  -> { "JTFH01001867", '2' }
-// hs37d5: "GL000192.1"                  -> { "GL000192",     '1' }
+// hg19:   "chr4_gl383528_alt"                  -> { "GL383528",     '1' }
+// GRCh38: "chrUn_JTFH01001867v2_decoy"         -> { "JTFH01001867", '2' }
+// hs37d5: "GL000192.1"                         -> { "GL000192",     '1' }
+// GRCh37_latest_genomic.fna.gz: "NC_000002.11" -> { "NC_000002",    '11' }
 static bool contig_name_to_acc_num (STRp(contig), AccessionNumber *ac) // out - canonical AC or zeroed
 {
     *ac = (AccessionNumber){};
@@ -32,6 +33,21 @@ static bool contig_name_to_acc_num (STRp(contig), AccessionNumber *ac) // out - 
             ac->AC[i] = UPPER_CASE (contig[i]);
 
         ac->version = contig[contig_len-1];
+        return true;
+    }
+
+    // hs37d5 style, 2 digit version
+    if (contig_len >= 6 && contig_len <= ACCESSION_LEN + 3 && 
+        contig[contig_len-3] == '.' && IS_DIGIT (contig[contig_len-2]) && IS_DIGIT (contig[contig_len-1])) {
+
+        *ac = (AccessionNumber){};
+    
+        for (unsigned i=0; i < contig_len-3; i++)
+            ac->AC[i] = UPPER_CASE (contig[i]);
+
+        ac->version  = contig[contig_len-2];
+        ac->version2 = contig[contig_len-1];
+
         return true;
     }
 
@@ -69,11 +85,13 @@ static void contigs_calculate_accession_numbers (BufferP contigs, ConstBufferP c
             for (unsigned j=0; j < ACCESSION_LEN && (IS_DIGIT(*s) || IS_LETTER(*s)); j++, s++)
                 ac[j] = UPPER_CASE (*s);
 
-            char version = (s - ctg[i].metadata.str <= REFCONTIG_MD_LEN-2 && *s == '.') ? s[1] : '1';
-
+            char version  = (s - ctg[i].metadata.str <= REFCONTIG_MD_LEN-2 && *s == '.')      ? s[1] : '1';
+            char version2 = (s - ctg[i].metadata.str <= REFCONTIG_MD_LEN-3 && IS_DIGIT(s[2])) ? s[2] : 0;
+                 
             // overwrite string metadata with parsed meta data
             memcpy (ctg[i].metadata.parsed.ac.AC, ac, ACCESSION_LEN);
             ctg[i].metadata.parsed.ac.version = version;
+            ctg[i].metadata.parsed.ac.version = version2;
         }
 
         // second, try to extract the AC from the contig name. 
@@ -87,7 +105,7 @@ static void contigs_calculate_accession_numbers (BufferP contigs, ConstBufferP c
 AccNumText display_acc_num (const AccessionNumber *ac)
 {
     AccNumText s = {};
-    if (ac->AC[0]) sprintf (s.s, "AC=%s.%c", ac->AC, ac->version);
+    if (ac->AC[0]) sprintf (s.s, "AC=%s.%c%c", ac->AC, ac->version, ac->version2);
     return s;
 }
 
@@ -112,7 +130,10 @@ static int contigs_alphabetical_sorter (const void *a, const void *b)
 static int contigs_accession_number_sorter (const void *a, const void *b)
 {
     DEF_SORTER_CONTIGS;
-    return memcmp (&contig_a->metadata.parsed.ac, &contig_b->metadata.parsed.ac, sizeof (AccessionNumber));
+    int cmp = memcmp (&contig_a->metadata.parsed.ac.AC, &contig_b->metadata.parsed.ac.AC, sizeof (AccessionNumber));
+    if (!cmp) cmp = contig_a->metadata.parsed.ac.version - contig_b->metadata.parsed.ac.version;
+    if (!cmp) cmp = contig_a->metadata.parsed.ac.version2 - contig_b->metadata.parsed.ac.version2;
+    return cmp;
 }
 
 static int contigs_ref_index_sorter (const void *a, const void *b)
@@ -191,8 +212,12 @@ static WordIndex contigs_get_by_accession_number_do (ConstBufferP contigs, Const
     WordIndex word_index = *ENT (WordIndex, *index_buf, mid_sorted_index);
     Contig *mid_word = ENT (Contig, *contigs, word_index);
  
-    int cmp = memcmp (&mid_word->metadata.parsed.ac, ac, sizeof (AccessionNumber));
-
+    int cmp = memcmp (&mid_word->metadata.parsed.ac.AC, ac->AC, sizeof (ac->AC));
+    
+    // also compare by version, version2, unless ac->version is 0 to indicate no searching by version is needed
+    if (!cmp && ac->version) cmp = mid_word->metadata.parsed.ac.version  - ac->version;
+    if (!cmp && ac->version) cmp = mid_word->metadata.parsed.ac.version2 - ac->version2;
+    
     if (cmp < 0) return contigs_get_by_accession_number_do (contigs, index_buf, ac, mid_sorted_index+1, last_sorted_index);
     if (cmp > 0) return contigs_get_by_accession_number_do (contigs, index_buf, ac, first_sorted_index, mid_sorted_index-1);
 
@@ -207,6 +232,14 @@ static WordIndex contigs_get_by_accession_number (ConstContigPkgP ctgs, STRp (co
     if (!contig_name_to_acc_num (STRa(contig), &ac)) return WORD_INDEX_NONE;
 
     return contigs_get_by_accession_number_do (&ctgs->contigs, &ctgs->by_AC, &ac, 0, ctgs->contigs.len-1);
+}
+
+// search by ac.AC only, ac.version must be set to 0. 
+static WordIndex contigs_get_by_accession_number_no_version (ConstContigPkgP ctgs, const AccessionNumber *ac)
+{
+    ASSERT (ctgs->contigs.len == ctgs->by_AC.len, "%s: expecting contigs.len=%"PRIu64" == by_AC.len=%"PRIu64, ctgs->name, ctgs->contigs.len, ctgs->by_AC.len);
+
+    return contigs_get_by_accession_number_do (&ctgs->contigs, &ctgs->by_AC, ac, 0, ctgs->contigs.len-1);
 }
 
 // binary search for this chrom in contigs. we count on gcc tail recursion optimization to keep this fast.
@@ -242,7 +275,24 @@ WordIndex contigs_get_matching (ConstContigPkgP ctgs, STRp(name), PosType LN, /*
                                 bool strictly_alt, // only tests for differnet names
                                 bool *is_alt) // if not NULL, also search for as-is, and return whether its alt or not
 {
+    // human chromosomes 1-22,X,Y as they appear, eg, on:  ftp://ftp.ncbi.nlm.nih.gov/refseq/H_sapiens/annotation/GRCh37_latest/refseq_identifiers/GRCh37_latest_genomic.fna.gz
+    static const AccessionNumber NC[25] = { {},
+        {.AC="NC_000001"}, {.AC="NC_000002"}, {.AC="NC_000003"}, {.AC="NC_000004"}, {.AC="NC_000005"}, {.AC="NC_000006"},
+        {.AC="NC_000007"}, {.AC="NC_000008"}, {.AC="NC_000009"}, {.AC="NC_000010"}, {.AC="NC_000011"}, {.AC="NC_000012"},
+        {.AC="NC_000013"}, {.AC="NC_000014"}, {.AC="NC_000015"}, {.AC="NC_000016"}, {.AC="NC_000017"}, {.AC="NC_000018"},
+        {.AC="NC_000019"}, {.AC="NC_000020"}, {.AC="NC_000021"}, {.AC="NC_000022"}, {.AC="NC_000023"}, {.AC="NC_000024"}
+        };
+
     #define CHECK_IF_DONE if (ctg_i != WORD_INDEX_NONE) goto finalize;
+
+    #define IS_CHROMOSOME(s,len) (((len) == 1 && (IS_DIGIT ((s)[0]) || ((s)[0]>='W' && (s)[0]<='Z'))) || \
+                                  ((len) == 2 && ((IS_DIGIT ((s)[0]) && IS_DIGIT ((s)[1])))))
+
+    #define NC_NUM(s,len) ((len)==2)                   ? (((s)[0]-'0') * 10 + ((s)[1]-'0'))   \
+                        : ((s)[0]=='X')                ? 23                 \
+                        : ((s)[0]=='Y')                ? 24                 \
+                        : ((s)[0]=='W' || (s)[0]=='Z') ? 1000 /* invalid */ \
+                        :                                ((s)[0]-'0');
 
     // if is_alt provided, search for exact name match
     WordIndex ctg_i = !strictly_alt ? contigs_get_by_name (ctgs, STRa(name)) : WORD_INDEX_NONE;
@@ -251,8 +301,7 @@ WordIndex contigs_get_matching (ConstContigPkgP ctgs, STRp(name), PosType LN, /*
     CHECK_IF_DONE;
 
     // 22 -> chr22 (1->22, X, Y, W, Z chromosomes)
-    if ((name_len == 1 && (IS_DIGIT (name[0]) || (name[0]>='W' && name[0]<='Z'))) ||
-        (name_len == 2 && ((IS_DIGIT (name[0]) && IS_DIGIT (name[1]))))) {
+        if (IS_CHROMOSOME (name, name_len)) {
 
         char chr_chrom[5] = "chr";
         chr_chrom[3] = name[0];
@@ -260,12 +309,46 @@ WordIndex contigs_get_matching (ConstContigPkgP ctgs, STRp(name), PosType LN, /*
 
         ctg_i = contigs_get_by_name (ctgs, chr_chrom, name_len+3); 
         CHECK_IF_DONE;
-    }
+
+        if (name[0] != 'W' && name[0] != 'Z') {
+            int nc_num = NC_NUM (name, name_len);
+            if (nc_num <= 24) {
+                ctg_i = contigs_get_by_accession_number_no_version (ctgs, &NC[nc_num]); 
+                CHECK_IF_DONE;
+            }
+        }
+    }    
 
     // chr? or chr?? -> ? or ??
-    if ((name_len == 4 || name_len == 5) && !memcmp (name, "chr", 3)) {
+    if ((name_len == 4 || name_len == 5) && !memcmp (name, "chr", 3) && IS_CHROMOSOME(&name[3], name_len-3)) {
         ctg_i = contigs_get_by_name (ctgs, &name[3], name_len-3);
         CHECK_IF_DONE;
+
+        int nc_num = NC_NUM (&name[3], name_len-3);
+        if (nc_num <= 24) {
+            ctg_i = contigs_get_by_accession_number_no_version (ctgs, &NC[nc_num]); 
+            CHECK_IF_DONE;
+        }
+    }
+
+    // NC_.. -> ? or chr?
+    if ((name_len == 11 || name_len == 12) && name[0]=='N' && name[1]=='C' && name[2]=='_' && name[9]=='.') {
+        uint64_t nc_num; 
+        str_get_int_dec (&name[3], 6, &nc_num);
+
+        static const char nc[25][3] = { "", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14",
+                                        "15", "16", "17", "18", "19", "20", "21", "22", "X", "Y" };
+
+        if (nc_num > 0 && nc_num <= 24) {
+
+            // NC_... -> ?
+            ctg_i = contigs_get_by_name (ctgs, nc[nc_num], 1 + (nc_num>=10 && nc_num<=22));
+            CHECK_IF_DONE;
+
+            char name[6] = { 'c','h','r',nc[nc_num][0],nc[nc_num][1],0 };
+            ctg_i = contigs_get_by_name (ctgs, name, 4 + (nc_num>=10 && nc_num<=22));
+            CHECK_IF_DONE;
+        }
     }
 
     // M, MT, chrM, chrMT 

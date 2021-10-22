@@ -149,8 +149,6 @@ static inline ContextP ctx_get_existing_ctx_do (VBlockP vb, DictId dict_id)  // 
 }
 #define ECTX(dict_id) ctx_get_existing_ctx_do ((VBlockP)(vb), (DictId)(dict_id))
 
-extern struct FlagsCtx ctx_get_zf_ctx_flags (ConstContextP vctx);
-
 extern ContextP ctx_add_new_zf_ctx_from_txtheader (const char *tag_name, unsigned tag_name_len, DictId dict_id, TranslatorId luft_translator);
 
 extern void ctx_overlay_dictionaries_to_vb (VBlockP vb);
@@ -164,8 +162,10 @@ extern bool ctx_is_show_dict_id (DictId dict_id);
 extern CtxNode *ctx_get_node_by_word_index (ConstContextP ctx, WordIndex word_index);
 extern const char *ctx_get_snip_by_word_index (ConstContextP ctx, WordIndex word_index, 
                                                const char **snip, uint32_t *snip_len);
-extern CtxNodeP ctx_get_vb_node (ContextP vctx, WordIndex vb_node_index);
 
+extern const char *ctx_get_vb_snip_ex (ConstContextP vctx, WordIndex vb_node_index, const char **snip, uint32_t *snip_len); 
+static inline const char *ctx_get_vb_snip (ConstContextP vctx, WordIndex vb_node_index) { return ctx_get_vb_snip_ex (vctx, vb_node_index, 0, 0); }
+ 
 static inline const char *ctx_get_words_snip(ConstContextP ctx, WordIndex word_index) 
     { return ctx_get_snip_by_word_index (ctx, word_index, 0, 0); }
 

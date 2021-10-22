@@ -111,7 +111,7 @@ Examples:
 
                      |
 
-.. option:: -K, --kraken filename. Incorporate the Taxonomy ID of each line into the file. For use with genocat --taxid. For SAM/BAM it also adds a TX:i field. 
+.. option:: -K, --kraken filename. Incorporate the Taxonomy ID of each line into the file. For use with genocat --taxid. For SAM/BAM it also adds a tx:i field. 
 
 | See: :ref:`kraken`
                         

@@ -209,7 +209,7 @@ WordIndex seg_integer_do (VBlockP vb, DidIType did_i, int64_t n, unsigned add_by
 }
 
 // prepare snips that contain code + dict_id + optional parameter (SNIP_LOOKUP_OTHER, SNIP_OTHER_DELTA, SNIP_REDIRECTION...)
-void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int32_t parameter, 
+void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int64_t parameter, 
                                 char *snip, unsigned *snip_len) //  in / out
 {
     // make sure we have enough memory
@@ -413,12 +413,7 @@ bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsigned ad
 
         ctx->last_line_i = vb->line_i;
 
-        if (!ctx->local.len) { // first number 
-            ctx->dynamic_size_local = true;
-            
-            if (!ctx->b250.len) // no non-numbers yet
-                ctx->numeric_only = true; // until proven otherwise
-        }
+        ctx->dynamic_size_local = true;
 
         // add to local
         buf_alloc (vb, &ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->local");
@@ -433,7 +428,6 @@ bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsigned ad
     // case: non-numeric snip
     else { 
         seg_by_ctx (VB, this_value, this_value_len, ctx, add_bytes);
-        ctx->numeric_only = false;
         return false;
     }
 }
@@ -492,7 +486,6 @@ WordIndex seg_delta_vs_other (VBlock *vb, Context *ctx, Context *other_ctx,
     other_ctx->no_stons = true;
     other_ctx->flags.store = STORE_INT;
 
-    ctx->numeric_only = false;
     return seg_by_ctx (VB, snip, snip_len, ctx, value_len);
 
 fallback:
@@ -592,7 +585,6 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
         // case: it has a sub-array
         if (is_subarray) {
             seg_array (vb, arr_ctx, stats_conslidation_did_i, this_item, this_item_len, subarray_sep, 0, use_integer_delta, store_int_in_local);
-            arr_ctx->numeric_only = false;
             this_item_value = arr_ctx->last_value.i;
         }
 
@@ -610,16 +602,12 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
         }
 
         // case: delta of 2nd+ item
-        else if (str_get_int (this_item, this_item_len, &this_item_value)) {
+        else if (str_get_int (this_item, this_item_len, &this_item_value)) 
             seg_self_delta (vb, arr_ctx, this_item_value, this_item_len);
-            arr_ctx->numeric_only = false;
-        }
 
         // non-integer that cannot be delta'd - store as-is
-        else {
+        else 
             seg_by_ctx (VB, this_item, this_item_len, arr_ctx, 0);
-            arr_ctx->numeric_only = false;
-        }
 
         if (container_ctx->flags.store == STORE_INT)
             container_ctx->last_value.i += this_item_value;

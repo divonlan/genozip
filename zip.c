@@ -165,41 +165,24 @@ static inline void zip_generate_one_b250 (VBlockP vb, ContextP ctx, uint32_t wor
 // because: 1. the dictionary got integrated into the global one - some values might have already been in the global
 // dictionary thanks to other threads working on other VBs  
 // 2. for the first VB, we sort the dictionary by frequency returns true if section should be dropped
-static bool zip_generate_b250_section (VBlock *vb, Context *ctx)
+static void zip_generate_b250 (VBlock *vb, Context *ctx)
 {
+    START_TIMER;
+
+    ASSERT (ctx->dict_id.num, "tag_name=%s did_i=%u: ctx->dict_id=0 despite ctx->b250 containing data", ctx->tag_name, (unsigned)(ctx - vb->contexts));
+
     bool show = flag.show_b250 || dict_id_typeless (ctx->dict_id).num == flag.dict_id_show_one_b250.num;
     if (show) bufprintf (vb, &vb->show_b250_buf, "vb_i=%u %s: ", vb->vblock_i, ctx->tag_name);
 
-    if (ctx->flags.all_the_same) ctx->b250.len = 1;
+    // case: all-the-same b250 survived dropping - we just shorten it to one entry
+    if (ctx->flags.all_the_same && ctx->b250.len > 1) { 
+        if (flag.debug_generate) iprintf ("%s.b250 vb_i=%u is \"all_the_same\" - shortened b250 from len=%"PRIu64" to 1\n", ctx->tag_name, vb->vblock_i, ctx->b250.len);
+        ctx->b250.len = 1;
+    }
+    else
+        if (flag.debug_generate) iprintf ("%s.b250 vb_i=%u len=%"PRIu64" all_the_same=%u\n", ctx->tag_name, vb->vblock_i, ctx->b250.len, ctx->flags.all_the_same);
 
     ARRAY (WordIndex, b250, ctx->b250);
-
-    if (ctx->flags.all_the_same) { // all entries appended with ctx_append_b250 were the same node_index  
-
-        struct FlagsCtx my_flags = ctx->flags;
-        struct FlagsCtx vb_1_flags = vb->vblock_i > 1 ? ctx_get_zf_ctx_flags(ctx) : (struct FlagsCtx){};
-        my_flags.all_the_same = vb_1_flags.all_the_same = false; // compare flags, except for all_the_same
-
-        // case 1: we can drop the entire section, if the one word value in this b250 is 0. unless:
-        // 1) it has local (bc if no-b250/dict-from-prev-vb/no-local piz can't distiguish between seg_id-with-b250-all-the-same-word-index-0 vs all-singleton-pushed-to-local)
-        // 2) it has flags that need to be passed to piz (unless its vb_i>1 and flags are same as vb_i=1)
-        // 3) the one snip is SELF_DELTA
-        if (b250[0] >= 0 && ctx_node_vb (ctx, b250[0], NULL, NULL)->word_index.n == 0
-            && !ctx->no_drop_b250  
-            && !ctx->local.len 
-            && ((SectionFlags)my_flags).flags == ((SectionFlags)vb_1_flags).flags
-            && !ctx->pair_b250 && !ctx->pair_local // pair_b250/local will causes zfile_compress_b250/local_data to set flags.paired, which will be different than vb_i=1 flags
-            && *FIRSTENT (char, (ctx->ol_dict.len ? ctx->ol_dict : ctx->dict)) != SNIP_SELF_DELTA) { // word_index=0 is the first word in the dictionary
-            
-            if (flag.debug_allthesame) iprintf ("%s in vb_i=%u is \"all_the_same\" - dropped b250 section\n", ctx->tag_name, vb->vblock_i);
-        
-            return true; // drop this b250 section
-        }
-
-        // case 2: we cannot drop the entire b250 section - as a second best, shorten the b250 to a single entry
-        else 
-            if (flag.debug_allthesame) iprintf ("%s in vb_i=%u is \"all_the_same\" - shortened b250 section to 1 element\n", ctx->tag_name, vb->vblock_i);
-    }
 
     ctx->b250.num_ctx_words = b250_len; // we move the number of words to param, as len will now contain the of bytes. used by ctx_update_stats()
     ctx->b250.len = 0; // we are going to overwrite b250 with the converted indices
@@ -215,9 +198,11 @@ static bool zip_generate_b250_section (VBlock *vb, Context *ctx)
         buf_free (&vb->show_b250_buf);
     }
 
-    return false; // don't drop this section
-}
+    codec_assign_best_codec (vb, ctx, NULL, SEC_B250);
 
+    COPY_TIMER (zip_generate_b250);
+}
+\\
 static void zip_resize_local (VBlock *vb, Context *ctx)
 {
     ARRAY (uint32_t, src, ctx->local);
@@ -332,31 +317,6 @@ static void zip_handle_unique_words_ctxs (VBlock *vb)
     }
 }
 
-// generate & write b250 data for all primary fields of this data type
-static bool zip_generate_b250 (VBlockP vb, ContextP ctx)
-{
-    START_TIMER;
-        
-    // case: the entire context is just numbers in local, and b250 is only SNIP_LOOKUPs. 
-    // ctx->numeric_only is set to indicate that we can get rid of the b250.
-    if (ctx->numeric_only) 
-        buf_free (&ctx->b250);
-
-    if (ctx->b250.len) {
-        ASSERT (ctx->dict_id.num, "tag_name=%s did_i=%u: ctx->dict_id=0 despite ctx->b250 containing data", ctx->tag_name, (unsigned)(ctx - vb->contexts));
-
-        bool drop_section = zip_generate_b250_section (vb, ctx);
-        if (drop_section) 
-            buf_free (&ctx->b250);
-        else 
-            codec_assign_best_codec (vb, ctx, NULL, SEC_B250);
-    }
-
-    COPY_TIMER (zip_generate_b250);
-
-    return ctx->b250.len > 0;
-}
-
 static void zip_generate_local (VBlockP vb, ContextP ctx)
 {
     START_TIMER;
@@ -380,6 +340,8 @@ static void zip_generate_local (VBlockP vb, ContextP ctx)
         
     codec_assign_best_codec (vb, ctx, NULL, SEC_LOCAL);
 
+    if (flag.debug_generate) iprintf ("%s.local in vb_i=%u ltype=%s len=%"PRIu64"\n", ctx->tag_name, vb->vblock_i, lt_name (ctx->ltype), ctx->local.len);
+
     COPY_TIMER (zip_generate_local);
 }
 
@@ -393,8 +355,9 @@ static void zip_compress_b250 (VBlock *vb)
     for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
         Context *ctx = CTX(did_i);
 
-        if (!ctx->b250.len || 
-            !zip_generate_b250 (vb, ctx)) continue; // generate the final b250 buffers from their intermediate form
+        if (!ctx->b250.len) continue;
+
+        zip_generate_b250 (vb, ctx); // generate the final b250 buffers from their intermediate form
 
         if (dict_id_typeless (ctx->dict_id).num == flag.dump_one_b250_dict_id.num) 
             ctx_dump_binary (vb, ctx, false);
@@ -425,7 +388,7 @@ static void zip_compress_local (VBlock *vb)
     for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
         Context *ctx = CTX(did_i);
 
-        if (!ctx->local.len && !ctx->local_always) continue;
+        if (ctx->local_compressed || (!ctx->local.len && !ctx->local_always)) continue;
 
         zip_generate_local (vb, ctx);
 
@@ -441,10 +404,9 @@ static void zip_compress_local (VBlock *vb)
 
         zfile_compress_local_data (vb, ctx, 0);
 
-        buf_free (&ctx->local); // so we don't compress it again
-        ctx->no_stons     = true; // since we had data on local, we don't allow ctx_evaluate_snip_merge to move singletons to local
-        ctx->no_drop_b250 = true; // since we had data in loca, we don't allow dropping of an all-the-same b250 section, as reconstruct will take data from local instead of dict[0] in this case
-        
+        ctx->local_compressed = true; // so we don't compress it again
+        ctx->no_stons = true; // since we had data on local, we don't allow ctx_evaluate_snip_merge to move singletons to local
+               
         if (flag.show_time) 
             ctx->compressor_time += CHECK_TIMER; // sum b250 and local
     }

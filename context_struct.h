@@ -86,11 +86,11 @@ typedef struct Context {
     bool no_drop_b250;         // the b250 section cannot be optimized away in zip_generate_b250_section (eg if we need section header to carry a param)
     bool local_always;         // always create a local section in zfile, even if it is empty 
     bool dynamic_size_local;   // resize LT_UINT32 according to data during generate (also do BGEN)
-    bool numeric_only;         // if both numeric_only and dynamic_size_local are set, 
     bool is_stats_parent;      // other contexts have this context in st_did_i
     bool counts_section;       // output a SEC_COUNTS section for this context
     bool line_is_luft_trans;   // Seg: true if current line, when reconstructed with --luft, should be translated with luft_trans (false if no
                                //      trans_luft exists for this context, or it doesn't trigger for this line, or line is already in LUFT coordinates)
+    bool local_compressed;     // ZIP: local has been compressed
     TranslatorId luft_trans;   // ZIP: Luft translator for the context, set at context init and immutable thereafter
     
     // ZIP only: hash stuff 

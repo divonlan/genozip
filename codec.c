@@ -248,7 +248,9 @@ Codec codec_assign_best_codec (VBlockP vb,
     // assign the best codec - the first one in the sorted array - and commit it to zctx
     *selected_codec = tests[0].codec;
 
-    if (is_b250 || is_local) ctx_commit_codec_to_zf_ctx (vb, ctx, is_local);
+    // save the assignment for future VBs, but not in --best, where each VB tests on its own
+    if ((is_b250 || is_local) && !flag.best)
+        ctx_commit_codec_to_zf_ctx (vb, ctx, is_local);
 
 done:
     // roll back

@@ -243,10 +243,8 @@ static void chain_seg_size_field (VBlockCHAIN *vb, const char *field_start, int 
 
     Context *ctx = CTX(CHAIN_SIZE);
 
-    if (vb->last_int(CHAIN_ENDPRIM) - vb->last_int(CHAIN_STARTPRIM) == size) { // happens if the alignment set has only one alignment
+    if (vb->last_int(CHAIN_ENDPRIM) - vb->last_int(CHAIN_STARTPRIM) == size)  // happens if the alignment set has only one alignment
         seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, CHAIN_SPECIAL_SIZE }), 2, ctx, field_len + 1);
-        ctx->numeric_only = false;
-    }
 
     else
         seg_integer_or_not (VB, ctx, field_start, field_len, field_len + 1);
@@ -261,7 +259,6 @@ static void chain_seg_luft_end_field (VBlockCHAIN *vb, const char *field_start, 
     if (vb->last_int(CHAIN_ENDPRIM) - vb->last_int(CHAIN_STARTPRIM) ==
         ctx->last_value.i           - vb->last_int(CHAIN_STARTLUFT)) {
         seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, CHAIN_SPECIAL_ENDLUFT }), 2, ctx, field_len + 1);        
-        ctx->numeric_only = false;
     }
 
     else

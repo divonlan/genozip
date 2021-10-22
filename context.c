@@ -175,9 +175,14 @@ WordIndex ctx_get_next_snip (VBlock *vb, Context *ctx, bool all_the_same, bool i
     WordIndex word_index = base250_decode (&iterator->next_b250, !all_the_same, ctx->tag_name);  // if this line has no non-GT subfields, it will not have a ctx 
 
     // we check after (no risk of segfault because of buffer overflow protector) - since b250 word is variable length
-    ASSERT (iterator->next_b250 <= AFTERENT (uint8_t, *b250), 
-            "while reconstructing line %"PRIu64" (last line of vb is %"PRIu64") in vb_i=%u: iterator for %s (did_i=%u) %sreached end of b250. b250.len=%"PRIu64, 
-            vb->line_i, vb->first_line + vb->lines.len - 1, vb->vblock_i, ctx->tag_name, ctx->did_i, is_pair ? "(PAIR) ": "", b250->len);
+    if (command == PIZ)
+        ASSPIZ (iterator->next_b250 <= AFTERENT (uint8_t, *b250), 
+                "while reconstructing (vb->lines.len=%"PRIu64"): iterator for %s (did_i=%u) %sreached end of b250. b250.len=%"PRIu64, 
+                vb->lines.len, ctx->tag_name, ctx->did_i, is_pair ? "(PAIR) ": "", b250->len);
+    else
+        ASSERT (iterator->next_b250 <= AFTERENT (uint8_t, *b250), 
+                "while reconstructing vb->line_i=%"PRIu64" (last line of vb is %"PRIu64") in vb_i=%u: iterator for %s (did_i=%u) %sreached end of b250. b250.len=%"PRIu64, 
+                vb->line_i, vb->first_line + vb->lines.len - 1, vb->vblock_i, ctx->tag_name, ctx->did_i, is_pair ? "(PAIR) ": "", b250->len);
 
     // case: a Container item is missing (eg a subfield in a Sample, a FORMAT or Samples items in a file)
     if (word_index == WORD_INDEX_MISSING) {
@@ -228,7 +233,7 @@ WordIndex ctx_peek_next_snip (VBlock *vb, Context *ctx, bool all_the_same, pSTRp
 
 // Process and snip - return its node index, and enter it into the directory if its not already there. Called
 // 1. During segregate - as snips are encountered in the data. No base250 encoding yet
-// 2. During ctx_merge_in_vb_ctx_one_dict_id() - to enter snips into z_file->contexts - also encoding in base250
+// 2. During ctx_merge_in_one_vctx() - to enter snips into z_file->contexts - also encoding in base250
 static WordIndex ctx_evaluate_snip_merge (VBlock *vb, Context *zctx, Context *vctx, 
                                           const char *snip, uint32_t snip_len, int64_t count,
                                           CtxNode **node, bool *is_new)  // out
@@ -288,11 +293,11 @@ static WordIndex ctx_evaluate_snip_merge (VBlock *vb, Context *zctx, Context *vc
         (*node)->word_index.n = node_index;
 
         buf_alloc_zero (evb, &zctx->counts, 1, INITIAL_NUM_NODES, int64_t, CTX_GROWTH, "zctx->counts");
-        zctx->counts.len++; // actually assigned in ctx_merge_in_vb_ctx_one_dict_id 
+        zctx->counts.len++; // actually assigned in ctx_merge_in_one_vctx 
 
         if (chrom_2ref_seg_is_needed (zctx->did_i)) { 
             buf_alloc_255 (evb, &z_file->chrom2ref_map, 1, INITIAL_NUM_NODES, WordIndex, CTX_GROWTH, "z_file->chrom2ref_map");
-            z_file->chrom2ref_map.len++; // actually assigned in ctx_merge_in_vb_ctx_one_dict_id 
+            z_file->chrom2ref_map.len++; // actually assigned in ctx_merge_in_one_vctx 
         }
 
         if (is_new) *is_new = true;
@@ -645,13 +650,6 @@ static inline Context *ctx_get_zf_ctx_from_vctx (ConstContextP vctx)
     return vctx->did_i < DTFZ(num_fields) ? ZCTX(vctx->did_i) : ctx_get_zf_ctx (vctx->dict_id);
 }
 
-// get zf_ctx flags, looking it it up by vctx
-struct FlagsCtx ctx_get_zf_ctx_flags (ConstContextP vctx)
-{
-    ContextP zctx = ctx_get_zf_ctx_from_vctx (vctx);
-    return zctx ? zctx->flags : (struct FlagsCtx){};
-}
-
 // ZIP only: called by merging VBs to add a new dict to z_file - copying some stuff from vctx
 static Context *ctx_add_new_zf_ctx (VBlock *vb, const Context *vctx)
 {
@@ -745,16 +743,68 @@ void ctx_commit_codec_to_zf_ctx (VBlock *vb, Context *vctx, bool is_lcodec)
     mutex_unlock (zctx->mutex);
 }
 
+static inline void ctx_drop_all_the_same (VBlock *vb, Context *zctx, Context *vctx)
+{
+    const char *reason=0;
+    #define NO_DROP(s) { reason=(s); goto no_drop; }
+
+    // note: pair_b250/local will causes zfile_compress_b250/local_data to set flags.paired, which will be different than vb_i=1 flags
+    if (!vctx->flags.all_the_same) return;
+    
+    if (vctx->no_drop_b250) NO_DROP("no_drop_b250 is set");
+    if (vctx->pair_b250)    NO_DROP("pair_b250 is set");
+    if (vctx->pair_local)   NO_DROP("pair_local is set");
+
+    WordIndex node_index = *FIRSTENT (WordIndex, vctx->b250); // the only b250 in this context, as it is all_the_same
+    if (node_index < 0) NO_DROP ("node_index=WORD_INDEX_*"); // a special WORD_INDEX_* - not droppable
+
+    bool is_new_word = node_index >= vctx->ol_nodes.len; // its a new word if its not in the overlayed nodes (from previous VBs)
+    
+    if (!is_new_word && ENT (CtxNode, vctx->ol_nodes, node_index)->word_index.n > 0) NO_DROP ("existing word_index is not 0"); // old word - but not word_index=0
+
+    if (is_new_word && zctx->dict.len) NO_DROP ("new word_index is not 0"); // new word - but not the first in the dictionary so not word_index=0
+
+    STR(snip);
+    ctx_get_vb_snip_ex (vctx, node_index, pSTRa(snip)); // get the the snip of the only b250 we have
+
+    if (*snip == SNIP_SELF_DELTA) NO_DROP ("snip is SNIP_SELF_DELTA");
+
+    bool is_simple_lookup = (*snip == SNIP_LOOKUP) && (snip_len == 1);
+
+    // we can't drop b250 if we have local data (as reconstructor will reconstruct from local rather than dict), unless it is a simple SNIP_LOOKUP
+    if (vctx->local.len && !is_simple_lookup) NO_DROP ("ctx has local, but snip is not SNIP_LOOKUP"); 
+
+    struct FlagsCtx my_flags = vctx->flags;
+    struct FlagsCtx vb_1_flags = (vb->vblock_i==1) ? (struct FlagsCtx){} : zctx->flags; // flags are set by vb_i=1 
+    my_flags.all_the_same = vb_1_flags.all_the_same = false; // compare flags, except for all_the_same
+
+    // we can't drop if vctx has flags that need to be passed to piz (unless its vb_i>1 and flags are same as vb_i=1)
+    if (((SectionFlags)my_flags).flags != ((SectionFlags)vb_1_flags).flags) NO_DROP (vb->vblock_i==1 ? "this is vb_i=1, and vctx has flags" : "vctx has flags, different from those set by vb_i=1");
+
+    // we survived all tests - we can now drop the b250 and maybe also dict
+
+    if (flag.debug_generate) 
+        iprintf ("%s vb_i=%u is \"all_the_same\" - dropped %sb250 b250.len=%"PRIu64"\n", vctx->tag_name, vb->vblock_i, (is_simple_lookup ? "dict AND " : ""), vctx->b250.len);
+    
+    buf_free (&vctx->b250);
+    if (is_simple_lookup) buf_free (&vctx->dict); // if this is a SNIP_LOOKUP, we don't need the new dict entry added in this VB, as absent dict, lookup will happen 
+    return;
+
+no_drop:
+    if (flag.debug_generate) 
+        iprintf ("%s vb_i=%u is all_the_same but cannot b250 because %s\n", vctx->tag_name, vb->vblock_i, reason);
+}
+
 // ZIP only: this is called towards the end of compressing one vb - merging its dictionaries into the z_file 
 // each dictionary is protected by its own mutex, and there is one z_file mutex protecting num_dicts.
 // we are careful never to hold two muteces at the same time to avoid deadlocks
-static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *vb, unsigned did_i)
+static void ctx_merge_in_one_vctx (VBlock *vb, DidIType did_i)
 {
-    Context *vctx = &vb->contexts[did_i];
+    Context *vctx = CTX(did_i);
 
     // get the ctx or create a new one. note: ctx_add_new_zf_ctx() must be called before mutex_lock() because it locks the z_file mutex (avoid a deadlock)
     Context *zctx  = ctx_get_zf_ctx_from_vctx (vctx);
-    if (!zctx) zctx = ctx_add_new_zf_ctx (vb, vctx); 
+    zctx = ctx_add_new_zf_ctx (vb, vctx);
 
     { START_TIMER; 
       mutex_lock (zctx->mutex);
@@ -764,6 +814,8 @@ static void ctx_merge_in_vb_ctx_one_dict_id (VBlock *vb, unsigned did_i)
     START_TIMER; // note: careful not to count time spent waiting for the mutex
     //iprintf ( ("Merging dict_id=%.8s into z_file vb_i=%u vb_did_i=%u z_did_i=%u\n", dis_dict_id (vctx->dict_id).s, vb->vblock_i, did_i, z_did_i);
 
+    ctx_drop_all_the_same (vb, zctx, vctx); // drop b250 and maybe also dict, if warranted
+    
     zctx->merge_num++; // first merge is #1 (first clone which happens before the first merge, will get vb-)
     zctx->num_new_entries_prev_merged_vb = vctx->nodes.len; // number of new words in this dict from this VB
     zctx->num_singletons += vctx->num_singletons; // add singletons created by seg_by_ctx_ex (SNIP_LOOKUP b250 and snip in local)
@@ -839,7 +891,7 @@ finish:
         for (uint64_t i=0; i < ol_len; i++) 
             *ENT (int64_t, zctx->counts, i) += *ENT (int64_t, vctx->counts, i);
 
-    COPY_TIMER_VB (vb, ctx_merge_in_vb_ctx_one_dict_id)
+    COPY_TIMER_VB (vb, ctx_merge_in_one_vctx)
     mutex_unlock (zctx->mutex);
 }
 
@@ -850,7 +902,7 @@ void ctx_merge_in_vb_ctx (VBlock *vb)
     
     // merge all contexts
     for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) 
-        ctx_merge_in_vb_ctx_one_dict_id (vb, did_i);
+        ctx_merge_in_one_vctx (vb, did_i);
 
     // note: z_file->num_contexts might be larger than vb->num_contexts at this point, for example:
     // vb_i=1 started, z_file is empty, created 20 contexts
@@ -1027,7 +1079,7 @@ const char *ctx_get_snip_by_word_index (ConstContextP ctx, WordIndex word_index,
     return my_snip; 
 }
 
-// returns word index of the snip, or WORD_INDEX_NONE if it is not in the dictionary
+// PIZ: returns word index of the snip, or WORD_INDEX_NONE if it is not in the dictionary
 WordIndex ctx_get_word_index_by_snip (ConstContextP ctx, const char *snip)
 {
     unsigned snip_len = strlen (snip);
@@ -1148,7 +1200,7 @@ void ctx_free_context (Context *ctx, DidIType did_i)
 
     ctx->no_stons = ctx->pair_local = ctx->pair_b250 = ctx->stop_pairing = ctx->no_callback = ctx->line_is_luft_trans =
     ctx->local_param = ctx->no_vb1_sort = ctx->local_always = ctx->counts_section = ctx->no_drop_b250 =
-    ctx->dynamic_size_local = ctx->numeric_only = ctx->is_stats_parent = 0;
+    ctx->dynamic_size_local = ctx->is_stats_parent = ctx->local_compressed = 0;
     ctx->local_hash_prime = 0;
     ctx->num_new_entries_prev_merged_vb = 0;
     ctx->nodes_len_at_1_3 = ctx->nodes_len_at_2_3 = 0;
@@ -1558,14 +1610,24 @@ const char *ctx_get_snip_with_largest_count (DidIType did_i, int64_t *count)
     return snip;
 }
 
-CtxNodeP ctx_get_vb_node (ContextP vctx, WordIndex vb_node_index)
+const char *ctx_get_vb_snip_ex (ConstContextP vctx, WordIndex vb_node_index, const char **snip, uint32_t *snip_len)
 {
-    bool is_ol = vb_node_index < vctx->ol_nodes.len; // is this entry from a previous vb (overlay buffer)
+    CtxNode *node;
+    const char *out_snip;
 
-    CtxNode *node = is_ol ? ENT (CtxNode, vctx->ol_nodes, vb_node_index)
-                          : ENT (CtxNode, vctx->nodes, vb_node_index - vctx->ol_nodes.len);
+    if (vb_node_index < vctx->ol_nodes.len) { // is this entry from a previous vb (overlay buffer)
+        node = ENT (CtxNode, vctx->ol_nodes, vb_node_index);
+        out_snip = ENT (char, vctx->ol_dict, node->char_index);
+    }
+    else {
+        node = ENT (CtxNode, vctx->nodes, vb_node_index - vctx->ol_nodes.len);
+        out_snip = ENT (char, vctx->dict, node->char_index);
+    }
 
-    return node;
+    if (snip) *snip = out_snip;
+    if (snip_len) *snip_len = node->snip_len;
+
+    return out_snip;
 }
 
 void ctx_compress_counts (void)

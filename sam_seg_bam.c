@@ -309,7 +309,7 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     
     if (ref_id >= 0) sam_seg_verify_RNAME_POS (VB, NULL, this_pos);
 
-    seg_integer (vb, SAM_MAPQ, mapq, true); // MAPQ
+    sam_seg_MAPQ (VB, dl, 0, 0, mapq, sizeof (mapq));
 
     sam_seg_FLAG (vb, dl, 0, 0, sizeof (uint16_t));
     
