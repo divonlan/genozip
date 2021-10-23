@@ -65,7 +65,7 @@ typedef struct {
     CtxWord QUAL, U2, BD_BI[2];    // coordinates in txt_data 
     CtxWord QNAME, RG, CIGAR, MC;  // coordinates in txt_data for buddy segging (except CIGAR in BAM - points instead into vb->buddy_textual_cigars)
     PosType POS, PNEXT;
-    int64_t MAPQ, MQ;
+    int64_t MAPQ, MQ, QUAL_score;
     SamFlags FLAG;
     uint32_t seq_len;              // actual sequence length determined from any or or of: CIGAR, SEQ, QUAL. If more than one contains the length, they must all agree
 } ZipDataLineSAM;
@@ -147,8 +147,6 @@ extern PosType sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pos_str)/* o
 extern void sam_seg_MAPQ (VBlockP vb, ZipDataLineSAM *dl, STRp(mapq_str), uint8_t mapq, unsigned add_bytes);
 extern void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pnext_str)/* option 1 */, PosType pnext/* option 2 */, PosType prev_line_pos, unsigned add_bytes);
 extern void sam_seg_TLEN (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(tlen), int64_t tlen_value, bool is_rname_rnext_same);
-extern void sam_seg_QUAL (VBlockSAM *vb, ZipDataLineSAM *dl, const char *qual, uint32_t qual_data_len, unsigned add_bytes);
-extern void sam_seg_SEQ (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), PosType pos, const char *cigar, uint32_t ref_consumed, uint32_t ref_and_seq_consumed, unsigned recursion_level, uint32_t level_0_seq_len, const char *level_0_cigar, unsigned add_bytes);
 extern const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char *next_field, int32_t len, bool *has_13, char separator, const char *after_field);
 extern const char *bam_get_one_optional (VBlockSAM *vb, const char *next_field, const char **tag, char *type, const char **value, unsigned *value_len);
 extern uint16_t bam_reg2bin (int32_t first_pos, int32_t last_pos);
@@ -166,6 +164,18 @@ extern void sam_cigar_seg_MC (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(mc), unsig
 extern bool sam_cigar_reverse (char *dst, STRp(cigar));
 extern bool sam_cigar_is_valid (STRp(cigar));
 extern unsigned sam_cigar_get_MC_ref_consumed (STRp(mc));
+
+// ----------
+// SEQ stuff
+// -----=----
+extern void sam_seg_SEQ (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), PosType pos, const char *cigar, uint32_t ref_consumed, uint32_t ref_and_seq_consumed, unsigned recursion_level, uint32_t level_0_seq_len, const char *level_0_cigar, unsigned add_bytes);
+
+// ----------
+// QUAL stuff
+// -----=----
+extern void sam_seg_QUAL_initialize (VBlockP vb);
+extern void sam_seg_QUAL (VBlockSAM *vb, ZipDataLineSAM *dl, const char *qual, uint32_t qual_data_len, unsigned add_bytes);
+extern void sam_seg_ms_field (VBlockSAM *vb, DictId dict_id, STRp(ms), unsigned add_bytes);
 
 // ----------
 // MD:Z stuff
@@ -201,7 +211,7 @@ static inline char sam_seg_bam_type_to_sam_type (char type)
 
 extern DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam, const char *tag, char bam_type, const char *value, unsigned value_len);
 
-extern char taxid_redirection_snip[100], xa_strand_pos_snip[100], XS_snip[30], XM_snip[30], MC_buddy_snip[30], MQ_buddy_snip[30], XA_lookback_snip[30];
-extern unsigned taxid_redirection_snip_len, xa_strand_pos_snip_len, XS_snip_len, XM_snip_len, MC_buddy_snip_len,  MQ_buddy_snip_len, XA_lookback_snip_len;
+extern char taxid_redirection_snip[100], xa_strand_pos_snip[100], XS_snip[30], XM_snip[30], MC_buddy_snip[30], MQ_buddy_snip[30], QUAL_buddy_snip[30], XA_lookback_snip[30];
+extern unsigned taxid_redirection_snip_len, xa_strand_pos_snip_len, XS_snip_len, XM_snip_len, MC_buddy_snip_len, MQ_buddy_snip_len, QUAL_buddy_snip_len, XA_lookback_snip_len;
 
 #endif

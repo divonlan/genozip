@@ -103,7 +103,7 @@ static int64_t reconstruct_from_local_int (VBlock *vb, Context *ctx, char separa
 
 // two options: 1. the length maybe given (textually) in snip/snip_len. in that case, it is used and vb->seq_len is updated.
 // if snip_len==0, then the length is taken from seq_len.
-static void reconstruct_from_local_sequence (VBlock *vb, Context *ctx, STRp(snip))
+void reconstruct_from_local_sequence (VBlock *vb, Context *ctx, STRp(snip))
 {
     ASSERTNOTNULL (ctx);
 
@@ -244,8 +244,7 @@ static LastValueType reconstruct_from_lookback (VBlock *vb, Context *ctx, STRp(s
 
 void reconstruct_one_snip (VBlock *vb, Context *snip_ctx, 
                            WordIndex word_index, // WORD_INDEX_NONE if not used.
-                           const char *snip, unsigned snip_len,
-                           bool reconstruct) // if false, calculates last_value but doesn't output to vb->txt_data)
+                           STRp(snip), bool reconstruct) // if false, calculates last_value but doesn't output to vb->txt_data)
 {
     LastValueType new_value = {0};
     bool have_new_value = false;
@@ -288,12 +287,12 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
 
             // case: the snip is taken to be the length of the sequence (or if missing, the length will be taken from vb->seq_len)
             case LT_SEQUENCE: 
-                reconstruct_from_local_sequence (vb, base_ctx, snip, snip_len);
+                reconstruct_from_local_sequence (vb, base_ctx, STRa(snip));
                 break;
                 
             case LT_BITMAP:
                 ASSERT_DT_FUNC (vb, reconstruct_seq);
-                DT_FUNC (vb, reconstruct_seq) (vb, base_ctx, snip, snip_len);
+                DT_FUNC (vb, reconstruct_seq) (vb, base_ctx, STRa(snip));
                 break;
 
             case LT_FLOAT32:

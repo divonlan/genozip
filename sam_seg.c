@@ -12,7 +12,6 @@
 #include "endianness.h"
 #include "strings.h"
 #include "zip.h"
-#include "optimize.h"
 #include "dict_id.h"
 #include "codec.h"
 #include "container.h"
@@ -28,32 +27,10 @@
 static char POS_buddy_snip[100], PNEXT_buddy_snip[100], CIGAR_buddy_snip[100];
 static uint32_t POS_buddy_snip_len, PNEXT_buddy_snip_len, CIGAR_buddy_snip_len;
 char taxid_redirection_snip[100], xa_strand_pos_snip[100], XS_snip[30], XM_snip[30], MC_buddy_snip[30], 
-     MQ_buddy_snip[30], MAPQ_buddy_snip[30], XA_lookback_snip[30];
+     MQ_buddy_snip[30], MAPQ_buddy_snip[30], QUAL_buddy_snip[30], XA_lookback_snip[30];
 unsigned taxid_redirection_snip_len, xa_strand_pos_snip_len, XS_snip_len, XM_snip_len, MC_buddy_snip_len,
-     MQ_buddy_snip_len, MAPQ_buddy_snip_len, XA_lookback_snip_len;
+     MQ_buddy_snip_len, MAPQ_buddy_snip_len, QUAL_buddy_snip_len, XA_lookback_snip_len;
 WordIndex xa_lookback_strand_word_index = WORD_INDEX_NONE, xa_lookback_rname_word_index = WORD_INDEX_NONE;
-
-// callback function for compress to get data of one line (called by codec_bz2_compress)
-void sam_zip_qual (VBlock *vb, uint64_t vb_line_i, char **line_qual_data, uint32_t *line_qual_len, uint32_t maximum_len) 
-{
-    ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
-
-    // note: maximum_len might be shorter than the data available if we're just sampling data in zip_assign_best_codec
-    *line_qual_len  = MIN_(maximum_len, dl->QUAL.snip_len);
-    
-    if (!line_qual_data) return; // only lengths were requested
-
-    *line_qual_data = ENT (char, vb->txt_data, dl->QUAL.char_index);
-
-    // if QUAL is just "*" (i.e. unavailable) replace it by " " because '*' is a legal PHRED quality value that will confuse PIZ
-    if (dl->QUAL.snip_len == 1 && (*line_qual_data)[0] == '*') 
-        *line_qual_data = " "; // pointer to static string
-
-    // note - we optimize just before compression - likely the string will remain in CPU cache
-    // removing the need for a separate load from RAM
-    else if (flag.optimize_QUAL) 
-        optimize_phred_quality_string (*line_qual_data, *line_qual_len);
-}
 
 // called by zfile_compress_genozip_header to set FlagsGenozipHeader.dt_specific
 bool sam_zip_dts_flag (void)
@@ -101,6 +78,7 @@ void sam_zip_initialize (void)
     seg_prepare_snip_other (SNIP_COPY_BUDDY, _SAM_POS,     false, 0, PNEXT_buddy_snip);
     seg_prepare_snip_other (SNIP_COPY_BUDDY, _OPTION_MC_Z, false, 0, CIGAR_buddy_snip);
     seg_prepare_snip_other (SNIP_COPY_BUDDY, _SAM_MAPQ,    false, 0, MQ_buddy_snip);
+    seg_prepare_snip_other (SNIP_COPY_BUDDY, _SAM_QUAL,    false, 0, QUAL_buddy_snip);
     seg_prepare_snip_other (SNIP_COPY_BUDDY, _OPTION_MQ_i, false, 0, MAPQ_buddy_snip);
     seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY_MC, MC_buddy_snip, _SAM_CIGAR);
 
@@ -171,13 +149,14 @@ void sam_seg_initialize (VBlock *vb)
 
     CTX(OPTION_MC_Z)->no_stons = true; // we're offloading to local ourselves
     CTX(SAM_CIGAR)->no_stons = true;
-    
+
     CTX(OPTION_BI_Z)->no_stons    = CTX(OPTION_BD_Z)->no_stons = true; // we can't use local for singletons in BD or BI as next_local is used by sam_piz_special_BD_BI to point into BD_BI
     CTX(OPTION_BI_Z)->st_did_i    = CTX(OPTION_BD_Z)->st_did_i = OPTION_BD_BI; 
     CTX(OPTION_BD_BI)->ltype      = LT_SEQUENCE;
     CTX(OPTION_NM_i)->flags.store = STORE_INT; // since v12.0.36
     CTX(OPTION_AS_i)->flags.store = STORE_INT; // since v12.0.37
     CTX(OPTION_MQ_i)->flags.store = STORE_INT; // since v13
+    CTX(SAM_QUAL)   ->flags.store = STORE_INT; // since v13 - store QUAL_score for buddy ms:i
 
     Context *rname_ctx = CTX(SAM_RNAME);
     Context *rnext_ctx = CTX(SAM_RNEXT);
@@ -202,7 +181,8 @@ void sam_seg_initialize (VBlock *vb)
     }
 
     qname_seg_initialize (VB, SAM_QNAME);
-    
+    sam_seg_QUAL_initialize (vb);
+
     if (segconf.running) {
         segconf.sam_is_sorted = segconf.sam_is_collated = segconf.MAPQ_has_single_value = true; // initialize optimistically
         segconf.qname_flavor = 0; // unknown
@@ -583,15 +563,6 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
         container_seg (vb, CTX(SAM_OPTIONAL), 0, 0, 0, 0); 
 
     return next_field;        
-}
-
-void sam_seg_QUAL (VBlockSAM *vb, ZipDataLineSAM *dl, const char *qual_data, uint32_t qual_data_len, unsigned add_bytes)
-{
-    dl->QUAL = WORD_IN_TXT_DATA (qual_data);
-
-    Context *qual_ctx = CTX(SAM_QUAL);
-    qual_ctx->local.len += dl->QUAL.snip_len;
-    qual_ctx->txt_len   += add_bytes;
 }
 
 void sam_seg_QNAME (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(qname), unsigned add_additional_bytes)

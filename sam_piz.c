@@ -215,31 +215,6 @@ finish:
 // Translator functions for reconstructing SAM data into BAM format
 //-----------------------------------------------------------------
 
-// translate SAM ASCII (33-based) Phread values to BAM's 0-based
-TRANSLATOR_FUNC (sam_piz_sam2bam_QUAL)
-{
-    // if QUAL is "*" there are two options:
-    // 1. If l_seq is 0, the QUAL is empty
-    // 2. If not (i.e. we have SEQ data but not QUAL) - it is a string of 0xff, length l_seq
-    if (recon_len==1 && *recon == '*') {
-        BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)ENT (char, vb->txt_data, vb->line_start);
-        uint32_t l_seq = LTEN32 (alignment->l_seq);
-
-        if (!l_seq) // option 1
-            vb->txt_data.len--;
-        else {      // option 2
-            memset (LASTENT (uint8_t, vb->txt_data), 0xff, l_seq); // override the '*' and l_seq-1 more
-            vb->txt_data.len += l_seq - 1;
-        }
-    }
-    
-    else // we have QUAL - update Phred values
-        for (uint32_t i=0; i < recon_len; i++)
-            recon[i] -= 33; 
-
-    return 0;
-}
-
 // output the word_index of RNAME, which is verified in ref_contigs_get_ref_chrom during seg
 // to be the same as the reference id 
 TRANSLATOR_FUNC (sam_piz_sam2bam_RNAME)
@@ -462,42 +437,6 @@ CONTAINER_FILTER_FUNC (sam_piz_filter)
     }
 
     return true; // go ahead and reconstruct
-}
-
-// reverse-complement the sequence if needed, and drop if "*"
-TRANSLATOR_FUNC (sam_piz_sam2fastq_SEQ)
-{  
-    uint16_t sam_flag = (uint16_t)vb->last_int(SAM_FLAG);
-    
-    // case: SEQ is "*" - don't show this fastq record
-    if (recon_len==1 && *recon == '*') 
-        vb->drop_curr_line = "no_seq";
-
-    // case: this sequence is reverse complemented - reverse-complement it
-    else if (sam_flag & SAM_FLAG_REV_COMP) 
-        str_revcomp (recon, recon_len);
-
-    return 0;
-}
-
-// reverse the sequence if needed, and drop if "*"
-TRANSLATOR_FUNC (sam_piz_sam2fastq_QUAL)
-{
-    uint16_t sam_flag = (uint16_t)vb->last_int(SAM_FLAG);
-    
-    // case: QUAL is "*" - don't show this fastq record
-    if (recon_len==1 && *recon == '*') 
-        vb->drop_curr_line = "no_qual";
-
-    // case: this sequence is reverse complemented - reverse the QUAL string
-    else if (sam_flag & SAM_FLAG_REV_COMP) {
-
-        // we move from the outside in, switching the left and right bases 
-        for (unsigned i=0; i < recon_len / 2; i++) 
-            SWAP (recon[i], recon[recon_len-1-i]);
-    }
-
-    return 0;
 }
 
 // emit 1 if (FLAGS & 0x40) or 2 of (FLAGS & 0x80) except if --FLAG is specified too (--FLAG can be

@@ -20,6 +20,7 @@ extern int32_t reconstruct_from_ctx_do (VBlockP vb, DidIType did_i, char sep, bo
 
 extern void reconstruct_one_snip (VBlockP vb, ContextP ctx, WordIndex word_index, STRp(snip), bool reconstruct);
 extern ContextP reconstruct_get_other_ctx_from_snip (VBlockP vb, pSTRp(snip));
+extern void reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, STRp(snip));
 
 extern LastValueType reconstruct_peek (VBlockP vb, ContextP ctx, pSTRp(txt));
 extern LastValueType reconstruct_peek_do (VBlockP vb, DictId dict_id, pSTRp(txt));

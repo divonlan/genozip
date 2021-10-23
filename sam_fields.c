@@ -534,17 +534,12 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_REF_CONSUMED)
 // alignment score of second best alignment - delta vs AS
 static inline void sam_seg_XS_field (VBlockSAM *vb, STRp(xs_str), unsigned add_bytes)
 {
-    int32_t xs = 0;
-    if (ctx_has_value_in_line_(VB, CTX(OPTION_AS_i)) && str_get_int_range32 (STRa(xs_str), 0, 10000, &xs) && xs) {
-    
-        int64_t delta = xs - CTX(OPTION_AS_i)->last_value.i;
+    ContextP ctx = CTX(OPTION_XS_i);
 
-        SNIP(64);
-        seg_prepare_snip_other (SNIP_OTHER_DELTA, _OPTION_AS_i, true, delta, snip);
-        seg_by_did_i (VB, STRa(snip), OPTION_XS_i, add_bytes);
-    }
+    if (ctx_has_value_in_line_(VB, CTX(OPTION_AS_i)) && str_get_int_range64 (STRa(xs_str), 0, 10000, &ctx->last_value.i) && ctx->last_value.i) 
+        seg_delta_vs_other_do (VB, ctx, CTX(OPTION_AS_i), NULL, 0, -1, add_bytes);
     else
-        seg_by_did_i (VB, STRa(xs_str),  OPTION_XS_i, add_bytes); 
+        seg_by_ctx (VB, STRa(xs_str), ctx, add_bytes); 
 }
 
 // MQ:i Mapping quality of the mate/next segment
@@ -584,8 +579,7 @@ fallback:
 // with the official SAM format spec.  New biobambam version uses mc."
 // ms="MateBaseScore" - sum all characters in QUAL of the mate, where the value of each character is its ASCII minus 33 (i.e. the Phred score)
 // mc="MateCoordinate"
-static inline void sam_seg_mc_field (VBlockSAM *vb, DictId dict_id, 
-                                     const char *snip, unsigned snip_len, unsigned add_bytes)
+static inline void sam_seg_mc_field (VBlockSAM *vb, DictId dict_id, STRp(snip), unsigned add_bytes)
 {
     uint8_t mc_did_i = ctx_get_ctx (vb, dict_id)->did_i;
     
@@ -780,6 +774,8 @@ DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_MQ_i: sam_seg_MQ_field (vb, dl, STRa(value), add_bytes); break;
 
         case _OPTION_mc_i: sam_seg_mc_field (vb, dict_id, STRa(value), add_bytes); break;
+
+        case _OPTION_ms_i: sam_seg_ms_field (vb, dict_id, STRa(value), add_bytes); break;
 
         case _OPTION_RG_Z: sam_seg_RG_field (vb, dl, STRa(value), add_bytes); break;
 

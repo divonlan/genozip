@@ -366,7 +366,7 @@ void sam_reconstruct_SEQ (VBlock *vb_, Context *bitmap_ctx, const char *unused, 
     nonref_ctx->next_local += ROUNDUP_TO_NEAREST_4 (nonref - nonref_start);
 }
 
-// translate SAM ASCII sequence characters to BAM's 4-bit characters:
+// SAM-to-BAM translator: translate SAM ASCII sequence characters to BAM's 4-bit characters:
 TRANSLATOR_FUNC (sam_piz_sam2bam_SEQ)
 {
     // the characters "=ACMGRSVTWYHKDBN" are mapped to BAM 0->15, in this matrix we add 0x80 as a validity bit. All other characters are 0x00 - invalid
@@ -404,6 +404,22 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_SEQ)
     }
 
     vb->txt_data.len = vb->txt_data.len - l_seq + (l_seq+1)/2;
+
+    return 0;
+}
+
+// SAM-to-FASTQ translator: reverse-complement the sequence if needed, and drop if "*"
+TRANSLATOR_FUNC (sam_piz_sam2fastq_SEQ)
+{  
+    uint16_t sam_flag = (uint16_t)vb->last_int(SAM_FLAG);
+    
+    // case: SEQ is "*" - don't show this fastq record
+    if (recon_len==1 && *recon == '*') 
+        vb->drop_curr_line = "no_seq";
+
+    // case: this sequence is reverse complemented - reverse-complement it
+    else if (sam_flag & SAM_FLAG_REV_COMP) 
+        str_revcomp (recon, recon_len);
 
     return 0;
 }

@@ -160,7 +160,7 @@ static void vcf_seg_AD_items (VBlockVCFP vb, Context *ctx, unsigned num_items, C
     // case: we had ADALL preceeding in this sample, seg as delta vs. ADALL 
     if (vcf_encountered_in_sample_(vb, CTX(FORMAT_ADALL))) 
         for (unsigned i=0; i < num_items; i++) 
-            seg_delta_vs_other (VB, item_ctxs[i], ECTX (con_FORMAT_ADALL.items[i].dict_id), NULL, item_lens[i], -1);
+            seg_delta_vs_other (VB, item_ctxs[i], ECTX (con_FORMAT_ADALL.items[i].dict_id), NULL, item_lens[i]);
 
     // case: no preceeding ADALL, since item 0 (depth of REF) is usually somewhat related to the overall sample depth,
     // and hence values within a sample are expected to be correlated - we store it transposed, and the other items - normally
@@ -321,7 +321,7 @@ static void vcf_seg_MB_items (VBlockVCFP vb, Context *ctx, unsigned num_items, C
 
         // if possible, seg even-numbered element delta vs the corresponding element in F2R1
         if (use_formula_even && !(i%2)) { 
-            seg_delta_vs_other (VB, item_ctxs[i], ECTX (con_FORMAT_F2R1.items[i/2].dict_id), NULL, item_lens[i], -1);
+            seg_delta_vs_other (VB, item_ctxs[i], ECTX (con_FORMAT_F2R1.items[i/2].dict_id), NULL, item_lens[i]);
             item_ctxs[i]->flags.store = STORE_INT; // consumed by the odd items (below)
         }
 
@@ -381,7 +381,7 @@ static inline WordIndex vcf_seg_FORMAT_PS (VBlockVCF *vb, Context *ctx, const ch
     if (str_get_int (cell, cell_len, &ps_value) && ps_value == ctx->last_value.i) // same as previous line
         return seg_by_ctx (VB, ((char []){ SNIP_SELF_DELTA, '0' }), 2, ctx, cell_len);
 
-    return seg_delta_vs_other (VB, ctx, CTX(VCF_POS), cell, cell_len, 1000);
+    return seg_delta_vs_other_do (VB, ctx, CTX(VCF_POS), cell, cell_len, 1000, cell_len);
 }
 
 //----------
@@ -392,11 +392,11 @@ static inline WordIndex vcf_seg_FORMAT_DP (VBlockVCF *vb, Context *ctx, const ch
 {
     // case - we have FORMAT/AD - calculate delta vs the sum of AD components
     if (vcf_has_value_in_sample_(vb, CTX(FORMAT_AD)))
-        return seg_delta_vs_other (VB, ctx, CTX(FORMAT_AD), cell, cell_len, -1);
+        return seg_delta_vs_other (VB, ctx, CTX(FORMAT_AD), cell, cell_len);
 
     // case: there is only one sample there is an INFO/DP too, we store a delta 
     else if (vcf_num_samples == 1 && vcf_has_value_in_sample_(vb, CTX(INFO_DP))) 
-        return seg_delta_vs_other (VB, ctx, CTX(INFO_DP), cell, cell_len, -1);
+        return seg_delta_vs_other (VB, ctx, CTX(INFO_DP), cell, cell_len);
 
     // case: no FORMAT/AD and no INFO/DP - store in transposed matrix
     else 
@@ -977,7 +977,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
         // case: MIN_DP - it is slightly smaller and usually equal to DP - we store MIN_DP as the delta DP-MIN_DP
         // note: the delta is vs. the DP field that preceeds MIN_DP - we take the DP as 0 there is no DP that preceeds
         else if (dict_id.num == _FORMAT_MIN_DP && vcf_has_value_in_sample (vb, _FORMAT_DP, &other_ctx)) 
-            seg_delta_vs_other (VB, ctx, other_ctx, sfs[i], sf_lens[i], -1);
+            seg_delta_vs_other (VB, ctx, other_ctx, sfs[i], sf_lens[i]);
 
         else if (dict_id.num == _FORMAT_AF) 
             vcf_seg_FORMAT_AF (vb, ctx, sfs[i], sf_lens[i]);

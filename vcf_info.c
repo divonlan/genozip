@@ -31,7 +31,7 @@ static bool vcf_seg_INFO_DP (VBlockVCF *vb, ContextP ctx_dp, STRp(value))
     // also tried delta vs DP4, but it made it worse
     Context *ctx_basecounts;
     if (ctx_has_value_in_line (vb, _INFO_BaseCounts, &ctx_basecounts)) {
-        seg_delta_vs_other (VB, ctx_dp, ctx_basecounts, value, value_len, -1);
+        seg_delta_vs_other (VB, ctx_dp, ctx_basecounts, value, value_len);
         return false; // caller needn't seg
     }
     else {
@@ -1242,7 +1242,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
         CALL (vcf_seg_INFO_AC (vb, ctx, value, value_len)); 
 
     else if (dnum == _INFO_MLEAC && ctx_has_value_in_line (vb, _INFO_AC, &other_ctx)) 
-        CALL (seg_delta_vs_other (VB, ctx, other_ctx, value, value_len, -1));
+        CALL (seg_delta_vs_other (VB, ctx, other_ctx, value, value_len));
 
     // ##INFO=<ID=AA,Number=1,Type=String,Description="Ancestral Allele">
     else if ((z_dual_coords  && ctx->luft_trans == VCF2VCF_ALLELE) || // if DVCF - apply to all fields (perhaps including AA) with RendAlg=ALLELE

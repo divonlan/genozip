@@ -469,9 +469,10 @@ bool seg_float_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsigne
     }
 }
 
-WordIndex seg_delta_vs_other (VBlock *vb, Context *ctx, Context *other_ctx, 
-                              const char *value, unsigned value_len, // if value==NULL, we use last_value.i (note: value_len must always be given)
-                              int64_t max_delta /* max abs value of delta - beyond that, seg as is, ignored if < 0 */)
+WordIndex seg_delta_vs_other_do (VBlock *vb, Context *ctx, Context *other_ctx, 
+                                 STRp(value), // if value==NULL, we use last_value.i
+                                 int64_t max_delta /* max abs value of delta - beyond that, seg as is, ignored if < 0 */,
+                                 unsigned add_bytes)
 {
     if (!other_ctx) goto fallback;
 
@@ -483,13 +484,12 @@ WordIndex seg_delta_vs_other (VBlock *vb, Context *ctx, Context *other_ctx,
     SNIP(100);
     seg_prepare_snip_other (SNIP_OTHER_DELTA, other_ctx->dict_id, true, (int32_t)delta, snip);
 
-    other_ctx->no_stons = true;
     other_ctx->flags.store = STORE_INT;
 
-    return seg_by_ctx (VB, snip, snip_len, ctx, value_len);
+    return seg_by_ctx (VB, snip, snip_len, ctx, add_bytes);
 
 fallback:
-    return value ? seg_by_ctx (VB, value, value_len, ctx, value_len) : seg_integer_do (vb, ctx->did_i, ctx->last_value.i, value_len);
+    return value ? seg_by_ctx (VB, value, value_len, ctx, add_bytes) : seg_integer_do (vb, ctx->did_i, ctx->last_value.i, add_bytes);
 }
 
 Container seg_initialize_container_array_do (DictId dict_id, bool type_1_items, bool comma_sep)

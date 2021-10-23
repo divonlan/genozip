@@ -66,7 +66,9 @@ extern void seg_add_to_local_fixed  (VBlockP vb, ContextP ctx, const void *data,
 extern void seg_add_to_local_uint8  (VBlockP vb, ContextP ctx, uint8_t  value, unsigned add_bytes);
 extern void seg_add_to_local_uint (VBlockP vb, ContextP ctx, uint32_t value, unsigned add_bytes);
 
-extern WordIndex seg_delta_vs_other (VBlockP vb, Context *ctx, Context *other_ctx, const char *value, unsigned value_len, int64_t max_delta);
+extern WordIndex seg_delta_vs_other_do (VBlockP vb, Context *ctx, Context *other_ctx, STRp(value), int64_t max_delta, unsigned add_bytes);
+static inline WordIndex seg_delta_vs_other (VBlockP vb, Context *ctx, Context *other_ctx, STRp(value))
+    { return seg_delta_vs_other_do (vb, ctx, other_ctx, STRa(value), -1, value_len); }
 
 extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, DidIType stats_conslidation_did_i, const char *value, int32_t value_len, char sep, char subarray_sep, bool use_integer_delta, bool store_int_in_local);
 
