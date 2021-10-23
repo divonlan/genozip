@@ -194,7 +194,7 @@ extern bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 extern bool sam_piz_read_one_vb (VBlockP vb, Section sl);
 extern void sam_reconstruct_vb ();
 extern CONTAINER_FILTER_FUNC (sam_piz_filter);
-extern void sam_reconstruct_seq (VBlockP vb, ContextP ctx, const char *unused, unsigned unused2);
+extern void sam_reconstruct_SEQ (VBlockP vb, ContextP ctx, const char *unused, unsigned unused2);
 extern void sam_set_FLAG_filter (const char *optarg);
 extern void sam_set_MAPQ_filter (const char *optarg);
 

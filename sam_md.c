@@ -233,7 +233,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_MD)
 
     ContextP sqbitmap_ctx = CTX(SAM_SQBITMAP);
     uint32_t save_next_local = sqbitmap_ctx->next_local;
-    sqbitmap_ctx->next_local = sqbitmap_ctx->last_value.i; // rewind back to beginning of the bits of this line (value stored by sam_reconstruct_seq)
+    sqbitmap_ctx->next_local = sqbitmap_ctx->last_value.i; // rewind back to beginning of the bits of this line (value stored by sam_reconstruct_SEQ)
 
     uint32_t count_match=0;
     for (uint32_t op_i=0; *cigar && *cigar != '\t' && *cigar != '\n'; op_i++) { 
@@ -253,7 +253,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_MD)
                 }
 
                 if (subcigar_len) {
-                    // case: no base in SEQ matched the reference - sam_reconstruct_seq set vb->range to NULL, so we set it here
+                    // case: no base in SEQ matched the reference - sam_reconstruct_SEQ set vb->range to NULL, so we set it here
                     if (!vb->range) {
                         vb->range = (RangeP)ref_piz_get_range (vb, gref, vb->last_int(SAM_POS), VB_SAM->ref_consumed);
                         ASSERTNOTNULL (vb->range);
@@ -262,7 +262,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_MD)
                     RECONSTRUCT_INT (count_match); // flush matches before reconstructing mismatch
                     count_match=0;
                     
-                    RECONSTRUCT1 (ref_base_by_pos (vb->range, pos)); // vb->range set in sam_reconstruct_seq
+                    RECONSTRUCT1 (ref_base_by_pos (vb->range, pos)); // vb->range set in sam_reconstruct_SEQ
                     subcigar_len--;
                     pos++;
                 }

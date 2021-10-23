@@ -221,6 +221,7 @@ void sam_cigar_seg_textual (VBlockSAM *vb, ZipDataLineSAM *dl, unsigned last_cig
 
     // case: we buddy non-trival CIGARs with MC:Z. We don't buddy eg "151M" bc this will add rather than reduce entropy.
     ZipDataLineSAM *buddy_dl = DATA_LINE (vb->buddy_line_i); // an invalid pointer if buddy_line_i is -1
+    bool seg_done=false;
 
     if (last_cigar_len > 4 && vb->buddy_line_i != -1 && segconf.has_MC && !segconf.running && 
         cigar_snip_len == 2 && // we don't buddy if CIGAR or SEQ are "*"
@@ -233,6 +234,12 @@ void sam_cigar_seg_textual (VBlockSAM *vb, ZipDataLineSAM *dl, unsigned last_cig
     else {
         memcpy (&cigar_snip[cigar_snip_len], vb->last_cigar, last_cigar_len);
         cigar_snip_len += last_cigar_len;
+
+        if (last_cigar_len > 7){
+            seg_add_to_local_text (VB, CTX(SAM_CIGAR), STRa(cigar_snip), last_cigar_len+1);
+            seg_simple_lookup (VB, CTX(SAM_CIGAR), 0);
+            seg_done = true;
+        }
     }
     
     // store the CIGAR in DataLine for use by a buddy MC:Z
@@ -241,7 +248,8 @@ void sam_cigar_seg_textual (VBlockSAM *vb, ZipDataLineSAM *dl, unsigned last_cig
 
     if (segconf.running) segconf.sam_cigar_len += last_cigar_len;
 
-    seg_by_did_i (VB, cigar_snip, cigar_snip_len, SAM_CIGAR, last_cigar_len+1); // +1 for \t
+    if (!seg_done)
+        seg_by_did_i (VB, STRa(cigar_snip), SAM_CIGAR, last_cigar_len+1); // +1 for \t
 
     COPY_TIMER(sam_cigar_seg);
 }
@@ -267,6 +275,8 @@ void sam_cigar_seg_binary (VBlockSAM *vb, ZipDataLineSAM *dl, uint32_t l_seq, ui
     
     // case: we buddy non-trival CIGARs with MC:Z. We don't buddy eg "151M" bc this will add rather than reduce entropy.
     ZipDataLineSAM *buddy_dl = DATA_LINE (vb->buddy_line_i); // an invalid pointer if buddy_line_i is -1
+    bool seg_done=false;
+    unsigned add_bytes = n_cigar_op * sizeof (uint32_t) /* cigar */ + sizeof (uint16_t) /* n_cigar_op */;
 
     if (vb->textual_cigar.len > 4 && vb->buddy_line_i != -1 && segconf.has_MC && !segconf.running && 
         buddy_dl->MC.snip_len == vb->textual_cigar.len && 
@@ -279,6 +289,12 @@ void sam_cigar_seg_binary (VBlockSAM *vb, ZipDataLineSAM *dl, uint32_t l_seq, ui
     else {
         memcpy (&cigar_snip[cigar_snip_len], vb->textual_cigar.data, vb->textual_cigar.len);
         cigar_snip_len += vb->textual_cigar.len;
+
+        if (vb->textual_cigar.len > 7) {
+            seg_add_to_local_text (VB, CTX(SAM_CIGAR), STRa(cigar_snip), add_bytes);
+            seg_simple_lookup (VB, CTX(SAM_CIGAR), 0);
+            seg_done = true;
+        }
     }
 
     // store a copy of the CIGAR in buddy_textual_cigars for use by a buddy MC:Z
@@ -289,8 +305,8 @@ void sam_cigar_seg_binary (VBlockSAM *vb, ZipDataLineSAM *dl, uint32_t l_seq, ui
 
     if (segconf.running) segconf.sam_cigar_len += cigar_snip_len;
 
-    seg_by_did_i (VB, cigar_snip, cigar_snip_len, SAM_CIGAR, 
-                  n_cigar_op * sizeof (uint32_t) /* cigar */ + sizeof (uint16_t) /* n_cigar_op */ );
+    if (!seg_done)
+        seg_by_did_i (VB, STRa(cigar_snip), SAM_CIGAR, add_bytes);
 
     COPY_TIMER(sam_cigar_seg);
 }
