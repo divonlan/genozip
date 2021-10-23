@@ -324,9 +324,6 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     sam_cigar_analyze (vb, vb->textual_cigar.data, vb->textual_cigar.len, &dl->seq_len);
     next_field += n_cigar_op * sizeof (uint32_t);
 
-    // TLEN - must be after sam_cigar_analyze
-    sam_seg_TLEN (vb, dl, 0, 0, (int64_t)tlen, CTX(SAM_PNEXT)->last_delta, dl->seq_len); // TLEN
-
     // Segment BIN after we've gathered bin, flags, pos and vb->ref_confumed (and before sam_seg_SEQ which ruins vb->ref_consumed)
     bam_seg_BIN (vb, dl, bin, this_pos);
 
@@ -368,6 +365,9 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     // OPTIONAL fields - up to MAX_FIELDS of them
     next_field = sam_seg_optional_all (vb, dl, next_field, 0,0,0, after);
     
+    // TLEN - must be after OPTIONAL as we might need data from MC:Z
+    sam_seg_TLEN (vb, dl, 0, 0, (int64_t)tlen, ref_id == next_ref_id); // TLEN
+
     buf_free (&vb->textual_cigar);
     buf_free (&vb->textual_seq);
 

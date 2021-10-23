@@ -90,90 +90,6 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_COPY_BUDDY_FLAG)
     return true; // new value
 }
 
-//--------------
-// TLEN
-//--------------
-
-// TLEN - 4 cases: 
-// 1. case: a non-zero value that is the negative of its mate in a sorted file - a COPY_BUDDY_TLEN special
-// 2. case: a non-zero value that is the negative of the previous line (usually a mate in a collated file) - a SNIP_DELTA & "-" (= value negation)
-// 3. case: tlen>0 and pnext_pos_delta>0 and seq_len>0 tlen is stored as SNIP_SPECIAL & tlen-pnext_pos_delta-seq_len
-// 4. otherwise: stored as is
-void sam_seg_TLEN (VBlockSAM *vb, ZipDataLineSAM *dl, 
-                         const char *tlen, unsigned tlen_len, // option 1
-                         int64_t tlen_value, // option 2
-                         PosType pnext_pos_delta, int32_t cigar_seq_len)
-{
-    Context *ctx = CTX(SAM_TLEN);
-
-    if (tlen) { // option 1
-        ASSSEG0 (tlen_len, tlen, "empty TLEN");
-
-        bool is_int = str_get_int (tlen, tlen_len, &tlen_value); // note: tlen_value remains 0 if not a valid integer
-        ASSSEG (is_int, tlen, "expecting TLEN to be an integer, but found \"%.*s\"", tlen_len, tlen);
-    }
-
-    unsigned add_bytes = IS_BAM ? sizeof (uint32_t) : tlen_len + 1;
-
-    // case 1: tlen is minus its buddy in a sorted file - mate is likely close but not necessarily adjacent
-    ZipDataLineSAM *buddy_dl = DATA_LINE (vb->buddy_line_i); // note: an invalid pointer if buddy_line_i is -1
-    if (segconf.sam_is_sorted && tlen_value && vb->buddy_line_i != -1 && buddy_dl->TLEN == -tlen_value) 
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_COPY_BUDDY_TLEN }, 2, ctx, add_bytes); // added 12.0.41
-
-    // case 2: tlen is minus previous tlen - usually adjacent mates in a collated file
-    else if (tlen_value && tlen_value == -ctx->last_value.i) 
-        seg_by_ctx (VB, (char[]){ SNIP_SELF_DELTA, '-' }, 2, ctx, add_bytes);
-    
-    // case 3:
-    else if (tlen_value > 0 && pnext_pos_delta > 0 && cigar_seq_len > 0) {
-        char tlen_by_calc[30] = { SNIP_SPECIAL, SAM_SPECIAL_TLEN };
-        unsigned tlen_by_calc_len = str_int (tlen_value - pnext_pos_delta - (int64_t)cigar_seq_len, &tlen_by_calc[2]);
-        seg_by_ctx (VB, tlen_by_calc, tlen_by_calc_len + 2, ctx, add_bytes);
-    }
-    
-    // case 4: tlen=ref_consumed (happens eg in pacbio)
-    else if (tlen_value == vb->ref_consumed) 
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_REF_CONSUMED }, 2, ctx, add_bytes);
-    
-    // case default: add as is (option 1)
-    else if (tlen)
-        seg_by_ctx (VB, tlen, tlen_len, ctx, add_bytes);
-
-    // case default: add as is (option 2)
-    else {
-        char snip[20];
-        unsigned snip_len = str_int (tlen_value, snip);
-        seg_by_ctx (VB, snip, snip_len, ctx, add_bytes);
-    }
-
-    ctx->last_value.i = tlen_value;
-    dl->TLEN = tlen_value;
-}
-
-SPECIAL_RECONSTRUCTOR (sam_piz_special_TLEN)
-{
-    ASSERT0 (snip_len, "snip_len=0");
-
-    int32_t tlen_by_calc = atoi (snip);
-    int32_t tlen_val = tlen_by_calc + CTX(SAM_PNEXT)->last_delta + vb->seq_len;
-
-    new_value->i = tlen_val;
-
-    if (reconstruct) RECONSTRUCT_INT (tlen_val);
-
-    return true; // new value
-}
-
-SPECIAL_RECONSTRUCTOR (sam_piz_special_COPY_BUDDY_TLEN)
-{
-    ASSPIZ0 (vb->buddy_line_i >= 0, "No buddy line is set for the current line");
-
-    new_value->i = -*ENT (int64_t, ctx->history, vb->buddy_line_i); // minus the buddy
-    if (reconstruct) RECONSTRUCT_INT (new_value->i);
-
-    return true; // new value
-}
-
 // -------------------------------------------------------------------------------------------------------------------------------------------
 // U2:Z "Phred probability of the 2nd call being wrong conditional on the best being wrong" (https://samtools.github.io/hts-specs/SAMtags.pdf)
 // -------------------------------------------------------------------------------------------------------------------------------------------
@@ -285,7 +201,7 @@ static bool sam_seg_0A_cigar_cb (VBlockP vb, ContextP ctx, STRp (cigar), uint32_
 {
     // complicated CIGARs, likely to be relatively uncommon, are better off in local - anything more than eg 112M39S 
     // note: we set no_stons=true in sam_seg_initialize_0X so we can use local for this rather than singletons
-    if (cigar_len > 7 && !flag.best) {
+    if (cigar_len > 7) {
         seg_add_to_local_text (vb, ctx, STRa(cigar), cigar_len);
         seg_simple_lookup (vb, ctx, 0);
     }

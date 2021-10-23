@@ -18,12 +18,12 @@ typedef struct {
 extern int32_t reconstruct_from_ctx_do (VBlockP vb, DidIType did_i, char sep, bool reconstruct, const char *func);
 #define reconstruct_from_ctx(vb,did_i,sep,reconstruct) reconstruct_from_ctx_do ((VBlockP)(vb),(did_i),(sep),(reconstruct), __FUNCTION__)
 
-extern void reconstruct_one_snip (VBlockP vb, ContextP ctx, WordIndex word_index, const char *snip, unsigned snip_len, bool reconstruct);
-extern ContextP reconstruct_get_other_ctx_from_snip (VBlockP vb, const char **snip, unsigned *snip_len);
+extern void reconstruct_one_snip (VBlockP vb, ContextP ctx, WordIndex word_index, STRp(snip), bool reconstruct);
+extern ContextP reconstruct_get_other_ctx_from_snip (VBlockP vb, pSTRp(snip));
 
-extern LastValueType reconstruct_peek (VBlockP vb, ContextP ctx, const char **txt, unsigned *txt_len);
-extern LastValueType reconstruct_peek__do (VBlockP vb, DictId dict_id, const char **txt, unsigned *txt_len);
-#define reconstruct_peek_(vb, dict_id, txt, txt_len) reconstruct_peek__do ((VBlockP)(vb), (DictId)(dict_id), (txt), (txt_len))
+extern LastValueType reconstruct_peek (VBlockP vb, ContextP ctx, pSTRp(txt));
+extern LastValueType reconstruct_peek_do (VBlockP vb, DictId dict_id, pSTRp(txt));
+#define reconstruct_peek_(vb, dict_id, txt, txt_len) reconstruct_peek_do ((VBlockP)(vb), (DictId)(dict_id), (txt), (txt_len))
 
 extern void reconstruct_set_buddy (VBlockP vb);
 extern bool reconstruct_from_buddy (VBlockP vb, ContextP ctx, STRp(snip), bool reconstruct, LastValueType *new_value);

@@ -11,6 +11,8 @@
 #define MIN_VBLOCK_MEMORY  1    // in MB
 #define MAX_VBLOCK_MEMORY  2048 
 
+typedef enum { TECH_UNKNOWN, TECH_ILLUM_7, TECH_ILLUM_5, TECH_PACBIO, TECH_454, TECH_BGI, TECH_IONTORR, TECH_HELICOS } SeqTech;
+
 // seg configuration set prior to starting to seg a file during segconfig_calculate or txtheader_zip_read_and_compress
 typedef struct {
 
@@ -25,6 +27,7 @@ typedef struct {
     bool sam_use_aligner;       // use of aligner is possible if its flag.aligner_available and there are no header contigs
     bool NM_is_integer;         // true if NM is integer, false if it binary
     bool has_MC, has_MD, has_MQ;// MC, MD, MQ field was detected in the data
+    bool has_TLEN_non_zero;
     enum { XA_NONE, XA_BWA, XA_IONTORRENT, XA_UNKNOWN } has_XA; // IonTorret and BWA have different XA:Z
     bool sam_is_collated;       // Every QNAME appears in two or more consecutive lines
     bool sam_is_sorted;         // every two consecutive lines that have the same RNAME, have non-decreasing POS
@@ -40,7 +43,9 @@ typedef struct {
     bool chain_mismatches_ref;  // Some contigs mismatch the reference files, so this chain file cannot be used with --chain
 
     // read name characteristics (SAM/BAM, KRAKEN and FASTQ)
-    unsigned qname_flavor;
+    unsigned qname_flavor;  
+    SeqTech tech;
+
 } SegConf;
 
 extern SegConf segconf;

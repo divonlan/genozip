@@ -295,6 +295,34 @@ void sam_cigar_seg_binary (VBlockSAM *vb, ZipDataLineSAM *dl, uint32_t l_seq, ui
     COPY_TIMER(sam_cigar_seg);
 }
 
+unsigned sam_cigar_get_MC_ref_consumed (STRp(mc))
+{
+    // get ref_and_seq_consumed
+    unsigned n=0;
+    unsigned ref_and_seq_consumed=0;
+    for (unsigned i=0; i < mc_len; i++) {
+
+        char c = mc[i];
+        char lookup = cigar_lookup_sam[(uint8_t)c];
+        if (!lookup) return 0; // invalid CIGAR - unrecognized character
+
+        lookup &= 0x0f; // remove validity bit
+
+        if (lookup == CIGAR_DIGIT) 
+            n = n*10 + (c - '0');
+        
+        else {
+            if (!n) return 0; // invalid CIGAR - no number before op
+
+            if ((lookup & CIGAR_CONSUMES_REFERENCE)) 
+                ref_and_seq_consumed += n;
+
+            n=0;
+        }
+    }
+    return ref_and_seq_consumed;
+}
+
 // MC:Z "CIGAR string for mate/next segment" (https://samtools.github.io/hts-specs/SAMtags.pdf)
 void sam_cigar_seg_MC (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(mc), unsigned add_bytes)
 {
@@ -309,10 +337,17 @@ void sam_cigar_seg_MC (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(mc), unsigned add
         buddy_dl->CIGAR.snip_len == mc_len && !memcmp (mc, ENT (char, *buddy_cigar_buf, buddy_dl->CIGAR.char_index), mc_len)) 
 
         seg_by_did_i (VB, STRa(MC_buddy_snip), OPTION_MC_Z, add_bytes); // copy MC from earlier-line buddy CIGAR
+    
+    else if (mc_len > 7) {
+        seg_add_to_local_text (VB, CTX(OPTION_MC_Z), STRa(mc), add_bytes);
+        seg_simple_lookup (VB, CTX(OPTION_MC_Z), 0);
+    }
     else
         seg_by_did_i (VB, STRa(mc), OPTION_MC_Z, add_bytes);    
 
     dl->MC = WORD_IN_TXT_DATA(mc); 
+
+    ctx_set_last_value (VB, CTX(OPTION_MC_Z), (LastValueType){ .i = sam_cigar_get_MC_ref_consumed (STRa(mc)) } );
 }
 
 //---------

@@ -570,7 +570,7 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
 // get reconstructed text without advancing the iterator or changing last_*. context may be already reconstructed or not.
 // Note: txt points into txt_data (past reconstructed or AFTERENT) - caller should copy it elsewhere
 LastValueType reconstruct_peek (VBlock *vb, Context *ctx, 
-                                const char **txt, unsigned *txt_len) // optional in / out
+                                pSTRp(txt)) // optional in / out
 {
     // case: already reconstructed 
     if (ctx->last_line_i == vb->line_i) {
@@ -602,7 +602,7 @@ LastValueType reconstruct_peek (VBlock *vb, Context *ctx,
     return last_value;
 }
 
-LastValueType reconstruct_peek__do (VBlockP vb, DictId dict_id, pSTRp(txt)) 
+LastValueType reconstruct_peek_do (VBlockP vb, DictId dict_id, pSTRp(txt)) 
 {
     Context *ctx = ECTX (dict_id); 
     ASSPIZ (ctx, "context doesn't exist for dict_id=%s", dis_dict_id (dict_id).s);

@@ -762,7 +762,9 @@ static inline void ctx_drop_all_the_same (VBlock *vb, Context *zctx, Context *vc
     
     if (!is_new_word && ENT (CtxNode, vctx->ol_nodes, node_index)->word_index.n > 0) NO_DROP ("existing word_index is not 0"); // old word - but not word_index=0
 
-    if (is_new_word && zctx->dict.len) NO_DROP ("new word_index is not 0"); // new word - but not the first in the dictionary so not word_index=0
+    if (is_new_word && 
+        zctx->dict.len && strcmp (zctx->dict.data, vctx->dict.data)) // if it is_new_word - b250 can still be droppable if this new word (the only word in vctx->dict) is the same as word_index_i=0 in zctx->dict, created independently by two VBs in parallel 
+        NO_DROP ("new word_index is not 0"); // new word - but not the first in the dictionary so not word_index=0
 
     STR(snip);
     ctx_get_vb_snip_ex (vctx, node_index, pSTRa(snip)); // get the the snip of the only b250 we have
@@ -792,7 +794,7 @@ static inline void ctx_drop_all_the_same (VBlock *vb, Context *zctx, Context *vc
 
 no_drop:
     if (flag.debug_generate) 
-        iprintf ("%s vb_i=%u is all_the_same but cannot b250 because %s\n", vctx->tag_name, vb->vblock_i, reason);
+        iprintf ("%s vb_i=%u is all_the_same but cannot drop b250 because %s\n", vctx->tag_name, vb->vblock_i, reason);
 }
 
 // ZIP only: this is called towards the end of compressing one vb - merging its dictionaries into the z_file 

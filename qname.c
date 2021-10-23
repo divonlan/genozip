@@ -209,6 +209,7 @@ typedef struct { STR(s); int32_t fixed_i; } FixedStr;
 
 typedef struct QnameFlavorStruct {
     char name[16], example[112];
+    SeqTech tech;                              // The sequencing technology used to generate this data
     bool fq_only;                              // this QF is only for FASTQ, not SAM/BAM/KRAKEN
     SmallContainer *con_template;              // container template - copied to con in qname_zip_initialize
     unsigned num_seps;                         // number of printable separator and prefix characters
@@ -225,25 +226,25 @@ typedef struct QnameFlavorStruct {
 } QnameFlavorStruct;
 
 static QnameFlavorStruct qf[] = { 
-/*  mate   name             example                                   fq con_template        #sp int_items      numeric_items   hex_itm ord1,2 rng len px_strs{str,str_len,fixed_i}                               */
+/*  mate   name             example                                   tech con_template        is_qf #sp int_items      numeric_items   hex_itm ord1,2 rng len px_strs{str,str_len,fixed_i}                               */
          { "Unknown"                                                                                                                                                                                               }, 
          { "Illumina-fastq","A00488:61:HMLGNDSXX:4:1101:4345:1000"
-           " 2:N:0:CTGAAGCT+ATAGAGGC",                                1, &con_illumina_7_fq, 7, {1,3,4,5,6,-1}, {-1},           {-1},   5,6,   -1,                                                                 },
-    {},  { "Illumina",      "A00488:61:HMLGNDSXX:4:1101:4345:1000",   0, &con_illumina_7,    6, {1,3,4,5,6,-1}, {-1},           {-1},   5,6,   -1,                                                                 },
-    {},  { "BGI-E",         "E100020409L1C001R0030000801",            0, &con_bgi_E,         4, {-1},           {0,1,2,3,4,-1}, {-1},   4,-1,  -1, 27, { {"E",1,0},  {"L",1,10},{"C",1,12},{"R",1,16},{"",0,20} }  },
-    {},  { "BGI-CL",        "CL100025298L1C002R050_244547",           0, &con_bgi_CL,        5, {-1},           {0,1,2,3,4,-1}, {-1},   4,-1,  -1, 0,  { {"CL",2,0}, {"L",1,11},{"C",1,13},{"R",1,17},{"_",1,21} } },
-    {},  { "IonTorrent",    "ZEWTM:10130:07001",                      0, &con_ion_torrent_3, 2, {-1},           {1,2,-1},       {-1},   -1,-1, -1, 17                                                              },
-    {},  { "Illumina-old#", "HWI-ST550_0201:3:1101:1626:2216#ACAGTG", 0, &con_illumina_5i,   5, {1,2,3,4,-1},   {-1},           {-1},   -1,-1, -1,                                                                 },
-    {},  { "Illumina-old",  "SOLEXA-1GA-1_4_FC20ENL:7:258:737:870",   0, &con_illumina_5,    4, {1,2,3,4,-1},   {-1},           {-1},   -1,-1, -1,                                                                 },
-    {},  { "Roche-454",     "000050_1712_0767",                       0, &con_roche_454,     2, {-1},           {0,1,2,-1},     {-1},   -1,-1, -1, 16, { {"",0,0}, {"_",1,6},{"_",1,11} }                          },
-    {},  { "Helicos",       "VHE-242383071011-15-1-0-2",              0, &con_helicos,       5, {2,3,4,5,-1},   {1,-1},         {-1},   -1,-1, -1                                                                  },
-         { "PacBio-3",      "56cdb76f_70722_4787",                    0, &con_pacbio_3,      2, {1,2,-1},       {-1},           {0,-1}, -1,-1, -1                                                                  },
+           " 2:N:0:CTGAAGCT+ATAGAGGC",                                TECH_ILLUM_7, 1, &con_illumina_7_fq, 7, {1,3,4,5,6,-1}, {-1},           {-1},   5,6,   -1,                                                                 },
+    {},  { "Illumina",      "A00488:61:HMLGNDSXX:4:1101:4345:1000",   TECH_ILLUM_7, 0, &con_illumina_7,    6, {1,3,4,5,6,-1}, {-1},           {-1},   5,6,   -1,                                                                 },
+    {},  { "BGI-E",         "E100020409L1C001R0030000801",            TECH_BGI,     0, &con_bgi_E,         4, {-1},           {0,1,2,3,4,-1}, {-1},   4,-1,  -1, 27, { {"E",1,0},  {"L",1,10},{"C",1,12},{"R",1,16},{"",0,20} }  },
+    {},  { "BGI-CL",        "CL100025298L1C002R050_244547",           TECH_BGI,     0, &con_bgi_CL,        5, {-1},           {0,1,2,3,4,-1}, {-1},   4,-1,  -1, 0,  { {"CL",2,0}, {"L",1,11},{"C",1,13},{"R",1,17},{"_",1,21} } },
+    {},  { "IonTorrent",    "ZEWTM:10130:07001",                      TECH_IONTORR, 0, &con_ion_torrent_3, 2, {-1},           {1,2,-1},       {-1},   -1,-1, -1, 17                                                              },
+    {},  { "Illumina-old#", "HWI-ST550_0201:3:1101:1626:2216#ACAGTG", TECH_ILLUM_5, 0, &con_illumina_5i,   5, {1,2,3,4,-1},   {-1},           {-1},   -1,-1, -1,                                                                 },
+    {},  { "Illumina-old",  "SOLEXA-1GA-1_4_FC20ENL:7:258:737:870",   TECH_ILLUM_5, 0, &con_illumina_5,    4, {1,2,3,4,-1},   {-1},           {-1},   -1,-1, -1,                                                                 },
+    {},  { "Roche-454",     "000050_1712_0767",                       TECH_454,     0, &con_roche_454,     2, {-1},           {0,1,2,-1},     {-1},   -1,-1, -1, 16, { {"",0,0}, {"_",1,6},{"_",1,11} }                          },
+    {},  { "Helicos",       "VHE-242383071011-15-1-0-2",              TECH_HELICOS, 0, &con_helicos,       5, {2,3,4,5,-1},   {1,-1},         {-1},   -1,-1, -1                                                                  },
+         { "PacBio-3",      "56cdb76f_70722_4787",                    TECH_PACBIO,  0, &con_pacbio_3,      2, {1,2,-1},       {-1},           {0,-1}, -1,-1, -1                                                                  },
          { "PacBio-Range",  "m130802_221257_00127_"
-           "c100560082550000001823094812221334_s1_p0/128361/872_4288",0, &con_pacbio_range,  4, {1,2,3,-1},     {-1},           {-1},   -1,-1, 3,  0,  { { "m",1,0} }                                              },
-         { "PacBio-Label",  "m64136_200621_234916/18/ccs",            0, &con_pacbio_label,  3, {1,-1},         {-1},           {-1},   -1,-1, -1, 0,  { { "m",1,0} }                                              },
-         { "PacBio-Plain",  "m64136_200621_234916/18",                0, &con_pacbio_plain,  2, {1,-1},         {-1},           {-1},   -1,-1, -1, 0,  { { "m",1,0} }                                              },
-    {},  { "NCBI-SRA",      "SRR001666.1",                            0, &con_ncbi_sra,      1, {2,-1},         {1,-1},         {-1},   2,-1,  -1,                                                                 },
-    {},  { "Genozip-opt",   "basic.1",                                1, &con_genozip_opt,   1, {1,-1},         {-1},           {-1},   1,-1,  -1,                                                                 },
+           "c100560082550000001823094812221334_s1_p0/128361/872_4288",TECH_PACBIO,  0, &con_pacbio_range,  4, {1,2,3,-1},     {-1},           {-1},   -1,-1, 3,  0,  { { "m",1,0} }                                              },
+         { "PacBio-Label",  "m64136_200621_234916/18/ccs",            TECH_PACBIO,  0, &con_pacbio_label,  3, {1,-1},         {-1},           {-1},   -1,-1, -1, 0,  { { "m",1,0} }                                              },
+         { "PacBio-Plain",  "m64136_200621_234916/18",                TECH_PACBIO,  0, &con_pacbio_plain,  2, {1,-1},         {-1},           {-1},   -1,-1, -1, 0,  { { "m",1,0} }                                              },
+    {},  { "NCBI-SRA",      "SRR001666.1",                            TECH_UNKNOWN, 0, &con_ncbi_sra,      1, {2,-1},         {1,-1},         {-1},   2,-1,  -1,                                                                 },
+    {},  { "Genozip-opt",   "basic.1",                                TECH_UNKNOWN, 1, &con_genozip_opt,   1, {1,-1},         {-1},           {-1},   1,-1,  -1,                                                                 },
 };
 
 #define NUM_QFs (sizeof(qf)/sizeof(qf[0]))
@@ -319,6 +320,8 @@ void qname_zip_initialize (DictId qname_dict_id)
 
     // prepare copy_qname snip - every time, as container_did_i changes between data types
     seg_prepare_snip_other (SNIP_COPY, qname_dict_id, false, 0, copy_qname); // QNAME dict_id is the same for SAM, FASTQ, KRAKEN
+
+    segconf.tech = TECH_UNKNOWN; // initialize
 }
 
 void qname_seg_initialize (VBlockP vb, DidIType qname_did_i)
@@ -390,6 +393,7 @@ void qname_segconf_discover_flavor (VBlockP vb, DidIType qname_did_i, STRp(qname
     for (unsigned qf_i=1; qf_i < NUM_QFs; qf_i++) 
         if ((VB_DT(DT_FASTQ) || !qf[qf_i].fq_only) && qname_is_flavor (qname, qname_len, &qf[qf_i])) {
             segconf.qname_flavor = qf_i;
+            segconf.tech = qf[qf_i].tech;
             qname_seg_initialize (vb, qname_did_i); // so the rest of segconf.running can seg fast using the discovered container
             break;
         }

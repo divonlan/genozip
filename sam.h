@@ -216,27 +216,28 @@ extern unsigned sam_vb_size (DataType dt);
 extern unsigned sam_vb_zip_dl_size (void);
 
 // Special - used for SAM & BAM
-#define SAM_SPECIAL { sam_cigar_special_CIGAR, sam_piz_special_TLEN, sam_piz_special_BD_BI, sam_piz_special_SEQ_LEN, \
+#define SAM_SPECIAL { sam_cigar_special_CIGAR, sam_piz_special_TLEN_old, sam_piz_special_BD_BI, sam_piz_special_SEQ_LEN, \
                       sam_piz_special_MD_old, bam_piz_special_FLOAT, bam_piz_special_BIN, bam_piz_special_NM,   \
                       sam_piz_special_MD, sam_piz_special_REF_CONSUMED, \
-                      sam_piz_special_PNEXT_IS_PREV_POS, sam_piz_special_COPY_BUDDY_FLAG, sam_piz_special_COPY_BUDDY_TLEN, \
-                      sam_piz_special_COPY_BUDDY_MC, sam_piz_special_CONSUME_MC_Z }
-SPECIAL (SAM, 0,  CIGAR,             sam_cigar_special_CIGAR);
-SPECIAL (SAM, 1,  TLEN,              sam_piz_special_TLEN);
-SPECIAL (SAM, 2,  BDBI,              sam_piz_special_BD_BI);
-SPECIAL (SAM, 3,  SEQ_LEN,           sam_piz_special_SEQ_LEN);           // Reconstructs seq_len. Note: called "AS" until 12.0.37 and used to reconstruct AS:i
-SPECIAL (SAM, 4,  MD_old,            sam_piz_special_MD_old);            // used in files compressed with Genozip up to 12.0.36
-SPECIAL (SAM, 5,  FLOAT,             bam_piz_special_FLOAT);             // used in BAM to represent float optional values
-SPECIAL (SAM, 6,  BIN,               bam_piz_special_BIN);   
-SPECIAL (SAM, 7,  NM,                bam_piz_special_NM);                // introduced 12.0.37
-SPECIAL (SAM, 8,  MD,                sam_piz_special_MD);                // introduced 12.0.37
-SPECIAL (SAM, 9,  REF_CONSUMED,      sam_piz_special_REF_CONSUMED);      // introduced 12.0.41: Reconstructs ref_consumed
-SPECIAL (SAM, 10, PNEXT_IS_PREV_POS, sam_piz_special_PNEXT_IS_PREV_POS); // introduced 12.0.41
-SPECIAL (SAM, 11, COPY_BUDDY_FLAG,   sam_piz_special_COPY_BUDDY_FLAG);   // introduced 12.0.41
-SPECIAL (SAM, 12, COPY_BUDDY_TLEN,   sam_piz_special_COPY_BUDDY_TLEN);   // introduced 12.0.41
-SPECIAL (SAM, 13, COPY_BUDDY_MC,     sam_piz_special_COPY_BUDDY_MC);     // introduced 12.0.41
-SPECIAL (SAM, 14, CONSUME_MC_Z,      sam_piz_special_CONSUME_MC_Z);      // introduced 12.0.41
-#define NUM_SAM_SPECIAL 15
+                      sam_piz_special_PNEXT_IS_PREV_POS, sam_piz_special_COPY_BUDDY_FLAG, sam_piz_special_COPY_BUDDY_TLEN_old, \
+                      sam_piz_special_COPY_BUDDY_MC, sam_piz_special_CONSUME_MC_Z, sam_piz_special_TLEN }
+SPECIAL (SAM, 0,  CIGAR,               sam_cigar_special_CIGAR);
+SPECIAL (SAM, 1,  TLEN_old,            sam_piz_special_TLEN_old);            // used for files compressed up to 12.0.42
+SPECIAL (SAM, 2,  BDBI,                sam_piz_special_BD_BI);
+SPECIAL (SAM, 3,  SEQ_LEN,             sam_piz_special_SEQ_LEN);             // Reconstructs seq_len. Note: called "AS" until 12.0.37 and used to reconstruct AS:i
+SPECIAL (SAM, 4,  MD_old,              sam_piz_special_MD_old);              // used in files compressed with Genozip up to 12.0.36
+SPECIAL (SAM, 5,  FLOAT,               bam_piz_special_FLOAT);               // used in BAM to represent float optional values
+SPECIAL (SAM, 6,  BIN,                 bam_piz_special_BIN);   
+SPECIAL (SAM, 7,  NM,                  bam_piz_special_NM);                  // introduced 12.0.37
+SPECIAL (SAM, 8,  MD,                  sam_piz_special_MD);                  // introduced 12.0.37
+SPECIAL (SAM, 9,  REF_CONSUMED,        sam_piz_special_REF_CONSUMED);        // introduced 12.0.41: Reconstructs ref_consumed
+SPECIAL (SAM, 10, PNEXT_IS_PREV_POS,   sam_piz_special_PNEXT_IS_PREV_POS);   // introduced 12.0.41
+SPECIAL (SAM, 11, COPY_BUDDY_FLAG,     sam_piz_special_COPY_BUDDY_FLAG);     // introduced 12.0.41
+SPECIAL (SAM, 12, COPY_BUDDY_TLEN_old, sam_piz_special_COPY_BUDDY_TLEN_old); // Used in 12.0.41 and 12.0.42
+SPECIAL (SAM, 13, COPY_BUDDY_MC,       sam_piz_special_COPY_BUDDY_MC);       // introduced 12.0.41
+SPECIAL (SAM, 14, CONSUME_MC_Z,        sam_piz_special_CONSUME_MC_Z);        // introduced 12.0.41
+SPECIAL (SAM, 15, TLEN,                sam_piz_special_TLEN);                // introduced v13
+#define NUM_SAM_SPECIAL 16
 
 #define SAM_LOCAL_GET_LINE_CALLBACKS                      \
     { DT_SAM,  _OPTION_BD_BI,       sam_zip_BD_BI      }, \

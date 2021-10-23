@@ -21,18 +21,18 @@
                              : (z_file->data_type==DT_SAM && z_file->z_flags.txt_is_bin))
 
 // as defined in https://samtools.github.io/hts-specs/SAMv1.pdf 1.4.2
-#define SAM_FLAG_MULTI_SEGMENTS 0x0001
-#define SAM_FLAG_IS_ALIGNED     0x0002
-#define SAM_FLAG_UNMAPPED       0x0004
-#define SAM_FLAG_NEXT_UNMAPPED  0x0008
-#define SAM_FLAG_REV_COMP       0x0010
-#define SAM_FLAG_NEXT_REV_COMP  0x0020
-#define SAM_FLAG_IS_FIRST       0x0040
-#define SAM_FLAG_IS_LAST        0x0080
-#define SAM_FLAG_SECONDARY      0x0100
-#define SAM_FLAG_FAILED_FILTERS 0x0200
-#define SAM_FLAG_DUPLICATE      0x0400
-#define SAM_FLAG_SUPPLEMENTARY  0x0800
+#define SAM_FLAG_MULTI_SEGMENTS 0x0001 // 1
+#define SAM_FLAG_IS_ALIGNED     0x0002 // 2
+#define SAM_FLAG_UNMAPPED       0x0004 // 4
+#define SAM_FLAG_NEXT_UNMAPPED  0x0008 // 8
+#define SAM_FLAG_REV_COMP       0x0010 // 16
+#define SAM_FLAG_NEXT_REV_COMP  0x0020 // 32
+#define SAM_FLAG_IS_FIRST       0x0040 // 64
+#define SAM_FLAG_IS_LAST        0x0080 // 128
+#define SAM_FLAG_SECONDARY      0x0100 // 256
+#define SAM_FLAG_FAILED_FILTERS 0x0200 // 512
+#define SAM_FLAG_DUPLICATE      0x0400 // 1024
+#define SAM_FLAG_SUPPLEMENTARY  0x0800 // 2048
 #define SAM_MAX_FLAG            0x0FFF
 
 #pragma pack(1) 
@@ -64,7 +64,7 @@ typedef union {
 typedef struct {
     CtxWord QUAL, U2, BD_BI[2];    // coordinates in txt_data 
     CtxWord QNAME, RG, CIGAR, MC;  // coordinates in txt_data for buddy segging (except CIGAR in BAM - points instead into vb->buddy_textual_cigars)
-    PosType POS, PNEXT, TLEN;
+    PosType POS, PNEXT;
     int64_t MAPQ, MQ;
     SamFlags FLAG;
     uint32_t seq_len;              // actual sequence length determined from any or or of: CIGAR, SEQ, QUAL. If more than one contains the length, they must all agree
@@ -146,7 +146,7 @@ extern void sam_seg_RNAME_RNEXT (VBlockP vb, DidIType did_i, STRp (chrom), unsig
 extern PosType sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pos_str)/* option 1 */, PosType pos/* option 2 */, WordIndex prev_line_chrom, PosType prev_line_pos, unsigned add_bytes);
 extern void sam_seg_MAPQ (VBlockP vb, ZipDataLineSAM *dl, STRp(mapq_str), uint8_t mapq, unsigned add_bytes);
 extern void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pnext_str)/* option 1 */, PosType pnext/* option 2 */, PosType prev_line_pos, unsigned add_bytes);
-extern void sam_seg_TLEN (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(tlen), int64_t tlen_value, PosType pnext_pos_delta, int32_t cigar_seq_len);
+extern void sam_seg_TLEN (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(tlen), int64_t tlen_value, bool is_rname_rnext_same);
 extern void sam_seg_QUAL (VBlockSAM *vb, ZipDataLineSAM *dl, const char *qual, uint32_t qual_data_len, unsigned add_bytes);
 extern void sam_seg_SEQ (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), PosType pos, const char *cigar, uint32_t ref_consumed, uint32_t ref_and_seq_consumed, unsigned recursion_level, uint32_t level_0_seq_len, const char *level_0_cigar, unsigned add_bytes);
 extern const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char *next_field, int32_t len, bool *has_13, char separator, const char *after_field);
@@ -165,6 +165,7 @@ extern void sam_cigar_seg_binary (VBlockSAM *vb, ZipDataLineSAM *dl, uint32_t l_
 extern void sam_cigar_seg_MC (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(mc), unsigned add_bytes);
 extern bool sam_cigar_reverse (char *dst, STRp(cigar));
 extern bool sam_cigar_is_valid (STRp(cigar));
+extern unsigned sam_cigar_get_MC_ref_consumed (STRp(mc));
 
 // ----------
 // MD:Z stuff

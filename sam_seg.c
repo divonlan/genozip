@@ -161,7 +161,6 @@ void sam_seg_initialize (VBlock *vb)
         CTX(SAM_FLAG   )->flags.store_per_line = true;
         CTX(SAM_POS    )->flags.store_per_line = true;
         CTX(SAM_PNEXT  )->flags.store_per_line = true;
-        CTX(SAM_TLEN   )->flags.store_per_line = true;
         CTX(SAM_CIGAR  )->flags.store_per_line = true;
         CTX(OPTION_MC_Z)->flags.store_per_line = true;
         CTX(SAM_MAPQ   )->flags.store_per_line = true;
@@ -170,16 +169,12 @@ void sam_seg_initialize (VBlock *vb)
 
     if (segconf.sam_buddy_RG)
         CTX(OPTION_RG_Z)->flags.store_per_line = true;
-    
-    CTX(SAM_TOPLEVEL)->no_stons = true; // keep in b250 so it can be eliminated as all_the_same
-    CTX(SAM_TOP2BAM)->no_stons  = true;
-    CTX(SAM_TOP2FQ)->no_stons   = true;
-    CTX(SAM_TOP2FQEX)->no_stons = true;
-    CTX(OPTION_RG_Z)->no_stons  = true;
+
+    CTX(OPTION_MC_Z)->no_stons = true; // we're offloading to local ourselves
 
     CTX(OPTION_BI_Z)->no_stons    = CTX(OPTION_BD_Z)->no_stons = true; // we can't use local for singletons in BD or BI as next_local is used by sam_piz_special_BD_BI to point into BD_BI
     CTX(OPTION_BI_Z)->st_did_i    = CTX(OPTION_BD_Z)->st_did_i = OPTION_BD_BI; 
-    CTX(OPTION_BD_BI)->ltype    = LT_SEQUENCE;
+    CTX(OPTION_BD_BI)->ltype      = LT_SEQUENCE;
     CTX(OPTION_NM_i)->flags.store = STORE_INT; // since v12.0.36
     CTX(OPTION_AS_i)->flags.store = STORE_INT; // since v12.0.37
     CTX(OPTION_MQ_i)->flags.store = STORE_INT; // since v13
@@ -283,7 +278,7 @@ void sam_seg_finalize (VBlockP vb)
                           { .dict_id = { _SAM_PNEXT    }, .separator = { CI_TRANS_NOR | CI_TRANS_MOVE, 4 }, SAM2BAM_POS      }, // Translate - output little endian POS-1
                           { .dict_id = { _SAM_QNAME    }, .separator = { CI_TRANS_NUL                    }                   }, // normal 
                           { .dict_id = { _SAM_CIGAR    }, .separator = ""                                                    }, // handle in special reconstructor - translate textual to BAM CIGAR format + reconstruct l_read_name, n_cigar_op, l_seq
-                          { .dict_id = { _SAM_TLEN     }, .separator = { CI_TRANS_NOR                    }, SAM2BAM_TLEN     }, // must be after CIGAR bc sam_piz_special_TLEN needs vb->seq_num
+                          { .dict_id = { _SAM_TLEN     }, .separator = { CI_TRANS_NOR                    }, SAM2BAM_TLEN     }, // must be after CIGAR bc sam_piz_special_TLEN_old needs vb->seq_num
                           { .dict_id = { _SAM_SQBITMAP }, .separator = "",                                  SAM2BAM_SEQ      }, // Translate - textual format to BAM format
                           { .dict_id = { _SAM_QUAL     }, .separator = "",                                  SAM2BAM_QUAL     }, // Translate - textual format to BAM format, set block_size
                           { .dict_id = { _SAM_OPTIONAL }, .separator = { CI_TRANS_NOR                    }                   }, // up to v11, this had the SAM2BAM_OPTIONAL translator
@@ -754,7 +749,7 @@ static const char *sam_seg_get_kraken (VBlockSAM *vb, const char *next_field, bo
 
 
 static const char *sam_get_one_optional (VBlockSAM *vb, const char *next_field, int32_t len, char *separator_p, bool *has_13, 
-                                         const char **tag, char *type, const char **value, unsigned *value_len) // out
+                                         const char **tag, char *type, pSTRp(value)) // out
 {
     unsigned field_len;
     const char *field_start;
@@ -1079,7 +1074,6 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     sam_seg_PNEXT (vb, dl, STRdid (SAM_PNEXT), 0, prev_line_pos, SAM_PNEXT_len+1);
 
     GET_NEXT_ITEM (SAM_TLEN);
-    sam_seg_TLEN (vb, dl, STRdid(SAM_TLEN), 0, CTX(SAM_PNEXT)->last_delta, dl->seq_len);
 
     // we search forward for MD:Z now, as we will need it for SEQ if it exists
     if (segconf.has_MD && !segconf.running) {
@@ -1109,6 +1103,12 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
 
     // OPTIONAL fields - up to MAX_FIELDS of them
     next_field = sam_seg_optional_all (vb, dl, next_field, len, has_13, separator, 0);
+
+    // finally, we can seg TLEN now, after MC:Z, if it exists
+    bool is_rname_rnext_same = (SAM_RNEXT_len==1 && *SAM_RNEXT_str=='=') || 
+                               (SAM_RNEXT_len==SAM_RNAME_len && !memcmp (SAM_RNEXT_str, SAM_RNAME_str, SAM_RNAME_len));
+
+    sam_seg_TLEN (vb, dl, STRdid(SAM_TLEN), 0, is_rname_rnext_same);
 
     SEG_EOL (SAM_EOL, false); /* last field accounted for \n */
 

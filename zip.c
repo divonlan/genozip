@@ -202,7 +202,7 @@ static void zip_generate_b250 (VBlock *vb, Context *ctx)
 
     COPY_TIMER (zip_generate_b250);
 }
-\\
+
 static void zip_resize_local (VBlock *vb, Context *ctx)
 {
     ARRAY (uint32_t, src, ctx->local);
