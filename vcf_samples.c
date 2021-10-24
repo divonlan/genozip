@@ -75,8 +75,8 @@ void vcf_samples_zip_initialize (void)
 
     for (unsigned i=0; i < MAX_ARRAY_ITEMS; i++) {
         vcf_seg_prepare_minus_snip (con_FORMAT_AD.items[i].dict_id, con_FORMAT_F1R2.items[i].dict_id, f2r1_snips[i], &f2r1_snip_lens[i]);
-        vcf_seg_prepare_minus_snip (con_FORMAT_AD.items[i].dict_id, con_FORMAT_ADR.items[i].dict_id,  adr_snips[i],  &adr_snip_lens[i]);
-        vcf_seg_prepare_minus_snip (con_FORMAT_AD.items[i].dict_id, con_FORMAT_ADF.items[i].dict_id,  adf_snips[i],  &adf_snip_lens[i]);
+        vcf_seg_prepare_minus_snip (con_FORMAT_AD.items[i].dict_id, con_FORMAT_ADF.items[i].dict_id,  adr_snips[i],  &adr_snip_lens[i]);
+        vcf_seg_prepare_minus_snip (con_FORMAT_AD.items[i].dict_id, con_FORMAT_ADR.items[i].dict_id,  adf_snips[i],  &adf_snip_lens[i]);
     }
 
     seg_prepare_snip_other (SNIP_COPY, _INFO_AF, 0, 0, af_snip);
@@ -225,7 +225,7 @@ static void vcf_seg_AD_complement_items (VBlockVCFP vb, Context *ctx, unsigned n
 
         // case: the formula doesn't work for this item - seg a normal snip
         else
-            seg_by_ctx (VB, items[i], item_lens[i], item_ctxs[i], item_lens[i]);
+            seg_by_ctx (VB, STRi(item,i), item_ctxs[i], item_lens[i]);
     }
 }
 
@@ -992,10 +992,10 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
             vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_ADALL, sfs[i], sf_lens[i], STORE_INT, vcf_seg_ADALL_items);
 
         else if (dict_id.num == _FORMAT_ADF) 
-            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_ADF, sfs[i], sf_lens[i], STORE_NONE, vcf_seg_ADF_items);
+            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_ADF, sfs[i], sf_lens[i], STORE_INT, vcf_seg_ADF_items);
 
         else if (dict_id.num == _FORMAT_ADR) 
-            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_ADR, sfs[i], sf_lens[i], STORE_NONE, vcf_seg_ADR_items);
+            vcf_seg_FORMAT_A_R_G (vb, ctx, con_FORMAT_ADR, sfs[i], sf_lens[i], STORE_INT, vcf_seg_ADR_items);
 
         // ##FORMAT=<ID=F1R2,Number=R,Type=Integer,Description="Count of reads in F1R2 pair orientation supporting each allele">
         else if (dict_id.num == _FORMAT_F1R2) 
