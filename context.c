@@ -634,20 +634,20 @@ void ctx_populate_zf_ctx_from_contigs (Reference ref, DidIType dst_did_i, ConstC
 // find the z_file context that corresponds to dict_id. It could be possibly a different did_i
 // than in the vb - in case this dict_id is new to this vb, but another vb already inserted
 // it to z_file
-static Context *ctx_get_zf_ctx (DictId dict_id)
+static Context *ctx_get_zctx (DictId dict_id, bool check_predefined)
 {
     DidIType z_num_contexts = __atomic_load_n (&z_file->num_contexts, __ATOMIC_RELAXED);
 
-    for (DidIType did_i=0; did_i < z_num_contexts; did_i++)
-        if (dict_id.num == ZCTX(did_i)->dict_id.num) 
-            return ZCTX(did_i);
+    for (ContextP zctx=ZCTX(check_predefined ? 0 : DTFZ(num_fields)); zctx < ZCTX(z_num_contexts); zctx++)
+        if (dict_id.num == zctx->dict_id.num) 
+            return zctx;
 
     return NULL;
 }
 
-static inline Context *ctx_get_zf_ctx_from_vctx (ConstContextP vctx)
+static inline Context *ctx_get_zctx_from_vctx (ConstContextP vctx)
 {
-    return vctx->did_i < DTFZ(num_fields) ? ZCTX(vctx->did_i) : ctx_get_zf_ctx (vctx->dict_id);
+    return vctx->did_i < DTFZ(num_fields) ? ZCTX(vctx->did_i) : ctx_get_zctx (vctx->dict_id, false);
 }
 
 // ZIP only: called by merging VBs to add a new dict to z_file - copying some stuff from vctx
@@ -659,7 +659,7 @@ static Context *ctx_add_new_zf_ctx (VBlock *vb, const Context *vctx)
     mutex_lock (z_file->dicts_mutex);
 
     // check if another thread raced and created this dict before us
-    Context *zctx = ctx_get_zf_ctx_from_vctx (vctx);
+    Context *zctx = ctx_get_zctx_from_vctx (vctx);
     if (zctx) goto finish;
 
     ASSERT (z_file->num_contexts+1 < MAX_DICTS, // load num_contexts - this time with mutex protection - it could have changed
@@ -698,7 +698,7 @@ ContextP ctx_add_new_zf_ctx_from_txtheader (const char *tag_name, unsigned tag_n
     mutex_lock (z_file->dicts_mutex); // note: mutex needed bc VBs of a previous component might still be merging
 
     // possibly a tag is duplicate in the header, OR two tag names map to the same dict_id
-    Context *zctx = ctx_get_zf_ctx (dict_id);
+    Context *zctx = ctx_get_zctx (dict_id, true);
     if (zctx) {
         zctx = NULL; // not new
         goto finish;
@@ -727,20 +727,16 @@ finish:
     return zctx; // NULL if not new
 }
 
+// update zctx with codec as it is assigned - don't wait for merge, to increase the chance that subsequent
+// VBs can get this codec and don't need to test for themselves.
 void ctx_commit_codec_to_zf_ctx (VBlock *vb, Context *vctx, bool is_lcodec)
 {
-    Context *zctx  = ctx_get_zf_ctx_from_vctx (vctx);
+    Context *zctx  = ctx_get_zctx_from_vctx (vctx);
     if (!zctx) zctx = ctx_add_new_zf_ctx (vb, vctx); // this context doesn't exist yet in z_file, because no VB with it has merged yet. create it now.
 
-    { START_TIMER; 
-      mutex_lock (zctx->mutex);
-      COPY_TIMER_VB (vb, lock_mutex_zf_ctx);  
-    }
-
+    // note: no need to mutex_lock zctx - these are only used for cloning to vctx, so the then-current one wins
     if (is_lcodec) zctx->lcodec = vctx->lcodec;
     else           zctx->bcodec = vctx->bcodec;
-
-    mutex_unlock (zctx->mutex);
 }
 
 static inline void ctx_drop_all_the_same (VBlock *vb, Context *zctx, Context *vctx)
@@ -800,20 +796,15 @@ no_drop:
 // ZIP only: this is called towards the end of compressing one vb - merging its dictionaries into the z_file 
 // each dictionary is protected by its own mutex, and there is one z_file mutex protecting num_dicts.
 // we are careful never to hold two muteces at the same time to avoid deadlocks
-static void ctx_merge_in_one_vctx (VBlock *vb, DidIType did_i)
+static bool ctx_merge_in_one_vctx (VBlock *vb, ContextP vctx)
 {
-    Context *vctx = CTX(did_i);
-
     // get the ctx or create a new one. note: ctx_add_new_zf_ctx() must be called before mutex_lock() because it locks the z_file mutex (avoid a deadlock)
-    Context *zctx  = ctx_get_zf_ctx_from_vctx (vctx);
+    Context *zctx  = ctx_get_zctx_from_vctx (vctx);
     zctx = ctx_add_new_zf_ctx (vb, vctx);
 
-    { START_TIMER; 
-      mutex_lock (zctx->mutex);
-      COPY_TIMER_VB (vb, lock_mutex_zf_ctx);  
-    }
+    if (!mutex_trylock (zctx->mutex)) 
+        return false; // zctx is currently locked by another VB 
 
-    START_TIMER; // note: careful not to count time spent waiting for the mutex
     //iprintf ( ("Merging dict_id=%.8s into z_file vb_i=%u vb_did_i=%u z_did_i=%u\n", dis_dict_id (vctx->dict_id).s, vb->vblock_i, did_i, z_did_i);
 
     ctx_drop_all_the_same (vb, zctx, vctx); // drop b250 and maybe also dict, if warranted
@@ -833,7 +824,7 @@ static void ctx_merge_in_one_vctx (VBlock *vb, DidIType did_i)
         zctx->txt_len += vctx->txt_len; // for stats
 
     if (vctx->st_did_i != DID_I_NONE && zctx->st_did_i == DID_I_NONE) {
-        Context *st_ctx = ctx_get_zf_ctx_from_vctx (CTX(vctx->st_did_i));
+        Context *st_ctx = ctx_get_zctx_from_vctx (CTX(vctx->st_did_i));
         if (st_ctx) zctx->st_did_i = st_ctx->did_i; // st_did_i is not necessarily the same for vb and zf
     }
 
@@ -878,7 +869,7 @@ static void ctx_merge_in_one_vctx (VBlock *vb, DidIType did_i)
             vb_node->word_index = zf_node->word_index = base250_encode (zf_node_index);
 
             // note: chrom2ref_map is protected by ZCTX[CHROM]->mutex
-            if (chrom_2ref_seg_is_needed(did_i)) 
+            if (chrom_2ref_seg_is_needed(vctx->did_i)) 
                 *ENT (WordIndex, z_file->chrom2ref_map, zf_node_index) = *ENT (WordIndex, vb->chrom2ref_map, i);
 
         } else 
@@ -893,8 +884,8 @@ finish:
         for (uint64_t i=0; i < ol_len; i++) 
             *ENT (int64_t, zctx->counts, i) += *ENT (int64_t, vctx->counts, i);
 
-    COPY_TIMER_VB (vb, ctx_merge_in_one_vctx)
     mutex_unlock (zctx->mutex);
+    return true; // merge was done
 }
 
 // ZIP only: merge new words added in this vb into the z_file.contexts, and compresses dictionaries.
@@ -902,9 +893,22 @@ void ctx_merge_in_vb_ctx (VBlock *vb)
 {
     START_TIMER;
     
-    // merge all contexts
-    for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) 
-        ctx_merge_in_one_vctx (vb, did_i);
+    // merge all contexts 
+    bool all_merged=false;
+    while (!all_merged) {
+
+        all_merged=true; // unless proven otherwise
+        bool any_merged=false;
+        for (ContextP vctx=CTX(0); vctx < CTX(vb->num_contexts); vctx++) 
+            if (!vctx->dict_merged) {
+                vctx->dict_merged = ctx_merge_in_one_vctx (vb, vctx); // false if zctx is locked by another VB
+                all_merged &= vctx->dict_merged;
+                any_merged |= vctx->dict_merged;
+            }
+
+        // case: couldn't merge any - perhaps the one large final vctx is busy - sleep a bit rather than busy-wait
+        if (!any_merged && !all_merged) usleep (100); 
+    }
 
     // note: z_file->num_contexts might be larger than vb->num_contexts at this point, for example:
     // vb_i=1 started, z_file is empty, created 20 contexts
@@ -921,8 +925,8 @@ void ctx_add_compressor_time_to_zf_ctx (VBlockP vb)
     for (DidIType vb_did_i=0; vb_did_i < vb->num_contexts; vb_did_i++) {
         ContextP vctx = CTX(vb_did_i); 
         if (vctx->compressor_time) {
-            ContextP zctx = vctx->st_did_i != DID_I_NONE ? ctx_get_zf_ctx_from_vctx (CTX(vctx->st_did_i)) // we accumulate at stats parent context if there is one
-                                                         : ctx_get_zf_ctx_from_vctx (vctx);
+            ContextP zctx = vctx->st_did_i != DID_I_NONE ? ctx_get_zctx_from_vctx (CTX(vctx->st_did_i)) // we accumulate at stats parent context if there is one
+                                                         : ctx_get_zctx_from_vctx (vctx);
             zctx->compressor_time += vctx->compressor_time;
         }
     }
@@ -1004,7 +1008,7 @@ void ctx_initialize_predefined_ctxs (Context *contexts /* an array */,
             for (uint32_t alias_i=0; alias_i < dict_id_num_aliases; alias_i++)
                 if (dict_id.num == dict_id_aliases[alias_i].alias.num) 
                     // note: all alias destinations that ever existed previous versions of Genozip must be defined in #pragma GENDICT for this to work
-                    dst_ctx = ctx_get_zf_ctx (dict_id_aliases[alias_i].dst); 
+                    dst_ctx = ctx_get_zctx (dict_id_aliases[alias_i].dst, true); 
 
         if (!dst_ctx) // normal field, not an alias
             ctx_initialize_ctx (&contexts[did_i], did_i, dict_id, dict_id_to_did_i_map, 
@@ -1171,13 +1175,11 @@ void ctx_sort_dictionaries_vb_1(VBlock *vb)
 void ctx_update_stats (VBlock *vb)
 {
     // zctx doesn't store b250, but we just use b250.len as a counter for displaying in genozip_show_sections
-    for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) {
-        Context *vctx = CTX(did_i);
-
-        Context *zctx = ctx_get_zf_ctx_from_vctx (vctx);
+    for (ContextP vctx=CTX(0); vctx < CTX(vb->num_contexts); vctx++) {
+        Context *zctx = ctx_get_zctx_from_vctx (vctx);
         if (!zctx) continue; // this can happen if FORMAT subfield appears, but no line has data for it
 
-        zctx->b250.num_ctx_words  += vctx->b250.num_ctx_words; // thread safety: no issues, this only updated only by the main thread
+        zctx->b250.num_ctx_words += vctx->b250.num_ctx_words; // thread safety: no issues, this only updated only by the main thread
         
         if (vctx->ltype == LT_TEXT) // textual - count words added in seg_add_to_local_text
             zctx->local.num_ctx_words += zctx->local.num_ctx_words;
@@ -1202,7 +1204,7 @@ void ctx_free_context (Context *ctx, DidIType did_i)
 
     ctx->no_stons = ctx->pair_local = ctx->pair_b250 = ctx->stop_pairing = ctx->no_callback = ctx->line_is_luft_trans =
     ctx->local_param = ctx->no_vb1_sort = ctx->local_always = ctx->counts_section = ctx->no_drop_b250 =
-    ctx->dynamic_size_local = ctx->is_stats_parent = ctx->local_compressed = 0;
+    ctx->dynamic_size_local = ctx->is_stats_parent = ctx->local_compressed = ctx->dict_merged = 0;
     ctx->local_hash_prime = 0;
     ctx->num_new_entries_prev_merged_vb = 0;
     ctx->nodes_len_at_1_3 = ctx->nodes_len_at_2_3 = 0;
@@ -1676,7 +1678,7 @@ void ctx_read_all_counts (void)
 
         if (piz_is_skip_sectionz (SEC_COUNTS, sl->dict_id)) continue;
 
-        Context *ctx = ctx_get_zf_ctx (sl->dict_id);
+        Context *ctx = ctx_get_zctx (sl->dict_id, true);
         
         zfile_get_global_section (SectionHeaderCounts, SEC_COUNTS, sl, &ctx->counts, "counts");
         if (flag.only_headers) continue; // only show headers

@@ -59,9 +59,7 @@ void profiler_add (ConstVBlockP vb)
     ADD(ctx_merge_in_vb_ctx);
     ADD(codec_hapmat_count_alt_alleles);
     ADD(md5);
-    ADD(lock_mutex_zf_ctx);
     ADD(wait_for_vb_1_mutex);
-    ADD(ctx_merge_in_one_vctx);
     ADD(ctx_clone);
     ADD(ctx_dict_build_word_lists);
     ADD(aligner_best_match);
@@ -176,8 +174,6 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (sam_seg_SEQ,2);
         PRINT (wait_for_vb_1_mutex, 1);
         PRINT (ctx_merge_in_vb_ctx, 1);
-        PRINT (lock_mutex_zf_ctx, 2);
-        PRINT (ctx_merge_in_one_vctx, 2);
         PRINT (zip_compress_ctxs, 1);
         PRINT (zip_generate_b250, 2);
         PRINT (zip_generate_local, 2);

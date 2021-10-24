@@ -31,8 +31,9 @@ extern void mutex_initialize_do (MutexP mutex, const char *name, const char *fun
 extern void mutex_destroy_do (MutexP mutex, const char *func);
 #define mutex_destroy(mutex) mutex_destroy_do (&(mutex), __FUNCTION__)
 
-extern void mutex_lock_do (MutexP mutex, const char *func);
-#define mutex_lock(mutex) mutex_lock_do (&(mutex), __FUNCTION__)
+extern bool mutex_lock_do (MutexP mutex, bool blocking, const char *func);
+#define mutex_lock(mutex) mutex_lock_do (&(mutex), true, __FUNCTION__)
+#define mutex_trylock(mutex) mutex_lock_do (&(mutex), false, __FUNCTION__)
 
 extern void mutex_unlock_do (MutexP mutex, const char *func, uint32_t line);
 #define mutex_unlock(mutex) mutex_unlock_do (&(mutex), __FUNCTION__, __LINE__)

@@ -298,8 +298,7 @@ done:
 // we move it to local instead of needlessly cluttering the global dictionary
 static void zip_handle_unique_words_ctxs (VBlock *vb)
 {
-    for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
-        Context *ctx = CTX(did_i);
+    for (ContextP ctx=CTX(0); ctx < CTX(vb->num_contexts); ctx++) {
     
         if (!ctx->nodes.len || ctx->nodes.len != ctx->b250.len) continue; // check that all words are unique (and new to this vb)
         if (VB_DT(DT_VCF) && dict_id_is_vcf_format_sf (ctx->dict_id)) continue; // this doesn't work for FORMAT fields
@@ -345,15 +344,13 @@ static void zip_generate_local (VBlockP vb, ContextP ctx)
     COPY_TIMER (zip_generate_local);
 }
 
-// generate & write b250 data for all primary fields of this data type
+// generate & write b250 data for all contexts
 static void zip_compress_b250 (VBlock *vb)
 {
     START_TIMER;
     threads_log_by_vb (vb, "zip", "START COMPRESSING B250", 0);
 
-    // generate & write b250 data for all primary fields
-    for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
-        Context *ctx = CTX(did_i);
+    for (ContextP ctx=CTX(0); ctx < CTX(vb->num_contexts); ctx++) {
 
         if (!ctx->b250.len) continue;
 
@@ -378,15 +375,13 @@ static void zip_compress_b250 (VBlock *vb)
     COPY_TIMER (zip_compress_ctxs); // same profiler for b250 and local as we breakdown by ctx underneath it
 }
 
-// generate & write b250 data for all primary fields of this data type
+// generate & write local data for all contexts
 static void zip_compress_local (VBlock *vb)
 {
     START_TIMER;
     threads_log_by_vb (vb, "zip", "START COMPRESSING LOCAL", 0);
 
-    // generate & write b250 data for all primary fields
-    for (int did_i=0 ; did_i < vb->num_contexts ; did_i++) {
-        Context *ctx = CTX(did_i);
+    for (ContextP ctx=CTX(0); ctx < CTX(vb->num_contexts); ctx++) {
 
         if (ctx->local_compressed || (!ctx->local.len && !ctx->local_always)) continue;
 

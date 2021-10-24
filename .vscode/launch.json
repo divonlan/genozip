@@ -16,12 +16,9 @@
             //"program": "${workspaceFolder}/genounzip.exe",
             //"program": "${workspaceFolder}/genols-debug.exe",
             
-            // "args" : ["--decompress", "--test", "--echo", "private/test/tmp/unix-nl.basic.genome_Full.me23.txt.genozip"],
-            // "args" : ["private/test/tmp/output.genozip", "--sequent"],
-            // "args" : [ "bug.fq.genozip","--show-con"],
-            "args" : ["--echo", "-f", "bug1.vcf"],
-            // "args" : ["--echo", "-C", "private/test/tmp/chain.genozip", "-f", "bug.vcf"],
-            
+            // "args" : ["-t", "bug.sam.genozip"],
+            "args" : ["-f", "private/test/test.pacbio.clr.bam"],
+                                    
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],

@@ -91,6 +91,7 @@ typedef struct Context {
     bool line_is_luft_trans;   // Seg: true if current line, when reconstructed with --luft, should be translated with luft_trans (false if no
                                //      trans_luft exists for this context, or it doesn't trigger for this line, or line is already in LUFT coordinates)
     bool local_compressed;     // ZIP: local has been compressed
+    bool dict_merged;          // ZIP: dict has been merged into zctx
     TranslatorId luft_trans;   // ZIP: Luft translator for the context, set at context init and immutable thereafter
     
     // ZIP only: hash stuff 

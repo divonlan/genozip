@@ -57,7 +57,8 @@ static void stats_check_count (uint64_t all_z_size, const int *count_per_section
 
     for (unsigned i=0; i < z_file->section_list_buf.len; i++) 
         if (!count_per_section[i]) 
-            WARN ("stats_check_count: Section not counted: %s section_i=%u\n", st_name (sections[i].st), i);
+            WARN ("stats_check_count: Section not counted: %s section_i=%u dict=%s\n", 
+                  st_name (sections[i].st), i, dis_dict_id (sections[i].dict_id).s);
         else if (count_per_section[i] > 1) 
             WARN ("stats_check_count: Section overcounted: %s section_i=%u dict=%s counted %u times\n", 
                    st_name (sections[i].st), i, dis_dict_id (sections[i].dict_id).s, count_per_section[i]);

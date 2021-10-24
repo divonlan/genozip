@@ -28,7 +28,7 @@ void mutex_destroy_do (Mutex *mutex, const char *func)
     memset (mutex, 0, sizeof (Mutex));
 }
 
-void mutex_lock_do (Mutex *mutex, const char *func)   
+bool mutex_lock_do (Mutex *mutex, bool blocking, const char *func)   
 { 
     ASSERT (mutex->initialized, "called from %s: mutex not initialized", func);
 
@@ -36,7 +36,11 @@ void mutex_lock_do (Mutex *mutex, const char *func)
 
     if (show) iprintf ("LOCKING : Mutex %s by thread %"PRIu64" %s\n", mutex->name, (uint64_t)pthread_self(), func);
 
-    int ret = pthread_mutex_lock (&mutex->mutex); 
+    int ret = blocking ? pthread_mutex_lock (&mutex->mutex)
+                       : pthread_mutex_trylock (&mutex->mutex);
+
+    if (!blocking && ret == EBUSY) return false;
+
     ASSERT (!ret, "called from %s by thread=%"PRIu64": pthread_mutex_lock failed on mutex->name=%s: %s", 
             func, (uint64_t)pthread_self(), mutex && mutex->name ? mutex->name : "(null)", strerror (ret)); 
 
@@ -44,6 +48,7 @@ void mutex_lock_do (Mutex *mutex, const char *func)
 
     if (show) iprintf ("LOCKED  : Mutex %s by thread %"PRIu64"\n", mutex->name, (uint64_t)pthread_self());
 
+    return true;
 }
 
 void mutex_unlock_do (Mutex *mutex, const char *func, uint32_t line) 
@@ -63,6 +68,6 @@ void mutex_unlock_do (Mutex *mutex, const char *func, uint32_t line)
 
 void mutex_wait_do (Mutex *mutex, const char *func, uint32_t line)   
 {
-    mutex_lock_do (mutex, func);
+    mutex_lock_do (mutex, true, func);
     mutex_unlock_do (mutex, func, line);
 }
