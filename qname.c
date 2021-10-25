@@ -189,6 +189,17 @@ static SmallContainer con_pacbio_plain = {
                              { .dict_id = { _SAM_Q1NAME }                   } } 
 };
 
+// example: af84b0c1-6945-4323-9193-d9f6f2c38f9a
+static SmallContainer con_nanopore = {
+    .repeats             = 1,
+    .nitems_lo           = 5,
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = "-" }, 
+                             { .dict_id = { _SAM_Q1NAME }, .separator = "-" }, 
+                             { .dict_id = { _SAM_Q2NAME }, .separator = "-" }, 
+                             { .dict_id = { _SAM_Q3NAME }, .separator = "-" }, 
+                             { .dict_id = { _SAM_Q4NAME }                   } } 
+};
+
 static SmallContainer con_ncbi_sra = {
     .repeats             = 1,
     .nitems_lo           = 3,
@@ -226,25 +237,26 @@ typedef struct QnameFlavorStruct {
 } QnameFlavorStruct;
 
 static QnameFlavorStruct qf[] = { 
-/*  mate   name             example                                   tech con_template        is_qf #sp int_items      numeric_items   hex_itm ord1,2 rng len px_strs{str,str_len,fixed_i}                               */
+/*  mate   name             example                                   tech     fq_only   con_template     #sp int_items      numeric_items    hex_items       ord1,2 rng len px_strs{str,str_len,fixed_i}                               */
          { "Unknown"                                                                                                                                                                                               }, 
          { "Illumina-fastq","A00488:61:HMLGNDSXX:4:1101:4345:1000"
-           " 2:N:0:CTGAAGCT+ATAGAGGC",                                TECH_ILLUM_7, 1, &con_illumina_7_fq, 7, {1,3,4,5,6,-1}, {-1},           {-1},   5,6,   -1,                                                                 },
-    {},  { "Illumina",      "A00488:61:HMLGNDSXX:4:1101:4345:1000",   TECH_ILLUM_7, 0, &con_illumina_7,    6, {1,3,4,5,6,-1}, {-1},           {-1},   5,6,   -1,                                                                 },
-    {},  { "BGI-E",         "E100020409L1C001R0030000801",            TECH_BGI,     0, &con_bgi_E,         4, {-1},           {0,1,2,3,4,-1}, {-1},   4,-1,  -1, 27, { {"E",1,0},  {"L",1,10},{"C",1,12},{"R",1,16},{"",0,20} }  },
-    {},  { "BGI-CL",        "CL100025298L1C002R050_244547",           TECH_BGI,     0, &con_bgi_CL,        5, {-1},           {0,1,2,3,4,-1}, {-1},   4,-1,  -1, 0,  { {"CL",2,0}, {"L",1,11},{"C",1,13},{"R",1,17},{"_",1,21} } },
-    {},  { "IonTorrent",    "ZEWTM:10130:07001",                      TECH_IONTORR, 0, &con_ion_torrent_3, 2, {-1},           {1,2,-1},       {-1},   -1,-1, -1, 17                                                              },
-    {},  { "Illumina-old#", "HWI-ST550_0201:3:1101:1626:2216#ACAGTG", TECH_ILLUM_5, 0, &con_illumina_5i,   5, {1,2,3,4,-1},   {-1},           {-1},   -1,-1, -1,                                                                 },
-    {},  { "Illumina-old",  "SOLEXA-1GA-1_4_FC20ENL:7:258:737:870",   TECH_ILLUM_5, 0, &con_illumina_5,    4, {1,2,3,4,-1},   {-1},           {-1},   -1,-1, -1,                                                                 },
-    {},  { "Roche-454",     "000050_1712_0767",                       TECH_454,     0, &con_roche_454,     2, {-1},           {0,1,2,-1},     {-1},   -1,-1, -1, 16, { {"",0,0}, {"_",1,6},{"_",1,11} }                          },
-    {},  { "Helicos",       "VHE-242383071011-15-1-0-2",              TECH_HELICOS, 0, &con_helicos,       5, {2,3,4,5,-1},   {1,-1},         {-1},   -1,-1, -1                                                                  },
-         { "PacBio-3",      "56cdb76f_70722_4787",                    TECH_PACBIO,  0, &con_pacbio_3,      2, {1,2,-1},       {-1},           {0,-1}, -1,-1, -1                                                                  },
-         { "PacBio-Range",  "m130802_221257_00127_"
-           "c100560082550000001823094812221334_s1_p0/128361/872_4288",TECH_PACBIO,  0, &con_pacbio_range,  4, {1,2,3,-1},     {-1},           {-1},   -1,-1, 3,  0,  { { "m",1,0} }                                              },
-         { "PacBio-Label",  "m64136_200621_234916/18/ccs",            TECH_PACBIO,  0, &con_pacbio_label,  3, {1,-1},         {-1},           {-1},   -1,-1, -1, 0,  { { "m",1,0} }                                              },
-         { "PacBio-Plain",  "m64136_200621_234916/18",                TECH_PACBIO,  0, &con_pacbio_plain,  2, {1,-1},         {-1},           {-1},   -1,-1, -1, 0,  { { "m",1,0} }                                              },
-    {},  { "NCBI-SRA",      "SRR001666.1",                            TECH_UNKNOWN, 0, &con_ncbi_sra,      1, {2,-1},         {1,-1},         {-1},   2,-1,  -1,                                                                 },
-    {},  { "Genozip-opt",   "basic.1",                                TECH_UNKNOWN, 1, &con_genozip_opt,   1, {1,-1},         {-1},           {-1},   1,-1,  -1,                                                                 },
+           " 2:N:0:CTGAAGCT+ATAGAGGC",                                TECH_ILLUM_7, 1, &con_illumina_7_fq, 7, {1,3,4,5,6,-1}, {-1},           {-1},           5,6,   -1,                                                                 },
+    {},  { "Illumina",      "A00488:61:HMLGNDSXX:4:1101:4345:1000",   TECH_ILLUM_7, 0, &con_illumina_7,    6, {1,3,4,5,6,-1}, {-1},           {-1},           5,6,   -1,                                                                 },
+    {},  { "BGI-E",         "E100020409L1C001R0030000801",            TECH_BGI,     0, &con_bgi_E,         4, {-1},           {0,1,2,3,4,-1}, {-1},           4,-1,  -1, 27, { {"E",1,0},  {"L",1,10},{"C",1,12},{"R",1,16},{"",0,20} }  },
+    {},  { "BGI-CL",        "CL100025298L1C002R050_244547",           TECH_BGI,     0, &con_bgi_CL,        5, {-1},           {0,1,2,3,4,-1}, {-1},           4,-1,  -1, 0,  { {"CL",2,0}, {"L",1,11},{"C",1,13},{"R",1,17},{"_",1,21} } },
+    {},  { "IonTorrent",    "ZEWTM:10130:07001",                      TECH_IONTORR, 0, &con_ion_torrent_3, 2, {-1},           {1,2,-1},       {-1},           -1,-1, -1, 17                                                              },
+    {},  { "Illumina-old#", "HWI-ST550_0201:3:1101:1626:2216#ACAGTG", TECH_ILLUM_5, 0, &con_illumina_5i,   5, {1,2,3,4,-1},   {-1},           {-1},           -1,-1, -1,                                                                 },
+    {},  { "Illumina-old",  "SOLEXA-1GA-1_4_FC20ENL:7:258:737:870",   TECH_ILLUM_5, 0, &con_illumina_5,    4, {1,2,3,4,-1},   {-1},           {-1},           -1,-1, -1,                                                                 },
+    {},  { "Roche-454",     "000050_1712_0767",                       TECH_454,     0, &con_roche_454,     2, {-1},           {0,1,2,-1},     {-1},           -1,-1, -1, 16, { {"",0,0}, {"_",1,6},{"_",1,11} }                          },
+    {},  { "Helicos",       "VHE-242383071011-15-1-0-2",              TECH_HELICOS, 0, &con_helicos,       5, {2,3,4,5,-1},   {1,-1},         {-1},           -1,-1, -1                                                                  },
+    {},  { "PacBio-3",      "56cdb76f_70722_4787",                    TECH_PACBIO,  0, &con_pacbio_3,      2, {1,2,-1},       {-1},           {0,-1},         -1,-1, -1                                                                  },
+    {},  { "PacBio-Range",  "m130802_221257_00127_"
+           "c100560082550000001823094812221334_s1_p0/128361/872_4288",TECH_PACBIO,  0, &con_pacbio_range,  4, {1,2,3,-1},     {-1},           {-1},           -1,-1, 3,  0,  { { "m",1,0} }                                              },
+    {},  { "PacBio-Label",  "m64136_200621_234916/18/ccs",            TECH_PACBIO,  0, &con_pacbio_label,  3, {1,-1},         {-1},           {-1},           -1,-1, -1, 0,  { { "m",1,0} }                                              },
+    {},  { "PacBio-Plain",  "m64136_200621_234916/18",                TECH_PACBIO,  0, &con_pacbio_plain,  2, {1,-1},         {-1},           {-1},           -1,-1, -1, 0,  { { "m",1,0} }                                              },
+    {},  { "Nanopore",      "af84b0c1-6945-4323-9193-d9f6f2c38f9a",   TECH_ONP,     0, &con_nanopore,      4, {-1},           {-1},           {0,1,2,3,4,-1}, -1,-1, -1, 36,                                                             },
+    {},  { "NCBI-SRA",      "SRR001666.1",                            TECH_UNKNOWN, 0, &con_ncbi_sra,      1, {2,-1},         {1,-1},         {-1},           2,-1,  -1,                                                                 },
+    {},  { "Genozip-opt",   "basic.1",                                TECH_UNKNOWN, 1, &con_genozip_opt,   1, {1,-1},         {-1},           {-1},           1,-1,  -1,                                                                 },
 };
 
 #define NUM_QFs (sizeof(qf)/sizeof(qf[0]))

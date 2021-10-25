@@ -11,7 +11,7 @@
 #define MIN_VBLOCK_MEMORY  1    // in MB
 #define MAX_VBLOCK_MEMORY  2048 
 
-typedef enum { TECH_UNKNOWN, TECH_ILLUM_7, TECH_ILLUM_5, TECH_PACBIO, TECH_454, TECH_BGI, TECH_IONTORR, TECH_HELICOS } SeqTech;
+typedef enum { TECH_UNKNOWN, TECH_ILLUM_7, TECH_ILLUM_5, TECH_PACBIO, TECH_ONP, TECH_454, TECH_BGI, TECH_IONTORR, TECH_HELICOS } SeqTech;
 
 // seg configuration set prior to starting to seg a file during segconfig_calculate or txtheader_zip_read_and_compress
 typedef struct {
