@@ -313,6 +313,7 @@ static void zip_handle_unique_words_ctxs (VBlock *vb)
         buf_move (vb, &ctx->local, vb, &ctx->dict);
         buf_free (&ctx->nodes);
         buf_free (&ctx->b250);
+        ctx->flags.all_the_same = false;
     }
 }
 

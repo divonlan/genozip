@@ -751,6 +751,7 @@ static inline void ctx_drop_all_the_same (VBlock *vb, Context *zctx, Context *vc
     if (vctx->pair_b250)    NO_DROP("pair_b250 is set");
     if (vctx->pair_local)   NO_DROP("pair_local is set");
 
+    ASSERTISALLOCED (vctx->b250);
     WordIndex node_index = *FIRSTENT (WordIndex, vctx->b250); // the only b250 in this context, as it is all_the_same
     if (node_index < 0) NO_DROP ("node_index=WORD_INDEX_*"); // a special WORD_INDEX_* - not droppable
 
