@@ -18,8 +18,8 @@
 // consider part of the last component.
 // each subfield is stored in its own dictionary- the second character of the dict_id  the subfield number starting
 // from 0 (0->9,a->z)
-const char sep_with_space[256]    = { [':']=true, [';']=true, ['/']=true, ['|']=true, ['.']=true, ['_']=true, ['#']=true, [' ']=true, ['\t']=true, [1]=true };
-const char sep_without_space[256] = { [':']=true, [';']=true, ['/']=true, ['|']=true, ['.']=true, ['_']=true, ['#']=true, };
+const char sep_with_space[256]    = { [':']=true, [';']=true, ['/']=true, ['|']=true, ['_']=true, ['#']=true, [' ']=true, ['\t']=true, [1]=true };
+const char sep_without_space[256] = { [':']=true, [';']=true, ['/']=true, ['|']=true, ['_']=true, ['#']=true, };
 
 static char illumina_7_snip[200], bgi_snip[200], copy_qname[50];
 static uint32_t illumina_7_snip_len, bgi_snip_len, copy_qname_len;
@@ -181,7 +181,7 @@ static void compound_seg_default (VBlock *vb,
 
             // note: if all the snips so far in this VB are the same - store just the snip, so that if the 
             // entire b250 is the same, it can be removed
-            if (!segconf.sam_is_sorted && (delta || item_ctx->not_all_the_same)) {
+            if (!segconf.sam_is_sorted && ctx_has_value_in_prev_line_(vb, item_ctx) && (delta || item_ctx->not_all_the_same)) {
                 ci->item     = delta_snip;
                 ci->item_len = 1 + str_int (delta, &delta_snip[1]);
 

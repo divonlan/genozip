@@ -202,6 +202,7 @@ extern void ctx_rollback (VBlockP vb, ContextP ctx);
 
 // returns true if dict_id was *previously* segged on this line, and we stored a valid last_value (int or float)
 #define ctx_has_value_in_line_(vb, ctx) ((ctx)->last_line_i == (vb)->line_i)
+#define ctx_has_value_in_prev_line_(vb, ctx) ((ctx)->last_line_i+1 == (vb)->line_i)
 static inline bool ctx_has_value_in_line_do (VBlockP vb, DictId dict_id, ContextP *p_ctx /* optional out */) 
 { 
     Context *ctx = ECTX (dict_id);
