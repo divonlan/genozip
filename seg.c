@@ -34,7 +34,7 @@ WordIndex seg_by_ctx_ex (VBlockP vb, STRp(snip), ContextP ctx, uint32_t add_byte
     ASSERTNOTNULL (ctx);
 
     
-    WordIndex node_index = ctx_evaluate_snip_seg (VB, ctx, STRa(snip), is_new);
+    WordIndex node_index = ctx_create_node_do (VB, ctx, STRa(snip), is_new);
 
     ASSERT (node_index < ctx->nodes.len + ctx->ol_nodes.len || node_index == WORD_INDEX_EMPTY || node_index == WORD_INDEX_MISSING, 
             "out of range: dict=%s node_index=%d nodes.len=%u ol_nodes.len=%u",  
@@ -855,7 +855,7 @@ void seg_all_data_lines (VBlock *vb)
         // Call the segmenter of the data type to segment one line
         const char *next_field = DT_FUNC (vb, seg_txt_line) (vb, field_start, remaining_txt_len, &has_13);
         if (!next_field) next_field = field_start + remaining_txt_len; // DT_GENERIC has no segmenter
-        
+
         vb->longest_line_len = MAX_(vb->longest_line_len, (next_field - field_start));
         field_start = next_field;
 

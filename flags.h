@@ -106,8 +106,12 @@ typedef struct {
     DictId dict_id_show_one_b250,   // argument of --show-b250-one
            show_one_counts,
            dump_one_b250_dict_id,   // argument of --dump-b250-one
-           dump_one_local_dict_id;  // argument of --dump-local-one
-    const char *show_one_dict;     // argument of --show-dict-one
+           dump_one_local_dict_id,  // argument of --dump-local-one
+           dict_id_show_containers, // argument of --show-containers
+           dict_id_debug_seg;       // argument of --debug-seg
+    const char *show_one_dict;      // argument of --show-dict-one
+
+    #define HAS_DEBUG_SEG(ctx) (flag.debug_seg && (!flag.dict_id_debug_seg.num || dict_id_typeless ((ctx)->dict_id).num == flag.dict_id_debug_seg.num))
 
     // internal flags set by the system, not the command line
     Coords rejects_coord;    // ZIP only: currently zipping liftover rejects file / component containing only PRIMARY or LUFT variants

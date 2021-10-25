@@ -234,9 +234,7 @@ WordIndex ctx_peek_next_snip (VBlock *vb, Context *ctx, bool all_the_same, pSTRp
 // Process and snip - return its node index, and enter it into the directory if its not already there. Called
 // 1. During segregate - as snips are encountered in the data. No base250 encoding yet
 // 2. During ctx_merge_in_one_vctx() - to enter snips into z_file->contexts - also encoding in base250
-static WordIndex ctx_evaluate_snip_merge (VBlock *vb, Context *zctx, Context *vctx, 
-                                          const char *snip, uint32_t snip_len, int64_t count,
-                                          CtxNode **node, bool *is_new)  // out
+static WordIndex ctx_commit_node (VBlock *vb, Context *zctx, Context *vctx, STRp(snip), int64_t count, CtxNode **node, bool *is_new)  // out
 {
     // if this turns out to be a singelton - i.e. a new snip globally - where it goes depends on whether its a singleton in the VB 
     // and whether we are allowed to move singletons to local. if its a singleton:
@@ -277,14 +275,14 @@ static WordIndex ctx_evaluate_snip_merge (VBlock *vb, Context *zctx, Context *vc
     if (node_index < 0) {
         seg_add_to_local_text (vb, vctx, snip, snip_len, 0);
 
-        if (flag.debug_seg) {
+        if (HAS_DEBUG_SEG(vctx)) {
             char printable_snip[snip_len+20];
-            iprintf ("eval_merge: vb_i=%u %s: SINGLETON replaced by SNIP_LOCAL: snip=%s snip_len=%u\n", 
+            iprintf ("commit_node: vb_i=%u %s: SINGLETON replaced by SNIP_LOCAL: snip=%s snip_len=%u\n", 
                      vb->vblock_i, vctx->tag_name, str_print_snip (snip, snip_len, printable_snip), snip_len);
         }
 
         static char lookup = SNIP_LOOKUP;
-        return ctx_evaluate_snip_merge (vb, zctx, vctx, &lookup, 1, -1 /* not singleton */, node, is_new);
+        return ctx_commit_node (vb, zctx, vctx, &lookup, 1, -1 /* not singleton */, node, is_new);
     }
 
     // case: not singleton - we return this (new) node
@@ -308,30 +306,24 @@ static WordIndex ctx_evaluate_snip_merge (VBlock *vb, Context *zctx, Context *vc
 
 // Seg: inserts snip into the hash, nodes and dictionary, if it was not already there, and returns its node index.
 // Does NOT add the word index to b250.
-WordIndex ctx_evaluate_snip_seg (VBlock *vb, Context *vctx, 
-                                 const char *snip, uint32_t snip_len,
-                                 bool *is_new /* out */)
+WordIndex ctx_create_node_do (VBlockP vb, ContextP vctx, STRp(snip), bool *is_new /* out */)
 {
     ASSERTNOTNULL (vctx);
     ASSERT (vctx->dict_id.num, "vctx has no dict_id (did_i=%u)", (unsigned)(vctx - vb->contexts));
-
-    if (flag.debug_seg) { 
-        char printable_snip[snip_len+20];
-        if (snip) iprintf ("eval_seg: vb_i=%u %s: snip=%s snip_len=%u\n", vb->vblock_i, vctx->tag_name, str_print_snip (snip, snip_len, printable_snip), snip_len);
-        else      iprintf ("eval_seg: vb_i=%u %s: snip=NULL snip_len=0", vb->vblock_i, vctx->tag_name);
-    }
+    WordIndex node_index;
+    #define RETURN(ni) { node_index=(ni); goto done; }
 
     if (!snip_len) {
         if (is_new) *is_new = false;
-        return (!snip || (vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (vctx->dict_id) && *snip != ':')) 
-                ? WORD_INDEX_MISSING : WORD_INDEX_EMPTY;
+        RETURN ((!snip || (vb->data_type == DT_VCF && dict_id_is_vcf_format_sf (vctx->dict_id) && *snip != ':')) 
+                 ? WORD_INDEX_MISSING : WORD_INDEX_EMPTY);
     }
 
     // short-circuit if identical to previous snip
-    if (str_issame (snip, vctx->last_snip)) {
+    if (vctx->last_snip && str_issame (snip, vctx->last_snip)) {
         (*ENT (int64_t, vctx->counts, vctx->last_snip_ni))++; 
         if (is_new) *is_new = false;
-        return vctx->last_snip_ni;
+        RETURN (vctx->last_snip_ni);
     }
     
     WordIndex node_index_if_new = vctx->ol_nodes.len + vctx->nodes.len;
@@ -360,7 +352,7 @@ WordIndex ctx_evaluate_snip_seg (VBlock *vb, Context *vctx,
         vctx->last_snip_len = snip_len;
         vctx->last_snip_ni  = existing_node_index;
 
-        return existing_node_index; // snip found - we're done
+        RETURN (existing_node_index); // snip found - we're done
     }
     
     // this snip isn't in the hash table - its a new snip
@@ -386,10 +378,29 @@ WordIndex ctx_evaluate_snip_seg (VBlock *vb, Context *vctx,
             vctx->counts.len, vctx->nodes.len, vctx->ol_nodes.len);
 
     if (is_new) *is_new = true;
-    return node_index_if_new;
+    RETURN (node_index_if_new);
+
+done:
+    if (HAS_DEBUG_SEG(vctx)) { 
+        char printable_snip[snip_len+20];
+        if (snip) iprintf ("create_node: vb_i=%u %s(%u): snip=%s snip_len=%u node_index=%d\n", vb->vblock_i, vctx->tag_name, vctx->did_i, str_print_snip (snip, snip_len, printable_snip), snip_len, node_index);
+        else      iprintf ("create_node: vb_i=%u %s(%u): snip=NULL snip_len=0 node_index=%d\n", vb->vblock_i, vctx->tag_name, vctx->did_i, node_index);
+    }
+
+    return node_index;
+    #undef RETURN
 }
 
-// Seg only: if after ctx_evaluate_snip_seg we don't add the snip to b250, we need to reduce its count
+// Seg only: create a node without adding to counts
+WordIndex ctx_create_node (VBlockP vb, DidIType did_i, STRp (snip))
+{
+    WordIndex node_index = ctx_create_node_do (vb, CTX(did_i), STRa(snip), NULL); 
+    ctx_decrement_count (vb, CTX(did_i), node_index);
+
+    return node_index;
+}
+
+// Seg only: if after ctx_create_node_do we don't add the snip to b250, we need to reduce its count
 int64_t ctx_decrement_count (VBlock *vb, Context *ctx, WordIndex node_index)
 {
     ASSERT (node_index < (WordIndex)ctx->counts.len, "node_index=%d out of range counts[%s].len=%"PRIu64, node_index, ctx->tag_name, ctx->counts.len);
@@ -415,15 +426,6 @@ void ctx_increment_count (VBlock *vb, Context *ctx, WordIndex node_index)
     ASSERT (node_index < ctx->counts.len, "node_index=%d out of range counts[%s].len=%"PRIu64, node_index, ctx->tag_name, ctx->counts.len);
 
     (*ENT (int64_t, ctx->counts, node_index))++;
-}
-
-// Seg only: create a node without adding to counts
-WordIndex ctx_create_node (VBlockP vb, DidIType did_i, STRp (snip))
-{
-    WordIndex node_index = ctx_evaluate_snip_seg (vb, CTX(did_i), STRa(snip), NULL); 
-    ctx_decrement_count (vb, CTX(did_i), node_index);
-
-    return node_index;
 }
 
 void ctx_append_b250 (VBlockP vb, ContextP vctx, WordIndex node_index)
@@ -581,7 +583,7 @@ WordIndex ctx_populate_zf_ctx (DidIType dst_did_i, STRp (contig_name), WordIndex
     bool is_primary = (dst_did_i == DTFZ (prim_chrom));
     
     CtxNode *zf_node;
-    WordIndex zf_node_index = ctx_evaluate_snip_merge (NULL, zctx, NULL, STRa(contig_name), 0, &zf_node, NULL);
+    WordIndex zf_node_index = ctx_commit_node (NULL, zctx, NULL, STRa(contig_name), 0, &zf_node, NULL);
     zf_node->word_index = base250_encode (zf_node_index);
 
     if (is_primary && ref_index != WORD_INDEX_NONE && (flag.reference & REF_ZIP_LOADED))
@@ -621,7 +623,7 @@ void ctx_populate_zf_ctx_from_contigs (Reference ref, DidIType dst_did_i, ConstC
         STR(contig_name);
         contig_name = contigs_get_name (ctgs, i, &contig_name_len);
 
-        WordIndex zf_node_index = ctx_evaluate_snip_merge (NULL, zctx, NULL, STRa(contig_name), 0, &zf_node, &is_new);
+        WordIndex zf_node_index = ctx_commit_node (NULL, zctx, NULL, STRa(contig_name), 0, &zf_node, &is_new);
         zf_node->word_index = base250_encode (zf_node_index);
 
         if (is_new && is_primary && (flag.reference & REF_ZIP_LOADED))
@@ -851,13 +853,16 @@ static bool ctx_merge_in_one_vctx (VBlock *vb, ContextP vctx)
     // (vctx->nodes contains only new words, old words from previous vbs are in vctx->ol_nodes)
     for (uint64_t i=0; i < vctx->nodes.len; i++) {
         CtxNode *vb_node = ENT (CtxNode, vctx->nodes, i), *zf_node;
+
+        if (vb_node->word_index.n == WORD_INDEX_NONE) continue; // canceled in ctx_rollback
+
         const char *snip = ENT (char, vctx->dict, vb_node->char_index);
         int64_t count = *ENT (int64_t, vctx->counts, ol_len + i);
         bool is_new;
 
         // use evb and not vb because zf_context is z_file (which belongs to evb)
         WordIndex zf_node_index = 
-            ctx_evaluate_snip_merge (vb, zctx, vctx, snip, vb_node->snip_len, count, &zf_node, &is_new);
+            ctx_commit_node (vb, zctx, vctx, snip, vb_node->snip_len, count, &zf_node, &is_new);
 
         ASSERT (zf_node_index >= 0 && zf_node_index < zctx->nodes.len, 
                 "zf_node_index=%d out of range - len=%i", zf_node_index, (uint32_t)vctx->nodes.len);
@@ -1153,13 +1158,16 @@ void ctx_sort_dictionaries_vb_1(VBlock *vb)
         for (WordIndex i=0; i < (WordIndex)ctx->nodes.len; i++) {
             WordIndex node_index = *ENT (WordIndex, sorter, i);
             CtxNode *node = ENT (CtxNode, ctx->nodes, node_index);
+
+            if (node->word_index.n == WORD_INDEX_NONE) continue; // node was canceled in ctx_rollback
+
             const char *snip = ENT (char, unsorted_dict, node->char_index); 
             memcpy (next, snip, node->snip_len + 1 /* +1 for SNIP_SEP */);
             node->char_index = ENTNUM (ctx->dict, next);
             node->word_index.n = i;
             next += node->snip_len + 1;
 
-            if (flag.debug_seg) {
+            if (HAS_DEBUG_SEG(ctx)) {
                 char printable_snip[node->snip_len+20];
                 iprintf ("ctx_sort_dictionaries_vb_1: %s: word_index=%u snip=%s snip_len=%u count=%"PRId64"\n",
                           ctx->tag_name, i, str_print_snip (snip, node->snip_len, printable_snip), node->snip_len, 
@@ -1214,7 +1222,7 @@ void ctx_free_context (Context *ctx, DidIType did_i)
     ctx->global_hash_prime = 0;
     ctx->merge_num = 0;
     ctx->txt_len = ctx->num_singletons = ctx->num_failed_singletons = 0;
-    ctx->rback_b250_len = ctx->rback_local_len = ctx->rback_txt_len = 0;    
+    ctx->rback_b250_len = ctx->rback_local_len = ctx->rback_txt_len = ctx->rback_nodes_len = 0;    
     ctx->rback_last_txt_index = ctx->rback_last_txt_len = ctx->rback_num_singletons = 0;
     ctx->rback_last_value.i = 0;
     ctx->rback_last_delta = 0;
@@ -1352,11 +1360,12 @@ static void ctx_compress_one_dict_fragment (VBlockP vb)
         .dict_id                 = vb->fragment_ctx->dict_id
     };
 
-    if (flag.show_dict || ctx_is_show_dict_id (vb->fragment_ctx->dict_id)) {
-        iprintf ("%s (vb_i=%u, did=%u, num_snips=%u):\t", 
+    if (flag.show_dict) 
+        iprintf ("%s (vb_i=%u, did=%u, num_snips=%u)\n", 
                  vb->fragment_ctx->tag_name, vb->vblock_i, vb->fragment_ctx->did_i, vb->fragment_num_words);
+    
+    if (ctx_is_show_dict_id (vb->fragment_ctx->dict_id))
         str_print_dict (vb->fragment_start, vb->fragment_len, flag.show_dict, false);
-    }
 
     if (flag.list_chroms && vb->fragment_ctx->did_i == CHROM)
         str_print_dict (vb->fragment_start, vb->fragment_len, false, VB_DT(DT_SAM) || VB_DT(DT_BAM));
@@ -1532,12 +1541,12 @@ void ctx_read_all_dictionaries (void)
             if (flag.list_chroms && ((!flag.luft && ctx->did_i == CHROM) || (flag.luft && ctx->did_i == VCF_oCHROM)))
                 str_print_dict (ctx->dict.data, (uint32_t)ctx->dict.len, true, Z_DT(DT_SAM));
             
-            if (flag.show_dict || ctx_is_show_dict_id (ctx->dict_id)) {
-                iprintf ("%s (did_i=%u, num_snips=%u, dict_size=%u bytes):\t", 
+            if (flag.show_dict) 
+                iprintf ("%s (did_i=%u, num_snips=%u, dict_size=%u bytes)\n", 
                          ctx->tag_name, did_i, (uint32_t)ctx->word_list.len, (uint32_t)ctx->dict.len);
 
+            if (ctx_is_show_dict_id (ctx->dict_id))
                 str_print_dict (ctx->dict.data, (uint32_t)ctx->dict.len, true, false);
-            }
         }
         iprint0 ("\n");
 
@@ -1716,9 +1725,12 @@ TagNameEx ctx_tag_name_ex (ConstContextP ctx)
 }
 
 // rolls back a context to the rollback point registered in ctx_create_rollback_point
-// NOTE: this rolls back b250, but not nodes / dict / hash. Therefore a future seg with the same snip will not be is_new.
 void ctx_rollback (VBlockP vb, Context *ctx)
 {
+    if (HAS_DEBUG_SEG(ctx)) 
+        iprintf ("ctx_rollback: vb_i=%u %s: rolling back b250=%u nodes=%u\n", vb->vblock_i, ctx->tag_name, 
+                 (int)(ctx->b250.len - ctx->rback_b250_len), (int)(ctx->nodes.len - ctx->rback_nodes_len));
+
     // if we evaluated this context since the rollback count - undo
     while (ctx->b250.len > ctx->rback_b250_len) { 
         (*ENT (int64_t, ctx->counts, LASTb250(ctx)))--;
@@ -1728,6 +1740,13 @@ void ctx_rollback (VBlockP vb, Context *ctx)
     // update all_the_same - true, if len is down to 1, and false if it is down to 0
     if (ctx->b250.len <= 1) ctx->flags.all_the_same = (bool)ctx->b250.len;
 
+    // we can't actually remove nodes as they are refered to from the hash table, instead, we mark them as unused
+    // this will prevent merging the word into the zctx->dict, and also prevent hash_get_entry_for_seg from returning this node if this word
+    // is segged again in this VB - a new node will be created.
+    for (WordIndex node_index_i = ctx->rback_nodes_len ; node_index_i < ctx->nodes.len ; node_index_i++) 
+        ENT (CtxNode, ctx->nodes, node_index_i
+        )->word_index.n = WORD_INDEX_NONE;
+    
     ctx->local.len      = ctx->rback_local_len;
     ctx->txt_len        = ctx->rback_txt_len;
     ctx->num_singletons = ctx->rback_num_singletons;
@@ -1736,6 +1755,7 @@ void ctx_rollback (VBlockP vb, Context *ctx)
     ctx->last_txt_index = ctx->rback_last_txt_index;
     ctx->last_txt_len   = ctx->rback_last_txt_len;
     ctx->last_line_i    = LAST_LINE_I_INIT; // undo "encountered in line"
+    ctx->last_snip      = NULL; // cancel caching in ctx_create_node_do
 }
 
 void ctx_foreach_buffer(ContextP ctx, bool set_name, void (*func)(BufferP buf, const char *func, unsigned line)) 

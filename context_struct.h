@@ -41,7 +41,7 @@ typedef struct Context {
     int64_t compressor_time;   // Used when --show-time - time for compressing / decompressing this context
 
     // rollback point
-    uint64_t rback_b250_len, rback_local_len, rback_txt_len; // ZIP: data to roll back the last seg
+    uint64_t rback_b250_len, rback_local_len, rback_nodes_len, rback_txt_len; // ZIP: data to roll back the last seg
     uint32_t rback_num_singletons, rback_last_txt_index, rback_last_txt_len;
     LastValueType rback_last_value;
     int64_t rback_last_delta, rback_ctx_spec_param;

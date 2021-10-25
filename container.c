@@ -271,12 +271,12 @@ LastValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP c
 
             last_non_filtered_item_i = i;
 
-            if (flag.show_containers && item_ctx) // show container reconstruction 
-                iprintf ("VB=%u Line=%"PRIu64" Repeat=%u %s->%s trans_id=%u txt_data.len=%"PRIu64" (0x%04"PRIx64") reconstruct_prefix=%d reconstruct_value=%d\n", 
+            if (flag.show_containers && item_ctx && (!flag.dict_id_show_containers.num || dict_id_typeless (item_ctx->dict_id).num == flag.dict_id_show_containers.num)) // show container reconstruction 
+                iprintf ("VB=%u Line=%"PRIu64" Repeat=%u %s->%s trans_id=%u txt_data.len=%"PRIu64" (0x%04"PRIx64") reconstruct_prefix=%d reconstruct_value=%d%s", 
                          vb->vblock_i, vb->line_i, rep_i, ctx->tag_name, item_ctx->tag_name,
                          translating ? item->translator : 0, 
                          vb->vb_position_txt_file + vb->txt_data.len, vb->vb_position_txt_file + vb->txt_data.len,
-                         reconstruct, reconstruct && !trans_nor);
+                         reconstruct, reconstruct && !trans_nor, (flag.dict_id_show_containers.num ? " : " : "\n"));
 
 /*BRKPOINT*/uint32_t item_prefix_len = 
                 reconstruct ? container_reconstruct_prefix (vb, con, &item_prefixes, &remaining_prefix_len, false, ctx->dict_id, con->items[i].dict_id) : 0; // item prefix (we will have one per item or none at all)
@@ -315,6 +315,9 @@ LastValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP c
             if (translating && IS_CI_SET (CI_TRANS_MOVE))
                 vb->txt_data.len += (uint8_t)item->separator[1];
 
+            if (flag.show_containers && dict_id_typeless (item_ctx->dict_id).num == flag.dict_id_show_containers.num)
+                iprintf ("\"%.*s\"\n", (int)(AFTERENT(char, vb->txt_data)-reconstruction_start), reconstruction_start);
+                
         } // items loop
 
         // remove final separator, if we need to (introduced v12)

@@ -31,7 +31,7 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
-.. option:: --show-dict=field  ZUC. Show dictionaries read/written for each vblock. With optional <field> (eg CHROM ; RNAME ; POS ; AN etc) shows only that one field. 
+.. option:: --show-dict[=field]  ZUC. Show dictionaries read/written for each vblock. With optional <field> (use --STATS to see the field names in the file) shows only that one field. 
 
           |
 
@@ -134,7 +134,7 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
 **Tracking execution**
 
-.. option:: --show-containers  ZUC. Show flow of containers.
+.. option:: --show-containers[=field]  ZUC. Show flow of containers. Possibly with the values of a specific field (use --STATS to see the field names in the file).
 
           |
 
@@ -146,7 +146,7 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
-.. option:: --debug-seg  Z.  Shows snips being segmented into contexts.
+.. option:: --debug-seg[=field]  Z.  Shows snips being segmented into contexts - possibly limiting to a specific field (use --STATS to see the field names in the file).
 
           |
 

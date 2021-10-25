@@ -207,6 +207,12 @@ void random_access_merge_in_vb (VBlock *vb, Coords dc)
 
         if (src_ra[i].chrom_index != WORD_INDEX_NONE) {
             CtxNode *chrom_node = ctx_node_vb (chrom_ctx, (WordIndex)src_ra[i].chrom_index, NULL, NULL);
+
+            if (chrom_node->word_index.n == WORD_INDEX_NONE) { // this contig was canceled by seg_rollback
+                z_buf->len--;
+                continue;
+            }
+            
             dst_ra->chrom_index = chrom_node->word_index.n; // note: in the VB we store the node index, while in zfile we store tha word index
         }
         else 

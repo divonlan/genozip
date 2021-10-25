@@ -97,7 +97,7 @@ static inline bool is_same_last_txt(VBlockP vb, ContextP ctx, STRp(str)) { retur
 
 static inline void ctx_init_iterator (Context *ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; ctx->next_local = 0; }
 
-extern WordIndex ctx_evaluate_snip_seg (VBlockP segging_vb, ContextP vctx, STRp (snip), bool *is_new);
+extern WordIndex ctx_create_node_do (VBlockP segging_vb, ContextP vctx, STRp (snip), bool *is_new);
 extern WordIndex ctx_create_node (VBlockP vb, DidIType did_i, STRp (snip));
 
 #define LASTb250(ctx) ((ctx)->flags.all_the_same ? *FIRSTENT(WordIndex, (ctx)->b250) : *LASTENT(WordIndex, (ctx)->b250))
@@ -196,6 +196,7 @@ static inline void ctx_create_rollback_point (ContextP ctx)
 {
     ctx->rback_b250_len       = ctx->b250.len;
     ctx->rback_local_len      = ctx->local.len;
+    ctx->rback_nodes_len      = ctx->nodes.len;
     ctx->rback_txt_len        = ctx->txt_len;
     ctx->rback_num_singletons = ctx->num_singletons;
     ctx->rback_last_value     = ctx->last_value;
@@ -207,6 +208,7 @@ extern void ctx_rollback (VBlockP vb, ContextP ctx);
 
 // returns true if dict_id was *previously* segged on this line, and we stored a valid last_value (int or float)
 #define ctx_has_value_in_line_(vb, ctx) ((ctx)->last_line_i == (vb)->line_i)
+#define ctx_has_value_in_prev_line_(vb, ctx) ((ctx)->last_line_i+1 == (vb)->line_i)
 static inline bool ctx_has_value_in_line_do (VBlockP vb, DictId dict_id, ContextP *p_ctx /* optional out */) 
 { 
     Context *ctx = ECTX (dict_id);
@@ -220,9 +222,13 @@ static inline void ctx_set_last_value (VBlockP vb, ContextP ctx, LastValueType l
     ctx->last_value    = last_value;
     ctx->last_line_i   = vb->line_i;
 }
+static inline void ctx_unset_last_value (VBlockP vb, ContextP ctx)
+{
+    ctx->last_line_i = LAST_LINE_I_INIT;
+}
 
 // returns true if dict_id was *previously* segged on this line (last_value may be valid or not)
-#define ctx_encountered_in_line_(vb, ctx) (((ctx)->last_line_i == (vb)->line_i) || ((ctx)->last_line_i == -(int32_t)(vb)->line_i - 1))
+static inline bool ctx_encountered_in_line_(VBlockP vb, ContextP ctx) { return ((ctx->last_line_i == vb->line_i) || (ctx->last_line_i == -(int32_t)vb->line_i - 1)); }
 static inline bool ctx_encountered_in_line_do (VBlockP vb, DictId dict_id, ContextP *p_ctx /* optional out */) 
 { 
     Context *ctx = ECTX (dict_id);

@@ -24,10 +24,10 @@ static unsigned sb_snip_lens[2], mb_snip_lens[2], f2r1_snip_lens[MAX_ARRAY_ITEMS
 
 #define last_sample_i ctx_specific // ZIP: like last_line_i, but used for VCF/FORMAT fields (0-based). Only meaningful if last_line_i indicates the line is the same vb->line_i
 
-#define vcf_encountered_in_sample_(vb, ctx) (ctx_encountered_in_line_(vb, ctx) && (ctx)->last_sample_i == VB_VCF->sample_i)
-#define vcf_encountered_in_sample(vb, dict_id, p_ctx) (ctx_encountered_in_line (vb, dict_id, p_ctx) && (*(p_ctx))->last_sample_i == VB_VCF->sample_i)
-#define vcf_has_value_in_sample_(vb, ctx) (ctx_has_value_in_line_(vb, ctx) && (ctx)->last_sample_i == (vb)->sample_i)
-#define vcf_has_value_in_sample(vb, dict_id, p_ctx) (ctx_has_value_in_line (vb, dict_id, p_ctx) && (*(p_ctx))->last_sample_i == (vb)->sample_i)
+#define vcf_encountered_in_sample_(vb, ctx) (ctx_encountered_in_line_((VBlockP)vb, ctx) && (ctx)->last_sample_i == VB_VCF->sample_i)
+#define vcf_encountered_in_sample(vb, dict_id, p_ctx) (ctx_encountered_in_line ((VBlockP)vb, dict_id, p_ctx) && (*(p_ctx))->last_sample_i == VB_VCF->sample_i)
+#define vcf_has_value_in_sample_(vb, ctx) (ctx_has_value_in_line_((VBlockP)vb, ctx) && (ctx)->last_sample_i == (vb)->sample_i)
+#define vcf_has_value_in_sample(vb, dict_id, p_ctx) (ctx_has_value_in_line ((VBlockP)vb, dict_id, p_ctx) && (*(p_ctx))->last_sample_i == (vb)->sample_i)
 
 #define vcf_set_last_sample_value_(vb, ctx, last_value) do { ctx_set_last_value ((VBlockP)(vb), ctx, last_value); (ctx)->last_sample_i = (vb)->sample_i; } while (0);
 // extern'ed version of vcf_set_last_sample_value_
@@ -407,7 +407,7 @@ static inline WordIndex vcf_seg_FORMAT_AF (VBlockVCF *vb, Context *ctx, const ch
 {
     if (vcf_num_samples == 1 && // very little hope that INFO/AF is equal to FORMAT/AF if we have more than one sample
         !z_dual_coords &&       // note: we can't use SNIP_COPY in dual coordinates, because when translating, it will translate the already-translated INFO/AF
-        ctx_encountered_in_line_(vb, CTX(INFO_AF)) && 
+        ctx_encountered_in_line_(VB, CTX(INFO_AF)) && 
         str_issame (cell, CTX(INFO_AF)->last_snip))
         return seg_by_ctx (VB, af_snip, af_snip_len, ctx, cell_len);
     else

@@ -186,7 +186,9 @@ static void flags_show_flags (void)
     iprintf ("show_is_set=%s\n", S_(show_is_set));
     iprintf ("show_time=%s\n", S_(show_time));
     iprintf ("show_mutex=%s\n", S_(show_mutex));
+    iprintf ("dict_id_debug_seg=%s\n", dis_dict_id (flag.dict_id_debug_seg).s);
     iprintf ("dict_id_show_one_b250=%s\n", dis_dict_id (flag.dict_id_show_one_b250).s);
+    iprintf ("dict_id_show_containers=%s\n", dis_dict_id (flag.dict_id_show_containers).s);
     iprintf ("show_one_counts=%s\n", dis_dict_id (flag.show_one_counts).s);
     iprintf ("dump_one_b250_dict_id=%s\n", dis_dict_id (flag.dump_one_b250_dict_id).s);
     iprintf ("dump_one_local_dict_id=%s\n", dis_dict_id (flag.dump_one_local_dict_id).s);
@@ -338,22 +340,22 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _DL {"replace",       no_argument,       &flag.replace,          1 }
         #define _V  {"version",       no_argument,       &command, VERSION         }
         #define _z  {"bgzf",          required_argument, 0, 'z'                    }
-        #define _zb {"bam",           no_argument,       &flag.out_dt,           DT_BAM }
-        #define _zB {"BAM",           no_argument,       &flag.out_dt,           DT_BAM }
-        #define _zs {"sam",           no_argument,       &flag.out_dt,           DT_SAM }
-        #define _zS {"SAM",           no_argument,       &flag.out_dt,           DT_SAM }
+        #define _zb {"bam",           no_argument,       &flag.out_dt,      DT_BAM }
+        #define _zB {"BAM",           no_argument,       &flag.out_dt,      DT_BAM }
+        #define _zs {"sam",           no_argument,       &flag.out_dt,      DT_SAM }
+        #define _zS {"SAM",           no_argument,       &flag.out_dt,      DT_SAM }
         #define _zq {"fastq",         optional_argument, 0, 130                    }
         #define _zQ {"FASTQ",         optional_argument, 0, 130                    }
         #define _zf {"fq",            optional_argument, 0, 130                    }
         #define _zF {"FQ",            optional_argument, 0, 130                    }
-        #define _za {"fasta",         no_argument,       &flag.out_dt,           DT_FASTA }
-        #define _zA {"FASTA",         no_argument,       &flag.out_dt,           DT_FASTA }
-        #define _zc {"bcf",           no_argument,       &flag.out_dt,           DT_BCF }
-        #define _zC {"BCF",           no_argument,       &flag.out_dt,           DT_BCF }
-        #define _zv {"vcf",           no_argument,       &flag.out_dt,           DT_VCF }
-        #define _zV {"VCF",           no_argument,       &flag.out_dt,           DT_VCF }
-        #define _zy {"phylip",        no_argument,       &flag.out_dt,           DT_PHYLIP }
-        #define _zY {"Phylip",        no_argument,       &flag.out_dt,           DT_PHYLIP }
+        #define _za {"fasta",         no_argument,       &flag.out_dt,    DT_FASTA }
+        #define _zA {"FASTA",         no_argument,       &flag.out_dt,    DT_FASTA }
+        #define _zc {"bcf",           no_argument,       &flag.out_dt,      DT_BCF }
+        #define _zC {"BCF",           no_argument,       &flag.out_dt,      DT_BCF }
+        #define _zv {"vcf",           no_argument,       &flag.out_dt,      DT_VCF }
+        #define _zV {"VCF",           no_argument,       &flag.out_dt,      DT_VCF }
+        #define _zy {"phylip",        no_argument,       &flag.out_dt,   DT_PHYLIP }
+        #define _zY {"Phylip",        no_argument,       &flag.out_dt,   DT_PHYLIP }
         #define _m  {"md5",           no_argument,       &flag.md5,              1 }
         #define _t  {"test",          no_argument,       &flag.test,             1 }
         #define _fa {"fast",          no_argument,       &flag.fast,             1 }
@@ -381,7 +383,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _B  {"vblock",        required_argument, 0, 'B'                    }
         #define _r  {"regions",       required_argument, 0, 'r'                    }
         #define _R  {"regions-file",  required_argument, 0, 'R'                    }
-        #define _Rg {"gpos",     no_argument,       &flag.gpos,        1 }
+        #define _Rg {"gpos",          no_argument,       &flag.gpos,             1 }
         #define _s  {"samples",       required_argument, 0, 's'                    }
         #define _sf {"FLAG",          required_argument, 0, 17                     }
         #define _sq {"MAPQ",          required_argument, 0, 18                     }
@@ -458,11 +460,12 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _oc {"component",     required_argument, 0, 14                     }  
         #define _sR {"show-reference",no_argument,       &flag.show_reference,   1 }  
         #define _sC {"show-ref-contigs", no_argument,    &flag.show_ref_contigs, 1 }  
-        #define _cC {"show-chain-contigs", no_argument,  &flag.show_chain_contigs, 1 }  
+        #define _cC {"show-chain-contigs", no_argument,  &flag.show_chain_contigs,1}  
         #define _rI {"show-ref-iupacs", no_argument,     &flag.show_ref_iupacs,  1 }  
-        #define _rA {"show-chrom2ref", no_argument,       &flag.show_chrom2ref,    1 }  
+        #define _rA {"show-chrom2ref", no_argument,      &flag.show_chrom2ref,   1 }  
         #define _rS {"show-ref-seq",  no_argument,       &flag.show_ref_seq,     1 }  
-        #define _cn {"show-containers", no_argument,     &flag.show_containers,  1 }  
+        #define _cn {"show-containers", optional_argument, 0, 132                  }  
+        #define _dg {"debug-seg",     optional_argument, 0, 133                    }  
         #define _hC {"show-txt-contigs", no_argument,    &flag.show_txt_contigs, 1 }
         #define _sI {"show-is-set",   required_argument, 0, '~',                   }  
         #define _sA {"show-aliases",  no_argument,       &flag.show_aliases,     1 }  
@@ -477,9 +480,8 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _dp {"debug-progress",no_argument,       &flag.debug_progress,   1 }  
         #define _dt {"debug-threads", no_argument,       &flag.debug_threads,    1 }  
         #define _dw {"debug-stats",   no_argument,       &flag.debug_stats,      1 }  
-        #define _dM {"debug-generate",no_argument,     &flag.debug_generate, 1 }  
+        #define _dM {"debug-generate",no_argument,       &flag.debug_generate  , 1 }  
         #define _dr {"debug-recon-size",no_argument,     &flag.debug_recon_size, 1 }  
-        #define _dg {"debug-seg",     no_argument,       &flag.debug_seg,        1 }  
         #define _oe {"echo",          no_argument,       &flag.echo,             1 }
         #define _dh {"show-hash",     no_argument,       &flag.show_hash,        1 }  
         #define _sx {"sex",           no_argument,       &flag.show_sex,         1 }  
@@ -613,7 +615,12 @@ verify_command:
             case 129 : ASSERTRUNONCE ("--dvcf-drop option can only appear once, see:  " WEBSITE_DVCF);
                        flag.dvcf_drop = optarg      ; break;
             case 130 : flag.out_dt = DT_FASTQ; flag.extended_translation = !!optarg; break; 
-
+            case 132 : flag.show_containers=1;
+                       if (optarg) flag.dict_id_show_containers = dict_id_make (optarg, strlen (optarg), DTYPE_PLAIN); 
+                       break;
+            case 133 : flag.debug_seg=1;
+                       if (optarg) flag.dict_id_debug_seg = dict_id_make (optarg, strlen (optarg), DTYPE_PLAIN); 
+                       break;
             case 0   : break; // a long option that doesn't have short version will land here - already handled so nothing to do
                  
             default  : // unrecognized option 

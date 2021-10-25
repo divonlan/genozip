@@ -15,8 +15,8 @@
 // Up to MAX_ARRAY_ITEMS subfields are permitted - if there are more, then all the trailing part is just
 // consider part of the last component.
 // each subfield is stored in its own dictionary
-const char sep_with_space[256]    = { [':']=true, [';']=true, ['/']=true, ['|']=true, ['.']=true, ['_']=true, ['#']=true, [' ']=true, ['\t']=true, [1]=true };
-const char sep_without_space[256] = { [':']=true, [';']=true, ['/']=true, ['|']=true, ['.']=true, ['_']=true, ['#']=true, };
+const char sep_with_space[256]    = { [':']=true, [';']=true, ['/']=true, ['|']=true, ['_']=true, ['#']=true, [' ']=true, ['\t']=true, [1]=true };
+const char sep_without_space[256] = { [':']=true, [';']=true, ['/']=true, ['|']=true, ['_']=true, ['#']=true, };
 
 //--------------------------------------------
 // Default compound segger
@@ -128,7 +128,8 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
         PosType delta;
 
         #define MAX_TOKENIZER_DETLA 16384 // arbitrary (Illumina ~= 100-800)
-        if (ci->is_int && ABS((delta = ci->value - item_ctx->last_value.i)) < MAX_TOKENIZER_DETLA) {
+
+        if (ci->is_int && ctx_has_value_in_prev_line_(vb, item_ctx) && ABS((delta = ci->value - item_ctx->last_value.i)) < MAX_TOKENIZER_DETLA) {
             delta_snip[0] = SNIP_SELF_DELTA;
 
             // note: if all the snips so far in this VB are the same - store just the snip, so that if the 
@@ -144,14 +145,14 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
                 ci->leading_zeros = 0; // we store the snip as-is
         }
 
-        ctx_set_last_value (vb, item_ctx, ci->value);
+        if (ci->is_int) ctx_set_last_value (vb, item_ctx, ci->value);
         
         if (flag.pair == PAIR_READ_1)
             item_ctx->no_stons = true; // prevent singletons, so pair_2 can compare to us
         
         // we are evaluating but might throw away this snip and use SNIP_PAIR_LOOKUP instead - however, we throw away if its in the pair file,
         // i.e. its already in the dictionary and hash table - so no resources wasted
-        WordIndex node_index = ctx_evaluate_snip_seg (vb, item_ctx, ci->item, ci->item_len, NULL);
+        WordIndex node_index = ctx_create_node_do (vb, item_ctx, ci->item, ci->item_len, NULL);
 
         // case we are compressing fastq pairs - read 1 is the basis and thus must have a b250 node index,
         // and read 2 might have SNIP_PAIR_LOOKUP
@@ -186,7 +187,7 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
                     // get new node_index instead
                     item_ctx->pair_b250 = true;
                     static const char lookup_pair_snip[1] = { SNIP_PAIR_LOOKUP };
-                    node_index = ctx_evaluate_snip_seg (vb, item_ctx, lookup_pair_snip, 1, NULL);
+                    node_index = ctx_create_node_do (vb, item_ctx, lookup_pair_snip, 1, NULL);
                 } 
                 else
                     // To improve: currently, pairing stops at the first non-match

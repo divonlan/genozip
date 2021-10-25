@@ -362,7 +362,7 @@ static void zip_compress_b250 (VBlock *vb)
 
         if (flag.show_time) codec_show_time (vb, "B250", ctx->tag_name, ctx->bcodec);
         
-        if (flag.debug_seg) iprintf ("zip_compress_b250: vb_i=%u %s: B250.len=%"PRIu64" NODES.len=%"PRIu64"\n", 
+        if (HAS_DEBUG_SEG(ctx)) iprintf ("zip_compress_b250: vb_i=%u %s: B250.len=%"PRIu64" NODES.len=%"PRIu64"\n", 
                                      vb->vblock_i, ctx->tag_name, ctx->b250.len, ctx->nodes.len);
 
         START_TIMER; // for compressor_time
@@ -393,15 +393,15 @@ static void zip_compress_local (VBlock *vb)
 
         if (flag.show_time) codec_show_time (vb, "LOCAL", ctx->tag_name, ctx->lcodec);
 
-        if (flag.debug_seg) iprintf ("zip_compress_local: vb_i=%u %s: LOCAL.len=%"PRIu64" LOCAL.param=%"PRIu64"\n", 
-                                      vb->vblock_i, ctx->tag_name, ctx->local.len, ctx->local.param);
+        if (HAS_DEBUG_SEG(ctx)) iprintf ("zip_compress_local: vb_i=%u %s: LOCAL.len=%"PRIu64" LOCAL.param=%"PRIu64"\n", 
+                                         vb->vblock_i, ctx->tag_name, ctx->local.len, ctx->local.param);
 
         START_TIMER; // for compressor_time
 
         zfile_compress_local_data (vb, ctx, 0);
 
         ctx->local_compressed = true; // so we don't compress it again
-        ctx->no_stons = true; // since we had data on local, we don't allow ctx_evaluate_snip_merge to move singletons to local
+        ctx->no_stons = true; // since we had data on local, we don't allow ctx_commit_node to move singletons to local
                
         if (flag.show_time) 
             ctx->compressor_time += CHECK_TIMER; // sum b250 and local

@@ -33,7 +33,7 @@ static inline bool sam_seg_predict_TLEN (VBlockSAM *vb, ZipDataLineSAM *dl, bool
         *predicted_tlen = 0;
     
     else if (!dl->FLAG.bits.rev_comp && dl->FLAG.bits.next_rev_comp) {
-        if (!ctx_encountered_in_line_(vb, CTX(OPTION_MC_Z))) return false;  // if we use this formula referring to MC, we need to assure PIZ that MC exists on this line, as it cannot easily check 
+        if (!ctx_encountered_in_line_(VB, CTX(OPTION_MC_Z))) return false;  // if we use this formula referring to MC, we need to assure PIZ that MC exists on this line, as it cannot easily check 
         
         *predicted_tlen = pnext_pos_delta + CTX(OPTION_MC_Z)->last_value.i; // ref_consumed of mate
     }
