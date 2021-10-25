@@ -1,10 +1,9 @@
 # This is the list of genozip authors for copyright purposes.
 #
-# This does not necessarily list everyone who has contributed code, since in
-# some cases, their employer may be the copyright holder.  To see the full list
-# of contributors, see the revision history in source control.
+# Genozip also uses source code from other projects according to their respective 
+# licenses, and we are greatly thankful to their respective authors.
+# See here: https://genozip.com/attributions.html
 #
-# Genozip uses code from other open source projects according to their licenses - these
-# appears in subdirectories with the license and authors information there.
+
 Divon Lan divon@genozip.com
 

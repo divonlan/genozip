@@ -23,6 +23,7 @@
 #define WEBSITE_CHAIN        GENOZIP_URL "/chain.html"
 #define WEBSITE_INSTALLING   GENOZIP_URL "/installing.html"
 #define WEBSITE_USING_ON_HPC GENOZIP_URL "/using-on-hpc.html"
+#define WEBSITE_ATTRIBUTIONS GENOZIP_URL "/attributions.html"
 
 #define EMAIL_SUPPORT  "support@genozip.com"
 #define EMAIL_SALES    "sales@genozip.com"

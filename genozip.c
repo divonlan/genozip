@@ -110,6 +110,10 @@ static void main_print_help (bool explicit)
         str_print_text (help_genocat, sizeof(help_genocat) / sizeof(char*), 
                         "                          ",  "\n", 0);
 
+    else if (flag.help && !strcmp (flag.help, "attributions")) 
+        str_print_text (help_attributions, sizeof(help_attributions) / sizeof(char*), 
+                        "                          ",  "\n", 0);
+
     else if (flag.help && !strcmp (flag.help, "input")) 
         iprintf ("Supported file types for --input:\n%s\n", file_compressible_extensions (false));
     
