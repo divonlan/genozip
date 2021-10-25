@@ -314,18 +314,26 @@ void vcf_tags_populate_tags_from_command_line (void)
     }
 
     // add some system-default values (the user can override these with --dvcf-rename and --dvcf-drop)
-    vcf_tags_add_system_default ((DefaultTag){ cSTR("MAX_AF"),       DTYPE_VCF_INFO,   .refalt="DROP_MAX_AF",  .refalt_len = sizeof "DROP_MAX_AF"-1 });
-    vcf_tags_add_system_default ((DefaultTag){ cSTR("DROP_MAX_AF"),  DTYPE_VCF_INFO,   .refalt="MAX_AF",       .refalt_len = sizeof "MAX_AF"-1 });
-    vcf_tags_add_system_default ((DefaultTag){ cSTR("CLNHGVS"),      DTYPE_VCF_INFO,   .always="DROP_CLNHGVS", .always_len = sizeof "DROP_CLNHGVS"-1 });
-    vcf_tags_add_system_default ((DefaultTag){ cSTR("DROP_CLNHGVS"), DTYPE_VCF_INFO,   .always="CLNHGVS",      .always_len = sizeof "CLNHGVS"-1 });
-    vcf_tags_add_system_default ((DefaultTag){ cSTR("ADF"),          DTYPE_VCF_FORMAT, .strand="ADR",          .strand_len = sizeof "ADR"-1 });
-    vcf_tags_add_system_default ((DefaultTag){ cSTR("ADR"),          DTYPE_VCF_FORMAT, .strand="ADF",          .strand_len = sizeof "ADF"-1 });
-    vcf_tags_add_system_default ((DefaultTag){ cSTR("F1R2"),         DTYPE_VCF_FORMAT, .strand="F2R1",         .strand_len = sizeof "F2R1"-1 });
-    vcf_tags_add_system_default ((DefaultTag){ cSTR("F2R1"),         DTYPE_VCF_FORMAT, .strand="F1R2",         .strand_len = sizeof "F1R2"-1 });
-    vcf_tags_add_system_default ((DefaultTag){ cSTR("REF_F1R2"),     DTYPE_VCF_FORMAT, .strand="REF_F2R1",     .strand_len = sizeof "REF_F2R1"-1, .refalt = "ALT_F1R2", .refalt_len = sizeof "ALT_F1R2"-1, .tlafer = "ALT_F2R1", .tlafer_len = sizeof "ALT_F2R1"-1});
-    vcf_tags_add_system_default ((DefaultTag){ cSTR("REF_F2R1"),     DTYPE_VCF_FORMAT, .strand="REF_F1R2",     .strand_len = sizeof "REF_F1R2"-1, .refalt = "ALT_F2R1", .refalt_len = sizeof "ALT_F2R1"-1, .tlafer = "ALT_F1R2", .tlafer_len = sizeof "ALT_F1R2"-1});
-    vcf_tags_add_system_default ((DefaultTag){ cSTR("ALT_F1R2"),     DTYPE_VCF_FORMAT, .strand="ALT_F2R1",     .strand_len = sizeof "ALT_F2R1"-1, .refalt = "REF_F1R2", .refalt_len = sizeof "REF_F1R2"-1, .tlafer = "REF_F2R1", .tlafer_len = sizeof "REF_F2R1"-1});
-    vcf_tags_add_system_default ((DefaultTag){ cSTR("ALT_F2R1"),     DTYPE_VCF_FORMAT, .strand="ALT_F1R2",     .strand_len = sizeof "ALT_F1R2"-1, .refalt = "REF_F2R1", .refalt_len = sizeof "REF_F2R1"-1, .tlafer = "REF_F1R2", .tlafer_len = sizeof "REF_F1R2"-1});
+    vcf_tags_add_system_default ((DefaultTag){ cSTR("MAX_AF"),       DTYPE_VCF_INFO,   .refalt=cSTR("DROP_MAX_AF") });
+    vcf_tags_add_system_default ((DefaultTag){ cSTR("DROP_MAX_AF"),  DTYPE_VCF_INFO,   .refalt=cSTR("MAX_AF") });
+    vcf_tags_add_system_default ((DefaultTag){ cSTR("CLNHGVS"),      DTYPE_VCF_INFO,   .always=cSTR("DROP_CLNHGVS") });
+    vcf_tags_add_system_default ((DefaultTag){ cSTR("DROP_CLNHGVS"), DTYPE_VCF_INFO,   .always=cSTR("CLNHGVS") });
+    vcf_tags_add_system_default ((DefaultTag){ cSTR("ADF"),          DTYPE_VCF_FORMAT, .strand=cSTR("ADR") });
+    vcf_tags_add_system_default ((DefaultTag){ cSTR("ADR"),          DTYPE_VCF_FORMAT, .strand=cSTR("ADF") });
+    vcf_tags_add_system_default ((DefaultTag){ cSTR("F1R2"),         DTYPE_VCF_FORMAT, .strand=cSTR("F2R1") });
+    vcf_tags_add_system_default ((DefaultTag){ cSTR("F2R1"),         DTYPE_VCF_FORMAT, .strand=cSTR("F1R2") });
+    vcf_tags_add_system_default ((DefaultTag){ cSTR("REF_F1R2"),     DTYPE_VCF_FORMAT, .strand=cSTR("REF_F2R1"), .refalt = cSTR("ALT_F1R2"), .tlafer = cSTR("ALT_F2R1") });
+    vcf_tags_add_system_default ((DefaultTag){ cSTR("REF_F2R1"),     DTYPE_VCF_FORMAT, .strand=cSTR("REF_F1R2"), .refalt = cSTR("ALT_F2R1"), .tlafer = cSTR("ALT_F1R2") });
+    vcf_tags_add_system_default ((DefaultTag){ cSTR("ALT_F1R2"),     DTYPE_VCF_FORMAT, .strand=cSTR("ALT_F2R1"), .refalt = cSTR("REF_F1R2"), .tlafer = cSTR("REF_F2R1") });
+    vcf_tags_add_system_default ((DefaultTag){ cSTR("ALT_F2R1"),     DTYPE_VCF_FORMAT, .strand=cSTR("ALT_F1R2"), .refalt = cSTR("REF_F2R1"), .tlafer = cSTR("REF_F1R2") });
+
+    // VarScan tags
+    vcf_tags_add_system_default ((DefaultTag){ cSTR("RDF"),          DTYPE_VCF_FORMAT, .strand=cSTR("RDR") }); 
+    vcf_tags_add_system_default ((DefaultTag){ cSTR("RDR"),          DTYPE_VCF_FORMAT, .strand=cSTR("RDF") }); 
+    vcf_tags_add_system_default ((DefaultTag){ cSTR("ABQ"),          DTYPE_VCF_FORMAT, .refalt=cSTR("RBQ") }); 
+    vcf_tags_add_system_default ((DefaultTag){ cSTR("RBQ"),          DTYPE_VCF_FORMAT, .refalt=cSTR("ABQ") }); 
+    // note: in VarScan, we should also have AD<>RD ADF<>RDF ADR<>RDR in case of Ref/Alt switch but
+    // AD, ADF and ADR conflict the standard 'R' tags with the same need.
 
     // sort again
     qsort (z_file->apriori_tags.data, z_file->apriori_tags.len, sizeof (Tag), tags_sorter); 

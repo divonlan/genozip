@@ -21,6 +21,8 @@ MAX_AF        INFO   DROP_MAX_AF  REF⇆ALT switch
 CLNHGVS       INFO   DROP_CLNHGVS Always
 ADF           FORMAT ADR          Strand reversal
 ADR           FORMAT ADF          Strand reversal
+RDF           FORMAT RDR          Strand reversal
+RDR           FORMAT RDF          Strand reversal
 F1R1          FORMAT F2R1         Strand reversal
 F2R1          FORMAT F1R2         Strand reversal
 REF_F1R2      FORMAT REF_F2R1     Strand reversal

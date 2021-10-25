@@ -476,7 +476,7 @@ WordIndex seg_delta_vs_other_do (VBlock *vb, Context *ctx, Context *other_ctx,
 {
     if (!other_ctx) goto fallback;
 
-    if (value && !str_get_int (value, value_len, &ctx->last_value.i)) goto fallback;
+    if (value && !str_get_int (STRa(value), &ctx->last_value.i)) goto fallback;
 
     int64_t delta = ctx->last_value.i - other_ctx->last_value.i; 
     if (max_delta >= 0 && (delta > max_delta || delta < -max_delta)) goto fallback;
@@ -486,7 +486,14 @@ WordIndex seg_delta_vs_other_do (VBlock *vb, Context *ctx, Context *other_ctx,
 
     other_ctx->flags.store = STORE_INT;
 
-    return seg_by_ctx (VB, snip, snip_len, ctx, add_bytes);
+    if (ctx->flags.store == STORE_INT) {
+        if (vb->data_type == DT_VCF && dict_id_is_type_2 (ctx->dict_id))
+            vcf_set_last_sample_value (vb, ctx, ctx->last_value.i);
+        else
+            ctx_set_last_value (vb, ctx, ctx->last_value.i);
+    }
+
+    return seg_by_ctx (VB, STRa(snip), ctx, add_bytes);
 
 fallback:
     return value ? seg_by_ctx (VB, value, value_len, ctx, add_bytes) : seg_integer_do (vb, ctx->did_i, ctx->last_value.i, add_bytes);

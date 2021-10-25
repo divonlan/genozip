@@ -41,9 +41,12 @@
 
 // FORMAT fields
 #pragma GENDICT FORMAT_AD=DTYPE_2=AD       // <ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">
-#pragma GENDICT FORMAT_ADF=DTYPE_2=ADF     // <ID=ADF,Number=R,Type=Float,Description="Allele dosage on fwd strand">
-#pragma GENDICT FORMAT_ADR=DTYPE_2=ADR     // <ID=ADR,Number=R,Type=Float,Description="Allele dosage on rev strand">
+                                           // BUT in VarScan conflicting: <ID=AD,Number=1,Type=Integer,Description="Depth of variant-supporting bases (reads2)">
 #pragma GENDICT FORMAT_ADALL=DTYPE_2=ADALL // from GIAB: <ID=ADALL,Number=R,Type=Integer,Description="Net allele depths across all datasets">
+#pragma GENDICT FORMAT_ADF=DTYPE_2=ADF     // <ID=ADF,Number=R,Type=Float,Description="Allele dosage on fwd strand">
+                                           // Conflicting VarScan: <ID=ADF,Number=1,Type=Integer,Description="Depth of variant-supporting bases on forward strand (reads2plus)">
+#pragma GENDICT FORMAT_ADR=DTYPE_2=ADR     // <ID=ADR,Number=R,Type=Float,Description="Allele dosage on rev strand">
+                                           // Conflicting VarScan: <ID=ADR,Number=1,Type=Integer,Description="Depth of variant-supporting bases on reverse strand (reads2minus)">
 #pragma GENDICT FORMAT_AF=DTYPE_2=AF       // <ID=AF,Number=A,Type=Float,Description="Allele fractions for alt alleles in the order listed">
 #pragma GENDICT FORMAT_DP=DTYPE_2=DP       // <ID=DP,Number=1,Type=Integer,Description="Approximate read depth (reads with MQ=255 or with bad mates are filtered)">
 #pragma GENDICT FORMAT_DS=DTYPE_2=DS
@@ -198,6 +201,21 @@
 // Structural variants (also uses INFO/END): https://www.internationalgenome.org/wiki/Analysis/Variant%20Call%20Format/VCF%20(Variant%20Call%20Format)%20version%204.0/encoding-structural-variants/
 #pragma GENDICT INFO_SVLEN=DTYPE_1=SVLEN
 
+// VarScan FORMAT and INFO fields: http://varscan.sourceforge.net/using-varscan.html
+#pragma GENDICT FORMAT_RDF=DTYPE_2=RDF     // <ID=RDF,Number=1,Type=Integer,Description="Depth of reference-supporting bases on forward strand (reads1plus)">
+#pragma GENDICT FORMAT_RDR=DTYPE_2=RDR     // <ID=RDR,Number=1,Type=Integer,Description="Depth of reference-supporting bases on reverse strand (reads1minus)">
+#pragma GENDICT FORMAT_SDP=DTYPE_2=SDP     // <ID=SDP,Number=1,Type=Integer,Description="Raw Read Depth as reported by SAMtools">
+#pragma GENDICT FORMAT_RD=DTYPE_2=RD       // <ID=RD,Number=1,Type=Integer,Description="Depth of reference-supporting bases (reads1)">
+#pragma GENDICT FORMAT_FREQ=DTYPE_2=FREQ   // <ID=FREQ,Number=1,Type=String,Description="Variant allele frequency">
+#pragma GENDICT FORMAT_PVAL=DTYPE_2=PVAL   // <ID=PVAL,Number=1,Type=String,Description="P-value from Fisher's Exact Test">
+#pragma GENDICT FORMAT_RBQ=DTYPE_2=RBQ     // <ID=RBQ,Number=1,Type=Integer,Description="Average quality of reference-supporting bases (qual1)">
+#pragma GENDICT FORMAT_ABQ=DTYPE_2=ABQ     // <ID=ABQ,Number=1,Type=Integer,Description="Average quality of variant-supporting bases (qual2)">
+#pragma GENDICT INFO_ADP=DTYPE_1=ADP       // <ID=ADP,Number=1,Type=Integer,Description="Average per-sample depth of bases with Phred score >= 0">
+#pragma GENDICT INFO_WT=DTYPE_1=WT         // <ID=WT,Number=1,Type=Integer,Description="Number of samples called reference (wild-type)">
+#pragma GENDICT INFO_HET=DTYPE_1=HET       // <ID=HET,Number=1,Type=Integer,Description="Number of samples called heterozygous-variant">
+#pragma GENDICT INFO_HOM=DTYPE_1=HOM       // <ID=HOM,Number=1,Type=Integer,Description="Number of samples called homozygous-variant">
+#pragma GENDICT INFO_NC=DTYPE_1=NC         // <ID=NC,Number=1,Type=Integer,Description="Number of samples not called">
+
 // genozip INFO fields
 #pragma GENDICT INFO_LUFT=DTYPE_1=LUFT
 #pragma GENDICT INFO_PRIM=DTYPE_1=PRIM
@@ -224,6 +242,7 @@ extern void vcf_zip_after_compute (VBlockP vb);
 extern void vcf_seg_finalize (VBlockP vb_);
 extern bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern TranslatorId vcf_lo_luft_trans_id (DictId dict_id, char number);
+extern void vcf_set_last_sample_value (VBlockP vb, ContextP ctx, int64_t last_value);
 
 // PIZ stuff
 extern bool vcf_piz_read_one_vb (VBlockP vb, Section sl);

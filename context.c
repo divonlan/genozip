@@ -1320,7 +1320,7 @@ static void ctx_prepare_for_dict_compress (VBlockP vb)
         if (frag_next_node == AFTERENT (CtxNode, frag_ctx->nodes)) {
             frag_ctx++;
             frag_next_node = NULL;
-            frag_codec = CODEC_UNKNOWN;
+            frag_codec = CODEC_UNKNOWN; // we assign a fresh codec for each dictionary
             frag_size = 0;
         }
 

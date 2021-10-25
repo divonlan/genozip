@@ -105,8 +105,18 @@ void vcf_seg_initialize (VBlock *vb_)
     CTX(VCF_POS)->     flags.store = STORE_INT;   // since v12
     CTX(VCF_oPOS)->    flags.store = STORE_INT;   // used by vcf_piz_luft_END
 
+    CTX(FORMAT_ADALL)->flags.store = STORE_INT;
+    CTX(FORMAT_DP)->   flags.store = STORE_INT;
+    CTX(FORMAT_RD)->   flags.store = STORE_INT;   // since v13
+    CTX(FORMAT_RDR)->  flags.store = STORE_INT;   // since v13
+    CTX(FORMAT_RDF)->  flags.store = STORE_INT;   // since v13
+    CTX(FORMAT_SDP)->  flags.store = STORE_INT;   // since v13
+    CTX(INFO_ADP)->    flags.store = STORE_INT;   // since v13
+
     seg_id_field_init (CTX(VCF_ID));
     seg_id_field_init (CTX(INFO_CSQ_Existing_variation));
+
+    CTX(FORMAT_RD)->flags.store = STORE_INT;
 
     // counts sections
     CTX(VCF_CHROM)->   counts_section = true;
