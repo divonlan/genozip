@@ -138,9 +138,9 @@ extern void seg_rollback (VBlockP vb);
     next_field = seg_get_next_item (vb, field_start, &len, GN_FORBIDEN, GN_SEP, GN_SEP, &field_len, &separator, NULL, #f); \
     FIELD (f)
 
-#define SEG_NEXT_ITEM_SP(f) ({ \
+#define SEG_NEXT_ITEM_SP(f) \
     GET_NEXT_ITEM_SP (f); \
-    seg_by_did_i (VB, field_start, field_len, f, field_len+1); })
+    seg_by_did_i (VB, field_start, field_len, f, field_len+1); 
 
 #define GET_LAST_ITEM_SP(f)  \
     field_start = next_field; \

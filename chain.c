@@ -48,7 +48,9 @@ typedef struct {
 } ChainAlignment;
 
 static Buffer chain = EMPTY_BUFFER;   // immutable after loaded
-static Mutex chain_mutex = {};        // protect chain wnile loading
+static Mutex chain_mutex = {};        // protect chain while PIZ: loading, SEG: accessing seg_alns_so_far
+
+static Buffer seg_alns_so_far = EMPTY_BUFFER; // Seg: alignments encountered so far - used for de-dupping in --match
 
 // 1) When pizzing a chain as a result of genozip --chain: chain_piz_initialize: prim_contig and luft_contig are generated 
 //    from z_file->contexts of a chain file 
@@ -140,6 +142,12 @@ void chain_zip_initialize (void)
     }
     else
         segconf.chain_mismatches_ref = true; // chain file can be compressed, but not used with --chain
+
+    if (flag.match_chrom_to_reference) {
+        mutex_initialize (chain_mutex);
+        seg_alns_so_far.len = 0;     // free allocation by previous files
+        buf_alloc (evb, &seg_alns_so_far, 0, 100, ChainAlignment, 1, "seg_alns_so_far"); // first allocation must be in main thread, so the buffer can be added to evb buf_list
+    }
 }
 
 // Tests lengths of prim/luft contigs of first line in chain file vs the two references. Error if they don't match, but swapping them matches.
@@ -323,6 +331,27 @@ static WordIndex chain_seg_name_and_size (VBlockCHAIN *vb, Reference ref, Coords
     return node_index;
 }
 
+static bool chain_seg_is_duplicate (ChainAlignment aln)
+{
+    mutex_lock (chain_mutex);
+
+    // check if this alignment was already encountered
+    for (uint64_t i=0; i < seg_alns_so_far.len; i++) {
+        ChainAlignment *old_aln =  ENT (ChainAlignment, seg_alns_so_far, i);
+        if (!memcmp (old_aln, &aln, sizeof (ChainAlignment))) {
+            mutex_unlock (chain_mutex);
+            return true;  // a duplicate
+        }
+    }
+    
+    // first encounter with this alignment - add it to the buffer
+    buf_alloc (NULL, &seg_alns_so_far, 1, 0, ChainAlignment, CTX_GROWTH, NULL);
+    NEXTENT (ChainAlignment, seg_alns_so_far) = aln;
+
+    mutex_unlock (chain_mutex);
+    return false; // not duplicate
+}
+
 bool chain_zip_dts_flag (void)
 {
     return segconf.chain_mismatches_ref;
@@ -336,7 +365,9 @@ const char *chain_seg_txt_line (VBlock *vb_, const char *field_start_line, uint3
     char separator;
     bool mismatch=false;
 
-    seg_create_rollback_point (vb_, NUM_CHAIN_FIELDS, CHAIN_NAMELUFT, CHAIN_STRNDLUFT, CHAIN_STARTLUFT, CHAIN_ENDLUFT, CHAIN_SIZELUFT, CHAIN_NAMEPRIM, CHAIN_STRNDPRIM, CHAIN_STARTPRIM, CHAIN_ENDPRIM, CHAIN_SIZEPRIM, CHAIN_CHAIN, CHAIN_SCORE, CHAIN_ID, CHAIN_VERIFIED, CHAIN_SET, CHAIN_SIZE, CHAIN_GAPS, CHAIN_EOL, CHAIN_TOPLEVEL, CHAIN_SEP);
+    seg_create_rollback_point (vb_, NUM_CHAIN_FIELDS, CHAIN_NAMELUFT, CHAIN_STRNDLUFT, CHAIN_STARTLUFT, CHAIN_ENDLUFT, CHAIN_SIZELUFT, 
+                               CHAIN_NAMEPRIM, CHAIN_STRNDPRIM, CHAIN_STARTPRIM, CHAIN_ENDPRIM, CHAIN_SIZEPRIM, CHAIN_CHAIN, CHAIN_SCORE, 
+                               CHAIN_ID, CHAIN_VERIFIED, CHAIN_SET, CHAIN_SIZE, CHAIN_GAPS, CHAIN_EOL, CHAIN_TOPLEVEL, CHAIN_SEP);
     typeof(vb->recon_size) save_recon_size = vb->recon_size;
 
     int32_t len = AFTERENT (char, vb->txt_data) - field_start_line;
@@ -347,40 +378,46 @@ const char *chain_seg_txt_line (VBlock *vb_, const char *field_start_line, uint3
     GET_NEXT_ITEM_SP (CHAIN_NAMEPRIM);
     GET_NEXT_ITEM_SP (CHAIN_SIZEPRIM);
     bool verified = true; // start optimistically
-    WordIndex prim_name_ni = chain_seg_name_and_size (vb, prim_ref, DC_PRIMARY, CHAIN_NAMEPRIM, STRdid(CHAIN_NAMEPRIM), CHAIN_SIZEPRIM, STRdid(CHAIN_SIZEPRIM), &mismatch, &verified);
+    WordIndex prim_chrom = chain_seg_name_and_size (vb, prim_ref, DC_PRIMARY, CHAIN_NAMEPRIM, STRd(CHAIN_NAMEPRIM), CHAIN_SIZEPRIM, STRd(CHAIN_SIZEPRIM),
+                                                    &mismatch, &verified);
 
     SEG_NEXT_ITEM_SP (CHAIN_STRNDPRIM);
+    
+    #define ASSERT_VALID_STRAND(f) ASSSEG (f##_len==1 && (*f##_str=='+' || *f##_str=='-'), f##_str, "Invalid strand character \"%.*s\", expecting '+' or '-'", f##_len, f##_str);
+    ASSERT_VALID_STRAND (CHAIN_STRNDPRIM);
 
     GET_NEXT_ITEM_SP (CHAIN_STARTPRIM);
-    seg_pos_field (vb_, CHAIN_STARTPRIM, CHAIN_ENDPRIM, 0, 0, field_start, field_len, 0, field_len + 1);
+    seg_pos_field (vb_, CHAIN_STARTPRIM, CHAIN_ENDPRIM, 0, 0, STRd(CHAIN_STARTPRIM), 0, field_len + 1);
 
     GET_NEXT_ITEM_SP (CHAIN_ENDPRIM);
-    seg_pos_field (vb_, CHAIN_ENDPRIM, CHAIN_STARTPRIM, 0, 0, field_start, field_len, 0,field_len + 1);
+    seg_pos_field (vb_, CHAIN_ENDPRIM, CHAIN_STARTPRIM, 0, 0, STRd(CHAIN_ENDPRIM), 0,field_len + 1);
 
-    random_access_update_first_last_pos (vb_, DC_PRIMARY, prim_name_ni, STRdid(CHAIN_STARTPRIM), STRdid (CHAIN_ENDPRIM));
+    random_access_update_first_last_pos (vb_, DC_PRIMARY, prim_chrom, STRd(CHAIN_STARTPRIM), STRd (CHAIN_ENDPRIM));
 
     GET_NEXT_ITEM_SP (CHAIN_NAMELUFT);
     GET_NEXT_ITEM_SP (CHAIN_SIZELUFT);
-    WordIndex luft_name_ni = chain_seg_name_and_size (vb, gref, DC_LUFT, CHAIN_NAMELUFT, STRdid(CHAIN_NAMELUFT), CHAIN_SIZELUFT, STRdid(CHAIN_SIZELUFT), &mismatch, &verified);
+    WordIndex luft_chrom = chain_seg_name_and_size (vb, gref, DC_LUFT, CHAIN_NAMELUFT, STRd(CHAIN_NAMELUFT), CHAIN_SIZELUFT, STRd(CHAIN_SIZELUFT), 
+                                                    &mismatch, &verified);
 
     seg_by_did_i (VB, verified ? "1" : "0", 1, CHAIN_VERIFIED, 0);
 
     SEG_NEXT_ITEM_SP (CHAIN_STRNDLUFT);
+    ASSERT_VALID_STRAND (CHAIN_STRNDLUFT);
 
     GET_NEXT_ITEM_SP (CHAIN_STARTLUFT);
-    seg_pos_field (vb_, CHAIN_STARTLUFT, CHAIN_ENDLUFT, 0, 0, field_start, field_len, 0, field_len + 1);
+    seg_pos_field (vb_, CHAIN_STARTLUFT, CHAIN_ENDLUFT, 0, 0, STRd(CHAIN_STARTLUFT), 0, field_len + 1);
 
     GET_NEXT_ITEM_SP (CHAIN_ENDLUFT);
     chain_seg_luft_end_field (vb, field_start, field_len);
 
-    random_access_update_first_last_pos (vb_, DC_LUFT, luft_name_ni, STRdid(CHAIN_STARTLUFT), STRdid(CHAIN_ENDLUFT));
+    random_access_update_first_last_pos (vb_, DC_LUFT, luft_chrom, STRd(CHAIN_STARTLUFT), STRd(CHAIN_ENDLUFT));
 
     // if ID is numeric, preferably store as delta, if not - normal snip
     GET_LAST_ITEM_SP (CHAIN_ID);
-    if (str_is_int (field_start, field_len))
-        seg_pos_field (vb_, CHAIN_ID, CHAIN_ID, 0, 0, field_start, field_len, 0, field_len + 1); // just a numeric delta    
+    if (str_is_int (STRd(CHAIN_ID)))
+        seg_pos_field (vb_, CHAIN_ID, CHAIN_ID, 0, 0, STRd(CHAIN_ID), 0, field_len + 1); // just a numeric delta    
     else
-        seg_by_did_i (VB, field_start, field_len, CHAIN_ID, field_len + 1);
+        seg_by_did_i (VB, STRd(CHAIN_ID), CHAIN_ID, field_len + 1);
 
     SEG_EOL (CHAIN_EOL, true);
 
@@ -427,11 +464,11 @@ const char *chain_seg_txt_line (VBlock *vb_, const char *field_start_line, uint3
         .keep_empty_item_sep = true, // avoid double-deleting the space - only chain_piz_special_BACKSPACE should delete it, not container_reconstruct_do
         .filter_items        = true,
         .items               = { { .dict_id = { _CHAIN_SIZE } },
-                                 { .dict_id = { _CHAIN_SEP }  }, 
+                                 { .dict_id = { _CHAIN_SEP  } }, 
                                  { .dict_id = { _CHAIN_GAPS } }, // prim_gap
-                                 { .dict_id = { _CHAIN_SEP }  }, 
+                                 { .dict_id = { _CHAIN_SEP  } }, 
                                  { .dict_id = { _CHAIN_GAPS } }, // luft_gap
-                                 { .dict_id = { _CHAIN_EOL }  } }
+                                 { .dict_id = { _CHAIN_EOL  } } }
     };
 
     container_seg (vb, CTX(CHAIN_SET), (ContainerP)&alignment_set, 0, 0, 0);
@@ -443,14 +480,27 @@ const char *chain_seg_txt_line (VBlock *vb_, const char *field_start_line, uint3
 
     // case: alignment contig names mismatch the references - handling depends on --match-chrom-to-reference
     if (mismatch) {
-        if (flag.match_chrom_to_reference) {
-            seg_rollback (vb_);         // remove the alignment completely
-            vb->recon_size = save_recon_size - (next_field - field_start_line);
-            vb->line_i--;
-        }
+        if (flag.match_chrom_to_reference) 
+            goto rollback;
         else
             segconf.chain_mismatches_ref = true; // mark this chain file as unsuitable for use with --chain (we only ever set this, never reset, so no thread safety issues)
     }
+
+    // in --match, we make sure to remove duplicate alignmets
+    else if (!segconf.running && flag.match_chrom_to_reference &&
+             chain_seg_is_duplicate ((ChainAlignment){ .prim_chrom      = prim_chrom,                          .luft_chrom      = luft_chrom,  // node_index==word_index bc ref contigs prepopulated in zctx(CHROM)
+                                                       .prim_first_1pos = CTX(CHAIN_STARTPRIM)->last_value.i,  .luft_first_1pos = CTX(CHAIN_STARTLUFT)->last_value.i,
+                                                       .prim_last_1pos  = CTX(CHAIN_ENDPRIM  )->last_value.i,  .luft_last_1pos  = CTX(CHAIN_ENDLUFT  )->last_value.i,
+                                                       .is_xstrand      = *CHAIN_STRNDPRIM_str != *CHAIN_STRNDLUFT_str }))
+        goto rollback;
+
+    return next_field;
+
+rollback:
+    // remove the alignment completely
+    seg_rollback (vb_); 
+    vb->recon_size = save_recon_size - (next_field - field_start_line);
+    vb->line_i--;
 
     return next_field;
 }
@@ -618,7 +668,7 @@ static inline void chain_piz_filter_ingest_alignmet (VBlockCHAIN *vb)
         .prim_first_1pos = 1 + vb->next_prim_0pos,         // +1 bc our alignments are 1-based vs the chain file that is 0-based
         .prim_last_1pos  = 1 + last_prim_0pos,
         .luft_chrom      = vb->last_index(CHAIN_NAMELUFT), // ditto
-        .luft_first_1pos = is_xstrand ? (size_dst - last_luft_0pos) : 1 + vb->next_luft_0pos, // +1 to convert to 1-base. note that "size_dst" has a built-in +1.
+        .luft_first_1pos = is_xstrand ? (size_dst - last_luft_0pos)     : 1 + vb->next_luft_0pos, // +1 to convert to 1-base. note that "size_dst" has a built-in +1.
         .luft_last_1pos  = is_xstrand ? (size_dst - vb->next_luft_0pos) : 1 + last_luft_0pos,
 
         .is_xstrand     = is_xstrand

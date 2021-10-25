@@ -765,37 +765,37 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     // PacBio BAM: {movieName}/{holeNumber}/{qStart}_{qEnd} see here: https://pacbiofileformats.readthedocs.io/en/3.0/BAM.html
     // BGI: E100020409L1C001R0030000234 (E100020409=Flow cell serial number, L1=Lane 1, C001R003=column 1 row 3, 0000234=Tile) Also see: https://github.com/IMB-Computational-Genomics-Lab/BGIvsIllumina_scRNASeq
     GET_NEXT_ITEM (SAM_QNAME);
-    sam_seg_QNAME (vb, dl, STRdid(SAM_QNAME), 1);
+    sam_seg_QNAME (vb, dl, STRd(SAM_QNAME), 1);
 
     GET_NEXT_ITEM (SAM_FLAG);
-    sam_seg_FLAG (vb, dl, STRdid(SAM_FLAG), SAM_FLAG_len+1);
+    sam_seg_FLAG (vb, dl, STRd(SAM_FLAG), SAM_FLAG_len+1);
     
     GET_NEXT_ITEM (SAM_RNAME);
 
-    sam_seg_RNAME_RNEXT (VB, SAM_RNAME, STRdid(SAM_RNAME), SAM_RNAME_len+1);
+    sam_seg_RNAME_RNEXT (VB, SAM_RNAME, STRd(SAM_RNAME), SAM_RNAME_len+1);
 
     // note: pos can have a value even if RNAME="*" - this happens if a SAM with a RNAME that is not in the header is converted to BAM with samtools
     GET_NEXT_ITEM (SAM_POS);
-    PosType this_pos = sam_seg_POS (vb, dl, STRdid (SAM_POS), 0, prev_line_chrom, prev_line_pos, SAM_POS_len+1);
+    PosType this_pos = sam_seg_POS (vb, dl, STRd (SAM_POS), 0, prev_line_chrom, prev_line_pos, SAM_POS_len+1);
 
     if (SAM_RNAME_len != 1 || *SAM_RNAME_str != '*')
         sam_seg_verify_RNAME_POS (VB, SAM_RNAME_str, this_pos);
 
     GET_NEXT_ITEM (SAM_MAPQ);
-    sam_seg_MAPQ (VB, dl, STRdid(SAM_MAPQ), 0, SAM_MAPQ_len+1);
+    sam_seg_MAPQ (VB, dl, STRd(SAM_MAPQ), 0, SAM_MAPQ_len+1);
 
     // CIGAR - we wait to get more info from SEQ and QUAL
     GET_NEXT_ITEM (SAM_CIGAR);
-    sam_cigar_analyze (vb, STRdid(SAM_CIGAR), &dl->seq_len);
+    sam_cigar_analyze (vb, STRd(SAM_CIGAR), &dl->seq_len);
     vb->last_cigar = SAM_CIGAR_str;
     unsigned last_cigar_len = SAM_CIGAR_len;
     ((char *)vb->last_cigar)[SAM_CIGAR_len] = 0; // nul-terminate CIGAR string
 
     GET_NEXT_ITEM (SAM_RNEXT);
-    sam_seg_RNAME_RNEXT (VB, SAM_RNEXT, STRdid(SAM_RNEXT), SAM_RNEXT_len+1);
+    sam_seg_RNAME_RNEXT (VB, SAM_RNEXT, STRd(SAM_RNEXT), SAM_RNEXT_len+1);
     
     GET_NEXT_ITEM (SAM_PNEXT);
-    sam_seg_PNEXT (vb, dl, STRdid (SAM_PNEXT), 0, prev_line_pos, SAM_PNEXT_len+1);
+    sam_seg_PNEXT (vb, dl, STRd (SAM_PNEXT), 0, prev_line_pos, SAM_PNEXT_len+1);
 
     GET_NEXT_ITEM (SAM_TLEN);
 
@@ -813,14 +813,14 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
             vb->last_cigar, dl->seq_len, SAM_SEQ_len, SAM_SEQ_len, SAM_SEQ_str);
 
     // calculate diff vs. reference (denovo or loaded)
-    sam_seg_SEQ (vb, SAM_SQBITMAP, STRdid(SAM_SEQ), this_pos, vb->last_cigar, vb->ref_consumed, vb->ref_and_seq_consumed, 
+    sam_seg_SEQ (vb, SAM_SQBITMAP, STRd(SAM_SEQ), this_pos, vb->last_cigar, vb->ref_consumed, vb->ref_and_seq_consumed, 
                        0, field_len, vb->last_cigar, SAM_SEQ_len+1);
 
     GET_MAYBE_LAST_ITEM (SAM_QUAL);
-    sam_seg_QUAL (vb, dl, STRdid(SAM_QUAL), SAM_QUAL_len + 1); 
+    sam_seg_QUAL (vb, dl, STRd(SAM_QUAL), SAM_QUAL_len + 1); 
 
     // finally we can seg CIGAR now
-    sam_cigar_seg_textual (vb, dl, last_cigar_len, STRdid(SAM_SEQ), STRdid(SAM_QUAL));
+    sam_cigar_seg_textual (vb, dl, last_cigar_len, STRd(SAM_SEQ), STRd(SAM_QUAL));
     
     // add BIN so this file can be reconstructed as BAM
     bam_seg_BIN (vb, dl, 0, this_pos);
@@ -832,7 +832,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     bool is_rname_rnext_same = (SAM_RNEXT_len==1 && *SAM_RNEXT_str=='=') || 
                                (SAM_RNEXT_len==SAM_RNAME_len && !memcmp (SAM_RNEXT_str, SAM_RNAME_str, SAM_RNAME_len));
 
-    sam_seg_TLEN (vb, dl, STRdid(SAM_TLEN), 0, is_rname_rnext_same);
+    sam_seg_TLEN (vb, dl, STRd(SAM_TLEN), 0, is_rname_rnext_same);
 
     SEG_EOL (SAM_EOL, false); /* last field accounted for \n */
 

@@ -531,10 +531,10 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
 
     GET_NEXT_ITEM (VCF_CHROM);
     if (vb->line_coords == DC_PRIMARY) 
-        dl->chrom[0] = chrom_seg_by_did_i (VB, VCF_CHROM, STRdid(VCF_CHROM),VCF_CHROM_len+1);
+        dl->chrom[0] = chrom_seg_by_did_i (VB, VCF_CHROM, STRd(VCF_CHROM),VCF_CHROM_len+1);
     
     else { // LUFT
-        dl->chrom[1] = chrom_seg_by_did_i (VB, VCF_oCHROM, STRdid(VCF_CHROM), VCF_CHROM_len);
+        dl->chrom[1] = chrom_seg_by_did_i (VB, VCF_oCHROM, STRd(VCF_CHROM), VCF_CHROM_len);
         CTX(vb->vb_coords==DC_LUFT ? VCF_oCHROM : VCF_CHROM)->txt_len++; // account for the tab - in oCHROM in the ##luft_only VB and in CHROM (on behalf on the primary CHROM) if this is a Dual-coord line (we will rollback accounting later if its not)
     }
 
