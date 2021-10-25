@@ -112,13 +112,16 @@ static void stats_output_file_metadata (Buffer *buf)
         bufprintf (evb, buf, "Features: Dual-coordinates\n%s", "");
 
     if ((Z_DT(DT_SAM) || Z_DT(DT_BAM)) && segconf.sam_is_sorted)
-        bufprintf (evb, buf, "Features: Sorted by POS\n%s", "");
+        bufprintf (evb, buf, "Sorting: Sorted by POS\n%s", "");
 
     if ((Z_DT(DT_SAM) || Z_DT(DT_BAM)) && segconf.sam_is_collated)
-        bufprintf (evb, buf, "Features: Collated by QNAME\n%s", "");
+        bufprintf (evb, buf, "Sorting: Collated by QNAME\n%s", "");
+
+    if (Z_DT(DT_FASTA))
+        bufprintf (evb, buf, "Sequence type: %s\n", segconf.seq_type==SQT_AMINO ? "Amino acids" : "Nucleotide bases");
 
     if (segconf.qname_flavor) 
-        bufprintf (evb, buf, "Features: read name style: %s\n", qf_name(segconf.qname_flavor));
+        bufprintf (evb, buf, "Read name style: %s\n", qf_name(segconf.qname_flavor));
 
     bufprintf (evb, buf, "Genozip version: %s %s\nDate compressed: %s\n", 
                GENOZIP_CODE_VERSION, DISTRIBUTION, str_time().s);

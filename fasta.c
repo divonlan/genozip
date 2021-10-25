@@ -193,8 +193,8 @@ void fasta_seg_initialize (VBlock *vb)
         CTX(FASTA_TAXID)->counts_section = true; 
     }
 
-    // if this FASTA contains unrelated contigs, we're better off with ACGT        
-    if (!flag.multifasta)
+    // if this neocleotide FASTA of unrelated contigs, we're better off with ACGT        
+    if (!flag.multifasta && segconf.seq_type == SQT_NUKE)
         codec_acgt_comp_init (VB);
 
     // if the contigs in this FASTA are related, let codec_assign_best_codec assign the bext codec 
@@ -238,6 +238,9 @@ void fasta_seg_finalize (VBlockP vb)
         #define MAX_CONTIGS_IN_FILE 1000000 
         segconf.fasta_has_contigs = num_contigs_this_vb == 1 || // the entire VB is a single contig
                                     est_num_contigs_in_file <  MAX_CONTIGS_IN_FILE; 
+
+        // case: we've seen only characters that are both nucleotide and protein (as are A,C,G,T,N) - call it as nucleotide
+        if (segconf.seq_type == SQT_NUKE_OR_AMINO) segconf.seq_type = SQT_NUKE;
     }
 }
 
@@ -317,6 +320,40 @@ static void fast_seg_comment_line (VBlockFASTA *vb, const char *line_start, uint
     vb->last_line = FASTA_LINE_COMMENT;
 }
 
+// ZIP: main thread during segconf.running
+static SeqType fasta_get_seq_type (STRp(seq))
+{
+    // we determine the type by characters that discriminate between protein and nucleotides, 
+    // according to: https://www.bioinformatics.org/sms/iupac.html and https://en.wikipedia.org/wiki/FASTA_format
+    // A,C,D,G,H,K,M,N,R,S,T,V,W,Y are can be either nucleoide or protein - in particular all of A,C,T,G,N can
+    static bool uniq_amino[256]    = { ['e']=true, ['F']=true, ['I']=true, ['L']=true, ['P']=true, ['Q']=true, 
+                                       ['X']=true, ['Z']=true,  // may be protein according to the FASTA_format page
+                                       ['e']=true, ['f']=true, ['i']=true, ['l']=true, ['p']=true, ['q']=true, 
+                                       ['x']=true, ['z']=true };
+                                      
+    static bool nuke_or_amino[256] = { ['A']=true, ['C']=true, ['D']=true, ['G']=true, ['H']=true, ['K']=true, ['M']=true, 
+                                       ['N']=true, ['R']=true, ['S']=true, ['T']=true, ['V']=true, ['W']=true, ['Y']=true,
+                                       ['U']=true, ['B']=true, // may be protein according to the FASTA_format page (in addition to standard nuke IUPACs)
+                                       ['a']=true, ['c']=true, ['d']=true, ['g']=true, ['h']=true, ['k']=true, ['m']=true, 
+                                       ['n']=true, ['r']=true, ['s']=true, ['t']=true, ['v']=true, ['w']=true, ['y']=true,
+                                       ['u']=true, ['b']=true };
+    
+    bool evidence_of_amino=false, evidence_of_both=false;
+
+    for (uint32_t i=0; i < seq_len; i++) {
+        if (uniq_amino[(int)seq[i]])    evidence_of_amino = true;
+        if (nuke_or_amino[(int)seq[i]]) evidence_of_both = true;
+
+        segconf.seq_type_counter++;
+    }
+
+    if (evidence_of_amino) return SQT_AMINO;
+
+    if (evidence_of_both) return segconf.seq_type_counter > 10000 ? SQT_NUKE : SQT_NUKE_OR_AMINO; // A,C,G,T,N are in both - call it as NUKE if we've seen enough without evidence of unique Amino characters
+    
+    return segconf.seq_type; // unchanged
+}
+
 static void fasta_seg_seq_line_do (VBlockFASTA *vb, uint32_t line_len, bool is_first_line_in_contig)
 {
     Context *lm_ctx  = CTX(FASTA_LINEMETA);
@@ -335,23 +372,23 @@ static void fasta_seg_seq_line_do (VBlockFASTA *vb, uint32_t line_len, bool is_f
         special_snip[1] = FASTA_SPECIAL_SEQ;
         special_snip[2] = '0' + is_first_line_in_contig; 
         seg_by_ctx (VB, special_snip, 3 + special_snip_len, lm_ctx, 0);  // the payload of the special snip, is the OTHER_LOOKUP snip...
-
-        // note: we don't set value for first line, so that seg_duplicate_last doesn't copy it - since special_snip[2] is different 
-        if (!is_first_line_in_contig) 
-            ctx_set_last_value (VB, lm_ctx, (LastValueType){ .i = line_len });
     }
+
+    // note: we don't set value for first line, so that seg_duplicate_last doesn't copy it - since special_snip[2] is different 
+    if (!is_first_line_in_contig) 
+        ctx_set_last_value (VB, lm_ctx, (LastValueType){ .i = line_len });
 
     seq_ctx->txt_len   += line_len;
     seq_ctx->local.len += line_len;
 } 
 
-static void fasta_seg_seq_line (VBlockFASTA *vb, const char *line_start, uint32_t line_len, 
+static void fasta_seg_seq_line (VBlockFASTA *vb, STRp(line), 
                                 bool is_last_line_vb_no_newline, bool is_last_line_in_contig, 
                                 const bool *has_13)
 {
     vb->lines_this_contig++;
 
-    *DATA_LINE (vb->line_i) = (ZipDataLineFASTA){ .seq_data_start = ENTNUM (vb->txt_data, line_start),
+    *DATA_LINE (vb->line_i) = (ZipDataLineFASTA){ .seq_data_start = ENTNUM (vb->txt_data, line),
                                                   .seq_len        = line_len };
 
     if (flag.make_reference)
@@ -373,6 +410,9 @@ static void fasta_seg_seq_line (VBlockFASTA *vb, const char *line_start, uint32_
         }        
         vb->lines_this_contig = 0;
     }
+
+    if (segconf.running && (segconf.seq_type == SQT_UNKNOWN || segconf.seq_type == SQT_NUKE_OR_AMINO))
+        segconf.seq_type = fasta_get_seq_type (STRa(line));
 
     vb->last_line = FASTA_LINE_SEQ;
 
