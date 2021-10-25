@@ -1539,14 +1539,14 @@ void ctx_read_all_dictionaries (void)
             if (!ctx->dict.len) continue;
 
             if (flag.list_chroms && ((!flag.luft && ctx->did_i == CHROM) || (flag.luft && ctx->did_i == VCF_oCHROM)))
-                str_print_dict (ctx->dict.data, (uint32_t)ctx->dict.len, true, Z_DT(DT_SAM));
+                str_print_dict (STRb(ctx->dict), true, Z_DT(DT_SAM));
             
             if (flag.show_dict) 
                 iprintf ("%s (did_i=%u, num_snips=%u, dict_size=%u bytes)\n", 
                          ctx->tag_name, did_i, (uint32_t)ctx->word_list.len, (uint32_t)ctx->dict.len);
 
             if (ctx_is_show_dict_id (ctx->dict_id))
-                str_print_dict (ctx->dict.data, (uint32_t)ctx->dict.len, true, false);
+                str_print_dict (STRb(ctx->dict), true, false);
         }
         iprint0 ("\n");
 

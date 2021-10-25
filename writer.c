@@ -569,7 +569,7 @@ static void writer_flush_vb (VBlockP wvb, VBlockP vb)
     }
 
     else if (vb->txt_data.len) {
-        file_write (txt_file, vb->txt_data.data, vb->txt_data.len);
+        file_write (txt_file, STRb(vb->txt_data));
 
         txt_file->txt_data_so_far_single += vb->txt_data.len;
         txt_file->disk_so_far            += vb->txt_data.len;

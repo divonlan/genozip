@@ -223,7 +223,7 @@ static inline const char *bam_rewrite_one_optional_number (VBlockSAM *vb, const 
 } 
 
 const char *bam_get_one_optional (VBlockSAM *vb, const char *next_field,
-                                  const char **tag, char *type, const char **value, unsigned *value_len) // out
+                                  const char **tag, char *type, pSTRp(value)) // out
 {
     *tag  = next_field;
     *type = next_field[2]; // c, C, s, S, i, I, f, A, Z, H or B
@@ -321,7 +321,7 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
 
     // CIGAR
     sam_cigar_binary_to_textual (vb, n_cigar_op, (uint32_t*)next_field, &vb->textual_cigar); // re-write BAM format CIGAR as SAM textual format in vb->textual_cigar
-    sam_cigar_analyze (vb, vb->textual_cigar.data, vb->textual_cigar.len, &dl->seq_len);
+    sam_cigar_analyze (vb, STRb(vb->textual_cigar), &dl->seq_len);
     next_field += n_cigar_op * sizeof (uint32_t);
 
     // Segment BIN after we've gathered bin, flags, pos and vb->ref_confumed (and before sam_seg_SEQ which ruins vb->ref_consumed)
@@ -341,8 +341,8 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
             "seq_len implied by CIGAR=%s is %u, but actual SEQ length is %u, SEQ=%.*s", 
             vb->last_cigar, dl->seq_len, l_seq, l_seq, vb->textual_seq.data);
 
-    sam_seg_SEQ (vb, SAM_SQBITMAP, vb->textual_seq.data, vb->textual_seq.len, this_pos, vb->last_cigar, vb->ref_consumed, vb->ref_and_seq_consumed, 
-                       0, vb->textual_seq.len, vb->last_cigar, (l_seq+1)/2 + sizeof (uint32_t) /* account for l_seq and seq fields */);
+    sam_seg_SEQ (vb, SAM_SQBITMAP, STRb(vb->textual_seq), this_pos, vb->last_cigar, vb->ref_consumed, vb->ref_and_seq_consumed, 
+                 0, vb->textual_seq.len, vb->last_cigar, (l_seq+1)/2 + sizeof (uint32_t) /* account for l_seq and seq fields */);
     next_field += (l_seq+1)/2; 
 
     // QUAL

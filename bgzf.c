@@ -570,7 +570,7 @@ void bgzf_write_to_disk (VBlockP wvb, VBlockP vb)
             bgzf_compress_one_block (vb, block, first_block->txt_size, 0, first_block->txt_index, &intercall_compressed); // compress into vb->compressed
             bgzf_free_compressor (vb, txt_file->bgzf_flags);
 
-            if (!flag.test) file_write (txt_file, intercall_compressed.data, intercall_compressed.len);
+            if (!flag.test) file_write (txt_file, STRb(intercall_compressed));
 
             txt_file->txt_data_so_far_single += first_block->txt_size;
             txt_file->disk_so_far            += intercall_compressed.len;
@@ -588,7 +588,7 @@ void bgzf_write_to_disk (VBlockP wvb, VBlockP vb)
     // Step 2. Write all the "middle" blocks of this VB, compressed by bgzf_compress_vb, currently in vb->compressed, to disk
     if (vb->compressed.len) {
         if (!flag.test) 
-            file_write (txt_file, vb->compressed.data, vb->compressed.len);
+            file_write (txt_file, STRb(vb->compressed));
 
         txt_file->txt_data_so_far_single += vb->compressed.uncomp_size;
         txt_file->disk_so_far            += vb->compressed.len; // vb->compressed.len;

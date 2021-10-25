@@ -352,7 +352,7 @@ static void linesorter_compress_recon_plan_do (bool is_luft)
     is_luft_sorter = is_luft; // ugly
 
     START_TIMER
-    qsort (index_buf.data, index_buf.len, sizeof (uint32_t), linesorter_line_cmp);
+    qsort (STRb(index_buf), sizeof (uint32_t), linesorter_line_cmp);
     COPY_TIMER_VB (evb, linesorter_compress_qsort);
 
     // detect cases where distinct variants in Primary got mapped to the same coordinates in Luft

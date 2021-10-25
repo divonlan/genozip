@@ -102,11 +102,11 @@ static void crypt_generate_aes_key (VBlock *vb,
     buf_add (&vb->spiced_pw, &sec_type_byte, sizeof (uint8_t));
     buf_add (&vb->spiced_pw, &is_header_byte, sizeof (uint8_t));
     buf_add (&vb->spiced_pw, salt, salt_len);
-    Digest salty_hash = md5_do (vb->spiced_pw.data, vb->spiced_pw.len);
+    Digest salty_hash = md5_do (STRb(vb->spiced_pw));
 
     // add some pepper
     buf_add (&vb->spiced_pw, pepper, pepper_len);
-    Digest peppered_hash = md5_do (vb->spiced_pw.data, vb->spiced_pw.len);
+    Digest peppered_hash = md5_do (STRb(vb->spiced_pw));
 
     // get hash
     memcpy (aes_key, salty_hash.bytes, sizeof(Digest)); // first half of key

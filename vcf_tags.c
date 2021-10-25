@@ -306,7 +306,7 @@ static void vcf_tags_add_system_default (DefaultTag new_tag)
 void vcf_tags_populate_tags_from_command_line (void)
 {
     // sort command line tags, as these will be searched when adding the header tags (command line tags never change after sorted here, so we only sort in the first call to this function)
-    DO_ONCE qsort (command_line_tags.data, command_line_tags.len, sizeof (Tag), tags_sorter); 
+    DO_ONCE qsort (STRb(command_line_tags), sizeof (Tag), tags_sorter); 
 
     if (command_line_tags.len && !z_file->apriori_tags.len) {
         buf_copy (evb, &z_file->apriori_tags, &command_line_tags, Tag, 0, 0, "z_file->apriori_tags");
@@ -336,7 +336,7 @@ void vcf_tags_populate_tags_from_command_line (void)
     // AD, ADF and ADR conflict the standard 'R' tags with the same need.
 
     // sort again
-    qsort (z_file->apriori_tags.data, z_file->apriori_tags.len, sizeof (Tag), tags_sorter); 
+    qsort (STRb(z_file->apriori_tags), sizeof (Tag), tags_sorter); 
     z_file->apriori_tags.param = z_file->apriori_tags.len;
 }
 
@@ -358,7 +358,7 @@ void vcf_tags_finalize_tags_from_vcf_header (void)
     if (!z_file->apriori_tags.len) return; // nothing to do
  
     // sort, placing the Genozip defaults that are not in header or command line, last
-    qsort (z_file->apriori_tags.data, z_file->apriori_tags.len, sizeof (Tag), tags_sorter_demote_defaults); 
+    qsort (STRb(z_file->apriori_tags), sizeof (Tag), tags_sorter_demote_defaults); 
 
     ARRAY (Tag, tags, z_file->apriori_tags);
 
@@ -392,7 +392,7 @@ void vcf_tags_finalize_tags_from_vcf_header (void)
     }
 
     // sort again, without taking source into account
-    qsort (z_file->apriori_tags.data, z_file->apriori_tags.len, sizeof (Tag), tags_sorter); 
+    qsort (STRb(z_file->apriori_tags), sizeof (Tag), tags_sorter); 
     z_file->apriori_tags.param = z_file->apriori_tags.len; // sorted length
 
     if (flag.show_rename_tags) vcf_tags_show_rename_tags ();

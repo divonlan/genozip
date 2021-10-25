@@ -139,10 +139,10 @@ static void vcf_seg_INFO_SF_seg (VBlockVCF *vb)
     }
 
     if (vb->use_special_sf == USE_SF_YES) 
-        seg_by_ctx (VB, vb->sf_snip.data, vb->sf_snip.len, CTX(INFO_SF), vb->sf_txt.len);
+        seg_by_ctx (VB, STRb(vb->sf_snip), CTX(INFO_SF), vb->sf_txt.len);
     
     else if (vb->use_special_sf == USE_SF_NO)
-        seg_by_ctx (VB, vb->sf_txt.data, vb->sf_txt.len, CTX(INFO_SF), vb->sf_txt.len);
+        seg_by_ctx (VB, STRb(vb->sf_txt), CTX(INFO_SF), vb->sf_txt.len);
 
     buf_free (&vb->sf_txt);
     buf_free (&vb->sf_snip);

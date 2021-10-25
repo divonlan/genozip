@@ -60,7 +60,7 @@ void vcf_zip_read_one_vb (VBlockP vb)
     // in case we're replacing ID with the line number
     if (flag.add_line_numbers) {
         vb->first_line = txt_file->num_lines + 1; // this is normally not used in ZIP
-        txt_file->num_lines += str_count_char (vb->txt_data.data, vb->txt_data.len, '\n');  // update here instead of in zip_update_txt_counters;
+        txt_file->num_lines += str_count_char (STRb(vb->txt_data), '\n');  // update here instead of in zip_update_txt_counters;
     }
 }
 

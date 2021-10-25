@@ -444,7 +444,7 @@ void kraken_load (void)
     
     // note: kraken_loaded is false if flag.kraken_taxid is absent from kraken data (then kraken_piz_initialize aborts pizzing the data) 
     if (kraken_loaded) {
-        qsort (qname_nodes.data, qname_nodes.len, sizeof (QnameNode), kraken_qname_nodes_cmp);
+        qsort (STRb(qname_nodes), sizeof (QnameNode), kraken_qname_nodes_cmp);
 
         ASSERT (qname_nodes.len <= MAX_QNAME_NODES, "qname_nodes.len=%"PRIu64" exceeds the maximum of %u", qname_nodes.len, MAX_QNAME_NODES);
 

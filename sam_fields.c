@@ -424,8 +424,8 @@ static void sam_seg_OA_field (VBlockSAM *vb, STRp(field))
 // 2) Binary NM: 0 if sequence fully matches the reference when aligning according to CIGAR, 1 is not.
 static void sam_seg_NM_field (VBlockSAM *vb, STRp(field), unsigned add_bytes)
 {
-    int32_t NM;
-    if (!str_get_int_range32 (STRa(field), 0, 10000000, &NM)) goto fallback;
+    int64_t NM;
+    if (!str_get_int (STRa(field), &NM)) goto fallback;
     
     if (segconf.running && NM > 1) segconf.NM_is_integer = true; // we found evidence of integer NM
 
@@ -439,7 +439,7 @@ static void sam_seg_NM_field (VBlockSAM *vb, STRp(field), unsigned add_bytes)
 
     else
         fallback:
-        seg_by_did_i (VB, field, field_len, OPTION_NM_i, add_bytes); 
+        seg_by_did_i (VB, STRa(field), OPTION_NM_i, add_bytes); 
 }
 
 SPECIAL_RECONSTRUCTOR (bam_piz_special_NM)

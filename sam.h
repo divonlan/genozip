@@ -267,8 +267,8 @@ SPECIAL (SAM, 16, QUAL,                sam_piz_special_QUAL);                // 
 // Important: Numbers (and order) of translators cannot be changed, as they are part of the file format
 // (they are included in the TOP2BAM container)
 // translator numbers must start from 1 - 0 is reserved for "none"
-TRANSLATOR (SAM, BAM,   1,  I8,         container_translate_I8)   // reconstruct binary little endian functions
-TRANSLATOR (SAM, BAM,   2,  U8,         container_translate_U8)   // 
+TRANSLATOR (SAM, BAM,   1,  I8,         container_translate_I8)     // reconstruct binary little endian functions
+TRANSLATOR (SAM, BAM,   2,  U8,         container_translate_U8)     // 
 TRANSLATOR (SAM, BAM,   3,  LTEN_I16,   container_translate_LTEN_I16) 
 TRANSLATOR (SAM, BAM,   4,  LTEN_U16,   container_translate_LTEN_U16) 
 TRANSLATOR (SAM, BAM,   5,  LTEN_I32,   container_translate_LTEN_I32) 

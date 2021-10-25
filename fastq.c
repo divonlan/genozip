@@ -145,7 +145,7 @@ void fastq_zip_read_one_vb (VBlockP vb)
 {
     // in case we're optimizing DESC in FASTQ, we need to know the number of lines
     if (flag.optimize_DESC) {
-        uint32_t num_lines = str_count_char (vb->txt_data.data, vb->txt_data.len, '\n');
+        uint32_t num_lines = str_count_char (STRb(vb->txt_data), '\n');
         ASSERT (num_lines % 4 == 0, "expecting number of txt lines in VB to be a multiple of 4, but found %u", num_lines);
 
         vb->first_line = txt_file->num_lines + 1; // this is normally not used in ZIP

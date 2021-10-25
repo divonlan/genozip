@@ -175,7 +175,7 @@ Coords txtheader_piz_read_and_reconstruct (uint32_t component_i, Section sl)
         if (flag.header_one && Z_DT(DT_VCF))
             txt_file->num_lines += 1;
         else if (!DTPT (is_binary))
-            txt_file->num_lines += str_count_char (comp_vb->txt_data.data, comp_vb->txt_data.len, '\n'); // number of source-file lines
+            txt_file->num_lines += str_count_char (STRb(comp_vb->txt_data), '\n'); // number of source-file lines
     }
 
     if (comp_vb->txt_data.len)
@@ -207,7 +207,7 @@ Coords txtheader_piz_read_and_reconstruct (uint32_t component_i, Section sl)
             }
 
             if (test_digest && z_file->genozip_version >= 9) {  // backward compatability with v8: we don't test against v8 MD5 for the header, as we had a bug in v8 in which we included a junk MD5 if they user didn't --md5 or --test. any file integrity problem will be discovered though on the whole-file MD5 so no harm in skipping this.
-                Digest reconstructed_header_digest = digest_do (comp_vb->txt_data.data, comp_vb->txt_data.len);
+                Digest reconstructed_header_digest = digest_do (STRb(comp_vb->txt_data));
                 
                 TEMP_FLAG (quiet, flag.quiet && !flag.show_digest);
 

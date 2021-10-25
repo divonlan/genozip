@@ -164,18 +164,25 @@ typedef _Bool bool;
 #define false 0
 #endif
 
+// Strings - declarations
 #define STR(x)   const char *x; uint32_t x##_len
 #define STRl(name,len) char name[len]; uint32_t name##_len
 #define STR0(x)  const char *x=NULL; uint32_t x##_len=0
-#define STRp(x)  const char *x, uint32_t x##_len // for function definitions 
-#define pSTRp(x) const char **x, uint32_t *x##_len // for function definitions 
-#define STRa(x) x, x##_len           // for function call arguments
-#define STRd(x)  x##_str, x##_len  // for function call arguments
-#define STRi(x,i) x##s[i], x##_lens[i] // for function call arguments
-#define pSTRa(x) &x, &x##_len // for function call arguments
-#define STRf(x) ((int)x##_len), x  // for printf %.*s argument list
-#define STRfi(x,i) x##_lens[i], x##s[i]  // for printf %.*s argument list
-#define cSTR(x) x, sizeof x-1 // a constant string and its length
+
+// Strings - function parameters
+#define STRp(x)  const char *x, uint32_t x##_len    
+#define pSTRp(x) const char **x, uint32_t *x##_len  
+
+// Strings - function arguments
+#define STRa(x)    x, x##_len                       
+#define STRd(x)    x##_str, x##_len                   
+#define STRb(x)    (x).data, (x).len                  
+#define STRi(x,i)  x##s[i], x##_lens[i]             
+#define pSTRa(x)   &x, &x##_len                      
+#define cSTR(x) x, sizeof x-1              // a use with a string literal
+#define STRf(x)    ((int)x##_len), x       // for printf %.*s argument list
+#define STRfi(x,i) x##_lens[i], x##s[i]    // for printf %.*s argument list
+
 #define STRcpy(dst,src) do { if (src##_len) { memcpy(dst,src,src##_len) ; dst##_len = src##_len; } } while(0)
 #define STRcpyi(dst,i,src) do { if (src##_len) { memcpy(dst##s[i],src,src##_len) ; dst##_lens[i] = src##_len; } } while(0)
 #define STRset(dst,src) do { dst=src; dst##_len=src##_len; } while(0)

@@ -809,7 +809,7 @@ void zfile_write_txt_header (Buffer *txt_header,
                    txt_header->len ? txt_header->data : NULL, // actual header may be missing (eg in SAM it is permitted to not have a header)
                    NULL);
 
-    file_write (z_file, txt_header_buf.data, txt_header_buf.len);
+    file_write (z_file, STRb(txt_header_buf));
 
     z_file->disk_so_far += txt_header_buf.len;   // length of GENOZIP data writen to disk
 
@@ -928,7 +928,7 @@ void zfile_output_processed_vb (VBlock *vb)
 
     sections_list_concat (vb);
     
-    file_write (z_file, vb->z_data.data, vb->z_data.len);
+    file_write (z_file, STRb(vb->z_data));
     COPY_TIMER (write);
 
     z_file->disk_so_far += (int64_t)vb->z_data.len;

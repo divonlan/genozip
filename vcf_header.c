@@ -518,7 +518,7 @@ static void vcf_header_zip_add_missing_tags (Buffer *txt_header)
     }
 
     // add back the field name (#CHROM) line
-    buf_add_more (evb, txt_header, vcf_field_name_line.data, vcf_field_name_line.len, "txt_data");
+    buf_add_more (evb, txt_header, STRb(vcf_field_name_line), "txt_data");
 }
 
 // ZIP with --chain: add liftover_contig, liftover_reference, chain, dual_coordinates keys
@@ -619,7 +619,7 @@ static void vcf_header_add_FORMAT_lines (Buffer *txt_header)
     if (flag.GL_to_PL) buf_add_moreC (evb, txt_header, "##FORMAT=<ID=PL,Number=G,Type=Integer,Description=\"Phred-scaled genotype likelihoods rounded to the closest integer\">\n", "txt_data");
 
     // add back the field name (#CHROM) line
-    buf_add_more (evb, txt_header, vcf_field_name_line.data, vcf_field_name_line.len, "txt_data");
+    buf_add_more (evb, txt_header, STRb(vcf_field_name_line), "txt_data");
 }
 
 static void vcf_add_all_ref_contigs_to_header (Buffer *txt_header)
@@ -637,7 +637,7 @@ static void vcf_add_all_ref_contigs_to_header (Buffer *txt_header)
     }
 
     // add back the field name (#CHROM) line
-    buf_add_more (evb, txt_header, vcf_field_name_line.data, vcf_field_name_line.len, "txt_data");
+    buf_add_more (evb, txt_header, STRb(vcf_field_name_line), "txt_data");
 }
 
 static bool vcf_inspect_txt_header_zip (Buffer *txt_header)
@@ -659,7 +659,7 @@ static bool vcf_inspect_txt_header_zip (Buffer *txt_header)
     vcf_header_rewrite_header (evb, txt_header, vcf_header_handle_contigs, &num_contig_lines);
 
     if (chain_is_loaded && !flag.rejects_coord)     // sort (but not uniq)
-        qsort (vcf_header_liftover_dst_contigs.data, vcf_header_liftover_dst_contigs.len, sizeof (WordIndex), dst_contigs_sorter);
+        qsort (STRb(vcf_header_liftover_dst_contigs), sizeof (WordIndex), dst_contigs_sorter);
 
     // in liftover, if header has no contigs, add reference contigs and derived ocontigs
     if (chain_is_loaded && !flag.rejects_coord && !num_contig_lines) 

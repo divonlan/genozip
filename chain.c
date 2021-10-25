@@ -589,12 +589,12 @@ static void chain_sort_mark_dups (void)
 {
     ARRAY (ChainAlignment, aln, chain);
 
-    qsort (chain.data, chain.len, sizeof (ChainAlignment), chain_sort_by_prim);
+    qsort (STRb(chain), sizeof (ChainAlignment), chain_sort_by_prim);
 
     for (int32_t i=0; i < chain.len; i++) 
         aln[i].aln_i = i+1;
 
-    qsort (chain.data, chain.len, sizeof (ChainAlignment), chain_sort_by_luft);
+    qsort (STRb(chain), sizeof (ChainAlignment), chain_sort_by_luft);
 
     // mark duplicates alignments (can happen when chain file has both 1-> and chr-> and --match collapses them to the same contig)
     #define REMOVED 0x7fffffff // MAX_INT
@@ -604,7 +604,7 @@ static void chain_sort_mark_dups (void)
             aln[i-1].aln_i = aln[i-1].luft_chrom = REMOVED;
 
     // sort again after de-dupping
-    qsort (chain.data, chain.len, sizeof (ChainAlignment), chain_sort_by_luft);
+    qsort (STRb(chain), sizeof (ChainAlignment), chain_sort_by_luft);
 
     // remove duplicates
     for (int32_t i=0; i < chain.len; i++) 
@@ -621,7 +621,7 @@ static void chain_sort_mark_dups (void)
                 aln[i-1].overlap_aln_i = aln[i].aln_i;
             }
 
-    qsort (chain.data, chain.len, sizeof (ChainAlignment), chain_sort_by_aln_i);
+    qsort (STRb(chain), sizeof (ChainAlignment), chain_sort_by_aln_i);
 }
 
 // initialize alignment set from alignment set header

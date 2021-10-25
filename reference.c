@@ -875,7 +875,7 @@ static void ref_copy_one_compressed_section (Reference ref, File *ref_file, cons
     // Note on encryption: reference sections originating from an external reference are never encrypted - not
     // by us here, and not in the source reference fasta (because with disallow --make-reference in combination with --password)
     START_TIMER;
-    file_write (z_file, ref_seq_section.data, ref_seq_section.len);
+    file_write (z_file, STRb(ref_seq_section));
     COPY_TIMER_VB (evb, write);
 
     z_file->disk_so_far += ref_seq_section.len;   // length of GENOZIP data writen to disk
@@ -1197,7 +1197,7 @@ static void ref_finalize_denovo_ranges (void)
     }
 
     // sort by chrom then pos, and place the unused ranges at the end
-    qsort (gref->ranges.data, gref->ranges.len, sizeof (Range), ref_contigs_range_sorter);
+    qsort (STRb(gref->ranges), sizeof (Range), ref_contigs_range_sorter);
 
     // shorten the array to only used ranges
     Range *r ; for (r=FIRSTENT (Range, gref->ranges); r < AFTERENT (Range, gref->ranges) && ref_is_range_used (r); r++) {};
@@ -1282,7 +1282,7 @@ void ref_compress_ref (void)
     // range data needed for contigs is only set in ref_make_prepare_range_for_compress which happens as part of the dispatcher_fan_out_task
     if (ranges_type (gref) == RT_MAKE_REF) {
         // sort by chrom then pos - so later piz can binary-search by chrom index
-        qsort (gref->ranges.data, gref->ranges.len, sizeof (Range), ref_contigs_range_sorter);
+        qsort (STRb(gref->ranges), sizeof (Range), ref_contigs_range_sorter);
 
         ref_contigs_compress_internal (gref); 
     }
