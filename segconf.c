@@ -19,7 +19,7 @@ static void segconf_set_vb_size (const VBlock *vb, uint64_t curr_vb_size)
 {
     #define VBLOCK_MEMORY_MIN_DYN  (16   << 20) // VB memory - min/max when set in segconf_calculate
     #define VBLOCK_MEMORY_MAX_DYN  (512  << 20) 
-    #define VBLOCK_MEMORY_FAST     (16   << 20) // VB memory with --fast
+    #define VBLOCK_MEMORY_FAST     (4    << 20) // VB memory with --fast
     #define VBLOCK_MEMORY_BEST     (512  << 20) // VB memory with --best 
     #define VBLOCK_MEMORY_MAKE_REF (1    << 20) // VB memory with --make-reference - reference data 
     #define VBLOCK_MEMORY_GENERIC  (16   << 20) // VB memory for the generic data type
