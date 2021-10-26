@@ -33,7 +33,6 @@ WordIndex seg_by_ctx_ex (VBlockP vb, STRp(snip), ContextP ctx, uint32_t add_byte
 {
     ASSERTNOTNULL (ctx);
 
-    
     WordIndex node_index = ctx_create_node_do (VB, ctx, STRa(snip), is_new);
 
     ASSERT (node_index < ctx->nodes.len + ctx->ol_nodes.len || node_index == WORD_INDEX_EMPTY || node_index == WORD_INDEX_MISSING, 

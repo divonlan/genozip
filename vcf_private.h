@@ -206,6 +206,7 @@ extern VcfVersion vcf_header_get_version (void);
 
 // Samples stuff
 extern void vcf_samples_zip_initialize (void);
+extern void vcf_set_init_mux_by_dosage (VBlockVCFP vb, DidIType did_i, StoreType store_type);
 extern const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *len, char *next_field, bool *has_13, const char *backup_luft_samples, uint32_t backup_luft_samples_len);
 extern void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCF *vb);
 #define IS_TRIVAL_FORMAT_SUBFIELD ((!recon_len || (recon_len==1 && *recon=='.')) && dict_id_is_vcf_format_sf (ctx->dict_id))

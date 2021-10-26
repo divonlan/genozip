@@ -16,6 +16,7 @@
 #include "chrom.h"
 #include "linesorter.h"
 #include "libdeflate/libdeflate.h"
+#include "stats.h"
 
 static MiniContainer line_number_container = {};
 
@@ -107,7 +108,7 @@ void vcf_seg_initialize (VBlock *vb_)
 
     CTX(FORMAT_ADALL)->flags.store = STORE_INT;
     CTX(FORMAT_DP)->   flags.store = STORE_INT;
-    CTX(FORMAT_RD)->   flags.store = STORE_INT;   // since v13
+    //CTX(FORMAT_RD)->   flags.store = STORE_INT;   // since v13
     CTX(FORMAT_RDR)->  flags.store = STORE_INT;   // since v13
     CTX(FORMAT_RDF)->  flags.store = STORE_INT;   // since v13
     CTX(FORMAT_SDP)->  flags.store = STORE_INT;   // since v13
@@ -127,12 +128,23 @@ void vcf_seg_initialize (VBlock *vb_)
         CTX(VCF_COORDS)-> counts_section = true;
     }
 
-    // consolidate stats
-    CTX(VCF_oREFALT)->st_did_i = CTX(VCF_LIFT_REF)->st_did_i = VCF_REFALT;
-    CTX(VCF_oPOS)->st_did_i = CTX(VCF_COPYPOS)->st_did_i = VCF_POS;
-    CTX(VCF_oCHROM)->st_did_i = VCF_CHROM;
-    CTX(VCF_COPYSTAT)->st_did_i = CTX(VCF_oSTATUS)->st_did_i = VCF_COORDS; // dual-coordinate non-reconstruted stuff goes here
     CTX(FORMAT_GT)->no_stons  = true; // we store the GT matrix in local, so cannot accomodate singletons
+
+    // consolidate stats
+    stats_set_consolidation (VB, VCF_REFALT, 2, VCF_oREFALT, VCF_LIFT_REF);
+    stats_set_consolidation (VB, VCF_POS,    2, VCF_oPOS, VCF_COPYPOS);
+    stats_set_consolidation (VB, VCF_CHROM,  1, VCF_oCHROM);
+    stats_set_consolidation (VB, VCF_COORDS, 4, INFO_PRIM, INFO_PREJ, INFO_LUFT, INFO_LREJ);
+
+    vcf_set_init_mux_by_dosage (vb, FORMAT_PRI, STORE_NONE);
+    vcf_set_init_mux_by_dosage (vb, FORMAT_GL,  STORE_NONE);
+    vcf_set_init_mux_by_dosage (vb, FORMAT_DS,  STORE_NONE);
+    vcf_set_init_mux_by_dosage (vb, FORMAT_PL,  STORE_NONE);
+    vcf_set_init_mux_by_dosage (vb, FORMAT_PP,  STORE_NONE);
+    vcf_set_init_mux_by_dosage (vb, FORMAT_GP,  STORE_NONE);
+    vcf_set_init_mux_by_dosage (vb, FORMAT_RD,  STORE_INT);
+    vcf_set_init_mux_by_dosage (vb, FORMAT_PVAL, STORE_NONE);
+    vcf_set_init_mux_by_dosage (vb, FORMAT_FREQ, STORE_NONE);
 
     vb->ht_matrix_ctx = CTX(FORMAT_GT_HT); // different for different data types
 
@@ -256,12 +268,6 @@ void vcf_seg_finalize (VBlockP vb_)
         vb->recon_size_luft += (sizeof HK_LUFT_ONLY - 1) * vb->lines.len; // when reconstructing luft-only rejects, we also reconstruct a prefix for each line
         // note: there is no equivalent of ctx->txt_len for Luft coordinates
     }
-
-    // consolidate DVCF info fields to VCF_COORDS (just the container, not the values)
-    if ((ctx = CTX (INFO_PRIM))) ctx->st_did_i = VCF_COORDS;
-    if ((ctx = CTX (INFO_PREJ))) ctx->st_did_i = VCF_COORDS;
-    if ((ctx = CTX (INFO_LUFT))) ctx->st_did_i = VCF_COORDS;
-    if ((ctx = CTX (INFO_LREJ))) ctx->st_did_i = VCF_COORDS;
 }
 
 bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)
@@ -321,7 +327,7 @@ static DictId vcf_seg_get_format_sf_dict_id (STRp (sf_name))
     return dict_id; 
 }
 
-static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char *fmt, int64_t fmt_len)
+static void vcf_seg_FORMAT (VBlockVCF *vb, ZipDataLineVCF *dl, STRp(fmt))
 {
     ASSVCF0 (fmt_len >= 1, "missing or invalid FORMAT field");
 
@@ -378,11 +384,11 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
         // case: GL_to_PL:  FORMAT field snip is changed here to GL. Note: dict_id remains _FORMAT_GL.
         // so that vcf_seg_one_sample treats it as GL, and converts it to PL.
         if (dict_id.num == _FORMAT_GL && flag.GL_to_PL)
-            ((char *)fmt)[-3] = 'P'; // change GL to GP (note: FORMAT changes and field changes, but still stored in dict_id=GL)
+            *((char *)sf_names[i]) = 'P'; // change GL to GP (note: FORMAT changes and field changes, but still stored in dict_id=GL)
 
         // case: GP_to_PP - only relevant to VCF 4.3 where GP is probabilities and PP is Phred values (up to 4.2 GP was Phred values)
         if (dict_id.num == _FORMAT_GP && flag.GP_to_PP && vb->vcf_version >= VCF_v4_3)
-            ((char *)fmt)[-3] = 'P'; // change GP to PP (note: FORMAT changes and field changes, but still stored in dict_id=GP)
+            *((char *)sf_names[i]) = 'P'; // change GP to PP (note: FORMAT changes and field changes, but still stored in dict_id=GP)
     } 
     
     char renamed_data[n_sf_names * MAX_TAG_LEN];
@@ -400,6 +406,8 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
             SWAP (fmt_len, renamed_len);
         }
 
+        ASSERT0 (6 + fmt_len + renamed_len == snip_len, "String index out of range");
+
         snip[0] = snip[3+fmt_len] = SNIP_DUAL;
         snip[1] = snip[4+fmt_len] = SNIP_SPECIAL;
         snip[2] = snip[5+fmt_len] = VCF_SPECIAL_FORMAT;
@@ -416,7 +424,7 @@ static void vcf_seg_format_field (VBlockVCF *vb, ZipDataLineVCF *dl, const char 
     }
 
     bool is_new;
-    uint32_t node_index = seg_by_did_i_ex (VB, snip, snip_len, VCF_FORMAT, fmt_len + 1 /* \t or \n */, &is_new);
+    uint32_t node_index = seg_by_did_i_ex (VB, STRa(snip), VCF_FORMAT, fmt_len + 1 /* \t or \n */, &is_new);
     
     dl->format_node_i = node_index;
 
@@ -609,7 +617,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
             GET_LAST_ITEM (VCF_FORMAT);
         }
 
-        vcf_seg_format_field (vb, dl, field_start, field_len);
+        vcf_seg_FORMAT (vb, dl, field_start, field_len);
 
         if ((has_samples = (separator != '\n'))) { 
 

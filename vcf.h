@@ -50,16 +50,34 @@
 #pragma GENDICT FORMAT_AF=DTYPE_2=AF       // <ID=AF,Number=A,Type=Float,Description="Allele fractions for alt alleles in the order listed">
 #pragma GENDICT FORMAT_DP=DTYPE_2=DP       // <ID=DP,Number=1,Type=Integer,Description="Approximate read depth (reads with MQ=255 or with bad mates are filtered)">
 #pragma GENDICT FORMAT_DS=DTYPE_2=DS
+#pragma GENDICT FORMAT_DS_0=DTYPE_2=DS_0
+#pragma GENDICT FORMAT_DS_1=DTYPE_2=DS_1
+#pragma GENDICT FORMAT_DS_2=DTYPE_2=DS_2
 #pragma GENDICT FORMAT_GL=DTYPE_2=GL
+#pragma GENDICT FORMAT_GL_0=DTYPE_2=GL_0   // needed by vcf_seg_FORMAT_mux_by_dosage
+#pragma GENDICT FORMAT_GL_1=DTYPE_2=GL_1
+#pragma GENDICT FORMAT_GL_2=DTYPE_2=GL_2
 #pragma GENDICT FORMAT_GP=DTYPE_2=GP       // <ID=GP,Number=G,Type=Float,Description="Phred-scaled posterior probabilities for genotypes as defined in the VCF specification">
+#pragma GENDICT FORMAT_GP_0=DTYPE_2=GP_0
+#pragma GENDICT FORMAT_GP_1=DTYPE_2=GP_1
+#pragma GENDICT FORMAT_GP_2=DTYPE_2=GP_2
 #pragma GENDICT FORMAT_GQ=DTYPE_2=GQ       // <ID=GQ,Number=1,Type=Integer,Description="Genotype Quality">
 #pragma GENDICT FORMAT_GT=DTYPE_2=GT       // <ID=GT,Number=1,Type=String,Description="Genotype">
 #pragma GENDICT FORMAT_PL=DTYPE_2=PL       // <ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes as defined in the VCF specification">
+#pragma GENDICT FORMAT_PL_0=DTYPE_2=PL_0
+#pragma GENDICT FORMAT_PL_1=DTYPE_2=PL_1
+#pragma GENDICT FORMAT_PL_2=DTYPE_2=PL_2
 #pragma GENDICT FORMAT_PRI=DTYPE_2=PRI     // <ID=PRI,Number=G,Type=Float,Description="Phred-scaled prior probabilities for genotypes">
+#pragma GENDICT FORMAT_PRI_0=DTYPE_2=PRI_0
+#pragma GENDICT FORMAT_PRI_1=DTYPE_2=PRI_1
+#pragma GENDICT FORMAT_PRI_2=DTYPE_2=PRI_2
 #pragma GENDICT FORMAT_F1R2=DTYPE_2=F1R2   // <ID=F1R2,Number=R,Type=Integer,Description="Count of reads in F1R2 pair orientation supporting each allele"> see: https://github.com/broadinstitute/gatk/blob/master/docs/mutect/mutect.pdf
 #pragma GENDICT FORMAT_F2R1=DTYPE_2=F2R1   // <ID=F2R1,Number=R,Type=Integer,Description="Count of reads in F2R1 pair orientation supporting each allele">
 #pragma GENDICT FORMAT_MB=DTYPE_2=MB       // <ID=MB,Number=4,Type=Integer,Description="Per-sample component statistics to detect mate bias">
 #pragma GENDICT FORMAT_PP=DTYPE_2=PP       // <ID=PP,Number=G,Type=Integer,Description="Phred-scaled genotype posterior probabilities rounded to the closest integer">
+#pragma GENDICT FORMAT_PP_0=DTYPE_2=PP_0
+#pragma GENDICT FORMAT_PP_1=DTYPE_2=PP_1
+#pragma GENDICT FORMAT_PP_2=DTYPE_2=PP_2
 #pragma GENDICT FORMAT_SAC=DTYPE_2=SAC     // <ID=SAC,Number=.,Type=Integer,Description="Number of reads on the forward and reverse strand supporting each allele (including reference)">
 #pragma GENDICT FORMAT_SB=DTYPE_2=SB       // <ID=SB,Number=4,Type=Integer,Description="Per-sample component statistics which comprise the Fisher's Exact Test to detect strand bias">
 #pragma GENDICT FORMAT_PS=DTYPE_2=PS 
@@ -206,8 +224,17 @@
 #pragma GENDICT FORMAT_RDR=DTYPE_2=RDR     // <ID=RDR,Number=1,Type=Integer,Description="Depth of reference-supporting bases on reverse strand (reads1minus)">
 #pragma GENDICT FORMAT_SDP=DTYPE_2=SDP     // <ID=SDP,Number=1,Type=Integer,Description="Raw Read Depth as reported by SAMtools">
 #pragma GENDICT FORMAT_RD=DTYPE_2=RD       // <ID=RD,Number=1,Type=Integer,Description="Depth of reference-supporting bases (reads1)">
+#pragma GENDICT FORMAT_RD_0=DTYPE_2=RD_0
+#pragma GENDICT FORMAT_RD_1=DTYPE_2=RD_1
+#pragma GENDICT FORMAT_RD_2=DTYPE_2=RD_2
 #pragma GENDICT FORMAT_FREQ=DTYPE_2=FREQ   // <ID=FREQ,Number=1,Type=String,Description="Variant allele frequency">
+#pragma GENDICT FORMAT_FREQ_0=DTYPE_2=FREQ_0
+#pragma GENDICT FORMAT_FREQ_1=DTYPE_2=FREQ_1
+#pragma GENDICT FORMAT_FREQ_2=DTYPE_2=FREQ_2
 #pragma GENDICT FORMAT_PVAL=DTYPE_2=PVAL   // <ID=PVAL,Number=1,Type=String,Description="P-value from Fisher's Exact Test">
+#pragma GENDICT FORMAT_PVAL_0=DTYPE_2=PVAL_0
+#pragma GENDICT FORMAT_PVAL_1=DTYPE_2=PVAL_1
+#pragma GENDICT FORMAT_PVAL_2=DTYPE_2=PVAL_2
 #pragma GENDICT FORMAT_RBQ=DTYPE_2=RBQ     // <ID=RBQ,Number=1,Type=Integer,Description="Average quality of reference-supporting bases (qual1)">
 #pragma GENDICT FORMAT_ABQ=DTYPE_2=ABQ     // <ID=ABQ,Number=1,Type=Integer,Description="Average quality of variant-supporting bases (qual2)">
 #pragma GENDICT INFO_ADP=DTYPE_1=ADP       // <ID=ADP,Number=1,Type=Integer,Description="Average per-sample depth of bases with Phred score >= 0">
@@ -282,18 +309,19 @@ extern void vcf_tags_cmdline_rename_option(void);
 extern void vcf_samples_add  (const char *samples_str);
 
 #define VCF_SPECIAL { vcf_piz_special_main_REFALT, vcf_piz_special_FORMAT, vcf_piz_special_INFO_AC, vcf_piz_special_INFO_SVLEN, \
-                      vcf_piz_special_FORMAT_DS, vcf_piz_special_INFO_BaseCounts, vcf_piz_special_INFO_SF, vcf_piz_special_MINUS,  \
+                      vcf_piz_special_FORMAT_DS_old, vcf_piz_special_INFO_BaseCounts, vcf_piz_special_INFO_SF, vcf_piz_special_MINUS,  \
                       vcf_piz_special_LIFT_REF, vcf_piz_special_COPYSTAT, vcf_piz_special_other_REFALT, vcf_piz_special_COPYPOS, vcf_piz_special_ALLELE, \
                       vcf_piz_special_INFO_HGVS_SNP_POS, vcf_piz_special_INFO_HGVS_SNP_REFALT, \
                       vcf_piz_special_INFO_HGVS_DEL_END_POS, vcf_piz_special_INFO_HGVS_DEL_PAYLOAD, \
                       vcf_piz_special_INFO_HGVS_INS_END_POS, vcf_piz_special_INFO_HGVS_INS_PAYLOAD, \
-                      vcf_piz_special_INFO_HGVS_DELINS_END_POS, vcf_piz_special_INFO_HGVS_DELINS_PAYLOAD }
+                      vcf_piz_special_INFO_HGVS_DELINS_END_POS, vcf_piz_special_INFO_HGVS_DELINS_PAYLOAD,\
+                      vcf_piz_special_MUX_BY_DOSAGE }
 
 SPECIAL (VCF, 0,  main_REFALT,         vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,              vcf_piz_special_FORMAT)
 SPECIAL (VCF, 2,  AC,                  vcf_piz_special_INFO_AC);
 SPECIAL (VCF, 3,  SVLEN,               vcf_piz_special_INFO_SVLEN);
-SPECIAL (VCF, 4,  DS,                  vcf_piz_special_FORMAT_DS);
+SPECIAL (VCF, 4,  DS_old,              vcf_piz_special_FORMAT_DS_old);            // used in files up to 12.0.42
 SPECIAL (VCF, 5,  BaseCounts,          vcf_piz_special_INFO_BaseCounts);
 SPECIAL (VCF, 6,  SF,                  vcf_piz_special_INFO_SF);
 SPECIAL (VCF, 7,  MINUS,               vcf_piz_special_MINUS);                    // added v12.0.0
@@ -310,7 +338,8 @@ SPECIAL (VCF, 17, HGVS_INS_END_POS,    vcf_piz_special_INFO_HGVS_INS_END_POS);  
 SPECIAL (VCF, 18, HGVS_INS_PAYLOAD,    vcf_piz_special_INFO_HGVS_INS_PAYLOAD);    // added v12.0.34
 SPECIAL (VCF, 19, HGVS_DELINS_END_POS, vcf_piz_special_INFO_HGVS_DELINS_END_POS); // added v12.0.34
 SPECIAL (VCF, 20, HGVS_DELINS_PAYLOAD, vcf_piz_special_INFO_HGVS_DELINS_PAYLOAD); // added v12.0.34
-#define NUM_VCF_SPECIAL 21
+SPECIAL (VCF, 21, MUX_BY_DOSAGE,       vcf_piz_special_MUX_BY_DOSAGE);            // added v13
+#define NUM_VCF_SPECIAL 22
 
 // Translators for Luft (=secondary coordinates)
 TRANSLATOR (VCF, VCF,   1,  G,      vcf_piz_luft_G)       // same order as LiftOverStatus starting LO_CANT_G

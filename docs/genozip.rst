@@ -71,7 +71,7 @@ Examples:
       | Tip: To avoid running out of memory on a low-resource personal computer, combine with limiting threads using ``--threads``.
       |
                             
-.. option:: -F, --fast  Fast compression but lower compression ratio than --best. Files compressed with this option also uncompress faster. Compressing with this option also consumes less memory.
+.. option:: -F, --fast  Faster compression but lower compression ratio than normal. Files compressed with this option also uncompress and can be subsetted faster. Compressing with this option also consumes less memory.
 
                      |
                      

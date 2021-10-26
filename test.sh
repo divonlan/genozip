@@ -430,7 +430,7 @@ batch_dvcf()
         fi
 
         echo -n "Step 2: make ${primary} from $dvcf : " 
-        $genocat $dvcf --no-pg -fo ${primary}
+        $genocat $dvcf --no-pg -fo ${primary} || exit 1
 
         # convert primary -> luft -> primary
         echo -n "Step 3: make ${luft} from $dvcf : " 

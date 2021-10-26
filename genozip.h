@@ -170,8 +170,9 @@ typedef _Bool bool;
 #define STR0(x)  const char *x=NULL; uint32_t x##_len=0
 
 // Strings - function parameters
-#define STRp(x)  const char *x, uint32_t x##_len    
-#define pSTRp(x) const char **x, uint32_t *x##_len  
+#define STRp(x)  const char *x,   uint32_t x##_len    
+#define pSTRp(x) const char **x,  uint32_t *x##_len  
+#define STRps(x) const char **x##s, const uint32_t *x##_lens  
 
 // Strings - function arguments
 #define STRa(x)    x, x##_len                       
