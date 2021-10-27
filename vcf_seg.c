@@ -113,7 +113,8 @@ void vcf_seg_initialize (VBlock *vb_)
     CTX(FORMAT_RDF)->  flags.store = STORE_INT;   // since v13
     CTX(FORMAT_SDP)->  flags.store = STORE_INT;   // since v13
     CTX(INFO_ADP)->    flags.store = STORE_INT;   // since v13
-
+    CTX(INFO_SVTYPE)-> flags.store = STORE_INDEX; // since v13 - consumed by vcf_refalt_piz_is_variant_indel
+    
     seg_id_field_init (CTX(VCF_ID));
     seg_id_field_init (CTX(INFO_CSQ_Existing_variation));
 
@@ -134,15 +135,16 @@ void vcf_seg_initialize (VBlock *vb_)
     stats_set_consolidation (VB, VCF_REFALT, 2, VCF_oREFALT, VCF_LIFT_REF);
     stats_set_consolidation (VB, VCF_POS,    2, VCF_oPOS, VCF_COPYPOS);
     stats_set_consolidation (VB, VCF_CHROM,  1, VCF_oCHROM);
-    stats_set_consolidation (VB, VCF_COORDS, 4, INFO_PRIM, INFO_PREJ, INFO_LUFT, INFO_LREJ);
+    stats_set_consolidation (VB, VCF_COORDS, 7, INFO_PRIM, INFO_PREJ, INFO_LUFT, INFO_LREJ, VCF_oSTATUS, VCF_COPYSTAT, VCF_oXSTRAND);
+    stats_set_consolidation (VB, FORMAT_GT,  4, FORMAT_GT_HT, FORMAT_GT_HT_INDEX, FORMAT_PBWT_RUNS, FORMAT_PBWT_FGRC);
 
-    vcf_set_init_mux_by_dosage (vb, FORMAT_PRI, STORE_NONE);
-    vcf_set_init_mux_by_dosage (vb, FORMAT_GL,  STORE_NONE);
-    vcf_set_init_mux_by_dosage (vb, FORMAT_DS,  STORE_NONE);
-    vcf_set_init_mux_by_dosage (vb, FORMAT_PL,  STORE_NONE);
-    vcf_set_init_mux_by_dosage (vb, FORMAT_PP,  STORE_NONE);
-    vcf_set_init_mux_by_dosage (vb, FORMAT_GP,  STORE_NONE);
-    vcf_set_init_mux_by_dosage (vb, FORMAT_RD,  STORE_INT);
+    vcf_set_init_mux_by_dosage (vb, FORMAT_PRI,  STORE_NONE);
+    vcf_set_init_mux_by_dosage (vb, FORMAT_GL,   STORE_NONE);
+    vcf_set_init_mux_by_dosage (vb, FORMAT_DS,   STORE_NONE);
+    vcf_set_init_mux_by_dosage (vb, FORMAT_PL,   STORE_NONE);
+    vcf_set_init_mux_by_dosage (vb, FORMAT_PP,   STORE_NONE);
+    vcf_set_init_mux_by_dosage (vb, FORMAT_GP,   STORE_NONE);
+    vcf_set_init_mux_by_dosage (vb, FORMAT_RD,   STORE_INT);
     vcf_set_init_mux_by_dosage (vb, FORMAT_PVAL, STORE_NONE);
     vcf_set_init_mux_by_dosage (vb, FORMAT_FREQ, STORE_NONE);
 
@@ -155,7 +157,7 @@ void vcf_seg_initialize (VBlock *vb_)
     
     // create additional contexts as needed for compressing FORMAT/GT - must be done before merge
     if (vcf_num_samples) 
-        codec_pbwt_seg_init (vb_, CTX(FORMAT_PBWT_RUNS), CTX(FORMAT_PBWT_FGRC), FORMAT_GT);
+        codec_pbwt_seg_init (vb_, CTX(FORMAT_PBWT_RUNS), CTX(FORMAT_PBWT_FGRC));
 
     if (flag.add_line_numbers) {
         // create a b250 and dict entry for VCF_LINE_NUM, VCF_ID - these become "all_the_same" so no need to seg them explicitly hereinafter        

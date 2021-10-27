@@ -17,6 +17,7 @@
 #include "chain.h"
 #include "coords.h"
 #include "ref_iupacs.h"
+#include "dict_id_gen.h"
 
 // ---------
 // Seg stuff
@@ -913,12 +914,14 @@ bool vcf_refalt_piz_is_variant_snp (VBlockP vb)
     return txt[1] == '\t' && str_count_char (&txt[2], txt_len-2, ',') * 2 == txt_len-3; // true if multi-allelic SNP
 }
 
-// --snps-only implementation (called from vcf_piz_container_cb)
+// --indels-only implementation (called from vcf_piz_container_cb)
 bool vcf_refalt_piz_is_variant_indel (VBlockP vb)
 {
     DidIType refalt = vb->vb_coords == DC_PRIMARY ? VCF_REFALT : VCF_oREFALT;
     unsigned txt_len = vb->last_txt_len (refalt);
     if (txt_len == 3 || vcf_refalt_piz_is_variant_snp (vb)) return false; // Not an INDEL: its a SNP (short circuit most common case of a bi-allelic SNP)
+
+    if (ctx_has_value_in_line_(vb, CTX(INFO_SVTYPE))) return false; // Note an INDEL: its a structural variant
 
     const char *txt = last_txt (vb, refalt);
     if (memchr (txt, '<', txt_len) || memchr (txt, '[', txt_len) || memchr (txt, ']', txt_len)) return false; // Not an INDEL: its an SV
