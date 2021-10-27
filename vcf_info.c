@@ -16,6 +16,7 @@
 #include "reconstruct.h"
 #include "gff3.h"
 #include "coords.h"
+#include "stats.h"
 
 void vcf_info_zip_initialize (void) 
 {
@@ -714,7 +715,7 @@ static bool vcf_seg_INFO_HGVS_snp (VBlockVCFP vb, ContextP ctx, STRp(value))
     SAFE_RESTOREx(2);
 
     // seg special snips
-    CTX(INFO_HGVS_snp_pos)->st_did_i = CTX(INFO_HGVS_snp_refalt)->st_did_i = ctx->did_i; // consolidate stats
+    stats_set_consolidation (VB, ctx->did_i, 2, INFO_HGVS_snp_pos, INFO_HGVS_snp_refalt);
 
     seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_HGVS_SNP_POS    }), 2, CTX(INFO_HGVS_snp_pos),    pos_str_len);
     seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_HGVS_SNP_REFALT }), 2, CTX(INFO_HGVS_snp_refalt), 3);
@@ -817,7 +818,8 @@ static bool vcf_seg_INFO_HGVS_indel (VBlockVCFP vb, ContextP ctx, STRp(value), c
     container_seg (vb, ctx, (ContainerP)&con, prefixes, prefixes_len, value_len - pos_lens[0] - (n_poss==2 ? pos_lens[1] : 0) - payload_len);
 
     // seg special snips
-    CTX(did_i_start_pos[t])->st_did_i = CTX(did_i_end_pos[t])->st_did_i = CTX(did_i_payload[t])->st_did_i = ctx->did_i; // consolidate stats
+    stats_set_consolidation (VB, ctx->did_i, 3, did_i_start_pos[t], did_i_end_pos[t], did_i_payload[t]);
+
     CTX(did_i_start_pos[t])->flags.store = STORE_INT; // consumed by vcf_piz_special_INFO_HGVS_DEL_END_POS
 
     seg_pos_field (VB, did_i_start_pos[t], VCF_POS, SPF_UNLIMITED_DELTA, 0, 0, 0, pos[0], pos_lens[0]);
@@ -1410,8 +1412,9 @@ void vcf_finalize_seg_info (VBlockVCF *vb)
     Container con = { .repeats             = 1, 
                       .drop_final_item_sep = true,
                       .filter_items        = z_dual_coords,   // vcf_piz_filter chooses which (if any) DVCF item to show based on flag.luft and flag.single_coord
+                      .filter_repeats      = true,            // we save POS last_value so we can use it --regions, as we might have INFO/END that modifies POS.last_value
                       .callback            = z_dual_coords }; // vcf_piz_container_cb appends oSTATUS to INFO if requested 
-
+ 
     // seg INFO/SF, if there is one
     if (vb->sf_txt.len) vcf_seg_INFO_SF_seg (vb);
 
@@ -1436,9 +1439,9 @@ void vcf_finalize_seg_info (VBlockVCF *vb)
     uint32_t total_names_len=0;
     for (unsigned i=0; i < ii_len; i++) {
         // Set the Container item and find (or create) a context for this name
-        con.items[i] = (ContainerItem){ .dict_id   = !ii[i].value                               ? DICT_ID_NONE 
+        con.items[i] = (ContainerItem){ .dict_id   = !ii[i].value                        ? DICT_ID_NONE 
                                                    : ii[i].ctx->dict_id.num == _INFO_END ? (DictId)_VCF_POS
-                                                   :                                              ii[i].ctx->dict_id,
+                                                   :                                       ii[i].ctx->dict_id,
                                         .separator = { ';' } }; 
 
         // if we're preparing a dual-coordinate VCF and this line needs translation to Luft - assign the liftover-translator for this item,

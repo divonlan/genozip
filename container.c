@@ -220,8 +220,8 @@ LastValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP c
     LastValueType new_value = {};
 
     if (flag.show_containers) // show container reconstruction 
-        iprintf ("VB=%u Container: %s repeats=%u items=%u\n", 
-                 vb->vblock_i, dis_dict_id (ctx->dict_id).s, con->repeats, con_nitems(*con));
+        iprintf ("VB=%u Container: %s repeats=%u items=%u filter_items=%u filter_repeats=%u callback=%u\n", 
+                 vb->vblock_i, dis_dict_id (ctx->dict_id).s, con->repeats, con_nitems(*con), con->filter_items, con->filter_repeats, con->callback);
 
     if (con->is_toplevel) {
         buf_alloc (vb, &vb->lines, 0, con->repeats+1, char *, 1.1, "lines"); // note: lines.len was set in piz_read_one_vb
@@ -343,7 +343,7 @@ LastValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP c
         if (con->is_toplevel) {
 
             // filter by --regions
-            if (!vb->drop_curr_line && flag.regions && !regions_is_site_included (vb))
+            if (!vb->drop_curr_line && flag.regions && !regions_is_site_included (vb)) 
                 vb->drop_curr_line = "regions";
 
             // filter by --lines

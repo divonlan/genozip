@@ -40,15 +40,12 @@ typedef struct Context {
     
     int64_t compressor_time;   // Used when --show-time - time for compressing / decompressing this context
 
-    // rollback point
+    // rollback point - used for rolling back during Seg
     uint64_t rback_b250_len, rback_local_len, rback_nodes_len, rback_txt_len; // ZIP: data to roll back the last seg
     uint32_t rback_num_singletons, rback_last_txt_index, rback_last_txt_len;
-    LastValueType rback_last_value;
+    LastValueType rback_last_value; // also used in PIZ for rolling back VCF_POS.last_value after INFO/END
     int64_t rback_last_delta, rback_ctx_spec_param;
     
-    // ----------------------------
-    // ZIP only fields
-    // ----------------------------
     Buffer ol_dict;            // ZIP VB: tab-delimited list of all unique snips - overlayed all previous VB dictionaries
                                // ZIP zfile: singletons are stored here
                                // PIZ: counts are read to here (from SEC_COUNTS) - aligned to the words in word_list/dict

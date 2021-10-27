@@ -1064,7 +1064,7 @@ static void ref_compress_one_range (VBlockP vb)
     if (r) {
         spin_lock (gref->stored_ra_spin);
         NEXTENT (RAEntry, gref->stored_ra) = (RAEntry){ .vblock_i    = vb->vblock_i, 
-                                                        .chrom_index = r->chrom,
+                                                        .chrom_index = flag.make_reference ? r->chrom : *ENT (WordIndex, z_file->ref2chrom_map, r->chrom),
                                                         .min_pos     = r->first_pos,
                                                         .max_pos     = r->last_pos };
         spin_unlock (gref->stored_ra_spin);

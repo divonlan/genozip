@@ -388,7 +388,9 @@ bool regions_is_site_included (VBlockP vb)
     DidIType pos_did_i   = flag.luft ? DTF(luft_pos)   : DTF(pos);
 
     WordIndex chrom = vb->last_index (chrom_did_i);
-    PosType pos = (pos_did_i != DID_I_NONE) ? vb->last_int (pos_did_i) : 1;
+    PosType pos = (pos_did_i == DID_I_NONE)          ? 1 
+                : CTX(pos_did_i)->rback_last_value.i ? CTX(pos_did_i)->rback_last_value.i // use saved value if one exists (used in VCF, bc VCF_POS.last_value might be modified by a INFO/END)
+                :                                      CTX(pos_did_i)->last_value.i;
     
     if (chrom == WORD_INDEX_NONE ||  
         (z_dual_coords && ((vb->vb_coords==DC_LUFT) != flag.luft))) return true; // always include all rejected variants in the vcf header
@@ -408,7 +410,8 @@ bool regions_is_site_included (VBlockP vb)
 // PIZ: check if a range (chrom,start_pos,end_pos) overlaps with an included region. used when loading reference ranges.
 bool regions_is_range_included (WordIndex chrom_word_index, PosType start_pos, PosType end_pos, bool completely_included)
 {
-    ASSERT (chrom_word_index >= 0 && chrom_word_index < num_chroms, "chrom_word_index=%d is out of range", chrom_word_index);
+    ASSERT (chrom_word_index >= 0 && chrom_word_index < num_chroms, "chrom_word_index=%d is out of range. num_chroms=%u", 
+            chrom_word_index, num_chroms);
 
     // it sufficient that the site is included in one (positive) region
     Buffer *chregs_buf = &chregs[chrom_word_index];
