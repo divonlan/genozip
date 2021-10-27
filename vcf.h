@@ -82,6 +82,9 @@
 #pragma GENDICT FORMAT_SB=DTYPE_2=SB       // <ID=SB,Number=4,Type=Integer,Description="Per-sample component statistics which comprise the Fisher's Exact Test to detect strand bias">
 #pragma GENDICT FORMAT_PS=DTYPE_2=PS 
 
+#pragma GENDICT FORMAT_AB=DTYPE_2=AB       // <ID=AB,Number=1,Type=Float,Description="Allele balance for each het genotype",RendAlg="NONE">
+#pragma GENDICT FORMAT_AB_HET=DTYPE_2=AB_HET 
+
 // PBWT fields - same dict_id for all data types using PBWT, as codec_pbwt_uncompress relies on it
 #pragma GENDICT FORMAT_GT_HT=DTYPE_2=@HT    
 #pragma GENDICT FORMAT_GT_HT_INDEX=DTYPE_2=@INDEXHT // different first 2 letters
@@ -218,6 +221,7 @@
 
 // Structural variants (also uses INFO/END): https://www.internationalgenome.org/wiki/Analysis/Variant%20Call%20Format/VCF%20(Variant%20Call%20Format)%20version%204.0/encoding-structural-variants/
 #pragma GENDICT INFO_SVLEN=DTYPE_1=SVLEN
+#pragma GENDICT INFO_SVTYPE=DTYPE_1=SVTYPE
 
 // VarScan FORMAT and INFO fields: http://varscan.sourceforge.net/using-varscan.html
 #pragma GENDICT FORMAT_RDF=DTYPE_2=RDF     // <ID=RDF,Number=1,Type=Integer,Description="Depth of reference-supporting bases on forward strand (reads1plus)">
@@ -315,7 +319,7 @@ extern void vcf_samples_add  (const char *samples_str);
                       vcf_piz_special_INFO_HGVS_DEL_END_POS, vcf_piz_special_INFO_HGVS_DEL_PAYLOAD, \
                       vcf_piz_special_INFO_HGVS_INS_END_POS, vcf_piz_special_INFO_HGVS_INS_PAYLOAD, \
                       vcf_piz_special_INFO_HGVS_DELINS_END_POS, vcf_piz_special_INFO_HGVS_DELINS_PAYLOAD,\
-                      vcf_piz_special_MUX_BY_DOSAGE }
+                      vcf_piz_special_MUX_BY_DOSAGE, vcf_piz_special_FORMAT_AB }
 
 SPECIAL (VCF, 0,  main_REFALT,         vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,              vcf_piz_special_FORMAT)
@@ -339,7 +343,8 @@ SPECIAL (VCF, 18, HGVS_INS_PAYLOAD,    vcf_piz_special_INFO_HGVS_INS_PAYLOAD);  
 SPECIAL (VCF, 19, HGVS_DELINS_END_POS, vcf_piz_special_INFO_HGVS_DELINS_END_POS); // added v12.0.34
 SPECIAL (VCF, 20, HGVS_DELINS_PAYLOAD, vcf_piz_special_INFO_HGVS_DELINS_PAYLOAD); // added v12.0.34
 SPECIAL (VCF, 21, MUX_BY_DOSAGE,       vcf_piz_special_MUX_BY_DOSAGE);            // added v13
-#define NUM_VCF_SPECIAL 22
+SPECIAL (VCF, 22, AB,                  vcf_piz_special_FORMAT_AB);                // added v13
+#define NUM_VCF_SPECIAL 23
 
 // Translators for Luft (=secondary coordinates)
 TRANSLATOR (VCF, VCF,   1,  G,      vcf_piz_luft_G)       // same order as LiftOverStatus starting LO_CANT_G

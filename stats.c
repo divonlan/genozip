@@ -133,7 +133,7 @@ static void stats_output_file_metadata (Buffer *buf)
 typedef struct {
     DidIType my_did_i, st_did_i;
     int64_t txt_len, z_size;
-    const char *name;
+    char name[100];
     const char *type;
     StrText did_i, words, hash, uncomp_dict, comp_dict, comp_b250, comp_data;
     float pc_of_txt, pc_of_z, pc_dict, pc_singletons, pc_failed_singletons, pc_hash_occupancy;
@@ -167,7 +167,7 @@ static void stats_consolidate_ctxs (StatsByLine *sbl, unsigned num_stats)
                 }
             }
 
-            if (!strcmp (sbl[parent].name, "SQBITMAP")) sbl[parent].name = "SEQ"; // rename
+            if (!strcmp (sbl[parent].name, "SQBITMAP")) strcpy (sbl[parent].name, "SEQ"); // rename
         }
 }
 
@@ -218,7 +218,7 @@ static void stats_consolidate_non_ctx (StatsByLine *sbl, unsigned num_stats, con
                     survivor->z_size    += sbl[i].z_size;  
                     survivor->pc_of_txt += sbl[i].pc_of_txt;
                     survivor->pc_of_z   += sbl[i].pc_of_z; 
-                    survivor->name       = consolidated_name; // rename only if at least one was consolidated
+                    strcpy (survivor->name, consolidated_name); // rename only if at least one was consolidated
 
                     if (flag.debug_stats)
                         iprintf ("Consolidated %s (txt_len=%"PRIu64" z_size=%"PRIu64") into %s (AFTER: txt_len=%"PRIu64" z_size=%"PRIu64")\n",
@@ -344,12 +344,16 @@ void stats_compress (void)
         all_txt_len     += s->txt_len;
 
         if (ctx) {
-            s->name = ctx->tag_name;
-            s->type = ctx->st_did_i != DID_I_NONE ? ZCTX(ctx->st_did_i)->tag_name : ctx->tag_name;
+            if (Z_DT(DT_VCF) && dict_id_type(ctx->dict_id))
+                sprintf (s->name, "%s/%s", dtype_name_z(ctx->dict_id), ctx->tag_name);
+            else 
+                strcpy (s->name, ctx->tag_name);
+
+            s->type  = ctx->st_did_i != DID_I_NONE ? ZCTX(ctx->st_did_i)->tag_name : ctx->tag_name;
         }
         else {
-            s->name = ST_NAME (SEC(i)); 
-            s->type = "Global";
+            strcpy (s->name, ST_NAME (SEC(i))); 
+            s->type  = "Global";
         }
 
         uint64_t n_words = !ctx                     ? 0

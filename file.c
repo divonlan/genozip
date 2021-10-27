@@ -1176,8 +1176,12 @@ bool file_seek (File *file, int64_t offset,
     ASSERTNOTNULL (file->file);
     
     // in SEEK_SET of a z_file that is being tarred, update the offset to the beginning of the file data in the tar file
-    if (file->supertype == Z_FILE && whence == SEEK_SET)
+    if (file->supertype == Z_FILE && whence == SEEK_SET) {
         offset += tar_file_offset(); // 0 if not using tar
+
+        int64_t old_offset = ftello64 ((FILE *)file->file);
+        if (old_offset == offset) return true; // already at the right offset
+    }
 
     int ret = fseeko64 ((FILE *)file->file, offset, whence);
 

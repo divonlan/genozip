@@ -363,7 +363,7 @@ typedef struct File {
     Mutex dicts_mutex;                 // this mutex protects contexts and num_contexts from concurrent adding of a new dictionary
     DidIType num_contexts;             // length of populated subfield_ids and mtx_ctx;
     
-    DidIType dict_id_to_did_i_map[65536]; // map for quick look up of did_i from dict_id 
+    DidIType dict_id_to_did_i_map[65536 * 2]; // map for quick look up of did_i from dict_id : 64K for key_map, 64K for alt_map 
     Context contexts[MAX_DICTS];       // a merge of dictionaries of all VBs
     Buffer ra_buf;                     // ZIP/PIZ:  RAEntry records: ZIP: of DC_PRIMARY ; PIZ - PRIMARY or LUFT depending on flag.luft
     Buffer ra_buf_luft;                // ZIP only: RAEntry records of DC_LUFT

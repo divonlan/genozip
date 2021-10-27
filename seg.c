@@ -60,6 +60,12 @@ WordIndex seg_known_node_index (VBlockP vb, ContextP ctx, WordIndex node_index, 
     return node_index;
 }
 
+WordIndex seg_duplicate_last(VBlockP vb, ContextP ctx, unsigned add_bytes) 
+{ 
+    ASSERTISALLOCED (ctx->b250);
+    return seg_known_node_index (vb, ctx, LASTb250(ctx), add_bytes); 
+}
+
 // NOTE: this does not save recon_size - if the processing may change recon_size it must be saved and rolled back separately
 void seg_create_rollback_point (VBlockP vb, unsigned num_ctxs, ...)
 {
@@ -248,7 +254,7 @@ PosType seg_pos_field (VBlock *vb,
                        DidIType base_did_i,    // mandatory: base for delta
                        unsigned opt,           // a combination of SPF_* options
                        char missing,           // a character allowed (meaning "missing value"), segged as SNIP_DONT_STORE
-                       const char *pos_str, unsigned pos_len, // option 1
+                       STRp(pos_str),          // option 1
                        PosType this_pos,       // option 2
                        unsigned add_bytes)     
 {
@@ -262,13 +268,13 @@ PosType seg_pos_field (VBlock *vb,
 
     SegError err = ERR_SEG_NO_ERROR;
     if (pos_str) { // option 1
-        if (pos_len == 1 && *pos_str == missing) 
+        if (pos_str_len == 1 && *pos_str == missing) 
             err = ERR_SEG_NOT_INTEGER; // not an error, just so that we seg this as SNIP_DONT_STORE
         
         else {
-            this_pos = seg_scan_pos_snip (vb, pos_str, pos_len, IS_FLAG (opt, SPF_ZERO_IS_BAD), &err);
+            this_pos = seg_scan_pos_snip (vb, STRa(pos_str), IS_FLAG (opt, SPF_ZERO_IS_BAD), &err);
             ASSERT (IS_FLAG (opt, SPF_BAD_SNIPS_TOO) || !err, "invalid value %.*s in %s vb=%u line_i=%"PRIu64, 
-                    pos_len, pos_str, CTX(snip_did_i)->tag_name, vb->vblock_i, vb->line_i);
+                    pos_str_len, pos_str, CTX(snip_did_i)->tag_name, vb->vblock_i, vb->line_i);
         }
 
         // we accept out-of-range integer values for non-self-delta
@@ -276,7 +282,7 @@ PosType seg_pos_field (VBlock *vb,
 
         if (err) {
             SAFE_ASSIGN (pos_str-1, SNIP_DONT_STORE);
-            seg_by_ctx (VB, pos_str-1, pos_len+1, snip_ctx, add_bytes); 
+            seg_by_ctx (VB, pos_str-1, pos_str_len+1, snip_ctx, add_bytes); 
             SAFE_RESTORE;
             snip_ctx->last_delta = 0;  // on last_delta as we're PIZ won't have access to it - since we're not storing it in b250 
             return 0; // invalid pos
@@ -354,9 +360,9 @@ PosType seg_pos_field (VBlock *vb,
 
     return this_pos;
 }
-bool seg_pos_field_cb (VBlockP vb, ContextP ctx, const char *pos_str, unsigned pos_len, uint32_t repeat)
+bool seg_pos_field_cb (VBlockP vb, ContextP ctx, STRp(pos_str), uint32_t repeat)
 {
-    seg_pos_field (vb, ctx->did_i, ctx->did_i, 0, 0, pos_str, pos_len, 0, pos_len);
+    seg_pos_field (vb, ctx->did_i, ctx->did_i, 0, 0, STRa(pos_str), 0, pos_str_len);
     return true; // segged successfully
 }
 
@@ -369,7 +375,7 @@ bool seg_pos_field_cb (VBlockP vb, ContextP ctx, const char *pos_str, unsigned p
 //          1423       : in the dictionary we store "\1" and 1423 SEC_NUMERIC_ID_DATA
 //          abcd       : in the dictionary we store "abcd" and nothing is stored SEC_NUMERIC_ID_DATA
 void seg_id_field_init (ContextP ctx) { ctx->no_stons = ctx->dynamic_size_local = true; } // must be called in seg_initialize
-void seg_id_field_do (VBlock *vb, ContextP ctx, const char *id_snip, unsigned id_snip_len)
+void seg_id_field_do (VBlock *vb, ContextP ctx, STRp(id_snip))
 {
     int i=id_snip_len-1; for (; i >= 0; i--) 
         if (!IS_DIGIT (id_snip[i])) break;
@@ -426,7 +432,7 @@ bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsigned ad
 
     // case: non-numeric snip
     else { 
-        seg_by_ctx (VB, this_value, this_value_len, ctx, add_bytes);
+        seg_by_ctx (VB, STRa(this_value), ctx, add_bytes);
         return false;
     }
 }
@@ -438,7 +444,7 @@ bool seg_integer_or_not_cb (VBlockP vb, ContextP ctx, STRp(int_str), uint32_t re
 }
 
 // if its a float, stores the float in local, and a LOOKUP in b250, and returns true. if not - normal seg, and returns false.
-bool seg_float_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsigned this_value_len, unsigned add_bytes)
+bool seg_float_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsigned add_bytes)
 {
     // TO DO: implement reconstruction in reconstruct_one_snip-SNIP_LOOKUP
     char snip[2 + FLOAT_FORMAT_LEN];
@@ -446,7 +452,7 @@ bool seg_float_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsigne
 
     // case: its an float
     if (!ctx->no_stons && // we interpret no_stons as means also no moving ints to local (one of the reasons is that an int might actually be a float)
-        str_get_float (this_value, this_value_len, &ctx->last_value.f, &snip[2], &format_len)) {
+        str_get_float (STRa(this_value), &ctx->last_value.f, &snip[2], &format_len)) {
 
         ctx->ltype = LT_FLOAT32; // set only upon storing the first number - if there are no numbers, leave it as LT_TEXT so it can be used for singletons
 
@@ -463,7 +469,7 @@ bool seg_float_or_not (VBlockP vb, ContextP ctx, const char *this_value, unsigne
 
     // case: non-float snip
     else { 
-        seg_by_ctx (VB, this_value, this_value_len, ctx, add_bytes);
+        seg_by_ctx (VB, STRa(this_value), ctx, add_bytes);
         return false;
     }
 }
@@ -631,8 +637,7 @@ WordIndex seg_array (VBlock *vb, Context *container_ctx, DidIType stats_conslida
 // The last item is treated as an ENST_ID (format: ENST00000399012) while the other items are regular dictionaries
 // the names of the dictionaries are the same as the ctx, with the 2nd character replaced by 1,2,3...
 // the field itself will contain the number of entries
-int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, 
-                             const char *snip, unsigned snip_len, 
+int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), 
                              const SegCallback *callbacks) // optional - either NULL, or contains a seg callback for each item (any callback may be NULL)
 {
     ContextP ctxs[con.nitems_lo]; 
@@ -704,7 +709,7 @@ badly_formatted:
         ctx_rollback (vb, ctxs[i]);
 
     // now just seg the entire snip
-    seg_by_ctx (VB, snip, snip_len, ctx, snip_len); 
+    seg_by_ctx (VB, STRa(snip), ctx, snip_len); 
 
     return -1; // not segged as a container
 }                           
@@ -720,7 +725,7 @@ void seg_add_to_local_text (VBlock *vb, Context *ctx, STRp (snip),
     ctx->local.num_ctx_words++;
 }
 
-void seg_add_to_local_fixed (VBlock *vb, Context *ctx, const void *data, unsigned data_len)  // bytes in the original text file accounted for by this snip
+void seg_add_to_local_fixed (VBlock *vb, Context *ctx, STRp(data))  // bytes in the original text file accounted for by this snip
 {
     if (data_len) {
         buf_alloc (vb, &ctx->local, data_len, vb->lines.len * data_len, char, CTX_GROWTH, "contexts->local");

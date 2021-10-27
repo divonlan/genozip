@@ -306,8 +306,7 @@ static void zip_handle_unique_words_ctxs (VBlock *vb)
         if (buf_is_alloc (&ctx->local))     continue; // skip if we are already using local to optimize in some other way
 
         // don't move to local if its on the list of special dict_ids that are always in dict (because local is used for something else - eg pos or id data)
-        if (ctx->no_stons || 
-            ctx->ltype != LT_TEXT || ctx->dynamic_size_local || // NO_STONS is implicit if ctx isn't text or dynamic_size_local
+        if (!ctx_can_have_singletons (ctx) ||
             ctx->b250.len == 1) continue; // handle with all_the_same rather than singleton
          
         buf_move (vb, &ctx->local, vb, &ctx->dict);

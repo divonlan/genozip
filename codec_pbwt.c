@@ -155,7 +155,7 @@ static void inline codec_pbwt_calculate_permutation (PbwtState *state, const All
 // -------------
 
 // called by vcf_seg_finalize to create all contexts - must be done before merge
-void codec_pbwt_seg_init (VBlock *vb, Context *runs_ctx, Context *fgrc_ctx, DidIType st_did_i)
+void codec_pbwt_seg_init (VBlock *vb, Context *runs_ctx, Context *fgrc_ctx)
 {
     vb->runs_ctx = runs_ctx;
     vb->fgrc_ctx = fgrc_ctx;
@@ -166,12 +166,10 @@ void codec_pbwt_seg_init (VBlock *vb, Context *runs_ctx, Context *fgrc_ctx, DidI
     // Note: we can't do this in codec_pbwt_compress because it must be done before merge, do be copied to z_file->contexts
 
     // this context will contain alternate run lengths of the background allele and any forward allele
-    runs_ctx->st_did_i      = st_did_i;   // in --stats, consoliate stats into GT
     runs_ctx->ltype         = LT_UINT32;
     
     // this context is used to determine which forward allele is in each forward run in RUNS: it contains
     // an array of PbwtFgRunCount
-    fgrc_ctx->st_did_i      = st_did_i;   // in --stats, consoliate stats into GT
     fgrc_ctx->ltype         = LT_UINT32;
     fgrc_ctx->lsubcodec_piz = CODEC_PBWT;
 }

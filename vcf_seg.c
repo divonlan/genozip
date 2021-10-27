@@ -114,7 +114,7 @@ void vcf_seg_initialize (VBlock *vb_)
     CTX(FORMAT_SDP)->  flags.store = STORE_INT;   // since v13
     CTX(INFO_ADP)->    flags.store = STORE_INT;   // since v13
     CTX(INFO_SVTYPE)-> flags.store = STORE_INDEX; // since v13 - consumed by vcf_refalt_piz_is_variant_indel
-    
+
     seg_id_field_init (CTX(VCF_ID));
     seg_id_field_init (CTX(INFO_CSQ_Existing_variation));
 
@@ -137,6 +137,7 @@ void vcf_seg_initialize (VBlock *vb_)
     stats_set_consolidation (VB, VCF_CHROM,  1, VCF_oCHROM);
     stats_set_consolidation (VB, VCF_COORDS, 7, INFO_PRIM, INFO_PREJ, INFO_LUFT, INFO_LREJ, VCF_oSTATUS, VCF_COPYSTAT, VCF_oXSTRAND);
     stats_set_consolidation (VB, FORMAT_GT,  4, FORMAT_GT_HT, FORMAT_GT_HT_INDEX, FORMAT_PBWT_RUNS, FORMAT_PBWT_FGRC);
+    stats_set_consolidation (VB, FORMAT_AB,  1, FORMAT_AB_HET);
 
     vcf_set_init_mux_by_dosage (vb, FORMAT_PRI,  STORE_NONE);
     vcf_set_init_mux_by_dosage (vb, FORMAT_GL,   STORE_NONE);

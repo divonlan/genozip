@@ -1412,7 +1412,6 @@ void vcf_finalize_seg_info (VBlockVCF *vb)
     Container con = { .repeats             = 1, 
                       .drop_final_item_sep = true,
                       .filter_items        = z_dual_coords,   // vcf_piz_filter chooses which (if any) DVCF item to show based on flag.luft and flag.single_coord
-                      .filter_repeats      = true,            // we save POS last_value so we can use it --regions, as we might have INFO/END that modifies POS.last_value
                       .callback            = z_dual_coords }; // vcf_piz_container_cb appends oSTATUS to INFO if requested 
  
     // seg INFO/SF, if there is one

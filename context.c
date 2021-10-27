@@ -35,6 +35,19 @@
 
 #define INITIAL_NUM_NODES 10000
 
+// inserts dict_id->did_i to the map, if one of the two entries is available
+static inline void set_dict_id_to_did_i_map (DidIType *map, DictId dict_id, DidIType did_i)
+{
+    if (map[dict_id.map_key] == DID_I_NONE)  // map is free
+        map[dict_id.map_key] = did_i;
+
+    else if (map[dict_id.map_key] == did_i)  // already has requested value - nothing to do 
+        {}
+    
+    else if (map[ALT_KEY(dict_id)] == DID_I_NONE) // fallback entry is free or we can override it
+        map[ALT_KEY(dict_id)] = did_i;
+}
+
 // show a dict_id if the requested string is a subset of it, excluding unprintable characters
 bool ctx_is_show_dict_id (DictId dict_id)
 {
@@ -242,7 +255,7 @@ static WordIndex ctx_commit_node (VBlock *vb, Context *zctx, Context *vctx, STRp
     // 2. we insert it to ston_nodes instead of dict - i.e. it doesn't get written the dict section
     // 3. we move it to the local section of this vb
     // 4. we set the word_index of its nodes to be the word_index of the SNIP_LOOKUP snip
-    bool is_singleton_in_vb = (count == 1 && (vctx->ltype == LT_TEXT) && !vctx->dynamic_size_local && !vctx->no_stons); // is singleton in this VB
+    bool is_singleton_in_vb = (count == 1 && ctx_can_have_singletons (vctx)); // is singleton in this VB
 
     // attempt to get the node from the hash table 
     WordIndex node_index = hash_global_get_entry (zctx, snip, snip_len, 
@@ -473,7 +486,7 @@ void ctx_clone (VBlock *vb)
 
     for (DidIType did_i=0; did_i < z_num_contexts; did_i++) {
         Context *vctx = CTX(did_i);
-        Context *zctx = ZCTX (did_i);
+        Context *zctx = ZCTX(did_i);
 
         // case: this context doesn't really exist (happens when incrementing num_contexts when adding RNAME and RNEXT in ctx_populate_zf_ctx_from_contigs)
         if (!zctx->mutex.initialized) continue;
@@ -510,7 +523,7 @@ void ctx_clone (VBlock *vb)
 
         memcpy ((char*)vctx->tag_name, zctx->tag_name, sizeof (vctx->tag_name));
 
-        vb->dict_id_to_did_i_map[vctx->dict_id.map_key] = did_i;
+        set_dict_id_to_did_i_map (vb->dict_id_to_did_i_map, vctx->dict_id, did_i);
         
         ctx_init_iterator (vctx);
 
@@ -549,8 +562,7 @@ static void ctx_initialize_ctx (Context *ctx, DidIType did_i, DictId dict_id, Di
 
     ctx_init_iterator (ctx);
     
-    if (dict_id_to_did_i_map[dict_id.map_key] == DID_I_NONE)
-        dict_id_to_did_i_map[dict_id.map_key] = did_i;
+    set_dict_id_to_did_i_map (dict_id_to_did_i_map, dict_id, did_i);
 
     bool is_zf_ctx = z_file && (ctx - z_file->contexts) >= 0 && (ctx - z_file->contexts) <= (sizeof(z_file->contexts)/sizeof(z_file->contexts[0]));
 
@@ -939,7 +951,7 @@ void ctx_add_compressor_time_to_zf_ctx (VBlockP vb)
 }
 
 // returns an existing did_i in this vb, or DID_I_NONE if there isn't one
-DidIType ctx_get_existing_did_i_if_not_found_by_inline (VBlockP vb, DictId dict_id)
+DidIType ctx_get_unmapped_existing_did_i (VBlockP vb, DictId dict_id)
 {
     // a different dict_id is in the map, perhaps a hash-clash...
     for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) 
@@ -959,38 +971,26 @@ DidIType ctx_get_existing_did_i_if_not_found_by_inline (VBlockP vb, DictId dict_
 
 // gets did_id if the dictionary exists, and creates a new dictionary if its the first time dict_id is encountered
 // threads: no issues - called by PIZ for vb and zf (but dictionaries are immutable) and by Segregate (ZIP) on vctx only
-Context *ctx_get_ctx_if_not_found_by_inline (
-    Context *contexts /* an array */, 
-    DataType dt, 
-    DidIType *dict_id_to_did_i_map, 
-    DidIType did_i,
-    DidIType *num_contexts, 
-    DictId dict_id,
-    const char *tag_name, unsigned tag_name_len)
+ContextP ctx_get_unmapped_ctx (Context *contexts/* array */, DataType dt, DidIType *dict_id_to_did_i_map, 
+                               DidIType *num_contexts, DictId dict_id, STRp(tag_name))
 {
-    // case: its not in mapper - mapper is occupied by another - perhaps it exists
-    // and missing the opportunity to enter mapper - search for it
-    if (did_i != DID_I_NONE)    
-        for (did_i=0; did_i < *num_contexts; did_i++) 
-            if (dict_id.num == contexts[did_i].dict_id.num) goto done;
+    // search to see if this dict_id has a context, despite not in the map (due to contention)
+    for (DidIType did_i=0; did_i < *num_contexts; did_i++) 
+        if (dict_id.num == contexts[did_i].dict_id.num) 
+            return &contexts[did_i];
 
-    did_i = *num_contexts; // note: *num_contexts cannot be updated until ctx is initialized, see comment below
-    
-    Context *ctx = &contexts[did_i]; 
-
+    Context *ctx = &contexts[*num_contexts]; // note: *num_contexts cannot be updated until ctx is initialized, see comment below
+ 
     //iprintf ("New context: dict_id=%s in did_i=%u \n", dis_dict_id (dict_id).s, did_i);
-    ASSERT (*num_contexts+1 < MAX_DICTS, 
-            "cannot create a context for %s because number of dictionaries would exceed MAX_DICTS=%u", 
-            dis_dict_id (dict_id).s, MAX_DICTS);
+    ASSERT (*num_contexts < MAX_DICTS, "cannot create a context for %.*s because number of dictionaries would exceed MAX_DICTS=%u", 
+            tag_name_len, tag_name, MAX_DICTS);
 
-    ctx_initialize_ctx (ctx, did_i, dict_id, dict_id_to_did_i_map, tag_name, tag_name_len);
+    ctx_initialize_ctx (ctx, *num_contexts, dict_id, dict_id_to_did_i_map, STRa (tag_name));
 
     // thread safety: the increment below MUST be AFTER the initialization of ctx, bc piz_get_line_subfields
     // might be reading this data at the same time as the piz dispatcher thread adding more dictionaries
-    (*num_contexts) = did_i + 1; 
+    (*num_contexts)++;
 
-done:
-    ctx = &contexts[did_i];
     return ctx;
 }
 
@@ -1023,7 +1023,8 @@ void ctx_initialize_predefined_ctxs (Context *contexts /* an array */,
         else { // an alias
             contexts[did_i].did_i = dst_ctx->did_i;
             contexts[did_i].dict_id = DICT_ID_NONE; // this is how reconstruct_from_ctx_do identifies it is an alias
-            dict_id_to_did_i_map[dict_id.map_key] = dst_ctx->did_i;        
+            
+            set_dict_id_to_did_i_map (dict_id_to_did_i_map, dict_id, dst_ctx->did_i);
         }
     }
 }
@@ -1049,8 +1050,7 @@ void ctx_overlay_dictionaries_to_vb (VBlock *vb)
         vctx->last_line_i = LAST_LINE_I_INIT;
         memcpy ((char*)vctx->tag_name, zctx->tag_name, sizeof (vctx->tag_name));
 
-        if (vb->dict_id_to_did_i_map[vctx->dict_id.map_key] == DID_I_NONE)
-            vb->dict_id_to_did_i_map[vctx->dict_id.map_key] = did_i;
+        set_dict_id_to_did_i_map (vb->dict_id_to_did_i_map, vctx->dict_id, did_i);
 
         ctx_init_iterator (vctx);
 

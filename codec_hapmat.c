@@ -26,17 +26,11 @@ typedef struct {
     uint32_t index_in_sorted_line;
 } HaploTypeSortHelperIndex;
 
-void codec_hapmat_comp_init (VBlock *vb_)
+void codec_hapmat_comp_init (VBlock *vb)
 {
-    VBlockVCF *vb = (VBlockVCF *)vb_;
-
     CTX(FORMAT_GT_HT)->ltype  = LT_CODEC;
     CTX(FORMAT_GT_HT)->lcodec = CODEC_HAPM;
-
     CTX(FORMAT_GT_HT_INDEX)->ltype  = LT_UINT32;
-
-    // in --stats, consolidate stats into GT
-    CTX(FORMAT_GT_HT)->st_did_i = CTX(FORMAT_GT_HT_INDEX)->st_did_i = CTX(FORMAT_GT)->did_i;
 }
 
 static int sort_by_alt_allele_comparator(const void *p, const void *q)  

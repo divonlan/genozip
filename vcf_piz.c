@@ -81,17 +81,18 @@ static void vcf_piz_replace_pos_with_gpos (VBlockP vb)
 // not be reconstructed. contexts are not consumed.
 CONTAINER_FILTER_FUNC (vcf_piz_filter)
 {
-    // before INFO is reconstructed, we save POS.last_value, as it might be changed by an INFO/END. We restore it in the INFO container callback.
-    if (item < 0) {
-        CTX(VCF_POS)->rback_last_value = CTX(VCF_POS)->last_value; // consumed by regions_is_site_included
-        return true; // show repeat as normal
-    }
-    
     uint64_t dnum = con->items[item].dict_id.num;
 
     switch (dict_id.num) {
 
         case _VCF_TOPLEVEL:
+            // After reconstructing POS (next field is ID) - save POS.last_value, as it might be changed by an INFO/END. 
+            if (dnum == _VCF_ID) {
+                CTX(VCF_POS)->rback_last_value = CTX(VCF_POS)->last_value; // consumed by regions_is_site_included
+                break;
+            }
+            // fall through
+            
         case _VCF_TOPLUFT:
             // --drop-genotypes: remove the two tabs at the end of the line
             if (flag.drop_genotypes && dnum == _VCF_EOL)

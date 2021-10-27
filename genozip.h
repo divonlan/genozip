@@ -86,6 +86,18 @@ typedef union DictId {
     uint64_t num;             // num is just for easy comparisons - it doesn't have a numeric value and endianity should not be changed
     uint8_t id[DICT_ID_LEN];  // \0-padded IDs 
     uint16_t map_key;         // we use the first two bytes as they key into vb/z_file->dict_id_mapper
+    struct {
+        #define ALT_KEY(d) (0x10000 | ((d).alt_key.b0_4 << 11) | ((d).alt_key.b5_9 << 6) | ((d).alt_key.b10_14 << 1) | (d).alt_key.b15)
+        uint64_t unused1 : 3;
+        uint64_t b0_4    : 5; // 5 LSb from 1st character
+        uint64_t unused2 : 3;
+        uint64_t b5_9    : 5; // 5 LSb from 2nd character
+        uint64_t unused3 : 3;
+        uint64_t b10_14  : 5; // 5 LSb from 3rd character
+        uint64_t unused4 : 7;
+        uint64_t b15     : 1; // 1 LSb from 4th character
+        uint64_t unused5 : 32;
+    } alt_key;
 } DictId;
 #pragma pack()
 

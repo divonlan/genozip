@@ -126,7 +126,6 @@ void sam_seg_initialize (VBlock *vb)
     CTX(SAM_GPOS)->ltype        = LT_UINT32;
     CTX(SAM_GPOS)->flags.store  = STORE_INT;
     CTX(SAM_BUDDY)->dynamic_size_local = true;
-    CTX(SAM_BUDDY)->st_did_i    = SAM_QNAME;
     CTX(SAM_QNAME)->no_stons    = true; // no singletons, bc sam_piz_filter uses PEEK_SNIP
     
     if (segconf.sam_is_collated) 
@@ -151,7 +150,6 @@ void sam_seg_initialize (VBlock *vb)
     CTX(SAM_CIGAR)->no_stons = true;
 
     CTX(OPTION_BI_Z)->no_stons    = CTX(OPTION_BD_Z)->no_stons = true; // we can't use local for singletons in BD or BI as next_local is used by sam_piz_special_BD_BI to point into BD_BI
-    CTX(OPTION_BI_Z)->st_did_i    = CTX(OPTION_BD_Z)->st_did_i = OPTION_BD_BI; 
     CTX(OPTION_BD_BI)->ltype      = LT_SEQUENCE;
     CTX(OPTION_NM_i)->flags.store = STORE_INT; // since v12.0.36
     CTX(OPTION_AS_i)->flags.store = STORE_INT; // since v12.0.37
@@ -171,6 +169,8 @@ void sam_seg_initialize (VBlock *vb)
     stats_set_consolidation (vb, OPTION_OA_Z,  6, OPTION_OA_RNAME, OPTION_OA_POS, OPTION_OA_STRAND, OPTION_OA_CIGAR, OPTION_OA_MAPQ, OPTION_OA_NM);
     stats_set_consolidation (vb, OPTION_XA_Z,  7, OPTION_XA_RNAME, OPTION_XA_POS, OPTION_XA_STRAND, OPTION_XA_CIGAR, OPTION_XA_NM, OPTION_XA_STRAND_POS, OPTION_XA_LOOKBACK);
     stats_set_consolidation (vb, SAM_OPTIONAL, 1, SAM_MC_Z);
+    stats_set_consolidation (vb, SAM_QNAME, 1, SAM_BUDDY);
+    stats_set_consolidation (vb, OPTION_BD_BI, 2, OPTION_BI_Z, OPTION_BD_Z);
 
     codec_acgt_comp_init (vb);
 

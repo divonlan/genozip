@@ -132,7 +132,7 @@ extern const char *lzma_errstr (SRes res);
 extern const char *lzma_status (ELzmaStatus status);
 
 // PBWT stuff
-extern void codec_pbwt_seg_init (VBlockP vb, ContextP runs_ctx, ContextP fgrc_ctx, DidIType st_did_i);
+extern void codec_pbwt_seg_init (VBlockP vb, ContextP runs_ctx, ContextP fgrc_ctx);
 extern void codec_pbwt_display_ht_matrix (VBlockP vb, uint32_t max_rows);
 
 #endif

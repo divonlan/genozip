@@ -42,13 +42,12 @@ void gff3_seg_initialize (VBlock *vb)
     CTX(GFF3_COMMENT)->no_stons    = true; // required by STORE_INDEX (otherwise singletons don't get their index stored)
     CTX(GFF3_SEQID)->no_stons      = true; // needs b250 node_index for random access
     CTX(GFF3_ATTRS)->no_stons      = true;
-    CTX(GFF3_TOPLEVEL)->no_stons   = true; // keep in b250 so it can be eliminated as all_the_same
 
-    CTX(ATTR_Target_ID)->st_did_i = CTX(ATTR_Target_POS)->st_did_i = CTX(ATTR_Target_STRAND)->st_did_i = ATTR_Target;
+    stats_set_consolidation (vb, ATTR_Target, 3, ATTR_Target_ID, ATTR_Target_POS, ATTR_Target_STRAND);
+    stats_set_consolidation (vb, ENSTid, 1, EnNSTid);
 
     seg_id_field_init (CTX(ATTR_Dbxref));
     seg_id_field_init (CTX(ATTR_Name));
-    stats_set_consolidation (vb, ENSTid, 1, EnNSTid);
 }
 
 void gff3_seg_finalize (VBlockP vb)

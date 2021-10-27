@@ -39,7 +39,7 @@
 #define SNIP_PAIR_DELTA          '\x7'   // The value is a uint32_t which is a result of the equivalent value in the paired file + the delta value (when using --pair)
 #define SNIP_SPECIAL             '\x8'   // Special algorithm followed by ID of the algorithm 
 #define SNIP_REDIRECTION         '\xB'   // Get the data from another dict_id (can be in b250, local...)
-#define SNIP_DONT_STORE          '\xC'   // Reconcstruct the following value, but don't store it in last_value (overriding flags.store)
+#define SNIP_DONT_STORE          '\xC'   // Reconstruct the following value, but don't store it in last_value (overriding flags.store)
 #define SNIP_COPY                '\xE'   // Copy the last_txt of dict_id (same or other)
 #define SNIP_DUAL                '\xF'   // A snip containing two snips separated by a SNIP_DUAL - for Primary and Luft reconstruction respectively
 #define SNIP_LOOKBACK            '\x10'  // Copy an earlier snip in the same context. Snip is dict_id from which to take the lookback offset, and an optional delta to be applied to the retrieved numeric value. note: line number of the previous snip is variable, but its offset back is fixed (introduced 12.0.41)
@@ -74,8 +74,8 @@ typedef struct {
 
 #define NEXTLOCAL(type, ctx) (*ENT (type, (ctx)->local, (ctx)->next_local++))
 #define PEEKNEXTLOCAL(type, ctx, offset) (*ENT (type, (ctx)->local, (ctx)->next_local + offset))
-static inline bool PAIRBIT(Context *ctx)      { BitArrayP b = buf_get_bitarray (&ctx->pair);  bool ret = bit_array_get (b, ctx->next_local);                    return ret; } // we do it like this and not in a #define to avoid anti-aliasing warning when casting part of a Buffer structure into a BitArray structure
-static inline bool NEXTLOCALBIT(Context *ctx) { BitArrayP b = buf_get_bitarray (&ctx->local); bool ret = bit_array_get (b, ctx->next_local); ctx->next_local++; return ret; }
+static inline bool PAIRBIT(ContextP ctx)      { BitArrayP b = buf_get_bitarray (&ctx->pair);  bool ret = bit_array_get (b, ctx->next_local);                    return ret; } // we do it like this and not in a #define to avoid anti-aliasing warning when casting part of a Buffer structure into a BitArray structure
+static inline bool NEXTLOCALBIT(ContextP ctx) { BitArrayP b = buf_get_bitarray (&ctx->local); bool ret = bit_array_get (b, ctx->next_local); ctx->next_local++; return ret; }
 
 // factor in which we grow buffers in CTX upon realloc
 #define CTX_GROWTH 1.75  
@@ -95,7 +95,7 @@ static inline bool NEXTLOCALBIT(Context *ctx) { BitArrayP b = buf_get_bitarray (
 static inline bool is_last_txt_valid(ContextP ctx) { return ctx->last_txt_index != INVALID_LAST_TXT_INDEX; }
 static inline bool is_same_last_txt(VBlockP vb, ContextP ctx, STRp(str)) { return str_len == ctx->last_txt_len && !memcmp (str, last_txtx(vb, ctx), str_len); }
 
-static inline void ctx_init_iterator (Context *ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; ctx->next_local = 0; }
+static inline void ctx_init_iterator (ContextP ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; ctx->next_local = 0; }
 
 extern WordIndex ctx_create_node_do (VBlockP segging_vb, ContextP vctx, STRp (snip), bool *is_new);
 extern WordIndex ctx_create_node (VBlockP vb, DidIType did_i, STRp (snip));
@@ -109,36 +109,52 @@ extern void ctx_increment_count (VBlockP vb, ContextP ctx, WordIndex node_index)
 extern WordIndex ctx_get_next_snip (VBlockP vb, ContextP ctx, bool all_the_same, bool is_pair, pSTRp (snip));
 extern WordIndex ctx_peek_next_snip (VBlockP vb, ContextP ctx, bool all_the_same, pSTRp (snip));  
 
-extern WordIndex ctx_search_for_word_index (Context *ctx, const char *snip, unsigned snip_len);
+extern WordIndex ctx_search_for_word_index (ContextP ctx, STRp(snip));
 extern void ctx_clone (VBlockP vb);
-extern CtxNode *ctx_node_vb_do (const Context *ctx, WordIndex node_index, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
-extern CtxNode *ctx_node_zf_do (const Context *ctx, int32_t node_index, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
+extern CtxNode *ctx_node_vb_do (ConstContextP ctx, WordIndex node_index, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
+extern CtxNode *ctx_node_zf_do (ConstContextP ctx, int32_t node_index, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
 #define ctx_node_zf(ctx, node_index, snip_in_dict, snip_len) ctx_node_zf_do(ctx, node_index, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
 extern void ctx_merge_in_vb_ctx (VBlockP vb);
 extern void ctx_add_compressor_time_to_zf_ctx (VBlockP vb);
 extern void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vctx, bool is_lcodec);
 
-extern Context *ctx_get_ctx_if_not_found_by_inline (Context *contexts, DataType dt, DidIType *dict_id_to_did_i_map, DidIType map_did_i, DidIType *num_contexts, DictId dict_id, const char *tag_name, unsigned tag_name_len);
+extern ContextP ctx_get_unmapped_ctx (ContextP contexts, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_contexts, DictId dict_id, STRp(tag_name));
+
+// returns did_i of dict_id if it is found in the map, or DID_I_NONE if not
+static inline DidIType get_matching_did_i_from_map (Context *contexts, DidIType *map, DictId dict_id)
+{
+    DidIType did_i = map[dict_id.map_key];
+    if (did_i != DID_I_NONE && contexts[did_i].dict_id.num == dict_id.num) 
+        return did_i;
+
+    did_i = map[ALT_KEY(dict_id)];
+    if (did_i != DID_I_NONE && contexts[did_i].dict_id.num == dict_id.num) 
+        return did_i;
+
+    return DID_I_NONE;
+}
 
 // inline function for quick operation typically called several billion times in a typical file and > 99.9% can be served by the inline
 #define ctx_get_ctx(vb,dict_id) ctx_get_ctx_do (((VBlockP)(vb))->contexts, ((VBlockP)(vb))->data_type, ((VBlockP)(vb))->dict_id_to_did_i_map, &((VBlockP)(vb))->num_contexts, (DictId)(dict_id), 0, 0)
 #define ctx_get_ctx_tag(vb,dict_id,tag_name,tag_name_len) ctx_get_ctx_do (((VBlockP)(vb))->contexts, ((VBlockP)(vb))->data_type, ((VBlockP)(vb))->dict_id_to_did_i_map, &((VBlockP)(vb))->num_contexts, (DictId)(dict_id), (tag_name), (tag_name_len))
-static inline Context *ctx_get_ctx_do (Context *contexts, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_contexts, DictId dict_id, const char *tag_name, unsigned tag_name_len)
+static inline ContextP ctx_get_ctx_do (Context *contexts, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_contexts, DictId dict_id, STRp(tag_name))
 {
-    DidIType did_i = dict_id_to_did_i_map[dict_id.map_key];
-    if (did_i != DID_I_NONE && contexts[did_i].dict_id.num == dict_id.num) 
+    DidIType did_i = get_matching_did_i_from_map (contexts, dict_id_to_did_i_map, dict_id);
+    if (did_i != DID_I_NONE) 
         return &contexts[did_i];
     else    
-        return ctx_get_ctx_if_not_found_by_inline (contexts, dt, dict_id_to_did_i_map, did_i, num_contexts, dict_id, tag_name, tag_name_len);
+        return ctx_get_unmapped_ctx (contexts, dt, dict_id_to_did_i_map, num_contexts, dict_id, STRa(tag_name));
 }
 
-extern DidIType ctx_get_existing_did_i_if_not_found_by_inline (VBlockP vb, DictId dict_id);
+extern DidIType ctx_get_unmapped_existing_did_i (VBlockP vb, DictId dict_id);
 
 static inline DidIType ctx_get_existing_did_i_do (VBlockP vb, DictId dict_id, Context *contexts, DidIType *dict_id_to_did_i_map)
 {
-    DidIType did_i = dict_id_to_did_i_map[dict_id.map_key];
-    if (did_i == DID_I_NONE || contexts[did_i].dict_id.num == dict_id.num) return did_i;
-    return ctx_get_existing_did_i_if_not_found_by_inline (vb, dict_id);
+    DidIType did_i = get_matching_did_i_from_map (contexts, dict_id_to_did_i_map, dict_id);
+    if (did_i != DID_I_NONE)
+        return did_i;
+    else
+        return ctx_get_unmapped_existing_did_i (vb, dict_id);
 }    
 #define ctx_get_existing_did_i(vb,dict_id) ctx_get_existing_did_i_do (vb, dict_id, vb->contexts, vb->dict_id_to_did_i_map)
 
@@ -149,34 +165,34 @@ static inline ContextP ctx_get_existing_ctx_do (VBlockP vb, DictId dict_id)  // 
 }
 #define ECTX(dict_id) ctx_get_existing_ctx_do ((VBlockP)(vb), (DictId)(dict_id))
 
-extern ContextP ctx_add_new_zf_ctx_from_txtheader (const char *tag_name, unsigned tag_name_len, DictId dict_id, TranslatorId luft_translator);
+extern ContextP ctx_add_new_zf_ctx_from_txtheader (STRp(tag_name), DictId dict_id, TranslatorId luft_translator);
 
 extern void ctx_overlay_dictionaries_to_vb (VBlockP vb);
 extern void ctx_sort_dictionaries_vb_1(VBlockP vb);
 
 extern void ctx_update_stats (VBlockP vb);
-extern void ctx_free_context (Context *ctx, DidIType did_i);
-extern void ctx_destroy_context (Context *ctx, DidIType did_i);
+extern void ctx_free_context (ContextP ctx, DidIType did_i);
+extern void ctx_destroy_context (ContextP ctx, DidIType did_i);
 extern bool ctx_is_show_dict_id (DictId dict_id);
 
 extern CtxNode *ctx_get_node_by_word_index (ConstContextP ctx, WordIndex word_index);
-extern const char *ctx_get_snip_by_word_index (ConstContextP ctx, WordIndex word_index, 
-                                               const char **snip, uint32_t *snip_len);
+extern const char *ctx_get_snip_by_word_index (ConstContextP ctx, WordIndex word_index, pSTRp(snip));
+                                               
 
-extern const char *ctx_get_vb_snip_ex (ConstContextP vctx, WordIndex vb_node_index, const char **snip, uint32_t *snip_len); 
+extern const char *ctx_get_vb_snip_ex (ConstContextP vctx, WordIndex vb_node_index, pSTRp(snip)); 
 static inline const char *ctx_get_vb_snip (ConstContextP vctx, WordIndex vb_node_index) { return ctx_get_vb_snip_ex (vctx, vb_node_index, 0, 0); }
  
 static inline const char *ctx_get_words_snip(ConstContextP ctx, WordIndex word_index) 
     { return ctx_get_snip_by_word_index (ctx, word_index, 0, 0); }
 
-extern const char *ctx_get_snip_by_zf_node_index (ConstBufferP nodes, ConstBufferP dict, WordIndex node_index, 
-                                                  const char **snip, uint32_t *snip_len);
+extern const char *ctx_get_snip_by_zf_node_index (ConstBufferP nodes, ConstBufferP dict, WordIndex node_index, pSTRp(snip));
+
 static inline const char *ctx_get_zf_nodes_snip(ConstContextP ctx, WordIndex node_index) 
     { return ctx_get_snip_by_zf_node_index (&ctx->nodes, &ctx->dict, node_index, 0, 0); }
 
 extern WordIndex ctx_get_word_index_by_snip (ConstContextP ctx, const char *snip);
 
-extern void ctx_initialize_predefined_ctxs (Context *contexts /* an array */, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_contexts);
+extern void ctx_initialize_predefined_ctxs (ContextP contexts /* an array */, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_contexts);
 
 extern void ctx_read_all_dictionaries (void);
 extern void ctx_compress_dictionaries (void);
@@ -191,7 +207,7 @@ extern void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local);
 typedef struct { char s[MAX_TAG_LEN+8]; } TagNameEx;
 TagNameEx ctx_tag_name_ex (ConstContextP ctx);
 
-// called before seg, to store the point to which we might roll back
+// Seg: called before seg, to store the point to which we might roll back
 static inline void ctx_create_rollback_point (ContextP ctx)
 {
     ctx->rback_b250_len       = ctx->b250.len;
@@ -206,12 +222,15 @@ static inline void ctx_create_rollback_point (ContextP ctx)
 }
 extern void ctx_rollback (VBlockP vb, ContextP ctx);
 
+static inline bool ctx_can_have_singletons (ContextP ctx) 
+    { return (ctx->ltype == LT_TEXT) && !ctx->dynamic_size_local && !ctx->no_stons && (ctx->flags.store != STORE_INDEX); }
+
 // returns true if dict_id was *previously* segged on this line, and we stored a valid last_value (int or float)
 #define ctx_has_value_in_line_(vb, ctx) ((ctx)->last_line_i == (vb)->line_i)
 #define ctx_has_value_in_prev_line_(vb, ctx) ((ctx)->last_line_i+1 == (vb)->line_i)
 static inline bool ctx_has_value_in_line_do (VBlockP vb, DictId dict_id, ContextP *p_ctx /* optional out */) 
 { 
-    Context *ctx = ECTX (dict_id);
+    ContextP ctx = ECTX (dict_id);
     if (p_ctx) *p_ctx = ctx;
     return ctx && ctx_has_value_in_line_(vb, ctx);
 }
@@ -231,7 +250,7 @@ static inline void ctx_unset_last_value (VBlockP vb, ContextP ctx)
 static inline bool ctx_encountered_in_line_(VBlockP vb, ContextP ctx) { return ((ctx->last_line_i == vb->line_i) || (ctx->last_line_i == -(int32_t)vb->line_i - 1)); }
 static inline bool ctx_encountered_in_line_do (VBlockP vb, DictId dict_id, ContextP *p_ctx /* optional out */) 
 { 
-    Context *ctx = ECTX (dict_id);
+    ContextP ctx = ECTX (dict_id);
     if (p_ctx) *p_ctx = ctx;
     return ctx && ctx_encountered_in_line_(vb, ctx);
 }

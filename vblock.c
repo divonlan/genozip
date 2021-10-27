@@ -44,7 +44,8 @@ VBlock *evb = NULL;
     func (&vb->lo_rejects[0]);       \
     func (&vb->lo_rejects[1]);       \
     for (unsigned i=0; i < NUM_CODEC_BUFS; i++) func (&vb->codec_bufs[i]); \
-    for (unsigned i=0; i < MAX_DICTS; i++) if (CTX(i)->dict_id.num || i < DTF(num_fields)) ctx_func (CTX(i), i); /* note: always erase num_fields as they may be set in *_seg_initialize even if not used */\
+    if (vb->data_type != DT_NONE)    \
+        for (unsigned i=0; i < MAX_DICTS; i++) if (CTX(i)->dict_id.num || i < DTF(num_fields)) ctx_func (CTX(i), i); /* note: always erase num_fields as they may be set in *_seg_initialize even if not used */\
     func (&vb->txt_data); /* handle contexts first, as vcf_seg_FORMAT_GT overlays FORMAT_GT_HT on txt_data */ \
     if (vb->data_type_alloced != DT_NONE && dt_props[vb->data_type_alloced].vb_func) dt_props[vb->data_type_alloced].vb_func(vb);    
 
@@ -215,6 +216,7 @@ VBlockP vb_initialize_nonpool_vb (int vb_id, DataType dt, const char *task)
     vb->data_type         = dt;
     vb->in_use            = true;
     vb->data_type_alloced = dt;
+    memset (vb->dict_id_to_did_i_map, 0xff, sizeof(vb->dict_id_to_did_i_map)); // DID_I_NONE
     return vb;
 }
 

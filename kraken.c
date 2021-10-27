@@ -103,15 +103,7 @@ void kraken_seg_initialize (VBlock *vb)
     CTX(KRAKEN_TAXID)->no_stons       = true; // must be no_stons the SEC_COUNTS data needs to mirror the dictionary words
     CTX(KRAKEN_TAXID)->counts_section = true; 
 
-    CTX(KRAKEN_KMERTAX)->st_did_i   = KRAKEN_KMERS;
-    CTX(KRAKEN_KMERLEN)->st_did_i   = KRAKEN_KMERS;
-
-    CTX(KRAKEN_KMERS)->no_stons     =  // container context
-    CTX(KRAKEN_QNAME)->no_stons     =  // container context
-    CTX(KRAKEN_TOPLEVEL)->no_stons  = 
-    CTX(KRAKEN_TOP2TAXID)->no_stons = 
-    CTX(KRAKEN_EOL)->no_stons       = 
-    CTX(KRAKEN_CU)->no_stons        = true; // no singletons, so b250 can be optimized away 
+    stats_set_consolidation (vb, KRAKEN_KMERS, 2, KRAKEN_KMERTAX, KRAKEN_KMERLEN);
 
     qname_seg_initialize (VB, KRAKEN_QNAME);
 }

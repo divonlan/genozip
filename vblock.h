@@ -130,7 +130,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     /* dictionaries stuff - we use them for 1. subfields with genotype data, 2. fields 1-9 of the VCF file 3. infos within the info field */\
     DidIType num_contexts;     /* total number of dictionaries of all types */\
     Context contexts[MAX_DICTS];    \
-    DidIType dict_id_to_did_i_map[65536];       /* map for quick look up of did_i from dict_id */\
+    DidIType dict_id_to_did_i_map[65536 * 2];   /* map for quick look up of did_i from dict_id : 64K for key_map, 64K for alt_map */\
     \
     /* reference stuff */ \
     Reference ref;             /* used by VBs created by dispatchers for uncompressing / compressing internal or external references. NOT used by VBs of the data type itself. */ \

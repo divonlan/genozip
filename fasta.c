@@ -361,7 +361,7 @@ static void fasta_seg_seq_line_do (VBlockFASTA *vb, uint32_t line_len, bool is_f
 
     // line length is same as previous SEQ line
     if (!is_first_line_in_contig && ctx_has_value_in_line_(vb, lm_ctx) && line_len == lm_ctx->last_value.i) 
-        seg_duplicate_last (vb, lm_ctx, 0);
+        seg_duplicate_last (VB, lm_ctx, 0);
 
     else { 
         char special_snip[100]; unsigned special_snip_len = sizeof (special_snip);

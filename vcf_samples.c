@@ -538,10 +538,6 @@ static bool vcf_phred_optimize (const char *snip, unsigned len, char *optimized_
 // Multiplex by dosage
 // -------------------
 
-//--------------------
-// Multiplex by dosage
-// -------------------
-
 void vcf_set_init_mux_by_dosage (VBlockVCFP vb, DidIType did_i, StoreType store_type)
 {
     stats_set_consolidation (VB, did_i, 3, did_i+1, did_i+2, did_i+3);
@@ -550,10 +546,15 @@ void vcf_set_init_mux_by_dosage (VBlockVCFP vb, DidIType did_i, StoreType store_
     CTX(did_i+2)->flags.store = CTX(did_i+3)->flags.store = store_type; 
 }
 
+static inline int vcf_seg_get_dosage (VBlockVCFP vb)
+{
+     return vcf_has_value_in_sample_(vb, CTX(FORMAT_GT)) ? CTX(FORMAT_GT)->last_value.i : -1; // dosage store here by vcf_seg_FORMAT_GT
+}
+
 // the 3 contexts after the caller context must be reseved for 0,1,2 dosages
 static inline void vcf_seg_FORMAT_mux_by_dosage (VBlockVCF *vb, Context *ctx, STRp(cell))
 {
-    int64_t dosage = vcf_has_value_in_sample_(vb, CTX(FORMAT_GT)) ? CTX(FORMAT_GT)->last_value.i : -1; // dosage store here by vcf_seg_FORMAT_GT
+    int dosage = vcf_seg_get_dosage (vb);
 
     if (dosage >= 0 && dosage <= 2
         && !z_dual_coords) { // don't use this in a DVCF, as it will incorrectly change if REF<>ALT switch as GT changes
@@ -565,31 +566,28 @@ static inline void vcf_seg_FORMAT_mux_by_dosage (VBlockVCF *vb, Context *ctx, ST
         seg_by_ctx (VB, STRa(cell), ctx, cell_len);
 }
 
-static inline unsigned vcf_piz_get_dosage (VBlockP vb)
+static inline int vcf_piz_get_dosage (VBlockP vb)
 {
-    // we are guaranteed that if we have a special snip, then all values are either '0' or '1';
     const char *gt = last_txt (vb, FORMAT_GT);
-    unsigned dosage=0;
-    for (unsigned i=0; i < CTX(FORMAT_GT)->last_txt_len; i+=2) 
-        dosage += gt[i]-'0';
+    unsigned gt_len = CTX(FORMAT_GT)->last_txt_len ;
 
-    return dosage;
+    if (gt_len != 3 || (gt[0]!='0' && gt[0]!='1') || (gt[2]!='0' && gt[2]!='1')) return -1; 
+
+    return (int)gt[0] + (int)gt[2] - 2*'0';
 }
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_DOSAGE)
 {
-    if (!reconstruct) goto done;
-
     unsigned dosage = vcf_piz_get_dosage (vb);
 
     DidIType mux_did_i = ctx->did_i + dosage + 1;
-    reconstruct_from_ctx (vb, mux_did_i, 0, true);
+    reconstruct_from_ctx (vb, mux_did_i, 0, reconstruct);
+
+    if (ctx->flags.store == STORE_NONE) return false;
 
     // propagate last_value up
-    new_value->i = CTX(mux_did_i)->last_value.i;
-
-done:
-    return ctx->flags.store != STORE_NONE; 
+    new_value->i = CTX(mux_did_i)->last_value.i; // note: last_value is a union, this copies the entire union
+    return true; 
 }
 
 // used for decompressing files compressed with version up to 12.0.42
@@ -607,6 +605,44 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_DS_old)
 done:
     return false; // no new value
 }
+
+//----------
+// FORMAT/AB
+// ---------
+
+// Expecting: '.' if dosage is 0 or 2, another value otherwise
+static inline void vcf_seg_FORMAT_AB (VBlockVCF *vb, Context *ctx, STRp(cell))
+{
+    int dosage = vcf_seg_get_dosage (vb);
+    bool dos02 = (dosage==0 || dosage==2);
+
+    bool meets_expectation = (dos02 && cell_len==1 && *cell=='.') || !dos02;
+
+    if (meets_expectation) {
+        if (!dos02) seg_by_ctx (VB, STRa(cell), ctx+1, 0);
+        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_AB }, 2, ctx, cell_len);
+    }
+    else 
+        seg_by_ctx (VB, STRa(cell), ctx, cell_len);
+}
+
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_AB)
+{
+    unsigned dosage = vcf_piz_get_dosage (vb);
+    bool dos02 = (dosage==0 || dosage==2);
+
+    if (dos02 && reconstruct)
+        RECONSTRUCT1 ('.');
+
+    else if (!dos02) 
+        reconstruct_from_ctx (vb, ctx->did_i + 1, 0, reconstruct);
+
+    return false; // no new value
+}
+
+//----------
+// FORMAT/DS
+// ---------
 
 // Lift-over translator for FORMAT/DS, IF it is bi-allelic and we have a ALT<>REF switch.
 // We change the value to (ploidy-value)
@@ -1108,6 +1144,9 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
 
         else if (dict_id.num == _FORMAT_RDR) 
             vcf_seg_FORMAT_minus (vb, ctx, STRi(sf, i), 0, CTX(FORMAT_RD), CTX(FORMAT_RDF), STRa(rdr_snip));
+
+        else if (dict_id.num == _FORMAT_AB) 
+            vcf_seg_FORMAT_AB (vb, ctx, STRi(sf, i));
 
         else  // default
             seg_by_ctx (VB, STRi(sf, i), ctx, sf_lens[i]);
