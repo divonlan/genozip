@@ -265,15 +265,30 @@ static void gff3_seg_attrs_field (VBlock *vb, const char *field, unsigned field_
         return;
     }
 
-    Container con = { .repeats             = 1, 
-                      .drop_final_item_sep = true };
     char prefixes[field_len + 2];
     prefixes[0] = prefixes[1] = CON_PX_SEP;
     unsigned prefixes_len = 2;
 
     str_split (field, field_len, MAX_DICTS, ';', attr, false);
     ASSSEG (n_attrs, field, "Invalid attributes field: %.*s", STRf(field));
-    
+
+    Container con = { .repeats = 1 };
+
+    // Handle the case in GFF (not GFF3) where sometimes separators are "; ".
+    unsigned count_space_seps=0;
+    for (int i=1; i < n_attrs-1; i++) 
+        if (attrs[i][0] == ' ') {
+            attrs[i]++;
+            attr_lens[i]--;
+            con.items[i-1].separator[1] = ' ';
+            count_space_seps++;
+        }
+
+    if (!attr_lens[n_attrs-1]) // last item is ends with a ; - creating a fake final item
+        n_attrs--;
+    else
+        con.drop_final_item_sep = true; // last item doesn't not end with a semicolon
+
     con_set_nitems (con, n_attrs);
 
     for (unsigned i=0; i < n_attrs; i++) {
@@ -286,10 +301,12 @@ static void gff3_seg_attrs_field (VBlock *vb, const char *field, unsigned field_
         prefixes[prefixes_len-1] = CON_PX_SEP;
 
         DictId dict_id = gff3_seg_attr_subfield (vb, STRi(tag_val, 0), STRi (tag_val, 1));
-        con.items[i] = (ContainerItem){ .dict_id = dict_id, .separator = { ';' } }; 
+        con.items[i].dict_id = dict_id;
+        con.items[i].separator[0] = ';';  // careful not to modify separator[1]
     }
 
-    container_seg (vb, CTX(GFF3_ATTRS), &con, prefixes, prefixes_len, (prefixes_len-2) /* names inc. = and (; or \n) separator */);
+    container_seg (vb, CTX(GFF3_ATTRS), &con, prefixes, prefixes_len, 
+                   prefixes_len + count_space_seps - 1 - con.drop_final_item_sep); // names inc. = and (; or \n) separator 
 }
 
 const char *gff3_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
@@ -304,7 +321,7 @@ const char *gff3_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_
         SEG_NEXT_ITEM_NL (GFF3_COMMENT);
 
         // TO DO: support embedded FASTA, bug 392
-        ASSINP (!str_issame_ (GFF3_COMMENT_str, GFF3_COMMENT_len, "##FASTA", 7), "%s contains a ##FASTA directive. To compress it use --input=generic", txt_name);
+        ASSINP (!str_issame_ (STRd(GFF3_COMMENT), "##FASTA", 7), "%s contains a ##FASTA directive. To compress it use --input=generic", txt_name);
         
         goto eol; // if we have a comment, then during piz, the other fields will be filtered out
     }
@@ -312,17 +329,17 @@ const char *gff3_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_
         seg_by_did_i (VB, NULL, 0, GFF3_COMMENT, 0); // missing comment field
 
     GET_NEXT_ITEM (GFF3_SEQID);
-    chrom_seg (vb, field_start, field_len);
+    chrom_seg (vb, STRd(GFF3_SEQID));
 
     SEG_NEXT_ITEM (GFF3_SOURCE);
     SEG_NEXT_ITEM (GFF3_TYPE);
 
     GET_NEXT_ITEM (GFF3_START);
-    seg_pos_field (vb, GFF3_START, GFF3_START, 0, 0, field_start, field_len, 0, field_len+1);
+    seg_pos_field (vb, GFF3_START, GFF3_START, 0, 0, STRd(GFF3_START), 0, GFF3_START_len+1);
     random_access_update_pos (vb, DC_PRIMARY, GFF3_START);
 
     GET_NEXT_ITEM (GFF3_END);
-    seg_pos_field (vb, GFF3_END, GFF3_START, 0, 0, field_start, field_len, 0, field_len+1);
+    seg_pos_field (vb, GFF3_END, GFF3_START, 0, 0, STRd(GFF3_END), 0, GFF3_END_len+1);
 
     SEG_NEXT_ITEM (GFF3_SCORE);
     SEG_NEXT_ITEM (GFF3_STRAND);
@@ -330,7 +347,7 @@ const char *gff3_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_
 
     if (separator != '\n') { // "attrbutes" is an optional field per http://gmod.org/wiki/GFF3
         GET_LAST_ITEM (GFF3_ATTRS); 
-        gff3_seg_attrs_field (vb, field_start, field_len);
+        gff3_seg_attrs_field (vb, STRd(GFF3_ATTRS));
     }
     else
         seg_by_did_i (VB, NULL, 0, GFF3_ATTRS, 0); // NULL=MISSING so previous \t is removed
