@@ -436,12 +436,35 @@ done:
     if (have_new_value && store_type) // note: we store in our own context, NOT base (a context, eg FORMAT/DP, sometimes serves as a base_ctx of MIN_DP and sometimes as the snip_ctx for INFO_DP)
         ctx_set_last_value (vb, snip_ctx, new_value);
     else
-        ctx_set_encountered_in_line (snip_ctx);
+        ctx_set_encountered (vb, snip_ctx);
 
     // note: if store_delta, we do a self-delta. this overrides last_delta set by the delta snip which could be against a different
     // base_ctx. note: when Seg sets last_delta, it must also set store=STORE_INT
     if (store_delta) 
         snip_ctx->last_delta = new_value.i - prev_value;
+}
+
+static inline void reconstruct_store_history (VBlockP vb, ContextP ctx, uint32_t last_txt_index)
+{
+    // case: store last integer value
+    if (ctx->flags.store == STORE_INT) 
+        *ENT (int64_t, ctx->history, vb->line_i - vb->first_line) = ctx->last_value.i;
+    
+    // case: textual value will remain in txt_data - just point to it
+    else if (!flag.maybe_lines_dropped_by_reconstructor) 
+        *ENT (HistoryWord, ctx->history, vb->line_i - vb->first_line) = 
+            (HistoryWord){ .lookup = LookupTxtData, .char_index = last_txt_index, .snip_len = ctx->last_txt_len };
+    
+    // case: textual value might be removed from txt_data - copy it
+    else {
+        *ENT (HistoryWord, ctx->history, vb->line_i - vb->first_line) = 
+            (HistoryWord){ .lookup = LookupPerLine, .char_index = ctx->per_line.len, .snip_len = ctx->last_txt_len };
+
+        if (ctx->last_txt_len) {
+            buf_add_more (vb, &ctx->per_line, ENT (char, vb->txt_data, last_txt_index), ctx->last_txt_len, "per_line");
+            NEXTENT (char, ctx->per_line) = 0; // nul-terminate
+        }
+    }
 }
 
 // returns reconstructed length or -1 if snip is missing and previous separator should be deleted
@@ -541,38 +564,21 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
     ctx->last_line_i    = vb->line_i; // reconstructed on this line
 
     // in "store per line" mode, we save one entry per line (possibly a line has no entries if it is an optional field)
-    if (ctx->flags.store_per_line) {
-        // case: store last integer value
-        if (ctx->flags.store == STORE_INT) 
-            *ENT (int64_t, ctx->history, vb->line_i - vb->first_line) = ctx->last_value.i;
-        
-        // case: textual value will remain in txt_data - just point to it
-        else if (!flag.maybe_lines_dropped_by_reconstructor) 
-            *ENT (HistoryWord, ctx->history, vb->line_i - vb->first_line) = 
-                (HistoryWord){ .lookup = LookupTxtData, .char_index = last_txt_index, .snip_len = ctx->last_txt_len };
-        
-        // case: textual value might be removed from txt_data - copy it
-        else {
-            *ENT (HistoryWord, ctx->history, vb->line_i - vb->first_line) = 
-                (HistoryWord){ .lookup = LookupPerLine, .char_index = ctx->per_line.len, .snip_len = ctx->last_txt_len };
-
-            if (ctx->last_txt_len) {
-                buf_add_more (vb, &ctx->per_line, ENT (char, vb->txt_data, last_txt_index), ctx->last_txt_len, "per_line");
-                NEXTENT (char, ctx->per_line) = 0; // nul-terminate
-            }
-        }
-    }
+    if (ctx->flags.store_per_line) 
+        reconstruct_store_history (vb, ctx, last_txt_index);
 
     return (int32_t)ctx->last_txt_len;
 } 
 
 // get reconstructed text without advancing the iterator or changing last_*. context may be already reconstructed or not.
 // Note: txt points into txt_data (past reconstructed or AFTERENT) - caller should copy it elsewhere
+// LIMITATION: cannot be used with contexts that might reconstruct other contexts as that would require
+// chained peeking (i.e. the secondary contexts should be peeked too, not reconstructed)
 LastValueType reconstruct_peek (VBlock *vb, Context *ctx, 
                                 pSTRp(txt)) // optional in / out
 {
-    // case: already reconstructed 
-    if (ctx->last_line_i == vb->line_i) {
+    // case: already reconstructed in this line (or sample in the case of VCF/FORMAT)
+    if (ctx_has_value_(vb, ctx)) {
         if (txt) *txt = last_txtx (vb, ctx);
         if (txt_len) *txt_len = ctx->last_txt_len;
         return ctx->last_value;

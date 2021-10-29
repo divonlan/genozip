@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef BASE250_INCLUDED
-#define BASE250_INCLUDED
+#pragma once
 
 #include "genozip.h"
 
@@ -32,4 +31,3 @@ extern WordIndex base250_decode (const uint8_t **str_p, bool advance, const char
 #define base250_len(data) ((*(uint8_t *)(data) < 250) ? 4 : 1)
 #define base250_copy(dst, b250) memcpy (dst, (b250).encoded.numerals, base250_len((b250).encoded.numerals))
 
-#endif

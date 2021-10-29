@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef THREADS_INCLUDED
-#define THREADS_INCLUDED
+#pragma once
 
 extern void threads_initialize (void);
 
@@ -19,4 +18,4 @@ void threads_log_by_vb (ConstVBlockP vb, const char *task_name, const char *even
 void threads_write_log (bool to_info_stream);
 
 #define ASSERTMAINTHREAD ASSERT0 (threads_am_i_main_thread(), "expected to be running in main thread")
-#endif
+

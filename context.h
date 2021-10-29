@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef CONTEXT_INCLUDED
-#define CONTEXT_INCLUDED
+#pragma once
 
 #include "genozip.h"
 #include "base250.h"
@@ -228,6 +227,7 @@ static inline bool ctx_can_have_singletons (ContextP ctx)
 // returns true if dict_id was *previously* segged on this line, and we stored a valid last_value (int or float)
 #define ctx_has_value_in_line_(vb, ctx) ((ctx)->last_line_i == (vb)->line_i)
 #define ctx_has_value_in_prev_line_(vb, ctx) ((ctx)->last_line_i+1 == (vb)->line_i)
+
 static inline bool ctx_has_value_in_line_do (VBlockP vb, DictId dict_id, ContextP *p_ctx /* optional out */) 
 { 
     ContextP ctx = ECTX (dict_id);
@@ -240,14 +240,26 @@ static inline void ctx_set_last_value (VBlockP vb, ContextP ctx, LastValueType l
 {
     ctx->last_value    = last_value;
     ctx->last_line_i   = vb->line_i;
+    ctx->last_sample_i = vb->sample_i; // used for VCF/FORMAT. otherwise meaningless but harmless.
 }
-static inline void ctx_unset_last_value (VBlockP vb, ContextP ctx)
+
+// set encountered if not already ctx_set_last_value (encounted = seen, but without setting last_value)
+static inline void ctx_set_encountered (VBlockP vb, ContextP ctx)
+{
+    if (ctx->last_line_i != vb->line_i || ctx->last_sample_i != vb->sample_i) // not already ctx_set_last_value in this line/sample
+        ctx->last_line_i = -(int64_t)vb->line_i - 1; 
+
+    ctx->last_sample_i = vb->sample_i; 
+}
+
+// after calling this, all these are false: ctx_encountered_in_line, ctx_has_value_in_line, ctx_encountered, ctx_has_value
+static inline void ctx_unset_encountered (VBlockP vb, ContextP ctx)
 {
     ctx->last_line_i = LAST_LINE_I_INIT;
 }
 
 // returns true if dict_id was *previously* segged on this line (last_value may be valid or not)
-static inline bool ctx_encountered_in_line_(VBlockP vb, ContextP ctx) { return ((ctx->last_line_i == vb->line_i) || (ctx->last_line_i == -(int32_t)vb->line_i - 1)); }
+static inline bool ctx_encountered_in_line_(VBlockP vb, ContextP ctx) { return ((ctx->last_line_i == vb->line_i) || (ctx->last_line_i == -(int64_t)vb->line_i - 1)); }
 static inline bool ctx_encountered_in_line_do (VBlockP vb, DictId dict_id, ContextP *p_ctx /* optional out */) 
 { 
     ContextP ctx = ECTX (dict_id);
@@ -256,10 +268,11 @@ static inline bool ctx_encountered_in_line_do (VBlockP vb, DictId dict_id, Conte
 }
 #define ctx_encountered_in_line(vb, dict_id, p_ctx) ctx_encountered_in_line_do ((VBlockP)(vb), (DictId)(dict_id), (p_ctx))
 
-#define ctx_set_encountered_in_line(ctx)  /* set encountered if not already ctx_set_last_value */  \
-    if ((ctx)->last_line_i != vb->line_i) \
-        (ctx)->last_line_i   = -(int32_t)vb->line_i - 1; 
+// note: these macros are good for contexts in VCF/FORMAT or not. Use the *_in_line version in case
+// we are sure its not VCF/FORMAT, they are a bit more efficient.
+#define ctx_encountered_(vb, ctx) (ctx_encountered_in_line_((VBlockP)vb, ctx) && (ctx)->last_sample_i == (vb)->sample_i)
+#define ctx_encountered(vb, dict_id, p_ctx) (ctx_encountered_in_line ((VBlockP)vb, dict_id, p_ctx) && (*(p_ctx))->last_sample_i == (vb)->sample_i)
+#define ctx_has_value_(vb, ctx) (ctx_has_value_in_line_((VBlockP)vb, ctx) && (ctx)->last_sample_i == (vb)->sample_i)
+#define ctx_has_value(vb, dict_id, p_ctx) (ctx_has_value_in_line ((VBlockP)vb, dict_id, p_ctx) && (*(p_ctx))->last_sample_i == (vb)->sample_i)
 
 extern void ctx_foreach_buffer(ContextP ctx, bool set_name, void (*func)(BufferP buf, const char *func, unsigned line));
-
-#endif

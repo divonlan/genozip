@@ -644,6 +644,12 @@ static bool vcf_inspect_txt_header_zip (Buffer *txt_header)
 {
     if (!vcf_header_set_globals (txt_file->name, txt_header, true)) return false; // samples are different than a previous concatented file
 
+    // check if this VCF was produced by VarScan
+    SAFE_NUL (AFTERENT(char, *txt_header));
+    if (strstr (txt_header->data, "VarScan"))
+        segconf.vcf_is_varscan = true;
+    SAFE_RESTORE;
+
     if (chain_is_loaded && !flag.rejects_coord)
         vcf_tags_populate_tags_from_command_line();
         

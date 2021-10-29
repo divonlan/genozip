@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef REFHASH_INCLUDED
-#define REFHASH_INCLUDED
+#pragma once
 
 #include "genozip.h"
 #include "reference.h"
@@ -38,5 +37,3 @@ extern void refhash_remove_cache (void);
 
 // globals
 extern const char complement[256];
-
-#endif

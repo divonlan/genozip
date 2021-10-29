@@ -24,10 +24,19 @@ void vcf_vb_release_vb (VBlockVCF *vb)
     vb->main_ref_len = vb->main_alt_len = 0;
     vb->last_end_line_i = 0;
     memset (vb->ad_values, 0, sizeof (vb->ad_values));
-    vb->sample_i = 0;
     vb->new_ref = 0;
     vb->is_del_sv = 0;
     vb->vcf_version = 0;
+    
+    memset (&vb->mux_PL,     0, sizeof(vb->mux_PL));
+    memset (&vb->mux_GL,     0, sizeof(vb->mux_GL));
+    memset (&vb->mux_GP,     0, sizeof(vb->mux_GP));
+    memset (&vb->mux_PRI,    0, sizeof(vb->mux_PRI));
+    memset (&vb->mux_DS,     0, sizeof(vb->mux_DS));
+    memset (&vb->mux_PP,     0, sizeof(vb->mux_PP));
+    memset (&vb->mux_PVAL,   0, sizeof(vb->mux_PVAL));
+    memset (&vb->mux_FREQ,   0, sizeof(vb->mux_FREQ));
+    memset (&vb->mux_RD,     0, sizeof(vb->mux_RD));
     
     buf_free (&vb->sf_txt);
     buf_free (&vb->sf_snip);

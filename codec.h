@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef CODEC_INCLUDED
-#define CODEC_INCLUDED
+#pragma once
 
 #include "lzma/7zTypes.h"
 #include "lzma/LzmaDec.h"
@@ -134,5 +133,3 @@ extern const char *lzma_status (ELzmaStatus status);
 // PBWT stuff
 extern void codec_pbwt_seg_init (VBlockP vb, ContextP runs_ctx, ContextP fgrc_ctx);
 extern void codec_pbwt_display_ht_matrix (VBlockP vb, uint32_t max_rows);
-
-#endif

@@ -4,8 +4,7 @@
 //   Please see terms and conditions in the file LICENSE.txt
 
 
-#ifndef ME23_INCLUDED
-#define ME23_INCLUDED
+#pragma once
 
 #include "genozip.h"
 
@@ -30,5 +29,3 @@ TRANSLATOR (ME23, VCF, 1, GENOTYPE, sam_piz_m232vcf_GENOTYPE)   // reconstruct V
 #define ME23_TRANSLATORS { NULL /* none */, sam_piz_m232vcf_GENOTYPE }
 
 TXTHEADER_TRANSLATOR (txtheader_me232vcf);
-
-#endif

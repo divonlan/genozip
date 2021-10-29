@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef TXTFILE_INCLUDED
-#define TXTFILE_INCLUDED
+#pragma once
 
 #include "genozip.h"
 #include "digest.h"
@@ -31,5 +30,3 @@ extern int32_t def_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
 extern int32_t def_is_header_done (bool is_eof);
 
 extern DataType txtfile_get_file_dt (const char *filename);
-
-#endif

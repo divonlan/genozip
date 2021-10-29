@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef AES_INCLUDED
-#define AES_INCLUDED
+#pragma once
 
 #include "genozip.h"
 
@@ -16,4 +15,3 @@ extern void aes_xcrypt_buffer (VBlockP vb, uint8_t *data, uint32_t length);
 extern char *aes_display_key (const uint8_t* key);
 extern char *aes_display_data (const uint8_t *data, unsigned data_len);
 
-#endif

@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef MUTEX_INCLUDED
-#define MUTEX_INCLUDED
+#pragma once
 
 #include <pthread.h>
 #ifdef __APPLE__
@@ -89,4 +88,3 @@ extern void mutex_wait_do (MutexP mutex, const char *func, uint32_t line);
                             ASSERT (!ret, "pthread_spin_lock failed: %s", strerror (ret)); } while(0)
 #endif
 
-#endif

@@ -253,7 +253,7 @@ bool vcf_lo_seg_cross_render_to_primary (VBlockVCFP vb, ContextP ctx,
 static inline Context *vcf_lo_seg_lo_snip (VBlockVCFP vb, const char *snip, unsigned snip_len, uint64_t dnum, unsigned add_bytes)
 {
     Context *ctx = ctx_get_ctx (vb, dnum);
-    ctx_set_encountered_in_line (ctx);
+    ctx_set_encountered (VB, ctx);
     ctx->no_stons = true; // keep in b250 so it can be eliminated as all_the_same
     ctx->st_did_i = VCF_oSTATUS;
     seg_by_ctx (VB, snip, snip_len, ctx, add_bytes); 

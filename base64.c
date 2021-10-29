@@ -2,8 +2,15 @@
 //   base64.c
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
+//   Copyright claimed on additions and modifications.
 //
-// inspired by: https://github.com/launchdarkly/c-client-sdk/blob/master/base64.c
+// derived from: https://github.com/launchdarkly/c-client-sdk/blob/master/base64.c
+//
+// Original unmodified license statement:
+//  * Base64 encoding/decoding (RFC1341)
+//  * Copyright (c) 2005-2011, Jouni Malinen <j@w1.fi>
+//  *
+//  * This software may be distributed under the terms of the BSD license.
 //
 
 #include "base64.h"

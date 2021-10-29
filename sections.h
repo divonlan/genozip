@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef SECTIONS_INCLUDED
-#define SECTIONS_INCLUDED
+#pragma once
 
 #include "genozip.h"
 #include "digest.h"
@@ -457,5 +456,3 @@ extern int64_t sections_get_ref_size (void);
 extern void sections_show_header (const SectionHeader *header, VBlockP vb /* optional if output to buffer */, uint64_t offset, char rw);
 extern void sections_show_gheader (const SectionHeaderGenozipHeader *header /* optional */);
 extern const char *lt_name (LocalType lt);
-
-#endif

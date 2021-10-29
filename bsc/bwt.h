@@ -35,8 +35,7 @@ See also the bsc and libbsc web site:
 //   Copyright (C) 2020-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef _LIBBSC_BWT_H
-#define _LIBBSC_BWT_H
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -67,8 +66,6 @@ extern "C" {
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif
 
 /*-----------------------------------------------------------*/

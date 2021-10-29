@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef PIZ_INCLUDED
-#define PIZ_INCLUDED
+#pragma once
 
 #include "genozip.h"
 #include "dispatcher.h"
@@ -23,7 +22,5 @@ extern bool piz_test_grep (VBlockP vb);
 
 #define ASSPIZ(condition, format, ...) do { if (!(condition)) { progress_newline(); fprintf (stderr, "Error in %s:%u vb_i=%u line_i=%"PRIu64" line_in_vb=%"PRIu64": ",     __FUNCTION__, __LINE__, vb->vblock_i, vb->line_i, vb->line_i - vb->first_line); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }} while(0)
 #define ASSPIZ0(condition, string)     do { if (!(condition)) { progress_newline(); fprintf (stderr, "Error in %s:%u vb_i=%u line_i=%"PRIu64" line_in_vb=%"PRIu64": %s\n", __FUNCTION__, __LINE__, vb->vblock_i, vb->line_i, vb->line_i - vb->first_line, string); exit_on_error(true); }} while(0)
-
-#endif
 
 

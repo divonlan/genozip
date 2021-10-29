@@ -3,8 +3,7 @@
 //   Copyright (C) 2020-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef DISPATCHER_INCLUDED
-#define DISPATCHER_INCLUDED
+#pragma once
 
 #include "genozip.h"
 #include "buffer.h"
@@ -34,5 +33,3 @@ extern void dispatcher_set_input_exhausted (Dispatcher dispatcher, bool exhauste
 extern bool dispatcher_is_input_exhausted (Dispatcher dispatcher);
 extern bool dispatcher_is_done (Dispatcher dispatcher);
 extern Dispatcher dispatcher_fan_out_task (const char *task_name, const char *filename, ProgressType prog, const char *prog_msg, bool test_mode, bool is_last_file, bool cleanup_after_me, bool force_single_thread, uint32_t previous_vb_i, uint32_t idle_sleep_microsec, DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output);
-
-#endif

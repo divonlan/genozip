@@ -3,8 +3,7 @@
 //   Copyright (C) 2021-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef SEGCONF_INCLUDED
-#define SEGCONF_INCLUDED
+#pragma once
 
 #include "genozip.h"
 
@@ -37,7 +36,13 @@ typedef struct {
     uint64_t sam_cigar_len;     // approx average CIGAR len (during running==true - total len)
     int64_t MAPQ_value;         // used during segconf.running to calculate sam_mapq_has_single_value
     bool MAPQ_has_single_value; // all non-0 MAPQ have the same value
-     
+    
+    // VCF stuff
+    bool vcf_is_varscan;        // this VCF file was produced by VarScan
+    bool vcf_has_ADALL;
+    uint64_t count_dosage[2];   // used to calculate pc_has_dosage
+    float pc_has_dosage;        // % of the samples x lines that have a valid (0-2) dosage value [0.0,1.0]
+
     // FASTA stuff
     bool fasta_has_contigs;     // the sequences in this FASTA represent contigs (as opposed to reads) - in which case we have a FASTA_CONTIG dictionary and RANDOM_ACCESS
     
@@ -57,5 +62,3 @@ extern SegConf segconf;
 
 extern void segconf_initialize (void);
 extern void segconf_calculate (void);
-
-#endif

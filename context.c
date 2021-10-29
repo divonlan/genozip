@@ -953,8 +953,8 @@ void ctx_add_compressor_time_to_zf_ctx (VBlockP vb)
 // returns an existing did_i in this vb, or DID_I_NONE if there isn't one
 DidIType ctx_get_unmapped_existing_did_i (VBlockP vb, DictId dict_id)
 {
-    // a different dict_id is in the map, perhaps a hash-clash...
-    for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) 
+    // search to see if this dict_id has a context, despite not in the map (due to contention). 
+    for (int/*signed*/ did_i=vb->num_contexts-1; did_i >= 0 ; did_i--)  // Search backwards as unmapped ctxs are more likely to be towards the end.
         if (dict_id.num == CTX(did_i)->dict_id.num) return did_i;
 
     // PIZ only: check if its an alias that's not mapped in ctx_initialize_predefined_ctxs (due to contention)
@@ -970,16 +970,16 @@ DidIType ctx_get_unmapped_existing_did_i (VBlockP vb, DictId dict_id)
 }
 
 // gets did_id if the dictionary exists, and creates a new dictionary if its the first time dict_id is encountered
-// threads: no issues - called by PIZ for vb and zf (but dictionaries are immutable) and by Segregate (ZIP) on vctx only
+// threads: no issues - called by PIZ for vb and zf (but dictionaries are immutable) and by Seg (ZIP) on vctx only
 ContextP ctx_get_unmapped_ctx (Context *contexts/* array */, DataType dt, DidIType *dict_id_to_did_i_map, 
                                DidIType *num_contexts, DictId dict_id, STRp(tag_name))
 {
-    // search to see if this dict_id has a context, despite not in the map (due to contention)
-    for (DidIType did_i=0; did_i < *num_contexts; did_i++) 
+    // search to see if this dict_id has a context, despite not in the map (due to contention). 
+    for (int/*signed*/ did_i=*num_contexts-1; did_i >= 0 ; did_i--)  // Search backwards as unmapped ctxs are more likely to be towards the end.
         if (dict_id.num == contexts[did_i].dict_id.num) 
             return &contexts[did_i];
 
-    Context *ctx = &contexts[*num_contexts]; // note: *num_contexts cannot be updated until ctx is initialized, see comment below
+    Context *ctx = &contexts[*num_contexts]; 
  
     //iprintf ("New context: dict_id=%s in did_i=%u \n", dis_dict_id (dict_id).s, did_i);
     ASSERT (*num_contexts < MAX_DICTS, "cannot create a context for %.*s because number of dictionaries would exceed MAX_DICTS=%u", 
@@ -1232,7 +1232,7 @@ void ctx_free_context (Context *ctx, DidIType did_i)
     ctx->iterator = (SnipIterator){};
     ctx->next_local = 0;
 
-    ctx->last_line_i = ctx->ctx_specific = 0; 
+    ctx->last_line_i = ctx->last_sample_i = ctx->ctx_specific = 0; 
     ctx->last_value.i = 0;
     ctx->last_delta = 0;
     ctx->last_txt_index = ctx->last_txt_len = 0;

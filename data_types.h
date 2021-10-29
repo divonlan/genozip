@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef DATA_TYPES_INCLUDED
-#define DATA_TYPES_INCLUDED
+#pragma once
 
 #include "dict_id.h"
 #include "genozip.h"
@@ -227,4 +226,3 @@ extern const DtTranslation dt_get_translation (VBlockP vb);
 extern DataType dt_get_txt_dt (DataType dt);
 extern const char *dt_name (DataType data_type);
 
-#endif

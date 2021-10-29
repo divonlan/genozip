@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef FLAGS_INCLUDED
-#define FLAGS_INCLUDED
+#pragma once
 
 #include "genozip.h"
 #include "coords.h"
@@ -193,5 +192,3 @@ extern void flags_display_debugger_params (void);
 extern const char *flags_pipe_in_process_name (void);
 extern unsigned flags_pipe_in_pid (void);
 extern bool flags_pipe_in_process_died (void);
-
-#endif

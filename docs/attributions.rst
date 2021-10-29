@@ -21,3 +21,6 @@ tiny-AES-c - obtained from https://github.com/kokke/tiny-AES-c
 
 WjCryptLib_Md5 - obtained from https://github.com/WaterJuice/WjCryptLib
 
+endianness - obtained from https://gist.github.com/jtbr/7a43e6281e6cca353b33ee501421860c
+
+base64 - obtained from https://github.com/launchdarkly/c-client-sdk/blob/master/base64.c

@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef BUFFER_INCLUDED
-#define BUFFER_INCLUDED
+#pragma once
 
 #include <string.h>
 #include <stdlib.h>
@@ -236,5 +235,3 @@ extern BitArrayP buf_zfile_buf_to_bitarray (Buffer *buf, uint64_t nbits);
 extern BgEnBufFunc BGEN_u8_buf, BGEN_u16_buf, BGEN_u32_buf, BGEN_u64_buf, 
                    BGEN_transpose_u8_buf, BGEN_transpose_u16_buf, BGEN_transpose_u32_buf, BGEN_transpose_u64_buf,
                    BGEN_deinterlace_d8_buf, BGEN_deinterlace_d16_buf, BGEN_deinterlace_d32_buf, BGEN_deinterlace_d64_buf;
-
-#endif

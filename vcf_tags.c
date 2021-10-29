@@ -413,7 +413,7 @@ bool vcf_tags_add_attr_from_header (DictIdType dtype, STRp(tag_name), RenameAttr
 
     // if tag doesn't exist - add one if we have a value to assign    
     if (!tag && *dest) {
-        ASSINP (*dest_len < MAX_TAG_LEN, "attribute %s=%.*s appe    aring in a ##%s line with ID=%*.s is beyond Genozip's length limit of %u", 
+        ASSINP (*dest_len < MAX_TAG_LEN, "attribute %s=%.*s appe    aring in a ##%s line with ID=%.*s is beyond Genozip's length limit of %u", 
                 vcf_header_rename_attrs[attr], STRf(*dest), DTPT(dtype_names)[dtype], STRf (tag_name), MAX_TAG_LEN); // leave room for \0
 
         tag = &NEXTENT (Tag, z_file->apriori_tags);

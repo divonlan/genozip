@@ -3,8 +3,7 @@
 //   Copyright (C) 2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef KRAKEN_INCLUDED
-#define KRAKEN_INCLUDED
+#pragma once
 
 #include "genozip.h"
 
@@ -69,5 +68,3 @@ extern unsigned kraken_seg_taxid (VBlockP vb, DidIType did_i_taxid, const char *
 extern void kraken_set_show_kraken (const char *optarg);
 extern char *kraken_filename; // global
 #define kraken_is_loaded ((bool)kraken_filename)
-
-#endif

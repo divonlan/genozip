@@ -3,8 +3,7 @@
 //   Copyright (C) 2020-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef URL_INCLUDED
-#define URL_INCLUDED
+#pragma once
 
 #include <stdio.h>
 #include "genozip.h"
@@ -22,5 +21,3 @@ extern int32_t url_read_string (const char *url, char *data, uint32_t data_size)
 extern void url_kill_curl (void);
 
 extern char *url_esc_non_valid_chars (const char *in);
-
-#endif

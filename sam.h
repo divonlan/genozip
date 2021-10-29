@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef SAM_INCLUDED
-#define SAM_INCLUDED
+#pragma once
 
 #include "genozip.h"
 #include "sections.h"
@@ -298,5 +297,3 @@ TXTHEADER_TRANSLATOR (sam_header_sam2bam);
 TXTHEADER_TRANSLATOR (txtheader_sam2fq);
 
 #define SAM_CONTIG_FMT "@SQ	SN:%.*s	LN:%"PRId64
-
-#endif

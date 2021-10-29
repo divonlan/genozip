@@ -1,8 +1,7 @@
 /* LzHash.h -- HASH functions for LZ algorithms
 2015-04-12 : Igor Pavlov : Public domain */
 
-#ifndef __LZ_HASH_H
-#define __LZ_HASH_H
+#pragma once
 
 #define kHash2Size (1 << 10)
 #define kHash3Size (1 << 16)
@@ -54,4 +53,3 @@
   h3 = temp & (kHash3Size - 1); \
   h4 = (temp ^ (p->crc[cur[3]] << 5)) & (kHash4Size - 1); }
 
-#endif

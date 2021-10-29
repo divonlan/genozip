@@ -3,8 +3,7 @@
 //   Copyright (C) 2021-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef WEBSITE_INCLUDED
-#define WEBSITE_INCLUDED
+#pragma once
 
 #define GENOZIP_URL "https://genozip.com"
 
@@ -28,5 +27,3 @@
 #define EMAIL_SUPPORT  "support@genozip.com"
 #define EMAIL_SALES    "sales@genozip.com"
 #define EMAIL_REGISTER "register@genozip.com"
-
-#endif

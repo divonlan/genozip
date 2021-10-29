@@ -3,8 +3,7 @@
 //   Copyright (C) 2020-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef RANDOM_ACCESS_INCLUDED
-#define RANDOM_ACCESS_INCLUDED
+#pragma once
 
 #include <stdint.h>
 #include "genozip.h"
@@ -39,5 +38,3 @@ extern uint32_t random_access_verify_all_contigs_same_length (void);
 #define RA_MSG_PRIM "Random-access index contents (result of --show-index)"
 #define RA_MSG_LUFT "Luft random-access index contents (result of --show-index)"
 #define RA_MSG_REF  "Reference random-access index contents (result of --show-ref-index)"
-
-#endif

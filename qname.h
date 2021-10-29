@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef QNAME_INCLUDED
-#define QNAME_INCLUDED
+#pragma once
 
 #include "genozip.h"
 
@@ -19,5 +18,3 @@ extern void qname_zip_initialize (DictId qname_dict_id);
 extern void qname_seg_initialize (VBlockP vb, DidIType qname_did_i);
 
 extern const char *qf_name (unsigned qf_i);
-
-#endif

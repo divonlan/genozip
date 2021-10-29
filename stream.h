@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef STREAM_INCLUDED
-#define STREAM_INCLUDED
+#pragma once
 
 #include <stdio.h>
 #include "genozip.h"
@@ -31,5 +30,3 @@ extern void stream_abort_if_cannot_run (const char *exec_name, const char *reaso
 extern FILE *stream_from_stream_stdout (StreamP stream);
 extern FILE *stream_from_stream_stderr (StreamP stream);
 extern FILE *stream_to_stream_stdin    (StreamP stream);
-
-#endif

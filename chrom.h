@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef CHROM_INCLUDED
-#define CHROM_INCLUDED
+#pragma once
 
 #include "genozip.h"
 #include "reference.h"
@@ -33,5 +32,3 @@ extern WordIndex chrom_2ref_seg_get (Reference ref, ConstVBlockP vb, WordIndex c
 extern void chrom_2ref_load (Reference ref);
 static inline WordIndex chrom_2ref_piz_get (WordIndex chrom_index) 
     { return z_file->chrom2ref_map.len ? *ENT (WordIndex, z_file->chrom2ref_map, chrom_index) : chrom_index; }
-
-#endif

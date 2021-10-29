@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef SEGREGATE_INCLUDED
-#define SEGREGATE_INCLUDED
+#pragma once
 
 #include <stdint.h>
 #include "genozip.h"
@@ -56,10 +55,6 @@ extern void seg_id_field_do (VBlockP vb, ContextP ctx, STRp(id_snip));
 #define seg_id_field(vb, ctx, id_snip, id_snip_len, account_for_separator) \
     do { seg_id_field_do(VB, (ctx), (id_snip), (id_snip_len)); (ctx)->txt_len += !!(account_for_separator); } while(0)
 extern bool seg_id_field_cb (VBlockP vb, ContextP ctx, STRp(id_snip), uint32_t repeat);
-
-#define MAX_ARRAY_ITEMS 36
-extern Container seg_initialize_container_array_do (DictId dict_id, bool type_1_items, bool comma_sep);
-#define seg_initialize_container_array(dict_id, type_1_items, comma_sep) seg_initialize_container_array_do ((DictId)dict_id, type_1_items, comma_sep)
 
 extern void seg_add_to_local_text   (VBlockP vb, ContextP ctx, STRp(snip), unsigned add_bytes);
 extern void seg_add_to_local_fixed  (VBlockP vb, ContextP ctx, STRp(data));
@@ -207,5 +202,3 @@ extern void seg_rollback (VBlockP vb);
 #define ABOSEG(p_into_txt, format, ...) ASSSEG(false, p_into_txt, format, __VA_ARGS__)
 
 #define ABOSEG0(p_into_txt, err_str) ABOSEG(false, p_into_txt, format, err_str "%s", "")
-
-#endif

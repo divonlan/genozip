@@ -3,8 +3,7 @@
 //   Copyright (C) 2020-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef HASH_INCLUDED
-#define HASH_INCLUDED
+#pragma once
 
 #include "genozip.h"
 
@@ -38,5 +37,3 @@ static inline uint32_t hash_do (uint32_t hash_len, const char *snip, unsigned sn
 
     return (uint32_t)(result % hash_len);
 }
-
-#endif

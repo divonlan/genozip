@@ -10,9 +10,11 @@
 #include "container.h"
 #include "seg.h"
 
+#define MAX_TOKENS 32
+
 // We break down the field (eg QNAME in SAM/BAM/Kraken or Description in FASTA/FASTQ) into subfields separated by / and/or : - and/or whitespace 
 // these are vendor-defined strings.
-// Up to MAX_ARRAY_ITEMS subfields are permitted - if there are more, then all the trailing part is just
+// Up to MAX_TOKENS subfields are permitted - if there are more, then all the trailing part is just
 // consider part of the last component.
 // each subfield is stored in its own dictionary
 const char sep_with_space[256]    = { [':']=true, [';']=true, ['/']=true, ['|']=true, ['_']=true, ['#']=true, [' ']=true, ['\t']=true, [1]=true };
@@ -33,7 +35,7 @@ typedef struct {
 } Token;
 
 static void tokenizer_split (STRp(field), const char *is_sep, bool split_on_digit_boundary,
-                             Token *items, uint8_t *n_items) // out: array of MAX_ARRAY_ITEMS
+                             Token *items, uint8_t *n_items) // out: array of MAX_TOKENS
 {
     bool in_digits = field_len ? IS_DIGIT (field[0]) : false;
     bool is_final_item = false;
@@ -72,7 +74,7 @@ static void tokenizer_split (STRp(field), const char *is_sep, bool split_on_digi
         else
             ci->is_int = false;
 
-        if (*n_items == MAX_ARRAY_ITEMS-1) is_final_item = true;
+        if (*n_items == MAX_TOKENS-1) is_final_item = true;
 
         if (ci->sep) i++; // skip separator
 
@@ -91,6 +93,21 @@ static void tokenizer_split (STRp(field), const char *is_sep, bool split_on_digi
     }
 }                                      
 
+Container tokenizer_initialize_container_array (DictId dict_id)
+{
+    Container con = (Container){ .repeats = 1 };
+
+    for (unsigned i=0; i < MAX_TOKENS; i++) {
+        const uint8_t *id = dict_id.id;
+        
+        char dict_id_str[8] = { id[0], base32(i), id[1], id[2], id[3], id[4], id[5], id[6] };
+        
+        con.items[i].dict_id = dict_id_make (dict_id_str, 8, DTYPE_1);
+    }
+
+    return con;
+}
+
 void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field), 
                     const char *is_sep,   
                     unsigned add_additional_bytes)  // account for characters in addition to the field
@@ -102,8 +119,8 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
     // when generate the items from "TOKEN" - from from field_ctx's dict_id to avoid clashing
     // with qname in case tokenizer is used as a fallback
     DictId generator_dict_id = dict_id_make ("TOKEN", 5, DTYPE_1); 
-    Container con = seg_initialize_container_array (generator_dict_id, true, false); 
-    Token items[MAX_ARRAY_ITEMS];
+    Container con = tokenizer_initialize_container_array (generator_dict_id); 
+    Token items[MAX_TOKENS];
 
     tokenizer_split (field, field_len, is_sep, false, items, &con.nitems_lo);
     

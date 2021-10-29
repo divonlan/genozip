@@ -19,8 +19,7 @@
    ------------------------------------------------------------------ */
 
 
-#ifndef _BZLIB_PRIVATE_H
-#define _BZLIB_PRIVATE_H
+#pragma once
 
 #include <stdlib.h>
 #include <inttypes.h>
@@ -492,8 +491,6 @@ extern void
 BZ2_hbCreateDecodeTables ( Int32*, Int32*, Int32*, UChar*,
                            Int32,  Int32, Int32 );
 
-
-#endif
 
 
 /*-- BZ_NO_STDIO seems to make NULL disappear on some platforms. --*/

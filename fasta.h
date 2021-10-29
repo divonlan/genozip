@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef FASTA_INCLUDED
-#define FASTA_INCLUDED
+#pragma once
 
 #include "genozip.h"
 #include "sections.h"
@@ -69,5 +68,3 @@ TRANSLATOR (FASTA, PHYLIP, 1, EOL, fasta_piz_fa2phy_EOL)   // drop EOL after DES
 
 TXTHEADER_TRANSLATOR (txtheader_fa2phy);
 CONTAINER_FILTER_FUNC (fasta_piz_filter);
-
-#endif

@@ -1302,7 +1302,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
         }
     }    
 
-    ctx_set_encountered_in_line (ctx);
+    ctx_set_encountered (VB, ctx);
     
     #undef CALL
     #undef CALL_WITH_FALLBACK

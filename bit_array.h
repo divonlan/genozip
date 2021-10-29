@@ -40,8 +40,7 @@
 //     - Affirmer understands and acknowledges that Creative Commons is not a party to this document and has no duty or obligation with respect to this CC0 or use of the Work.
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-#ifndef BIT_ARRAY_INCLUDED
-#define BIT_ARRAY_INCLUDED
+#pragma once
 
 #include "genozip.h"
 
@@ -188,10 +187,6 @@ typedef uint8_t word_offset_t; // Offset within a 64 bit word
 
 #define BIT_INDEX_MIN 0
 #define BIT_INDEX_MAX (~(bit_index_t)0)
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 //
 // Structs
@@ -578,8 +573,3 @@ char* bit_array_word2str_rev(const void *ptr, size_t nbits, char *str);
 // get number of bits in an array, excluding trailing zeros (divon)
 bit_index_t bit_array_effective_length (BitArray *bitarr);
 
-#ifdef __cplusplus
-}
-#endif
-
-#endif

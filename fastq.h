@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef FASTQ_INCLUDED
-#define FASTQ_INCLUDED
+#pragma once
 
 #include "genozip.h"
 #include "sections.h"
@@ -70,5 +69,3 @@ extern uint32_t fastq_get_pair_vb_i (VBlockP vb);
 
 #define FASTQ_LOCAL_GET_LINE_CALLBACKS  \
     { DT_FASTQ, _FASTQ_QUAL, fastq_zip_qual },
-
-#endif

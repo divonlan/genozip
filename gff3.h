@@ -3,8 +3,7 @@
 //   Copyright (C) 2020-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef GFF3_INCLUDED
-#define GFF3_INCLUDED
+#pragma once
 
 #include "genozip.h"
 
@@ -81,6 +80,3 @@ CONTAINER_FILTER_FUNC (gff3_piz_filter);
     { DT_GFF3, _ATTR_ancestral_allele, _ATTR_Reference_seq }, 
 
 #define GFF3_LOCAL_GET_LINE_CALLBACKS
-
-#endif
-

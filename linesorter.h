@@ -3,8 +3,7 @@
 //   Copyright (C) 2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef LINESORTER_INCLUDED
-#define LINESORTER_INCLUDED
+#pragma once
 
 #include "genozip.h"
 
@@ -26,6 +25,3 @@ extern int linesorter_cmp (LineCmpInfo a, LineCmpInfo b);
 // PIZ side
 // --------
 extern uint32_t linesorter_get_max_conc_writing_vbs (void);
-
-#endif
-

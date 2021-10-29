@@ -3,8 +3,7 @@
 //   Copyright (C) 2020-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef REF_PRIVATE_INCLUDED
-#define REF_PRIVATE_INCLUDED
+#pragma once
 
 #include "genozip.h"
 #include "reference.h"
@@ -94,5 +93,3 @@ extern void ref_contigs_compress_ext_store (Reference ref);
 
 #define ROUNDUP64(x) (((x) + 63) & ~(typeof(x))0x3f) // round up to the nearest 64
 #define ROUNDDOWN64(x) ((x)      & ~(typeof(x))0x3f) // round down to the nearest 64
-
-#endif

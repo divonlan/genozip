@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef CRYPT_INCLUDED
-#define CRYPT_INCLUDED
+#pragma once
 
 #include "genozip.h"
 #include "sections.h"
@@ -21,5 +20,3 @@ extern void crypt_pad (uint8_t *data, uint32_t data_len, uint32_t padding_len);
 extern uint32_t crypt_max_padding_len(void);
 
 extern const char *encryption_name (EncryptionType encryption_type);
-
-#endif

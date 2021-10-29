@@ -3,8 +3,7 @@
 //   Copyright (C) 2021-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef REF_IUPACS_INCLUDED
-#define REF_IUPACS_INCLUDED
+#pragma once
 
 #include "genozip.h"
 
@@ -31,5 +30,3 @@ extern void ref_iupacs_load (Reference ref);
      : ref_iupacs_is_included_do ((ref), (vb), (range), (pos), (vcf_base)))
 extern bool ref_iupacs_is_included_do (Reference ref, VBlockP vb, const Range *range, PosType pos, char vcf_base);
 extern char ref_iupacs_get (Reference ref, const Range *r, PosType pos, bool reverse, PosType *next_pos);
-
-#endif

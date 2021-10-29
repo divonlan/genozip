@@ -3,8 +3,7 @@
 //   Copyright (C) 2020-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef REGIONS_INCLUDED
-#define REGIONS_INCLUDED
+#pragma once
 
 #include "genozip.h"
 
@@ -22,5 +21,3 @@ extern void regions_display(const char *title);
 extern bool regions_is_site_included (VBlockP vb);
 extern bool regions_is_range_included (WordIndex chrom, PosType start_pos, PosType end_pos, bool completely_included);
 #define regions_is_ra_included(ra) regions_is_range_included(ra->chrom_index, ra->min_pos, ra->max_pos, false)
-
-#endif

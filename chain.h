@@ -3,8 +3,7 @@
 //   Copyright (C) 2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef CHAIN_INCLUDED
-#define CHAIN_INCLUDED
+#pragma once
 
 #include "genozip.h"
 
@@ -68,5 +67,3 @@ SPECIAL (CHAIN, 2, SIZE,      chain_piz_special_SIZE);
 
 extern char *chain_filename; // global
 #define chain_is_loaded ((bool)chain_filename)
-
-#endif

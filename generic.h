@@ -3,8 +3,7 @@
 //   Copyright (C) 2020-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef GNRIC_INCLUDED
-#define GNRIC_INCLUDED
+#pragma once
 
 #include "genozip.h"
 
@@ -19,5 +18,3 @@ extern bool generic_seg_is_small (ConstVBlockP vb, DictId dict_id);
 #define GNRIC_SPECIAL { generic_piz_TOPLEVEL }
 SPECIAL (GNRIC, 0, TOPLEVEL, generic_piz_TOPLEVEL);
 #define NUM_GNRIC_SPECIAL 1
-
-#endif

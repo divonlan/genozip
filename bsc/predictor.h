@@ -35,8 +35,7 @@ See also the bsc and libbsc web site:
 //   Copyright (C) 2020-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef _LIBBSC_CODER_PREDICTOR_H
-#define _LIBBSC_CODER_PREDICTOR_H
+#pragma once
 
 #include "platform.h"
 #include "tables.h"
@@ -191,4 +190,3 @@ static inline void UpdateBit1(ProbabilityMixer *mixer,
     mixer->weight2 -= (learningRate2 * eps * mixer->stretchedProbability2) >> 16;
 };
 
-#endif

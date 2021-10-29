@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef COMPRESSOR_INCLUDED
-#define COMPRESSOR_INCLUDED
+#pragma once
 
 #include "genozip.h"
 #include "codec.h"
@@ -16,5 +15,3 @@ extern uint32_t comp_compress (VBlockP vb, BufferP z_data, SectionHeaderP header
 extern void comp_uncompress (VBlockP vb, Codec codec, Codec sub_codec, uint8_t param,
                              const char *compressed_data, uint32_t compressed_data_len,
                              Buffer *uncompressed_data, uint64_t uncompressed_len);
-
-#endif

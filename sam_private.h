@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef SAM_PRIVATE_INCLUDED
-#define SAM_PRIVATE_INCLUDED
+#pragma once
 
 #include "sam.h"
 #include "vblock.h"
@@ -213,5 +212,3 @@ extern DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is
 
 extern char taxid_redirection_snip[100], xa_strand_pos_snip[100], XS_snip[30], XM_snip[30], MC_buddy_snip[30], MQ_buddy_snip[30], QUAL_buddy_snip[30], XA_lookback_snip[30];
 extern unsigned taxid_redirection_snip_len, xa_strand_pos_snip_len, XS_snip_len, XM_snip_len, MC_buddy_snip_len, MQ_buddy_snip_len, QUAL_buddy_snip_len, XA_lookback_snip_len;
-
-#endif

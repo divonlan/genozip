@@ -30,8 +30,7 @@ See also the bsc and libbsc web site:
 
 --*/
 
-#ifndef _LIBBSC_CODER_TABLES_H
-#define _LIBBSC_CODER_TABLES_H
+#pragma once
 
 #include "platform.h"
 
@@ -1890,7 +1889,6 @@ static inline int model_run_state(const int contextRank0, const int contextRun, 
     return model_run_state_table[(contextRank0 << 10) | (contextRun << 6) | ((rank < 7 ? rank : 7) << 3) | (runSizeHistory < 7 ? runSizeHistory : 7)];
 }
 
-#endif
 
 /*-----------------------------------------------------------*/
 /* End                                              tables.h */

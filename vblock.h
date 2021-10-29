@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef VBLOCK_INCLUDED
-#define VBLOCK_INCLUDED
+#pragma once
 
 #include "genozip.h"
 #include "buffer.h"
@@ -61,6 +60,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     int32_t txt_size;          /* ZIP: original size of of text data read from the file */ \
     int32_t txt_size_source_comp; /* ZIP: when source file is internally compressed - apporx. compressed size attributable to this VB's data */\
     uint32_t longest_line_len; /* length of longest line of text line in this vb. calculated by seg_all_data_lines */\
+    uint32_t sample_i;         /* ZIP/PIZ: VCF: current sample in line (0-based) */ \
     uint64_t line_i;           /* ZIP: current line in VB (0-based) being segmented PIZ: current line in txt file */\
     uint64_t line_start;       /* PIZ: position of start of line currently being reconstructed in vb->txt_data */\
     \
@@ -218,8 +218,6 @@ typedef struct {
 extern void vb_create_pool (unsigned num_vbs);
 extern VBlockPool *vb_get_pool(void);
 #define vb_get_from_pool(vb_i) (((vb_i) == VB_ID_EVB) ? evb : vb_pool->vb[vb_i])
-
-#endif
 
 //-----------------------------------------
 // VBlock utilities

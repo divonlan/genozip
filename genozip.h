@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef GENOZIP_INCLUDED
-#define GENOZIP_INCLUDED
+#pragma once
 
 #define _FILE_OFFSET_BITS 64
 #include <stdio.h>
@@ -346,5 +345,3 @@ static inline void progress_newline(void) {
 #define EXIT_SIGHUP               5
 #define EXIT_SIGSEGV              6
 #define EXIT_ABNORMAL             7
-
-#endif

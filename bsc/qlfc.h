@@ -30,8 +30,7 @@ See also the bsc and libbsc web site:
 
 --*/
 
-#ifndef _LIBBSC_QLFC_H
-#define _LIBBSC_QLFC_H
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -84,7 +83,6 @@ extern "C" {
 }
 #endif
 
-#endif
 
 /*-----------------------------------------------------------*/
 /* End                                                qlfc.h */

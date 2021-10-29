@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef PHY_INCLUDED
-#define PHY_INCLUDED
+#pragma once
 
 #include "genozip.h"
 
@@ -43,5 +42,3 @@ TRANSLATOR (PHYLIP, FASTA, 1, ID, phy_piz_phy2fasta_ID)   // remove final spaces
 #define PHYLIP_TRANSLATORS { NULL /* none */, phy_piz_phy2fasta_ID }
 
 TXTHEADER_TRANSLATOR (txtheader_phy2fa);
-
-#endif

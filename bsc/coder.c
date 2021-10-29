@@ -38,6 +38,7 @@ See also the bsc and libbsc web site:
 #include <stdlib.h>
 #include <memory.h>
 
+#include "../genozip.h"
 #include "coder.h"
 #include "libbsc.h"
 #include "platform.h"

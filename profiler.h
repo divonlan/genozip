@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef PROFILER_INCLUDED
-#define PROFILER_INCLUDED
+#pragma once
 
 #include "genozip.h"
 #include <time.h>
@@ -86,4 +85,3 @@ extern void profiler_add (ConstVBlockP vb);
 extern const char *profiler_print_short (const ProfilerRec *p);
 extern void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned used_threads, const char *filename, unsigned num_vbs);
 
-#endif

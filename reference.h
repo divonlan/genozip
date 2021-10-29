@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef REFERENCE_INCLUDED
-#define REFERENCE_INCLUDED
+#pragma once
 
 #include "genozip.h"
 #include "buffer.h"
@@ -150,5 +149,3 @@ extern char *ref_dis_subrange (Reference ref, const Range *r, PosType start_pos,
 
 // globals
 extern Reference gref, prim_ref;
-
-#endif

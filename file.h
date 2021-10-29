@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef FILE_INCLUDED
-#define FILE_INCLUDED
+#pragma once
 
 #include "genozip.h"
 #include "context.h"
@@ -524,6 +523,4 @@ static inline bool file_is_plain_or_ext_decompressor(ConstFileP file) {
 #ifdef __APPLE__
 #define fseeko64 fseeko
 #define ftello64 ftello
-#endif
-
 #endif

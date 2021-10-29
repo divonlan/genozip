@@ -3,13 +3,13 @@
 //   Copyright (C) 2020-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef VCF_PRIVATE_INCLUDED
-#define VCF_PRIVATE_INCLUDED
+#pragma once
 
 #include "vblock.h"
 #include "vcf.h"
 #include "website.h"
 #include "seg.h"
+#include "container.h"
 
 #define VCF_FIELD_NAMES "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO"
 #define VCF_FIELD_NAMES_LONG VCF_FIELD_NAMES "\tFORMAT"
@@ -27,6 +27,13 @@ typedef struct {
 
 typedef enum { VCF_v_UNKNOWN, VCF_v4_1, VCF_v4_2, VCF_v4_3, VCF_v4_4, VCF_v4_5 } VcfVersion;
 
+typedef struct {
+    STRl(snip, 64);
+    ContextP channel_ctx[4];
+} DosageMultiplexer;
+
+#define VCF_MAX_ARRAY_ITEMS SMALL_CON_NITEMS
+
 // IMPORTANT: if changing fields in VBlockVCF, also update vb_release_vb
 typedef struct VBlockVCF {
 
@@ -36,8 +43,6 @@ typedef struct VBlockVCF {
     
     uint16_t ploidy;           // ZIP only
     VcfVersion vcf_version;
-
-    uint32_t sample_i;         // ZIP: current sample in line (0-based) being segmented 
 
     // used for segging FORMAT/GT
     uint32_t gt_prev_ploidy;
@@ -54,15 +59,17 @@ typedef struct VBlockVCF {
     Buffer sf_txt, sf_snip; // INFO/SF data as it appears in the snip being constructed
 
     // INFO/END
-    uint32_t last_end_line_i;       // PIZ: last line on which INFO/END was encountered
+    uint64_t last_end_line_i;       // PIZ: last line on which INFO/END was encountered
     
     // FORMAT/AD
-    int64_t ad_values[MAX_ARRAY_ITEMS];
+    int64_t ad_values[VCF_MAX_ARRAY_ITEMS];
 
     // FORMAT stuff 
     Buffer format_mapper_buf;       // ZIP only: an array of type Container - one entry per entry in CTX(VCF_FORMAT)->nodes   
     Buffer format_contexts;         // ZIP only: an array of format_mapper_buf.len of ContextBlock
     Buffer last_format;             // ZIP only: cache previous line's FORMAT string
+
+    DosageMultiplexer mux_PL, mux_GL, mux_GP, mux_PRI, mux_DS, mux_PP, mux_PVAL, mux_FREQ, mux_RD;
 
     // used by CODEC_HAPM (for VCF haplotype matrix) 
     Buffer hapmat_helper_index_buf; // ZIP: used by codec_hapmat_count_alt_alleles 
@@ -206,7 +213,9 @@ extern VcfVersion vcf_header_get_version (void);
 
 // Samples stuff
 extern void vcf_samples_zip_initialize (void);
-extern void vcf_set_init_mux_by_dosage (VBlockVCFP vb, DidIType did_i, StoreType store_type);
+extern void vcf_init_mux_by_dosage (VBlockVCFP vb, DidIType mux_did_i, DidIType st_did_i, StoreType store_type, DosageMultiplexer *mux);
+#define vcf_init_mux(name,store_type) vcf_init_mux_by_dosage (vb, FORMAT_##name, FORMAT_##name, (store_type), &vb->mux_##name)
+
 extern const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *len, char *next_field, bool *has_13, const char *backup_luft_samples, uint32_t backup_luft_samples_len);
 extern void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCF *vb);
 #define IS_TRIVAL_FORMAT_SUBFIELD ((!recon_len || (recon_len==1 && *recon=='.')) && dict_id_is_vcf_format_sf (ctx->dict_id))
@@ -291,6 +300,3 @@ extern void vcf_lo_piz_TOPLEVEL_cb_filter_line (VBlockP vb);
 #define LIFTOK0(ostatus, reason) LIFTOK(ostatus, reason "%s", "")
 #define REJECTIF(condition, ostatus, reason, ...) do { if (condition) { if (!flag.rejects_coord) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } } while(0)
 #define REJECTIF0(condition, ostatus, reason)     do { if (condition) REJECT (ostatus, reason "%s", ""); } while (0)
-
-#endif
-

@@ -234,6 +234,7 @@ LastValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP c
         // case this is the top-level snip: initialize line
         if (con->is_toplevel) {
             vb->line_i         = vb->first_line + rep_i; // 1-based line from the begginging for the file, including the txt header            
+            vb->sample_i       = 0;
             vb->line_start     = vb->txt_data.len;
             vb->drop_curr_line = NULL;    
             vb->buddy_line_i   = NO_BUDDY;

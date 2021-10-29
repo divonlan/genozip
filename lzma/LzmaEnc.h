@@ -1,8 +1,7 @@
 /*  LzmaEnc.h -- LZMA Encoder
 2017-07-27 : Igor Pavlov : Public domain */
 
-#ifndef __LZMA_ENC_H
-#define __LZMA_ENC_H
+#pragma once
 
 #include "7zTypes.h"
 
@@ -73,4 +72,3 @@ SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
 
 EXTERN_C_END
 
-#endif

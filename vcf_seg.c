@@ -17,6 +17,7 @@
 #include "linesorter.h"
 #include "libdeflate/libdeflate.h"
 #include "stats.h"
+#include "segconf.h"
 
 static MiniContainer line_number_container = {};
 
@@ -108,17 +109,18 @@ void vcf_seg_initialize (VBlock *vb_)
 
     CTX(FORMAT_ADALL)->flags.store = STORE_INT;
     CTX(FORMAT_DP)->   flags.store = STORE_INT;
-    //CTX(FORMAT_RD)->   flags.store = STORE_INT;   // since v13
+    CTX(FORMAT_AD)->   flags.store = STORE_INT;   // since v13
+    CTX(FORMAT_RD)->   flags.store = STORE_INT;   // since v13
     CTX(FORMAT_RDR)->  flags.store = STORE_INT;   // since v13
     CTX(FORMAT_RDF)->  flags.store = STORE_INT;   // since v13
+    CTX(FORMAT_ADR)->  flags.store = STORE_INT;   // since v13
+    CTX(FORMAT_ADF)->  flags.store = STORE_INT;   // since v13
     CTX(FORMAT_SDP)->  flags.store = STORE_INT;   // since v13
     CTX(INFO_ADP)->    flags.store = STORE_INT;   // since v13
     CTX(INFO_SVTYPE)-> flags.store = STORE_INDEX; // since v13 - consumed by vcf_refalt_piz_is_variant_indel
 
     seg_id_field_init (CTX(VCF_ID));
     seg_id_field_init (CTX(INFO_CSQ_Existing_variation));
-
-    CTX(FORMAT_RD)->flags.store = STORE_INT;
 
     // counts sections
     CTX(VCF_CHROM)->   counts_section = true;
@@ -137,17 +139,18 @@ void vcf_seg_initialize (VBlock *vb_)
     stats_set_consolidation (VB, VCF_CHROM,  1, VCF_oCHROM);
     stats_set_consolidation (VB, VCF_COORDS, 7, INFO_PRIM, INFO_PREJ, INFO_LUFT, INFO_LREJ, VCF_oSTATUS, VCF_COPYSTAT, VCF_oXSTRAND);
     stats_set_consolidation (VB, FORMAT_GT,  4, FORMAT_GT_HT, FORMAT_GT_HT_INDEX, FORMAT_PBWT_RUNS, FORMAT_PBWT_FGRC);
-    stats_set_consolidation (VB, FORMAT_AB,  1, FORMAT_AB_HET);
+    stats_set_consolidation (VB, FORMAT_AB,  1, FORMAT_AB3);
 
-    vcf_set_init_mux_by_dosage (vb, FORMAT_PRI,  STORE_NONE);
-    vcf_set_init_mux_by_dosage (vb, FORMAT_GL,   STORE_NONE);
-    vcf_set_init_mux_by_dosage (vb, FORMAT_DS,   STORE_NONE);
-    vcf_set_init_mux_by_dosage (vb, FORMAT_PL,   STORE_NONE);
-    vcf_set_init_mux_by_dosage (vb, FORMAT_PP,   STORE_NONE);
-    vcf_set_init_mux_by_dosage (vb, FORMAT_GP,   STORE_NONE);
-    vcf_set_init_mux_by_dosage (vb, FORMAT_RD,   STORE_INT);
-    vcf_set_init_mux_by_dosage (vb, FORMAT_PVAL, STORE_NONE);
-    vcf_set_init_mux_by_dosage (vb, FORMAT_FREQ, STORE_NONE);
+    // initialize dosage multiplexers
+    vcf_init_mux(PRI,  STORE_NONE);
+    vcf_init_mux(GL,   STORE_NONE);
+    vcf_init_mux(DS,   STORE_NONE);
+    vcf_init_mux(PL,   STORE_NONE);
+    vcf_init_mux(PP,   STORE_NONE);
+    vcf_init_mux(GP,   STORE_NONE);
+    vcf_init_mux(PVAL, STORE_NONE);
+    vcf_init_mux(FREQ, STORE_NONE);
+    vcf_init_mux(RD,   STORE_INT);
 
     vb->ht_matrix_ctx = CTX(FORMAT_GT_HT); // different for different data types
 
@@ -271,6 +274,10 @@ void vcf_seg_finalize (VBlockP vb_)
         vb->recon_size_luft += (sizeof HK_LUFT_ONLY - 1) * vb->lines.len; // when reconstructing luft-only rejects, we also reconstruct a prefix for each line
         // note: there is no equivalent of ctx->txt_len for Luft coordinates
     }
+
+    // percent of (samples x lines) that have a dosage value of 0,1 or 2 
+    if (segconf.running) 
+        segconf.pc_has_dosage = (float)segconf.count_dosage[1] / (float)(segconf.count_dosage[0] + segconf.count_dosage[1]);
 }
 
 bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)

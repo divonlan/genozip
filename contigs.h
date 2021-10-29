@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef CONTIGS_INCLUDED
-#define CONTIGS_INCLUDED
+#pragma once
 
 #include "genozip.h"
 #include "buffer.h"
@@ -82,4 +81,4 @@ typedef struct { char s[ACCESSION_LEN+20]; } AccNumText;
 extern AccNumText display_acc_num (const AccessionNumber *ac);
 
 #define CONTIG(ctg_pkg,ctg_i) ENT (Contig, ((ctg_pkg).contigs), (ctg_i))
-#endif
+

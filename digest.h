@@ -3,8 +3,7 @@
 //   Copyright (C) 2020-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef DIGEST_INCLUDED
-#define DIGEST_INCLUDED
+#pragma once
 
 #include "genozip.h"
 
@@ -74,5 +73,3 @@ extern void digest_verify_ref_is_equal (const Reference ref, const char *header_
 #define digest_is_zero md5_is_zero
 
 // backward compatability note: in v8 files compressed without --md5 or --test, we had no digest. starting v9, we have Adler32
-
-#endif

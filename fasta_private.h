@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef FASTA_PRIVATE_INCLUDED
-#define FASTA_PRIVATE_INCLUDED
+#pragma once
 
 #include "genozip.h"
 #include "vblock.h"
@@ -27,7 +26,4 @@ typedef struct VBlockFASTA {
     bool has_contig_metadata;       // used by make-reference
     ContigMetadata contig_metadata; 
 } VBlockFASTA;
-
-#endif
-
 

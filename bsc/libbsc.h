@@ -35,8 +35,7 @@ See also the bsc and libbsc web site:
 //   Copyright (C) 2020-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef _LIBBSC_LIBBSC_H
-#define _LIBBSC_LIBBSC_H
+#pragma once
 
 #define LIBBSC_NO_ERROR                0
 #define LIBBSC_BAD_PARAMETER          -1
@@ -133,7 +132,5 @@ extern "C" {
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif
 

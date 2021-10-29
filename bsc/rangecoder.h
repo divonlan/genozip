@@ -36,8 +36,7 @@ See also the bsc and libbsc web site:
 //   Copyright (C) 2020-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef _LIBBSC_CODER_RANGECODER_H
-#define _LIBBSC_CODER_RANGECODER_H
+#pragma once
 
 #include "platform.h"
 
@@ -210,4 +209,3 @@ static inline unsigned int DecodeWord (RangeCoder *coder)
     return word;
 }
 
-#endif

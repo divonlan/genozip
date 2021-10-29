@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef MD5_INCLUDED
-#define MD5_INCLUDED
+#pragma once
 
 #include "genozip.h"
 #include "digest.h"
@@ -14,5 +13,3 @@ extern Digest md5_finalize (Md5Context *ctx);
 extern Digest md5_do (const void *data, uint32_t len);
 extern void md5_update (Md5Context *ctx, const void *data, uint32_t len);
 extern void md5_display_ctx (const Md5Context *ctx); // for debugging
-
-#endif

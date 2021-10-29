@@ -38,6 +38,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "../genozip.h"
 #include "divsufsort.h"
 #include "platform.h"
 #include "libbsc.h"

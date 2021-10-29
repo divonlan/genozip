@@ -1,8 +1,7 @@
 /* Threads.h -- multithreading library
 2017-06-18 : Igor Pavlov : Public domain */
 
-#ifndef __7Z_THREADS_H
-#define __7Z_THREADS_H
+#pragma once
 
 #ifdef _WIN32
 #include <windows.h>
@@ -65,4 +64,3 @@ WRes CriticalSection_Init(CCriticalSection *p);
 
 EXTERN_C_END
 
-#endif

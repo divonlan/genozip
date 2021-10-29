@@ -29,8 +29,7 @@
 //   Copyright (C) 2020-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef _DIVSUFSORT_H
-#define _DIVSUFSORT_H 1
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -69,4 +68,3 @@ divbwt(void *vb, const unsigned char *T, unsigned char *U, int *A, int n, unsign
 } /* extern "C" */
 #endif /* __cplusplus */
 
-#endif /* _DIVSUFSORT_H */

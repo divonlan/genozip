@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef DICT_ID_INCLUDED
-#define DICT_ID_INCLUDED
+#pragma once
 
 #include <inttypes.h>
 #include "genozip.h"
@@ -73,6 +72,3 @@ extern DisplayPrintId dis_dict_id (DictId dict_id);
 #define DICT_ID_MAKEF_6(s) ((((uint64_t)(s[0] & 0x3f)) | ((uint64_t)s[1] << 8) | ((uint64_t)s[2] << 16) | ((uint64_t)s[3] << 24) | ((uint64_t)s[4] << 32) | ((uint64_t)s[5] << 40)))
 #define DICT_ID_MAKEF_7(s) ((((uint64_t)(s[0] & 0x3f)) | ((uint64_t)s[1] << 8) | ((uint64_t)s[2] << 16) | ((uint64_t)s[3] << 24) | ((uint64_t)s[4] << 32) | ((uint64_t)s[5] << 40) | ((uint64_t)s[6] << 48)))
 #define DICT_ID_MAKEF_L(s) ((((uint64_t)(s[0] & 0x3f)) | ((uint64_t)s[1] << 8) | ((uint64_t)s[2] << 16) | ((uint64_t)s[3] << 24) | ((uint64_t)s[sizeof s-5] << 32) | ((uint64_t)s[sizeof s-4] << 40) | ((uint64_t)s[sizeof s-3] << 48) | ((uint64_t)s[sizeof s-2] << 56)))
-
-#endif
-

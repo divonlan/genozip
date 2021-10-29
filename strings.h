@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef STRINGS_INCLUDED
-#define STRINGS_INCLUDED
+#pragma once
 
 #include "genozip.h"
 
@@ -175,6 +174,6 @@ extern bool str_verify_not_empty (char *response, uint32_t response_size, const 
 
 extern const char *str_win_error (void);
 
-static inline char base36(uint32_t n) { return ((n) < 10) ? ('0' + (n)) : ('a' + ((n)-10)); };
-
-#endif
+static inline char base32(uint32_t n) { return (n) < 26 ? ('a' + (n))     // 97->122. 5bits: 1->26    <-- differentiated 5bits, so to work well with ALT_KEY
+                                             : (n) < 31 ? ((n)-26 + '[')  // 91->95.  5bits: 27->31
+                                             :            '@';          } // 64.      5bits: 0

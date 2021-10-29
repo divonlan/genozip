@@ -35,8 +35,7 @@ See also the bsc and libbsc web site:
 //   Copyright (C) 2020-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef _LIBBSC_QLFC_MODEL_H
-#define _LIBBSC_QLFC_MODEL_H
+#pragma once
 
 #include "predictor.h"
 
@@ -244,7 +243,6 @@ typedef struct {
 int  bsc_qlfc_init_static_model();
 void bsc_qlfc_init_model(QlfcStatisticalModel * model);
 
-#endif
 
 /*-----------------------------------------------------------*/
 /* End                                          qlfc_model.h */

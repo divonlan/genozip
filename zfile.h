@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef ZFILE_INCLUDED
-#define ZFILE_INCLUDED
+#pragma once
 
 #include "genozip.h"
 #include "sections.h"
@@ -69,6 +68,4 @@ extern DataType zfile_get_file_dt (const char *filename);
 
 #ifdef __APPLE__
 #define off64_t __int64_t // needed for conda mac - otherwise zlib.h throws compilation errors
-#endif
-
 #endif

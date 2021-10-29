@@ -3,8 +3,7 @@
 //   Copyright (C) 2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef WRITER_INCLUDED
-#define WRITER_INCLUDED
+#pragma once
 
 #include "genozip.h"
 
@@ -22,6 +21,3 @@ extern bool writer_is_txtheader_in_plan (uint32_t component_i);
 extern bool writer_is_component_no_read (uint32_t component_i);
 extern bool writer_is_vb_no_read (uint32_t vb_i);
 extern void writer_get_txt_file_info (uint32_t *first_comp_i, uint32_t *num_comps, Section *start_sl);
-
-#endif
-

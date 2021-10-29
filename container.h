@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef CONTAINER_INCLUDED
-#define CONTAINER_INCLUDED
+#pragma once
 
 #include "genozip.h"
 #include "sections.h"
@@ -66,10 +65,14 @@ typedef struct ContainerItem {
     char repsep[2];                    /* repeat separator - two bytes that appear at the end of each repeat (ignored if 0) */ \
     ContainerItem items[nitems];
 
-typedef struct Container       { CONTAINER_FIELDS(MAX_FIELDS) } Container;
-typedef struct MiniContainer   { CONTAINER_FIELDS(1)          } MiniContainer;
-typedef struct SmallContainer  { CONTAINER_FIELDS(16)         } SmallContainer;
-typedef struct MediumContainer { CONTAINER_FIELDS(80)         } MediumContainer;
+typedef struct Container       { CONTAINER_FIELDS(MAX_FIELDS)        } Container;
+typedef struct MiniContainer   { CONTAINER_FIELDS(1)                 } MiniContainer;
+
+#define SMALL_CON_NITEMS 16
+typedef struct SmallContainer  { CONTAINER_FIELDS(SMALL_CON_NITEMS)  } SmallContainer;
+
+#define MEDIUM_CON_NITEMS 80
+typedef struct MediumContainer { CONTAINER_FIELDS(MEDIUM_CON_NITEMS) } MediumContainer;
 
 #pragma pack()
 #define con_nitems(con) ((con).nitems_hi * 256 + (con).nitems_lo)
@@ -103,5 +106,3 @@ TRANSLATOR_FUNC (container_translate_LTEN_I16);
 TRANSLATOR_FUNC (container_translate_LTEN_U16);   
 TRANSLATOR_FUNC (container_translate_LTEN_I32);   
 TRANSLATOR_FUNC (container_translate_LTEN_U32);   
-
-#endif

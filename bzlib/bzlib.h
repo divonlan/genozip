@@ -19,8 +19,7 @@
    ------------------------------------------------------------------ */
 
 
-#ifndef _BZLIB_H
-#define _BZLIB_H
+#pragma once
 
 #include <inttypes.h>
 
@@ -269,8 +268,6 @@ BZ_EXTERN uint64_t BZ2_consumed (BZFILE* b);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif
 
 /*-------------------------------------------------------------*/

@@ -81,7 +81,7 @@ static void vcf_piz_replace_pos_with_gpos (VBlockP vb)
 // not be reconstructed. contexts are not consumed.
 CONTAINER_FILTER_FUNC (vcf_piz_filter)
 {
-    uint64_t dnum = con->items[item].dict_id.num;
+    uint64_t dnum = (item >= 0) ? con->items[item].dict_id.num : 0;
 
     switch (dict_id.num) {
 
@@ -137,9 +137,15 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter)
             break;
 
         case _VCF_SAMPLES:
+
+            // Set sample_i before reconstructing each sample
+            if (item == -1) 
+                vb->sample_i = rep;
+
             // --GT-only - don't reconstruct non-GT sample subfields
-            if (flag.gt_only && dnum != _FORMAT_GT) 
+            else if (flag.gt_only && dnum != _FORMAT_GT) 
                 return false; 
+
             break;
 
         default: break;

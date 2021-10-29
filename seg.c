@@ -176,7 +176,7 @@ const char *seg_get_next_line (void *vb_, const char *str,
 }
 
 // returns true is value is of type store_type and stored in last_value
-bool seg_set_last_txt (VBlockP vb, ContextP ctx, const char *value, unsigned value_len, StoreType store_type)
+bool seg_set_last_txt (VBlockP vb, ContextP ctx, STRp(value), StoreType store_type)
 {
     bool is_value_in_txt_data = value >= FIRSTENT (char, vb->txt_data) &&
                                 value <= LASTENT  (char, vb->txt_data);
@@ -201,7 +201,7 @@ bool seg_set_last_txt (VBlockP vb, ContextP ctx, const char *value, unsigned val
         ctx->last_line_i = vb->line_i;    
     }
     else 
-        ctx_set_encountered_in_line (ctx);
+        ctx_set_encountered (vb, ctx);
 
     return stored;
 }
@@ -491,34 +491,13 @@ WordIndex seg_delta_vs_other_do (VBlock *vb, Context *ctx, Context *other_ctx,
 
     other_ctx->flags.store = STORE_INT;
 
-    if (ctx->flags.store == STORE_INT) {
-        if (vb->data_type == DT_VCF && dict_id_is_type_2 (ctx->dict_id))
-            vcf_set_last_sample_value (vb, ctx, ctx->last_value.i);
-        else
-            ctx_set_last_value (vb, ctx, ctx->last_value.i);
-    }
+    if (ctx->flags.store == STORE_INT) 
+        ctx_set_last_value (vb, ctx, ctx->last_value.i);
 
     return seg_by_ctx (VB, STRa(snip), ctx, add_bytes);
 
 fallback:
     return value ? seg_by_ctx (VB, value, value_len, ctx, add_bytes) : seg_integer_do (vb, ctx->did_i, ctx->last_value.i, add_bytes);
-}
-
-Container seg_initialize_container_array_do (DictId dict_id, bool type_1_items, bool comma_sep)
-{
-    Container con = (Container){ .repeats = 1,
-                                 .drop_final_item_sep = comma_sep };
-
-    for (unsigned i=0; i < MAX_ARRAY_ITEMS; i++) {
-        const uint8_t *id = dict_id.id;
-        
-        char dict_id_str[8] = { id[0], base36(i), id[1], id[2], id[3], id[4], id[5], id[6] };
-        
-        con.items[i].dict_id = dict_id_make (dict_id_str, 8, type_1_items ? DTYPE_1 : DTYPE_2);
-        if (comma_sep) con.items[i].separator[0] = ',';
-    }
-
-    return con;
 }
 
 // note: seg_initialize should set STORE_INT for this ctx

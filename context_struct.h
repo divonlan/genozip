@@ -3,8 +3,7 @@
 //   Copyright (C) 2019-2021 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-#ifndef CONTEXT_STRUCT_INCLUDED
-#define CONTEXT_STRUCT_INCLUDED
+#pragma once
 
 #include "genozip.h"
 #include "buffer.h"
@@ -136,10 +135,11 @@ typedef struct Context {
     uint32_t last_txt_index;   // ZIP/PIZ: index into vb->txt_data of last seg/reconstruction (always in PIZ, sometimes in Seg) (introduced 10.0.5)
     uint32_t last_txt_len;     // ZIP/PIZ: length (in vb->txt_data) of last seg/reconstruction (always in PIZ, sometimes in Seg)
 
-    #define LAST_LINE_I_INIT -0x7fffffff
-    int32_t last_line_i;       // ZIP/PIZ: =vb->line_i this line, so far, generated a valid last_value that can be used by downstream fields 
+    #define LAST_LINE_I_INIT -0x7fffffffffffffffULL
+    int64_t last_line_i;       // ZIP/PIZ: =vb->line_i this line, so far, generated a valid last_value that can be used by downstream fields 
                                //          =(-vb->line_i-1) means ctx encountered in this line (so far) but last_value was not set 
-    int32_t ctx_specific;      // ZIP/PIZ: for context-specific usage 
+    int32_t last_sample_i;     // ZIP/PIZ: Current sample in VCF/FORMAT ; must be set to 0 if not VCF/FORMAT
+    int32_t ctx_specific;
     uint32_t next_local;       // PIZ: iterator on Context.local
     SnipIterator iterator;     // PIZ: used to iterate on the context, reading one b250 word_index at a time
     SnipIterator pair_b250_iter; // PIZ: Iterator on pair, if it contains b250 data  <--- LAST in RECONSTRUCT START
@@ -148,10 +148,9 @@ typedef struct Context {
 
     // Container cache 
     Buffer con_cache;          // PIZ: Handled by container_reconstruct - an array of Container which includes the did_i. Each struct is truncated to used items, followed by prefixes. 
+                               //      also used to cached Multiplexers in vcf_piz_special_MUX_BY_DOSAGE
                                // ZIP: Each context is free to use it on its own
     Buffer con_index;          // Array of uint32_t - PIZ: index into con_cache - Each item corresponds to word_index. ZIP: context-specific.
     Buffer con_len;            // Array of uint16_t - length of item in cache
     
 } Context;
-
-#endif
