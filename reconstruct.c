@@ -467,6 +467,8 @@ static inline void reconstruct_store_history (VBlockP vb, ContextP ctx, uint32_t
     }
 }
 
+static void reconstruct_peek_add_ctx_to_frozen_state (VBlockP vb, ContextP ctx); // forward declaration
+
 // returns reconstructed length or -1 if snip is missing and previous separator should be deleted
 int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i, 
                                  char sep, // if non-zero, outputs after the reconstruction
@@ -477,6 +479,10 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
             func, did_i, vb->num_contexts, vb->vblock_i);
 
     Context *ctx = CTX(did_i);
+
+    // if we're peeking, freeze the context
+    if (vb->frozen_state.param) 
+        reconstruct_peek_add_ctx_to_frozen_state (vb, ctx);
 
     ASSERT0 (ctx->dict_id.num || ctx->did_i != DID_I_NONE, "ctx not initialized (dict_id=0)");
 
@@ -570,6 +576,44 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
     return (int32_t)ctx->last_txt_len;
 } 
 
+static uint64_t reconstruct_state_size=0, freeze_rec_size=0;
+void reconstruct_initialize (void)
+{
+    reconstruct_state_size = reconstruct_state_size_formula;
+    freeze_rec_size = sizeof(ContextP) + reconstruct_state_size; 
+}
+
+// add a context to the state freeze, unless the context is already frozen
+static void reconstruct_peek_add_ctx_to_frozen_state (VBlockP vb, ContextP ctx)
+{
+    for (char *state=FIRSTENT (char, vb->frozen_state); state < AFTERENT (char, vb->frozen_state); state += freeze_rec_size)
+        if (!memcmp (state, &ctx, sizeof (ContextP)))
+            return; // this context is already frozen
+
+    // add this context to the frozen state
+    buf_alloc (vb, &vb->frozen_state, freeze_rec_size, 10*freeze_rec_size, char, 2, "frozen_state");
+
+    char *reconstruct_state = AFTERENT (char, vb->frozen_state);
+    memcpy (reconstruct_state, &ctx, sizeof (ContextP)); // copy pointer to context
+    memcpy (reconstruct_state + sizeof (ContextP), reconstruct_state_start(ctx), reconstruct_state_size); // copy state itself
+
+    vb->frozen_state.len += freeze_rec_size;
+}
+
+static void reconstruct_peek_unfreeze_state (VBlockP vb)
+{
+    // unfreeze state of all involved contexts
+    for (char *state=FIRSTENT (char, vb->frozen_state); state < AFTERENT (char, vb->frozen_state); state += freeze_rec_size) {
+        ContextP ctx;
+        memcpy (&ctx, state, sizeof (ContextP));
+        memcpy (reconstruct_state_start(ctx), state + sizeof (ContextP), reconstruct_state_size);
+    }
+
+    // de-activate peek
+    vb->frozen_state.param = 0; 
+    vb->frozen_state.len   = 0; 
+}
+
 // get reconstructed text without advancing the iterator or changing last_*. context may be already reconstructed or not.
 // Note: txt points into txt_data (past reconstructed or AFTERENT) - caller should copy it elsewhere
 // LIMITATION: cannot be used with contexts that might reconstruct other contexts as that would require
@@ -577,6 +621,9 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
 LastValueType reconstruct_peek (VBlock *vb, Context *ctx, 
                                 pSTRp(txt)) // optional in / out
 {
+    ASSPIZ (!vb->frozen_state.param, "Requested to peek %s, however already peeking %s. Recursive peeking not supported", 
+            ctx->tag_name, (*FIRSTENT(ContextP, vb->frozen_state))->tag_name);
+
     // case: already reconstructed in this line (or sample in the case of VCF/FORMAT)
     if (ctx_has_value_(vb, ctx)) {
         if (txt) *txt = last_txtx (vb, ctx);
@@ -584,9 +631,10 @@ LastValueType reconstruct_peek (VBlock *vb, Context *ctx,
         return ctx->last_value;
     }
 
-    // case: ctx is not reconstructed yet in this last - we reconstruct, but then roll back state
-    char reconstruct_state[reconstruct_state_size(ctx)];
-    memcpy (reconstruct_state, reconstruct_state_start(ctx), reconstruct_state_size(ctx)); // save
+    // we "freeze" the reconstruction state of all contexts involved in this peek reconstruction (there could be more than
+    // one context - eg items of a container, muxed contexts, "other" contexts (SNIP_OTHER etc). We freeze them by saving their state
+    // in vb->frozen_state when reconstruct_from_ctx is called for this ctx.
+    vb->frozen_state.param = 1; // peeking is active
     uint64_t save_txt_data_len = vb->txt_data.len;
 
     reconstruct_from_ctx (vb, ctx->did_i, 0, true);
@@ -601,8 +649,11 @@ LastValueType reconstruct_peek (VBlock *vb, Context *ctx,
 
     LastValueType last_value = ctx->last_value;
 
-    memcpy (reconstruct_state_start(ctx), reconstruct_state, reconstruct_state_size(ctx)); // restore
-    vb->txt_data.len = save_txt_data_len;
+    // unfreeze state of all involved contexts
+    reconstruct_peek_unfreeze_state (vb);
+    
+    // delete data reconstructed for peeking
+    vb->txt_data.len = save_txt_data_len; 
 
     return last_value;
 }

@@ -43,6 +43,7 @@ VBlock *evb = NULL;
     func (&vb->ol_chrom2ref_map);    \
     func (&vb->lo_rejects[0]);       \
     func (&vb->lo_rejects[1]);       \
+    func (&vb->frozen_state);        \
     for (unsigned i=0; i < NUM_CODEC_BUFS; i++) func (&vb->codec_bufs[i]); \
     if (vb->data_type != DT_NONE)    \
         for (unsigned i=0; i < MAX_DICTS; i++) if (CTX(i)->dict_id.num || i < DTF(num_fields)) ctx_func (CTX(i), i); /* note: always erase num_fields as they may be set in *_seg_initialize even if not used */\

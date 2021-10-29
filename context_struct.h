@@ -126,7 +126,7 @@ typedef struct Context {
     // ------------------------------------------------------------------------------------------------
     // START: RECONSTRUCT STATE : copied in reconstruct_peek 
     #define reconstruct_state_start(ctx) ((char*)&(ctx)->last_value)
-    #define reconstruct_state_size(ctx)  ((char*)(&(ctx)->pair_b250_iter + 1) - (char*)(&(ctx)->last_value))
+    #define reconstruct_state_size_formula  ((char*)(&evb->contexts[0].pair_b250_iter + 1) - (char*)(&evb->contexts[0].last_value))
 
     LastValueType last_value;  // ZIP/PIZ: last value of this context (it can be a basis for a delta, used for BAM translation, and other uses)
     int64_t last_delta;        // last delta value calculated

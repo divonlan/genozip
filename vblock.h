@@ -79,6 +79,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     \
     unsigned num_rollback_ctxs;/* ZIP: Seg rollback contexts */ \
     ContextP rollback_ctxs[MAX_ROLLBACK_CTXS]; \
+    Buffer frozen_state;       /* PIZ: reconstruction state - frozen during reconstruct_peek */ \
     \
     /* data for dictionary compressing */ \
     char *fragment_start;        \

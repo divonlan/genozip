@@ -14,6 +14,8 @@ typedef struct {
     enum { LookupTxtData, LookupDict, LookupLocal, LookupPerLine } lookup;
 } HistoryWord;
 
+extern void reconstruct_initialize (void);
+
 extern int32_t reconstruct_from_ctx_do (VBlockP vb, DidIType did_i, char sep, bool reconstruct, const char *func);
 #define reconstruct_from_ctx(vb,did_i,sep,reconstruct) reconstruct_from_ctx_do ((VBlockP)(vb),(did_i),(sep),(reconstruct), __FUNCTION__)
 

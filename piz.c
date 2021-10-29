@@ -684,6 +684,8 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file)
  
     dispatcher_start_wallclock();
 
+    reconstruct_initialize();
+    
     if (DTPZ(piz_initialize) && !DTPZ(piz_initialize)())
         return false; // abort PIZ if piz_initialize says so
       
