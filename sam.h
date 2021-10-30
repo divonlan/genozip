@@ -180,10 +180,46 @@
 #pragma GENDICT SAM_E2_Z=DTYPE_FIELD=E2:Z   // This used to be the destination alias from OPTION_E2_Z 
 #pragma GENDICT SAM_U2_Z=DTYPE_FIELD=U2:Z   // This used to be the destination alias from OPTION_U2_Z 
 
+// as defined in https://samtools.github.io/hts-specs/SAMv1.pdf 1.4.2
+#define SAM_FLAG_MULTI_SEGMENTS 0x0001 // 1
+#define SAM_FLAG_IS_ALIGNED     0x0002 // 2
+#define SAM_FLAG_UNMAPPED       0x0004 // 4
+#define SAM_FLAG_NEXT_UNMAPPED  0x0008 // 8
+#define SAM_FLAG_REV_COMP       0x0010 // 16
+#define SAM_FLAG_NEXT_REV_COMP  0x0020 // 32
+#define SAM_FLAG_IS_FIRST       0x0040 // 64
+#define SAM_FLAG_IS_LAST        0x0080 // 128
+#define SAM_FLAG_SECONDARY      0x0100 // 256
+#define SAM_FLAG_FAILED_FILTERS 0x0200 // 512
+#define SAM_FLAG_DUPLICATE      0x0400 // 1024
+#define SAM_FLAG_SUPPLEMENTARY  0x0800 // 2048
+#define SAM_MAX_FLAG            0x0FFF
+
+#pragma pack(1) 
+typedef union SamFlags {
+    struct {
+        uint8_t multi_segments : 1;
+        uint8_t is_aligned     : 1;
+        uint8_t unmapped       : 1;
+        uint8_t next_unmapped  : 1;
+        uint8_t rev_comp       : 1;
+        uint8_t next_rev_comp  : 1;
+        uint8_t is_first       : 1;
+        uint8_t is_last        : 1;
+        uint8_t secondary      : 1;
+        uint8_t failed_filters : 1;
+        uint8_t duplicate      : 1;
+        uint8_t supplementary  : 1;
+        uint8_t unused         : 4;    
+    } bits;
+    uint16_t value;
+} SamFlags;
+#pragma pack()
+
 // ZIP Stuff
-COMPRESSOR_CALLBACK(sam_zip_qual)
-COMPRESSOR_CALLBACK(sam_zip_U2)
-COMPRESSOR_CALLBACK(sam_zip_BD_BI)
+COMPRESSOR_CALLBACK(sam_zip_qual);
+COMPRESSOR_CALLBACK(sam_zip_U2);
+COMPRESSOR_CALLBACK(sam_zip_BD_BI);
 extern void sam_zip_initialize (void);
 extern bool sam_zip_is_unaligned_line (const char *line, int len);
 extern bool sam_zip_dts_flag (void);

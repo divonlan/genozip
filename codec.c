@@ -117,6 +117,10 @@ typedef struct {
 
 static int codec_assign_sorter (const CodecTest *t1, const CodecTest *t2)
 {
+    // in --best mode, we take the smallest size, regardless of speed
+    if (flag.best)
+        return t1->size - t2->size;
+
     // in --fast mode - if one if significantly faster with a modest size hit, take it. Otherwise, take the best.
     if (flag.fast) {
         if (t1->clock < t2->clock * 0.90 && t1->size < t2->size * 1.3) return -1; // t1 has 10% or more better time with at most 30% size hit
@@ -178,8 +182,9 @@ Codec codec_assign_best_codec (VBlockP vb,
     bool is_local = (st == SEC_LOCAL);
     bool is_b250  = (st == SEC_B250 );
 
-    CodecTest tests[] = { { CODEC_BZ2 }, { CODEC_NONE }, { CODEC_BSC }, { CODEC_LZMA } };
-    const unsigned num_tests = 4;
+    CodecTest tests[] = { { CODEC_BZ2 }, { CODEC_NONE }, { CODEC_BSC }, { CODEC_LZMA }, 
+                          { CODEC_RANS8 }, { CODEC_RANS32 }, { CODEC_ARITH8 }, { CODEC_ARITH32 } };
+    const unsigned num_tests = 8;
 
     Codec non_ctx_codec = CODEC_UNKNOWN; // used for non-b250, non-local sections
 

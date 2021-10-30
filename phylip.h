@@ -15,8 +15,8 @@
 #pragma GENDICT PHY_TOP2FASTA=DTYPE_FIELD=TOP2FA
 
 // ZIP side
-COMPRESSOR_CALLBACK(phy_zip_id)
-COMPRESSOR_CALLBACK(phy_zip_seq)
+COMPRESSOR_CALLBACK(phy_zip_id);
+COMPRESSOR_CALLBACK(phy_zip_seq);
 #define PHY_LOCAL_GET_LINE_CALLBACKS  \
     { DT_PHYLIP, _PHY_ID,  phy_zip_id  }, \
     { DT_PHYLIP, _PHY_SEQ, phy_zip_seq }, 

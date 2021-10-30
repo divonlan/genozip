@@ -95,18 +95,18 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_COPY_BUDDY_FLAG)
 // -------------------------------------------------------------------------------------------------------------------------------------------
 
 // callback function for compress to get data of one line
-void sam_zip_U2 (VBlock *vb, uint64_t vb_line_i, char **line_u2_data,  uint32_t *line_u2_len, uint32_t maximum_len) 
+COMPRESSOR_CALLBACK (sam_zip_U2)
 {
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
 
-    *line_u2_len = MIN_(maximum_len, dl->U2.snip_len);
+    *line_data_len = MIN_(maximum_size, dl->U2.snip_len);
 
-    if (!line_u2_data) return; // only lengths were requested
+    if (!line_data) return; // only lengths were requested
 
-    *line_u2_data = ENT (char, vb->txt_data, dl->U2.char_index);
+    *line_data = ENT (char, vb->txt_data, dl->U2.char_index);
 
     if (flag.optimize_QUAL)
-        optimize_phred_quality_string (*line_u2_data, *line_u2_len);
+        optimize_phred_quality_string (*line_data, *line_data_len);
 }
 
 // ---------
@@ -135,11 +135,8 @@ static void sam_seg_BD_BI_field (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(field),
 
 // callback function for compress to get BD_BI data of one line: this is an
 // interlaced line containing a character from BD followed by a character from BI - since these two fields are correlated
-void sam_zip_BD_BI (VBlock *vb_, uint64_t vb_line_i, 
-                    char **line_data, uint32_t *line_len,  // out 
-                    uint32_t maximum_len)
+COMPRESSOR_CALLBACK (sam_zip_BD_BI)
 {
-    VBlockSAM *vb = (VBlockSAM *)vb_;
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
     
     const char *bd = dl->BD_BI[0].char_index ? ENT (char, vb->txt_data, dl->BD_BI[0].char_index) : NULL;
@@ -151,19 +148,19 @@ void sam_zip_BD_BI (VBlock *vb_, uint64_t vb_line_i,
             vb->vblock_i, vb_line_i);
 
     // note: maximum_len might be shorter than the data available if we're just sampling data in zip_assign_best_codec
-    *line_len  = MIN_(maximum_len, dl->seq_len * 2);
+    *line_data_len  = MIN_(maximum_size, dl->seq_len * 2);
 
     if (!line_data) return; // only length was requested
 
-    buf_alloc (vb, &vb->bd_bi_line, 0, dl->seq_len * 2, uint8_t, 2, "bd_bi_line");
+    buf_alloc (vb, &VB_SAM->bd_bi_line, 0, dl->seq_len * 2, uint8_t, 2, "bd_bi_line");
 
     // calculate character-wise delta
     for (unsigned i=0; i < dl->seq_len; i++) {
-        *ENT (uint8_t, vb->bd_bi_line, i*2    ) = bd[i];
-        *ENT (uint8_t, vb->bd_bi_line, i*2 + 1) = bi[i] - (bd ? bd[i] : 0);
+        *ENT (uint8_t, VB_SAM->bd_bi_line, i*2    ) = bd[i];
+        *ENT (uint8_t, VB_SAM->bd_bi_line, i*2 + 1) = bi[i] - (bd ? bd[i] : 0);
     }
 
-    *line_data = FIRSTENT (char, vb->bd_bi_line);
+    *line_data = FIRSTENT (char, VB_SAM->bd_bi_line);
 }   
 
 // BD and BI - reconstruct from BD_BI context which contains interlaced BD and BI data. 

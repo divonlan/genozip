@@ -29,7 +29,7 @@ else
 	CC=gcc
 endif 
 
-SRC_DIRS = zlib bzlib lzma bsc libdeflate compatibility
+SRC_DIRS = zlib bzlib lzma bsc libdeflate htscodecs compatibility
 
 MY_SRCS = genozip.c genols.c base250.c context.c container.c strings.c stats.c arch.c license.c \
 		  data_types.c bit_array.c progress.c coords.c writer.c tar.c chrom.c qname.c tokenizer.c \
@@ -40,7 +40,7 @@ MY_SRCS = genozip.c genols.c base250.c context.c container.c strings.c stats.c a
 		  fasta.c fastq.c gff3.c me23.c phylip.c chain.c kraken.c generic.c \
 		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c lookback.c \
 		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c\
-		  codec_gtshark.c codec_pbwt.c codec_none.c \
+		  codec_gtshark.c codec_pbwt.c codec_none.c codec_htscodecs.c \
 	      txtfile.c profiler.c file.c dispatcher.c crypt.c aes.c md5.c segconf.c \
 		  vblock.c regions.c  optimize.c dict_id.c hash.c stream.c url.c bases_filter.c
 
@@ -53,6 +53,8 @@ BZLIB_SRCS = bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c b
 LZMA_SRCS  = lzma/LzmaEnc.c lzma/LzmaDec.c lzma/LzFind.c
 
 BSC_SRCS   = bsc/divsufsort.c bsc/bwt.c bsc/coder.c bsc/libbsc.c bsc/lzp.c bsc/qlfc_model.c bsc/qlfc.c
+
+HTSCODECS_SRC = htscodecs/rANS_static4x16pr.c htscodecs/rle.c htscodecs/pack.c htscodecs/arith_dynamic.c
 
 DEFLATE_SRCS = libdeflate/deflate_compress.c libdeflate/deflate_decompress.c libdeflate/utils.c libdeflate/x86_cpu_features.c \
              libdeflate/arm_cpu_features.c libdeflate/crc32.c libdeflate/adler32.c
@@ -76,6 +78,8 @@ CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h tx
 			 lzma/7zTypes.h lzma/Compiler.h lzma/LzFind.h lzma/LzFindMt.h lzma/LzHash.h lzma/LzmaDec.h lzma/LzmaEnc.h \
 			 lzma/Precomp.h lzma/Threads.h \
 			 bzlib/bzlib.h bzlib/bzlib_private.h \
+			 htscodecs/rANS_static4x16.h htscodecs/rle.h htscodecs/pack.h htscodecs/arith_dynamic.h htscodecs/c_simple_model.h\
+			 htscodecs/rANS_word.h htscodecs/htscodecs_endian.h htscodecs/rANS_word.h htscodecs/util.h htscodecs/varint.h htscodecs/varint2.h \
 			 bsc/bwt.h bsc/coder.h bsc/divsufsort.h bsc/libbsc.h bsc/lzp.h bsc/platform.h \
 			 bsc/qlfc_model.h bsc/qlfc.h bsc/rangecoder.h bsc/tables.h \
  			 libdeflate/adler32_vec_template.h  libdeflate/crc32_table.h          libdeflate/unaligned.h \
@@ -119,14 +123,14 @@ endif
 
 ifndef IS_CONDA 
 	# local - static link everything
-	C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(BSC_SRCS) $(LZMA_SRCS) $(DEFLATE_SRCS)
+	C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(BSC_SRCS) $(LZMA_SRCS) $(DEFLATE_SRCS) $(HTSCODECS_SRC)
 #	ifneq ($(shell uname -a | grep ppc64),)
 #		CFLAGS += -mcpu=native 
 #	endif
 
 else  # conda
 	# use packages for bzip2
-	C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(LZMA_SRCS) $(BSC_SRCS) $(DEFLATE_SRCS)
+	C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(LZMA_SRCS) $(BSC_SRCS) $(DEFLATE_SRCS) $(HTSCODECS_SRC)
 endif
 
 OBJS       := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.o))

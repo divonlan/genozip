@@ -483,22 +483,20 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
 }
 
 // callback function for compress to get data of one line (called by codec_bz2_compress)
-void fastq_zip_qual (VBlock *vb, uint64_t vb_line_i, 
-                     char **line_qual_data, uint32_t *line_qual_len, // out
-                     uint32_t maximum_len) 
+COMPRESSOR_CALLBACK (fastq_zip_qual) 
 {
     ZipDataLineFASTQ *dl = DATA_LINE (vb_line_i);
 
     // note: maximum_len might be shorter than the data available if we're just sampling data in zip_assign_best_codec
-    *line_qual_len  = MIN_(dl->seq_len, maximum_len);
+    *line_data_len  = MIN_(dl->seq_len, maximum_size);
     
-    if (!line_qual_data) return; // only lengths were requested
+    if (!line_data) return; // only lengths were requested
 
-    *line_qual_data = ENT (char, vb->txt_data, dl->qual_data_start);
+    *line_data = ENT (char, vb->txt_data, dl->qual_data_start);
 
     // note - we optimize just before compression - likely the string will remain in CPU cache
     // removing the need for a separate load from RAM
-    if (flag.optimize_QUAL) optimize_phred_quality_string (*line_qual_data, *line_qual_len);
+    if (flag.optimize_QUAL) optimize_phred_quality_string (STRa(*line_data));
 }
 
 //-----------------

@@ -33,25 +33,25 @@ static int64_t sam_get_QUAL_score (STRp(qual))
 //---------
 
 // callback function for compress to get data of one line (called by codec_bz2_compress)
-void sam_zip_qual (VBlock *vb, uint64_t vb_line_i, char **line_qual_data, uint32_t *line_qual_len, uint32_t maximum_len) 
+COMPRESSOR_CALLBACK (sam_zip_qual) 
 {
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
 
     // note: maximum_len might be shorter than the data available if we're just sampling data in zip_assign_best_codec
-    *line_qual_len  = MIN_(maximum_len, dl->QUAL.snip_len);
-    
-    if (!line_qual_data) return; // only lengths were requested
+    *line_data_len  = MIN_(maximum_size, dl->QUAL.snip_len);
 
-    *line_qual_data = ENT (char, vb->txt_data, dl->QUAL.char_index);
+    if (!line_data) return; // only lengths were requested
+
+    *line_data = ENT (char, vb->txt_data, dl->QUAL.char_index);
 
     // if QUAL is just "*" (i.e. unavailable) replace it by " " because '*' is a legal PHRED quality value that will confuse PIZ
-    if (dl->QUAL.snip_len == 1 && (*line_qual_data)[0] == '*') 
-        *line_qual_data = " "; // pointer to static string
+    if (dl->QUAL.snip_len == 1 && (*line_data)[0] == '*') 
+        *line_data = " "; // pointer to static string
 
     // note - we optimize just before compression - likely the string will remain in CPU cache
     // removing the need for a separate load from RAM
     else if (flag.optimize_QUAL) 
-        optimize_phred_quality_string (*line_qual_data, *line_qual_len);
+        optimize_phred_quality_string (STRa(*line_data));
 }
 
 void sam_seg_QUAL_initialize (VBlockP vb)

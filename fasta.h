@@ -24,7 +24,7 @@ extern int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
 
 // ZIP Stuff
 extern void fasta_zip_initialize (void);
-COMPRESSOR_CALLBACK(fasta_zip_seq)
+COMPRESSOR_CALLBACK(fasta_zip_seq);
 extern void vcf_zip_after_compute (VBlockP vb);
 
 // SEG Stuff

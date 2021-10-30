@@ -59,6 +59,7 @@ typedef struct RefStruct *Reference;
 typedef struct Contig *ContigP;
 typedef struct ContigPkg *ContigPkgP;
 typedef const struct ContigPkg *ConstContigPkgP;
+typedef union SamFlags *SamFlagsP;
 
 typedef void BgEnBufFunc (BufferP buf, uint8_t *lt); // we use uint8_t instead of LocalType (which 1 byte) to avoid #including sections.h
 typedef BgEnBufFunc (*BgEnBuf);
@@ -124,7 +125,8 @@ extern FileP z_file, txt_file;
 // If making any changes, update arrays in 1. codec.h 2. txtfile_set_seggable_size
 typedef enum __attribute__ ((__packed__)) { // 1 byte
     CODEC_UNKNOWN=0, 
-    CODEC_NONE=1, CODEC_GZ=2, CODEC_BZ2=3, CODEC_LZMA=4, CODEC_BSC=5, // internal compressors
+    CODEC_NONE=1, CODEC_GZ=2, CODEC_BZ2=3, CODEC_LZMA=4, CODEC_BSC=5, 
+    CODEC_RANS8=6, CODEC_RANS32=7, CODEC_ARITH8=8, CODEC_ARITH32=9,// internal compressors
     
     CODEC_ACGT    = 10, CODEC_XCGT = 11, // compress sequence data - slightly better compression LZMA, 20X faster (these compress NONREF and NONREF_X respectively)
     CODEC_HAPM    = 12, // compress a VCF haplotype matrix - transpose, then sort lines, then bz2. 
@@ -254,8 +256,8 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 
 #define COMPRESSOR_CALLBACK(func) \
 void func (VBlockP vb, uint64_t vb_line_i, \
-           char **line_data, uint32_t *line_data_len,\
-           uint32_t maximum_size); // might be less than the size available if we're sampling in zip_assign_best_codec()
+           char **line_data, uint32_t *line_data_len,  \
+           uint32_t maximum_size) // might be less than the size available if we're sampling in zip_assign_best_codec()
 #define CALLBACK_NO_SIZE_LIMIT 0xffffffff // for maximum_size
 
 typedef COMPRESSOR_CALLBACK (LocalGetLineCB);
