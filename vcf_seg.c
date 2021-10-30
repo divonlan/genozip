@@ -116,8 +116,13 @@ void vcf_seg_initialize (VBlock *vb_)
     CTX(FORMAT_ADR)->  flags.store = STORE_INT;   // since v13
     CTX(FORMAT_ADF)->  flags.store = STORE_INT;   // since v13
     CTX(FORMAT_SDP)->  flags.store = STORE_INT;   // since v13
+    CTX(INFO_AF)->     flags.store = STORE_FLOAT;
+    CTX(INFO_AN)->     flags.store = STORE_INT;
     CTX(INFO_ADP)->    flags.store = STORE_INT;   // since v13
     CTX(INFO_SVTYPE)-> flags.store = STORE_INDEX; // since v13 - consumed by vcf_refalt_piz_is_variant_indel
+
+    CTX(FORMAT_PS)->   flags.store = STORE_INT;   
+    CTX(FORMAT_PS)->   no_stons = true;   
 
     seg_id_field_init (CTX(VCF_ID));
     seg_id_field_init (CTX(INFO_CSQ_Existing_variation));
@@ -148,6 +153,7 @@ void vcf_seg_initialize (VBlock *vb_)
     vcf_init_mux(PL,   STORE_NONE);
     vcf_init_mux(PP,   STORE_NONE);
     vcf_init_mux(GP,   STORE_NONE);
+    vcf_init_mux(GQ,   STORE_NONE);
     vcf_init_mux(PVAL, STORE_NONE);
     vcf_init_mux(FREQ, STORE_NONE);
     vcf_init_mux(RD,   STORE_INT);
@@ -275,9 +281,14 @@ void vcf_seg_finalize (VBlockP vb_)
         // note: there is no equivalent of ctx->txt_len for Luft coordinates
     }
 
-    // percent of (samples x lines) that have a dosage value of 0,1 or 2 
-    if (segconf.running) 
+    if (segconf.running) {
+        // percent of (samples x lines) that have a dosage value of 0,1 or 2 
         segconf.pc_has_dosage = (float)segconf.count_dosage[1] / (float)(segconf.count_dosage[0] + segconf.count_dosage[1]);
+
+        // whether we should seg GQ as a function of GP or PL (the better of the two) - only if this works for at least 20% of the samples
+        segconf.GQ_by_GP = (segconf.count_GQ_by_GP > vb->lines.len * vcf_num_samples / 5) && (segconf.count_GQ_by_GP >  segconf.count_GQ_by_PL);
+        segconf.GQ_by_PL = (segconf.count_GQ_by_PL > vb->lines.len * vcf_num_samples / 5) && (segconf.count_GQ_by_PL >= segconf.count_GQ_by_GP);
+    }
 }
 
 bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)

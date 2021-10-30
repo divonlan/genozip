@@ -180,6 +180,9 @@ typedef _Bool bool;
 #define STRl(name,len) char name[len]; uint32_t name##_len
 #define STR0(x)  const char *x=NULL; uint32_t x##_len=0
 
+#define STRlast(name,ctx) const char *name = last_txtx((VBlockP)(vb), (ctx)); unsigned name##_len = (ctx)->last_txt_len
+#define CTXlast(name,ctx)          ({ name = last_txtx((VBlockP)(vb), (ctx));          name##_len = (ctx)->last_txt_len; })
+
 // Strings - function parameters
 #define STRp(x)  const char *x,   uint32_t x##_len    
 #define pSTRp(x) const char **x,  uint32_t *x##_len  
@@ -187,6 +190,7 @@ typedef _Bool bool;
 
 // Strings - function arguments
 #define STRa(x)    x, x##_len                       
+#define STRas(x)   x##s, x##_lens                       
 #define STRd(x)    x##_str, x##_len                   
 #define STRb(x)    (x).data, (x).len                  
 #define STRi(x,i)  x##s[i], x##_lens[i]             

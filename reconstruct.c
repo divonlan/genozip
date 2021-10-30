@@ -625,7 +625,7 @@ LastValueType reconstruct_peek (VBlock *vb, Context *ctx,
             ctx->tag_name, (*FIRSTENT(ContextP, vb->frozen_state))->tag_name);
 
     // case: already reconstructed in this line (or sample in the case of VCF/FORMAT)
-    if (ctx_has_value_(vb, ctx)) {
+    if (ctx_has_value (vb, ctx->did_i)) {
         if (txt) *txt = last_txtx (vb, ctx);
         if (txt_len) *txt_len = ctx->last_txt_len;
         return ctx->last_value;

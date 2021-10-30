@@ -197,8 +197,8 @@ bool seg_set_last_txt (VBlockP vb, ContextP ctx, STRp(value), StoreType store_ty
     }
 
     if (stored) {
-        ctx->flags.store = store_type;
-        ctx->last_line_i = vb->line_i;    
+        ctx->last_line_i   = vb->line_i;    
+        ctx->last_sample_i = vb->sample_i;
     }
     else 
         ctx_set_encountered (vb, ctx);

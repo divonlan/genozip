@@ -20,12 +20,12 @@ static SmallContainer con_AD={}, con_ADALL={}, con_ADF={}, con_ADR={}, con_SAC={
     con_MB={}, con_SB={}, con_AF={};
 
 static char sb_snips[2][32], mb_snips[2][32], f2r1_snips[VCF_MAX_ARRAY_ITEMS][32], adr_snips[VCF_MAX_ARRAY_ITEMS][32], adf_snips[VCF_MAX_ARRAY_ITEMS][32], 
-    rdf_snip[32], rdr_snip[32], adf_snip[32], adr_snip[32], ad_varscan_snip[32], ab_snip[48],
+    rdf_snip[32], rdr_snip[32], adf_snip[32], adr_snip[32], ad_varscan_snip[32], ab_snip[48], gq_by_pl[50], gq_by_gp[50],
     af_snip[32], sac_snips[VCF_MAX_ARRAY_ITEMS/2][32];
 
 static unsigned sb_snip_lens[2], mb_snip_lens[2], f2r1_snip_lens[VCF_MAX_ARRAY_ITEMS], adr_snip_lens[VCF_MAX_ARRAY_ITEMS], adf_snip_lens[VCF_MAX_ARRAY_ITEMS], 
     af_snip_len, sac_snip_lens[VCF_MAX_ARRAY_ITEMS/2], rdf_snip_len, rdr_snip_len, adf_snip_len, adr_snip_len, ad_varscan_snip_len,
-    ab_snip_len;
+    ab_snip_len, gq_by_pl_len, gq_by_gp_len;
 
 // prepare snip of A - B
 static void vcf_seg_prepare_minus_snip (DictId dict_id_a, DictId dict_id_b, char *snip, unsigned *snip_len)
@@ -133,6 +133,14 @@ void vcf_samples_zip_initialize (void)
                               make_array_item_dict_id(_FORMAT_AD, 1),
                               (DictId)_FORMAT_AB3 };
     make_multi_dict_id_special_snip (VCF_SPECIAL_AB, 3, ad_dict_ids, ab_snip, &ab_snip_len);
+
+    gq_by_gp_len = sizeof (gq_by_gp);
+    make_multi_dict_id_special_snip (VCF_SPECIAL_GQ, 1, (DictId[]){ (DictId)_FORMAT_GP }, gq_by_gp, &gq_by_gp_len);
+    gq_by_gp[gq_by_gp_len++] = '\t';
+    
+    gq_by_pl_len = sizeof (gq_by_pl);
+    make_multi_dict_id_special_snip (VCF_SPECIAL_GQ, 1, (DictId[]){ (DictId)_FORMAT_PL }, gq_by_pl, &gq_by_pl_len);
+    gq_by_pl[gq_by_pl_len++] = '\t';
 }
 
 //--------------------
@@ -144,7 +152,7 @@ void vcf_init_mux_by_dosage (VBlockVCFP vb, DidIType mux_did_i, DidIType st_did_
     const uint8_t *id = CTX(mux_did_i)->dict_id.id;
     DictId dict_id_template = (DictId){ .id = { id[0], 0, id[1], id[2], id[3], id[4], id[5], id[6] } };
 
-    // calculate dict_ids, eg: PL -> PwL, PxL, PyL, PzL
+    // calculate dict_ids, eg: PL -> PlL, PmL, PnL, PoL
     DictId channel_dict_id[4];
     for (int i=0; i < 4; i++) {
         channel_dict_id[i] = dict_id_template;
@@ -173,7 +181,7 @@ static inline int vcf_seg_get_mux_channel_i (VBlockVCFP vb, bool fail_if_dvcf_re
         return -1;
 
     // fail if there is no valid GT in this sample
-    if (!ctx_has_value_(vb, CTX(FORMAT_GT)))
+    if (!ctx_has_value (VB, FORMAT_GT))
         return -1;
 
     int64_t dosage = CTX(FORMAT_GT)->last_value.i; // dosage stored here by vcf_seg_FORMAT_GT
@@ -245,7 +253,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_DOSAGE)
 // along with the floating point format to allow exact reconstruction
 static inline WordIndex vcf_seg_FORMAT_DS (VBlockVCF *vb, Context *ctx, const char *cell, unsigned cell_len)
 {
-    int64_t dosage = ctx_has_value_(vb, CTX(FORMAT_GT)) ? CTX(FORMAT_GT)->last_value.i : -1; // dosage stored here by vcf_seg_FORMAT_GT
+    int64_t dosage = ctx_has_value (VB, FORMAT_GT) ? CTX(FORMAT_GT)->last_value.i : -1; // dosage stored here by vcf_seg_FORMAT_GT
     double ds_val;
     unsigned format_len;
     char snip[FLOAT_FORMAT_LEN + 20] = { SNIP_SPECIAL, VCF_SPECIAL_DS }; 
@@ -287,7 +295,7 @@ static WordIndex vcf_seg_FORMAT_minus (VBlockVCFP vb, ContextP ctx,
 
     ctx_set_last_value (VB, ctx, value);
 
-    bool use_formula = ctx_has_value_(vb, base_ctx) && ctx_has_value_(vb, minus_ctx) &&
+    bool use_formula = ctx_has_value (VB, base_ctx->did_i) && ctx_has_value (VB, minus_ctx->did_i) &&
                        value == base_ctx->last_value.i - minus_ctx->last_value.i;
 
     // case: formula works - seg as minus
@@ -375,8 +383,8 @@ static inline WordIndex vcf_seg_FORMAT_AD_varscan (VBlockVCF *vb, Context *ctx, 
 {
     // case: AD = DP-RD
     int64_t ad;
-    if (ctx_has_value_(vb, CTX(FORMAT_DP)) &&
-        ctx_has_value_(vb, CTX(FORMAT_RD)) && 
+    if (ctx_has_value (VB, FORMAT_DP) &&
+        ctx_has_value (VB, FORMAT_RD) && 
         str_get_int (STRa(ad_str), &ad) &&
         ad == CTX(FORMAT_DP)->last_value.i - CTX(FORMAT_RD)->last_value.i) 
     
@@ -394,7 +402,8 @@ static inline WordIndex vcf_seg_FORMAT_AD_varscan (VBlockVCF *vb, Context *ctx, 
 static void vcf_seg_AD_items (VBlockVCFP vb, Context *ctx, unsigned num_items, ContextP *item_ctxs, 
                               STRps(item), const int64_t *values)
 {       
-    bool has_adall_this_sample = segconf.vcf_has_ADALL && ctx_has_value_(vb, CTX(FORMAT_ADALL)); // note: we can delta vs ADALL unless segconf says so, bc it can ruin other fields that rely on peeking AD, eg AB
+    bool has_adall_this_sample = segconf.vcf_has_ADALL && ctx_encountered (VB, FORMAT_ADALL); // note: we can delta vs ADALL unless segconf says so, bc it can ruin other fields that rely on peeking AD, eg AB
+    int64_t sum = 0; 
 
     for (unsigned i=0; i < num_items; i++) {
 
@@ -410,18 +419,22 @@ static void vcf_seg_AD_items (VBlockVCFP vb, Context *ctx, unsigned num_items, C
         // case: Since item 0 (depth of REF) is usually somewhat related to the overall sample depth,
         // and hence values within a sample are expected to be correlated - we store it transposed, and the other items - normally
         else {
-            if (i==0)
+            if (i==0 && vcf_num_samples > 1)
                 vcf_seg_FORMAT_transposed (vb, item_ctxs[0], STRi(item, 0), item_lens[0]);
+            
+            else if (i==0 || i==1) {
+                if (vb->line_i==0)
+                    vcf_init_mux_by_dosage (vb, item_ctxs[i]->did_i, FORMAT_AD, STORE_INT, &vb->mux_AD[i]);
+                
+                vcf_seg_FORMAT_mux_by_dosage (vb, item_ctxs[i], STRi(item, i), &vb->mux_AD[i]);
+            }
             else
                 seg_by_ctx (VB, STRi(item, i), item_ctxs[i], item_lens[i]);
         }
+        sum += values[i];
     }
 
-    // set sum of items for AD
-    int64_t sum = 0; 
-    for (unsigned i=0; i < num_items; i++) 
-        sum += values[i];
-
+    // AD value is sum of its items
     ctx_set_last_value (VB, ctx, sum);
 
     memcpy (vb->ad_values, values, num_items * sizeof (values[0]));
@@ -437,12 +450,15 @@ static void vcf_seg_ADALL_items (VBlockVCFP vb, Context *ctx, unsigned num_items
 {
     if (segconf.running) segconf.vcf_has_ADALL = true;
 
-    // item 0, the depth of REF, is usually somewhat related to the overall sample depth,
-    // therefore values within a sample are expected to be correlated - so we store it transposed
-    vcf_seg_FORMAT_transposed (vb, item_ctxs[0], STRi(item, 0), item_lens[0]);
-
-    for (unsigned i=1; i < num_items; i++) 
-        seg_by_ctx (VB, STRi(item, i), item_ctxs[i], item_lens[i]);
+    for (unsigned i=0; i < num_items; i++) 
+        if (i==0 || i==1) {
+            if (vb->line_i==0)
+                vcf_init_mux_by_dosage (vb, item_ctxs[i]->did_i, FORMAT_ADALL, STORE_INT, &vb->mux_ADALL[i]);
+            
+            vcf_seg_FORMAT_mux_by_dosage (vb, item_ctxs[i], STRi(item, i), &vb->mux_ADALL[i]);
+        }
+        else 
+            seg_by_ctx (VB, STRi(item, i), item_ctxs[i], item_lens[i]);
 }
 
 //----------------------
@@ -457,18 +473,16 @@ static void vcf_seg_AD_complement_items (VBlockVCFP vb, Context *ctx, unsigned n
 {
     // we can use the formula only if AD,F1R1 were encountered in this line, and that they have the number of items as us
     ContextP ad_ctx=CTX(FORMAT_AD), other_ctx;
-    bool use_formula = ctx_encountered_(vb, ad_ctx) &&
-                       ctx_encountered (vb, other_dict_id.num, &other_ctx) &&
+    bool use_formula = ctx_encountered (VB, FORMAT_AD) &&
+                       ctx_encountered_by_dict_id (VB, other_dict_id, &other_ctx) &&
                        ad_ctx->last_txt_len    == num_items &&  // last_txt_len is # of items stored by vcf_seg_FORMAT_A_R 
                        other_ctx->last_txt_len == num_items;
 
     for (unsigned i=0; i < num_items; i++) {
 
         // case: as expected, F1R2 + F2R1 = AD - seg as a F2R1 as a MINUS snip
-        if (use_formula && vb->ad_values[i] == values[i] + ECTX (other_con->items[i].dict_id)->last_value.i) {
+        if (use_formula && vb->ad_values[i] == values[i] + ECTX (other_con->items[i].dict_id)->last_value.i) 
             seg_by_ctx (VB, my_snips[i], my_snip_lens[i], item_ctxs[i], item_lens[i]); 
-            item_ctxs[i]->no_stons = true; // enable "all_the_same"
-        }
 
         // case: the formula doesn't work for this item - seg a normal snip
         else
@@ -508,15 +522,14 @@ static void vcf_seg_SB_items (VBlockVCFP vb, Context *ctx, unsigned num_items, C
 {
     // verify that AD was encountered in this line, and that it has exactly half the number of items as us
     ContextP ad_ctx=CTX(FORMAT_AD);
-    bool use_formula = ctx_encountered_(vb, CTX(FORMAT_AD)) && ad_ctx->last_txt_len == 2 && num_items == 4; // note: last_txt_len = # of items stored by vcf_seg_FORMAT_A_R
+    bool use_formula = ctx_encountered (VB, FORMAT_AD) && ad_ctx->last_txt_len == 2 && num_items == 4; // note: last_txt_len = # of items stored by vcf_seg_FORMAT_A_R
 
     for (unsigned i=0; i < num_items; i++) {
 
         // seg odd-numbered element as AD - (even element), if the sum is correct
-        if (use_formula && i%2 && vb->ad_values[i/2] == values[i-1] + values[i]) {
+        if (use_formula && i%2 && vb->ad_values[i/2] == values[i-1] + values[i]) 
             seg_by_ctx (VB, sb_snips[i/2], sb_snip_lens[i/2], item_ctxs[i], item_lens[i]); 
-            item_ctxs[i]->no_stons = true; // to enable "all_the_same"
-        }
+
         else {
             item_ctxs[i]->flags.store = STORE_INT; // consumed by the odd items ^
             seg_by_ctx (VB, STRi(item, i), item_ctxs[i], item_lens[i]);
@@ -533,16 +546,14 @@ static void vcf_seg_SAC_items (VBlockVCFP vb, Context *ctx, unsigned num_items, 
                                STRps(item), const int64_t *values)
 {
     // verify that AD was encountered in this line, and that it has exactly half the number of items as us
-    ContextP ad_ctx = CTX(FORMAT_AD);
-    bool use_formula = ctx_encountered_(vb, ad_ctx) && 2 * ad_ctx->last_txt_len == num_items; // note: last_txt_len = # of items stored by vcf_seg_FORMAT_A_R
+    bool use_formula = ctx_encountered (VB, FORMAT_AD) && 2 * CTX(FORMAT_AD)->last_txt_len == num_items; // note: last_txt_len = # of items stored by vcf_seg_FORMAT_A_R
 
     for (unsigned i=0; i < num_items; i++) {
 
         // seg odd-numbered element as AD - (even element), if the sum is correct
-        if (use_formula && i%2 && vb->ad_values[i/2] == values[i-1] + values[i]) {
+        if (use_formula && i%2 && vb->ad_values[i/2] == values[i-1] + values[i]) 
             seg_by_ctx (VB, sac_snips[i/2], sac_snip_lens[i/2], item_ctxs[i], item_lens[i]); 
-            item_ctxs[i]->no_stons = true; // to enable "all_the_same"
-        }
+
         else {
             item_ctxs[i]->flags.store = STORE_INT; // consumed by the odd items ^
             seg_by_ctx (VB, STRi(item, i), item_ctxs[i], item_lens[i]);
@@ -560,8 +571,8 @@ static void vcf_seg_SAC_items (VBlockVCFP vb, Context *ctx, unsigned num_items, 
 static void vcf_seg_MB_items (VBlockVCFP vb, Context *ctx, unsigned num_items, ContextP *item_ctxs, 
                               STRps(item), const int64_t *values)
 {
-    bool use_formula_even = ctx_encountered_(vb, CTX(FORMAT_F2R1)) && CTX(FORMAT_F2R1)->last_txt_len == 2 && num_items == 4;
-    bool use_formula_odd  = ctx_encountered_(vb, CTX(FORMAT_AD))   && CTX(FORMAT_AD)  ->last_txt_len == 2 && num_items == 4; // last_txt_len is # of items set by vcf_seg_FORMAT_A_R
+    bool use_formula_even = ctx_encountered (VB, FORMAT_F2R1) && CTX(FORMAT_F2R1)->last_txt_len == 2 && num_items == 4;
+    bool use_formula_odd  = ctx_encountered (VB, FORMAT_AD)   && CTX(FORMAT_AD)  ->last_txt_len == 2 && num_items == 4; // last_txt_len is # of items set by vcf_seg_FORMAT_A_R
 
     for (unsigned i=0; i < num_items; i++) {
 
@@ -572,10 +583,8 @@ static void vcf_seg_MB_items (VBlockVCFP vb, Context *ctx, unsigned num_items, C
         }
 
         // if possible, seg odd-numbered element as AD minus (even element), if the sum is correct
-        else if (use_formula_odd && i%2 && vb->ad_values[i/2] == values[i-1] + values[i]) {
+        else if (use_formula_odd && i%2 && vb->ad_values[i/2] == values[i-1] + values[i]) 
             seg_by_ctx (VB, mb_snips[i/2], mb_snip_lens[i/2], item_ctxs[i], item_lens[i]); 
-            item_ctxs[i]->no_stons = true; // to enable "all_the_same"
-        }
         
         else { // fallback if formulas don't work
             seg_by_ctx (VB, STRi(item, i), item_ctxs[i], item_lens[i]);
@@ -607,7 +616,7 @@ static inline WordIndex vcf_seg_FORMAT_AF (VBlockVCF *vb, Context *ctx, STRp(cel
 {
     if (vcf_num_samples == 1 && // very little hope that INFO/AF is equal to FORMAT/AF if we have more than one sample
         !z_dual_coords &&       // note: we can't use SNIP_COPY in dual coordinates, because when translating, it will translate the already-translated INFO/AF
-        ctx_encountered_in_line_(VB, CTX(INFO_AF)) && 
+        ctx_encountered_in_line (VB, INFO_AF) && 
         str_issame (cell, CTX(INFO_AF)->last_snip))
         return seg_by_ctx (VB, af_snip, af_snip_len, ctx, cell_len);
     else
@@ -620,14 +629,125 @@ static inline WordIndex vcf_seg_FORMAT_AF (VBlockVCF *vb, Context *ctx, STRp(cel
 
 static inline WordIndex vcf_seg_FORMAT_PS (VBlockVCF *vb, Context *ctx, STRp(cell))
 {
-    ctx->flags.store = STORE_INT;
-    ctx->no_stons = true;
-
     int64_t ps_value=0;
     if (str_get_int (STRa(cell), &ps_value) && ps_value == ctx->last_value.i) // same as previous line
         return seg_by_ctx (VB, ((char []){ SNIP_SELF_DELTA, '0' }), 2, ctx, cell_len);
 
     return seg_delta_vs_other_do (VB, ctx, CTX(VCF_POS), STRa(cell), 1000, cell_len);
+}
+
+//----------
+// FORMAT/GQ
+// ---------
+
+static int value_sorter(const void *a, const void *b)  
+{
+    return *(int64_t *)b - *(int64_t*)a; // sort in reverse order - usually faster as GP[0] / PL[0] are usually the biggest (corresponding to GT=0/0)
+}
+
+static int64_t vcf_predict_GQ (VBlockVCFP vb, DidIType src_did_i)
+{
+    bool is_gp = (src_did_i == FORMAT_GP);
+    STR(src);
+
+    if (command == ZIP)
+        CTXlast (src, CTX(src_did_i));
+    else
+        reconstruct_peek (VB, CTX(src_did_i), pSTRa(src));
+
+    str_split (src, src_len, 30, ',', item, false);
+
+    int64_t values[n_items];
+    unsigned n_values=0;
+
+    for (int i=0; i < n_items; i++) {
+        if (item_lens[i]==1 && items[i][0]=='.')
+            values[n_values++] = 0; // consider a '.' to be 0
+
+        else if (is_gp) {
+            double f;
+            if (str_get_float (STRi(item,i), &f, 0, 0)) 
+                values[n_values++] = (int64_t)(f+0.5); // round to nearest integer
+        }
+        else
+            n_values += str_get_int (STRi(item, i), &values[n_values]); // increment if successfully read an int
+    }
+
+    if (!n_values) return 0; // array to long (n_item=0) or none is an integer
+
+
+    // now we have an array of integers that is the same or shorter that the GP/PL array. Now we sort it.
+    qsort (values, n_values, sizeof(values[0]), value_sorter);
+
+    int64_t mid_value = values[n_values/2];
+
+    if (!is_gp) mid_value = MIN_(mid_value, 99); // for PL, it is capped by 99
+
+    return mid_value;
+}
+
+static void vcf_seg_FORMAT_GQ_do_seg (VBlockVCFP vb, int64_t gq_value, int64_t prediction, STRp(template_snip), unsigned gq_len)
+{
+    STRl(snip, 50) = template_snip_len;
+    memcpy (snip, template_snip, template_snip_len);
+    snip_len += str_int (prediction - gq_value, &snip[snip_len]);
+
+    seg_by_did_i (VB, STRa (snip), FORMAT_GQ, gq_len);
+}
+
+static inline void vcf_seg_FORMAT_GQ (VBlockVCF *vb)
+{
+    ContextP gq_ctx = CTX(FORMAT_GQ);
+    STRlast (gq, gq_ctx);
+
+    // second best: mux by dosage 
+    if (!segconf.running && !segconf.GQ_by_GP && !segconf.GQ_by_PL) {
+        vcf_seg_FORMAT_mux_by_dosage (vb, gq_ctx, STRa(gq), &vb->mux_GQ);
+        return;
+    }
+
+    int64_t gq_value;
+    if (!str_get_int (STRa(gq), &gq_value)) goto fallback;
+
+    if (segconf.running) {
+        if (ctx_encountered (VB, FORMAT_GP) && vcf_predict_GQ (vb, FORMAT_GP) == gq_value) segconf.count_GQ_by_GP++;
+        if (ctx_encountered (VB, FORMAT_PL) && vcf_predict_GQ (vb, FORMAT_PL) == gq_value) segconf.count_GQ_by_PL++;
+    }
+    
+    else {
+        if (segconf.GQ_by_GP && ctx_encountered (VB, FORMAT_GP)) {
+            int64_t prediction = vcf_predict_GQ (vb, FORMAT_GP);
+            vcf_seg_FORMAT_GQ_do_seg (vb, gq_value, prediction, STRa(gq_by_gp), gq_len);
+            return;
+        }
+
+        if (segconf.GQ_by_PL && ctx_encountered (VB, FORMAT_PL)) {
+            int64_t prediction = vcf_predict_GQ (vb, FORMAT_PL);
+            vcf_seg_FORMAT_GQ_do_seg (vb, gq_value, prediction, STRa(gq_by_pl), gq_len);
+            return;
+        }
+    }
+
+fallback:
+    // fallback if not match to GP or PL, or segconf.running
+    seg_by_ctx (VB, STRa(gq), gq_ctx, gq_len);    
+}
+
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_GQ)
+{
+    const char *tab = memchr (snip, '\t', snip_len);
+
+    // case: first encounter with this context's mux - decode it to an array of ContextP
+    if (!ctx->con_cache.len) consume_multi_dict_id_special_snip (vb, ctx, 1, snip, tab - snip);
+
+    ContextP src_ctx = *ENT(ContextP, ctx->con_cache, 0);
+
+    int64_t prediction = vcf_predict_GQ (VB_VCF, src_ctx->did_i);
+    int64_t delta = atoi (tab+1);
+
+    RECONSTRUCT_INT (prediction - delta);
+
+    return false; // no new value
 }
 
 //----------
@@ -637,15 +757,15 @@ static inline WordIndex vcf_seg_FORMAT_PS (VBlockVCF *vb, Context *ctx, STRp(cel
 static inline WordIndex vcf_seg_FORMAT_DP (VBlockVCF *vb, Context *ctx, STRp(cell))
 {
     // case - we have FORMAT/AD - calculate delta vs the sum of AD components
-    if (ctx_has_value_(vb, CTX(FORMAT_AD)))
+    if (ctx_has_value (VB, FORMAT_AD))
         return seg_delta_vs_other (VB, ctx, CTX(FORMAT_AD), STRa(cell));
 
     // case - we have FORMAT/SDP - calculate delta vs the sum of AD components
-    else if (ctx_has_value_(vb, CTX(FORMAT_SDP)))
+    else if (ctx_has_value (VB, FORMAT_SDP))
         return seg_delta_vs_other (VB, ctx, CTX(FORMAT_SDP), STRa(cell));
     
     // case: there is only one sample there is an INFO/DP too, we store a delta 
-    else if (vcf_num_samples == 1 && ctx_has_value_(vb, CTX(INFO_DP))) 
+    else if (vcf_num_samples == 1 && ctx_has_value (VB, INFO_DP)) 
         return seg_delta_vs_other (VB, ctx, CTX(INFO_DP), STRa(cell));
 
     // case: no FORMAT/AD and no INFO/DP - store in transposed matrix
@@ -792,7 +912,7 @@ static inline void vcf_seg_FORMAT_AB_verify_channel1 (VBlockVCF *vb)
     // rollback if we don't have AD0, AD1 this line, or if their value is not as expected by the formula
     if (!ad0_ctx || !ad1_ctx) goto rollback;
 
-    if (!ctx_has_value_(vb, ad0_ctx) || !ctx_has_value_(vb, ad1_ctx)) goto rollback;
+    if (!ctx_has_value (VB, ad0_ctx->did_i) || !ctx_has_value (VB, ad1_ctx->did_i)) goto rollback;
 
     double ad0 = ad0_ctx->last_value.i;
     double ad1 = ad1_ctx->last_value.i;
@@ -850,7 +970,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_AB)
 // returns true if successful (return value used only if validate_only)
 TRANSLATOR_FUNC (vcf_piz_luft_PLOIDY)
 {
-    if (!ctx_encountered_(vb, CTX(FORMAT_GT))) return false; // we can't translate unless this variant as GT
+    if (!ctx_encountered (VB, FORMAT_GT)) return false; // we can't translate unless this variant as GT
 
     // use gt_prev_ploidy: in Seg, set by vcf_seg_FORMAT_GT, in validate and piz set by vcf_piz_luft_GT 
     return vcf_piz_luft_trans_complement_to_max_value (vb, ctx, recon, recon_len, validate_only, VB_VCF->gt_prev_ploidy);
@@ -1271,6 +1391,8 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
                 SEG_OPTIMIZED_MUX_BY_DOSAGE(GP);
             else
                 vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_GP);
+
+            seg_set_last_txt (VB, ctx, STRi(sf, i), STORE_NONE); // used by GQ
             break;
 
         // <ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes as defined in the VCF specification">       
@@ -1279,6 +1401,8 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
                 SEG_OPTIMIZED_MUX_BY_DOSAGE(GP);
             else
                 vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_PL);
+
+            seg_set_last_txt (VB, ctx, STRi(sf, i), STORE_NONE); // used by GQ
             break;
 
         // <ID=PP,Number=G,Type=Integer,Description="Phred-scaled genotype posterior probabilities rounded to the closest integer">
@@ -1310,7 +1434,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
 
         // standard: <ID=GQ,Number=1,Type=Integer,Description="Genotype Quality">
         // GIAB: <ID=GQ,Number=1,Type=Integer,Description="Net Genotype quality across all datasets, calculated from GQ scores of callsets supporting the consensus GT, using only one callset from each dataset">   
-        case _FORMAT_GQ   : vcf_seg_FORMAT_transposed (vb, ctx, STRi(sf, i), sf_lens[i]); break;
+        case _FORMAT_GQ   : seg_set_last_txt (VB, ctx, STRi(sf, i), STORE_NONE); break; // postpone to later
             
         // <ID=DP,Number=1,Type=Integer,Description="Approximate read depth (reads with MQ=255 or with bad mates are filtered)">
         case _FORMAT_DP   : vcf_seg_FORMAT_DP (vb, ctx, STRi(sf, i)); break;
@@ -1319,7 +1443,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
         // case: MIN_DP - it is slightly smaller and usually equal to DP - we store MIN_DP as the delta DP-MIN_DP
         // note: the delta is vs. the DP field that preceeds MIN_DP - we take the DP as 0 there is no DP that preceeds
         case _FORMAT_MIN_DP :
-            if (ctx_has_value_(vb, CTX(FORMAT_DP))) 
+            if (ctx_has_value (VB, FORMAT_DP)) 
                 seg_delta_vs_other (VB, ctx, CTX(FORMAT_DP), STRi(sf, i));
             else goto fallback;
             break;
@@ -1387,7 +1511,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
         }
 
         int64_t value;
-        if (ctx->flags.store == STORE_INT && !ctx_has_value_(vb, ctx) &&  // not already set
+        if (ctx->flags.store == STORE_INT && !ctx_has_value(VB, ctx->did_i) &&  // not already set
             str_get_int (STRi(sf, i), &value))
             ctx_set_last_value(VB, ctx, value);
         else        
@@ -1399,8 +1523,12 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
         seg_by_ctx (VB, NULL, 0, ctxs[i], 0); // generates WORD_INDEX_MISSING
 
     // verify AB if its channel 1
-    if (ctx_has_value_(vb, CTX(FORMAT_AB)))
+    if (ctx_has_value (VB, FORMAT_AB))
         vcf_seg_FORMAT_AB_verify_channel1 (vb);
+
+    // finally seg GQ if we have it
+    if (ctx_encountered (VB, FORMAT_GQ))
+        vcf_seg_FORMAT_GQ (vb);
 
     return n_sfs - 1; // number of colons
 }

@@ -69,7 +69,8 @@ typedef struct VBlockVCF {
     Buffer format_contexts;         // ZIP only: an array of format_mapper_buf.len of ContextBlock
     Buffer last_format;             // ZIP only: cache previous line's FORMAT string
 
-    DosageMultiplexer mux_PL, mux_GL, mux_GP, mux_PRI, mux_DS, mux_PP, mux_PVAL, mux_FREQ, mux_RD;
+    DosageMultiplexer mux_PL, mux_GL, mux_GP, mux_PRI, mux_DS, mux_PP, mux_PVAL, mux_FREQ, mux_RD, mux_GQ,
+                      mux_AD[2], mux_ADALL[2];
 
     // used by CODEC_HAPM (for VCF haplotype matrix) 
     Buffer hapmat_helper_index_buf; // ZIP: used by codec_hapmat_count_alt_alleles 

@@ -13,6 +13,7 @@
 #include "context_struct.h"
 #include "vblock.h"
 #include "segconf.h"
+#include "strings.h"
 
 #define MAX_WORDS_IN_CTX 0x7ffffff0 // limit on nodes.len, word_list.len - partly because hash uses signed int32_t + 2 for singlton using index-2
 
@@ -91,6 +92,7 @@ static inline bool NEXTLOCALBIT(ContextP ctx) { BitArrayP b = buf_get_bitarray (
 #define last_txtx(vb, ctx)  ENT (char, (vb)->txt_data, (ctx)->last_txt_index)
 #define last_txt(vb, did_i) last_txtx (vb, &(vb)->contexts[did_i])
 #define last_txt_len(did_i) contexts[did_i].last_txt_len
+
 static inline bool is_last_txt_valid(ContextP ctx) { return ctx->last_txt_index != INVALID_LAST_TXT_INDEX; }
 static inline bool is_same_last_txt(VBlockP vb, ContextP ctx, STRp(str)) { return str_len == ctx->last_txt_len && !memcmp (str, last_txtx(vb, ctx), str_len); }
 
@@ -243,6 +245,13 @@ static inline void ctx_set_last_value (VBlockP vb, ContextP ctx, LastValueType l
     ctx->last_sample_i = vb->sample_i; // used for VCF/FORMAT. otherwise meaningless but harmless.
 }
 
+// returns true if value is set
+static inline bool ctx_set_last_value_from_str (VBlockP vb, ContextP ctx, STRp(str))
+{
+    return (ctx->flags.store == STORE_INT   && str_get_int   (STRa(str), &ctx->last_value.i)) ||
+           (ctx->flags.store == STORE_FLOAT && str_get_float (STRa(str), &ctx->last_value.f, 0, 0));
+}
+
 // set encountered if not already ctx_set_last_value (encounted = seen, but without setting last_value)
 static inline void ctx_set_encountered (VBlockP vb, ContextP ctx)
 {
@@ -252,27 +261,44 @@ static inline void ctx_set_encountered (VBlockP vb, ContextP ctx)
     ctx->last_sample_i = vb->sample_i; 
 }
 
-// after calling this, all these are false: ctx_encountered_in_line, ctx_has_value_in_line, ctx_encountered, ctx_has_value
+// after calling this, all these are false: ctx_encountered*, ctx_has_value*
 static inline void ctx_unset_encountered (VBlockP vb, ContextP ctx)
 {
     ctx->last_line_i = LAST_LINE_I_INIT;
 }
 
 // returns true if dict_id was *previously* segged on this line (last_value may be valid or not)
-static inline bool ctx_encountered_in_line_(VBlockP vb, ContextP ctx) { return ((ctx->last_line_i == vb->line_i) || (ctx->last_line_i == -(int64_t)vb->line_i - 1)); }
-static inline bool ctx_encountered_in_line_do (VBlockP vb, DictId dict_id, ContextP *p_ctx /* optional out */) 
+static inline bool ctx_encountered_in_line (VBlockP vb, DidIType did_i) 
+{ 
+    ContextP ctx=CTX(did_i); 
+    return ((ctx->last_line_i == vb->line_i) || (ctx->last_line_i == -(int64_t)vb->line_i - 1)); 
+}
+
+static inline bool ctx_encountered_in_line_by_dict_id (VBlockP vb, DictId dict_id, ContextP *p_ctx /* optional out */) 
 { 
     ContextP ctx = ECTX (dict_id);
     if (p_ctx) *p_ctx = ctx;
-    return ctx && ctx_encountered_in_line_(vb, ctx);
+    return ctx && ctx_encountered_in_line(vb, ctx->did_i);
 }
-#define ctx_encountered_in_line(vb, dict_id, p_ctx) ctx_encountered_in_line_do ((VBlockP)(vb), (DictId)(dict_id), (p_ctx))
 
 // note: these macros are good for contexts in VCF/FORMAT or not. Use the *_in_line version in case
 // we are sure its not VCF/FORMAT, they are a bit more efficient.
-#define ctx_encountered_(vb, ctx) (ctx_encountered_in_line_((VBlockP)vb, ctx) && (ctx)->last_sample_i == (vb)->sample_i)
-#define ctx_encountered(vb, dict_id, p_ctx) (ctx_encountered_in_line ((VBlockP)vb, dict_id, p_ctx) && (*(p_ctx))->last_sample_i == (vb)->sample_i)
-#define ctx_has_value_(vb, ctx) (ctx_has_value_in_line_((VBlockP)vb, ctx) && (ctx)->last_sample_i == (vb)->sample_i)
-#define ctx_has_value(vb, dict_id, p_ctx) (ctx_has_value_in_line ((VBlockP)vb, dict_id, p_ctx) && (*(p_ctx))->last_sample_i == (vb)->sample_i)
+static inline bool ctx_encountered (VBlockP vb, DidIType did_i) 
+{ 
+    ContextP ctx = CTX(did_i);
+    return ctx_encountered_in_line(vb, ctx->did_i) && ctx->last_sample_i == vb->sample_i; 
+}
+
+static inline bool ctx_encountered_by_dict_id (VBlockP vb, DictId dict_id, ContextP *p_ctx) 
+    { return ctx_encountered_in_line_by_dict_id (vb, dict_id, p_ctx) && (*p_ctx)->last_sample_i == vb->sample_i; }
+    
+static inline bool ctx_has_value (VBlockP vb, DidIType did_i) 
+{   
+    ContextP ctx = CTX(did_i);
+    return ctx_has_value_in_line_(vb, ctx) && ctx->last_sample_i == vb->sample_i; 
+}
+
+static inline bool ctx_has_value_by_dict_id (VBlockP vb, DictId dict_id, ContextP *p_ctx) 
+    { return ctx_has_value_in_line_do (vb, dict_id, p_ctx) && (*p_ctx)->last_sample_i == vb->sample_i; }
 
 extern void ctx_foreach_buffer(ContextP ctx, bool set_name, void (*func)(BufferP buf, const char *func, unsigned line));

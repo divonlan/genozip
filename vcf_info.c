@@ -844,7 +844,7 @@ static bool vcf_seg_INFO_HGVS (VBlock *vb_, ContextP ctx, STRp(value), uint32_t 
 {
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
-    if (ctx_encountered_in_line (vb, _INFO_END, NULL)) 
+    if (ctx_encountered_in_line (VB, INFO_END)) 
         goto fail; // we can't use this if there is an END before CLNHGVS, as it will change last_int(VCF_POS) during reconstruction
 
     // if main->refalt is different than REFALT then we can't use this function, as reconstruction is based on VCF_REFALT
@@ -1066,18 +1066,18 @@ static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCF *vb)
     // case: Dual coordinates file line has no PRIM, Lrej or Prej - this can happen if variants were added to the file,
     // for example, as a result of a "bcftools merge" with a non-DVCF file
     bool added_variant = false;
-    if (!ctx_encountered_in_line (vb, _INFO_LUFT, NULL) && // note: no need to chech PRIM because LUFT and PRIM always appear together
-        !ctx_encountered_in_line (vb, _INFO_LREJ, NULL) &&
-        !ctx_encountered_in_line (vb, _INFO_PREJ, NULL)) {
+    if (!ctx_encountered_in_line (VB, INFO_LUFT) && // note: no need to check PRIM because LUFT and PRIM always appear together
+        !ctx_encountered_in_line (VB, INFO_LREJ) &&
+        !ctx_encountered_in_line (VB, INFO_PREJ)) {
         vcf_lo_seg_rollback_and_reject (vb, LO_ADDED_VARIANT, NULL); // note: we don't report this reject because it doesn't happen during --chain
         added_variant = true; // we added a REJX field in a variant that will be reconstructed in the current coordintes
     }
 
     // case: line originally had LIFTOVER or LIFTBACK. These can be fields from the txt files, or created by --chain
-    bool has_luft    = ctx_encountered_in_line (vb, _INFO_LUFT, NULL);
-    bool has_prim    = ctx_encountered_in_line (vb, _INFO_PRIM, NULL);
-    bool has_lrej    = ctx_encountered_in_line (vb, _INFO_LREJ, NULL);
-    bool has_prej    = ctx_encountered_in_line (vb, _INFO_PREJ, NULL);
+    bool has_luft    = ctx_encountered_in_line (VB, INFO_LUFT);
+    bool has_prim    = ctx_encountered_in_line (VB, INFO_PRIM);
+    bool has_lrej    = ctx_encountered_in_line (VB, INFO_LREJ);
+    bool has_prej    = ctx_encountered_in_line (VB, INFO_PREJ);
     bool rolled_back = LO_IS_REJECTED (last_ostatus) && (has_luft || has_prim); // rejected in the Seg process
            
     // make sure we have either both LIFT/PRIM or both Lrej/Prej subfields in Primary and Luft

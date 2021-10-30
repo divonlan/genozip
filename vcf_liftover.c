@@ -295,8 +295,8 @@ void vcf_lo_seg_rollback_and_reject (VBlockVCFP vb, LiftOverStatus ostatus, Cont
     if (LO_IS_REJECTED (last_ostatus)) return; // already rejected
 
     // unaccount for INFO/LUFT (in primary reconstruction) and INFO/PRIM (in Luft reconstruction)
-    Context *luft_ctx; 
-    if (ctx_encountered_in_line (vb, _INFO_LUFT, &luft_ctx)) { // we always have both LUFT and PRIM, or neither
+    Context *luft_ctx = CTX(INFO_LUFT); 
+    if (ctx_encountered_in_line (VB, INFO_LUFT)) { // we always have both LUFT and PRIM, or neither
         vb->recon_size      -= luft_ctx->last_txt_len;
         vb->recon_size_luft -= CTX(INFO_PRIM)->last_txt_len;
     }
