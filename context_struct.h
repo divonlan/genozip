@@ -67,6 +67,7 @@ typedef struct Context {
 
     // settings
     Codec lcodec, bcodec;      // codec used to compress local and b250
+    Codec lsubcodec_zip;       // zip to compress with this codec AFTER compressing with lcodec
     Codec lsubcodec_piz;       // piz to decompress with this codec, AFTER decompressing with lcodec
 
     // ZIP-only instructions NOT written to the genozip file

@@ -1271,6 +1271,11 @@ static unsigned num_put_files=0;
 bool file_put_data (const char *filename, const void *data, uint64_t len, 
                     mode_t mode) // optional - ignored if 0
 {
+    // remove invalid characters from filename
+    if (flag.is_windows)
+        for (char *c=(char*)filename ; *c ; c++)
+            if (*c == ':') *c = '-'; // ':' exist eg in SAM OPTIONAL names 
+
     char *tmp_filename = MALLOC (strlen(filename)+5);
     // we first write to tmp_filename, and after we complete and flush, we rename to the final name
     // this is important, eg for the reference cache files - if a file exists (in its final name) - then it is fully written

@@ -14,8 +14,7 @@
 
  */
 
-#ifndef C_RANGER_CODER_H
-#define C_RANGER_CODER_H
+#pragma once
 
 #define  DO(n)	   int _;for (_=0; _<n; _++)
 #define  TOP	   (1<<24)
@@ -82,7 +81,7 @@ static inline void RC_ShiftLow(RangeCoder *rc) {
 	rc->Cache = rc->low >> 24;
 	rc->Carry = 0;
     } else {
-	// Low if FFxx xxxx.  Bump FF count and shift in as before
+	// Low if FF** ****.  Bump FF count and shift in as before
 	rc->FFNum++;
     }
     rc->low = rc->low<<8;
@@ -126,4 +125,3 @@ static inline void RC_Decode (RangeCoder *rc, uint32_t cumFreq, uint32_t freq, u
     }
 }
 
-#endif /* C_RANGER_CODER_H */

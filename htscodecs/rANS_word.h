@@ -13,8 +13,7 @@
 // Not intended to be "industrial strength"; just meant to illustrate the general
 // idea.
 
-#ifndef RANS_WORD_HEADER
-#define RANS_WORD_HEADER
+#pragma once
 
 #include <stdio.h>
 #include <stdint.h>
@@ -409,4 +408,3 @@ static inline void RansDecRenormSafe(RansState* r, uint8_t** pptr, uint8_t *ptr_
     *r = x;
 }
 
-#endif // RANS_WORD_HEADER

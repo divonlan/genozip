@@ -29,6 +29,7 @@
 #include "flags.h"
 #include "website.h"
 #include "coords.h"
+#include "libdeflate/libdeflate.h"
 
 static const char *password_test_string = "WhenIThinkBackOnAllTheCrapIlearntInHighschool";
 
@@ -125,7 +126,8 @@ void zfile_uncompress_section (VBlock *vb,
     // decrypt data (in-place) if needed
     if (data_encrypted_len) 
         crypt_do (vb, (uint8_t*)section_header + compressed_offset, data_encrypted_len, vblock_i, section_header->section_type, false);
-
+ 
+    bool bad_compression = false;
     if (data_uncompressed_len > 0) { // FORMAT, for example, can be missing in a sample-less file
 
         if (uncompressed_data_buf_name) {
@@ -136,12 +138,22 @@ void zfile_uncompress_section (VBlock *vb,
         comp_uncompress (vb, section_header->codec, section_header->sub_codec, codec_param,
                          (char*)section_header + compressed_offset, data_compressed_len, 
                          uncompressed_data, data_uncompressed_len);
+
+        //--verify-codec: verify that adler32 of the decompressed data is equal that of the original uncompressed data
+        if (flag.verify_codec && uncompressed_data && data_uncompressed_len && 
+            BGEN32 (section_header->magic) != GENOZIP_MAGIC &&
+            section_header->uncomp_adler32 != libdeflate_adler32 (1, uncompressed_data->data, data_uncompressed_len)) {
+        
+            iprintf ("--verify-codec: BAD ADLER32 section decompressed incorrectly: codec=%s\n", codec_name(section_header->codec));
+            sections_show_header (section_header, NULL, 0, 'R');
+            bad_compression = true;
+        }
     }
  
     if (flag.show_b250 && expected_section_type == SEC_B250) 
         zfile_show_b250_section (section_header_p, uncompressed_data);
     
-    if (flag.dump_section && !strcmp (st_name (expected_section_type), flag.dump_section)) {
+    if ((flag.dump_section && !strcmp (st_name (expected_section_type), flag.dump_section)) || bad_compression) {
         uint64_t save_len = uncompressed_data->len;
         uncompressed_data->len = data_uncompressed_len; // might be different, eg in the case of ref_hash
         zfile_dump_section (uncompressed_data, section_header, compressed_offset, dict_id);
@@ -230,7 +242,7 @@ uint32_t zfile_compress_local_data (VBlock *vb, Context *ctx, uint32_t sample_si
         .h.data_uncompressed_len = BGEN32 (uncompressed_len),
         .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderCtx)),
         .h.codec                 = ctx->lcodec == CODEC_UNKNOWN ? CODEC_BZ2 : ctx->lcodec, // if codec has not been decided yet, fall back on BZ2
-        .h.sub_codec             = ctx->lsubcodec_piz ? ctx->lsubcodec_piz : codec_args[ctx->lcodec].sub_codec,
+        .h.sub_codec             = ctx->lsubcodec_piz ? ctx->lsubcodec_piz : CODEC_UNKNOWN,
         .h.vblock_i              = BGEN32 (vb->vblock_i),
         .h.flags.ctx             = flags,
         .dict_id                 = ctx->dict_id,
@@ -265,7 +277,12 @@ void zfile_compress_section_data_ex (VBlock *vb, SectionType section_type,
 
     if (flag.show_time) codec_show_time (vb, st_name (section_type), NULL, codec);
 
-    comp_compress (vb, &vb->z_data, &header, 
+    comp_compress (vb, 
+                   // note: when called from codec_assign_best_codec we use z_data_test. this is because codec_assign_best_codec can be
+                   // called from within complex codecs for their subcodecs, and if we had used z_data, comp_compress could realloc it as it
+                   // is being populated by complex codec
+                   section_type == SEC_NONE ? &vb->z_data_test : &vb->z_data, 
+                   &header, 
                    section_data ? section_data->data : NULL, 
                    callback);
 }
@@ -358,7 +375,7 @@ int32_t zfile_read_section_do (File *file,
              return header_offset; // in genocat --show-header - we only show headers, nothing else
     }
 
-    ASSERT (is_magical, "called from %s:%u: corrupt data (magic is wrong) when attempting to read section=%s dict_id=%s of vblock_i=%u component=%u in file %s", 
+    ASSERT (is_magical || flag.verify_codec, "called from %s:%u: corrupt data (magic is wrong) when attempting to read section=%s dict_id=%s of vblock_i=%u component=%u in file %s", 
             func, code_line, st_name (expected_sec_type), sec ? dis_dict_id (sec->dict_id).s : "(no sec)", vb->vblock_i, z_file->num_txt_components_so_far, z_name);
 
     uint32_t compressed_offset   = BGEN32 (header->compressed_offset);

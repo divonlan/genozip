@@ -209,6 +209,11 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
+.. option:: --verify-codec  ZUC. Verifies each section's decompression correctness against an Adler32 that is stored in SectionHeader.magic. Note: the Genozip file generated when using this option is not a valid Genozip file as it has the wrong magic - this option is designed for detecting issues while developing new codecs.
+
+    | Example: ``genozip -t --verify-codec myfile.sam``
+    |
+
 **Controlling execution**
 
 .. option:: --one-vb vb  C. Reconstruct data from a single VB.

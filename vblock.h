@@ -119,6 +119,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     \
     /* file data */\
     Buffer z_data;             /* all headers and section data as read from disk */\
+    Buffer z_data_test;        /* for use of codec_assign_best_codec */ \
     \
     Buffer txt_data;           /* ZIP only: txt_data as read from disk - either the txt header (in evb) or the VB data lines */\
     \

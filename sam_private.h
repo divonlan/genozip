@@ -28,7 +28,7 @@ typedef struct {
     CtxWord QUAL, U2, BD_BI[2];    // coordinates in txt_data 
     CtxWord QNAME, RG, CIGAR, MC;  // coordinates in txt_data for buddy segging (except CIGAR in BAM - points instead into vb->buddy_textual_cigars)
     PosType POS, PNEXT;
-    int64_t MAPQ, MQ, QUAL_score;
+    int64_t MAPQ, MQ, QUAL_score, TLEN;
     SamFlags FLAG;
     uint32_t seq_len;              // actual sequence length determined from any or or of: CIGAR, SEQ, QUAL. If more than one contains the length, they must all agree
 } ZipDataLineSAM;

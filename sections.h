@@ -136,6 +136,7 @@ typedef union SectionFlags {
 
 typedef struct SectionHeader {
     uint32_t     magic; 
+    #define      uncomp_adler32 magic // used in --verify-codec
     uint32_t     compressed_offset;   // number of bytes from the start of the header that is the start of compressed data (sizeof header + header encryption padding)
     uint32_t     data_encrypted_len;  // = data_compressed_len + padding if encrypted, 0 if not
     uint32_t     data_compressed_len;

@@ -486,7 +486,7 @@ void sections_show_header (const SectionHeader *header, VBlock *vb /* optional i
     #define PRINT { if (vb) buf_add_string (vb, &vb->show_headers_buf, str); else iprintf ("%s", str); } 
     #define SEC_TAB "            ++  "
 
-    sprintf (str, "%c %s%-*"PRIu64" %-19s %-4.4s %-4.4s vb=%-3u z_off=%-6u txt_len=%-7u z_len=%-7u enc_len=%-7u %s ",
+    sprintf (str, "%c %s%-*"PRIu64" %-19s %-4.4s %-4.4s vb=%-3u z_off=%-6u txt_len=%-7u z_len=%-7u enc_len=%-7u%s ",
              rw, 
              is_dict_offset ? "~" : "", 9-is_dict_offset, offset, 
              st_name(header->section_type), 
@@ -496,7 +496,7 @@ void sections_show_header (const SectionHeader *header, VBlock *vb /* optional i
              BGEN32 (header->data_uncompressed_len), 
              BGEN32 (header->data_compressed_len), 
              BGEN32 (header->data_encrypted_len), 
-             BGEN32 (header->magic) != GENOZIP_MAGIC ? "BAD-MAGIC" : ""); // usually, we don't want the magic to take up line real estatee
+             BGEN32 (header->magic) != GENOZIP_MAGIC ? " BAD-MAGIC" : ""); // usually, we don't want the magic to take up line real estatee
     PRINT;
 
     SectionFlags f = header->flags;

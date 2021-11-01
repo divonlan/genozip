@@ -31,12 +31,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef HTS_PACK_H
-#define HTS_PACK_H
-
-#ifdef __cplusplus
-extern "C" {
-#endif
+#pragma once
 
 /*
  * Packs multiple symbols into a single byte if the total alphabet of symbols
@@ -79,8 +74,3 @@ uint8_t hts_unpack_meta(uint8_t *data, uint32_t data_len,
  */
 uint8_t *hts_unpack(uint8_t *data, int64_t len, uint8_t *out, uint64_t out_len, int nsym, uint8_t *map);
 
-#ifdef __cplusplus
-}
-#endif
-
-#endif /* HTS_PACK_H */

@@ -26,7 +26,7 @@ const char acgt_decode[4] = { 'A', 'C', 'G', 'T' };
 const uint8_t acgt_encode[256] = { ['A']=0, ['C']=1, ['G']=2, ['T']=3,  // all others are 0
                                    ['a']=0, ['c']=1, ['g']=2, ['t']=3, 
                                    
-                                   // IUPAC codes are to one of their bases: http://www.bioinformatics.org/sms/iupac.html
+                                   // IUPAC codes are mapped to one of their bases: http://www.bioinformatics.org/sms/iupac.html
                                    // the base to which a IUPAC is mapped, is the lowest alphanetically of its participating bases, per 1.6.1-REF in the VCF specification: https://samtools.github.io/hts-specs/VCFv4.3.pdf
                                    // (expected by vcf_refalt_lift_snp)
                                    ['U']=3, ['R']=0, ['Y']=1, ['S']=1,
@@ -48,12 +48,11 @@ void codec_acgt_comp_init (VBlock *vb)
         nonref_ctx->ltype     = LT_SEQUENCE;
 
         Context *nonref_x_ctx = nonref_ctx + 1;
-        nonref_x_ctx->lcodec  = CODEC_XCGT;
         nonref_x_ctx->ltype   = LT_UINT8;
 }
 
 // packing of an array A,G,C,T characters into a 2-bit BitArray, stored in vb->compressed. 
-static void codec_acgt_pack (BitArray *packed, const char *data, uint64_t data_len)
+static inline void codec_acgt_pack (BitArray *packed, const char *data, uint64_t data_len)
 {
     // increase bit array to accomodate data
     uint64_t next_bit = packed->nbits;
@@ -62,6 +61,7 @@ static void codec_acgt_pack (BitArray *packed, const char *data, uint64_t data_l
     
     // pack nucleotides - each character is packed into 2 bits
     for (uint64_t i=0 ; i < data_len ; i++) {
+
         uint8_t encoding = acgt_encode[(uint8_t)data[i]];
         
         bit_array_assign (packed, next_bit,   (encoding & 1)     );
@@ -71,12 +71,12 @@ static void codec_acgt_pack (BitArray *packed, const char *data, uint64_t data_l
 }
 
 // This function decompsoses SEQ data into two buffers:
-// 1. A,G,C,T characters are packed into a 2-bit BitArray, placed in vb->compressed and then compressed with ACGT.sub_codec
+// 1. A,C,G,T characters are packed into a 2-bit BitArray, placed in vb->compressed and then compressed with ACGT.sub_codec
 // 2. NONREF_X.local is constructed to be the same length on the SEQ data, with each characer corresponding to a character in SEQ:
 // -- an A,C,G or T character in SEQ is corresponds to a \0 in NONREF_X 
 // -- an a,c,g or t character in SEQ is corresponds to a \1 in NONREF_X 
 // -- any other character is copied from SEQ as is
-// NONREF_X.local is later compressed in codec_xcgt_compress with XCGT.sub_codec
+// NONREF_X.local is later compressed as a normal context (codec=XCGT, subcodec=as assigned)
 bool codec_acgt_compress (VBlock *vb, SectionHeader *header,
                           const char *uncompressed,    // option 1 - compress contiguous data
                           uint32_t *uncompressed_len,
@@ -96,12 +96,19 @@ bool codec_acgt_compress (VBlock *vb, SectionHeader *header,
 
     Context *nonref_ctx   = CTX(DTF(nonref));
     Context *nonref_x_ctx = nonref_ctx + 1;
+    BitArray *packed;
 
+    // case: this is our second entry, after soft-failing. Just continue from where we stopped
+    if (nonref_x_ctx->local.len) {
+        packed = buf_get_bitarray (&vb->compressed);
+        goto compress_sub;
+    }
+    
     ASSERT0 (!vb->compressed.len && !vb->compressed.param, "expecting vb->compressed to be free, but its not");
 
     // we will pack into vb->compressed
-    buf_alloc (vb, &vb->compressed, 0, roundup_bits2bytes64 (*uncompressed_len * 2), uint8_t, 1, "compress");
-    BitArray *packed = buf_get_bitarray (&vb->compressed);
+    buf_alloc (vb, &vb->compressed, 0, roundup_bits2bytes64 (*uncompressed_len * 2), uint8_t, 1, "compressed");
+    packed = buf_get_bitarray (&vb->compressed);
 
     // option 1 - pack contiguous data
     if (uncompressed) {
@@ -135,22 +142,34 @@ bool codec_acgt_compress (VBlock *vb, SectionHeader *header,
     else 
         ABORT0 ("Error in codec_acgt_compress_nonref: neither src_data nor callback is provided");
 
+    // get codec for NONREF_X header->lcodec remains CODEC_XCGT, and we set subcodec to the codec discovered in assign, and set to nonref_ctx->lcode
+    nonref_x_ctx->lsubcodec_piz = codec_assign_best_codec (vb, nonref_x_ctx, NULL, SEC_LOCAL);
+    if (nonref_x_ctx->lsubcodec_piz == CODEC_UNKNOWN) nonref_x_ctx->lsubcodec_piz = CODEC_NONE; // really small
+    
+    nonref_x_ctx->lcodec = CODEC_XCGT;
+
     // note: we store in Little Endian unlike the rest of the data that is in Big Endian, because LTEN keeps the nucleotides in their
     // original order, and improves compression ratio by about 2%
     LTEN_bit_array (packed);
 
-    Codec sub_codec = codec_args[header->codec].sub_codec;
-    CodecCompress *compress = codec_args[sub_codec].compress;
-    uint32_t packed_uncompressed_len = packed->nwords * sizeof (word_t);
+    // get codec for NONREF - header->lcodec remains CODEC_ACGT, and we set subcodec to the codec discovered in assign, and set to nonref_ctx->lcodec 
+    nonref_ctx->lcodec = CODEC_UNKNOWN;
+    header->sub_codec = codec_assign_best_codec (vb, nonref_ctx, &vb->compressed, SEC_LOCAL);
+    if (header->sub_codec == CODEC_UNKNOWN) header->sub_codec = CODEC_NONE; // really small
+    
+    compress_sub: {
+        CodecCompress *compress = codec_args[header->sub_codec].compress;
+        uint32_t packed_uncompressed_len = packed->nwords * sizeof (word_t);
 
-    PAUSE_TIMER; // sub-codec compresssors account for themselves
-    if (flag.show_time) codec_show_time (vb, "Subcodec", vb->profile.next_subname, sub_codec);
-    compress (vb, header, (char *)packed->words, &packed_uncompressed_len, NULL, compressed, compressed_len, false); // no soft fail
-    RESUME_TIMER (compressor_actg);
+        if (flag.show_time) codec_show_time (vb, "Subcodec", vb->profile.next_subname, header->sub_codec);
+
+        PAUSE_TIMER; // sub-codec compresssors account for themselves
+        if (!compress (vb, header, (char *)packed->words, &packed_uncompressed_len, NULL, compressed, compressed_len, soft_fail)) return false;
+        RESUME_TIMER (compressor_actg);
+    }
 
     buf_free (&vb->compressed);
-
-    // note: NONREF_X will be compressed after us in codec_xcgt_compress, as it is the subsequent context, and its local is now populated
+    // note: NONREF_X will be compressed after us as it is the subsequent context, and its local is now populated
 
     COPY_TIMER (compressor_actg); // don't include sub-codec compressor - it accounts for itself
     return true;

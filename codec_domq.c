@@ -169,9 +169,13 @@ bool codec_domq_compress (VBlock *vb,
         NEXTENT (char, *qual_buf) = NO_DOMS;
     }
 
-    Codec sub_codec = codec_args[CODEC_DOMQ].sub_codec;
-    CodecCompress *compress = codec_args[sub_codec].compress;
-    uint32_t min_required_compressed_len = codec_args[sub_codec].est_size (sub_codec, qual_buf->len);
+    qual_ctx->lcodec = CODEC_UNKNOWN;
+    header->sub_codec = codec_assign_best_codec (vb, qual_ctx, NULL, SEC_LOCAL);
+    if (header->sub_codec == CODEC_UNKNOWN) header->sub_codec = CODEC_NONE; // really small
+
+    CodecCompress *compress = codec_args[header->sub_codec].compress;
+
+    uint32_t min_required_compressed_len = codec_args[header->sub_codec].est_size (header->sub_codec, qual_buf->len);
 
     COPY_TIMER (compressor_domq); // don't account for sub-codec compressor, it accounts for itself
 
@@ -181,20 +185,23 @@ bool codec_domq_compress (VBlock *vb,
         // since codecs were already assigned to contexts before compression of all contexts begun, but
         // we just created this context now, we assign a codec manually
         codec_assign_best_codec (vb, qdomruns_ctx, NULL, SEC_LOCAL);
+        if (qdomruns_ctx->lcodec == CODEC_UNKNOWN) qdomruns_ctx->lcodec = CODEC_NONE; // really small
 
         *uncompressed_len = (uint32_t)qual_buf->len;
-        return compress (vb, header, qual_buf->data, uncompressed_len, NULL, compressed, compressed_len, soft_fail);
+        return compress (vb, header, qual_buf->data, uncompressed_len, NULL, compressed, compressed_len, false);
     }
 
     // case: our uncompressed length is too long vs the allocation of compressed (in a rare case that domqual enlengthen QUAL)
     // fallback on compressing the QUAL data using sub_codec directly (by which compressed_len was alloceted in comp_compress)
     else {
-        ((SectionHeaderCtx *)header)->ltype = LT_SEQUENCE; // not LD_CODEC any more
-        header->codec     = sub_codec;
-        header->sub_codec = CODEC_UNKNOWN;
-        header->flags.ctx.copy_local_param = 0; // cancel flag
         buf_free (qual_buf);
         buf_free (qdomruns_buf);
+
+        ((SectionHeaderCtx *)header)->ltype = LT_SEQUENCE; // not LT_CODEC any more
+        header->codec     = header->sub_codec;
+        header->sub_codec = CODEC_UNKNOWN;
+        header->flags.ctx.copy_local_param = 0; // cancel flag
+        
         return compress (vb, header, NULL, uncompressed_len, callback, compressed, compressed_len, soft_fail);
     }
 }

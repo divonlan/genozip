@@ -134,7 +134,7 @@ void present8(unsigned char *in, unsigned int in_size,
  * Order 1 histogram construction.  4-way unrolled to avoid cache collisions.
  */
 static inline
-void hist1_4(unsigned char *in, unsigned int in_size,
+void hist1_4(VBlockP vb, unsigned char *in, unsigned int in_size,
 	     uint32_t F0[256][256], uint32_t *T0) {
     uint32_t T1[256+MAGIC] = {0}, T2[256+MAGIC] = {0}, T3[256+MAGIC] = {0};
 
@@ -143,20 +143,25 @@ void hist1_4(unsigned char *in, unsigned int in_size,
 
     unsigned char cc[5] = {0};
     if (in_size > 500000) {
-	uint32_t F1[256][259] = {{0}};
+
+	// uint32_t F1[256][259] = {{0}}; // causes stack overflow 
+	uint32_t *f1 = codec_alloc (vb, 256 * 259 * sizeof (uint32_t), 1);
+	memset (f1, 0, 256 * 259 * sizeof (uint32_t));
+	#define F1(a,b) f1[a*259 + b]
+
 	while (in < in_end-8) {
 	    memcpy(cc, in, 4); in += 4;
 	    T0[cc[4]]++; F0[cc[4]][cc[0]]++;
-	    T1[cc[0]]++; F1[cc[0]][cc[1]]++;
+	    T1[cc[0]]++; F1(cc[0],cc[1])++;
 	    T2[cc[1]]++; F0[cc[1]][cc[2]]++;
-	    T3[cc[2]]++; F1[cc[2]][cc[3]]++;
+	    T3[cc[2]]++; F1(cc[2],cc[3])++;
 	    cc[4] = cc[3];
 
 	    memcpy(cc, in, 4); in += 4;
 	    T0[cc[4]]++; F0[cc[4]][cc[0]]++;
-	    T1[cc[0]]++; F1[cc[0]][cc[1]]++;
+	    T1[cc[0]]++; F1(cc[0],cc[1])++;
 	    T2[cc[1]]++; F0[cc[1]][cc[2]]++;
-	    T3[cc[2]]++; F1[cc[2]][cc[3]]++;
+	    T3[cc[2]]++; F1(cc[2],cc[3])++;
 	    cc[4] = cc[3];
 	}
 	l = cc[3];
@@ -170,7 +175,10 @@ void hist1_4(unsigned char *in, unsigned int in_size,
 	int i, j;
 	for (i = 0; i < 256; i++)
 	    for (j = 0; j < 256; j++)
-		F0[i][j] += F1[i][j];
+		F0[i][j] += F1(i,j);
+
+	codec_free (vb, f1);
+
     } else {
 	while (in < in_end-8) {
 	    memcpy(cc, in, 4); in += 4;

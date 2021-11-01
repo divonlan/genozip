@@ -38,6 +38,9 @@
 // inserts dict_id->did_i to the map, if one of the two entries is available
 static inline void set_dict_id_to_did_i_map (DidIType *map, DictId dict_id, DidIType did_i)
 {
+    // thread safety for z_file map: we don't bother with having a mutex, in the worst case scenario, two threads will test an entry
+    // as empty and then both write to it, with one of them prevailing. that's fine (+ Likely its the same did_i anyway).
+
     if (map[dict_id.map_key] == DID_I_NONE)  // map is free
         map[dict_id.map_key] = did_i;
 
@@ -659,9 +662,14 @@ static Context *ctx_get_zctx (DictId dict_id, bool check_predefined)
     return NULL;
 }
 
-static inline Context *ctx_get_zctx_from_vctx (ConstContextP vctx)
+ContextP ctx_get_zctx_from_vctx (ConstContextP vctx)  // returns NULL if context doesn't exist
 {
-    return vctx->did_i < DTFZ(num_fields) ? ZCTX(vctx->did_i) : ctx_get_zctx (vctx->dict_id, false);
+    if (vctx->did_i < DTFZ(num_fields)) 
+        return ZCTX(vctx->did_i); 
+    
+    // check dict_id->did_i map, and if not found search linearly
+    DidIType did_i = ctx_get_existing_did_i_do (vctx->dict_id, z_file->contexts, z_file->dict_id_to_did_i_map, z_file->num_contexts);
+    return did_i != DID_I_NONE ? ZCTX(did_i) : NULL;
 }
 
 // ZIP only: called by merging VBs to add a new dict to z_file - copying some stuff from vctx
@@ -694,6 +702,9 @@ static Context *ctx_add_new_zf_ctx (VBlock *vb, const Context *vctx)
     // only when the new entry is finalized, do we increment num_contexts, atmoically , this is because
     // other threads might access it without a mutex when searching for a dict_id
     __atomic_store_n (&z_file->num_contexts, z_file->num_contexts+1, __ATOMIC_RELAXED); 
+
+    // only after updating num_contexts, we add it to the map. 
+    set_dict_id_to_did_i_map (z_file->dict_id_to_did_i_map, zctx->dict_id, zctx->did_i);
 
 finish:
     mutex_unlock (z_file->dicts_mutex);
@@ -951,18 +962,18 @@ void ctx_add_compressor_time_to_zf_ctx (VBlockP vb)
 }
 
 // returns an existing did_i in this vb, or DID_I_NONE if there isn't one
-DidIType ctx_get_unmapped_existing_did_i (VBlockP vb, DictId dict_id)
+DidIType ctx_get_unmapped_existing_did_i (const Context *contexts, DidIType num_contexts, DictId dict_id)
 {
     // search to see if this dict_id has a context, despite not in the map (due to contention). 
-    for (int/*signed*/ did_i=vb->num_contexts-1; did_i >= 0 ; did_i--)  // Search backwards as unmapped ctxs are more likely to be towards the end.
-        if (dict_id.num == CTX(did_i)->dict_id.num) return did_i;
+    for (int/*signed*/ did_i=num_contexts-1; did_i >= 0 ; did_i--)  // Search backwards as unmapped ctxs are more likely to be towards the end.
+        if (dict_id.num == contexts[did_i].dict_id.num) return did_i;
 
     // PIZ only: check if its an alias that's not mapped in ctx_initialize_predefined_ctxs (due to contention)
     if (command != ZIP && dict_id_aliases) {
         for (uint32_t alias_i=0; alias_i < dict_id_num_aliases; alias_i++)
             if (dict_id.num == dict_id_aliases[alias_i].alias.num) { // yes! its an alias
-                for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) 
-                    if (dict_id_aliases[alias_i].dst.num == CTX(did_i)->dict_id.num) return did_i;
+                for (DidIType did_i=0; did_i < num_contexts; did_i++) 
+                    if (dict_id_aliases[alias_i].dst.num == contexts[did_i].dict_id.num) return did_i;
             }
     }
 

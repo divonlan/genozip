@@ -262,6 +262,7 @@ static void main_test_after_genozip (const char *exec_name, const char *z_filena
                                   flag.show_alleles  ? "--show-alleles"  : SKIP_ARG,
                                   flag.debug_threads ? "--debug-threads" : SKIP_ARG,
                                   flag.echo          ? "--echo"          : SKIP_ARG,
+                                  flag.verify_codec   ? "--verify-codec"   : SKIP_ARG,
                                   flag.reference == REF_EXTERNAL && !is_chain ? "--reference" : SKIP_ARG, // normal pizzing of a chain file doesn't require a reference
                                   flag.reference == REF_EXTERNAL && !is_chain ? ref_get_filename(gref) : SKIP_ARG, 
                                   NULL);

@@ -145,6 +145,10 @@ static int codec_assign_sorter (const CodecTest *t1, const CodecTest *t2)
     if (t1->clock < t2->clock * 0.85) return -1; // t1 has significantly better time
     if (t2->clock < t1->clock * 0.85) return  1; // t2 has significantly better time
 
+    // if size is exactly the same - choose the lower-index codex (so to pick non-packing version of RAN and ART)
+    if (t1->size == t2->size)
+        return t1->codec - t1->codec;
+
     // time and size are very similar (within %1 and 15% respectively) - select for smaller size
     return t1->size - t2->size;
 }
@@ -172,45 +176,56 @@ static int codec_assign_sorter (const CodecTest *t1, const CodecTest *t2)
 
 Codec codec_assign_best_codec (VBlockP vb, 
                                ContextP ctx, /* for b250, local, dict */ 
-                               BufferP data, /* non-context data */
+                               BufferP data, /* non-context data, or context data that doesn't reside in its normal buffer */
                                SectionType st)
 {
     START_TIMER;
 
-    uint64_t save_section_list = vb->section_list_buf.len; // save section list as comp_compress adds to it
-    uint64_t save_z_data       = vb->z_data.len;
     bool is_local = (st == SEC_LOCAL);
     bool is_b250  = (st == SEC_B250 );
-
-    CodecTest tests[] = { { CODEC_BZ2 }, { CODEC_NONE }, { CODEC_BSC }, { CODEC_LZMA }, 
-                          { CODEC_RANS8 }, { CODEC_RANS32 }, { CODEC_ARITH8 }, { CODEC_ARITH32 } };
-    const unsigned num_tests = 8;
-
     Codec non_ctx_codec = CODEC_UNKNOWN; // used for non-b250, non-local sections
+    bool data_override = ctx && data;    // caller provided data for us to use *instead* of ctx's own local/b250/dict buffer
+    
+    ContextP zctx = ctx ? ctx_get_zctx_from_vctx (ctx) : NULL;
 
     Codec *selected_codec = is_local ? &ctx->lcodec : 
                             is_b250  ? &ctx->bcodec :
                                        &non_ctx_codec;
+
+    if (*selected_codec == CODEC_UNKNOWN && zctx) 
+        *selected_codec = is_local ? zctx->lcodec : 
+                          is_b250  ? zctx->bcodec :
+                                     CODEC_UNKNOWN;
+
+    if (*selected_codec != CODEC_UNKNOWN) return *selected_codec; // if already assigned - no need to test
+
+    CodecTest tests[] = { { CODEC_BZ2 }, { CODEC_NONE }, { CODEC_BSC }, { CODEC_LZMA }, 
+                          { CODEC_RANS8 }, { CODEC_RANS32 }, { CODEC_RANS8_pack }, { CODEC_RANS32_pack }, 
+                          /*{ CODEC_ARITH8 },*/ { CODEC_ARITH32 }, /*{ CODEC_ARITH8_pack },*/ { CODEC_ARITH32_pack } };
+    const unsigned num_tests = 10;
+    
     // set data
-    switch (st) {
-        case SEC_DICT  : data = &ctx->dict  ; break;
-        case SEC_B250  : data = &ctx->b250  ; break; 
-        case SEC_LOCAL : data = &ctx->local ; break;
-        default: ASSERT (data, "expecting non-NULL data for section=%s", st_name (st));
-    }
+    if (!data)
+        switch (st) {
+            case SEC_DICT  : data = &ctx->dict  ; break;
+            case SEC_B250  : data = &ctx->b250  ; break; 
+            case SEC_LOCAL : data = &ctx->local ; break;
+            default: ASSERT (data, "expecting non-NULL data for section=%s", st_name (st));
+        }
+
+    uint64_t save_data_len = data->len;
+    uint64_t save_section_list = vb->section_list_buf.len; // save section list as comp_compress adds to it
 
     // sample from the end of the buffer, that is more likely to be representative of the data in the file (in particular  true for vb=1)
-    uint64_t save_data_len = data->len;
     data->len = MIN_(data->len * (is_local ? lt_desc[ctx->ltype].width : 1), CODEC_ASSIGN_SAMPLE_SIZE);
 
-    if (data->len < MIN_LEN_FOR_COMPRESSION ||       // if too small - don't assign - compression will use the default BZ2 and the next VB can try to select
-        *selected_codec != CODEC_UNKNOWN) goto done; // if already selected - don't assign
+    if (data->len < MIN_LEN_FOR_COMPRESSION) goto done; // if too small - don't assign - compression will use the default BZ2 and the next VB can try to select
      
     // last attempt to avoid double checking of the same context by parallel threads (as we're not locking, 
     // it doesn't prevent double testing 100% of time, but that's good enough) 
-    Codec zf_codec = is_local ? ZCTX(ctx->did_i)->lcodec :  // read without locking (1 byte)
-                     is_b250  ? ZCTX(ctx->did_i)->bcodec :
-                                CODEC_UNKNOWN;
+    Codec zf_codec = is_local && zctx ? zctx->lcodec :  // read without locking (1 byte)
+                     is_b250  && zctx ? zctx->bcodec :
+                                        CODEC_UNKNOWN;
     
     if (zf_codec != CODEC_UNKNOWN) {
         *selected_codec = zf_codec;
@@ -227,11 +242,11 @@ Codec codec_assign_best_codec (VBlockP vb,
 
         if (*selected_codec == CODEC_NONE) tests[t].size = data->len;
         else {
-            LocalGetLineCB *callback = zfile_get_local_data_callback (vb->data_type, ctx);
+            LocalGetLineCB *callback = !data_override ? zfile_get_local_data_callback (vb->data_type, ctx) : NULL;
 
-            uint64_t z_data_before = vb->z_data.len;
             zfile_compress_section_data_ex (vb, SEC_NONE, callback ? NULL : data, callback, data->len, *selected_codec, SECTION_FLAGS_NONE);
-            tests[t].size = vb->z_data.len - z_data_before;
+            tests[t].size = vb->z_data_test.len;
+            vb->z_data_test.len = 0;
         }
                                                            
         tests[t].clock = (clock() - start_time);
@@ -254,13 +269,12 @@ Codec codec_assign_best_codec (VBlockP vb,
     *selected_codec = tests[0].codec;
 
     // save the assignment for future VBs, but not in --best, where each VB tests on its own
-    if ((is_b250 || is_local) && !flag.best)
+    if ((is_b250 || is_local) && !flag.best && *selected_codec != CODEC_UNKNOWN && zctx)
         ctx_commit_codec_to_zf_ctx (vb, ctx, is_local);
 
 done:
     // roll back
     data->len                = save_data_len;
-    vb->z_data.len           = save_z_data;
     vb->section_list_buf.len = save_section_list; 
 
     COPY_TIMER (codec_assign_best_codec);

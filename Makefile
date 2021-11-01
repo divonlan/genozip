@@ -14,7 +14,7 @@ IS_CONDA=1
 endif
 
 LDFLAGS += -lpthread -lm 
-CFLAGS  += -Wall -D_LARGEFILE64_SOURCE=1
+CFLAGS  += -Wall -D_LARGEFILE64_SOURCE=1 -D_7ZIP_ST
 
 ifdef IS_CONDA 
 	CFLAGS  += -DDISTRIBUTION=\"conda\"
@@ -79,7 +79,8 @@ CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h tx
 			 lzma/Precomp.h lzma/Threads.h \
 			 bzlib/bzlib.h bzlib/bzlib_private.h \
 			 htscodecs/rANS_static4x16.h htscodecs/rle.h htscodecs/pack.h htscodecs/arith_dynamic.h htscodecs/c_simple_model.h\
-			 htscodecs/rANS_word.h htscodecs/htscodecs_endian.h htscodecs/rANS_word.h htscodecs/util.h htscodecs/varint.h htscodecs/varint2.h \
+			 htscodecs/rANS_word.h htscodecs/htscodecs_endian.h htscodecs/rANS_word.h htscodecs/util.h htscodecs/varint.h \
+			 htscodecs/varint2.h htscodecs/utils.h \
 			 bsc/bwt.h bsc/coder.h bsc/divsufsort.h bsc/libbsc.h bsc/lzp.h bsc/platform.h \
 			 bsc/qlfc_model.h bsc/qlfc.h bsc/rangecoder.h bsc/tables.h \
  			 libdeflate/adler32_vec_template.h  libdeflate/crc32_table.h          libdeflate/unaligned.h \
@@ -108,7 +109,6 @@ ifeq ($(OS),Windows_NT)
 	OBJDIR=objdir.windows
 	WSL=wsl
 else
-	CFLAGS += -D_7ZIP_ST
     ifeq ($(uname),Linux)
 # Linux
         LDFLAGS += -lrt # required by pthreads

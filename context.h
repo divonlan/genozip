@@ -122,7 +122,7 @@ extern void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vctx, bool is_lcode
 extern ContextP ctx_get_unmapped_ctx (ContextP contexts, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_contexts, DictId dict_id, STRp(tag_name));
 
 // returns did_i of dict_id if it is found in the map, or DID_I_NONE if not
-static inline DidIType get_matching_did_i_from_map (Context *contexts, DidIType *map, DictId dict_id)
+static inline DidIType get_matching_did_i_from_map (const Context *contexts, const DidIType *map, DictId dict_id)
 {
     DidIType did_i = map[dict_id.map_key];
     if (did_i != DID_I_NONE && contexts[did_i].dict_id.num == dict_id.num) 
@@ -147,17 +147,17 @@ static inline ContextP ctx_get_ctx_do (Context *contexts, DataType dt, DidIType 
         return ctx_get_unmapped_ctx (contexts, dt, dict_id_to_did_i_map, num_contexts, dict_id, STRa(tag_name));
 }
 
-extern DidIType ctx_get_unmapped_existing_did_i (VBlockP vb, DictId dict_id);
+extern DidIType ctx_get_unmapped_existing_did_i (const Context *contexts, DidIType num_contexts, DictId dict_id);
 
-static inline DidIType ctx_get_existing_did_i_do (VBlockP vb, DictId dict_id, Context *contexts, DidIType *dict_id_to_did_i_map)
+static inline DidIType ctx_get_existing_did_i_do (DictId dict_id, const Context *contexts, DidIType *dict_id_to_did_i_map, DidIType num_contexts)
 {
     DidIType did_i = get_matching_did_i_from_map (contexts, dict_id_to_did_i_map, dict_id);
     if (did_i != DID_I_NONE)
         return did_i;
     else
-        return ctx_get_unmapped_existing_did_i (vb, dict_id);
+        return ctx_get_unmapped_existing_did_i (contexts, num_contexts, dict_id);
 }    
-#define ctx_get_existing_did_i(vb,dict_id) ctx_get_existing_did_i_do (vb, dict_id, vb->contexts, vb->dict_id_to_did_i_map)
+#define ctx_get_existing_did_i(vb,dict_id) ctx_get_existing_did_i_do (dict_id, vb->contexts, vb->dict_id_to_did_i_map, vb->num_contexts)
 
 static inline ContextP ctx_get_existing_ctx_do (VBlockP vb, DictId dict_id)  // returns NULL if context doesn't exist
 {
@@ -165,6 +165,8 @@ static inline ContextP ctx_get_existing_ctx_do (VBlockP vb, DictId dict_id)  // 
     return (did_i == DID_I_NONE) ? NULL : &vb->contexts[did_i]; 
 }
 #define ECTX(dict_id) ctx_get_existing_ctx_do ((VBlockP)(vb), (DictId)(dict_id))
+
+extern ContextP ctx_get_zctx_from_vctx (ConstContextP vctx);
 
 extern ContextP ctx_add_new_zf_ctx_from_txtheader (STRp(tag_name), DictId dict_id, TranslatorId luft_translator);
 

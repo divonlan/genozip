@@ -31,26 +31,13 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef RANS_STATIC4x16_H
-#define RANS_STATIC4x16_H
+#pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include "../genozip.h"
 
 unsigned int rans_compress_bound_4x16(unsigned int size, int order);
-unsigned char *rans_compress_to_4x16(unsigned char *in,  unsigned int in_size,
+unsigned char *rans_compress_to_4x16(VBlockP vb, unsigned char *in,  unsigned int in_size,
 				     unsigned char *out, unsigned int *out_size,
 				     int order);
-unsigned char *rans_compress_4x16(unsigned char *in, unsigned int in_size,
-				  unsigned int *out_size, int order);
-unsigned char *rans_uncompress_to_4x16(unsigned char *in,  unsigned int in_size,
+unsigned char *rans_uncompress_to_4x16(VBlockP vb, unsigned char *in,  unsigned int in_size,
 				       unsigned char *out, unsigned int *out_size);
-unsigned char *rans_uncompress_4x16(unsigned char *in, unsigned int in_size,
-				    unsigned int *out_size);
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif /* RANS_STATIC4x16_H */

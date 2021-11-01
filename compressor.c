@@ -13,6 +13,7 @@
 #include "strings.h"
 #include "compressor.h"
 #include "zfile.h"
+#include "libdeflate/libdeflate.h"
 
 // compresses data - either a contiguous block or one line at a time. If both are NULL that there is no data to compress.
 // returns data_compressed_len
@@ -49,20 +50,21 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data,
         header->codec = CODEC_NONE;
 
     // use codec's compress function, but if its marked as USE_SUBCODEC, then use sub_codec instead
-    Codec est_size_codec = codec_args[header->codec].est_size ? header->codec : codec_args[header->codec].sub_codec;
+    Codec comp_codec = (codec_args[header->codec].compress != USE_SUBCODEC) ? header->codec : header->sub_codec;
 
-    uint32_t est_compressed_len = codec_args[est_size_codec].est_size (header->codec, data_uncompressed_len); 
+    uint32_t est_compressed_len = codec_args[comp_codec].est_size (header->codec, data_uncompressed_len); 
 
     // allocate what we think will be enough memory. usually this alloc does nothing, as the memory we pre-allocate for z_data is sufficient
     buf_alloc (vb, z_data, compressed_offset + est_compressed_len + encryption_padding_reserve, 0, char, 1.5, 
                z_data->name ? z_data->name : "z_data");
 
-    // use codec's compress function, but if its marked as USE_SUBCODEC, then use sub_codec instead
-    Codec comp_codec = (codec_args[header->codec].compress != USE_SUBCODEC) ? header->codec : codec_args[header->codec].sub_codec;
-
     // compress the data, if we have it...
     if (data_uncompressed_len) {
-        
+
+        // flag.verify-codec: add adler32 of the uncompressed data to the Header, instead of magic
+        if (flag.verify_codec && uncompressed_data && data_uncompressed_len && header->section_type != SEC_NONE)  // TODO: support the callback option
+            header->uncomp_adler32 = libdeflate_adler32 (1, uncompressed_data, data_uncompressed_len);
+
         data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve; // actual memory available - usually more than we asked for in the alloc, because z_data is pre-allocated
 
         codec_verify_free_all (vb, "compressor", comp_codec);
@@ -71,7 +73,7 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data,
         bool success = 
             codec_args[comp_codec].compress (vb, header, uncompressed_data, &data_uncompressed_len,
                                              callback,  
-                                             &z_data->data[z_data->len + compressed_offset], &data_compressed_len,
+                                             AFTERENT(char, *z_data) + compressed_offset, &data_compressed_len,
                                              true);
         codec_free_all (vb); // just in case
 
@@ -113,16 +115,16 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data,
     header->compressed_offset   = BGEN32 (compressed_offset);  // updated value to include header padding
     header->data_compressed_len = BGEN32 (data_compressed_len);   
     header->data_encrypted_len  = BGEN32 (data_encrypted_len); 
-    memcpy (&z_data->data[z_data->len], header, compressed_offset);
+    memcpy (AFTERENT(uint8_t, *z_data), header, compressed_offset);
 
     // encrypt if needed - header & body separately
     unsigned total_z_len;
     if (is_encrypted) {
-        // create good padding (just padding with 0 exposes a cryptographic volnurability)
-        crypt_pad ((uint8_t*)&z_data->data[z_data->len], compressed_offset, header_padding);
+        // create good padding (just padding with 0 exposes a cryptographic vulnerability)
+        crypt_pad (AFTERENT(uint8_t, *z_data), compressed_offset, header_padding);
         
         if (data_uncompressed_len) 
-            crypt_pad ((uint8_t*)&z_data->data[z_data->len + compressed_offset], data_encrypted_len, data_padding);
+            crypt_pad (AFTERENT(uint8_t, *z_data) + compressed_offset, data_encrypted_len, data_padding);
 
         // encrypt the header - we use vb_i, section_type and is_header to generate a different AES key for each section
         uint32_t vb_i  = BGEN32 (header->vblock_i);
@@ -130,11 +132,11 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data,
         // note: for SEC_VB_HEADER we will encrypt at the end of calculating this VB in zfile_update_compressed_vb_header() 
         // and we will then update z_data in memory prior to writing the encrypted data to disk
         if (header->section_type != SEC_VB_HEADER || header->vblock_i == 0 /* terminator vb header */)
-            crypt_do (vb, (uint8_t*)&z_data->data[z_data->len], compressed_offset, vb_i, header->section_type, true);
+            crypt_do (vb, AFTERENT(uint8_t, *z_data), compressed_offset, vb_i, header->section_type, true);
 
         // encrypt the data body 
         if (data_uncompressed_len) 
-            crypt_do (vb, (uint8_t*)&z_data->data[z_data->len + compressed_offset], data_encrypted_len, vb_i, header->section_type, false);
+            crypt_do (vb, AFTERENT(uint8_t, *z_data) + compressed_offset, data_encrypted_len, vb_i, header->section_type, false);
         
         total_z_len = compressed_offset + data_encrypted_len;
     }
@@ -160,8 +162,7 @@ done:
     return data_compressed_len;
 }
 
-void comp_uncompress (VBlock *vb, Codec codec, Codec sub_codec, uint8_t param,
-                      const char *compressed, uint32_t compressed_len,
+void comp_uncompress (VBlock *vb, Codec codec, Codec sub_codec, uint8_t param, STRp(compressed),
                       Buffer *uncompressed_data, uint64_t uncompressed_len)
 {
     ASSERT0 (compressed_len, "compressed_len=0");
@@ -176,7 +177,7 @@ void comp_uncompress (VBlock *vb, Codec codec, Codec sub_codec, uint8_t param,
         codec_verify_free_all (vb, "uncompressor", codec);
 
         vb->codec_using_codec_bufs = codec;
-        codec_args[codec].uncompress (vb, codec, param, compressed, compressed_len, uncompressed_data, uncompressed_len, sub_codec);
+        codec_args[codec].uncompress (vb, codec, param, STRa(compressed), uncompressed_data, uncompressed_len, sub_codec);
         codec_free_all (vb); // just in case
         vb->codec_using_codec_bufs = CODEC_UNKNOWN;
 
@@ -196,7 +197,7 @@ void comp_uncompress (VBlock *vb, Codec codec, Codec sub_codec, uint8_t param,
     if (run_subcodec) { // might run with or without first running the primary codec
         codec_verify_free_all (vb, "uncompressor", sub_codec);
         vb->codec_using_codec_bufs = sub_codec;
-        codec_args[sub_codec].uncompress (vb, sub_codec, param, compressed, compressed_len, uncompressed_data, uncompressed_len, CODEC_UNKNOWN);
+        codec_args[sub_codec].uncompress (vb, sub_codec, param, STRa(compressed), uncompressed_data, uncompressed_len, CODEC_UNKNOWN);
         codec_free_all (vb); // just in case
         vb->codec_using_codec_bufs = CODEC_UNKNOWN;
     }

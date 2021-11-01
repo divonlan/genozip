@@ -14,8 +14,10 @@ bool codec_none_compress (VBlock *vb, SectionHeader *header,
                          char *compressed, uint32_t *compressed_len /* in/out */, 
                          bool soft_fail)
 {
-    if (*compressed_len < *uncompressed_len && soft_fail) return false;
-    ASSERT0 (*compressed_len >= *uncompressed_len, "compressed_len too small");
+    if (*compressed_len < *uncompressed_len && soft_fail) 
+        return false;
+    
+    ASSERT (*compressed_len >= *uncompressed_len, "expecting compressed_len=%u >= uncompressed_len=%u for ", *compressed_len, *uncompressed_len);
 
     if (callback) {
         char *next = compressed;

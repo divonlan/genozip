@@ -344,13 +344,24 @@ static void zip_generate_local (VBlockP vb, ContextP ctx)
     COPY_TIMER (zip_generate_local);
 }
 
-// generate & write b250 data for all contexts
+// generate & write b250 data for all contexts - do them in random order, to reduce the chance of the same context from multiple
+// VBs doing codec_assign_best_codec at the same, so that they can benefit from pre-assiged codecs
 static void zip_compress_b250 (VBlock *vb)
 {
     START_TIMER;
     threads_log_by_vb (vb, "zip", "START COMPRESSING B250", 0);
+    
+    // arrays of all contexts in this VB
+    ContextP ctxs[vb->num_contexts];
+    for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) ctxs[did_i] = CTX(did_i);
 
-    for (ContextP ctx=CTX(0); ctx < CTX(vb->num_contexts); ctx++) {
+    for (unsigned i=0; i < vb->num_contexts; i++) {
+ 
+        // pick context at random and remove it from the list - to reduce the chance of multiple doing codec_assign_best_codec for the same context at the same
+        int ctx_i = global_max_threads >  1 ? (clock() * (vb->vblock_i+1)) % (vb->num_contexts - i) : 0; // force predictability with single thread 
+        
+        ContextP ctx = ctxs[ctx_i];
+        memmove (&ctxs[ctx_i], &ctxs[ctx_i+1], (vb->num_contexts - i - ctx_i - 1) * sizeof (ContextP));
 
         if (!ctx->b250.len) continue;
 
@@ -381,7 +392,18 @@ static void zip_compress_local (VBlock *vb)
     START_TIMER;
     threads_log_by_vb (vb, "zip", "START COMPRESSING LOCAL", 0);
 
-    for (ContextP ctx=CTX(0); ctx < CTX(vb->num_contexts); ctx++) {
+    // we interate twice because some contexts will be empty until other contexts are compressed (eg XCTG after ACTG)
+    // arrays of all contexts in this VB
+    ContextP ctxs[vb->num_contexts];
+    for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) ctxs[did_i] = CTX(did_i);
+
+    for (unsigned i=0; i < vb->num_contexts; i++) {
+
+        // pick context at random and remove it from the list - to reduce the chance of multiple doing codec_assign_best_codec for the same context at the same
+        //int ctx_i = global_max_threads >  1 ? (clock() * (vb->vblock_i+1)) % (vb->num_contexts - i) : 0; // force predictability with single thread 
+        int ctx_i=0; // TODO: for local, compressing out of order requires extra logic as we need to compress the dependent contexts (eg a context XCGT codec is dependent on ACGT) after the independent ones.
+        ContextP ctx = ctxs[ctx_i];
+        memmove (&ctxs[ctx_i], &ctxs[ctx_i+1], (vb->num_contexts - i - ctx_i - 1) * sizeof (ContextP));
 
         if (ctx->local_compressed || (!ctx->local.len && !ctx->local_always)) continue;
 
@@ -393,7 +415,7 @@ static void zip_compress_local (VBlock *vb)
         if (flag.show_time) codec_show_time (vb, "LOCAL", ctx->tag_name, ctx->lcodec);
 
         if (HAS_DEBUG_SEG(ctx)) iprintf ("zip_compress_local: vb_i=%u %s: LOCAL.len=%"PRIu64" LOCAL.param=%"PRIu64"\n", 
-                                         vb->vblock_i, ctx->tag_name, ctx->local.len, ctx->local.param);
+                                        vb->vblock_i, ctx->tag_name, ctx->local.len, ctx->local.param);
 
         START_TIMER; // for compressor_time
 
@@ -401,7 +423,7 @@ static void zip_compress_local (VBlock *vb)
 
         ctx->local_compressed = true; // so we don't compress it again
         ctx->no_stons = true; // since we had data on local, we don't allow ctx_commit_node to move singletons to local
-               
+            
         if (flag.show_time) 
             ctx->compressor_time += CHECK_TIMER; // sum b250 and local
     }

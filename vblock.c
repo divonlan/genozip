@@ -30,6 +30,7 @@ VBlock *evb = NULL;
     func (&vb->ra_buf[1]);           \
     func (&vb->compressed);          \
     func (&vb->z_data);              \
+    func (&vb->z_data_test);         \
     func (&vb->z_section_headers);   \
     func (&vb->spiced_pw);           \
     func (&vb->show_headers_buf);    \

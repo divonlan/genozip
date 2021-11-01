@@ -126,14 +126,16 @@ extern FileP z_file, txt_file;
 typedef enum __attribute__ ((__packed__)) { // 1 byte
     CODEC_UNKNOWN=0, 
     CODEC_NONE=1, CODEC_GZ=2, CODEC_BZ2=3, CODEC_LZMA=4, CODEC_BSC=5, 
-    CODEC_RANS8=6, CODEC_RANS32=7, CODEC_ARITH8=8, CODEC_ARITH32=9,// internal compressors
+    CODEC_RANS8=6, CODEC_RANS32=7, CODEC_RANS8_pack=8, CODEC_RANS32_pack=9, 
     
     CODEC_ACGT    = 10, CODEC_XCGT = 11, // compress sequence data - slightly better compression LZMA, 20X faster (these compress NONREF and NONREF_X respectively)
     CODEC_HAPM    = 12, // compress a VCF haplotype matrix - transpose, then sort lines, then bz2. 
     CODEC_DOMQ    = 13, // compress SAM/FASTQ quality scores, if dominated by a single character
     CODEC_GTSHARK = 14, // compress VCF haplotype matrix with gtshark (discontinued in v12)
     CODEC_PBWT    = 15, // compress VCF haplotype matrix with pbwt
-    
+
+    CODEC_ARITH8=16, CODEC_ARITH32=17, CODEC_ARITH8_pack=18, CODEC_ARITH32_pack=19, 
+
     // external compressors (used by executing an external application)
     CODEC_BGZF=20, CODEC_XZ=21, CODEC_BCF=22, 
     V8_CODEC_BAM=23,    // in v8 BAM was a codec which was compressed using samtools as external compressor. since v9 it is a full data type, and no longer a codec.

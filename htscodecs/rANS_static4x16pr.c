@@ -57,6 +57,7 @@
  */
 
 //#include "config.h"
+#define NO_THREADS
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -70,6 +71,9 @@
 #ifndef NO_THREADS
 #include <pthread.h>
 #endif
+
+#include "../genozip.h"
+#include "../codec.h"
 
 #include "rANS_word.h"
 #include "rANS_static4x16.h"
@@ -376,7 +380,7 @@ unsigned int rans_compress_bound_4x16(unsigned int size, int order) {
 // NB: The output buffer does not hold the original size, so it is up to
 // the caller to store this.
 static
-unsigned char *rans_compress_O0_4x16(unsigned char *in, unsigned int in_size,
+unsigned char *rans_compress_O0_4x16(VBlockP vb, unsigned char *in, unsigned int in_size,
 				     unsigned char *out, unsigned int *out_size) {
     unsigned char *cp, *out_end;
     RansEncSymbol syms[256];
@@ -637,7 +641,6 @@ static int compute_shift(uint32_t *F0, uint32_t (*F)[256], uint32_t *T,
 	    continue;
 	int max_val = round2(T[i]);
 	int ns = 0;
-#define MAX(a,b) ((a)>(b)?(a):(b))
 
 	// Number of samples that get their freq bumped to 1
 	int sm10 = 0, sm12 = 0;
@@ -692,20 +695,21 @@ static int compute_shift(uint32_t *F0, uint32_t (*F)[256], uint32_t *T,
 
 
 static
-unsigned char *rans_compress_O1_4x16(unsigned char *in, unsigned int in_size,
+unsigned char *rans_compress_O1_4x16(VBlockP vb, unsigned char *in, unsigned int in_size,
 				     unsigned char *out, unsigned int *out_size) {
     unsigned char *cp, *out_end, *op;
     unsigned int tab_size;
     RansEncSymbol syms[256][256];
     int bound = rans_compress_bound_4x16(in_size,1)-20; // -20 for order/size/meta
 
-    if (!out) {
+	ASSERTNOTNULL (out);
+/*    if (!out) {
 	*out_size = bound;
-	out = malloc(*out_size);
+	out = codec_alloc (vb, *out_size, 1);
     }
     if (!out || bound > *out_size)
 	return NULL;
-
+*/
     if (((size_t)out)&1)
 	bound--;
     out_end = out + bound;
@@ -716,7 +720,7 @@ unsigned char *rans_compress_O1_4x16(unsigned char *in, unsigned int in_size,
     //memset(F, 0, 256*256*sizeof(int));
     //memset(T, 0, 256*sizeof(int));
 
-    hist1_4(in, in_size, F, T);
+    hist1_4(vb, in, in_size, F, T);
     F[0][in[1*(in_size>>2)]]++;
     F[0][in[2*(in_size>>2)]]++;
     F[0][in[3*(in_size>>2)]]++;
@@ -768,7 +772,7 @@ unsigned char *rans_compress_O1_4x16(unsigned char *in, unsigned int in_size,
 	// try rans0 compression of header
 	unsigned int u_freq_sz = cp-(op+1);
 	unsigned int c_freq_sz;
-	unsigned char *c_freq = rans_compress_O0_4x16(op+1, u_freq_sz, NULL, &c_freq_sz);
+	unsigned char *c_freq = rans_compress_O0_4x16(vb, op+1, u_freq_sz, NULL, &c_freq_sz);
 	if (c_freq && c_freq_sz + 6 < cp-op) {
 	    *op++ |= 1; // compressed
 	    op += var_put_u32(op, NULL, u_freq_sz);
@@ -1135,17 +1139,15 @@ unsigned char *rans_uncompress_O1_4x16(unsigned char *in, unsigned int in_size,
  *
  * Smallest is method, <in_size> <input>, so worst case 2 bytes longer.
  */
-unsigned char *rans_compress_to_4x16(unsigned char *in,  unsigned int in_size,
+unsigned char *rans_compress_to_4x16(VBlockP vb, unsigned char *in, unsigned int in_size,
 				     unsigned char *out, unsigned int *out_size,
 				     int order) {
     unsigned int c_meta_len;
     uint8_t *meta = NULL, *rle = NULL, *packed = NULL;
+	ASSERTNOTNULL (out);
 
-    if (!out) {
-	*out_size = rans_compress_bound_4x16(in_size, order);
-	if (!(out = malloc(*out_size)))
-	    return NULL;
-    }
+	if (*out_size < rans_compress_bound_4x16(in_size, order)) return NULL; // not enough memory
+	
     unsigned char *out_end = out + *out_size;
 
     if (in_size <= 20)
@@ -1158,11 +1160,9 @@ unsigned char *rans_compress_to_4x16(unsigned char *in,  unsigned int in_size,
 	if (N > 255)
 	    return NULL;
 
-	unsigned char *transposed = malloc(in_size);
+	unsigned char *transposed = codec_alloc (vb, in_size, 1);
 	unsigned int part_len[256];
 	unsigned int idx[256];
-	if (!transposed)
-	    return NULL;
 	int i, j, x;
 
 	for (i = 0; i < N; i++) {
@@ -1194,7 +1194,7 @@ unsigned char *rans_compress_to_4x16(unsigned char *in,  unsigned int in_size,
 		if ((order & m[j]) != m[j])
                     continue;
                 olen2 = *out_size - (out2 - out);
-                rans_compress_to_4x16(transposed+idx[i], part_len[i],
+                rans_compress_to_4x16(vb, transposed+idx[i], part_len[i],
 				      out2, &olen2, m[j] | X_NOSZ);
                 if (best_sz > olen2) {
                     best_sz = olen2;
@@ -1203,14 +1203,14 @@ unsigned char *rans_compress_to_4x16(unsigned char *in,  unsigned int in_size,
             }
 	    if (best_j != j-1) {
 		olen2 = *out_size - (out2 - out);
-		rans_compress_to_4x16(transposed+idx[i], part_len[i],
+		rans_compress_to_4x16(vb, transposed+idx[i], part_len[i],
 				      out2, &olen2, m[best_j] | X_NOSZ);
 	    }
             out2 += olen2;
             c_meta_len += var_put_u32(out+c_meta_len, out_end, olen2);
         }
 	memmove(out+c_meta_len, out2_start, out2-out2_start);
-	free(transposed);
+
 	*out_size = c_meta_len + out2-out2_start;
 	return out;
     }
@@ -1295,7 +1295,7 @@ unsigned char *rans_compress_to_4x16(unsigned char *in,  unsigned int in_size,
 	    int sz = var_put_u32(out+c_meta_len, out_end, rmeta_len*2), sz2;
 	    sz += var_put_u32(out+c_meta_len+sz, out_end, rle_len);
 	    c_rmeta_len = *out_size - (c_meta_len+sz+5);
-	    rans_compress_O0_4x16(meta, rmeta_len, out+c_meta_len+sz+5, &c_rmeta_len);
+	    rans_compress_O0_4x16(vb, meta, rmeta_len, out+c_meta_len+sz+5, &c_rmeta_len);
 	    if (c_rmeta_len < rmeta_len) {
 		sz2 = var_put_u32(out+c_meta_len+sz, out_end, c_rmeta_len);
 		memmove(out+c_meta_len+sz+sz2, out+c_meta_len+sz+5, c_rmeta_len);
@@ -1325,9 +1325,9 @@ unsigned char *rans_compress_to_4x16(unsigned char *in,  unsigned int in_size,
     }
 
     if (order == 1)
-	rans_compress_O1_4x16(in, in_size, out+c_meta_len, out_size);
+	rans_compress_O1_4x16(vb, in, in_size, out+c_meta_len, out_size);
     else
-	rans_compress_O0_4x16(in, in_size, out+c_meta_len, out_size);
+	rans_compress_O0_4x16(vb, in, in_size, out+c_meta_len, out_size);
 
     if (*out_size >= in_size) {
 	out[0] &= ~3;
@@ -1344,12 +1344,7 @@ unsigned char *rans_compress_to_4x16(unsigned char *in,  unsigned int in_size,
     return out;
 }
 
-unsigned char *rans_compress_4x16(unsigned char *in, unsigned int in_size,
-				  unsigned int *out_size, int order) {
-    return rans_compress_to_4x16(in, in_size, NULL, out_size, order);
-}
-
-unsigned char *rans_uncompress_to_4x16(unsigned char *in,  unsigned int in_size,
+unsigned char *rans_uncompress_to_4x16(VBlockP vb, unsigned char *in,  unsigned int in_size,
 				       unsigned char *out, unsigned int *out_size) {
     unsigned char *in_end = in + in_size;
     unsigned char *out_free = NULL, *tmp_free = NULL, *meta_free = NULL;
@@ -1416,7 +1411,7 @@ unsigned char *rans_uncompress_to_4x16(unsigned char *in,  unsigned int in_size,
 		free(outN);
 		return NULL;
 	    }
-	    if (!rans_uncompress_to_4x16(in+c_meta_len, in_size-c_meta_len, outN + idxN[i], &olen)
+	    if (!rans_uncompress_to_4x16(vb, in+c_meta_len, in_size-c_meta_len, outN + idxN[i], &olen)
 		|| olen != ulenN[i]) {
 		free(out_free);
 		free(outN);
@@ -1633,9 +1628,4 @@ unsigned char *rans_uncompress_to_4x16(unsigned char *in,  unsigned int in_size,
     free(out_free);
     free(tmp_free);
     return NULL;
-}
-
-unsigned char *rans_uncompress_4x16(unsigned char *in, unsigned int in_size,
-				    unsigned int *out_size) {
-    return rans_uncompress_to_4x16(in, in_size, NULL, out_size);
 }

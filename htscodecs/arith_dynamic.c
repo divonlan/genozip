@@ -45,6 +45,7 @@
 #define X_ORDER  0x03    // Mask to obtain order
 
 //#include "config.h"
+#define NO_THREADS
 
 #ifdef HAVE_LIBBZ2
 #include <bzlib.h>
@@ -61,6 +62,8 @@
 #ifndef NO_THREADS
 #include <pthread.h>
 #endif
+
+#include "../codec.h"
 
 #include "arith_dynamic.h"
 #include "varint.h"
@@ -618,17 +621,15 @@ unsigned char *arith_uncompress_O1_RLE(unsigned char *in, unsigned int in_size,
  *
  * Smallest is method, <in_size> <input>, so worst case 2 bytes longer.
  */
-unsigned char *arith_compress_to(unsigned char *in,  unsigned int in_size,
+unsigned char *arith_compress_to(VBlockP vb, unsigned char *in,  unsigned int in_size,
 				 unsigned char *out, unsigned int *out_size,
 				 int order) {
     unsigned int c_meta_len;
     uint8_t *rle = NULL, *packed = NULL;
 
-    if (!out) {
-	*out_size = arith_compress_bound(in_size, order);
-	if (!(out = malloc(*out_size)))
-	    return NULL;
-    }
+	ASSERTNOTNULL (out);
+	if (*out_size < arith_compress_bound(in_size, order)) return NULL; // not enough memory
+
     unsigned char *out_end = out + *out_size;
 
     if (in_size <= 20)
@@ -734,7 +735,7 @@ unsigned char *arith_compress_to(unsigned char *in,  unsigned int in_size,
 		if ((order&3) == 0 && (m[MIN(i,3)][j]&1))
 		    continue;
 
-                arith_compress_to(transposed+idx[i], part_len[i],
+                arith_compress_to(vb, transposed+idx[i], part_len[i],
 				  out2, &olen2, m[MIN(i,3)][j] | X_NOSZ);
 		if (best_sz > olen2) {
 		    best_sz = olen2;
@@ -745,7 +746,7 @@ unsigned char *arith_compress_to(unsigned char *in,  unsigned int in_size,
 //		return NULL;
 	    if (best_j != j-1) {
 		olen2 = *out_size - (out2 - out);
-		arith_compress_to(transposed+idx[i], part_len[i],
+		arith_compress_to(vb, transposed+idx[i], part_len[i],
 				  out2, &olen2, m[MIN(i,3)][best_j] | X_NOSZ);
 	    }
 	    out2 += olen2;
@@ -862,12 +863,7 @@ unsigned char *arith_compress_to(unsigned char *in,  unsigned int in_size,
     return out;
 }
 
-unsigned char *arith_compress(unsigned char *in, unsigned int in_size,
-			      unsigned int *out_size, int order) {
-    return arith_compress_to(in, in_size, NULL, out_size, order);
-}
-
-unsigned char *arith_uncompress_to(unsigned char *in,  unsigned int in_size,
+unsigned char *arith_uncompress_to(VBlockP vb, unsigned char *in,  unsigned int in_size,
 				   unsigned char *out, unsigned int *out_size) {
     unsigned char *in_end = in + in_size;
     unsigned char *out_free = NULL;
@@ -935,7 +931,7 @@ unsigned char *arith_uncompress_to(unsigned char *in,  unsigned int in_size,
 		free(outN);
 		return NULL;
 	    }
-	    if (!arith_uncompress_to(in+c_meta_len, in_size-c_meta_len, outN + idxN[i], &olen)
+	    if (!arith_uncompress_to(vb, in+c_meta_len, in_size-c_meta_len, outN + idxN[i], &olen)
 		|| olen != ulenN[i]) {
 		free(out_free);
 		free(outN);
@@ -1113,7 +1109,3 @@ unsigned char *arith_uncompress_to(unsigned char *in,  unsigned int in_size,
     return NULL;
 }
 
-unsigned char *arith_uncompress(unsigned char *in, unsigned int in_size,
-				unsigned int *out_size) {
-    return arith_uncompress_to(in, in_size, NULL, out_size);
-}
