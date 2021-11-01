@@ -740,7 +740,7 @@ static Range *ref_seg_get_locked_range_denovo (VBlockP vb, Reference ref, WordIn
         if (range->range_i != range_i || !str_issame (vb->chrom_name, range->chrom_name)) {
             *lock = ref_unlock (ref, *lock);
 
-            ASSERTW (!flag.seg_only, "Warning: ref range contention: chrom=%.*s pos=%u (this slightly affects compression ratio, but is harmless)", 
+            ASSERTW (!flag.seg_only && !flag.debug, "DEBUG: ref range contention: chrom=%.*s pos=%u (this slightly affects compression ratio, but is harmless)", 
                      vb->chrom_name_len, vb->chrom_name, (uint32_t)pos); // only show this in --seg-only
 
             range = NULL;  // no soup for you

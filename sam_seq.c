@@ -84,6 +84,7 @@ void sam_seg_SEQ (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), const PosType p
         
         bit_array_clear_region (bitmap, bitmap_ctx->next_local, ref_and_seq_consumed); // note: vb->ref_and_seq_consumed==0 if cigar="*"
         bitmap_ctx->next_local += ref_and_seq_consumed;
+        vb->mismatch_bases     += ref_and_seq_consumed;
 
         random_access_update_last_pos (VB, DC_PRIMARY, pos + ref_consumed - 1);
 
@@ -135,7 +136,7 @@ void sam_seg_SEQ (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), const PosType p
                 // will be needed for pizzing. With REF_INTERNAL, this is equivalent to saying we have set the ref value for the site
                 if (flag.reference == REF_INTERNAL && range && normal_base 
                     && !ref_is_nucleotide_set (range, actual_next_ref)) { 
-                    
+
                     ref_set_nucleotide (range, actual_next_ref, seq[i]);
                     bit_array_set (&range->is_set, actual_next_ref); // we will need this ref to reconstruct
                     bit_i++; // bit remains set. cannot increment inside the macro
@@ -308,7 +309,7 @@ void sam_reconstruct_SEQ (VBlock *vb_, Context *bitmap_ctx, const char *unused, 
     bool uses_ref_data = vb->ref_consumed && 
                          (bit_array_num_bits_set_region (buf_get_bitarray (&bitmap_ctx->local), bitmap_ctx->next_local, vb->ref_and_seq_consumed) > 0);
     bitmap_ctx->last_value.i = bitmap_ctx->next_local; // for SEQ, we use last_value for storing the beginning of the sequence
-    
+
     range = uses_ref_data ? ref_piz_get_range (vb_, gref, pos, vb->ref_consumed) : NULL; 
     vb->range = (RangeP)range; // store is vb->range too, for sam_piz_special_MD
 
