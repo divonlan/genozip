@@ -549,7 +549,7 @@ void container_display (ConstContainerP con)
 
 // Translators reconstructing last_value as a little endian binary
 #define SET_n(type,mn,mx) type n = (type)ctx->last_value.i; \
-                           ASSINP (ctx->last_value.i>=(int64_t)(mn) && ctx->last_value.i<=(int64_t)(mx), "Error: Failed to convert %s to %s because of bad data in line %"PRIu64" of the %s file: value of %s=%"PRId64" is out of range [%"PRId64"-%"PRId64"]",\
+                           ASSPIZ (ctx->last_value.i>=(int64_t)(mn) && ctx->last_value.i<=(int64_t)(mx), "Error: Failed to convert %s to %s because of bad data in line %"PRIu64" of the %s file: value of %s=%"PRId64" is out of range [%"PRId64"-%"PRId64"]",\
                                    dt_name (z_file->data_type), dt_name (flag.out_dt), vb->line_i, dt_name (z_file->data_type), \
                                    ctx->tag_name, (int64_t)(ctx->last_value.i), (int64_t)(mn), (int64_t)(mx))
 

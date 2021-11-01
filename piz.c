@@ -36,6 +36,27 @@
 #include "chrom.h"
 #include "txtheader.h"
 
+// output coordinates of current line (for error printing) - very carefully as we are in an error condition - we can't assume anything
+PizDisCoords piz_dis_coords (VBlockP vb)
+{
+    PizDisCoords out = {};
+    if (DTF(prim_chrom) == DID_I_NONE || !ctx_has_value (vb, DTF(prim_chrom))) return out;
+    
+    ContextP chrom_ctx = CTX(DTF(prim_chrom));
+    WordIndex chrom = chrom_ctx->last_value.i;
+    if (chrom < 0 || chrom >= chrom_ctx->word_list.len) return out; // not a valid chrom value
+
+    const char *chrom_str = ctx_get_snip_by_word_index (chrom_ctx, chrom, 0, 0);
+    if (strlen (chrom_str) > sizeof(out.s)-20) return out;
+
+    sprintf (out.s, " CHROM=%s", chrom_str); // with leading space
+
+    if (DTF(pos) == DID_I_NONE || !ctx_has_value (vb, DTF(pos))) return out;
+    
+    sprintf (&out.s[strlen(out.s)], " POS=%"PRId64, CTX(DTF(pos))->last_value.i);
+    return out;
+}
+
 bool piz_grep_match (const char *start, const char *after)
 {
     bool found = false;

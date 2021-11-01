@@ -1085,13 +1085,20 @@ CtxNode *ctx_get_node_by_word_index (ConstContextP ctx, WordIndex word_index)
     ABORT_R ("ctx_get_node_by_word_index failed to find word_index=%d in did_i=%u", word_index, ctx->did_i);
 }
 
-// PIZ: get snip by normal word index (doesn't support WORD_INDEX_*)
+// PIZ: get snip by normal word index (doesn't support WORD_INDEX_* - returns "")
 const char *ctx_get_snip_by_word_index (ConstContextP ctx, WordIndex word_index, STRp(*snip))
 {
     ASSERT (buf_is_alloc (&ctx->word_list), "word_list is not allocated for ctx=%s", ctx->tag_name);
 
     ASSERT ((uint32_t)word_index < ctx->word_list.len, "word_index=%d out of range: word_list.len=%u for ctx=%s",
             word_index, (uint32_t)ctx->word_list.len, ctx->tag_name);
+
+    if (word_index < 0) {
+        static const char *empty="";
+        if (snip) *snip = empty;
+        if (snip_len) *snip_len = 0;
+        return empty;
+    }
 
     CtxWord *word = ENT (CtxWord, ctx->word_list, word_index);
     const char *my_snip = ENT (const char, ctx->dict, word->char_index);
