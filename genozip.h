@@ -57,6 +57,7 @@ typedef const struct RAEntry *ConstRAEntryP;
 typedef struct Mutex *MutexP;
 typedef struct RefStruct *Reference;
 typedef struct Contig *ContigP;
+typedef const struct Contig *ConstContigP;
 typedef struct ContigPkg *ContigPkgP;
 typedef const struct ContigPkg *ConstContigPkgP;
 typedef union SamFlags *SamFlagsP;

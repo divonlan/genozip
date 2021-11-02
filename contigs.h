@@ -71,6 +71,7 @@ extern WordIndex contigs_get_matching (ConstContigPkgP ctgs, STRp(name), PosType
 extern const char *contigs_get_name (ConstContigPkgP ctgs, WordIndex index, unsigned *contig_name_len /* optional */);
 extern WordIndex contigs_get_by_ref_index (ConstContigPkgP ctgs,WordIndex ref_index);
 static inline PosType contigs_get_LN (ConstContigPkgP ctgs, WordIndex index) { return ENT (Contig, ctgs->contigs, index)->max_pos; }
+static inline PosType contigs_get_gpos (ConstContigPkgP ctgs, WordIndex index) { return ENT (Contig, ctgs->contigs, index)->gpos; }
 
 // iterator
 typedef void (*ContigsIteratorCallback)(STRp(contig_name), PosType last_pos, void *callback_param);

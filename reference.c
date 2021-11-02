@@ -718,6 +718,15 @@ static inline uint32_t ref_range_id_by_hash (VBlockP vb, uint32_t range_i)
     return value; 
 }
 
+// get GPOS for SAM header contig, when a file is to be compressed with REF_INTERNAL
+PosType ref_samheader_denovo_get_header_contig_gpos (ConstContigP prev_contig)
+{
+    if (flag.reference != REF_INTERNAL || !prev_contig) return 0;
+
+    // gpos is aligned to REF_NUM_DENOVO_SITES_PER_RANGE
+    return ROUNDUP1M (prev_contig->gpos + prev_contig->max_pos); // each contig is divided to a whole number of denovo ranges, each of length REF_NUM_DENOVO_SITES_PER_RANGE
+}
+
 static Range *ref_seg_get_locked_range_denovo (VBlockP vb, Reference ref, WordIndex chrom, PosType pos, const char *field /* used for ASSSEG */, RefLock *lock)  
 {
     uint32_t range_i = pos2range_i (pos); // range within contig 
@@ -728,16 +737,24 @@ static Range *ref_seg_get_locked_range_denovo (VBlockP vb, Reference ref, WordIn
         return vb->prev_range[0];
     }
 
-    uint32_t range_id = ref_range_id_by_hash (vb, range_i);
+    // in a headered SAM, requesting we return NULL if the range is beyond the declared contig's ranges (may be beyond LN as rounded to 1Mb)
+    if (sam_hdr_contigs && pos > contigs_get_LN (sam_hdr_contigs, chrom) && 
+        pos >= ROUNDUP1M (contigs_get_LN (sam_hdr_contigs, chrom))) // end of last range for this contig. note: for optimization, we first test just contigs_get_LN - faster 
+        return NULL;
+
+    // in case of header contigs, sam_seg_RNAME_RNEXT enforces that chrom is defined in the header
+    uint32_t range_id = sam_hdr_contigs ? (contigs_get_gpos (sam_hdr_contigs, chrom) >> REF_NUM_DENOVO_SITES_PER_RANGE_BITS) + range_i // note: GPOS maybe beyond 4GB
+                                        : ref_range_id_by_hash (vb, range_i);
     ASSSEG (range_id < ref->ranges.len, field, "range_id=%u expected to be smaller than ranges.len=%u", range_id, (uint32_t)ref->ranges.len);
 
     Range *range = ENT (Range, ref->ranges, range_id);
     *lock = ref_lock_range (ref, range_id);
 
+    // case: range is already initialized 
     if (range->ref.nbits) {
 
-        // check for hash conflict 
-        if (range->range_i != range_i || !str_issame (vb->chrom_name, range->chrom_name)) {
+        // check for hash conflict (can only happen in headerless mode)
+        if (!sam_hdr_contigs && (range->range_i != range_i || !str_issame (vb->chrom_name, range->chrom_name))) {
             *lock = ref_unlock (ref, *lock);
 
             ASSERTW (!flag.seg_only && !flag.debug, "DEBUG: ref range contention: chrom=%.*s pos=%u (this slightly affects compression ratio, but is harmless)", 
@@ -755,7 +772,7 @@ static Range *ref_seg_get_locked_range_denovo (VBlockP vb, Reference ref, WordIn
         .first_pos      = range_i2pos (range_i),
         .last_pos       = range_i2pos (range_i) + REF_NUM_DENOVO_SITES_PER_RANGE - 1,
         .chrom_name_len = vb->chrom_name_len,
-        .chrom          = WORD_INDEX_NONE,  // Note: in REF_INTERNAL the chrom index is private to the VB prior to merge, so we can't use it
+        .chrom          = WORD_INDEX_NONE,  // Note: in REF_INTERNAL, in a headerless file, the chrom index is private to the VB prior to merge, so we can't use it 
         .chrom_name     = MALLOC (vb->chrom_name_len),
         .ref            = bit_array_alloc (REF_NUM_DENOVO_SITES_PER_RANGE * 2, false),
         .is_set         = bit_array_alloc (REF_NUM_DENOVO_SITES_PER_RANGE, true), // nothing is set yet - in ZIP, bits get set as they are encountered in the compressing txt file

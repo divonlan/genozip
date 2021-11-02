@@ -56,17 +56,21 @@ static void sam_header_add_contig (STRp (contig_name), PosType LN, void *out_ref
         }
     }
 
+    // In case of REF_INTERNAL compression, and we have a header contigs - we pre-allocate the range space
+    PosType gpos = ref_samheader_denovo_get_header_contig_gpos (sam_hdr_contigs->contigs.len ? LASTENT (Contig, sam_hdr_contigs->contigs) : NULL);
+
     // add to contigs. note: index is sam_hdr_contigs is by order of appearance in header, not the same as the reference
     NEXTENT (Contig, sam_hdr_contigs->contigs) = (Contig){ 
         .max_pos    = LN,        // if last_pos was provided, it is unchanged, and verified = the pos in ref. if not provided, it is what the reference says.
         .char_index = sam_hdr_contigs->dict.len, 
         .snip_len   = contig_name_len,
-        .ref_index  = ref_index  // matching reference contig (with possibly a different variation of the contig name)
+        .ref_index  = ref_index, // matching reference contig (with possibly a different variation of the contig name)
+        .gpos       = gpos
     };
 
     if (flag.show_txt_contigs) 
-        iprintf ("index=%u \"%.*s\" LN=%"PRId64" ref_index=%d snip_len=%u\n", 
-                 (unsigned)sam_hdr_contigs->contigs.len-1, STRf(contig_name), LN, ref_index, contig_name_len);
+        iprintf ("index=%u \"%.*s\" LN=%"PRId64" ref_index=%d snip_len=%u gpos=%"PRId64"\n", 
+                 (unsigned)sam_hdr_contigs->contigs.len-1, STRf(contig_name), LN, ref_index, contig_name_len, gpos);
 
     // add to contigs_dict
     buf_add_more (NULL, &sam_hdr_contigs->dict, contig_name, contig_name_len, NULL);

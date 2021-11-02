@@ -37,12 +37,14 @@ typedef struct Range {
 #define ref_size(r) ((r) ? ((r)->last_pos - (r)->first_pos + 1) : 0)
 
 #define REF_NUM_DENOVO_RANGES (1 << 20)
-#define REF_NUM_DENOVO_SITES_PER_RANGE (1 << 20) // 1 Mbp
+
+#define REF_NUM_DENOVO_SITES_PER_RANGE_BITS 20 // 1 Mbp
+#define REF_NUM_DENOVO_SITES_PER_RANGE (1 << REF_NUM_DENOVO_SITES_PER_RANGE_BITS) // 1 Mbp
 
 // ZIP ONLY: access range_i and index within range, for ranges configured for ZIP
-#define range_i2pos(range_i) ((PosType)(range_i) * REF_NUM_DENOVO_SITES_PER_RANGE)
-#define pos2range_i(pos)   ((uint32_t)((pos) / REF_NUM_DENOVO_SITES_PER_RANGE))
-#define pos2range_idx(pos) ((uint32_t)((pos) % REF_NUM_DENOVO_SITES_PER_RANGE))
+#define range_i2pos(range_i) ((PosType)(range_i) << REF_NUM_DENOVO_SITES_PER_RANGE_BITS)
+#define pos2range_i(pos)   ((uint32_t)((pos) >> REF_NUM_DENOVO_SITES_PER_RANGE_BITS))
+#define pos2range_idx(pos) ((uint32_t)((pos) & (REF_NUM_DENOVO_SITES_PER_RANGE-1)))
 
 // locks
 typedef struct { int32_t first_mutex, last_mutex; } RefLock;
@@ -73,6 +75,7 @@ extern MemStats ref_memory_consumption (const Reference ref);
 extern const Range *ref_piz_get_range (VBlockP vb, Reference ref, PosType first_pos_needed, uint32_t num_nucleotides_needed);
 extern Range *ref_get_range_by_ref_index (VBlockP vb, Reference ref, WordIndex ref_contig_index);
 extern Range *ref_seg_get_locked_range (VBlockP vb, Reference ref, WordIndex chrom, STRp(chrom_name), PosType pos, uint32_t seq_len, WordIndex ref_index, const char *field /* used for ASSSEG */, RefLock *lock);
+extern PosType ref_samheader_denovo_get_header_contig_gpos (ConstContigP prev_contig);
 extern const char *ref_get_cram_ref (const Reference ref);
 extern void ref_generate_reverse_complement_genome (Reference ref);
 extern const char *ref_get_filename (const Reference ref);

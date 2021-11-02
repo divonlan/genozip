@@ -88,8 +88,10 @@ extern void ref_contigs_compress_ext_store (Reference ref);
 
 #define IS_REF_INTERNAL(f) (((f)->data_type == DT_SAM || (f)->data_type == DT_BAM) && (f)->z_flags.dts_ref_internal)
 
-#define ROUNDUP32(x) (((x) + 32) & ~(typeof(x))0x1f) // round up to the nearest 32
-#define ROUNDDOWN32(x) ((x)      & ~(typeof(x))0x1f) // round down to the nearest 32
+#define ROUNDUP32(x) (((x) + 0x1f)    & ~(typeof(x))0x1f)    // round up to the nearest 32
+#define ROUNDDOWN32(x) ((x)           & ~(typeof(x))0x1f)    // round down to the nearest 32
 
-#define ROUNDUP64(x) (((x) + 63) & ~(typeof(x))0x3f) // round up to the nearest 64
-#define ROUNDDOWN64(x) ((x)      & ~(typeof(x))0x3f) // round down to the nearest 64
+#define ROUNDUP64(x) (((x) + 0x3f)    & ~(typeof(x))0x3f)    // round up to the nearest 64
+#define ROUNDDOWN64(x) ((x)           & ~(typeof(x))0x3f)    // round down to the nearest 64
+
+#define ROUNDUP1M(x) (((x) + 0xfffff) & ~(typeof(x))0xfffff) // round up to the nearest 64

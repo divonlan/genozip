@@ -252,9 +252,9 @@ void sam_seg_SEQ (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), const PosType p
     }
 
 align_nonref_local: {
-// we align nonref_ctx->local to a 4-character boundary. this is because CODEC_ACGT squeezes every 4 characters into a byte,
+    // we align nonref_ctx->local to a 4-character boundary. this is because CODEC_ACGT squeezes every 4 characters into a byte,
     // before compressing it with LZMA. In sorted SAM, we want subsequent identical sequences to have the same byte alignment
-    // so that LZMA can catch their identicality.
+    // so that LZMA can catch their identicality. (note: as of v13, we assign a codec rather than hard-coding LZMA, but it is usually LZMA anyway)
     uint64_t add_chars = (4 - (nonref_ctx->local.len & 3)) & 3;
     if (add_chars) buf_add (&nonref_ctx->local, "AAA", add_chars); // add 1 to 3 As
 }

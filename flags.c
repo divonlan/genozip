@@ -1250,6 +1250,7 @@ void flags_store_command_line (int argc, char **argv)
 
     if ((pw = crypt_get_password())) pw_len  = strlen (pw);
 
+    const char *slash;
     for (int i=0; i < argc; i++) {
 
         unsigned arg_len = strlen (argv[i]);
@@ -1266,6 +1267,12 @@ void flags_store_command_line (int argc, char **argv)
             ASSINP (arg_len < BUFPRINTF_MAX_LEN-10, "argument %u longer than maximum allowed %u characters: %s", i, BUFPRINTF_MAX_LEN-10, argv[i]);
             bufprintf (evb, &command_line, "%.*s***%s", arg_len-pw_len, argv[i], (i < argc-1 ? " ": "")); // hide password
         }
+
+        else if (!i && (slash = strrchr (argv[0], '/')))
+            bufprintf (evb, &command_line, "%s ", slash+1);
+
+        else if (!i && (slash = strrchr (argv[0], '\\')))
+            bufprintf (evb, &command_line, "%s ", slash+1);
 
         else {
             buf_add_string (evb, &command_line, argv[i]);       // can't use bufprintf because argv[i] length is unbound
