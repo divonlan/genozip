@@ -196,7 +196,7 @@ uint32_t zfile_compress_b250_data (VBlock *vb, Context *ctx)
         .h.section_type          = SEC_B250,
         .h.data_uncompressed_len = BGEN32 (ctx->b250.len),
         .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderCtx)),
-        .h.codec                 = ctx->bcodec == CODEC_UNKNOWN ? CODEC_BZ2 : ctx->bcodec,
+        .h.codec                 = ctx->bcodec == CODEC_UNKNOWN ? CODEC_RANS8 : ctx->bcodec,
         .h.vblock_i              = BGEN32 (vb->vblock_i),
         .h.flags.ctx             = flags,
         .dict_id                 = ctx->dict_id,
@@ -241,7 +241,7 @@ uint32_t zfile_compress_local_data (VBlock *vb, Context *ctx, uint32_t sample_si
         .h.section_type          = SEC_LOCAL,
         .h.data_uncompressed_len = BGEN32 (uncompressed_len),
         .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderCtx)),
-        .h.codec                 = ctx->lcodec == CODEC_UNKNOWN ? CODEC_BZ2 : ctx->lcodec, // if codec has not been decided yet, fall back on BZ2
+        .h.codec                 = ctx->lcodec == CODEC_UNKNOWN ? CODEC_RANS8 : ctx->lcodec, // if codec has not been decided yet, fall back on RANS8
         .h.sub_codec             = ctx->lsubcodec_piz ? ctx->lsubcodec_piz : CODEC_UNKNOWN,
         .h.vblock_i              = BGEN32 (vb->vblock_i),
         .h.flags.ctx             = flags,
@@ -706,10 +706,13 @@ void zfile_compress_genozip_header (Digest single_component_digest)
 
     uint32_t num_sections = z_file->section_list_buf.len;
 
+    z_file->section_list_buf.len *= sizeof (SectionEnt);
+    Codec codec = codec_assign_best_codec (evb, NULL, &z_file->section_list_buf, SEC_GENOZIP_HEADER);
+
     header.h.magic                 = BGEN32 (GENOZIP_MAGIC);
     header.h.compressed_offset     = BGEN32 (sizeof (SectionHeaderGenozipHeader));
-    header.h.data_uncompressed_len = BGEN32 (z_file->section_list_buf.len * sizeof (SectionEnt));
-    header.h.codec                 = CODEC_BZ2;
+    header.h.data_uncompressed_len = BGEN32 (z_file->section_list_buf.len);
+    header.h.codec                 = codec == CODEC_UNKNOWN ? CODEC_NONE : codec;
     header.h.flags.genozip_header  = (struct FlagsGenozipHeader) {
         .txt_is_bin   = DTPT (is_binary),
         .dt_specific  = (DT_FUNC (z_file, zip_dts_flag)()),
@@ -726,7 +729,9 @@ void zfile_compress_genozip_header (Digest single_component_digest)
     header.num_lines_bound = BGEN64 (z_file->num_lines);
     header.num_sections    = BGEN32 (num_sections); 
     header.num_components  = BGEN32 (z_file->num_txt_components_so_far);
-    
+
+    z_file->section_list_buf.len /= sizeof (SectionEnt); // restore
+
     // when decompressing will require an external reference, we set header.ref_filename to the name of the genozip reference file
     if (flag.reference == REF_EXTERNAL || flag.reference == REF_MAKE_CHAIN) {   
         strncpy (header.ref_filename, ref_get_filename (gref), REF_FILENAME_LEN-1);
@@ -797,12 +802,14 @@ void zfile_write_txt_header (Buffer *txt_header,
                              uint64_t unmodified_txt_header_len, // length of header before modifications, eg due to --chain or compressing a Luft file
                              Digest header_md5, bool is_first_txt)
 {
+    Codec codec = codec_assign_best_codec (evb, NULL, txt_header, SEC_TXT_HEADER);
+
     SectionHeaderTxtHeader header = {
         .h.magic                   = BGEN32 (GENOZIP_MAGIC),
         .h.section_type            = SEC_TXT_HEADER,
         .h.data_uncompressed_len   = BGEN32 (txt_header->len),
         .h.compressed_offset       = BGEN32 (sizeof (SectionHeaderTxtHeader)),
-        .h.codec                   = CODEC_BZ2,
+        .h.codec                   = (codec == CODEC_UNKNOWN) ? CODEC_NONE : codec,
         .h.flags.txt_header        = { .rejects_coord = flag.rejects_coord,
                                        .is_txt_luft   = (txt_file->coords == DC_LUFT) },
         .codec                     = txt_file->codec, 

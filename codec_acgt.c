@@ -43,12 +43,13 @@ const uint8_t acgt_encode[256] = { ['A']=0, ['C']=1, ['G']=2, ['T']=3,  // all o
 
 void codec_acgt_comp_init (VBlock *vb)
 {
-        Context *nonref_ctx   = CTX(DTF(nonref));
-        nonref_ctx->lcodec    = CODEC_ACGT; // ACGT is better than LZMA and BSC
-        nonref_ctx->ltype     = LT_SEQUENCE;
+        Context *nonref_ctx     = CTX(DTF(nonref));
+        nonref_ctx->lcodec      = CODEC_ACGT; // ACGT is better than LZMA and BSC
+        nonref_ctx->ltype       = LT_SEQUENCE;
 
-        Context *nonref_x_ctx = nonref_ctx + 1;
-        nonref_x_ctx->ltype   = LT_UINT8;
+        Context *nonref_x_ctx   = nonref_ctx + 1;
+        nonref_x_ctx->ltype     = LT_UINT8;
+        nonref_x_ctx->local_dep = 1; // NONREF_X.local is created with NONREF.local is compressed
 }
 
 // packing of an array A,G,C,T characters into a 2-bit BitArray, stored in vb->compressed. 

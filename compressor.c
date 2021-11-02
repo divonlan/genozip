@@ -79,7 +79,7 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data,
 
         // if output buffer is too small, increase it, and try again
         if (!success) {
-            buf_alloc (vb, z_data, compressed_offset + data_uncompressed_len * 1.5 + encryption_padding_reserve + 50, /* > BZ_N_OVERSHOOT, LIBBSC_HEADER_SIZE */
+            buf_alloc (vb, z_data, compressed_offset + data_uncompressed_len * 1.5 + encryption_padding_reserve + 100000, /* +100K required by RAN, ART */
                        0, char, 1, z_data->name ? z_data->name : "z_data");
             
             data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve;

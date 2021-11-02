@@ -76,12 +76,12 @@ static void codec_uncompress_error (VBlock *vb, Codec codec, uint8_t param,
                                     Buffer *uncompressed_buf, uint64_t uncompressed_len,
                                     Codec sub_codec)
 {
-    ABORT ("Error in comp_uncompress: Unsupported codec: %s", codec_name (codec));
+    ABORT ("Error in comp_uncompress: Unsupported codec: %s. Please upgrade to the most recent version of Genozip.", codec_name (codec));
 }
 
 static void codec_reconstruct_error (VBlockP vb, Codec codec, ContextP ctx)
 {
-    ABORT ("Error in reconstruct_from_ctx_do: in ctx=%s - codec %s has no LT_CODEC reconstruction", 
+    ABORT ("Error in reconstruct_from_ctx_do: in ctx=%s - codec %s has no LT_CODEC reconstruction. Please upgrade to the most recent version of Genozip.", 
            dis_dict_id (ctx->dict_id).s, codec_name (codec));
 }
 
@@ -201,8 +201,8 @@ Codec codec_assign_best_codec (VBlockP vb,
 
     CodecTest tests[] = { { CODEC_BZ2 }, { CODEC_NONE }, { CODEC_BSC }, { CODEC_LZMA }, 
                           { CODEC_RANS8 }, { CODEC_RANS32 }, { CODEC_RANS8_pack }, { CODEC_RANS32_pack }, 
-                          /*{ CODEC_ARITH8 },*/ { CODEC_ARITH32 }, /*{ CODEC_ARITH8_pack },*/ { CODEC_ARITH32_pack } };
-    const unsigned num_tests = 10;
+                          /*{ CODEC_ARITH8 }, { CODEC_ARITH32 }, { CODEC_ARITH8_pack }, { CODEC_ARITH32_pack } */ }; // not using for now due to bug in arith_dynamic
+    const unsigned num_tests = 8;
     
     // set data
     if (!data)

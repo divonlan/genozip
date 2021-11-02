@@ -69,7 +69,7 @@ typedef struct Context {
     Codec lcodec, bcodec;      // codec used to compress local and b250
     Codec lsubcodec_zip;       // zip to compress with this codec AFTER compressing with lcodec
     Codec lsubcodec_piz;       // piz to decompress with this codec, AFTER decompressing with lcodec
-
+    
     // ZIP-only instructions NOT written to the genozip file
     bool no_stons;             // don't attempt to move singletons to local (singletons are never moved anyway if ltype!=LT_TEXT)
     bool pair_local;           // ZIP: this is the 2nd file of a pair - compare vs the first file, and set flags.paired in the header of SEC_LOCAL
@@ -87,6 +87,7 @@ typedef struct Context {
     bool counts_section;       // output a SEC_COUNTS section for this context
     bool line_is_luft_trans;   // Seg: true if current line, when reconstructed with --luft, should be translated with luft_trans (false if no
                                //      trans_luft exists for this context, or it doesn't trigger for this line, or line is already in LUFT coordinates)
+    uint8_t local_dep;         // ZIP: this local is created when another local is compressed (each NONREF_X is created with NONREF is compressed) (value=0,1,2)
     bool local_compressed;     // ZIP: local has been compressed
     bool dict_merged;          // ZIP: dict has been merged into zctx
     TranslatorId luft_trans;   // ZIP: Luft translator for the context, set at context init and immutable thereafter

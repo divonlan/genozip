@@ -344,7 +344,7 @@ static void zip_generate_local (VBlockP vb, ContextP ctx)
     COPY_TIMER (zip_generate_local);
 }
 
-// generate & write b250 data for all contexts - do them in random order, to reduce the chance of the same context from multiple
+// generate & write b250 data for all contexts - do them in random order, to reduce the chance of multiple doing codec_assign_best_codec for the same context at the same time
 // VBs doing codec_assign_best_codec at the same, so that they can benefit from pre-assiged codecs
 static void zip_compress_b250 (VBlock *vb)
 {
@@ -355,10 +355,10 @@ static void zip_compress_b250 (VBlock *vb)
     ContextP ctxs[vb->num_contexts];
     for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) ctxs[did_i] = CTX(did_i);
 
+        // in each iteration, pick a context at random and remove it from the list 
     for (unsigned i=0; i < vb->num_contexts; i++) {
  
-        // pick context at random and remove it from the list - to reduce the chance of multiple doing codec_assign_best_codec for the same context at the same
-        int ctx_i = global_max_threads >  1 ? (clock() * (vb->vblock_i+1)) % (vb->num_contexts - i) : 0; // force predictability with single thread 
+        int ctx_i = global_max_threads > 1 ? ((clock()+1) * (vb->vblock_i+1)) % (vb->num_contexts - i) : 0; // force predictability with single thread 
         
         ContextP ctx = ctxs[ctx_i];
         memmove (&ctxs[ctx_i], &ctxs[ctx_i+1], (vb->num_contexts - i - ctx_i - 1) * sizeof (ContextP));
@@ -386,46 +386,51 @@ static void zip_compress_b250 (VBlock *vb)
     COPY_TIMER (zip_compress_ctxs); // same profiler for b250 and local as we breakdown by ctx underneath it
 }
 
-// generate & write local data for all contexts
+// generate & write local data for all contexts - in random order, to reduce the chance of multiple doing codec_assign_best_codec for the same context at the same time
 static void zip_compress_local (VBlock *vb)
 {
     START_TIMER;
     threads_log_by_vb (vb, "zip", "START COMPRESSING LOCAL", 0);
 
-    // we interate twice because some contexts will be empty until other contexts are compressed (eg XCTG after ACTG)
-    // arrays of all contexts in this VB
-    ContextP ctxs[vb->num_contexts];
-    for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) ctxs[did_i] = CTX(did_i);
+    // first we handle local_dep=0 then local_dep=1 and finally local_dep=2
+    for (int dep_level=0 ; dep_level < 3; dep_level++) {
 
-    for (unsigned i=0; i < vb->num_contexts; i++) {
+        // initialize list of pointers
+        ContextP ctxs[vb->num_contexts];
+        for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) ctxs[did_i] = CTX(did_i);
 
-        // pick context at random and remove it from the list - to reduce the chance of multiple doing codec_assign_best_codec for the same context at the same
-        //int ctx_i = global_max_threads >  1 ? (clock() * (vb->vblock_i+1)) % (vb->num_contexts - i) : 0; // force predictability with single thread 
-        int ctx_i=0; // TODO: for local, compressing out of order requires extra logic as we need to compress the dependent contexts (eg a context XCGT codec is dependent on ACGT) after the independent ones.
-        ContextP ctx = ctxs[ctx_i];
-        memmove (&ctxs[ctx_i], &ctxs[ctx_i+1], (vb->num_contexts - i - ctx_i - 1) * sizeof (ContextP));
+        // in each iteration, pick a context at random and remove it from the list 
+        for (unsigned i=0; i < vb->num_contexts; i++) {
 
-        if (ctx->local_compressed || (!ctx->local.len && !ctx->local_always)) continue;
+            int ctx_i = global_max_threads > 1 ? ((clock()+1) * (vb->vblock_i+1)) % (vb->num_contexts - i) : 0; // force predictability with single thread 
+            ContextP ctx = ctxs[ctx_i];
+            memmove (&ctxs[ctx_i], &ctxs[ctx_i+1], (vb->num_contexts - i - ctx_i - 1) * sizeof (ContextP));
 
-        zip_generate_local (vb, ctx);
+            if (ctx->local_compressed                 || // already compressed
+                (ctx->local_dep != dep_level)         || // not the right dependency level for this iteration
+                (!ctx->local.len && !ctx->local_always)) // nothing to compress
+                continue;
 
-        if (dict_id_typeless (ctx->dict_id).num == flag.dump_one_local_dict_id.num) 
-            ctx_dump_binary (vb, ctx, true);
+            zip_generate_local (vb, ctx);
 
-        if (flag.show_time) codec_show_time (vb, "LOCAL", ctx->tag_name, ctx->lcodec);
+            if (dict_id_typeless (ctx->dict_id).num == flag.dump_one_local_dict_id.num) 
+                ctx_dump_binary (vb, ctx, true);
 
-        if (HAS_DEBUG_SEG(ctx)) iprintf ("zip_compress_local: vb_i=%u %s: LOCAL.len=%"PRIu64" LOCAL.param=%"PRIu64"\n", 
-                                        vb->vblock_i, ctx->tag_name, ctx->local.len, ctx->local.param);
+            if (flag.show_time) codec_show_time (vb, "LOCAL", ctx->tag_name, ctx->lcodec);
 
-        START_TIMER; // for compressor_time
+            if (HAS_DEBUG_SEG(ctx)) iprintf ("zip_compress_local: vb_i=%u %s: LOCAL.len=%"PRIu64" LOCAL.param=%"PRIu64"\n", 
+                                            vb->vblock_i, ctx->tag_name, ctx->local.len, ctx->local.param);
 
-        zfile_compress_local_data (vb, ctx, 0);
+            START_TIMER; // for compressor_time
 
-        ctx->local_compressed = true; // so we don't compress it again
-        ctx->no_stons = true; // since we had data on local, we don't allow ctx_commit_node to move singletons to local
-            
-        if (flag.show_time) 
-            ctx->compressor_time += CHECK_TIMER; // sum b250 and local
+            zfile_compress_local_data (vb, ctx, 0);
+
+            ctx->local_compressed = true; // so we don't compress it again
+            ctx->no_stons = true; // since we had data on local, we don't allow ctx_commit_node to move singletons to local
+                
+            if (flag.show_time) 
+                ctx->compressor_time += CHECK_TIMER; // sum b250 and local
+        }
     }
 
     COPY_TIMER (zip_compress_ctxs); // same profiler for b250 and local as we breakdown by ctx underneath it

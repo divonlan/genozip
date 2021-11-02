@@ -18,6 +18,7 @@
 #include "profiler.h"
 #include "context.h"
 #include "endianness.h"
+#include "piz.h"
 
 typedef struct {
     Allele allele;      // copied from line on which permutation is applied
@@ -167,11 +168,13 @@ void codec_pbwt_seg_init (VBlock *vb, Context *runs_ctx, Context *fgrc_ctx)
 
     // this context will contain alternate run lengths of the background allele and any forward allele
     runs_ctx->ltype         = LT_UINT32;
+    runs_ctx->local_dep     = 1; // RUNS.local is generated when PBWT_HT_MATRIX.local is compressed
     
     // this context is used to determine which forward allele is in each forward run in RUNS: it contains
     // an array of PbwtFgRunCount
     fgrc_ctx->ltype         = LT_UINT32;
     fgrc_ctx->lsubcodec_piz = CODEC_PBWT;
+    fgrc_ctx->local_dep     = 2; // FGRC.local is generated when PBWT_HT_MATRIX.local is compressed, and *must* be after RUNS in z_file
 }
 
 // updates FGRC - our list of foreground run alleles. Each entry represents "count" consecutive runs of this same "fg_allele"
@@ -330,6 +333,8 @@ static void codec_pbwt_decode_init_ht_matrix (VBlock *vb, const uint32_t *rc_dat
 
 static inline void pbwt_decode_one_line (VBlockP vb, PbwtState *state, uint32_t line_i)
 {
+    ASSPIZ0 (state->runs->len, "No runs found");
+
     uint32_t *runs = ENT (uint32_t, *state->runs, state->runs->next);
     uint32_t *start_runs = runs;
 

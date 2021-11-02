@@ -57,7 +57,7 @@ static bool codec_hts_compress (VBlock *vb,
         ASSERT (vb->codec_bufs[0].len == *uncompressed_len, "Expecting in_so_far=%u == uncompressed_len=%u", (unsigned)vb->codec_bufs[0].len, *uncompressed_len);
     }
 
-    int ret = !!func (vb, (uint8_t*)uncompressed, *uncompressed_len, (uint8_t*)compressed, compressed_len, order);
+    bool ret = !!func (vb, (uint8_t*)uncompressed, *uncompressed_len, (uint8_t*)compressed, compressed_len, order);
 
     if (func == rans_compress_to_4x16) COPY_TIMER (compressor_rans)
     else                               COPY_TIMER (compressor_arith); // higher level codecs are accounted for in their codec code

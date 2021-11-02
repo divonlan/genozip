@@ -72,14 +72,15 @@ bool codec_domq_comp_init (VBlock *vb, DidIType qual_did_i, LocalGetLineCB callb
 
     for (unsigned c=33; c <= 126; c++)  // legal Phred scores only
         if (char_counter[c] > threshold) {
-            qual_ctx->local.param = c;
-            qual_ctx->local_param = true;
-            qual_ctx->ltype   = LT_CODEC;
-            qual_ctx->lcodec  = CODEC_DOMQ;
+            qual_ctx->local.param   = c;
+            qual_ctx->local_param   = true;
+            qual_ctx->ltype         = LT_CODEC;
+            qual_ctx->lcodec        = CODEC_DOMQ;
 
-            Context *domqruns_ctx  = qual_ctx + 1;
-            domqruns_ctx->ltype    = LT_UINT8;
-            domqruns_ctx->st_did_i = qual_ctx->did_i;
+            Context *domqruns_ctx   = qual_ctx + 1;
+            domqruns_ctx->ltype     = LT_UINT8;
+            domqruns_ctx->st_did_i  = qual_ctx->did_i;
+            domqruns_ctx->local_dep = 1;  // DOMQRUNS.local is created with QUAL.local is compressed
             return true;
         }
 
@@ -114,10 +115,13 @@ bool codec_domq_compress (VBlock *vb,
     Context *qdomruns_ctx = qual_ctx + 1;
 
     const char dom = qual_ctx->local.param;
-    ASSERT0 (dom, "dom is not set");
+    ASSERT (dom, "dom is not set for %s in vb=%u", qual_ctx->tag_name, vb->vblock_i);
 
     Buffer *qual_buf     = &qual_ctx->local;
     Buffer *qdomruns_buf = &qdomruns_ctx->local;
+
+    // case: this is our second entry, after soft-failing. Just continue from where we stopped
+    if (!soft_fail) goto do_compress;
 
     // this is usually enough, but might not be in some edge cases
     // note: qual_buf->len is the total length of all qual lines
@@ -173,37 +177,20 @@ bool codec_domq_compress (VBlock *vb,
     header->sub_codec = codec_assign_best_codec (vb, qual_ctx, NULL, SEC_LOCAL);
     if (header->sub_codec == CODEC_UNKNOWN) header->sub_codec = CODEC_NONE; // really small
 
+do_compress: ({});
     CodecCompress *compress = codec_args[header->sub_codec].compress;
 
+    // make sure we have enough memory
     uint32_t min_required_compressed_len = codec_args[header->sub_codec].est_size (header->sub_codec, qual_buf->len);
+    if (*compressed_len < min_required_compressed_len) {
+        if (soft_fail) return false; // call me again with more memory
+        ABORT ("Compressing %s in vb_i=%u with %s need %u bytes, but allocated only %u", qual_ctx->tag_name, vb->vblock_i, codec_name(header->sub_codec), min_required_compressed_len, *compressed_len);
+    }
 
+    *uncompressed_len = (uint32_t)qual_buf->len;
     COPY_TIMER (compressor_domq); // don't account for sub-codec compressor, it accounts for itself
 
-    // case: all good - compress the QUAL context; the DOMQRUNS will be compressed after us, as its the subsequent context.
-    if (*compressed_len >= min_required_compressed_len) {
-
-        // since codecs were already assigned to contexts before compression of all contexts begun, but
-        // we just created this context now, we assign a codec manually
-        codec_assign_best_codec (vb, qdomruns_ctx, NULL, SEC_LOCAL);
-        if (qdomruns_ctx->lcodec == CODEC_UNKNOWN) qdomruns_ctx->lcodec = CODEC_NONE; // really small
-
-        *uncompressed_len = (uint32_t)qual_buf->len;
-        return compress (vb, header, qual_buf->data, uncompressed_len, NULL, compressed, compressed_len, false);
-    }
-
-    // case: our uncompressed length is too long vs the allocation of compressed (in a rare case that domqual enlengthen QUAL)
-    // fallback on compressing the QUAL data using sub_codec directly (by which compressed_len was alloceted in comp_compress)
-    else {
-        buf_free (qual_buf);
-        buf_free (qdomruns_buf);
-
-        ((SectionHeaderCtx *)header)->ltype = LT_SEQUENCE; // not LT_CODEC any more
-        header->codec     = header->sub_codec;
-        header->sub_codec = CODEC_UNKNOWN;
-        header->flags.ctx.copy_local_param = 0; // cancel flag
-        
-        return compress (vb, header, NULL, uncompressed_len, callback, compressed, compressed_len, soft_fail);
-    }
+    return compress (vb, header, qual_buf->data, uncompressed_len, NULL, compressed, compressed_len, false);
 }
 
 //--------------
