@@ -10,7 +10,7 @@
 #define ZIP_LOOKBACK_SIZE 1024  // this can be changed up or down, up to PIZ_LOOKBACK_SIZE
 #define PIZ_LOOKBACK_SIZE 1024  // this needs to be at least what ZIP_LOOKBACK_SIZE was at any Genozip release
 
-#define lookback_buf(ctx) ((command == ZIP) ? &ctx->ctx_specific_buf : &ctx->history)
+#define lookback_buf(ctx) ((command == ZIP) ? &ctx->zip_lookback_buf : &ctx->history)
 #define lookback_size (command == ZIP ? ZIP_LOOKBACK_SIZE : PIZ_LOOKBACK_SIZE)
 #define gap_index len // the index of the entry that is not used, one before (i.e. higher) that the oldest entry
 #define newest_index param

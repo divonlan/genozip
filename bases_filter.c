@@ -47,7 +47,7 @@ void iupac_show (void)
         iprint0 ("bases=false\n");
 }
 
-bool iupac_is_included_ascii (const char *seq, unsigned seq_len)
+bool iupac_is_included_ascii (STRp(seq))
 {    
     bool caught=false;
     for (unsigned i=0; i < seq_len; i++)
@@ -60,7 +60,7 @@ bool iupac_is_included_ascii (const char *seq, unsigned seq_len)
     else                            return  caught;
 }
 
-bool iupac_is_included_bam (const char *seq, unsigned seq_len)
+bool iupac_is_included_bam (STRp(seq))
 {    
     if (!seq_len) 
         return (flag.bases == IUP_POSITIVE) ? true : false;

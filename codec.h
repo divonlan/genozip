@@ -113,7 +113,7 @@ extern const char acgt_decode[4];
 #define ACGT_DECODE(bitarr,idx) acgt_decode[bit_array_get ((bitarr), ((int64_t)(idx))*2) + (bit_array_get ((bitarr), ((int64_t)(idx))*2 + 1) << 1)]
 
 extern void codec_acgt_comp_init (VBlockP vb);
-extern void codec_acgt_reconstruct (VBlockP vb, ContextP ctx, const char *snip, unsigned snip_len);
+extern void codec_acgt_reconstruct (VBlockP vb, ContextP ctx, STRp(snip));
 
 // BSC stuff
 extern void codec_bsc_initialize (void);

@@ -153,7 +153,7 @@ static void stats_consolidate_ctxs (StatsByLine *sbl, unsigned num_stats)
             for (unsigned child=0; child < num_stats; child++) {
 
                 if (sbl[parent].my_did_i  == sbl[child].st_did_i) {
-                    sbl[parent].txt_len  += sbl[child].txt_len;
+                    sbl[parent].txt_len   += sbl[child].txt_len;
                     sbl[parent].z_size    += sbl[child].z_size;  
                     sbl[parent].pc_of_txt += sbl[child].pc_of_txt;
                     sbl[parent].pc_of_z   += sbl[child].pc_of_z;  
@@ -403,9 +403,10 @@ void stats_compress (void)
 
     // long form stats from --STATS    
     qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_z_size);  // sort by compressed size
+
     stats_output_STATS (sbl, num_stats, 
                         all_txt_len, all_uncomp_dict, all_comp_dict, all_comp_b250, all_comp_data, all_z_size, all_pc_of_txt, all_pc_of_z, all_comp_ratio);
-    
+
     // consolidates stats of child contexts into the parent one
     stats_consolidate_ctxs (sbl, num_stats);
     

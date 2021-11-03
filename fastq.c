@@ -634,12 +634,12 @@ static void fastq_update_coverage (VBlockFASTQ *vb)
 }
 
 // PIZ: SEQ reconstruction 
-void fastq_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, const char *seq_len_str, unsigned seq_len_str_len)
+void fastq_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, STRp(seq_len_str))
 {
     VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
  
     int64_t seq_len_64;
-    ASSERT (str_get_int (seq_len_str, seq_len_str_len, &seq_len_64), "could not parse integer \"%.*s\"", seq_len_str_len, seq_len_str);
+    ASSERT (str_get_int (STRa(seq_len_str), &seq_len_64), "could not parse integer \"%.*s\"", STRf(seq_len_str));
     vb->seq_len = (uint32_t)seq_len_64;
 
     // just update coverage

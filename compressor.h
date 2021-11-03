@@ -13,5 +13,4 @@ extern uint32_t comp_compress (VBlockP vb, BufferP z_data, SectionHeaderP header
                                LocalGetLineCB callback); // option 2 - compress data one line at a time
 
 extern void comp_uncompress (VBlockP vb, Codec codec, Codec sub_codec, uint8_t param,
-                             const char *compressed_data, uint32_t compressed_data_len,
-                             Buffer *uncompressed_data, uint64_t uncompressed_len);
+                             STRp(compressed_data), Buffer *uncompressed_data, uint64_t uncompressed_len);

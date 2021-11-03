@@ -132,6 +132,18 @@ void sam_cigar_analyze (VBlockSAMP vb, STRp(cigar),  unsigned *seq_consumed)
         }
     }                          
 
+    if (command == ZIP)
+        DATA_LINE (vb->line_i)->ref_consumed = vb->ref_consumed; // consumed by sam_seg_predict_TLEN 
+
+    // PIZ: we store ref_consumed in ctx->piz_ctx_specific_buf because ctx->history is already taken for storing the CIGAR string
+    else {
+        uint64_t line_i = vb->line_i - vb->first_line;
+        if (!line_i)
+            buf_alloc_zero (vb, &CTX(SAM_CIGAR)->piz_ctx_specific_buf, 0, vb->lines.len, uint32_t, 0, "piz_ctx_specific_buf"); // initialize to exactly one per line.
+
+        *ENT (uint32_t, CTX(SAM_CIGAR)->piz_ctx_specific_buf, line_i) = vb->ref_consumed;
+    }
+    
     ASSINP (!n, "Invalid CIGAR in %s: expecting it to end with an operation character. CIGAR=%.*s", 
             txt_name, cigar_len, cigar);
 
@@ -299,7 +311,7 @@ void sam_cigar_seg_binary (VBlockSAM *vb, ZipDataLineSAM *dl, uint32_t l_seq, ui
 
     // store a copy of the CIGAR in buddy_textual_cigars for use by a buddy MC:Z
     if (segconf.has_MC && !segconf.running) {
-        dl->CIGAR =(CtxWord){ .char_index = vb->buddy_textual_cigars.len, .snip_len = vb->textual_cigar.len }; // in BAM dl->CIGAR poits into buddy_textual_cigars
+        dl->CIGAR =(CtxWord){ .char_index = vb->buddy_textual_cigars.len, .snip_len = vb->textual_cigar.len }; // in BAM dl->CIGAR points into buddy_textual_cigars
         buf_add_buf (VB, &vb->buddy_textual_cigars, &vb->textual_cigar, char, "buddy_textual_cigars");
     }
 

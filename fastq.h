@@ -54,7 +54,7 @@ extern bool fastq_piz_is_paired (void);
 extern bool fastq_piz_read_one_vb (VBlockP vb, Section sl);
 CONTAINER_FILTER_FUNC (fastq_piz_filter);
 extern bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
-extern void fastq_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq_len_str, unsigned seq_len_str_len);
+extern void fastq_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq_len_str));
 extern CONTAINER_CALLBACK (fastq_piz_container_cb);
 
 // VBlock stuff

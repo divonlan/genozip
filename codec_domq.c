@@ -80,7 +80,7 @@ bool codec_domq_comp_init (VBlock *vb, DidIType qual_did_i, LocalGetLineCB callb
             Context *domqruns_ctx   = qual_ctx + 1;
             domqruns_ctx->ltype     = LT_UINT8;
             domqruns_ctx->st_did_i  = qual_ctx->did_i;
-            domqruns_ctx->local_dep = 1;  // DOMQRUNS.local is created with QUAL.local is compressed
+            domqruns_ctx->local_dep = DEP_L1;  // DOMQRUNS.local is created with QUAL.local is compressed
             return true;
         }
 

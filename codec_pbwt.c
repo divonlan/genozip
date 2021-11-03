@@ -168,13 +168,13 @@ void codec_pbwt_seg_init (VBlock *vb, Context *runs_ctx, Context *fgrc_ctx)
 
     // this context will contain alternate run lengths of the background allele and any forward allele
     runs_ctx->ltype         = LT_UINT32;
-    runs_ctx->local_dep     = 1; // RUNS.local is generated when PBWT_HT_MATRIX.local is compressed
+    runs_ctx->local_dep     = DEP_L1; // RUNS.local is generated when PBWT_HT_MATRIX.local is compressed
     
     // this context is used to determine which forward allele is in each forward run in RUNS: it contains
     // an array of PbwtFgRunCount
     fgrc_ctx->ltype         = LT_UINT32;
     fgrc_ctx->lsubcodec_piz = CODEC_PBWT;
-    fgrc_ctx->local_dep     = 2; // FGRC.local is generated when PBWT_HT_MATRIX.local is compressed, and *must* be after RUNS in z_file
+    fgrc_ctx->local_dep     = DEP_L2; // FGRC.local is generated when PBWT_HT_MATRIX.local is compressed, and *must* be after RUNS in z_file
 }
 
 // updates FGRC - our list of foreground run alleles. Each entry represents "count" consecutive runs of this same "fg_allele"

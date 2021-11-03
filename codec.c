@@ -123,8 +123,8 @@ static int codec_assign_sorter (const CodecTest *t1, const CodecTest *t2)
 
     // in --fast mode - if one if significantly faster with a modest size hit, take it. Otherwise, take the best.
     if (flag.fast) {
-        if (t1->clock < t2->clock * 0.90 && t1->size < t2->size * 1.3) return -1; // t1 has 10% or more better time with at most 30% size hit
-        if (t2->clock < t1->clock * 0.90 && t2->size < t1->size * 1.3) return  1; 
+        if (t1->clock < t2->clock * 0.80 && t1->size < t2->size * 1.3) return -1; // t1 has 20% or more better time with at most 30% size hit
+        if (t2->clock < t1->clock * 0.80 && t2->size < t1->size * 1.3) return  1; 
     }
 
     // case: select for significant difference in size (more than 2%)
@@ -147,7 +147,7 @@ static int codec_assign_sorter (const CodecTest *t1, const CodecTest *t2)
 
     // if size is exactly the same - choose the lower-index codex (so to pick non-packing version of RAN and ART)
     if (t1->size == t2->size)
-        return t1->codec - t1->codec;
+        return t1->codec - t2->codec;
 
     // time and size are very similar (within %1 and 15% respectively) - select for smaller size
     return t1->size - t2->size;
@@ -201,8 +201,8 @@ Codec codec_assign_best_codec (VBlockP vb,
 
     CodecTest tests[] = { { CODEC_BZ2 }, { CODEC_NONE }, { CODEC_BSC }, { CODEC_LZMA }, 
                           { CODEC_RANS8 }, { CODEC_RANS32 }, { CODEC_RANS8_pack }, { CODEC_RANS32_pack }, 
-                          /*{ CODEC_ARITH8 }, { CODEC_ARITH32 }, { CODEC_ARITH8_pack }, { CODEC_ARITH32_pack } */ }; // not using for now due to bug in arith_dynamic
-    const unsigned num_tests = 8;
+                          { CODEC_ARITH8 }, { CODEC_ARITH32 }, { CODEC_ARITH8_pack }, { CODEC_ARITH32_pack } }; // not using for now due to bug in arith_dynamic
+    const unsigned num_tests = 12;
     
     // set data
     if (!data)
@@ -216,7 +216,6 @@ Codec codec_assign_best_codec (VBlockP vb,
     uint64_t save_data_len = data->len;
     uint64_t save_section_list = vb->section_list_buf.len; // save section list as comp_compress adds to it
 
-    // sample from the end of the buffer, that is more likely to be representative of the data in the file (in particular  true for vb=1)
     data->len = MIN_(data->len * (is_local ? lt_desc[ctx->ltype].width : 1), CODEC_ASSIGN_SAMPLE_SIZE);
 
     if (data->len < MIN_LEN_FOR_COMPRESSION) goto done; // if too small - don't assign - compression will use the default BZ2 and the next VB can try to select
@@ -256,7 +255,7 @@ Codec codec_assign_best_codec (VBlockP vb,
     qsort (tests, num_tests, sizeof (CodecTest), (int (*)(const void *, const void*))codec_assign_sorter);
 
     if (flag.show_codec) {
-        iprintf ("vb_i=%-2u %-12s %-5s [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f]\n", 
+        iprintf ("vb_i=%-2u %-12s %-5s *[%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f]\n", 
                  vb->vblock_i, ctx ? ctx->tag_name : "", &st_name (st)[4],
                  codec_name (tests[0].codec), (int)tests[0].size, tests[0].clock,
                  codec_name (tests[1].codec), (int)tests[1].size, tests[1].clock,
@@ -268,8 +267,8 @@ Codec codec_assign_best_codec (VBlockP vb,
     // assign the best codec - the first one in the sorted array - and commit it to zctx
     *selected_codec = tests[0].codec;
 
-    // save the assignment for future VBs, but not in --best, where each VB tests on its own
-    if ((is_b250 || is_local) && !flag.best && *selected_codec != CODEC_UNKNOWN && zctx)
+    // save the assignment for future VBs, but not in --best, where each VB tests on its own (for local, don't commit for vb=1 bc less representative of data)
+    if ((is_b250 || (is_local && vb->vblock_i > 1)) && !flag.best && *selected_codec != CODEC_UNKNOWN && zctx)
         ctx_commit_codec_to_zf_ctx (vb, ctx, is_local);
 
 done:

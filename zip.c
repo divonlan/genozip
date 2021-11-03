@@ -393,23 +393,21 @@ static void zip_compress_local (VBlock *vb)
     threads_log_by_vb (vb, "zip", "START COMPRESSING LOCAL", 0);
 
     // first we handle local_dep=0 then local_dep=1 and finally local_dep=2
-    for (int dep_level=0 ; dep_level < 3; dep_level++) {
+    for (int dep_level=DEP_L0 ; dep_level < NUM_LOCAL_DEPENDENCY_LEVELS; dep_level++) {
 
-        // initialize list of pointers
+        // initialize list of contexts at this dependency level that need compression
         ContextP ctxs[vb->num_contexts];
-        for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) ctxs[did_i] = CTX(did_i);
+        unsigned num_ctxs=0;
+        for (ContextP ctx=CTX(0); ctx < CTX(vb->num_contexts); ctx++) 
+            if ((ctx->local.len || ctx->local_always) && ctx->local_dep == dep_level && !ctx->local_compressed)
+                ctxs[num_ctxs++] = ctx;
 
-        // in each iteration, pick a context at random and remove it from the list 
-        for (unsigned i=0; i < vb->num_contexts; i++) {
-
-            int ctx_i = global_max_threads > 1 ? ((clock()+1) * (vb->vblock_i+1)) % (vb->num_contexts - i) : 0; // force predictability with single thread 
+        while (num_ctxs) {
+            // pick a context at "random" and remove it from the list (not random if single thread)
+            int ctx_i = global_max_threads > 1 ? (65531 * (vb->vblock_i+1)) % num_ctxs : 0; 
             ContextP ctx = ctxs[ctx_i];
-            memmove (&ctxs[ctx_i], &ctxs[ctx_i+1], (vb->num_contexts - i - ctx_i - 1) * sizeof (ContextP));
-
-            if (ctx->local_compressed                 || // already compressed
-                (ctx->local_dep != dep_level)         || // not the right dependency level for this iteration
-                (!ctx->local.len && !ctx->local_always)) // nothing to compress
-                continue;
+            memmove (&ctxs[ctx_i], &ctxs[ctx_i+1], (num_ctxs - (ctx_i+1)) * sizeof (ContextP));
+            num_ctxs--;
 
             zip_generate_local (vb, ctx);
 

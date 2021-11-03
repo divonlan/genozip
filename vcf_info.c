@@ -567,7 +567,7 @@ static void vcf_seg_INFO_END (VBlockVCFP vb, Context *end_ctx, const char *end_s
 
         // case: we don't yet handle END translation in case of a reverse strand
         if (is_xstrand)            
-            REJECT_SUBFIELD (LO_INFO, end_ctx, ".\tGenozip limitation: variant with INFO/END and chain file alignment with a negative strand%s", "");
+            REJECT_SUBFIELD (LO_INFO, end_ctx, ".\tGenozip limitation: Variant with INFO/END and chain file alignment with a negative strand%s", "");
 
         // case: END goes beyond the end of the chain file alignment and its a <DEL>
         else if (vb->is_del_sv && end > aln_last_pos) {

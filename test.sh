@@ -1037,23 +1037,34 @@ GRCh38=data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
 chain37_38=data/GRCh37_to_GRCh38.chain.genozip
 
 if (( $# < 1 )); then
-    echo "Usage: test.sh [debug|opt|prod] <batch_id-test> [optional-genozip-arg]"
+    echo "Usage: test.sh [debug|opt|prod|back] <batch_id-test> [optional-genozip-arg]"
     exit 0
 fi
 
-# debug and opt
+# debug, opt, prod
 is_debug=`echo $1|grep debug`
 if [ -n "$is_debug" ]; then 
-    debug=-debug; 
+    debug_zip=-debug
+    debug_nonzip=-debug
     shift
 fi
 
 is_opt=`echo $1|grep opt`
 if [ -n "$is_opt" ]; then 
-    debug=-opt; 
+    debug_zip=-opt
+    debug_nonzip=-opt
     shift
 fi
 
+# test backward compatability against against
+is_back=`echo $1|grep back`
+if [ -n "$is_back" ]; then 
+    debug_zip=-prod
+    debug_nonzip=""
+    shift
+fi
+
+# test prod (for a maintainence release)
 is_prod=`echo $1|grep prod`
 if [ -n "$is_prod" ]; then 
     dir=../genozip-prod
@@ -1068,18 +1079,18 @@ fi
 # platform settings
 # -----------------
 if [ -n "$is_windows" ]; then
-    genozip_exe=$dir/genozip${debug}.exe
-    genounzip_exe=$dir/genounzip${debug}.exe
-    genocat_exe=$dir/genocat${debug}.exe
-    genols_exe=$dir/genols${debug}.exe 
+    genozip_exe=$dir/genozip${debug_zip}.exe
+    genounzip_exe=$dir/genounzip${debug_nonzip}.exe
+    genocat_exe=$dir/genocat${debug_nonzip}.exe
+    genols_exe=$dir/genols${debug_nonzip}.exe 
 #    zip_threads="-@3"
 #    piz_threads="-@5"
     path=`pwd| cut -c3-|tr / '\\\\'`\\
 else
-    genozip_exe=$dir/genozip${debug}
-    genounzip_exe=$dir/genounzip${debug}
-    genocat_exe=$dir/genocat${debug}
-    genols_exe=$dir/genols${debug} 
+    genozip_exe=$dir/genozip${debug_zip}
+    genounzip_exe=$dir/genounzip${debug_nonzip}
+    genocat_exe=$dir/genocat${debug_nonzip}
+    genols_exe=$dir/genols${debug_nonzip} 
     path=$PWD/
 fi
 

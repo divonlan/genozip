@@ -18,7 +18,7 @@
 //---------
 
 static inline bool sam_seg_predict_TLEN (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_rname_rnext_same,
-                                                  int64_t *predicted_tlen)
+                                          int64_t *predicted_tlen)
 {
     int64_t pnext_pos_delta = dl->PNEXT - dl->POS;
 
@@ -33,9 +33,25 @@ static inline bool sam_seg_predict_TLEN (VBlockSAM *vb, ZipDataLineSAM *dl, bool
         *predicted_tlen = 0;
     
     else if (!dl->FLAG.bits.rev_comp && dl->FLAG.bits.next_rev_comp) {
-        if (!ctx_encountered_in_line(VB, OPTION_MC_Z)) return false;  // if we use this formula referring to MC, we need to assure PIZ that MC exists on this line, as it cannot easily check 
         
-        *predicted_tlen = pnext_pos_delta + CTX(OPTION_MC_Z)->last_value.i; // ref_consumed of mate
+        uint32_t approx_mate_ref_consumed;
+
+        if (!segconf.running && segconf.has_MC) {
+            if (!ctx_encountered_in_line(VB, OPTION_MC_Z)) return false; // in a has_MC file, if we use this formula referring to MC, we need to assure PIZ that MC exists on this line, as it cannot easily check 
+            
+            approx_mate_ref_consumed = CTX(OPTION_MC_Z)->last_value.i;
+        }
+
+        // if this line has a buddy, get the buddy's ref_consumed. Note: we hope this is our mate, but this is not guaranteed -
+        // it is just an earlier read with the same QNAME - could be a supplamentary alignment
+        else if (vb->buddy_line_i != -1) 
+            approx_mate_ref_consumed = DATA_LINE (vb->buddy_line_i)->ref_consumed; // most of the time we're lucky and this is our mate
+
+        // if no MC and no buddy, approximate buddy's ref_consumed as this line's ref_consumed
+        else 
+            approx_mate_ref_consumed = vb->ref_consumed;
+
+        *predicted_tlen = pnext_pos_delta + approx_mate_ref_consumed;
     }
 
     else if (dl->FLAG.bits.rev_comp && !dl->FLAG.bits.next_rev_comp) 
@@ -70,16 +86,18 @@ void sam_seg_TLEN (VBlockSAM *vb, ZipDataLineSAM *dl,
 
     int64_t predicted_tlen;
     if (segconf.has_TLEN_non_zero && sam_seg_predict_TLEN (vb, dl, is_rname_rnext_same, &predicted_tlen)) {
-/*
-        if (predicted_tlen != tlen_value)
+
+/*        if (predicted_tlen != tlen_value)
             printf ("WRONG FLAG=%x tlen=%d expected=%d : line_i=%u POS=%u PNEXT=%u RefConsumed=%u mate_RefConsumed=%u sup=%u next_unmapped=%u is_first=%u rev=%u next_rev=%u aligned=%u\n", 
                     dl->FLAG.value, (int)tlen_value, (int)predicted_tlen,
                     (int)vb->line_i, (int)dl->POS, (int)dl->PNEXT, vb->ref_consumed, (int)CTX(OPTION_MC_Z)->last_value.i,
                     dl->FLAG.bits.supplementary, dl->FLAG.bits.next_unmapped, dl->FLAG.bits.is_first, dl->FLAG.bits.rev_comp, dl->FLAG.bits.next_rev_comp, dl->FLAG.bits.is_aligned);
 */
-        char tlen_by_calc[30] = { SNIP_SPECIAL, SAM_SPECIAL_TLEN };
-        unsigned tlen_by_calc_len = str_int (tlen_value - predicted_tlen, &tlen_by_calc[2]);
-        seg_by_ctx (VB, tlen_by_calc, tlen_by_calc_len + 2, ctx, add_bytes);
+        char tlen_by_calc[30] = { SNIP_SPECIAL, SAM_SPECIAL_TLEN, '0' + segconf.has_MC };
+        unsigned tlen_by_calc_len = 
+            (tlen_value == predicted_tlen) ? 0 : str_int (tlen_value - predicted_tlen, &tlen_by_calc[3]);
+
+        seg_by_ctx (VB, tlen_by_calc, tlen_by_calc_len + 3, ctx, add_bytes);
     }
     else if (tlen)
         seg_by_ctx (VB, STRa(tlen), ctx, add_bytes);
@@ -94,7 +112,7 @@ void sam_seg_TLEN (VBlockSAM *vb, ZipDataLineSAM *dl,
 // PIZ
 //---------
 
-static inline int64_t sam_piz_predict_TLEN (VBlockSAM *vb)
+static inline int64_t sam_piz_predict_TLEN (VBlockSAM *vb, bool has_mc)
 {
     SamFlags sam_flag = { .value = CTX(SAM_FLAG)->last_value.i };
 
@@ -116,10 +134,21 @@ static inline int64_t sam_piz_predict_TLEN (VBlockSAM *vb)
 
     if (!sam_flag.bits.rev_comp && sam_flag.bits.next_rev_comp) {
 
-        STR(MC);
-        reconstruct_peek (VB, CTX(OPTION_MC_Z), pSTRa(MC));
-        unsigned MC_ref_consumed = sam_cigar_get_MC_ref_consumed (STRa(MC));
-        return pnext_pos_delta + MC_ref_consumed;
+        if (has_mc) {
+            STR(MC);
+            reconstruct_peek (VB, CTX(OPTION_MC_Z), pSTRa(MC));
+            unsigned MC_ref_consumed = sam_cigar_get_MC_ref_consumed (STRa(MC));
+            return pnext_pos_delta + MC_ref_consumed;
+        }
+                
+        else if (vb->buddy_line_i != NO_BUDDY) {
+            uint32_t approx_mate_ref_consumed = *ENT (uint32_t, CTX(SAM_CIGAR)->piz_ctx_specific_buf, vb->buddy_line_i);
+
+            return pnext_pos_delta + approx_mate_ref_consumed;
+        }
+
+        else
+            return pnext_pos_delta + vb->ref_consumed;
     }
 
     if (sam_flag.bits.rev_comp && !sam_flag.bits.next_rev_comp) 
@@ -131,10 +160,12 @@ static inline int64_t sam_piz_predict_TLEN (VBlockSAM *vb)
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_TLEN)
 {
-    ASSERT0 (snip_len, "snip_len=0");
+    ASSPIZ0 (snip_len, "snip_len=0");
 
-    int32_t tlen_by_calc = atoi (snip);
-    new_value->i = tlen_by_calc + sam_piz_predict_TLEN (VB_SAM);
+    bool has_mc = snip[0] - '0';
+    int32_t tlen_by_calc = (snip_len > 1) ? atoi (snip+1) : 0;
+
+    new_value->i = tlen_by_calc + sam_piz_predict_TLEN (VB_SAM, has_mc);
 
     if (reconstruct) RECONSTRUCT_INT (new_value->i);
 
@@ -144,7 +175,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_TLEN)
 // Used for files compressed with Genozip up to 12.0.42
 SPECIAL_RECONSTRUCTOR (sam_piz_special_TLEN_old)
 {
-    ASSERT0 (snip_len, "snip_len=0");
+    ASSPIZ0 (snip_len, "snip_len=0");
 
     int32_t tlen_by_calc = atoi (snip);
     int32_t tlen_val = tlen_by_calc + CTX(SAM_PNEXT)->last_delta + vb->seq_len;

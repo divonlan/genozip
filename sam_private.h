@@ -31,6 +31,7 @@ typedef struct {
     int64_t MAPQ, MQ, QUAL_score, TLEN;
     SamFlags FLAG;
     uint32_t seq_len;              // actual sequence length determined from any or or of: CIGAR, SEQ, QUAL. If more than one contains the length, they must all agree
+    uint32_t ref_consumed;
 } ZipDataLineSAM;
 
 typedef struct VBlockSAM {

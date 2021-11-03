@@ -209,7 +209,7 @@ static bool sam_seg_0A_cigar_cb (VBlockP vb, ContextP ctx, STRp (cigar), uint32_
 }
 
 // Lookup buffer
-#define lookback_buf ctx_specific_buf // we store the previous rname, pos, strand in their ctx->ctx_specific_buf buffer
+#define lookback_buf zip_lookback_buf // we store the previous rname, pos, strand in their ctx->zip_lookback_buf buffer
 #define lookback_value last_value.i
 #define MAX_LOOKUPS (1 << XA_LOOKBACK_DEPTH_BITS)
 

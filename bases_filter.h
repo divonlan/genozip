@@ -7,5 +7,5 @@
 
 extern void iupac_set (const char *optarg);
 extern void iupac_show (void);
-extern bool iupac_is_included_ascii (const char *seq, unsigned seq_len);
-extern bool iupac_is_included_bam (const char *seq, unsigned seq_len);
+extern bool iupac_is_included_ascii (STRp(seq));
+extern bool iupac_is_included_bam (STRp(seq));

@@ -50,14 +50,13 @@ typedef struct Context {
                                // PIZ: counts are read to here (from SEC_COUNTS) - aligned to the words in word_list/dict
     Buffer ol_nodes;           // ZIP array of CtxNode - overlayed all previous VB dictionaries. char/word indices are into ol_dict.
     #define ston_nodes ol_nodes// ZIP z_file: nodes of singletons
+    #define piz_ctx_specific_buf ol_nodes // PIZ: used by SAM_CIGAR to store ref_consumed history
     
     Buffer nodes;              // ZIP: array of CtxNode - in this VB that don't exist in ol_nodes. char/word indices are into dict.
                                // PIZ: in kraken's KRAKEN_QNAME context - contains qname_nodes 
                                // ZIP->PIZ zctx.nodes.param is transferred via SectionHeaderCounts.nodes_param if counts_section=true
     Buffer counts;             // ZIP/PIZ: counts of snips (array of int64_t)
     
-    #define ctx_specific_buf word_list  // ZIP: use word_list as a context-specific buf
-
     // Seg: snip (in dictionary) and node_index the last non-empty ("" or NULL) snip evaluated
     const char *last_snip;     // also used in PIZ SAM      
     unsigned last_snip_len;
@@ -87,7 +86,7 @@ typedef struct Context {
     bool counts_section;       // output a SEC_COUNTS section for this context
     bool line_is_luft_trans;   // Seg: true if current line, when reconstructed with --luft, should be translated with luft_trans (false if no
                                //      trans_luft exists for this context, or it doesn't trigger for this line, or line is already in LUFT coordinates)
-    uint8_t local_dep;         // ZIP: this local is created when another local is compressed (each NONREF_X is created with NONREF is compressed) (value=0,1,2)
+    enum __attribute__ ((__packed__)) { DEP_L0, DEP_L1, DEP_L2, NUM_LOCAL_DEPENDENCY_LEVELS } local_dep; // ZIP: this local is created when another local is compressed (each NONREF_X is created with NONREF is compressed) (value=0,1,2)
     bool local_compressed;     // ZIP: local has been compressed
     bool dict_merged;          // ZIP: dict has been merged into zctx
     TranslatorId luft_trans;   // ZIP: Luft translator for the context, set at context init and immutable thereafter
@@ -116,7 +115,9 @@ typedef struct Context {
     #define history local_hash // PIZ: used if FlagsCtx.store_per_line and also for lookback (for files compressed starting with v12.0.41) - contains an array of either int64_t (if STORE_INT) or HistoryWord
     #define per_line global_hash // PIZ: data copied from txt_data for fields with textual store_per_line, used in case flag.maybe_lines_dropped_by_reconstructor
 
-    Buffer word_list;          // PIZ: word list. an array of CtxWord - listing the snips in dictionary ZIP: ctx_specific_buf
+    Buffer word_list;          // PIZ: word list. an array of CtxWord - listing the snips in dictionary
+    #define zip_lookback_buf word_list  // ZIP: use word_list as lookback_buf
+
     bool semaphore;            // valid within the context of reconstructing a single line. MUST be reset ahead of completing the line.
 
     // ----------------------------

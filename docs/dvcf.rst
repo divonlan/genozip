@@ -500,15 +500,14 @@ ChromNotInPrimReference  Lift failed - Primary coordinates reference file doesn'
 ChromNotInChainFile      Lift failed - chain file doesn't have a mapping for CHROM 
 NoMappingInChainFile     Lift failed - chain file doesn't have a mapping for (CHROM,POS), or a multi-base REF is not entirely in the same chain file alignment
 REFMismatchesReference   Lift failed - REF in VCF file mismatches the Primary coordinates reference file. There is an error in the VCF file, or the wrong reference file is provided
-RefMultiAltSwitchSNP     Lift failed - A REF⇆ALT switch for a multi-allelic SNP (Genozip can't handle it)
-RefMultiAltSwitchIndel   Lift failed - A REF⇆ALT switch for a multi-allelic INDEL (Genozip can't handle it)
-RefNewAlleleSNP          Lift failed - The Luft reference would introduce a new allele which is neither REF or ALT (Genozip can't handle it)
-RefNewAlleleIndel        Lift failed - The Luft reference would introduce a new allele which is neither REF or ALT (Genozip can't handle it)
-RefNewAlleleNotLeftAnc   Lift failed - The Luft reference would introduce a new allele for a variant that is neither a SNP nor left-anchored (Genozip can't handle it)
+RefMultiAltSwitchSNP     Lift failed - A REF⇆ALT switch for a multi-allelic SNP
+RefMultiAltSwitchIndel   Lift failed - A REF⇆ALT switch for a multi-allelic INDEL
+RefNewAlleleSNP          Lift failed - The Luft reference would introduce a new allele which is neither REF or ALT
+RefNewAlleleNotLeftAnc   Lift failed - The Luft reference would introduce a new allele for a variant that is neither a SNP nor left-anchored
 RefNewAlleleSV           Lift failed - The Luft reference is different than REF for a variant with a symbolic ALT allele
-XstrandNotLeftAnc        Lift failed - A variant that is neither a SNP nor left-anchored mapped to the reverse strand (Genozip can't handle it)
-XstrandSV                Lift failed - A variant with a symbolic ALT allele mapped to the reverse strand (Genozip can't handle it)
-ComplexRearrangements    Lift failed - Variant is a Complex Rearrangement (Genozip can't handle it)
+XstrandNotLeftAnc        Lift failed - A variant that is neither a SNP nor left-anchored mapped to the reverse strand
+XstrandSV                Lift failed - A variant with a symbolic ALT allele mapped to the reverse strand
+ComplexRearrangements    Lift failed - Variant is a Complex Rearrangement
 INFO/END                 Lift failed - POS and INFO/END are not on the same chain file alignment
 AddedVariant             Failed to cross-render a variant - Non-dual-coordinate variant added to a DVCF 
 UnsupportedRefAlt        Failed to cross-render a variant - Combination of REF/ALT in Primary and Luft coordinates not supported by Genozip
@@ -517,3 +516,23 @@ INFO/*tag*               Failed to cross-render this INFO tag
 FORMAT/*tag*             Failed to cross-render this FORMAT tag
 ======================== ==================================
 
+When using ``--ext-ostatus`` with ``genozip --chain``, some of the oSTATUSes are broken down to subcategories:
+
+======================== ==================================
+oSTATUS                  Occurs when...
+======================== ==================================
+OkRefAltSwitchIndel1     Lift succeeded - Indel REF⇆ALT switch: Simple Deletion->Insertion switch
+OkRefAltSwitchIndel2     Lift succeeded - Indel REF⇆ALT switch: Switched number of payload repeats in reference
+OkRefAltSwitchIndel3     Lift succeeded - Indel REF⇆ALT switch: REF bases the same, but switch called based on flanking regions
+OkRefAltSwitchIndel4     Lift succeeded - Indel REF⇆ALT switch: Left-anchored complex INDEL
+OkRefAltSwitchIndel5     Lift succeeded - Indel REF⇆ALT switch: Deletion with payload in chain file gap
+NoMappingInChainFile1    Lift failed - Chain file doesn't contain a mapping for the primary POS
+NoMappingInChainFile2    Lift failed - New left-anchor base (after reverse-complementing) is before beginning of the chromosome
+NoMappingInChainFile3    Lift failed - No mapping: REF is not fully within a single alignment in the chain file
+RefNewAlleleIndel1       Lift failed - The Luft reference would introduce a new allele which is neither REF or ALT: REF changed in a Deletion variant that has more than one ALT
+RefNewAlleleIndel2       Lift failed - The Luft reference would introduce a new allele which is neither REF or ALT: REF changed in Deletion variant to ALT, but this is not a REF<>ALT switch because flanking regions differ
+RefNewAlleleIndel3       Lift failed - The Luft reference would introduce a new allele which is neither REF or ALT: REF bases match, but this is a new INDEL allele based on context
+RefNewAlleleIndel4       Lift failed - The Luft reference would introduce a new allele which is neither REF or ALT: REF switched with one of the ALTs, but flanking regions differ
+RefNewAlleleIndel5       Lift failed - The Luft reference would introduce a new allele which is neither REF or ALT: REF changed in Deletion variant, but not to ALT
+RefNewAlleleIndel6       Lift failed - The Luft reference would introduce a new allele which is neither REF or ALT: REF is a new allele
+======================== ==================================

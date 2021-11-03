@@ -219,7 +219,7 @@ done:
     return best_gpos;
 }
 
-void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, const char *seq, uint32_t seq_len)
+void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq))
 {
     const BitArray *genome, *emoneg;
     PosType genome_nbases;

@@ -86,8 +86,8 @@ typedef struct MediumContainer { CONTAINER_FIELDS(MEDIUM_CON_NITEMS) } MediumCon
 //     container-wide-prefix (may be empty)  + CON_PX_SEP
 //     a prefix for each item (may be empty) + CON_PX_SEP
 // empty prefixes of trailing items may be omitted
-extern void container_prepare_snip (ConstContainerP con, const char *prefixes, unsigned prefixes_len, char *snip, unsigned *snip_len);
-extern WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con, const char *prefixes, unsigned prefixes_len, const char *ren_prefixes, unsigned ren_prefixes_len, unsigned add_bytes, bool *is_new);
+extern void container_prepare_snip (ConstContainerP con, STRp(prefixes), char *snip, unsigned *snip_len);
+extern WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con, STRp(prefixes), STRp(ren_prefixes), unsigned add_bytes, bool *is_new);
 #define container_seg(vb, ctx, con, prefixes, prefixes_len, add_bytes) container_seg_do ((VBlockP)(vb), (ctx), (con), (prefixes), (prefixes_len), 0, 0, (add_bytes), NULL)
 #define container_seg_with_rename(vb, ctx, con, prefixes, prefixes_len, ren_prefixes, ren_prefixes_len, add_bytes, is_new) container_seg_do ((VBlockP)(vb), (ctx), (con), (prefixes), (prefixes_len), (ren_prefixes), (ren_prefixes_len), (add_bytes), (is_new))
 #define container_seg_by_dict_id(vb,dict_id,con,add_bytes) container_seg (vb, ctx_get_ctx (vb, dict_id), con, NULL, 0, add_bytes)

@@ -49,7 +49,7 @@ void codec_acgt_comp_init (VBlock *vb)
 
         Context *nonref_x_ctx   = nonref_ctx + 1;
         nonref_x_ctx->ltype     = LT_UINT8;
-        nonref_x_ctx->local_dep = 1; // NONREF_X.local is created with NONREF.local is compressed
+        nonref_x_ctx->local_dep = DEP_L1; // NONREF_X.local is created with NONREF.local is compressed
 }
 
 // packing of an array A,G,C,T characters into a 2-bit BitArray, stored in vb->compressed. 

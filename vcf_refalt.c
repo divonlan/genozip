@@ -241,7 +241,7 @@ static inline LiftOverStatus
 {
     PosType luft_new_left_anchor = opos - ref_len;
 
-    REJECTIF (luft_new_left_anchor < 1, LO_NO_MAPPING_IN_CHAIN, 
+    REJECTIF (luft_new_left_anchor < 1, LO_NO_MAPPING_IN_CHAIN, LO_NO_MAPPING_IN_CHAIN_2,
               ".\tNew left-anchor base (after reverse-complementing) is before beginning of the chromosome: luft_new_left_anchor=%"PRId64, luft_new_left_anchor);
               
     // new anchor - the base to the left of the oREF
@@ -272,11 +272,12 @@ static inline LiftOverStatus vcf_refalt_lift_report_indel_outcome (VBlockVCFP vb
 
     if (switch_alt_i==0 && (num_alts == 1 && !has_missing_alts)) {
         IF_XSTRAND_FLIP_ANCHOR;
-        LIFTOK (LO_OK_REF_ALT_SWITCH_INDEL, ALTF "INDEL REF<>ALT switch with repeats: " XSTRANDF PRIMF LUFTF, ALT, XSTRAND, PRIM, LUFT); 
+        LIFTOKEXT (LO_OK_REF_ALT_SWITCH_INDEL, LO_OK_REF_ALT_SWITCH_INDEL_2, 
+                   ALTF "INDEL REF<>ALT switch - switched number of payload repeats: " XSTRANDF PRIMF LUFTF, ALT, XSTRAND, PRIM, LUFT); 
     }
 
     // encountered a switch ALT in a multi allelic DEL variant
-    REJECTIF (switch_alt_i >= 0 || has_missing_alts, LO_REF_MULTIALT_SWITCH_INDEL, ALTF "Genozip limitation: " PRIMF " and ALT[%d] matches " LUFTF ", but can't switch in multi-allelic INDEL variant", 
+    REJECTIF (switch_alt_i >= 0 || has_missing_alts, LO_REF_MULTIALT_SWITCH_INDEL, LO_REF_MULTIALT_SWITCH_INDEL, ALTF "Genozip limitation: " PRIMF " and ALT[%d] matches " LUFTF ", but can't switch in multi-allelic INDEL variant", 
               ALT, PRIM, switch_alt_i+1, LUFT);
 
     // case: possibly a REF⇄ALT switch, call based on flanking regions
@@ -286,20 +287,21 @@ static inline LiftOverStatus vcf_refalt_lift_report_indel_outcome (VBlockVCFP vb
         DEF_PRIM (rep_len_prim + FLANKING_SEQ_LEN*2 + 2*(ref_len > 1)); 
         DEF_LUFT (rep_len_luft + FLANKING_SEQ_LEN*2 + 2*(ref_len > 1));
 
-        REJECTIF (!same_flanking_regions, LO_NEW_ALLELE_INDEL, ALTF "Genozip limitation: REF switched with ALT[%d], but flanking regions differ. " PRIMF LUFTF "(flanking %d bases on either side)", 
+        REJECTIF (!same_flanking_regions, LO_NEW_ALLELE_INDEL, LO_NEW_ALLELE_INDEL_4, ALTF "Genozip limitation: REF switched with ALT[%d], but flanking regions differ. " PRIMF LUFTF "(flanking %d bases on either side)", 
                 ALT, maybe_switch_alt_i+1, PRIMFLANKING, LUFTFLANKING, FLANKING_SEQ_LEN); 
 
-        REJECTIF (num_alts > 1, LO_REF_MULTIALT_SWITCH_INDEL, ALTF "Genozip limitation: " PRIMF " and ALT[%d] matches " LUFTF "(flanking %d bases on either side), but can't switch in multi-allelic INDEL variant", 
+        REJECTIF (num_alts > 1, LO_REF_MULTIALT_SWITCH_INDEL, LO_REF_MULTIALT_SWITCH_INDEL, ALTF "Genozip limitation: " PRIMF " and ALT[%d] matches " LUFTF "(flanking %d bases on either side), but can't switch in multi-allelic INDEL variant", 
                 ALT, PRIMFLANKING, maybe_switch_alt_i+1, LUFTFLANKING, FLANKING_SEQ_LEN);
 
         IF_XSTRAND_FLIP_ANCHOR;
 
-        LIFTOK (LO_OK_REF_ALT_SWITCH_INDEL, ALTF "INDEL REF<>ALT switch with matching flanking regions. " XSTRANDF PRIMF LUFTF "(flanking %d bases on either side)", 
-                ALT, XSTRAND, PRIMFLANKING, LUFTFLANKING, FLANKING_SEQ_LEN); 
+        LIFTOKEXT (LO_OK_REF_ALT_SWITCH_INDEL, LO_OK_REF_ALT_SWITCH_INDEL_3,
+                   ALTF "INDEL REF<>ALT switch - REF bases the same, but switch called based on flanking regions. " XSTRANDF PRIMF LUFTF "(flanking %d bases on either side)", 
+                   ALT, XSTRAND, PRIMFLANKING, LUFTFLANKING, FLANKING_SEQ_LEN); 
     }
 
     // LUFT is a new allele
-    REJECTIF (true, LO_NEW_ALLELE_INDEL, ALTF "Genozip limitation: new INDEL allele: " PRIMF LUFTF XSTRANDF "num_alts=%u rep_len_prim=%u rep_len_luft=%u switch_alt_i=%d maybe_switch_alt_i=%d", 
+    REJECTIF (true, LO_NEW_ALLELE_INDEL, LO_NEW_ALLELE_INDEL_3, ALTF "Genozip limitation: REF bases match, but new INDEL allele based on context: " PRIMF LUFTF XSTRANDF "num_alts=%u rep_len_prim=%u rep_len_luft=%u switch_alt_i=%d maybe_switch_alt_i=%d", 
               ALT, PRIM, LUFT, XSTRAND, num_alts, rep_len_prim, rep_len_luft, switch_alt_i, maybe_switch_alt_i); 
 
     return 0; // never reaches here
@@ -330,10 +332,10 @@ static LiftOverStatus vcf_refalt_lift_deletion (VBlockVCFP vb, const char *ref, 
 {
     if (!vcf_refalt_is_REF_same_in_luft (vb, ref, ref_len, is_xstrand, prim_range, pos, luft_range, opos)) {
         REJECTIF (num_alts > 1 || (num_alts==1 && has_missing_alts), 
-                  LO_NEW_ALLELE_INDEL, ALTF "Genozip limitation: REF changed in a Deletion variant that has more than one ALT", ALT);
+                  LO_NEW_ALLELE_INDEL, LO_NEW_ALLELE_INDEL_1, ALTF "Genozip limitation: REF changed in a Deletion variant that has more than one ALT", ALT);
 
         { DEF_PRIM (ref_len); DEF_LUFT (ref_len);
-          REJECTIF (!is_same_seq (gref, vb, luft_range, opos, alts[0], 1, is_xstrand), LO_NEW_ALLELE_INDEL, 
+          REJECTIF (!is_same_seq (gref, vb, luft_range, opos, alts[0], 1, is_xstrand), LO_NEW_ALLELE_INDEL, LO_NEW_ALLELE_INDEL_5, 
                     ALTF "Genozip limitation: REF changed in Deletion variant, but not to ALT. " PRIMF LUFTF, ALT, PRIM, LUFT); }
 
         // if the REF is not in the Luft range, we check if the flanking regions of the ALT in Luft are the same as REF's to decide
@@ -342,12 +344,13 @@ static LiftOverStatus vcf_refalt_lift_deletion (VBlockVCFP vb, const char *ref, 
 
         DEF_PRIM (ref_len + FLANKING_SEQ_LEN*2); 
         DEF_LUFT (1 + FLANKING_SEQ_LEN*2);
-        REJECTIF (!same_flanking_regions, LO_NEW_ALLELE_INDEL, 
+        REJECTIF (!same_flanking_regions, LO_NEW_ALLELE_INDEL, LO_NEW_ALLELE_INDEL_2, 
                   ALTF "Genozip limitation: REF changed in Deletion variant to ALT, but this is not a REF<>ALT switch because flanking regions differ " PRIMF LUFTF "(shown with flanking %d on either side)",
                   ALT, PRIMFLANKING, LUFTFLANKING, FLANKING_SEQ_LEN);
 
-        LIFTOK (LO_OK_REF_ALT_SWITCH_INDEL, ALTF "REF<>ALT INDEL switch with matching flanking region: " PRIMF LUFTF "(shown with flanking %d on either side)", 
-                ALT, PRIMFLANKING, LUFTFLANKING, FLANKING_SEQ_LEN); // simple REF⇄ALT switch - deletion already included in Luft
+        LIFTOKEXT (LO_OK_REF_ALT_SWITCH_INDEL, LO_OK_REF_ALT_SWITCH_INDEL_1,
+                   ALTF "Simple REF<>ALT Deletion->Insertion switch: " PRIMF LUFTF "(shown with flanking %d on either side)", 
+                   ALT, PRIMFLANKING, LUFTFLANKING, FLANKING_SEQ_LEN); // simple REF⇄ALT switch - deletion already included in Luft
     }
 
     // now we know that REF is stringwise the same as the reference, but we need to test for repeats
@@ -447,14 +450,14 @@ static LiftOverStatus vcf_refalt_lift_with_sym_allele (VBlockVCFP vb, STRp(ref),
                                           const Range *prim_range, PosType pos, 
                                           const Range *luft_range, PosType opos)
 {
-    REJECTIF (is_xstrand, LO_XSTRAND_SV, ALTF "Genozip limitation: Variant with a symbolic allele is mapped to the reverse strand" XSTRANDF, ALT, XSTRAND);
+    REJECTIF (is_xstrand, LO_XSTRAND_SV, LO_XSTRAND_SV, ALTF "Genozip limitation: Variant with a symbolic allele is mapped to the reverse strand" XSTRANDF, ALT, XSTRAND);
 
     // case: structural variant - but REF unchanged 
     if (is_same_seq (gref, vb, luft_range, opos, ref, ref_len, is_xstrand))
         LIFTOK0 (LO_OK_REF_SAME_SV, ".\tREF unchanged - structural variant");
 
     else
-        REJECTIF (true, LO_NEW_ALLELE_SV, ALTF "Genozip limitation: REF changed in variant with a symbolic allele", ALT);
+        REJECTIF (true, LO_NEW_ALLELE_SV, LO_NEW_ALLELE_SV, ALTF "Genozip limitation: REF changed in variant with a symbolic allele", ALT);
 
     return 0; // never reaches here
 }
@@ -482,7 +485,7 @@ static LiftOverStatus vcf_refalt_lift_complex (VBlockVCFP vb, STRp(ref),
             vcf_refalt_lift_same_flanking_regions (is_xstrand, prim_range, pos, ref_len, luft_range, opos, alt_lens[0])) {
             if (is_left_anchored) {
                 IF_XSTRAND_FLIP_ANCHOR;
-                LIFTOK (LO_OK_REF_ALT_SWITCH_INDEL, ALTF "REF<>ALT switch, left-anchored complex INDEL", ALT);
+                LIFTOKEXT (LO_OK_REF_ALT_SWITCH_INDEL, LO_OK_REF_ALT_SWITCH_INDEL_4, ALTF "REF<>ALT switch, left-anchored complex INDEL", ALT);
             }
             else
                 LIFTOK (LO_OK_REF_ALT_SWITCH_NLA, ALTF "REF<>ALT switch, non-left-anchored COMPLEX variant", ALT);
@@ -495,12 +498,13 @@ static LiftOverStatus vcf_refalt_lift_complex (VBlockVCFP vb, STRp(ref),
             if (is_same_seq (gref, vb, luft_range, opos, alts[alt_i], alt_lens[alt_i], is_xstrand) &&
                 vcf_refalt_lift_same_flanking_regions (is_xstrand, prim_range, pos, ref_len, luft_range, opos, alt_lens[alt_i])) {
                 DEF_LUFT (alt_lens[alt_i]);
-                REJECTIF (true, LO_REF_MULTIALT_SWITCH_INDEL, ALTF "Genozip limitation: " LUFTF "== ALT[%d], but can't switch in multi-allelic variant", 
+                REJECTIF (true, LO_REF_MULTIALT_SWITCH_INDEL, LO_REF_MULTIALT_SWITCH_INDEL, ALTF "Genozip limitation: " LUFTF "== ALT[%d], but can't switch in multi-allelic variant", 
                           ALT, LUFT, alt_i+1);
             }
 
     DEF_LUFT (ref_len);
-    REJECTIF (true, is_left_anchored ? LO_NEW_ALLELE_INDEL : LO_NEW_ALLELE_NLA, ALTF "Genozip limitation: " LUFTF "is a new allele", ALT, LUFT);
+    REJECTIF (true, (is_left_anchored ? LO_NEW_ALLELE_INDEL : LO_NEW_ALLELE_NLA), (is_left_anchored ? LO_NEW_ALLELE_INDEL_6 : LO_NEW_ALLELE_NLA), 
+              ALTF "Genozip limitation: " LUFTF "is a new allele", ALT, LUFT);
 
     return 0; // never reaches here
 }
@@ -547,7 +551,7 @@ static LiftOverStatus vcf_refalt_lift_snp (VBlockVCFP vb, STRp(ref)/* must be 1 
 
     for (unsigned alt_i=0; alt_i < num_alts; alt_i++)
         if (SAME_AS_LUFT_REF (alts[alt_i][0]))
-            REJECTIF (true, LO_REF_MULTIALT_SWITCH_SNP, ALTF "Genozip limitation: LUFT(%"PRId64")=%c == ALT[%d], can't switch in multi-allelic SNP", 
+            REJECTIF (true, LO_REF_MULTIALT_SWITCH_SNP, LO_REF_MULTIALT_SWITCH_SNP, ALTF "Genozip limitation: LUFT(%"PRId64")=%c == ALT[%d], can't switch in multi-allelic SNP", 
                       ALT, opos, oref, alt_i+1);
 
     // case: oREF is neither REF nor ALT, but sum AF=1 OR AC=AN (i.e. no REF in the samples) - we allow the new REF as it doesn't affect any annotation
@@ -561,7 +565,7 @@ static LiftOverStatus vcf_refalt_lift_snp (VBlockVCFP vb, STRp(ref)/* must be 1 
         LIFTOK (LO_OK_REF_NEW_SNP, ".\tSNP: REF changed to %c, but lifted because AF=1 or AC=AN", oref);
     }
 
-    REJECTIF (true, LO_NEW_ALLELE_SNP, ALTF "Genozip limitation: LUFT(%"PRId64")=%c is a new SNP allele", ALT, opos, oref);
+    REJECTIF (true, LO_NEW_ALLELE_SNP, LO_NEW_ALLELE_SNP, ALTF "Genozip limitation: LUFT(%"PRId64")=%c is a new SNP allele", ALT, opos, oref);
 
     return 0; // never reaches here
 }
@@ -575,6 +579,8 @@ static inline bool vcf_refalt_is_left_anchored (const char *ref, const char **al
 }
 
 // The ALT field might contain missing ALTs eg "GAAGAAA,G,*,GGAAA". Removes the missing ALTs from the list
+// A '*' means another allele is defined by a deletion a previous line that overlaps this variant.
+// See: https://gatk.broadinstitute.org/hc/en-us/articles/360035531912-Spanning-or-overlapping-deletions-allele-
 static bool vcf_refalt_lift_remove_missing_alts (uint32_t *n_alts, const char **alts, uint32_t *alt_lens)
 {
     bool has_missing_alts = false;
@@ -637,22 +643,22 @@ LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool is
 
         // Exception: a Deletion that has the anchor base on the alignment, and the rest of REF entirely in the gap after the alignment - 
         // is a REF⇄ALT switch (currently handled only for the non-xstrand case)
-        if (last_ref_ostatus == LO_NO_MAPPING_IN_CHAIN && 
+        if (LO_IS_NO_MAPPING (last_ref_ostatus) && 
             n_alts == 1 && alt_lens[0] == 1 && // a simple Deletion
             SAME_AS_LUFT_REF (ref[0]) && !is_xstrand &&
             chain_get_aln_prim_last_pos (vb->pos_aln_i) == pos && 
             chain_get_aln_gap_after (vb->pos_aln_i) >= (ref_len-1)) 
-                return LO_OK_REF_ALT_SWITCH_INDEL;   
+                return flag.ext_ostatus ? LO_OK_REF_ALT_SWITCH_INDEL_5 : LO_OK_REF_ALT_SWITCH_INDEL;   
             // TO DO: 1. right-anchor on second aligntmnet 2. xstrand - anchor base on opposite alignments
 
         REJECTIF0 (LO_IS_REJECTED (last_ref_ostatus) || last_ref_aln_i != vb->pos_aln_i,
-                   LO_NO_MAPPING_IN_CHAIN, "REF is not fully within a single alignment in the chain file");
+                   LO_NO_MAPPING_IN_CHAIN, LO_NO_MAPPING_IN_CHAIN_3, "REF is not fully within a single alignment in the chain file");
     }
 
     // verify that the REF is consistent between the VCF file and prim_range (if not - there's an error in the VCF or the wrong reference file is used)
     if (!is_same_seq (prim_ref, vb, prim_range, pos, ref, ref_len, false)) {
         char seq[1 + MIN_(ref_len, MAX_BASES_REJECTS_FILE)]; // cap size of automatic variable
-        REJECT (LO_REF_MISMATCHES_REFERENCE, ".\tReferenceFile=%s. Possibly this VCF is based on reads that were mapped to a reference other than %s, or the VCF has been erroneously modified",
+        REJECT (LO_REF_MISMATCHES_REFERENCE, LO_REF_MISMATCHES_REFERENCE, ".\tReferenceFile=%s. Possibly this VCF is based on reads that were mapped to a reference other than %s, or the VCF has been erroneously modified",
                 ref_dis_subrange (prim_ref, prim_range, pos, sizeof (seq), seq, false), ref_get_filename (prim_ref));
     }
     
@@ -664,7 +670,7 @@ LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool is
 
     // case: complex rearrangements (i.e. with [ or ])) (see VCF spec) - Genozip cannot lift these
     REJECTIF (memchr (alt, '[', alt_len) || memchr (alt, ']', alt_len), 
-              LO_COMPLEX_REARRANGEMENTS, ALTF "Genozip limitation: Rearrangements with breakends", ALT);
+              LO_COMPLEX_REARRANGEMENTS, LO_COMPLEX_REARRANGEMENTS, ALTF "Genozip limitation: Rearrangements with breakends", ALT);
 
     // case: variant with a symbolic ALT allele (eg <DEL>, <INS> etc)
     if (memchr (alt, '<', alt_len)) {

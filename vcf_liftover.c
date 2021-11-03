@@ -51,7 +51,7 @@
 #include "coords.h"
 #include "chrom.h"
 
-const char *dvcf_status_names[] = DVCF_STATUS_NAMES;
+const char *dvcf_status_names[NUM_LO_STATUSES] = DVCF_STATUS_NAMES;
 const LuftTransLateProp ltrans_props[NUM_VCF_TRANS] = DVCF_TRANS_PROPS;
 
 // constant snips initialized at the beginning of the first file zip
@@ -193,7 +193,9 @@ LiftOverStatus vcf_lo_get_liftover_coords (VBlockVCFP vb, PosType pos, WordIndex
     
     else {
         bool mapping_ok = chain_get_liftover_coords (prim_ref_index, pos, luft_ref_index, dst_1pos, xstrand, aln_i); // if failure, sets output to 0.
-        return mapping_ok ? LO_OK : LO_NO_MAPPING_IN_CHAIN;
+        return mapping_ok       ? LO_OK 
+             : flag.ext_ostatus ? LO_NO_MAPPING_IN_CHAIN_1 
+             :                    LO_NO_MAPPING_IN_CHAIN;
     }
 }                                
 
@@ -335,8 +337,8 @@ void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl)
     LiftOverStatus ostatus = vcf_lo_get_liftover_coords (vb, pos, &luft_ref_index, &dl->pos[1], &is_xstrand, &vb->pos_aln_i);
     unsigned oref_len;
 
-    if (ostatus == LO_NO_MAPPING_IN_CHAIN) {
-        vcf_lo_seg_rollback_and_reject (vb, LO_NO_MAPPING_IN_CHAIN, NULL);
+    if (LO_IS_NO_MAPPING(ostatus)) {
+        vcf_lo_seg_rollback_and_reject (vb, ostatus, NULL);
         REJECT_MAPPING (".\tNo alignment in the chain file");
     }
     
@@ -560,7 +562,7 @@ void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, ContextP ctx, STRp (value))
     CTX(VCF_LIFT_REF)->txt_len += SEL (info_ref_len, 0); // we account for oREF (to be shown in INFO/LUFT in default reconstruction). 
 
     // an indel or complex variant with REF⇄ALT switch can change the size of the oREF field in INFO/LUFT
-    if (ostatus == LO_OK_REF_ALT_SWITCH_INDEL || ostatus == LO_OK_REF_ALT_SWITCH_NLA) 
+    if (LO_IS_OK_REF_ALT_SWITCH_INDEL(ostatus) || ostatus == LO_OK_REF_ALT_SWITCH_NLA) 
         vb->recon_size += (int)vb->main_ref_len - (int)info_ref_len;
 
     // Seg the XSTRAND (same for both coordinates)
