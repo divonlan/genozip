@@ -111,5 +111,5 @@ advised of the possibility of such damages.
 
 END OF TERMS AND CONDITIONS
 
-Genozip license version: 12.0.42
+Genozip license version: 13.0.0
 
