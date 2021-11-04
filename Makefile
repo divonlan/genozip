@@ -472,7 +472,7 @@ genozip-linux-x86_64/genounzip genozip-linux-x86_64/genocat genozip-linux-x86_64
 
 LINUX_TARGZ_OBJS = genozip-linux-x86_64/genozip genozip-linux-x86_64/genounzip genozip-linux-x86_64/genocat genozip-linux-x86_64/genols 
 
-# this must be run ONLY has part of "make distribution" or else versions will be out of sync
+# this must be run ONLY as part of "make distribution" or else versions will be out of sync
 docs/genozip-linux-x86_64.tar.gz: version.h genozip-linux-x86_64/clean $(LINUX_TARGZ_OBJS)
 	@echo "Creating $@"
 	@tar cf $@ genozip-linux-x86_64 -z
