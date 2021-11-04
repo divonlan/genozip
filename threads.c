@@ -153,8 +153,8 @@ static void threads_log_by_thread_id (ThreadId thread_id, const ThreadEnt *ent, 
         mutex_lock (log_mutex);
         buf_alloc (evb, &log, 10000, 1000000, char, 2, "log");
         
-        if (has_vb) bufprintf (evb, &log, "%s: vb_i=%u vb_id=%u %s thread_id=%d pthread=%u\n", ent->task_name, ent->vb_i, ent->vb_id, event, thread_id, (unsigned)ent->pthread);
-        else        bufprintf (evb, &log, "%s: %s thread_id=%d pthread=%u\n", ent->task_name, event, thread_id, (unsigned)ent->pthread);
+        if (has_vb) bufprintf (evb, &log, "%s: vb_i=%u vb_id=%u %s thread_id=%d pthread=%"PRIu64"\n", ent->task_name, ent->vb_i, ent->vb_id, event, thread_id, (uint64_t)ent->pthread);
+        else        bufprintf (evb, &log, "%s: %s thread_id=%d pthread=%"PRIu64"\n", ent->task_name, event, thread_id, (uint64_t)ent->pthread);
         mutex_unlock (log_mutex);
     }
 }
