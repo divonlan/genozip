@@ -145,8 +145,8 @@ static void threads_log_by_thread_id (ThreadId thread_id, const ThreadEnt *ent, 
     bool has_vb = ent->vb_i != (uint32_t)-1;
 
     if (flag.show_threads)  {
-        if (has_vb) iprintf ("%s: vb_i=%u vb_id=%u %s thread_id=%d pthread=%u\n", ent->task_name, ent->vb_i, ent->vb_id, event, thread_id, (unsigned)ent->pthread);
-        else        iprintf ("%s: %s: thread_id=%d pthread=%u\n", ent->task_name, event, thread_id, (unsigned)ent->pthread);
+        if (has_vb) iprintf ("%s: vb_i=%u vb_id=%u %s thread_id=%d pthread=%"PRIu64"\n", ent->task_name, ent->vb_i, ent->vb_id, event, thread_id, (uint64_t)ent->pthread);
+        else        iprintf ("%s: %s: thread_id=%d pthread=%"PRIu64"\n", ent->task_name, event, thread_id, (uint64_t)ent->pthread);
     }
     
     if (flag.debug_threads) {
