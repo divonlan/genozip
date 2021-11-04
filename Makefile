@@ -79,7 +79,7 @@ CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h tx
 			 lzma/Precomp.h lzma/Threads.h \
 			 bzlib/bzlib.h bzlib/bzlib_private.h \
 			 htscodecs/rANS_static4x16.h htscodecs/rle.h htscodecs/pack.h htscodecs/arith_dynamic.h htscodecs/c_simple_model.h\
-			 htscodecs/rANS_word.h htscodecs/htscodecs_endian.h htscodecs/rANS_word.h htscodecs/util.h htscodecs/varint.h \
+			 htscodecs/rANS_word.h htscodecs/htscodecs_endian.h htscodecs/rANS_word.h htscodecs/utils.h htscodecs/varint.h \
 			 htscodecs/varint2.h htscodecs/utils.h \
 			 bsc/bwt.h bsc/coder.h bsc/divsufsort.h bsc/libbsc.h bsc/lzp.h bsc/platform.h \
 			 bsc/qlfc_model.h bsc/qlfc.h bsc/rangecoder.h bsc/tables.h \
