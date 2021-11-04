@@ -17,5 +17,6 @@ extern const char *arch_get_endianity (void);
 extern const char *arch_get_ip_addr (const char *reason);
 extern const char *arch_get_user_host (void);
 extern const char *arch_get_os (void);
+extern bool arch_is_wsl (void);
 
 

@@ -29,6 +29,7 @@ extern int fcntl (int __fd, int __cmd, ...); // defined in fcntl.h but not linux
 #include "stream.h"
 #include "file.h"
 #include "url.h"
+#include "buffer.h"
 
 typedef struct stream_ {
     const char *exec_name;
@@ -44,6 +45,24 @@ typedef struct stream_ {
     int exit_status; // if the process already exited and we got its code, the code will be here and pid==0;
 #endif
 } Stream;
+
+#define EXIT_OK                   0
+#define EXIT_GENERAL_ERROR        1
+#define EXIT_INVALID_GENOZIP_FILE 2
+#define EXIT_DOWNSTREAM_LOST      3
+#define EXIT_STREAM               4
+#define EXIT_SIGHUP               5
+#define EXIT_SIGSEGV              6
+#define EXIT_ABNORMAL             7
+
+const char *exit_code_name (int exit_code)
+{
+    static const char *names[NUM_EXIT_CODES] = 
+        { "EXIT_OK", "EXIT_GENERAL_ERROR", "EXIT_INVALID_GENOZIP_FILE", "EXIT_DOWNSTREAM_LOST", "EXIT_STREAM",
+          "EXIT_SIGHUP", "EXIT_SIGSEGV", "EXIT_ABNORMAL" };
+
+    return (exit_code >= 0 && exit_code < NUM_EXIT_CODES) ? names[exit_code] : "Invalid exit code";
+}
 
 #ifdef _WIN32
 static const char *stream_windows_error (void)
@@ -166,6 +185,12 @@ static pid_t stream_exec_child (int *stream_stdout_to_genozip, int *stream_stder
                                 unsigned argc, char * const *argv, const char *reason)
 {
     pid_t child_pid = fork();
+ 
+    if (child_pid == -1 && errno == ENOMEM)
+        buf_show_memory (true, 0, 0);
+
+    ASSERT (child_pid != -1, "fork() failed when attempting to run %s: %s (errno=%d)", argv[0], strerror (errno), errno);
+
     if (child_pid) return child_pid; // parent returns
 
     // determine what happens to the child's stdin
@@ -347,10 +372,15 @@ int stream_wait_for_exit (Stream *stream)
     CloseHandle (stream->pid);
 
 #else
+    START_TIMER_ALWAYS;
+
     int exit_status;
     waitpid (stream->pid, &exit_status, 0); 
-
+    
     stream->exit_status = WIFEXITED (exit_status) ? WEXITSTATUS (exit_status) : EXIT_ABNORMAL;
+
+    ASSERTW (WIFEXITED (exit_status), "Child process pid=%d exited abnormally (i.e. not via exit()). I waited for it %u milliseconds",          
+             stream->pid, (unsigned)(CHECK_TIMER / 1000000ULL));
 
     // in Windows, the main process fails to CreateProcess it exits. In Unix, it is the child process that 
     // fails to execv, and exits and code EXIT_STREAM. The main process catches it here, and exits silently.

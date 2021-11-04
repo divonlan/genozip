@@ -237,15 +237,13 @@ static void main_test_after_genozip (const char *exec_name, const char *z_filena
     
     // On Windows and Mac that usually have limited memory, if ZIP consumed more than 2GB, free memory before PIZ. 
     // Note: on Windows, freeing memory takes considerable time.
-#if defined _WIN32 || defined __APPLE__
-    if (buf_get_memory_usage () > (1ULL<<31)) {
+    if ((flag.is_windows || flag.is_mac || arch_is_wsl()) && buf_get_memory_usage () > (1ULL<<31)) {
         ref_destroy_reference (gref, true); // on Windows I observed a race condition: if we unmap mapped memory here, and remap it in the test process, and the system is very slow due to low memory, then "MapViewOfFile" in the test processs will get "Access is Denied". That's why destroy_only_if_not_mmap=true.
         ref_destroy_reference (prim_ref, true); 
         kraken_destroy();
         chain_destroy();
         vb_destroy_pool_vbs();
     }
-#endif
 
     StreamP test = stream_create (0, 0, 0, 0, 0, 0, 0,
                                   "To use the --test option",
@@ -262,7 +260,7 @@ static void main_test_after_genozip (const char *exec_name, const char *z_filena
                                   flag.show_alleles  ? "--show-alleles"  : SKIP_ARG,
                                   flag.debug_threads ? "--debug-threads" : SKIP_ARG,
                                   flag.echo          ? "--echo"          : SKIP_ARG,
-                                  flag.verify_codec   ? "--verify-codec"   : SKIP_ARG,
+                                  flag.verify_codec  ? "--verify-codec"  : SKIP_ARG,
                                   flag.reference == REF_EXTERNAL && !is_chain ? "--reference" : SKIP_ARG, // normal pizzing of a chain file doesn't require a reference
                                   flag.reference == REF_EXTERNAL && !is_chain ? ref_get_filename(gref) : SKIP_ARG, 
                                   NULL);
@@ -271,7 +269,7 @@ static void main_test_after_genozip (const char *exec_name, const char *z_filena
     int exit_code = stream_wait_for_exit (test);
     
     TEMP_VALUE (primary_command, TEST_AFTER_ZIP); // make exit_on_error NOT delete the genozip file in this case, so its available for debugging
-    ASSERT (!exit_code, "%s: test exited with status %d\n", global_cmd, exit_code); // exit with error status 
+    ASSERT (!exit_code, "%s: test exited with status: %s\n", global_cmd, exit_code_name (exit_code)); // exit with error status 
     RESTORE_VALUE (primary_command); // recover in case of more non-concatenated files
 }
 

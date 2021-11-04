@@ -17,6 +17,7 @@
 #else // LINUX
 #include <sched.h>
 #include <sys/sysinfo.h>
+#include <sys/utsname.h>
 #endif
 #endif
 
@@ -200,3 +201,15 @@ const char *arch_get_user_host (void)
     return user_host;
 }
 
+bool arch_is_wsl (void)
+{
+#ifdef __linux__    
+    struct utsname uts = {};
+    if (uname(&uts)) return false; // uname doesn't work
+
+    return (strstr (uts.release, "Microsoft"/*WSL1*/) || strstr (uts.release, "microsoft-standard"/*WSL2*/));
+
+#else
+    return false;
+#endif
+}

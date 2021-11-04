@@ -30,3 +30,5 @@ extern void stream_abort_if_cannot_run (const char *exec_name, const char *reaso
 extern FILE *stream_from_stream_stdout (StreamP stream);
 extern FILE *stream_from_stream_stderr (StreamP stream);
 extern FILE *stream_to_stream_stdin    (StreamP stream);
+
+extern const char *exit_code_name (int exit_code);
