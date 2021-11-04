@@ -81,7 +81,7 @@ void BZ2_bz__AssertH__fail ( int errcode )
    );
    }
 
-   exit(3);
+   exit(1); // EXIT_GENERAL_ERROR
 }
 #endif
 

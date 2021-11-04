@@ -210,7 +210,12 @@ static inline void piz_adjust_one_local (Buffer *local_buf, LocalType *ltype, ui
     else if (lt_desc[*ltype].file_to_native)   
         lt_desc[*ltype].file_to_native (local_buf, ltype); // BGEN, transpose etc - updates ltype in case of Transpose, after untransposing
 }
- 
+
+static int sort_by_dict_id (const void *a, const void *b)
+{
+    return ASCENDING (((ContextIndex *)a)->dict_id.num, ((ContextIndex *)b)->dict_id.num);
+}
+
 // PIZ compute thread: decompress all contexts
 // ZIP compute thread in FASTQ: decompress pair_1 contexts when compressing pair_2
 uint32_t piz_uncompress_all_ctxs (VBlock *vb, 
@@ -307,6 +312,16 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
             
             ctx->history.len = vb->lines.len;
         }
+    }
+
+    // prepare context index
+    if (command == PIZ) {
+        for (DidIType did_i=0; did_i < vb->num_contexts; did_i++)
+            vb->ctx_index[did_i] = (ContextIndex){ .did_i = did_i, .dict_id = CTX(did_i)->dict_id };
+    
+        qsort (vb->ctx_index, vb->num_contexts, sizeof (ContextIndex), sort_by_dict_id);
+
+        vb->has_ctx_index = true;
     }
 
     return section_i;

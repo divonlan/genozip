@@ -434,6 +434,9 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 
 prod:
 	@(cd ../genozip-prod ; git pull ; make)
+	@cp ../genozip-prod/genozip.exe genozip-prod.exe
+	@cp ../genozip-prod/genounzip.exe genounzip-prod.exe
+	@cp ../genozip-prod/genocat.exe genocat-prod.exe
 
 distribution: testfiles conda/.conda-timestamp docs/genozip-linux-x86_64.tar.gz.build docs/genozip-installer.exe docs prod # docs (almost) last, after version incremented # mac/.remote_mac_timestamp
 	@(cd ../genozip-feedstock/ ; git pull)

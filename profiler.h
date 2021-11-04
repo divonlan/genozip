@@ -36,6 +36,8 @@ typedef struct timespec TimeSpecType;
 #define START_TIMER TimeSpecType profiler_timer; \
                     if (flag.show_time) clock_gettime(CLOCK_REALTIME, &profiler_timer); 
 
+#define START_TIMER_ALWAYS TimeSpecType profiler_timer; clock_gettime(CLOCK_REALTIME, &profiler_timer); 
+
 #define CHECK_TIMER ({ TimeSpecType tb; \
                        clock_gettime(CLOCK_REALTIME, &tb); \
                        ((uint64_t)((tb).tv_sec-(profiler_timer).tv_sec))*1000000000ULL + ((tb).tv_nsec-(profiler_timer).tv_nsec); })

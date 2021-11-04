@@ -18,6 +18,7 @@ launch.json
 *.new
 windows
 genozip-linux-x86_64
+geno*-prod
 genozip
 genounzip*
 genocat*

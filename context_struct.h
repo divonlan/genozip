@@ -157,3 +157,8 @@ typedef struct Context {
     Buffer con_len;            // Array of uint16_t - length of item in cache
     
 } Context;
+
+typedef struct {
+    DictId dict_id;
+    DidIType did_i;
+} ContextIndex;

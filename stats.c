@@ -199,14 +199,14 @@ static void stats_consolidate_non_ctx (StatsByLine *sbl, unsigned num_stats, con
     // use existing SBL if it matches the consolidated name
     StatsByLine *survivor = NULL;
     for (unsigned i=0; i < num_stats; i++) 
-        if (sbl[i].name && !strcmp (consolidated_name, sbl[i].name)) {
+        if (sbl[i].name[0] && !strcmp (consolidated_name, sbl[i].name)) {
             survivor = &sbl[i];
             break;
         }
 
     for (unsigned i=0; i < num_stats; i++) {
         
-        if (!sbl[i].name) continue; // unused entry
+        if (!sbl[i].name[0]) continue; // unused entry
 
         for (unsigned d=0; d < num_deps; d++)
             if (!strcmp (deps[d], sbl[i].name)) {

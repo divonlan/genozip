@@ -354,8 +354,6 @@ void qname_seg_initialize (VBlockP vb, DidIType qname_did_i)
 
 static inline bool qname_has_px_strs (STRp(qname), const QnameFlavorStruct *qfs)
 {
-    if (!qfs->px_strs) return true; // flavor has no px_strs requirements - all good
-
     for (const FixedStr *px = qfs->px_strs; px->s ; px++) {
         int i = (px->fixed_i >= 0) ? px->fixed_i : ((int)qname_len + px->fixed_i);
         if (i + px->s_len > qname_len ||          // case: fixed str goes beyond the end of qname
@@ -446,6 +444,9 @@ static inline bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, const QnameFlav
             seg_prepare_snip_other (SNIP_OTHER_DELTA, qfs->con.items[qfs->range_end_item-1].dict_id, true, value - prev_value, snip);
             seg_by_ctx (vb, STRa(snip), item_ctx, item_lens[item_i]);      
         }
+// else if (item_i==1)//xxx
+//     seg_integer_or_not (vb, item_ctx, STRi(item, item_i), item_lens[item_i]);
+
         // case: textual item
         else
             seg_by_ctx (vb, STRi(item, item_i), item_ctx, item_lens[item_i]);      

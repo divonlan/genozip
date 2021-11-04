@@ -171,6 +171,10 @@ typedef          __int128 int128_t;
 #define SWAP(a,b)  do { typeof(a) tmp = a; a = b; b = tmp; } while(0)
 #define SWAPbit(a,b) do { uint8_t tmp = a; a = b; b = tmp; } while(0)  // meant for bit fields 
 
+// used for qsort sort function - receives two integers of any type and returns -1/0/1 as required to sort in ascending order
+#define ASCENDING(a,b) (((a) > (b)) ? 1 : (a) < (b) ? -1 : 0)
+#define DESCENDING(a,b) (-ASCENDING((a),(b))
+
 #define DO_ONCE static uint64_t do_once=0; if (!(do_once++))  // note: not thread-safe - in compute threads, in rare race-conditions, this can be executed more than once
 
 // we defined these ourselves (normally defined in stdbool.h), as not always available on all platforms (namely issues with Docker Hub)
@@ -354,3 +358,4 @@ static inline void progress_newline(void) {
 #define EXIT_SIGHUP               5
 #define EXIT_SIGSEGV              6
 #define EXIT_ABNORMAL             7
+#define NUM_EXIT_CODES            8

@@ -74,19 +74,28 @@ static void make_multi_dict_id_special_snip (uint8_t special_code, unsigned num_
     *out_snip_len = (snip + snip_len) - out_snip;
 }
 
-static void consume_multi_dict_id_special_snip (VBlockP vb, ContextP ctx, unsigned num_dict_ids, STRp(snip))
+// get ctx from a multi-dict_id special snip. note that we're careful to only ECTX the ctx_i requested, and not all,
+// so that we don't do a full search of vb->contexts[] for a channel that was not segged and hence has no context
+static ContextP multi_dict_id_get_ctx (VBlockP vb, ContextP ctx, unsigned num_dict_ids, STRp(snip), unsigned ctx_i)
 {
-    buf_alloc (vb, &ctx->con_cache, 0, num_dict_ids, DictId, 1, "con_cache");
+    if (!ctx->con_cache.len)
+        buf_alloc_zero (vb, &ctx->con_cache, 0, num_dict_ids, DictId, 1, "con_cache");
 
+    ContextP item_ctx = *ENT(ContextP, ctx->con_cache, ctx_i);
+    if (item_ctx) return item_ctx;
+
+    // note: we get past this point only once per VB, per ctx_i
     str_split (snip, snip_len, num_dict_ids, '\t', item, true);
     ASSPIZ (n_items, "Unable to decoded multi-dict-id snip for %s. snip=\"%.*s\"", ctx->tag_name, snip_len, snip);
 
-    for (int i=0; i < num_dict_ids; i++)  {  
-        DictId item_dict_id;
-        base64_decode (items[i], &item_lens[i], (uint8_t*)&item_dict_id);
-        *ENT(ContextP, ctx->con_cache, i) = ECTX (item_dict_id); // NULL if no data was segged to this channel
-    }
+    DictId item_dict_id;
+    base64_decode (items[ctx_i], &item_lens[ctx_i], item_dict_id.id);
+    item_ctx = ECTX (item_dict_id);
+
+    *ENT(ContextP, ctx->con_cache, ctx_i) = item_ctx; // NULL if no data was segged to this channel    
+    return item_ctx;
 }
+#define MCTX(ctx_i,num_dict_ids,snip,snip_len) multi_dict_id_get_ctx (vb, ctx, (num_dict_ids), (snip), (snip_len), (ctx_i))
 
 void vcf_samples_zip_initialize (void) 
 {
@@ -231,11 +240,9 @@ static inline int vcf_piz_get_mux_channel_i (VBlockP vb)
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_DOSAGE)
 {
-    // case: first encounter with this context's mux - decode it to an array of ContextP
-    if (!ctx->con_cache.len) consume_multi_dict_id_special_snip (vb, ctx, 4, STRa(snip));
-
     int channel_i = vcf_piz_get_mux_channel_i (vb);
-    ContextP channel_ctx = *ENT(ContextP, ctx->con_cache, channel_i);
+    
+    ContextP channel_ctx = MCTX (channel_i, 4, snip, snip_len);
     ASSPIZ (channel_ctx, "Cannot find channel context of channel_i=%d of multiplexed context %s", channel_i, ctx->tag_name);
 
     reconstruct_from_ctx (vb, channel_ctx->did_i, 0, reconstruct);
@@ -737,10 +744,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_GQ)
 {
     const char *tab = memchr (snip, '\t', snip_len);
 
-    // case: first encounter with this context's mux - decode it to an array of ContextP
-    if (!ctx->con_cache.len) consume_multi_dict_id_special_snip (vb, ctx, 1, snip, tab - snip);
-
-    ContextP src_ctx = *ENT(ContextP, ctx->con_cache, 0);
+    ContextP src_ctx = MCTX (0, 1, snip, tab - snip);
 
     int64_t prediction = vcf_predict_GQ (VB_VCF, src_ctx->did_i);
     int64_t delta = atoi (tab+1);
@@ -932,17 +936,14 @@ rollback:
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_AB)
 {
-    // case: first encounter with this context's mux - decode it to an array of ContextP
-    if (!ctx->con_cache.len) consume_multi_dict_id_special_snip (vb, ctx, 3, STRa(snip));
-
     int channel_i = vcf_piz_get_mux_channel_i (vb);
 
     if ((channel_i == 0 || channel_i == 2) && reconstruct) 
         RECONSTRUCT1 ('.');
 
     else if (channel_i == 1 && reconstruct) {
-        ContextP ad0_ctx = *ENT(ContextP, ctx->con_cache, 0);
-        ContextP ad1_ctx = *ENT(ContextP, ctx->con_cache, 1);
+        ContextP ad0_ctx = MCTX (0, 3, snip, snip_len);
+        ContextP ad1_ctx = MCTX (1, 3, snip, snip_len);
 
         double ad0 = reconstruct_peek (vb, ad0_ctx, 0, 0).i;
         double ad1 = reconstruct_peek (vb, ad1_ctx, 0, 0).i;
@@ -954,7 +955,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_AB)
     }
 
     else if (channel_i == 3) {
-        ContextP ab3_ctx = *ENT(ContextP, ctx->con_cache, 2);
+        ContextP ab3_ctx = MCTX (2, 3, snip, snip_len);
         reconstruct_from_ctx (vb, ab3_ctx->did_i, 0, reconstruct);
     }
 

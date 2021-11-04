@@ -147,17 +147,17 @@ static inline ContextP ctx_get_ctx_do (Context *contexts, DataType dt, DidIType 
         return ctx_get_unmapped_ctx (contexts, dt, dict_id_to_did_i_map, num_contexts, dict_id, STRa(tag_name));
 }
 
-extern DidIType ctx_get_unmapped_existing_did_i (const Context *contexts, DidIType num_contexts, DictId dict_id);
+extern DidIType ctx_get_unmapped_existing_did_i (const Context *contexts, const ContextIndex *ctx_index, DidIType num_contexts, DictId dict_id);
 
-static inline DidIType ctx_get_existing_did_i_do (DictId dict_id, const Context *contexts, DidIType *dict_id_to_did_i_map, DidIType num_contexts)
+static inline DidIType ctx_get_existing_did_i_do (DictId dict_id, const Context *contexts, DidIType *dict_id_to_did_i_map, const ContextIndex *ctx_index, DidIType num_contexts)
 {
     DidIType did_i = get_matching_did_i_from_map (contexts, dict_id_to_did_i_map, dict_id);
     if (did_i != DID_I_NONE)
         return did_i;
     else
-        return ctx_get_unmapped_existing_did_i (contexts, num_contexts, dict_id);
+        return ctx_get_unmapped_existing_did_i (contexts, ctx_index, num_contexts, dict_id);
 }    
-#define ctx_get_existing_did_i(vb,dict_id) ctx_get_existing_did_i_do (dict_id, vb->contexts, vb->dict_id_to_did_i_map, vb->num_contexts)
+#define ctx_get_existing_did_i(vb,dict_id) ctx_get_existing_did_i_do (dict_id, vb->contexts, vb->dict_id_to_did_i_map, (vb->has_ctx_index ? vb->ctx_index : NULL), vb->num_contexts)
 
 static inline ContextP ctx_get_existing_ctx_do (VBlockP vb, DictId dict_id)  // returns NULL if context doesn't exist
 {

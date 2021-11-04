@@ -324,7 +324,7 @@ static SeqType fasta_get_seq_type (STRp(seq))
     // we determine the type by characters that discriminate between protein and nucleotides, 
     // according to: https://www.bioinformatics.org/sms/iupac.html and https://en.wikipedia.org/wiki/FASTA_format
     // A,C,D,G,H,K,M,N,R,S,T,V,W,Y are can be either nucleoide or protein - in particular all of A,C,T,G,N can
-    static bool uniq_amino[256]    = { ['e']=true, ['F']=true, ['I']=true, ['L']=true, ['P']=true, ['Q']=true, 
+    static bool uniq_amino[256]    = { ['E']=true, ['F']=true, ['I']=true, ['L']=true, ['P']=true, ['Q']=true, 
                                        ['X']=true, ['Z']=true,  // may be protein according to the FASTA_format page
                                        ['e']=true, ['f']=true, ['i']=true, ['l']=true, ['p']=true, ['q']=true, 
                                        ['x']=true, ['z']=true };

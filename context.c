@@ -668,7 +668,7 @@ ContextP ctx_get_zctx_from_vctx (ConstContextP vctx)  // returns NULL if context
         return ZCTX(vctx->did_i); 
     
     // check dict_id->did_i map, and if not found search linearly
-    DidIType did_i = ctx_get_existing_did_i_do (vctx->dict_id, z_file->contexts, z_file->dict_id_to_did_i_map, z_file->num_contexts);
+    DidIType did_i = ctx_get_existing_did_i_do (vctx->dict_id, z_file->contexts, z_file->dict_id_to_did_i_map, NULL, z_file->num_contexts);
     return did_i != DID_I_NONE ? ZCTX(did_i) : NULL;
 }
 
@@ -961,19 +961,49 @@ void ctx_add_compressor_time_to_zf_ctx (VBlockP vb)
     }
 }
 
-// returns an existing did_i in this vb, or DID_I_NONE if there isn't one
-DidIType ctx_get_unmapped_existing_did_i (const Context *contexts, DidIType num_contexts, DictId dict_id)
+static DidIType ctx_did_i_search (const ContextIndex *ctx_index, DidIType num_contexts, DictId dict_id, DidIType first, DidIType last)
 {
-    // search to see if this dict_id has a context, despite not in the map (due to contention). 
-    for (int/*signed*/ did_i=num_contexts-1; did_i >= 0 ; did_i--)  // Search backwards as unmapped ctxs are more likely to be towards the end.
-        if (dict_id.num == contexts[did_i].dict_id.num) return did_i;
+    if (last < first) return DID_I_NONE;
+
+    DidIType mid = (first + last) / 2;
+    DictId dict_id_mid = ctx_index[mid].dict_id;
+
+    if (dict_id_mid.num == dict_id.num)    
+        return ctx_index[mid].did_i;
+
+    else if (dict_id_mid.num < dict_id.num) 
+        return ctx_did_i_search (ctx_index, num_contexts, dict_id, mid+1, last);
+
+    else
+        return ctx_did_i_search (ctx_index, num_contexts, dict_id, first, mid-1);
+}
+
+// returns an existing did_i in this vb, or DID_I_NONE if there isn't one
+DidIType ctx_get_unmapped_existing_did_i (const Context *contexts, const ContextIndex *ctx_index, DidIType num_contexts, DictId dict_id)
+{
+    int did_i; // signed
+
+    // binary search if we have ctx_index (we will have it in PIZ compute threads)
+    if (ctx_index) {
+        if ((did_i = ctx_did_i_search (ctx_index, num_contexts, dict_id, 0, num_contexts-1)) != DID_I_NONE)
+            return did_i;
+    }
+
+    else // linear search if not
+        for (did_i=num_contexts-1; did_i >= 0 ; did_i--)  // Search backwards as unmapped ctxs are more likely to be towards the end.
+            if (dict_id.num == contexts[did_i].dict_id.num) return did_i;
 
     // PIZ only: check if its an alias that's not mapped in ctx_initialize_predefined_ctxs (due to contention)
     if (command != ZIP && dict_id_aliases) {
         for (uint32_t alias_i=0; alias_i < dict_id_num_aliases; alias_i++)
             if (dict_id.num == dict_id_aliases[alias_i].alias.num) { // yes! its an alias
-                for (DidIType did_i=0; did_i < num_contexts; did_i++) 
-                    if (dict_id_aliases[alias_i].dst.num == contexts[did_i].dict_id.num) return did_i;
+
+                if (ctx_index)
+                    return ctx_did_i_search (ctx_index, num_contexts, dict_id_aliases[alias_i].dst, 0, num_contexts-1);
+
+                else 
+                    for (did_i=0; did_i < num_contexts; did_i++) 
+                        if (dict_id_aliases[alias_i].dst.num == contexts[did_i].dict_id.num) return did_i;
             }
     }
 

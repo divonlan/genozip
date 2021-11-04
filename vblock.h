@@ -134,6 +134,9 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     Context contexts[MAX_DICTS];    \
     DidIType dict_id_to_did_i_map[65536 * 2];   /* map for quick look up of did_i from dict_id : 64K for key_map, 64K for alt_map */\
     \
+    bool has_ctx_index; \
+    ContextIndex ctx_index[MAX_DICTS]; /* PIZ VB: sorted index into contexts for binary-search lookup if dict_id_to_did_i_map fails */\
+    \
     /* reference stuff */ \
     Reference ref;             /* used by VBs created by dispatchers for uncompressing / compressing internal or external references. NOT used by VBs of the data type itself. */ \
     Buffer chrom2ref_map;      /* ZIP: mapping from user file chrom to alternate chrom in reference file (new chroms in this VB) - incides much vb->contexts[CHROM].nodes */\

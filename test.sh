@@ -822,6 +822,29 @@ batch_real_world_1()
     for f in $files; do rm -f ${f}.genozip; done
 }
 
+batch_real_world_1_backcomp()
+{
+    batch_print_header
+
+    cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
+
+    local filter_out=nothing
+    if [ ! -x "$(command -v xz)" ] ; then # xz unavailable
+        local filter_out=.xz
+    fi
+
+    # without reference
+    local files_work_v12_0_42=( basic.phy test.1000G.annotated.vcf test.1001genomes.vcf.gz test.1KG-38.vcf test.360_merged_2.50.vcf.gz test.ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf test.BGI.sam.gz test.bwa-X.sam test.canonical-gene.gff test.cattle.vcf test.chr17.SS6004478.vcf test.chr22.indels.vcf test.clinvar37.vcf.gz test.contaminated.kraken test.coronavirus.fasta test.dog.INDEL.vcf.gz test.ExAC.vcf.gz test.exampleFASTA.fasta test.GCF_000001405.39-GCA_009914755.2.gff test.genome_Full.txt test.GenomeAsia100K.vcf.bz2 test.giab.vcf test.gnomad.vcf.gz test.GRCh38_full_analysis_set_plus_decoy_hla.fa test.GRCh38_issues.gff3 test.homo_sapiens_incl_consequences-chrY.gvf test.human.fq.gz test.human2.bam test.human2.filtered.snp.vcf test.human2.sam test.human2-R1.100K.fq.bz2 test.human2-R1.100K.fq.gz test.human2-R2.100K.fq.bz2 test.human2-R2.100K.fq.gz test.human-collated.sam test.human-sorted.sam test.IonXpress.sam test.NA12878.chr22.1x.bam test.NA12878.chr22.1x.sam test.NA12878.sorted.vcf test.NA12878-R1.100k.fq test.nanopore.fq test.nanopore.sam test.normal.kraken test.NovaSeq.bam test.NovaSeq.sam.gz test.pacbio.10k.fasta.xz test.pacbio.10k.hg19.sam.gz test.pacbio.ccs.10k.bam test.pacbio.ccs.10k.sam test.pacbio.clr.bam test.pacbio.clr.sam test.robot.sam test.sequential.fa.gz test.solexa.sam test.udhr.txt )
+
+    local files_work_v13_0_0=( test.ensembl-export.gff test.maker.gff test.varscan.vcf )
+
+    for f in ${files_work_v12_0_42[@]}; do 
+        test_header "$f - backward compatability with prod"
+        $genozip_prod private/test/$f -fo $output || exit 1
+        $genounzip -t $output || exit 1
+    done
+}
+
 batch_real_world_with_ref()
 {
     batch_print_header
@@ -841,6 +864,26 @@ batch_real_world_with_ref()
     test_standard "-mf $1 -e $hs37d5" " " ${files[*]}
 
     for f in $files test.GRCh38_to_GRCh37.chain; do rm -f ${TESTDIR}/${f}.genozip ; done
+}
+
+
+batch_real_world_with_ref_backcomp()
+{
+    batch_print_header
+
+    cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
+
+    # with a reference
+    local files=( test.IonXpress.sam \
+                  test.human.fq.gz test.human2.bam test.human2.sam \
+                  test.human2-R1.100K.fq.bz2 test.pacbio.ccs.10k.bam test.pacbio.ccs.10k.sam \
+                  test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq test.pacbio.10k.hg19.sam.gz )
+
+    for f in $files; do 
+        test_header "$f - backward compatability with prod (with reference)"
+        $genozip_prod private/test/$f -mf -e $hs37d5 -o $output || exit 1
+        $genounzip -t $output || exit 1
+    done
 }
 
 batch_real_world_small_vbs()
@@ -1037,7 +1080,7 @@ GRCh38=data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
 chain37_38=data/GRCh37_to_GRCh38.chain.genozip
 
 if (( $# < 1 )); then
-    echo "Usage: test.sh [debug|opt|prod|back] <batch_id-test> [optional-genozip-arg]"
+    echo "Usage: test.sh [debug|opt|prod] <batch_id-test> [optional-genozip-arg]"
     exit 0
 fi
 
@@ -1053,14 +1096,6 @@ is_opt=`echo $1|grep opt`
 if [ -n "$is_opt" ]; then 
     debug_zip=-opt
     debug_nonzip=-opt
-    shift
-fi
-
-# test backward compatability against against
-is_back=`echo $1|grep back`
-if [ -n "$is_back" ]; then 
-    debug_zip=-prod
-    debug_nonzip=""
     shift
 fi
 
@@ -1080,6 +1115,7 @@ fi
 # -----------------
 if [ -n "$is_windows" ]; then
     genozip_exe=$dir/genozip${debug_zip}.exe
+    genozip_prod_exe=$dir/genozip-prod.exe
     genounzip_exe=$dir/genounzip${debug_nonzip}.exe
     genocat_exe=$dir/genocat${debug_nonzip}.exe
     genols_exe=$dir/genols${debug_nonzip}.exe 
@@ -1088,6 +1124,7 @@ if [ -n "$is_windows" ]; then
     path=`pwd| cut -c3-|tr / '\\\\'`\\
 else
     genozip_exe=$dir/genozip${debug_zip}
+    genozip_prod_exe=$dir/genozip-prod
     genounzip_exe=$dir/genounzip${debug_nonzip}
     genocat_exe=$dir/genocat${debug_nonzip}
     genols_exe=$dir/genols${debug_nonzip} 
@@ -1095,6 +1132,7 @@ else
 fi
 
 genozip="$genozip_exe --echo $2 $zip_threads"
+genozip_prod="$genozip_prod_exe --echo $2 $zip_threads"
 genounzip="$genounzip_exe --echo $2 $piz_threads"
 genocat_no_echo="$genocat_exe $2 $piz_threads"
 genocat="$genocat_exe --echo $2 $piz_threads"
@@ -1165,17 +1203,19 @@ if (( $1 <= 29 )) ; then  batch_iupac                  ; fi
 if (( $1 <= 30 )) ; then  batch_real_world_small_vbs   ; fi 
 if (( $1 <= 31 )) ; then  batch_real_world_1           ; fi 
 if (( $1 <= 32 )) ; then  batch_real_world_with_ref    ; fi 
-if (( $1 <= 33 )) ; then  batch_multifasta             ; fi
-if (( $1 <= 34 )) ; then  batch_misc_cases             ; fi
-if (( $1 <= 35 )) ; then  batch_external_cram          ; fi
-if (( $1 <= 36 )) ; then  batch_external_bcf           ; fi
-if (( $1 <= 37 )) ; then  batch_external_unzip         ; fi
-if (( $1 <= 38 )) ; then  batch_reference_fastq        ; fi
-if (( $1 <= 39 )) ; then  batch_reference_sam          ; fi
-if (( $1 <= 40 )) ; then  batch_reference_vcf          ; fi
-if (( $1 <= 41 )) ; then  batch_genols                 ; fi
-if (( $1 <= 42 )) ; then  batch_tar_files_from         ; fi
-if (( $1 <= 43 )) ; then  batch_make_reference         ; fi
-if (( $1 <= 44 )) ; then  batch_prod_compatability     ; fi
+if (( $1 <= 33 )) ; then  batch_real_world_1_backcomp  ; fi 
+if (( $1 <= 34 )) ; then  batch_real_world_with_ref_backcomp ; fi 
+if (( $1 <= 35 )) ; then  batch_multifasta             ; fi
+if (( $1 <= 36 )) ; then  batch_misc_cases             ; fi
+if (( $1 <= 37 )) ; then  batch_external_cram          ; fi
+if (( $1 <= 38 )) ; then  batch_external_bcf           ; fi
+if (( $1 <= 39 )) ; then  batch_external_unzip         ; fi
+if (( $1 <= 40 )) ; then  batch_reference_fastq        ; fi
+if (( $1 <= 41 )) ; then  batch_reference_sam          ; fi
+if (( $1 <= 42 )) ; then  batch_reference_vcf          ; fi
+if (( $1 <= 43 )) ; then  batch_genols                 ; fi
+if (( $1 <= 44 )) ; then  batch_tar_files_from         ; fi
+if (( $1 <= 45 )) ; then  batch_make_reference         ; fi
+if (( $1 <= 46 )) ; then  batch_prod_compatability     ; fi
 
 printf "\nALL GOOD!\n"

@@ -87,7 +87,7 @@ void vb_release_vb_do (VBlockP *vb_p, const char *func)
     vb->first_line = vb->vblock_i = vb->fragment_len = vb->fragment_num_words = vb->pos_aln_i = 0;
     vb->recon_size = vb->recon_size_luft = vb->txt_size = vb->txt_size_source_comp = vb->reject_bytes = vb->longest_line_len = vb->line_i = vb->component_i = vb->grep_stages = vb->sample_i = 0;
     vb->recon_num_lines = vb->recon_num_lines_luft = 0;
-    vb->ready_to_dispatch = vb->is_processed = vb->is_unsorted[0] = vb->is_unsorted[1] = false;
+    vb->ready_to_dispatch = vb->is_processed = vb->is_unsorted[0] = vb->is_unsorted[1] = vb->has_ctx_index = false;
     vb->z_next_header_i = 0;
     vb->num_contexts = 0;
     vb->line_coords = DC_NONE;
@@ -115,6 +115,7 @@ void vb_release_vb_do (VBlockP *vb_p, const char *func)
 
     memset(&vb->profile, 0, sizeof (vb->profile));
     memset(vb->dict_id_to_did_i_map, 0, sizeof(vb->dict_id_to_did_i_map));
+    memset(vb->ctx_index, 0, sizeof(vb->ctx_index));
     vb->iupacs_last_range[0] = vb->iupacs_last_range[1] = NULL;
     vb->iupacs_last_pos[0] = vb->iupacs_last_pos[1] = vb->iupacs_next_pos[0] = vb->iupacs_next_pos[1] = 0;
     vb->num_rollback_ctxs=0;
