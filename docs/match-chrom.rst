@@ -57,6 +57,8 @@ The variations of the contig names considered are:
 
 - For chromosomes with a numeric suffix (eg chr22) as well as chrX, chrY, chrW and chrZ - with or without the *chr* prefix - the name with or without a lower case *chr* prefix is considered.
 
+- NC_000001 to NC_000024 with a version number (eg NC_000001.10) are considered as equivalent to 1,...22,X,Y (with or without a *chr* prefix)
+  
 - For the Mitochondria chromosome, four options are considered - M, MT, chrM, chrMT
 
 - For contigs that contain an embedded `Accession Number <https://www.ncbi.nlm.nih.gov/genbank/acc_prefix/>`_, the following variations are considered:
