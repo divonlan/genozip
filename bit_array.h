@@ -213,6 +213,13 @@ static inline void bit_array_clear_excess_bits_in_top_word (BitArray* bitarr) //
     bitarr->words[bitarr->nwords-1] &= bitmask64 (bitarr->nbits % 64); 
 }
 
+static inline void ASSERT_excess_bits_are_0 (BitArray* bitarr) // divon
+{
+  ASSERT0 (!(bitarr->nbits & 0x3f) || !(bitarr->words[bitarr->nwords-1] & ~bitmask64 (bitarr->nbits & 0x3f)),
+           "Expecting excess bits in top word of bit array to be 0");
+}
+
+
 // Allocate using existing struct
 extern BitArray bit_array_alloc_do (bit_index_t nbits, bool clear, const char *func, uint32_t code_line);
 #define bit_array_alloc(nbits, clear) bit_array_alloc_do ((nbits), (clear), __FUNCTION__, __LINE__)

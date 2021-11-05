@@ -284,6 +284,12 @@ done:
     return *selected_codec;
 }
 
+
+// complex codec est size - result may be recompressed with RAN, ART
+uint32_t codec_complex_est_size (Codec codec, uint64_t uncompressed_len)
+{
+    return (uint32_t)uncompressed_len * 1.1 + 100000;
+}
 // print prefix to the string to be printed by COPY_TIMER in the codec compression functions in case
 // of eg. --show-time=compressor_lzma
 void codec_show_time (VBlock *vb, const char *name, const char *subname, Codec codec)

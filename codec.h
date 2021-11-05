@@ -60,12 +60,12 @@ typedef struct {
     { 1, "RANW", "+",      NA0,           codec_RANW_compress,      codec_rans_uncompress, NA3,                       codec_RANW_est_size      }, \
     { 1, "RANb", "+",      NA0,           codec_RANb_compress,      codec_rans_uncompress, NA3,                       codec_RANb_est_size      }, \
     { 1, "RANw", "+",      NA0,           codec_RANw_compress,      codec_rans_uncompress, NA3,                       codec_RANw_est_size      }, \
-    { 0, "ACGT", "+",      NA0,           codec_acgt_compress,      codec_acgt_uncompress, NA3,                       codec_none_est_size      }, \
+    { 0, "ACGT", "+",      NA0,           codec_acgt_compress,      codec_acgt_uncompress, NA3,                       codec_complex_est_size   }, \
     { 0, "XCGT", "+",      NA0,           USE_SUBCODEC,             codec_xcgt_uncompress, NA3,                       NA4                      }, \
     { 0, "HAPM", "+",      NA0,           NA1,                      USE_SUBCODEC,          codec_hapmat_reconstruct,  NA4,                     }, /* HapMat was discontinued and replaced by PBWT. We keep it for decompressing old VCF files */ \
-    { 0, "DOMQ", "+",      NA0,           codec_domq_compress,      USE_SUBCODEC,          codec_domq_reconstruct,    codec_none_est_size,     }, \
+    { 0, "DOMQ", "+",      NA0,           codec_domq_compress,      USE_SUBCODEC,          codec_domq_reconstruct,    codec_complex_est_size,  }, \
     { 0, "GTSH", "+",      NA0,           NA1,                      codec_gtshark_uncompress, codec_pbwt_reconstruct, NA4,                     }, /* gtshark discontinued in v12. keep for displaying an error */\
-    { 0, "PBWT", "+",      NA0,           codec_pbwt_compress,      codec_pbwt_uncompress, codec_pbwt_reconstruct,    codec_none_est_size      }, \
+    { 0, "PBWT", "+",      NA0,           codec_pbwt_compress,      codec_pbwt_uncompress, codec_pbwt_reconstruct,    codec_complex_est_size   }, \
     { 1, "ARTB", "+",      NA0,           codec_ARTB_compress,      codec_arith_uncompress,NA3,                       codec_ARTB_est_size      }, \
     { 1, "ARTW", "+",      NA0,           codec_ARTW_compress,      codec_arith_uncompress,NA3,                       codec_ARTW_est_size      }, \
     { 1, "ARTb", "+",      NA0,           codec_ARTb_compress,      codec_arith_uncompress,NA3,                       codec_ARTb_est_size      }, \
@@ -83,17 +83,19 @@ extern CodecArgs codec_args[NUM_CODECS];
 extern CodecCompress codec_bz2_compress, codec_lzma_compress, codec_domq_compress, codec_bsc_compress, 
                      codec_none_compress, codec_acgt_compress, codec_xcgt_compress, codec_pbwt_compress, 
                      codec_RANB_compress, codec_RANW_compress, codec_RANb_compress, codec_RANw_compress, 
-                     codec_ARTB_compress, codec_ARTW_compress, codec_ARTb_compress, codec_ARTw_compress;
+                     codec_ARTB_compress, codec_ARTW_compress, codec_ARTb_compress, codec_ARTw_compress,
+                     codec_bit1_compress;
 
 extern CodecUncompress codec_bz2_uncompress, codec_lzma_uncompress, codec_acgt_uncompress, codec_xcgt_uncompress,
                        codec_bsc_uncompress, codec_none_uncompress, codec_gtshark_uncompress, codec_pbwt_uncompress,
-                       codec_rans_uncompress, codec_arith_uncompress;
+                       codec_rans_uncompress, codec_arith_uncompress, codec_bit1_uncompress;
 
 extern CodecReconstruct codec_hapmat_reconstruct, codec_domq_reconstruct, codec_pbwt_reconstruct;
 
 extern CodecEstSizeFunc codec_none_est_size, codec_bsc_est_size, codec_hapmat_est_size, codec_domq_est_size,
                         codec_RANB_est_size, codec_RANW_est_size, codec_RANb_est_size, codec_RANw_est_size, 
-                        codec_ARTB_est_size, codec_ARTW_est_size, codec_ARTb_est_size, codec_ARTw_est_size;
+                        codec_ARTB_est_size, codec_ARTW_est_size, codec_ARTb_est_size, codec_ARTw_est_size,
+                        codec_complex_est_size;
 
 // non-codec-specific functions
 extern void codec_initialize (void);

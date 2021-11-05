@@ -12,19 +12,6 @@
 // or a value of 255 means a run of 255 and then continue the run with the next dom value, 
 // thereby allowing runs of over 255 (e.g. a run "255-255-5" would be a run of 255+255+5=515 doms)
 
-/* feasibility test on Illumina binned data:
--rw-r--r-- 1 USER 197610 14236798 Jul 25 16:49 qual
--rw-r--r-- 1 USER 197610   924542 Jul 26 18:17 qual.bz2 
-
--rw-r--r-- 1 USER 197610   295298 Jul 26 17:07 qual.chars.bz2
--rw-r--r-- 1 USER 197610   600946 Jul 26 17:07 qdomruns.bz2
-                           896244 3% better and 10% faster
-
--rw-r--r-- 1 USER 197610   274560 Jul 26 17:11 qual.chars.xz
--rw-r--r-- 1 USER 197610   545944 Jul 26 17:11 qdomruns.xz
-                           820504 12% better and 3.5X more time
-*/
-
 #include "vblock.h"
 #include "data_types.h"
 #include "piz.h"

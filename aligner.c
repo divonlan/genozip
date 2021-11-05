@@ -101,13 +101,13 @@ BitArray aligner_seq_to_bitmap (const char *seq, word_t seq_len,
 // returns gpos aligned with seq with M (as in CIGAR) length, containing the longest match to the reference. 
 // returns false if no match found.
 // note: matches that imply a negative GPOS (i.e. their beginning is aligned to before the start of the genome), aren't consisdered
-static inline PosType aligner_best_match (VBlock *vb, const char *seq, const uint32_t seq_len,
+static inline PosType aligner_best_match (VBlock *vb, STRp(seq), PosType pair_gpos,
                                           const BitArray *genome, const BitArray *emoneg, PosType genome_nbases,
                                           bool *is_forward, bool *is_all_ref) // out
 {
     START_TIMER;
 
-    uint32_t longest_len=0; // longest number of bits (not bases!) that match
+    int32_t/*signed*/ longest_len=0; // longest number of bits (not bases!) that match
     uint32_t refhash_word;
     const PosType seq_len_64 = (PosType)seq_len; // 64 bit version of seq_len
     
@@ -166,11 +166,12 @@ static inline PosType aligner_best_match (VBlock *vb, const char *seq, const uin
 
 #       define UPDATE_BEST(fwd)  {               \
             if (gpos != best_gpos) {             \
-                uint32_t match_len = (uint32_t)seq_bits.nbits - \
+                int32_t match_len = (uint32_t)seq_bits.nbits - \
                     bit_array_hamming_distance ((fwd) ? genome : emoneg, \
                                                ((fwd) ? gpos : genome_nbases-1 - (gpos + seq_bits.nbits/2 -1)) * 2, \
                                                &seq_bits, 0, \
                                                seq_bits.nbits); \
+                if (pair_gpos != NO_GPOS && ABS(gpos-pair_gpos) > 500) match_len -= 20; /* penalty for remote GPOS in 2nd pair */ \
                 if (match_len > longest_len) {   \
                     longest_len     = match_len; \
                     best_gpos       = gpos;      \
@@ -245,10 +246,19 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq))
 
     bool is_forward=false, is_all_ref=false;
 
+    // get mate's GPOS
+    PosType pair_gpos = NO_GPOS;
+    if (gpos_ctx->pair_local) {
+        ASSERT (vb->line_i < gpos_ctx->pair.len, "vb=%u cannot get pair_1 GPOS for line_i=%"PRIu64" because pair_1 GPOS.len=%"PRIu64,
+                vb->vblock_i, vb->line_i, gpos_ctx->pair.len);
+
+        pair_gpos = (PosType)*ENT (uint32_t, gpos_ctx->pair, vb->line_i); // same location, in the pair's local
+    }
+
     // our aligner algorithm only works for short reads - long reads tend to have many Indel differences (mostly errors) vs the reference
     #define MAX_SHORT_READ_LEN 2500
     PosType gpos = (seq_len <= MAX_SHORT_READ_LEN && !segconf.running) 
-                 ? aligner_best_match (VB, seq, seq_len, genome, emoneg, genome_nbases, &is_forward, &is_all_ref) : NO_GPOS; 
+                 ? aligner_best_match (VB, STRa(seq), pair_gpos, genome, emoneg, genome_nbases, &is_forward, &is_all_ref) : NO_GPOS; 
 
     // case: we're the 2nd of the pair - the bit represents whether this strand is equal to the pair's strand (expecting
     // it to be 1 in most cases - making the bitmap highly compressible)
@@ -271,10 +281,6 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq))
     bool store_local = true;
     if (gpos_ctx->pair_local) {
 
-        ASSERT (vb->line_i < gpos_ctx->pair.len, "vb=%u cannot get pair_1 GPOS for line_i=%"PRIu64" because pair_1 GPOS.len=%"PRIu64,
-                vb->vblock_i, vb->line_i, gpos_ctx->pair.len);
-
-        PosType pair_gpos = (PosType)*ENT (uint32_t, gpos_ctx->pair, vb->line_i); // same location, in the pair's local
         PosType gpos_delta = gpos - pair_gpos; 
 
         if (gpos != NO_GPOS && gpos_delta <= MAX_GPOS_DELTA && gpos_delta >= -MAX_GPOS_DELTA) {

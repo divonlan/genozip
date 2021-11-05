@@ -167,11 +167,10 @@
 //#pragma GENDICT OPTION_ms_i=DTYPE_2=ms:i  // Conflict with biobambam: DP score of the max scoring segment in the alignment
 #pragma GENDICT OPTION_nn_i=DTYPE_2=nn:i    // Number of ambiguous bases in the alignment
 #pragma GENDICT OPTION_ts_A=DTYPE_2=ts:A    // Transcript strand (splice mode only)
-#pragma GENDICT OPTION_cs_Z=DTYPE_2=cs:Z    // Difference string, see: https://github.com/lh3/minimap2#cs
+#pragma GENDICT OPTION_cs_Z=DTYPE_2=cs:Z    // Difference string, see: https://github.com/lh3/minimap2#cs and https://lh3.github.io/2018/03/27/the-history-the-cigar-x-operator-and-the-md-tag
 #pragma GENDICT OPTION_dv_f=DTYPE_2=dv:f    // Approximate per-base sequence divergence
 #pragma GENDICT OPTION_de_f=DTYPE_2=de:f    // Gap-compressed per-base sequence divergence
 #pragma GENDICT OPTION_rl_i=DTYPE_2=rl:i    // Length of query regions harboring repetitive seeds
-
 
 #pragma GENDICT OPTION_TX_i=DTYPE_2=tx:i    // Genozip tag for taxonomy ID
 
