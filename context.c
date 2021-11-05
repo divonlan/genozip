@@ -1322,8 +1322,8 @@ void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local /* true = local, fals
     char dump_fn[MAX_TAG_LEN + 50];
     sprintf (dump_fn, "%s.%05u.%s", ctx->tag_name, vb->vblock_i, local ? "local" : "b250");
     
-    bool success = local ? buf_dump_to_file (dump_fn, &ctx->local, lt_desc[ctx->ltype].width, false, true, true)
-                         : buf_dump_to_file (dump_fn, &ctx->b250, 1, false, true, true);
+    bool success = local ? buf_dump_to_file (dump_fn, &ctx->local, lt_desc[ctx->ltype].width, false, true, true, false)
+                         : buf_dump_to_file (dump_fn, &ctx->b250, 1, false, true, true, false);
 
     ASSERTW (success, "Warning: ctx_dump_binary failed to output file %s: %s", dump_fn, strerror (errno));
 }

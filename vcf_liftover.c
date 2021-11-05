@@ -679,7 +679,7 @@ void vcf_liftover_display_lift_report (void)
         memcpy (report, REJECTS_HEADER, REJECTS_HEADER_LEN);
         z_file->rejects_report.len += REJECTS_HEADER_LEN;
 
-        buf_dump_to_file (report_fn, &z_file->rejects_report, 1, false, false, false);
+        buf_dump_to_file (report_fn, &z_file->rejects_report, 1, false, false, false, false);
     }
 
     if (!flag.quiet)

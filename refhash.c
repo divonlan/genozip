@@ -248,7 +248,7 @@ void refhash_remove_cache (void)
 // thread entry for creating refhash cache
 static void refhash_create_cache (VBlockP unused)
 {
-    buf_dump_to_file (refhash_get_cache_fn(), &refhash_buf, 1, true, false, false);
+    buf_dump_to_file (refhash_get_cache_fn(), &refhash_buf, 1, true, false, false, false);
 }
 
 static void refhash_create_cache_in_background (void)

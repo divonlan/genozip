@@ -183,12 +183,11 @@ bool codec_acgt_compress (VBlock *vb, SectionHeader *header,
 // two options: 1. the length maybe given (textually) in snip/snip_len. in that case, it is used and vb->seq_len is updated.
 // if snip_len==0, then the length is taken from seq_len.
 void codec_xcgt_uncompress (VBlock *vb, Codec codec, uint8_t param,
-                            const char *compressed, uint32_t compressed_len,
-                            Buffer *uncompressed_buf, uint64_t uncompressed_len,
+                            STRp(compressed), Buffer *uncompressed_buf, uint64_t uncompressed_len,
                             Codec sub_codec)
 {
     // uncompress NONREF_X using CODEC_XCGT.sub_codec (passed to us as sub_codec)
-    codec_args[sub_codec].uncompress (vb, sub_codec, param, compressed, compressed_len, uncompressed_buf, uncompressed_len, CODEC_NONE);
+    codec_args[sub_codec].uncompress (vb, sub_codec, param, STRa(compressed), uncompressed_buf, uncompressed_len, CODEC_NONE);
 
     const BitArray *acgt_packed = buf_get_bitarray (&vb->compressed); // data from NONREF context (2-bit per base)
     const char *acgt_x = FIRSTENT (const char, *uncompressed_buf); // data from NONREF_X context

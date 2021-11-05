@@ -132,6 +132,11 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
     | See: :ref:`dvcf`
     |
 
+.. option:: --biopsy=vb,vb...  C. Dump a subset of the source file being compressed. The argument is a comma separated list of VB numbers, with 0 meaning the file's header.
+
+          |
+
+
 **Tracking execution**
 
 .. option:: --show-containers[=field]  ZUC. Show flow of containers. Possibly with the values of a specific field (use --STATS to see the field names in the file).

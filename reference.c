@@ -626,7 +626,7 @@ bool ref_mmap_cached_reference (Reference ref)
 
 static void ref_create_cache (VBlockP cache_create_vb) 
 {
-    buf_dump_to_file (ref_get_cache_fn(cache_create_vb->ref), &cache_create_vb->ref->genome_cache, 1, true, false, false);
+    buf_dump_to_file (ref_get_cache_fn(cache_create_vb->ref), &cache_create_vb->ref->genome_cache, 1, true, false, false, false);
 }
 
 // initiate creating the the genome cache in a background thread

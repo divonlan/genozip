@@ -23,6 +23,7 @@
 #include "digest.h"
 #include "profiler.h"
 #include "segconf.h"
+#include "biopsy.h"
 #include "zlib/zlib.h"
 #include "libdeflate/libdeflate.h"
 #include "bzlib/bzlib.h"
@@ -39,7 +40,7 @@ const char *txtfile_dump_filename (VBlockP vb, const char *base_name, const char
 const char *txtfile_dump_vb (VBlockP vb, const char *base_name)
 {
     const char *dump_filename = txtfile_dump_filename (vb, base_name, "bad");
-    buf_dump_to_file (dump_filename, &vb->txt_data, 1, false, false, false);
+    buf_dump_to_file (dump_filename, &vb->txt_data, 1, false, false, false, false);
 
     return dump_filename;
 }
@@ -165,7 +166,7 @@ static inline uint32_t txtfile_read_block_bgzf (VBlock *vb, int32_t max_uncomp /
                 sprintf (dump_fn, "%s.vb-%u.bad-bgzf.bad-offset-0x%X", txt_name, vb->vblock_i, (uint32_t)vb->compressed.len);
                 Buffer dump_buffer = vb->compressed; // a copy
                 dump_buffer.len   += block_comp_len; // compressed size
-                buf_dump_to_file (dump_fn, &dump_buffer, 1, false, false, true);
+                buf_dump_to_file (dump_fn, &dump_buffer, 1, false, false, true, false);
 
                 ABORT ("Error in txtfile_read_block_bgzf: Invalid BGZF block in vb=%u block_comp_len=%u. Entire BGZF data of this vblock dumped to %s, bad block stats at offset 0x%X",
                        vb->vblock_i, block_comp_len, dump_fn, (uint32_t)vb->compressed.len);
@@ -358,6 +359,8 @@ Digest txtfile_read_header (bool is_first_txt)
         header_digest = digest_snapshot (&z_file->digest_ctx_single);
     }
 
+    biopsy_take (evb);
+
     COPY_TIMER_VB (evb, txtfile_read_header); // same profiler entry as txtfile_read_header
 
     return header_digest;
@@ -375,9 +378,9 @@ int32_t def_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
     return -1; // cannot find \n in the data starting first_i
 }
 
-static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb)
+static uint32_t txtfile_get_unconsumed_to_pass_to_next_vb (VBlock *vb)
 {
-    int32_t passed_up_len;
+    int32_t pass_to_next_vb_len;
     int32_t last_i = vb->txt_data.len-1; // next index to test (going backwards)
 
     // case: the data is BGZF-compressed in vb->compressed, except for passed down data from prev VB        
@@ -390,8 +393,8 @@ static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb)
             BgzfBlockZip *bb = ENT (BgzfBlockZip, vb->bgzf_blocks, block_i);
             bgzf_uncompress_one_block (vb, bb);
 
-            passed_up_len = (DT_FUNC(txt_file, unconsumed)(vb, bb->txt_index, &last_i));
-            if (passed_up_len >= 0) goto done; // we have the answer (callback returns -1 if no it needs more data)
+            pass_to_next_vb_len = (DT_FUNC(txt_file, unconsumed)(vb, bb->txt_index, &last_i));
+            if (pass_to_next_vb_len >= 0) goto done; // we have the answer (callback returns -1 if no it needs more data)
         }
 
         libdeflate_free_decompressor ((struct libdeflate_decompressor **)&vb->gzip_compressor);
@@ -400,12 +403,12 @@ static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb)
     }
 
     // test remaining txt_data including passed-down data from previous VB
-    passed_up_len = (DT_FUNC(txt_file, unconsumed)(vb, 0, &last_i));
+    pass_to_next_vb_len = (DT_FUNC(txt_file, unconsumed)(vb, 0, &last_i));
 
     // case: we're testing memory and this VB is too small for a single line - return and caller will try again with a larger VB
-    if (segconf.running && passed_up_len < 0) return (uint32_t)-1;
+    if (segconf.running && pass_to_next_vb_len < 0) return (uint32_t)-1;
 
-    ASSERT (passed_up_len >= 0, "Reason: failed to find a full line (i.e. newline-terminated) in vb=%u data_type=%s codec=%s.\n"
+    ASSERT (pass_to_next_vb_len >= 0, "Reason: failed to find a full line (i.e. newline-terminated) in vb=%u data_type=%s codec=%s.\n"
             "Known possible causes:\n"
             "- The file is missing a newline on the last line.\n"
             "- The file is not a %s file.\n"
@@ -416,7 +419,7 @@ static uint32_t txtfile_get_unconsumed_to_pass_up (VBlock *vb)
 
 done:
     libdeflate_free_decompressor ((struct libdeflate_decompressor **)&vb->gzip_compressor);
-    return (uint32_t)passed_up_len;
+    return (uint32_t)pass_to_next_vb_len;
 }
 
 // estimate the size of the txt_data of the file - i.e. the uncompressed data excluding the header - 
@@ -476,7 +479,7 @@ void txtfile_read_vblock (VBlock *vb)
 
     // read data from the file until either 1. EOF is reached 2. end of block is reached
     uint64_t max_memory_per_vb = segconf.vb_size - TXTFILE_READ_VB_PADDING;
-    uint32_t passed_up_len=0;
+    uint32_t pass_to_next_vb_len=0;
 
     // start with using the data passed down from the previous VB (note: copy & free and not move! so we can reuse txt_data next vb)
     if (txt_file->unconsumed_txt.len) {
@@ -487,9 +490,10 @@ void txtfile_read_vblock (VBlock *vb)
 
     bool always_uncompress = flag.pair == PAIR_READ_2 || // if we're reading the 2nd paired file, fastq_txtfile_have_enough_lines needs the whole data
                              flag.make_reference      || // unconsumed callback for make-reference needs to inspect the whole data
-                             segconf.running     ||
+                             segconf.running          ||
                              flag.optimize_DESC       || // fastq_zip_read_one_vb needs to count lines
-                             flag.add_line_numbers;      // vcf_zip_read_one_vb   needs to count lines
+                             flag.add_line_numbers    || // vcf_zip_read_one_vb   needs to count lines
+                             flag.biopsy;
 
     for (int32_t block_i=0; ; block_i++) {
 
@@ -505,7 +509,7 @@ void txtfile_read_vblock (VBlock *vb)
             // case: this is the 2nd file of a fastq pair - make sure it has at least as many fastq "lines" as the first file
             uint32_t my_lines, her_lines;
             if (flag.pair == PAIR_READ_2 &&  // we are reading the second file of a fastq file pair (with --pair)
-                !fastq_txtfile_have_enough_lines (vb, &passed_up_len, &my_lines, &her_lines)) { // we don't yet have all the data we need
+                !fastq_txtfile_have_enough_lines (vb, &pass_to_next_vb_len, &my_lines, &her_lines)) { // we don't yet have all the data we need
 
                 ASSINP (len, "File %s has less FASTQ reads than its R1 counterpart (vb=%u has %u lines while counterpart has %u lines)", 
                         txt_name, vb->vblock_i, my_lines, her_lines);
@@ -521,34 +525,34 @@ void txtfile_read_vblock (VBlock *vb)
         }
     }
 
-    if (always_uncompress) buf_free (&vb->compressed); // tested by txtfile_get_unconsumed_to_pass_up
+    if (always_uncompress) buf_free (&vb->compressed); // tested by txtfile_get_unconsumed_to_pass_to_next_vb
 
     // callback to decide what part of txt_data to pass up to the next VB (usually partial lines, but sometimes more)
     // note: even if we haven't read any new data (everything was passed down), we still might data to pass up - eg
     // in FASTA with make-reference if we have a lots of small contigs, each VB will take one contig and pass up the remaining
-    if (!passed_up_len && vb->txt_data.len) {
-        passed_up_len = txtfile_get_unconsumed_to_pass_up (vb);
+    if (!pass_to_next_vb_len && vb->txt_data.len) {
+        pass_to_next_vb_len = txtfile_get_unconsumed_to_pass_to_next_vb (vb);
 
         // case: return if we're testing memory, and there is not even one line of text  
-        if (segconf.running && passed_up_len == (uint32_t)-1) {
+        if (segconf.running && pass_to_next_vb_len == (uint32_t)-1) {
             buf_copy (evb, &txt_file->unconsumed_txt, &vb->txt_data, char, 0, 0, "txt_file->unconsumed_txt"); 
             buf_free (&vb->txt_data);
             return;
         }
     }
 
-    if (passed_up_len) {
+    if (pass_to_next_vb_len) {
 
         // note: we might some unconsumed data, pass it up to the next vb. possibly we still have unconsumed data (can happen if DVCF reject
         // data was passed down from the txt header, greater than max_memory_per_vb)
-        buf_alloc (evb, &txt_file->unconsumed_txt, passed_up_len, 0, char, 1, "txt_file->unconsumed_txt");
-        memmove (ENT (char, txt_file->unconsumed_txt, passed_up_len), FIRSTENT (char, txt_file->unconsumed_txt), txt_file->unconsumed_txt.len);
-        memcpy (FIRSTENT (char, txt_file->unconsumed_txt), ENT (char, vb->txt_data, vb->txt_data.len - passed_up_len), passed_up_len);
-        txt_file->unconsumed_txt.len += passed_up_len;
+        buf_alloc (evb, &txt_file->unconsumed_txt, pass_to_next_vb_len, 0, char, 1, "txt_file->unconsumed_txt");
+        memmove (ENT (char, txt_file->unconsumed_txt, pass_to_next_vb_len), FIRSTENT (char, txt_file->unconsumed_txt), txt_file->unconsumed_txt.len);
+        memcpy (FIRSTENT (char, txt_file->unconsumed_txt), ENT (char, vb->txt_data, vb->txt_data.len - pass_to_next_vb_len), pass_to_next_vb_len);
+        txt_file->unconsumed_txt.len += pass_to_next_vb_len;
 
         // now, if our data is bgzf-compressed, txt_data.len becomes shorter than indicated by vb->bgzf_blocks. that's ok - all that data
         // is decompressed and passed-down to the next VB. because it has been decompressed, the compute thread won't try to decompress it again
-        vb->txt_data.len -= passed_up_len; 
+        vb->txt_data.len -= pass_to_next_vb_len; 
 
         // if is possible we reached eof but still have pass_up_data - this happens eg in make-reference when a
         // VB takes only one contig from txt_data and pass up the rest - reset eof so that we come back here to process the rest
@@ -569,6 +573,9 @@ void txtfile_read_vblock (VBlock *vb)
     if (DTPT(zip_read_one_vb)) DTPT(zip_read_one_vb)(vb);
 
     txtfile_set_seggable_size();
+
+    if (!segconf.running)
+        biopsy_take (vb);
 
     COPY_TIMER (txtfile_read_vblock);
 }

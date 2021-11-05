@@ -348,8 +348,8 @@ void bgzf_calculate_blocks_one_vb (VBlock *vb, uint32_t vb_txt_data_len)
     if (!txt_file->bgzf_isizes.len) return;
 
     // if we have an initial region of txt_data that has a split block with the previous VB - 
-    // that will be our first block, with a negative index. the previous VBs final data is now in bzgf_passed_down_len
-    int32_t index = -txt_file->bzgf_passed_down_len; // first block should cover passed down data too
+    // that will be our first block, with a negative index. the previous VBs final data is now in bzgf_passed_to_next_vb
+    int32_t index = -txt_file->bzgf_passed_to_next_vb; // first block should cover passed down data too
 
     while (next_isize < txt_file->bgzf_isizes.len) { 
         
@@ -358,7 +358,7 @@ void bgzf_calculate_blocks_one_vb (VBlock *vb, uint32_t vb_txt_data_len)
         ASSERT (index + isize > 0, "expecting index=%d + isize=%d > 0", index, isize); // if isize is small than the unconsumed data, then this block should have belonged to the previous VB
 
         if (index + isize > (int32_t)vb_txt_data_len) {
-            txt_file->bzgf_passed_down_len = (int32_t)vb_txt_data_len - index; // pass down to next vb 
+            txt_file->bzgf_passed_to_next_vb = (int32_t)vb_txt_data_len - index; // pass down to next vb 
             break; // this VB doesn't have enough data to fill up this BGZF block - pass it down to the next VB
         }
         buf_alloc (vb, &vb->bgzf_blocks, 1, segconf.vb_size / 63000, BgzfBlockPiz, 1.5, "bgzf_blocks");

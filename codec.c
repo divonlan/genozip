@@ -118,8 +118,10 @@ typedef struct {
 static int codec_assign_sorter (const CodecTest *t1, const CodecTest *t2)
 {
     // in --best mode, we take the smallest size, regardless of speed
-    if (flag.best)
-        return t1->size - t2->size;
+    if (flag.best) {
+        if (t1->size != t2->size) return ASCENDING (t1->size, t2->size);
+        else                      return ASCENDING (t1->clock, t2->clock);
+    }
 
     // in --fast mode - if one if significantly faster with a modest size hit, take it. Otherwise, take the best.
     if (flag.fast) {
@@ -147,10 +149,10 @@ static int codec_assign_sorter (const CodecTest *t1, const CodecTest *t2)
 
     // if size is exactly the same - choose the lower-index codex (so to pick non-packing version of RAN and ART)
     if (t1->size == t2->size)
-        return t1->codec - t2->codec;
+        return ASCENDING(t1->codec, t2->codec);
 
     // time and size are very similar (within %1 and 15% respectively) - select for smaller size
-    return t1->size - t2->size;
+    return ASCENDING(t1->size, t2->size);
 }
 
 // this function tests each of our generic codecs on a 100KB sample of local or b250 data, and assigns the best one based on 
@@ -255,8 +257,9 @@ Codec codec_assign_best_codec (VBlockP vb,
     qsort (tests, num_tests, sizeof (CodecTest), (int (*)(const void *, const void*))codec_assign_sorter);
 
     if (flag.show_codec) {
-        iprintf ("vb_i=%-2u %-12s %-5s *[%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f]\n", 
-                 vb->vblock_i, ctx ? ctx->tag_name : "", &st_name (st)[4],
+        iprintf ("vb_i=%-2u %-12s %-5s %6.1fX  *[%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f]\n", 
+                 vb->vblock_i, ctx ? ctx->tag_name : &st_name (st)[4], ctx ? &st_name (st)[4] : "SECT",
+                 (float)data->len / tests[0].size,
                  codec_name (tests[0].codec), (int)tests[0].size, tests[0].clock,
                  codec_name (tests[1].codec), (int)tests[1].size, tests[1].clock,
                  codec_name (tests[2].codec), (int)tests[2].size, tests[2].clock,

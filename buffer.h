@@ -201,7 +201,7 @@ extern void *buf_low_level_malloc (size_t size, bool zero, const char *func, uin
 extern void *buf_low_level_realloc (void *p, size_t size, const char *name, const char *func, uint32_t code_line);
 #define REALLOC(p,size,name) if (!(*(p) = buf_low_level_realloc (*(p), (size), (name), __FUNCTION__, __LINE__))) ABORT0 ("REALLOC failed")
 
-extern bool buf_dump_to_file (const char *filename, const Buffer *buf, unsigned buf_word_width, bool including_control_region, bool no_dirs, bool verbose);
+extern bool buf_dump_to_file (const char *filename, const Buffer *buf, unsigned buf_word_width, bool including_control_region, bool no_dirs, bool verbose, bool do_gzip);
 
 // ------------
 // bitmap stuff

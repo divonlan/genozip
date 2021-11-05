@@ -59,7 +59,7 @@ typedef struct DataTypeProperties {
     const char *hdr_contigs;        // format of contigs in the txtheader
     char txt_header_1st_char;          // first character in each line in the text file header (-1 if TXT_HEADER_IS_ALLOWED is false)
     int32_t (*is_header_done) (bool is_eof);  // ZIP: header length if header read is complete, -1 if not complete yet + sets lines.len
-    int32_t (*unconsumed) (VBlockP, uint32_t first_i, int32_t *i);  // called by main thread called by txtfile_get_unconsumed_to_pass_up to get the length of unconsumed txt to pass to next vb. returns -1 if first_i is too high and it needs more data.
+    int32_t (*unconsumed) (VBlockP, uint32_t first_i, int32_t *i);  // called by main thread called by txtfile_get_unconsumed_to_pass_to_next_vb to get the length of unconsumed txt to pass to next vb. returns -1 if first_i is too high and it needs more data.
     bool (*inspect_txt_header) (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags); // called by main thread to verify the txt header. returns false if this txt file should be skipped
 
     // ZIP callbacks

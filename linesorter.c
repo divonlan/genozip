@@ -191,7 +191,7 @@ static void line_sorter_detect_duplicates (const Buffer *index_buf)
     }
 
     if (dups.len > empty_len) { 
-        buf_dump_to_file (overlaps_fn, &dups, 1, false, false, false);
+        buf_dump_to_file (overlaps_fn, &dups, 1, false, false, false, false);
         
         WARN ("FYI: Genozip detected cases of two or more variants with different Primary coordinates, mapped to the same Luft coordinates.\n"
               "These duplicates (in Luft coordinates) were output to %s, and may be filtered out with:\ngenocat %s --luft --regions-file ^%s\n",

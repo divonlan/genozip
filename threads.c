@@ -135,7 +135,7 @@ void threads_write_log (bool to_info_stream)
     else {
         char filename[100];
         sprintf (filename, "genozip.threads-log.%u", getpid());
-        buf_dump_to_file (filename, &log, 1, false, false, true);
+        buf_dump_to_file (filename, &log, 1, false, false, true, false);
     }
 }
 

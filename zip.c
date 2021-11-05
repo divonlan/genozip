@@ -39,6 +39,7 @@
 #include "segconf.h"
 #include "contigs.h"
 #include "chrom.h"
+#include "biopsy.h"
 
 static Mutex wait_for_vb_1_mutex = {};
 
@@ -514,6 +515,8 @@ static void zip_write_global_area (Digest single_component_digest)
 static void zip_compress_one_vb (VBlock *vb)
 {
     START_TIMER; 
+
+    if (flag.biopsy) return; // we're just taking a biopsy of the txt data, so no need to actually compress
 
     // if the txt file is compressed with BGZF, we uncompress now, in the compute thread
     if (txt_file->codec == CODEC_BGZF && flag.pair != PAIR_READ_2) 

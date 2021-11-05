@@ -17,8 +17,8 @@
             //"program": "${workspaceFolder}/genols-debug.exe",
             
             // "args" : ["-t", "bug.sam.genozip"],
-            "args" : ["-f", "private/test/test.pacbio.clr.bam"],
-                                    
+            "args" : ["--biopsy", "0,20,25", "-@1", "../../My-DNA/Dante/GFX0241869.bam"],
+                                                            
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],

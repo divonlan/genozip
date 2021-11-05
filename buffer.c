@@ -1040,31 +1040,43 @@ bit_index_t buf_extend_bits (Buffer *buf, int64_t num_new_bits)
 // note: this is run as separate thread from ref_create_cache_in_background and refhash_create_cache_in_background
 // so it cannot allocate any buffers
 bool buf_dump_to_file (const char *filename, const Buffer *buf, unsigned buf_word_width, bool including_control_region, 
-                       bool no_dirs, bool verbose)
+                       bool no_dirs, bool verbose, bool do_gzip)
 {
     RETURNW (buf->type == BUF_REGULAR, false, "FYI: failed to dump buffer.type=%s name=%s while putting %s", 
              buf_display_type (buf), buf->name ? buf->name : "(null)", filename);
 
-    char update_filename[strlen(filename) + 1];
+    int fn_len = strlen(filename);
+    char update_filename[fn_len + 10];
     strcpy (update_filename, filename);
 
     if (no_dirs) {
-        for (unsigned i=0; i < strlen(filename); i++)
+        for (unsigned i=0; i < fn_len; i++)
             if (filename[i] == '/' || (flag.is_windows && (filename[i] == '\\' || filename[i] == ':')))
                 update_filename[i] = '-';
         filename = update_filename;
     }
 
-    if (verbose) iprintf ("Dumping file %s\n", update_filename);
-
+    bool success;
     if (including_control_region) {
         ASSERT (*(uint64_t *)(buf->memory) == UNDERFLOW_TRAP, "dumping to %s: buffer has underflowed", filename);
         ASSERT (*(uint64_t *)(buf->data + buf->size) == OVERFLOW_TRAP, "dumping to %s: buffer has underflowed", filename);
 
-        return file_put_data (update_filename, buf->memory, buf->size + control_size, 0);
+        success = file_put_data (update_filename, buf->memory, buf->size + control_size, 0);
     }
     else
-        return file_put_data (update_filename, buf->data, buf->len * buf_word_width, 0);
+        success = file_put_data (update_filename, buf->data, buf->len * buf_word_width, 0);
+
+    if (success && do_gzip) {
+        char command[fn_len + 50];
+        sprintf (command, "gzip %s", update_filename);
+        system (command); // ignore failure
+
+        strcpy (&update_filename[fn_len], ".gz");
+    }
+
+    if (success && verbose) iprintf ("Dumped file %s\n", update_filename);
+
+    return success;
 }
  
 void BGEN_u8_buf (Buffer *buf, LocalType *lt)

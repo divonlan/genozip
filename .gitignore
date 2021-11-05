@@ -88,6 +88,7 @@ conda/README.md
 *.good
 *.gcache
 *.hcache
+*.biopsy
 unused-code
 genozip.threads-log.*
 .genozip_license
@@ -95,4 +96,3 @@ dict_id_gen.c
 core
 SEC_*.body
 SEC_*.header
-

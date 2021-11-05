@@ -77,7 +77,7 @@ static void zfile_dump_section (Buffer *uncompressed_data, SectionHeader *sectio
     // body
     if (uncompressed_data->len) {
         sprintf (filename, "%s.%u.%s.body", st_name (section_header->section_type), vb_i, dis_dict_id (dict_id).s);
-        buf_dump_to_file (filename, uncompressed_data, 1, false, false, true);
+        buf_dump_to_file (filename, uncompressed_data, 1, false, false, true, false);
     }
 }
 
@@ -929,6 +929,8 @@ void zfile_compress_vb_header (VBlock *vb)
 // note: this updates the z_data in memory (not on disk)
 void zfile_update_compressed_vb_header (VBlock *vb)
 {
+    if (flag.biopsy) return; // we have no z_data in biopsy mode
+
     SectionHeaderVbHeader *vb_header = (SectionHeaderVbHeader *)vb->z_data.data;
     vb_header->z_data_bytes    = BGEN32 ((uint32_t)vb->z_data.len);
 
