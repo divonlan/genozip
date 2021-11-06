@@ -132,9 +132,10 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
     | See: :ref:`dvcf`
     |
 
-.. option:: --biopsy=vb,vb...  C. Dump a subset of the source file being compressed. The argument is a comma separated list of VB numbers, with 0 meaning the file's header.
+.. option:: --biopsy=vb,vb...  C. Dump a subset of the source file being compressed. The argument is a comma separated list of VB numbers or VB ranges with 0 meaning the file's header.
 
-          |
+    | Example: ``genozip mybam.bam --biopsy 0,5-7,11`` will emit the txt header and VBs 5,6,7,11.
+    |
 
 
 **Tracking execution**
