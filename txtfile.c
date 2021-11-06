@@ -408,12 +408,14 @@ static uint32_t txtfile_get_unconsumed_to_pass_to_next_vb (VBlock *vb)
     // case: we're testing memory and this VB is too small for a single line - return and caller will try again with a larger VB
     if (segconf.running && pass_to_next_vb_len < 0) return (uint32_t)-1;
 
-    ASSERT (pass_to_next_vb_len >= 0, "Reason: failed to find a full line (i.e. newline-terminated) in vb=%u data_type=%s codec=%s.\n"
+    ASSERT (pass_to_next_vb_len >= 0, "Reason: failed to find a full line %sin vb=%u data_type=%s codec=%s.\n"
             "Known possible causes:\n"
-            "- The file is missing a newline on the last line.\n"
+            "- The file is %s %s.\n"
             "- The file is not a %s file.\n"
             "VB dumped: %s\n",  
+            DTPT(is_binary) ? "" : "(i.e. newline-terminated) ",
             vb->vblock_i, dt_name (txt_file->data_type), codec_name (txt_file->codec),
+            DTPT(is_binary) ? "truncated but not on the boundary of the" : "missing a newline on the last", DTPT(line_name),
             TXT_DT(DT_REF) ? "FASTA" : dt_name (txt_file->data_type),
             txtfile_dump_vb (vb, txt_name));
 

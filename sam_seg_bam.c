@@ -22,6 +22,7 @@
 #include "context.h"
 #include "kraken.h"
 #include "segconf.h"
+#include "qname.h"
 
 void bam_seg_initialize (VBlock *vb)
 {
@@ -31,12 +32,24 @@ void bam_seg_initialize (VBlock *vb)
         buf_alloc (vb, &VB_SAM->buddy_textual_cigars, 0, segconf.sam_cigar_len * vb->lines.len, char, CTX_GROWTH, "buddy_textual_cigars");
 }
 
-// returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
-// if first_i > 0, we attempt to heuristically detect the start of a BAM alignment.
-int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
+static int32_t bam_unconsumed_scan_forwards (VBlockP vb)
 {
-    ASSERT (*i >= 0 && *i < vb->txt_data.len, "*i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
+    ARRAY (char, txt, vb->txt_data);
+    
+    if (txt_len < sizeof (BAMAlignmentFixed)) return -1; // this VB doesn't not even contain one single full alignment
 
+    uint32_t aln_size, i;
+    for (i=0 ; i < txt_len; i += aln_size) 
+        aln_size = LTEN32 ((BAMAlignmentFixed *)&txt[i])->block_size + 4;
+
+    if (aln_size > txt_len) 
+        return -1; // this VB doesn't not even contain one single full alignment
+    else
+        return aln_size - (i - txt_len); // we pass the data of the final, partial, alignment to the next VB
+}
+
+static int32_t bam_unconsumed_scan_backwards (VBlockP vb, uint32_t first_i, int32_t *i)
+{
     *i = MIN_(*i, vb->txt_data.len - sizeof(BAMAlignmentFixed));
 
     // find the first alignment in the data (going backwards) that is entirely in the data - 
@@ -45,6 +58,8 @@ int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
         const BAMAlignmentFixed *aln = (const BAMAlignmentFixed *)ENT (char, vb->txt_data, *i);
 
         uint32_t block_size = LTEN32 (aln->block_size);
+        if (block_size > 100000000) continue; // quick short-circuit - more than 100M for one alignment - clearly wrong
+
         uint32_t l_seq      = LTEN32 (aln->l_seq);
         uint16_t n_cigar_op = LTEN16 (aln->n_cigar_op);
 
@@ -65,7 +80,8 @@ int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
         if (aln->read_name[aln->l_read_name-1] != 0 || // nul-terminated
             !str_is_in_range (aln->read_name, aln->l_read_name-1, '!', '~')) continue;  // all printable ascii (per SAM spec)
 
-        // test l_seq vs seq_len implied by cigar
+
+        // final test option 1: test l_seq vs seq_len implied by cigar
         if (aln->l_seq && n_cigar_op) {
             uint32_t seq_len_by_cigar=0;
             uint32_t *cigar = (uint32_t *)((uint8_t *)(aln+1) + aln->l_read_name);
@@ -76,15 +92,42 @@ int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
             }
             if (l_seq != seq_len_by_cigar) continue;
         }
+        
+        // final test option 2: in case we know the qname flavor
+        else if (segconf.qname_flavor) {
+            if (!qname_is_flavor (aln->read_name, aln->l_read_name-1, segconf.qname_flavor))
+                continue;
+        }
+
+        // we don't have a final test - skip
+        else continue;
 
         // Note: we don't use add aln->bin calculation because in some files we've seen data that doesn't
         // agree with our formula. see comment in bam_reg2bin
-
+printf ("xxx vb=%u l_read_name=%u qname=\"%.*s\"\n", vb->vblock_i, aln->l_read_name, aln->l_read_name-1, aln->read_name);
         // all tests passed - this is indeed an alignment
         return vb->txt_data.len - (*i + LTEN32 (aln->block_size) + 4); // everything after this alignment is "unconsumed"
     }
 
-    return -1; // we can't find any alignment - need more data (lower first_i)
+    return -1; // we can't find any alignment - need more data (lower first_i)    
+}  
+// returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
+// if first_i > 0, we attempt to heuristically detect the start of a BAM alignment.
+int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
+{
+    ASSERT (*i >= 0 && *i < vb->txt_data.len, "*i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
+
+    int32_t result;
+
+    // if we have all the data - search forward - faster in BAM as we have aln.block_size
+    if (first_i == 0)
+        result = bam_unconsumed_scan_forwards (vb);
+
+    // stringent -either CIGAR needs to match seq_len, or qname needs to match flavor
+    else
+        result = bam_unconsumed_scan_backwards (vb, first_i, i); 
+
+    return result; // if -1 - we will be called again with more data
 }
 
 static bool bam_seg_get_MD (VBlockSAM *vb, const char *aux, const char *after_aux, pSTRp(md))

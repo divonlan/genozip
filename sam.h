@@ -146,6 +146,34 @@
 #pragma GENDICT OPTION_jM_B=DTYPE_2=jM:B    // jM:B:c,M1,M2,... intron motifs for all junctions (i.e. N in CIGAR): 0: non-canonical; 1: GT/AG, 2: CT/AC, 3: GC/AG, 4: CT/GC, 5: AT/AC, 6: GT/AT. If splice junctions database is used, and a junction is annotated, 20 is added to its motif value.
 #pragma GENDICT OPTION_jI_B=DTYPE_2=jI:B    // jI:B:I,Start1,End1,Start2,End2,... Start and End of introns for all junctions (1-based).
 
+// PacBio tags. Source: https://pacbiofileformats.readthedocs.io/en/10.0/BAM.html and https://pacbiofileformats.readthedocs.io/en/3.0/BAM.html
+#pragma GENDICT OPTION_qs_i=DTYPE_2=qs:i    // per-read: 0-based start of query in the ZMW read (absent in CCS)
+#pragma GENDICT OPTION_qe_i=DTYPE_2=qe:i    // per-read: 0-based end of query in the ZMW read (absent in CCS)
+#pragma GENDICT OPTION_ws_i=DTYPE_2=ws:i    // per-read: Start of first base of the query (‘qs’) in approximate raw frame count since start of movie. For a CCS read, the start of the first base of the first incorporated subread.
+#pragma GENDICT OPTION_we_i=DTYPE_2=we:i    // per-read: Start of last base of the query (‘qe - 1’) in approximate raw frame count since start of movie. For a CCS read, the start of the last base of the last incorporated subread.
+#pragma GENDICT OPTION_zm_i=DTYPE_2=zm:i    // per-read: ZMW hole number
+#pragma GENDICT OPTION_np_i=DTYPE_2=np:i    // per-read: NumPasses (1 for subreads, variable for CCS—encodes number of complete passes of the insert)
+#pragma GENDICT OPTION_ec_f=DTYPE_2=ec:i    // per-read: Effective coverage for CCS reads, the average subread coverage across all windows (only present in CCS reads)
+#pragma GENDICT OPTION_rq_f=DTYPE_2=rq:i    // per-read: Float in [0, 1] encoding expected accuracy
+#pragma GENDICT OPTION_sn_B=DTYPE_2=sn:i    // per-read: 4 floats for the average signal-to-noise ratio of A, C, G, and T (in that order) over the HQRegion
+#pragma GENDICT OPTION_dq_Z=DTYPE_2=dq:Z    // per-base: DeletionQV
+#pragma GENDICT OPTION_dt_Z=DTYPE_2=dt:Z    // per-base: DeletionTag
+#pragma GENDICT OPTION_iq_Z=DTYPE_2=iq:Z    // per-base: InsertionQV
+#pragma GENDICT OPTION_mq_Z=DTYPE_2=mq:Z    // per-base: MergeQV
+#pragma GENDICT OPTION_sq_Z=DTYPE_2=sq:Z    // per-base: SubstitutionQV
+#pragma GENDICT OPTION_st_Z=DTYPE_2=st:Z    // per-base: SubstitutionTag
+#pragma GENDICT OPTION_ip_B=DTYPE_2=ip:B    // per-base: IPD (raw frames or codec V1): Forward IPD (codec V1)
+#pragma GENDICT OPTION_pw_B=DTYPE_2=pw:B    // per-base: PulseWidth (raw frames or codec V1): Reverse IPD (codec V1)
+#pragma GENDICT OPTION_fi_B=DTYPE_2=fi:B    // per-base (Hi-Fi kinetic info): Forward IPD (codec V1)
+#pragma GENDICT OPTION_ri_B=DTYPE_2=ri:B    // per-base (Hi-Fi kinetic info): Reverse IPD (codec V1)
+#pragma GENDICT OPTION_fp_B=DTYPE_2=fp:B    // per-base (Hi-Fi kinetic info): Forward PulseWidth (codec V1)
+#pragma GENDICT OPTION_rp_B=DTYPE_2=rp:B    // per-base (Hi-Fi kinetic info): Reverse PulseWidth (codec V1)
+#pragma GENDICT OPTION_fn_i=DTYPE_2=fn:i    // per-base (Hi-Fi kinetic info): Forward number of complete passes (zero or more)
+#pragma GENDICT OPTION_rn_i=DTYPE_2=rn:i    // per-base (Hi-Fi kinetic info): Reverse number of complete passes (zero or more)
+#pragma GENDICT OPTION_sz_A=DTYPE_2=sz_A    // scrap read: ZMW classification annotation, one of N:=Normal, C:=Control, M:=Malformed, or S:=Sentinel
+#pragma GENDICT OPTION_sc_A=DTYPE_2=sc_A    // scrap read: Scrap region-type annotation, one of A:=Adapter, B:=Barcode, L:=LQRegion, or F:=Filtered
+
+
 // biobambam tags
 #pragma GENDICT OPTION_mc_i=DTYPE_2=mc:i    // MateCoordinate (biobambam)
 #pragma GENDICT OPTION_ms_i=DTYPE_2=ms:i    // MateBaseScore  (biobambam)

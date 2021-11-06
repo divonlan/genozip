@@ -160,8 +160,9 @@ static SmallContainer con_pacbio_3 = {
                              { .dict_id = { _SAM_Q2NAME }                   } } 
 };
 
-// <MovieName>/<ZMW_number>/<subread-start>_<subread-end>
+// {movieName}/{holeNumber}/{qStart}_{qEnd} 
 // example: m130802_221257_00127_c100560082550000001823094812221334_s1_p0/128361/872_4288
+// See: https://pacbiofileformats.readthedocs.io/en/3.0/BAM.html
 static SmallContainer con_pacbio_range = {
     .repeats             = 1,
     .nitems_lo           = 4,
@@ -171,8 +172,9 @@ static SmallContainer con_pacbio_range = {
                              { .dict_id = { _SAM_Q3NAME }                   } } 
 };
 
-// <MovieName>/<ZMW_number>/ccs
+// {movieName}/{holeNumber}/ccs 
 // example: m64136_200621_234916/18/ccs
+// see: https://pacbiofileformats.readthedocs.io/en/3.0/BAM.html
 static SmallContainer con_pacbio_label = {
     .repeats             = 1,
     .nitems_lo           = 3,
@@ -251,9 +253,9 @@ static QnameFlavorStruct qf[] = {
     {},  { "Helicos",       "VHE-242383071011-15-1-0-2",              TECH_HELICOS, 0, &con_helicos,       5, {2,3,4,5,-1},   {1,-1},         {-1},           -1,-1, -1                                                                  },
     {},  { "PacBio-3",      "56cdb76f_70722_4787",                    TECH_PACBIO,  0, &con_pacbio_3,      2, {1,2,-1},       {-1},           {0,-1},         -1,-1, -1                                                                  },
     {},  { "PacBio-Range",  "m130802_221257_00127_"
-           "c100560082550000001823094812221334_s1_p0/128361/872_4288",TECH_PACBIO,  0, &con_pacbio_range,  4, {1,2,3,-1},     {-1},           {-1},           -1,-1, 3,  0,  { { "m",1,0} }                                              },
-    {},  { "PacBio-Label",  "m64136_200621_234916/18/ccs",            TECH_PACBIO,  0, &con_pacbio_label,  3, {1,-1},         {-1},           {-1},           -1,-1, -1, 0,  { { "m",1,0} }                                              },
-    {},  { "PacBio-Plain",  "m64136_200621_234916/18",                TECH_PACBIO,  0, &con_pacbio_plain,  2, {1,-1},         {-1},           {-1},           -1,-1, -1, 0,  { { "m",1,0} }                                              },
+           "c100560082550000001823094812221334_s1_p0/128361/872_4288",TECH_PACBIO,  0, &con_pacbio_range,  4, {1,2,3,-1},     {-1},           {-1},           1,-1, 3,  0,  { { "m",1,0} }                                              },
+    {},  { "PacBio-Label",  "m64136_200621_234916/18/ccs",            TECH_PACBIO,  0, &con_pacbio_label,  3, {1,-1},         {-1},           {-1},           1,-1, -1, 0,  { { "m",1,0} }                                              },
+    {},  { "PacBio-Plain",  "m64136_200621_234916/18",                TECH_PACBIO,  0, &con_pacbio_plain,  2, {1,-1},         {-1},           {-1},           1,-1, -1, 0,  { { "m",1,0} }                                              },
     {},  { "Nanopore",      "af84b0c1-6945-4323-9193-d9f6f2c38f9a",   TECH_ONP,     0, &con_nanopore,      4, {-1},           {-1},           {0,1,2,3,4,-1}, -1,-1, -1, 36,                                                             },
     {},  { "NCBI-SRA",      "SRR001666.1",                            TECH_UNKNOWN, 0, &con_ncbi_sra,      1, {2,-1},         {1,-1},         {-1},           2,-1,  -1,                                                                 },
     {},  { "Genozip-opt",   "basic.1",                                TECH_UNKNOWN, 1, &con_genozip_opt,   1, {1,-1},         {-1},           {-1},           1,-1,  -1,                                                                 },
@@ -365,8 +367,10 @@ static inline bool qname_has_px_strs (STRp(qname), const QnameFlavorStruct *qfs)
 }
 
 // note: we run this function only in discovery, not in segging, because it is quite expesive - checking all numerics.
-static bool qname_is_flavor (STRp(qname), const QnameFlavorStruct *qfs)
+bool qname_is_flavor (STRp(qname), unsigned qname_flavor)
 {
+    const QnameFlavorStruct *qfs = &qf[qname_flavor];
+
     // test fixed length, if applicable
     if (qfs->fixed_len && qname_len != qfs->fixed_len) return false;
 
@@ -401,7 +405,7 @@ void qname_segconf_discover_flavor (VBlockP vb, DidIType qname_did_i, STRp(qname
     segconf.qname_flavor = 0; // unknown
 
     for (unsigned qf_i=1; qf_i < NUM_QFs; qf_i++) 
-        if ((VB_DT(DT_FASTQ) || !qf[qf_i].fq_only) && qname_is_flavor (qname, qname_len, &qf[qf_i])) {
+        if ((VB_DT(DT_FASTQ) || !qf[qf_i].fq_only) && qname_is_flavor (qname, qname_len, qf_i)) {
             segconf.qname_flavor = qf_i;
             segconf.tech = qf[qf_i].tech;
             qname_seg_initialize (vb, qname_did_i); // so the rest of segconf.running can seg fast using the discovered container
@@ -410,7 +414,7 @@ void qname_segconf_discover_flavor (VBlockP vb, DidIType qname_did_i, STRp(qname
 
     if (flag.debug) // unit test
         for (unsigned qf_i=1; qf_i < NUM_QFs; qf_i++)
-            ASSERT (qname_is_flavor (qf[qf_i].example, strlen (qf[qf_i].example), &qf[qf_i]), 
+            ASSERT (qname_is_flavor (qf[qf_i].example, strlen (qf[qf_i].example), qf_i), 
                     "Failed to identify qname \"%s\" as %s (qf_i=%u)", qf[qf_i].example, qf[qf_i].name, qf_i);
 }
 

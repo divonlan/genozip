@@ -87,8 +87,8 @@ static void stats_output_file_metadata (Buffer *buf)
     if (Z_DT(DT_VCF)) 
         bufprintf (evb, buf, "Samples: %u   ", vcf_header_get_num_samples());
 
-    bufprintf (evb, buf, "%s: %s   Dictionaries: %u   Vblocks: %u x %u MB  Sections: %u\n", 
-               DTPZ (show_stats_line_name), str_uint_commas (z_file->num_lines).s, z_file->num_contexts, 
+    bufprintf (evb, buf, "%ss: %s   Dictionaries: %u   Vblocks: %u x %u MB  Sections: %u\n", 
+               DTPZ (line_name), str_uint_commas (z_file->num_lines).s, z_file->num_contexts, 
                z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), (uint32_t)z_file->section_list_buf.len);
 
     if (Z_DT(DT_KRAKEN)) {
@@ -96,7 +96,7 @@ static void stats_output_file_metadata (Buffer *buf)
         const char *dominant_taxid = ctx_get_snip_with_largest_count (KRAKEN_TAXID, &dominant_taxid_count);
 
         if (dominant_taxid_count != -1)
-            bufprintf (evb, buf, "Dominant TaxID: %s  %s: %s (%-5.2f%%)\n", dominant_taxid, DTPZ (show_stats_line_name),
+            bufprintf (evb, buf, "Dominant TaxID: %s  %s: %s (%-5.2f%%)\n", dominant_taxid, DTPZ (line_name),
                        str_uint_commas (dominant_taxid_count).s, 100.0 * (float)dominant_taxid_count / (float)z_file->num_lines); 
         else
             bufprint0 (evb, buf, "Dominant TaxID: No dominant species\n"); 
