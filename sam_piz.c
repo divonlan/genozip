@@ -162,23 +162,22 @@ SPECIAL_RECONSTRUCTOR (bam_piz_special_BIN)
 //    either as textual for SAM or binary for BAM via bam_piz_special_FLOAT. Done this way so BAM binary float is reconstructd precisely.
 SPECIAL_RECONSTRUCTOR (bam_piz_special_FLOAT)
 {
-    // get Little Endian n
     int64_t n;
     ASSERT (str_get_int (snip, snip_len, &n), "failed to read integer in %s", ctx->tag_name);
-
-    uint32_t lten_n = (uint32_t)n;         // n is now little endian, uint32 
     
-    union { // n and f in machine endianity (4 bytes)
-        uint32_t n;
+    union {
+        uint32_t i;
         float f;
-    } machine_en = { .n = LTEN32 (lten_n) };
+    } machine_en = { .i = (uint32_t)n };
 
     if (!reconstruct) goto finish;
 
-    // binary reconstruction - BAM format
-    if (flag.out_dt == DT_BAM)
-        RECONSTRUCT (&machine_en.f, sizeof (float));
-    
+    // binary reconstruction in little endian - BAM format
+    if (flag.out_dt == DT_BAM) {
+        uint32_t n32_lten = LTEN32 (machine_en.i); // little endian (BAM format)
+        RECONSTRUCT (&n32_lten, sizeof (uint32_t)); // in binary - the float and uint32 are the same
+    }
+
     // textual reconstruction - SAM format 
     else { 
         #define NUM_SIGNIFICANT_DIGITS 6 // 6 significant digits, as samtools does

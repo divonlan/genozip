@@ -218,7 +218,7 @@ static void zip_resize_local (VBlock *vb, Context *ctx)
     
     // 8 bit
     if (largest <= 0xff) {
-        ctx->ltype = LT_UINT8;
+        ctx->ltype =  ctx->dynamic_size_local == DYN_SIGNED ? LT_INT8 : LT_UINT8;
         ARRAY (uint8_t, dst, ctx->local);
         for (uint64_t i=0; i < src_len; i++)
             dst[i] = (uint8_t)src[i];
@@ -226,7 +226,7 @@ static void zip_resize_local (VBlock *vb, Context *ctx)
 
     // 16 bit
     else if (largest <= 0xffff) {
-        ctx->ltype = LT_UINT16;
+        ctx->ltype = ctx->dynamic_size_local == DYN_SIGNED ? LT_INT16 : LT_UINT16;
         ARRAY (uint16_t, dst, ctx->local);
         for (uint64_t i=0; i < src_len; i++)
             dst[i] = BGEN16 ((uint16_t)src[i]);
@@ -234,7 +234,7 @@ static void zip_resize_local (VBlock *vb, Context *ctx)
 
     // 32 bit
     else {
-        ctx->ltype = LT_UINT32;
+        ctx->ltype = ctx->dynamic_size_local == DYN_SIGNED ? LT_INT32 : LT_UINT32;
         for (uint64_t i=0; i < src_len; i++)
             src[i] = BGEN32 (src[i]);
     }

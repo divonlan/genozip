@@ -1298,7 +1298,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
         if (ctx->flags.store == STORE_INT) {
             int64_t val;
             if (str_get_int (STRa(value), &val))
-                ctx_set_last_value (VB, ctx, (LastValueType){ .i = val } );
+                ctx_set_last_value (VB, ctx, (ValueType){ .i = val } );
         }
     }    
 

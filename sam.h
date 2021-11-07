@@ -162,8 +162,8 @@
 #pragma GENDICT OPTION_mq_Z=DTYPE_2=mq:Z    // per-base: MergeQV
 #pragma GENDICT OPTION_sq_Z=DTYPE_2=sq:Z    // per-base: SubstitutionQV
 #pragma GENDICT OPTION_st_Z=DTYPE_2=st:Z    // per-base: SubstitutionTag
-#pragma GENDICT OPTION_ip_B=DTYPE_2=ip:B    // per-base: IPD (raw frames or codec V1): Forward IPD (codec V1)
-#pragma GENDICT OPTION_pw_B=DTYPE_2=pw:B    // per-base: PulseWidth (raw frames or codec V1): Reverse IPD (codec V1)
+#pragma GENDICT OPTION_ip_B=DTYPE_2=ip:B    // per-base: Interpulse duration (IPD) measured in frames (raw frames or codec V1)
+#pragma GENDICT OPTION_pw_B=DTYPE_2=pw:B    // per-base: PulseWidth measured in frames (raw frames or codec V1)
 #pragma GENDICT OPTION_fi_B=DTYPE_2=fi:B    // per-base (Hi-Fi kinetic info): Forward IPD (codec V1)
 #pragma GENDICT OPTION_ri_B=DTYPE_2=ri:B    // per-base (Hi-Fi kinetic info): Reverse IPD (codec V1)
 #pragma GENDICT OPTION_fp_B=DTYPE_2=fp:B    // per-base (Hi-Fi kinetic info): Forward PulseWidth (codec V1)
@@ -200,7 +200,7 @@
 #pragma GENDICT OPTION_de_f=DTYPE_2=de:f    // Gap-compressed per-base sequence divergence
 #pragma GENDICT OPTION_rl_i=DTYPE_2=rl:i    // Length of query regions harboring repetitive seeds
 
-#pragma GENDICT OPTION_TX_i=DTYPE_2=tx:i    // Genozip tag for taxonomy ID
+#pragma GENDICT OPTION_tx_i=DTYPE_2=tx:i    // Genozip tag for taxonomy ID
 
 // backward compatability for decompressing files compressed with older versions that had aliases to these destinations (used by ctx_initialize_predefined_ctxs)
 #pragma GENDICT OPTION_CIGAR=DTYPE_2=@CIGAR // For files compressed with 12.0.37 or older which had aliases MC:Z, OC:Z -> @CIGAR

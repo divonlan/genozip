@@ -31,8 +31,10 @@ static inline WordIndex seg_by_did_i (VBlockP vb, STRp(snip), DidIType did_i, un
 extern WordIndex seg_known_node_index (VBlockP vb, ContextP ctx, WordIndex node_index, unsigned add_bytes);
 extern WordIndex seg_duplicate_last (VBlockP vb, ContextP ctx, unsigned add_bytes);
 
-extern WordIndex seg_integer_do (VBlockP vb, DidIType did_i, int64_t n, unsigned add_bytes); // segs integer as normal textual snip
-#define seg_integer(vb,did_i,n,add_sizeof_n) seg_integer_do((VBlockP)(vb), (did_i), (n), (add_sizeof_n) ? sizeof(n) : 0)
+extern void seg_integer (VBlockP vb, ContextP ctx, int64_t n, bool is_signed, bool with_lookup, unsigned add_bytes);
+
+extern WordIndex seg_integer_as_text_do (VBlockP vb, ContextP ctx, int64_t n, unsigned add_bytes); // segs integer as normal textual snip
+#define seg_integer_as_text(vb,did_i,n,add_sizeof_n) seg_integer_as_text_do((VBlockP)(vb), &vb->contexts[did_i], (n), (add_sizeof_n) ? sizeof(n) : 0)
 
 extern WordIndex seg_self_delta (VBlockP vb, ContextP ctx, int64_t value, uint32_t value_str_len);
 
@@ -69,8 +71,6 @@ extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, DidIType stats_c
 
 typedef bool (*SegCallback) (VBlockP vb, ContextP ctx, STRp(value), uint32_t repeat);
 extern int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), const SegCallback *callbacks);
-
-typedef void (*SegOptimize)(const char **snip, unsigned *snip_len, char *space_for_new_str);
 
 extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int64_t parameter, 
                                        char *snip, unsigned *snip_len /* in / out */);

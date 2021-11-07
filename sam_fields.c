@@ -70,7 +70,7 @@ void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(flag_str)/* optional,
     
     // case: normal snip
     else {
-        seg_integer (vb, SAM_FLAG, dl->FLAG.value, false);
+        seg_integer_as_text (vb, SAM_FLAG, dl->FLAG.value, false);
         CTX(SAM_FLAG)->txt_len += add_bytes; 
     }
 }
@@ -419,24 +419,21 @@ static void sam_seg_OA_field (VBlockSAM *vb, STRp(field))
 // is ambiguous at that point. Alignment reference skips, padding, soft and hard clipping (‘N’, ‘P’, ‘S’ and ‘H’ CIGAR operations) do not count as mismatches,
 // but insertions and deletions count as one mismatch per base."
 // 2) Binary NM: 0 if sequence fully matches the reference when aligning according to CIGAR, 1 is not.
-static void sam_seg_NM_field (VBlockSAM *vb, STRp(field), unsigned add_bytes)
+static void sam_seg_NM_field (VBlockSAM *vb, ValueType NM, unsigned add_bytes)
 {
-    int64_t NM;
-    if (!str_get_int (STRa(field), &NM)) goto fallback;
-    
-    if (segconf.running && NM > 1) segconf.NM_is_integer = true; // we found evidence of integer NM
+    if (segconf.running && NM.i > 1) segconf.NM_is_integer = true; // we found evidence of integer NM
 
-    ctx_set_last_value (VB, CTX (OPTION_NM_i), ((LastValueType){ .i = NM }));
+    ContextP ctx = CTX (OPTION_NM_i);
+    ctx_set_last_value (VB, ctx, NM);
 
-    if (segconf.NM_is_integer && NM == vb->mismatch_bases)
+    if (segconf.NM_is_integer && NM.i == vb->mismatch_bases)
         seg_by_did_i (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'i'}, 3, OPTION_NM_i, add_bytes); 
 
-    else if (!segconf.NM_is_integer && (NM > 0) == (vb->mismatch_bases > 0))
+    else if (!segconf.NM_is_integer && (NM.i > 0) == (vb->mismatch_bases > 0))
         seg_by_did_i (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'b'}, 3, OPTION_NM_i, add_bytes); 
 
-    else
-        fallback:
-        seg_by_did_i (VB, STRa(field), OPTION_NM_i, add_bytes); 
+    else 
+        seg_integer (VB, ctx, NM.i, false, true, add_bytes);
 }
 
 SPECIAL_RECONSTRUCTOR (bam_piz_special_NM)
@@ -461,24 +458,20 @@ SPECIAL_RECONSTRUCTOR (bam_piz_special_NM)
 //      Case 2: IonTorrent TMAP: "The target length, that is, the number of reference bases spanned by the alignment." 
 // -------------------------------------------------------------------------------------------------------------------
 
-static void sam_seg_XM_field (VBlockSAM *vb, STRp(xm_str), unsigned add_bytes)
+static void sam_seg_XM_field (VBlockSAM *vb, ValueType XM, unsigned add_bytes)
 {
-    int64_t xm;
     ContextP NM_ctx;
-    if (!str_get_int (STRa(xm_str), &xm))
-        goto fallback;
     
     // check for BWA case - XM is similar to NM - in our test file > 99% identical to NM.
-    if (ctx_has_value_in_line (vb, _OPTION_NM_i, &NM_ctx) && xm == NM_ctx->last_value.i) 
+    if (ctx_has_value_in_line (vb, _OPTION_NM_i, &NM_ctx) && XM.i == NM_ctx->last_value.i) 
         seg_by_did_i (VB, STRa(XM_snip), OPTION_XM_i, add_bytes); // copy from NM
     
     // check IonTorrent TMAP case - XM is supposed to be ref_consumed
-    else if (xm == vb->ref_consumed)                              
+    else if (XM.i == vb->ref_consumed)                              
         seg_by_did_i (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_REF_CONSUMED }, 2, OPTION_XM_i, add_bytes);
         
     else
-        fallback:
-        seg_by_did_i (VB, STRa(xm_str), OPTION_XM_i, add_bytes);  // normal seg
+        seg_integer (VB, CTX(OPTION_XM_i), XM.i, false, true, add_bytes);
 }
 
 // ----------------------------------------------------------------------------------------------
@@ -487,22 +480,15 @@ static void sam_seg_XM_field (VBlockSAM *vb, STRp(xm_str), unsigned add_bytes)
 
 // AS has a value set (at least as set by BWA and IonTorrent TMAP) of at most vb->ref_consumed, and often equal to it. we modify
 // it to be new_value=(value-ref_consumed) 
-static inline void sam_seg_AS_field (VBlockSAM *vb, STRp(as_str), unsigned add_bytes)
+static inline void sam_seg_AS_field (VBlockSAM *vb, ValueType AS, unsigned add_bytes)
 {
-    int32_t as;    
-    if (str_get_int_range32 (STRa(as_str), 0, 100000, &as)) {
-        ctx_set_last_value (VB, CTX (OPTION_AS_i), ((LastValueType){ .i = as }));
+    ctx_set_last_value (VB, CTX (OPTION_AS_i), AS);
 
-        // store a special snip with delta
-        char new_snip[20] = { SNIP_SPECIAL, SAM_SPECIAL_REF_CONSUMED };
-        unsigned delta_len = str_int ((int32_t)vb->ref_consumed-as, &new_snip[2]);
+    // store a special snip with delta
+    char new_snip[20] = { SNIP_SPECIAL, SAM_SPECIAL_REF_CONSUMED };
+    unsigned delta_len = str_int ((int32_t)vb->ref_consumed-AS.i, &new_snip[2]);
 
-        seg_by_ctx (VB, new_snip, delta_len+2, CTX (OPTION_AS_i), add_bytes); 
-    }
-
-    // not possible - just store unmodified
-    else
-        seg_by_ctx (VB, STRa(as_str), CTX (OPTION_AS_i), add_bytes); 
+    seg_by_ctx (VB, new_snip, delta_len+2, CTX (OPTION_AS_i), add_bytes); 
 }
 
 // reconstruct seq_len or (seq_len-snip)
@@ -529,43 +515,40 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_REF_CONSUMED)
 // ----------------------------------------------------------------------------------------------
 
 // alignment score of second best alignment - delta vs AS
-static inline void sam_seg_XS_field (VBlockSAM *vb, STRp(xs_str), unsigned add_bytes)
+static inline void sam_seg_XS_field (VBlockSAM *vb, ValueType XS, unsigned add_bytes)
 {
-    ContextP ctx = CTX(OPTION_XS_i);
-
-    if (ctx_has_value_in_line_(VB, CTX(OPTION_AS_i)) && str_get_int_range64 (STRa(xs_str), 0, 10000, &ctx->last_value.i) && ctx->last_value.i) 
-        seg_delta_vs_other_do (VB, ctx, CTX(OPTION_AS_i), NULL, 0, -1, add_bytes);
+    if (ctx_has_value_in_line_(VB, CTX(OPTION_AS_i)) && XS.i >= 0 && XS.i < 10000) {
+        ctx_set_last_value (VB, CTX (OPTION_XS_i), XS); // needed for seg_delta_vs_other_do
+        seg_delta_vs_other_do (VB, CTX(OPTION_XS_i), CTX(OPTION_AS_i), NULL, 0, -1, add_bytes);
+    }
     else
-        seg_by_ctx (VB, STRa(xs_str), ctx, add_bytes); 
+        seg_integer_as_text_do (VB, CTX(OPTION_XS_i), XS.i, add_bytes); // seg as text to not prevent singletons
 }
 
 // MQ:i Mapping quality of the mate/next segment
 // Seg against buddy if we have one, or else against MAPQ as it is often very similar
-static inline void sam_seg_MQ_field (VBlockSAM *vb, ZipDataLineSAM *dl, 
-                                     const char *snip, unsigned snip_len, unsigned add_bytes)
+static inline void sam_seg_MQ_field (VBlockSAM *vb, ZipDataLineSAM *dl, ValueType MQ, unsigned add_bytes)
 {
     if (segconf.running) segconf.has_MQ = true;
 
-    if (!str_get_int (STRa(snip), &dl->MQ)) goto fallback;
-
+    dl->MQ = MQ.i;
+    
     ZipDataLineSAM *buddy_dl = DATA_LINE (vb->buddy_line_i); // an invalid pointer if buddy_line_i is -1
 
     int64_t mapq = ctx_has_value_in_line_(vb, CTX(SAM_MAPQ)) ? CTX(SAM_MAPQ)->last_value.i : -1;
 
-    if (!segconf.running && vb->buddy_line_i != -1 && dl->MQ != mapq && dl->MQ == buddy_dl->MAPQ)
+    if (!segconf.running && vb->buddy_line_i != -1 && MQ.i != mapq && MQ.i == buddy_dl->MAPQ)
         seg_by_did_i (VB, STRa(MQ_buddy_snip), OPTION_MQ_i, add_bytes); // copy MAPQ from earlier-line buddy 
 
     else if (mapq >= 0) {
-
-        int64_t delta = dl->MQ - mapq;
+        int64_t delta = MQ.i - mapq;
 
         SNIP(100);
         seg_prepare_snip_other (SNIP_OTHER_DELTA, _SAM_MAPQ, true, delta, snip);
-        seg_by_ctx (VB, STRa(snip), CTX(OPTION_MQ_i), add_bytes);
+        seg_by_did_i (VB, STRa(snip), OPTION_MQ_i, add_bytes);
     }
     else
-fallback:
-        seg_by_ctx (VB, snip, snip_len, CTX (OPTION_MQ_i), add_bytes); 
+        seg_integer_as_text_do (VB, CTX(OPTION_MQ_i), MQ.i, add_bytes); // seg as text so to not prevent singletons
 }
 
 // mc:i: (output of bamsormadup and other biobambam tools - mc in small letters) 
@@ -576,17 +559,15 @@ fallback:
 // with the official SAM format spec.  New biobambam version uses mc."
 // ms="MateBaseScore" - sum all characters in QUAL of the mate, where the value of each character is its ASCII minus 33 (i.e. the Phred score)
 // mc="MateCoordinate"
-static inline void sam_seg_mc_field (VBlockSAM *vb, DictId dict_id, STRp(snip), unsigned add_bytes)
+static inline void sam_seg_mc_field (VBlockSAM *vb, ValueType mc, unsigned add_bytes)
 {
-    uint8_t mc_did_i = ctx_get_ctx (vb, dict_id)->did_i;
-    
     // if snip is "-1", store as simple snip
-    if (snip_len == 2 && snip[0] == '-' && snip[1] == '1')
-        seg_by_did_i (VB, snip, snip_len, mc_did_i, add_bytes);
+    if (mc.i == -1)
+        seg_by_did_i (VB, "-1", 2, OPTION_mc_i, add_bytes);
     
     // delta vs PNEXT
     else
-        seg_pos_field (VB, mc_did_i, SAM_PNEXT, SPF_BAD_SNIPS_TOO, 0, snip, snip_len, 0, add_bytes);
+        seg_pos_field (VB, OPTION_mc_i, SAM_PNEXT, SPF_BAD_SNIPS_TOO, 0, 0, 0, mc.i, add_bytes);
 }
 
 // possibly a special snip for copying RG from our buddy
@@ -605,18 +586,14 @@ static inline void sam_seg_RG_field (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(rg)
 }
 
 // optimization for Ion Torrent flow signal (ZM) - negative values become zero, positives are rounded to the nearest 10
-static void sam_optimize_ZM (const char **snip, unsigned *snip_len, char *new_str)
+static void sam_optimize_ZM (VBlockP vb, ContextP ctx, ValueType n, uint32_t repeat, unsigned add_bytes)
 {
-    char *after;
-    int number = strtoul (*snip, &after, 10);
+    ctx->dynamic_size_local = DYN_SIGNED; // signed
+    
+    if (n.i >= 0) n.i = ((n.i + 5) / 10) * 10;
+    else          n.i = 0;
 
-    if ((unsigned)(after - *snip) > 0) {
-        if (number >= 0) number = ((number + 5) / 10) * 10;
-        else             number = 0;
-
-        *snip_len = str_int (number, new_str);
-        *snip = new_str;
-    }    
+    seg_integer (vb, ctx, n.i, true, false, add_bytes);
 }
 
 // E2 - SEQ data. Currently broken. To do: fix.
@@ -648,28 +625,23 @@ static void sam_seg_U2_field (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(field), un
 
 static inline unsigned sam_seg_optional_add_bytes (char type, unsigned value_len, bool is_bam)
 {
-    if (is_bam)
-        switch (type) {
-            case 'c': case 'C': case 'A': return 1;
-            case 's': case 'S':           return 2;
-            case 'i': case 'I': case 'f': return 4;
-            case 'Z': case 'H':           return value_len + 1; // +1 for \0
-            default : return 0;
-        }
-    else // SAM
-        return value_len + 1; // +1 for \t
+    if (!is_bam || type=='Z' || type=='H')
+        return value_len + 1; // +1 for \0 (BAM Z/H) or \t (SAM)
+
+    else
+        return aux_width[(uint8_t)type]; // BAM
+
+    // note: this will return 0 for 'B'
 }
 
 // an array - all elements go into a single item context, multiple repeats
-static void sam_seg_array_field (VBlock *vb, DictId dict_id, const char *value, unsigned value_len)
+typedef void (*ArrayItemCallback) (VBlockP vb, ContextP ctx, ValueType n, uint32_t repeat, unsigned add_bytes);
+static void sam_seg_array_field (VBlock *vb, DictId dict_id, uint8_t type, 
+                                 const char *array, int/*signed*/ array_len, // SAM: comma separated array ; BAM : arrays original width and machine endianity
+                                 ArrayItemCallback callback) // optional - call back for each item to seg the item
 {   
-    // get optimization function, if there is one
-    SegOptimize optimize = NULL;
-    if (flag.optimize_ZM && dict_id.num == _OPTION_ZM_B && value_len > 3 && value[0] == 's')  // XM:B:s,
-        optimize = sam_optimize_ZM;
-
     // prepare array container - a single item, with number of repeats of array element. array type is stored as a prefix
-    Context *container_ctx     = ctx_get_ctx (vb, dict_id);
+    Context *container_ctx = ctx_get_ctx (vb, dict_id);
 
     SmallContainer con = { .nitems_lo = 2, 
                            .drop_final_item_sep_of_final_repeat = true, // TODO - get rid of this flag and move to making the seperators to be repeat seperators as they should have been, using drop_final_repeat_sep and obsoleting this flag 
@@ -678,63 +650,126 @@ static void sam_seg_array_field (VBlock *vb, DictId dict_id, const char *value, 
                                           { .separator  = {0, ','}            } } // item[1] is actual array item
                          };
     
-    char prefixes[] = { CON_PX_SEP, value[0], ',', CON_PX_SEP }; // prefix contains type eg "i,"
-    
-    const char *str = value + 2;      // remove type and comma
-    int str_len = (int)value_len - 2; // must be int, not unsigned, for the for loop
+    bool is_signed = type=='i' || type=='c' || type=='s';
+    int width = aux_width[type];
 
+    char prefixes[] = { CON_PX_SEP, type, ',', CON_PX_SEP }; 
+    
     // prepare context where array elements will go in
-    char arr_dict_id_str[8]   = "XX_ARRAY";
-    arr_dict_id_str[0]        = FLIP_CASE (dict_id.id[0]);
-    arr_dict_id_str[1]        = FLIP_CASE (dict_id.id[1]);
-    con.items[1].dict_id      = dict_id_make (arr_dict_id_str, 8, DTYPE_SAM_OPTIONAL);
-    con.items[1].translator   = optional_field_translator ((uint8_t)value[0]); // instructions on how to transform array items if reconstructing as BAM (value[0] is the subtype of the array)
-    con.items[1].separator[0] = optional_sep_by_type[IS_BAM][(uint8_t)value[0]];
+    con.items[1].dict_id      = (DictId){ .id = { dict_id.id[0], dict_id.id[1], '_','A','R','R','A','Y' } }; // DTYPE_2
+    con.items[1].translator   = optional_field_translator (type); // instructions on how to transform array items if reconstructing as BAM (array[0] is the subtype of the array)
+    con.items[1].separator[0] = optional_sep_by_type[IS_BAM][type];
     
-    Context *element_ctx      = ctx_get_ctx (vb, con.items[1].dict_id);
-    element_ctx->st_did_i     = container_ctx->did_i;
-    element_ctx->flags.store  = optional_field_store_flag[(uint8_t)value[0]];
+    Context *elem_ctx      = ctx_get_ctx (vb, con.items[1].dict_id);
+    elem_ctx->st_did_i     = container_ctx->did_i;
+    elem_ctx->flags.store  = optional_field_store_flag[type];
 
-    for (con.repeats=0; con.repeats < CONTAINER_MAX_REPEATS && str_len > 0; con.repeats++) { // str_len will be -1 after last number
+    ASSERT (elem_ctx->flags.store, "Invalid type \"%c\" in array of %s. vb=%u line=%"PRIu64, type, container_ctx->tag_name, vb->vblock_i, vb->line_i);
 
-        const char *snip = str;
-        for (; str_len && *str != ','; str++, str_len--) {};
-
-        unsigned number_len = (unsigned)(str - snip);
-        unsigned snip_len   = number_len; // might be changed by optimize
-             
-        char new_number_str[30];
-        if (optimize && snip_len < 25)
-            optimize (&snip, &snip_len, new_number_str);
-
-        seg_by_ctx (VB, snip, snip_len, element_ctx, IS_BAM ? 0 : number_len+1);
+    if (elem_ctx->flags.store == STORE_INT && !callback) {
+        static LocalType array_int_type_to_localtype[256] = 
+            { ['i']=LT_INT32, ['I']=LT_UINT32, ['s']=LT_INT16, ['S']=LT_UINT16, ['c']=LT_INT8, ['C']=LT_UINT8 };
         
-        str_len--; // skip comma
-        str++;
+        elem_ctx->ltype = array_int_type_to_localtype[type]; // Note: fields with callback should set ltype or dynamic in the callback if needed
     }
 
-    ASSSEG (con.repeats < CONTAINER_MAX_REPEATS, value, "array has too many elements, more than %u", CONTAINER_MAX_REPEATS);
+    if (IS_BAM && !callback) {
+        con.repeats = array_len;
+        buf_alloc (vb, &elem_ctx->local, array_len * width, 0, char, 2, "contexts->local");
+
+        for (int i=0; i < array_len; i++, array += width) { 
+            switch (type) {
+                case 'I': NEXTENT (uint32_t, elem_ctx->local) = BGEN32(GET_UINT32(array)); break;
+                case 'i': NEXTENT (uint32_t, elem_ctx->local) = BGEN32(INTERLACE(int32_t, (int32_t)GET_UINT32(array))); break;
+                case 'S': NEXTENT (uint16_t, elem_ctx->local) = BGEN16(GET_UINT16(array)); break;
+                case 's': NEXTENT (uint16_t, elem_ctx->local) = BGEN16(INTERLACE(int16_t, (int16_t)GET_UINT16(array))); break;
+                case 'C': NEXTENT (uint8_t,  elem_ctx->local) = GET_UINT8(array); break;
+                case 'c': NEXTENT (uint8_t,  elem_ctx->local) = INTERLACE(int8_t, (int8_t)GET_UINT8(array)); break;
+
+                case 'f': {
+                    char snip[16] = { SNIP_SPECIAL, SAM_SPECIAL_FLOAT };
+                    unsigned snip_len = 2 + str_int (GET_UINT32(array), &snip[2]);
+                    seg_by_ctx (vb, STRa(snip), elem_ctx, 0); // xxx seg in local and update SPECIAL to get from local if no snip
+                    break;
+                }
+
+                default : ABORT ("Type not supported for SAM/BAM arrays '%c'(%u)", type, type);
+            }
+        }
+
+        elem_ctx->txt_len += width * array_len;
+    }
+
+    else if (IS_BAM && callback) {
+        con.repeats = array_len;
+        for (int i=0; i < array_len; i++, array += width) { 
+
+            ValueType value;
+            switch (type) {
+                case 'I': value.i = (uint32_t)GET_UINT32(array); break;
+                case 'i': value.i = (int32_t) GET_UINT32(array); break;
+                case 'S': value.i = (uint16_t)GET_UINT16(array); break;
+                case 's': value.i = (int16_t) GET_UINT16(array); break;
+                case 'C': value.i = (uint8_t) GET_UINT8 (array); break;
+                case 'c': value.i = (int8_t)  GET_UINT8 (array); break;
+                default : ABORT ("Type not supported for callbacks '%c'(%u)", type, type);
+            }
+
+            callback (vb, elem_ctx, value, i, 0);
+        }
+    }
+
+    else { // SAM
+        if (!callback && elem_ctx->flags.store == STORE_INT)
+            elem_ctx->dynamic_size_local = is_signed ? DYN_SIGNED : DYN_UNSIGNED; // needed for seg_integer
+
+        // note: we're not using str_split on array, because the number of elements can be very large (eg one per base in PacBio ip:B) - possibly stack overflow
+        for (con.repeats=0; con.repeats < CONTAINER_MAX_REPEATS && array_len > 0; con.repeats++) { // str_len will be -1 after last number
+
+            const char *snip = array;
+            for (; array_len && *array != ','; array++, array_len--) {};
+
+            unsigned snip_len = (unsigned)(array - snip);
+
+            if (elem_ctx->flags.store == STORE_INT) { 
+                ValueType n;
+                ASSERT (str_get_int (STRa(snip), &n.i), "Invalid array: \"%.*s\", expecting an integer in an array element of %s. vb=%u line=%"PRIu64, 
+                        snip_len, snip, container_ctx->tag_name, vb->vblock_i, vb->line_i);
+                
+                if (callback)
+                    callback (vb, elem_ctx, n, con.repeats, snip_len+1);
+                else
+                    seg_integer (vb, elem_ctx, n.i, is_signed, false, snip_len+1);
+            }
+            else {
+                ASSERT0 (!callback, "callback feature not yet supported for float arrays");
+
+                // TODO: need to implement reconstruction, see comment in seg_float_or_not
+                //seg_float_or_not (vb, elem_ctx, STRa(snip), snip_len+1);
+                seg_by_ctx (vb, STRa(snip), elem_ctx, snip_len+1);
+            }
+            
+            array_len--; // skip comma
+            array++;
+        }
+    }
+
+    ASSERT (con.repeats < CONTAINER_MAX_REPEATS, "array has too many elements, more than %u", CONTAINER_MAX_REPEATS);
 
     // add bytes here in case of BAM - all to main field
-    unsigned container_add_bytes=0;
-    if (IS_BAM) {
-        unsigned add_bytes_per_repeat = sam_seg_optional_add_bytes (value[0], 0, true);
-        container_add_bytes = add_bytes_per_repeat * con.repeats + 4 /* count */ + 1 /* type */ ;
-    }
-    else 
-        container_add_bytes = 2; // type - eg "i,"
-
+    unsigned container_add_bytes = IS_BAM ? 4/*count*/ + 1/*type*/ : 2/*type - eg "i,"*/;
     container_seg (vb, container_ctx, (ContainerP)&con, prefixes, sizeof(prefixes), container_add_bytes);
 }
 
 // process an optional subfield, that looks something like MX:Z:abcdefg. We use "MX" for the field name, and
 // the data is abcdefg. The full name "MX:Z:" is stored as part of the OPTIONAL dictionary entry
 DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam, 
-                               const char *tag, char bam_type, const char *value, unsigned value_len)
+                               const char *tag, char bam_type, char array_subtype, 
+                               STRp(value), ValueType numeric) // two options 
 {
     char sam_type = sam_seg_bam_type_to_sam_type (bam_type);
     char dict_name[4] = { tag[0], tag[1], ':', sam_type };
-    DictId dict_id = dict_id_make (dict_name, 4, DTYPE_SAM_OPTIONAL);
+    DictId dict_id = dict_id_make (dict_name, 4, DTYPE_SAM_OPTIONAL); // match dict_id as declared in #pragma GENDICT
 
     unsigned add_bytes = sam_seg_optional_add_bytes (bam_type, value_len, is_bam);
 
@@ -757,47 +792,61 @@ DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam,
 
         case _OPTION_MD_Z: sam_md_seg (vb, dl, STRa(value), add_bytes); break;
 
-        case _OPTION_NM_i: sam_seg_NM_field (vb, STRa(value), add_bytes); break;
+        case _OPTION_NM_i: sam_seg_NM_field (vb, numeric, add_bytes); break;
 
         case _OPTION_BD_Z:
         case _OPTION_BI_Z: sam_seg_BD_BI_field (vb, dl, STRa(value), dict_id, add_bytes); break;
         
-        case _OPTION_AS_i: sam_seg_AS_field (vb, STRa(value), add_bytes); break;
+        case _OPTION_AS_i: sam_seg_AS_field (vb, numeric, add_bytes); break;
 
-        case _OPTION_XS_i: sam_seg_XS_field (vb, STRa(value), add_bytes); break;
+        case _OPTION_XS_i: sam_seg_XS_field (vb, numeric, add_bytes); break;
 
-        case _OPTION_XM_i: sam_seg_XM_field (vb, STRa(value), add_bytes); break;
+        case _OPTION_XM_i: sam_seg_XM_field (vb, numeric, add_bytes); break;
 
-        case _OPTION_MQ_i: sam_seg_MQ_field (vb, dl, STRa(value), add_bytes); break;
+        case _OPTION_MQ_i: sam_seg_MQ_field (vb, dl, numeric, add_bytes); break;
 
-        case _OPTION_mc_i: sam_seg_mc_field (vb, dict_id, STRa(value), add_bytes); break;
+        case _OPTION_mc_i: sam_seg_mc_field (vb, numeric, add_bytes); break;
 
-        case _OPTION_ms_i: sam_seg_ms_field (vb, dict_id, STRa(value), add_bytes); break;
+        case _OPTION_ms_i: sam_seg_ms_field (vb, numeric, add_bytes); break;
 
         case _OPTION_RG_Z: sam_seg_RG_field (vb, dl, STRa(value), add_bytes); break;
 
         // tx:i: - we seg this as a primary field SAM_TAX_ID
-        case _OPTION_TX_i: seg_by_did_i (VB, taxid_redirection_snip, taxid_redirection_snip_len, OPTION_TX_i, add_bytes); break;
+        case _OPTION_tx_i: seg_by_did_i (VB, taxid_redirection_snip, taxid_redirection_snip_len, OPTION_tx_i, add_bytes); break;
 
         //case _OPTION_E2: sam_seg_E2_field (vb, dl, STRa(value), add_bytes); // BROKEN. To do: fix.
 
         case _OPTION_U2_Z: sam_seg_U2_field (vb, dl, STRa(value), add_bytes); break;
 
-        case _OPTION_Z5_i: if (value_len && IS_DIGIT(value[0])) seg_pos_field (VB, OPTION_Z5_i, SAM_PNEXT, 0, 0, STRa(value), 0, add_bytes); 
-                           else goto fallback; 
+        case _OPTION_Z5_i: seg_pos_field (VB, OPTION_Z5_i, SAM_PNEXT, 0, 0, 0, 0, numeric.i, add_bytes); break;
+
+        case _OPTION_ZM_B: sam_seg_array_field (VB, (DictId)_OPTION_ZM_B, array_subtype, STRa(value), 
+                                                (segconf.tech == TECH_IONTORR && flag.optimize_ZM) ? sam_optimize_ZM : NULL);
                            break;
+        default: fallback:
+            
+            // all types of integer
+            if (sam_type == 'i') {
+                ContextP ctx = ctx_get_ctx (vb, dict_id);
+                seg_integer (VB, ctx, numeric.i, true, true, add_bytes);
+                ctx->dynamic_size_local = DYN_SIGNED;
+            }
 
-        default:
-            fallback:
-            // integer
-            if (sam_type == 'i')
-                seg_integer_or_not (VB, ctx_get_ctx (vb, dict_id), STRa(value), add_bytes);
+            else if (sam_type == 'f') {
+                if (is_bam) {
+                    char snip[16] = { SNIP_SPECIAL, SAM_SPECIAL_FLOAT };
+                    unsigned snip_len = 2 + str_int (numeric.i, &snip[2]); // we emit the textual integer that is binary-identical to the float, when converted to binary for
+                    seg_by_dict_id (VB, STRa(snip), dict_id, add_bytes); 
+                }
+                else
+                    seg_by_dict_id (VB, STRa(value), dict_id, add_bytes); 
+            }
 
-            // Numeric array array
-            else if (bam_type == 'B') 
-                sam_seg_array_field (VB, dict_id, STRa(value));
+            // Numeric array
+            else if (sam_type == 'B') 
+                sam_seg_array_field (VB, dict_id, array_subtype, STRa(value), NULL);
 
-            // All other subfields - normal snips in their own dictionary
+            // Z,H,A - normal snips in their own dictionary
             else        
                 seg_by_dict_id (VB, STRa(value), dict_id, add_bytes); 
     }

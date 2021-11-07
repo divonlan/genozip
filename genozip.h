@@ -112,7 +112,7 @@ typedef int64_t PosType;      // used for position coordinate within a genome
 typedef union { // 64 bit
     int64_t i;
     double f;
-} LastValueType __attribute__((__transparent_union__));
+} ValueType __attribute__((__transparent_union__));
 
 // global parameters - set before any thread is created, and never change
 extern uint32_t global_max_threads;
@@ -222,7 +222,7 @@ typedef _Bool bool;
 #define RESTORE_VALUE(var) var = save_##var
 
 // returns true if new_value has been set
-#define SPECIAL_RECONSTRUCTOR(func) bool func (VBlockP vb, ContextP ctx, const char *snip, uint32_t snip_len, LastValueType *new_value, bool reconstruct)
+#define SPECIAL_RECONSTRUCTOR(func) bool func (VBlockP vb, ContextP ctx, const char *snip, uint32_t snip_len, ValueType *new_value, bool reconstruct)
 typedef SPECIAL_RECONSTRUCTOR ((*PizSpecialReconstructor));
 
 #define SPECIAL(dt,num,name,func) \

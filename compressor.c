@@ -28,15 +28,15 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data,
 
     ASSERT (header->codec < NUM_CODECS, "unsupported section compressor=%u", header->codec);
 
-    unsigned compressed_offset     = BGEN32 (header->compressed_offset);
-    unsigned data_uncompressed_len = BGEN32 (header->data_uncompressed_len);
-    unsigned data_compressed_len   = 0;
-    unsigned data_encrypted_len=0, data_padding=0, header_padding=0;
+    uint32_t compressed_offset     = BGEN32 (header->compressed_offset);
+    uint32_t data_uncompressed_len = BGEN32 (header->data_uncompressed_len);
+    uint32_t data_compressed_len   = 0;
+    uint32_t data_encrypted_len=0, data_padding=0, header_padding=0;
 
     ASSERT0 (!data_uncompressed_len || uncompressed_data || callback, "data_uncompressed_len!=0 but neither uncompressed_data nor callback are provided");
 
     bool is_encrypted = false;
-    unsigned encryption_padding_reserve = 0;
+    uint32_t encryption_padding_reserve = 0;
 
     if (header->section_type != SEC_GENOZIP_HEADER &&  // genozip header is never encrypted
         !(header->section_type == SEC_REFERENCE && flag.reference == REF_EXT_STORE)) { // external reference copied over is never encrypted
@@ -79,8 +79,12 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data,
 
         // if output buffer is too small, increase it, and try again
         if (!success) {
-            buf_alloc (vb, z_data, compressed_offset + data_uncompressed_len * 1.5 + encryption_padding_reserve + 100000, /* +100K required by RAN, ART */
-                       0, char, 1, z_data->name ? z_data->name : "z_data");
+
+            uint32_t at_least = header->sub_codec ? codec_args[header->sub_codec].est_size (header->sub_codec, data_uncompressed_len)
+                                                  : MAX (data_uncompressed_len * 1.5 + 500000,
+                                                         codec_args[header->codec].est_size (header->sub_codec, data_uncompressed_len));
+
+            buf_alloc (vb, z_data, compressed_offset + at_least, 0, char, 1, z_data->name ? z_data->name : "z_data");
             
             data_compressed_len = z_data->size - z_data->len - compressed_offset - encryption_padding_reserve;
             data_uncompressed_len = BGEN32 (header->data_uncompressed_len); // reset

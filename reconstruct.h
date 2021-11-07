@@ -23,12 +23,12 @@ extern void reconstruct_one_snip (VBlockP vb, ContextP ctx, WordIndex word_index
 extern ContextP reconstruct_get_other_ctx_from_snip (VBlockP vb, pSTRp(snip));
 extern void reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, STRp(snip));
 
-extern LastValueType reconstruct_peek (VBlockP vb, ContextP ctx, pSTRp(txt));
-extern LastValueType reconstruct_peek_do (VBlockP vb, DictId dict_id, pSTRp(txt));
+extern ValueType reconstruct_peek (VBlockP vb, ContextP ctx, pSTRp(txt));
+extern ValueType reconstruct_peek_do (VBlockP vb, DictId dict_id, pSTRp(txt));
 #define reconstruct_peek_(vb, dict_id, txt, txt_len) reconstruct_peek_do ((VBlockP)(vb), (DictId)(dict_id), (txt), (txt_len))
 
 extern void reconstruct_set_buddy (VBlockP vb);
-extern bool reconstruct_from_buddy (VBlockP vb, ContextP ctx, STRp(snip), bool reconstruct, LastValueType *new_value);
+extern bool reconstruct_from_buddy (VBlockP vb, ContextP ctx, STRp(snip), bool reconstruct, ValueType *new_value);
 extern void reconstruct_from_buddy_get_textual_snip (VBlockP vb, ContextP ctx, pSTRp(snip));
 
 typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, DidIType did_i, DictId dict_id);

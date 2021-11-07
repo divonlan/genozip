@@ -375,7 +375,7 @@ void sam_cigar_seg_MC (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(mc), unsigned add
 
     dl->MC = WORD_IN_TXT_DATA(mc); 
 
-    ctx_set_last_value (VB, CTX(OPTION_MC_Z), (LastValueType){ .i = sam_cigar_get_MC_ref_consumed (STRa(mc)) } );
+    ctx_set_last_value (VB, CTX(OPTION_MC_Z), (ValueType){ .i = sam_cigar_get_MC_ref_consumed (STRa(mc)) } );
 }
 
 //---------

@@ -44,6 +44,8 @@ static int32_t bam_unconsumed_scan_forwards (VBlockP vb)
 
     if (aln_size > txt_len) 
         return -1; // this VB doesn't not even contain one single full alignment
+    else if (i == txt_len)
+        return 0;  // will will consume all data - nothing to pass to next VB
     else
         return aln_size - (i - txt_len); // we pass the data of the final, partial, alignment to the next VB
 }
@@ -104,7 +106,7 @@ static int32_t bam_unconsumed_scan_backwards (VBlockP vb, uint32_t first_i, int3
 
         // Note: we don't use add aln->bin calculation because in some files we've seen data that doesn't
         // agree with our formula. see comment in bam_reg2bin
-printf ("xxx vb=%u l_read_name=%u qname=\"%.*s\"\n", vb->vblock_i, aln->l_read_name, aln->l_read_name-1, aln->read_name);
+
         // all tests passed - this is indeed an alignment
         return vb->txt_data.len - (*i + LTEN32 (aln->block_size) + 4); // everything after this alignment is "unconsumed"
     }
@@ -177,7 +179,7 @@ void bam_seg_BIN (VBlockSAM *vb, ZipDataLineSAM *dl, uint16_t bin /* used only i
         WARN_ONCE ("FYI: bad bin value in vb=%u vb->line_i=%"PRIu64": this_pos=%"PRId64" ref_consumed=%u flag=%u last_pos=%"PRId64": bin=%u but reg2bin=%u. No harm. This warning will not be shown again for this file.",
                     vb->vblock_i, vb->line_i, this_pos, vb->ref_consumed, dl->FLAG.value, last_pos, bin, reg2bin);
 #endif
-        seg_integer (vb, SAM_BAM_BIN, bin, is_bam);
+        seg_integer_as_text (vb, SAM_BAM_BIN, bin, is_bam);
         CTX(SAM_BAM_BIN)->flags.store = STORE_INT;
     }
 }
@@ -242,69 +244,120 @@ static inline bool bam_rewrite_qual (uint8_t *qual, uint32_t l_seq)
 
     return true;
 }
-
+/* xxx
 static inline const char *bam_rewrite_one_optional_number (VBlockSAM *vb, const char *next_field, uint8_t type)
 {
-    static const char special_float[2] = { SNIP_SPECIAL, SAM_SPECIAL_FLOAT };
-
     switch (type) {
         case 'c': { uint8_t  n = NEXT_UINT8 ; vb->textual_opt.len += str_int ((int8_t )n, AFTERENT (char, vb->textual_opt)); break; }
         case 'C': { uint8_t  n = NEXT_UINT8 ; vb->textual_opt.len += str_int (         n, AFTERENT (char, vb->textual_opt)); break; }
-        case 's': { uint16_t n = NEXT_UINT16; vb->textual_opt.len += str_int ((int16_t)n, AFTERENT (char, vb->textual_opt)); break; }
-        case 'S': { uint16_t n = NEXT_UINT16; vb->textual_opt.len += str_int (         n, AFTERENT (char, vb->textual_opt)); break; }
-        case 'i': { uint32_t n = NEXT_UINT32; vb->textual_opt.len += str_int ((int32_t)n, AFTERENT (char, vb->textual_opt)); break; }
-        case 'I': { uint32_t n = NEXT_UINT32; vb->textual_opt.len += str_int (         n, AFTERENT (char, vb->textual_opt)); break; }
-        case 'f': { buf_add (&vb->textual_opt, special_float, 2); 
-                    uint32_t n = NEXT_UINT32; // n is the 4 bytes of the little endian float, construct and int, and switch to machine endianity 
-                    n = LTEN32 (n);           // switch back to Little Endian as it was in the BAM file
-                    /* integer as text */     vb->textual_opt.len += str_int (         n, AFTERENT (char, vb->textual_opt)); break; }
-        default: ABORT ("Error in bam_rewrite_one_optional_number: enrecognized Optional field type '%c' (ASCII %u) in vb=%u", 
+        case 's': { uint16_t n = NEXT_UINT16; vb->textual_opt.len += str_int ((int16_t)LTEN16(n), AFTERENT (char, vb->textual_opt)); break; }
+        case 'S': { uint16_t n = NEXT_UINT16; vb->textual_opt.len += str_int (         LTEN16(n), AFTERENT (char, vb->textual_opt)); break; }
+        case 'i': { uint32_t n = NEXT_UINT32; vb->textual_opt.len += str_int ((int32_t)LTEN32(n), AFTERENT (char, vb->textual_opt)); break; }
+        case 'I': { uint32_t n = NEXT_UINT32; vb->textual_opt.len += str_int (         LTEN32(n), AFTERENT (char, vb->textual_opt)); break; }
+        case 'f': { buf_add (&vb->textual_opt, ((char[]){ SNIP_SPECIAL, SAM_SPECIAL_FLOAT }), 2); 
+                    uint32_t n = NEXT_UINT32; // n is the 4 bytes of the little endian float (since BAM format is LTEN), construct as int, and switch to machine endianity 
+                    n = LTEN32 (n);           // switch to native endianity
+     vb->textual_opt.len += str_int (         n, AFTERENT (char, vb->textual_opt)); break; }                    // integer as text 
+        default: ABORT ("Error in bam_rewrite_one_optional_number: unrecognized Optional field type '%c' (ASCII %u) in vb=%u", 
                         type, type, vb->vblock_i);
     }    
 
     return next_field;
 } 
 
+static inline ValueType bam_get_one_optional_number (VBlockSAM *vb, const char **next_field_p, uint8_t type)
+{
+
+    switch (type) {
+        case 'c': { uint8_t  n = NEXTP_UINT8 ; return (ValueType){ .i=(int8_t)n           }; }
+        case 'C': { uint8_t  n = NEXTP_UINT8 ; return (ValueType){ .i=n                   }; }
+        case 's': { uint16_t n = NEXTP_UINT16; return (ValueType){ .i=LTEN16((int16_t)n)  }; } // LTEN to convert from LTEN BAM format, to native machine endianity 
+        case 'S': { uint16_t n = NEXTP_UINT16; return (ValueType){ .i=LTEN16(n)           }; }
+        case 'i': { uint32_t n = NEXTP_UINT32; return (ValueType){ .i=LTEN32((int32_t)n)  }; }
+        case 'I': { uint32_t n = NEXTP_UINT32; return (ValueType){ .i=LTEN32(n)           }; }
+        case 'f': { uint32_t n = NEXTP_UINT32; return (ValueType){ .i=LTEN32(n)           }; } // float is segged as uint32
+        default: ABORT ("Error in bam_get_one_optional_number: unrecognized Optional field type '%c' (ASCII %u) in vb=%u", 
+                        type, type, vb->vblock_i);
+    }    
+
+    return (ValueType){};
+} 
+*/
 const char *bam_get_one_optional (VBlockSAM *vb, const char *next_field,
-                                  const char **tag, char *type, pSTRp(value)) // out
+                                  const char **tag, char *type, char *array_subtype, // out
+                                  pSTRp(value), ValueType *numeric) // out - one of these depending on the type
 {
     *tag  = next_field;
     *type = next_field[2]; // c, C, s, S, i, I, f, A, Z, H or B
     next_field += 3;
 
-    if (*type == 'Z' || *type == 'H') {
-        *value = next_field;
-        *value_len = strlen (*value);
-        return next_field + *value_len + 1; // +1 for \0
-    }
-    
-    else if (*type == 'A') {
-        *value = next_field;
-        *value_len = 1;
-        return next_field + 1;
-    } 
+    switch (*type) {
+        // in case of an numeric type, we pass the value as a ValueType
+        case 'i': 
+            numeric->i = (int32_t)LTEN32 (GET_UINT32 (next_field));
+            return next_field + 4;
 
-    uint32_t max_len = (*type == 'B') ? (12 * GET_UINT32 (next_field) + 10) : // worst case scenario for item: "-1000000000,"
-                       30;
-    buf_alloc (vb, &vb->textual_opt, 0, max_len, char, 2, "textual_opt"); // a rather inefficient max in case of arrays, to do: tighten the calculation
-
-    if (*type != 'B')
-        next_field = bam_rewrite_one_optional_number (vb, next_field, *type);
-
-    else { // 'B'
-        char subtype = *next_field++; // type of elements of array
-        uint32_t num_elements = NEXT_UINT32;
-
-        NEXTENT (uint8_t, vb->textual_opt) = subtype;
+        case 'I': 
+        case 'f':
+            numeric->i = LTEN32 (GET_UINT32 (next_field)); // note: uint32 and float are binary-identical so this effectively sets value->f            
+            return next_field + 4;
         
-        for (uint32_t i=0; i < num_elements; i++) {
-            NEXTENT (char, vb->textual_opt) = ',';
-            next_field = bam_rewrite_one_optional_number (vb, next_field, subtype);
-        }
-    }    
+        case 's': 
+            numeric->i = (int16_t)LTEN16 (GET_UINT16 (next_field));
+            return next_field + 2;
 
-    *value     = vb->textual_opt.data;
-    *value_len = vb->textual_opt.len;
+        case 'S': 
+            numeric->i = LTEN16 (GET_UINT16 (next_field));
+            return next_field + 2;
+        
+        case 'c': 
+            numeric->i = (int8_t)*next_field;
+            return next_field + 1;
+
+        case 'C': 
+            numeric->i = (uint8_t)*next_field;
+            return next_field + 1;
+
+        // in case of a textual or hex string, or a single character, we pass the data as is
+        case 'Z': case 'H':
+            *value = next_field;
+            *value_len = strlen (*value);
+            return next_field + *value_len + 1; // +1 for \0
+
+        case 'A':    
+            *value = next_field;
+            *value_len = 1;
+            return next_field + 1;
+
+        // in case of a numerical value we pass the data as is, in machine endianity
+        case 'B':
+            *array_subtype = *next_field++; // type of elements of array
+            *value_len = NEXT_UINT32;       // number of elements, not number of bytes
+            *value = next_field;
+            
+            // switch from BAM's little endian to machine endianity
+            if (!flag.is_lten) 
+                switch (*array_subtype) {
+                    case 'i': case 'I': case 'f': 
+                        for (int i=0; i < *value_len; i++) ((uint32_t*)(*value))[i] = LTEN32(((uint32_t*)(*value))[i]);
+                        break;
+
+                    case 's': case 'S': 
+                        for (int i=0; i < *value_len; i++) ((uint32_t*)(*value))[i] = LTEN16(((uint32_t*)(*value))[i]);
+                        break;
+
+                    default: break;
+                }
+
+            ASSERT (aux_width[(uint8_t)*array_subtype], "Invalid array type: '%c' for field \"%c%c\". vb=%u line=%"PRIu64, 
+                    *array_subtype, (*tag)[0], (*tag)[1], vb->vblock_i, vb->line_i);
+
+            return next_field + *value_len * aux_width[(uint8_t)*array_subtype];
+
+        default:
+            ABORT ("Invalid field type: '%c' for field \"%c%c\". vb=%u line=%"PRIu64, 
+                    *type, (*tag)[0], (*tag)[1], vb->vblock_i, vb->line_i);
+    }
 
     return next_field;
 }

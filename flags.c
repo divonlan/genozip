@@ -28,11 +28,15 @@
 #include "license.h"
 #include "tar.h"
 #include "biopsy.h"
+#include "endianness.h"
 
 // flags - factory default values (all others are 0)
 Flags flag = { 
 #ifdef DEBUG
     .debug        = true,
+#endif
+#ifdef __LITTLE_ENDIAN__
+    .is_lten      = true,
 #endif
 #ifdef _WIN32
     .is_windows   = true,

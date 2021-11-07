@@ -116,7 +116,8 @@ typedef struct {
     Coords rejects_coord;    // ZIP only: currently zipping liftover rejects file / component containing only PRIMARY or LUFT variants
     bool debug,              // set if DEBUG is defined
          is_windows, is_mac, is_linux, // set according to OS
-         aligner_available,    // ZIP: compression requires using the aligner
+         is_lten,            // set according to enidanness   
+         aligner_available,  // ZIP: compression requires using the aligner
          genocat_no_ref_file,// PIZ (genocat): we don't need to load the reference data
          genocat_no_dicts,   // PIZ (genocat): we don't need to read the dicts
          genocat_global_area_only, // PIZ (genocat): we quit after processing the global area

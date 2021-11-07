@@ -92,10 +92,8 @@ void seg_rollback (VBlockP vb)
 
 void seg_simple_lookup (VBlockP vb, ContextP ctx, unsigned add_bytes)
 {
-    static const char lookup[1] = { SNIP_LOOKUP };
-    seg_by_ctx (VB, lookup, 1, ctx, add_bytes);
+    seg_by_ctx (VB, (char[]){ SNIP_LOOKUP }, 1, ctx, add_bytes);
 }
-
 
 const char *seg_get_next_item (void *vb_, const char *str, int *str_len, 
                                GetNextAllow newline, GetNextAllow tab, GetNextAllow space,
@@ -206,11 +204,11 @@ bool seg_set_last_txt (VBlockP vb, ContextP ctx, STRp(value), StoreType store_ty
     return stored;
 }
 
-WordIndex seg_integer_do (VBlockP vb, DidIType did_i, int64_t n, unsigned add_bytes)
+WordIndex seg_integer_as_text_do (VBlockP vb, ContextP ctx, int64_t n, unsigned add_bytes)
 {
     char snip[24];
     unsigned snip_len = str_int (n, snip);
-    return seg_by_did_i (VB, snip, snip_len, did_i, add_bytes);
+    return seg_by_ctx (vb, STRa(snip), ctx, add_bytes);
 }
 
 // prepare snips that contain code + dict_id + optional parameter (SNIP_LOOKUP_OTHER, SNIP_OTHER_DELTA, SNIP_REDIRECTION...)
@@ -374,7 +372,7 @@ bool seg_pos_field_cb (VBlockP vb, ContextP ctx, STRp(pos_str), uint32_t repeat)
 // example: rs17030902 : in the dictionary we store "rs\1" or "rs\1\2" and in SEC_NUMERIC_ID_DATA we store 17030902.
 //          1423       : in the dictionary we store "\1" and 1423 SEC_NUMERIC_ID_DATA
 //          abcd       : in the dictionary we store "abcd" and nothing is stored SEC_NUMERIC_ID_DATA
-void seg_id_field_init (ContextP ctx) { ctx->no_stons = ctx->dynamic_size_local = true; } // must be called in seg_initialize
+void seg_id_field_init (ContextP ctx) { ctx->no_stons = true; ctx->dynamic_size_local = DYN_UNSIGNED; } // must be called in seg_initialize
 void seg_id_field_do (VBlock *vb, ContextP ctx, STRp(id_snip))
 {
     int i=id_snip_len-1; for (; i >= 0; i--) 
@@ -408,6 +406,34 @@ bool seg_id_field_cb (VBlockP vb, ContextP ctx, STRp(id_snip), uint32_t repeat)
     return true; // segged successfully
 }
 
+// note: caller must set ctx->dynamic_size_local
+void seg_integer (VBlockP vb, ContextP ctx, int64_t n, bool is_signed, bool with_lookup, unsigned add_bytes)
+{
+    ctx_set_last_value (vb, ctx, (ValueType){.i = n});
+
+    bool in_range = (!is_signed && n <= 0xffffffffULL) || (is_signed && n >= -0x80000000LL && n <= 0x7fffffffLL);
+
+    // case: if we're allowed to use b250, and its out-of-range, we just seg it as text
+    if (!in_range && with_lookup) {
+        seg_integer_as_text_do (vb, ctx, n, add_bytes);
+        return;
+    }
+
+    ASSERT (in_range, "Integer %"PRId64" (displayed here as signed), is out of range of 32 bit. ctx=%s vb=%u line_i=%"PRIu64, 
+            n, ctx->tag_name, vb->vblock_i, vb->line_i);
+
+    uint32_t n32 = is_signed ? INTERLACE(int32_t, n) : (uint32_t)n;
+
+    // add to local. TO DO: find a way to better estimate the size, see b250_per_line
+    buf_alloc (vb, &ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->local");
+    NEXTENT (uint32_t, ctx->local) = n32;
+
+    if (with_lookup)     
+        seg_by_ctx (vb, (char[]){ SNIP_LOOKUP }, 1, ctx, 0);
+
+    ctx->txt_len += add_bytes;
+}
+
 // returns true if it was an integer
 bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsigned add_bytes)
 {
@@ -418,7 +444,7 @@ bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsigned ad
 
         ctx->last_line_i = vb->line_i;
 
-        ctx->dynamic_size_local = true;
+        ctx->dynamic_size_local = DYN_UNSIGNED;
 
         // add to local
         buf_alloc (vb, &ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->local");
@@ -447,12 +473,12 @@ bool seg_integer_or_not_cb (VBlockP vb, ContextP ctx, STRp(int_str), uint32_t re
 bool seg_float_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsigned add_bytes)
 {
     // TO DO: implement reconstruction in reconstruct_one_snip-SNIP_LOOKUP
-    char snip[2 + FLOAT_FORMAT_LEN];
+    char snip[1 + FLOAT_FORMAT_LEN];
     unsigned format_len;
 
     // case: its an float
     if (!ctx->no_stons && // we interpret no_stons as means also no moving ints to local (one of the reasons is that an int might actually be a float)
-        str_get_float (STRa(this_value), &ctx->last_value.f, &snip[2], &format_len)) {
+        str_get_float (STRa(this_value), &ctx->last_value.f, &snip[1], &format_len)) {
 
         ctx->ltype = LT_FLOAT32; // set only upon storing the first number - if there are no numbers, leave it as LT_TEXT so it can be used for singletons
 
@@ -497,7 +523,7 @@ WordIndex seg_delta_vs_other_do (VBlock *vb, Context *ctx, Context *other_ctx,
     return seg_by_ctx (VB, STRa(snip), ctx, add_bytes);
 
 fallback:
-    return value ? seg_by_ctx (VB, value, value_len, ctx, add_bytes) : seg_integer_do (vb, ctx->did_i, ctx->last_value.i, add_bytes);
+    return value ? seg_by_ctx (VB, value, value_len, ctx, add_bytes) : seg_integer_as_text_do (vb, ctx, ctx->last_value.i, add_bytes);
 }
 
 // note: seg_initialize should set STORE_INT for this ctx
@@ -862,6 +888,7 @@ void seg_all_data_lines (VBlock *vb)
     if (segconf.running) {
         segconf.line_len = (vb->lines.len ? (vb->txt_data.len / vb->lines.len) : 500) + 1; // get average line length (rounded up ; arbitrary 500 if the segconf data ended up not having any lines (example: all lines were non-matching lines dropped by --match in a chain file))
 
+        // limitations: only pre-defined field, not local
         for (DidIType did_i=0; did_i < DTF(num_fields); did_i++)
             if (CTX(did_i)->b250.len) 
                 segconf.b250_per_line[did_i] = (float)CTX(did_i)->b250.len / (float)vb->lines.len;

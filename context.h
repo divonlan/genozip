@@ -64,12 +64,12 @@ typedef struct {
 } CtxWord;
 #define WORD_IN_TXT_DATA(snip) ((CtxWord){ .char_index = ENTNUM (vb->txt_data, snip), .snip_len = snip##_len }) // get coordinates in txt_data
 
-// SIGNED NUMBERS ARE NOT UNTEST YET! NOT USE YET BY ANY SEG
 // for signed numbers, we store them in our "interlaced" format rather than standard ISO format 
 // example signed: 2, -5 <--> interlaced: 4, 9. Why? for example, a int32 -1 will be 0x00000001 rather than 0xfffffffe - 
 // compressing better in an array that contains both positive and negative
-#define SAFE_NEGATE(type,n) ((u##type)(-((int64_t)n))) // careful negation to avoid overflow eg -(-128)==0 in int8_t
-#define INTERLACE(type,n) ((((type)n) < 0) ? ((SAFE_NEGATE(type,n) << 1) - 1) : (((u##type)n) << 1))
+// Note: the full range of the signed type is supported, eg -128 to 127 for int8_t
+#define SAFE_NEGATE(signedtype,n) ((u##signedtype)(-((int64_t)n))) // careful negation to avoid overflow eg -(-128)==0 in int8_t
+#define INTERLACE(signedtype,n) ((((signedtype)n) < 0) ? ((SAFE_NEGATE(signedtype,n) << 1) - 1) : (((u##signedtype)n) << 1))
 #define DEINTERLACE(signedtype,unum) (((unum) & 1) ? -(signedtype)(((unum)>>1)+1) : (signedtype)((unum)>>1))
 
 #define NEXTLOCAL(type, ctx) (*ENT (type, (ctx)->local, (ctx)->next_local++))
@@ -240,7 +240,7 @@ static inline bool ctx_has_value_in_line_do (VBlockP vb, DictId dict_id, Context
 }
 #define ctx_has_value_in_line(vb, dict_id, p_ctx) ctx_has_value_in_line_do ((VBlockP)(vb), (DictId)(dict_id), (p_ctx))
 
-static inline void ctx_set_last_value (VBlockP vb, ContextP ctx, LastValueType last_value)
+static inline void ctx_set_last_value (VBlockP vb, ContextP ctx, ValueType last_value)
 {
     ctx->last_value    = last_value;
     ctx->last_line_i   = vb->line_i;

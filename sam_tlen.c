@@ -103,7 +103,7 @@ void sam_seg_TLEN (VBlockSAM *vb, ZipDataLineSAM *dl,
         seg_by_ctx (VB, STRa(tlen), ctx, add_bytes);
 
     else
-        seg_integer_do (VB, SAM_TLEN, tlen_value, add_bytes);
+        seg_integer_as_text_do (VB, ctx, tlen_value, add_bytes);
 
     ctx->last_value.i = tlen_value;
 }

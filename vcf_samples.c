@@ -883,7 +883,7 @@ static inline void vcf_seg_FORMAT_AB (VBlockVCF *vb, Context *ctx, STRp(ab))
     // prepare rollback data: we will verify channel 1 in vcf_seg_FORMAT_AB_verify_channel1 and rollback if necessary
     if (channel_i==1) {
         seg_set_last_txt (VB, ctx, STRa(ab), STORE_NONE);
-        ctx_set_last_value (VB, ctx, (LastValueType){.i = 1}); // need verification
+        ctx_set_last_value (VB, ctx, (ValueType){.i = 1}); // need verification
 
         ctx_create_rollback_point (ctx); 
     }

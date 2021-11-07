@@ -595,11 +595,13 @@ bool kraken_is_included_stored (VBlockP vb, DidIType did_i_taxid, bool already_r
 //----------------------------------------------------------------------------------------------------
 
 // returns snip_len if successful, or 0 if failed (only happens if fail_if_missing)
-unsigned kraken_seg_taxid_do (VBlockP vb, DidIType did_i_taxid, const char *qname, unsigned qname_len, 
+unsigned kraken_seg_taxid_do (VBlockP vb, DidIType did_i_taxid, STRp(qname), 
                               char *snip, // caller-allocated out
                               bool fail_if_missing)
 {
-    TaxonomyId taxid = kraken_get_taxid (qname, qname_len);
+    TaxonomyId taxid = kraken_get_taxid (STRa(qname));
+
+    ctx_set_last_value (vb, CTX(did_i_taxid), (ValueType){.i = taxid });
 
     ASSINP (!fail_if_missing || taxid != TAXID_NONE, 
             "Cannot find taxonomy id in kraken file for QNAME \"%.*s\"", qname_len, qname);
@@ -613,7 +615,7 @@ unsigned kraken_seg_taxid_do (VBlockP vb, DidIType did_i_taxid, const char *qnam
         if (flag.show_kraken)
             iprintf ("%.*s\t%d\n", qname_len, qname, taxid);
 
-        seg_by_did_i (VB, snip, snip_len, did_i_taxid, 0);
+        seg_by_did_i (VB, STRa(snip), did_i_taxid, 0);
 
         return snip_len;
     }

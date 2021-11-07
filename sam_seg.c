@@ -102,7 +102,7 @@ static void sam_seg_initialize_0X (VBlockP vb, DidIType lookback_did_i, DidIType
         rname_ctx->no_stons  = true;  // as we store by index
         strand_ctx->no_stons = true;
         lookback_ctx->flags.store = STORE_INT;
-        lookback_ctx->dynamic_size_local = true;
+        lookback_ctx->dynamic_size_local = DYN_UNSIGNED;
     }
 
     cigar_ctx->no_stons = true; // as we use local to store long CIGARs in sam_seg_0A_cigar_cb
@@ -125,7 +125,7 @@ void sam_seg_initialize (VBlock *vb)
     CTX(SAM_STRAND)->ltype      = LT_BITMAP;
     CTX(SAM_GPOS)->ltype        = LT_UINT32;
     CTX(SAM_GPOS)->flags.store  = STORE_INT;
-    CTX(SAM_BUDDY)->dynamic_size_local = true;
+    CTX(SAM_BUDDY)->dynamic_size_local = DYN_UNSIGNED;
     CTX(SAM_QNAME)->no_stons    = true; // no singletons, bc sam_piz_filter uses PEEK_SNIP
     
     if (segconf.sam_is_collated) 
@@ -155,7 +155,12 @@ void sam_seg_initialize (VBlock *vb)
     CTX(OPTION_AS_i)->flags.store = STORE_INT; // since v12.0.37
     CTX(OPTION_MQ_i)->flags.store = STORE_INT; // since v13
     CTX(SAM_QUAL)   ->flags.store = STORE_INT; // since v13 - store QUAL_score for buddy ms:i
-
+    
+    // set dynamic_size_local to allow use of seg_integer
+    CTX(OPTION_NM_i)->dynamic_size_local = true;
+    CTX(OPTION_XM_i)->dynamic_size_local = true;
+    CTX(OPTION_ms_i)->dynamic_size_local = true;
+    
     Context *rname_ctx = CTX(SAM_RNAME);
     Context *rnext_ctx = CTX(SAM_RNEXT);
 
@@ -464,16 +469,17 @@ void sam_seg_verify_RNAME_POS (VBlock *vb, const char *p_into_txt, PosType this_
 }
 
 static const char *sam_seg_get_kraken (VBlockSAM *vb, const char *next_field, bool *has_kraken, 
-                                       char *taxid_str, const char **tag, char *type,  // out
-                                       const char **value, unsigned *value_len, // out
+                                       char *taxid_str, const char **tag, char *sam_type, 
+                                       pSTRp (value), ValueType *numeric, // out - value for SAM, numeric for BAM
                                        bool is_bam)
 {
     *tag        = "tx"; // genozip introduced tag (=taxid)
-    *type       = 'i';
+    *sam_type   = 'i';
     *value      = taxid_str;
     *has_kraken = false;
     *value_len  = kraken_seg_taxid_do (VB, SAM_TAXID, last_txt (vb, SAM_QNAME), vb->last_txt_len (SAM_QNAME),
                                        taxid_str, true);
+    *numeric = CTX(SAM_TAXID)->last_value;
 
     vb->recon_size += is_bam ? 7 : (*value_len + 6); // txt modified
 
@@ -482,7 +488,7 @@ static const char *sam_seg_get_kraken (VBlockSAM *vb, const char *next_field, bo
 
 
 static const char *sam_get_one_optional (VBlockSAM *vb, const char *next_field, int32_t len, char *separator_p, bool *has_13, 
-                                         const char **tag, char *type, pSTRp(value)) // out
+                                         const char **tag, char *type, char *array_subtype, pSTRp(value)) // out
 {
     unsigned field_len;
     const char *field_start;
@@ -497,9 +503,19 @@ static const char *sam_get_one_optional (VBlockSAM *vb, const char *next_field, 
 
     *tag         = field_start;
     *type        = field_start[3];
-    *value       = field_start + 5;
-    *value_len   = field_len - 5;
     *separator_p = separator;
+    
+    if (*type == 'B') {
+        *array_subtype = field_start[5];
+        *value         = field_start + 7;
+        *value_len     = field_len - 7;
+    }
+    else {
+        *value         = field_start + 5;
+        *value_len     = field_len - 5;
+    }
+
+    ASSSEG0 (*value_len < 10000000, next_field, "Invalid array field format"); // check that *value_len didn't underflow beneath 0
 
     return next_field;
 }
@@ -513,10 +529,6 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
     char prefixes[MAX_FIELDS * 6 + 3]; // each name is 5 characters per SAM specification, eg "MC:Z:" followed by CON_PX_SEP ; +3 for the initial CON_PX_SEP
     prefixes[0] = prefixes[1] = prefixes[2] = CON_PX_SEP; // initial CON_PX_SEP follow by separator of empty Container-wide prefix followed by separator for empty prefix for translator-only item[0]
     unsigned prefixes_len=3;
-    const char *value, *tag;
-    char type;
-    unsigned value_len;
-    char added_value[20];
 
     // item[0] is translator-only item - to translate the Container itself in case of reconstructing BAM 
     con.items[con_nitems(con)] = (ContainerItem){ .translator = SAM2BAM_OPTIONAL_SELF }; 
@@ -524,30 +536,43 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
     
     bool has_kraken = kraken_is_loaded;
 
-    while ((is_bam ? (next_field < after_field) : (separator != '\n'))
-         || has_kraken) {
+    while ((is_bam ? (next_field < after_field) : (separator != '\n')) || has_kraken) {
 
-        next_field = has_kraken ? sam_seg_get_kraken   (vb, next_field, &has_kraken, added_value, &tag, &type, &value, &value_len, is_bam)  
-                   : is_bam     ? bam_get_one_optional (vb, next_field,                           &tag, &type, &value, &value_len)
-                   :              sam_get_one_optional (vb, next_field, len, &separator, has_13,  &tag, &type, &value, &value_len);
+        STR0(value);
+        ValueType numeric = {};
+        const char *tag;
+        char sam_type=0, bam_type=0, array_subtype=0;
+        char taxid_str[20];
+
+        next_field = has_kraken ? sam_seg_get_kraken   (vb, next_field, &has_kraken, taxid_str,  &tag, &bam_type, pSTRa(value), &numeric, is_bam)  
+                   : is_bam     ? bam_get_one_optional (vb, next_field,                          &tag, &bam_type, &array_subtype, pSTRa(value), &numeric)
+                   :              sam_get_one_optional (vb, next_field, len, &separator, has_13, &tag, &sam_type, &array_subtype, pSTRa(value));
+
+        if (sam_type == 'i') {
+            ASSERT (str_get_int (STRa(value), &numeric.i), "Expecting integer value for auxiliary field %c%c but found \"%.*s\". vb=%u line=%"PRIu64,
+                    tag[0], tag[1], value_len, value, vb->vblock_i, vb->line_i);
+            value=0;
+        }
+            
+        if (!bam_type) bam_type = sam_seg_sam_type_to_bam_type (sam_type, numeric.i);
+        if (!sam_type) sam_type = sam_seg_bam_type_to_sam_type (bam_type);
+        
+        ASSERT (bam_type, "value %"PRId64" of field %c%c is out of range of the BAM specification: [%d-%u]. vb=%u line=%"PRIu64, 
+                numeric.i, tag[0], tag[1], -0x80000000, 0x7fffffff, vb->vblock_i, vb->line_i);
 
         con.items[con_nitems(con)] = (ContainerItem) {
-            .dict_id    = sam_seg_optional_field (vb, dl, is_bam, tag, type, value, value_len),
-            .translator = optional_field_translator ((uint8_t)type), // how to transform the field if reconstructing to BAM
-            .separator  = { optional_sep_by_type[is_bam][(uint8_t)type], '\t' },
+            .dict_id    = sam_seg_optional_field (vb, dl, is_bam, tag, bam_type, array_subtype, STRa(value), numeric),
+            .translator = optional_field_translator ((uint8_t)bam_type), // how to transform the field if reconstructing to BAM
+            .separator  = { optional_sep_by_type[is_bam][(uint8_t)bam_type], '\t' },
         };
         con_inc_nitems (con);
 
         ASSSEG (con_nitems(con) <= MAX_FIELDS, value, "too many optional fields, limit is %u", MAX_FIELDS);
 
-        // in the optional field prefix (unlike array type), all integer types become 'i'.
-        char prefix_type = sam_seg_bam_type_to_sam_type (type);
-
-        char prefix[6] = { tag[0], tag[1], ':', prefix_type, ':', CON_PX_SEP}; 
+        // note: in the optional field prefix (unlike array type), all integer types become 'i'.
+        char prefix[6] = { tag[0], tag[1], ':', sam_type, ':', CON_PX_SEP}; 
         memcpy (&prefixes[prefixes_len], prefix, 6);
         prefixes_len += 6;
-
-        if (is_bam) buf_free (&vb->textual_opt);
     }
 
     uint32_t num_items = con_nitems(con);
@@ -645,7 +670,7 @@ fallback:
         if (mapq_str)
             seg_by_ctx (VB, STRa(mapq_str), ctx, add_bytes); 
         else
-            seg_integer (VB, SAM_MAPQ, mapq, true);
+            seg_integer_as_text (VB, SAM_MAPQ, mapq, true);
 }
 
 void sam_seg_RNAME_RNEXT (VBlockP vb, DidIType did_i, STRp (chrom), unsigned add_bytes)

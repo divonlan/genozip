@@ -399,8 +399,8 @@ WordIndex ctx_create_node_do (VBlockP vb, ContextP vctx, STRp(snip), bool *is_ne
 done:
     if (HAS_DEBUG_SEG(vctx)) { 
         char printable_snip[snip_len+20];
-        if (snip) iprintf ("create_node: vb_i=%u %s(%u): snip=%s snip_len=%u node_index=%d\n", vb->vblock_i, vctx->tag_name, vctx->did_i, str_print_snip (snip, snip_len, printable_snip), snip_len, node_index);
-        else      iprintf ("create_node: vb_i=%u %s(%u): snip=NULL snip_len=0 node_index=%d\n", vb->vblock_i, vctx->tag_name, vctx->did_i, node_index);
+        if (snip) iprintf ("create_node: vb_i=%u line=%"PRIu64" %s(%u): snip=%s snip_len=%u node_index=%d\n", vb->vblock_i, vb->line_i, vctx->tag_name, vctx->did_i, str_print_snip (snip, snip_len, printable_snip), snip_len, node_index);
+        else      iprintf ("create_node: vb_i=%u line=%"PRIu64" %s(%u): snip=NULL snip_len=0 node_index=%d\n", vb->vblock_i, vb->line_i, vctx->tag_name, vctx->did_i, node_index);
     }
 
     return node_index;
@@ -1260,8 +1260,9 @@ void ctx_free_context (Context *ctx, DidIType did_i)
     ctx->lcodec = ctx->bcodec = ctx->lsubcodec_piz = 0;
 
     ctx->no_stons = ctx->pair_local = ctx->pair_b250 = ctx->stop_pairing = ctx->no_callback = ctx->line_is_luft_trans =
-    ctx->local_param = ctx->no_vb1_sort = ctx->local_always = ctx->counts_section = ctx->no_drop_b250 =
-    ctx->dynamic_size_local = ctx->is_stats_parent = ctx->local_compressed = ctx->dict_merged = 0;
+    ctx->local_param = ctx->no_vb1_sort = ctx->local_always = ctx->counts_section = ctx->no_drop_b250 = 0;
+    ctx->dynamic_size_local = 0;
+    ctx->is_stats_parent = ctx->local_compressed = ctx->dict_merged = 0;
     ctx->local_dep = 0;
     ctx->local_hash_prime = 0;
     ctx->num_new_entries_prev_merged_vb = 0;

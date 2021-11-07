@@ -79,21 +79,17 @@ void sam_seg_QUAL (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(qual_data), unsigned 
 
 // ms:i: (output of bamsormadup and other biobambam tools - ms in small letters), created here: https://github.com/gt1/libmaus/tree/master/src/libmaus/bambam/BamAlignmentDecoderBase.cpp getScore 
 // It is the sum of phred values of mate's QUAL, but only phred values >= 15
-void sam_seg_ms_field (VBlockSAM *vb, DictId dict_id, STRp(ms), unsigned add_bytes)
+void sam_seg_ms_field (VBlockSAM *vb, ValueType ms, unsigned add_bytes)
 {
     if (segconf.running) segconf.has_ms = true;
 
     ZipDataLineSAM *buddy_dl = DATA_LINE (vb->buddy_line_i); // an invalid pointer if buddy_line_i is -1
     
-    int64_t ms_value;
-    if (!str_get_int (STRa(ms), &ms_value)) goto fallback;
-
-    if (vb->buddy_line_i != -1 && buddy_dl->QUAL_score == ms_value)  // successful in ~97% of lines with buddy
+    if (vb->buddy_line_i != -1 && buddy_dl->QUAL_score == ms.i)  // successful in ~97% of lines with buddy
         seg_by_did_i (VB, STRa(QUAL_buddy_snip), OPTION_ms_i, add_bytes); // copy MQ from earlier-line buddy 
 
     else
-fallback:
-        seg_by_did_i (VB, STRa(ms), OPTION_ms_i, add_bytes);    
+        seg_integer (VB, CTX(OPTION_ms_i), ms.i, false, true, add_bytes);    
 }
 
 //---------

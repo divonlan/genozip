@@ -40,7 +40,6 @@ typedef struct VBlockSAM {
     Buffer textual_cigar;          // ZIP: Seg of BAM, PIZ: store CIGAR in sam_cigar_analyze
     Buffer binary_cigar;           // PIZ: generate in sam_cigar_analyze, to reconstruct BAM
     Buffer textual_seq;            // ZIP: Seg of BAM
-    Buffer textual_opt;            // ZIP: Seg of BAM
 
     // data set by sam_cigar_analyze
     uint32_t ref_consumed;         // how many bp of reference are consumed according to the last_cigar
@@ -96,13 +95,18 @@ extern const uint8_t cigar_lookup_sam[256];
 extern const uint8_t cigar_lookup_bam[16];
 
 // loading a Little Endian uint32_t from an unaligned buffer
-#define GET_UINT16(p) (((uint8_t*)(p))[0] | (((uint8_t*)(p))[1] << 8))
-#define GET_UINT32(p) (((uint8_t*)(p))[0] | (((uint8_t*)(p))[1] << 8) | (((uint8_t*)(p))[2] << 16) | (((uint8_t*)(p))[3] << 24))
+#define GET_UINT8(p)  ((uint8_t)(((uint8_t*)(p))[0]))
+#define GET_UINT16(p) ((uint16_t)(((uint8_t*)(p))[0] | (((uint8_t*)(p))[1] << 8)))
+#define GET_UINT32(p) ((uint32_t)(((uint8_t*)(p))[0] | (((uint8_t*)(p))[1] << 8) | (((uint8_t*)(p))[2] << 16) | (((uint8_t*)(p))[3] << 24)))
 
 // getting integers from the BAM data
-#define NEXT_UINT8  *((const uint8_t *)next_field++)
+#define NEXT_UINT8  GET_UINT8  (next_field); next_field += sizeof (uint8_t);
 #define NEXT_UINT16 GET_UINT16 (next_field); next_field += sizeof (uint16_t);
 #define NEXT_UINT32 GET_UINT32 (next_field); next_field += sizeof (uint32_t);
+
+#define NEXTP_UINT8  GET_UINT8  (*next_field_p); *next_field_p += sizeof (uint8_t);
+#define NEXTP_UINT16 GET_UINT16 (*next_field_p); *next_field_p += sizeof (uint16_t);
+#define NEXTP_UINT32 GET_UINT32 (*next_field_p); *next_field_p += sizeof (uint32_t);
 
 extern void sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qname), unsigned add_additional_bytes);
 extern void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(flag_str), unsigned add_bytes);
@@ -112,14 +116,14 @@ extern void sam_seg_MAPQ (VBlockP vb, ZipDataLineSAM *dl, STRp(mapq_str), uint8_
 extern void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pnext_str)/* option 1 */, PosType pnext/* option 2 */, PosType prev_line_pos, unsigned add_bytes);
 extern void sam_seg_TLEN (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(tlen), int64_t tlen_value, bool is_rname_rnext_same);
 extern const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char *next_field, int32_t len, bool *has_13, char separator, const char *after_field);
-extern const char *bam_get_one_optional (VBlockSAM *vb, const char *next_field, const char **tag, char *type, const char **value, unsigned *value_len);
+extern const char *bam_get_one_optional (VBlockSAM *vb, const char *next_field, const char **tag, char *type, char *array_subtype, pSTRp(value), ValueType *numeric);
 extern uint16_t bam_reg2bin (int32_t first_pos, int32_t last_pos);
 extern void bam_seg_BIN (VBlockSAM *vb, ZipDataLineSAM *dl, uint16_t bin, PosType this_pos);
 extern void sam_seg_verify_RNAME_POS (VBlockP vb, const char *p_into_txt, PosType this_pos);
 
 // ------------------
 // CIGAR / MC:Z stuff
-// -----=------------
+// ------------------
 extern void sam_cigar_analyze (VBlockSAMP vb, STRp(cigar), unsigned *seq_consumed);
 extern void sam_cigar_binary_to_textual (VBlockSAM *vb, uint16_t n_cigar_op, const uint32_t *cigar, Buffer *textual_cigar);
 extern void sam_cigar_seg_textual (VBlockSAM *vb, ZipDataLineSAM *dl, unsigned last_cigar_len, STRp(seq_data), STRp(qual_data));
@@ -131,25 +135,25 @@ extern unsigned sam_cigar_get_MC_ref_consumed (STRp(mc));
 
 // ----------
 // SEQ stuff
-// -----=----
+// ----------
 extern void sam_seg_SEQ (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), PosType pos, const char *cigar, uint32_t ref_consumed, uint32_t ref_and_seq_consumed, unsigned recursion_level, uint32_t level_0_seq_len, const char *level_0_cigar, unsigned add_bytes);
 
 // ----------
 // QUAL stuff
-// -----=----
+// ----------
 extern void sam_seg_QUAL_initialize (VBlockP vb);
 extern void sam_seg_QUAL (VBlockSAM *vb, ZipDataLineSAM *dl, const char *qual, uint32_t qual_data_len, unsigned add_bytes);
-extern void sam_seg_ms_field (VBlockSAM *vb, DictId dict_id, STRp(ms), unsigned add_bytes);
+extern void sam_seg_ms_field (VBlockSAM *vb, ValueType ms, unsigned add_bytes);
 
 // ----------
 // MD:Z stuff
-// -----=----
+// ----------
 extern void sam_md_analyze (VBlockSAMP vb, STRp(md), PosType pos, const char *cigar);
 extern void sam_md_seg (VBlockSAM *vb,  ZipDataLineSAM *dl, STRp(md), unsigned add_bytes);
 
 // ----------
 // XA:Z stuff
-// -----=----
+// ----------
 extern void sam_piz_XA_field_insert_lookback (VBlockP vb);
 
 extern const char optional_sep_by_type[2][256];
@@ -173,7 +177,27 @@ static inline char sam_seg_bam_type_to_sam_type (char type)
     return (type=='c' || type=='C' || type=='s' || type=='S' || type=='I') ? 'i' : type;
 }
 
-extern DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam, const char *tag, char bam_type, const char *value, unsigned value_len);
+static inline char sam_seg_sam_type_to_bam_type (char type, int64_t n)
+{
+    LocalType test[6] = { LT_UINT8, LT_INT8, LT_UINT16, LT_INT16, LT_UINT32, LT_INT32 }; // preference to UINT
+    
+    if (type != 'i') return type; // all SAM types except 'i' are the same in BAM
+
+    // i converts to one of 6: C,c,S,s,I,i
+    for (int i=0 ; i < 6; i++)
+        if (n >= lt_desc[test[i]].min_int && n <= lt_desc[test[i]].max_int)
+            return lt_desc[test[i]].sam_type;
+    
+    return 0; // number out of range
+}
+
+extern DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam, const char *tag, char bam_type, char bam_array_subtype, STRp(value), ValueType numeric);
+
+// -------------------
+// SAM-private globals
+// -------------------
+
+extern const uint8_t aux_width[256];
 
 extern char taxid_redirection_snip[100], xa_strand_pos_snip[100], XS_snip[30], XM_snip[30], MC_buddy_snip[30], MQ_buddy_snip[30], QUAL_buddy_snip[30], XA_lookback_snip[30];
 extern unsigned taxid_redirection_snip_len, xa_strand_pos_snip_len, XS_snip_len, XM_snip_len, MC_buddy_snip_len, MQ_buddy_snip_len, QUAL_buddy_snip_len, XA_lookback_snip_len;

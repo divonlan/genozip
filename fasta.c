@@ -374,7 +374,7 @@ static void fasta_seg_seq_line_do (VBlockFASTA *vb, uint32_t line_len, bool is_f
 
     // note: we don't set value for first line, so that seg_duplicate_last doesn't copy it - since special_snip[2] is different 
     if (!is_first_line_in_contig) 
-        ctx_set_last_value (VB, lm_ctx, (LastValueType){ .i = line_len });
+        ctx_set_last_value (VB, lm_ctx, (ValueType){ .i = line_len });
 
     seq_ctx->txt_len   += line_len;
     seq_ctx->local.len += line_len;

@@ -166,6 +166,7 @@ bool codec_domq_compress (VBlock *vb,
 
 do_compress: ({});
     CodecCompress *compress = codec_args[header->sub_codec].compress;
+    *uncompressed_len = (uint32_t)qual_buf->len;
 
     // make sure we have enough memory
     uint32_t min_required_compressed_len = codec_args[header->sub_codec].est_size (header->sub_codec, qual_buf->len);
@@ -174,7 +175,6 @@ do_compress: ({});
         ABORT ("Compressing %s in vb_i=%u with %s need %u bytes, but allocated only %u", qual_ctx->tag_name, vb->vblock_i, codec_name(header->sub_codec), min_required_compressed_len, *compressed_len);
     }
 
-    *uncompressed_len = (uint32_t)qual_buf->len;
     COPY_TIMER (compressor_domq); // don't account for sub-codec compressor, it accounts for itself
 
     return compress (vb, header, qual_buf->data, uncompressed_len, NULL, compressed, compressed_len, false);

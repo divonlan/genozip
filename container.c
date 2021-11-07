@@ -190,7 +190,7 @@ static inline unsigned container_reconstruct_item_seperator (VBlockP vb, const C
         return 0;
 }
 
-LastValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, STRp(prefixes))
+ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, STRp(prefixes))
 {
     TimeSpecType profiler_timer = {}; 
     if (flag.show_time && con->is_toplevel) 
@@ -217,7 +217,7 @@ LastValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP c
                      :                                   ECTX (con->items[i].dict_id);
 
     // for containers, new_value is the sum of all its items, all repeats last_value (either int or float)
-    LastValueType new_value = {};
+    ValueType new_value = {};
 
     if (flag.show_containers) // show container reconstruction 
         iprintf ("VB=%u Container: %s repeats=%u items=%u filter_items=%u filter_repeats=%u callback=%u\n", 
@@ -316,7 +316,7 @@ LastValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP c
             if (translating && IS_CI_SET (CI_TRANS_MOVE))
                 vb->txt_data.len += (uint8_t)item->separator[1];
 
-            if (flag.show_containers && dict_id_typeless (item_ctx->dict_id).num == flag.dict_id_show_containers.num)
+            if (flag.show_containers && item_ctx && dict_id_typeless (item_ctx->dict_id).num == flag.dict_id_show_containers.num)
                 iprintf ("\"%.*s\"\n", (int)(AFTERENT(char, vb->txt_data)-reconstruction_start), reconstruction_start);
                 
         } // items loop
@@ -551,7 +551,7 @@ void container_display (ConstContainerP con)
 #define SET_n(type,mn,mx) type n = (type)ctx->last_value.i; \
                            ASSPIZ (ctx->last_value.i>=(int64_t)(mn) && ctx->last_value.i<=(int64_t)(mx), "Error: Failed to convert %s to %s because of bad data in line %"PRIu64" of the %s file: value of %s=%"PRId64" is out of range [%"PRId64"-%"PRId64"]",\
                                    dt_name (z_file->data_type), dt_name (flag.out_dt), vb->line_i, dt_name (z_file->data_type), \
-                                   ctx->tag_name, (int64_t)(ctx->last_value.i), (int64_t)(mn), (int64_t)(mx))
+                                   ctx->tag_name, ctx->last_value.i, (int64_t)(mn), (int64_t)(mx))
 
 TRANSLATOR_FUNC (container_translate_I8)       { SET_n (int8_t,   INT8_MIN,  INT8_MAX  );              RECONSTRUCT1(n);       return 0; }
 TRANSLATOR_FUNC (container_translate_U8)       { SET_n (uint8_t,  0,         UINT8_MAX );              RECONSTRUCT1((char)n); return 0; }

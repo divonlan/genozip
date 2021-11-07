@@ -42,7 +42,7 @@ typedef struct Context {
     // rollback point - used for rolling back during Seg
     uint64_t rback_b250_len, rback_local_len, rback_nodes_len, rback_txt_len; // ZIP: data to roll back the last seg
     uint32_t rback_num_singletons, rback_last_txt_index, rback_last_txt_len;
-    LastValueType rback_last_value; // also used in PIZ for rolling back VCF_POS.last_value after INFO/END
+    ValueType rback_last_value; // also used in PIZ for rolling back VCF_POS.last_value after INFO/END
     int64_t rback_last_delta, rback_ctx_spec_param;
     
     Buffer ol_dict;            // ZIP VB: tab-delimited list of all unique snips - overlayed all previous VB dictionaries
@@ -81,7 +81,7 @@ typedef struct Context {
     bool no_vb1_sort;          // don't sort the dictionary in ctx_sort_dictionaries_vb_1
     bool no_drop_b250;         // the b250 section cannot be optimized away in zip_generate_b250_section (eg if we need section header to carry a param)
     bool local_always;         // always create a local section in zfile, even if it is empty 
-    bool dynamic_size_local;   // resize LT_UINT32 according to data during generate (also do BGEN)
+    enum { DYN_SIGNED=-1, DYN_NONE=0, DYN_UNSIGNED=1 } dynamic_size_local; // resize LT_UINT32 according to data during generate (also do BGEN). 
     bool is_stats_parent;      // other contexts have this context in st_did_i
     bool counts_section;       // output a SEC_COUNTS section for this context
     bool line_is_luft_trans;   // Seg: true if current line, when reconstructed with --luft, should be translated with luft_trans (false if no
@@ -131,7 +131,7 @@ typedef struct Context {
     #define reconstruct_state_start(ctx) ((char*)&(ctx)->last_value)
     #define reconstruct_state_size_formula  ((char*)(&evb->contexts[0].pair_b250_iter + 1) - (char*)(&evb->contexts[0].last_value))
 
-    LastValueType last_value;  // ZIP/PIZ: last value of this context (it can be a basis for a delta, used for BAM translation, and other uses)
+    ValueType last_value;  // ZIP/PIZ: last value of this context (it can be a basis for a delta, used for BAM translation, and other uses)
     int64_t last_delta;        // last delta value calculated
     
     #define INVALID_LAST_TXT_INDEX ((uint32_t)-1)

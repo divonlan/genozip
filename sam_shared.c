@@ -8,6 +8,8 @@
 #include "file.h"
 #include "endianness.h"
 
+const uint8_t aux_width[256] = { ['i']=4, ['I']=4, ['s']=2, ['S']=2, ['c']=1, ['C']=1, ['A']=1, ['f']=4 };
+
 // table of valid cigar_op as defined in https://samtools.github.io/hts-specs/SAMv1.pdf
 const uint8_t cigar_lookup_sam[256] = { // note: bit 4 (0x10) is set for all valid values
     ['0'...'9']=0x11,                   // digits
@@ -39,7 +41,6 @@ void sam_vb_release_vb (VBlockSAM *vb)
     buf_free (&vb->textual_cigar);
     buf_free (&vb->binary_cigar);
     buf_free (&vb->textual_seq);
-    buf_free (&vb->textual_opt);
     buf_free (&vb->md_M_is_ref);
     buf_free (&vb->qname_hash);
     buf_free (&vb->buddy_textual_cigars);
@@ -50,7 +51,6 @@ void sam_vb_destroy_vb (VBlockSAM *vb)
     buf_destroy (&vb->bd_bi_line);
     buf_destroy (&vb->textual_cigar);
     buf_destroy (&vb->textual_seq);
-    buf_destroy (&vb->textual_opt);
     buf_destroy (&vb->md_M_is_ref);
     buf_destroy (&vb->qname_hash);
     buf_destroy (&vb->buddy_textual_cigars);

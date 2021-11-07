@@ -245,33 +245,34 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 
 typedef struct LocalTypeDesc {
     const char *name;
-    const char sam_char;
+    const char sam_type;
     unsigned width;
     bool is_signed;
+    int64_t min_int, max_int; // relevant for integer fields only
     BgEnBuf file_to_native;
 } LocalTypeDesc;
 
 extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
 #define LOCALTYPE_DESC { \
-/*   name   sam  wid signed file_to_native */ \
-   { "TXT", 0,   1,  0,     0                        }, \
-   { "I8 ", 'c', 1,  1,     BGEN_deinterlace_d8_buf  }, \
-   { "U8 ", 'C', 1,  0,     BGEN_u8_buf              }, \
-   { "I16", 's', 2,  1,     BGEN_deinterlace_d16_buf }, \
-   { "U16", 'S', 2,  0,     BGEN_u16_buf             }, \
-   { "I32", 'i', 4,  1,     BGEN_deinterlace_d32_buf }, \
-   { "U32", 'I', 4,  0,     BGEN_u32_buf             }, \
-   { "I64", 0,   8,  1,     BGEN_deinterlace_d64_buf }, \
-   { "U64", 0,   8,  0,     BGEN_u64_buf             }, \
-   { "F32", 'f', 4,  0,     BGEN_u32_buf             }, \
-   { "F64", 0,   8,  0,     BGEN_u64_buf             }, \
-   { "SEQ", 0,   1,  0,     0                        }, \
-   { "BMP", 0,   8,  0,     0                        }, \
-   { "COD", 0,   1,  0,     0                        }, \
-   { "T8 ", 0,   1,  0,     BGEN_transpose_u8_buf    }, \
-   { "T16", 0,   2,  0,     BGEN_transpose_u16_buf   }, \
-   { "T32", 0,   4,  0,     BGEN_transpose_u32_buf   }, \
-   { "T64", 0,   8,  0,     BGEN_transpose_u64_buf   }, \
+/*   name   sam  wid signed min_int                max_int                file_to_native */ \
+   { "TXT", 0,   1,  0,     0,                     0,                     0                        }, \
+   { "I8 ", 'c', 1,  1,     -0x80LL,               0x7fLL,                BGEN_deinterlace_d8_buf  }, \
+   { "U8 ", 'C', 1,  0,     0,                     0xffLL,                BGEN_u8_buf              }, \
+   { "I16", 's', 2,  1,     -0x8000LL,             0x7fffLL,              BGEN_deinterlace_d16_buf }, \
+   { "U16", 'S', 2,  0,     0,                     0xffffLL,              BGEN_u16_buf             }, \
+   { "I32", 'i', 4,  1,     -0x80000000LL,         0x7fffffffLL,          BGEN_deinterlace_d32_buf }, \
+   { "U32", 'I', 4,  0,     0,                     0xffffffffLL,          BGEN_u32_buf             }, \
+   { "I64", 0,   8,  1,     -0x8000000000000000LL, 0x7fffffffffffffffLL,  BGEN_deinterlace_d64_buf }, \
+   { "U64", 0,   8,  0,     0,                     0x7fffffffffffffffLL,  BGEN_u64_buf             }, /* note: our internal representation is int64_t so max is limited by that */ \
+   { "F32", 'f', 4,  0,     0,                     0,                     BGEN_u32_buf             }, \
+   { "F64", 0,   8,  0,     0,                     0,                     BGEN_u64_buf             }, \
+   { "SEQ", 0,   1,  0,     0,                     0,                     0                        }, \
+   { "BMP", 0,   8,  0,     0,                     0,                     0                        }, \
+   { "COD", 0,   1,  0,     0,                     0,                     0                        }, \
+   { "T8 ", 0,   1,  0,     0,                     0xffLL,                BGEN_transpose_u8_buf    }, \
+   { "T16", 0,   2,  0,     0,                     0xffffLL,              BGEN_transpose_u16_buf   }, \
+   { "T32", 0,   4,  0,     0,                     0xffffffffLL,          BGEN_transpose_u32_buf   }, \
+   { "T64", 0,   8,  0,     0,                     0x7fffffffffffffffLL,  BGEN_transpose_u64_buf   }, \
 }
 
 // used for SEC_LOCAL and SEC_B250
