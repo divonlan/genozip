@@ -147,6 +147,7 @@
 #pragma GENDICT OPTION_jI_B=DTYPE_2=jI:B    // jI:B:I,Start1,End1,Start2,End2,... Start and End of introns for all junctions (1-based).
 
 // PacBio tags. Source: https://pacbiofileformats.readthedocs.io/en/10.0/BAM.html and https://pacbiofileformats.readthedocs.io/en/3.0/BAM.html
+#pragma GENDICT OPTION_cx_i=DTYPE_2=cx:i    // per-read: Subread local context Flags: enum LocalContextFlags { ADAPTER_BEFORE = 1, ADAPTER_AFTER = 2, BARCODE_BEFORE = 4, BARCODE_AFTER = 8, FORWARD_PASS = 16, REVERSE_PASS = 32 }
 #pragma GENDICT OPTION_qs_i=DTYPE_2=qs:i    // per-read: 0-based start of query in the ZMW read (absent in CCS)
 #pragma GENDICT OPTION_qe_i=DTYPE_2=qe:i    // per-read: 0-based end of query in the ZMW read (absent in CCS)
 #pragma GENDICT OPTION_ws_i=DTYPE_2=ws:i    // per-read: Start of first base of the query (‘qs’) in approximate raw frame count since start of movie. For a CCS read, the start of the first base of the first incorporated subread.

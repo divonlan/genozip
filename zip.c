@@ -107,11 +107,11 @@ static void zip_display_compression_ratio (Digest md5, bool is_final_component)
     }
 }
 
-// we segment the first line of the txt file and see how many contexts were created. when then set
-// global_max_memory_per_vb to 1MB per context (subject to VBLOCK_MEMORY_MIN/MAX_DYN). rational: we need sufficient amount 
-// of data in each context for the generic codecs to work well. if compressing multiple files,
-// we do this just for the first file, so VBs can be reused (typically, the files will be similar)
-
+// B250 generation means re-writing the b250 buffer with 2 modifications:
+// 1) We write the word_index (i.e. the sequential number of the word in the dict in z_file) instead
+// of the VB's node_index (that is private to this VB)
+// 2) We optimize the representation of word_index giving privilage to 3 popular words (the most popular
+//    words in VB=1) to be represented by a single byte
 static inline void zip_generate_one_b250 (VBlockP vb, ContextP ctx, uint32_t word_i, WordIndex node_index,
                                           Buffer *b250_buf, 
                                           WordIndex *prev_word_index,  // in/out
@@ -606,7 +606,7 @@ static void zip_compress_one_vb (VBlock *vb)
         COPY_TIMER(wait_for_vb_1_mutex);
     }
 
-    // merge new words added in this vb into the z_file.contexts, ahead of zip_generate_b250_section().
+    // merge new words added in this vb into the z_file.contexts, ahead of zip_generate_b250().
     // writing indices based on the merged dictionaries. dictionaries are compressed. 
     // all this is done while holding exclusive access to the z_file dictionaries.
     // note: vb>=2 will block here, until vb=1 is completed

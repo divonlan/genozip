@@ -11,7 +11,7 @@
 // only 1 byte is used
 #define BASE250_EMPTY_SF   0xFA // 250 empty string
 #define BASE250_MISSING_SF 0xFB // 251 container item missing, remove preceding separator
-#define BASE250_ONE_UP     0xFC // 252 value is one higher than previous value. used in B250_ENC_8
+#define BASE250_ONE_UP     0xFC // 252 value is one higher than previous value. 
 #define BASE250_MOST_FREQ0 0xFD // 253 this translates to 0,1,2 representing the most frequent values (according to vb_i=1 sorting).
 #define BASE250_MOST_FREQ1 0xFE // 254
 #define BASE250_MOST_FREQ2 0xFF // 255
