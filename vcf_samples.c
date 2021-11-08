@@ -57,46 +57,6 @@ static SmallContainer vcf_samples_init_container_array (uint64_t dict_id_num)
     return con;
 }
 
-static void make_multi_dict_id_special_snip (uint8_t special_code, unsigned num_dict_ids, DictId *dict_ids,
-                                             char *out_snip, unsigned *out_snip_len) // in/out - allocated by caller
-{
-    // prepare snip - a string consisting of 4 x { VCF_SPECIAL_MUX_BY_DOSAGE , base64(dict_id.id) }   
-    char *snip = out_snip;
-    snip[0] = SNIP_SPECIAL;
-    unsigned snip_len = 1;
-
-    for (int i=0; i < num_dict_ids; i++) {
-        snip += snip_len;
-        snip_len = out_snip + *out_snip_len - snip;
-        seg_prepare_snip_other_do (i ? '\t' : special_code, dict_ids[i], 0, 0, snip, &snip_len);
-    }
-
-    *out_snip_len = (snip + snip_len) - out_snip;
-}
-
-// get ctx from a multi-dict_id special snip. note that we're careful to only ECTX the ctx_i requested, and not all,
-// so that we don't do a full search of vb->contexts[] for a channel that was not segged and hence has no context
-static ContextP multi_dict_id_get_ctx (VBlockP vb, ContextP ctx, unsigned num_dict_ids, STRp(snip), unsigned ctx_i)
-{
-    if (!ctx->con_cache.len)
-        buf_alloc_zero (vb, &ctx->con_cache, 0, num_dict_ids, DictId, 1, "con_cache");
-
-    ContextP item_ctx = *ENT(ContextP, ctx->con_cache, ctx_i);
-    if (item_ctx) return item_ctx;
-
-    // note: we get past this point only once per VB, per ctx_i
-    str_split (snip, snip_len, num_dict_ids, '\t', item, true);
-    ASSPIZ (n_items, "Unable to decoded multi-dict-id snip for %s. snip=\"%.*s\"", ctx->tag_name, snip_len, snip);
-
-    DictId item_dict_id;
-    base64_decode (items[ctx_i], &item_lens[ctx_i], item_dict_id.id);
-    item_ctx = ECTX (item_dict_id);
-
-    *ENT(ContextP, ctx->con_cache, ctx_i) = item_ctx; // NULL if no data was segged to this channel    
-    return item_ctx;
-}
-#define MCTX(ctx_i,num_dict_ids,snip,snip_len) multi_dict_id_get_ctx (vb, ctx, (num_dict_ids), (snip), (snip_len), (ctx_i))
-
 void vcf_samples_zip_initialize (void) 
 {
     static bool done = false;
@@ -141,46 +101,20 @@ void vcf_samples_zip_initialize (void)
     DictId ad_dict_ids[3] = { make_array_item_dict_id(_FORMAT_AD, 0), 
                               make_array_item_dict_id(_FORMAT_AD, 1),
                               (DictId)_FORMAT_AB3 };
-    make_multi_dict_id_special_snip (VCF_SPECIAL_AB, 3, ad_dict_ids, ab_snip, &ab_snip_len);
+    seg_prepare_multi_dict_id_special_snip (VCF_SPECIAL_AB, 3, ad_dict_ids, ab_snip, &ab_snip_len);
 
     gq_by_gp_len = sizeof (gq_by_gp);
-    make_multi_dict_id_special_snip (VCF_SPECIAL_GQ, 1, (DictId[]){ (DictId)_FORMAT_GP }, gq_by_gp, &gq_by_gp_len);
+    seg_prepare_multi_dict_id_special_snip (VCF_SPECIAL_GQ, 1, (DictId[]){ (DictId)_FORMAT_GP }, gq_by_gp, &gq_by_gp_len);
     gq_by_gp[gq_by_gp_len++] = '\t';
     
     gq_by_pl_len = sizeof (gq_by_pl);
-    make_multi_dict_id_special_snip (VCF_SPECIAL_GQ, 1, (DictId[]){ (DictId)_FORMAT_PL }, gq_by_pl, &gq_by_pl_len);
+    seg_prepare_multi_dict_id_special_snip (VCF_SPECIAL_GQ, 1, (DictId[]){ (DictId)_FORMAT_PL }, gq_by_pl, &gq_by_pl_len);
     gq_by_pl[gq_by_pl_len++] = '\t';
 }
 
 //--------------------
 // Multiplex by dosage
 // -------------------
-
-void vcf_init_mux_by_dosage (VBlockVCFP vb, DidIType mux_did_i, DidIType st_did_i, StoreType store_type, DosageMultiplexer *mux)
-{
-    const uint8_t *id = CTX(mux_did_i)->dict_id.id;
-    DictId dict_id_template = (DictId){ .id = { id[0], 0, id[1], id[2], id[3], id[4], id[5], id[6] } };
-
-    // calculate dict_ids, eg: PL -> PlL, PmL, PnL, PoL
-    DictId channel_dict_id[4];
-    for (int i=0; i < 4; i++) {
-        channel_dict_id[i] = dict_id_template;
-        channel_dict_id[i].id[1] = FLIP_CASE(id[1]) + i;
-        mux->channel_ctx[i] = ctx_get_ctx (vb, channel_dict_id[i]);
-    }
-
-    // set consolidation for --stats
-    stats_set_consolidation (VB, st_did_i, 4, mux->channel_ctx[0]->did_i, mux->channel_ctx[1]->did_i, 
-                                              mux->channel_ctx[2]->did_i, mux->channel_ctx[3]->did_i);
-
-    // set store type
-    CTX(mux_did_i)->flags.store = mux->channel_ctx[0]->flags.store = mux->channel_ctx[1]->flags.store = 
-    mux->channel_ctx[2]->flags.store = mux->channel_ctx[3]->flags.store = store_type; 
-
-    // prepare snip - a string consisting of 4 x { VCF_SPECIAL_MUX_BY_DOSAGE , base64(dict_id.id) }
-    mux->snip_len = sizeof (mux->snip);   
-    make_multi_dict_id_special_snip (VCF_SPECIAL_MUX_BY_DOSAGE, 4, channel_dict_id, mux->snip, &mux->snip_len);
-}
 
 static inline int vcf_seg_get_mux_channel_i (VBlockVCFP vb, bool fail_if_dvcf_refalt_switch)
 {
@@ -431,7 +365,7 @@ static void vcf_seg_AD_items (VBlockVCFP vb, Context *ctx, unsigned num_items, C
             
             else if (i==0 || i==1) {
                 if (vb->line_i==0)
-                    vcf_init_mux_by_dosage (vb, item_ctxs[i]->did_i, FORMAT_AD, STORE_INT, &vb->mux_AD[i]);
+                    seg_mux_init (VB, 4, VCF_SPECIAL_MUX_BY_DOSAGE, item_ctxs[i]->did_i, FORMAT_AD, STORE_INT, (Multiplexer*)&vb->mux_AD[i], "0123");
                 
                 vcf_seg_FORMAT_mux_by_dosage (vb, item_ctxs[i], STRi(item, i), &vb->mux_AD[i]);
             }
@@ -460,7 +394,7 @@ static void vcf_seg_ADALL_items (VBlockVCFP vb, Context *ctx, unsigned num_items
     for (unsigned i=0; i < num_items; i++) 
         if (i==0 || i==1) {
             if (vb->line_i==0)
-                vcf_init_mux_by_dosage (vb, item_ctxs[i]->did_i, FORMAT_ADALL, STORE_INT, &vb->mux_ADALL[i]);
+                seg_mux_init (VB, 4, VCF_SPECIAL_MUX_BY_DOSAGE, item_ctxs[i]->did_i, FORMAT_ADALL, STORE_INT, (Multiplexer*)&vb->mux_ADALL[i], "0123");
             
             vcf_seg_FORMAT_mux_by_dosage (vb, item_ctxs[i], STRi(item, i), &vb->mux_ADALL[i]);
         }
@@ -603,11 +537,19 @@ static void vcf_seg_MB_items (VBlockVCFP vb, Context *ctx, unsigned num_items, C
 // parameter is two dict_id's (in base64). reconstructs dict1.last_value - dict2.last_value
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_MINUS)
 {
-    DictId two_dicts[2];
-    base64_decode (snip, &snip_len, (uint8_t *)two_dicts);
+    // decode and store the the contexts in the first call for ctx (only one MINUS snip allowed per ctx)
+    if (!ctx->con_cache.len) {
+        buf_alloc_zero (vb, &ctx->con_cache, 0, 2, ContextP, 1, "con_cache");
 
-    new_value->i = ECTX (two_dicts[0])->last_value.i - 
-                   ECTX (two_dicts[1])->last_value.i;
+        DictId two_dicts[2];
+        base64_decode (snip, &snip_len, (uint8_t *)two_dicts);
+
+        *ENT(ContextP, ctx->con_cache, 0) = ECTX (two_dicts[0]);
+        *ENT(ContextP, ctx->con_cache, 1) = ECTX (two_dicts[1]);
+    }
+
+    new_value->i = (*ENT(ContextP, ctx->con_cache, 0))->last_value.i - 
+                   (*ENT(ContextP, ctx->con_cache, 1))->last_value.i;
 
     if (reconstruct)
         RECONSTRUCT_INT (new_value->i); 

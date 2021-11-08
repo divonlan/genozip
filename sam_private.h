@@ -10,14 +10,16 @@
 #include "reference.h"
 #include "contigs.h"
 #include "file.h"
+#include "seg.h"
 
 #define DTYPE_QNAME        DTYPE_1
 #define DTYPE_SAM_OPTIONAL DTYPE_2
 
 #define BAM_MAGIC "BAM\1" // first 4 characters of a BAM file
 
-#define IS_BAM (command==ZIP ? txt_file->data_type==DT_BAM \
-                             : (z_file->data_type==DT_SAM && z_file->z_flags.txt_is_bin))
+#define IS_BAM_ZIP (txt_file->data_type==DT_BAM)
+#define IS_BAM_PIZ (z_file->data_type==DT_SAM && z_file->z_flags.txt_is_bin)
+#define IS_BAM (command==ZIP ? IS_BAM_ZIP : IS_BAM_PIZ)
 
 // Buddy & lookback parameters
 #define BUDDY_MIN_RG_COUNT 3       // we only apply buddy to RG:Z if there are at least this many RGs

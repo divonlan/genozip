@@ -243,14 +243,6 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_POS)
     return 0;
 }
 
-// place value in correct location in alignment
-TRANSLATOR_FUNC (sam_piz_sam2bam_TLEN)
-{
-    BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)ENT (char, vb->txt_data, vb->line_start);
-    alignment->tlen = LTEN32 (ctx->last_value.i);
-    return 0;
-}
-
 // translate OPTIONAL SAM->BAM - called as translator-only item on within the Optional reconstruction
 // fix prefix eg MX:i: -> MXs
 TRANSLATOR_FUNC (sam_piz_sam2bam_OPTIONAL_SELF)

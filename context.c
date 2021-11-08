@@ -1262,7 +1262,7 @@ void ctx_free_context (Context *ctx, DidIType did_i)
     ctx->no_stons = ctx->pair_local = ctx->pair_b250 = ctx->stop_pairing = ctx->no_callback = ctx->line_is_luft_trans =
     ctx->local_param = ctx->no_vb1_sort = ctx->local_always = ctx->counts_section = ctx->no_drop_b250 = 0;
     ctx->dynamic_size_local = 0;
-    ctx->is_stats_parent = ctx->local_compressed = ctx->dict_merged = 0;
+    ctx->is_stats_parent = ctx->seg_initialized = ctx->local_compressed = ctx->dict_merged = 0;
     ctx->local_dep = 0;
     ctx->local_hash_prime = 0;
     ctx->num_new_entries_prev_merged_vb = 0;

@@ -197,3 +197,11 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_COPY_BUDDY_TLEN_old)
 
     return true; // new value
 }
+
+// place value in correct location in alignment
+TRANSLATOR_FUNC (sam_piz_sam2bam_TLEN)
+{
+    BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)ENT (char, vb->txt_data, vb->line_start);
+    alignment->tlen = LTEN32 (ctx->last_value.i);
+    return 0;
+}

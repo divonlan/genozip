@@ -244,45 +244,7 @@ static inline bool bam_rewrite_qual (uint8_t *qual, uint32_t l_seq)
 
     return true;
 }
-/* xxx
-static inline const char *bam_rewrite_one_optional_number (VBlockSAM *vb, const char *next_field, uint8_t type)
-{
-    switch (type) {
-        case 'c': { uint8_t  n = NEXT_UINT8 ; vb->textual_opt.len += str_int ((int8_t )n, AFTERENT (char, vb->textual_opt)); break; }
-        case 'C': { uint8_t  n = NEXT_UINT8 ; vb->textual_opt.len += str_int (         n, AFTERENT (char, vb->textual_opt)); break; }
-        case 's': { uint16_t n = NEXT_UINT16; vb->textual_opt.len += str_int ((int16_t)LTEN16(n), AFTERENT (char, vb->textual_opt)); break; }
-        case 'S': { uint16_t n = NEXT_UINT16; vb->textual_opt.len += str_int (         LTEN16(n), AFTERENT (char, vb->textual_opt)); break; }
-        case 'i': { uint32_t n = NEXT_UINT32; vb->textual_opt.len += str_int ((int32_t)LTEN32(n), AFTERENT (char, vb->textual_opt)); break; }
-        case 'I': { uint32_t n = NEXT_UINT32; vb->textual_opt.len += str_int (         LTEN32(n), AFTERENT (char, vb->textual_opt)); break; }
-        case 'f': { buf_add (&vb->textual_opt, ((char[]){ SNIP_SPECIAL, SAM_SPECIAL_FLOAT }), 2); 
-                    uint32_t n = NEXT_UINT32; // n is the 4 bytes of the little endian float (since BAM format is LTEN), construct as int, and switch to machine endianity 
-                    n = LTEN32 (n);           // switch to native endianity
-     vb->textual_opt.len += str_int (         n, AFTERENT (char, vb->textual_opt)); break; }                    // integer as text 
-        default: ABORT ("Error in bam_rewrite_one_optional_number: unrecognized Optional field type '%c' (ASCII %u) in vb=%u", 
-                        type, type, vb->vblock_i);
-    }    
 
-    return next_field;
-} 
-
-static inline ValueType bam_get_one_optional_number (VBlockSAM *vb, const char **next_field_p, uint8_t type)
-{
-
-    switch (type) {
-        case 'c': { uint8_t  n = NEXTP_UINT8 ; return (ValueType){ .i=(int8_t)n           }; }
-        case 'C': { uint8_t  n = NEXTP_UINT8 ; return (ValueType){ .i=n                   }; }
-        case 's': { uint16_t n = NEXTP_UINT16; return (ValueType){ .i=LTEN16((int16_t)n)  }; } // LTEN to convert from LTEN BAM format, to native machine endianity 
-        case 'S': { uint16_t n = NEXTP_UINT16; return (ValueType){ .i=LTEN16(n)           }; }
-        case 'i': { uint32_t n = NEXTP_UINT32; return (ValueType){ .i=LTEN32((int32_t)n)  }; }
-        case 'I': { uint32_t n = NEXTP_UINT32; return (ValueType){ .i=LTEN32(n)           }; }
-        case 'f': { uint32_t n = NEXTP_UINT32; return (ValueType){ .i=LTEN32(n)           }; } // float is segged as uint32
-        default: ABORT ("Error in bam_get_one_optional_number: unrecognized Optional field type '%c' (ASCII %u) in vb=%u", 
-                        type, type, vb->vblock_i);
-    }    
-
-    return (ValueType){};
-} 
-*/
 const char *bam_get_one_optional (VBlockSAM *vb, const char *next_field,
                                   const char **tag, char *type, char *array_subtype, // out
                                   pSTRp(value), ValueType *numeric) // out - one of these depending on the type

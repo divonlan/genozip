@@ -31,7 +31,7 @@ static inline WordIndex seg_by_did_i (VBlockP vb, STRp(snip), DidIType did_i, un
 extern WordIndex seg_known_node_index (VBlockP vb, ContextP ctx, WordIndex node_index, unsigned add_bytes);
 extern WordIndex seg_duplicate_last (VBlockP vb, ContextP ctx, unsigned add_bytes);
 
-extern void seg_integer (VBlockP vb, ContextP ctx, int64_t n, bool is_signed, bool with_lookup, unsigned add_bytes);
+extern void seg_integer (VBlockP vb, ContextP ctx, int64_t n, bool with_lookup, unsigned add_bytes);
 
 extern WordIndex seg_integer_as_text_do (VBlockP vb, ContextP ctx, int64_t n, unsigned add_bytes); // segs integer as normal textual snip
 #define seg_integer_as_text(vb,did_i,n,add_sizeof_n) seg_integer_as_text_do((VBlockP)(vb), &vb->contexts[did_i], (n), (add_sizeof_n) ? sizeof(n) : 0)
@@ -61,7 +61,18 @@ extern bool seg_id_field_cb (VBlockP vb, ContextP ctx, STRp(id_snip), uint32_t r
 extern void seg_add_to_local_text   (VBlockP vb, ContextP ctx, STRp(snip), unsigned add_bytes);
 extern void seg_add_to_local_fixed  (VBlockP vb, ContextP ctx, STRp(data));
 extern void seg_add_to_local_uint8  (VBlockP vb, ContextP ctx, uint8_t  value, unsigned add_bytes);
-extern void seg_add_to_local_uint (VBlockP vb, ContextP ctx, uint32_t value, unsigned add_bytes);
+
+// requires setting ctx->dynamic_size_local=true in seg_initialize, but not need to set ltype as it will be set in zip_resize_local
+static inline void seg_add_to_local_resizable (VBlockP vb, ContextP ctx, int64_t value, unsigned add_bytes)
+{
+#ifdef DEBUG
+    ASSERT (ctx->dynamic_size_local, "Expecting ctx->dynamic_size_local=true in ctx=%s vb=%u", ctx->tag_name, vb->vblock_i);
+#endif
+    // TO DO: find a way to better estimate the size, see b250_per_line
+    buf_alloc (vb, &ctx->local, 1, vb->lines.len, int64_t, CTX_GROWTH, "contexts->local");
+    NEXTENT (int64_t, ctx->local) = value;
+    if (add_bytes) ctx->txt_len += add_bytes;
+}
 
 extern WordIndex seg_delta_vs_other_do (VBlockP vb, ContextP ctx, ContextP other_ctx, STRp(value), int64_t max_delta, unsigned add_bytes);
 static inline WordIndex seg_delta_vs_other (VBlockP vb, ContextP ctx, ContextP other_ctx, STRp(value))
@@ -84,10 +95,23 @@ extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, 
     snip##_len++;\
 } while(0)
 
+extern void seg_prepare_multi_dict_id_special_snip (uint8_t special_code, unsigned num_dict_ids, DictId *dict_ids, char *out_snip, unsigned *out_snip_len);
+
 bool seg_set_last_txt (VBlockP vb, ContextP ctx, STRp(value), StoreType store_type);
 
 extern void seg_create_rollback_point (VBlockP vb, unsigned num_ctxs, ...); // list of did_i
 extern void seg_rollback (VBlockP vb);
+
+// Multiplexers
+#define MUX_MAX_CHANNELS 4 // can be increased as needed
+#define TYPEDEF_MULTIPLEXER(n_channels) \
+typedef struct {                        \
+    STRl(snip, 14*MUX_MAX_CHANNELS);    \
+    uint8_t num_channels;               \
+    ContextP channel_ctx[n_channels];   \
+}
+TYPEDEF_MULTIPLEXER() Multiplexer;
+extern void seg_mux_init (VBlockP vb, unsigned num_channels, uint8_t special_code, DidIType mux_did_i, DidIType st_did_i, StoreType store_type, Multiplexer *mux, const char *channel_letters);
 
 // ------------------
 // Seg utilities

@@ -206,37 +206,76 @@ static void zip_generate_b250 (VBlock *vb, Context *ctx)
 
 static void zip_resize_local (VBlock *vb, Context *ctx)
 {
-    ARRAY (uint32_t, src, ctx->local);
+    ARRAY (int64_t, src, ctx->local);
 
     // search for the largest (stop if largest so far requires 32bit)
-    uint32_t largest=0;
-    for (uint64_t i=0; i < src_len; i++) 
-        if (src[i] > largest) {
-            largest = src[i];
-            if (largest > 0xffff) break;
-        }
-    
-    // 8 bit
-    if (largest <= 0xff) {
-        ctx->ltype =  ctx->dynamic_size_local == DYN_SIGNED ? LT_INT8 : LT_UINT8;
+    int64_t largest = *FIRSTENT (int64_t, ctx->local);
+    int64_t smallest = largest;
+
+    for (uint64_t i=1; i < src_len; i++) 
+        if (src[i] > largest) largest = src[i];
+        else if (src[i] < smallest) smallest = src[i];
+
+    // uint8
+    if (smallest >= 0 && largest <= 0xffLL) {
+        ctx->ltype = LT_UINT8;
         ARRAY (uint8_t, dst, ctx->local);
         for (uint64_t i=0; i < src_len; i++)
             dst[i] = (uint8_t)src[i];
     }
 
-    // 16 bit
-    else if (largest <= 0xffff) {
-        ctx->ltype = ctx->dynamic_size_local == DYN_SIGNED ? LT_INT16 : LT_UINT16;
+    // uint16
+    else if (smallest >= 0 && largest <= 0xffffLL) {
+        ctx->ltype = LT_UINT16;
         ARRAY (uint16_t, dst, ctx->local);
         for (uint64_t i=0; i < src_len; i++)
             dst[i] = BGEN16 ((uint16_t)src[i]);
     }
 
-    // 32 bit
-    else {
-        ctx->ltype = ctx->dynamic_size_local == DYN_SIGNED ? LT_INT32 : LT_UINT32;
+    // uint32
+    else if (smallest >= 0 && largest <= 0xffffffffLL) {
+        ctx->ltype = LT_UINT32;
+        ARRAY (uint32_t, dst, ctx->local);
         for (uint64_t i=0; i < src_len; i++)
-            src[i] = BGEN32 (src[i]);
+            dst[i] = BGEN32 ((uint32_t)src[i]);
+    }
+
+    // int8
+    else if (smallest >= -0x80LL && largest <= 0x7fLL) {
+        ctx->ltype = LT_INT8;
+        ARRAY (uint8_t, dst, ctx->local);
+        for (uint64_t i=0; i < src_len; i++)
+            dst[i] = INTERLACE(int8_t, src[i]);
+    }
+
+    // int16
+    else if (smallest >= -0x8000LL && largest <= 0x7fffLL) {
+        ctx->ltype = LT_INT16;
+        ARRAY (uint16_t, dst, ctx->local);
+        for (uint64_t i=0; i < src_len; i++)
+            dst[i] = BGEN16 (INTERLACE(int16_t, src[i]));
+    }
+
+    // int32
+    else if (smallest >= -0x80000000LL && largest <= 0x7fffffffLL) {
+        ctx->ltype = LT_INT32;
+        ARRAY (uint32_t, dst, ctx->local);
+        for (uint64_t i=0; i < src_len; i++)
+            dst[i] = BGEN32 (INTERLACE(int32_t,src[i]));
+    }
+
+    // uint64
+    else if (smallest >= 0) {
+        ctx->ltype = LT_UINT64;
+        for (uint64_t i=0; i < src_len; i++)
+            src[i] = BGEN64 (src[i]);
+    }
+
+    // int64
+    else {
+        ctx->ltype = LT_INT64;
+        for (uint64_t i=0; i < src_len; i++)
+            src[i] = BGEN64 (INTERLACE(int64_t, src[i]));
     }
 }
 
@@ -321,16 +360,18 @@ static void zip_generate_local (VBlockP vb, ContextP ctx)
 {
     START_TIMER;
 
+    if (!ctx->local.len) return;
+
     ASSERT (ctx->dict_id.num, "tag_name=%s did_i=%u: ctx->dict_id=0 despite ctx->local containing data", ctx->tag_name, (unsigned)(ctx - vb->contexts));
 
-    if (ctx->ltype == LT_BITMAP) 
+    if (ctx->dynamic_size_local) 
+        zip_resize_local (vb, ctx);
+
+    else if (ctx->ltype == LT_BITMAP) 
         LTEN_bit_array (buf_get_bitarray (&ctx->local));
 
     else if (ctx->ltype == LT_UINT32_TR)
         zip_generate_transposed_local (vb, ctx);
-
-    else if (ctx->dynamic_size_local) 
-        zip_resize_local (vb, ctx);
 
     else if (ctx->ltype == LT_FLOAT32)
         BGEN_u32_buf (&ctx->local, NULL);

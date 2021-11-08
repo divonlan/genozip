@@ -89,7 +89,7 @@ void sam_seg_ms_field (VBlockSAM *vb, ValueType ms, unsigned add_bytes)
         seg_by_did_i (VB, STRa(QUAL_buddy_snip), OPTION_ms_i, add_bytes); // copy MQ from earlier-line buddy 
 
     else
-        seg_integer (VB, CTX(OPTION_ms_i), ms.i, false, true, add_bytes);    
+        seg_integer (VB, CTX(OPTION_ms_i), ms.i, true, add_bytes);    
 }
 
 //---------

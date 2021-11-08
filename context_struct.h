@@ -81,12 +81,13 @@ typedef struct Context {
     bool no_vb1_sort;          // don't sort the dictionary in ctx_sort_dictionaries_vb_1
     bool no_drop_b250;         // the b250 section cannot be optimized away in zip_generate_b250_section (eg if we need section header to carry a param)
     bool local_always;         // always create a local section in zfile, even if it is empty 
-    enum { DYN_SIGNED=-1, DYN_NONE=0, DYN_UNSIGNED=1 } dynamic_size_local; // resize LT_UINT32 according to data during generate (also do BGEN). 
+    bool dynamic_size_local;   // resize int64_t according to data during generate (also do INTERLACE, BGEN). 
     bool is_stats_parent;      // other contexts have this context in st_did_i
     bool counts_section;       // output a SEC_COUNTS section for this context
     bool line_is_luft_trans;   // Seg: true if current line, when reconstructed with --luft, should be translated with luft_trans (false if no
                                //      trans_luft exists for this context, or it doesn't trigger for this line, or line is already in LUFT coordinates)
     enum __attribute__ ((__packed__)) { DEP_L0, DEP_L1, DEP_L2, NUM_LOCAL_DEPENDENCY_LEVELS } local_dep; // ZIP: this local is created when another local is compressed (each NONREF_X is created with NONREF is compressed) (value=0,1,2)
+    bool seg_initialized;      // ZIP: context-specific seg initialization has been done
     bool local_compressed;     // ZIP: local has been compressed
     bool dict_merged;          // ZIP: dict has been merged into zctx
     TranslatorId luft_trans;   // ZIP: Luft translator for the context, set at context init and immutable thereafter
@@ -151,7 +152,7 @@ typedef struct Context {
 
     // Container cache 
     Buffer con_cache;          // PIZ: Handled by container_reconstruct - an array of Container which includes the did_i. Each struct is truncated to used items, followed by prefixes. 
-                               //      also used to cached Multiplexers in vcf_piz_special_MUX_BY_DOSAGE
+                               //      also used to cached Multiplexers in vcf_piz_special_MUX_BY_DOSAGE , vcf_piz_special_MINUS
                                // ZIP: Each context is free to use it on its own
     Buffer con_index;          // Array of uint32_t - PIZ: index into con_cache - Each item corresponds to word_index. ZIP: context-specific.
     Buffer con_len;            // Array of uint16_t - length of item in cache

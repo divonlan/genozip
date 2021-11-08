@@ -27,10 +27,7 @@ typedef struct {
 
 typedef enum { VCF_v_UNKNOWN, VCF_v4_1, VCF_v4_2, VCF_v4_3, VCF_v4_4, VCF_v4_5 } VcfVersion;
 
-typedef struct {
-    STRl(snip, 64);
-    ContextP channel_ctx[4];
-} DosageMultiplexer;
+TYPEDEF_MULTIPLEXER(4) DosageMultiplexer;
 
 #define VCF_MAX_ARRAY_ITEMS SMALL_CON_NITEMS
 
@@ -235,8 +232,6 @@ extern VcfVersion vcf_header_get_version (void);
 
 // Samples stuff
 extern void vcf_samples_zip_initialize (void);
-extern void vcf_init_mux_by_dosage (VBlockVCFP vb, DidIType mux_did_i, DidIType st_did_i, StoreType store_type, DosageMultiplexer *mux);
-#define vcf_init_mux(name,store_type) vcf_init_mux_by_dosage (vb, FORMAT_##name, FORMAT_##name, (store_type), &vb->mux_##name)
 
 extern const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *len, char *next_field, bool *has_13, const char *backup_luft_samples, uint32_t backup_luft_samples_len);
 extern void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCF *vb);

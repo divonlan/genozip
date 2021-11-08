@@ -20,6 +20,11 @@ extern uint32_t piz_uncompress_all_ctxs (VBlockP vb, uint32_t pair_vb_i);
 extern bool piz_grep_match (const char *start, const char *after);
 extern bool piz_test_grep (VBlockP vb);
 
+extern ContextP piz_multi_dict_id_get_ctx_first_time (VBlockP vb, ContextP ctx, unsigned num_dict_ids, STRp(snip), unsigned ctx_i);
+#define MCTX(ctx_i,num_dict_ids,snip,snip_len) (ctx->con_cache.len && *ENT(ContextP, ctx->con_cache, ctx_i)) \
+                                                    ? *ENT(ContextP, ctx->con_cache, ctx_i)                  \
+                                                    : piz_multi_dict_id_get_ctx_first_time ((VBlockP)vb, ctx, (num_dict_ids), (snip), (snip_len), (ctx_i))
+
 typedef struct { char s[100]; } PizDisCoords; 
 extern PizDisCoords piz_dis_coords (VBlockP vb); // for ASSPIZ
 

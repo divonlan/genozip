@@ -155,6 +155,10 @@ void reconstruct_set_buddy (VBlockP vb)
     ASSPIZ0 (vb->buddy_line_i == NO_BUDDY, "Buddy line already set for the current line");
 
     ContextP buddy_ctx = ECTX (_SAM_BUDDY); // all data types using buddy are expected to have a dict_id identical to _SAM_BUDDY (but different did_i)
+
+    // BUG introduced 12.0.41 (bug 367): we double BGEN32 - thereby storing this value in the genozip file in *machine endianity* 
+    // which will be different between Big/Little endian machines.
+    // ZIP: sam_seg_QNAME and in zip_resize_local ; PIZ: piz_adjust_one_local and reconstruct_set_buddy  
     int32_t num_lines_back = BGEN32 (NEXTLOCAL (uint32_t, buddy_ctx));
     vb->buddy_line_i = (vb->line_i - vb->first_line) - num_lines_back; // convert value passed (distance in lines to buddy) to 0-based buddy_line_i
     ASSPIZ (vb->buddy_line_i >= 0, "Expecting vb->buddy_line_i=%d to be non-negative", vb->buddy_line_i);

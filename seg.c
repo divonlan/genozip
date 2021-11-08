@@ -27,6 +27,7 @@
 #include "segconf.h"
 #include "coords.h"
 #include "website.h"
+#include "stats.h"
 
 WordIndex seg_by_ctx_ex (VBlockP vb, STRp(snip), ContextP ctx, uint32_t add_bytes,
                          bool *is_new) // optional out
@@ -226,6 +227,49 @@ void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, bool ha
         *snip_len += str_int (parameter, &snip[*snip_len]);
 }
 
+void seg_prepare_multi_dict_id_special_snip (uint8_t special_code, unsigned num_dict_ids, DictId *dict_ids,
+                                             char *out_snip, unsigned *out_snip_len) // in/out - allocated by caller
+{
+    // prepare snip - a string consisting of num_dict_ids x { VCF_SPECIAL_MUX_BY_DOSAGE , base64(dict_id.id) }   
+    char *snip = out_snip;
+    snip[0] = SNIP_SPECIAL;
+    unsigned snip_len = 1;
+
+    for (int i=0; i < num_dict_ids; i++) {
+        snip += snip_len;
+        snip_len = out_snip + *out_snip_len - snip;
+        seg_prepare_snip_other_do (i ? '\t' : special_code, dict_ids[i], 0, 0, snip, &snip_len);
+    }
+
+    *out_snip_len = (snip + snip_len) - out_snip;
+}
+
+void seg_mux_init (VBlockP vb, unsigned num_channels, uint8_t special_code, DidIType mux_did_i, DidIType st_did_i, StoreType store_type, Multiplexer *mux,
+                   const char *channel_letters) // optional - a string with num_channels unique characters
+{
+    const uint8_t *id = CTX(mux_did_i)->dict_id.id;
+    DictId dict_id_template = (DictId){ .id = { id[0], 0, id[1], id[2], id[3], id[4], id[5], id[6] } };
+
+    mux->num_channels = num_channels;
+
+    // calculate dict_ids, eg: PL -> PlL, PmL, PnL, PoL
+    DictId channel_dict_id[num_channels];
+    for (int i=0; i < num_channels; i++) {
+        channel_dict_id[i] = dict_id_template;
+        channel_dict_id[i].id[1] = channel_letters ? channel_letters[i] : (FLIP_CASE(id[1]) + i);
+        mux->channel_ctx[i] = ctx_get_ctx (vb, channel_dict_id[i]);
+        mux->channel_ctx[i]->flags.store = store_type; 
+
+        stats_set_consolidation (VB, st_did_i, 1, mux->channel_ctx[i]->did_i); // set consolidation for --stats
+    }
+
+    CTX(mux_did_i)->flags.store = store_type;
+
+    // prepare snip - a string consisting of num_channels x { special_code or \t , base64(dict_id.id) }
+    mux->snip_len = sizeof (mux->snip);   
+    seg_prepare_multi_dict_id_special_snip (special_code, num_channels, channel_dict_id, mux->snip, &mux->snip_len);
+}
+
 // scans a pos field - in case of non-digit or not in the range [0,MAX_POS], either returns -1
 // (if allow_nonsense) or errors
 static PosType seg_scan_pos_snip (VBlock *vb, const char *snip, unsigned snip_len, bool zero_is_bad, 
@@ -372,13 +416,13 @@ bool seg_pos_field_cb (VBlockP vb, ContextP ctx, STRp(pos_str), uint32_t repeat)
 // example: rs17030902 : in the dictionary we store "rs\1" or "rs\1\2" and in SEC_NUMERIC_ID_DATA we store 17030902.
 //          1423       : in the dictionary we store "\1" and 1423 SEC_NUMERIC_ID_DATA
 //          abcd       : in the dictionary we store "abcd" and nothing is stored SEC_NUMERIC_ID_DATA
-void seg_id_field_init (ContextP ctx) { ctx->no_stons = true; ctx->dynamic_size_local = DYN_UNSIGNED; } // must be called in seg_initialize
+void seg_id_field_init (ContextP ctx) { ctx->no_stons = true; ctx->dynamic_size_local = true; } // must be called in seg_initialize
 void seg_id_field_do (VBlock *vb, ContextP ctx, STRp(id_snip))
 {
     int i=id_snip_len-1; for (; i >= 0; i--) 
         if (!IS_DIGIT (id_snip[i])) break;
     
-    unsigned num_digits = MIN_(id_snip_len - (i+1), 9);
+    unsigned num_digits = MIN_(id_snip_len - (i+1), 18); // up to 0x0DE0,B6B3,A763,FFFF - fits in int64_t
 
     // leading zeros will be part of the dictionary data, not the number
     for (unsigned i = id_snip_len - num_digits; i < id_snip_len; i++) 
@@ -389,8 +433,10 @@ void seg_id_field_do (VBlock *vb, ContextP ctx, STRp(id_snip))
 
     // added to local if we have a trailing number
     if (num_digits) {
-        uint32_t id_num = atoi (&id_snip[id_snip_len - num_digits]);
-        seg_add_to_local_uint (vb, ctx, id_num, 0);
+        int64_t id_num;
+        ASSERT (str_get_int (&id_snip[id_snip_len - num_digits], num_digits, &id_num), 
+                "Failed str_get_int ctx=%s vb=%u line=%"PRIu64, ctx->tag_name, vb->vblock_i, vb->line_i);
+        seg_add_to_local_resizable (vb, ctx, id_num, 0);
     }
 
     // prefix the textual part with SNIP_LOOKUP_UINT32 if needed (we temporarily overwrite the previous separator or the buffer underflow area)
@@ -407,58 +453,32 @@ bool seg_id_field_cb (VBlockP vb, ContextP ctx, STRp(id_snip), uint32_t repeat)
 }
 
 // note: caller must set ctx->dynamic_size_local
-void seg_integer (VBlockP vb, ContextP ctx, int64_t n, bool is_signed, bool with_lookup, unsigned add_bytes)
+void seg_integer (VBlockP vb, ContextP ctx, int64_t n, bool with_lookup, unsigned add_bytes)
 {
     ctx_set_last_value (vb, ctx, (ValueType){.i = n});
 
-    bool in_range = (!is_signed && n <= 0xffffffffULL) || (is_signed && n >= -0x80000000LL && n <= 0x7fffffffLL);
-
-    // case: if we're allowed to use b250, and its out-of-range, we just seg it as text
-    if (!in_range && with_lookup) {
-        seg_integer_as_text_do (vb, ctx, n, add_bytes);
-        return;
-    }
-
-    ASSERT (in_range, "Integer %"PRId64" (displayed here as signed), is out of range of 32 bit. ctx=%s vb=%u line_i=%"PRIu64, 
-            n, ctx->tag_name, vb->vblock_i, vb->line_i);
-
-    uint32_t n32 = is_signed ? INTERLACE(int32_t, n) : (uint32_t)n;
-
-    // add to local. TO DO: find a way to better estimate the size, see b250_per_line
-    buf_alloc (vb, &ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->local");
-    NEXTENT (uint32_t, ctx->local) = n32;
+    seg_add_to_local_resizable (vb, ctx, n, add_bytes);
 
     if (with_lookup)     
         seg_by_ctx (vb, (char[]){ SNIP_LOOKUP }, 1, ctx, 0);
-
-    ctx->txt_len += add_bytes;
 }
 
 // returns true if it was an integer
-bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsigned add_bytes)
+bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_bytes)
 {
+    int64_t n;
+    bool is_numeric = str_get_int (STRa(value), &n);
+
     // case: its an integer
-    if (!ctx->no_stons && // we interpret no_stons as means also no moving ints to local (one of the reasons is that an int might actually be a float)
-        str_get_int (STRa(this_value), &ctx->last_value.i) &&
-        ctx->last_value.i >= 0 && ctx->last_value.i <= 0xffffffffULL) {
-
-        ctx->last_line_i = vb->line_i;
-
-        ctx->dynamic_size_local = DYN_UNSIGNED;
-
-        // add to local
-        buf_alloc (vb, &ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->local");
-        NEXTENT (uint32_t, ctx->local) = (uint32_t)ctx->last_value.i;
-        
-        // add to b250
-        seg_simple_lookup (VB, ctx, add_bytes);
-
+    if (!ctx->no_stons && is_numeric) { // we interpret no_stons as means also no moving ints to local (one of the reasons is that an int might actually be a float)
+        ctx->dynamic_size_local = true;
+        seg_integer (vb, ctx, n, true, add_bytes);
         return true;
     }
 
     // case: non-numeric snip
     else { 
-        seg_by_ctx (VB, STRa(this_value), ctx, add_bytes);
+        seg_by_ctx (VB, STRa(value), ctx, add_bytes);
         return false;
     }
 }
@@ -747,16 +767,6 @@ void seg_add_to_local_uint8 (VBlockP vb, ContextP ctx, uint8_t value, unsigned a
     if (add_bytes) ctx->txt_len += add_bytes;
 }
 
-// requires setting ctx->dynamic_size_local=true in seg_initialize, but not need to set ltype as it will be set in zip_resize_local
-void seg_add_to_local_uint (VBlockP vb, ContextP ctx, uint32_t value, unsigned add_bytes)
-{
-    buf_alloc (vb, &ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->local");
-
-    NEXTENT (uint32_t, ctx->local) = value;
-
-    if (add_bytes) ctx->txt_len += add_bytes;
-}
-
 static void seg_set_hash_hints (VBlock *vb, int third_num)
 {
     if (third_num == 1) 
@@ -836,7 +846,7 @@ void seg_all_data_lines (VBlock *vb)
     
     // set estimated number of lines
     vb->lines.len = vb->lines.len    ? vb->lines.len // already set? don't change (eg 2nd pair FASTQ)
-                  : segconf.running  ? 5000 
+                  : segconf.running  ? 10 // low number of avoid memory overallocation for PacBio arrays etc 
                   : segconf.line_len ? MAX_(1, vb->txt_data.len / segconf.line_len)
                   :                    1;            // eg DT_GENERIC
 

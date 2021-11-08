@@ -102,7 +102,7 @@ static void sam_seg_initialize_0X (VBlockP vb, DidIType lookback_did_i, DidIType
         rname_ctx->no_stons  = true;  // as we store by index
         strand_ctx->no_stons = true;
         lookback_ctx->flags.store = STORE_INT;
-        lookback_ctx->dynamic_size_local = DYN_UNSIGNED;
+        lookback_ctx->dynamic_size_local = true;
     }
 
     cigar_ctx->no_stons = true; // as we use local to store long CIGARs in sam_seg_0A_cigar_cb
@@ -112,21 +112,21 @@ void sam_seg_initialize (VBlock *vb)
 {
     START_TIMER;
 
-    // note: all numeric fields needs STORE_INT to be reconstructable to BAM (possibly already set)
+    // all numeric fields need STORE_INT / STORE_FLOAT to be reconstructable to BAM (possibly already set)
     // via the translators set in the SAM_TOP2BAM Container
+    DidIType numeric_fields[] = { SAM_TLEN, SAM_MAPQ, SAM_FLAG, SAM_POS, SAM_PNEXT, SAM_GPOS,
+    /* non-fallback fields */     OPTION_NM_i, OPTION_AS_i, OPTION_MQ_i, OPTION_XS_i, OPTION_XM_i, OPTION_mc_i, OPTION_ms_i, OPTION_Z5_i, OPTION_tx_i };
+    for (int i=0; i < sizeof(numeric_fields)/sizeof(numeric_fields[0]); i++)
+        CTX(numeric_fields[i])->flags.store = STORE_INT;
+
     CTX(SAM_SQBITMAP)->ltype    = LT_BITMAP;
     CTX(SAM_SQBITMAP)->local_always = true;
-    CTX(SAM_TLEN)->flags.store  = STORE_INT;
-    CTX(SAM_MAPQ)->flags.store  = STORE_INT;
-    CTX(SAM_FLAG)->flags.store  = STORE_INT;
     CTX(SAM_RNAME)->flags.store = STORE_INDEX; // since v12
-    CTX(SAM_POS)->flags.store   = STORE_INT;   // since v12
-    CTX(SAM_PNEXT)->flags.store = STORE_INT;
     CTX(SAM_STRAND)->ltype      = LT_BITMAP;
     CTX(SAM_GPOS)->ltype        = LT_UINT32;
-    CTX(SAM_GPOS)->flags.store  = STORE_INT;
-    CTX(SAM_BUDDY)->dynamic_size_local = DYN_UNSIGNED;
-    CTX(SAM_QNAME)->no_stons    = true; // no singletons, bc sam_piz_filter uses PEEK_SNIP
+    CTX(SAM_BUDDY)->dynamic_size_local = true;
+    CTX(SAM_QNAME)->no_stons    = true;        // no singletons, bc sam_piz_filter uses PEEK_SNIP
+    CTX(SAM_QUAL) ->flags.store = STORE_INT;   // since v13 - store QUAL_score for buddy ms:i
     
     if (segconf.sam_is_collated) 
         CTX(SAM_POS)->flags.store_delta = true; // since v12.0.41
@@ -151,10 +151,6 @@ void sam_seg_initialize (VBlock *vb)
 
     CTX(OPTION_BI_Z)->no_stons    = CTX(OPTION_BD_Z)->no_stons = true; // we can't use local for singletons in BD or BI as next_local is used by sam_piz_special_BD_BI to point into BD_BI
     CTX(OPTION_BD_BI)->ltype      = LT_SEQUENCE;
-    CTX(OPTION_NM_i)->flags.store = STORE_INT; // since v12.0.36
-    CTX(OPTION_AS_i)->flags.store = STORE_INT; // since v12.0.37
-    CTX(OPTION_MQ_i)->flags.store = STORE_INT; // since v13
-    CTX(SAM_QUAL)   ->flags.store = STORE_INT; // since v13 - store QUAL_score for buddy ms:i
     
     // set dynamic_size_local to allow use of seg_integer
     CTX(OPTION_NM_i)->dynamic_size_local = true;
@@ -621,7 +617,10 @@ void sam_seg_QNAME (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(qname), unsigned add
         if (buddy_line_i != -1 && buddy_dl->QNAME.snip_len == qname_len && 
             !memcmp (qname, ENT (char, vb->txt_data, buddy_dl->QNAME.char_index), qname_len)) {
 
-            seg_add_to_local_uint (VB, CTX(SAM_BUDDY), BGEN32 (vb->line_i - buddy_line_i), 0); // add buddy (delta) >= 1
+            // BUG introduced 12.0.41 (bug 367): we double BGEN32 - thereby storing this value in the genozip file in *machine endianity* 
+            // which will be different between Big/Little endian machines.
+            // ZIP: sam_seg_QNAME and in zip_resize_local ; PIZ: piz_adjust_one_local and reconstruct_set_buddy  
+            seg_add_to_local_resizable (VB, CTX(SAM_BUDDY), BGEN32 (vb->line_i - buddy_line_i), 0); // add buddy (delta) >= 1 . 
             
             seg_by_ctx (VB, (char[]){ SNIP_COPY_BUDDY, SNIP_COPY_BUDDY }, 2, CTX(SAM_QNAME), qname_len + add_additional_bytes); // seg QNAME as copy-from-buddy (an extra SNIP_COPY_BUDDY indicates that reconstruct_from_buddy should set buddy_line_i here)
             
@@ -832,14 +831,15 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     }
 
     GET_NEXT_ITEM (SAM_SEQ);
-
+    seg_set_last_txt (VB, CTX(SAM_SQBITMAP), STRd(SAM_SEQ), STORE_NONE);
+    
     ASSSEG (dl->seq_len == field_len || vb->last_cigar[0] == '*' || SAM_SEQ_str[0] == '*', SAM_SEQ_str, 
             "seq_len implied by CIGAR=%s is %u, but actual SEQ length is %u, SEQ=%.*s", 
             vb->last_cigar, dl->seq_len, SAM_SEQ_len, SAM_SEQ_len, SAM_SEQ_str);
 
     // calculate diff vs. reference (denovo or loaded)
     sam_seg_SEQ (vb, SAM_SQBITMAP, STRd(SAM_SEQ), this_pos, vb->last_cigar, vb->ref_consumed, vb->ref_and_seq_consumed, 
-                       0, field_len, vb->last_cigar, SAM_SEQ_len+1);
+                 0, field_len, vb->last_cigar, SAM_SEQ_len+1);
 
     GET_MAYBE_LAST_ITEM (SAM_QUAL);
     sam_seg_QUAL (vb, dl, STRd(SAM_QUAL), SAM_QUAL_len + 1); 

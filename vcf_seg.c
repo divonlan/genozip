@@ -147,16 +147,17 @@ void vcf_seg_initialize (VBlock *vb_)
     stats_set_consolidation (VB, FORMAT_AB,  1, FORMAT_AB3);
 
     // initialize dosage multiplexers
-    vcf_init_mux(PRI,  STORE_NONE);
-    vcf_init_mux(GL,   STORE_NONE);
-    vcf_init_mux(DS,   STORE_NONE);
-    vcf_init_mux(PL,   STORE_NONE);
-    vcf_init_mux(PP,   STORE_NONE);
-    vcf_init_mux(GP,   STORE_NONE);
-    vcf_init_mux(GQ,   STORE_NONE);
-    vcf_init_mux(PVAL, STORE_NONE);
-    vcf_init_mux(FREQ, STORE_NONE);
-    vcf_init_mux(RD,   STORE_INT);
+    #define init_mux(name,store_type) seg_mux_init ((VBlockP)vb, 4, VCF_SPECIAL_MUX_BY_DOSAGE, FORMAT_##name, FORMAT_##name, (store_type), (Multiplexer*)&vb->mux_##name, "0123")
+    init_mux(PRI,  STORE_NONE);
+    init_mux(GL,   STORE_NONE);
+    init_mux(DS,   STORE_NONE);
+    init_mux(PL,   STORE_NONE);
+    init_mux(PP,   STORE_NONE);
+    init_mux(GP,   STORE_NONE);
+    init_mux(GQ,   STORE_NONE);
+    init_mux(PVAL, STORE_NONE);
+    init_mux(FREQ, STORE_NONE);
+    init_mux(RD,   STORE_INT);
 
     vb->ht_matrix_ctx = CTX(FORMAT_GT_HT); // different for different data types
 

@@ -548,10 +548,12 @@ void container_display (ConstContainerP con)
 }
 
 // Translators reconstructing last_value as a little endian binary
-#define SET_n(type,mn,mx) type n = (type)ctx->last_value.i; \
-                           ASSPIZ (ctx->last_value.i>=(int64_t)(mn) && ctx->last_value.i<=(int64_t)(mx), "Error: Failed to convert %s to %s because of bad data in line %"PRIu64" of the %s file: value of %s=%"PRId64" is out of range [%"PRId64"-%"PRId64"]",\
-                                   dt_name (z_file->data_type), dt_name (flag.out_dt), vb->line_i, dt_name (z_file->data_type), \
-                                   ctx->tag_name, ctx->last_value.i, (int64_t)(mn), (int64_t)(mx))
+#define SET_n(type,mn,mx) \
+    type n = (type)ctx->last_value.i; \
+    ASSPIZ (ctx->last_value.i>=(int64_t)(mn) && ctx->last_value.i<=(int64_t)(mx),\
+            "Error: Failed to convert %s to %s because of bad data in line %"PRIu64" of the %s file: value of %s=%"PRId64" is out of range for type \"%s\"=[%"PRId64"-%"PRId64"]",\
+            dt_name (z_file->data_type), dt_name (flag.out_dt), vb->line_i, dt_name (z_file->data_type), \
+            ctx->tag_name, ctx->last_value.i, #type, (int64_t)(mn), (int64_t)(mx))
 
 TRANSLATOR_FUNC (container_translate_I8)       { SET_n (int8_t,   INT8_MIN,  INT8_MAX  );              RECONSTRUCT1(n);       return 0; }
 TRANSLATOR_FUNC (container_translate_U8)       { SET_n (uint8_t,  0,         UINT8_MAX );              RECONSTRUCT1((char)n); return 0; }
