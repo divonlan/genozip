@@ -371,7 +371,7 @@ PosType seg_pos_field (VBlock *vb,
     // store the delta in last_delta only if we're also putting in the b250
     snip_ctx->last_delta = pos_delta;
     
-    // if the delta is the negative of the previous delta (as happens in unsorted BAM files with the second line in
+    // if the delta is the negative of the previous delta (as happens in collated BAM files with the second line in
     // each pair of lines) - we just store an empty snippet
     bool is_negated_last = (snip_ctx->last_delta && snip_ctx->last_delta == -pos_delta);
 

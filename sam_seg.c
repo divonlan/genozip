@@ -748,7 +748,7 @@ void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pnext_str)/* option 
     }
 
     else
-        pnext = seg_pos_field (VB, SAM_PNEXT, SAM_POS, 0, 0, STRa(pnext_str), pnext, add_bytes);
+        pnext = seg_pos_field (VB, SAM_PNEXT, SAM_POS, 0, 0, 0, 0, pnext, add_bytes);
 
     dl->PNEXT = pnext;
 }
