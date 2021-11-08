@@ -131,6 +131,11 @@ void sam_seg_initialize (VBlock *vb)
     if (segconf.sam_is_collated) 
         CTX(SAM_POS)->flags.store_delta = true; // since v12.0.41
 
+    // a bug that existed 12.0.41-13.0.1 (bug 367): we stored buddy in machine endianty instead of BGEN32.
+    // we use local.param=1 to indicate to reconstruct_set_buddy that this bug is now fixed.
+    CTX(SAM_BUDDY)->local.param = 1;
+    CTX(SAM_BUDDY)->local_param = true;
+
     // we sometimes copy from buddy alignments (mates etc), but only in sorted files
     if (segconf.sam_is_sorted) { // since v12.0.41
         CTX(SAM_QNAME  )->flags.store_per_line = true; 
@@ -203,7 +208,7 @@ void sam_seg_initialize (VBlock *vb)
 
     // create an "all the same" node for SAM_MC_Z
     ctx_create_node (vb, SAM_MC_Z, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_CONSUME_MC_Z }, 2);
-
+    
     COPY_TIMER (seg_initialize);
 }
 
@@ -617,10 +622,7 @@ void sam_seg_QNAME (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(qname), unsigned add
         if (buddy_line_i != -1 && buddy_dl->QNAME.snip_len == qname_len && 
             !memcmp (qname, ENT (char, vb->txt_data, buddy_dl->QNAME.char_index), qname_len)) {
 
-            // BUG introduced 12.0.41 (bug 367): we double BGEN32 - thereby storing this value in the genozip file in *machine endianity* 
-            // which will be different between Big/Little endian machines.
-            // ZIP: sam_seg_QNAME and in zip_resize_local ; PIZ: piz_adjust_one_local and reconstruct_set_buddy  
-            seg_add_to_local_resizable (VB, CTX(SAM_BUDDY), BGEN32 (vb->line_i - buddy_line_i), 0); // add buddy (delta) >= 1 . 
+            seg_add_to_local_resizable (VB, CTX(SAM_BUDDY), vb->line_i - buddy_line_i, 0); // add buddy (delta) >= 1 . 
             
             seg_by_ctx (VB, (char[]){ SNIP_COPY_BUDDY, SNIP_COPY_BUDDY }, 2, CTX(SAM_QNAME), qname_len + add_additional_bytes); // seg QNAME as copy-from-buddy (an extra SNIP_COPY_BUDDY indicates that reconstruct_from_buddy should set buddy_line_i here)
             

@@ -90,8 +90,8 @@ static int64_t reconstruct_from_local_int (VBlock *vb, Context *ctx, char separa
     // TO DO: RECONSTRUCT_INT won't reconstruct large uint64_t correctly
     if (reconstruct) { 
         static int64_t minus_1[NUM_LOCAL_TYPES] = { // how -1 casted to a type would look in int64_t
-            [LT_UINT32]=(uint32_t)-1, [LT_UINT16]=(uint16_t)-1, [LT_UINT8]=(uint8_t)-1, 
-            [LT_INT32]=-1, [LT_INT16]=-1, [LT_INT8]=-1 };
+            [LT_UINT64]=(uint64_t)-1, [LT_UINT32]=(uint32_t)-1, [LT_UINT16]=(uint16_t)-1, [LT_UINT8]=(uint8_t)-1, 
+            [LT_INT64]=-1, [LT_INT32]=-1, [LT_INT16]=-1, [LT_INT8]=-1 };
 
         if (VB_DT(DT_VCF) && num==minus_1[ctx->ltype] && dict_id_is_vcf_format_sf (ctx->dict_id)) 
             RECONSTRUCT1 ('.');
@@ -156,12 +156,16 @@ void reconstruct_set_buddy (VBlockP vb)
 
     ContextP buddy_ctx = ECTX (_SAM_BUDDY); // all data types using buddy are expected to have a dict_id identical to _SAM_BUDDY (but different did_i)
 
-    // BUG introduced 12.0.41 (bug 367): we double BGEN32 - thereby storing this value in the genozip file in *machine endianity* 
-    // which will be different between Big/Little endian machines.
-    // ZIP: sam_seg_QNAME and in zip_resize_local ; PIZ: piz_adjust_one_local and reconstruct_set_buddy  
-    int32_t num_lines_back = BGEN32 (NEXTLOCAL (uint32_t, buddy_ctx));
+    int32_t num_lines_back = reconstruct_from_local_int (vb, buddy_ctx, 0, false);
+
+    // a bug that existed 12.0.41-13.0.1 (see bug 367): we stored buddy in machine endianty instead of BGEN32.
+    // When we reach this point pizzing in a buggy file, num_lines_back will be in BGEN since piz_adjust_one_local set it. 
+    // We detect buggy files by local.param=0 (see sam_seg_initialize) and convert it back to machine endianity.
+    if (!buddy_ctx->local.param)    
+        num_lines_back = BGEN32 ((uint32_t)num_lines_back);
+
     vb->buddy_line_i = (vb->line_i - vb->first_line) - num_lines_back; // convert value passed (distance in lines to buddy) to 0-based buddy_line_i
-    ASSPIZ (vb->buddy_line_i >= 0, "Expecting vb->buddy_line_i=%d to be non-negative", vb->buddy_line_i);
+    ASSPIZ (vb->buddy_line_i >= 0, "Expecting vb->buddy_line_i=%d to be non-negative. num_lines_back=%d buddy_ctx->local.param=%d", vb->buddy_line_i, num_lines_back, (int)buddy_ctx->local.param);
 }
 
 void reconstruct_from_buddy_get_textual_snip (VBlockP vb, ContextP ctx, pSTRp(snip))
