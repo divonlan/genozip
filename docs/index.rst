@@ -7,6 +7,7 @@ Genozip
    :maxdepth: 3
 
    Installing <installing> 
+   Benchmarks <benchmarks> 
    File Types <data-types>
    Manual <manual>
    Capabilities <capabilities>
