@@ -67,6 +67,8 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     Digest digest_so_far;      /* partial calculation of MD5 up to and including this VB */ \
     uint32_t component_i;      /* PIZ: 0-based txt component within z_file that this VB belongs to */ \
     DtTranslation translation; /* PIZ: translation to be applies to this VB */ \
+    union FlagsVbHeader flags; /* ZIP: set by *_seg_finalize and consumed by zfile_compress_vb_header */ \
+                               /* PIZ: copied from SectionHeaderVbHeader.h.flags.vb_header */ \
     \
     const char *drop_curr_line;/* PIZ: line currently in reconstruction is to be dropped due a filter (value is filter name) */\
     uint32_t num_nondrop_lines;/* PIZ: number of lines NOT dropped as a result of drop_curr_line */\

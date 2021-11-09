@@ -767,6 +767,15 @@ void seg_add_to_local_uint8 (VBlockP vb, ContextP ctx, uint8_t value, unsigned a
     if (add_bytes) ctx->txt_len += add_bytes;
 }
 
+void seg_add_to_local_uint32 (VBlockP vb, ContextP ctx, uint32_t value, unsigned add_bytes)
+{
+    buf_alloc (vb, &ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->local");
+
+    NEXTENT (uint32_t, ctx->local) = BGEN32 (value);
+
+    if (add_bytes) ctx->txt_len += add_bytes;
+}
+
 static void seg_set_hash_hints (VBlock *vb, int third_num)
 {
     if (third_num == 1) 

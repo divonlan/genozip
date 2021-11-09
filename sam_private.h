@@ -195,6 +195,9 @@ static inline char sam_seg_sam_type_to_bam_type (char type, int64_t n)
 
 extern DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam, const char *tag, char bam_type, char bam_array_subtype, STRp(value), ValueType numeric);
 
+typedef struct { char s[200]; } DisFlagsStr;
+extern DisFlagsStr sam_dis_flags (SamFlags flags);
+
 // -------------------
 // SAM-private globals
 // -------------------

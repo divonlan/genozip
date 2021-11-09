@@ -75,3 +75,13 @@ uint16_t bam_reg2bin (int32_t first_pos, int32_t last_pos)
     if (first_pos_0>>26 == last_pos_0>>26) return ((1<<3 )-1)/7 + (first_pos_0>>26);
     return 0;
 }
+
+DisFlagsStr sam_dis_flags (SamFlags flags)
+{
+    struct SamFlagsBits f = flags.bits;
+    DisFlagsStr s;
+    sprintf (s.s, "multi_segments=%u is_aligned=%u unmapped=%u:%u revcomp=%u:%u mate#=%u:%u secondary=%u failfilt=%u dup=%u supp=%u",
+             f.multi_segments, f.is_aligned, f.unmapped, f.next_unmapped, f.rev_comp, f.next_rev_comp, 
+             f.is_first, f.is_last, f.secondary, f.failed_filters, f.duplicate, f.supplementary);
+    return s;
+}

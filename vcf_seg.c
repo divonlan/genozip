@@ -282,6 +282,8 @@ void vcf_seg_finalize (VBlockP vb_)
         // note: there is no equivalent of ctx->txt_len for Luft coordinates
     }
 
+    vb->flags.vcf.coords = vb->vb_coords;
+
     if (segconf.running) {
         // percent of (samples x lines) that have a dosage value of 0,1 or 2 
         segconf.pc_has_dosage = (float)segconf.count_dosage[1] / (float)(segconf.count_dosage[0] + segconf.count_dosage[1]);

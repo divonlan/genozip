@@ -209,23 +209,23 @@
 #pragma GENDICT SAM_U2_Z=DTYPE_FIELD=U2:Z   // This used to be the destination alias from OPTION_U2_Z 
 
 // as defined in https://samtools.github.io/hts-specs/SAMv1.pdf 1.4.2
-#define SAM_FLAG_MULTI_SEGMENTS 0x0001 // 1
-#define SAM_FLAG_IS_ALIGNED     0x0002 // 2
-#define SAM_FLAG_UNMAPPED       0x0004 // 4
-#define SAM_FLAG_NEXT_UNMAPPED  0x0008 // 8
-#define SAM_FLAG_REV_COMP       0x0010 // 16
-#define SAM_FLAG_NEXT_REV_COMP  0x0020 // 32
-#define SAM_FLAG_IS_FIRST       0x0040 // 64
-#define SAM_FLAG_IS_LAST        0x0080 // 128
-#define SAM_FLAG_SECONDARY      0x0100 // 256
-#define SAM_FLAG_FAILED_FILTERS 0x0200 // 512
-#define SAM_FLAG_DUPLICATE      0x0400 // 1024
-#define SAM_FLAG_SUPPLEMENTARY  0x0800 // 2048
+#define SAM_FLAG_MULTI_SEGMENTS 0x0001 // 1     0000 0000 0001
+#define SAM_FLAG_IS_ALIGNED     0x0002 // 2     0000 0000 0010
+#define SAM_FLAG_UNMAPPED       0x0004 // 4     0000 0000 0100
+#define SAM_FLAG_NEXT_UNMAPPED  0x0008 // 8     0000 0000 1000
+#define SAM_FLAG_REV_COMP       0x0010 // 16    0000 0001 0000
+#define SAM_FLAG_NEXT_REV_COMP  0x0020 // 32    0000 0010 0000
+#define SAM_FLAG_IS_FIRST       0x0040 // 64    0000 0100 0000
+#define SAM_FLAG_IS_LAST        0x0080 // 128   0000 1000 0000
+#define SAM_FLAG_SECONDARY      0x0100 // 256   0001 0000 0000
+#define SAM_FLAG_FAILED_FILTERS 0x0200 // 512   0010 0000 0000
+#define SAM_FLAG_DUPLICATE      0x0400 // 1024  0100 0000 0000
+#define SAM_FLAG_SUPPLEMENTARY  0x0800 // 2048  1000 0000 0000
 #define SAM_MAX_FLAG            0x0FFF
 
 #pragma pack(1) 
 typedef union SamFlags {
-    struct {
+    struct SamFlagsBits {
         uint8_t multi_segments : 1;
         uint8_t is_aligned     : 1;
         uint8_t unmapped       : 1;

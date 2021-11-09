@@ -442,7 +442,16 @@ static FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt)
             break;
 
         case SEC_VB_HEADER:
-            sprintf (str.s, "coords=%s", coords_name (f.vb_header.coords));
+            switch (dt) {
+                case DT_VCF: 
+                    sprintf (str.s, "coords=%s", coords_name (f.vb_header.vcf.coords));
+                    break;
+                case DT_SAM: case DT_BAM:
+                    sprintf (str.s, "sorted=%u collated=%u", f.vb_header.sam.is_sorted, f.vb_header.sam.is_collated);
+                    break;
+                default:
+                    str.s[0] = 0;
+            }
             break;
 
         case SEC_BGZF:

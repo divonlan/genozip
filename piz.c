@@ -543,10 +543,12 @@ static bool piz_read_one_vb (VBlock *vb)
 
     SectionHeaderVbHeader *header = (SectionHeaderVbHeader *)ENT (char, vb->z_data, vb_header_offset);
 
+    vb->flags            = header->h.flags.vb_header;
+
     // calculate the coordinates in which this VB will be rendered - PRIMARY or LUFT
     vb->vb_coords        = !z_dual_coords ? DC_PRIMARY // non dual-coordinates file - always PRIMARY
-                         : header->h.flags.vb_header.coords == DC_PRIMARY ? DC_PRIMARY // reject component ##primary_only
-                         : header->h.flags.vb_header.coords == DC_LUFT    ? DC_LUFT    // reject component ##luft_only
+                         : header->h.flags.vb_header.vcf.coords == DC_PRIMARY ? DC_PRIMARY // reject component ##primary_only
+                         : header->h.flags.vb_header.vcf.coords == DC_LUFT    ? DC_LUFT    // reject component ##luft_only
                          : flag.luft ? DC_LUFT // dual component - render as LUFT
                          : DC_PRIMARY;         // dual component - render as PRIMARY
 
@@ -558,7 +560,7 @@ static bool piz_read_one_vb (VBlock *vb)
     vb->digest_so_far    = header->digest_so_far;
     vb->chrom_node_index = WORD_INDEX_NONE;
 
-    vb->is_rejects_vb    = z_dual_coords && (header->h.flags.vb_header.coords != DC_BOTH);
+    vb->is_rejects_vb    = z_dual_coords && (header->h.flags.vb_header.vcf.coords != DC_BOTH);
 
     vb->translation      = dt_get_translation (vb); // vb->vb_chords needs to be set first
 

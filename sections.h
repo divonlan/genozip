@@ -97,9 +97,17 @@ typedef union SectionFlags {
         uint8_t unused           : 5;
     } txt_header;
 
-    struct FlagsVbHeader {
-        uint8_t coords           : 2; // DC_PRIMARY if it contains TOPLEVEL container, DC_LUFT if LUFT toplevel container, or DC_BOTH if both (DC_NONE prior to v12)
-        uint8_t unused           : 6;
+    union FlagsVbHeader {
+        struct FlagsVbHeaderVcf {
+            uint8_t coords           : 2; // DC_PRIMARY if it contains TOPLEVEL container, DC_LUFT if LUFT toplevel container, or DC_BOTH if both (DC_NONE prior to v12)
+            uint8_t unused           : 6;
+        } vcf;
+        struct FlagsVbHeaderSam {
+            uint8_t unused           : 2; // for now, reserved for coords, should we have a dual-coord SAM in the future
+            uint8_t is_sorted        : 1; // Likely sorted (copied from segconf.sam_is_sorted)     - introduced 13.0.3
+            uint8_t is_collated      : 1; // Likely collated (copied from segconf.sam_is_collated) - introduced 13.0.3
+            uint8_t unused2          : 4;
+        } sam;
     } vb_header;
 
     struct FlagsBgzf {

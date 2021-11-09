@@ -60,6 +60,7 @@ extern bool seg_id_field_cb (VBlockP vb, ContextP ctx, STRp(id_snip), uint32_t r
 
 extern void seg_add_to_local_text   (VBlockP vb, ContextP ctx, STRp(snip), unsigned add_bytes);
 extern void seg_add_to_local_fixed  (VBlockP vb, ContextP ctx, STRp(data));
+extern void seg_add_to_local_uint32 (VBlockP vb, ContextP ctx, uint32_t value, unsigned add_bytes);
 extern void seg_add_to_local_uint8  (VBlockP vb, ContextP ctx, uint8_t  value, unsigned add_bytes);
 
 // requires setting ctx->dynamic_size_local=true in seg_initialize, but not need to set ltype as it will be set in zip_resize_local

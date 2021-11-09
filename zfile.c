@@ -909,7 +909,7 @@ void zfile_compress_vb_header (VBlock *vb)
         .h.compressed_offset = BGEN32 (sizeof_header),
         .h.vblock_i          = BGEN32 (vb->vblock_i),
         .h.codec             = CODEC_NONE,
-        .h.flags.vb_header   = { .coords = vb->vb_coords },
+        .h.flags.vb_header   = vb->flags,
         .top_level_repeats   = BGEN32 ((uint32_t)vb->lines.len),
         .num_lines_prim      = BGEN32 (z_dual_coords ? vb->recon_num_lines : vb->lines.len),
         .num_lines_luft      = z_dual_coords ? BGEN32 (vb->recon_num_lines_luft) : 0,

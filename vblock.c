@@ -97,6 +97,7 @@ void vb_release_vb_do (VBlockP *vb_p, const char *func)
     vb->is_rejects_vb = false;    
     vb->num_type1_subfields = vb->num_type2_subfields = 0;
     vb->range = NULL;
+    vb->flags = (union FlagsVbHeader){};
     vb->drop_curr_line = vb->chrom_name = vb->fragment_start = NULL;
     vb->prev_range[0] = vb->prev_range[1] = NULL;
     vb->prev_range_chrom_node_index[0] = vb->prev_range_chrom_node_index[1] = vb->prev_range_range_i = 0;

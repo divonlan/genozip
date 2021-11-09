@@ -214,6 +214,9 @@ void sam_seg_initialize (VBlock *vb)
 
 void sam_seg_finalize (VBlockP vb)
 {
+    vb->flags.sam.is_collated = segconf.sam_is_collated;
+    vb->flags.sam.is_sorted   = segconf.sam_is_sorted;
+
     // for qual data - select domqual compression if possible, or fallback 
     if (!codec_domq_comp_init (vb, SAM_QUAL, sam_zip_qual)) 
         CTX(SAM_QUAL)->ltype  = LT_SEQUENCE; 
