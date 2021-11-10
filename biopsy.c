@@ -63,6 +63,8 @@ start_biopsy:
     
     buf_add_more (evb, &biopsy_data, STRb(vb->txt_data), "biopsy_data");
     
+    DO_ONCE sprintf (&biopsy_fn[strlen(biopsy_fn)], "%s", file_plain_ext_by_dt (txt_file->data_type));
+
     // case: biopsy is ready - dump it to a file and exit
     if (!biopsy_vb_i.len) {
         buf_dump_to_file (biopsy_fn, &biopsy_data, 1, false, false, true, true);
