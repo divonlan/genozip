@@ -199,7 +199,7 @@ void vcf_piz_GT_cb_calc_INFO_SF (VBlockVCFP vcf_vb, unsigned rep, char *recon, i
         if (sf_snip[snip_i] == ',') {
             snip_i++;
 
-            buf_add_int ((VBlockP)vcf_vb, &vcf_vb->sf_txt, adjusted_sample_i);
+            buf_add_int_as_text ((VBlockP)vcf_vb, &vcf_vb->sf_txt, adjusted_sample_i);
 
             if (snip_i < sf_snip_len) // add comma if not done yet
                 NEXTENT (char, vcf_vb->sf_txt) = ',';

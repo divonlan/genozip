@@ -193,9 +193,7 @@ LiftOverStatus vcf_lo_get_liftover_coords (VBlockVCFP vb, PosType pos, WordIndex
     
     else {
         bool mapping_ok = chain_get_liftover_coords (prim_ref_index, pos, luft_ref_index, dst_1pos, xstrand, aln_i); // if failure, sets output to 0.
-        return mapping_ok       ? LO_OK 
-             : flag.ext_ostatus ? LO_NO_MAPPING_IN_CHAIN_1 
-             :                    LO_NO_MAPPING_IN_CHAIN;
+        return mapping_ok ? LO_OK : LO_NO_MAPPING_IN_CHAIN_REF; // note: we call this function for testing the first and last POS of REF
     }
 }                                
 

@@ -147,7 +147,7 @@ void vcf_seg_initialize (VBlock *vb_)
     stats_set_consolidation (VB, FORMAT_AB,  1, FORMAT_AB3);
 
     // initialize dosage multiplexers
-    #define init_mux(name,store_type) seg_mux_init ((VBlockP)vb, 4, VCF_SPECIAL_MUX_BY_DOSAGE, FORMAT_##name, FORMAT_##name, (store_type), (Multiplexer*)&vb->mux_##name, "0123")
+    #define init_mux(name,store_type) seg_mux_init ((VBlockP)vb, 4, VCF_SPECIAL_MUX_BY_DOSAGE, FORMAT_##name, FORMAT_##name, (store_type), (MultiplexerP)&vb->mux_##name, "0123")
     init_mux(PRI,  STORE_NONE);
     init_mux(GL,   STORE_NONE);
     init_mux(DS,   STORE_NONE);
@@ -158,7 +158,9 @@ void vcf_seg_initialize (VBlock *vb_)
     init_mux(PVAL, STORE_NONE);
     init_mux(FREQ, STORE_NONE);
     init_mux(RD,   STORE_INT);
-
+    
+    seg_mux_init ((VBlockP)vb, 3*DOSAGExDP_NUM_DPs + 1, VCF_SPECIAL_MUX_BY_DOSAGExDP, FORMAT_PL, FORMAT_PL, STORE_NONE, (MultiplexerP)&vb->mux_PL_xDP, NULL);
+    
     vb->ht_matrix_ctx = CTX(FORMAT_GT_HT); // different for different data types
 
     // room for already existing FORMATs from previous VBs

@@ -47,9 +47,9 @@ static int64_t reconstruct_from_delta (VBlock *vb,
 }
 
 #define ASSERT_IN_BOUNDS \
-    ASSERT (ctx->next_local < ctx->local.len, \
-            "reconstructing txt_line=%"PRIu64" vb_i=%u: unexpected end of ctx->local data in %s (len=%u ltype=%s lcodec=%s did_i=%u)", \
-            vb->line_i, vb->vblock_i, ctx->tag_name, (uint32_t)ctx->local.len, lt_name (ctx->ltype), codec_name (ctx->lcodec), ctx->did_i)
+    ASSPIZ (ctx->next_local < ctx->local.len, \
+            "unexpected end of ctx->local data in %s (len=%u ltype=%s lcodec=%s did_i=%u)", \
+            ctx->tag_name, (uint32_t)ctx->local.len, lt_name (ctx->ltype), codec_name (ctx->lcodec), ctx->did_i)
 
 static uint32_t reconstruct_from_local_text (VBlock *vb, Context *ctx, bool reconstruct)
 {
@@ -249,7 +249,6 @@ static ValueType reconstruct_from_lookback (VBlock *vb, Context *ctx, STRp(snip)
         if (reconstruct) RECONSTRUCT_INT (value.i);
     }
     
-//printf ("xxx pos lookback=%u  pos=%u prev_pos=%u delta=%d\n", lookback, prev_pos+delta, prev_pos, delta);
     return value; 
 }
 
@@ -445,9 +444,7 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
 done:
     // update last_value if needed
     if (have_new_value && store_type) // note: we store in our own context, NOT base (a context, eg FORMAT/DP, sometimes serves as a base_ctx of MIN_DP and sometimes as the snip_ctx for INFO_DP)
-        ctx_set_last_value (vb, snip_ctx, new_value);
-    else
-        ctx_set_encountered (vb, snip_ctx);
+        ctx_set_last_value (vb, snip_ctx, new_value); // if marely encountered it is set in is set in reconstruct_from_ctx_do
 
     // note: if store_delta, we do a self-delta. this overrides last_delta set by the delta snip which could be against a different
     // base_ctx. note: when Seg sets last_delta, it must also set store=STORE_INT
@@ -578,7 +575,8 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
 
     ctx->last_txt_index = last_txt_index;
     ctx->last_txt_len   = (uint32_t)vb->txt_data.len - ctx->last_txt_index;
-    ctx->last_line_i    = vb->line_i; // reconstructed on this line
+    ctx_set_encountered (vb, ctx); // this is the ONLY place in PIZ where we set encountered
+    ctx->last_encounter_was_reconstructed = reconstruct;
 
     // in "store per line" mode, we save one entry per line (possibly a line has no entries if it is an optional field)
     if (ctx->flags.store_per_line) 
@@ -630,13 +628,13 @@ static void reconstruct_peek_unfreeze_state (VBlockP vb)
 // LIMITATION: cannot be used with contexts that might reconstruct other contexts as that would require
 // chained peeking (i.e. the secondary contexts should be peeked too, not reconstructed)
 ValueType reconstruct_peek (VBlock *vb, Context *ctx, 
-                                pSTRp(txt)) // optional in / out
+                            pSTRp(txt)) // optional in / out
 {
     ASSPIZ (!vb->frozen_state.param, "Requested to peek %s, however already peeking %s. Recursive peeking not supported", 
             ctx->tag_name, (*FIRSTENT(ContextP, vb->frozen_state))->tag_name);
 
     // case: already reconstructed in this line (or sample in the case of VCF/FORMAT)
-    if (ctx_has_value (vb, ctx->did_i)) {
+    if (ctx_encountered (vb, ctx->did_i) && ctx->last_encounter_was_reconstructed) {
         if (txt) *txt = last_txtx (vb, ctx);
         if (txt_len) *txt_len = ctx->last_txt_len;
         return ctx->last_value;

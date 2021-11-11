@@ -9,8 +9,8 @@
 #include "vblock.h"
 #include "file.h"
 
-static Buffer biopsy_vb_i = EMPTY_BUFFER;
-static Buffer biopsy_data = EMPTY_BUFFER;
+static Buffer biopsy_vb_i = { .name = "biopsy_vb_i" };
+static Buffer biopsy_data = { .name = "biopsy_data" };
 static char *biopsy_fn = NULL;
 
 void biopsy_init (const char *optarg)
@@ -19,21 +19,19 @@ void biopsy_init (const char *optarg)
 
     ASSINP (n_items > 0, "Invalid biopsy argument: \"%s\", expecting a comma-seperated list of VB numbers, with 0 meaning the txt header", optarg);
 
+    buf_add_int (evb, biopsy_vb_i, 0UL); // txt header
+
     for (int i=0; i < n_items; i++) {
         str_split (items[i], item_lens[i], 2, '-', startend, false);
         if (n_startends == 2) { // a range, eg "20-25"
             uint32_t first_vb_i = atoi (startends[0]);
             uint32_t last_vb_i  = atoi (startends[1]);
 
-            buf_alloc (evb, &biopsy_vb_i, last_vb_i-first_vb_i+1, 0, uint32_t, 0, "biopsy");
-
             for (uint32_t vb_i = first_vb_i; vb_i <= last_vb_i; vb_i++)
-                NEXTENT (uint32_t, biopsy_vb_i) = vb_i;
+                buf_add_int (evb, biopsy_vb_i, vb_i); 
         }
-        else { // single vb eg "1"    
-            buf_alloc (evb, &biopsy_vb_i, 1, n_items, uint32_t, 0, "biopsy");
-            NEXTENT (uint32_t, biopsy_vb_i) = atoi (items[i]);
-        }
+        else // single vb eg "1"    
+            buf_add_int (evb, biopsy_vb_i, ((uint32_t)atoi (items[i]))); 
     }
 
     biopsy_fn = malloc (strlen(optarg)+50);

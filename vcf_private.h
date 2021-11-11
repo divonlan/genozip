@@ -29,6 +29,9 @@ typedef enum { VCF_v_UNKNOWN, VCF_v4_1, VCF_v4_2, VCF_v4_3, VCF_v4_4, VCF_v4_5 }
 
 TYPEDEF_MULTIPLEXER(4) DosageMultiplexer;
 
+#define DOSAGExDP_NUM_DPs 50
+TYPEDEF_MULTIPLEXER(3*DOSAGExDP_NUM_DPs+1) DosageDPMultiplexer;
+
 #define VCF_MAX_ARRAY_ITEMS SMALL_CON_NITEMS
 
 // IMPORTANT: if changing fields in VBlockVCF, also update vb_release_vb
@@ -69,6 +72,8 @@ typedef struct VBlockVCF {
     DosageMultiplexer mux_PL, mux_GL, mux_GP, mux_PRI, mux_DS, mux_PP, mux_PVAL, mux_FREQ, mux_RD, mux_GQ,
                       mux_AD[2], mux_ADALL[2];
 
+    DosageDPMultiplexer mux_PL_xDP;
+
     // used by CODEC_HAPM (for VCF haplotype matrix) 
     Buffer hapmat_helper_index_buf; // ZIP: used by codec_hapmat_count_alt_alleles 
     Buffer hapmat_columns_data;     // used by codec_hapmat_piz_get_one_line 
@@ -100,16 +105,20 @@ typedef enum {
     LO_OK,                          // internal progress step in ZIP - never written z_file
     LO_OK_REF_SAME_SNP,             // REF and ALT are the same for a SNP
     LO_OK_REF_SAME_INDEL,           // REF and ALT are the same for an INDEL, and confirmed not to be a REF<>ALT switch
+    LO_OK_REF_SAME_NDNI_REV,        // Extended status: Same, non-Ins non-Del left-aligned Indel, reverse complemented
+    LO_OK_REF_SAME_DEL_REV,         // Extended status: Same deletion - reverse complemented
+    LO_OK_REF_SAME_INS_REV,         // Extended status: Same insertion - reverse complented
+#define LO_OK_REF_SAME_INDEL_LAST LO_OK_REF_SAME_INS_REV
     LO_OK_REF_SAME_NLA,             // REF and ALT are the same for a non-left-aligned, not SNP variant
     LO_OK_REF_SAME_SV,              // REF and ALT are the same for a variant with a symbolic ALT allele
     LO_OK_REF_ALT_SWITCH_SNP,       // REF and ALT are switched, and INFO and FORMAT subfields updated
     LO_OK_REF_ALT_SWITCH_INDEL,     // REF and ALT are switched, and INFO and FORMAT subfields updated
-    LO_OK_REF_ALT_SWITCH_INDEL_1,   // REF and ALT are switched: Simple REF<>ALT Deletion->Insertion switch
-    LO_OK_REF_ALT_SWITCH_INDEL_2,   // REF and ALT are switched: Switched number of payload repeats in reference
-    LO_OK_REF_ALT_SWITCH_INDEL_3,   // REF and ALT are switched: REF bases the same, but switch called based on flanking regions
-    LO_OK_REF_ALT_SWITCH_INDEL_4,   // REF and ALT are switched: Left-anchored complex INDEL
-    LO_OK_REF_ALT_SWITCH_INDEL_5,   // REF and ALT are switched: Deletion with payload in chain file gap
-#define LO_OK_REF_ALT_SWITCH_INDEL_LAST LO_OK_REF_ALT_SWITCH_INDEL_5
+    LO_OK_REF_ALT_SWITCH_DEL_TO_INS,// Extended status: Deletion in Primary became incorporated in the Luft reference
+    LO_OK_REF_ALT_SWITCH_INDEL_RPTS,// Extended status: Switched number of payload repeats in reference
+    LO_OK_REF_ALT_SWITCH_INDEL_FLANKING,// Extended status: REF bases the same, but switch called based on flanking regions
+    LO_OK_REF_ALT_SWITCH_NDNI,      // Extended status: Left-anchored non=Ins non-Del INDEL
+    LO_OK_REF_ALT_SWITCH_INDEL_WITH_GAP,// Extended status: Deletion with payload in chain file gap
+#define LO_OK_REF_ALT_SWITCH_INDEL_LAST LO_OK_REF_ALT_SWITCH_INDEL_WITH_GAP
     LO_OK_REF_ALT_SWITCH_NLA,       // REF and ALT are switched, and INFO and FORMAT subfields updated
     LO_OK_REF_NEW_SNP,              // REF in a SNP was replaced with a new REF - can only happen if AF=1
 
@@ -119,24 +128,23 @@ typedef enum {
     // Reasons due to data (any tool should reject)
     LO_CHROM_NOT_IN_PRIM_REF,       // Primary reference doesn't contain CHROM
     LO_CHROM_NOT_IN_CHAIN,          // chain file doesn't contain a qName which has CHROM  
-    LO_NO_MAPPING_IN_CHAIN,         // No mapping in chain file
-    LO_NO_MAPPING_IN_CHAIN_1,       // No mapping: chain file doesn't contain a mapping for the primary POS
-    LO_NO_MAPPING_IN_CHAIN_2,       // No mapping: New left-anchor base (after reverse-complementing) is before beginning of the chromosome
-    LO_NO_MAPPING_IN_CHAIN_3,       // No mapping: REF is not fully within a single alignment in the chain file
-#define LO_NO_MAPPING_IN_CHAIN_LAST LO_NO_MAPPING_IN_CHAIN_3
+#define LO_NO_MAPPING_IN_CHAIN_FIRST LO_NO_MAPPING_IN_CHAIN_REF
+    LO_NO_MAPPING_IN_CHAIN_REF,     // Extended status: chain file doesn't contain a mapping covering REF
+    LO_NO_MAPPING_IN_CHAIN_ANCHOR,  // Extended status: New left-anchor base (after reverse-complementing) is before beginning of the chromosome
+    LO_NO_MAPPING_REF_SPLIT,        // Extended status: REF is not fully within a single alignment in the chain file
+#define LO_NO_MAPPING_IN_CHAIN_LAST LO_NO_MAPPING_REF_SPLIT
     LO_REF_MISMATCHES_REFERENCE,    // REF different than reference 
 
     // Reasons due to Genozip limitations (more sophisticated tools might lift)
     LO_REF_MULTIALT_SWITCH_SNP,     // REF changes for a multi-allelic SNP, or REF change would make a bi-allelic into a tri-allelic SNP
     LO_NEW_ALLELE_SNP,              // The Luft reference represents an allele that is neither REF or ALT
     LO_REF_MULTIALT_SWITCH_INDEL,   // REF changes for a multi-allelic INDEL, or REF change would make a bi-allelic into a tri-allelic INDEL
-    LO_NEW_ALLELE_INDEL,            // The Luft reference represents an allele that is neither REF or ALT
-    LO_NEW_ALLELE_INDEL_1,          // The Luft reference represents an allele that is neither REF or ALT: REF changed in a Deletion variant that has more than one ALT
-    LO_NEW_ALLELE_INDEL_2,          // The Luft reference represents an allele that is neither REF or ALT: REF changed in Deletion variant to ALT, but this is not a REF<>ALT switch because flanking regions differ
-    LO_NEW_ALLELE_INDEL_3,          // The Luft reference represents an allele that is neither REF or ALT: REF bases match, but this is a new INDEL allele based on context
-    LO_NEW_ALLELE_INDEL_4,          // The Luft reference represents an allele that is neither REF or ALT: Genozip limitation: REF switched with one of the ALTs, but flanking regions differ
-    LO_NEW_ALLELE_INDEL_5,          // The Luft reference represents an allele that is neither REF or ALT: REF changed in Deletion variant, but not to ALT.
-    LO_NEW_ALLELE_INDEL_6,          // The Luft reference represents an allele that is neither REF or ALT: REF is a new allele
+    LO_NEW_ALLELE_DEL_REF_CHANGED_MISSING,  // Extended status: REF changed in a Deletion variant that has a "*" ALT
+    LO_NEW_ALLELE_DEL_REF_CHANGED,  // Extended status: REF changed in Deletion variant, but not REF<>ALT switch (i.e. Deletion not integrated into new reference)
+    LO_NEW_ALLELE_DEL_SAME_REF,     // Extended status: REF bases match, but this is a new Deletion allele based on context
+    LO_NEW_ALLELE_INS_SAME_REF,     // Extended status: REF bases match, but this is a new Insertion allele based on context
+    LO_NEW_ALLELE_INDEL_NO_SWITCH,  // Extended status: REF switched with one of the ALTs, but flanking regions differ
+    LO_NEW_ALLELE_NDNI,             // Extended status: REF is a new allele a left-anchored non-Del non-Ins indel
 
     LO_XSTRAND_NLA,                 // Used in v12.0.0-12.0.37: Genozip limiation: A complex indel variant mapped to the reverse strand
     LO_NEW_ALLELE_NLA,              // The Luft reference represents an allele that is neither REF or ALT
@@ -159,27 +167,29 @@ typedef enum {
 extern const char *dvcf_status_names[NUM_LO_STATUSES];
 #define DVCF_STATUS_NAMES { /* for display esthetics - max 25 characters - note: these strings are defined in the dual-coordinate specification */\
     "UNKNOWN", \
-    "OK", "OkRefSameSNP", "OkRefSameIndel", "OkRefSameNotLeftAnc", "OkRefSameStructVariant", "OkRefAltSwitchSNP", \
-    "OkRefAltSwitchIndel", "OkRefAltSwitchIndel1", "OkRefAltSwitchIndel2", "OkRefAltSwitchIndel3", "OkRefAltSwitchIndel4", "OkRefAltSwitchIndel5", \
+    "OK", "OkRefSameSNP", "OkRefSameIndel", "OkRefSameNDNIRev", "OkRefSameDelRev", "OkRefSameInsRev", \
+    "OkRefSameNotLeftAnc", "OkRefSameStructVariant", "OkRefAltSwitchSNP", \
+    "OkRefAltSwitchIndel", "OkRefAltSwitchDelToIns", "OkRefAltSwitchIndelRpts", "OkRefAltSwitchIndelFlank", "OkRefAltSwitchNDNI", "OkRefAltSwitchWithGap", \
     "OkRefAltSwitchNotLeftAnc", "OkNewRefSNP", \
     "Rejected", "ChromNotInPrimReference", "ChromNotInChainFile", \
-    "NoMappingInChainFile", "NoMappingInChainFile1", "NoMappingInChainFile2", "NoMappingInChainFile3", \
-    "REFMismatchesReference", "RefMultiAltSwitchSNP", "RefNewAlleleSNP", "RefMultiAltSwitchIndel", \
-    "RefNewAlleleIndel", "RefNewAlleleIndel1", "RefNewAlleleIndel2", "RefNewAlleleIndel3", "RefNewAlleleIndel4", "RefNewAlleleIndel5", "RefNewAlleleIndel6",\
+    "RefNotMappedInChain", "NewAnchorNotInChrom", "RefSplitInChain", \
+    "RefMismatchesReference", "RefMultiAltSwitchSNP", "RefNewAlleleSNP", "RefMultiAltSwitchIndel", \
+    "RefNewAlleleDelRefChgHas*", "RefNewAlleleDelRefChanged", "RefNewAlleleDelSameRef", "RefNewAlleleInsSameRef", "RefNewAlleleIndelNoSwitch", "RefNewAlleleNDNI",\
     "XstrandNotLeftAnc", "RefNewAlleleNotLeftAnc","RefNewAlleleSV", "XstrandSV", "ComplexRearrangements", \
     "AddedVariant", "UnsupportedRefAlt", \
     "INFO", "FORMAT" \
 }
 
 #define LO_IS_REJECTED(ost) ((ost) >= LO_REJECTED) // note: this condition works also for unrecognized reject strings (that an have index >= NUM_LO_STATUSES)
-#define LO_IS_NO_MAPPING(ost) ((ost)>=LO_NO_MAPPING_IN_CHAIN && (ost)<=LO_NO_MAPPING_IN_CHAIN_LAST)
+#define LO_IS_NO_MAPPING(ost) ((ost)>=LO_NO_MAPPING_IN_CHAIN_FIRST && (ost)<=LO_NO_MAPPING_IN_CHAIN_LAST)
 #define LO_IS_OK(ost) ((ost) >= LO_OK && (ost) < LO_REJECTED)
+#define LO_IS_OK_SAME_INDEL(ost)           ((ost)>=LO_OK_REF_SAME_INDEL       && (ost)<=LO_OK_REF_SAME_INDEL_LAST)
 #define LO_IS_OK_REF_ALT_SWITCH_INDEL(ost) ((ost)>=LO_OK_REF_ALT_SWITCH_INDEL && (ost)<=LO_OK_REF_ALT_SWITCH_INDEL_LAST)
 #define LO_IS_OK_SNP(ost) ((ost)==LO_OK_REF_SAME_SNP || (ost)==LO_OK_REF_ALT_SWITCH_SNP || (ost)==LO_OK_REF_NEW_SNP)
-#define LO_IS_OK_INDEL(ost) ((ost)==LO_OK_REF_SAME_INDEL || LO_IS_OK_REF_ALT_SWITCH_INDEL(ost))
+#define LO_IS_OK_INDEL(ost) (LO_IS_OK_SAME_INDEL(ost) || LO_IS_OK_REF_ALT_SWITCH_INDEL(ost))
 #define LO_IS_OK_COMPLEX(ost) ((ost)==LO_OK_REF_SAME_NLA || (ost)==LO_OK_REF_ALT_SWITCH_NLA)
 #define LO_IS_OK_SWITCH(ost) ((ost)==LO_OK_REF_ALT_SWITCH_SNP || LO_IS_OK_REF_ALT_SWITCH_INDEL(ost) || (ost)==LO_OK_REF_ALT_SWITCH_NLA)
-#define LO_IS_OK_SAME(ost) ((ost)==LO_OK_REF_SAME_SNP || (ost)==LO_OK_REF_SAME_INDEL || (ost)==LO_OK_REF_SAME_NLA)
+#define LO_IS_OK_SAME(ost) ((ost)==LO_OK_REF_SAME_SNP || LO_IS_OK_SAME_INDEL(ost) || (ost)==LO_OK_REF_SAME_NLA)
 #define last_ostatus (ctx_has_value_in_line_(vb, CTX(VCF_oSTATUS)) ? (LiftOverStatus)vb->last_index (VCF_oSTATUS) : LO_UNKNOWN)
 #define last_ostatus_name_piz (last_ostatus < CTX(VCF_oSTATUS)->word_list.len ? ctx_get_words_snip (CTX(VCF_oSTATUS), last_ostatus) : "Invalid oStatus")
 
@@ -309,12 +319,12 @@ extern void vcf_lo_piz_TOPLEVEL_cb_filter_line (VBlockP vb);
 #define ASSVCF0(condition, msg)        ASSVCF ((condition), msg "%s", "")
 #define WARNVCF(format, ...)           do { if (!flag.quiet)  { VCF_ERR_PREFIX; fprintf (stderr, format "\n", __VA_ARGS__); } } while(0)
 
-#define REJECT(ostatus, eostatus, reason, ...)              do { if (!flag.rejects_coord) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[flag.ext_ostatus ? (eostatus) : (ostatus)], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (flag.ext_ostatus ? (eostatus) : (ostatus)); } while(0)
+#define REJECT(ostatus, reason, ...)              do { if (!flag.rejects_coord) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } while(0)
 #define REJECT_MAPPING(reason)                    do { if (!flag.rejects_coord) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64 "\t.\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0]); return; } while(0)
 #define REJECT_SUBFIELD(ostatus, ctx, reason,...) do { if (!flag.rejects_coord) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t.\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], __VA_ARGS__); \
                                                        vcf_lo_seg_rollback_and_reject (vb, (ostatus), (ctx)); } while(0)
 #define LIFTOK(ostatus, reason, ...) do { if (flag.show_lift && !flag.rejects_coord) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } while(0)
-#define LIFTOKEXT(ostatus, eostatus, reason, ...) do { if (flag.show_lift && !flag.rejects_coord) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[flag.ext_ostatus ? (eostatus) : (ostatus)], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (flag.ext_ostatus ? (eostatus) : (ostatus)); } while(0)
+#define LIFTOKEXT(ostatus, reason, ...) do { if (flag.show_lift && !flag.rejects_coord) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } while(0)
 #define LIFTOK0(ostatus, reason) LIFTOK(ostatus, reason "%s", "")
-#define REJECTIF(condition, ostatus, eostatus, reason, ...) do { if (condition) { if (!flag.rejects_coord) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[flag.ext_ostatus ? (eostatus) : (ostatus)], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (flag.ext_ostatus ? (eostatus) : (ostatus)); } } while(0)
-#define REJECTIF0(condition, ostatus, eostatus, reason)     do { if (condition) REJECT (ostatus, eostatus, reason "%s", ""); } while (0)
+#define REJECTIF(condition, ostatus, reason, ...) do { if (condition) { if (!flag.rejects_coord) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } } while(0)
+#define REJECTIF0(condition, ostatus, reason)      do { if (condition) REJECT (ostatus, reason "%s", ""); } while (0)

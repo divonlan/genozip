@@ -158,7 +158,7 @@ The algorithms determining how to *cross-rendered* each INFO and FORMAT field, a
 
 In contrast, take a look at variant LN=2. In the Primary rendition has REF=A ALT=T and it in the Luft rendition it has REF=T ALT=A. This appears to be a REF⇆ALT switch, however, the INFO and FORMAT fields were not cross-rendered. This is because this variant is actually *not* a REF⇆ALT switch - rather, the chain file mapped the alignment on which this variant resides to the reverse strand in the Luft reference, as indicated by the ``X`` in the fourth value of the INFO/PRIM field. The nominal base change is due to the required reverse-complementing of REF and ALT (as in the VCF file format variants are always shown in forward strand terms), and this variant has actually not changed between the references.
 
-Let us now take a look the variant with LN=3. It has an INFO/Lrej field indicating that Genozip cannot render it in Luft coordinates and hence it is a Primary-only variant (or in other words, it was *rejected* from lifting). The reason given in this case is ``RefNewAlleleIndel`` - which means that neither the REF nor the ALT of the Primary INDEL variant match the Luft reference at this position. There are many reasons lifting can fail - they are listed in the table below.
+Let us now take a look the variant with LN=3. It has an INFO/Lrej field indicating that Genozip cannot render it in Luft coordinates and hence it is a Primary-only variant (or in other words, it was *rejected* from lifting). The reason given in this case is ``RefNewAlleleIndel`` - which means that neither the REF nor the ALT of the Primary indel variant match the Luft reference at this position. There are many reasons lifting can fail - they are listed in the table below.
 
 In the Luft rendition, this Primary-only variant, LN=3, is indeed missing in the VCF data lines, which now contain only three variants. However, notice that it still survives as a meta-information line with the key ``##primary_only``.
 
@@ -400,7 +400,7 @@ When running ``genozip --chain``, a human-readable *rejects file*, ``mydata.d.vc
 
     ##fileformat=GENOZIP-REJECTSv12.0.33
     #oSTATUS          CHROM   POS      REF     ALT     REASON
-    RefNewAlleleIndel 1       366042   TA      A       Genozip limitation: new INDEL allele: PRIM=TAA LUFT(453295)=TAAAA
+    RefNewAlleleIndel 1       366042   TA      A       Genozip limitation: new indel allele: PRIM=TAA LUFT(453295)=TAAAA
 
 Here we can see why TA would be a new allele in the Luft reference: it is because the Primary REF allele relates to T followed by two As, and hence the ALT deletion allele refers to a T followed by a single A. Since the Luft reference contains four repeating As, and therefore the corresponding variant in Luft coordinates would therefore be "REF=TAAA ALT=TA,T", however at present Genozip is limited in that it cannot change a bi-allelic variant to a tri-allelic one, and hence the variant is rejected.
 
@@ -415,7 +415,7 @@ The option ``--show-lifts`` in combination with ``genozip --chain`` causes all l
     #oSTATUS          CHROM   POS      REF     ALT     REASON
     OkRefSameSNP      1       10285    T       .       SNP: REF unchanged
     OkRefSameSNP      1       329162   A       .       SNP: REF unchanged
-    RefNewAlleleIndel 1       366042   TA      A       Genozip limitation: new INDEL allele: PRIM=TAA LUFT(453295)=TAAAA
+    RefNewAlleleIndel 1       366042   TA      A       Genozip limitation: new indel allele: PRIM=TAA LUFT(453295)=TAAAA
     OkRefAltSwitchSNP 1       20159588 C       A       SNP: REF<>ALT switch
     
 |
@@ -465,7 +465,7 @@ To see summary statistics of how variants were handled, we can use --show-counts
 
     | 
 
-- ``genocat --indels-only <myfile.vcf.genozip>`` - drops non-INDEL variants.
+- ``genocat --indels-only <myfile.vcf.genozip>`` - drops non-indel variants.
 
     | 
 
@@ -485,54 +485,49 @@ To see summary statistics of how variants were handled, we can use --show-counts
 
 The oSTATUSes produced are as follows:
 
-======================== ==================================
-oSTATUS                  Occurs when...
-======================== ==================================
-OkRefSameSNP             Lift succeeded - REF unchanged for a SNP variant
-OkRefSameIndel           Lift succeeded - REF unchanged for an INDEL variant
-OkRefSameNotLeftAnc      Lift succeeded - REF unchanged for a variant that is neither a SNP nor left-anchored
-OkRefSameStructVariant   Lift succeeded - REF unchanged for a variant with a symbolic ALT allele
-OkRefAltSwitchSNP        Lift succeeded - REF⇆ALT switch for a SNP variant
-OkRefAltSwitchIndel      Lift succeeded - REF⇆ALT switch for an left-anchored INDEL variant
-OkRefAltSwitchNotLeftAnc Lift succeeded - REF⇆ALT switch for a variant that is neither a SNP nor left-anchored
-OkNewRefSNP              Lift succeeded - REF changed (not to ALT) for a SNP variant with AF=1 or AC=AN
-ChromNotInPrimReference  Lift failed - Primary coordinates reference file doesn't contain CHROM 
-ChromNotInChainFile      Lift failed - chain file doesn't have a mapping for CHROM 
-NoMappingInChainFile     Lift failed - chain file doesn't have a mapping for (CHROM,POS), or a multi-base REF is not entirely in the same chain file alignment
-REFMismatchesReference   Lift failed - REF in VCF file mismatches the Primary coordinates reference file. There is an error in the VCF file, or the wrong reference file is provided
-RefMultiAltSwitchSNP     Lift failed - A REF⇆ALT switch for a multi-allelic SNP
-RefMultiAltSwitchIndel   Lift failed - A REF⇆ALT switch for a multi-allelic INDEL
-RefNewAlleleSNP          Lift failed - The Luft reference would introduce a new allele which is neither REF or ALT
-RefNewAlleleNotLeftAnc   Lift failed - The Luft reference would introduce a new allele for a variant that is neither a SNP nor left-anchored
-RefNewAlleleSV           Lift failed - The Luft reference is different than REF for a variant with a symbolic ALT allele
-XstrandNotLeftAnc        Lift failed - A variant that is neither a SNP nor left-anchored mapped to the reverse strand
-XstrandSV                Lift failed - A variant with a symbolic ALT allele mapped to the reverse strand
-ComplexRearrangements    Lift failed - Variant is a Complex Rearrangement
-INFO/END                 Lift failed - POS and INFO/END are not on the same chain file alignment
-AddedVariant             Failed to cross-render a variant - Non-dual-coordinate variant added to a DVCF 
-UnsupportedRefAlt        Failed to cross-render a variant - Combination of REF/ALT in Primary and Luft coordinates not supported by Genozip
-INFO/AC                  Failed to cross-render AC: INFO/AN is missing for this variant 
-INFO/*tag*               Failed to cross-render this INFO tag
-FORMAT/*tag*             Failed to cross-render this FORMAT tag
-======================== ==================================
-
-When using ``--ext-ostatus`` with ``genozip --chain``, some of the oSTATUSes are broken down to subcategories:
-
-======================== ==================================
-oSTATUS                  Occurs when...
-======================== ==================================
-OkRefAltSwitchIndel1     Lift succeeded - Indel REF⇆ALT switch: Simple Deletion->Insertion switch
-OkRefAltSwitchIndel2     Lift succeeded - Indel REF⇆ALT switch: Switched number of payload repeats in reference
-OkRefAltSwitchIndel3     Lift succeeded - Indel REF⇆ALT switch: REF bases the same, but switch called based on flanking regions
-OkRefAltSwitchIndel4     Lift succeeded - Indel REF⇆ALT switch: Left-anchored complex INDEL
-OkRefAltSwitchIndel5     Lift succeeded - Indel REF⇆ALT switch: Deletion with payload in chain file gap
-NoMappingInChainFile1    Lift failed - Chain file doesn't contain a mapping for the primary POS
-NoMappingInChainFile2    Lift failed - New left-anchor base (after reverse-complementing) is before beginning of the chromosome
-NoMappingInChainFile3    Lift failed - No mapping: REF is not fully within a single alignment in the chain file
-RefNewAlleleIndel1       Lift failed - The Luft reference would introduce a new allele which is neither REF or ALT: REF changed in a Deletion variant that has more than one ALT
-RefNewAlleleIndel2       Lift failed - The Luft reference would introduce a new allele which is neither REF or ALT: REF changed in Deletion variant to ALT, but this is not a REF<>ALT switch because flanking regions differ
-RefNewAlleleIndel3       Lift failed - The Luft reference would introduce a new allele which is neither REF or ALT: REF bases match, but this is a new INDEL allele based on context
-RefNewAlleleIndel4       Lift failed - The Luft reference would introduce a new allele which is neither REF or ALT: REF switched with one of the ALTs, but flanking regions differ
-RefNewAlleleIndel5       Lift failed - The Luft reference would introduce a new allele which is neither REF or ALT: REF changed in Deletion variant, but not to ALT
-RefNewAlleleIndel6       Lift failed - The Luft reference would introduce a new allele which is neither REF or ALT: REF is a new allele
-======================== ==================================
+========================= ==================================
+oSTATUS                   Occurs when...
+========================= ==================================
+OkRefSameSNP              Lift succeeded - REF unchanged for a SNP variant
+OkRefSameIndel            Lift succeeded - REF unchanged for an indel variant
+OkRefSameNDNIRev          Lift succeeded - Lift succeeded - REF unchanged for an left-anchored non-Ins non-Del indel variant with strand reversal
+OkRefSameDelRev           Lift succeeded - Lift succeeded - REF unchanged for an left-anchored Deletion variant with strand reversal
+OkRefSameInsRev           Lift succeeded - Lift succeeded - REF unchanged for an left-anchored Insertion variant with strand reversal
+OkRefSameNotLeftAnc       Lift succeeded - REF unchanged for a variant that is neither a SNP nor left-anchored
+OkRefSameStructVariant    Lift succeeded - REF unchanged for a variant with a symbolic ALT allele
+OkRefAltSwitchSNP         Lift succeeded - REF⇆ALT switch for a SNP variant
+OkRefAltSwitchIndel       Lift succeeded - REF⇆ALT switch for an left-anchored indel variant
+OkRefAltSwitchDelToIns    Lift succeeded - Indel REF⇆ALT switch: The Deletion variant in Primary is incorporated in the Luft reference
+OkRefAltSwitchIndelRpts   Lift succeeded - Indel REF⇆ALT switch: Switched number of payload repeats in reference
+OkRefAltSwitchIndelFlank  Lift succeeded - Indel REF⇆ALT switch: REF bases the same, but switch called based on flanking regions
+OkRefAltSwitchNDNI        Lift succeeded - Indel REF⇆ALT switch: Left-anchored non-Ins non-Del indel
+OkRefAltSwitchWithGap     Lift succeeded - Indel REF⇆ALT switch: Deletion with payload in chain file gap
+OkRefAltSwitchNotLeftAnc  Lift succeeded - REF⇆ALT switch for a variant that is neither a SNP nor left-anchored
+OkNewRefSNP               Lift succeeded - REF changed (not to ALT) for a SNP variant with AF=1 or AC=AN
+ChromNotInPrimReference   Lift failed - Primary coordinates reference file doesn't contain CHROM 
+ChromNotInChainFile       Lift failed - chain file doesn't have a mapping for CHROM 
+RefNotMappedInChain       Lift failed - Chain file doesn't contain a mapping covering REF
+NewAnchorNotInChrom       Lift failed - New left-anchor base (after reverse-complementing) is before beginning of the chromosome
+RefSplitInChain           Lift failed - REF is not fully within a single alignment in the chain file
+RefMismatchesReference    Lift failed - REF in VCF file mismatches the Primary coordinates reference file. There is an error in the VCF file, or the wrong reference file is provided
+RefMultiAltSwitchSNP      Lift failed - A REF⇆ALT switch for a multi-allelic SNP
+RefMultiAltSwitchIndel    Lift failed - A REF⇆ALT switch for a multi-allelic indel
+RefNewAlleleSNP           Lift failed - The Luft reference would introduce a new allele which is neither REF or ALT
+RefNewAlleleDelRefChgHas* Lift failed - REF changed in a Deletion variant that has a "*" ALT
+RefNewAlleleDelRefChanged Lift failed - REF changed in Deletion variant, but not REF<>ALT switch (i.e. Deletion not integrated into new reference)
+RefNewAlleleDelSameRef    Lift failed - REF bases match, but this is a new Deletion allele based on context
+RefNewAlleleInsSameRef    Lift failed - REF bases match, but this is a new Insertion allele based on context
+RefNewAlleleIndelNoSwitch Lift failed - REF switched with one of the ALTs, but flanking regions differ
+RefNewAlleleNDNI          Lift failed - REF is a new allele a left-anchored non-Ins non-Del indel variant
+RefNewAlleleNotLeftAnc    Lift failed - The Luft reference would introduce a new allele for a variant that is neither a SNP nor left-anchored
+RefNewAlleleSV            Lift failed - The Luft reference is different than REF for a variant with a symbolic ALT allele
+XstrandNotLeftAnc         Lift failed - A variant that is neither a SNP nor left-anchored mapped to the reverse strand
+XstrandSV                 Lift failed - A variant with a symbolic ALT allele mapped to the reverse strand
+ComplexRearrangements     Lift failed - Variant is a Complex Rearrangement
+INFO/END                  Lift failed - POS and INFO/END are not on the same chain file alignment
+AddedVariant              Failed to cross-render a variant - Non-dual-coordinate variant added to a DVCF 
+UnsupportedRefAlt         Failed to cross-render a variant - Combination of REF/ALT in Primary and Luft coordinates not supported by Genozip
+INFO/AC                   Failed to cross-render AC: INFO/AN is missing for this variant 
+INFO/*tag*                Failed to cross-render this INFO tag
+FORMAT/*tag*              Failed to cross-render this FORMAT tag
+========================= ==================================

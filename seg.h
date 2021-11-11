@@ -104,15 +104,24 @@ extern void seg_create_rollback_point (VBlockP vb, unsigned num_ctxs, ...); // l
 extern void seg_rollback (VBlockP vb);
 
 // Multiplexers
-#define MUX_MAX_CHANNELS 4 // can be increased as needed
+#define BASE64_DICT_ID_LEN 14
 #define TYPEDEF_MULTIPLEXER(n_channels) \
 typedef struct {                        \
-    STRl(snip, 14*MUX_MAX_CHANNELS);    \
     uint8_t num_channels;               \
+    StoreType store_type;               \
+    DidIType st_did_i;                  \
+    uint64_t unused;                    \
+    DictId dict_ids[n_channels];        \
     ContextP channel_ctx[n_channels];   \
-}
-TYPEDEF_MULTIPLEXER() Multiplexer;
-extern void seg_mux_init (VBlockP vb, unsigned num_channels, uint8_t special_code, DidIType mux_did_i, DidIType st_did_i, StoreType store_type, Multiplexer *mux, const char *channel_letters);
+    uint32_t snip_len;/*word aligned*/  \
+    char snip[BASE64_DICT_ID_LEN * n_channels];  \
+}                               
+#define MUX ((MultiplexerP)mux)
+
+TYPEDEF_MULTIPLEXER(1000) *MultiplexerP;
+
+extern void seg_mux_init (VBlockP vb, unsigned num_channels, uint8_t special_code, DidIType mux_did_i, DidIType st_did_i, StoreType store_type, MultiplexerP mux, const char *channel_letters);
+extern ContextP seg_mux_get_channel_ctx (VBlockP vb, MultiplexerP mux, uint32_t channel_i);
 
 // ------------------
 // Seg utilities

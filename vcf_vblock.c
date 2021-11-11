@@ -40,6 +40,7 @@ void vcf_vb_release_vb (VBlockVCF *vb)
     memset (&vb->mux_GQ,     0, sizeof(vb->mux_GQ));
     memset (&vb->mux_AD,     0, sizeof(vb->mux_AD));
     memset (&vb->mux_ADALL,  0, sizeof(vb->mux_ADALL));
+    memset (&vb->mux_PL_xDP, 0, sizeof(vb->mux_PL_xDP));
     
     buf_free (&vb->sf_txt);
     buf_free (&vb->sf_snip);

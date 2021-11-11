@@ -17,8 +17,8 @@
 
 #define BAM_MAGIC "BAM\1" // first 4 characters of a BAM file
 
-#define IS_BAM_ZIP (txt_file->data_type==DT_BAM)
-#define IS_BAM_PIZ (z_file->data_type==DT_SAM && z_file->z_flags.txt_is_bin)
+#define IS_BAM_ZIP TXT_DT(DT_BAM)
+#define IS_BAM_PIZ (Z_DT(DT_SAM) && z_file->z_flags.txt_is_bin)
 #define IS_BAM (command==ZIP ? IS_BAM_ZIP : IS_BAM_PIZ)
 
 // Buddy & lookback parameters

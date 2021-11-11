@@ -143,7 +143,7 @@ static inline ContextP vcf_seg_FORMAT_mux_by_dosage (VBlockVCF *vb, Context *ctx
         return ctx;
     }
 
-    ContextP channel_ctx = mux->channel_ctx[channel_i];
+    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, MUX, channel_i);
 
     if (cell) seg_by_ctx (VB, STRa(cell), channel_ctx, cell_len);
 
@@ -176,7 +176,67 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_DOSAGE)
 {
     int channel_i = vcf_piz_get_mux_channel_i (vb);
     
-    ContextP channel_ctx = MCTX (channel_i, 4, snip, snip_len);
+    ContextP channel_ctx = MCTX (channel_i, snip, snip_len);
+    ASSPIZ (channel_ctx, "Cannot find channel context of channel_i=%d of multiplexed context %s", channel_i, ctx->tag_name);
+
+    reconstruct_from_ctx (vb, channel_ctx->did_i, 0, reconstruct);
+
+    if (ctx->flags.store == STORE_NONE) return false;
+
+    // propagate last_value up
+    new_value->i = channel_ctx->last_value.i; // note: last_value is a union, this copies the entire union
+    return true; 
+}
+
+// if cell is NULL, leaves it up to the caller to seg to the channel 
+static inline void vcf_seg_FORMAT_mux_by_dosagexDP (VBlockVCF *vb, Context *ctx, STRp(cell), const DosageDPMultiplexer *mux) 
+{
+    int64_t DP;
+    if (!str_get_int (last_txt(vb, FORMAT_DP), vb->last_txt_len(FORMAT_DP), &DP)) // In some files, DP may be '.'
+        DP=0;
+
+    // if DP is 0 (or not a positive integer), we predict that our value is '.'. we don't use any channel for it.
+    if (DP <= 0) {
+        if (cell_len != 1 || *cell != '.') goto cannot_use_special;
+        seg_by_ctx (VB, STRa(mux->snip), ctx, 1);
+        return;
+    }
+
+    int channel_i = vcf_seg_get_mux_channel_i (vb, true); // we don't use the multiplexer if its a DVCF REF<>ALT switch variant as GT changes
+    if (channel_i == -1) goto cannot_use_special;
+
+    DP = MIN_(DP, DOSAGExDP_NUM_DPs-1);
+    channel_i = (channel_i == 3) ? (DOSAGExDP_NUM_DPs * 3) : (DP*3 + channel_i);
+
+    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, MUX, channel_i);
+
+    seg_by_ctx (VB, STRa(cell), channel_ctx, cell_len);
+
+    // note: this is not necessarily all-the-same - there could be unmuxed snips due to REF<>ALT switch, and/or WORD_INDEX_MISSING 
+    seg_by_ctx (VB, STRa(mux->snip), ctx, 0);
+    return;
+
+cannot_use_special:
+    seg_by_ctx (VB, STRa(cell), ctx, cell_len);
+}
+
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_DOSAGExDP)
+{
+    unsigned num_channels = ctx->con_cache.len ? ctx->con_cache.len : (1 + str_count_char (STRa(snip), '\t'));
+    unsigned num_dps = num_channels / 3;
+
+    int64_t DP = ctx_has_value (vb, FORMAT_DP) ? CTX(FORMAT_DP)->last_value.i : 0; // possibly "."
+    if (DP <= 0) {
+        if (reconstruct) RECONSTRUCT1('.');
+        return false;
+    }
+
+    if (DP >= num_dps) DP = num_dps-1;
+
+    int channel_i = vcf_piz_get_mux_channel_i (vb); 
+    channel_i = (channel_i == 3) ? (num_dps * 3) : (DP*3 + channel_i);
+
+    ContextP channel_ctx = MCTX (channel_i, snip, snip_len);
     ASSPIZ (channel_ctx, "Cannot find channel context of channel_i=%d of multiplexed context %s", channel_i, ctx->tag_name);
 
     reconstruct_from_ctx (vb, channel_ctx->did_i, 0, reconstruct);
@@ -364,8 +424,8 @@ static void vcf_seg_AD_items (VBlockVCFP vb, Context *ctx, unsigned num_items, C
                 vcf_seg_FORMAT_transposed (vb, item_ctxs[0], STRi(item, 0), item_lens[0]);
             
             else if (i==0 || i==1) {
-                if (vb->line_i==0)
-                    seg_mux_init (VB, 4, VCF_SPECIAL_MUX_BY_DOSAGE, item_ctxs[i]->did_i, FORMAT_AD, STORE_INT, (Multiplexer*)&vb->mux_AD[i], "0123");
+                if (!vb->mux_AD[i].num_channels)
+                    seg_mux_init (VB, 4, VCF_SPECIAL_MUX_BY_DOSAGE, item_ctxs[i]->did_i, FORMAT_AD, STORE_INT, (MultiplexerP)&vb->mux_AD[i], "0123");
                 
                 vcf_seg_FORMAT_mux_by_dosage (vb, item_ctxs[i], STRi(item, i), &vb->mux_AD[i]);
             }
@@ -393,8 +453,8 @@ static void vcf_seg_ADALL_items (VBlockVCFP vb, Context *ctx, unsigned num_items
 
     for (unsigned i=0; i < num_items; i++) 
         if (i==0 || i==1) {
-            if (vb->line_i==0)
-                seg_mux_init (VB, 4, VCF_SPECIAL_MUX_BY_DOSAGE, item_ctxs[i]->did_i, FORMAT_ADALL, STORE_INT, (Multiplexer*)&vb->mux_ADALL[i], "0123");
+            if (!vb->mux_ADALL[i].num_channels)
+                seg_mux_init (VB, 4, VCF_SPECIAL_MUX_BY_DOSAGE, item_ctxs[i]->did_i, FORMAT_ADALL, STORE_INT, (MultiplexerP)&vb->mux_ADALL[i], "0123");
             
             vcf_seg_FORMAT_mux_by_dosage (vb, item_ctxs[i], STRi(item, i), &vb->mux_ADALL[i]);
         }
@@ -686,7 +746,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_GQ)
 {
     const char *tab = memchr (snip, '\t', snip_len);
 
-    ContextP src_ctx = MCTX (0, 1, snip, tab - snip);
+    ContextP src_ctx = MCTX (0, snip, tab - snip);
 
     int64_t prediction = vcf_predict_GQ (VB_VCF, src_ctx->did_i);
     int64_t delta = atoi (tab+1);
@@ -702,6 +762,8 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_GQ)
 
 static inline WordIndex vcf_seg_FORMAT_DP (VBlockVCF *vb, Context *ctx, STRp(cell))
 {
+    seg_set_last_txt (VB, ctx, STRa(cell), STORE_NONE);
+
     // case - we have FORMAT/AD - calculate delta vs the sum of AD components
     if (ctx_has_value (VB, FORMAT_AD))
         return seg_delta_vs_other (VB, ctx, CTX(FORMAT_AD), STRa(cell));
@@ -884,8 +946,8 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_AB)
         RECONSTRUCT1 ('.');
 
     else if (channel_i == 1 && reconstruct) {
-        ContextP ad0_ctx = MCTX (0, 3, snip, snip_len);
-        ContextP ad1_ctx = MCTX (1, 3, snip, snip_len);
+        ContextP ad0_ctx = MCTX (0, snip, snip_len);
+        ContextP ad1_ctx = MCTX (1, snip, snip_len);
 
         double ad0 = reconstruct_peek (vb, ad0_ctx, 0, 0).i;
         double ad1 = reconstruct_peek (vb, ad1_ctx, 0, 0).i;
@@ -897,7 +959,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_AB)
     }
 
     else if (channel_i == 3) {
-        ContextP ab3_ctx = MCTX (2, 3, snip, snip_len);
+        ContextP ab3_ctx = MCTX (2, snip, snip_len);
         reconstruct_from_ctx (vb, ab3_ctx->did_i, 0, reconstruct);
     }
 
@@ -1310,6 +1372,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
         // <ID=GT,Number=1,Type=String,Description="Genotype">
         case _FORMAT_GT: vcf_seg_FORMAT_GT (vb, ctx, dl, STRi(sf, i)); break;
 
+        // <ID=GL,Number=.,Type=Float,Description="Genotype Likelihoods">
         case _FORMAT_GL:
             // --GL-to-PL:  GL: 0.00,-0.60,-8.40 -> PL: 0,6,60
             // note: we changed the FORMAT field GL->PL in vcf_seg_format_field. data is still stored in the GL context.
@@ -1342,6 +1405,11 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
         case _FORMAT_PL:
             if (flag.optimize_phred && vcf_phred_optimize (STRi(sf, i), modified, &modified_len)) 
                 SEG_OPTIMIZED_MUX_BY_DOSAGE(GP);
+            
+            // Full muxing by DP turns out be beneficial only with several samples independent of the block size (not clear why)
+            else if (vcf_num_samples >= 8 && ctx_encountered (VB, FORMAT_DP))
+                vcf_seg_FORMAT_mux_by_dosagexDP (vb, ctx, STRi (sf, i), &vb->mux_PL_xDP);
+            
             else
                 vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_PL);
 
@@ -1356,6 +1424,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
                 vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_PP);
             break;
         
+        // <ID=PRI,Number=G,Type=Float,Description="Phred-scaled prior probabilities for genotypes">
         case _FORMAT_PRI:
             if (flag.optimize_phred && vcf_phred_optimize (STRi(sf, i), modified, &modified_len)) 
                 SEG_OPTIMIZED_MUX_BY_DOSAGE(PRI);
@@ -1363,12 +1432,17 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
                 vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_PRI);
             break;
         
+        // <ID=DS,Number=1,Type=Float,Description="Genotype dosage from MaCH/Thunder"> (1000 Genome Project phase1 data)
+        // See: https://genome.sph.umich.edu/wiki/Thunder
         case _FORMAT_DS   : vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_DS)   ; break;
         
+        // VarScan: <ID=RD,Number=1,Type=Integer,Description="Depth of reference-supporting bases (reads1)">
         case _FORMAT_RD   : vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_RD)   ; break;
         
+        // VarScan: <ID=PVAL,Number=1,Type=String,Description="P-value from Fisher's Exact Test">
         case _FORMAT_PVAL : vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_PVAL) ; break;   
         
+        // VarScan: <ID=FREQ,Number=1,Type=String,Description="Variant allele frequency">
         case _FORMAT_FREQ : vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_FREQ) ; break;
         
         // case: PS ("Phase Set") - might be the same as POS (for example, if set by Whatshap: https://whatshap.readthedocs.io/en/latest/guide.html#features-and-limitations)
@@ -1447,6 +1521,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
         // VarScan: <ID=RDR,Number=1,Type=Integer,Description="Depth of reference-supporting bases on reverse strand (reads1minus)">
         case _FORMAT_RDR   : vcf_seg_FORMAT_minus (vb, ctx, STRi(sf, i), 0, CTX(FORMAT_RD), CTX(FORMAT_RDF), STRa(rdr_snip)); break;
 
+        // <ID=AB,Number=1,Type=Float,Description="Allele balance for each het genotype">
         case _FORMAT_AB    : vcf_seg_FORMAT_AB (vb, ctx, STRi(sf, i)); break;
 
         default            :

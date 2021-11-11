@@ -144,7 +144,6 @@ static inline void buf_add_more (VBlockP vb, BufferP buf, const void *new_data, 
 
 #define buf_add_moreC(vb_, buf, literal_str, name) buf_add_more ((VBlockP)(vb_), (buf), literal_str, sizeof literal_str-1, (name))
 #define buf_add_moreS(vb_, buf, str, name) buf_add_more ((VBlockP)(vb_), (buf), str, str##_len, (name))
-
 #define buf_add_buf(vb_,dst_buf,src_buf,type,name) do { \
     buf_alloc ((vb_) ? (vb_) : (dst_buf)->vb, (dst_buf), (src_buf)->len, 0, type, CTX_GROWTH, (name)); \
     memcpy (AFTERENT(type, *(dst_buf)), (src_buf)->data, (src_buf)->len * sizeof (type));   \
@@ -152,7 +151,9 @@ static inline void buf_add_more (VBlockP vb, BufferP buf, const void *new_data, 
 } while (0)
 
 extern void buf_add_string (VBlockP vb, Buffer *buf, const char *str);
-extern void buf_add_int (VBlockP vb, Buffer *buf, int64_t value);
+extern void buf_add_int_as_text (VBlockP vb, Buffer *buf, int64_t value);
+
+#define buf_add_int(vb, buf, n) ({ buf_alloc ((VBlockP)(vb), &(buf), 1, 0, typeof(n), 0, NULL); NEXTENT(typeof(n), (buf)) = n; })
 
 #define buf_add_vector(vb, type, dst, src, name) do { \
     if ((src).len) { \

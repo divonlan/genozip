@@ -244,30 +244,56 @@ void seg_prepare_multi_dict_id_special_snip (uint8_t special_code, unsigned num_
     *out_snip_len = (snip + snip_len) - out_snip;
 }
 
-void seg_mux_init (VBlockP vb, unsigned num_channels, uint8_t special_code, DidIType mux_did_i, DidIType st_did_i, StoreType store_type, Multiplexer *mux,
+void seg_mux_init (VBlockP vb, unsigned num_channels, uint8_t special_code, DidIType mux_did_i, DidIType st_did_i,
+                   StoreType store_type, MultiplexerP mux,
                    const char *channel_letters) // optional - a string with num_channels unique characters
 {
+    ASSERT0 (num_channels <= 256, "num_channels=%u beyond maximum of 256");
+
     const uint8_t *id = CTX(mux_did_i)->dict_id.id;
     DictId dict_id_template = (DictId){ .id = { id[0], 0, id[1], id[2], id[3], id[4], id[5], id[6] } };
 
     mux->num_channels = num_channels;
+    mux->store_type   = store_type;
+    mux->st_did_i     = st_did_i;
 
     // calculate dict_ids, eg: PL -> PlL, PmL, PnL, PoL
-    DictId channel_dict_id[num_channels];
     for (int i=0; i < num_channels; i++) {
-        channel_dict_id[i] = dict_id_template;
-        channel_dict_id[i].id[1] = channel_letters ? channel_letters[i] : (FLIP_CASE(id[1]) + i);
-        mux->channel_ctx[i] = ctx_get_ctx (vb, channel_dict_id[i]);
-        mux->channel_ctx[i]->flags.store = store_type; 
-
-        stats_set_consolidation (VB, st_did_i, 1, mux->channel_ctx[i]->did_i); // set consolidation for --stats
+        mux->dict_ids[i] = dict_id_template;
+        mux->dict_ids[i].id[1] = channel_letters ? channel_letters[i] : (((uint16_t)id[1] + (uint16_t)i) & 0xff);
+        unsigned id_len = strnlen ((char*)mux->dict_ids[i].id, 8);
+        if (id_len <= 5) str_int (i, (char*)&mux->dict_ids[i].id[id_len]); // add numerical digits for ease of debugging if we have room
     }
 
     CTX(mux_did_i)->flags.store = store_type;
 
+    uint32_t *snip_len = (uint32_t*)((char*)mux->dict_ids + num_channels * (sizeof (DictId) + sizeof (ContextP)));
+    char *snip = (char *)(snip_len + 1); 
+
     // prepare snip - a string consisting of num_channels x { special_code or \t , base64(dict_id.id) }
-    mux->snip_len = sizeof (mux->snip);   
-    seg_prepare_multi_dict_id_special_snip (special_code, num_channels, channel_dict_id, mux->snip, &mux->snip_len);
+    *snip_len = BASE64_DICT_ID_LEN * num_channels;   
+    seg_prepare_multi_dict_id_special_snip (special_code, num_channels, mux->dict_ids, snip, snip_len);
+}
+
+ContextP seg_mux_get_channel_ctx (VBlockP vb, MultiplexerP mux, uint32_t channel_i)
+{
+    ASSERT (channel_i < mux->num_channels, "channel_i=%u out of range, multiplexer of \"%s\" has only %u channels",
+            channel_i, CTX(mux->st_did_i)->tag_name, mux->num_channels);
+
+    ContextP channel_ctx = ctx_get_ctx (vb, mux->dict_ids[channel_i]);
+
+    if (!channel_ctx->seg_initialized) { // note: context may exist (cloned from z_ctx) but not yet initialized
+
+        ContextP *contexts = (ContextP *)&mux->dict_ids[mux->num_channels]; // start of context array
+        contexts[channel_i] = channel_ctx;
+
+        channel_ctx->flags.store = mux->store_type; 
+        stats_set_consolidation (VB, mux->st_did_i, 1, channel_ctx->did_i); // set consolidation for --stats
+    
+        channel_ctx->seg_initialized = true;
+    }
+
+    return channel_ctx;
 }
 
 // scans a pos field - in case of non-digit or not in the range [0,MAX_POS], either returns -1

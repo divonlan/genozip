@@ -144,6 +144,7 @@ typedef struct Context {
                                //          =(-vb->line_i-1) means ctx encountered in this line (so far) but last_value was not set 
     int32_t last_sample_i;     // ZIP/PIZ: Current sample in VCF/FORMAT ; must be set to 0 if not VCF/FORMAT
     int32_t ctx_specific;
+    bool last_encounter_was_reconstructed; // PIZ: only valid if ctx_encountered() is true. Means last encountered was also reconstructed.
     uint32_t next_local;       // PIZ: iterator on Context.local
     SnipIterator iterator;     // PIZ: used to iterate on the context, reading one b250 word_index at a time
     SnipIterator pair_b250_iter; // PIZ: Iterator on pair, if it contains b250 data  <--- LAST in RECONSTRUCT START

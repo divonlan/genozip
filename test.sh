@@ -401,7 +401,7 @@ batch_dvcf()
 {
     batch_print_header
 
-    local files=(basic-dvcf-source.vcf basic-dvcf-luft.vcf test.NA12878.sorted.vcf test.clinvar37.vcf.gz test.chr22.indels.vcf test.chr17.SS6004478.vcf test.ExAC.vcf.gz)
+    local files=(basic-dvcf-source.vcf basic-dvcf-luft.vcf test.NA12878.sorted.vcf test.clinvar37.vcf.gz test.1KG-37.indels.vcf test.chr17.SS6004478.vcf test.ExAC.vcf.gz)
     local file
 
     # prepare chain file
@@ -834,7 +834,7 @@ batch_real_world_1_backcomp()
     fi
 
     # without reference
-    local files_work_v12_0_42=( basic.phy test.1000G.annotated.vcf test.1001genomes.vcf.gz test.1KG-38.vcf test.360_merged_2.50.vcf.gz test.ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf test.BGI.sam.gz test.bwa-X.sam test.canonical-gene.gff test.cattle.vcf test.chr17.SS6004478.vcf test.chr22.indels.vcf test.clinvar37.vcf.gz test.contaminated.kraken test.coronavirus.fasta test.dog.INDEL.vcf.gz test.ExAC.vcf.gz test.exampleFASTA.fasta test.GCF_000001405.39-GCA_009914755.2.gff test.genome_Full.txt test.GenomeAsia100K.vcf.bz2 test.giab.vcf test.gnomad.vcf.gz test.GRCh38_full_analysis_set_plus_decoy_hla.fa test.GRCh38_issues.gff3 test.homo_sapiens_incl_consequences-chrY.gvf test.human.fq.gz test.human2.bam test.human2.filtered.snp.vcf test.human2.sam test.human2-R1.100K.fq.bz2 test.human2-R1.100K.fq.gz test.human2-R2.100K.fq.bz2 test.human2-R2.100K.fq.gz test.human-collated.sam test.human-sorted.sam test.IonXpress.sam test.NA12878.chr22.1x.bam test.NA12878.chr22.1x.sam test.NA12878.sorted.vcf test.NA12878-R1.100k.fq test.nanopore.fq test.nanopore.sam test.normal.kraken test.NovaSeq.bam test.NovaSeq.sam.gz test.pacbio.10k.fasta.xz test.pacbio.10k.hg19.sam.gz test.pacbio.ccs.10k.bam test.pacbio.ccs.10k.sam test.pacbio.clr.bam test.pacbio.clr.sam test.robot.sam test.sequential.fa.gz test.solexa.sam test.udhr.txt )
+    local files_work_v12_0_42=( basic.phy test.1KG-38.INFO.vcf test.1001genomes.vcf.gz test.1KG-38.vcf.gz test.360_merged_2.50.vcf.gz test.1KG-37.vcf test.BGI.sam.gz test.bwa-X.sam test.canonical-gene.gff test.cattle.vcf test.chr17.SS6004478.vcf test.1KG-37.indels.vcf test.clinvar37.vcf.gz test.contaminated.kraken test.coronavirus.fasta test.dog.INDEL.vcf.gz test.ExAC.vcf.gz test.exampleFASTA.fasta test.GCF_000001405.39-GCA_009914755.2.gff test.genome_Full.txt test.GenomeAsia100K.vcf.bz2 test.giab.vcf test.gnomad.vcf.gz test.GRCh38_full_analysis_set_plus_decoy_hla.fa test.GRCh38_issues.gff3 test.homo_sapiens_incl_consequences-chrY.gvf test.human.fq.gz test.human2.bam test.human2.filtered.snp.vcf test.human2.sam test.human2-R1.100K.fq.bz2 test.human2-R1.100K.fq.gz test.human2-R2.100K.fq.bz2 test.human2-R2.100K.fq.gz test.human-collated.sam test.human-sorted.sam test.IonXpress.sam test.NA12878.chr22.1x.bam test.NA12878.chr22.1x.sam test.NA12878.sorted.vcf test.NA12878-R1.100k.fq test.nanopore.fq test.nanopore.sam test.normal.kraken test.NovaSeq.bam test.NovaSeq.sam.gz test.pacbio.10k.fasta.xz test.pacbio.10k.hg19.sam.gz test.pacbio.ccs.10k.bam test.pacbio.ccs.10k.sam test.pacbio.clr.bam test.pacbio.clr.sam test.robot.sam test.sequential.fa.gz test.solexa.sam test.udhr.txt )
 
     local files_work_v13_0_0=( test.ensembl-export.gff test.maker.gff test.varscan.vcf )
 
@@ -1000,7 +1000,7 @@ batch_reference_vcf()
     test_standard "COPY CONCAT -me$hg19" " " test.human2.filtered.snp.vcf
 
     echo "multiple VCF with --REFERENCE using hs37d5" 
-    test_standard "-mE$hs37d5" " " test.ALL.chr22.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf test.human2.filtered.snp.vcf
+    test_standard "-mE$hs37d5" " " test.1KG-37.vcf test.human2.filtered.snp.vcf
 }
 
 batch_make_reference()

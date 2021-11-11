@@ -932,7 +932,7 @@ void buf_add_string (VBlockP vb, Buffer *buf, const char *str)
     buf->data[buf->len] = '\0'; // string terminator without increasing buf->len
 }
 
-void buf_add_int (VBlockP vb, Buffer *buf, int64_t value)
+void buf_add_int_as_text (VBlockP vb, Buffer *buf, int64_t value)
 {
     char s[20];
     unsigned len = str_int (value, s);

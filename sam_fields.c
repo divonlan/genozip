@@ -235,7 +235,7 @@ static void sam_seg_XA_pos (VBlockP vb, STRp(pos_str), uint32_t rep)
         while ((lookback = lookback_get_next (vb, rname_ctx, rname_index, &iterator))) {
 
             PosType lookback_pos = lookback_get_value (vb, pos_ctx, lookback);
-//printf ("xxx lookback_pos=%"PRId64" lookback=%u iterator=%"PRId64"\n", lookback_pos, lookback, iterator);
+
             // case: we found a lookback - same rname and close enough pos
             if (ABS (pos-lookback_pos) < MAX_POS_DISTANCE) {
             //    if (ABS (pos-lookback_pos) <= ABS(CTX(SAM_TLEN)->last_value.i)) { <-- better POS deltas but bigger index - its a wash

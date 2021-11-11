@@ -58,7 +58,7 @@ Complex Rearrangement variants (whose ALT contains the characters ``[`` or ``]``
 
 Variants with a multi-base REF are lifted only if the entire REF fits into a single chain file alignment, with the exception of Deletion variants where a Deletion variant is allowed to have its anchor base on an alignment and its payload in the gap following the alignment (this would be a REF⇆ALT switch).
 
-Variants are rejected with REFMismatchesReference if their REF does not match the Primary reference (this would be an indication of an error in the VCF file, or usage of the wrong reference file). In case the reference contains `IUPAC "bases" <http://www.bioinformatics.org/sms/iupac.html>`_ (other than A,C,T,G,N), a base is considered matching if it matches one of the IUPAC's "base" constituent bases.
+Variants are rejected with RefMismatchesReference if their REF does not match the Primary reference (this would be an indication of an error in the VCF file, or usage of the wrong reference file). In case the reference contains `IUPAC "bases" <http://www.bioinformatics.org/sms/iupac.html>`_ (other than A,C,T,G,N), a base is considered matching if it matches one of the IUPAC's "base" constituent bases.
 
 When a DVCF file is rendered with ``--luft``, REF\ :subscript:`luft` is placed in the REF field, and REF\ :subscript:`prim` is placed as the third value of INFO/PRIM.
 

@@ -48,8 +48,8 @@
                                            // Conflicting VarScan: <ID=ADR,Number=1,Type=Integer,Description="Depth of variant-supporting bases on reverse strand (reads2minus)">
 #pragma GENDICT FORMAT_AF=DTYPE_2=AF       // <ID=AF,Number=A,Type=Float,Description="Allele fractions for alt alleles in the order listed">
 #pragma GENDICT FORMAT_DP=DTYPE_2=DP       // <ID=DP,Number=1,Type=Integer,Description="Approximate read depth (reads with MQ=255 or with bad mates are filtered)">
-#pragma GENDICT FORMAT_DS=DTYPE_2=DS
-#pragma GENDICT FORMAT_GL=DTYPE_2=GL
+#pragma GENDICT FORMAT_DS=DTYPE_2=DS       // <ID=DS,Number=1,Type=Float,Description="Genotype dosage from MaCH/Thunder">. See: https://genome.sph.umich.edu/wiki/Thunder
+#pragma GENDICT FORMAT_GL=DTYPE_2=GL       // <ID=GL,Number=.,Type=Float,Description="Genotype Likelihoods">
 #pragma GENDICT FORMAT_GP=DTYPE_2=GP       // <ID=GP,Number=G,Type=Float,Description="Phred-scaled posterior probabilities for genotypes as defined in the VCF specification">
 #pragma GENDICT FORMAT_GQ=DTYPE_2=GQ       // <ID=GQ,Number=1,Type=Integer,Description="Genotype Quality">
 #pragma GENDICT FORMAT_GT=DTYPE_2=GT       // <ID=GT,Number=1,Type=String,Description="Genotype">
@@ -62,6 +62,8 @@
 #pragma GENDICT FORMAT_SAC=DTYPE_2=SAC     // <ID=SAC,Number=.,Type=Integer,Description="Number of reads on the forward and reverse strand supporting each allele (including reference)">
 #pragma GENDICT FORMAT_SB=DTYPE_2=SB       // <ID=SB,Number=4,Type=Integer,Description="Per-sample component statistics which comprise the Fisher's Exact Test to detect strand bias">
 #pragma GENDICT FORMAT_PS=DTYPE_2=PS 
+
+#pragma GENDICT FORMAT_FL=DTYPE_2=FL       // Seen in Reich's ancient DNA datasets: <ID=FL,Number=1,Type=Character,Description="filter level in range 0-9 or no value (non-integer: N,?) with zero being least reliable; to threshold at FL=n, use all levels n-9">
 
 #pragma GENDICT FORMAT_AB=DTYPE_2=AB       // <ID=AB,Number=1,Type=Float,Description="Allele balance for each het genotype",RendAlg="NONE">
 #pragma GENDICT FORMAT_AB3=DTYPE_2=AB3     // must be the next context after AB
@@ -208,7 +210,8 @@
 #pragma GENDICT FORMAT_RDF=DTYPE_2=RDF     // <ID=RDF,Number=1,Type=Integer,Description="Depth of reference-supporting bases on forward strand (reads1plus)">
 #pragma GENDICT FORMAT_RDR=DTYPE_2=RDR     // <ID=RDR,Number=1,Type=Integer,Description="Depth of reference-supporting bases on reverse strand (reads1minus)">
 #pragma GENDICT FORMAT_SDP=DTYPE_2=SDP     // <ID=SDP,Number=1,Type=Integer,Description="Raw Read Depth as reported by SAMtools">
-#pragma GENDICT FORMAT_RD=DTYPE_2=RD       // <ID=RD,Number=1,Type=Integer,Description="Depth of reference-supporting bases (reads1)">
+#pragma GENDICT FORMAT_RD=DTYPE_2=RD       // 
+
 #pragma GENDICT FORMAT_FREQ=DTYPE_2=FREQ   // <ID=FREQ,Number=1,Type=String,Description="Variant allele frequency">
 #pragma GENDICT FORMAT_PVAL=DTYPE_2=PVAL   // <ID=PVAL,Number=1,Type=String,Description="P-value from Fisher's Exact Test">
 #pragma GENDICT FORMAT_RBQ=DTYPE_2=RBQ     // <ID=RBQ,Number=1,Type=Integer,Description="Average quality of reference-supporting bases (qual1)">
@@ -290,7 +293,8 @@ extern void vcf_samples_add  (const char *samples_str);
                       vcf_piz_special_INFO_HGVS_DEL_END_POS, vcf_piz_special_INFO_HGVS_DEL_PAYLOAD, \
                       vcf_piz_special_INFO_HGVS_INS_END_POS, vcf_piz_special_INFO_HGVS_INS_PAYLOAD, \
                       vcf_piz_special_INFO_HGVS_DELINS_END_POS, vcf_piz_special_INFO_HGVS_DELINS_PAYLOAD,\
-                      vcf_piz_special_MUX_BY_DOSAGE, vcf_piz_special_FORMAT_AB, vcf_piz_special_FORMAT_GQ }
+                      vcf_piz_special_MUX_BY_DOSAGE, vcf_piz_special_FORMAT_AB, vcf_piz_special_FORMAT_GQ, \
+                      vcf_piz_special_MUX_BY_DOSAGExDP }
 
 SPECIAL (VCF, 0,  main_REFALT,         vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,              vcf_piz_special_FORMAT)
@@ -316,7 +320,8 @@ SPECIAL (VCF, 20, HGVS_DELINS_PAYLOAD, vcf_piz_special_INFO_HGVS_DELINS_PAYLOAD)
 SPECIAL (VCF, 21, MUX_BY_DOSAGE,       vcf_piz_special_MUX_BY_DOSAGE);            // added v13
 SPECIAL (VCF, 22, AB,                  vcf_piz_special_FORMAT_AB);                // added v13
 SPECIAL (VCF, 23, GQ,                  vcf_piz_special_FORMAT_GQ);                // added v13
-#define NUM_VCF_SPECIAL 24
+SPECIAL (VCF, 24, MUX_BY_DOSAGExDP,    vcf_piz_special_MUX_BY_DOSAGExDP);         // added v13.0.3
+#define NUM_VCF_SPECIAL 25
 
 // Translators for Luft (=secondary coordinates)
 TRANSLATOR (VCF, VCF,   1,  G,      vcf_piz_luft_G)       // same order as LiftOverStatus starting LO_CANT_G
