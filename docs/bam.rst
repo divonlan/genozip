@@ -78,7 +78,7 @@ Note: the reference file is also needed for uncompressing. Alternatively, use ``
 
 **Compressing CRAM files**
 
-Genozip does not support CRAM natively - it uses `samtools <https://en.wikipedia.org/wiki/SAMtools>`_ to convert CRAM files to the SAM format, and as such it requires samtools to be installed for CRAM compression to work.
+Genozip does not support CRAM natively - it uses `samtools <https://en.wikipedia.org/wiki/SAMtools>`_ to convert CRAM files to the BAM format, and as such it requires samtools to be installed for CRAM compression to work.
 
 ``genozip --reference hs37d5.ref.genozip myfile.cram``
 

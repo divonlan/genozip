@@ -388,6 +388,20 @@ static bool file_open_txt_read (File *file)
              "genozip on Windows supports piping in only plain (uncompressed) data");
 
     switch (file->codec) { 
+        case CODEC_CRAM: {
+            input_decompressor = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 
+                                                file->is_remote ? file->name : NULL,      // url                                        
+                                                file->redirected,
+                                                "To compress a CRAM file", 
+                                                "samtools", "view", "-bu", "--threads", "8", "-h", // in practice, samtools is able to consume 1.3 cores
+                                                file_samtools_no_PG() ? "--no-PG" : "-h", // don't add a PG line to the header (just repeat -h if this is an older samtools without --no-PG - no harm)
+                                                file->is_remote ? SKIP_ARG : file->name,  // local file name 
+                                                ref_get_cram_ref(gref), NULL);
+            file->file = stream_from_stream_stdout (input_decompressor);
+            file->redirected = true;
+            goto fallthrough_from_cram;
+        }
+
         case CODEC_GZ:   // we test the first few bytes of the file to differentiate between NONE, GZ and BGZIP
         case CODEC_BGZF: 
         case CODEC_NONE: {
@@ -398,6 +412,7 @@ static bool file_open_txt_read (File *file)
                        :                                    fopen (file->name, READ);
             ASSERT (file->file, "failed to open %s: %s", file->name, strerror (errno));
 
+fallthrough_from_cram:
             if (flag.rejects_coord)
                 file_seek (file, 0, SEEK_SET, false); // we finished writing the reject file - now we will read it
 
@@ -422,6 +437,11 @@ static bool file_open_txt_read (File *file)
                 
                 file->bgzf_flags = bgzf_get_compression_level (file->name ? file->name : FILENAME_STDIN, 
                                                                block, block_size, (uint32_t)bgzf_uncompressed_size);
+
+                // if we're compressing an level-0 BGZF (eg produced by samtools view -u), we don't record its
+                // value so that PIZ reconstructs at the default level
+                if (file->bgzf_flags.level == 0) 
+                    file->bgzf_flags.level = BGZF_COMP_LEVEL_UNKNOWN;
             }
 
             // for regulars files, we already skipped 0 size files. This can happen in STDIN
@@ -526,19 +546,6 @@ static bool file_open_txt_read (File *file)
                                                 file->is_remote ? SKIP_ARG : file->name,    // local file name 
                                                 "--no-version", // BCF: do not append version and command line to the header
                                                 NULL);
-            file->file = stream_from_stream_stdout (input_decompressor);
-            break;
-        }
-
-        case CODEC_CRAM: {
-            input_decompressor = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 
-                                                file->is_remote ? file->name : NULL,      // url                                        
-                                                file->redirected,
-                                                "To compress a CRAM file", 
-                                                "samtools", "view", "-OSAM", "--threads", "8", "-h", // in practice, samtools is able to consume 1.3 cores
-                                                file_samtools_no_PG() ? "--no-PG" : "-h", // don't add a PG line to the header (just repeat -h if this is an older samtools without --no-PG - no harm)
-                                                file->is_remote ? SKIP_ARG : file->name,  // local file name 
-                                                ref_get_cram_ref(gref), NULL);
             file->file = stream_from_stream_stdout (input_decompressor);
             break;
         }

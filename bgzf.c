@@ -137,10 +137,10 @@ int32_t bgzf_read_block (File *file, // txt_file is not yet assigned when called
 // ZIP
 void bgzf_compress_bgzf_section (void)
 {
-    if (!txt_file->bgzf_isizes.len) return; // this txt file is not compressed with BGZF - we don't need a BGZF section
-
-    // we don't write a BGZF block if we have data_modified, as the file has changed and we can't reconstruct to the same blocks
-    if (flag.data_modified) return; 
+    // cases where we don't write the BGZF blocks section
+    if (!txt_file->bgzf_isizes.len ||  // this txt file is not compressed with BGZF - we don't need a BGZF section
+       txt_file->bgzf_flags.level == BGZF_COMP_LEVEL_UNKNOWN ||  // we don't know the level - so PIZ will reconstruct at default level
+       flag.data_modified) return;     // we have data_modified-  the file has changed and we can't reconstruct to the same blocks
 
     // sanity check
     int64_t total_isize = 0;

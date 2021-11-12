@@ -30,11 +30,11 @@
 #define SAM_BGZF_      ".sam.bgz"
 #define SAM_BZ2_       ".sam.bz2"
 #define SAM_XZ_        ".sam.xz"
-#define CRAM_          ".cram"
 #define SAM_GENOZIP_   ".sam" GENOZIP_EXT
 
 // BAM
 #define BAM_           ".bam" // can be bgzf-compressed or not
+#define CRAM_          ".cram"
 #define BAM_GENOZIP_   ".bam.genozip" 
 
 // BCF
@@ -154,7 +154,7 @@ typedef enum {TXT_FILE, Z_FILE} FileSupertype;
 typedef enum      { UNKNOWN_FILE_TYPE, 
                     REF_GENOZIP,
                     VCF, VCF_GZ, VCF_BGZF, VCF_BZ2, VCF_XZ, VCF_GENOZIP, 
-                    SAM, SAM_GZ, SAM_BGZF, SAM_BZ2, SAM_XZ, CRAM, SAM_GENOZIP,
+                    SAM, SAM_GZ, SAM_BGZF, SAM_BZ2, SAM_XZ, SAM_GENOZIP,
                     FASTQ, FASTQ_GZ, FASTQ_BZ2, FASTQ_XZ, FASTQ_GENOZIP,
                     FQ,    FQ_GZ,    FQ_BZ2,    FQ_XZ,    FQ_GENOZIP,
                     FASTA, FASTA_GZ, FASTA_BZ2, FASTA_XZ, FASTA_GENOZIP,
@@ -172,7 +172,7 @@ typedef enum      { UNKNOWN_FILE_TYPE,
                     PHY,   PHY_GZ,   PHY_BZ2,   PHY_XZ,   PHY_GENOZIP,
                     CHAIN, CHAIN_GZ, CHAIN_BZ2, CHAIN_XZ, CHAIN_GENOZIP,
                     KRAKEN, KRAKEN_GZ, KRAKEN_BZ2, KRAKEN_XZ, KRAKEN_GENOZIP,
-                    BAM,                                  BAM_GENOZIP,
+                    BAM, CRAM,                            BAM_GENOZIP,
                     BCF, BCF_GZ, BCF_BGZF,                BCF_GENOZIP,  
                     // the GNRIC row *must* be the last row, as it consists catch-all extensions (*.gz etc)
                     GNRIC_GZ, GNRIC_BZ2, GNRIC_XZ,        GNRIC_GENOZIP, GNRIC, // GNRIC *must* be the very last as it is a catch-all ""
@@ -181,7 +181,7 @@ typedef enum      { UNKNOWN_FILE_TYPE,
 #define FILE_EXTS {"Unknown", /* order matches the FileType enum */ \
                    REF_GENOZIP_, \
                    VCF_, VCF_GZ_, VCF_BGZF_, VCF_BZ2_, VCF_XZ_, VCF_GENOZIP_,        \
-                   SAM_, SAM_GZ_, SAM_BGZF_, SAM_BZ2_, SAM_XZ_, CRAM_, SAM_GENOZIP_, \
+                   SAM_, SAM_GZ_, SAM_BGZF_, SAM_BZ2_, SAM_XZ_, SAM_GENOZIP_, \
                    FASTQ_, FASTQ_GZ_, FASTQ_BZ2_, FASTQ_XZ_, FASTQ_GENOZIP_,         \
                    FQ_,    FQ_GZ_,    FQ_BZ2_,    FQ_XZ_,    FQ_GENOZIP_,            \
                    FASTA_, FASTA_GZ_, FASTA_BZ2_, FASTA_XZ_, FASTA_GENOZIP_,         \
@@ -199,7 +199,7 @@ typedef enum      { UNKNOWN_FILE_TYPE,
                    PHY_,   PHY_GZ_,   PHY_BZ2_,   PHY_XZ_,   PHY_GENOZIP_,           \
                    CHAIN_, CHAIN_GZ_, CHAIN_BZ2_, CHAIN_XZ_, CHAIN_GENOZIP_,         \
                    KRAKEN_, KRAKEN_GZ_, KRAKEN_BZ2_, KRAKEN_XZ_, KRAKEN_GENOZIP_,  \
-                   BAM_,                                     BAM_GENOZIP_,           \
+                   BAM_,   CRAM_,                            BAM_GENOZIP_,           \
                    BCF_,   BCF_GZ_,   BCF_BGZF_,             BCF_GENOZIP_,           \
                    GNRIC_GZ_, GNRIC_BZ2_, GNRIC_XZ_,         GNRIC_GENOZIP_, GNRIC_, /* GNRIC_ is catch all */ \
                    "stdin", "stdout" }
@@ -219,8 +219,7 @@ extern const char *file_exts[];
                            { { VCF,       CODEC_NONE, VCF_GENOZIP   }, { VCF_GZ,   CODEC_GZ,  VCF_GENOZIP   }, { VCF_BGZF, CODEC_GZ,  VCF_GENOZIP },\
                              { VCF_BZ2,   CODEC_BZ2,  VCF_GENOZIP   }, { VCF_XZ,   CODEC_XZ,  VCF_GENOZIP   }, { } },\
                            { { SAM,       CODEC_NONE, SAM_GENOZIP   }, { SAM_GZ,   CODEC_GZ,  SAM_GENOZIP   }, { SAM_BGZF, CODEC_GZ,  SAM_GENOZIP },\
-                             { SAM_BZ2,   CODEC_BZ2,  SAM_GENOZIP   }, { SAM_XZ,   CODEC_XZ,  SAM_GENOZIP   },\
-                             { CRAM,      CODEC_CRAM, SAM_GENOZIP   }, { }, },\
+                             { SAM_BZ2,   CODEC_BZ2,  SAM_GENOZIP   }, { SAM_XZ,   CODEC_XZ,  SAM_GENOZIP   }, { }, },\
                            { { FASTQ,     CODEC_NONE, FASTQ_GENOZIP }, { FASTQ_GZ, CODEC_GZ,  FASTQ_GENOZIP },\
                              { FASTQ_BZ2, CODEC_BZ2,  FASTQ_GENOZIP }, { FASTQ_XZ, CODEC_XZ,  FASTQ_GENOZIP },\
                              { FQ,        CODEC_NONE, FQ_GENOZIP    }, { FQ_GZ,    CODEC_GZ,  FQ_GENOZIP    },\
@@ -248,7 +247,7 @@ extern const char *file_exts[];
                              { GVF,       CODEC_NONE, GVF_GENOZIP   }, { GVF_GZ,   CODEC_GZ,  GVF_GENOZIP   },\
                              { GVF_BZ2,   CODEC_BZ2,  GVF_GENOZIP   }, { GVF_XZ,   CODEC_XZ,  GVF_GENOZIP   }, { } },\
                            { { ME23,      CODEC_NONE, ME23_GENOZIP  }, { ME23_ZIP, CODEC_ZIP, ME23_GENOZIP  }, { } },\
-                           { { BAM,       CODEC_BGZF, BAM_GENOZIP   }, { } }, \
+                           { { BAM,       CODEC_BGZF, BAM_GENOZIP   }, { CRAM,     CODEC_CRAM,BAM_GENOZIP  }, { } }, \
                            { { BCF,       CODEC_BCF,  BCF_GENOZIP   }, { BCF_GZ,   CODEC_BCF, BCF_GENOZIP   }, { BCF_BGZF, CODEC_BCF, BCF_GENOZIP }, { } }, \
                            { { GNRIC,     CODEC_NONE, GNRIC_GENOZIP }, { GNRIC_GZ, CODEC_GZ,  GNRIC_GENOZIP },\
                              { GNRIC_BZ2, CODEC_BZ2,  GNRIC_GENOZIP }, { GNRIC_XZ, CODEC_XZ,  GNRIC_GENOZIP }, { } },\
