@@ -3,6 +3,11 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+13.0.3 15/November 2021
+- VCF: better compression of FORMAT/GL in --best
+- DVCF: more granular statuses, canceled --ext-ostatus
+- CRAM: now compresses as BAM instead of SAM
+
 13.0.2 8/November/2021
 - Native (binary) handling of BAM integers --> faster compression, up to 2X faster in BAM files with long arrays (eg PacBio subreads, IonTorrent)
 - Advanced option: --biopsy

@@ -134,7 +134,7 @@
             "label": "Test Docs",
             "command": "make",
             "args": [
-                "docs-debug"
+                "test-docs"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"

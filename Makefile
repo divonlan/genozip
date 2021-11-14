@@ -232,7 +232,6 @@ LICENSE.txt: text_license.h version.h # not dependent on genozip.exe, so we don'
 	@./genozip$(EXE) --license=100 --force > $@
 	@(git commit -m license_version_$(version) $@ ; exit 0) > /dev/null
 
-SPHINX = /home/divon/miniconda3/bin/sphinx-build
 DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs/advanced.rst docs/index.rst docs/license.rst \
        docs/publications.rst docs/installing.rst docs/contact.rst docs/compression.rst docs/source.rst docs/logo.png \
 	   docs/opt-help.rst docs/opt-piz.rst docs/opt-quiet.rst docs/opt-stats.rst docs/opt-threads.rst \
@@ -258,15 +257,15 @@ docs/RELEASE_NOTES.for-docs.txt: RELEASE_NOTES.txt
 	
 docs/_build/html/.buildinfo: docs/LICENSE.for-docs.txt docs/RELEASE_NOTES.for-docs.txt docs/conf.py $(DOCS)
 	@echo Building HTML docs
-	@$(WSL) $(SPHINX) -M html docs docs/_build -q -a 
+	@run-on-wsl.sh /home/divon/miniconda3/bin/sphinx-build -M html docs docs/_build -q -a 
 
-docs: docs/_build/html/.buildinfo docs/LICENSE.for-docs.txt docs/RELEASE_NOTES.for-docs.txt
+publish-docs: docs/_build/html/.buildinfo docs/LICENSE.for-docs.txt docs/RELEASE_NOTES.for-docs.txt
 	@(git commit -m "build docs" docs/conf.py docs/LICENSE.for-docs.txt docs/RELEASE_NOTES.for-docs.txt ; exit 0) > /dev/null
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@git push > /dev/null
 
-docs-debug: docs/_build/html/.buildinfo 
-	/c/Program\\ Files\\ \\(x86\\)/Google/Chrome/Application/chrome.exe file:///c:/Users/USER/projects/genozip/docs/_build/html/index.html
+test-docs: docs/_build/html/.buildinfo 
+	@"/c/Program Files (x86)/Google/Chrome/Application/chrome.exe" file:///c:/Users/divon/projects/genozip/docs/_build/html/index.html
 
 # this is used by build.sh to install on conda for Linux and Mac. Installation for Windows in in bld.bat
 install: genozip$(EXE)
@@ -416,7 +415,7 @@ docs/genozip-installer.exe: clean-optimized $(WINDOWS_INSTALLER_OBJS) # clean fi
 
 docs/genozip-linux-x86_64.tar.gz.build: genozip-linux-x86_64/LICENSE.txt 
 	@(mkdir genozip-linux-x86_64 >& /dev/null ; exit 0)
-	@wsl make docs/genozip-linux-x86_64.tar.gz
+	@run-on-wsl.sh make docs/genozip-linux-x86_64.tar.gz
 	@(git commit -m linux_files_for_version_$(version) docs/genozip-linux-x86_64.tar.gz ; exit 0) > /dev/null
 	@git push > /dev/null
 
@@ -438,7 +437,7 @@ prod:
 	@cp ../genozip-prod/genounzip.exe genounzip-prod.exe
 	@cp ../genozip-prod/genocat.exe genocat-prod.exe
 
-distribution: testfiles conda/.conda-timestamp docs/genozip-linux-x86_64.tar.gz.build docs/genozip-installer.exe docs prod # docs (almost) last, after version incremented # mac/.remote_mac_timestamp
+distribution: testfiles conda/.conda-timestamp docs/genozip-linux-x86_64.tar.gz.build docs/genozip-installer.exe publish-docs prod # docs (almost) last, after version incremented # mac/.remote_mac_timestamp
 	@(cd ../genozip-feedstock/ ; git pull)
 
 test-backup: genozip.exe
@@ -473,7 +472,7 @@ genozip-linux-x86_64/genounzip genozip-linux-x86_64/genocat genozip-linux-x86_64
 LINUX_TARGZ_OBJS = genozip-linux-x86_64/genozip genozip-linux-x86_64/genounzip genozip-linux-x86_64/genocat genozip-linux-x86_64/genols 
 
 # this must be run ONLY as part of "make distribution" or else versions will be out of sync
-docs/genozip-linux-x86_64.tar.gz: version.h genozip-linux-x86_64/clean $(LINUX_TARGZ_OBJS)
+docs/genozip-linux-x86_64.tar.gz: version.h genozip-linux-x86_64/clean $(LINUX_TARGZ_OBJS) # run on Linux by make-linux-from-windows.sh
 	@echo "Creating $@"
 	@tar cf $@ genozip-linux-x86_64 -z
 	@rm -f $(OBJDIR)/arch.o # remove this arch.o which contains DISTRIBUTION

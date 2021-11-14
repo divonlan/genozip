@@ -269,7 +269,7 @@ batch_print_header()
 {
     batch_id=$((batch_id + 1))
     echo "***************************************************************************"
-    echo "******* ${FUNCNAME[1]} (batch_id=${batch_id}) "
+    echo "******* ${FUNCNAME[1]} (batch_id=${batch_id}) " $1
     echo "***************************************************************************"
 }
 
@@ -845,25 +845,27 @@ batch_real_world_1_backcomp()
     done
 }
 
-batch_real_world_with_ref()
+batch_real_world_with_ref() # $1 extra genozip argument
 {
-    batch_print_header
+    batch_print_header $1
 
     cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
 
     # with two references
     test_standard "-mf $1 -e $GRCh38 -e $hs37d5" " " test.GRCh38_to_GRCh37.chain 
 
-    # with a reference
-    local files=( test.IonXpress.sam \
-                  test.human.fq.gz test.human2.bam test.human2.sam \
-                  test.human2-R1.100K.fq.bz2 test.pacbio.ccs.10k.bam test.pacbio.ccs.10k.sam \
-                  test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq test.pacbio.10k.hg19.sam.gz )
+    local files37=( test.IonXpress.sam \
+                    test.human.fq.gz test.human2.bam test.human2.sam \
+                    test.human2-R1.100K.fq.bz2 test.pacbio.ccs.10k.bam test.pacbio.ccs.10k.sam \
+                    test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq test.pacbio.10k.hg19.sam.gz \
+                    test.human2.filtered.snp.vcf )
 
-    echo "subsets of real world files (with reference)"
-    test_standard "-mf $1 -e $hs37d5" " " ${files[*]}
+    local files38=( test.1KG-38.vcf.gz )
 
-    for f in $files test.GRCh38_to_GRCh37.chain; do rm -f ${TESTDIR}/${f}.genozip ; done
+    test_standard "-mf $1 -e $hs37d5" " " ${files37[*]}
+    test_standard "-mf $1 -e $GRCh38" " " ${files38[*]}
+
+    for f in $files37 $files38 test.GRCh38_to_GRCh37.chain; do rm -f ${TESTDIR}/${f}.genozip ; done
 }
 
 
@@ -1203,8 +1205,8 @@ if (( $1 <= 29 )) ; then  batch_iupac                  ; fi
 if (( $1 <= 30 )) ; then  batch_real_world_small_vbs   ; fi 
 if (( $1 <= 31 )) ; then  batch_real_world_1           ; fi 
 if (( $1 <= 32 )) ; then  batch_real_world_1 --fast    ; fi 
-if (( $1 <= 33 )) ; then  batch_real_world_1 --best    ; fi 
-if (( $1 <= 34 )) ; then  batch_real_world_with_ref    ; fi 
+if (( $1 <= 33 )) ; then  batch_real_world_with_ref    ; fi 
+if (( $1 <= 34 )) ; then  batch_real_world_with_ref --best  ; fi # BAM/FASTQ with --best require a reference
 if (( $1 <= 35 )) ; then  batch_real_world_1_backcomp  ; fi 
 if (( $1 <= 36 )) ; then  batch_real_world_with_ref_backcomp ; fi 
 if (( $1 <= 37 )) ; then  batch_multifasta             ; fi

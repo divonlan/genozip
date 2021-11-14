@@ -61,7 +61,8 @@
         "segconf.h": "c",
         "coder.h": "c",
         "fqzcomp_qual.h": "c",
-        "stdlib.h": "c"
+        "stdlib.h": "c",
+        "zlib.h": "c"
     },
     "C_Cpp.dimInactiveRegions": false,
     "restructuredtext.confPath": "${workspaceFolder}\\docs",
@@ -74,5 +75,6 @@
                 "MSYSTEM": "MINGW64",
             },
         }
-      }
+    },
+    "restructuredtext.languageServer.disabled": true
 }
