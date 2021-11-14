@@ -66,9 +66,9 @@ bool ctx_is_show_dict_id (DictId dict_id)
 
     unsigned len = strlen (flag.show_one_dict);
     if (len <= 8)
-        return !memcmp (dict_id_str, flag.show_one_dict, len);
+        return !dict_id_str[MIN_(len,8)] && !memcmp (dict_id_str, flag.show_one_dict, len);
     else
-        return !memcmp (dict_id_str, flag.show_one_dict, 4) && !memcmp(&dict_id_str[4], &flag.show_one_dict[len-4], 4);
+        return !dict_id_str[MIN_(len,8)] && !memcmp (dict_id_str, flag.show_one_dict, 4) && !memcmp(&dict_id_str[4], &flag.show_one_dict[len-4], 4);
 }
 
 // ZIP: add a snip to the dictionary the first time it is encountered in the VCF file.
@@ -692,10 +692,11 @@ static Context *ctx_add_new_zf_ctx (VBlock *vb, const Context *vctx)
     mutex_initialize (zctx->mutex);
 
     zctx->did_i           = z_file->num_contexts; 
-    zctx->st_did_i        = vctx->st_did_i;
-    zctx->is_stats_parent = vctx->is_stats_parent;
     zctx->dict_id         = vctx->dict_id;
     zctx->luft_trans      = vctx->luft_trans;
+    zctx->st_did_i        = vctx->st_did_i;
+    zctx->is_stats_parent = vctx->is_stats_parent;
+
     memcpy ((char*)zctx->tag_name, vctx->tag_name, sizeof(zctx->tag_name));
     // note: lcodec is NOT copied here, see comment in zip_assign_best_codec
 
@@ -819,6 +820,17 @@ no_drop:
         iprintf ("%s vb_i=%u is all_the_same but cannot drop b250 because %s\n", vctx->tag_name, vb->vblock_i, reason);
 }
 
+// in case we're dropping vctx after already merging it - substract txt_len added in ctx_merge_in_one_vctx
+void ctx_substract_txt_len (VBlock *vb, ContextP vctx)
+{
+    Context *zctx  = ctx_get_zctx_from_vctx (vctx);
+    if (!zctx) return;
+
+    mutex_lock (zctx->mutex);
+    zctx->txt_len -= vctx->txt_len;
+    mutex_unlock (zctx->mutex);
+}
+
 // ZIP only: this is called towards the end of compressing one vb - merging its dictionaries into the z_file 
 // each dictionary is protected by its own mutex, and there is one z_file mutex protecting num_dicts.
 // we are careful never to hold two muteces at the same time to avoid deadlocks
@@ -826,7 +838,7 @@ static bool ctx_merge_in_one_vctx (VBlock *vb, ContextP vctx)
 {
     // get the ctx or create a new one. note: ctx_add_new_zf_ctx() must be called before mutex_lock() because it locks the z_file mutex (avoid a deadlock)
     Context *zctx  = ctx_get_zctx_from_vctx (vctx);
-    zctx = ctx_add_new_zf_ctx (vb, vctx);
+    if (!zctx) zctx = ctx_add_new_zf_ctx (vb, vctx);
 
     if (!mutex_trylock (zctx->mutex)) 
         return false; // zctx is currently locked by another VB 
@@ -929,7 +941,7 @@ void ctx_merge_in_vb_ctx (VBlock *vb)
         all_merged=true; // unless proven otherwise
         bool any_merged=false;
         for (ContextP vctx=CTX(0); vctx < CTX(vb->num_contexts); vctx++) 
-            if (!vctx->dict_merged) {
+            if (!vctx->dict_merged && vctx->dict_id.num) {
                 vctx->dict_merged = ctx_merge_in_one_vctx (vb, vctx); // false if zctx is locked by another VB
                 all_merged &= vctx->dict_merged;
                 any_merged |= vctx->dict_merged;
@@ -1262,7 +1274,7 @@ void ctx_free_context (Context *ctx, DidIType did_i)
     ctx->no_stons = ctx->pair_local = ctx->pair_b250 = ctx->stop_pairing = ctx->no_callback = ctx->line_is_luft_trans =
     ctx->local_param = ctx->no_vb1_sort = ctx->local_always = ctx->counts_section = ctx->no_drop_b250 = 0;
     ctx->dynamic_size_local = 0;
-    ctx->is_stats_parent = ctx->seg_initialized = ctx->local_compressed = ctx->dict_merged = 0;
+    ctx->is_stats_parent = ctx->seg_initialized = ctx->local_compressed = ctx->b250_compressed = ctx->dict_merged = 0;
     ctx->local_dep = 0;
     ctx->local_hash_prime = 0;
     ctx->num_new_entries_prev_merged_vb = 0;
@@ -1293,6 +1305,8 @@ void ctx_free_context (Context *ctx, DidIType did_i)
     ctx->last_snip = 0; 
     ctx->last_snip_len = 0;
     ctx->last_snip_ni = 0;
+
+    ctx->local_in_z = ctx->local_in_z_len = ctx->b250_in_z = ctx->b250_in_z_len = 0;
 
     memset (ctx->tag_name, 0, sizeof(ctx->tag_name));
 }
@@ -1345,10 +1359,12 @@ static void ctx_prepare_for_dict_compress (VBlockP vb)
     while (frag_ctx < ZCTX(z_file->num_contexts)) {
 
         if (!frag_next_node) {
-            if (!frag_ctx->nodes.len) {
+            if (!frag_ctx->nodes.len ||
+                frag_ctx->please_remove_dict) { // this context belongs to a method that lost the test and is not used in this file
                 frag_ctx++;
                 continue; // unused context
             }
+
             frag_next_node = FIRSTENT (const CtxNode, frag_ctx->nodes);
 
             ASSERT (frag_next_node->char_index + frag_next_node->snip_len <= frag_ctx->dict.len, 
@@ -1526,32 +1542,35 @@ done:
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined.
 }
 
+static void ctx_dict_build_word_list_one (ContextP ctx)
+{
+    if (!ctx->word_list.len || ctx->word_list.data) return; // skip if 1. no words, or 2. already built
+
+    buf_alloc (evb, &ctx->word_list, 0, ctx->word_list.len, CtxWord, 0, "contexts->word_list");
+    buf_set_overlayable (&ctx->word_list);
+
+    const char *word_start = ctx->dict.data;
+    for (uint64_t snip_i=0; snip_i < ctx->word_list.len; snip_i++) {
+
+        const char *c=word_start; while (*c) c++;
+
+        *ENT (CtxWord, ctx->word_list, snip_i) = (CtxWord) {
+            .snip_len   = c - word_start,
+            .char_index = word_start - ctx->dict.data
+        };
+
+        word_start = c+1; // skip over the \0 separator
+    }
+}
+
 static void ctx_dict_build_word_lists (void)
 {    
     START_TIMER;
 
     Context *last = ZCTX((flag.show_headers && exe_type == EXE_GENOCAT) ? CHROM : z_file->num_contexts);
 
-    for (Context *ctx=z_file->contexts; ctx <= last; ctx++) {
-
-        if (!ctx->word_list.len || ctx->word_list.data) continue; // skip if 1. no words, or 2. already built
-
-        buf_alloc (evb, &ctx->word_list, 0, ctx->word_list.len, CtxWord, 0, "contexts->word_list");
-        buf_set_overlayable (&ctx->word_list);
-
-        const char *word_start = ctx->dict.data;
-        for (uint64_t snip_i=0; snip_i < ctx->word_list.len; snip_i++) {
-
-            const char *c=word_start; while (*c) c++;
-
-            *ENT (CtxWord, ctx->word_list, snip_i) = (CtxWord) {
-                .snip_len   = c - word_start,
-                .char_index = word_start - ctx->dict.data
-            };
-
-            word_start = c+1; // skip over the \0 separator
-        }
-    }
+    for (Context *ctx=z_file->contexts; ctx <= last; ctx++) 
+        ctx_dict_build_word_list_one (ctx);
 
     COPY_TIMER_VB (evb, ctx_dict_build_word_lists);
 }
@@ -1806,6 +1825,40 @@ void ctx_rollback (VBlockP vb, Context *ctx)
     ctx->last_txt_len   = ctx->rback_last_txt_len;
     ctx->last_line_i    = LAST_LINE_I_INIT; // undo "encountered in line"
     ctx->last_snip      = NULL; // cancel caching in ctx_create_node_do
+}
+
+// ZIP: get total length in VB's z_data of b250 and local of all contexts in a context group
+uint64_t ctx_get_ctx_group_z_len (VBlockP vb, DidIType group_did_i)
+{
+    DidIType save = CTX(group_did_i)->st_did_i;
+    CTX(group_did_i)->st_did_i = group_did_i; // so parent is also included in the loop
+
+    uint64_t z_len = 0;
+    for (ContextP ctx=CTX(0); ctx < CTX(vb->num_contexts); ctx++)
+        if (ctx->st_did_i == group_did_i) 
+            z_len += ctx->local_in_z_len + ctx->b250_in_z_len; 
+
+    CTX(group_did_i)->st_did_i = save;
+
+    return z_len;
+}
+
+// ZIP: one per file from vcf_after_vbs - set the st_did_i of the winning group, 
+// and mark the directories of the losing group for deletion
+void ctx_declare_winning_group (DidIType winning_group_did_i, DidIType losing_group_did_i, DidIType new_st_did_i) 
+{
+    ZCTX(winning_group_did_i)->st_did_i = winning_group_did_i; // so group head is also included in the loop
+    ZCTX(losing_group_did_i) ->st_did_i = losing_group_did_i;
+
+    for (ContextP zctx=ZCTX(0); zctx < ZCTX(z_file->num_contexts); zctx++)
+        if (zctx->st_did_i == winning_group_did_i) {
+            zctx->st_did_i = new_st_did_i; 
+            zctx->is_stats_parent = false;
+        }
+        else if (zctx->st_did_i == losing_group_did_i)             
+            zctx->please_remove_dict = true;
+
+    ZCTX(new_st_did_i)->is_stats_parent = true; // assuming it is predefined - no need for mutex - set once and never reset
 }
 
 void ctx_foreach_buffer(ContextP ctx, bool set_name, void (*func)(BufferP buf, const char *func, unsigned line)) 

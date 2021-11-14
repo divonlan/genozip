@@ -27,8 +27,8 @@ static int64_t reconstruct_from_delta (VBlock *vb,
                                        const char *delta_snip, unsigned delta_snip_len,
                                        bool reconstruct) 
 {
-    ASSERT (delta_snip, "delta_snip is NULL. vb_i=%u", vb->vblock_i);
-    ASSERT (base_ctx->flags.store == STORE_INT, "reconstructing %s - calculating delta \"%.*s\" from a base of %s, but %s, doesn't have STORE_INT. vb_i=%u line_in_vb=%"PRIu64,
+    ASSPIZ (delta_snip, "delta_snip is NULL. vb_i=%u", vb->vblock_i);
+    ASSPIZ (base_ctx->flags.store == STORE_INT, "reconstructing %s - calculating delta \"%.*s\" from a base of %s, but %s, doesn't have STORE_INT. vb_i=%u line_in_vb=%"PRIu64,
             my_ctx->tag_name, delta_snip_len, delta_snip, base_ctx->tag_name, base_ctx->tag_name, vb->vblock_i, vb->line_i - vb->first_line);
 
     if (delta_snip_len == 1 && delta_snip[0] == '-')
@@ -123,7 +123,7 @@ void reconstruct_from_local_sequence (VBlock *vb, Context *ctx, STRp(snip))
     }
     else {
         len = vb->seq_len;
-        ASSERT (ctx->next_local + len <= ctx->local.len, "reading txt_line=%"PRIu64" vb_i=%u: unexpected end of %s data", 
+        ASSPIZ (ctx->next_local + len <= ctx->local.len, "reading txt_line=%"PRIu64" vb_i=%u: unexpected end of %s data", 
                 vb->line_i, vb->vblock_i, ctx->tag_name);
 
         if (reconstruct) RECONSTRUCT (&ctx->local.data[ctx->next_local], len);
@@ -133,16 +133,19 @@ void reconstruct_from_local_sequence (VBlock *vb, Context *ctx, STRp(snip))
     ctx->next_local += len;
 }
 
-Context *reconstruct_get_other_ctx_from_snip (VBlockP vb, pSTRp (snip))
+static Context *reconstruct_get_other_ctx_from_snip (VBlockP vb, ConstContextP ctx, pSTRp (snip))
 {
     unsigned b64_len = base64_sizeof (DictId);
-    ASSERT (b64_len + 1 <= *snip_len, "snip_len=%u but expecting it to be >= %u", *snip_len, b64_len + 1);
+    char err[*snip_len+20];
+    ASSPIZ (b64_len + 1 <= *snip_len, "ctx=%s snip=\"%s\" snip_len=%u but expecting it to be >= %u", 
+            ctx->tag_name, str_print_snip(*snip, *snip_len, err), *snip_len, b64_len + 1);
 
     DictId dict_id;
     base64_decode ((*snip)+1, &b64_len, dict_id.id);
 
     Context *other_ctx = ECTX (dict_id);
-    ASSERT (other_ctx, "Failed to get other context: snip=%.*s dict_id=%s", STRf(*snip), dis_dict_id(dict_id).s);
+    ASSPIZ (other_ctx, "Failed to get other context: ctx=%s snip=%.*s other_dict_id=%s", 
+                        ctx->tag_name, STRf(*snip), dis_dict_id(dict_id).s);
   
     *snip     += b64_len + 1;
     *snip_len -= b64_len + 1;
@@ -203,7 +206,7 @@ bool reconstruct_from_buddy (VBlock *vb, Context *ctx, STRp(snip), bool reconstr
     // optional: base context is different than ctx
     else if (snip_len > 1) {
         snip--; snip_len++; // reconstruct_get_other_ctx_from_snip skips the first char
-        base_ctx = reconstruct_get_other_ctx_from_snip (vb, &snip, &snip_len);
+        base_ctx = reconstruct_get_other_ctx_from_snip (vb, ctx, pSTRa(snip));
     }
 
     // case: numeric value 
@@ -228,7 +231,7 @@ bool reconstruct_from_buddy (VBlock *vb, Context *ctx, STRp(snip), bool reconstr
 
 static ValueType reconstruct_from_lookback (VBlock *vb, Context *ctx, STRp(snip), bool reconstruct)
 {   
-    int64_t lookback = reconstruct_get_other_ctx_from_snip (vb, pSTRa(snip))->last_value.i;
+    int64_t lookback = reconstruct_get_other_ctx_from_snip (vb, ctx, pSTRa(snip))->last_value.i;
     ValueType value;
 
     if (!snip_len) { // a lookback by index
@@ -281,7 +284,7 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
             { snip++; snip_len--; }
         else 
             // we are request to reconstruct from another ctx
-            base_ctx = reconstruct_get_other_ctx_from_snip (vb, &snip, &snip_len); // also updates snip and snip_len
+            base_ctx = reconstruct_get_other_ctx_from_snip (vb, snip_ctx, pSTRa(snip)); // also updates snip and snip_len
 
         switch (base_ctx->ltype) {
             case LT_TEXT:
@@ -331,23 +334,25 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         have_new_value = true;
         break;
 
-    case SNIP_PAIR_LOOKUP: {
-        ASSERT (snip_ctx->pair_b250, "no pair_1 b250 data for ctx=%s, while reconstructing pair_2 vb=%u. "
+    case SNIP_MATE_LOOKUP: {
+        ASSPIZ (z_file->data_type == DT_FASTQ, "SNIP_MATE_LOOKUP is not expected in ctx=%s since this isn't a FASTQ", snip_ctx->tag_name);
+
+        ASSPIZ (snip_ctx->pair_b250, "no pair_1 b250 data for ctx=%s, while reconstructing pair_2. "
                 "If this file was compressed with Genozip version 9.0.12 or older use the --dts_paired flag. "
-                "You can see the Genozip version used to compress it with 'genocat -w %s'", snip_ctx->tag_name, vb->vblock_i, z_name);
+                "You can see the Genozip version used to compress it with 'genocat -w %s'", snip_ctx->tag_name, z_name);
                 
         ctx_get_next_snip (vb, snip_ctx, snip_ctx->pair_flags.all_the_same, true, &snip, &snip_len);
         reconstruct_one_snip (vb, snip_ctx, WORD_INDEX_NONE /* we can't cache pair items */, snip, snip_len, reconstruct); // might include delta etc - works because in --pair, ALL the snips in a context are PAIR_LOOKUP
         break;
     }
     case SNIP_OTHER_DELTA: 
-        base_ctx = reconstruct_get_other_ctx_from_snip (vb, pSTRa(snip)); // also updates snip and snip_len
+        base_ctx = reconstruct_get_other_ctx_from_snip (vb, snip_ctx, pSTRa(snip)); // also updates snip and snip_len
         new_value.i = reconstruct_from_delta (vb, snip_ctx, base_ctx, STRa(snip), reconstruct); 
         have_new_value = true;
         break;
 
     case SNIP_PAIR_DELTA: { // used for FASTQ_GPOS - uint32_t stored in originating in the pair's local
-        ASSERT (snip_ctx->pair_local, "no pair_1 local data for ctx=%s, while reconstructing pair_2 vb=%u", snip_ctx->tag_name, vb->vblock_i);
+        ASSPIZ (snip_ctx->pair_local, "no pair_1 local data for ctx=%s, while reconstructing pair_2 vb=%u", snip_ctx->tag_name, vb->vblock_i);
         uint32_t fastq_line_i = vb->line_i / 4 - vb->first_line; // see fastq_piz_filter for calculation
         int64_t pair_value = (int64_t) *ENT (uint32_t, snip_ctx->pair, fastq_line_i);  
         int64_t delta = (int64_t)strtoull (snip+1, NULL, 10 /* base 10 */); 
@@ -358,26 +363,26 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
     }
 
     case SNIP_COPY: 
-        base_ctx = (snip_len==1) ? snip_ctx : reconstruct_get_other_ctx_from_snip (vb, pSTRa(snip)); 
+        base_ctx = (snip_len==1) ? snip_ctx : reconstruct_get_other_ctx_from_snip (vb, snip_ctx, pSTRa(snip)); 
         RECONSTRUCT (last_txtx (vb, base_ctx), base_ctx->last_txt_len);
         new_value = base_ctx->last_value; 
         have_new_value = true;
         break;
 
     case SNIP_SPECIAL:
-        ASSERT (snip_len >= 2, "SNIP_SPECIAL expects snip_len=%u >= 2. ctx=%s vb_i=%u line_i=%"PRIu64, 
+        ASSPIZ (snip_len >= 2, "SNIP_SPECIAL expects snip_len=%u >= 2. ctx=%s vb_i=%u line_i=%"PRIu64, 
                 snip_len, snip_ctx->tag_name, vb->vblock_i, vb->line_i);
                 
         uint8_t special = snip[1] - 32; // +32 was added by SPECIAL macro
 
-        ASSERT (special < DTP (num_special), "file requires special handler %u which doesn't exist in this version of genozip - please upgrade to the latest version", special);
+        ASSPIZ (special < DTP (num_special), "file requires special handler %u which doesn't exist in this version of genozip - please upgrade to the latest version", special);
         ASSERT_DT_FUNC (vb, special);
 
         have_new_value = DT_FUNC(vb, special)[special](vb, snip_ctx, snip+2, snip_len-2, &new_value, reconstruct);  
         break;
 
     case SNIP_REDIRECTION: 
-        base_ctx = reconstruct_get_other_ctx_from_snip (vb, pSTRa(snip)); // also updates snip and snip_len
+        base_ctx = reconstruct_get_other_ctx_from_snip (vb, snip_ctx, pSTRa(snip)); // also updates snip and snip_len
         reconstruct_from_ctx (vb, base_ctx->did_i, 0, reconstruct);
         break;
     
@@ -483,7 +488,7 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
                                  bool reconstruct, // if false, calculates last_value but doesn't output to vb->txt_data
                                  const char *func)
 {
-    ASSERT (did_i < vb->num_contexts, "called from: %s: did_i=%u out of range: vb->num_contexts=%u for vb_i=%u", 
+    ASSPIZ (did_i < vb->num_contexts, "called from: %s: did_i=%u out of range: vb->num_contexts=%u for vb_i=%u", 
             func, did_i, vb->num_contexts, vb->vblock_i);
 
     Context *ctx = CTX(did_i);
@@ -492,7 +497,7 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
     if (vb->frozen_state.param) 
         reconstruct_peek_add_ctx_to_frozen_state (vb, ctx);
 
-    ASSERT0 (ctx->dict_id.num || ctx->did_i != DID_I_NONE, "ctx not initialized (dict_id=0)");
+    ASSPIZ0 (ctx->dict_id.num || ctx->did_i != DID_I_NONE, "ctx not initialized (dict_id=0)");
 
     // update ctx, if its an alias (only for primary field aliases as they have contexts, other alias don't have ctx)
     if (!ctx->dict_id.num) 
@@ -567,7 +572,7 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
         if (reconstruct) { RECONSTRUCT1('\n'); }
     }
 
-    else ASSERT (flag.missing_contexts_allowed,
+    else ASSPIZ (flag.missing_contexts_allowed,
                  "Error in reconstruct_from_ctx_do: ctx %s/%s has no data (dict, b250 or local) in vb_i=%u line_i=%"PRIu64" did_i=%u ctx->did=%u ctx->dict_id=%s", 
                  dtype_name_z (ctx->dict_id), ctx->tag_name, vb->vblock_i, vb->line_i, did_i, ctx->did_i, dis_dict_id (ctx->dict_id).s);
 
@@ -650,7 +655,7 @@ ValueType reconstruct_peek (VBlock *vb, Context *ctx,
 
     // since we are reconstructing unaccounted for data, make sure we didn't go beyond the end of txt_data (this can happen if we are close to the end
     // of the VB, and reconstructed more than OVERFLOW_SIZE allocated in piz_reconstruct_one_vb)
-    ASSERT (vb->txt_data.len <= vb->txt_data.size, "txt_data overflow while peeking %s in vb_i=%u: len=%"PRIu64" size=%"PRIu64" last_txt_len=%u", 
+    ASSPIZ (vb->txt_data.len <= vb->txt_data.size, "txt_data overflow while peeking %s in vb_i=%u: len=%"PRIu64" size=%"PRIu64" last_txt_len=%u", 
             ctx->tag_name, vb->vblock_i, vb->txt_data.len, vb->txt_data.size, ctx->last_txt_len);
 
     if (txt) *txt = last_txtx (vb, ctx);

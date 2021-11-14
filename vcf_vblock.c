@@ -27,8 +27,9 @@ void vcf_vb_release_vb (VBlockVCF *vb)
     vb->new_ref = 0;
     vb->is_del_sv = 0;
     vb->vcf_version = 0;
+    vb->PL_mux_by_DP = 0;
     
-    memset (&vb->mux_PL,     0, sizeof(vb->mux_PL));
+    memset (&vb->mux_PLn,    0, sizeof(vb->mux_PLn));
     memset (&vb->mux_GL,     0, sizeof(vb->mux_GL));
     memset (&vb->mux_GP,     0, sizeof(vb->mux_GP));
     memset (&vb->mux_PRI,    0, sizeof(vb->mux_PRI));
@@ -40,7 +41,7 @@ void vcf_vb_release_vb (VBlockVCF *vb)
     memset (&vb->mux_GQ,     0, sizeof(vb->mux_GQ));
     memset (&vb->mux_AD,     0, sizeof(vb->mux_AD));
     memset (&vb->mux_ADALL,  0, sizeof(vb->mux_ADALL));
-    memset (&vb->mux_PL_xDP, 0, sizeof(vb->mux_PL_xDP));
+    memset (&vb->mux_PLy,    0, sizeof(vb->mux_PLy));
     
     buf_free (&vb->sf_txt);
     buf_free (&vb->sf_snip);

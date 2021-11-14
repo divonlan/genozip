@@ -28,13 +28,13 @@ typedef struct { char s[80]; } StrText;
 
 extern StrText char_to_printable (char c);
 
-extern char *str_print_snip (const char *in, uint32_t in_len, char *out);
+extern char *str_print_snip (STRp(in), char *out);
 
-extern char *str_to_printable (const char *in, uint32_t in_len, char *out);
+extern char *str_to_printable (STRp(in), char *out);
 extern char *str_tolower (const char *in, char *out /* out allocated by caller - can be the same as in */);
 extern char *str_toupper (const char *in, char *out);
 
-static bool inline str_issame_ (const char *str1, uint32_t str1_len, const char *str2, uint32_t str2_len) // true if the same
+static bool inline str_issame_ (STRp(str1), STRp(str2)) // true if the same
 {
     return (str1_len == str2_len) && !memcmp (str1, str2, str1_len);
 }

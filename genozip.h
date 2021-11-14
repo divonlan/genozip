@@ -173,7 +173,7 @@ typedef          __int128 int128_t;
 
 // used for qsort sort function - receives two integers of any type and returns -1/0/1 as required to sort in ascending order
 #define ASCENDING(a,b) (((a) > (b)) ? 1 : (a) < (b) ? -1 : 0)
-#define DESCENDING(a,b) (-ASCENDING((a),(b))
+#define DESCENDING(a,b) (-ASCENDING((a),(b)))
 
 #define DO_ONCE static uint64_t do_once=0; if (!(do_once++))  // note: not thread-safe - in compute threads, in rare race-conditions, this can be executed more than once
 

@@ -32,7 +32,7 @@
 #define SNIP_SEP                 '\x0'   // Seperator between snips - both for dict and local 
 #define SNIP_LOOKUP              '\x1'   // Lookup from local (optionally followed by a snip - interpreted differently by local type, see reconstruct_one_snip)
 #define SNIP_OTHER_LOOKUP        '\x2'   // Lookup from local of other dict_id (possibly with length for sequence storage)
-#define SNIP_PAIR_LOOKUP         '\x3'   // Lookup from paired file (when using --pair)  
+#define SNIP_MATE_LOOKUP         '\x3'   // Lookup from paired file (when using --pair)  
 #define SNIP_CONTAINER           '\x4'   // Appears as first character in the SNIP, followed by a specification of a container field
 #define SNIP_SELF_DELTA          '\x5'   // The value is a uint32_t which is a result of the last value + the positive or negative textual int32_t value following this character
 #define SNIP_OTHER_DELTA         '\x6'   // The value is a uint32_t which is a result of the last value of another field + the delta value. following this char, {DictId dict_id, int32_t delta, bool update_other} in base64)
@@ -46,7 +46,7 @@
 #define SNIP_COPY_BUDDY          '\x11'  // Copy a snip on an earlier "buddy" line in the same or another context (note: offset back to the previous snip is variable, but its line number is fixed) (introduced 12.0.41)
 #define NUM_SNIP_CODES           18
 
-#define SNIP_CODES { "SNIP_SEP", "SNIP_LOOKUP", "SNIP_OTHER_LOOKUP", "SNIP_PAIR_LOOKUP",\
+#define SNIP_CODES { "SNIP_SEP", "SNIP_LOOKUP", "SNIP_OTHER_LOOKUP", "SNIP_MATE_LOOKUP",\
                      "SNIP_CONTAINER", "SNIP_SELF_DELTA", "SNIP_OTHER_DELTA", "SNIP_PAIR_DELTA", \
                      "SNIP_SPECIAL", "<TAB>", "<NL>", "SNIP_REDIRECTION",\
                      "SNIP_DONT_STORE", "<LF>", "SNIP_COPY", "SNIP_DUAL", "SNIP_LOOKBACK" }
@@ -116,6 +116,7 @@ extern CtxNode *ctx_node_vb_do (ConstContextP ctx, WordIndex node_index, const c
 extern CtxNode *ctx_node_zf_do (ConstContextP ctx, int32_t node_index, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
 #define ctx_node_zf(ctx, node_index, snip_in_dict, snip_len) ctx_node_zf_do(ctx, node_index, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
 extern void ctx_merge_in_vb_ctx (VBlockP vb);
+extern void ctx_substract_txt_len (VBlockP vb, ContextP vctx);
 extern void ctx_add_compressor_time_to_zf_ctx (VBlockP vb);
 extern void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vctx, bool is_lcodec);
 
@@ -226,7 +227,8 @@ static inline void ctx_create_rollback_point (ContextP ctx)
 extern void ctx_rollback (VBlockP vb, ContextP ctx);
 
 static inline bool ctx_can_have_singletons (ContextP ctx) 
-    { return (ctx->ltype == LT_TEXT) && !ctx->dynamic_size_local && !ctx->no_stons && (ctx->flags.store != STORE_INDEX); }
+    { return (ctx->ltype == LT_TEXT) && !ctx->dynamic_size_local && !ctx->no_stons && 
+              (ctx->flags.store != STORE_INDEX) && !ctx->flags.all_the_same; } 
 
 // returns true if dict_id was *previously* segged on this line, and we stored a valid last_value (int or float)
 #define ctx_has_value_in_line_(vb, ctx) ((ctx)->last_line_i == (vb)->line_i)
@@ -302,5 +304,10 @@ static inline bool ctx_has_value (VBlockP vb, DidIType did_i)
 
 static inline bool ctx_has_value_by_dict_id (VBlockP vb, DictId dict_id, ContextP *p_ctx) 
     { return ctx_has_value_in_line_do (vb, dict_id, p_ctx) && (*p_ctx)->last_sample_i == vb->sample_i; }
+
+extern uint64_t ctx_get_ctx_group_z_len (VBlockP vb, DidIType group_did_i);
+
+typedef enum { KR_KEEP, KR_REMOVE } CtxKeepRemove;
+extern void ctx_declare_winning_group (DidIType winning_group_did_i, DidIType losing_group_did_i, DidIType new_st_did_i);
 
 extern void ctx_foreach_buffer(ContextP ctx, bool set_name, void (*func)(BufferP buf, const char *func, unsigned line));

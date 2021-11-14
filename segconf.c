@@ -91,7 +91,7 @@ static void segconf_set_vb_size (const VBlock *vb, uint64_t curr_vb_size)
         }
     }
     
-    if (flag.best)
+    if (flag.best && !flag.vblock)
         segconf.vb_size = MAX_(segconf.vb_size, VBLOCK_MEMORY_BEST);
 }
 
@@ -99,6 +99,8 @@ void segconf_initialize (void)
 {
     if (z_file->num_txt_components_so_far == 0)
         segconf = (SegConf){}; // reset for new z_file
+
+    mutex_initialize (segconf.PL_mux_by_DP_mutex);
 }
 
 // ZIP: Seg a small sample of data of the beginning of the data, to pre-calculate several Seg configuration parameters

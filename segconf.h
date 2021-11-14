@@ -14,6 +14,8 @@ typedef enum { TECH_UNKNOWN, TECH_ILLUM_7, TECH_ILLUM_5, TECH_PACBIO, TECH_ONP, 
 
 typedef enum { SQT_UNKNOWN, SQT_NUKE, SQT_AMINO, SQT_NUKE_OR_AMINO } SeqType;
 
+typedef enum { PL_mux_by_DP_TEST, PL_mux_by_DP_NO, PL_mux_by_DP_YES } PLMuxByDP;
+
 // seg configuration set prior to starting to seg a file during segconfig_calculate or txtheader_zip_read_and_compress
 typedef struct {
 
@@ -29,6 +31,7 @@ typedef struct {
     bool NM_is_integer;         // true if NM is integer, false if it binary
     bool has_MC, has_MD, has_MQ, has_ms; // these fields are detected in the data
     bool has_TLEN_non_zero;
+    bool has_DP_before_PL;
     enum { XA_NONE, XA_BWA, XA_IONTORRENT, XA_UNKNOWN } has_XA; // IonTorret and BWA have different XA:Z
     bool sam_is_collated;       // Every QNAME appears in two or more consecutive lines
     bool sam_is_sorted;         // every two consecutive lines that have the same RNAME, have non-decreasing POS
@@ -42,6 +45,9 @@ typedef struct {
     bool vcf_has_ADALL;
     uint64_t count_dosage[2];   // used to calculate pc_has_dosage
     float pc_has_dosage;        // % of the samples x lines that have a valid (0-2) dosage value [0.0,1.0]
+
+    PLMuxByDP PL_mux_by_DP;
+    Mutex PL_mux_by_DP_mutex;
 
     uint64_t count_GQ_by_PL, count_GQ_by_GP; // used tp calculate GQ_by_PL, GQ_by_GP
     bool GQ_by_PL, GQ_by_GP;

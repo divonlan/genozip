@@ -328,7 +328,7 @@ int32_t bam_is_header_done (bool is_eof)
 
     HDRSKIP(4); // magic
     ASSINP (!memcmp (evb->txt_data.data, BAM_MAGIC, 4), // magic
-            "%s doesn't have a BAM magic - it doesn't seem to be a BAM file", txt_name);
+            "%s doesn't have a BAM magic - it doesn't seem to be a BAM file: magic=%2.2x%2.2x%2.2x%2.2x ", txt_name, (uint8_t)evb->txt_data.data[0], (uint8_t)evb->txt_data.data[1], (uint8_t)evb->txt_data.data[2], (uint8_t)evb->txt_data.data[3]);
 
     // sam header text
     uint32_t l_text = HDR32;

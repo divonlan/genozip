@@ -15,17 +15,19 @@
 #include "base64.h"
 #include "stats.h"
 #include "piz.h"
+#include "zfile.h"
+#include "zip.h"
 
 static SmallContainer con_AD={}, con_ADALL={}, con_ADF={}, con_ADR={}, con_SAC={}, con_F1R2={}, con_F2R1={}, 
     con_MB={}, con_SB={}, con_AF={};
 
 static char sb_snips[2][32], mb_snips[2][32], f2r1_snips[VCF_MAX_ARRAY_ITEMS][32], adr_snips[VCF_MAX_ARRAY_ITEMS][32], adf_snips[VCF_MAX_ARRAY_ITEMS][32], 
     rdf_snip[32], rdr_snip[32], adf_snip[32], adr_snip[32], ad_varscan_snip[32], ab_snip[48], gq_by_pl[50], gq_by_gp[50],
-    af_snip[32], sac_snips[VCF_MAX_ARRAY_ITEMS/2][32];
+    af_snip[32], sac_snips[VCF_MAX_ARRAY_ITEMS/2][32], PL_to_PLn_redirect_snip[30], PL_to_PLy_redirect_snip[30];
 
 static unsigned sb_snip_lens[2], mb_snip_lens[2], f2r1_snip_lens[VCF_MAX_ARRAY_ITEMS], adr_snip_lens[VCF_MAX_ARRAY_ITEMS], adf_snip_lens[VCF_MAX_ARRAY_ITEMS], 
     af_snip_len, sac_snip_lens[VCF_MAX_ARRAY_ITEMS/2], rdf_snip_len, rdr_snip_len, adf_snip_len, adr_snip_len, ad_varscan_snip_len,
-    ab_snip_len, gq_by_pl_len, gq_by_gp_len;
+    ab_snip_len, gq_by_pl_len, gq_by_gp_len, PL_to_PLn_redirect_snip_len, PL_to_PLy_redirect_snip_len;
 
 // prepare snip of A - B
 static void vcf_seg_prepare_minus_snip (DictId dict_id_a, DictId dict_id_b, char *snip, unsigned *snip_len)
@@ -110,12 +112,67 @@ void vcf_samples_zip_initialize (void)
     gq_by_pl_len = sizeof (gq_by_pl);
     seg_prepare_multi_dict_id_special_snip (VCF_SPECIAL_GQ, 1, (DictId[]){ (DictId)_FORMAT_PL }, gq_by_pl, &gq_by_pl_len);
     gq_by_pl[gq_by_pl_len++] = '\t';
+
+    // two redirection snips that must be the same length - we might interchange them in-place in the dictionary
+    PL_to_PLy_redirect_snip_len = PL_to_PLn_redirect_snip_len = sizeof (PL_to_PLy_redirect_snip);
+    seg_prepare_snip_other (SNIP_REDIRECTION, _FORMAT_PLy, false, 0, PL_to_PLy_redirect_snip);
+    seg_prepare_snip_other (SNIP_REDIRECTION, _FORMAT_PLn, false, 0, PL_to_PLn_redirect_snip);
+    ASSERT (PL_to_PLy_redirect_snip_len == PL_to_PLn_redirect_snip_len, "Expecting PL_to_PLy_redirect_snip_len%u == PL_to_PLn_redirect_snip_len=%u", PL_to_PLy_redirect_snip_len, PL_to_PLn_redirect_snip_len);
+}
+
+void vcf_samples_seg_initialize (VBlockVCFP vb)
+{
+    CTX(FORMAT_ADALL)->flags.store = STORE_INT;
+    CTX(FORMAT_DP)->   flags.store = STORE_INT;
+    CTX(FORMAT_AD)->   flags.store = STORE_INT;   // since v13
+    CTX(FORMAT_RD)->   flags.store = STORE_INT;   // since v13
+    CTX(FORMAT_RDR)->  flags.store = STORE_INT;   // since v13
+    CTX(FORMAT_RDF)->  flags.store = STORE_INT;   // since v13
+    CTX(FORMAT_ADR)->  flags.store = STORE_INT;   // since v13
+    CTX(FORMAT_ADF)->  flags.store = STORE_INT;   // since v13
+    CTX(FORMAT_SDP)->  flags.store = STORE_INT;   // since v13
+
+    CTX(FORMAT_PS)->   flags.store = STORE_INT;   
+    CTX(FORMAT_PS)->   no_stons = true;   
+
+    CTX(FORMAT_GT)->no_stons  = true; // we store the GT matrix in local, so cannot accomodate singletons
+    vb->ht_matrix_ctx = CTX(FORMAT_GT_HT); // different for different data types
+
+    // create additional contexts as needed for compressing FORMAT/GT - must be done before merge
+    if (vcf_num_samples) 
+        codec_pbwt_seg_init (VB, CTX(FORMAT_PBWT_RUNS), CTX(FORMAT_PBWT_FGRC));
+
+    stats_set_consolidation (VB, FORMAT_GT,  4, FORMAT_GT_HT, FORMAT_GT_HT_INDEX, FORMAT_PBWT_RUNS, FORMAT_PBWT_FGRC);
+    stats_set_consolidation (VB, FORMAT_AB,  1, FORMAT_AB3);
+
+    // determine which way to seg PL - Mux by dosage or Mux by dosageXDP, or test both options
+    CTX(FORMAT_PL)->no_stons = true;
+    vb->PL_mux_by_DP = (flag.best && !z_dual_coords && !segconf.running && segconf.has_DP_before_PL) 
+        ? segconf.PL_mux_by_DP // set by a previous VB in vcf_FORMAT_PL_decide or still in its initial value of PL_mux_by_DP_TEST
+        : PL_mux_by_DP_NO;
+
+    // initialize dosage multiplexers
+    #define init_mux(name,store_type) seg_mux_init ((VBlockP)vb, 4, VCF_SPECIAL_MUX_BY_DOSAGE, FORMAT_##name, FORMAT_##name, (store_type), (MultiplexerP)&vb->mux_##name, "0123")
+    init_mux(PRI,  STORE_NONE);
+    init_mux(GL,   STORE_NONE);
+    init_mux(DS,   STORE_NONE);
+    init_mux(PP,   STORE_NONE);
+    init_mux(GP,   STORE_NONE);
+    init_mux(GQ,   STORE_NONE);
+    init_mux(PVAL, STORE_NONE);
+    init_mux(FREQ, STORE_NONE);
+    init_mux(RD,   STORE_INT);
+    init_mux(PLn,  STORE_NONE);
+
+    seg_mux_init (VB, 3*DOSAGExDP_NUM_DPs + 1, VCF_SPECIAL_MUX_BY_DOSAGExDP, FORMAT_PLy, FORMAT_PLy, STORE_NONE, (MultiplexerP)&vb->mux_PLy, NULL);
 }
 
 //--------------------
 // Multiplex by dosage
 // -------------------
 
+// returns: 0,1,2 correspond to 0/0 0/1 1/1, 3 means "no dosage" - multi-allelic or '.' or ploidy > 2
+// -1 means caller should not use her SPECIAL
 static inline int vcf_seg_get_mux_channel_i (VBlockVCFP vb, bool fail_if_dvcf_refalt_switch)
 {
     // fail if this is a DVCF ref<>alt switch, if caller requested so,
@@ -123,8 +180,8 @@ static inline int vcf_seg_get_mux_channel_i (VBlockVCFP vb, bool fail_if_dvcf_re
     if (fail_if_dvcf_refalt_switch && z_dual_coords)// && LO_IS_OK_SWITCH (last_ostatus)) // TODO: no real need to fallback unless REF<>ALT switch, but this doesn't work yet
         return -1;
 
-    // fail if there is no valid GT in this sample
-    if (!ctx_has_value (VB, FORMAT_GT))
+    // fail if there is no GT in this variant
+    if (!ctx_encountered_in_line (VB, FORMAT_GT))
         return -1;
 
     int64_t dosage = CTX(FORMAT_GT)->last_value.i; // dosage stored here by vcf_seg_FORMAT_GT
@@ -191,21 +248,16 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_DOSAGE)
 // if cell is NULL, leaves it up to the caller to seg to the channel 
 static inline void vcf_seg_FORMAT_mux_by_dosagexDP (VBlockVCF *vb, Context *ctx, STRp(cell), const DosageDPMultiplexer *mux) 
 {
+    if (!ctx_encountered (VB, FORMAT_DP)) goto cannot_use_special; // no DP in the FORMAT of this line
+
     int64_t DP;
     if (!str_get_int (last_txt(vb, FORMAT_DP), vb->last_txt_len(FORMAT_DP), &DP)) // In some files, DP may be '.'
         DP=0;
 
-    // if DP is 0 (or not a positive integer), we predict that our value is '.'. we don't use any channel for it.
-    if (DP <= 0) {
-        if (cell_len != 1 || *cell != '.') goto cannot_use_special;
-        seg_by_ctx (VB, STRa(mux->snip), ctx, 1);
-        return;
-    }
-
     int channel_i = vcf_seg_get_mux_channel_i (vb, true); // we don't use the multiplexer if its a DVCF REF<>ALT switch variant as GT changes
     if (channel_i == -1) goto cannot_use_special;
 
-    DP = MIN_(DP, DOSAGExDP_NUM_DPs-1);
+    DP = MAX_(0, MIN_(DP, DOSAGExDP_NUM_DPs-1));
     channel_i = (channel_i == 3) ? (DOSAGExDP_NUM_DPs * 3) : (DP*3 + channel_i);
 
     ContextP channel_ctx = seg_mux_get_channel_ctx (VB, MUX, channel_i);
@@ -226,12 +278,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_DOSAGExDP)
     unsigned num_dps = num_channels / 3;
 
     int64_t DP = ctx_has_value (vb, FORMAT_DP) ? CTX(FORMAT_DP)->last_value.i : 0; // possibly "."
-    if (DP <= 0) {
-        if (reconstruct) RECONSTRUCT1('.');
-        return false;
-    }
-
-    if (DP >= num_dps) DP = num_dps-1;
+    DP = MAX_(0, MIN_(DP, num_dps-1));
 
     int channel_i = vcf_piz_get_mux_channel_i (vb); 
     channel_i = (channel_i == 3) ? (num_dps * 3) : (DP*3 + channel_i);
@@ -246,44 +293,6 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_DOSAGExDP)
     // propagate last_value up
     new_value->i = channel_ctx->last_value.i; // note: last_value is a union, this copies the entire union
     return true; 
-}
-
-/* used by files compressed by Genozip up to 12.0.42. Kept here, commented out, for documentation 
-// DS is a value [0,ploidy] which is a the sum of GP values that refer to allele!=0. Eg for bi-allelic diploid it is: GP[1] + 2*GP[2] (see: https://www.biostars.org/p/227346/)
-// the DS (allele DoSage) value is usually close to or exactly the sum of '1' alleles in GT. we store it as a delta from that,
-// along with the floating point format to allow exact reconstruction
-static inline WordIndex vcf_seg_FORMAT_DS (VBlockVCF *vb, Context *ctx, const char *cell, unsigned cell_len)
-{
-    int64_t dosage = ctx_has_value (VB, FORMAT_GT) ? CTX(FORMAT_GT)->last_value.i : -1; // dosage stored here by vcf_seg_FORMAT_GT
-    double ds_val;
-    unsigned format_len;
-    char snip[FLOAT_FORMAT_LEN + 20] = { SNIP_SPECIAL, VCF_SPECIAL_DS }; 
-
-    if (dosage < 0 || !str_get_float (cell, cell_len, &ds_val, &snip[2], &format_len)) 
-        return seg_by_ctx (VB, cell, cell_len, ctx, cell_len);
-
-    unsigned snip_len = 2 + format_len;
-    snip[snip_len++] = ' ';
-    snip_len += str_int ((int64_t)((ds_val - dosage) * 1000000), &snip[snip_len]);
-
-    return seg_by_ctx (VB, snip, snip_len, ctx, cell_len);
-}
-*/
-
-// used for decompressing files compressed with version up to 12.0.42
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_DS_old)
-{
-    if (!reconstruct) goto done;
-
-    char float_format[10];
-    int32_t val;
-    sscanf (snip, "%s %d", float_format, &val); // snip looks like eg: "%5.3f 50000"
-
-    unsigned dosage = vcf_piz_get_mux_channel_i (vb); // seg guaranteed 0, 1 or 2 (or else this SPECIAL is not used)
-    bufprintf (vb, &vb->txt_data, float_format, (double)val / 1000000 + dosage);
-
-done:
-    return false; // no new value
 }
 
 // used when CTX is expected to be (BaseCtx-MinusCtx) - if it indeed is, we use a special snip
@@ -314,7 +323,7 @@ static inline WordIndex vcf_seg_FORMAT_transposed (VBlockVCF *vb, Context *ctx, 
 {
     ctx->ltype = LT_UINT32_TR;
     ctx->flags.store = STORE_INT;
-
+    
     buf_alloc (vb, &ctx->local, 1, vb->lines.len * vcf_num_samples, uint32_t, 1, "contexts->local");
 
     if (cell_len == 1 && cell[0] == '.') {
@@ -350,8 +359,12 @@ static WordIndex vcf_seg_FORMAT_A_R (VBlockVCF *vb, Context *ctx, SmallContainer
     for (unsigned i=0; i < con.nitems_lo; i++) {
 
         item_ctxs[i] = ctx_get_ctx (vb, con.items[i].dict_id);
-        item_ctxs[i]->flags.store = item_store_type;
-        item_ctxs[i]->st_did_i = ctx->did_i;
+        
+        if (!item_ctxs[i]->seg_initialized) {
+            item_ctxs[i]->flags.store = item_store_type;
+            item_ctxs[i]->seg_initialized = true;
+            stats_set_consolidation (VB, ctx->did_i, 1, item_ctxs[i]->did_i);
+        }
 
         if (seg_item_cb) {
             if (str_get_int (STRi(item, i), &values[i])) 
@@ -371,7 +384,7 @@ static WordIndex vcf_seg_FORMAT_A_R (VBlockVCF *vb, Context *ctx, SmallContainer
             seg_by_ctx (VB, STRi(item, i), item_ctxs[i], item_lens[i]);
 
     ctx->last_txt_len = con.nitems_lo; // seg only: for use by vcf_seg_*_items callbacks
-
+    
     return container_seg (vb, ctx, (ContainerP)&con, 0, 0, con.nitems_lo-1); // account for the commas
 }
 
@@ -967,8 +980,142 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_AB)
 }
 
 //----------
+// FORMAT/PL
+// ---------
+
+// <ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes as defined in the VCF specification">       
+static inline void vcf_seg_FORMAT_PL (VBlockVCF *vb, Context *ctx, STRp(PL))
+{
+    if (segconf.running && !segconf.has_DP_before_PL) 
+        segconf.has_DP_before_PL = ctx_encountered (VB, FORMAT_DP);
+
+    seg_set_last_txt (VB, ctx, STRa(PL), STORE_NONE); // used by GQ (points into txt_data, before optimization)
+
+    // attempt to optimize PL string, if requested
+    unsigned modified_len = PL_len*2 + 10;                 
+    char modified[PL_len]; // note: modifying functions need to make sure not to overflow this space
+
+    if (flag.optimize_phred && vcf_phred_optimize (STRa(PL), modified, &modified_len)) {
+        int shrinkage = (int)PL_len - (int)modified_len;
+        vb->recon_size      -= shrinkage;               
+        vb->recon_size_luft -= shrinkage;
+        PL = modified;
+        PL_len = modified_len;
+    }
+        
+    // seg into either PLy or PLn, or into both if we're testing (vcf_FORMAT_PL_decide will drop one of them) 
+    if (vb->PL_mux_by_DP == PL_mux_by_DP_YES || vb->PL_mux_by_DP == PL_mux_by_DP_TEST) 
+        vcf_seg_FORMAT_mux_by_dosagexDP (vb, CTX(FORMAT_PLy), STRa(PL), &vb->mux_PLy);
+    
+    if (vb->PL_mux_by_DP == PL_mux_by_DP_NO  || vb->PL_mux_by_DP == PL_mux_by_DP_TEST) 
+        vcf_seg_FORMAT_mux_by_dosage (vb, CTX(FORMAT_PLn), STRa(PL), &vb->mux_PLn);
+
+    if (vb->PL_mux_by_DP == PL_mux_by_DP_TEST) 
+        vb->recon_size += PL_len; // since we're segging twice, we need to pretent the recon_size is growing even thow it isn't (reversed in zfile_remove_ctx_group_from_z_data)
+
+    // we seg "redirection to PLn" in all VBs regardless of PL_mux_by_DP, so that ZCTX(FORMAT_PL).dict has
+    // only a single word. This word might be updated to PLy in vcf_FORMAT_PL_after_vbs.
+    // note: this isn't always "all-the-same" - we can have WORD_INDEX_MISSING in b250 in case of missing PLs in samples
+    seg_by_did_i (VB, STRa(PL_to_PLn_redirect_snip), FORMAT_PL, 0);
+}
+
+// in PL_mux_by_DP_TEST mode, this function is called to pick one of the two compressed options, and drop the others
+void vcf_FORMAT_PL_decide (VBlockVCF *vb)
+{
+    DidIType keep_did_i, remove_did_i;
+
+    mutex_lock (segconf.PL_mux_by_DP_mutex);
+
+    // only first testing VB to lock this mutex gets here, to make the decision
+    switch (segconf.PL_mux_by_DP) {
+        case PL_mux_by_DP_TEST : { 
+            // get combined compress size of all contexts associated with GL (mux by dosage)
+            uint64_t PLy_size = ctx_get_ctx_group_z_len (VB, FORMAT_PLy);
+            uint64_t PLn_size = ctx_get_ctx_group_z_len (VB, FORMAT_PLn);
+
+            // note: this is not an accurate comparison bc it doesn't include dictionaries
+            keep_did_i   = (PLy_size >= PLn_size) ? FORMAT_PLn : FORMAT_PLy;
+            remove_did_i = (PLy_size >= PLn_size) ? FORMAT_PLy : FORMAT_PLn;
+
+            // weigh in this VBs experience. New VBs will only test if the votes are still the same
+            segconf.PL_mux_by_DP = (keep_did_i == FORMAT_PLy) ? PL_mux_by_DP_YES : PL_mux_by_DP_NO;
+            
+            if (flag.debug_generate) iprintf ("PL_mux_by_DP decision: %s\n", keep_did_i == FORMAT_PLy ? "YES" : "NO");
+            
+            break;
+        }
+        case PL_mux_by_DP_YES : keep_did_i = FORMAT_PLy; remove_did_i = FORMAT_PLn; break;
+
+        default:
+        case PL_mux_by_DP_NO  : keep_did_i = FORMAT_PLn; remove_did_i = FORMAT_PLy;
+    }
+
+    mutex_unlock (segconf.PL_mux_by_DP_mutex);
+
+    zfile_remove_ctx_group_from_z_data (VB, remove_did_i); // removes data from VB and update z_file counters
+}
+
+// called after all VBs are compressed - before Global sections are compressed
+void vcf_FORMAT_PL_after_vbs (void)
+{
+    if (!ZCTX(FORMAT_PL)->nodes.len) return; // no FORMAT/PL in this file
+
+    if (ZCTX(FORMAT_PL)->nodes.len > 1) {
+        str_print_dict (ZCTX(FORMAT_PL)->dict.data, ZCTX(FORMAT_PL)->dict.len, true, false);
+        ABORT ("Expecting FORMAT_PL to have exactly one word in its dict, but it has %"PRIu64, ZCTX(FORMAT_PL)->nodes.len);
+    }
+
+    if (segconf.PL_mux_by_DP == PL_mux_by_DP_YES) { // Tested, and selected YES
+        ctx_declare_winning_group (FORMAT_PLy, FORMAT_PLn, FORMAT_PL); // update groups for stats
+
+        // if we select "Yes", we change the (only) snip in the PL dictionary in place
+        memcpy (ZCTX(FORMAT_PL)->dict.data, PL_to_PLy_redirect_snip, PL_to_PLy_redirect_snip_len);
+    }
+    else // Tested, and selected NO, or not tested
+        ctx_declare_winning_group (FORMAT_PLn, FORMAT_PLy, FORMAT_PL); 
+}
+
+//----------
 // FORMAT/DS
 // ---------
+
+/* used by files compressed by Genozip up to 12.0.42. Kept here, commented out, for documentation 
+// DS is a value [0,ploidy] which is a the sum of GP values that refer to allele!=0. Eg for bi-allelic diploid it is: GP[1] + 2*GP[2] (see: https://www.biostars.org/p/227346/)
+// the DS (allele DoSage) value is usually close to or exactly the sum of '1' alleles in GT. we store it as a delta from that,
+// along with the floating point format to allow exact reconstruction
+static inline WordIndex vcf_seg_FORMAT_DS (VBlockVCF *vb, Context *ctx, const char *cell, unsigned cell_len)
+{
+    int64_t dosage = ctx_has_value (VB, FORMAT_GT) ? CTX(FORMAT_GT)->last_value.i : -1; // dosage stored here by vcf_seg_FORMAT_GT
+    double ds_val;
+    unsigned format_len;
+    char snip[FLOAT_FORMAT_LEN + 20] = { SNIP_SPECIAL, VCF_SPECIAL_DS }; 
+
+    if (dosage < 0 || !str_get_float (cell, cell_len, &ds_val, &snip[2], &format_len)) 
+        return seg_by_ctx (VB, cell, cell_len, ctx, cell_len);
+
+    unsigned snip_len = 2 + format_len;
+    snip[snip_len++] = ' ';
+    snip_len += str_int ((int64_t)((ds_val - dosage) * 1000000), &snip[snip_len]);
+
+    return seg_by_ctx (VB, snip, snip_len, ctx, cell_len);
+}
+*/
+
+// used for decompressing files compressed with version up to 12.0.42
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_DS_old)
+{
+    if (!reconstruct) goto done;
+
+    char float_format[10];
+    int32_t val;
+    sscanf (snip, "%s %d", float_format, &val); // snip looks like eg: "%5.3f 50000"
+
+    unsigned dosage = vcf_piz_get_mux_channel_i (vb); // seg guaranteed 0, 1 or 2 (or else this SPECIAL is not used)
+    bufprintf (vb, &vb->txt_data, float_format, (double)val / 1000000 + dosage);
+
+done:
+    return false; // no new value
+}
 
 // Lift-over translator for FORMAT/DS, IF it is bi-allelic and we have a ALT<>REF switch.
 // We change the value to (ploidy-value)
@@ -1402,19 +1549,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
             break;
 
         // <ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes as defined in the VCF specification">       
-        case _FORMAT_PL:
-            if (flag.optimize_phred && vcf_phred_optimize (STRi(sf, i), modified, &modified_len)) 
-                SEG_OPTIMIZED_MUX_BY_DOSAGE(GP);
-            
-            // Full muxing by DP turns out be beneficial only with several samples independent of the block size (not clear why)
-            else if (vcf_num_samples >= 8 && ctx_encountered (VB, FORMAT_DP))
-                vcf_seg_FORMAT_mux_by_dosagexDP (vb, ctx, STRi (sf, i), &vb->mux_PL_xDP);
-            
-            else
-                vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_PL);
-
-            seg_set_last_txt (VB, ctx, STRi(sf, i), STORE_NONE); // used by GQ
-            break;
+        case _FORMAT_PL: vcf_seg_FORMAT_PL (vb, ctx, STRi (sf, i)); break;
 
         // <ID=PP,Number=G,Type=Integer,Description="Phred-scaled genotype posterior probabilities rounded to the closest integer">
         case _FORMAT_PP:

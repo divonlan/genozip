@@ -33,6 +33,8 @@ extern void zfile_update_compressed_vb_header (VBlockP vb);
 extern void zfile_write_txt_header (BufferP vcf_header_text, uint64_t unmodified_txt_header_len, Digest header_md5, bool is_first_vcf);
 extern bool zfile_update_txt_header_section_header (uint64_t pos_of_current_vcf_header, uint32_t max_lines_per_vb, Digest *md5);
 
+extern void zfile_remove_ctx_group_from_z_data (VBlockP vb, DidIType did_i);
+
 extern void zfile_output_processed_vb (VBlockP vb);
 
 // --------

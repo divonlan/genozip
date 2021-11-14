@@ -167,22 +167,22 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
         if (flag.pair == PAIR_READ_1)
             item_ctx->no_stons = true; // prevent singletons, so pair_2 can compare to us
         
-        // we are evaluating but might throw away this snip and use SNIP_PAIR_LOOKUP instead - however, we throw away if its in the pair file,
+        // we are evaluating but might throw away this snip and use SNIP_MATE_LOOKUP instead - however, we throw away if its in the pair file,
         // i.e. its already in the dictionary and hash table - so no resources wasted
         WordIndex node_index = ctx_create_node_do (vb, item_ctx, ci->item, ci->item_len, NULL);
 
         // case we are compressing fastq pairs - read 1 is the basis and thus must have a b250 node index,
-        // and read 2 might have SNIP_PAIR_LOOKUP
+        // and read 2 might have SNIP_MATE_LOOKUP
         if (flag.pair == PAIR_READ_2) {
 
             // if the number of components in the compound is not exactly the same for every line of
             // pair 1 and pair 2 for this vb, the readings from the b250 will be incorrect, causing missed opportunities 
-            // for SNIP_PAIR_LOOKUP and hence worse compression. This conditions makes sure this situation
+            // for SNIP_MATE_LOOKUP and hence worse compression. This conditions makes sure this situation
             // doesn't result in an error (TO DO: overcome this, bug 159)
             // note: this can also happen if the there is no item_ctx->pair do it being fully singletons and moved to local 
             if (item_ctx->pair_b250_iter.next_b250 < AFTERENT (uint8_t, item_ctx->pair) &&
-                // for pairing to word with SNIP_DELTA, if we have SNIP_PAIR_LOOKUP then all previous lines
-                // this VB must have been SNIP_PAIR_LOOKUP as well. Therefore, the first time we encounter an
+                // for pairing to word with SNIP_DELTA, if we have SNIP_MATE_LOOKUP then all previous lines
+                // this VB must have been SNIP_MATE_LOOKUP as well. Therefore, the first time we encounter an
                 // inequality - we stop the pairing going forward till the end of this VB
                 !item_ctx->stop_pairing) {
                 
@@ -203,7 +203,7 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
 
                     // get new node_index instead
                     item_ctx->pair_b250 = true;
-                    static const char lookup_pair_snip[1] = { SNIP_PAIR_LOOKUP };
+                    static const char lookup_pair_snip[1] = { SNIP_MATE_LOOKUP };
                     node_index = ctx_create_node_do (vb, item_ctx, lookup_pair_snip, 1, NULL);
                 } 
                 else

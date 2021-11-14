@@ -203,7 +203,13 @@ uint32_t zfile_compress_b250_data (VBlock *vb, Context *ctx)
         .ltype                   = ctx->ltype
     };
 
-    return comp_compress (vb, &vb->z_data, (SectionHeader*)&header, ctx->b250.data, NULL);
+    ctx->b250_in_z = vb->z_data.len;
+
+    uint32_t compressed_size = comp_compress (vb, &vb->z_data, (SectionHeader*)&header, ctx->b250.data, NULL);
+
+    ctx->b250_in_z_len = vb->z_data.len - ctx->b250_in_z;
+
+    return compressed_size;
 }
 
 LocalGetLineCB *zfile_get_local_data_callback (DataType dt, Context *ctx)
@@ -252,9 +258,14 @@ uint32_t zfile_compress_local_data (VBlock *vb, Context *ctx, uint32_t sample_si
 
     LocalGetLineCB *callback = zfile_get_local_data_callback (vb->data_type, ctx);
 
-    return comp_compress (vb, &vb->z_data, (SectionHeader*)&header, 
-                          callback ? NULL : ctx->local.data, 
-                          callback);
+    ctx->local_in_z = vb->z_data.len;
+
+    uint32_t compressed_size = comp_compress (vb, &vb->z_data, (SectionHeader*)&header, 
+                                              callback ? NULL : ctx->local.data, callback);
+
+    ctx->local_in_z_len = vb->z_data.len - ctx->local_in_z;
+
+    return compressed_size;
 }
 
 // compress section - two options for input data - 
@@ -285,6 +296,59 @@ void zfile_compress_section_data_ex (VBlock *vb, SectionType section_type,
                    &header, 
                    section_data ? section_data->data : NULL, 
                    callback);
+}
+
+typedef struct { uint64_t start, len; } RemovedSection;
+
+int sort_removed_sections (const void *a, const void *b)
+{
+    return DESCENDING (((RemovedSection*)a)->start, ((RemovedSection*)b)->start);
+}
+
+// remove ctx and all other ctxs consolidated to it from z_data. akin of unscrambling an egg.
+void zfile_remove_ctx_group_from_z_data (VBlockP vb, DidIType remove_did_i)
+{
+    unsigned num_rms=0;
+    RemovedSection rm[vb->num_contexts * 2];
+
+    // remove all contexts in the group
+    CTX(remove_did_i)->st_did_i = remove_did_i; // so the loop catches it too
+    for (ContextP ctx=CTX(0); ctx < CTX(vb->num_contexts); ctx++)
+        if (ctx->st_did_i == remove_did_i) {
+            if (ctx->b250_in_z_len) 
+                rm[num_rms++] = (RemovedSection){.start = ctx->b250_in_z, .len = ctx->b250_in_z_len };
+
+            if (ctx->local_in_z_len) 
+                rm[num_rms++] = (RemovedSection){.start = ctx->local_in_z, .len = ctx->local_in_z_len};
+
+            vb->recon_size -= ctx->txt_len; // it won't be reconstructed after all
+
+            ctx_substract_txt_len (vb, ctx); // substract txt_len added to zctx during merge
+
+            ctx_free_context (ctx, ctx->did_i);
+        }
+
+    // update VB Header (always first in z_data) with reduced recon_size (re-encrypting it if encrypting)
+    uint64_t save = vb->z_data.len;
+    vb->z_data.len = 0;
+    zfile_compress_vb_header (vb);
+    vb->z_data.len = save;
+
+    // sort indices to the to-be-removed sections in reverse order
+    qsort (rm, num_rms, sizeof(RemovedSection), sort_removed_sections);
+
+    bool is_encrypted = crypt_have_password(); // we can't (easily) test magic if header is encrypted
+
+    for (unsigned i=0; i < num_rms; i++) {
+        ASSERT (is_encrypted || ((SectionHeader*)ENT (uint8_t, vb->z_data, rm[i].start))->magic == BGEN32(GENOZIP_MAGIC),
+                "Data to be cut out start=%"PRIu64" len=%"PRIu64" is not on section boundary", rm[i].start, rm[i].len);
+        
+        buf_cut_out (&vb->z_data, char, rm[i].start, rm[i].len);
+        sections_remove_from_list (vb, rm[i].start, rm[i].len);
+
+        ASSERT (is_encrypted || rm[i].start == vb->z_data.len || ((SectionHeader*)ENT (uint8_t, vb->z_data, rm[i].start))->magic == BGEN32(GENOZIP_MAGIC),
+                "Data cut out is not exactly one section start=%"PRIu64" len=%"PRIu64, rm[i].start, rm[i].len);
+    }
 }
 
 // reads exactly the length required, error otherwise. 

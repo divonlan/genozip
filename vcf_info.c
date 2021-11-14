@@ -22,6 +22,16 @@ void vcf_info_zip_initialize (void)
 {
 }
 
+void vcf_info_seg_initialize (VBlockVCFP vb) 
+{
+    CTX(INFO_AF)->     flags.store = STORE_FLOAT;
+    CTX(INFO_AN)->     flags.store = STORE_INT;
+    CTX(INFO_ADP)->    flags.store = STORE_INT;   // since v13
+    CTX(INFO_SVTYPE)-> flags.store = STORE_INDEX; // since v13 - consumed by vcf_refalt_piz_is_variant_indel
+
+    seg_id_field_init (CTX(INFO_CSQ_Existing_variation));
+}
+
 //--------
 // INFO/DP
 // -------

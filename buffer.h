@@ -122,6 +122,9 @@ extern void buf_move (VBlockP dst_vb, Buffer *dst, VBlockP src_vb, Buffer *src);
 extern void buf_grab_do (VBlockP dst_vb, Buffer *dst_buf, const char *dst_name, Buffer *src_buf, const char *func, uint32_t code_line);
 #define buf_grab(dst_vb, dst_buf, dst_name, src_buf) buf_grab_do ((dst_vb), (dst_buf), (dst_name), (src_buf), __FUNCTION__, __LINE__)
 
+extern void buf_cut_out_do (BufferP buf, unsigned sizeof_item, uint64_t remove_start, uint64_t remove_len);
+#define buf_cut_out(buf, type, remove_start, remove_len) buf_cut_out_do ((buf), sizeof(type), (remove_start), (remove_len))
+
 #define buf_has_space(buf, new_len) ((buf)->len + (new_len) <= (buf)->size)
 
 #define buf_add(buf, new_data, new_data_len) do { \

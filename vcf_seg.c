@@ -107,25 +107,7 @@ void vcf_seg_initialize (VBlock *vb_)
     CTX(VCF_POS)->     flags.store = STORE_INT;   // since v12
     CTX(VCF_oPOS)->    flags.store = STORE_INT;   // used by vcf_piz_luft_END
 
-    CTX(FORMAT_ADALL)->flags.store = STORE_INT;
-    CTX(FORMAT_DP)->   flags.store = STORE_INT;
-    CTX(FORMAT_AD)->   flags.store = STORE_INT;   // since v13
-    CTX(FORMAT_RD)->   flags.store = STORE_INT;   // since v13
-    CTX(FORMAT_RDR)->  flags.store = STORE_INT;   // since v13
-    CTX(FORMAT_RDF)->  flags.store = STORE_INT;   // since v13
-    CTX(FORMAT_ADR)->  flags.store = STORE_INT;   // since v13
-    CTX(FORMAT_ADF)->  flags.store = STORE_INT;   // since v13
-    CTX(FORMAT_SDP)->  flags.store = STORE_INT;   // since v13
-    CTX(INFO_AF)->     flags.store = STORE_FLOAT;
-    CTX(INFO_AN)->     flags.store = STORE_INT;
-    CTX(INFO_ADP)->    flags.store = STORE_INT;   // since v13
-    CTX(INFO_SVTYPE)-> flags.store = STORE_INDEX; // since v13 - consumed by vcf_refalt_piz_is_variant_indel
-
-    CTX(FORMAT_PS)->   flags.store = STORE_INT;   
-    CTX(FORMAT_PS)->   no_stons = true;   
-
     seg_id_field_init (CTX(VCF_ID));
-    seg_id_field_init (CTX(INFO_CSQ_Existing_variation));
 
     // counts sections
     CTX(VCF_CHROM)->   counts_section = true;
@@ -136,42 +118,17 @@ void vcf_seg_initialize (VBlock *vb_)
         CTX(VCF_COORDS)-> counts_section = true;
     }
 
-    CTX(FORMAT_GT)->no_stons  = true; // we store the GT matrix in local, so cannot accomodate singletons
-
     // consolidate stats
     stats_set_consolidation (VB, VCF_REFALT, 2, VCF_oREFALT, VCF_LIFT_REF);
     stats_set_consolidation (VB, VCF_POS,    2, VCF_oPOS, VCF_COPYPOS);
     stats_set_consolidation (VB, VCF_CHROM,  1, VCF_oCHROM);
     stats_set_consolidation (VB, VCF_COORDS, 7, INFO_PRIM, INFO_PREJ, INFO_LUFT, INFO_LREJ, VCF_oSTATUS, VCF_COPYSTAT, VCF_oXSTRAND);
-    stats_set_consolidation (VB, FORMAT_GT,  4, FORMAT_GT_HT, FORMAT_GT_HT_INDEX, FORMAT_PBWT_RUNS, FORMAT_PBWT_FGRC);
-    stats_set_consolidation (VB, FORMAT_AB,  1, FORMAT_AB3);
-
-    // initialize dosage multiplexers
-    #define init_mux(name,store_type) seg_mux_init ((VBlockP)vb, 4, VCF_SPECIAL_MUX_BY_DOSAGE, FORMAT_##name, FORMAT_##name, (store_type), (MultiplexerP)&vb->mux_##name, "0123")
-    init_mux(PRI,  STORE_NONE);
-    init_mux(GL,   STORE_NONE);
-    init_mux(DS,   STORE_NONE);
-    init_mux(PL,   STORE_NONE);
-    init_mux(PP,   STORE_NONE);
-    init_mux(GP,   STORE_NONE);
-    init_mux(GQ,   STORE_NONE);
-    init_mux(PVAL, STORE_NONE);
-    init_mux(FREQ, STORE_NONE);
-    init_mux(RD,   STORE_INT);
-    
-    seg_mux_init ((VBlockP)vb, 3*DOSAGExDP_NUM_DPs + 1, VCF_SPECIAL_MUX_BY_DOSAGExDP, FORMAT_PL, FORMAT_PL, STORE_NONE, (MultiplexerP)&vb->mux_PL_xDP, NULL);
-    
-    vb->ht_matrix_ctx = CTX(FORMAT_GT_HT); // different for different data types
 
     // room for already existing FORMATs from previous VBs
     vb->format_mapper_buf.len = vb->format_contexts.len = CTX(VCF_FORMAT)->ol_nodes.len;
     buf_alloc_zero (vb, &vb->format_mapper_buf, 0, vb->format_mapper_buf.len, Container, CTX_GROWTH, "format_mapper_buf");
     buf_alloc_zero (vb, &vb->format_contexts, 0, vb->format_contexts.len, ContextPBlock, CTX_GROWTH, "format_contexts");
     
-    // create additional contexts as needed for compressing FORMAT/GT - must be done before merge
-    if (vcf_num_samples) 
-        codec_pbwt_seg_init (vb_, CTX(FORMAT_PBWT_RUNS), CTX(FORMAT_PBWT_FGRC));
-
     if (flag.add_line_numbers) {
         // create a b250 and dict entry for VCF_LINE_NUM, VCF_ID - these become "all_the_same" so no need to seg them explicitly hereinafter        
         #define LN_PREFIX_LEN 3 // "LN="
@@ -204,6 +161,9 @@ void vcf_seg_initialize (VBlock *vb_)
 
     seg_by_did_i (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPYPOS }), 2, VCF_COPYPOS, 0);
     ctx_decrement_count (vb_, CTX(VCF_COPYPOS), 0);
+
+    vcf_info_seg_initialize(vb);
+    vcf_samples_seg_initialize(vb);
 }             
 
 void vcf_seg_finalize (VBlockP vb_)
@@ -294,6 +254,19 @@ void vcf_seg_finalize (VBlockP vb_)
         segconf.GQ_by_GP = (segconf.count_GQ_by_GP > vb->lines.len * vcf_num_samples / 5) && (segconf.count_GQ_by_GP >  segconf.count_GQ_by_PL);
         segconf.GQ_by_PL = (segconf.count_GQ_by_PL > vb->lines.len * vcf_num_samples / 5) && (segconf.count_GQ_by_PL >= segconf.count_GQ_by_GP);
     }
+}
+
+// after each VB is compressed
+void vcf_zip_after_compress (VBlockP vb)
+{
+    if (VB_VCF->PL_mux_by_DP == PL_mux_by_DP_TEST) 
+        vcf_FORMAT_PL_decide (VB_VCF);
+}
+
+// called after all VBs are compressed - before Global sections are compressed
+void zip_vcf_after_vbs (void)
+{
+    vcf_FORMAT_PL_after_vbs ();
 }
 
 bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)

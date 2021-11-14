@@ -69,10 +69,12 @@ typedef struct VBlockVCF {
     Buffer format_contexts;         // ZIP only: an array of format_mapper_buf.len of ContextBlock
     Buffer last_format;             // ZIP only: cache previous line's FORMAT string
 
-    DosageMultiplexer mux_PL, mux_GL, mux_GP, mux_PRI, mux_DS, mux_PP, mux_PVAL, mux_FREQ, mux_RD, mux_GQ,
+    // Multiplexers
+    DosageMultiplexer mux_PLn, mux_GL, mux_GP, mux_PRI, mux_DS, mux_PP, mux_PVAL, mux_FREQ, mux_RD, mux_GQ,
                       mux_AD[2], mux_ADALL[2];
 
-    DosageDPMultiplexer mux_PL_xDP;
+    PLMuxByDP PL_mux_by_DP;
+    DosageDPMultiplexer mux_PLy;
 
     // used by CODEC_HAPM (for VCF haplotype matrix) 
     Buffer hapmat_helper_index_buf; // ZIP: used by codec_hapmat_count_alt_alleles 
@@ -242,10 +244,13 @@ extern VcfVersion vcf_header_get_version (void);
 
 // Samples stuff
 extern void vcf_samples_zip_initialize (void);
+extern void vcf_samples_seg_initialize (VBlockVCFP vb);
 
 extern const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *len, char *next_field, bool *has_13, const char *backup_luft_samples, uint32_t backup_luft_samples_len);
 extern void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCF *vb);
 #define IS_TRIVAL_FORMAT_SUBFIELD ((!recon_len || (recon_len==1 && *recon=='.')) && dict_id_is_vcf_format_sf (ctx->dict_id))
+extern void vcf_FORMAT_PL_decide (VBlockVCFP vb);
+extern void vcf_FORMAT_PL_after_vbs (void);
 
 // INFO stuff
 
@@ -255,6 +260,7 @@ typedef struct { char name[MAX_TAG_LEN]; // not nul-terminated, including '=' if
                  ContextP ctx; } InfoItem;
 
 extern void vcf_info_zip_initialize (void);
+extern void vcf_info_seg_initialize (VBlockVCFP vb);
 extern void vcf_piz_GT_cb_calc_INFO_SF (VBlockVCFP vcf_vb, unsigned rep, char *recon, int32_t recon_len);
 extern void vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VBlockVCFP vcf_vb);
 extern void vcf_seg_INFO_SF_one_sample (VBlockVCF *vb);

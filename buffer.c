@@ -923,6 +923,23 @@ void buf_move (VBlock *dst_vb, Buffer *dst, VBlock *src_vb, Buffer *src)
     buf_reset (src); // zero buffer except vb
 }
 
+// removes a section from the buffer
+void buf_cut_out_do (Buffer *buf, unsigned sizeof_item, uint64_t remove_start, uint64_t remove_len)
+{
+    if (!remove_len) return;
+
+    ASSERT (remove_start + remove_len <= buf->len, "Out of range: remove_start=%"PRIu64" + remove_len=%"PRIu64" > buf->len=%"PRIu64,
+            remove_start, remove_len, buf->len);
+
+    uint64_t remove_start_byte = remove_start * sizeof_item;
+    uint64_t remove_bytes      = remove_len   * sizeof_item;
+    memmove (buf->data + remove_start_byte, 
+             buf->data + remove_start_byte + remove_bytes, 
+             (buf->len * sizeof_item) - (remove_start_byte + remove_bytes));
+
+    buf->len -= remove_len;
+}
+
 void buf_add_string (VBlockP vb, Buffer *buf, const char *str) 
 { 
     uint64_t len = strlen (str); 
@@ -1051,7 +1068,7 @@ bool buf_dump_to_file (const char *filename, const Buffer *buf, unsigned buf_wor
 
     if (no_dirs) {
         for (unsigned i=0; i < fn_len; i++)
-            if (filename[i] == '/' || (flag.is_windows && (filename[i] == '\\' || filename[i] == ':')))
+            if (filename[i] == '/' || (flag.is_windows && (filename[i] == '\\' || (filename[i] == ':' && i!=1))))
                 update_filename[i] = '-';
         filename = update_filename;
     }

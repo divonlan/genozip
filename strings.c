@@ -49,8 +49,7 @@ StrText char_to_printable (char c)
     }
 }
 
-char *str_print_snip (const char *in, uint32_t in_len, 
-                      char *out) // caller allocated - in_len+20
+char *str_print_snip (STRp(in), char *out) // caller allocated - in_len+20
 {
     char *save_out = out;
 
@@ -673,7 +672,7 @@ void str_print_dict (const char *data, uint32_t len, bool add_newline, bool remo
             case '\r'       : fwrite ("\\r", 1, 2, info_stream); break;
             default         : iprintf ("\\x%x", (uint8_t)data[i]);
         }
-        }
+    }
 }
 
 int str_print_text (const char **text, uint32_t num_lines,

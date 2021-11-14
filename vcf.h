@@ -54,6 +54,8 @@
 #pragma GENDICT FORMAT_GQ=DTYPE_2=GQ       // <ID=GQ,Number=1,Type=Integer,Description="Genotype Quality">
 #pragma GENDICT FORMAT_GT=DTYPE_2=GT       // <ID=GT,Number=1,Type=String,Description="Genotype">
 #pragma GENDICT FORMAT_PL=DTYPE_2=PL       // <ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes as defined in the VCF specification">
+#pragma GENDICT FORMAT_PLy=DTYPE_2=PLy     // Alternative PL context while testing PL_mux_by_DP (YES Mux by DP)
+#pragma GENDICT FORMAT_PLn=DTYPE_2=PLn     // Alternative PL context while testing PL_mux_by_DP (NO don't Mux by DP)
 #pragma GENDICT FORMAT_PRI=DTYPE_2=PRI     // <ID=PRI,Number=G,Type=Float,Description="Phred-scaled prior probabilities for genotypes">
 #pragma GENDICT FORMAT_F1R2=DTYPE_2=F1R2   // <ID=F1R2,Number=R,Type=Integer,Description="Count of reads in F1R2 pair orientation supporting each allele"> see: https://github.com/broadinstitute/gatk/blob/master/docs/mutect/mutect.pdf
 #pragma GENDICT FORMAT_F2R1=DTYPE_2=F2R1   // <ID=F2R1,Number=R,Type=Integer,Description="Count of reads in F2R1 pair orientation supporting each allele">
@@ -240,6 +242,8 @@ typedef uint8_t Allele; // elements of ht_matrix: values 48->147 for allele 0 to
 extern void vcf_zip_initialize (void);
 extern void vcf_zip_read_one_vb (VBlockP vb);
 extern void vcf_liftover_display_lift_report (void);
+extern void vcf_zip_after_compress (VBlockP vb);
+extern void zip_vcf_after_vbs (void);
 
 // SEG stuff
 extern const char *vcf_seg_txt_line (VBlockP vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);

@@ -796,7 +796,7 @@ batch_prod_compatability()
     genozip=$save_genozip
 }
     
-batch_real_world_1()
+batch_real_world_1() # $1 extra genozip argument
 {
     batch_print_header
 
@@ -1202,20 +1202,22 @@ if (( $1 <= 28 )) ; then  batch_copy_ref_section       ; fi
 if (( $1 <= 29 )) ; then  batch_iupac                  ; fi 
 if (( $1 <= 30 )) ; then  batch_real_world_small_vbs   ; fi 
 if (( $1 <= 31 )) ; then  batch_real_world_1           ; fi 
-if (( $1 <= 32 )) ; then  batch_real_world_with_ref    ; fi 
-if (( $1 <= 33 )) ; then  batch_real_world_1_backcomp  ; fi 
-if (( $1 <= 34 )) ; then  batch_real_world_with_ref_backcomp ; fi 
-if (( $1 <= 35 )) ; then  batch_multifasta             ; fi
-if (( $1 <= 36 )) ; then  batch_misc_cases             ; fi
-if (( $1 <= 37 )) ; then  batch_external_cram          ; fi
-if (( $1 <= 38 )) ; then  batch_external_bcf           ; fi
-if (( $1 <= 39 )) ; then  batch_external_unzip         ; fi
-if (( $1 <= 40 )) ; then  batch_reference_fastq        ; fi
-if (( $1 <= 41 )) ; then  batch_reference_sam          ; fi
-if (( $1 <= 42 )) ; then  batch_reference_vcf          ; fi
-if (( $1 <= 43 )) ; then  batch_genols                 ; fi
-if (( $1 <= 44 )) ; then  batch_tar_files_from         ; fi
-if (( $1 <= 45 )) ; then  batch_make_reference         ; fi
-if (( $1 <= 46 )) ; then  batch_prod_compatability     ; fi
+if (( $1 <= 32 )) ; then  batch_real_world_1 --fast    ; fi 
+if (( $1 <= 33 )) ; then  batch_real_world_1 --best    ; fi 
+if (( $1 <= 34 )) ; then  batch_real_world_with_ref    ; fi 
+if (( $1 <= 35 )) ; then  batch_real_world_1_backcomp  ; fi 
+if (( $1 <= 36 )) ; then  batch_real_world_with_ref_backcomp ; fi 
+if (( $1 <= 37 )) ; then  batch_multifasta             ; fi
+if (( $1 <= 38 )) ; then  batch_misc_cases             ; fi
+if (( $1 <= 39 )) ; then  batch_external_cram          ; fi
+if (( $1 <= 40 )) ; then  batch_external_bcf           ; fi
+if (( $1 <= 41 )) ; then  batch_external_unzip         ; fi
+if (( $1 <= 42 )) ; then  batch_reference_fastq        ; fi
+if (( $1 <= 43 )) ; then  batch_reference_sam          ; fi
+if (( $1 <= 44 )) ; then  batch_reference_vcf          ; fi
+if (( $1 <= 45 )) ; then  batch_genols                 ; fi
+if (( $1 <= 46 )) ; then  batch_tar_files_from         ; fi
+if (( $1 <= 47 )) ; then  batch_make_reference         ; fi
+if (( $1 <= 48 )) ; then  batch_prod_compatability     ; fi
 
 printf "\nALL GOOD!\n"

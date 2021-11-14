@@ -388,7 +388,7 @@ static void zip_generate_local (VBlockP vb, ContextP ctx)
 
 // generate & write b250 data for all contexts - do them in random order, to reduce the chance of multiple doing codec_assign_best_codec for the same context at the same time
 // VBs doing codec_assign_best_codec at the same, so that they can benefit from pre-assiged codecs
-static void zip_compress_b250 (VBlock *vb)
+void zip_compress_all_contexts_b250 (VBlock *vb)
 {
     START_TIMER;
     threads_log_by_vb (vb, "zip", "START COMPRESSING B250", 0);
@@ -405,7 +405,7 @@ static void zip_compress_b250 (VBlock *vb)
         ContextP ctx = ctxs[ctx_i];
         memmove (&ctxs[ctx_i], &ctxs[ctx_i+1], (vb->num_contexts - i - ctx_i - 1) * sizeof (ContextP));
 
-        if (!ctx->b250.len) continue;
+        if (!ctx->b250.len || ctx->b250_compressed) continue;
 
         zip_generate_b250 (vb, ctx); // generate the final b250 buffers from their intermediate form
 
@@ -414,7 +414,7 @@ static void zip_compress_b250 (VBlock *vb)
 
         if (flag.show_time) codec_show_time (vb, "B250", ctx->tag_name, ctx->bcodec);
         
-        if (HAS_DEBUG_SEG(ctx)) iprintf ("zip_compress_b250: vb_i=%u %s: B250.len=%"PRIu64" NODES.len=%"PRIu64"\n", 
+        if (HAS_DEBUG_SEG(ctx)) iprintf ("zip_compress_all_contexts_b250: vb_i=%u %s: B250.len=%"PRIu64" NODES.len=%"PRIu64"\n", 
                                      vb->vblock_i, ctx->tag_name, ctx->b250.len, ctx->nodes.len);
 
         START_TIMER; // for compressor_time
@@ -423,6 +423,8 @@ static void zip_compress_b250 (VBlock *vb)
 
         if (flag.show_time) 
             ctx->compressor_time += CHECK_TIMER; // sum b250 and local
+
+        ctx->b250_compressed = true;
     }
 
     COPY_TIMER (zip_compress_ctxs); // same profiler for b250 and local as we breakdown by ctx underneath it
@@ -618,7 +620,7 @@ static void zip_compress_one_vb (VBlock *vb)
 
     if (!flag.make_reference && !flag.seg_only) {
         zip_compress_local (vb); // for vb=1 - all locals ; for vb>1 - locals which consist of singletons set in ctx_merge_in_vb_ctx (other locals were already compressed above)
-        zip_compress_b250 (vb);
+        zip_compress_all_contexts_b250 (vb);
     }
 
     // case: we're sorting the file's lines - add line data to txt_file's line_info (VB order doesn't matter - we will sort them later)
@@ -787,6 +789,8 @@ finish:
         linesorter_compress_recon_plan();
 
     if (z_closes_after_me && !flag.seg_only) {
+        DT_FUNC (txt_file, zip_after_vbs)();
+    
         zip_write_global_area (single_component_digest);
 
         if (chain_is_loaded && !Z_DT(DT_CHAIN)) vcf_liftover_display_lift_report();

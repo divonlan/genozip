@@ -25,6 +25,10 @@ const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES] = LOCALTYPE_DESC;
 // ZIP only: create section list that goes into the genozip header, as we are creating the sections. returns offset
 void sections_add_to_list (VBlock *vb, const SectionHeader *header)
 {
+    // case: we're re-creaating a section already on this list - nothing to do
+    if (vb->section_list_buf.len && vb->z_data.len <= LASTENT (SectionEnt, vb->section_list_buf)->offset)
+        return;
+
     DictId dict_id = DICT_ID_NONE;
     bool has_dict_id = true;
 
@@ -45,6 +49,18 @@ void sections_add_to_list (VBlock *vb, const SectionHeader *header)
         .offset   = vb->z_data.len,  // this is a partial offset (within d) - we will correct it later
         .flags    = header->flags
     };
+}
+
+// ZIP: remove section from list when it is deleted from z_data by zfile_remove_ctx_group_from_z_data
+void sections_remove_from_list (VBlock *vb, uint64_t offset, uint64_t len)
+{
+    SectionEntModifiable *sl;
+    for (sl=LASTENT (SectionEntModifiable, vb->section_list_buf); sl->offset > offset; sl--) 
+        sl->offset -= len;
+
+    ASSERT (sl->offset == offset, "cannot find section with offset=%"PRIu64" in vb=%u", offset, vb->vblock_i);
+
+    buf_cut_out (&vb->section_list_buf, SectionEnt, ENTNUM (vb->section_list_buf, sl), 1);
 }
 
 // Called by ZIP main thread. concatenates a vb or dictionary section list to the z_file section list - just before 
@@ -611,12 +627,33 @@ void sections_show_header (const SectionHeader *header, VBlock *vb /* optional i
     PRINT;
 }
 
-void sections_show_gheader (const SectionHeaderGenozipHeader *header /* optional */)
+void sections_show_section_list (VBlockP vb/*if VB*/, const SectionHeaderGenozipHeader *header/*if z_file*/)
+{
+    ARRAY (SectionEnt, ents, vb ? vb->section_list_buf : z_file->section_list_buf);
+    DataType dt = vb ? vb->data_type : BGEN16 (header->data_type);
+
+    for (unsigned i=0; i < ents_len; i++) {
+     
+        uint64_t this_offset = ents[i].offset;
+        
+        uint64_t next_offset = (i < ents_len-1) ? ents[i+1].offset
+                             : header               ? this_offset + BGEN32 (header->h.data_compressed_len) + BGEN32 (header->h.compressed_offset) + sizeof (SectionFooterGenozipHeader) // we're at the last section genozip header+footer
+                             :                        this_offset; // without the GenozipHeader, we can't know its length
+
+
+        iprintf ("%3u\t%-20.20s\t%s%s%-8.8s\tvb=%u\toffset=%-8"PRIu64"\tsize=%-6"PRId64"\t%s\n", 
+                 i, st_name(ents[i].st), 
+                 ents[i].dict_id.num ? dtype_name_z(ents[i].dict_id) :"     ", 
+                 ents[i].dict_id.num ? "/" : "", 
+                 ents[i].dict_id.num ? dis_dict_id (ents[i].dict_id).s : "", 
+                 ents[i].vblock_i, this_offset, next_offset - this_offset, sections_dis_flags (ents[i].flags, ents[i].st, dt).s);
+    }
+}
+
+void sections_show_gheader (const SectionHeaderGenozipHeader *header)
 {
     if (flag_loading_auxiliary) return; // don't show gheaders of an auxiliary file
     
-    ARRAY (SectionEnt, ents, z_file->section_list_buf);
-
     DataType dt = BGEN16 (header->data_type);
     ASSERT (dt < NUM_DATATYPES, "Invalid data_type=%u", dt);
     
@@ -627,7 +664,7 @@ void sections_show_gheader (const SectionHeaderGenozipHeader *header /* optional
         iprintf ("  encryption_type: %s\n",         encryption_name (header->encryption_type)); 
         iprintf ("  recon_size_prim: %s\n",         str_uint_commas (BGEN64 (header->recon_size_prim)).s);
         iprintf ("  num_lines_bound: %"PRIu64"\n",  BGEN64 (header->num_lines_bound));
-        iprintf ("  num_sections: %u\n",            (unsigned)ents_len);
+        iprintf ("  num_sections: %u\n",            (unsigned)z_file->section_list_buf.len);
         iprintf ("  num_components: %u\n",          BGEN32 (header->num_components));
         iprintf ("  digest_bound.md5: %s\n",        digest_display (header->digest_bound).s);
         iprintf ("  created: %*s\n",                -FILE_METADATA_LEN, header->created);
@@ -648,20 +685,5 @@ void sections_show_gheader (const SectionHeaderGenozipHeader *header /* optional
 
     iprint0 ("  sections:\n");
 
-    for (unsigned i=0; i < ents_len; i++) {
-     
-        uint64_t this_offset = ents[i].offset;
-        
-        uint64_t next_offset = (i < ents_len-1) ? ents[i+1].offset
-                             : header               ? this_offset + BGEN32 (header->h.data_compressed_len) + BGEN32 (header->h.compressed_offset) + sizeof (SectionFooterGenozipHeader) // we're at the last section genozip header+footer
-                             :                        this_offset; // without the GenozipHeader, we can't know its length
-
-
-        iprintf ("%3u\t%-20.20s\t%s%s%-8.8s\tvb_i=%u\toffset=%-8"PRIu64"\tsize=%-6"PRId64"\t%s\n", 
-                 i, st_name(ents[i].st), 
-                 ents[i].dict_id.num ? dtype_name_z(ents[i].dict_id) :"     ", 
-                 ents[i].dict_id.num ? "/" : "", 
-                 ents[i].dict_id.num ? dis_dict_id (ents[i].dict_id).s : "", 
-                 ents[i].vblock_i, this_offset, next_offset - this_offset, sections_dis_flags (ents[i].flags, ents[i].st, dt).s);
-    }
+    sections_show_section_list (0, header);
 }

@@ -12,7 +12,7 @@
 
 typedef struct { // initialize with ctx_init_iterator()
     const uint8_t *next_b250;  // Pointer into b250 of the next b250 to be read (must be initialized to NULL)
-    WordIndex prev_word_index; // When decoding, if word_index==BASE250_ONE_UP, then make it prev_word_index+1 (must be initalized to -1)
+    WordIndex prev_word_index; // When decoding, if word_index==BASE250_ONE_UP, then make it prev_word_index+1 (must be initialized to -1)
 } SnipIterator;
 
 typedef struct Context {
@@ -75,7 +75,7 @@ typedef struct Context {
                                // PIZ: pair local data is loaded to context.pair
     bool pair_b250;            // ZIP: this is the 2nd file of a pair - compare vs the first file, and set flags.paired in the header of SEC_B250
                                // PIZ: pair b250 data is loaded to context.pair
-    bool stop_pairing;         // this is the 2nd file of a pair - don't use SNIP_PAIR_LOOKUP/DELTA anymore until the end of this VB
+    bool stop_pairing;         // this is the 2nd file of a pair - don't use SNIP_MATE_LOOKUP/DELTA anymore until the end of this VB
     bool no_callback;          // don't use LOCAL_GET_LINE_CALLBACK for compressing, despite it being defined
     bool local_param;          // copy local.param to SectionHeaderCtx
     bool no_vb1_sort;          // don't sort the dictionary in ctx_sort_dictionaries_vb_1
@@ -88,10 +88,18 @@ typedef struct Context {
                                //      trans_luft exists for this context, or it doesn't trigger for this line, or line is already in LUFT coordinates)
     enum __attribute__ ((__packed__)) { DEP_L0, DEP_L1, DEP_L2, NUM_LOCAL_DEPENDENCY_LEVELS } local_dep; // ZIP: this local is created when another local is compressed (each NONREF_X is created with NONREF is compressed) (value=0,1,2)
     bool seg_initialized;      // ZIP: context-specific seg initialization has been done
-    bool local_compressed;     // ZIP: local has been compressed
-    bool dict_merged;          // ZIP: dict has been merged into zctx
+    bool local_compressed;     // ZIP: VB: local has been compressed
+    bool b250_compressed;      // ZIP: VB: b250 has been compressed
+    bool dict_merged;          // ZIP: VB: dict has been merged into zctx
+    bool please_remove_dict;   // ZFILE: one or more of the VBs request NOT compressing this dict (will be dropped unless another VB insists on keeping it)
+
     TranslatorId luft_trans;   // ZIP: Luft translator for the context, set at context init and immutable thereafter
     
+    uint32_t local_in_z;       // ZIP: index and len into z_data where local compressed data is
+    uint32_t local_in_z_len;   
+    uint32_t b250_in_z;        // ZIP: index and len into z_data where b250 compressed data is
+    uint32_t b250_in_z_len;    
+
     // ZIP only: hash stuff 
     Buffer local_hash;         // hash table for entries added by this VB that are not yet in the global (until merge_number)
                                // obtained by hash function hash(snip) and the rest of linked to them by linked list
@@ -116,8 +124,8 @@ typedef struct Context {
     #define history local_hash // PIZ: used if FlagsCtx.store_per_line and also for lookback (for files compressed starting with v12.0.41) - contains an array of either int64_t (if STORE_INT) or HistoryWord
     #define per_line global_hash // PIZ: data copied from txt_data for fields with textual store_per_line, used in case flag.maybe_lines_dropped_by_reconstructor
 
-    Buffer word_list;          // PIZ: word list. an array of CtxWord - listing the snips in dictionary
-    #define zip_lookback_buf word_list  // ZIP: use word_list as lookback_buf
+    Buffer word_list;          // PIZ and ZIP z_file (ctx_verify_dict_words_uniq): word list. an array of CtxWord - listing the snips in dictionary
+    #define zip_lookback_buf word_list  // ZIP VB: use word_list as lookback_buf
 
     bool semaphore;            // valid within the context of reconstructing a single line. MUST be reset ahead of completing the line.
 

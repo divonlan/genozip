@@ -422,6 +422,7 @@ typedef union {
 // ---------
 
 extern void sections_add_to_list (VBlockP vb, const SectionHeader *header);
+extern void sections_remove_from_list (VBlockP vb, uint64_t offset, uint64_t len);
 extern void sections_list_concat (VBlockP vb);
 
 // ---------
@@ -464,5 +465,6 @@ extern int64_t sections_get_ref_size (void);
 
 // display functions
 extern void sections_show_header (const SectionHeader *header, VBlockP vb /* optional if output to buffer */, uint64_t offset, char rw);
-extern void sections_show_gheader (const SectionHeaderGenozipHeader *header /* optional */);
+extern void sections_show_gheader (const SectionHeaderGenozipHeader *header);
+extern void sections_show_section_list (VBlockP vb/*if VB*/, const SectionHeaderGenozipHeader *header/*if z_file*/);
 extern const char *lt_name (LocalType lt);
