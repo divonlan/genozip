@@ -400,7 +400,7 @@ When running ``genozip --chain``, a human-readable *rejects file*, ``mydata.d.vc
 
     ##fileformat=GENOZIP-REJECTSv12.0.33
     #oSTATUS          CHROM   POS      REF     ALT     REASON
-    RefNewAlleleIndel 1       366042   TA      A       Genozip limitation: new indel allele: PRIM=TAA LUFT(453295)=TAAAA
+    RefNewAlleleIndel 1       366042   TA      A       new indel allele: PRIM=TAA LUFT(453295)=TAAAA
 
 Here we can see why TA would be a new allele in the Luft reference: it is because the Primary REF allele relates to T followed by two As, and hence the ALT deletion allele refers to a T followed by a single A. Since the Luft reference contains four repeating As, and therefore the corresponding variant in Luft coordinates would therefore be "REF=TAAA ALT=TA,T", however at present Genozip is limited in that it cannot change a bi-allelic variant to a tri-allelic one, and hence the variant is rejected.
 
@@ -415,7 +415,7 @@ The option ``--show-lifts`` in combination with ``genozip --chain`` causes all l
     #oSTATUS          CHROM   POS      REF     ALT     REASON
     OkRefSameSNP      1       10285    T       .       SNP: REF unchanged
     OkRefSameSNP      1       329162   A       .       SNP: REF unchanged
-    RefNewAlleleIndel 1       366042   TA      A       Genozip limitation: new indel allele: PRIM=TAA LUFT(453295)=TAAAA
+    RefNewAlleleIndel 1       366042   TA      A       new indel allele: PRIM=TAA LUFT(453295)=TAAAA
     OkRefAltSwitchSNP 1       20159588 C       A       SNP: REF<>ALT switch
     
 |
@@ -489,6 +489,8 @@ The oSTATUSes produced are as follows:
 oSTATUS                   Occurs when...
 ========================= ==================================
 OkRefSameSNP              Lift succeeded - REF unchanged for a SNP variant
+OkRefSameSNPRev           Lift succeeded - REF unchanged for a SNP variant - with strand reversal
+OkRefSameSNPIupac         Lift succeeded - REF considered unchanged as it matches a IUPAC "base" in the Luft reference
 OkRefSameIndel            Lift succeeded - REF unchanged for an indel variant
 OkRefSameNDNIRev          Lift succeeded - Lift succeeded - REF unchanged for an left-anchored non-Ins non-Del indel variant with strand reversal
 OkRefSameDelRev           Lift succeeded - Lift succeeded - REF unchanged for an left-anchored Deletion variant with strand reversal
@@ -516,6 +518,7 @@ RefNewAlleleSNP           Lift failed - The Luft reference would introduce a new
 RefNewAlleleDelRefChgHas* Lift failed - REF changed in a Deletion variant that has a "*" ALT
 RefNewAlleleDelRefChanged Lift failed - REF changed in Deletion variant, but not REF<>ALT switch (i.e. Deletion not integrated into new reference)
 RefNewAlleleDelSameRef    Lift failed - REF bases match, but this is a new Deletion allele based on context
+RefNewAllelInsRefChanged  Lift failed - REF changed in Insertion variant
 RefNewAlleleInsSameRef    Lift failed - REF bases match, but this is a new Insertion allele based on context
 RefNewAlleleIndelNoSwitch Lift failed - REF switched with one of the ALTs, but flanking regions differ
 RefNewAlleleNDNI          Lift failed - REF is a new allele a left-anchored non-Ins non-Del indel variant

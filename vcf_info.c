@@ -577,7 +577,7 @@ static void vcf_seg_INFO_END (VBlockVCFP vb, Context *end_ctx, const char *end_s
 
         // case: we don't yet handle END translation in case of a reverse strand
         if (is_xstrand)            
-            REJECT_SUBFIELD (LO_INFO, end_ctx, ".\tGenozip limitation: Variant with INFO/END and chain file alignment with a negative strand%s", "");
+            REJECT_SUBFIELD (LO_INFO, end_ctx, ".\tVariant with INFO/END and chain file alignment with a negative strand%s", "");
 
         // case: END goes beyond the end of the chain file alignment and its a <DEL>
         else if (vb->is_del_sv && end > aln_last_pos) {
@@ -588,7 +588,7 @@ static void vcf_seg_INFO_END (VBlockVCFP vb, Context *end_ctx, const char *end_s
             // case: END falls in the gap after - <DEL> is still valid but translated END needs to be closer to POS to avoid gap - 
             // we don't yet do this
             if (end <= aln_last_pos + gap_after)
-                REJECT_SUBFIELD (LO_INFO, end_ctx, ".\tGenozip limitation: <DEL> variant: INFO/END=%.*s is in the gap after the end of the chain file alignment", end_len, end_str);
+                REJECT_SUBFIELD (LO_INFO, end_ctx, ".\t<DEL> variant: INFO/END=%.*s is in the gap after the end of the chain file alignment", end_len, end_str);
     
             // case: END falls on beyond the gap (next alignment or beyond) - this variant cannot be lifted
             else

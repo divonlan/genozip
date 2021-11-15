@@ -106,20 +106,22 @@ typedef enum {
     // OK statuses - this are internal to genozip and z_file.oStatus - not expressed in the txt file
     LO_OK,                          // internal progress step in ZIP - never written z_file
     LO_OK_REF_SAME_SNP,             // REF and ALT are the same for a SNP
+    LO_OK_REF_SAME_SNP_REV,         // REF and ALT are the same for a SNP - reverse complemented
+    LO_OK_REF_SAME_SNP_IUPAC,       // REF considered unchanged as it matches a IUPAC \"base\" in the Luft reference
     LO_OK_REF_SAME_INDEL,           // REF and ALT are the same for an INDEL, and confirmed not to be a REF<>ALT switch
-    LO_OK_REF_SAME_NDNI_REV,        // Extended status: Same, non-Ins non-Del left-aligned Indel, reverse complemented
-    LO_OK_REF_SAME_DEL_REV,         // Extended status: Same deletion - reverse complemented
-    LO_OK_REF_SAME_INS_REV,         // Extended status: Same insertion - reverse complented
+    LO_OK_REF_SAME_NDNI_REV,        // Same, non-Ins non-Del left-aligned Indel, reverse complemented
+    LO_OK_REF_SAME_DEL_REV,         // Same deletion - reverse complemented
+    LO_OK_REF_SAME_INS_REV,         // Same insertion - reverse complemented
 #define LO_OK_REF_SAME_INDEL_LAST LO_OK_REF_SAME_INS_REV
     LO_OK_REF_SAME_NLA,             // REF and ALT are the same for a non-left-aligned, not SNP variant
     LO_OK_REF_SAME_SV,              // REF and ALT are the same for a variant with a symbolic ALT allele
     LO_OK_REF_ALT_SWITCH_SNP,       // REF and ALT are switched, and INFO and FORMAT subfields updated
     LO_OK_REF_ALT_SWITCH_INDEL,     // REF and ALT are switched, and INFO and FORMAT subfields updated
-    LO_OK_REF_ALT_SWITCH_DEL_TO_INS,// Extended status: Deletion in Primary became incorporated in the Luft reference
-    LO_OK_REF_ALT_SWITCH_INDEL_RPTS,// Extended status: Switched number of payload repeats in reference
-    LO_OK_REF_ALT_SWITCH_INDEL_FLANKING,// Extended status: REF bases the same, but switch called based on flanking regions
-    LO_OK_REF_ALT_SWITCH_NDNI,      // Extended status: Left-anchored non=Ins non-Del INDEL
-    LO_OK_REF_ALT_SWITCH_INDEL_WITH_GAP,// Extended status: Deletion with payload in chain file gap
+    LO_OK_REF_ALT_SWITCH_DEL_TO_INS,// Deletion in Primary became incorporated in the Luft reference
+    LO_OK_REF_ALT_SWITCH_INDEL_RPTS,// Switched number of payload repeats in reference
+    LO_OK_REF_ALT_SWITCH_INDEL_FLANKING,// REF bases the same, but switch called based on flanking regions
+    LO_OK_REF_ALT_SWITCH_NDNI,      // Left-anchored non=Ins non-Del INDEL
+    LO_OK_REF_ALT_SWITCH_INDEL_WITH_GAP,// Deletion with payload in chain file gap
 #define LO_OK_REF_ALT_SWITCH_INDEL_LAST LO_OK_REF_ALT_SWITCH_INDEL_WITH_GAP
     LO_OK_REF_ALT_SWITCH_NLA,       // REF and ALT are switched, and INFO and FORMAT subfields updated
     LO_OK_REF_NEW_SNP,              // REF in a SNP was replaced with a new REF - can only happen if AF=1
@@ -131,9 +133,9 @@ typedef enum {
     LO_CHROM_NOT_IN_PRIM_REF,       // Primary reference doesn't contain CHROM
     LO_CHROM_NOT_IN_CHAIN,          // chain file doesn't contain a qName which has CHROM  
 #define LO_NO_MAPPING_IN_CHAIN_FIRST LO_NO_MAPPING_IN_CHAIN_REF
-    LO_NO_MAPPING_IN_CHAIN_REF,     // Extended status: chain file doesn't contain a mapping covering REF
-    LO_NO_MAPPING_IN_CHAIN_ANCHOR,  // Extended status: New left-anchor base (after reverse-complementing) is before beginning of the chromosome
-    LO_NO_MAPPING_REF_SPLIT,        // Extended status: REF is not fully within a single alignment in the chain file
+    LO_NO_MAPPING_IN_CHAIN_REF,     // chain file doesn't contain a mapping covering REF
+    LO_NO_MAPPING_IN_CHAIN_ANCHOR,  // New left-anchor base (after reverse-complementing) is before beginning of the chromosome
+    LO_NO_MAPPING_REF_SPLIT,        // REF is not fully within a single alignment in the chain file
 #define LO_NO_MAPPING_IN_CHAIN_LAST LO_NO_MAPPING_REF_SPLIT
     LO_REF_MISMATCHES_REFERENCE,    // REF different than reference 
 
@@ -141,12 +143,13 @@ typedef enum {
     LO_REF_MULTIALT_SWITCH_SNP,     // REF changes for a multi-allelic SNP, or REF change would make a bi-allelic into a tri-allelic SNP
     LO_NEW_ALLELE_SNP,              // The Luft reference represents an allele that is neither REF or ALT
     LO_REF_MULTIALT_SWITCH_INDEL,   // REF changes for a multi-allelic INDEL, or REF change would make a bi-allelic into a tri-allelic INDEL
-    LO_NEW_ALLELE_DEL_REF_CHANGED_MISSING,  // Extended status: REF changed in a Deletion variant that has a "*" ALT
-    LO_NEW_ALLELE_DEL_REF_CHANGED,  // Extended status: REF changed in Deletion variant, but not REF<>ALT switch (i.e. Deletion not integrated into new reference)
-    LO_NEW_ALLELE_DEL_SAME_REF,     // Extended status: REF bases match, but this is a new Deletion allele based on context
-    LO_NEW_ALLELE_INS_SAME_REF,     // Extended status: REF bases match, but this is a new Insertion allele based on context
-    LO_NEW_ALLELE_INDEL_NO_SWITCH,  // Extended status: REF switched with one of the ALTs, but flanking regions differ
-    LO_NEW_ALLELE_NDNI,             // Extended status: REF is a new allele a left-anchored non-Del non-Ins indel
+    LO_NEW_ALLELE_DEL_REF_CHANGED_MISSING,  // REF changed in a Deletion variant that has a "*" ALT
+    LO_NEW_ALLELE_DEL_REF_CHANGED,  // REF changed in Deletion variant, but not REF<>ALT switch (i.e. Deletion not integrated into new reference)
+    LO_NEW_ALLELE_DEL_SAME_REF,     // REF bases match, but this is a new Deletion allele based on context
+    LO_NEW_ALLELE_INS_REF_CHANGED,  // REF changed in Insertion variant
+    LO_NEW_ALLELE_INS_SAME_REF,     // REF bases match, but this is a new Insertion allele based on context
+    LO_NEW_ALLELE_INDEL_NO_SWITCH,  // REF switched with one of the ALTs, but flanking regions differ
+    LO_NEW_ALLELE_NDNI,             // REF is a new allele a left-anchored non-Del non-Ins indel
 
     LO_XSTRAND_NLA,                 // Used in v12.0.0-12.0.37: Genozip limiation: A complex indel variant mapped to the reverse strand
     LO_NEW_ALLELE_NLA,              // The Luft reference represents an allele that is neither REF or ALT
@@ -169,14 +172,16 @@ typedef enum {
 extern const char *dvcf_status_names[NUM_LO_STATUSES];
 #define DVCF_STATUS_NAMES { /* for display esthetics - max 25 characters - note: these strings are defined in the dual-coordinate specification */\
     "UNKNOWN", \
-    "OK", "OkRefSameSNP", "OkRefSameIndel", "OkRefSameNDNIRev", "OkRefSameDelRev", "OkRefSameInsRev", \
+    "OK", "OkRefSameSNP", "OkRefSameSNPRev", "OkRefSameSNPIupac", \
+    "OkRefSameIndel", "OkRefSameNDNIRev", "OkRefSameDelRev", "OkRefSameInsRev", \
     "OkRefSameNotLeftAnc", "OkRefSameStructVariant", "OkRefAltSwitchSNP", \
     "OkRefAltSwitchIndel", "OkRefAltSwitchDelToIns", "OkRefAltSwitchIndelRpts", "OkRefAltSwitchIndelFlank", "OkRefAltSwitchNDNI", "OkRefAltSwitchWithGap", \
     "OkRefAltSwitchNotLeftAnc", "OkNewRefSNP", \
     "Rejected", "ChromNotInPrimReference", "ChromNotInChainFile", \
     "RefNotMappedInChain", "NewAnchorNotInChrom", "RefSplitInChain", \
     "RefMismatchesReference", "RefMultiAltSwitchSNP", "RefNewAlleleSNP", "RefMultiAltSwitchIndel", \
-    "RefNewAlleleDelRefChgHas*", "RefNewAlleleDelRefChanged", "RefNewAlleleDelSameRef", "RefNewAlleleInsSameRef", "RefNewAlleleIndelNoSwitch", "RefNewAlleleNDNI",\
+    "RefNewAlleleDelRefChgHas*", "RefNewAlleleDelRefChanged", "RefNewAlleleDelSameRef", \
+    "RefNewAllelInsRefChanged", "RefNewAlleleInsSameRef", "RefNewAlleleIndelNoSwitch", "RefNewAlleleNDNI",\
     "XstrandNotLeftAnc", "RefNewAlleleNotLeftAnc","RefNewAlleleSV", "XstrandSV", "ComplexRearrangements", \
     "AddedVariant", "UnsupportedRefAlt", \
     "INFO", "FORMAT" \
