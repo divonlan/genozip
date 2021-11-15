@@ -9,19 +9,19 @@ To see more, peer-reviewed, benchmarks, see :ref:`Publications <publications>`.
 
 As can be appreciated from the *detailed compression reports* following the table, the compression gains strongly depend on the specific fields contained in a file, and can therefore vary significantly. 
 
-=== =========== ========= ========= ============ ================================= ==============================
-#   Type        Size      .genozip  Genozip gain Data                              Source
-=== =========== ========= ========= ============ ================================= ==============================
-1   BAM         41 GB     10 GB     4.1X         30x Illumina NovaSeq + Dragen     Unpublished
-2   BAM         53.8 GB   30.2 GB   1.8X         PacBio CLR (mapped)               `1000 Genozip Project <ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/working/20131209 na12878 pacbio/si/NA12878.pacbio.bwa-sw.20140202.bam>`_
-3   CRAM        15 GB     9.8 GB    1.5X         Illumina NovaSeq + bwa mem        `The European Bioinformatics Institute <ftp://ftp.sra.ebi.ac.uk/vol1/run/ERR323/ERR3239334/NA12878.final.cram>`_
-4   FASTQ.gz    61.2 GB   14.2 GB   4.3X         30x Illumina NovaSeq              Unpublished
-5   VCF.gz      241.8 MB  85.8 MB   2.8X         30x Illumina NovaSeq + Dragen     Unpublished
-6   VCF.gz      27 GB     7.8 GB    3.3X         3202 samples                      `1000 Genome Project <ftp://ftp=trace.ncbi.nih.gov/1000genomes/ftp/release/20110521/20201028_CCDG_14151_B01_GRM_WGS_2020=08=05_chr22.recalibrated_variants.vcf.gz>`_
-7   FASTA       1.2 GB    5.9 MB    212.2X       Covid-19 multi-FASTA              `coronavirus.innar.com <https://coronavirus.innar.com/coronavirus.unwrapped.fasta.zip>`_
-8   GFF3        714 KB    32 KB     22.2X        GRCh38 issues                     `NCBI <https://ftp.ncbi.nlm.nih.gov/pub/grc/human/GRC/Issue_Mapping/GRCh38.p9_issues.gff3>`_
-9   23andMe     23.6 MB   4.2 MB    5.7X         Consumer DNA test "raw data"      Unpublished
-=== =========== ========= ========= ============ ================================= ==============================
+== ================================ =========== ========= ========= ============ ================================= ==============================
+#   Details                         Type        Size      .genozip  Genozip gain Data                              Source
+== ================================ =========== ========= ========= ============ ================================= ==============================
+1  :ref:`details<benchmark-BAM1>`   BAM         41 GB     10 GB     4.1X         30x Illumina NovaSeq + Dragen     Unpublished
+2  :ref:`details<benchmark-BAM2>`   BAM         53.8 GB   30.2 GB   1.8X         PacBio CLR (mapped)               `1000 Genozip Project <ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/working/20131209 na12878 pacbio/si/NA12878.pacbio.bwa-sw.20140202.bam>`_
+3  :ref:`details<benchmark-CRAM1>`  CRAM        15 GB     9.8 GB    1.5X         Illumina NovaSeq + bwa mem        `The European Bioinformatics Institute <ftp://ftp.sra.ebi.ac.uk/vol1/run/ERR323/ERR3239334/NA12878.final.cram>`_
+4  :ref:`details<benchmark-FASTQ1>` FASTQ.gz    61.2 GB   14.2 GB   4.3X         30x Illumina NovaSeq              Unpublished
+5  :ref:`details<benchmark-VCF1>`   VCF.gz      241.8 MB  85.8 MB   2.8X         30x Illumina NovaSeq + Dragen     Unpublished
+6  :ref:`details<benchmark-VCF2>`   VCF.gz      27 GB     7.8 GB    3.3X         3202 samples                      `1000 Genome Project <ftp://ftp=trace.ncbi.nih.gov/1000genomes/ftp/release/20110521/20201028_CCDG_14151_B01_GRM_WGS_2020=08=05_chr22.recalibrated_variants.vcf.gz>`_
+7  :ref:`details<benchmark-FASTA1>` FASTA       1.2 GB    5.9 MB    212.2X       Covid-19 multi-FASTA              `coronavirus.innar.com <https://coronavirus.innar.com/coronavirus.unwrapped.fasta.zip>`_
+8  :ref:`details<benchmark-GFF1>`   GFF3        714 KB    32 KB     22.2X        GRCh38 issues                     `NCBI <https://ftp.ncbi.nlm.nih.gov/pub/grc/human/GRC/Issue_Mapping/GRCh38.p9_issues.gff3>`_
+9  :ref:`details<benchmark-ME1>`    23andMe     23.6 MB   4.2 MB    5.7X         Consumer DNA test "raw data"      Unpublished
+== ================================ =========== ========= ========= ============ ================================= ==============================
 
 Notes:
 
@@ -32,7 +32,9 @@ Notes:
 
 *The following reports were produced with* ``genocat --stats`` *on each* ``.genozip`` *file:*
 
-- BAM - File #1 - 30x Illumina NovaSeq + Dragen:
+.. _benchmark-BAM1:
+
+**BAM - 30x Illumina NovaSeq + Dragen:**
 
 ::
 
@@ -69,8 +71,9 @@ Notes:
     GENOZIP vs BGZF        10.0 GB 100.0%   41.0 GB 100.0%    4.1X
     GENOZIP vs TXT         10.0 GB 100.0%  194.0 GB 100.0%   19.4X
 
+.. _benchmark-BAM2:
 
-- BAM - File #2 - PacBio CLR (mapped)
+**BAM - PacBio CLR (mapped)**
 
 ::
 
@@ -107,8 +110,9 @@ Notes:
     GENOZIP vs BGZF        30.2 GB 100.0%   53.8 GB 100.0%    1.8X
     GENOZIP vs TXT         30.2 GB 100.0%  107.3 GB 100.0%    3.6X
 
+.. _benchmark-CRAM1:
 
-- CRAM - File #3 - Illumina NovaSeq + bwa mem
+**CRAM - Illumina NovaSeq + bwa mem**
 
 ::
 
@@ -150,8 +154,9 @@ Notes:
     BAM_BIN                   43 B   0.0%         -   0.0%    0.0X
     TOTAL                   9.8 GB 100.0%  374.2 GB 100.0%   38.3X
 
+.. _benchmark-FASTQ1:
 
-- FASTQ - File #4 - 30x Illumina NovaSeq
+**FASTQ - 30x Illumina NovaSeq**
 
 ::
 
@@ -174,7 +179,9 @@ Notes:
     GENOZIP vs TXT         14.2 GB 100.0%  294.7 GB 100.0%   20.7X
 
 
-- VCF - File #5 - 30x Illumina NovaSeq + Dragen
+.. _benchmark-VCF1:
+
+**VCF - 30x Illumina NovaSeq + Dragen**
 
 ::
 
@@ -227,7 +234,9 @@ Notes:
     GENOZIP vs TXT         85.8 MB 100.0%    1.1 GB 100.0%   12.7X
 
 
-- VCF - File #6 - 3202 samples from the 1000 Genome Project:
+.. _benchmark-VCF2:
+
+**VCF - 3202 samples from the 1000 Genome Project**
 
 ::
 
@@ -326,7 +335,9 @@ Notes:
     GENOZIP vs TXT          7.8 GB 100.0%  175.3 GB 100.0%   22.4X
 
 
-- FASTA - File #7 - Covid-19 multi-FASTA
+.. _benchmark-FASTA1:
+
+**FASTA - Covid-19 multi-FASTA**
 
 ::
 
@@ -345,7 +356,9 @@ Notes:
     TOTAL                   5.9 MB 100.0%    1.2 GB 100.0%  212.2X
 
 
-- GFF3 - File #8 - GRCh38 issues
+.. _benchmark-GFF1:
+
+**GFF3 - GRCh38 issues**
 
 ::
 
@@ -377,7 +390,9 @@ Notes:
     TOTAL                  32.1 KB 100.0%  713.6 KB 100.0%   22.2X
 
 
-- 23andMe - File #9 - Consumer DNA test "raw data"
+.. _benchmark-ME1:
+
+**23andMe - Consumer DNA test "raw data"**
 
 ::
 
