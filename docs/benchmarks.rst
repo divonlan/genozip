@@ -10,7 +10,7 @@ To see more, peer-reviewed, benchmarks, see :ref:`Publications <publications>`.
 As can be appreciated from the *detailed compression reports* following the table, the compression gains strongly depend on the specific fields contained in a file, and can therefore vary significantly. 
 
 == ================================ =========== ========= ========= ============ ================================= ==============================
-#   Details                         Type        Size      .genozip  Genozip gain Data                              Source
+#   Details                         Type        Size      .genozip  Genozip gain Data                              Link to data
 == ================================ =========== ========= ========= ============ ================================= ==============================
 1  :ref:`details<benchmark-BAM1>`   BAM         41 GB     10 GB     4.1X         30x Illumina NovaSeq + Dragen     Unpublished
 2  :ref:`details<benchmark-BAM2>`   BAM         53.8 GB   30.2 GB   1.8X         PacBio CLR (mapped)               `1000 Genozip Project <ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/working/20131209 na12878 pacbio/si/NA12878.pacbio.bwa-sw.20140202.bam>`_
