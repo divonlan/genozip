@@ -17,7 +17,7 @@ As can be appreciated from the *detailed compression reports* following the tabl
 3   CRAM        15 GB     9.8 GB    1.5X         Illumina NovaSeq + bwa mem        `The European Bioinformatics Institute <ftp://ftp.sra.ebi.ac.uk/vol1/run/ERR323/ERR3239334/NA12878.final.cram>`_
 4   FASTQ.gz    61.2 GB   14.2 GB   4.3X         30x Illumina NovaSeq              Unpublished
 5   VCF.gz      241.8 MB  85.8 MB   2.8X         30x Illumina NovaSeq + Dragen     Unpublished
-6   VCF.gz      27 GB     9.4 GB    2.9X         3202 samples                      `1000 Genome Project <ftp://ftp=trace.ncbi.nih.gov/1000genomes/ftp/release/20110521/20201028_CCDG_14151_B01_GRM_WGS_2020=08=05_chr22.recalibrated_variants.vcf.gz>`_
+6   VCF.gz      27 GB     7.8 GB    3.3X         3202 samples                      `1000 Genome Project <ftp://ftp=trace.ncbi.nih.gov/1000genomes/ftp/release/20110521/20201028_CCDG_14151_B01_GRM_WGS_2020=08=05_chr22.recalibrated_variants.vcf.gz>`_
 7   FASTA       1.2 GB    5.9 MB    212.2X       Covid-19 multi-FASTA              `coronavirus.innar.com <https://coronavirus.innar.com/coronavirus.unwrapped.fasta.zip>`_
 8   GFF3        714 KB    32 KB     22.2X        GRCh38 issues                     `NCBI <https://ftp.ncbi.nlm.nih.gov/pub/grc/human/GRC/Issue_Mapping/GRCh38.p9_issues.gff3>`_
 9   23andMe     23.6 MB   4.2 MB    5.7X         Consumer DNA test "raw data"      Unpublished
@@ -25,7 +25,7 @@ As can be appreciated from the *detailed compression reports* following the tabl
 
 Notes:
 
-    - The tests were conducted using Genozip version 13.0.2, running with the ``--best`` option and in the cases of BAM, CRAM, FASTQ files, also with the ``--reference`` option specifying the appropriate reference file.
+    - The tests were conducted with the ``--best`` option and in the cases of BAM, CRAM, FASTQ files, also with the ``--reference`` option specifying the appropriate reference file.
     
   
 **Detailed compression reports**
@@ -227,30 +227,28 @@ Notes:
     GENOZIP vs TXT         85.8 MB 100.0%    1.1 GB 100.0%   12.7X
 
 
-- VCF - File #6 - 3202 samples
+- VCF - File #6 - 3202 samples from the 1000 Genome Project:
 
 ::
 
-    VCF: 1000 Genome Project:
-
     VCF file: 20201028_CCDG_14151_B01_GRM_WGS_2020-08-05_chr22.recalibrated_variants.vcf.gz
-    Samples: 3202   Variants: 1,927,372   Dictionaries: 283   Vblocks: 351 x 512 MB  Sections: 54993
-    Genozip version: 13.0.2 conda
-    Date compressed: 2021-11-09 16:15:33 ACDT
+    Samples: 3202   Variants: 1,927,372   Dictionaries: 401   Vblocks: 351 x 512 MB  Sections: 158051
+    Genozip version: 13.0.3 github
+    Date compressed: 2021-11-14 08:56:28 ACDT
 
     Sections (sorted by % of genozip file):
     NAME                   GENOZIP      %      TXT       %   RATIO
-    FORMAT/PL               6.6 GB  70.2%   59.4 GB  33.9%    9.0X
-    FORMAT/AD               2.4 GB  25.9%   24.7 GB  14.1%   10.2X
-    FORMAT/GT              67.2 MB   0.7%   17.2 GB   9.8%  262.8X
-    FORMAT/GQ              65.3 MB   0.7%   11.2 GB   6.4%  175.9X
-    FORMAT/PID             63.9 MB   0.7%    3.2 GB   1.8%   51.3X
-    FORMAT/PGT             38.4 MB   0.4%    2.3 GB   1.3%   60.1X
-    FORMAT/DP              19.6 MB   0.2%   11.4 GB   6.5%  594.4X
-    FORMAT/AB              14.9 MB   0.2%    5.7 GB   3.2%  389.8X
+    FORMAT/PL               5.0 GB  64.3%   59.4 GB  33.9%   11.8X
+    FORMAT/AD               2.4 GB  30.9%   24.7 GB  14.1%   10.2X
+    FORMAT/GT              67.2 MB   0.8%   17.2 GB   9.8%  262.8X
+    FORMAT/GQ              65.3 MB   0.8%   11.2 GB   6.4%  176.0X
+    FORMAT/PID             63.5 MB   0.8%    3.2 GB   1.8%   51.6X
+    FORMAT/PGT             38.4 MB   0.5%    2.3 GB   1.3%   60.1X
+    FORMAT/DP              19.6 MB   0.2%   11.4 GB   6.5%  593.2X
+    FORMAT/AB              14.9 MB   0.2%    5.7 GB   3.2%  388.8X
     INFO/AC_Het_EUR_unre    5.9 MB   0.1%   26.9 MB   0.0%    4.6X
     QUAL                    5.1 MB   0.1%   13.7 MB   0.0%    2.7X
-    INFO/DP                 4.3 MB   0.0%   10.5 MB   0.0%    2.4X
+    INFO/DP                 4.4 MB   0.1%   10.5 MB   0.0%    2.4X
     INFO/AF_AMR_unrel       3.4 MB   0.0%   20.4 MB   0.0%    6.0X
     INFO/VQSLOD             3.3 MB   0.0%    9.6 MB   0.0%    2.9X
     INFO/FS                 3.0 MB   0.0%    7.3 MB   0.0%    2.5X
@@ -283,7 +281,7 @@ Notes:
     INFO/AF_EAS             1.5 MB   0.0%    8.5 MB   0.0%    5.6X
     INFO/AC_Het_AMR         1.5 MB   0.0%    5.3 MB   0.0%    3.5X
     POS                     1.5 MB   0.0%   16.5 MB   0.0%   11.2X
-    INFO/AC_Het_EUR         1.5 MB   0.0%    5.4 MB   0.0%    3.6X
+    INFO/AC_Het_EUR         1.5 MB   0.0%    5.4 MB   0.0%    3.7X
     INFO/HWE_AFR            1.4 MB   0.0%    5.0 MB   0.0%    3.5X
     INFO/AC_Het_EAS         1.4 MB   0.0%    5.3 MB   0.0%    3.8X
     INFO/ExcHet_AMR         1.4 MB   0.0%    6.2 MB   0.0%    4.4X
@@ -299,33 +297,33 @@ Notes:
     INFO/HWE_SAS            1.1 MB   0.0%    4.2 MB   0.0%    4.0X
     INFO/HWE_AMR            1.0 MB   0.0%    4.1 MB   0.0%    4.0X
     INFO/HWE_EUR            1.0 MB   0.0%    4.1 MB   0.0%    4.0X
-    INFO/HWE_EAS          980.8 KB   0.0%    4.0 MB   0.0%    4.1X
-    INFO/AC_Hom           936.9 KB   0.0%    2.8 MB   0.0%    3.1X
-    INFO/ME               927.0 KB   0.0%    4.5 MB   0.0%    4.9X
-    INFO/AC               753.8 KB   0.0%    3.5 MB   0.0%    4.7X
-    INFO/AN_AMR_unrel     537.3 KB   0.0%   12.8 MB   0.0%   24.5X
-    INFO                  479.4 KB   0.0%    1.6 GB   0.9% 3600.2X
+    INFO/HWE_EAS          981.2 KB   0.0%    4.0 MB   0.0%    4.1X
+    INFO/AC_Hom           936.7 KB   0.0%    2.8 MB   0.0%    3.1X
+    INFO/ME               926.4 KB   0.0%    4.5 MB   0.0%    4.9X
+    INFO/AC               778.4 KB   0.0%    3.5 MB   0.0%    4.6X
+    INFO/AN_AMR_unrel     537.4 KB   0.0%   12.8 MB   0.0%   24.5X
+    INFO                  479.4 KB   0.0%    1.6 GB   0.9% 3600.3X
     INFO/AN_EUR_unrel     472.6 KB   0.0%   14.4 MB   0.0%   31.2X
-    INFO/AN               457.8 KB   0.0%    7.4 MB   0.0%   16.4X
-    Other                 391.4 KB   0.0%   38.1 GB  21.7% 102008.7X
+    INFO/AN               457.6 KB   0.0%    7.4 MB   0.0%   16.4X
+    Other                 391.4 KB   0.0%   38.1 GB  21.7% 102014.1X
     FORMAT                347.0 KB   0.0%   37.9 MB   0.0%  111.8X
     INFO/culprit          340.1 KB   0.0%    5.5 MB   0.0%   16.7X
-    INFO/AN_AFR           338.2 KB   0.0%    7.3 MB   0.0%   22.2X
+    INFO/AN_AFR           337.9 KB   0.0%    7.3 MB   0.0%   22.2X
     INFO/AN_EUR           285.7 KB   0.0%    7.3 MB   0.0%   26.2X
     INFO/AN_SAS           283.2 KB   0.0%    7.3 MB   0.0%   26.4X
-    INFO/AN_EAS           273.7 KB   0.0%    7.3 MB   0.0%   27.3X
+    INFO/AN_EAS           273.6 KB   0.0%    7.3 MB   0.0%   27.3X
     INFO/AN_AMR           272.8 KB   0.0%    5.5 MB   0.0%   20.7X
     INFO/AN_SAS_unrel     266.6 KB   0.0%    5.5 MB   0.0%   21.2X
     FILTER                147.0 KB   0.0%   15.0 MB   0.0%  104.6X
     INFO/NEGATIVE_TRAIN_   14.1 KB   0.0%         -   0.0%    0.0X
     TXT_HEADER             13.2 KB   0.0%  201.7 KB   0.0%   15.2X
     INFO/POSITIVE_TRAIN_   12.2 KB   0.0%         -   0.0%    0.0X
-    COORDS                   476 B   0.0%         -   0.0%    0.0X
+    COORDS                   536 B   0.0%         -   0.0%    0.0X
     CHROM                    139 B   0.0%   11.0 MB   0.0% 83195.9X
     ID                        42 B   0.0%    3.7 MB   0.0% 91779.6X
     INFO/MQ0                  42 B   0.0%    1.8 MB   0.0% 45889.8X
-    GENOZIP vs BGZF         9.4 GB 100.0%   26.0 GB 100.0%    2.8X
-    GENOZIP vs TXT          9.4 GB 100.0%  175.3 GB 100.0%   18.7X
+    GENOZIP vs BGZF         7.8 GB 100.0%   26.0 GB 100.0%    3.3X
+    GENOZIP vs TXT          7.8 GB 100.0%  175.3 GB 100.0%   22.4X
 
 
 - FASTA - File #7 - Covid-19 multi-FASTA

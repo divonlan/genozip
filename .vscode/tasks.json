@@ -152,10 +152,10 @@
         },
         {
             "type": "shell",
-            "label": "Deploy Docs",
+            "label": "Publish Docs",
             "command": "make",
             "args": [
-                "docs"
+                "publish-docs"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"
