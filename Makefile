@@ -265,7 +265,7 @@ publish-docs: docs/_build/html/.buildinfo docs/LICENSE.for-docs.txt docs/RELEASE
 	@git push > /dev/null
 
 test-docs: docs/_build/html/.buildinfo 
-	@"/c/Program Files (x86)/Google/Chrome/Application/chrome.exe" file:///c:/Users/divon/projects/genozip/docs/_build/html/index.html
+	@"/c/Program Files (x86)/Google/Chrome/Application/chrome.exe" file:///c:/Users/divon/projects/genozip/docs/_build/html/index.html --new-window
 
 # this is used by build.sh to install on conda for Linux and Mac. Installation for Windows in in bld.bat
 install: genozip$(EXE)
