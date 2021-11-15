@@ -531,7 +531,7 @@ static inline void sam_seg_XS_field (VBlockSAM *vb, ValueType XS, unsigned add_b
 // Seg against buddy if we have one, or else against MAPQ as it is often very similar
 static inline void sam_seg_MQ_field (VBlockSAM *vb, ZipDataLineSAM *dl, ValueType MQ, unsigned add_bytes)
 {
-    if (segconf.running) segconf.has_MQ = true;
+    if (segconf.running) segconf.has[OPTION_MQ_i] = true;
 
     dl->MQ = MQ.i;
     

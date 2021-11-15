@@ -235,7 +235,7 @@ void sam_cigar_seg_textual (VBlockSAM *vb, ZipDataLineSAM *dl, unsigned last_cig
     ZipDataLineSAM *buddy_dl = DATA_LINE (vb->buddy_line_i); // an invalid pointer if buddy_line_i is -1
     bool seg_done=false;
 
-    if (last_cigar_len > 4 && vb->buddy_line_i != -1 && segconf.has_MC && !segconf.running && 
+    if (last_cigar_len > 4 && vb->buddy_line_i != -1 && segconf.has[OPTION_MC_Z] && !segconf.running && 
         cigar_snip_len == 2 && // we don't buddy if CIGAR or SEQ are "*"
         buddy_dl->MC.snip_len == last_cigar_len && 
         !memcmp (vb->last_cigar, ENT (char, vb->txt_data, buddy_dl->MC.char_index), last_cigar_len)) 
@@ -255,7 +255,7 @@ void sam_cigar_seg_textual (VBlockSAM *vb, ZipDataLineSAM *dl, unsigned last_cig
     }
     
     // store the CIGAR in DataLine for use by a buddy MC:Z
-    if (segconf.has_MC)
+    if (segconf.has[OPTION_MC_Z])
         dl->CIGAR =(CtxWord){ .char_index = ENTNUM (vb->txt_data, vb->last_cigar), .snip_len = last_cigar_len }; // in SAM (but not BAM) vb->last_cigar points into txt_data
 
     if (segconf.running) segconf.sam_cigar_len += last_cigar_len;
@@ -290,7 +290,7 @@ void sam_cigar_seg_binary (VBlockSAM *vb, ZipDataLineSAM *dl, uint32_t l_seq, ui
     bool seg_done=false;
     unsigned add_bytes = n_cigar_op * sizeof (uint32_t) /* cigar */ + sizeof (uint16_t) /* n_cigar_op */;
 
-    if (vb->textual_cigar.len > 4 && vb->buddy_line_i != -1 && segconf.has_MC && !segconf.running && 
+    if (vb->textual_cigar.len > 4 && vb->buddy_line_i != -1 && segconf.has[OPTION_MC_Z] && !segconf.running && 
         buddy_dl->MC.snip_len == vb->textual_cigar.len && 
         cigar_snip_len == 2 && // we don't buddy if CIGAR or SEQ are "*"
         !memcmp (vb->textual_cigar.data, ENT (char, vb->txt_data, buddy_dl->MC.char_index), vb->textual_cigar.len)) 
@@ -310,7 +310,7 @@ void sam_cigar_seg_binary (VBlockSAM *vb, ZipDataLineSAM *dl, uint32_t l_seq, ui
     }
 
     // store a copy of the CIGAR in buddy_textual_cigars for use by a buddy MC:Z
-    if (segconf.has_MC && !segconf.running) {
+    if (segconf.has[OPTION_MC_Z] && !segconf.running) {
         dl->CIGAR =(CtxWord){ .char_index = vb->buddy_textual_cigars.len, .snip_len = vb->textual_cigar.len }; // in BAM dl->CIGAR points into buddy_textual_cigars
         buf_add_buf (VB, &vb->buddy_textual_cigars, &vb->textual_cigar, char, "buddy_textual_cigars");
     }
@@ -354,7 +354,7 @@ unsigned sam_cigar_get_MC_ref_consumed (STRp(mc))
 // MC:Z "CIGAR string for mate/next segment" (https://samtools.github.io/hts-specs/SAMtags.pdf)
 void sam_cigar_seg_MC (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(mc), unsigned add_bytes)
 {
-    if (segconf.running) segconf.has_MC = true;
+    if (segconf.running) segconf.has[OPTION_MC_Z] = true;
 
     ZipDataLineSAM *buddy_dl = DATA_LINE (vb->buddy_line_i); // an invalid pointer if buddy_line_i is -1
     Buffer *buddy_cigar_buf = IS_BAM ? &vb->buddy_textual_cigars : &vb->txt_data; // buddy_dl->MC points into this buffer

@@ -36,8 +36,8 @@ static inline bool sam_seg_predict_TLEN (VBlockSAM *vb, ZipDataLineSAM *dl, bool
         
         uint32_t approx_mate_ref_consumed;
 
-        if (!segconf.running && segconf.has_MC) {
-            if (!ctx_encountered_in_line(VB, OPTION_MC_Z)) return false; // in a has_MC file, if we use this formula referring to MC, we need to assure PIZ that MC exists on this line, as it cannot easily check 
+        if (!segconf.running && segconf.has[OPTION_MC_Z]) {
+            if (!ctx_encountered_in_line(VB, OPTION_MC_Z)) return false; // in a has[OPTION_MC_Z] file, if we use this formula referring to MC, we need to assure PIZ that MC exists on this line, as it cannot easily check 
             
             approx_mate_ref_consumed = CTX(OPTION_MC_Z)->last_value.i;
         }
@@ -93,7 +93,7 @@ void sam_seg_TLEN (VBlockSAM *vb, ZipDataLineSAM *dl,
                     (int)vb->line_i, (int)dl->POS, (int)dl->PNEXT, vb->ref_consumed, (int)CTX(OPTION_MC_Z)->last_value.i,
                     dl->FLAG.bits.supplementary, dl->FLAG.bits.next_unmapped, dl->FLAG.bits.is_first, dl->FLAG.bits.rev_comp, dl->FLAG.bits.next_rev_comp, dl->FLAG.bits.is_aligned);
 */
-        char tlen_by_calc[30] = { SNIP_SPECIAL, SAM_SPECIAL_TLEN, '0' + segconf.has_MC };
+        char tlen_by_calc[30] = { SNIP_SPECIAL, SAM_SPECIAL_TLEN, '0' + segconf.has[OPTION_MC_Z] };
         unsigned tlen_by_calc_len = 
             (tlen_value == predicted_tlen) ? 0 : str_int (tlen_value - predicted_tlen, &tlen_by_calc[3]);
 

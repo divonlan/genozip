@@ -416,13 +416,13 @@ static inline WordIndex vcf_seg_FORMAT_AD_varscan (VBlockVCF *vb, Context *ctx, 
 static void vcf_seg_AD_items (VBlockVCFP vb, Context *ctx, unsigned num_items, ContextP *item_ctxs, 
                               STRps(item), const int64_t *values)
 {       
-    bool has_adall_this_sample = segconf.vcf_has_ADALL && ctx_encountered (VB, FORMAT_ADALL); // note: we can delta vs ADALL unless segconf says so, bc it can ruin other fields that rely on peeking AD, eg AB
+    bool has_adall_this_sample = segconf.has[FORMAT_ADALL] && ctx_encountered (VB, FORMAT_ADALL); // note: we can delta vs ADALL unless segconf says so, bc it can ruin other fields that rely on peeking AD, eg AB
     int64_t sum = 0; 
 
     for (unsigned i=0; i < num_items; i++) {
 
         // If we have ADALL in this file, we delta vs ADALL if we have it in this sample, or seg normally if not
-        if (segconf.vcf_has_ADALL) {
+        if (segconf.has[FORMAT_ADALL]) {
             // case: we had ADALL preceeding in this sample, seg as delta vs. ADALL 
             if (has_adall_this_sample)
                 seg_delta_vs_other (VB, item_ctxs[i], ECTX (con_ADALL.items[i].dict_id), NULL, item_lens[i]);
@@ -462,7 +462,7 @@ static void vcf_seg_AD_items (VBlockVCFP vb, Context *ctx, unsigned num_items, C
 static void vcf_seg_ADALL_items (VBlockVCFP vb, Context *ctx, unsigned num_items, ContextP *item_ctxs, 
                                  STRps(item), const int64_t *values)
 {
-    if (segconf.running) segconf.vcf_has_ADALL = true;
+    if (segconf.running) segconf.has[FORMAT_ADALL] = true;
 
     for (unsigned i=0; i < num_items; i++) 
         if (i==0 || i==1) {
@@ -890,7 +890,7 @@ static inline void vcf_seg_FORMAT_AB (VBlockVCF *vb, Context *ctx, STRp(ab))
 
     if (channel_i==-1                   || // GT didn't produce a mux channel
         (channel_i==1 && z_dual_coords) || // we can't handle channel 1 in dual coordinates (TODO: limit to REF<>ALT switch)
-        segconf.vcf_has_ADALL           || // we can't handle AD0/AD1 peeking in AD is a delta vs ADALL
+        segconf.has[FORMAT_ADALL]           || // we can't handle AD0/AD1 peeking in AD is a delta vs ADALL
         (is_0_or_2 && !ab_missing)) {      // if channel is 0 or 2, we expected a '.' 
     
         seg_by_ctx (VB, STRa(ab), ctx, ab_len);

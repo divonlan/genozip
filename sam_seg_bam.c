@@ -28,7 +28,7 @@ void bam_seg_initialize (VBlock *vb)
 {
     sam_seg_initialize (vb);
 
-    if (!segconf.running && segconf.has_MC)
+    if (!segconf.running && segconf.has[OPTION_MC_Z])
         buf_alloc (vb, &VB_SAM->buddy_textual_cigars, 0, segconf.sam_cigar_len * vb->lines.len, char, CTX_GROWTH, "buddy_textual_cigars");
 }
 
@@ -386,7 +386,7 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     bam_seg_BIN (vb, dl, bin, this_pos);
 
     // we search forward for MD:Z now, as we will need it for SEQ if it exists
-    if (segconf.has_MD && !segconf.running) {
+    if (segconf.has[OPTION_MD_Z] && !segconf.running) {
         STR(md); 
         if (bam_seg_get_MD (vb, next_field + (l_seq+1)/2 + l_seq, after, pSTRa(md)))
             sam_md_analyze (vb, STRa(md), this_pos, FIRSTENT(char, vb->textual_cigar));

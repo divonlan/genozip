@@ -829,7 +829,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     GET_NEXT_ITEM (SAM_TLEN);
 
     // we search forward for MD:Z now, as we will need it for SEQ if it exists
-    if (segconf.has_MD && !segconf.running) {
+    if (segconf.has[OPTION_MD_Z] && !segconf.running) {
         STR(md); 
         if (sam_seg_get_MD (next_field, remaining_txt_len, pSTRa(md)))
             sam_md_analyze (vb, STRa(md), this_pos, vb->last_cigar);

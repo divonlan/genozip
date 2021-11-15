@@ -26,10 +26,11 @@ typedef struct {
     float b250_per_line[MAX_DICTS]; // b250.len / num_lines
     #define AT_LEAST(did_i) ((uint64_t)(10.0 + (segconf.b250_per_line[did_i] * (float)(vb->lines.len))))
 
+    bool has[MAX_DICTS];        // for select did_i's, states whether this field was encountered during segconf.running
+
     // SAM/BAM stuff
     bool sam_use_aligner;       // use of aligner is possible if its flag.aligner_available and there are no header contigs
     bool NM_is_integer;         // true if NM is integer, false if it binary
-    bool has_MC, has_MD, has_MQ, has_ms; // these fields are detected in the data
     bool has_TLEN_non_zero;
     bool has_DP_before_PL;
     enum { XA_NONE, XA_BWA, XA_IONTORRENT, XA_UNKNOWN } has_XA; // IonTorret and BWA have different XA:Z
@@ -42,7 +43,6 @@ typedef struct {
     
     // VCF stuff
     bool vcf_is_varscan;        // this VCF file was produced by VarScan
-    bool vcf_has_ADALL;
     uint64_t count_dosage[2];   // used to calculate pc_has_dosage
     float pc_has_dosage;        // % of the samples x lines that have a valid (0-2) dosage value [0.0,1.0]
 

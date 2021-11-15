@@ -56,7 +56,7 @@ COMPRESSOR_CALLBACK (sam_zip_qual)
 
 void sam_seg_QUAL_initialize (VBlockP vb)
 {
-    if (segconf.has_ms) {     // handle QUAL_scores for ms:i - added v13
+    if (segconf.has[OPTION_ms_i]) {     // handle QUAL_scores for ms:i - added v13
         CTX(SAM_QUAL)->flags.store_per_line = true;
         CTX(SAM_QUAL)->no_stons = true; // since we're storing QUAL data in local
 
@@ -73,7 +73,7 @@ void sam_seg_QUAL (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(qual_data), unsigned 
     qual_ctx->txt_len   += add_bytes;
 
     // get QUAL score, consumed by buddy ms:i
-    if (!segconf.running && segconf.has_ms)
+    if (!segconf.running && segconf.has[OPTION_ms_i])
         dl->QUAL_score = qual_ctx->last_value.i = sam_get_QUAL_score (STRa(qual_data));
 }
 
@@ -81,7 +81,7 @@ void sam_seg_QUAL (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(qual_data), unsigned 
 // It is the sum of phred values of mate's QUAL, but only phred values >= 15
 void sam_seg_ms_field (VBlockSAM *vb, ValueType ms, unsigned add_bytes)
 {
-    if (segconf.running) segconf.has_ms = true;
+    if (segconf.running) segconf.has[OPTION_ms_i] = true;
 
     ZipDataLineSAM *buddy_dl = DATA_LINE (vb->buddy_line_i); // an invalid pointer if buddy_line_i is -1
     
