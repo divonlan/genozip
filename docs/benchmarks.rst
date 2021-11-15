@@ -30,7 +30,7 @@ Notes:
   
 **Detailed compression reports**
 
-*The following reports were produced with* ``genocat --stats`` *on each* ``.genozip`` *file:*
+*The following reports can be produced during compression with* ``genozip --stats`` *or after compression with* ``genocat --stats <myfile>.genozip``.
 
 .. _benchmark-BAM1:
 
