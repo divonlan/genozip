@@ -202,12 +202,24 @@ static SmallContainer con_nanopore = {
                              { .dict_id = { _SAM_Q4NAME }                   } } 
 };
 
+// example: 2a228edf-d8bc-45d4-9c96-3d613b8530dc_Basecall_2D_000_template
+static SmallContainer con_nanopore_ext = {
+    .repeats             = 1,
+    .nitems_lo           = 6,
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = "-" }, 
+                             { .dict_id = { _SAM_Q1NAME }, .separator = "-" }, 
+                             { .dict_id = { _SAM_Q2NAME }, .separator = "-" }, 
+                             { .dict_id = { _SAM_Q3NAME }, .separator = "-" }, 
+                             { .dict_id = { _SAM_Q4NAME }, .separator = "_" }, 
+                             { .dict_id = { _SAM_Q5NAME }                   } } 
+};
+
 static SmallContainer con_ncbi_sra = {
     .repeats             = 1,
     .nitems_lo           = 3,
     .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI_FIXED_0_PAD, 3 } }, 
-                             { .dict_id = { _SAM_Q1NAME }, .separator = "."    }, 
-                             { .dict_id = { _SAM_Q2NAME }                      } } 
+                             { .dict_id = { _SAM_Q1NAME }, .separator = "."                   }, 
+                             { .dict_id = { _SAM_Q2NAME }                                     } } 
 };
 
 static SmallContainer con_genozip_opt = {
@@ -239,8 +251,8 @@ typedef struct QnameFlavorStruct {
 } QnameFlavorStruct;
 
 static QnameFlavorStruct qf[] = { 
-/*  mate   name             example                                   tech     fq_only   con_template     #sp int_items      numeric_items    hex_items       ord1,2 rng len px_strs{str,str_len,fixed_i}                               */
-         { "Unknown"                                                                                                                                                                                               }, 
+/*  mate   name             example                                   tech     fq_only   con_template     #sp int_items       numeric_items   hex_items       ord1,2 rng len px_strs{str,str_len,fixed_i}                               */
+         { "Unknown"                                                                                                                                                                                                                     }, 
          { "Illumina-fastq","A00488:61:HMLGNDSXX:4:1101:4345:1000"
            " 2:N:0:CTGAAGCT+ATAGAGGC",                                TECH_ILLUM_7, 1, &con_illumina_7_fq, 7, {1,3,4,5,6,-1}, {-1},           {-1},           5,6,   -1,                                                                 },
     {},  { "Illumina",      "A00488:61:HMLGNDSXX:4:1101:4345:1000",   TECH_ILLUM_7, 0, &con_illumina_7,    6, {1,3,4,5,6,-1}, {-1},           {-1},           5,6,   -1,                                                                 },
@@ -253,11 +265,13 @@ static QnameFlavorStruct qf[] = {
     {},  { "Helicos",       "VHE-242383071011-15-1-0-2",              TECH_HELICOS, 0, &con_helicos,       5, {2,3,4,5,-1},   {1,-1},         {-1},           -1,-1, -1                                                                  },
     {},  { "PacBio-3",      "56cdb76f_70722_4787",                    TECH_PACBIO,  0, &con_pacbio_3,      2, {1,2,-1},       {-1},           {0,-1},         -1,-1, -1                                                                  },
     {},  { "PacBio-Range",  "m130802_221257_00127_"
-           "c100560082550000001823094812221334_s1_p0/128361/872_4288",TECH_PACBIO,  0, &con_pacbio_range,  4, {1,2,3,-1},     {-1},           {-1},           1,-1, 3,  0,  { { "m",1,0} }                                              },
-    {},  { "PacBio-Label",  "m64136_200621_234916/18/ccs",            TECH_PACBIO,  0, &con_pacbio_label,  3, {1,-1},         {-1},           {-1},           1,-1, -1, 0,  { { "m",1,0} }                                              },
-    {},  { "PacBio-Plain",  "m64136_200621_234916/18",                TECH_PACBIO,  0, &con_pacbio_plain,  2, {1,-1},         {-1},           {-1},           1,-1, -1, 0,  { { "m",1,0} }                                              },
+           "c100560082550000001823094812221334_s1_p0/128361/872_4288",TECH_PACBIO,  0, &con_pacbio_range,  4, {1,2,3,-1},     {-1},           {-1},           1,-1, 3,  0,  { { "m",1,0} }                                               },
+    {},  { "PacBio-Label",  "m64136_200621_234916/18/ccs",            TECH_PACBIO,  0, &con_pacbio_label,  3, {1,-1},         {-1},           {-1},           1,-1, -1, 0,  { { "m",1,0} }                                               },
+    {},  { "PacBio-Plain",  "m64136_200621_234916/18",                TECH_PACBIO,  0, &con_pacbio_plain,  2, {1,-1},         {-1},           {-1},           1,-1, -1, 0,  { { "m",1,0} }                                               },
     {},  { "Nanopore",      "af84b0c1-6945-4323-9193-d9f6f2c38f9a",   TECH_ONP,     0, &con_nanopore,      4, {-1},           {-1},           {0,1,2,3,4,-1}, -1,-1, -1, 36,                                                             },
-    {},  { "NCBI-SRA",      "SRR001666.1",                            TECH_UNKNOWN, 0, &con_ncbi_sra,      1, {2,-1},         {1,-1},         {-1},           2,-1,  -1,                                                                 },
+    {},  { "Nanopore-ext",  "2a228edf-d8bc-45d4-9c96-3d613b8530dc"
+           "_Basecall_2D_000_template",                               TECH_ONP,     0, &con_nanopore_ext,  5, {-1},           {-1},           {0,1,2,3,4,-1}, -1,-1, -1,                                                             },
+    {},  { "NCBI-SRA",      "SRR001666.1",                            TECH_NCBI,    0, &con_ncbi_sra,      1, {2,-1},         {1,-1},         {-1},           2,-1,  -1,                                                                 },
     {},  { "Genozip-opt",   "basic.1",                                TECH_UNKNOWN, 1, &con_genozip_opt,   1, {1,-1},         {-1},           {-1},           1,-1,  -1,                                                                 },
 };
 
@@ -403,12 +417,35 @@ bool qname_is_flavor (STRp(qname), unsigned qname_flavor)
 void qname_segconf_discover_flavor (VBlockP vb, DidIType qname_did_i, STRp(qname))
 {
     segconf.qname_flavor = 0; // unknown
+    STR0(field2);
+
+    // case: eg "@ERR3278978.1 82a6ce63-eb2d-4812-ad19-136092a95f3d/1" -> split to qname="@ERR3278978.1" field2="82a6ce63-eb2d-4812-ad19-136092a95f3d/1"
+    if (VB_DT(DT_FASTQ)) {
+        str_split (qname, qname_len, 0, ' ', sub, false);
+        if (n_subs > 1) {
+            field2 = subs[1];
+            field2_len = sub_lens[1];
+            qname_len  = sub_lens[0];
+        }
+    }
 
     for (unsigned qf_i=1; qf_i < NUM_QFs; qf_i++) 
-        if ((VB_DT(DT_FASTQ) || !qf[qf_i].fq_only) && qname_is_flavor (qname, qname_len, qf_i)) {
+        if ((VB_DT(DT_FASTQ) || !qf[qf_i].fq_only) && qname_is_flavor (STRa(qname), qf_i)) {
             segconf.qname_flavor = qf_i;
             segconf.tech = qf[qf_i].tech;
             qname_seg_initialize (vb, qname_did_i); // so the rest of segconf.running can seg fast using the discovered container
+
+            // if its NCBI - find the true tech from field2 (only possible for FASTQ, in SAM we can't find the tech from NCBI qname)
+            if (qf[qf_i].tech == TECH_NCBI) { 
+                qf[qf_i].tech = TECH_UNKNOWN; // initialize pessimistically
+
+                if (field2) 
+                    for (unsigned q2_i=1; q2_i < NUM_QFs; q2_i++) 
+                        if (qname_is_flavor (STRa (field2), q2_i)) {
+                            segconf.qname_flavor2 = q2_i;
+                            segconf.tech = qf[q2_i].tech;
+                        }
+            }
             break;
         }
 
