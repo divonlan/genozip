@@ -587,12 +587,9 @@ int main (int argc, char **argv)
         ASSINP (str_get_int_range32 (flag.threads_str, 0, 1, 10000, (int32_t *)&global_max_threads),
                 "invalid argument of --threads: \"%s\". Expecting an integer between 1 and 10000.", flag.threads_str);
 
-    else global_max_threads = 
-#if defined _WIN32 || defined __APPLE__
-        (float)arch_get_num_cores() * 0.75; // under-subscribe on Windows / Mac to maintain UI interactivity
-#else
-        (float)arch_get_num_cores() * 1.1;  // over-subscribe to keep all cores busy even when some threads are waiting on mutex or join
-#endif
+    else global_max_threads = (flag.is_windows || flag.is_mac || arch_is_wsl()) 
+        ? ((float)arch_get_num_cores() * 0.75)  // under-subscribe on Windows / Mac to maintain UI interactivity
+        : ((float)arch_get_num_cores() * 1.1 ); // over-subscribe to keep all cores busy even when some threads are waiting on mutex or join
 
     // handle all commands except for ZIP, PIZ or LIST
     if (command == VERSION) { main_print_version();   return 0; }
