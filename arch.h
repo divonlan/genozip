@@ -5,10 +5,6 @@
 
 #pragma once
 
-#ifndef DISTRIBUTION
-    #define DISTRIBUTION "unknown"
-#endif    
-
 extern void arch_initialize (const char *argv0);
 extern unsigned arch_get_num_cores (void);
 extern const char *arch_get_endianity (void);
@@ -17,6 +13,7 @@ extern const char *arch_get_endianity (void);
 extern const char *arch_get_ip_addr (const char *reason);
 extern const char *arch_get_user_host (void);
 extern const char *arch_get_os (void);
+extern const char *arch_get_distribution (void);
 extern bool arch_is_wsl (void);
 
 

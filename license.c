@@ -318,7 +318,7 @@ void license_register (void)
         license_exit_if_not_confirmed (confirm);
 
         os        = arch_get_os();
-        dist      = DISTRIBUTION;
+        dist      = arch_get_distribution();
         cores     = arch_get_num_cores();
         endianity = arch_get_endianity();
         user_host = arch_get_user_host();

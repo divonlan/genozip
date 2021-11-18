@@ -57,7 +57,7 @@ static void stats_check_count (uint64_t all_z_size, const int *count_per_section
 
     for (unsigned i=0; i < z_file->section_list_buf.len; i++) 
         if (!count_per_section[i]) 
-            WARN ("stats_check_count: Section not counted: %s section_i=%u dict=%s\n", 
+            WARN ("stats_check_count: Section not counted: %s section_i=%u dict=%s\n", // this error happens when contexts with local buffers are created in a VB after merge - they are not added to z_file->contexts 
                   st_name (sections[i].st), i, dis_dict_id (sections[i].dict_id).s);
         else if (count_per_section[i] > 1) 
             WARN ("stats_check_count: Section overcounted: %s section_i=%u dict=%s counted %u times\n", 
@@ -124,7 +124,7 @@ static void stats_output_file_metadata (Buffer *buf)
         bufprintf (evb, buf, "Read name style: %s\n", qf_name(segconf.qname_flavor));
 
     bufprintf (evb, buf, "Genozip version: %s %s\nDate compressed: %s\n", 
-               GENOZIP_CODE_VERSION, DISTRIBUTION, str_time().s);
+               GENOZIP_CODE_VERSION, arch_get_distribution(), str_time().s);
 
     if (license_has_details())
         bufprintf (evb, buf, "%s\n", license_get_one_line());
@@ -296,16 +296,18 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
 
 // generate the stats text - all sections except genozip header and the two stats sections 
 void stats_compress (void)
-{    
-    stats_output_file_metadata(&z_file->stats_buf);
+{
+    stats_output_file_metadata (&z_file->stats_buf);
     buf_copy (evb, &z_file->STATS_buf, &z_file->stats_buf, char,0,0, "z_file->STATS_buf");
 
     int64_t all_comp_dict=0, all_uncomp_dict=0, all_comp_b250=0, all_comp_data=0, all_z_size=0, all_txt_len=0;
 
     // prepare data
     #define NUM_SBL (NUM_SEC_TYPES + z_file->num_contexts + 2) // 2 for consolidated groups
-    StatsByLine sbl[NUM_SBL], *s = sbl;
-    memset (sbl, 0, NUM_SBL * sizeof (StatsByLine)); // initialize
+    static Buffer sbl_buf = EMPTY_BUFFER;
+    buf_alloc_zero (evb, &sbl_buf, NUM_SBL, 0, StatsByLine, 1, "count_per_section");
+    StatsByLine *sbl = FIRSTENT (StatsByLine, sbl_buf);
+    StatsByLine *s = sbl;
 
     static Buffer count_per_section_buf = EMPTY_BUFFER;
     buf_alloc (evb, &count_per_section_buf, 0, z_file->section_list_buf.len, int, 1, "count_per_section");
@@ -446,6 +448,7 @@ void stats_compress (void)
     zfile_compress_section_data (evb, SEC_STATS, &z_file->STATS_buf);
 
     buf_free (&count_per_section_buf);
+    buf_free (&sbl_buf);
 }
 
 void stats_display (void)

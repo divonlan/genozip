@@ -213,3 +213,12 @@ bool arch_is_wsl (void)
     return false;
 #endif
 }
+
+#ifndef DISTRIBUTION
+    #define DISTRIBUTION "unknown" // this occurs if the code is built not using the genozip Makefile
+#endif    
+const char *arch_get_distribution (void)
+{
+    return DISTRIBUTION[0] ? DISTRIBUTION : "github"; // DISTRIBUTION is "" if genozip is built with "make" without defining DISTRIBUTION - re-write as "github"
+}
+ 

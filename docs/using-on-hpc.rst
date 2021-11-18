@@ -3,11 +3,17 @@
 Using Genozip on an HPC
 =======================
 
+**Building an EasyBuild module**
+
+Please find sample scripts `here <https://github.com/divonlan/genozip/tree/master/easybuild>`_.
+
+**How to register Genozip for a batch job**
+
 Genozip requires registration prior to use, and its a violation of Genozip's license to use Genozip without registration.
 
-However, in some environments, interactive registration is not possible. For example, when submitting a batch job to an HPC.
+`Option 1 (easier)`: register on the login node of the HPC with ``genozip --register``. You need to do this only once.
 
-In these environments, do the following:
+`Option 2`: If you are able to register on the HPC's login node or your batch script does not have access to your home directory, do the following:
 
 | 1. Register Genozip on another computer with ``genozip --register``. You can skip this step if you have already used (and hence registered) Genozip on this computer. 
 | 
