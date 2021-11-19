@@ -303,7 +303,7 @@ clean: clean-docs
 	@echo Cleaning up
 	@rm -f $(DEPS) $(WINDOWS_INSTALLER_OBJS) *.d .archive.tar.gz *.stackdump $(EXECUTABLES) $(OPT_EXECUTABLES) $(DEBUG_EXECUTABLES) 
 	@rm -f *.good *.bad data/*.good data/*.bad *.local genozip.threads-log.* *.b250 test/*.good test/*.bad test/*.local test/*.b250 test/tmp/* test/*.rejects
-	@rm -Rf $(OBJDIR)
+	@rm -Rf $(OBJDIR)/*
 
 .PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch docs testfiles test-backup genozip-linux-x86_64/clean prod dict_id_gen$(EXE) push-build
 
@@ -408,7 +408,7 @@ docs/genozip-installer.exe: clean-optimized $(WINDOWS_INSTALLER_OBJS) # clean fi
 
 docs/genozip-linux-x86_64.tar.gz.build: genozip-linux-x86_64/LICENSE.txt 
 	@(mkdir genozip-linux-x86_64 >& /dev/null ; exit 0)
-	@run-on-wsl.sh make -j docs/genozip-linux-x86_64.tar.gz
+	@run-on-wsl.sh make clean-optimized docs/genozip-linux-x86_64.tar.gz # make -j doesn't work well on WSL - filesystem clock issues
 
 mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@echo "Creating Mac installer"
@@ -429,9 +429,10 @@ prod:
 	@cp ../genozip-prod/genocat.exe genocat-prod.exe
 
 BUILD_FILES = version.h genozip-installer.ifp docs/genozip-installer.exe docs/genozip-linux-x86_64.tar.gz LICENSE.txt  \
-			  docs/conf.py docs/LICENSE.for-docs.txt docs/RELEASE_NOTES.for-docs.txt
+			  docs/conf.py docs/LICENSE.for-docs.txt docs/RELEASE_NOTES.for-docs.txt Makefile
 push-build: 
-	@(git commit -m $(version) $(BUILD_FILES) ; exit 0) > /dev/null
+	@(git stage $(BUILD_FILES) ; exit 0) > /dev/null
+	@(git commit -m $(version) ; exit 0) > /dev/null
 	@git push > /dev/null
 
 distribution: increment-version testfiles docs/genozip-linux-x86_64.tar.gz.build docs/genozip-installer.exe build-docs push-build conda/.conda-timestamp prod # docs (almost) last, after version incremented # mac/.remote_mac_timestamp

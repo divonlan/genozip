@@ -452,7 +452,7 @@ static int main_sort_input_filenames (const void *fn1, const void *fn2)
 static void main_get_filename_list (unsigned num_files, char **filenames, // in 
                                     unsigned *num_z_files, Buffer *fn_buf)      // out
 {
-    ASSINP (!flag.files_from || !num_files, "when option %s is used, files cannot also be listed on the command line", OT("files-from", "T"));
+    if (!num_files && !flag.files_from) return; // no files
 
     // add names from command line
     buf_add_more_(evb, fn_buf, char *, filenames, num_files, NULL);
@@ -624,7 +624,7 @@ int main (int argc, char **argv)
         else command = ZIP; // default 
     }
 
-    unsigned num_z_files;
+    unsigned num_z_files=0;
     static Buffer input_files_buf = { .name = "input_files" };
     main_get_filename_list (argc - optind, &argv[optind], &num_z_files, &input_files_buf);
     ARRAY (const char *, input_files, input_files_buf);
