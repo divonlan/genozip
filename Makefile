@@ -326,7 +326,6 @@ decrement-version:
 
 .archive.tar.gz : $(C_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) LICENSE.txt
 	@echo Creating github tag genozip-$(version) and archive
-	@git commit -m $(version) version.h
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@git push > /dev/null
 	@git tag genozip-$(version) > /dev/null
