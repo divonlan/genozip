@@ -230,7 +230,6 @@ LICENSE.txt: text_license.h version.h # not dependent on genozip.exe, so we don'
 	@make -j ./genozip$(EXE) # recursive call 
 	@echo Generating $@
 	@./genozip$(EXE) --license=100 --force > $@
-	@(git commit -m license_version_$(version) $@ ; exit 0) > /dev/null
 
 DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs/advanced.rst docs/index.rst docs/license.rst \
        docs/publications.rst docs/installing.rst docs/contact.rst docs/compression.rst docs/source.rst docs/logo.png \
@@ -259,10 +258,7 @@ docs/_build/html/.buildinfo: docs/LICENSE.for-docs.txt docs/RELEASE_NOTES.for-do
 	@echo Building HTML docs
 	@run-on-wsl.sh /home/divon/miniconda3/bin/sphinx-build -M html docs docs/_build -q -a 
 
-publish-docs: docs/_build/html/.buildinfo docs/LICENSE.for-docs.txt docs/RELEASE_NOTES.for-docs.txt
-	@(git commit -m "build docs" docs/conf.py docs/LICENSE.for-docs.txt docs/RELEASE_NOTES.for-docs.txt ; exit 0) > /dev/null
-	@$(SH_VERIFY_ALL_COMMITTED)
-	@git push > /dev/null
+build-docs: docs/_build/html/.buildinfo docs/LICENSE.for-docs.txt docs/RELEASE_NOTES.for-docs.txt # they are actually published after git commit + push
 
 test-docs: docs/_build/html/.buildinfo 
 	@"/c/Program Files (x86)/Google/Chrome/Application/chrome.exe" file:///c:/Users/divon/projects/genozip/docs/_build/html/index.html --new-window
@@ -309,7 +305,7 @@ clean: clean-docs
 	@rm -f *.good *.bad data/*.good data/*.bad *.local genozip.threads-log.* *.b250 test/*.good test/*.bad test/*.local test/*.b250 test/tmp/* test/*.rejects
 	@rm -Rf $(OBJDIR)
 
-.PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch docs testfiles test-backup genozip-linux-x86_64/clean prod dict_id_gen$(EXE)
+.PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch docs testfiles test-backup genozip-linux-x86_64/clean prod dict_id_gen$(EXE) push-build
 
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
 ifeq ($(OS),Windows_NT)
@@ -323,7 +319,6 @@ increment-version: $(C_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_D
 	@echo "Incrementing version.h"
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@bash increment-version.sh
-	@git commit -m "increment version" version.h 
 
 decrement-version:
 	@echo "Do manually:"
@@ -332,6 +327,7 @@ decrement-version:
 
 .archive.tar.gz : $(C_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) LICENSE.txt
 	@echo Creating github tag genozip-$(version) and archive
+	@git commit -m $(version) version.h
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@git push > /dev/null
 	@git tag genozip-$(version) > /dev/null
@@ -407,17 +403,12 @@ docs/genozip-installer.exe: clean-optimized $(WINDOWS_INSTALLER_OBJS) # clean fi
 	@(private/utils/InstallForge/InstallForge.exe ; exit 0)
 	@echo 'Committing Windows installer and pushing to repo'
 	@mv ../genozip/windows/genozip-installer.exe docs  # so this works for genozip-prod too - because InstallForge uses absolute paths
-	@(git stage genozip-installer.ifp $@ ; exit 0) > /dev/null
-	@(git commit -m windows_files_for_version_$(version) genozip-installer.ifp $@ ; exit 0) > /dev/null
-	@git push > /dev/null
 	@rm -f $(OBJDIR)/arch.o # remove this arch.o which contains DISTRIBUTION
 #	@(C:\\\\Program\\ Files\\ \\(x86\\)\\\\solicus\\\\InstallForge\\\\bin\\\\ifbuilderenvx86.exe ; exit 0)
 
 docs/genozip-linux-x86_64.tar.gz.build: genozip-linux-x86_64/LICENSE.txt 
 	@(mkdir genozip-linux-x86_64 >& /dev/null ; exit 0)
 	@run-on-wsl.sh make -j docs/genozip-linux-x86_64.tar.gz
-	@(git commit -m linux_files_for_version_$(version) docs/genozip-linux-x86_64.tar.gz ; exit 0) > /dev/null
-	@git push > /dev/null
 
 mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@echo "Creating Mac installer"
@@ -437,7 +428,13 @@ prod:
 	@cp ../genozip-prod/genounzip.exe genounzip-prod.exe
 	@cp ../genozip-prod/genocat.exe genocat-prod.exe
 
-distribution: increment-version testfiles docs/genozip-linux-x86_64.tar.gz.build docs/genozip-installer.exe conda/.conda-timestamp publish-docs prod # docs (almost) last, after version incremented # mac/.remote_mac_timestamp
+BUILD_FILES = version.h genozip-installer.ifp docs/genozip-installer.exe docs/genozip-linux-x86_64.tar.gz LICENSE.txt  \
+			  docs/conf.py docs/LICENSE.for-docs.txt docs/RELEASE_NOTES.for-docs.txt
+push-build: 
+	@(git commit -m $(version) $(BUILD_FILES) ; exit 0) > /dev/null
+	@git push > /dev/null
+
+distribution: increment-version testfiles docs/genozip-linux-x86_64.tar.gz.build docs/genozip-installer.exe build-docs push-build conda/.conda-timestamp prod # docs (almost) last, after version incremented # mac/.remote_mac_timestamp
 	@(cd ../genozip-feedstock/ ; git pull)
 
 test-backup: genozip.exe
