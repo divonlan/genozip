@@ -114,7 +114,15 @@ void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, STRp(ref), STRp(alt))
 // Lifting with genozip --chain
 // ----------------------------
 
-// we accept an INDEL or complex variant for REF⇄ALT switch if (1) it is short enough (2) flanking regions are the same
+// Parameters for accepting an we accept an INDEL or NLA variant for REF⇄ALT switch if (1) it is short enough (2) flanking regions are the same
+
+// A more liberal threashold of FLANKING_SEQ_LEN=2, results in the following changes in our indel test file (see https://github.com/divonlan/genozip-dvcf-results)
+// RefNewAlleleIndelNoSwitch 9->2   (showing flanking-4 -> flanking-2)
+// OkRefAltSwitchIndelFlank  27->34
+// RefNewAlleleDelRefChanged 13->10
+// RefNewAlleleInsSameRef    17->11
+// OkRefAltSwitchDelToIns    6->9
+// RefNewAllelInsRefChanged  0->6
 #define FLANKING_SEQ_LEN 4
 #define MAX_LEN_REF_ALT_SWITCH_INDEL_BASED_ON_FLANKING 16
 
@@ -143,9 +151,9 @@ void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, STRp(ref), STRp(alt))
 #define SAME_AS_LUFT_REF2(vcf_base, is_iupac) is_same_base (vb, luft_range, opos, (vcf_base), is_xstrand, (is_iupac))
 
 static inline bool is_same_base (VBlockVCFP vb, const Range *luft_range, PosType opos, char vcf_base, bool is_xstrand,
-                                 bool *out_is_iupac) // optional out - valid only when function returns true 
+                                 bool *out_is_iupac) // optional out - only set when function returns true 
 {
-    bool is_iupac = false;
+    int is_iupac = -1; // not tested yet
 
     if (is_xstrand) vcf_base = COMPLEM[(int)vcf_base];
 
@@ -155,7 +163,8 @@ static inline bool is_same_base (VBlockVCFP vb, const Range *luft_range, PosType
                    (is_iupac = ref_iupacs_is_included (gref, VB, luft_range, opos, vcf_base));
 
     // note: is_iupac is true only if ref_base != vcf_base AND the ref is included in the bases represented by the IUPAC
-    if (out_is_iupac) *out_is_iupac = is_iupac;
+    if (out_is_iupac && is_same) 
+        *out_is_iupac = (is_iupac >= 0) ? is_iupac : ref_iupacs_is_included (gref, VB, luft_range, opos, vcf_base);
 
     return is_same;
 }
@@ -300,8 +309,8 @@ static inline LiftOverStatus vcf_refalt_lift_report_indel_outcome (VBlockVCFP vb
     if (maybe_switch_alt_i >= 0) {
         bool same_flanking_regions = vcf_refalt_lift_same_flanking_regions (is_xstrand, prim_range, pos, ref_len, luft_range, opos, maybe_switch_alt_len);
 
-        DEF_PRIM (rep_len_prim + FLANKING_SEQ_LEN*2 + 2*(ref_len > 1)); 
-        DEF_LUFT (rep_len_luft + FLANKING_SEQ_LEN*2 + 2*(ref_len > 1));
+        DEF_PRIM (rep_len_prim + FLANKING_SEQ_LEN*2+1 + 2*(ref_len > 1)); 
+        DEF_LUFT (rep_len_luft + FLANKING_SEQ_LEN*2+1 + 2*(ref_len > 1));
 
         REJECTIF (!same_flanking_regions, LO_NEW_ALLELE_INDEL_NO_SWITCH, ALTF "REF switched with ALT[%d], but flanking regions differ. " PRIMF LUFTF "(flanking %d bases on either side)", 
                 ALT, maybe_switch_alt_i+1, PRIMFLANKING, LUFTFLANKING, FLANKING_SEQ_LEN); 

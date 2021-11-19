@@ -121,7 +121,8 @@ static void stats_output_file_metadata (Buffer *buf)
         bufprintf (evb, buf, "Sequence type: %s\n", segconf.seq_type==SQT_AMINO ? "Amino acids" : "Nucleotide bases");
 
     if (segconf.qname_flavor) 
-        bufprintf (evb, buf, "Read name style: %s\n", qf_name(segconf.qname_flavor));
+        bufprintf (evb, buf, "Read name style: %s%s%s\n", 
+                   qf_name(segconf.qname_flavor), segconf.qname_flavor2 ? " + " : "", segconf.qname_flavor2 ? qf_name(segconf.qname_flavor2) : "");
 
     bufprintf (evb, buf, "Genozip version: %s %s\nDate compressed: %s\n", 
                GENOZIP_CODE_VERSION, arch_get_distribution(), str_time().s);

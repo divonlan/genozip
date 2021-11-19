@@ -343,7 +343,7 @@ void zfile_remove_ctx_group_from_z_data (VBlockP vb, DidIType remove_did_i)
         ASSERT (is_encrypted || ((SectionHeader*)ENT (uint8_t, vb->z_data, rm[i].start))->magic == BGEN32(GENOZIP_MAGIC),
                 "Data to be cut out start=%"PRIu64" len=%"PRIu64" is not on section boundary", rm[i].start, rm[i].len);
         
-        buf_cut_out (&vb->z_data, char, rm[i].start, rm[i].len);
+        buf_remove (&vb->z_data, char, rm[i].start, rm[i].len);
         sections_remove_from_list (vb, rm[i].start, rm[i].len);
 
         ASSERT (is_encrypted || rm[i].start == vb->z_data.len || ((SectionHeader*)ENT (uint8_t, vb->z_data, rm[i].start))->magic == BGEN32(GENOZIP_MAGIC),

@@ -872,6 +872,9 @@ void seg_all_data_lines (VBlock *vb)
 {
     START_TIMER;
 
+    ASSERT (*LASTENT (char, vb->txt_data) == '\n' || !DTP(vb_end_nl), "%s txt_data for vb=%u unexpectedly doesn't end with a newline. Last 10 chars: \"%10s\"", 
+            dt_name(vb->data_type), vb->vblock_i, ENT (char, vb->txt_data, vb->txt_data.len - MIN_(10,vb->txt_data.len)));
+
     ctx_initialize_predefined_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_contexts); // Create ctx for the fields in the correct order 
  
     // allocate the b250 for the fields which each have num_lines entries

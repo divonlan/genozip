@@ -45,7 +45,7 @@ bool codec_domq_comp_init (VBlock *vb, DidIType qual_did_i, LocalGetLineCB callb
     for (uint32_t line_i=0; line_i < MIN_(NUM_LINES_IN_SAMPLE, vb->lines.len); line_i++) {   
         char *qual_data;
         uint32_t qual_data_len;
-        callback (vb, line_i, &qual_data, &qual_data_len, CALLBACK_NO_SIZE_LIMIT);
+        callback (vb, line_i, &qual_data, &qual_data_len, CALLBACK_NO_SIZE_LIMIT, NULL);
     
         if (qual_data_len > DOMQUAL_LINE_SAMPLE_LEN) qual_data_len = DOMQUAL_LINE_SAMPLE_LEN; 
     
@@ -123,7 +123,7 @@ bool codec_domq_compress (VBlock *vb,
     for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {   
         char *qual = 0;
         uint32_t qual_len = 0;
-        callback (vb, line_i, &qual, &qual_len, CALLBACK_NO_SIZE_LIMIT);
+        callback (vb, line_i, &qual, &qual_len, CALLBACK_NO_SIZE_LIMIT, NULL);
 
         // grow if needed
         buf_alloc (vb, qual_buf, 2 * qual_len, 0, char, 1.5, 0); // theoretical worst case is 2 characters (added NO_DOMS) per each original character

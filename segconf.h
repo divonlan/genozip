@@ -10,7 +10,7 @@
 #define MIN_VBLOCK_MEMORY  1    // in MB
 #define MAX_VBLOCK_MEMORY  2048 
 
-typedef enum { TECH_UNKNOWN, TECH_ILLUM_7, TECH_ILLUM_5, TECH_PACBIO, TECH_ONP, TECH_454, TECH_BGI, TECH_IONTORR, TECH_HELICOS } SeqTech;
+typedef enum { TECH_UNKNOWN, TECH_ILLUM_7, TECH_ILLUM_5, TECH_PACBIO, TECH_ONP, TECH_454, TECH_BGI, TECH_IONTORR, TECH_HELICOS, TECH_NCBI } SeqTech;
 
 typedef enum { SQT_UNKNOWN, SQT_NUKE, SQT_AMINO, SQT_NUKE_OR_AMINO } SeqType;
 
@@ -38,6 +38,7 @@ typedef struct {
     bool sam_is_sorted;         // every two consecutive lines that have the same RNAME, have non-decreasing POS
     bool sam_buddy_RG;          // attempt to use the same mate for RG:Z as QNAME
     uint64_t sam_cigar_len;     // approx average CIGAR len (during running==true - total len)
+    uint64_t sam_seq_len;       // approx average CIGAR len (during running==true - total len)
     int64_t MAPQ_value;         // used during segconf.running to calculate sam_mapq_has_single_value
     bool MAPQ_has_single_value; // all non-0 MAPQ have the same value
     
@@ -62,7 +63,7 @@ typedef struct {
     bool chain_mismatches_ref;  // Some contigs mismatch the reference files, so this chain file cannot be used with --chain
 
     // read name characteristics (SAM/BAM, KRAKEN and FASTQ)
-    unsigned qname_flavor;  
+    unsigned qname_flavor, qname_flavor2;  
     SeqTech tech;
 
 } SegConf;
@@ -71,3 +72,4 @@ extern SegConf segconf;
 
 extern void segconf_initialize (void);
 extern void segconf_calculate (void);
+static inline bool segconf_is_long_reads(void) { return segconf.tech == TECH_PACBIO || segconf.tech == TECH_ONP; }

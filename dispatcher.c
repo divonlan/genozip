@@ -129,7 +129,7 @@ void dispatcher_resume (Dispatcher dispatcher)
 
     dd->input_exhausted = false;
     dd->paused          = false;
-    dd->filename        = txt_file->name;
+    dd->filename        = txt_file->basename;
     
     dd->progress_prefix = progress_new_component (dd->filename, "0\%", -1);    
 }
@@ -144,14 +144,6 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
     if (! *dispatcher) return; // nothing to do
 
     DispatcherData *dd = (DispatcherData *)*dispatcher;
-
-    COPY_TIMER_VB (evb, wallclock);
-
-    if (flag.show_time && !flag.show_time[0] && // show-time without the optional parameter 
-        !(command == ZIP && z_dual_coords && !flag.rejects_coord)) // when compressing dual coordinates, show time after the rejects component
-        profiler_print_report (&evb->profile, 
-                               dd->max_threads, dd->max_vb_id_so_far+1,
-                               dd->filename, dd->next_vb_i + (command != ZIP)); // in ZIP, the last VB is empty
 
     // must be before vb_cleanup_memory() 
     if (flag.show_memory) buf_show_memory (false, dd->max_threads, dd->max_vb_id_so_far);    

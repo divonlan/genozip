@@ -16,6 +16,10 @@
 #include "regions.h"
 #include "codec.h"
 
+//---------
+// ZIP
+//---------
+
 // Creates a bitmap from seq data - exactly one bit per base that is mapped to the reference (e.g. not for INSERT bases)
 // - Normal SEQ: tracking CIGAR, we compare the sequence to the reference, indicating in a SAM_SQBITMAP whether this
 //   base in the same as the reference or not. In case of REF_INTERNAL, if the base is not already in the reference, we add it.
@@ -49,13 +53,19 @@ void sam_seg_SEQ (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), const PosType p
 
     if (!recursion_level) {
 
-        ASSERTW (seq_len < 1000000, "Warning: sam_seg_SEQ: seq_len=%u is suspiciously high and might indicate a bug", seq_len);
+        ASSERT (seq_len < 100000 || segconf_is_long_reads(), 
+                 "Warning: sam_seg_SEQ: seq_len=%u is suspiciously high and might indicate a bug. vb=%u line_i=%"PRIu64, seq_len, vb->vblock_i, vb->line_i);
 
-        buf_alloc (vb, &bitmap_ctx->local, roundup_bits2bytes64 (ref_and_seq_consumed), vb->lines.len * (ref_and_seq_consumed+5) / 8, uint8_t, CTX_GROWTH, "contexts->local"); 
+        buf_alloc (vb, &bitmap_ctx->local, roundup_bits2words64 (ref_and_seq_consumed), 
+                   (segconf_is_long_reads() ? vb->lines.len/2 : vb->lines.len) * (MIN_(ref_and_seq_consumed, segconf.sam_seq_len)) / 64,  // this formula was chosen after extensive trial & error - easy to get wrong, esp for long reads
+                   uint64_t /* len is in 64b words in a bitmap */, CTX_GROWTH, "contexts->local"); 
+
         buf_extend_bits (&bitmap_ctx->local, ref_and_seq_consumed); 
         bit_array_set_region (bitmap, bitmap_ctx->next_local, ref_and_seq_consumed); // we initiaze all the bits to "set", and clear as needed.
 
-        buf_alloc (vb, &nonref_ctx->local, seq_len + 3, vb->lines.len * seq_len / 4, uint8_t, CTX_GROWTH, "contexts->local"); 
+        buf_alloc (vb, &nonref_ctx->local, seq_len + 3, 
+                   vb->lines.len * (MIN_(seq_len, segconf.sam_seq_len)) / (segconf_is_long_reads() ? 50 : 20), // this one too - it was chosen after extensive trial & error - easy to get wrong, esp for long reads
+                   uint8_t, CTX_GROWTH, "contexts->local"); 
     
         if (segconf.running) return; // case segconf: we created the contexts for segconf_set_vb_size accounting. that's enough - actually segging will mark is_set and break sam_md_analyze.
     }
@@ -261,6 +271,20 @@ align_nonref_local: {
 done:
     COPY_TIMER (sam_seg_SEQ);
 }
+
+// used by codec_enano_compress
+COMPRESSOR_CALLBACK (sam_zip_seq) 
+{
+    ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
+    *line_data_len = dl->seq_len;
+    *line_data     = ENT (char, vb->txt_data, dl->seq_data_start);
+
+    if (is_rev) *is_rev = dl->FLAG.bits.rev_comp;
+}
+
+//---------
+// PIZ
+//---------
 
 // PIZ: SEQ reconstruction 
 void sam_reconstruct_SEQ (VBlock *vb_, Context *bitmap_ctx, const char *unused, unsigned unused2)

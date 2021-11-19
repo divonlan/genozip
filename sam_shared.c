@@ -36,7 +36,8 @@ void sam_vb_release_vb (VBlockSAM *vb)
     vb->a_bases = vb->x_bases = vb->y_bases = 0;
     vb->a_index = vb->x_index = vb->y_index = 0;
     vb->md_verified = 0;
-    
+    vb->qual_codec_enano = 0;
+
     buf_free (&vb->bd_bi_line);
     buf_free (&vb->textual_cigar);
     buf_free (&vb->binary_cigar);

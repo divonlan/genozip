@@ -56,6 +56,7 @@ Examples:
 
                      |
                      
+.. include:: opt-subdirs.rst 
 .. option:: -o, --output output-filename.  This option can also be used to bind multiple input files into a single genozip file. genounzip will unbind the file back to its components while genocat will concatenate them. To bind files they must be of the same type (e.g. VCF or SAM) and if they are VCF files they must contain the same samples. genozip takes advantage of similarities between the input files so that the bound file is usually smaller than the combined size of individually compressed files.
 
                      |
@@ -78,7 +79,13 @@ Examples:
 .. option:: -p, --password password.  Password-protected - encrypted with 256-bit AES.
 
                      |
-                     
+
+.. option:: --tar tarfilename.tar.  Compress directly into a standard tar file. Each file is compressed independently and written directly into a standard tar file as it is being formed.                        
+
+      | Note: to decompress all files packaged in a tar file use: 
+      | ``tar xvf tarfilename.tar |& genounzip --files-from - --replace``
+      |
+
 .. option:: -m, --md5  Use MD5 (rather than the default Adler32) to calculate the digest of the original textual file. The MD5 digest is also viewable with genols. Note: for compressed files (e.g. myfile.vcf.gz or myfile.bam) the MD5 calculated is that of the original uncompressed textual file - myfile.vcf or myfile.sam respectively.
              
                      |

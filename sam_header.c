@@ -186,7 +186,7 @@ static void bam_foreach_SQ_line (const char *txt_header, uint32_t txt_header_len
 
         // add n_ref
         uint32_t n_ref_lten = LTEN32 (n_ref);
-        buf_add_more (NULL, new_txt_header, &n_ref_lten, sizeof (uint32_t), NULL); // not necessarily word-aligned
+        buf_add_more (NULL, new_txt_header, (char*)&n_ref_lten, sizeof (uint32_t), NULL); // not necessarily word-aligned
     }
 
     for (uint32_t ref_i=0; ref_i < n_ref; ref_i++) {
@@ -209,11 +209,11 @@ static void bam_foreach_SQ_line (const char *txt_header, uint32_t txt_header_len
                 new_l_name++; // now its the length including \0
 
                 uint32_t new_l_name_lten = LTEN32 (new_l_name);
-                buf_add_more (NULL, new_txt_header, &new_l_name_lten, sizeof (uint32_t), NULL); // use memcpy as data is not word-aligned
+                buf_add_more (NULL, new_txt_header, (char*)&new_l_name_lten, sizeof (uint32_t), NULL); // use memcpy as data is not word-aligned
                 buf_add_more (NULL, new_txt_header, name, new_l_name_lten, NULL);
 
                 uint32_t l_ref_lten = LTEN32 (l_ref);
-                buf_add_more (NULL, new_txt_header, &l_ref_lten, sizeof (uint32_t), NULL); // use memcpy as data is not word-aligned
+                buf_add_more (NULL, new_txt_header, (char*)&l_ref_lten, sizeof (uint32_t), NULL); // use memcpy as data is not word-aligned
             }
             else 
                 buf_add_more (NULL, new_txt_header, &txt_header[start_line], l_name + 8, NULL); // use memcpy as data is not word-aligned

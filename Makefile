@@ -40,7 +40,7 @@ MY_SRCS = genozip.c genols.c base250.c context.c container.c strings.c stats.c a
 		  fasta.c fastq.c gff3.c me23.c phylip.c chain.c kraken.c generic.c \
 		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c lookback.c \
 		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c\
-		  codec_gtshark.c codec_pbwt.c codec_none.c codec_htscodecs.c \
+		  codec_gtshark.c codec_pbwt.c codec_none.c codec_htscodecs.c codec_enano.c \
 	      txtfile.c profiler.c file.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c \
 		  vblock.c regions.c  optimize.c dict_id.c hash.c stream.c url.c bases_filter.c
 
@@ -67,7 +67,7 @@ CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h tx
              base250.h endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h \
              buffer.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h codec.h stats.h \
              crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h qname.h lookback.h \
-			 tokenizer.h \
+			 tokenizer.h codec_enano_alg.c \
 			 reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h linesorter.h threads.h \
 			 arch.h license.h data_types.h base64.h txtheader.h writer.h bases_filter.h genols.h coords.h contigs.h chrom.h \
 			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h fastq.h gff3.h phylip.h chain.h kraken.h generic.h \
@@ -150,7 +150,7 @@ else
 	DEBUGFLAGS += -DDEBUG -g -O0
 endif
 
-all   : CFLAGS += $(OPTFLAGS) -march=native -DDISTRIBUTION=\"github\"
+all   : CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"$(DISTRIBUTION)\" -march=native 
 all   : $(OBJDIR) $(EXECUTABLES) 
 	@chmod +x test.sh
 
@@ -227,14 +227,14 @@ genounzip-opt$(EXE) genocat-opt$(EXE) genols-opt$(EXE): genozip-opt$(EXE)
 	@ln $^ $@
 
 LICENSE.txt: text_license.h version.h # not dependent on genozip.exe, so we don't generate it every compilation
-	@make ./genozip$(EXE) # recursive call 
+	@make -j ./genozip$(EXE) # recursive call 
 	@echo Generating $@
 	@./genozip$(EXE) --license=100 --force > $@
 	@(git commit -m license_version_$(version) $@ ; exit 0) > /dev/null
 
 DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs/advanced.rst docs/index.rst docs/license.rst \
        docs/publications.rst docs/installing.rst docs/contact.rst docs/compression.rst docs/source.rst docs/logo.png \
-	   docs/opt-help.rst docs/opt-piz.rst docs/opt-quiet.rst docs/opt-stats.rst docs/opt-threads.rst \
+	   docs/opt-help.rst docs/opt-piz.rst docs/opt-quiet.rst docs/opt-stats.rst docs/opt-threads.rst docs/opt-subdirs.rst \
 	   docs/manual.rst docs/sex-assignment.rst docs/sex-assignment-alg-sam.rst docs/sex-assignment-alg-fastq.rst \
 	   docs/fastq-to-bam-pipeline.rst docs/coverage.rst docs/algorithms.rst docs/losslessness.rst docs/idxstats.rst \
 	   docs/downsampling.rst docs/applications.rst docs/capabilities.rst docs/kraken.rst \
@@ -330,7 +330,7 @@ decrement-version:
 	@echo "Remove tag: git push --delete origin genozip-a.b.c"
 	@echo "Change version.h to the last version that still has a tag"
 
-.archive.tar.gz : increment-version $(C_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) LICENSE.txt
+.archive.tar.gz : $(C_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) LICENSE.txt
 	@echo Creating github tag genozip-$(version) and archive
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@git push > /dev/null
@@ -415,7 +415,7 @@ docs/genozip-installer.exe: clean-optimized $(WINDOWS_INSTALLER_OBJS) # clean fi
 
 docs/genozip-linux-x86_64.tar.gz.build: genozip-linux-x86_64/LICENSE.txt 
 	@(mkdir genozip-linux-x86_64 >& /dev/null ; exit 0)
-	@run-on-wsl.sh make docs/genozip-linux-x86_64.tar.gz
+	@run-on-wsl.sh make -j docs/genozip-linux-x86_64.tar.gz
 	@(git commit -m linux_files_for_version_$(version) docs/genozip-linux-x86_64.tar.gz ; exit 0) > /dev/null
 	@git push > /dev/null
 
@@ -428,16 +428,16 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@# Get IP address - check if the previous IP address still works or ask for a new one. Assuming a LAN on an Android hotspot.
 	@ip=`cat mac/.mac_ip_address` ; a=`echo $$ip|cut -d. -f4`; (( `ping  -n 1 $$ip | grep "round trip times" | wc -l` > 0 )) || read -p "IP Address: 192.168.43." a ; ip=192.168.43.$$a ; echo $$ip > mac/.mac_ip_address
 	@[ -f mac/.mac_username ] || ( echo ERROR: file mac/.mac_username missing && exit 1 )
-	@ssh `cat mac/.mac_ip_address` -l `cat mac/.mac_username`  "cd genozip ; echo "Pulling from git" ; git pull >& /dev/null ; make mac/.from_remote_timestamp" # pull before make as Makefile might have to be pulled
+	@ssh `cat mac/.mac_ip_address` -l `cat mac/.mac_username`  "cd genozip ; echo "Pulling from git" ; git pull >& /dev/null ; make -j mac/.from_remote_timestamp" # pull before make as Makefile might have to be pulled
 	@touch $@
 
 prod:
-	@(cd ../genozip-prod ; git stash ; git pull ; make clean ; touch dict_id_gen.h ; make)
+	@(cd ../genozip-prod ; git stash ; git pull ; make -j clean ; touch dict_id_gen.h ; make -j)
 	@cp ../genozip-prod/genozip.exe genozip-prod.exe
 	@cp ../genozip-prod/genounzip.exe genounzip-prod.exe
 	@cp ../genozip-prod/genocat.exe genocat-prod.exe
 
-distribution: testfiles conda/.conda-timestamp docs/genozip-linux-x86_64.tar.gz.build docs/genozip-installer.exe publish-docs prod # docs (almost) last, after version incremented # mac/.remote_mac_timestamp
+distribution: increment-version testfiles docs/genozip-linux-x86_64.tar.gz.build docs/genozip-installer.exe conda/.conda-timestamp publish-docs prod # docs (almost) last, after version incremented # mac/.remote_mac_timestamp
 	@(cd ../genozip-feedstock/ ; git pull)
 
 test-backup: genozip.exe

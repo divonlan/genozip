@@ -2,6 +2,7 @@
 
           |
 
+.. include:: opt-subdirs.rst 
 .. option:: -o, --output output-filename.  Output to this filename.
 
           |

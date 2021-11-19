@@ -5,7 +5,7 @@
 //   Copyright claimed on additions and modifications vs public domain.
 //
 // This is an implementation of AES based on https://github.com/kokke/tiny-AES-c
-// which has been heavily modified. The unmodified terms if the license of tiny-AES-c are as follows:
+// which has been heavily modified. The unmodified terms of the license of tiny-AES-c are as follows:
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> 
 // This is free and unencumbered software released into the public domain.
 //

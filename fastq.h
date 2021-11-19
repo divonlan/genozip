@@ -41,7 +41,8 @@ extern bool fastq_txtfile_have_enough_lines (VBlockP vb, uint32_t *unconsumed_le
 extern void fastq_zip_initialize (void);
 extern void fastq_zip_read_one_vb (VBlockP vb);
 extern bool fastq_zip_dts_flag (void);
-COMPRESSOR_CALLBACK(fastq_zip_qual);
+COMPRESSOR_CALLBACK (fastq_zip_seq);
+COMPRESSOR_CALLBACK(fastq_zip_qual); // used by codec_enano_compress
 
 // SEG Stuff
 extern void fastq_seg_initialize();

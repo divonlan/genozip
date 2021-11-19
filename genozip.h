@@ -140,7 +140,9 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     // external compressors (used by executing an external application)
     CODEC_BGZF=20, CODEC_XZ=21, CODEC_BCF=22, 
     V8_CODEC_BAM=23,    // in v8 BAM was a codec which was compressed using samtools as external compressor. since v9 it is a full data type, and no longer a codec.
-    CODEC_CRAM=24, CODEC_ZIP=25,  
+    CODEC_CRAM=24, CODEC_ZIP=25,
+
+    CODEC_ENANO=26,  
 
     NUM_CODECS
 } Codec; 
@@ -168,8 +170,8 @@ typedef          __int128 int128_t;
 
 #define IS_FLAG(flag, mask) (((flag) & (mask)) == (mask))
 
-#define SWAP(a,b)  do { typeof(a) tmp = a; a = b; b = tmp; } while(0)
-#define SWAPbit(a,b) do { uint8_t tmp = a; a = b; b = tmp; } while(0)  // meant for bit fields 
+#define SWAP(a,b)    ({ typeof(a) tmp = a; a = b; b = tmp; })
+#define SWAPbit(a,b) ({ uint8_t   tmp = a; a = b; b = tmp; })  // meant for bit fields 
 
 // used for qsort sort function - receives two integers of any type and returns -1/0/1 as required to sort in ascending order
 #define ASCENDING(a,b) (((a) > (b)) ? 1 : (a) < (b) ? -1 : 0)
@@ -208,9 +210,9 @@ typedef _Bool bool;
 #define STRf(x)    ((int)x##_len), x       // for printf %.*s argument list
 #define STRfi(x,i) x##_lens[i], x##s[i]    // for printf %.*s argument list
 
-#define STRcpy(dst,src) do { if (src##_len) { memcpy(dst,src,src##_len) ; dst##_len = src##_len; } } while(0)
-#define STRcpyi(dst,i,src) do { if (src##_len) { memcpy(dst##s[i],src,src##_len) ; dst##_lens[i] = src##_len; } } while(0)
-#define STRset(dst,src) do { dst=src; dst##_len=src##_len; } while(0)
+#define STRcpy(dst,src)    ({ if (src##_len) { memcpy(dst,src,src##_len) ; dst##_len = src##_len; } })
+#define STRcpyi(dst,i,src) ({ if (src##_len) { memcpy(dst##s[i],src,src##_len) ; dst##_lens[i] = src##_len; } })
+#define STRset(dst,src)    ({ dst=src; dst##_len=src##_len; })
 #define STRLEN(string_literal) (sizeof string_literal - 1)
 
 #define ARRAYp(name) uint32_t n_##name##s, const char *name##s[], uint32_t name##_lens[] // function parameters
@@ -264,7 +266,8 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 #define COMPRESSOR_CALLBACK(func) \
 void func (VBlockP vb, uint64_t vb_line_i, \
            char **line_data, uint32_t *line_data_len,  \
-           uint32_t maximum_size) // might be less than the size available if we're sampling in zip_assign_best_codec()
+           uint32_t maximum_size, /* might be less than the size available if we're sampling in zip_assign_best_codec() */ \
+           bool *is_rev)          // QUAL and SEQ callbacks - must be returned in SAM/BAM and set to 0 elsewhere
 #define CALLBACK_NO_SIZE_LIMIT 0xffffffff // for maximum_size
 
 typedef COMPRESSOR_CALLBACK (LocalGetLineCB);

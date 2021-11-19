@@ -171,6 +171,8 @@ COMPRESSOR_CALLBACK (fasta_zip_seq)
     
     if (line_data) // if NULL, only length was requested
         *line_data = dl->seq_len ? ENT (char, vb->txt_data, dl->seq_data_start) : NULL;
+
+    if (is_rev) *is_rev = 0;
 }   
 
 void fasta_seg_initialize (VBlock *vb)

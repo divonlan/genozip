@@ -12,6 +12,8 @@
 
 #define MIN_LEN_FOR_COMPRESSION 90 // less that this size, and compressed size is typically larger than uncompressed size
 
+#define ENANO_MIN_READ_LEN 4
+
 typedef bool CodecCompress (VBlockP vb, 
                             SectionHeader *header,       // in / out
                             const char *uncompressed,   // option 1 - compress contiguous data
@@ -76,6 +78,7 @@ typedef struct {
     { 0, "BAM",  "-.bam",  "samtools view -h --threads 2", NA1,     NA2,                   NA3,                       NA4                      }, \
     { 0, "CRAM", "-.cram", "samtools view -h --threads 2", NA1,     NA2,                   NA3,                       NA4                      }, \
     { 0, "ZIP",  "+.zip",  "unzip -p",    NA1,                      NA2,                   NA3,                       NA4                      }, \
+    { 0, "NANO", "+",      NA0,           codec_enano_compress,     codec_enano_uncompress,NA3,                       codec_complex_est_size   }, \
 }
 
 extern CodecArgs codec_args[NUM_CODECS];
@@ -84,11 +87,11 @@ extern CodecCompress codec_bz2_compress, codec_lzma_compress, codec_domq_compres
                      codec_none_compress, codec_acgt_compress, codec_xcgt_compress, codec_pbwt_compress, 
                      codec_RANB_compress, codec_RANW_compress, codec_RANb_compress, codec_RANw_compress, 
                      codec_ARTB_compress, codec_ARTW_compress, codec_ARTb_compress, codec_ARTw_compress,
-                     codec_bit1_compress;
+                     codec_enano_compress;
 
 extern CodecUncompress codec_bz2_uncompress, codec_lzma_uncompress, codec_acgt_uncompress, codec_xcgt_uncompress,
                        codec_bsc_uncompress, codec_none_uncompress, codec_gtshark_uncompress, codec_pbwt_uncompress,
-                       codec_rans_uncompress, codec_arith_uncompress, codec_bit1_uncompress;
+                       codec_rans_uncompress, codec_arith_uncompress, codec_enano_uncompress;
 
 extern CodecReconstruct codec_hapmat_reconstruct, codec_domq_reconstruct, codec_pbwt_reconstruct;
 
@@ -138,3 +141,6 @@ extern const char *lzma_status (ELzmaStatus status);
 // PBWT stuff
 extern void codec_pbwt_seg_init (VBlockP vb, ContextP runs_ctx, ContextP fgrc_ctx);
 extern void codec_pbwt_display_ht_matrix (VBlockP vb, uint32_t max_rows);
+
+// NANO stuff
+extern void codec_enano_seg_init (VBlockP vb, ContextP qual_ctx);

@@ -35,7 +35,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     DataType data_type_alloced;/* type of this VB was allocated as. could be different that data_type, see vb_get_vb */\
     \
     /* memory management  */\
-    Buffer buffer_list;        /* a buffer containing an array of pointers to all buffers allocated for this VB (either by the main thread or its compute thread) */\
+    Buffer buffer_list;        /* a buffer containing an array of pointers to all buffers allocated for this VB (either by the main thread or its compute thread). param=is_sorted */\
     \
     bool ready_to_dispatch;    /* line data is read, and dispatcher can dispatch this VB to a compute thread */\
     bool is_processed;         /* thread completed processing this VB - it is ready for outputting */\

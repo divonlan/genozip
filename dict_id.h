@@ -10,7 +10,7 @@
 #include "endianness.h"
 
 #define DTYPE_PLAIN DTYPE_2
-extern DictId dict_id_make (const char *str, unsigned str_len, DictIdType dict_id_type);
+extern DictId dict_id_make (STRp(str), DictIdType dict_id_type);
 
 #define dict_id_is(dict_id, str) (dict_id_make (str, strlen(str)).num == dict_id_typeless (dict_id).num)
 static inline DictIdType dict_id_type (DictId dict_id) { return ((dict_id.id[0] >> 6) == 0) ? DTYPE_FIELD   

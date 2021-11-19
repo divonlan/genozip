@@ -60,7 +60,7 @@ void sections_remove_from_list (VBlock *vb, uint64_t offset, uint64_t len)
 
     ASSERT (sl->offset == offset, "cannot find section with offset=%"PRIu64" in vb=%u", offset, vb->vblock_i);
 
-    buf_cut_out (&vb->section_list_buf, SectionEnt, ENTNUM (vb->section_list_buf, sl), 1);
+    buf_remove (&vb->section_list_buf, SectionEnt, ENTNUM (vb->section_list_buf, sl), 1);
 }
 
 // Called by ZIP main thread. concatenates a vb or dictionary section list to the z_file section list - just before 

@@ -5,7 +5,7 @@
 //   Copyright claimed on additions and modifications vs public domain.
 //
 // This is an implementation of MD5 based on: https://github.com/WaterJuice/WjCryptLib/blob/master/lib/WjCryptLib_Md5.c
-// which has been modified extensively. The unmodified terms if the license of tiny-AES-c are as follows:
+// which has been modified extensively. The unmodified terms of the license are as follows:
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> 
 // This is free and unencumbered software released into the public domain.
 //

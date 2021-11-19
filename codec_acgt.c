@@ -132,7 +132,7 @@ bool codec_acgt_compress (VBlock *vb, SectionHeader *header,
             char *data_1=0;
             uint32_t data_1_len=0;
             
-            callback (vb, line_i, &data_1, &data_1_len, *uncompressed_len - nonref_x_ctx->local.len);
+            callback (vb, line_i, &data_1, &data_1_len, *uncompressed_len - nonref_x_ctx->local.len, NULL);
 
             PACK (data_1, data_1_len);
 
@@ -164,9 +164,9 @@ bool codec_acgt_compress (VBlock *vb, SectionHeader *header,
 
         if (flag.show_time) codec_show_time (vb, "Subcodec", vb->profile.next_subname, header->sub_codec);
 
-        PAUSE_TIMER; // sub-codec compresssors account for themselves
+        PAUSE_TIMER(vb); // sub-codec compresssors account for themselves
         if (!compress (vb, header, (char *)packed->words, &packed_uncompressed_len, NULL, compressed, compressed_len, soft_fail)) return false;
-        RESUME_TIMER (compressor_actg);
+        RESUME_TIMER (vb, compressor_actg);
     }
 
     buf_free (&vb->compressed);

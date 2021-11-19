@@ -17,6 +17,8 @@
 #define CONTAINER_MAX_REPEATS 0xfffffe     // 3 byte unsigned int (16M) (minus 1 for easier detection of overflows)
 #define CONTAINER_MAX_SELF_TRANS_CHANGE 50
 
+#define CONTAINER_MAX_DICTS 2047           // 11 bits -matches CONTAINER_FIELDS.nitems_lo+nitems_hi
+
 typedef struct ContainerItem {
     DictId dict_id;                        // note: the code counts on this field being first (assigning "item = { dict_id }")
     uint8_t did_i_small;                   // PIZ only: can store dids 0->254, 255 means did_i too large to store
@@ -46,7 +48,7 @@ typedef struct ContainerItem {
 // Only the container-wide prefix may alternatively be terminated by CON_PX_SEP_SHOW_REPEATS.
 
 #define CONTAINER_FIELDS(nitems)        \
-    uint32_t nitems_hi            : 3;  /* nitems_lo+hi=11 bits, matches MAX_DICTS. MSB of num_items (until 9.0.22 it was MSB of repeats (after BGEN)), until 12.0.27 nitems_hi was 8 bits */ \
+    uint32_t nitems_hi            : 3;  /* nitems_lo+hi=11 bits, matches CONTAINER_MAX_DICTS. MSB of num_items (until 9.0.22 it was MSB of repeats (after BGEN)), until 12.0.27 nitems_hi was 8 bits */ \
     /* container flags set during reconstruction */ \
     uint32_t unused               : 4;  /* can be used to enlarge nitems_hi or to add flags */ \
     uint32_t no_translation       : 1;  /* Cancel translation for this container and all of its items */\
@@ -76,7 +78,8 @@ typedef struct MediumContainer { CONTAINER_FIELDS(MEDIUM_CON_NITEMS) } MediumCon
 
 #pragma pack()
 #define con_nitems(con) ((con).nitems_hi * 256 + (con).nitems_lo)
-#define con_set_nitems(con, n) { (con).nitems_hi = (n) >> 8; (con).nitems_lo = ((n) & 0xff); }
+#define con_set_nitems(con, n) { ASSERT (n <= CONTAINER_MAX_DICTS, "Container nitems=%u too large, max is %u", (unsigned)(n), CONTAINER_MAX_DICTS);\
+                                 (con).nitems_hi = (n) >> 8; (con).nitems_lo = ((n) & 0xff); }
 #define con_inc_nitems(con) con_set_nitems ((con), con_nitems (con) + 1)
 #define con_dec_nitems(con) con_set_nitems ((con), con_nitems (con) - 1)
 #define con_sizeof(con) (sizeof(con) - sizeof((con).items) + con_nitems (con) * sizeof((con).items[0]))

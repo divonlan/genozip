@@ -64,7 +64,7 @@ static SRes codec_lzma_data_in_callback (const ISeqInStream *p, void *buf, size_
 
         instream->callback (instream->vb, instream->line_i, 
                             &instream->next_in_1, &instream->avail_in_1,
-                            instream->avail_in);
+                            instream->avail_in, NULL);
 
         instream->line_i++;
     }

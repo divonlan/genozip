@@ -171,7 +171,7 @@ static void genols_list_dir(const char *dirname)
     flag.multiple_files = true;
 
     while ((ent = readdir(dir))) 
-        if (!file_is_dir (ent->d_name))  // don't go down subdirectories recursively
+        if (ent->d_name[0] != '.' && !file_is_dir (ent->d_name))  // don't go down subdirectories recursively, and don't consider hidden files
             genols (ent->d_name, false, dirname, true);
     
     closedir(dir);    

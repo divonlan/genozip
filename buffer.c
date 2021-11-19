@@ -36,6 +36,11 @@
 
 #define BUFFER_BEING_MODIFIED ((char*)0x777)
 
+// We mark a buffer list entry as removed, by setting its LSb. This keeps the buffer list sorted, in case it is sorted.
+// Normally the LSb is 0 as buffers are word-aligned (verified in buf_add_to_buffer_list_do)
+#define BL_SET_REMOVED(bl_ent) bl_ent = ((BufferP)((uint64_t)bl_ent | 1))
+#define BL_IS_REMOVED(bl_ent)  ((uint64_t)bl_ent & 1) 
+
 static const unsigned control_size = 2*sizeof (uint64_t) + sizeof(uint16_t); // underflow, overflow and user counter
 
 static Mutex overlay_mutex = {}; // used to thread-protect overlay counters (note: not initializing here - different in different OSes)
@@ -182,8 +187,8 @@ static bool buf_test_overflows_do (const VBlock *vb, bool primary, const char *m
         // we attempt to prevent many of the cases by not checking buffers that are BUFFER_BEING_MODIFIED at the onset, but they still may
         // become BUFFER_BEING_MODIFIED mid way through the test
 
-        if (!(buf = *ENT (Buffer *, vb->buffer_list, buf_i)))
-             continue; // buf was 'buf_destroy'd
+        buf = *ENT (Buffer *, vb->buffer_list, buf_i);
+        if (BL_IS_REMOVED (buf)) continue; // buf was 'buf_destroy'd
 
 #ifdef WIN32
         if (IsBadReadPtr (buf, sizeof (Buffer))) {
@@ -285,7 +290,7 @@ void buf_update_buf_list_vb_addr_change (VBlockP new_vb, VBlockP old_vb)
     
     for (uint32_t buf_i=0; buf_i < bl_len; buf_i++) {
 
-        if (!bl[buf_i]) continue;
+        if (BL_IS_REMOVED (bl[buf_i])) continue;
 
         // if this buffer is within the moved VB - update its address to the same offset relative to the new vb address
         if ((char*)bl[buf_i] >= (char*)old_vb && (char*)bl[buf_i] < (char *)(old_vb+1)) 
@@ -311,12 +316,14 @@ static void buf_foreach_buffer (void (*callback)(const Buffer *, void *arg), voi
         ARRAY (const Buffer *, bl, vb->buffer_list);
         
         for (uint32_t buf_i=0; buf_i < bl_len; buf_i++) {
+            if (BL_IS_REMOVED (bl[buf_i]) || !bl[buf_i]->memory) continue; // exclude destroyed, not-yet-allocated, overlay buffers and buffers that were src in buf_move
+
             #ifdef WIN32
             if (IsBadReadPtr (&bl[buf_i], sizeof (Buffer))) 
                 ABORT ("buffer structure inaccessible (invalid pointer) in buf_i=%u of vb_i=%d", buf_i, vb_i); 
             #endif
 
-            if (bl[buf_i] && bl[buf_i]->memory) callback (bl[buf_i], arg); // exclude destroyed, not-yet-allocated, overlay buffers and buffers that were src in buf_move
+            callback (bl[buf_i], arg); 
         }
     }
 }
@@ -407,8 +414,7 @@ void buf_show_memory_handler (void)
 #endif
 
 // thread safety: only the thread owning the VB of the buffer (main thread of evb) can add a buffer
-// to the buf list OR it may be added by the main thread IF the compute thread of this VB is not 
-// running yet
+// to the buf list OR it may be added by the main thread IF the compute thread of this VB is not running yet
 void buf_add_to_buffer_list_do (VBlock *vb, Buffer *buf, const char *func)
 {
     if (buf->vb == vb) return; // already in buf_list - nothing to do
@@ -416,12 +422,15 @@ void buf_add_to_buffer_list_do (VBlock *vb, Buffer *buf, const char *func)
     ASSERT (!buf->vb, "cannot add buffer %s to buf_list of vb_i=%u because it is already in buf_list of vb_i=%u.",
              buf_desc(buf).s, vb->vblock_i, buf->vb->vblock_i);    
 
+    ASSERT (((uint64_t)buf & 1)==0, "Expecting buffer %s of vb_i=%u to be word-aligned, but its address is %p",
+             buf_desc(buf).s, vb->vblock_i, buf); // BL_SET_REMOVED expects this
+
 #define INITIAL_MAX_MEM_NUM_BUFFERS 10000 /* for files that have ht,gt,phase,variant,and line - the factor would be about 5.5 so there will be 1 realloc per vb, but most files don't */
     Buffer *bl = &vb->buffer_list;
 
-    buf_alloc (vb, bl, 1, INITIAL_MAX_MEM_NUM_BUFFERS, Buffer *, 2, "buffer_list");
-
-    ((Buffer **)bl->data)[bl->len++] = buf;
+    buf_alloc (vb, bl, 1, INITIAL_MAX_MEM_NUM_BUFFERS, BufferP, 2, "buffer_list");
+    NEXTENT (BufferP, *bl) = buf;
+    bl->param = false; // buffer list is not sorted anymore
 
     if (flag.debug_memory==1 && vb->buffer_list.len > DISPLAY_ALLOCS_AFTER)
         iprintf ("buf_add_to_buffer_list (%s): %s: size=%"PRIu64" buffer=%s vb->id=%d buf_i=%u\n", 
@@ -480,8 +489,8 @@ uint64_t buf_alloc_do (VBlock *vb,
 
 #define REQUEST_TOO_BIG_THREADSHOLD (3ULL << 30) // 3 GB
     if (requested_size > REQUEST_TOO_BIG_THREADSHOLD && !buf->can_be_big) // use WARN instead of ASSERTW to have a place for breakpoint
-        WARN ("Warning: buf_alloc called from %s:%u requested %s. This is suspiciously high and might indicate a bug. buf=%s",
-              func, code_line, str_size (requested_size).s, buf_desc (buf).s);
+        WARN ("Warning: buf_alloc called from %s:%u requested %s. This is suspiciously high and might indicate a bug. buf=%s line_i=%"PRIu64,
+              func, code_line, str_size (requested_size).s, buf_desc (buf).s, vb->line_i);
 
     // sanity checks
     ASSERT (buf->type == BUF_REGULAR || buf->type == BUF_UNALLOCATED, "called from %s:%u: cannot buf_alloc a buffer of type %s. details: %s", 
@@ -802,6 +811,25 @@ void buf_free_do (Buffer *buf, const char *func, uint32_t code_line)
     }
 } 
 
+static int buf_list_sorter (const void *a, const void *b)
+{
+    return ASCENDING (*(BufferP *)a, *(BufferP *)b);
+}
+
+// binary-search a buffer in a sorted buffer list
+static int buf_list_find_buffer (const BufferP *buf_list, ConstBufferP buf, int first, int last)
+{
+    if (first > last) return -1; // not found
+
+    int mid = (first + last) / 2;
+    ConstBufferP mid_buf = buf_list[mid];
+
+    if (mid_buf < buf) return buf_list_find_buffer (buf_list, buf, mid + 1, last);
+    if (mid_buf > buf) return buf_list_find_buffer (buf_list, buf, first, mid - 1);
+    
+    return mid; // found
+}
+
 // remove from buffer_list of this vb
 // thread safety: only the thread owning the VB of the buffer (main thread of evb) can remove a buffer
 // from the buf list, OR the main thread may remove for all VBs, IF no compute thread is running
@@ -809,22 +837,28 @@ static void buf_remove_from_buffer_list (Buffer *buf)
 {
     if (!buf->vb) return; // this buffer is not on the buf_list - nothing to do
 
-    ARRAY (Buffer *, buf_list, buf->vb->buffer_list);
+    START_TIMER;
+    VBlockP vb = buf->vb;
+    
+    ARRAY (BufferP, buf_list, vb->buffer_list);
 
-     for (unsigned i=0; i < buf->vb->buffer_list.len; i++) 
+    if (!vb->buffer_list.param) { // not sorted
+        qsort (buf_list, buf_list_len, sizeof(BufferP), buf_list_sorter);
+        vb->buffer_list.param = true; // now it's sorted
+    }
 
-        if (buf_list[i] == buf) {
-            
-            if (flag.debug_memory==1) 
-                iprintf ("Destroy %s: buf_addr=%s buf->vb->id=%d buf_i=%u\n", buf_desc (buf).s, str_pointer(buf).s, buf->vb->id, i);
+    int buf_i = buf_list_find_buffer (buf_list, buf, 0, buf_list_len-1);
 
-            buf_list[i] = NULL;
-            buf->vb = NULL;
+    if (buf_i >= 0) {
+        if (flag.debug_memory==1) 
+            iprintf ("Destroy %s: buf_addr=%s vb->id=%d buf_i=%u\n", buf_desc (buf).s, str_pointer(buf).s, vb->id, buf_i);
 
-            break;
-        }
-
+        BL_SET_REMOVED (buf_list[buf_i]);
+        buf->vb = NULL;
+    }
     // note: it is possible that the buffer is not found in the list if it is never allocated or destroyed more than once. that's fine.
+    
+    COPY_TIMER(buf_remove_from_buffer_list);
 }
 
 void buf_destroy_do (Buffer *buf, const char *func, uint32_t code_line)
@@ -967,7 +1001,9 @@ void buf_print (Buffer *buf, bool add_newline)
 void buf_low_level_free (void *p, const char *func, uint32_t code_line)
 {
     if (!p) return; // nothing to do
-    
+
+    START_TIMER;
+
     if (flag.debug_memory==1) 
         iprintf ("Memory freed by free(): %s %s:%u\n", str_pointer (p).s, func, code_line);
 
@@ -977,6 +1013,7 @@ void buf_low_level_free (void *p, const char *func, uint32_t code_line)
     }
 
     free (p);
+    COPY_TIMER_VB (evb, buf_low_level_free);
 }
 
 void *buf_low_level_realloc (void *p, size_t size, const char *name, const char *func, uint32_t code_line)

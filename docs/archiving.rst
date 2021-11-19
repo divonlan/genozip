@@ -25,7 +25,7 @@ Example 1:
     -rw-rw-rw- USER/USER    765323 2021-03-04 22:08 variants.vcf.genozip
     
     > # Unarchiving and decompressing all files
-    > tar xvf mydata.tar | genounzip --files-from - --replace
+    > tar xvf mydata.tar |& genounzip --files-from - --replace
 
 Example 2: here, we compress and archive all BAM files in the current directory and its sub-directories, preserving the directory struture:
 

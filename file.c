@@ -379,7 +379,7 @@ static bool file_open_txt_read (File *file)
     if (file_open_txt_read_test_valid_dt (file)) return true; // skip this file
 
     if (file->data_type == DT_GENERIC && !stdin_type) 
-        WARN_ONCE ("FYI: genozip can't recognize %s file's type, so it will be compressed as GENERIC. In the future, you may specify the type with \"--input <type>\". To suppress this warning, use \"--input generic\".", file->name);
+        WARN_ONCE ("FYI: genozip doesn't recognize %s file's type, so it will be compressed as GENERIC. In the future, you may specify the type with \"--input <type>\". To suppress this warning, use \"--input generic\".", file->name);
     
     // open the file, based on the codec
     file->codec = file_get_codec_by_txt_ft (file->data_type, file->type);
@@ -433,7 +433,7 @@ fallthrough_from_cram:
                 file->codec = CODEC_BGZF;
                 
                 evb->compressed.param = bgzf_uncompressed_size; // pass uncompressed size in param
-                buf_add_more (evb, &evb->compressed, block, block_size, "compressed");
+                buf_add_more (evb, &evb->compressed, (char*)block, block_size, "compressed");
                 
                 file->bgzf_flags = bgzf_get_compression_level (file->name ? file->name : FILENAME_STDIN, 
                                                                block, block_size, (uint32_t)bgzf_uncompressed_size);
@@ -483,7 +483,7 @@ fallthrough_from_cram:
                 }
 
                 file->codec = CODEC_NONE;
-                buf_add_more (evb, &evb->compressed, block, block_size, "compressed");
+                buf_add_more (evb, &evb->compressed, (char*)block, block_size, "compressed");
             }
 
             // Notes 1. We currently only support plain and BGZF data piped in - see bug 243
@@ -829,8 +829,9 @@ static bool file_open_z (File *file)
         file->type = file_get_z_ft_by_txt_in_ft (file->data_type, txt_file->type); 
 
         mutex_initialize (file->dicts_mutex);
-
-        if (flag.force) unlink (file->name); // delete file if it already exists (needed in weird cases, eg symlink to non-existing file)
+    
+        if (flag.force && !tar_is_tar()) 
+            unlink (file->name); // delete file if it already exists (needed in weird cases, eg symlink to non-existing file)
 
         // if we're writing to a tar file, we get the already-openned tar file
         file->file = tar_is_tar() ? tar_open_file (file->name) 
@@ -847,6 +848,8 @@ static bool file_open_z (File *file)
 
 File *file_open (const char *filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE or WRITEREAD */)
 {
+    START_TIMER;
+
     File *file = (File *)CALLOC (sizeof(File));
 
     file->supertype  = supertype;
@@ -884,6 +887,7 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
         !(!file->is_remote && !file->redirected && file_is_fifo (filename))) // a fifo is allowed is be size 0 (as it always is) 
     {
         FREE (file);
+        COPY_TIMER_VB(evb, file_open);
         return NULL; 
     }
 
@@ -895,8 +899,9 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
             is_file_exists && 
             !(!file->is_remote && !file->redirected && file_is_fifo (filename)) && // a fifo can be "overwritten" (that's just normal writing to a fifo)
             !flag.force && 
-            !(supertype==TXT_FILE && flag.test) && // not testing piz
-            !(supertype==Z_FILE && flag.seg_only)) // not zip with --seg-only
+            !(supertype==TXT_FILE && flag.test) &&   // not testing piz
+            !(supertype==Z_FILE && flag.seg_only) && // not zip with --seg-only
+            !(supertype==Z_FILE && tar_is_tar()))    // not z_file is within a tar file
             file_ask_user_to_confirm_overwrite (filename); // function doesn't return if user responds "no"
 
         // copy filename 
@@ -934,6 +939,7 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
 
     ASSINP (success, "cannot open file \"%s\": %s", file->name, strerror(errno)); // errno will be retrieve even the open() was called through zlib and bzlib 
 
+    COPY_TIMER_VB (evb, file_open);
     return file;
 }
 
@@ -980,6 +986,8 @@ void file_close (File **file_p,
                  bool index_txt,      // true if we should also index the txt file after it is closed
                  bool cleanup_memory) // true means destroy buffers - use if the closed is NOT near the end of the execution, eg when dealing with unbinding bound files
 {
+    START_TIMER;
+
     File *file = *file_p;
     *file_p = NULL;
 
@@ -1039,6 +1047,8 @@ void file_close (File **file_p,
 
     // free resources if we are NOT near the end of the execution. If we are at the end of the execution
     // it is faster to just let the process die
+
+{ START_TIMER 
     if (cleanup_memory) {
 
         mutex_destroy (file->dicts_mutex);
@@ -1078,6 +1088,9 @@ void file_close (File **file_p,
         FREE (file->rejects_file_name[1]);
         FREE (file);
     }
+COPY_TIMER_VB(evb,tmp2);}
+
+    COPY_TIMER_VB (evb, file_close);
 }
 
 void file_write (File *file, const void *data, unsigned len)

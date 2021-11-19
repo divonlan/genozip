@@ -381,7 +381,8 @@ static void zip_generate_local (VBlockP vb, ContextP ctx)
         
     codec_assign_best_codec (vb, ctx, NULL, SEC_LOCAL);
 
-    if (flag.debug_generate) iprintf ("%s.local in vb_i=%u ltype=%s len=%"PRIu64"\n", ctx->tag_name, vb->vblock_i, lt_name (ctx->ltype), ctx->local.len);
+    if (flag.debug_generate) iprintf ("%s.local in vb_i=%u ltype=%s len=%"PRIu64" codec=%s\n", 
+                                      ctx->tag_name, vb->vblock_i, lt_name (ctx->ltype), ctx->local.len, codec_name(ctx->lcodec));
 
     COPY_TIMER (zip_generate_local);
 }

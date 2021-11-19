@@ -50,7 +50,7 @@ static bool codec_hts_compress (VBlock *vb,
         
         for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
             char *line; uint32_t line_len;
-            callback (vb, line_i, pSTRa(line), *uncompressed_len - vb->codec_bufs[0].len);
+            callback (vb, line_i, pSTRa(line), *uncompressed_len - vb->codec_bufs[0].len, NULL);
             
             buf_add (&vb->codec_bufs[0], line, line_len);
         }

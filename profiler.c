@@ -10,19 +10,31 @@
 #include "file.h"
 #include "segconf.h"
 
-static Mutex evb_profile_mutex = {};
+static ProfilerRec profile = {};    // data for entire execution 
+static Mutex profile_mutex = {};
+static TimeSpecType profiler_timer; // wallclock
 
 void profiler_initialize (void)
 {
-    mutex_initialize (evb_profile_mutex);
+    mutex_initialize (profile_mutex);
+    clock_gettime(CLOCK_REALTIME, &profiler_timer); // initialze wallclock
 }
 
 void profiler_add (ConstVBlockP vb)
 {
-#   define ADD(x) evb->profile.x += vb->profile.x
+#   define ADD(x) profile.x += vb->profile.x
     
-    mutex_lock (evb_profile_mutex);
+    mutex_lock (profile_mutex);
 
+    if (vb->txt_data.len) {
+        profile.num_vbs++;
+        profile.max_vb_size_mb = MAX_(profile.max_vb_size_mb, segconf.vb_size >> 20);
+    }
+
+    ADD(file_open);
+    ADD(file_close);
+    ADD(buf_low_level_free);
+    ADD(buf_remove_from_buffer_list);
     ADD(read);
     ADD(compute);
     ADD(write);
@@ -33,7 +45,7 @@ void profiler_add (ConstVBlockP vb)
     ADD(compressor_domq);
     ADD(compressor_actg);
     ADD(compressor_pbwt);
-    ADD(compressor_hapmat);
+    ADD(compressor_enano);
     ADD(compressor_rans);
     ADD(compressor_arith);
     ADD(zip_generate_b250);
@@ -81,7 +93,7 @@ void profiler_add (ConstVBlockP vb)
     ADD(tmp4);
     ADD(tmp5);
 
-    mutex_unlock (evb_profile_mutex);
+    mutex_unlock (profile_mutex);
 
 #undef ADD
 }
@@ -97,17 +109,20 @@ const char *profiler_print_short (const ProfilerRec *p)
 
 static void print_ctx_compressor_times (void)
 {
-    for (DidIType did_i=0; did_i < z_file->num_contexts; did_i++) {
+// this prints the compressor time for each context. temporarily disabled bc we moved profile to be global rather than file by file
+// TO DO: revive this, when compressing a single file
+/*    for (DidIType did_i=0; did_i < z_file->num_contexts; did_i++) {
         ContextP ctx = ZCTX(did_i);
         if (ms(ctx->compressor_time))
             iprintf ("      %s: %u\n", ctx->tag_name, ms(ctx->compressor_time));
     }
+*/
 }
 
-void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned used_threads, const char *filename, unsigned num_vbs)
+void profiler_print_report (void)
 {
     static const char *space = "                                                   ";
-#   define PRINT(x, level) if (ms(p->x)) iprintf ("%.*s" #x ": %u\n", level*3, space, ms(p->x));
+#   define PRINT(x, level) if (ms(profile.x)) iprintf ("%.*s" #x ": %u\n", level*3, space, ms(profile.x));
     
     const char *os = flag.is_windows ? "Windows"
                    : flag.is_mac     ? "MacOS"
@@ -117,10 +132,8 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
     iprintf ("\n%s PROFILER:\n", command == ZIP ? "ZIP" : "PIZ");
     iprintf ("OS=%s\n", os);
     iprintf ("Build=%s\n", flag.debug ? "Debug" : "Optimized");
-    iprintf ("Compute threads: max_permitted=%u actually_used=%u\n", max_threads, used_threads);
-    iprintf ("file=%s\n\n", filename ? filename : "(not file)");
-    
-    iprintf ("Wallclock: %u milliseconds\n", ms (p->wallclock));
+
+    iprintf ("Wallclock: %s milliseconds\n", str_uint_commas (ms (CHECK_TIMER)).s);
 
     if (command != ZIP) { // this is a uncompress operation
 
@@ -136,7 +149,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (read, 2);
         PRINT (bgzf_io_thread, 1);
         PRINT (write, 1);
-        iprintf ("GENOUNZIP compute threads: %u\n", ms(p->compute));
+        iprintf ("GENOUNZIP compute threads: %u\n", ms(profile.compute));
         PRINT (zfile_uncompress_section, 1);
         PRINT (compressor_bz2,  2);
         PRINT (compressor_lzma, 2);
@@ -145,8 +158,8 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (compressor_arith, 2);
         PRINT (compressor_domq, 2);
         PRINT (compressor_actg, 2);
-        PRINT (compressor_hapmat, 2);
         PRINT (compressor_pbwt, 2);
+        PRINT (compressor_enano, 2);
         print_ctx_compressor_times();
         PRINT (reconstruct_vb, 1);
         PRINT (md5, 1);
@@ -165,7 +178,7 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (ref_contigs_compress, 1);
         PRINT (linesorter_compress_recon_plan, 1);
         PRINT (linesorter_compress_qsort, 2);
-        iprintf ("GENOZIP compute threads %u\n", ms(p->compute));
+        iprintf ("GENOZIP compute threads %u\n", ms(profile.compute));
         PRINT (ctx_clone, 1);
         PRINT (seg_all_data_lines, 1);
         PRINT (sam_seg_XA_pos, 2);
@@ -194,26 +207,33 @@ void profiler_print_report (const ProfilerRec *p, unsigned max_threads, unsigned
         PRINT (compressor_arith, 1);
         PRINT (compressor_domq, 1);
         PRINT (compressor_actg, 1);
-        PRINT (compressor_hapmat, 1);
         PRINT (compressor_pbwt, 1);
+        PRINT (compressor_enano, 1);
         PRINT (codec_hapmat_count_alt_alleles, 2);
     }    
 
+    PRINT (file_open, 0);
+    PRINT (file_close, 0);
     PRINT (buf_alloc, 0);
+    PRINT (buf_remove_from_buffer_list, 0);
+    PRINT (buf_low_level_free, 0);
     PRINT (buf_mmap_do, 0);
     PRINT (vb_release_vb_do, 0);
     PRINT (vb_destroy_vb, 0);
     PRINT (dispatcher_recycle_vbs, 0);
     PRINT (generate_rev_complement_genome, 0);
     
-    iprintf ("tmp1: %u tmp2: %u tmp3: %u tmp4: %u tmp5: %u\n\n", ms(p->tmp1), ms(p->tmp2), ms(p->tmp3), ms(p->tmp4), ms(p->tmp5));
+    iprintf ("tmp1: %u tmp2: %u tmp3: %u tmp4: %u tmp5: %u\n\n", ms(profile.tmp1), ms(profile.tmp2), ms(profile.tmp3), ms(profile.tmp4), ms(profile.tmp5));
 
-    iprint0 ("\nVblock stats:\n");
-    iprintf ("  Vblocks: %u\n", num_vbs);
-    iprintf ("  Maximum vblock size: %"PRIu64" MB\n", segconf.vb_size >> 20);
-    iprintf ("  Average wallclock: %u\n", ms(p->wallclock) / num_vbs);
-    iprintf ("  Average read time: %u\n", ms(p->read) / num_vbs);
-    iprintf ("  Average compute time: %u\n", ms(p->compute) / num_vbs);
-    iprintf ("  Average write time: %u\n", ms(p->write) / num_vbs);
+    if (profile.num_vbs) {
+        iprint0 ("\nVblock stats:\n");
+        iprintf ("  Vblocks: %u\n", profile.num_vbs);
+        iprintf ("  Maximum vblock size: %u MB\n", profile.max_vb_size_mb);
+        iprintf ("  Average wallclock: %u\n", (unsigned)(ms(CHECK_TIMER) / profile.num_vbs));
+        iprintf ("  Average read time: %u\n", ms(profile.read) / profile.num_vbs);
+        iprintf ("  Average compute time: %u\n", ms(profile.compute) / profile.num_vbs);
+        iprintf ("  Average write time: %u\n", ms(profile.write) / profile.num_vbs);
+    }
+    
     iprint0 ("\n");
 }

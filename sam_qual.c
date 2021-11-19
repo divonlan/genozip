@@ -52,6 +52,8 @@ COMPRESSOR_CALLBACK (sam_zip_qual)
     // removing the need for a separate load from RAM
     else if (flag.optimize_QUAL) 
         optimize_phred_quality_string (STRa(*line_data));
+
+    if (is_rev) *is_rev = dl->FLAG.bits.rev_comp;
 }
 
 void sam_seg_QUAL_initialize (VBlockP vb)

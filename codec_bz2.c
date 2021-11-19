@@ -86,7 +86,7 @@ bool codec_bz2_compress (VBlock *vb, SectionHeader *header,
             strm.next_in=0;
             strm.avail_in=0;
 
-            callback (vb, line_i, &strm.next_in, &strm.avail_in, *uncompressed_len - in_so_far);
+            callback (vb, line_i, &strm.next_in, &strm.avail_in, *uncompressed_len - in_so_far, NULL);
             in_so_far += strm.avail_in;
 
             bool is_last_line = (line_i == vb->lines.len - 1);

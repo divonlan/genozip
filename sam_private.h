@@ -32,6 +32,7 @@ typedef struct {
     PosType POS, PNEXT;
     int64_t MAPQ, MQ, QUAL_score, TLEN;
     SamFlags FLAG;
+    uint32_t seq_data_start;       // index in txt_data
     uint32_t seq_len;              // actual sequence length determined from any or or of: CIGAR, SEQ, QUAL. If more than one contains the length, they must all agree
     uint32_t ref_consumed;
 } ZipDataLineSAM;
@@ -63,6 +64,8 @@ typedef struct VBlockSAM {
     Buffer qname_hash;             // Seg: each entry i contains a line number for which the hash(qname)=i (or -1)
     Buffer buddy_textual_cigars;   // Seg of BAM (not SAM): an array of textual CIGARs referred to from DataLine->CIGAR
 
+    // qual stuff
+    bool qual_codec_enano;         // true if we can compress qual with CODEC_ENANO
 } VBlockSAM;
 
 #define VB_SAM ((VBlockSAMP)vb)

@@ -50,6 +50,7 @@ One or more file names must be given
           |
 
 
+.. include:: opt-subdirs.rst 
 .. include:: opt-quiet.rst
 .. include:: opt-threads.rst
 .. include:: opt-stats.rst

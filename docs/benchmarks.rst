@@ -9,19 +9,19 @@ To see more, peer-reviewed, benchmarks, see :ref:`Publications <publications>`.
 
 As can be appreciated from the *detailed compression reports* following the table, the compression gains strongly depend on the specific fields contained in a file, and can therefore vary significantly. 
 
-================================ =========== ========= ========= ============ ================================= ==============================
-Details                          Type        Size      .genozip  Genozip gain Data                              Link to data
-================================ =========== ========= ========= ============ ================================= ==============================
-:ref:`details<benchmark-BAM1>`   BAM         41 GB     10 GB     4.1X         30x Illumina NovaSeq + Dragen     Unpublished
-:ref:`details<benchmark-BAM2>`   BAM         53.8 GB   30.2 GB   1.8X         PacBio CLR (mapped)               `1000 Genozip Project <ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/working/20131209 na12878 pacbio/si/NA12878.pacbio.bwa-sw.20140202.bam>`_
-:ref:`details<benchmark-CRAM1>`  CRAM        15 GB     9.8 GB    1.5X         Illumina NovaSeq + bwa mem        `The European Bioinformatics Institute <ftp://ftp.sra.ebi.ac.uk/vol1/run/ERR323/ERR3239334/NA12878.final.cram>`_
-:ref:`details<benchmark-FASTQ1>` FASTQ.gz    61.2 GB   14.2 GB   4.3X         30x Illumina NovaSeq (R1+R2)      Unpublished
-:ref:`details<benchmark-VCF1>`   VCF.gz      241.8 MB  85.8 MB   2.8X         30x Illumina NovaSeq + Dragen     Unpublished
-:ref:`details<benchmark-VCF2>`   VCF.gz      27 GB     7.8 GB    3.3X         3202 samples                      `1000 Genome Project <ftp://ftp=trace.ncbi.nih.gov/1000genomes/ftp/release/20110521/20201028_CCDG_14151_B01_GRM_WGS_2020=08=05_chr22.recalibrated_variants.vcf.gz>`_
-:ref:`details<benchmark-FASTA1>` FASTA       1.2 GB    5.9 MB    212.2X       Covid-19 multi-FASTA              `coronavirus.innar.com <https://coronavirus.innar.com/coronavirus.unwrapped.fasta.zip>`_
-:ref:`details<benchmark-GFF1>`   GFF3        714 KB    32 KB     22.2X        GRCh38 issues                     `NCBI <https://ftp.ncbi.nlm.nih.gov/pub/grc/human/GRC/Issue_Mapping/GRCh38.p9_issues.gff3>`_
-:ref:`details<benchmark-ME1>`    23andMe     23.6 MB   4.2 MB    5.7X         Consumer DNA test "raw data"      Unpublished
-================================ =========== ========= ========= ============ ================================= ==============================
+================================ =========== ========= ========= ========= ============ ============ ================================= ==============================
+Details                          Type        Size      .gz Size  .genozip  Genozip gain Gain vs .gz  Data                              Link to data
+================================ =========== ========= ========= ========= ============ ============ ================================= ==============================
+:ref:`details<benchmark-FASTQ1>` FASTQ       294.7 GB  61.2 GB   14.2 GB   20.7X        4.3X         30x Illumina NovaSeq (R1+R2)      Unpublished
+:ref:`details<benchmark-BAM1>`   BAM         41 GB               10 GB     4.1X                      30x Illumina NovaSeq + Dragen     Unpublished
+:ref:`details<benchmark-BAM2>`   BAM         53.8 GB             30.2 GB   1.8X                      PacBio CLR (mapped)               `1000 Genozip Project <ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/working/20131209 na12878 pacbio/si/NA12878.pacbio.bwa-sw.20140202.bam>`_
+:ref:`details<benchmark-CRAM1>`  CRAM        15 GB               9.8 GB    1.5X                      Illumina NovaSeq + bwa mem        `The European Bioinformatics Institute <ftp://ftp.sra.ebi.ac.uk/vol1/run/ERR323/ERR3239334/NA12878.final.cram>`_
+:ref:`details<benchmark-VCF1>`   VCF         175.3GB   27 GB     7.8 GB    22.4X        3.3X         3202 samples                      `1000 Genome Project <ftp://ftp=trace.ncbi.nih.gov/1000genomes/ftp/release/20110521/20201028_CCDG_14151_B01_GRM_WGS_2020=08=05_chr22.recalibrated_variants.vcf.gz>`_
+:ref:`details<benchmark-VCF2>`   VCF         1.1 GB    241.8 MB  85.8 MB   12.7X        2.8X         30x Illumina NovaSeq + Dragen     Unpublished
+:ref:`details<benchmark-FASTA1>` FASTA       1.2 GB              5.9 MB    212.2X                    Covid-19 multi-FASTA              `coronavirus.innar.com <https://coronavirus.innar.com/coronavirus.unwrapped.fasta.zip>`_
+:ref:`details<benchmark-GFF1>`   GFF3        714 KB              32 KB     22.2X                     GRCh38 issues                     `NCBI <https://ftp.ncbi.nlm.nih.gov/pub/grc/human/GRC/Issue_Mapping/GRCh38.p9_issues.gff3>`_
+:ref:`details<benchmark-ME1>`    23andMe     23.6 MB             4.2 MB    5.7X                      Consumer DNA test "raw data"      Unpublished
+================================ =========== ========= ========= ========= ============ ============ ================================= ==============================
 
 Notes:
 
@@ -181,61 +181,6 @@ Notes:
 
 .. _benchmark-VCF1:
 
-**VCF - 30x Illumina NovaSeq + Dragen**
-
-::
-
-    VCF file: <redacted>.vcf.gz
-    Samples: 1   Variants: 3,866,255   Dictionaries: 249   Vblocks: 3 x 512 MB  Sections: 400
-    Genozip version: 13.0.2 conda
-    Date compressed: 2021-11-09 16:32:06 ACDT
-
-    Sections (sorted by % of genozip file):
-    NAME                   GENOZIP      %      TXT       %   RATIO
-    INFO/VQSLOD            11.1 MB  13.0%   26.1 MB   2.4%    2.3X
-    FORMAT/GP               8.6 MB  10.0%   68.5 MB   6.3%    8.0X
-    POS                     5.0 MB   5.9%   33.9 MB   3.1%    6.8X
-    INFO/R2_5P_bias         4.6 MB   5.3%   12.8 MB   1.2%    2.8X
-    QUAL                    4.6 MB   5.3%   20.1 MB   1.8%    4.4X
-    INFO/SOR                4.4 MB   5.1%   18.1 MB   1.7%    4.1X
-    INFO/ReadPosRankSum     3.7 MB   4.3%   11.5 MB   1.1%    3.1X
-    FORMAT/AD               3.7 MB   4.3%   16.7 MB   1.5%    4.6X
-    FORMAT/SB               3.6 MB   4.2%   32.7 MB   3.0%    9.1X
-    FORMAT/F2R1             3.6 MB   4.2%   14.5 MB   1.3%    4.1X
-    FORMAT/F1R2             3.6 MB   4.1%   14.5 MB   1.3%    4.1X
-    INFO/QD                 3.6 MB   4.1%   14.3 MB   1.3%    4.0X
-    INFO/MQRankSum          3.2 MB   3.7%   11.6 MB   1.1%    3.6X
-    INFO/MQ                 3.1 MB   3.7%   15.6 MB   1.4%    5.0X
-    FORMAT/MB               3.1 MB   3.6%   32.8 MB   3.0%   10.6X
-    FORMAT/PL               2.7 MB   3.2%   28.1 MB   2.6%   10.2X
-    INFO/FS                 2.7 MB   3.2%    9.9 MB   0.9%    3.6X
-    FORMAT/AF               2.6 MB   3.0%   12.3 MB   1.1%    4.8X
-    INFO/DP                 2.4 MB   2.8%    7.3 MB   0.7%    3.0X
-    REF+ALT                 1.5 MB   1.8%   14.8 MB   1.4%    9.7X
-    CHROM                   1.4 MB   1.6%    9.1 MB   0.8%    6.5X
-    INFO/FractionInforma  953.3 KB   1.1%    6.7 MB   0.6%    7.2X
-    FORMAT/GQ             679.8 KB   0.8%    8.2 MB   0.8%   12.3X
-    FORMAT/GT             496.3 KB   0.6%   11.1 MB   1.0%   22.8X
-    INFO                  289.0 KB   0.3%  336.8 MB  31.0% 1193.7X
-    INFO/AF               282.4 KB   0.3%    8.2 MB   0.8%   29.6X
-    Other                 183.1 KB   0.2%   44.7 MB   4.1%  249.9X
-    FORMAT                181.8 KB   0.2%  152.5 MB  14.0%  858.8X
-    FORMAT/PS              76.7 KB   0.1%    3.5 MB   0.3%   46.9X
-    FILTER                 44.3 KB   0.1%   19.4 MB   1.8%  448.8X
-    INFO/AC                 2.9 KB   0.0%    3.7 MB   0.3% 1292.4X
-    TXT_HEADER              2.8 KB   0.0%    9.0 KB   0.0%    3.2X
-    COORDS                   476 B   0.0%         -   0.0%    0.0X
-    INFO/LOD                 413 B   0.0%     364 B   0.0%    0.9X
-    FORMAT/PRI               274 B   0.0%   48.0 MB   4.4% 183538.6X
-    FORMAT/DP                 96 B   0.0%    7.3 MB   0.7% 80128.0X
-    INFO/AN                   83 B   0.0%    3.7 MB   0.3% 46580.6X
-    ID                        42 B   0.0%    7.4 MB   0.7% 184107.4X
-    GENOZIP vs BGZF        85.8 MB 100.0%  241.8 MB 100.0%    2.8X
-    GENOZIP vs TXT         85.8 MB 100.0%    1.1 GB 100.0%   12.7X
-
-
-.. _benchmark-VCF2:
-
 **VCF - 3202 samples from the 1000 Genome Project**
 
 ::
@@ -333,6 +278,61 @@ Notes:
     INFO/MQ0                  42 B   0.0%    1.8 MB   0.0% 45889.8X
     GENOZIP vs BGZF         7.8 GB 100.0%   26.0 GB 100.0%    3.3X
     GENOZIP vs TXT          7.8 GB 100.0%  175.3 GB 100.0%   22.4X
+
+
+.. _benchmark-VCF2:
+
+**VCF - 30x Illumina NovaSeq + Dragen**
+
+::
+
+    VCF file: <redacted>.vcf.gz
+    Samples: 1   Variants: 3,866,255   Dictionaries: 249   Vblocks: 3 x 512 MB  Sections: 400
+    Genozip version: 13.0.2 conda
+    Date compressed: 2021-11-09 16:32:06 ACDT
+
+    Sections (sorted by % of genozip file):
+    NAME                   GENOZIP      %      TXT       %   RATIO
+    INFO/VQSLOD            11.1 MB  13.0%   26.1 MB   2.4%    2.3X
+    FORMAT/GP               8.6 MB  10.0%   68.5 MB   6.3%    8.0X
+    POS                     5.0 MB   5.9%   33.9 MB   3.1%    6.8X
+    INFO/R2_5P_bias         4.6 MB   5.3%   12.8 MB   1.2%    2.8X
+    QUAL                    4.6 MB   5.3%   20.1 MB   1.8%    4.4X
+    INFO/SOR                4.4 MB   5.1%   18.1 MB   1.7%    4.1X
+    INFO/ReadPosRankSum     3.7 MB   4.3%   11.5 MB   1.1%    3.1X
+    FORMAT/AD               3.7 MB   4.3%   16.7 MB   1.5%    4.6X
+    FORMAT/SB               3.6 MB   4.2%   32.7 MB   3.0%    9.1X
+    FORMAT/F2R1             3.6 MB   4.2%   14.5 MB   1.3%    4.1X
+    FORMAT/F1R2             3.6 MB   4.1%   14.5 MB   1.3%    4.1X
+    INFO/QD                 3.6 MB   4.1%   14.3 MB   1.3%    4.0X
+    INFO/MQRankSum          3.2 MB   3.7%   11.6 MB   1.1%    3.6X
+    INFO/MQ                 3.1 MB   3.7%   15.6 MB   1.4%    5.0X
+    FORMAT/MB               3.1 MB   3.6%   32.8 MB   3.0%   10.6X
+    FORMAT/PL               2.7 MB   3.2%   28.1 MB   2.6%   10.2X
+    INFO/FS                 2.7 MB   3.2%    9.9 MB   0.9%    3.6X
+    FORMAT/AF               2.6 MB   3.0%   12.3 MB   1.1%    4.8X
+    INFO/DP                 2.4 MB   2.8%    7.3 MB   0.7%    3.0X
+    REF+ALT                 1.5 MB   1.8%   14.8 MB   1.4%    9.7X
+    CHROM                   1.4 MB   1.6%    9.1 MB   0.8%    6.5X
+    INFO/FractionInforma  953.3 KB   1.1%    6.7 MB   0.6%    7.2X
+    FORMAT/GQ             679.8 KB   0.8%    8.2 MB   0.8%   12.3X
+    FORMAT/GT             496.3 KB   0.6%   11.1 MB   1.0%   22.8X
+    INFO                  289.0 KB   0.3%  336.8 MB  31.0% 1193.7X
+    INFO/AF               282.4 KB   0.3%    8.2 MB   0.8%   29.6X
+    Other                 183.1 KB   0.2%   44.7 MB   4.1%  249.9X
+    FORMAT                181.8 KB   0.2%  152.5 MB  14.0%  858.8X
+    FORMAT/PS              76.7 KB   0.1%    3.5 MB   0.3%   46.9X
+    FILTER                 44.3 KB   0.1%   19.4 MB   1.8%  448.8X
+    INFO/AC                 2.9 KB   0.0%    3.7 MB   0.3% 1292.4X
+    TXT_HEADER              2.8 KB   0.0%    9.0 KB   0.0%    3.2X
+    COORDS                   476 B   0.0%         -   0.0%    0.0X
+    INFO/LOD                 413 B   0.0%     364 B   0.0%    0.9X
+    FORMAT/PRI               274 B   0.0%   48.0 MB   4.4% 183538.6X
+    FORMAT/DP                 96 B   0.0%    7.3 MB   0.7% 80128.0X
+    INFO/AN                   83 B   0.0%    3.7 MB   0.3% 46580.6X
+    ID                        42 B   0.0%    7.4 MB   0.7% 184107.4X
+    GENOZIP vs BGZF        85.8 MB 100.0%  241.8 MB 100.0%    2.8X
+    GENOZIP vs TXT         85.8 MB 100.0%    1.1 GB 100.0%   12.7X
 
 
 .. _benchmark-FASTA1:

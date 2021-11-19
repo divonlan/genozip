@@ -48,8 +48,11 @@ typedef struct VBlockFASTQ {
     uint32_t pair_num_lines; // number of lines in the equivalent vb in the first file
     char *optimized_desc;    // base of desc in flag.optimize_DESC 
     uint32_t optimized_desc_len;
+    bool qual_codec_enano;         // true if we can compress qual with CODEC_ENANO
 
 } VBlockFASTQ;
+
+#define VB_FASTQ ((VBlockFASTQ *)vb)
 
 #define DATA_LINE(i) ENT (ZipDataLineFASTQ, vb->lines, i)
 
@@ -59,6 +62,8 @@ unsigned fastq_vb_zip_dl_size (void) { return sizeof (ZipDataLineFASTQ); }
 void fastq_vb_release_vb (VBlockFASTQ *vb)
 {
     vb->pair_num_lines = vb->pair_vb_i = vb->optimized_desc_len = 0;
+    vb->qual_codec_enano = 0;
+
     FREE (vb->optimized_desc);
 }
 
@@ -244,6 +249,10 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
     if (segconf.running) 
         segconf.qname_flavor = 0; // unknown
 
+//xxx need to fix qname to identify "@ERR3278978.1 82a6ce63-eb2d-4812-ad19-136092a95f3d/1"    
+    if (segconf.tech == TECH_ONP)
+        vb->qual_codec_enano = true; // unless we find out during Seg that the data won't allow us
+
     COPY_TIMER (seg_initialize);
 }
 
@@ -284,6 +293,9 @@ void fastq_seg_finalize (VBlockP vb)
                                CON_PX_SEP      }; // END of prefixes
 
     container_seg (vb, CTX(FASTQ_TOPLEVEL), (ContainerP)&top_level, prefixes, sizeof (prefixes), 2 * vb->lines.len); // account for the '@' and '+' - one of each for each line
+
+//    if (VB_FASTQ->qual_codec_enano) 
+//        codec_enano_seg_init (vb, CTX(FASTQ_QUAL));
 }
 
 bool fastq_seg_is_small (ConstVBlockP vb, DictId dict_id)
@@ -350,7 +362,7 @@ bool fastq_piz_read_one_vb (VBlockP vb_, Section sl)
 
 uint32_t fastq_get_pair_vb_i (VBlockP vb)
 {
-    return ((VBlockFASTQ *)vb)->pair_vb_i;
+    return VB_FASTQ->pair_vb_i;
 }
 
 // concept: we treat every 4 lines as a "line". the Description/ID is stored in DESC dictionary and segmented to subfields D?ESC.
@@ -479,6 +491,9 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
     ASSSEG (FASTQ_QUAL_len == dl->seq_len, FASTQ_QUAL_str, "Invalid FASTQ file format: sequence_len=%u and quality_len=%u. Expecting them to be the same.\nSEQ = %.*s\nQUAL= %.*s",
             dl->seq_len, FASTQ_QUAL_len, dl->seq_len, FASTQ_SEQ_str, FASTQ_QUAL_len, FASTQ_QUAL_str);
  
+     if (FASTQ_QUAL_len < ENANO_MIN_READ_LEN)
+        vb->qual_codec_enano = false; // we cannot compress QUAL with CODEC_ENANO as prerequisites are not met
+
     return after;
 }
 
@@ -497,6 +512,16 @@ COMPRESSOR_CALLBACK (fastq_zip_qual)
     // note - we optimize just before compression - likely the string will remain in CPU cache
     // removing the need for a separate load from RAM
     if (flag.optimize_QUAL) optimize_phred_quality_string (STRa(*line_data));
+
+    if (is_rev) *is_rev = 0;
+}
+
+COMPRESSOR_CALLBACK (fastq_zip_seq) 
+{
+    ZipDataLineFASTQ *dl = DATA_LINE (vb_line_i);
+    *line_data_len = dl->seq_len;
+    *line_data     = ENT (char, vb->txt_data, dl->seq_data_start);
+    if (is_rev) *is_rev = 0;
 }
 
 //-----------------

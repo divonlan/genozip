@@ -1528,7 +1528,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
                 vcf_convert_prob_to_phred (vb, "--GL-to-PL", STRi(sf, i), modified, &modified_len);
                 SEG_OPTIMIZED_MUX_BY_DOSAGE(GL);
             }
-            else
+            else // I tried muxing against DS instead of dosage (41 channels) - worse results than dosage in 1KGP-37 even with --best 
                 vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_GL);
             break;
 

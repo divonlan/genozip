@@ -272,7 +272,7 @@ static QnameFlavorStruct qf[] = {
     {},  { "Nanopore-ext",  "2a228edf-d8bc-45d4-9c96-3d613b8530dc"
            "_Basecall_2D_000_template",                               TECH_ONP,     0, &con_nanopore_ext,  5, {-1},           {-1},           {0,1,2,3,4,-1}, -1,-1, -1,                                                             },
     {},  { "NCBI-SRA",      "SRR001666.1",                            TECH_NCBI,    0, &con_ncbi_sra,      1, {2,-1},         {1,-1},         {-1},           2,-1,  -1,                                                                 },
-    {},  { "Genozip-opt",   "basic.1",                                TECH_UNKNOWN, 1, &con_genozip_opt,   1, {1,-1},         {-1},           {-1},           1,-1,  -1,                                                                 },
+    {},  { "Genozip-opt",   "basic.1",                                TECH_UNKNOWN, 0, &con_genozip_opt,   1, {1,-1},         {-1},           {-1},           1,-1,  -1,                                                                 },
 };
 
 #define NUM_QFs (sizeof(qf)/sizeof(qf[0]))

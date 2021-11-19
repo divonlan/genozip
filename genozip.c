@@ -4,6 +4,10 @@
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include <getopt.h>
+#include <fcntl.h>
+#include <dirent.h>
+#include <errno.h>
+#include <sys/types.h>
 
 #include "genozip.h"
 #include "text_help.h"
@@ -329,7 +333,10 @@ static void main_genozip (const char *txt_filename,
     // skip this file if its size is 0
     RETURNW (txt_file,, "Cannot compress file %s because its size is 0 - skipping it", txt_filename);
 
-    if (!txt_file->file) goto done; // this is the case where multiple files are given in the command line, but this one is not compressible - we skip it
+    if (!txt_file->file) {
+        file_close (&txt_file, false, false);
+        goto done; // this is the case where multiple files are given in the command line, but this one is not compressible (eg its a .genozip file) - we skip it
+    }
 
     ASSERT0 (flag.bind || !z_file, "expecting z_file to be NULL in non-bound mode");
 
@@ -442,32 +449,71 @@ static int main_sort_input_filenames (const void *fn1, const void *fn2)
     return *(char **)fn1 - *(char **)fn2;
 }
 
-static char **main_get_filename_list (unsigned *num_files /* in/out */, char **filenames /* in */, unsigned *num_z_files /* out */) 
+static void main_get_filename_list (unsigned num_files, char **filenames, // in 
+                                    unsigned *num_z_files, Buffer *fn_buf)      // out
 {
-    ASSINP (!flag.files_from || ! *num_files, "when option %s is used, files cannot also be listed on the command line", OT("files-from", "T"));
+    ASSINP (!flag.files_from || !num_files, "when option %s is used, files cannot also be listed on the command line", OT("files-from", "T"));
+
+    // add names from command line
+    buf_add_more_(evb, fn_buf, char *, filenames, num_files, NULL);
 
     // set argv to file names
     if (flag.files_from) {
         file_split_lines (flag.files_from, "files-from");
         
-        filenames = MALLOC (n_lines * sizeof (char *));
-        memcpy (filenames, lines, n_lines * sizeof (char *)); // pointers into "data" defined in file_split_lines
-        *num_files = n_lines;
+        // handle case of "tar xvf myfile.tar |& genounzip --files-from -" when using bsdtar:
+        // the output has an added "x " prefix eg "x junk.sam.genozip"
+        if (n_lines && lines[0][0]=='x' && lines[0][1]==' ')
+            for (int i=0; i < n_lines; i++)
+                lines[i] += 2;
+
+        buf_add_more_(evb, fn_buf, char *, lines, n_lines, NULL);
     }
 
-    *num_z_files = command != ZIP          ? *num_files     :
-                   flag.bind == BIND_ALL   ? 1              :  // flag.bind was set by flags_update
-                   flag.bind == BIND_PAIRS ? *num_files / 2 :
-                                             *num_files;
+    // expand directories if --subdirs 
+    for (unsigned i=0; i < fn_buf->len; i++) { // len increases during the loop as we add more files which may themselves be directories
 
-    flags_update (*num_files, (const char **)filenames);
+        const char *fn = *ENT (char *, *fn_buf, i);
+        if (!file_is_dir (fn)) continue;
+
+        if (flag.subdirs) {
+            unsigned fn_len = strlen (fn);
+            DIR *dir = opendir (fn);
+
+            ASSERT (dir, "failed to open directory %s: %s", fn, strerror (errno));
+
+            struct dirent *ent;
+            while ((ent = readdir(dir))) {
+                if (ent->d_name[0] =='.') continue; // skip . ..  and hidden files
+
+                char *ent_fn = MALLOC (strlen(ent->d_name) + fn_len + 2);
+                sprintf (ent_fn, "%s/%s", fn, ent->d_name);
+                buf_add_more_(evb, fn_buf, char *, &ent_fn, 1, NULL);
+            }
+            closedir(dir);    
+        } 
+        else
+            WARN ("Skipping directory %s. Use --subdirs to compress directories.", fn);
+
+
+        // remove the directory from the list of files to compress
+        buf_remove (fn_buf, char *, i, 1);
+        i--;
+    }
+
+    ASSINP0 (fn_buf->len, "No work me :( all files listed are directories.");
+
+    flags_update (fn_buf->len, FIRSTENT (const char *, *fn_buf));
+
+    *num_z_files = command != ZIP          ? fn_buf->len     :
+                   flag.bind == BIND_ALL   ? 1               :  // flag.bind was set by flags_update
+                   flag.bind == BIND_PAIRS ? fn_buf->len / 2 :
+                                             fn_buf->len;
 
     // sort files by data type to improve VB re-using, and refhash-using files in the end to improve reference re-using
     SET_FLAG (quiet); // suppress warnings
-    qsort (filenames, *num_files, sizeof (filenames[0]), main_sort_input_filenames);
+    qsort (FIRSTENT (char *, *fn_buf), fn_buf->len, sizeof (char *), main_sort_input_filenames);
     RESTORE_FLAG (quiet);
-
-    return filenames;
 }
 
 static void main_load_reference (const char *filename, bool is_first_file, bool is_last_z_file)
@@ -578,9 +624,10 @@ int main (int argc, char **argv)
         else command = ZIP; // default 
     }
 
-    unsigned num_files = argc - optind;
     unsigned num_z_files;
-    char **input_files = main_get_filename_list (&num_files, &argv[optind], &num_z_files);
+    static Buffer input_files_buf = { .name = "input_files" };
+    main_get_filename_list (argc - optind, &argv[optind], &num_z_files, &input_files_buf);
+    ARRAY (const char *, input_files, input_files_buf);
 
     // determine how many threads we have - either as specified by the user, or by the number of cores
     if (flag.threads_str) 
@@ -596,8 +643,8 @@ int main (int argc, char **argv)
     if (command == LICENSE) { license_display();      return 0; }
     if (command == HELP)    { main_print_help (true); return 0; }
 
-    ASSINP (num_files || !isatty(0) || command != ZIP, "missing input file. Example: %s myfile.bam", global_cmd);
-    ASSINP (num_files || !isatty(0) || command != PIZ, "missing input file. Example: %s myfile.bam.genozip", global_cmd);
+    ASSINP (input_files_len || !isatty(0) || command != ZIP, "missing input file. Example: %s myfile.bam", global_cmd);
+    ASSINP (input_files_len || !isatty(0) || command != PIZ, "missing input file. Example: %s myfile.bam.genozip", global_cmd);
 
     primary_command = command; 
 
@@ -609,8 +656,9 @@ int main (int argc, char **argv)
     if (flag.reading_chain) {
         vcf_tags_cmdline_rename_option(); 
         vcf_tags_cmdline_drop_option();
-        
+
         chain_load();
+
         if (exe_type == EXE_GENOCAT) exit(0);
     }
 
@@ -619,10 +667,10 @@ int main (int argc, char **argv)
     // if we're genozipping with tar, initialize tar file
     if (tar_is_tar()) tar_initialize();
 
-    for (unsigned file_i=0, z_file_i=0; file_i < MAX_(num_files, 1); file_i++) {
+    for (unsigned file_i=0, z_file_i=0; file_i < MAX_(input_files_len, 1); file_i++) {
 
         // get file name
-        const char *next_input_file = num_files ? input_files[file_i] : NULL;  // NULL means stdin
+        const char *next_input_file = input_files_len ? input_files[file_i] : NULL;  // NULL means stdin
 
         if (flag.show_filename) iprintf ("%s:\n", next_input_file ? next_input_file : "(standard input)");
 
@@ -632,14 +680,14 @@ int main (int argc, char **argv)
 
         ASSERTW (next_input_file || !flag.replace, "%s: ignoring %s option", global_cmd, OT("replace", "^")); 
 
-        bool is_last_txt_file = (file_i==num_files-1);
+        bool is_last_txt_file = (file_i==input_files_len-1);
         bool is_last_z_file = (z_file_i==num_z_files-1);
 
         main_load_reference (next_input_file, !file_i, is_last_z_file);
         
         switch (command) {
             case ZIP  : main_genozip (next_input_file, 
-                                      file_i < num_files-1 ? input_files[file_i+1] : NULL, // file name of next file, if there is one
+                                      file_i < input_files_len-1 ? input_files[file_i+1] : NULL, // file name of next file, if there is one
                                       flag.out_filename, file_i, !next_input_file || is_last_txt_file, DC_NONE, argv[0]); 
                         break;
 
@@ -668,6 +716,11 @@ int main (int argc, char **argv)
     ref_create_cache_join (gref, false);
     ref_create_cache_join (prim_ref, false);
     refhash_create_cache_join(false);
+
+    if (flag.show_time && !flag.show_time[0]) { // show-time without the optional parameter 
+        profiler_add (evb);
+        profiler_print_report();
+    }
 
     exit_ok();
     return 0;

@@ -123,7 +123,7 @@ extern void buf_grab_do (VBlockP dst_vb, Buffer *dst_buf, const char *dst_name, 
 #define buf_grab(dst_vb, dst_buf, dst_name, src_buf) buf_grab_do ((dst_vb), (dst_buf), (dst_name), (src_buf), __FUNCTION__, __LINE__)
 
 extern void buf_cut_out_do (BufferP buf, unsigned sizeof_item, uint64_t remove_start, uint64_t remove_len);
-#define buf_cut_out(buf, type, remove_start, remove_len) buf_cut_out_do ((buf), sizeof(type), (remove_start), (remove_len))
+#define buf_remove(buf, type, remove_start, remove_len) buf_cut_out_do ((buf), sizeof(type), (remove_start), (remove_len))
 
 #define buf_has_space(buf, new_len) ((buf)->len + (new_len) <= (buf)->size)
 
@@ -136,14 +136,19 @@ extern void buf_cut_out_do (BufferP buf, unsigned sizeof_item, uint64_t remove_s
     (buf)->len += new_len; \
 } while(0)
 
-static inline void buf_add_more (VBlockP vb, BufferP buf, const void *new_data, uint32_t new_data_len, const char *name) 
+static inline void buf_add_more_ex (VBlockP vb, BufferP buf, unsigned width, const void *new_data, unsigned new_data_len, const char *name) 
 { 
     if (!new_data_len) return;
 
-    buf_alloc (vb ? vb : buf->vb, buf, new_data_len, buf->len + new_data_len +1 /* +1 - room for \0 or separator */, char, 1.5, name); 
-    memcpy (&buf->data[buf->len], new_data, new_data_len);   
+    buf_alloc (vb ? vb : buf->vb, buf, new_data_len, (buf->len + new_data_len) * width +1 /* +1 - room for \0 or separator */, char, 1.5, name); 
+    memcpy (&buf->data[buf->len * width], new_data, new_data_len * width);   
     buf->len += new_data_len; 
 } 
+static inline void buf_add_more (VBlockP vb, BufferP buf, STRp(new_data), const char *name) 
+{   buf_add_more_ex (vb, buf, 1, STRa(new_data), name); }
+
+#define buf_add_more_(vb, buf, type, new_data, new_data_len, name) \
+    buf_add_more_ex ((VBlockP)(vb), (buf), sizeof(type), (new_data), (new_data_len), (name))
 
 #define buf_add_moreC(vb_, buf, literal_str, name) buf_add_more ((VBlockP)(vb_), (buf), literal_str, sizeof literal_str-1, (name))
 #define buf_add_moreS(vb_, buf, str, name) buf_add_more ((VBlockP)(vb_), (buf), str, str##_len, (name))

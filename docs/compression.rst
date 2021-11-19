@@ -28,7 +28,7 @@ Genozip can run on any type of file, but it is optimized to compress genomic fil
 
     | ``genozip *.bam --tar mysamples.tar``  
     |
-    | ``tar xvf mydata.tar | genounzip --files-from - --replace``
+    | ``tar xvf mydata.tar |& genounzip --files-from - --replace``
     |
     | :ref:`Details <archiving>`
 

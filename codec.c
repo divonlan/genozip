@@ -298,7 +298,10 @@ void codec_show_time (VBlock *vb, const char *name, const char *subname, Codec c
         (strcmp (flag.show_time, "compressor_bsc"   ) && codec==CODEC_BSC ) || 
         (strcmp (flag.show_time, "compressor_acgt"  ) && codec==CODEC_ACGT) || 
         (strcmp (flag.show_time, "compressor_domq"  ) && codec==CODEC_DOMQ) || 
-        (strcmp (flag.show_time, "compressor_hapmat") && codec==CODEC_HAPM) || 
+        (strcmp (flag.show_time, "compressor_pbwt"  ) && codec==CODEC_PBWT) || 
+        (strcmp (flag.show_time, "compressor_enano" ) && codec==CODEC_ENANO) || 
+        (strcmp (flag.show_time, "compressor_rans"  ) && (codec==CODEC_RANS32 || codec==CODEC_RANS32_pack || codec==CODEC_RANS8 || codec==CODEC_RANS32_pack)) || 
+        (strcmp (flag.show_time, "compressor_arith" ) && (codec==CODEC_ARITH32 || codec==CODEC_ARITH32_pack || codec==CODEC_ARITH8 || codec==CODEC_ARITH32_pack)) || 
         (strcmp (flag.show_time, "compressor_bz2"   ) && codec==CODEC_BZ2 )) {
 
         vb->profile.next_name    = name;

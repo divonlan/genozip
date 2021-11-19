@@ -15,7 +15,7 @@ TESTDIR=private/test
 OUTDIR=$TESTDIR/tmp
 
 cleanup() { 
-    rm -f $OUTDIR/* $TESTDIR/*.bad $TESTDIR/*.rejects.* 
+    rm -fR $OUTDIR/* $TESTDIR/*.bad $TESTDIR/*.rejects.* 
 }
 
 cmp_2_files() {
@@ -381,6 +381,19 @@ batch_bgzf()
         exit 1
     fi
 }
+
+batch_subdirs()
+{
+    batch_print_header
+    local files=(${TESTDIR}/minimal.sam ${TESTDIR}/basic-subdirs)
+
+    cleanup
+    $genozip -Dft ${files[*]} || exit 1
+
+    # verify that the file residing in the subdir was compressed
+    $genounzip -f ${TESTDIR}/basic-subdirs/basic.subdirs.txt.genozip || exit
+    cleanup
+}   
         
 # files represent cases that cannot be written into the test files because they would conflict
 batch_special_algs()
@@ -1054,16 +1067,18 @@ batch_genols()
 batch_tar_files_from()
 {
     batch_print_header
+    cleanup
 
     local tar=${OUTDIR}/output.tar
 
-    $genozip -T ${TESTDIR}/basic-files-from -f --tar $tar  || exit 1
+    $genozip -D -T ${TESTDIR}/basic-files-from -f --tar $tar  || exit 1
     tar xvf $tar || exit 1
-    
+
     cat ${TESTDIR}/basic-files-from-genozip | $genounzip --files-from - -t || exit 1
     $genols --files-from ${TESTDIR}/basic-files-from-genozip || exit 1
     $genocat --files-from ${TESTDIR}/basic-files-from-genozip -fo $output || exit 1
-    rm -fR $tar
+    
+    cleanup
 }
 
 output=${OUTDIR}/output.genozip
@@ -1165,7 +1180,7 @@ make -C $TESTDIR --quiet || exit 1
 # only if doing a full test (starting from 0) - delete genome and hash caches
 sparkling_clean()
 {
-    rm -f ${hg19}.*cache* ${hs37d5}.*cache* ${GRCh38}.*cache* ${TESTDIR}/*.genozip ${TESTDIR}/*rejects*
+    rm -f ${hg19}.*cache* ${hs37d5}.*cache* ${GRCh38}.*cache* ${TESTDIR}/*.genozip ${TESTDIR}/basic-subdirs/*.genozip ${TESTDIR}/*rejects* 
 }
 
 # unfortunately Mac's bash doesn't support "case" with fall-through ( ;& )
@@ -1187,39 +1202,40 @@ if (( $1 <= 11 )) ; then  batch_basic basic.phy        ; fi
 if (( $1 <= 12 )) ; then  batch_basic basic.generic    ; fi
 if (( $1 <= 13 )) ; then  batch_precompressed          ; fi
 if (( $1 <= 14 )) ; then  batch_bgzf                   ; fi
-if (( $1 <= 15 )) ; then  batch_special_algs           ; fi
-if (( $1 <= 16 )) ; then  batch_dvcf                   ; fi
-if (( $1 <= 17 )) ; then  batch_sam_bam_translations   ; fi
-if (( $1 <= 18 )) ; then  batch_sam_fq_translations    ; fi
-if (( $1 <= 19 )) ; then  batch_23andMe_translations   ; fi
-if (( $1 <= 20 )) ; then  batch_phylip_translations    ; fi
-if (( $1 <= 21 )) ; then  batch_genocat_tests          ; fi
-if (( $1 <= 22 )) ; then  batch_grep_count_lines       ; fi
-if (( $1 <= 23 )) ; then  batch_backward_compatability ; fi
-if (( $1 <= 24 )) ; then  batch_match_chrom            ; fi
-if (( $1 <= 25 )) ; then  batch_kraken " " "-K$kraken" ; fi   # genocat loads kraken data
-if (( $1 <= 26 )) ; then  batch_kraken "-K$kraken" " " ; fi   # genozip loads kraken data
-if (( $1 <= 27 )) ; then  batch_single_thread          ; fi 
-if (( $1 <= 28 )) ; then  batch_copy_ref_section       ; fi 
-if (( $1 <= 29 )) ; then  batch_iupac                  ; fi 
-if (( $1 <= 30 )) ; then  batch_real_world_small_vbs   ; fi 
-if (( $1 <= 31 )) ; then  batch_real_world_1           ; fi 
-if (( $1 <= 32 )) ; then  batch_real_world_1 --fast    ; fi 
-if (( $1 <= 33 )) ; then  batch_real_world_with_ref    ; fi 
-if (( $1 <= 34 )) ; then  batch_real_world_with_ref --best  ; fi # BAM/FASTQ with --best require a reference
-if (( $1 <= 35 )) ; then  batch_real_world_1_backcomp  ; fi 
-if (( $1 <= 36 )) ; then  batch_real_world_with_ref_backcomp ; fi 
-if (( $1 <= 37 )) ; then  batch_multifasta             ; fi
-if (( $1 <= 38 )) ; then  batch_misc_cases             ; fi
-if (( $1 <= 39 )) ; then  batch_external_cram          ; fi
-if (( $1 <= 40 )) ; then  batch_external_bcf           ; fi
-if (( $1 <= 41 )) ; then  batch_external_unzip         ; fi
-if (( $1 <= 42 )) ; then  batch_reference_fastq        ; fi
-if (( $1 <= 43 )) ; then  batch_reference_sam          ; fi
-if (( $1 <= 44 )) ; then  batch_reference_vcf          ; fi
-if (( $1 <= 45 )) ; then  batch_genols                 ; fi
-if (( $1 <= 46 )) ; then  batch_tar_files_from         ; fi
-if (( $1 <= 47 )) ; then  batch_make_reference         ; fi
-if (( $1 <= 48 )) ; then  batch_prod_compatability     ; fi
+if (( $1 <= 15 )) ; then  batch_subdirs                ; fi
+if (( $1 <= 16 )) ; then  batch_special_algs           ; fi
+if (( $1 <= 17 )) ; then  batch_dvcf                   ; fi
+if (( $1 <= 18 )) ; then  batch_sam_bam_translations   ; fi
+if (( $1 <= 19 )) ; then  batch_sam_fq_translations    ; fi
+if (( $1 <= 20 )) ; then  batch_23andMe_translations   ; fi
+if (( $1 <= 21 )) ; then  batch_phylip_translations    ; fi
+if (( $1 <= 22 )) ; then  batch_genocat_tests          ; fi
+if (( $1 <= 23 )) ; then  batch_grep_count_lines       ; fi
+if (( $1 <= 24 )) ; then  batch_backward_compatability ; fi
+if (( $1 <= 25 )) ; then  batch_match_chrom            ; fi
+if (( $1 <= 26 )) ; then  batch_kraken " " "-K$kraken" ; fi   # genocat loads kraken data
+if (( $1 <= 27 )) ; then  batch_kraken "-K$kraken" " " ; fi   # genozip loads kraken data
+if (( $1 <= 28 )) ; then  batch_single_thread          ; fi 
+if (( $1 <= 29 )) ; then  batch_copy_ref_section       ; fi 
+if (( $1 <= 30 )) ; then  batch_iupac                  ; fi 
+if (( $1 <= 31 )) ; then  batch_genols                 ; fi
+if (( $1 <= 32 )) ; then  batch_tar_files_from         ; fi
+if (( $1 <= 33 )) ; then  batch_real_world_small_vbs   ; fi 
+if (( $1 <= 34 )) ; then  batch_real_world_1           ; fi 
+if (( $1 <= 35 )) ; then  batch_real_world_1 --fast    ; fi 
+if (( $1 <= 36 )) ; then  batch_real_world_with_ref    ; fi 
+if (( $1 <= 37 )) ; then  batch_real_world_with_ref --best  ; fi # BAM/FASTQ with --best require a reference
+if (( $1 <= 38 )) ; then  batch_real_world_1_backcomp  ; fi 
+if (( $1 <= 39 )) ; then  batch_real_world_with_ref_backcomp ; fi 
+if (( $1 <= 40 )) ; then  batch_multifasta             ; fi
+if (( $1 <= 41 )) ; then  batch_misc_cases             ; fi
+if (( $1 <= 42 )) ; then  batch_external_cram          ; fi
+if (( $1 <= 43 )) ; then  batch_external_bcf           ; fi
+if (( $1 <= 44 )) ; then  batch_external_unzip         ; fi
+if (( $1 <= 45 )) ; then  batch_reference_fastq        ; fi
+if (( $1 <= 46 )) ; then  batch_reference_sam          ; fi
+if (( $1 <= 47 )) ; then  batch_reference_vcf          ; fi
+if (( $1 <= 48 )) ; then  batch_make_reference         ; fi
+if (( $1 <= 49 )) ; then  batch_prod_compatability     ; fi
 
 printf "\nALL GOOD!\n"

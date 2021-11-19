@@ -75,6 +75,7 @@ typedef struct {
         lic_width,   // width of license output, 0=dynamic (undocumented parameter of --license)
         test,        // implies md5
         index_txt,   // create an index
+        subdirs,     // recursively traversing subdirectories
         list;        // a genols option
     const char *threads_str, *out_filename, *files_from, *do_register;
 

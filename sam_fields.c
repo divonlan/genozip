@@ -109,6 +109,8 @@ COMPRESSOR_CALLBACK (sam_zip_U2)
 
     if (flag.optimize_QUAL)
         optimize_phred_quality_string (*line_data, *line_data_len);
+
+    if (is_rev) *is_rev = dl->FLAG.bits.rev_comp;
 }
 
 // ---------
@@ -151,6 +153,7 @@ COMPRESSOR_CALLBACK (sam_zip_BD_BI)
 
     // note: maximum_len might be shorter than the data available if we're just sampling data in zip_assign_best_codec
     *line_data_len  = MIN_(maximum_size, dl->seq_len * 2);
+    if (is_rev) *is_rev = dl->FLAG.bits.rev_comp;
 
     if (!line_data) return; // only length was requested
 
@@ -779,6 +782,8 @@ DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam,
 
     unsigned add_bytes = sam_seg_optional_add_bytes (bam_type, value_len, is_bam);
 
+    #define SEG_COND(condition, seg) if (condition) { seg; break; } else goto fallback; 
+
     switch (dict_id.num) {
 
         case _OPTION_SA_Z: sam_seg_SA_field (vb, STRa(value)); break;
@@ -788,11 +793,7 @@ DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_XA_Z: 
             if (segconf.running && !segconf.has_XA) segconf.has_XA = sam_seg_which_XA (STRa(value));
 
-            if (segconf.has_XA == XA_BWA)
-                sam_seg_BWA_XA_field (vb, STRa(value)); 
-            else
-                goto fallback;
-            break;
+            SEG_COND (segconf.has_XA == XA_BWA, sam_seg_BWA_XA_field (vb, STRa(value))); 
         
         case _OPTION_MC_Z: sam_cigar_seg_MC (vb, dl, STRa(value), add_bytes); break;
 
@@ -825,6 +826,8 @@ DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_U2_Z: sam_seg_U2_field (vb, dl, STRa(value), add_bytes); break;
 
         case _OPTION_Z5_i: seg_pos_field (VB, OPTION_Z5_i, SAM_PNEXT, 0, 0, 0, 0, numeric.i, add_bytes); break;
+
+        case _OPTION_CP_i: SEG_COND (segconf.sam_is_sorted, seg_pos_field (VB, OPTION_CP_i, OPTION_CP_i, 0, 0, 0, 0, numeric.i, add_bytes)); 
 
         case _OPTION_ZM_B: sam_seg_array_field (vb, (DictId)_OPTION_ZM_B, array_subtype, STRa(value), 
                                                 (segconf.tech == TECH_IONTORR && flag.optimize_ZM) ? sam_optimize_ZM : NULL, 0);

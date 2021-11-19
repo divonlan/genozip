@@ -50,7 +50,7 @@ bool codec_bsc_compress (VBlock *vb, SectionHeader *header,
             uint32_t len1=0;        
             
             // note: get what we need, might be less than what's available if calling from zip_assign_best_codec
-            callback (vb, line_i, &start1, &len1, *uncompressed_len - vb->compressed.len); 
+            callback (vb, line_i, &start1, &len1, *uncompressed_len - vb->compressed.len, NULL); 
 
             if (start1 && len1) buf_add (&vb->compressed, start1, len1);
         }

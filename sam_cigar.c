@@ -258,7 +258,10 @@ void sam_cigar_seg_textual (VBlockSAM *vb, ZipDataLineSAM *dl, unsigned last_cig
     if (segconf.has[OPTION_MC_Z])
         dl->CIGAR =(CtxWord){ .char_index = ENTNUM (vb->txt_data, vb->last_cigar), .snip_len = last_cigar_len }; // in SAM (but not BAM) vb->last_cigar points into txt_data
 
-    if (segconf.running) segconf.sam_cigar_len += last_cigar_len;
+    if (segconf.running) {
+        segconf.sam_cigar_len += last_cigar_len;
+        segconf.sam_seq_len   += seq_data_len;
+    }
 
     if (!seg_done)
         seg_by_did_i (VB, STRa(cigar_snip), SAM_CIGAR, last_cigar_len+1); // +1 for \t
@@ -315,7 +318,10 @@ void sam_cigar_seg_binary (VBlockSAM *vb, ZipDataLineSAM *dl, uint32_t l_seq, ui
         buf_add_buf (VB, &vb->buddy_textual_cigars, &vb->textual_cigar, char, "buddy_textual_cigars");
     }
 
-    if (segconf.running) segconf.sam_cigar_len += cigar_snip_len;
+    if (segconf.running) {
+        segconf.sam_cigar_len += cigar_snip_len;
+        segconf.sam_seq_len   += dl->seq_len;
+    }
 
     if (!seg_done)
         seg_by_did_i (VB, STRa(cigar_snip), SAM_CIGAR, add_bytes);

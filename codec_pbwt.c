@@ -290,10 +290,10 @@ bool codec_pbwt_compress (VBlock *vb,
 
     // the allele sections are further compressed with the best simple codec 
     // note: this simple codec (not CODEC_PBWT) will be the codec stored in zctx->lcodec
-    PAUSE_TIMER; //  don't include sub-codec compressor - it accounts for itself
+    PAUSE_TIMER(vb); //  don't include sub-codec compressor - it accounts for itself
     codec_assign_best_codec (vb, vb->runs_ctx, NULL, SEC_LOCAL);
     codec_assign_best_codec (vb, vb->fgrc_ctx, NULL, SEC_LOCAL);
-    RESUME_TIMER (compressor_pbwt);
+    RESUME_TIMER (vb, compressor_pbwt);
 
     // note: we created the data in PBWT contexts - no section should be created for the ht_matrix context it in the file
     buf_free (&vb->ht_matrix_ctx->local); 

@@ -25,7 +25,7 @@ bool codec_none_compress (VBlock *vb, SectionHeader *header,
             char *start1=0;
             uint32_t len1=0;        
             
-            callback (vb, line_i, &start1, &len1, *uncompressed_len - (next - compressed));
+            callback (vb, line_i, &start1, &len1, *uncompressed_len - (next - compressed), NULL);
 
             if (start1 && len1) { memcpy (next, start1, len1); next += len1; }
         }

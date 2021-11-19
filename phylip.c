@@ -71,14 +71,16 @@ COMPRESSOR_CALLBACK (phy_zip_id)
 {
     ZipDataLinePHY *dl = DATA_LINE (vb_line_i);
     *line_data_len = PHY_ID_LEN;
-    *line_data = ENT (char, vb->txt_data, dl->line_start);
+    *line_data     = ENT (char, vb->txt_data, dl->line_start);
+    if (is_rev) *is_rev = 0;
 }
 
 COMPRESSOR_CALLBACK (phy_zip_seq)
 {
     ZipDataLinePHY *dl = DATA_LINE (vb_line_i);
     *line_data_len = phy_seq_len;
-    *line_data = ENT (char, vb->txt_data, dl->line_start) + PHY_ID_LEN;
+    *line_data     = ENT (char, vb->txt_data, dl->line_start) + PHY_ID_LEN;
+    if (is_rev) *is_rev = 0;
 }
 
 //-----------------------

@@ -198,6 +198,9 @@ void sam_seg_initialize (VBlock *vb)
     if (!segconf.running && segconf.sam_is_sorted) 
         buf_alloc_255 (vb, &VB_SAM->qname_hash, 0, (1 << BUDDY_HASH_BITS), int32_t, 1, "qname_hash");    
 
+    // if (segconf.tech == TECH_ONP)
+    //     VB_SAM->qual_codec_enano = true; // unless we find out during Seg that the data won't allow us
+
     sam_seg_initialize_0X (vb, (segconf.sam_is_sorted ? OPTION_XA_LOOKBACK : DID_I_NONE), OPTION_XA_RNAME, OPTION_XA_STRAND, OPTION_XA_POS, OPTION_XA_CIGAR);
     sam_seg_initialize_0X (vb, DID_I_NONE, OPTION_SA_RNAME, OPTION_SA_STRAND, OPTION_SA_POS, OPTION_SA_CIGAR);
     sam_seg_initialize_0X (vb, DID_I_NONE, OPTION_OA_RNAME, OPTION_OA_STRAND, OPTION_OA_POS, OPTION_OA_CIGAR);
@@ -350,6 +353,7 @@ void sam_seg_finalize (VBlockP vb)
     if (segconf.running) {
         segconf.sam_buddy_RG  = segconf.sam_is_sorted && (CTX(OPTION_RG_Z)->nodes.len >= BUDDY_MIN_RG_COUNT); // it only makes sense to buddy RGs in a sorted (not collated) file, and where there are "a lot" of RGs or else we would be increasing rather than decreasing entropy
         segconf.sam_cigar_len = 1 + (segconf.sam_cigar_len / vb->lines.len); // set to the average CIGAR len (rounded up)
+        segconf.sam_seq_len   = 1 + (segconf.sam_seq_len   / vb->lines.len);
     }
 
     // get rid of the XA strand context (nodes added in sam_seg_initialize) if we ended up not having this tag
@@ -358,6 +362,9 @@ void sam_seg_finalize (VBlockP vb)
     // case: we have XA but didn't use lookback (because its a non-sorted file) - create an all-the-same XA_LOOKBACK dict
     if (CTX(OPTION_XA_Z)->b250.len && !CTX(OPTION_XA_Z)->local.len)
         ctx_create_node (vb, OPTION_XA_LOOKBACK, "0", 1);
+
+    if (VB_SAM->qual_codec_enano) 
+        codec_enano_seg_init (vb, CTX(SAM_QUAL));
 }
 
 bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)
@@ -837,7 +844,8 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
 
     GET_NEXT_ITEM (SAM_SEQ);
     seg_set_last_txt (VB, CTX(SAM_SQBITMAP), STRd(SAM_SEQ), STORE_NONE);
-    
+    dl->seq_data_start = ENTNUM (vb->txt_data, SAM_SEQ_str);
+
     ASSSEG (dl->seq_len == field_len || vb->last_cigar[0] == '*' || SAM_SEQ_str[0] == '*', SAM_SEQ_str, 
             "seq_len implied by CIGAR=%s is %u, but actual SEQ length is %u, SEQ=%.*s", 
             vb->last_cigar, dl->seq_len, SAM_SEQ_len, SAM_SEQ_len, SAM_SEQ_str);
@@ -845,9 +853,15 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     // calculate diff vs. reference (denovo or loaded)
     sam_seg_SEQ (vb, SAM_SQBITMAP, STRd(SAM_SEQ), this_pos, vb->last_cigar, vb->ref_consumed, vb->ref_and_seq_consumed, 
                  0, field_len, vb->last_cigar, SAM_SEQ_len+1);
-
+    
     GET_MAYBE_LAST_ITEM (SAM_QUAL);
     sam_seg_QUAL (vb, dl, STRd(SAM_QUAL), SAM_QUAL_len + 1); 
+
+    ASSSEG (str_is_in_range (SAM_QUAL_str, SAM_QUAL_len, 33, 126), SAM_QUAL_str, "Invalid QUAL - it contains non-Phred characters: \"%.*s\"", 
+            SAM_QUAL_len, SAM_QUAL_str);
+
+    if (SAM_SEQ_len < ENANO_MIN_READ_LEN || SAM_SEQ_len != SAM_QUAL_len)
+        vb->qual_codec_enano = false; // we cannot compress QUAL with CODEC_ENANO as prerequisites are not met
 
     // finally we can seg CIGAR now
     sam_cigar_seg_textual (vb, dl, last_cigar_len, STRd(SAM_SEQ), STRd(SAM_QUAL));

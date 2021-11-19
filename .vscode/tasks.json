@@ -6,7 +6,7 @@
             "label": "Make Optimized",
             "command": "make",
             "args": [
-                "all"
+                "-j", "all"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"
@@ -25,6 +25,27 @@
         {
             "type": "shell",
             "label": "Make Debug",
+            "command": "make.exe",
+            "args": [
+                "-j", "debug"
+            ],
+            "options": {
+                "cwd": "${workspaceRoot}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "clear": true
+            }
+        },
+        {
+            "type": "shell",
+            "label": "Make Debug slowly",
             "command": "make.exe",
             "args": [
                 "debug"
@@ -48,7 +69,7 @@
             "label": "Make Opt - compiler debug info and optimizations",
             "command": "make",
             "args": [
-                "opt"
+                "opt", "-j"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"
@@ -134,7 +155,7 @@
             "label": "Test Docs",
             "command": "make",
             "args": [
-                "test-docs"
+                "test-docs", "-j"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"
@@ -155,7 +176,7 @@
             "label": "Publish Docs",
             "command": "make",
             "args": [
-                "publish-docs"
+                "publish-docs", "-j"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"
@@ -176,7 +197,7 @@
             "label": "Clean All",
             "command": "make.exe",
             "args": [
-                "clean"
+                "-j", "clean"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"
@@ -197,7 +218,7 @@
             "label": "Clean Debug",
             "command": "make.exe",
             "args": [
-                "clean-debug"
+                "-j", "clean-debug"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"
@@ -218,7 +239,7 @@
             "label": "Clean Optimized",
             "command": "make.exe",
             "args": [
-                "clean-optimized"
+                "-j", "clean-optimized"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"
@@ -239,7 +260,7 @@
             "label": "Clean Docs",
             "command": "make.exe",
             "args": [
-                "clean-docs"
+                "-j", "clean-docs"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"
