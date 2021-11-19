@@ -317,7 +317,6 @@ ifeq ($(OS),Windows_NT)
 # the genozip file header SectionHeaderTxtHeader.genozip_version
 increment-version: $(C_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
 	@echo "Incrementing version.h"
-	@$(SH_VERIFY_ALL_COMMITTED)
 	@bash increment-version.sh
 
 decrement-version:
@@ -391,7 +390,6 @@ WINDOWS_INSTALLER_OBJS = windows/genozip.exe windows/genounzip.exe windows/genoc
 docs/genozip-installer.exe: clean-optimized $(WINDOWS_INSTALLER_OBJS) # clean first, as we will compile without -march=native
 	@(mkdir windows >& /dev/null ; exit 0)
 	@echo 'Creating Windows installer'
-	@$(SH_VERIFY_ALL_COMMITTED)
 	@echo 'WINDOWS: Using the UI:'
 	@echo '  (1) Open genozip-installer.ifp'
 	@echo '  (2) Set General-Program version to $(version)'
@@ -412,9 +410,6 @@ docs/genozip-linux-x86_64.tar.gz.build: genozip-linux-x86_64/LICENSE.txt
 
 mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@echo "Creating Mac installer"
-	@$(SH_VERIFY_ALL_COMMITTED)
-	@echo "Pushing all committed changes to github"
-	@(( `git push |& grep "Everything up-to-date"  | wc -l` > 0 )) || (echo "Pushed some stuff... waiting 5 seconds for it to settle in" ; sleep 5)
 	@echo "Logging in to remote mac" 
 	@# Get IP address - check if the previous IP address still works or ask for a new one. Assuming a LAN on an Android hotspot.
 	@ip=`cat mac/.mac_ip_address` ; a=`echo $$ip|cut -d. -f4`; (( `ping  -n 1 $$ip | grep "round trip times" | wc -l` > 0 )) || read -p "IP Address: 192.168.43." a ; ip=192.168.43.$$a ; echo $$ip > mac/.mac_ip_address
