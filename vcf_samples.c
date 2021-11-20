@@ -17,17 +17,21 @@
 #include "piz.h"
 #include "zfile.h"
 #include "zip.h"
+#include "lookback.h"
+#include "hash.h"
 
 static SmallContainer con_AD={}, con_ADALL={}, con_ADF={}, con_ADR={}, con_SAC={}, con_F1R2={}, con_F2R1={}, 
     con_MB={}, con_SB={}, con_AF={};
 
 static char sb_snips[2][32], mb_snips[2][32], f2r1_snips[VCF_MAX_ARRAY_ITEMS][32], adr_snips[VCF_MAX_ARRAY_ITEMS][32], adf_snips[VCF_MAX_ARRAY_ITEMS][32], 
     rdf_snip[32], rdr_snip[32], adf_snip[32], adr_snip[32], ad_varscan_snip[32], ab_snip[48], gq_by_pl[50], gq_by_gp[50],
-    af_snip[32], sac_snips[VCF_MAX_ARRAY_ITEMS/2][32], PL_to_PLn_redirect_snip[30], PL_to_PLy_redirect_snip[30];
+    af_snip[32], sac_snips[VCF_MAX_ARRAY_ITEMS/2][32], PL_to_PLn_redirect_snip[30], PL_to_PLy_redirect_snip[30],
+    ps_lookback_snip[32], ps_pra_snip[200];
 
 static unsigned sb_snip_lens[2], mb_snip_lens[2], f2r1_snip_lens[VCF_MAX_ARRAY_ITEMS], adr_snip_lens[VCF_MAX_ARRAY_ITEMS], adf_snip_lens[VCF_MAX_ARRAY_ITEMS], 
     af_snip_len, sac_snip_lens[VCF_MAX_ARRAY_ITEMS/2], rdf_snip_len, rdr_snip_len, adf_snip_len, adr_snip_len, ad_varscan_snip_len,
-    ab_snip_len, gq_by_pl_len, gq_by_gp_len, PL_to_PLn_redirect_snip_len, PL_to_PLy_redirect_snip_len;
+    ab_snip_len, gq_by_pl_len, gq_by_gp_len, PL_to_PLn_redirect_snip_len, PL_to_PLy_redirect_snip_len, ps_lookback_snip_len,
+    ps_pra_snip_len;
 
 // prepare snip of A - B
 static void vcf_seg_prepare_minus_snip (DictId dict_id_a, DictId dict_id_b, char *snip, unsigned *snip_len)
@@ -118,10 +122,40 @@ void vcf_samples_zip_initialize (void)
     seg_prepare_snip_other (SNIP_REDIRECTION, _FORMAT_PLy, false, 0, PL_to_PLy_redirect_snip);
     seg_prepare_snip_other (SNIP_REDIRECTION, _FORMAT_PLn, false, 0, PL_to_PLn_redirect_snip);
     ASSERT (PL_to_PLy_redirect_snip_len == PL_to_PLn_redirect_snip_len, "Expecting PL_to_PLy_redirect_snip_len%u == PL_to_PLn_redirect_snip_len=%u", PL_to_PLy_redirect_snip_len, PL_to_PLn_redirect_snip_len);
+
+    // FORMAT/PS related stuff
+    seg_prepare_snip_other_char (SNIP_LOOKBACK, (DictId)_VCF_LOOKBACK, 'T', ps_lookback_snip);
+
+    #define PSpos "PSpos"
+    #define PSref "PSref"
+    #define PSalt "PSalt"
+
+    SmallContainer con_PS_pos_ref_alt = {
+        .repeats   = 1,
+        .nitems_lo = 3,
+        .items     = { { .dict_id = dict_id_make (PSpos, 5, DTYPE_VCF_FORMAT), .separator = "_"},
+                       { .dict_id = dict_id_make (PSref, 5, DTYPE_VCF_FORMAT), .separator = "_"},
+                       { .dict_id = dict_id_make (PSalt, 5, DTYPE_VCF_FORMAT)                  } } };                       
+
+    ps_pra_snip_len = sizeof (ps_pra_snip);
+    container_prepare_snip ((ContainerP)&con_PS_pos_ref_alt, 0, 0, ps_pra_snip, &ps_pra_snip_len); 
 }
 
 void vcf_samples_seg_initialize (VBlockVCFP vb)
 {
+    if (segconf.ps_type) {
+        // note: we don't actually Seg anything into VCF_LOOKBACK as we get the lookback from the number of samples
+        // this just carries the lb_size as an empty local section
+        CTX(VCF_LOOKBACK)->flags.store        = STORE_INT;
+        CTX(VCF_LOOKBACK)->dynamic_size_local = true;
+        CTX(VCF_LOOKBACK)->local_param        = true;
+        CTX(VCF_LOOKBACK)->local.param        = lookback_size_to_local_param (vcf_num_samples + 1); // 1+ number of lookback values
+
+        CTX(VCF_SAMPLES)->flags.store         = STORE_INDEX; // last_value is number of samples (=con.repeats)
+
+        lookback_init (VB, CTX(VCF_LOOKBACK), CTX(FORMAT_PS), STORE_INT); // lookback_ctx->local.param must be set before
+    }
+
     CTX(FORMAT_ADALL)->flags.store = STORE_INT;
     CTX(FORMAT_DP)->   flags.store = STORE_INT;
     CTX(FORMAT_AD)->   flags.store = STORE_INT;   // since v13
@@ -131,9 +165,6 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
     CTX(FORMAT_ADR)->  flags.store = STORE_INT;   // since v13
     CTX(FORMAT_ADF)->  flags.store = STORE_INT;   // since v13
     CTX(FORMAT_SDP)->  flags.store = STORE_INT;   // since v13
-
-    CTX(FORMAT_PS)->   flags.store = STORE_INT;   
-    CTX(FORMAT_PS)->   no_stons = true;   
 
     CTX(FORMAT_GT)->no_stons  = true; // we store the GT matrix in local, so cannot accomodate singletons
     vb->ht_matrix_ctx = CTX(FORMAT_GT_HT); // different for different data types
@@ -165,6 +196,19 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
     init_mux(PLn,  STORE_NONE);
 
     seg_mux_init (VB, 3*DOSAGExDP_NUM_DPs + 1, VCF_SPECIAL_MUX_BY_DOSAGExDP, FORMAT_PLy, FORMAT_PLy, STORE_NONE, (MultiplexerP)&vb->mux_PLy, NULL);
+
+    // initialize all-the-same contexts for the REF and ALT container items of PS_POS_REF_ALT
+    if (segconf.ps_type == PS_POS_REF_ALT) {
+
+        ContextP ctx = ctx_get_ctx (vb, dict_id_make (PSref, 5, DTYPE_VCF_FORMAT));
+        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPY_REForALT, '0' }), 3, ctx, 0);
+
+        ctx = ctx_get_ctx (vb, dict_id_make (PSalt, 5, DTYPE_VCF_FORMAT));
+        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPY_REForALT, '1' }), 3, ctx, 0);
+
+        ctx = ctx_get_ctx (vb, dict_id_make (PSpos, 5, DTYPE_VCF_FORMAT));
+        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPYPOS, '0' }), 3, ctx, 0);
+    }
 }
 
 //--------------------
@@ -649,13 +693,84 @@ static inline WordIndex vcf_seg_FORMAT_AF (VBlockVCF *vb, Context *ctx, STRp(cel
 // FORMAT/PS
 // ---------
 
-static inline WordIndex vcf_seg_FORMAT_PS (VBlockVCF *vb, Context *ctx, STRp(cell))
+static inline void vcf_seg_FORMAT_PS_segconf (VBlockVCF *vb, Context *ctx, STRp(PS))
 {
-    int64_t ps_value=0;
-    if (str_get_int (STRa(cell), &ps_value) && ps_value == ctx->last_value.i) // same as previous line
-        return seg_by_ctx (VB, ((char []){ SNIP_SELF_DELTA, '0' }), 2, ctx, cell_len);
+    // analyze PS and determine its type
+    if (!segconf.ps_type && *PS != '.') {
+        if (str_is_int (STRa(PS))) 
+            segconf.ps_type = PS_POS;  // eg "73218731"
+        else {
+            str_split (PS, PS_len, 3, '_', item, true);
+            if (n_items && str_is_int (STRi(item, 0))) 
+                segconf.ps_type = PS_POS_REF_ALT; // eg "18182014_G_A"
+            else
+                segconf.ps_type = PS_UNKNOWN;
+        }
+        seg_by_ctx (VB, STRa(PS), ctx, PS_len); // segging once during segconf is enough - to create a context
+    }
+}
 
-    return seg_delta_vs_other_do (VB, ctx, CTX(VCF_POS), STRa(cell), 1000, cell_len);
+static inline bool vcf_seg_FORMAT_PS_is_same_alt1 (VBlockVCF *vb, STRp(alt))
+{
+    if (alt_len == vb->main_alt_len)
+        return !memcmp (alt, vb->main_refalt + vb->main_ref_len + 1, alt_len);
+
+    // case: possibly multi-alt - compare to first ALT (ALT1)
+    else {
+        str_split (vb->main_refalt + vb->main_ref_len + 1, vb->main_alt_len, MAX_ALLELES, ',', alt, false);
+        return str_issame_(STRa(alt), STRi(alt,0));
+    }
+}
+
+// encountered formats: "18182014_G_A" ; "73218731"
+static inline void vcf_seg_FORMAT_PS (VBlockVCF *vb, ZipDataLineVCF *dl, Context *ctx, STRp(PS))
+{
+    int64_t ps_value;
+
+    if (segconf.running) {
+        vcf_seg_FORMAT_PS_segconf (vb, ctx, STRa(PS));
+        return;
+    }
+    
+    // case: this line is in the same Phase Set as the previous line
+    if (vb->PS_encountered_last_line && 
+        lookback_is_same_txt (VB, VCF_LOOKBACK, ctx, (uint32_t)CTX(VCF_SAMPLES)->last_value.i/*last_line_num_samples*/, STRa(PS))) 
+        
+        seg_by_ctx (VB, STRa(ps_lookback_snip), ctx, PS_len); 
+
+    // case: not the same as previous line - seg according to ps_type
+    else {
+        // PS_POS: delta vs POS
+        if (segconf.ps_type == PS_POS && vb->line_coords == DC_PRIMARY &&
+            str_get_int (STRa(PS), &ps_value)) {
+
+            char snip[16] = { SNIP_SPECIAL, VCF_SPECIAL_COPYPOS };
+            unsigned snip_len = 2 + str_int (ps_value - dl->pos[0], &snip[2]);
+            seg_by_ctx (VB, STRa(snip), ctx, PS_len);
+        }
+
+        // PS_POS_REF_ALT: copy POS, REF, ALT1 in a container
+        else if (segconf.ps_type == PS_POS_REF_ALT && vb->line_coords == DC_PRIMARY) {
+            str_split (PS, PS_len, 3, '_', item, true);
+
+            if (n_items && 
+                str_issame_(STRi(item,0), last_txt(vb, VCF_POS), vb->last_txt_len(VCF_POS)) &&
+                str_issame_(STRi(item,1), vb->main_refalt, vb->main_ref_len) &&
+                vcf_seg_FORMAT_PS_is_same_alt1(vb, STRi(item,2))) {
+
+                // replace PS with COPY_POS, COPY_REF, COPY_ALT container 
+                seg_by_ctx (VB, STRa(ps_pra_snip), ctx, PS_len); 
+                // items PSpos, PSref and PSalt of the container are all_the_same - initialized in vcf_samples_seg_initialize
+            }
+            else   
+                goto fallback;
+        }
+        else 
+            fallback:            
+            seg_by_ctx (VB, STRa(PS), ctx, PS_len); // segging once during segconf is enough - to create a context        
+    }
+
+    lookback_insert_txt (VB, VCF_LOOKBACK, FORMAT_PS, STRa(PS));
 }
 
 //----------
@@ -759,7 +874,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_GQ)
 {
     const char *tab = memchr (snip, '\t', snip_len);
 
-    ContextP src_ctx = MCTX (0, snip, tab - snip);
+    ContextP src_ctx = SCTX0 (snip);
 
     int64_t prediction = vcf_predict_GQ (VB_VCF, src_ctx->did_i);
     int64_t delta = atoi (tab+1);
@@ -1176,11 +1291,11 @@ static void vcf_seg_FORMAT_GT_increase_ploidy (VBlockVCF *vb, unsigned new_ploid
     vb->ht_per_line = vb->ploidy * vcf_num_samples;
 }
 
-static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataLineVCF *dl, STRp(cell))
+static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, STRp(cell), bool has_ps)
 {
     // the GT field is represented as a Container, with a single item repeating as required by poidy, and the separator 
     // determined by the phase
-    MiniContainer gt = { .repeats = 1, 
+    MiniContainer gt = { .repeats   = 1, 
                          .nitems_lo = 1, 
                          .drop_final_repeat_sep = true, 
                          .callback = (vb->use_special_sf == USE_SF_YES),
@@ -1190,7 +1305,7 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
     unsigned save_cell_len = cell_len;
 
     // update repeats according to ploidy, and separator according to phase
-    for (unsigned i=1; i<cell_len-1; i++)
+    for (unsigned i=1; i < cell_len-1; i++)
         if (cell[i] == '|' || cell[i] == '/') {
             gt.repeats++;
             gt.repsep[0] = cell[i];
@@ -1270,10 +1385,21 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
         if (!gt.repsep[0]) gt.repsep[0] = vb->gt_prev_phase; // this happens in case if a 1-ploid sample
     }
 
+    // case: phase is predictable from has_ps and ht_data[0]
+    // note: a case where this prediction fails is with alleles > 1 eg "1|2". In GIAB, this never have a PS, but can be | or / 
+    if (segconf.ps_type && gt.repeats==2 &&
+            ((ht_data[0] != '.' && (has_ps == (gt.repsep[0]=='|'))) || // ht!=. --> predicted to be as has_ps says
+             (ht_data[0] == '.' && gt.repsep[0]=='/'))) {              // ht==. --> predicted to be /
+
+        // generate the phase from 
+        gt.repsep[0] = '&'; // re-write from prediction
+        gt.callback = true; // vcf_piz_filter will re-write repsep based on prediction
+    }
+
     // if this sample is a "./." - replace it with "%|%" or "%/%" according to the previous sample's phase -  
     // so that the gt container is likely identical and we reduce GT.b250 entropy. Reason: many tools
     // (including bcftools merge) produce "./." for missing samples even if all other samples are phased
-    if (ht_data[0]=='.' && gt.repeats==2 && ht_data[1]=='.' && gt.repsep[0]=='/') {
+    else if (ht_data[0]=='.' && gt.repeats==2 && ht_data[1]=='.' && gt.repsep[0]=='/') {
         gt.repsep[0] = vb->gt_prev_phase ? vb->gt_prev_phase : '|'; // '|' is arbitrary
         ht_data[0] = ht_data[1] = '%';
     }
@@ -1298,6 +1424,38 @@ static inline WordIndex vcf_seg_FORMAT_GT (VBlockVCF *vb, Context *ctx, ZipDataL
         vb->gt_prev_phase  = gt.repsep[0];
         return container_seg (vb, ctx, (ContainerP)&gt, 0, 0, save_cell_len); 
     }
+}
+
+// rewrite '&' to the predicted phase 
+void vcf_piz_FORMAT_GT_rewrite_predicted_phase (VBlockP vb, char *recon, uint32_t recon_len)
+{
+    // prediction is '/' by default. it is '|' only if: 
+    // 1. ht[0] is not '.' AND 2. we have PS on this line AND 3. PS is not (empty or '.')
+    char prediction = '/';
+
+    // case: ht[0] is '.' - phase is /
+    if (*recon != '.') {
+
+        // get FORMAT field
+        const char *format = last_txt (vb, VCF_FORMAT);
+        uint32_t format_len = vb->last_txt_len (VCF_FORMAT);
+
+        // check if a :PS: or :PS\t exists 
+        for (int i=2; i < format_len-1; i++) // start from 2 - skip GT
+            if (format[i+1]=='P' && format[i+2]=='S' && format[i]==':' && (format[i+3]==':' || format[i+3]=='\t')) {
+                
+                // case: if its a non-trivial PS - not empty or '.' - the phase is |, otherwise it's /
+                STR(ps);
+                reconstruct_peek (vb, CTX(FORMAT_PS), pSTRa(ps));
+                if (ps_len && !(ps_len==1 && *ps=='.')) prediction = '|';
+                break;
+            }
+    }
+        
+    // we only use prediction in in diploid GTs, and genozip allows only single or double-digit alleles
+    if      (recon[1] == '&') recon[1] = prediction;
+    else if (recon[2] == '&') recon[2] = prediction;
+    else ASSPIZ (false, "Cannot find '&' predictable phase in recon: \"%.*s\"", recon_len, recon);
 }
 
 // Lift-over translator assigned to a FORMAT/GT item, IF it is bi-allelic and we have a ALT<>REF switch. No limitations on ploidy.
@@ -1477,6 +1635,16 @@ static inline void vcf_seg_validate_luft_trans_all_samples (VBlockVCF *vb, uint3
 // One sample
 // ----------
 
+// returns true is the sample has a non-'.' PS value
+static inline bool vcf_seg_sample_has_PS (ContextP *ctxs, uint32_t n_sfs, const char **sfs, uint32_t *sf_lens)
+{
+    for (int i=1; i < n_sfs; i++) // start from 1 - we know 0 is GT
+        if (ctxs[i]->dict_id.num == _FORMAT_PS)
+            return sf_lens[i] && !(sf_lens[i]==1 && sfs[i][0]=='.'); // PS found on this line - return true if its not '.' or empty
+
+    return false; // no PS at all on this line
+}
+
 // returns the number of colons in the sample
 static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, ContextP *ctxs, ContainerP samples, STRp(sample))
 {
@@ -1517,7 +1685,12 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
         else switch (dict_id.num) {
 
         // <ID=GT,Number=1,Type=String,Description="Genotype">
-        case _FORMAT_GT: vcf_seg_FORMAT_GT (vb, ctx, dl, STRi(sf, i)); break;
+        case _FORMAT_GT: {
+            bool has_ps = segconf.ps_type ? vcf_seg_sample_has_PS (ctxs, n_sfs, sfs, sf_lens) : false;
+            
+            vcf_seg_FORMAT_GT (vb, ctx, dl, STRi(sf, i), has_ps); 
+            break;
+        }
 
         // <ID=GL,Number=.,Type=Float,Description="Genotype Likelihoods">
         case _FORMAT_GL:
@@ -1582,7 +1755,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCF *vb, ZipDataLineVCF *dl, Co
         
         // case: PS ("Phase Set") - might be the same as POS (for example, if set by Whatshap: https://whatshap.readthedocs.io/en/latest/guide.html#features-and-limitations)
         // or might be the same as the previous line
-        case _FORMAT_PS   : vcf_seg_FORMAT_PS (vb, ctx, STRi(sf, i)); break;
+        case _FORMAT_PS   : vcf_seg_FORMAT_PS (vb, dl, ctx, STRi(sf, i)); break;
 
         // standard: <ID=GQ,Number=1,Type=Integer,Description="Genotype Quality">
         // GIAB: <ID=GQ,Number=1,Type=Integer,Description="Net Genotype quality across all datasets, calculated from GQ scores of callsets supporting the consensus GT, using only one callset from each dataset">   
@@ -1748,8 +1921,12 @@ const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *len, ch
 
     container_seg (vb, CTX(VCF_SAMPLES), &samples, 0, 0, samples.repeats + num_colons); // account for : and \t \r \n separators
 
+    ctx_set_last_value (VB, CTX(VCF_SAMPLES), (ValueType){ .i = samples.repeats });
+
     CTX(FORMAT_GT_HT)->local.len = (vb->line_i+1) * vb->ht_per_line;
  
+    vb->PS_encountered_last_line = ctx_encountered_in_line (VB, FORMAT_PS);
+
     return next_field;
 }
 

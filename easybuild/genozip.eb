@@ -23,7 +23,7 @@ sources = [{
 		      },
 }]
 
-install_cmd = "PREFIX=%(installdir)s DISTRIBUTION=%(local_institution)s make install"
+install_cmd = "PREFIX=%(installdir)s DISTRIBUTION=" + local_institution + " make install"
 
 sanity_check_paths = {
     'files': ['bin/genocat', 'bin/genozip', 'bin/genounzip', 'bin/genols'],

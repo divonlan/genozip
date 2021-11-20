@@ -133,7 +133,7 @@ void reconstruct_from_local_sequence (VBlock *vb, Context *ctx, STRp(snip))
     ctx->next_local += len;
 }
 
-static Context *reconstruct_get_other_ctx_from_snip (VBlockP vb, ConstContextP ctx, pSTRp (snip))
+ContextP reconstruct_get_other_ctx_from_snip (VBlockP vb, ContextP ctx, pSTRp (snip))
 {
     unsigned b64_len = base64_sizeof (DictId);
     char err[*snip_len+20];
@@ -145,12 +145,33 @@ static Context *reconstruct_get_other_ctx_from_snip (VBlockP vb, ConstContextP c
 
     Context *other_ctx = ECTX (dict_id);
     ASSPIZ (other_ctx, "Failed to get other context: ctx=%s snip=%.*s other_dict_id=%s", 
-                        ctx->tag_name, STRf(*snip), dis_dict_id(dict_id).s);
+            ctx->tag_name, STRf(*snip), dis_dict_id(dict_id).s);
   
     *snip     += b64_len + 1;
     *snip_len -= b64_len + 1;
-    
+
+    ctx->other_did_i = other_ctx->did_i;
+
     return other_ctx;
+}
+
+// get ctx from a multi-dict_id special snip. note that we're careful to only ECTX the ctx_i requested, and not all,
+// so that we don't do a full search of vb->contexts[] for a channel that was not segged and hence has no context
+ContextP recon_multi_dict_id_get_ctx_first_time (VBlockP vb, ContextP ctx, STRp(snip), unsigned ctx_i)
+{
+    if (!ctx->con_cache.len) {
+        ctx->con_cache.len = str_count_char (STRa(snip), '\t') + 1;
+        buf_alloc_zero (vb, &ctx->con_cache, 0, ctx->con_cache.len, ContextP, 1, "con_cache");
+    }
+
+    // note: we get past this point only once per VB, per ctx_i
+    str_split (snip, snip_len, ctx->con_cache.len, '\t', item, true);
+    ASSPIZ (n_items, "Unable to decoded multi-dict-id snip for %s. snip=\"%.*s\"", ctx->tag_name, snip_len, snip);
+
+    DictId item_dict_id;
+    base64_decode (items[ctx_i], &item_lens[ctx_i], item_dict_id.id);
+
+    return (*ENT(ContextP, ctx->con_cache, ctx_i) = ECTX (item_dict_id)); // NULL if no data was segged to this channel    
 }
 
 void reconstruct_set_buddy (VBlockP vb)
@@ -229,29 +250,42 @@ bool reconstruct_from_buddy (VBlock *vb, Context *ctx, STRp(snip), bool reconstr
     }
 }
 
-static ValueType reconstruct_from_lookback (VBlock *vb, Context *ctx, STRp(snip), bool reconstruct)
+static ValueType reconstruct_from_lookback (VBlockP vb, ContextP ctx, STRp(snip), bool reconstruct)
 {   
-    int64_t lookback = reconstruct_get_other_ctx_from_snip (vb, ctx, pSTRa(snip))->last_value.i;
-    ValueType value;
+    ContextP lb_ctx = SCTX(snip);
+    int64_t lookback = lb_ctx->last_value.i;
+    ValueType value = {};
 
-    if (!snip_len) { // a lookback by index
-        value.i = lookback_get_index (vb, ctx, lookback);
+    // a lookback by word_index
+    if (!snip_len) { 
+        value.i = lookback_get_index (vb, lb_ctx, ctx, lookback);
         
         STR(back_snip);
         ctx_get_snip_by_word_index (ctx, value.i, pSTRa(back_snip));
 
         if (reconstruct) RECONSTRUCT (back_snip, back_snip_len);
     }
-    else { // a lookback by delta
-        PosType back_value = lookback_get_value (vb, ctx, lookback);
-        PosType delta;
-        ASSPIZ  (str_get_int (STRa(snip), &delta), "Invalid delta snip \"%.*s\"", STRf(snip));
 
-        value.i = back_value + delta;
-        
-        if (reconstruct) RECONSTRUCT_INT (value.i);
-    }
+    else { 
+        ValueType back_value = lookback_get_value (vb, lb_ctx, ctx, lookback);
+
+        // a lookback by txt
+        if (snip_len == 1 && *snip == 'T') {
+            if (reconstruct) 
+                RECONSTRUCT (ENT (char, vb->txt_data, back_value.txt.index), back_value.txt.len);
+        }
     
+        // a lookback by delta vs integer
+        else { 
+            PosType delta;
+            ASSPIZ  (str_get_int (STRa(snip), &delta), "Invalid delta snip \"%.*s\"", STRf(snip));
+
+            value.i = back_value.i + delta;
+            
+            if (reconstruct) RECONSTRUCT_INT (value.i);
+        }
+    }
+
     return value; 
 }
 

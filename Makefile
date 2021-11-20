@@ -417,7 +417,7 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@touch $@
 
 prod:
-	@(cd ../genozip-prod ; git stash ; git pull ; make -j clean ; touch dict_id_gen.h ; make -j)
+	@(cd ../genozip-prod ; git stash ; git pull ; make clean ; touch dict_id_gen.h ; make -j)
 	@cp ../genozip-prod/genozip.exe genozip-prod.exe
 	@cp ../genozip-prod/genounzip.exe genounzip-prod.exe
 	@cp ../genozip-prod/genocat.exe genocat-prod.exe

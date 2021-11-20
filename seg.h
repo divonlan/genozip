@@ -84,15 +84,19 @@ extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, DidIType stats_c
 typedef bool (*SegCallback) (VBlockP vb, ContextP ctx, STRp(value), uint32_t repeat);
 extern int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), const SegCallback *callbacks);
 
-extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int64_t parameter, 
+extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int64_t int_param, char char_param,
                                        char *snip, unsigned *snip_len /* in / out */);
 #define seg_prepare_snip_other(snip_code, other_dict_id, has_parameter, parameter, snip) \
     snip##_len = sizeof (snip);\
-    seg_prepare_snip_other_do ((snip_code), (DictId)(other_dict_id), (has_parameter), (parameter), (snip), &snip##_len)
+    seg_prepare_snip_other_do ((snip_code), (DictId)(other_dict_id), (has_parameter), (parameter), 0, (snip), &snip##_len)
+
+#define seg_prepare_snip_other_char(snip_code, other_dict_id, char_param, snip) \
+    snip##_len = sizeof (snip);\
+    seg_prepare_snip_other_do ((snip_code), (DictId)(other_dict_id), true, 0, (char_param), (snip), &snip##_len)
 
 #define seg_prepare_snip_special_other(special_code, snip, other_dict_id) do { \
     snip[0]=SNIP_SPECIAL; snip##_len=sizeof(snip)-1; \
-    seg_prepare_snip_other_do ((special_code), (DictId)(other_dict_id), 0, 0, &snip[1], &snip##_len); \
+    seg_prepare_snip_other_do ((special_code), (DictId)(other_dict_id), 0, 0, 0, &snip[1], &snip##_len); \
     snip##_len++;\
 } while(0)
 

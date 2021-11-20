@@ -213,7 +213,7 @@ WordIndex seg_integer_as_text_do (VBlockP vb, ContextP ctx, int64_t n, unsigned 
 }
 
 // prepare snips that contain code + dict_id + optional parameter (SNIP_LOOKUP_OTHER, SNIP_OTHER_DELTA, SNIP_REDIRECTION...)
-void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int64_t parameter, 
+void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int64_t int_param, char char_param, 
                                 char *snip, unsigned *snip_len) //  in / out
 {
     // make sure we have enough memory
@@ -223,8 +223,12 @@ void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, bool ha
     snip[0] = snip_code;
     *snip_len = 1 + base64_encode (other_dict_id.id, DICT_ID_LEN, &snip[1]);
 
-    if (has_parameter)
-        *snip_len += str_int (parameter, &snip[*snip_len]);
+    if (has_parameter) {
+        if (char_param) 
+            snip[(*snip_len)++] = char_param;
+        else
+            *snip_len += str_int (int_param, &snip[*snip_len]);
+    }
 }
 
 void seg_prepare_multi_dict_id_special_snip (uint8_t special_code, unsigned num_dict_ids, DictId *dict_ids,
@@ -238,7 +242,7 @@ void seg_prepare_multi_dict_id_special_snip (uint8_t special_code, unsigned num_
     for (int i=0; i < num_dict_ids; i++) {
         snip += snip_len;
         snip_len = out_snip + *out_snip_len - snip;
-        seg_prepare_snip_other_do (i ? '\t' : special_code, dict_ids[i], 0, 0, snip, &snip_len);
+        seg_prepare_snip_other_do (i ? '\t' : special_code, dict_ids[i], 0, 0, 0, snip, &snip_len);
     }
 
     *out_snip_len = (snip + snip_len) - out_snip;
@@ -412,7 +416,7 @@ PosType seg_pos_field (VBlock *vb,
             total_len = 1;
         }
         else 
-            seg_prepare_snip_other_do (SNIP_OTHER_DELTA, base_ctx->dict_id, false, 0, pos_delta_str, &total_len);
+            seg_prepare_snip_other_do (SNIP_OTHER_DELTA, base_ctx->dict_id, false, 0, 0, pos_delta_str, &total_len);
 
         unsigned delta_len = str_int (pos_delta, &pos_delta_str[total_len]);
         total_len += delta_len;

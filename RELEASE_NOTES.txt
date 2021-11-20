@@ -3,6 +3,9 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+13.0.5
+- VCF: Better compression for FORMAT/PS, FORMAT/GT
+
 13.0.4 19/November/2021
 - Better support for EasyBuild installations - see https://genozip.com/using-on-hpc.html
 - new option: --subdirs to recursively compress subdirectories

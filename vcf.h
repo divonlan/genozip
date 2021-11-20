@@ -24,6 +24,7 @@
 #pragma GENDICT VCF_INFO=DTYPE_FIELD=INFO
 #pragma GENDICT VCF_FORMAT=DTYPE_FIELD=FORMAT
 #pragma GENDICT VCF_SAMPLES=DTYPE_FIELD=SAMPLES
+#pragma GENDICT VCF_LOOKBACK=DTYPE_FIELD=LOOKBACK // samples lookback
 #pragma GENDICT VCF_EOL=DTYPE_FIELD=EOL
 #pragma GENDICT VCF_TOPLEVEL=DTYPE_FIELD=TOPLEVEL // must be called TOPLEVEL
 #pragma GENDICT VCF_oCHROM=DTYPE_FIELD=oCHROM     
@@ -51,7 +52,7 @@
 #pragma GENDICT FORMAT_DS=DTYPE_2=DS       // <ID=DS,Number=1,Type=Float,Description="Genotype dosage from MaCH/Thunder">. See: https://genome.sph.umich.edu/wiki/Thunder
 #pragma GENDICT FORMAT_GL=DTYPE_2=GL       // <ID=GL,Number=.,Type=Float,Description="Genotype Likelihoods">
 #pragma GENDICT FORMAT_GP=DTYPE_2=GP       // <ID=GP,Number=G,Type=Float,Description="Phred-scaled posterior probabilities for genotypes as defined in the VCF specification">
-#pragma GENDICT FORMAT_GQ=DTYPE_2=GQ       // <ID=GQ,Number=1,Type=Integer,Description="Genotype Quality">
+#pragma GENDICT FORMAT_GQ=DTYPE_2=GQ       // <ID=GQ,Number=1,Type=Integer,Description="Genotype Quality"> VCF spec: "conditional genotype quality, encoded as a phred quality −10log10 p(genotype call is wrong, conditioned on the site’s being variant) (Integer)"
 #pragma GENDICT FORMAT_GT=DTYPE_2=GT       // <ID=GT,Number=1,Type=String,Description="Genotype">
 #pragma GENDICT FORMAT_PL=DTYPE_2=PL       // <ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes as defined in the VCF specification">
 #pragma GENDICT FORMAT_PLy=DTYPE_2=PLy     // Alternative PL context while testing PL_mux_by_DP (YES Mux by DP)
@@ -63,7 +64,7 @@
 #pragma GENDICT FORMAT_PP=DTYPE_2=PP       // <ID=PP,Number=G,Type=Integer,Description="Phred-scaled genotype posterior probabilities rounded to the closest integer">
 #pragma GENDICT FORMAT_SAC=DTYPE_2=SAC     // <ID=SAC,Number=.,Type=Integer,Description="Number of reads on the forward and reverse strand supporting each allele (including reference)">
 #pragma GENDICT FORMAT_SB=DTYPE_2=SB       // <ID=SB,Number=4,Type=Integer,Description="Per-sample component statistics which comprise the Fisher's Exact Test to detect strand bias">
-#pragma GENDICT FORMAT_PS=DTYPE_2=PS 
+#pragma GENDICT FORMAT_PS=DTYPE_2=PS       // <ID=PS,Number=1,Type=Integer,Description="Physical phasing ID information, where each unique ID within a given sample (but not across samples) connects records within a phasing group">
 
 #pragma GENDICT FORMAT_FL=DTYPE_2=FL       // Seen in Reich's ancient DNA datasets: <ID=FL,Number=1,Type=Character,Description="filter level in range 0-9 or no value (non-integer: N,?) with zero being least reliable; to threshold at FL=n, use all levels n-9">
 
@@ -90,9 +91,11 @@
 #pragma GENDICT INFO_AA=DTYPE_1=AA         // <ID=AA,Number=1,Type=String,Description="Ancestral Allele"> - defined in the VCF specification
 #pragma GENDICT INFO_BaseCounts=DTYPE_1=BaseCounts
 #pragma GENDICT INFO_DP=DTYPE_1=DP         // <ID=DP,Number=1,Type=Integer,Description="Approximate read depth; some reads may have been filtered">
-#pragma GENDICT INFO_DP4=DTYPE_1=DP4   
-#pragma GENDICT INFO_SF=DTYPE_1=SF
+#pragma GENDICT INFO_DP4=DTYPE_1=DP4       // <ID=DP4,Number=4,Type=Integer,Description="# high-quality ref-forward bases, ref-reverse, alt-forward and alt-reverse bases">
+#pragma GENDICT INFO_SF=DTYPE_1=SF         // <ID=SF,Number=.,Type=String,Description="Source File (index to sourceFiles, f when filtered)">
 #pragma GENDICT INFO_VQSLOD=DTYPE_1=VQSLOD // <ID=VQSLOD,Number=1,Type=Float,Description="Log odds of being a true variant versus being false under the trained Gaussian mixture model">
+#pragma GENDICT INFO_MQ=DTYPE_1=MQ         // <ID=MQ,Number=1,Type=Integer,Description="Root-mean-square mapping quality of covering reads">    
+#pragma GENDICT INFO_MQ0=DTYPE_1=MQ0       // <ID=MQ0,Number=1,Type=Integer,Description="Total Mapping Quality Zero Reads"> (VCF spec: "Number of MAPQ == 0 reads covering this record")
 
 // Ann field defined: https://pcingola.github.io/SnpEff/adds/VCFannotationformat_v1.0.pdf
 #pragma GENDICT INFO_ANN=DTYPE_1=ANN       // <ID=ANN,Number=.,Type=String,Description="Functional annotations: 'Allele | Annotation | Annotation_Impact | Gene_Name | Gene_ID | Feature_Type | Feature_ID | Transcript_BioType | Rank | HGVS.c | HGVS.p | cDNA.pos / cDNA.length | CDS.pos / CDS.length | AA.pos / AA.length | Distance | ERRORS / WARNINGS / INFO'">
@@ -118,7 +121,6 @@
 #pragma GENDICT INFO_MLEAC=DTYPE_1=MLEAC       // <ID=MLEAC,Number=A,Type=Integer,Description="Maximum likelihood expectation (MLE) for the allele counts (not necessarily the same as the AC), for each ALT allele, in the same order as listed">
 #pragma GENDICT INFO_MLEAF=DTYPE_1=MLEAF       // <ID=MLEAF,Number=A,Type=Float,Description="Maximum likelihood expectation (MLE) for the allele frequency (not necessarily the same as the AF), for each ALT allele, in the same order as listed">
 #pragma GENDICT INFO_LDAF=DTYPE_1=LDAF         //  MLE Allele Frequency Accounting for LD
-#pragma GENDICT INFO_MQ0=DTYPE_1=MQ0    
 #pragma GENDICT FORMAT_MIN_DP=DTYPE_1=MIN_DP   // <ID=MIN_DP,Number=1,Type=Integer,Description="Minimum DP observed within the GVCF block">
 
 // Ensembl VEP (Variant Effect Predictor) fields: https://www.ensembl.org/info/docs/tools/vep/script/vep_options.html
@@ -257,8 +259,9 @@ extern TranslatorId vcf_lo_luft_trans_id (DictId dict_id, char number);
 extern bool vcf_piz_read_one_vb (VBlockP vb, Section sl);
 extern bool vcf_vb_is_luft (VBlockP vb);
 extern bool vcf_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
-CONTAINER_FILTER_FUNC (vcf_piz_filter);
-CONTAINER_CALLBACK (vcf_piz_container_cb);
+extern CONTAINER_FILTER_FUNC (vcf_piz_filter);
+extern CONTAINER_CALLBACK (vcf_piz_container_cb);
+extern CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb);
 
 // VCF Header stuff
 extern void vcf_header_piz_init (void);
@@ -298,7 +301,7 @@ extern void vcf_samples_add  (const char *samples_str);
                       vcf_piz_special_INFO_HGVS_INS_END_POS, vcf_piz_special_INFO_HGVS_INS_PAYLOAD, \
                       vcf_piz_special_INFO_HGVS_DELINS_END_POS, vcf_piz_special_INFO_HGVS_DELINS_PAYLOAD,\
                       vcf_piz_special_MUX_BY_DOSAGE, vcf_piz_special_FORMAT_AB, vcf_piz_special_FORMAT_GQ, \
-                      vcf_piz_special_MUX_BY_DOSAGExDP }
+                      vcf_piz_special_MUX_BY_DOSAGExDP, vcf_piz_special_COPY_REForALT }
 
 SPECIAL (VCF, 0,  main_REFALT,         vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,              vcf_piz_special_FORMAT)
@@ -325,7 +328,8 @@ SPECIAL (VCF, 21, MUX_BY_DOSAGE,       vcf_piz_special_MUX_BY_DOSAGE);          
 SPECIAL (VCF, 22, AB,                  vcf_piz_special_FORMAT_AB);                // added v13
 SPECIAL (VCF, 23, GQ,                  vcf_piz_special_FORMAT_GQ);                // added v13
 SPECIAL (VCF, 24, MUX_BY_DOSAGExDP,    vcf_piz_special_MUX_BY_DOSAGExDP);         // added v13.0.3
-#define NUM_VCF_SPECIAL 25
+SPECIAL (VCF, 25, COPY_REForALT,       vcf_piz_special_COPY_REForALT);                  // added v13.0.5
+#define NUM_VCF_SPECIAL 26
 
 // Translators for Luft (=secondary coordinates)
 TRANSLATOR (VCF, VCF,   1,  G,      vcf_piz_luft_G)       // same order as LiftOverStatus starting LO_CANT_G

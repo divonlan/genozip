@@ -26,9 +26,9 @@
 bool sam_piz_read_one_vb (VBlockP vb, Section sl)
 {
     if (CTX(OPTION_XA_Z)->dict.len) { // this file has XA
-        lookback_init (vb, CTX (OPTION_XA_RNAME),  STORE_INDEX);
-        lookback_init (vb, CTX (OPTION_XA_STRAND), STORE_INDEX);
-        lookback_init (vb, CTX (OPTION_XA_POS),    STORE_INT);
+        lookback_init (vb, CTX(OPTION_XA_LOOKBACK), CTX (OPTION_XA_RNAME),  STORE_INDEX);
+        lookback_init (vb, CTX(OPTION_XA_LOOKBACK), CTX (OPTION_XA_STRAND), STORE_INDEX);
+        lookback_init (vb, CTX(OPTION_XA_LOOKBACK), CTX (OPTION_XA_POS),    STORE_INT);
     }
 
     return true; // all good

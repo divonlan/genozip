@@ -113,7 +113,7 @@ void vcf_lo_zip_initialize (void)
         .filter_items = true, // needed for --single-coord
         .items        = { { .dict_id = { _VCF_COPYSTAT } },
                           { .dict_id = { _VCF_CHROM }    },
-                          { .dict_id = { _VCF_COPYPOS }, .separator = { CI_TRANS_NOR } }, // rather than segging "", we don't reconstruct. so we don't break the "all_the_same" of COPYPOS
+                          { .dict_id = { _VCF_COPYPOS }, .separator = { CI0_TRANS_NOR } }, // rather than segging "", we don't reconstruct. so we don't break the "all_the_same" of COPYPOS
                           { .dict_id = { _VCF_REFALT }   } } };
     container_prepare_snip ((Container*)&con, 0, 0, info_rejt_prim_snip, &info_rejt_prim_snip_len);
 }

@@ -26,22 +26,22 @@ static const StoreType optional_field_store_flag[256] = {
 };
 
 const char optional_sep_by_type[2][256] = { { // compressing from SAM
-        ['c']=CI_NATIVE_NEXT | CI_TRANS_NOR, ['C']=CI_NATIVE_NEXT | CI_TRANS_NOR, // reconstruct number and \t separator is SAM, and don't reconstruct anything if BAM (reconstruction will be done by translator)
-        ['s']=CI_NATIVE_NEXT | CI_TRANS_NOR, ['S']=CI_NATIVE_NEXT | CI_TRANS_NOR, // -"-
-        ['i']=CI_NATIVE_NEXT | CI_TRANS_NOR, ['I']=CI_NATIVE_NEXT | CI_TRANS_NOR, // -"-
-        ['f']=CI_NATIVE_NEXT | CI_TRANS_NOR,                                      // compressing SAM - a float is stored as text, and when piz with translate to BAM - is not reconstructed, instead - translated
-        ['Z']=CI_NATIVE_NEXT | CI_TRANS_NUL, ['H']=CI_NATIVE_NEXT | CI_TRANS_NUL, // reconstruct text and then \t separator if SAM and \0 if BAM 
-        ['A']=CI_NATIVE_NEXT,                                                     // reconstruct character and then \t separator if SAM and no separator for BAM
-        ['B']=CI_NATIVE_NEXT                                                      // reconstruct array and then \t separator if SAM and no separator for BAM
+        ['c']=CI0_NATIVE_NEXT | CI0_TRANS_NOR, ['C']=CI0_NATIVE_NEXT | CI0_TRANS_NOR, // reconstruct number and \t separator is SAM, and don't reconstruct anything if BAM (reconstruction will be done by translator)
+        ['s']=CI0_NATIVE_NEXT | CI0_TRANS_NOR, ['S']=CI0_NATIVE_NEXT | CI0_TRANS_NOR, // -"-
+        ['i']=CI0_NATIVE_NEXT | CI0_TRANS_NOR, ['I']=CI0_NATIVE_NEXT | CI0_TRANS_NOR, // -"-
+        ['f']=CI0_NATIVE_NEXT | CI0_TRANS_NOR,                                      // compressing SAM - a float is stored as text, and when piz with translate to BAM - is not reconstructed, instead - translated
+        ['Z']=CI0_NATIVE_NEXT | CI0_TRANS_NUL, ['H']=CI0_NATIVE_NEXT | CI0_TRANS_NUL, // reconstruct text and then \t separator if SAM and \0 if BAM 
+        ['A']=CI0_NATIVE_NEXT,                                                     // reconstruct character and then \t separator if SAM and no separator for BAM
+        ['B']=CI0_NATIVE_NEXT                                                      // reconstruct array and then \t separator if SAM and no separator for BAM
 }, 
 { // compressing from BAM
-        ['c']=CI_NATIVE_NEXT | CI_TRANS_NOR, ['C']=CI_NATIVE_NEXT | CI_TRANS_NOR, // reconstruct number and \t separator is SAM, and don't reconstruct anything if BAM (reconstruction will be done by translator)
-        ['s']=CI_NATIVE_NEXT | CI_TRANS_NOR, ['S']=CI_NATIVE_NEXT | CI_TRANS_NOR, // -"-
-        ['i']=CI_NATIVE_NEXT | CI_TRANS_NOR, ['I']=CI_NATIVE_NEXT | CI_TRANS_NOR, // -"-
-        ['f']=CI_NATIVE_NEXT,                                                     // compressing SAM - a float is stored as a SPECIAL, and the special reconstructor handles the SAM and BAM reconstructing
-        ['Z']=CI_NATIVE_NEXT | CI_TRANS_NUL, ['H']=CI_NATIVE_NEXT | CI_TRANS_NUL, // reconstruct text and then \t separator if SAM and \0 if BAM 
-        ['A']=CI_NATIVE_NEXT,                                                     // reconstruct character and then \t separator if SAM and no separator for BAM
-        ['B']=CI_NATIVE_NEXT                                                      // reconstruct array and then \t separator if SAM and no separator for BAM
+        ['c']=CI0_NATIVE_NEXT | CI0_TRANS_NOR, ['C']=CI0_NATIVE_NEXT | CI0_TRANS_NOR, // reconstruct number and \t separator is SAM, and don't reconstruct anything if BAM (reconstruction will be done by translator)
+        ['s']=CI0_NATIVE_NEXT | CI0_TRANS_NOR, ['S']=CI0_NATIVE_NEXT | CI0_TRANS_NOR, // -"-
+        ['i']=CI0_NATIVE_NEXT | CI0_TRANS_NOR, ['I']=CI0_NATIVE_NEXT | CI0_TRANS_NOR, // -"-
+        ['f']=CI0_NATIVE_NEXT,                                                     // compressing SAM - a float is stored as a SPECIAL, and the special reconstructor handles the SAM and BAM reconstructing
+        ['Z']=CI0_NATIVE_NEXT | CI0_TRANS_NUL, ['H']=CI0_NATIVE_NEXT | CI0_TRANS_NUL, // reconstruct text and then \t separator if SAM and \0 if BAM 
+        ['A']=CI0_NATIVE_NEXT,                                                     // reconstruct character and then \t separator if SAM and no separator for BAM
+        ['B']=CI0_NATIVE_NEXT                                                      // reconstruct array and then \t separator if SAM and no separator for BAM
 } };
 
 #define DICT_ID_ARRAY(dict_id) (DictId){ .id = { (dict_id).id[0], (dict_id).id[1], '_','A','R','R','A','Y' } } // DTYPE_2
@@ -216,7 +216,6 @@ static bool sam_seg_0A_cigar_cb (VBlockP vb, ContextP ctx, STRp (cigar), uint32_
 // Lookup buffer
 #define lookback_buf zip_lookback_buf // we store the previous rname, pos, strand in their ctx->zip_lookback_buf buffer
 #define lookback_value last_value.i
-#define MAX_LOOKUPS (1 << XA_LOOKBACK_DEPTH_BITS)
 
 // Seg lookback callback for POS item of XA - seg the POS relative to lookback pos, and replace the already segged RNAME with a lookback if there is one.
 static void sam_seg_XA_pos (VBlockP vb, STRp(pos_str), uint32_t rep)
@@ -226,6 +225,7 @@ static void sam_seg_XA_pos (VBlockP vb, STRp(pos_str), uint32_t rep)
 
     ContextP rname_ctx = CTX (OPTION_XA_RNAME);
     ContextP pos_ctx   = CTX (OPTION_XA_POS);
+    ContextP lb_ctx    = CTX (OPTION_XA_LOOKBACK);
 
     // look back for a node with this index and a similar POS - we use word_index to store the original rname_node_index, pos
     WordIndex rname_index = LASTb250(rname_ctx);
@@ -235,9 +235,9 @@ static void sam_seg_XA_pos (VBlockP vb, STRp(pos_str), uint32_t rep)
     if (!segconf.running && str_get_int (STRa(pos_str), &pos)) {
 
         int64_t iterator = -1;
-        while ((lookback = lookback_get_next (vb, rname_ctx, rname_index, &iterator))) {
+        while ((lookback = lookback_get_next (vb, lb_ctx, rname_ctx, rname_index, &iterator))) {
 
-            PosType lookback_pos = lookback_get_value (vb, pos_ctx, lookback);
+            PosType lookback_pos = lookback_get_value (vb, lb_ctx, pos_ctx, lookback).i;
 
             // case: we found a lookback - same rname and close enough pos
             if (ABS (pos-lookback_pos) < MAX_POS_DISTANCE) {
@@ -265,8 +265,8 @@ static void sam_seg_XA_pos (VBlockP vb, STRp(pos_str), uint32_t rep)
 
     seg_add_to_local_resizable (vb, CTX(OPTION_XA_LOOKBACK), lookback, 0);
 
-    lookback_insert (vb, OPTION_XA_RNAME, rname_index, true);
-    lookback_insert (vb, OPTION_XA_POS, pos, false);
+    lookback_insert (vb, OPTION_XA_LOOKBACK, OPTION_XA_RNAME, false, (ValueType){.i = rname_index }, true);
+    lookback_insert (vb, OPTION_XA_LOOKBACK, OPTION_XA_POS,   false, (ValueType){.i = pos }, false);
     
     CTX(OPTION_XA_Z)->lookback_value = lookback; // for use when segging STRAND
 
@@ -279,12 +279,12 @@ static void sam_seg_XA_strand (VBlockP vb, WordIndex strand_index)
     ContextP strand_ctx = CTX (OPTION_XA_STRAND);
     int64_t lookback = CTX(OPTION_XA_Z)->lookback_value; // calculated in sam_seg_XA_pos
 
-    if (lookback && lookback_get_index (vb, strand_ctx, lookback) == strand_index) 
+    if (lookback && lookback_get_index (vb, CTX(OPTION_XA_LOOKBACK), strand_ctx, lookback) == strand_index) 
         seg_by_ctx (vb, STRa(XA_lookback_snip), strand_ctx, 1);
     else
         seg_known_node_index (vb, strand_ctx, strand_index, 1); 
 
-    lookback_insert (vb, OPTION_XA_STRAND, strand_index, true);
+    lookback_insert (vb, OPTION_XA_LOOKBACK, OPTION_XA_STRAND, false, (ValueType){ .i = strand_index }, true);
 }
 
 // split the pos strand-pos string, eg "-10000" to strand "-" and pos "10000"
@@ -323,7 +323,7 @@ static void sam_seg_BWA_XA_field (VBlockSAM *vb, STRp(xa))
         .nitems_lo    = 5, 
         .filter_items = true, 
         .repsep       = {';'}, // including last item
-        .items        = { { .dict_id = { _OPTION_XA_LOOKBACK   }, .separator = { CI_INVISIBLE } }, 
+        .items        = { { .dict_id = { _OPTION_XA_LOOKBACK   }, .separator = { CI0_INVISIBLE } }, 
                           { .dict_id = { _OPTION_XA_RNAME      }, .separator = {','} }, 
                           { .dict_id = { _OPTION_XA_STRAND_POS }, .separator = {','} },
                           { .dict_id = { _OPTION_XA_CIGAR      }, .separator = {','} }, // we don't mix the prirmary CIGAR field as the primary has a SNIP_SPECIAL
@@ -357,9 +357,9 @@ static int sam_seg_which_XA (STRp(xa))
 // this is called for XA that are a container, but not for invalid XA that are segged as a simple snip
 void sam_piz_XA_field_insert_lookback (VBlockP vb)
 {
-    lookback_insert (vb, OPTION_XA_RNAME,  TAKE_LAST_VALUE, true);
-    lookback_insert (vb, OPTION_XA_STRAND, TAKE_LAST_VALUE, true);
-    lookback_insert (vb, OPTION_XA_POS,    TAKE_LAST_VALUE, false);
+    lookback_insert (vb, OPTION_XA_LOOKBACK, OPTION_XA_RNAME,  true, (ValueType){ .i = 0 }, true);
+    lookback_insert (vb, OPTION_XA_LOOKBACK, OPTION_XA_STRAND, true, (ValueType){ .i = 0 }, true);
+    lookback_insert (vb, OPTION_XA_LOOKBACK, OPTION_XA_POS,    true, (ValueType){ .i = 0 }, false);
 }
 
 // ---------------------------------------------------------

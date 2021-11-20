@@ -226,7 +226,7 @@ void vcf_seg_finalize (VBlockP vb_)
                           { .dict_id = { _VCF_oREFALT }, .separator = "\t" },
                           { .dict_id = { _VCF_QUAL },    .separator = "\t" },
                           { .dict_id = { _VCF_FILTER },  .separator = "\t" },
-                          { .dict_id = { _VCF_POS },     .separator = { CI_TRANS_NOR } }, // consume POS before INFO, in case we have INFO/END
+                          { .dict_id = { _VCF_POS },     .separator = { CI0_TRANS_NOR } }, // consume POS before INFO, in case we have INFO/END
                           { .dict_id = { _VCF_INFO },    .separator = "\t" }, // in dual-coordinates, contains INFO/LIFTOVER or INFO/REJTOVER that reconstructs oCHROM, oPOS, oREF, oXSTRAND
                           { .dict_id = { _VCF_FORMAT },  .separator = "\t" },
                           { .dict_id = { _VCF_SAMPLES }, .separator = ""   },
@@ -379,6 +379,9 @@ static void vcf_seg_FORMAT (VBlockVCF *vb, ZipDataLineVCF *dl, STRp(fmt))
         if (possibly_rename) vcf_tags_add_tag (vb, ctxs[i], DTYPE_VCF_FORMAT, sf_names[i], sf_name_lens[i]);
 
         format_mapper.items[i] = (ContainerItem) { .dict_id = dict_id, .separator = {':'} };
+
+        if (dict_id.num == _FORMAT_PS)
+            format_mapper.items[i].separator[1] = CI1_ITEM_CB;
 
         // case: GL_to_PL:  FORMAT field snip is changed here to GL. Note: dict_id remains _FORMAT_GL.
         // so that vcf_seg_one_sample treats it as GL, and converts it to PL.
@@ -546,6 +549,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     }
 
     GET_NEXT_ITEM (VCF_POS);
+    CTX(VCF_POS)->last_txt_index = ENTNUM (vb->txt_data, VCF_POS_str); // consumed by vcf_seg_FORMAT_PS
     vb->last_txt_len (VCF_POS) = VCF_POS_len;
 
     if (vb->line_coords == DC_PRIMARY) {

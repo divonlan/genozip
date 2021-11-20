@@ -544,8 +544,7 @@ void ctx_clone (VBlock *vb)
     COPY_TIMER (ctx_clone);
 }
 
-static void ctx_initialize_ctx (Context *ctx, DidIType did_i, DictId dict_id, DidIType *dict_id_to_did_i_map,
-                                const char *tag_name, unsigned tag_name_len)
+static void ctx_initialize_ctx (ContextP ctx, DidIType did_i, DictId dict_id, DidIType *dict_id_to_did_i_map, STRp(tag_name))
 {
     ctx->did_i       = did_i;
     ctx->st_did_i    = DID_I_NONE;

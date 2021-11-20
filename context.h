@@ -83,8 +83,14 @@ static inline bool NEXTLOCALBIT(ContextP ctx) { BitArrayP b = buf_get_bitarray (
 #define ctx_node_vb(ctx, node_index, snip_in_dict, snip_len) ctx_node_vb_do(ctx, node_index, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
 #define node_word_index(vb,did_i,index) ((index)!=WORD_INDEX_NONE ? ctx_node_vb (&(vb)->contexts[did_i], (index), 0,0)->word_index.n : WORD_INDEX_NONE)
 
-#define CTX(did_i)          (&vb->contexts[did_i])
-#define ZCTX(did_i)         (&z_file->contexts[did_i])
+#define CTX(did_i)   ({ DidIType my_did_i = (did_i); /* could be an expression */\
+                        ASSERT (my_did_i < MAX_DICTS, "CTX(): did_i=%u out of range", my_did_i); /* will be optimized-out for constant did_i */ \
+                        (&vb->contexts[my_did_i]); })
+
+#define ZCTX(did_i)  ({ DidIType my_did_i = (did_i);\
+                        ASSERT (my_did_i < MAX_DICTS, "ZCTX(): did_i=%u out of range", my_did_i);  \
+                        &z_file->contexts[my_did_i]; })
+
 #define last_int(did_i)     contexts[did_i].last_value.i
 #define last_index(did_i)   contexts[did_i].last_value.i
 #define last_float(did_i)   contexts[did_i].last_value.f

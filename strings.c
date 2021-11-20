@@ -14,6 +14,13 @@
 #include <windows.h>
 #endif
 
+bool is_printable[256] = {
+    [9]=1, [10]=1, [13]=1,
+    [32]=1,1,1,1,1,1,1,1,    1,1,1,1,1,1,1,1,    1,1,1,1,1,1,1,1,    1,1,1,1,1,1,1,1, // 32-126
+         1,1,1,1,1,1,1,1,    1,1,1,1,1,1,1,1,    1,1,1,1,1,1,1,1,    1,1,1,1,1,1,1,1,
+         1,1,1,1,1,1,1,1,    1,1,1,1,1,1,1,1,    1,1,1,1,1,1,1,1,    1,1,1,1,1,1,1,1,
+         1,1,1,1,1,1,1,1,    1,1,1,1,1,1,1,1,    1,1,1,1,1,1,1,1,    1,1,1,1,1,1,1    };
+
 char *str_tolower (const char *in, char *out /* out allocated by caller - can be the same as in */)
 {
     char *startout = out;
@@ -499,7 +506,7 @@ uint32_t str_split_do (const char *str, uint32_t str_len,
             px_i++; // skip to first item prefix
         }
 
-        sep = CI_FIXED_0_PAD; // previous fictuous item -1
+        sep = CI0_FIXED_0_PAD; // previous fictuous item -1
         unsigned fixed_len=0;
         for (item_i=0; item_i < max_items; item_i++) {
             items[item_i] = item_i ? items[item_i-1] : str;
@@ -511,25 +518,25 @@ uint32_t str_split_do (const char *str, uint32_t str_len,
                 items[item_i] += px_len;
             }
 
-            bool is_fixed = (sep == CI_FIXED_0_PAD); // previous item was fixed
+            bool is_fixed = (sep == CI0_FIXED_0_PAD); // previous item was fixed
 
             // handle fixed items. not all items need to be fixed, but all the fixed items must be at the beginning of the container
             if (is_fixed) 
                 items[item_i] += fixed_len;
             
-            else if (sep != CI_FIXED_0_PAD)
+            else if (sep != CI0_FIXED_0_PAD)
                 break; // no more fixed items
 
             sep = con->items[item_i].separator[0];
-            fixed_len = sep == CI_FIXED_0_PAD ? con->items[item_i].separator[1] : 0;
+            fixed_len = sep == CI0_FIXED_0_PAD ? con->items[item_i].separator[1] : 0;
 
-            if (sep == CI_FIXED_0_PAD) {
+            if (sep == CI0_FIXED_0_PAD) {
                 num_fixed_item++;
                 if (item_lens) item_lens[item_i] = fixed_len;
             }
         }
 
-        if (sep == CI_INVISIBLE) { // currently, we only support CI_INVISIBLE for the first item as there is no need yet for more
+        if (sep == CI0_INVISIBLE) { // currently, we only support CI0_INVISIBLE for the first item as there is no need yet for more
             sep = con->items[item_i].separator[0];
             items[item_i++] = str;
         }
@@ -555,7 +562,7 @@ uint32_t str_split_do (const char *str, uint32_t str_len,
     if (item_lens) {
         for (uint32_t i=num_fixed_item; i < item_i-1; i++)    
             item_lens[i] = (items[i+1] > items[i]) ? items[i+1] - items[i] - 1 
-                                                   : 0; // items[i] is CI_INVISIBLE
+                                                   : 0; // items[i] is CI0_INVISIBLE
             
         item_lens[item_i-1] = &str[str_len] - items[item_i-1];
     }

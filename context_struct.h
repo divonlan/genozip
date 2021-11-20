@@ -22,7 +22,8 @@ typedef struct Context {
     #define MAX_TAG_LEN 64     // including terminating nul (must be divisible by 8 for Tag struct)
     char tag_name[MAX_TAG_LEN];// nul-terminated tag name 
     DidIType did_i;            // the index of this ctx within the array vb->contexts
-    DidIType st_did_i;         // in --stats, consolidate this context into st_did_i
+    DidIType st_did_i;         // ZIP: in --stats, consolidate this context into st_did_i
+    #define other_did_i st_did_i // PIZ: cache the other context needed for reconstructing this one
     LocalType ltype;           // LT_* - type of local data - included in the section header
     struct FlagsCtx flags;     // flags to be included in section header
     struct FlagsCtx pair_flags;// Used if this file is a PAIR_2 - contains ctx->flags of the PAIR_1

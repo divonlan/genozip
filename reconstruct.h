@@ -22,6 +22,31 @@ extern int32_t reconstruct_from_ctx_do (VBlockP vb, DidIType did_i, char sep, bo
 extern void reconstruct_one_snip (VBlockP vb, ContextP ctx, WordIndex word_index, STRp(snip), bool reconstruct);
 extern void reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, STRp(snip));
 
+extern ContextP reconstruct_get_other_ctx_from_snip (VBlockP vb, ContextP ctx, pSTRp (snip));
+
+extern ContextP recon_multi_dict_id_get_ctx_first_time (VBlockP vb, ContextP ctx, STRp(snip), unsigned ctx_i);
+#define MCTX(ctx_i,snip,snip_len) ((ctx->con_cache.len && *ENT(ContextP, ctx->con_cache, ctx_i)) \
+                                        ? *ENT(ContextP, ctx->con_cache, ctx_i)                  \
+                                        : recon_multi_dict_id_get_ctx_first_time ((VBlockP)vb, ctx, (snip), (snip_len), (ctx_i)))
+
+// use SCTX if we are certain that ctx can only be one other_dict_id in its snips 
+// snip is expected to be : 1-char-code + base64-dict_id + other stuff. snip is modified to be after the dict_id
+#define SCTX(snip) ({ ContextP sctx;                                \
+                      if (ctx->other_did_i != DID_I_NONE)  {        \
+                          snip       += base64_sizeof (DictId) + 1; \
+                          snip##_len -= base64_sizeof (DictId) + 1; \
+                          sctx = CTX(ctx->other_did_i);             \
+                      }                                             \
+                      else                                          \
+                          sctx = reconstruct_get_other_ctx_from_snip (VB, ctx, &snip, &snip##_len); \
+                      sctx;                                         \
+                   })
+
+// a version of SCTX with where just a base64-dict_id
+#define SCTX0(snip) ({ const char *snip0 = (snip)-1;                    \
+                       uint32_t snip0_len = base64_sizeof (DictId) + 1; \
+                       SCTX(snip0); })
+
 extern ValueType reconstruct_peek (VBlockP vb, ContextP ctx, pSTRp(txt));
 extern ValueType reconstruct_peek_do (VBlockP vb, DictId dict_id, pSTRp(txt));
 #define reconstruct_peek_(vb, dict_id, txt, txt_len) reconstruct_peek_do ((VBlockP)(vb), (DictId)(dict_id), (txt), (txt_len))

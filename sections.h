@@ -200,7 +200,6 @@ typedef struct {
 #define TXT_FILENAME_LEN 256
     char     txt_filename[TXT_FILENAME_LEN]; // filename of this single component. without path, 0-terminated. always in base form like .vcf or .sam, even if the original is compressed .vcf.gz or .bam
     uint64_t txt_header_size;         // size of header in original txt file (likely different than reconstructed size if dual-coordinates)  (v12)
-
 } SectionHeaderTxtHeader; 
 
 typedef struct {

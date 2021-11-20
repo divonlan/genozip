@@ -641,6 +641,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_END)
 }
 
 // Called to reconstruct the POS subfield of INFO/LIFTBACK, handling the possibility of INFO/END
+// Also used for FORMAT/PS
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_COPYPOS)
 {
     if (!reconstruct) return false; // no new value
@@ -657,6 +658,9 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_COPYPOS)
     }
     else
         pos = pos_ctx->last_value.i;
+
+    if (snip_len)
+        pos += atoi (snip); // add optional delta (since 13.0.5)
 
     RECONSTRUCT_INT (pos); // vcf_piz_luft_END makes sure it always contains the value of POS, not END
     return false; // no new value

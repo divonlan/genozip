@@ -50,7 +50,7 @@ void container_prepare_snip (ConstContainerP con, STRp(prefixes),
 }
 
 // WARNING: don't pass in con an address of a static container, it is not thread safe! container_prepare_snip temporarily BGEN fields of the container.
-WordIndex container_seg_do (VBlock *vb, Context *ctx, ConstContainerP con, 
+WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con, 
                             // prefixes may be NULL or may be contain a container-wide prefix and per-item prefixes.
                             // The "container-wide prefix" is reconstructed once, at the beginning of the Container.
                             // The per-item prefixes are reconstructed once per repeat, before their respective items. 
@@ -58,8 +58,7 @@ WordIndex container_seg_do (VBlock *vb, Context *ctx, ConstContainerP con,
                             // - then the container-wide prefix terminated by CON_PX_SEP 
                             // - then one prefix per item terminated by CON_PX_SEP
                             // all prefixes may be empty; empty prefixes at the end of the prefix string maybe omitted.
-                            const char *prefixes, unsigned prefixes_len, 
-                            const char *ren_prefixes, unsigned ren_prefixes_len, 
+                            STRp (prefixes), STRp (ren_prefixes),
                             unsigned add_bytes,
                             bool *is_new) // optional out
 {
@@ -143,25 +142,36 @@ CONTAINER_FILTER_FUNC (container_no_filter)
     return true;    
 }
 
-#define IS_CI_SET(flag) (CI_ITEM_HAS_FLAG (item) && ((uint8_t)item->separator[0] & ~(uint8_t)0x80 & flag))
+#define IS_CI0_SET(flag) (CI0_ITEM_HAS_FLAG (item) && ((uint8_t)item->separator[0] & ~(uint8_t)0x80 & flag))
 
 // reconstructs the item separator, returning the number of characters reconstructed
 static inline unsigned container_reconstruct_item_seperator (VBlockP vb, const ContainerItem *item, char *reconstruction_start, bool translating)
 {
+    // callback before separator reconstruction
+    if ((item->separator[1] == CI1_ITEM_CB) &&
+        (!item->separator[0] || IS_PRINTABLE(item->separator[0]))) { // sep[1] flags are valid only if sep[0] is 0 or printable
+
+        ASSPIZ (DT_FUNC(vb, con_item_cb), "data_type=%s doesn't have con_item_cb requested by dict_id=%s. Please upgrade to the latest version of Genozip",
+                dt_name (vb->data_type), dis_dict_id (item->dict_id).s);
+
+        if (!vb->frozen_state.param) // only if we're not just peeking
+            DT_FUNC(vb, con_item_cb)(vb, item->dict_id, reconstruction_start, AFTERENT (char, vb->txt_data) - reconstruction_start);
+    }
+
     if (!item->separator[0])
         return 0;
 
-    else if (translating && IS_CI_SET (CI_TRANS_NUL)) {
+    else if (translating && IS_CI0_SET (CI0_TRANS_NUL)) {
         RECONSTRUCT1 (0);
         return 1;
     }
 
-    else if (!translating && IS_CI_SET (CI_NATIVE_NEXT)) {
+    else if (!translating && IS_CI0_SET (CI0_NATIVE_NEXT)) {
         RECONSTRUCT1 (item->separator[1]);
         return 1;
     }
 
-    else if (item->separator[0] == CI_FIXED_0_PAD) {
+    else if (item->separator[0] == CI0_FIXED_0_PAD) {
         int recon_len = AFTERENT (char, vb->txt_data) - reconstruction_start;
         int pad = (int)item->separator[1] - recon_len;
         if (pad > 0) {
@@ -177,8 +187,8 @@ static inline unsigned container_reconstruct_item_seperator (VBlockP vb, const C
         return 0;
     }
 
-    else if (!CI_ITEM_HAS_FLAG(item)) { // separator, not flag        unsigned sep_0_valid = item->separator[0] >= '\t'; // 1->8 reserved for special separators ; 0=no seperator
-        unsigned sep_1_valid = item->separator[1] >= '\t';
+    else if (!CI0_ITEM_HAS_FLAG(item)) { // separator, not flag        
+        unsigned sep_1_valid = item->separator[1] >= '\t'; // 1->8 reserved for special separators ; 0=no seperator
         
         RECONSTRUCT1 ((char)item->separator[0]);
         if (sep_1_valid) RECONSTRUCT1 ((char)item->separator[1]);
@@ -259,7 +269,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
             const ContainerItem *item = &con->items[i];
             Context *item_ctx = item_ctxs[i];
             bool reconstruct = !flag.genocat_no_reconstruct;
-            bool trans_nor = translating && IS_CI_SET (CI_TRANS_NOR); // check for prohibition on reconstructing when translating
+            bool trans_nor = translating && IS_CI0_SET (CI0_TRANS_NOR); // check for prohibition on reconstructing when translating
 
             // an item filter may filter items in two ways:
             // - returns true - item is filter out, and data is not consumed
@@ -287,11 +297,11 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
 
             if (item->dict_id.num) {  // not a prefix-only or translator-only item
                 reconstruct &= !trans_nor; // check for prohibition on reconstructing when translating
-                reconstruct &= (item->separator[0] != CI_INVISIBLE); // check if this item should never be reconstructed
+                reconstruct &= (item->separator[0] != CI0_INVISIBLE); // check if this item should never be reconstructed
 
                 recon_len = reconstruct_from_ctx (vb, item_ctx->did_i, 0, reconstruct); // -1 if WORD_INDEX_MISSING
 
-                // sum up items' values if needed
+                // sum up items' values if needed (STORE_INDEX is handled at the end of this function)
                 if (ctx->flags.store == STORE_INT)
                     new_value.i += item_ctx->last_value.i;
                 
@@ -305,7 +315,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
             }            
 
             // case: WORD_INDEX_MISSING - delete previous item's separator if it has one (used by SAM_OPTIONAL - sam_seg_optional_all)
-            if (recon_len == -1 && i > 0 && !con->keep_empty_item_sep && !CI_ITEM_HAS_FLAG(item-1))  
+            if (recon_len == -1 && i > 0 && !con->keep_empty_item_sep && !CI0_ITEM_HAS_FLAG(item-1))  
                 vb->txt_data.len -= num_preceding_seps;
 
             // reconstruct separator(s) as needed
@@ -313,7 +323,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
                 num_preceding_seps = container_reconstruct_item_seperator (vb, item, reconstruction_start, translating);
 
             // after all reconstruction and translation is done - move if needed
-            if (translating && IS_CI_SET (CI_TRANS_MOVE))
+            if (translating && IS_CI0_SET (CI0_TRANS_MOVE))
                 vb->txt_data.len += (uint8_t)item->separator[1];
 
             // display 10 first reconstructed characters, but all characters if just this ctx was requested 
@@ -328,8 +338,8 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
         if (con->drop_final_item_sep && last_non_filtered_item_i >= 0) {
             const ContainerItem *item = &con->items[last_non_filtered_item_i]; // last_non_filtered_item_i is the last item that survived the filter, of the last repeat
 
-            vb->txt_data.len -= CI_ITEM_HAS_FLAG(item) ? (translating ? 0 : !!IS_CI_SET (CI_NATIVE_NEXT))
-                                                       : (!!item->separator[0] + !!item->separator[1]);
+            vb->txt_data.len -= CI0_ITEM_HAS_FLAG(item) ? (translating ? 0 : !!IS_CI0_SET (CI0_NATIVE_NEXT))
+                                                       : ((item->separator[0] >= '\t') + (item->separator[1] >= '\t'));
         }
 
         // reconstruct repeats separator, if neeeded
@@ -340,7 +350,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
 
         // call callback if needed now that repeat reconstruction is done (always callback for top level)
         if (con->callback || (con->is_toplevel && DTP (container_cb)))
-            DT_FUNC(vb, container_cb)(vb, ctx->dict_id, con->is_toplevel, rep_i, con->repeats, rep_reconstruction_start, 
+            DT_FUNC(vb, container_cb)(vb, ctx->dict_id, con->is_toplevel, rep_i, con, rep_reconstruction_start, 
                     AFTERENT (char, vb->txt_data) - rep_reconstruction_start, prefixes, prefixes_len);
 
         // in top level: after consuming the line's data, if it is not to be outputted - drop it
@@ -420,12 +430,15 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
     if (con->drop_final_item_sep_of_final_repeat && last_non_filtered_item_i >= 0) {
         const ContainerItem *item = &con->items[last_non_filtered_item_i]; // last_non_filtered_item_i is the last item that survived the filter, of the last repeat
 
-        vb->txt_data.len -= CI_ITEM_HAS_FLAG(item) ? (translating ? 0 : !!IS_CI_SET (CI_NATIVE_NEXT))
+        vb->txt_data.len -= CI0_ITEM_HAS_FLAG(item) ? (translating ? 0 : !!IS_CI0_SET (CI0_NATIVE_NEXT))
                                                    : (!!item->separator[0] + !!item->separator[1]);
     }
      
     if (con->is_toplevel)   
         COPY_TIMER (reconstruct_vb);
+
+    if (ctx->flags.store == STORE_INDEX) // STORE_INDEX for a container means store number of repeats (since 13.0.5)
+        new_value.i += con->repeats;
 
     return new_value;
 }

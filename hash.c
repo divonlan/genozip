@@ -346,14 +346,13 @@ WordIndex hash_global_get_entry (Context *zctx, const char *snip, unsigned snip_
 // 1. if its in the global hash table, with merge_num lower or equal to ours - i.e. added by an earler thread - we take it 
 // 2. if its in the local hash table - i.e. added by us (this vb) earlier - we take it
 // 3. if not found - we add it to the local hash table
-WordIndex hash_get_entry_for_seg (VBlock *segging_vb, Context *vctx,
-                                  const char *snip, unsigned snip_len, 
+WordIndex hash_get_entry_for_seg (VBlock *segging_vb, Context *vctx, STRp(snip), 
                                   WordIndex node_index_if_new,
                                   CtxNode **node)        // out - node if node is found, NULL if not
 {
     // first, search for the snip in the global table
     GlobalHashEnt g_head, *g_hashent = &g_head;
-    g_hashent->next = hash_do (vctx->global_hash_prime, snip, snip_len); // entry in hash table determined by hash function on snip
+    g_hashent->next = hash_do (vctx->global_hash_prime, STRa(snip)); // entry in hash table determined by hash function on snip
 
     for (unsigned depth=0; ; depth++) {
         

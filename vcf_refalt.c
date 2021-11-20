@@ -944,6 +944,38 @@ done:
     return false; // no new value
 }   
 
+// used by FORMAT/PS - reconstructs REF or ALT depending on the parameter - '0' REF or '1'..MAX_ALLELES-1 - ALT
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_COPY_REForALT)
+{
+    if (!reconstruct) return false;
+
+    const char *refalt = last_txt(vb, VCF_REFALT);
+    uint32_t refalt_len = vb->last_txt_len (VCF_REFALT);
+    
+    // shortcut in case of SNP
+    if (refalt_len == 3)
+        RECONSTRUCT1 (refalt[*snip=='0' ? 0 : 2]);
+
+    else {
+        str_split (refalt, refalt_len, 2, '\t', item, true);
+        ASSPIZ0 (n_items, "failed splitting REFALT");
+
+        if (*snip=='0') // REF
+            RECONSTRUCT (items[0], item_lens[0]);
+
+        else {
+            str_split (items[1], item_lens[1], MAX_ALLELES-1, ',', alt, false);
+
+            int allele = (snip_len == 1) ? (*snip - '0')
+                                         : (snip[0] - '0') * 10 + (snip[1] - '0');
+            
+            RECONSTRUCT (alts[allele-1], alt_lens[allele-1]);
+        }
+    }
+
+    return false; // no new value
+}
+
 // --snps-only implementation (called from vcf_piz_container_cb)
 bool vcf_refalt_piz_is_variant_snp (VBlockP vb)
 {

@@ -112,6 +112,7 @@ typedef int64_t PosType;      // used for position coordinate within a genome
 typedef union { // 64 bit
     int64_t i;
     double f;
+    struct { uint32_t index, len; } txt; // txt in txt_data
 } ValueType __attribute__((__transparent_union__));
 
 // global parameters - set before any thread is created, and never change
@@ -249,8 +250,11 @@ typedef uint8_t TranslatorId;
 #define CONTAINER_FILTER_FUNC(func) bool func(VBlockP vb, DictId dict_id, ConstContainerP con, unsigned rep, int item, bool *reconstruct)
 
 // called after reconstruction of each repeat, IF Container.callback or Container.is_top_level is set
-#define CONTAINER_CALLBACK(func) void func(VBlockP vb, DictId dict_id, bool is_top_level, unsigned rep, unsigned num_reps, \
+#define CONTAINER_CALLBACK(func) void func(VBlockP vb, DictId dict_id, bool is_top_level, unsigned rep, ConstContainerP con, \
                                            char *recon, int32_t recon_len, const char *prefixes, uint32_t prefixes_len)
+
+// called after reconstruction of an item, if CI1_ITEM_CB is specified
+#define CONTAINER_ITEM_CALLBACK(func) void func(VBlockP vb, DictId dict_id, const char *recon, uint32_t recon_len)
 
 #define TXTHEADER_TRANSLATOR(func) void func (VBlockP comp_vb, BufferP txtheader_buf)
 

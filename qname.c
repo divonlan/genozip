@@ -66,11 +66,11 @@ static SmallContainer con_illumina_7_fq = {
 static SmallContainer con_bgi_E = {
     .repeats             = 1,
     .nitems_lo           = 5,
-    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI_FIXED_0_PAD, 9 } }, 
-                             { .dict_id = { _SAM_Q1NAME }, .separator = { CI_FIXED_0_PAD, 1 } }, // note: CI_FIXED_0_PAD is only useful if the field is segged as a number (which may be shorter than the field length). if it is segged as a text, the separator will have no effect.
-                             { .dict_id = { _SAM_Q2NAME }, .separator = { CI_FIXED_0_PAD, 3 } },
-                             { .dict_id = { _SAM_Q3NAME }, .separator = { CI_FIXED_0_PAD, 3 } },
-                             { .dict_id = { _SAM_Q4NAME }, .separator = { CI_FIXED_0_PAD, 7 } } } 
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_FIXED_0_PAD, 9 } }, 
+                             { .dict_id = { _SAM_Q1NAME }, .separator = { CI0_FIXED_0_PAD, 1 } }, // note: CI0_FIXED_0_PAD is only useful if the field is segged as a number (which may be shorter than the field length). if it is segged as a text, the separator will have no effect.
+                             { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_FIXED_0_PAD, 3 } },
+                             { .dict_id = { _SAM_Q3NAME }, .separator = { CI0_FIXED_0_PAD, 3 } },
+                             { .dict_id = { _SAM_Q4NAME }, .separator = { CI0_FIXED_0_PAD, 7 } } } 
 };
 
 //--------------------------------------------------------------------------------------------------------------------
@@ -81,10 +81,10 @@ static SmallContainer con_bgi_E = {
 static SmallContainer con_bgi_CL = {
     .repeats             = 1,
     .nitems_lo           = 5,
-    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI_FIXED_0_PAD, 9 } }, 
-                             { .dict_id = { _SAM_Q1NAME }, .separator = { CI_FIXED_0_PAD, 1 } },
-                             { .dict_id = { _SAM_Q2NAME }, .separator = { CI_FIXED_0_PAD, 3 } },
-                             { .dict_id = { _SAM_Q3NAME }, .separator = { CI_FIXED_0_PAD, 3 } },
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_FIXED_0_PAD, 9 } }, 
+                             { .dict_id = { _SAM_Q1NAME }, .separator = { CI0_FIXED_0_PAD, 1 } },
+                             { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_FIXED_0_PAD, 3 } },
+                             { .dict_id = { _SAM_Q3NAME }, .separator = { CI0_FIXED_0_PAD, 3 } },
                              { .dict_id = { _SAM_Q4NAME },                                  } } 
 };
 
@@ -135,9 +135,9 @@ static SmallContainer con_illumina_5i = {
 static SmallContainer con_roche_454 = {
     .repeats             = 1,
     .nitems_lo           = 3,
-    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI_FIXED_0_PAD, 6 } }, 
-                             { .dict_id = { _SAM_Q1NAME }, .separator = { CI_FIXED_0_PAD, 4 } },
-                             { .dict_id = { _SAM_Q2NAME }, .separator = { CI_FIXED_0_PAD, 4 } } } 
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_FIXED_0_PAD, 6 } }, 
+                             { .dict_id = { _SAM_Q1NAME }, .separator = { CI0_FIXED_0_PAD, 4 } },
+                             { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_FIXED_0_PAD, 4 } } } 
 };
 
 // See: https://www.ncbi.nlm.nih.gov/sra/docs/submitformats
@@ -217,7 +217,7 @@ static SmallContainer con_nanopore_ext = {
 static SmallContainer con_ncbi_sra = {
     .repeats             = 1,
     .nitems_lo           = 3,
-    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI_FIXED_0_PAD, 3 } }, 
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, 
                              { .dict_id = { _SAM_Q1NAME }, .separator = "."                   }, 
                              { .dict_id = { _SAM_Q2NAME }                                     } } 
 };

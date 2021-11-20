@@ -7,6 +7,7 @@
 
 #include "genozip.h"
 #include "dispatcher.h"
+#include "reconstruct.h"
 
 extern bool piz_default_skip_section (VBlockP vb, SectionType st, DictId dict_id);
 #define piz_is_skip_section(vb,st,dict_id) (vb->data_type     != DT_NONE && (piz_default_skip_section ((VBlockP)(vb), (st), (dict_id)) || (DT_FUNC (vb, is_skip_section)((VBlockP)(vb), (st), (dict_id)))))
@@ -19,11 +20,6 @@ extern uint32_t piz_uncompress_all_ctxs (VBlockP vb, uint32_t pair_vb_i);
 
 extern bool piz_grep_match (const char *start, const char *after);
 extern bool piz_test_grep (VBlockP vb);
-
-extern ContextP piz_multi_dict_id_get_ctx_first_time (VBlockP vb, ContextP ctx, STRp(snip), unsigned ctx_i);
-#define MCTX(ctx_i,snip,snip_len) (ctx->con_cache.len && *ENT(ContextP, ctx->con_cache, ctx_i)) \
-                                        ? *ENT(ContextP, ctx->con_cache, ctx_i)                 \
-                                        : piz_multi_dict_id_get_ctx_first_time ((VBlockP)vb, ctx, (snip), (snip_len), (ctx_i))
 
 typedef struct { char s[100]; } PizDisCoords; 
 extern PizDisCoords piz_dis_coords (VBlockP vb); // for ASSPIZ

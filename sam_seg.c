@@ -87,7 +87,6 @@ void sam_zip_initialize (void)
 
 static void sam_seg_initialize_0X (VBlockP vb, DidIType lookback_did_i, DidIType rname_did_i, DidIType strand_did_i, DidIType pos_did_i, DidIType cigar_did_i)
 {
-    ContextP lookback_ctx = CTX(lookback_did_i); // invalid if lookback_did_i=DID_I_NONE, that's ok
     ContextP rname_ctx    = CTX(rname_did_i);
     ContextP strand_ctx   = CTX(strand_did_i);
     ContextP pos_ctx      = CTX(pos_did_i);
@@ -95,14 +94,18 @@ static void sam_seg_initialize_0X (VBlockP vb, DidIType lookback_did_i, DidIType
 
     // note: we need to allocate lookback even if reps_per_line=0, lest an XA shows up despite not being in segconf
     if (lookback_did_i != DID_I_NONE) {
-        lookback_init (vb, rname_ctx,  STORE_INDEX);
-        lookback_init (vb, strand_ctx, STORE_INDEX);
-        lookback_init (vb, pos_ctx,    STORE_INT);
-
+        ContextP lookback_ctx = CTX(lookback_did_i); // invalid if lookback_did_i=DID_I_NONE, that's ok
+    
         rname_ctx->no_stons  = true;  // as we store by index
         strand_ctx->no_stons = true;
-        lookback_ctx->flags.store = STORE_INT;
+        lookback_ctx->flags.store        = STORE_INT;
         lookback_ctx->dynamic_size_local = true;
+        lookback_ctx->local_param        = true;
+        lookback_ctx->local.param        = lookback_size_to_local_param (1024);
+
+        lookback_init (vb, lookback_ctx, rname_ctx,  STORE_INDEX); // lookback_ctx->local.param must be set before
+        lookback_init (vb, lookback_ctx, strand_ctx, STORE_INDEX);
+        lookback_init (vb, lookback_ctx, pos_ctx,    STORE_INT);
     }
 
     cigar_ctx->no_stons = true; // as we use local to store long CIGARs in sam_seg_0A_cigar_cb
@@ -261,19 +264,19 @@ void sam_seg_finalize (VBlockP vb)
         .callback     = true,
         .filter_items = true,
         .nitems_lo    = 14,
-        .items        = { { .dict_id = { _SAM_RNAME    }, .separator = { CI_TRANS_NOR                    }, SAM2BAM_RNAME    }, // Translate - output word_index instead of string
-                          { .dict_id = { _SAM_POS      }, .separator = { CI_TRANS_NOR | CI_TRANS_MOVE, 1 }, SAM2BAM_POS      }, // Translate - output little endian POS-1
-                          { .dict_id = { _SAM_MAPQ     }, .separator = { CI_TRANS_NOR                    }, SAM2BAM_U8       }, // Translate - textual to binary number
-                          { .dict_id = { _SAM_BAM_BIN  }, .separator = { CI_TRANS_NOR | CI_TRANS_MOVE, 2 }, SAM2BAM_LTEN_U16 }, // Translate - textual to binary number
-                          { .dict_id = { _SAM_FLAG     }, .separator = { CI_TRANS_NOR | CI_TRANS_MOVE, 4 }, SAM2BAM_LTEN_U16 }, // Translate - textual to binary number
-                          { .dict_id = { _SAM_RNEXT    }, .separator = { CI_TRANS_NOR                    }, SAM2BAM_RNAME    }, // Translate - output word_index instead of string
-                          { .dict_id = { _SAM_PNEXT    }, .separator = { CI_TRANS_NOR | CI_TRANS_MOVE, 4 }, SAM2BAM_POS      }, // Translate - output little endian POS-1
-                          { .dict_id = { _SAM_QNAME    }, .separator = { CI_TRANS_NUL                    }                   }, // normal 
+        .items        = { { .dict_id = { _SAM_RNAME    }, .separator = { CI0_TRANS_NOR                    }, SAM2BAM_RNAME    }, // Translate - output word_index instead of string
+                          { .dict_id = { _SAM_POS      }, .separator = { CI0_TRANS_NOR | CI0_TRANS_MOVE, 1 }, SAM2BAM_POS      }, // Translate - output little endian POS-1
+                          { .dict_id = { _SAM_MAPQ     }, .separator = { CI0_TRANS_NOR                    }, SAM2BAM_U8       }, // Translate - textual to binary number
+                          { .dict_id = { _SAM_BAM_BIN  }, .separator = { CI0_TRANS_NOR | CI0_TRANS_MOVE, 2 }, SAM2BAM_LTEN_U16 }, // Translate - textual to binary number
+                          { .dict_id = { _SAM_FLAG     }, .separator = { CI0_TRANS_NOR | CI0_TRANS_MOVE, 4 }, SAM2BAM_LTEN_U16 }, // Translate - textual to binary number
+                          { .dict_id = { _SAM_RNEXT    }, .separator = { CI0_TRANS_NOR                    }, SAM2BAM_RNAME    }, // Translate - output word_index instead of string
+                          { .dict_id = { _SAM_PNEXT    }, .separator = { CI0_TRANS_NOR | CI0_TRANS_MOVE, 4 }, SAM2BAM_POS      }, // Translate - output little endian POS-1
+                          { .dict_id = { _SAM_QNAME    }, .separator = { CI0_TRANS_NUL                    }                   }, // normal 
                           { .dict_id = { _SAM_CIGAR    }, .separator = ""                                                    }, // handle in special reconstructor - translate textual to BAM CIGAR format + reconstruct l_read_name, n_cigar_op, l_seq
-                          { .dict_id = { _SAM_TLEN     }, .separator = { CI_TRANS_NOR                    }, SAM2BAM_TLEN     }, // must be after CIGAR bc sam_piz_special_TLEN_old needs vb->seq_num
+                          { .dict_id = { _SAM_TLEN     }, .separator = { CI0_TRANS_NOR                    }, SAM2BAM_TLEN     }, // must be after CIGAR bc sam_piz_special_TLEN_old needs vb->seq_num
                           { .dict_id = { _SAM_SQBITMAP }, .separator = "",                                  SAM2BAM_SEQ      }, // Translate - textual format to BAM format
                           { .dict_id = { _SAM_QUAL     }, .separator = "",                                  SAM2BAM_QUAL     }, // Translate - textual format to BAM format, set block_size
-                          { .dict_id = { _SAM_OPTIONAL }, .separator = { CI_TRANS_NOR                    }                   }, // up to v11, this had the SAM2BAM_OPTIONAL translator
+                          { .dict_id = { _SAM_OPTIONAL }, .separator = { CI0_TRANS_NOR                    }                   }, // up to v11, this had the SAM2BAM_OPTIONAL translator
                         }
     };
 
@@ -292,12 +295,12 @@ void sam_seg_finalize (VBlockP vb)
         .callback    = true,  // drop supplementary alignments and alignments without QUAL data
         .nitems_lo   = 9,
         .items       = { { .dict_id = { _SAM_QNAME    }, .separator = "\n"                 }, 
-                         { .dict_id = { _SAM_RNAME    }, .separator = { CI_TRANS_NOR }     }, // needed for reconstructing seq 
-                         { .dict_id = { _SAM_POS      }, .separator = { CI_TRANS_NOR }     }, // needed for reconstructing seq
-                         { .dict_id = { _SAM_PNEXT    }, .separator = { CI_TRANS_NOR }     }, // needed for reconstructing POS (in case of BUDDY)
-                         { .dict_id = { _SAM_FLAG     }, .separator = { CI_TRANS_NOR }, .translator = SAM2FASTQ_FLAG }, // need to know if seq is reverse complemented & if it is R2 ; reconstructs "1" for R1 and "2" for R2
-                         { .dict_id = { _SAM_CIGAR    }, .separator = { CI_TRANS_NOR }     }, // needed for reconstructing seq
-                         { .dict_id = { _SAM_MC_Z     }, .separator = { CI_TRANS_NOR }     }, // consumes OPTION_MC_Z if its on this line, might be needed for buddy CIGAR
+                         { .dict_id = { _SAM_RNAME    }, .separator = { CI0_TRANS_NOR }     }, // needed for reconstructing seq 
+                         { .dict_id = { _SAM_POS      }, .separator = { CI0_TRANS_NOR }     }, // needed for reconstructing seq
+                         { .dict_id = { _SAM_PNEXT    }, .separator = { CI0_TRANS_NOR }     }, // needed for reconstructing POS (in case of BUDDY)
+                         { .dict_id = { _SAM_FLAG     }, .separator = { CI0_TRANS_NOR }, .translator = SAM2FASTQ_FLAG }, // need to know if seq is reverse complemented & if it is R2 ; reconstructs "1" for R1 and "2" for R2
+                         { .dict_id = { _SAM_CIGAR    }, .separator = { CI0_TRANS_NOR }     }, // needed for reconstructing seq
+                         { .dict_id = { _SAM_MC_Z     }, .separator = { CI0_TRANS_NOR }     }, // consumes OPTION_MC_Z if its on this line, might be needed for buddy CIGAR
                          { .dict_id = { _SAM_SQBITMAP }, .separator = "\n",             .translator = SAM2FASTQ_SEQ  }, 
                          { .dict_id = { _SAM_QUAL     }, .separator = "\n",             .translator = SAM2FASTQ_QUAL }, // also moves fastq "line" to R2 (paired file) if needed
                        }
@@ -589,7 +592,7 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
     uint32_t num_items = con_nitems(con);
     if (num_items > 1) { // we have Optional fields, not just the translator item
         if (con.items[num_items-1].separator[0] & 0x80) // is a flag
-            con.items[num_items-1].separator[0] &= ~(CI_NATIVE_NEXT & ~(uint8_t)0x80); // last Optional field has no tab
+            con.items[num_items-1].separator[0] &= ~(CI0_NATIVE_NEXT & ~(uint8_t)0x80); // last Optional field has no tab
         con.items[num_items-1].separator[1] = 0;
         container_seg (vb, CTX(SAM_OPTIONAL), &con, prefixes, prefixes_len, (is_bam ? 3 : 5) * (num_items-1)); // account for : SAM: "MX:i:" BAM: "MXi"
     }
@@ -614,7 +617,7 @@ void sam_seg_QNAME (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(qname), unsigned add
         }
         
         if (vb->line_i==0)
-             qname_segconf_discover_flavor (VB, SAM_QNAME, STRa(qname));
+            qname_segconf_discover_flavor (VB, SAM_QNAME, STRa(qname));
     }
 
     ContextP ctx = CTX(SAM_QNAME);

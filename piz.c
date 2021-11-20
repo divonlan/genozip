@@ -169,25 +169,6 @@ bool piz_test_grep (VBlock *vb)
     return found; 
 }
 
-// get ctx from a multi-dict_id special snip. note that we're careful to only ECTX the ctx_i requested, and not all,
-// so that we don't do a full search of vb->contexts[] for a channel that was not segged and hence has no context
-ContextP piz_multi_dict_id_get_ctx_first_time (VBlockP vb, ContextP ctx, STRp(snip), unsigned ctx_i)
-{
-    if (!ctx->con_cache.len) {
-        ctx->con_cache.len = str_count_char (STRa(snip), '\t') + 1;
-        buf_alloc_zero (vb, &ctx->con_cache, 0, ctx->con_cache.len, ContextP, 1, "con_cache");
-    }
-
-    // note: we get past this point only once per VB, per ctx_i
-    str_split (snip, snip_len, ctx->con_cache.len, '\t', item, true);
-    ASSPIZ (n_items, "Unable to decoded multi-dict-id snip for %s. snip=\"%.*s\"", ctx->tag_name, snip_len, snip);
-
-    DictId item_dict_id;
-    base64_decode (items[ctx_i], &item_lens[ctx_i], item_dict_id.id);
-
-    return (*ENT(ContextP, ctx->con_cache, ctx_i) = ECTX (item_dict_id)); // NULL if no data was segged to this channel    
-}
-
 bool piz_default_skip_section (VBlockP vb, SectionType st, DictId dict_id)
 {
     // --show-dict=DICT - read only the one dictionary

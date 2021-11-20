@@ -16,6 +16,8 @@ typedef enum { SQT_UNKNOWN, SQT_NUKE, SQT_AMINO, SQT_NUKE_OR_AMINO } SeqType;
 
 typedef enum { PL_mux_by_DP_TEST, PL_mux_by_DP_NO, PL_mux_by_DP_YES } PLMuxByDP;
 
+typedef enum { PS_NONE, PS_POS, PS_POS_REF_ALT, PS_UNKNOWN } PSType;
+
 // seg configuration set prior to starting to seg a file during segconfig_calculate or txtheader_zip_read_and_compress
 typedef struct {
 
@@ -46,7 +48,8 @@ typedef struct {
     bool vcf_is_varscan;        // this VCF file was produced by VarScan
     uint64_t count_dosage[2];   // used to calculate pc_has_dosage
     float pc_has_dosage;        // % of the samples x lines that have a valid (0-2) dosage value [0.0,1.0]
-
+    PSType ps_type;
+    
     PLMuxByDP PL_mux_by_DP;
     Mutex PL_mux_by_DP_mutex;
 

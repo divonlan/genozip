@@ -28,7 +28,7 @@ static STRl(ENST_snip, 200);
 
 void gff3_zip_initialize (void)
 {
-    static SmallContainer enst_con = { .repeats=1, .nitems_lo=1, .items = { { .dict_id = { _EnNSTid }, .separator = { CI_FIXED_0_PAD, 11 } } } };
+    static SmallContainer enst_con = { .repeats=1, .nitems_lo=1, .items = { { .dict_id = { _EnNSTid }, .separator = { CI0_FIXED_0_PAD, 11 } } } };
     ENST_snip_len = sizeof (ENST_snip);
     container_prepare_snip ((ConstContainerP)&enst_con, "\4\4ENST\4", 7, ENST_snip, &ENST_snip_len); 
 }

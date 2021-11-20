@@ -18,6 +18,7 @@ Details                          Type        Size      .gz Size  .genozip  Genoz
 :ref:`details<benchmark-CRAM1>`  CRAM        15 GB               9.8 GB    1.5X                      Illumina NovaSeq + bwa mem        `The European Bioinformatics Institute <ftp://ftp.sra.ebi.ac.uk/vol1/run/ERR323/ERR3239334/NA12878.final.cram>`_
 :ref:`details<benchmark-VCF1>`   VCF         175.3GB   27 GB     7.8 GB    22.4X        3.3X         3202 samples                      `1000 Genome Project <ftp://ftp=trace.ncbi.nih.gov/1000genomes/ftp/release/20110521/20201028_CCDG_14151_B01_GRM_WGS_2020=08=05_chr22.recalibrated_variants.vcf.gz>`_
 :ref:`details<benchmark-VCF2>`   VCF         1.1 GB    241.8 MB  85.8 MB   12.7X        2.8X         30x Illumina NovaSeq + Dragen     Unpublished
+:ref:`details<benchmark-VCF3>`   VCF         26 GB     1.9 GB    315.5 MB  84.3X        6.2X         Rice                              `3K Rice Genome <https://3kricegenome.s3.amazonaws.com/9311/IRIS_313-10000.snp.vcf.gz>`_
 :ref:`details<benchmark-FASTA1>` FASTA       1.2 GB              5.9 MB    212.2X                    Covid-19 multi-FASTA              `coronavirus.innar.com <https://coronavirus.innar.com/coronavirus.unwrapped.fasta.zip>`_
 :ref:`details<benchmark-GFF1>`   GFF3        714 KB              32 KB     22.2X                     GRCh38 issues                     `NCBI <https://ftp.ncbi.nlm.nih.gov/pub/grc/human/GRC/Issue_Mapping/GRCh38.p9_issues.gff3>`_
 :ref:`details<benchmark-ME1>`    23andMe     23.6 MB             4.2 MB    5.7X                      Consumer DNA test "raw data"      Unpublished
@@ -333,6 +334,55 @@ Notes:
     ID                        42 B   0.0%    7.4 MB   0.7% 184107.4X
     GENOZIP vs BGZF        85.8 MB 100.0%  241.8 MB 100.0%    2.8X
     GENOZIP vs TXT         85.8 MB 100.0%    1.1 GB 100.0%   12.7X
+
+
+.. _benchmark-VCF3:
+
+**VCF - 3K Rice Genome**
+
+VCF file: IRIS_313-10000.snp.vcf.gz
+Samples: 1   Variants: 409,606,670   Dictionaries: 302   Vblocks: 52 x 512 MB  Sections: 3288
+Genozip version: 13.0.4 github
+Date compressed: 2021-11-20 20:51:00 ACDT
+
+Sections (sorted by % of genozip file):
+NAME                   GENOZIP      %      TXT       %   RATIO
+REF+ALT                93.3 MB  29.6%    1.5 GB   5.9%   16.7X
+QUAL                   70.0 MB  22.2%    2.0 GB   7.8%   29.7X
+INFO/MQ                68.2 MB  21.6%    1.7 GB   6.4%   25.0X
+INFO/DP                52.3 MB  16.6%  593.1 MB   2.2%   11.3X
+INFO/MQ0                6.6 MB   2.1%  360.3 MB   1.4%   54.5X
+INFO                    3.4 MB   1.1%    5.8 GB  22.4% 1757.9X
+FORMAT/DP               2.7 MB   0.8%  561.5 MB   2.1%  211.5X
+FORMAT/PL               2.6 MB   0.8%   11.2 MB   0.0%    4.3X
+FORMAT/GT               2.6 MB   0.8%    1.1 GB   4.4%  454.9X
+Other                   2.6 MB   0.8%  716.6 MB   2.7%  280.6X
+FORMAT                  2.5 MB   0.8%    2.1 GB   8.1%  848.9X
+INFO/QD                 2.1 MB   0.7%    6.8 MB   0.0%    3.3X
+FORMAT/AD               1.1 MB   0.3%    5.2 MB   0.0%    4.7X
+FILTER                902.5 KB   0.3%  785.2 MB   3.0%  890.9X
+FORMAT/GQ             811.5 KB   0.3%    2.7 MB   0.0%    3.4X
+POS                   715.0 KB   0.2%    3.2 GB  12.2% 4627.1X
+INFO/MQRankSum        647.9 KB   0.2%    2.3 MB   0.0%    3.6X
+INFO/ReadPosRankSum   643.2 KB   0.2%    2.2 MB   0.0%    3.5X
+INFO/BaseQRankSum     638.8 KB   0.2%    2.2 MB   0.0%    3.5X
+INFO/HaplotypeScore   443.5 KB   0.1%    7.7 MB   0.0%   17.8X
+INFO/FS               373.2 KB   0.1%    7.2 MB   0.0%   19.7X
+CHROM                 137.7 KB   0.0%    4.4 GB  17.1% 33717.5X
+INFO/MLEAF             82.6 KB   0.0%    6.1 MB   0.0%   75.2X
+INFO/MLEAC             82.6 KB   0.0%    1.4 MB   0.0%   17.7X
+INFO/AF                82.1 KB   0.0%    6.1 MB   0.0%   75.6X
+INFO/RPA               77.6 KB   0.0%  317.9 KB   0.0%    4.1X
+INFO/RU                64.3 KB   0.0%  138.0 KB   0.0%    2.1X
+TXT_HEADER             46.7 KB   0.0%  546.0 KB   0.0%   11.7X
+INFO/Dels              35.0 KB   0.0%    5.1 MB   0.0%  149.8X
+INFO/AC                 4.7 KB   0.0%    1.4 MB   0.0%  313.4X
+INFO/STR                2.1 KB   0.0%         -   0.0%    0.0X
+COORDS                   547 B   0.0%         -   0.0%    0.0X
+INFO/AN                   83 B   0.0%  321.7 MB   1.2% 4064608.5X
+ID                        42 B   0.0%  781.3 MB   2.9% 19505078.0X
+GENOZIP vs BGZF       315.5 MB 100.0%    1.9 GB 100.0%    6.2X
+GENOZIP vs TXT        315.5 MB 100.0%   26.0 GB 100.0%   84.3X
 
 
 .. _benchmark-FASTA1:

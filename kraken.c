@@ -132,8 +132,8 @@ void kraken_seg_finalize (VBlockP vb)
         .is_toplevel    = true,
         .callback       = true,
         .nitems_lo      = 2,
-        .items          = { { .dict_id = { _KRAKEN_QNAME },  .separator = { CI_TRANS_NUL /* '\0' */} },
-                            { .dict_id = { _KRAKEN_TAXID },  .separator = { CI_TRANS_NOR /* no reconstruct */ } } },
+        .items          = { { .dict_id = { _KRAKEN_QNAME },  .separator = { CI0_TRANS_NUL /* '\0' */} },
+                            { .dict_id = { _KRAKEN_TAXID },  .separator = { CI0_TRANS_NOR /* no reconstruct */ } } },
     };
 
     container_seg (vb, CTX(KRAKEN_TOP2TAXID), (ContainerP)&top2taxid, 0, 0, 0);

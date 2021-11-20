@@ -16,10 +16,14 @@
             //"program": "${workspaceFolder}/genounzip.exe",
             //"program": "${workspaceFolder}/genols-debug.exe",
             
-            "args" : ["bug.bam", "-f"],
-            // "args" : ["--decompress", "--test", "--show-con", "bug.bam.genozip"],
-
-            "stopAtEntry": false,
+            // "args" : ["-ftw", "private/test/test.human2.filtered.snp.vcf"],
+            //"args" : ["-dt@1", "private/test/test.human2.filtered.snp.vcf.genozip", "--show-con"],
+            // "args" : ["-ftw", "private/test/test.giab.vcf"],
+            // "args" : ["-dt", "private/test/test.giab.vcf.genozip"],
+            // "args" : ["-dt", "private/test/test.NovaSeq.bam.genozip"],
+            "args" : ["--decompress", "--test", "--echo", "private/test/test.BGI.sam.genozip"],
+            // "args" : ["--echo", "-f", "--md5", "-o", "private/test/tmp/output.genozip", "private/test/basic.chain"],
+                        "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
             "externalConsole": false,

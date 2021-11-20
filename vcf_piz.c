@@ -15,11 +15,16 @@
 #include "codec.h"
 #include "reconstruct.h"
 #include "piz.h"
+#include "lookback.h"
 
 bool vcf_piz_read_one_vb (VBlock *vb, Section sl)
 { 
     VB_VCF->last_end_line_i = LAST_LINE_I_INIT;
-    return true;
+
+    if (CTX(FORMAT_PS)->dict.len)  // this file has PS
+        lookback_init (vb, CTX(VCF_LOOKBACK), CTX (FORMAT_PS), STORE_INT);
+
+    return true; // all good
 }
 
 // determine whether we should reconstruct this VB in LUFT coordinates. this is the is_translation callback defined in TRANSLATIONS
@@ -194,15 +199,35 @@ static void inline vcf_piz_append_ostatus_to_INFO (VBlockP vb)
     RECONSTRUCT (snip, snip_len);
 }
 
+CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb)
+{
+    switch (dict_id.num) {
+
+        case _FORMAT_PS:
+            lookback_insert_txt (vb, VCF_LOOKBACK, FORMAT_PS, STRa(recon));
+            break;
+
+        default:
+            ASSPIZ (false, "vcf_piz_con_item_cb doesn't know how to handle dict_id=%s. Please upgrade to the latest version of Genozip", 
+                    dis_dict_id (dict_id).s);
+    }
+}
+
 CONTAINER_CALLBACK (vcf_piz_container_cb)
 {
     VBlockVCFP vcf_vb = (VBlockVCFP)vb;
     #define have_INFO_SF  (vcf_vb->sf_snip.len > 0)
 
     // case: we have an INFO/SF field and we reconstructed and we reconstructed a repeat (i.e. one ht) GT field of a sample 
-    if (dict_id.num == _FORMAT_GT && have_INFO_SF) 
-        vcf_piz_GT_cb_calc_INFO_SF (vcf_vb, rep, recon, recon_len);
-
+    if (dict_id.num == _FORMAT_GT) {
+    
+        // after first HT is reconstructed, re-write the predictable phase (note: predictable phases are only used for ploidy=2)
+        if (rep==0 && con->repsep[0] == '&') 
+            vcf_piz_FORMAT_GT_rewrite_predicted_phase (vb, STRa (recon));
+        
+        if (have_INFO_SF) 
+            vcf_piz_GT_cb_calc_INFO_SF (vcf_vb, rep, recon, recon_len);
+    }
     else if (is_top_level) {
 
         // case: we have an INFO/SF field and we reconstructed one VCF line
@@ -224,6 +249,11 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
     else if (flag.show_ostatus && dict_id.num == _VCF_INFO) 
         vcf_piz_append_ostatus_to_INFO (vb);
 
-    else if (dict_id.num == _VCF_SAMPLES && flag.samples) 
-        vcf_piz_SAMPLES_subset_samples (vcf_vb, rep, num_reps, recon_len);
+    else if (dict_id.num == _VCF_SAMPLES) {
+
+        ctx_set_last_value (vb, CTX(VCF_LOOKBACK), (ValueType){ .i = con->repeats });
+
+        if (flag.samples) 
+            vcf_piz_SAMPLES_subset_samples (vcf_vb, rep, con->repeats, recon_len);
+    }
 }
