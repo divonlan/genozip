@@ -220,11 +220,14 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
 
     // case: we have an INFO/SF field and we reconstructed and we reconstructed a repeat (i.e. one ht) GT field of a sample 
     if (dict_id.num == _FORMAT_GT) {
-    
         // after first HT is reconstructed, re-write the predictable phase (note: predictable phases are only used for ploidy=2)
         if (rep==0 && con->repsep[0] == '&') 
             vcf_piz_FORMAT_GT_rewrite_predicted_phase (vb, STRa (recon));
-        
+   
+        if (rep==1 && vb->flags.vcf.has_null_DP && con->repeats==2 && 
+            con->items[0].separator[1] != CI1_ITEM_PRIVATE/*override flag*/) 
+            vcf_piz_GT_cb_null_GT_if_null_DP (vb, recon);
+
         if (have_INFO_SF) 
             vcf_piz_GT_cb_calc_INFO_SF (vcf_vb, rep, recon, recon_len);
     }

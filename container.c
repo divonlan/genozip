@@ -147,9 +147,10 @@ CONTAINER_FILTER_FUNC (container_no_filter)
 // reconstructs the item separator, returning the number of characters reconstructed
 static inline unsigned container_reconstruct_item_seperator (VBlockP vb, const ContainerItem *item, char *reconstruction_start, bool translating)
 {
+    #define IS_VALID_SEP1_FLAG (!item->separator[0] || IS_PRINTABLE(item->separator[0])) // sep[1] flags are valid only if sep[0] is 0 or printable
+
     // callback before separator reconstruction
-    if ((item->separator[1] == CI1_ITEM_CB) &&
-        (!item->separator[0] || IS_PRINTABLE(item->separator[0]))) { // sep[1] flags are valid only if sep[0] is 0 or printable
+    if (item->separator[1] == CI1_ITEM_CB && IS_VALID_SEP1_FLAG) {
 
         ASSPIZ (DT_FUNC(vb, con_item_cb), "data_type=%s doesn't have con_item_cb requested by dict_id=%s. Please upgrade to the latest version of Genozip",
                 dt_name (vb->data_type), dis_dict_id (item->dict_id).s);
@@ -157,7 +158,7 @@ static inline unsigned container_reconstruct_item_seperator (VBlockP vb, const C
         if (!vb->frozen_state.param) // only if we're not just peeking
             DT_FUNC(vb, con_item_cb)(vb, item->dict_id, reconstruction_start, AFTERENT (char, vb->txt_data) - reconstruction_start);
     }
-
+    
     if (!item->separator[0])
         return 0;
 

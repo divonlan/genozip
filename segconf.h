@@ -49,7 +49,8 @@ typedef struct {
     uint64_t count_dosage[2];   // used to calculate pc_has_dosage
     float pc_has_dosage;        // % of the samples x lines that have a valid (0-2) dosage value [0.0,1.0]
     PSType ps_type;
-    
+    bool has_null_DP;           // File has FORMAT/DP, and some of the DP values are '.' 
+
     PLMuxByDP PL_mux_by_DP;
     Mutex PL_mux_by_DP_mutex;
 

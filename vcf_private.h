@@ -257,6 +257,11 @@ extern void vcf_samples_seg_initialize (VBlockVCFP vb);
 extern const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *len, char *next_field, bool *has_13, const char *backup_luft_samples, uint32_t backup_luft_samples_len);
 extern void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCF *vb);
 extern void vcf_piz_FORMAT_GT_rewrite_predicted_phase (VBlockP vb, char *recon, uint32_t recon_len);
+
+// FORMAT/GT stuff
+extern WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, STRp(cell), bool has_ps, bool has_null_dp);
+extern void vcf_piz_GT_cb_null_GT_if_null_DP (VBlockP vb , char *recon);
+
 #define IS_TRIVAL_FORMAT_SUBFIELD ((!recon_len || (recon_len==1 && *recon=='.')) && dict_id_is_vcf_format_sf (ctx->dict_id))
 extern void vcf_FORMAT_PL_decide (VBlockVCFP vb);
 extern void vcf_FORMAT_PL_after_vbs (void);

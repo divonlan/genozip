@@ -100,7 +100,8 @@ typedef union SectionFlags {
     union FlagsVbHeader {
         struct FlagsVbHeaderVcf {
             uint8_t coords           : 2; // DC_PRIMARY if it contains TOPLEVEL container, DC_LUFT if LUFT toplevel container, or DC_BOTH if both (DC_NONE prior to v12)
-            uint8_t unused           : 6;
+            uint8_t has_null_DP      : 1; // since 13.0.5: "has_null_DP" algorithm is used
+            uint8_t unused           : 5;
         } vcf;
         struct FlagsVbHeaderSam {
             uint8_t unused           : 2; // for now, reserved for coords, should we have a dual-coord SAM in the future

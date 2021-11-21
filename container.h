@@ -24,21 +24,22 @@ typedef struct ContainerItem {
     uint8_t did_i_small;                   // PIZ only: can store dids 0->254, 255 means did_i too large to store
 
     // special values of seperator[0]
-    #define CI0_NONE        ((uint8_t)0x00) // no seperator 
-    #define CI0_INVISIBLE   ((uint8_t)0x01) // this item does not appear in the original or reconstructed text. it should be consumed with reconstruct=false
-    #define CI0_FIXED_0_PAD ((uint8_t)0x02) // fixed width, zero-left-padded, width in sep[2] (introduced v13)
+    #define CI0_NONE         ((uint8_t)0x00) // no seperator 
+    #define CI0_INVISIBLE    ((uint8_t)0x01) // this item does not appear in the original or reconstructed text. it should be consumed with reconstruct=false
+    #define CI0_FIXED_0_PAD  ((uint8_t)0x02) // fixed width, zero-left-padded, width in sep[2] (introduced v13)
 
     // separator[0] values with bit 7 set (0x80) are interpreted as flags rather than a separator, in 
     // which case separator[1] is a parameter of the flags
     #define CI0_ITEM_HAS_FLAG(item) ((uint8_t)(item)->separator[0] & 0x80)
-    #define CI0_TRANS_NUL   ((uint8_t)0x81) // In translated mode: '\0' separator 
-    #define CI0_TRANS_NOR   ((uint8_t)0x82) // In translated mode: reconstruct prefix, consume but don't reconstruct value. If item is a sub-container - NOT propagated to this sub-container.
-    #define CI0_TRANS_MOVE  ((uint8_t)0x84) // (ORed) in addition: in translated: txt_data.len is moved separator[1] bytes (0-255), after all recontruction and/or translation
-    #define CI0_NATIVE_NEXT ((uint8_t)0x88) // in non-translated mode: separator is in separator[1]
+    #define CI0_TRANS_NUL    ((uint8_t)0x81) // In translated mode: '\0' separator 
+    #define CI0_TRANS_NOR    ((uint8_t)0x82) // In translated mode: reconstruct prefix, consume but don't reconstruct value. If item is a sub-container - NOT propagated to this sub-container.
+    #define CI0_TRANS_MOVE   ((uint8_t)0x84) // (ORed) in addition: in translated: txt_data.len is moved separator[1] bytes (0-255), after all recontruction and/or translation
+    #define CI0_NATIVE_NEXT  ((uint8_t)0x88) // in non-translated mode: separator is in separator[1]
 
     // special values of separator[1]
-    #define CI1_NONE        ((uint8_t)0x00) // no seperator 
-    #define CI1_ITEM_CB     ((uint8_t)0x01) // item callback
+    #define CI1_NONE         ((uint8_t)0x00) // no seperator 
+    #define CI1_ITEM_CB      ((uint8_t)0x01) // item callback
+    #define CI1_ITEM_PRIVATE ((uint8_t)0x02) // flag interpreted by the context logic, ignored by container code
 
     uint8_t separator[2];                   // 2 byte separator reconstructed after the item (or flags)
     
