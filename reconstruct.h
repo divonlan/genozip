@@ -50,6 +50,7 @@ extern ContextP recon_multi_dict_id_get_ctx_first_time (VBlockP vb, ContextP ctx
 extern ValueType reconstruct_peek (VBlockP vb, ContextP ctx, pSTRp(txt));
 extern ValueType reconstruct_peek_do (VBlockP vb, DictId dict_id, pSTRp(txt));
 #define reconstruct_peek_(vb, dict_id, txt, txt_len) reconstruct_peek_do ((VBlockP)(vb), (DictId)(dict_id), (txt), (txt_len))
+extern int64_t reconstruct_peek_local_int (VBlockP vb, ContextP ctx, int offset);
 
 extern void reconstruct_set_buddy (VBlockP vb);
 extern bool reconstruct_from_buddy (VBlockP vb, ContextP ctx, STRp(snip), bool reconstruct, ValueType *new_value);

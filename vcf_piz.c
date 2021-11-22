@@ -224,7 +224,7 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
         if (rep==0 && con->repsep[0] == '&') 
             vcf_piz_FORMAT_GT_rewrite_predicted_phase (vb, STRa (recon));
    
-        if (rep==1 && vb->flags.vcf.has_null_DP && con->repeats==2 && 
+        if (rep==1 && vb->flags.vcf.use_null_DP_method && con->repeats==2 && 
             con->items[0].separator[1] != CI1_ITEM_PRIVATE/*override flag*/) 
             vcf_piz_GT_cb_null_GT_if_null_DP (vb, recon);
 

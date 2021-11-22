@@ -129,6 +129,7 @@ typedef struct Context {
     #define zip_lookback_buf word_list  // ZIP VB: use word_list as lookback_buf
 
     bool semaphore;            // valid within the context of reconstructing a single line. MUST be reset ahead of completing the line.
+    bool is_frozen;            // PIZ: state is frozen because we're currently peeking
 
     // ----------------------------
     // ZIP in z_file only
@@ -141,7 +142,7 @@ typedef struct Context {
     #define reconstruct_state_start(ctx) ((char*)&(ctx)->last_value)
     #define reconstruct_state_size_formula  ((char*)(&evb->contexts[0].pair_b250_iter + 1) - (char*)(&evb->contexts[0].last_value))
 
-    ValueType last_value;  // ZIP/PIZ: last value of this context (it can be a basis for a delta, used for BAM translation, and other uses)
+    ValueType last_value;      // ZIP/PIZ: last value of this context (it can be a basis for a delta, used for BAM translation, and other uses)
     int64_t last_delta;        // last delta value calculated
     
     #define INVALID_LAST_TXT_INDEX ((uint32_t)-1)

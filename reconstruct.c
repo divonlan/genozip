@@ -21,18 +21,22 @@
 // Special values:
 // "-" - negated previous value
 // ""  - negated previous delta
-static int64_t reconstruct_from_delta (VBlock *vb, 
-                                       Context *my_ctx,   // use and store last_delta
-                                       Context *base_ctx, // get last_value
-                                       const char *delta_snip, unsigned delta_snip_len,
+static int64_t reconstruct_from_delta (VBlockP vb, 
+                                       ContextP my_ctx,   // use and store last_delta
+                                       ContextP base_ctx, // get last_value
+                                       STRp(delta_snip),
                                        bool reconstruct) 
 {
     ASSPIZ (delta_snip, "delta_snip is NULL. vb_i=%u", vb->vblock_i);
     ASSPIZ (base_ctx->flags.store == STORE_INT, "reconstructing %s - calculating delta \"%.*s\" from a base of %s, but %s, doesn't have STORE_INT. vb_i=%u line_in_vb=%"PRIu64,
             my_ctx->tag_name, delta_snip_len, delta_snip, base_ctx->tag_name, base_ctx->tag_name, vb->vblock_i, vb->line_i - vb->first_line);
 
+    int64_t base_value = (my_ctx->flags.delta_peek && my_ctx != base_ctx)
+        ? reconstruct_peek (vb, base_ctx, 0, 0).i // value of this line/sample - whether already encountered or peek a future value
+        : base_ctx->last_value.i; // use last_value even if base_ctx not encountered yet
+
     if (delta_snip_len == 1 && delta_snip[0] == '-')
-        my_ctx->last_delta = -2 * base_ctx->last_value.i; // negated previous value
+        my_ctx->last_delta = -2 * base_value; // negated previous value
 
     else if (!delta_snip_len)
         my_ctx->last_delta = -my_ctx->last_delta; // negated previous delta
@@ -40,7 +44,7 @@ static int64_t reconstruct_from_delta (VBlock *vb,
     else 
         my_ctx->last_delta = (int64_t)strtoull (delta_snip, NULL, 10 /* base 10 */); // strtoull can handle negative numbers, despite its name
 
-    int64_t new_value = base_ctx->last_value.i + my_ctx->last_delta;  
+    int64_t new_value = base_value + my_ctx->last_delta;  
     if (reconstruct) RECONSTRUCT_INT (new_value);
 
     return new_value;
@@ -48,10 +52,10 @@ static int64_t reconstruct_from_delta (VBlock *vb,
 
 #define ASSERT_IN_BOUNDS \
     ASSPIZ (ctx->next_local < ctx->local.len, \
-            "unexpected end of ctx->local data in %s (len=%u ltype=%s lcodec=%s did_i=%u)", \
-            ctx->tag_name, (uint32_t)ctx->local.len, lt_name (ctx->ltype), codec_name (ctx->lcodec), ctx->did_i)
+            "unexpected end of ctx->local data in %s (len=%u next_local=%u ltype=%s lcodec=%s did_i=%u)", \
+            ctx->tag_name, (uint32_t)ctx->local.len, ctx->next_local, lt_name (ctx->ltype), codec_name (ctx->lcodec), ctx->did_i)
 
-static uint32_t reconstruct_from_local_text (VBlock *vb, Context *ctx, bool reconstruct)
+static uint32_t reconstruct_from_local_text (VBlockP vb, ContextP ctx, bool reconstruct)
 {
     uint32_t start = ctx->next_local; 
     ARRAY (char, data, ctx->local);
@@ -68,33 +72,31 @@ static uint32_t reconstruct_from_local_text (VBlock *vb, Context *ctx, bool reco
     return snip_len;
 }
 
-static int64_t reconstruct_from_local_int (VBlock *vb, Context *ctx, char separator /* 0 if none */, bool reconstruct)
+static int64_t reconstruct_from_local_int (VBlockP vb, ContextP ctx, char separator /* 0 if none */, bool reconstruct)
 {
     ASSERT_IN_BOUNDS;
 
     int64_t num=0;
 
     switch (ctx->ltype) {
+        case LT_UINT8:  num = NEXTLOCAL(uint8_t,  ctx); break;
         case LT_UINT32: num = NEXTLOCAL(uint32_t, ctx); break;
+        case LT_INT8:   num = NEXTLOCAL(int8_t,   ctx); break;
         case LT_INT32:  num = NEXTLOCAL(int32_t,  ctx); break;
         case LT_UINT16: num = NEXTLOCAL(uint16_t, ctx); break;
         case LT_INT16:  num = NEXTLOCAL(int16_t,  ctx); break;
-        case LT_UINT8:  num = NEXTLOCAL(uint8_t,  ctx); break;
-        case LT_INT8:   num = NEXTLOCAL(int8_t,   ctx); break;
         case LT_UINT64: num = NEXTLOCAL(uint64_t, ctx); break;
         case LT_INT64:  num = NEXTLOCAL(int64_t,  ctx); break;
         default: 
             ASSPIZ (false, "Unexpected ltype=%s(%u)", lt_name(ctx->ltype), ctx->ltype); 
     }
 
-    // TO DO: RECONSTRUCT_INT won't reconstruct large uint64_t correctly
     if (reconstruct) { 
-        static int64_t minus_1[NUM_LOCAL_TYPES] = { // how -1 casted to a type would look in int64_t
-            [LT_UINT64]=(uint64_t)-1, [LT_UINT32]=(uint32_t)-1, [LT_UINT16]=(uint16_t)-1, [LT_UINT8]=(uint8_t)-1, 
-            [LT_INT64]=-1, [LT_INT32]=-1, [LT_INT16]=-1, [LT_INT8]=-1 };
-
-        if (VB_DT(DT_VCF) && num==minus_1[ctx->ltype] && dict_id_is_vcf_format_sf (ctx->dict_id)) 
+        if (VB_DT(DT_VCF) && num==lt_desc[ctx->ltype].max_int && dict_id_is_vcf_format_sf (ctx->dict_id)
+            && !lt_desc[ctx->ltype].is_signed) {
             RECONSTRUCT1 ('.');
+            num = 0; // we consider FORMAT fields that are . to be 0.
+        }
         else 
             RECONSTRUCT_INT (num);
         
@@ -104,9 +106,35 @@ static int64_t reconstruct_from_local_int (VBlock *vb, Context *ctx, char separa
     return num;
 }
 
+int64_t reconstruct_peek_local_int (VBlockP vb, ContextP ctx, int offset /*0=next_local*/)
+{
+    ASSERT_IN_BOUNDS;
+
+    int64_t num=0;
+
+    switch (ctx->ltype) {
+        case LT_UINT8:  num = PEEKNEXTLOCAL(uint8_t,  ctx, offset); break;
+        case LT_UINT32: num = PEEKNEXTLOCAL(uint32_t, ctx, offset); break;
+        case LT_INT8:   num = PEEKNEXTLOCAL(int8_t,   ctx, offset); break;
+        case LT_INT32:  num = PEEKNEXTLOCAL(int32_t,  ctx, offset); break;
+        case LT_UINT16: num = PEEKNEXTLOCAL(uint16_t, ctx, offset); break;
+        case LT_INT16:  num = PEEKNEXTLOCAL(int16_t,  ctx, offset); break;
+        case LT_UINT64: num = PEEKNEXTLOCAL(uint64_t, ctx, offset); break;
+        case LT_INT64:  num = PEEKNEXTLOCAL(int64_t,  ctx, offset); break;
+        default: 
+            ASSPIZ (false, "Unexpected ltype=%s(%u)", lt_name(ctx->ltype), ctx->ltype); 
+    }
+
+    if (VB_DT(DT_VCF) && num==lt_desc[ctx->ltype].max_int && dict_id_is_vcf_format_sf (ctx->dict_id)
+        && !lt_desc[ctx->ltype].is_signed)
+        return 0; // returns 0 if '.'
+
+    return num;
+}
+
 // two options: 1. the length maybe given (textually) in snip/snip_len. in that case, it is used and vb->seq_len is updated.
 // if snip_len==0, then the length is taken from seq_len.
-void reconstruct_from_local_sequence (VBlock *vb, Context *ctx, STRp(snip))
+void reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, STRp(snip))
 {
     ASSERTNOTNULL (ctx);
 
@@ -143,7 +171,7 @@ ContextP reconstruct_get_other_ctx_from_snip (VBlockP vb, ContextP ctx, pSTRp (s
     DictId dict_id;
     base64_decode ((*snip)+1, &b64_len, dict_id.id);
 
-    Context *other_ctx = ECTX (dict_id);
+    ContextP other_ctx = ECTX (dict_id);
     ASSPIZ (other_ctx, "Failed to get other context: ctx=%s snip=%.*s other_dict_id=%s", 
             ctx->tag_name, STRf(*snip), dis_dict_id(dict_id).s);
   
@@ -216,7 +244,7 @@ void reconstruct_from_buddy_get_textual_snip (VBlockP vb, ContextP ctx, pSTRp(sn
 // Copy from buddy: buddy is data that appears on a specific "buddy line", in this context or another one. Not all lines need
 // Note of difference vs. lookback: with buddy, not all lines need to have the data (eg MC:Z), so the line number is constant,
 // but if we had have used lookback, the lookback value would have been different between different fields.  
-bool reconstruct_from_buddy (VBlock *vb, Context *ctx, STRp(snip), bool reconstruct, ValueType *new_value)
+bool reconstruct_from_buddy (VBlockP vb, ContextP ctx, STRp(snip), bool reconstruct, ValueType *new_value)
 {
     ContextP base_ctx = ctx;
 
@@ -289,14 +317,14 @@ static ValueType reconstruct_from_lookback (VBlockP vb, ContextP ctx, STRp(snip)
     return value; 
 }
 
-void reconstruct_one_snip (VBlock *vb, Context *snip_ctx, 
+void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx, 
                            WordIndex word_index, // WORD_INDEX_NONE if not used.
                            STRp(snip), bool reconstruct) // if false, calculates last_value but doesn't output to vb->txt_data)
 {
     ValueType new_value = {0};
     bool have_new_value = false;
     int64_t prev_value = snip_ctx->last_value.i;
-    Context *base_ctx = snip_ctx; // this will change if the snip refers us to another data source
+    ContextP base_ctx = snip_ctx; // this will change if the snip refers us to another data source
     StoreType store_type = snip_ctx->flags.store;
     bool store_delta = z_file->genozip_version >= 12 && snip_ctx->flags.store_delta; // note: the flag was used for something else in v8
 
@@ -372,7 +400,7 @@ void reconstruct_one_snip (VBlock *vb, Context *snip_ctx,
         ASSPIZ (z_file->data_type == DT_FASTQ, "SNIP_MATE_LOOKUP is not expected in ctx=%s since this isn't a FASTQ", snip_ctx->tag_name);
 
         ASSPIZ (snip_ctx->pair_b250, "no pair_1 b250 data for ctx=%s, while reconstructing pair_2. "
-                "If this file was compressed with Genozip version 9.0.12 or older use the --dts_paired flag. "
+                "If this file was compressed with Genozip version 9.0.12 or older use the --dts_paired command line option. "
                 "You can see the Genozip version used to compress it with 'genocat -w %s'", snip_ctx->tag_name, z_name);
                 
         ctx_get_next_snip (vb, snip_ctx, snip_ctx->pair_flags.all_the_same, true, &snip, &snip_len);
@@ -517,7 +545,7 @@ static inline void reconstruct_store_history (VBlockP vb, ContextP ctx, uint32_t
 static void reconstruct_peek_add_ctx_to_frozen_state (VBlockP vb, ContextP ctx); // forward declaration
 
 // returns reconstructed length or -1 if snip is missing and previous separator should be deleted
-int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i, 
+int32_t reconstruct_from_ctx_do (VBlockP vb, DidIType did_i, 
                                  char sep, // if non-zero, outputs after the reconstruction
                                  bool reconstruct, // if false, calculates last_value but doesn't output to vb->txt_data
                                  const char *func)
@@ -525,7 +553,7 @@ int32_t reconstruct_from_ctx_do (VBlock *vb, DidIType did_i,
     ASSPIZ (did_i < vb->num_contexts, "called from: %s: did_i=%u out of range: vb->num_contexts=%u for vb_i=%u", 
             func, did_i, vb->num_contexts, vb->vblock_i);
 
-    Context *ctx = CTX(did_i);
+    ContextP ctx = CTX(did_i);
 
     // if we're peeking, freeze the context
     if (vb->frozen_state.param) 
@@ -634,9 +662,7 @@ void reconstruct_initialize (void)
 // add a context to the state freeze, unless the context is already frozen
 static void reconstruct_peek_add_ctx_to_frozen_state (VBlockP vb, ContextP ctx)
 {
-    for (char *state=FIRSTENT (char, vb->frozen_state); state < AFTERENT (char, vb->frozen_state); state += freeze_rec_size)
-        if (!memcmp (state, &ctx, sizeof (ContextP)))
-            return; // this context is already frozen
+    ASSPIZ (!ctx->is_frozen, "Context %s is already frozen - reconstruct_peek is accessing it recursively which is not supported", ctx->tag_name);
 
     // add this context to the frozen state
     buf_alloc (vb, &vb->frozen_state, freeze_rec_size, 10*freeze_rec_size, char, 2, "frozen_state");
@@ -646,6 +672,7 @@ static void reconstruct_peek_add_ctx_to_frozen_state (VBlockP vb, ContextP ctx)
     memcpy (reconstruct_state + sizeof (ContextP), reconstruct_state_start(ctx), reconstruct_state_size); // copy state itself
 
     vb->frozen_state.len += freeze_rec_size;
+    ctx->is_frozen = true;
 }
 
 static void reconstruct_peek_unfreeze_state (VBlockP vb)
@@ -655,6 +682,7 @@ static void reconstruct_peek_unfreeze_state (VBlockP vb)
         ContextP ctx;
         memcpy (&ctx, state, sizeof (ContextP));
         memcpy (reconstruct_state_start(ctx), state + sizeof (ContextP), reconstruct_state_size);
+        ctx->is_frozen = false;
     }
 
     // de-activate peek
@@ -666,23 +694,26 @@ static void reconstruct_peek_unfreeze_state (VBlockP vb)
 // Note: txt points into txt_data (past reconstructed or AFTERENT) - caller should copy it elsewhere
 // LIMITATION: cannot be used with contexts that might reconstruct other contexts as that would require
 // chained peeking (i.e. the secondary contexts should be peeked too, not reconstructed)
-ValueType reconstruct_peek (VBlock *vb, Context *ctx, 
+ValueType reconstruct_peek (VBlockP vb, ContextP ctx, 
                             pSTRp(txt)) // optional in / out
 {
-    ASSPIZ (!vb->frozen_state.param, "Requested to peek %s, however already peeking %s. Recursive peeking not supported", 
-            ctx->tag_name, (*FIRSTENT(ContextP, vb->frozen_state))->tag_name);
+    // ASSPIZ (!vb->frozen_state.param, "Requested to peek %s, however already peeking %s. Recursive peeking not supported", 
+    //         ctx->tag_name, (*FIRSTENT(ContextP, vb->frozen_state))->tag_name);
 
     // case: already reconstructed in this line (or sample in the case of VCF/FORMAT)
-    if (ctx_encountered (vb, ctx->did_i) && ctx->last_encounter_was_reconstructed) {
+    if (ctx_encountered (vb, ctx->did_i) && (ctx->last_encounter_was_reconstructed || (!txt && !txt_len))) {
         if (txt) *txt = last_txtx (vb, ctx);
         if (txt_len) *txt_len = ctx->last_txt_len;
         return ctx->last_value;
     }
 
+    bool already_peeking = (bool)vb->frozen_state.param;
+
     // we "freeze" the reconstruction state of all contexts involved in this peek reconstruction (there could be more than
     // one context - eg items of a container, muxed contexts, "other" contexts (SNIP_OTHER etc). We freeze them by saving their state
     // in vb->frozen_state when reconstruct_from_ctx is called for this ctx.
     vb->frozen_state.param = 1; // peeking is active
+
     uint64_t save_txt_data_len = vb->txt_data.len;
 
     reconstruct_from_ctx (vb, ctx->did_i, 0, true);
@@ -697,8 +728,9 @@ ValueType reconstruct_peek (VBlock *vb, Context *ctx,
 
     ValueType last_value = ctx->last_value;
 
-    // unfreeze state of all involved contexts
-    reconstruct_peek_unfreeze_state (vb);
+    // unfreeze state of all involved contexts (only in first peek in case of recursive calls to peek)
+    if (!already_peeking)
+        reconstruct_peek_unfreeze_state (vb);
     
     // delete data reconstructed for peeking
     vb->txt_data.len = save_txt_data_len; 
@@ -708,7 +740,7 @@ ValueType reconstruct_peek (VBlock *vb, Context *ctx,
 
 ValueType reconstruct_peek_do (VBlockP vb, DictId dict_id, pSTRp(txt)) 
 {
-    Context *ctx = ECTX (dict_id); 
+    ContextP ctx = ECTX (dict_id); 
     ASSPIZ (ctx, "context doesn't exist for dict_id=%s", dis_dict_id (dict_id).s);
 
     return reconstruct_peek (vb, ctx, txt, txt_len);

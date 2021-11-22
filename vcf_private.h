@@ -27,10 +27,7 @@ typedef struct {
 
 typedef enum { VCF_v_UNKNOWN, VCF_v4_1, VCF_v4_2, VCF_v4_3, VCF_v4_4, VCF_v4_5 } VcfVersion;
 
-TYPEDEF_MULTIPLEXER(4) DosageMultiplexer;
-
-#define DOSAGExDP_NUM_DPs 50
-TYPEDEF_MULTIPLEXER(3*DOSAGExDP_NUM_DPs+1) DosageDPMultiplexer;
+typedef MULTIPLEXER(4) DosageMultiplexer;
 
 #define VCF_MAX_ARRAY_ITEMS SMALL_CON_NITEMS
 
@@ -61,6 +58,10 @@ typedef struct VBlockVCF {
     // INFO/END
     uint64_t last_end_line_i;       // PIZ: last line on which INFO/END was encountered
     
+    // FORMAT/DP
+    int64_t sum_dp_this_line;       // ZIP: sum of values of FORMAT/DP in samples of this line - '.' counts as 0.
+    uint32_t num_dps_this_line;     // ZIP: possibley less that vcf_num_samples, in case of missing samples or missing DP fields in some of the samples
+    
     // FORMAT/AD
     int64_t ad_values[VCF_MAX_ARRAY_ITEMS];
 
@@ -73,11 +74,13 @@ typedef struct VBlockVCF {
     Buffer last_format;             // ZIP only: cache previous line's FORMAT string
 
     // Multiplexers
-    DosageMultiplexer mux_PLn, mux_GL, mux_GP, mux_PRI, mux_DS, mux_PP, mux_PVAL, mux_FREQ, mux_RD, mux_GQ,
+    DosageMultiplexer mux_PLn, mux_GL, mux_GP, mux_PRI, mux_DS, mux_PP, mux_PVAL, mux_FREQ, mux_RD,
                       mux_AD[2], mux_ADALL[2];
 
     PLMuxByDP PL_mux_by_DP;
-    DosageDPMultiplexer mux_PLy;
+    
+    MULTIPLEXER(1 + 50 * 3) mux_PLy; // num_DP x 3 + 1
+    MULTIPLEXER(1 + 7 * 3) mux_GQ;
 
     // used by CODEC_HAPM (for VCF haplotype matrix) 
     Buffer hapmat_helper_index_buf; // ZIP: used by codec_hapmat_count_alt_alleles 
@@ -253,6 +256,7 @@ extern VcfVersion vcf_header_get_version (void);
 // Samples stuff
 extern void vcf_samples_zip_initialize (void);
 extern void vcf_samples_seg_initialize (VBlockVCFP vb);
+extern void vcf_samples_seg_finalize (VBlockVCFP vb);
 
 extern const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *len, char *next_field, bool *has_13, const char *backup_luft_samples, uint32_t backup_luft_samples_len);
 extern void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCF *vb);

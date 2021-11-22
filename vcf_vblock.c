@@ -18,7 +18,7 @@ void vcf_vb_release_vb (VBlockVCF *vb)
 {
     vb->ploidy = 0;
     vb->use_special_sf = 0;
-    vb->gt_prev_ploidy = 0;
+    vb->gt_prev_ploidy = vb->num_dps_this_line = 0;
     vb->gt_prev_phase = 0;
     vb->main_refalt = NULL;
     vb->main_ref_len = vb->main_alt_len = 0;
@@ -29,7 +29,8 @@ void vcf_vb_release_vb (VBlockVCF *vb)
     vb->vcf_version = 0;
     vb->PL_mux_by_DP = 0;
     vb->PS_encountered_last_line = 0;
-    
+    vb->sum_dp_this_line = 0;
+
     memset (&vb->mux_PLn,    0, sizeof(vb->mux_PLn));
     memset (&vb->mux_GL,     0, sizeof(vb->mux_GL));
     memset (&vb->mux_GP,     0, sizeof(vb->mux_GP));

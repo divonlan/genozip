@@ -127,8 +127,11 @@ static void stats_output_file_metadata (Buffer *buf)
     bufprintf (evb, buf, "Genozip version: %s %s\nDate compressed: %s\n", 
                GENOZIP_CODE_VERSION, arch_get_distribution(), str_time().s);
 
+    bufprintf (evb, buf, "Command line: %s", "");
+    buf_add_string (evb, buf, flags_command_line()); // careful not to use bufprintf with command_line as it can exceed the maximum length in bufprintf
+
     if (license_has_details())
-        bufprintf (evb, buf, "%s\n", license_get_one_line());
+        bufprintf (evb, buf, "\n%s\n", license_get_one_line());
 }
 
 typedef struct {
@@ -271,8 +274,6 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
 #define PC(pc) ((pc==0 || pc>=10) ? 0 : (pc<1 ? 2:1))
 
     // add diagnostic info
-    bufprintf (evb, &z_file->STATS_buf, "Command line: %s", "");
-    buf_add_string (evb, &z_file->STATS_buf, flags_command_line()); // careful not to use bufprintf with command_line as it can exceed the maximum length in bufprintf
     bufprintf (evb, &z_file->STATS_buf, "\nSystem info: OS=%s cores=%u endianity=%s\n", 
                arch_get_os(), arch_get_num_cores(), arch_get_endianity());
     bufprintf (evb, &z_file->STATS_buf, "\nSections (sorted by %% of genozip file):%s\n", "");

@@ -248,6 +248,16 @@ void seg_prepare_multi_dict_id_special_snip (uint8_t special_code, unsigned num_
     *out_snip_len = (snip + snip_len) - out_snip;
 }
 
+void seg_mux_display (MultiplexerP mux)
+{
+    iprintf ("num_channels: %u store_type=%u st_did_i=%u snip_len=%u snip=%.100s", 
+             mux->num_channels, mux->store_type, mux->st_did_i,
+             MUX_SNIP_LEN(mux), MUX_SNIP(mux));
+
+    for (unsigned i=0; i < MIN_(mux->num_channels, 1024); i++)
+        iprintf ("[%u] dict_id=%s channel_ctx=%p\n", i, dis_dict_id (mux->dict_ids[i]).s, MUX_CHANNEL_CTX(mux)[i]);
+}
+
 void seg_mux_init (VBlockP vb, unsigned num_channels, uint8_t special_code, DidIType mux_did_i, DidIType st_did_i,
                    StoreType store_type, MultiplexerP mux,
                    const char *channel_letters) // optional - a string with num_channels unique characters
@@ -271,12 +281,11 @@ void seg_mux_init (VBlockP vb, unsigned num_channels, uint8_t special_code, DidI
 
     CTX(mux_did_i)->flags.store = store_type;
 
-    uint32_t *snip_len = (uint32_t*)((char*)mux->dict_ids + num_channels * (sizeof (DictId) + sizeof (ContextP)));
-    char *snip = (char *)(snip_len + 1); 
-
     // prepare snip - a string consisting of num_channels x { special_code or \t , base64(dict_id.id) }
-    *snip_len = BASE64_DICT_ID_LEN * num_channels;   
-    seg_prepare_multi_dict_id_special_snip (special_code, num_channels, mux->dict_ids, snip, snip_len);
+    MUX_SNIP_LEN(mux) = BASE64_DICT_ID_LEN * num_channels;   
+    seg_prepare_multi_dict_id_special_snip (special_code, num_channels, mux->dict_ids, MUX_SNIP(mux), &MUX_SNIP_LEN(mux));
+
+    //seg_mux_display (mux);
 }
 
 ContextP seg_mux_get_channel_ctx (VBlockP vb, MultiplexerP mux, uint32_t channel_i)
@@ -288,13 +297,11 @@ ContextP seg_mux_get_channel_ctx (VBlockP vb, MultiplexerP mux, uint32_t channel
 
     if (!channel_ctx->seg_initialized) { // note: context may exist (cloned from z_ctx) but not yet initialized
 
-        ContextP *contexts = (ContextP *)&mux->dict_ids[mux->num_channels]; // start of context array
-        contexts[channel_i] = channel_ctx;
+        MUX_CHANNEL_CTX(mux)[channel_i] = channel_ctx;
 
-        channel_ctx->flags.store = mux->store_type; 
-        stats_set_consolidation (VB, mux->st_did_i, 1, channel_ctx->did_i); // set consolidation for --stats
-    
         channel_ctx->seg_initialized = true;
+        channel_ctx->flags.store = mux->store_type; 
+        stats_set_consolidation (VB, mux->st_did_i, 1, channel_ctx->did_i); // set consolidation for --stats    
     }
 
     return channel_ctx;

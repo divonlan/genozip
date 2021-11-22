@@ -280,6 +280,7 @@ static void zip_resize_local (VBlock *vb, Context *ctx)
 }
 
 // selects the smallest size (8, 16, 32) for the data, transposes, and BGENs
+// note: in PIZ, these are untransposed in eg BGEN_transpose_u32_buf
 static void zip_generate_transposed_local (VBlock *vb, Context *ctx)
 {
     ARRAY (uint32_t, data, ctx->local);

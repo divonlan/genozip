@@ -99,15 +99,15 @@ typedef union SectionFlags {
 
     union FlagsVbHeader {
         struct FlagsVbHeaderVcf {
-            uint8_t coords           : 2; // DC_PRIMARY if it contains TOPLEVEL container, DC_LUFT if LUFT toplevel container, or DC_BOTH if both (DC_NONE prior to v12)
-            uint8_t has_null_DP      : 1; // since 13.0.5: "has_null_DP" algorithm is used
-            uint8_t unused           : 5;
+            uint8_t coords             : 2; // DC_PRIMARY if it contains TOPLEVEL container, DC_LUFT if LUFT toplevel container, or DC_BOTH if both (DC_NONE prior to v12)
+            uint8_t use_null_DP_method : 1; // since 13.0.5: "null_DP" mehod is used
+            uint8_t unused             : 5;
         } vcf;
         struct FlagsVbHeaderSam {
-            uint8_t unused           : 2; // for now, reserved for coords, should we have a dual-coord SAM in the future
-            uint8_t is_sorted        : 1; // Likely sorted (copied from segconf.sam_is_sorted)     - introduced 13.0.3
-            uint8_t is_collated      : 1; // Likely collated (copied from segconf.sam_is_collated) - introduced 13.0.3
-            uint8_t unused2          : 4;
+            uint8_t unused             : 2; // for now, reserved for coords, should we have a dual-coord SAM in the future
+            uint8_t is_sorted          : 1; // Likely sorted (copied from segconf.sam_is_sorted)     - introduced 13.0.3
+            uint8_t is_collated        : 1; // Likely collated (copied from segconf.sam_is_collated) - introduced 13.0.3
+            uint8_t unused2            : 4;
         } sam;
     } vb_header;
 
@@ -124,8 +124,8 @@ typedef union SectionFlags {
         uint8_t store_delta      : 1; // introduced v12.0.41: after reconstruction of a snip, store last_delta. notes: 1. last_delta also stored in case of a delta snip. 2. if using this, store=STORE_INT must be set.
         uint8_t copy_local_param : 1; // copy ctx.b250/local.param from SectionHeaderCtx.param
         uint8_t all_the_same     : 1; // SEC_B250: the b250 data contains only one element, and should be used to reconstruct any number of snips from this context
-        #define ctxs_dot_is_0    ctx_specific // used in _FORMAT_GT_SHARK_GT between 10.0.3 and 10.0.8
-        uint8_t ctx_specific     : 1; // flag specific a context (introduced 10.0.3)
+        #define delta_peek ctx_specific_flag // v13.0.5: Valid for contexts that use SNIP_OTHER_DELTA: whether reconstruct_from_delta should peek a value or use last_value
+        uint8_t ctx_specific_flag: 1; // flag specific a context (introduced 10.0.3)
         uint8_t store_per_line   : 1; // introduced v12.0.41: store last_txt for each line - in context->txt_per_prev        
     } ctx;
 

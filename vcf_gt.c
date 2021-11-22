@@ -67,7 +67,7 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
     MiniContainer gt = { .repeats   = 1, 
                          .nitems_lo = 1, 
                          .drop_final_repeat_sep = true, 
-                         .callback = (vb->use_special_sf == USE_SF_YES || segconf.has_null_DP),
+                         .callback = (vb->use_special_sf == USE_SF_YES || segconf.use_null_DP_method),
                          .items = { { .dict_id = (DictId)_FORMAT_GT_HT } },
                        };
 
@@ -156,7 +156,7 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
 
     // case DP='.' - we predict that GT=./.
     bool no_duplicate=false;
-    if (has_null_dp) { // segconf.has_null_DP=true && line has DP && it is '.'
+    if (has_null_dp) { // segconf.use_null_DP_method=true && line has DP && it is '.'
         // case: prediction is correct - re-write GT as "0/0" or "0|0" (use previous phase)
         if (gt.repeats==2 && ht_data[0]=='.' && gt.repsep[0]=='/' && ht_data[1]=='.') {
             ht_data[0] = ht_data[1] = '0';

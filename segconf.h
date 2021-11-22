@@ -18,6 +18,8 @@ typedef enum { PL_mux_by_DP_TEST, PL_mux_by_DP_NO, PL_mux_by_DP_YES } PLMuxByDP;
 
 typedef enum { PS_NONE, PS_POS, PS_POS_REF_ALT, PS_UNKNOWN } PSType;
 
+typedef enum { DP_DEFAULT, by_AD, by_SDP, by_INFO_DP } FormatDPMethod;
+
 // seg configuration set prior to starting to seg a file during segconfig_calculate or txtheader_zip_read_and_compress
 typedef struct {
 
@@ -49,7 +51,9 @@ typedef struct {
     uint64_t count_dosage[2];   // used to calculate pc_has_dosage
     float pc_has_dosage;        // % of the samples x lines that have a valid (0-2) dosage value [0.0,1.0]
     PSType ps_type;
-    bool has_null_DP;           // File has FORMAT/DP, and some of the DP values are '.' 
+    bool use_null_DP_method;    // A method for predicting GT=./. by DP=.
+    bool INFO_DP_by_FORMAT_DP;  // INFO_DP = Delta vs SUM(FORMAT_DP) 
+    FormatDPMethod FORMAT_DP_method;
 
     PLMuxByDP PL_mux_by_DP;
     Mutex PL_mux_by_DP_mutex;

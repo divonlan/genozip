@@ -164,6 +164,10 @@ void vcf_seg_initialize (VBlock *vb_)
 
     vcf_info_seg_initialize(vb);
     vcf_samples_seg_initialize(vb);
+
+    if (segconf.running) {
+        if (vcf_num_samples > 1) segconf.INFO_DP_by_FORMAT_DP = true; // unless proven otherwise
+    }
 }             
 
 void vcf_seg_finalize (VBlockP vb_)
@@ -246,14 +250,7 @@ void vcf_seg_finalize (VBlockP vb_)
 
     vb->flags.vcf.coords = vb->vb_coords;
 
-    if (segconf.running) {
-        // percent of (samples x lines) that have a dosage value of 0,1 or 2 
-        segconf.pc_has_dosage = (float)segconf.count_dosage[1] / (float)(segconf.count_dosage[0] + segconf.count_dosage[1]);
-
-        // whether we should seg GQ as a function of GP or PL (the better of the two) - only if this works for at least 20% of the samples
-        segconf.GQ_by_GP = (segconf.count_GQ_by_GP > vb->lines.len * vcf_num_samples / 5) && (segconf.count_GQ_by_GP >  segconf.count_GQ_by_PL);
-        segconf.GQ_by_PL = (segconf.count_GQ_by_PL > vb->lines.len * vcf_num_samples / 5) && (segconf.count_GQ_by_PL >= segconf.count_GQ_by_GP);
-    }
+    vcf_samples_seg_finalize (vb);
 }
 
 // after each VB is compressed
@@ -506,6 +503,8 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
 {
     VBlockVCF *vb = (VBlockVCF *)vb_;
     ZipDataLineVCF *dl = DATA_LINE (vb->line_i);
+    vb->sum_dp_this_line  = 0;
+    vb->num_dps_this_line = 0;
 
     const char *next_field=field_start_line, *field_start;
     unsigned field_len=0;

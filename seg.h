@@ -109,20 +109,25 @@ extern void seg_rollback (VBlockP vb);
 
 // Multiplexers
 #define BASE64_DICT_ID_LEN 14
-#define TYPEDEF_MULTIPLEXER(n_channels) \
-typedef struct {                        \
-    uint8_t num_channels;               \
-    StoreType store_type;               \
-    DidIType st_did_i;                  \
-    uint64_t unused;                    \
-    DictId dict_ids[n_channels];        \
-    ContextP channel_ctx[n_channels];   \
-    uint32_t snip_len;/*word aligned*/  \
-    char snip[BASE64_DICT_ID_LEN * n_channels];  \
+#define MULTIPLEXER(n_channels)                     \
+struct __attribute__ ((__packed__)) {               \
+    /* all 32b/64b fields are word-aligned */       \
+    uint8_t num_channels;                           \
+    StoreType store_type;                           \
+    DidIType st_did_i;                              \
+    DictId dict_ids[n_channels];                    \
+    ContextP channel_ctx[n_channels];               \
+    uint32_t snip_len;                              \
+    char snip[BASE64_DICT_ID_LEN * (n_channels)];   \
 }                               
 #define MUX ((MultiplexerP)mux)
+#define MUX_CAPACITY(mux) (sizeof((mux).dict_ids)/sizeof(DictId)) // max number of channels this mux can contain
+#define MUX_CHANNEL_CTX(mux) ((ContextP *)((mux)->dict_ids + (mux)->num_channels))
+#define MUX_SNIP_LEN(mux)    (*(uint32_t*)(MUX_CHANNEL_CTX(mux) + (mux)->num_channels))
+#define MUX_SNIP(mux)        ((char*)(&MUX_SNIP_LEN(mux) + 1))
 
-TYPEDEF_MULTIPLEXER(1000) *MultiplexerP;
+typedef MULTIPLEXER(1000) *MultiplexerP;
+typedef const MULTIPLEXER(1000) *ConstMultiplexerP;
 
 extern void seg_mux_init (VBlockP vb, unsigned num_channels, uint8_t special_code, DidIType mux_did_i, DidIType st_did_i, StoreType store_type, MultiplexerP mux, const char *channel_letters);
 extern ContextP seg_mux_get_channel_ctx (VBlockP vb, MultiplexerP mux, uint32_t channel_i);

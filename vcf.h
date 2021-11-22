@@ -301,7 +301,7 @@ extern void vcf_samples_add  (const char *samples_str);
                       vcf_piz_special_INFO_HGVS_INS_END_POS, vcf_piz_special_INFO_HGVS_INS_PAYLOAD, \
                       vcf_piz_special_INFO_HGVS_DELINS_END_POS, vcf_piz_special_INFO_HGVS_DELINS_PAYLOAD,\
                       vcf_piz_special_MUX_BY_DOSAGE, vcf_piz_special_FORMAT_AB, vcf_piz_special_FORMAT_GQ, \
-                      vcf_piz_special_MUX_BY_DOSAGExDP, vcf_piz_special_COPY_REForALT }
+                      vcf_piz_special_MUX_BY_DOSAGExDP, vcf_piz_special_COPY_REForALT, vcf_piz_special_DP_by_DP }
 
 SPECIAL (VCF, 0,  main_REFALT,         vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,              vcf_piz_special_FORMAT)
@@ -328,8 +328,9 @@ SPECIAL (VCF, 21, MUX_BY_DOSAGE,       vcf_piz_special_MUX_BY_DOSAGE);          
 SPECIAL (VCF, 22, AB,                  vcf_piz_special_FORMAT_AB);                // added v13
 SPECIAL (VCF, 23, GQ,                  vcf_piz_special_FORMAT_GQ);                // added v13
 SPECIAL (VCF, 24, MUX_BY_DOSAGExDP,    vcf_piz_special_MUX_BY_DOSAGExDP);         // added v13.0.3
-SPECIAL (VCF, 25, COPY_REForALT,       vcf_piz_special_COPY_REForALT);                  // added v13.0.5
-#define NUM_VCF_SPECIAL 26
+SPECIAL (VCF, 25, COPY_REForALT,       vcf_piz_special_COPY_REForALT);            // added v13.0.5
+SPECIAL (VCF, 26, DP_by_DP,            vcf_piz_special_DP_by_DP);                 // added v13.0.5
+#define NUM_VCF_SPECIAL 27
 
 // Translators for Luft (=secondary coordinates)
 TRANSLATOR (VCF, VCF,   1,  G,      vcf_piz_luft_G)       // same order as LiftOverStatus starting LO_CANT_G

@@ -45,11 +45,58 @@ static bool vcf_seg_INFO_DP (VBlockVCF *vb, ContextP ctx_dp, STRp(value))
         seg_delta_vs_other (VB, ctx_dp, ctx_basecounts, STRa(value));
         return false; // caller needn't seg
     }
+    // postpone segging to vcf_seg_INFO_DP_by_FORMAT_DP after samples have been segged
+    else if (segconf.INFO_DP_by_FORMAT_DP) {
+        ctx_set_last_value (VB, ctx_dp, (int64_t)atoi (value));
+        ctx_dp->txt_len += value_len; // just add bytes for now
+        return false; // caller shouldn't seg
+    }
     else {
-        // store last_value of INFO/DP field in case we have FORMAT/DP as well (used in vcf_seg_one_sample)
+        // store last_value of INFO/DP field in case we have FORMAT/DP as well (used in vcf_seg_one_sample, for 1-sample files)
         ctx_set_last_value (VB, ctx_dp, (int64_t)atoi (value));
         return true; // caller should seg
     }
+}
+
+// used for multi-sample VCFs, IF FORMAT/DP is segged as a simple integer
+static void vcf_seg_INFO_DP_by_FORMAT_DP (VBlockVCF *vb)
+{
+    SNIP(32) = { SNIP_SPECIAL, VCF_SPECIAL_DP_by_DP };
+    snip_len = 2 + str_int (vb->num_dps_this_line, &snip[2]);
+    snip[snip_len++] = '\t';
+    snip_len += str_int (CTX(INFO_DP)->last_value.i - vb->sum_dp_this_line, &snip[snip_len]);
+
+    seg_by_did_i (VB, STRa(snip), INFO_DP, 0); // 0 bc bytes already added in vcf_seg_INFO_DP
+}
+
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_DP_by_DP)
+{
+    str_split (snip, snip_len, 2, '\t', item, 2);
+
+    int num_dps_this_line = atoi (items[0]);
+    int64_t value_minus_sum = atoi (items[1]);
+
+    ContextP format_dp_ctx = CTX(FORMAT_DP);
+
+    int64_t sum=0;
+
+    ASSPIZ (format_dp_ctx->next_local + num_dps_this_line <= format_dp_ctx->local.len, "Not enough data in FORMAT/DP.local to reconstructed INFO/DP: next_local=%u local.len=%u but needed num_dps_this_line=%u",
+            format_dp_ctx->next_local, (unsigned)format_dp_ctx->local.len, num_dps_this_line);
+            
+    uint32_t invalid = lt_desc[format_dp_ctx->ltype].max_int; // represents '.'
+    for (int i=0; i < num_dps_this_line; i++) {
+        uint32_t format_dp = (format_dp_ctx->ltype == LT_UINT8)  ? (uint32_t)*ENT (uint8_t,  format_dp_ctx->local, format_dp_ctx->next_local + i)
+                           : (format_dp_ctx->ltype == LT_UINT16) ? (uint32_t)*ENT (uint16_t, format_dp_ctx->local, format_dp_ctx->next_local + i)
+                           : /* LT_UINT32 */                       (uint32_t)*ENT (uint32_t, format_dp_ctx->local, format_dp_ctx->next_local + i);
+
+        if (format_dp != invalid) sum += format_dp; 
+    }
+
+    new_value->i = value_minus_sum + sum;
+
+    RECONSTRUCT_INT (new_value->i);
+
+    return true; // have new_value
 }
 
 //--------
@@ -1430,6 +1477,10 @@ void vcf_finalize_seg_info (VBlockVCF *vb)
  
     // seg INFO/SF, if there is one
     if (vb->sf_txt.len) vcf_seg_INFO_SF_seg (vb);
+
+    // seg INFO/DP, if against some of FORMAT/DP
+    if (segconf.INFO_DP_by_FORMAT_DP && ctx_has_value (VB, INFO_DP)) 
+        vcf_seg_INFO_DP_by_FORMAT_DP (vb);
 
     // now that we segged all INFO and FORMAT subfields, we have the final ostatus and can add the DVCF items
     if (z_dual_coords)
