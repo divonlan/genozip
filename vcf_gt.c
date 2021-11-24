@@ -37,11 +37,10 @@ void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCF *vb)
 }
 
 // increase ploidy of the previous lines, if higher ploidy was encountered
-static void vcf_seg_FORMAT_GT_increase_ploidy (VBlockVCF *vb, unsigned new_ploidy, uint32_t max_new_size)
+static void vcf_seg_FORMAT_GT_increase_ploidy (VBlockVCF *vb, unsigned new_ploidy)
 {
-    // protect against highly unlikely case that we don't have enough consumed txt data to store increased-ploidy ht data 
-    ASSVCF (new_ploidy * vb->line_i * vcf_num_samples <= max_new_size, 
-            "haplotype data overflow due to increased ploidy on line %"PRIu64, vb->line_i);
+    buf_alloc (vb, &CTX(FORMAT_GT_HT)->local, 0, new_ploidy * vcf_num_samples * vb->line_i, 
+               char, CTX_GROWTH, "contexts->local");
 
     uint32_t num_samples = vb->line_i * vcf_num_samples + vb->sample_i; // all samples in previous lines + previous samples in current line
     char *ht_data = FIRSTENT (char, CTX(FORMAT_GT_HT)->local);
@@ -86,7 +85,7 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
     // we have to increase ploidy of all the haplotypes read in in this VB so far. This can happen for example in 
     // the X chromosome if initial samples are male with ploidy=1 and then a female sample with ploidy=2
     if (vb->ploidy && gt.repeats > vb->ploidy) 
-        vcf_seg_FORMAT_GT_increase_ploidy (vb, gt.repeats, ENTNUM (vb->txt_data, cell));
+        vcf_seg_FORMAT_GT_increase_ploidy (vb, gt.repeats);
 
     if (!vb->ploidy) {
         vb->ploidy = gt.repeats; // very first sample in the vb
