@@ -118,6 +118,20 @@ static inline bool buf_has_underflowed (const Buffer *buf, const char *msg)
     return *(uint64_t*)memory != UNDERFLOW_TRAP; // note on evb: if another thread reallocs the memory concurrently, this might seg-fault
 }
 
+// check overflow and underflow in an allocated buffer
+static inline void buf_verify_integrity (const Buffer *buf,
+                                         const char *func, uint32_t code_line, const char *buf_func)
+{
+    if (buf->vb == evb) return; // we cannot (easily) test evb (see comment in buf_has_overflowed)
+ 
+    // note: // overlayed buffers might be partial and start at a different address 
+    ASSERT (buf->type == BUF_OVERLAY || *(uint64_t *)(buf->memory) == UNDERFLOW_TRAP, "called from %s:%u to %s: Error in of %s: buffer has corrupt underflow trap",
+            func, code_line, buf_func, buf_desc(buf).s);
+
+    ASSERT (*(uint64_t *)(buf->memory + sizeof(uint64_t) + buf->size) == OVERFLOW_TRAP, "called from %s:%u to %s: Error in %s: buffer has corrupt overflow trap",
+            func, code_line, buf_func, buf_desc(buf).s);
+}
+
 // not thread-safe, used in emergency 
 static void buf_find_underflow_culprit (const char *memory, const char *msg)
 {
@@ -548,6 +562,8 @@ uint64_t buf_alloc_do (VBlock *vb,
                 buf->len = old_len;
             }
             else {
+                buf_verify_integrity (buf, func, code_line, "buf_alloc_do(overlayable)");
+
                 // buffer is overlayable - but no current overlayers - regular realloc - however,
                 // still within mutex to prevent another thread from overlaying while we're at it
                 char *old_memory = buf->memory;
@@ -560,6 +576,8 @@ uint64_t buf_alloc_do (VBlock *vb,
         }
 
         else { // non-overlayable buffer - regular realloc without mutex
+            buf_verify_integrity (buf, func, code_line, "buf_alloc_do");
+
             char *old_memory = buf->memory;
             __atomic_store_n (&buf->memory, BUFFER_BEING_MODIFIED, __ATOMIC_RELAXED);
             char *new_memory = (char *)buf_low_level_realloc (old_memory, new_size + control_size, name, func, code_line);
@@ -738,6 +756,8 @@ void buf_free_do (Buffer *buf, const char *func, uint32_t code_line)
     switch (buf->type) {
 
         case BUF_REGULAR: 
+
+            buf_verify_integrity (buf, func, code_line, "buf_free_do");
 
             if (buf->overlayable) {
 
