@@ -6,7 +6,7 @@ File Types
 .. toctree::
    :maxdepth: 1
 
-   Genozip BAM or SAM<bam>
+   Genozip BAM, CRAM or SAM<bam>
    Genozip FASTQ files<fastq>
    Genozip VCF files<vcf>
    Genozip FASTA files<fasta>
