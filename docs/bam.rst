@@ -3,7 +3,7 @@
 Genozip BAM, SAM or CRAM files
 ==============================
 
-**Compressing a SAM or BAM file**
+**Compressing a BAM or SAM file**
 
 ::
 
@@ -67,14 +67,14 @@ Sets the level BGZF compression (for .bam and .sam.gz output format) - from 0 (n
 
 **Using a reference file**
 
-Compressing against a reference file improves compression:
+Compressing against a reference file improves compression, often considerably, and is therefore recommended:
 
 ::
 
     $ genozip --make-reference hs37d5.fa.gz  # one-time preparation of the reference. should be similar to the reference used to create the BAM file
     $ genozip myfile.bam --reference hs37d5.ref.genozip
     
-Note: the reference file is also needed for uncompressing. Alternatively, use ``--REFERENCE`` to copy the relevant parts of the reference file to myfile.bam.genozip, so that the reference file is not needed for decompression. Compression with a reference file works regardless of whether the SAM/BAM file is aligned.
+Note: the reference file is also needed for uncompressing. Alternatively, use ``--REFERENCE`` (uppercase) which copies the relevant parts of the reference file to myfile.bam, obliviating the need for a reference file for uncompressing. Compression with a reference file works regardless of whether the SAM/BAM file is aligned.
 
 **Compressing CRAM files**
 

@@ -14,7 +14,7 @@ Notes:
 - If the species has multiple versions of its reference genome FASTA, any one of them will work. 
 - If there is no reference genome for the target species, a reference genome of a closely related species may be used.
 - For meta-genomic applications, it is possible to use a reference FASTA that contains sequences from multiple species, up to a total of 4 Gbp.
-- For human data, a reference FASTA may be `downloaded here <ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/GRCh38_reference_genome/GRCh38_full_analysis_set_plus_decoy_hla.fa>`_.
+- For human data, a reference FASTA may be `downloaded here <ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/phase2_reference_assembly_sequence/hs37d5.fa.gz>`_.
 
 ::
 
