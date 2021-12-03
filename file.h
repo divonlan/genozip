@@ -142,6 +142,13 @@
 #define KRAKEN_XZ_      ".kraken.xz"
 #define KRAKEN_GENOZIP_ ".kraken" GENOZIP_EXT
 
+// locs files
+#define LOCS_           ".locs" 
+#define LOCS_GZ_        ".locs.gz"
+#define LOCS_BZ2_       ".locs.bz2"
+#define LOCS_XZ_        ".locs.xz"
+#define LOCS_GENOZIP_   ".locs" GENOZIP_EXT
+
 // generic files
 #define GNRIC_           ""
 #define GNRIC_GZ_        ".gz"
@@ -172,6 +179,7 @@ typedef enum      { UNKNOWN_FILE_TYPE,
                     PHY,   PHY_GZ,   PHY_BZ2,   PHY_XZ,   PHY_GENOZIP,
                     CHAIN, CHAIN_GZ, CHAIN_BZ2, CHAIN_XZ, CHAIN_GENOZIP,
                     KRAKEN, KRAKEN_GZ, KRAKEN_BZ2, KRAKEN_XZ, KRAKEN_GENOZIP,
+                    LOCS,  LOCS_GZ,  LOCS_BZ2,  LOCS_XZ,  LOCS_GENOZIP,
                     BAM, CRAM,                            BAM_GENOZIP,
                     BCF, BCF_GZ, BCF_BGZF,                BCF_GENOZIP,  
                     // the GNRIC row *must* be the last row, as it consists catch-all extensions (*.gz etc)
@@ -179,9 +187,9 @@ typedef enum      { UNKNOWN_FILE_TYPE,
                     AFTER_LAST_FILE_TYPE } FileType;
 
 #define FILE_EXTS {"Unknown", /* order matches the FileType enum */ \
-                   REF_GENOZIP_, \
+                   REF_GENOZIP_,                                                     \
                    VCF_, VCF_GZ_, VCF_BGZF_, VCF_BZ2_, VCF_XZ_, VCF_GENOZIP_,        \
-                   SAM_, SAM_GZ_, SAM_BGZF_, SAM_BZ2_, SAM_XZ_, SAM_GENOZIP_, \
+                   SAM_, SAM_GZ_, SAM_BGZF_, SAM_BZ2_, SAM_XZ_, SAM_GENOZIP_,        \
                    FASTQ_, FASTQ_GZ_, FASTQ_BZ2_, FASTQ_XZ_, FASTQ_GENOZIP_,         \
                    FQ_,    FQ_GZ_,    FQ_BZ2_,    FQ_XZ_,    FQ_GENOZIP_,            \
                    FASTA_, FASTA_GZ_, FASTA_BZ2_, FASTA_XZ_, FASTA_GENOZIP_,         \
@@ -193,12 +201,13 @@ typedef enum      { UNKNOWN_FILE_TYPE,
                    FRN_,   FRN_GZ_,   FRN_BZ2_,   FRN_XZ_,   FRN_GENOZIP_,           \
                    FAS_,   FAS_GZ_,   FAS_BZ2_,   FAS_XZ_,   FAS_GENOZIP_,           \
                    GFF3_,  GFF3_GZ_,  GFF3_BZ2_,  GFF3_XZ_,  GFF3_GENOZIP_,          \
-                   GFF_,   GFF_GZ_,   GFF_BZ2_,   GFF_XZ_,   GFF_GENOZIP_,          \
+                   GFF_,   GFF_GZ_,   GFF_BZ2_,   GFF_XZ_,   GFF_GENOZIP_,           \
                    GVF_,   GVF_GZ_,   GVF_BZ2_,   GVF_XZ_,   GVF_GENOZIP_,           \
                    ME23_,  ME23_ZIP_,                        ME23_GENOZIP_,          \
                    PHY_,   PHY_GZ_,   PHY_BZ2_,   PHY_XZ_,   PHY_GENOZIP_,           \
                    CHAIN_, CHAIN_GZ_, CHAIN_BZ2_, CHAIN_XZ_, CHAIN_GENOZIP_,         \
-                   KRAKEN_, KRAKEN_GZ_, KRAKEN_BZ2_, KRAKEN_XZ_, KRAKEN_GENOZIP_,  \
+                   KRAKEN_, KRAKEN_GZ_, KRAKEN_BZ2_, KRAKEN_XZ_, KRAKEN_GENOZIP_,    \
+                   LOCS_,  LOCS_GZ_,  LOCS_BZ2_,  LOCS_XZ_,  LOCS_GENOZIP_,          \
                    BAM_,   CRAM_,                            BAM_GENOZIP_,           \
                    BCF_,   BCF_GZ_,   BCF_BGZF_,             BCF_GENOZIP_,           \
                    GNRIC_GZ_, GNRIC_BZ2_, GNRIC_XZ_,         GNRIC_GENOZIP_, GNRIC_, /* GNRIC_ is catch all */ \
@@ -207,56 +216,58 @@ extern const char *file_exts[];
 
 // Ordered by data_type: txt file types and their corresponding genozip file types for each data type
 // first entry of each data type MUST be the default plain file
-//                           { in         codec       out           }
-#define TXT_IN_FT_BY_DT  { { { FASTA,     CODEC_NONE, REF_GENOZIP   }, { FASTA_GZ, CODEC_GZ,  REF_GENOZIP   }, /* fasta for generating reference files */\
-                             { FASTA_BZ2, CODEC_BZ2,  REF_GENOZIP   }, { FASTA_XZ, CODEC_XZ,  REF_GENOZIP   },\
-                             { FNA,       CODEC_NONE, REF_GENOZIP   }, { FNA_GZ,   CODEC_GZ,  REF_GENOZIP   },\
-                             { FNA_BZ2,   CODEC_BZ2,  REF_GENOZIP   }, { FNA_XZ,   CODEC_XZ,  REF_GENOZIP   },\
-                             { FAS,       CODEC_NONE, REF_GENOZIP   }, { FAS_GZ,   CODEC_GZ,  REF_GENOZIP   },\
-                             { FAS_BZ2,   CODEC_BZ2,  REF_GENOZIP   }, { FAS_XZ,   CODEC_XZ,  REF_GENOZIP   },\
-                             { FA,        CODEC_NONE, REF_GENOZIP   }, { FA_GZ,    CODEC_GZ,  REF_GENOZIP   },\
-                             { FA_BZ2,    CODEC_BZ2,  REF_GENOZIP   }, { FA_XZ,    CODEC_XZ,  REF_GENOZIP   }, { } }, \
-                           { { VCF,       CODEC_NONE, VCF_GENOZIP   }, { VCF_GZ,   CODEC_GZ,  VCF_GENOZIP   }, { VCF_BGZF, CODEC_GZ,  VCF_GENOZIP },\
-                             { VCF_BZ2,   CODEC_BZ2,  VCF_GENOZIP   }, { VCF_XZ,   CODEC_XZ,  VCF_GENOZIP   }, { } },\
-                           { { SAM,       CODEC_NONE, SAM_GENOZIP   }, { SAM_GZ,   CODEC_GZ,  SAM_GENOZIP   }, { SAM_BGZF, CODEC_GZ,  SAM_GENOZIP },\
-                             { SAM_BZ2,   CODEC_BZ2,  SAM_GENOZIP   }, { SAM_XZ,   CODEC_XZ,  SAM_GENOZIP   }, { }, },\
-                           { { FASTQ,     CODEC_NONE, FASTQ_GENOZIP }, { FASTQ_GZ, CODEC_GZ,  FASTQ_GENOZIP },\
-                             { FASTQ_BZ2, CODEC_BZ2,  FASTQ_GENOZIP }, { FASTQ_XZ, CODEC_XZ,  FASTQ_GENOZIP },\
-                             { FQ,        CODEC_NONE, FQ_GENOZIP    }, { FQ_GZ,    CODEC_GZ,  FQ_GENOZIP    },\
-                             { FQ_BZ2,    CODEC_BZ2,  FQ_GENOZIP    }, { FQ_XZ,    CODEC_XZ,  FQ_GENOZIP    }, { } },\
-                           { { FASTA,     CODEC_NONE, FASTA_GENOZIP }, { FASTA_GZ, CODEC_GZ,  FASTA_GENOZIP },\
-                             { FASTA_BZ2, CODEC_BZ2,  FASTA_GENOZIP }, { FASTA_XZ, CODEC_XZ,  FASTA_GENOZIP },\
-                             { FAA,       CODEC_NONE, FAA_GENOZIP   }, { FAA_GZ,   CODEC_GZ,  FAA_GENOZIP   },\
-                             { FAA_BZ2,   CODEC_BZ2,  FAA_GENOZIP   }, { FAA_XZ,   CODEC_XZ,  FAA_GENOZIP   },\
-                             { FFN,       CODEC_NONE, FFN_GENOZIP   }, { FFN_GZ,   CODEC_GZ,  FFN_GENOZIP   },\
-                             { FFN_BZ2,   CODEC_BZ2,  FFN_GENOZIP   }, { FFN_XZ,   CODEC_XZ,  FFN_GENOZIP   },\
-                             { FNN,       CODEC_NONE, FNN_GENOZIP   }, { FNN_GZ,   CODEC_GZ,  FNN_GENOZIP   },\
-                             { FNN_BZ2,   CODEC_BZ2,  FNN_GENOZIP   }, { FNN_XZ,   CODEC_XZ,  FNN_GENOZIP   },\
-                             { FNA,       CODEC_NONE, FNA_GENOZIP   }, { FNA_GZ,   CODEC_GZ,  FNA_GENOZIP   },\
-                             { FNA_BZ2,   CODEC_BZ2,  FNA_GENOZIP   }, { FNA_XZ,   CODEC_XZ,  FNA_GENOZIP   },\
-                             { FRN,       CODEC_NONE, FRN_GENOZIP   }, { FRN_GZ,   CODEC_GZ,  FRN_GENOZIP   },\
-                             { FRN_BZ2,   CODEC_BZ2,  FRN_GENOZIP   }, { FRN_XZ,   CODEC_XZ,  FRN_GENOZIP   },\
-                             { FAS,       CODEC_NONE, FAS_GENOZIP   }, { FAS_GZ,   CODEC_GZ,  FAS_GENOZIP   },\
-                             { FAS_BZ2,   CODEC_BZ2,  FAS_GENOZIP   }, { FAS_XZ,   CODEC_XZ,  FAS_GENOZIP   },\
-                             { FA,        CODEC_NONE, FA_GENOZIP    }, { FA_GZ,    CODEC_GZ,  FA_GENOZIP    },\
-                             { FA_BZ2,    CODEC_BZ2,  FA_GENOZIP    }, { FA_XZ,    CODEC_XZ,  FA_GENOZIP    }, { } },\
-                           { { GFF3,      CODEC_NONE, GFF3_GENOZIP  }, { GFF3_GZ,  CODEC_GZ,  GFF3_GENOZIP  },\
-                             { GFF3_BZ2,  CODEC_BZ2,  GFF3_GENOZIP  }, { GFF3_XZ,  CODEC_XZ,  GFF3_GENOZIP  },\
-                             { GFF,       CODEC_NONE, GFF_GENOZIP   }, { GFF_GZ,   CODEC_GZ,  GFF_GENOZIP   },\
-                             { GFF_BZ2,   CODEC_BZ2,  GFF_GENOZIP   }, { GFF_XZ,   CODEC_XZ,  GFF_GENOZIP   },\
-                             { GVF,       CODEC_NONE, GVF_GENOZIP   }, { GVF_GZ,   CODEC_GZ,  GVF_GENOZIP   },\
-                             { GVF_BZ2,   CODEC_BZ2,  GVF_GENOZIP   }, { GVF_XZ,   CODEC_XZ,  GVF_GENOZIP   }, { } },\
-                           { { ME23,      CODEC_NONE, ME23_GENOZIP  }, { ME23_ZIP, CODEC_ZIP, ME23_GENOZIP  }, { } },\
-                           { { BAM,       CODEC_BGZF, BAM_GENOZIP   }, { CRAM,     CODEC_CRAM,BAM_GENOZIP  }, { } }, \
-                           { { BCF,       CODEC_BCF,  BCF_GENOZIP   }, { BCF_GZ,   CODEC_BCF, BCF_GENOZIP   }, { BCF_BGZF, CODEC_BCF, BCF_GENOZIP }, { } }, \
-                           { { GNRIC,     CODEC_NONE, GNRIC_GENOZIP }, { GNRIC_GZ, CODEC_GZ,  GNRIC_GENOZIP },\
-                             { GNRIC_BZ2, CODEC_BZ2,  GNRIC_GENOZIP }, { GNRIC_XZ, CODEC_XZ,  GNRIC_GENOZIP }, { } },\
-                           { { PHY,       CODEC_NONE, PHY_GENOZIP   }, { PHY_GZ,   CODEC_GZ,  PHY_GENOZIP   },\
-                             { PHY_BZ2,   CODEC_BZ2,  PHY_GENOZIP   }, { PHY_XZ,   CODEC_XZ,  PHY_GENOZIP   }, { } },\
-                           { { CHAIN,     CODEC_NONE, CHAIN_GENOZIP }, { CHAIN_GZ, CODEC_GZ,  CHAIN_GENOZIP },\
-                             { CHAIN_BZ2, CODEC_BZ2,  CHAIN_GENOZIP }, { CHAIN_XZ, CODEC_XZ,  CHAIN_GENOZIP }, { } },\
+//                           { in          codec       out            }
+#define TXT_IN_FT_BY_DT  { { { FASTA,      CODEC_NONE, REF_GENOZIP    }, { FASTA_GZ,  CODEC_GZ,  REF_GENOZIP    }, /* fasta for generating reference files */\
+                             { FASTA_BZ2,  CODEC_BZ2,  REF_GENOZIP    }, { FASTA_XZ,  CODEC_XZ,  REF_GENOZIP    },\
+                             { FNA,        CODEC_NONE, REF_GENOZIP    }, { FNA_GZ,    CODEC_GZ,  REF_GENOZIP    },\
+                             { FNA_BZ2,    CODEC_BZ2,  REF_GENOZIP    }, { FNA_XZ,    CODEC_XZ,  REF_GENOZIP    },\
+                             { FAS,        CODEC_NONE, REF_GENOZIP    }, { FAS_GZ,    CODEC_GZ,  REF_GENOZIP    },\
+                             { FAS_BZ2,    CODEC_BZ2,  REF_GENOZIP    }, { FAS_XZ,    CODEC_XZ,  REF_GENOZIP    },\
+                             { FA,         CODEC_NONE, REF_GENOZIP    }, { FA_GZ,     CODEC_GZ,  REF_GENOZIP    },\
+                             { FA_BZ2,     CODEC_BZ2,  REF_GENOZIP    }, { FA_XZ,     CODEC_XZ,  REF_GENOZIP    }, { } }, \
+                           { { VCF,        CODEC_NONE, VCF_GENOZIP    }, { VCF_GZ,    CODEC_GZ,  VCF_GENOZIP    }, { VCF_BGZF, CODEC_GZ,  VCF_GENOZIP  },\
+                             { VCF_BZ2,    CODEC_BZ2,  VCF_GENOZIP    }, { VCF_XZ,    CODEC_XZ,  VCF_GENOZIP    }, { } },\
+                           { { SAM,        CODEC_NONE, SAM_GENOZIP    }, { SAM_GZ,    CODEC_GZ,  SAM_GENOZIP    }, { SAM_BGZF, CODEC_GZ,  SAM_GENOZIP  },\
+                             { SAM_BZ2,    CODEC_BZ2,  SAM_GENOZIP    }, { SAM_XZ,    CODEC_XZ,  SAM_GENOZIP    }, { }, },\
+                           { { FASTQ,      CODEC_NONE, FASTQ_GENOZIP  }, { FASTQ_GZ,  CODEC_GZ,  FASTQ_GENOZIP  },\
+                             { FASTQ_BZ2,  CODEC_BZ2,  FASTQ_GENOZIP  }, { FASTQ_XZ,  CODEC_XZ,  FASTQ_GENOZIP  },\
+                             { FQ,         CODEC_NONE, FQ_GENOZIP     }, { FQ_GZ,     CODEC_GZ,  FQ_GENOZIP     },\
+                             { FQ_BZ2,     CODEC_BZ2,  FQ_GENOZIP     }, { FQ_XZ,     CODEC_XZ,  FQ_GENOZIP     }, { } },\
+                           { { FASTA,      CODEC_NONE, FASTA_GENOZIP  }, { FASTA_GZ,  CODEC_GZ,  FASTA_GENOZIP  },\
+                             { FASTA_BZ2,  CODEC_BZ2,  FASTA_GENOZIP  }, { FASTA_XZ,  CODEC_XZ,  FASTA_GENOZIP  },\
+                             { FAA,        CODEC_NONE, FAA_GENOZIP    }, { FAA_GZ,    CODEC_GZ,  FAA_GENOZIP    },\
+                             { FAA_BZ2,    CODEC_BZ2,  FAA_GENOZIP    }, { FAA_XZ,    CODEC_XZ,  FAA_GENOZIP    },\
+                             { FFN,        CODEC_NONE, FFN_GENOZIP    }, { FFN_GZ,    CODEC_GZ,  FFN_GENOZIP    },\
+                             { FFN_BZ2,    CODEC_BZ2,  FFN_GENOZIP    }, { FFN_XZ,    CODEC_XZ,  FFN_GENOZIP    },\
+                             { FNN,        CODEC_NONE, FNN_GENOZIP    }, { FNN_GZ,    CODEC_GZ,  FNN_GENOZIP    },\
+                             { FNN_BZ2,    CODEC_BZ2,  FNN_GENOZIP    }, { FNN_XZ,    CODEC_XZ,  FNN_GENOZIP    },\
+                             { FNA,        CODEC_NONE, FNA_GENOZIP    }, { FNA_GZ,    CODEC_GZ,  FNA_GENOZIP    },\
+                             { FNA_BZ2,    CODEC_BZ2,  FNA_GENOZIP    }, { FNA_XZ,    CODEC_XZ,  FNA_GENOZIP    },\
+                             { FRN,        CODEC_NONE, FRN_GENOZIP    }, { FRN_GZ,    CODEC_GZ,  FRN_GENOZIP    },\
+                             { FRN_BZ2,    CODEC_BZ2,  FRN_GENOZIP    }, { FRN_XZ,    CODEC_XZ,  FRN_GENOZIP    },\
+                             { FAS,        CODEC_NONE, FAS_GENOZIP    }, { FAS_GZ,    CODEC_GZ,  FAS_GENOZIP    },\
+                             { FAS_BZ2,    CODEC_BZ2,  FAS_GENOZIP    }, { FAS_XZ,    CODEC_XZ,  FAS_GENOZIP    },\
+                             { FA,         CODEC_NONE, FA_GENOZIP     }, { FA_GZ,     CODEC_GZ,  FA_GENOZIP     },\
+                             { FA_BZ2,     CODEC_BZ2,  FA_GENOZIP     }, { FA_XZ,     CODEC_XZ,  FA_GENOZIP     }, { } },\
+                           { { GFF3,       CODEC_NONE, GFF3_GENOZIP   }, { GFF3_GZ,   CODEC_GZ,  GFF3_GENOZIP   },\
+                             { GFF3_BZ2,   CODEC_BZ2,  GFF3_GENOZIP   }, { GFF3_XZ,   CODEC_XZ,  GFF3_GENOZIP   },\
+                             { GFF,        CODEC_NONE, GFF_GENOZIP    }, { GFF_GZ,    CODEC_GZ,  GFF_GENOZIP    },\
+                             { GFF_BZ2,    CODEC_BZ2,  GFF_GENOZIP    }, { GFF_XZ,    CODEC_XZ,  GFF_GENOZIP    },\
+                             { GVF,        CODEC_NONE, GVF_GENOZIP    }, { GVF_GZ,    CODEC_GZ,  GVF_GENOZIP    },\
+                             { GVF_BZ2,    CODEC_BZ2,  GVF_GENOZIP    }, { GVF_XZ,    CODEC_XZ,  GVF_GENOZIP    }, { } },\
+                           { { ME23,       CODEC_NONE, ME23_GENOZIP   }, { ME23_ZIP,  CODEC_ZIP, ME23_GENOZIP   }, { } },\
+                           { { BAM,        CODEC_BGZF, BAM_GENOZIP    }, { CRAM,      CODEC_CRAM,BAM_GENOZIP    }, { } }, \
+                           { { BCF,        CODEC_BCF,  BCF_GENOZIP    }, { BCF_GZ,    CODEC_BCF, BCF_GENOZIP    }, { BCF_BGZF, CODEC_BCF, BCF_GENOZIP  }, { } }, \
+                           { { GNRIC,      CODEC_NONE, GNRIC_GENOZIP  }, { GNRIC_GZ,  CODEC_GZ,  GNRIC_GENOZIP  },\
+                             { GNRIC_BZ2,  CODEC_BZ2,  GNRIC_GENOZIP  }, { GNRIC_XZ,  CODEC_XZ,  GNRIC_GENOZIP  }, { } },\
+                           { { PHY,        CODEC_NONE, PHY_GENOZIP    }, { PHY_GZ,    CODEC_GZ,  PHY_GENOZIP    },\
+                             { PHY_BZ2,    CODEC_BZ2,  PHY_GENOZIP    }, { PHY_XZ,    CODEC_XZ,  PHY_GENOZIP    }, { } },\
+                           { { CHAIN,      CODEC_NONE, CHAIN_GENOZIP  }, { CHAIN_GZ,  CODEC_GZ,  CHAIN_GENOZIP  },\
+                             { CHAIN_BZ2,  CODEC_BZ2,  CHAIN_GENOZIP  }, { CHAIN_XZ,  CODEC_XZ,  CHAIN_GENOZIP  }, { } },\
                            { { KRAKEN,     CODEC_NONE, KRAKEN_GENOZIP }, { KRAKEN_GZ, CODEC_GZ,  KRAKEN_GENOZIP },\
                              { KRAKEN_BZ2, CODEC_BZ2,  KRAKEN_GENOZIP }, { KRAKEN_XZ, CODEC_XZ,  KRAKEN_GENOZIP }, { } },\
+                           { { LOCS,       CODEC_NONE, LOCS_GENOZIP   }, { LOCS_GZ,   CODEC_GZ,  LOCS_GENOZIP   },\
+                             { LOCS_BZ2,   CODEC_BZ2,  LOCS_GENOZIP   }, { LOCS_XZ,   CODEC_XZ,  LOCS_GENOZIP   }, { } },\
                         }
 
 // Ordered by data_type: Supported output formats for genounzip
@@ -275,6 +286,7 @@ extern const char *file_exts[];
                            { PHY, PHY_GZ, 0 }, \
                            { CHAIN, CHAIN_GZ, 0 }, \
                            { KRAKEN, KRAKEN_GZ, 0 }, \
+                           { LOCS, LOCS_GZ, 0 }, \
                          }                        
 
 // Ordered by data_type
@@ -291,6 +303,7 @@ extern const char *file_exts[];
                      { PHY_GENOZIP, 0 },                    \
                      { CHAIN_GENOZIP, 0 },                  \
                      { KRAKEN_GENOZIP, 0 },                 \
+                     { LOCS_GENOZIP, 0 },                   \
                    } 
 
 typedef const char *FileMode;
@@ -434,6 +447,7 @@ extern void file_set_input_size (const char *size_str);
 extern FileType file_get_type (const char *filename);
 extern FileType file_get_stdin_type (void);
 extern DataType file_get_data_type (FileType ft, bool is_input);
+extern Codec file_get_codec_by_txt_ft (DataType dt, FileType txt_ft);
 extern const char *file_plain_text_ext_of_dt (DataType dt);
 extern void file_get_raw_name_and_type (char *filename, char **raw_name, FileType *ft);
 extern bool file_has_ext (const char *filename, const char *extension);

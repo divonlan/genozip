@@ -239,7 +239,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     LT_UINT32    = 6,
     LT_INT64     = 7,   // ffu
     LT_UINT64    = 8,   // ffu
-    LT_FLOAT32   = 9,   // ffu
+    LT_FLOAT32   = 9,   
     LT_FLOAT64   = 10,  // ffu
     LT_SEQUENCE  = 11,  // length of data extracted is determined by vb->seq_len
     LT_BITMAP    = 12,  // a bitmap

@@ -9,6 +9,7 @@ launch.json
 *.debug-o
 *.opt-o
 *.d
+*.S
 *.genozip
 *.gz
 *.bgz

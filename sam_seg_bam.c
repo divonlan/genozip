@@ -82,7 +82,6 @@ static int32_t bam_unconsumed_scan_backwards (VBlockP vb, uint32_t first_i, int3
         if (aln->read_name[aln->l_read_name-1] != 0 || // nul-terminated
             !str_is_in_range (aln->read_name, aln->l_read_name-1, '!', '~')) continue;  // all printable ascii (per SAM spec)
 
-
         // final test option 1: test l_seq vs seq_len implied by cigar
         if (aln->l_seq && n_cigar_op) {
             uint32_t seq_len_by_cigar=0;
@@ -208,30 +207,30 @@ static inline void bam_seg_ref_id (VBlockP vb, DidIType did_i, int32_t ref_id, i
 }
 
 // re-writes BAM format SEQ into textual SEQ in vb->textual_seq
-static inline void bam_rewrite_seq (VBlockSAM *vb, uint32_t l_seq, const char *next_field)
+void bam_rewrite_seq (VBlockSAM *vb, const char *bam_seq, uint32_t seq_len)
 {
-    buf_alloc (vb, &vb->textual_seq, 0, l_seq+1 /* +1 for last half-byte */, char, 1.5, "textual_seq");
+    buf_alloc (vb, &vb->textual_seq, 0, seq_len+1 /* +1 for last half-byte */, char, 1.5, "textual_seq");
 
-    if (!l_seq) {
+    if (!seq_len) {
         NEXTENT (char, vb->textual_seq) = '*';
         return;        
     }
 
     char *next = FIRSTENT (char, vb->textual_seq);
 
-    for (uint32_t i=0; i < (l_seq+1) / 2; i++) {
+    for (uint32_t i=0; i < (seq_len+1) / 2; i++) {
         static const char base_codes[16] = "=ACMGRSVTWYHKDBN";
 
-        *next++ = base_codes[*(uint8_t*)next_field >> 4];
-        *next++ = base_codes[*(uint8_t*)next_field & 0xf];
-        next_field++;
+        *next++ = base_codes[*(uint8_t*)bam_seq >> 4];
+        *next++ = base_codes[*(uint8_t*)bam_seq & 0xf];
+        bam_seq++;
     }
 
-    vb->textual_seq.len = l_seq;
+    vb->textual_seq.len = seq_len;
 
-    ASSERTW (!(l_seq % 2) || (*AFTERENT(char, vb->textual_seq)=='='), 
+    ASSERTW (!(seq_len % 2) || (*AFTERENT(char, vb->textual_seq)=='='), 
             "Warning in bam_rewrite_seq vb=%u: expecting the unused lower 4 bits of last seq byte in an odd-length seq_len=%u to be 0, but its not. This will cause an incorrect MD5",
-             vb->vblock_i, l_seq);
+             vb->vblock_i, seq_len);
 }
 
 // Rewrite the QUAL field - add +33 to Phred scores to make them ASCII
@@ -252,7 +251,8 @@ const char *bam_get_one_optional (VBlockSAM *vb, const char *next_field,
     *tag  = next_field;
     *type = next_field[2]; // c, C, s, S, i, I, f, A, Z, H or B
     next_field += 3;
-
+    *array_subtype = 0;
+    
     switch (*type) {
         // in case of an numeric type, we pass the value as a ValueType
         case 'i': 
@@ -393,7 +393,8 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     }
 
     // SEQ - calculate diff vs. reference (denovo or loaded)
-    bam_rewrite_seq (vb, l_seq, next_field);
+    bam_rewrite_seq (vb, next_field, l_seq);
+    dl->seq_data_start = ENTNUM (vb->txt_data, next_field);
 
     ASSERT (dl->seq_len == l_seq || vb->last_cigar[0] == '*' || !l_seq, 
             "seq_len implied by CIGAR=%s is %u, but actual SEQ length is %u, SEQ=%.*s", 
@@ -414,6 +415,8 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     else { // cases 1. were both SEQ and QUAL are '*' (seq_len=0) and 2. SEQ exists, QUAL not (bam_rewrite_qual returns false)
         *(char *)alignment = '*'; // overwrite as we need it somewhere in txt_data
         sam_seg_QUAL (vb, dl, alignment, 1, l_seq /* account of l_seq 0xff */);
+        
+        vb->qual_codec_no_longr = true; // we cannot compress QUAL with CODEC_LONGR in this case
     }
     next_field += l_seq; 
 

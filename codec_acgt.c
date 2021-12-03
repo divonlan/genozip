@@ -37,6 +37,22 @@ const uint8_t acgt_encode[256] = { ['A']=0, ['C']=1, ['G']=2, ['T']=3,  // all o
                                    ['w']=0, ['k']=2, ['m']=0, ['b']=1,
                                    ['d']=0, ['h']=0, ['v']=0, ['n']=0  }; 
 
+// same as actg_encode, but produces the complement base. 
+// Note for the IUPACs: eg B=C,G,T (the lowest of them)=> C=1 
+//                   comp(B)=G,C,A (the lowest of them)=> A=0
+const uint8_t acgt_encode_comp[256] = 
+                                 { ['A']=3, ['C']=2, ['G']=1, ['T']=0,  // all others are 0
+                                   ['a']=3, ['c']=2, ['g']=1, ['t']=0, 
+                                   
+                                   ['U']=0, ['R']=1, ['Y']=0, ['S']=1,
+                                   ['W']=0, ['K']=0, ['M']=2, ['B']=0,
+                                   ['D']=0, ['H']=0, ['V']=1, ['N']=0,
+
+                                   ['u']=0, ['r']=1, ['y']=0, ['s']=1,
+                                   ['w']=0, ['k']=0, ['m']=2, ['b']=0,
+                                   ['d']=0, ['h']=0, ['v']=1, ['n']=0  }; 
+
+
 //--------------
 // ZIP side
 //--------------

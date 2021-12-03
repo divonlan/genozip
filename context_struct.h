@@ -41,6 +41,7 @@ typedef struct Context {
     int64_t compressor_time;   // Used when --show-time - time for compressing / decompressing this context
 
     // rollback point - used for rolling back during Seg
+    int64_t rback_id;          // ZIP: rollback data valid only if ctx->rback_id == vb->rback_id
     uint64_t rback_b250_len, rback_local_len, rback_nodes_len, rback_txt_len; // ZIP: data to roll back the last seg
     uint32_t rback_num_singletons, rback_last_txt_index, rback_last_txt_len;
     ValueType rback_last_value; // also used in PIZ for rolling back VCF_POS.last_value after INFO/END
@@ -77,7 +78,8 @@ typedef struct Context {
     bool pair_b250;            // ZIP: this is the 2nd file of a pair - compare vs the first file, and set flags.paired in the header of SEC_B250
                                // PIZ: pair b250 data is loaded to context.pair
     bool stop_pairing;         // this is the 2nd file of a pair - don't use SNIP_MATE_LOOKUP/DELTA anymore until the end of this VB
-    bool no_callback;          // don't use LOCAL_GET_LINE_CALLBACK for compressing, despite it being defined
+    bool no_callback;          // don't use callback for compressing, despite it being defined
+    bool local_no_bgen;        // Don't BGEN the local data - it is used by a codec to produce other data and NOT written to the z_file
     bool local_param;          // copy local.param to SectionHeaderCtx
     bool no_vb1_sort;          // don't sort the dictionary in ctx_sort_dictionaries_vb_1
     bool no_drop_b250;         // the b250 section cannot be optimized away in zip_generate_b250_section (eg if we need section header to carry a param)
@@ -88,12 +90,12 @@ typedef struct Context {
     bool line_is_luft_trans;   // Seg: true if current line, when reconstructed with --luft, should be translated with luft_trans (false if no
                                //      trans_luft exists for this context, or it doesn't trigger for this line, or line is already in LUFT coordinates)
     enum __attribute__ ((__packed__)) { DEP_L0, DEP_L1, DEP_L2, NUM_LOCAL_DEPENDENCY_LEVELS } local_dep; // ZIP: this local is created when another local is compressed (each NONREF_X is created with NONREF is compressed) (value=0,1,2)
-    bool seg_initialized;      // ZIP: context-specific seg initialization has been done
+    bool is_initialized;       // ZIP / PIZ: context-specific initialization has been done
     bool local_compressed;     // ZIP: VB: local has been compressed
     bool b250_compressed;      // ZIP: VB: b250 has been compressed
     bool dict_merged;          // ZIP: VB: dict has been merged into zctx
     bool please_remove_dict;   // ZFILE: one or more of the VBs request NOT compressing this dict (will be dropped unless another VB insists on keeping it)
-
+    
     TranslatorId luft_trans;   // ZIP: Luft translator for the context, set at context init and immutable thereafter
     
     uint32_t local_in_z;       // ZIP: index and len into z_data where local compressed data is

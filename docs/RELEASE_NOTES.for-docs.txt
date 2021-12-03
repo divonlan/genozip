@@ -8,6 +8,15 @@ updates
 - Some minor versions are skipped due to failed deployment 
 pipelines
 
+13.0.5
+- SAM/BAM, FASTQ: Better compression of PacBio and Nanopore 
+quality scores (in --best mode)
+- VCF: Better compression for FORMAT/PS, FORMAT/GT, FORMAT/GQ, 
+INFO/DP
+- Illumina formats: Better compression for .locs files
+- --multiseq (renamed from --multifasta) now works on FASTQ 
+files too, in addition to FASTA
+
 13.0.4 19/November/2021
 - Better support for EasyBuild installations - see 
 https://genozip.com/using-on-hpc.html

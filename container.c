@@ -572,9 +572,11 @@ void container_display (ConstContainerP con)
             dt_name (z_file->data_type), dt_name (flag.out_dt), vb->line_i, dt_name (z_file->data_type), \
             ctx->tag_name, ctx->last_value.i, #type, (int64_t)(mn), (int64_t)(mx))
 
-TRANSLATOR_FUNC (container_translate_I8)       { SET_n (int8_t,   INT8_MIN,  INT8_MAX  );              RECONSTRUCT1(n);       return 0; }
-TRANSLATOR_FUNC (container_translate_U8)       { SET_n (uint8_t,  0,         UINT8_MAX );              RECONSTRUCT1((char)n); return 0; }
-TRANSLATOR_FUNC (container_translate_LTEN_I16) { SET_n (int16_t,  INT16_MIN, INT16_MAX ); n=LTEN16(n); RECONSTRUCT(&n,2);     return 0; }
-TRANSLATOR_FUNC (container_translate_LTEN_U16) { SET_n (uint16_t, 0,         UINT16_MAX); n=LTEN16(n); RECONSTRUCT(&n,2);     return 0; }
-TRANSLATOR_FUNC (container_translate_LTEN_I32) { SET_n (int32_t,  INT32_MIN, INT32_MAX ); n=LTEN32(n); RECONSTRUCT(&n,4);     return 0; }
-TRANSLATOR_FUNC (container_translate_LTEN_U32) { SET_n (uint32_t, 0,         UINT32_MAX); n=LTEN32(n); RECONSTRUCT(&n,4);     return 0; }
+TRANSLATOR_FUNC (container_translate_I8)       { SET_n (int8_t,   INT8_MIN,  INT8_MAX  );               RECONSTRUCT1(n);       return 0; }
+TRANSLATOR_FUNC (container_translate_U8)       { SET_n (uint8_t,  0,         UINT8_MAX );               RECONSTRUCT1((char)n); return 0; }
+TRANSLATOR_FUNC (container_translate_LTEN_I16) { SET_n (int16_t,  INT16_MIN, INT16_MAX ); n=LTEN16(n);  RECONSTRUCT(&n,2);     return 0; }
+TRANSLATOR_FUNC (container_translate_LTEN_U16) { SET_n (uint16_t, 0,         UINT16_MAX); n=LTEN16(n);  RECONSTRUCT(&n,2);     return 0; }
+TRANSLATOR_FUNC (container_translate_LTEN_I32) { SET_n (int32_t,  INT32_MIN, INT32_MAX ); n=LTEN32(n);  RECONSTRUCT(&n,4);     return 0; }
+TRANSLATOR_FUNC (container_translate_LTEN_U32) { SET_n (uint32_t, 0,         UINT32_MAX); n=LTEN32(n);  RECONSTRUCT(&n,4);     return 0; }
+TRANSLATOR_FUNC (container_translate_LTEN_F32) { float n=ctx->last_value.f;             ; n=LTEN32F(n); RECONSTRUCT(&n,4);     return 0; }
+TRANSLATOR_FUNC (container_translate_LTEN_F64) { double n=ctx->last_value.f;            ; n=LTEN64F(n); RECONSTRUCT(&n,8);     return 0; }

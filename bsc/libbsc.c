@@ -46,15 +46,15 @@ See also the bsc and libbsc web site:
 #include "lzp.h"
 #include "coder.h"
 
-void* (* bsc_malloc)(void *vb, size_t size) = NULL;
-void  (* bsc_free)(void *vb, void* address) = NULL;
+void* (* bsc_malloc_do)(void *vb, size_t size, const char *,uint32_t) = NULL;
+void  (* bsc_free_do)(void *vb, void* address, const char *,uint32_t) = NULL;
 
 int bsc_init_full(int features, 
-                  void* (* malloc)(void *vb, size_t size), 
-                  void (* free)(void *vb, void* address))
+                  void* (* malloc)(void *vb, size_t size, const char *,uint32_t), 
+                  void (* free)(void *vb, void* address, const char *,uint32_t))
 {
-    bsc_malloc = malloc;
-    bsc_free   = free;
+    bsc_malloc_do = malloc;
+    bsc_free_do   = free;
     return bsc_coder_init(features);
 }
 

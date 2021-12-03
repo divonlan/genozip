@@ -163,7 +163,7 @@ void tar_close_file (void **file)
     int64_t z_size = tar_size - file_offset;
 
     // file consist of full 512-byte records. pad it to make it so:
-    int64_t bytes_to_full_record = 512 - (tar_size & 0x1ff);
+    int64_t bytes_to_full_record = (tar_size & 0x1ff) ? (512 - (tar_size & 0x1ff)) : 0;
     if (bytes_to_full_record) {
         char s[512] = "";
         ASSERT (fwrite (s, bytes_to_full_record, 1, tar_file) == 1, "failed to write file padding to %s", tar_name);

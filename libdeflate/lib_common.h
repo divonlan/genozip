@@ -30,8 +30,11 @@
 #define _cpu_features			SYM_FIXUP(_cpu_features)
 #define setup_cpu_features		SYM_FIXUP(setup_cpu_features)
 
-void *libdeflate_malloc(size_t size, void *opaque);
-void libdeflate_free(void *ptr, void *opaque);
+void *libdeflate_malloc_do(size_t size, void *opaque, const char *func, uint32_t code_line);
+#define libdeflate_malloc(size, opaque) libdeflate_malloc_do ((size), (opaque), __FUNCTION__, __LINE__)
+
+void libdeflate_free_do(void *ptr, void *opaque, const char *func, uint32_t code_line);
+#define libdeflate_free(ptr, opaque) libdeflate_free_do ((ptr), (opaque), __FUNCTION__, __LINE__)
 
 void *libdeflate_aligned_malloc(size_t alignment, size_t size, void *opaque);
 void libdeflate_aligned_free(void *ptr, void *opaque);

@@ -218,14 +218,14 @@ void bgzf_uncompress_vb (VBlock *vb)
     }
 }
 
-static void *bgzf_alloc (void *vb_, unsigned items, unsigned size)
+static void *bgzf_alloc (void *vb_, unsigned items, unsigned size, const char *func, uint32_t code_line)
 {
-    return codec_alloc ((VBlock *)vb_, (uint64_t)items * (uint64_t)size, 1); // all bzlib buffers are constant in size between subsequent compressions
+    return codec_alloc_do ((VBlock *)vb_, (uint64_t)items * (uint64_t)size, 1, func, code_line); // all bzlib buffers are constant in size between subsequent compressions
 }
 
 void bgzf_libdeflate_initialize (void)
 {
-    libdeflate_set_memory_allocator (bgzf_alloc, codec_free);
+    libdeflate_set_memory_allocator (bgzf_alloc, codec_free_do);
 }
 
 // ZIP: tests a BGZF block against libdeflate's level 0-12
@@ -269,7 +269,7 @@ struct FlagsBgzf bgzf_get_compression_level (const char *filename, const uint8_t
             libdeflate_free_compressor (compressor);
         }
         else { // BGZF_ZLIB
-            z_stream strm = { .zalloc = bgzf_alloc, .zfree  = codec_free, .opaque = evb };
+            z_stream strm = { .zalloc = bgzf_alloc, .zfree  = codec_free_do, .opaque = evb };
             // deflateInit2 with the default zlib parameters, with is also the same as htslib does
             ASSERT0 (deflateInit2 (&strm, l.level, Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY) == Z_OK, "deflateInit2 failed");
 
@@ -380,8 +380,8 @@ static void bgzf_alloc_compressor (VBlock *vb, struct FlagsBgzf bgzf_flags)
         vb->gzip_compressor = libdeflate_alloc_compressor (bgzf_flags.level, vb);
 
     else { // zlib
-        vb->gzip_compressor = bgzf_alloc (vb, 1, sizeof (z_stream));
-        *(z_stream *)vb->gzip_compressor = (z_stream){ .zalloc = bgzf_alloc, .zfree  = codec_free, .opaque = vb };
+        vb->gzip_compressor = bgzf_alloc (vb, 1, sizeof (z_stream), __FUNCTION__, __LINE__);
+        *(z_stream *)vb->gzip_compressor = (z_stream){ .zalloc = bgzf_alloc, .zfree  = codec_free_do, .opaque = vb };
     }
 }
 

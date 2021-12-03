@@ -31,6 +31,7 @@
 #ifndef ZLIB_H
 #define ZLIB_H
 
+#include <inttypes.h>
 #include "zconf.h"
 
 #ifdef __cplusplus
@@ -78,8 +79,8 @@ extern "C" {
   even in the case of corrupted input.
 */
 
-typedef voidpf (*alloc_func) OF((voidpf opaque, uInt items, uInt size));
-typedef void   (*free_func)  OF((voidpf opaque, voidpf address));
+typedef voidpf (*alloc_func) OF((voidpf opaque, uInt items, uInt size, const char *func, uint32_t code_line));
+typedef void   (*free_func)  OF((voidpf opaque, voidpf address, const char *func, uint32_t code_line));
 
 struct internal_state;
 

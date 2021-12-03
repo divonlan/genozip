@@ -45,7 +45,7 @@ void profiler_add (ConstVBlockP vb)
     ADD(compressor_domq);
     ADD(compressor_actg);
     ADD(compressor_pbwt);
-    ADD(compressor_enano);
+    ADD(compressor_longr);
     ADD(compressor_rans);
     ADD(compressor_arith);
     ADD(zip_generate_b250);
@@ -159,7 +159,7 @@ void profiler_print_report (void)
         PRINT (compressor_domq, 2);
         PRINT (compressor_actg, 2);
         PRINT (compressor_pbwt, 2);
-        PRINT (compressor_enano, 2);
+        PRINT (compressor_longr, 2);
         print_ctx_compressor_times();
         PRINT (reconstruct_vb, 1);
         PRINT (md5, 1);
@@ -208,7 +208,7 @@ void profiler_print_report (void)
         PRINT (compressor_domq, 1);
         PRINT (compressor_actg, 1);
         PRINT (compressor_pbwt, 1);
-        PRINT (compressor_enano, 1);
+        PRINT (compressor_longr, 1);
         PRINT (codec_hapmat_count_alt_alleles, 2);
     }    
 

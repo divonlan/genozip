@@ -44,7 +44,8 @@
 #define SNIP_DUAL                '\xF'   // A snip containing two snips separated by a SNIP_DUAL - for Primary and Luft reconstruction respectively
 #define SNIP_LOOKBACK            '\x10'  // Copy an earlier snip in the same context. Snip is dict_id from which to take the lookback offset, and an optional delta to be applied to the retrieved numeric value. note: line number of the previous snip is variable, but its offset back is fixed (introduced 12.0.41)
 #define SNIP_COPY_BUDDY          '\x11'  // Copy a snip on an earlier "buddy" line in the same or another context (note: offset back to the previous snip is variable, but its line number is fixed) (introduced 12.0.41)
-#define NUM_SNIP_CODES           18
+#define SNIP_XOR_DIFF            '\x12'  // XOR a string vs. previous string (introduced 13.0.5)    
+#define NUM_SNIP_CODES           19
 
 #define SNIP_CODES { "SNIP_SEP", "SNIP_LOOKUP", "SNIP_OTHER_LOOKUP", "SNIP_MATE_LOOKUP",\
                      "SNIP_CONTAINER", "SNIP_SELF_DELTA", "SNIP_OTHER_DELTA", "SNIP_PAIR_DELTA", \
@@ -76,6 +77,7 @@ typedef struct {
 #define PEEKNEXTLOCAL(type, ctx, offset) (*ENT (type, (ctx)->local, (ctx)->next_local + offset))
 static inline bool PAIRBIT(ContextP ctx)      { BitArrayP b = buf_get_bitarray (&ctx->pair);  bool ret = bit_array_get (b, ctx->next_local);                    return ret; } // we do it like this and not in a #define to avoid anti-aliasing warning when casting part of a Buffer structure into a BitArray structure
 static inline bool NEXTLOCALBIT(ContextP ctx) { BitArrayP b = buf_get_bitarray (&ctx->local); bool ret = bit_array_get (b, ctx->next_local); ctx->next_local++; return ret; }
+static inline uint8_t NEXTLOCAL2BITS(ContextP ctx) { BitArrayP b = buf_get_bitarray (&ctx->local); uint8_t ret = bit_array_get (b, ctx->next_local) | (bit_array_get (b, ctx->next_local+1) << 1); ctx->next_local += 2; return ret; }
 
 // factor in which we grow buffers in CTX upon realloc
 #define CTX_GROWTH 1.75  
@@ -218,8 +220,10 @@ typedef struct { char s[MAX_TAG_LEN+8]; } TagNameEx;
 TagNameEx ctx_tag_name_ex (ConstContextP ctx);
 
 // Seg: called before seg, to store the point to which we might roll back
-static inline void ctx_create_rollback_point (ContextP ctx)
+static inline bool ctx_set_rollback (VBlockP vb, ContextP ctx, bool override_id)
 {
+    if (ctx->rback_id == vb->rback_id && !override_id) return false; // ctx already in rollback point 
+    
     ctx->rback_b250_len       = ctx->b250.len;
     ctx->rback_local_len      = ctx->local.len;
     ctx->rback_nodes_len      = ctx->nodes.len;
@@ -229,8 +233,14 @@ static inline void ctx_create_rollback_point (ContextP ctx)
     ctx->rback_last_delta     = ctx->last_delta;
     ctx->rback_last_txt_index = ctx->last_txt_index;
     ctx->rback_last_txt_len   = ctx->last_txt_len;
+    ctx->rback_id             = vb->rback_id;
+    return true;
 }
-extern void ctx_rollback (VBlockP vb, ContextP ctx);
+
+// Needed only if we intend to call ctx_set_rollback again without advancing vb->rback_id
+static inline void ctx_unset_rollback (ContextP ctx) { ctx->rback_id = 1; }
+
+extern void ctx_rollback (VBlockP vb, ContextP ctx, bool override_id);
 
 static inline bool ctx_can_have_singletons (ContextP ctx) 
     { return (ctx->ltype == LT_TEXT) && !ctx->dynamic_size_local && !ctx->no_stons && 
@@ -282,6 +292,12 @@ static inline bool ctx_encountered_in_line (VBlockP vb, DidIType did_i)
 { 
     ContextP ctx=CTX(did_i); 
     return ((ctx->last_line_i == vb->line_i) || (ctx->last_line_i == -(int64_t)vb->line_i - 1)); 
+}
+
+static inline bool ctx_encountered_in_prev_line (VBlockP vb, DidIType did_i) 
+{ 
+    ContextP ctx=CTX(did_i); 
+    return ((ctx->last_line_i == vb->line_i-1) || (ctx->last_line_i == -(int64_t)(vb->line_i-1) - 1)); 
 }
 
 static inline bool ctx_encountered_in_line_by_dict_id (VBlockP vb, DictId dict_id, ContextP *p_ctx /* optional out */) 

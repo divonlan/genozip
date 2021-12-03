@@ -1,12 +1,9 @@
 /* LzFind.c -- Match finder for LZ algorithms
 2018-07-08 : Igor Pavlov : Public domain */
 
-#include "Precomp.h"
-
-#include <string.h>
-
 #include "LzFind.h"
 #include "LzHash.h"
+#include "../codec.h"
 
 #define kEmptyHashValue 0
 #define kMaxValForNormalize ((UInt32)0xFFFFFFFF)
@@ -16,18 +13,18 @@
 
 #define kStartMaxLen 3
 
-static void LzInWindow_Free(CMatchFinder *p, ISzAllocPtr alloc)
+static void LzInWindow_Free(VBlockP vb, CMatchFinder *p)
 {
   if (!p->directInput)
   {
-    ISzAlloc_Free(alloc, p->bufferBase);
+    codec_free (vb, p->bufferBase);
     p->bufferBase = NULL;
   }
 }
 
 /* keepSizeBefore + keepSizeAfter + keepSizeReserv must be < 4G) */
 
-static int LzInWindow_Create(CMatchFinder *p, UInt32 keepSizeReserv, ISzAllocPtr alloc)
+static int LzInWindow_Create(VBlockP vb, CMatchFinder *p, UInt32 keepSizeReserv)
 {
   UInt32 blockSize = p->keepSizeBefore + p->keepSizeAfter + keepSizeReserv;
   if (p->directInput)
@@ -37,18 +34,18 @@ static int LzInWindow_Create(CMatchFinder *p, UInt32 keepSizeReserv, ISzAllocPtr
   }
   if (!p->bufferBase || p->blockSize != blockSize)
   {
-    LzInWindow_Free(p, alloc);
+    LzInWindow_Free(vb, p);
     p->blockSize = blockSize;
-    p->bufferBase = (Byte *)ISzAlloc_Alloc(alloc, (size_t)blockSize);
+    p->bufferBase = codec_alloc (vb, blockSize, 0);
   }
   return (p->bufferBase != NULL);
 }
 
-Byte *MatchFinder_GetPointerToCurrentPos(CMatchFinder *p) { return p->buffer; }
+static Byte *MatchFinder_GetPointerToCurrentPos(CMatchFinder *p) { return p->buffer; }
 
-UInt32 MatchFinder_GetNumAvailableBytes(CMatchFinder *p) { return p->streamPos - p->pos; }
+static UInt32 MatchFinder_GetNumAvailableBytes(CMatchFinder *p) { return p->streamPos - p->pos; }
 
-void MatchFinder_ReduceOffsets(CMatchFinder *p, UInt32 subValue)
+static void MatchFinder_ReduceOffsets(CMatchFinder *p, UInt32 subValue)
 {
   p->posLimit -= subValue;
   p->pos -= subValue;
@@ -95,7 +92,7 @@ static void MatchFinder_ReadBlock(CMatchFinder *p)
   }
 }
 
-void MatchFinder_MoveBlock(CMatchFinder *p)
+static void MatchFinder_MoveBlock(CMatchFinder *p)
 {
   memmove(p->bufferBase,
       p->buffer - p->keepSizeBefore,
@@ -103,20 +100,12 @@ void MatchFinder_MoveBlock(CMatchFinder *p)
   p->buffer = p->bufferBase + p->keepSizeBefore;
 }
 
-int MatchFinder_NeedMove(CMatchFinder *p)
+static int MatchFinder_NeedMove(CMatchFinder *p)
 {
   if (p->directInput)
     return 0;
   /* if (p->streamEndWasReached) return 0; */
   return ((size_t)(p->bufferBase + p->blockSize - p->buffer) <= p->keepSizeAfter);
-}
-
-void MatchFinder_ReadIfRequired(CMatchFinder *p)
-{
-  if (p->streamEndWasReached)
-    return;
-  if (p->keepSizeAfter >= p->streamPos - p->pos)
-    MatchFinder_ReadBlock(p);
 }
 
 static void MatchFinder_CheckAndMoveAndRead(CMatchFinder *p)
@@ -155,35 +144,34 @@ void MatchFinder_Construct(CMatchFinder *p)
   }
 }
 
-static void MatchFinder_FreeThisClassMemory(CMatchFinder *p, ISzAllocPtr alloc)
+static void MatchFinder_FreeThisClassMemory(VBlockP vb, CMatchFinder *p)
 {
-  ISzAlloc_Free(alloc, p->hash);
+  codec_free(vb, p->hash);
   p->hash = NULL;
 }
 
-void MatchFinder_Free(CMatchFinder *p, ISzAllocPtr alloc)
+void MatchFinder_Free(VBlockP vb, CMatchFinder *p)
 {
-  MatchFinder_FreeThisClassMemory(p, alloc);
-  LzInWindow_Free(p, alloc);
+  MatchFinder_FreeThisClassMemory(vb, p);
+  LzInWindow_Free(vb, p);
 }
 
-static CLzRef* AllocRefs(size_t num, ISzAllocPtr alloc)
+static CLzRef* AllocRefs(VBlockP vb, size_t num)
 {
   size_t sizeInBytes = (size_t)num * sizeof(CLzRef);
   if (sizeInBytes / sizeof(CLzRef) != num)
     return NULL;
-  return (CLzRef *)ISzAlloc_Alloc(alloc, sizeInBytes);
+  return codec_alloc (vb, sizeInBytes, 0);
 }
 
-int MatchFinder_Create(CMatchFinder *p, UInt32 historySize,
-    UInt32 keepAddBufferBefore, UInt32 matchMaxLen, UInt32 keepAddBufferAfter,
-    ISzAllocPtr alloc)
+int MatchFinder_Create(VBlockP vb, CMatchFinder *p, UInt32 historySize,
+    UInt32 keepAddBufferBefore, UInt32 matchMaxLen, UInt32 keepAddBufferAfter)
 {
   UInt32 sizeReserv;
   
   if (historySize > kMaxHistorySize)
   {
-    MatchFinder_Free(p, alloc);
+    MatchFinder_Free(vb, p);
     return 0;
   }
   
@@ -198,7 +186,7 @@ int MatchFinder_Create(CMatchFinder *p, UInt32 historySize,
   
   /* we need one additional byte, since we use MoveBlock after pos++ and before dictionary using */
   
-  if (LzInWindow_Create(p, sizeReserv, alloc))
+  if (LzInWindow_Create(vb, p, sizeReserv))
   {
     UInt32 newCyclicBufferSize = historySize + 1;
     UInt32 hs;
@@ -252,9 +240,9 @@ int MatchFinder_Create(CMatchFinder *p, UInt32 historySize,
       if (p->hash && p->numRefs == newSize)
         return 1;
       
-      MatchFinder_FreeThisClassMemory(p, alloc);
+      MatchFinder_FreeThisClassMemory(vb, p);
       p->numRefs = newSize;
-      p->hash = AllocRefs(newSize, alloc);
+      p->hash = AllocRefs(vb, newSize);
       
       if (p->hash)
       {
@@ -264,7 +252,7 @@ int MatchFinder_Create(CMatchFinder *p, UInt32 historySize,
     }
   }
 
-  MatchFinder_Free(p, alloc);
+  MatchFinder_Free(vb, p);
   return 0;
 }
 
@@ -298,7 +286,7 @@ static void MatchFinder_SetLimits(CMatchFinder *p)
 }
 
 
-void MatchFinder_Init_LowHash(CMatchFinder *p)
+static void MatchFinder_Init_LowHash(CMatchFinder *p)
 {
   size_t i;
   CLzRef *items = p->hash;
@@ -308,7 +296,7 @@ void MatchFinder_Init_LowHash(CMatchFinder *p)
 }
 
 
-void MatchFinder_Init_HighHash(CMatchFinder *p)
+static void MatchFinder_Init_HighHash(CMatchFinder *p)
 {
   size_t i;
   CLzRef *items = p->hash + p->fixedHashSize;
@@ -318,7 +306,7 @@ void MatchFinder_Init_HighHash(CMatchFinder *p)
 }
 
 
-void MatchFinder_Init_3(CMatchFinder *p, int readData)
+static void MatchFinder_Init_3(CMatchFinder *p, int readData)
 {
   p->cyclicBufferPos = 0;
   p->buffer = p->bufferBase;
@@ -334,7 +322,7 @@ void MatchFinder_Init_3(CMatchFinder *p, int readData)
 }
 
 
-void MatchFinder_Init(CMatchFinder *p)
+static void MatchFinder_Init(CMatchFinder *p)
 {
   MatchFinder_Init_HighHash(p);
   MatchFinder_Init_LowHash(p);
@@ -347,7 +335,7 @@ static UInt32 MatchFinder_GetSubValue(CMatchFinder *p)
   return (p->pos - p->historySize - 1) & kNormalizeMask;
 }
 
-void MatchFinder_Normalize3(UInt32 subValue, CLzRef *items, size_t numItems)
+static void MatchFinder_Normalize3(UInt32 subValue, CLzRef *items, size_t numItems)
 {
   size_t i;
   for (i = 0; i < numItems; i++)
@@ -462,7 +450,7 @@ static UInt32 * Hc_GetMatchesSpec(unsigned lenLimit, UInt32 curMatch, UInt32 pos
 
 
 MY_FORCE_INLINE
-UInt32 * GetMatchesSpec1(UInt32 lenLimit, UInt32 curMatch, UInt32 pos, const Byte *cur, CLzRef *son,
+static UInt32 * GetMatchesSpec1(UInt32 lenLimit, UInt32 curMatch, UInt32 pos, const Byte *cur, CLzRef *son,
     UInt32 _cyclicBufferPos, UInt32 _cyclicBufferSize, UInt32 cutValue,
     UInt32 *distances, UInt32 maxLen)
 {
@@ -611,17 +599,6 @@ static UInt32 Bt2_MatchFinder_GetMatches(CMatchFinder *p, UInt32 *distances)
   p->hash[hv] = p->pos;
   offset = 0;
   GET_MATCHES_FOOTER(offset, 1)
-}
-
-UInt32 Bt3Zip_MatchFinder_GetMatches(CMatchFinder *p, UInt32 *distances)
-{
-  unsigned offset;
-  GET_MATCHES_HEADER(3)
-  HASH_ZIP_CALC;
-  curMatch = p->hash[hv];
-  p->hash[hv] = p->pos;
-  offset = 0;
-  GET_MATCHES_FOOTER(offset, 2)
 }
 
 static UInt32 Bt3_MatchFinder_GetMatches(CMatchFinder *p, UInt32 *distances)
@@ -958,19 +935,6 @@ static void Bt2_MatchFinder_Skip(CMatchFinder *p, UInt32 num)
   while (--num != 0);
 }
 
-void Bt3Zip_MatchFinder_Skip(CMatchFinder *p, UInt32 num)
-{
-  do
-  {
-    SKIP_HEADER(3)
-    HASH_ZIP_CALC;
-    curMatch = p->hash[hv];
-    p->hash[hv] = p->pos;
-    SKIP_FOOTER
-  }
-  while (--num != 0);
-}
-
 static void Bt3_MatchFinder_Skip(CMatchFinder *p, UInt32 num)
 {
   do
@@ -1068,19 +1032,6 @@ static void Hc5_MatchFinder_Skip(CMatchFinder *p, UInt32 num)
 }
 */
 
-void Hc3Zip_MatchFinder_Skip(CMatchFinder *p, UInt32 num)
-{
-  do
-  {
-    SKIP_HEADER(3)
-    HASH_ZIP_CALC;
-    curMatch = p->hash[hv];
-    p->hash[hv] = p->pos;
-    p->son[p->cyclicBufferPos] = curMatch;
-    MOVE_POS
-  }
-  while (--num != 0);
-}
 
 void MatchFinder_CreateVTable(CMatchFinder *p, IMatchFinder *vTable)
 {

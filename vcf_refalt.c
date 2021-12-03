@@ -33,9 +33,10 @@ static void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char main_ref, char main_
     if (((flag.reference == REF_EXTERNAL && !flag.match_chrom_to_reference) || flag.reference == REF_EXT_STORE) && vb->line_coords == DC_PRIMARY) {
         PosType pos = vb->last_int(VCF_POS);
 
-        RefLock lock;
+        RefLock lock = REFLOCK_NONE;
 
-        Range *range = ref_seg_get_locked_range (VB, gref, vb->chrom_node_index, vb->chrom_name, vb->chrom_name_len, pos, 1, WORD_INDEX_NONE, NULL, &lock);
+        Range *range = ref_seg_get_locked_range (VB, gref, vb->chrom_node_index, vb->chrom_name, vb->chrom_name_len, pos, 1, WORD_INDEX_NONE, NULL, 
+                                                 (flag.reference == REF_EXT_STORE ? &lock : NULL));
         if (range) { // this chrom is in the reference
             uint32_t index_within_range = pos - range->first_pos;
 
@@ -48,7 +49,7 @@ static void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char main_ref, char main_
             if (flag.reference == REF_EXT_STORE)
                 bit_array_set (&range->is_set, index_within_range);
 
-            ref_unlock (gref, lock);
+            ref_unlock (gref, lock); // does nothing if REFLOCK_NONE
         }
     }
 

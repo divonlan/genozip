@@ -5,8 +5,6 @@
 
 #include "7zTypes.h"
 
-EXTERN_C_BEGIN
-
 typedef UInt32 CLzRef;
 
 typedef struct _CMatchFinder
@@ -58,11 +56,6 @@ typedef struct _CMatchFinder
     ((p)->streamEndWasReached \
         && (p)->streamPos == (p)->pos \
         && (!(p)->directInput || (p)->directInputRem == 0))
-      
-int MatchFinder_NeedMove(CMatchFinder *p);
-Byte *MatchFinder_GetPointerToCurrentPos(CMatchFinder *p);
-void MatchFinder_MoveBlock(CMatchFinder *p);
-void MatchFinder_ReadIfRequired(CMatchFinder *p);
 
 void MatchFinder_Construct(CMatchFinder *p);
 
@@ -70,16 +63,9 @@ void MatchFinder_Construct(CMatchFinder *p);
      historySize <= 3 GB
      keepAddBufferBefore + matchMaxLen + keepAddBufferAfter < 511MB
 */
-int MatchFinder_Create(CMatchFinder *p, UInt32 historySize,
-    UInt32 keepAddBufferBefore, UInt32 matchMaxLen, UInt32 keepAddBufferAfter,
-    ISzAllocPtr alloc);
-void MatchFinder_Free(CMatchFinder *p, ISzAllocPtr alloc);
-void MatchFinder_Normalize3(UInt32 subValue, CLzRef *items, size_t numItems);
-void MatchFinder_ReduceOffsets(CMatchFinder *p, UInt32 subValue);
-
-UInt32 * GetMatchesSpec1(UInt32 lenLimit, UInt32 curMatch, UInt32 pos, const Byte *buffer, CLzRef *son,
-    UInt32 _cyclicBufferPos, UInt32 _cyclicBufferSize, UInt32 _cutValue,
-    UInt32 *distances, UInt32 maxLen);
+int MatchFinder_Create(VBlockP vb, CMatchFinder *p, UInt32 historySize,
+    UInt32 keepAddBufferBefore, UInt32 matchMaxLen, UInt32 keepAddBufferAfter);
+void MatchFinder_Free(VBlockP vb, CMatchFinder *p);
 
 /*
 Conditions:
@@ -103,17 +89,4 @@ typedef struct _IMatchFinder
 } IMatchFinder;
 
 void MatchFinder_CreateVTable(CMatchFinder *p, IMatchFinder *vTable);
-
-void MatchFinder_Init_LowHash(CMatchFinder *p);
-void MatchFinder_Init_HighHash(CMatchFinder *p);
-void MatchFinder_Init_3(CMatchFinder *p, int readData);
-void MatchFinder_Init(CMatchFinder *p);
-
-UInt32 Bt3Zip_MatchFinder_GetMatches(CMatchFinder *p, UInt32 *distances);
-UInt32 Hc3Zip_MatchFinder_GetMatches(CMatchFinder *p, UInt32 *distances);
-
-void Bt3Zip_MatchFinder_Skip(CMatchFinder *p, UInt32 num);
-void Hc3Zip_MatchFinder_Skip(CMatchFinder *p, UInt32 num);
-
-EXTERN_C_END
 

@@ -190,6 +190,14 @@ void stats_set_consolidation (VBlock *vb, DidIType parent, unsigned num_deps, ..
     va_end (args);
 }
 
+void stats_set_consolidation_(VBlock *vb, DidIType parent, unsigned num_deps, ContextP *dep_ctxs)
+{
+    for (unsigned d=0; d < num_deps; d++) 
+        dep_ctxs[d]->st_did_i = parent;
+
+    CTX(parent)->is_stats_parent = true;
+}
+
 static void stats_consolidate_non_ctx (StatsByLine *sbl, unsigned num_stats, const char *consolidated_name, 
                                        unsigned num_deps, ...)
 {
@@ -241,7 +249,7 @@ static void stats_output_stats (StatsByLine *s, unsigned num_stats, float src_co
                                 int64_t all_txt_len, int64_t all_txt_len_0, int64_t all_z_size, float all_pc_of_txt, float all_pc_of_z, float all_comp_ratio)
 {
     bufprintf (evb, &z_file->stats_buf, "\nSections (sorted by %% of genozip file):%s\n", "");
-    bufprintf (evb, &z_file->stats_buf, "NAME                   GENOZIP      %%      TXT       %%   RATIO\n%s", "");
+    bufprintf (evb, &z_file->stats_buf, "NAME                   GENOZIP      %%       TXT      %%   RATIO\n%s", "");
 
     for (uint32_t i=0; i < num_stats; i++, s++)
         if (s->z_size)
@@ -420,10 +428,10 @@ void stats_compress (void)
                                ST_NAME (SEC_REF_CONTIGS), ST_NAME (SEC_REF_RAND_ACC), ST_NAME (SEC_CHROM2REF_MAP),
                                ST_NAME (SEC_REF_IUPACS));
 
-    stats_consolidate_non_ctx (sbl, num_stats, "Other", 18, "E1L", "E2L", "EOL", "SAMPLES", "OPTIONAL", 
+    stats_consolidate_non_ctx (sbl, num_stats, "Other", 18 + (DTPZ(txt_header_required) == HDR_NONE), "E1L", "E2L", "EOL", "SAMPLES", "OPTIONAL", 
                                TOPLEVEL, "ToPLUFT", "TOP2BAM", "TOP2FQ", "TOP2FQEX", "TOP2VCF", "TOP2HASH", "LINEMETA", "CONTIG", 
                                ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_DICT_ID_ALIASES), 
-                               ST_NAME (SEC_VB_HEADER), ST_NAME (SEC_BGZF));
+                               ST_NAME (SEC_VB_HEADER), ST_NAME (SEC_BGZF), ST_NAME(SEC_TXT_HEADER)/*must be last*/);
     
     ASSERTW (all_txt_len == z_file->txt_data_so_far_bind || flag.make_reference, // all_txt_len=0 in make-ref as there are no contexts
              "Expecting all_txt_len=%"PRId64" == z_file->txt_data_so_far_bind=%"PRId64, all_txt_len, z_file->txt_data_so_far_bind);

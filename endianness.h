@@ -135,3 +135,7 @@
 #define CONST_BGEN64(x) (x)
 #endif
 
+#define LTEN32F(x) ({ union { float f;  uint32_t i; } u = {.f = (x)}; u.i = LTEN32(u.i); u.f; })
+#define BGEN32F(x) ({ union { float f;  uint32_t i; } u = {.f = (x)}; u.i = BGEN32(u.i); u.f; })
+#define LTEN64F(x) ({ union { double f; uint64_t i; } u = {.f = (x)}; u.i = LTEN64(u.i); u.f; })
+#define BGEN64F(x) ({ union { double f; uint64_t i; } u = {.f = (x)}; u.i = BGEN64(u.i); u.f; })

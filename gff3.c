@@ -119,11 +119,15 @@ static bool gff3_seg_target (VBlockP vb, const char *value, unsigned value_len)
 
 static bool gff3_seg_ENSTid (VBlockP vb, ContextP ctx, STRp(enst_id), uint32_t repeat)
 {
-    if (enst_id_len != 15 || memcmp (enst_id, "ENST", 4) || !str_is_numeric (&enst_id[4], 11))
-        return false;
+    if (enst_id_len != 15 || memcmp (enst_id, "ENST", 4) || !str_is_numeric (&enst_id[4], 11)) 
+        seg_by_ctx (vb, STRa(enst_id), ctx, enst_id_len);
 
-    seg_by_did_i (vb, &enst_id[4], 11, EnNSTid, 11);
-    seg_by_ctx (vb, STRa(ENST_snip), ctx, 4);
+    else {
+        seg_add_ctx_to_rollback_point (vb, CTX(EnNSTid));
+
+        seg_by_did_i (vb, &enst_id[4], 11, EnNSTid, 11);
+        seg_by_ctx (vb, STRa(ENST_snip), ctx, 4);
+    }
     return true;
 }
 

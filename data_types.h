@@ -26,6 +26,7 @@
 #include "phylip.h"
 #include "chain.h"
 #include "kraken.h"
+#include "locs.h"
 
 #ifndef MAX // can't use MAX_ in a global variable
 #define MAX(a, b) (((a) > (b)) ? (a) : (b) )
@@ -35,30 +36,32 @@
                         MAX ((int)NUM_VCF_SPECIAL,   \
                         MAX ((int)NUM_SAM_SPECIAL,   \
                         MAX ((int)NUM_CHAIN_SPECIAL, \
-                             (int)NUM_FASTA_SPECIAL))))
+                        MAX ((int)NUM_LOCS_SPECIAL,  \
+                             (int)NUM_FASTA_SPECIAL)))))
 
 typedef TRANSLATOR_FUNC ((*PizTranslator));
 #define MAX_NUM_TRANSLATORS MAX (NUM_VCF_TRANS,      \
                             MAX (NUM_SAM_TRANS,      \
                             MAX (NUM_ME23_TRANS,     \
                             MAX (NUM_PHYLIP_TRANS,   \
-                                 NUM_FASTA_TRANS))))
+                            MAX (NUM_LOCS_TRANS,     \
+                                 NUM_FASTA_TRANS)))))
 
 typedef struct DataTypeProperties {
     
     // ZIP properties and functions
     const char *name;
     bool is_binary; 
-    bool vb_end_nl;                    // the last character of every VB.txt_data is a newline
-    DataType bin_type;                 // the binary equivalent of this textual file - exists for every data type that might have genozip_header.txt_is_bin=true
-    unsigned line_height;              // how many actual txt file lines are in one seg line (seg lines are counted in lines.len). drop_lines in container_reconstruct_do needs to match the maximum.
+    bool vb_end_nl;                     // the last character of every VB.txt_data is a newline
+    DataType bin_type;                  // the binary equivalent of this textual file - exists for every data type that might have genozip_header.txt_is_bin=true
+    unsigned line_height;               // how many actual txt file lines are in one seg line (seg lines are counted in lines.len). drop_lines in container_reconstruct_do needs to match the maximum.
     unsigned (*sizeof_vb)(DataType dt);
     unsigned (*sizeof_zip_dataline)(void);
 
     // TXT HEDEAR stuff
     enum {HDR_NONE, HDR_OK, HDR_MUST} txt_header_required;
-    const char *hdr_contigs;        // format of contigs in the txtheader
-    char txt_header_1st_char;          // first character in each line in the text file header (-1 if TXT_HEADER_IS_ALLOWED is false)
+    const char *hdr_contigs;            // format of contigs in the txtheader
+    char txt_header_1st_char;           // first character in each line in the text file header (-1 if TXT_HEADER_IS_ALLOWED is false)
     int32_t (*is_header_done) (bool is_eof);  // ZIP: header length if header read is complete, -1 if not complete yet + sets lines.len
     int32_t (*unconsumed) (VBlockP, uint32_t first_i, int32_t *i);  // called by main thread called by txtfile_get_unconsumed_to_pass_to_next_vb to get the length of unconsumed txt to pass to next vb. returns -1 if first_i is too high and it needs more data.
     bool (*inspect_txt_header) (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags); // called by main thread to verify the txt header. returns false if this txt file should be skipped
@@ -123,9 +126,10 @@ typedef struct DataTypeProperties {
     { "PHYLIP",    false, true,  DT_NONE,    1, 0,             phy_vb_zip_dl_size,   HDR_MUST, NULL,           -1,  phy_is_header_done,  NULL,             phy_header_inspect,     NULL,                   NULL,              NULL,                NULL,                  NULL,                      NULL,                 phy_seg_initialize,     phy_seg_txt_line,     phy_seg_is_small,     phy_seg_finalize,     NULL,                     NULL,                NULL,                   NULL,                NULL,                    NULL,                       NULL,                      NULL,                  NULL,                     0,                   0,                 {},            NUM_PHYLIP_TRANS,PHYLIP_TRANSLATORS,NULL,                NULL,                NULL,                   "Sequence",      { "FIELD", "ERROR!", "ERROR!"         } }, \
     { "CHAIN",     false, true,  DT_NONE,    1, chain_vb_size, 0,                    HDR_NONE, NULL,           -1,  NULL,                chain_unconsumed, NULL,                   chain_zip_initialize,   NULL,              NULL,                NULL,                  NULL,                      chain_zip_dts_flag,   chain_seg_initialize,   chain_seg_txt_line,   chain_seg_is_small,   chain_seg_finalize,   NULL,                     NULL,                chain_piz_initialize,   NULL,                NULL,                    NULL,                       NULL,                      chain_piz_filter,      NULL,                     0,                   NUM_CHAIN_SPECIAL, CHAIN_SPECIAL, 0,               {},                chain_vb_release_vb, NULL,                NULL,                   "Alignment set", { "FIELD", "ERROR!", "ERROR!"         } }, \
     { "KRAKEN",    false, true,  DT_NONE,    1, 0,             0,                    HDR_NONE, NULL,           -1,  NULL,                NULL,             NULL,                   kraken_zip_initialize,  NULL,              NULL,                NULL,                  kraken_zip_after_compute,  NULL,                 kraken_seg_initialize,  kraken_seg_txt_line,  kraken_seg_is_small,  kraken_seg_finalize,  NULL,                     NULL,                kraken_piz_initialize,  NULL,                NULL,                    kraken_piz_is_skip_section, NULL,                      NULL,                  kraken_piz_container_cb,  0,                   0,                 {},            0,               {},                NULL,                NULL,                NULL,                   "Sequence",      { "FIELD", "QNAME",  "SEQLEN"         } }, \
+    { "LOCS",      true,  false, DT_LOCS,    0, 0,             0,                    HDR_MUST, NULL,           -1,  locs_is_header_done, locs_unconsumed,  NULL,                   NULL,                   NULL,              NULL,                NULL,                  NULL,                      NULL,                 locs_seg_initialize,    locs_seg_txt_line,    locs_seg_is_small,    locs_seg_finalize,    NULL,                     NULL,                NULL,                   NULL,                NULL,                    NULL,                       NULL,                      NULL,                  NULL,                     0,                   NUM_LOCS_SPECIAL,  LOCS_SPECIAL,  NUM_LOCS_TRANS,  LOCS_TRANSLATORS,  NULL,                NULL,                NULL,                   "Cluster" ,      { "FIELD", "ERROR!", "ERROR!"         } }, \
 }  
 #define DATA_TYPE_FUNCTIONS_DEFAULT /* only applicable to (some) functions */ \
-    { "DEFAULT",   false, false, DT_NONE,    0, def_vb_size,   0,                    0,        0,              0,   def_is_header_done,  def_unconsumed,   0,                      0,                      0,                 0,                   0,                     0,                         0,                    0,                      0,                    0,                    0,                    0,                        0,                   0,                      NULL,                0,                       0,                          0,                         container_no_filter,   0,                        0,                   0,                 {},            0,               {},                0,                   0,                   0,                      "",                {                             } }
+    { "DEFAULT",   false, false, DT_NONE,    0, def_vb_size,   0,                    0,        0,              0,   def_is_header_done,  def_unconsumed,   0,                      0,                      0,                 0,                   0,                     0,                         0,                    0,                      0,                    0,                    0,                    0,                        0,                   0,                      NULL,                0,                       0,                          0,                         container_no_filter,   0,                        0,                   0,                 {},            0,               {},                0,                   0,                   0,                      "",              {                                     } }
 
 extern DataTypeProperties dt_props[NUM_DATATYPES], dt_props_def;
 
@@ -144,7 +148,6 @@ extern DataTypeProperties dt_props[NUM_DATATYPES], dt_props_def;
 // !!WARNING!!: to use DT_FUNC in an expression it MUST be enclosed in parathesis: (DT_FUNC(vb,func)(args))
 #define DT_FUNC(src,prop) DT_FUNC_OPTIONAL (src, prop, 0)
 
-//#define MAX_DICTS 9000      // > ENANO_NUM_CTXS
 #define MAX_DICTS 2048
 
 typedef struct DataTypeFields {
@@ -175,6 +178,7 @@ typedef struct DataTypeFields {
   {NUM_PHY_FIELDS,   DID_I_NONE,      DID_I_NONE,   DID_I_NONE,     DID_I_NONE,     DID_I_NONE,      {_PHY_EOL},     {_PHY_TOPLEVEL},     PHY_PREDEFINED    }, \
   {NUM_CHAIN_FIELDS, CHAIN_STARTPRIM, DID_I_NONE,   CHAIN_NAMEPRIM, CHAIN_NAMELUFT, CHAIN_STARTLUFT, {_CHAIN_EOL},   {_CHAIN_TOPLEVEL},   CHAIN_PREDEFINED  }, \
   {NUM_KRAKEN_FIELDS,DID_I_NONE,      DID_I_NONE,   DID_I_NONE,     DID_I_NONE,     DID_I_NONE,      {_KRAKEN_EOL},  {_KRAKEN_TOPLEVEL},  KRAKEN_PREDEFINED }, \
+  {NUM_LOCS_FIELDS,  DID_I_NONE,      DID_I_NONE,   DID_I_NONE,     DID_I_NONE,     DID_I_NONE,      {0},            {_LOCS_TOPLEVEL},    LOCS_PREDEFINED   }, \
 }
 
 extern DataTypeFields dt_fields[NUM_DATATYPES];
@@ -214,7 +218,7 @@ typedef struct DtTranslation {
 } DtTranslation;
 
 #define TRANSLATIONS { \
-    /*                           non-bin-dt  binary dst_txt_dt toplevel        factor  txtheader_transl.        trans_con. src_dt is_trans. */ \
+    /*                           non-bin-dt  binary dst_txt_dt toplevel             factor  txtheader_transl.   trans_con. src_dt is_trans. */ \
     /* SAM to BAM           */ { DT_SAM,     false, DT_BAM,    { _SAM_TOP2BAM },       2,   sam_header_sam2bam,  true,     false, NULL }, /* BAM is expected to be smaller, but in edge cases numbers "1\t" -> uint32 and QUAL="*"->0xff X seq_len */ \
     /* SAM to FASTQ         */ { DT_SAM,     false, DT_FASTQ,  { _SAM_TOP2FQ },        1,   txtheader_sam2fq,    true,     false, NULL }, /* sizes of SEQ, QUAL, QNAME the same */ \
     /* SAM to FASTQ extend. */ { DT_SAM,     false, DT_FASTQ,  { _SAM_TOP2FQEX },      1.1, txtheader_sam2fq,    true,     false, NULL }, /* very slightly bigger due to added + */ \
@@ -226,6 +230,7 @@ typedef struct DtTranslation {
     /* Phylip to FASTA      */ { DT_PHYLIP,  false, DT_FASTA,  { _PHY_TOP2FASTA },     1.1, txtheader_phy2fa,    true,     false, NULL }, \
     /* VCF: genocat --luft  */ { DT_VCF,     false, DT_VCF,    { _VCF_TOPLUFT },       1,   NULL,                true,     false, vcf_vb_is_luft }, /* Length of --luft is exactly recon_size_luft*/ \
     /* genocat --taxid      */ { DT_KRAKEN,  false, DT_NONE,   { _KRAKEN_TOP2TAXID },  1,   NULL,                true,     false, kraken_is_translation }, \
+    /* LOCS reconstruction  */ { DT_LOCS,    true,  DT_LOCS,   { _LOCS_TOPLEVEL },     1,   NULL,                true,     true,  NULL }, \
 }
 
 extern const DtTranslation dt_get_translation (VBlockP vb);

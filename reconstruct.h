@@ -59,8 +59,8 @@ extern void reconstruct_from_buddy_get_textual_snip (VBlockP vb, ContextP ctx, p
 typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, DidIType did_i, DictId dict_id);
 
 // gets snip, snip_len from b250 data
-#define LOAD_SNIP(did_i) ctx_get_next_snip (VB, CTX(did_i), CTX(did_i)->flags.all_the_same, false, &snip, &snip_len); 
-#define PEEK_SNIP(did_i) ctx_peek_next_snip (VB, CTX(did_i), CTX(did_i)->flags.all_the_same, &snip, &snip_len); 
+#define LOAD_SNIP(did_i) ctx_get_next_snip (VB, CTX(did_i), CTX(did_i)->flags.all_the_same, false, &snip, &snip_len) 
+#define PEEK_SNIP(did_i) ctx_peek_next_snip (VB, CTX(did_i), CTX(did_i)->flags.all_the_same, &snip, &snip_len)
 
 #define LOAD_SNIP_FROM_LOCAL(ctx) ( {           \
     uint32_t start = ctx->next_local;           \
@@ -74,19 +74,20 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, DidIType did_i, 
 
 #define RECONSTRUCT(s,len) buf_add (&vb->txt_data, (char*)(s), (len))
 #define RECONSTRUCT1(c) NEXTENT (char, vb->txt_data) = c
-#define RECONSTRUCT_SEP(s,len,sep) do { RECONSTRUCT((s), (len)); RECONSTRUCT1 (sep); } while(0)
+#define RECONSTRUCT_SEP(s,len,sep) ({ RECONSTRUCT((s), (len)); RECONSTRUCT1 (sep); })
 #define RECONSTRUCT_TABBED(s,len) RECONSTRUCT_SEP (s, len, '\t')
 #define RECONSTRUCT_BUF(buf) RECONSTRUCT((buf).data,(buf).len)
 
 #define RECONSTRUCT_INT(n) ({ unsigned n_len = str_int ((n), AFTERENT (char, vb->txt_data)); \
                               vb->txt_data.len += n_len; n_len; })
 
-#define RECONSTRUCT_FROM_DICT(did_i,add_tab) /* not a block so caller get the return value of ctx_get_next_snip */ \
-    LOAD_SNIP (did_i);\
-    RECONSTRUCT (snip, snip_len);\
-    if (add_tab) RECONSTRUCT1 ('\t');
+#define RECONSTRUCT_FROM_DICT(did_i,add_tab)    \
+    ({ WordIndex wi = LOAD_SNIP (did_i);        \
+       RECONSTRUCT (snip, snip_len);            \
+       if (add_tab) RECONSTRUCT1 ('\t');        \
+       wi;                               })
 
 // binary reconstructions
 #define RECONSTRUCT_BIN8(n)  RECONSTRUCT (&n, 1)
-#define RECONSTRUCT_BIN16(n) do { uint16_t lten = (uint16_t)(n); lten = LTEN16(lten); RECONSTRUCT (&lten, sizeof (uint16_t)); } while (0)
-#define RECONSTRUCT_BIN32(n) do { uint32_t lten = (uint32_t)(n); lten = LTEN32(lten); RECONSTRUCT (&lten, sizeof (uint32_t)); } while (0)
+#define RECONSTRUCT_BIN16(n) ({ uint16_t lten = (uint16_t)(n); lten = LTEN16(lten); RECONSTRUCT (&lten, sizeof (uint16_t)); })
+#define RECONSTRUCT_BIN32(n) ({ uint32_t lten = (uint32_t)(n); lten = LTEN32(lten); RECONSTRUCT (&lten, sizeof (uint32_t)); })

@@ -468,6 +468,16 @@ static inline bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, const QnameFlav
     // seg
     int64_t value, prev_value;
 
+    bool is_int[n_items], is_hex[n_items];
+
+    memset (is_int, 0, n_items * sizeof(bool));
+    for (unsigned i=0; qfs->integer_items[i] != -1; i++)
+        is_int[qfs->integer_items[i]] = true;
+//xxx what about numeric_items?
+    memset (is_hex, 0, n_items * sizeof(bool));
+    for (unsigned i=0; qfs->hex_items[i] != -1; i++)
+        is_hex[qfs->hex_items[i]] = true;
+    
     for (unsigned item_i=0; item_i < qfs->con.nitems_lo; item_i++) {
 
         // get item ctx - Q?NAME did_i are immediately following QNAME, and QmatNAME si the last.
@@ -485,9 +495,13 @@ static inline bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, const QnameFlav
             seg_prepare_snip_other (SNIP_OTHER_DELTA, qfs->con.items[qfs->range_end_item-1].dict_id, true, value - prev_value, snip);
             seg_by_ctx (vb, STRa(snip), item_ctx, item_lens[item_i]);      
         }
-// else if (item_i==1)//xxx
-//     seg_integer_or_not (vb, item_ctx, STRi(item, item_i), item_lens[item_i]);
 
+        else if (is_int[item_i])
+            seg_integer_or_not (vb, item_ctx, STRi(item, item_i), item_lens[item_i]);
+
+        else if (is_hex[item_i]) 
+            seg_xor_diff (vb, item_ctx, STRi(item, item_i), item_ctx->flags.all_the_same, item_lens[item_i]);
+        
         // case: textual item
         else
             seg_by_ctx (vb, STRi(item, item_i), item_ctx, item_lens[item_i]);      

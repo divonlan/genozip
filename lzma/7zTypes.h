@@ -3,25 +3,8 @@
 
 #pragma once
 
-#ifdef _WIN32
-/* #include <windows.h> */
-#endif
-
-#include <stddef.h>
-#include <stdint.h>
+#include "stddef.h" // ptrdiff_t
 #include "../genozip.h"
-
-#ifndef EXTERN_C_BEGIN
-#ifdef __cplusplus
-#define EXTERN_C_BEGIN extern "C" {
-#define EXTERN_C_END }
-#else
-#define EXTERN_C_BEGIN
-#define EXTERN_C_END
-#endif
-#endif
-
-EXTERN_C_BEGIN
 
 #define SZ_OK 0
 
@@ -168,12 +151,6 @@ struct ISeqInStream
 };
 #define ISeqInStream_Read(p, buf, size) (p)->Read(p, buf, size)
 
-/* it can return SZ_ERROR_INPUT_EOF */
-SRes SeqInStream_Read(const ISeqInStream *stream, void *buf, size_t size);
-SRes SeqInStream_Read2(const ISeqInStream *stream, void *buf, size_t size, SRes errorType);
-SRes SeqInStream_ReadByte(const ISeqInStream *stream, Byte *buf);
-
-
 typedef struct ISeqOutStream ISeqOutStream;
 struct ISeqOutStream
 {
@@ -186,124 +163,6 @@ struct ISeqOutStream
 
 #define ISeqOutStream_Write(p, buf, size) (p)->Write(p, buf, size)
 
-typedef enum
-{
-  SZ_SEEK_SET = 0,
-  SZ_SEEK_CUR = 1,
-  SZ_SEEK_END = 2
-} ESzSeek;
-
-
-typedef struct ISeekInStream ISeekInStream;
-struct ISeekInStream
-{
-  SRes (*Read)(const ISeekInStream *p, void *buf, size_t *size);  /* same as ISeqInStream::Read */
-  SRes (*Seek)(const ISeekInStream *p, Int64 *pos, ESzSeek origin);
-};
-#define ISeekInStream_Read(p, buf, size)   (p)->Read(p, buf, size)
-#define ISeekInStream_Seek(p, pos, origin) (p)->Seek(p, pos, origin)
-
-
-typedef struct ILookInStream ILookInStream;
-struct ILookInStream
-{
-  SRes (*Look)(const ILookInStream *p, const void **buf, size_t *size);
-    /* if (input(*size) != 0 && output(*size) == 0) means end_of_stream.
-       (output(*size) > input(*size)) is not allowed
-       (output(*size) < input(*size)) is allowed */
-  SRes (*Skip)(const ILookInStream *p, size_t offset);
-    /* offset must be <= output(*size) of Look */
-
-  SRes (*Read)(const ILookInStream *p, void *buf, size_t *size);
-    /* reads directly (without buffer). It's same as ISeqInStream::Read */
-  SRes (*Seek)(const ILookInStream *p, Int64 *pos, ESzSeek origin);
-};
-
-#define ILookInStream_Look(p, buf, size)   (p)->Look(p, buf, size)
-#define ILookInStream_Skip(p, offset)      (p)->Skip(p, offset)
-#define ILookInStream_Read(p, buf, size)   (p)->Read(p, buf, size)
-#define ILookInStream_Seek(p, pos, origin) (p)->Seek(p, pos, origin)
-
-
-SRes LookInStream_LookRead(const ILookInStream *stream, void *buf, size_t *size);
-SRes LookInStream_SeekTo(const ILookInStream *stream, UInt64 offset);
-
-/* reads via ILookInStream::Read */
-SRes LookInStream_Read2(const ILookInStream *stream, void *buf, size_t size, SRes errorType);
-SRes LookInStream_Read(const ILookInStream *stream, void *buf, size_t size);
-
-
-
-typedef struct
-{
-  ILookInStream vt;
-  const ISeekInStream *realStream;
- 
-  size_t pos;
-  size_t size; /* it's data size */
-  
-  /* the following variables must be set outside */
-  Byte *buf;
-  size_t bufSize;
-} CLookToRead2;
-
-void LookToRead2_CreateVTable(CLookToRead2 *p, int lookahead);
-
-#define LookToRead2_Init(p) { (p)->pos = (p)->size = 0; }
-
-
-typedef struct
-{
-  ISeqInStream vt;
-  const ILookInStream *realStream;
-} CSecToLook;
-
-void SecToLook_CreateVTable(CSecToLook *p);
-
-
-
-typedef struct
-{
-  ISeqInStream vt;
-  const ILookInStream *realStream;
-} CSecToRead;
-
-void SecToRead_CreateVTable(CSecToRead *p);
-
-
-typedef struct ICompressProgress ICompressProgress;
-
-struct ICompressProgress
-{
-  SRes (*Progress)(const ICompressProgress *p, UInt64 inSize, UInt64 outSize);
-    /* Returns: result. (result != SZ_OK) means break.
-       Value (UInt64)(Int64)-1 for size means unknown value. */
-};
-#define ICompressProgress_Progress(p, inSize, outSize) (p)->Progress(p, inSize, outSize)
-
-
-
-typedef struct ISzAlloc ISzAlloc;
-typedef const ISzAlloc * ISzAllocPtr;
-
-struct ISzAlloc
-{
-  void *(*Alloc)(ISzAllocPtr p, size_t size);
-  void (*Free)(ISzAllocPtr p, void *address); /* address can be 0 */
-  void *vb; // added by Divon 
-};
-
-#define ISzAlloc_Alloc(p, size) (p)->Alloc(p, size)
-#define ISzAlloc_Free(p, a) (p)->Free(p, a)
-
-/* deprecated */
-#define IAlloc_Alloc(p, size) ISzAlloc_Alloc(p, size)
-#define IAlloc_Free(p, a) ISzAlloc_Free(p, a)
-
-
-
-
-
 #ifndef MY_offsetof
   #ifdef offsetof
     #define MY_offsetof(type, m) offsetof(type, m)
@@ -314,8 +173,6 @@ struct ISzAlloc
     #define MY_offsetof(type, m) ((size_t)&(((type *)0)->m))
   #endif
 #endif
-
-
 
 #ifndef MY_container_of
 
@@ -366,6 +223,4 @@ struct ISzAlloc
 #define WSTRING_PATH_SEPARATOR L"/"
 
 #endif
-
-EXTERN_C_END
 

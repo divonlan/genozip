@@ -13,7 +13,7 @@ Genozip requires registration prior to use, and its a violation of Genozip's lic
 
 `Option 1 (easier)`: register on the login node of the HPC with ``genozip --register``. You need to do this only once.
 
-`Option 2`: If you are able to register on the HPC's login node or your batch script does not have access to your home directory, do the following:
+`Option 2`: If you are not able to register on the HPC's login node or your batch script does not have access to your home directory, do the following:
 
 | 1. Register Genozip on another computer with ``genozip --register``. You can skip this step if you have already used (and hence registered) Genozip on this computer. 
 | 

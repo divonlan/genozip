@@ -215,7 +215,7 @@ bool str_get_int (STRp(str),
 }
 
 #define str_get_int_range_type(func_num,type) \
-bool str_get_int_range##func_num (const char *str, uint32_t str_len, type min_val, type max_val, type *value /* optional */) \
+bool str_get_int_range##func_num (const char *str, uint32_t str_len, int64_t min_val, int64_t max_val, type *value /* optional */) \
 {                                                                                     \
     if (!str) return false;                                                           \
                                                                                       \
@@ -223,7 +223,7 @@ bool str_get_int_range##func_num (const char *str, uint32_t str_len, type min_va
     if (!str_get_int (str, str_len ? str_len : strlen (str), &value64)) return false; \
     if (value) *value = (type)value64;                                                \
                                                                                       \
-    return (type)value64 >= min_val && (type)value64 <= max_val;                      \
+    return value64 >= min_val && value64 <= max_val;                                  \
 }
 str_get_int_range_type(8,uint8_t)   // unsigned
 str_get_int_range_type(16,uint16_t) // unsigned
@@ -364,7 +364,7 @@ bool str_get_float (STRp(float_str),
         else return false; // can't interpret this string as float
     }
 
-    // calculate format if requested
+    // calculate format if requested - the format string is in a format expected by reconstruct_from_local_float
     if (format) {
 
         if (float_str_len > 99) return false; // we support format of float strings up to 99 characters... more than enough

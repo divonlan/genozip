@@ -243,4 +243,6 @@ extern BitArrayP buf_zfile_buf_to_bitarray (Buffer *buf, uint64_t nbits);
 // endianness
 extern BgEnBufFunc BGEN_u8_buf, BGEN_u16_buf, BGEN_u32_buf, BGEN_u64_buf, 
                    BGEN_transpose_u8_buf, BGEN_transpose_u16_buf, BGEN_transpose_u32_buf, BGEN_transpose_u64_buf,
-                   BGEN_deinterlace_d8_buf, BGEN_deinterlace_d16_buf, BGEN_deinterlace_d32_buf, BGEN_deinterlace_d64_buf;
+                   BGEN_deinterlace_d8_buf, BGEN_deinterlace_d16_buf, BGEN_deinterlace_d32_buf, BGEN_deinterlace_d64_buf,
+                   BGEN_interlace_d8_buf, BGEN_interlace_d16_buf, BGEN_interlace_d32_buf, BGEN_interlace_d64_buf;
+                   

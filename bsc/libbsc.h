@@ -37,6 +37,8 @@ See also the bsc and libbsc web site:
 
 #pragma once
 
+#include <inttypes.h>
+
 #define LIBBSC_NO_ERROR                0
 #define LIBBSC_BAD_PARAMETER          -1
 #define LIBBSC_NOT_ENOUGH_MEMORY      -2
@@ -80,8 +82,8 @@ extern "C" {
     * @param free - function used to free buffers
     * @return LIBBSC_NO_ERROR if no error occurred, error code otherwise.
     */
-    int bsc_init_full(int features, void* (* malloc)(void *vb, size_t size), 
-                      void (* free)(void *vb, void* address));
+    int bsc_init_full(int features, void* (* malloc)(void *vb, size_t size, const char *,uint32_t), 
+                      void (* free)(void *vb, void* address, const char *,uint32_t));
 
     /**
     * Compress a memory block.

@@ -112,6 +112,81 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
                     const char *is_sep,   
                     unsigned add_additional_bytes)  // account for characters in addition to the field
 {
+    // when generate the items from "TOKEN" - from from field_ctx's dict_id to avoid clashing
+    // with qname in case tokenizer is used as a fallback
+    DictId generator_dict_id = dict_id_make ("TOKEN", 5, DTYPE_1); 
+    Container con = tokenizer_initialize_container_array (generator_dict_id); 
+    Token items[MAX_TOKENS];
+
+    tokenizer_split (field, field_len, is_sep, false, items, &con.nitems_lo);
+    
+    char prefixes[field_len + con.nitems_lo + 2];
+    prefixes[0] = prefixes[1] = CON_PX_SEP;
+    unsigned prefixes_len = 2;
+    unsigned num_seps = 0;
+
+    for (unsigned i=0; i < con.nitems_lo; i++) {
+        Token  *ci = &items[i];
+        ContainerItem *CI = &con.items[i];
+
+        // process the subfield that just ended
+        Context *item_ctx = ctx_get_ctx (vb, CI->dict_id);
+        ASSERT (item_ctx, "item_ctx for %s is NULL", dis_dict_id (CI->dict_id).s);
+
+        item_ctx->st_did_i = field_ctx->did_i;
+
+        #define MAX_TOKENIZER_DETLA 16384 // arbitrary (Illumina ~= 100-800)
+
+        if (ci->is_int) {
+            
+            PosType delta;
+            if (ctx_has_value_in_prev_line_(vb, item_ctx) && 
+                ABS((delta = ci->value - item_ctx->last_value.i)) < MAX_TOKENIZER_DETLA &&
+                (delta || !item_ctx->flags.all_the_same)) { // don't do delta if it can ruin the all-the-same
+
+                seg_self_delta (vb, item_ctx, ci->value, ci->item_len);
+                item_ctx->flags.store = STORE_INT;
+            }
+            else {
+                ci->leading_zeros = 0; // we store the snip as-is
+                goto fallback;
+            }
+
+            ctx_set_last_value (vb, item_ctx, ci->value);
+        }
+        else if (ctx_encountered_in_prev_line (vb, item_ctx->did_i) &&
+                 item_ctx->last_txt_len == ci->item_len)  
+
+             seg_xor_diff (vb, item_ctx, STRa(ci->item), item_ctx->flags.all_the_same, ci->item_len); // don't xor-diff if it can ruin the all-the-same
+
+        else fallback: 
+            seg_by_ctx (vb, STRa(ci->item), item_ctx, ci->item_len);
+
+        // set separators
+        CI->separator[0] = ci->sep;
+        CI->separator[1] = ci->sep2;
+        num_seps += (ci->sep != 0) + (ci->sep2 != 0);
+
+        // add the leading zeros to the container prefixes
+        if (ci->is_int && ci->leading_zeros) {
+            memset (&prefixes[prefixes_len], '0', ci->leading_zeros);
+            prefixes_len += ci->leading_zeros + 1;
+            prefixes[prefixes_len-1] = CON_PX_SEP;
+        }
+        else
+            prefixes[prefixes_len++] = CON_PX_SEP;
+
+        seg_set_last_txt (vb, item_ctx, STRa(ci->item), STORE_NONE);
+    }
+
+    container_seg (vb, field_ctx, &con, prefixes, prefixes_len, num_seps + add_additional_bytes);
+}
+
+/*
+void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field), 
+                    const char *is_sep,   
+                    unsigned add_additional_bytes)  // account for characters in addition to the field
+{
     // we use nodes.param in D?ESC contexts to track whether all snips in in this VB are the same
     // defaults to 0 (the same) and we set it to 1 if we encounter a different one
     #define not_all_the_same nodes.param 
@@ -146,24 +221,36 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
 
         #define MAX_TOKENIZER_DETLA 16384 // arbitrary (Illumina ~= 100-800)
 
-        if (ci->is_int && ctx_has_value_in_prev_line_(vb, item_ctx) && ABS((delta = ci->value - item_ctx->last_value.i)) < MAX_TOKENIZER_DETLA) {
-            delta_snip[0] = SNIP_SELF_DELTA;
+        if (ci->is_int) {
+            
+            if (ctx_has_value_in_prev_line_(vb, item_ctx) && ABS((delta = ci->value - item_ctx->last_value.i)) < MAX_TOKENIZER_DETLA) {
+                delta_snip[0] = SNIP_SELF_DELTA;
 
-            // note: if all the snips so far in this VB are the same - store just the snip, so that if the 
-            // entire b250 is the same, it can be removed
-            if (delta || item_ctx->not_all_the_same) {
-                ci->item     = delta_snip;
-                ci->item_len = 1 + str_int (delta, &delta_snip[1]);
+                // note: if all the snips so far in this VB are the same - store just the snip, so that if the 
+                // entire b250 is the same, it can be removed
+                if (delta || item_ctx->not_all_the_same) {
+                    ci->item     = delta_snip;
+                    ci->item_len = 1 + str_int (delta, &delta_snip[1]);
 
-                item_ctx->flags.store = STORE_INT;
-                item_ctx->not_all_the_same = true;
+                    item_ctx->flags.store = STORE_INT;
+                    item_ctx->not_all_the_same = true;
+                }
+                else
+                    ci->leading_zeros = 0; // we store the snip as-is
             }
-            else
-                ci->leading_zeros = 0; // we store the snip as-is
+
+            ctx_set_last_value (vb, item_ctx, ci->value);
+        }
+        else { // not int
+            if (!flag.pair &&  // we can't use xor-diff if pairing because the code below relies on node_index without consideration of data in local 
+                ctx_encountered_in_prev_line (vb, item_ctx->did_i) &&
+                item_ctx->last_txt_len == ci->item_len) {
+
+                seg_xor_diff (vb, item_ctx, STRa(ci->item), ci->item_len); 
+                goto after_seg; // we skip the pairing logic
+            }
         }
 
-        if (ci->is_int) ctx_set_last_value (vb, item_ctx, ci->value);
-        
         if (flag.pair == PAIR_READ_1)
             item_ctx->no_stons = true; // prevent singletons, so pair_2 can compare to us
         
@@ -218,6 +305,7 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
 
         item_ctx->txt_len += original_item_len;
 
+after_seg:
         // set separators
         CI->separator[0] = ci->sep;
         CI->separator[1] = ci->sep2;
@@ -231,7 +319,10 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
         }
         else
             prefixes[prefixes_len++] = CON_PX_SEP;
+
+        seg_set_last_txt (vb, item_ctx, STRa(ci->item), STORE_NONE);
     }
 
     container_seg (vb, field_ctx, &con, prefixes, prefixes_len, num_seps + add_additional_bytes);
 }
+*/

@@ -48,8 +48,6 @@ typedef struct VBlockFASTQ {
     uint32_t pair_num_lines; // number of lines in the equivalent vb in the first file
     char *optimized_desc;    // base of desc in flag.optimize_DESC 
     uint32_t optimized_desc_len;
-    bool qual_codec_enano;         // true if we can compress qual with CODEC_ENANO
-
 } VBlockFASTQ;
 
 #define VB_FASTQ ((VBlockFASTQ *)vb)
@@ -62,8 +60,6 @@ unsigned fastq_vb_zip_dl_size (void) { return sizeof (ZipDataLineFASTQ); }
 void fastq_vb_release_vb (VBlockFASTQ *vb)
 {
     vb->pair_num_lines = vb->pair_vb_i = vb->optimized_desc_len = 0;
-    vb->qual_codec_enano = 0;
-
     FREE (vb->optimized_desc);
 }
 
@@ -202,7 +198,6 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
 {
     START_TIMER;
 
-    CTX(FASTQ_TOPLEVEL)->no_stons  = true; // keep in b250 so it can be eliminated as all_the_same
     CTX(FASTQ_CONTIG)->flags.store = STORE_INDEX; // since v12
 
     Context *gpos_ctx     = CTX(FASTQ_GPOS);
@@ -218,7 +213,8 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
     sqbitmap_ctx->ltype = LT_BITMAP; 
     sqbitmap_ctx->local_always = true;
 
-    codec_acgt_comp_init (VB);
+    if (!flag.multiseq)
+        codec_acgt_comp_init (VB);
 
      if (flag.pair == PAIR_READ_2) {
 
@@ -249,18 +245,16 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
     if (segconf.running) 
         segconf.qname_flavor = 0; // unknown
 
-//xxx need to fix qname to identify "@ERR3278978.1 82a6ce63-eb2d-4812-ad19-136092a95f3d/1"    
-    if (segconf.tech == TECH_ONP)
-        vb->qual_codec_enano = true; // unless we find out during Seg that the data won't allow us
-
     COPY_TIMER (seg_initialize);
 }
 
 void fastq_seg_finalize (VBlockP vb)
 {
-    // for qual data - select domqual compression if possible, or fallback 
-    if (!codec_domq_comp_init (vb, FASTQ_QUAL, fastq_zip_qual)) 
-        CTX(FASTQ_QUAL)->ltype  = LT_SEQUENCE; // might be overridden by codec_domq_compress
+    if (segconf.running && segconf_is_long_reads())
+        codec_longr_calculate_bins (vb, CTX(FASTQ_QUAL), fastq_zip_qual);        
+
+    // assign the QUAL codec
+    codec_assign_best_qual_codec (vb, FASTQ_QUAL, fastq_zip_qual, false);
 
     // top level snip
     SmallContainer top_level = { 
@@ -293,9 +287,6 @@ void fastq_seg_finalize (VBlockP vb)
                                CON_PX_SEP      }; // END of prefixes
 
     container_seg (vb, CTX(FASTQ_TOPLEVEL), (ContainerP)&top_level, prefixes, sizeof (prefixes), 2 * vb->lines.len); // account for the '@' and '+' - one of each for each line
-
-//    if (VB_FASTQ->qual_codec_enano) 
-//        codec_enano_seg_init (vb, CTX(FASTQ_QUAL));
 }
 
 bool fastq_seg_is_small (ConstVBlockP vb, DictId dict_id)
@@ -403,7 +394,7 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
         }
     }
 
-    // if flag.optimize_DESC is on, we replace the description with filename:line_i 
+    // if flag.optimize_DESC is on, we replace the description with "filename.line_i" 
     unsigned optimized_len = 0; 
     if (flag.optimize_DESC) {
         optimized_len  = vb->optimized_desc_len + str_int (vb->first_line + vb->line_i, &vb->optimized_desc[vb->optimized_desc_len]);   
@@ -411,6 +402,7 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
     }
 
     if (segconf.running && vb->line_i==0)
+        // TODO bug 494: this should still discover the TECH from the original qname when optimized
         qname_segconf_discover_flavor (VB, FASTQ_DESC, 
                                        flag.optimize_DESC ? vb->optimized_desc : FASTQ_DESC_str, 
                                        flag.optimize_DESC ? optimized_len      : FASTQ_DESC_len);
@@ -426,13 +418,16 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
     dl->seq_data_start = ENTNUM (vb->txt_data, FASTQ_SEQ_str);
     const char *FASTQ_LINE3_str = seg_get_next_item (vb, FASTQ_SEQ_str, &len, GN_SEP, GN_IGNORE, GN_IGNORE, &dl->seq_len, &separator, has_13, "SEQ");
 
+    if (segconf.running) 
+        segconf.longest_seq_len = MAX_(dl->seq_len, segconf.longest_seq_len);
+
     // case: compressing without a reference - all data goes to "nonref", and we have no bitmap
     if (flag.aligner_available) 
         aligner_seg_seq (VB, CTX(FASTQ_SQBITMAP), FASTQ_SEQ_str, dl->seq_len);
 
     else {
         Context *nonref_ctx = CTX(FASTQ_NONREF);
-        buf_alloc (VB, &nonref_ctx->local, 0, MAX_(nonref_ctx->local.len + dl->seq_len + 3, vb->lines.len * (dl->seq_len + 5)), char, CTX_GROWTH, "contexts->local"); 
+        buf_alloc (VB, &nonref_ctx->local, dl->seq_len + 3, vb->lines.len * (MIN_(dl->seq_len,1000) + 5), char, CTX_GROWTH, "contexts->local"); 
         buf_add (&nonref_ctx->local, FASTQ_SEQ_str, dl->seq_len);
     }
 
@@ -482,6 +477,10 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
     CTX(FASTQ_QUAL)->local.len += dl->seq_len;
     CTX(FASTQ_QUAL)->txt_len   += dl->seq_len;
 
+    // get stats on qual scores
+    if (segconf.running)
+        segconf_update_qual (STRd (FASTQ_QUAL));
+
     // End Of Line    
     SEG_EOL (FASTQ_E2L, true);
 
@@ -491,9 +490,6 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
     ASSSEG (FASTQ_QUAL_len == dl->seq_len, FASTQ_QUAL_str, "Invalid FASTQ file format: sequence_len=%u and quality_len=%u. Expecting them to be the same.\nSEQ = %.*s\nQUAL= %.*s",
             dl->seq_len, FASTQ_QUAL_len, dl->seq_len, FASTQ_SEQ_str, FASTQ_QUAL_len, FASTQ_QUAL_str);
  
-     if (FASTQ_QUAL_len < ENANO_MIN_READ_LEN)
-        vb->qual_codec_enano = false; // we cannot compress QUAL with CODEC_ENANO as prerequisites are not met
-
     return after;
 }
 

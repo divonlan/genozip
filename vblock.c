@@ -113,6 +113,7 @@ void vb_release_vb_do (VBlockP *vb_p, const char *func)
     vb->translation = (DtTranslation){};
     vb->ref = NULL;
     vb->buddy_line_i = 0;
+    vb->rback_id = 0;
 
     memset(&vb->profile, 0, sizeof (vb->profile));
     memset(vb->dict_id_to_did_i_map, 0, sizeof(vb->dict_id_to_did_i_map));

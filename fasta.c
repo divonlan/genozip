@@ -114,11 +114,11 @@ int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *last_i)
 
         if (txt[i] == '\n') {
 
-            // when compressing FASTA with a reference or --multifasta - an "end of line" means "end of contig" - 
+            // when compressing FASTA with a reference or --multiseq - an "end of line" means "end of contig" - 
             // i.e. one that the next character is >, or it is the end of the file
             // note: when compressing FASTA with a reference (eg long reads stored in a FASTA instead of a FASTQ), 
             // line cannot be too long - they must fit in a VB
-            if ((flag.reference & REF_ZIP_LOADED) || flag.multifasta) {
+            if ((flag.reference & REF_ZIP_LOADED) || flag.multiseq) {
                 int is_end_of_contig = fasta_is_end_of_contig (vb, first_i, i);
 
                 switch (is_end_of_contig) {
@@ -194,7 +194,7 @@ void fasta_seg_initialize (VBlock *vb)
     }
 
     // if this neocleotide FASTA of unrelated contigs, we're better off with ACGT        
-    if (!flag.multifasta && segconf.seq_type == SQT_NUKE)
+    if (!flag.multiseq && segconf.seq_type == SQT_NUKE)
         codec_acgt_comp_init (VB);
 
     // if the contigs in this FASTA are related, let codec_assign_best_codec assign the bext codec 

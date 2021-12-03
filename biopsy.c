@@ -19,8 +19,6 @@ void biopsy_init (const char *optarg)
 
     ASSINP (n_items > 0, "Invalid biopsy argument: \"%s\", expecting a comma-seperated list of VB numbers, with 0 meaning the txt header", optarg);
 
-    buf_add_int (evb, biopsy_vb_i, 0UL); // txt header
-
     for (int i=0; i < n_items; i++) {
         str_split (items[i], item_lens[i], 2, '-', startend, false);
         if (n_startends == 2) { // a range, eg "20-25"
@@ -45,6 +43,8 @@ void biopsy_take (VBlockP vb)
 {
     if (!biopsy_vb_i.len) return;
 
+    if (vb->vblock_i == 0) goto start_biopsy; // always output the txt header
+
     ARRAY (uint32_t, vb_i, biopsy_vb_i);
 
     for (int i=0; i < vb_i_len; i++)
@@ -55,7 +55,7 @@ void biopsy_take (VBlockP vb)
             goto start_biopsy;
         }
 
-    return; // we were not requested to take a biopsy from vb
+    return; // we were not requested to take a biopsy from this vb
 
 start_biopsy:
     

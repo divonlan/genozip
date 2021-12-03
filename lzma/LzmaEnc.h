@@ -5,8 +5,6 @@
 
 #include "7zTypes.h"
 
-EXTERN_C_BEGIN
-
 #define LZMA_PROPS_SIZE 5
 
 typedef struct _CLzmaEncProps
@@ -30,10 +28,7 @@ typedef struct _CLzmaEncProps
                         Encoder uses this value to reduce dictionary size */
 } CLzmaEncProps;
 
-void LzmaEncProps_Init(CLzmaEncProps *p);
-void LzmaEncProps_Normalize(CLzmaEncProps *p);
-UInt32 LzmaEncProps_GetDictSize(const CLzmaEncProps *props2);
-
+extern void LzmaEncProps_Init(CLzmaEncProps *p);
 
 /* ---------- CLzmaEncHandle Interface ---------- */
 
@@ -50,25 +45,14 @@ SRes:
 
 typedef void * CLzmaEncHandle;
 
-CLzmaEncHandle LzmaEnc_Create(ISzAllocPtr alloc);
-void LzmaEnc_Destroy(CLzmaEncHandle p, ISzAllocPtr alloc, ISzAllocPtr allocBig);
+extern size_t LzmaEnc_LzmaHandleSize (void); // divon
 
-SRes LzmaEnc_SetProps(CLzmaEncHandle p, const CLzmaEncProps *props);
-void LzmaEnc_SetDataSize(CLzmaEncHandle p, UInt64 expectedDataSiize);
-SRes LzmaEnc_WriteProperties(CLzmaEncHandle p, Byte *properties, SizeT *size);
-unsigned LzmaEnc_IsWriteEndMark(CLzmaEncHandle p);
+extern void LzmaEnc_Create(CLzmaEncHandle p, VBlockP vb);
+extern void LzmaEnc_Destroy(CLzmaEncHandle p);
 
-SRes LzmaEnc_Encode(CLzmaEncHandle p, ISeqOutStream *outStream, ISeqInStream *inStream,
-    ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig);
-SRes LzmaEnc_MemEncode(CLzmaEncHandle p, Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
-    int writeEndMark, ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig);
+extern SRes LzmaEnc_SetProps(CLzmaEncHandle p, const CLzmaEncProps *props);
+extern SRes LzmaEnc_WriteProperties(CLzmaEncHandle p, Byte *properties, SizeT *size);
 
-
-/* ---------- One Call Interface ---------- */
-
-SRes LzmaEncode(Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen,
-    const CLzmaEncProps *props, Byte *propsEncoded, SizeT *propsSize, int writeEndMark,
-    ICompressProgress *progress, ISzAllocPtr alloc, ISzAllocPtr allocBig);
-
-EXTERN_C_END
+extern SRes LzmaEnc_Encode(CLzmaEncHandle p, ISeqOutStream *outStream, ISeqInStream *inStream);
+extern SRes LzmaEnc_MemEncode(CLzmaEncHandle p, Byte *dest, SizeT *destLen, const Byte *src, SizeT srcLen, int writeEndMark);
 

@@ -117,6 +117,7 @@ extern void ref_contigs_load_contigs (Reference ref);
 extern WordIndex ref_contig_get_by_gpos (const Reference ref, PosType gpos, PosType *pos);
 
 extern const uint8_t acgt_encode[256];
+extern const uint8_t acgt_encode_comp[256];
 extern const char acgt_decode[4];
 
 // note that the following work on idx and not pos! (idx is the index within the range)

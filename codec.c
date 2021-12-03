@@ -18,7 +18,7 @@
 
 // memory management for bzlib - tesing shows that compress allocates 4 times, and decompress 2 times. Allocations are the same set of sizes
 // every call to compress/decompress with the same parameters, independent on the contents or size of the compressed/decompressed data.
-void *codec_alloc (VBlock *vb, uint64_t size, float grow_at_least_factor)
+void *codec_alloc_do (VBlock *vb, uint64_t size, float grow_at_least_factor, const char *func, uint32_t code_line)
 {
     const char *names[NUM_CODEC_BUFS] = { "codec_bufs[0]", "codec_bufs[1]", "codec_bufs[2]", "codec_bufs[3]",
                                           "codec_bufs[4]", "codec_bufs[5]", "codec_bufs[6]" };
@@ -27,14 +27,14 @@ void *codec_alloc (VBlock *vb, uint64_t size, float grow_at_least_factor)
     // so subsequent VBs will allocate roughly the same amount of memory for each buffer
     for (unsigned i=0; i < NUM_CODEC_BUFS ; i++) 
         if (!buf_is_alloc (&vb->codec_bufs[i])) {
-            buf_alloc (vb, &vb->codec_bufs[i], 0, size, char, grow_at_least_factor, names[i]);
+            buf_alloc_do (vb, &vb->codec_bufs[i], size, grow_at_least_factor, func, code_line, names[i]);
             //printf ("codec_alloc: %u bytes buf=%u\n", size, i);
             return vb->codec_bufs[i].data;
         }
-    ABORT_R ("Error: codec_alloc could not find a free buffer. vb_i=%d", vb->vblock_i);
+    ABORT_R ("Error: called from %s:%u codec_alloc could not find a free buffer. vb_i=%d", func, code_line, vb->vblock_i);
 }
 
-void codec_free (void *vb_, void *addr)
+void codec_free_do (void *vb_, void *addr, const char *func, uint32_t code_line)
 {
     VBlockP vb = (VBlockP)vb_;
 
@@ -42,13 +42,12 @@ void codec_free (void *vb_, void *addr)
 
     for (unsigned i=0; i < NUM_CODEC_BUFS ; i++) 
         if (vb->codec_bufs[i].data == addr) {
-            buf_free (&vb->codec_bufs[i]);
-            //printf ("codec_free: buf=%u\n", i);
+            buf_free_do (&vb->codec_bufs[i], func, code_line);
             return;
         }
 
-    ABORT ("Error: codec_free failed to find buffer to free. vb_i=%d codec=%s addr=%s", 
-           vb->vblock_i, codec_name(vb->codec_using_codec_bufs), str_pointer (addr).s);
+    ABORT ("Error: codec_free_do called from %s:%u: failed to find buffer to free. vb_i=%d codec=%s addr=%s", 
+           func, code_line, vb->vblock_i, codec_name(vb->codec_using_codec_bufs), str_pointer (addr).s);
 }
 
 void codec_free_all (VBlock *vb)
@@ -106,7 +105,7 @@ void codec_initialize (void)
 }
 
 // ------------------------------
-// Automatic codec selection
+// Automatic codec assignment
 // ------------------------------
 
 typedef struct {
@@ -284,12 +283,31 @@ done:
     return *selected_codec;
 }
 
+void codec_assign_best_qual_codec (VBlockP vb, DidIType qual_did_i,  
+                                   LocalGetLineCB callback, bool no_longr)
+{
+    if (segconf.running) return;
+
+    if (flag.best && segconf_is_long_reads() && !no_longr && segconf.nontrivial_qual)
+        codec_longr_comp_init (vb, qual_did_i);
+
+    else if (codec_domq_comp_init (vb, qual_did_i, callback)) 
+        {} // domqual    
+    
+    else // to be assigned by codec_assign_best_codec
+        CTX(qual_did_i)->ltype = LT_SEQUENCE; 
+
+    if (flag.show_codec) // aligned to the output of codec_assign_best_codec
+        iprintf ("vb_i=%-2u %-12s %-5s          *[%s]\n", vb->vblock_i, "QUAL", "LOCAL", codec_name(CTX(qual_did_i)->lcodec));
+}
 
 // complex codec est size - result may be recompressed with RAN, ART
 uint32_t codec_complex_est_size (Codec codec, uint64_t uncompressed_len)
 {
-    return (uint32_t)uncompressed_len * 1.1 + 100000;
+    uint64_t preprocessed_len = uncompressed_len * 1.1; 
+    return MAX_(codec_ARTB_est_size (0, preprocessed_len), codec_ARTB_est_size (0, preprocessed_len)) + 10000;
 }
+
 // print prefix to the string to be printed by COPY_TIMER in the codec compression functions in case
 // of eg. --show-time=compressor_lzma
 void codec_show_time (VBlock *vb, const char *name, const char *subname, Codec codec)
@@ -299,7 +317,7 @@ void codec_show_time (VBlock *vb, const char *name, const char *subname, Codec c
         (strcmp (flag.show_time, "compressor_acgt"  ) && codec==CODEC_ACGT) || 
         (strcmp (flag.show_time, "compressor_domq"  ) && codec==CODEC_DOMQ) || 
         (strcmp (flag.show_time, "compressor_pbwt"  ) && codec==CODEC_PBWT) || 
-        (strcmp (flag.show_time, "compressor_enano" ) && codec==CODEC_ENANO) || 
+        (strcmp (flag.show_time, "compressor_longr" ) && codec==CODEC_LONGR) || 
         (strcmp (flag.show_time, "compressor_rans"  ) && (codec==CODEC_RANS32 || codec==CODEC_RANS32_pack || codec==CODEC_RANS8 || codec==CODEC_RANS32_pack)) || 
         (strcmp (flag.show_time, "compressor_arith" ) && (codec==CODEC_ARITH32 || codec==CODEC_ARITH32_pack || codec==CODEC_ARITH8 || codec==CODEC_ARITH32_pack)) || 
         (strcmp (flag.show_time, "compressor_bz2"   ) && codec==CODEC_BZ2 )) {

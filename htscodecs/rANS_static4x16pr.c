@@ -697,9 +697,21 @@ static int compute_shift(uint32_t *F0, uint32_t (*F)[256], uint32_t *T,
 static
 unsigned char *rans_compress_O1_4x16(VBlockP vb, unsigned char *in, unsigned int in_size,
 				     unsigned char *out, unsigned int *out_size) {
-    unsigned char *cp, *out_end, *op;
+    // divon fix for stack overflow
+	typedef struct { 
+		RansEncSymbol syms[256][256];
+		uint32_t F[256][256];
+	} MyData;
+
+	MyData *my_data = codec_alloc (vb, sizeof(MyData), 0);
+	RansEncSymbol (*syms)[256] = my_data->syms;
+	uint32_t (*F)[256] = my_data->F;
+	memset (F, 0, sizeof (my_data->F));
+	// end divon fix
+
+	unsigned char *cp, *out_end, *op;
     unsigned int tab_size;
-    RansEncSymbol syms[256][256];
+    //RansEncSymbol syms[256][256]; // divon
     int bound = rans_compress_bound_4x16(in_size,1)-20; // -20 for order/size/meta
 
 	ASSERTNOTNULL (out);
@@ -714,7 +726,8 @@ unsigned char *rans_compress_O1_4x16(VBlockP vb, unsigned char *in, unsigned int
 	bound--;
     out_end = out + bound;
 
-    uint32_t F[256][256] = {{0}}, T[256+MAGIC] = {0};
+    //uint32_t F[256][256] = {{0}}, // divon
+	uint32_t T[256+MAGIC] = {0};
     int i, j;
 
     //memset(F, 0, 256*256*sizeof(int));
@@ -751,8 +764,10 @@ unsigned char *rans_compress_O1_4x16(VBlockP vb, unsigned char *in, unsigned int
 	if (shift == TF_SHIFT_O1_FAST && max_val > TOTFREQ_O1_FAST)
 	    max_val = TOTFREQ_O1_FAST;
 
-	if (normalise_freq(F[i], T[i], max_val) < 0)
+	if (normalise_freq(F[i], T[i], max_val) < 0) {
+		codec_free (vb, my_data); // divon
 	    return NULL;
+	}
 	T[i]=max_val;
 
 	cp += encode_freq_d(cp, F0, F[i]);
@@ -847,6 +862,7 @@ unsigned char *rans_compress_O1_4x16(VBlockP vb, unsigned char *in, unsigned int
     cp = out;
     memmove(out + tab_size, ptr, out_end-ptr);
 
+	codec_free (vb, my_data); // divon
     return out;
 }
 
@@ -1161,6 +1177,7 @@ unsigned char *rans_compress_to_4x16(VBlockP vb, unsigned char *in, unsigned int
 	    return NULL;
 
 	unsigned char *transposed = codec_alloc (vb, in_size, 1);
+
 	unsigned int part_len[256];
 	unsigned int idx[256];
 	int i, j, x;

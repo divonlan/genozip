@@ -99,14 +99,14 @@ int bz_config_ok ( void )
 
 /*---------------------------------------------------*/
 static
-void* default_bzalloc ( void* opaque, Int32 items, Int32 size )
+void* default_bzalloc ( void* opaque, Int32 items, Int32 size, const char *func, uint32_t code_line)
 {
    void* v = malloc ( items * size );
    return v;
 }
 
 static
-void default_bzfree ( void* opaque, void* addr )
+void default_bzfree ( void* opaque, void* addr, const char *func, uint32_t code_line )
 {
    if (addr != NULL) free ( addr );
 }

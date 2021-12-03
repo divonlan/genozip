@@ -283,17 +283,7 @@ bool codec_pbwt_compress (VBlock *vb,
     NEXTENT (uint32_t, vb->fgrc_ctx->local) = vb->ht_matrix_ctx->local.len & 0xffffffffULL; // 32 LSb
     NEXTENT (uint32_t, vb->fgrc_ctx->local) = vb->ht_matrix_ctx->local.len >> 32;           // 32 MSb
 
-    BGEN_u32_buf (&vb->runs_ctx->local, NULL);
-    BGEN_u32_buf (&vb->fgrc_ctx->local, NULL);
-
     buf_free (&vb->codec_bufs[0]); // allocated in codec_pbwt_initialize_state
-
-    // the allele sections are further compressed with the best simple codec 
-    // note: this simple codec (not CODEC_PBWT) will be the codec stored in zctx->lcodec
-    PAUSE_TIMER(vb); //  don't include sub-codec compressor - it accounts for itself
-    codec_assign_best_codec (vb, vb->runs_ctx, NULL, SEC_LOCAL);
-    codec_assign_best_codec (vb, vb->fgrc_ctx, NULL, SEC_LOCAL);
-    RESUME_TIMER (vb, compressor_pbwt);
 
     // note: we created the data in PBWT contexts - no section should be created for the ht_matrix context it in the file
     buf_free (&vb->ht_matrix_ctx->local); 

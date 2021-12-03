@@ -18,6 +18,8 @@ typedef enum { PL_mux_by_DP_TEST, PL_mux_by_DP_NO, PL_mux_by_DP_YES } PLMuxByDP;
 
 typedef enum { PS_NONE, PS_POS, PS_POS_REF_ALT, PS_UNKNOWN } PSType;
 
+typedef enum { ms_NONE, ms_BIOBAMBAM, ms_MINIMAP2 } msType; // type of SAM ms:i field 
+
 typedef enum { DP_DEFAULT, by_AD, by_SDP, by_INFO_DP } FormatDPMethod;
 
 // seg configuration set prior to starting to seg a file during segconfig_calculate or txtheader_zip_read_and_compress
@@ -34,18 +36,24 @@ typedef struct {
 
     // SAM/BAM stuff
     bool sam_use_aligner;       // use of aligner is possible if its flag.aligner_available and there are no header contigs
+    bool sam_is_unmapped;       // all POS fields in the segconf block were 0
     bool NM_is_integer;         // true if NM is integer, false if it binary
     bool has_TLEN_non_zero;
     bool has_DP_before_PL;
     enum { XA_NONE, XA_BWA, XA_IONTORRENT, XA_UNKNOWN } has_XA; // IonTorret and BWA have different XA:Z
     bool sam_is_collated;       // Every QNAME appears in two or more consecutive lines
     bool sam_is_sorted;         // every two consecutive lines that have the same RNAME, have non-decreasing POS
+    bool sam_is_paired;         // file has a least one read that is marked as "last" in FLAG
     bool sam_buddy_RG;          // attempt to use the same mate for RG:Z as QNAME
     uint64_t sam_cigar_len;     // approx average CIGAR len (during running==true - total len)
     uint64_t sam_seq_len;       // approx average CIGAR len (during running==true - total len)
     int64_t MAPQ_value;         // used during segconf.running to calculate sam_mapq_has_single_value
     bool MAPQ_has_single_value; // all non-0 MAPQ have the same value
-    
+    msType sam_ms_type;          
+
+    // SAM/BAM and FASTQ
+    bool nontrivial_qual;       // true if we know that not all QUAL values are the same (as they are in newer PacBio files)
+
     // VCF stuff
     bool vcf_is_varscan;        // this VCF file was produced by VarScan
     uint64_t count_dosage[2];   // used to calculate pc_has_dosage
@@ -70,8 +78,9 @@ typedef struct {
     // Chain stuff
     bool chain_mismatches_ref;  // Some contigs mismatch the reference files, so this chain file cannot be used with --chain
 
-    // read name characteristics (SAM/BAM, KRAKEN and FASTQ)
+    // read characteristics (SAM/BAM, KRAKEN and FASTQ)
     unsigned qname_flavor, qname_flavor2;  
+    uint32_t longest_seq_len;   // length of the longest seq_len in the segconf data 
     SeqTech tech;
 
 } SegConf;
@@ -80,4 +89,17 @@ extern SegConf segconf;
 
 extern void segconf_initialize (void);
 extern void segconf_calculate (void);
-static inline bool segconf_is_long_reads(void) { return segconf.tech == TECH_PACBIO || segconf.tech == TECH_ONP; }
+extern void segconf_update_qual (STRp (qual));
+
+static inline bool segconf_is_long_reads(void) 
+{ 
+    return segconf.tech == TECH_PACBIO    || 
+           segconf.tech == TECH_ONP       || 
+           segconf.longest_seq_len > 2000 ||
+           flag.debug_LONG;
+}
+
+static inline void segconf_set_has (DidIType did_i)
+{
+    if (segconf.running) segconf.has[did_i] = true;
+}

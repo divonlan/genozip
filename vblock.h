@@ -18,8 +18,6 @@
 
 typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
 
-#define MAX_ROLLBACK_CTXS NUM_CHAIN_FIELDS // chain_seg_txt_line() is currently the biggest consumer of rollback ctxs 
-
 // IMPORTANT: if changing fields in VBlockVCF, also update vb_release_vb
 #define VBLOCK_COMMON_FIELDS \
     uint32_t vblock_i;         /* number of variant block within VCF file */\
@@ -62,6 +60,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     uint32_t longest_line_len; /* length of longest line of text line in this vb. calculated by seg_all_data_lines */\
     uint32_t sample_i;         /* ZIP/PIZ: VCF: current sample in line (0-based) */ \
     uint64_t line_i;           /* ZIP: current line in VB (0-based) being segmented PIZ: current line in txt file */\
+    int64_t rback_id;          /* ZIP: sequential number of current rollback point */ \
     uint64_t line_start;       /* PIZ: position of start of line currently being reconstructed in vb->txt_data */\
     \
     Digest digest_so_far;      /* partial calculation of MD5 up to and including this VB */ \
@@ -79,8 +78,8 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     \
     int32_t buddy_line_i;      /* ZIP/PIZ: buddy line of current line (Seg: set in sam_seg_QNAME ; PIZ: set in reconstruct_from_buddy) */\
     \
-    unsigned num_rollback_ctxs;/* ZIP: Seg rollback contexts */ \
-    ContextP rollback_ctxs[MAX_ROLLBACK_CTXS]; \
+    uint32_t num_rollback_ctxs;/* ZIP: Seg rollback contexts */ \
+    ContextP rollback_ctxs[MEDIUM_CON_NITEMS]; \
     Buffer frozen_state;       /* PIZ: reconstruction state - frozen during reconstruct_peek */ \
     \
     /* data for dictionary compressing */ \
@@ -172,7 +171,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     Codec codec_using_codec_bufs; /* codec currently using codec_bufs */\
     Buffer codec_bufs[NUM_CODEC_BUFS];   /* memory allocation for compressor so it doesn't do its own malloc/free */ \
     \
-    /* used by CODEC_PBWT, CODEC_HAPMAT and CODEC_GTSHARK */ \
+    /* used by CODEC_PBWT, CODEC_HAPMAT */ \
     uint32_t ht_per_line; \
     Context *ht_matrix_ctx; \
     \

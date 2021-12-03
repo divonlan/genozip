@@ -42,7 +42,7 @@ typedef struct VBlockSAM {
     const char *last_cigar;        // ZIP/PIZ: last CIGAR
     Buffer textual_cigar;          // ZIP: Seg of BAM, PIZ: store CIGAR in sam_cigar_analyze
     Buffer binary_cigar;           // PIZ: generate in sam_cigar_analyze, to reconstruct BAM
-    Buffer textual_seq;            // ZIP: Seg of BAM
+    Buffer textual_seq;            // ZIP/PIZ: BAM: contains the textual SEQ (PIZ: used only in some cases)
 
     // data set by sam_cigar_analyze
     uint32_t ref_consumed;         // how many bp of reference are consumed according to the last_cigar
@@ -65,7 +65,7 @@ typedef struct VBlockSAM {
     Buffer buddy_textual_cigars;   // Seg of BAM (not SAM): an array of textual CIGARs referred to from DataLine->CIGAR
 
     // qual stuff
-    bool qual_codec_enano;         // true if we can compress qual with CODEC_ENANO
+    bool qual_codec_no_longr;         // true if we can compress qual with CODEC_LONGR
 } VBlockSAM;
 
 #define VB_SAM ((VBlockSAMP)vb)
@@ -99,20 +99,6 @@ typedef VBlockSAM *VBlockSAMP;
 extern const uint8_t cigar_lookup_sam[256];
 extern const uint8_t cigar_lookup_bam[16];
 
-// loading a Little Endian uint32_t from an unaligned buffer
-#define GET_UINT8(p)  ((uint8_t)(((uint8_t*)(p))[0]))
-#define GET_UINT16(p) ((uint16_t)(((uint8_t*)(p))[0] | (((uint8_t*)(p))[1] << 8)))
-#define GET_UINT32(p) ((uint32_t)(((uint8_t*)(p))[0] | (((uint8_t*)(p))[1] << 8) | (((uint8_t*)(p))[2] << 16) | (((uint8_t*)(p))[3] << 24)))
-
-// getting integers from the BAM data
-#define NEXT_UINT8  GET_UINT8  (next_field); next_field += sizeof (uint8_t);
-#define NEXT_UINT16 GET_UINT16 (next_field); next_field += sizeof (uint16_t);
-#define NEXT_UINT32 GET_UINT32 (next_field); next_field += sizeof (uint32_t);
-
-#define NEXTP_UINT8  GET_UINT8  (*next_field_p); *next_field_p += sizeof (uint8_t);
-#define NEXTP_UINT16 GET_UINT16 (*next_field_p); *next_field_p += sizeof (uint16_t);
-#define NEXTP_UINT32 GET_UINT32 (*next_field_p); *next_field_p += sizeof (uint32_t);
-
 extern void sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qname), unsigned add_additional_bytes);
 extern void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(flag_str), unsigned add_bytes);
 extern void sam_seg_RNAME_RNEXT (VBlockP vb, DidIType did_i, STRp (chrom), unsigned add_bytes);
@@ -142,6 +128,7 @@ extern unsigned sam_cigar_get_MC_ref_consumed (STRp(mc));
 // SEQ stuff
 // ----------
 extern void sam_seg_SEQ (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), PosType pos, const char *cigar, uint32_t ref_consumed, uint32_t ref_and_seq_consumed, unsigned recursion_level, uint32_t level_0_seq_len, const char *level_0_cigar, unsigned add_bytes);
+extern void bam_rewrite_seq (VBlockSAM *vb, const char *bam_seq, uint32_t seq_len);
 
 // ----------
 // QUAL stuff

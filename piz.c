@@ -287,6 +287,7 @@ uint32_t piz_uncompress_all_ctxs (VBlock *vb,
         if (!is_pair_section && !is_local && dict_id_typeless (ctx->dict_id).num == flag.dump_one_b250_dict_id.num) 
             ctx_dump_binary (vb, ctx, false);
 
+        // BGEN32, transpose, fix len
         if (is_local) {
             if (is_pair_section) piz_adjust_one_local (&ctx->pair,  &ctx->ltype, header->param);
             else                 piz_adjust_one_local (&ctx->local, &ctx->ltype, header->param);

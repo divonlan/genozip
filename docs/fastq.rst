@@ -14,6 +14,7 @@ Notes:
 - If the species has multiple versions of its reference genome FASTA, any one of them will work. 
 - If there is no reference genome for the target species, a reference genome of a closely related species may be used.
 - For meta-genomic applications, it is possible to use a reference FASTA that contains sequences from multiple species, up to a total of 4 Gbp.
+- For human data, a reference FASTA may be `downloaded here <ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/GRCh38_reference_genome/GRCh38_full_analysis_set_plus_decoy_hla.fa>`_.
 
 ::
 
@@ -66,6 +67,18 @@ Some useful command line options (for a full list, see :ref:`genozip manual<geno
 
 | ``genozip *.fq.gz --reference hs37d5.ref.genozip --tar mydata.tar``. 
 | See details: :ref:`archiving`.
+
+**Compressing if sequences are similar (e.g. virus data)**
+
+In files where it is expected that the sequences (reads) are similar - for example in the case of long-reads of similar virus genomes, conveying that expectation to Genozip using the ``--multiseq`` option will usually improve the compression.
+
+``genozip --multiseq myfile.fq.gz``
+
+**Best compression**
+
+Using the ``--best`` option causes Genozip to use more aggressive compression methods, at the expense of higher CPU and memory usage, resulting in better compression. It is recommend to combine this with ``--reference`` and ``--pair`` if applicable for even better compression.
+
+``genozip --best myfile.fq.gz``
 
 **Optimizing compression**
 

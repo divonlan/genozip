@@ -67,7 +67,10 @@ void sam_seg_SEQ (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), const PosType p
                    vb->lines.len * (MIN_(seq_len, segconf.sam_seq_len)) / (segconf_is_long_reads() ? 50 : 20), // this one too - it was chosen after extensive trial & error - easy to get wrong, esp for long reads
                    uint8_t, CTX_GROWTH, "contexts->local"); 
     
-        if (segconf.running) return; // case segconf: we created the contexts for segconf_set_vb_size accounting. that's enough - actually segging will mark is_set and break sam_md_analyze.
+        if (segconf.running) {
+            if (seq_len > segconf.longest_seq_len) segconf.longest_seq_len = seq_len;
+            return; // case segconf: we created the contexts for segconf_set_vb_size accounting. that's enough - actually segging will mark is_set and break sam_md_analyze.
+        }
     }
 
     // we can't compare to the reference if it is unaligned: we store the seqeuence in nonref without an indication in the bitmap
@@ -83,8 +86,9 @@ void sam_seg_SEQ (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), const PosType p
 
     bool no_cigar = cigar[0] == '*' && cigar[1] == 0; // there's no CIGAR. 
 
-    RefLock lock;
-    Range *range = no_cigar ? NULL : ref_seg_get_locked_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, ref_consumed, WORD_INDEX_NONE, seq, &lock);
+    RefLock lock = REFLOCK_NONE;
+    Range *range = no_cigar ? NULL : ref_seg_get_locked_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, ref_consumed, WORD_INDEX_NONE, seq, 
+                                                               flag.reference == REF_EXTERNAL ? NULL : &lock);
 
     // Cases where we don't consider the refernce and just copy the seq as-is
     if (!range) { // 1. (denovo:) this contig defined in @SQ went beyond the maximum genome size of 4B and is thus ignored
@@ -212,7 +216,7 @@ void sam_seg_SEQ (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), const PosType p
         if (next_ref == pos_index + ref_len_this_level && subcigar_len) break;
     }
 
-    if (range) ref_unlock (gref, lock);       
+    ref_unlock (gref, lock); // does nothing if REFLOCK_NONE
 
     uint32_t this_seq_last_pos = pos + (next_ref - pos_index) - 1;
 
@@ -272,12 +276,18 @@ done:
     COPY_TIMER (sam_seg_SEQ);
 }
 
-// used by codec_enano_compress
+// used by codec_longr_compress
 COMPRESSOR_CALLBACK (sam_zip_seq) 
 {
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
     *line_data_len = dl->seq_len;
-    *line_data     = ENT (char, vb->txt_data, dl->seq_data_start);
+
+    if (VB_DT(DT_SAM)) 
+        *line_data = ENT (char, vb->txt_data, dl->seq_data_start);
+    else { // BAM
+        bam_rewrite_seq (VB_SAM, ENT (char, vb->txt_data, dl->seq_data_start), dl->seq_len);
+        *line_data = FIRSTENT (char, VB_SAM->textual_seq);
+    }
 
     if (is_rev) *is_rev = dl->FLAG.bits.rev_comp;
 }
@@ -397,12 +407,19 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_SEQ)
     // the characters "=ACMGRSVTWYHKDBN" are mapped to BAM 0->15, in this matrix we add 0x80 as a validity bit. All other characters are 0x00 - invalid
     static const uint8_t sam2bam_seq_map[256] = { ['=']=0x80, ['A']=0x81, ['C']=0x82, ['M']=0x83, ['G']=0x84, ['R']=0x85, ['S']=0x86, ['V']=0x87, 
                                                   ['T']=0x88, ['W']=0x89, ['Y']=0x8a, ['H']=0x8b, ['K']=0x8c, ['D']=0x8d, ['B']=0x8e, ['N']=0x8f };
-    
-    if (vb->drop_curr_line) return 0; // sequence was not reconstructed - nothing to translate
-    
+
     BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)ENT (char, vb->txt_data, vb->line_start);
     uint32_t l_seq = LTEN32 (alignment->l_seq);
 
+    // case QUAL codec is LONGR: codec_longr_reconstruct needs the sequence (even if line is dropped - it still needs to consume its contexts)
+    if (CTX(SAM_QUAL)->lcodec == CODEC_LONGR) {
+        buf_alloc (vb, &VB_SAM->textual_seq, 0, recon_len, char, 0, "textual_seq");
+        memcpy (FIRSTENT (char, VB_SAM->textual_seq), recon, recon_len);
+        VB_SAM->textual_seq.len = recon_len;
+    }
+
+    if (vb->drop_curr_line) return 0; // sequence was not reconstructed - nothing to translate
+    
     // if l_seq=0, just remove the '*'
     if (!l_seq) {
         vb->txt_data.len--;

@@ -148,12 +148,16 @@ void vcf_tags_cmdline_rename_option(void)
                 str_split (attrs[i], attr_lens[i], 2, '>', item, true);
                 ASSINP (n_items == 2 && item_lens[1] > 0, "--dvcf-rename: invalid attr \"%.*s\". See: " WEBSITE_DVCF, attr_lens[i], attrs[i]);
 
+                if (items[0][item_lens[0]-1] == '\\') item_lens[0]--; // remove escape char for escaping >
+                    
                 vcf_tags_cmdline_add_attr ("--dvcf-rename", one_dtype, STRi(item,0), STRa(tag_name), STRi(item,1), TAG_CMDLINE);
             }
 
             // add symmetrical attrs to the destination tags
             for (unsigned i=0; i < n_attrs; i++) {
                 str_split (attrs[i], attr_lens[i], 2, '>', item, true);
+                if (items[0][item_lens[0]-1] == '\\') item_lens[0]--; // remove escape char for escaping >
+
                 vcf_tags_cmdline_add_symmetrical ("--dvcf-rename", one_dtype, STRi(item,0), STRi(item,1), STRa(tag_name));
             }
         }

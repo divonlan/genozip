@@ -201,8 +201,7 @@ LiftOverStatus vcf_lo_get_liftover_coords (VBlockVCFP vb, PosType pos, WordIndex
 // returns true if successfully translated, false if left as-is
 // Notes: 1. all translators are symmetrical - running on primary results in luft and vice versa
 // 2. AC and END translators might result in bigger or smaller text - we handle this
-bool vcf_lo_seg_cross_render_to_primary (VBlockVCFP vb, ContextP ctx, 
-                                         const char *this_value, unsigned this_value_len, 
+bool vcf_lo_seg_cross_render_to_primary (VBlockVCFP vb, ContextP ctx, STRp(this_value), 
                                          char *modified_snip, unsigned *modified_snip_len) // NULL means translate in-place (MUST be the same length)
 {
     // save original value (and TXTFILE_READ_VB_PADDING extra bytes) and txt_data.len
@@ -250,13 +249,11 @@ bool vcf_lo_seg_cross_render_to_primary (VBlockVCFP vb, ContextP ctx,
     }
 }
 
-static inline Context *vcf_lo_seg_lo_snip (VBlockVCFP vb, const char *snip, unsigned snip_len, uint64_t dnum, unsigned add_bytes)
+static inline Context *vcf_lo_seg_lo_snip (VBlockVCFP vb, STRp(snip), DidIType did_i, unsigned add_bytes)
 {
-    Context *ctx = ctx_get_ctx (vb, dnum);
+    Context *ctx = CTX(did_i);
     ctx_set_encountered (VB, ctx);
-    ctx->no_stons = true; // keep in b250 so it can be eliminated as all_the_same
-    ctx->st_did_i = VCF_oSTATUS;
-    seg_by_ctx (VB, snip, snip_len, ctx, add_bytes); 
+    seg_by_ctx (VB, STRa(snip), ctx, add_bytes); 
     
     return ctx;
 }
@@ -272,8 +269,8 @@ static void vcf_lo_seg_REJX_do (VBlockVCFP vb, unsigned add_bytes)
     // whether user views the file primary or luft coordinates, and whether this line is primary-only or luft-only:
     // each rejected line consumes all contexts exactly once, either in the main field, or in INFO/*rej
     // note: rejected lines are still reconstructed in their unsupported coordinates to consume all contexts, and then dropped.
-    vcf_lo_seg_lo_snip (vb, info_rejt_luft_snip, info_rejt_luft_snip_len, _INFO_LREJ, 0); 
-    vcf_lo_seg_lo_snip (vb, info_rejt_prim_snip, info_rejt_prim_snip_len, _INFO_PREJ, 0);
+    vcf_lo_seg_lo_snip (vb, info_rejt_luft_snip, info_rejt_luft_snip_len, INFO_LREJ, 0); 
+    vcf_lo_seg_lo_snip (vb, info_rejt_prim_snip, info_rejt_prim_snip_len, INFO_PREJ, 0);
     
     // case: primary-only line: CHROM, POS and REFALT were segged in the main fields, trivial oCHROM, oPOS, oREFLT segged here
     // case: luft-only line: oCHROM, oPOS and oREFALT were segged in the main fields, trivial CHROM, POS, REFLT segged here
@@ -289,6 +286,11 @@ static void vcf_lo_seg_REJX_do (VBlockVCFP vb, unsigned add_bytes)
     else                               vb->recon_size_luft += add_bytes;
 }
 
+static const DidIType rb_did_i[3][8] = { {}, 
+    { INFO_LUFT, INFO_PRIM, VCF_oSTATUS, VCF_LIFT_REF, VCF_oXSTRAND, VCF_oCHROM, VCF_oPOS, VCF_oREFALT },// primary coord lines
+    { INFO_LUFT, INFO_PRIM, VCF_oSTATUS, VCF_LIFT_REF, VCF_oXSTRAND, VCF_CHROM,  VCF_POS,  VCF_REFALT  } // luft coord lines
+};
+
 // Actually, reject this line (Primary or Luft line) from cross-rendering, possibly after already segging to o* fields in vcf_lo_seg_generate_INFO_DVCF
 void vcf_lo_seg_rollback_and_reject (VBlockVCFP vb, LiftOverStatus ostatus, Context *ctx /* INFO or FORMAT context, or NULL */)
 {
@@ -301,7 +303,9 @@ void vcf_lo_seg_rollback_and_reject (VBlockVCFP vb, LiftOverStatus ostatus, Cont
         vb->recon_size_luft -= CTX(INFO_PRIM)->last_txt_len;
     }
 
-    seg_rollback (VB);
+    // note: we can't use seg_create_rollback_point as vb->num_rollback_ctxs is used in seg, eg seg_array_of_struct
+    for (int i=0; i < 8; i++)
+        ctx_rollback (VB, CTX(rb_did_i[vb->line_coords][i]), true);
 
     // seg Xrej and empty values for the fields of the rejected coord
     char str[MAX_TAG_LEN + 20];
@@ -317,10 +321,9 @@ void vcf_lo_seg_rollback_and_reject (VBlockVCFP vb, LiftOverStatus ostatus, Cont
 
 void vcf_lo_set_rollback_point (VBlockVCFP vb)
 {
-    if (vb->line_coords == DC_PRIMARY) 
-        seg_create_rollback_point (VB, 8, INFO_LUFT, INFO_PRIM, VCF_oSTATUS, VCF_oCHROM, VCF_oPOS, VCF_oREFALT, VCF_LIFT_REF, VCF_oXSTRAND);
-    else 
-        seg_create_rollback_point (VB, 8, INFO_LUFT, INFO_PRIM, VCF_oSTATUS, VCF_CHROM,  VCF_POS,  VCF_REFALT,  VCF_LIFT_REF, VCF_oXSTRAND);
+    // note: we can't use seg_create_rollback_point as vb->num_rollback_ctxs is used in seg, eg seg_array_of_struct
+    for (int i=0; i < 8; i++)
+        ctx_set_rollback (VB, CTX(rb_did_i[vb->line_coords][i]), true);
 }
 
 // --chain: Create:
@@ -394,12 +397,12 @@ void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl)
     vb->last_index(VCF_oXSTRAND) = seg_by_did_i (VB, (char[]){xstrand}, 1, VCF_oXSTRAND, 1); // index used by vcf_seg_INFO_END
 
     // Add LUFT container - we modified the txt by adding these 4 fields to INFO/LUFT. We account for them now, and we will account for the INFO name etc in vcf_seg_info_field
-    Context *luft_ctx = vcf_lo_seg_lo_snip (vb, info_luft_snip, info_luft_snip_len, _INFO_LUFT, 3);
+    Context *luft_ctx = vcf_lo_seg_lo_snip (vb, info_luft_snip, info_luft_snip_len, INFO_LUFT, 3);
     luft_ctx->last_txt_len = opos_len + ochrom_len + oref_len + 4; // used for rollback: 4 = 3 commas + xstrand (the "PRIM="/"LUFT=" is accounted for in vcf_seg_info_add_DVCF_to_InfoItems)
     vb->recon_size += luft_ctx->last_txt_len; // We added INFO/LUFT to the Primary coordinates reconstruction
 
     // Do the same for PRIM. 
-    Context *prim_ctx = vcf_lo_seg_lo_snip (vb, info_prim_snip, info_prim_snip_len, _INFO_PRIM, 0);
+    Context *prim_ctx = vcf_lo_seg_lo_snip (vb, info_prim_snip, info_prim_snip_len, INFO_PRIM, 0);
     prim_ctx->last_txt_len = 0; // 0 as not added to recon_size (txt_len is used only for Primary coordinates)
     vb->recon_size_luft += vb->last_txt_len (VCF_POS) + vb->chrom_name_len + vb->main_ref_len + 4; // 4=3 commas + xstrand. We added INFO/PRIM to the Luft coordinates reconstruction
 
@@ -567,8 +570,8 @@ void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, ContextP ctx, STRp (value))
     seg_by_did_i (VB, strs[IL_XSTRAND], str_lens[IL_XSTRAND], VCF_oXSTRAND, str_lens[IL_XSTRAND]);
 
     // LUFT and PRIM container snips (INFO container filter will determine which is reconstructed)
-    Context *luft_ctx = vcf_lo_seg_lo_snip (vb, info_luft_snip, info_luft_snip_len, _INFO_LUFT, 3); // account for 3 commas
-    Context *prim_ctx = vcf_lo_seg_lo_snip (vb, info_prim_snip, info_prim_snip_len, _INFO_PRIM, 0); // 0 as this container is not reconstructed in Primary coords
+    Context *luft_ctx = vcf_lo_seg_lo_snip (vb, info_luft_snip, info_luft_snip_len, INFO_LUFT, 3); // account for 3 commas
+    Context *prim_ctx = vcf_lo_seg_lo_snip (vb, info_prim_snip, info_prim_snip_len, INFO_PRIM, 0); // 0 as this container is not reconstructed in Primary coords
     
     if (ctx->dict_id.num == _INFO_LUFT) luft_ctx->last_txt_len = value_len;
     else                                prim_ctx->last_txt_len = value_len;

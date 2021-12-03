@@ -166,6 +166,7 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
     CTX(FORMAT_SDP)->  flags.store = STORE_INT;   // since v13
 
     CTX(FORMAT_GT)->no_stons  = true; // we store the GT matrix in local, so cannot accomodate singletons
+    
     vb->ht_matrix_ctx = CTX(FORMAT_GT_HT); // different for different data types
 
     CTX(FORMAT_DP)->flags.delta_peek = true; // DP value, when delta's against another ctx, is always relative to the other value in the current sample (regardless of whether DP or the other value are reconstructed first)
@@ -429,9 +430,9 @@ static WordIndex vcf_seg_FORMAT_A_R (VBlockVCFP vb, ContextP ctx, SmallContainer
 
         item_ctxs[i] = ctx_get_ctx (vb, con.items[i].dict_id);
         
-        if (!item_ctxs[i]->seg_initialized) {
+        if (!item_ctxs[i]->is_initialized) {
             item_ctxs[i]->flags.store = item_store_type;
-            item_ctxs[i]->seg_initialized = true;
+            item_ctxs[i]->is_initialized = true;
             stats_set_consolidation (VB, ctx->did_i, 1, item_ctxs[i]->did_i);
         }
 
@@ -531,7 +532,7 @@ static void vcf_seg_AD_items (VBlockVCFP vb, ContextP ctx, unsigned num_items, C
 static void vcf_seg_ADALL_items (VBlockVCFP vb, ContextP ctx, unsigned num_items, ContextP *item_ctxs, 
                                  STRps(item), const int64_t *values)
 {
-    if (segconf.running) segconf.has[FORMAT_ADALL] = true;
+    segconf_set_has (FORMAT_ADALL);
 
     for (unsigned i=0; i < num_items; i++) 
         if (i==0 || i==1) {
@@ -1071,7 +1072,7 @@ static inline void vcf_seg_FORMAT_AB (VBlockVCFP vb, ContextP ctx, STRp(ab))
         seg_set_last_txt (VB, ctx, STRa(ab), STORE_NONE);
         ctx_set_last_value (VB, ctx, (ValueType){.i = 1}); // need verification
 
-        ctx_create_rollback_point (ctx); 
+        seg_create_rollback_point (VB, NULL, 1, FORMAT_AB); 
     }
 
     if (channel_i==3) { 
@@ -1113,10 +1114,11 @@ static inline void vcf_seg_FORMAT_AB_verify_channel1 (VBlockVCFP vb)
 
     if (strlen (recon_ab_str) != ab_str_len || memcmp (recon_ab_str, ab_str, ab_str_len)) goto rollback;
     
+    ctx_unset_rollback (ab_ctx); // so we can ctx_set_rollback again in the next sample (note: we can't advance rback_id because it is set in vcf_seg_txt_line)
     return; // verified
 
 rollback:
-    ctx_rollback (VB, ab_ctx);
+    seg_rollback (VB);
     seg_by_ctx (VB, STRa(ab_str), ab_ctx, ab_str_len); 
 }
 

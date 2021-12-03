@@ -360,7 +360,7 @@ unsigned sam_cigar_get_MC_ref_consumed (STRp(mc))
 // MC:Z "CIGAR string for mate/next segment" (https://samtools.github.io/hts-specs/SAMtags.pdf)
 void sam_cigar_seg_MC (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(mc), unsigned add_bytes)
 {
-    if (segconf.running) segconf.has[OPTION_MC_Z] = true;
+    segconf_set_has (OPTION_MC_Z);
 
     ZipDataLineSAM *buddy_dl = DATA_LINE (vb->buddy_line_i); // an invalid pointer if buddy_line_i is -1
     Buffer *buddy_cigar_buf = IS_BAM ? &vb->buddy_textual_cigars : &vb->txt_data; // buddy_dl->MC points into this buffer

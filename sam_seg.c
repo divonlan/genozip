@@ -194,15 +194,13 @@ void sam_seg_initialize (VBlock *vb)
 
     if (segconf.running) {
         segconf.sam_is_sorted = segconf.sam_is_collated = segconf.MAPQ_has_single_value = true; // initialize optimistically
-        segconf.qname_flavor = 0; // unknown
+        segconf.sam_is_unmapped = true;  // we will reset this if finding a line with POS>0
+        segconf.qname_flavor  = 0; // unknown
     }
 
     // initial allocations based on segconf data
     if (!segconf.running && segconf.sam_is_sorted) 
         buf_alloc_255 (vb, &VB_SAM->qname_hash, 0, (1 << BUDDY_HASH_BITS), int32_t, 1, "qname_hash");    
-
-    // if (segconf.tech == TECH_ONP)
-    //     VB_SAM->qual_codec_enano = true; // unless we find out during Seg that the data won't allow us
 
     sam_seg_initialize_0X (vb, (segconf.sam_is_sorted ? OPTION_XA_LOOKBACK : DID_I_NONE), OPTION_XA_RNAME, OPTION_XA_STRAND, OPTION_XA_POS, OPTION_XA_CIGAR);
     sam_seg_initialize_0X (vb, DID_I_NONE, OPTION_SA_RNAME, OPTION_SA_STRAND, OPTION_SA_POS, OPTION_SA_CIGAR);
@@ -223,9 +221,8 @@ void sam_seg_finalize (VBlockP vb)
     vb->flags.sam.is_collated = segconf.sam_is_collated;
     vb->flags.sam.is_sorted   = segconf.sam_is_sorted;
 
-    // for qual data - select domqual compression if possible, or fallback 
-    if (!codec_domq_comp_init (vb, SAM_QUAL, sam_zip_qual)) 
-        CTX(SAM_QUAL)->ltype  = LT_SEQUENCE; 
+    // assign the QUAL codec
+    codec_assign_best_qual_codec (vb, SAM_QUAL, sam_zip_qual, VB_SAM->qual_codec_no_longr);
 
     if (!codec_domq_comp_init (vb, OPTION_U2_Z, sam_zip_U2)) 
         CTX(OPTION_U2_Z)->ltype  = LT_SEQUENCE; 
@@ -264,19 +261,19 @@ void sam_seg_finalize (VBlockP vb)
         .callback     = true,
         .filter_items = true,
         .nitems_lo    = 14,
-        .items        = { { .dict_id = { _SAM_RNAME    }, .separator = { CI0_TRANS_NOR                    }, SAM2BAM_RNAME    }, // Translate - output word_index instead of string
+        .items        = { { .dict_id = { _SAM_RNAME    }, .separator = { CI0_TRANS_NOR                     }, SAM2BAM_RNAME    }, // Translate - output word_index instead of string
                           { .dict_id = { _SAM_POS      }, .separator = { CI0_TRANS_NOR | CI0_TRANS_MOVE, 1 }, SAM2BAM_POS      }, // Translate - output little endian POS-1
-                          { .dict_id = { _SAM_MAPQ     }, .separator = { CI0_TRANS_NOR                    }, SAM2BAM_U8       }, // Translate - textual to binary number
+                          { .dict_id = { _SAM_MAPQ     }, .separator = { CI0_TRANS_NOR                     }, SAM2BAM_U8       }, // Translate - textual to binary number
                           { .dict_id = { _SAM_BAM_BIN  }, .separator = { CI0_TRANS_NOR | CI0_TRANS_MOVE, 2 }, SAM2BAM_LTEN_U16 }, // Translate - textual to binary number
                           { .dict_id = { _SAM_FLAG     }, .separator = { CI0_TRANS_NOR | CI0_TRANS_MOVE, 4 }, SAM2BAM_LTEN_U16 }, // Translate - textual to binary number
-                          { .dict_id = { _SAM_RNEXT    }, .separator = { CI0_TRANS_NOR                    }, SAM2BAM_RNAME    }, // Translate - output word_index instead of string
+                          { .dict_id = { _SAM_RNEXT    }, .separator = { CI0_TRANS_NOR                     }, SAM2BAM_RNAME    }, // Translate - output word_index instead of string
                           { .dict_id = { _SAM_PNEXT    }, .separator = { CI0_TRANS_NOR | CI0_TRANS_MOVE, 4 }, SAM2BAM_POS      }, // Translate - output little endian POS-1
-                          { .dict_id = { _SAM_QNAME    }, .separator = { CI0_TRANS_NUL                    }                   }, // normal 
-                          { .dict_id = { _SAM_CIGAR    }, .separator = ""                                                    }, // handle in special reconstructor - translate textual to BAM CIGAR format + reconstruct l_read_name, n_cigar_op, l_seq
-                          { .dict_id = { _SAM_TLEN     }, .separator = { CI0_TRANS_NOR                    }, SAM2BAM_TLEN     }, // must be after CIGAR bc sam_piz_special_TLEN_old needs vb->seq_num
-                          { .dict_id = { _SAM_SQBITMAP }, .separator = "",                                  SAM2BAM_SEQ      }, // Translate - textual format to BAM format
-                          { .dict_id = { _SAM_QUAL     }, .separator = "",                                  SAM2BAM_QUAL     }, // Translate - textual format to BAM format, set block_size
-                          { .dict_id = { _SAM_OPTIONAL }, .separator = { CI0_TRANS_NOR                    }                   }, // up to v11, this had the SAM2BAM_OPTIONAL translator
+                          { .dict_id = { _SAM_QNAME    }, .separator = { CI0_TRANS_NUL                     }                   }, // normal 
+                          { .dict_id = { _SAM_CIGAR    }, .separator = ""                                                      }, // handle in special reconstructor - translate textual to BAM CIGAR format + reconstruct l_read_name, n_cigar_op, l_seq
+                          { .dict_id = { _SAM_TLEN     }, .separator = { CI0_TRANS_NOR                     }, SAM2BAM_TLEN     }, // must be after CIGAR bc sam_piz_special_TLEN_old needs vb->seq_num
+                          { .dict_id = { _SAM_SQBITMAP }, .separator = "",                                    SAM2BAM_SEQ      }, // Translate - textual format to BAM format
+                          { .dict_id = { _SAM_QUAL     }, .separator = "",                                    SAM2BAM_QUAL     }, // Translate - textual format to BAM format, set block_size
+                          { .dict_id = { _SAM_OPTIONAL }, .separator = { CI0_TRANS_NOR                     }                   }, // up to v11, this had the SAM2BAM_OPTIONAL translator
                         }
     };
 
@@ -357,6 +354,18 @@ void sam_seg_finalize (VBlockP vb)
         segconf.sam_buddy_RG  = segconf.sam_is_sorted && (CTX(OPTION_RG_Z)->nodes.len >= BUDDY_MIN_RG_COUNT); // it only makes sense to buddy RGs in a sorted (not collated) file, and where there are "a lot" of RGs or else we would be increasing rather than decreasing entropy
         segconf.sam_cigar_len = 1 + (segconf.sam_cigar_len / vb->lines.len); // set to the average CIGAR len (rounded up)
         segconf.sam_seq_len   = 1 + (segconf.sam_seq_len   / vb->lines.len);
+
+        if (segconf_is_long_reads()) {
+            codec_longr_calculate_bins (vb, CTX(SAM_QUAL), sam_zip_qual);
+
+            if (segconf.has[OPTION_ms_i])
+                segconf.sam_ms_type = ms_MINIMAP2; // definitely not biobambam's MateBaseScore as long reads don't have mates
+        }
+        else {
+            if (segconf.has[OPTION_ms_i] && segconf.sam_is_paired)
+                // TODO: test not strong enough - minimap2 may be used for short reads too
+                segconf.sam_ms_type = ms_BIOBAMBAM;
+        }
     }
 
     // get rid of the XA strand context (nodes added in sam_seg_initialize) if we ended up not having this tag
@@ -365,9 +374,6 @@ void sam_seg_finalize (VBlockP vb)
     // case: we have XA but didn't use lookback (because its a non-sorted file) - create an all-the-same XA_LOOKBACK dict
     if (CTX(OPTION_XA_Z)->b250.len && !CTX(OPTION_XA_Z)->local.len)
         ctx_create_node (vb, OPTION_XA_LOOKBACK, "0", 1);
-
-    if (VB_SAM->qual_codec_enano) 
-        codec_enano_seg_init (vb, CTX(SAM_QUAL));
 }
 
 bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)
@@ -525,6 +531,7 @@ static const char *sam_get_one_optional (VBlockSAM *vb, const char *next_field, 
         *value_len     = field_len - 7;
     }
     else {
+        *array_subtype = 0;
         *value         = field_start + 5;
         *value_len     = field_len - 5;
     }
@@ -727,10 +734,14 @@ PosType sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pos_str)/* option 1
     dl->POS = pos;
 
     // in segconf, identify if this file is sorted
-    if (segconf.running && segconf.sam_is_sorted) // still sorted, try to find evidence to the contrary
-        if (prev_line_chrom > vb->chrom_node_index || (prev_line_chrom == vb->chrom_node_index && prev_line_pos > pos))
+    if (segconf.running) {
+        if (segconf.sam_is_sorted && 
+            (prev_line_chrom > vb->chrom_node_index || (prev_line_chrom == vb->chrom_node_index && prev_line_pos > pos)))
             segconf.sam_is_sorted = false;
-
+        
+        if (pos)
+            segconf.sam_is_unmapped = false; // it remains unmapped only if we never get here - all lines have POS=0
+    }
     return pos;
 }
 
@@ -863,8 +874,8 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     ASSSEG (str_is_in_range (SAM_QUAL_str, SAM_QUAL_len, 33, 126), SAM_QUAL_str, "Invalid QUAL - it contains non-Phred characters: \"%.*s\"", 
             SAM_QUAL_len, SAM_QUAL_str);
 
-    if (SAM_SEQ_len < ENANO_MIN_READ_LEN || SAM_SEQ_len != SAM_QUAL_len)
-        vb->qual_codec_enano = false; // we cannot compress QUAL with CODEC_ENANO as prerequisites are not met
+    if (SAM_SEQ_len != SAM_QUAL_len)
+        vb->qual_codec_no_longr = true; // we cannot compress QUAL with CODEC_LONGR in this case
 
     // finally we can seg CIGAR now
     sam_cigar_seg_textual (vb, dl, last_cigar_len, STRd(SAM_SEQ), STRd(SAM_QUAL));

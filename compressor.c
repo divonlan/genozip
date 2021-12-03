@@ -70,6 +70,7 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data,
         codec_verify_free_all (vb, "compressor", comp_codec);
 
         vb->codec_using_codec_bufs = comp_codec;
+
         bool success = 
             codec_args[comp_codec].compress (vb, header, uncompressed_data, &data_uncompressed_len,
                                              callback,  
@@ -172,7 +173,7 @@ void comp_uncompress (VBlock *vb, Codec codec, Codec sub_codec, uint8_t param, S
     ASSERT0 (compressed_len, "compressed_len=0");
 
     // if this is (1) a simple codec (including CODEC_UNKNOWN) that has a sub-codec or
-    // (2) or no codec uncompressor - the sub-codec now run it now
+    // (2) or no codec uncompressor - run the sub-codec uncompressor directly
     // for non-simple codecs, the subcodec is handled within the main codec decompressor. run_subcodec is true if we need to handle it here.
     bool run_subcodec = sub_codec && (codec_args[codec].is_simple || !codec_args[codec].uncompress);
 

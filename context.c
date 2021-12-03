@@ -1034,8 +1034,8 @@ ContextP ctx_get_unmapped_ctx (Context *contexts/* array */, DataType dt, DidITy
     Context *ctx = &contexts[*num_contexts]; 
  
     //iprintf ("New context: dict_id=%s in did_i=%u \n", dis_dict_id (dict_id).s, did_i);
-    ASSERT (*num_contexts < MAX_DICTS, "cannot create a context for %.*s because number of dictionaries would exceed MAX_DICTS=%u", 
-            tag_name_len, tag_name, MAX_DICTS);
+    ASSERT (*num_contexts < MAX_DICTS, "cannot create a context for %.*s (dict_id=%s) because number of dictionaries would exceed MAX_DICTS=%u", 
+            tag_name_len, tag_name, dis_dict_id (dict_id).s, MAX_DICTS);
 
     ctx_initialize_ctx (ctx, *num_contexts, dict_id, dict_id_to_did_i_map, STRa (tag_name));
 
@@ -1271,9 +1271,10 @@ void ctx_free_context (Context *ctx, DidIType did_i)
     ctx->lcodec = ctx->bcodec = ctx->lsubcodec_piz = 0;
 
     ctx->no_stons = ctx->pair_local = ctx->pair_b250 = ctx->stop_pairing = ctx->no_callback = ctx->line_is_luft_trans =
-    ctx->local_param = ctx->no_vb1_sort = ctx->local_always = ctx->counts_section = ctx->no_drop_b250 = 0;
+    ctx->local_param = ctx->no_vb1_sort = ctx->local_always = ctx->counts_section = ctx->no_drop_b250 = 
+    ctx->is_frozen = ctx->please_remove_dict = ctx->local_no_bgen = 0;
     ctx->dynamic_size_local = 0;
-    ctx->is_stats_parent = ctx->seg_initialized = ctx->local_compressed = ctx->b250_compressed = ctx->dict_merged = 0;
+    ctx->is_stats_parent = ctx->is_initialized = ctx->local_compressed = ctx->b250_compressed = ctx->dict_merged = 0;
     ctx->local_dep = 0;
     ctx->local_hash_prime = 0;
     ctx->num_new_entries_prev_merged_vb = 0;
@@ -1287,6 +1288,7 @@ void ctx_free_context (Context *ctx, DidIType did_i)
     ctx->rback_last_txt_index = ctx->rback_last_txt_len = ctx->rback_num_singletons = 0;
     ctx->rback_last_value.i = 0;
     ctx->rback_last_delta = 0;
+    ctx->rback_id = 0;
 
     mutex_destroy (ctx->mutex);
 
@@ -1323,7 +1325,7 @@ void ctx_destroy_context (Context *ctx, DidIType did_i)
         #define REL_LOC(field) ((char*)(&ctx->field) - (char*)ctx)
         for (char *c=(char*)ctx; c  < (char*)(ctx+1); c++)
             if (*c) {
-                fprintf (stderr, "relative location for debugging: %"PRIu64"\n", REL_LOC(num_singletons)); // help find the offending field 
+                fprintf (stderr, "relative location for debugging: %"PRIu64"\n", REL_LOC(please_remove_dict)); // help find the offending field 
                 ABORT ("ctx_free_context didn't fully clear the context did_i=%u, byte %u != 0", did_i, (unsigned)(c - (char*)ctx)); 
             }
     #endif
@@ -1792,16 +1794,21 @@ TagNameEx ctx_tag_name_ex (ConstContextP ctx)
     return s;
 }
 
-// rolls back a context to the rollback point registered in ctx_create_rollback_point
-void ctx_rollback (VBlockP vb, Context *ctx)
+// rolls back a context to the rollback point registered in ctx_set_rollback
+void ctx_rollback (VBlockP vb, Context *ctx, bool override_id)
 {
+    ASSERT (override_id || ctx->rback_id == vb->rback_id, "Expected ctx->rback_id=%"PRId64" == vb->rback_id=%"PRId64, 
+            ctx->rback_id, vb->rback_id);
+             
     if (HAS_DEBUG_SEG(ctx)) 
         iprintf ("ctx_rollback: vb_i=%u %s: rolling back b250=%u nodes=%u\n", vb->vblock_i, ctx->tag_name, 
                  (int)(ctx->b250.len - ctx->rback_b250_len), (int)(ctx->nodes.len - ctx->rback_nodes_len));
 
     // if we evaluated this context since the rollback count - undo
     while (ctx->b250.len > ctx->rback_b250_len) { 
-        (*ENT (int64_t, ctx->counts, LASTb250(ctx)))--;
+        WordIndex node_index = LASTb250(ctx);
+        if (node_index >= 0)
+            (*ENT (int64_t, ctx->counts, node_index))--;
         ctx->b250.len--;
     }
 
@@ -1812,8 +1819,7 @@ void ctx_rollback (VBlockP vb, Context *ctx)
     // this will prevent merging the word into the zctx->dict, and also prevent hash_get_entry_for_seg from returning this node if this word
     // is segged again in this VB - a new node will be created.
     for (WordIndex node_index_i = ctx->rback_nodes_len ; node_index_i < ctx->nodes.len ; node_index_i++) 
-        ENT (CtxNode, ctx->nodes, node_index_i
-        )->word_index.n = WORD_INDEX_NONE;
+        ENT (CtxNode, ctx->nodes, node_index_i)->word_index.n = WORD_INDEX_NONE;
     
     ctx->local.len      = ctx->rback_local_len;
     ctx->txt_len        = ctx->rback_txt_len;
@@ -1824,6 +1830,7 @@ void ctx_rollback (VBlockP vb, Context *ctx)
     ctx->last_txt_len   = ctx->rback_last_txt_len;
     ctx->last_line_i    = LAST_LINE_I_INIT; // undo "encountered in line"
     ctx->last_snip      = NULL; // cancel caching in ctx_create_node_do
+    ctx->rback_id       = -1; // rolled back
 }
 
 // ZIP: get total length in VB's z_data of b250 and local of all contexts in a context group

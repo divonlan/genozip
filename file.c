@@ -78,7 +78,7 @@ FileType file_get_z_ft_by_txt_in_ft (DataType dt, FileType txt_ft)
 }
 
 // get codec by txt file type
-static Codec file_get_codec_by_txt_ft (DataType dt, FileType txt_ft)
+Codec file_get_codec_by_txt_ft (DataType dt, FileType txt_ft)
 {
     for (unsigned i=0; txt_in_ft_by_dt[dt][i].in; i++)
         if (txt_in_ft_by_dt[dt][i].in == txt_ft) 
@@ -341,7 +341,7 @@ static bool file_open_txt_read_test_valid_dt (const File *file)
                 // case: compressing into a tar file - include .genozip files verbatim
                 if (tar_is_tar()) {
                     tar_copy_file (file->name);
-                    RETURNW (false, true, "Copied %s to tar file", file_printname(file));
+                    RETURNW (false, true, "Copied %s to the tar file", file_printname(file));
                 }    
                 else
                     RETURNW (false, true, "Skipping %s - it is already compressed", file_printname(file));
@@ -381,7 +381,7 @@ static bool file_open_txt_read (File *file)
     if (file->data_type == DT_GENERIC && !stdin_type) 
         WARN_ONCE ("FYI: genozip doesn't recognize %s file's type, so it will be compressed as GENERIC. In the future, you may specify the type with \"--input <type>\". To suppress this warning, use \"--input generic\".", file->name);
     
-    // open the file, based on the codec
+    // open the file, based on the codec (as guessed by file extension)
     file->codec = file_get_codec_by_txt_ft (file->data_type, file->type);
 
     ASSINP0 (!flag.is_windows || !file->redirected || file->codec == CODEC_NONE, 
@@ -454,6 +454,10 @@ fallthrough_from_cram:
                 ABORTINP0 ("No input data");
             }
 
+            // Bug 490: if a gzip- pr bz2-compressed file appears to be uncompressed (CODEC_NONE =
+            // no .gz or .bz2 extension), the user is unaware that this file is compressed. Since we can't 
+            // re-compress CODEC_GZ or CODEC_BZ2 upon decompressed, it will appear as if we're not recreating the original file. 
+            
             // case: this is a non-BGZF gzip format - open with zlib and hack back the read bytes 
             // (note: we cannot re-read the bytes from the file as the file might be piped in)
             else if (bgzf_uncompressed_size == BGZF_BLOCK_GZIP_NOT_BGZIP) {

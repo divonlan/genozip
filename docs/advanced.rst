@@ -71,7 +71,7 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
-.. option:: --show-ref-seq  ZUC. Show the reference sequences as stored internally in a SAM, BAM or FASTQ file (also works for a reference file, but --reference --regions is faster). Combine with --regions to see specific regions (genocat only). Combine with --sequential to omit newlines. '-' appears in unset loci.
+.. option:: --show-ref-seq  ZUC. Show the reference sequences as stored internally in a SAM BAM or FASTQ file (also works for a reference file but --reference --regions is faster). Combine with --regions to see specific regions (genocat only). Combine with --sequential to omit newlines. '-' appears in unset loci.
 
           |
 
@@ -91,7 +91,7 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
-.. option:: --show-ref-iupacs  ZC. Show the the IUPACs in the reference. In combination with genozip --chain, also shows the VCF variants that have a IUPAC in the Luft reference and how they are handled.
+.. option:: --show-ref-iupacs  ZC. Show the the IUPACs in the reference. In combination with genozip --chain - also shows the VCF variants that have a IUPAC in the Luft reference and how they are handled.
 
           |
 
@@ -132,7 +132,7 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
     | See: :ref:`dvcf`
     |
 
-.. option:: --biopsy=vb,vb...  C. Dump a subset VBs of the source file being compressed, and including the txt header. The argument is a comma separated list of VB numbers or VB ranges.
+.. option:: --biopsy=vb,vb...  C. Dump a subset VBs of the source file being compressed and including the txt header. The argument is a comma separated list of VB numbers or VB ranges.
 
     | Example: ``genozip mybam.bam --biopsy 5-7,11`` will emit the txt header and VBs 5,6,7,11.
     |
@@ -199,11 +199,15 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
-.. option:: --show-dvcf.  C. When used with dual-coordinate VCF file, shows for each variant its Coordinates (Primary, Luft or Both) and its oStatus.
+.. option:: --show-dvcf.  C. When used with dual-coordinate VCF file shows for each variant its Coordinates (Primary Luft or Both) and its oStatus.
 
           |
 
 .. option:: --show-wrong-md.  C. SAM with MD:Z field - shows cases where the special MD algorithm is not applied to the MD:Z in the data
+
+          |
+
+.. option:: --debug-LONG.  C. SAM/BAM and FASTQ: treat data as long reads regardless of the actual read length
 
           |
 

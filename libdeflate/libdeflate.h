@@ -356,8 +356,8 @@ libdeflate_crc32(uint32_t crc, const void *buffer, size_t len);
  * structures in existence when calling this function.
  */
 LIBDEFLATEEXPORT void LIBDEFLATEAPI
-libdeflate_set_memory_allocator(void *(*malloc_func)(void *, unsigned, unsigned),
-				void (*free_func)(void *, void *));
+libdeflate_set_memory_allocator(void *(*malloc_func)(void *, unsigned, unsigned, const char*, uint32_t),
+				void (*free_func)(void *, void *, const char*, uint32_t));
 
 #ifdef __cplusplus
 }

@@ -73,7 +73,7 @@ typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT, NUM_EXE_TYPE
 typedef enum { DT_NONE=-1, // used in the code logic, never written to the file
                DT_REF=0, DT_VCF=1, DT_SAM=2, DT_FASTQ=3, DT_FASTA=4, DT_GFF3=5, DT_ME23=6, // these values go into SectionHeaderGenozipHeader.data_type
                DT_BAM=7, DT_BCF=8, DT_GENERIC=9, DT_PHYLIP=10, DT_CHAIN=11, DT_KRAKEN=12, 
-               NUM_DATATYPES 
+               DT_LOCS=13, DT_BCL=14, NUM_DATATYPES 
              } DataType; 
 #define Z_DT(dt) (z_file->data_type == (dt))
 #define TXT_DT(dt) (txt_file->data_type == (dt))
@@ -143,7 +143,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     V8_CODEC_BAM=23,    // in v8 BAM was a codec which was compressed using samtools as external compressor. since v9 it is a full data type, and no longer a codec.
     CODEC_CRAM=24, CODEC_ZIP=25,
 
-    CODEC_ENANO=26,  
+    CODEC_LONGR=26,
 
     NUM_CODECS
 } Codec; 
@@ -168,6 +168,8 @@ typedef          __int128 int128_t;
 #ifndef ABS
 #define ABS(a) ({ __typeof__(a) _a_=(a); (_a_ >= 0) ? _a_ : -_a_; })
 #endif
+
+#define ARRAY_LEN(array) (sizeof(array) / sizeof(array[0]))
 
 #define IS_FLAG(flag, mask) (((flag) & (mask)) == (mask))
 

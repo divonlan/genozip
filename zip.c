@@ -95,8 +95,9 @@ static void zip_display_compression_ratio (Digest md5, bool is_final_component)
         progress_finalize_component_time ("Done", md5);
 
     // when compressing BAM report only ratio_vs_comp (compare to BGZF-compress BAM - we don't care about the underlying plain BAM)
-    else if (Z_DT(DT_BAM)) 
-            progress_finalize_component_time_ratio (dt_name (z_file->data_type), ratio_vs_comp, md5);
+    // Likewise, doesn't have a compression extension (eg .gz), even though it may actually be compressed eg .tbi (which is actually BGZF)
+    else if (Z_DT(DT_BAM) || (txt_file && file_get_codec_by_txt_ft (txt_file->data_type, txt_file->type) == CODEC_NONE)) 
+        progress_finalize_component_time_ratio (dt_name (z_file->data_type), ratio_vs_comp, md5);
 
     else if (ratio_vs_comp >= 0) {
         if (txt_file->codec == CODEC_NONE || ratio_vs_comp < 1.05) // disk_so_far doesn't give us the true txt file size 
@@ -368,18 +369,22 @@ static void zip_generate_local (VBlockP vb, ContextP ctx)
     if (ctx->dynamic_size_local) 
         zip_resize_local (vb, ctx);
 
-    else if (ctx->ltype == LT_BITMAP) 
-        LTEN_bit_array (buf_get_bitarray (&ctx->local));
+    else if (!ctx->local_no_bgen) 
+        switch (ctx->ltype) {
+            case LT_BITMAP    : LTEN_bit_array (buf_get_bitarray (&ctx->local));    break;
+            case LT_UINT32_TR : zip_generate_transposed_local (vb, ctx);            break;
+            case LT_FLOAT32   : 
+            case LT_UINT32    : BGEN_u32_buf (&ctx->local, NULL);                   break;
+            case LT_UINT16    : BGEN_u16_buf (&ctx->local, NULL);                   break;
+            case LT_FLOAT64   :
+            case LT_UINT64    : BGEN_u64_buf (&ctx->local, NULL);                   break;
+            case LT_INT8      : BGEN_interlace_d8_buf  (&ctx->local, NULL);         break;
+            case LT_INT16     : BGEN_interlace_d16_buf (&ctx->local, NULL);         break;
+            case LT_INT32     : BGEN_interlace_d32_buf (&ctx->local, NULL);         break;
+            case LT_INT64     : BGEN_interlace_d64_buf (&ctx->local, NULL);         break;
+            default           :                                                     break;        
+        }
 
-    else if (ctx->ltype == LT_UINT32_TR)
-        zip_generate_transposed_local (vb, ctx);
-
-    else if (ctx->ltype == LT_FLOAT32)
-        BGEN_u32_buf (&ctx->local, NULL);
-        
-    else if (ctx->ltype == LT_FLOAT64)
-        BGEN_u64_buf (&ctx->local, NULL);
-        
     codec_assign_best_codec (vb, ctx, NULL, SEC_LOCAL);
 
     if (flag.debug_generate) iprintf ("%s.local in vb_i=%u ltype=%s len=%"PRIu64" codec=%s\n", 

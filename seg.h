@@ -36,7 +36,7 @@ extern void seg_integer (VBlockP vb, ContextP ctx, int64_t n, bool with_lookup, 
 extern WordIndex seg_integer_as_text_do (VBlockP vb, ContextP ctx, int64_t n, unsigned add_bytes); // segs integer as normal textual snip
 #define seg_integer_as_text(vb,did_i,n,add_sizeof_n) seg_integer_as_text_do((VBlockP)(vb), &vb->contexts[did_i], (n), (add_sizeof_n) ? sizeof(n) : 0)
 
-extern WordIndex seg_self_delta (VBlockP vb, ContextP ctx, int64_t value, uint32_t value_str_len);
+extern WordIndex seg_self_delta (VBlockP vb, ContextP ctx, int64_t value, uint32_t add_bytes);
 
 extern void seg_simple_lookup (VBlockP vb, ContextP ctx, unsigned add_bytes);
 extern bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsigned add_bytes); // segs integer in local if possible
@@ -60,8 +60,6 @@ extern bool seg_id_field_cb (VBlockP vb, ContextP ctx, STRp(id_snip), uint32_t r
 
 extern void seg_add_to_local_text   (VBlockP vb, ContextP ctx, STRp(snip), unsigned add_bytes);
 extern void seg_add_to_local_fixed  (VBlockP vb, ContextP ctx, STRp(data));
-extern void seg_add_to_local_uint32 (VBlockP vb, ContextP ctx, uint32_t value, unsigned add_bytes);
-extern void seg_add_to_local_uint8  (VBlockP vb, ContextP ctx, uint8_t  value, unsigned add_bytes);
 
 // requires setting ctx->dynamic_size_local=true in seg_initialize, but not need to set ltype as it will be set in zip_resize_local
 static inline void seg_add_to_local_resizable (VBlockP vb, ContextP ctx, int64_t value, unsigned add_bytes)
@@ -78,6 +76,8 @@ static inline void seg_add_to_local_resizable (VBlockP vb, ContextP ctx, int64_t
 extern WordIndex seg_delta_vs_other_do (VBlockP vb, ContextP ctx, ContextP other_ctx, STRp(value), int64_t max_delta, unsigned add_bytes);
 static inline WordIndex seg_delta_vs_other (VBlockP vb, ContextP ctx, ContextP other_ctx, STRp(value))
     { return seg_delta_vs_other_do (vb, ctx, other_ctx, STRa(value), -1, value_len); }
+
+extern void seg_xor_diff (VBlockP vb, ContextP ctx, STRp(value), bool no_xor_if_same, unsigned add_bytes);
 
 extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, DidIType stats_conslidation_did_i, const char *value, int32_t value_len, char sep, char subarray_sep, bool use_integer_delta, bool store_int_in_local);
 
@@ -104,7 +104,8 @@ extern void seg_prepare_multi_dict_id_special_snip (uint8_t special_code, unsign
 
 bool seg_set_last_txt (VBlockP vb, ContextP ctx, STRp(value), StoreType store_type);
 
-extern void seg_create_rollback_point (VBlockP vb, unsigned num_ctxs, ...); // list of did_i
+extern void seg_create_rollback_point (VBlockP vb, ContextP *ctxs, unsigned num_ctxs, ...); // list of did_i
+extern void seg_add_ctx_to_rollback_point (VBlockP vb, ContextP ctx);
 extern void seg_rollback (VBlockP vb);
 
 // Multiplexers
@@ -131,6 +132,24 @@ typedef const MULTIPLEXER(1000) *ConstMultiplexerP;
 
 extern void seg_mux_init (VBlockP vb, unsigned num_channels, uint8_t special_code, DidIType mux_did_i, DidIType st_did_i, StoreType store_type, MultiplexerP mux, const char *channel_letters);
 extern ContextP seg_mux_get_channel_ctx (VBlockP vb, MultiplexerP mux, uint32_t channel_i);
+
+// --------------------
+// handling binary data
+// --------------------
+
+// loading a Little Endian uint32_t from an unaligned buffer
+#define GET_UINT8(p)  ((uint8_t)(((uint8_t*)(p))[0]))
+#define GET_UINT16(p) ((uint16_t)(((uint8_t*)(p))[0] | (((uint8_t*)(p))[1] << 8)))
+#define GET_UINT32(p) ((uint32_t)(((uint8_t*)(p))[0] | (((uint8_t*)(p))[1] << 8) | (((uint8_t*)(p))[2] << 16) | (((uint8_t*)(p))[3] << 24)))
+
+// getting integers from the BAM data
+#define NEXT_UINT8  GET_UINT8  (next_field); next_field += sizeof (uint8_t);
+#define NEXT_UINT16 GET_UINT16 (next_field); next_field += sizeof (uint16_t);
+#define NEXT_UINT32 GET_UINT32 (next_field); next_field += sizeof (uint32_t);
+
+#define NEXTP_UINT8  GET_UINT8  (*next_field_p); *next_field_p += sizeof (uint8_t);
+#define NEXTP_UINT16 GET_UINT16 (*next_field_p); *next_field_p += sizeof (uint16_t);
+#define NEXTP_UINT32 GET_UINT32 (*next_field_p); *next_field_p += sizeof (uint32_t);
 
 // ------------------
 // Seg utilities

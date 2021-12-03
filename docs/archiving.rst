@@ -27,7 +27,13 @@ Example 1:
     > # Unarchiving and decompressing all files
     > tar xvf mydata.tar |& genounzip --files-from - --replace
 
-Example 2: here, we compress and archive all BAM files in the current directory and its sub-directories, preserving the directory struture:
+Example 2: compress all files in a directory and its sub-directories, using ``--subdirs``:
+
+::
+
+    > genozip --tar mydata.tar --subdirs my-data-dir
+
+Example 3: compress and archive all BAM files in the current directory and its sub-directories, preserving the directory struture:
 
 ::
 

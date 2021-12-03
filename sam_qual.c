@@ -58,7 +58,7 @@ COMPRESSOR_CALLBACK (sam_zip_qual)
 
 void sam_seg_QUAL_initialize (VBlockP vb)
 {
-    if (segconf.has[OPTION_ms_i]) {     // handle QUAL_scores for ms:i - added v13
+    if (segconf.sam_ms_type == ms_BIOBAMBAM) {     // handle QUAL_scores for ms:i - added v13
         CTX(SAM_QUAL)->flags.store_per_line = true;
         CTX(SAM_QUAL)->no_stons = true; // since we're storing QUAL data in local
 
@@ -75,16 +75,18 @@ void sam_seg_QUAL (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(qual_data), unsigned 
     qual_ctx->txt_len   += add_bytes;
 
     // get QUAL score, consumed by buddy ms:i
-    if (!segconf.running && segconf.has[OPTION_ms_i])
+    if (!segconf.running && segconf.sam_ms_type == ms_BIOBAMBAM)
         dl->QUAL_score = qual_ctx->last_value.i = sam_get_QUAL_score (STRa(qual_data));
+
+    // get stats on qual scores
+    if (segconf.running)
+        segconf_update_qual (STRa (qual_data));
 }
 
 // ms:i: (output of bamsormadup and other biobambam tools - ms in small letters), created here: https://github.com/gt1/libmaus/tree/master/src/libmaus/bambam/BamAlignmentDecoderBase.cpp getScore 
 // It is the sum of phred values of mate's QUAL, but only phred values >= 15
 void sam_seg_ms_field (VBlockSAM *vb, ValueType ms, unsigned add_bytes)
 {
-    if (segconf.running) segconf.has[OPTION_ms_i] = true;
-
     ZipDataLineSAM *buddy_dl = DATA_LINE (vb->buddy_line_i); // an invalid pointer if buddy_line_i is -1
     
     if (vb->buddy_line_i != -1 && buddy_dl->QUAL_score == ms.i)  // successful in ~97% of lines with buddy
@@ -117,7 +119,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_QUAL)
     return true; // new value
 }
 
-// SAM-to-BAM translator: translate SAM ASCII (33-based) Phread values to BAM's 0-based
+// SAM-to-BAM translator: translate SAM ASCII (33-based) Phred values to BAM's 0-based
 TRANSLATOR_FUNC (sam_piz_sam2bam_QUAL)
 {
     // if QUAL is "*" there are two options:

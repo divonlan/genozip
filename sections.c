@@ -669,8 +669,10 @@ void sections_show_gheader (const SectionHeaderGenozipHeader *header)
         iprintf ("  digest_bound.md5: %s\n",        digest_display (header->digest_bound).s);
         iprintf ("  created: %*s\n",                -FILE_METADATA_LEN, header->created);
         iprintf ("  license_hash: %s\n",            digest_display (header->license_hash).s);
-        iprintf ("  reference filename: %s\n",      header->ref_filename);
-        iprintf ("  reference file hash: %s\n",     digest_display (header->ref_file_md5).s);
+        if (header->ref_filename[0]) {
+            iprintf ("  reference filename: %s\n",      header->ref_filename);
+            iprintf ("  reference file hash: %s\n",     digest_display (header->ref_file_md5).s);
+        }
         iprintf ("  flags: %s\n",                   sections_dis_flags (header->h.flags, SEC_GENOZIP_HEADER, dt).s);
 
         switch (dt) {

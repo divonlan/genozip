@@ -210,7 +210,7 @@ not_verified:
 // if MD value can be derived from the seq_len, we don't need to store - store just an empty string
 void sam_md_seg (VBlockSAM *vb,  ZipDataLineSAM *dl, STRp(md), unsigned add_bytes)
 {
-    if (segconf.running) segconf.has[OPTION_MD_Z] = true;
+    segconf_set_has (OPTION_MD_Z);
 
     if (vb->md_verified) 
         seg_by_did_i (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_MD}, 2, OPTION_MD_Z, add_bytes);

@@ -146,13 +146,13 @@ static inline void validate_bitarr (BitArray *arr, const char *file, int lineno)
 static inline word_t _reverse_word(word_t word)
 {
     word_t reverse = (reverse_table[(word)       & 0xff] << 56) |
-                    (reverse_table[(word >>  8) & 0xff] << 48) |
-                    (reverse_table[(word >> 16) & 0xff] << 40) |
-                    (reverse_table[(word >> 24) & 0xff] << 32) |
-                    (reverse_table[(word >> 32) & 0xff] << 24) |
-                    (reverse_table[(word >> 40) & 0xff] << 16) |
-                    (reverse_table[(word >> 48) & 0xff] << 8) |
-                    (reverse_table[(word >> 56) & 0xff]);
+                     (reverse_table[(word >>  8) & 0xff] << 48) |
+                     (reverse_table[(word >> 16) & 0xff] << 40) |
+                     (reverse_table[(word >> 24) & 0xff] << 32) |
+                     (reverse_table[(word >> 32) & 0xff] << 24) |
+                     (reverse_table[(word >> 40) & 0xff] << 16) |
+                     (reverse_table[(word >> 48) & 0xff] << 8)  |
+                     (reverse_table[(word >> 56) & 0xff]);
 
     return reverse;
 }
@@ -507,6 +507,8 @@ void bit_array_clear_region_do (BitArray *bitarr, bit_index_t start, bit_index_t
 // set all elements of data to one
 void bit_array_set_all (BitArray *bitarr)
 {
+    if (!bitarr->words) return; // nothing to do
+    
     bit_index_t num_of_bytes = bitarr->nwords * sizeof(word_t);
     memset(bitarr->words, 0xFF, num_of_bytes);
     _mask_top_word(bitarr);

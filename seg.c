@@ -67,28 +67,45 @@ WordIndex seg_duplicate_last(VBlockP vb, ContextP ctx, unsigned add_bytes)
     return seg_known_node_index (vb, ctx, LASTb250(ctx), add_bytes); 
 }
 
+#define MAX_ROLLBACK_CTXS ((unsigned)(sizeof(vb->rollback_ctxs)/sizeof(vb->rollback_ctxs[0])))
+
 // NOTE: this does not save recon_size - if the processing may change recon_size it must be saved and rolled back separately
-void seg_create_rollback_point (VBlockP vb, unsigned num_ctxs, ...)
+void seg_create_rollback_point (VBlockP vb, 
+                                ContextP *ctxs,    // option 1
+                                unsigned num_ctxs, // applied to both options
+                                ...)               // option 2
 {
+    ASSERT (num_ctxs <= MAX_ROLLBACK_CTXS, "num_ctxs=%u > MAX_ROLLBACK_CTXS=%u", num_ctxs, MAX_ROLLBACK_CTXS);
+
     va_list args;
     va_start (args, num_ctxs);
 
-#ifdef DEBUG
-    ASSERT (num_ctxs <= MAX_ROLLBACK_CTXS, "num_ctxs=%u > MAX_ROLLBACK_CTXS=%u", num_ctxs, MAX_ROLLBACK_CTXS);
-#endif
-
-    vb->num_rollback_ctxs = num_ctxs;
+    vb->rback_id++; // new rollback point
+    vb->num_rollback_ctxs = 0;
 
     for (unsigned i=0; i < num_ctxs; i++) {
-        vb->rollback_ctxs[i] = CTX(va_arg (args, int)); // 'DidIType' {aka 'short unsigned int'} is promoted to 'int' when passed through '...'
-        ctx_create_rollback_point (vb->rollback_ctxs[i]);
+        vb->rollback_ctxs[vb->num_rollback_ctxs] = ctxs ? ctxs[i] : CTX(va_arg (args, int)); // note: 'DidIType' {aka 'short unsigned int'} is promoted to 'int' when passed through '...'
+
+        if (ctx_set_rollback (vb, vb->rollback_ctxs[vb->num_rollback_ctxs], false)) // added
+            vb->num_rollback_ctxs++;
     }
+}
+
+// adds a ctx to the current rollback point, if its not already there
+void seg_add_ctx_to_rollback_point (VBlockP vb, ContextP ctx)
+{
+    ASSERT (vb->num_rollback_ctxs < MAX_ROLLBACK_CTXS, "num_ctxs=%u > MAX_ROLLBACK_CTXS=%u", vb->num_rollback_ctxs+1, MAX_ROLLBACK_CTXS);
+
+    vb->rollback_ctxs[vb->num_rollback_ctxs] = ctx;
+    
+    if (ctx_set_rollback (vb, ctx, false)) // added
+        vb->num_rollback_ctxs++;
 }
 
 void seg_rollback (VBlockP vb)
 {
-    for (unsigned i=0; i < vb->num_rollback_ctxs; i++) 
-        ctx_rollback (vb, vb->rollback_ctxs[i]);
+    for (uint32_t i=0; i < vb->num_rollback_ctxs; i++) 
+        ctx_rollback (vb, vb->rollback_ctxs[i], false);
 }
 
 void seg_simple_lookup (VBlockP vb, ContextP ctx, unsigned add_bytes)
@@ -295,11 +312,11 @@ ContextP seg_mux_get_channel_ctx (VBlockP vb, MultiplexerP mux, uint32_t channel
 
     ContextP channel_ctx = ctx_get_ctx (vb, mux->dict_ids[channel_i]);
 
-    if (!channel_ctx->seg_initialized) { // note: context may exist (cloned from z_ctx) but not yet initialized
+    if (!channel_ctx->is_initialized) { // note: context may exist (cloned from z_ctx) but not yet initialized
 
         MUX_CHANNEL_CTX(mux)[channel_i] = channel_ctx;
 
-        channel_ctx->seg_initialized = true;
+        channel_ctx->is_initialized = true;
         channel_ctx->flags.store = mux->store_type; 
         stats_set_consolidation (VB, mux->st_did_i, 1, channel_ctx->did_i); // set consolidation for --stats    
     }
@@ -392,9 +409,8 @@ PosType seg_pos_field (VBlock *vb,
 
         // store the value in in 32b local
         buf_alloc (vb, &snip_ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->local");
-        NEXTENT (uint32_t, snip_ctx->local) = BGEN32 (this_pos);
+        NEXTENT (uint32_t, snip_ctx->local) = this_pos;
         snip_ctx->txt_len += add_bytes;
-
         snip_ctx->ltype  = LT_UINT32;
 
         // add a LOOKUP to b250
@@ -527,7 +543,7 @@ bool seg_integer_or_not_cb (VBlockP vb, ContextP ctx, STRp(int_str), uint32_t re
 }
 
 // if its a float, stores the float in local, and a LOOKUP in b250, and returns true. if not - normal seg, and returns false.
-bool seg_float_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsigned add_bytes)
+bool seg_float_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_bytes)
 {
     // TO DO: implement reconstruction in reconstruct_one_snip-SNIP_LOOKUP
     char snip[1 + FLOAT_FORMAT_LEN];
@@ -535,13 +551,20 @@ bool seg_float_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsigned add_
 
     // case: its an float
     if (!ctx->no_stons && // we interpret no_stons as means also no moving ints to local (one of the reasons is that an int might actually be a float)
-        str_get_float (STRa(this_value), &ctx->last_value.f, &snip[1], &format_len)) {
+        str_get_float (STRa(value), &ctx->last_value.f, &snip[1], &format_len)) {
+
+        // verify that we can reconstruct the number precisely (not always the case, 
+        // as the textual float may exceed float precision)
+        float f = (float)ctx->last_value.f; // 64bit -> 32bit
+        char recon[value_len+1];
+        sprintf (recon, &snip[1], f);
+        if (memcmp (value, recon, value_len)) goto fallback;
 
         ctx->ltype = LT_FLOAT32; // set only upon storing the first number - if there are no numbers, leave it as LT_TEXT so it can be used for singletons
 
         // add to local
         buf_alloc (vb, &ctx->local, 1, vb->lines.len, float, CTX_GROWTH, "contexts->local");
-        NEXTENT (float, ctx->local) = (float)ctx->last_value.f; // 32 bit
+        NEXTENT (float, ctx->local) = f;
         
         // add to b250
         snip[0] = SNIP_LOOKUP;
@@ -551,8 +574,8 @@ bool seg_float_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsigned add_
     }
 
     // case: non-float snip
-    else { 
-        seg_by_ctx (VB, STRa(this_value), ctx, add_bytes);
+    else fallback: { 
+        seg_by_ctx (VB, STRa(value), ctx, add_bytes);
         return false;
     }
 }
@@ -584,7 +607,7 @@ fallback:
 }
 
 // note: seg_initialize should set STORE_INT for this ctx
-WordIndex seg_self_delta (VBlockP vb, ContextP ctx, int64_t value, uint32_t value_str_len)
+WordIndex seg_self_delta (VBlockP vb, ContextP ctx, int64_t value, uint32_t add_bytes)
 {
     char delta_snip[30];
     delta_snip[0] = SNIP_SELF_DELTA;
@@ -592,7 +615,7 @@ WordIndex seg_self_delta (VBlockP vb, ContextP ctx, int64_t value, uint32_t valu
 
     ctx_set_last_value (vb, ctx, value);
 
-    return seg_by_ctx (VB, delta_snip, delta_snip_len, ctx, value_str_len);
+    return seg_by_ctx (VB, delta_snip, delta_snip_len, ctx, add_bytes);
 }
 
 // an array or array of arrays
@@ -704,12 +727,12 @@ int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp
 {
     ContextP ctxs[con.nitems_lo]; 
 
-    for (unsigned i=0; i < con.nitems_lo; i++) {
+    for (unsigned i=0; i < con.nitems_lo; i++) 
         ctxs[i] = ctx_get_ctx (vb, con.items[i].dict_id); 
-        ctxs[i]->st_did_i = ctx->did_i;
-        ctx_create_rollback_point (ctxs[i]);
-    }
-    
+
+    stats_set_consolidation_(vb, ctx->did_i, con.nitems_lo, ctxs);
+    seg_create_rollback_point (vb, ctxs, con.nitems_lo);
+
     // get repeats
     str_split (snip, snip_len, 0, con.repsep[0], repeat, false);
 
@@ -767,8 +790,7 @@ int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp
 
 badly_formatted:
     // roll back all the changed data
-    for (unsigned i=0; i < con.nitems_lo ; i++) 
-        ctx_rollback (vb, ctxs[i]);
+    seg_rollback (vb);
 
     // now just seg the entire snip
     seg_by_ctx (VB, STRa(snip), ctx, snip_len); 
@@ -795,24 +817,35 @@ void seg_add_to_local_fixed (VBlock *vb, Context *ctx, STRp(data))  // bytes in 
     }
 }
 
-void seg_add_to_local_uint8 (VBlockP vb, ContextP ctx, uint8_t value, unsigned add_bytes)
+void seg_xor_diff (VBlockP vb, ContextP ctx, STRp(value), bool no_xor_if_same, unsigned add_bytes)
 {
-    buf_alloc (vb, &ctx->local, 1, vb->lines.len, uint8_t, CTX_GROWTH, "contexts->local");
+    if (ctx->last_txt_len != value_len || !value_len) goto fallback;
 
-    NEXTENT (uint8_t, ctx->local) = value;
+    ctx->ltype = LT_UINT8;
+    
+    buf_alloc (vb, &ctx->local, value_len, MIN_(value_len,20) * vb->lines.len, uint8_t, CTX_GROWTH, "contexts->local");
 
-    if (add_bytes) ctx->txt_len += add_bytes;
+    const uint8_t *last = (uint8_t *)last_txtx (vb, ctx);
+    uint8_t *xor = AFTERENT (uint8_t, ctx->local); 
+
+    bool is_same = true;
+    for (uint32_t i=0; i < value_len; i++) {
+        xor[i] = last[i] ^ ((uint8_t *)value)[i];
+        is_same &= !xor[i];
+    }
+
+    if (!is_same || !no_xor_if_same) {
+        ctx->local.len += value_len;
+
+        SNIP(16) = { SNIP_XOR_DIFF };
+        snip_len = 1 + str_int (value_len, &snip[1]);
+        seg_by_ctx (vb, STRa(snip), ctx, add_bytes);
+    }
+    else fallback:
+        seg_by_ctx (vb, STRa(value), ctx, add_bytes);
 }
 
-void seg_add_to_local_uint32 (VBlockP vb, ContextP ctx, uint32_t value, unsigned add_bytes)
-{
-    buf_alloc (vb, &ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->local");
-
-    NEXTENT (uint32_t, ctx->local) = BGEN32 (value);
-
-    if (add_bytes) ctx->txt_len += add_bytes;
-}
-
+//DESC                   13.4 KB   0.5%   85.3 KB   1.2%    6.4X xxx
 static void seg_set_hash_hints (VBlock *vb, int third_num)
 {
     if (third_num == 1) 
@@ -894,7 +927,7 @@ void seg_all_data_lines (VBlock *vb)
             buf_alloc (vb, &CTX(did_i)->b250, 0, AT_LEAST(did_i), WordIndex, 1, "contexts->b250");
     
     // set estimated number of lines
-    vb->lines.len = vb->lines.len    ? vb->lines.len // already set? don't change (eg 2nd pair FASTQ)
+    vb->lines.len = vb->lines.len    ? vb->lines.len // already set? don't change (eg 2nd pair FASTQ, bcl_unconsumed)
                   : segconf.running  ? 10 // low number of avoid memory overallocation for PacBio arrays etc 
                   : segconf.line_len ? MAX_(1, vb->txt_data.len / segconf.line_len)
                   :                    1;            // eg DT_GENERIC

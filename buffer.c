@@ -125,11 +125,17 @@ static inline void buf_verify_integrity (const Buffer *buf,
     if (buf->vb == evb) return; // we cannot (easily) test evb (see comment in buf_has_overflowed)
  
     // note: // overlayed buffers might be partial and start at a different address 
-    ASSERT (buf->type == BUF_OVERLAY || *(uint64_t *)(buf->memory) == UNDERFLOW_TRAP, "called from %s:%u to %s: Error in of %s: buffer has corrupt underflow trap",
-            func, code_line, buf_func, buf_desc(buf).s);
+    ASSERTGOTO (buf->type == BUF_OVERLAY || *(uint64_t *)(buf->memory) == UNDERFLOW_TRAP, "called from %s:%u to %s: Error in of %s: buffer has corrupt underflow trap",
+                func, code_line, buf_func, buf_desc(buf).s);
 
-    ASSERT (*(uint64_t *)(buf->memory + sizeof(uint64_t) + buf->size) == OVERFLOW_TRAP, "called from %s:%u to %s: Error in %s: buffer has corrupt overflow trap",
-            func, code_line, buf_func, buf_desc(buf).s);
+    ASSERTGOTO (*(uint64_t *)(buf->memory + sizeof(uint64_t) + buf->size) == OVERFLOW_TRAP, "called from %s:%u to %s: Error in %s: buffer has corrupt overflow trap",
+                func, code_line, buf_func, buf_desc(buf).s);
+    
+    return; // all good
+
+error:
+    buf_test_overflows (buf->vb, "in buf_verify_integrity");
+    exit_on_error (false);
 }
 
 // not thread-safe, used in emergency 
@@ -446,11 +452,11 @@ void buf_add_to_buffer_list_do (VBlock *vb, Buffer *buf, const char *func)
     NEXTENT (BufferP, *bl) = buf;
     bl->param = false; // buffer list is not sorted anymore
 
+    buf->vb = vb; // successfully added to buf list
+
     if (flag.debug_memory==1 && vb->buffer_list.len > DISPLAY_ALLOCS_AFTER)
         iprintf ("buf_add_to_buffer_list (%s): %s: size=%"PRIu64" buffer=%s vb->id=%d buf_i=%u\n", 
-                 func, buf_desc(buf).s, buf->size, str_pointer(buf).s, vb->id, (uint32_t)vb->buffer_list.len-1);
-    
-    buf->vb = vb; // successfully added to buf list
+                 func, buf_desc(buf).s, buf->size, str_pointer(buf).s, vb->id, (uint32_t)vb->buffer_list.len-1);    
 }
 
 static void buf_init (Buffer *buf, char *memory, uint64_t size, uint64_t old_size, 
@@ -1160,6 +1166,41 @@ bool buf_dump_to_file (const char *filename, const Buffer *buf, unsigned buf_wor
     return success;
 }
  
+void BGEN_interlace_d8_buf (Buffer *buf, LocalType *lt)
+{
+    for (uint64_t i=0; i < buf->len; i++) {
+        uint8_t unum = *ENT (uint8_t, *buf, i);
+        *ENT (int8_t, *buf, i) = INTERLACE(int8_t,unum); 
+    }    
+}
+
+void BGEN_interlace_d16_buf (Buffer *buf, LocalType *lt)
+{
+    for (uint64_t i=0; i < buf->len; i++) {
+        uint16_t num_big_en = *ENT (uint16_t, *buf, i);
+        uint16_t unum = BGEN16 (num_big_en);
+        *ENT (int16_t, *buf, i) = INTERLACE(int16_t,unum); 
+    }
+}
+
+void BGEN_interlace_d32_buf (Buffer *buf, LocalType *lt)
+{
+    for (uint64_t i=0; i < buf->len; i++) {
+        uint32_t num_big_en = *ENT (uint32_t, *buf, i);
+        uint32_t unum = BGEN32 (num_big_en);
+        *ENT (int32_t, *buf, i) = INTERLACE(int32_t,unum); 
+    }
+}
+
+void BGEN_interlace_d64_buf (Buffer *buf, LocalType *lt)
+{
+    for (uint64_t i=0; i < buf->len; i++) {
+        uint64_t num_big_en = *ENT (uint64_t, *buf, i);
+        uint64_t unum = BGEN64 (num_big_en);
+        *ENT (int64_t, *buf, i) = INTERLACE(int64_t,unum); 
+    }
+}
+
 void BGEN_u8_buf (Buffer *buf, LocalType *lt)
 {
 }
@@ -1176,7 +1217,7 @@ void BGEN_u32_buf (Buffer *buf, LocalType *lt)
 {
     for (uint64_t i=0; i < buf->len; i++) {
         uint32_t num_big_en = *ENT (uint32_t, *buf, i);
-        *ENT (uint32_t, *buf, i) = BGEN32 (num_big_en);            
+        *ENT (uint32_t, *buf, i) = BGEN32 (num_big_en);  
     }
 }
 

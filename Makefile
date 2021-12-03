@@ -37,10 +37,10 @@ MY_SRCS = genozip.c genols.c base250.c context.c container.c strings.c stats.c a
 		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c \
 		  vcf_piz.c vcf_seg.c vcf_gt.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c vcf_refalt.c vcf_tags.c \
           sam_seg.c sam_piz.c sam_seg_bam.c sam_shared.c sam_header.c sam_md.c sam_tlen.c sam_cigar.c sam_fields.c sam_seq.c sam_qual.c \
-		  fasta.c fastq.c gff3.c me23.c phylip.c chain.c kraken.c generic.c \
+		  fasta.c fastq.c gff3.c me23.c phylip.c chain.c kraken.c locs.c generic.c \
 		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c lookback.c \
 		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c\
-		  codec_gtshark.c codec_pbwt.c codec_none.c codec_htscodecs.c codec_enano.c \
+		  codec_gtshark.c codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c \
 	      txtfile.c profiler.c file.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c \
 		  vblock.c regions.c  optimize.c dict_id.c hash.c stream.c url.c bases_filter.c
 
@@ -67,16 +67,15 @@ CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h tx
              base250.h endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h \
              buffer.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h codec.h stats.h \
              crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h qname.h lookback.h \
-			 tokenizer.h codec_enano_alg.c \
+			 tokenizer.h codec_longr_alg.c \
 			 reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h linesorter.h threads.h \
 			 arch.h license.h data_types.h base64.h txtheader.h writer.h bases_filter.h genols.h coords.h contigs.h chrom.h \
-			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h fastq.h gff3.h phylip.h chain.h kraken.h generic.h \
+			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h fastq.h gff3.h phylip.h chain.h kraken.h locs.h generic.h \
              compatibility/mac_gettime.h  \
 			 zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h \
 			 zlib/deflate.h zlib/trees.h \
 			 zlib/zlib.h zlib/zutil.h \
-			 lzma/7zTypes.h lzma/Compiler.h lzma/LzFind.h lzma/LzFindMt.h lzma/LzHash.h lzma/LzmaDec.h lzma/LzmaEnc.h \
-			 lzma/Precomp.h lzma/Threads.h \
+			 lzma/7zTypes.h lzma/LzFind.h lzma/LzHash.h lzma/LzmaDec.h lzma/LzmaEnc.h \
 			 bzlib/bzlib.h bzlib/bzlib_private.h \
 			 htscodecs/rANS_static4x16.h htscodecs/rle.h htscodecs/pack.h htscodecs/arith_dynamic.h htscodecs/c_simple_model.h\
 			 htscodecs/rANS_word.h htscodecs/htscodecs_endian.h htscodecs/rANS_word.h htscodecs/utils.h htscodecs/varint.h \
@@ -105,7 +104,6 @@ ifeq ($(OS),Windows_NT)
 # Windows
 	EXE = .exe
 	LDFLAGS += -static -static-libgcc
-	LZMA_SRCS += lzma/Threads.c lzma/LzFindMt.c
 	OBJDIR=objdir.windows
 	WSL=wsl
 else
@@ -184,6 +182,10 @@ $(OBJDIR)/%.debug-o: %.c $(OBJDIR)/%.d
 $(OBJDIR)/%.opt-o: %.c $(OBJDIR)/%.d
 	@echo "Compiling $< (opt)"
 	@$(CC) -c -o $@ $< $(CFLAGS)
+
+%.S: %.c $(OBJDIR)/%.d
+	@echo "Generating $@"
+	@$(CC) -S -o $@ $< $(CFLAGS)
 
 GENDICT_OBJS := $(addprefix $(OBJDIR)/, $(GENDICT_SRCS:.c=.o))
 
@@ -302,8 +304,9 @@ clean-opt:
 clean: clean-docs
 	@echo Cleaning up
 	@rm -f $(DEPS) $(WINDOWS_INSTALLER_OBJS) *.d .archive.tar.gz *.stackdump $(EXECUTABLES) $(OPT_EXECUTABLES) $(DEBUG_EXECUTABLES) 
-	@rm -f *.good *.bad data/*.good data/*.bad *.local genozip.threads-log.* *.b250 test/*.good test/*.bad test/*.local test/*.b250 test/tmp/* test/*.rejects
-	@rm -Rf $(OBJDIR)/*
+	@rm -f *.S *.good *.bad data/*.good data/*.bad *.local genozip.threads-log.* *.b250 test/*.good test/*.bad test/*.local test/*.b250 test/tmp/* test/*.rejects
+	@rm -R $(OBJDIR)
+	@mkdir $(OBJDIR) $(addprefix $(OBJDIR)/, $(SRC_DIRS))
 
 .PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch docs testfiles test-backup genozip-linux-x86_64/clean prod dict_id_gen$(EXE) push-build
 
@@ -418,9 +421,14 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 
 prod:
 	@(cd ../genozip-prod ; git stash ; git pull ; make clean ; touch dict_id_gen.h ; make -j)
-	@cp ../genozip-prod/genozip.exe genozip-prod.exe
-	@cp ../genozip-prod/genounzip.exe genounzip-prod.exe
-	@cp ../genozip-prod/genocat.exe genocat-prod.exe
+	@cp ../genozip-prod/genozip$(EXE) genozip-prod$(EXE)
+	@cp ../genozip-prod/genounzip$(EXE) genounzip-prod$(EXE)
+	@cp ../genozip-prod/genocat$(EXE) genocat-prod$(EXE)
+
+ifeq ($(OS),Windows_NT)
+prod-linux:
+	@run-on-wsl.sh make prod
+endif
 
 BUILD_FILES = version.h genozip-installer.ifp docs/genozip-installer.exe docs/genozip-linux-x86_64.tar.gz LICENSE.txt  \
 			  docs/conf.py docs/LICENSE.for-docs.txt docs/RELEASE_NOTES.for-docs.txt Makefile
@@ -429,11 +437,11 @@ push-build:
 	@(git commit -m $(version) ; exit 0) > /dev/null
 	@git push > /dev/null
 
-distribution: increment-version testfiles docs/genozip-linux-x86_64.tar.gz.build docs/genozip-installer.exe build-docs push-build conda/.conda-timestamp prod # docs (almost) last, after version incremented # mac/.remote_mac_timestamp
+distribution: increment-version testfiles docs/genozip-linux-x86_64.tar.gz.build docs/genozip-installer.exe build-docs push-build conda/.conda-timestamp prod prod-linux
 	@(cd ../genozip-feedstock/ ; git pull)
 
 test-backup: genozip.exe
-	@echo "Compresing test/ files for in preparation for backup (except cram and bcf)"
+	@echo "Compressing test/ files for in preparation for backup (except cram and bcf)"
 	@rm -f test/*.genozip
 	@(cd test; genozip.exe -f `ls -1d *|grep -v / |grep -v cram | grep -v bcf`)
 

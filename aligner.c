@@ -298,7 +298,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq))
     
     // store the GPOS in local if its not a 2nd pair, or if it is, but the delta is not small enough
     if (store_local)
-        NEXTENT (uint32_t, gpos_ctx->local) = BGEN32 ((uint32_t)gpos);
+        NEXTENT (uint32_t, gpos_ctx->local) = (uint32_t)gpos;
 
     // shortcut if there's no reference match
     if (gpos == NO_GPOS) {

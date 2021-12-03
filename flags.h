@@ -24,7 +24,7 @@ typedef enum {
 typedef struct {
     
     // genozip options that affect the compressed file
-    int fast, best, make_reference, multifasta, md5;
+    int fast, best, make_reference, multiseq, md5;
     const char *vblock;
     
     // ZIP: data modifying options
@@ -96,8 +96,9 @@ typedef struct {
         show_index, show_gheader, show_ref_contigs, show_chain_contigs, show_ref_seq,
         show_reference, show_ref_hash, show_ref_index, show_chrom2ref, show_ref_iupacs, show_chain,
         show_codec, show_containers, show_alleles, show_bgzf, show_txt_contigs,
-    show_vblocks, show_threads, show_uncompress, biopsy,
+        show_vblocks, show_threads, show_uncompress, biopsy,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
+        debug_LONG,
         verify_codec, seg_only, xthreads, show_flags, show_rename_tags,
         echo,    // show the command line in case of an error
         show_headers; // (1 + SectionType to display) or 0=flag off or -1=all sections
@@ -116,6 +117,7 @@ typedef struct {
     // internal flags set by the system, not the command line
     Coords rejects_coord;    // ZIP only: currently zipping liftover rejects file / component containing only PRIMARY or LUFT variants
     bool debug,              // set if DEBUG is defined
+         debug_top,
          is_windows, is_mac, is_linux, // set according to OS
          is_lten,            // set according to enidanness   
          aligner_available,  // ZIP: compression requires using the aligner
@@ -194,3 +196,4 @@ extern void flags_display_debugger_params (void);
 extern const char *flags_pipe_in_process_name (void);
 extern unsigned flags_pipe_in_pid (void);
 extern bool flags_pipe_in_process_died (void);
+

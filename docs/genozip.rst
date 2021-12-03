@@ -6,7 +6,7 @@ genozip
 =======
 Compress files. 
 
-``genozip`` can compress any file, but is optimally designed to compress the following file types: VCF/BCF, SAM/BAM/CRAM, FASTQ, FASTA, GFF3/GVF, PHYLIP, Chain, Kraken and 23andMe
+``genozip`` can compress any file, but is optimally designed to compress the following file types: VCF/BCF, SAM/BAM/CRAM, FASTQ, FASTA, GFF3/GVF, PHYLIP, Chain, Kraken, 23andMe, BCL and LOCS.
 
 Usage: ``genozip`` [options]... [files or urls]...
 
@@ -29,6 +29,7 @@ Supported input file types, as recognized by their listed filename extension(s):
    Chain    chain (possibly .gz .bgz .bz2 .xz)
    Kraken   kraken (possibly .gz .bgz .bz2 .xz)
    23andMe  genome\*Full\*.txt (possibly zip)
+   LOCS     locs (possibly .gz .bgz .bz2 .xz)
    Generic  any other file (possibly .gz .bgz .bz2 .xz)
    ======== ==========================================================
 
@@ -66,12 +67,15 @@ Examples:
       | Note: files compressed with this option are NOT identical to the original file after decompression. For this reason, it is not possible to use this option in combination with --test or --md5.
       |
                                        
-.. option:: --best  Best compression. For SAM/BAM and FASTQ, --reference must be used as well.
+.. option:: -b, --best  Best compression. 
 
-      | Note: Running with this option is a bit slower and consumes more memory. Also, subsetting the resulting genozip file (eg ``genocat --regions``) will be slower. 
+      | Note: Running with this option is a bit slower and consumes more memory. Also, subsetting the resulting genozip file (with eg ``genocat --regions``) will be slower. 
+      |
+      | Note: When using ``--best`` with SAM/BAM or FASTQ, ``--reference`` *must* be used as well (except for long-read FASTQ files and long-read, unmapped SAM/BAM files); This can be overridden with ``--best=NO_REF``. 
+      | 
       | Tip: To avoid running out of memory on a low-resource personal computer, combine with limiting threads using ``--threads``.
       |
-                            
+
 .. option:: -F, --fast  Faster compression but lower compression ratio than normal. Files compressed with this option also decompress faster. 
 
                      |
@@ -237,6 +241,10 @@ Examples:
 
                      |
                      
+.. option:: --multiseq  Sequences are somewhat similar to each other (e.g. multiple sequences of the same virus). genozip uses this information to improve the compression.
+
+                     |
+
 *FASTQ optimizations*. Applying these improves the compression. Note: ``--optimize`` (or ``-9``) is a shortcut for combining all optimizations 
 
 .. option:: --optimize-DESC  Replaces the description line with @filename:read_number. Also - if the 3rd line (the '+' line) contains a copy of the description it is shortened to just '+'.
@@ -257,7 +265,7 @@ Examples:
    | Example: ``cat *.fa | genozip --input fasta --make-reference --output myref.ref.genozip``
    |
                      
-.. option:: --multifasta  All contigs in the FASTA file are variations of a the same contig (i.e. they are somewhat similar to each other). genozip uses this information to improve the compression.
+.. option:: --multiseq  Sequences are somewhat similar to each other (e.g. multiple sequences of the same virus). genozip uses this information to improve the compression.
 
                      |
 

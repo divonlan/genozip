@@ -10,9 +10,9 @@
 #include "buffer.h"
 #include "strings.h"
 
-static void *codec_bz2_alloc (void *vb_, int items, int size)
+static void *codec_bz2_alloc (void *vb_, int items, int size, const char *func, uint32_t code_line)
 {
-    return codec_alloc ((VBlock *)vb_, (uint64_t)items * (uint64_t)size, 1); // all bzlib buffers are constant in size between subsequent compressions
+    return codec_alloc_do ((VBlock *)vb_, (uint64_t)items * (uint64_t)size, 1, func, code_line); // all bzlib buffers are constant in size between subsequent compressions
 }
 
 static const char *BZ2_errstr (int err)
@@ -51,7 +51,7 @@ bool codec_bz2_compress (VBlock *vb, SectionHeader *header,
     memset (&strm, 0, sizeof (strm)); // safety
 
     strm.bzalloc = codec_bz2_alloc;
-    strm.bzfree  = codec_free;
+    strm.bzfree  = codec_free_do;
     strm.opaque  = vb; // just passed to malloc/free
     
     int init_ret = BZ2_bzCompressInit (&strm, flag.fast ? 1 : 9, 0, 30); // we optimize for size (normally) or speed (if user selected --fast)
@@ -126,7 +126,7 @@ void codec_bz2_uncompress (VBlock *vb, Codec codec, uint8_t param,
 
     bz_stream strm;
     strm.bzalloc = codec_bz2_alloc;
-    strm.bzfree  = codec_free;
+    strm.bzfree  = codec_free_do;
     strm.opaque  = vb; // just passed to malloc/free
 
     int ret = BZ2_bzDecompressInit (&strm, 0, 0);

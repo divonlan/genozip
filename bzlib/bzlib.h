@@ -59,8 +59,8 @@ typedef
 
       void *state;
 
-      void *(*bzalloc)(void *,int,int);
-      void (*bzfree)(void *,void *);
+      void *(*bzalloc)(void *,int,int,const char *,uint32_t);
+      void (*bzfree)(void *,void *,const char *,uint32_t);
       void *opaque;
    } 
    bz_stream;

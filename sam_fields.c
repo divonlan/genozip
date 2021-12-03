@@ -62,12 +62,12 @@ void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(flag_str)/* optional,
                                  SAM_FLAG_DUPLICATE | SAM_FLAG_SUPPLEMENTARY)
     if (segconf.sam_is_sorted && vb->buddy_line_i != -1 &&
         (dl->FLAG.value & SAME_AS_BUDDY_FLAGS) == (buddy_dl->FLAG.value & SAME_AS_BUDDY_FLAGS) &&
-        dl->FLAG.bits.unmapped       == buddy_dl->FLAG.bits.next_unmapped &&
-        dl->FLAG.bits.next_unmapped  == buddy_dl->FLAG.bits.unmapped &&
-        dl->FLAG.bits.rev_comp       == buddy_dl->FLAG.bits.next_rev_comp &&
-        dl->FLAG.bits.next_rev_comp  == buddy_dl->FLAG.bits.rev_comp &&
-        dl->FLAG.bits.is_first       == buddy_dl->FLAG.bits.is_last &&
-        dl->FLAG.bits.is_last        == buddy_dl->FLAG.bits.is_first)
+         dl->FLAG.bits.unmapped       == buddy_dl->FLAG.bits.next_unmapped &&
+         dl->FLAG.bits.next_unmapped  == buddy_dl->FLAG.bits.unmapped      &&
+         dl->FLAG.bits.rev_comp       == buddy_dl->FLAG.bits.next_rev_comp &&
+         dl->FLAG.bits.next_rev_comp  == buddy_dl->FLAG.bits.rev_comp      &&
+         dl->FLAG.bits.is_first       == buddy_dl->FLAG.bits.is_last       &&
+         dl->FLAG.bits.is_last        == buddy_dl->FLAG.bits.is_first)
         seg_by_did_i (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_COPY_BUDDY_FLAG }, 2, SAM_FLAG, add_bytes); // added 12.0.41
     
     // case: normal snip
@@ -75,6 +75,9 @@ void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(flag_str)/* optional,
         seg_integer_as_text (vb, SAM_FLAG, dl->FLAG.value, false);
         CTX(SAM_FLAG)->txt_len += add_bytes; 
     }
+
+    if (segconf.running && dl->FLAG.bits.is_last && !dl->FLAG.bits.is_first)
+        segconf.sam_is_paired = true;
 }
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_COPY_BUDDY_FLAG)
@@ -534,7 +537,7 @@ static inline void sam_seg_XS_field (VBlockSAM *vb, ValueType XS, unsigned add_b
 // Seg against buddy if we have one, or else against MAPQ as it is often very similar
 static inline void sam_seg_MQ_field (VBlockSAM *vb, ZipDataLineSAM *dl, ValueType MQ, unsigned add_bytes)
 {
-    if (segconf.running) segconf.has[OPTION_MQ_i] = true;
+    segconf_set_has (OPTION_MQ_i);
 
     dl->MQ = MQ.i;
     
@@ -714,15 +717,21 @@ static void sam_seg_array_field (VBlockSAMP vb, DictId dict_id, uint8_t type,
         elem_ctx->txt_len += width * array_len;
         buf_alloc (vb, &elem_ctx->local, array_len, array_len * 50, int64_t, 2, "contexts->local"); // careful not * line.len - we can get OOM
         
-        for (int i=0; i < array_len; i++, array += width) 
-            if (is_int)
-                NEXTENT (int64_t, elem_ctx->local) = sam_seg_array_get_int (type, array);
-            else { // f
+        if (is_int) {
+            int64_t *data = AFTERENT (int64_t, elem_ctx->local); // automatic var for speed
+            elem_ctx->local.len += array_len;
+
+            for (uint32_t i=0; i < array_len; i++, array += width) 
+                data[i] = sam_seg_array_get_int (type, array);
+        }
+        else
+            // TO DO: we can use SNIP_LOOKUP like seg_float_or_not and store the data in local (bug 500)
+            for (uint32_t i=0; i < array_len; i++, array += width) {
                 char snip[16] = { SNIP_SPECIAL, SAM_SPECIAL_FLOAT };
                 unsigned snip_len = 2 + str_int (GET_UINT32(array), &snip[2]);
                 seg_by_ctx (VB, STRa(snip), elem_ctx, 0); // TODO: seg in local and update SPECIAL to get from local if no snip
             }
-    }
+   }
 
     else if (IS_BAM && callback) {
         con->repeats = array_len;
@@ -752,11 +761,8 @@ static void sam_seg_array_field (VBlockSAMP vb, DictId dict_id, uint8_t type,
                 else
                     seg_integer (VB, elem_ctx, n.i, false, snip_len+1);
             }
-            else {
-                // TODO: change to seg_float_or_not - need to implement reconstruction, see comment in seg_float_or_not
-                //seg_float_or_not (vb, elem_ctx, STRa(snip), snip_len+1);
-                seg_by_ctx (VB, STRa(snip), elem_ctx, snip_len+1);
-            }
+            else 
+                seg_float_or_not (VB, elem_ctx, STRa(snip), snip_len+1);
             
             array_len--; // skip comma
             array++;
@@ -777,8 +783,8 @@ DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam,
                                STRp(value), ValueType numeric) // two options 
 {
     char sam_type = sam_seg_bam_type_to_sam_type (bam_type);
-    char dict_name[4] = { tag[0], tag[1], ':', sam_type };
-    DictId dict_id = dict_id_make (dict_name, 4, DTYPE_SAM_OPTIONAL); // match dict_id as declared in #pragma GENDICT
+    char dict_name[6] = { tag[0], tag[1], ':', sam_type, ':', array_subtype }; // last 2 are ignored if not array
+    DictId dict_id = dict_id_make (dict_name, (sam_type=='B' ? 6 : 4), DTYPE_SAM_OPTIONAL); // match dict_id as declared in #pragma GENDICT
 
     unsigned add_bytes = sam_seg_optional_add_bytes (bam_type, value_len, is_bam);
 
@@ -814,7 +820,8 @@ DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam,
 
         case _OPTION_mc_i: sam_seg_mc_field (vb, numeric, add_bytes); break;
 
-        case _OPTION_ms_i: sam_seg_ms_field (vb, numeric, add_bytes); break;
+        case _OPTION_ms_i: segconf_set_has (OPTION_ms_i);
+                           SEG_COND (segconf.sam_ms_type == ms_BIOBAMBAM, sam_seg_ms_field (vb, numeric, add_bytes));
 
         case _OPTION_RG_Z: sam_seg_RG_field (vb, dl, STRa(value), add_bytes); break;
 
@@ -829,9 +836,9 @@ DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam,
 
         case _OPTION_CP_i: SEG_COND (segconf.sam_is_sorted, seg_pos_field (VB, OPTION_CP_i, OPTION_CP_i, 0, 0, 0, 0, numeric.i, add_bytes)); 
 
-        case _OPTION_ZM_B: sam_seg_array_field (vb, (DictId)_OPTION_ZM_B, array_subtype, STRa(value), 
-                                                (segconf.tech == TECH_IONTORR && flag.optimize_ZM) ? sam_optimize_ZM : NULL, 0);
-                           break;
+        case _OPTION_ZM_B_s : sam_seg_array_field (vb, (DictId)_OPTION_ZM_B_s, array_subtype, STRa(value), 
+                                                   (segconf.tech == TECH_IONTORR && flag.optimize_ZM) ? sam_optimize_ZM : NULL, 0);
+                              break;
 
         default: fallback:
             
@@ -853,7 +860,7 @@ DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam,
                     seg_by_ctx (VB, STRa(snip), ctx, add_bytes); 
                 }
                 else
-                    seg_by_ctx (VB, STRa(value), ctx, add_bytes); 
+                    seg_float_or_not (VB, ctx, STRa(value), add_bytes);
             }
 
             // Numeric array

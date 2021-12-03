@@ -276,12 +276,13 @@ ThreadId threads_create (void (*func)(VBlockP), VBlockP vb)
 }
 
 // returns success if joined (which is always the case if blocking)
-bool threads_join (ThreadId *thread_id, 
-                   VBlockP vb) // optional: if given, will return false if VB is not ready, if NULL, join will block
+bool threads_join_do (ThreadId *thread_id, 
+                      VBlockP vb, // optional: if given, will return false if VB is not ready, if NULL, join will block
+                      const char *func)
 {
     ASSERTMAINTHREAD;
 
-    ASSERT0 (*thread_id != THREAD_ID_NONE, "thread not created or already joined");
+    ASSERT (*thread_id != THREAD_ID_NONE, "called from %s: thread not created or already joined", func);
 
     mutex_lock (threads_mutex);
     const ThreadEnt ent = *ENT (ThreadEnt, threads, *thread_id); // make a copy as array be realloced

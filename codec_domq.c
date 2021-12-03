@@ -19,6 +19,7 @@
 #include "profiler.h"
 #include "codec.h"
 #include "context.h"
+#include "stats.h"
 
 #define NO_DOMS '\x1'
 
@@ -32,9 +33,9 @@
 // Returns the character that appears more than 50% of the sample lines tested, or -1 if there isn't one.
 bool codec_domq_comp_init (VBlock *vb, DidIType qual_did_i, LocalGetLineCB callback)
 {
-#   define DOMQUAL_THREADSHOLD_DOM_OF_TOTAL 0.5 // minimum % - doms of of total to trigger domqual
-#   define DOMQUAL_THREADSHOLD_NUM_CHARS 5      // not worth it if less than this (and will fail in SAM with 1)
-#   define DOMQUAL_LINE_SAMPLE_LEN 500          // we don't need more than this to find the dom (in case of long reads of 10s of thousands)
+#   define DOMQUAL_THREADSHOLD_DOM_OF_TOTAL 0.45 // minimum % - doms of of total to trigger domqual
+#   define DOMQUAL_THREADSHOLD_NUM_CHARS 5       // not worth it if less than this (and will fail in SAM with 1)
+#   define DOMQUAL_SAMPLE_LEN 2500               // we don't need more than this to find the dom 
 #   define NUM_LINES_IN_SAMPLE 5
 
     Context *qual_ctx = CTX(qual_did_i);
@@ -42,12 +43,15 @@ bool codec_domq_comp_init (VBlock *vb, DidIType qual_did_i, LocalGetLineCB callb
 
     uint32_t char_counter[256] = { 0 };
     uint32_t total_len = 0;
-    for (uint32_t line_i=0; line_i < MIN_(NUM_LINES_IN_SAMPLE, vb->lines.len); line_i++) {   
+    uint32_t num_sampled_lines = MIN_(NUM_LINES_IN_SAMPLE, vb->lines.len);
+    uint32_t sampled_one_line = DOMQUAL_SAMPLE_LEN / MAX_(1,num_sampled_lines);
+
+    for (uint32_t line_i=0; line_i < num_sampled_lines; line_i++) {   
         char *qual_data;
         uint32_t qual_data_len;
         callback (vb, line_i, &qual_data, &qual_data_len, CALLBACK_NO_SIZE_LIMIT, NULL);
     
-        if (qual_data_len > DOMQUAL_LINE_SAMPLE_LEN) qual_data_len = DOMQUAL_LINE_SAMPLE_LEN; 
+        if (qual_data_len > sampled_one_line) qual_data_len = sampled_one_line; 
     
         total_len += qual_data_len;
 
@@ -57,7 +61,10 @@ bool codec_domq_comp_init (VBlock *vb, DidIType qual_did_i, LocalGetLineCB callb
 
     unsigned threshold = MAX_((unsigned)((float)total_len * DOMQUAL_THREADSHOLD_DOM_OF_TOTAL), DOMQUAL_THREADSHOLD_NUM_CHARS);
 
-    for (unsigned c=33; c <= 126; c++)  // legal Phred scores only
+    for (unsigned c=33; c <= 126; c++) { // legal Phred scores only
+        
+        //if (char_counter[c]) printf ("'%c' : %u\n", c, char_counter[c]);
+        
         if (char_counter[c] > threshold) {
             qual_ctx->local.param   = c;
             qual_ctx->local_param   = true;
@@ -66,10 +73,11 @@ bool codec_domq_comp_init (VBlock *vb, DidIType qual_did_i, LocalGetLineCB callb
 
             Context *domqruns_ctx   = qual_ctx + 1;
             domqruns_ctx->ltype     = LT_UINT8;
-            domqruns_ctx->st_did_i  = qual_ctx->did_i;
             domqruns_ctx->local_dep = DEP_L1;  // DOMQRUNS.local is created with QUAL.local is compressed
+            stats_set_consolidation (vb, qual_ctx->did_i, 1, domqruns_ctx->did_i);
             return true;
         }
+    }
 
     return false; // no value is dominant
 }
@@ -161,7 +169,7 @@ bool codec_domq_compress (VBlock *vb,
     }
 
     qual_ctx->lcodec = CODEC_UNKNOWN;
-    header->sub_codec = codec_assign_best_codec (vb, qual_ctx, NULL, SEC_LOCAL);
+    header->sub_codec = codec_assign_best_codec (vb, qual_ctx, &qual_ctx->local, SEC_LOCAL); // provide BufferP to override callback
     if (header->sub_codec == CODEC_UNKNOWN) header->sub_codec = CODEC_NONE; // really small
 
 do_compress: ({});

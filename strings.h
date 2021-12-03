@@ -14,6 +14,7 @@
 #define IS_HEXDIGITUP(c) (((c)>='0' && (c)<='9') || ((c)>='A' && (c)<='F'))
 #define IS_CLETTER(c)  ((c)>='A' && (c)<='Z')
 #define IS_SLETTER(c)  ((c)>='a' && (c)<='z')
+#define IS_WS(c) ((c)=='\t' || (c)=='\r' || (c)=='\n')
 #define IS_LETTER(c) (IS_CLETTER(c) || IS_SLETTER(c))
 #define IS_NON_WS_PRINTABLE(c) (((c)>=33) && ((c)<=126))
 extern bool is_printable[256];
@@ -90,10 +91,10 @@ extern StrText str_int_s (int64_t n);
 
 extern uint32_t str_int (int64_t n, char *str /* out */);
 extern bool str_get_int (STRp(str), int64_t *value); 
-extern bool str_get_int_range8  (STRp(str), uint8_t  min_val, uint8_t  max_val, uint8_t  *value);
-extern bool str_get_int_range16 (STRp(str), uint16_t min_val, uint16_t max_val, uint16_t *value);
-extern bool str_get_int_range64 (STRp(str), int64_t  min_val, int64_t  max_val, int64_t  *value);
-extern bool str_get_int_range32 (STRp(str), int32_t  min_val, int32_t  max_val, int32_t  *value);
+extern bool str_get_int_range8  (STRp(str), int64_t min_val, int64_t max_val, uint8_t  *value); // unsigned
+extern bool str_get_int_range16 (STRp(str), int64_t min_val, int64_t max_val, uint16_t *value); // unsigned
+extern bool str_get_int_range64 (STRp(str), int64_t min_val, int64_t max_val, int64_t  *value); // signed
+extern bool str_get_int_range32 (STRp(str), int64_t min_val, int64_t max_val, int32_t  *value); // signed
 
 extern bool str_get_int_dec (STRp(str), uint64_t *value); 
 extern bool str_get_int_hex (STRp(str), uint64_t *value); 

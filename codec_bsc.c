@@ -97,14 +97,14 @@ uint32_t codec_bsc_est_size (Codec codec, uint64_t uncompressed_len)
     return (uint32_t)uncompressed_len + LIBBSC_HEADER_SIZE; // as required by libbsc
 }
 
-static void *codec_bsc_malloc (void *vb, size_t size)
+static void *codec_bsc_malloc (void *vb, size_t size, const char *func, uint32_t code_line)
 {
-    void *mem =  codec_alloc (VB, size, 1.5); 
+    void *mem =  codec_alloc_do (VB, size, 1.5, func, code_line); 
     return mem;
 }
 
 void codec_bsc_initialize (void)
 {
-    bsc_init_full (LIBBSC_FEATURE_FASTMODE, codec_bsc_malloc, codec_free);
+    bsc_init_full (LIBBSC_FEATURE_FASTMODE, codec_bsc_malloc, codec_free_do);
 }
 

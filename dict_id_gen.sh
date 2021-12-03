@@ -144,7 +144,8 @@ else
     dict_id_gen_exe=dict_id_gen
 fi
 
-files=(`egrep "^#pragma GENDICT" *.h | cut -d: -f1 | uniq`)
+headers=(`egrep "^#include" data_types.h | cut -d\" -f2`)
+files=(`egrep "^#pragma GENDICT" ${headers[*]} | cut -d: -f1 | uniq`)
 
 generate_dict_id_gen_c
 

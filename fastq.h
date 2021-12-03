@@ -28,7 +28,7 @@
 #pragma GENDICT FASTQ_STRAND=DTYPE_FIELD=STRAND
 #pragma GENDICT FASTQ_E2L=DTYPE_FIELD=E2L
 #pragma GENDICT FASTQ_QUAL=DTYPE_FIELD=QUAL 
-#pragma GENDICT FASTQ_DOMQRUNS=DTYPE_FIELD=DOMQRUNS
+#pragma GENDICT FASTQ_DOMQRUNS=DTYPE_FIELD=DOMQRUNS // must be 1 after QUAL. Also used by LONGR. For backwards compatability, we can never change its name.
 #pragma GENDICT FASTQ_TOPLEVEL=DTYPE_FIELD=TOPLEVEL
 #pragma GENDICT FASTQ_TAXID=DTYPE_FIELD=TAXID
 #pragma GENDICT FASTQ_LINE3=DTYPE_FIELD=LINE3
@@ -42,7 +42,7 @@ extern void fastq_zip_initialize (void);
 extern void fastq_zip_read_one_vb (VBlockP vb);
 extern bool fastq_zip_dts_flag (void);
 COMPRESSOR_CALLBACK (fastq_zip_seq);
-COMPRESSOR_CALLBACK(fastq_zip_qual); // used by codec_enano_compress
+COMPRESSOR_CALLBACK(fastq_zip_qual); // used by codec_longr_compress
 
 // SEG Stuff
 extern void fastq_seg_initialize();

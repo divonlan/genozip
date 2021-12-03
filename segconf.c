@@ -118,13 +118,19 @@ void segconf_calculate (void)
     segconf.running = true;
 
     uint64_t save_vb_size = segconf.vb_size;
-    segconf.vb_size = txt_file->codec == CODEC_BZ2 ? 1500000 // needs to be big enough to overcome the block nature of BZ2 (64K block -> 200-800K text) to get a reasonable size estimate
-                    :                                300000; // big enough for a few long-read SAM or FASTQ lines
-    
     VBlockP vb = vb_initialize_nonpool_vb (VB_ID_SEGCONF, z_file->data_type, "segconf");
 
-    txtfile_read_vblock (vb);
+    // note: in case of BZ2, needs to be big enough to overcome the block nature of BZ2 (64K block -> 200-800K text) to get a reasonable size estimate
+    uint32_t vb_sizes[] = { 300000, 1500000, 5000000 };
+    
+    for (int s = (txt_file->codec == CODEC_BZ2); s < ARRAY_LEN(vb_sizes) && !vb->txt_data.len; s++) {
+        segconf.vb_size = vb_sizes[s];
+        txtfile_read_vblock (vb);
+    }
+
     if (!vb->txt_data.len) {
+        WARN ("Segconf didn't run because first line is larger than %u", vb_sizes[ARRAY_LEN(vb_sizes)-1]);
+    
         segconf_set_vb_size (vb, save_vb_size);
         goto done; // cannot find a single line - vb_size set to default and other segconf fields remain default, or previous file's setting
     }
@@ -144,7 +150,6 @@ void segconf_calculate (void)
     flag.quiet = true;
 
     seg_all_data_lines (vb);        
-
     RESTORE_FLAGS;
 
     segconf_set_vb_size (vb, save_vb_size);
@@ -160,10 +165,36 @@ void segconf_calculate (void)
     vb->lo_rejects[0].len = vb->lo_rejects[1].len = 0;
     txt_file->reject_bytes += save_luft_reject_bytes; // return reject bytes to txt_file, to be reassigned to VB
 
+    // require compressing with a reference when using --best with SAM/BAM/FASTQ, with some exceptions
+    bool best_requires_ref = ((VB_DT(DT_SAM) || VB_DT(DT_BAM)) && !(segconf_is_long_reads() && segconf.sam_is_unmapped))
+                          || (VB_DT(DT_FASTQ) && !segconf_is_long_reads());
+
+    if (segconf_is_long_reads() && (VB_DT(DT_FASTQ) || segconf.sam_is_unmapped)) {
+        flag.reference = REF_NONE;
+        flag.aligner_available = false;
+    }
+
+    ASSINP (flag.best != 1                // no --best specified, or specified --best=NO_REF
+         || !best_requires_ref            // --best doesn't require ref
+         || flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE // reference is provided
+         || flag.seg_only || flag.biopsy, // we're not creating a compressed format
+            "Using --best on a %s file also requires using --reference. You can override this requirement with --best=NO_REF", dt_name(vb->data_type));
+
 done:
     vb_destroy_vb (&vb);
 
     // restore (used for --optimize-DESC / --add-line-numbers)
     txt_file->num_lines = 0;
     segconf.running = false;
+}
+
+void segconf_update_qual (STRp (qual))
+{
+    if (segconf.nontrivial_qual) return; // already established
+
+    for (uint32_t i=1; i < qual_len; i++) 
+        if (qual[i] != qual[0]) {
+            segconf.nontrivial_qual = true;
+            break;
+        }
 }

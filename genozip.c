@@ -43,6 +43,23 @@ CommandType command = NO_COMMAND, primary_command = NO_COMMAND;
 
 uint32_t global_max_threads = DEFAULT_MAX_THREADS; 
 
+#define MAIN(format, ...) do { if (flag.debug_top) { progress_newline(); fprintf (stderr, "%s[%u]: ", command_name(), getpid()); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } } while(0)
+#define MAIN0(string)     do { if (flag.debug_top) { progress_newline(); fprintf (stderr, "%s[%u]: %s\n", command_name(), getpid(), string); } } while(0)
+
+const char *command_name (void) // see CommandType
+{
+    switch (command) {
+        case ZIP        : return "ZIP";
+        case PIZ        : return "PIZ";
+        case LIST       : return "LIST";
+        case VERSION    : return "VERSION";
+        case HELP       : return "HELP";
+        case LICENSE    : return "LICENSE";
+        case NO_COMMAND : return "NO_COMMAND";
+        default         : return "Invalid command";
+    }
+}
+
 void main_exit (bool show_stack, bool is_error) 
 {
     if (is_error && flag.debug_threads)
@@ -84,8 +101,7 @@ void main_exit (bool show_stack, bool is_error)
         if (save_name) file_remove (save_name, true);
     }
 
-    if (!is_error && (flag.echo || flag.debug || getenv ("GENOZIP_TEST"))) 
-        fprintf (stderr, "\nExiting %s (%s): Success\n", global_cmd, command==ZIP ? "ZIP" : command==PIZ ? "PIZ" : ""); 
+    if (!is_error) MAIN0 ("Exiting : Success"); 
 
     exit (is_error ? EXIT_GENERAL_ERROR : EXIT_OK);
 } 
@@ -142,6 +158,8 @@ static void main_print_version()
 
 static void main_genounzip (const char *z_filename, const char *txt_filename, int z_file_i, bool is_last_z_file)
 {
+    MAIN ("main_genounzip: %s", z_filename);
+
     // save flag as it might be modified - so that next file has the same flags
     SAVE_FLAGS;
 
@@ -271,7 +289,7 @@ static void main_test_after_genozip (const char *exec_name, const char *z_filena
 
     // wait for child process to finish, so that the shell doesn't print its prompt until the test is done
     int exit_code = stream_wait_for_exit (test);
-    
+
     TEMP_VALUE (primary_command, TEST_AFTER_ZIP); // make exit_on_error NOT delete the genozip file in this case, so its available for debugging
     ASSERT (!exit_code, "%s: test exited with status: %s\n", global_cmd, exit_code_name (exit_code)); // exit with error status 
     RESTORE_VALUE (primary_command); // recover in case of more non-concatenated files
@@ -316,6 +334,8 @@ static void main_genozip (const char *txt_filename,
                           Coords txt_file_coords,
                           char *exec_name)
 {
+    MAIN ("main_genozip: %s", txt_filename ? txt_filename : "stdin");
+    
     SAVE_FLAGS;
 
     ASSINP (!z_filename || !url_is_url (z_filename), 
@@ -331,7 +351,15 @@ static void main_genozip (const char *txt_filename,
     }
 
     // skip this file if its size is 0
-    RETURNW (txt_file,, "Cannot compress file %s because its size is 0 - skipping it", txt_filename);
+    if (!txt_file) {
+        if (tar_is_tar()) {
+            tar_copy_file (txt_filename);
+            WARN ("Copied %s which has size=0 to the tar file", txt_filename);
+        }    
+        else
+            WARN ("Cannot compress file %s because its size is 0 - skipping it", txt_filename);
+        return;
+    }
 
     if (!txt_file->file) {
         file_close (&txt_file, false, false);
@@ -473,11 +501,14 @@ static void main_get_filename_list (unsigned num_files, char **filenames, // in
     // expand directories if --subdirs 
     for (unsigned i=0; i < fn_buf->len; i++) { // len increases during the loop as we add more files which may themselves be directories
 
-        const char *fn = *ENT (char *, *fn_buf, i);
+        char *fn = *ENT (char *, *fn_buf, i);
+        unsigned fn_len = strlen (fn);
+        if (fn[fn_len-1] == '/') 
+            fn[--fn_len] = 0; // change "mydir/" to "mydir"
+
         if (!file_is_dir (fn)) continue;
 
         if (flag.subdirs) {
-            unsigned fn_len = strlen (fn);
             DIR *dir = opendir (fn);
 
             ASSERT (dir, "failed to open directory %s: %s", fn, strerror (errno));
@@ -487,7 +518,7 @@ static void main_get_filename_list (unsigned num_files, char **filenames, // in
                 if (ent->d_name[0] =='.') continue; // skip . ..  and hidden files
 
                 char *ent_fn = MALLOC (strlen(ent->d_name) + fn_len + 2);
-                sprintf (ent_fn, "%s/%s", fn, ent->d_name);
+                sprintf (ent_fn, "%.*s/%s", fn_len, fn, ent->d_name);
                 buf_add_more_(evb, fn_buf, char *, &ent_fn, 1, NULL);
             }
             closedir(dir);    
@@ -542,8 +573,10 @@ static void main_load_reference (const char *filename, bool is_first_file, bool 
 
     RESET_VALUE (txt_file); // save and reset - for use by reference loader
 
-    if (!ref_is_external_loaded (gref))
+    if (!ref_is_external_loaded (gref)) {
+        MAIN0 ("Loading external reference to gref");
         ref_load_external_reference (gref, NULL); // also loads refhash if needed
+    }
 
     if (dt == DT_CHAIN && !ref_is_external_loaded (prim_ref)) {
 
@@ -553,20 +586,22 @@ static void main_load_reference (const char *filename, bool is_first_file, bool 
                 "When compressing a chain file, you must also specify two --reference arguments: the first is the reference file in Primary coordinates "
                 "(i.e. those of the VCF files to be lifted), and the second is the reference file in Luft coordinates (i.e. the coordinates aftering lifting). See "WEBSITE_DVCF);
 
+        MAIN0 ("Loading external reference to prim_ref");
         ref_load_external_reference (prim_ref, NULL);
     }
 
     // Read the refhash and calculate the reverse compliment genome for the aligner algorithm - it was not used before and now it is
-    if (!old_aligner_available && flag.aligner_available) 
+    if (!old_aligner_available && flag.aligner_available) {
+        MAIN0 ("Loading refhash");
         refhash_load_standalone();
+    }
 
     RESTORE_VALUE (txt_file);
 }
 
 int main (int argc, char **argv)
 {    
-    if (flag.debug || getenv ("GENOZIP_TEST"))
-        fprintf (stderr, "\nStarting %s %s\n", argv[0], argc>1 ? argv[1] : ""); 
+    MAIN0 ("Starting main");
 
     // sometimes the last 3 args are "2>CON", "1>CON", "<CON", not sure where is this from, perhaps the debugger?
     if (argc >= 4 && !strcmp (argv[argc-1], "<CON")) argc -= 3;
@@ -657,12 +692,16 @@ int main (int argc, char **argv)
         vcf_tags_cmdline_rename_option(); 
         vcf_tags_cmdline_drop_option();
 
+        MAIN0 ("Loading chain file");
         chain_load();
 
         if (exe_type == EXE_GENOCAT) exit(0);
     }
 
-    if (flag.reading_kraken) kraken_load();
+    if (flag.reading_kraken) {
+        MAIN0 ("Loading kraken file");
+        kraken_load();
+    }
 
     // if we're genozipping with tar, initialize tar file
     if (tar_is_tar()) tar_initialize();
@@ -684,7 +723,7 @@ int main (int argc, char **argv)
         bool is_last_z_file = (z_file_i==num_z_files-1);
 
         main_load_reference (next_input_file, !file_i, is_last_z_file);
-        
+
         switch (command) {
             case ZIP  : main_genozip (next_input_file, 
                                       file_i < input_files_len-1 ? input_files[file_i+1] : NULL, // file name of next file, if there is one

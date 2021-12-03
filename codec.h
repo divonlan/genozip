@@ -12,8 +12,6 @@
 
 #define MIN_LEN_FOR_COMPRESSION 90 // less that this size, and compressed size is typically larger than uncompressed size
 
-#define ENANO_MIN_READ_LEN 4
-
 typedef bool CodecCompress (VBlockP vb, 
                             SectionHeader *header,       // in / out
                             const char *uncompressed,   // option 1 - compress contiguous data
@@ -56,7 +54,7 @@ typedef struct {
     { 1, "NONE", "+",      "cat",         codec_none_compress,      codec_none_uncompress, NA3,                       codec_none_est_size      }, \
     { 1, "GZ",   "+.gz",   "gunzip -c",   NA1,                      NA2,                   NA3,                       NA4                      }, \
     { 1, "BZ2",  "+.bz2",  "bzip2 -d -c", codec_bz2_compress,       codec_bz2_uncompress,  NA3,                       NA4                      }, \
-    { 1, "LZMA", "+",      NA0,           codec_lzma_compress,      codec_lzma_uncompress, NA3,                       NA4                      }, \
+    { 1, "LZMA", "+",      NA0,           codec_lzma_compress,      codec_lzma_uncompress, NA3,                       codec_none_est_size      }, \
     { 1, "BSC",  "+",      NA0,           codec_bsc_compress,       codec_bsc_uncompress,  NA3,                       codec_bsc_est_size       }, \
     { 1, "RANB", "+",      NA0,           codec_RANB_compress,      codec_rans_uncompress, NA3,                       codec_RANB_est_size      }, \
     { 1, "RANW", "+",      NA0,           codec_RANW_compress,      codec_rans_uncompress, NA3,                       codec_RANW_est_size      }, \
@@ -78,7 +76,7 @@ typedef struct {
     { 0, "BAM",  "-.bam",  "samtools view -h --threads 2", NA1,     NA2,                   NA3,                       NA4                      }, \
     { 0, "CRAM", "-.cram", "samtools view -h --threads 2", NA1,     NA2,                   NA3,                       NA4                      }, \
     { 0, "ZIP",  "+.zip",  "unzip -p",    NA1,                      NA2,                   NA3,                       NA4                      }, \
-    { 0, "NANO", "+",      NA0,           codec_enano_compress,     codec_enano_uncompress,NA3,                       codec_complex_est_size   }, \
+    { 0, "LNGR", "+",      NA0,           codec_longr_compress,     USE_SUBCODEC,          codec_longr_reconstruct,   codec_longr_est_size     }, \
 }
 
 extern CodecArgs codec_args[NUM_CODECS];
@@ -87,30 +85,35 @@ extern CodecCompress codec_bz2_compress, codec_lzma_compress, codec_domq_compres
                      codec_none_compress, codec_acgt_compress, codec_xcgt_compress, codec_pbwt_compress, 
                      codec_RANB_compress, codec_RANW_compress, codec_RANb_compress, codec_RANw_compress, 
                      codec_ARTB_compress, codec_ARTW_compress, codec_ARTb_compress, codec_ARTw_compress,
-                     codec_enano_compress;
+                     codec_longr_compress;
 
 extern CodecUncompress codec_bz2_uncompress, codec_lzma_uncompress, codec_acgt_uncompress, codec_xcgt_uncompress,
                        codec_bsc_uncompress, codec_none_uncompress, codec_gtshark_uncompress, codec_pbwt_uncompress,
-                       codec_rans_uncompress, codec_arith_uncompress, codec_enano_uncompress;
+                       codec_rans_uncompress, codec_arith_uncompress;
 
-extern CodecReconstruct codec_hapmat_reconstruct, codec_domq_reconstruct, codec_pbwt_reconstruct;
+extern CodecReconstruct codec_hapmat_reconstruct, codec_domq_reconstruct, codec_pbwt_reconstruct, codec_longr_reconstruct;
 
 extern CodecEstSizeFunc codec_none_est_size, codec_bsc_est_size, codec_hapmat_est_size, codec_domq_est_size,
                         codec_RANB_est_size, codec_RANW_est_size, codec_RANb_est_size, codec_RANw_est_size, 
                         codec_ARTB_est_size, codec_ARTW_est_size, codec_ARTb_est_size, codec_ARTw_est_size,
-                        codec_complex_est_size;
+                        codec_complex_est_size, codec_longr_est_size;
 
 // non-codec-specific functions
 extern void codec_initialize (void);
 extern const char *codec_name (Codec codec);
-extern void *codec_alloc (VBlockP vb, uint64_t size, float grow_at_least_factor);
-extern void codec_free (void *vb, void *addr);
+extern void *codec_alloc_do (VBlockP vb, uint64_t size, float grow_at_least_factor, const char *func, uint32_t code_line);
+#define codec_alloc(vb,size,grow_at_least_factor) codec_alloc_do((vb),(size),(grow_at_least_factor), __FUNCTION__, __LINE__)
+
+extern void codec_free_do (void *vb, void *addr, const char *func, uint32_t code_line);
+#define codec_free(vb,addr) codec_free_do ((vb), (addr), __FUNCTION__, __LINE__)
+
 extern void codec_free_all (VBlockP vb);
 extern void codec_verify_free_all (VBlockP vb, const char *op, Codec codec);
 extern void codec_show_time (VBlockP vb, const char *name, const char *subname, Codec codec);
 
 #define CODEC_ASSIGN_SAMPLE_SIZE 99999 // bytes (slightly better results than 50K)
 extern Codec codec_assign_best_codec (VBlockP vb, ContextP ctx, BufferP non_ctx_data, SectionType st);
+extern void codec_assign_best_qual_codec (VBlockP vb, DidIType qual_did, LocalGetLineCB callback, bool no_longr);
 
 // ACGT stuff
 extern const uint8_t acgt_encode[256];
@@ -132,15 +135,11 @@ extern bool codec_domq_comp_init (VBlockP vb, DidIType qual_did_i, LocalGetLineC
 // BZ2 stuff
 extern uint64_t BZ2_consumed (void *bz_file); // a hacky addition to bzip2
 
-// LZMA stuff
-extern void *lzma_alloc (ISzAllocPtr alloc_stuff, size_t size);
-extern void lzma_free (ISzAllocPtr alloc_stuff, void *addr);
-extern const char *lzma_errstr (SRes res);
-extern const char *lzma_status (ELzmaStatus status);
-
 // PBWT stuff
 extern void codec_pbwt_seg_init (VBlockP vb, ContextP runs_ctx, ContextP fgrc_ctx);
 extern void codec_pbwt_display_ht_matrix (VBlockP vb, uint32_t max_rows);
 
-// NANO stuff
-extern void codec_enano_seg_init (VBlockP vb, ContextP qual_ctx);
+// LONGR stuff
+extern void codec_longr_comp_init (VBlockP vb, DidIType qual_did_i);
+extern void codec_longr_calculate_bins (VBlockP vb, ContextP ctx, LocalGetLineCB callback);
+

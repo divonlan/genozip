@@ -17,6 +17,8 @@ bsc - obtained from https://github.com/IlyaGrebnov/libbsc - version 3.1.0
 
 htscodecs - obtained from https://github.com/samtools/htscodecs - version 10.1.1 
 
+ENanoFASTQ - obtained from https://github.com/guilledufort/EnanoFASTQ/tree/d6119dbccd19485c8222ec6d72516114401d1a08
+
 BitArray - obtained from https://github.com/noporpoise/BitArray
 
 tiny-AES-c - obtained from https://github.com/kokke/tiny-AES-c 

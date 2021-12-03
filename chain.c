@@ -365,7 +365,7 @@ const char *chain_seg_txt_line (VBlock *vb_, const char *field_start_line, uint3
     char separator;
     bool mismatch=false;
 
-    seg_create_rollback_point (vb_, NUM_CHAIN_FIELDS, CHAIN_NAMELUFT, CHAIN_STRNDLUFT, CHAIN_STARTLUFT, CHAIN_ENDLUFT, CHAIN_SIZELUFT, 
+    seg_create_rollback_point (VB, NULL, NUM_CHAIN_FIELDS, CHAIN_NAMELUFT, CHAIN_STRNDLUFT, CHAIN_STARTLUFT, CHAIN_ENDLUFT, CHAIN_SIZELUFT, 
                                CHAIN_NAMEPRIM, CHAIN_STRNDPRIM, CHAIN_STARTPRIM, CHAIN_ENDPRIM, CHAIN_SIZEPRIM, CHAIN_CHAIN, CHAIN_SCORE, 
                                CHAIN_ID, CHAIN_VERIFIED, CHAIN_SET, CHAIN_SIZE, CHAIN_GAPS, CHAIN_EOL, CHAIN_TOPLEVEL, CHAIN_SEP);
     typeof(vb->recon_size) save_recon_size = vb->recon_size;

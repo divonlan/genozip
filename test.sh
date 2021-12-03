@@ -735,7 +735,7 @@ batch_grep_count_lines()
 
     local file
     for file in ${basics[@]}; do
-        if [ $file == basic.fa ] || [ $file == basic.bam ] || [ $file == basic.generic ]; then continue; fi
+        if [ $file == basic.fa ] || [ $file == basic.bam ] || [ $file == basic.locs ] || [ $file == basic.generic ]; then continue; fi
 
         if [ $file == basic.chain ]; then
             export GENOZIP_REFERENCE=${hs37d5}:${GRCh38}
@@ -793,7 +793,7 @@ batch_prod_compatability()
     genozip=../genozip-prod/$genozip
 
     batch_basic basic.vcf        
-    #batch_dvcf
+    batch_dvcf
     batch_reference_fastq
     batch_reference_sam
     batch_basic basic.bam        
@@ -823,7 +823,7 @@ batch_real_world_1() # $1 extra genozip argument
     # without reference
     local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*sam* test.*bam* \
                    test.*fq* test.*fa* \
-                   basic.phy* test.*gvf* test.*gff* \
+                   basic.phy* test.*gvf* test.*gff* test.*locs* \
                    test.*txt* test.*kraken* | \
                    grep -v "$filter_out" | grep -v .genozip` )
 
@@ -847,11 +847,11 @@ batch_real_world_1_backcomp()
     fi
 
     # without reference
-    local files_work_v12_0_42=( basic.phy test.1KG-38.INFO.vcf test.AT.vcf.gz test.1KG-38.vcf.gz test.tomato.vcf.gz test.1KG-37.vcf test.BGI.sam.gz test.bwa-X.sam test.canonical-gene.gff test.cattle.vcf test.chr17.SS6004478.vcf test.1KG-37.indels.vcf test.clinvar37.vcf.gz test.contaminated.kraken test.coronavirus.fasta test.dog.INDEL.vcf.gz test.ExAC.vcf.gz test.exampleFASTA.fasta test.GCF_000001405.39-GCA_009914755.2.gff test.genome_Full.txt test.GenomeAsia100K.vcf.bz2 test.giab.vcf test.gnomad.vcf.gz test.GRCh38_full_analysis_set_plus_decoy_hla.fa test.GRCh38_issues.gff3 test.homo_sapiens_incl_consequences-chrY.gvf test.human.fq.gz test.human2.bam test.human2.filtered.snp.vcf test.human2.sam test.human2-R1.100K.fq.bz2 test.human2-R1.100K.fq.gz test.human2-R2.100K.fq.bz2 test.human2-R2.100K.fq.gz test.human-collated.sam test.human-sorted.sam test.IonXpress.sam test.NA12878.chr22.1x.bam test.NA12878.chr22.1x.sam test.NA12878.sorted.vcf test.NA12878-R1.100k.fq test.nanopore.fq test.nanopore.sam test.normal.kraken test.NovaSeq.bam test.NovaSeq.sam.gz test.pacbio.10k.fasta.xz test.pacbio.10k.hg19.sam.gz test.pacbio.ccs.10k.bam test.pacbio.ccs.10k.sam test.pacbio.clr.bam test.pacbio.clr.sam test.robot.sam test.sequential.fa.gz test.solexa.sam test.udhr.txt )
+    local files_work_v12_0_42=( basic.phy test.1KG-38.INFO.vcf test.AT.vcf.gz test.1KG-38.vcf.gz test.tomato.vcf.gz test.1KG-37.vcf test.BGI.sam.gz test.bwa-X.sam test.canonical-gene.gff test.cattle.vcf test.chr17.SS6004478.vcf test.1KG-37.indels.vcf test.clinvar37.vcf.gz test.contaminated.kraken test.coronavirus.fasta test.dog.INDEL.vcf.gz test.ExAC.vcf.gz test.exampleFASTA.fasta test.GCF_000001405.39-GCA_009914755.2.gff test.genome_Full.txt test.GenomeAsia100K.vcf.bz2 test.giab.vcf test.gnomad.vcf.gz test.GRCh38_full_analysis_set_plus_decoy_hla.fa test.GRCh38_issues.gff3 test.homo_sapiens_incl_consequences-chrY.gvf test.human.fq.gz test.human2.bam test.human2.filtered.snp.vcf test.human2.sam test.human2-R1.100K.fq.bz2 test.human2-R1.100K.fq.gz test.human2-R2.100K.fq.bz2 test.human2-R2.100K.fq.gz test.human-collated.sam test.human-sorted.sam test.IonXpress.sam test.NA12878.chr22.1x.bam test.NA12878.chr22.1x.sam test.NA12878.sorted.vcf test.NA12878-R1.100k.fq test.nanopore.fq test.nanopore.t2t_v1_1.sam test.normal.kraken test.NovaSeq.bam test.NovaSeq.sam.gz test.pacbio.10k.fasta.xz test.pacbio.10k.hg19.sam.gz test.pacbio.ccs.10k.bam test.pacbio.ccs.10k.sam test.pacbio.clr.bam test.pacbio.clr.sam test.robot.sam test.sequential.fa.gz test.solexa.sam test.udhr.txt )
+    local files_work_v13_0_0=( ${files_work_v12_0_42[*]} test.ensembl-export.gff test.maker.gff test.varscan.vcf )
+    local files_word_v13_0_5=( ${files_work_v13_0_0[*]} test.locs )
 
-    local files_work_v13_0_0=( test.ensembl-export.gff test.maker.gff test.varscan.vcf )
-
-    for f in ${files_work_v12_0_42[@]}; do 
+    for f in ${files_work_v13_0_0[@]}; do 
         test_header "$f - backward compatability with prod"
         $genozip_prod private/test/$f -fo $output || exit 1
         $genounzip -t $output || exit 1
@@ -871,14 +871,18 @@ batch_real_world_with_ref() # $1 extra genozip argument
                     test.human.fq.gz test.human2.bam test.human2.sam \
                     test.human2-R1.100K.fq.bz2 test.pacbio.ccs.10k.bam test.pacbio.ccs.10k.sam \
                     test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq test.pacbio.10k.hg19.sam.gz \
-                    test.human2.filtered.snp.vcf )
+                    test.human2.filtered.snp.vcf test.nanopore.fq \
+                    test.nanopore-ext.fq )
 
     local files38=( test.1KG-38.vcf.gz )
 
+    local filesT2T1_1=( test.nanopore.t2t_v1_1.sam )
+
     test_standard "-mf $1 -e $hs37d5" " " ${files37[*]}
     test_standard "-mf $1 -e $GRCh38" " " ${files38[*]}
+    test_standard "-mf $1 -e $T2T1_1" " " ${filesT2T1_1[*]}
 
-    for f in $files37 $files38 test.GRCh38_to_GRCh37.chain; do rm -f ${TESTDIR}/${f}.genozip ; done
+    for f in $files37 $files38 $filesT2T1_1 test.GRCh38_to_GRCh37.chain; do rm -f ${TESTDIR}/${f}.genozip ; done
 }
 
 
@@ -1094,6 +1098,7 @@ is_mac=`uname|grep -i Darwin`
 hg19=data/hg19.p13.plusMT.full_analysis_set.ref.genozip
 hs37d5=data/hs37d5.ref.genozip
 GRCh38=data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
+T2T1_1=data/chm13.draft_v1.1.ref.genozip
 chain37_38=data/GRCh37_to_GRCh38.chain.genozip
 
 if (( $# < 1 )); then
@@ -1156,7 +1161,7 @@ genocat="$genocat_exe --echo $2 $piz_threads"
 genols=$genols_exe 
 
 basics=(basic.vcf basic.chain basic.sam basic.vcf basic.bam basic.fq basic.fa basic.gvf basic.genome_Full.me23.txt \
-        basic.kraken basic.phy basic.generic)
+        basic.kraken basic.phy basic.locs basic.generic)
 
 exes=($genozip_exe $genounzip_exe $genocat_exe $genols_exe)
 for exe in ${exes[@]}; do
