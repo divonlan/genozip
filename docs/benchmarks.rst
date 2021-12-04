@@ -91,7 +91,7 @@ Notes:
     Read name style: PacBio-Range
     Genozip version: 13.0.5 github
     Date compressed: 2021-11-30 21:05:14 ACDT
-    Command line: genozip -e data/hs37d5.ref.genozip -fbwt NA12878.pacbio.bwa-sw.20140202.bam
+    Command line: genozip --reference hs37d5.ref.genozip --best --stats NA12878.pacbio.bwa-sw.20140202.bam
 
     Sections (sorted by % of genozip file):
     NAME                   GENOZIP      %      TXT       %   RATIO
@@ -198,7 +198,7 @@ Notes:
     Sequences: 218,903   Dictionaries: 26   Vblocks: 2 x 512 MB  Sections: 37
     Genozip version: 13.0.5 github
     Date compressed: 2021-12-03 10:31:26 ACDT
-    Command line: genozip -ftw --best --multiseq ERR2708427.1.fastq.gz
+    Command line: genozip --stats --best --multiseq ERR2708427.1.fastq.gz
 
     Sections (sorted by % of genozip file):
     NAME                   GENOZIP      %       TXT      %   RATIO
@@ -323,7 +323,7 @@ Notes:
     Samples: 1135   Variants: 119,146,348   Dictionaries: 190   Vblocks: 2398 x 512 MB  Sections: 56957
     Genozip version: 13.0.5 github
     Date compressed: 2021-11-22 11:28:13 ACDT
-    Command line: genozip -ftw --best 1001genomes_snp-short-indel_with_tair10_only_ACGTN.vcf.gz
+    Command line: genozip --stats --best 1001genomes_snp-short-indel_with_tair10_only_ACGTN.vcf.gz
 
     Sections (sorted by % of genozip file):
     NAME                   GENOZIP      %      TXT       %   RATIO
@@ -485,7 +485,7 @@ Notes:
     Clusters: 4,091,904   Dictionaries: 3   Vblocks: 1 x 512 MB  Sections: 9
     Genozip version: 13.0.5
     Date compressed: 2021-11-28 16:51:17 Cen. Australia Daylight Time
-    Command line: genozip --best -ftw --best s.locs
+    Command line: genozip --best --stats s.locs
 
     Sections (sorted by % of genozip file):
     NAME                   GENOZIP      %      TXT       %   RATIO
@@ -508,7 +508,7 @@ Notes:
     Clusters: 812,166   Dictionaries: 3   Vblocks: 1 x 512 MB  Sections: 9
     Genozip version: 13.0.5
     Date compressed: 2021-11-28 16:57:58 Cen. Australia Daylight Time
-    Command line: genozip --best -ftw --best s_1_1101.locs
+    Command line: genozip --best --stats s_1_1101.locs
 
     Sections (sorted by % of genozip file):
     NAME                   GENOZIP      %      TXT       %   RATIO
