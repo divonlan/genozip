@@ -7,7 +7,7 @@ Below are some benchmarks measuring Genozip's performance on a variety of file t
 
 To see more, peer-reviewed, benchmarks, see :ref:`Publications <publications>`.
 
-As can be appreciated from the *detailed compression reports* following the table, the compression gains strongly depend on the specific fields contained in a file, and can therefore vary significantly. 
+As can be appreciated from the :ref:`detailed compression reports<benchmark-details>` following the table, the compression gains strongly depend on the specific fields contained in a file, and can therefore vary significantly. 
 
 ================================ ================ ========= ========= ========= ============ ============ ================================= ==============================
 Details                          Type             Size      .gz Size  .genozip  Genozip gain Gain vs .gz  Data                              Link to data
@@ -35,6 +35,8 @@ Notes:
   
     - :sup:`2` the data was unzipped with ``unzip`` and then compressed to .gz with ``bgzip``. genozip was used with the ``--multiseq`` option.
   
+.. _benchmark-details:
+
 **Detailed compression reports**
 
 *The following reports can be produced during compression with* ``genozip --stats`` *or after compression with* ``genocat --stats <myfile>.genozip``.
