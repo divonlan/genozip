@@ -23,7 +23,7 @@
 
 #define MAX_POS ((PosType)UINT32_MAX) // maximum allowed value for POS (constraint: fit into uint32 ctx.local). Note: in SAM the limit is 2^31-1
 
-#define MAX_FIELDS 2048  // Maximum number of fields in a line (eg VCF variant, SAM line etc), including VCF/FORMAT fields, VCF/INFO fields GVF/ATTR fields, SAM/OPTIONAL fields etc. 
+#define MAX_FIELDS 2048  // Maximum number of fields in a line (eg VCF variant, SAM line etc), including VCF/FORMAT fields, VCF/INFO fields GVF/ATTR fields, SAM/AUX fields etc. 
 
 #define DEFAULT_MAX_THREADS 8 // used if num_cores is not discoverable and the user didn't specifiy --threads
 
@@ -42,6 +42,8 @@ typedef struct Buffer *BufferP;
 typedef const struct Buffer *ConstBufferP;
 typedef struct Container *ContainerP;
 typedef const struct Container *ConstContainerP;
+typedef struct SmallContainer *SmallContainerP;
+typedef const struct SmallContainer *ConstSmallContainerP;
 typedef struct Context *ContextP;
 typedef const struct Context *ConstContextP;
 typedef struct CtxNode *CtxNodeP;
@@ -61,6 +63,7 @@ typedef const struct Contig *ConstContigP;
 typedef struct ContigPkg *ContigPkgP;
 typedef const struct ContigPkg *ConstContigPkgP;
 typedef union SamFlags *SamFlagsP;
+typedef const struct QnameFlavorStruct *QnameFlavor; 
 
 typedef void BgEnBufFunc (BufferP buf, uint8_t *lt); // we use uint8_t instead of LocalType (which 1 byte) to avoid #including sections.h
 typedef BgEnBufFunc (*BgEnBuf);

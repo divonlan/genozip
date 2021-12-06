@@ -86,8 +86,6 @@ void codec_longr_calculate_bins (VBlockP vb, ContextP ctx,
     
     uint8_t fixed = 11;
 
-//for (int i=0; i< 256; i++) if (histogram[i]) printf ("xxx histogram[%d] = %u\n", i, histogram[i]);
-
     // divide the values into as-equal-size-as-possible bins
     uint32_t next_val = 0;
     for (unsigned bin_i=0; bin_i < NUM_BINS; bin_i++) {
@@ -97,7 +95,6 @@ void codec_longr_calculate_bins (VBlockP vb, ContextP ctx,
         if (bin_i < fixed) {
             num_values -= histogram[next_val];
             value_to_bin[next_val] = bin_i;
-//printf ("xxx bin=%u: next_val=%u histo=%u bin_content=%u\n", bin_i, next_val, histogram[next_val], histogram[next_val]);
             next_val++;
 
         }
@@ -107,7 +104,6 @@ void codec_longr_calculate_bins (VBlockP vb, ContextP ctx,
                 bin_content += histogram[next_val];
                 num_values  -= histogram[next_val];
                 value_to_bin[next_val] = bin_i;
-//printf ("xxx bin=%u: next_val=%u histo=%u bin_content=%u\n", bin_i, next_val, histogram[next_val], bin_content);
                 next_val++;
             }
         }
@@ -255,7 +251,7 @@ static void codec_longr_recon_one_read (LongrState *state, STRp(seq), bool is_re
         prev_q = q;                                     \
         recon[i] = q  + '!';
 
-    if (!is_rev)
+    if (!is_rev) // separate loops to save one "if" in the tight loop
         for (uint32_t i=0; i < seq_len; i++) {        
             uint8_t b = acgt_encode[(uint8_t)codec_longr_next_base (STRa(seq), i)];
             uint8_t q = sorted_qual[next_of_chan[state->chan.channel.n]++];

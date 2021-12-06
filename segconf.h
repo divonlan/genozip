@@ -10,7 +10,7 @@
 #define MIN_VBLOCK_MEMORY  1    // in MB
 #define MAX_VBLOCK_MEMORY  2048 
 
-typedef enum { TECH_UNKNOWN, TECH_ILLUM_7, TECH_ILLUM_5, TECH_PACBIO, TECH_ONP, TECH_454, TECH_BGI, TECH_IONTORR, TECH_HELICOS, TECH_NCBI } SeqTech;
+typedef enum { TECH_UNKNOWN, TECH_ILLUM_7, TECH_ILLUM_5, TECH_PACBIO, TECH_ONP, TECH_454, TECH_BGI, TECH_IONTORR, TECH_HELICOS } SeqTech;
 
 typedef enum { SQT_UNKNOWN, SQT_NUKE, SQT_AMINO, SQT_NUKE_OR_AMINO } SeqType;
 
@@ -79,7 +79,7 @@ typedef struct {
     bool chain_mismatches_ref;  // Some contigs mismatch the reference files, so this chain file cannot be used with --chain
 
     // read characteristics (SAM/BAM, KRAKEN and FASTQ)
-    unsigned qname_flavor, qname_flavor2;  
+    QnameFlavor qname_flavor, qname_flavor2;  
     uint32_t longest_seq_len;   // length of the longest seq_len in the segconf data 
     SeqTech tech;
 

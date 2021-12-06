@@ -27,7 +27,8 @@ typedef struct ContainerItem {
     #define CI0_NONE         ((uint8_t)0x00) // no seperator 
     #define CI0_INVISIBLE    ((uint8_t)0x01) // this item does not appear in the original or reconstructed text. it should be consumed with reconstruct=false
     #define CI0_FIXED_0_PAD  ((uint8_t)0x02) // fixed width, zero-left-padded, width in sep[2] (introduced v13)
-
+    #define CI0_SKIP         ((uint8_t)0x03) // instruct str_split to skip this item - Seg side only, needs to be removed with container_remove_skip
+ 
     // separator[0] values with bit 7 set (0x80) are interpreted as flags rather than a separator, in 
     // which case separator[1] is a parameter of the flags
     #define CI0_ITEM_HAS_FLAG(item) ((uint8_t)(item)->separator[0] & 0x80)

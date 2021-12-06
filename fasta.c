@@ -305,7 +305,7 @@ static void fasta_seg_desc_line (VBlockFASTA *vb, const char *line_start, uint32
 static void fast_seg_comment_line (VBlockFASTA *vb, const char *line_start, uint32_t line_len, bool *has_13)
 {
     if (!flag.make_reference) {
-        seg_add_to_local_text (VB, CTX(FASTA_COMMENT), line_start, line_len, line_len); 
+        seg_add_to_local_text (VB, CTX(FASTA_COMMENT), line_start, line_len, false, line_len); 
 
         char special_snip[100]; unsigned special_snip_len = sizeof (special_snip);
         seg_prepare_snip_other_do (SNIP_OTHER_LOOKUP, (DictId)_FASTA_COMMENT, false, 0, 0, &special_snip[2], &special_snip_len);

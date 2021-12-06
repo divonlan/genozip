@@ -184,7 +184,7 @@ void fastq_zip_initialize (void)
     if (flag.reference == REF_EXTERNAL && z_file->num_txt_components_so_far == 1) // first file
         ctx_populate_zf_ctx_from_contigs (gref, FASTQ_CONTIG, ref_get_ctgs (gref)); 
 
-    qname_zip_initialize ((DictId)_FASTQ_DESC);
+    qname_zip_initialize (FASTQ_DESC);
 }
 
 // called by zfile_compress_genozip_header to set FlagsGenozipHeader.dt_specific
@@ -241,9 +241,6 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
 
     // in --stats, consolidate stats into SQBITMAP
     stats_set_consolidation (VB, FASTQ_SQBITMAP, 4, FASTQ_NONREF, FASTQ_NONREF_X, FASTQ_GPOS, FASTQ_STRAND);
-
-    if (segconf.running) 
-        segconf.qname_flavor = 0; // unknown
 
     COPY_TIMER (seg_initialize);
 }
@@ -401,12 +398,10 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
         vb->recon_size -= FASTQ_DESC_len - optimized_len;
     }
 
-    if (segconf.running && vb->line_i==0)
-        // TODO bug 494: this should still discover the TECH from the original qname when optimized
-        qname_segconf_discover_flavor (VB, FASTQ_DESC, 
-                                       flag.optimize_DESC ? vb->optimized_desc : FASTQ_DESC_str, 
-                                       flag.optimize_DESC ? optimized_len      : FASTQ_DESC_len);
-
+    if (segconf.running && vb->line_i==0) 
+        // discover the original TECH, even when optimize_DESC
+        qname_segconf_discover_flavor (VB, FASTQ_DESC, STRd(FASTQ_DESC));
+    
     // attempt to parse the desciption line as qname, and fallback to tokenizer no qname format matches
     qname_seg (VB, CTX(FASTQ_DESC), 
                flag.optimize_DESC ? vb->optimized_desc : FASTQ_DESC_str, 

@@ -13,7 +13,7 @@
 #include "seg.h"
 
 #define DTYPE_QNAME        DTYPE_1
-#define DTYPE_SAM_OPTIONAL DTYPE_2
+#define DTYPE_SAM_AUX DTYPE_2
 
 #define BAM_MAGIC "BAM\1" // first 4 characters of a BAM file
 
@@ -106,7 +106,7 @@ extern PosType sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pos_str)/* o
 extern void sam_seg_MAPQ (VBlockP vb, ZipDataLineSAM *dl, STRp(mapq_str), uint8_t mapq, unsigned add_bytes);
 extern void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pnext_str)/* option 1 */, PosType pnext/* option 2 */, PosType prev_line_pos, unsigned add_bytes);
 extern void sam_seg_TLEN (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(tlen), int64_t tlen_value, bool is_rname_rnext_same);
-extern const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char *next_field, int32_t len, bool *has_13, char separator, const char *after_field);
+extern const char *sam_seg_aux_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char *next_field, int32_t len, bool *has_13, char separator, const char *after_field);
 extern const char *bam_get_one_optional (VBlockSAM *vb, const char *next_field, const char **tag, char *type, char *array_subtype, pSTRp(value), ValueType *numeric);
 extern uint16_t bam_reg2bin (int32_t first_pos, int32_t last_pos);
 extern void bam_seg_BIN (VBlockSAM *vb, ZipDataLineSAM *dl, uint16_t bin, PosType this_pos);
@@ -148,9 +148,9 @@ extern void sam_md_seg (VBlockSAM *vb,  ZipDataLineSAM *dl, STRp(md), unsigned a
 // ----------
 extern void sam_piz_XA_field_insert_lookback (VBlockP vb);
 
-extern const char optional_sep_by_type[2][256];
+extern const char aux_sep_by_type[2][256];
 
-static inline TranslatorId optional_field_translator (char type)
+static inline TranslatorId aux_field_translator (char type)
 {
     switch (type) {
         case 'c' : return SAM2BAM_I8;
@@ -183,7 +183,7 @@ static inline char sam_seg_sam_type_to_bam_type (char type, int64_t n)
     return 0; // number out of range
 }
 
-extern DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam, const char *tag, char bam_type, char bam_array_subtype, STRp(value), ValueType numeric);
+extern DictId sam_seg_aux_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam, const char *tag, char bam_type, char bam_array_subtype, STRp(value), ValueType numeric);
 
 typedef struct { char s[200]; } DisFlagsStr;
 extern DisFlagsStr sam_dis_flags (SamFlags flags);

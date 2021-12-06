@@ -1294,11 +1294,11 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
 
     //##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">
     else if (dnum == _INFO_AN) 
-        seg_set_last_txt (VB, ctx, STRa(value), STORE_INT);
+        seg_set_last_txt_store_value (VB, ctx, STRa(value), STORE_INT);
 
     // ##INFO=<ID=AF,Number=A,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed">
     else if (dnum == _INFO_AF) 
-        seg_set_last_txt (VB, ctx, STRa(value), STORE_FLOAT);
+        seg_set_last_txt_store_value (VB, ctx, STRa(value), STORE_FLOAT);
 
     // ##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">
     else if (dnum == _INFO_AC)

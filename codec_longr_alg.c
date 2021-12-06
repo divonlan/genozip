@@ -104,7 +104,7 @@ typedef struct {
     uint32_t next_base;  // index into base_chan
 } LongrState;
 
-static void codec_longr_update_state (LongrState *s, uint8_t b, int32_t q1, int32_t q2) 
+static inline void codec_longr_update_state (LongrState *s, uint8_t b, int32_t q1, int32_t q2) 
 {
     LongrChannel chan = s->chan; // automatic var for effeciency
     
@@ -149,12 +149,11 @@ static void codec_longr_alg_init_read (LongrState *state, STRp(seq), bool is_rev
     state->chan = (LongrChannel){};
 
     // get first channel
-    if (!is_rev)
-        for (int32_t i=0; i < B_AHEAD_OF_Q; i++) 
-            codec_longr_update_state (state, acgt_encode[i < seq_len ? seq[i] : 'A'], 0, 0);
-    else
-        for (int32_t i=0; i < B_AHEAD_OF_Q; i++) 
-            codec_longr_update_state (state, acgt_encode_comp[(seq_len-1-i) >= 0 ? seq[seq_len-1-i] : 'T'], 0, 0);
+    for (int32_t i=0; i < B_AHEAD_OF_Q; i++) 
+        codec_longr_update_state (state, 
+                                  is_rev ? acgt_encode_comp[(seq_len-1-i) >= 0 ? seq[seq_len-1-i] : 'T']
+                                         : acgt_encode[i < seq_len ? seq[i] : 'A'],
+                                  0, 0);
 }
 
 static inline char codec_longr_next_base (STRp(seq), uint32_t base_i)

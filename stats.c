@@ -182,7 +182,8 @@ void stats_set_consolidation (VBlock *vb, DidIType parent, unsigned num_deps, ..
 
     for (unsigned d=0; d < num_deps; d++) {
         DidIType dep = (DidIType)va_arg (args, int); 
-        CTX(dep)->st_did_i = parent;
+        if (dep != parent) 
+            CTX(dep)->st_did_i = parent;
     }
 
     CTX(parent)->is_stats_parent = true;
@@ -192,8 +193,9 @@ void stats_set_consolidation (VBlock *vb, DidIType parent, unsigned num_deps, ..
 
 void stats_set_consolidation_(VBlock *vb, DidIType parent, unsigned num_deps, ContextP *dep_ctxs)
 {
-    for (unsigned d=0; d < num_deps; d++) 
-        dep_ctxs[d]->st_did_i = parent;
+    for (unsigned d=0; d < num_deps; d++)
+        if (dep_ctxs[d]->did_i != parent) 
+            dep_ctxs[d]->st_did_i = parent;
 
     CTX(parent)->is_stats_parent = true;
 }
@@ -428,7 +430,7 @@ void stats_compress (void)
                                ST_NAME (SEC_REF_CONTIGS), ST_NAME (SEC_REF_RAND_ACC), ST_NAME (SEC_CHROM2REF_MAP),
                                ST_NAME (SEC_REF_IUPACS));
 
-    stats_consolidate_non_ctx (sbl, num_stats, "Other", 18 + (DTPZ(txt_header_required) == HDR_NONE), "E1L", "E2L", "EOL", "SAMPLES", "OPTIONAL", 
+    stats_consolidate_non_ctx (sbl, num_stats, "Other", 18 + (DTPZ(txt_header_required) == HDR_NONE), "E1L", "E2L", "EOL", "SAMPLES", "AUX", 
                                TOPLEVEL, "ToPLUFT", "TOP2BAM", "TOP2FQ", "TOP2FQEX", "TOP2VCF", "TOP2HASH", "LINEMETA", "CONTIG", 
                                ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_DICT_ID_ALIASES), 
                                ST_NAME (SEC_VB_HEADER), ST_NAME (SEC_BGZF), ST_NAME(SEC_TXT_HEADER)/*must be last*/);

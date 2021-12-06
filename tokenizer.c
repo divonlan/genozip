@@ -176,7 +176,7 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
         else
             prefixes[prefixes_len++] = CON_PX_SEP;
 
-        seg_set_last_txt (vb, item_ctx, STRa(ci->item), STORE_NONE);
+        seg_set_last_txt (vb, item_ctx, STRa(ci->item));
     }
 
     container_seg (vb, field_ctx, &con, prefixes, prefixes_len, num_seps + add_additional_bytes);
@@ -320,7 +320,7 @@ after_seg:
         else
             prefixes[prefixes_len++] = CON_PX_SEP;
 
-        seg_set_last_txt (vb, item_ctx, STRa(ci->item), STORE_NONE);
+        seg_set_last_txt (vb, item_ctx, STRa(ci->item));
     }
 
     container_seg (vb, field_ctx, &con, prefixes, prefixes_len, num_seps + add_additional_bytes);

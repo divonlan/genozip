@@ -18,8 +18,10 @@
 #pragma GENDICT KRAKEN_Q4NAME=DTYPE_1=Q4NAME
 #pragma GENDICT KRAKEN_Q5NAME=DTYPE_1=Q5NAME
 #pragma GENDICT KRAKEN_Q6NAME=DTYPE_1=Q6NAME 
-#pragma GENDICT KRAKEN_Q7NAME=DTYPE_1=Q7NAME 
-#pragma GENDICT KRAKEN_QmatNAME=DTYPE_1=QmatNAME // QmatNAME reserved for mate number (always the last dict_id in the container)
+#pragma GENDICT KRAKEN_Q7NAME=DTYPE_1=Q7NAME
+#pragma GENDICT KRAKEN_Q8NAME=DTYPE_1=Q8NAME 
+#pragma GENDICT KRAKEN_Q9NAME=DTYPE_1=Q9NAME 
+#pragma GENDICT KRAKEN_QmNAME=DTYPE_1=QmNAME // QmNAME reserved for mate number (always the last dict_id in the container)
 
 #pragma GENDICT KRAKEN_TAXID=DTYPE_FIELD=TAXID
 

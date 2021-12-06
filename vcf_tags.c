@@ -337,7 +337,7 @@ void vcf_tags_populate_tags_from_command_line (void)
     vcf_tags_add_system_default ((DefaultTag){ cSTR("ABQ"),          DTYPE_VCF_FORMAT, .refalt=cSTR("RBQ") }); 
     vcf_tags_add_system_default ((DefaultTag){ cSTR("RBQ"),          DTYPE_VCF_FORMAT, .refalt=cSTR("ABQ") }); 
     // note: in VarScan, we should also have AD<>RD ADF<>RDF ADR<>RDR in case of Ref/Alt switch but
-    // AD, ADF and ADR conflict the standard 'R' tags with the same need.
+    // AD, ADF and ADR conflict the standard 'R' tags with the same need (Bug 453)
 
     // sort again
     qsort (STRb(z_file->apriori_tags), sizeof (Tag), tags_sorter); 

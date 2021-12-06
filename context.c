@@ -289,7 +289,7 @@ static WordIndex ctx_commit_node (VBlock *vb, Context *zctx, Context *vctx, STRp
     // instead of the singleton node (which is guaranteed to be non-singleton, and hence >= 0)
     // note: local is dedicated to singletons and contains nothing else, since inst.no_stons is not set
     if (node_index < 0) {
-        seg_add_to_local_text (vb, vctx, snip, snip_len, 0);
+        seg_add_to_local_text (vb, vctx, snip, snip_len, false, 0);
 
         if (HAS_DEBUG_SEG(vctx)) {
             char printable_snip[snip_len+20];
@@ -1272,7 +1272,7 @@ void ctx_free_context (Context *ctx, DidIType did_i)
 
     ctx->no_stons = ctx->pair_local = ctx->pair_b250 = ctx->stop_pairing = ctx->no_callback = ctx->line_is_luft_trans =
     ctx->local_param = ctx->no_vb1_sort = ctx->local_always = ctx->counts_section = ctx->no_drop_b250 = 
-    ctx->is_frozen = ctx->please_remove_dict = ctx->local_no_bgen = 0;
+    ctx->is_frozen = ctx->please_remove_dict = ctx->local_is_lten = 0;
     ctx->dynamic_size_local = 0;
     ctx->is_stats_parent = ctx->is_initialized = ctx->local_compressed = ctx->b250_compressed = ctx->dict_merged = 0;
     ctx->local_dep = 0;

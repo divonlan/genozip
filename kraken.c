@@ -94,7 +94,7 @@ void kraken_zip_initialize (void)
 {
     seg_prepare_snip_other (SNIP_COPY, _KRAKEN_TAXID, 0, 0, copy_taxid_snip);
 
-    qname_zip_initialize ((DictId)_KRAKEN_QNAME);
+    qname_zip_initialize (KRAKEN_QNAME);
 }
 
 void kraken_seg_initialize (VBlock *vb)

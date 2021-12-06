@@ -44,8 +44,8 @@ bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
               dict_id.num != _SAM_RNAME    && 
               dict_id.num != _SAM_FLAG     && 
               dict_id.num != _SAM_CIGAR    &&
-              dict_id.num != _SAM_BUDDY    && // BUDDY, OPTIONAL and SAM_MC_Z, OPTION_MC_Z are needed for CIGAR
-              dict_id.num != _SAM_OPTIONAL && // sam_piz_filter drops it and reconstructs SAM_MC_Z instead
+              dict_id.num != _SAM_BUDDY    && // BUDDY, AUX and SAM_MC_Z, OPTION_MC_Z are needed for CIGAR
+              dict_id.num != _SAM_AUX && // sam_piz_filter drops it and reconstructs SAM_MC_Z instead
               dict_id.num != _SAM_MC_Z     &&
               dict_id.num != _OPTION_MC_Z  &&
             !(dict_id.num == _SAM_MAPQ     && flag.sam_mapq_filter) && 
@@ -243,19 +243,19 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_POS)
     return 0;
 }
 
-// translate OPTIONAL SAM->BAM - called as translator-only item on within the Optional reconstruction
+// translate AUX SAM->BAM - called as translator-only item on within the Aux reconstruction
 // fix prefix eg MX:i: -> MXs
-TRANSLATOR_FUNC (sam_piz_sam2bam_OPTIONAL_SELF)
+TRANSLATOR_FUNC (sam_piz_sam2bam_AUX_SELF)
 {
     ContainerP con = (ContainerP)recon;
 
-    // if this translator is called due to SAM->FASTQEXT, cancel translation for the OPTIONAL container and its items
+    // if this translator is called due to SAM->FASTQEXT, cancel translation for the AUX container and its items
     if (flag.out_dt == DT_FASTQ) {
         con->no_translation = true; // turn off translation for this container and its items
         return 0; 
     }
 
-    if (recon_len == -1) return 0; // no Optional data in this alignment
+    if (recon_len == -1) return 0; // no Aux data in this alignment
 
     char *prefixes_before = &recon[con_sizeof (*con)] + 2; // +2 to skip the empty prefixes of container wide, and item[0]
     char *prefixes_after = prefixes_before;
@@ -277,8 +277,8 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_OPTIONAL_SELF)
     return -2 * (num_items-1); // change in prefixes_len
 }
 
-// translate OPTIONAL SAM->BAM - called after Optional reconstruction is done
-TRANSLATOR_FUNC (sam_piz_sam2bam_OPTIONAL)
+// translate AUX SAM->BAM - called after Aux reconstruction is done
+TRANSLATOR_FUNC (sam_piz_sam2bam_AUX)
 {
     /* up to v11 we used this translator to set alignment.block_size. due to container logic change, it
        has now moved to sam_piz_container_cb. we keep this translator function for backward
@@ -332,7 +332,7 @@ TXTHEADER_TRANSLATOR (txtheader_sam2fq)
 CONTAINER_CALLBACK (sam_piz_container_cb)
 {
     if (is_top_level) {
-        // case SAM to BAM translation: set alignment.block_size (was in sam_piz_sam2bam_OPTIONAL until v11)
+        // case SAM to BAM translation: set alignment.block_size (was in sam_piz_sam2bam_AUX until v11)
         if (dict_id.num == _SAM_TOP2BAM) { 
             BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)ENT (char, vb->txt_data, vb->line_start);
             alignment->block_size = vb->txt_data.len - vb->line_start - sizeof (uint32_t); // block_size doesn't include the block_size field itself
@@ -422,9 +422,9 @@ CONTAINER_FILTER_FUNC (sam_piz_filter)
         sam_piz_XA_field_insert_lookback (vb);
     
     // collect_coverage: rather than reconstructing optional, reconstruct SAM_MC_Z that just consumes MC:Z if it exists
-    else if (dict_id.num == _SAM_OPTIONAL && flag.collect_coverage) {
+    else if (dict_id.num == _SAM_AUX && flag.collect_coverage) {
         reconstruct_from_ctx (vb, SAM_MC_Z, 0, false);
-        return false; // don't reconstruct OPTIONAL
+        return false; // don't reconstruct AUX
     }
 
     return true; // go ahead and reconstruct

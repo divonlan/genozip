@@ -21,7 +21,9 @@
 #pragma GENDICT SAM_Q5NAME=DTYPE_1=Q5NAME
 #pragma GENDICT SAM_Q6NAME=DTYPE_1=Q6NAME 
 #pragma GENDICT SAM_Q7NAME=DTYPE_1=Q7NAME 
-#pragma GENDICT SAM_QmatNAME=DTYPE_1=QmatNAME // QmatNAME reserved for mate number (always the last dict_id in the container)
+#pragma GENDICT SAM_Q8NAME=DTYPE_1=Q7NAME 
+#pragma GENDICT SAM_Q9NAME=DTYPE_1=Q7NAME 
+#pragma GENDICT SAM_QmNAME=DTYPE_1=QmNAME // QmNAME reserved for mate number (always the last dict_id in the container)
 #pragma GENDICT SAM_FLAG=DTYPE_FIELD=FLAG
 #pragma GENDICT SAM_POS=DTYPE_FIELD=POS
 #pragma GENDICT SAM_MAPQ=DTYPE_FIELD=MAPQ
@@ -29,7 +31,7 @@
 #pragma GENDICT SAM_RNEXT=DTYPE_FIELD=RNEXT
 #pragma GENDICT SAM_PNEXT=DTYPE_FIELD=PNEXT
 #pragma GENDICT SAM_TLEN=DTYPE_FIELD=TLEN
-#pragma GENDICT SAM_OPTIONAL=DTYPE_FIELD=OPTIONAL
+#pragma GENDICT SAM_AUX=DTYPE_FIELD=AUX
 #pragma GENDICT SAM_SQBITMAP=DTYPE_FIELD=SQBITMAP
 #pragma GENDICT SAM_NONREF=DTYPE_FIELD=NONREF    // these 4 fields must be in this order, right after SAM_SQBITMAP
 #pragma GENDICT SAM_NONREF_X=DTYPE_FIELD=NONREF_X
@@ -348,8 +350,8 @@ TRANSLATOR (SAM, BAM,   10, POS,        sam_piz_sam2bam_POS)        // reconstru
 TRANSLATOR (SAM, BAM,   11, SEQ,        sam_piz_sam2bam_SEQ)        // textual SEQ to BAM-format SEQ 
 TRANSLATOR (SAM, BAM,   12, QUAL,       sam_piz_sam2bam_QUAL)       // textual QUAL to BAM-format QUAL 
 TRANSLATOR (SAM, BAM,   13, TLEN,       sam_piz_sam2bam_TLEN)       // place TLEN last_value in BAM alignment 
-TRANSLATOR (SAM, BAM,   14, OPTIONAL,   sam_piz_sam2bam_OPTIONAL)   // used up to v11, kept for for backward compatability as old files expect it
-TRANSLATOR (SAM, BAM,   15, OPTIONAL_SELF, sam_piz_sam2bam_OPTIONAL_SELF) // transform prefixes in Optional Container from SAM to BAM format 
+TRANSLATOR (SAM, BAM,   14, AUX,        sam_piz_sam2bam_AUX)        // used up to v11, kept for for backward compatability as old files expect it
+TRANSLATOR (SAM, BAM,   15, AUX_SELF,   sam_piz_sam2bam_AUX_SELF)   // transform prefixes in Aux Container from SAM to BAM format 
 TRANSLATOR (SAM, FASTQ, 16, SEQ,        sam_piz_sam2fastq_SEQ)      // reverse-complement the sequence if needed, and drop if "*"
 TRANSLATOR (SAM, FASTQ, 17, QUAL,       sam_piz_sam2fastq_QUAL)     // reverse the QUAL if reverse-complemented and drop fastq records with QUAL="*"
 TRANSLATOR (SAM, FASTQ, 18, FLAG,       sam_piz_sam2fastq_FLAG)     // emit 1 if (FLAGS & 0x40) or 2 of (FLAGS & 0x80)
@@ -358,7 +360,7 @@ TRANSLATOR (SAM, FASTQ, 18, FLAG,       sam_piz_sam2fastq_FLAG)     // emit 1 if
 #define SAM_TRANSLATORS { NULL /* none */, container_translate_I8, container_translate_U8, container_translate_LTEN_I16, \
                           container_translate_LTEN_U16, container_translate_LTEN_I32, container_translate_LTEN_U32, \
                           sam_piz_sam2bam_FLOAT, sam_piz_sam2bam_ARRAY_SELF, sam_piz_sam2bam_RNAME, sam_piz_sam2bam_POS, sam_piz_sam2bam_SEQ, \
-                          sam_piz_sam2bam_QUAL, sam_piz_sam2bam_TLEN, sam_piz_sam2bam_OPTIONAL, sam_piz_sam2bam_OPTIONAL_SELF, \
+                          sam_piz_sam2bam_QUAL, sam_piz_sam2bam_TLEN, sam_piz_sam2bam_AUX, sam_piz_sam2bam_AUX_SELF, \
                           sam_piz_sam2fastq_SEQ, sam_piz_sam2fastq_QUAL, sam_piz_sam2fastq_FLAG }
 
 TXTHEADER_TRANSLATOR (sam_header_bam2sam);

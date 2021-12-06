@@ -222,7 +222,7 @@ WordIndex chrom_seg_ex (VBlock *vb, DidIType did_i,
         }
 
         // update cache
-        seg_set_last_txt (vb, ctx, STRa(save_chrom), STORE_NONE);
+        seg_set_last_txt (vb, ctx, STRa(save_chrom));
         ctx->last_is_alt = is_alt;
         ctx->last_growth = chrom_name_growth;
         ctx->no_stons    = true; // needed for seg_duplicate_last

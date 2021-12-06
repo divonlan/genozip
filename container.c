@@ -315,7 +315,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
                     DT_FUNC(vb, translator)[item->translator](vb, item_ctx, reconstruction_start, recon_len, item_prefix_len, false);  
             }            
 
-            // case: WORD_INDEX_MISSING - delete previous item's separator if it has one (used by SAM_OPTIONAL - sam_seg_optional_all)
+            // case: WORD_INDEX_MISSING - delete previous item's separator if it has one (used by SAM_AUX - sam_seg_aux_all)
             if (recon_len == -1 && i > 0 && !con->keep_empty_item_sep && !CI0_ITEM_HAS_FLAG(item-1))  
                 vb->txt_data.len -= num_preceding_seps;
 
@@ -520,7 +520,7 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
         con_p    = (ContainerP)cached_con; // update so we reconstruct from translated cached item
         prefixes = cached_con + st_size;
 
-        // if item[0] is a translator-only item, use it to translate the Container itself (used by SAM_OPTIONAL)
+        // if item[0] is a translator-only item, use it to translate the Container itself (used by SAM_AUX)
         ContainerItem *item0 = &con.items[0];
         
         if (vb->translation.trans_containers && !item0->dict_id.num && item0->translator) {

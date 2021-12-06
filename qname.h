@@ -12,10 +12,10 @@
 
 extern const char sep_with_space[], sep_without_space[];
 extern void qname_seg (VBlockP vb, ContextP qname_ctx, STRp(qname), unsigned add_additional_bytes);
-extern bool qname_is_flavor (STRp(qname), unsigned qname_flavor);
+extern bool qname_is_flavor (STRp(qname), QnameFlavor qf, pSTRp (qname2));
 
 extern void qname_segconf_discover_flavor (VBlockP vb, DidIType qname_did_i, STRp(qname));
-extern void qname_zip_initialize (DictId qname_dict_id);
+extern void qname_zip_initialize (DidIType qname_did_i);
 extern void qname_seg_initialize (VBlockP vb, DidIType qname_did_i);
 
-extern const char *qf_name (unsigned qf_i);
+extern const char *qf_name (QnameFlavor qf);
