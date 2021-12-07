@@ -257,42 +257,71 @@ static void main_test_after_genozip (const char *exec_name, const char *z_filena
 
     refhash_create_cache_join(false);
     
-    // On Windows and Mac that usually have limited memory, if ZIP consumed more than 2GB, free memory before PIZ. 
-    // Note: on Windows, freeing memory takes considerable time.
-    if ((flag.is_windows || flag.is_mac || arch_is_wsl()) && buf_get_memory_usage () > (1ULL<<31)) {
-        ref_destroy_reference (gref, true); // on Windows I observed a race condition: if we unmap mapped memory here, and remap it in the test process, and the system is very slow due to low memory, then "MapViewOfFile" in the test processs will get "Access is Denied". That's why destroy_only_if_not_mmap=true.
-        ref_destroy_reference (prim_ref, true); 
-        kraken_destroy();
-        chain_destroy();
-        vb_destroy_pool_vbs();
+    if (!is_last_txt_file || flag.is_windows) {
+        // On Windows and Mac that usually have limited memory, if ZIP consumed more than 2GB, free memory before PIZ. 
+        // Note: on Windows, freeing memory takes considerable time.
+        if ((flag.is_windows || flag.is_mac || arch_is_wsl()) && buf_get_memory_usage () > (1ULL<<31)) {
+            ref_destroy_reference (gref, true); // on Windows I observed a race condition: if we unmap mapped memory here, and remap it in the test process, and the system is very slow due to low memory, then "MapViewOfFile" in the test processs will get "Access is Denied". That's why destroy_only_if_not_mmap=true.
+            ref_destroy_reference (prim_ref, true); 
+            kraken_destroy();
+            chain_destroy();
+            vb_destroy_pool_vbs();
+        }
+
+        StreamP test = stream_create (0, 0, 0, 0, 0, 0, 0,
+                                    "To use the --test option",
+                                    exec_name, "--decompress", "--test", z_filename,
+                                    flag.quiet         ? "--quiet"         : SKIP_ARG,
+                                    password           ? "--password"      : SKIP_ARG,
+                                    password           ? password          : SKIP_ARG,
+                                    flag.show_digest   ? "--show-digest"   : SKIP_ARG,
+                                    flag.show_memory   ? "--show-memory"   : SKIP_ARG,
+                                    flag.show_time     ? "--show-time"     : SKIP_ARG,
+                                    flag.threads_str   ? "--threads"       : SKIP_ARG,
+                                    flag.threads_str   ? flag.threads_str  : SKIP_ARG,
+                                    flag.xthreads      ? "--xthreads"      : SKIP_ARG,
+                                    flag.show_alleles  ? "--show-alleles"  : SKIP_ARG,
+                                    flag.debug_threads ? "--debug-threads" : SKIP_ARG,
+                                    flag.echo          ? "--echo"          : SKIP_ARG,
+                                    flag.verify_codec  ? "--verify-codec"  : SKIP_ARG,
+                                    flag.reference == REF_EXTERNAL && !is_chain ? "--reference" : SKIP_ARG, // normal pizzing of a chain file doesn't require a reference
+                                    flag.reference == REF_EXTERNAL && !is_chain ? ref_get_filename(gref) : SKIP_ARG, 
+                                    NULL);
+
+        // wait for child process to finish, so that the shell doesn't print its prompt until the test is done
+        int exit_code = stream_wait_for_exit (test);
+
+        TEMP_VALUE (primary_command, TEST_AFTER_ZIP); // make exit_on_error NOT delete the genozip file in this case, so its available for debugging
+        ASSERT (!exit_code, "%s: test exited with status: %s\n", global_cmd, exit_code_name (exit_code)); // exit with error status 
+        RESTORE_VALUE (primary_command); // recover in case of more non-concatenated files
     }
 
-    StreamP test = stream_create (0, 0, 0, 0, 0, 0, 0,
-                                  "To use the --test option",
-                                  exec_name, "--decompress", "--test", z_filename,
-                                  flag.quiet         ? "--quiet"         : SKIP_ARG,
-                                  password           ? "--password"      : SKIP_ARG,
-                                  password           ? password          : SKIP_ARG,
-                                  flag.show_digest   ? "--show-digest"   : SKIP_ARG,
-                                  flag.show_memory   ? "--show-memory"   : SKIP_ARG,
-                                  flag.show_time     ? "--show-time"     : SKIP_ARG,
-                                  flag.threads_str   ? "--threads"       : SKIP_ARG,
-                                  flag.threads_str   ? flag.threads_str  : SKIP_ARG,
-                                  flag.xthreads      ? "--xthreads"      : SKIP_ARG,
-                                  flag.show_alleles  ? "--show-alleles"  : SKIP_ARG,
-                                  flag.debug_threads ? "--debug-threads" : SKIP_ARG,
-                                  flag.echo          ? "--echo"          : SKIP_ARG,
-                                  flag.verify_codec  ? "--verify-codec"  : SKIP_ARG,
-                                  flag.reference == REF_EXTERNAL && !is_chain ? "--reference" : SKIP_ARG, // normal pizzing of a chain file doesn't require a reference
-                                  flag.reference == REF_EXTERNAL && !is_chain ? ref_get_filename(gref) : SKIP_ARG, 
-                                  NULL);
+    // case: nothing more to do on the compression side - run test replacing the current process, without forking
+    // note: in Windows, we can't use execv because it creates a new process with a new pid, while the current process exits
+    // and returns an exit code to the shell.
+    else {
+        const char *argv[32]; 
+        int argc = 0;
+        argv[argc++] = exec_name;
+        argv[argc++] = "--decompress";
+        argv[argc++] = "--test";
+        argv[argc++] = z_filename;
+        if (flag.quiet) argv[argc++] = "--quiet";
+        if (password) { argv[argc++] = "--password"; argv[argc++] = password; }
+        if (flag.show_digest) argv[argc++] = "--show-digest";
+        if (flag.show_memory) argv[argc++] = "--show-memory";
+        if (flag.show_time) argv[argc++] = "--show-time";
+        if (flag.threads_str) { argv[argc++] = "--threads"; argv[argc++] = flag.threads_str; }
+        if (flag.xthreads) argv[argc++] = "--xthreads";
+        if (flag.show_alleles) argv[argc++] = "--show-alleles";
+        if (flag.debug_threads) argv[argc++] = "--debug-threads";
+        if (flag.echo) argv[argc++] = "--echo";
+        if (flag.verify_codec) argv[argc++] = "--verify-codec";
+        if (flag.reference == REF_EXTERNAL && !is_chain) { argv[argc++] = "--reference"; argv[argc++] = ref_get_filename(gref); }
+        argv[argc] = NULL;
 
-    // wait for child process to finish, so that the shell doesn't print its prompt until the test is done
-    int exit_code = stream_wait_for_exit (test);
-
-    TEMP_VALUE (primary_command, TEST_AFTER_ZIP); // make exit_on_error NOT delete the genozip file in this case, so its available for debugging
-    ASSERT (!exit_code, "%s: test exited with status: %s\n", global_cmd, exit_code_name (exit_code)); // exit with error status 
-    RESTORE_VALUE (primary_command); // recover in case of more non-concatenated files
+        execv (exec_name, (char **)argv);
+    }
 }
 
 static void main_genozip_open_z_file_write (const char **z_filename)
