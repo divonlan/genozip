@@ -97,9 +97,12 @@ static void segconf_set_vb_size (const VBlock *vb, uint64_t curr_vb_size)
 
 void segconf_initialize (void)
 {
-    if (z_file->num_txt_components_so_far == 0)
-        segconf = (SegConf){}; // reset for new z_file
+    uint64_t save_vb_size = segconf.vb_size;
+    segconf = (SegConf){}; // reset for new component
 
+    if (z_file->num_txt_components_so_far > 0)
+        segconf.vb_size = save_vb_size; // components after first inherit vb_size from first
+        
     mutex_initialize (segconf.PL_mux_by_DP_mutex);
 }
 

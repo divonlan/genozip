@@ -66,8 +66,8 @@ CONDA_DOCS = LICENSE.txt AUTHORS README.md
 CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h bit_array.h progress.h website.h \
              base250.h endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h \
              buffer.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h codec.h stats.h \
-             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h qname.h lookback.h \
-			 tokenizer.h codec_longr_alg.c \
+             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h qname.h qname_cons.h \
+			 lookback.h tokenizer.h codec_longr_alg.c \
 			 reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h linesorter.h threads.h \
 			 arch.h license.h data_types.h base64.h txtheader.h writer.h bases_filter.h genols.h coords.h contigs.h chrom.h \
 			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h fastq.h gff3.h phylip.h chain.h kraken.h locs.h generic.h \
@@ -262,7 +262,9 @@ docs/_build/html/.buildinfo: docs/LICENSE.for-docs.txt docs/RELEASE_NOTES.for-do
 
 build-docs: docs/_build/html/.buildinfo docs/LICENSE.for-docs.txt docs/RELEASE_NOTES.for-docs.txt # they are actually published after git commit + push
 
-test-docs: docs/_build/html/.buildinfo 
+test-docs: docs/conf.py $(DOCS) # don't require license or release notes - so code needn't be built
+	@echo "Building HTML docs (TEST)"
+	@run-on-wsl.sh /home/divon/miniconda3/bin/sphinx-build -M html docs docs/_build -q -a 
 	@"/c/Program Files (x86)/Google/Chrome/Application/chrome.exe" file:///c:/Users/divon/projects/genozip/docs/_build/html/index.html --new-window
 
 # this is used by build.sh to install on conda for Linux and Mac. Installation for Windows in in bld.bat
@@ -308,10 +310,19 @@ clean: clean-docs
 	@rm -R $(OBJDIR)
 	@mkdir $(OBJDIR) $(addprefix $(OBJDIR)/, $(SRC_DIRS))
 
-.PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch docs testfiles test-backup genozip-linux-x86_64/clean prod dict_id_gen$(EXE) push-build
+.PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch docs testfiles test-backup genozip-linux-x86_64/clean genozip-prod genozip-prod.exe dict_id_gen$(EXE) push-build
+
+genozip-prod$(EXE): 
+	@(cd ../genozip-prod ; git stash ; git pull ; rm -Rf $(OBJDIR) ; make -j clean ; touch dict_id_gen.h ; make -j)
+	@cp ../genozip-prod/genozip$(EXE) genozip-prod$(EXE)
+	@cp ../genozip-prod/genounzip$(EXE) genounzip-prod$(EXE)
+	@cp ../genozip-prod/genocat$(EXE) genocat-prod$(EXE)
 
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
 ifeq ($(OS),Windows_NT)
+
+genozip-prod:
+	@run-on-wsl.sh make genozip-prod
 
 # increments minor version, eg. 1.0.1 -> 1.0.2. 
 # To increment a major version, manually edit version.h and set minor version to -1 e.g. 1.1.-1 (careful! no newlines or spaces)
@@ -419,17 +430,6 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@ssh `cat mac/.mac_ip_address` -l `cat mac/.mac_username`  "cd genozip ; echo "Pulling from git" ; git pull >& /dev/null ; make -j mac/.from_remote_timestamp" # pull before make as Makefile might have to be pulled
 	@touch $@
 
-prod:
-	@(cd ../genozip-prod ; git stash ; git pull ; make clean ; touch dict_id_gen.h ; make -j)
-	@cp ../genozip-prod/genozip$(EXE) genozip-prod$(EXE)
-	@cp ../genozip-prod/genounzip$(EXE) genounzip-prod$(EXE)
-	@cp ../genozip-prod/genocat$(EXE) genocat-prod$(EXE)
-
-ifeq ($(OS),Windows_NT)
-prod-linux:
-	@run-on-wsl.sh make prod
-endif
-
 BUILD_FILES = version.h genozip-installer.ifp docs/genozip-installer.exe docs/genozip-linux-x86_64.tar.gz LICENSE.txt  \
 			  docs/conf.py docs/LICENSE.for-docs.txt docs/RELEASE_NOTES.for-docs.txt Makefile
 push-build: 
@@ -437,7 +437,7 @@ push-build:
 	@(git commit -m $(version) ; exit 0) > /dev/null
 	@git push > /dev/null
 
-distribution: increment-version testfiles docs/genozip-linux-x86_64.tar.gz.build docs/genozip-installer.exe build-docs push-build conda/.conda-timestamp prod prod-linux
+distribution: increment-version testfiles docs/genozip-linux-x86_64.tar.gz.build docs/genozip-installer.exe build-docs push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
 	@(cd ../genozip-feedstock/ ; git pull)
 
 test-backup: genozip.exe

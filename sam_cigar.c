@@ -248,8 +248,7 @@ void sam_cigar_seg_textual (VBlockSAM *vb, ZipDataLineSAM *dl, unsigned last_cig
         cigar_snip_len += last_cigar_len;
 
         if (last_cigar_len > 7){
-            seg_add_to_local_text (VB, CTX(SAM_CIGAR), STRa(cigar_snip), last_cigar_len+1);
-            seg_simple_lookup (VB, CTX(SAM_CIGAR), 0);
+            seg_add_to_local_text (VB, CTX(SAM_CIGAR), STRa(cigar_snip), true, last_cigar_len+1);
             seg_done = true;
         }
     }
@@ -306,8 +305,7 @@ void sam_cigar_seg_binary (VBlockSAM *vb, ZipDataLineSAM *dl, uint32_t l_seq, ui
         cigar_snip_len += vb->textual_cigar.len;
 
         if (vb->textual_cigar.len > 7) {
-            seg_add_to_local_text (VB, CTX(SAM_CIGAR), STRa(cigar_snip), add_bytes);
-            seg_simple_lookup (VB, CTX(SAM_CIGAR), 0);
+            seg_add_to_local_text (VB, CTX(SAM_CIGAR), STRa(cigar_snip), true, add_bytes);
             seg_done = true;
         }
     }
@@ -372,10 +370,8 @@ void sam_cigar_seg_MC (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(mc), unsigned add
 
         seg_by_did_i (VB, STRa(MC_buddy_snip), OPTION_MC_Z, add_bytes); // copy MC from earlier-line buddy CIGAR
     
-    else if (mc_len > 7) {
-        seg_add_to_local_text (VB, CTX(OPTION_MC_Z), STRa(mc), add_bytes);
-        seg_simple_lookup (VB, CTX(OPTION_MC_Z), 0);
-    }
+    else if (mc_len > 7) 
+        seg_add_to_local_text (VB, CTX(OPTION_MC_Z), STRa(mc), true, add_bytes);
     else
         seg_by_did_i (VB, STRa(mc), OPTION_MC_Z, add_bytes);    
 
@@ -469,14 +465,14 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_COPY_BUDDY_MC)
     return false; // no new value 
 }
 
-// invoked from TOP2FQ (but not TOP2FQEX, bc it reconstructs OPTIONAL) to consume MC if it exists in this line, in case this line is
+// invoked from TOP2FQ (but not TOP2FQEX, bc it reconstructs AUX) to consume MC if it exists in this line, in case this line is
 // a buddy line of a future line in which case this MC will be copied to the future line's CIGAR 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_CONSUME_MC_Z)
 {
-    ContextP opt_ctx = CTX(SAM_OPTIONAL);
+    ContextP opt_ctx = CTX(SAM_AUX);
     WordIndex opt_word_index = WORD_INDEX_NONE;
 
-    // get OPTIONAL container
+    // get AUX container
     snip_len=0;
     if (opt_ctx->b250.len ||
         (!opt_ctx->b250.len && !opt_ctx->local.len && opt_ctx->dict.len)) {  // all_the_same case - no b250 or local, but have dict      
@@ -501,7 +497,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_CONSUME_MC_Z)
             found = true;
             break;
         }
-    if (!found) goto done; // OPTIONAL has no MC:Z tag
+    if (!found) goto done; // AUX has no MC:Z tag
 
     ContextP mc_ctx = CTX(OPTION_MC_Z);
 

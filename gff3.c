@@ -232,7 +232,7 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
     case _ATTR_Reference_seq:
     case _ATTR_ancestral_allele: 
         // note: all three are stored together in _ATTR_Reference_seq as they are correlated
-        seg_add_to_local_text (vb, CTX(ATTR_Reference_seq), STRa(value), value_len); 
+        seg_add_to_local_text (vb, CTX(ATTR_Reference_seq), STRa(value), false, value_len); 
         break;
 
     case _ATTR_chr:

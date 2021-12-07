@@ -369,22 +369,51 @@ static void zip_generate_local (VBlockP vb, ContextP ctx)
     if (ctx->dynamic_size_local) 
         zip_resize_local (vb, ctx);
 
-    else if (!ctx->local_no_bgen) 
+    else {
+        // case: local is LTEN (instead of native endianity) and machine is BGEN, so BGEN_*_buf ^ above did nothing.     
+        bool need_lten = (ctx->local_is_lten && !flag.is_lten);
+        
         switch (ctx->ltype) {
-            case LT_BITMAP    : LTEN_bit_array (buf_get_bitarray (&ctx->local));    break;
-            case LT_UINT32_TR : zip_generate_transposed_local (vb, ctx);            break;
-            case LT_FLOAT32   : 
-            case LT_UINT32    : BGEN_u32_buf (&ctx->local, NULL);                   break;
-            case LT_UINT16    : BGEN_u16_buf (&ctx->local, NULL);                   break;
-            case LT_FLOAT64   :
-            case LT_UINT64    : BGEN_u64_buf (&ctx->local, NULL);                   break;
-            case LT_INT8      : BGEN_interlace_d8_buf  (&ctx->local, NULL);         break;
-            case LT_INT16     : BGEN_interlace_d16_buf (&ctx->local, NULL);         break;
-            case LT_INT32     : BGEN_interlace_d32_buf (&ctx->local, NULL);         break;
-            case LT_INT64     : BGEN_interlace_d64_buf (&ctx->local, NULL);         break;
-            default           :                                                     break;        
-        }
+            case LT_BITMAP    : LTEN_bit_array (buf_get_bitarray (&ctx->local));    
+                                break;
 
+            case LT_UINT32_TR : zip_generate_transposed_local (vb, ctx);            
+                                break;
+
+            case LT_FLOAT32   : 
+
+            case LT_UINT32    : if (need_lten) LTEN_u32_buf (&ctx->local, NULL);   
+                                else           BGEN_u32_buf (&ctx->local, NULL);    
+                                break;
+
+            case LT_UINT16    : if (need_lten) LTEN_u16_buf (&ctx->local, NULL);   
+                                else           BGEN_u16_buf (&ctx->local, NULL);    
+                                break;
+
+            case LT_FLOAT64   :
+            case LT_UINT64    : if (need_lten) LTEN_u64_buf (&ctx->local, NULL);   
+                                else           BGEN_u64_buf (&ctx->local, NULL);    
+                                break;
+
+            case LT_INT8      : interlace_d8_buf  (&ctx->local, NULL);              
+                                break;
+
+            case LT_INT16     : if (need_lten) LTEN_interlace_d16_buf (&ctx->local, NULL);   
+                                else           BGEN_interlace_d16_buf (&ctx->local, NULL);    
+                                break;
+
+            case LT_INT32     : if (need_lten) LTEN_interlace_d32_buf (&ctx->local, NULL);   
+                                else           BGEN_interlace_d32_buf (&ctx->local, NULL);    
+                                break;
+
+            case LT_INT64     : if (need_lten) LTEN_interlace_d64_buf (&ctx->local, NULL);   
+                                else           BGEN_interlace_d64_buf (&ctx->local, NULL);    
+                                break;
+
+            default           : break;        
+        }
+    }
+    
     codec_assign_best_codec (vb, ctx, NULL, SEC_LOCAL);
 
     if (flag.debug_generate) iprintf ("%s.local in vb_i=%u ltype=%s len=%"PRIu64" codec=%s\n", 

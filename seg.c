@@ -192,7 +192,7 @@ const char *seg_get_next_line (void *vb_, const char *str,
 }
 
 // returns true is value is of type store_type and stored in last_value
-bool seg_set_last_txt (VBlockP vb, ContextP ctx, STRp(value), StoreType store_type)
+bool seg_set_last_txt_store_value (VBlockP vb, ContextP ctx, STRp(value), StoreType store_type)
 {
     bool is_value_in_txt_data = value >= FIRSTENT (char, vb->txt_data) &&
                                 value <= LASTENT  (char, vb->txt_data);
@@ -798,7 +798,7 @@ badly_formatted:
     return -1; // not segged as a container
 }                           
 
-void seg_add_to_local_text (VBlock *vb, Context *ctx, STRp (snip),
+void seg_add_to_local_text (VBlock *vb, Context *ctx, STRp (snip), bool with_lookup,
                             unsigned add_bytes)  // bytes in the original text file accounted for by this snip
 {
     buf_alloc (vb, &ctx->local, snip_len + 1, 0, char, CTX_GROWTH, "contexts->local"); // no multiplying by line.len, as snip can idiosyncratically be very large
@@ -807,6 +807,9 @@ void seg_add_to_local_text (VBlock *vb, Context *ctx, STRp (snip),
 
     if (add_bytes) ctx->txt_len += add_bytes;
     ctx->local.num_ctx_words++;
+
+    if (with_lookup)     
+        seg_by_ctx (vb, (char[]){ SNIP_LOOKUP }, 1, ctx, 0);
 }
 
 void seg_add_to_local_fixed (VBlock *vb, Context *ctx, STRp(data))  // bytes in the original text file accounted for by this snip

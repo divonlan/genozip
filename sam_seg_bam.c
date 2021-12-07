@@ -96,7 +96,7 @@ static int32_t bam_unconsumed_scan_backwards (VBlockP vb, uint32_t first_i, int3
         
         // final test option 2: in case we know the qname flavor
         else if (segconf.qname_flavor) {
-            if (!qname_is_flavor (aln->read_name, aln->l_read_name-1, segconf.qname_flavor))
+            if (!qname_is_flavor (aln->read_name, aln->l_read_name-1, segconf.qname_flavor, 0, 0))
                 continue;
         }
 
@@ -423,10 +423,10 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     // finally we can segment the textual CIGAR now (including if n_cigar_op=0)
     sam_cigar_seg_binary (vb, dl, l_seq, n_cigar_op);
 
-    // OPTIONAL fields - up to MAX_FIELDS of them
-    next_field = sam_seg_optional_all (vb, dl, next_field, 0,0,0, after);
+    // AUX fields - up to MAX_FIELDS of them
+    next_field = sam_seg_aux_all (vb, dl, next_field, 0,0,0, after);
     
-    // TLEN - must be after OPTIONAL as we might need data from MC:Z
+    // TLEN - must be after AUX as we might need data from MC:Z
     sam_seg_TLEN (vb, dl, 0, 0, (int64_t)tlen, ref_id == next_ref_id); // TLEN
 
     buf_free (&vb->textual_cigar);

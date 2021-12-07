@@ -58,7 +58,7 @@ extern void seg_id_field_do (VBlockP vb, ContextP ctx, STRp(id_snip));
     do { seg_id_field_do(VB, (ctx), (id_snip), (id_snip_len)); (ctx)->txt_len += !!(account_for_separator); } while(0)
 extern bool seg_id_field_cb (VBlockP vb, ContextP ctx, STRp(id_snip), uint32_t repeat);
 
-extern void seg_add_to_local_text   (VBlockP vb, ContextP ctx, STRp(snip), unsigned add_bytes);
+extern void seg_add_to_local_text   (VBlockP vb, ContextP ctx, STRp(snip), bool with_lookup, unsigned add_bytes);
 extern void seg_add_to_local_fixed  (VBlockP vb, ContextP ctx, STRp(data));
 
 // requires setting ctx->dynamic_size_local=true in seg_initialize, but not need to set ltype as it will be set in zip_resize_local
@@ -102,7 +102,18 @@ extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, 
 
 extern void seg_prepare_multi_dict_id_special_snip (uint8_t special_code, unsigned num_dict_ids, DictId *dict_ids, char *out_snip, unsigned *out_snip_len);
 
-bool seg_set_last_txt (VBlockP vb, ContextP ctx, STRp(value), StoreType store_type);
+static void inline seg_set_last_txt (VBlockP vb, ContextP ctx, STRp(value))
+{
+    bool is_value_in_txt_data = value >= FIRSTENT (char, vb->txt_data) &&
+                                value <= LASTENT  (char, vb->txt_data);
+
+    ctx->last_txt_index = is_value_in_txt_data ? ENTNUM (vb->txt_data, value) : INVALID_LAST_TXT_INDEX;
+    ctx->last_txt_len = value_len;
+
+    ctx_set_encountered (vb, ctx);
+}
+
+bool seg_set_last_txt_store_value (VBlockP vb, ContextP ctx, STRp(value), StoreType store_type);
 
 extern void seg_create_rollback_point (VBlockP vb, ContextP *ctxs, unsigned num_ctxs, ...); // list of did_i
 extern void seg_add_ctx_to_rollback_point (VBlockP vb, ContextP ctx);

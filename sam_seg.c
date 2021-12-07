@@ -72,7 +72,7 @@ void sam_zip_initialize (void)
     seg_prepare_snip_other (SNIP_COPY, _OPTION_AS_i, false, 0, XS_snip);
     seg_prepare_snip_other (SNIP_COPY, _OPTION_NM_i, false, 0, XM_snip);
 
-    qname_zip_initialize ((DictId)_SAM_QNAME);
+    qname_zip_initialize (SAM_QNAME);
     
     seg_prepare_snip_other (SNIP_COPY_BUDDY, _SAM_PNEXT,   false, 0, POS_buddy_snip);
     seg_prepare_snip_other (SNIP_COPY_BUDDY, _SAM_POS,     false, 0, PNEXT_buddy_snip);
@@ -177,7 +177,7 @@ void sam_seg_initialize (VBlock *vb)
     stats_set_consolidation (vb, OPTION_SA_Z,  6, OPTION_SA_RNAME, OPTION_SA_POS, OPTION_SA_STRAND, OPTION_SA_CIGAR, OPTION_SA_MAPQ, OPTION_SA_NM);
     stats_set_consolidation (vb, OPTION_OA_Z,  6, OPTION_OA_RNAME, OPTION_OA_POS, OPTION_OA_STRAND, OPTION_OA_CIGAR, OPTION_OA_MAPQ, OPTION_OA_NM);
     stats_set_consolidation (vb, OPTION_XA_Z,  7, OPTION_XA_RNAME, OPTION_XA_POS, OPTION_XA_STRAND, OPTION_XA_CIGAR, OPTION_XA_NM, OPTION_XA_STRAND_POS, OPTION_XA_LOOKBACK);
-    stats_set_consolidation (vb, SAM_OPTIONAL, 1, SAM_MC_Z);
+    stats_set_consolidation (vb, SAM_AUX, 1, SAM_MC_Z);
     stats_set_consolidation (vb, SAM_QNAME, 1, SAM_BUDDY);
     stats_set_consolidation (vb, OPTION_BD_BI, 2, OPTION_BI_Z, OPTION_BD_Z);
 
@@ -245,7 +245,7 @@ void sam_seg_finalize (VBlockP vb)
                           { .dict_id = { _SAM_TLEN     }, .separator = "\t" },
                           { .dict_id = { _SAM_SQBITMAP }, .separator = "\t" },
                           { .dict_id = { _SAM_QUAL     }, .separator = "\t" },
-                          { .dict_id = { _SAM_OPTIONAL },                   },
+                          { .dict_id = { _SAM_AUX },                   },
                           { .dict_id = { _SAM_EOL      },                   } 
                         }
     };
@@ -273,7 +273,7 @@ void sam_seg_finalize (VBlockP vb)
                           { .dict_id = { _SAM_TLEN     }, .separator = { CI0_TRANS_NOR                     }, SAM2BAM_TLEN     }, // must be after CIGAR bc sam_piz_special_TLEN_old needs vb->seq_num
                           { .dict_id = { _SAM_SQBITMAP }, .separator = "",                                    SAM2BAM_SEQ      }, // Translate - textual format to BAM format
                           { .dict_id = { _SAM_QUAL     }, .separator = "",                                    SAM2BAM_QUAL     }, // Translate - textual format to BAM format, set block_size
-                          { .dict_id = { _SAM_OPTIONAL }, .separator = { CI0_TRANS_NOR                     }                   }, // up to v11, this had the SAM2BAM_OPTIONAL translator
+                          { .dict_id = { _SAM_AUX }, .separator = { CI0_TRANS_NOR                     }                   }, // up to v11, this had the SAM2BAM_AUX translator
                         }
     };
 
@@ -324,7 +324,7 @@ void sam_seg_finalize (VBlockP vb)
                          { .dict_id = { _SAM_RNEXT    }, .separator = "\t"                               },
                          { .dict_id = { _SAM_PNEXT    }, .separator = "\t"                               },
                          { .dict_id = { _SAM_TLEN     }, .separator = "\t"                               },
-                         { .dict_id = { _SAM_OPTIONAL }, .separator = "\n"                               },
+                         { .dict_id = { _SAM_AUX }, .separator = "\n"                               },
                          { .dict_id = { _SAM_SQBITMAP }, .separator = "\n", .translator =SAM2FASTQ_SEQ   }, 
                          { .dict_id = { _SAM_QUAL     }, .separator = "\n", .translator =SAM2FASTQ_QUAL  }, // also moves fastq "line" to R2 (paired file) if needed
                        }
@@ -387,7 +387,7 @@ bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)
         dict_id.num == _SAM_FLAG      ||
         dict_id.num == _SAM_MAPQ      ||
         dict_id.num == _SAM_QNAME     ||
-        dict_id.num == _SAM_OPTIONAL  ||
+        dict_id.num == _SAM_AUX  ||
         dict_id.num == _SAM_EOL       ||
         dict_id.num == _SAM_TAXID     ||
         dict_id.num == _SAM_BUDDY     ||
@@ -541,7 +541,7 @@ static const char *sam_get_one_optional (VBlockSAM *vb, const char *next_field, 
     return next_field;
 }
 
-const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char *next_field,
+const char *sam_seg_aux_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char *next_field,
                                   int32_t len, bool *has_13, char separator, // sam only
                                   const char *after_field) // bam only 
 {
@@ -552,7 +552,7 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
     unsigned prefixes_len=3;
 
     // item[0] is translator-only item - to translate the Container itself in case of reconstructing BAM 
-    con.items[con_nitems(con)] = (ContainerItem){ .translator = SAM2BAM_OPTIONAL_SELF }; 
+    con.items[con_nitems(con)] = (ContainerItem){ .translator = SAM2BAM_AUX_SELF }; 
     con_inc_nitems (con);
     
     bool has_kraken = kraken_is_loaded;
@@ -582,9 +582,9 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
                 numeric.i, tag[0], tag[1], -0x80000000, 0x7fffffff, vb->vblock_i, vb->line_i);
 
         con.items[con_nitems(con)] = (ContainerItem) {
-            .dict_id    = sam_seg_optional_field (vb, dl, is_bam, tag, bam_type, array_subtype, STRa(value), numeric),
-            .translator = optional_field_translator ((uint8_t)bam_type), // how to transform the field if reconstructing to BAM
-            .separator  = { optional_sep_by_type[is_bam][(uint8_t)bam_type], '\t' },
+            .dict_id    = sam_seg_aux_field (vb, dl, is_bam, tag, bam_type, array_subtype, STRa(value), numeric),
+            .translator = aux_field_translator ((uint8_t)bam_type), // how to transform the field if reconstructing to BAM
+            .separator  = { aux_sep_by_type[is_bam][(uint8_t)bam_type], '\t' },
         };
         con_inc_nitems (con);
 
@@ -597,16 +597,16 @@ const char *sam_seg_optional_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char 
     }
 
     uint32_t num_items = con_nitems(con);
-    if (num_items > 1) { // we have Optional fields, not just the translator item
+    if (num_items > 1) { // we have Aux fields, not just the translator item
         if (con.items[num_items-1].separator[0] & 0x80) // is a flag
-            con.items[num_items-1].separator[0] &= ~(CI0_NATIVE_NEXT & ~(uint8_t)0x80); // last Optional field has no tab
+            con.items[num_items-1].separator[0] &= ~(CI0_NATIVE_NEXT & ~(uint8_t)0x80); // last Aux field has no tab
         con.items[num_items-1].separator[1] = 0;
-        container_seg (vb, CTX(SAM_OPTIONAL), &con, prefixes, prefixes_len, (is_bam ? 3 : 5) * (num_items-1)); // account for : SAM: "MX:i:" BAM: "MXi"
+        container_seg (vb, CTX(SAM_AUX), &con, prefixes, prefixes_len, (is_bam ? 3 : 5) * (num_items-1)); // account for : SAM: "MX:i:" BAM: "MXi"
     }
     else
         // NULL means MISSING Container item (of the toplevel container) - will cause container_reconstruct_do of 
         // the toplevel container to delete of previous separator (\t)
-        container_seg (vb, CTX(SAM_OPTIONAL), 0, 0, 0, 0); 
+        container_seg (vb, CTX(SAM_AUX), 0, 0, 0, 0); 
 
     return next_field;        
 }
@@ -857,7 +857,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     }
 
     GET_NEXT_ITEM (SAM_SEQ);
-    seg_set_last_txt (VB, CTX(SAM_SQBITMAP), STRd(SAM_SEQ), STORE_NONE);
+    seg_set_last_txt (VB, CTX(SAM_SQBITMAP), STRd(SAM_SEQ));
     dl->seq_data_start = ENTNUM (vb->txt_data, SAM_SEQ_str);
 
     ASSSEG (dl->seq_len == field_len || vb->last_cigar[0] == '*' || SAM_SEQ_str[0] == '*', SAM_SEQ_str, 
@@ -883,8 +883,8 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     // add BIN so this file can be reconstructed as BAM
     bam_seg_BIN (vb, dl, 0, this_pos);
 
-    // OPTIONAL fields - up to MAX_FIELDS of them
-    next_field = sam_seg_optional_all (vb, dl, next_field, len, has_13, separator, 0);
+    // AUX fields - up to MAX_FIELDS of them
+    next_field = sam_seg_aux_all (vb, dl, next_field, len, has_13, separator, 0);
 
     // finally, we can seg TLEN now, after MC:Z, if it exists
     bool is_rname_rnext_same = (SAM_RNEXT_len==1 && *SAM_RNEXT_str=='=') || 

@@ -326,7 +326,7 @@ static WordIndex chain_seg_name_and_size (VBlockCHAIN *vb, Reference ref, Coords
     *verified &= is_alt || chain_seg_verify_contig (vb, ref, node_index, &once[dc-1], STRa (name), 
                                                     last_txt(vb, did_i_name), vb->last_txt_len(did_i_name), size_value, mismatch);
 
-    seg_set_last_txt (VB, CTX(did_i_name), STRa(name), STORE_NONE); // note: in some cases, this is already done by chrom_seg_ex. no harm.
+    seg_set_last_txt (VB, CTX(did_i_name), STRa(name)); // note: in some cases, this is already done by chrom_seg_ex. no harm.
 
     return node_index;
 }

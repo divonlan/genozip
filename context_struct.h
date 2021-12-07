@@ -79,7 +79,7 @@ typedef struct Context {
                                // PIZ: pair b250 data is loaded to context.pair
     bool stop_pairing;         // this is the 2nd file of a pair - don't use SNIP_MATE_LOOKUP/DELTA anymore until the end of this VB
     bool no_callback;          // don't use callback for compressing, despite it being defined
-    bool local_no_bgen;        // Don't BGEN the local data - it is used by a codec to produce other data and NOT written to the z_file
+    bool local_is_lten;        // if true local data is LTEN, otherwise it is the machine (native) endianity
     bool local_param;          // copy local.param to SectionHeaderCtx
     bool no_vb1_sort;          // don't sort the dictionary in ctx_sort_dictionaries_vb_1
     bool no_drop_b250;         // the b250 section cannot be optimized away in zip_generate_b250_section (eg if we need section header to carry a param)
@@ -167,7 +167,8 @@ typedef struct Context {
     Buffer con_cache;          // PIZ: Handled by container_reconstruct - an array of Container which includes the did_i. Each struct is truncated to used items, followed by prefixes. 
                                //      also used to cached Multiplexers in vcf_piz_special_MUX_BY_DOSAGE , vcf_piz_special_MINUS
                                // ZIP: Each context is free to use it on its own
-    Buffer con_index;          // Array of uint32_t - PIZ: index into con_cache - Each item corresponds to word_index. ZIP: context-specific.
+    Buffer con_index;          // Array of uint32_t - PIZ: index into con_cache - Each item corresponds to word_index. 
+                               // ZIP: used by: 1. seg_array_of_struct
     Buffer con_len;            // Array of uint16_t - length of item in cache
     
 } Context;

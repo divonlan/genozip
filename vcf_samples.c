@@ -941,7 +941,7 @@ static inline void vcf_seg_FORMAT_DP (VBlockVCFP vb, ContextP ctx, STRp(cell))
         }
     }
 
-    seg_set_last_txt (VB, ctx, STRa(cell), STORE_NONE);
+    seg_set_last_txt (VB, ctx, STRa(cell));
 
     // case - we have FORMAT/AD - calculate delta vs the sum of AD components
     if (segconf.FORMAT_DP_method == by_AD && ctx_has_value (VB, FORMAT_AD))
@@ -1069,7 +1069,7 @@ static inline void vcf_seg_FORMAT_AB (VBlockVCFP vb, ContextP ctx, STRp(ab))
 
     // prepare rollback data: we will verify channel 1 in vcf_seg_FORMAT_AB_verify_channel1 and rollback if necessary
     if (channel_i==1) {
-        seg_set_last_txt (VB, ctx, STRa(ab), STORE_NONE);
+        seg_set_last_txt (VB, ctx, STRa(ab));
         ctx_set_last_value (VB, ctx, (ValueType){.i = 1}); // need verification
 
         seg_create_rollback_point (VB, NULL, 1, FORMAT_AB); 
@@ -1160,7 +1160,7 @@ static inline void vcf_seg_FORMAT_PL (VBlockVCFP vb, ContextP ctx, STRp(PL))
     if (segconf.running && !segconf.has_DP_before_PL) 
         segconf.has_DP_before_PL = ctx_encountered (VB, FORMAT_DP);
 
-    seg_set_last_txt (VB, ctx, STRa(PL), STORE_NONE); // used by GQ (points into txt_data, before optimization)
+    seg_set_last_txt (VB, ctx, STRa(PL)); // used by GQ (points into txt_data, before optimization)
 
     // attempt to optimize PL string, if requested
     unsigned modified_len = PL_len*2 + 10;                 
@@ -1548,7 +1548,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
             else
                 vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_GP);
 
-            seg_set_last_txt (VB, ctx, STRi(sf, i), STORE_NONE); // used by GQ
+            seg_set_last_txt (VB, ctx, STRi(sf, i)); // used by GQ
             break;
 
         // <ID=PL,Number=G,Type=Integer,Description="Normalized, Phred-scaled likelihoods for genotypes as defined in the VCF specification">       
@@ -1589,7 +1589,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
 
         // standard: <ID=GQ,Number=1,Type=Integer,Description="Genotype Quality">
         // GIAB: <ID=GQ,Number=1,Type=Integer,Description="Net Genotype quality across all datasets, calculated from GQ scores of callsets supporting the consensus GT, using only one callset from each dataset">   
-        case _FORMAT_GQ   : seg_set_last_txt (VB, ctx, STRi(sf, i), STORE_NONE); break; // postpone to later
+        case _FORMAT_GQ   : seg_set_last_txt (VB, ctx, STRi(sf, i)); break; // postpone to later
             
         // <ID=DP,Number=1,Type=Integer,Description="Approximate read depth (reads with MQ=255 or with bad mates are filtered)">
         case _FORMAT_DP   : vcf_seg_FORMAT_DP (vb, ctx, STRi(sf, i)); break;

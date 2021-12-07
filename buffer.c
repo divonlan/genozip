@@ -1166,39 +1166,46 @@ bool buf_dump_to_file (const char *filename, const Buffer *buf, unsigned buf_wor
     return success;
 }
  
-void BGEN_interlace_d8_buf (Buffer *buf, LocalType *lt)
+void interlace_d8_buf (Buffer *buf, LocalType *lt)
 {
-    for (uint64_t i=0; i < buf->len; i++) {
-        uint8_t unum = *ENT (uint8_t, *buf, i);
-        *ENT (int8_t, *buf, i) = INTERLACE(int8_t,unum); 
-    }    
+    for (uint64_t i=0; i < buf->len; i++) 
+        *ENT (int8_t, *buf, i) = INTERLACE(int8_t,*ENT (uint8_t, *buf, i)); 
 }
 
 void BGEN_interlace_d16_buf (Buffer *buf, LocalType *lt)
 {
-    for (uint64_t i=0; i < buf->len; i++) {
-        uint16_t num_big_en = *ENT (uint16_t, *buf, i);
-        uint16_t unum = BGEN16 (num_big_en);
-        *ENT (int16_t, *buf, i) = INTERLACE(int16_t,unum); 
-    }
+    for (uint64_t i=0; i < buf->len; i++) 
+        *ENT (int16_t, *buf, i) = BGEN16 (INTERLACE(int16_t,*ENT (uint16_t, *buf, i))); 
 }
 
 void BGEN_interlace_d32_buf (Buffer *buf, LocalType *lt)
 {
-    for (uint64_t i=0; i < buf->len; i++) {
-        uint32_t num_big_en = *ENT (uint32_t, *buf, i);
-        uint32_t unum = BGEN32 (num_big_en);
-        *ENT (int32_t, *buf, i) = INTERLACE(int32_t,unum); 
-    }
+    for (uint64_t i=0; i < buf->len; i++) 
+        *ENT (int32_t, *buf, i) = BGEN32 (INTERLACE(int32_t,*ENT (uint32_t, *buf, i))); 
 }
 
 void BGEN_interlace_d64_buf (Buffer *buf, LocalType *lt)
 {
-    for (uint64_t i=0; i < buf->len; i++) {
-        uint64_t num_big_en = *ENT (uint64_t, *buf, i);
-        uint64_t unum = BGEN64 (num_big_en);
-        *ENT (int64_t, *buf, i) = INTERLACE(int64_t,unum); 
-    }
+    for (uint64_t i=0; i < buf->len; i++) 
+        *ENT (int64_t, *buf, i) = BGEN64 (INTERLACE(int64_t,*ENT (uint64_t, *buf, i))); 
+}
+
+void LTEN_interlace_d16_buf (Buffer *buf, LocalType *lt)
+{
+    for (uint64_t i=0; i < buf->len; i++) 
+        *ENT (int16_t, *buf, i) = LTEN16 (INTERLACE(int16_t,*ENT (uint16_t, *buf, i))); 
+}
+
+void LTEN_interlace_d32_buf (Buffer *buf, LocalType *lt)
+{
+    for (uint64_t i=0; i < buf->len; i++) 
+        *ENT (int32_t, *buf, i) = LTEN32 (INTERLACE(int32_t,*ENT (uint32_t, *buf, i))); 
+}
+
+void LTEN_interlace_d64_buf (Buffer *buf, LocalType *lt)
+{
+    for (uint64_t i=0; i < buf->len; i++) 
+        *ENT (int64_t, *buf, i) = LTEN64 (INTERLACE(int64_t,*ENT (uint64_t, *buf, i))); 
 }
 
 void BGEN_u8_buf (Buffer *buf, LocalType *lt)
@@ -1207,26 +1214,56 @@ void BGEN_u8_buf (Buffer *buf, LocalType *lt)
 
 void BGEN_u16_buf (Buffer *buf, LocalType *lt)
 {
-    for (uint64_t i=0; i < buf->len; i++) {
-        uint16_t num_big_en = *ENT (uint16_t, *buf, i);
-        *ENT (uint16_t, *buf, i) = BGEN16 (num_big_en);            
-    }
+    if (flag.is_lten)
+        for (uint64_t i=0; i < buf->len; i++) {
+            uint16_t num_big_en = *ENT (uint16_t, *buf, i);
+            *ENT (uint16_t, *buf, i) = BGEN16 (num_big_en);            
+        }
 }
 
 void BGEN_u32_buf (Buffer *buf, LocalType *lt)
 {
-    for (uint64_t i=0; i < buf->len; i++) {
-        uint32_t num_big_en = *ENT (uint32_t, *buf, i);
-        *ENT (uint32_t, *buf, i) = BGEN32 (num_big_en);  
-    }
+    if (flag.is_lten)
+        for (uint64_t i=0; i < buf->len; i++) {
+            uint32_t num_big_en = *ENT (uint32_t, *buf, i);
+            *ENT (uint32_t, *buf, i) = BGEN32 (num_big_en);  
+        }
 }
 
 void BGEN_u64_buf (Buffer *buf, LocalType *lt)
 {
-    for (uint64_t i=0; i < buf->len; i++) {
-        uint64_t num_big_en = *ENT (uint64_t, *buf, i);
-        *ENT (uint64_t, *buf, i) = BGEN64 (num_big_en);            
-    }
+    if (flag.is_lten)
+        for (uint64_t i=0; i < buf->len; i++) {
+            uint64_t num_big_en = *ENT (uint64_t, *buf, i);
+            *ENT (uint64_t, *buf, i) = BGEN64 (num_big_en);            
+        }
+}
+
+void LTEN_u16_buf (Buffer *buf, LocalType *lt)
+{
+    if (!flag.is_lten)
+        for (uint64_t i=0; i < buf->len; i++) {
+            uint16_t num_big_en = *ENT (uint16_t, *buf, i);
+            *ENT (uint16_t, *buf, i) = LTEN16 (num_big_en);            
+        }
+}
+
+void LTEN_u32_buf (Buffer *buf, LocalType *lt)
+{
+    if (!flag.is_lten)
+        for (uint64_t i=0; i < buf->len; i++) {
+            uint32_t num_big_en = *ENT (uint32_t, *buf, i);
+            *ENT (uint32_t, *buf, i) = LTEN32 (num_big_en);  
+        }
+}
+
+void LTEN_u64_buf (Buffer *buf, LocalType *lt)
+{
+    if (!flag.is_lten)
+        for (uint64_t i=0; i < buf->len; i++) {
+            uint64_t num_big_en = *ENT (uint64_t, *buf, i);
+            *ENT (uint64_t, *buf, i) = LTEN64 (num_big_en);            
+        }
 }
 
 // number of columns is trasmitted in the param, except if this is a matrix of VCF samples, in which case param=0 and we take 

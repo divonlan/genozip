@@ -17,31 +17,39 @@
 #include "segconf.h"
 #include "profiler.h"
 #include "lookback.h"
+#include "endianness.h"
 
-static const StoreType optional_field_store_flag[256] = {
+static const StoreType aux_field_store_flag[256] = {
     ['c']=STORE_INT, ['C']=STORE_INT, 
     ['s']=STORE_INT, ['S']=STORE_INT,
     ['i']=STORE_INT, ['I']=STORE_INT,
     ['f']=STORE_FLOAT
 };
 
-const char optional_sep_by_type[2][256] = { { // compressing from SAM
+static const StoreType aux_field_to_ltype[256] = {
+    ['c']=LT_INT8,   ['C']=LT_UINT8, 
+    ['s']=LT_INT16,  ['S']=LT_UINT16,
+    ['i']=LT_INT32,  ['I']=LT_UINT32,
+    ['f']=LT_FLOAT32
+};
+
+const char aux_sep_by_type[2][256] = { { // compressing from SAM
         ['c']=CI0_NATIVE_NEXT | CI0_TRANS_NOR, ['C']=CI0_NATIVE_NEXT | CI0_TRANS_NOR, // reconstruct number and \t separator is SAM, and don't reconstruct anything if BAM (reconstruction will be done by translator)
         ['s']=CI0_NATIVE_NEXT | CI0_TRANS_NOR, ['S']=CI0_NATIVE_NEXT | CI0_TRANS_NOR, // -"-
         ['i']=CI0_NATIVE_NEXT | CI0_TRANS_NOR, ['I']=CI0_NATIVE_NEXT | CI0_TRANS_NOR, // -"-
-        ['f']=CI0_NATIVE_NEXT | CI0_TRANS_NOR,                                      // compressing SAM - a float is stored as text, and when piz with translate to BAM - is not reconstructed, instead - translated
+        ['f']=CI0_NATIVE_NEXT | CI0_TRANS_NOR,                                        // compressing SAM - a float is stored as text, and when piz with translate to BAM - is not reconstructed, instead - translated
         ['Z']=CI0_NATIVE_NEXT | CI0_TRANS_NUL, ['H']=CI0_NATIVE_NEXT | CI0_TRANS_NUL, // reconstruct text and then \t separator if SAM and \0 if BAM 
-        ['A']=CI0_NATIVE_NEXT,                                                     // reconstruct character and then \t separator if SAM and no separator for BAM
-        ['B']=CI0_NATIVE_NEXT                                                      // reconstruct array and then \t separator if SAM and no separator for BAM
+        ['A']=CI0_NATIVE_NEXT,                                                        // reconstruct character and then \t separator if SAM and no separator for BAM
+        ['B']=CI0_NATIVE_NEXT                                                         // reconstruct array and then \t separator if SAM and no separator for BAM
 }, 
 { // compressing from BAM
         ['c']=CI0_NATIVE_NEXT | CI0_TRANS_NOR, ['C']=CI0_NATIVE_NEXT | CI0_TRANS_NOR, // reconstruct number and \t separator is SAM, and don't reconstruct anything if BAM (reconstruction will be done by translator)
         ['s']=CI0_NATIVE_NEXT | CI0_TRANS_NOR, ['S']=CI0_NATIVE_NEXT | CI0_TRANS_NOR, // -"-
         ['i']=CI0_NATIVE_NEXT | CI0_TRANS_NOR, ['I']=CI0_NATIVE_NEXT | CI0_TRANS_NOR, // -"-
-        ['f']=CI0_NATIVE_NEXT,                                                     // compressing SAM - a float is stored as a SPECIAL, and the special reconstructor handles the SAM and BAM reconstructing
+        ['f']=CI0_NATIVE_NEXT,                                                        // compressing SAM - a float is stored as a SPECIAL, and the special reconstructor handles the SAM and BAM reconstructing
         ['Z']=CI0_NATIVE_NEXT | CI0_TRANS_NUL, ['H']=CI0_NATIVE_NEXT | CI0_TRANS_NUL, // reconstruct text and then \t separator if SAM and \0 if BAM 
-        ['A']=CI0_NATIVE_NEXT,                                                     // reconstruct character and then \t separator if SAM and no separator for BAM
-        ['B']=CI0_NATIVE_NEXT                                                      // reconstruct array and then \t separator if SAM and no separator for BAM
+        ['A']=CI0_NATIVE_NEXT,                                                        // reconstruct character and then \t separator if SAM and no separator for BAM
+        ['B']=CI0_NATIVE_NEXT                                                         // reconstruct array and then \t separator if SAM and no separator for BAM
 } };
 
 #define DICT_ID_ARRAY(dict_id) (DictId){ .id = { (dict_id).id[0], (dict_id).id[1], '_','A','R','R','A','Y' } } // DTYPE_2
@@ -206,10 +214,8 @@ static bool sam_seg_0A_cigar_cb (VBlockP vb, ContextP ctx, STRp (cigar), uint32_
 {
     // complicated CIGARs, likely to be relatively uncommon, are better off in local - anything more than eg 112M39S 
     // note: we set no_stons=true in sam_seg_initialize_0X so we can use local for this rather than singletons
-    if (cigar_len > 7) {
-        seg_add_to_local_text (vb, ctx, STRa(cigar), cigar_len);
-        seg_simple_lookup (vb, ctx, 0);
-    }
+    if (cigar_len > 7) 
+        seg_add_to_local_text (vb, ctx, STRa(cigar), true, cigar_len);
     else 
         seg_by_ctx (vb, STRa(cigar), ctx, cigar_len);
 
@@ -594,14 +600,25 @@ static inline void sam_seg_RG_field (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(rg)
 }
 
 // optimization for Ion Torrent flow signal (ZM) - negative values become zero, positives are rounded to the nearest 10
-static void sam_optimize_ZM (VBlockSAMP vb, ContextP ctx, void *cb_param, ValueType n, uint32_t repeat, unsigned add_bytes)
+static void sam_optimize_ZM (VBlockSAMP vb, ContextP ctx, void *cb_param, void *array_, uint32_t array_len)
 {
-    ctx->dynamic_size_local = true;
-    
-    if (n.i >= 0) n.i = ((n.i + 5) / 10) * 10;
-    else          n.i = 0;
+    int16_t *array = (int16_t *)array_;
 
-    seg_integer (VB, ctx, n.i, false, add_bytes);
+    for (uint32_t i=0; i < array_len; i++)
+        if (array[i] >= 0) 
+#ifdef __BIG_ENDIAN__
+            array[i] = LTEN16 (((LTEN16(array[i]) + 5) / 10) * 10);
+#else            
+            array[i] = ((array[i] + 5) / 10) * 10;
+#endif
+        else array[i] = 0;
+
+    // ctx->dynamic_size_local = true;
+    
+    // if (n.i >= 0) n.i = ((n.i + 5) / 10) * 10;
+    // else          n.i = 0;
+
+    // seg_integer (VB, ctx, n.i, false, add_bytes);
 }
 
 // E2 - SEQ data. Currently broken. To do: fix.
@@ -631,7 +648,7 @@ static void sam_seg_U2_field (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(field), un
     CTX(OPTION_U2_Z)->local.len += field_len;
 }
 
-static inline unsigned sam_seg_optional_add_bytes (char type, unsigned value_len, bool is_bam)
+static inline unsigned sam_seg_aux_add_bytes (char type, unsigned value_len, bool is_bam)
 {
     if (!is_bam || type=='Z' || type=='H')
         return value_len + 1; // +1 for \0 (BAM Z/H) or \t (SAM)
@@ -664,19 +681,21 @@ static inline SmallContainer *sam_seg_array_field_get_con (VBlockSAMP vb, Contex
     
     // prepare context where array elements will go in
     con->items[1].dict_id      = DICT_ID_ARRAY (con_ctx->dict_id);
-    con->items[1].translator   = optional_field_translator (type); // instructions on how to transform array items if reconstructing as BAM (array[0] is the subtype of the array)
-    con->items[1].separator[0] = optional_sep_by_type[IS_BAM][type];
+    con->items[1].translator   = aux_field_translator (type); // instructions on how to transform array items if reconstructing as BAM (array[0] is the subtype of the array)
+    con->items[1].separator[0] = aux_sep_by_type[IS_BAM][type];
     
     *elem_ctx = ctx_get_ctx (vb, con->items[1].dict_id);
     (*elem_ctx)->st_did_i = con_ctx->did_i;
     
-    StoreType store_type = optional_field_store_flag[type];
+    StoreType store_type = aux_field_store_flag[type];
     (*elem_ctx)->flags.store = store_type;
 
     ASSERT (store_type, "Invalid type \"%c\" in array of %s. vb=%u line=%"PRIu64, type, con_ctx->tag_name, vb->vblock_i, vb->line_i);
 
-    if (store_type == STORE_INT && !has_callback) 
-        (*elem_ctx)->dynamic_size_local = true; // Note: fields with callback should set ltype or dynamic in the callback if needed
+    if (store_type == STORE_INT) {
+        (*elem_ctx)->ltype = aux_field_to_ltype[type];
+        (*elem_ctx)->local_is_lten = true; // we store in local in LTEN (as in BAM) and *not* in machine endianity
+    }
 
     con_ctx->con_cache.param = type;
 
@@ -697,7 +716,7 @@ static inline int64_t sam_seg_array_get_int (uint8_t type, const char *array)
 }
 
 // an array - all elements go into a single item context, multiple repeats. items are segged as dynamic integers or floats, or a callback is called to seg them.
-typedef void (*ArrayItemCallback) (VBlockSAMP vb, ContextP ctx, void *cb_param, ValueType n, uint32_t repeat, unsigned add_bytes);
+typedef void (*ArrayItemCallback) (VBlockSAMP vb, ContextP ctx, void *cb_param, void *array, uint32_t array_len);
 static void sam_seg_array_field (VBlockSAMP vb, DictId dict_id, uint8_t type, 
                                  const char *array, int/*signed*/ array_len, // SAM: comma separated array ; BAM : arrays original width and machine endianity
                                  ArrayItemCallback callback, void *cb_param) // optional - call back for each item to seg the item
@@ -707,86 +726,86 @@ static void sam_seg_array_field (VBlockSAMP vb, DictId dict_id, uint8_t type,
     SmallContainer *con = sam_seg_array_field_get_con (vb, con_ctx, type, !!callback, &elem_ctx);
 
     int width = aux_width[type];
+
+    int array_bytes = IS_BAM ? (width * array_len) : array_len;
+    elem_ctx->txt_len += array_bytes;
+
+    con->repeats = IS_BAM ? array_len : (1 + str_count_char (STRa(array), ','));
+    ASSERT (con->repeats < CONTAINER_MAX_REPEATS, "array has too many elements, more than %u", CONTAINER_MAX_REPEATS);
+
     bool is_int = (elem_ctx->flags.store == STORE_INT);
+    if (is_int) {
+        elem_ctx->local.len *= width; // len will be calculated in bytes in this function
+        buf_alloc (vb, &elem_ctx->local, con->repeats * width, con->repeats * width * 50, char, CTX_GROWTH, "contexts->local"); // careful not * line.len - we can get OOM
+    }
 
     ASSERT (is_int || (type=='f' && !callback), "Type not supported for SAM/BAM arrays '%c'(%u) in ctx=%s vb=%u line=%"PRIu64,
             type, type, con_ctx->tag_name, vb->vblock_i, vb->line_i);
 
-    if (IS_BAM && !callback) {
-        con->repeats = array_len;
-        elem_ctx->txt_len += width * array_len;
-        buf_alloc (vb, &elem_ctx->local, array_len, array_len * 50, int64_t, 2, "contexts->local"); // careful not * line.len - we can get OOM
-        
-        if (is_int) {
-            int64_t *data = AFTERENT (int64_t, elem_ctx->local); // automatic var for speed
-            elem_ctx->local.len += array_len;
+    char *local_start = AFTERENT (char, elem_ctx->local);
 
-            for (uint32_t i=0; i < array_len; i++, array += width) 
-                data[i] = sam_seg_array_get_int (type, array);
-        }
-        else
+    if (IS_BAM) {        
+
+        if (is_int) 
+            buf_add (&elem_ctx->local, array, array_bytes); // LTEN, not machine endianity (local_is_lten is set)
+
+        else // FLOAT
             // TO DO: we can use SNIP_LOOKUP like seg_float_or_not and store the data in local (bug 500)
             for (uint32_t i=0; i < array_len; i++, array += width) {
                 char snip[16] = { SNIP_SPECIAL, SAM_SPECIAL_FLOAT };
                 unsigned snip_len = 2 + str_int (GET_UINT32(array), &snip[2]);
                 seg_by_ctx (VB, STRa(snip), elem_ctx, 0); // TODO: seg in local and update SPECIAL to get from local if no snip
             }
-   }
-
-    else if (IS_BAM && callback) {
-        con->repeats = array_len;
-        for (int i=0; i < array_len; i++, array += width) { 
-            ValueType value = { .i = sam_seg_array_get_int (type, array) };
-            callback (vb, elem_ctx, cb_param, value, i, width);
-        }
     }
 
     else { // SAM
-
         // note: we're not using str_split on array, because the number of elements can be very large (eg one per base in PacBio ip:B) - possibly stack overflow
-        for (con->repeats=0; con->repeats < CONTAINER_MAX_REPEATS && array_len > 0; con->repeats++) { // str_len will be -1 after last number
+        for (uint32_t i=0; i < con->repeats; i++) { // str_len will be -1 after last number
 
             const char *snip = array;
             for (; array_len && *array != ','; array++, array_len--) {};
 
             unsigned snip_len = (unsigned)(array - snip);
 
-            if (elem_ctx->flags.store == STORE_INT) { 
-                ValueType n;
-                ASSERT (str_get_int (STRa(snip), &n.i), "Invalid array: \"%.*s\", expecting an integer in an array element of %s. vb=%u line=%"PRIu64, 
+            if (is_int) { 
+                int64_t value;
+                ASSERT (str_get_int (STRa(snip), &value), "Invalid array: \"%.*s\", expecting an integer in an array element of %s. vb=%u line=%"PRIu64, 
                         snip_len, snip, con_ctx->tag_name, vb->vblock_i, vb->line_i);
-                
-                if (callback)
-                    callback (vb, elem_ctx, cb_param, n, con->repeats, snip_len+1);
-                else
-                    seg_integer (VB, elem_ctx, n.i, false, snip_len+1);
+                value = LTEN64 (value); // consistent with BAM and avoid a condition before the memcpy below 
+                memcpy (&local_start[i*width], &value, width);
             }
             else 
-                seg_float_or_not (VB, elem_ctx, STRa(snip), snip_len+1);
+                seg_float_or_not (VB, elem_ctx, STRa(snip), 0);
             
             array_len--; // skip comma
             array++;
         }
+
+        if (is_int) elem_ctx->local.len += con->repeats * width;
     }
 
-    ASSERT (con->repeats < CONTAINER_MAX_REPEATS, "array has too many elements, more than %u", CONTAINER_MAX_REPEATS);
+    if (callback)
+        callback (vb, elem_ctx, cb_param, local_start, con->repeats);
 
+    if (is_int)
+       elem_ctx->local.len /= width; // return len back to counting in units of ltype
+ 
     // add bytes here in case of BAM - all to main field
-    unsigned container_add_bytes = IS_BAM ? 4/*count*/ + 1/*type*/ : 2/*type - eg "i,"*/;
+    unsigned container_add_bytes = IS_BAM ? (4/*count*/ + 1/*type*/) : (2/*type - eg "i,"*/ + 1/*\t or \n*/);
     container_seg (vb, con_ctx, (ContainerP)con, ((char[]){ CON_PX_SEP, type, ',', CON_PX_SEP }), 4, container_add_bytes);
 }
 
 // process an optional subfield, that looks something like MX:Z:abcdefg. We use "MX" for the field name, and
-// the data is abcdefg. The full name "MX:Z:" is stored as part of the OPTIONAL dictionary entry
-DictId sam_seg_optional_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam, 
-                               const char *tag, char bam_type, char array_subtype, 
-                               STRp(value), ValueType numeric) // two options 
+// the data is abcdefg. The full name "MX:Z:" is stored as part of the AUX dictionary entry
+DictId sam_seg_aux_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam, 
+                          const char *tag, char bam_type, char array_subtype, 
+                          STRp(value), ValueType numeric) // two options 
 {
     char sam_type = sam_seg_bam_type_to_sam_type (bam_type);
     char dict_name[6] = { tag[0], tag[1], ':', sam_type, ':', array_subtype }; // last 2 are ignored if not array
-    DictId dict_id = dict_id_make (dict_name, (sam_type=='B' ? 6 : 4), DTYPE_SAM_OPTIONAL); // match dict_id as declared in #pragma GENDICT
+    DictId dict_id = dict_id_make (dict_name, (sam_type=='B' ? 6 : 4), DTYPE_SAM_AUX); // match dict_id as declared in #pragma GENDICT
 
-    unsigned add_bytes = sam_seg_optional_add_bytes (bam_type, value_len, is_bam);
+    unsigned add_bytes = sam_seg_aux_add_bytes (bam_type, value_len, is_bam);
 
     #define SEG_COND(condition, seg) if (condition) { seg; break; } else goto fallback; 
 

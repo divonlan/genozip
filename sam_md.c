@@ -141,7 +141,7 @@ void sam_md_analyze (VBlockSAMP vb, STRp(md), PosType pos, const char *cigar)
     RefLock lock;
 
     if (flag.show_wrong_md)
-        seg_set_last_txt (VB, CTX(OPTION_MD_Z), STRa(md), STORE_NONE); // consumed in sam_seg_SEQ
+        seg_set_last_txt (VB, CTX(OPTION_MD_Z), STRa(md)); // consumed in sam_seg_SEQ
 
     vb->md_verified = true; // initialize optimistically
     
