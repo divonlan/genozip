@@ -52,6 +52,9 @@ For paired-end FASTQ files, it is advisable to compress the two files together, 
     -rwxrwxrwx 1 divon divon 7338338 Aug 21 12:02 myfile-R1.fq.gz
     -rwxrwxrwx 1 divon divon 8232187 Aug 21 12:02 myfile-R2.fq.gz
     
+| Uncompressing both files to their original file names: 
+| ``genounzip myfile-R1+2.fq.genozip``
+
 | Accessing R1 data: ``genocat myfile-R1+2.fq.genozip --component 1``
 | Accessing R2 data: ``genocat myfile-R1+2.fq.genozip --component 2``
 
