@@ -114,6 +114,7 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
 {
     // when generate the items from "TOKEN" - from from field_ctx's dict_id to avoid clashing
     // with qname in case tokenizer is used as a fallback
+    field_ctx->pair_b250 = false; // no pairing in case of tokenizer
     DictId generator_dict_id = dict_id_make ("TOKEN", 5, DTYPE_1); 
     Container con = tokenizer_initialize_container_array (generator_dict_id); 
     Token items[MAX_TOKENS];
@@ -134,6 +135,7 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
         ASSERT (item_ctx, "item_ctx for %s is NULL", dis_dict_id (CI->dict_id).s);
 
         item_ctx->st_did_i = field_ctx->did_i;
+        item_ctx->pair_b250 = false; // we don't pair in tokenizer, only qname
 
         #define MAX_TOKENIZER_DETLA 16384 // arbitrary (Illumina ~= 100-800)
 
