@@ -15,13 +15,15 @@ Details                          Type             Size      .gz Size  .genozip  
 :ref:`details<benchmark-FASTQ1>` FASTQ (Illumina) 294.7 GB  61.2 GB   13.5 GB   21.8X        4.5X         30x Illumina NovaSeq (R1+R2)      Unpublished
 :ref:`details<benchmark-FASTQ2>` FASTQ (Nanopore) 538 MB    268 MB    169.5 MB  3.2X         1.6X         Nanopore (virus) :sup:`1`         `NCBI <https://sra-downloadb.be-md.ncbi.nlm.nih.gov/sos/sra-pub-run-1/ERR2708427/ERR2708427.1>`_
 :ref:`details<benchmark-BAM1>`   BAM (Illumina)   41 GB               10 GB     4.1X                      30x Illumina NovaSeq + Dragen     Unpublished
-:ref:`details<benchmark-BAM2>`   BAM (PacBio)     53.8 GB             28 GB     1.9X                      PacBio CLR (mapped)               `1000 Genozip Project <ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/working/20131209 na12878 pacbio/si/NA12878.pacbio.bwa-sw.20140202.bam>`_
+:ref:`details<benchmark-BAM2>`   BAM (PacBio CLR) 53.8 GB             28 GB     1.9X                      PacBio CLR (mapped)               `1000 Genozip Project <ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/working/20131209 na12878 pacbio/si/NA12878.pacbio.bwa-sw.20140202.bam>`_
+:ref:`details<benchmark-BAM3>`   BAM (PacBio CCS) 73.8 GB             38.7 GB   1.9X                      PacBio CCS + Winnowmap (mapped)   `Telomere-to-telomere consortium <https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/alignments/chm13.draft_v1.1.hifi_20k.wm_2.01.pri.bam>`_
+:ref:`details<benchmark-BAM4>`   BAM (Nanopore)   384.1 GB            209.3 GB  1.8X                      Nanopore + Winnowmap (mapped)     `Telomere-to-telomere consortium <https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/alignments/chm13.draft_v1.1.ont_guppy_3.6.0.wm_2.01.pri.bam>`_
 :ref:`details<benchmark-CRAM1>`  CRAM (Illumina)  15 GB               9.8 GB    1.5X                      Illumina NovaSeq + bwa mem        `The European Bioinformatics Institute <ftp://ftp.sra.ebi.ac.uk/vol1/run/ERR323/ERR3239334/NA12878.final.cram>`_
 :ref:`details<benchmark-VCF1>`   VCF              175.3 GB  27 GB     7.8 GB    22.4X        3.3X         3202 human samples                `1000 Genome Project <ftp://ftp=trace.ncbi.nih.gov/1000genomes/ftp/release/20110521/20201028_CCDG_14151_B01_GRM_WGS_2020=08=05_chr22.recalibrated_variants.vcf.gz>`_
 :ref:`details<benchmark-VCF2>`   VCF              1.2 TB    132.4 GB  31.6 GB   37.9X        4.2X         1135 plant samples                `1001 Genomes - Arabidopsis Thaliana <https://1001genomes.org/data/GMI-MPI/releases/v3.1/1001genomes_snp-short-indel_with_tair10_only_ACGTN.vcf.gz>`_
 :ref:`details<benchmark-VCF3>`   VCF              26 GB     1.9 GB    315.5 MB  84.3X        6.2X         Rice                              `3K Rice Genome <https://3kricegenome.s3.amazonaws.com/9311/IRIS_313-10000.snp.vcf.gz>`_
 :ref:`details<benchmark-FASTA1>` FASTA            1.2 GB    254.9 MB  1.5 MB    838.4X       170X         Covid-19 multi-FASTA :sup:`2`     `coronavirus.innar.com <https://coronavirus.innar.com/coronavirus.unwrapped.fasta.zip>`_
-:ref:`details<benchmark-GFF1>`   GFF3             714 KB              32 KB     22.2X                     GRCh38 issues                     `NCBI <https://ftp.ncbi.nlm.nih.gov/pub/grc/human/GRC/Issue_Mapping/GRCh38.p9_issues.gff3>`_
+:ref:`details<benchmark-GFF1>`   GFF3             3.7 GB    91.8 MB   32.3 MB   117.9X       2.8X         Gene annotation                   `Telomere-to-telomere consortium <https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/annotation/chm13.draft_v1.0.gene_annotation.v4.gff3.gz>`_
 :ref:`details<benchmark-ME1>`    23andMe          23.6 MB             4.2 MB    5.7X                      Consumer DNA test "raw data"      Unpublished
 :ref:`details<benchmark-LOCS1>`  LOCS (Illumina)  32 MB     12MB      5.9 KB    5430X        2006X        Illumina s.locs file              `BaseSpace Demo Data <https://basespace.illumina.com/run/199406228/NVS1p5-10X-Multi-ATAC-001/files/tree>`_
 :ref:`details<benchmark-LOCS2>`  LOCS (Illumina)  6.2 MB    4.4MB     3.3 MB    1.9X         1.3X         Illumina s_X_XXXX.locs file       `BaseSpace Demo Data <https://basespace.illumina.com/run/207258100/MiSeq-v2-0-Sars-CoV-2-samples/files/tree>`_
@@ -41,129 +43,6 @@ Notes:
 
 *The following reports can be produced during compression with* ``genozip --stats`` *or after compression with* ``genocat --stats <myfile>.genozip``.
 
-.. _benchmark-BAM1:
-
-**BAM - 30x Illumina NovaSeq + Dragen:**
-
-::
-
-    BAM file: <redacted>.bam
-    Reference: data/hs37d5.ref.genozip
-    Alignments: 636,660,181   Dictionaries: 161   Vblocks: 389 x 512 MB  Sections: 17340
-    Sorting: Sorted by POS
-    Read name style: Illumina
-    Genozip version: 13.0.2 github
-    Date compressed: 2021-11-09 17:14:19 Cen. Australia Daylight Time
-
-    Sections (sorted by % of genozip file):
-    NAME                   GENOZIP      %      TXT       %   RATIO
-    QUAL                    5.7 GB  57.2%   87.9 GB  45.3%   15.3X
-    QNAME                   1.9 GB  19.3%   23.4 GB  12.1%   12.1X
-    SEQ                   890.2 MB   8.7%   46.5 GB  24.0%   53.5X
-    PNEXT                 441.8 MB   4.3%    2.4 GB   1.2%    5.5X
-    POS                   211.0 MB   2.1%    2.4 GB   1.2%   11.5X
-    CIGAR                 183.2 MB   1.8%    3.8 GB   1.9%   21.1X
-    FLAG                  151.9 MB   1.5%    1.2 GB   0.6%    8.0X
-    XS:i                  139.6 MB   1.4%  973.5 MB   0.5%    7.0X
-    AS:i                  124.6 MB   1.2%    2.4 GB   1.2%   19.5X
-    TLEN                  119.6 MB   1.2%    2.4 GB   1.2%   20.3X
-    XQ:i                   70.4 MB   0.7%  580.0 MB   0.3%    8.2X
-    Other                  41.7 MB   0.4%   10.1 GB   5.2%  248.6X
-    MAPQ                   20.3 MB   0.2%  607.2 MB   0.3%   29.9X
-    SA:Z                    7.8 MB   0.1%   31.2 MB   0.0%    4.0X
-    RNEXT                   6.6 MB   0.1%    2.4 GB   1.2%  367.5X
-    RNAME                  24.4 KB   0.0%    2.4 GB   1.2% 101926.8X
-    NM:i                   12.6 KB   0.0%    2.4 GB   1.2% 196672.2X
-    TXT_HEADER              5.6 KB   0.0%   16.8 KB   0.0%    3.0X
-    BAM_BIN                   43 B   0.0%    1.2 GB   0.6% 29612100.0X
-    RG:Z                      42 B   0.0%    1.2 GB   0.6% 30317150.0X
-    GENOZIP vs BGZF        10.0 GB 100.0%   41.0 GB 100.0%    4.1X
-    GENOZIP vs TXT         10.0 GB 100.0%  194.0 GB 100.0%   19.4X
-
-.. _benchmark-BAM2:
-
-**BAM - PacBio CLR (mapped)**
-
-::
-
-    BAM file: NA12878.pacbio.bwa-sw.20140202.bam
-    Reference: data/hs37d5.ref.genozip
-    Alignments: 25,968,256   Dictionaries: 163   Vblocks: 215 x 512 MB  Sections: 9825
-    Sorting: Sorted by POS
-    Read name style: PacBio-Range
-    Genozip version: 13.0.5 github
-    Date compressed: 2021-11-30 21:05:14 ACDT
-    Command line: genozip --reference hs37d5.ref.genozip --best --stats NA12878.pacbio.bwa-sw.20140202.bam
-
-    Sections (sorted by % of genozip file):
-    NAME                   GENOZIP      %      TXT       %   RATIO
-    QUAL                   19.3 GB  69.2%   41.1 GB  38.3%    2.1X
-    SEQ                     3.7 GB  13.3%   20.6 GB  19.2%    5.6X
-    CIGAR                   2.4 GB   8.6%   22.6 GB  21.1%    9.4X
-    SA:Z                    2.3 GB   8.2%   19.1 GB  17.8%    8.4X
-    QNAME                 103.6 MB   0.4%    1.9 GB   1.8%   18.7X
-    AS:i                   32.0 MB   0.1%   38.0 MB   0.0%    1.2X
-    XS:i                   31.1 MB   0.1%   29.2 MB   0.0%    0.9X
-    POS                    24.5 MB   0.1%   99.1 MB   0.1%    4.0X
-    Other                  11.6 MB   0.0%  520.0 MB   0.5%   44.9X
-    MAPQ                   10.6 MB   0.0%   24.8 MB   0.0%    2.3X
-    FLAG                    7.1 MB   0.0%   49.5 MB   0.0%    6.9X
-    PNEXT                  51.7 KB   0.0%   99.1 MB   0.1% 1962.5X
-    NM:i                   49.2 KB   0.0%   29.9 MB   0.0%  622.7X
-    RNAME                  10.8 KB   0.0%   99.1 MB   0.1% 9369.7X
-    RNEXT                   9.5 KB   0.0%   99.1 MB   0.1% 10686.5X
-    TXT_HEADER              4.0 KB   0.0%   19.7 KB   0.0%    5.0X
-    TLEN                      83 B   0.0%   99.1 MB   0.1% 1251482.2X
-    RG:Z                      56 B   0.0%  396.2 MB   0.4% 7419501.5X
-    PG:Z                      55 B   0.0%  371.5 MB   0.3% 7082251.5X
-    BAM_BIN                   43 B   0.0%   49.5 MB   0.0% 1207825.9X
-    GENOZIP vs BGZF        28.0 GB 100.0%   53.8 GB 100.0%    1.9X
-    GENOZIP vs TXT         28.0 GB 100.0%  107.3 GB 100.0%    3.8X
-
-
-.. _benchmark-CRAM1:
-
-**CRAM - Illumina NovaSeq + bwa mem**
-
-::
-
-    SAM file: NA12878.final.cram
-    Reference: data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
-    Alignments: 768,580,569   Dictionaries: 160   Vblocks: 749 x 512 MB  Sections: 44749
-    Sorting: Sorted by POS
-    Read name style: Illumina
-    Genozip version: 13.0.2 conda
-    Date compressed: 2021-11-09 17:32:34 ACDT
-
-    Sections (sorted by % of genozip file):
-    NAME                   GENOZIP      %      TXT       %   RATIO
-    QUAL                    2.7 GB  27.7%  108.1 GB  28.9%   39.9X
-    QNAME                   2.4 GB  24.7%   27.5 GB   7.4%   11.4X
-    XA:Z                    1.4 GB  14.8%   13.7 GB   3.7%    9.5X
-    SEQ                   925.9 MB   9.3%  108.1 GB  28.9%  119.5X
-    PNEXT                 630.8 MB   6.3%    6.6 GB   1.8%   10.7X
-    XS:i                  305.0 MB   3.1%    2.1 GB   0.6%    7.2X
-    POS                   275.7 MB   2.8%    6.6 GB   1.8%   24.4X
-    RG:Z                  275.0 MB   2.8%   29.3 GB   7.8%  109.3X
-    FLAG                  213.7 MB   2.1%    2.6 GB   0.7%   12.6X
-    AS:i                  129.6 MB   1.3%    2.8 GB   0.8%   22.4X
-    SA:Z                  115.3 MB   1.2%  838.7 MB   0.2%    7.3X
-    MAPQ                  112.9 MB   1.1%    2.1 GB   0.6%   19.1X
-    MC:Z                  106.3 MB   1.1%    3.8 GB   1.0%   36.5X
-    CIGAR                  91.8 MB   0.9%    3.8 GB   1.0%   42.2X
-    MQ:i                   37.0 MB   0.4%    2.1 GB   0.6%   57.5X
-    RNEXT                  20.6 MB   0.2%    1.5 GB   0.4%   76.5X
-    Other                  17.6 MB   0.2%   29.0 GB   7.8% 1692.4X
-    TLEN                   14.0 MB   0.1%    3.2 GB   0.9%  233.7X
-    pa:f                    6.9 MB   0.1%   38.5 MB   0.0%    5.6X
-    MD:Z                    1.2 MB   0.0%    4.0 GB   1.1% 3464.2X
-    RNAME                 374.0 KB   0.0%    4.1 GB   1.1% 11515.0X
-    TXT_HEADER             72.5 KB   0.0%  626.9 KB   0.0%    8.6X
-    NM:i                   66.8 KB   0.0%    1.4 GB   0.4% 22624.0X
-    Reference                112 B   0.0%         -   0.0%    0.0X
-    PG:Z                      55 B   0.0%   10.7 GB   2.9% 209612880.0X
-    BAM_BIN                   43 B   0.0%         -   0.0%    0.0X
-    TOTAL                   9.8 GB 100.0%  374.2 GB 100.0%   38.3X
 
 .. _benchmark-FASTQ1:
 
@@ -212,6 +91,230 @@ Notes:
     LINE3                     54 B   0.0%   14.0 MB   2.6% 271727.3X
     GENOZIP vs BGZF       169.5 MB 100.0%  267.7 MB 100.0%    1.6X
     GENOZIP vs TXT        169.5 MB 100.0%  537.5 MB 100.0%    3.2X
+
+
+.. _benchmark-BAM1:
+
+**BAM - 30x Illumina NovaSeq + Dragen:**
+
+::
+
+    BAM file: <redacted>.bam
+    Reference: data/hs37d5.ref.genozip
+    Alignments: 636,660,181   Dictionaries: 161   Vblocks: 389 x 512 MB  Sections: 17340
+    Sorting: Sorted by POS
+    Read name style: Illumina
+    Genozip version: 13.0.2 github
+    Date compressed: 2021-11-09 17:14:19 Cen. Australia Daylight Time
+
+    Sections (sorted by % of genozip file):
+    NAME                   GENOZIP      %      TXT       %   RATIO
+    QUAL                    5.7 GB  57.2%   87.9 GB  45.3%   15.3X
+    QNAME                   1.9 GB  19.3%   23.4 GB  12.1%   12.1X
+    SEQ                   890.2 MB   8.7%   46.5 GB  24.0%   53.5X
+    PNEXT                 441.8 MB   4.3%    2.4 GB   1.2%    5.5X
+    POS                   211.0 MB   2.1%    2.4 GB   1.2%   11.5X
+    CIGAR                 183.2 MB   1.8%    3.8 GB   1.9%   21.1X
+    FLAG                  151.9 MB   1.5%    1.2 GB   0.6%    8.0X
+    XS:i                  139.6 MB   1.4%  973.5 MB   0.5%    7.0X
+    AS:i                  124.6 MB   1.2%    2.4 GB   1.2%   19.5X
+    TLEN                  119.6 MB   1.2%    2.4 GB   1.2%   20.3X
+    XQ:i                   70.4 MB   0.7%  580.0 MB   0.3%    8.2X
+    Other                  41.7 MB   0.4%   10.1 GB   5.2%  248.6X
+    MAPQ                   20.3 MB   0.2%  607.2 MB   0.3%   29.9X
+    SA:Z                    7.8 MB   0.1%   31.2 MB   0.0%    4.0X
+    RNEXT                   6.6 MB   0.1%    2.4 GB   1.2%  367.5X
+    RNAME                  24.4 KB   0.0%    2.4 GB   1.2% 101926.8X
+    NM:i                   12.6 KB   0.0%    2.4 GB   1.2% 196672.2X
+    TXT_HEADER              5.6 KB   0.0%   16.8 KB   0.0%    3.0X
+    BAM_BIN                   43 B   0.0%    1.2 GB   0.6% 29612100.0X
+    RG:Z                      42 B   0.0%    1.2 GB   0.6% 30317150.0X
+    GENOZIP vs BGZF        10.0 GB 100.0%   41.0 GB 100.0%    4.1X
+    GENOZIP vs TXT         10.0 GB 100.0%  194.0 GB 100.0%   19.4X
+
+
+.. _benchmark-BAM2:
+
+**BAM - PacBio CLR (mapped)**
+
+::
+
+    BAM file: NA12878.pacbio.bwa-sw.20140202.bam
+    Reference: data/hs37d5.ref.genozip
+    Alignments: 25,968,256   Dictionaries: 163   Vblocks: 215 x 512 MB  Sections: 9825
+    Sorting: Sorted by POS
+    Read name style: PacBio-Range
+    Genozip version: 13.0.5 github
+    Date compressed: 2021-11-30 21:05:14 ACDT
+    Command line: genozip --reference hs37d5.ref.genozip --best --stats NA12878.pacbio.bwa-sw.20140202.bam
+
+    Sections (sorted by % of genozip file):
+    NAME                   GENOZIP      %      TXT       %   RATIO
+    QUAL                   19.3 GB  69.2%   41.1 GB  38.3%    2.1X
+    SEQ                     3.7 GB  13.3%   20.6 GB  19.2%    5.6X
+    CIGAR                   2.4 GB   8.6%   22.6 GB  21.1%    9.4X
+    SA:Z                    2.3 GB   8.2%   19.1 GB  17.8%    8.4X
+    QNAME                 103.6 MB   0.4%    1.9 GB   1.8%   18.7X
+    AS:i                   32.0 MB   0.1%   38.0 MB   0.0%    1.2X
+    XS:i                   31.1 MB   0.1%   29.2 MB   0.0%    0.9X
+    POS                    24.5 MB   0.1%   99.1 MB   0.1%    4.0X
+    Other                  11.6 MB   0.0%  520.0 MB   0.5%   44.9X
+    MAPQ                   10.6 MB   0.0%   24.8 MB   0.0%    2.3X
+    FLAG                    7.1 MB   0.0%   49.5 MB   0.0%    6.9X
+    PNEXT                  51.7 KB   0.0%   99.1 MB   0.1% 1962.5X
+    NM:i                   49.2 KB   0.0%   29.9 MB   0.0%  622.7X
+    RNAME                  10.8 KB   0.0%   99.1 MB   0.1% 9369.7X
+    RNEXT                   9.5 KB   0.0%   99.1 MB   0.1% 10686.5X
+    TXT_HEADER              4.0 KB   0.0%   19.7 KB   0.0%    5.0X
+    TLEN                      83 B   0.0%   99.1 MB   0.1% 1251482.2X
+    RG:Z                      56 B   0.0%  396.2 MB   0.4% 7419501.5X
+    PG:Z                      55 B   0.0%  371.5 MB   0.3% 7082251.5X
+    BAM_BIN                   43 B   0.0%   49.5 MB   0.0% 1207825.9X
+    GENOZIP vs BGZF        28.0 GB 100.0%   53.8 GB 100.0%    1.9X
+    GENOZIP vs TXT         28.0 GB 100.0%  107.3 GB 100.0%    3.8X
+
+
+.. _benchmark-BAM3:
+
+**BAM - PacBio CCS (mapped)**
+
+::
+
+    BAM file: chm13.draft_v1.1.hifi_20k.wm_2.01.pri.bam
+    Reference: chm13.draft_v1.1.ref.genozip
+    Alignments: 5,575,318   Dictionaries: 164   Vblocks: 286 x 512 MB  Sections: 11865
+    Sorting: Sorted by POS
+    Read name style: PacBio-Label
+    Genozip version: 13.0.5 conda
+    Date compressed: 2021-12-08 13:35:00 ACDT
+    Command line: genozip -ftw -e chm13.draft_v1.1.ref.genozip --best chm13.draft_v1.1.hifi_20k.wm_2.01.pri.bam
+    
+    Sections (sorted by % of genozip file):
+    NAME                   GENOZIP      %       TXT      %   RATIO
+    QUAL                   38.3 GB  98.9%   93.5 GB  65.5%    2.4X
+    CIGAR                 273.3 MB   0.7%    1.4 GB   1.0%    5.4X
+    SEQ                    75.4 MB   0.2%   46.8 GB  32.7%  635.7X
+    QNAME                  16.7 MB   0.0%  188.1 MB   0.1%   11.2X
+    AS:i                    9.4 MB   0.0%   10.6 MB   0.0%    1.1X
+    ms:i                    9.0 MB   0.0%   10.6 MB   0.0%    1.2X
+    s1:i                    8.2 MB   0.0%   10.6 MB   0.0%    1.3X
+    POS                     7.4 MB   0.0%   21.3 MB   0.0%    2.9X
+    Other                   5.9 MB   0.0%  196.8 MB   0.1%   33.1X
+    cm:i                    5.9 MB   0.0%   10.6 MB   0.0%    1.8X
+    rl:i                    5.4 MB   0.0%    6.9 MB   0.0%    1.3X
+    de:f                    4.0 MB   0.0%   21.3 MB   0.0%    5.3X
+    s2:i                  842.4 KB   0.0%    5.7 MB   0.0%    6.9X
+    FLAG                  721.6 KB   0.0%   10.6 MB   0.0%   15.1X
+    SA:Z                  330.1 KB   0.0%  596.4 KB   0.0%    1.8X
+    MD:Z                   35.2 KB   0.0%  533.8 MB   0.4% 15524.7X
+    MAPQ                   33.7 KB   0.0%    5.3 MB   0.0%  161.6X
+    PNEXT                  32.5 KB   0.0%   21.3 MB   0.0%  670.5X
+    nn:i                   13.2 KB   0.0%    5.3 MB   0.0%  412.3X
+    RNEXT                  12.4 KB   0.0%   21.3 MB   0.0% 1753.8X
+    RNAME                  12.1 KB   0.0%   21.3 MB   0.0% 1801.1X
+    TXT_HEADER              2.3 KB   0.0%   24.6 KB   0.0%   10.8X
+    zd:i                    1.2 KB   0.0%      69 B   0.0%    0.1X
+    tp:A                     233 B   0.0%    5.3 MB   0.0% 23928.4X
+    NM:i                      85 B   0.0%    5.3 MB   0.0% 65785.6X
+    TLEN                      83 B   0.0%   21.3 MB   0.0% 268690.0X
+    BAM_BIN                   43 B   0.0%   10.6 MB   0.0% 259317.1X
+    GENOZIP vs BGZF        38.7 GB 100.0%   73.8 GB 100.0%    1.9X
+    GENOZIP vs TXT         38.7 GB 100.0%  142.8 GB 100.0%    3.7X
+
+
+.. _benchmark-BAM4:
+
+**BAM - Nanopore (mapped)**
+
+::
+
+    BAM file: chm13.draft_v1.1.ont_guppy_3.6.0.wm_2.01.pri.bam
+    Reference: chm13.draft_v1.1.ref.genozip
+    Alignments: 13,364,876   Dictionaries: 168   Vblocks: 1321 x 512 MB  Sections: 65852
+    Sorting: Sorted by POS
+    Sorting: Collated by QNAME
+    Read name style: Nanopore
+    Genozip version: 13.0.6 github
+    Date compressed: 2021-12-08 02:36:21 ACDT
+    Command line: genozip --best -wtf -e chm13.draft_v1.1.ref.genozip chm13.draft_v1.1.ont_guppy_3.6.0.wm_2.01.pri.bam
+
+    Sections (sorted by % of genozip file):
+    NAME                   GENOZIP      %       TXT      %   RATIO
+    QUAL                  186.1 GB  88.9%  351.6 GB  53.3%    1.9X
+    CIGAR                  11.8 GB   5.6%   84.2 GB  12.8%    7.2X
+    SEQ                    11.0 GB   5.3%  175.9 GB  26.6%   15.9X
+    QNAME                 214.8 MB   0.1%  484.3 MB   0.1%    2.3X
+    MD:Z                   39.6 MB   0.0%   46.7 GB   7.1% 1208.4X
+    AS:i                   27.8 MB   0.0%   30.6 MB   0.0%    1.1X
+    SA:Z                   26.9 MB   0.0%  154.8 MB   0.0%    5.8X
+    ms:i                   25.0 MB   0.0%   30.6 MB   0.0%    1.2X
+    s1:i                   21.9 MB   0.0%   23.1 MB   0.0%    1.1X
+    Other                  20.9 MB   0.0%  475.1 MB   0.1%   22.8X
+    de:f                   17.4 MB   0.0%   51.0 MB   0.0%    2.9X
+    cm:i                   16.3 MB   0.0%   18.6 MB   0.0%    1.1X
+    POS                    15.3 MB   0.0%   51.0 MB   0.0%    3.3X
+    CG:B:I                 14.3 MB   0.0%  118.9 MB   0.0%    8.3X
+    rl:i                    6.7 MB   0.0%   13.6 MB   0.0%    2.0X
+    s2:i                    3.7 MB   0.0%   13.4 MB   0.0%    3.6X
+    FLAG                    2.1 MB   0.0%   25.5 MB   0.0%   12.3X
+    MAPQ                    1.6 MB   0.0%   12.7 MB   0.0%    8.0X
+    PNEXT                 167.9 KB   0.0%   51.0 MB   0.0%  311.0X
+    zd:i                  126.6 KB   0.0%  109.7 KB   0.0%    0.9X
+    nn:i                   59.4 KB   0.0%   12.7 MB   0.0%  219.6X
+    RNEXT                  56.9 KB   0.0%   51.0 MB   0.0%  917.7X
+    RNAME                  52.6 KB   0.0%   51.0 MB   0.0%  993.3X
+    NM:i                   39.2 KB   0.0%   21.8 MB   0.0%  569.9X
+    tp:A                   28.1 KB   0.0%   12.7 MB   0.0%  464.4X
+    TXT_HEADER              1.8 KB   0.0%   12.0 KB   0.0%    6.8X
+    TLEN                      83 B   0.0%   51.0 MB   0.0% 644090.4X
+    BAM_BIN                   43 B   0.0%   25.5 MB   0.0% 621622.1X
+    GENOZIP vs BGZF       209.3 GB 100.0%  384.1 GB 100.0%    1.8X
+    GENOZIP vs TXT        209.3 GB 100.0%  660.1 GB 100.0%    3.2X
+
+
+.. _benchmark-CRAM1:
+
+**CRAM - Illumina NovaSeq + bwa mem**
+
+::
+
+    SAM file: NA12878.final.cram
+    Reference: data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
+    Alignments: 768,580,569   Dictionaries: 160   Vblocks: 749 x 512 MB  Sections: 44749
+    Sorting: Sorted by POS
+    Read name style: Illumina
+    Genozip version: 13.0.2 conda
+    Date compressed: 2021-11-09 17:32:34 ACDT
+
+    Sections (sorted by % of genozip file):
+    NAME                   GENOZIP      %      TXT       %   RATIO
+    QUAL                    2.7 GB  27.7%  108.1 GB  28.9%   39.9X
+    QNAME                   2.4 GB  24.7%   27.5 GB   7.4%   11.4X
+    XA:Z                    1.4 GB  14.8%   13.7 GB   3.7%    9.5X
+    SEQ                   925.9 MB   9.3%  108.1 GB  28.9%  119.5X
+    PNEXT                 630.8 MB   6.3%    6.6 GB   1.8%   10.7X
+    XS:i                  305.0 MB   3.1%    2.1 GB   0.6%    7.2X
+    POS                   275.7 MB   2.8%    6.6 GB   1.8%   24.4X
+    RG:Z                  275.0 MB   2.8%   29.3 GB   7.8%  109.3X
+    FLAG                  213.7 MB   2.1%    2.6 GB   0.7%   12.6X
+    AS:i                  129.6 MB   1.3%    2.8 GB   0.8%   22.4X
+    SA:Z                  115.3 MB   1.2%  838.7 MB   0.2%    7.3X
+    MAPQ                  112.9 MB   1.1%    2.1 GB   0.6%   19.1X
+    MC:Z                  106.3 MB   1.1%    3.8 GB   1.0%   36.5X
+    CIGAR                  91.8 MB   0.9%    3.8 GB   1.0%   42.2X
+    MQ:i                   37.0 MB   0.4%    2.1 GB   0.6%   57.5X
+    RNEXT                  20.6 MB   0.2%    1.5 GB   0.4%   76.5X
+    Other                  17.6 MB   0.2%   29.0 GB   7.8% 1692.4X
+    TLEN                   14.0 MB   0.1%    3.2 GB   0.9%  233.7X
+    pa:f                    6.9 MB   0.1%   38.5 MB   0.0%    5.6X
+    MD:Z                    1.2 MB   0.0%    4.0 GB   1.1% 3464.2X
+    RNAME                 374.0 KB   0.0%    4.1 GB   1.1% 11515.0X
+    TXT_HEADER             72.5 KB   0.0%  626.9 KB   0.0%    8.6X
+    NM:i                   66.8 KB   0.0%    1.4 GB   0.4% 22624.0X
+    Reference                112 B   0.0%         -   0.0%    0.0X
+    PG:Z                      55 B   0.0%   10.7 GB   2.9% 209612880.0X
+    BAM_BIN                   43 B   0.0%         -   0.0%    0.0X
+    TOTAL                   9.8 GB 100.0%  374.2 GB 100.0%   38.3X
 
 
 .. _benchmark-VCF1:
@@ -423,36 +526,76 @@ Notes:
 
 .. _benchmark-GFF1:
 
-**GFF3 - GRCh38 issues**
+**GFF3 - Gene annotation**
 
 ::
 
-    GFF3 file: https://ftp.ncbi.nlm.nih.gov/pub/grc/human/GRC/Issue_Mapping/GRCh38.p9_issues.gff3
-    Sequences: 5,256   Dictionaries: 41   Vblocks: 1 x 16 MB  Sections: 36
-    Genozip version: 13.0.2 conda
-    Date compressed: 2021-11-09 19:21:06 ACDT
+    GFF3 file: chm13.draft_v1.0.gene_annotation.v4.gff3.gz
+    Sequences: 3,873,663   Dictionaries: 79   Vblocks: 8 x 512 MB  Sections: 562
+    Genozip version: 13.0.5 conda
+    Date compressed: 2021-12-08 12:07:18 ACDT
+    Command line: genozip -ft --best --stats chm13.draft_v1.0.gene_annotation.v4.gff3.gz
 
     Sections (sorted by % of genozip file):
-    NAME                   GENOZIP      %      TXT       %   RATIO
-    END                    10.1 KB  31.6%   39.9 KB   5.6%    3.9X
-    START                   9.1 KB  28.4%   33.5 KB   4.7%    3.7X
-    Name                    2.9 KB   9.0%   34.6 KB   4.8%   12.0X
-    SEQID                   2.6 KB   8.0%   67.2 KB   9.4%   26.0X
-    Other                   2.1 KB   6.4%         -   0.0%    0.0X
-    fixVersion              1.5 KB   4.6%   42.5 KB   6.0%   29.0X
-    type                    1.0 KB   3.2%   54.1 KB   7.6%   52.1X
-    affectVersion            964 B   2.9%   34.6 KB   4.8%   36.7X
-    status                   717 B   2.2%   44.2 KB   6.2%   63.2X
-    chr                      392 B   1.2%    8.7 KB   1.2%   22.8X
-    TXT_HEADER               389 B   1.2%      41 B   0.0%    0.1X
-    ATTRS                    151 B   0.5%  266.9 KB  37.4% 1810.0X
-    TYPE                      47 B   0.1%   35.9 KB   5.0%  782.8X
-    SOURCE                    44 B   0.1%   20.5 KB   2.9%  477.8X
-    SCORE                     42 B   0.1%   10.3 KB   1.4%  250.3X
-    STRAND                    42 B   0.1%   10.3 KB   1.4%  250.3X
-    PHASE                     42 B   0.1%   10.3 KB   1.4%  250.3X
-    COMMENT                   41 B   0.1%         -   0.0%    0.0X
-    TOTAL                  32.1 KB 100.0%  713.6 KB 100.0%   22.2X
+    NAME                   GENOZIP      %       TXT      %   RATIO
+    ID                      4.5 MB  13.9%   78.6 MB   2.1%   17.5X
+    END                     3.0 MB   9.1%   34.0 MB   0.9%   11.5X
+    alignment_id            2.0 MB   6.1%   69.1 MB   1.8%   35.0X
+    source_transcript       1.9 MB   5.9%   60.8 MB   1.6%   31.9X
+    source_gene_common_n    1.9 MB   5.8%   56.2 MB   1.5%   29.9X
+    START                   1.7 MB   5.2%   34.0 MB   0.9%   20.3X
+    transcript_name         1.7 MB   5.1%   35.9 MB   0.9%   21.7X
+    Parent                  1.6 MB   4.9%   50.9 MB   1.3%   32.1X
+    havana_transcript       1.5 MB   4.7%   64.2 MB   1.7%   42.5X
+    transcript_id           1.3 MB   4.1%   50.9 MB   1.3%   38.6X
+    intron_annotation_su    1.2 MB   3.8%  101.0 MB   2.7%   83.3X
+    exon_anotation_suppo    1.0 MB   3.2%  108.3 MB   2.8%  104.2X
+    protein_id            997.4 KB   3.0%   45.0 MB   1.2%   46.2X
+    adj_stop              825.9 KB   2.5%   22.3 MB   0.6%   27.6X
+    ATTRS                 818.0 KB   2.5%    2.1 GB  56.8% 2711.0X
+    adj_start             804.7 KB   2.4%   22.3 MB   0.6%   28.3X
+    tag                   689.3 KB   2.1%   84.8 MB   2.2%  125.9X
+    transcript_support_l  569.0 KB   1.7%    3.1 MB   0.1%    5.7X
+    transcript_biotype    420.6 KB   1.3%   53.9 MB   1.4%  131.2X
+    Name                  394.6 KB   1.2%   21.8 MB   0.6%   56.6X
+    TYPE                  386.3 KB   1.2%   22.4 MB   0.6%   59.4X
+    gene_name             326.5 KB   1.0%   51.3 MB   1.3%  160.9X
+    PHASE                 321.0 KB   1.0%    7.4 MB   0.2%   23.6X
+    SCORE                 315.6 KB   1.0%    8.1 MB   0.2%   26.2X
+    source_gene           293.2 KB   0.9%   65.8 MB   1.7%  229.7X
+    ccdsid                258.3 KB   0.8%   14.6 MB   0.4%   57.9X
+    havana_gene           241.3 KB   0.7%   71.0 MB   1.9%  301.3X
+    proper_orf            205.7 KB   0.6%   14.9 MB   0.4%   74.4X
+    valid_stop            187.7 KB   0.6%   14.9 MB   0.4%   81.3X
+    level                 176.8 KB   0.5%    3.5 MB   0.1%   20.4X
+    valid_start           170.5 KB   0.5%   14.9 MB   0.4%   89.2X
+    hgnc_id               164.9 KB   0.5%   32.1 MB   0.8%  199.6X
+    gene_id               129.5 KB   0.4%   51.7 MB   1.4%  408.8X
+    frameshift            127.2 KB   0.4%   11.1 MB   0.3%   89.4X
+    unfiltered_paralogy   115.3 KB   0.3%   11.7 MB   0.3%  103.9X
+    paralogy               76.8 KB   0.2%   11.1 MB   0.3%  147.7X
+    transcript_class       76.4 KB   0.2%   30.6 MB   0.8%  409.8X
+    gene_biotype           54.5 KB   0.2%   49.9 MB   1.3%  937.7X
+    SEQID                  45.4 KB   0.1%   20.2 MB   0.5%  456.6X
+    STRAND                 33.0 KB   0.1%    7.4 MB   0.2%  229.2X
+    transcript_modes       32.5 KB   0.1%   29.3 MB   0.8%  921.5X
+    rna_support            31.0 KB   0.1%   10.3 MB   0.3%  340.7X
+    collapsed_gene_names   22.2 KB   0.1%   15.1 MB   0.4%  695.0X
+    collapsed_gene_ids     20.8 KB   0.1%   18.7 MB   0.5%  917.8X
+    gene_alternate_conti   18.2 KB   0.1%    1.6 MB   0.0%   90.2X
+    alternative_source_t    5.7 KB   0.0%   11.1 MB   0.3% 1982.3X
+    ont                     4.6 KB   0.0%  679.7 KB   0.0%  147.0X
+    Other                   1.7 KB   0.0%         -   0.0%    0.0X
+    possible_split_gene_    1.3 KB   0.0%   12.5 KB   0.0%    9.5X
+    novel_5p_cap            1.0 KB   0.0%  394.9 KB   0.0%  383.7X
+    TXT_HEADER               364 B   0.0%      16 B   0.0%    0.0X
+    COMMENT                  328 B   0.0%         -   0.0%    0.0X
+    SOURCE                   160 B   0.0%   14.8 MB   0.4% 97251.2X
+    extra_paralog            159 B   0.0%   18.5 MB   0.5% 121710.3X
+    novel_poly_a             130 B   0.0%  390.6 KB   0.0% 3076.8X
+    reference_support         45 B   0.0%   13.6 MB   0.4% 317191.9X
+    GENOZIP vs GZ          32.3 MB 100.0%   91.8 MB 100.0%    2.8X
+    GENOZIP vs TXT         32.3 MB 100.0%    3.7 GB 100.0%  117.9X
 
 
 .. _benchmark-ME1:
