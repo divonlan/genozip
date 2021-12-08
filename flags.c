@@ -776,7 +776,7 @@ static void flags_verify_pair_rules (unsigned num_files, const char **filenames)
 {
     // ZIP only
     if (command != ZIP) {
-        flag.pair = false;
+        flag.pair = NOT_PAIRED_END;
         return;
     }
 

@@ -95,23 +95,29 @@ static void segconf_set_vb_size (const VBlock *vb, uint64_t curr_vb_size)
         segconf.vb_size = MAX_(segconf.vb_size, VBLOCK_MEMORY_BEST);
 }
 
+static bool segconf_no_recalculate (void)
+{
+    return flag.pair == PAIR_READ_2 // FASTQ: no recalculating for 2nd pair 
+        || flag.rejects_coord;      // DVCF: no recalculating for reject components
+}
+
 void segconf_initialize (void)
 {
+    if (segconf_no_recalculate()) return;
+
     uint64_t save_vb_size = segconf.vb_size;
     segconf = (SegConf){}; // reset for new component
 
     if (z_file->num_txt_components_so_far > 0)
         segconf.vb_size = save_vb_size; // components after first inherit vb_size from first
-        
+
     mutex_initialize (segconf.PL_mux_by_DP_mutex);
 }
 
 // ZIP: Seg a small sample of data of the beginning of the data, to pre-calculate several Seg configuration parameters
 void segconf_calculate (void)
 {
-    if ((flag.pair && z_file->num_txt_components_so_far % 2 == 0) // FASTQ: no recalculating for 2nd pair 
-    ||  flag.rejects_coord)                                       // DVCF: no recalculating for reject components
-        return; // in FASTQ pairs, we only calculate for the first one
+    if (segconf_no_recalculate()) return;
 
     if (TXT_DT(DT_GENERIC)) {                                     // nothing to calculate in generic files    
         segconf.vb_size = VBLOCK_MEMORY_GENERIC;

@@ -50,33 +50,33 @@ static QnameFlavorStruct qf[] = {
 /*  mate   name             example                                   tech     fq_only   con_template     #sp int_items       numeric_items   in-local        hex_items       ord1,2 rng len px_strs{str,str_len,fixed_i}                               */
          { "Illumina-fastq","A00488:61:HMLGNDSXX:4:1101:4345:1000 2:N:0:CTGAAGCT+ATAGAGGC",
                                                                       TECH_ILLUM_7, 1, &con_illumina_7_fq, 7, {1,3,4,5,6,-1}, {-1},           {-1},           {-1},           5,6,   -1,                                                                 },
-    {},  { "Illumina",      "A00488:61:HMLGNDSXX:4:1101:4345:1000",   TECH_ILLUM_7, 0, &con_illumina_7,    6, {1,3,4,5,6,-1}, {-1},           {-1},           {-1},           5,6,   -1,                                                                  },
+    {},  { "Illumina",      "A00488:61:HMLGNDSXX:4:1101:4345:1000",   TECH_ILLUM_7, 0, &con_illumina_7,    6, {1,3,4,5,6,-1}, {-1},           {-1},           {-1},           5,6,   -1,                                                                 },
     {},  { "BGI-E",         "E100020409L1C001R0030000801",            TECH_BGI,     0, &con_bgi_E,         4, {-1},           {0,1,2,3,4,-1}, {-1},           {-1},           4,-1,  -1, 27, { {"E",1,0},  {"L",1,10},{"C",1,12},{"R",1,16},{"",0,20}, {(char[]){CI0_SKIP},0,27} } },
     {},  { "BGI-CL",        "CL100025298L1C002R050_244547",           TECH_BGI,     0, &con_bgi_CL,        5, {-1},           {0,1,2,3,4,-1}, {-1},           {-1},           4,-1,  -1, 0,  { {"CL",2,0}, {"L",1,11},{"C",1,13},{"R",1,17},{"_",1,21} } },
     {},  { "IonTorrent",    "ZEWTM:10130:07001",                      TECH_IONTORR, 0, &con_ion_torrent_3, 2, {-1},           {1,2,-1},       {-1},           {-1},           -1,-1, -1, 17                                                              },
     {},  { "Illumina-old#", "HWI-ST550_0201:3:1101:1626:2216#ACAGTG", TECH_ILLUM_5, 0, &con_illumina_5i,   5, {1,2,3,4,-1},   {-1},           {-1},           {-1},           -1,-1, -1,                                                                 },
-    {},  { "Illumina-old",  "SOLEXA-1GA-1_4_FC20ENL:7:258:737:870",   TECH_ILLUM_5, 0, &con_illumina_5,    4, {1,2,3,4,-1},   {-1},           {-1},           {-1},           -1,-1, -1,                                                                  },
+    {},  { "Illumina-old",  "SOLEXA-1GA-1_4_FC20ENL:7:258:737:870",   TECH_ILLUM_5, 0, &con_illumina_5,    4, {1,2,3,4,-1},   {-1},           {-1},           {-1},           -1,-1, -1,                                                                 },
     {},  { "Roche-454",     "000050_1712_0767",                       TECH_454,     0, &con_roche_454,     2, {-1},           {0,1,2,-1},     {-1},           {-1},           -1,-1, -1, 16, { {"",0,0},{"_",1,6},{"_",1,11},{(char[]){CI0_SKIP},0,16} } },
-    {},  { "Helicos",       "VHE-242383071011-15-1-0-2",              TECH_HELICOS, 0, &con_helicos,       5, {2,3,4,5,-1},   {1,-1},         {-1},           {-1},           -1,-1, -1,                                                                  },
-    {},  { "PacBio-3",      "56cdb76f_70722_4787",                    TECH_PACBIO,  0, &con_pacbio_3,      2, {1,2,-1},       {-1},           {-1},           {0,-1},         -1,-1, -1,                                                                  },
+    {},  { "Helicos",       "VHE-242383071011-15-1-0-2",              TECH_HELICOS, 0, &con_helicos,       5, {2,3,4,5,-1},   {1,-1},         {-1},           {-1},           -1,-1, -1,                                                                 },
+    {},  { "PacBio-3",      "56cdb76f_70722_4787",                    TECH_PACBIO,  0, &con_pacbio_3,      2, {1,2,-1},       {-1},           {-1},           {0,-1},         -1,-1, -1,                                                                 },
     {},  { "PacBio-Range",  "m130802_221257_00127_c100560082550000001823094812221334_s1_p0/128361/872_4288",
                                                                       TECH_PACBIO,  0, &con_pacbio_range,  4, {1,2,3,-1},     {-1},           {-1},           {-1},           1,-1,   3, 0,  { { "m",1,0} }                                              },
     {},  { "PacBio-Label",  "m64136_200621_234916/18/ccs",            TECH_PACBIO,  0, &con_pacbio_label,  3, {1,-1},         {-1},           {-1},           {-1},           1,-1,  -1, 0,  { { "m",1,0} }                                              },
     {},  { "PacBio-Plain",  "m64136_200621_234916/18",                TECH_PACBIO,  0, &con_pacbio_plain,  2, {1,-1},         {-1},           {-1},           {-1},           1,-1,  -1, 0,  { { "m",1,0} }                                              },
     {},  { "Nanopore",      "af84b0c1-6945-4323-9193-d9f6f2c38f9a",   TECH_ONP,     0, &con_nanopore,      4, {-1},           {-1},           {0,1,2,3,4,-1}, {0,1,2,3,4,-1}, -1,-1, -1, 36,                                                             },
     {},  { "Nanopore-ext",  "2a228edf-d8bc-45d4-9c96-3d613b8530dc_Basecall_2D_000_template",                               
-                                                                      TECH_ONP,     0, &con_nanopore_ext,  5, {-1},           {-1},           {0,1,2,3,4,-1}, {0,1,2,3,4,-1}, -1,-1, -1,                                                                  },
+                                                                      TECH_ONP,     0, &con_nanopore_ext,  5, {-1},           {-1},           {0,1,2,3,4,-1}, {0,1,2,3,4,-1}, -1,-1, -1,                                                                 },
     {},  { "NCBI-SRA2+-FQ", "ERR2708427.1.1 51e7525d-fa50-4b1a-ad6d-4f4ae25c1df7 someextradata length=1128",                         
-                                                                      TECH_UNKNOWN, 2, &con_ncbi_sra2P_fq, 6, {2,3,8,-1},     {1, -1},        {-1},           {-1},           3,-1,  -1,                                                                    },
+                                                                      TECH_UNKNOWN, 2, &con_ncbi_sra2P_fq, 6, {2,3,8,-1},     {1, -1},        {-1},           {-1},           3,-1,  -1,                                                                 },
     {},  { "NCBI-SRA+-FQ",  "ERR1111170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template BOWDEN04_20151016_MN15199_FAA67113_BOWDEN04_MdC_MARC_Phase2a_4833_1_ch19_file1_strand length=52",
-                                                                      TECH_UNKNOWN, 2, &con_ncbi_sraP_fq,  5, {2,7,-1},       {1, -1},        {-1},           {-1},           2,-1,  -1,                                                                    },
+                                                                      TECH_UNKNOWN, 2, &con_ncbi_sraP_fq,  5, {2,7,-1},       {1, -1},        {-1},           {-1},           2,-1,  -1,                                                                 },
     {},  { "NCBI-SRA2-FQ",  "ERR2708427.1.1 51e7525d-fa50-4b1a-ad6d-4f4ae25c1df7 length=1128",                         
-                                                                      TECH_UNKNOWN, 2, &con_ncbi_sra2_fq,  5, {2,3,7,-1},     {1, -1},        {-1},           {-1},           3,-1,  -1,                                                                    },
+                                                                      TECH_UNKNOWN, 2, &con_ncbi_sra2_fq,  5, {2,3,7,-1},     {1, -1},        {-1},           {-1},           3,-1,  -1,                                                                 },
     {},  { "NCBI-SRA-FQ",   "ERR1111170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template length=52",
-                                                                      TECH_UNKNOWN, 2, &con_ncbi_sra_fq,   4, {2,6,-1},       {1, -1},        {-1},           {-1},           2,-1,  -1,                                                                    },
-    {},  { "NCBI-SRA2",     "ERR2708427.1.1",                         TECH_UNKNOWN, 0, &con_ncbi_sra2,     2, {2,3,-1},       {1, -1},        {-1},           {-1},           3,-1,  -1,                                                                   },
-    {},  { "NCBI-SRA",      "SRR001666.1",                            TECH_UNKNOWN, 0, &con_ncbi_sra,      1, {2,-1},         {1, -1},        {-1},           {-1},           2,-1,  -1,                                                                  },
-    {},  { "Genozip-opt",   "basic.1",  /* must be last */            TECH_UNKNOWN, 0, &con_genozip_opt,   1, {1,-1},         {-1},           {-1},           {-1},           1,-1,  -1,                                                                   },
+                                                                      TECH_UNKNOWN, 2, &con_ncbi_sra_fq,   4, {2,6,-1},       {1, -1},        {-1},           {-1},           2,-1,  -1,                                                                 },
+    {},  { "NCBI-SRA2",     "ERR2708427.1.1",                         TECH_UNKNOWN, 0, &con_ncbi_sra2,     2, {2,3,-1},       {1, -1},        {-1},           {-1},           3,-1,  -1,                                                                 },
+    {},  { "NCBI-SRA",      "SRR001666.1",                            TECH_UNKNOWN, 0, &con_ncbi_sra,      1, {2,-1},         {1, -1},        {-1},           {-1},           2,-1,  -1,                                                                 },
+    {},  { "Genozip-opt",   "basic.1",  /* must be last */            TECH_UNKNOWN, 0, &con_genozip_opt,   1, {1,-1},         {-1},           {-1},           {-1},           1,-1,  -1,                                                                 },
 };
 
 #define NUM_QFs (sizeof(qf)/sizeof(qf[0]))
@@ -133,7 +133,7 @@ static void qname_genarate_qfs_with_mate (QnameFlavorStruct *qfs)
         slash[0] = '/';
         slash[1] = '1';
     }
-//printf ("xxx %s qfs->fq_only=%u %s\n", qfs->name, qfs->fq_only, qfs->example);    
+
     // case 1: previous item is not fixed - move its separator (possibly 0) to the mate item and make it '/'
     if (qfs->con.items[mate_item_i-1].separator[0] != CI0_FIXED_0_PAD) {
         qfs->con.items[mate_item_i].separator[0] = qfs->con.items[mate_item_i-1].separator[0]; // 0 or ' '
@@ -234,9 +234,17 @@ static void qname_seg_initialize_do (VBlockP vb, QnameFlavor qfs, DidIType qname
 
     // consolidate all items under QNAME in --stats
     ContextP qname_ctxs[num_qname_items+1];
-    for (int i=0; i < num_qname_items+1; i++) 
+    for (int i=0; i < num_qname_items+1; i++) {
         qname_ctxs[i] = CTX(qname_did_i + i);
-    
+
+        if (flag.pair) {
+            qname_ctxs[i]->no_stons = true; // prevent singletons, so pair_1 and pair_2 are comparable based on b250 only
+            
+            if (flag.pair == PAIR_READ_2)
+                ctx_create_node (vb, qname_did_i + i, (char[]){ SNIP_MATE_LOOKUP }, 1); // required by ctx_convert_generated_b250_to_mate_lookup
+        }
+    }
+
     stats_set_consolidation_(vb, st_did_i, num_qname_items+1, qname_ctxs); 
 
     // set STORE_INT as appropriate
@@ -369,14 +377,20 @@ static inline bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, QnameFlavor qfs
     memset (in_local, 0, n_items * sizeof(bool));
     for (unsigned i=0; qfs->in_local[i] != -1; i++)
         in_local[qfs->in_local[i]] = true;
-    
+
+    // seg container
+    if (qfs == segconf.qname_flavor)
+        seg_by_ctx (vb, STRa(qfs->con_snip), qname_ctx, qfs->num_seps + add_additional_bytes); // account for container separators, prefixes and caller-requested add_additional_bytes 
+    else
+        seg_by_ctx (vb, STRa(qfs->con_snip2), qname_ctx, qfs->num_seps + add_additional_bytes); 
+
     int encountered_mName=0, encountered_QNAME2=0;
     for (unsigned item_i=0; item_i < qfs->con.nitems_lo; item_i++) {
 
         // get item ctx - Q?NAME did_i are immediately following QNAME, and QmNAME si the last.
         const ContainerItem *item = &qfs->con.items[item_i];
         
-        // calculate context - a bit messy, but a lot faster than looking up by dict_id
+        // calculate context - a bit messy, but faster than looking up by dict_id
         ContextP item_ctx = (item->dict_id.num == _SAM_QmNAME)   ? (qname_ctx + MAX_QNAME_ITEMS) 
                           : (item->dict_id.num == _FASTQ_QNAME2) ? CTX(FASTQ_QNAME2)
                           :                                        (qname_ctx + 1+item_i - encountered_mName - encountered_QNAME2);
@@ -385,31 +399,37 @@ static inline bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, QnameFlavor qfs
         encountered_QNAME2 |= item->dict_id.num == _FASTQ_QNAME2;
 
         // case: this is the file is sorted by qname - delta against previous
-        if ((item_i == qfs->ordered_item1 || item_i == qfs->ordered_item2) && !segconf.sam_is_sorted && str_get_int_dec (STRi(item, item_i), (uint64_t*)&value)) 
+        if ((item_i == qfs->ordered_item1 || item_i == qfs->ordered_item2) && 
+            !segconf.sam_is_sorted && 
+            str_get_int_dec (STRi(item, item_i), (uint64_t*)&value))
+
             seg_self_delta (vb, item_ctx, value, item_lens[item_i]);
         
         // case: end-of-range item, seg as delta vs previous item which is start-of-range
         else if (qfs->range_end_item == item_i &&
+                 !flag.pair && // we don't use delta against other if we're pairing - too complicated
                  str_get_int (STRi(item, item_i), &value) && 
                  str_get_int (STRi(item, item_i-1), &prev_value)) {
-            SNIP(50);
+            SNIP(32);
             seg_prepare_snip_other (SNIP_OTHER_DELTA, qfs->con.items[qfs->range_end_item-1].dict_id, true, value - prev_value, snip);
             seg_by_ctx (vb, STRa(snip), item_ctx, item_lens[item_i]);      
         }
 
-        else if ((is_int[item_i] || is_numeric[item_i]) && in_local[item_i])
-            seg_integer_or_not (vb, item_ctx, STRi(item, item_i), item_lens[item_i]);
+        else if (in_local[item_i] && !flag.pair) { // note: we can't store in local if pairing        
+            if (is_int[item_i] || is_numeric[item_i])
+                seg_integer_or_not (vb, item_ctx, STRi(item, item_i), item_lens[item_i]);
 
-        else if (in_local[item_i])
-            seg_add_to_local_text (vb, item_ctx, STRi(item, item_i), true, item_lens[item_i]);
+            else 
+                seg_add_to_local_text (vb, item_ctx, STRi(item, item_i), true, item_lens[item_i]);
+        }
 
         // TO DO - add field xor_diff allowing specifying xor_diff method (if we find a case where its useful)
-        // else if (xor_diff[item_i]) {
-        //     seg_xor_diff (vb, item_ctx, STRi(item, item_i), item_ctx->flags.all_the_same, item_lens[item_i]);
+        // else if (xor_diff[item_i] && !flag.pair) {
+        //    seg_xor_diff (vb, item_ctx, STRi(item, item_i), item_ctx->flags.all_the_same, item_lens[item_i]);
         //     seg_set_last_txt (vb, item_ctx, STRi(item, item_i));
         // }
         
-        else if (item_i == qfs->qname2 && segconf.qname_flavor2)
+        else if (item_i == qfs->qname2 && segconf.qname_flavor2) 
             qname_seg_qf (vb, CTX (FASTQ_QNAME2), segconf.qname_flavor2, STRi(item, item_i), 0);
 
         else if (item->separator[0] == CI0_SKIP)
@@ -417,14 +437,8 @@ static inline bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, QnameFlavor qfs
 
         // case: textual item
         else
-            seg_by_ctx (vb, STRi(item, item_i), item_ctx, item_lens[item_i]);      
+            seg_by_ctx (vb, STRi(item, item_i), item_ctx, item_lens[item_i]);   
     }
-
-    // seg container
-    if (qfs == segconf.qname_flavor)
-        seg_by_ctx (vb, STRa(qfs->con_snip), qname_ctx, qfs->num_seps + add_additional_bytes); // account for container separators, prefixes and caller-requested add_additional_bytes 
-    else
-        seg_by_ctx (vb, STRa(qfs->con_snip2), qname_ctx, qfs->num_seps + add_additional_bytes); 
 
     return true;
 }

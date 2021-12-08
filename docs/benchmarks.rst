@@ -12,7 +12,7 @@ As can be appreciated from the :ref:`detailed compression reports<benchmark-deta
 ================================ ================ ========= ========= ========= ============ ============ ================================= ==============================
 Details                          Type             Size      .gz Size  .genozip  Genozip gain Gain vs .gz  Data                              Link to data
 ================================ ================ ========= ========= ========= ============ ============ ================================= ==============================
-:ref:`details<benchmark-FASTQ1>` FASTQ (Illumina) 294.7 GB  61.2 GB   14.2 GB   20.7X        4.3X         30x Illumina NovaSeq (R1+R2)      Unpublished
+:ref:`details<benchmark-FASTQ1>` FASTQ (Illumina) 294.7 GB  61.2 GB   13.5 GB   21.8X        4.5X         30x Illumina NovaSeq (R1+R2)      Unpublished
 :ref:`details<benchmark-FASTQ2>` FASTQ (Nanopore) 538 MB    268 MB    169.5 MB  3.2X         1.6X         Nanopore (virus) :sup:`1`         `NCBI <https://sra-downloadb.be-md.ncbi.nlm.nih.gov/sos/sra-pub-run-1/ERR2708427/ERR2708427.1>`_
 :ref:`details<benchmark-BAM1>`   BAM (Illumina)   41 GB               10 GB     4.1X                      30x Illumina NovaSeq + Dragen     Unpublished
 :ref:`details<benchmark-BAM2>`   BAM (PacBio)     53.8 GB             28 GB     1.9X                      PacBio CLR (mapped)               `1000 Genozip Project <ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/working/20131209 na12878 pacbio/si/NA12878.pacbio.bwa-sw.20140202.bam>`_
@@ -172,22 +172,22 @@ Notes:
 ::
 
     FASTQ files (paired): <redacted>_R1_001.fastq.gz <redacted>_R2_001.fastq.gz
-    Reference: GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
-    Sequences: 860,000,926   Dictionaries: 23   Vblocks: 590 x 512 MB  Sections: 11689
+    Reference: hs37d5.ref.genozip
+    Sequences: 860,000,926   Dictionaries: 36   Vblocks: 590 x 512 MB  Sections: 10823
     Read name style: Illumina-fastq
-    Genozip version: 13.0.2 conda
-    Date compressed: 2021-11-09 16:57:31 ACDT
+    Genozip version: 13.0.6 github
+    Date compressed: 2021-12-08 00:49:27 ACDT
+    Command line: genozip --best --pair -ft -e hs37d5.ref.genozip --stats <redacted>_R1_001.fastq.gz <redacted>_R2_001.fastq.gz
 
     Sections (sorted by % of genozip file):
-    NAME                   GENOZIP      %      TXT       %   RATIO
-    QUAL                    7.7 GB  54.1%  118.7 GB  40.3%   15.4X
-    SEQ                     5.2 GB  36.8%  118.7 GB  40.3%   22.7X
-    DESC                    1.3 GB   9.1%   52.4 GB  17.8%   40.4X
-    Other                  73.3 KB   0.0%    4.8 GB   1.6% 68760.6X
+    NAME                   GENOZIP      %       TXT      %   RATIO
+    QUAL                    7.7 GB  56.9%  118.7 GB  40.3%   15.4X
+    SEQ                     5.2 GB  38.1%  118.7 GB  40.3%   23.0X
+    DESC                  682.4 MB   4.9%   52.4 GB  17.8%   78.7X
+    Other                  71.1 KB   0.0%    4.8 GB   1.6% 70888.0X
     LINE3                  23.6 KB   0.0%         -   0.0%    0.0X
-    TXT_HEADER               696 B   0.0%         -   0.0%    0.0X
-    GENOZIP vs BGZF        14.2 GB 100.0%   61.2 GB 100.0%    4.3X
-    GENOZIP vs TXT         14.2 GB 100.0%  294.7 GB 100.0%   20.7X
+    GENOZIP vs BGZF        13.5 GB 100.0%   61.2 GB 100.0%    4.5X
+    GENOZIP vs TXT         13.5 GB 100.0%  294.7 GB 100.0%   21.8X
 
 
 .. _benchmark-FASTQ2:

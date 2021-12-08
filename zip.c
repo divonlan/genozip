@@ -194,6 +194,15 @@ static void zip_generate_b250 (VBlock *vb, Context *ctx)
     for (uint64_t word_i=0; word_i < b250_len; word_i++) 
         zip_generate_one_b250 (vb, ctx, word_i, b250[word_i], &ctx->b250, &prev, show);
 
+    // in case we are pairing b250 - check if entire section is identical - and reduce it to all-the-same SNIP_MATE_LOOKUP if it is
+    if (ctx->pair_b250 && !ctx->flags.all_the_same &&
+        ctx->pair.len == ctx->b250.len && !memcmp (ctx->b250.data, ctx->pair.data, ctx->b250.len)) {
+        ctx_convert_generated_b250_to_mate_lookup (vb, ctx);
+        if (flag.debug_generate) iprintf ("%s.b250 vb_i=%u is all_the_same=1 mate_lookup=1\n", ctx->tag_name, vb->vblock_i);
+    }
+    else
+        ctx->pair_b250 = false;
+    
     if (show) {
         bufprintf (vb, &vb->show_b250_buf, "%s", "\n");
         iprintf ("%.*s", (uint32_t)vb->show_b250_buf.len, vb->show_b250_buf.data);
@@ -413,7 +422,7 @@ static void zip_generate_local (VBlockP vb, ContextP ctx)
             default           : break;        
         }
     }
-    
+
     codec_assign_best_codec (vb, ctx, NULL, SEC_LOCAL);
 
     if (flag.debug_generate) iprintf ("%s.local in vb_i=%u ltype=%s len=%"PRIu64" codec=%s\n", 

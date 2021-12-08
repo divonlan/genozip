@@ -848,7 +848,6 @@ void seg_xor_diff (VBlockP vb, ContextP ctx, STRp(value), bool no_xor_if_same, u
         seg_by_ctx (vb, STRa(value), ctx, add_bytes);
 }
 
-//DESC                   13.4 KB   0.5%   85.3 KB   1.2%    6.4X xxx
 static void seg_set_hash_hints (VBlock *vb, int third_num)
 {
     if (third_num == 1) 

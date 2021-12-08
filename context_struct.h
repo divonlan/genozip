@@ -77,7 +77,6 @@ typedef struct Context {
                                // PIZ: pair local data is loaded to context.pair
     bool pair_b250;            // ZIP: this is the 2nd file of a pair - compare vs the first file, and set flags.paired in the header of SEC_B250
                                // PIZ: pair b250 data is loaded to context.pair
-    bool stop_pairing;         // this is the 2nd file of a pair - don't use SNIP_MATE_LOOKUP/DELTA anymore until the end of this VB
     bool no_callback;          // don't use callback for compressing, despite it being defined
     bool local_is_lten;        // if true local data is LTEN, otherwise it is the machine (native) endianity
     bool local_param;          // copy local.param to SectionHeaderCtx

@@ -246,11 +246,11 @@ void hash_alloc_global (ContextP zctx, uint32_t estimated_entries)
 // creates a node in the hash table, unless the snip is already there. 
 // the old node is in node, and NULL if its a new node.
 // returns the node_index (positive if in nodes and negative-2 if in ston_nodes - the singleton buffer)
-WordIndex hash_global_get_entry (Context *zctx, const char *snip, unsigned snip_len, HashGlobalGetEntryMode mode,
+WordIndex hash_global_get_entry (Context *zctx, STRp(snip), HashGlobalGetEntryMode mode,
                                  CtxNode **old_node)        // out - node if node is found, NULL if not
 {
     GlobalHashEnt g_head, *g_hashent = &g_head;
-    g_hashent->next = hash_do (zctx->global_hash_prime, snip, snip_len); // entry in hash table determined by hash function on snip
+    g_hashent->next = hash_do (zctx->global_hash_prime, STRa(snip)); // entry in hash table determined by hash function on snip
     int32_t hashent_i = NO_NEXT; // squash compiler warning (note: global hash table is always allocated in the first merge)
     bool singleton_encountered = false;
 
@@ -280,7 +280,7 @@ WordIndex hash_global_get_entry (Context *zctx, const char *snip, unsigned snip_
             return g_hashent->node_index;
         }
 
-        if (old_node) {  // if node=NULL, caller is telling us it is not in MTF for sure
+        if (old_node) {  // if node=NULL, caller is telling us it is not in nodes for sure
             const char *snip_in_dict;
             uint32_t snip_in_dict_len;
 

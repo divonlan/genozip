@@ -209,6 +209,7 @@ void sam_seg_initialize (VBlock *vb)
     // create XA_STRAND nodes (nodes will be deleted in sam_seg_finalize if not used)
     ctx_create_node (vb, OPTION_XA_STRAND, cSTR("-"));
     ctx_create_node (vb, OPTION_XA_STRAND, cSTR("+"));
+    CTX(OPTION_XA_STRAND)->no_vb1_sort = true; // keep them in this ^ order
 
     // create an "all the same" node for SAM_MC_Z
     ctx_create_node (vb, SAM_MC_Z, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_CONSUME_MC_Z }, 2);

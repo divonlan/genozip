@@ -127,6 +127,7 @@ extern void ctx_merge_in_vb_ctx (VBlockP vb);
 extern void ctx_substract_txt_len (VBlockP vb, ContextP vctx);
 extern void ctx_add_compressor_time_to_zf_ctx (VBlockP vb);
 extern void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vctx, bool is_lcodec);
+extern void ctx_convert_generated_b250_to_mate_lookup (VBlockP vb, ContextP vctx);
 
 extern ContextP ctx_get_unmapped_ctx (ContextP contexts, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_contexts, DictId dict_id, STRp(tag_name));
 
@@ -190,7 +191,6 @@ extern bool ctx_is_show_dict_id (DictId dict_id);
 extern CtxNode *ctx_get_node_by_word_index (ConstContextP ctx, WordIndex word_index);
 extern const char *ctx_get_snip_by_word_index (ConstContextP ctx, WordIndex word_index, pSTRp(snip));
                                                
-
 extern const char *ctx_get_vb_snip_ex (ConstContextP vctx, WordIndex vb_node_index, pSTRp(snip)); 
 static inline const char *ctx_get_vb_snip (ConstContextP vctx, WordIndex vb_node_index) { return ctx_get_vb_snip_ex (vctx, vb_node_index, 0, 0); }
  

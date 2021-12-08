@@ -261,7 +261,7 @@ static WordIndex ctx_commit_node (VBlock *vb, Context *zctx, Context *vctx, STRp
     bool is_singleton_in_vb = (count == 1 && ctx_can_have_singletons (vctx)); // is singleton in this VB
 
     // attempt to get the node from the hash table 
-    WordIndex node_index = hash_global_get_entry (zctx, snip, snip_len, 
+    WordIndex node_index = hash_global_get_entry (zctx, STRa(snip), 
                                                   is_singleton_in_vb ? HASH_NEW_OK_SINGLETON_IN_VB : HASH_NEW_OK_NOT_SINGLETON, node);
 
     // case: existing non-singleton node. Possibly it was a singleton node before, that thanks to us hash_global_get_entry
@@ -318,6 +318,24 @@ static WordIndex ctx_commit_node (VBlock *vb, Context *zctx, Context *vctx, STRp
 
         return node_index; // >= 0
     }
+}
+
+// Make ctx an "all-the-same" with SNIP_MATE_LOOKUP. Runs during generate.
+void ctx_convert_generated_b250_to_mate_lookup (VBlockP vb, ContextP vctx)
+{
+    Context *zctx  = ctx_get_zctx_from_vctx (vctx);
+    ASSERTNOTNULL (zctx);
+
+    // ctx_create_node MUST be run for SNIP_MATE_LOOKUP in seg_initialize, so here we know it exists
+    CtxNode *node;
+    WordIndex word_index = hash_global_get_entry (zctx, (char[]){ SNIP_MATE_LOOKUP }, 1, HASH_READ_ONLY, &node);
+    ASSERT (word_index != WORD_INDEX_NONE, "SNIP_MATE_LOOKUP node not found in ctx=%s - expected it to be created in seg_initialize", vctx->tag_name);
+
+    vctx->flags.all_the_same = true;
+
+    Base250 b250 = base250_encode (word_index);
+    vctx->b250.len = base250_len (b250.encoded.numerals);
+    memcpy (vctx->b250.data, b250.encoded.numerals, vctx->b250.len);
 }
 
 // Seg: inserts snip into the hash, nodes and dictionary, if it was not already there, and returns its node index.
@@ -896,13 +914,13 @@ static bool ctx_merge_in_one_vctx (VBlock *vb, ContextP vctx)
 
         // use evb and not vb because zf_context is z_file (which belongs to evb)
         WordIndex zf_node_index = 
-            ctx_commit_node (vb, zctx, vctx, snip, vb_node->snip_len, count, &zf_node, &is_new);
+            ctx_commit_node (vb, zctx, vctx, snip, vb_node->snip_len, count, &zf_node, &is_new); // also allocs nodes, counts and chrom2ref_map
 
         ASSERT (zf_node_index >= 0 && zf_node_index < zctx->nodes.len, 
                 "zf_node_index=%d out of range - len=%i", zf_node_index, (uint32_t)vctx->nodes.len);
 
         if (has_count) 
-            *ENT (int64_t, zctx->counts, zf_node_index) += *ENT (int64_t, vctx->counts, ol_len + i); // also allocs nodes, counts and chrom2ref_map
+            *ENT (int64_t, zctx->counts, zf_node_index) += count; 
 
         // set word_index to be indexing the global dict - to be used by vcf_zip_generate_genotype_one_section() and zip_generate_b250_section()
         if (is_new) {
@@ -1270,7 +1288,7 @@ void ctx_free_context (Context *ctx, DidIType did_i)
     ctx->pair_b250_iter = (SnipIterator){};
     ctx->lcodec = ctx->bcodec = ctx->lsubcodec_piz = 0;
 
-    ctx->no_stons = ctx->pair_local = ctx->pair_b250 = ctx->stop_pairing = ctx->no_callback = ctx->line_is_luft_trans =
+    ctx->no_stons = ctx->pair_local = ctx->pair_b250 = ctx->no_callback = ctx->line_is_luft_trans =
     ctx->local_param = ctx->no_vb1_sort = ctx->local_always = ctx->counts_section = ctx->no_drop_b250 = 
     ctx->is_frozen = ctx->please_remove_dict = ctx->local_is_lten = 0;
     ctx->dynamic_size_local = 0;

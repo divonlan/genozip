@@ -98,6 +98,7 @@ void vcf_seg_initialize (VBlock *vb_)
     CTX(VCF_oCHROM)->  no_vb1_sort = true; // indices need to remain as in the Chain file
     CTX(VCF_oSTATUS)-> no_vb1_sort = true; // indices need to remaining matching to LiftOverStatus
     CTX(VCF_COORDS)->  no_vb1_sort = true; // indices need to remaining matching to Coords
+    CTX(VCF_oXSTRAND)->no_vb1_sort = true; // indices need to order of ctx_create_node
 
     CTX(VCF_oSTATUS)-> flags.store = STORE_INDEX;
     CTX(VCF_COORDS)->  flags.store = STORE_INDEX;
