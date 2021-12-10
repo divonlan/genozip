@@ -714,23 +714,23 @@ bool buf_mmap_do (VBlock *vb, Buffer *buf, const char *filename,
 #ifdef _WIN32
     HANDLE file = (HANDLE)_get_osfhandle (fd);
     buf->param = (int64_t)CreateFileMapping (file, NULL, PAGE_WRITECOPY, file_size >> 32, file_size & 0xffffffff, NULL);
-    ASSERTGOTO (buf->param, "Error in buf_mmap of %s file_size=%"PRIu64": CreateFileMapping failed: %s", filename, file_size, str_win_error());
+    ASSERTGOTO (buf->param, "Failed buf_mmap of %s file_size=%"PRIu64": CreateFileMapping failed: %s", filename, file_size, str_win_error());
     
     // note that mmap'ed buffers include the Buffer 
     buf->memory = MapViewOfFile ((HANDLE)buf->param, read_only_buffer ? FILE_MAP_READ : FILE_MAP_COPY, 0, 0, file_size);
-    ASSERTGOTO (buf->memory, "Error in buf_mmap of %s file_size=%"PRIu64": MapViewOfFile failed: %s", filename, file_size, str_win_error());
+    ASSERTGOTO (buf->memory, "Failed buf_mmap of %s file_size=%"PRIu64": MapViewOfFile failed: %s", filename, file_size, str_win_error());
 
 #else
     buf->memory = mmap (NULL, file_size, PROT_READ | (read_only_buffer ? 0 : PROT_WRITE), MAP_PRIVATE, fd, 0);
-    ASSERT (buf->memory != MAP_FAILED, "Error in buf_mmap of %s file_size=%"PRIu64": mmap failed: %s", filename, file_size, strerror (errno));
+    ASSERT (buf->memory != MAP_FAILED, "Failed buf_mmap of %s file_size=%"PRIu64": mmap failed: %s", filename, file_size, strerror (errno));
 #endif
     close (fd);
     fd=-1;
 
     // verify buffer integrity
     buf->data = buf->memory + sizeof (uint64_t);
-    ASSERTGOTO (*(uint64_t *)(buf->memory) == UNDERFLOW_TRAP, "Error in buf_mmap of %s: mmap'ed buffer has corrupt underflow trap", filename);
-    ASSERTGOTO (*(uint64_t *)(buf->data + buf->size) == OVERFLOW_TRAP, "Error in buf_mmap of %s: mmap'ed buffer has corrupt overflow trap - possibly file is trucated", filename);
+    ASSERTGOTO (*(uint64_t *)(buf->memory) == UNDERFLOW_TRAP, "Failed buf_mmap of %s: mmap'ed buffer has corrupt underflow trap", filename);
+    ASSERTGOTO (*(uint64_t *)(buf->data + buf->size) == OVERFLOW_TRAP, "Failed buf_mmap of %s: mmap'ed buffer has corrupt overflow trap - possibly file is trucated", filename);
 
     // reset overlay counter    
     if (!read_only_buffer)

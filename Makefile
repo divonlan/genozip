@@ -312,15 +312,18 @@ clean: clean-docs
 
 .PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch docs testfiles test-backup genozip-linux-x86_64/clean genozip-prod genozip-prod.exe dict_id_gen$(EXE) push-build
 
+# builds prod for local OS
 genozip-prod$(EXE): 
 	@(cd ../genozip-prod ; git stash ; git pull ; rm -Rf $(OBJDIR) ; make -j clean ; touch dict_id_gen.h ; make -j)
 	@cp ../genozip-prod/genozip$(EXE) genozip-prod$(EXE)
+	@cp ../genozip-prod/genozip$(EXE) private/releases/genozip-$(version)$(EXE)
 	@cp ../genozip-prod/genounzip$(EXE) genounzip-prod$(EXE)
 	@cp ../genozip-prod/genocat$(EXE) genocat-prod$(EXE)
 
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
 ifeq ($(OS),Windows_NT)
 
+# When running on Windows, builds prod for Linux
 genozip-prod:
 	@run-on-wsl.sh make genozip-prod
 

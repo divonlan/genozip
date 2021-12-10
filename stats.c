@@ -77,12 +77,12 @@ static void stats_output_file_metadata (Buffer *buf)
                    (int)z_file->bound_txt_names.len, z_file->bound_txt_names.data);
     
     if (flag.reference == REF_MAKE_CHAIN) {
-        bufprintf (evb, buf, "PRIM reference: %s\n", ref_get_filename (prim_ref));
-        bufprintf (evb, buf, "LUFT reference: %s\n", ref_get_filename (gref));
+        bufprintf (evb, buf, "PRIM reference: %s MD5=%s genozip_version=%u\n", ref_get_filename (prim_ref), digest_display (ref_get_file_md5 (prim_ref)).s, ref_get_genozip_version (prim_ref));
+        bufprintf (evb, buf, "LUFT reference: %s MD5=%s genozip_version=%u\n", ref_get_filename (gref), digest_display (ref_get_file_md5 (gref)).s, ref_get_genozip_version (gref));
     }
 
     else if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE || flag.reference == REF_LIFTOVER) 
-        bufprintf (evb, buf, "Reference: %s\n", ref_get_filename (gref));
+        bufprintf (evb, buf, "Reference: %s MD5=%s genozip_version=%u\n", ref_get_filename (gref), digest_display (ref_get_file_md5 (gref)).s, ref_get_genozip_version (gref));
 
     if (Z_DT(DT_VCF)) 
         bufprintf (evb, buf, "Samples: %u   ", vcf_header_get_num_samples());

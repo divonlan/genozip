@@ -774,9 +774,9 @@ batch_grep_count_lines()
 batch_backward_compatability()
 {
     batch_print_header
-    local files=`ls $TESTDIR/back-compat/[0-9]*/*.genozip` 
+    local files=( `ls $TESTDIR/back-compat/[0-9]*/*.genozip` )
     local file
-    for file in $files; do
+    for file in ${files[@]}; do
         test_backward_compatability $file
     done
 }
@@ -827,12 +827,12 @@ batch_real_world_1() # $1 extra genozip argument
                    test.*txt* test.*kraken* | \
                    grep -v "$filter_out" | grep -v .genozip` )
 
-    for f in $files; do rm -f ${f}.genozip; done
+    for f in ${files[@]}; do rm -f ${f}.genozip; done
 
     echo "subsets of real world files (without reference)"
     test_standard "-mf $1" " " ${files[*]}
 
-    for f in $files; do rm -f ${f}.genozip; done
+    for f in ${files[@]}; do rm -f ${f}.genozip; done
 }
 
 batch_real_world_1_backcomp()
@@ -881,7 +881,7 @@ batch_real_world_with_ref() # $1 extra genozip argument
     test_standard "-mf $1 -e $GRCh38" " " ${files38[*]}
     test_standard "-mf $1 -e $T2T1_1" " " ${filesT2T1_1[*]}
 
-    for f in $files37 $files38 $filesT2T1_1 test.GRCh38_to_GRCh37.chain; do rm -f ${TESTDIR}/${f}.genozip ; done
+    for f in ${files37[@]} ${files38[@]} ${filesT2T1_1[@]} test.GRCh38_to_GRCh37.chain; do rm -f ${TESTDIR}/${f}.genozip ; done
 }
 
 
@@ -893,28 +893,28 @@ batch_real_world_with_ref_backcomp()
 
     # with a reference
     local files37=( test.IonXpress.sam \
-                  test.human.fq.gz test.human2.bam test.human2.sam test.pacbio.clr.bam \
-                  test.human2-R1.100K.fq.bz2 test.pacbio.ccs.10k.sam \
-                  test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq test.pacbio.10k.hg19.sam.gz \
-                  test.human2.filtered.snp.vcf )
+                    test.human.fq.gz test.human2.bam test.human2.sam test.pacbio.clr.bam \
+                    test.human2-R1.100K.fq.bz2 test.pacbio.ccs.10k.sam \
+                    test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq test.pacbio.10k.hg19.sam.gz \
+                    test.human2.filtered.snp.vcf )
 
     local files38=( test.1KG-38.vcf.gz )
 
     local filesT2T1_1=( test.nanopore.t2t_v1_1.bam )
 
-    for f in $files37; do 
+    for f in ${files37[@]}; do 
         test_header "$f - backward compatability with prod (with reference) - 37"
         $genozip_prod private/test/$f -mf -e $hs37d5 -o $output || exit 1
         $genounzip -t $output || exit 1
     done
 
-    for f in $files38; do 
+    for f in ${files38[@]}; do 
         test_header "$f - backward compatability with prod (with reference) - 38"
         $genozip_prod private/test/$f -mf -e $GRCh38 -o $output || exit 1
         $genounzip -t $output || exit 1
     done
 
-    for f in $filesT2T1_1; do 
+    for f in ${filesT2T1_1[@]}; do 
         test_header "$f - backward compatability with prod (with reference) - T2T"
         $genozip_prod private/test/$f -mf -e $T2T1_1 -o $output || exit 1
         $genounzip -t $output || exit 1
@@ -946,7 +946,7 @@ batch_real_world_small_vbs()
     echo "subsets of real world files (lots of small VBs -B1)"
     test_standard "-mf $1 -B1" " " ${files[*]}
 
-    for f in $files; do rm -f ${f}.genozip; done
+    for f in ${files[@]}; do rm -f ${f}.genozip; done
 }
 
 batch_multiseq()
@@ -1073,6 +1073,36 @@ batch_make_reference()
 
     echo "unaligned SAM with --REFERENCE - from stdin"
     test_redirected basic-unaligned.sam "$REF"
+
+    #cleanup - no cleanup, we need the reference for batch_reference_backcomp
+}
+
+# compress with prod and prod-created ref file, uncompress with new version and new version-created ref file
+# ref files are expected have the same MD5
+batch_reference_backcomp()
+{
+    local fa_file=data/GRCh38_full_analysis_set_plus_decoy_hla.fa.gz 
+    local ref_file=$OUTDIR/output.ref.genozip
+    local prod_ref_file=$OUTDIR/output.prod.ref.genozip
+
+    # new ref file normally created by batch_make_reference, but we create if for some reason its not
+    if [ ! -f $ref_file ]; then
+        echo "Making reference"
+        $genozip --make-reference $fa_file --force -o $ref_file || exit 1
+    fi
+
+    if [ ! -f $prod_ref_file ]; then
+        echo "Making prod reference"
+        $genozip_prod --make-reference $fa_file --force -o $prod_ref_file || exit 1
+    fi
+
+    local files38=( test.human.fq.gz test.human-collated.sam test.1KG-38.vcf.gz )
+
+    for f in ${files38[@]}; do 
+        test_header "$f - reference file backward compatability with prod"
+        $genozip_prod private/test/$f -mf -e $prod_ref_file -o $output || exit 1
+        $genounzip -t $output -e $ref_file || exit 1
+    done
 
     cleanup
 }
@@ -1259,6 +1289,7 @@ if (( $1 <= 45 )) ; then  batch_reference_fastq        ; fi
 if (( $1 <= 46 )) ; then  batch_reference_sam          ; fi
 if (( $1 <= 47 )) ; then  batch_reference_vcf          ; fi
 if (( $1 <= 48 )) ; then  batch_make_reference         ; fi
-if (( $1 <= 49 )) ; then  batch_prod_compatability     ; fi
+if (( $1 <= 49 )) ; then  batch_reference_backcomp     ; fi
+if (( $1 <= 50 )) ; then  batch_prod_compatability     ; fi
 
 printf "\nALL GOOD!\n"

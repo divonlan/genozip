@@ -426,7 +426,7 @@ ZEXTERN int ZEXPORT gzinject OF((gzFile file, const unsigned char *injection, uI
 
     if (injection_size > INJECTION_SIZE) {
         fprintf (stderr, "Error in gzinject: injection_size=%u too big", injection_size);
-        main_exit (0, 1);
+        main_exit (1, 1);
     }
 
     memcpy (state->injection, injection, injection_size);  

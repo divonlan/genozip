@@ -171,14 +171,16 @@ bool digest_recon_is_equal (const Digest recon_digest, const Digest expected_dig
            recon_digest.words[3] == expected_digest.words[3]; 
 }
 
-// in v6-v11 we had a bug were the 2nd 32b of an MD5 digest was a copy of the first 32b
 void digest_verify_ref_is_equal (const Reference ref, const char *header_ref_filename, const Digest header_md5)
 {
     Digest ref_md5 = ref_get_file_md5 (ref);
-    uint8_t version = ref_get_genozip_version (ref);
+    //uint8_t version = ref_get_genozip_version (ref);
 
-    ASSINP ((version >= 12 && digest_is_equal (ref_md5, header_md5)) ||
-            (version <= 11 && ref_md5.words[0] == header_md5.words[0] && ref_md5.words[2] == header_md5.words[2] && ref_md5.words[3] == header_md5.words[3]),
+    // in v6-v11 we had a bug where the 2nd 32b of an MD5 digest was a copy of the first 32b.
+    // we don't know the genozip version of the reference file used for compressing - therefore we accept both MD5 options.
+    // this way, if a reference is re-generated from FASTA using a new genozip, it can be used to decompress an old file
+    ASSINP (//digest_is_equal (ref_md5, header_md5) ||
+            (ref_md5.words[0] == header_md5.words[0] && ref_md5.words[2] == header_md5.words[2] && ref_md5.words[3] == header_md5.words[3]),
             "%s: Bad reference file:\n%s (MD5=%s) was used for compressing\n%s (MD5=%s) has a different MD5",
             z_name, header_ref_filename, digest_display_ex (header_md5, DD_MD5).s, 
             ref_get_filename (ref), digest_display_ex (ref_md5, DD_MD5).s);

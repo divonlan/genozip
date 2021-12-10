@@ -1432,6 +1432,70 @@ void ref_display_ref (Reference ref)
     ctx_free_context (&chrom_ctx, DID_I_NONE);
 }
 
+// show diff between two reference files
+void ref_diff_ref (void)
+{
+    static Context gref_chrom_ctx = {}, prim_chrom_ctx = {}; // static because the contained buffers cannot be on the stack as they are added to buf_list
+    ref_load_external_reference (gref, &gref_chrom_ctx);
+    ref_load_external_reference (prim_ref, &prim_chrom_ctx);
+
+    printf ("Comparing two references:\nR1 = %s\nR2 = %s\n", gref->filename, prim_ref->filename);
+    if (gref->ranges.len != prim_ref->ranges.len) {
+        printf ("*** References have a different number of contigs: R1=%u R2=%u\n", (int)gref->ranges.len, (int)prim_ref->ranges.len);
+        exit_ok();
+    }
+
+    for (uint32_t range_i=0; range_i < gref->ranges.len; range_i++) {
+        const Range *r1 = ENT (Range, gref->ranges, range_i); 
+        const Range *r2 = ENT (Range, prim_ref->ranges, range_i); 
+
+        if (!str_issame(r1->chrom_name, r2->chrom_name)) {
+            printf ("*** range_i=%u has a different contig name: R1=\"%.*s\" R2=\"%.*s\"\n", range_i, STRf(r1->chrom_name), STRf(r2->chrom_name));
+            continue;
+        }
+
+        if (r1->first_pos != r2->first_pos || r1->last_pos != r2->last_pos) {
+            printf ("*** range_i=%u has a different POS: R1=[%"PRIu64",%"PRIu64"] R2=[%"PRIu64",%"PRIu64"]\n", 
+                    range_i, r1->first_pos, r1->last_pos, r2->first_pos, r2->last_pos);
+            continue;
+        }
+
+        if (r1->gpos != r2->gpos) {
+            printf ("*** range_i=%u has a different GPOS: R1=%"PRIu64" R2=%"PRIu64"\n", range_i, r1->gpos, r2->gpos);
+            continue;
+        }
+        
+        uint32_t num_diffs=0;
+        PosType next_iupac_pos1=r1->first_pos;
+        PosType next_iupac_pos2=r2->first_pos;
+        
+        #define MAX_NUM_DIFFS 100
+        for (PosType pos=r1->first_pos ; pos <= r1->last_pos ; pos++) {
+            char iupac1 = (pos==next_iupac_pos1) ? ref_iupacs_get (gref,     r1, pos, false, &next_iupac_pos1) : 0;
+            char iupac2 = (pos==next_iupac_pos2) ? ref_iupacs_get (prim_ref, r2, pos, false, &next_iupac_pos2) : 0;
+
+            char b1 = ref_base_by_pos (r1, pos);
+            char b2 = ref_base_by_pos (r2, pos);
+
+            if (b1 != b2 || iupac1 != iupac2) {
+                if (!iupac1 && !iupac2)
+                    printf ("*** %.*s:%"PRIu64" differ: R1=%c R2=%c\n", STRf(r1->chrom_name), pos, b1, b2);
+                else
+                    printf ("*** %.*s:%"PRIu64" differ: R1=%c (IUPAC=%c) R2=%c (IUPAC=%c)\n", 
+                            STRf(r1->chrom_name), pos, b1, iupac1 ? iupac1 : '-', b2, iupac2 ? iupac2 : '-');
+
+                if (num_diffs++ == MAX_NUM_DIFFS) {
+                    printf ("Shown %u first differences. Moving on to next range.", MAX_NUM_DIFFS);
+                    break;
+                }
+            }
+        }
+    }
+
+    ctx_free_context (&gref_chrom_ctx, DID_I_NONE);
+    ctx_free_context (&prim_chrom_ctx, DID_I_NONE);
+}
+
 #define REV_CODEC_GENOME_BASES_PER_THREAD (1 << 27) // 128Mbp
 
 static Reference ref_reverse_compliment_genome_ref = 0; // ref_generate_reverse_complement_genome is called from the main thread so no thread safety issues
@@ -1588,6 +1652,14 @@ void ref_initialize_ranges (Reference ref, RangesType type)
 {
     if (type == RT_LOADED || type == RT_CACHED) {
         ref_initialize_loaded_ranges (ref, type);
+
+        if (type == RT_CACHED) {
+            if (!buf_mmap (evb, &ref->genome_cache, ref_get_cache_fn(ref), false, "genome_cache")) {
+                // this happens eg if the process writing the cache was aborted
+                ref_remove_cache (ref);
+                type = RT_LOADED;
+            }
+        }
 
         if (type == RT_LOADED) 
             buf_alloc (evb, &ref->genome_cache, 0, ref->genome_nbases / 4 * 2, uint8_t, 1, "genome_cache"); // contains both forward and rev. compliment

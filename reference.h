@@ -67,6 +67,7 @@ extern void ref_load_stored_reference (Reference ref);
 extern bool ref_is_loaded (const Reference ref);
 extern bool ref_is_external_loaded (const Reference ref);
 extern void ref_display_ref (const Reference ref);
+extern void ref_diff_ref (void);
 extern void ref_set_reference (Reference ref, const char *filename, ReferenceType ref_type, bool is_explicit);
 extern void ref_set_ref_file_info (Reference ref, Digest md5, const char *fasta_name, uint8_t genozip_version);
 extern void ref_unload_reference (Reference ref);

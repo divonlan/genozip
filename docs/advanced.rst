@@ -67,11 +67,15 @@ Usage: as flags for ``genozip`` (Z), ``genounzip`` (U), ``genocat`` (C), ``genol
 
           |
 
-.. option:: --show-reference  ZUC. Show the ranges included the SEC_REFERENCE sections.
+.. option:: --show-reference  ZUC. Show the ranges included the SEC_REFERENCE sections
 
           |
 
 .. option:: --show-ref-seq  ZUC. Show the reference sequences as stored internally in a SAM BAM or FASTQ file (also works for a reference file but --reference --regions is faster). Combine with --regions to see specific regions (genocat only). Combine with --sequential to omit newlines. '-' appears in unset loci.
+
+          |
+
+.. option:: --show-ref-diff  C. Show the difference between two reference files. Use in combination with two --reference arguments.
 
           |
 

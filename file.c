@@ -1364,6 +1364,7 @@ void file_put_data_abort (void)
 
     for (unsigned i=0; i < num_put_files; i++) 
         if (put_data_tmp_filenames[i]) {
+            // TODO: this works on Linux but not Windows - gets "Permission Denied" if file_put_data is in fflush()
             unlink (put_data_tmp_filenames[i]); // ignore errors
             remove (put_data_tmp_filenames[i]); // in case unlinked failed - eg NTFS - ignore errors
         }

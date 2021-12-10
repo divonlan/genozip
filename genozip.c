@@ -62,12 +62,20 @@ const char *command_name (void) // see CommandType
 
 void main_exit (bool show_stack, bool is_error) 
 {
+    // finish dumping reference and/or refhash to cache
+    if (!is_error) {
+        ref_create_cache_join (gref, false);
+        ref_create_cache_join (prim_ref, false);
+        refhash_create_cache_join(false);
+    }
+
     if (is_error && flag.debug_threads)
         threads_write_log (true);
         
-    if (show_stack) threads_print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
+    if (show_stack) 
+        threads_print_call_stack(); // this works ok on mac, but does not print function names on Linux (even when compiled with -g)
 
-    buf_test_overflows_all_vbs("exit_on_error");
+    buf_test_overflows_all_vbs (is_error ? "exit_on_error" : "on_exit");
 
     if (flag.log_filename) {
         iprintf ("%s - execution ended %s\n", str_time().s, is_error ? "with an error" : "normally");
@@ -77,9 +85,8 @@ void main_exit (bool show_stack, bool is_error)
     if (is_error) {
         close (1);   // prevent other threads from outputting to terminal (including buffered output), obscuring our error message
         close (2);
-        url_kill_curl();  /* <--- BREAKPOINT */
+        url_kill_curl();  /* <--- BREAKPOINT BRK */
         file_kill_external_compressors(); 
-        file_put_data_abort();
     }
 
     // if we're in ZIP - remove failed genozip file (but don't remove partial failed text file in PIZ - it might be still useful to the user)
@@ -100,6 +107,9 @@ void main_exit (bool show_stack, bool is_error)
         // because it can't access a z_file filed after z_file is freed, and threads_sigsegv_handler aborts
         if (save_name) file_remove (save_name, true);
     }
+
+    if (is_error) // call after canceling the writing threads 
+        file_put_data_abort();
 
     if (!is_error) MAIN0 ("Exiting : Success"); 
 
@@ -321,6 +331,7 @@ static void main_test_after_genozip (const char *exec_name, const char *z_filena
         argv[argc] = NULL;
 
         execv (exec_name, (char **)argv);
+        ABORT ("Failed to execute %s for testing the compression: %s", exec_name, strerror (errno));
     }
 }
 
@@ -509,7 +520,10 @@ static int main_sort_input_filenames (const void *fn1, const void *fn2)
 static void main_get_filename_list (unsigned num_files, char **filenames, // in 
                                     unsigned *num_z_files, Buffer *fn_buf)      // out
 {
-    if (!num_files && !flag.files_from) return; // no files
+    if (!num_files && !flag.files_from) {
+        flags_update (0, NULL);
+        return; // no files
+    }
 
     // add names from command line
     buf_add_more_(evb, fn_buf, char *, filenames, num_files, NULL);
@@ -672,8 +686,13 @@ int main (int argc, char **argv)
 
             // case: requesting to display the reference: genocat --reference <ref-file> and optionally --regions
             if (exe_type == EXE_GENOCAT && (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE)) {
+                command = PIZ;
                 flags_update (0, NULL);
-                ref_display_ref (gref);
+
+                if (flag.show_ref_diff) 
+                    ref_diff_ref();                    
+                else
+                    ref_display_ref (gref);
             }
 
             // otherwise: show help
@@ -779,11 +798,6 @@ int main (int argc, char **argv)
 
     if (flag.multiple_files && flag.validate==VLD_REPORT_INVALID /* reporting invalid files, and none found */) 
         WARN0 ("All files are valid genozip files");
-
-    // finish dumping reference and/or refhash to cache
-    ref_create_cache_join (gref, false);
-    ref_create_cache_join (prim_ref, false);
-    refhash_create_cache_join(false);
 
     if (flag.show_time && !flag.show_time[0]) { // show-time without the optional parameter 
         profiler_add (evb);
