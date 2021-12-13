@@ -8,6 +8,7 @@ Genozip
 
    Installing <installing> 
    Benchmarks <benchmarks> 
+   Testimonials <testimonials> 
    File Types <data-types>
    Manual <manual>
    Capabilities <capabilities>
