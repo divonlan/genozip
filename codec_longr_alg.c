@@ -117,7 +117,7 @@ static inline void codec_longr_update_state (LongrState *s, uint8_t b, int32_t q
 
     chan.bits.B = (chan.bits.B << 2) | b; // shift and add new base 
 
-    chan.bits.difq = MIN_((1L<<DIFQ_BITS)-1, INTERLACE(int32_t, q1-q2)); // difference might be [-255,255], interlaced to [0,510]
+    chan.bits.difq = MIN_((1L<<DIFQ_BITS)-1, INTERLACE(int32_t, q1-q2)); // difference might be [-93,93], interlaced to [0,186] and capped 
 
     chan.bits.qbin = s->value_to_bin[q1];
     

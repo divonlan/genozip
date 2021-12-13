@@ -141,5 +141,5 @@ extern void codec_pbwt_display_ht_matrix (VBlockP vb, uint32_t max_rows);
 
 // LONGR stuff
 extern void codec_longr_comp_init (VBlockP vb, DidIType qual_did_i);
-extern void codec_longr_calculate_bins (VBlockP vb, ContextP ctx, LocalGetLineCB callback);
+extern void codec_longr_segconf_calculate_bins (VBlockP vb, ContextP ctx, LocalGetLineCB callback);
 

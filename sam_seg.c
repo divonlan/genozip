@@ -357,10 +357,11 @@ void sam_seg_finalize (VBlockP vb)
         segconf.sam_seq_len   = 1 + (segconf.sam_seq_len   / vb->lines.len);
 
         if (segconf_is_long_reads()) {
-            codec_longr_calculate_bins (vb, CTX(SAM_QUAL), sam_zip_qual);
 
             if (segconf.has[OPTION_ms_i])
                 segconf.sam_ms_type = ms_MINIMAP2; // definitely not biobambam's MateBaseScore as long reads don't have mates
+        
+            segconf.sam_is_collated = false; // long reads are never paired-end
         }
         else {
             if (segconf.has[OPTION_ms_i] && segconf.sam_is_paired)

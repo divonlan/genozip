@@ -195,21 +195,21 @@ void profiler_print_report (void)
         PRINT (zip_generate_b250, 2);
         PRINT (zip_generate_local, 2);
         print_ctx_compressor_times();
+        PRINT (codec_assign_best_codec, 2);
+        PRINT (compressor_bz2,  2);
+        PRINT (compressor_lzma, 2);
+        PRINT (compressor_bsc,  2);
+        PRINT (compressor_rans, 2);
+        PRINT (compressor_arith, 2);
+        PRINT (compressor_domq, 2);
+        PRINT (compressor_actg, 2);
+        PRINT (compressor_pbwt, 2);
+        PRINT (compressor_longr, 2);
+        PRINT (codec_hapmat_count_alt_alleles, 2);
 
         PRINT (ctx_compress_one_dict_fragment, 1);
-        PRINT (codec_assign_best_codec, 1);
         PRINT (md5, 1);
         PRINT (bgzf_compute_thread, 1);
-        PRINT (compressor_bz2,  1);
-        PRINT (compressor_lzma, 1);
-        PRINT (compressor_bsc,  1);
-        PRINT (compressor_rans, 1);
-        PRINT (compressor_arith, 1);
-        PRINT (compressor_domq, 1);
-        PRINT (compressor_actg, 1);
-        PRINT (compressor_pbwt, 1);
-        PRINT (compressor_longr, 1);
-        PRINT (codec_hapmat_count_alt_alleles, 2);
     }    
 
     PRINT (file_open, 0);

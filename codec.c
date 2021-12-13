@@ -286,9 +286,13 @@ done:
 void codec_assign_best_qual_codec (VBlockP vb, DidIType qual_did_i,  
                                    LocalGetLineCB callback, bool no_longr)
 {
-    if (segconf.running) return;
+    if (segconf.running) {
+        if (!flag.fast && segconf.nontrivial_qual && segconf_is_long_reads())
+            codec_longr_segconf_calculate_bins (vb, CTX(qual_did_i), callback);
+        return;
+    }
 
-    if (flag.best && segconf_is_long_reads() && !no_longr && segconf.nontrivial_qual)
+    if (!flag.fast && segconf_is_long_reads() && !no_longr && segconf.nontrivial_qual)
         codec_longr_comp_init (vb, qual_did_i);
 
     else if (codec_domq_comp_init (vb, qual_did_i, callback)) 

@@ -100,7 +100,7 @@ Notes:
 ::
 
     BAM file: <redacted>.bam
-    Reference: data/hs37d5.ref.genozip
+    Reference: hs37d5.ref.genozip
     Alignments: 636,660,181   Dictionaries: 161   Vblocks: 389 x 512 MB  Sections: 17340
     Sorting: Sorted by POS
     Read name style: Illumina
@@ -140,7 +140,7 @@ Notes:
 ::
 
     BAM file: NA12878.pacbio.bwa-sw.20140202.bam
-    Reference: data/hs37d5.ref.genozip
+    Reference: hs37d5.ref.genozip
     Alignments: 25,968,256   Dictionaries: 163   Vblocks: 215 x 512 MB  Sections: 9825
     Sorting: Sorted by POS
     Read name style: PacBio-Range
@@ -232,7 +232,6 @@ Notes:
     Reference: chm13.draft_v1.1.ref.genozip
     Alignments: 13,364,876   Dictionaries: 168   Vblocks: 1321 x 512 MB  Sections: 65852
     Sorting: Sorted by POS
-    Sorting: Collated by QNAME
     Read name style: Nanopore
     Genozip version: 13.0.6 github
     Date compressed: 2021-12-08 02:36:21 ACDT
@@ -279,7 +278,7 @@ Notes:
 ::
 
     SAM file: NA12878.final.cram
-    Reference: data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
+    Reference: GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
     Alignments: 768,580,569   Dictionaries: 160   Vblocks: 749 x 512 MB  Sections: 44749
     Sorting: Sorted by POS
     Read name style: Illumina

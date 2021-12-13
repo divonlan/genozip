@@ -54,10 +54,10 @@ static inline void add_to_histogram (uint32_t *histogram, const uint8_t *values,
         histogram[values[i] - '!']++;
 }
 
-// ZIP, main thread
+// ZIP, main thread, segconf.running
 #define NUM_BINS (1 << QUAL_BITS)
-void codec_longr_calculate_bins (VBlockP vb, ContextP ctx, 
-                                 LocalGetLineCB callback) // option 2 - get one line
+void codec_longr_segconf_calculate_bins (VBlockP vb, ContextP ctx, 
+                                         LocalGetLineCB callback) // option 2 - get one line
 {
     ASSERT0 (segconf.running, "Expected segconf.running"); // must run in main thread as we are allocating from evb
     ContextP zctx = ZCTX(ctx->did_i);
@@ -284,11 +284,11 @@ static void codec_longr_reconstruct_init (VBlock *vb, Context *lens_ctx, Context
         next += len;
     }
     
-    // initialize value-to-bin mapping - in lens_ctx.con_cache
+    // retrieve the global value-to-bin mapper from SEC_COUNTS and store it in lens_ctx.con_cache
     buf_alloc (vb, &lens_ctx->con_cache, 0, 256, uint8_t, 0, "value_to_bin");
     lens_ctx->con_cache.len = 256;
 
-    ARRAY (uint64_t, value_to_bin_src, ZCTX(lens_ctx->did_i)->counts);
+    ARRAY (uint64_t, value_to_bin_src, ZCTX(lens_ctx->did_i)->counts); 
     ARRAY (uint8_t,  value_to_bin_dst, lens_ctx->con_cache);
 
     for (int i=0; i < 256; i++)

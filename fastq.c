@@ -247,9 +247,6 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
 
 void fastq_seg_finalize (VBlockP vb)
 {
-    if (segconf.running && segconf_is_long_reads())
-        codec_longr_calculate_bins (vb, CTX(FASTQ_QUAL), fastq_zip_qual);        
-
     // assign the QUAL codec
     codec_assign_best_qual_codec (vb, FASTQ_QUAL, fastq_zip_qual, false);
 

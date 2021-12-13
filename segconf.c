@@ -62,8 +62,14 @@ static void segconf_set_vb_size (const VBlock *vb, uint64_t curr_vb_size)
         uint64_t bytes = ((uint64_t)num_used_contexts << 20) + 
                             (vcf_header_get_num_samples() << 17 /* 0 if not vcf */);
 
+        uint64_t min_memory = !segconf.sam_is_sorted     ? VBLOCK_MEMORY_MIN_DYN
+                            : !segconf_is_long_reads()   ? VBLOCK_MEMORY_MIN_DYN
+                            : arch_get_num_cores() <= 8  ? VBLOCK_MEMORY_MIN_DYN // eg a personal computer
+                            : arch_get_num_cores() <= 20 ? (128 << 20)           // higher minimum memory for long reads in sorted SAM - enables CPU scaling
+                            :                              (256 << 20);
+
         // actual memory setting VBLOCK_MEMORY_MIN_DYN to VBLOCK_MEMORY_MAX_DYN
-        segconf.vb_size = MIN_(MAX_(bytes, VBLOCK_MEMORY_MIN_DYN), VBLOCK_MEMORY_MAX_DYN);
+        segconf.vb_size = MIN_(MAX_(bytes, min_memory), VBLOCK_MEMORY_MAX_DYN);
         
         int64_t est_seggable_size = txtfile_get_seggable_size();
         if (est_seggable_size) segconf.vb_size = MIN_(segconf.vb_size, est_seggable_size * 1.5);
