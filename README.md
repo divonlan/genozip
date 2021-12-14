@@ -15,28 +15,18 @@
 
 <h1>Genozip</h1><br>
 <br>
-Genozip is also available on <b>Conda</b>. For additional installation options, See: https://genozip.com<br>
+Genozip is also available on <b>Conda</b> and binary downloads. For additional installation options, See: https://genozip.com<br>
 <br>
-<b>Genozip</b> is a compressor for genomic files - while it can compress any file (i.e. not only genomic files), it is optimized to compress FASTQ, BAM, CRAM, VCF, FASTA, GVF, PHYLIP, Chain, Kraken and 23andMe files.<br>
+<b>Genozip</b> is a universal compressor for genomic files - it compresses FASTQ, BAM/CRAM, VCF and many other file formats (including non-genomic files) - see https://genozip.com<br>
 <br>
-<b>Citing</b> Do you find Genozip useful? Please cite:<br>
+For Illumina data <i>.bam</i> and <i>.fastq.gz</i> files, the typical gain over gzip is around 4X. For PacBio and Oxford Nanopore data aligned <i>.bam</i> files, the gain is typically around 2X. For <i>.vcf.gz</i> files, the gain over gzip is typically 3-6X. Here are some examples: https://genozip.com/benchmarks.html.<br>
 <br>
-Lan, D., et al. (2021) <b>Genozip: a universal extensible genomic data compressor</b>. <i>Bioinformatics</i>, 37, 2225-2230, https://doi.org/10.1093/bioinformatics/btab102<br>
-<br>
-Lan, D., et al. (2020) <b>genozip: a fast and efficient compression tool for VCF files</b> <i>Bioinformatics</i>, 36, 4091–4092, https://doi.org/10.1093/bioinformatics/btaa290<br>
-</p>
-<br> 
-Typically, a <b>2X-5X improvement over the existing compression</b> is achieved when compressing already-compressed files like .fastq.gz .bam vcf.gz and much higher ratios in some other cases.<br> 
-<br> 
 <b>Yes</b>, Genozip can compress already-compressed files (.gz .bz2 .xz .bam .cram).<br> 
 <br> 
 The compression is <b>lossless</b> - the decompressed file is 100% identical to the original file (see documentation for exceptions).<br> 
-<b>Sign up</b> to receive low-frequency updates related to Genozip: https://tinyurl.com/genozip<br>
 <br>
-The command line options are similar to gzip and samtools/bcftools, so if you are familiar with these, it works pretty much the same. To get started, see: https://genozip.com<br>
-<br>
-<b>Genozip</b> is free for non-commercial use (as defined in the license). For a commercial license, please contact <b>sales@genozip.com</b> <br>
+<b>Genozip</b> is free for academic and training use (as defined in the license). For use with data generated in a clinical or commercial settings, please see https://genozip.com/commercial.html or contact <b>sales@genozip.com</b> <br>
 <br>
 Usage is subject to terms and conditions. The license can be viewed on https://genozip.com/license.html<br>
 <br>
-THIS SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE AUTHORS, COPYRIGHT HOLDERS OR DISTRIBUTORS OF THIS SOFTWARE BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.<br>
+<b>THIS SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE AUTHORS, COPYRIGHT HOLDERS OR DISTRIBUTORS OF THIS SOFTWARE BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.</b><br>

@@ -682,7 +682,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeader *out_header) // optio
 
     flag.genocat_no_ref_file |= (Z_DT(DT_CHAIN) && !flag.reading_chain); // initialized in flags_update: we only need the reference when using the chain file with --chain
 
-    if (txt_file && header->h.flags.genozip_header.txt_is_bin) // txt_file is still NULL when called from main_genozip
+    if (txt_file && !flag.explicit_out_dt /*not explicitly specified by genocat user*/ && header->h.flags.genozip_header.txt_is_bin)
         txt_file->data_type = DTPZ (bin_type);
 
     ASSINP (header->encryption_type != ENC_NONE || !crypt_have_password() || Z_DT(DT_REF), 

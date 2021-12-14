@@ -3,7 +3,7 @@
 Sex assignment
 ==============
 
-**EXPERIMENTAL FEATURE**
+**EXPERIMENTAL FEATURE - NOT SUITED FOR CLINICAL APPLICATIONS**
 
 .. toctree::
    :hidden:

@@ -15,4 +15,5 @@ File Types
    Genozip chain files<chain>
    Genozip kraken files<kraken>
    Genozip PHYLIP files<phylip>
+   Genozip LOC files<loc>
    Genozip other files<generic>

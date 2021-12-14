@@ -120,6 +120,7 @@ typedef struct {
          debug_top,
          is_windows, is_mac, is_linux, // set according to OS
          is_lten,            // set according to enidanness   
+         explicit_out_dt,    // genocat - out txt file data type set explicitly from command line
          aligner_available,  // ZIP: compression requires using the aligner
          genocat_no_ref_file,// PIZ (genocat): we don't need to load the reference data
          genocat_no_dicts,   // PIZ (genocat): we don't need to read the dicts

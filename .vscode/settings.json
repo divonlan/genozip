@@ -1,14 +1,7 @@
 {
     "files.associations": {
         "*.eb": "python",
-        "array": "c",
-        "compare": "c",
-        "functional": "c",
-        "ostream": "c",
-        "ranges": "c",
-        "tuple": "c",
-        "type_traits": "c",
-        "utility": "c"
+        "qname_cons.h": "c"
     },
     "C_Cpp.dimInactiveRegions": false,
     "restructuredtext.confPath": "${workspaceFolder}\\docs",

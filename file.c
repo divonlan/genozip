@@ -603,6 +603,7 @@ static bool file_open_txt_write (File *file)
         (file->data_type == DT_ME23   && dt_by_filename == DT_VCF  ) )
     {
         flag.out_dt = file->data_type = dt_by_filename;
+        flag.explicit_out_dt = true;   // specifiying output data type by filename is considered explicit
         flags_update_piz_one_file(-1); // update flags accordingly
     }
 

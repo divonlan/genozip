@@ -18,7 +18,7 @@
 # -- Project information -----------------------------------------------------
 
 project = 'Genozip'
-copyright = '2019-2021, Divon Lan'
+copyright = '2019-2021, Black Paw Ventures Limited'
 author = 'Divon Lan'
 
 # The full version, including alpha/beta/rc tags

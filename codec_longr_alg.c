@@ -146,6 +146,7 @@ static void codec_longr_alg_init (LongrState *state)
 
 static void codec_longr_alg_init_read (LongrState *state, STRp(seq), bool is_rev)
 {
+    ASSERTNOTNULL (seq);
     state->chan = (LongrChannel){};
 
     // get first channel

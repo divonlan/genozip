@@ -89,6 +89,7 @@ static void flags_show_flags (void)
     iprintf ("undocumented_dts_paired=%s\n", TF_(undocumented_dts_paired));
     iprintf ("bgzf=%d\n", flag.bgzf);
     iprintf ("out_dt=%s\n", dt_name (flag.out_dt));
+    iprintf ("explicit_out_dt=%s\n", TF_(explicit_out_dt));
     iprintf ("header_one=%s\n", TF_(header_one));
     iprintf ("no_header=%d\n", flag.no_header);
     iprintf ("header_only=%s\n", TF_(header_only));
@@ -647,6 +648,7 @@ verify_command:
                 exit (EXIT_GENERAL_ERROR);  
         }
     }
+    flag.explicit_out_dt = (flag.out_dt >= 0);
 }
 
 static void flags_warn_if_duplicates (int num_files, const char **filenames)
