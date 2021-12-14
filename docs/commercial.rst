@@ -18,8 +18,6 @@ Developing Genozip and supporting its users is what we do for a living. We refra
 
 **Examples of applications that *do not require* paying a subscription fee:**
 
-- Academic: You are analyzing ancient DNA to research the peopling of Europe.
-
 - Academic: You are conducing a study, with the primary objective being publishing the results in a scientific journal.
   
 - Training: You are teaching a course in bioinformatics, using Genozip to teach data compression.
