@@ -8,6 +8,15 @@ updates
 - Some minor versions are skipped due to failed deployment 
 pipelines
 
+13.0.6 14/Dec.2021
+- Better compression of QNAME (SAM/BAM/FASTQ/Kraken)
+- Improve memory effeciency when compressing BAM integer 
+arrays (eg B:i)
+- New advanced option: --show-ref-diff - see the difference 
+between two Genozip reference files.
+- New LongR codec for quality scores introduced in 13.0.5 now 
+used also in default mode (not just in --best as before)
+
 13.0.5 3/December/2021
 - SAM/BAM, FASTQ: Better compression of PacBio and Nanopore 
 quality scores (in --best mode)
