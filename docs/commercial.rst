@@ -5,7 +5,7 @@ Licensing Genozip
 
 Genozip is a small business that strives to create the world's best genomic data compression tools. Developing Genozip and supporting its users is what we do for a living. We have not sought or received any external funding. We proudly contribute our work, free, for advancement of science - and fund it by charging commercial or clinical users a licensing fee. 
 
-In short, if all you are doing with your genomic data is making scientific discoveries and publishing them in scientific journals, then please go ahead and use Genozip for free. On the other hand, if handling genomic data ultimately generates revenue for your organization, we ask that you respect us and our hard work by purchasing a license.
+In short, if all you are doing with your genomic data is making scientific discoveries and publishing them in scientific journals, then please go ahead and use Genozip for free. On the other hand, if handling genomic data ultimately generates revenue for your organization, we ask that you respect us and our hard work by purchasing a license. Please feel free to install Genozip for evaluation purposes for a duration of 30 days.
 
 The :ref:`Genozip License <license>` defines the exact cases for which use of Genozip is free. To illustrate, here are some examples:
 
