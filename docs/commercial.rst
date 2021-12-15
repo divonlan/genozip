@@ -1,30 +1,40 @@
 .. _commercial:
 
-Subscribing to use Genozip
-===========================
-*Using Genozip with data generated in a clinical or commercial setting*
+Licensing Genozip
+==================
 
-Genozip is a small business that strives to create the world's best genomic data compression tools. We hope that by doing so we can make our small contribution to the genomics revolution that improves human lives in so many ways - better food, better medicine, fighting pandemics, conserving our nature and better understanding our past just to name a few.
+Genozip is a small business that strives to create the world's best genomic data compression tools. Developing Genozip and supporting its users is what we do for a living. We have not sought or received any external funding. We proudly contribute our work, free, for advancement of science - and fund it by charging commercial or clinical users a licensing fee. 
 
-Developing Genozip and supporting its users is what we do for a living. We refrain from taking any taxpayer money in the form of grants or subsidies, and we also do not receive funding from any external body. We therefore kindly request that if your hard work of handling genomic data puts bread or rice on your family's table and generates revenue for your organization, you also respect *our* hard work by honestly paying us our very reasonable subscription fee.
+In short, if all you are doing with your genomic data is making scientific discoveries and publishing them in scientific journals, then please go ahead and use Genozip for free. On the other hand, if handling genomic data ultimately generates revenue for your organization, we ask that you respect us and our hard work by purchasing a license.
 
-**Examples of applications that *require* paying a subscription fee:**
+This message is here because, sadly, in the past, some dishonest users shoplifted our product by:
 
-- Clinical: The genomic data was generated with intent of directly benefiting the individual who provided the sample, for example via better diagnosis or treatment.
+| - Lying in the registration form - providing fake details
+| - Claiming that the nature of their data is academic while in fact it is clinical
 
-- Product: You are developing a product, such as a pharmaceutical, cosmetics or food product. 
+The :ref:`Genozip License <license>` defines the exact cases for which use of Genozip is free. To illustrate, here are some examples:
 
-- Commercial: You are providing a service to your customers, such as DNA sequencing, DNA analysis, bioinformatics, SaaS or cloud.
-
-**Examples of applications that *do not require* paying a subscription fee:**
+**Examples of applications for which use of Genozip is FREE:**
 
 - Academic: You are conducing a study, with the primary objective being publishing the results in a scientific journal.
   
 - Training: You are teaching a course in bioinformatics, using Genozip to teach data compression.
 
-- Evaluation: You may use Genozip for 30 days to see whether Genozip fits your needs, ahead of a decision of whether to subscribe.
+- Evaluation: You may use Genozip for 30 days to see whether Genozip fits your needs, ahead of a decision of whether to purchase a license.
 
-- Decompression: No subscription is required for decompressing files previously compressed with Genozip, and you may freely transfer Genozip-compressed files to other people or organizations.
+- Decompression: decompressing files previously compressed with Genozip is free.
+
+- Distribution: Distributing the Genozip software to others, for example, as a module on an HPC, is free. Each user will need to register individually.
+
+**Examples of applications that require paying a licensing fee:**
+
+- Clinical: The genomic data is used to directly benefit the individuals who provided the samples, for example via better diagnosis or treatment.
+
+- Product: You are developing a product, such as a pharmaceutical or food product. 
+
+- Service: You are providing a service to your customers, such as DNA sequencing, DNA analysis, bioinformatics, SaaS or cloud.
+
+If you are unsure which category covers your use case, please ask us at `register@genozip.com <mailto:register@genozip.com>`_.
   
-**To purchase a subscription, please contact:** `sales@genozip.com <mailto:sales@genozip.com>`_
+**To purchase a license, please contact:** `sales@genozip.com <mailto:sales@genozip.com>`_
 

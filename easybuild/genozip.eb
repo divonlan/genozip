@@ -15,7 +15,7 @@ description = """Genozip is a compressor for genomic files - it compresses FASTQ
 toolchain = SYSTEM
 
 sources = [{
-	'filename': 'genozip.tar.gz',
+	'filename': 'genozip_%(version)s.tar.gz',
 	'git_config': {
 		      'url': 'https://github.com/divonlan/',
 		      'repo_name': 'genozip',
