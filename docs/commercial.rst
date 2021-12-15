@@ -7,11 +7,6 @@ Genozip is a small business that strives to create the world's best genomic data
 
 In short, if all you are doing with your genomic data is making scientific discoveries and publishing them in scientific journals, then please go ahead and use Genozip for free. On the other hand, if handling genomic data ultimately generates revenue for your organization, we ask that you respect us and our hard work by purchasing a license.
 
-This message is here because, sadly, in the past, some dishonest users shoplifted our product by:
-
-| - Lying in the registration form - providing fake details
-| - Claiming that the nature of their data is academic while in fact it is clinical
-
 The :ref:`Genozip License <license>` defines the exact cases for which use of Genozip is free. To illustrate, here are some examples:
 
 **Examples of applications for which use of Genozip is FREE:**
