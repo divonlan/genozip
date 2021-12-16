@@ -1,4 +1,5 @@
 private
+docs
 test
 scripts
 launch.json
@@ -78,9 +79,6 @@ genome_*Full*
 unix-nl.*
 windows-nl.*
 test.*
-docs/_build
-!docs/*.rst
-!docs/genozip-linux-x86_64.tar.gz
 utils/*
 conda/README.md
 *.local
