@@ -10,7 +10,7 @@
 #include "genozip.h"
 #include "data_types.h"
 
-#define MIN_LEN_FOR_COMPRESSION 90 // less that this size, and compressed size is typically larger than uncompressed size
+#define MIN_LEN_FOR_COMPRESSION 50 // less that this size, and compressed size is typically larger than uncompressed size
 
 typedef bool CodecCompress (VBlockP vb, 
                             SectionHeader *header,       // in / out

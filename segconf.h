@@ -37,6 +37,7 @@ typedef struct {
     // SAM/BAM stuff
     bool sam_use_aligner;       // use of aligner is possible if its flag.aligner_available and there are no header contigs
     bool sam_is_unmapped;       // all POS fields in the segconf block were 0
+    bool sam_bowtie2;           
     bool NM_is_integer;         // true if NM is integer, false if it binary
     bool has_TLEN_non_zero;
     bool has_DP_before_PL;

@@ -27,9 +27,11 @@
 static char POS_buddy_snip[100], PNEXT_buddy_snip[100], CIGAR_buddy_snip[100];
 static uint32_t POS_buddy_snip_len, PNEXT_buddy_snip_len, CIGAR_buddy_snip_len;
 char taxid_redirection_snip[100], xa_strand_pos_snip[100], XS_snip[30], XM_snip[30], MC_buddy_snip[30], 
-     MQ_buddy_snip[30], MAPQ_buddy_snip[30], QUAL_buddy_snip[30], XA_lookback_snip[30];
+     MQ_buddy_snip[30], MAPQ_buddy_snip[30], QUAL_buddy_snip[30], XA_lookback_snip[30],
+     AS_buddy_snip[30], YS_buddy_snip[30];
 unsigned taxid_redirection_snip_len, xa_strand_pos_snip_len, XS_snip_len, XM_snip_len, MC_buddy_snip_len,
-     MQ_buddy_snip_len, MAPQ_buddy_snip_len, QUAL_buddy_snip_len, XA_lookback_snip_len;
+     MQ_buddy_snip_len, MAPQ_buddy_snip_len, QUAL_buddy_snip_len, XA_lookback_snip_len,
+     AS_buddy_snip_len, YS_buddy_snip_len;
 WordIndex xa_lookback_strand_word_index = WORD_INDEX_NONE, xa_lookback_rname_word_index = WORD_INDEX_NONE;
 
 // called by zfile_compress_genozip_header to set FlagsGenozipHeader.dt_specific
@@ -80,6 +82,8 @@ void sam_zip_initialize (void)
     seg_prepare_snip_other (SNIP_COPY_BUDDY, _SAM_MAPQ,    false, 0, MQ_buddy_snip);
     seg_prepare_snip_other (SNIP_COPY_BUDDY, _SAM_QUAL,    false, 0, QUAL_buddy_snip);
     seg_prepare_snip_other (SNIP_COPY_BUDDY, _OPTION_MQ_i, false, 0, MAPQ_buddy_snip);
+    seg_prepare_snip_other (SNIP_COPY_BUDDY, _OPTION_YS_i, false, 0, AS_buddy_snip);
+    seg_prepare_snip_other (SNIP_COPY_BUDDY, _OPTION_AS_i, false, 0, YS_buddy_snip);
     seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY_MC, MC_buddy_snip, _SAM_CIGAR);
 
     seg_prepare_snip_other (SNIP_LOOKBACK, (DictId)_OPTION_XA_LOOKBACK, false, 0, XA_lookback_snip);
@@ -118,8 +122,9 @@ void sam_seg_initialize (VBlock *vb)
     // all numeric fields need STORE_INT / STORE_FLOAT to be reconstructable to BAM (possibly already set)
     // via the translators set in the SAM_TOP2BAM Container
     DidIType numeric_fields[] = { SAM_TLEN, SAM_MAPQ, SAM_FLAG, SAM_POS, SAM_PNEXT, SAM_GPOS,
-    /* non-fallback fields */     OPTION_NM_i, OPTION_AS_i, OPTION_MQ_i, OPTION_XS_i, OPTION_XM_i, OPTION_mc_i, OPTION_ms_i, OPTION_Z5_i, OPTION_tx_i };
-    for (int i=0; i < sizeof(numeric_fields)/sizeof(numeric_fields[0]); i++)
+    /* non-fallback fields */     OPTION_NM_i, OPTION_AS_i, OPTION_MQ_i, OPTION_XS_i, OPTION_XM_i, OPTION_mc_i, OPTION_ms_i, OPTION_Z5_i, OPTION_tx_i,
+                                  OPTION_YS_i };
+    for (int i=0; i < ARRAY_LEN(numeric_fields); i++)
         CTX(numeric_fields[i])->flags.store = STORE_INT;
 
     CTX(SAM_SQBITMAP)->ltype    = LT_BITMAP;
@@ -149,6 +154,11 @@ void sam_seg_initialize (VBlock *vb)
         CTX(OPTION_MC_Z)->flags.store_per_line = true;
         CTX(SAM_MAPQ   )->flags.store_per_line = true;
         CTX(OPTION_MQ_i)->flags.store_per_line = true; // v13
+    }
+
+    if (segconf.sam_bowtie2) {
+        CTX(OPTION_AS_i)->flags.store_per_line = true; // 13.0.7
+        CTX(OPTION_YS_i)->flags.store_per_line = true; // 13.0.7
     }
 
     if (segconf.sam_buddy_RG)
@@ -376,6 +386,14 @@ void sam_seg_finalize (VBlockP vb)
     // case: we have XA but didn't use lookback (because its a non-sorted file) - create an all-the-same XA_LOOKBACK dict
     if (CTX(OPTION_XA_Z)->b250.len && !CTX(OPTION_XA_Z)->local.len)
         ctx_create_node (vb, OPTION_XA_LOOKBACK, "0", 1);
+}
+
+// main thread: called after all VBs, before compressing global sections
+void zip_sam_after_vbs (void)
+{
+    // shorten unused RNAME / RNEXT dictionary strings to "" (dict pre-populated in sam_zip_initialize)
+    ctx_shorten_unused_dict_words (SAM_RNAME);
+    ctx_shorten_unused_dict_words (SAM_RNEXT);
 }
 
 bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)

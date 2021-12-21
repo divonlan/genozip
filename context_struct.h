@@ -94,6 +94,7 @@ typedef struct Context {
     bool b250_compressed;      // ZIP: VB: b250 has been compressed
     bool dict_merged;          // ZIP: VB: dict has been merged into zctx
     bool please_remove_dict;   // ZFILE: one or more of the VBs request NOT compressing this dict (will be dropped unless another VB insists on keeping it)
+    bool dict_len_excessive;   // ZFILE: dict is very big, indicating an ineffecient segging of this context
     
     TranslatorId luft_trans;   // ZIP: Luft translator for the context, set at context init and immutable thereafter
     

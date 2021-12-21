@@ -180,7 +180,7 @@ void fastq_zip_initialize (void)
     seg_prepare_snip_other (SNIP_COPY, _FASTQ_DESC, 0, 0, copy_desc_snip);
 
     // with REF_EXTERNAL, we don't know which chroms are seen (bc unlike REF_EXT_STORE, we don't use is_set), so
-    // we just copy all reference contigs. this are not need for decompression, just for --coverage/--sex/--idxstats
+    // we just copy all reference contigs. this are not needed for decompression, just for --coverage/--sex/--idxstats
     if (flag.reference == REF_EXTERNAL && z_file->num_txt_components_so_far == 1) // first file
         ctx_populate_zf_ctx_from_contigs (gref, FASTQ_CONTIG, ref_get_ctgs (gref)); 
 

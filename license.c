@@ -260,7 +260,7 @@ void license_register (void)
     str_nul_separate (field);
 
     // if stdin or stderr is redirected - we cannot ask the user an interactive question
-    ASSINP0 (isatty(0) && isatty(2), "Use of genozip is free for non-commercial purposes, but requires registration. Please run: genozip --register.\n"
+    ASSINP0 (isatty(0) && isatty(2), "Use of genozip is free for academic and training purposes, but requires registration. Please run: genozip --register.\n"
                                      "If you are unable to register (for example because this is a batch-job machine) please see: " WEBSITE_USING_ON_HPC);
 
 
@@ -269,8 +269,9 @@ void license_register (void)
     if (!n_fields) {
 
         fprintf (stderr, "Welcome to genozip!\n\n"
-                         "The use of genozip for non-commercial purposes (as defined in the license: "WEBSITE_LICENSE") is FREE, but requires registration.\n"
-                         "If you are not sure whether your usage is considered non-commercial, please email "EMAIL_REGISTER"\n\n");
+                         "- Genozip is FREE for for academic, training and some other purposes defined in the license (see "WEBSITE_LICENSE"), but requires registration.\n"
+                         "- For other cases (examples: "WEBSITE_COMMERCIAL") you may evaluate Genozip for free for 30 days, after which you are required to purchase a license.\n"
+                         "If you are not sure whether your use case covered by the free license, please email "EMAIL_REGISTER"\n\n");
 
         if (file_exists (filename)) 
             str_query_user ("You are already registered. Are you sure you want to register again? (y or n) ", confirm, sizeof(confirm), str_verify_y_n, NULL);

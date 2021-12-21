@@ -193,7 +193,7 @@ static inline void bam_seg_ref_id (VBlockP vb, DidIType did_i, int32_t ref_id, i
     if (ref_id >= 0) {
         if (ref_id == compare_to_ref_i) {
             snip = "=";
-            snip_len = 1;
+            snip_len = 1;            
         }
         else 
             snip = contigs_get_name (sam_hdr_contigs, ref_id, &snip_len);

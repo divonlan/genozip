@@ -32,6 +32,7 @@
 #include "segconf.h"
 #include "chrom.h"
 #include "buffer.h"
+#include "version.h"
 
 #define INITIAL_NUM_NODES 10000
 
@@ -936,6 +937,15 @@ static bool ctx_merge_in_one_vctx (VBlock *vb, ContextP vctx)
             vb_node->word_index = zf_node->word_index;
     }
 
+    // warn if dict > 512 MB
+    if (zctx->dict.len > (512 << 20) && !zctx->dict_len_excessive) {
+        zctx->dict_len_excessive = true; // warn only once (per context)
+        WARN ("WARNING: excessive dictionary size - causing slow compression and decompression and reduced compression ratio. Please report this to support@genozip.com.\n"
+              "data_type=%s ctx=%s vb=%u vb_size=%"PRIu64" dict.len=%"PRIu64" version=%s. First 1000 bytes: ", 
+              dt_name (z_file->data_type), zctx->tag_name, vb->vblock_i, segconf.vb_size, zctx->dict.len, GENOZIP_CODE_VERSION);
+        str_print_dict (stderr, zctx->dict.data, 1000, false, false);
+    }
+
 finish:
     // just update counts for ol_node (i.e. known to be existing) snips
     if (has_count) 
@@ -1290,7 +1300,7 @@ void ctx_free_context (Context *ctx, DidIType did_i)
 
     ctx->no_stons = ctx->pair_local = ctx->pair_b250 = ctx->no_callback = ctx->line_is_luft_trans =
     ctx->local_param = ctx->no_vb1_sort = ctx->local_always = ctx->counts_section = ctx->no_drop_b250 = 
-    ctx->is_frozen = ctx->please_remove_dict = ctx->local_is_lten = 0;
+    ctx->is_frozen = ctx->please_remove_dict = ctx->local_is_lten = ctx->dict_len_excessive = 0;
     ctx->dynamic_size_local = 0;
     ctx->is_stats_parent = ctx->is_initialized = ctx->local_compressed = ctx->b250_compressed = ctx->dict_merged = 0;
     ctx->local_dep = 0;
@@ -1366,6 +1376,31 @@ void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local /* true = local, fals
 // ZIP: Compress and output dictionaries
 // -------------------------------------
 
+// rewrite unused (i.e count=0) zctx dict words as "" (we don't delete them completely, so word_index's in b250 sections remain correct)
+void ctx_shorten_unused_dict_words (DidIType did_i)
+{
+    ContextP zctx = ZCTX(did_i);
+    ARRAY (CtxNode, nodes, zctx->nodes);
+    ARRAY (int64_t, counts, zctx->counts);
+    ARRAY (char, dict, zctx->dict);
+
+    // note that dict words are not in the order of the nodes array. 
+    // pass 1: mark characters for deletion
+    for (uint64_t ni=0; ni < nodes_len; ni++) 
+        if (!counts[ni]) {
+            memset (&dict[nodes[ni].char_index], SNIP_RESERVED, nodes[ni].snip_len); // A value guaranteed not to exist in dictionary data
+            nodes[ni].snip_len = 0;
+        }
+        
+    // pass 2: delete characters
+    char *next = dict;
+    for (uint64_t i=0; i < dict_len; i++)
+        if (dict[i] != SNIP_RESERVED)
+            *next++ = dict[i];
+    
+    zctx->dict.len = next - dict;
+}
+
 static Context *frag_ctx;
 static const CtxNode *frag_next_node;
 static Codec frag_codec = CODEC_UNKNOWN;
@@ -1419,11 +1454,11 @@ static void ctx_prepare_for_dict_compress (VBlockP vb)
         }
 
         if (vb->fragment_len) {
-
             // if its the first fragment - assign a codec
             if (vb->fragment_codec == CODEC_UNKNOWN)
                 vb->fragment_codec = frag_codec =
                     codec_assign_best_codec (vb, vb->fragment_ctx, NULL, SEC_DICT);
+
             vb->ready_to_dispatch = true;
             break;
         }
@@ -1450,10 +1485,10 @@ static void ctx_compress_one_dict_fragment (VBlockP vb)
                  vb->fragment_ctx->tag_name, vb->vblock_i, vb->fragment_ctx->did_i, vb->fragment_num_words);
     
     if (ctx_is_show_dict_id (vb->fragment_ctx->dict_id))
-        str_print_dict (vb->fragment_start, vb->fragment_len, flag.show_dict, false);
+        str_print_dict (info_stream, vb->fragment_start, vb->fragment_len, flag.show_dict, false);
 
     if (flag.list_chroms && vb->fragment_ctx->did_i == CHROM)
-        str_print_dict (vb->fragment_start, vb->fragment_len, false, VB_DT(DT_SAM) || VB_DT(DT_BAM));
+        str_print_dict (info_stream, vb->fragment_start, vb->fragment_len, false, VB_DT(DT_SAM) || VB_DT(DT_BAM));
 
     if (flag.show_time) codec_show_time (vb, "DICT", vb->fragment_ctx->tag_name, vb->fragment_codec);
 
@@ -1627,14 +1662,14 @@ void ctx_read_all_dictionaries (void)
             if (!ctx->dict.len) continue;
 
             if (flag.list_chroms && ((!flag.luft && ctx->did_i == CHROM) || (flag.luft && ctx->did_i == VCF_oCHROM)))
-                str_print_dict (STRb(ctx->dict), true, Z_DT(DT_SAM));
+                str_print_dict (info_stream, STRb(ctx->dict), true, Z_DT(DT_SAM));
             
             if (flag.show_dict) 
                 iprintf ("%s (did_i=%u, num_snips=%u, dict_size=%u bytes)\n", 
                          ctx->tag_name, did_i, (uint32_t)ctx->word_list.len, (uint32_t)ctx->dict.len);
 
             if (ctx_is_show_dict_id (ctx->dict_id))
-                str_print_dict (STRb(ctx->dict), true, false);
+                str_print_dict (info_stream, STRb(ctx->dict), true, false);
         }
         iprint0 ("\n");
 

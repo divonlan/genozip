@@ -314,6 +314,7 @@ bool reconstruct_from_buddy (VBlockP vb, ContextP ctx, STRp(snip), bool reconstr
     // case: numeric value 
     if (ctx->flags.store == STORE_INT) {
         ASSPIZ0 (vb->buddy_line_i >= 0, "No buddy line is set for the current line"); // for textual, we test in reconstruct_from_buddy_get_textual_snip
+        ASSPIZ (base_ctx->history.len, "history not set for %s, perhaps seg forgot to set store_per_line?", ctx->tag_name);
 
         new_value->i = *ENT (int64_t, base_ctx->history, vb->buddy_line_i);
         if (reconstruct) RECONSTRUCT_INT (new_value->i);

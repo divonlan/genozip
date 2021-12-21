@@ -26,7 +26,7 @@ static const StoreType aux_field_store_flag[256] = {
     ['f']=STORE_FLOAT
 };
 
-static const StoreType aux_field_to_ltype[256] = {
+static const LocalType aux_field_to_ltype[256] = {
     ['c']=LT_INT8,   ['C']=LT_UINT8, 
     ['s']=LT_INT16,  ['S']=LT_UINT16,
     ['i']=LT_INT32,  ['I']=LT_UINT32,
@@ -494,15 +494,30 @@ static void sam_seg_XM_field (VBlockSAM *vb, ValueType XM, unsigned add_bytes)
 
 // AS has a value set (at least as set by BWA and IonTorrent TMAP) of at most vb->ref_consumed, and often equal to it. we modify
 // it to be new_value=(value-ref_consumed) 
-static inline void sam_seg_AS_field (VBlockSAM *vb, ValueType AS, unsigned add_bytes)
+static inline void sam_seg_AS_field (VBlockSAM *vb, ZipDataLineSAM *dl, ValueType AS, unsigned add_bytes)
 {
     ctx_set_last_value (VB, CTX (OPTION_AS_i), AS);
 
-    // store a special snip with delta
-    char new_snip[20] = { SNIP_SPECIAL, SAM_SPECIAL_REF_CONSUMED };
-    unsigned delta_len = str_int ((int32_t)vb->ref_consumed-AS.i, &new_snip[2]);
+    // in bowtie2, we might be able to copy from buddy
+    if (segconf.sam_bowtie2) {
+        ZipDataLineSAM *buddy_dl = DATA_LINE (vb->buddy_line_i); // an invalid pointer if buddy_line_i is -1
 
-    seg_by_ctx (VB, new_snip, delta_len+2, CTX (OPTION_AS_i), add_bytes); 
+        if (vb->buddy_line_i != -1 && buddy_dl->YS == AS.i) 
+            seg_by_did_i (VB, STRa(AS_buddy_snip), OPTION_AS_i, add_bytes);
+        else
+            // TODO: AS prediction, see bug 520
+            seg_integer_as_text_do (VB, CTX(OPTION_AS_i), AS.i, add_bytes);    
+
+        dl->AS = AS.i;
+    }
+
+    // not bowtie2: store a special snip with delta from ref_confusmed
+    else {
+        char new_snip[20] = { SNIP_SPECIAL, SAM_SPECIAL_REF_CONSUMED };
+        unsigned delta_len = str_int ((int32_t)vb->ref_consumed-AS.i, &new_snip[2]);
+
+        seg_by_ctx (VB, new_snip, delta_len+2, CTX (OPTION_AS_i), add_bytes); 
+    }
 }
 
 // reconstruct seq_len or (seq_len-snip)
@@ -531,12 +546,31 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_REF_CONSUMED)
 // alignment score of second best alignment - delta vs AS
 static inline void sam_seg_XS_field (VBlockSAM *vb, ValueType XS, unsigned add_bytes)
 {
-    if (ctx_has_value_in_line_(VB, CTX(OPTION_AS_i)) && XS.i >= 0 && XS.i < 10000) {
+    if (ctx_has_value_in_line_(VB, CTX(OPTION_AS_i)) && XS.i >= -10000 && XS.i < 10000) {
         ctx_set_last_value (VB, CTX (OPTION_XS_i), XS); // needed for seg_delta_vs_other_do
         seg_delta_vs_other_do (VB, CTX(OPTION_XS_i), CTX(OPTION_AS_i), NULL, 0, -1, add_bytes);
     }
     else
         seg_integer_as_text_do (VB, CTX(OPTION_XS_i), XS.i, add_bytes); // seg as text to not prevent singletons
+}
+
+// ----------------------------------------------------------------------------------------------
+// YS:i mate alignment score (bowtie2 only)
+// ----------------------------------------------------------------------------------------------
+
+static inline void sam_seg_YS_field (VBlockSAM *vb, ZipDataLineSAM *dl, ValueType YS, unsigned add_bytes)
+{
+    ctx_set_last_value (VB, CTX (OPTION_YS_i), YS);
+
+    ZipDataLineSAM *buddy_dl = DATA_LINE (vb->buddy_line_i); // an invalid pointer if buddy_line_i is -1
+
+    if (vb->buddy_line_i != -1 && buddy_dl->AS == YS.i) 
+        seg_by_did_i (VB, STRa(YS_buddy_snip), OPTION_YS_i, add_bytes);
+
+    else 
+        seg_integer_as_text_do (VB, CTX(OPTION_YS_i), YS.i, add_bytes);    
+
+    dl->YS = YS.i;
 }
 
 // MQ:i Mapping quality of the mate/next segment
@@ -829,9 +863,11 @@ DictId sam_seg_aux_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_BD_Z:
         case _OPTION_BI_Z: sam_seg_BD_BI_field (vb, dl, STRa(value), dict_id, add_bytes); break;
         
-        case _OPTION_AS_i: sam_seg_AS_field (vb, numeric, add_bytes); break;
+        case _OPTION_AS_i: sam_seg_AS_field (vb, dl, numeric, add_bytes); break;
 
         case _OPTION_XS_i: sam_seg_XS_field (vb, numeric, add_bytes); break;
+
+        case _OPTION_YS_i: SEG_COND (segconf.sam_bowtie2, sam_seg_YS_field (vb, dl, numeric, add_bytes));
 
         case _OPTION_XM_i: sam_seg_XM_field (vb, numeric, add_bytes); break;
 

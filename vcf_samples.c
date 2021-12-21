@@ -1232,7 +1232,7 @@ void vcf_FORMAT_PL_after_vbs (void)
     if (!ZCTX(FORMAT_PL)->nodes.len) return; // no FORMAT/PL in this file
 
     if (ZCTX(FORMAT_PL)->nodes.len > 1) {
-        str_print_dict (ZCTX(FORMAT_PL)->dict.data, ZCTX(FORMAT_PL)->dict.len, true, false);
+        str_print_dict (info_stream, ZCTX(FORMAT_PL)->dict.data, ZCTX(FORMAT_PL)->dict.len, true, false);
         ABORT ("Expecting FORMAT_PL to have exactly one word in its dict, but it has %"PRIu64, ZCTX(FORMAT_PL)->nodes.len);
     }
 

@@ -94,6 +94,8 @@ CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h tx
 
 LINUXDIR = genozip-linux-x86_64 # directory for creating the Linux binaries distribution
 
+DOCS = docs/docs
+
 ifeq ($(CC),cl) # Microsoft Visual C
 	$(error Only the gcc compiler is currently supported)
 endif
@@ -233,39 +235,39 @@ LICENSE.txt: text_license.h version.h # not dependent on genozip.exe, so we don'
 	@echo Generating $@
 	@./genozip$(EXE) --license=100 --force > $@
 
-DOCS = docs/genozip.rst docs/genounzip.rst docs/genocat.rst docs/genols.rst docs/advanced.rst docs/index.rst docs/license.rst \
-       docs/publications.rst docs/installing.rst docs/contact.rst docs/compression.rst docs/source.rst docs/logo.png \
-	   docs/opt-help.rst docs/opt-piz.rst docs/opt-quiet.rst docs/opt-stats.rst docs/opt-threads.rst docs/opt-subdirs.rst \
-	   docs/manual.rst docs/sex-assignment.rst docs/sex-assignment-alg-sam.rst docs/sex-assignment-alg-fastq.rst \
-	   docs/fastq-to-bam-pipeline.rst docs/coverage.rst docs/algorithms.rst docs/losslessness.rst docs/idxstats.rst \
-	   docs/downsampling.rst docs/applications.rst docs/capabilities.rst docs/kraken.rst \
-	   docs/sam2fq.rst docs/23andMe2vcf.rst docs/multifasta2phylip.rst docs/gatk-unexpected-base.rst docs/digest.rst docs/commercial.rst \
-	   docs/using-on-hpc.rst docs/match-chrom.rst docs/attributions.rst docs/testimonials.rst \
-	   docs/dvcf.rst docs/dvcf-rendering.rst docs/chain.rst docs/dvcf-limitations.rst docs/dvcf-renaming.rst docs/dvcf-see-also.rst \
-	   docs/archiving.rst docs/encryption.rst docs/release-notes.rst docs/benchmarks.rst \
-	   docs/data-types.rst docs/bam.rst docs/fastq.rst docs/vcf.rst docs/gff3.rst
+docs = $(DOCS)/genozip.rst $(DOCS)/genounzip.rst $(DOCS)/genocat.rst $(DOCS)/genols.rst $(DOCS)/advanced.rst $(DOCS)/index.rst $(DOCS)/license.rst \
+       $(DOCS)/publications.rst $(DOCS)/installing.rst $(DOCS)/contact.rst $(DOCS)/compression.rst $(DOCS)/source.rst $(DOCS)/logo.png \
+	   $(DOCS)/opt-help.rst $(DOCS)/opt-piz.rst $(DOCS)/opt-quiet.rst $(DOCS)/opt-stats.rst $(DOCS)/opt-threads.rst $(DOCS)/opt-subdirs.rst \
+	   $(DOCS)/manual.rst $(DOCS)/sex-assignment.rst $(DOCS)/sex-assignment-alg-sam.rst $(DOCS)/sex-assignment-alg-fastq.rst \
+	   $(DOCS)/fastq-to-bam-pipeline.rst $(DOCS)/coverage.rst $(DOCS)/algorithms.rst $(DOCS)/losslessness.rst $(DOCS)/idxstats.rst \
+	   $(DOCS)/downsampling.rst $(DOCS)/applications.rst $(DOCS)/capabilities.rst $(DOCS)/kraken.rst \
+	   $(DOCS)/sam2fq.rst $(DOCS)/23andMe2vcf.rst $(DOCS)/multifasta2phylip.rst $(DOCS)/gatk-unexpected-base.rst $(DOCS)/digest.rst $(DOCS)/commercial.rst \
+	   $(DOCS)/using-on-hpc.rst $(DOCS)/match-chrom.rst $(DOCS)/attributions.rst $(DOCS)/testimonials.rst $(DOCS)/pricing-faq.rst \
+	   $(DOCS)/dvcf.rst $(DOCS)/dvcf-rendering.rst $(DOCS)/chain.rst $(DOCS)/dvcf-limitations.rst $(DOCS)/dvcf-renaming.rst $(DOCS)/dvcf-see-also.rst \
+	   $(DOCS)/archiving.rst $(DOCS)/encryption.rst $(DOCS)/release-notes.rst $(DOCS)/benchmarks.rst \
+	   $(DOCS)/data-types.rst $(DOCS)/bam.rst $(DOCS)/fastq.rst $(DOCS)/vcf.rst $(DOCS)/gff3.rst
 
-docs/conf.py: docs/conf.template.py version.h
+$(DOCS)/conf.py: $(DOCS)/conf.template.py version.h
 	@sed -e "s/__VERSION__/$(version)/g" $< |sed -e "s/__YEAR__/`date +'%Y'`/g" > $@ 
 
-docs/LICENSE.for-docs.txt: genozip$(EXE) version.h
+$(DOCS)/LICENSE.for-docs.txt: genozip$(EXE) version.h
 	@echo Generating $@
 	@./genozip$(EXE) --license=74 --force > $@
 
-docs/RELEASE_NOTES.for-docs.txt: RELEASE_NOTES.txt
+$(DOCS)/RELEASE_NOTES.for-docs.txt: RELEASE_NOTES.txt
 	@echo Generating $@
 	@fold -w 63 -s $< > $@
 	
-docs/_build/html/.buildinfo: docs/LICENSE.for-docs.txt docs/RELEASE_NOTES.for-docs.txt docs/conf.py $(DOCS)
+$(DOCS)/_build/html/.buildinfo: $(DOCS)/LICENSE.for-docs.txt $(DOCS)/RELEASE_NOTES.for-docs.txt $(DOCS)/conf.py docs
 	@echo Building HTML docs
-	@run-on-wsl.sh /home/divon/miniconda3/bin/sphinx-build -M html docs docs/_build -q -a 
+	@run-on-wsl.sh /home/divon/miniconda3/bin/sphinx-build -M html docs $(DOCS)/_build -q -a 
 
-build-docs: docs/_build/html/.buildinfo docs/LICENSE.for-docs.txt docs/RELEASE_NOTES.for-docs.txt # they are actually published after git commit + push
+build-docs: $(DOCS)/_build/html/.buildinfo $(DOCS)/LICENSE.for-docs.txt $(DOCS)/RELEASE_NOTES.for-docs.txt # they are actually published after git commit + push
 
-test-docs: docs/conf.py $(DOCS) # don't require license or release notes - so code needn't be built
+test-docs: $(DOCS)/conf.py docs # don't require license or release notes - so code needn't be built
 	@echo "Building HTML docs (TEST)"
-	@run-on-wsl.sh /home/divon/miniconda3/bin/sphinx-build -M html docs docs/_build -q -a 
-	@"/c/Program Files (x86)/Google/Chrome/Application/chrome.exe" file:///c:/Users/divon/projects/genozip/docs/_build/html/index.html --new-window
+	@run-on-wsl.sh /home/divon/miniconda3/bin/sphinx-build -M html $(DOCS) $(DOCS)/_build -q -a 
+	@"/c/Program Files (x86)/Google/Chrome/Application/chrome.exe" file:///c:/Users/divon/projects/genozip/docs/docs/_build/html/index.html --new-window
 
 # this is used by build.sh to install on conda for Linux and Mac. Installation for Windows in in bld.bat
 install: genozip$(EXE)
@@ -288,7 +290,7 @@ test:
 	@cat test.sh | tr -d "\r" | bash -
 
 clean-docs:
-	@rm -fR docs/_build/*
+	@rm -fR $(DOCS)/_build/*
 
 clean-debug:
 	@echo Cleaning up debug
@@ -403,7 +405,7 @@ windows/LICENSE.for-installer.txt: genozip$(EXE) version.h
 WINDOWS_INSTALLER_OBJS = windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe windows/LICENSE.for-installer.txt LICENSE.txt
 
 # this must be run ONLY has part of "make distribution" or else versions will be out of sync
-docs/genozip-installer.exe: clean-optimized $(WINDOWS_INSTALLER_OBJS) # clean first, as we will compile without -march=native
+$(DOCS)/genozip-installer.exe: clean-optimized $(WINDOWS_INSTALLER_OBJS) # clean first, as we will compile without -march=native
 	@(mkdir windows >& /dev/null ; exit 0)
 	@echo 'Creating Windows installer'
 	@echo 'WINDOWS: Using the UI:'
@@ -420,9 +422,9 @@ docs/genozip-installer.exe: clean-optimized $(WINDOWS_INSTALLER_OBJS) # clean fi
 	@rm -f $(OBJDIR)/arch.o # remove this arch.o which contains DISTRIBUTION
 #	@(C:\\\\Program\\ Files\\ \\(x86\\)\\\\solicus\\\\InstallForge\\\\bin\\\\ifbuilderenvx86.exe ; exit 0)
 
-docs/genozip-linux-x86_64.tar.gz.build: genozip-linux-x86_64/LICENSE.txt 
+$(DOCS)/genozip-linux-x86_64.tar.gz.build: genozip-linux-x86_64/LICENSE.txt 
 	@(mkdir genozip-linux-x86_64 >& /dev/null ; exit 0)
-	@run-on-wsl.sh make clean-optimized docs/genozip-linux-x86_64.tar.gz # make -j doesn't work well on WSL - filesystem clock issues
+	@run-on-wsl.sh make clean-optimized $(DOCS)/genozip-linux-x86_64.tar.gz # make -j doesn't work well on WSL - filesystem clock issues
 
 mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@echo "Creating Mac installer"
@@ -433,14 +435,14 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@ssh `cat mac/.mac_ip_address` -l `cat mac/.mac_username`  "cd genozip ; echo "Pulling from git" ; git pull >& /dev/null ; make -j mac/.from_remote_timestamp" # pull before make as Makefile might have to be pulled
 	@touch $@
 
-BUILD_FILES = version.h genozip-installer.ifp docs/genozip-installer.exe docs/genozip-linux-x86_64.tar.gz LICENSE.txt  \
-			  docs/conf.py docs/LICENSE.for-docs.txt docs/RELEASE_NOTES.for-docs.txt Makefile
+BUILD_FILES = version.h genozip-installer.ifp $(DOCS)/genozip-installer.exe $(DOCS)/genozip-linux-x86_64.tar.gz LICENSE.txt  \
+			  $(DOCS)/conf.py $(DOCS)/LICENSE.for-docs.txt $(DOCS)/RELEASE_NOTES.for-docs.txt Makefile
 push-build: 
 	@(git stage $(BUILD_FILES) ; exit 0) > /dev/null
 	@(git commit -m $(version) ; exit 0) > /dev/null
 	@git push > /dev/null
 
-distribution: increment-version testfiles docs/genozip-linux-x86_64.tar.gz.build docs/genozip-installer.exe build-docs push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
+distribution: increment-version testfiles $(DOCS)/genozip-linux-x86_64.tar.gz.build $(DOCS)/genozip-installer.exe build-docs push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
 	@(cd ../genozip-feedstock/ ; git pull)
 
 test-backup: genozip.exe
@@ -475,7 +477,7 @@ genozip-linux-x86_64/genounzip genozip-linux-x86_64/genocat genozip-linux-x86_64
 LINUX_TARGZ_OBJS = genozip-linux-x86_64/genozip genozip-linux-x86_64/genounzip genozip-linux-x86_64/genocat genozip-linux-x86_64/genols 
 
 # this must be run ONLY as part of "make distribution" or else versions will be out of sync
-docs/genozip-linux-x86_64.tar.gz: version.h genozip-linux-x86_64/clean $(LINUX_TARGZ_OBJS) # run on Linux by make-linux-from-windows.sh
+$(DOCS)/genozip-linux-x86_64.tar.gz: version.h genozip-linux-x86_64/clean $(LINUX_TARGZ_OBJS) # run on Linux by make-linux-from-windows.sh
 	@echo "Creating $@"
 	@tar cf $@ genozip-linux-x86_64 -z
 	@rm -f $(OBJDIR)/arch.o # remove this arch.o which contains DISTRIBUTION

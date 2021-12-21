@@ -263,6 +263,28 @@ void sam_header_finalize (void)
     }    
 }
 
+bool sam_header_has_string (ConstBufferP txt_header, const char *substr)
+{
+    uint32_t next=0;
+    #define HDRSKIP(n) if (txt_header->len < next + n) return false; next += n
+    #define HDR32 (next + 4 <= txt_header->len ? GET_UINT32 (&txt_header->data[next]) : 0) ; if (txt_header->len < next + 4) return false; next += 4;
+
+    if (IS_BAM) {
+        HDRSKIP(4); // magic
+        uint32_t l_text = HDR32;
+        const char *text = ENT (const char, *txt_header, next);
+        SAFE_NUL (&text[l_text]);
+        bool found = !!strstr (text, substr);
+        SAFE_RESTORE;
+        return found;
+    }
+    else  // SAM - already nul-terminated in sam_header_inspect
+        return !!strstr (txt_header->data, substr);
+
+    #undef HDRSKIP
+    #undef HDR32
+}
+
 // constructs hdr_contigs, and in ZIP, also initialzes refererence ranges and random_access
 bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags)
 {    
@@ -271,6 +293,8 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
     if (command != ZIP) return true; // nothing to inspect in in PIZ, all good
 
     if (!IS_BAM) *AFTERENT (char, *txt_header) = 0; // nul-terminate as required by sam_foreach_SQ_line
+
+    segconf.sam_bowtie2 = sam_header_has_string (txt_header, "PN:bowtie2");
 
     // if there is no external reference provided, then we create our internal one, and store it
     // (if an external reference IS provided, the user can decide whether to store it or not, with --reference vs --REFERENCE)

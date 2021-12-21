@@ -161,7 +161,7 @@ extern const char *type_name (uint32_t item,
                               const char * const *name, // the address in which a pointer to name is found, if item is in range
                               uint32_t num_names);
 
-extern void str_print_dict (const char *data, uint32_t len, bool add_newline, bool remove_equal_asterisk);
+extern void str_print_dict (FILE *fp, STRp(data), bool add_newline, bool remove_equal_asterisk);
 
 extern int str_print_text (const char **text, uint32_t num_lines,
                            const char *wrapped_line_prefix, 

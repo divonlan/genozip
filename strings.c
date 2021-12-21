@@ -675,9 +675,9 @@ const char *type_name (uint32_t item,
     return *name;    
 }
 
-void str_print_dict (const char *data, uint32_t len, bool add_newline, bool remove_equal_asterisk)
+void str_print_dict (FILE *fp, STRp(data), bool add_newline, bool remove_equal_asterisk)
 {
-    for (uint32_t i=0; i < len; i++) {
+    for (uint32_t i=0; i < data_len; i++) {
         // in case we are showing chrom data in --list-chroms in SAM - don't show * and =
         if (remove_equal_asterisk && (data[i]=='*' || data[i]=='=') && !data[i+1]) {
             i++;
@@ -685,14 +685,15 @@ void str_print_dict (const char *data, uint32_t len, bool add_newline, bool remo
         }
 
         switch (data[i]) {
-            case 32 ... 127 : fputc (data[i], info_stream);      break;
-            case 0          : fputc (add_newline ? '\n' : ' ', info_stream); break; // snip separator
-            case '\t'       : fwrite ("\\t", 1, 2, info_stream); break;
-            case '\n'       : fwrite ("\\n", 1, 2, info_stream); break;
-            case '\r'       : fwrite ("\\r", 1, 2, info_stream); break;
-            default         : iprintf ("\\x%x", (uint8_t)data[i]);
+            case 32 ... 127 : fputc (data[i], fp);      break;
+            case 0          : fputc (add_newline ? '\n' : ' ', fp); break; // snip separator
+            case '\t'       : fwrite ("\\t", 1, 2, fp); break;
+            case '\n'       : fwrite ("\\n", 1, 2, fp); break;
+            case '\r'       : fwrite ("\\r", 1, 2, fp); break;
+            default         : fprintf (fp, "\\x%x", (uint8_t)data[i]);
         }
     }
+    fflush (fp);
 }
 
 int str_print_text (const char **text, uint32_t num_lines,

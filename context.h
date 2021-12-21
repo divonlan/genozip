@@ -45,12 +45,14 @@
 #define SNIP_LOOKBACK            '\x10'  // Copy an earlier snip in the same context. Snip is dict_id from which to take the lookback offset, and an optional delta to be applied to the retrieved numeric value. note: line number of the previous snip is variable, but its offset back is fixed (introduced 12.0.41)
 #define SNIP_COPY_BUDDY          '\x11'  // Copy a snip on an earlier "buddy" line in the same or another context (note: offset back to the previous snip is variable, but its line number is fixed) (introduced 12.0.41)
 #define SNIP_XOR_DIFF            '\x12'  // XOR a string vs. previous string (introduced 13.0.5)    
-#define NUM_SNIP_CODES           19
+#define SNIP_RESERVED            '\x13'  // A value guaranteed not to exist in dictionary data. Used internally by ctx_shorten_unused_dict_words. (13.0.7)
+#define NUM_SNIP_CODES           20
 
 #define SNIP_CODES { "SNIP_SEP", "SNIP_LOOKUP", "SNIP_OTHER_LOOKUP", "SNIP_MATE_LOOKUP",\
                      "SNIP_CONTAINER", "SNIP_SELF_DELTA", "SNIP_OTHER_DELTA", "SNIP_PAIR_DELTA", \
                      "SNIP_SPECIAL", "<TAB>", "<NL>", "SNIP_REDIRECTION",\
-                     "SNIP_DONT_STORE", "<LF>", "SNIP_COPY", "SNIP_DUAL", "SNIP_LOOKBACK" }
+                     "SNIP_DONT_STORE", "<LF>", "SNIP_COPY", "SNIP_DUAL", "SNIP_LOOKBACK",\
+                     "SNIP_COPY_BUDDY", "SNIP_XOR_DIFF", "SNIP_RESERVED" }
 #define SNIP(len) uint32_t snip_len=(len); char snip[len]
 
 typedef struct CtxNode {
@@ -207,6 +209,7 @@ extern WordIndex ctx_get_word_index_by_snip (ConstContextP ctx, const char *snip
 extern void ctx_initialize_predefined_ctxs (ContextP contexts /* an array */, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_contexts);
 
 extern void ctx_read_all_dictionaries (void);
+extern void ctx_shorten_unused_dict_words (DidIType did_i);
 extern void ctx_compress_dictionaries (void);
 extern void ctx_read_all_counts (void);
 extern void ctx_compress_counts (void);
