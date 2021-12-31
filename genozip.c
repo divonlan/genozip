@@ -225,16 +225,15 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, in
         txt_filename = txtfile_piz_get_filename (z_filename, "", true);
 
     // open output txt file (except if unbinding)
-    if (txt_filename || (flag.to_stdout && !flag.no_writer)) {
+    if ((txt_filename && flag.one_component < 2) || (flag.to_stdout && !flag.no_writer)) {
         ASSERT0 (!txt_file, "txt_file is unexpectedly already open"); // note: in bound mode, we expect it to be open for 2nd+ file
         txt_file = file_open (txt_filename, WRITE, TXT_FILE, flag.out_dt);
     }
-    else if (flag.unbind || flag.no_writer) {
+    else if (flag.unbind || flag.no_writer || (txt_filename && flag.one_component >= 2)) {
         // do nothing - in unbind, the component files will be opened by txtheader_piz_read_and_reconstruct()
     }
-    else {
+    else 
         ABORT0 ("Error: unrecognized configuration for the txt_file");
-    }
 
     Dispatcher dispatcher = piz_z_file_initialize (is_last_z_file);  
 
