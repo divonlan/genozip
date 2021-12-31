@@ -781,7 +781,7 @@ void zfile_compress_genozip_header (Digest single_component_digest)
         .txt_is_bin   = DTPT (is_binary),
         .dt_specific  = (DT_FUNC (z_file, zip_dts_flag)()),
         .aligner      = (flag.aligner_available > 0),
-        .bgzf         = (txt_file->codec == CODEC_BGZF),
+        .bgzf         = (txt_file->codec == CODEC_BGZF || txt_file->codec == CODEC_GZ), // note: if txt file is compressed with GZ, we will reconstruct it with BGZF
         .adler        = !flag.md5,
         .dual_coords  = z_dual_coords,
         .has_taxid    = kraken_is_loaded

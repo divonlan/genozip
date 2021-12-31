@@ -87,6 +87,16 @@ Codec file_get_codec_by_txt_ft (DataType dt, FileType txt_ft)
     return CODEC_NONE;
 }
 
+// get codec by txt file type
+FileType file_get_txt_ft_by_codec (DataType dt, Codec codec)
+{
+    for (unsigned i=0; txt_in_ft_by_dt[dt][i].in; i++)
+        if (txt_in_ft_by_dt[dt][i].codec == codec) 
+            return txt_in_ft_by_dt[dt][i].in;
+
+    return UNKNOWN_FILE_TYPE;
+}
+
 DataType file_get_dt_by_z_ft (FileType z_ft)
 {
     for (DataType dt=0; dt < NUM_DATATYPES; dt++)
@@ -151,6 +161,17 @@ FileType file_get_type (const char *filename)
     }
 
     return UNKNOWN_FILE_TYPE; // this should never happen, because GNRIC_ is "" so it will catch everything
+}
+
+static FileType file_get_type_force_dt (const char *filename, DataType dt)
+{
+    FileType ft = file_get_type (filename); 
+    switch (ft) {
+        case GNRIC_GZ  : return file_get_txt_ft_by_codec (dt, CODEC_GZ);
+        case GNRIC_BZ2 : return file_get_txt_ft_by_codec (dt, CODEC_BZ2);
+        case GNRIC_XZ  : return file_get_txt_ft_by_codec (dt, CODEC_XZ);
+        default        : return ft;
+    }
 }
 
 // returns the filename without the extension eg myfile.1.sam.gz -> myfile.1. 
@@ -914,11 +935,15 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
         file->name = MALLOC (fn_size);
         memcpy (file->name, filename, fn_size);
 
-        if (mode==READ || data_type != DT_NONE) // if its WRITE and DT_NONE, we will not open now, and try again from piz_dispatch after reading the genozip header
+        if (mode==READ) // if its WRITE and DT_NONE, we will not open now, and try again from piz_dispatch after reading the genozip header
             file->type = file_get_type (file->name);
 
-        if (mode == WRITE || mode == WRITEREAD) 
+        if (mode == WRITE || mode == WRITEREAD) {
+            if (data_type != DT_NONE) // if its WRITE and DT_NONE, we will not open now, and try again from piz_dispatch after reading the genozip header
+                file->type = file_get_type_force_dt (file->name, data_type);
+
             file->data_type = data_type; // for READ, data_type is set by file_open_*
+        }
     }
     else if (mode==READ) {  // stdin
 

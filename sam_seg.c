@@ -145,15 +145,15 @@ void sam_seg_initialize (VBlock *vb)
     CTX(SAM_BUDDY)->local_param = true;
 
     // we sometimes copy from buddy alignments (mates etc), but only in sorted files
-    if (segconf.sam_is_sorted) { // since v12.0.41
-        CTX(SAM_QNAME  )->flags.store_per_line = true; 
+    if (segconf.sam_is_sorted) { 
+        CTX(SAM_QNAME  )->flags.store_per_line = true; // 12.0.41
         CTX(SAM_FLAG   )->flags.store_per_line = true;
         CTX(SAM_POS    )->flags.store_per_line = true;
         CTX(SAM_PNEXT  )->flags.store_per_line = true;
         CTX(SAM_CIGAR  )->flags.store_per_line = true;
         CTX(OPTION_MC_Z)->flags.store_per_line = true;
         CTX(SAM_MAPQ   )->flags.store_per_line = true;
-        CTX(OPTION_MQ_i)->flags.store_per_line = true; // v13
+        CTX(OPTION_MQ_i)->flags.store_per_line = true; // 13.0.0
     }
 
     if (segconf.sam_bowtie2) {

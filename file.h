@@ -158,33 +158,33 @@
 
 typedef enum {TXT_FILE, Z_FILE} FileSupertype; 
 
-typedef enum      { UNKNOWN_FILE_TYPE, 
-                    REF_GENOZIP,
-                    VCF, VCF_GZ, VCF_BGZF, VCF_BZ2, VCF_XZ, VCF_GENOZIP, 
-                    SAM, SAM_GZ, SAM_BGZF, SAM_BZ2, SAM_XZ, SAM_GENOZIP,
-                    FASTQ, FASTQ_GZ, FASTQ_BZ2, FASTQ_XZ, FASTQ_GENOZIP,
-                    FQ,    FQ_GZ,    FQ_BZ2,    FQ_XZ,    FQ_GENOZIP,
-                    FASTA, FASTA_GZ, FASTA_BZ2, FASTA_XZ, FASTA_GENOZIP,
-                    FA,    FA_GZ,    FA_BZ2,    FA_XZ,    FA_GENOZIP,
-                    FAA,   FAA_GZ,   FAA_BZ2,   FAA_XZ,   FAA_GENOZIP,
-                    FFN,   FFN_GZ,   FFN_BZ2,   FFN_XZ,   FFN_GENOZIP,
-                    FNN,   FNN_GZ,   FNN_BZ2,   FNN_XZ,   FNN_GENOZIP,
-                    FNA,   FNA_GZ,   FNA_BZ2,   FNA_XZ,   FNA_GENOZIP,
-                    FRN,   FRN_GZ,   FRN_BZ2,   FRN_XZ,   FRN_GENOZIP,
-                    FAS,   FAS_GZ,   FAS_BZ2,   FAS_XZ,   FAS_GENOZIP,
-                    GFF3,  GFF3_GZ,  GFF3_BZ2,  GFF3_XZ,  GFF3_GENOZIP,
-                    GFF,   GFF_GZ,   GFF_BZ2,   GFF_XZ,   GFF_GENOZIP,
-                    GVF,   GVF_GZ,   GVF_BZ2,   GVF_XZ,   GVF_GENOZIP,
-                    ME23,  ME23_ZIP,                      ME23_GENOZIP, 
-                    PHY,   PHY_GZ,   PHY_BZ2,   PHY_XZ,   PHY_GENOZIP,
-                    CHAIN, CHAIN_GZ, CHAIN_BZ2, CHAIN_XZ, CHAIN_GENOZIP,
-                    KRAKEN, KRAKEN_GZ, KRAKEN_BZ2, KRAKEN_XZ, KRAKEN_GENOZIP,
-                    LOCS,  LOCS_GZ,  LOCS_BZ2,  LOCS_XZ,  LOCS_GENOZIP,
-                    BAM, CRAM,                            BAM_GENOZIP,
-                    BCF, BCF_GZ, BCF_BGZF,                BCF_GENOZIP,  
-                    // the GNRIC row *must* be the last row, as it consists catch-all extensions (*.gz etc)
-                    GNRIC_GZ, GNRIC_BZ2, GNRIC_XZ,        GNRIC_GENOZIP, GNRIC, // GNRIC *must* be the very last as it is a catch-all ""
-                    AFTER_LAST_FILE_TYPE } FileType;
+typedef enum { UNKNOWN_FILE_TYPE, 
+               REF_GENOZIP,
+               VCF, VCF_GZ, VCF_BGZF, VCF_BZ2, VCF_XZ,   VCF_GENOZIP, 
+               SAM, SAM_GZ, SAM_BGZF, SAM_BZ2, SAM_XZ,   SAM_GENOZIP,
+               FASTQ, FASTQ_GZ, FASTQ_BZ2, FASTQ_XZ,     FASTQ_GENOZIP,
+               FQ,    FQ_GZ,    FQ_BZ2,    FQ_XZ,        FQ_GENOZIP,
+               FASTA, FASTA_GZ, FASTA_BZ2, FASTA_XZ,     FASTA_GENOZIP,
+               FA,    FA_GZ,    FA_BZ2,    FA_XZ,        FA_GENOZIP,
+               FAA,   FAA_GZ,   FAA_BZ2,   FAA_XZ,       FAA_GENOZIP,
+               FFN,   FFN_GZ,   FFN_BZ2,   FFN_XZ,       FFN_GENOZIP,
+               FNN,   FNN_GZ,   FNN_BZ2,   FNN_XZ,       FNN_GENOZIP,
+               FNA,   FNA_GZ,   FNA_BZ2,   FNA_XZ,       FNA_GENOZIP,
+               FRN,   FRN_GZ,   FRN_BZ2,   FRN_XZ,       FRN_GENOZIP,
+               FAS,   FAS_GZ,   FAS_BZ2,   FAS_XZ,       FAS_GENOZIP,
+               GFF3,  GFF3_GZ,  GFF3_BZ2,  GFF3_XZ,      GFF3_GENOZIP,
+               GFF,   GFF_GZ,   GFF_BZ2,   GFF_XZ,       GFF_GENOZIP,
+               GVF,   GVF_GZ,   GVF_BZ2,   GVF_XZ,       GVF_GENOZIP,
+               ME23,  ME23_ZIP,                          ME23_GENOZIP, 
+               PHY,   PHY_GZ,   PHY_BZ2,   PHY_XZ,       PHY_GENOZIP,
+               CHAIN, CHAIN_GZ, CHAIN_BZ2, CHAIN_XZ,     CHAIN_GENOZIP,
+               KRAKEN, KRAKEN_GZ, KRAKEN_BZ2, KRAKEN_XZ, KRAKEN_GENOZIP,
+               LOCS,  LOCS_GZ,  LOCS_BZ2,  LOCS_XZ,      LOCS_GENOZIP,
+               BAM, CRAM,                                BAM_GENOZIP,
+               BCF, BCF_GZ, BCF_BGZF,                    BCF_GENOZIP,  
+               // the GNRIC row *must* be the last row, as it consists catch-all extensions (*.gz etc)
+               GNRIC_GZ, GNRIC_BZ2, GNRIC_XZ,            GNRIC_GENOZIP, GNRIC, // GNRIC *must* be the very last as it is a catch-all ""
+               AFTER_LAST_FILE_TYPE } FileType;
 
 #define FILE_EXTS {"Unknown", /* order matches the FileType enum */ \
                    REF_GENOZIP_,                                                     \
