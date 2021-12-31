@@ -469,6 +469,9 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_COPY_BUDDY_MC)
 // a buddy line of a future line in which case this MC will be copied to the future line's CIGAR 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_CONSUME_MC_Z)
 {
+    ContextP mc_ctx = CTX(OPTION_MC_Z);
+    if (!mc_ctx->flags.store_per_line) goto done; // MC is not buddied
+    
     ContextP opt_ctx = CTX(SAM_AUX);
     WordIndex opt_word_index = WORD_INDEX_NONE;
 
@@ -499,8 +502,6 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_CONSUME_MC_Z)
         }
     if (!found) goto done; // AUX has no MC:Z tag
 
-    ContextP mc_ctx = CTX(OPTION_MC_Z);
-
     // store MC:Z in history to be used by future line CIGAR. Note: since MC:Z is not reconstructed, ctx->history will point
     // to either dict or local (depending on where this snip originates) rather than the normal txt_data.
     snip_len = 0;
@@ -513,7 +514,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_CONSUME_MC_Z)
         if (snip_len==1 && *snip == SNIP_LOOKUP)
             snip_len=0;
 
-        else
+        else 
             *ENT (HistoryWord, mc_ctx->history, vb->line_i - vb->first_line) = 
                 (HistoryWord){ .char_index = ENTNUM (mc_ctx->dict, snip), .snip_len = snip_len, .lookup = LookupDict };
     }
