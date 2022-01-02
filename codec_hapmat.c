@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   codec_hapmat.c
-//   Copyright (C) 2019-2021 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 // *** RETIRED CODEC. USED JUST FOR DECOMPRESSING OLD VCF FILES (retired officially in v13, but hasn't been in since some earlier version) ***

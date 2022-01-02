@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   vblock.c
-//   Copyright (C) 2019-2021 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 // vb stands for VBlock - it started its life as VBlockVCF when genozip could only compress VCFs, but now

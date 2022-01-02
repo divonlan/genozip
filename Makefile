@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------
 #   Makefile
-#   Copyright (C) 2019-2021 Black Paw Ventures Limited
+#   Copyright (C) 2019-2022 Black Paw Ventures Limited
 #   Please see terms and conditions in the file LICENSE.txt
 
 # Note for Windows: to run this make, you need mingw (for the gcc compiler) and cygwin (for Unix-like tools):

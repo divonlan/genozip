@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   codec_domq.c
-//   Copyright (C) 2020-2021 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 // compression algorithm for QUAL value that has a dominant value ("dom") (roughly over 50%) - as typically does binned Illumina

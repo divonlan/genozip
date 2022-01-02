@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   qname.c
-//   Copyright (C) 2019-2021 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "qname.h"

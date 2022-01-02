@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--                                                                                                      -->
 <!-- README.md                                                                                            -->
-<!-- Copyright (C) 2019-2021 Black Paw Ventures Limited                                                -->
+<!-- Copyright (C) 2019-2022 Black Paw Ventures Limited                                                -->
 <!-- Please see terms and conditions in the file LICENSE.txt   -->
 <!--                                                                                                      -->
 <!-- This file needs to be compliant to both Markdown and HTML. It is:                                    -->

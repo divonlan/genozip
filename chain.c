@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   chain.c
-//   Copyright (C) 2021 Black Paw Ventures Limited
+//   Copyright (C) 2021-2022 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 // handle UCSC Chain format: https://genome.ucsc.edu/goldenPath/help/chain.html
