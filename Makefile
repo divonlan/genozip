@@ -258,13 +258,13 @@ $(DOCS)/RELEASE_NOTES.for-docs.txt: RELEASE_NOTES.txt
 	@echo Generating $@
 	@fold -w 63 -s $< > $@
 	
-$(DOCS)/_build/html/.buildinfo: $(DOCS)/LICENSE.for-docs.txt $(DOCS)/RELEASE_NOTES.for-docs.txt $(DOCS)/conf.py docs
+$(DOCS)/_build/html/.buildinfo: $(DOCS)/LICENSE.for-docs.txt $(DOCS)/RELEASE_NOTES.for-docs.txt $(DOCS)/conf.py $(docs)
 	@echo Building HTML docs
-	@run-on-wsl.sh /home/divon/miniconda3/bin/sphinx-build -M html docs $(DOCS)/_build -q -a 
+	@run-on-wsl.sh /home/divon/miniconda3/bin/sphinx-build -M html $(DOCS) $(DOCS)/_build -q -a 
 
 build-docs: $(DOCS)/_build/html/.buildinfo $(DOCS)/LICENSE.for-docs.txt $(DOCS)/RELEASE_NOTES.for-docs.txt # they are actually published after git commit + push
 
-test-docs: $(DOCS)/conf.py docs # don't require license or release notes - so code needn't be built
+test-docs: $(DOCS)/conf.py $(docs) # don't require license or release notes - so code needn't be built
 	@echo "Building HTML docs (TEST)"
 	@run-on-wsl.sh /home/divon/miniconda3/bin/sphinx-build -M html $(DOCS) $(DOCS)/_build -q -a 
 	@"/c/Program Files (x86)/Google/Chrome/Application/chrome.exe" file:///c:/Users/divon/projects/genozip/docs/docs/_build/html/index.html --new-window
@@ -312,7 +312,7 @@ clean: clean-docs
 	@rm -R $(OBJDIR)
 	@mkdir $(OBJDIR) $(addprefix $(OBJDIR)/, $(SRC_DIRS))
 
-.PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch docs testfiles test-backup genozip-linux-x86_64/clean genozip-prod genozip-prod.exe dict_id_gen$(EXE) push-build
+.PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch build-docs test-docs testfiles test-backup genozip-linux-x86_64/clean genozip-prod genozip-prod.exe dict_id_gen$(EXE) push-build
 
 # builds prod for local OS
 genozip-prod$(EXE): 
@@ -418,7 +418,7 @@ $(DOCS)/genozip-installer.exe: clean-optimized $(WINDOWS_INSTALLER_OBJS) # clean
 	@if [ `basename ${PWD}` != genozip ] ; then cp $(WINDOWS_INSTALLER_OBJS) ../genozip/windows ; fi # so this works for genozip-prod too - because InstallForge uses absolute paths 
 	@(private/utils/InstallForge/InstallForge.exe ; exit 0)
 	@echo 'Committing Windows installer and pushing to repo'
-	@mv ../genozip/windows/genozip-installer.exe docs  # so this works for genozip-prod too - because InstallForge uses absolute paths
+	@mv ../genozip/windows/genozip-installer.exe $(DOCS)  # so this works for genozip-prod too - because InstallForge uses absolute paths
 	@rm -f $(OBJDIR)/arch.o # remove this arch.o which contains DISTRIBUTION
 #	@(C:\\\\Program\\ Files\\ \\(x86\\)\\\\solicus\\\\InstallForge\\\\bin\\\\ifbuilderenvx86.exe ; exit 0)
 
