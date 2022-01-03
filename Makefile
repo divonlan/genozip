@@ -422,9 +422,9 @@ $(DOCS)/genozip-installer.exe: clean-optimized $(WINDOWS_INSTALLER_OBJS) # clean
 	@rm -f $(OBJDIR)/arch.o # remove this arch.o which contains DISTRIBUTION
 #	@(C:\\\\Program\\ Files\\ \\(x86\\)\\\\solicus\\\\InstallForge\\\\bin\\\\ifbuilderenvx86.exe ; exit 0)
 
-$(DOCS)/genozip-linux-x86_64.tar.gz.build: genozip-linux-x86_64/LICENSE.txt 
+$(DOCS)/genozip-linux-x86_64.tar.build: genozip-linux-x86_64/LICENSE.txt 
 	@(mkdir genozip-linux-x86_64 >& /dev/null ; exit 0)
-	@run-on-wsl.sh make clean-optimized $(DOCS)/genozip-linux-x86_64.tar.gz # make -j doesn't work well on WSL - filesystem clock issues
+	@run-on-wsl.sh make clean-optimized $(DOCS)/genozip-linux-x86_64.tar # make -j doesn't work well on WSL - filesystem clock issues
 
 mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@echo "Creating Mac installer"
@@ -435,14 +435,19 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@ssh `cat mac/.mac_ip_address` -l `cat mac/.mac_username`  "cd genozip ; echo "Pulling from git" ; git pull >& /dev/null ; make -j mac/.from_remote_timestamp" # pull before make as Makefile might have to be pulled
 	@touch $@
 
-BUILD_FILES = version.h genozip-installer.ifp $(DOCS)/genozip-installer.exe $(DOCS)/genozip-linux-x86_64.tar.gz LICENSE.txt  \
-			  $(DOCS)/conf.py $(DOCS)/LICENSE.for-docs.txt $(DOCS)/RELEASE_NOTES.for-docs.txt Makefile
+BUILD_FILES = version.h genozip-installer.ifp LICENSE.txt Makefile
+
+BUILD_FILES_DOCS = $(DOCS)/genozip-installer.exe $(DOCS)/genozip-linux-x86_64.tar $(DOCS)/conf.py $(DOCS)/LICENSE.for-docs.txt $(DOCS)/RELEASE_NOTES.for-docs.txt
+
 push-build: 
 	@(git stage $(BUILD_FILES) ; exit 0) > /dev/null
 	@(git commit -m $(version) ; exit 0) > /dev/null
 	@git push > /dev/null
+	@(cd $(DOCS); git stage $(BUILD_FILES_DOCS) ; exit 0) > /dev/null
+	@(cd $(DOCS); git commit -m $(version) ; exit 0) > /dev/null
+	@(cd $(DOCS); git push) > /dev/null
 
-distribution: increment-version testfiles $(DOCS)/genozip-linux-x86_64.tar.gz.build $(DOCS)/genozip-installer.exe build-docs push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
+distribution: increment-version testfiles $(DOCS)/genozip-linux-x86_64.tar.build $(DOCS)/genozip-installer.exe build-docs push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
 	@(cd ../genozip-feedstock/ ; git pull)
 
 test-backup: genozip.exe
@@ -477,9 +482,9 @@ genozip-linux-x86_64/genounzip genozip-linux-x86_64/genocat genozip-linux-x86_64
 LINUX_TARGZ_OBJS = genozip-linux-x86_64/genozip genozip-linux-x86_64/genounzip genozip-linux-x86_64/genocat genozip-linux-x86_64/genols 
 
 # this must be run ONLY as part of "make distribution" or else versions will be out of sync
-$(DOCS)/genozip-linux-x86_64.tar.gz: version.h genozip-linux-x86_64/clean $(LINUX_TARGZ_OBJS) # run on Linux by make-linux-from-windows.sh
+$(DOCS)/genozip-linux-x86_64.tar: version.h genozip-linux-x86_64/clean $(LINUX_TARGZ_OBJS) # run on Linux by make-linux-from-windows.sh
 	@echo "Creating $@"
-	@tar cf $@ genozip-linux-x86_64 -z
+	@tar cf $@ -z genozip-linux-x86_64
 	@rm -f $(OBJDIR)/arch.o # remove this arch.o which contains DISTRIBUTION
 
 endif # Linux
