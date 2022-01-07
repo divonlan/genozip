@@ -13,78 +13,15 @@
 #include "sam.h"
 #include "fastq.h"
 #include "stats.h"
-#include "qname_cons.h"
+#include "qname_flavors.h"
 #include "file.h"
 
-#define MAX_QNAME_ITEMS 11 // mate + 10 others (matching Q?NAME defined in sam.h, fastq.h, kraken.h) 
-
 static STRl(copy_qname, 50);
-
-//----------------------------------------------------------------
-
-typedef struct { STR(s); int32_t fixed_i; } FixedStr;
-
-typedef struct QnameFlavorStruct {
-    char name[16], example[256];
-    SeqTech tech;                              // The sequencing technology used to generate this data
-    int fq_only;                               // this QF is only for FASTQ, not SAM/BAM/KRAKEN. FQ: 1 if /1 goes after the first string, 2 if after the second space-separated string
-    SmallContainer *con_template;              // container template - copied to con in qname_zip_initialize
-    unsigned num_seps;                         // number of printable separator and prefix characters
-    int integer_items[MAX_QNAME_ITEMS+1];      // array of item_i (0-based) that are expected to be integer - no leading zeros (+1 for termiantor; terminated by -1)
-    int numeric_items[MAX_QNAME_ITEMS+1];      // array of item_i (0-based) that are expected to be numeric - leading zeros ok (+1 for termiantor; terminated by -1)
-    int in_local[MAX_QNAME_ITEMS+1];           // int or numeric items that should be stored in local. if not set, item is segged to dict.
-    int hex_items[MAX_QNAME_ITEMS+1];          // array of item_i (0-based) that are expected to be hexademical (+1 for termiantor; terminated by -1)
-    int ordered_item1, ordered_item2;          // an item that may be delta'd in non-sorted files. this should be the fast-moving item which consecutive values are close
-    int range_end_item;                        // item containing end of range - delta vs preceding item in container
-    unsigned fixed_len;                        // fixed length (0 if it is not fixed length)
-    FixedStr px_strs[MAX_QNAME_ITEMS+1];       // fixed substrings in template (=prefixes of items in fixed locations). (+1 for termiantor; terminated by empty entry) 
-    int qname2;                                // embedded qname2 item (generated in qname_zip_initialize)
-    STRl (con_snip,  200);                     // container snips (generated in qname_zip_initialize)
-    STRl (con_snip2, 200);                     // same as con_snip, just with QNAME2 dict_ids
-    #define MAX_PREFIX_LEN 30
-    STRl (con_prefix, MAX_PREFIX_LEN);         // prefix of container
-    SmallContainer con;                        // container
-} QnameFlavorStruct;
-
-static QnameFlavorStruct qf[] = { 
-/*  mate   name             example                                   tech     fq_only   con_template     #sp int_items       numeric_items   in-local        hex_items       ord1,2 rng len px_strs{str,str_len,fixed_i}                               */
-         { "Illumina-fastq","A00488:61:HMLGNDSXX:4:1101:4345:1000 2:N:0:CTGAAGCT+ATAGAGGC",
-                                                                      TECH_ILLUM_7, 1, &con_illumina_7_fq, 7, {1,3,4,5,6,-1}, {-1},           {-1},           {-1},           5,6,   -1,                                                                 },
-    {},  { "Illumina",      "A00488:61:HMLGNDSXX:4:1101:4345:1000",   TECH_ILLUM_7, 0, &con_illumina_7,    6, {1,3,4,5,6,-1}, {-1},           {-1},           {-1},           5,6,   -1,                                                                 },
-    {},  { "BGI-E",         "E100020409L1C001R0030000801",            TECH_BGI,     0, &con_bgi_E,         4, {-1},           {0,1,2,3,4,-1}, {-1},           {-1},           4,-1,  -1, 27, { {"E",1,0},  {"L",1,10},{"C",1,12},{"R",1,16},{"",0,20}, {(char[]){CI0_SKIP},0,27} } },
-    {},  { "BGI-CL",        "CL100025298L1C002R050_244547",           TECH_BGI,     0, &con_bgi_CL,        5, {-1},           {0,1,2,3,4,-1}, {-1},           {-1},           4,-1,  -1, 0,  { {"CL",2,0}, {"L",1,11},{"C",1,13},{"R",1,17},{"_",1,21} } },
-    {},  { "IonTorrent",    "ZEWTM:10130:07001",                      TECH_IONTORR, 0, &con_ion_torrent_3, 2, {-1},           {1,2,-1},       {-1},           {-1},           -1,-1, -1, 17                                                              },
-    {},  { "Illumina-old#", "HWI-ST550_0201:3:1101:1626:2216#ACAGTG", TECH_ILLUM_5, 0, &con_illumina_5i,   5, {1,2,3,4,-1},   {-1},           {-1},           {-1},           -1,-1, -1,                                                                 },
-    {},  { "Illumina-old",  "SOLEXA-1GA-1_4_FC20ENL:7:258:737:870",   TECH_ILLUM_5, 0, &con_illumina_5,    4, {1,2,3,4,-1},   {-1},           {-1},           {-1},           -1,-1, -1,                                                                 },
-    {},  { "Roche-454",     "000050_1712_0767",                       TECH_454,     0, &con_roche_454,     2, {-1},           {0,1,2,-1},     {-1},           {-1},           -1,-1, -1, 16, { {"",0,0},{"_",1,6},{"_",1,11},{(char[]){CI0_SKIP},0,16} } },
-    {},  { "Helicos",       "VHE-242383071011-15-1-0-2",              TECH_HELICOS, 0, &con_helicos,       5, {2,3,4,5,-1},   {1,-1},         {-1},           {-1},           -1,-1, -1,                                                                 },
-    {},  { "PacBio-3",      "56cdb76f_70722_4787",                    TECH_PACBIO,  0, &con_pacbio_3,      2, {1,2,-1},       {-1},           {-1},           {0,-1},         -1,-1, -1,                                                                 },
-    {},  { "PacBio-Range",  "m130802_221257_00127_c100560082550000001823094812221334_s1_p0/128361/872_4288",
-                                                                      TECH_PACBIO,  0, &con_pacbio_range,  4, {1,2,3,-1},     {-1},           {-1},           {-1},           1,-1,   3, 0,  { { "m",1,0} }                                              },
-    {},  { "PacBio-Label",  "m64136_200621_234916/18/ccs",            TECH_PACBIO,  0, &con_pacbio_label,  3, {1,-1},         {-1},           {-1},           {-1},           1,-1,  -1, 0,  { { "m",1,0} }                                              },
-    {},  { "PacBio-Plain",  "m64136_200621_234916/18",                TECH_PACBIO,  0, &con_pacbio_plain,  2, {1,-1},         {-1},           {-1},           {-1},           1,-1,  -1, 0,  { { "m",1,0} }                                              },
-    {},  { "Nanopore",      "af84b0c1-6945-4323-9193-d9f6f2c38f9a",   TECH_ONP,     0, &con_nanopore,      4, {-1},           {-1},           {0,1,2,3,4,-1}, {0,1,2,3,4,-1}, -1,-1, -1, 36,                                                             },
-    {},  { "Nanopore-ext",  "2a228edf-d8bc-45d4-9c96-3d613b8530dc_Basecall_2D_000_template",                               
-                                                                      TECH_ONP,     0, &con_nanopore_ext,  5, {-1},           {-1},           {0,1,2,3,4,-1}, {0,1,2,3,4,-1}, -1,-1, -1,                                                                 },
-    {},  { "NCBI-SRA2+-FQ", "ERR2708427.1.1 51e7525d-fa50-4b1a-ad6d-4f4ae25c1df7 someextradata length=1128",                         
-                                                                      TECH_UNKNOWN, 2, &con_ncbi_sra2P_fq, 6, {2,3,8,-1},     {1, -1},        {-1},           {-1},           3,-1,  -1,                                                                 },
-    {},  { "NCBI-SRA+-FQ",  "ERR1111170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template BOWDEN04_20151016_MN15199_FAA67113_BOWDEN04_MdC_MARC_Phase2a_4833_1_ch19_file1_strand length=52",
-                                                                      TECH_UNKNOWN, 2, &con_ncbi_sraP_fq,  5, {2,7,-1},       {1, -1},        {-1},           {-1},           2,-1,  -1,                                                                 },
-    {},  { "NCBI-SRA2-FQ",  "ERR2708427.1.1 51e7525d-fa50-4b1a-ad6d-4f4ae25c1df7 length=1128",                         
-                                                                      TECH_UNKNOWN, 2, &con_ncbi_sra2_fq,  5, {2,3,7,-1},     {1, -1},        {-1},           {-1},           3,-1,  -1,                                                                 },
-    {},  { "NCBI-SRA-FQ",   "ERR1111170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template length=52",
-                                                                      TECH_UNKNOWN, 2, &con_ncbi_sra_fq,   4, {2,6,-1},       {1, -1},        {-1},           {-1},           2,-1,  -1,                                                                 },
-    {},  { "NCBI-SRA2",     "ERR2708427.1.1",                         TECH_UNKNOWN, 0, &con_ncbi_sra2,     2, {2,3,-1},       {1, -1},        {-1},           {-1},           3,-1,  -1,                                                                 },
-    {},  { "NCBI-SRA",      "SRR001666.1",                            TECH_UNKNOWN, 0, &con_ncbi_sra,      1, {2,-1},         {1, -1},        {-1},           {-1},           2,-1,  -1,                                                                 },
-    {},  { "Genozip-opt",   "basic.1",  /* must be last */            TECH_UNKNOWN, 0, &con_genozip_opt,   1, {1,-1},         {-1},           {-1},           {-1},           1,-1,  -1,                                                                 },
-};
-
-#define NUM_QFs (sizeof(qf)/sizeof(qf[0]))
 
 static inline unsigned qname_get_px_str_len (QnameFlavorStruct *qfs)
 {
     unsigned i=0; 
-    while (qfs->px_strs[i].s) i++;
+    while (qfs->px_strs[i]) i++;
     return i;
 }
 
@@ -107,13 +44,17 @@ static void qname_remove_skip (SmallContainerP con_no_skip, uint32_t *prefix_no_
 
 static void qname_genarate_qfs_with_mate (QnameFlavorStruct *qfs)
 {
-    // find mate item (can't be item 0)
+    // find mate item (can't be item 0 ; usually, but not always, its the last item)
     int mate_item_i;
-    for (mate_item_i=1; mate_item_i < qfs->con.nitems_lo; mate_item_i++)
+    for (mate_item_i=qfs->con.nitems_lo-1; mate_item_i >= 1; mate_item_i--)
         if (qfs->con.items[mate_item_i].dict_id.num == _SAM_QmNAME) break;
 
-    ASSERT (mate_item_i < qfs->con.nitems_lo, "Can't find mate item in QFS=%s", qfs->name);
+    ASSERT (mate_item_i, "Can't find mate item for qfs=%s", qfs->name);
 
+    // replace CI0_SKIP with fixed-len of length 1
+    qfs->con.items[mate_item_i].separator[0] = CI0_FIXED_0_PAD;
+    qfs->con.items[mate_item_i].separator[1] = 1;
+    
     // add new item as numeric item (at beginning of array - easier, and the order doesn't matter)
     memmove (&qfs->numeric_items[1], qfs->numeric_items, sizeof(qfs->numeric_items) - sizeof(qfs->numeric_items[0])); // make room
     qfs->numeric_items[0] = mate_item_i;
@@ -121,35 +62,39 @@ static void qname_genarate_qfs_with_mate (QnameFlavorStruct *qfs)
     // name
     strcpy (&qfs->name[strlen(qfs->name)], "/");
     
-    // example
-    unsigned example_len = strlen(qfs->example);
-    char *after = &qfs->example[example_len];
-    if (!qfs->fq_only)
-        strcpy (after, "/1");
-    else {
-        str_split (qfs->example, example_len, 0, ' ', str, false);
-        char *slash = (char *)strs[qfs->fq_only-1] + str_lens[qfs->fq_only-1];
-        memmove (slash+2, slash, after - slash);
-        slash[0] = '/';
-        slash[1] = '1';
+    // examples
+    for (int i=0; i < QFS_MAX_EXAMPLES; i++) {
+        unsigned example_len = strlen(qfs->example[i]);
+        if (!example_len) break;
+
+        char *after = &qfs->example[i][example_len];
+        if (!qfs->fq_only)
+            strcpy (after, "/1");
+        else {
+            str_split (qfs->example[i], example_len, 0, ' ', str, false);
+            char *slash = (char *)strs[qfs->fq_only-1] + str_lens[qfs->fq_only-1];
+            memmove (slash+2, slash, after - slash);
+            slash[0] = '/';
+            slash[1] = '1';
+        }
     }
 
     // case 1: previous item is not fixed - move its separator (possibly 0) to the mate item and make it '/'
     if (qfs->con.items[mate_item_i-1].separator[0] != CI0_FIXED_0_PAD) {
         qfs->con.items[mate_item_i].separator[0] = qfs->con.items[mate_item_i-1].separator[0]; // 0 or ' '
         qfs->con.items[mate_item_i-1].separator[0] = '/';
-        qfs->num_seps++;
     }
 
     // case 2: previous item is fixed - add separator as a prefix. 
-    else { // eg con_bgi_E, con_roche_454
+    else { // eg con_roche_454
         // qfs must already have prefix item for the mate item - initially empty string
         ASSERT (qname_get_px_str_len (qfs) > mate_item_i, "QnameFlavor=%s: expecting prefix to exist for mate_item_i=%u",
                 qfs->name, mate_item_i);
 
-        qfs->px_strs[mate_item_i].s = "/";
-        qfs->px_strs[mate_item_i].s_len = 1;
+        qfs->px_strs[mate_item_i] = "/";
     }
+
+    qfs->num_seps++; // we added / to length of prefixes/seperator
 
     if (qfs->fixed_len) // note: qfs can have fixed_len even if items aren't fixed (eg IonTorrent)
         qfs->fixed_len += 2;
@@ -165,7 +110,7 @@ void qname_zip_initialize (DidIType qname_did_i)
     DO_ONCE {
         for (QnameFlavorStruct *qfs=&qf[0]; qfs < &qf[NUM_QFs]; qfs++) {
 
-            // case: this qfs os version of the next qfs, just with room for /1 /2 - generate it now
+            // case: this qfs version of the next qfs, just with room for /1 /2 - generate it now
             if (!qfs->name[0]) { 
                 *qfs = *(qfs+1);
                 qfs->con = *qfs->con_template;
@@ -191,13 +136,14 @@ void qname_zip_initialize (DidIType qname_did_i)
             }
 
             // case: this QF needs a container prefix - generate it
-            if (qfs->px_strs[0].s) {
+            if (qfs->px_strs[0]) {
                 qfs->con_prefix[qfs->con_prefix_len++] = CON_PX_SEP; 
                 qfs->con_prefix[qfs->con_prefix_len++] = CON_PX_SEP; // no container-wide prefix
 
-                for (const FixedStr *px = qfs->px_strs; px->s ; px++) {
-                    memcpy (&qfs->con_prefix[qfs->con_prefix_len], px->s, px->s_len);
-                    qfs->con_prefix_len += px->s_len;
+                for (const char **px = qfs->px_strs; *px ; px++) {
+                    unsigned len = strlen (*px);
+                    memcpy (&qfs->con_prefix[qfs->con_prefix_len], *px, len);
+                    qfs->con_prefix_len += len;
                     qfs->con_prefix[qfs->con_prefix_len++] = CON_PX_SEP; 
                 }
             } 
@@ -261,48 +207,34 @@ void qname_seg_initialize (VBlockP vb, DidIType qname_did_i)
     qname_seg_initialize_do (vb, segconf.qname_flavor, qname_did_i, qname_did_i, MAX_QNAME_ITEMS); 
 }
 
-static inline bool qname_has_px_strs (STRp(qname), QnameFlavor qfs)
-{
-    for (const FixedStr *px = qfs->px_strs; px->s ; px++) {
-        int i = (px->fixed_i >= 0) ? px->fixed_i : ((int)qname_len + px->fixed_i);
-        if (i + px->s_len > qname_len ||          // case: fixed str goes beyond the end of qname
-            memcmp (px->s, &qname[i], px->s_len)) // case: fixed str does not appear in qname
-            return false;
-    }
-
-    return true; // all fixed strings appear as expected
-}
-
 // note: we run this function only in discovery, not in segging, because it is quite expesive - checking all numerics.
-bool qname_is_flavor (STRp(qname), QnameFlavor qfs,
-                      pSTRp (qname2)) // out
+// returns 0 if qname is indeed the flavor, or error code if not
+int qname_test_flavor (STRp(qname), QnameFlavor qfs,
+                       pSTRp (qname2)) // out
 {
-    if (!qname_len) return false;
+    if (!qname_len) return -1;
 
     // test fixed length, if applicable
-    if (qfs->fixed_len && qname_len != qfs->fixed_len) return false;
-
-    // check that the fixed strings expected by the flavor appear in qname
-    if (!qname_has_px_strs (STRa(qname), qfs)) return false;
+    if (qfs->fixed_len && qname_len != qfs->fixed_len) return -2;
 
     str_split_by_container (qname, qname_len, &qfs->con, qfs->con_prefix, qfs->con_prefix_len, item);
-    if (!n_items) return false; // failed to split according to container - qname is not of this flavor
+    if (!n_items) return -4; // failed to split according to container - qname is not of this flavor
 
     // items cannot include whitespace or non-printable chars
     for (uint32_t item_i=0; item_i < n_items; item_i++)
-        if (!str_is_no_ws (STRi(item, item_i))) return false;
+        if (!str_is_no_ws (STRi(item, item_i))) return -6;
 
     // check that all the items expected to be numeric (leading zeros ok) are indeed so
     for (const int *item_i = qfs->numeric_items; *item_i != -1; item_i++)
-        if (!str_is_numeric (STRi(item, *item_i))) return false;
+        if (!str_is_numeric (STRi(item, *item_i))) return -7;
 
     // check that all the items expected to be hexadecimal are indeed so
     for (const int *item_i = qfs->hex_items; *item_i != -1; item_i++)
-        if (!str_is_hexlo (STRi(item, *item_i))) return false;
+        if (!str_is_hexlo (STRi(item, *item_i))) return -8;
 
     // check that all the items expected to be integer (no leading zeros) are indeed so
     for (const int *item_i = qfs->integer_items; *item_i != -1; item_i++)
-        if (!str_is_int (STRi(item, *item_i))) return false;
+        if (!str_is_int (STRi(item, *item_i))) return -9;
 
     // return embedded qname2, eg "82a6ce63-eb2d-4812-ad19-136092a95f3d" in "@ERR3278978.1 82a6ce63-eb2d-4812-ad19-136092a95f3d/1"
     if (qname2 && qfs->qname2 != -1) {
@@ -310,7 +242,7 @@ bool qname_is_flavor (STRp(qname), QnameFlavor qfs,
         *qname2_len = item_lens[qfs->qname2];
     }
 
-    return true; // yes, qname is of this flavor
+    return 0; // yes, qname is of this flavor
 }
 
 // called for the first line in segconf.running
@@ -320,7 +252,7 @@ void qname_segconf_discover_flavor (VBlockP vb, DidIType qname_did_i, STRp(qname
     STR0(qname2);
 
     for (QnameFlavor qfs=&qf[0]; qfs < &qf[NUM_QFs]; qfs++) 
-        if ((VB_DT(DT_FASTQ) || !qfs->fq_only) && qname_is_flavor (STRa(qname), qfs, pSTRa(qname2))) {
+        if ((VB_DT(DT_FASTQ) || !qfs->fq_only) && !qname_test_flavor (STRa(qname), qfs, pSTRa(qname2))) {
             segconf.qname_flavor = qfs;
             segconf.tech = qfs->tech;
             qname_seg_initialize (vb, qname_did_i); // so the rest of segconf.running can seg fast using the discovered container
@@ -328,7 +260,7 @@ void qname_segconf_discover_flavor (VBlockP vb, DidIType qname_did_i, STRp(qname
             // if it has an embedded qname2 - find the true tech from qname2 (only possible for FASTQ, in SAM we can't find the tech from NCBI qname)
             if (qname2) 
                 for (QnameFlavor qf2=&qf[0]; qf2 < &qf[NUM_QFs]; qf2++) 
-                    if (!qf2->fq_only && qname_is_flavor (STRa (qname2), qf2, 0, 0)) { // qname2 cannot be "fq_only"
+                    if (!qf2->fq_only && !qname_test_flavor (STRa (qname2), qf2, 0, 0)) { // qname2 cannot be "fq_only"
                         segconf.qname_flavor2 = qf2;
                         segconf.tech = qf2->tech;
                     }
@@ -341,19 +273,23 @@ void qname_segconf_discover_flavor (VBlockP vb, DidIType qname_did_i, STRp(qname
         segconf.qname_flavor2 = NULL;
     }
 
-    if (flag.debug) // unit test
-        for (QnameFlavor qfs=&qf[0]; qfs < &qf[NUM_QFs]; qfs++) 
-            ASSERT (qname_is_flavor (qfs->example, strlen (qfs->example), qfs, 0, 0), 
-                    "Failed to identify qname \"%s\" as %s", qfs->example, qfs->name);
+    if (flag.debug || flag.debug_qname) // unit test
+        for (QnameFlavor qfs=&qf[0]; qfs < &qf[NUM_QFs]; qfs++) {
+
+            for (int i=0; i < QFS_MAX_EXAMPLES; i++) {
+                unsigned example_len = strlen(qfs->example[i]);
+                if (!example_len) break;
+
+                if (flag.debug_qname) iprintf ("Testing qname flavor=\"%s\" example=\"%s\"\n", qfs->name, qfs->example[i]);
+                int res = qname_test_flavor (qfs->example[i], example_len, qfs, 0, 0); 
+                ASSERT (!res, "Failed to identify qname \"%s\" as %s: res=%d", qfs->example[i], qfs->name, res);
+            }
+        }
 }
 
 // attempt to seg according to the qf - return true if successful
 static inline bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, QnameFlavor qfs, STRp(qname), unsigned add_additional_bytes)
 {
-    // check that the fixed strings expected by the flavor appear in qname. note: we don't verify numeric fields as
-    // it would be expensive. instead, we fallback on segging them as text if they turn out to be not numeric
-    if (!qname_has_px_strs (STRa(qname), qfs)) return false;
-
     str_split_by_container (qname, qname_len, &qfs->con, qfs->con_prefix, qfs->con_prefix_len, item);
     if (!n_items) return false; // failed to split according to container - qname is not of this flavor
 
@@ -363,7 +299,7 @@ static inline bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, QnameFlavor qfs
     bool is_int[n_items], is_hex[n_items], in_local[n_items], is_numeric[n_items];
 
     memset (is_int, 0, n_items * sizeof(bool));
-    for (unsigned i=0; qfs->integer_items[i] != -1; i++)
+    for (unsigned i=0; qfs->integer_items[i] != -1; i++) 
         is_int[qfs->integer_items[i]] = true;
 
     memset (is_numeric, 0, n_items * sizeof(bool));

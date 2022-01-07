@@ -98,7 +98,7 @@ typedef struct {
         show_codec, show_containers, show_alleles, show_bgzf, show_txt_contigs,
         show_vblocks, show_threads, show_uncompress, biopsy,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
-        debug_LONG,
+        debug_LONG, debug_qname,
         verify_codec, seg_only, xthreads, show_flags, show_rename_tags,
         echo,    // show the command line in case of an error
         show_headers; // (1 + SectionType to display) or 0=flag off or -1=all sections

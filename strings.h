@@ -8,19 +8,19 @@
 #include "genozip.h"
 
 #define IS_NUCLEOTIDE(c) ((c) == 'A' || (c) == 'T' || (c) == 'C' || (c) == 'G')
-#define IS_DIGIT(c)    ((c)>='0' && (c)<='9')
-#define IS_HEXDIGIT(c) (((c)>='0' && (c)<='9') || ((c)>='A' && (c)<='F') || ((c)>='a' && (c)<='f'))
-#define IS_HEXDIGITlo(c) (((c)>='0' && (c)<='9') || ((c)>='a' && (c)<='f'))
-#define IS_HEXDIGITUP(c) (((c)>='0' && (c)<='9') || ((c)>='A' && (c)<='F'))
-#define IS_CLETTER(c)  ((c)>='A' && (c)<='Z')
-#define IS_SLETTER(c)  ((c)>='a' && (c)<='z')
+#define IS_DIGIT(c)      ((c)>='0' && (c)<='9')
+#define IS_HEXDIGIT(c)   (IS_DIGIT(c) || ((c)>='A' && (c)<='F') || ((c)>='a' && (c)<='f'))
+#define IS_HEXDIGITlo(c) (IS_DIGIT(c) || ((c)>='a' && (c)<='f'))
+#define IS_HEXDIGITUP(c) (IS_DIGIT(c) || ((c)>='A' && (c)<='F'))
+#define IS_CLETTER(c)    ((c)>='A' && (c)<='Z')
+#define IS_SLETTER(c)    ((c)>='a' && (c)<='z')
 #define IS_WS(c) ((c)=='\t' || (c)=='\r' || (c)=='\n')
 #define IS_LETTER(c) (IS_CLETTER(c) || IS_SLETTER(c))
 #define IS_NON_WS_PRINTABLE(c) (((c)>=33) && ((c)<=126))
 extern bool is_printable[256];
 #define IS_PRINTABLE(c) is_printable[(uint8_t)(c)]
 #define IS_VALID_URL_CHAR(c) (IS_LETTER(c) || IS_DIGIT(c) || c=='-' || c=='_' || c=='.' || c=='~') // characters valid in a URL
-#define FLIP_CASE(c) (IS_CLETTER(c) ? ((c)+32) : (IS_SLETTER(c) ? ((c)-32) : (c))) // flips lower <--> upper case
+#define FLIP_CASE(c)  (IS_CLETTER(c) ? ((c)+32) : (IS_SLETTER(c) ? ((c)-32) : (c))) // flips lower <--> upper case
 #define UPPER_CASE(c) (IS_SLETTER(c) ? ((c)-32) : (c))
 #define LOWER_CASE(c) (IS_CLETTER(c) ? ((c)+32) : (c))
 
@@ -120,27 +120,29 @@ extern bool str_get_float (STRp(float_str), double *value, char format[FLOAT_FOR
 
 extern bool str_scientific_to_decimal (STRp(float_str), char *modified, uint32_t *modified_len, double *value);
 
-extern uint32_t str_split_do (STRp(str), uint32_t max_items, char sep, ConstContainerP con, STRp(con_prefixes), const char **items, uint32_t *item_lens, bool exactly, const char *enforce_msg);
-
-// name      : eg "item", macro defines variables "items" (array of pointers), item_lens (array or uint32_t), n_items (actual number of items)
-// max_items : maximum allowed items, or 0 if not known
-#define str_split(str,str_len,max_items,sep,name,exactly) str_split_enforce((str),(str_len),(max_items),(sep),name,(exactly),NULL)
+extern uint32_t str_split_do (STRp(str), uint32_t max_items, char sep, const char **items, uint32_t *item_lens, bool exactly, const char *enforce_msg);
 
 #define str_split_enforce(str,str_len,max_items,sep,name,exactly,enforce) \
     uint32_t n_##name##s = (max_items) ? (max_items) : str_count_char ((str), (str_len), (sep)) + 1; /* 0 if str is NULL */ \
     const char *name##s[MAX_(n_##name##s, 1)]; \
     uint32_t name##_lens[MAX_(n_##name##s, 1)]; \
-    n_##name##s = str_split_do ((str), (str_len), n_##name##s, (sep), NULL, NULL, 0, name##s, name##_lens, (exactly), (enforce))
+    n_##name##s = str_split_do ((str), (str_len), n_##name##s, (sep), name##s, name##_lens, (exactly), (enforce))
+
+// name      : eg "item", macro defines variables "items" (array of pointers), item_lens (array or uint32_t), n_items (actual number of items)
+// max_items : maximum allowed items, or 0 if not known
+#define str_split(str,str_len,max_items,sep,name,exactly) str_split_enforce((str),(str_len),(max_items),(sep),name,(exactly),NULL)
+
+extern uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(con_prefixes), const char **items, uint32_t *item_lens, const char *enforce_msg);
 
 #define str_split_by_container(str,str_len,container,prefix,prefix_len,name) \
     const char *name##s[MAX_(con_nitems(*container), 1)];  \
     uint32_t name##_lens[MAX_(con_nitems(*container), 1)]; \
-    uint32_t n_##name##s = str_split_do ((str), (str_len), con_nitems(*container), 0, (ConstContainerP)(container), (prefix), (prefix_len), name##s, name##_lens, true, NULL)
+    uint32_t n_##name##s = str_split_by_container_do ((str), (str_len), (ConstContainerP)(container), (prefix), (prefix_len), name##s, name##_lens, NULL)
 
-extern void str_remove_CR_do (uint32_t n_lines, const char **lines, uint32_t *line_lens);
+extern void str_remove_CR_do (uint32_t n_lines, pSTRp(line));
 #define str_remove_CR(name) str_remove_CR_do (n_##name##s, name##s, name##_lens)
 
-extern void str_nul_separate_do (uint32_t n_items, const char **items, uint32_t *item_lens);
+extern void str_nul_separate_do (uint32_t n_items, STRps(item));
 #define str_nul_separate(name) str_nul_separate_do (n_##name##s, name##s, name##_lens)
 
 extern uint32_t str_remove_whitespace (const char *in, uint32_t in_len, char *out);

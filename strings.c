@@ -478,112 +478,140 @@ differ:
     return false;
 }
 
+#define ASSSPLIT(condition, format, ...) ({\
+    if (!(condition)) { \
+        if (enforce_msg) {  \
+            progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); exit_on_error(true); /* same as ASSERT */ \
+        } \
+        return 0; /* just return 0 if we're not asked to enforce */ \
+    } \
+})
+
 // splits a string with up to (max_items-1) separators (doesn't need to be nul-terminated) to up to or exactly max_items
 // returns the actual number of items, or 0 is unsuccessful
-uint32_t str_split_do (const char *str, uint32_t str_len, 
+uint32_t str_split_do (STRp(str), 
                        uint32_t max_items,        // optional - if not given, a count of sep is done first
-                       char sep,                  // option 1 - constant separator
-                       ConstContainerP con,       // option 2 - separators by container item[].separator[0]. max_items MUST be given
-                       STRp(con_prefixes),        // optional - used only in option 2, and used only if container has fixed items 
+                       char sep,                  // separator
                        const char **items,        // out - array of char* of length max_items - one more than the number of separators
                        uint32_t *item_lens,       // optional out - corresponding lengths
                        bool exactly,
                        const char *enforce_msg)   // non-NULL if enforcement of length is requested
-
 {
     if (!str) return 0; // note: str!=NULL + str_len==0 results in n_items=1 - one empty item
     
-    uint32_t item_i;
-    uint32_t num_fixed_item=0;
+    items[0] = str;
+    uint32_t item_i = 1;
+    for (uint32_t str_i=0 ; str_i < str_len ; str_i++) 
+        if (str[str_i] == sep) {
+            ASSSPLIT (item_i < max_items, "expecting up to %u %s separators but found more: (100 first) %.*s", 
+                    max_items-1, enforce_msg, MIN_(str_len, 100), str);
 
-    if (con) { // option 2
-
-        ASSERT0 (con->nitems_lo || con->nitems_hi, "Container has no items");
-
-        // if we have prefixes, set px_i to the first item's prefix, after the container-wide prefix
-        unsigned px_i = 0; 
-        if (con_prefixes_len) {
-            px_i = 1;
-            while (con_prefixes[px_i] != CON_PX_SEP) px_i++; // skip over container-wide prefix
-            px_i++; // skip to first item prefix
-        }
-
-        sep = CI0_FIXED_0_PAD; // fake previous item -1
-        unsigned fixed_len=0;
-        for (item_i=0; item_i < max_items; item_i++) {
-            items[item_i] = item_i ? items[item_i-1] : str;
-
-            // skip item prefix
-            if (px_i < con_prefixes_len) {
-                unsigned px_len=0; for (; con_prefixes[px_i] != CON_PX_SEP; px_i++) px_len++;
-                px_i++; // skip CON_PX_SEP
-                items[item_i] += px_len;
-            }
-
-            bool is_fixed = (sep == CI0_FIXED_0_PAD); // previous item was fixed
-
-            // handle fixed items. not all items need to be fixed, but all the fixed items must be at the beginning of the container
-            if (is_fixed) 
-                items[item_i] += fixed_len;
-            
-            else if (sep != CI0_FIXED_0_PAD)
-                break; // no more fixed items
-
-            sep = con->items[item_i].separator[0];
-
-            if (sep == CI0_FIXED_0_PAD) {
-                fixed_len = con->items[item_i].separator[1];
-                num_fixed_item++;
-                if (item_lens) item_lens[item_i] = fixed_len;
-            }
-            else
-                fixed_len = 0;
-        }
-
-        if (sep == CI0_INVISIBLE) { // currently, we only support CI0_INVISIBLE for the first item as there is no need yet for more
-            sep = con->items[item_i].separator[0];
-            items[item_i++] = str;
-        }
-    }
-    else {
-        items[0] = str;
-        item_i=1;
-    }
-
-    for (uint32_t i=items[item_i-1]-str; i < str_len ; i++) 
-        if (str[i] == sep) {
-            if (item_i == max_items) {
-                ASSERT (!enforce_msg, "expecting up to %u %s separators but found more: (100 first) %.*s", 
-                        max_items-1, enforce_msg, MIN_(str_len, 100), str);
-                return 0; // too many separators
-            }
-            
-            do {
-                if (con) sep = con->items[item_i].separator[0]; // option 2 - update to next separator
-                
-                items[item_i++] = &str[i+1];
-             } while (con && sep == CI0_SKIP);
+            items[item_i++] = &str[str_i+1];
         }
 
     if (item_lens) {
-        for (uint32_t i=num_fixed_item; i < item_i-1; i++)    
-            item_lens[i] = (items[i+1] > items[i]) ? items[i+1] - items[i] - 1 
-                                                   : 0; // items[i] is CI0_INVISIBLE
+        for (uint32_t i=0; i < item_i-1; i++)    
+            item_lens[i] = items[i+1] - items[i] - 1; 
             
         item_lens[item_i-1] = &str[str_len] - items[item_i-1];
-
-        // case: last container item is a CI0_SKIP
-        if (con && item_i == max_items-1 && con->items[item_i].separator[0] == CI0_SKIP) {
-            items[item_i] = &str[str_len];
-            item_lens[item_i] = 0;
-            item_i = max_items;
-        }
     }
 
     ASSERT (!exactly || !enforce_msg || item_i == max_items, "Expecting the number of %s to be %u, but it is %u: (100 first) \"%.*s\"", 
             enforce_msg, max_items, str_len ? item_i : 0, MIN_(100, str_len), str);
     
     return (!exactly || item_i == max_items) ? item_i : 0; // 0 if requested exactly, but too few separators 
+}
+
+// splits a string based on container items (doesn't need to be nul-terminated). 
+// returns the number on unskipped items if successful
+uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(con_prefixes),
+                                    const char **items,        // out - array of char* of length max_items - one more than the number of separators
+                                    uint32_t *item_lens,       // optional out - corresponding lengths
+                                    const char *enforce_msg)   // non-NULL if enforcement of length is requested
+{
+    if (!str) return 0; // note: str!=NULL + str_len==0 results in n_items=1 - one empty item
+
+    uint32_t num_items = con_nitems (*con);
+    ASSERT0 (num_items, "Container has no items");
+
+    const char **save_items = items;
+    const char *after_str = &str[str_len], *save_str = str;
+    const char *px = 0, *after_px=0;
+
+    // if we have prefixes, set px_i to the first item's prefix, after the container-wide prefix
+    if (con_prefixes_len) {
+        px = &con_prefixes[1];
+        after_px = &con_prefixes[con_prefixes_len];
+        while (*px != CON_PX_SEP) px++; // skip over container-wide prefix
+        px++; // skip CON_PX_SEP to first item prefix
+    }
+
+    for (uint32_t item_i=0; item_i < num_items; item_i++) { 
+
+        char sep = con->items[item_i].separator[0];
+        
+        // verify item prefix
+        if (px < after_px) {
+            const char *item_px = px;
+            while (*px != CON_PX_SEP) px++;
+
+            uint32_t item_px_len = px - item_px;                   
+            px++; // skip CON_PX_SEP
+
+            if (item_px_len) {
+                ASSERT (sep != CI0_INVISIBLE, "item_i=%u is CI0_INVISIBLE, expecting item_px_len=%u to be 0", item_i, item_px_len);
+
+                if (sep != CI0_SKIP) { // if CI0_SKIP, we ignore the prefix
+                    bool prefix_matches = (str + item_px_len <= after_str) && !memcmp (str, item_px, item_px_len);
+                    ASSSPLIT (prefix_matches, "prefix mismatch for item_i=%u: expecting \"%.*s\" but seeing \"%.*s\"",
+                              item_i-1, item_px_len, item_px, MIN_(item_px_len, (int)(after_str-str)), str);
+    
+                    str += item_px_len; // advance past prefix
+                }
+            }
+        }
+
+        switch (sep) {
+
+            case CI0_SKIP: 
+            case CI0_INVISIBLE:
+                *item_lens = 0;
+                *items = str; // zero-length item - next item will start from the same str_i
+                break;
+
+            case CI0_FIXED_0_PAD: 
+                *item_lens = con->items[item_i].separator[1];
+                *items = str; // zero-length item - next item will start from the same str_i
+                str += *item_lens;
+                ASSSPLIT (str <= after_str, "item_i=%u fixed_len=%u goes beyond end of string \"%.*s\"", item_i, *item_lens, str_len, save_str);
+                break;
+
+            case 0: // no separator - goes to end of string
+                *item_lens = after_str - str;
+                *items = str; // zero-length item - next item will start from the same str_i
+                str = after_str;
+                break;
+
+            default:
+                ASSERT (IS_PRINTABLE(sep), "item_i=%u sep=%u is not a printable character in string \"%.*s\"", item_i, sep, str_len, save_str);
+
+                *items = str;
+                while (*str != sep && str < after_str) str++; 
+
+                ASSSPLIT (str < after_str, "item_i=%u reached end of string without finding separator '%c' in string \"%.*s\"", 
+                          item_i, sep, str_len, save_str);
+
+                *item_lens = str - *items;
+                str++; // skip seperator
+        }
+
+        items++; item_lens++; // increment pointers        
+    }
+
+    ASSSPLIT (str == after_str, "container consumed only %u of %u characters of string \"%.*s\"", 
+              (int)(str-save_str), str_len, str_len, save_str);
+
+    return items - save_items;
 }
 
 // remove \r (ASCII Carriage Return) from each lines[] that has it as its final character, but decrementing the matching line_lens
@@ -595,7 +623,7 @@ void str_remove_CR_do (uint32_t n_lines, const char **lines, uint32_t *line_lens
 }
 
 // replace the last character in each item with \0. these are generated by str_split, so expecting a separator after each string
-void str_nul_separate_do (uint32_t n_items, const char **items, uint32_t *item_lens)
+void str_nul_separate_do (uint32_t n_items, STRps(item))
 {
     for (uint32_t i=0; i < n_items; i++)
         ((char**)items)[i][item_lens[i]] = '\0';
@@ -684,6 +712,8 @@ void str_print_dict (FILE *fp, STRp(data), bool add_newline, bool remove_equal_a
             continue; // skip character and following separator
         }
 
+        if (i && !data[i] && !data[i-1]) continue; // skip empty words
+        
         switch (data[i]) {
             case 32 ... 127 : fputc (data[i], fp);      break;
             case 0          : fputc (add_newline ? '\n' : ' ', fp); break; // snip separator
