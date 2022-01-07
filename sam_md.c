@@ -256,7 +256,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_MD)
                     // case: no base in SEQ matched the reference - sam_reconstruct_SEQ set vb->range to NULL, so we set it here
                     if (!vb->range) {
                         vb->range = (RangeP)ref_piz_get_range (vb, gref, vb->last_int(SAM_POS), VB_SAM->ref_consumed);
-                        ASSERTNOTNULL (vb->range);
+                        ASSERT0 (vb->range, "vb->range=NULL, possibly related to private/defects/SAM-MD-external-ref-contig-with-no-ref.txt");
                     }
 
                     RECONSTRUCT_INT (count_match); // flush matches before reconstructing mismatch
