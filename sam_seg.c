@@ -187,8 +187,8 @@ void sam_seg_initialize (VBlock *vb)
     stats_set_consolidation (vb, OPTION_SA_Z,  6, OPTION_SA_RNAME, OPTION_SA_POS, OPTION_SA_STRAND, OPTION_SA_CIGAR, OPTION_SA_MAPQ, OPTION_SA_NM);
     stats_set_consolidation (vb, OPTION_OA_Z,  6, OPTION_OA_RNAME, OPTION_OA_POS, OPTION_OA_STRAND, OPTION_OA_CIGAR, OPTION_OA_MAPQ, OPTION_OA_NM);
     stats_set_consolidation (vb, OPTION_XA_Z,  7, OPTION_XA_RNAME, OPTION_XA_POS, OPTION_XA_STRAND, OPTION_XA_CIGAR, OPTION_XA_NM, OPTION_XA_STRAND_POS, OPTION_XA_LOOKBACK);
-    stats_set_consolidation (vb, SAM_AUX, 1, SAM_MC_Z);
-    stats_set_consolidation (vb, SAM_QNAME, 1, SAM_BUDDY);
+    stats_set_consolidation (vb, SAM_AUX,      1, SAM_MC_Z);
+    stats_set_consolidation (vb, SAM_QNAME,    1, SAM_BUDDY);
     stats_set_consolidation (vb, OPTION_BD_BI, 2, OPTION_BI_Z, OPTION_BD_Z);
 
     codec_acgt_comp_init (vb);

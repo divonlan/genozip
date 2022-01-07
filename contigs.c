@@ -282,8 +282,8 @@ WordIndex contigs_get_matching (ConstContigPkgP ctgs, STRp(name), PosType LN, /*
         {.AC="NC_000007"}, {.AC="NC_000008"}, {.AC="NC_000009"}, {.AC="NC_000010"}, {.AC="NC_000011"}, {.AC="NC_000012"},
         {.AC="NC_000013"}, {.AC="NC_000014"}, {.AC="NC_000015"}, {.AC="NC_000016"}, {.AC="NC_000017"}, {.AC="NC_000018"},
         {.AC="NC_000019"}, {.AC="NC_000020"}, {.AC="NC_000021"}, {.AC="NC_000022"}, {.AC="NC_000023"}, {.AC="NC_000024"},
-        {.AC="NC_012920"}
-        };
+        {.AC="NC_012920"} 
+    };
 
     #define CHECK_IF_DONE if (ctg_i != WORD_INDEX_NONE) goto finalize;
 

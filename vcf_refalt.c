@@ -123,7 +123,7 @@ void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, STRp(ref), STRp(alt))
 // RefNewAlleleDelRefChanged 13->10
 // RefNewAlleleInsSameRef    17->11
 // OkRefAltSwitchDelToIns    6->9
-// RefNewAllelInsRefChanged  0->6
+// RefNewAlleleInsRefChanged 0->6
 #define FLANKING_SEQ_LEN 4
 #define MAX_LEN_REF_ALT_SWITCH_INDEL_BASED_ON_FLANKING 16
 

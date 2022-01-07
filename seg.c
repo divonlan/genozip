@@ -750,7 +750,7 @@ int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp
 
         // get items in each repeat
         str_split_by_container (repeats[r], repeat_lens[r], &con, NULL, 0, item);
-        //str_split (repeats[r], repeat_lens[r], con.nitems_lo, con.items[0].separator[0], item, true);
+        
         if (n_items != con.nitems_lo) goto badly_formatted;
 
         for (unsigned i=0; i < n_items; i++)

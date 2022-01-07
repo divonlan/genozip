@@ -304,7 +304,7 @@ extern bool is_info_stream_terminal; // is info_stream going to a terminal
 
 static inline void iputc(char c) { fputc ((c), info_stream); } // no flushing
 
-#define iprintf(format, ...)     do { fprintf (info_stream, (format), __VA_ARGS__); fflush (info_stream); } while(0)
+#define iprintf(format, ...)     ( { fprintf (info_stream, (format), __VA_ARGS__); fflush (info_stream); } )
 static inline void iprint0 (const char *str) { fprintf (info_stream, "%s", str); fflush (info_stream); } 
 
 // bring the cursor down to a newline, if needed
@@ -317,49 +317,49 @@ static inline void progress_newline(void) {
 }
 
 // check for a user error
-#define ASSINP(condition, format, ...)       do { if (!(condition)) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); if (flags_command_line()) fprintf (stderr, "\n\ncommand: %s\n", flags_command_line()); else fprintf (stderr, "\n"); exit_on_error(false); }} while(0)
-#define ASSINP0(condition, string)           do { if (!(condition)) { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); if (flags_command_line()) fprintf (stderr, "\ncommand: %s\n", flags_command_line()); exit_on_error(false); }} while(0)
-#define ABORTINP(format, ...)                do { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(false);} while(0)
-#define ABORTINP0(string)                    do { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); exit_on_error(false);} while(0)
+#define ASSINP(condition, format, ...)       ( { if (!(condition)) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); if (flags_command_line()) fprintf (stderr, "\n\ncommand: %s\n", flags_command_line()); else fprintf (stderr, "\n"); exit_on_error(false); }} )
+#define ASSINP0(condition, string)           ( { if (!(condition)) { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); if (flags_command_line()) fprintf (stderr, "\ncommand: %s\n", flags_command_line()); exit_on_error(false); }} )
+#define ABORTINP(format, ...)                ( { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(false);} )
+#define ABORTINP0(string)                    ( { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); exit_on_error(false);} )
 
 // check for a bug - prints stack
 #define SUPPORT "\nIf this is unexpected, please contact "EMAIL_SUPPORT".\n"
-#define ASSERT(condition, format, ...)       do { if (!(condition)) { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); exit_on_error(true); }} while(0)
-#define ASSERT0(condition, string)           do { if (!(condition)) { progress_newline(); fprintf (stderr, "Error in %s:%u: %s" SUPPORT, __FUNCTION__, __LINE__, string); exit_on_error(true); }} while(0)
+#define ASSERT(condition, format, ...)       ( { if (!(condition)) { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); exit_on_error(true); }} )
+#define ASSERT0(condition, string)           ( { if (!(condition)) { progress_newline(); fprintf (stderr, "Error in %s:%u: %s" SUPPORT, __FUNCTION__, __LINE__, string); exit_on_error(true); }} )
 #define ASSERTISNULL(p)                      ASSERT0 (!p, "expecting "#p" to be NULL")
 #define ASSERTNOTNULL(p)                     ASSERT0 (p, #p" is NULL")
 #define ASSERTNOTZERO(p)                     ASSERT0 (p, #p"=0")
-#define ASSERTW(condition, format, ...)      do { if (!(condition) && !flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); }} while(0)
-#define ASSERTW0(condition, string)          do { if (!(condition) && !flag.quiet) { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); } } while(0)
-#define ASSRET(condition, ret, format, ...)  do { if (!(condition)) { progress_newline(); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); return ret; }} while(0)
-#define ASSRET0(condition, ret, string)      do { if (!(condition)) { progress_newline(); fprintf (stderr, "%s\n", string); return ret; } } while(0)
-#define ASSERTRUNONCE(string)                do { static bool once = false; /* this code path should run only once */ \
-                                                  ASSINP0 (!once, string); \
-                                                  once = true; } while (0)
-#define RETURNW(condition, ret, format, ...) do { if (!(condition)) { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } return ret; }} while(0)
-#define RETURNW0(condition, ret, string)     do { if (!(condition)) { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); } return ret; } } while(0)
-#define ABORT(format, ...)                   do { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); exit_on_error(true);} while(0)
-#define ABORT_R(format, ...) /*w/ return 0*/ do { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); exit_on_error(true); return 0;} while(0)
-#define ABORT0(string)                       do { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, "%s" SUPPORT, string); exit_on_error(true);} while(0)
-#define ABORT0_R(string)                     do { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, "%s" SUPPORT, string); exit_on_error(true); return 0; } while(0)
-#define WARN(format, ...)                    do { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } } while(0)
-#define WARN0(string)                        do { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); } } while(0)
+#define ASSERTW(condition, format, ...)      ( { if (!(condition) && !flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); }} )
+#define ASSERTW0(condition, string)          ( { if (!(condition) && !flag.quiet) { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); } } )
+#define ASSRET(condition, ret, format, ...)  ( { if (!(condition)) { progress_newline(); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); return ret; }} )
+#define ASSRET0(condition, ret, string)      ( { if (!(condition)) { progress_newline(); fprintf (stderr, "%s\n", string); return ret; } } )
+#define ASSERTRUNONCE(string)                ( { static bool once = false; /* this code path should run only once */ \
+                                                 ASSINP0 (!once, string); \
+                                                 once = true; } )
+#define RETURNW(condition, ret, format, ...) ( { if (!(condition)) { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } return ret; }} )
+#define RETURNW0(condition, ret, string)     ( { if (!(condition)) { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); } return ret; } } )
+#define ABORT(format, ...)                   ( { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); exit_on_error(true);} )
+#define ABORT_R(format, ...) /*w/ return 0*/ ( { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); exit_on_error(true); return 0;} )
+#define ABORT0(string)                       ( { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, "%s" SUPPORT, string); exit_on_error(true);} )
+#define ABORT0_R(string)                     ( { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, "%s" SUPPORT, string); exit_on_error(true); return 0; } )
+#define WARN(format, ...)                    ( { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } } )
+#define WARN0(string)                        ( { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); } } )
 
-#define WARN_ONCE(format, ...)               do { static bool warning_shown = false; \
-                                                  if (!flag.quiet && !warning_shown) { \
-                                                      progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); \
-                                                      warning_shown = true; \
-                                                  } \
-                                             } while(0) 
+#define WARN_ONCE(format, ...)               ( { static bool warning_shown = false; \
+                                                 if (!flag.quiet && !warning_shown) { \
+                                                     progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); \
+                                                     warning_shown = true; \
+                                                 } \
+                                             } ) 
 
-#define WARN_ONCE0(string)                   do { static bool warning_shown = false; \
-                                                  if (!flag.quiet && !warning_shown) { \
-                                                      progress_newline(); fprintf (stderr, "%s\n", string); \
-                                                      warning_shown = true; \
-                                                  } \
-                                             } while(0) 
+#define WARN_ONCE0(string)                   ( { static bool warning_shown = false; \
+                                                 if (!flag.quiet && !warning_shown) { \
+                                                     progress_newline(); fprintf (stderr, "%s\n", string); \
+                                                     warning_shown = true; \
+                                                 } \
+                                             } ) 
 
-#define ASSERTGOTO(condition, format, ...)   do { if (!(condition)) { progress_newline(); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); goto error; }} while(0)
+#define ASSERTGOTO(condition, format, ...)   ( { if (!(condition)) { progress_newline(); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); goto error; }} )
 
 // exit codes
 #define EXIT_OK                   0

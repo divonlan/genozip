@@ -326,7 +326,7 @@ WordIndex ref_contigs_ref_chrom_from_header_chrom (Reference ref, STRp(chrom_nam
             const char *ref_contig_name = ref_contigs_get_name (ref, ref_contig_index, NULL); // might be different that chrom_name if it matches an alt_name
         
             char fmt[200]; // no unbound names in fmt
-            sprintf (fmt, "Error: wrong reference file: %%s has a \"%s\", but in %%s '%%s' has LN=%%"PRId64, DTPT (hdr_contigs));
+            sprintf (fmt, "Error: wrong reference file - different chromosome length: %%s has a \"%s\", but in %%s '%%s' has LN=%%"PRId64, DTPT (hdr_contigs));
             ASSINP (false, fmt, txt_name, chrom_name_len, chrom_name, *hdr_LN, ref->filename, ref_contig_name, ref_LN);
         }
     }

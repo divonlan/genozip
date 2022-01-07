@@ -327,7 +327,7 @@ static void writer_add_txtheader_plan (CompInfo *comp)
     };
 }
 
-// PIZ main thread: add "full vb" entry for each VB of the component
+// PIZ main thread
 static void writer_add_downsample_plan (const CompInfo *comp)
 {
     buf_alloc (evb, &z_file->recon_plan, comp->num_vbs, 1000, ReconPlanItem, 1.5, "recon_plan");

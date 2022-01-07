@@ -187,7 +187,7 @@ extern const char *dvcf_status_names[NUM_LO_STATUSES];
     "RefNotMappedInChain", "NewAnchorNotInChrom", "RefSplitInChain", \
     "RefMismatchesReference", "RefMultiAltSwitchSNP", "RefNewAlleleSNP", "RefMultiAltSwitchIndel", \
     "RefNewAlleleDelRefChgHas*", "RefNewAlleleDelRefChanged", "RefNewAlleleDelSameRef", \
-    "RefNewAllelInsRefChanged", "RefNewAlleleInsSameRef", "RefNewAlleleIndelNoSwitch", "RefNewAlleleNDNI",\
+    "RefNewAlleleInsRefChanged", "RefNewAlleleInsSameRef", "RefNewAlleleIndelNoSwitch", "RefNewAlleleNDNI",\
     "XstrandNotLeftAnc", "RefNewAlleleNotLeftAnc","RefNewAlleleSV", "XstrandSV", "ComplexRearrangements", \
     "AddedVariant", "UnsupportedRefAlt", \
     "INFO", "FORMAT" \
