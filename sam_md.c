@@ -113,7 +113,7 @@ static inline bool sam_md_consume_M (VBlockSAMP vb, char **md_in_out, uint32_t *
                 return false; // Genozip reference supports only A,C,T,G
 
             if (!sam_md_set_one_ref_base (vb, *pos, *md, *M_D_bases, range_p, lock))
-                return false; // base doesn't match base already in reference
+                return false; // base doesn't match base already in reference, or external reference range doesn't exist
 
             bit_array_clear (M_is_ref, *M_is_ref_i); // base in SEQ is expected to be NOT equal to the reference base
             (*M_is_ref_i)++;              
@@ -129,12 +129,12 @@ static inline bool sam_md_consume_M (VBlockSAMP vb, char **md_in_out, uint32_t *
     return true;
 }
 
-// called after analyzing CIGAR but before segging SEQ and later MD
+// called after analyzing MD but before segging SEQ and later MD
 // - Verifies that MD is consistent with CIGAR
 // - Verifies that the mismatched and deleted bases are the same as the reference, or if not 
 //   in the reference yet (in REF_INTERNAL), adds them
 // - Sets md_M_is_ref, of length ref_and_seq_consumed (corresponding to M, X and = CIGAR ops): 1 for a base matching the reference, 0 for not.
-//   sam_seg_seq will conduct the final verification step of comparing this bitmap to the one calculated from the SEQ data.
+//   sam_seg_SEQ will conduct the final verification step of comparing this bitmap to the one calculated from the SEQ data.
 void sam_md_analyze (VBlockSAMP vb, STRp(md), PosType pos, const char *cigar)
 {
     RangeP range = NULL;
@@ -213,7 +213,7 @@ void sam_md_seg (VBlockSAM *vb,  ZipDataLineSAM *dl, STRp(md), unsigned add_byte
     segconf_set_has (OPTION_MD_Z);
 
     if (vb->md_verified) 
-        seg_by_did_i (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_MD}, 2, OPTION_MD_Z, add_bytes);
+        seg_by_did_i (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_MD }, 2, OPTION_MD_Z, add_bytes);
     else
         seg_by_did_i (VB, STRa(md), OPTION_MD_Z, add_bytes);
 }

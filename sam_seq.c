@@ -99,6 +99,7 @@ void sam_seg_SEQ (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), const PosType p
         bit_array_clear_region (bitmap, bitmap_ctx->next_local, ref_and_seq_consumed); // note: vb->ref_and_seq_consumed==0 if cigar="*"
         bitmap_ctx->next_local += ref_and_seq_consumed;
         vb->mismatch_bases     += ref_and_seq_consumed;
+        vb->md_verified = false; // we can't use MD special alg if there is no range
 
         random_access_update_last_pos (VB, DC_PRIMARY, pos + ref_consumed - 1);
 

@@ -302,7 +302,7 @@ void ref_contigs_generate_data_if_denovo (Reference ref)
 
 // ZIP SAM/BAM and VCF: verify that we have the specified chrom (name & last_pos) loaded from the reference at the same index. 
 // called by sam_header_add_contig, vcf_header_consume_contig. returns true if contig is in reference
-WordIndex ref_contigs_ref_chrom_from_header_chrom (Reference ref, const char *chrom_name, unsigned chrom_name_len, 
+WordIndex ref_contigs_ref_chrom_from_header_chrom (Reference ref, STRp(chrom_name), 
                                                    PosType *hdr_LN) // if 0, set from reference, otherwise verify
 {               
     WordIndex ref_contig_index = ref_contigs_get_by_name (ref, chrom_name, chrom_name_len, true, true); // including alts
