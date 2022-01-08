@@ -4,7 +4,7 @@ Note on versioning:
 - Some minor versions are skipped due to failed deployment pipelines
 
 13.0.8 8/January/2022
-- SAM/BAM/FASTQ: Better compresion of BGI read names
+- SAM/BAM/FASTQ: Better compression of BGI read names
 - New advanced option: --debug-qname
 
 13.0.7 2/January/2022
