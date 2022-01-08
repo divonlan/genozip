@@ -3,6 +3,10 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+13.0.8 8/January/2022
+- SAM/BAM/FASTQ: Better compresion of BGI read names
+- New advanced option: --debug-qname
+
 13.0.7 2/January/2022
 - SAM/BAM: bowtie2: Better compression of AS and YS fields
 - Display warning if excessive dictionary size

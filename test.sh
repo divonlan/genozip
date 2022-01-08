@@ -441,7 +441,7 @@ batch_dvcf()
         else
             $genozip -C $chain ${TESTDIR}/$file -fo $dvcf --dvcf-rename="FORMAT/QDF:STRAND>QDR,QDR:STRAND>QDF" --dvcf-drop="INFO/CLN:REFALT" || exit 1
         fi
-
+    
         echo -n "Step 2: make ${primary} from $dvcf : " 
         $genocat $dvcf --no-pg -fo ${primary} || exit 1
 
@@ -783,31 +783,30 @@ batch_backward_compatability()
 
 batch_prod_compatability()
 {
-    if [ ! -d genozip-prod ]; then return; fi
+    if [ ! -d ../genozip-prod ]; then return; fi
 
-    batch_print_header
-
-    (cd ../genozip-prod; make ${debug:1})
+    (cd ../genozip-prod; make -j ${debug:1})
     
     save_genozip=$genozip
     genozip=../genozip-prod/$genozip
 
-    batch_basic basic.vcf        
-    batch_dvcf
-    batch_reference_fastq
-    batch_reference_sam
-    batch_basic basic.bam        
-    batch_basic basic.fq         
-    batch_basic basic.fa         
-    batch_basic basic.chain      
-    batch_basic basic.gvf        
-    batch_basic basic.genome_Full.me23.txt 
-    batch_kraken " " "-K$kraken"     
-    batch_basic basic.phy        
-    batch_basic basic.generic    
+    if (( $1 <= $2 + 1  )) ; then batch_basic basic.vcf     ; fi
+    if (( $1 <= $2 + 2  )) ; then batch_dvcf                ; fi
+    if (( $1 <= $2 + 3  )) ; then batch_reference_fastq     ; fi
+    if (( $1 <= $2 + 4  )) ; then batch_reference_sam       ; fi
+    if (( $1 <= $2 + 5  )) ; then batch_basic basic.bam     ; fi
+    if (( $1 <= $2 + 6  )) ; then batch_basic basic.fq      ; fi
+    if (( $1 <= $2 + 7  )) ; then batch_basic basic.fa      ; fi
+    if (( $1 <= $2 + 8  )) ; then batch_basic basic.chain   ; fi
+    if (( $1 <= $2 + 9  )) ; then batch_basic basic.gvf     ; fi
+    if (( $1 <= $2 + 10 )) ; then batch_basic basic.genome_Full.me23.txt ; fi
+    if (( $1 <= $2 + 11 )) ; then batch_kraken " " "-K$kraken"           ; fi
+    if (( $1 <= $2 + 12 )) ; then batch_basic basic.phy     ; fi
+    if (( $1 <= $2 + 13 )) ; then batch_basic basic.generic ; fi
 
     genozip=$save_genozip
 }
+num_batch_prod_compatability_tests=13
     
 batch_real_world_1() # $1 extra genozip argument
 {
@@ -1228,7 +1227,7 @@ fi
 mkdir $OUTDIR >& /dev/null
 cleanup
 
-make -C $TESTDIR --quiet || exit 1
+make -j -C $TESTDIR --quiet || exit 1
 
 # only if doing a full test (starting from 0) - delete genome and hash caches
 sparkling_clean()
@@ -1290,6 +1289,6 @@ if (( $1 <= 46 )) ; then  batch_reference_sam          ; fi
 if (( $1 <= 47 )) ; then  batch_reference_vcf          ; fi
 if (( $1 <= 48 )) ; then  batch_make_reference         ; fi
 if (( $1 <= 49 )) ; then  batch_reference_backcomp     ; fi
-if (( $1 <= 50 )) ; then  batch_prod_compatability     ; fi
+if (( $1 <= 50 + $num_batch_prod_compatability_tests )) ; then batch_id=49 ; batch_prod_compatability $1 $batch_id ; fi
 
 printf "\nALL GOOD!\n"
