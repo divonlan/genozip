@@ -139,10 +139,19 @@ extern uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(
     uint32_t name##_lens[MAX_(con_nitems(*container), 1)]; \
     uint32_t n_##name##s = str_split_by_container_do ((str), (str_len), (ConstContainerP)(container), (prefix), (prefix_len), name##s, name##_lens, NULL)
 
+extern const char *str_split_by_tab_do (STRp(str), uint32_t *n_items, const char **items, uint32_t *item_lens, bool *has_13);
+
+#define str_split_by_tab(str,max_len,max_items,has_13) \
+    const char *flds[(max_items)];   \
+    uint32_t fld_lens[(max_items)];  \
+    uint32_t n_flds = (max_items);   \
+    str = str_split_by_tab_do ((str), (max_len), &n_flds, flds, fld_lens, (has_13))
+#define STRfld(i) STRi(fld,(i))
+
 extern void str_remove_CR_do (uint32_t n_lines, pSTRp(line));
 #define str_remove_CR(name) str_remove_CR_do (n_##name##s, name##s, name##_lens)
 
-extern void str_nul_separate_do (uint32_t n_items, STRps(item));
+extern void str_nul_separate_do (STRps(item));
 #define str_nul_separate(name) str_nul_separate_do (n_##name##s, name##s, name##_lens)
 
 extern uint32_t str_remove_whitespace (const char *in, uint32_t in_len, char *out);

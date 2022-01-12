@@ -40,6 +40,9 @@ typedef struct {
 
 typedef struct VBlockSAM {
     VBLOCK_COMMON_FIELDS
+
+    enum { CT_NORMAL, CT_SA_PRIM, CT_SA_DEP } sam_component_type;
+
     const char *last_cigar;        // ZIP/PIZ: last CIGAR
     Buffer textual_cigar;          // ZIP: Seg of BAM, PIZ: store CIGAR in sam_cigar_analyze
     Buffer binary_cigar;           // PIZ: generate in sam_cigar_analyze, to reconstruct BAM
@@ -101,14 +104,14 @@ extern const uint8_t cigar_lookup_sam[256];
 extern const uint8_t cigar_lookup_bam[16];
 
 extern void sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qname), unsigned add_additional_bytes);
-extern void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(flag_str), unsigned add_bytes);
+extern void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM *dl, unsigned add_bytes);
 extern void sam_seg_RNAME_RNEXT (VBlockP vb, DidIType did_i, STRp (chrom), unsigned add_bytes);
 extern PosType sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pos_str)/* option 1 */, PosType pos/* option 2 */, WordIndex prev_line_chrom, PosType prev_line_pos, unsigned add_bytes);
 extern void sam_seg_MAPQ (VBlockP vb, ZipDataLineSAM *dl, STRp(mapq_str), uint8_t mapq, unsigned add_bytes);
 extern void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pnext_str)/* option 1 */, PosType pnext/* option 2 */, PosType prev_line_pos, unsigned add_bytes);
 extern void sam_seg_TLEN (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(tlen), int64_t tlen_value, bool is_rname_rnext_same);
-extern const char *sam_seg_aux_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char *next_field, int32_t len, bool *has_13, char separator, const char *after_field);
-extern const char *bam_get_one_optional (VBlockSAM *vb, const char *next_field, const char **tag, char *type, char *array_subtype, pSTRp(value), ValueType *numeric);
+extern void sam_seg_aux_all (VBlockSAM *vb, ZipDataLineSAM *dl, STRps(aux));
+extern void bam_get_one_optional (VBlockSAM *vb, STRp(aux), const char **tag, char *type, char *array_subtype, pSTRp(value), ValueType *numeric);
 extern uint16_t bam_reg2bin (int32_t first_pos, int32_t last_pos);
 extern void bam_seg_BIN (VBlockSAM *vb, ZipDataLineSAM *dl, uint16_t bin, PosType this_pos);
 extern void sam_seg_verify_RNAME_POS (VBlockP vb, const char *p_into_txt, PosType this_pos);

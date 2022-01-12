@@ -24,6 +24,8 @@
 #include "lookback.h"
 #include "libdeflate/libdeflate.h"
 
+typedef enum { QNAME, FLAG, RNAME, POS, MAPQ, CIGAR, RNEXT, PNEXT, TLEN, SEQ, QUAL, AUX } SamFields __attribute__((unused)); // quick way to define constants
+
 static char POS_buddy_snip[100], PNEXT_buddy_snip[100], CIGAR_buddy_snip[100];
 static uint32_t POS_buddy_snip_len, PNEXT_buddy_snip_len, CIGAR_buddy_snip_len;
 char taxid_redirection_snip[100], xa_strand_pos_snip[100], XS_snip[30], XM_snip[30], MC_buddy_snip[30], 
@@ -284,7 +286,7 @@ void sam_seg_finalize (VBlockP vb)
                           { .dict_id = { _SAM_TLEN     }, .separator = { CI0_TRANS_NOR                     }, SAM2BAM_TLEN     }, // must be after CIGAR bc sam_piz_special_TLEN_old needs vb->seq_num
                           { .dict_id = { _SAM_SQBITMAP }, .separator = "",                                    SAM2BAM_SEQ      }, // Translate - textual format to BAM format
                           { .dict_id = { _SAM_QUAL     }, .separator = "",                                    SAM2BAM_QUAL     }, // Translate - textual format to BAM format, set block_size
-                          { .dict_id = { _SAM_AUX }, .separator = { CI0_TRANS_NOR                     }                   }, // up to v11, this had the SAM2BAM_AUX translator
+                          { .dict_id = { _SAM_AUX      }, .separator = { CI0_TRANS_NOR                     }                   }, // up to v11, this had the SAM2BAM_AUX translator
                         }
     };
 
@@ -453,32 +455,19 @@ bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)
         dict_id.num == _OPTION_CC_Z;
 }
 
-static bool sam_seg_get_MD (const char *txt /* points to SEQ field */, uint32_t txt_len, pSTRp(md))
+// returns aux field if it exists or NULL if it doesn't
+static const char *sam_seg_get_aux (const char *name, STRps (fld), uint32_t *aux_len)
 {
-    const char *after = &txt[txt_len];
-    SAFE_ASSIGN(after, '\n'); // for safety
-
-    unsigned column = 9; // SEQ
-    *md = NULL;
-
-    for (;*txt != '\n'; txt++) 
-        if (*txt == '\t') {
-            if (! *md) { 
-                column++;
-                // case: start of MD
-                if (column >= 11 && after - txt > 6 && !memcmp (txt+1, "MD:Z:", 5)) 
-                    *md = txt+6; // skip \tMD:Z:
-            }
-            // case: \t at end of MD
-            else break;
+    for (uint32_t f=AUX; f < n_flds; f++) {
+        const char *aux = flds[f];
+        if (fld_lens[f] > 5 && 
+            aux[0] == name[0] && aux[1] == name[1] && aux[2] == ':' && aux[3] == name[3]) {
+            *aux_len = fld_lens[f] - 5;
+            return &aux[5];
         }
+    }
 
-    // next currently points either to the \n or \t at after of the MD field
-    if (*md) *md_len = txt - *md;
-
-    SAFE_RESTORE;
-    
-    return *md != NULL;
+    return NULL;
 }
 
 void sam_seg_verify_RNAME_POS (VBlock *vb, const char *p_into_txt, PosType this_pos)
@@ -508,10 +497,10 @@ void sam_seg_verify_RNAME_POS (VBlock *vb, const char *p_into_txt, PosType this_
             txt_name, this_pos, vb->chrom_name_len, vb->chrom_name, LN, vb->vblock_i, vb->line_i, vb->chrom_node_index);
 }
 
-static const char *sam_seg_get_kraken (VBlockSAM *vb, const char *next_field, bool *has_kraken, 
-                                       char *taxid_str, const char **tag, char *sam_type, 
-                                       pSTRp (value), ValueType *numeric, // out - value for SAM, numeric for BAM
-                                       bool is_bam)
+static void sam_seg_get_kraken (VBlockSAM *vb, bool *has_kraken, 
+                                char *taxid_str, const char **tag, char *sam_type, 
+                                pSTRp (value), ValueType *numeric, // out - value for SAM, numeric for BAM
+                                bool is_bam)
 {
     *tag        = "tx"; // genozip introduced tag (=taxid)
     *sam_type   = 'i';
@@ -522,48 +511,32 @@ static const char *sam_seg_get_kraken (VBlockSAM *vb, const char *next_field, bo
     *numeric = CTX(SAM_TAXID)->last_value;
 
     vb->recon_size += is_bam ? 7 : (*value_len + 6); // txt modified
-
-    return next_field; // unmodified
 }
 
 
-static const char *sam_get_one_optional (VBlockSAM *vb, const char *next_field, int32_t len, char *separator_p, bool *has_13, 
-                                         const char **tag, char *type, char *array_subtype, pSTRp(value)) // out
+static void sam_get_one_optional (VBlockSAM *vb, STRp(aux),
+                                  const char **tag, char *type, char *array_subtype, pSTRp(value)) // out
 {
-    unsigned field_len;
-    const char *field_start;
+    ASSSEG (aux_len >= 6 && aux[2] == ':' && aux[4] == ':', aux, "invalid optional field format: %.*s", aux_len, aux);
 
-    char separator;
-    GET_MAYBE_LAST_ITEM (subfield); 
-
-    ASSSEG0 (field_len, field_start, "line invalidly ends with a tab");
-
-    ASSSEG (field_len >= 6 && field_start[2] == ':' && field_start[4] == ':', field_start, "invalid optional field format: %.*s",
-            field_len, field_start);
-
-    *tag         = field_start;
-    *type        = field_start[3];
-    *separator_p = separator;
+    *tag         = aux;
+    *type        = aux[3];
     
     if (*type == 'B') {
-        *array_subtype = field_start[5];
-        *value         = field_start + 7;
-        *value_len     = field_len - 7;
+        *array_subtype = aux[5];
+        *value         = aux + 7;
+        *value_len     = aux_len - 7;
     }
     else {
         *array_subtype = 0;
-        *value         = field_start + 5;
-        *value_len     = field_len - 5;
+        *value         = aux + 5;
+        *value_len     = aux_len - 5;
     }
 
-    ASSSEG0 (*value_len < 10000000, next_field, "Invalid array field format"); // check that *value_len didn't underflow beneath 0
-
-    return next_field;
+    ASSSEG0 (*value_len < 10000000, aux, "Invalid array field format"); // check that *value_len didn't underflow beneath 0
 }
 
-const char *sam_seg_aux_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char *next_field,
-                                  int32_t len, bool *has_13, char separator, // sam only
-                                  const char *after_field) // bam only 
+void sam_seg_aux_all (VBlockSAM *vb, ZipDataLineSAM *dl, STRps(aux))
 {
     const bool is_bam = IS_BAM;
     Container con = { .repeats=1 };
@@ -577,7 +550,7 @@ const char *sam_seg_aux_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char *next
     
     bool has_kraken = kraken_is_loaded;
 
-    while ((is_bam ? (next_field < after_field) : (separator != '\n')) || has_kraken) {
+    for (uint32_t f=0 ; f < n_auxs + has_kraken; f++) {
 
         STR0(value);
         ValueType numeric = {};
@@ -585,9 +558,9 @@ const char *sam_seg_aux_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char *next
         char sam_type=0, bam_type=0, array_subtype=0;
         char taxid_str[20];
 
-        next_field = has_kraken ? sam_seg_get_kraken   (vb, next_field, &has_kraken, taxid_str,  &tag, &bam_type, pSTRa(value), &numeric, is_bam)  
-                   : is_bam     ? bam_get_one_optional (vb, next_field,                          &tag, &bam_type, &array_subtype, pSTRa(value), &numeric)
-                   :              sam_get_one_optional (vb, next_field, len, &separator, has_13, &tag, &sam_type, &array_subtype, pSTRa(value));
+        if (f == n_auxs) sam_seg_get_kraken   (vb, &has_kraken, taxid_str,  &tag, &bam_type, pSTRa(value), &numeric, is_bam);
+        else if (is_bam) bam_get_one_optional (vb, STRi(aux,f), &tag, &bam_type, &array_subtype, pSTRa(value), &numeric);
+        else             sam_get_one_optional (vb, STRi(aux,f), &tag, &sam_type, &array_subtype, pSTRa(value));
 
         if (sam_type == 'i') {
             ASSERT (str_get_int (STRa(value), &numeric.i), "Expecting integer value for auxiliary field %c%c but found \"%.*s\". vb=%u line=%"PRIu64,
@@ -627,8 +600,6 @@ const char *sam_seg_aux_all (VBlockSAM *vb, ZipDataLineSAM *dl, const char *next
         // NULL means MISSING Container item (of the toplevel container) - will cause container_reconstruct_do of 
         // the toplevel container to delete of previous separator (\t)
         container_seg (vb, CTX(SAM_AUX), 0, 0, 0, 0); 
-
-    return next_field;        
 }
 
 void sam_seg_QNAME (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(qname), unsigned add_additional_bytes)
@@ -815,104 +786,90 @@ bool sam_zip_is_unaligned_line (const char *line, int len)
     return (field_len == 1 && *field_start == '0');
 }
 
-const char *sam_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
+const char *sam_seg_txt_line (VBlock *vb_, const char *next_line, uint32_t remaining_txt_len, bool *has_13)
 {
     VBlockSAM *vb = (VBlockSAM *)vb_;
     ZipDataLineSAM *dl = DATA_LINE (vb->line_i);
     vb->buddy_line_i = NO_BUDDY; // initialize
 
-    const char *next_field=field_start_line, *field_start;
-    unsigned field_len=0;
-    char separator;
-
-    int32_t len = REMAINING (vb->txt_data, field_start_line);
+    str_split_by_tab (next_line, remaining_txt_len, MAX_FIELDS+AUX, has_13); // also advances next_line to next line
 
     WordIndex prev_line_chrom = vb->chrom_node_index;
     PosType prev_line_pos = vb->last_int (SAM_POS);
 
-    // QNAME - We break down the QNAME into subfields separated by / and/or : - these are vendor-defined strings. Examples:
-    // Illumina: <instrument>:<run number>:<flowcell ID>:<lane>:<tile>:<x-pos>:<y-pos> for example "A00488:61:HMLGNDSXX:4:1101:15374:1031" see here: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
-    // PacBio BAM: {movieName}/{holeNumber}/{qStart}_{qEnd} see here: https://pacbiofileformats.readthedocs.io/en/3.0/BAM.html
-    // BGI: E100020409L1C001R0030000234 (E100020409=Flow cell serial number, L1=Lane 1, C001R003=column 1 row 3, 0000234=Tile) Also see: https://github.com/IMB-Computational-Genomics-Lab/BGIvsIllumina_scRNASeq
-    GET_NEXT_ITEM (SAM_QNAME);
-    sam_seg_QNAME (vb, dl, STRd(SAM_QNAME), 1);
-
-    GET_NEXT_ITEM (SAM_FLAG);
-    sam_seg_FLAG (vb, dl, STRd(SAM_FLAG), SAM_FLAG_len+1);
+    ASSSEG (str_get_int_range16 (STRfld(FLAG), 0, SAM_MAX_FLAG, &dl->FLAG.value), flds[FLAG], "invalid FLAG field: \"%.*s\"", fld_lens[FLAG], flds[FLAG]);
     
-    GET_NEXT_ITEM (SAM_RNAME);
+    // if this is a secondary / supplamentary read according to FLAGS, copy it to dependents before any seg and move on to next line 
+    // if (vb->sam_component_type == CT_NORMAL) {
+    //     if (dl->FLAG.bits.secondary || dl->FLAG.bits.supplementary)
+    //         return sam_sa_skip_sa_dep (field_start_line, remaining_txt_len);
 
-    sam_seg_RNAME_RNEXT (VB, SAM_RNAME, STRd(SAM_RNAME), SAM_RNAME_len+1);
+    sam_seg_QNAME (vb, dl, STRfld(QNAME), 1);
+
+    sam_seg_FLAG (vb, dl, fld_lens[FLAG]+1);
+    
+    sam_seg_RNAME_RNEXT (VB, SAM_RNAME, STRfld(RNAME), fld_lens[RNAME]+1);
 
     // note: pos can have a value even if RNAME="*" - this happens if a SAM with a RNAME that is not in the header is converted to BAM with samtools
-    GET_NEXT_ITEM (SAM_POS);
-    PosType this_pos = sam_seg_POS (vb, dl, STRd (SAM_POS), 0, prev_line_chrom, prev_line_pos, SAM_POS_len+1);
+    PosType this_pos = sam_seg_POS (vb, dl, STRfld(POS), 0, prev_line_chrom, prev_line_pos, fld_lens[POS]+1);
 
-    if (SAM_RNAME_len != 1 || *SAM_RNAME_str != '*')
-        sam_seg_verify_RNAME_POS (VB, SAM_RNAME_str, this_pos);
+    if (fld_lens[RNAME] != 1 || *flds[RNAME] != '*')
+        sam_seg_verify_RNAME_POS (VB, flds[RNAME], this_pos);
 
-    GET_NEXT_ITEM (SAM_MAPQ);
-    sam_seg_MAPQ (VB, dl, STRd(SAM_MAPQ), 0, SAM_MAPQ_len+1);
+    sam_seg_MAPQ (VB, dl, STRfld(MAPQ), 0, fld_lens[MAPQ]+1);
 
     // CIGAR - we wait to get more info from SEQ and QUAL
-    GET_NEXT_ITEM (SAM_CIGAR);
-    sam_cigar_analyze (vb, STRd(SAM_CIGAR), &dl->seq_len);
-    vb->last_cigar = SAM_CIGAR_str;
-    unsigned last_cigar_len = SAM_CIGAR_len;
-    ((char *)vb->last_cigar)[SAM_CIGAR_len] = 0; // nul-terminate CIGAR string
+    sam_cigar_analyze (vb, STRfld(CIGAR), &dl->seq_len);
+    vb->last_cigar = flds[CIGAR];
+    unsigned last_cigar_len = fld_lens[CIGAR];
+    SAFE_NUL (&vb->last_cigar[fld_lens[CIGAR]]); // nul-terminate CIGAR string
 
-    GET_NEXT_ITEM (SAM_RNEXT);
-    sam_seg_RNAME_RNEXT (VB, SAM_RNEXT, STRd(SAM_RNEXT), SAM_RNEXT_len+1);
+    sam_seg_RNAME_RNEXT (VB, SAM_RNEXT, STRfld(RNEXT), fld_lens[RNEXT]+1);
     
-    GET_NEXT_ITEM (SAM_PNEXT);
-    sam_seg_PNEXT (vb, dl, STRd (SAM_PNEXT), 0, prev_line_pos, SAM_PNEXT_len+1);
-
-    GET_NEXT_ITEM (SAM_TLEN);
+    sam_seg_PNEXT (vb, dl, STRfld(PNEXT), 0, prev_line_pos, fld_lens[PNEXT]+1);
 
     // we search forward for MD:Z now, as we will need it for SEQ if it exists
-    if (segconf.has[OPTION_MD_Z] && !segconf.running) {
-        STR(md); 
-        if (sam_seg_get_MD (next_field, remaining_txt_len, pSTRa(md)))
-            sam_md_analyze (vb, STRa(md), this_pos, vb->last_cigar);
-    }
+    STR(MD);
+    if (segconf.has[OPTION_MD_Z] && !segconf.running &&
+        (MD = sam_seg_get_aux ("MD:Z", n_flds, flds, fld_lens, &MD_len))) 
+        sam_md_analyze (vb, STRa(MD), this_pos, vb->last_cigar);
 
-    GET_NEXT_ITEM (SAM_SEQ);
-    seg_set_last_txt (VB, CTX(SAM_SQBITMAP), STRd(SAM_SEQ));
-    dl->seq_data_start = ENTNUM (vb->txt_data, SAM_SEQ_str);
+    seg_set_last_txt (VB, CTX(SAM_SQBITMAP), STRfld(SEQ));
+    dl->seq_data_start = ENTNUM (vb->txt_data, flds[SEQ]);
 
-    ASSSEG (dl->seq_len == field_len || vb->last_cigar[0] == '*' || SAM_SEQ_str[0] == '*', SAM_SEQ_str, 
+    ASSSEG (dl->seq_len == fld_lens[SEQ] || vb->last_cigar[0] == '*' || flds[SEQ][0] == '*', flds[SEQ], 
             "seq_len implied by CIGAR=%s is %u, but actual SEQ length is %u, SEQ=%.*s", 
-            vb->last_cigar, dl->seq_len, SAM_SEQ_len, SAM_SEQ_len, SAM_SEQ_str);
+            vb->last_cigar, dl->seq_len, fld_lens[SEQ], fld_lens[SEQ], flds[SEQ]);
 
     // calculate diff vs. reference (denovo or loaded)
-    sam_seg_SEQ (vb, SAM_SQBITMAP, STRd(SAM_SEQ), this_pos, vb->last_cigar, vb->ref_consumed, vb->ref_and_seq_consumed, 
-                 0, field_len, vb->last_cigar, SAM_SEQ_len+1);
+    sam_seg_SEQ (vb, SAM_SQBITMAP, STRfld(SEQ), this_pos, vb->last_cigar, vb->ref_consumed, vb->ref_and_seq_consumed, 
+                 0, fld_lens[SEQ], vb->last_cigar, fld_lens[SEQ]+1);
     
-    GET_MAYBE_LAST_ITEM (SAM_QUAL);
-    sam_seg_QUAL (vb, dl, STRd(SAM_QUAL), SAM_QUAL_len + 1); 
+    sam_seg_QUAL (vb, dl, STRfld(QUAL), fld_lens[QUAL] + 1); 
 
-    ASSSEG (str_is_in_range (SAM_QUAL_str, SAM_QUAL_len, 33, 126), SAM_QUAL_str, "Invalid QUAL - it contains non-Phred characters: \"%.*s\"", 
-            SAM_QUAL_len, SAM_QUAL_str);
+    ASSSEG (str_is_in_range (flds[QUAL], fld_lens[QUAL], 33, 126), flds[QUAL], "Invalid QUAL - it contains non-Phred characters: \"%.*s\"", 
+            fld_lens[QUAL], flds[QUAL]);
 
-    if (SAM_SEQ_len != SAM_QUAL_len)
+    if (fld_lens[SEQ] != fld_lens[QUAL])
         vb->qual_codec_no_longr = true; // we cannot compress QUAL with CODEC_LONGR in this case
 
     // finally we can seg CIGAR now
-    sam_cigar_seg_textual (vb, dl, last_cigar_len, STRd(SAM_SEQ), STRd(SAM_QUAL));
+    sam_cigar_seg_textual (vb, dl, last_cigar_len, STRfld(SEQ), STRfld(QUAL));
     
     // add BIN so this file can be reconstructed as BAM
     bam_seg_BIN (vb, dl, 0, this_pos);
 
     // AUX fields - up to MAX_FIELDS of them
-    next_field = sam_seg_aux_all (vb, dl, next_field, len, has_13, separator, 0);
+    sam_seg_aux_all (vb, dl, n_flds-AUX, &flds[AUX], &fld_lens[AUX]);
 
     // finally, we can seg TLEN now, after MC:Z, if it exists
-    bool is_rname_rnext_same = (SAM_RNEXT_len==1 && *SAM_RNEXT_str=='=') || 
-                               (SAM_RNEXT_len==SAM_RNAME_len && !memcmp (SAM_RNEXT_str, SAM_RNAME_str, SAM_RNAME_len));
+    bool is_rname_rnext_same = (fld_lens[RNEXT]==1 && *flds[RNEXT]=='=') || 
+                               (fld_lens[RNEXT]==fld_lens[RNAME] && !memcmp (flds[RNEXT], flds[RNAME], fld_lens[RNAME]));
 
-    sam_seg_TLEN (vb, dl, STRd(SAM_TLEN), 0, is_rname_rnext_same);
+    sam_seg_TLEN (vb, dl, STRfld(TLEN), 0, is_rname_rnext_same);
 
     SEG_EOL (SAM_EOL, false); /* last field accounted for \n */
+    SAFE_RESTORE;   
 
-    return next_field;
+    return next_line;
 }

@@ -944,7 +944,7 @@ void seg_all_data_lines (VBlock *vb)
     bool hash_hints_set_1_3 = false, hash_hints_set_2_3 = false;
     for (vb->line_i=0; vb->line_i < vb->lines.len; vb->line_i++) {
 
-        uint32_t remaining_txt_len = AFTERENT (char, vb->txt_data) - field_start;
+        uint32_t remaining_txt_len = REMAINING (vb->txt_data, field_start);
         
         if (!remaining_txt_len) { // we're done
             vb->lines.len = vb->line_i; // update to actual number of lines

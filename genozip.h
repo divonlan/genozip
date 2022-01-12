@@ -203,11 +203,11 @@ typedef _Bool bool;
 // Strings - function parameters
 #define STRp(x)  const char *x,   uint32_t x##_len    
 #define pSTRp(x) const char **x,  uint32_t *x##_len  
-#define STRps(x) const char **x##s, const uint32_t *x##_lens  
+#define STRps(x) uint32_t n_##x##s, const char **x##s, const uint32_t *x##_lens  
 
 // Strings - function arguments
 #define STRa(x)    x, x##_len                       
-#define STRas(x)   x##s, x##_lens                       
+#define STRas(x)   n_##x##s, x##s, x##_lens                       
 #define STRd(x)    x##_str, x##_len                   
 #define STRb(x)    (x).data, (x).len                  
 #define STRi(x,i)  x##s[i], x##_lens[i]             

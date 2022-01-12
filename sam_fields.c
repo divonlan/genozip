@@ -58,11 +58,8 @@ const char aux_sep_by_type[2][256] = { { // compressing from SAM
 // FLAG
 //--------------
 
-void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(flag_str)/* optional, otherwise in dl */, unsigned add_bytes)
+void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM *dl, unsigned add_bytes)
 {
-    if (flag_str_len) 
-        ASSSEG (str_get_int_range16 (STRa(flag_str), 0, SAM_MAX_FLAG, &dl->FLAG.value), flag_str, "invalid FLAG field: %.*s", STRf(flag_str));
-
     ZipDataLineSAM *buddy_dl = DATA_LINE (vb->buddy_line_i); // note: an invalid pointer if buddy_line_i is -1
     
     // case: we can retrieve the FLAG from this line's buddy
@@ -188,7 +185,8 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_BD_BI)
 
     // note: bd and bi use their own next_local to retrieve data from bdbi_ctx. the actual index
     // in bdbi_ctx.local is calculated given the interlacing
-    ASSERT (ctx->next_local + vb->seq_len * 2 <= bdbi_ctx->local.len, "Error reading txt_line=%"PRIu64": unexpected end of %s data", vb->line_i, dis_dict_id (ctx->dict_id).s);
+    ASSERT (ctx->next_local + vb->seq_len * 2 <= bdbi_ctx->local.len, "Error reading txt_line=%"PRIu64": unexpected end of %s data. Expecting ctx->next_local=%u + vb->seq_len=%u * 2 <= bdbi_ctx->local.len=%"PRIu64, 
+            vb->line_i, dis_dict_id (bdbi_ctx->dict_id).s, ctx->next_local, vb->seq_len, bdbi_ctx->local.len);
 
     char *dst        = AFTERENT (char, vb->txt_data);
     const char *src  = ENT (char, bdbi_ctx->local, ctx->next_local * 2);

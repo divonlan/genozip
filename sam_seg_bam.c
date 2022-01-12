@@ -131,36 +131,48 @@ int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
     return result; // if -1 - we will be called again with more data
 }
 
-static bool bam_seg_get_MD (VBlockSAM *vb, const char *aux, const char *after_aux, pSTRp(md))
+static uint32_t bam_split_aux (VBlockSAM *vb, const char *aux, const char *after_aux, const char **auxs, uint32_t *aux_lens)
 {
+    uint32_t n_auxs = 0;
     while (aux < after_aux) {
+        auxs[n_auxs] = aux;
 
-        if (!memcmp (aux, "MDZ", 3)) {
-            *md = aux+3;
-            SAFE_NUL (after_aux);
-            *md_len =strlen (aux+3);
-            SAFE_RESTORE;
-
-            return true;
-        }
-    
         static unsigned const size[256] = { ['A']=1, ['c']=1, ['C']=1, ['s']=2, ['S']=2, ['i']=4, ['I']=4, ['f']=4 };
 
         if (aux[2] == 'Z' || aux[2] == 'H') {
             SAFE_NUL (after_aux);
-            aux += strlen (aux+3) + 4; // add tag[2], type and \0
+            aux_lens[n_auxs] = strlen (aux+3) + 4; // add tag[2], type and \0
             SAFE_RESTORE;
         }
-        else if (aux[2] == 'B') {
-            aux += 8 + GET_UINT32 (aux+4) * size[(int)aux[3]]; 
-        }   
+        else if (aux[2] == 'B') 
+            aux_lens[n_auxs] = 8 + GET_UINT32 (aux+4) * size[(int)aux[3]]; 
+        
         else if (size[(int)aux[2]])
-            aux += 3 + size[(int)aux[2]];
+            aux_lens[n_auxs] = 3 + size[(int)aux[2]];
         else
             ABORT ("vb=%u line_i=%"PRIu64" Unrecognized aux type '%c' (ASCII %u)", vb->vblock_i, vb->line_i, aux[2], aux[2]);
+        
+        aux += aux_lens[n_auxs++];
     }
 
-    return false; // MD:Z not found        
+    ASSERT (aux == after_aux, "vb=%u line_i=%"PRIu64" overflow while parsing auxilliary fields", vb->vblock_i, vb->line_i);
+
+    return n_auxs;
+}
+
+// returns aux field (first byte after eg MDZ) if it exists or NULL if it doesn't
+static const char *bam_seg_get_aux (const char *name, STRps (aux), uint32_t *aux_len) 
+{
+    for (uint32_t f=0; f < n_auxs; f++) {
+        const char *aux = auxs[f];
+        if (aux_lens[f] > 3 && 
+            aux[0] == name[0] && aux[1] == name[1] && aux[2] == name[3]) {
+            *aux_len = aux_lens[f] - 3;
+            return &aux[3];
+        }
+    }
+
+    return NULL;
 }
 
 void bam_seg_BIN (VBlockSAM *vb, ZipDataLineSAM *dl, uint16_t bin /* used only in bam */, PosType this_pos)
@@ -244,58 +256,33 @@ static inline bool bam_rewrite_qual (uint8_t *qual, uint32_t l_seq)
     return true;
 }
 
-const char *bam_get_one_optional (VBlockSAM *vb, const char *next_field,
-                                  const char **tag, char *type, char *array_subtype, // out
-                                  pSTRp(value), ValueType *numeric) // out - one of these depending on the type
+void bam_get_one_optional (VBlockSAM *vb, STRp(aux),
+                           const char **tag, char *type, char *array_subtype, // out
+                           pSTRp(value), ValueType *numeric) // out - one of these depending on the type
 {
-    *tag  = next_field;
-    *type = next_field[2]; // c, C, s, S, i, I, f, A, Z, H or B
-    next_field += 3;
+    *tag  = aux;
+    *type = aux[2]; // c, C, s, S, i, I, f, A, Z, H or B
+    aux += 3;
     *array_subtype = 0;
     
     switch (*type) {
         // in case of an numeric type, we pass the value as a ValueType
-        case 'i': 
-            numeric->i = (int32_t)LTEN32 (GET_UINT32 (next_field));
-            return next_field + 4;
-
+        case 'i': numeric->i = (int32_t)LTEN32 (GET_UINT32 (aux)); break;
         case 'I': 
-        case 'f':
-            numeric->i = LTEN32 (GET_UINT32 (next_field)); // note: uint32 and float are binary-identical so this effectively sets value->f            
-            return next_field + 4;
-        
-        case 's': 
-            numeric->i = (int16_t)LTEN16 (GET_UINT16 (next_field));
-            return next_field + 2;
-
-        case 'S': 
-            numeric->i = LTEN16 (GET_UINT16 (next_field));
-            return next_field + 2;
-        
-        case 'c': 
-            numeric->i = (int8_t)*next_field;
-            return next_field + 1;
-
-        case 'C': 
-            numeric->i = (uint8_t)*next_field;
-            return next_field + 1;
-
-        // in case of a textual or hex string, or a single character, we pass the data as is
-        case 'Z': case 'H':
-            *value = next_field;
-            *value_len = strlen (*value);
-            return next_field + *value_len + 1; // +1 for \0
-
-        case 'A':    
-            *value = next_field;
-            *value_len = 1;
-            return next_field + 1;
+        case 'f': numeric->i = LTEN32 (GET_UINT32 (aux));          break; // note: uint32 and float are binary-identical so this effectively sets value->f            
+        case 's': numeric->i = (int16_t)LTEN16 (GET_UINT16 (aux)); break;
+        case 'S': numeric->i = LTEN16 (GET_UINT16 (aux));          break;
+        case 'c': numeric->i = (int8_t)*aux;                       break;
+        case 'C': numeric->i = (uint8_t)*aux;                      break;
+        case 'Z': 
+        case 'H': *value = aux; *value_len = aux_len - 4;          break; // value_len excludes the terminating \0
+        case 'A': *value = aux; *value_len = 1;                    break;
 
         // in case of a numerical value we pass the data as is, in machine endianity
         case 'B':
-            *array_subtype = *next_field++; // type of elements of array
-            *value_len = NEXT_UINT32;       // number of elements, not number of bytes
-            *value = next_field;
+            *array_subtype = *aux++; // type of elements of array
+            *value_len = GET_UINT32(aux);  // number of elements, not number of bytes
+            *value = aux + sizeof (uint32_t);
             
             // switch from BAM's little endian to machine endianity
             if (!flag.is_lten) 
@@ -314,14 +301,12 @@ const char *bam_get_one_optional (VBlockSAM *vb, const char *next_field,
             ASSERT (aux_width[(uint8_t)*array_subtype], "Invalid array type: '%c' for field \"%c%c\". vb=%u line=%"PRIu64, 
                     *array_subtype, (*tag)[0], (*tag)[1], vb->vblock_i, vb->line_i);
 
-            return next_field + *value_len * aux_width[(uint8_t)*array_subtype];
+            break;
 
         default:
             ABORT ("Invalid field type: '%c' for field \"%c%c\". vb=%u line=%"PRIu64, 
                     *type, (*tag)[0], (*tag)[1], vb->vblock_i, vb->line_i);
     }
-
-    return next_field;
 }
 
 const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminology for one line */,
@@ -356,6 +341,12 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     PosType next_pos    = 1 + (int32_t)NEXT_UINT32; // pos in BAM is 0 based, -1 for unknown
     int32_t tlen        = (int32_t)NEXT_UINT32;
 
+    // *** ingest auxillary fields ***
+    const char *aux = next_field + l_read_name + sizeof(uint32_t)*n_cigar_op + (l_seq+1)/2 + l_seq;
+    const char *auxs[MAX_FIELDS]; 
+    uint32_t aux_lens[MAX_FIELDS];
+    uint32_t n_auxs = bam_split_aux (vb, aux, after, auxs, aux_lens);
+
     // seg QNAME first, as it will find the buddy
     sam_seg_QNAME (vb, dl, next_field, l_read_name-1, 2); // QNAME. account for \0 and l_read_name
     next_field += l_read_name; // inc. \0
@@ -369,7 +360,7 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
 
     sam_seg_MAPQ (VB, dl, 0, 0, mapq, sizeof (mapq));
 
-    sam_seg_FLAG (vb, dl, 0, 0, sizeof (uint16_t));
+    sam_seg_FLAG (vb, dl, sizeof (uint16_t));
     
     bam_seg_ref_id (VB, SAM_RNEXT, next_ref_id, ref_id); // RNEXT
 
@@ -385,12 +376,10 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     // Segment BIN after we've gathered bin, flags, pos and vb->ref_confumed (and before sam_seg_SEQ which ruins vb->ref_consumed)
     bam_seg_BIN (vb, dl, bin, this_pos);
 
-    // we search forward for MD:Z now, as we will need it for SEQ if it exists
-    if (segconf.has[OPTION_MD_Z] && !segconf.running) {
-        STR(md); 
-        if (bam_seg_get_MD (vb, next_field + (l_seq+1)/2 + l_seq, after, pSTRa(md)))
-            sam_md_analyze (vb, STRa(md), this_pos, FIRSTENT(char, vb->textual_cigar));
-    }
+    // we analyze MD:Z now (if it exists), as we will need it for SEQ 
+    STR(MD); 
+    if (segconf.has[OPTION_MD_Z] && !segconf.running && (MD = bam_seg_get_aux ("MD:Z", STRas(aux), &MD_len))) 
+        sam_md_analyze (vb, STRa(MD), this_pos, FIRSTENT(char, vb->textual_cigar));
 
     // SEQ - calculate diff vs. reference (denovo or loaded)
     bam_rewrite_seq (vb, next_field, l_seq);
@@ -418,13 +407,12 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
         
         vb->qual_codec_no_longr = true; // we cannot compress QUAL with CODEC_LONGR in this case
     }
-    next_field += l_seq; 
 
     // finally we can segment the textual CIGAR now (including if n_cigar_op=0)
     sam_cigar_seg_binary (vb, dl, l_seq, n_cigar_op);
 
     // AUX fields - up to MAX_FIELDS of them
-    next_field = sam_seg_aux_all (vb, dl, next_field, 0,0,0, after);
+    sam_seg_aux_all (vb, dl, STRas(aux));
     
     // TLEN - must be after AUX as we might need data from MC:Z
     sam_seg_TLEN (vb, dl, 0, 0, (int64_t)tlen, ref_id == next_ref_id); // TLEN
@@ -432,5 +420,5 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     buf_free (&vb->textual_cigar);
     buf_free (&vb->textual_seq);
 
-    return next_field;
+    return after;
 }

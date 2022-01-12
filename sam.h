@@ -68,6 +68,7 @@
 #pragma GENDICT OPTION_MD_Z=DTYPE_2=MD:Z     // String encoding mismatched and deleted reference bases
 #pragma GENDICT OPTION_MQ_i=DTYPE_2=MQ:i     // Mapping quality of the mate/next segment
 #pragma GENDICT OPTION_NH_i=DTYPE_2=NH:i     // Number of reported alignments that contain the query in the current record
+#pragma GENDICT OPTION_HI_i=DTYPE_2=HI:i     // Query hit index (a number [1,NH])
 #pragma GENDICT OPTION_NM_i=DTYPE_2=NM:i     // Edit distance to the reference
 
 #pragma GENDICT OPTION_OA_Z=DTYPE_2=OA:Z     // Original alignment

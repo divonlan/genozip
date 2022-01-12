@@ -66,6 +66,7 @@ void vcf_zip_read_one_vb (VBlockP vb)
     }
 }
 
+// called main thread, in order of VBs
 void vcf_zip_after_compute (VBlockP vb_)
 {
     VBlockVCFP vb = (VBlockVCFP)vb_;
@@ -508,10 +509,9 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     vb->num_dps_this_line = 0;
 
     const char *next_field=field_start_line, *field_start;
+    int32_t len = remaining_txt_len;
     unsigned field_len=0;
     char separator;
-
-    int32_t len = &vb->txt_data.data[vb->txt_data.len] - field_start_line;
 
     vb->line_coords = (txt_file->coords == DC_NONE) ? DC_PRIMARY : txt_file->coords;
     if (vb->reject_bytes) 
@@ -522,7 +522,9 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     unsigned save_txt_len_len = vb->num_contexts;
     uint64_t save_txt_len[save_txt_len_len];
     if (z_dual_coords) {
-        save_lo_rejects_len = vb->lo_rejects[vb->line_coords-1].len; // copy line to lo_rejects now, because we are going to destroy it. We remove it later if its not a reject.
+        // copy line to lo_rejects now, because we are going to destroy it. We remove it later if its not a reject.
+        // TODO: code-review that we don't destroy anything (bc we don't store GT in txt_data anymore), and we can stop copying in advance
+        save_lo_rejects_len = vb->lo_rejects[vb->line_coords-1].len; 
         line_len = vcf_seg_copy_line_to_reject (vb, field_start_line, remaining_txt_len);
         vcf_lo_set_rollback_point (vb); // rollback point for rolling back seg of the OTHER coord if it turns out this line cannot be luft-translated
 

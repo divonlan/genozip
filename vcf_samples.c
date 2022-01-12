@@ -415,8 +415,7 @@ static inline void vcf_seg_FORMAT_transposed (VBlockVCFP vb, ContextP ctx, STRp(
 
 // a comma-separated array - each element goes into its own item context, single repeat
 static WordIndex vcf_seg_FORMAT_A_R (VBlockVCFP vb, ContextP ctx, SmallContainer con /* by value */, STRp(value), StoreType item_store_type,
-                                     void (*seg_item_cb)(VBlockVCFP, ContextP ctx, unsigned num_items, ContextP *item_ctxs, 
-                                                         const char**, const uint32_t*, const int64_t*))
+                                     void (*seg_item_cb)(VBlockVCFP, ContextP ctx, unsigned n_items, const char**, const uint32_t*, ContextP *item_ctxs, const int64_t*))
 {   
     str_split (value, value_len, VCF_MAX_ARRAY_ITEMS, ',', item, false);
     
@@ -446,7 +445,7 @@ static WordIndex vcf_seg_FORMAT_A_R (VBlockVCFP vb, ContextP ctx, SmallContainer
 
     // case: seg items via callback
     if (seg_item_cb)
-        seg_item_cb (vb, ctx, con.nitems_lo, item_ctxs, items, item_lens, values);
+        seg_item_cb (vb, ctx, con.nitems_lo, items, item_lens, item_ctxs, values);
 
     // case: seg items as normal snips
     else 
@@ -483,13 +482,12 @@ static inline WordIndex vcf_seg_FORMAT_AD_varscan (VBlockVCFP vb, ContextP ctx, 
 }
 
 // <ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">
-static void vcf_seg_AD_items (VBlockVCFP vb, ContextP ctx, unsigned num_items, ContextP *item_ctxs, 
-                              STRps(item), const int64_t *values)
+static void vcf_seg_AD_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *item_ctxs, const int64_t *values)
 {       
     bool has_adall_this_sample = segconf.has[FORMAT_ADALL] && ctx_encountered (VB, FORMAT_ADALL); // note: we can delta vs ADALL unless segconf says so, bc it can ruin other fields that rely on peeking AD, eg AB
     int64_t sum = 0; 
 
-    for (unsigned i=0; i < num_items; i++) {
+    for (unsigned i=0; i < n_items; i++) {
 
         // If we have ADALL in this file, we delta vs ADALL if we have it in this sample, or seg normally if not
         if (segconf.has[FORMAT_ADALL]) {
@@ -521,7 +519,7 @@ static void vcf_seg_AD_items (VBlockVCFP vb, ContextP ctx, unsigned num_items, C
     // AD value is sum of its items
     ctx_set_last_value (VB, ctx, sum);
 
-    memcpy (vb->ad_values, values, num_items * sizeof (values[0]));
+    memcpy (vb->ad_values, values, n_items * sizeof (values[0]));
 }
 
 //-------------
@@ -529,12 +527,11 @@ static void vcf_seg_AD_items (VBlockVCFP vb, ContextP ctx, unsigned num_items, C
 //-------------
 
 // Sepcial treatment for item 0
-static void vcf_seg_ADALL_items (VBlockVCFP vb, ContextP ctx, unsigned num_items, ContextP *item_ctxs, 
-                                 STRps(item), const int64_t *values)
+static void vcf_seg_ADALL_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *item_ctxs, const int64_t *values)
 {
     segconf_set_has (FORMAT_ADALL);
 
-    for (unsigned i=0; i < num_items; i++) 
+    for (unsigned i=0; i < n_items; i++) 
         if (i==0 || i==1) {
             if (!vb->mux_ADALL[i].num_channels)
                 seg_mux_init (VB, 4, VCF_SPECIAL_MUX_BY_DOSAGE, item_ctxs[i]->did_i, FORMAT_ADALL, STORE_INT, (MultiplexerP)&vb->mux_ADALL[i], "0123");
@@ -550,8 +547,7 @@ static void vcf_seg_ADALL_items (VBlockVCFP vb, ContextP ctx, unsigned num_items
 //----------------------
 
 // used when Vector is expected to be (AD-OtherVector) - if it indeed is, we use a special snip
-static void vcf_seg_AD_complement_items (VBlockVCFP vb, ContextP ctx, unsigned num_items, ContextP *item_ctxs, 
-                                         STRps(item), const int64_t *values,
+static void vcf_seg_AD_complement_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *item_ctxs, const int64_t *values,
                                          DictId other_dict_id, const SmallContainer *other_con,
                                          char my_snips[][32], unsigned *my_snip_lens)
 {
@@ -559,10 +555,10 @@ static void vcf_seg_AD_complement_items (VBlockVCFP vb, ContextP ctx, unsigned n
     ContextP ad_ctx=CTX(FORMAT_AD), other_ctx;
     bool use_formula = ctx_encountered (VB, FORMAT_AD) &&
                        ctx_encountered_by_dict_id (VB, other_dict_id, &other_ctx) &&
-                       ad_ctx->last_txt_len    == num_items &&  // last_txt_len is # of items stored by vcf_seg_FORMAT_A_R 
-                       other_ctx->last_txt_len == num_items;
+                       ad_ctx->last_txt_len    == n_items &&  // last_txt_len is # of items stored by vcf_seg_FORMAT_A_R 
+                       other_ctx->last_txt_len == n_items;
 
-    for (unsigned i=0; i < num_items; i++) {
+    for (unsigned i=0; i < n_items; i++) {
 
         // case: as expected, F1R2 + F2R1 = AD - seg as a F2R1 as a MINUS snip
         if (use_formula && vb->ad_values[i] == values[i] + ECTX (other_con->items[i].dict_id)->last_value.i) 
@@ -575,24 +571,21 @@ static void vcf_seg_AD_complement_items (VBlockVCFP vb, ContextP ctx, unsigned n
 }
 
 // F2R1 = AD - F1R2 (applied if AD and F1R2 are encountered before F2R1)
-static void vcf_seg_F2R1_items (VBlockVCFP vb, ContextP ctx, unsigned num_items, ContextP *item_ctxs, 
-                                STRps(item), const int64_t *values)
+static void vcf_seg_F2R1_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *item_ctxs, const int64_t *values)
 {
-    vcf_seg_AD_complement_items (vb, ctx, num_items, item_ctxs, items, item_lens, values, (DictId)_FORMAT_F1R2, &con_F1R2, f2r1_snips, f2r1_snip_lens);
+    vcf_seg_AD_complement_items (vb, ctx, STRas(item), item_ctxs, values, (DictId)_FORMAT_F1R2, &con_F1R2, f2r1_snips, f2r1_snip_lens);
 }
 
 // ADF = AD - ADR (applied if AD and ADR are encountered before ADF)
-static void vcf_seg_ADF_items (VBlockVCFP vb, ContextP ctx, unsigned num_items, ContextP *item_ctxs, 
-                               STRps(item), const int64_t *values)
+static void vcf_seg_ADF_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *item_ctxs, const int64_t *values)
 {
-    vcf_seg_AD_complement_items (vb, ctx, num_items, item_ctxs, items, item_lens, values, (DictId)_FORMAT_ADR, &con_ADR, adf_snips, adf_snip_lens);
+    vcf_seg_AD_complement_items (vb, ctx, STRas(item), item_ctxs, values, (DictId)_FORMAT_ADR, &con_ADR, adf_snips, adf_snip_lens);
 }
 
 // ADR = AD - ADF (applied if AD and ADF are encountered before ADR)
-static void vcf_seg_ADR_items (VBlockVCFP vb, ContextP ctx, unsigned num_items, ContextP *item_ctxs, 
-                               STRps(item), const int64_t *values)
+static void vcf_seg_ADR_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *item_ctxs, const int64_t *values)
 {
-    vcf_seg_AD_complement_items (vb, ctx, num_items, item_ctxs, items, item_lens, values, (DictId)_FORMAT_ADF, &con_ADF, adr_snips, adr_snip_lens);
+    vcf_seg_AD_complement_items (vb, ctx, STRas(item), item_ctxs, values, (DictId)_FORMAT_ADF, &con_ADF, adr_snips, adr_snip_lens);
 }
 
 //----------
@@ -601,14 +594,13 @@ static void vcf_seg_ADR_items (VBlockVCFP vb, ContextP ctx, unsigned num_items, 
 
 // For bi-allelic SNPs, sum every of two values is expected to equal the corresponding value in AD. Example: AD=59,28 SB=34,25,17,11. 
 // seg the second of every pair as a MINUS snip
-static void vcf_seg_SB_items (VBlockVCFP vb, ContextP ctx, unsigned num_items, ContextP *item_ctxs, 
-                              STRps(item), const int64_t *values)
+static void vcf_seg_SB_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *item_ctxs, const int64_t *values)
 {
     // verify that AD was encountered in this line, and that it has exactly half the number of items as us
     ContextP ad_ctx=CTX(FORMAT_AD);
-    bool use_formula = ctx_encountered (VB, FORMAT_AD) && ad_ctx->last_txt_len == 2 && num_items == 4; // note: last_txt_len = # of items stored by vcf_seg_FORMAT_A_R
+    bool use_formula = ctx_encountered (VB, FORMAT_AD) && ad_ctx->last_txt_len == 2 && n_items == 4; // note: last_txt_len = # of items stored by vcf_seg_FORMAT_A_R
 
-    for (unsigned i=0; i < num_items; i++) {
+    for (unsigned i=0; i < n_items; i++) {
 
         // seg odd-numbered element as AD - (even element), if the sum is correct
         if (use_formula && i%2 && vb->ad_values[i/2] == values[i-1] + values[i]) 
@@ -626,13 +618,12 @@ static void vcf_seg_SB_items (VBlockVCFP vb, ContextP ctx, unsigned num_items, C
 //-----------
 
 // sum every of two values is expected to equal the corresponding value in AD. seg the second of every pair as a MINUS snip
-static void vcf_seg_SAC_items (VBlockVCFP vb, ContextP ctx, unsigned num_items, ContextP *item_ctxs, 
-                               STRps(item), const int64_t *values)
+static void vcf_seg_SAC_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *item_ctxs, const int64_t *values)
 {
     // verify that AD was encountered in this line, and that it has exactly half the number of items as us
-    bool use_formula = ctx_encountered (VB, FORMAT_AD) && 2 * CTX(FORMAT_AD)->last_txt_len == num_items; // note: last_txt_len = # of items stored by vcf_seg_FORMAT_A_R
+    bool use_formula = ctx_encountered (VB, FORMAT_AD) && 2 * CTX(FORMAT_AD)->last_txt_len == n_items; // note: last_txt_len = # of items stored by vcf_seg_FORMAT_A_R
 
-    for (unsigned i=0; i < num_items; i++) {
+    for (unsigned i=0; i < n_items; i++) {
 
         // seg odd-numbered element as AD - (even element), if the sum is correct
         if (use_formula && i%2 && vb->ad_values[i/2] == values[i-1] + values[i]) 
@@ -652,13 +643,12 @@ static void vcf_seg_SAC_items (VBlockVCFP vb, ContextP ctx, unsigned num_items, 
 // For bi-allelic SNPs: sum every of two items is expected to equal the corresponding value in AD. Example: AD=7,49 F2R1=3,28 MB=4,3,26,23 
 // In addition, the even-numbered item is quite similar to the corresponding value in F2R1.
 // Seg the even items as delta from F2R1 and odd items as a MINUS snip between AD and the preceding even item
-static void vcf_seg_MB_items (VBlockVCFP vb, ContextP ctx, unsigned num_items, ContextP *item_ctxs, 
-                              STRps(item), const int64_t *values)
+static void vcf_seg_MB_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *item_ctxs, const int64_t *values)
 {
-    bool use_formula_even = ctx_encountered (VB, FORMAT_F2R1) && CTX(FORMAT_F2R1)->last_txt_len == 2 && num_items == 4;
-    bool use_formula_odd  = ctx_encountered (VB, FORMAT_AD)   && CTX(FORMAT_AD)  ->last_txt_len == 2 && num_items == 4; // last_txt_len is # of items set by vcf_seg_FORMAT_A_R
+    bool use_formula_even = ctx_encountered (VB, FORMAT_F2R1) && CTX(FORMAT_F2R1)->last_txt_len == 2 && n_items == 4;
+    bool use_formula_odd  = ctx_encountered (VB, FORMAT_AD)   && CTX(FORMAT_AD)  ->last_txt_len == 2 && n_items == 4; // last_txt_len is # of items set by vcf_seg_FORMAT_A_R
 
-    for (unsigned i=0; i < num_items; i++) {
+    for (unsigned i=0; i < n_items; i++) {
 
         // if possible, seg even-numbered element delta vs the corresponding element in F2R1
         if (use_formula_even && !(i%2)) { 
@@ -1321,15 +1311,15 @@ static bool vcf_piz_luft_switch_first_last (VBlockP vb, ContextP ctx, char *reco
     
     vb->txt_data.len -= recon_len;
     
-    if (num_items==2 || num_items == 3) {
-        RECONSTRUCT_SEP (items[num_items-1], item_lens[num_items-1], ',');
+    if (n_items==2 || n_items == 3) {
+        RECONSTRUCT_SEP (items[n_items-1], item_lens[n_items-1], ',');
 
-        if (num_items==3)
+        if (n_items==3)
             RECONSTRUCT_SEP (items[1], item_lens[1], ',');
 
         RECONSTRUCT (items[0], item_lens[0]);
     }
-    else if (num_items == 4) { // Ra1,Rb1,Ra2,Rb2 -> Ra2,Rb2,Ra1,Rb1
+    else if (n_items == 4) { // Ra1,Rb1,Ra2,Rb2 -> Ra2,Rb2,Ra1,Rb1
         RECONSTRUCT_SEP (items[2], item_lens[2], ',');
         RECONSTRUCT_SEP (items[3], item_lens[3], ',');
         RECONSTRUCT_SEP (items[0], item_lens[0], ',');
@@ -1414,7 +1404,7 @@ static inline ContextP vcf_seg_validate_luft_trans_one_sample (VBlockVCFP vb, Co
 
 // If ALL subfields in ALL samples can luft-translate as required: 1.sets ctx->line_is_luft_trans for all contexts 2.lifted-back if this is a LUFT lne
 // if NOT: ctx->line_is_luft_trans=false for all contexts, line is rejects (LO_FORMAT), and keeps samples in their original LUFT or PRIMARY coordinates.
-static inline void vcf_seg_validate_luft_trans_all_samples (VBlockVCFP vb, uint32_t num_items, ContextP *ctxs, 
+static inline void vcf_seg_validate_luft_trans_all_samples (VBlockVCFP vb, uint32_t n_items, ContextP *ctxs, 
                                                             int32_t len, char *samples_start,
                                                             const char *backup_luft_samples, uint32_t backup_luft_samples_len)
 {
@@ -1423,7 +1413,7 @@ static inline void vcf_seg_validate_luft_trans_all_samples (VBlockVCFP vb, uint3
     bool has_13;
 
     // initialize optimistically. we will roll back and set to false if ANY subfield in ANY sample fails to translate, and re-seg all samples
-    for (unsigned sf_i=0; sf_i < num_items; sf_i++)
+    for (unsigned sf_i=0; sf_i < n_items; sf_i++)
         ctxs[sf_i]->line_is_luft_trans = needs_translation (ctxs[sf_i]); 
 
     // 0 or more samples
@@ -1434,12 +1424,12 @@ static inline void vcf_seg_validate_luft_trans_all_samples (VBlockVCFP vb, uint3
         next_field = seg_get_next_item (vb, field_start, &len, GN_SEP, GN_SEP, GN_IGNORE, &field_len, &separator, &has_13, "sample-subfield");
         ASSVCF (field_len, "unexpected tab character after sample # %u", vb->sample_i);
 
-        ContextP failed_ctx = vcf_seg_validate_luft_trans_one_sample (vb, ctxs, num_items, (char *)field_start, field_len);
+        ContextP failed_ctx = vcf_seg_validate_luft_trans_one_sample (vb, ctxs, n_items, (char *)field_start, field_len);
         if (failed_ctx) { // some context doesn't luft-translate as required
             REJECT_SUBFIELD (LO_FORMAT, failed_ctx, ".\tCannot cross-render sample due to field %s: \"%.*s\"", failed_ctx->tag_name, field_len, field_start);
 
             // make all contexts untranslateable in this line
-            for (unsigned i=0; i < num_items; i++)  // iterate on the order as in the line
+            for (unsigned i=0; i < n_items; i++)  // iterate on the order as in the line
                 ctxs[i]->line_is_luft_trans = false;
 
             // if this is an untranslatable LUFT-only line, recover the original LUFT-coordinates samples
@@ -1698,16 +1688,16 @@ const char *vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t *len, ch
 {
     // Container for samples - we have:
     // - repeats as the number of samples in the line (<= vcf_num_samples)
-    // - num_items as the number of FORMAT subfields (inc. GT)
+    // - n_items as the number of FORMAT subfields (inc. GT)
 
     Container samples = *ENT (Container, vb->format_mapper_buf, dl->format_node_i); // make a copy of the template
     ContextP *ctxs = ENT (ContextP, vb->format_contexts, dl->format_node_i * MAX_FIELDS);
-    uint32_t num_items = con_nitems (samples);
+    uint32_t n_items = con_nitems (samples);
 
     // check that all subfields in all samples can be luft-translated as required, or make this a LUFT-only / PRIMARY-only line.
     // Also, if the data is in LUFT coordinates and is indeed translatable, then this lifts-back the samples to PRIMARY coordinates
     if (z_dual_coords && LO_IS_OK (last_ostatus))
-        vcf_seg_validate_luft_trans_all_samples (vb, num_items, ctxs, *len, next_field, backup_luft_samples, backup_luft_samples_len);
+        vcf_seg_validate_luft_trans_all_samples (vb, n_items, ctxs, *len, next_field, backup_luft_samples, backup_luft_samples_len);
 
     const char *field_start;
     unsigned field_len=0, num_colons=0;
@@ -1746,7 +1736,7 @@ const char *vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t *len, ch
     
     // assign all translators. note: we either have translators for all translatable items, or none at all.
     if (z_dual_coords)
-        for (uint32_t i=0; i < num_items; i++)
+        for (uint32_t i=0; i < n_items; i++)
             if (ctxs[i]->line_is_luft_trans)
                 samples.items[i].translator = ctxs[i]->luft_trans;
 
