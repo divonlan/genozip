@@ -237,7 +237,7 @@ static SmallContainer con_nanopore_ext = {
 static SmallContainer con_ncbi_sra = {
     .repeats             = 1,
     .nitems_lo           = 4,
-    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, // three letters - usually all-the-same
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, // three letters (usually SRR, ERR or DRR) - usually all-the-same context. See: https://www.biostars.org/p/381527/ and https://www.ncbi.nlm.nih.gov/books/NBK569234/#search.what_do_the_different_sra_accessi
                              { .dict_id = { _SAM_Q1NAME }, .separator = "."                    }, // SRA number - usually all-the-same - seg as snip and not numeric
                              { .dict_id = { _SAM_Q2NAME }                                      },
                              { .dict_id = { _SAM_QmNAME }, .separator = { CI0_SKIP }           } }
@@ -319,6 +319,74 @@ static SmallContainer con_genozip_opt = {
                              { .dict_id = { _SAM_QmNAME }, .separator = { CI0_SKIP } } }
 };
 
+// example: 1
+static SmallContainer con_numeric = {
+    .repeats             = 1,
+    .nitems_lo           = 2,
+    .items               = { { .dict_id = { _SAM_Q0NAME }                            },
+                             { .dict_id = { _SAM_QmNAME }, .separator = { CI0_SKIP } } }
+};
+
+//--------------------------------------------
+// FASTQ Line3 flavors
+
+// example: ERR811170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template length=52
+static SmallContainer con_ncbi_sra_l3 = {
+    .repeats             = 1,
+    .nitems_lo           = 6,
+    .items               = { { .dict_id = { _FASTQ_T0HIRD }, .separator = { CI0_FIXED_0_PAD, 3 } },  // three letters - usually all-the-same
+                             { .dict_id = { _FASTQ_T1HIRD }, .separator = "."                    },  // SRA number - usually all-the-same - seg as snip and not numeric
+                             { .dict_id = { _FASTQ_T2HIRD }, .separator = " "                    },  // sequential number 
+//                             { .dict_id = { _FASTQ_COPY_Q }, .separator = " "                    },  // original qname 
+                             { .dict_id = { _FASTQ_T3HIRD }, .separator = " "                    },  // original qname 
+                             { .dict_id = { _FASTQ_T4HIRD }, .separator = "="                    },  // "length" (can't be a prefix, because no fixed_i)
+                             { .dict_id = { _FASTQ_T5HIRD },                                     } } // length value
+};
+
+// example: ERR811170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template BOWDEN04_20151016_MN15199_FAA67113_BOWDEN04_MdC_MARC_Phase2a_4833_1_ch19_file1_strand length=52
+static SmallContainer con_ncbi_sraP_l3 = {
+    .repeats             = 1,
+    .nitems_lo           = 7,
+    .items               = { { .dict_id = { _FASTQ_T0HIRD }, .separator = { CI0_FIXED_0_PAD, 3 } },  // three letters - usually all-the-same
+                             { .dict_id = { _FASTQ_T1HIRD }, .separator = "."                    },  // SRA number - usually all-the-same - seg as snip and not numeric
+                             { .dict_id = { _FASTQ_T2HIRD }, .separator = " "                    },  // sequential number 
+//                             { .dict_id = { _FASTQ_COPY_Q }, .separator = " "                    },  // original qname 
+                             { .dict_id = { _FASTQ_T3HIRD }, .separator = " "                    },  // original qname 
+                             { .dict_id = { _FASTQ_T4HIRD }, .separator = " "                    },  // additional info 
+                             { .dict_id = { _FASTQ_T5HIRD }, .separator = "="                    },  // "length" (can't be a prefix, because no fixed_i)
+                             { .dict_id = { _FASTQ_T6HIRD },                                     } } // length value
+};
+
+// example: ERR2708427.1.1 51e7525d-fa50-4b1a-ad6d-4f4ae25c1df7 length=1128
+static SmallContainer con_ncbi_sra2_l3 = {
+    .repeats             = 1,
+    .nitems_lo           = 7,
+    .items               = { { .dict_id = { _FASTQ_T0HIRD }, .separator = { CI0_FIXED_0_PAD, 3 } },  // three letters - usually all-the-same
+                             { .dict_id = { _FASTQ_T1HIRD }, .separator = "."                    },  // SRA number - usually all-the-same - seg as snip and not numeric
+                             { .dict_id = { _FASTQ_T2HIRD }, .separator = "."                    },  // first number - usually all-the-same - seg as snip and not numeric
+                             { .dict_id = { _FASTQ_T3HIRD }, .separator = " "                    },  // 2nd number - usually sequential
+//                             { .dict_id = { _FASTQ_COPY_Q }, .separator = " "                    },  // original qname 
+                             { .dict_id = { _FASTQ_T4HIRD }, .separator = " "                    },  // original qname 
+                             { .dict_id = { _FASTQ_T5HIRD }, .separator = "="                    },  // "length" (can't be a prefix, because no fixed_i)
+                             { .dict_id = { _FASTQ_T6HIRD },                                     } } // length value
+};
+
+// example: ERR2708427.1.1 51e7525d-fa50-4b1a-ad6d-4f4ae25c1df7 someextradata length=1128
+static SmallContainer con_ncbi_sra2P_l3 = {
+    .repeats             = 1,
+    .nitems_lo           = 8,
+    .items               = { { .dict_id = { _FASTQ_T0HIRD }, .separator = { CI0_FIXED_0_PAD, 3 } },  // three letters - usually all-the-same
+                             { .dict_id = { _FASTQ_T1HIRD }, .separator = "."                    },  // SRA number - usually all-the-same - seg as snip and not numeric
+                             { .dict_id = { _FASTQ_T2HIRD }, .separator = "."                    },  // first number - usually all-the-same - seg as snip and not numeric
+                             { .dict_id = { _FASTQ_T3HIRD }, .separator = " "                    },  // 2nd number - usually sequential
+//                             { .dict_id = { _FASTQ_COPY_Q }, .separator = " "                    },  // original qname 
+                             { .dict_id = { _FASTQ_T4HIRD }, .separator = " "                    },  // original qname 
+                             { .dict_id = { _FASTQ_T5HIRD }, .separator = " "                    },  // additional info 
+                             { .dict_id = { _FASTQ_T6HIRD }, .separator = "="                    },  // "length" (can't be a prefix, because no fixed_i)
+                             { .dict_id = { _FASTQ_T7HIRD },                                     } } // length value
+};
+
+
 //--------------------------------------------------------------------------------------------------------
 
 #define MAX_QNAME_ITEMS 11 // mate + 10 others (matching Q?NAME defined in sam.h, fastq.h, kraken.h) 
@@ -328,7 +396,7 @@ typedef struct QnameFlavorStruct {
     char name[16]; 
     char example[QFS_MAX_EXAMPLES][256];
     SeqTech tech;                              // The sequencing technology used to generate this data
-    int fq_only;                               // this QF is only for FASTQ, not SAM/BAM/KRAKEN. FQ: 1 if /1 goes after the first string, 2 if after the second space-separated string
+    int fq_only;                               // this QF is only for FASTQ, not SAM/BAM/KRAKEN. FQ: 1 if /1 goes after the first string, 2 after the second space-separated string
     SmallContainer *con_template;              // container template - copied to con in qname_zip_initialize
     unsigned num_seps;                         // number of printable separator and prefix characters
     int integer_items[MAX_QNAME_ITEMS+1];      // array of item_i (0-based) that are expected to be integer - no leading zeros (+1 for termiantor; terminated by -1)
@@ -381,7 +449,21 @@ static QnameFlavorStruct qf[] = {
                                                                           TECH_UNKNOWN, 2, &con_ncbi_sra_fq,   4, {2,6,-1},       {1, -1},        {-1},           {-1},           2,-1,  -1,                  },
     {},  { "NCBI-SRA2",     { "ERR2708427.1.1" },                         TECH_UNKNOWN, 0, &con_ncbi_sra2,     2, {2,3,-1},       {1, -1},        {-1},           {-1},           3,-1,  -1,                  },
     {},  { "NCBI-SRA",      { "SRR001666.1" },                            TECH_UNKNOWN, 0, &con_ncbi_sra,      1, {2,-1},         {1, -1},        {-1},           {-1},           2,-1,  -1,                  },
+    {},  { "Numeric",       { "123" },                                    TECH_UNKNOWN, 0, &con_numeric,       0, {0,-1},         {1, -1},        {-1},           {-1},           0,-1,  -1,                  },
     {},  { "Genozip-opt",   { "basic.1" },  /* must be last */            TECH_UNKNOWN, 0, &con_genozip_opt,   1, {1,-1},         {-1},           {-1},           {-1},           1,-1,  -1,                  },
+
+    // FASTQ Line3 QFs
+         { "NCBI-SRA2+-L3", { "ERR2708427.1.1 51e7525d-fa50-4b1a-ad6d-4f4ae25c1df7 someextradata length=1128" },
+                                                                          TECH_UNKNOWN, 2, &con_ncbi_sra2P_l3, 6, {2,3,7,-1},     {1, -1},        {-1},           {-1},           3,4,   -1,                  },
+         { "NCBI-SRA+-L3",  { "ERR811170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template BOWDEN04_20151016_MN15199_FAA67113_BOWDEN04_MdC_MARC_Phase2a_4833_1_ch19_file1_strand length=52" },
+                                                                          TECH_UNKNOWN, 2, &con_ncbi_sraP_l3,  5, {2,6,-1},       {1, -1},        {-1},           {-1},           2,3,   -1,                  },
+         { "NCBI-SRA2-L3",  { "ERR2708427.1.1 51e7525d-fa50-4b1a-ad6d-4f4ae25c1df7 length=1128" },
+                                                                          TECH_UNKNOWN, 2, &con_ncbi_sra2_l3,  5, {2,3,6,-1},     {1, -1},        {-1},           {-1},           3,4,   -1,                  },
+         { "NCBI-SRA-L3",   { "ERR811170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template length=52" },
+                                                                          TECH_UNKNOWN, 2, &con_ncbi_sra_l3,   4, {2,5,-1},       {1, -1},        {-1},           {-1},           2,3,   -1,                  },
 };
 
-#define NUM_QFs (sizeof(qf)/sizeof(qf[0]))
+#define NUM_QF_L3s 4
+#define NUM_QFs (ARRAY_LEN(qf) - NUM_QF_L3s)
+#define FIRST_QF_L3 NUM_QFs
+

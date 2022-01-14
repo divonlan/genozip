@@ -44,7 +44,18 @@
 #pragma GENDICT FASTQ_DOMQRUNS=DTYPE_FIELD=DOMQRUNS // must be 1 after QUAL. Also used by LONGR. For backwards compatability, we can never change its name.
 #pragma GENDICT FASTQ_TOPLEVEL=DTYPE_FIELD=TOPLEVEL
 #pragma GENDICT FASTQ_TAXID=DTYPE_FIELD=TAXID
+
 #pragma GENDICT FASTQ_LINE3=DTYPE_FIELD=LINE3
+#define MAX_LINE3_ITEMS 9
+#pragma GENDICT FASTQ_T0HIRD=DTYPE_1=t0NAME    // must be directly after FASTQ_LINE3
+#pragma GENDICT FASTQ_T1HIRD=DTYPE_1=t1NAME 
+#pragma GENDICT FASTQ_T2HIRD=DTYPE_1=t2NAME
+#pragma GENDICT FASTQ_T3HIRD=DTYPE_1=t3NAME
+#pragma GENDICT FASTQ_T4HIRD=DTYPE_1=t4NAME
+#pragma GENDICT FASTQ_T5HIRD=DTYPE_1=t5NAME
+#pragma GENDICT FASTQ_T6HIRD=DTYPE_1=t6NAME 
+#pragma GENDICT FASTQ_T7HIRD=DTYPE_1=t7NAME 
+#pragma GENDICT FASTQ_COPY_Q=DTYPE_1=tQcopy 
 
 // Txtfile stuff
 extern int32_t fastq_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
@@ -83,3 +94,4 @@ extern uint32_t fastq_get_pair_vb_i (VBlockP vb);
 
 #define FASTQ_LOCAL_GET_LINE_CALLBACKS  \
     { DT_FASTQ, _FASTQ_QUAL, fastq_zip_qual },
+

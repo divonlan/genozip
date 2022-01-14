@@ -36,8 +36,8 @@ typedef struct {
 } ZipDataLineFASTQ;
 
 // Used by Seg
-static char copy_desc_snip[30];
-static unsigned copy_desc_snip_len;
+static char fastq_copy_desc_snip[30];
+static unsigned fastq_copy_desc_snip_len;
 
 // IMPORTANT: if changing fields in VBlockFASTQ, also update vb_fast_release_vb 
 typedef struct VBlockFASTQ {
@@ -177,7 +177,7 @@ void fastq_zip_initialize (void)
     ZCTX(FASTQ_STRAND)->lcodec = CODEC_UNKNOWN;
     ZCTX(FASTQ_GPOS  )->lcodec = CODEC_UNKNOWN;
 
-    seg_prepare_snip_other (SNIP_COPY, _FASTQ_DESC, 0, 0, copy_desc_snip);
+    seg_prepare_snip_other (SNIP_COPY, _FASTQ_DESC, 0, 0, fastq_copy_desc_snip);
 
     // with REF_EXTERNAL, we don't know which chroms are seen (bc unlike REF_EXT_STORE, we don't use is_set), so
     // we just copy all reference contigs. this are not needed for decompression, just for --coverage/--sex/--idxstats
@@ -350,6 +350,50 @@ uint32_t fastq_get_pair_vb_i (VBlockP vb)
     return VB_FASTQ->pair_vb_i;
 }
 
+static void fastq_seg_line3 (VBlockFASTQ *vb, STRp(line3), STRp(desc))
+{
+    // first line of segconf VB - discover line3 type
+    if (segconf.running && vb->line_i==0) {
+
+        if (line3_len==0 || flag.optimize_DESC) 
+            segconf.line3 = L3_EMPTY;
+
+        else if (str_issame_(STRa(line3), STRa(desc)))
+            segconf.line3 = L3_COPY_DESC;
+
+        else if (qname_segconf_discover_fastq_line3_sra_flavor (VB, STRa(line3)))
+            segconf.line3 = L3_QF;
+
+        else 
+            ASSSEG (false, line3, "Invalid FASTQ file format: expecting middle line to be a \"+\" with or without a copy of the description, but it is \"%.*s\"",
+                    line3_len+1, line3-1);
+    }
+
+    if (flag.optimize_DESC) {
+        seg_by_did_i (VB, "", 0, FASTQ_LINE3, 0);
+        vb->recon_size -= line3_len; 
+    }
+    
+    else if (segconf.line3 == L3_EMPTY) {
+        ASSSEG (!line3_len || flag.optimize_DESC, line3, "Invalid FASTQ file format: expecting middle line to be a \"+\", but it is \"%.*s\"", line3_len+1, line3-1);
+        seg_by_did_i (VB, "", 0, FASTQ_LINE3, 0);
+    }
+    
+    else if (segconf.line3 == L3_COPY_DESC) {
+        ASSSEG (str_issame_(STRa(line3), STRa(desc)), line3, 
+                "Invalid FASTQ file format: expecting middle line to be a \"+\" followed by a copy of the description line, but it is \"%.*s\"", line3_len+1, line3-1); 
+        seg_by_did_i (VB, STRa(fastq_copy_desc_snip), FASTQ_LINE3, line3_len);
+    }
+
+    else if (segconf.line3 == L3_QF) 
+        ASSSEG (qname_seg_qf (VB, CTX(FASTQ_LINE3), segconf.line3_flavor, STRa(line3), false, 0), line3, 
+                "Invalid FASTQ file format: expecting middle line to be a \"+\" followed by a \"%s\" flavor, but it is \"%.*s\"", qf_name(segconf.line3_flavor), line3_len+1, line3-1); 
+
+    else 
+        ASSSEG (false, line3, "Invalid FASTQ file format: expecting middle line to be a \"+\" with or without a copy of the description, but it is \"%.*s\"",
+                line3_len+1, line3-1);
+}
+
 // concept: we treat every 4 lines as a "line". the Description/ID is stored in DESC dictionary and segmented to subfields D?ESC.
 // The sequence is stored in SEQ data. In addition, we utilize the TEMPLATE dictionary for metadata on the line, namely
 // the length of the sequence and whether each line has a \r.
@@ -439,24 +483,7 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
     unsigned FASTQ_LINE3_len;
     const char *FASTQ_QUAL_str = seg_get_next_line (vb, FASTQ_LINE3_str, &len, &FASTQ_LINE3_len, true, has_13, "LINE3");
 
-    // line3 can be either empty, or a copy of DESC.
-    if (!FASTQ_LINE3_len) 
-        seg_by_did_i (VB, "", 0, FASTQ_LINE3, 0);
-
-    else if (str_issame_ (FASTQ_LINE3_str, FASTQ_LINE3_len, FASTQ_DESC_str, FASTQ_DESC_len)) {
-
-        // if --optimize-DESC, we always produce an empty line.
-        if (flag.optimize_DESC) {
-            seg_by_did_i (VB, "", 0, FASTQ_LINE3, 0);
-            vb->recon_size -= FASTQ_DESC_len;
-        }
-        else 
-            seg_by_did_i (VB, copy_desc_snip, copy_desc_snip_len, FASTQ_LINE3, (flag.optimize_DESC ? optimized_len : FASTQ_LINE3_len));
-    }
-
-    else 
-        ASSSEG (false, FASTQ_LINE3_str, "Invalid FASTQ file format: expecting middle line to be a \"+\" with or without a copy of the description, but it is \"%.*s\"",
-                FASTQ_LINE3_len+1, FASTQ_QUAL_str-1);
+    fastq_seg_line3 (vb, STRd(FASTQ_LINE3), STRd(FASTQ_DESC));
 
     SEG_EOL (FASTQ_E2L, true); // account for ascii-10
 
