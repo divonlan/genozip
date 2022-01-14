@@ -34,7 +34,7 @@ void gff3_zip_initialize (void)
 }
 
 // called from seg_all_data_lines
-void gff3_seg_initialize (VBlock *vb)
+void gff3_seg_initialize (VBlockP vb)
 {
     CTX(GFF3_SEQID)->flags.store   = STORE_INDEX; // since v12
     CTX(GFF3_START)->flags.store   = STORE_INT;   // since v12
@@ -89,7 +89,7 @@ bool gff3_seg_is_small (ConstVBlockP vb, DictId dict_id)
 }
 
 // returns trus if successful
-static bool gff3_seg_target (VBlockP vb, const char *value, unsigned value_len)
+static bool gff3_seg_target (VBlockP vb, STRp(value))
 {
     str_split (value, value_len, 4, ' ', item, false);
     if (n_items != 3 && n_items != 4) return false; // not standard Target format
@@ -131,7 +131,7 @@ static bool gff3_seg_ENSTid (VBlockP vb, ContextP ctx, STRp(enst_id), uint32_t r
     return true;
 }
 
-static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, unsigned tag_name_len, const char *value, unsigned value_len)
+static inline DictId gff3_seg_attr_subfield (VBlockP vb, STRp(tag_name), STRp(value))
 {
     DictId dict_id = dict_id_make (tag_name, tag_name_len, DTYPE_GFF3_ATTR);
 
@@ -261,7 +261,7 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, const char *tag_name, u
     return dict_id;
 }
 
-static void gff3_seg_attrs_field (VBlock *vb, const char *field, unsigned field_len)
+static void gff3_seg_attrs_field (VBlock *vb, STRp(field))
 {
     // case: "." field
     if (field_len == 1 && *field == '.') {
@@ -313,7 +313,7 @@ static void gff3_seg_attrs_field (VBlock *vb, const char *field, unsigned field_
                    prefixes_len + count_space_seps - 1 - con.drop_final_item_sep); // names inc. = and (; or \n) separator 
 }
 
-const char *gff3_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
+const char *gff3_seg_txt_line (VBlockP vb, const char *field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
 {
     const char *next_field=field_start_line, *field_start;
     unsigned field_len=0;
