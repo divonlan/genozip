@@ -6,7 +6,7 @@
 #pragma once
 
 #include "genozip.h"
-#include "coords.h"
+#include "gencomp.h"
 
 typedef enum { 
     REF_NONE          = 0,  // ZIP (except SAM) and PIZ when user didn't specify an external reference
@@ -115,7 +115,7 @@ typedef struct {
     #define HAS_DEBUG_SEG(ctx) (flag.debug_seg && (!flag.dict_id_debug_seg.num || dict_id_typeless ((ctx)->dict_id).num == flag.dict_id_debug_seg.num))
 
     // internal flags set by the system, not the command line
-    Coords rejects_coord;    // ZIP only: currently zipping liftover rejects file / component containing only PRIMARY or LUFT variants
+    GenCompNum gencomp_num;  // ZIP only: currently zipping generated component (DVCF rejects or SAM SA)
     bool debug,              // set if DEBUG is defined
          debug_top,
          is_windows, is_mac, is_linux, // set according to OS
@@ -153,7 +153,7 @@ typedef struct {
     const char *unbind;
     const char *log_filename;  // output to info_stream goes here
 
-    enum { BIND_NONE, BIND_ALL, BIND_PAIRS, BIND_REJECTS } bind; // ZIP: user used --output to bind all files or --pair without --output to bind every 2
+    enum { BIND_NONE, BIND_ALL, BIND_PAIRS, BIND_GENCOMP } bind; // ZIP: user used --output to bind all files or --pair without --output to bind every 2
     uint64_t stdin_size;
     unsigned longest_filename; // length of longest filename of the txt/z files on the command line
     

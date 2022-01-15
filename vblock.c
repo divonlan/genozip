@@ -42,8 +42,8 @@ VBlock *evb = NULL;
     func (&vb->unmapped_read_count); \
     func (&vb->chrom2ref_map);       \
     func (&vb->ol_chrom2ref_map);    \
-    func (&vb->lo_rejects[0]);       \
-    func (&vb->lo_rejects[1]);       \
+    func (&vb->gencomp[0]);       \
+    func (&vb->gencomp[1]);       \
     func (&vb->frozen_state);        \
     for (unsigned i=0; i < NUM_CODEC_BUFS; i++) func (&vb->codec_bufs[i]); \
     if (vb->data_type != DT_NONE)    \

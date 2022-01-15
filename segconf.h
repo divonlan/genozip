@@ -22,6 +22,8 @@ typedef enum { ms_NONE, ms_BIOBAMBAM, ms_MINIMAP2 } msType; // type of SAM ms:i 
 
 typedef enum { DP_DEFAULT, by_AD, by_SDP, by_INFO_DP } FormatDPMethod;
 
+typedef enum { L3_UNKNOWN, L3_EMPTY, L3_COPY_DESC, L3_QF, NUM_L3s } FastqLine3Type;
+
 // seg configuration set prior to starting to seg a file during segconfig_calculate or txtheader_zip_read_and_compress
 typedef struct {
 
@@ -84,6 +86,9 @@ typedef struct {
     uint32_t longest_seq_len;   // length of the longest seq_len in the segconf data 
     SeqTech tech;
 
+    // FASTQ
+    FastqLine3Type line3;       // format of line3
+    QnameFlavor line3_flavor;   // in case of L3_QF 
 } SegConf;
 
 extern SegConf segconf;

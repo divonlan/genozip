@@ -324,7 +324,6 @@ extern Tag *vcf_tags_get_next_missing_tag (Tag *tag);
 
 // Liftover Zip
 extern void vcf_lo_zip_initialize (void);
-extern void vcf_lo_append_rejects_file (VBlockP vb, Coords coord);
 extern void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl);
 extern void vcf_lo_set_rollback_point (VBlockVCFP vb);
 extern void vcf_lo_seg_rollback_and_reject (VBlockVCFP vb, LiftOverStatus ostatus, Context *ctx);
@@ -343,12 +342,12 @@ extern void vcf_lo_piz_TOPLEVEL_cb_filter_line (VBlockP vb);
 #define ASSVCF0(condition, msg)        ASSVCF ((condition), msg "%s", "")
 #define WARNVCF(format, ...)           do { if (!flag.quiet)  { VCF_ERR_PREFIX; fprintf (stderr, format "\n", __VA_ARGS__); } } while(0)
 
-#define REJECT(ostatus, reason, ...)              do { if (!flag.rejects_coord) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } while(0)
-#define REJECT_MAPPING(reason)                    do { if (!flag.rejects_coord) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64 "\t.\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0]); return; } while(0)
-#define REJECT_SUBFIELD(ostatus, ctx, reason,...) do { if (!flag.rejects_coord) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t.\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], __VA_ARGS__); \
+#define REJECT(ostatus, reason, ...)              do { if (!flag.gencomp_num) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } while(0)
+#define REJECT_MAPPING(reason)                    do { if (!flag.gencomp_num) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64 "\t.\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0]); return; } while(0)
+#define REJECT_SUBFIELD(ostatus, ctx, reason,...) do { if (!flag.gencomp_num) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t.\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], __VA_ARGS__); \
                                                        vcf_lo_seg_rollback_and_reject (vb, (ostatus), (ctx)); } while(0)
-#define LIFTOK(ostatus, reason, ...) do { if (flag.show_lift && !flag.rejects_coord) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } while(0)
-#define LIFTOKEXT(ostatus, reason, ...) do { if (flag.show_lift && !flag.rejects_coord) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } while(0)
+#define LIFTOK(ostatus, reason, ...) do { if (flag.show_lift && !flag.gencomp_num) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } while(0)
+#define LIFTOKEXT(ostatus, reason, ...) do { if (flag.show_lift && !flag.gencomp_num) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } while(0)
 #define LIFTOK0(ostatus, reason) LIFTOK(ostatus, reason "%s", "")
-#define REJECTIF(condition, ostatus, reason, ...) do { if (condition) { if (!flag.rejects_coord) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } } while(0)
+#define REJECTIF(condition, ostatus, reason, ...) do { if (condition) { if (!flag.gencomp_num) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } } while(0)
 #define REJECTIF0(condition, ostatus, reason)      do { if (condition) REJECT (ostatus, reason "%s", ""); } while (0)

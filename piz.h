@@ -6,7 +6,6 @@
 #pragma once
 
 #include "genozip.h"
-#include "dispatcher.h"
 #include "reconstruct.h"
 
 extern bool piz_default_skip_section (VBlockP vb, SectionType st, DictId dict_id);

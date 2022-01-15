@@ -33,6 +33,7 @@
 #include "chrom.h"
 #include "buffer.h"
 #include "version.h"
+#include "coords.h"
 
 #define INITIAL_NUM_NODES 10000
 
@@ -876,7 +877,7 @@ static bool ctx_merge_in_one_vctx (VBlock *vb, ContextP vctx)
     uint64_t ol_len = vctx->ol_nodes.len;
     bool has_count = !vb->is_rejects_vb; // don't count rejects VB - these are duplicate lines counted in the normal VBs.
 
-    if (flag.rejects_coord != DC_PRIMARY) // we don't include ##primary_only VBs as they are not in the primary reconstruction, but we do include ##luft_only
+    if (vb->data_type != DT_VCF || flag.gencomp_num != DC_PRIMARY) // we don't include ##primary_only VBs as they are not in the primary reconstruction, but we do include ##luft_only
         zctx->txt_len += vctx->txt_len; // for stats
 
     if (vctx->st_did_i != DID_I_NONE && zctx->st_did_i == DID_I_NONE) {

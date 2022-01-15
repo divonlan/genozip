@@ -160,21 +160,6 @@ static uint32_t bam_split_aux (VBlockSAM *vb, const char *aux, const char *after
     return n_auxs;
 }
 
-// returns aux field (first byte after eg MDZ) if it exists or NULL if it doesn't
-static const char *bam_seg_get_aux (const char *name, STRps (aux), uint32_t *aux_len) 
-{
-    for (uint32_t f=0; f < n_auxs; f++) {
-        const char *aux = auxs[f];
-        if (aux_lens[f] > 3 && 
-            aux[0] == name[0] && aux[1] == name[1] && aux[2] == name[3]) {
-            *aux_len = aux_lens[f] - 3;
-            return &aux[3];
-        }
-    }
-
-    return NULL;
-}
-
 void bam_seg_BIN (VBlockSAM *vb, ZipDataLineSAM *dl, uint16_t bin /* used only in bam */, PosType this_pos)
 {
     bool is_bam = IS_BAM;
@@ -347,6 +332,12 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     uint32_t aux_lens[MAX_FIELDS];
     uint32_t n_auxs = bam_split_aux (vb, aux, after, auxs, aux_lens);
 
+    // if this is a secondary / supplamentary read (aka Dependent) or a read that has an associated sec/sup read (aka Primary) - move
+    // the line to the appropriate component and skip it here (no segging done yet)
+    if (!segconf.running && !flag.gencomp_num && 
+        sam_seg_is_sa_line (vb, dl, alignment, after - alignment, STRas(aux), true)) 
+        goto done;
+
     // seg QNAME first, as it will find the buddy
     sam_seg_QNAME (vb, dl, next_field, l_read_name-1, 2); // QNAME. account for \0 and l_read_name
     next_field += l_read_name; // inc. \0
@@ -378,7 +369,7 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
 
     // we analyze MD:Z now (if it exists), as we will need it for SEQ 
     STR(MD); 
-    if (segconf.has[OPTION_MD_Z] && !segconf.running && (MD = bam_seg_get_aux ("MD:Z", STRas(aux), &MD_len))) 
+    if (segconf.has[OPTION_MD_Z] && !segconf.running && (MD = sam_seg_get_aux ("MD:Z", STRas(aux), &MD_len, true))) 
         sam_md_analyze (vb, STRa(MD), this_pos, FIRSTENT(char, vb->textual_cigar));
 
     // SEQ - calculate diff vs. reference (denovo or loaded)
@@ -420,5 +411,8 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     buf_free (&vb->textual_cigar);
     buf_free (&vb->textual_seq);
 
+    vb->recon_num_lines++;
+
+done:
     return after;
 }

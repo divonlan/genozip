@@ -157,7 +157,7 @@ static uint32_t writer_init_comp_info (void)
             .info.comp_i   = comp_i, 
             .txt_header_sl = sl, 
             .first_vb_i    = 0xffffffff,
-            .rejects_coord = sl->flags.txt_header.rejects_coord
+            .rejects_coord = Z_DT(DT_VCF) ? sl->flags.txt_header.gencomp_num : DC_NONE
         };
 
         // conditions entire component (header and all VBs) should be skipped (i.e. not even read and inspected)
@@ -305,10 +305,10 @@ void writer_move_liftover_rejects_to_front (void)
     Section prim = dual; sections_next_sec (&prim, SEC_TXT_HEADER);
     Section luft = prim; sections_next_sec (&luft, SEC_TXT_HEADER);
 
-    ASSERT (dual->flags.txt_header.rejects_coord == DC_NONE && 
-            prim->flags.txt_header.rejects_coord == DC_PRIMARY && 
-            luft->flags.txt_header.rejects_coord == DC_LUFT,
-            "File %s is a dual-coordinates file, components have incorrect rejects_coord", z_name);
+    ASSERT (dual->flags.txt_header.gencomp_num == DC_NONE && 
+            prim->flags.txt_header.gencomp_num == DC_PRIMARY && 
+            luft->flags.txt_header.gencomp_num == DC_LUFT,
+            "File %s is a dual-coordinates file, components have incorrect gencomp_num", z_name);
 
     sections_pull_component_up (NULL, flag.luft ? prim : luft); // when rendering in LUFT, show the ##primary_only in the header, and vice versa
 }

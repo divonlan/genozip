@@ -18,6 +18,7 @@
 #include "libdeflate/libdeflate.h"
 #include "stats.h"
 #include "segconf.h"
+#include "gencomp.h"
 
 static MiniContainer line_number_container = {};
 
@@ -71,9 +72,9 @@ void vcf_zip_after_compute (VBlockP vb_)
 {
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
-    if (z_dual_coords && !flag.rejects_coord) { // normal file, not zipping rejects files
-        if (vb->lo_rejects[DC_PRIMARY-1].len) vcf_lo_append_rejects_file (vb_, DC_PRIMARY);
-        if (vb->lo_rejects[DC_LUFT-1].len)    vcf_lo_append_rejects_file (vb_, DC_LUFT);
+    if (z_dual_coords && !flag.gencomp_num) { // normal file, not zipping rejects files
+        if (vb->gencomp[DC_PRIMARY-1].len) gencomp_append_file (vb_, DC_PRIMARY, "PRIM");
+        if (vb->gencomp[DC_LUFT-1].len)    gencomp_append_file (vb_, DC_LUFT, "LUFT");
     }
 
     if (chain_is_loaded && vb->rejects_report.len) 
@@ -445,14 +446,14 @@ static void vcf_seg_FORMAT (VBlockVCF *vb, ZipDataLineVCF *dl, STRp(fmt))
     }
 }
 
-// returns length of lo_rejects before the copying
+// returns length of gencomp before the copying
 static uint32_t vcf_seg_copy_line_to_reject (VBlockVCF *vb, const char *field_start_line, uint32_t remaining_txt_len)
 {
     const char *last = memchr (field_start_line, '\n', remaining_txt_len);
     ASSERT (last, "Line has no newline: %.*s", remaining_txt_len, field_start_line);
 
     uint32_t line_len = last - field_start_line + 1;
-    buf_add_more (VB, &vb->lo_rejects[vb->line_coords-1], field_start_line, line_len, "lo_rejects");
+    buf_add_more (VB, &vb->gencomp[vb->line_coords-1], field_start_line, line_len, "gencomp");
 
     return line_len;
 }
@@ -522,9 +523,9 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
     unsigned save_txt_len_len = vb->num_contexts;
     uint64_t save_txt_len[save_txt_len_len];
     if (z_dual_coords) {
-        // copy line to lo_rejects now, because we are going to destroy it. We remove it later if its not a reject.
+        // copy line to gencomp now, because we are going to destroy it. We remove it later if its not a reject.
         // TODO: code-review that we don't destroy anything (bc we don't store GT in txt_data anymore), and we can stop copying in advance
-        save_lo_rejects_len = vb->lo_rejects[vb->line_coords-1].len; 
+        save_lo_rejects_len = vb->gencomp[vb->line_coords-1].len; 
         line_len = vcf_seg_copy_line_to_reject (vb, field_start_line, remaining_txt_len);
         vcf_lo_set_rollback_point (vb); // rollback point for rolling back seg of the OTHER coord if it turns out this line cannot be luft-translated
 
@@ -630,7 +631,7 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
             
             const char *backup_luft_samples = NULL; uint32_t backup_luft_samples_len=0;
             if (vb->line_coords == DC_LUFT) {
-                 backup_luft_samples = ENT (char, vb->lo_rejects[DC_LUFT-1], save_lo_rejects_len + (next_field - field_start_line));
+                 backup_luft_samples = ENT (char, vb->gencomp[DC_LUFT-1], save_lo_rejects_len + (next_field - field_start_line));
                  backup_luft_samples_len = line_len - (next_field - field_start_line);
             }
 
@@ -668,9 +669,9 @@ const char *vcf_seg_txt_line (VBlock *vb_, const char *field_start_line, uint32_
         if (reconstructable_coords & DC_PRIMARY) vb->recon_num_lines++;   // PRIMARY or BOTH
         if (reconstructable_coords & DC_LUFT) vb->recon_num_lines_luft++; // LUFT or BOTH
         
-        // if line was NOT rejected (the default, if not dual coordinates), we can delete the text from lo_rejects
+        // if line was NOT rejected (the default, if not dual coordinates), we can delete the text from gencomp
         if (lo_ok)
-            vb->lo_rejects[vb->line_coords-1].len = save_lo_rejects_len;
+            vb->gencomp[vb->line_coords-1].len = save_lo_rejects_len;
 
         // in a dual-coordinate VB (i.e. the main VCF data lines), single-coordinate lines won't be displayed in the opposite reconstruction
         else {

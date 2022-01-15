@@ -346,13 +346,15 @@ Digest txtfile_read_header (bool is_first_txt)
     }
 
     // the excess data is for the next vb to read 
-    buf_copy (evb, &txt_file->unconsumed_txt, &evb->txt_data, char, header_len, 0, "txt_file->unconsumed_txt");
+    if (evb->txt_data.len) 
+        buf_copy (evb, &txt_file->unconsumed_txt, &evb->txt_data, char, header_len, 0, "txt_file->unconsumed_txt");
+    
     txt_file->txt_data_so_far_single = txt_file->header_size = evb->txt_data.len = header_len; // trim to uncompressed length of txt header
 
     // md5 header - always digest_ctx_single, digest_ctx_bound only if first component 
     Digest header_digest = DIGEST_NONE;
 
-    if (!flag.data_modified && !flag.rejects_coord) {
+    if (!flag.data_modified && !flag.gencomp_num) { // note: we don't add generated component's header to the digest
         if (flag.bind && is_first_txt) digest_update (&z_file->digest_ctx_bound, &evb->txt_data, "txt_header:digest_ctx_bound");
         digest_update (&z_file->digest_ctx_single, &evb->txt_data, "txt_header:digest_ctx_single");
 

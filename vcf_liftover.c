@@ -639,28 +639,6 @@ void vcf_lo_piz_TOPLEVEL_cb_filter_line (VBlock *vb)
 // Rejects file stuff - file contains data in the native txt format
 // ----------------------------------------------------------------
 
-// ZIP: called when inspecting the txtheader to add header data, and after each VB to add rejected line
-void vcf_lo_append_rejects_file (VBlockP vb, Coords coord)
-{
-    ASSERTNOTNULL (z_file);
-
-    // create rejects file if not already open
-    if (!z_file->rejects_file[coord-1]) {
-        z_file->rejects_file_name[coord-1] = MALLOC (strlen (z_file->name) + 20);
-        sprintf (z_file->rejects_file_name[coord-1], "%s.%s_ONLY%s", z_file->name, coords_name (coord), file_plain_ext_by_dt (z_file->data_type));
-        
-        z_file->rejects_file[coord-1] = fopen (z_file->rejects_file_name[coord-1], "wb+");
-        ASSERT (z_file->rejects_file[coord-1], "fopen() failed to open %s: %s", z_file->rejects_file_name[coord-1], strerror (errno));
-    }
-
-    ASSERT0 (z_file->rejects_file[coord-1], "liftover rejects file is not open");
-
-    fwrite (vb->lo_rejects[coord-1].data, 1, vb->lo_rejects[coord-1].len, z_file->rejects_file[coord-1]);
-    z_file->rejects_disk_size[coord-1] += vb->lo_rejects[coord-1].len;
-
-    buf_free (&vb->lo_rejects[coord-1]);
-}
-
 void vcf_liftover_display_lift_report (void)
 {
     char report_fn[strlen (z_name) + 50];

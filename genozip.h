@@ -64,6 +64,7 @@ typedef struct ContigPkg *ContigPkgP;
 typedef const struct ContigPkg *ConstContigPkgP;
 typedef union SamFlags *SamFlagsP;
 typedef const struct QnameFlavorStruct *QnameFlavor; 
+typedef void *Dispatcher;
 
 typedef void BgEnBufFunc (BufferP buf, uint8_t *lt); // we use uint8_t instead of LocalType (which 1 byte) to avoid #including sections.h
 typedef BgEnBufFunc (*BgEnBuf);
@@ -208,6 +209,7 @@ typedef _Bool bool;
 // Strings - function arguments
 #define STRa(x)    x, x##_len                       
 #define STRas(x)   n_##x##s, x##s, x##_lens                       
+#define STRasi(x,i) (n_##x##s-(i)), &x##s[i], &x##_lens[i] // subset strating from item i
 #define STRd(x)    x##_str, x##_len                   
 #define STRb(x)    (x).data, (x).len                  
 #define STRi(x,i)  x##s[i], x##_lens[i]             

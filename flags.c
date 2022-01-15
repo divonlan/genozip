@@ -212,7 +212,7 @@ static void flags_show_flags (void)
     iprintf ("linux=%s\n", TF_(is_linux));
     iprintf ("aligner_available=%s\n", TF_(aligner_available));
     iprintf ("reading_reference=%s\n", flag.reading_reference==gref ? "GREF" : flag.reading_reference==prim_ref ? "CHAIN_SRC" : "NONE");
-    iprintf ("rejects_coord=%s\n", TF_(rejects_coord));
+    iprintf ("gencomp_num=%s\n", TF_(gencomp_num));
     iprintf ("genocat_no_ref_file=%s\n", TF_(genocat_no_ref_file));
     iprintf ("genocat_no_dicts=%s\n", TF_(genocat_no_dicts));
     iprintf ("genocat_global_area_only=%s\n", TF_(genocat_global_area_only));
@@ -935,7 +935,7 @@ void flags_update_zip_one_file (void)
 
     // cases where txt data is modified during Seg - digest is not stored, it cannot be tested with --test and other limitations 
     // note: this flag is also set when the file header indicates that it's a Luft file. See vcf_header_get_dual_coords().
-    // note: we don't set this for rejects_coord, bc when compressing a primary DC file it is reconstructed without modification
+    // note: we don't set this for gencomp_num, bc DVCF: when compressing a primary DC file it is reconstructed without modification
     flag.data_modified = flag.data_modified  // this is needed, eg, so when compressinga Luft file, the rejects file inherits data_modified 
                       || flag.optimize       // we're modifying data to make it more compressible
                       || flag.match_chrom_to_reference
@@ -946,7 +946,7 @@ void flags_update_zip_one_file (void)
     ASSINP0 (!flag.sort || dt == DT_VCF, "--sort is only supported for VCF files");
 
     // genozip --chain implies --sort, unless overridden with --unsorted
-    if (chain_is_loaded && !flag.unsorted && !flag.rejects_coord) 
+    if (chain_is_loaded && dt == DT_VCF && !flag.unsorted && !flag.gencomp_num) 
         flag.sort = true;
 
     if (chain_is_loaded && dt == DT_VCF && !flag.show_one_counts.num && !flag.quiet)

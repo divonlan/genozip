@@ -159,12 +159,14 @@ void coverage_sex_classifier (bool is_first_z_file)
                                     { "Unassigned",        "Unassigned",                "Unassigned", "Unassigned" }  // XTEST_NA
                                   };
 
-    if (!flag.multiple_files) 
-        iprintf (is_info_stream_terminal ? "\n--sex for: %s\n%-10s  %-*s  %-6s  %-6s  %-6s  %-4s  %-4s\n" 
-                                          : "\n--sex for: %s\n%s\t%*s\t%s\t%s\t%s\t%s\t%s\n",
+    if (!flag.multiple_files) {
+        iprint0 ("\nWARNING: NOT SUITABLE FOR CLINICAL USE\n\n");
+        iprintf (is_info_stream_terminal ? "--sex for: %s\n%-10s  %-*s  %-6s  %-6s  %-6s  %-4s  %-4s\n" 
+                                         : "--sex for: %s\n%s\t%*s\t%s\t%s\t%s\t%s\t%s\n",
                 z_name, "Sex", flag.longest_filename, "File", is_sam ? "DP_1" : "DP_AS", "DP_X", "DP_Y", 
                 is_sam ? "1/X" : "AS/X", "X/Y");
-                
+    }
+
     iprintf (is_info_stream_terminal ? "%-10s  %-*s  %-6.3f  %-6.3f  %-6.3f  %-4.1f  %-4.1f\n" : "%s\t%*s\t%f\t%f\t%f\t%f\t%f\n",  
             is_sam ? sam_call[by_as_x][by_x_y] : fq_call[by_as_x][by_x_y], 
             flag.longest_filename, z_name, 

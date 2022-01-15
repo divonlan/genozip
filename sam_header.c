@@ -290,7 +290,7 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
 {    
     if (flag.show_txt_contigs && exe_type == EXE_GENOCAT) exit_ok();
 
-    if (command != ZIP) return true; // nothing to inspect in in PIZ, all good
+    if (command != ZIP || flag.gencomp_num) return true; // nothing to inspect in in PIZ or SA components, all good
 
     if (!IS_BAM) *AFTERENT (char, *txt_header) = 0; // nul-terminate as required by sam_foreach_SQ_line
 
@@ -348,6 +348,8 @@ int32_t bam_is_header_done (bool is_eof)
     #define HDRSKIP(n) if (evb->txt_data.len < next + n) goto incomplete_header; next += n
     #define HDR32 (next + 4 <= evb->txt_data.len ? GET_UINT32 (&evb->txt_data.data[next]) : 0) ; if (evb->txt_data.len < next + 4) goto incomplete_header; next += 4;
 
+    if (flag.gencomp_num) return 0; // SA components are headerless
+
     uint32_t next=0;
 
     HDRSKIP(4); // magic
@@ -404,7 +406,7 @@ static inline void sam_header_add_PG (Buffer *txtheader_buf)
 // PIZ main thread: make the txt header either SAM or BAM according to flag.out_dt, and regardless of the source file
 TXTHEADER_TRANSLATOR (sam_header_bam2sam)
 {
-    if (flag.no_header) {
+    if (flag.no_header || !txtheader_buf->len /* SA component */) {
         txtheader_buf->len = 0; // remove the BAM header data
         return;
     }

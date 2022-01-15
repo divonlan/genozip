@@ -18,6 +18,7 @@
 #include "dict_id.h"
 #include "website.h"
 #include "contigs.h"
+#include "gencomp.h"
 
 // Globals
 static VcfVersion vcf_version;
@@ -166,14 +167,14 @@ static bool vcf_header_get_dual_coords (STRp(line), void *unused1, void *unused2
     if (LINEIS (HK_DC_PRIMARY)) {
         ASSERT (!chain_is_loaded, "--chain cannot be used with %s - it is already a dual-coordinates VCF file - it contains \""HK_DC_PRIMARY"\" in its header", txt_name);
         txt_file->coords = DC_PRIMARY;
-        flag.bind = BIND_REJECTS;
+        flag.bind = BIND_GENCOMP;
         z_file->digest_ctx_bound = z_file->digest_ctx_single; // we already calculated the digest for the header
     }
 
     else if (LINEIS (HK_DC_LUFT)) {
         ASSERT (!chain_is_loaded, "--chain cannot be used with %s - it is already a dual-coordinates VCF file - it contains \""HK_DC_LUFT"\" in its header", txt_name);
         txt_file->coords = DC_LUFT;
-        flag.bind = BIND_REJECTS;
+        flag.bind = BIND_GENCOMP;
         flag.data_modified = true; // we will be zipping this as a dual-coordinates VCF with default reconstruction as PRIMARY - this turns off digest
         z_file->digest_ctx_bound  = (DigestContext){};
         z_file->digest_ctx_single = (DigestContext){};
@@ -554,7 +555,8 @@ static bool vcf_header_handle_contigs (STRp(line), void *new_txt_header_, void *
     const bool is_lo_contig = LINEIS (HK_LUFT_CONTIG);
     const bool is_lb_contig = LINEIS (HK_PRIM_CONTIG);
 
-    if (is_contig) (*(uint32_t *)num_contig_lines)++;
+    if (is_contig) 
+        (*(uint32_t *)num_contig_lines)++;
 
     if (!is_contig && !is_lo_contig && !is_lb_contig) goto copy_line; // not a contig line
 
@@ -601,7 +603,7 @@ static bool vcf_header_handle_contigs (STRp(line), void *new_txt_header_, void *
     }
 
     // case: --chain: collect all vcf_header_liftover_dst_contigs. non sorted/unique buf for now, will fix in vcf_header_zip_update_to_dual_coords
-    if (chain_is_loaded && !flag.rejects_coord && is_contig)
+    if (chain_is_loaded && !flag.gencomp_num && is_contig)
         chain_append_all_luft_ref_index (STRa (contig_name), LN, &vcf_header_liftover_dst_contigs);
 
 copy_line:
@@ -650,7 +652,7 @@ static bool vcf_inspect_txt_header_zip (Buffer *txt_header)
         segconf.vcf_is_varscan = true;
     SAFE_RESTORE;
 
-    if (chain_is_loaded && !flag.rejects_coord)
+    if (chain_is_loaded && !flag.gencomp_num)
         vcf_tags_populate_tags_from_command_line();
         
     // scan header for ##dual_coordinates - this sets txt_file->coords
@@ -658,48 +660,48 @@ static bool vcf_inspect_txt_header_zip (Buffer *txt_header)
     
     // handle contig lines
     ASSERTNOTINUSE (vcf_header_liftover_dst_contigs);
-    if (chain_is_loaded && !flag.rejects_coord)
+    if (chain_is_loaded && !flag.gencomp_num)
         buf_alloc (evb, &vcf_header_liftover_dst_contigs, 0, 100, WordIndex, 0, "codec_bufs[1]");
     
-    uint32_t num_contig_lines;
+    uint32_t num_contig_lines=0;
     vcf_header_rewrite_header (evb, txt_header, vcf_header_handle_contigs, &num_contig_lines);
 
-    if (chain_is_loaded && !flag.rejects_coord)     // sort (but not uniq)
+    if (chain_is_loaded && !flag.gencomp_num)     // sort (but not uniq)
         qsort (STRb(vcf_header_liftover_dst_contigs), sizeof (WordIndex), dst_contigs_sorter);
 
     // in liftover, if header has no contigs, add reference contigs and derived ocontigs
-    if (chain_is_loaded && !flag.rejects_coord && !num_contig_lines) 
+    if (chain_is_loaded && !flag.gencomp_num && !num_contig_lines) 
         vcf_add_all_ref_contigs_to_header (txt_header);
 
     // add PP and/or PL INFO lines if needed
-    if ((flag.GP_to_PP || flag.GL_to_PL) && !flag.rejects_coord)
+    if ((flag.GP_to_PP || flag.GL_to_PL) && !flag.gencomp_num)
         vcf_header_add_FORMAT_lines (txt_header);
 
     // set vcf_version
     unsigned fileformat_line_len = vcf_header_parse_fileformat_line (txt_header);
 
     // if --chain: scan header for ##FORMAT and ##INFO - for translatable subfields - create contexts, and populate Context.luft_trans
-    if (chain_is_loaded) flag.bind = BIND_REJECTS;
+    if (chain_is_loaded) flag.bind = BIND_GENCOMP;
 
     // if we're compressing a txt file with liftover, we prepare the two rejects headers: it consists of two lines:
     // 1. the first "##fileformat" line if one exists in our file 
     // 2. the last "#CHROM" line - needing for zipping the rejects file, but will be removed in reconstruction
     // in reconstruction without --luft, we will reconstruct the normal header 
     // in reconstruction with --luft, we will reconstruct the rejected header first, then the normal header without the first line
-    if ((chain_is_loaded || txt_file->coords) && !flag.rejects_coord) {
+    if ((chain_is_loaded || txt_file->coords) && !flag.gencomp_num) {
         
         // add the ##fileformat line, if there is one
-        buf_add_more (evb, &evb->lo_rejects[0], txt_header->data, fileformat_line_len, "lo_rejects");
-        buf_add_more (evb, &evb->lo_rejects[1], txt_header->data, fileformat_line_len, "lo_rejects");
+        buf_add_more (evb, &evb->gencomp[0], txt_header->data, fileformat_line_len, "gencomp");
+        buf_add_more (evb, &evb->gencomp[1], txt_header->data, fileformat_line_len, "gencomp");
         
         // add the #CHROM line
         char *line;
         unsigned len = vcf_header_get_last_line (txt_header, &line);
-        buf_add_more (evb, &evb->lo_rejects[0], line, len, "lo_rejects");
-        buf_add_more (evb, &evb->lo_rejects[1], line, len, "lo_rejects");
+        buf_add_more (evb, &evb->gencomp[0], line, len, "gencomp");
+        buf_add_more (evb, &evb->gencomp[1], line, len, "gencomp");
 
-        vcf_lo_append_rejects_file (evb, DC_PRIMARY);
-        vcf_lo_append_rejects_file (evb, DC_LUFT);
+        gencomp_append_file (evb, DC_PRIMARY, "PRIM");
+        gencomp_append_file (evb, DC_LUFT, "LUFT");
     }
 
     // case: Luft file - update *contig, *reference, dual_coordinates keys to Primary format, and move rejects to unconsumed_txt
@@ -709,7 +711,7 @@ static bool vcf_inspect_txt_header_zip (Buffer *txt_header)
         vcf_header_zip_get_luft_only_lines (txt_header);
 
     // case: --chain: add liftover_contig, liftover_reference, chain, dual_coordinates keys
-    if ((chain_is_loaded || txt_file->coords) && !flag.rejects_coord)
+    if ((chain_is_loaded || txt_file->coords) && !flag.gencomp_num)
         vcf_header_zip_update_to_dual_coords (txt_header);
 
     return true; // all good
@@ -734,11 +736,11 @@ static bool vcf_inspect_txt_header_piz (VBlock *txt_header_vb, Buffer *txt_heade
     else              vcf_num_displayed_samples = vcf_num_samples;
 
     // for the rejects part of the header - we're done
-    if (txt_header_flags.rejects_coord) 
+    if (txt_header_flags.gencomp_num) 
         return true;
 
     // if needed, liftover the header
-    if (flag.luft && !flag.header_one && !flag.rejects_coord) 
+    if (flag.luft && !flag.header_one && !flag.gencomp_num) 
         vcf_header_rewrite_header (txt_header_vb, txt_header, vcf_header_piz_liftover_header, NULL);
 
     if (flag.single_coord)
@@ -749,7 +751,7 @@ static bool vcf_inspect_txt_header_piz (VBlock *txt_header_vb, Buffer *txt_heade
         bufprintf (txt_header_vb, txt_header, KH_INFO_oSTATUS"\n", GENOZIP_CODE_VERSION);
 
     // add genozip command line
-    if (!flag.header_one && exe_type == EXE_GENOCAT && !flag.genocat_no_reconstruct && !flag.rejects_coord
+    if (!flag.header_one && exe_type == EXE_GENOCAT && !flag.genocat_no_reconstruct && !flag.gencomp_num
         && !flag.no_pg && (flag.data_modified || z_dual_coords)) 
         vcf_header_add_genozip_command (txt_header_vb, txt_header);
 

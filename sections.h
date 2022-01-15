@@ -86,13 +86,15 @@ typedef union SectionFlags {
         uint8_t txt_is_bin       : 1; // BAM: Source file is binary (BAM)
         uint8_t bgzf             : 1; // Reconstruct as BGZF (user may override) (determined by the last component)
         uint8_t adler            : 1; // true if Adler32 is used, false if MD5 is used (>= v9) or (either MD5 or nothing) (v8)
-        uint8_t dual_coords      : 1; // VCF: file supports dual coordinates - last two TXT sections are the "liftover rejects" data (v12)
+        uint8_t has_gencomp      : 1; // VCF: file supports dual coordinates - last two components are the "liftover rejects" data (v12)
+                                      // SAM/BAM: SA_PRIM and/or SA_DEPN components exist 
         uint8_t has_taxid        : 1; // each line in the file has Taxonomic ID information (v12)
         uint8_t unused           : 1;
     } genozip_header;
 
     struct FlagsTxtHeader {
-        uint8_t rejects_coord    : 2; // DC_PRIMARY/DC_LUFT contains "##primary_only"/"##luft_only" variants or DC_NONE if not a rejects component (added v12)
+        uint8_t gencomp_num      : 2; // DVCF: DC_PRIMARY/DC_LUFT contains "##primary_only"/"##luft_only" variants or DC_NONE if not a rejects component (added v12)
+                                      // SAM/BAM: CT_SA_PRIM/CT_SA_DEPN - added 13.0.9
         uint8_t is_txt_luft      : 1; // true if original source file was a dual-coordinates file in Luft rendition (v12)
         uint8_t unused           : 5;
     } txt_header;

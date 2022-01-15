@@ -414,7 +414,7 @@ batch_dvcf()
 {
     batch_print_header
 
-    local files=(basic-dvcf-source.vcf basic-dvcf-luft.vcf test.NA12878.sorted.vcf test.clinvar37.vcf.gz test.1KG-37.indels.vcf test.chr17.SS6004478.vcf test.ExAC.vcf.gz)
+    local files=(minimal.vcf basic-dvcf-source.vcf basic-dvcf-luft.vcf test.NA12878.sorted.vcf test.clinvar37.vcf.gz test.1KG-37.indels.vcf test.chr17.SS6004478.vcf test.ExAC.vcf.gz)
     local file
 
     # prepare chain file

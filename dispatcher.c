@@ -32,8 +32,8 @@ typedef struct {
     unsigned num_running_compute_threads;
     unsigned next_vb_i;
     unsigned max_threads;
-    bool is_last_file; // very last file in this execution
-    bool cleanup_after_me; // free resources after dispatcher is complete
+    bool is_last_file;        // very last file in this execution
+    bool cleanup_after_me;    // free resources after dispatcher is complete
     ProgressType prog;
     const char *filename;
     char *progress_prefix;
@@ -324,7 +324,7 @@ Dispatcher dispatcher_fan_out_task (const char *task_name,
                                     bool force_single_thread, 
                                     uint32_t previous_vb_i, // used if binding file
                                     uint32_t idle_sleep_microsec,
-                                    DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output)
+                                    DispatcherFunc prepare, DispatcherFunc compute, DispatcherOutputFunc output)
 {
     Dispatcher dispatcher = dispatcher_init (task_name, force_single_thread ? 1 : global_max_threads, 
                                              previous_vb_i, test_mode, is_last_file, cleanup_after_me, filename, prog, prog_msg ? prog_msg : "0%");
@@ -344,7 +344,7 @@ Dispatcher dispatcher_fan_out_task (const char *task_name,
             VBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL, true); // this will block until one is available
             if (!processed_vb) continue; // no running compute threads 
 
-            if (output) output (processed_vb);
+            if (output) output (dispatcher, processed_vb);
             
             dispatcher_recycle_vbs (dispatcher, true);
         }        
@@ -367,4 +367,16 @@ Dispatcher dispatcher_fan_out_task (const char *task_name,
     } while (!dispatcher_is_done (dispatcher));
 
     return dispatcher;
+}
+
+void dispatcher_set_cleanup_after_me (Dispatcher dispatcher, bool cleanup_after_me)
+{
+    DispatcherData *dd = (DispatcherData *)dispatcher;
+    dd->cleanup_after_me = cleanup_after_me;
+}
+
+bool dispatcher_get_cleanup_after_me (Dispatcher dispatcher)
+{
+    DispatcherData *dd = (DispatcherData *)dispatcher;
+    return dd->cleanup_after_me;
 }

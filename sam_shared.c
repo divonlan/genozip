@@ -37,7 +37,6 @@ void sam_vb_release_vb (VBlockSAM *vb)
     vb->a_index = vb->x_index = vb->y_index = 0;
     vb->md_verified = 0;
     vb->qual_codec_no_longr = 0;
-    vb->sam_component_type = 0;
     
     buf_free (&vb->bd_bi_line);
     buf_free (&vb->textual_cigar);
@@ -52,6 +51,7 @@ void sam_vb_destroy_vb (VBlockSAM *vb)
 {
     buf_destroy (&vb->bd_bi_line);
     buf_destroy (&vb->textual_cigar);
+    buf_destroy (&vb->binary_cigar);
     buf_destroy (&vb->textual_seq);
     buf_destroy (&vb->md_M_is_ref);
     buf_destroy (&vb->qname_hash);

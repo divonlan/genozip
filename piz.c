@@ -755,12 +755,12 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file)
 
                 else {
                     // note: also starts writer, and if unbinding, also opens the txt file and hands data over to the writer
-                    Coords rejects_coord = txtheader_piz_read_and_reconstruct (z_file->num_txt_components_so_far, sl); 
+                    GenCompNum gc = txtheader_piz_read_and_reconstruct (z_file->num_txt_components_so_far, sl); 
 
                     // case --unbind: unpausing after previous txt_file pause (requires txt file to be open)
                     if (flag.unbind) dispatcher_resume (dispatcher);  
 
-                    if (flag.header_only && !rejects_coord)
+                    if (flag.header_only && (!(TXT_DT(DT_VCF) && gc))) // in DVCF we keep rejects VBs in --header-only, as they reconstructed as part of the header
                         sl = sections_component_last (sl); // skip all VBs
                 }
                 z_file->num_txt_components_so_far++;

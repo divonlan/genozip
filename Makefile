@@ -41,7 +41,7 @@ MY_SRCS = genozip.c genols.c base250.c context.c container.c strings.c stats.c a
 		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c lookback.c \
 		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c\
 		  codec_gtshark.c codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c \
-	      txtfile.c profiler.c file.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c \
+	      txtfile.c profiler.c file.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c gencomp.c \
 		  vblock.c regions.c  optimize.c dict_id.c hash.c stream.c url.c bases_filter.c
 
 CONDA_COMPATIBILITY_SRCS =  compatibility/mac_gettime.c
@@ -67,7 +67,7 @@ CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h tx
              base250.h endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h \
              buffer.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h codec.h stats.h \
              crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h qname.h qname_flavors.h \
-			 lookback.h tokenizer.h codec_longr_alg.c \
+			 lookback.h tokenizer.h codec_longr_alg.c gencomp.h \
 			 reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h linesorter.h threads.h \
 			 arch.h license.h data_types.h base64.h txtheader.h writer.h bases_filter.h genols.h coords.h contigs.h chrom.h \
 			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h fastq.h gff3.h phylip.h chain.h kraken.h locs.h generic.h \

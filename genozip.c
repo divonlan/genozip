@@ -370,7 +370,7 @@ static void main_genozip (const char *txt_filename,
                           const char *next_txt_filename, // ignored unless we are of pair_1 in a --pair
                           const char *z_filename,
                           unsigned txt_file_i, bool is_last_txt_file,
-                          Coords txt_file_coords,
+                          Coords txt_file_coords, // only relevant to VCF
                           char *exec_name)
 {
     MAIN ("main_genozip: %s", txt_filename ? txt_filename : "stdin");
@@ -380,13 +380,13 @@ static void main_genozip (const char *txt_filename,
     ASSINP (!z_filename || !url_is_url (z_filename), 
             "output files must be regular files, they cannot be a URL: %s", z_filename);
 
-    ASSINP0 (!z_file || !z_dual_coords || flag.rejects_coord, 
+    ASSINP0 (!z_file || !z_dual_coords || flag.gencomp_num, 
              "it is not possible to concatenate dual-coordinate files");
 
     // get input file
     if (!txt_file) { // open the file - possibly already open from main_load_reference
         txt_file = file_open (txt_filename, READ, TXT_FILE, DT_NONE); 
-        if (txt_file) txt_file->coords = txt_file_coords; // maybe overridden by ##dual_coordinates in the header.
+        if (txt_file) txt_file->coords = txt_file_coords; // (only used by VCF) maybe overridden by ##dual_coordinates in the header.
     }
 
     // skip this file if its size is 0
@@ -396,7 +396,7 @@ static void main_genozip (const char *txt_filename,
             WARN ("Copied %s which has size=0 to the tar file", txt_filename);
         }    
         else
-            WARN ("Cannot compress file %s because its size is 0 - skipping it", txt_filename);
+            ASSERTW (flag.gencomp_num, "Cannot compress file %s because its size is 0 - skipping it", txt_filename);
         return;
     }
 
@@ -416,10 +416,10 @@ static void main_genozip (const char *txt_filename,
         main_genozip_open_z_file_write (&z_filename);
     }
 
-    if (!flag.rejects_coord)
+    if (!flag.gencomp_num)
         stats_add_txt_name (txt_name); // add txt_name (inluding stdin) to stats data stored in z_file
 
-    TEMP_FLAG (quiet, flag.rejects_coord ? true : flag.quiet); // no warnings when (re) processing rejects
+    TEMP_FLAG (quiet, (z_dual_coords && flag.gencomp_num) ? true : flag.quiet); // no warnings when (re) processing rejects
 
     flags_update_zip_one_file();
 
@@ -427,10 +427,8 @@ static void main_genozip (const char *txt_filename,
 
     zip_one_file (txt_file->basename, &is_last_txt_file, z_closes_after_me);
 
-    if (flag.show_stats && z_closes_after_me && 
-        (!z_dual_coords || flag.rejects_coord)) {
+    if (flag.show_stats && z_closes_after_me && (!z_dual_coords || flag.gencomp_num)) 
         stats_display();
-    }
 
     bool remove_txt_file = z_file && flag.replace && txt_filename;
 
@@ -439,28 +437,32 @@ static void main_genozip (const char *txt_filename,
     bool is_chain = (Z_DT(DT_CHAIN));
 
     // close the file if its an open disk file AND we need to close it
-    if (!flag.to_stdout && z_file && z_closes_after_me) {
+    if (flag.gencomp_num==0 && !flag.to_stdout && z_file && z_closes_after_me) {
+        TEMP_FLAG (sort, false);
 
-        // if this is a dual coords file, recursively call to add the rejects file, and close z_file there.
-        if (z_dual_coords && !flag.rejects_coord) {
-            flag.sort = false;
-            z_closes_after_me = false;                
-            
-            for (flag.rejects_coord = DC_PRIMARY ; flag.rejects_coord <= DC_LUFT ; flag.rejects_coord++)
-                main_genozip (z_file->rejects_file_name[flag.rejects_coord-1], 0, z_file->name, txt_file_i, flag.rejects_coord==DC_LUFT, 
-                              flag.rejects_coord, exec_name);
+        if (z_file->gencomp_file[0]) {
+            flag.gencomp_num = 1;
+            main_genozip (z_file->gencomp_file_name[0], 0, z_file->name, txt_file_i, !z_file->gencomp_file[1], 1, exec_name);
         }
+
+        if (z_file->gencomp_file[1]) {
+            flag.gencomp_num = 2;
+            main_genozip (z_file->gencomp_file_name[1], 0, z_file->name, txt_file_i, true, 2, exec_name);
+        }
+
+        flag.gencomp_num = 0;
+        RESTORE_FLAG(sort);
         
-        else if (!z_dual_coords || flag.rejects_coord == DC_LUFT) {
-            if (!z_filename) { z_filename = z_file->name ; z_file->name = 0; } // take over the name if we don't have it (eg 2nd file in a pair)
-            file_close (&z_file, false, !is_last_txt_file); 
-        }
+        // we have no generated components or we're within the recursive call to final components - close the file now 
+        if (!z_filename) { z_filename = z_file->name ; z_file->name = 0; } // take over the name if we don't have it (eg 2nd file in a pair)
+        file_close (&z_file, false, !is_last_txt_file); 
+
+        RESTORE_FLAG (quiet); // don't pass on quiet to test, just because we turned it on for rejects 
+
+        // test the compression, if the user requested --test
+        if (flag.test) 
+            main_test_after_genozip (exec_name, z_filename, is_last_txt_file, is_chain);
     }
-
-    RESTORE_FLAG (quiet); // don't pass on quiet to test, just because we turned it on for rejects 
-
-    // test the compression, if the user requested --test
-    if (flag.test && z_closes_after_me) main_test_after_genozip (exec_name, z_filename, is_last_txt_file, is_chain);
 
     // remove after test (if any) was successful
     if (remove_txt_file) {

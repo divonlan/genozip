@@ -22,6 +22,7 @@
 #include "chrom.h"
 #include "qname.h"
 #include "lookback.h"
+#include "gencomp.h"
 #include "libdeflate/libdeflate.h"
 
 typedef enum { QNAME, FLAG, RNAME, POS, MAPQ, CIGAR, RNEXT, PNEXT, TLEN, SEQ, QUAL, AUX } SamFields __attribute__((unused)); // quick way to define constants
@@ -89,6 +90,13 @@ void sam_zip_initialize (void)
     seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY_MC, MC_buddy_snip, _SAM_CIGAR);
 
     seg_prepare_snip_other (SNIP_LOOKBACK, (DictId)_OPTION_XA_LOOKBACK, false, 0, XA_lookback_snip);
+}
+
+// called main thread, in order of VBs
+void sam_zip_after_compute (VBlockP vb)
+{
+    if (vb->gencomp[CT_SA_PRIM-1].len) gencomp_append_file (vb, CT_SA_PRIM, "SA_PRIM");
+    if (vb->gencomp[CT_SA_DEPN-1].len) gencomp_append_file (vb, CT_SA_DEPN, "SA_DEPN");
 }
 
 static void sam_seg_initialize_0X (VBlockP vb, DidIType lookback_did_i, DidIType rname_did_i, DidIType strand_did_i, DidIType pos_did_i, DidIType cigar_did_i)
@@ -258,7 +266,7 @@ void sam_seg_finalize (VBlockP vb)
                           { .dict_id = { _SAM_TLEN     }, .separator = "\t" },
                           { .dict_id = { _SAM_SQBITMAP }, .separator = "\t" },
                           { .dict_id = { _SAM_QUAL     }, .separator = "\t" },
-                          { .dict_id = { _SAM_AUX },                   },
+                          { .dict_id = { _SAM_AUX      },                   },
                           { .dict_id = { _SAM_EOL      },                   } 
                         }
     };
@@ -391,7 +399,7 @@ void sam_seg_finalize (VBlockP vb)
 }
 
 // main thread: called after all VBs, before compressing global sections
-void zip_sam_after_vbs (void)
+void sam_zip_after_vbs (void)
 {
     // shorten unused RNAME / RNEXT dictionary strings to "" (dict pre-populated in sam_zip_initialize)
     ctx_shorten_unused_dict_words (SAM_RNAME);
@@ -456,14 +464,17 @@ bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)
 }
 
 // returns aux field if it exists or NULL if it doesn't
-static const char *sam_seg_get_aux (const char *name, STRps (fld), uint32_t *aux_len)
+const char *sam_seg_get_aux (const char *name, STRps (aux), uint32_t *aux_len, bool is_bam)
 {
-    for (uint32_t f=AUX; f < n_flds; f++) {
-        const char *aux = flds[f];
-        if (fld_lens[f] > 5 && 
-            aux[0] == name[0] && aux[1] == name[1] && aux[2] == ':' && aux[3] == name[3]) {
-            *aux_len = fld_lens[f] - 5;
-            return &aux[5];
+    for (uint32_t f=0; f < n_auxs; f++) {
+        const char *aux = auxs[f];
+        if (aux_lens[f] > (is_bam ? 3 : 5) && 
+            name[0] == aux[0] && 
+            name[1] == aux[1] && 
+            name[3] == (is_bam ? sam_seg_bam_type_to_sam_type(aux[2]) : aux[3])) {
+
+            if (aux_len) *aux_len = aux_lens[f] - (is_bam ? 3 : 5);
+            return &aux[is_bam ? 3 : 5];
         }
     }
 
@@ -786,6 +797,31 @@ bool sam_zip_is_unaligned_line (const char *line, int len)
     return (field_len == 1 && *field_start == '0');
 }
 
+// returns true if this line should be skipped
+bool sam_seg_is_sa_line (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(alignment), STRps(aux), bool is_bam)
+{
+    STR(NH); STR(HI); 
+
+    // dependent - always has secondary or supplementary flag
+    if (dl->FLAG.bits.secondary || dl->FLAG.bits.supplementary) 
+        buf_add_more (VB, &vb->gencomp[CT_SA_DEPN-1], STRa(alignment), "gencomp[1]");
+
+    // primary - no special flag, identify by SA or (NH>1 && HI==1)
+    else if (sam_seg_get_aux ("SA:Z", STRas(aux), NULL, is_bam) ||
+               (((NH = sam_seg_get_aux ("NH:i", STRas(aux), &NH_len, is_bam)) && (NH_len > 1 || *NH != '1')) &&
+               (((HI = sam_seg_get_aux ("HI:i", STRas(aux), &HI_len, is_bam)) && (HI_len ==1 || *HI == '1')))))
+        buf_add_more (VB, &vb->gencomp[CT_SA_PRIM-1], STRa(alignment), "gencomp[0]");
+
+    else
+        return false;
+
+    vb->line_i--;
+    vb->recon_size -= alignment_len;
+
+    return true;
+
+}
+
 const char *sam_seg_txt_line (VBlock *vb_, const char *next_line, uint32_t remaining_txt_len, bool *has_13)
 {
     VBlockSAM *vb = (VBlockSAM *)vb_;
@@ -799,10 +835,11 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *next_line, uint32_t remai
 
     ASSSEG (str_get_int_range16 (STRfld(FLAG), 0, SAM_MAX_FLAG, &dl->FLAG.value), flds[FLAG], "invalid FLAG field: \"%.*s\"", fld_lens[FLAG], flds[FLAG]);
     
-    // if this is a secondary / supplamentary read according to FLAGS, copy it to dependents before any seg and move on to next line 
-    // if (vb->sam_component_type == CT_NORMAL) {
-    //     if (dl->FLAG.bits.secondary || dl->FLAG.bits.supplementary)
-    //         return sam_sa_skip_sa_dep (field_start_line, remaining_txt_len);
+    // if this is a secondary / supplamentary read (aka Dependent) or a read that has an associated sec/sup read (aka Primary) - move
+    // the line to the appropriate component and skip it here (no segging done yet)
+    if (!segconf.running && !flag.gencomp_num && 
+        sam_seg_is_sa_line (vb, dl, flds[0], next_line - flds[0], STRasi(fld,AUX), false)) 
+        goto done;
 
     sam_seg_QNAME (vb, dl, STRfld(QNAME), 1);
 
@@ -831,7 +868,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *next_line, uint32_t remai
     // we search forward for MD:Z now, as we will need it for SEQ if it exists
     STR(MD);
     if (segconf.has[OPTION_MD_Z] && !segconf.running &&
-        (MD = sam_seg_get_aux ("MD:Z", n_flds, flds, fld_lens, &MD_len))) 
+        (MD = sam_seg_get_aux ("MD:Z", STRasi(fld,AUX), &MD_len, false))) 
         sam_md_analyze (vb, STRa(MD), this_pos, vb->last_cigar);
 
     seg_set_last_txt (VB, CTX(SAM_SQBITMAP), STRfld(SEQ));
@@ -871,5 +908,8 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *next_line, uint32_t remai
     SEG_EOL (SAM_EOL, false); /* last field accounted for \n */
     SAFE_RESTORE;   
 
+    vb->recon_num_lines++;
+
+done:
     return next_line;
 }

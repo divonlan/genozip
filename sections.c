@@ -447,14 +447,14 @@ static FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt)
 
     switch (st) {
         case SEC_GENOZIP_HEADER:
-            sprintf (str.s, "%s=%u aligner=%u txt_is_bin=%u bgzf=%u adler=%u dual_coords=%u has_taxid=%u",
+            sprintf (str.s, "%s=%u aligner=%u txt_is_bin=%u bgzf=%u adler=%u has_gencomp=%u has_taxid=%u",
                      dts[dt] ? dts[dt] : "dt_specitic", f.genozip_header.dt_specific, f.genozip_header.aligner, 
-                     f.genozip_header.txt_is_bin, f.genozip_header.bgzf, f.genozip_header.adler, f.genozip_header.dual_coords,
+                     f.genozip_header.txt_is_bin, f.genozip_header.bgzf, f.genozip_header.adler, f.genozip_header.has_gencomp,
                      f.genozip_header.has_taxid);
             break;
 
         case SEC_TXT_HEADER:
-            sprintf (str.s, "rejects_coord=%s is_txt_luft=%u", coords_name (f.txt_header.rejects_coord), f.txt_header.is_txt_luft);
+            sprintf (str.s, "gencomp_num=%s is_txt_luft=%u", coords_name (f.txt_header.gencomp_num), f.txt_header.is_txt_luft);
             break;
 
         case SEC_VB_HEADER:
@@ -486,7 +486,7 @@ static FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt)
  
         case SEC_RANDOM_ACCESS:
         case SEC_RECON_PLAN:
-            sprintf (str.s, "rejects_coord=%s is_txt_luft=%u", coords_name (f.txt_header.rejects_coord), f.txt_header.is_txt_luft);
+            sprintf (str.s, "is_luft=%u", f.recon_plan.luft);
             break;
 
         default: 

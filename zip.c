@@ -532,7 +532,7 @@ static void zip_update_txt_counters (VBlock *vb)
         txt_file->num_lines += (int64_t)vb->lines.len; // lines in this txt file
 
     // counters of data AS IT APPEARS IN THE TXT FILE
-    if (!flag.rejects_coord) {      
+    if (!flag.gencomp_num) {      
         z_file->num_lines                += (int64_t)vb->lines.len; // lines in all bound files in this z_file
         z_file->txt_data_so_far_single_0 += (int64_t)vb->txt_size;  // length of data before any modifications
         z_file->txt_data_so_far_bind_0   += (int64_t)vb->txt_size;
@@ -542,8 +542,11 @@ static void zip_update_txt_counters (VBlock *vb)
     z_file->txt_data_so_far_single += (int64_t)vb->txt_size;   
 
     // counter of data in DEFAULT PRIMARY RECONSTRUCTION
-    if (flag.rejects_coord == DC_NONE) z_file->txt_data_so_far_bind += vb->recon_size;
-    if (flag.rejects_coord == DC_LUFT) z_file->txt_data_so_far_bind += vb->recon_size_luft; // luft reject VB shows in primary reconstruction
+    if (!Z_DT(DT_VCF) || flag.gencomp_num == DC_NONE) 
+        z_file->txt_data_so_far_bind += vb->recon_size;
+    
+    else if (flag.gencomp_num == DC_LUFT) 
+        z_file->txt_data_so_far_bind += vb->recon_size_luft; // luft reject VB shows in primary reconstruction
 
     // add up context compress time
     if (flag.show_time)
@@ -611,7 +614,7 @@ static void zip_compress_one_vb (VBlock *vb)
         bgzf_uncompress_vb (vb);    // some of the blocks might already have been decompressed while reading - we decompress the remaining
 
     // calculate the digest contribution of this VB to the single file and bound files, and the digest snapshot of this VB
-    if (!flag.make_reference && !flag.data_modified && !flag.rejects_coord) 
+    if (!flag.make_reference && !flag.data_modified && !flag.gencomp_num) 
         digest_one_vb (vb); 
 
     // allocate memory for the final compressed data of this vb. allocate 33% of the
@@ -721,10 +724,10 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
         }
 
         vb->vb_coords = !z_dual_coords ? DC_PRIMARY
-                      : flag.rejects_coord == DC_NONE ? DC_BOTH
-                      : flag.rejects_coord;
+                      : flag.gencomp_num == DC_NONE ? DC_BOTH
+                      : flag.gencomp_num;
 
-        vb->is_rejects_vb = (flag.rejects_coord != DC_NONE);
+        vb->is_rejects_vb = z_dual_coords && (flag.gencomp_num != DC_NONE);
     }
 
     if (vb->txt_data.len)   // we found some data 
@@ -738,17 +741,20 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
 }
 
 // called main thread, in order of VBs
-static void zip_complete_processing_one_vb (VBlockP vb)
+static void zip_complete_processing_one_vb (Dispatcher dispatcher, VBlockP vb)
 {
-    if (DTP(zip_after_compute)) DTP(zip_after_compute)(vb);
+    if (!flag.gencomp_num && (vb->gencomp[0].len || vb->gencomp[1].len)) 
+        dispatcher_set_cleanup_after_me (dispatcher, false);
 
+    if (DTP(zip_after_compute)) DTP(zip_after_compute)(vb);
+    
     // update z_data in memory (its not written to disk yet)
     zfile_update_compressed_vb_header (vb); 
 
     max_lines_per_vb = MAX_(max_lines_per_vb, vb->lines.len);
 
     if (!flag.make_reference && !flag.seg_only)
-        zfile_output_processed_vb (vb);
+        zfile_output_processed_vb (NULL, vb);
     
     zip_update_txt_counters (vb);
 
@@ -794,10 +800,11 @@ void zip_one_file (const char *txt_basename,
     bool success = txtheader_zip_read_and_compress (&txt_header_size); // also increments z_file->num_txt_components_so_far
     if (!success) goto finish; // eg 2nd+ VCF file cannot bind, because of different sample names
 
-    if (z_dual_coords && !flag.rejects_coord) { 
-        *is_last_file = false; // we're not the last file - at leasts, the liftover rejects file is after us
-        z_closes_after_me = false;
-    }
+// xxx we need to keep SAM/BAM open too, but we don't know yet if there are SA files?
+    // if (z_dual_coords && !flag.gencomp_num) { 
+    //     *is_last_file = false; // we're not the last file - at leasts, the liftover rejects file is after us
+    //     z_closes_after_me = false;
+    // }
 
     DT_FUNC (txt_file, zip_initialize)();
 
@@ -826,13 +833,15 @@ void zip_one_file (const char *txt_basename,
 
     // if this a non-bound file, or the last component of a bound file - write the genozip header, random access and dictionaries
 finish:
-    if (!flag.rejects_coord)
+    if (!flag.gencomp_num)
         z_file->txt_disk_so_far_bind += (int64_t)txt_file->disk_so_far + (txt_file->codec==CODEC_BGZF)*BGZF_EOF_LEN;
 
     // reconstruction plan for sorting the data (per txt file)
     if (flag.sort && !flag.seg_only)
         linesorter_compress_recon_plan();
 
+    z_closes_after_me = *is_last_file = dispatcher_get_cleanup_after_me (dispatcher); // possibly modified in zip_complete_processing_one_vb due to a "generated component"
+    
     if (z_closes_after_me && !flag.seg_only) {
         DT_FUNC (txt_file, zip_after_vbs)();
     

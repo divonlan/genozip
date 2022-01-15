@@ -87,8 +87,12 @@ static void stats_output_file_metadata (Buffer *buf)
     if (Z_DT(DT_VCF)) 
         bufprintf (evb, buf, "Samples: %u   ", vcf_header_get_num_samples());
 
-    bufprintf (evb, buf, "%ss: %s   Dictionaries: %u   Vblocks: %u x %u MB  Sections: %u\n", 
-               DTPZ (line_name), str_uint_commas (z_file->num_lines).s, z_file->num_contexts, 
+    uint32_t num_used_ctxs=0;
+    for (ContextP ctx=ZCTX(0); ctx < ZCTX(z_file->num_contexts); ctx++)
+        if (ctx->nodes.len || ctx->txt_len) num_used_ctxs++;
+
+    bufprintf (evb, buf, "%ss: %s   Contexts: %u   Vblocks: %u x %u MB  Sections: %u\n", 
+               DTPZ (line_name), str_uint_commas (z_file->num_lines).s, num_used_ctxs, 
                z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), (uint32_t)z_file->section_list_buf.len);
 
     if (Z_DT(DT_KRAKEN)) {

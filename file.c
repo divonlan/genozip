@@ -426,16 +426,15 @@ static bool file_open_txt_read (File *file)
         case CODEC_GZ:   // we test the first few bytes of the file to differentiate between NONE, GZ and BGZIP
         case CODEC_BGZF: 
         case CODEC_NONE: {
-            file->file = file->is_remote                  ? url_open (NULL, file->name)  
-                       : file->redirected                 ? fdopen (STDIN_FILENO,  "rb") 
-                       : flag.rejects_coord == DC_PRIMARY ? z_file->rejects_file[0]  // already open
-                       : flag.rejects_coord == DC_LUFT    ? z_file->rejects_file[1]  // already open
+            file->file = file->is_remote  ? url_open (NULL, file->name)  
+                       : file->redirected ? fdopen (STDIN_FILENO,  "rb") 
+                       : flag.gencomp_num ? z_file->gencomp_file[flag.gencomp_num-1]  // already open
                        :                                    fopen (file->name, READ);
             ASSERT (file->file, "failed to open %s: %s", file->name, strerror (errno));
 
 fallthrough_from_cram:
-            if (flag.rejects_coord)
-                file_seek (file, 0, SEEK_SET, false); // we finished writing the reject file - now we will read it
+            if (flag.gencomp_num)
+                file_seek (file, 0, SEEK_SET, false); // we finished writing the gencomp file - now we will read it
 
             // read the first potential BGZF block to test if this is GZ or BGZF
             uint8_t block[BGZF_MAX_BLOCK_SIZE]; 
@@ -864,7 +863,7 @@ static bool file_open_z (File *file)
                                   : fopen (file->name, file->mode);
 
         if (chain_is_loaded)
-            file->z_flags.dual_coords = true;
+            file->z_flags.has_gencomp = true; // dual-coordinate file
     }
     
     file_initialize_z_file_data (file);
@@ -900,12 +899,12 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
         is_file_exists = file_exists (filename);
         error = strerror (errno);
 
-        if (!flag.rejects_coord) {
+        if (!flag.gencomp_num) {
             if (is_file_exists && mode == READ) 
                 file->disk_size = file_get_size (filename);
         }
         else 
-            file->disk_size = z_file->rejects_disk_size[flag.rejects_coord-1];
+            file->disk_size = z_file->gencomp_disk_size[flag.gencomp_num-1];
     }
 
     // return null if genozip input file size is known to be 0, so we can skip it. note: file size of url might be unknown
@@ -1024,8 +1023,8 @@ void file_close (File **file_p,
     if (!file) return; // nothing to do
 
     // if this is the rejects file, unlink it first to prevent unnecessary flushing when closing
-    if (file->supertype == TXT_FILE && flag.rejects_coord) 
-        unlink (z_file->rejects_file_name[flag.rejects_coord-1]); // ignore errors (this doesn't work on NTFS)
+    if (file->supertype == TXT_FILE && flag.gencomp_num) 
+        unlink (z_file->gencomp_file_name[flag.gencomp_num-1]); // ignore errors (this doesn't work on NTFS)
 
     if (file->file && file->supertype == TXT_FILE) {
 
@@ -1057,8 +1056,8 @@ void file_close (File **file_p,
 
         // if there are still DVCF rejects files when close z_file (eg when closing from main_exit()), delete them too
         for (unsigned i=0; i < 2; i++)
-            if (file->rejects_file_name[i]) 
-                remove (file->rejects_file_name[i]); // ignore errors
+            if (file->gencomp_file_name[i]) 
+                remove (file->gencomp_file_name[i]); // ignore errors
     
         if (tar_is_tar() && file->mode != READ)
             tar_close_file (&file->file);
@@ -1067,9 +1066,9 @@ void file_close (File **file_p,
     }
 
     // in case the unlinking didn't work (eg NTFS) - remove the rejects file now that its closed
-    if (file->supertype == TXT_FILE && flag.rejects_coord) {
-        remove (z_file->rejects_file_name[flag.rejects_coord-1]); // ignore errors
-        FREE (z_file->rejects_file_name[flag.rejects_coord-1]);
+    if (file->supertype == TXT_FILE && flag.gencomp_num) {
+        remove (z_file->gencomp_file_name[flag.gencomp_num-1]); // ignore errors
+        FREE (z_file->gencomp_file_name[flag.gencomp_num-1]);
     }
 
     // create an index file using samtools, bcftools etc, if applicable
@@ -1114,8 +1113,8 @@ void file_close (File **file_p,
 
         FREE (file->name);
         FREE (file->basename);
-        FREE (file->rejects_file_name[0]);
-        FREE (file->rejects_file_name[1]);
+        FREE (file->gencomp_file_name[0]);
+        FREE (file->gencomp_file_name[1]);
         FREE (file);
     }
 COPY_TIMER_VB(evb,tmp2);}

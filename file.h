@@ -396,11 +396,13 @@ typedef struct File {
     Buffer coverage;
     Buffer read_count;
     Buffer unmapped_read_count;
-    
+
+    // Z_FILE: Generated Components (gencomp) stuff - reject components in DVCF, SA primary/dependent components in SAM/BAM    
+    char *gencomp_file_name[2];        // ZIP: [0]=DC_PRIMARY/CT_PRIM [1]=DC_LUFT/CT_DEPN
+    FILE *gencomp_file[2];             // ZIP: DVCF:rejects txt file SAM:SA primary/dependent lines
+    uint64_t gencomp_disk_size[2];     // ZIP
+
     // Z_FILE: DVCF stuff
-    char *rejects_file_name[2];        // ZIP: [0]=DC_PRIMARY [1]=DC_LUFT
-    FILE *rejects_file[2];             // ZIP: rejects txt file
-    uint64_t rejects_disk_size[2];     // ZIP
     Buffer rejects_report;             // ZIP --chain: human readable report about rejects
     Buffer apriori_tags;               // ZIP DVCF: used for INFO/FORMAT tag renaming. Data from command line options if --chain, or VCF header if DVCF
     
@@ -433,7 +435,8 @@ typedef struct File {
     Buffer unconsumed_txt;             // ZIP: excess data read from the txt file - moved to the next VB
 } File;
 
-#define z_dual_coords z_file->z_flags.dual_coords
+#define z_has_gencomp z_file->z_flags.has_gencomp
+#define z_dual_coords (Z_DT(DT_VCF) && z_has_gencomp)
 
 // methods
 extern File *file_open (const char *filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE */);

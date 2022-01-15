@@ -783,7 +783,7 @@ void zfile_compress_genozip_header (Digest single_component_digest)
         .aligner      = (flag.aligner_available > 0),
         .bgzf         = (txt_file->codec == CODEC_BGZF || txt_file->codec == CODEC_GZ), // note: if txt file is compressed with GZ, we will reconstruct it with BGZF
         .adler        = !flag.md5,
-        .dual_coords  = z_dual_coords,
+        .has_gencomp  = z_file->z_flags.has_gencomp,
         .has_taxid    = kraken_is_loaded
     };
     header.genozip_version = GENOZIP_FILE_FORMAT_VERSION;
@@ -858,7 +858,7 @@ void zfile_compress_genozip_header (Digest single_component_digest)
                                           .genozip_header_offset = BGEN64 (genozip_header_offset) };
     buf_add_more (evb, z_data, (char*)&footer, sizeof(SectionFooterGenozipHeader), "z_data");
 
-    zfile_output_processed_vb (evb); // write footer
+    zfile_output_processed_vb (NULL, evb); // write footer
 }
 
 // ZIP
@@ -874,8 +874,8 @@ void zfile_write_txt_header (Buffer *txt_header,
         .h.data_uncompressed_len   = BGEN32 (txt_header->len),
         .h.compressed_offset       = BGEN32 (sizeof (SectionHeaderTxtHeader)),
         .h.codec                   = (codec == CODEC_UNKNOWN) ? CODEC_NONE : codec,
-        .h.flags.txt_header        = { .rejects_coord = flag.rejects_coord,
-                                       .is_txt_luft   = (txt_file->coords == DC_LUFT) },
+        .h.flags.txt_header        = { .gencomp_num = flag.gencomp_num,
+                                       .is_txt_luft = (txt_file->coords == DC_LUFT) },
         .codec                     = txt_file->codec, 
         .digest_header             = flag.data_modified ? DIGEST_NONE : header_md5,
         .txt_header_size           = BGEN64 (unmodified_txt_header_len),
@@ -902,7 +902,7 @@ void zfile_write_txt_header (Buffer *txt_header,
     z_file->disk_so_far += txt_header_buf.len;   // length of GENOZIP data writen to disk
 
     // note: the liftover reject txt data is of course not counted as part of the file txt data for stats...
-    if (!flag.rejects_coord) {        
+    if (!Z_DT(DT_VCF) || !flag.gencomp_num) {        
         z_file->txt_data_so_far_single   += txt_header->len; // length of txt header as it would be reconstructed (possibly afer modifications)
         z_file->txt_data_so_far_bind     += txt_header->len;
         z_file->txt_data_so_far_single_0 += unmodified_txt_header_len; // length of the original txt header as read from the file
@@ -939,8 +939,8 @@ bool zfile_update_txt_header_section_header (uint64_t offset_in_z_file, uint32_t
     curr_header->txt_data_size    = BGEN64 (txt_file->txt_data_so_far_single);
     curr_header->txt_num_lines    = BGEN64 (txt_file->num_lines);
     curr_header->max_lines_per_vb = BGEN32 (max_lines_per_vb);
-    curr_header->digest_single    = flag.data_modified || flag.rejects_coord ? DIGEST_NONE 
-                                                                             : digest_finalize (&z_file->digest_ctx_single, "component:digest_ctx_single");
+    curr_header->digest_single    = flag.data_modified || flag.gencomp_num ? DIGEST_NONE 
+                                                                           : digest_finalize (&z_file->digest_ctx_single, "component:digest_ctx_single");
 
     *md5 = curr_header->digest_single;
 
@@ -1012,7 +1012,7 @@ void zfile_update_compressed_vb_header (VBlock *vb)
 }
 
 // ZIP
-void zfile_output_processed_vb (VBlock *vb)
+void zfile_output_processed_vb (Dispatcher dispatcher, VBlock *vb)
 {
     START_TIMER;
 

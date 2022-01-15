@@ -38,10 +38,10 @@ typedef struct {
     uint32_t ref_consumed;
 } ZipDataLineSAM;
 
+typedef enum { CT_NORMAL, CT_SA_PRIM, CT_SA_DEPN } SamComponentType;
+
 typedef struct VBlockSAM {
     VBLOCK_COMMON_FIELDS
-
-    enum { CT_NORMAL, CT_SA_PRIM, CT_SA_DEP } sam_component_type;
 
     const char *last_cigar;        // ZIP/PIZ: last CIGAR
     Buffer textual_cigar;          // ZIP: Seg of BAM, PIZ: store CIGAR in sam_cigar_analyze
@@ -115,6 +115,8 @@ extern void bam_get_one_optional (VBlockSAM *vb, STRp(aux), const char **tag, ch
 extern uint16_t bam_reg2bin (int32_t first_pos, int32_t last_pos);
 extern void bam_seg_BIN (VBlockSAM *vb, ZipDataLineSAM *dl, uint16_t bin, PosType this_pos);
 extern void sam_seg_verify_RNAME_POS (VBlockP vb, const char *p_into_txt, PosType this_pos);
+extern const char *sam_seg_get_aux (const char *name, STRps (aux), uint32_t *aux_len, bool is_bam);
+extern bool sam_seg_is_sa_line (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(alignment), STRps(aux), bool is_bam);
 
 // ------------------
 // CIGAR / MC:Z stuff

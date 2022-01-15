@@ -12,6 +12,7 @@
 #include "context_struct.h"
 #include "data_types.h"
 #include "sections.h"
+#include "coords.h"
 
 #define NUM_CODEC_BUFS 7       // bzlib2 compress requires 4 and decompress requires 2 ; lzma compress requires 7 and decompress 1
                                // if updating, also update array in codec_alloc()
@@ -148,12 +149,14 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     uint32_t prev_range_range_i; /* range_i used to calculate previous range */ \
     WordIndex prev_range_chrom_node_index[2]; /* chrom used to calculate previous range */ \
     \
+    /* generated components */ \
+    Buffer gencomp[2];         /* ZIP generated components: in DVCF-txt lines rejected for liftover, in SAM-SA primary/dependent lines */ \
+    \
     /* liftover stuff */ \
     Coords vb_coords;          /* ZIP: DC_PRIMARY, DC_LUFT or DC_BOTH */ \
                                /* PIZ: DC_PRIMARY or DC_LUFT - influenced by FlagsVbHeader.coords and flag.luft */ \
     Coords line_coords;        /* Seg: coords of current line - DC_PRIMARY or DC_LUFT */ \
     uint32_t pos_aln_i;        /* ZIP: chain alignment of POS (used to compare to that of END) */\
-    Buffer lo_rejects[2];      /* ZIP generating a dual-coordinates file: txt lines rejected for liftover */ \
     int32_t reject_bytes;      /* ZIP of a Luft file: number of bytes of reject data in this VB (data originating from ##primary_only/##luft_only) */ \
     bool is_rejects_vb;        /* PIZ/ZIP: this is a VB of rejects variants for header ##primary_only/##luft_only */ \
     bool is_unsorted[2];       /* ZIP: line order of this VB[primary, luft] is unsorted */ \

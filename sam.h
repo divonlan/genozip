@@ -264,7 +264,8 @@ COMPRESSOR_CALLBACK(sam_zip_BD_BI);
 extern void sam_zip_initialize (void);
 extern bool sam_zip_is_unaligned_line (const char *line, int len);
 extern bool sam_zip_dts_flag (void);
-extern void zip_sam_after_vbs (void);
+extern void sam_zip_after_compute (VBlockP vb);
+extern void sam_zip_after_vbs (void);
 
 // HEADER stuff
 extern bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags);

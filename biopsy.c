@@ -41,7 +41,7 @@ void biopsy_init (const char *optarg)
 
 void biopsy_take (VBlockP vb)
 {
-    if (!biopsy_vb_i.len) return;
+    if (flag.gencomp_num || !biopsy_vb_i.len) return;
 
     if (vb->vblock_i == 0) goto start_biopsy; // always output the txt header
 

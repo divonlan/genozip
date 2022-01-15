@@ -60,9 +60,7 @@ bool txtheader_zip_read_and_compress (uint64_t *txt_header_size)
                     "All binding files must be either dual-coordinates or not. However %s is not a dual-coordinates file while previous file(s) are", txt_name);
         }
         else  // first component 
-              // note: in case of --chain, z_flags.dual_coords is set in file_open_z
-              // note: z_flags.dual_coords is bool and txt_file->coords is an enum
-            z_dual_coords = z_dual_coords || !!txt_file->coords; 
+            z_has_gencomp |= (txt_file->coords != DC_NONE);  // note: in case of --chain, z_flags.dual_coords is set in file_open_z
     }
 
     if (z_file && !flag.seg_only)       
@@ -73,7 +71,7 @@ bool txtheader_zip_read_and_compress (uint64_t *txt_header_size)
     // for stats: combined length of txt headers in this bound file, or only one file if not bound
     if (!flag.bind) total_bound_txt_headers_len=0;
     
-    if (!flag.rejects_coord) // we don't account for rejects files as txt_len - the variant lines are already accounted for in the main file, and the added header lines are duplicates of the main header
+    if (!(TXT_DT(DT_VCF) && flag.gencomp_num)) // we don't account for rejects files as txt_len - the variant lines are already accounted for in the main file, and the added header lines are duplicates of the main header
         total_bound_txt_headers_len += evb->txt_data.len; 
 
     z_file->num_txt_components_so_far++; // when compressing
@@ -240,5 +238,5 @@ Coords txtheader_piz_read_and_reconstruct (uint32_t component_i, Section sl)
     if (!flag.reading_chain && !flag.reading_reference)
         is_first_txt = false;
 
-    return header->h.flags.txt_header.rejects_coord;
+    return header->h.flags.txt_header.gencomp_num;
 }

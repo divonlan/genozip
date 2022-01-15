@@ -104,7 +104,7 @@ static void segconf_set_vb_size (const VBlock *vb, uint64_t curr_vb_size)
 static bool segconf_no_recalculate (void)
 {
     return flag.pair == PAIR_READ_2 // FASTQ: no recalculating for 2nd pair 
-        || flag.rejects_coord;      // DVCF: no recalculating for reject components
+        || flag.gencomp_num;        // DVCF / SAM: no recalculating for generated components
 }
 
 void segconf_initialize (void)
@@ -177,7 +177,7 @@ void segconf_calculate (void)
     buf_destroy (&txt_data_copy);
 
     // in case of Luft file - undo
-    vb->lo_rejects[0].len = vb->lo_rejects[1].len = 0;
+    vb->gencomp[0].len = vb->gencomp[1].len = 0;
     txt_file->reject_bytes += save_luft_reject_bytes; // return reject bytes to txt_file, to be reassigned to VB
 
     // require compressing with a reference when using --best with SAM/BAM/FASTQ, with some exceptions
