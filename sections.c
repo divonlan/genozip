@@ -321,14 +321,14 @@ Section sections_pull_vb_up (uint32_t vb_i, Section sl)
 }
 
 // move all sections of component txtfile_sl_move_me to be immediately after txtfile_sl_after_me, or txtfile_sl_after_me=NULL to move to the top of the section list
-void sections_pull_component_up (Section txtfile_sl_after_me, // destination - after this component (NULL means move to beginning)
-                                 Section txtfile_sl_move_me)  // this is the component to move
+Section sections_pull_component_up (Section txtfile_sl_after_me, // destination - after this component (NULL means move to beginning)
+                                    Section txtfile_sl_move_me)  // this is the component to move
 {    
     Section dst_sl = txtfile_sl_after_me ? sections_component_last (txtfile_sl_after_me) + 1
                                          : FIRSTENT (SectionEnt, z_file->section_list_buf);
 
     // case: component is already in its desired place
-    if (dst_sl == txtfile_sl_move_me) return;
+    if (dst_sl == txtfile_sl_move_me) return dst_sl;
 
     // save all entries of the VB in temp
     Section last_moving_sl = sections_component_last (txtfile_sl_move_me);
@@ -343,6 +343,8 @@ void sections_pull_component_up (Section txtfile_sl_after_me, // destination - a
     memcpy ((SectionEntModifiable *)dst_sl, temp, vb_sections_size); // moving component moves to dst
 
     FREE (temp);
+
+    return dst_sl; // first entry of moved component (after move)
 }
 
 int64_t sections_get_section_size (Section sl)

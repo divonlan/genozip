@@ -19,6 +19,7 @@ extern const char *txtfile_dump_vb (VBlockP vb, const char *base_name);
 extern Digest txtfile_read_header (bool is_first_txt);
 
 #define TXTFILE_READ_VB_PADDING 16 // txtfile_read_vblock ensure this quantity of bytes at the end of vb.txt_data are unused
+extern uint64_t txtfile_max_memory_per_vb (void);
 extern void txtfile_read_vblock (VBlockP vb);
 extern int64_t txtfile_get_seggable_size (void);
 

@@ -45,6 +45,7 @@ void sam_vb_release_vb (VBlockSAM *vb)
     buf_free (&vb->md_M_is_ref);
     buf_free (&vb->qname_hash);
     buf_free (&vb->buddy_textual_cigars);
+    buf_free (&vb->gc_line_info);
 }
 
 void sam_vb_destroy_vb (VBlockSAM *vb)
@@ -56,6 +57,7 @@ void sam_vb_destroy_vb (VBlockSAM *vb)
     buf_destroy (&vb->md_M_is_ref);
     buf_destroy (&vb->qname_hash);
     buf_destroy (&vb->buddy_textual_cigars);
+    buf_destroy (&vb->gc_line_info);
 }
 
 // calculate bin given an alignment covering [first_pos_0,last_pos_0) (0-based positions, half-closed, half-open)

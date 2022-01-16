@@ -95,8 +95,7 @@ void sam_zip_initialize (void)
 // called main thread, in order of VBs
 void sam_zip_after_compute (VBlockP vb)
 {
-    if (vb->gencomp[CT_SA_PRIM-1].len) gencomp_append_file (vb, CT_SA_PRIM, "SA_PRIM");
-    if (vb->gencomp[CT_SA_DEPN-1].len) gencomp_append_file (vb, CT_SA_DEPN, "SA_DEPN");
+    sam_zip_gc_after_compute (VB_SAM);
 }
 
 static void sam_seg_initialize_0X (VBlockP vb, DidIType lookback_did_i, DidIType rname_did_i, DidIType strand_did_i, DidIType pos_did_i, DidIType cigar_did_i)
@@ -797,31 +796,6 @@ bool sam_zip_is_unaligned_line (const char *line, int len)
     return (field_len == 1 && *field_start == '0');
 }
 
-// returns true if this line should be skipped
-bool sam_seg_is_sa_line (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(alignment), STRps(aux), bool is_bam)
-{
-    STR(NH); STR(HI); 
-
-    // dependent - always has secondary or supplementary flag
-    if (dl->FLAG.bits.secondary || dl->FLAG.bits.supplementary) 
-        buf_add_more (VB, &vb->gencomp[CT_SA_DEPN-1], STRa(alignment), "gencomp[1]");
-
-    // primary - no special flag, identify by SA or (NH>1 && HI==1)
-    else if (sam_seg_get_aux ("SA:Z", STRas(aux), NULL, is_bam) ||
-               (((NH = sam_seg_get_aux ("NH:i", STRas(aux), &NH_len, is_bam)) && (NH_len > 1 || *NH != '1')) &&
-               (((HI = sam_seg_get_aux ("HI:i", STRas(aux), &HI_len, is_bam)) && (HI_len ==1 || *HI == '1')))))
-        buf_add_more (VB, &vb->gencomp[CT_SA_PRIM-1], STRa(alignment), "gencomp[0]");
-
-    else
-        return false;
-
-    vb->line_i--;
-    vb->recon_size -= alignment_len;
-
-    return true;
-
-}
-
 const char *sam_seg_txt_line (VBlock *vb_, const char *next_line, uint32_t remaining_txt_len, bool *has_13)
 {
     VBlockSAM *vb = (VBlockSAM *)vb_;
@@ -838,7 +812,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *next_line, uint32_t remai
     // if this is a secondary / supplamentary read (aka Dependent) or a read that has an associated sec/sup read (aka Primary) - move
     // the line to the appropriate component and skip it here (no segging done yet)
     if (!segconf.running && !flag.gencomp_num && 
-        sam_seg_is_sa_line (vb, dl, flds[0], next_line - flds[0], STRasi(fld,AUX), false)) 
+        sam_seg_is_gc_line (vb, dl, flds[0], next_line - flds[0], STRasi(fld,AUX), false)) 
         goto done;
 
     sam_seg_QNAME (vb, dl, STRfld(QNAME), 1);

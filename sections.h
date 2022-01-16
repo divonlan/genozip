@@ -87,7 +87,7 @@ typedef union SectionFlags {
         uint8_t bgzf             : 1; // Reconstruct as BGZF (user may override) (determined by the last component)
         uint8_t adler            : 1; // true if Adler32 is used, false if MD5 is used (>= v9) or (either MD5 or nothing) (v8)
         uint8_t has_gencomp      : 1; // VCF: file supports dual coordinates - last two components are the "liftover rejects" data (v12)
-                                      // SAM/BAM: SA_PRIM and/or SA_DEPN components exist 
+                                      // SAM/BAM: PRIM and/or DEPN components exist 
         uint8_t has_taxid        : 1; // each line in the file has Taxonomic ID information (v12)
         uint8_t unused           : 1;
     } genozip_header;
@@ -449,7 +449,7 @@ extern Section sections_vb_first (uint32_t vb_i, bool soft_fail);
 
 extern void sections_count_component_vbs (Section sl, uint32_t *num_vbs, uint32_t *first_vb);
 extern Section sections_pull_vb_up (uint32_t vb_i, Section sl);
-extern void sections_pull_component_up (Section txtfile_sl_after_me, Section txtfile_sl_move_me);
+extern Section sections_pull_component_up (Section txtfile_sl_after_me, Section txtfile_sl_move_me);
 
 extern void BGEN_sections_list(void);
 extern const char *st_name (SectionType sec_type);

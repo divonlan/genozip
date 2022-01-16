@@ -434,9 +434,9 @@ void stats_compress (void)
                                ST_NAME (SEC_REF_CONTIGS), ST_NAME (SEC_REF_RAND_ACC), ST_NAME (SEC_CHROM2REF_MAP),
                                ST_NAME (SEC_REF_IUPACS));
 
-    stats_consolidate_non_ctx (sbl, num_stats, "Other", 18 + (DTPZ(txt_header_required) == HDR_NONE), "E1L", "E2L", "EOL", "SAMPLES", "AUX", 
+    stats_consolidate_non_ctx (sbl, num_stats, "Other", 19 + (DTPZ(txt_header_required) == HDR_NONE), "E1L", "E2L", "EOL", "SAMPLES", "AUX", 
                                TOPLEVEL, "ToPLUFT", "TOP2BAM", "TOP2FQ", "TOP2FQEX", "TOP2VCF", "TOP2HASH", "LINEMETA", "CONTIG", 
-                               ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_DICT_ID_ALIASES), 
+                               ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_DICT_ID_ALIASES), ST_NAME (SEC_RECON_PLAN),
                                ST_NAME (SEC_VB_HEADER), ST_NAME (SEC_BGZF), ST_NAME(SEC_TXT_HEADER)/*must be last*/);
     
     ASSERTW (all_txt_len == z_file->txt_data_so_far_bind || flag.make_reference, // all_txt_len=0 in make-ref as there are no contexts

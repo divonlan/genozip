@@ -34,4 +34,3 @@ void gencomp_append_file (VBlockP vb,
 
     flag.bind = BIND_GENCOMP; // we need to bind the generated components 
 }
-

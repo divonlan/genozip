@@ -411,10 +411,12 @@ typedef struct File {
     uint64_t reject_bytes;             // ZIP of a dual coordinate file: number of bytes in lines originating from ##primary_only/##luft_only, not yet assigned to a VB
 
     // Reconstruction plan, for reconstructing in sorted order if --sort: [0] is primary coords, [1] is luft coords
-    Mutex recon_plan_mutex[2];         // TXT_FILE ZIP: protect vb_info and line_info during merging of VB data
-    Buffer vb_info[2];                 // TXT_FILE ZIP: array of ZipVbInfo per VB, indexed by (vb_i-1), 0:PRIMARY, 1:LUFT
+    Mutex recon_plan_mutex[2];         // TXT_FILE ZIP: VCF: protect vb_info and line_info during merging of VB data
+    Buffer vb_info[2];                 // TXT_FILE ZIP: VCF: array of ZipVbInfo per VB, indexed by (vb_i-1), 0:PRIMARY, 1:LUFT
+                                       // Z_FILE   ZIP: SAM: array of SamGcVbInfo: for each gencomp: 0:PRIM 1:DEPN
                                        // Z_FILE   PIZ: array of PizVbInfo per VB, indexed by (vb_i-1), only vb_info[0] is used
-    Buffer line_info[2];               // TXT_FILE ZIP: array of LineInfo per line or gapless range in txt_file
+    Buffer line_info[2];               // TXT_FILE ZIP: VCF: array of LineInfo per line or gapless range in txt_file
+                                       //               SAM: array of uint32 - lengths of lines in PRIM/DEPN
     Buffer recon_plan;                 // TXT_FILE ZIP/PIZ: array of ReconPlanItem - order of reconstruction of ranges of lines, to achieve a sorted file
                                        // Z_FILE   PIZ: plan for entire z_file, txt_file.recon_plan is assigned a portion of this plan
     Buffer comp_info;                  // Z_FILE   PIZ: array of PizCompInfo - component information (param=1 if locks initialized)
@@ -428,7 +430,7 @@ typedef struct File {
     Buffer bound_txt_names;            // ZIP: Stats data: a concatenation of all bound txt_names that contributed to this genozip file
     
     // Information content stats - how many bytes and how many sections does this file have in each section type
-    uint32_t num_vbs;
+    uint32_t num_vbs;                  // ZIP: z_file/txt_file
     uint32_t max_conc_writing_vbs;     // PIZ z_file: the maximal value conc_writing_vbs across all SEC_RECON_PLAN sections in the file
 
     // Used for reading txt files
@@ -437,6 +439,7 @@ typedef struct File {
 
 #define z_has_gencomp z_file->z_flags.has_gencomp
 #define z_dual_coords (Z_DT(DT_VCF) && z_has_gencomp)
+#define z_sam_gencomp ((Z_DT(DT_SAM) || Z_DT(DT_BAM)) && z_has_gencomp)
 
 // methods
 extern File *file_open (const char *filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE */);

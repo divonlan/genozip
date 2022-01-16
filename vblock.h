@@ -65,7 +65,7 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     uint64_t line_start;       /* PIZ: position of start of line currently being reconstructed in vb->txt_data */\
     \
     Digest digest_so_far;      /* partial calculation of MD5 up to and including this VB */ \
-    uint32_t component_i;      /* PIZ: 0-based txt component within z_file that this VB belongs to */ \
+    uint32_t component_i;      /* ZIP/PIZ: 0-based txt component within z_file that this VB belongs to */ \
     DtTranslation translation; /* PIZ: translation to be applies to this VB */ \
     union FlagsVbHeader flags; /* ZIP: set by *_seg_finalize and consumed by zfile_compress_vb_header */ \
                                /* PIZ: copied from SectionHeaderVbHeader.h.flags.vb_header */ \

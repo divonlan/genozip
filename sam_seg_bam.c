@@ -335,7 +335,7 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
     // if this is a secondary / supplamentary read (aka Dependent) or a read that has an associated sec/sup read (aka Primary) - move
     // the line to the appropriate component and skip it here (no segging done yet)
     if (!segconf.running && !flag.gencomp_num && 
-        sam_seg_is_sa_line (vb, dl, alignment, after - alignment, STRas(aux), true)) 
+        sam_seg_is_gc_line (vb, dl, alignment, after - alignment, STRas(aux), true)) 
         goto done;
 
     // seg QNAME first, as it will find the buddy

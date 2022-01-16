@@ -470,6 +470,11 @@ int64_t txtfile_get_seggable_size (void)
     return __atomic_load_n (&txt_file->est_seggable_size, __ATOMIC_RELAXED);
 }
 
+uint64_t txtfile_max_memory_per_vb (void)
+{
+    return segconf.vb_size - TXTFILE_READ_VB_PADDING;
+}
+
 // ZIP main threads
 void txtfile_read_vblock (VBlock *vb)
 {
@@ -482,7 +487,7 @@ void txtfile_read_vblock (VBlock *vb)
     buf_alloc (vb, &vb->txt_data, 0, segconf.vb_size, char, 1, "txt_data");    
 
     // read data from the file until either 1. EOF is reached 2. end of block is reached
-    uint64_t max_memory_per_vb = segconf.vb_size - TXTFILE_READ_VB_PADDING;
+    uint64_t max_memory_per_vb = txtfile_max_memory_per_vb();
     uint32_t pass_to_next_vb_len=0;
 
     // start with using the data passed down from the previous VB (note: copy & free and not move! so we can reuse txt_data next vb)
@@ -499,7 +504,7 @@ void txtfile_read_vblock (VBlock *vb)
                              flag.add_line_numbers    || // vcf_zip_read_one_vb   needs to count lines
                              flag.biopsy;
 
-    for (int32_t block_i=0; ; block_i++) {
+    while (1) {
 
         uint32_t len = max_memory_per_vb > vb->txt_data.len ? txtfile_read_block (vb, MIN_(max_memory_per_vb - vb->txt_data.len, 1<<30 /* read() can't handle more */), always_uncompress) 
                                                             : 0;

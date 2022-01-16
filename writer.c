@@ -180,14 +180,15 @@ static uint32_t writer_init_comp_info (void)
         &&
            (  !flag.interleave                      // when interleaving, show every header of the first component of every two
            || comp_i % 2 == 0) 
-        &&                                          // whether to show this section considering concatenating or unbinding
-           (  flag.unbind                           // unbinding: we show all components
+        &&                                          // VCF: whether to show this section considering concatenating or unbinding
+           (  !Z_DT(DT_VCF)                         // This clause only limits VCF files 
+           || flag.unbind                           // unbinding: we show all components
            || ( flag.luft && comp->rejects_coord == DC_PRIMARY)  // concatenating: if --luft, show ##primary_only rejects components (appears in the vcf header)
            || (!flag.luft && comp->rejects_coord == DC_LUFT)     // concatenating: if primary, show ##luft_only rejects components (appears in the vcf header)
            || flag.one_component-1 == comp_i        // single component: this is it (note: if dual coord, this will pointing a rejects components since we switched their order)
-           || (!flag.one_component && comp_i==0)    // concatenating: show first header (0 if no rejects)
-           || (!flag.one_component && (comp-1)->rejects_coord)); // concatenating: show first header (first after rejects)
-
+           || (Z_DT(DT_VCF) && !flag.one_component && comp_i==0)    // concatenating: show first header (0 if no rejects)
+           || (Z_DT(DT_VCF) && !flag.one_component && (comp-1)->rejects_coord)); // concatenating: show first header (first after rejects)
+           
         if (comp->info.in_plan) {
             // mutex: locked:    here (at initialization)
             //        waited on: writer thread, wanting the data
@@ -275,7 +276,7 @@ static void writer_init_vb_info (void)
             // conditions in which VB should be written 
             v->in_plan = 
                 !v->no_read
-            &&  !flag_loading_auxiliary;                      // we're ingesting, but not reconstructing, an auxiliary file
+            &&  !flag_loading_auxiliary; // we're ingesting, but not reconstructing, an auxiliary file
 
             if (v->in_plan) {
                 // mutex: locked:    here (at initialization)
@@ -297,7 +298,7 @@ static void writer_init_vb_info (void)
 // concatenating - the relevant rejects component (PRIMARY or LUFT) is moved to the front
 // unbinding - each reject component switches place with its primary component
 // note: currently we support only a single dual+primary+luft triple component. bug 333.
-void writer_move_liftover_rejects_to_front (void)
+static void writer_move_liftover_rejects_to_front (void)
 {
     ASSERT (sections_count_sections (SEC_TXT_HEADER) == 3, "Error: %s is a dual coordinates file, expecting 3 TXT_HEADER sections", z_name);
 
@@ -311,6 +312,27 @@ void writer_move_liftover_rejects_to_front (void)
             "File %s is a dual-coordinates file, components have incorrect gencomp_num", z_name);
 
     sections_pull_component_up (NULL, flag.luft ? prim : luft); // when rendering in LUFT, show the ##primary_only in the header, and vice versa
+}
+
+// PIZ of SAM/BAM with SA generated components: Make the order Primary->Dependent->Normal 
+// note: currently we support only a single SAM/BAM file. bug 333.
+static void writer_move_sam_gencomp_to_front (void)
+{
+    unsigned num_components = sections_count_sections (SEC_TXT_HEADER);
+    ASSERT (num_components==2 || num_components==3, "Error: %s is a SAM/BAM file with generated components, expecting 2 or 3 TXT_HEADER sections, but found %u", z_name, num_components);
+
+    Section normal=0, gc_1=0, gc_2=0;
+    normal = sections_first_sec (SEC_TXT_HEADER, false);
+    gc_1 = normal; sections_next_sec (&gc_1, SEC_TXT_HEADER);
+    if (num_components == 3)
+        gc_2 = gc_1; sections_next_sec (&gc_2, SEC_TXT_HEADER);
+
+    // switch places between the first generated component and the normal components
+    gc_1 = sections_pull_component_up (NULL, gc_1);
+
+    // if we have a second generated component (Dependent), move it to after the first component (Primary)
+    if (num_components == 3)
+        sections_pull_component_up (gc_1, gc_2);
 }
 
 // PIZ main thread: add txtheader entry for the component
@@ -492,6 +514,10 @@ void writer_create_plan (void)
     if (z_dual_coords) 
         writer_move_liftover_rejects_to_front(); // must be before writer_init_vb_info as components order changes
 
+    // when showing SAM/BAM with generated components, bring them forward before the primary component(s)
+    else if (z_sam_gencomp)
+        writer_move_sam_gencomp_to_front();
+
     writer_init_vb_info();
 
     if (flag.no_writer && !flag.show_recon_plan) return; // we prepare the *_info_* data even if not writing
@@ -520,8 +546,8 @@ void writer_create_plan (void)
         if (flag.interleave) 
             writer_add_interleave_plan (comp);
 
-        // case: we have a SEC_RECON section (occurs in dual-coordinates files)
-        else if (flag.sort && (recon_plan_sl = writer_get_recon_plan_sl (comp)))
+        // case: we have a SEC_RECON section (occurs in dual-coordinates files and SAM/BAM with supplementary/seconday groups)
+        else if ((flag.sort || z_sam_gencomp) && (recon_plan_sl = writer_get_recon_plan_sl (comp)))
             writer_add_plan_from_recon_section (comp, recon_plan_sl, &conc_writing_vbs, &vblock_mb);
 
         // case: a fairly large downsample - if lines are not dropped or re-ordered (DVCF, interleave) - we may be able to drop some VBs
@@ -744,6 +770,8 @@ static void writer_main_loop (VBlockP wvb)
                 else 
                     writer_write_line_range (wvb, v, 0, v->vb->lines.len);
 
+                if (z_has_gencomp && !flag.data_modified) digest_one_vb (&v->vb); 
+
                 vb_release_vb (&v->vb);
                 break;
 
@@ -752,6 +780,11 @@ static void writer_main_loop (VBlockP wvb)
                 break;
 
             case PLAN_END_OF_VB: // done with VB - free the memory (happens after a series of "default" line range entries)
+
+                // note: normally digest calculation is done in the compute thread in piz_reconstruct_one_vb, but in
+                // case of an unmodified VB that inserts lines from gencomp VBs, we do it here.
+                if (z_has_gencomp && !flag.data_modified) digest_one_vb (&v->vb); 
+xxx not good! we need to do the digest_update in writer_write_line_range and the verification test here
                 vb_release_vb (&v->vb);
                 break;
 

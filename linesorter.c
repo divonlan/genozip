@@ -95,7 +95,6 @@ static void linesorter_merge_vb_do (VBlock *vb, bool is_luft)
             };
     }
 
-
     // store information about this VB, that will help us figure out if the entire file is sorted or not
     buf_alloc_zero (evb, &txt_file->vb_info[is_luft], 0, MIN_(1000, vb->vblock_i), LsVbInfo, CTX_GROWTH, 0); // added to evb buf_list in file_initialize_txt_file_data
 
@@ -115,8 +114,11 @@ static void linesorter_merge_vb_do (VBlock *vb, bool is_luft)
 }
 
 // ZIP compute thread: merge data from one VB (possibly VBs are out of order) into txt_file->vb_info/line_info
+// (currently used only for VCF - SAM merge happens in main thread in sam_zip_gc_after_compute)
 void linesorter_merge_vb (VBlock *vb)
 {
+    if (!flag.sort) return; // only needed when sorting (--sort or dual-coordinates)
+
     linesorter_merge_vb_do (vb, false);
     if (z_dual_coords) // Luft coordinates exist
         linesorter_merge_vb_do (vb, true);
@@ -239,11 +241,11 @@ static int linesorter_line_cmp (const void *a_, const void *b_)
     return linesorter_cmp (a->info, b->info);
 }
 
-static void linesorter_get_final_index_i (Buffer *line_info, Buffer *vb_info, Buffer *index_buf)
+static void linesorter_get_final_index_i (ConstBufferP line_info, BufferP vb_info, ConstBufferP index_buf)
 {
-    ARRAY (LineInfo, lorder, *line_info);
+    ARRAY (const LineInfo, lorder, *line_info);
     ARRAY (LsVbInfo, v, *vb_info);
-    ARRAY (uint32_t, index, *index_buf);
+    ARRAY (const uint32_t, index, *index_buf);
 
     uint32_t count_vbs=0;
     uint32_t prev_vb_i=(uint32_t)-1;
@@ -274,11 +276,34 @@ static void linesorter_get_final_index_i (Buffer *line_info, Buffer *vb_info, Bu
 
 // ZIP: reconstruction plan format: txt_file->recon_plan is an array of ReconPlanItem
 // returns - max number of concurrent txt_data buffers in memory needed for execution of the plan
-static uint32_t linesorter_plan_reconstruction (const Buffer *line_info, const Buffer *vb_info, const Buffer *index_buf)
+static uint32_t linesorter_plan_reconstruction (bool is_luft)
 {
-    ARRAY (uint32_t, index, *index_buf);
+    ConstBufferP line_info = &txt_file->line_info[is_luft];
+    BufferP vb_info        = &txt_file->vb_info[is_luft];
+    BufferP index_buf      = &evb->compressed; // an array of uint32_t - indices into line_info
+    BufferP recon_plan     = &txt_file->recon_plan;
 
-    buf_alloc (evb, &txt_file->recon_plan, 0, 100000, ReconPlanItem, 1, "txt_file->recon_plan");
+    // case: no need for a reconstruction plan, as file is sorted
+    if (linesorter_is_file_sorted (is_luft)) return 0; 
+
+    // build index sorted by VB - indices into line_info 
+    linesorter_create_index (index_buf, is_luft);
+
+    // sort lines
+    is_luft_sorter = is_luft; // ugly
+
+    START_TIMER
+    qsort (STRb(*index_buf), sizeof (uint32_t), linesorter_line_cmp);
+    ARRAY (uint32_t, index, *index_buf);
+    COPY_TIMER_VB (evb, linesorter_compress_qsort);
+
+    // detect cases where distinct variants in Primary got mapped to the same coordinates in Luft
+    if (is_luft) line_sorter_detect_duplicates(index_buf);
+
+    // find final entry in index_buf of each VB - needed to calculate how many concurrent threads will be needed for piz
+    linesorter_get_final_index_i (line_info, vb_info, index_buf);
+
+    buf_alloc (evb, recon_plan, 0, 100000, ReconPlanItem, 1, "txt_file->recon_plan");
 
     LineInfo *prev_li = NULL;
     uint32_t conc_writing_vbs=0, max_num_txt_data_bufs=0;
@@ -298,12 +323,12 @@ static uint32_t linesorter_plan_reconstruction (const Buffer *line_info, const B
         if (prev_li && 
             li->vblock_i == prev_li->vblock_i &&  
             prev_li->start_line + prev_li->num_lines == li->start_line)
-            LASTENT (ReconPlanItem, txt_file->recon_plan)->range.num_lines += li->num_lines;
+            LASTENT (ReconPlanItem, *recon_plan)->range.num_lines += li->num_lines;
 
         // different vb or non-consecutive lines - start new entry
         else {
-            buf_alloc (evb, &txt_file->recon_plan, 1, 0, ReconPlanItem, 2, 0);
-            NEXTENT (ReconPlanItem, txt_file->recon_plan) = (ReconPlanItem){
+            buf_alloc (evb, recon_plan, 1, 0, ReconPlanItem, 2, 0);
+            NEXTENT (ReconPlanItem, *recon_plan) = (ReconPlanItem){
                 .range.vb_i       = li->vblock_i,
                 .range.start_line = li->start_line,
                 .range.num_lines  = li->num_lines
@@ -324,7 +349,7 @@ static uint32_t linesorter_plan_reconstruction (const Buffer *line_info, const B
         if (v->final_index_i == index_i) { // case: last access to a VB (in PIZ - we would free VB data here)
             conc_writing_vbs--;
 
-            buf_alloc (evb, &txt_file->recon_plan, 1, 0, ReconPlanItem, 2, 0);
+            buf_alloc (evb, recon_plan, 1, 0, ReconPlanItem, 2, 0);
             NEXTENT (ReconPlanItem, txt_file->recon_plan) = (ReconPlanItem){ 
                 .end_of_vb.vb_i      = li->vblock_i,
                 .end_of_vb.plan_type = PLAN_END_OF_VB,
@@ -334,36 +359,17 @@ static uint32_t linesorter_plan_reconstruction (const Buffer *line_info, const B
         prev_li = li;
     }
 
+    buf_free (index_buf);
+    
     return max_num_txt_data_bufs;
 }
-
-#define index_buf evb->compressed // an array of uint32_t - indices into txt_file->line_info
 
 // ZIP
 static void linesorter_compress_recon_plan_do (bool is_luft)
 {
-    // case: no need for a thread plan, as file is sorted
-    if (linesorter_is_file_sorted (is_luft)) return; 
-
-    // build index sorted by VB - indices into txt_file->line_info 
-    linesorter_create_index (&index_buf, is_luft);
-
-    // sort lines
-    is_luft_sorter = is_luft; // ugly
-
-    START_TIMER
-    qsort (STRb(index_buf), sizeof (uint32_t), linesorter_line_cmp);
-    COPY_TIMER_VB (evb, linesorter_compress_qsort);
-
-    // detect cases where distinct variants in Primary got mapped to the same coordinates in Luft
-    if (is_luft) line_sorter_detect_duplicates(&index_buf);
-
-    // find final entry in index_buf of each VB - needed to calculate how many concurrent threads will be needed for piz
-    linesorter_get_final_index_i (&txt_file->line_info[is_luft], &txt_file->vb_info[is_luft], &index_buf);
-
     // create txt_file->recon_plan
-    uint32_t conc_writing_vbs = linesorter_plan_reconstruction (&txt_file->line_info[is_luft], &txt_file->vb_info[is_luft], &index_buf);
-    buf_free (&index_buf);
+    uint32_t conc_writing_vbs = linesorter_plan_reconstruction (is_luft);
+    if (!conc_writing_vbs) return; // no need for a recon plan
 
     // get best codec for the reconstruction plan data
     Codec codec = codec_assign_best_codec (evb, 0, &txt_file->recon_plan, SEC_RECON_PLAN);
@@ -397,6 +403,9 @@ static void linesorter_compress_recon_plan_do (bool is_luft)
 void linesorter_compress_recon_plan (void)
 {
     START_TIMER;
+
+    // we only need a linesorter recon plan if we're sorting (note: flag.sort is always true for DVCF)
+    if (!flag.sort) return;
 
     // reconstruction plans for primary and luft (might not exist)
     if (txt_file->vb_info[0].len) linesorter_compress_recon_plan_do (false);

@@ -272,7 +272,7 @@ extern bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struc
 extern void sam_header_finalize (void);
 extern ContigPkgP sam_hdr_contigs;
 
-// SEG Stuff
+// ZIP/SEG Stuff
 extern void sam_zip_initialize (void);
 extern void sam_seg_initialize (VBlockP vb);
 extern void sam_seg_finalize (VBlockP vb);
@@ -280,6 +280,9 @@ extern bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern const char *sam_seg_txt_line (VBlockP vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
 extern uint32_t sam_seg_seq_len_from_cigar (STRp(cigar));
 extern uint32_t sam_seg_get_seq_len_by_MD_field (STRp(md_str));
+extern void sam_zip_compress_recon_plan (void);
+extern void sam_zip_verify_gc_vb (VBlockP vb);
+
 
 // PIZ Stuff
 extern bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);

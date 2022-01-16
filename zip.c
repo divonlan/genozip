@@ -671,7 +671,8 @@ static void zip_compress_one_vb (VBlock *vb)
         zip_compress_all_contexts_b250 (vb);
     }
 
-    // case: we're sorting the file's lines - add line data to txt_file's line_info (VB order doesn't matter - we will sort them later)
+    // case: (only used for VCF for now) we're sorting the file's lines - add line data to txt_file's line_info 
+    // (VB order doesn't matter - we will sort them later). Note: merging gencomp data in sam happens in sam_zip_after_compute
     if (flag.sort) 
         linesorter_merge_vb (vb);
 
@@ -722,6 +723,8 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
             mutex_initialize (wait_for_vb_1_mutex);
             mutex_lock (wait_for_vb_1_mutex); 
         }
+
+        vb->component_i = z_file->num_txt_components_so_far;
 
         vb->vb_coords = !z_dual_coords ? DC_PRIMARY
                       : flag.gencomp_num == DC_NONE ? DC_BOTH
@@ -836,9 +839,9 @@ finish:
     if (!flag.gencomp_num)
         z_file->txt_disk_so_far_bind += (int64_t)txt_file->disk_so_far + (txt_file->codec==CODEC_BGZF)*BGZF_EOF_LEN;
 
-    // reconstruction plan for sorting the data (per txt file)
-    if (flag.sort && !flag.seg_only)
-        linesorter_compress_recon_plan();
+    // reconstruction plan (for VCF - for DVCF or --sort, for SAM - re-integrate supp/secondary alignments)
+    if (!flag.seg_only && DTPZ(compress_recon_plan)) 
+        DTPZ(compress_recon_plan)();
 
     z_closes_after_me = *is_last_file = dispatcher_get_cleanup_after_me (dispatcher); // possibly modified in zip_complete_processing_one_vb due to a "generated component"
     

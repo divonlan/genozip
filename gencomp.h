@@ -12,4 +12,3 @@
 typedef int GenCompNum; // 0=NONE, 1,2=Generated Components
 
 extern void gencomp_append_file (VBlockP vb, GenCompNum file_gc, const char *name);
-

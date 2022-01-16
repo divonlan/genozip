@@ -357,7 +357,8 @@ static void piz_reconstruct_one_vb (VBlock *vb)
         bgzf_compress_vb (vb);
 
     // calculate the digest contribution of this VB to the single file and bound files, and the digest snapshot of this VB
-    if (!v8_digest_is_zero (vb->digest_so_far) && !flag.data_modified && !flag.reading_chain) 
+    // note: if we have generated components from which lines might be inserted into the VB - we verify in writer instead 
+    if (!v8_digest_is_zero (vb->digest_so_far) && !flag.data_modified && !flag.reading_chain && !z_has_gencomp) 
         digest_one_vb (vb); // LOOKING FOR A DEADLOCK BUG? CHECK HERE
 
     vb->is_processed = true; /* tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway */ 

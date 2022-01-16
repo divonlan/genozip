@@ -48,6 +48,8 @@ typedef struct VBlockSAM {
     Buffer binary_cigar;           // PIZ: generate in sam_cigar_analyze, to reconstruct BAM
     Buffer textual_seq;            // ZIP/PIZ: BAM: contains the textual SEQ (PIZ: used only in some cases)
 
+    Buffer gc_line_info;           // ZIP of Normal VB: an int32 entry for each alignment moved to gencomp - the line_i of the normal VB after the inserted alignment (positive for Primary, negative for Dependent)
+    
     // data set by sam_cigar_analyze
     uint32_t ref_consumed;         // how many bp of reference are consumed according to the last_cigar
     uint32_t ref_and_seq_consumed; // how many bp in the last seq consumes both ref and seq, according to CIGAR
@@ -69,7 +71,7 @@ typedef struct VBlockSAM {
     Buffer buddy_textual_cigars;   // Seg of BAM (not SAM): an array of textual CIGARs referred to from DataLine->CIGAR
 
     // qual stuff
-    bool qual_codec_no_longr;         // true if we can compress qual with CODEC_LONGR
+    bool qual_codec_no_longr;      // true if we can compress qual with CODEC_LONGR
 } VBlockSAM;
 
 #define VB_SAM ((VBlockSAMP)vb)
@@ -116,7 +118,12 @@ extern uint16_t bam_reg2bin (int32_t first_pos, int32_t last_pos);
 extern void bam_seg_BIN (VBlockSAM *vb, ZipDataLineSAM *dl, uint16_t bin, PosType this_pos);
 extern void sam_seg_verify_RNAME_POS (VBlockP vb, const char *p_into_txt, PosType this_pos);
 extern const char *sam_seg_get_aux (const char *name, STRps (aux), uint32_t *aux_len, bool is_bam);
-extern bool sam_seg_is_sa_line (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(alignment), STRps(aux), bool is_bam);
+
+// -----------------------------------
+// supplementary/secondary group stuff
+// -----------------------------------
+extern bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(alignment), STRps(aux), bool is_bam);
+extern void sam_zip_gc_after_compute (VBlockSAMP vb);
 
 // ------------------
 // CIGAR / MC:Z stuff

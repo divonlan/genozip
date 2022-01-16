@@ -40,33 +40,6 @@ typedef struct Buffer {
 
 #define EMPTY_BUFFER {}
 
-#define ARRAY(element_type, name, buf) \
-    element_type *name = ((element_type *)((buf).data)); \
-    const uint64_t name##_len __attribute__((unused)) = (buf).len; // read-only copy of len 
-    
-#define ENT(type, buf, index) ((type *)(&(buf).data[(index) * sizeof(type)]))
-#define FIRSTENT(type, buf)   ((type *)( (buf).data))
-#define LASTENT(type, buf)    ((type *)(&(buf).data[((buf).len-1) * sizeof(type)]))
-#define AFTERENT(type, buf)   ((type *)(&(buf).data[((buf).len  ) * sizeof(type)]))
-
-typedef struct { char s[300]; } BufDescType;
-extern const BufDescType buf_desc (const Buffer *buf);
-
-static inline uint64_t NEXTENT_get_index (Buffer *buf, size_t size, const char *func, uint32_t code_line) 
-{ 
-    uint64_t index = (buf->len++) * size;
-    ASSERT (index + size <= buf->size, "called from %s:%u: NEXTENT went beyond end of buffer: size=%u index=%"PRIu64": %.*s", 
-            func, code_line, (unsigned)size, index, (int)sizeof(BufDescType)-1, &buf_desc (buf).s[0]);
-    return index;
-}
-#define NEXTENT(type, buf)    (*(type *)(&(buf).data[NEXTENT_get_index (&(buf), sizeof(type), __FUNCTION__, __LINE__)]))
-#define ENTNUM(buf, ent)      ((int32_t)((((char*)(ent)) - ((buf).data)) / (int32_t)sizeof (*(ent)))) // signed integer
-#define REMAINING(buf, ent)   ((buf).len - ENTNUM ((buf),(ent)))
-#define ISLASTENT(buf,ent)    (ENTNUM((buf),(ent)) == (buf).len - 1)
-#define ISAFTERENT(buf,ent)   (!(buf).data || ENTNUM((buf),(ent)) >= (buf).len)
-#define ISFIRSTENT(buf,ent)   (ENTNUM((buf),(ent)) == 0)
-#define ISBEFOREENT(buf,ent)  (!(buf).data || ENTNUM((buf),(ent)) <= -1)
-
 extern void buf_initialize(void);
 
 #define buf_is_alloc(buf_p) ((buf_p)->data != NULL && (buf_p)->type != BUF_UNALLOCATED)
@@ -98,6 +71,41 @@ extern uint64_t buf_alloc_do (VBlockP vb,
     buf_alloc((vb), (buf), (more), (at_least), element_type, (grow_at_least_factor), (name)); \
     if ((buf)->data && (buf)->size > size_before) memset (&(buf)->data[size_before], 255, (buf)->size - size_before); \
 } while(0)
+
+
+#define ARRAY(element_type, name, buf) \
+    element_type *name = ((element_type *)((buf).data)); \
+    const uint64_t name##_len __attribute__((unused)) = (buf).len; // read-only copy of len 
+    
+#define ENT(type, buf, index) ((type *)(&(buf).data[(index) * sizeof(type)]))
+#define FIRSTENT(type, buf)   ((type *)( (buf).data))
+#define LASTENT(type, buf)    ((type *)(&(buf).data[((buf).len-1) * sizeof(type)]))
+#define AFTERENT(type, buf)   ((type *)(&(buf).data[((buf).len  ) * sizeof(type)]))
+
+typedef struct { char s[300]; } BufDescType;
+extern const BufDescType buf_desc (const Buffer *buf);
+
+static inline uint64_t NEXTENT_get_index (Buffer *buf, size_t size, const char *func, uint32_t code_line) 
+{ 
+    uint64_t index = (buf->len++) * size;
+    ASSERT (index + size <= buf->size, "called from %s:%u: NEXTENT went beyond end of buffer: size=%u index=%"PRIu64": %.*s", 
+            func, code_line, (unsigned)size, index, (int)sizeof(BufDescType)-1, &buf_desc (buf).s[0]);
+    return index;
+}
+#define NEXTENT(type, buf)    (*(type *)(&(buf).data[NEXTENT_get_index (&(buf), sizeof(type), __FUNCTION__, __LINE__)]))
+#define ENTNUM(buf, ent)      ((int32_t)((((char*)(ent)) - ((buf).data)) / (int32_t)sizeof (*(ent)))) // signed integer
+#define REMAINING(buf, ent)   ((buf).len - ENTNUM ((buf),(ent)))
+#define ISLASTENT(buf,ent)    (ENTNUM((buf),(ent)) == (buf).len - 1)
+#define ISAFTERENT(buf,ent)   (!(buf).data || ENTNUM((buf),(ent)) >= (buf).len)
+#define ISFIRSTENT(buf,ent)   (ENTNUM((buf),(ent)) == 0)
+#define ISBEFOREENT(buf,ent)  (!(buf).data || ENTNUM((buf),(ent)) <= -1)
+
+#define INSERTENTAFTER(type, buf, index) ({             \
+    buf_alloc ((buf).vb, &(buf), 1, 0, type, 1, NULL);  \
+    memmove (ENT(type, (buf), (index)+2), ENT(type, (buf), (index)+1), ((buf).len - ((index)+1)) * sizeof(type)); \
+    (buf).len++;                                        \
+    ENT(type, (buf), (index)+1);                          \
+})
 
 extern bool buf_mmap_do (VBlockP vb, Buffer *buf, const char *filename, bool read_only_buffer, const char *func, uint32_t code_line, const char *name);
 #define buf_mmap(vb, buf, filename, read_only_buffer, name) \
