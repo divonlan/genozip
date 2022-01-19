@@ -141,10 +141,11 @@ void segconf_calculate (void)
     for (int s = (txt_file->codec == CODEC_BZ2); s < ARRAY_LEN(vb_sizes) && !vb->txt_data.len; s++) {
         segconf.vb_size = vb_sizes[s];
         txtfile_read_vblock (vb);
+        if (txt_file->header_only) break;
     }
 
     if (!vb->txt_data.len) {
-        WARN ("Segconf didn't run because first line is larger than %u", vb_sizes[ARRAY_LEN(vb_sizes)-1]);
+        ASSERTW (txt_file->header_only, "Segconf didn't run because first line is larger than %u", vb_sizes[ARRAY_LEN(vb_sizes)-1]);
     
         segconf_set_vb_size (vb, save_vb_size);
         goto done; // cannot find a single line - vb_size set to default and other segconf fields remain default, or previous file's setting

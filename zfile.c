@@ -721,7 +721,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeader *out_header) // optio
     BGEN_sections_list();
 
     if (flag.show_gheader) {
-        sections_show_gheader (header);
+        DO_ONCE sections_show_gheader (header);
         if (exe_type == EXE_GENOCAT) exit_ok(); // in genocat, exit after showing the requested data
     }
 
@@ -858,7 +858,7 @@ void zfile_compress_genozip_header (Digest single_component_digest)
                                           .genozip_header_offset = BGEN64 (genozip_header_offset) };
     buf_add_more (evb, z_data, (char*)&footer, sizeof(SectionFooterGenozipHeader), "z_data");
 
-    zfile_output_processed_vb (NULL, evb); // write footer
+    zfile_output_processed_vb (evb); // write footer
 }
 
 // ZIP
@@ -901,8 +901,9 @@ void zfile_write_txt_header (Buffer *txt_header,
 
     z_file->disk_so_far += txt_header_buf.len;   // length of GENOZIP data writen to disk
 
-    // note: the liftover reject txt data is of course not counted as part of the file txt data for stats...
-    if (!Z_DT(DT_VCF) || !flag.gencomp_num) {        
+    // VCF note: we don't account for DVCF rejects files - the added header lines are duplicates of the main header
+    // SAM/BAM note: we don't account for PRIM/DEPN txt headers generated in gencomp_initialize_file
+    if (!flag.gencomp_num) {        
         z_file->txt_data_so_far_single   += txt_header->len; // length of txt header as it would be reconstructed (possibly afer modifications)
         z_file->txt_data_so_far_bind     += txt_header->len;
         z_file->txt_data_so_far_single_0 += unmodified_txt_header_len; // length of the original txt header as read from the file
@@ -1012,7 +1013,7 @@ void zfile_update_compressed_vb_header (VBlock *vb)
 }
 
 // ZIP
-void zfile_output_processed_vb (Dispatcher dispatcher, VBlock *vb)
+void zfile_output_processed_vb (VBlock *vb)
 {
     START_TIMER;
 

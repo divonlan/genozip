@@ -92,7 +92,7 @@ typedef struct {
     enum { KRK_NONE, KRK_ALL, KRK_INCLUDED, KRK_EXCLUDED } show_kraken;
 
     // stats / debug useful mostly for developers
-    int show_memory, show_dict, show_b250, show_aliases, show_digest, show_recon_plan,
+    int show_memory, show_dict, show_b250, show_aliases, show_digest, log_digest, show_recon_plan,
         show_index, show_gheader, show_ref_contigs, show_chain_contigs, show_ref_seq, show_ref_diff,
         show_reference, show_ref_hash, show_ref_index, show_chrom2ref, show_ref_iupacs, show_chain,
         show_codec, show_containers, show_alleles, show_bgzf, show_txt_contigs,
@@ -100,7 +100,7 @@ typedef struct {
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
         debug_LONG, debug_qname,
         verify_codec, seg_only, xthreads, show_flags, show_rename_tags,
-        echo,    // show the command line in case of an error
+        echo,         // show the command line in case of an error
         show_headers; // (1 + SectionType to display) or 0=flag off or -1=all sections
     const char *help, *dump_section, *show_is_set, *show_time, *show_mutex;
 
@@ -125,8 +125,9 @@ typedef struct {
          genocat_no_ref_file,// PIZ (genocat): we don't need to load the reference data
          genocat_no_dicts,   // PIZ (genocat): we don't need to read the dicts
          genocat_global_area_only, // PIZ (genocat): we quit after processing the global area
-         genocat_no_reconstruct,  // PIZ: User requested to genocat with only metadata to be shown, not file contents
+         genocat_no_reconstruct,   // PIZ: User requested to genocat with only metadata to be shown, not file contents
          no_writer,          // PIZ: User requested to genocat with only metadata to be shown, not file contents (but we still might do reconstruction without output)
+         no_writer_thread,   // PIZ: Don't use a Writer thread. Sometimes when no_writer, we still need a writer thread (eg to calculate digest with SAM generated components)
          multiple_files,     // Command line includes multiple files
          reconstruct_as_src, // the reconstructed data type is the same as the source data type
          maybe_txt_header_modified,

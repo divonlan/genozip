@@ -802,11 +802,11 @@ void chain_load (void)
 
     if (flag.reference) flag.reference = REF_LIFTOVER;
 
-    flag.no_writer = true;
+    flag.no_writer = flag.no_writer_thread = true;
     flag.genocat_no_reconstruct = false;
     flag.genocat_global_area_only = false;
     
-    Dispatcher dispachter = piz_z_file_initialize (false);
+    Dispatcher dispachter = piz_z_file_initialize();
 
     // load both references, now that it is set (either explicitly from the command line, or implicitly from the chain GENOZIP_HEADER)
     SAVE_VALUE (z_file); // actually, read the references first
@@ -821,7 +821,7 @@ void chain_load (void)
     flag.quiet = true; // don't show progress indicator for the chain file - it is very fast 
     flag.maybe_vb_modified_by_reconstructor = true; // we drop all the lines
 
-    piz_one_txt_file (dispachter, false);
+    piz_one_txt_file (dispachter, false, false);
 
     // --show-chain-contigs
     if (flag.show_chain_contigs) {

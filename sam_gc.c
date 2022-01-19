@@ -27,18 +27,20 @@ typedef struct {
 // and should be moved to a generated component. Called by compute thread in seg of Normal VB.
 bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(alignment), STRps(aux), bool is_bam)
 {
+    // xxx if (!flag.best) return false; // TODO: implement BGZF compressing threads in writer, and the we can remove this line to make gencomp available always
+
     STR(NH); STR(HI); 
     SamComponentType gc_type = 0;;
 
     // dependent - always has secondary or supplementary flag
     if (dl->FLAG.bits.secondary || dl->FLAG.bits.supplementary) 
-        gc_type = CT_SA_DEPN;
+        gc_type = SAM_COMP_DEPN;
 
     // primary - no special flag, identify by SA or (NH>1 && HI==1)
     else if (sam_seg_get_aux ("SA:Z", STRas(aux), NULL, is_bam) ||
                (((NH = sam_seg_get_aux ("NH:i", STRas(aux), &NH_len, is_bam)) && (NH_len > 1 || *NH != '1')) &&
                (((HI = sam_seg_get_aux ("HI:i", STRas(aux), &HI_len, is_bam)) && (HI_len ==1 || *HI == '1')))))
-        gc_type = CT_SA_PRIM;
+        gc_type = SAM_COMP_PRIM;
 
     else
         return false;
@@ -49,7 +51,7 @@ bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(alignment), STR
     buf_alloc (VB, &vb->gc_line_info, 1, 100, GencompLineIEntry, 2, "gc_line_info");
     NEXTENT (GencompLineIEntry, vb->gc_line_info) = (GencompLineIEntry){ .line_i   = vb->line_i, 
                                                                          .line_len = alignment_len,
-                                                                         .is_prim  = (gc_type == CT_SA_PRIM) };
+                                                                         .is_prim  = (gc_type == SAM_COMP_PRIM) };
     vb->line_i--;
     vb->recon_size -= alignment_len;
 
@@ -60,6 +62,10 @@ bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(alignment), STR
 void sam_zip_gc_after_compute (VBlockSAMP vb)
 {
     if (flag.gencomp_num) return;
+
+    // write gencomp lines to the gencomp files
+    gencomp_append_file (VB, SAM_COMP_PRIM);
+    gencomp_append_file (VB, SAM_COMP_DEPN);
 
     BufferP recon_plan = &txt_file->recon_plan;
     ARRAY (GencompLineIEntry, gc_lines, vb->gc_line_info);
@@ -77,11 +83,7 @@ void sam_zip_gc_after_compute (VBlockSAMP vb)
 
     // case: we removed some gencomp lines from this VB, we now create a recon plan to insert them back.
     // the actual line location in the gencomp vb will be updated later
-    else {
-        // write flush gencomp lines to the gencomp files
-        if (vb->gencomp[CT_SA_PRIM-1].len) gencomp_append_file (VB, CT_SA_PRIM, "PRIM");
-        if (vb->gencomp[CT_SA_DEPN-1].len) gencomp_append_file (VB, CT_SA_DEPN, "DEPN");
-
+    else {         
         buf_alloc (evb, recon_plan, gc_lines_len * 2 + 2, 100000, ReconPlanItem, 2, "txt_file->recon_plan");
         buf_alloc (evb, &txt_file->line_info[0], gc_lines_len, 100000, uint32_t, 2, "txt_file->line_info");
         buf_alloc (evb, &txt_file->line_info[1], gc_lines_len, 100000, uint32_t, 2, "txt_file->line_info");
@@ -197,8 +199,8 @@ static void sam_zip_recon_plan_add_gc_lines (void)
 {
     sam_zip_gc_calc_vb_info();
 
-    SamGcVbInfo *vb_info[2] = { FIRSTENT (SamGcVbInfo, z_file->vb_info[CT_SA_PRIM-1]), 
-                                FIRSTENT (SamGcVbInfo, z_file->vb_info[CT_SA_DEPN-1]) };
+    SamGcVbInfo *vb_info[2] = { FIRSTENT (SamGcVbInfo, z_file->vb_info[SAM_COMP_PRIM-1]), 
+                                FIRSTENT (SamGcVbInfo, z_file->vb_info[SAM_COMP_DEPN-1]) };
     uint32_t gc_vb_line_i[2] = {};
     
     for (uint32_t i=0; i < txt_file->recon_plan.len; i++) {
@@ -258,14 +260,14 @@ void sam_zip_compress_recon_plan (void)
     // genenerated componets have an empty plan - causing writer to not write them despite being reconstructed
     if (!flag.gencomp_num) {
 
-        // if we have no gencomp components, we don't need a recon plan
-        if (sam_zip_recon_plan_full_vb_only()) return;
+        if (!sam_zip_recon_plan_full_vb_only()) { // if not empty gencomp components
 
-        // update recon plan with gencomp lines
-        sam_zip_recon_plan_add_gc_lines();
+            // update recon plan with gencomp lines
+            sam_zip_recon_plan_add_gc_lines();
 
-        // merge consecutive GC lines from the same GC & VB
-        sam_zip_recon_plan_optimize_gc_lines();
+            // merge consecutive GC lines from the same GC & VB
+            sam_zip_recon_plan_optimize_gc_lines();
+        }
 
         if (flag.show_recon_plan)
             linesorter_show_recon_plan (txt_file, false, 3, (uint32_t)(segconf.vb_size >> 20));

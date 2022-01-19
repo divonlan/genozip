@@ -169,7 +169,6 @@ void random_access_update_first_last_pos (VBlock *vb, Coords dc, WordIndex chrom
     if (last_pos_value  > ra_ent->max_pos) ra_ent->max_pos = last_pos_value;
 }
 
-
 void random_access_update_to_entire_chrom (VBlockP vb, Coords dc, PosType first_pos_of_chrom, PosType last_pos_of_chrom)
 {
     ASSERTISALLOCED (vb->ra_buf[DC]);

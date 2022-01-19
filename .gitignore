@@ -97,3 +97,4 @@ dict_id_gen.c
 core
 SEC_*.body
 SEC_*.header
+digest.*.log

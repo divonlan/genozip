@@ -31,7 +31,8 @@
 
 static Buffer threads = EMPTY_BUFFER;
 static Mutex threads_mutex = { .name = "threads_mutex-not-initialized" };
-static pthread_t main_thread;
+static pthread_t main_thread, writer_thread;
+static bool writer_thread_is_set = false;
 
 static Buffer log = EMPTY_BUFFER; // for debugging thread issues, activated with --debug-threads
 static Mutex log_mutex = {};
@@ -122,6 +123,22 @@ void threads_initialize (void)
 bool threads_am_i_main_thread (void)
 {
     return pthread_self() == main_thread;
+}
+
+void threads_set_writer_thread (void)
+{
+    writer_thread_is_set = true;
+    writer_thread = pthread_self();
+}
+
+void threads_unset_writer_thread (void)
+{
+    writer_thread_is_set = false;
+}
+
+bool threads_am_i_writer_thread (void)
+{
+    return writer_thread_is_set && pthread_self() == writer_thread;    
 }
 
 void threads_write_log (bool to_info_stream)

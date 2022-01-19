@@ -700,8 +700,13 @@ static bool vcf_inspect_txt_header_zip (Buffer *txt_header)
         buf_add_more (evb, &evb->gencomp[0], line, len, "gencomp");
         buf_add_more (evb, &evb->gencomp[1], line, len, "gencomp");
 
-        gencomp_append_file (evb, DC_PRIMARY, "PRIM");
-        gencomp_append_file (evb, DC_LUFT, "LUFT");
+        gencomp_initialize_file (1, "PRIM");
+        gencomp_append_file (evb, DC_PRIMARY);
+
+        gencomp_initialize_file (2, "LUFT");
+        gencomp_append_file (evb, DC_LUFT);
+
+        z_file->z_closes_after_me = false; // we now have two more components to zip before we close...
     }
 
     // case: Luft file - update *contig, *reference, dual_coordinates keys to Primary format, and move rejects to unconsumed_txt

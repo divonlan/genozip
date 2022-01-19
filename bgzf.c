@@ -447,7 +447,7 @@ static uint32_t bgzf_compress_one_block (VBlock *vb, const char *in, uint32_t is
     if (flag.show_bgzf)
         #define C(i) (i < isize ? char_to_printable (in[i]).s : "")
         iprintf ("%-7s vb=%u i=%d compressed_index=%u size=%u txt_index=%d size=%u txt_data[5]=%1s%1s%1s%1s%1s %s\n",
-                threads_am_i_main_thread() ? "MAIN" : "COMPUTE", vb->vblock_i, block_i,
+                threads_am_i_main_thread() ? "MAIN" : threads_am_i_writer_thread() ? "WRITER" : "COMPUTE", vb->vblock_i, block_i,
                 comp_index, (unsigned)out_size, txt_index, isize, C(0), C(1), C(2), C(3), C(4),
                 out_size == BGZF_EOF_LEN ? "EOF" : "");
         #undef C
@@ -462,8 +462,9 @@ static uint32_t bgzf_compress_one_block (VBlock *vb, const char *in, uint32_t is
     buf_add (compressed, &footer, sizeof (BgzfFooter));
 
     if (flag.show_time) {
-        if (threads_am_i_main_thread ()) COPY_TIMER (bgzf_io_thread)
-        else                             COPY_TIMER (bgzf_compute_thread);
+        if (threads_am_i_main_thread ())       COPY_TIMER (bgzf_io_thread)
+        else if (threads_am_i_writer_thread()) COPY_TIMER (bgzf_writer_thread)
+        else                                   COPY_TIMER (bgzf_compute_thread);
     }
 
     return (uint32_t)out_size;

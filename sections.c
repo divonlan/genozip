@@ -146,9 +146,11 @@ Section sections_last_sec4 (Section sl, SectionType st1, SectionType st2, Sectio
 // count how many sections we have of a certain type
 uint32_t sections_count_sections (SectionType st)
 {
+    ARRAY (SectionEnt, secs, z_file->section_list_buf);
     uint32_t count=0;
-    for (uint32_t i=0; i < z_file->section_list_buf.len; i++) 
-        if (ENT (SectionEnt, z_file->section_list_buf, i)->st == st)
+
+    for (uint32_t i=0; i < secs_len; i++) 
+        if (secs[i].st == st)
             count++;
 
     return count;
@@ -456,7 +458,7 @@ static FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt)
             break;
 
         case SEC_TXT_HEADER:
-            sprintf (str.s, "gencomp_num=%s is_txt_luft=%u", coords_name (f.txt_header.gencomp_num), f.txt_header.is_txt_luft);
+            sprintf (str.s, "gencomp_num=%u is_txt_luft=%u", f.txt_header.gencomp_num, f.txt_header.is_txt_luft);
             break;
 
         case SEC_VB_HEADER:
@@ -632,15 +634,17 @@ void sections_show_header (const SectionHeader *header, VBlock *vb /* optional i
 void sections_show_section_list (VBlockP vb/*if VB*/, const SectionHeaderGenozipHeader *header/*if z_file*/)
 {
     ARRAY (SectionEnt, ents, vb ? vb->section_list_buf : z_file->section_list_buf);
-    DataType dt = vb ? vb->data_type : BGEN16 (header->data_type);
+    DataType dt = vb     ? vb->data_type 
+                : header ? BGEN16 (header->data_type)
+                :          z_file->data_type;
 
     for (unsigned i=0; i < ents_len; i++) {
      
         uint64_t this_offset = ents[i].offset;
         
         uint64_t next_offset = (i < ents_len-1) ? ents[i+1].offset
-                             : header               ? this_offset + BGEN32 (header->h.data_compressed_len) + BGEN32 (header->h.compressed_offset) + sizeof (SectionFooterGenozipHeader) // we're at the last section genozip header+footer
-                             :                        this_offset; // without the GenozipHeader, we can't know its length
+                             : header           ? this_offset + BGEN32 (header->h.data_compressed_len) + BGEN32 (header->h.compressed_offset) + sizeof (SectionFooterGenozipHeader) // we're at the last section genozip header+footer
+                             :                    this_offset; // without the GenozipHeader, we can't know its length
 
 
         iprintf ("%3u\t%-20.20s\t%s%s%-8.8s\tvb=%u\toffset=%-8"PRIu64"\tsize=%-6"PRId64"\t%s\n", 

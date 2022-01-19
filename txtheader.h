@@ -10,7 +10,6 @@
 //----------
 
 extern bool txtheader_zip_read_and_compress (uint64_t *txt_header_size);
-extern uint32_t txtheader_get_bound_headers_len(void); // for stats
 
 //----------
 // PIZ stuff

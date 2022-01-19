@@ -14,6 +14,11 @@ extern void threads_cancel_other_threads (void);
 extern bool threads_am_i_main_thread (void);
 extern void threads_print_call_stack (void);
 
+// writer thread stuff
+extern void threads_set_writer_thread (void);
+extern void threads_unset_writer_thread (void);
+extern bool threads_am_i_writer_thread (void);
+
 // for debugging thread issues, activated with --debug-threads or --show-threads
 void threads_log_by_vb (ConstVBlockP vb, const char *task_name, const char *event, int time_usec);
 void threads_write_log (bool to_info_stream);

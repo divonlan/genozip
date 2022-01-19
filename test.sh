@@ -316,7 +316,10 @@ batch_basic()
     fi
     test_standard "COPY $ref" " " $file
 
-    test_multi_bound $file $replace # REPLACE to adjust the contig name for .fa as we can't have two contigs with the same name
+    if [ $file != basic.bam ] && [ $file != basic.sam ]; then # SAM/BAM cannot be bound
+        test_multi_bound $file $replace # REPLACE to adjust the contig name for .fa as we can't have two contigs with the same name
+    fi
+
     test_optimize $file
     unset GENOZIP_REFERENCE
 }
@@ -352,7 +355,7 @@ batch_bgzf()
             test_redirected $file
         fi
         test_standard "COPY" " " $file
-        test_multi_bound $file
+        #test_multi_bound $file
     done
 
     test_header "sam -> sam.genozip -> sam.gz - see that it is BGZF"
@@ -405,7 +408,11 @@ batch_special_algs()
         test_unix_style $file                # standard
         test_standard "-p123" "-p 123" $file # encrypted
         test_standard "COPY" " " $file       # multiple files unbound
-        test_multi_bound $file               # multiple files bound
+
+        if [ $file != basic-domqual.sam ] && [ $file != basic-unaligned.sam ]; then # SAM/BAM cannot be bound
+            test_multi_bound $file           # multiple files bound
+        fi
+
         test_optimize $file                  # optimize - only compress to see that it doesn't error
     done
 }
@@ -960,15 +967,6 @@ batch_multiseq()
     test_standard "--multiseq" " " test.nanopore-virus.fq
 }
 
-batch_misc_cases()
-{
-    batch_print_header
-
-    # Test binding SAM files with lots of contigs (no reference)
-    echo "binding SAM files with lots of contigs (no reference)"
-    test_multi_bound test.human-collated.sam
-}
-
 # CRAM hs37d5
 batch_external_cram()
 {
@@ -1110,7 +1108,7 @@ batch_genols()
 {
     batch_print_header
 
-    $genozip ${TESTDIR}/basic.sam ${TESTDIR}/minimal.sam -fo $output -p abcd || exit 1
+    $genozip ${TESTDIR}/basic.vcf ${TESTDIR}/minimal.vcf -fo $output -p abcd || exit 1
     $genols $output -p abcd || exit 1
     rm -f $output
 }
@@ -1274,13 +1272,13 @@ if (( $1 <= 31 )) ; then  batch_genols                 ; fi
 if (( $1 <= 32 )) ; then  batch_tar_files_from         ; fi
 if (( $1 <= 33 )) ; then  batch_real_world_small_vbs   ; fi 
 if (( $1 <= 34 )) ; then  batch_real_world_1           ; fi 
-if (( $1 <= 35 )) ; then  batch_real_world_1 --fast    ; fi 
-if (( $1 <= 36 )) ; then  batch_real_world_with_ref    ; fi 
-if (( $1 <= 37 )) ; then  batch_real_world_with_ref --best  ; fi # BAM/FASTQ with --best require a reference
-if (( $1 <= 38 )) ; then  batch_real_world_1_backcomp  ; fi 
-if (( $1 <= 39 )) ; then  batch_real_world_with_ref_backcomp ; fi 
-if (( $1 <= 40 )) ; then  batch_multiseq               ; fi
-if (( $1 <= 41 )) ; then  batch_misc_cases             ; fi
+if (( $1 <= 35 )) ; then  batch_real_world_1 --best=NO_REF    ; fi 
+if (( $1 <= 36 )) ; then  batch_real_world_1 --fast    ; fi 
+if (( $1 <= 37 )) ; then  batch_real_world_with_ref    ; fi 
+if (( $1 <= 38 )) ; then  batch_real_world_with_ref --best  ; fi 
+if (( $1 <= 39 )) ; then  batch_real_world_1_backcomp  ; fi 
+if (( $1 <= 40 )) ; then  batch_real_world_with_ref_backcomp ; fi 
+if (( $1 <= 41 )) ; then  batch_multiseq               ; fi
 if (( $1 <= 42 )) ; then  batch_external_cram          ; fi
 if (( $1 <= 43 )) ; then  batch_external_bcf           ; fi
 if (( $1 <= 44 )) ; then  batch_external_unzip         ; fi

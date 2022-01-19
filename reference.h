@@ -26,11 +26,10 @@ typedef struct Range {
     BitArray ref;                // actual reference data - 2-bit array
     BitArray is_set;             // a 1-bit array - SEG: a pos is set if seg set this reference PIZ: is set if SEC_REF_IS_SET said so
     int64_t num_set;             // used by ref_prepare_range_for_compress: number of set bits in in_set
-    const char *chrom_name;
-    unsigned chrom_name_len;
+    STR (chrom_name);
     WordIndex chrom;             // index to the contig of the in the CHROM of the file from which this reference was loaded.
     uint32_t range_i;            // range ordinal number within contig
-    PosType first_pos, last_pos; // the range that includes all locii (note: in ZIP-INTERNAL it might include unset locii too)
+    PosType first_pos, last_pos; // the range that includes all loci (note: in ZIP-INTERNAL it might include unset loci too)
     PosType gpos;                // position of this range in the "global position" 
 } Range;
 

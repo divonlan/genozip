@@ -411,7 +411,7 @@ void kraken_load (void)
 
     flag.maybe_vb_modified_by_reconstructor = true;    // we drop the lines not matching --taxid
     flag.data_modified    = true;    // the reconstructed kraken file is not the same as the original...
-    flag.no_writer        = true;
+    flag.no_writer = flag.no_writer_thread = true;
     flag.genocat_no_reconstruct = false;
     flag.genocat_global_area_only = false;
     flag.out_dt           = DT_NONE; // needed for dt_get_translation to find the translation defined in TRANSLATIONS
@@ -426,8 +426,8 @@ void kraken_load (void)
 
     z_file->basename = file_basename (flag.reading_kraken, false, "(kraken-file)", NULL, 0);
 
-    Dispatcher dispachter = piz_z_file_initialize (false);
-    bool kraken_loaded = piz_one_txt_file (dispachter, false);
+    Dispatcher dispachter = piz_z_file_initialize();
+    bool kraken_loaded = piz_one_txt_file (dispachter, false, false);
 
     kraken_filename = file_make_unix_filename (z_name); // full-path unix-style filename, allocates memory
 

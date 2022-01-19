@@ -235,18 +235,20 @@ static void main_genounzip (const char *z_filename, const char *txt_filename, in
     else 
         ABORT0 ("Error: unrecognized configuration for the txt_file");
 
-    Dispatcher dispatcher = piz_z_file_initialize (is_last_z_file);  
+    Dispatcher dispatcher = piz_z_file_initialize();  
 
     // a loop for decompressing all txt_files (1 if concatenating, possibly more if unbinding)
     if (dispatcher)
         while (z_file->num_txt_components_so_far < z_file->num_components) {
-            piz_one_txt_file (dispatcher, is_first_z_file);
+            piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file);
             file_close (&txt_file, flag.index_txt, flag.unbind || !is_last_z_file); 
         }
 
     file_close (&z_file, false, false);
     is_first_z_file = false;
 
+    if (piz_digest_failed) exit_on_error (false); // error message already displayed in piz_one_verify_digest
+    
     // case --replace: now that the file (or multiple bound files) where reconstructed, we can remove the genozip file
     if (flag.replace && (txt_filename || flag.unbind) && z_filename) file_remove (z_filename, true); 
 
@@ -284,6 +286,7 @@ static void main_test_after_genozip (const char *exec_name, const char *z_filena
                                     password           ? "--password"      : SKIP_ARG,
                                     password           ? password          : SKIP_ARG,
                                     flag.show_digest   ? "--show-digest"   : SKIP_ARG,
+                                    flag.log_digest    ? "--log-digest"    : SKIP_ARG,
                                     flag.show_memory   ? "--show-memory"   : SKIP_ARG,
                                     flag.show_time     ? "--show-time"     : SKIP_ARG,
                                     flag.threads_str   ? "--threads"       : SKIP_ARG,
@@ -369,8 +372,8 @@ static void main_genozip_open_z_file_write (const char **z_filename)
 static void main_genozip (const char *txt_filename, 
                           const char *next_txt_filename, // ignored unless we are of pair_1 in a --pair
                           const char *z_filename,
-                          unsigned txt_file_i, bool is_last_txt_file,
-                          Coords txt_file_coords, // only relevant to VCF
+                          unsigned txt_file_i, 
+                          bool is_last_user_txt_file,    // very last file in this execution 
                           char *exec_name)
 {
     MAIN ("main_genozip: %s", txt_filename ? txt_filename : "stdin");
@@ -386,7 +389,7 @@ static void main_genozip (const char *txt_filename,
     // get input file
     if (!txt_file) { // open the file - possibly already open from main_load_reference
         txt_file = file_open (txt_filename, READ, TXT_FILE, DT_NONE); 
-        if (txt_file) txt_file->coords = txt_file_coords; // (only used by VCF) maybe overridden by ##dual_coordinates in the header.
+        if (txt_file && z_file && Z_DT(DT_VCF)) txt_file->coords = flag.gencomp_num; // (only used by VCF) maybe overridden by ##dual_coordinates in the header.
     }
 
     // skip this file if its size is 0
@@ -423,45 +426,50 @@ static void main_genozip (const char *txt_filename,
 
     flags_update_zip_one_file();
 
-    bool z_closes_after_me = is_last_txt_file || flag.bind==BIND_NONE || (flag.bind==BIND_PAIRS && txt_file_i%2);
+    z_file->z_closes_after_me =  flag.bind == BIND_NONE                              || 
+                                (flag.bind == BIND_GENCOMP && flag.gencomp_num == 2) || 
+                                (flag.bind == BIND_ALL     && is_last_user_txt_file) || 
+                                (flag.bind == BIND_PAIRS   && txt_file_i%2);
 
-    zip_one_file (txt_file->basename, &is_last_txt_file, z_closes_after_me);
+    zip_one_file (txt_file->basename, is_last_user_txt_file);
 
-    if (flag.show_stats && z_closes_after_me && (!z_dual_coords || flag.gencomp_num)) 
+    if (flag.show_stats && z_file->z_closes_after_me && (!z_dual_coords || flag.gencomp_num)) 
         stats_display();
 
     bool remove_txt_file = z_file && flag.replace && txt_filename;
 
-    file_close (&txt_file, false, !is_last_txt_file);  // no need to waste time closing the last file, the process termination will do that
+    file_close (&txt_file, false, !(is_last_user_txt_file && z_file->z_closes_after_me));  // no need to waste time closing the last file, the process termination will do that
 
     bool is_chain = (Z_DT(DT_CHAIN));
 
-    // close the file if its an open disk file AND we need to close it
-    if (flag.gencomp_num==0 && !flag.to_stdout && z_file && z_closes_after_me) {
+    // recursive zip the two gencomp files (DVCF: primary-only and luft-only ; SAM/BAM: Primary and Dependent files of supplementary/secondary alignments)
+    if (flag.bind == BIND_GENCOMP && !flag.gencomp_num) {
         TEMP_FLAG (sort, false);
 
-        if (z_file->gencomp_file[0]) {
-            flag.gencomp_num = 1;
-            main_genozip (z_file->gencomp_file_name[0], 0, z_file->name, txt_file_i, !z_file->gencomp_file[1], 1, exec_name);
-        }
-
-        if (z_file->gencomp_file[1]) {
-            flag.gencomp_num = 2;
-            main_genozip (z_file->gencomp_file_name[1], 0, z_file->name, txt_file_i, true, 2, exec_name);
-        }
-
-        flag.gencomp_num = 0;
-        RESTORE_FLAG(sort);
+        ASSERTNOTNULL (z_file->gencomp_file[0]);
+        ASSERTNOTNULL (z_file->gencomp_file[1]); 
         
-        // we have no generated components or we're within the recursive call to final components - close the file now 
-        if (!z_filename) { z_filename = z_file->name ; z_file->name = 0; } // take over the name if we don't have it (eg 2nd file in a pair)
-        file_close (&z_file, false, !is_last_txt_file); 
+        flag.gencomp_num = 1; main_genozip (z_file->gencomp_file_name[0], 0, z_file->name, txt_file_i, is_last_user_txt_file, exec_name);
+        flag.gencomp_num = 2; main_genozip (z_file->gencomp_file_name[1], 0, z_file->name, txt_file_i, is_last_user_txt_file, exec_name);
+        flag.gencomp_num = 0;
+
+        RESTORE_FLAG(sort);
+    }
+
+    // close the file if its an open disk file AND we need to close it
+    if (!flag.to_stdout && z_file && z_file->z_closes_after_me) {
+
+        // take over the name 
+        z_filename = z_file->name; 
+        z_file->name = NULL; 
+
+        file_close (&z_file, false, !is_last_user_txt_file); 
 
         RESTORE_FLAG (quiet); // don't pass on quiet to test, just because we turned it on for rejects 
 
         // test the compression, if the user requested --test
         if (flag.test) 
-            main_test_after_genozip (exec_name, z_filename, is_last_txt_file, is_chain);
+            main_test_after_genozip (exec_name, z_filename, is_last_user_txt_file, is_chain);
     }
 
     // remove after test (if any) was successful
@@ -474,7 +482,7 @@ static void main_genozip (const char *txt_filename,
         remove_list.param++; // count files
 
         // case: z_file has closed and tested if needed - remove all files included in this z_file 
-        if (z_closes_after_me) {
+        if (z_file->z_closes_after_me) {
             str_split (remove_list.data, remove_list.len-1, remove_list.param, '\0', rm_file, true); // -1 to remove last \0
 
             for (unsigned i=0; i < n_rm_files; i++)
@@ -667,6 +675,8 @@ int main (int argc, char **argv)
     global_cmd = file_basename (argv[0], true, "(executable)", NULL, 0); // global var
 
     flags_init_from_command_line (argc, argv);
+    if (exe_type == EXE_GENOZIP && command == PIZ) exe_type = EXE_GENOUNZIP; // treat "genozip -d" as genounzip
+
     flags_store_command_line (argc, argv); // can only be called after --password is processed
 
     // if command not chosen explicitly, use the default determined by the executable name
@@ -776,7 +786,7 @@ int main (int argc, char **argv)
         switch (command) {
             case ZIP  : main_genozip (next_input_file, 
                                       file_i < input_files_len-1 ? input_files[file_i+1] : NULL, // file name of next file, if there is one
-                                      flag.out_filename, file_i, !next_input_file || is_last_txt_file, DC_NONE, argv[0]); 
+                                      flag.out_filename, file_i, !next_input_file || is_last_txt_file, argv[0]); 
                         break;
 
             case PIZ  : main_genounzip (next_input_file, flag.out_filename, file_i, is_last_z_file); break;           

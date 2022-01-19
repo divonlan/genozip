@@ -239,8 +239,6 @@ static void sam_header_count_contigs_cb (const char *chrom_name, unsigned chrom_
 
 static void sam_header_alloc_contigs (BufferP txt_header)
 {
-    sam_header_finalize(); // free previous header
-
     ContigsCbParam contigs_count = {}; 
     foreach_SQ_line (sam_header_count_contigs_cb, &contigs_count, NULL);
 
@@ -257,10 +255,8 @@ static void sam_header_alloc_contigs (BufferP txt_header)
 
 void sam_header_finalize (void)
 {
-    if (!flag.bind) { // in ZIP with bind we keep the header contigs
-        contigs_free (sam_hdr_contigs);
-        FREE (sam_hdr_contigs);
-    }    
+    contigs_free (sam_hdr_contigs);
+    FREE (sam_hdr_contigs);
 }
 
 bool sam_header_has_string (ConstBufferP txt_header, const char *substr)
@@ -304,7 +300,7 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
     if (!flag.reference || flag.reference == REF_INTERNAL) 
         ref_initialize_ranges (gref, RT_DENOVO); // it will be REF_INTERNAL if this is the 2nd+ non-conatenated file
 
-    // evb buffers must be alloced by main threads, since other threads cannot modify evb's buf_list
+    // evb buffers must be alloced by the main thread, since other threads cannot modify evb's buf_list
     random_access_alloc_ra_buf (evb, DC_PRIMARY, 0);
 
     // if its the 2nd+ file while binding in ZIP - we just check that the contigs are the same
@@ -347,8 +343,6 @@ int32_t bam_is_header_done (bool is_eof)
 {
     #define HDRSKIP(n) if (evb->txt_data.len < next + n) goto incomplete_header; next += n
     #define HDR32 (next + 4 <= evb->txt_data.len ? GET_UINT32 (&evb->txt_data.data[next]) : 0) ; if (evb->txt_data.len < next + 4) goto incomplete_header; next += 4;
-
-    if (flag.gencomp_num) return 0; // SA components are headerless
 
     uint32_t next=0;
 
@@ -470,7 +464,7 @@ TXTHEADER_TRANSLATOR (sam_header_sam2bam)
     ASSINP (n_ref ||  // has SQ records
             !z_file->z_flags.dts_ref_internal || // has external reference
             ZCTX(SAM_POS)->word_list.len==1, // has only one POS word = "Delta 0" = unaligned SAM that doesn't need contigs 
-            "Failed to convert %s from SAM to BAM: genounzip requires that either the SAM header has SQ records (see https://samtools.github.io/hts-specs/SAMv1.pdf section 1.3), or the file was genozipped with --reference or --REFERENCE", z_name);
+            "Failed to convert %s from SAM to BAM: the SAM header must have SQ records (see https://samtools.github.io/hts-specs/SAMv1.pdf section 1.3), or alternatively the file should be genozipped with --reference or --REFERENCE", z_name);
 
     // if no SQ lines - get lines from loaded contig (will be available only if file was compressed with --reference or --REFERENCE)
     bool from_SQ = !!n_ref;

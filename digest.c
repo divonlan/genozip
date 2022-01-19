@@ -22,6 +22,8 @@ static uint32_t vb_digest_last=0; // last vb to be MD5ed
 #define IS_ADLER ((command == ZIP) ? !flag.md5 : z_file->z_flags.adler)
 #define DIGEST_NAME (IS_ADLER ? "Adler32" : "MD5")
 
+#define DIGEST_LOG_FILENAME (command==ZIP ? "digest.zip.log" : "digest.piz.log")
+
 void digest_initialize (void)
 {
     mutex_initialize (vb_digest_mutex);
@@ -49,6 +51,12 @@ Digest digest_snapshot (const DigestContext *ctx)
                     : md5_finalize (&ctx_copy.md5_ctx);
 }
 
+void digest_start_log (DigestContext *ctx)
+{
+    ctx->common.log = true;
+    file_remove (DIGEST_LOG_FILENAME, true);
+}
+
 Digest digest_do (const void *data, uint32_t len)
 {
     if (IS_ADLER)
@@ -57,8 +65,10 @@ Digest digest_do (const void *data, uint32_t len)
         return md5_do (data, len);
 }
 
-void digest_update (DigestContext *ctx, const Buffer *buf, const char *msg)
+void digest_update_do (VBlockP vb, DigestContext *ctx, const char *data, uint64_t data_len, const char *msg)
 {
+    if (!data_len) return;
+    
     DigestContext before;
 
     if (IS_ADLER) {
@@ -67,27 +77,68 @@ void digest_update (DigestContext *ctx, const Buffer *buf, const char *msg)
             ctx->adler_ctx.initialized = true;
         }
         if (flag.show_digest) before = *ctx;
-        ctx->adler_ctx.adler = libdeflate_adler32 (ctx->adler_ctx.adler, buf->data, buf->len);
+        ctx->adler_ctx.adler = libdeflate_adler32 (ctx->adler_ctx.adler, STRa(data));
     }
 
     else {
         if (!ctx->md5_ctx.initialized) {
+            bool save_log = ctx->md5_ctx.log;
+            ctx->md5_ctx.log = 0;
             md5_initialize (&ctx->md5_ctx);
+            ctx->md5_ctx.log = save_log;
             ctx->md5_ctx.initialized = true;
         }
         if (flag.show_digest) before = *ctx;
-        md5_update (&ctx->md5_ctx, buf->data, buf->len);
+        md5_update (&ctx->md5_ctx, STRa(data));
     }
 
-    ctx->common.bytes_digested += buf->len;
+    ctx->common.bytes_digested += data_len;
 
     if (flag.show_digest) {
         char str[65];
         iprintf ("vb=%05d %s update %s (len=%"PRIu64" so_far=%"PRIu64") 32chars=\"%s\": before=%s after=%s\n", 
-                 buf->vb->vblock_i, DIGEST_NAME, msg, buf->len, ctx->common.bytes_digested, 
-                 str_to_printable (buf->data, MIN_(32, (int)buf->len), str), 
+                 vb->vblock_i, DIGEST_NAME, msg, data_len, ctx->common.bytes_digested, 
+                 str_to_printable (data, MIN_(32, data_len), str), 
                  digest_display_ex (digest_snapshot (&before), DD_NORMAL).s, 
                  digest_display_ex (digest_snapshot (ctx), DD_NORMAL).s);
+    }
+
+    if (ctx->common.log) {
+        FILE *f=fopen (DIGEST_LOG_FILENAME, "ab");
+        fwrite (data, data_len, 1, f);
+        fclose (f);
+    }
+}
+
+void digest_piz_verify_one_vb (VBlock *vb)
+{
+    static bool failed = false; 
+
+    // if testing, compare digest up to this VB to that calculated on the original file and transferred through SectionHeaderVbHeader
+    // note: we cannot test this unbind mode, because the digests are commulative since the beginning of the bound file
+    if (!failed && !flag.unbind && !v8_digest_is_zero (vb->digest_so_far)) {
+        Digest piz_digest_so_far = digest_snapshot (&txt_file->digest_ctx_bound);
+
+        // warn if VB is bad, but don't exit, so file reconstruction is complete and we can debug it
+        if (!digest_recon_is_equal (piz_digest_so_far, vb->digest_so_far) && !digest_is_equal (vb->digest_so_far, DIGEST_NONE)) {
+
+            TEMP_FLAG (quiet, flag.quiet && !flag.show_digest);
+
+            // dump bad vb to disk
+            WARN ("%s of reconstructed vblock=%u,component=%u (%s) differs from original file (%s).\n"
+                    "Note: genounzip is unable to check the %s subsequent vblocks once a vblock is bad\n"
+                    "Bad reconstructed vblock has been dumped to: %s\n"
+                    "To see the same data in the original file:\n"
+                    "genozip --biopsy %u %s (+any parameters used to compress this file)\n"
+                    "If this is unexpected, please contact support@genozip.com.\n", 
+                    DIGEST_NAME, vb->vblock_i, z_file->num_txt_components_so_far, 
+                    digest_display (piz_digest_so_far).s, digest_display (vb->digest_so_far).s, 
+                    DIGEST_NAME, txtfile_dump_vb (vb, z_name), vb->vblock_i, file_guess_original_filename (txt_file));
+
+            RESTORE_FLAG (quiet);
+
+            failed = true; // no point in test the rest of the vblocks as they will all fail - MD5 is commulative
+        }
     }
 }
 
@@ -124,36 +175,9 @@ void digest_one_vb (VBlock *vb)
     }
     
     else { // PIZ
-        static bool failed = false; // note: when testing multiple files, if a file fails the test, we don't test subsequent files, so no need to reset this variable
-
         digest_update (&txt_file->digest_ctx_bound, &vb->txt_data, flag.unbind ? "vb:digest_ctx_single" : "vb:digest_ctx_bound"); // labels consistent with ZIP so we can easily diff PIZ vs ZIP
 
-        // if testing, compare digest up to this VB to that calculated on the original file and transferred through SectionHeaderVbHeader
-        // note: we cannot test this unbind mode, because the digests are commulative since the beginning of the bound file
-        if (!failed && !flag.unbind && !v8_digest_is_zero (vb->digest_so_far)) {
-            Digest piz_digest_so_far = digest_snapshot (&txt_file->digest_ctx_bound);
-
-            // warn if VB is bad, but don't exit, so file reconstruction is complete and we can debug it
-            if (!digest_recon_is_equal (piz_digest_so_far, vb->digest_so_far) && !digest_is_equal (vb->digest_so_far, DIGEST_NONE)) {
-
-                TEMP_FLAG (quiet, flag.quiet && !flag.show_digest);
-
-                // dump bad vb to disk
-                WARN ("%s of reconstructed vblock=%u,component=%u (%s) differs from original file (%s).\n"
-                      "Note: genounzip is unable to check the %s subsequent vblocks once a vblock is bad\n"
-                      "Bad reconstructed vblock has been dumped to: %s\n"
-                      "To see the same data in the original file:\n"
-                      "genozip --biopsy %u %s (+any parameters used to compress this file)\n"
-                      "If this is unexpected, please contact support@genozip.com.\n", 
-                      DIGEST_NAME, vb->vblock_i, z_file->num_txt_components_so_far, 
-                      digest_display (piz_digest_so_far).s, digest_display (vb->digest_so_far).s, 
-                      DIGEST_NAME, txtfile_dump_vb (vb, z_name), vb->vblock_i, file_guess_original_filename (txt_file));
-
-                RESTORE_FLAG (quiet);
-
-                failed = true; // no point in test the rest of the vblocks as they will all fail - MD5 is commulative
-            }
-        }
+        digest_piz_verify_one_vb (vb);        
     }
 
     vb_digest_last++; // next please

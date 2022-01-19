@@ -355,7 +355,12 @@ Digest txtfile_read_header (bool is_first_txt)
     Digest header_digest = DIGEST_NONE;
 
     if (!flag.data_modified && !flag.gencomp_num) { // note: we don't add generated component's header to the digest
-        if (flag.bind && is_first_txt) digest_update (&z_file->digest_ctx_bound, &evb->txt_data, "txt_header:digest_ctx_bound");
+        // note: we calculate digest_ctx_bound for SAM/BAM because they it always be bound with gencomp
+        if ((flag.bind == BIND_ALL && is_first_txt) ||          // only first header if we're binding multiple txt files
+            (flag.bind == BIND_GENCOMP && !flag.gencomp_num)) { // header of main gencomp component (we might be compressing multiple files on the command line)
+            if (flag.log_digest) digest_start_log (&z_file->digest_ctx_bound); 
+            digest_update (&z_file->digest_ctx_bound, &evb->txt_data, "txt_header:digest_ctx_bound");
+        }
         digest_update (&z_file->digest_ctx_single, &evb->txt_data, "txt_header:digest_ctx_single");
 
         header_digest = digest_snapshot (&z_file->digest_ctx_single);
@@ -475,7 +480,7 @@ uint64_t txtfile_max_memory_per_vb (void)
     return segconf.vb_size - TXTFILE_READ_VB_PADDING;
 }
 
-// ZIP main threads
+// ZIP main threads.
 void txtfile_read_vblock (VBlock *vb)
 {
     START_TIMER;
@@ -504,10 +509,17 @@ void txtfile_read_vblock (VBlock *vb)
                              flag.add_line_numbers    || // vcf_zip_read_one_vb   needs to count lines
                              flag.biopsy;
 
-    while (1) {
+    txt_file->header_only = false; // optimistic initialization
+
+    for (bool first=true; ; first=false) {
 
         uint32_t len = max_memory_per_vb > vb->txt_data.len ? txtfile_read_block (vb, MIN_(max_memory_per_vb - vb->txt_data.len, 1<<30 /* read() can't handle more */), always_uncompress) 
                                                             : 0;
+        if (!len && first && !vb->txt_data.len) {
+            if (vb->vblock_i <= 1) txt_file->header_only = true; // header-only file (the header was already read, and there is no additional data)
+                                                                 // note: this doesn't capture header-only 2nd+ bound file
+            return;
+        }
 
         // when reading BGZF, we might be filled up even without completely filling max_memory_per_vb 
         // if there is room left for only a partial BGZF block (we can't read partial blocks)

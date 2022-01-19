@@ -26,6 +26,7 @@ typedef union {
 
 typedef struct {
     bool initialized;
+    bool log;
     uint64_t bytes_digested;
     uint32_t     lo, hi;
     uint32_t     a, b, c, d;
@@ -37,6 +38,7 @@ typedef struct {
 
 typedef struct {
     bool initialized;
+    bool log;
     uint64_t bytes_digested;
     uint32_t adler; // native endianity
 } AdlerContext;
@@ -44,6 +46,7 @@ typedef struct {
 typedef union {
     struct {
         bool initialized;
+        bool log;
         uint64_t bytes_digested; 
     } common;
     Md5Context md5_ctx;
@@ -52,10 +55,14 @@ typedef union {
 
 extern void digest_initialize (void);
 extern Digest digest_finalize (DigestContext *ctx, const char *msg);
-extern void digest_update (DigestContext *ctx, ConstBufferP buf, const char *msg);
+extern void digest_update_do (VBlockP vb, DigestContext *ctx, const char *data, uint64_t data_len, const char *msg);
+#define digest_update(ctx, buf, msg) digest_update_do ((buf)->vb, (ctx), STRb(*(buf)), (msg))
+
 extern Digest digest_do (const void *data, uint32_t len);
 extern Digest digest_snapshot (const DigestContext *ctx);
 extern void digest_one_vb (VBlockP vb);
+extern void digest_piz_verify_one_vb (VBlockP vb);
+extern void digest_start_log (DigestContext *ctx);
 
 typedef struct { char s[34]; } DigestDisplay;
 extern DigestDisplay digest_display (Digest digest);

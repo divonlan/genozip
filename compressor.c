@@ -161,7 +161,7 @@ uint32_t comp_compress (VBlock *vb, Buffer *z_data,
 
     // if we're compressing a global buffer in the main thread, we can write it immeidately
     if (vb == evb && header->section_type != SEC_NONE) 
-        zfile_output_processed_vb (NULL, vb);
+        zfile_output_processed_vb (vb);
 
 done:
     return data_compressed_len;

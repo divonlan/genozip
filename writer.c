@@ -36,6 +36,7 @@ typedef struct {
     bool in_plan;                 // this VB is used in the reconstruction plan
     bool no_read;                 // entire VB filtered out and should not be read or reconstructed (despite maybe being in the plan)
                                   // if no_read=false, VB should be reconstructed, but writing it depends on in_plan
+    bool full_vb;
     VBlock *vb;                   // data handed over main -> compute -> main -> writer
 } VbInfo;
 
@@ -92,6 +93,12 @@ bool writer_is_vb_no_read (uint32_t vb_i)
 {
     bool no_read = !vb_info.len || ENT (VbInfo, vb_info, vb_i)->no_read;
     return no_read;
+}
+
+bool writer_is_vb_full_vb (uint32_t vb_i)
+{
+    bool full_vb = !vb_info.len || ENT (VbInfo, vb_info, vb_i)->full_vb;
+    return full_vb;
 }
 
 void writer_get_txt_file_info (uint32_t *first_comp_i, uint32_t *num_comps, Section *start_sl) // out
@@ -186,9 +193,14 @@ static uint32_t writer_init_comp_info (void)
            || ( flag.luft && comp->rejects_coord == DC_PRIMARY)  // concatenating: if --luft, show ##primary_only rejects components (appears in the vcf header)
            || (!flag.luft && comp->rejects_coord == DC_LUFT)     // concatenating: if primary, show ##luft_only rejects components (appears in the vcf header)
            || flag.one_component-1 == comp_i        // single component: this is it (note: if dual coord, this will pointing a rejects components since we switched their order)
-           || (Z_DT(DT_VCF) && !flag.one_component && comp_i==0)    // concatenating: show first header (0 if no rejects)
-           || (Z_DT(DT_VCF) && !flag.one_component && (comp-1)->rejects_coord)); // concatenating: show first header (first after rejects)
-           
+           || (!flag.one_component && comp_i==0)    // concatenating: show first header (0 if no rejects)
+           || (!flag.one_component && (comp-1)->rejects_coord)) // concatenating: show first header (first after rejects)
+        &&
+           (  !(Z_DT(DT_SAM) || Z_DT(DT_BAM))       // This clause only limits SAM/BAM
+           || z_file->num_components == 1           // files generated up to v13.0.8
+           || flag.one_component-1 == comp_i        // A specific component is requested
+           || (!flag.one_component && comp_i==2));  // Show only the txt header of the normal component
+
         if (comp->info.in_plan) {
             // mutex: locked:    here (at initialization)
             //        waited on: writer thread, wanting the data
@@ -319,13 +331,13 @@ static void writer_move_liftover_rejects_to_front (void)
 static void writer_move_sam_gencomp_to_front (void)
 {
     unsigned num_components = sections_count_sections (SEC_TXT_HEADER);
-    ASSERT (num_components==2 || num_components==3, "Error: %s is a SAM/BAM file with generated components, expecting 2 or 3 TXT_HEADER sections, but found %u", z_name, num_components);
+    ASSERT (num_components==3, "Error: %s is a SAM/BAM file with generated components, expecting 3 TXT_HEADER sections, but found %u", z_name, num_components);
 
     Section normal=0, gc_1=0, gc_2=0;
     normal = sections_first_sec (SEC_TXT_HEADER, false);
     gc_1 = normal; sections_next_sec (&gc_1, SEC_TXT_HEADER);
     if (num_components == 3)
-        gc_2 = gc_1; sections_next_sec (&gc_2, SEC_TXT_HEADER);
+        { gc_2 = gc_1; sections_next_sec (&gc_2, SEC_TXT_HEADER); }
 
     // switch places between the first generated component and the normal components
     gc_1 = sections_pull_component_up (NULL, gc_1);
@@ -397,6 +409,8 @@ static void writer_add_trival_plan (const CompInfo *comp)
 
         if (!v->in_plan) continue;
 
+        v->full_vb = true; // BGZF-recompression can be done by the compute thread
+
         NEXTENT (ReconPlanItem, z_file->recon_plan) = (ReconPlanItem){ 
             .full_vb.plan_type  = PLAN_FULL_VB, // all lines
             .full_vb.vb_i       = vb_i
@@ -456,7 +470,7 @@ static void writer_add_plan_from_recon_section (const CompInfo *comp, Section re
 {
     zfile_get_global_section (SectionHeaderReconPlan, SEC_RECON_PLAN, recon_plan_sl, 
                               &evb->compressed, "compressed");
-
+ 
     // assign outs
     *conc_writing_vbs = MAX_(*conc_writing_vbs, BGEN32 (header.conc_writing_vbs));
     *vblock_mb = BGEN32 (header.vblock_mb);
@@ -478,7 +492,12 @@ static void writer_add_plan_from_recon_section (const CompInfo *comp, Section re
 
         NEXTENT (ReconPlanItem, z_file->recon_plan) = plan[i];
         
-        if (!vb_is_pulled_up[plan[i].x.vb_i - comp->first_vb_i]) { // first encounter with this VB in the plan
+        if (plan[i].x.plan_type == PLAN_FULL_VB)
+            ENT (VbInfo, vb_info, plan[i].full_vb.vb_i)->full_vb = true; // BGZF recompression can be done by the compute thread
+
+        // if we're sorting - re-order section list, so reconstruction is ordered according to the first
+        // occurance of VB in the recon_plan. 
+        if (flag.sort && !vb_is_pulled_up[plan[i].x.vb_i - comp->first_vb_i]) { // first encounter with this VB in the plan
             // move all sections of vb_i to be immediately after sl ; returns last section of vb_i after move
             sl = sections_pull_vb_up (plan[i].x.vb_i, sl); 
             vb_is_pulled_up[plan[i].x.vb_i - comp->first_vb_i] = true;
@@ -520,7 +539,7 @@ void writer_create_plan (void)
 
     writer_init_vb_info();
 
-    if (flag.no_writer && !flag.show_recon_plan) return; // we prepare the *_info_* data even if not writing
+    if (flag.no_writer_thread && !flag.show_recon_plan) return; // we prepare the *_info_* data even if not writing
 
     uint32_t conc_writing_vbs=0, vblock_mb=0;
 
@@ -582,23 +601,33 @@ void writer_create_plan (void)
 // Writer thread stuff
 // -------------------
 
-static void writer_flush_vb (VBlockP wvb, VBlockP vb)
+static void writer_flush_vb (VBlockP wvb, VBlockP vb, bool is_txt_header, bool is_full_vb)
 {
     START_TIMER;
 
-    if (txt_file->codec == CODEC_BGZF) {
-        // compress now if not compressed yet (--interleave, --downsample, sorting)
-        if (flag.maybe_vb_modified_by_writer) 
-            bgzf_compress_vb (vb); // compress data into vb->compressed (using BGZF blocks from source file or new ones)
+    // note: normally digest calculation is done in the compute thread in piz_reconstruct_one_vb, but in
+    // case of an unmodified VB that inserts lines from gencomp VBs, we do it here, as we re-assemble the original VB
+    if (z_has_gencomp && !flag.data_modified && !is_txt_header)
+        digest_update_do (vb, &txt_file->digest_ctx_bound, STRb(vb->txt_data),
+                          flag.unbind ? "vb:digest_ctx_single" : "vb:digest_ctx_bound"); 
 
-        bgzf_write_to_disk (wvb, vb); 
-    }
+    if (!flag.no_writer) {
 
-    else if (vb->txt_data.len) {
-        file_write (txt_file, STRb(vb->txt_data));
+        if (txt_file->codec == CODEC_BGZF) {
+            // compress now if not compressed yet by compute thread (VBs) or main thread (txt_header)
+            if (flag.maybe_vb_modified_by_writer || // compute thread didn't compress because writer could modify the data (--interleave, --downsample, sorting)
+                (!is_full_vb && !is_txt_header))    // the recon plan for this VB is NOT FULL_VB - either because it was modified or because SAM/BAM gencomp lines are re-integrated to the VB to re-assemble the original un-modified VB
+                bgzf_compress_vb (vb); // compress data into vb->compressed (using BGZF blocks from source file or new ones)
 
-        txt_file->txt_data_so_far_single += vb->txt_data.len;
-        txt_file->disk_so_far            += vb->txt_data.len;
+            bgzf_write_to_disk (wvb, vb); 
+        }
+
+        else if (vb->txt_data.len) {
+            file_write (txt_file, STRb(vb->txt_data));
+
+            txt_file->txt_data_so_far_single += vb->txt_data.len;
+            txt_file->disk_so_far            += vb->txt_data.len;
+        }
     }
 
     // free, so in case this is wvb we can use it for more lines
@@ -733,6 +762,8 @@ static void writer_main_loop (VBlockP wvb)
 {
     ASSERTNOTNULL (wvb);
 
+    threads_set_writer_thread();
+
     // execute reconstruction plan
     for (uint64_t i=0; i < txt_file->recon_plan.len; i++) { // note: recon_plan.len maybe 0 if everything is filtered out
 
@@ -758,19 +789,20 @@ static void writer_main_loop (VBlockP wvb)
         switch (p->x.plan_type) {
 
             case PLAN_TXTHEADER:   
-                writer_flush_vb (wvb, v->vb); // write the txt header in its entirety
+                writer_flush_vb (wvb, v->vb, true, false); // write the txt header in its entirety
                 vb_release_vb (&v->vb);
                 break;
 
             case PLAN_FULL_VB:   
                 if (!flag.downsample) {
-                    writer_flush_vb (wvb, v->vb); // write entire VB
+                    writer_flush_vb (wvb, v->vb, false, true); // write entire VB
                     txt_file->lines_written_so_far += v->vb->num_nondrop_lines;
                 }
                 else 
                     writer_write_line_range (wvb, v, 0, v->vb->lines.len);
 
-                if (z_has_gencomp && !flag.data_modified) digest_one_vb (&v->vb); 
+                if (z_has_gencomp && !flag.data_modified) 
+                    digest_piz_verify_one_vb (v->vb); 
 
                 vb_release_vb (&v->vb);
                 break;
@@ -781,10 +813,13 @@ static void writer_main_loop (VBlockP wvb)
 
             case PLAN_END_OF_VB: // done with VB - free the memory (happens after a series of "default" line range entries)
 
+                writer_flush_vb (wvb, wvb, false, false); // we flush, because we might also calculate the digest
+
                 // note: normally digest calculation is done in the compute thread in piz_reconstruct_one_vb, but in
-                // case of an unmodified VB that inserts lines from gencomp VBs, we do it here.
-                if (z_has_gencomp && !flag.data_modified) digest_one_vb (&v->vb); 
-xxx not good! we need to do the digest_update in writer_write_line_range and the verification test here
+                // case of an unmodified VB that inserts lines from gencomp VBs, we do it here, after original VB is re-assembled
+                if (z_has_gencomp && !flag.data_modified) 
+                    digest_piz_verify_one_vb (v->vb); 
+
                 vb_release_vb (&v->vb);
                 break;
 
@@ -799,12 +834,14 @@ xxx not good! we need to do the digest_update in writer_write_line_range and the
                 break;
         }
 
-        if (wvb->txt_data.len > 4*1024*1024) // flush VB every 4MB
-            writer_flush_vb (wvb, wvb);
+        if (wvb->txt_data.len > 4*1024*1024)  // flush VB every 4MB
+            writer_flush_vb (wvb, wvb, false, false);
     }
 
-    writer_flush_vb (wvb, wvb);
+    writer_flush_vb (wvb, wvb, false, false);
     vb_release_vb (&wvb); 
+
+    threads_unset_writer_thread();
 }
 
 // PIZ main thread: launch writer thread to write to a single txt_file (one or more components)
@@ -812,7 +849,7 @@ static void writer_start_writing (uint32_t txt_file_i)
 {
     ASSERTNOTNULL (txt_file);
 
-    if (writer_thread != THREAD_ID_NONE || flag.no_writer) return;
+    if (writer_thread != THREAD_ID_NONE || flag.no_writer_thread) return;
 
     ASSERT (txt_file_i < txt_file_info.len, "txt_file_i=%u is out of range txt_file_info.len=%u", 
             txt_file_i, (unsigned)txt_file_info.len);
@@ -830,7 +867,7 @@ static void writer_start_writing (uint32_t txt_file_i)
 // PIZ main thread: wait for writer thread to finish writing a single txt_file (one or more components)
 void writer_finish_writing (bool is_last_txt_file)
 {
-    if (flag.no_writer || !txt_file || writer_thread == THREAD_ID_NONE) return;
+    if (flag.no_writer_thread || !txt_file || writer_thread == THREAD_ID_NONE) return;
 
     // wait for thread to complete (possibly it completed already)
     threads_join (&writer_thread, NULL); // also sets writer_thread=THREAD_ID_NONE
@@ -852,7 +889,7 @@ void writer_finish_writing (bool is_last_txt_file)
 // PIZ main thread
 static void writer_handover (VbInfo *v, VBlock *vb)
 {
-    if (flag.no_writer) return;
+    if (flag.no_writer_thread) return;
 
     if (!v->in_plan) return; // we don't need this data as we are not going to write any of it
 

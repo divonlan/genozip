@@ -53,6 +53,7 @@ void profiler_add (ConstVBlockP vb)
     ADD(zip_compress_ctxs);
     ADD(codec_assign_best_codec);
     ADD(bgzf_io_thread);
+    ADD(bgzf_writer_thread);
     ADD(bgzf_compute_thread);
     ADD(reconstruct_vb);
     ADD(piz_get_line_subfields);
@@ -148,6 +149,7 @@ void profiler_print_report (void)
         PRINT (piz_read_one_vb, 1);
         PRINT (read, 2);
         PRINT (bgzf_io_thread, 1);
+        PRINT (bgzf_writer_thread, 1);
         PRINT (write, 1);
         iprintf ("GENOUNZIP compute threads: %u\n", ms(profile.compute));
         PRINT (zfile_uncompress_section, 1);
@@ -162,7 +164,7 @@ void profiler_print_report (void)
         PRINT (compressor_longr, 2);
         print_ctx_compressor_times();
         PRINT (reconstruct_vb, 1);
-        PRINT (md5, 1);
+        PRINT (md5, 1); // note: in SAM/BAM digest is done in the writer thread, otherwise its done in the compute thread. TODO: change level to 0 in case of SAM/BAM
         PRINT (bgzf_compute_thread, 1);
         PRINT (piz_get_line_subfields, 2);
         PRINT (codec_hapmat_piz_get_one_line, 2);

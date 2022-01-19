@@ -43,7 +43,7 @@
 
 static Mutex wait_for_vb_1_mutex = {};
 
-static void zip_display_compression_ratio (Digest md5, bool is_final_component)
+static void zip_display_compression_ratio (Digest md5)
 {
     float z_bytes        = MAX_((float)z_file->disk_so_far, 1.0); // at least one, to avoid division by zero in case of a z_bytes=0 issue
     float plain_bytes    = (float)z_file->txt_data_so_far_bind;
@@ -74,7 +74,7 @@ static void zip_display_compression_ratio (Digest md5, bool is_final_component)
 
         comp_bytes_bind += comp_bytes;
 
-        if (is_final_component) { 
+        if (z_file->z_closes_after_me) { 
             ratio_vs_comp = comp_bytes_bind / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
             if (flag.debug_progress) 
                 iprintf ("Ratio calculation: ratio_vs_comp=%f = comp_bytes_bind=%"PRIu64" / z_bytes=%"PRIu64"\n",
@@ -600,6 +600,8 @@ static void zip_write_global_area (Digest single_component_digest)
 
     // compress genozip header (including its payload sectionlist and footer) into evb->z_data
     zfile_compress_genozip_header (single_component_digest);    
+
+    if (DTPZ(zip_free_end_of_z)) DTPZ(zip_free_end_of_z)();
 }
 
 // entry point for ZIP compute thread
@@ -744,11 +746,8 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
 }
 
 // called main thread, in order of VBs
-static void zip_complete_processing_one_vb (Dispatcher dispatcher, VBlockP vb)
+static void zip_complete_processing_one_vb (VBlockP vb)
 {
-    if (!flag.gencomp_num && (vb->gencomp[0].len || vb->gencomp[1].len)) 
-        dispatcher_set_cleanup_after_me (dispatcher, false);
-
     if (DTP(zip_after_compute)) DTP(zip_after_compute)(vb);
     
     // update z_data in memory (its not written to disk yet)
@@ -757,7 +756,7 @@ static void zip_complete_processing_one_vb (Dispatcher dispatcher, VBlockP vb)
     max_lines_per_vb = MAX_(max_lines_per_vb, vb->lines.len);
 
     if (!flag.make_reference && !flag.seg_only)
-        zfile_output_processed_vb (NULL, vb);
+        zfile_output_processed_vb (vb);
     
     zip_update_txt_counters (vb);
 
@@ -770,8 +769,7 @@ static void zip_complete_processing_one_vb (Dispatcher dispatcher, VBlockP vb)
 // completes, this function proceeds to write the output to the output file. It can dispatch
 // several threads in parallel.
 void zip_one_file (const char *txt_basename, 
-                   bool *is_last_file,     // in/out very last file in this execution
-                   bool z_closes_after_me) // we will finalize this z_file after writing this component
+                   bool is_last_user_txt_file)  // the last user-specified txt file in this execution
 {
     static DataType last_data_type = DT_NONE;
     Dispatcher dispatcher = 0;
@@ -785,7 +783,7 @@ void zip_one_file (const char *txt_basename,
     if (!flag.bind) prev_file_first_vb_i = prev_file_last_vb_i = 0; // reset if we're not binding
 
     // we cannot bind files of different type
-    ASSINP (!flag.bind || txt_file->data_type == last_data_type || last_data_type == DT_NONE, 
+    ASSINP (flag.bind == BIND_NONE || flag.bind == BIND_GENCOMP || txt_file->data_type == last_data_type || last_data_type == DT_NONE, 
             "%s: cannot bind %s because it is a %s file, whereas the previous file was a %s",
             global_cmd, txt_name, dt_name (txt_file->data_type), dt_name (last_data_type));
     last_data_type =  txt_file->data_type;
@@ -803,12 +801,6 @@ void zip_one_file (const char *txt_basename,
     bool success = txtheader_zip_read_and_compress (&txt_header_size); // also increments z_file->num_txt_components_so_far
     if (!success) goto finish; // eg 2nd+ VCF file cannot bind, because of different sample names
 
-// xxx we need to keep SAM/BAM open too, but we don't know yet if there are SA files?
-    // if (z_dual_coords && !flag.gencomp_num) { 
-    //     *is_last_file = false; // we're not the last file - at leasts, the liftover rejects file is after us
-    //     z_closes_after_me = false;
-    // }
-
     DT_FUNC (txt_file, zip_initialize)();
 
     segconf_calculate();
@@ -819,7 +811,7 @@ void zip_one_file (const char *txt_basename,
         dispatcher_fan_out_task ("zip", txt_basename, 
                                  txt_file->redirected ? PROGRESS_MESSAGE : PROGRESS_PERCENT,
                                  txt_file->redirected ? "Compressing..." : NULL, 
-                                 false, *is_last_file, z_closes_after_me, 
+                                 false,  
                                  flag.xthreads, prev_file_last_vb_i, 300,
                                  zip_prepare_one_vb_for_dispatching, 
                                  zip_compress_one_vb, 
@@ -842,10 +834,8 @@ finish:
     // reconstruction plan (for VCF - for DVCF or --sort, for SAM - re-integrate supp/secondary alignments)
     if (!flag.seg_only && DTPZ(compress_recon_plan)) 
         DTPZ(compress_recon_plan)();
-
-    z_closes_after_me = *is_last_file = dispatcher_get_cleanup_after_me (dispatcher); // possibly modified in zip_complete_processing_one_vb due to a "generated component"
-    
-    if (z_closes_after_me && !flag.seg_only) {
+        
+    if (z_file->z_closes_after_me && !flag.seg_only) {
         DT_FUNC (txt_file, zip_after_vbs)();
     
         zip_write_global_area (single_component_digest);
@@ -853,18 +843,20 @@ finish:
         if (chain_is_loaded && !Z_DT(DT_CHAIN)) vcf_liftover_display_lift_report();
     }
 
-    zip_display_compression_ratio (flag.bind ? DIGEST_NONE : single_component_digest, z_closes_after_me); // Done for reference + final compression ratio calculation
+    zip_display_compression_ratio (flag.bind ? DIGEST_NONE : single_component_digest); // Done for reference + final compression ratio calculation
     
-    if (flag.md5 && flag.bind && z_file->num_txt_components_so_far > 1 && z_closes_after_me) 
+    if (flag.md5 && flag.bind && z_file->z_closes_after_me &&
+        ((flag.bind != BIND_GENCOMP && z_file->num_txt_components_so_far > 1) ||
+         (flag.bind == BIND_GENCOMP && !flag.gencomp_num)))
         progress_concatenated_md5 (dt_name (z_file->data_type), digest_finalize (&z_file->digest_ctx_bound, "file:digest_ctx_bound"));
 
-    z_file->disk_size              = z_file->disk_so_far;
+    z_file->disk_size = z_file->disk_so_far;
 
-    if (z_closes_after_me) 
+    prev_file_first_vb_i = first_vb_i;
+    dispatcher_finish (&dispatcher, &prev_file_last_vb_i, z_file->z_closes_after_me && !is_last_user_txt_file);
+
+    if (z_file->z_closes_after_me) 
         prev_file_first_vb_i = prev_file_last_vb_i = 0; // reset statics
     
-    prev_file_first_vb_i = first_vb_i;
-    dispatcher_finish (&dispatcher, &prev_file_last_vb_i);
-
     DT_FUNC (txt_file, zip_finalize)();
 }

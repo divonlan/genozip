@@ -319,6 +319,7 @@ typedef struct File {
     bool is_remote;                    // true if file is downloaded from a url
     bool redirected;                   // txt_file: true if this file is redirected from stdin/stdout
     bool is_eof;                       // we've read the entire file
+    bool header_only;                  // ZIP txt_file: file has only the data-type header and no data
     DataType data_type;
     Codec codec;                       // ZIP - txt_file: generic codec used with this file (in PIZ we use flag.bgzf instead)
                                        // ZIP - z_file: copy from txt_file.codec, but not for rejects file    
@@ -331,7 +332,9 @@ typedef struct File {
     // this relate to the textual data represented. In case of READ - only data that was picked up from the read buffer.
     int64_t txt_data_so_far_single;    // txt_file: data read (ZIP) or written (PIZ) to/from txt file so far
                                        // z_file: txt data represented in the GENOZIP data written (ZIP) or read (PIZ) to/from the genozip file so far for the current VCF
-    int64_t header_size;               // txt_file ZIP: size of txt header
+    int64_t header_size;               // txt_file ZIP: size of txt header 
+    int64_t txt_txtheader_so_far_bind; // z_file ZIP: combined size of all headers in bound file
+    
     //      seggable_data_so_far = txt_data_so_far_single - header_size
     int64_t seggable_data_so_far_gz_bz2; // txt_file ZIP: if source gz or bz2 compression, this is the compressed txt_data_so_far_single 
     int64_t txt_data_so_far_bind;      // z_file only: uncompressed txt data represented in the GENOZIP data written so far for all bound files
@@ -370,6 +373,8 @@ typedef struct File {
     SectionHeaderTxtHeader txt_header_single;        // store the txt header of single component in bound mode
     uint8_t txt_header_enc_padding2[AES_BLOCKLEN-1]; // same
 
+    bool z_closes_after_me;            // Z_FILE ZIP: this z_file will close after completing the current txt_file
+    
     // dictionary information used for writing GENOZIP files - can be accessed only when holding mutex
     Mutex dicts_mutex;                 // this mutex protects contexts and num_contexts from concurrent adding of a new dictionary
     DidIType num_contexts;             // length of populated subfield_ids and mtx_ctx;

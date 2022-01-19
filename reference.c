@@ -563,7 +563,7 @@ void ref_load_stored_reference (Reference ref)
     dispatcher_fan_out_task ("load_ref", external ? ref->filename : z_file->basename, 
                              external ? PROGRESS_PERCENT : PROGRESS_NONE, 
                              external ? "Reading reference file" : NULL, 
-                             flag.test, true, true, false, 0, 100,
+                             flag.test, false, 0, 100,
                              ref_read_one_range, 
                              ref_uncompress_one_range, 
                              NULL);
@@ -772,7 +772,7 @@ static Range *ref_seg_get_locked_range_denovo (VBlockP vb, Reference ref, WordIn
         .first_pos      = range_i2pos (range_i),
         .last_pos       = range_i2pos (range_i) + REF_NUM_DENOVO_SITES_PER_RANGE - 1,
         .chrom_name_len = vb->chrom_name_len,
-        .chrom          = WORD_INDEX_NONE,  // Note: in REF_INTERNAL, in a headerless file, the chrom index is private to the VB prior to merge, so we can't use it 
+        .chrom          = WORD_INDEX_NONE,  // Note: in REF_INTERNAL, in a headerless file, the chrom index is private to the VB prior to merge, so we can't use it. It will be assigned later, in ref_finalize_denovo_ranges.
         .chrom_name     = MALLOC (vb->chrom_name_len),
         .ref            = bit_array_alloc (REF_NUM_DENOVO_SITES_PER_RANGE * 2, false),
         .is_set         = bit_array_alloc (REF_NUM_DENOVO_SITES_PER_RANGE, true), // nothing is set yet - in ZIP, bits get set as they are encountered in the compressing txt file
@@ -1079,9 +1079,11 @@ static void ref_compress_one_range (VBlockP vb)
 
     // store the stored_ra data for this range
     if (r) {
+        ASSERT (r->chrom >= 0, "Invalid r->chrom=%d for contig \"%.*s\"", r->chrom, r->chrom_name_len, r->chrom_name);
+
         spin_lock (gref->stored_ra_spin);
         NEXTENT (RAEntry, gref->stored_ra) = (RAEntry){ .vblock_i    = vb->vblock_i, 
-                                                        .chrom_index = flag.make_reference == REF_EXT_STORE ? *ENT (WordIndex, z_file->ref2chrom_map, r->chrom) : r->chrom,
+                                                        .chrom_index = flag.reference == REF_EXT_STORE ? *ENT (WordIndex, z_file->ref2chrom_map, r->chrom) : r->chrom,
                                                         .min_pos     = r->first_pos,
                                                         .max_pos     = r->last_pos };
         spin_unlock (gref->stored_ra_spin);
@@ -1276,7 +1278,7 @@ void ref_compress_ref (void)
 
     // proceed to compress all ranges that have still have data in them after copying
     Dispatcher dispatcher = 
-        dispatcher_fan_out_task ("compress_ref", NULL, PROGRESS_MESSAGE, "Writing reference...", false, true, true, false, 0, 5000,
+        dispatcher_fan_out_task ("compress_ref", NULL, PROGRESS_MESSAGE, "Writing reference...", false, false, 0, 5000,
                                  flag.make_reference ? ref_make_prepare_range_for_compress : ref_prepare_range_for_compress, 
                                  ref_compress_one_range, 
                                  zfile_output_processed_vb);
@@ -1518,7 +1520,7 @@ void ref_generate_reverse_complement_genome (Reference ref)
 {
     START_TIMER;
     ref_reverse_compliment_genome_ref = ref;
-    dispatcher_fan_out_task ("generate_rev_comp_genome", NULL, PROGRESS_NONE, 0, false, true, true, false, 0, 10,
+    dispatcher_fan_out_task ("generate_rev_comp_genome", NULL, PROGRESS_NONE, 0, false, false, 0, 10,
                              ref_reverse_compliment_genome_prepare, 
                              ref_reverse_compliment_genome_do, 
                              NULL);
@@ -1543,7 +1545,7 @@ void ref_load_external_reference (Reference ref, ContextP chrom_ctx)
     SAVE_FLAGS_AUX;
 
     flag.reading_reference = ref; // tell file.c and fasta.c that this is a reference
-    flag.no_writer = true;
+    flag.no_writer = flag.no_writer_thread = true;
     flag.luft = false;
     flag.list_chroms = false;
     flag.show_gheader = false;

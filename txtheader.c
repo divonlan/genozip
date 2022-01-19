@@ -21,13 +21,10 @@
 #include "contigs.h"
 
 static bool is_first_txt = true; 
-static uint32_t total_bound_txt_headers_len = 0; 
 
 //----------
 // ZIP stuff
 //----------
-
-uint32_t txtheader_get_bound_headers_len(void) { return total_bound_txt_headers_len; }
 
 // ZIP: reads txt header and writes its compressed form to the GENOZIP file
 bool txtheader_zip_read_and_compress (uint64_t *txt_header_size)
@@ -69,10 +66,12 @@ bool txtheader_zip_read_and_compress (uint64_t *txt_header_size)
         zfile_write_txt_header (&evb->txt_data, *txt_header_size, header_digest, is_first_txt); // we write all headers in bound mode too, to support genounzip
 
     // for stats: combined length of txt headers in this bound file, or only one file if not bound
-    if (!flag.bind) total_bound_txt_headers_len=0;
+    if (!flag.bind) z_file->txt_txtheader_so_far_bind=0;
     
-    if (!(TXT_DT(DT_VCF) && flag.gencomp_num)) // we don't account for rejects files as txt_len - the variant lines are already accounted for in the main file, and the added header lines are duplicates of the main header
-        total_bound_txt_headers_len += evb->txt_data.len; 
+    // VCF note: we don't account for DVCF rejects files as txt_len - the variant lines are already accounted for in the main file, and the added header lines are duplicates of the main header
+    // SAM/BAM note: we don't account for PRIM/DEPN txt headers generated in gencomp_initialize_file
+    if (!flag.gencomp_num) 
+        z_file->txt_txtheader_so_far_bind += evb->txt_data.len; 
 
     z_file->num_txt_components_so_far++; // when compressing
 
@@ -179,20 +178,23 @@ Coords txtheader_piz_read_and_reconstruct (uint32_t component_i, Section sl)
     if (comp_vb->txt_data.len)
         DT_FUNC_OPTIONAL (z_file, inspect_txt_header, true)(comp_vb, &comp_vb->txt_data, header->h.flags.txt_header); // ignore return value
 
-    // if we're translating from one data type to another (SAM->BAM, BAM->FASTQ, ME23->VCF etc) translate the txt header 
-    // note: in a header-less SAM, after translating to BAM, we will have a header
-    DtTranslation trans = dt_get_translation(NULL);
-    if (trans.txtheader_translator && !flag.no_header) trans.txtheader_translator (comp_vb, &comp_vb->txt_data); 
-
     // hand-over txt header if it is needed (it won't be if flag.no_header)
     if (writer_is_txtheader_in_plan (component_i)) {
+
+        // if we're translating from one data type to another (SAM->BAM, BAM->FASTQ, ME23->VCF etc) translate the txt header 
+        // note: in a header-less SAM, after translating to BAM, we will have a header
+        DtTranslation trans = dt_get_translation(NULL);
+        if (trans.txtheader_translator && !flag.no_header) trans.txtheader_translator (comp_vb, &comp_vb->txt_data); 
 
         if (comp_vb->txt_data.len) {
 
             bool test_digest = !digest_is_zero (header->digest_header) && // in v8 without --md5, we had no digest
                                !flag.data_modified; // no point calculating digest if we know already the file will be different
 
-            if (test_digest) digest_update (&txt_file->digest_ctx_bound, &comp_vb->txt_data, "txt_header:digest_ctx_bound");
+            if (test_digest) {
+                if (flag.log_digest) digest_start_log (&txt_file->digest_ctx_bound); 
+                digest_update (&txt_file->digest_ctx_bound, &comp_vb->txt_data, "txt_header:digest_ctx_bound");
+            }
 
             if (txt_file->codec == CODEC_BGZF) {
                 // inherit BGZF blocks from source file, if isizes was loaded (i.e. not flag.data_modified) - 

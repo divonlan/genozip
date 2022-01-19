@@ -73,8 +73,8 @@ void vcf_zip_after_compute (VBlockP vb_)
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
     if (z_dual_coords && !flag.gencomp_num) { // normal file, not zipping rejects files
-        if (vb->gencomp[DC_PRIMARY-1].len) gencomp_append_file (vb_, DC_PRIMARY, "PRIM");
-        if (vb->gencomp[DC_LUFT-1].len)    gencomp_append_file (vb_, DC_LUFT, "LUFT");
+        if (vb->gencomp[DC_PRIMARY-1].len) gencomp_append_file (vb_, DC_PRIMARY);
+        if (vb->gencomp[DC_LUFT-1].len)    gencomp_append_file (vb_, DC_LUFT);
     }
 
     if (chain_is_loaded && vb->rejects_report.len) 

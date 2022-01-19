@@ -15,7 +15,7 @@ typedef struct {
     int64_t file_open, file_close, buf_low_level_free, buf_remove_from_buffer_list,
         read, compute, compressor_bz2, compressor_lzma, compressor_bsc, 
         write, piz_read_one_vb, codec_hapmat_piz_get_one_line, vb_get_vb, buf_mmap_do,
-        sam_seg_SEQ, compressor_domq, compressor_actg, bgzf_io_thread, bgzf_compute_thread,
+        sam_seg_SEQ, compressor_domq, compressor_actg, bgzf_io_thread, bgzf_compute_thread, bgzf_writer_thread,
         piz_get_line_subfields, zip_generate_b250, zip_generate_local, zip_compress_ctxs, ctx_merge_in_vb_ctx,
         zfile_uncompress_section, codec_assign_best_codec, compressor_pbwt, compressor_longr, 
         compressor_rans, compressor_arith,

@@ -94,7 +94,7 @@ typedef union SectionFlags {
 
     struct FlagsTxtHeader {
         uint8_t gencomp_num      : 2; // DVCF: DC_PRIMARY/DC_LUFT contains "##primary_only"/"##luft_only" variants or DC_NONE if not a rejects component (added v12)
-                                      // SAM/BAM: CT_SA_PRIM/CT_SA_DEPN - added 13.0.9
+                                      // SAM/BAM: SAM_COMP_PRIM/SAM_COMP_DEPN - added 13.0.9
         uint8_t is_txt_luft      : 1; // true if original source file was a dual-coordinates file in Luft rendition (v12)
         uint8_t unused           : 5;
     } txt_header;

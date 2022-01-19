@@ -47,6 +47,11 @@ bool sam_zip_dts_flag (void)
 // Seg stuff
 // ----------------------
 
+void sam_zip_free_end_of_z (void)
+{
+    sam_header_finalize(); 
+}
+
 void sam_zip_initialize (void)
 {
     bool has_hdr_contigs = sam_hdr_contigs && sam_hdr_contigs->contigs.len;
@@ -90,6 +95,9 @@ void sam_zip_initialize (void)
     seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY_MC, MC_buddy_snip, _SAM_CIGAR);
 
     seg_prepare_snip_other (SNIP_LOOKBACK, (DictId)_OPTION_XA_LOOKBACK, false, 0, XA_lookback_snip);
+
+    gencomp_initialize_file (SAM_COMP_PRIM, "PRIM");
+    gencomp_initialize_file (SAM_COMP_DEPN, "DEPN");
 }
 
 // called main thread, in order of VBs

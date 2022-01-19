@@ -270,6 +270,8 @@ extern void sam_zip_after_vbs (void);
 // HEADER stuff
 extern bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags);
 extern void sam_header_finalize (void);
+extern void sam_zip_free_end_of_z (void);
+
 extern ContigPkgP sam_hdr_contigs;
 
 // ZIP/SEG Stuff

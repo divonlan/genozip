@@ -32,8 +32,6 @@ typedef struct {
     unsigned num_running_compute_threads;
     unsigned next_vb_i;
     unsigned max_threads;
-    bool is_last_file;        // very last file in this execution
-    bool cleanup_after_me;    // free resources after dispatcher is complete
     ProgressType prog;
     const char *filename;
     char *progress_prefix;
@@ -86,7 +84,7 @@ void dispatcher_start_wallclock (void)
 }
 
 Dispatcher dispatcher_init (const char *task_name, unsigned max_threads, unsigned previous_vb_i,
-                            bool test_mode, bool is_last_file, bool cleanup_after_me,
+                            bool test_mode, 
                             const char *filename, // filename, or NULL if filename is unchanged
                             ProgressType prog, const char *prog_msg /* used if prog=PROGRESS_MESSAGE */)   
 {
@@ -94,8 +92,6 @@ Dispatcher dispatcher_init (const char *task_name, unsigned max_threads, unsigne
     dd->task_name        = task_name;
     dd->next_vb_i        = previous_vb_i;  // used if we're binding files - the vblock_i will continue from one file to the next
     dd->max_threads      = MIN_(max_threads, MAX_COMPUTED_VBS);
-    dd->is_last_file     = is_last_file;
-    dd->cleanup_after_me = cleanup_after_me;
     dd->prog             = prog;
 
     if (filename)
@@ -139,7 +135,7 @@ uint32_t dispatcher_get_next_vb_i (Dispatcher dispatcher)
     return ((DispatcherData *)dispatcher)->next_vb_i;
 }
 
-void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
+void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i, bool cleanup_after_me)
 {
     if (! *dispatcher) return; // nothing to do
 
@@ -151,13 +147,13 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i)
     // free memory allocations between files, when compressing multiple non-bound files or 
     // decompressing multiple files. 
     // don't bother freeing (=save time) if this is the last file, unless we're going to test and need the memory
-    if (dd->cleanup_after_me && (!dd->is_last_file || flag.test)) {
+    if (cleanup_after_me) {
         vb_cleanup_memory(); 
         vb_release_vb (&evb); // reset memory 
     }
     
-    if (last_vb_i && !dd->cleanup_after_me) 
-        *last_vb_i = dd->next_vb_i; // for continuing vblock_i count between subsequent bound files
+    // only relevant to the ZIP dispatcher
+    if (last_vb_i) *last_vb_i = dd->next_vb_i; // for continuing vblock_i count between subsequent bound files
 
     FREE (dd->progress_prefix);
     FREE (*dispatcher);
@@ -269,8 +265,8 @@ void dispatcher_recycle_vbs (Dispatcher dispatcher, bool release_vb)
     if (dd->processed_vb) {
 
         if (release_vb) { 
-            // WORKAROUND to bug 343: there is a race condition of unknown cause is flag.no_writer=true (eg --coverage, --count) crashes
-            if (flag.no_writer && !flag.test && !strcmp (dd->task_name, "piz")) usleep (1000); 
+            // WORKAROUND to bug 343: there is a race condition of unknown cause is flag.no_writer_thread=true (eg --coverage, --count) crashes
+            if (flag.no_writer_thread && !flag.test && !strcmp (dd->task_name, "piz")) usleep (1000); 
             vb_release_vb (&dd->processed_vb); // cleanup vb and get it ready for another usage (without freeing memory)
         }
 
@@ -319,15 +315,13 @@ Dispatcher dispatcher_fan_out_task (const char *task_name,
                                     ProgressType prog,
                                     const char *prog_msg,   // used if prog=PROGRESS_MESSAGE 
                                     bool test_mode,
-                                    bool is_last_file, 
-                                    bool cleanup_after_me, 
                                     bool force_single_thread, 
                                     uint32_t previous_vb_i, // used if binding file
                                     uint32_t idle_sleep_microsec,
-                                    DispatcherFunc prepare, DispatcherFunc compute, DispatcherOutputFunc output)
+                                    DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output)
 {
     Dispatcher dispatcher = dispatcher_init (task_name, force_single_thread ? 1 : global_max_threads, 
-                                             previous_vb_i, test_mode, is_last_file, cleanup_after_me, filename, prog, prog_msg ? prog_msg : "0%");
+                                             previous_vb_i, test_mode, filename, prog, prog_msg ? prog_msg : "0%");
     do {
         VBlock *next_vb = dispatcher_get_next_vb (dispatcher);
         bool has_vb_ready_to_compute = next_vb && next_vb->ready_to_dispatch;
@@ -344,7 +338,7 @@ Dispatcher dispatcher_fan_out_task (const char *task_name,
             VBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL, true); // this will block until one is available
             if (!processed_vb) continue; // no running compute threads 
 
-            if (output) output (dispatcher, processed_vb);
+            if (output) output (processed_vb);
             
             dispatcher_recycle_vbs (dispatcher, true);
         }        
@@ -367,16 +361,4 @@ Dispatcher dispatcher_fan_out_task (const char *task_name,
     } while (!dispatcher_is_done (dispatcher));
 
     return dispatcher;
-}
-
-void dispatcher_set_cleanup_after_me (Dispatcher dispatcher, bool cleanup_after_me)
-{
-    DispatcherData *dd = (DispatcherData *)dispatcher;
-    dd->cleanup_after_me = cleanup_after_me;
-}
-
-bool dispatcher_get_cleanup_after_me (Dispatcher dispatcher)
-{
-    DispatcherData *dd = (DispatcherData *)dispatcher;
-    return dd->cleanup_after_me;
 }

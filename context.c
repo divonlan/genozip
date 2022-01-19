@@ -871,13 +871,13 @@ static bool ctx_merge_in_one_vctx (VBlock *vb, ContextP vctx)
     zctx->num_singletons += vctx->num_singletons; // add singletons created by seg_by_ctx_ex (SNIP_LOOKUP b250 and snip in local)
     zctx->counts_section |= vctx->counts_section; // for use of ctx_compress_counts
     
-    if (vb->vblock_i == 1)
+    if (vb->vblock_i == 1 && (vctx->b250.len || vctx->local.len))  // vb=1 must have either a b250 or local section to carry the flags, otherwise the default flags are 0
         zctx->flags = vctx->flags; // vb_1 flags will be the default flags for this context, used by piz in case there are no b250 or local sections due to all_the_same. see zip_generate_b250_section and piz_read_all_ctxs
 
     uint64_t ol_len = vctx->ol_nodes.len;
     bool has_count = !vb->is_rejects_vb; // don't count rejects VB - these are duplicate lines counted in the normal VBs.
 
-    if (vb->data_type != DT_VCF || flag.gencomp_num != DC_PRIMARY) // we don't include ##primary_only VBs as they are not in the primary reconstruction, but we do include ##luft_only
+    if (!(vb->data_type == DT_VCF && flag.gencomp_num == DC_PRIMARY)) // we don't include ##primary_only VBs as they are not in the primary reconstruction, but we do include ##luft_only
         zctx->txt_len += vctx->txt_len; // for stats
 
     if (vctx->st_did_i != DID_I_NONE && zctx->st_did_i == DID_I_NONE) {
@@ -968,13 +968,23 @@ void ctx_merge_in_vb_ctx (VBlock *vb)
 
         all_merged=true; // unless proven otherwise
         bool any_merged=false;
-        for (ContextP vctx=CTX(0); vctx < CTX(vb->num_contexts); vctx++) 
+        for (ContextP vctx=CTX(0); vctx < CTX(vb->num_contexts); vctx++) {
+            if (!(   vctx->nodes.len                       // nodes need merging (some might pre-populated without b250)
+                  || vctx->ol_nodes.len                    // possibly need to update counts 
+                  || vctx->b250.len                        // some b250 might not have nodes (eg WORD_INDEX_MISSING)
+                  || vctx->txt_len                         // a context may have txt_len but the txt was segged to another context
+                  || (vctx->local.len && vb->vblock_i==1)  // zctx->flags needs setting
+                  || vctx->st_did_i != DID_I_NONE          // st_did_i needs setting
+                  || vctx->is_stats_parent))               // is_stats_parent needs setting
+               continue; // nothing to merge
+
             if (!vctx->dict_merged && vctx->dict_id.num) {
                 vctx->dict_merged = ctx_merge_in_one_vctx (vb, vctx); // false if zctx is locked by another VB
                 all_merged &= vctx->dict_merged;
                 any_merged |= vctx->dict_merged;
             }
-
+        }
+        
         // case: couldn't merge any - perhaps the one large final vctx is busy - sleep a bit rather than busy-wait
         if (!any_merged && !all_merged) usleep (100); 
     }
@@ -1506,7 +1516,7 @@ void ctx_compress_dictionaries (void)
     frag_ctx = ZCTX(0);
     frag_next_node = NULL;
 
-    dispatcher_fan_out_task ("compress_dicts", NULL, PROGRESS_MESSAGE, "Writing dictionaries...", false, true, true, false, 0, 20000,
+    dispatcher_fan_out_task ("compress_dicts", NULL, PROGRESS_MESSAGE, "Writing dictionaries...", false, false, 0, 20000,
                              ctx_prepare_for_dict_compress, 
                              ctx_compress_one_dict_fragment, 
                              zfile_output_processed_vb);
@@ -1520,8 +1530,12 @@ static Context *dict_ctx;
 
 static void ctx_dict_read_one_vb (VBlockP vb)
 {
+    Section old_dict_sl = dict_sl;
     if (!sections_next_sec (&dict_sl, SEC_DICT))
         return; // we're done - no more SEC_DICT sections
+
+    // while we could easily read non-consecutive sections, this is not expected to happen and may indicate multiple calls to zip_write_global_area
+    ASSERT0 (!old_dict_sl || (old_dict_sl+1 == dict_sl), "Unexpectedly, not all SEC_DICT sections are consecutive in the Genozip file");
 
     // create context if if section is skipped, for containters to work (skipping a section should be mirror in 
     // a container filter)
@@ -1645,7 +1659,7 @@ void ctx_read_all_dictionaries (void)
                             :flag.reading_kraken    ? "read_dicts_kraken" 
                             :                         "read_dicts",
                              NULL, PROGRESS_NONE, "Reading dictionaries...", 
-                             flag.test, true, true, 
+                             flag.test,
                              z_file->genozip_version == 8, // For v8 files, we read all fragments in the main thread as was the case in v8. This is because they are very small, and also we can't easily calculate the totel size of each dictionary.
                              0, 
                              10, // must be short - many dictionaries are just a few bytes

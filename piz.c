@@ -37,6 +37,8 @@
 #include "txtheader.h"
 #include "base64.h"
 
+bool piz_digest_failed = false;
+
 // output coordinates of current line (for error printing) - very carefully as we are in an error condition - we can't assume anything
 PizDisCoords piz_dis_coords (VBlockP vb)
 {
@@ -353,7 +355,8 @@ static void piz_reconstruct_one_vb (VBlock *vb)
 
     // compress txt_data into BGZF blocks (in vb->compressed) if applicable
     if (txt_file && txt_file->codec == CODEC_BGZF && !flag.no_writer &&
-        !flag.maybe_vb_modified_by_writer)  // if --downsample, --interleave or sorting - writer will BGZF-compress
+        !flag.maybe_vb_modified_by_writer &&  // if --downsample, --interleave or sorting - writer will BGZF-compress
+        writer_is_vb_full_vb (vb->vblock_i))  // in SAM/BAM reconstruction, this compute thread recompresses only if no gencomp lines are re-assembled by writer, otherwise writer recompresses  
         bgzf_compress_vb (vb);
 
     // calculate the digest contribution of this VB to the single file and bound files, and the digest snapshot of this VB
@@ -617,10 +620,12 @@ static Digest piz_one_verify_digest (void)
     }
 
     // if compressed incorrectly - warn, but still give user access to the decompressed file
-    else ASSERTW (digest_is_zero (original_digest), // its ok if we decompressed only a partial file
-                  "File integrity error: %s of decompressed file %s is %s, but %s of the original %s file was %s", 
-                  digest_name(), txt_file->name, digest_display (decompressed_file_digest).s, digest_name(), 
-                  dt_name (txt_file->data_type), digest_display (original_digest).s);
+    else if (!digest_is_zero (original_digest)) { // its ok if we decompressed only a partial file
+        piz_digest_failed = true; // inspected by main_genounzip
+        WARN ("File integrity error: %s of decompressed file %s is %s, but %s of the original %s file was %s", 
+              digest_name(), txt_file->name, digest_display (decompressed_file_digest).s, digest_name(), 
+              dt_name (txt_file->data_type), digest_display (original_digest).s);
+    }
 
     return decompressed_file_digest;
 }
@@ -631,7 +636,7 @@ static void piz_handover_or_discard_vb (Dispatcher dispatcher, VBlockP *vb)
     if (flag.show_time)
         ctx_add_compressor_time_to_zf_ctx (*vb);
 
-    if (!flag.no_writer) {
+    if (!flag.no_writer_thread) { // note: in SAM with gencomp - writer does the digest calculation
         writer_handover_data (vb);
         dispatcher_recycle_vbs (dispatcher, false); // don't release VB- it will be released in writer_release_vb when writing is completed
     }
@@ -689,7 +694,7 @@ static void piz_handle_reconstructed_vb (Dispatcher dispatcher, VBlock *vb, uint
     piz_handover_or_discard_vb (dispatcher, &vb);
 }
 
-Dispatcher piz_z_file_initialize (bool is_last_z_file)
+Dispatcher piz_z_file_initialize (void)
 {
     digest_initialize();
 
@@ -712,14 +717,14 @@ Dispatcher piz_z_file_initialize (bool is_last_z_file)
                                             :flag.reading_reference ? "piz-ref"
                                             :flag.reading_kraken    ? "piz-kraken"
                                             :                         "piz", // also referred to in dispatcher_recycle_vbs()
-                                             flag.xthreads ? 1 : global_max_threads, 0, flag.test, 
-                                             is_last_z_file, true, z_file->basename, PROGRESS_PERCENT, 0);
+                                             flag.xthreads ? 1 : global_max_threads, 0, flag.test,
+                                             z_file->basename, PROGRESS_PERCENT, 0);
     return dispatcher;
 }
 
 // called once per txt_file created: i.e. if concatenating - a single call, if unbinding there will be multiple calls to this function
 // returns true if piz completed, false if piz aborted by piz_initialize
-bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file)
+bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last_z_file)
 {
     bool is_last_txt_file = (z_file->num_txt_components_so_far == z_file->txt_file_info.len-1);
  
@@ -787,13 +792,13 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file)
         if (!achieved_something) usleep (30000); // nothing for us to do right now - wait 30ms
     }
 
+    // finish writing the txt_file (note: the writer thread also calculates digest in SAM/BAM with gencomp)
+    writer_finish_writing (is_last_txt_file);
+
     // verifies reconstructed file against MD5 (if compressed with --md5 or --test) or Adler2 and/or codec_args (if bgzf)
     Digest decompressed_file_digest = piz_one_verify_digest();
 
     if (!flag.test) progress_finalize_component_time ("Done", decompressed_file_digest);
-
-    // finish writing the txt_file
-    writer_finish_writing (is_last_txt_file);
 
     // --show-sex and --show-coverage - output results
     if (txt_file && !flag_loading_auxiliary) {
@@ -803,7 +808,7 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file)
         if (flag.count == CNT_TOTAL) iprintf ("%"PRIu64"\n", num_nondrop_lines);
     }
 
-    if (is_last_txt_file) dispatcher_finish (&dispatcher, NULL);
+    if (is_last_txt_file) dispatcher_finish (&dispatcher, NULL, !is_last_z_file || flag.test);
     else                  dispatcher_pause (dispatcher); // we're unbinding and still have more txt_files
      
     DT_FUNC (z_file, piz_finalize)();

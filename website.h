@@ -1,3 +1,4 @@
+
 // ------------------------------------------------------------------
 //   website.h
 //   Copyright (C) 2021-2022 Black Paw Ventures Limited
@@ -16,6 +17,7 @@
 #define WEBSITE_GENOLS       GENOZIP_URL "/genols.html"
 #define WEBSITE_ADVANCED     GENOZIP_URL "/advanced.html"
 #define WEBSITE_DIGEST       GENOZIP_URL "/digest.html"
+#define WEBSITE_ARCHIVING    GENOZIP_URL "/archiving.html"
 #define WEBSITE_LICENSE      GENOZIP_URL "/license.html"
 #define WEBSITE_COMMERCIAL   GENOZIP_URL "/commercial.html"
 #define WEBSITE_PUBLICATIONS GENOZIP_URL "/publications.html"

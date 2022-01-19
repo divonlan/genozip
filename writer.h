@@ -20,4 +20,5 @@ extern unsigned writer_get_pair (uint32_t vb_i, uint32_t *pair_vb_i);
 extern bool writer_is_txtheader_in_plan (uint32_t component_i);
 extern bool writer_is_component_no_read (uint32_t component_i);
 extern bool writer_is_vb_no_read (uint32_t vb_i);
+extern bool writer_is_vb_full_vb (uint32_t vb_i);
 extern void writer_get_txt_file_info (uint32_t *first_comp_i, uint32_t *num_comps, Section *start_sl);

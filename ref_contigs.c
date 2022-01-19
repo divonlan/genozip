@@ -286,8 +286,8 @@ const char *ref_contigs_get_name_by_ref_index (Reference ref, WordIndex ref_inde
 
 void ref_contigs_generate_data_if_denovo (Reference ref)
 {
-        // copy data from the reference FASTA's CONTIG context, so it survives after we finish reading the reference and close z_file
-    Context *chrom_ctx = ZCTX(CHROM);
+    // copy data from the reference FASTA's CONTIG context, so it survives after we finish reading the reference and close z_file
+    Context *chrom_ctx = ZCTX(DTFZ(prim_chrom));
 
     ASSINP (flag.reference == REF_INTERNAL || (buf_is_alloc (&chrom_ctx->dict) && buf_is_alloc (&chrom_ctx->word_list)),
             "Error: cannot use %s as a reference as it is missing a CONTIG dictionary", z_name);

@@ -38,7 +38,7 @@ typedef struct {
     uint32_t ref_consumed;
 } ZipDataLineSAM;
 
-typedef enum { CT_NORMAL, CT_SA_PRIM, CT_SA_DEPN } SamComponentType;
+typedef enum { SAM_COMP_MAIN, SAM_COMP_PRIM, SAM_COMP_DEPN } SamComponentType;
 
 typedef struct VBlockSAM {
     VBLOCK_COMMON_FIELDS

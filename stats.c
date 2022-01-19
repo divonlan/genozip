@@ -112,7 +112,7 @@ static void stats_output_file_metadata (Buffer *buf)
     else if (Z_DT(DT_CHAIN) && flag.reference == REF_MAKE_CHAIN && !segconf.chain_mismatches_ref)
         bufprintf (evb, buf, "Features: Chain file suitable for use with genozip --chain\n%s", "");
 
-    if (chain_is_loaded || txt_file->coords) 
+    if (Z_DT(DT_VCF) && (chain_is_loaded || txt_file->coords)) 
         bufprintf (evb, buf, "Features: Dual-coordinates\n%s", "");
 
     if ((Z_DT(DT_SAM) || Z_DT(DT_BAM)) && segconf.sam_is_sorted)
@@ -350,7 +350,7 @@ void stats_compress (void)
         if (ctx && !ctx->b250.num_ctx_words && !ctx->txt_len && !ctx->b250.len && !ctx->is_stats_parent && !s->z_size) 
             continue;
 
-        s->txt_len = SEC(i) == SEC_TXT_HEADER  ? txtheader_get_bound_headers_len()
+        s->txt_len = SEC(i) == SEC_TXT_HEADER  ? z_file->txt_txtheader_so_far_bind // note: this excludes generated headers for DVCF and SAM/BAM
                    : !ctx                      ? 0 
                    :                             ctx->txt_len;
         
