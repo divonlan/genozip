@@ -22,7 +22,7 @@ typedef struct {
         reconstruct_vb, buf_alloc, dispatcher_recycle_vbs, txtfile_read_header, txtfile_read_vblock,
         seg_all_data_lines, codec_hapmat_count_alt_alleles, seg_initialize,
         ctx_clone, qname_seg, sam_cigar_seg, sam_seg_XA_pos, 
-        md5,ctx_compress_one_dict_fragment, aligner_best_match, aligner_get_word_from_seq,
+        digest,ctx_compress_one_dict_fragment, aligner_best_match, aligner_get_word_from_seq,
         aligner_get_match_len, generate_rev_complement_genome, ref_contigs_compress,
         linesorter_compress_qsort, linesorter_compress_recon_plan, 
         piz_read_global_area, ref_load_stored_reference, ctx_read_all_dictionaries, ctx_dict_build_word_lists, 

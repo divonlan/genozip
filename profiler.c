@@ -73,7 +73,7 @@ void profiler_add (ConstVBlockP vb)
     ADD(qname_seg);
     ADD(ctx_merge_in_vb_ctx);
     ADD(codec_hapmat_count_alt_alleles);
-    ADD(md5);
+    ADD(digest);
     ADD(wait_for_vb_1_mutex);
     ADD(ctx_clone);
     ADD(ctx_dict_build_word_lists);
@@ -164,7 +164,7 @@ void profiler_print_report (void)
         PRINT (compressor_longr, 2);
         print_ctx_compressor_times();
         PRINT (reconstruct_vb, 1);
-        PRINT (md5, 1); // note: in SAM/BAM digest is done in the writer thread, otherwise its done in the compute thread. TODO: change level to 0 in case of SAM/BAM
+        PRINT (digest, 1); // note: in SAM/BAM digest is done in the writer thread, otherwise its done in the compute thread. TODO: change level to 0 in case of SAM/BAM
         PRINT (bgzf_compute_thread, 1);
         PRINT (piz_get_line_subfields, 2);
         PRINT (codec_hapmat_piz_get_one_line, 2);
@@ -210,7 +210,7 @@ void profiler_print_report (void)
         PRINT (codec_hapmat_count_alt_alleles, 2);
 
         PRINT (ctx_compress_one_dict_fragment, 1);
-        PRINT (md5, 1);
+        PRINT (digest, 1);
         PRINT (bgzf_compute_thread, 1);
     }    
 

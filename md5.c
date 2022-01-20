@@ -37,7 +37,6 @@
 #include "genozip.h"
 #include "md5.h"
 #include "endianness.h"
-#include "profiler.h"
 #include "vblock.h"
 
 #define F( x, y, z )            ( (z) ^ ((x) & ((y) ^ (z))) )
@@ -60,7 +59,6 @@ void md5_display_ctx (const Md5Context *x) // for debugging
 
     iteration++;
 }
-
 
 static const void *md5_transform (Md5Context *ctx, const void *data, uintmax_t size)
 {
@@ -193,8 +191,6 @@ void md5_initialize (Md5Context *ctx)
 // data must be aligned on 32-bit boundary
 void md5_update (Md5Context *ctx, const void *data, uint32_t len)
 {
-    START_TIMER;
-
     if (!len) return; // nothing to do
 
     uint32_t    saved_lo;
@@ -233,14 +229,11 @@ void md5_update (Md5Context *ctx, const void *data, uint32_t len)
 finish:
     //fprintf (stderr, "%s md5_update snapshot: %s\n", primary_command == ZIP ? "ZIP" : "PIZ", digest_display (digest_snapshot (ctx)));
     //md5_display_ctx (ctx);
-    COPY_TIMER_VB (evb, md5);
     return;
 }
 
 Digest md5_finalize (Md5Context *ctx)
 {
-    START_TIMER;
-
     uint32_t    used;
     uint32_t    free;
 
@@ -267,8 +260,6 @@ Digest md5_finalize (Md5Context *ctx)
     Digest digest = { .words = { LTEN32 (ctx->a), LTEN32 (ctx->b), LTEN32 (ctx->c), LTEN32 (ctx->d) } };
 
     memset (ctx, 0, sizeof (Md5Context)); // return to its pre-initialized state, should it be used again
-
-    COPY_TIMER_VB (evb, md5);
 
     return digest;
 }

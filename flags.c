@@ -905,8 +905,6 @@ void flags_update_zip_one_file (void)
 {
     DataType dt = z_file->data_type;
 
-    if (flag.test) flag.md5=true; // test implies md5
-
     // --make-reference implies --md5 --B1 (unless --vblock says otherwise), and not encrypted. 
     // in addition, txtfile_read_vblock() limits each VB to have exactly one contig.
     if (flag.make_reference) {

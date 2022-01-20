@@ -15,6 +15,7 @@
 #include "txtfile.h"
 #include "strings.h"
 #include "endianness.h"
+#include "profiler.h"
 
 static Mutex vb_digest_mutex = {};   // ZIP: used for serializing MD5ing of VBs
 static uint32_t vb_digest_last=0; // last vb to be MD5ed 
@@ -69,6 +70,7 @@ void digest_update_do (VBlockP vb, DigestContext *ctx, const char *data, uint64_
 {
     if (!data_len) return;
     
+    START_TIMER;
     DigestContext before;
 
     if (IS_ADLER) {
@@ -108,6 +110,8 @@ void digest_update_do (VBlockP vb, DigestContext *ctx, const char *data, uint64_
         fwrite (data, data_len, 1, f);
         fclose (f);
     }
+
+    COPY_TIMER_VB (vb, digest);
 }
 
 void digest_piz_verify_one_vb (VBlock *vb)
