@@ -941,6 +941,8 @@ static void ref_copy_compressed_sections_from_reference_file (Reference ref)
         if ((float)bits_is_set / (float)fasta_sec_len >= 0.95) {
             ref_copy_one_compressed_section (ref, ref_file, &fasta_sec[i], &sl);
             bit_array_clear_region (&contig_r->is_set, fasta_sec_start_in_contig_r, fasta_sec_len);
+
+            if (contig_r->num_set != -1) contig_r->num_set -= bits_is_set;
         }
     }
 
