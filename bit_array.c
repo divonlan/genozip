@@ -649,10 +649,10 @@ bit_index_t bit_array_num_bits_cleared(const BitArray* bitarr)
 // Index is stored in the integer pointed to by `result`
 // If no such bit is found, value at `result` is not changed
 #define _next_bit_func_def(FUNC,GET) \
-char FUNC(const BitArray* bitarr, bit_index_t offset, bit_index_t* result) \
+bool FUNC(const BitArray* bitarr, bit_index_t offset, bit_index_t* result) \
 { \
   ASSERT (offset < bitarr->nbits, "expecting offset(%"PRId64") < bitarr->nbits(%"PRId64")", offset, bitarr->nbits); \
-  if(bitarr->nbits == 0 || offset >= bitarr->nbits) { return 0; } \
+  if(bitarr->nbits == 0 || offset >= bitarr->nbits) { return false; } \
  \
   /* Find first word that is greater than zero */ \
   word_addr_t i = bitset64_wrd(offset); \
@@ -661,15 +661,15 @@ char FUNC(const BitArray* bitarr, bit_index_t offset, bit_index_t* result) \
   while(1) { \
     if(w > 0) { \
       bit_index_t pos = i * WORD_SIZE + trailing_zeros(w); \
-      if(pos < bitarr->nbits) { *result = pos; return 1; } \
-      else { return 0; } \
+      if(pos < bitarr->nbits) { *result = pos; return true; } \
+      else { return false; } \
     } \
     i++; \
     if(i >= bitarr->nwords) break; \
     w = GET(bitarr->words[i]); \
   } \
  \
-  return 0; \
+  return false; \
 }
 
 // Find the index of the previous bit that is set/clear, before `offset`.
@@ -677,27 +677,27 @@ char FUNC(const BitArray* bitarr, bit_index_t offset, bit_index_t* result) \
 // Index is stored in the integer pointed to by `result`
 // If no such bit is found, value at `result` is not changed
 #define _prev_bit_func_def(FUNC,GET) \
-char FUNC(const BitArray* bitarr, bit_index_t offset, bit_index_t* result) \
+bool FUNC(const BitArray* bitarr, bit_index_t offset, bit_index_t* result) \
 { \
   assert(offset <= bitarr->nbits); \
-  if(bitarr->nbits == 0 || offset == 0) { return 0; } \
+  if(bitarr->nbits == 0 || offset == 0) { return false; } \
  \
   /* Find prev word that is greater than zero */ \
   word_addr_t i = bitset64_wrd(offset-1); \
   word_t w = GET(bitarr->words[i]) & bitmask64(bitset64_idx(offset-1)+1); \
  \
-  if(w > 0) { *result = (i+1) * WORD_SIZE - leading_zeros(w) - 1; return 1; } \
+  if(w > 0) { *result = (i+1) * WORD_SIZE - leading_zeros(w) - 1; return true; } \
  \
   /* i is unsigned so have to use break when i == 0 */ \
   for(--i; i != BIT_INDEX_MAX; i--) { \
     w = GET(bitarr->words[i]); \
     if(w > 0) { \
       *result = (i+1) * WORD_SIZE - leading_zeros(w) - 1; \
-      return 1; \
+      return true; \
     } \
   } \
  \
-  return 0; \
+  return false; \
 }
 
 #define GET_WORD(x) (x)
@@ -711,13 +711,13 @@ _prev_bit_func_def(bit_array_find_prev_clear_bit,NEG_WORD);
 // Returns 1 if a bit is set, otherwise 0
 // Index of first set bit is stored in the integer pointed to by result
 // If no bits are set, value at `result` is not changed
-char bit_array_find_first_set_bit(const BitArray* bitarr, bit_index_t* result)
+bool bit_array_find_first_set_bit(const BitArray* bitarr, bit_index_t* result)
 {
   return bit_array_find_next_set_bit(bitarr, 0, result);
 }
 
 // same same
-char bit_array_find_first_clear_bit(const BitArray* bitarr, bit_index_t* result)
+bool bit_array_find_first_clear_bit(const BitArray* bitarr, bit_index_t* result)
 {
   return bit_array_find_next_clear_bit(bitarr, 0, result);
 }
@@ -726,13 +726,13 @@ char bit_array_find_first_clear_bit(const BitArray* bitarr, bit_index_t* result)
 // Returns 1 if a bit is set, otherwise 0
 // Index of last set bit is stored in the integer pointed to by `result`
 // If no bits are set, value at `result` is not changed
-char bit_array_find_last_set_bit(const BitArray* bitarr, bit_index_t* result)
+bool bit_array_find_last_set_bit(const BitArray* bitarr, bit_index_t* result)
 {
   return bit_array_find_prev_set_bit(bitarr, bitarr->nbits, result);
 }
 
 // same same
-char bit_array_find_last_clear_bit(const BitArray* bitarr, bit_index_t* result)
+bool bit_array_find_last_clear_bit(const BitArray* bitarr, bit_index_t* result)
 {
   return bit_array_find_prev_clear_bit(bitarr, bitarr->nbits, result);
 }
@@ -806,24 +806,28 @@ char* bit_array_to_str_rev(const BitArray* bitarr, char* str)
 
 
 // Get a string representations for a given region, using given on/off characters.
-// Note: does not nul-terminate
-void bit_array_to_substr(const BitArray* bitarr,
-                         bit_index_t start, bit_index_t length,
-                         char* str, char on, char off,
-                         char left_to_right)
+char *bit_array_to_substr(const BitArray* bitarr,
+                          bit_index_t start, bit_index_t length,
+                          char* str, char on, char off,
+                          char left_to_right)
 {
-  assert(start + length <= bitarr->nbits);
+    if (start >= bitarr->nbits) 
+        length = 0; // nothing to output
+    
+    else if (start + length > bitarr->nbits)
+        length = bitarr->nbits - start; // until the end of the bitarray, less than the original length
+      
+    bit_index_t i, j;
+    bit_index_t end = start + length - 1;
 
-  bit_index_t i, j;
-  bit_index_t end = start + length - 1;
+    for(i = 0; i < length; i++) {
+        j = (left_to_right ? start + i : end - i);
+        str[i] = bit_array_get(bitarr, j) ? on : off;
+    }
 
-  for(i = 0; i < length; i++)
-  {
-    j = (left_to_right ? start + i : end - i);
-    str[i] = bit_array_get(bitarr, j) ? on : off;
-  }
+    str[length] = '\0';
 
-//  str[length] = '\0';
+    return str;
 }
 
 void bit_array_print_do (const BitArray *bitarr, const char *msg, FILE *file)

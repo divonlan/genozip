@@ -924,23 +924,26 @@ static void ref_copy_compressed_sections_from_reference_file (Reference ref)
     // 1. If 95% of the ref file RA is set in the zfile contig range - we copy the compressed reference section directly from the ref FASTA
     // 2. If we copied from the FASTA, we mark those region covered by the RA as "is_set=0", so that we don't compress it later
     Section sl = FIRSTENT (SectionEnt, ref->ref_file_section_list);
-    ARRAY (RAEntry, fasta_sec, ref->ref_external_ra);
+    ARRAY (RAEntry, sec_reference, ref->ref_external_ra);
 
     chrom_index_by_name (CHROM);
 
+    // note: use 'genocat --show-index <file.ref.genozip>' to see ref_external_ra
     for (uint32_t i=0; i < ref->ref_external_ra.len; i++) {
 
-        Range *contig_r = ENT (Range, ref->ranges, fasta_sec[i].chrom_index);
-        PosType fasta_sec_start_in_contig_r = fasta_sec[i].min_pos - contig_r->first_pos; // the start of the FASTA section (a bit less than 1MB) within the full-contig range
+        Range *contig_r = ENT (Range, ref->ranges, sec_reference[i].chrom_index);
+        PosType SEC_REFERENCE_start_in_contig_r = sec_reference[i].min_pos - contig_r->first_pos; // the start of the SEC_REFERENCE section (a bit less than 1MB) within the full-contig range
 
-        PosType fasta_sec_len = fasta_sec[i].max_pos - fasta_sec[i].min_pos + 1;
-        PosType bits_is_set   = bit_array_num_bits_set_region (&contig_r->is_set, fasta_sec_start_in_contig_r, fasta_sec_len);
+        PosType SEC_REFERNECE_len = sec_reference[i].max_pos - sec_reference[i].min_pos + 1;
+        PosType bits_is_set   = bit_array_num_bits_set_region (&contig_r->is_set, SEC_REFERENCE_start_in_contig_r, SEC_REFERNECE_len);
 
         // if this at least 95% of the RA is covered, just copy the corresponding FASTA section to our file, and
         // mark all the ranges as is_set=false indicating that they don't need to be compressed individually
-        if ((float)bits_is_set / (float)fasta_sec_len >= 0.95) {
-            ref_copy_one_compressed_section (ref, ref_file, &fasta_sec[i], &sl);
-            bit_array_clear_region (&contig_r->is_set, fasta_sec_start_in_contig_r, fasta_sec_len);
+        if ((float)bits_is_set / (float)SEC_REFERNECE_len >= 0.95) {
+            ref_copy_one_compressed_section (ref, ref_file, &sec_reference[i], &sl);
+            bit_array_clear_region (&contig_r->is_set, SEC_REFERENCE_start_in_contig_r, SEC_REFERNECE_len);
+
+            if (contig_r->num_set != -1) contig_r->num_set -= bits_is_set;
         }
     }
 
@@ -956,8 +959,13 @@ static bool ref_remove_flanking_regions (Reference ref, Range *r, uint64_t *star
 
     uint64_t end_flanking_region_len, last_1;
     
-    char has_any_bit = bit_array_find_first_set_bit (&r->is_set, start_flanking_region_len);
-    ASSERT (has_any_bit, "range %u (%s) has no bits set in r->is_set", ENTNUM (ref->ranges, r), r->chrom_name); // ref_prepare_range_for_compress is responsible not to send us 0-bit ranges
+    // note: ref_prepare_range_for_compress is responsible not to send us 0-bit ranges
+    bool has_any_bit = bit_array_find_first_set_bit (&r->is_set, start_flanking_region_len);
+
+    char bits[65];
+    ASSERT (has_any_bit, "range %u (%s) has no bits set in r->is_set but r->num_set=%"PRIu64" (r->is_set.nbits=%"PRIu64"). is_set(first 64 bits)=%s", 
+            ENTNUM (ref->ranges, r), r->chrom_name, r->num_set, r->is_set.nbits, 
+            bit_array_to_substr (&r->is_set, 0, 64, bits, '1', '0', true)); 
 
     has_any_bit = bit_array_find_prev_set_bit (&r->is_set, r->is_set.nbits, &last_1);
     ASSERT (has_any_bit, "range %u (%s) has no bits set in r->is_set (#2)", ENTNUM (ref->ranges, r), r->chrom_name); // this should definitely never happen, since we already know the range has bits
@@ -1106,7 +1114,7 @@ static inline unsigned ref_prepare_expected_more_merges (const Range *this_r, in
     unsigned more=0;
     for (Range *r=(Range *)this_r+1; r < AFTERENT (Range, gref->ranges) && more <= max_ranges; r++, more++) {
 
-        if (r->num_set == -1) // calcualte num_set if not already calculated
+        if (r->num_set == -1)  // calcualte num_set if not already calculated
             r->num_set = bit_array_num_bits_set (&r->is_set);
 
         num_set_this_merge += r->num_set;
@@ -1139,7 +1147,7 @@ static void ref_prepare_range_for_compress (VBlockP vb)
         // case: we're done merging, as this range has a different chrom or not consecutive, therefore we're not consuming ranges[next_range_i]
         if (vb->range && (num_merged >= MAX_MERGED_RANGES || r->chrom != vb->range->chrom || r->first_pos != vb->range->last_pos+1)) break; 
 
-        if (r->num_set == -1) // calcualte num_set if not already calculated
+        if (r->num_set == -1)  // calculate num_set if not already calculated
             r->num_set = bit_array_num_bits_set (&r->is_set);
 
         if (!r->num_set) {
@@ -1257,7 +1265,7 @@ void ref_compress_ref (void)
         ref_contigs_compress_ext_store (gref);  
 
     // copy already-compressed SEC_REFERENCE sections from the genozip reference file, but only such sections that are almost entirely
-    // covered by ranges with is_accessed=true. we mark these ranges affected as is_accessed=false.
+    // covered by ranges with is_set=true. we mark these ranges affected as is_set=false.
     if (ranges_type(gref) == RT_LOADED || ranges_type(gref) == RT_CACHED)
         ref_copy_compressed_sections_from_reference_file (gref);
 

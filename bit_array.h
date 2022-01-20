@@ -383,52 +383,52 @@ extern bit_index_t bit_array_num_bits_cleared(const BitArray* bitarr);
 // Returns 1 if a bit is set, otherwise 0
 // Index of next set bit is stored in the integer pointed to by result
 // If no next bit is set result is not changed
-extern char bit_array_find_next_set_bit(const BitArray* bitarr, bit_index_t offset, bit_index_t* result);
+extern bool bit_array_find_next_set_bit(const BitArray* bitarr, bit_index_t offset, bit_index_t* result);
 
 // Find the index of the next bit that is NOT set, at or after `offset`
 // Returns 1 if a bit is NOT set, otherwise 0
 // Index of next zero bit is stored in the integer pointed to by `result`
 // If no next bit is zero, value at `result` is not changed
-extern char bit_array_find_next_clear_bit(const BitArray* bitarr, bit_index_t offset,
+extern bool bit_array_find_next_clear_bit(const BitArray* bitarr, bit_index_t offset,
                                  bit_index_t* result);
 
 // Find the index of the previous bit that is set, before offset.
 // Returns 1 if a bit is set, otherwise 0
 // Index of previous set bit is stored in the integer pointed to by `result`
 // If no previous bit is set result is not changed
-extern char bit_array_find_prev_set_bit(const BitArray* bitarr, bit_index_t offset,
+extern bool bit_array_find_prev_set_bit(const BitArray* bitarr, bit_index_t offset,
                                  bit_index_t* result);
 
 // Find the index of the previous bit that is NOT set, before offset.
 // Returns 1 if a bit is clear, otherwise 0
 // Index of previous zero bit is stored in the integer pointed to by `result`
 // If no previous bit is zero result is not changed
-extern char bit_array_find_prev_clear_bit(const BitArray* bitarr, bit_index_t offset,
+extern bool bit_array_find_prev_clear_bit(const BitArray* bitarr, bit_index_t offset,
                                    bit_index_t* result);
 
 // Find the index of the first bit that is set.
 // Returns 1 if a bit is set, otherwise 0
 // Index of first set bit is stored in the integer pointed to by `result`
 // If no bit is set result is not changed
-extern char bit_array_find_first_set_bit(const BitArray* bitarr, bit_index_t* result);
+extern bool bit_array_find_first_set_bit(const BitArray* bitarr, bit_index_t* result);
 
 // Find the index of the first bit that is NOT set.
 // Returns 1 if a bit is clear, otherwise 0
 // Index of first zero bit is stored in the integer pointed to by `result`
 // If no bit is zero result is not changed
-extern char bit_array_find_first_clear_bit(const BitArray* bitarr, bit_index_t* result);
+extern bool bit_array_find_first_clear_bit(const BitArray* bitarr, bit_index_t* result);
 
 // Find the index of the last bit that is set.
 // Returns 1 if a bit is set, otherwise 0
 // Index of last set bit is stored in the integer pointed to by `result`
 // If no bit is set result is not changed
-extern char bit_array_find_last_set_bit(const BitArray* bitarr, bit_index_t* result);
+extern bool bit_array_find_last_set_bit(const BitArray* bitarr, bit_index_t* result);
 
 // Find the index of the last bit that is NOT set.
 // Returns 1 if a bit is clear, otherwise 0
 // Index of last zero bit is stored in the integer pointed to by `result`
 // If no bit is zero result is not changed
-extern char bit_array_find_last_clear_bit(const BitArray* bitarr, bit_index_t* result);
+extern bool bit_array_find_last_clear_bit(const BitArray* bitarr, bit_index_t* result);
 
 
 //
@@ -448,15 +448,12 @@ extern void bit_array_from_substr(BitArray* bitarr, bit_index_t offset,
 extern char* bit_array_to_str(const BitArray* bitarr, char* str);
 extern char* bit_array_to_str_rev(const BitArray* bitarr, char* str);
 
-// Get a string representations for a given region, using given on/off
-// characters.
-// Note: does not nul-terminate
-extern void bit_array_to_substr (const BitArray* bitarr,
-                                 bit_index_t start, bit_index_t length,
-                                 char* str, char on, char off, char left_to_right);
+// Get a string representations for a given region, using given on/off characters.
+extern char *bit_array_to_substr (const BitArray* bitarr,
+                                  bit_index_t start, bit_index_t length,
+                                  char* str, char on, char off, char left_to_right);
 
-// Print this array to a file stream.  Prints '0's and '1'.  Doesn't print
-// newline.
+// Print this array to a file stream.  Prints '0's and '1'.  Doesn't print newline.
 extern void bit_array_print_do (const BitArray* bitarr, const char *msg, FILE *file);
 #define bit_array_print(bitarr) bit_array_print_do (bitarr, #bitarr, info_stream)
 

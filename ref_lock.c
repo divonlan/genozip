@@ -9,7 +9,7 @@
 #include "buffer.h"
 #include "flags.h"
 
-#define GENOME_BASES_PER_MUTEX (1 << 16) // 2^16 = 64K
+#define GENOME_BASES_PER_MUTEX (1 << 16) // 2^16 = 64K - note: number of mutexes (per process) on Windows is limited by the total maximum HANDLEs - 16M, on Linux to 2G.
 
 static void ref_lock_initialize_do (Reference ref, uint32_t num_muteces)
 {

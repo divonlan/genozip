@@ -3,6 +3,13 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+13.0.9
+- FASTQ: Support format where read name is a number, and line3 is a SRA format
+- SAM/BAM: Better compression of Supplementary / Secondary alignments
+- --test now defaults to verify correctness with Adler32 which is much faster than MD5. To use MD5 instead of Adler32, specifiy --md5. 
+- New advanced option: --log-digest
+- Binding of multiples files is no longer supported for SAM/BAM - use --tar instead
+
 13.0.8 8/January/2022
 - SAM/BAM/FASTQ: Better compression of BGI read names
 - New advanced option: --debug-qname
@@ -11,6 +18,7 @@ Note on versioning:
 - SAM/BAM: bowtie2: Better compression of AS and YS fields
 - Display warning if excessive dictionary size
 - Fix bug where genounzip sometimes output uncompressed files when a .gz-recompression was expected
+- Accept contig name "NC_012920" as equivalent to "chrM"
 
 13.0.6 14/December/2021
 - Better compression of QNAME (SAM/BAM/FASTQ/Kraken)

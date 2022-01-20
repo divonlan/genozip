@@ -94,6 +94,9 @@ static void zip_display_compression_ratio (Digest md5)
     if (flag.make_reference)
         progress_finalize_component_time ("Done", md5);
 
+    // in bound files, for the non-last components, we already printed "Done" above
+    else if (flag.bind && !z_file->z_closes_after_me) {}
+
     // when compressing BAM report only ratio_vs_comp (compare to BGZF-compress BAM - we don't care about the underlying plain BAM)
     // Likewise, doesn't have a compression extension (eg .gz), even though it may actually be compressed eg .tbi (which is actually BGZF)
     else if (Z_DT(DT_BAM) || (txt_file && file_get_codec_by_txt_ft (txt_file->data_type, txt_file->type) == CODEC_NONE)) 
@@ -569,7 +572,7 @@ static void zip_write_global_area (Digest single_component_digest)
     ctx_compress_dictionaries(); 
 
     ctx_compress_counts();
-        
+
     // store a mapping of the file's chroms to the reference's contigs, if they are any different
     // note: not needed in REF_EXT_STORE, as we convert the stored ref_contigs to use chrom_index of the file's CHROM
     if (flag.reference == REF_EXTERNAL) 
