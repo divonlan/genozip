@@ -231,7 +231,7 @@ genounzip-opt$(EXE) genocat-opt$(EXE) genols-opt$(EXE): genozip-opt$(EXE)
 	@ln $^ $@
 
 LICENSE.txt: text_license.h version.h # not dependent on genozip.exe, so we don't generate it every compilation
-	@make -j ./genozip$(EXE) # recursive call 
+	@make -j genozip$(EXE) # recursive call to make genozip.exe with the latest version
 	@echo Generating $@
 	@./genozip$(EXE) --license=100 --force > $@
 
@@ -240,7 +240,7 @@ docs = $(DOCS)/genozip.rst $(DOCS)/genounzip.rst $(DOCS)/genocat.rst $(DOCS)/gen
 	   $(DOCS)/opt-help.rst $(DOCS)/opt-piz.rst $(DOCS)/opt-quiet.rst $(DOCS)/opt-stats.rst $(DOCS)/opt-threads.rst $(DOCS)/opt-subdirs.rst \
 	   $(DOCS)/manual.rst $(DOCS)/sex-assignment.rst $(DOCS)/sex-assignment-alg-sam.rst $(DOCS)/sex-assignment-alg-fastq.rst \
 	   $(DOCS)/fastq-to-bam-pipeline.rst $(DOCS)/coverage.rst $(DOCS)/algorithms.rst $(DOCS)/losslessness.rst $(DOCS)/idxstats.rst \
-	   $(DOCS)/downsampling.rst $(DOCS)/applications.rst $(DOCS)/capabilities.rst $(DOCS)/kraken.rst \
+	   $(DOCS)/downsampling.rst $(DOCS)/capabilities.rst $(DOCS)/kraken.rst \
 	   $(DOCS)/sam2fq.rst $(DOCS)/23andMe2vcf.rst $(DOCS)/multifasta2phylip.rst $(DOCS)/gatk-unexpected-base.rst $(DOCS)/digest.rst $(DOCS)/commercial.rst \
 	   $(DOCS)/using-on-hpc.rst $(DOCS)/match-chrom.rst $(DOCS)/attributions.rst $(DOCS)/testimonials.rst $(DOCS)/pricing-faq.rst \
 	   $(DOCS)/dvcf.rst $(DOCS)/dvcf-rendering.rst $(DOCS)/chain.rst $(DOCS)/dvcf-limitations.rst $(DOCS)/dvcf-renaming.rst $(DOCS)/dvcf-see-also.rst \
@@ -312,7 +312,7 @@ clean: clean-docs
 	@rm -R $(OBJDIR)
 	@mkdir $(OBJDIR) $(addprefix $(OBJDIR)/, $(SRC_DIRS))
 
-.PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch build-docs test-docs testfiles test-backup genozip-linux-x86_64/clean genozip-prod genozip-prod.exe dict_id_gen$(EXE) push-build
+.PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch build-docs test-docs testfiles test-backup genozip-linux-x86_64/clean genozip-prod genozip-prod.exe dict_id_gen$(EXE) push-build increment-version
 
 # builds prod for local OS
 genozip-prod$(EXE): 
@@ -334,7 +334,8 @@ genozip-prod:
 # and re-compile so that genozip --version gets updated
 # IMPORTANT: the first number in the version indicates the genozip file format version and goes into
 # the genozip file header SectionHeaderTxtHeader.genozip_version
-increment-version: $(C_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
+#increment-version: $(C_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
+increment-version: # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
 	@echo "Incrementing version.h"
 	@bash increment-version.sh
 
@@ -396,10 +397,12 @@ conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld
 windows/%.exe: CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"InstallForge\"
 windows/%.exe: $(OBJS) %.exe
 	@echo Linking $@
+	@(mkdir windows >& /dev/null ; exit 0)
 	@$(CC) -o $@ $(OBJS) $(CFLAGS) $(LDFLAGS)
 
 windows/LICENSE.for-installer.txt: genozip$(EXE) version.h
 	@echo Generating $@
+	@(mkdir windows >& /dev/null ; exit 0)
 	@./genozip$(EXE) --license=60 --force > $@
 
 WINDOWS_INSTALLER_OBJS = windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe windows/LICENSE.for-installer.txt LICENSE.txt
@@ -458,6 +461,7 @@ test-backup: genozip.exe
 # license copied on Windows, not Linux due to file mode issues on NTFS causing git to think LICENSE.txt has changed
 genozip-linux-x86_64/LICENSE.txt: LICENSE.txt
 	@echo Generating $@
+	@(mkdir genozip-linux-x86_64 >& /dev/null ; exit 0)
 	@cp -f $< $@
 
 endif # Windows
