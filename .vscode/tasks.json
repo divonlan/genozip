@@ -297,12 +297,33 @@
                 "clear": true
             }
         },
-       {
+        {
             "type": "shell",
             "label": "Distribution - conda + windows installer + linux binaries",
             "command": "make.exe",
             "args": [
                 "distribution"
+            ],
+            "options": {
+                "cwd": "${workspaceRoot}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "clear": true
+            }
+        },
+        {
+            "type": "shell",
+            "label": "Distribution-Maintenance - to be run from genozip-prod",
+            "command": "make.exe",
+            "args": [
+                "distribution-maintenance"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"
