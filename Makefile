@@ -231,7 +231,7 @@ genounzip-opt$(EXE) genocat-opt$(EXE) genols-opt$(EXE): genozip-opt$(EXE)
 	@ln $^ $@
 
 LICENSE.txt: text_license.h version.h # not dependent on genozip.exe, so we don't generate it every compilation
-	@make -j ./genozip$(EXE) # recursive call 
+	@make -j genozip$(EXE) # recursive call to make genozip.exe with the latest version
 	@echo Generating $@
 	@./genozip$(EXE) --license=100 --force > $@
 
@@ -312,7 +312,7 @@ clean: clean-docs
 	@rm -R $(OBJDIR)
 	@mkdir $(OBJDIR) $(addprefix $(OBJDIR)/, $(SRC_DIRS))
 
-.PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch build-docs test-docs testfiles test-backup genozip-linux-x86_64/clean genozip-prod genozip-prod.exe dict_id_gen$(EXE) push-build
+.PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch build-docs test-docs testfiles test-backup genozip-linux-x86_64/clean genozip-prod genozip-prod.exe dict_id_gen$(EXE) push-build increment-version
 
 # builds prod for local OS
 genozip-prod$(EXE): 
@@ -334,7 +334,8 @@ genozip-prod:
 # and re-compile so that genozip --version gets updated
 # IMPORTANT: the first number in the version indicates the genozip file format version and goes into
 # the genozip file header SectionHeaderTxtHeader.genozip_version
-increment-version: $(C_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
+#increment-version: $(C_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
+increment-version: # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
 	@echo "Incrementing version.h"
 	@bash increment-version.sh
 
@@ -396,10 +397,12 @@ conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld
 windows/%.exe: CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"InstallForge\"
 windows/%.exe: $(OBJS) %.exe
 	@echo Linking $@
+	@(mkdir windows >& /dev/null ; exit 0)
 	@$(CC) -o $@ $(OBJS) $(CFLAGS) $(LDFLAGS)
 
 windows/LICENSE.for-installer.txt: genozip$(EXE) version.h
 	@echo Generating $@
+	@(mkdir windows >& /dev/null ; exit 0)
 	@./genozip$(EXE) --license=60 --force > $@
 
 WINDOWS_INSTALLER_OBJS = windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe windows/LICENSE.for-installer.txt LICENSE.txt
@@ -450,6 +453,9 @@ push-build:
 distribution: increment-version testfiles $(DOCS)/genozip-linux-x86_64.tar.build $(DOCS)/genozip-installer.exe build-docs push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
 	@(cd ../genozip-feedstock/ ; git pull)
 
+distribution-maintenance: increment-version testfiles $(DOCS)/genozip-linux-x86_64.tar.build $(DOCS)/genozip-installer.exe push-build conda/.conda-timestamp 
+	@(cd ../genozip-feedstock/ ; git pull)
+
 test-backup: genozip.exe
 	@echo "Compressing test/ files for in preparation for backup (except cram and bcf)"
 	@rm -f test/*.genozip
@@ -458,6 +464,7 @@ test-backup: genozip.exe
 # license copied on Windows, not Linux due to file mode issues on NTFS causing git to think LICENSE.txt has changed
 genozip-linux-x86_64/LICENSE.txt: LICENSE.txt
 	@echo Generating $@
+	@(mkdir genozip-linux-x86_64 >& /dev/null ; exit 0)
 	@cp -f $< $@
 
 endif # Windows
