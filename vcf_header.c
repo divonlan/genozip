@@ -661,7 +661,7 @@ static bool vcf_inspect_txt_header_zip (Buffer *txt_header)
     if (chain_is_loaded && !flag.rejects_coord)
         buf_alloc (evb, &vcf_header_liftover_dst_contigs, 0, 100, WordIndex, 0, "codec_bufs[1]");
     
-    uint32_t num_contig_lines;
+    uint32_t num_contig_lines=0;
     vcf_header_rewrite_header (evb, txt_header, vcf_header_handle_contigs, &num_contig_lines);
 
     if (chain_is_loaded && !flag.rejects_coord)     // sort (but not uniq)

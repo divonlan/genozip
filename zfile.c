@@ -720,7 +720,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeader *out_header) // optio
     z_file->section_list_buf.len /= sizeof (SectionEnt); // fix len
     BGEN_sections_list();
 
-    if (flag.show_gheader) {
+    DO_ONCE if (flag.show_gheader) {
         sections_show_gheader (header);
         if (exe_type == EXE_GENOCAT) exit_ok(); // in genocat, exit after showing the requested data
     }

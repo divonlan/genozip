@@ -870,7 +870,7 @@ static bool ctx_merge_in_one_vctx (VBlock *vb, ContextP vctx)
     zctx->num_singletons += vctx->num_singletons; // add singletons created by seg_by_ctx_ex (SNIP_LOOKUP b250 and snip in local)
     zctx->counts_section |= vctx->counts_section; // for use of ctx_compress_counts
     
-    if (vb->vblock_i == 1)
+    if (vb->vblock_i == 1 && (vctx->b250.len || vctx->local.len))
         zctx->flags = vctx->flags; // vb_1 flags will be the default flags for this context, used by piz in case there are no b250 or local sections due to all_the_same. see zip_generate_b250_section and piz_read_all_ctxs
 
     uint64_t ol_len = vctx->ol_nodes.len;
@@ -967,12 +967,22 @@ void ctx_merge_in_vb_ctx (VBlock *vb)
 
         all_merged=true; // unless proven otherwise
         bool any_merged=false;
-        for (ContextP vctx=CTX(0); vctx < CTX(vb->num_contexts); vctx++) 
+        for (ContextP vctx=CTX(0); vctx < CTX(vb->num_contexts); vctx++) {
+            if (!(   vctx->nodes.len                       // nodes need merging (some might pre-populated without b250)
+                  || vctx->ol_nodes.len                    // possibly need to update counts 
+                  || vctx->b250.len                        // some b250 might not have nodes (eg WORD_INDEX_MISSING)
+                  || vctx->txt_len                         // a context may have txt_len but the txt was segged to another context
+                  || (vctx->local.len && vb->vblock_i==1)  // zctx->flags needs setting
+                  || vctx->st_did_i != DID_I_NONE          // st_did_i needs setting
+                  || vctx->is_stats_parent))               // is_stats_parent needs setting
+               continue; // nothing to merge
+
             if (!vctx->dict_merged && vctx->dict_id.num) {
                 vctx->dict_merged = ctx_merge_in_one_vctx (vb, vctx); // false if zctx is locked by another VB
                 all_merged &= vctx->dict_merged;
                 any_merged |= vctx->dict_merged;
             }
+        }
 
         // case: couldn't merge any - perhaps the one large final vctx is busy - sleep a bit rather than busy-wait
         if (!any_merged && !all_merged) usleep (100); 
