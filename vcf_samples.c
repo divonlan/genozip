@@ -349,8 +349,9 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_DOSAGExDP)
     unsigned num_channels = ctx->con_cache.len ? ctx->con_cache.len : (1 + str_count_char (STRa(snip), '\t'));
     unsigned num_dps = num_channels / 3;
 
-    int64_t DP = reconstruct_peek (vb, CTX(FORMAT_DP), 0, 0).i;
-    DP = MAX_(0, MIN_(DP, num_dps-1));
+    const char *DP_str;
+    int64_t DP = reconstruct_peek (vb, CTX(FORMAT_DP), &DP_str, 0).i;
+    DP = (*DP_str=='.') ? 0 : MAX_(0, MIN_(DP, num_dps-1));
 
     int channel_i = vcf_piz_get_mux_channel_i (vb); 
     channel_i = (channel_i == 3) ? (num_dps * 3) : (DP*3 + channel_i);
