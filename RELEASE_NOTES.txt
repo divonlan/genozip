@@ -3,12 +3,15 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
-13.0.9
+14.0.0
 - FASTQ: Support format where read name is a number, and line3 is a SRA format
 - SAM/BAM: Better compression of Supplementary / Secondary alignments
 - --test now defaults to verify correctness with Adler32 which is much faster than MD5. To use MD5 instead of Adler32, specifiy --md5. 
 - New advanced option: --log-digest
 - Binding of multiples files is no longer supported for SAM/BAM - use --tar instead
+
+13.0.9 21/Jan/2022
+- Bug fixes
 
 13.0.8 8/January/2022
 - SAM/BAM/FASTQ: Better compression of BGI read names

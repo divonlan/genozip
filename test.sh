@@ -1276,17 +1276,19 @@ if (( $1 <= 35 )) ; then  batch_real_world_1 --best=NO_REF    ; fi
 if (( $1 <= 36 )) ; then  batch_real_world_1 --fast    ; fi 
 if (( $1 <= 37 )) ; then  batch_real_world_with_ref    ; fi 
 if (( $1 <= 38 )) ; then  batch_real_world_with_ref --best  ; fi 
-if (( $1 <= 39 )) ; then  batch_real_world_1_backcomp  ; fi 
-if (( $1 <= 40 )) ; then  batch_real_world_with_ref_backcomp ; fi 
-if (( $1 <= 41 )) ; then  batch_multiseq               ; fi
-if (( $1 <= 42 )) ; then  batch_external_cram          ; fi
-if (( $1 <= 43 )) ; then  batch_external_bcf           ; fi
-if (( $1 <= 44 )) ; then  batch_external_unzip         ; fi
-if (( $1 <= 45 )) ; then  batch_reference_fastq        ; fi
-if (( $1 <= 46 )) ; then  batch_reference_sam          ; fi
-if (( $1 <= 47 )) ; then  batch_reference_vcf          ; fi
-if (( $1 <= 48 )) ; then  batch_make_reference         ; fi
-if (( $1 <= 49 )) ; then  batch_reference_backcomp     ; fi
+if (( $1 <= 39 )) ; then  batch_multiseq               ; fi
+if (( $1 <= 40 )) ; then  batch_external_cram          ; fi
+if (( $1 <= 41 )) ; then  batch_external_bcf           ; fi
+if (( $1 <= 42 )) ; then  batch_external_unzip         ; fi
+if (( $1 <= 43 )) ; then  batch_reference_fastq        ; fi
+if (( $1 <= 44 )) ; then  batch_reference_sam          ; fi
+if (( $1 <= 45 )) ; then  batch_reference_vcf          ; fi
+if (( $1 <= 46 )) ; then  batch_make_reference         ; fi
+if (( $1 <= 47 )) ; then  batch_reference_backcomp     ; fi
+
+# TO DO: no need to run these in a maintainance release from genozip-prod
+if (( $1 <= 48 )) ; then  batch_real_world_1_backcomp  ; fi 
+if (( $1 <= 49 )) ; then  batch_real_world_with_ref_backcomp ; fi 
 if (( $1 <= 50 + $num_batch_prod_compatability_tests )) ; then batch_id=49 ; batch_prod_compatability $1 $batch_id ; fi
 
 printf "\nALL GOOD!\n"
