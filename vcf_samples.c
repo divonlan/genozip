@@ -140,20 +140,27 @@ void vcf_samples_zip_initialize (void)
     container_prepare_snip ((ContainerP)&con_PS_pos_ref_alt, 0, 0, ps_pra_snip, &ps_pra_snip_len); 
 }
 
+static void vcf_samples_PS_initialize (VBlockVCFP vb)
+{
+    ContextP lookback_ctx = CTX(VCF_LOOKBACK);
+    if (lookback_ctx->local_param) return; // already initialized
+
+    // note: we don't actually Seg anything into VCF_LOOKBACK as we get the lookback from the number of samples
+    // this just carries the lb_size as an empty local section
+    lookback_ctx->flags.store        = STORE_INT;
+    lookback_ctx->dynamic_size_local = true;
+    lookback_ctx->local_param        = true;
+    lookback_ctx->local.param        = lookback_size_to_local_param (vcf_num_samples + 1); // 1+ number of lookback values
+
+    CTX(VCF_SAMPLES)->flags.store = STORE_INDEX; // last_value is number of samples (=con.repeats)
+
+    lookback_init (VB, lookback_ctx, CTX(FORMAT_PS), STORE_INT); // lookback_ctx->local.param must be set before
+}
+
 void vcf_samples_seg_initialize (VBlockVCFP vb)
 {
-    if (segconf.ps_type) {
-        // note: we don't actually Seg anything into VCF_LOOKBACK as we get the lookback from the number of samples
-        // this just carries the lb_size as an empty local section
-        CTX(VCF_LOOKBACK)->flags.store        = STORE_INT;
-        CTX(VCF_LOOKBACK)->dynamic_size_local = true;
-        CTX(VCF_LOOKBACK)->local_param        = true;
-        CTX(VCF_LOOKBACK)->local.param        = lookback_size_to_local_param (vcf_num_samples + 1); // 1+ number of lookback values
-
-        CTX(VCF_SAMPLES)->flags.store         = STORE_INDEX; // last_value is number of samples (=con.repeats)
-
-        lookback_init (VB, CTX(VCF_LOOKBACK), CTX(FORMAT_PS), STORE_INT); // lookback_ctx->local.param must be set before
-    }
+    if (segconf.ps_type) 
+        vcf_samples_PS_initialize(vb);
 
     CTX(FORMAT_ADALL)->flags.store = STORE_INT;
     CTX(FORMAT_DP)->   flags.store = STORE_INT;
@@ -757,6 +764,12 @@ static inline void vcf_seg_FORMAT_PS (VBlockVCFP vb, ZipDataLineVCF *dl, Context
     if (segconf.running) {
         vcf_seg_FORMAT_PS_segconf (vb, ctx, STRa(PS));
         return;
+    }
+
+    // case first PS line appears after the lines segged by segconf - so we need to initialize
+    else if (!segconf.ps_type) {
+        vcf_seg_FORMAT_PS_segconf (vb, ctx, STRa(PS)); // set global segconf parameter - no harm even if multiple threads will set concurrently as regardless of the winner, the value is legitimate
+        vcf_samples_PS_initialize (vb);
     }
     
     // case: this line is in the same Phase Set as the previous line
@@ -1676,8 +1689,17 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
     }
 
     // missing subfields - defined in FORMAT but missing (not merely empty) in sample
-    for (unsigned i=n_sfs; i < con_nitems (*samples); i++)  
+    for (unsigned i=n_sfs; i < con_nitems (*samples); i++) {
+
+        if (samples->items[i].dict_id.num == _FORMAT_PS) {
+            if (!segconf.ps_type) 
+                vcf_samples_PS_initialize (vb);
+
+            lookback_insert_txt (VB, VCF_LOOKBACK, FORMAT_PS, &sample[sample_len], 0); // lookback must have num_samples per line
+        }
+
         seg_by_ctx (VB, NULL, 0, ctxs[i], 0); // generates WORD_INDEX_MISSING
+    }
 
     // verify AB if its channel 1
     if (ctx_has_value (VB, FORMAT_AB))

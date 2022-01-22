@@ -3,6 +3,9 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+13.0.10 22/Jan/2022
+- Bug fixes
+
 13.0.9 21/Jan/2022
 - Bug fixes
 

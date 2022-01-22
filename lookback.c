@@ -67,14 +67,14 @@ const void *lookback_get_do (VBlockP vb, ContextP lb_ctx, ContextP ctx,
 {
     uint32_t lb_size = lookback_size (lb_ctx);
 
-    ASSERT (lookback <= lookback_len (ctx, lb_size), "expecting lookback=%u <= lookback_len=%u for ctx=%s vb=%d line_i=%"PRIu64, 
-            lookback, lookback_len(ctx, lb_size), ctx->tag_name, vb->vblock_i, vb->line_i);
+    ASSERT (lookback <= lookback_len (ctx, lb_size), "expecting lookback=%u <= lookback_len=%u for ctx=%s vb=%d line_i=%"PRIu64"%s%s lb_size=%u", 
+            lookback, lookback_len(ctx, lb_size), ctx->tag_name, vb->vblock_i, vb->line_i, (VB_DT(DT_VCF) ? " sample_i=" : ""), (VB_DT(DT_VCF) ? str_int_s (vb->sample_i).s : ""), lb_size);
             
     Buffer *buf = lookback_buf(ctx);
     unsigned index = RR(buf->newest_index + lookback - 1, lb_size);
 
-    ASSERT (lookback > 0 && lookback < lb_size, "Expecting lookback=%d in ctx=%s to be in the range [1,%u]", 
-            lookback, ctx->tag_name, lb_size-1);
+    ASSERT (lookback > 0 && lookback < lb_size, "Expecting lookback=%d in ctx=%s vb=%d line_i=%"PRIu64"%s%s to be in the range [1,%u]", 
+            lookback, ctx->tag_name, vb->vblock_i, vb->line_i, (VB_DT(DT_VCF) ? " sample_i=" : ""), (VB_DT(DT_VCF) ? str_int_s (vb->sample_i).s : ""), lb_size-1);
 
     return is_word_index ? (void *)ENT (WordIndex, *buf, index) : (void *)ENT (int64_t, *buf, index);
 }
