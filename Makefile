@@ -418,11 +418,11 @@ $(DOCS)/genozip-installer.exe: clean-optimized $(WINDOWS_INSTALLER_OBJS) # clean
 	@echo '  (3) Click Save, then click Build'
 	@echo '  (4) Optionally: Click Yes, and copy the resulting files to releases/* and also c:\bin'	
 	@echo '  (5) Exit the UI (close the window)'
-	@if [ `basename ${PWD}` != genozip ] ; then cp $(WINDOWS_INSTALLER_OBJS) ../genozip/windows ; fi # so this works for genozip-prod too - because InstallForge uses absolute paths 
+	@if [ `basename ${PWD}` != genozip ] ; then cp $(WINDOWS_INSTALLER_OBJS) ../genozip/windows ; cp ../genozip/genozip-installer.ifp ../genozip-installer.ifp.save ; fi # so this works for genozip-prod too - because InstallForge uses absolute paths 
 	@(private/utils/InstallForge/InstallForge.exe ; exit 0)
-	@echo 'Committing Windows installer and pushing to repo'
 	@mv ../genozip/windows/genozip-installer.exe $(DOCS)  # so this works for genozip-prod too - because InstallForge uses absolute paths
 	@rm -f $(OBJDIR)/arch.o # remove this arch.o which contains DISTRIBUTION
+	@if [ `basename ${PWD}` != genozip ] ; then mv ../genozip/genozip-installer.ifp . ; mv ../genozip-installer.ifp.save ../genozip/genozip-installer.ifp ; fi # we always edit the version in the genozip dir
 #	@(C:\\\\Program\\ Files\\ \\(x86\\)\\\\solicus\\\\InstallForge\\\\bin\\\\ifbuilderenvx86.exe ; exit 0)
 
 $(DOCS)/genozip-linux-x86_64.tar.build: genozip-linux-x86_64/LICENSE.txt 
