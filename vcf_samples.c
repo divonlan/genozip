@@ -753,8 +753,7 @@ static inline void vcf_seg_FORMAT_PS (VBlockVCFP vb, ZipDataLineVCF *dl, Context
 
     if (segconf.running) {
         vcf_seg_FORMAT_PS_segconf (vb, ctx, STRa(PS));
-        return;
-    
+        return;    
     } 
     
     // case first PS line appears after the lines segged by segconf - so we need to initialize
