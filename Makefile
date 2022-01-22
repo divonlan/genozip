@@ -440,7 +440,7 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 
 BUILD_FILES = version.h genozip-installer.ifp LICENSE.txt Makefile
 
-BUILD_FILES_DOCS = $(DOCS)/genozip-installer.exe $(DOCS)/genozip-linux-x86_64.tar $(DOCS)/conf.py $(DOCS)/LICENSE.for-docs.txt $(DOCS)/RELEASE_NOTES.for-docs.txt
+BUILD_FILES_DOCS = genozip-installer.exe genozip-linux-x86_64.tar conf.py LICENSE.for-docs.txt RELEASE_NOTES.for-docs.txt
 
 push-build: 
 	@(git stage $(BUILD_FILES) ; exit 0) > /dev/null
