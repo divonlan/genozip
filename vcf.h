@@ -64,8 +64,9 @@
 #pragma GENDICT FORMAT_PP=DTYPE_2=PP       // <ID=PP,Number=G,Type=Integer,Description="Phred-scaled genotype posterior probabilities rounded to the closest integer">
 #pragma GENDICT FORMAT_SAC=DTYPE_2=SAC     // <ID=SAC,Number=.,Type=Integer,Description="Number of reads on the forward and reverse strand supporting each allele (including reference)">
 #pragma GENDICT FORMAT_SB=DTYPE_2=SB       // <ID=SB,Number=4,Type=Integer,Description="Per-sample component statistics which comprise the Fisher's Exact Test to detect strand bias">
-#pragma GENDICT FORMAT_PS=DTYPE_2=PS       // <ID=PS,Number=1,Type=Integer,Description="Physical phasing ID information, where each unique ID within a given sample (but not across samples) connects records within a phasing group">
-
+#pragma GENDICT FORMAT_PS=DTYPE_2=PS       // seen 1: <ID=PS,Number=1,Type=Integer,Description="Phasing set (typically the position of the first variant in the set)">
+                                           // seen 2: <ID=PS,Number=1,Type=Integer,Description="Physical phasing ID information, where each unique ID within a given sample (but not across samples) connects records within a phasing group">
+#pragma GENDICT FORMAT_PID=DTYPE_2=PID     // <ID=PID,Number=1,Type=String,Description="Physical phasing ID information, where each unique ID within a given sample (but not across samples) connects records within a phasing group">
 #pragma GENDICT FORMAT_FL=DTYPE_2=FL       // Seen in Reich's ancient DNA datasets: <ID=FL,Number=1,Type=Character,Description="filter level in range 0-9 or no value (non-integer: N,?) with zero being least reliable; to threshold at FL=n, use all levels n-9">
 
 #pragma GENDICT FORMAT_AB=DTYPE_2=AB       // <ID=AB,Number=1,Type=Float,Description="Allele balance for each het genotype",RendAlg="NONE">
@@ -257,6 +258,7 @@ extern TranslatorId vcf_lo_luft_trans_id (DictId dict_id, char number);
 
 // PIZ stuff
 extern bool vcf_piz_read_one_vb (VBlockP vb, Section sl);
+extern void vcf_piz_recon_init (VBlockP vb);
 extern bool vcf_vb_is_luft (VBlockP vb);
 extern bool vcf_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
 extern CONTAINER_FILTER_FUNC (vcf_piz_filter);
@@ -301,7 +303,8 @@ extern void vcf_samples_add  (const char *samples_str);
                       vcf_piz_special_INFO_HGVS_INS_END_POS, vcf_piz_special_INFO_HGVS_INS_PAYLOAD, \
                       vcf_piz_special_INFO_HGVS_DELINS_END_POS, vcf_piz_special_INFO_HGVS_DELINS_PAYLOAD,\
                       vcf_piz_special_MUX_BY_DOSAGE, vcf_piz_special_FORMAT_AB, vcf_piz_special_FORMAT_GQ, \
-                      vcf_piz_special_MUX_BY_DOSAGExDP, vcf_piz_special_COPY_REForALT, vcf_piz_special_DP_by_DP }
+                      vcf_piz_special_MUX_BY_DOSAGExDP, vcf_piz_special_COPY_REForALT, vcf_piz_special_DP_by_DP, \
+                      vcf_piz_special_PS_by_PID }
 
 SPECIAL (VCF, 0,  main_REFALT,         vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,              vcf_piz_special_FORMAT)
@@ -330,7 +333,8 @@ SPECIAL (VCF, 23, GQ,                  vcf_piz_special_FORMAT_GQ);              
 SPECIAL (VCF, 24, MUX_BY_DOSAGExDP,    vcf_piz_special_MUX_BY_DOSAGExDP);         // added v13.0.3
 SPECIAL (VCF, 25, COPY_REForALT,       vcf_piz_special_COPY_REForALT);            // added v13.0.5
 SPECIAL (VCF, 26, DP_by_DP,            vcf_piz_special_DP_by_DP);                 // added v13.0.5
-#define NUM_VCF_SPECIAL 27
+SPECIAL (VCF, 27, PS_BY_PID,           vcf_piz_special_PS_by_PID);                // added v13.0.11
+#define NUM_VCF_SPECIAL 28
 
 // Translators for Luft (=secondary coordinates)
 TRANSLATOR (VCF, VCF,   1,  G,      vcf_piz_luft_G)       // same order as LiftOverStatus starting LO_CANT_G

@@ -349,6 +349,8 @@ static void piz_reconstruct_one_vb (VBlock *vb)
     
     piz_uncompress_all_ctxs (vb, 0);
 
+    if (DTP (piz_recon_init)) DTP(piz_recon_init)(vb);
+
     // reconstruct from top level snip
     DidIType top_level_did_i = ctx_get_existing_did_i (vb, vb->translation.toplevel); 
     reconstruct_from_ctx (vb, top_level_did_i, 0, true);

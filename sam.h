@@ -288,7 +288,7 @@ extern void sam_zip_verify_gc_vb (VBlockP vb);
 
 // PIZ Stuff
 extern bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
-extern bool sam_piz_read_one_vb (VBlockP vb, Section sl);
+extern void sam_piz_recon_init (VBlockP vb);
 extern void sam_reconstruct_vb ();
 extern CONTAINER_FILTER_FUNC (sam_piz_filter);
 extern void sam_reconstruct_SEQ (VBlockP vb, ContextP ctx, const char *unused, unsigned unused2);

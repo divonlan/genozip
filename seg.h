@@ -91,8 +91,12 @@ extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, 
     seg_prepare_snip_other_do ((snip_code), (DictId)(other_dict_id), (has_parameter), (parameter), 0, (snip), &snip##_len)
 
 #define seg_prepare_snip_other_char(snip_code, other_dict_id, char_param, snip) \
-    snip##_len = sizeof (snip);\
-    seg_prepare_snip_other_do ((snip_code), (DictId)(other_dict_id), true, 0, (char_param), (snip), &snip##_len)
+    ({ snip##_len = sizeof (snip);\
+       seg_prepare_snip_other_do ((snip_code), (DictId)(other_dict_id), true, 0, (char_param), (snip), &snip##_len); })
+
+#define seg_prepare_snip_other_chari(snip_code, other_dict_id, char_param, snip, i) \
+    ({ snip##_lens[i] = sizeof (snip##s);\
+       seg_prepare_snip_other_do ((snip_code), (DictId)(other_dict_id), true, 0, (char_param), (snip##s)[i], &snip##_lens[i]); })
 
 #define seg_prepare_snip_special_other(special_code, snip, other_dict_id) do { \
     snip[0]=SNIP_SPECIAL; snip##_len=sizeof(snip)-1; \

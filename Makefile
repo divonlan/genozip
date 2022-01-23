@@ -35,7 +35,7 @@ MY_SRCS = genozip.c genols.c base250.c context.c container.c strings.c stats.c a
 		  data_types.c bit_array.c progress.c coords.c writer.c tar.c chrom.c qname.c tokenizer.c \
           zip.c piz.c reconstruct.c seg.c zfile.c aligner.c flags.c digest.c mutex.c linesorter.c threads.c \
 		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c \
-		  vcf_piz.c vcf_seg.c vcf_gt.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c vcf_refalt.c vcf_tags.c \
+		  vcf_piz.c vcf_seg.c vcf_gt.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c vcf_refalt.c vcf_tags.c vcf_ps_pid.c \
           sam_seg.c sam_piz.c sam_seg_bam.c sam_shared.c sam_header.c sam_md.c sam_tlen.c sam_cigar.c sam_fields.c \
 		  sam_seq.c sam_qual.c sam_gencomp.c sam_sa.c \
 		  fasta.c fastq.c gff3.c me23.c phylip.c chain.c kraken.c locs.c generic.c \
@@ -318,10 +318,10 @@ clean: clean-docs
 # builds prod for local OS
 genozip-prod$(EXE): 
 	@(cd ../genozip-prod ; git stash ; git pull ; rm -Rf $(OBJDIR) ; make -j clean ; touch dict_id_gen.h ; make -j)
-	@cp ../genozip-prod/genozip$(EXE) genozip-prod$(EXE)
-	@cp ../genozip-prod/genozip$(EXE) private/releases/genozip-$(version)$(EXE)
-	@cp ../genozip-prod/genounzip$(EXE) genounzip-prod$(EXE)
-	@cp ../genozip-prod/genocat$(EXE) genocat-prod$(EXE)
+	@cp ../genozip-prod/genozip$(EXE) ../genozip/genozip-prod$(EXE)
+	@cp ../genozip-prod/genozip$(EXE) ../genozip/private/releases/genozip-$(version)$(EXE)
+	@cp ../genozip-prod/genounzip$(EXE) ../genozip/genounzip-prod$(EXE)
+	@cp ../genozip-prod/genocat$(EXE) ../genozip/genocat-prod$(EXE)
 
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
 ifeq ($(OS),Windows_NT)

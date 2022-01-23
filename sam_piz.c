@@ -23,15 +23,13 @@
 #include "lookback.h"
 #include "qname.h"
 
-bool sam_piz_read_one_vb (VBlockP vb, Section sl)
+void sam_piz_recon_init (VBlockP vb)
 {
     if (CTX(OPTION_XA_Z)->dict.len) { // this file has XA
         lookback_init (vb, CTX(OPTION_XA_LOOKBACK), CTX (OPTION_XA_RNAME),  STORE_INDEX);
         lookback_init (vb, CTX(OPTION_XA_LOOKBACK), CTX (OPTION_XA_STRAND), STORE_INDEX);
         lookback_init (vb, CTX(OPTION_XA_LOOKBACK), CTX (OPTION_XA_POS),    STORE_INT);
     }
-
-    return true; // all good
 }
 
 // returns true if section is to be skipped reading / uncompressing
@@ -45,7 +43,7 @@ bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
               dict_id.num != _SAM_FLAG     && 
               dict_id.num != _SAM_CIGAR    &&
               dict_id.num != _SAM_BUDDY    && // BUDDY, AUX and SAM_MC_Z, OPTION_MC_Z are needed for CIGAR
-              dict_id.num != _SAM_AUX && // sam_piz_filter drops it and reconstructs SAM_MC_Z instead
+              dict_id.num != _SAM_AUX      && // sam_piz_filter drops it and reconstructs SAM_MC_Z instead
               dict_id.num != _SAM_MC_Z     &&
               dict_id.num != _OPTION_MC_Z  &&
             !(dict_id.num == _SAM_MAPQ     && flag.sam_mapq_filter) && 

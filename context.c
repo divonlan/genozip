@@ -1311,7 +1311,7 @@ void ctx_free_context (Context *ctx, DidIType did_i)
 
     ctx->no_stons = ctx->pair_local = ctx->pair_b250 = ctx->no_callback = ctx->line_is_luft_trans =
     ctx->local_param = ctx->no_vb1_sort = ctx->local_always = ctx->counts_section = ctx->no_drop_b250 = 
-    ctx->is_frozen = ctx->please_remove_dict = ctx->local_is_lten = ctx->dict_len_excessive = 0;
+    ctx->is_frozen = ctx->value_is_missing = ctx->please_remove_dict = ctx->local_is_lten = ctx->dict_len_excessive = 0;
     ctx->dynamic_size_local = 0;
     ctx->is_stats_parent = ctx->is_initialized = ctx->local_compressed = ctx->b250_compressed = ctx->dict_merged = 0;
     ctx->local_dep = 0;

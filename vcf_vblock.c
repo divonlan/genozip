@@ -28,7 +28,6 @@ void vcf_vb_release_vb (VBlockVCF *vb)
     vb->is_del_sv = 0;
     vb->vcf_version = 0;
     vb->PL_mux_by_DP = 0;
-    vb->PS_encountered_last_line = 0;
     vb->sum_dp_this_line = 0;
 
     memset (&vb->mux_PLn,    0, sizeof(vb->mux_PLn));

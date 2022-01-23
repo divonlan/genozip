@@ -172,7 +172,7 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
 
     // case: phase is predictable from has_ps and ht_data[0]
     // note: a case where this prediction fails is with alleles > 1 eg "1|2". In GIAB, this never have a PS, but can be | or / 
-    else if (segconf.ps_type && gt.repeats==2 &&
+    else if (segconf.ps_pid_type[0] && gt.repeats==2 &&
             ((ht_data[0] != '.' && (has_ps == (gt.repsep[0]=='|'))) || // ht!=. --> predicted to be as has_ps says
              (ht_data[0] == '.' && gt.repsep[0]=='/'))) {              // ht==. --> predicted to be /
 
