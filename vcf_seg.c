@@ -378,7 +378,7 @@ static void vcf_seg_FORMAT (VBlockVCF *vb, ZipDataLineVCF *dl, STRp(fmt))
 
         format_mapper.items[i] = (ContainerItem) { .dict_id = dict_id, .separator = {':'} };
 
-        if (dict_id.num == _FORMAT_PS)
+        if (dict_id.num == _FORMAT_PS || dict_id.num == _FORMAT_PID)
             format_mapper.items[i].separator[1] = CI1_ITEM_CB;
 
         // case: GL_to_PL:  FORMAT field snip is changed here to GL. Note: dict_id remains _FORMAT_GL.

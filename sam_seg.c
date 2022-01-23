@@ -106,6 +106,7 @@ static void sam_seg_initialize_0X (VBlockP vb, DidIType lookback_did_i, DidIType
         lookback_ctx->dynamic_size_local = true;
         lookback_ctx->local_param        = true;
         lookback_ctx->local.param        = lookback_size_to_local_param (1024);
+        lookback_ctx->local_always       = (lookback_ctx->local.param != 0); // no need for a SEC_LOCAL section if the parameter is 0 (which is the default anyway)
 
         lookback_init (vb, lookback_ctx, rname_ctx,  STORE_INDEX); // lookback_ctx->local.param must be set before
         lookback_init (vb, lookback_ctx, strand_ctx, STORE_INDEX);

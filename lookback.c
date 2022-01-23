@@ -82,6 +82,10 @@ const void *lookback_get_do (VBlockP vb, ContextP lb_ctx, ContextP ctx,
 // Seg: check if a string is the same of a back txt at a certain lookback
 bool lookback_is_same_txt (VBlockP vb, DidIType lb_did_i, ContextP ctx, uint32_t lookback, STRp(str))
 {
+    ContextP lb_ctx = CTX(lb_did_i);
+    uint32_t lb_size = lookback_size (lb_ctx);
+    if (lookback > lookback_len (ctx, lb_size)) return false; // no lookup available - not enough lookback data yet
+
     ValueType value = lookback_get_value (vb, CTX(lb_did_i), ctx, lookback);
 
     return str_issame_(STRa(str), ENT(char, vb->txt_data, value.txt.index), value.txt.len);

@@ -64,9 +64,6 @@ typedef struct VBlockVCF {
     
     // FORMAT/AD
     int64_t ad_values[VCF_MAX_ARRAY_ITEMS];
-
-    // FORMAT/PS
-    bool PS_encountered_last_line;
     
     // FORMAT stuff 
     Buffer format_mapper_buf;       // ZIP only: an array of type Container - one entry per entry in CTX(VCF_FORMAT)->nodes   
@@ -269,6 +266,13 @@ extern void vcf_piz_GT_cb_null_GT_if_null_DP (VBlockP vb , char *recon);
 #define IS_TRIVAL_FORMAT_SUBFIELD ((!recon_len || (recon_len==1 && *recon=='.')) && dict_id_is_vcf_format_sf (ctx->dict_id))
 extern void vcf_FORMAT_PL_decide (VBlockVCFP vb);
 extern void vcf_FORMAT_PL_after_vbs (void);
+
+// FORMAT/PS and FORMAT/PID stuff
+extern void vcf_samples_zip_initialize_PS_PID (void);
+extern void vcf_samples_seg_initialize_PS_PID (VBlockVCFP vb);
+extern void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STRp(value), bool is_pid);
+extern void vcf_seg_FORMAT_PS_PID_missing_value (VBlockVCFP vb, ContextP ctx, bool is_pid, const char *end_of_sample);
+extern void vcf_piz_initialize_ps_pid (VBlockP vb);
 
 // INFO stuff
 

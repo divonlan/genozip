@@ -21,10 +21,12 @@ bool vcf_piz_read_one_vb (VBlock *vb, Section sl)
 { 
     VB_VCF->last_end_line_i = LAST_LINE_I_INIT;
 
-    if (CTX(FORMAT_PS)->dict.len)  // this file has PS
-        lookback_init (vb, CTX(VCF_LOOKBACK), CTX (FORMAT_PS), STORE_INT);
-
     return true; // all good
+}
+
+void vcf_piz_recon_init (VBlockP vb)
+{
+    vcf_piz_initialize_ps_pid (vb);
 }
 
 // determine whether we should reconstruct this VB in LUFT coordinates. this is the is_translation callback defined in TRANSLATIONS
@@ -205,6 +207,10 @@ CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb)
 
         case _FORMAT_PS:
             lookback_insert_txt (vb, VCF_LOOKBACK, FORMAT_PS, STRa(recon));
+            break;
+
+        case _FORMAT_PID:
+            lookback_insert_txt (vb, VCF_LOOKBACK, FORMAT_PID, STRa(recon));
             break;
 
         default:

@@ -132,7 +132,8 @@ typedef struct Context {
 
     bool semaphore;            // valid within the context of reconstructing a single line. MUST be reset ahead of completing the line.
     bool is_frozen;            // PIZ: state is frozen because we're currently peeking
-
+    bool value_is_missing;     // PIZ: set by a SPECIAL function, as if there was a WORD_INDEX_MISSING b250
+    
     // ----------------------------
     // ZIP in z_file only
     // ----------------------------

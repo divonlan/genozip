@@ -348,24 +348,24 @@ static ValueType reconstruct_from_lookback (VBlockP vb, ContextP ctx, STRp(snip)
         if (reconstruct) RECONSTRUCT (back_snip, back_snip_len);
     }
 
+    // a lookback by txt
+    else if (snip_len == 1 && (*snip >= 'T' && *snip <= 'z')) { // maximum supported - 122(=z)-84(=T)+1 = 39
+        ValueType back_value = lookback_get_value (vb, lb_ctx, ctx, lookback * (*snip - 'T' + 1));
+
+        if (reconstruct) 
+            RECONSTRUCT (ENT (char, vb->txt_data, back_value.txt.index), back_value.txt.len);
+    }
+    
+    // a lookback by delta vs integer
     else { 
         ValueType back_value = lookback_get_value (vb, lb_ctx, ctx, lookback);
 
-        // a lookback by txt
-        if (snip_len == 1 && *snip == 'T') {
-            if (reconstruct) 
-                RECONSTRUCT (ENT (char, vb->txt_data, back_value.txt.index), back_value.txt.len);
-        }
-    
-        // a lookback by delta vs integer
-        else { 
-            PosType delta;
-            ASSPIZ  (str_get_int (STRa(snip), &delta), "Invalid delta snip \"%.*s\"", STRf(snip));
+        PosType delta;
+        ASSPIZ  (str_get_int (STRa(snip), &delta), "Invalid delta snip \"%.*s\"", STRf(snip));
 
-            value.i = back_value.i + delta;
-            
-            if (reconstruct) RECONSTRUCT_INT (value.i);
-        }
+        value.i = back_value.i + delta;
+        
+        if (reconstruct) RECONSTRUCT_INT (value.i);
     }
 
     return value; 
@@ -634,16 +634,15 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, DidIType did_i,
         STR0(snip);
         WordIndex word_index = LOAD_SNIP(ctx->did_i); // note: if we have no b250, local but have dict, this will be word_index=0 (see ctx_get_next_snip)
 
-        if (!snip) {
-            ctx->last_txt_len = 0;
-
-            if (ctx->flags.store == STORE_INDEX) 
-                ctx_set_last_value (vb, ctx, (int64_t)WORD_INDEX_MISSING);
-
-            return reconstruct ? -1 : 0; // -1 if WORD_INDEX_MISSING - remove preceding separator
-        }
+        if (!snip) goto missing;
 
         reconstruct_one_snip (vb, ctx, word_index, STRa(snip), reconstruct);        
+
+        // if SPECIAL function set value_is_missing (eg vcf_piz_special_PS_by_PID) - this treated as a WORD_INDEX_MISSING 
+        if (ctx->value_is_missing) {
+            ctx->value_is_missing = false;
+            goto missing;
+        }
 
         // for backward compatability with v8-11 that didn't yet have flags.store = STORE_INDEX for CHROM
         if (did_i == DTF(prim_chrom)) { // NOTE: CHROM cannot have aliases, because looking up the did_i by dict_id will lead to CHROM, and this code will be executed for a non-CHROM field
@@ -698,11 +697,12 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, DidIType did_i,
     else ASSPIZ (flag.missing_contexts_allowed,
                  "Error in reconstruct_from_ctx_do: ctx %s/%s has no data (dict, b250 or local) in vb_i=%u line_i=%"PRIu64" did_i=%u ctx->did=%u ctx->dict_id=%s", 
                  dtype_name_z (ctx->dict_id), ctx->tag_name, vb->vblock_i, vb->line_i, did_i, ctx->did_i, dis_dict_id (ctx->dict_id).s);
-
+        
     if (sep && reconstruct) RECONSTRUCT1 (sep); 
 
     ctx->last_txt_index = last_txt_index;
-    ctx->last_txt_len   = (uint32_t)vb->txt_data.len - ctx->last_txt_index;
+    ctx->last_txt_len   = (uint32_t)vb->txt_data.len - last_txt_index;
+
     ctx_set_encountered (vb, ctx); // this is the ONLY place in PIZ where we set encountered
     ctx->last_encounter_was_reconstructed = reconstruct;
 
@@ -711,6 +711,14 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, DidIType did_i,
         reconstruct_store_history (vb, ctx, last_txt_index);
 
     return (int32_t)ctx->last_txt_len;
+
+missing:
+    ctx->last_txt_len = 0;
+
+    if (ctx->flags.store == STORE_INDEX) 
+        ctx_set_last_value (vb, ctx, (int64_t)WORD_INDEX_MISSING);
+
+    return reconstruct ? -1 : 0; // -1 if WORD_INDEX_MISSING - remove preceding separator
 } 
 
 static uint64_t reconstruct_state_size=0, freeze_rec_size=0;
