@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-//   sam_gc.c
+//   sam_gencomp.c
 //   Copyright (C) 2022-2022 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 

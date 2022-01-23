@@ -65,7 +65,6 @@ typedef struct {
     CharIndex char_index;
     uint32_t snip_len;
 } CtxWord;
-#define WORD_IN_TXT_DATA(snip) ((CtxWord){ .char_index = ENTNUM (vb->txt_data, snip), .snip_len = snip##_len }) // get coordinates in txt_data
 
 // for signed numbers, we store them in our "interlaced" format rather than standard ISO format 
 // example signed: 2, -5 <--> interlaced: 4, 9. Why? for example, a int32 -1 will be 0x00000001 rather than 0xfffffffe - 

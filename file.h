@@ -403,13 +403,17 @@ typedef struct File {
     Buffer unmapped_read_count;
 
     // Z_FILE: Generated Components (gencomp) stuff - reject components in DVCF, SA primary/dependent components in SAM/BAM    
-    char *gencomp_file_name[2];        // ZIP: [0]=DC_PRIMARY/CT_PRIM [1]=DC_LUFT/CT_DEPN
+    char *gencomp_file_name[2];        // ZIP: [0]=DC_PRIMARY/SAM_COMP_PRIM [1]=DC_LUFT/SAM_COMP_DEPN
     FILE *gencomp_file[2];             // ZIP: DVCF:rejects txt file SAM:SA primary/dependent lines
     uint64_t gencomp_disk_size[2];     // ZIP
 
+    // Z_FILE: SAM/BAM SA stuff
+    Buffer sa_groups;                  // Z_FILE ZIP/PIZ: an SA group is a group of alignments, including the primary aligngment
+    Buffer sa_alns;                    // Z_FILE ZIP/PIZ: array of {RNAME, STRAND, POS, CIGAR, NM, MAPQ} of the alignment
+    
     // Z_FILE: DVCF stuff
-    Buffer rejects_report;             // ZIP --chain: human readable report about rejects
-    Buffer apriori_tags;               // ZIP DVCF: used for INFO/FORMAT tag renaming. Data from command line options if --chain, or VCF header if DVCF
+    Buffer rejects_report;             // Z_FILE ZIP --chain: human readable report about rejects
+    Buffer apriori_tags;               // Z_FILE ZIP DVCF: used for INFO/FORMAT tag renaming. Data from command line options if --chain, or VCF header if DVCF
     
     // TXT_FILE: DVCF stuff
     Coords coords;                     // TXT FILE ZIP: Set from ##dual_coordinates and immutable thereafter

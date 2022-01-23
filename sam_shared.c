@@ -43,6 +43,9 @@ void sam_vb_release_vb (VBlockSAM *vb)
     buf_free (&vb->binary_cigar);
     buf_free (&vb->textual_seq);
     buf_free (&vb->md_M_is_ref);
+    buf_free (&vb->sa_groups);
+    buf_free (&vb->sa_alns);
+    buf_free (&vb->sa_prim_cigars);
     buf_free (&vb->qname_hash);
     buf_free (&vb->buddy_textual_cigars);
     buf_free (&vb->gc_line_info);
@@ -55,6 +58,9 @@ void sam_vb_destroy_vb (VBlockSAM *vb)
     buf_destroy (&vb->binary_cigar);
     buf_destroy (&vb->textual_seq);
     buf_destroy (&vb->md_M_is_ref);
+    buf_destroy (&vb->sa_groups);
+    buf_destroy (&vb->sa_alns);
+    buf_destroy (&vb->sa_prim_cigars);
     buf_destroy (&vb->qname_hash);
     buf_destroy (&vb->buddy_textual_cigars);
     buf_destroy (&vb->gc_line_info);

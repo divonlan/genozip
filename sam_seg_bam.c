@@ -338,6 +338,10 @@ const char *bam_seg_txt_line (VBlock *vb_, const char *alignment /* BAM terminol
         sam_seg_is_gc_line (vb, dl, alignment, after - alignment, STRas(aux), true)) 
         goto done;
 
+    // case seg of prim/depn lines: we store vb->NM
+    if (flag.gencomp_num)
+        sam_sa_set_NM (vb, STRas(aux), true);
+
     // seg QNAME first, as it will find the buddy
     sam_seg_QNAME (vb, dl, next_field, l_read_name-1, 2); // QNAME. account for \0 and l_read_name
     next_field += l_read_name; // inc. \0

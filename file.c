@@ -716,6 +716,8 @@ static void file_initialize_bufs (File *file)
     INIT (vb_info[1]);
     INIT (line_info[0]);
     INIT (line_info[1]);
+    INIT (sa_alns);
+    INIT (sa_groups);
     INIT (rejects_report);
     INIT (apriori_tags);
     INIT (unconsumed_txt);
@@ -1107,6 +1109,8 @@ void file_close (File **file_p,
         buf_destroy (&file->recon_plan);
         buf_destroy (&file->comp_info);
         buf_destroy (&file->txt_file_info);
+        buf_destroy (&file->sa_groups);
+        buf_destroy (&file->sa_alns);
         buf_destroy (&file->rejects_report);
         buf_destroy (&file->apriori_tags);
 

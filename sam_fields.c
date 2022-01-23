@@ -208,7 +208,8 @@ done:
 // XA:Z "Alternative alignments" (a BWA-backtrack feature)
 // -------------------------------------------------------
 
-static bool sam_seg_0A_cigar_cb (VBlockP vb, ContextP ctx, STRp (cigar), uint32_t repeat)
+// used for XA, OA, SA
+bool sam_seg_0A_cigar_cb (VBlockP vb, ContextP ctx, STRp (cigar), uint32_t repeat)
 {
     // complicated CIGARs, likely to be relatively uncommon, are better off in local - anything more than eg 112M39S 
     // note: we set no_stons=true in sam_seg_initialize_0X so we can use local for this rather than singletons
@@ -369,38 +370,13 @@ void sam_piz_XA_field_insert_lookback (VBlockP vb)
     lookback_insert (vb, OPTION_XA_LOOKBACK, OPTION_XA_POS,    true, (ValueType){ .i = 0 }, false);
 }
 
-// ---------------------------------------------------------
-// SA:Z "Other canonical alignments in a chimeric alignment"
-// ---------------------------------------------------------
-
-// OA and SA format is: (rname ,pos ,strand ,CIGAR ,mapQ ,NM ;)+ . in OA - NM is optional (but its , is not)
-// Example SA:Z:chr13,52863337,-,56S25M70S,0,0;chr6,145915118,+,97S24M30S,0,0;chr18,64524943,-,13S22M116S,0,0;chr7,56198174,-,20M131S,0,0;chr7,87594501,+,34S20M97S,0,0;chr4,12193416,+,58S19M74S,0,0;
-// See: https://samtools.github.io/hts-specs/SAMtags.pdf
-// note: even though SA, OA, XA contain similar fields amongst each other and similar to the primary fields,
-// the values of subsequent lines tend to be similar for each one of them seperately, so we maintain separate contexts
-
-static void sam_seg_SA_field (VBlockSAM *vb, STRp(field))
-{
-    static const MediumContainer container_SA = { .nitems_lo = 6,      
-                                                  .repsep    = { ';' }, // including on last repeat    
-                                                  .items     = { { .dict_id = { _OPTION_SA_RNAME  }, .separator = {','} },  
-                                                                 { .dict_id = { _OPTION_SA_POS    }, .separator = {','} },  
-                                                                 { .dict_id = { _OPTION_SA_STRAND }, .separator = {','} },  
-                                                                 { .dict_id = { _OPTION_SA_CIGAR  }, .separator = {','} },  
-                                                                 { .dict_id = { _OPTION_SA_MAPQ   }, .separator = {','} },  
-                                                                 { .dict_id = { _OPTION_SA_NM     },                  } } };
-
-    SegCallback callbacks[6] = { [0]=chrom_seg_cb, [1]=seg_pos_field_cb, [3]=sam_seg_0A_cigar_cb };
-     
-    seg_array_of_struct (VB, CTX(OPTION_SA_Z), container_SA, field, field_len, callbacks);
-
-    CTX(OPTION_SA_Z)->txt_len++; // 1 for \t in SAM and \0 in BAM 
-}
-
 // -------------------------
 // OA:Z "Original alignment"
 // -------------------------
 
+// OA is: (rname, pos, strand, CIGAR, mapQ, NM ;)+ . NM is optional (but its , is not)
+// Example OA:Z:chr13,52863337,-,56S25M70S,0,0;chr6,145915118,+,97S24M30S,0,0;chr18,64524943,-,13S22M116S,0,0;chr7,56198174,-,20M131S,0,0;chr7,87594501,+,34S20M97S,0,0;chr4,12193416,+,58S19M74S,0,0;
+// See: https://samtools.github.io/hts-specs/SAMtags.pdf
 static void sam_seg_OA_field (VBlockSAM *vb, STRp(field))
 {
     static const MediumContainer container_OA = { .nitems_lo = 6,          

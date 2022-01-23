@@ -667,7 +667,7 @@ void sam_seg_QNAME (VBlockSAM *vb, ZipDataLineSAM *dl, STRp(qname), unsigned add
     if (vb->buddy_line_i == -1)
         qname_seg (VB, ctx, STRa(qname), add_additional_bytes);
 
-    dl->QNAME = (CtxWord){.char_index = ENTNUM (vb->txt_data, qname), .snip_len = qname_len };
+    dl->QNAME = (TxtWord){.index = ENTNUM (vb->txt_data, qname), .len = qname_len };
 }
 
 // We seg against a previous buddy line's MQ if one exists, but not if this is a single-MAPQ-value file
@@ -822,6 +822,10 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *next_line, uint32_t remai
     if (!segconf.running && !flag.gencomp_num && 
         sam_seg_is_gc_line (vb, dl, flds[0], next_line - flds[0], STRasi(fld,AUX), false)) 
         goto done;
+    
+    // case seg of prim/depn lines: we store vb->NM
+    if (flag.gencomp_num)
+        sam_sa_set_NM (vb, STRasi(fld,AUX), false);
 
     sam_seg_QNAME (vb, dl, STRfld(QNAME), 1);
 
@@ -840,7 +844,6 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *next_line, uint32_t remai
     // CIGAR - we wait to get more info from SEQ and QUAL
     sam_cigar_analyze (vb, STRfld(CIGAR), &dl->seq_len);
     vb->last_cigar = flds[CIGAR];
-    unsigned last_cigar_len = fld_lens[CIGAR];
     SAFE_NUL (&vb->last_cigar[fld_lens[CIGAR]]); // nul-terminate CIGAR string
 
     sam_seg_RNAME_RNEXT (VB, SAM_RNEXT, STRfld(RNEXT), fld_lens[RNEXT]+1);
@@ -873,7 +876,7 @@ const char *sam_seg_txt_line (VBlock *vb_, const char *next_line, uint32_t remai
         vb->qual_codec_no_longr = true; // we cannot compress QUAL with CODEC_LONGR in this case
 
     // finally we can seg CIGAR now
-    sam_cigar_seg_textual (vb, dl, last_cigar_len, STRfld(SEQ), STRfld(QUAL));
+    sam_cigar_seg_textual (vb, dl, fld_lens[CIGAR], STRfld(SEQ), STRfld(QUAL));
     
     // add BIN so this file can be reconstructed as BAM
     bam_seg_BIN (vb, dl, 0, this_pos);

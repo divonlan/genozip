@@ -196,6 +196,10 @@ typedef struct ZipDataLine {
     VBLOCK_COMMON_LINES_ZIP
 } ZipDataLine;
 
+// a reference into txt_data
+typedef struct { uint32_t index, len; } TxtWord; // 32b as VBs are limited to 2GB
+#define WORD_IN_TXT_DATA(snip) ((TxtWord){ .index = ENTNUM (vb->txt_data, snip), .len = snip##_len }) // get coordinates in txt_data
+
 #define NO_BUDDY (-1)
 
 extern void vb_cleanup_memory(void);

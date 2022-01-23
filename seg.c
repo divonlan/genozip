@@ -455,6 +455,7 @@ PosType seg_pos_field (VBlock *vb,
 
     return this_pos;
 }
+
 bool seg_pos_field_cb (VBlockP vb, ContextP ctx, STRp(pos_str), uint32_t repeat)
 {
     seg_pos_field (vb, ctx->did_i, ctx->did_i, 0, 0, STRa(pos_str), 0, pos_str_len);

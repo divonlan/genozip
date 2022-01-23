@@ -213,11 +213,11 @@ void sam_cigar_seg_textual (VBlockSAM *vb, ZipDataLineSAM *dl, unsigned last_cig
 
     // case: CIGAR is "*" - we get the dl->seq_len directly from SEQ or QUAL, and add the length to CIGAR eg "151*"
     if (!dl->seq_len) { // CIGAR is not available
-        ASSSEG (!seq_data_len || !qual_is_available || seq_data_len==dl->QUAL.snip_len, seq_data,
+        ASSSEG (!seq_data_len || !qual_is_available || seq_data_len==dl->QUAL.len, seq_data,
                 "Bad line: SEQ length is %u, QUAL length is %u, unexpectedly differ. SEQ=%.*s QUAL=%.*s", 
-                seq_data_len, dl->QUAL.snip_len, seq_data_len, seq_data, dl->QUAL.snip_len, qual_data);    
+                seq_data_len, dl->QUAL.len, seq_data_len, seq_data, dl->QUAL.len, qual_data);    
 
-        dl->seq_len = MAX_(seq_data_len, dl->QUAL.snip_len); // one or both might be not available and hence =1
+        dl->seq_len = MAX_(seq_data_len, dl->QUAL.len); // one or both might be not available and hence =1
 
         cigar_snip_len += str_int (dl->seq_len, &cigar_snip[cigar_snip_len]);
     } 
@@ -228,7 +228,7 @@ void sam_cigar_seg_textual (VBlockSAM *vb, ZipDataLineSAM *dl, unsigned last_cig
 
         ASSSEG (!qual_is_available || qual_data_len == dl->seq_len, qual_data,
                 "Bad line: according to CIGAR, expecting QUAL length to be %u but it is %u. QUAL=%.*s", 
-                dl->seq_len, dl->QUAL.snip_len, dl->QUAL.snip_len, qual_data);    
+                dl->seq_len, dl->QUAL.len, dl->QUAL.len, qual_data);    
     }
 
     // case: we buddy non-trival CIGARs with MC:Z. We don't buddy eg "151M" bc this will add rather than reduce entropy.
@@ -237,8 +237,8 @@ void sam_cigar_seg_textual (VBlockSAM *vb, ZipDataLineSAM *dl, unsigned last_cig
 
     if (last_cigar_len > 4 && vb->buddy_line_i != -1 && segconf.has[OPTION_MC_Z] && !segconf.running && 
         cigar_snip_len == 2 && // we don't buddy if CIGAR or SEQ are "*"
-        buddy_dl->MC.snip_len == last_cigar_len && 
-        !memcmp (vb->last_cigar, ENT (char, vb->txt_data, buddy_dl->MC.char_index), last_cigar_len)) 
+        buddy_dl->MC.len == last_cigar_len && 
+        !memcmp (vb->last_cigar, ENT (char, vb->txt_data, buddy_dl->MC.index), last_cigar_len)) 
 
         cigar_snip[cigar_snip_len++] = COPY_BUDDY; // always at cigar_snip[2]
 
@@ -253,9 +253,8 @@ void sam_cigar_seg_textual (VBlockSAM *vb, ZipDataLineSAM *dl, unsigned last_cig
         }
     }
     
-    // store the CIGAR in DataLine for use by a buddy MC:Z
-    if (segconf.has[OPTION_MC_Z])
-        dl->CIGAR =(CtxWord){ .char_index = ENTNUM (vb->txt_data, vb->last_cigar), .snip_len = last_cigar_len }; // in SAM (but not BAM) vb->last_cigar points into txt_data
+    // store the CIGAR in DataLine for use by a buddy MC:Z and SA:Z
+    dl->CIGAR = (TxtWord){ .index = ENTNUM (vb->txt_data, vb->last_cigar), .len = last_cigar_len }; // in SAM (but not BAM) vb->last_cigar points into txt_data
 
     if (segconf.running) {
         segconf.sam_cigar_len += last_cigar_len;
@@ -293,9 +292,9 @@ void sam_cigar_seg_binary (VBlockSAM *vb, ZipDataLineSAM *dl, uint32_t l_seq, ui
     unsigned add_bytes = n_cigar_op * sizeof (uint32_t) /* cigar */ + sizeof (uint16_t) /* n_cigar_op */;
 
     if (vb->textual_cigar.len > 4 && vb->buddy_line_i != -1 && segconf.has[OPTION_MC_Z] && !segconf.running && 
-        buddy_dl->MC.snip_len == vb->textual_cigar.len && 
+        buddy_dl->MC.len == vb->textual_cigar.len && 
         cigar_snip_len == 2 && // we don't buddy if CIGAR or SEQ are "*"
-        !memcmp (vb->textual_cigar.data, ENT (char, vb->txt_data, buddy_dl->MC.char_index), vb->textual_cigar.len)) 
+        !memcmp (vb->textual_cigar.data, ENT (char, vb->txt_data, buddy_dl->MC.index), vb->textual_cigar.len)) 
 
         cigar_snip[cigar_snip_len++] = COPY_BUDDY; // always at cigar_snip[2]
 
@@ -312,7 +311,7 @@ void sam_cigar_seg_binary (VBlockSAM *vb, ZipDataLineSAM *dl, uint32_t l_seq, ui
 
     // store a copy of the CIGAR in buddy_textual_cigars for use by a buddy MC:Z
     if (segconf.has[OPTION_MC_Z] && !segconf.running) {
-        dl->CIGAR =(CtxWord){ .char_index = vb->buddy_textual_cigars.len, .snip_len = vb->textual_cigar.len }; // in BAM dl->CIGAR points into buddy_textual_cigars
+        dl->CIGAR =(TxtWord){ .index = vb->buddy_textual_cigars.len, .len = vb->textual_cigar.len }; // in BAM dl->CIGAR points into buddy_textual_cigars
         buf_add_buf (VB, &vb->buddy_textual_cigars, &vb->textual_cigar, char, "buddy_textual_cigars");
     }
 

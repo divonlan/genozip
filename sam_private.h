@@ -27,8 +27,8 @@
 #define COPY_BUDDY ((char)0x80)    // character entered in CIGAR and TLEN data to indicate a buddy copy (PART OF THE GENOZIP FILE FORMAT)
 
 typedef struct {
-    CtxWord QUAL, U2, BD_BI[2];    // coordinates in txt_data 
-    CtxWord QNAME, RG, CIGAR, MC;  // coordinates in txt_data for buddy segging (except CIGAR in BAM - points instead into vb->buddy_textual_cigars)
+    TxtWord QUAL, U2, BD_BI[2];    // coordinates in txt_data 
+    TxtWord QNAME, RG, CIGAR, MC;  // coordinates in txt_data for buddy segging (except CIGAR in BAM - points instead into vb->buddy_textual_cigars)
     PosType POS, PNEXT;
     int64_t MAPQ, MQ, QUAL_score, TLEN;
     int64_t AS, YS;                // used for bowtie2
@@ -62,6 +62,12 @@ typedef struct VBlockSAM {
 
     Buffer bd_bi_line;             // ZIP: interlaced BD and BI data for one line
     
+    // SA stuff
+    Buffer sa_groups;              // ZIP/PIZ: an SA group is a group of alignments, including the primary aligngment
+    Buffer sa_alns;                // ZIP/PIZ: array of {RNAME, STRAND, POS, CIGAR, NM, MAPQ} of the alignment
+    Buffer sa_prim_cigars;         // ZIP/PIZ: BAM: textual primary CIGARs of SA groups
+    int64_t NM;                    // ZIP: value of NM (used by SA)
+
     // data used in genocat --show-sex
     WordIndex x_index, y_index, a_index;    // word index of the X, Y and chr1 chromosomes
     uint64_t x_bases, y_bases, a_bases;     // counters of number chromosome X, Y and chr1 bases
@@ -160,6 +166,12 @@ extern void sam_md_seg (VBlockSAM *vb,  ZipDataLineSAM *dl, STRp(md), unsigned a
 // XA:Z stuff
 // ----------
 extern void sam_piz_XA_field_insert_lookback (VBlockP vb);
+extern bool sam_seg_0A_cigar_cb (VBlockP vb, ContextP ctx, STRp (cigar), uint32_t repeat);
+
+// ----------
+// SA:Z stuff
+// ----------
+extern void sam_sa_set_NM (VBlockSAMP vb, STRps(aux), bool is_bam);
 
 extern const char aux_sep_by_type[2][256];
 
