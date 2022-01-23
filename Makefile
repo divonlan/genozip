@@ -317,7 +317,8 @@ clean: clean-docs
 
 # builds prod for local OS
 genozip-prod$(EXE): 
-	@if (( $(cd ../genozip-prod ; git status | grep clean | wc -l) == 0 )); then echo "genozip-prod has uncommitted files:"; git status; fi
+	@echo "building prod"
+	@$(SH_VERIFY_ALL_COMMITTED)
 	@(cd ../genozip-prod ; git pull ; rm -Rf $(OBJDIR) ; make -j clean ; touch dict_id_gen.h ; make -j)
 	@cp ../genozip-prod/genozip$(EXE) ../genozip/genozip-prod$(EXE)
 	@cp ../genozip-prod/genozip$(EXE) ../genozip/private/releases/genozip-$(version)$(EXE)
