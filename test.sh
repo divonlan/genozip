@@ -965,6 +965,9 @@ batch_misc_cases()
 {
     batch_print_header
 
+    # solexa read style
+    test_standard "-e$GRCh38 --pair" "" special.solexa-R1.fq special.solexa-R2.fq
+
     # Test binding SAM files with lots of contigs (no reference)
     echo "binding SAM files with lots of contigs (no reference)"
     test_multi_bound test.human-collated.sam

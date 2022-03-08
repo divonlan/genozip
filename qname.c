@@ -82,6 +82,7 @@ static void qname_genarate_qfs_with_mate (QnameFlavorStruct *qfs)
     // case 1: previous item is not fixed - move its separator (possibly 0) to the mate item and make it '/'
     if (qfs->con.items[mate_item_i-1].separator[0] != CI0_FIXED_0_PAD) {
         qfs->con.items[mate_item_i].separator[0] = qfs->con.items[mate_item_i-1].separator[0]; // 0 or ' '
+        qfs->con.items[mate_item_i].separator[1] = 0; 
         qfs->con.items[mate_item_i-1].separator[0] = '/';
     }
 

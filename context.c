@@ -797,7 +797,11 @@ static inline void ctx_drop_all_the_same (VBlock *vb, Context *zctx, Context *vc
 
     ASSERTISALLOCED (vctx->b250);
     WordIndex node_index = *FIRSTENT (WordIndex, vctx->b250); // the only b250 in this context, as it is all_the_same
-    if (node_index < 0) NO_DROP ("node_index=WORD_INDEX_*"); // a special WORD_INDEX_* - not droppable
+
+    // - if we have ol_node - we can only drop the existing word_index=0
+    // - if we don't have ol_node - we can only drop new node_index=0 (possibly we have ctx_create_node'd several)
+    // - a special WORD_INDEX_* - not droppable
+    if (node_index != 0) NO_DROP ("node_index is not 0"); 
 
     bool is_new_word = node_index >= vctx->ol_nodes.len; // its a new word if its not in the overlayed nodes (from previous VBs)
     
