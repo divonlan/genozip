@@ -267,7 +267,9 @@ build-docs: $(DOCS)/_build/html/.buildinfo $(DOCS)/LICENSE.for-docs.txt $(DOCS)/
 test-docs: $(DOCS)/conf.py $(docs) # don't require license or release notes - so code needn't be built
 	@echo "Building HTML docs (TEST)"
 	@run-on-wsl.sh /home/divon/miniconda3/bin/sphinx-build -M html $(DOCS) $(DOCS)/_build -q -a 
-	@"/c/Program Files (x86)/Google/Chrome/Application/chrome.exe" file:///c:/Users/divon/projects/genozip/docs/docs/_build/html/index.html --new-window
+	@echo $(PWD)
+	@# Open chrome on the last doc edited
+	@"/c/Program Files (x86)/Google/Chrome/Application/chrome.exe" "file:///c:"`pwd |cut -c3-`/docs/docs/_build/html/`cd docs/docs ; ls -1 *.rst -t|head -1|rev|cut -c5-|rev`.html --new-window
 
 # this is used by build.sh to install on conda for Linux and Mac. Installation for Windows in in bld.bat
 install: genozip$(EXE)
