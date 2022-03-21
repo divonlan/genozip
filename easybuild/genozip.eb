@@ -10,7 +10,7 @@ local_institution = 'MyInstitutionName'
 
 skipsteps = ['configure'] 
 homepage = 'https://genozip.com'
-description = """Genozip is a compressor for genomic files - it compresses FASTQ, SAM/BAM/CRAM, VCF, FASTA and others. Documentation: genozip.com. Support: support@genozip.com"""
+description = """Genozip is a compressor for BAM, FASTQ, VCF and other genomic files. Documentation: genozip.com. Support: support@genozip.com"""
 
 toolchain = SYSTEM
 
