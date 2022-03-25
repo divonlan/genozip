@@ -418,7 +418,7 @@ $(DOCS)/genozip-installer.exe: clean-optimized $(WINDOWS_INSTALLER_OBJS) # clean
 	@echo 'WINDOWS: Using the UI:'
 	@echo '  (1) Open genozip-installer.ifp'
 	@echo '  (2) Set General-Program version to $(version)'
-	@echo '  (3) Copy&paste to Dialogs->License from windows/LICENSE-for-installer.txt'
+	@echo '  (3) In Dialogs->License upload license from windows/LICENSE-for-installer.txt'
 	@echo '  (3) Click Save, then click Build'
 	@echo '  (4) Optionally: Click Yes, and copy the resulting files to releases/* and also c:\bin'	
 	@echo '  (5) Exit the UI (close the window)'
