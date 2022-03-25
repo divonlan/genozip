@@ -856,6 +856,21 @@ static int buf_list_find_buffer (const BufferP *buf_list, ConstBufferP buf, int 
     return mid; // found
 }
 
+// after removing marking buffers as removed, actually remove them from the list
+void buf_compact_buf_list (VBlockP vb)
+{
+    if (!vb) return;
+    
+    ARRAY (BufferP, bl, vb->buffer_list);
+
+    uint64_t new_i = 0;
+    for (uint64_t old_i=0; old_i < bl_len; old_i++)
+        if (!BL_IS_REMOVED (bl[old_i])) 
+            bl[new_i++] = bl[old_i];
+    
+    vb->buffer_list.len = new_i;
+}
+
 // remove from buffer_list of this vb
 // thread safety: only the thread owning the VB of the buffer (main thread of evb) can remove a buffer
 // from the buf list, OR the main thread may remove for all VBs, IF no compute thread is running

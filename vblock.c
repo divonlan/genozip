@@ -135,6 +135,8 @@ void vb_release_vb_do (VBlockP *vb_p, const char *func)
         *vb_p = NULL;
     }
 
+    buf_compact_buf_list (vb);
+
     if (vb->id >= 0) COPY_TIMER_VB (evb, vb_release_vb_do)
 }
 
@@ -330,7 +332,7 @@ void vb_cleanup_memory (void)
         VBlock *vb = pool->vb[vb_i];
         if (vb && 
             vb->data_type == z_file->data_type && // skip VBs that were initialized by a previous file of a different data type and not used by this file
-            DTPZ(cleanup_memory)) 
+            DTPZ(cleanup_memory))        
             DTPZ(cleanup_memory)(vb);
     }
 

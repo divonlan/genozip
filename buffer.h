@@ -198,7 +198,9 @@ extern void buf_show_memory_handler (void);
 extern void buf_add_to_buffer_list_do (VBlockP vb, Buffer *buf, const char *func);
 #define buf_add_to_buffer_list(vb,buf) buf_add_to_buffer_list_do ((vb), (buf), __FUNCTION__)
 
-void buf_update_buf_list_vb_addr_change (VBlockP new_vb, VBlockP old_vb);
+extern void buf_update_buf_list_vb_addr_change (VBlockP new_vb, VBlockP old_vb);
+
+extern void buf_compact_buf_list (VBlockP vb);
 
 extern void buf_low_level_free (void *p, const char *func, uint32_t code_line);
 #define FREE(p) do { if (p) { buf_low_level_free (((void*)(p)), __FUNCTION__, __LINE__); p=NULL; } } while(0)

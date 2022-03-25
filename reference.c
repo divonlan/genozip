@@ -1498,19 +1498,19 @@ void ref_diff_ref (void)
     ctx_free_context (&prim_chrom_ctx, DID_I_NONE);
 }
 
-#define REV_CODEC_GENOME_BASES_PER_THREAD (1 << 27) // 128Mbp
+#define REV_CODEC_GENOME_BASES_PER_THREAD (1ULL << 27) // 128Mbp
 
 static Reference ref_reverse_compliment_genome_ref = 0; // ref_generate_reverse_complement_genome is called from the main thread so no thread safety issues
 static void ref_reverse_compliment_genome_prepare (VBlock *vb)
 {
     vb->ref = ref_reverse_compliment_genome_ref;
-    vb->ready_to_dispatch = (vb->vblock_i-1) * REV_CODEC_GENOME_BASES_PER_THREAD < vb->ref->genome_nbases;
+    vb->ready_to_dispatch = (uint64_t)(vb->vblock_i-1) * REV_CODEC_GENOME_BASES_PER_THREAD < vb->ref->genome_nbases;
 }
 
 static void ref_reverse_compliment_genome_do (VBlock *vb)
 {
     bit_array_reverse_complement_all (vb->ref->emoneg, vb->ref->genome, 
-                                      (vb->vblock_i-1) * REV_CODEC_GENOME_BASES_PER_THREAD, 
+                                      (uint64_t)(vb->vblock_i-1) * REV_CODEC_GENOME_BASES_PER_THREAD, 
                                       REV_CODEC_GENOME_BASES_PER_THREAD);
 
     vb->is_processed = true; // tell dispatcher this thread is done and can be joined.

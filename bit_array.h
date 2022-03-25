@@ -210,7 +210,8 @@ typedef struct BitArray
 static inline void bit_array_clear_excess_bits_in_top_word (BitArray* bitarr) // divon
 {
   if (bitarr->nbits % 64)
-    bitarr->words[bitarr->nwords-1] &= bitmask64 (bitarr->nbits % 64); 
+    __atomic_and_fetch (&bitarr->words[bitarr->nwords-1], bitmask64(bitarr->nbits % 64), __ATOMIC_RELAXED); // atomic &=
+    // bitarr->words[bitarr->nwords-1] &= bitmask64 (bitarr->nbits % 64); 
 }
 
 static inline void ASSERT_excess_bits_are_0 (BitArray* bitarr) // divon

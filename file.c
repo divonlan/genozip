@@ -1078,7 +1078,6 @@ void file_close (File **file_p,
     // free resources if we are NOT near the end of the execution. If we are at the end of the execution
     // it is faster to just let the process die
 
-{ START_TIMER 
     if (cleanup_memory) {
 
         mutex_destroy (file->dicts_mutex);
@@ -1118,7 +1117,6 @@ void file_close (File **file_p,
         FREE (file->rejects_file_name[1]);
         FREE (file);
     }
-COPY_TIMER_VB(evb,tmp2);}
 
     COPY_TIMER_VB (evb, file_close);
 }

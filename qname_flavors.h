@@ -379,8 +379,8 @@ static QnameFlavorStruct qf[] = {
                                                                           TECH_UNKNOWN, 2, &con_ncbi_sra2_fq,  5, {2,3,7,-1},     {1, -1},        {-1},           {-1},           3,-1,  -1,                  },
     {},  { "NCBI-SRA-FQ",   { "ERR811170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template length=52" },
                                                                           TECH_UNKNOWN, 2, &con_ncbi_sra_fq,   4, {2,6,-1},       {1, -1},        {-1},           {-1},           2,-1,  -1,                  },
-    {},  { "NCBI-SRA2",     { "ERR2708427.1.1" },                         TECH_UNKNOWN, 0, &con_ncbi_sra2,     2, {2,3,-1},       {1, -1},        {-1},           {-1},           3,-1,  -1,                  },
-    {},  { "NCBI-SRA",      { "SRR001666.1" },                            TECH_UNKNOWN, 0, &con_ncbi_sra,      1, {2,-1},         {1, -1},        {-1},           {-1},           2,-1,  -1,                  },
+    {},  { "NCBI-SRA2",     { "ERR2708427.1.1" },                         TECH_UNKNOWN, 0, &con_ncbi_sra2,     2, {2,3,-1},       {1, -1},        {3,-1},           {-1},           3,-1,  -1,                  },
+    {},  { "NCBI-SRA",      { "SRR001666.1" },                            TECH_UNKNOWN, 0, &con_ncbi_sra,      1, {2,-1},         {1, -1},        {2,-1},           {-1},           2,-1,  -1,                  },
     {},  { "Genozip-opt",   { "basic.1" },  /* must be last */            TECH_UNKNOWN, 0, &con_genozip_opt,   1, {1,-1},         {-1},           {-1},           {-1},           1,-1,  -1,                  },
 };
 
