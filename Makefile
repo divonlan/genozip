@@ -319,8 +319,8 @@ clean: clean-docs
 # builds prod for local OS
 genozip-prod$(EXE): 
 	@echo "building prod"
-	@(cd ../genozip-prod ; git pull ; rm -Rf $(OBJDIR) ; make -j clean ; touch dict_id_gen.h ; make -j)
 	@$(SH_VERIFY_ALL_COMMITTED)
+	@(cd ../genozip-prod ; git pull ; rm -Rf $(OBJDIR) ; make -j clean ; touch dict_id_gen.h ; make -j)
 	@cp ../genozip-prod/genozip$(EXE) ../genozip/genozip-prod$(EXE)
 	@cp ../genozip-prod/genozip$(EXE) ../genozip/private/releases/genozip-$(version)$(EXE)
 	@cp ../genozip-prod/genounzip$(EXE) ../genozip/genounzip-prod$(EXE)
