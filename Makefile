@@ -285,7 +285,7 @@ endif
 
 version = $(shell head -n1 version.h |cut -d\" -f2)
 
-SH_VERIFY_ALL_COMMITTED = (( `git status |grep 'modified\|Untracked files'|grep -v .gitkeep |wc -l ` == 0 )) || \
+SH_VERIFY_ALL_COMMITTED = (( `git status |grep 'modified\|Untracked files'|grep -v .gitkeep |wc -l` == 0 )) || \
                           (echo ERROR: there are some uncommitted changes: ; echo ; git status ; exit 1)
 
 test:
