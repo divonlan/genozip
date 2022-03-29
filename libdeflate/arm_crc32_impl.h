@@ -220,7 +220,7 @@ crc32_pmull_aligned(u32 remainder, const uint8x16_t *p, size_t nr_segs)
 }
 #define IMPL_ALIGNMENT		16
 #define IMPL_SEGMENT_SIZE	16
-#include "../crc32_vec_template.h"
+#include "./crc32_vec_template.h"
 #endif /* PMULL implementation */
 
 #ifdef DISPATCH
