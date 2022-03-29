@@ -18,6 +18,9 @@
 #include "file.h"
 #include "endianness.h"
 
+#define MAX_TAR_UID_GID 07777777 // must fit in 8 characters, inc. \0, printed in octal
+#define NOBODY  65534            // used for UID / GID in case real values are beyond MAX_TAR_UID_GID. https://wiki.ubuntu.com/nobody
+
 // each file in the tar file is comprised a 512-byte "ustar" header followed by 512-byte blocks. tar file is terminated
 // by two zero 512B blocks. see: http://manpages.ubuntu.com/manpages/bionic/man5/tar.5.html
 typedef struct __attribute__ ((packed)){
@@ -72,6 +75,20 @@ static void tar_copy_metadata_from_file (const char *fn)
     struct stat64 st;    
     int ret = stat64 (fn, &st);
     ASSERT (!ret, "stat64 failed on %s: %s", fn, strerror(errno));
+
+    // change UID and/or GID to NOBODY if they go beyond the maximum. This can happen, for example, if
+    // SSSD (https://sssd.io/) uses UIDs from Microsoft Active Directory.
+    if ((uint32_t)st.st_uid > MAX_TAR_UID_GID) {
+        WARN_ONCE ("UID of %s (and perhaps others) is %u - beyond the maximum allowed by the tar file format; recording uid as %u (nobody). No harm.",
+                   fn, st.st_uid, NOBODY);
+        st.st_uid = NOBODY;
+    }
+
+    if ((uint32_t)st.st_gid > MAX_TAR_UID_GID) {
+        WARN_ONCE ("GID of %s (and perhaps others) is %u - beyond the maximum allowed by the tar file format; recording uid as %u (nogroup). No harm.",
+                   fn, st.st_gid, NOBODY);
+        st.st_gid = NOBODY;
+    }
 
     // convert to nul-terminated octal in ASCII
     sprintf (hdr.uid,   "%.*o", (int)sizeof(hdr.uid)-1,  st.st_uid);
