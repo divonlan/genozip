@@ -14,6 +14,7 @@
 #include <termios.h>
 #ifdef __APPLE__
 #include <sys/sysctl.h>
+#include <mach-o/dyld.h>
 #else // LINUX
 #include <sched.h>
 #include <sys/sysinfo.h>
@@ -27,13 +28,14 @@
 #include "arch.h"
 #include "sections.h"
 #include "flags.h"
+#include "strings.h"
 
 #ifdef _WIN32
 // add the genozip path to the user's Path environment variable, if its not already there. 
 // Note: We do all string operations in Unicode, so as to preserve any Unicode characters in the existing Path
-static void arch_add_to_windows_path (const char *argv0)
+static void arch_add_to_windows_path (rom argv0)
 {
-    const char *backslash = strrchr (argv0, '\\');
+    rom backslash = strrchr (argv0, '\\');
     if (!backslash) return; // no directory
 
     unsigned genozip_path_len = backslash - argv0;
@@ -68,7 +70,7 @@ static void arch_add_to_windows_path (const char *argv0)
 } 
 #endif
 
-void arch_initialize (const char *argv0)
+void arch_initialize (rom argv0)
 {
     // verify CPU architecture and compiler is supported
     ASSERT0 (sizeof(char)==1 && sizeof(short)==2 && sizeof (unsigned)==4 && sizeof(long long)==8, 
@@ -85,10 +87,11 @@ void arch_initialize (const char *argv0)
 #endif
 
     // verify that type sizes are as required (types that appear in section headers written to the genozip format)
-    ASSERT0 (sizeof (SectionType) == 1,  "expecting sizeof (SectionType)==1");
-    ASSERT0 (sizeof (Codec)       == 1,  "expecting sizeof (Codec)==1");
-    ASSERT0 (sizeof (LocalType)   == 1,  "expecting sizeof (LocalType)==1");
-    ASSERT0 (sizeof (uint128_t)   == 16, "expecting sizeof (uint128_t)==16");
+    ASSERT0 (sizeof (SectionType)   == 1,  "expecting sizeof (SectionType)==1");
+    ASSERT0 (sizeof (Codec)         == 1,  "expecting sizeof (Codec)==1");
+    ASSERT0 (sizeof (LocalType)     == 1,  "expecting sizeof (LocalType)==1");
+    ASSERT0 (sizeof (uint128_t)     == 16, "expecting sizeof (uint128_t)==16");
+    ASSERT0 (sizeof (ReconPlanItem) == 12, "expecting sizeof (ReconPlanItem)==12");
 
     // verify that order of bit fields in a structure is as expected (this is compiler-implementation dependent, and we go by gcc)
     // it might be endianity-dependent, and we haven't implemented big-endian yet, see: http://mjfrazer.org/mjfrazer/bitfields/
@@ -101,11 +104,14 @@ void arch_initialize (const char *argv0)
     ASSERT0 (bittest.bit_3.a == 1, "unsupported bit order in a struct, please use gcc to compile (2)");
 
 #ifdef _WIN32
+    _setmode(_fileno(stdin),  _O_BINARY);
+    _setmode(_fileno(stdout), _O_BINARY);
+
     arch_add_to_windows_path (argv0);
 #endif
 }
 
-const char *arch_get_endianity (void)
+rom arch_get_endianity (void)
 {
     // verify endianity is as expected
     uint16_t test_endianity = 0x0102;
@@ -154,7 +160,7 @@ unsigned arch_get_num_cores (void)
 #endif
 }
 
-const char *arch_get_os (void)
+rom arch_get_os (void)
 {
     static char os[256];
 
@@ -174,7 +180,7 @@ const char *arch_get_os (void)
     return os;
 }
 
-const char *arch_get_ip_addr (const char *reason) // optional text in case curl execution fails
+rom arch_get_ip_addr (rom reason) // optional text in case curl execution fails
 {
     static char ip_str[ARCH_IP_LEN] = "0.0.0.0"; // default in case of failure
 
@@ -183,19 +189,19 @@ const char *arch_get_ip_addr (const char *reason) // optional text in case curl 
     return ip_str;
 }
 
-const char *arch_get_user_host (void)
+rom arch_get_user_host (void)
 {
     static char user_host[200];
 
 #ifdef _WIN32
-    const char *host = getenv ("HOSTNAME");
+    rom host = getenv ("HOSTNAME");
     if (!host) host = "";
 #else
     char host[100] = "";
     gethostname (host, sizeof (host)-1);
 #endif
 
-    const char *user = getenv (flag.is_windows ? "USERNAME" : "USER");
+    rom user = getenv (flag.is_windows ? "USERNAME" : "USER");
 
     sprintf (user_host, "%.99s@%.99s", user ? user : "", host);
     return user_host;
@@ -214,10 +220,42 @@ bool arch_is_wsl (void)
 #endif
 }
 
+// good summary here: https://stackoverflow.com/questions/1023306/finding-current-executables-path-without-proc-self-exe/1024937#1024937
+rom arch_get_executable (rom argv0) // caller should free
+{
+#ifdef __linux__    
+    char *path = malloc (PATH_MAX + 1);
+    ssize_t path_len = readlink ("/proc/self/exe", path, PATH_MAX); // doesn't nul-terminate
+    ASSRET (path_len > 0, argv0, "Warning: readlink() failed to get executable path from /proc/self/exe: %s", strerror(errno));
+    path[path_len] = 0;
+    return path;
+
+#elif defined _WIN32
+    char *path = malloc (MAX_PATH + 1);
+    DWORD path_len = GetModuleFileNameA (NULL, path, MAX_PATH); // nul-terminates
+    ASSRET (path_len/*error*/ && GetLastError() != ERROR_INSUFFICIENT_BUFFER,  argv0,
+            "Warning: GetModuleFileNameA() failed to get executable path from /proc/self/exe: %s", str_win_error());
+    return path;
+
+#elif defined __APPLE__
+    // see: https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/dyld.3.html
+    uint32_t path_len = 0;
+    _NSGetExecutablePath (NULL, &path_len); // get path len - possibly more than MAXPATHLEN if has symlinks
+    char *path = malloc (path_len + 1);  
+
+    ASSRET0 (!_NSGetExecutablePath (path, &path_len), argv0, "Warning: _NSGetExecutablePath() failed");
+    path[path_len] = 0;
+    return path;
+
+#else // another OS
+    return argv0;
+#endif
+}
+
 #ifndef DISTRIBUTION
     #define DISTRIBUTION "unknown" // this occurs if the code is built not using the genozip Makefile
 #endif    
-const char *arch_get_distribution (void)
+rom arch_get_distribution (void)
 {
     return DISTRIBUTION[0] ? DISTRIBUTION : "github"; // DISTRIBUTION is "" if genozip is built with "make" without defining DISTRIBUTION - re-write as "github"
 }

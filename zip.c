@@ -32,7 +32,6 @@
 #include "compressor.h"
 #include "strings.h"
 #include "bgzf.h"
-#include "linesorter.h"
 #include "txtheader.h"
 #include "threads.h"
 #include "endianness.h"
@@ -40,6 +39,8 @@
 #include "contigs.h"
 #include "chrom.h"
 #include "biopsy.h"
+#include "dict_io.h"
+#include "gencomp.h"
 
 static Mutex wait_for_vb_1_mutex = {};
 
@@ -64,7 +65,7 @@ static void zip_display_compression_ratio (Digest md5)
         static FileType source_file_type = UNKNOWN_FILE_TYPE;
 
         // reset for every set of bound files (we might have multiple sets if --pair)
-        if (z_file->num_txt_components_so_far == 1) {
+        if (z_file->num_txts_so_far == 1) {
             comp_bytes_bind=0; 
             source_file_type = txt_file->type;
         }
@@ -99,7 +100,7 @@ static void zip_display_compression_ratio (Digest md5)
 
     // when compressing BAM report only ratio_vs_comp (compare to BGZF-compress BAM - we don't care about the underlying plain BAM)
     // Likewise, doesn't have a compression extension (eg .gz), even though it may actually be compressed eg .tbi (which is actually BGZF)
-    else if (Z_DT(DT_BAM) || (txt_file && file_get_codec_by_txt_ft (txt_file->data_type, txt_file->type) == CODEC_NONE)) 
+    else if (Z_DT(DT_BAM) || (txt_file && file_get_codec_by_txt_ft (txt_file->data_type, txt_file->type, false) == CODEC_NONE)) 
         progress_finalize_component_time_ratio (dt_name (z_file->data_type), ratio_vs_comp, md5);
 
     else if (ratio_vs_comp >= 0) {
@@ -132,17 +133,17 @@ static inline void zip_generate_one_b250 (VBlockP vb, ContextP ctx, uint32_t wor
         bool one_up = (n == *prev_word_index + 1) && (word_i > 0);
 
         if (one_up) { // note: we can't do SEC_VCF_GT_DATA bc we can't PIZ it as many GT data types are in the same section 
-            NEXTENT(uint8_t, *b250_buf) = (uint8_t)BASE250_ONE_UP;
+            BNXT(uint8_t, *b250_buf) = (uint8_t)BASE250_ONE_UP;
             if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:ONE_UP ", word_i);
         }
 
         else {
             if (num_numerals == 4) { // assign word byte by byte, as it is not word-boundary aligned
-                memcpy (AFTERENT (char, *b250_buf), numerals, 4); // hopefully the compiler will optimize this memcpy and it won't e a function call...
+                memcpy (BAFTc (*b250_buf), numerals, 4); // hopefully the compiler will optimize this memcpy and it won't e a function call...
                 b250_buf->len += 4;
             } 
             else
-                NEXTENT (uint8_t, *b250_buf) = *numerals;
+                BNXT8 (*b250_buf) = *numerals;
 
             if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:%u ", word_i, n);
         }
@@ -150,18 +151,18 @@ static inline void zip_generate_one_b250 (VBlockP vb, ContextP ctx, uint32_t wor
     }
 
     else if (node_index == WORD_INDEX_MISSING) {
-        NEXTENT(uint8_t, *b250_buf) = (uint8_t)BASE250_MISSING_SF;
+        BNXT(uint8_t, *b250_buf) = (uint8_t)BASE250_MISSING_SF;
         *prev_word_index = node_index;
         if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:MISSING ", word_i);
     }
     
     else if (node_index == WORD_INDEX_EMPTY) {
-        NEXTENT(uint8_t, *b250_buf) = (uint8_t)BASE250_EMPTY_SF;
+        BNXT(uint8_t, *b250_buf) = (uint8_t)BASE250_EMPTY_SF;
         *prev_word_index = node_index;
         if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:EMPTY ", word_i);
     }
 
-    else ABORT ("Error in zip_generate_one_b250: invalid node_index=%u", node_index);        
+    else ABORT ("invalid node_index=%u", node_index);        
 }
 
 // here we generate the b250 data: we convert the b250 buffer data from an index into context->nodes
@@ -170,7 +171,7 @@ static inline void zip_generate_one_b250 (VBlockP vb, ContextP ctx, uint32_t wor
 // because: 1. the dictionary got integrated into the global one - some values might have already been in the global
 // dictionary thanks to other threads working on other VBs  
 // 2. for the first VB, we sort the dictionary by frequency returns true if section should be dropped
-static void zip_generate_b250 (VBlock *vb, Context *ctx)
+static void zip_generate_b250 (VBlockP vb, Context *ctx)
 {
     START_TIMER;
 
@@ -189,7 +190,7 @@ static void zip_generate_b250 (VBlock *vb, Context *ctx)
 
     ARRAY (WordIndex, b250, ctx->b250);
 
-    ctx->b250.num_ctx_words = b250_len; // we move the number of words to param, as len will now contain the of bytes. used by ctx_update_stats()
+    ctx->b250.count = b250_len; // we move the number of words to param, as len will now contain the of bytes. used by ctx_update_stats()
     ctx->b250.len = 0; // we are going to overwrite b250 with the converted indices
 
     // convert b250 from an array of node_index (4 bytes each) to word_index (1-4 bytes each)    
@@ -209,20 +210,20 @@ static void zip_generate_b250 (VBlock *vb, Context *ctx)
     if (show) {
         bufprintf (vb, &vb->show_b250_buf, "%s", "\n");
         iprintf ("%.*s", (uint32_t)vb->show_b250_buf.len, vb->show_b250_buf.data);
-        buf_free (&vb->show_b250_buf);
+        buf_free (vb->show_b250_buf);
     }
 
-    codec_assign_best_codec (vb, ctx, NULL, SEC_B250);
+    COPY_TIMER (zip_generate_b250); // codec_assign measures its own time
 
-    COPY_TIMER (zip_generate_b250);
+    codec_assign_best_codec (vb, ctx, NULL, SEC_B250);
 }
 
-static void zip_resize_local (VBlock *vb, Context *ctx)
+static void zip_resize_local (VBlockP vb, Context *ctx)
 {
     ARRAY (int64_t, src, ctx->local);
 
     // search for the largest (stop if largest so far requires 32bit)
-    int64_t largest = *FIRSTENT (int64_t, ctx->local);
+    int64_t largest = *B1ST (int64_t, ctx->local);
     int64_t smallest = largest;
 
     for (uint64_t i=1; i < src_len; i++) 
@@ -294,7 +295,7 @@ static void zip_resize_local (VBlock *vb, Context *ctx)
 
 // selects the smallest size (8, 16, 32) for the data, transposes, and BGENs
 // note: in PIZ, these are untransposed in eg BGEN_transpose_u32_buf
-static void zip_generate_transposed_local (VBlock *vb, Context *ctx)
+static void zip_generate_transposed_local (VBlockP vb, Context *ctx)
 {
     ARRAY (uint32_t, data, ctx->local);
 
@@ -306,9 +307,9 @@ static void zip_generate_transposed_local (VBlock *vb, Context *ctx)
     if      (largest < 0xfe)   ctx->ltype = LT_UINT8_TR;  // -1 is reserved for "missing"
     else if (largest < 0xfffe) ctx->ltype = LT_UINT16_TR;
     
-    buf_alloc (vb, &vb->compressed, 0, ctx->local.len * lt_desc[ctx->ltype].width, char, 1, "compressed");
+    buf_alloc (vb, &vb->scratch, 0, ctx->local.len * lt_desc[ctx->ltype].width, char, 1, "scratch");
 
-    uint32_t cols = ctx->local.param;
+    uint32_t cols = ctx->local.count;
     // we're restricted to 255 columns, because this number goes into uint8_t SectionHeaderCtx.param
     ASSERT (cols >= 0 && cols <= 255, "columns=%u out of range [1,255] in transposed matrix %s", cols, ctx->tag_name);
 
@@ -334,23 +335,23 @@ static void zip_generate_transposed_local (VBlock *vb, Context *ctx)
             uint32_t value = data[r * cols + c];
 
             switch (ctx->ltype) { // note: the casting aslo correctly converts 0xffffffff to eg 0xff
-                case LT_UINT8_TR  : *ENT (uint8_t,  vb->compressed, c * rows + r) =         (uint8_t)value;   break;
-                case LT_UINT16_TR : *ENT (uint16_t, vb->compressed, c * rows + r) = BGEN16 ((uint16_t)value); break;
-                case LT_UINT32_TR : *ENT (uint32_t, vb->compressed, c * rows + r) = BGEN32 (value);           break;
-                default: ABORT ("Error in zip_generate_transposed_local: Bad ltype=%s", lt_name (ctx->ltype));
+                case LT_UINT8_TR  : *B8 ( vb->scratch, c * rows + r) =         (uint8_t)value;   break;
+                case LT_UINT16_TR : *B16 (vb->scratch, c * rows + r) = BGEN16 ((uint16_t)value); break;
+                case LT_UINT32_TR : *B32 (vb->scratch, c * rows + r) = BGEN32 (value);           break;
+                default: ABORT ("Bad ltype=%s", lt_name (ctx->ltype));
             }
         }
 
-    vb->compressed.len = ctx->local.len;
-    buf_copy_do (vb, &ctx->local, &vb->compressed, lt_desc[ctx->ltype].width, 0, 0, __FUNCTION__,__LINE__, "contexts->local"); // copy and not move, so we can keep local's memory for next vb
+    vb->scratch.len = ctx->local.len;
+    buf_copy_do (vb, &ctx->local, &vb->scratch, lt_desc[ctx->ltype].width, 0, 0, __FUNCTION__,__LINE__, "contexts->local"); // copy and not move, so we can keep local's memory for next vb
 
 done:
-    buf_free (&vb->compressed);
+    buf_free (vb->scratch);
 }
 
 // after segging - if any context appears to contain only singleton snips (eg a unique ID),
 // we move it to local instead of needlessly cluttering the global dictionary
-static void zip_handle_unique_words_ctxs (VBlock *vb)
+static void zip_handle_unique_words_ctxs (VBlockP vb)
 {
     for (ContextP ctx=CTX(0); ctx < CTX(vb->num_contexts); ctx++) {
     
@@ -364,8 +365,8 @@ static void zip_handle_unique_words_ctxs (VBlock *vb)
             ctx->b250.len == 1) continue; // handle with all_the_same rather than singleton
          
         buf_move (vb, &ctx->local, vb, &ctx->dict);
-        buf_free (&ctx->nodes);
-        buf_free (&ctx->b250);
+        buf_free (ctx->nodes);
+        buf_free (ctx->b250);
         ctx->flags.all_the_same = false;
     }
 }
@@ -426,17 +427,17 @@ static void zip_generate_local (VBlockP vb, ContextP ctx)
         }
     }
 
+    COPY_TIMER (zip_generate_local); // codec_assign measures its own time
+
     codec_assign_best_codec (vb, ctx, NULL, SEC_LOCAL);
 
     if (flag.debug_generate) iprintf ("%s.local in vb_i=%u ltype=%s len=%"PRIu64" codec=%s\n", 
                                       ctx->tag_name, vb->vblock_i, lt_name (ctx->ltype), ctx->local.len, codec_name(ctx->lcodec));
-
-    COPY_TIMER (zip_generate_local);
 }
 
 // generate & write b250 data for all contexts - do them in random order, to reduce the chance of multiple doing codec_assign_best_codec for the same context at the same time
 // VBs doing codec_assign_best_codec at the same, so that they can benefit from pre-assiged codecs
-void zip_compress_all_contexts_b250 (VBlock *vb)
+void zip_compress_all_contexts_b250 (VBlockP vb)
 {
     START_TIMER;
     threads_log_by_vb (vb, "zip", "START COMPRESSING B250", 0);
@@ -479,7 +480,7 @@ void zip_compress_all_contexts_b250 (VBlock *vb)
 }
 
 // generate & write local data for all contexts - in random order, to reduce the chance of multiple doing codec_assign_best_codec for the same context at the same time
-static void zip_compress_local (VBlock *vb)
+static void compress_all_contexts_local (VBlockP vb)
 {
     START_TIMER;
     threads_log_by_vb (vb, "zip", "START COMPRESSING LOCAL", 0);
@@ -508,11 +509,10 @@ static void zip_compress_local (VBlock *vb)
 
             if (flag.show_time) codec_show_time (vb, "LOCAL", ctx->tag_name, ctx->lcodec);
 
-            if (HAS_DEBUG_SEG(ctx)) iprintf ("zip_compress_local: vb_i=%u %s: LOCAL.len=%"PRIu64" LOCAL.param=%"PRIu64"\n", 
+            if (HAS_DEBUG_SEG(ctx)) iprintf ("compress_all_contexts_local: vb_i=%u %s: LOCAL.len=%"PRIu64" LOCAL.param=%"PRIu64"\n", 
                                             vb->vblock_i, ctx->tag_name, ctx->local.len, ctx->local.param);
 
             START_TIMER; // for compressor_time
-
             zfile_compress_local_data (vb, ctx, 0);
 
             ctx->local_compressed = true; // so we don't compress it again
@@ -526,17 +526,27 @@ static void zip_compress_local (VBlock *vb)
     COPY_TIMER (zip_compress_ctxs); // same profiler for b250 and local as we breakdown by ctx underneath it
 }
 
-// called by main thread after VB has completed processing
-static void zip_update_txt_counters (VBlock *vb)
+void zip_init_vb (VBlockP vb)
 {
-    // note: in case of an FASTQ with flag.optimize_DESC or VCF with add_line_numbers, we already updated this in *_zip_read_one_vb
+    vb->recon_size = vb->txt_data.len; // initial value. it may change if --optimize / --chain are used, or if dual coordintes - for the other coordinate
+    vb->txt_size   = vb->txt_data.len; // this copy doesn't change with --optimize / --chain.
+
+    if (DTPT(zip_init_vb)) DTPT(zip_init_vb)(vb); // data-type specific initialization of the VB    
+}
+
+// called by main thread after VB has completed processing
+static void zip_update_txt_counters (VBlockP vb)
+{
+    // note: in case of an FASTQ with flag.optimize_DESC or VCF with add_line_numbers, we already updated this in *_zip_init_vb
     if (!(flag.optimize_DESC && VB_DT(DT_FASTQ)) &&
         !(flag.add_line_numbers && (VB_DT(DT_VCF) || VB_DT(DT_BCF))))
         txt_file->num_lines += (int64_t)vb->lines.len; // lines in this txt file
 
     // counters of data AS IT APPEARS IN THE TXT FILE
-    if (!flag.gencomp_num) {      
-        z_file->num_lines                += (int64_t)vb->lines.len; // lines in all bound files in this z_file
+    if (!(z_is_dvcf && vb->comp_i))  // in DVCF, the generated to components contain copied data so we don't need to count it again
+        z_file->num_lines += (int64_t)vb->lines.len; // lines in all bound files in this z_file
+
+    if (!vb->comp_i) { // in SAM and DVCF, vb->txt_size of the main file, as read from disk, contains all the data
         z_file->txt_data_so_far_single_0 += (int64_t)vb->txt_size;  // length of data before any modifications
         z_file->txt_data_so_far_bind_0   += (int64_t)vb->txt_size;
     }
@@ -544,12 +554,8 @@ static void zip_update_txt_counters (VBlock *vb)
     // counter of data FOR PROGRESS DISPLAY
     z_file->txt_data_so_far_single += (int64_t)vb->txt_size;   
 
-    // counter of data in DEFAULT PRIMARY RECONSTRUCTION
-    if (!Z_DT(DT_VCF) || flag.gencomp_num == DC_NONE) 
-        z_file->txt_data_so_far_bind += vb->recon_size;
-    
-    else if (flag.gencomp_num == DC_LUFT) 
-        z_file->txt_data_so_far_bind += vb->recon_size_luft; // luft reject VB shows in primary reconstruction
+    // counter of data in DEFAULT RECONSTRUCTION (For DVCF, this is corrected in vcf_zip_update_txt_counters)
+    z_file->txt_data_so_far_bind += vb->recon_size;
 
     // add up context compress time
     if (flag.show_time)
@@ -557,7 +563,7 @@ static void zip_update_txt_counters (VBlock *vb)
 }
 
 // write all the sections at the end of the file, after all VB stuff has been written
-static void zip_write_global_area (Digest single_component_digest)
+static void zip_write_global_area (void)
 {
     // if we're making a reference, we need the RA data to populate the reference section chrome/first/last_pos ahead of ref_compress_ref
     random_access_finalize_entries (&z_file->ra_buf); // sort RA, update entries that don't yet have a chrom_index
@@ -569,7 +575,7 @@ static void zip_write_global_area (Digest single_component_digest)
     if (flag.aligner_available && flag.reference == REF_EXT_STORE)
         ref_contigs_populate_aligned_chroms();
 
-    ctx_compress_dictionaries(); 
+    dict_io_compress_dictionaries(); 
 
     ctx_compress_counts();
 
@@ -593,22 +599,31 @@ static void zip_write_global_area (Digest single_component_digest)
     if (dict_id_aliases_buf->len) zfile_compress_section_data (evb, SEC_DICT_ID_ALIASES, dict_id_aliases_buf);
 
     // if this data has random access (i.e. it has chrom and pos), compress all random access records into evb->z_data
-    random_access_compress (&z_file->ra_buf,      SEC_RANDOM_ACCESS, DC_PRIMARY, flag.show_index ? RA_MSG_PRIM : NULL);
-    random_access_compress (&z_file->ra_buf_luft, SEC_RANDOM_ACCESS, DC_LUFT,    flag.show_index ? RA_MSG_LUFT : NULL);
+    random_access_compress (&z_file->ra_buf,      SEC_RANDOM_ACCESS, 0, flag.show_index ? RA_MSG_PRIM : NULL);
+    random_access_compress (&z_file->ra_buf_luft, SEC_RANDOM_ACCESS, 1, flag.show_index ? RA_MSG_LUFT : NULL);
 
     if (store_ref) 
         random_access_compress (ref_get_stored_ra (gref), SEC_REF_RAND_ACC, 0, flag.show_ref_index ? RA_MSG_REF : NULL);
 
-    stats_compress();
+    // note: we can't generate file-wide stats if we're showing component stats, because we reset ctx->txt_len after each component
+    if (flag.show_stats != STATS_SHORT_COMP && flag.show_stats != STATS_LONG_COMP)
+        stats_generate (COMP_NONE);
+
+    else {
+        CompIType num_components = sections_get_num_comps();
+        for (CompIType comp_i=0; comp_i < num_components; comp_i++)
+        // xxx broken, need to accumulate stats for each component
+            stats_generate (comp_i);
+    }
 
     // compress genozip header (including its payload sectionlist and footer) into evb->z_data
-    zfile_compress_genozip_header (single_component_digest);    
+    zfile_compress_genozip_header();    
 
     if (DTPZ(zip_free_end_of_z)) DTPZ(zip_free_end_of_z)();
 }
 
 // entry point for ZIP compute thread
-static void zip_compress_one_vb (VBlock *vb)
+static void zip_compress_one_vb (VBlockP vb)
 {
     START_TIMER; 
 
@@ -619,7 +634,7 @@ static void zip_compress_one_vb (VBlock *vb)
         bgzf_uncompress_vb (vb);    // some of the blocks might already have been decompressed while reading - we decompress the remaining
 
     // calculate the digest contribution of this VB to the single file and bound files, and the digest snapshot of this VB
-    if (!flag.make_reference && !flag.data_modified && !flag.gencomp_num) 
+    if (!flag.make_reference && !flag.data_modified) 
         digest_one_vb (vb); 
 
     // allocate memory for the final compressed data of this vb. allocate 33% of the
@@ -653,7 +668,7 @@ static void zip_compress_one_vb (VBlock *vb)
     if (vb->vblock_i != 1) {
         if (!flag.make_reference && !flag.seg_only) 
             // while vb_i=1 is busy merging, other VBs can handle local
-            zip_compress_local (vb); // not yet locals that consist of singletons transferred from dict to local in ctx_merge_in_vb_ctx (these will have len=0 at this point)
+            compress_all_contexts_local (vb); // not yet locals that consist of singletons transferred from dict to local in ctx_merge_in_vb_ctx (these will have len=0 at this point)
         
         // let vb_i=1 merge first, as it has the sorted dictionaries, other vbs can go in arbitrary order. 
         START_TIMER;
@@ -672,18 +687,13 @@ static void zip_compress_one_vb (VBlock *vb)
         mutex_unlock (wait_for_vb_1_mutex); 
 
     if (!flag.make_reference && !flag.seg_only) {
-        zip_compress_local (vb); // for vb=1 - all locals ; for vb>1 - locals which consist of singletons set in ctx_merge_in_vb_ctx (other locals were already compressed above)
+        compress_all_contexts_local (vb); // for vb=1 - all locals ; for vb>1 - locals which consist of singletons set in ctx_merge_in_vb_ctx (other locals were already compressed above)
         zip_compress_all_contexts_b250 (vb);
     }
 
-    // case: (only used for VCF for now) we're sorting the file's lines - add line data to txt_file's line_info 
-    // (VB order doesn't matter - we will sort them later). Note: merging gencomp data in sam happens in sam_zip_after_compute
-    if (flag.sort) 
-        linesorter_merge_vb (vb);
-
     // merge in random access - IF it is used
-    random_access_merge_in_vb (vb, DC_PRIMARY);
-    random_access_merge_in_vb (vb, DC_LUFT);
+    random_access_merge_in_vb (vb, 0);
+    random_access_merge_in_vb (vb, 1);
     
     // compress data-type specific sections
     DT_FUNC (vb, compress)(vb);
@@ -699,26 +709,32 @@ static void zip_compress_one_vb (VBlock *vb)
 static uint32_t prev_file_first_vb_i=0, prev_file_last_vb_i=0; // used if we're binding files - the vblock_i will continue from one file to the next
 static uint32_t max_lines_per_vb; // (resets in every file)
 
-// returns true if successfully prepared a vb 
+// main thread: returns true if successfully prepared a vb 
 static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
 {
     // if we're compressing the 2nd file in a fastq pair (with --pair) - look back at the z_file data
     // and copy the data we need for this vb. note: we need to do this before txtfile_read_vblock as
     // we need the num_lines of the pair file
-    bool read_txt = true;
     if (flag.pair == PAIR_READ_2) {
-
-        // normally we clone in the compute thread, because it might wait on mutex, but in this
+        // note: normally we clone in the compute thread, because it might wait on mutex, but in this
         // case we need to clone (i.e. create all contexts before we can read the pair file data)
         ctx_clone (vb); 
     
         uint32_t pair_vb_i = prev_file_first_vb_i + (vb->vblock_i - prev_file_last_vb_i - 1);
         
-        read_txt = (pair_vb_i <= prev_file_last_vb_i)  // false if there is no vb with vb_i in the previous file
-                 && fastq_read_pair_1_data (vb, pair_vb_i, false); // read here, decompressed in fastq_seg_initialize
+        if (pair_vb_i > prev_file_last_vb_i || // false if there is no vb with vb_i in the previous file
+            !fastq_read_pair_1_data (vb, pair_vb_i, false)) { // read here, decompressed in fastq_seg_initialize
+            vb->dispatch = DATA_EXHAUSTED;
+            return;
+        }
     }
 
-    if (read_txt) {
+    // case: we have out-of-band txt_data waiting (for generated components) - compress this data first,
+    // before reading more data from the txt_file
+    if (gencomp_get_txt_data(vb)) 
+        goto dispatch;
+
+    else {        
         txtfile_read_vblock (vb);
 
         // initializations after reading the first vb and before running any compute thread
@@ -729,30 +745,41 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
             mutex_lock (wait_for_vb_1_mutex); 
         }
 
-        vb->component_i = z_file->num_txt_components_so_far;
+        // --head advanced option in ZIP cuts a certain number of first lines from vb=1, and discards other VBs
+        else if (flag.lines_last >= 0) {
+            vb->dispatch = DATA_EXHAUSTED;
+            return;
+        }
 
-        vb->vb_coords = !z_dual_coords ? DC_PRIMARY
-                      : flag.gencomp_num == DC_NONE ? DC_BOTH
-                      : flag.gencomp_num;
+        if (vb->txt_data.len) 
+            goto dispatch;
 
-        vb->is_rejects_vb = z_dual_coords && (flag.gencomp_num != DC_NONE);
-    }
+        else if (gencomp_am_i_expecting_more_txt_data()) // more data might be coming from MAIN VBs currently computing
+            vb->dispatch = MORE_DATA_MIGHT_COME;
 
-    if (vb->txt_data.len)   // we found some data 
-        vb->ready_to_dispatch = true;
+        else 
+            vb->dispatch = DATA_EXHAUSTED;
 
-    else {
         // error if stdin is empty - can happen only when redirecting eg "cat empty-file|./genozip -" (we test for empty regular files in main_genozip)
         ASSINP0 (vb->vblock_i > 1 || txt_file->txt_data_so_far_single /* txt header data */, 
                  "Error: Cannot compress stdin data because its size is 0");
+        
+        return;
     }
+
+dispatch:
+    vb->dispatch = READY_TO_COMPUTE;
+    txt_file->num_vbs_dispatched++;
+
+    if (!vb->comp_i) // note: we only update the MAIN comp from here, gen comps are updated
+        gencomp_a_main_vb_has_been_dispatched();
 }
 
 // called main thread, in order of VBs
 static void zip_complete_processing_one_vb (VBlockP vb)
 {
-    if (DTP(zip_after_compute)) DTP(zip_after_compute)(vb);
-    
+    DT_FUNC (vb, zip_after_compute)(vb);
+
     // update z_data in memory (its not written to disk yet)
     zfile_update_compressed_vb_header (vb); 
 
@@ -771,37 +798,33 @@ static void zip_complete_processing_one_vb (VBlockP vb)
 // a variant block from the input file and send it off to a thread for computation. When the thread
 // completes, this function proceeds to write the output to the output file. It can dispatch
 // several threads in parallel.
-void zip_one_file (const char *txt_basename, 
+void zip_one_file (rom txt_basename, 
                    bool is_last_user_txt_file)  // the last user-specified txt file in this execution
 {
-    static DataType last_data_type = DT_NONE;
     Dispatcher dispatcher = 0;
     dispatcher_start_wallclock();
 
     z_file->txt_data_so_far_single = 0;
     evb->z_data.len                = 0;
     evb->z_next_header_i           = 0;
-    memset (&z_file->digest_ctx_single, 0, sizeof (z_file->digest_ctx_single));
+    
+    // we calculate digest for each component seperately, stored in SectionHeaderTxtHeader (always 0 for generated components, or if modified)
+    if (gencomp_comp_eligible_for_digest(NULL)) // if generated component - keep digest to display in progress after the last component
+        z_file->digest_ctx = DIGEST_CONTEXT_NONE;
 
-    if (!flag.bind) prev_file_first_vb_i = prev_file_last_vb_i = 0; // reset if we're not binding
-
-    // we cannot bind files of different type
-    ASSINP (flag.bind == BIND_NONE || flag.bind == BIND_GENCOMP || txt_file->data_type == last_data_type || last_data_type == DT_NONE, 
-            "%s: cannot bind %s because it is a %s file, whereas the previous file was a %s",
-            global_cmd, txt_name, dt_name (txt_file->data_type), dt_name (last_data_type));
-    last_data_type =  txt_file->data_type;
+    if (!flag.bind || flag.zip_comp_i==0) 
+        prev_file_first_vb_i = prev_file_last_vb_i = 0; // reset if we're not binding
 
     uint32_t first_vb_i = prev_file_last_vb_i + 1;
 
-    if (!z_file->num_txt_components_so_far)  // first component of this z_file 
+    if (!z_file->num_txts_so_far)  // first component of this z_file 
         ctx_initialize_predefined_ctxs (z_file->contexts, txt_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts);
 
     segconf_initialize(); // before txtheader 
 
     // read the txt header, assign the global variables, and write the compressed header to the GENOZIP file
-    uint64_t txt_header_header_pos = z_file->disk_so_far;
-    uint64_t txt_header_size;
-    bool success = txtheader_zip_read_and_compress (&txt_header_size); // also increments z_file->num_txt_components_so_far
+    int64_t txt_header_offset = -1;
+    bool success = txtheader_zip_read_and_compress (&txt_header_offset, flag.zip_comp_i); // also increments z_file->num_txts_so_far
     if (!success) goto finish; // eg 2nd+ VCF file cannot bind, because of different sample names
 
     DT_FUNC (txt_file, zip_initialize)();
@@ -812,54 +835,50 @@ void zip_one_file (const char *txt_basename,
 
     dispatcher = 
         dispatcher_fan_out_task ("zip", txt_basename, 
-                                 txt_file->redirected ? PROGRESS_MESSAGE : PROGRESS_PERCENT,
-                                 txt_file->redirected ? "Compressing..." : NULL, 
+                                 txt_file->no_progress ? PROGRESS_MESSAGE : PROGRESS_PERCENT,
+                                 txt_file->no_progress ? "Compressing..." : NULL, 
                                  false,  
-                                 flag.xthreads, prev_file_last_vb_i, 300,
+                                 flag.xthreads, prev_file_last_vb_i, 1000,
                                  zip_prepare_one_vb_for_dispatching, 
                                  zip_compress_one_vb, 
                                  zip_complete_processing_one_vb);
 
-    // go back and update some fields in the txt header's section header and genozip header -
-    // only if we can go back - i.e. is a normal file, not redirected
-    Digest single_component_digest = DIGEST_NONE;
-    if (z_file && !flag.seg_only && !z_file->redirected && txt_header_header_pos >= 0) 
-        success = zfile_update_txt_header_section_header (txt_header_header_pos, max_lines_per_vb, &single_component_digest);
+    // go back and update some fields in the txt header's section header and genozip header 
+    if (txt_header_offset >= 0) // note: this will be -1 if we didn't write a SEC_TXT_HEADER section for any reason
+        success = zfile_update_txt_header_section_header (txt_header_offset, max_lines_per_vb);
 
     // write the BGZF section containing BGZF block sizes, if this txt file is compressed with BGZF
     bgzf_compress_bgzf_section();
 
     // if this a non-bound file, or the last component of a bound file - write the genozip header, random access and dictionaries
 finish:
-    if (!flag.gencomp_num)
+    if (!flag.zip_comp_i)
         z_file->txt_disk_so_far_bind += (int64_t)txt_file->disk_so_far + (txt_file->codec==CODEC_BGZF)*BGZF_EOF_LEN;
 
     // reconstruction plan (for VCF - for DVCF or --sort, for SAM - re-integrate supp/secondary alignments)
-    if (!flag.seg_only && DTPZ(compress_recon_plan)) 
-        DTPZ(compress_recon_plan)();
-        
-    if (z_file->z_closes_after_me && !flag.seg_only) {
+    if (!flag.seg_only && DTPZ(generate_recon_plan)) 
+        DTPZ(generate_recon_plan)(); // should set z_file->z_closes_after_me if we need to close after this component after all
+
+    if (z_file->z_closes_after_me && !flag.seg_only) { // note: for SAM, z_closes_after_me might be updated in sam_zip_generate_recon_plan
         DT_FUNC (txt_file, zip_after_vbs)();
     
-        zip_write_global_area (single_component_digest);
+        zip_write_global_area();
 
         if (chain_is_loaded && !Z_DT(DT_CHAIN)) vcf_liftover_display_lift_report();
     }
-
-    zip_display_compression_ratio (flag.bind ? DIGEST_NONE : single_component_digest); // Done for reference + final compression ratio calculation
+//xxx TODO fix progress here - no more binding - always just one
+    zip_display_compression_ratio (digest_snapshot (&z_file->digest_ctx, NULL)); // Done for reference + final compression ratio calculation
     
     if (flag.md5 && flag.bind && z_file->z_closes_after_me &&
-        ((flag.bind != BIND_GENCOMP && z_file->num_txt_components_so_far > 1) ||
-         (flag.bind == BIND_GENCOMP && !flag.gencomp_num)))
-        progress_concatenated_md5 (dt_name (z_file->data_type), digest_finalize (&z_file->digest_ctx_bound, "file:digest_ctx_bound"));
+        ((flag.bind == BIND_FQ_PAIR && z_file->num_txts_so_far == 2) ||
+         ((flag.bind == BIND_DVCF || flag.bind == BIND_SAM) && z_file->num_txts_so_far == 3)))
+        progress_concatenated_md5 (dt_name (z_file->data_type), digest_snapshot (&z_file->digest_ctx, "file"));
 
     z_file->disk_size = z_file->disk_so_far;
 
     prev_file_first_vb_i = first_vb_i;
-    dispatcher_finish (&dispatcher, &prev_file_last_vb_i, z_file->z_closes_after_me && !is_last_user_txt_file);
-
-    if (z_file->z_closes_after_me) 
-        prev_file_first_vb_i = prev_file_last_vb_i = 0; // reset statics
+    dispatcher_finish (&dispatcher, &prev_file_last_vb_i, z_file->z_closes_after_me && !is_last_user_txt_file,
+                       flag.show_memory && z_file->z_closes_after_me && is_last_user_txt_file);
     
     DT_FUNC (txt_file, zip_finalize)();
 }

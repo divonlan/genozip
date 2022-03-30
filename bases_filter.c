@@ -11,20 +11,20 @@
 uint8_t iupac_ascii_mask[256] = {}; // for --bases filter - '1' for every ASCII included in a positive or negative bases
 uint8_t iupac_bam_mask[16]    = {}; // each entry corresponds to: =ACMGRSVTWYHKDBN (defined page 16: https://samtools.github.io/hts-specs/SAMv1.pdf)
 
-void iupac_set (const char *optarg)
+void iupac_set (rom optarg)
 {
     bool neg = optarg[0] == '^';
     flag.bases = neg ? IUP_NEGATIVE : IUP_POSITIVE;
 
     // ascii mask
-    for (const char *c = &optarg[neg]; *c; c++)
+    for (rom c = &optarg[neg]; *c; c++)
         iupac_ascii_mask[(int)*c] = true;
         
     // missing sequences (SEQ=*) (appear only in SAM/BAM) - always included in positive --bases and excluded in negative
     iupac_ascii_mask[(int)'*'] = true; 
 
     // bam mask
-    for (const char *c = &optarg[neg]; *c; c++) {
+    for (rom c = &optarg[neg]; *c; c++) {
         // the characters "=ACMGRSVTWYHKDBN" are mapped to BAM 0->15, in this matrix we add 0x80 as a validity bit. All other characters are 0x00 - invalid
         static const uint8_t sam2bam_seq_map[256] = { ['=']=0x80, ['A']=0x81, ['C']=0x82, ['M']=0x83, ['G']=0x84, ['R']=0x85, ['S']=0x86, ['V']=0x87, 
                                                       ['T']=0x88, ['W']=0x89, ['Y']=0x8a, ['H']=0x8b, ['K']=0x8c, ['D']=0x8d, ['B']=0x8e, ['N']=0x8f };
@@ -48,7 +48,7 @@ void iupac_show (void)
 }
 
 bool iupac_is_included_ascii (STRp(seq))
-{    
+{   
     bool caught=false;
     for (unsigned i=0; i < seq_len; i++)
         if (!iupac_ascii_mask[(int)seq[i]]) {

@@ -5,7 +5,7 @@
 
 #include "version.h"
 
-static const char *license[] = {
+static rom license[] = {
     "This program, \"Genozip\", which includes four tools (genozip, genounzip, genocat and genols), source code, object code, executables, documentation and other files, was developed by Divon Lan (\"Developer\") and is copyright (C) 2019-2022 Black Paw Ventures Limited (\"Licensor\"). All rights reserved.",
     "TERMS AND CONDITIONS FOR USE",
     "1. Definitions.",
@@ -31,7 +31,7 @@ static const char *license[] = {
     "   a. You must fully and accurately complete the registration, either by completing the registeration as prompted by the genozip tool or by receiving registration confirmation after registering by emailing "EMAIL_REGISTER".",
     "   b. Using Genozip to compress a file is only permitted if the file is retained in its original form as well or the potential loss of data due to Genozip not being able to uncompress the compressed file would not cause any harm.",
     "   c. Creation of Derivative Works is not permitted, unless prior written permission is obtained from Licensor.",
-    "   d. Any software source code intentionally submitted for inclusion in Genozip by You to the Licensor shall imply complete and irrevocable assignment by You to Licensor of all copyright in the submitted source code.",
+    "   d. Any software source code intentionally submitted for inclusion in Genozip by You to the Licensor or the Developer, including by using a Github Pull Request, shall imply complete and irrevocable assignment by You to Licensor of all copyright in the submitted source code. Regarding any such source code You submitted for inclusion in Genozip in the past, You hereby assign all copyright in this submitted source code to Licensor.",
 
     "4. Unauthorized use of Genozip. Use for a purpose other than as permitted in section 2 or failing to register as required by section 3a shall be considered unauthorized use of Genozip. In this case, You agree that Licensor shall be eligible to 20% ownership of any revenue generated and intellectual property created that involved the unauthorized use of Genozip.",
     

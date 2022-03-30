@@ -21,42 +21,40 @@
 static VBlockPool *pool = NULL;
 
 // one VBlock outside of pool
-VBlock *evb = NULL;
+VBlockP evb = NULL;
 
 #define FINALIZE_VB_BUFS(func, ctx_func, vb_func) \
-    func (&vb->lines);               \
-    func (&vb->is_dropped);          \
-    func (&vb->ra_buf[0]);           \
-    func (&vb->ra_buf[1]);           \
-    func (&vb->compressed);          \
-    func (&vb->z_data);              \
-    func (&vb->z_data_test);         \
-    func (&vb->z_section_headers);   \
-    func (&vb->spiced_pw);           \
-    func (&vb->show_headers_buf);    \
-    func (&vb->show_b250_buf);       \
-    func (&vb->section_list_buf);    \
-    func (&vb->bgzf_blocks);         \
-    func (&vb->coverage);            \
-    func (&vb->read_count);          \
-    func (&vb->unmapped_read_count); \
-    func (&vb->chrom2ref_map);       \
-    func (&vb->ol_chrom2ref_map);    \
-    func (&vb->gencomp[0]);       \
-    func (&vb->gencomp[1]);       \
-    func (&vb->frozen_state);        \
-    for (unsigned i=0; i < NUM_CODEC_BUFS; i++) func (&vb->codec_bufs[i]); \
+    func (vb->lines);               \
+    func (vb->ra_buf[0]);           \
+    func (vb->ra_buf[1]);           \
+    func (vb->scratch);          \
+    func (vb->z_data);              \
+    func (vb->z_data_test);         \
+    func (vb->z_section_headers);   \
+    func (vb->spiced_pw);           \
+    func (vb->show_headers_buf);    \
+    func (vb->show_b250_buf);       \
+    func (vb->section_list_buf);    \
+    func (vb->bgzf_blocks);         \
+    func (vb->coverage);            \
+    func (vb->read_count);          \
+    func (vb->unmapped_read_count); \
+    func (vb->chrom2ref_map);       \
+    func (vb->ol_chrom2ref_map);    \
+    func (vb->gencomp_lines);       \
+    func (vb->frozen_state);        \
+    func (vb->txt_data);            \
+    for (unsigned i=0; i < NUM_CODEC_BUFS; i++) func (vb->codec_bufs[i]); \
     if (vb->data_type != DT_NONE)    \
         for (unsigned i=0; i < MAX_DICTS; i++) if (CTX(i)->dict_id.num || i < DTF(num_fields)) ctx_func (CTX(i), i); /* note: always erase num_fields as they may be set in *_seg_initialize even if not used */\
-    func (&vb->txt_data); /* handle contexts first, as vcf_seg_FORMAT_GT overlays FORMAT_GT_HT on txt_data */ \
     if (vb->data_type_alloced != DT_NONE && dt_props[vb->data_type_alloced].vb_func) dt_props[vb->data_type_alloced].vb_func(vb);    
 
 // cleanup vb and get it ready for another usage (without freeing memory held in the Buffers)
-void vb_release_vb_do (VBlockP *vb_p, const char *func) 
+void vb_release_vb_do (VBlockP *vb_p, rom task_name, rom func) 
 {
     START_TIMER;
 
-    VBlock *vb = *vb_p;
+    VBlockP vb = *vb_p;
 
     if (!vb) return; // nothing to release
 
@@ -66,7 +64,7 @@ void vb_release_vb_do (VBlockP *vb_p, const char *func)
     threads_log_by_vb (vb, vb->compute_task ? vb->compute_task : func, "RELEASING VB", 0);
 
     if (flag.show_vblocks) 
-        iprintf ("VB_RELEASE(id=%d) vb_i=%d caller=%s\n", vb->id, vb->vblock_i, func);
+        iprintf ("VB_RELEASE(task=%s id=%d) vb_i=%d comp_i=%u caller=%s\n", task_name, vb->id, vb->vblock_i, vb->comp_i, func);
 
     if (flag.show_time) 
         profiler_add (vb);
@@ -84,17 +82,15 @@ void vb_release_vb_do (VBlockP *vb_p, const char *func)
     // vb->data_type_alloced (maybe changed by vb_get_vb)
     // vb->id
 
-    vb->first_line = vb->vblock_i = vb->fragment_len = vb->fragment_num_words = vb->pos_aln_i = 0;
-    vb->recon_size = vb->recon_size_luft = vb->txt_size = vb->txt_size_source_comp = vb->reject_bytes = vb->longest_line_len = vb->line_i = vb->component_i = vb->grep_stages = vb->sample_i = 0;
-    vb->recon_num_lines = vb->recon_num_lines_luft = 0;
-    vb->ready_to_dispatch = vb->is_processed = vb->is_unsorted[0] = vb->is_unsorted[1] = vb->has_ctx_index = false;
+    vb->first_line = vb->vblock_i = vb->fragment_len = vb->fragment_num_words = 0;
+    vb->recon_size = vb->txt_size = vb->txt_size_source_comp = vb->longest_line_len = vb->line_i = vb->sample_i = 0;
+    vb->comp_i = 0;
+    vb->dispatch = vb->is_processed = vb->preprocessing = vb->has_ctx_index = vb->maybe_lines_dropped = vb->show_containers = false;
     vb->z_next_header_i = 0;
     vb->num_contexts = 0;
-    vb->line_coords = DC_NONE;
     vb->chrom_node_index = vb->chrom_name_len = vb->seq_len = 0; 
     vb->vb_position_txt_file = vb->line_start = 0;
     vb->num_lines_at_1_3 = vb->num_lines_at_2_3 = vb->num_nondrop_lines = 0;
-    vb->is_rejects_vb = false;    
     vb->num_type1_subfields = vb->num_type2_subfields = 0;
     vb->range = NULL;
     vb->flags = (union FlagsVbHeader){};
@@ -104,9 +100,8 @@ void vb_release_vb_do (VBlockP *vb_p, const char *func)
     vb->digest_so_far = DIGEST_NONE;
     vb->refhash_layer = vb->refhash_start_in_layer = 0;
     vb->fragment_ctx = vb->ht_matrix_ctx = vb->runs_ctx = vb->fgrc_ctx = NULL;
-    vb->fragment_codec = vb->codec_using_codec_bufs = 0;
+    vb->codec_using_codec_bufs = 0;
     vb->ht_per_line = 0;
-    vb->vb_coords = DC_NONE;
     vb->compute_thread_id = 0;
     vb->compute_task = NULL;
     vb->compute_func = NULL;
@@ -114,6 +109,7 @@ void vb_release_vb_do (VBlockP *vb_p, const char *func)
     vb->ref = NULL;
     vb->buddy_line_i = 0;
     vb->rback_id = 0;
+    vb->is_dropped = 0;
 
     memset(&vb->profile, 0, sizeof (vb->profile));
     memset(vb->dict_id_to_did_i_map, 0, sizeof(vb->dict_id_to_did_i_map));
@@ -131,14 +127,18 @@ void vb_release_vb_do (VBlockP *vb_p, const char *func)
 
     // case: this VB is from the pool (i.e. not evb)
     if (vb != evb) {
-        __atomic_store_n (&vb->in_use, (bool)0, __ATOMIC_RELAXED); // released the VB back into the pool - it may now be reused 
+        // Logic: num_in_use is always AT LEAST sum(vb)->in_use. i.e. pessimistic. (it can be mometarily less between these too updates)
+        __atomic_store_n (&vb->in_use, (bool)0, __ATOMIC_RELAXED);   // released the VB back into the pool - it may now be reused 
+        if (vb->id >= 0) __atomic_fetch_sub (&pool->num_in_use, 1, __ATOMIC_RELAXED); // atomic to prevent concurrent update by writer thread and main thread (must be after update of in_use)
         *vb_p = NULL;
     }
+
+    buf_compact_buf_list (vb);
 
     if (vb->id >= 0) COPY_TIMER_VB (evb, vb_release_vb_do)
 }
 
-void vb_destroy_vb_do (VBlockP *vb_p, const char *func)
+void vb_destroy_vb_do (VBlockP *vb_p, rom func)
 {
     ASSERTMAINTHREAD;
     START_TIMER;
@@ -158,27 +158,27 @@ void vb_destroy_vb_do (VBlockP *vb_p, const char *func)
         unsigned sizeof_vb = DT_FUNC(vb, sizeof_vb)(vb->data_type_alloced);
         DataType dt = vb->data_type_alloced;
 
-        vb_release_vb_do (&vb, "vb_destroy_vb"); 
+        vb_release_vb_do (&vb, "destroy", "vb_destroy_vb"); 
         vb = *vb_p; // re-initialize after release zeroed it
 
         // clear the few fields purposely not cleared by vb_release_vb_do
-        buf_destroy (&(*vb_p)->buffer_list); // used by vb_release_vb_do
+        buf_destroy ((*vb_p)->buffer_list); // used by vb_release_vb_do
         vb->data_type = vb->data_type_alloced = 0; 
         vb->id = 0;
         vb->profile.buf_remove_from_buffer_list = 0; // this profile field changes as a result of removing buffers,
         
         for (char *c=(char*)vb; c  < (char*)(vb) + sizeof_vb; c++)
             if (*c) {
-                #define REL_LOC(field) (((char*)(&((VBlock *)vb)->field)) - (char*)vb) // <-- to use private datatype VBlocks, temporarily include the private .h for debugging
+                #define REL_LOC(field) (((char*)(&((VBlockP )vb)->field)) - (char*)vb) // <-- to use private datatype VBlocks, temporarily include the private .h for debugging
                 fprintf (stderr, "sizeof_vb=%u sizeof(VBlock)=%u. Bad byte=%u Your field: %u\n", 
-                         sizeof_vb, (int)sizeof (VBlock), (unsigned)(c - (char*)vb), (int)REL_LOC(profile.file_open)); // <-- to find the offending field, plug in field names and run iteratively
+                         sizeof_vb, (int)sizeof (VBlock), (unsigned)(c - (char*)vb), (int)REL_LOC(show_containers)); // <-- to find the offending field, plug in field names and run iteratively
                 
                 ABORT ("vb_release_vb_do of %s didn't fully clear the VB, byte %u != 0", dt_name(dt), (unsigned)(c - (char*)vb));
             }
     }
     else {
         // clear the few fields purposely not cleared by vb_release_vb_do
-        buf_destroy (&(*vb_p)->buffer_list);
+        buf_destroy ((*vb_p)->buffer_list);
         vb->data_type = vb->data_type_alloced = 0; 
         vb->id = 0;
     }
@@ -188,19 +188,19 @@ void vb_destroy_vb_do (VBlockP *vb_p, const char *func)
     if (!is_evb) COPY_TIMER_VB (evb, vb_destroy_vb)
 }
 
-void vb_create_pool (unsigned num_vbs)
+void vb_create_pool (uint32_t num_vbs)
 {
     ASSERTMAINTHREAD;
 
     if (!pool)  {
         // allocation includes array of pointers (initialized to NULL)
-        pool = (VBlockPool *)CALLOC (sizeof (VBlockPool) + num_vbs * sizeof (VBlock *)); // note we can't use Buffer yet, because we don't have VBs yet...
+        pool = (VBlockPool *)CALLOC (sizeof (VBlockPool) + num_vbs * sizeof (VBlockP )); // note we can't use Buffer yet, because we don't have VBs yet...
         pool->num_vbs = num_vbs; 
     }
 
     // case: old pool is too small - realloc it (the pool contains only pointers to VBs, so the VBs themselves are not realloced)
     else if (pool->num_vbs < num_vbs) {
-        REALLOC (&pool, sizeof (VBlockPool) + num_vbs * sizeof (VBlock *), "VBlockPool"); 
+        REALLOC (&pool, sizeof (VBlockPool) + num_vbs * sizeof (VBlockP ), "VBlockPool"); 
         memset (&pool->vb[pool->num_vbs], 0, (num_vbs - pool->num_vbs) * sizeof (VBlockP)); // initialize new entries
         pool->num_vbs = num_vbs; 
     }
@@ -211,7 +211,7 @@ VBlockPool *vb_get_pool (void)
     return pool;
 }
 
-VBlockP vb_initialize_nonpool_vb (int vb_id, DataType dt, const char *task)
+VBlockP vb_initialize_nonpool_vb (int vb_id, DataType dt, rom task)
 {
     uint64_t sizeof_vb = (dt != DT_NONE && dt_props[dt].sizeof_vb) ? dt_props[dt].sizeof_vb(dt) : sizeof (VBlock);
 
@@ -227,11 +227,11 @@ VBlockP vb_initialize_nonpool_vb (int vb_id, DataType dt, const char *task)
 }
 
 // allocate an unused vb from the pool. seperate pools for zip and unzip
-VBlock *vb_get_vb (const char *task_name, uint32_t vblock_i)
+VBlockP vb_get_vb (rom task_name, VBIType vblock_i, CompIType comp_i)
 {
     ASSERTMAINTHREAD;
     START_TIMER;
-
+    
     DataType dt = command==ZIP ? (txt_file ? txt_file->data_type : DT_NONE)
                                : (z_file   ? z_file->data_type   : DT_NONE);
     
@@ -244,7 +244,7 @@ VBlock *vb_get_vb (const char *task_name, uint32_t vblock_i)
                       :                                  dt;
 
     // circle around until a VB becomes available (busy wait)
-    unsigned vb_id; for (vb_id=0; ; vb_id = (vb_id+1) % pool->num_vbs) {
+    uint32_t vb_id; for (vb_id=0; ; vb_id = (vb_id+1) % pool->num_vbs) {
 
         // case: the VB is allocated to a different data type - change its data type
         if (pool->vb[vb_id] && z_file && pool->vb[vb_id]->data_type != dt) {
@@ -287,21 +287,26 @@ VBlock *vb_get_vb (const char *task_name, uint32_t vblock_i)
         // this happens when a lot VBs are handed over to the writer thread which has not processed them yet.
         // for example, if writer is blocking on write(), waiting for a pipe counterpart to read.
         // it will be released when the writer thread completes one VB.
-        if (vb_id == pool->num_vbs-1) usleep (1000); // 1 ms
+        if (vb_id == pool->num_vbs-1) usleep (10000); // 10 ms
     }
 
+    // Logic: num_in_use is always AT LEAST sum(vb)->in_use. i.e. pessimistic. (it can be mometarily less between these too updates)
+    uint32_t num_in_use = __atomic_add_fetch (&pool->num_in_use, 1, __ATOMIC_RELAXED); // atomic to prevent concurrent update by writer thread and main thread (must be before update of in_use)
+
     // initialize VB fields that need to be a value other than 0
-    VBlock *vb            = pool->vb[vb_id];
+    VBlockP vb            = pool->vb[vb_id];
     vb->id                = vb_id;
     vb->in_use            = true;
     vb->vblock_i          = vblock_i;
+    vb->comp_i            = comp_i;
     vb->buffer_list.vb    = vb;
     vb->compute_thread_id = THREAD_ID_NONE;
     vb->compute_task      = task_name;
     memset (vb->dict_id_to_did_i_map, 0xff, sizeof(vb->dict_id_to_did_i_map)); // DID_I_NONE
 
     if (flag.show_vblocks) 
-        iprintf ("VB_GET_VB(task=%s id=%u) vb_i=%d\n", task_name, vb->id, vb->vblock_i);
+        iprintf ("VB_GET_VB(task=%s id=%u) vb_i=%s/%d in_use=%u/%u\n", 
+                  task_name, vb->id, comp_name (vb->comp_i), vb->vblock_i, num_in_use, pool->num_vbs);
 
     threads_log_by_vb (vb, task_name, "GET VB", 0);
 
@@ -312,11 +317,11 @@ VBlock *vb_get_vb (const char *task_name, uint32_t vblock_i)
 
 bool vb_has_free_vb (void)
 {
-    for (unsigned vb_id=0; vb_id < pool->num_vbs ; vb_id++) 
-        if (!pool->vb[vb_id] || ! __atomic_load_n (&pool->vb[vb_id]->in_use, __ATOMIC_RELAXED)) 
-            return true;
-
-    return false;
+    // atomic as writer thread might update concurrently.
+    // Logic: num_in_use is always AT LEAST sum(vb)->in_use. i.e. pessimistic. (it can be mometarily less than sum(vb)->in_use as they are getting updated)
+    uint32_t num_in_use = __atomic_load_n (&pool->num_in_use, __ATOMIC_RELAXED); 
+    
+    return num_in_use < pool->num_vbs;
 }
 
 // free memory allocations between files, when compressing multiple non-bound files or decompressing multiple files
@@ -326,8 +331,8 @@ void vb_cleanup_memory (void)
 
     if (!pool) return;
 
-    for (unsigned vb_i=0; vb_i < pool->num_vbs; vb_i++) {
-        VBlock *vb = pool->vb[vb_i];
+    for (VBIType vb_i=0; vb_i < pool->num_vbs; vb_i++) {
+        VBlockP vb = pool->vb[vb_i];
         if (vb && 
             vb->data_type == z_file->data_type && // skip VBs that were initialized by a previous file of a different data type and not used by this file
             DTPZ(cleanup_memory)) 
@@ -341,21 +346,21 @@ void vb_cleanup_memory (void)
         ref_unload_reference (gref);
 }
 
-// frees memory of all VBs, except for non-pool VBs (evb)
+// frees memory of all VBs, except for non-pool VBs (evb, cache_create_vb, segconf...)
 void vb_destroy_pool_vbs (void)
 {
     ASSERTMAINTHREAD;
 
     if (!pool) return;
 
-    for (unsigned vb_i=0; vb_i < pool->num_vbs; vb_i++) 
-        vb_destroy_vb (&pool->vb[vb_i]);
+    for (uint32_t vb_id=0; vb_id < pool->num_vbs; vb_id++) 
+        vb_destroy_vb (&pool->vb[vb_id]);
 
     FREE (pool);
 }
 
 // NOT thread safe, use only in execution-terminating messages
-const char *err_vb_pos (void *vb)
+rom err_vb_pos (void *vb)
 {
     static char s[80];
     sprintf (s, "vb i=%u position in %s file=%"PRIu64, 

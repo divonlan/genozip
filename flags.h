@@ -6,7 +6,6 @@
 #pragma once
 
 #include "genozip.h"
-#include "gencomp.h"
 
 typedef enum { 
     REF_NONE          = 0,  // ZIP (except SAM) and PIZ when user didn't specify an external reference
@@ -25,7 +24,7 @@ typedef struct {
     
     // genozip options that affect the compressed file
     int fast, best, make_reference, multiseq, md5;
-    const char *vblock;
+    rom vblock;
     
     // ZIP: data modifying options
     int optimize, optimize_sort, optimize_phred, GL_to_PL, GP_to_PP, optimize_VQSLOD,  // optimize flags
@@ -52,15 +51,15 @@ typedef struct {
         seq_only, qual_only, single_coord,
         regions, gpos, samples, 
         drop_genotypes, gt_only, luft, sort, unsorted, snps_only, indels_only, // VCF options
-        sequential, no_pg, extended_translation,
+        sequential, no_pg, extended_translation,  one_component,
         kraken_taxid;
-    const char *regions_file;
-    int64_t lines_first, lines_last, tail; // set by --lines 
-    const char *grep; int grepw; unsigned grep_len; // set by --grep and --grep-w
-    uint32_t one_vb, one_component, downsample, shard ;
+    rom regions_file;
+    int64_t lines_first, lines_last, tail;  // set by --head, --tail, --lines 
+    rom grep; int grepw; unsigned grep_len; // set by --grep and --grep-w
+    uint32_t one_vb, downsample, shard ;
     enum { SAM_FLAG_INCLUDE_IF_ALL=1, SAM_FLAG_INCLUDE_IF_NONE, SAM_FLAG_EXCLUDE_IF_ALL } sam_flag_filter;
     enum { SAM_MAPQ_INCLUDE_IF_AT_LEAST=1, SAM_MAPQ_EXCLUDE_IF_AT_LEAST } sam_mapq_filter;
-    enum { INTERLEAVE_NONE, INTERLEAVE_EITHER, INTERLEAVE_BOTH } interleave;
+    enum { INTERLEAVE_NONE, INTERLEAVE_EITHER, INTERLEAVE_BOTH } interleaved;
     uint16_t FLAG; // the value for sam_flag_filter
     uint8_t MAPQ;  // the value for sam_mapq_filter
     enum { IUP_NONE, IUP_POSITIVE, IUP_NEGATIVE } bases;
@@ -77,12 +76,12 @@ typedef struct {
         index_txt,   // create an index
         subdirs,     // recursively traversing subdirectories
         list;        // a genols option
-    const char *threads_str, *out_filename, *files_from, *do_register;
+    rom threads_str, out_filename, out_dirname, files_from, do_register;
 
     ReferenceType reference;
 
     // stats / metadata flags for end users
-    int show_stats, show_dvcf, show_ostatus, show_lift, show_wrong_md; 
+    int show_stats, show_dvcf, show_ostatus, show_lift, show_wrong_md, show_wrong_xg, show_wrong_xm; 
     enum { VLD_NONE, VLD_REPORT_INVALID, VLD_REPORT_VALID, VLD_INVALID_FOUND } validate; // genocat: tests if this is a valid genozip file (z_file opens correctly)
     
     // analysis
@@ -92,17 +91,17 @@ typedef struct {
     enum { KRK_NONE, KRK_ALL, KRK_INCLUDED, KRK_EXCLUDED } show_kraken;
 
     // stats / debug useful mostly for developers
-    int show_memory, show_dict, show_b250, show_aliases, show_digest, log_digest, show_recon_plan,
+    int show_memory, show_sa, show_depn, show_dict, show_b250, show_aliases, show_digest, log_digest, show_recon_plan,
         show_index, show_gheader, show_ref_contigs, show_chain_contigs, show_ref_seq, show_ref_diff,
-        show_reference, show_ref_hash, show_ref_index, show_chrom2ref, show_ref_iupacs, show_chain,
-        show_codec, show_containers, show_alleles, show_bgzf, show_txt_contigs,
+        show_reference, show_ref_hash, show_ref_index, show_chrom2ref, show_ref_iupacs, show_chain, show_ranges,
+        show_codec, show_containers, show_alleles, show_bgzf, show_txt_contigs, show_lines,
         show_vblocks, show_threads, show_uncompress, biopsy,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
-        debug_LONG, debug_qname,
-        verify_codec, seg_only, xthreads, show_flags, show_rename_tags,
+        debug_LONG, debug_qname, debug_read_ctxs, debug_sa, debug_gencomp,
+        verify_codec, seg_only, show_bam, xthreads, show_flags, show_rename_tags,
         echo,         // show the command line in case of an error
         show_headers; // (1 + SectionType to display) or 0=flag off or -1=all sections
-    const char *help, *dump_section, *show_is_set, *show_time, *show_mutex;
+    rom help, dump_section, show_is_set, show_time, show_mutex;
 
     DictId dict_id_show_one_b250,   // argument of --show-b250-one
            show_one_counts,
@@ -110,16 +109,16 @@ typedef struct {
            dump_one_local_dict_id,  // argument of --dump-local-one
            dict_id_show_containers, // argument of --show-containers
            dict_id_debug_seg;       // argument of --debug-seg
-    const char *show_one_dict;      // argument of --show-dict-one
+    rom show_one_dict;      // argument of --show-dict-one
 
     #define HAS_DEBUG_SEG(ctx) (flag.debug_seg && (!flag.dict_id_debug_seg.num || dict_id_typeless ((ctx)->dict_id).num == flag.dict_id_debug_seg.num))
 
     // internal flags set by the system, not the command line
-    GenCompNum gencomp_num;  // ZIP only: currently zipping generated component (DVCF rejects or SAM SA)
+    CompIType zip_comp_i;    // ZIP only: currently zipping component (copied into VBlock.comp_i, FlagsTxtHeader.comp_i, SectionEntFileFormat.comp_i)
     bool debug,              // set if DEBUG is defined
          debug_top,
          is_windows, is_mac, is_linux, // set according to OS
-         is_lten,            // set according to enidanness   
+         is_lten,            // set according to endianness   
          explicit_out_dt,    // genocat - out txt file data type set explicitly from command line
          aligner_available,  // ZIP: compression requires using the aligner
          genocat_no_ref_file,// PIZ (genocat): we don't need to load the reference data
@@ -128,33 +127,35 @@ typedef struct {
          genocat_no_reconstruct,   // PIZ: User requested to genocat with only metadata to be shown, not file contents
          no_writer,          // PIZ: User requested to genocat with only metadata to be shown, not file contents (but we still might do reconstruction without output)
          no_writer_thread,   // PIZ: Don't use a Writer thread. Sometimes when no_writer, we still need a writer thread (eg to calculate digest with SAM generated components)
+         preprocessing,      // PIZ: we're currently dispatching compute threads for preprocessing (= loading SA Groups)
          multiple_files,     // Command line includes multiple files
          reconstruct_as_src, // the reconstructed data type is the same as the source data type
          maybe_txt_header_modified,
+         maybe_lines_dropped,
          maybe_lines_dropped_by_reconstructor,
+         maybe_lines_dropped_by_writer,
          maybe_vb_modified_by_reconstructor,
-         maybe_vb_modified_by_writer,
-         maybe_vb_dropped_before_read,
-         maybe_vb_dropped_after_read_vb_header,
+         maybe_lines_out_of_order,
+         maybe_vb_dropped_by_writer,
          maybe_vb_dropped_after_read,
          missing_contexts_allowed, // PIZ: its not an error if contexts are missing - just reconstruct as an empty string
          data_modified,      // PIZ: output is NOT precisely identical to the compressed source, and hence we cannot use its BZGF blocks
                              // ZIP: txt data is modified during Seg
          explicit_ref,       // ref->filename was set by --reference or --REFERENCE (as opposed to being read from the genozip header)
          collect_coverage;   // PIZ: collect coverage data for show_sex/show_coverage/idxstats
-    
+
     int only_headers;        // genocat --show_headers (not genounzip) show only headers
 
     Reference reading_reference;  // system is currently reading a reference  as a result of --chain (not normal PIZ of a .chain.genozip)
 
 #define flag_loading_auxiliary (flag.reading_reference || flag.reading_chain || flag.reading_kraken) // PIZ: currently reading auxiliary file (reference, chain etc)
 
-    const char *reading_chain; // system is currently loading a chain file by this name
-    const char *reading_kraken;// system is currently loading a kraken file by this name
-    const char *unbind;
-    const char *log_filename;  // output to info_stream goes here
+    rom reading_chain; // system is currently loading a chain file by this name
+    rom reading_kraken;// system is currently loading a kraken file by this name
+    rom unbind;
+    rom log_filename;  // output to info_stream goes here
 
-    enum { BIND_NONE, BIND_ALL, BIND_PAIRS, BIND_GENCOMP } bind; // ZIP: user used --output to bind all files or --pair without --output to bind every 2
+    enum { BIND_NONE, BIND_FQ_PAIR, BIND_DVCF, BIND_SAM } bind; // ZIP: cases where we have more than one txt_file bound in a z_file
     uint64_t stdin_size;
     unsigned longest_filename; // length of longest filename of the txt/z files on the command line
     
@@ -173,7 +174,7 @@ extern Flags flag;
     flag.downsample = flag.shard = flag.one_vb = flag.one_component = flag.xthreads = \
     flag.show_sex = flag.show_coverage = flag.idxstats = flag.collect_coverage = 0; /* int */ \
     flag.bases = IUP_NONE; \
-    flag.interleave = INTERLEAVE_NONE; \
+    flag.interleaved = INTERLEAVE_NONE; \
     flag.grep = flag.show_time = flag.unbind = flag.show_one_dict = flag.out_filename = NULL; /* char* */ \
     flag.dict_id_show_one_b250 = flag.dump_one_b250_dict_id = flag.dump_one_local_dict_id = DICT_ID_NONE; /* DictId */ 
     
@@ -188,14 +189,14 @@ extern bool option_is_short[];
 #define OT(l,s) option_is_short[(int)s[0]] ? "-"s : "--"l
 
 extern void flags_init_from_command_line (int argc, char **argv);
-extern void flags_update (unsigned num_files, const char **filenames);
+extern void flags_update (unsigned num_files, rom *filenames);
 extern void flags_update_zip_one_file (void);
 extern void flags_update_piz_one_file (int z_file_i);
 
 extern void flags_store_command_line (int argc, char **argv);
-extern const char *flags_command_line (void);
+extern rom flags_command_line (void);
 extern void flags_display_debugger_params (void);
-extern const char *flags_pipe_in_process_name (void);
+extern rom flags_pipe_in_process_name (void);
 extern unsigned flags_pipe_in_pid (void);
 extern bool flags_pipe_in_process_died (void);
-
+extern bool flags_is_genocat_global_area_only (void);

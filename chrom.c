@@ -32,7 +32,7 @@ typedef struct __attribute__ ((__packed__)) { WordIndex chrom_index, ref_index; 
 
 // ZIP of a file with an external reference: 
 // The CHROM dictionary includes: first - the txtheader contig names, then reference file contig names that are not in txtheader, 
-// and finally names encountered in the file that are not in either the header or the reference (see zip_prepopulate_contig_ctxs()). 
+// and finally names encountered in the file that are not in either the header or the reference (see ctx_populate_zf_ctx_from_contigs()). 
 // Since the CHROM context is prepopulated from the txtheader and the reference, often not all the entries are used by the file data.
 //
 // Here, we create a mapping between those chrom entries that are used (count>0) and the index of the contig in the reference file
@@ -46,15 +46,15 @@ void chrom_2ref_compress (Reference ref)
     // remove idenity entries (chrom_index==ref_index) from chrom2ref_map
     ARRAY (WordIndex, c2r, z_file->chrom2ref_map);
     
-    ASSERTNOTINUSE (evb->compressed);
-    buf_alloc (evb, &evb->compressed, 0, z_file->chrom2ref_map.len, Chrom2Ref, 1, "compressed");
+    ASSERTNOTINUSE (evb->scratch);
+    buf_alloc (evb, &evb->scratch, 0, z_file->chrom2ref_map.len, Chrom2Ref, 1, "scratch");
     ContextP ctx = ZCTX(DTFZ(prim_chrom));
 
     for (uint32_t i=0; i < c2r_len; i++) {
 
         if (flag.show_chrom2ref) {
-            const char *chrom_name = ctx_get_zf_nodes_snip (ctx, i);
-            const char *ref_name = c2r[i] >= 0 ? ref_contigs_get_name (ref, c2r[i], NULL) : "(none)";
+            rom chrom_name = ctx_get_zf_nodes_snip (ctx, i, 0, 0);
+            rom ref_name = c2r[i] >= 0 ? ref_contigs_get_name (ref, c2r[i], NULL) : "(none)";
 
             if (c2r[i] != WORD_INDEX_NONE) 
                 iprintf ("In file: '%s' (%d)\tIn reference: '%s' (%d)\t%s\n", chrom_name, i, ref_name, c2r[i], i != c2r[i] ? "INDEX_CHANGE" : "");
@@ -70,16 +70,16 @@ void chrom_2ref_compress (Reference ref)
         // adds the mapping if not identify and adds -1 if this chrom doesn't map to a ref contig.
         // note: we add only contigs that are used (count>0) except for aligner_available in which case we don't have counts (for REF_EXTERNAL, we have 
         // populated all contigs in zip_initialize, and for REF_EXT_STORE we add contigs with any bit set in is_set) 
-        if (c2r[i] != i && (*ENT(int64_t, ctx->counts, i) || flag.aligner_available))
-            NEXTENT (Chrom2Ref, evb->compressed) = (Chrom2Ref){ .chrom_index = BGEN32(i), .ref_index = BGEN32 (c2r[i]) };
+        if (c2r[i] != i && (*B(int64_t, ctx->counts, i) || flag.aligner_available))
+            BNXT (Chrom2Ref, evb->scratch) = (Chrom2Ref){ .chrom_index = BGEN32(i), .ref_index = BGEN32 (c2r[i]) };
     }
 
-    if (evb->compressed.len) {
-        evb->compressed.len *= sizeof (Chrom2Ref);
-        zfile_compress_section_data_ex (evb, SEC_CHROM2REF_MAP, &evb->compressed, 0,0, CODEC_LZMA, SECTION_FLAGS_NONE); // compresses better with LZMA than BZLIB
+    if (evb->scratch.len) {
+        evb->scratch.len *= sizeof (Chrom2Ref);
+        zfile_compress_section_data_ex (evb, SEC_CHROM2REF_MAP, &evb->scratch, 0,0, CODEC_LZMA, SECTION_FLAGS_NONE); // compresses better with LZMA than BZLIB
     }
 
-    buf_free (&evb->compressed);
+    buf_free (evb->scratch);
 }
 
 void chrom_2ref_load (Reference ref)
@@ -87,12 +87,12 @@ void chrom_2ref_load (Reference ref)
     Section sl = sections_last_sec (SEC_CHROM2REF_MAP, true);
     if (!sl) return; // we don't have alternate chroms
 
-    zfile_get_global_section (SectionHeader, SEC_CHROM2REF_MAP, sl, &evb->compressed, "compressed");
+    zfile_get_global_section (SectionHeader, sl, &evb->scratch, "scratch");
 
     if (flag.show_chrom2ref) 
         iprint0 ("\nAlternative chrom indices (output of --show-chrom2ref): chroms that are in the txt file and are mapped to a different index in the reference\n");
 
-    evb->compressed.len /= sizeof (Chrom2Ref);
+    evb->scratch.len /= sizeof (Chrom2Ref);
     Context *ctx = ZCTX(CHROM);
 
     // create mapping user index -> reference index
@@ -107,8 +107,8 @@ void chrom_2ref_load (Reference ref)
     // the indices of chroms that are NOT in the reference (they are only in the user file), will be mapped to ref chroms
     ConstContigPkgP ctgs = ref_get_ctgs (ref); 
     WordIndex num_ref_contigs = ctgs->contigs.len; // must be signed int
-    for (uint32_t i=0; i < evb->compressed.len; i++) {
-        Chrom2Ref *ent = ENT (Chrom2Ref, evb->compressed, i);
+    for (uint32_t i=0; i < evb->scratch.len; i++) {
+        Chrom2Ref *ent = B(Chrom2Ref, evb->scratch, i);
         WordIndex chrom_index = BGEN32 (ent->chrom_index);
         WordIndex ref_index = BGEN32 (ent->ref_index);
 
@@ -119,8 +119,8 @@ void chrom_2ref_load (Reference ref)
         map[chrom_index] = ref_index;
 
         if (flag.show_chrom2ref) {
-            const char *chrom_name = ctx_get_words_snip (ctx, chrom_index);
-            const char *ref_name   = ref_index >= 0 ? ref_contigs_get_name (ref, ref_index, NULL) : NULL;
+            rom chrom_name = ctx_get_words_snip (ctx, chrom_index);
+            rom ref_name   = ref_index >= 0 ? ref_contigs_get_name (ref, ref_index, NULL) : NULL;
             if (ref_name)
                 iprintf ("In file: '%s' (%d)\tIn reference: '%s' (%d)\n", chrom_name, chrom_index, ref_name, ref_index);
             else
@@ -130,7 +130,7 @@ void chrom_2ref_load (Reference ref)
 
     if (flag.show_chrom2ref && exe_type == EXE_GENOCAT) exit (EXIT_OK); // in genocat this, not the data
 
-    buf_free (&evb->compressed);
+    buf_free (evb->scratch);
 }
 
 static void chrom_2ref_seg_set (VBlockP vb, WordIndex chrom_node_index, WordIndex ref_index)
@@ -140,16 +140,17 @@ static void chrom_2ref_seg_set (VBlockP vb, WordIndex chrom_node_index, WordInde
             chrom_node_index, vb->ol_chrom2ref_map.len);
 
     buf_alloc_255 (vb, &vb->chrom2ref_map, 0, index+1, WordIndex, CTX_GROWTH, "chrom2ref_map");
+    vb->chrom2ref_map.len = MAX_(vb->chrom2ref_map.len, index+1);
 
-    *ENT (WordIndex, vb->chrom2ref_map, index) = ref_index; 
+    *B(WordIndex, vb->chrom2ref_map, index) = ref_index; 
 }
 
 // returns the ref index by the chrom index, works only after Segging of CHROM
 WordIndex chrom_2ref_seg_get (Reference ref, ConstVBlockP vb, WordIndex chrom_index)
 { 
     int32_t ol_len = vb->ol_chrom2ref_map.len;
-    return (chrom_index < ol_len) ? *ENT (WordIndex, vb->ol_chrom2ref_map, chrom_index)
-                                  : *ENT (WordIndex, vb->chrom2ref_map, chrom_index - ol_len);
+    return (chrom_index < ol_len) ? *B(WordIndex, vb->ol_chrom2ref_map, chrom_index)
+                                  : *B(WordIndex, vb->chrom2ref_map, chrom_index - ol_len);
 }
 
 void chrom_calculate_ref2chrom (uint64_t num_ref_contigs)
@@ -169,7 +170,7 @@ void chrom_calculate_ref2chrom (uint64_t num_ref_contigs)
 // Seg stuff
 //-------------
 
-WordIndex chrom_seg_ex (VBlock *vb, DidIType did_i, 
+WordIndex chrom_seg_ex (VBlockP vb, DidIType did_i, 
                         STRp(chrom), 
                         PosType LN,       // Optional, if readily known
                         bool *is_alt_out, // need iff flag.match_chrom_to_reference.
@@ -177,7 +178,7 @@ WordIndex chrom_seg_ex (VBlock *vb, DidIType did_i,
                         bool recon_changes_if_match, // whether reconstruction changes in case of change in chrom name due to --match-chrom
                         bool *is_new_out) // optional out
 {
-    ASSERTNOTZERO (chrom_len);
+    ASSERTNOTZERO (chrom_len,"");
     ContextP ctx = CTX(did_i);
     bool is_primary = did_i == DTF(prim_chrom);
     bool is_luft    = did_i == DTF(luft_chrom);
@@ -186,7 +187,7 @@ WordIndex chrom_seg_ex (VBlock *vb, DidIType did_i,
     WordIndex chrom_node_index = WORD_INDEX_NONE, ref_index = WORD_INDEX_NONE;
     int32_t chrom_name_growth=0;
     bool is_new, is_alt=false;
-    const char *save_chrom = chrom;
+    rom save_chrom = chrom;
     uint32_t save_chrom_len = chrom_len;
     
     Reference ref = !(flag.reference & REF_ZIP_LOADED) ? NULL
@@ -232,7 +233,7 @@ WordIndex chrom_seg_ex (VBlock *vb, DidIType did_i,
     }
         
     // case: either without --match-chrom-to-reference OR chrom not found in the reference
-    chrom_node_index = seg_by_ctx_ex (vb, chrom, chrom_len, ctx, add_bytes, &is_new); // note: this is not the same as ref_index, bc ctx->nodes contains the header contigs first, followed by the reference contigs that are not already in the header
+    chrom_node_index = seg_by_ctx_ex (vb, STRa(chrom), ctx, add_bytes, &is_new); // note: this is not the same as ref_index, bc ctx->nodes contains the header contigs first, followed by the reference contigs that are not already in the header
     
     STR (ref_contig);
     if (is_new && ref)
@@ -242,9 +243,9 @@ WordIndex chrom_seg_ex (VBlock *vb, DidIType did_i,
     static bool once[2]={};
     if (ref_index != WORD_INDEX_NONE && is_alt && // a new chrom that matched to the reference with an alternative name
         (is_primary || is_luft) &&
-        !once[is_primary] &&              // skip if we've shown the warning already
         !segconf.running  &&              // segconf runs with flag.quiet so the user won't see the warning
-        !flag.match_chrom_to_reference) { // we didn't already attempt to match to the reference
+        !flag.match_chrom_to_reference && // we didn't already attempt to match to the reference
+        !__atomic_test_and_set (&once[is_primary], __ATOMIC_RELAXED)) {  // skip if we've shown the warning already
             
             if (VB_DT(DT_CHAIN))
                 WARN ("Warning: Contig name mismatch between %s and reference file %s. For example: %s file: \"%.*s\" Reference file: \"%.*s\". "
@@ -254,9 +255,7 @@ WordIndex chrom_seg_ex (VBlock *vb, DidIType did_i,
                 WARN ("FYI: Contigs name mismatch between %s and reference file %s. For example: %s file: \"%.*s\" Reference file: \"%.*s\". "
                       "You may use --match-chrom-to-reference to create %s with contigs matching those of the reference. This makes no difference for the compression. More info: %s",
                       txt_name, ref_get_filename (ref), dt_name (vb->data_type), STRf(chrom), STRf(ref_contig), z_name, WEBSITE_GENOZIP);
-
-            once[is_primary] = true; // we don't use WARN_ONCE bc we want the "once" to also include ref_contigs_get_matching
-    }
+    } // we don't use WARN_ONCE bc we want the "once" to also include ref_contigs_get_matching
 
     if (is_alt_out) *is_alt_out = false;
 
@@ -264,7 +263,7 @@ finalize:
     if (is_new_out) *is_new_out = is_new;        
 
     if (is_primary || is_luft)
-        random_access_update_chrom (vb, (is_primary ? DC_PRIMARY : DC_LUFT), chrom_node_index, chrom, chrom_len); 
+        random_access_update_chrom (vb, !is_primary, chrom_node_index, chrom, chrom_len); 
 
     if (is_primary) {
         vb->chrom_node_index = chrom_node_index;
@@ -295,28 +294,28 @@ bool chrom_seg_cb (VBlockP vb, ContextP ctx, STRp (chrom), uint32_t repeat)
     return true; // segged successfully
 }
 
-static int chrom_create_zip_sorter (const void *a, const void *b)
+static SORTER (chrom_create_zip_sorter)
 {
     uint32_t index_a = *(uint32_t *)a;
     uint32_t index_b = *(uint32_t *)b;
 
-    CtxNode *word_a = ENT (CtxNode, sorter_ctx->nodes, index_a);
-    CtxNode *word_b = ENT (CtxNode, sorter_ctx->nodes, index_b);
+    CtxNode *word_a = B(CtxNode, sorter_ctx->nodes, index_a);
+    CtxNode *word_b = B(CtxNode, sorter_ctx->nodes, index_b);
     
-    return strcmp (ENT (char, sorter_ctx->dict, word_a->char_index),
-                   ENT (char, sorter_ctx->dict, word_b->char_index));
+    return strcmp (Bc (sorter_ctx->dict, word_a->char_index),
+                   Bc (sorter_ctx->dict, word_b->char_index));
 }
 
-static int chrom_create_piz_sorter (const void *a, const void *b)
+static SORTER (chrom_create_piz_sorter)
 {
     uint32_t index_a = *(uint32_t *)a;
     uint32_t index_b = *(uint32_t *)b;
 
-    CtxWord *word_a = ENT (CtxWord, sorter_ctx->word_list, index_a);
-    CtxWord *word_b = ENT (CtxWord, sorter_ctx->word_list, index_b);
+    CtxWord *word_a = B(CtxWord, sorter_ctx->word_list, index_a);
+    CtxWord *word_b = B(CtxWord, sorter_ctx->word_list, index_b);
     
-    return strcmp (ENT (char, sorter_ctx->dict, word_a->char_index),
-                   ENT (char, sorter_ctx->dict, word_b->char_index));
+    return strcmp (Bc (sorter_ctx->dict, word_a->char_index),
+                   Bc (sorter_ctx->dict, word_b->char_index));
 }
 
 // ZIP/PIZ MUST be run by the main thread only
@@ -324,7 +323,7 @@ void chrom_index_by_name (DidIType chrom_did_i)
 {
     sorter_ctx = ZCTX(chrom_did_i);
 
-    buf_free (&chrom_sorter);
+    buf_free (chrom_sorter);
 
     // chrom_sorter - an array of uint32 of indexes into ZCTX(CHROM)->word_list - sorted by alphabetical order of the snip in ZCTX(CHROM)->dict
     chrom_sorter.len = sorter_ctx->nodes.len;
@@ -344,8 +343,8 @@ static WordIndex chrom_zip_get_by_name_do (STRp (chrom_name), WordIndex first_so
     WordIndex mid_sorted_index = (first_sorted_index + last_sorted_index) / 2;
     
     STR (snip);
-    WordIndex node_index = *ENT (WordIndex, chrom_sorter, mid_sorted_index);
-    ctx_get_snip_by_zf_node_index (&ZCTX(CHROM)->nodes, &ZCTX(CHROM)->dict, node_index, pSTRa(snip));
+    WordIndex node_index = *B(WordIndex, chrom_sorter, mid_sorted_index);
+    ctx_get_zf_nodes_snip (ZCTX(CHROM), node_index, pSTRa(snip));
 
     int cmp = strncmp (snip, chrom_name, chrom_name_len);
     if (!cmp && snip_len != chrom_name_len) // identical prefix but different length
@@ -365,8 +364,8 @@ static WordIndex chrom_piz_get_by_name_do (STRp (chrom_name), WordIndex first_so
     WordIndex mid_sorted_index = (first_sorted_index + last_sorted_index) / 2;
     
     STR (snip);
-    WordIndex word_index = *ENT (WordIndex, chrom_sorter, mid_sorted_index);
-    ctx_get_snip_by_word_index (ZCTX(CHROM), word_index, pSTRa(snip));
+    WordIndex word_index = *B(WordIndex, chrom_sorter, mid_sorted_index);
+    ctx_get_snip_by_word_index (ZCTX(CHROM), word_index, snip);
 
     int cmp = strncmp (snip, chrom_name, chrom_name_len);
     if (!cmp && snip_len != chrom_name_len) // identical prefix but different length

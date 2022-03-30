@@ -13,12 +13,12 @@
 #include "file.h"
 #include "codec.h"
 #include "txtfile.h"
+#include "gencomp.h"
 #include "strings.h"
 #include "endianness.h"
 #include "profiler.h"
 
-static Mutex vb_digest_mutex = {};   // ZIP: used for serializing MD5ing of VBs
-static uint32_t vb_digest_last=0; // last vb to be MD5ed 
+static Mutex vb_digest_mutex = {}; // ZIP: used for serializing MD5ing of VBs
 
 #define IS_ADLER ((command == ZIP) ? !flag.md5 : z_file->z_flags.adler)
 #define DIGEST_NAME (IS_ADLER ? "Adler32" : "MD5")
@@ -27,29 +27,24 @@ static uint32_t vb_digest_last=0; // last vb to be MD5ed
 
 void digest_initialize (void)
 {
-    mutex_initialize (vb_digest_mutex);
-    if (!z_file->num_txt_components_so_far) vb_digest_last = 0; // reset if we're starting a new z_file
+    // reset if we're starting a new z_file
+    if (!z_file->num_txts_so_far) 
+        mutex_initialize (vb_digest_mutex); 
 }
 
-Digest digest_finalize (DigestContext *ctx, const char *msg)
-{
-    Digest digest = IS_ADLER ? (Digest) { .words = { BGEN32 (ctx->adler_ctx.adler) } }
-                             : md5_finalize (&ctx->md5_ctx);
-
-    if (flag.show_digest) 
-        iprintf ("%s finalize %s: %s\n", DIGEST_NAME, msg, digest_display_ex (digest, DD_NORMAL).s);
-
-    return digest;
-}
-
-// get digest of data so far, without finalizing
-Digest digest_snapshot (const DigestContext *ctx)
+// get digest of data so far
+Digest digest_snapshot (const DigestContext *ctx, rom msg)
 {
     // make a copy of ctx, and finalize it, keeping the original copy unfinalized
     DigestContext ctx_copy = *ctx;
 
-    return IS_ADLER ? (Digest) { .words = { BGEN32 (ctx_copy.adler_ctx.adler) } }
-                    : md5_finalize (&ctx_copy.md5_ctx);
+    Digest digest = IS_ADLER ? (Digest) { .words = { BGEN32 (ctx_copy.adler_ctx.adler) } }
+                             : md5_finalize (&ctx_copy.md5_ctx);
+
+    if (msg && flag.show_digest) 
+        iprintf ("%s finalize %s: %s\n", DIGEST_NAME, msg, digest_display_ex (digest, DD_NORMAL).s);
+
+    return digest;
 }
 
 void digest_start_log (DigestContext *ctx)
@@ -61,12 +56,12 @@ void digest_start_log (DigestContext *ctx)
 Digest digest_do (const void *data, uint32_t len)
 {
     if (IS_ADLER)
-        return (Digest) { .words = { BGEN32 (libdeflate_adler32 (1, data, len)) } };
+        return (Digest) { .words = { BGEN32 (adler32 (1, data, len)) } };
     else
         return md5_do (data, len);
 }
 
-void digest_update_do (VBlockP vb, DigestContext *ctx, const char *data, uint64_t data_len, const char *msg)
+void digest_update_do (VBlockP vb, DigestContext *ctx, rom data, uint64_t data_len, rom msg)
 {
     if (!data_len) return;
     
@@ -79,7 +74,7 @@ void digest_update_do (VBlockP vb, DigestContext *ctx, const char *data, uint64_
             ctx->adler_ctx.initialized = true;
         }
         if (flag.show_digest) before = *ctx;
-        ctx->adler_ctx.adler = libdeflate_adler32 (ctx->adler_ctx.adler, STRa(data));
+        ctx->adler_ctx.adler = adler32 (ctx->adler_ctx.adler, STRa(data));
     }
 
     else {
@@ -101,8 +96,8 @@ void digest_update_do (VBlockP vb, DigestContext *ctx, const char *data, uint64_
         iprintf ("vb=%05d %s update %s (len=%"PRIu64" so_far=%"PRIu64") 32chars=\"%s\": before=%s after=%s\n", 
                  vb->vblock_i, DIGEST_NAME, msg, data_len, ctx->common.bytes_digested, 
                  str_to_printable (data, MIN_(32, data_len), str), 
-                 digest_display_ex (digest_snapshot (&before), DD_NORMAL).s, 
-                 digest_display_ex (digest_snapshot (ctx), DD_NORMAL).s);
+                 digest_display_ex (digest_snapshot (&before, NULL), DD_NORMAL).s, 
+                 digest_display_ex (digest_snapshot (ctx, NULL), DD_NORMAL).s);
     }
 
     if (ctx->common.log) {
@@ -114,14 +109,14 @@ void digest_update_do (VBlockP vb, DigestContext *ctx, const char *data, uint64_
     COPY_TIMER_VB (vb, digest);
 }
 
-void digest_piz_verify_one_vb (VBlock *vb)
+void digest_piz_verify_one_vb (VBlockP vb)
 {
     static bool failed = false; 
 
     // if testing, compare digest up to this VB to that calculated on the original file and transferred through SectionHeaderVbHeader
     // note: we cannot test this unbind mode, because the digests are commulative since the beginning of the bound file
     if (!failed && !flag.unbind && !v8_digest_is_zero (vb->digest_so_far)) {
-        Digest piz_digest_so_far = digest_snapshot (&txt_file->digest_ctx_bound);
+        Digest piz_digest_so_far = digest_snapshot (&z_file->digest_ctx, NULL);
 
         // warn if VB is bad, but don't exit, so file reconstruction is complete and we can debug it
         if (!digest_recon_is_equal (piz_digest_so_far, vb->digest_so_far) && !digest_is_equal (vb->digest_so_far, DIGEST_NONE)) {
@@ -129,15 +124,16 @@ void digest_piz_verify_one_vb (VBlock *vb)
             TEMP_FLAG (quiet, flag.quiet && !flag.show_digest);
 
             // dump bad vb to disk
-            WARN ("%s of reconstructed vblock=%u,component=%u (%s) differs from original file (%s).\n"
-                    "Note: genounzip is unable to check the %s subsequent vblocks once a vblock is bad\n"
-                    "Bad reconstructed vblock has been dumped to: %s\n"
-                    "To see the same data in the original file:\n"
-                    "genozip --biopsy %u %s (+any parameters used to compress this file)\n"
-                    "If this is unexpected, please contact support@genozip.com.\n", 
-                    DIGEST_NAME, vb->vblock_i, z_file->num_txt_components_so_far, 
-                    digest_display (piz_digest_so_far).s, digest_display (vb->digest_so_far).s, 
-                    DIGEST_NAME, txtfile_dump_vb (vb, z_name), vb->vblock_i, file_guess_original_filename (txt_file));
+            WARN ("reconstructed vblock=%u, component=%u (%s=%s) differs from original file (%s=%s).\n"
+                  "Note: genounzip is unable to check the %s subsequent vblocks once a vblock is bad\n"
+                  "Bad reconstructed vblock has been dumped to: %s\n"
+                  "To see the same data in the original file:\n"
+                  "genozip --biopsy %u %s (+any parameters used to compress this file)\n"
+                  "If this is unexpected, please contact support@genozip.com.\n", 
+                  vb->vblock_i, vb->comp_i,  
+                  DIGEST_NAME, digest_display (piz_digest_so_far).s, 
+                  DIGEST_NAME, digest_display (vb->digest_so_far).s, 
+                  DIGEST_NAME, txtfile_dump_vb (vb, z_name), vb->vblock_i, file_guess_original_filename (txt_file));
 
             RESTORE_FLAG (quiet);
 
@@ -147,44 +143,31 @@ void digest_piz_verify_one_vb (VBlock *vb)
 }
 
 // ZIP and PIZ: called by compute thread to calculate MD5 for one VB - need to serialize VBs using a mutex
-void digest_one_vb (VBlock *vb)
+void digest_one_vb (VBlockP vb)
 {
     #define WAIT_TIME_USEC 1000
     #define DIGEST_TIMEOUT (30*60) // 30 min
 
-    // wait for our turn
-    for (unsigned i=0; ; i++) {
-        mutex_lock (vb_digest_mutex);
+    // serialize VBs in order
+    mutex_lock_by_vb_order (vb->vblock_i, vb_digest_mutex);
 
-        ASSERT (vb_digest_last < vb->vblock_i, "Expecting vb_digest_last=%u < vb->vblock_i=%u", vb_digest_last, vb->vblock_i);
-        
-        if (vb_digest_last == vb->vblock_i - 1) break; // its our turn now
-
-        // not our turn, wait 1ms and try again
-        mutex_unlock (vb_digest_mutex);
-        usleep (WAIT_TIME_USEC);
-
-        // timeout after approx 30 seconds
-        ASSERT (i < DIGEST_TIMEOUT*(1000000/WAIT_TIME_USEC), "Timeout (%u sec) while waiting for vb_digest_mutex in vb=%u. vb_digest_last=%u", 
-                DIGEST_TIMEOUT, vb->vblock_i, vb_digest_last);
-    }
-
-    if (command == ZIP) {
-        // digest of all data up to and including this VB is just the total digest of the file so far (as there is no unconsumed data)
-        if (flag.bind) digest_update (&z_file->digest_ctx_bound, &vb->txt_data, "vb:digest_ctx_bound");
-        digest_update (&z_file->digest_ctx_single, &vb->txt_data, "vb:digest_ctx_single");
-
-        // take a snapshot of digest as per the end of this VB - this will be used to test for errors in piz after each VB  
-        vb->digest_so_far = digest_snapshot (flag.bind ? &z_file->digest_ctx_bound : &z_file->digest_ctx_single);
-    }
+    // note: we don't digest generated components, but we need to enter the mutex anyway as it serializes VBs in order
+    if (gencomp_comp_eligible_for_digest(vb)) {
     
-    else { // PIZ
-        digest_update (&txt_file->digest_ctx_bound, &vb->txt_data, flag.unbind ? "vb:digest_ctx_single" : "vb:digest_ctx_bound"); // labels consistent with ZIP so we can easily diff PIZ vs ZIP
+        if (command == ZIP) {
+            digest_update (&z_file->digest_ctx, &vb->txt_data, "vb");
 
-        digest_piz_verify_one_vb (vb);        
+            // take a snapshot of digest as per the end of this VB - this will be used to test for errors in piz after each VB  
+            vb->digest_so_far = digest_snapshot (&z_file->digest_ctx, NULL);
+        }
+        
+        else { // PIZ
+            digest_update (&z_file->digest_ctx, &vb->txt_data, "vb"); // labels consistent with ZIP so we can easily diff PIZ vs ZIP
+
+            digest_piz_verify_one_vb (vb);        
+        }
     }
 
-    vb_digest_last++; // next please
     mutex_unlock (vb_digest_mutex);
 }
 
@@ -199,7 +182,7 @@ bool digest_recon_is_equal (const Digest recon_digest, const Digest expected_dig
            recon_digest.words[3] == expected_digest.words[3]; 
 }
 
-void digest_verify_ref_is_equal (const Reference ref, const char *header_ref_filename, const Digest header_md5)
+void digest_verify_ref_is_equal (const Reference ref, rom header_ref_filename, const Digest header_md5)
 {
     Digest ref_md5 = ref_get_file_md5 (ref);
     uint8_t version = ref_get_genozip_version (ref);
@@ -218,7 +201,7 @@ DigestDisplay digest_display_ex (const Digest digest, DigestDisplayMode mode)
 {
     DigestDisplay dis = {};
 
-    const uint8_t *b = digest.bytes; 
+    bytes b = digest.bytes; 
     
     if ((mode == DD_NORMAL && !IS_ADLER && md5_is_zero (digest)) ||
         (mode == DD_MD5                 && md5_is_zero (digest)) || 
@@ -241,4 +224,4 @@ DigestDisplay digest_display_ex (const Digest digest, DigestDisplayMode mode)
 }
 DigestDisplay digest_display (const Digest digest) { return digest_display_ex (digest, DD_NORMAL); }
 
-const char *digest_name (void) { return DIGEST_NAME; }
+rom digest_name (void) { return DIGEST_NAME; }

@@ -63,7 +63,7 @@ extern bool fastq_txtfile_have_enough_lines (VBlockP vb, uint32_t *unconsumed_le
 
 // ZIP Stuff
 extern void fastq_zip_initialize (void);
-extern void fastq_zip_read_one_vb (VBlockP vb);
+extern void fastq_zip_init_vb (VBlockP vb);
 extern bool fastq_zip_dts_flag (void);
 COMPRESSOR_CALLBACK (fastq_zip_seq);
 COMPRESSOR_CALLBACK(fastq_zip_qual); // used by codec_longr_compress
@@ -72,13 +72,14 @@ COMPRESSOR_CALLBACK(fastq_zip_qual); // used by codec_longr_compress
 extern void fastq_seg_initialize();
 extern void fastq_seg_finalize();
 extern bool fastq_seg_is_small (ConstVBlockP vb, DictId dict_id);
-extern const char *fastq_seg_txt_line();
+extern rom fastq_seg_txt_line();
 
 // PIZ Stuff
 extern bool fastq_piz_is_paired (void);
-extern bool fastq_piz_read_one_vb (VBlockP vb, Section sl);
+extern bool fastq_piz_maybe_reorder_lines (void);
+extern bool fastq_piz_init_vb (VBlockP vb, const SectionHeaderVbHeader *header, uint32_t *txt_data_so_far_single_0_increment);
 CONTAINER_FILTER_FUNC (fastq_piz_filter);
-extern bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
+extern IS_SKIP (fastq_piz_is_skip_section);
 extern void fastq_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq_len_str));
 extern CONTAINER_CALLBACK (fastq_piz_container_cb);
 
@@ -95,3 +96,6 @@ extern uint32_t fastq_get_pair_vb_i (VBlockP vb);
 #define FASTQ_LOCAL_GET_LINE_CALLBACKS  \
     { DT_FASTQ, _FASTQ_QUAL, fastq_zip_qual },
 
+typedef enum { FQ_COMP_R1, FQ_COMP_R2 } FastqComponentType;
+#define FASTQ_COMP_NAMES { "FQR1", "FQR2" }
+ 

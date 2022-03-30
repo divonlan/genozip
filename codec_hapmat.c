@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2022 Black Paw Ventures Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
-// *** RETIRED CODEC. USED JUST FOR DECOMPRESSING OLD VCF FILES (retired officially in v13, but hasn't been in since some earlier version) ***
+// *** RETIRED CODEC. USED JUST FOR DECOMPRESSING OLD VCF FILES (retired officially in v13, but hasn't been in use since some earlier version) ***
 
 #include "genozip.h"
 #include "codec.h"
@@ -25,9 +25,9 @@
 // PIZ: for each haplotype column, retrieve its it address in the haplotype sections. Note that since the haplotype sections are
 // transposed, each column will be a row, or a contiguous array, in the section data. This function returns an array
 // of pointers, each pointer being a beginning of column data within the section array
-void codec_hapmat_piz_calculate_columns (VBlock *vb_)
+void codec_hapmat_piz_calculate_columns (VBlockP vb_)
 {
-    VBlockVCF *vb = (VBlockVCF *)vb_;
+    VBlockVCFP vb = (VBlockVCFP)vb_;
 
     vb->ht_matrix_ctx = ECTX (_PBWT_HT_MATRIX);
 
@@ -39,7 +39,7 @@ void codec_hapmat_piz_calculate_columns (VBlock *vb_)
 
     // each entry is a pointer to the beginning of haplotype column located in vb->haplotype_sections_data
     // note: haplotype columns are permuted only within their own sample block
-    ARRAY (const char *, hapmat_columns_data, vb->hapmat_columns_data); 
+    ARRAY (rom , hapmat_columns_data, vb->hapmat_columns_data); 
 
     ContextP perm_ctx = ECTX (_PBWT_GT_HT_INDEX);
     ARRAY (const unsigned, permutatation_index, perm_ctx->local);
@@ -52,22 +52,22 @@ void codec_hapmat_piz_calculate_columns (VBlock *vb_)
     buf_zero (&vb->hapmat_column_of_zeros);
 
     for (uint32_t ht_i = 0; ht_i < ht_per_line; ht_i++) 
-        hapmat_columns_data[ht_i] = ENT (char, vb->ht_matrix_ctx->local, permutatation_index[ht_i] * vb->lines.len);
+        hapmat_columns_data[ht_i] = Bc (vb->ht_matrix_ctx->local, permutatation_index[ht_i] * vb->lines.len);
 
     for (unsigned ht_i=ht_per_line; ht_i < ht_per_line + 7; ht_i++)
         hapmat_columns_data[ht_i] = vb->hapmat_column_of_zeros.data;
 }
 
 // PIZ: build haplotype for a line - reversing the permutation and the transposal.
-static inline void codec_hapmat_piz_get_one_line (VBlockVCF *vb)
+static inline void codec_hapmat_piz_get_one_line (VBlockVCFP vb)
 {
     START_TIMER;
 
     if (flag.samples) buf_zero (&vb->hapmat_one_array); // if we're not filling in all samples, initialize to 0;
 
-    ARRAY (const char *, hapmat_columns_data, vb->hapmat_columns_data); 
+    ARRAY (rom , hapmat_columns_data, vb->hapmat_columns_data); 
     uint32_t ht_i_after = vb->ht_per_line; // automatic variable - faster
-    uint64_t *next = FIRSTENT (uint64_t, vb->hapmat_one_array);
+    uint64_t *next = B1ST64 (vb->hapmat_one_array);
     uint32_t vb_line_i = vb->line_i - vb->first_line;
 
     // this loop can consume up to 25-50% of the entire decompress compute time (tested with 1KGP data)
@@ -108,9 +108,9 @@ static inline void codec_hapmat_piz_get_one_line (VBlockVCF *vb)
 //    by PIZ as the LT_CODEC reconstructor for CODEC_HAPM. It takes data from GT_HT, consulting GT_HT_INDEX
 //    to find the correct column in the matrix, and skips '*'s (missing haplotypes due to mixed ploidy, missing samples,
 //    or lines missing GT in FORMAT) until it finds a valid haplotype value.
-void codec_hapmat_reconstruct (VBlock *vb_, Codec codec, Context *ctx)
+void codec_hapmat_reconstruct (VBlockP vb_, Codec codec, Context *ctx)
 {
-    VBlockVCF *vb = (VBlockVCF *)vb_;
+    VBlockVCFP vb = (VBlockVCFP)vb_;
 
     // get one row of the haplotype matrix for this line into vb->hapmat_one_array if we don't have it already
     if (vb->hapmat_one_array.param != vb->line_i) { // we store the line_i in param
@@ -122,7 +122,7 @@ void codec_hapmat_reconstruct (VBlock *vb_, Codec codec, Context *ctx)
     // find next allele - skipping unused spots ('*')
     uint8_t ht = '*';
     while (ht == '*' && vb->hapmat_one_array.len < vb->ht_per_line)
-        ht = *ENT(uint8_t, vb->hapmat_one_array, vb->hapmat_one_array.len++);
+        ht = *B8(vb->hapmat_one_array, vb->hapmat_one_array.len++);
 
     if (vb->drop_curr_line) return;
 
@@ -140,7 +140,7 @@ void codec_hapmat_reconstruct (VBlock *vb_, Codec codec, Context *ctx)
         // "%|%" is used instead of "./." in case the previous sample had a | phase. This is meant to reduce entroy of GT.b250
         // in the case we have phased data, but missing samples appear as "./.".
         case '%': 
-            if (*LASTENT (char, vb->txt_data) == '|' || *LASTENT (char, vb->txt_data) == '/') { // second % in "%|%" and act on the 2nd
+            if (*BLSTc (vb->txt_data) == '|' || *BLSTc (vb->txt_data) == '/') { // second % in "%|%" and act on the 2nd
                 vb->txt_data.len -= 1;  // remove | or /
                 RECONSTRUCT ("/.", 2);
             }
@@ -149,7 +149,7 @@ void codec_hapmat_reconstruct (VBlock *vb_, Codec codec, Context *ctx)
             break;
 
         default: 
-            ABORT ("Error in codec_hapmat_reconstruct: reconstructing txt_line=%"PRIu64" vb_i=%u: Invalid character found in decompressed HT array: '%c' (ASCII %u)", 
+            ABORT ("reconstructing txt_line=%"PRIu64" vb_i=%u: Invalid character found in decompressed HT array: '%c' (ASCII %u)", 
                    vb->line_i, vb->vblock_i, ht, ht);
     }
 }

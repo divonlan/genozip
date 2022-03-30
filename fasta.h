@@ -31,14 +31,13 @@ extern void vcf_zip_after_compute (VBlockP vb);
 extern void fasta_seg_initialize(VBlockP vb);
 extern void fasta_seg_finalize (VBlockP vb);
 extern bool fasta_seg_is_small (ConstVBlockP vb, DictId dict_id);
-extern const char *fasta_seg_txt_line();
+extern rom fasta_seg_txt_line();
 
 // PIZ Stuff
-extern bool fasta_piz_initialize (void);
-extern bool fasta_piz_read_one_vb (VBlockP vb, Section sl);
+extern bool fasta_piz_is_vb_needed (VBIType vb_i);
+extern bool fasta_piz_init_vb (VBlockP vb, const SectionHeaderVbHeader *header, uint32_t *txt_data_so_far_single_0_increment);
 extern void fasta_reconstruct_vb(); // no parameter - implicit casting of VBlockP
-extern bool fasta_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
-extern bool fasta_piz_initialize_contig_grepped_out (VBlockP vb, bool does_vb_have_any_desc, bool last_desc_in_this_vb_matches_grep);
+extern IS_SKIP (fasta_piz_is_skip_section);
 
 // VBlock stuff
 extern void fasta_vb_release_vb();

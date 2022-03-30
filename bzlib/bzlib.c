@@ -11,7 +11,7 @@
    bzip2/libbzip2 version 1.0.8 of 13 July 2019
    Copyright (C) 1996-2019 Julian Seward <jseward@acm.org>
 
-   Please read the WARNING, DISCLAIMER and PATENTS sections in the 
+   Please read the WARNING, DISCLAIMER and PABtxtS sections in the 
    README file.
 
    This program is released under the terms of the license contained
@@ -106,7 +106,7 @@ void* default_bzalloc ( void* opaque, Int32 items, Int32 size, const char *func,
 }
 
 static
-void default_bzfree ( void* opaque, void* addr, const char *func, uint32_t code_line )
+void default_bzfree ( void* opaque, void* addr, const char *func, uint32_t code_line)
 {
    if (addr != NULL) free ( addr );
 }

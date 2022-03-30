@@ -57,10 +57,10 @@ static void sam_header_add_contig (STRp (contig_name), PosType LN, void *out_ref
     }
 
     // In case of REF_INTERNAL compression, and we have a header contigs - we pre-allocate the range space
-    PosType gpos = ref_samheader_denovo_get_header_contig_gpos (sam_hdr_contigs->contigs.len ? LASTENT (Contig, sam_hdr_contigs->contigs) : NULL);
+    PosType gpos = ref_samheader_denovo_get_header_contig_gpos (sam_hdr_contigs->contigs.len ? BLST (Contig, sam_hdr_contigs->contigs) : NULL);
 
     // add to contigs. note: index is sam_hdr_contigs is by order of appearance in header, not the same as the reference
-    NEXTENT (Contig, sam_hdr_contigs->contigs) = (Contig){ 
+    BNXT (Contig, sam_hdr_contigs->contigs) = (Contig){ 
         .max_pos    = LN,        // if last_pos was provided, it is unchanged, and verified = the pos in ref. if not provided, it is what the reference says.
         .char_index = sam_hdr_contigs->dict.len, 
         .snip_len   = contig_name_len,
@@ -74,12 +74,12 @@ static void sam_header_add_contig (STRp (contig_name), PosType LN, void *out_ref
 
     // add to contigs_dict
     buf_add_more (NULL, &sam_hdr_contigs->dict, contig_name, contig_name_len, NULL);
-    NEXTENT (char, sam_hdr_contigs->dict) = 0; // nul-termiante
+    BNXTc (sam_hdr_contigs->dict) = 0; // nul-termiante
 }
 
 // verify that this contig in this 2nd+ component, also exists (with the same LN) in the contig list created in the 1st component
 // Note: we don't allow components to add new contigs, as currently BAM expects header contigs to be first in the RNAME, and there might already
-// be additional contigs after (eg reference contigs added by zip_prepopulate_contig_ctxs and/or "*"). To do: fix this
+// be additional contigs after (eg reference contigs added by ctx_populate_zf_ctx_from_contigs and/or "*"). To do: fix this
 static void sam_header_verify_contig (STRp (hdr_contig), PosType hdr_contig_LN, void *unused)
 {
     ASSINP (sam_hdr_contigs->cp_next < sam_hdr_contigs->cp_num_contigs, 
@@ -101,11 +101,11 @@ static void sam_header_verify_contig (STRp (hdr_contig), PosType hdr_contig_LN, 
 }
 
 // call a callback for each SQ line (contig). Note: callback function is the same as foreach_contig
-static void sam_foreach_SQ_line (const char *txt_header, // nul-terminated string
+static void sam_foreach_SQ_line (rom txt_header, // nul-terminated string
                                  ContigsIteratorCallback callback, void *callback_param,
                                  Buffer *new_txt_header) // optional - if provided, all lines need to be copied (modified or not) to this buffer
 {
-    const char *line = txt_header;
+    rom line = txt_header;
 
     while (1) {
         line = strchr (line, '@');
@@ -119,11 +119,11 @@ static void sam_foreach_SQ_line (const char *txt_header, // nul-terminated strin
         if (line[1] == 'S' && line[2] == 'Q') { // this test will always be in the buffer - possible in the overflow area
 
             // line looks something like: @SQ\tSN:chr10\tLN:135534747 (no strict order between SN and LN and there could be more parameters)
-            const char *chrom_name = strstr (line, "SN:"); 
-            const char *pos_str    = strstr (line, "LN:"); 
+            rom chrom_name = strstr (line, "SN:"); 
+            rom pos_str    = strstr (line, "LN:"); 
             if (chrom_name && pos_str) {
                 unsigned chrom_name_len = strcspn (&chrom_name[3], "\t\n\r");
-                const char *after_chrom = chrom_name + chrom_name_len + STRLEN("SN:");
+                rom after_chrom = chrom_name + chrom_name_len + STRLEN("SN:");
 
                 PosType last_pos = (PosType)strtoull (&pos_str[3], NULL, 10);
 
@@ -154,7 +154,7 @@ static void sam_foreach_SQ_line (const char *txt_header, // nul-terminated strin
 }
 
 // call a callback for each SQ line (contig). Note: callback function is the same as foreach_contig
-static void bam_foreach_SQ_line (const char *txt_header, uint32_t txt_header_len, // binary BAM header
+static void bam_foreach_SQ_line (rom txt_header, uint32_t txt_header_len, // binary BAM header
                                  ContigsIteratorCallback callback, void *callback_param,
                                  Buffer *new_txt_header) // optional - if provided, all lines need to be copied (modified or not) to this buffer
 {
@@ -166,7 +166,7 @@ static void bam_foreach_SQ_line (const char *txt_header, uint32_t txt_header_len
     // skip magic, l_text, text
     HDRSKIP(4);
     uint32_t l_text = HDR32;
-    const char *plain_sam_header = &txt_header[next];
+    rom plain_sam_header = &txt_header[next];
     HDRSKIP(l_text);
 
     uint32_t n_ref = HDR32;
@@ -182,7 +182,7 @@ static void bam_foreach_SQ_line (const char *txt_header, uint32_t txt_header_len
         SAFE_RESTORE;
 
         // update l_text
-        *ENT (uint32_t, *new_txt_header, 1) = LTEN32 ((uint32_t)new_txt_header->len - 8); // this assignment is word-aligned
+        *B32 (*new_txt_header, 1) = LTEN32 ((uint32_t)new_txt_header->len - 8); // this assignment is word-aligned
 
         // add n_ref
         uint32_t n_ref_lten = LTEN32 (n_ref);
@@ -194,7 +194,7 @@ static void bam_foreach_SQ_line (const char *txt_header, uint32_t txt_header_len
         uint32_t start_line = next;
 
         uint32_t l_name = HDR32; // name length including \0
-        const char *name = &txt_header[next];
+        rom name = &txt_header[next];
         HDRSKIP (l_name);
         uint32_t l_ref = HDR32;
 
@@ -223,20 +223,21 @@ static void bam_foreach_SQ_line (const char *txt_header, uint32_t txt_header_len
     return;
 
 incomplete_header:
-    ABORT ("Error in bam_foreach_SQ_line: incomplete BAM header (next=%u)", next);
+    ABORT ("incomplete BAM header (next=%u)", next);
 
     #undef HDRSKIP
     #undef HDR32
 }   
 
 typedef struct { uint32_t num_contigs, dict_len; } ContigsCbParam;
-static void sam_header_count_contigs_cb (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *cb_param)
+static void sam_header_count_contigs_cb (rom chrom_name, unsigned chrom_name_len, PosType last_pos, void *cb_param)
 {
     // note: for simplicity, we consider contigs to be in the range [0, last_pos] even though POS=0 doesn't exist - last_pos+1 loci
     ((ContigsCbParam*)cb_param)->num_contigs++;
     ((ContigsCbParam*)cb_param)->dict_len += chrom_name_len + 1;
 }
 
+// ZIP
 static void sam_header_alloc_contigs (BufferP txt_header)
 {
     ContigsCbParam contigs_count = {}; 
@@ -244,7 +245,7 @@ static void sam_header_alloc_contigs (BufferP txt_header)
 
     // note: In BAM, a contig-less header is considered an unaligned BAM in which all RNAME=*
     // In SAM, a contig-less header just means we don't know the contigs and they are defined in RNAME 
-    if (!IS_BAM && !contigs_count.num_contigs) return; // "headerless" SAM (not really headerless, just no contigs in the header)
+    if (!IS_BAM_ZIP && !contigs_count.num_contigs) return; // "headerless" SAM (not really headerless, just no contigs in the header)
 
     sam_hdr_contigs = CALLOC (sizeof (ContigPkg));
     sam_hdr_contigs->name = "sam_hdr_contigs";
@@ -259,16 +260,17 @@ void sam_header_finalize (void)
     FREE (sam_hdr_contigs);
 }
 
-bool sam_header_has_string (ConstBufferP txt_header, const char *substr)
+// ZIP
+bool sam_header_has_string (ConstBufferP txt_header, rom substr)
 {
     uint32_t next=0;
     #define HDRSKIP(n) if (txt_header->len < next + n) return false; next += n
     #define HDR32 (next + 4 <= txt_header->len ? GET_UINT32 (&txt_header->data[next]) : 0) ; if (txt_header->len < next + 4) return false; next += 4;
 
-    if (IS_BAM) {
+    if (IS_BAM_ZIP) {
         HDRSKIP(4); // magic
         uint32_t l_text = HDR32;
-        const char *text = ENT (const char, *txt_header, next);
+        rom text = Bc (*txt_header, next);
         SAFE_NUL (&text[l_text]);
         bool found = !!strstr (text, substr);
         SAFE_RESTORE;
@@ -286,11 +288,12 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
 {    
     if (flag.show_txt_contigs && exe_type == EXE_GENOCAT) exit_ok();
 
-    if (command != ZIP || flag.gencomp_num) return true; // nothing to inspect in in PIZ or SA components, all good
+    if (command != ZIP) return true; // nothing to inspect in in PIZ or SA components, all good
 
-    if (!IS_BAM) *AFTERENT (char, *txt_header) = 0; // nul-terminate as required by sam_foreach_SQ_line
+    if (!IS_BAM_ZIP) *BAFTc (*txt_header) = 0; // nul-terminate as required by sam_foreach_SQ_line
 
-    segconf.sam_bowtie2 = sam_header_has_string (txt_header, "PN:bowtie2");
+    segconf.has_bsseeker2 = sam_header_has_string (txt_header, "PN:BS Seeker 2"); 
+    segconf.sam_bowtie2   = sam_header_has_string (txt_header, "PN:bowtie2");
 
     // if there is no external reference provided, then we create our internal one, and store it
     // (if an external reference IS provided, the user can decide whether to store it or not, with --reference vs --REFERENCE)
@@ -301,11 +304,11 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
         ref_initialize_ranges (gref, RT_DENOVO); // it will be REF_INTERNAL if this is the 2nd+ non-conatenated file
 
     // evb buffers must be alloced by the main thread, since other threads cannot modify evb's buf_list
-    random_access_alloc_ra_buf (evb, DC_PRIMARY, 0);
+    random_access_alloc_ra_buf (evb, 0, 0);
 
     // if its the 2nd+ file while binding in ZIP - we just check that the contigs are the same
     // (or a subset) of previous file's contigs (to do: merge headers, bug 327) 
-    if (sam_hdr_contigs && flag.bind && z_file->num_txt_components_so_far /* 2nd+ file */) {
+    if (sam_hdr_contigs && flag.bind && z_file->num_txts_so_far /* 2nd+ file */) {
         sam_hdr_contigs->cp_next = 0; 
         foreach_SQ_line (sam_header_verify_contig, NULL, NULL);
     }
@@ -322,13 +325,15 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
                 foreach_SQ_line (sam_header_add_contig, NULL, &new_txt_header);
 
                 // replace txt_header with lifted back one
-                buf_free (txt_header);
+                buf_free (*txt_header);
                 buf_copy (txt_header_vb, txt_header, &new_txt_header, char, 0, 0, "txt_data");
-                buf_free (&new_txt_header);
+                buf_free (new_txt_header);
                 #undef new_txt_header
             }
             else
                 foreach_SQ_line (sam_header_add_contig, NULL, NULL);
+
+            contigs_create_index (sam_hdr_contigs, SORT_BY_NAME); // used by sam_sa_add_sa_group
         }
     }
 
@@ -352,7 +357,7 @@ int32_t bam_is_header_done (bool is_eof)
 
     // sam header text
     uint32_t l_text = HDR32;
-    const char *text = ENT (const char, evb->txt_data, next);
+    rom text = Bc (evb->txt_data, next);
     HDRSKIP(l_text);
 
     uint32_t header_n_ref = HDR32;
@@ -388,7 +393,7 @@ static inline void sam_header_add_PG (Buffer *txtheader_buf)
     TimeSpecType tb;
     clock_gettime (CLOCK_REALTIME, &tb);
 
-    uint32_t unique_id = libdeflate_adler32 (1, &tb, sizeof (tb));
+    uint32_t unique_id = adler32 (1, &tb, sizeof (tb));
 
     // the command line length is unbound, careful not to put it in a bufprintf
     bufprintf (txtheader_buf->vb, txtheader_buf, "@PG\tID:genozip-%u\tPN:genozip\tDS:%s\tVN:%s\tCL:", 
@@ -407,14 +412,14 @@ TXTHEADER_TRANSLATOR (sam_header_bam2sam)
 
     ASSERT0 (buf_is_alloc (txtheader_buf), "txtheader_buf not allocated");
 
-    uint32_t l_text = GET_UINT32 (ENT (char, *txtheader_buf, 4));
-    memmove (txtheader_buf->data, ENT (char, *txtheader_buf, 8), l_text);
+    uint32_t l_text = GET_UINT32 (Bc (*txtheader_buf, 4));
+    memmove (txtheader_buf->data, Bc (*txtheader_buf, 8), l_text);
     txtheader_buf->len = l_text;
     
     sam_header_add_PG (txtheader_buf);
 }
 
-static void sam_header_sam2bam_count_sq (const char *chrom_name, unsigned chrom_name_len, PosType last_pos, void *callback_param)
+static void sam_header_sam2bam_count_sq (rom chrom_name, unsigned chrom_name_len, PosType last_pos, void *callback_param)
 {
     (*(uint32_t *)callback_param)++;
 }
@@ -427,18 +432,18 @@ static void sam_header_sam2bam_ref_info (STRp (ref_contig_name), PosType last_po
 
     // l_name
     ref_contig_name_len++; // inc. nul terminator
-    *(uint32_t *)AFTERENT (char, *txtheader_buf) = LTEN32 (ref_contig_name_len); 
+    *(uint32_t *)BAFTc (*txtheader_buf) = LTEN32 (ref_contig_name_len); 
     txtheader_buf->len += sizeof (uint32_t);
 
     ASSINP (ref_contig_name_len <= INT32_MAX, "Error: cannot convert to BAM because l_name=%u exceeds BAM format maximum of %u", ref_contig_name_len, INT32_MAX);
 
     // name
     buf_add (txtheader_buf, ref_contig_name, ref_contig_name_len-1);                  
-    NEXTENT (char, *txtheader_buf) = 0;
+    BNXTc (*txtheader_buf) = 0;
 
     // l_ref
     uint32_t last_pos32 = (uint32_t)last_pos;
-    *(uint32_t *)AFTERENT (char, *txtheader_buf) = LTEN32 (last_pos32); 
+    *(uint32_t *)BAFTc (*txtheader_buf) = LTEN32 (last_pos32); 
     txtheader_buf->len += sizeof (uint32_t);
 
     ASSINP (last_pos <= INT32_MAX, "Error: cannot convert to BAM because contig %.*s has length=%"PRId64" that exceeds BAM format maximum of %u", 
@@ -452,7 +457,7 @@ TXTHEADER_TRANSLATOR (sam_header_sam2bam)
     buf_alloc (comp_vb, txtheader_buf, 12 + 1, 0, char, 1, "txt_data");
 
     // nul-terminate text - required by sam_foreach_SQ_line - but without enlengthening buffer
-    *AFTERENT (char, *txtheader_buf) = 0;
+    *BAFTc (*txtheader_buf) = 0;
 
     // n_ref = count SQ lines in text
     uint32_t n_ref=0;
@@ -482,9 +487,9 @@ TXTHEADER_TRANSLATOR (sam_header_sam2bam)
     ASSINP (txtheader_buf->len <= INT32_MAX, "Cannot convert to BAM because SAM header length (%"PRIu64" bytes) exceeds BAM format maximum of %u", txtheader_buf->len, INT32_MAX);
 
     memmove (text, txtheader_buf->data, l_text);                          // text
-    memcpy (FIRSTENT (char, *txtheader_buf), BAM_MAGIC, 4);               // magic
-    *ENT (uint32_t, *txtheader_buf, 1) = LTEN32 (l_text);                 // l_text
-    *(uint32_t *)ENT (char, *txtheader_buf, l_text + 8) = LTEN32 (n_ref); // n_ref
+    memcpy (B1STc (*txtheader_buf), BAM_MAGIC, 4);               // magic
+    *B32 (*txtheader_buf, 1) = LTEN32 (l_text);                 // l_text
+    *(uint32_t *)Bc (*txtheader_buf, l_text + 8) = LTEN32 (n_ref); // n_ref
     txtheader_buf->len += 12; // BAM header length so far, before adding reference information
 
     // option 1: copy reference information from SAM SQ lines, if available

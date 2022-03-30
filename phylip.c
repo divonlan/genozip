@@ -38,7 +38,7 @@ int32_t phy_is_header_done (bool is_eof)
             return i+1;
 
     // case: the entire file is just a header
-    if (is_eof && *LASTENT (char, evb->txt_data) == '\n') 
+    if (is_eof && *BLSTc (evb->txt_data) == '\n') 
         return evb->txt_data.len;
 
     return -1;
@@ -62,7 +62,7 @@ bool phy_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
 typedef struct {
     uint32_t line_start;  // start within vb->txt_data
 } ZipDataLinePHY;
-#define DATA_LINE(i) ENT (ZipDataLinePHY, vb->lines, i)
+#define DATA_LINE(i) B(ZipDataLinePHY, vb->lines, i)
 
 unsigned phy_vb_zip_dl_size (void) { return sizeof (ZipDataLinePHY); }
 
@@ -71,7 +71,7 @@ COMPRESSOR_CALLBACK (phy_zip_id)
 {
     ZipDataLinePHY *dl = DATA_LINE (vb_line_i);
     *line_data_len = PHY_ID_LEN;
-    *line_data     = ENT (char, vb->txt_data, dl->line_start);
+    *line_data     = Bc (vb->txt_data, dl->line_start);
     if (is_rev) *is_rev = 0;
 }
 
@@ -79,7 +79,7 @@ COMPRESSOR_CALLBACK (phy_zip_seq)
 {
     ZipDataLinePHY *dl = DATA_LINE (vb_line_i);
     *line_data_len = phy_seq_len;
-    *line_data     = ENT (char, vb->txt_data, dl->line_start) + PHY_ID_LEN;
+    *line_data     = Bc (vb->txt_data, dl->line_start) + PHY_ID_LEN;
     if (is_rev) *is_rev = 0;
 }
 
@@ -87,7 +87,7 @@ COMPRESSOR_CALLBACK (phy_zip_seq)
 // Segmentation functions
 //-----------------------
 
-void phy_seg_initialize (VBlock *vb)
+void phy_seg_initialize (VBlockP vb)
 {
     CTX(PHY_SEQ)->ltype = LT_SEQUENCE;
     CTX(PHY_ID)->ltype  = LT_SEQUENCE;
@@ -129,7 +129,7 @@ bool phy_seg_is_small (ConstVBlockP vb, DictId dict_id)
     return true; // contexts are expected to have small dictionaries
 }
 
-const char *phy_seg_txt_line (VBlock *vb, const char *line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
+rom phy_seg_txt_line (VBlockP vb, rom line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
 {
     Context *id_ctx  = CTX(PHY_ID);
     Context *seq_ctx = CTX(PHY_SEQ);
@@ -172,7 +172,7 @@ TXTHEADER_TRANSLATOR (txtheader_phy2fa)
 // Translating PHYLIP->FASTA: remove redundant terminating spaces from ID (FASTA's DESC)
 TRANSLATOR_FUNC (phy_piz_phy2fasta_ID)
 {
-    while (vb->txt_data.len && *LASTENT (char, vb->txt_data)==' ')
+    while (vb->txt_data.len && *BLSTc (vb->txt_data)==' ')
         vb->txt_data.len--;
 
     return 0;

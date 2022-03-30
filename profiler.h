@@ -21,15 +21,16 @@ typedef struct {
         compressor_rans, compressor_arith,
         reconstruct_vb, buf_alloc, dispatcher_recycle_vbs, txtfile_read_header, txtfile_read_vblock,
         seg_all_data_lines, codec_hapmat_count_alt_alleles, seg_initialize,
-        ctx_clone, qname_seg, sam_cigar_seg, sam_seg_XA_pos, 
-        digest,ctx_compress_one_dict_fragment, aligner_best_match, aligner_get_word_from_seq,
+        ctx_clone, qname_seg, sam_cigar_seg, sam_seg_XA_pos, sam_sa_prim_finalize_ingest, sam_zip_prim_ingest_vb,
+        digest,dict_io_compress_one_fragment, aligner_best_match, aligner_get_word_from_seq,
         aligner_get_match_len, generate_rev_complement_genome, ref_contigs_compress,
-        linesorter_compress_qsort, linesorter_compress_recon_plan, 
-        piz_read_global_area, ref_load_stored_reference, ctx_read_all_dictionaries, ctx_dict_build_word_lists, 
+        vcf_linesort_compress_qsort, generate_recon_plan, 
+        piz_read_global_area, ref_load_stored_reference, dict_io_read_all_dictionaries, dict_io_build_word_lists, 
         ref_read_one_range, ref_uncompress_one_range, vb_release_vb_do, vb_destroy_vb,
-        wait_for_vb_1_mutex,
+        wait_for_vb_1_mutex, sam_load_groups_add_one_prim_vb, recon_plan_compress_one_fragment,
+        sam_zip_recon_plan_add_gc_lines, sam_zip_gc_calc_depn_vb_info,
         tmp1, tmp2, tmp3, tmp4, tmp5;
-        const char *next_name, *next_subname;
+        rom next_name, next_subname;
         unsigned num_vbs, max_vb_size_mb;
 } ProfilerRec;
 
@@ -61,10 +62,11 @@ typedef struct timespec TimeSpecType;
 
 #define COPY_TIMER(res)       COPY_TIMER_FULL(vb, res)
 #define COPY_TIMER_VB(vb,res) COPY_TIMER_FULL((vb), res)
+#define COPY_TIMER_COMPRESS(res)  ({ if (!vb->z_data_test.param) COPY_TIMER(res); }) // account only if not running from codec_assign_best_codec, because it accounts for itself
 
 #define PAUSE_TIMER(vb) \
     TimeSpecType on_hold_timer; \
-    const char *save_name=0, *save_subname=0; \
+    rom save_name=0, save_subname=0; \
     if (flag.show_time) { \
         clock_gettime(CLOCK_REALTIME, &on_hold_timer); \
         save_name = vb->profile.next_name; \
@@ -86,6 +88,6 @@ typedef struct timespec TimeSpecType;
 
 extern void profiler_initialize (void);
 extern void profiler_add (ConstVBlockP vb);
-extern const char *profiler_print_short (const ProfilerRec *p);
+extern rom profiler_print_short (const ProfilerRec *p);
 extern void profiler_print_report (void);
 

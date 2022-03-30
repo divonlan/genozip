@@ -14,17 +14,19 @@
 
 typedef bool CodecCompress (VBlockP vb, 
                             SectionHeader *header,       // in / out
-                            const char *uncompressed,   // option 1 - compress contiguous data
+                            rom uncompressed,   // option 1 - compress contiguous data
                             uint32_t *uncompressed_len, // in/out (might be modified by complex codecs)
                             LocalGetLineCB callback,    // option 2 - compress data one line at a tim
                             char *compressed, 
                             uint32_t *compressed_len,   // in/out
-                            bool soft_fail);
+                            bool soft_fail,
+                            rom name);
 
 typedef void CodecUncompress (VBlockP vb, Codec codec, uint8_t param,
-                              const char *compressed, uint32_t compressed_len,
+                              rom compressed, uint32_t compressed_len,
                               Buffer *uncompressed_buf, uint64_t uncompressed_len,
-                              Codec sub_codec);
+                              Codec sub_codec,
+                              rom name);
 
 typedef uint32_t CodecEstSizeFunc (Codec codec, uint64_t uncompressed_len);
 
@@ -57,9 +59,9 @@ typedef struct {
     { 1, "LZMA", "+",      NA0,           codec_lzma_compress,      codec_lzma_uncompress, NA3,                       codec_none_est_size      }, \
     { 1, "BSC",  "+",      NA0,           codec_bsc_compress,       codec_bsc_uncompress,  NA3,                       codec_bsc_est_size       }, \
     { 1, "RANB", "+",      NA0,           codec_RANB_compress,      codec_rans_uncompress, NA3,                       codec_RANB_est_size      }, \
-    { 1, "RANW", "+",      NA0,           codec_RANW_compress,      codec_rans_uncompress, NA3,                       codec_RANW_est_size      }, \
-    { 1, "RANb", "+",      NA0,           codec_RANb_compress,      codec_rans_uncompress, NA3,                       codec_RANb_est_size      }, \
-    { 1, "RANw", "+",      NA0,           codec_RANw_compress,      codec_rans_uncompress, NA3,                       codec_RANw_est_size      }, \
+    { 1, "RANW", "+",      NA0,           codec_RANW_compress,      codec_rans_uncompress, NA3,                       codec_RANW_est_size      }, /* STRIPE */\
+    { 1, "RANb", "+",      NA0,           codec_RANb_compress,      codec_rans_uncompress, NA3,                       codec_RANb_est_size      }, /* PACK */\
+    { 1, "RANw", "+",      NA0,           codec_RANw_compress,      codec_rans_uncompress, NA3,                       codec_RANw_est_size      }, /* STRIPE & PACK */\
     { 0, "ACGT", "+",      NA0,           codec_acgt_compress,      codec_acgt_uncompress, NA3,                       codec_complex_est_size   }, \
     { 0, "XCGT", "+",      NA0,           USE_SUBCODEC,             codec_xcgt_uncompress, NA3,                       NA4                      }, \
     { 0, "HAPM", "+",      NA0,           NA1,                      USE_SUBCODEC,          codec_hapmat_reconstruct,  NA4,                     }, /* HapMat was discontinued and replaced by PBWT. We keep it for decompressing old VCF files */ \
@@ -67,9 +69,9 @@ typedef struct {
     { 0, "GTSH", "+",      NA0,           NA1,                      codec_gtshark_uncompress, codec_pbwt_reconstruct, NA4,                     }, /* gtshark discontinued in v12. keep for displaying an error */\
     { 0, "PBWT", "+",      NA0,           codec_pbwt_compress,      codec_pbwt_uncompress, codec_pbwt_reconstruct,    codec_complex_est_size   }, \
     { 1, "ARTB", "+",      NA0,           codec_ARTB_compress,      codec_arith_uncompress,NA3,                       codec_ARTB_est_size      }, \
-    { 1, "ARTW", "+",      NA0,           codec_ARTW_compress,      codec_arith_uncompress,NA3,                       codec_ARTW_est_size      }, \
-    { 1, "ARTb", "+",      NA0,           codec_ARTb_compress,      codec_arith_uncompress,NA3,                       codec_ARTb_est_size      }, \
-    { 1, "ARTw", "+",      NA0,           codec_ARTw_compress,      codec_arith_uncompress,NA3,                       codec_ARTw_est_size      }, \
+    { 1, "ARTW", "+",      NA0,           codec_ARTW_compress,      codec_arith_uncompress,NA3,                       codec_ARTW_est_size      }, /* STRIPE */\
+    { 1, "ARTb", "+",      NA0,           codec_ARTb_compress,      codec_arith_uncompress,NA3,                       codec_ARTb_est_size      }, /* PACK */\
+    { 1, "ARTw", "+",      NA0,           codec_ARTw_compress,      codec_arith_uncompress,NA3,                       codec_ARTw_est_size      }, /* STRIPE & PACK */\
     { 0, "BGZF", "+.gz",   "gunzip -c",   NA1,                      NA2,                   NA3,                       NA4                      }, \
     { 0, "XZ",   "+.xz",   "xz -d -c",    NA1,                      NA2,                   NA3,                       NA4                      }, \
     { 0, "BCF",  "-.bcf",  "bcftools view", NA1,                    NA2,                   NA3,                       NA4                      }, \
@@ -100,16 +102,16 @@ extern CodecEstSizeFunc codec_none_est_size, codec_bsc_est_size, codec_hapmat_es
 
 // non-codec-specific functions
 extern void codec_initialize (void);
-extern const char *codec_name (Codec codec);
-extern void *codec_alloc_do (VBlockP vb, uint64_t size, float grow_at_least_factor, const char *func, uint32_t code_line);
-#define codec_alloc(vb,size,grow_at_least_factor) codec_alloc_do((vb),(size),(grow_at_least_factor), __FUNCTION__, __LINE__)
+extern rom codec_name (Codec codec);
+extern void *codec_alloc_do (VBlockP vb, uint64_t size, float grow_at_least_factor, FUNCLINE);
+#define codec_alloc(vb,size,grow_at_least_factor) codec_alloc_do((vb),(size),(grow_at_least_factor), __FUNCLINE)
 
-extern void codec_free_do (void *vb, void *addr, const char *func, uint32_t code_line);
-#define codec_free(vb,addr) codec_free_do ((vb), (addr), __FUNCTION__, __LINE__)
+extern void codec_free_do (void *vb, void *addr, FUNCLINE);
+#define codec_free(vb,addr) codec_free_do ((vb), (addr), __FUNCLINE)
 
 extern void codec_free_all (VBlockP vb);
-extern void codec_verify_free_all (VBlockP vb, const char *op, Codec codec);
-extern void codec_show_time (VBlockP vb, const char *name, const char *subname, Codec codec);
+extern void codec_verify_free_all (VBlockP vb, rom op, Codec codec);
+extern void codec_show_time (VBlockP vb, rom name, rom subname, Codec codec);
 
 #define CODEC_ASSIGN_SAMPLE_SIZE 99999 // bytes (slightly better results than 50K)
 extern Codec codec_assign_best_codec (VBlockP vb, ContextP ctx, BufferP non_ctx_data, SectionType st);
@@ -117,9 +119,6 @@ extern void codec_assign_best_qual_codec (VBlockP vb, DidIType qual_did, LocalGe
 
 // ACGT stuff
 extern const uint8_t acgt_encode[256];
-extern const char acgt_decode[4];
-#define ACGT_DECODE(bitarr,idx) acgt_decode[bit_array_get ((bitarr), ((int64_t)(idx))*2) + (bit_array_get ((bitarr), ((int64_t)(idx))*2 + 1) << 1)]
-
 extern void codec_acgt_comp_init (VBlockP vb);
 extern void codec_acgt_reconstruct (VBlockP vb, ContextP ctx, STRp(snip));
 
@@ -142,4 +141,3 @@ extern void codec_pbwt_display_ht_matrix (VBlockP vb, uint32_t max_rows);
 // LONGR stuff
 extern void codec_longr_comp_init (VBlockP vb, DidIType qual_did_i);
 extern void codec_longr_segconf_calculate_bins (VBlockP vb, ContextP ctx, LocalGetLineCB callback);
-

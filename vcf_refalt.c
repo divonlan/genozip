@@ -15,7 +15,6 @@
 #include "file.h"
 #include "reference.h"
 #include "chain.h"
-#include "coords.h"
 #include "ref_iupacs.h"
 #include "dict_id_gen.h"
 
@@ -101,7 +100,7 @@ void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, STRp(ref), STRp(alt))
     if (vb->line_coords == DC_PRIMARY) // in the default reconstruction, this REFALT is in the main fields along with 2 tabs
         CTX(VCF_REFALT)->txt_len += ref_len + alt_len + 2;
 
-    else if (vb->vb_coords == DC_BOTH) // LUFT line in dual coord VB - in the default reconstruction of dual-coord line, oREF is in the INFO/LUFT vector
+    else if (vb->vb_coords == DC_BOTH) // LUFT-only line in dual coord VB - in the default reconstruction of dual-coord line, oREF is in the INFO/LUFT vector
         CTX(VCF_LIFT_REF)->txt_len += ref_len;
 
     else // ##luft-only VB - we account for the main fields and 2 tabs
@@ -171,7 +170,7 @@ static inline bool is_same_base (VBlockVCFP vb, const Range *luft_range, PosType
 }
 
 // false is not the same or if either goes beyond the end of the range 
-static inline bool is_same_seq (Reference ref, VBlockVCFP vb, const Range *range, PosType pos, const char *seq, PosType seq_len, bool is_xstrand)
+static inline bool is_same_seq (Reference ref, VBlockVCFP vb, const Range *range, PosType pos, rom seq, PosType seq_len, bool is_xstrand)
 {
     if (!is_xstrand) {
         if (pos + seq_len - 1 > range->last_pos) return false; // seq goes beyond the end of range
@@ -219,7 +218,7 @@ static inline bool is_same_refs (const Range *prim_range, PosType prim_pos,
 }
 
 // counts repeated bases (forwards or backwards depending on direction)
-static unsigned vcf_refalt_lift_get_repeats (const Range *range, const char *payload, PosType payload_len, PosType pos, bool revcomp)
+static unsigned vcf_refalt_lift_get_repeats (const Range *range, rom payload, PosType payload_len, PosType pos, bool revcomp)
 {
     unsigned num_reps = 0;
     if (!revcomp) {
@@ -350,9 +349,9 @@ static bool vcf_refalt_is_REF_same_in_luft (VBlockVCFP vb, STRp(ref), bool is_xs
 }
 
 // when --chain: handle a Deletion
-static LiftOverStatus vcf_refalt_lift_deletion (VBlockVCFP vb, const char *ref, PosType ref_len,
+static LiftOverStatus vcf_refalt_lift_deletion (VBlockVCFP vb, rom ref, PosType ref_len,
                                                 unsigned num_alts, // always one - the Deletion anchor - or multiple identical ALTs
-                                                bool has_missing_alts, const char **alts, STRp(alt), 
+                                                bool has_missing_alts, rom *alts, STRp(alt), 
                                                 bool is_xstrand,
                                                 const Range *prim_range, PosType pos, 
                                                 const Range *luft_range, PosType opos)                                        
@@ -385,7 +384,7 @@ static LiftOverStatus vcf_refalt_lift_deletion (VBlockVCFP vb, const char *ref, 
 
     // now we know that REF is stringwise the same as the reference, but we need to test for repeats
 
-    const char *payload = ref + 1;
+    rom payload = ref + 1;
     PosType payload_len = ref_len-1;
     
     unsigned rep_len_prim=0, rep_len_luft=0;
@@ -420,7 +419,7 @@ static LiftOverStatus vcf_refalt_lift_deletion (VBlockVCFP vb, const char *ref, 
 
 // when --chain: handle an Insertion
 static LiftOverStatus vcf_refalt_lift_insertion (VBlockVCFP vb, STRp(ref), /* must be 1 - needed for macros */ 
-                                                 unsigned num_alts, bool has_missing_alts, const char **alts, const unsigned *alt_lens, STRp(alt), 
+                                                 unsigned num_alts, bool has_missing_alts, rom *alts, const unsigned *alt_lens, STRp(alt), 
                                                  bool is_xstrand,
                                                  const Range *prim_range, PosType pos, 
                                                  const Range *luft_range, PosType opos)
@@ -445,7 +444,7 @@ static LiftOverStatus vcf_refalt_lift_insertion (VBlockVCFP vb, STRp(ref), /* mu
         // PRIM: GACACACACT (4 repeats) LUFT: GACACACACACT (5+ repeats) -> new allele: GACACAC G,GAC (old REF was a 4-repeats: now GAC   ; old ALT was a 3-repeats: now G)
         // PRIM: GACACACACT (4 repeats) LUFT: GACACT       (2- repeats) -> new allele: G GAC,GACAC   (old REF was a 4-repeats: now GACAC ; old ALT was a 3-repeats: now GAC)
 
-        const char *payload = alts[alt_i] + 1;
+        rom payload = alts[alt_i] + 1;
         PosType payload_len = alt_lens[alt_i]-1;
 
         rep_len_prim +=               vcf_refalt_lift_get_repeats (prim_range, payload, payload_len, pos  + 1, false); 
@@ -471,7 +470,7 @@ static LiftOverStatus vcf_refalt_lift_insertion (VBlockVCFP vb, STRp(ref), /* mu
 
 // when --chain: handle an structural variant with an ALT containing a <***> ID  (eg <DEL>)
 static LiftOverStatus vcf_refalt_lift_with_sym_allele (VBlockVCFP vb, STRp(ref), 
-                                          unsigned num_alts, bool has_missing_alts, const char **alts, const unsigned *alt_lens, STRp(alt),
+                                          unsigned num_alts, bool has_missing_alts, rom *alts, const unsigned *alt_lens, STRp(alt),
                                           bool is_xstrand,
                                           const Range *prim_range, PosType pos, 
                                           const Range *luft_range, PosType opos)
@@ -490,7 +489,7 @@ static LiftOverStatus vcf_refalt_lift_with_sym_allele (VBlockVCFP vb, STRp(ref),
 
 // when --chain: handle a complex variant (anything either than SNPs, left-anchored indels, complex rearrangements or symbolic ALTs)
 static LiftOverStatus vcf_refalt_lift_complex (VBlockVCFP vb, STRp(ref), 
-                                               unsigned num_alts, bool has_missing_alts, const char **alts, const unsigned *alt_lens, STRp(alt),
+                                               unsigned num_alts, bool has_missing_alts, rom *alts, const unsigned *alt_lens, STRp(alt),
                                                bool is_xstrand, bool is_left_anchored,
                                                const Range *prim_range, PosType pos, 
                                                const Range *luft_range, PosType opos)
@@ -539,10 +538,10 @@ static LiftOverStatus vcf_refalt_lift_complex (VBlockVCFP vb, STRp(ref),
 }
 
 // an ineffecient way of parsing a VCF line to extract AF - used in exceptional cases. Returns AF if its a valid single number, or -1 otherwise
-static double vcf_refalt_get_INFO (VBlockVCFP vb, const char *tag)
+static double vcf_refalt_get_INFO (VBlockVCFP vb, rom tag)
 {
     // split the VCF line into fields
-    const char *line = ENT (char, vb->txt_data, vb->line_start);
+    rom line = Bc (vb->txt_data, vb->line_start);
     str_split (line, strcspn (line, "\n\r"), 8 + (vcf_num_samples>0) + vcf_num_samples, '\t', field, false);
     if (n_fields < 8) return -1; // no INFO field (we will deal with this error in vcf_seg_txt_line)
 
@@ -565,7 +564,7 @@ static double vcf_refalt_get_INFO (VBlockVCFP vb, const char *tag)
 
 // when --chain: handle a SNP (one or more ALTs)
 static LiftOverStatus vcf_refalt_lift_snp (VBlockVCFP vb, STRp(ref)/* must be 1 */, 
-                                           unsigned num_alts, bool has_missing_alts, const char **alts, const unsigned *alt_lens, STRp(alt),
+                                           unsigned num_alts, bool has_missing_alts, rom *alts, const unsigned *alt_lens, STRp(alt),
                                            bool is_xstrand,
                                            const Range *prim_range, PosType pos, 
                                            const Range *luft_range, PosType opos)
@@ -606,7 +605,7 @@ static LiftOverStatus vcf_refalt_lift_snp (VBlockVCFP vb, STRp(ref)/* must be 1 
     return 0; // never reaches here
 }
 
-static inline bool vcf_refalt_is_left_anchored (const char *ref, const char **alts, unsigned n_alts)
+static inline bool vcf_refalt_is_left_anchored (rom ref, rom *alts, unsigned n_alts)
 {
     for (unsigned alt_i=0; alt_i < n_alts; alt_i++)
         if (alts[alt_i][0] != ref[0]) return false; // first base of ALT[alt_i] differs from first base of REF
@@ -617,7 +616,7 @@ static inline bool vcf_refalt_is_left_anchored (const char *ref, const char **al
 // The ALT field might contain missing ALTs eg "GAAGAAA,G,*,GGAAA". Removes the missing ALTs from the list
 // A '*' means another allele is defined by a deletion a previous line that overlaps this variant.
 // See: https://gatk.broadinstitute.org/hc/en-us/articles/360035531912-Spanning-or-overlapping-deletions-allele-
-static bool vcf_refalt_lift_remove_missing_alts (uint32_t *n_alts, const char **alts, uint32_t *alt_lens)
+static bool vcf_refalt_lift_remove_missing_alts (uint32_t *n_alts, rom *alts, uint32_t *alt_lens)
 {
     bool has_missing_alts = false;
 
@@ -650,10 +649,10 @@ LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool is
     if (!opos) return LO_OK_REF_SAME_SNP; // POS==oPOS==0 and REF==oREF=='.'
 
     // note: as we're using external references, the range is always the entire contig, and range->first_pos is always 1.
-    const Range *prim_range = ref_seg_get_locked_range (VB, prim_ref, dl->chrom[0], vb->chrom_name, vb->chrom_name_len, pos, 1, WORD_INDEX_NONE, ENT (char, vb->txt_data, vb->line_start), NULL); // doesn't lock as lock=NULL
+    const Range *prim_range = ref_seg_get_locked_range (VB, prim_ref, dl->chrom[0], vb->chrom_name, vb->chrom_name_len, pos, 1, WORD_INDEX_NONE, Bc (vb->txt_data, vb->line_start), NULL); // doesn't lock as lock=NULL
     ASSVCF (prim_range, "Failed to find PRIM range for chrom=\"%.*s\"", vb->chrom_name_len, vb->chrom_name);
 
-    const Range *luft_range = ref_seg_get_locked_range (VB, gref, dl->chrom[1], NULL, 0, opos, 1, luft_ref_index, ENT (char, vb->txt_data, vb->line_start), NULL);
+    const Range *luft_range = ref_seg_get_locked_range (VB, gref, dl->chrom[1], NULL, 0, opos, 1, luft_ref_index, Bc (vb->txt_data, vb->line_start), NULL);
     ASSVCF (luft_range, "Failed to find LUFT range for chrom=%d", dl->chrom[1]);
 
     str_toupper_(vb->main_refalt, ref, ref_len);
@@ -773,7 +772,7 @@ static inline void vcf_refalt_rotate_right (char *seq, unsigned seq_len, STRp(an
 
 // actually reconstruct other REFALT
 static void vcf_reconstruct_other_REFALT_do (VBlockP vb, STRp(snip), char xstrand,
-                                             const char *other_refalt, unsigned refalt_len, const char *other_refalt_ctx_name)
+                                             rom other_refalt, unsigned refalt_len, rom other_refalt_ctx_name)
 {
     // short-circuit the most common case of a "same" bi-allelic SNP
     if (refalt_len == 3 && *snip == '0' && snip_len == 1 && xstrand=='-') {
@@ -787,8 +786,8 @@ static void vcf_reconstruct_other_REFALT_do (VBlockP vb, STRp(snip), char xstran
     str_split (refalt, refalt_len, 2, '\t', ref_alt, true);
     ASSPIZ (n_ref_alts, "expecting one tab in the %s snip: \"%.*s\"", other_refalt_ctx_name, refalt_len, other_refalt);
 
-    const char *ref = (char *)ref_alts[0]; unsigned ref_len = ref_alt_lens[0];  // assignments for code readability
-    const char *alt = (char *)ref_alts[1]; unsigned alt_len = ref_alt_lens[1]; 
+    rom ref = (char *)ref_alts[0]; unsigned ref_len = ref_alt_lens[0];  // assignments for code readability
+    rom alt = (char *)ref_alts[1]; unsigned alt_len = ref_alt_lens[1]; 
 
     str_split (alt, alt_len, alt_len == 1 ? 1 : 0, ',', alt, false); 
 
@@ -846,15 +845,15 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_other_REFALT)
 
     LiftOverStatus ostatus = last_ostatus;
     ASSPIZ (LO_IS_OK (ostatus), "oStatus=%s unexpected for VCF_SPECIAL_other_REFALT coords=%s ctx=%s", 
-            last_ostatus_name_piz, coords_name (CTX (VCF_COORDS)->last_value.i), ctx->tag_name);
+            last_ostatus_name_piz, vcf_coords_name (CTX (VCF_COORDS)->last_value.i), ctx->tag_name);
 
-    const char *xstrand_p;
+    rom xstrand_p;
     reconstruct_peek (vb, CTX(VCF_oXSTRAND), &xstrand_p, 0);
     char xstrand = *xstrand_p; // extract xstrand here, because it will be overwritten in the following reconstruct_peek
 
     Context *other_refalt_ctx = CTX(ctx->did_i == VCF_REFALT ? VCF_oREFALT : VCF_REFALT);
 
-    const char *other_refalt; 
+    rom other_refalt; 
     unsigned refalt_len;
     reconstruct_peek (vb, other_refalt_ctx, &other_refalt, &refalt_len);
     
@@ -869,7 +868,7 @@ void vcf_refalt_seg_convert_to_primary (VBlockVCFP vb, LiftOverStatus ostatus)
 {
     // "reconstruct" to vb->txt_data, overwriting current REF\tALT
     uint64_t save_txt_len = vb->txt_data.len;
-    vb->txt_data.len = ENTNUM (vb->txt_data, vb->main_refalt);
+    vb->txt_data.len = BNUMtxt (vb->main_refalt);
 
     vcf_reconstruct_other_REFALT_do (VB, CTX(VCF_REFALT)->last_snip + 2, CTX(VCF_REFALT)->last_snip_len - 2, 
                                      *CTX(VCF_oXSTRAND)->last_snip, 
@@ -881,17 +880,17 @@ void vcf_refalt_seg_convert_to_primary (VBlockVCFP vb, LiftOverStatus ostatus)
 // called for reconstructing the REF field of the INFO/LIFTOVER and INFO/LIFTBACK fields. It reconstructs the full REFALT and then discards the ALT.
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_LIFT_REF)
 {
-    ContextP refalt_ctx = (vb->vb_coords == DC_LUFT ? CTX (VCF_REFALT) : CTX (VCF_oREFALT));
+    ContextP refalt_ctx = (VB_VCF->vb_coords == DC_LUFT ? CTX (VCF_REFALT) : CTX (VCF_oREFALT));
 
-    snip = AFTERENT (char, vb->txt_data);
+    snip = BAFTc (vb->txt_data);
     reconstruct_from_ctx (vb, refalt_ctx->did_i, 0, true);
-    snip_len = (unsigned)(AFTERENT (char, vb->txt_data) - snip);
+    snip_len = (unsigned)(BAFTc (vb->txt_data) - snip);
 
-    const char *after_ref = memchr (snip, '\t', snip_len);
+    rom after_ref = memchr (snip, '\t', snip_len);
     ASSPIZ (after_ref, "expected a \\t in the %s snip: \"%.*s\" ostatus=%s", 
             refalt_ctx->tag_name, snip_len, snip, last_ostatus_name_piz);
 
-    vb->txt_data.len = ENTNUM (vb->txt_data, reconstruct ? after_ref : snip);
+    vb->txt_data.len = BNUMtxt (reconstruct ? after_ref : snip);
 
     return false; // no new value
 }
@@ -912,8 +911,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_main_REFALT)
     if (snip[0] == '-' || snip[1] == '-') { 
         PosType pos = CTX (VCF_POS)->last_value.i;
 
-        const Range *range = ref_piz_get_range (vb, gref, pos, 1);
-        ASSPIZ (range, "failed to find range for chrom='%s' pos=%"PRId64" in %s", vb->chrom_name, pos, ref_get_filename(gref));
+        ConstRangeP range = ref_piz_get_range (vb, gref, false);
         
         uint32_t idx = pos - range->first_pos;
         ASSPIZ (ref_is_nucleotide_set (range, idx), "reference is not set: chrom=%.*s pos=%"PRId64, range->chrom_name_len, range->chrom_name, pos);
@@ -950,7 +948,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_COPY_REForALT)
 {
     if (!reconstruct) return false;
 
-    const char *refalt = last_txt(vb, VCF_REFALT);
+    rom refalt = last_txt(vb, VCF_REFALT);
     uint32_t refalt_len = vb->last_txt_len (VCF_REFALT);
     
     // shortcut in case of SNP
@@ -978,18 +976,18 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_COPY_REForALT)
 }
 
 // --snps-only implementation (called from vcf_piz_container_cb)
-bool vcf_refalt_piz_is_variant_snp (VBlockP vb)
+bool vcf_refalt_piz_is_variant_snp (VBlockVCFP vb)
 {
     DidIType refalt = vb->vb_coords == DC_PRIMARY ? VCF_REFALT : VCF_oREFALT;
     unsigned txt_len = vb->last_txt_len (refalt);
     if (txt_len <= 3) return true; // short circuit most common case  of a bi-allelic SNP (<3 can never happen, here to avoid issues)
 
-    const char *txt = last_txt (vb, refalt);
+    rom txt = last_txt (vb, refalt);
     return txt[1] == '\t' && str_count_char (&txt[2], txt_len-2, ',') * 2 == txt_len-3; // true if multi-allelic SNP
 }
 
 // --indels-only implementation (called from vcf_piz_container_cb)
-bool vcf_refalt_piz_is_variant_indel (VBlockP vb)
+bool vcf_refalt_piz_is_variant_indel (VBlockVCFP vb)
 {
     DidIType refalt = vb->vb_coords == DC_PRIMARY ? VCF_REFALT : VCF_oREFALT;
     unsigned txt_len = vb->last_txt_len (refalt);
@@ -997,7 +995,7 @@ bool vcf_refalt_piz_is_variant_indel (VBlockP vb)
 
     if (ctx_has_value_in_line_(vb, CTX(INFO_SVTYPE))) return false; // Note an INDEL: its a structural variant
 
-    const char *txt = last_txt (vb, refalt);
+    rom txt = last_txt (vb, refalt);
     if (memchr (txt, '<', txt_len) || memchr (txt, '[', txt_len) || memchr (txt, ']', txt_len)) return false; // Not an INDEL: its an SV
 
     return true;

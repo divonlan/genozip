@@ -89,18 +89,18 @@ static void inline aes_substitute_word (uint8_t *w)
     w[3] = sbox[w[3]];
 }
 
-static void inline aes_assign_word (uint8_t *dst, const uint8_t *src)
+static void inline aes_assign_word (uint8_t *dst, bytes src)
 {
     *(uint32_t *)dst = *(uint32_t *)src;
 }
 
-static void inline aes_xor_word (uint8_t *dst, const uint8_t *w1, const uint8_t *w2)
+static void inline aes_xor_word (uint8_t *dst, bytes w1, bytes w2)
 {
     *(uint32_t *)dst = *(uint32_t *)w1 ^ *(uint32_t *)w2;
 }
 
 // This function produces Nb(Nr+1) round keys. The round keys are used in each round to decrypt the states. 
-static void inline aes_expand_key(uint8_t* aes_round_key, const uint8_t* Key)
+static void inline aes_expand_key(uint8_t* aes_round_key, bytes Key)
 {
     // The first round key is the key itself.
     memcpy (aes_round_key, Key, AES_KEYLEN);
@@ -126,7 +126,7 @@ static void inline aes_expand_key(uint8_t* aes_round_key, const uint8_t* Key)
 
 // This function adds the round key to state.
 // The round key is added to the state by an XOR function.
-static inline void aes_add_round_key(uint8_t round, AesStateType* state, const uint8_t* aes_round_key)
+static inline void aes_add_round_key(uint8_t round, AesStateType* state, bytes aes_round_key)
 {
     for (uint8_t i=0; i < Nb*Nb; i++) 
         state->v[i] ^= aes_round_key[(round * Nb * 4) + i];
@@ -191,7 +191,7 @@ static inline void aes_mix_columns (AesStateType* state)
 }
 
 // aes_cipher is the main function that encrypts the PlainText.
-static void aes_cipher(AesStateType* state, const uint8_t* aes_round_key)
+static void aes_cipher(AesStateType* state, bytes aes_round_key)
 {
     // Add the First round key to the state before starting the rounds.
     aes_add_round_key(0, state, aes_round_key); 
@@ -214,7 +214,7 @@ static void aes_cipher(AesStateType* state, const uint8_t* aes_round_key)
 }
 
 // Symmetrical operation: same function for encrypting as for decrypting. Note any IV/nonce should never be reused with the same key 
-void aes_xcrypt_buffer (VBlock *vb, uint8_t *data, uint32_t length)
+void aes_xcrypt_buffer (VBlockP vb, uint8_t *data, uint32_t length)
 {
     AesStateType buffer; 
 
@@ -240,7 +240,7 @@ void aes_xcrypt_buffer (VBlock *vb, uint8_t *data, uint32_t length)
     }
 }
 
-void aes_initialize (VBlock *vb, const uint8_t* key)
+void aes_initialize (VBlockP vb, bytes key)
 {
     static const uint8_t iv_ad_120[AES_BLOCKLEN] = { 0, 1, 2, 10, 11, 12, 20, 21, 22, 100, 101, 102, 110, 111, 112, 120 };
 
@@ -249,7 +249,7 @@ void aes_initialize (VBlock *vb, const uint8_t* key)
     vb->bi = AES_BLOCKLEN;
 }
 
-char *aes_display_data (const uint8_t *data, unsigned data_len)
+char *aes_display_data (bytes data, unsigned data_len)
 {
     char *str = MALLOC (data_len * 2 + 1);
 
@@ -261,4 +261,4 @@ char *aes_display_data (const uint8_t *data, unsigned data_len)
     return str;
 }
 
-char *aes_display_key (const uint8_t* key) { return aes_display_data (key, AES_KEYLEN); }
+char *aes_display_key (bytes key) { return aes_display_data (key, AES_KEYLEN); }

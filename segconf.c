@@ -15,7 +15,7 @@
 
 SegConf segconf = {}; // system-wide global
 
-static void segconf_set_vb_size (const VBlock *vb, uint64_t curr_vb_size)
+static void segconf_set_vb_size (ConstVBlockP vb, uint64_t curr_vb_size)
 {
     #define VBLOCK_MEMORY_MIN_DYN  (16   << 20) // VB memory - min/max when set in segconf_calculate
     #define VBLOCK_MEMORY_MAX_DYN  (512  << 20) 
@@ -32,12 +32,27 @@ static void segconf_set_vb_size (const VBlock *vb, uint64_t curr_vb_size)
 
     // if user requested explicit vblock - use it
     else if (flag.vblock) {
-        int64_t mem_size_mb;
-        ASSINP (str_get_int_range64 (flag.vblock, 0, MIN_VBLOCK_MEMORY, MAX_VBLOCK_MEMORY, &mem_size_mb), 
-                "invalid argument of --vblock: \"%s\". Expecting an integer between 1 and %u. The file will be read and processed in blocks of this number of megabytes.",
-                flag.vblock, MAX_VBLOCK_MEMORY);
+        int vblock_len = strlen(flag.vblock);
+        
+        // case: normal usage - specifying megabytes within the permitted range
+        if (vblock_len < 2 || flag.vblock[vblock_len-1] != 'B') { 
+            int64_t mem_size_mb;
+            ASSINP (str_get_int_range64 (flag.vblock, vblock_len, MIN_VBLOCK_MEMORY, MAX_VBLOCK_MEMORY, &mem_size_mb), 
+                    "invalid argument of --vblock: \"%s\". Expecting an integer between 1 and %u. The file will be read and processed in blocks of this number of megabytes.",
+                    flag.vblock, MAX_VBLOCK_MEMORY);
 
-        segconf.vb_size = (uint64_t)mem_size_mb << 20;
+            segconf.vb_size = (uint64_t)mem_size_mb << 20;
+        }
+
+        // case: developer option - a number of bytes eg "100000B"
+        else {
+            int64_t bytes;
+            ASSINP (str_get_int_range64 (flag.vblock, vblock_len-1, ABSOLUTE_MIN_VBLOCK_MEMORY, ABSOLUTE_MAX_VBLOCK_MEMORY, &bytes),  
+                    "invalid argument of --vblock: \"%s\". Expecting an integer eg 100000B between %"PRIu64" and %"PRIu64, 
+                    flag.vblock, ABSOLUTE_MIN_VBLOCK_MEMORY, ABSOLUTE_MAX_VBLOCK_MEMORY);
+
+            segconf.vb_size = bytes;
+        }
     }
 
     // set memory if --make_reference and user didn't specify --vblock
@@ -63,7 +78,7 @@ static void segconf_set_vb_size (const VBlock *vb, uint64_t curr_vb_size)
                             (vcf_header_get_num_samples() << 17 /* 0 if not vcf */);
 
         uint64_t min_memory = !segconf.sam_is_sorted     ? VBLOCK_MEMORY_MIN_DYN
-                            : !segconf_is_long_reads()   ? VBLOCK_MEMORY_MIN_DYN
+                            : !segconf.is_long_reads   ? VBLOCK_MEMORY_MIN_DYN
                             : arch_get_num_cores() <= 8  ? VBLOCK_MEMORY_MIN_DYN // eg a personal computer
                             : arch_get_num_cores() <= 20 ? (128 << 20)           // higher minimum memory for long reads in sorted SAM - enables CPU scaling
                             :                              (256 << 20);
@@ -101,20 +116,29 @@ static void segconf_set_vb_size (const VBlock *vb, uint64_t curr_vb_size)
         segconf.vb_size = MAX_(segconf.vb_size, VBLOCK_MEMORY_BEST);
 }
 
-static bool segconf_no_recalculate (void)
+// this function is called to set is_long_reads, and may be also called while running segconf before is_long_reads is set
+bool segconf_is_long_reads(void) 
+{ 
+    return segconf.tech == TECH_PACBIO    || 
+           segconf.tech == TECH_ONP       || 
+           segconf.longest_seq_len > 2000 ||
+           flag.debug_LONG;
+}
+
+
+static bool segconf_no_calculate (void)
 {
-    return flag.pair == PAIR_READ_2 // FASTQ: no recalculating for 2nd pair 
-        || flag.gencomp_num;        // DVCF / SAM: no recalculating for generated components
+    return (Z_DT(DT_FASTQ) && flag.pair == PAIR_READ_2); // FASTQ: no recalculating for 2nd pair 
 }
 
 void segconf_initialize (void)
 {
-    if (segconf_no_recalculate()) return;
+    if (segconf_no_calculate()) return;
 
     uint64_t save_vb_size = segconf.vb_size;
     segconf = (SegConf){}; // reset for new component
 
-    if (z_file->num_txt_components_so_far > 0)
+    if (z_file->num_txts_so_far > 0)
         segconf.vb_size = save_vb_size; // components after first inherit vb_size from first
 
     mutex_initialize (segconf.PL_mux_by_DP_mutex);
@@ -123,13 +147,13 @@ void segconf_initialize (void)
 // ZIP: Seg a small sample of data of the beginning of the data, to pre-calculate several Seg configuration parameters
 void segconf_calculate (void)
 {
-    if (segconf_no_recalculate()) return;
+    if (segconf_no_calculate()) return;
 
     if (TXT_DT(DT_GENERIC)) {                                     // nothing to calculate in generic files    
         segconf.vb_size = VBLOCK_MEMORY_GENERIC;
         return;
     }
-    
+
     segconf.running = true;
 
     uint64_t save_vb_size = segconf.vb_size;
@@ -158,7 +182,7 @@ void segconf_calculate (void)
     // segment this VB
     ctx_clone (vb);
 
-    int32_t save_luft_reject_bytes = vb->reject_bytes;
+    int32_t save_luft_reject_bytes = Z_DT(DT_VCF) ? vcf_vb_get_reject_bytes (vb) : 0;
 
     SAVE_FLAGS;
     flag.show_alleles = flag.show_digest = flag.show_codec = flag.show_hash =
@@ -169,23 +193,26 @@ void segconf_calculate (void)
     RESTORE_FLAGS;
 
     segconf_set_vb_size (vb, save_vb_size);
-    
+    segconf.is_long_reads = segconf_is_long_reads();
+
     // return the data to txt_file->unconsumed_txt - squeeze it in before the passed-up data
     buf_alloc (evb, &txt_file->unconsumed_txt, txt_data_copy.len, 0, char, 0, "txt_file->unconsumed_txt");
     memmove (&txt_file->unconsumed_txt.data[txt_data_copy.len], txt_file->unconsumed_txt.data, txt_file->unconsumed_txt.len);
     memcpy (txt_file->unconsumed_txt.data, txt_data_copy.data, txt_data_copy.len);
     txt_file->unconsumed_txt.len += txt_data_copy.len;
-    buf_destroy (&txt_data_copy);
+    buf_destroy (txt_data_copy);
 
-    // in case of Luft file - undo
-    vb->gencomp[0].len = vb->gencomp[1].len = 0;
-    txt_file->reject_bytes += save_luft_reject_bytes; // return reject bytes to txt_file, to be reassigned to VB
+    // in case of generated component data - undo
+    vb->gencomp_lines.len = 0;
+
+    if (Z_DT(DT_VCF))
+        txt_file->reject_bytes += save_luft_reject_bytes; // return reject bytes to txt_file, to be reassigned to VB
 
     // require compressing with a reference when using --best with SAM/BAM/FASTQ, with some exceptions
-    bool best_requires_ref = ((VB_DT(DT_SAM) || VB_DT(DT_BAM)) && !(segconf_is_long_reads() && segconf.sam_is_unmapped))
-                          || (VB_DT(DT_FASTQ) && !segconf_is_long_reads());
+    bool best_requires_ref = ((VB_DT(DT_SAM) || VB_DT(DT_BAM)) && !(segconf.is_long_reads && segconf.sam_is_unmapped))
+                          || (VB_DT(DT_FASTQ) && !segconf.is_long_reads);
 
-    if (segconf_is_long_reads() && (VB_DT(DT_FASTQ) || segconf.sam_is_unmapped)) {
+    if (segconf.is_long_reads && (VB_DT(DT_FASTQ) || segconf.sam_is_unmapped)) {
         flag.reference = REF_NONE;
         flag.aligner_available = false;
     }

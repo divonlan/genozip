@@ -52,7 +52,7 @@ typedef struct VBlockFASTQ {
 
 #define VB_FASTQ ((VBlockFASTQ *)vb)
 
-#define DATA_LINE(i) ENT (ZipDataLineFASTQ, vb->lines, i)
+#define DATA_LINE(i) B(ZipDataLineFASTQ, vb->lines, i)
 
 unsigned fastq_vb_size (DataType dt) { return sizeof (VBlockFASTQ); }
 unsigned fastq_vb_zip_dl_size (void) { return sizeof (ZipDataLineFASTQ); }
@@ -72,7 +72,7 @@ void fastq_vb_destroy_vb (VBlockFASTQ *vb)
 //-----------------------
 
 // returns true if txt_data[txt_i] (which is a \n) is the end of a FASTQ record (= block of 4 lines in the file); -1 if out of data
-static inline int fastq_is_end_of_line (VBlock *vb, uint32_t first_i, int32_t txt_i) // index of a \n in txt_data
+static inline int fastq_is_end_of_line (VBlockP vb, uint32_t first_i, int32_t txt_i) // index of a \n in txt_data
 {
     ARRAY (char, txt, vb->txt_data);
 
@@ -120,8 +120,8 @@ bool fastq_txtfile_have_enough_lines (VBlockP vb_, uint32_t *unconsumed_len,
 
     VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
 
-    const char *next  = FIRSTENT (const char, vb->txt_data);
-    const char *after = AFTERENT (const char, vb->txt_data);
+    rom next  = B1STtxt;
+    rom after = BAFTtxt;
 
     uint32_t line_i; for (line_i=0; line_i < vb->pair_num_lines * 4; line_i++) {
         while (*next != '\n' && next < after) next++; 
@@ -142,7 +142,7 @@ bool fastq_txtfile_have_enough_lines (VBlockP vb_, uint32_t *unconsumed_len,
 // ZIP / SEG stuff
 //---------------
 
-void fastq_zip_read_one_vb (VBlockP vb)
+void fastq_zip_init_vb (VBlockP vb)
 {
     // in case we're optimizing DESC in FASTQ, we need to know the number of lines
     if (flag.optimize_DESC) {
@@ -181,7 +181,7 @@ void fastq_zip_initialize (void)
 
     // with REF_EXTERNAL, we don't know which chroms are seen (bc unlike REF_EXT_STORE, we don't use is_set), so
     // we just copy all reference contigs. this are not needed for decompression, just for --coverage/--sex/--idxstats
-    if (flag.reference == REF_EXTERNAL && z_file->num_txt_components_so_far == 1) // first file
+    if (flag.reference == REF_EXTERNAL && z_file->num_txts_so_far == 1) // first file
         ctx_populate_zf_ctx_from_contigs (gref, FASTQ_CONTIG, ref_get_ctgs (gref)); 
 
     qname_zip_initialize (FASTQ_DESC);
@@ -302,26 +302,30 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i, bool must_have)
 
     vb->pair_vb_i = pair_vb_i;
 
-    Section sl = sections_vb_first (vb->pair_vb_i, true);
-    ASSERT (!must_have || sl, "file unexpectedly does not contain data for pair 1 vb_i=%u", pair_vb_i);
-    if (!sl) return false;
+    Section sec = sections_vb_header (vb->pair_vb_i, true);
+    ASSERT (!must_have || sec, "file unexpectedly does not contain data for pair 1 vb_i=%u", pair_vb_i);
+    if (!sec) return false;
 
-    // get num_lines from vb header
-    SectionHeaderVbHeader vb_header = zfile_read_section_header (vb_, sl->offset, vb->pair_vb_i, SEC_VB_HEADER).vb_header;
-    vb->pair_num_lines = BGEN32 (vb_header.num_lines_prim);
+    vb->pair_num_lines = sec->num_lines;
 
     // read into ctx->pair the data we need from our pair: DESC and its components, GPOS and STRAND
     buf_alloc (vb, &vb->z_section_headers, MAX_FIELDS + 10, MAX_DICTS * 2 + 50, uint32_t, 0, "z_section_headers"); // room for section headers  
 
-    for (sl++; sl->st == SEC_B250 || sl->st == SEC_LOCAL; sl++) {
+    for (sec++; sec->st == SEC_B250 || sec->st == SEC_LOCAL; sec++) {
         
-        if (dict_id_is_fastq_desc_sf (sl->dict_id) || sl->dict_id.num == _FASTQ_DESC ||
-            sl->dict_id.num == _FASTQ_GPOS || sl->dict_id.num == _FASTQ_STRAND) { 
+        if (dict_id_is_fastq_desc_sf (sec->dict_id) || sec->dict_id.num == _FASTQ_DESC ||
+            sec->dict_id.num == _FASTQ_GPOS || sec->dict_id.num == _FASTQ_STRAND) { 
             
-            NEXTENT (uint32_t, vb->z_section_headers) = vb->z_data.len; 
-            int32_t offset = zfile_read_section (z_file, vb, vb->pair_vb_i, &vb->z_data, "z_data", sl->st, sl); // returns 0 if section is skipped
+            BNXT32 (vb->z_section_headers) = vb->z_data.len; 
+            int32_t offset = zfile_read_section (z_file, vb, vb->pair_vb_i, &vb->z_data, "z_data", sec->st, sec); // returns 0 if section is skipped
+            
+            ContextP ctx = ctx_get_ctx (vb, ((SectionHeaderCtx *)Bc(vb->z_section_headers, offset))->dict_id);
+            ctx->is_loaded = true; // not skipped. note: possibly already true if it has a dictionary - set in ctx_overlay_dictionaries_to_vb
 
             if (offset == SECTION_SKIPPED) vb->z_section_headers.len--; // section skipped
+
+            if (flag.debug_read_ctxs)
+                sections_show_header ((SectionHeader *)Bc (vb->z_data, offset), NULL, sec->offset, '2');
         }
     }
 
@@ -331,8 +335,14 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i, bool must_have)
     return true;
 }
 
+// main thread: is it possible that genocat of this file will re-order lines
+bool fastq_piz_maybe_reorder_lines (void)
+{
+    return sections_get_num_comps() == 2; // genocat always interleaves (= reorders lines) of paired FASTQs
+}
+
 // main thread: called from piz_read_one_vb as DTPZ(piz_read_one_vb)
-bool fastq_piz_read_one_vb (VBlockP vb_, Section sl)
+bool fastq_piz_init_vb (VBlockP vb_, const SectionHeaderVbHeader *header, uint32_t *txt_data_so_far_single_0_increment)
 {
     VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
     uint32_t pair_vb_i=0;
@@ -397,7 +407,7 @@ static void fastq_seg_line3 (VBlockFASTQ *vb, STRp(line3), STRp(desc))
 // concept: we treat every 4 lines as a "line". the Description/ID is stored in DESC dictionary and segmented to subfields D?ESC.
 // The sequence is stored in SEQ data. In addition, we utilize the TEMPLATE dictionary for metadata on the line, namely
 // the length of the sequence and whether each line has a \r.
-const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
+rom fastq_seg_txt_line (VBlockFASTQ *vb, rom line_start, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
 {
     ZipDataLineFASTQ *dl = DATA_LINE (vb->line_i);
 
@@ -406,16 +416,16 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
     ASSSEG (*line_start == '@', line_start, "Invalid FASTQ file format: expecting description line to start with @ but it starts with %c",
             *line_start);
 
-    const char *FASTQ_DESC_str = line_start + 1; // skip the '@' - its already included in the container prefix
+    rom FASTQ_DESC_str = line_start + 1; // skip the '@' - its already included in the container prefix
     char separator;
 
-    int32_t len = (int32_t)(AFTERENT (char, vb->txt_data) - FASTQ_DESC_str);
+    int32_t len = (int32_t)(BAFTc (vb->txt_data) - FASTQ_DESC_str);
     
     // DESC - the description/id line is vendor-specific. example:
     // @A00910:85:HYGWJDSXX:1:1101:3025:1000 1:N:0:CAACGAGAGC+GAATTGAGTG <-- Illumina, See: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
     // @20A_V100002704L1C001R012000000/1 <-- BGI, see: https://github.com/IMB-Computational-Genomics-Lab/BGIvsIllumina_scRNASeq
     unsigned FASTQ_DESC_len;
-    const char *FASTQ_SEQ_str = seg_get_next_line (vb, FASTQ_DESC_str, &len, &FASTQ_DESC_len, true, has_13, "DESC");
+    rom FASTQ_SEQ_str = seg_get_next_line (vb, FASTQ_DESC_str, &len, &FASTQ_DESC_len, true, has_13, "DESC");
  
     if (kraken_is_loaded) {
         unsigned qname_len = strcspn (FASTQ_DESC_str, " \t\r\n"); 
@@ -451,8 +461,8 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
     SEG_EOL (FASTQ_E1L, true);
 
     // SEQ - just get the whole line
-    dl->seq_data_start = ENTNUM (vb->txt_data, FASTQ_SEQ_str);
-    const char *FASTQ_LINE3_str = seg_get_next_item (vb, FASTQ_SEQ_str, &len, GN_SEP, GN_IGNORE, GN_IGNORE, &dl->seq_len, &separator, has_13, "SEQ");
+    dl->seq_data_start = BNUMtxt (FASTQ_SEQ_str);
+    rom FASTQ_LINE3_str = seg_get_next_item (vb, FASTQ_SEQ_str, &len, GN_SEP, GN_IGNORE, GN_IGNORE, &dl->seq_len, &separator, has_13, "SEQ");
 
     if (segconf.running) 
         segconf.longest_seq_len = MAX_(dl->seq_len, segconf.longest_seq_len);
@@ -481,17 +491,17 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
     FASTQ_LINE3_str++; len--; // skip the prefix
 
     unsigned FASTQ_LINE3_len;
-    const char *FASTQ_QUAL_str = seg_get_next_line (vb, FASTQ_LINE3_str, &len, &FASTQ_LINE3_len, true, has_13, "LINE3");
+    rom FASTQ_QUAL_str = seg_get_next_line (vb, FASTQ_LINE3_str, &len, &FASTQ_LINE3_len, true, has_13, "LINE3");
 
     fastq_seg_line3 (vb, STRd(FASTQ_LINE3), STRd(FASTQ_DESC));
 
     SEG_EOL (FASTQ_E2L, true); // account for ascii-10
 
     // QUAL - just get the whole line and make sure its length is the same as SEQ
-    dl->qual_data_start = ENTNUM (vb->txt_data, FASTQ_QUAL_str);
+    dl->qual_data_start = BNUMtxt (FASTQ_QUAL_str);
 
     unsigned FASTQ_QUAL_len;
-    const char *after = seg_get_next_item (vb, FASTQ_QUAL_str, &len, GN_SEP, GN_FORBIDEN, GN_IGNORE, &FASTQ_QUAL_len, &separator, has_13, "QUAL"); \
+    rom after = seg_get_next_item (vb, FASTQ_QUAL_str, &len, GN_SEP, GN_FORBIDEN, GN_IGNORE, &FASTQ_QUAL_len, &separator, has_13, "QUAL"); \
 
     CTX(FASTQ_QUAL)->local.len += dl->seq_len;
     CTX(FASTQ_QUAL)->txt_len   += dl->seq_len;
@@ -522,7 +532,7 @@ COMPRESSOR_CALLBACK (fastq_zip_qual)
     
     if (!line_data) return; // only lengths were requested
 
-    *line_data = ENT (char, vb->txt_data, dl->qual_data_start);
+    *line_data = Bc (vb->txt_data, dl->qual_data_start);
 
     // note - we optimize just before compression - likely the string will remain in CPU cache
     // removing the need for a separate load from RAM
@@ -535,7 +545,7 @@ COMPRESSOR_CALLBACK (fastq_zip_seq)
 {
     ZipDataLineFASTQ *dl = DATA_LINE (vb_line_i);
     *line_data_len = dl->seq_len;
-    *line_data     = ENT (char, vb->txt_data, dl->seq_data_start);
+    *line_data     = Bc (vb->txt_data, dl->seq_data_start);
     if (is_rev) *is_rev = 0;
 }
 
@@ -544,9 +554,9 @@ COMPRESSOR_CALLBACK (fastq_zip_seq)
 //-----------------
 
 // returns true if section is to be skipped reading / uncompressing
-bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
+IS_SKIP (fastq_piz_is_skip_section)
 {
-    if (!vb) return false; // we don't skip reading any SEC_DICT/SEC_COUNTS sections
+    if (st != SEC_LOCAL && st != SEC_B250 && st != SEC_DICT) return false; // we only skip contexts
 
     // note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast: skip all items but DESC and E1L (except if we need them for --grep)
     if (flag.header_only_fast && !flag.grep &&
@@ -590,7 +600,7 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
          (dict_id.num != _FASTQ_NONREF_X || !flag.bases) && 
          (dict_id.num != _FASTQ_GPOS     || !flag.bases) && 
          (dict_id.num != _FASTQ_STRAND   || !flag.bases) && 
-         (!dict_id_is_fastq_desc_sf(dict_id)            || !kraken_is_loaded))) 
+         (!dict_id_is_fastq_desc_sf(dict_id) || !kraken_is_loaded))) 
         return true;
 
     return false;
@@ -659,22 +669,22 @@ static void fastq_update_coverage (VBlockFASTQ *vb)
         (ref_index = ref_contig_get_by_gpos (gref, gpos, NULL)) != WORD_INDEX_NONE) {
 
         if (flag.show_coverage || flag.show_sex)
-            *ENT (uint64_t, vb->coverage, ref_index) += vb->seq_len;
+            *B64 (vb->coverage, ref_index) += vb->seq_len;
 
         if (flag.show_coverage || flag.idxstats)
-            (*ENT (uint64_t, vb->read_count, ref_index))++;
+            (*B64 (vb->read_count, ref_index))++;
     }
     else {
         if (flag.show_coverage || flag.show_sex)
-            *(AFTERENT (uint64_t, vb->coverage) - NUM_COVER_TYPES + CVR_UNMAPPED) += vb->seq_len;
+            *(BAFT64 (vb->coverage) - NUM_COVER_TYPES + CVR_UNMAPPED) += vb->seq_len;
 
         if (flag.show_coverage || flag.idxstats)
-            (*(AFTERENT (uint64_t, vb->read_count) - NUM_COVER_TYPES + CVR_UNMAPPED))++;
+            (*(BAFT64 (vb->read_count) - NUM_COVER_TYPES + CVR_UNMAPPED))++;
     }
 }
 
 // PIZ: SEQ reconstruction 
-void fastq_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, STRp(seq_len_str))
+void fastq_reconstruct_seq (VBlockP vb_, Context *bitmap_ctx, STRp(seq_len_str))
 {
     VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
  
@@ -704,7 +714,7 @@ CONTAINER_CALLBACK (fastq_piz_container_cb)
             vb->drop_curr_line = "taxid";
         
         else if (kraken_is_loaded && flag.kraken_taxid >= 0) {
-            const char *qname = last_txt (vb, FASTQ_DESC) + !prefixes_len; // +1 to skip the "@", if '@' is in DESC and not in prefixes (for files up to version 12.0.13)
+            rom qname = last_txt (vb, FASTQ_DESC) + !prefixes_len; // +1 to skip the "@", if '@' is in DESC and not in prefixes (for files up to version 12.0.13)
             unsigned qname_len = strcspn (qname, " \t\n\r");
 
             if (!kraken_is_included_loaded (vb, qname, qname_len)) 

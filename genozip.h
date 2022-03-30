@@ -16,6 +16,13 @@
 
 #pragma GCC diagnostic ignored "-Wunknown-pragmas"
 
+// we defined these ourselves (normally defined in stdbool.h), as not always available on all platforms (namely issues with Docker Hub)
+#ifndef __bool_true_false_are_defined
+typedef _Bool bool;
+#define true 1
+#define false 0
+#endif
+
 // -----------------
 // system parameters
 // -----------------
@@ -29,13 +36,15 @@
 
 #define MEMORY_WARNING_THREASHOLD  0x100000000  // (4 GB) warning in some cases that we predict that user choices would cause us to consume more than this
 
+#define NO_CALLBACK NULL
+
 // ------------------------------------------------------------------------------------------------------------------------
 // pointers used in header files - so we don't need to include the whole .h (and avoid cyclicity and save compilation time)
 // ------------------------------------------------------------------------------------------------------------------------
 typedef struct VBlock *VBlockP;
 typedef const struct VBlock *ConstVBlockP;
-typedef struct ZipDataLine *ZipDataLineP;
-typedef const struct ZipDataLine *ConstZipDataLineP;
+#define NULL_VB ((VBlockP)0)
+
 typedef struct File *FileP;
 typedef const struct File *ConstFileP;
 typedef struct Buffer *BufferP;
@@ -62,12 +71,8 @@ typedef struct Contig *ContigP;
 typedef const struct Contig *ConstContigP;
 typedef struct ContigPkg *ContigPkgP;
 typedef const struct ContigPkg *ConstContigPkgP;
-typedef union SamFlags *SamFlagsP;
 typedef const struct QnameFlavorStruct *QnameFlavor; 
 typedef void *Dispatcher;
-
-typedef void BgEnBufFunc (BufferP buf, uint8_t *lt); // we use uint8_t instead of LocalType (which 1 byte) to avoid #including sections.h
-typedef BgEnBufFunc (*BgEnBuf);
 
 #define VB ((VBlockP)(vb))
 
@@ -109,9 +114,16 @@ typedef union DictId {
 typedef uint16_t DidIType;    // index of a context in vb->contexts or z_file->contexts / a counter of contexts
 #define DID_I_NONE ((DidIType)0xFFFF)
 
+typedef uint8_t CompIType;    // comp_i 
+#define COMP_MAIN ((CompIType)0)
+#define COMP_NONE ((CompIType)255)
+
+typedef uint32_t VBIType;     // vblock_i
 typedef uint64_t CharIndex;   // index within dictionary
 typedef int32_t WordIndex;    // used for word and node indices
 typedef int64_t PosType;      // used for position coordinate within a genome
+typedef const char *rom;      // "read-only memory"
+typedef const uint8_t *bytes; // read-only array of bytes
 
 typedef union { // 64 bit
     int64_t i;
@@ -121,14 +133,16 @@ typedef union { // 64 bit
 
 // global parameters - set before any thread is created, and never change
 extern uint32_t global_max_threads;
-extern const char *global_cmd;            // set once in main()
+#define MAX_GLOBAL_MAX_THREADS 10000
+
+extern rom global_cmd;            // set once in main()
 extern ExeType exe_type;
 
 // global files (declared in file.c)
 extern FileP z_file, txt_file; 
 
 // IMPORTANT: This is part of the genozip file format. Also update codec.h/codec_args
-// If making any changes, update arrays in 1. codec.h 2. txtfile_set_seggable_size
+// If making any changes, update arrays in 1. codec.h 2. (for codecs that have a public file format, eg .zip) txtfile_set_seggable_size
 typedef enum __attribute__ ((__packed__)) { // 1 byte
     CODEC_UNKNOWN=0, 
     CODEC_NONE=1, CODEC_GZ=2, CODEC_BZ2=3, CODEC_LZMA=4, CODEC_BSC=5, 
@@ -144,16 +158,55 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 
     // external compressors (used by executing an external application)
     CODEC_BGZF=20, CODEC_XZ=21, CODEC_BCF=22, 
-    V8_CODEC_BAM=23,    // in v8 BAM was a codec which was compressed using samtools as external compressor. since v9 it is a full data type, and no longer a codec.
+    CODEC_BAM=23,       // in v8 BAM was a codec which was compressed using samtools as external compressor. Since v14 we use the codec name for displaying "BAM" in stats total line.
     CODEC_CRAM=24, CODEC_ZIP=25,
 
     CODEC_LONGR=26,
 
-    NUM_CODECS
+    NUM_CODECS,
 } Codec; 
 
+// note: the numbering of the sections cannot be modified, for backward compatibility
+typedef enum __attribute__ ((__packed__)) { // 1 byte
+    SEC_NONE            = -1, // doesn't appear in the file 
+
+    SEC_RANDOM_ACCESS   = 0,  // Global section
+    SEC_REFERENCE       = 1,  // Global section
+    SEC_REF_IS_SET      = 2,  // Global section
+    SEC_REF_HASH        = 3,  // Global section
+    SEC_REF_RAND_ACC    = 4,  // Global section
+    SEC_REF_CONTIGS     = 5,  // Global section
+    SEC_GENOZIP_HEADER  = 6,  // Global section: SEC_GENOZIP_HEADER has been 6 since v2, so we can always read old versions' genozip header
+    SEC_DICT_ID_ALIASES = 7,  // Global section
+    SEC_TXT_HEADER      = 8,  // Per-component section
+    SEC_VB_HEADER       = 9,  // Per-VB section
+    SEC_DICT            = 10, // Global section
+    SEC_B250            = 11, // Multiple per-VB sections
+    SEC_LOCAL           = 12, // Multiple per-VB sections
+    SEC_CHROM2REF_MAP   = 13, // Global section
+    SEC_STATS           = 14, // Global section
+    SEC_BGZF            = 15, // Per-component section (optional): contains the uncompressed sizes of the source file bgzf block
+    SEC_RECON_PLAN      = 16, // Per-component section (optional): introduced v12
+    SEC_COUNTS          = 17, // Global section: introduced v12
+    SEC_REF_IUPACS      = 18, // Global section: introduced v12
+
+    NUM_SEC_TYPES // fake section for counting
+} SectionType;
+
+typedef enum { DATA_EXHAUSTED, READY_TO_COMPUTE, MORE_DATA_MIGHT_COME } DispatchStatus;
+
+typedef void BgEnBufFunc (BufferP buf, uint8_t *lt); // we use uint8_t instead of LocalType (which 1 byte) to avoid #including sections.h
+typedef BgEnBufFunc (*BgEnBuf);
+
+typedef enum { SKIP_PURPOSE_PROGRESS, // true if this section doesn't count towards "total" of progress indicator
+               SKIP_PURPOSE_RECON,    // true if this section should be skipped when reading VB data for reconstruction
+               SKIP_PURPOSE_PREPROC   // true if this section should be skipped when reading data for preprocessing (SAM: SA Loading FASTA: grep)
+} SkipPurpose;
+#define IS_SKIP(func) bool func (SectionType st, CompIType comp_i, DictId dict_id, SkipPurpose purpose)
+typedef IS_SKIP ((*Skip));
+
 // PIZ / ZIP inspired by "We don't sell Duff. We sell Fudd"
-typedef enum { NO_COMMAND=-1, ZIP='z', PIZ='d' /* this is unzip */, LIST='l', LICENSE='L', VERSION='V', HELP='h', TEST_AFTER_ZIP } CommandType;
+typedef enum { NO_COMMAND=-1, ZIP='z', PIZ='d' /* this is unzip */, LIST='l', LICENSE='L', VERSION='V', HELP='h', SHOW_HEADERS=10, TEST_AFTER_ZIP } CommandType;
 extern CommandType command, primary_command;
 
 // external vb - used when an operation is needed outside of the context of a specific variant block;
@@ -181,30 +234,37 @@ typedef          __int128 int128_t;
 #define SWAPbit(a,b) ({ uint8_t   tmp = a; a = b; b = tmp; })  // meant for bit fields 
 
 // used for qsort sort function - receives two integers of any type and returns -1/0/1 as required to sort in ascending order
-#define ASCENDING(a,b) (((a) > (b)) ? 1 : (a) < (b) ? -1 : 0)
-#define DESCENDING(a,b) (-ASCENDING((a),(b)))
+#define SORTER(func) int func (const void *a, const void *b)
+typedef SORTER ((*Sorter));
+#define ASCENDING_RAW(a,b) (((a) > (b)) ? 1 : (a) < (b) ? -1 : 0)
+#define DESCENDING_RAW(a,b) (-ASCENDING_RAW((a), (b)))
+#define ASCENDING(struct_type,struct_field) ASCENDING_RAW (((struct_type *)a)->struct_field, ((struct_type *)b)->struct_field)
+#define DESCENDING(struct_type,struct_field) (-ASCENDING(struct_type, struct_field))
+
+#define ASCENDING_SORTER(func_name,struct_type,struct_field) \
+    SORTER (func_name) { return ASCENDING (struct_type, struct_field); }
+
+#define DESCENDING_SORTER(func_name,struct_type,struct_field) \
+    SORTER (func_name) { return DESCENDING (struct_type, struct_field); }
 
 #define DO_ONCE static uint64_t do_once=0; if (!(do_once++))  // note: not thread-safe - in compute threads, in rare race-conditions, this can be executed more than once
 
-// we defined these ourselves (normally defined in stdbool.h), as not always available on all platforms (namely issues with Docker Hub)
-#ifndef __bool_true_false_are_defined
-typedef _Bool bool;
-#define true 1
-#define false 0
-#endif
-
 // Strings - declarations
-#define STR(x)   const char *x; uint32_t x##_len
+#define STR(x)   rom x;        uint32_t x##_len
+#define STR0(x)  rom x=NULL;   uint32_t x##_len=0
+#define STRw(x)  char *x;      uint32_t x##_len    // writeable
+#define STRw0(x) char *x=NULL; uint32_t x##_len=0  // writeable, initializedx
 #define STRl(name,len) char name[len]; uint32_t name##_len
-#define STR0(x)  const char *x=NULL; uint32_t x##_len=0
 
-#define STRlast(name,ctx) const char *name = last_txtx((VBlockP)(vb), (ctx)); unsigned name##_len = (ctx)->last_txt_len
-#define CTXlast(name,ctx)          ({ name = last_txtx((VBlockP)(vb), (ctx));          name##_len = (ctx)->last_txt_len; })
+#define STRlast(name,ctx) rom name = last_txtx((VBlockP)(vb), (ctx)); unsigned name##_len = (ctx)->last_txt_len
+#define CTXlast(name,ctx)  ({ name = last_txtx((VBlockP)(vb), (ctx));          name##_len = (ctx)->last_txt_len; })
 
 // Strings - function parameters
-#define STRp(x)  const char *x,   uint32_t x##_len    
-#define pSTRp(x) const char **x,  uint32_t *x##_len  
-#define STRps(x) uint32_t n_##x##s, const char **x##s, const uint32_t *x##_lens  
+#define STRp(x)  rom x,   uint32_t x##_len    
+#define STRc(x)  char *x, uint32_t x##_len  // string is fixed-length, but editable 
+#define pSTRp(x) rom *x,  uint32_t *x##_len  
+#define STRe(x)  char *x, uint32_t *x##_len // string and its length are editable 
+#define STRps(x) uint32_t n_##x##s, rom *x##s, const uint32_t *x##_lens  
 
 // Strings - function arguments
 #define STRa(x)    x, x##_len                       
@@ -222,8 +282,12 @@ typedef _Bool bool;
 #define STRcpyi(dst,i,src) ({ if (src##_len) { memcpy(dst##s[i],src,src##_len) ; dst##_lens[i] = src##_len; } })
 #define STRset(dst,src)    ({ dst=src; dst##_len=src##_len; })
 #define STRLEN(string_literal) (sizeof string_literal - 1)
+#define STRtxt(x) Btxt (x), x##_len
+#define STRtxtw(x) Btxt ((x).index), (x).len
 
-#define ARRAYp(name) uint32_t n_##name##s, const char *name##s[], uint32_t name##_lens[] // function parameters
+#define FUNCLINE rom func, uint32_t code_line
+#define __FUNCLINE __FUNCTION__, __LINE__
+#define ARRAYp(name) uint32_t n_##name##s, rom name##s[], uint32_t name##_lens[] // function parameters
 #define ARRAYa(name) n_##name##s, name##s, name##_lens // function arguments
 
 #define SAVE_VALUE(var) typeof(var) save_##var = var 
@@ -232,7 +296,9 @@ typedef _Bool bool;
 #define RESTORE_VALUE(var) var = save_##var
 
 // returns true if new_value has been set
-#define SPECIAL_RECONSTRUCTOR(func) bool func (VBlockP vb, ContextP ctx, const char *snip, uint32_t snip_len, ValueType *new_value, bool reconstruct)
+typedef enum { NO_NEW_VALUE, HAS_NEW_VALUE } SpecialReconstructorRetVal;
+#define SPECIAL_RECONSTRUCTOR(func) SpecialReconstructorRetVal func (VBlockP vb, ContextP ctx, rom snip, uint32_t snip_len, ValueType *new_value, bool reconstruct)
+#define SPECIAL_RECONSTRUCTOR_DT(func) SpecialReconstructorRetVal func (VBlockP vb_/*vb_ instead of vb*/, ContextP ctx, rom snip, uint32_t snip_len, ValueType *new_value, bool reconstruct)
 typedef SPECIAL_RECONSTRUCTOR ((*PizSpecialReconstructor));
 
 #define SPECIAL(dt,num,name,func) \
@@ -258,10 +324,10 @@ typedef uint8_t TranslatorId;
 
 // called after reconstruction of each repeat, IF Container.callback or Container.is_top_level is set
 #define CONTAINER_CALLBACK(func) void func(VBlockP vb, DictId dict_id, bool is_top_level, unsigned rep, ConstContainerP con, \
-                                           char *recon, int32_t recon_len, const char *prefixes, uint32_t prefixes_len)
+                                           char *recon, int32_t recon_len, rom prefixes, uint32_t prefixes_len)
 
 // called after reconstruction of an item, if CI1_ITEM_CB is specified
-#define CONTAINER_ITEM_CALLBACK(func) void func(VBlockP vb, DictId dict_id, const char *recon, uint32_t recon_len)
+#define CONTAINER_ITEM_CALLBACK(func) void func(VBlockP vb, DictId dict_id, rom recon, uint32_t recon_len)
 
 #define TXTHEADER_TRANSLATOR(func) void func (VBlockP comp_vb, BufferP txtheader_buf)
 
@@ -307,7 +373,7 @@ extern bool is_info_stream_terminal; // is info_stream going to a terminal
 static inline void iputc(char c) { fputc ((c), info_stream); } // no flushing
 
 #define iprintf(format, ...)     ( { fprintf (info_stream, (format), __VA_ARGS__); fflush (info_stream); } )
-static inline void iprint0 (const char *str) { fprintf (info_stream, "%s", str); fflush (info_stream); } 
+static inline void iprint0 (rom str) { fprintf (info_stream, "%s", str); fflush (info_stream); } 
 
 // bring the cursor down to a newline, if needed
 extern bool progress_newline_since_update;
@@ -319,47 +385,40 @@ static inline void progress_newline(void) {
 }
 
 // check for a user error
-#define ASSINP(condition, format, ...)       ( { if (!(condition)) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); if (flags_command_line()) fprintf (stderr, "\n\ncommand: %s\n", flags_command_line()); else fprintf (stderr, "\n"); exit_on_error(false); }} )
-#define ASSINP0(condition, string)           ( { if (!(condition)) { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); if (flags_command_line()) fprintf (stderr, "\ncommand: %s\n", flags_command_line()); exit_on_error(false); }} )
-#define ABORTINP(format, ...)                ( { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(false);} )
-#define ABORTINP0(string)                    ( { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); exit_on_error(false);} )
+#define ASSINP(condition, format, ...)       ( { if (!(condition)) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); if (flags_command_line()) fprintf (stderr, "\n\ncommand: %s\n", flags_command_line()); else fprintf (stderr, "\n"); fflush (stderr); exit_on_error(false); }} )
+#define ASSINP0(condition, string)           ASSINP (condition, string "%s", "")
+#define ABORTINP(format, ...)                ( { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); exit_on_error(false);} )
+#define ABORTINP0(string)                    ABORTINP (string "%s", "")
 
 // check for a bug - prints stack
 #define SUPPORT "\nIf this is unexpected, please contact "EMAIL_SUPPORT".\n"
-#define ASSERT(condition, format, ...)       ( { if (!(condition)) { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); exit_on_error(true); }} )
-#define ASSERT0(condition, string)           ( { if (!(condition)) { progress_newline(); fprintf (stderr, "Error in %s:%u: %s" SUPPORT, __FUNCTION__, __LINE__, string); exit_on_error(true); }} )
+#define ASSERT(condition, format, ...)       ( { if (!(condition)) { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true); }} )
+#define ASSERT0(condition, string)           ASSERT (condition, string "%s", "")
 #define ASSERTISNULL(p)                      ASSERT0 (!p, "expecting "#p" to be NULL")
 #define ASSERTNOTNULL(p)                     ASSERT0 (p, #p" is NULL")
-#define ASSERTNOTZERO(p)                     ASSERT0 (p, #p"=0")
-#define ASSERTW(condition, format, ...)      ( { if (!(condition) && !flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); }} )
-#define ASSERTW0(condition, string)          ( { if (!(condition) && !flag.quiet) { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); } } )
-#define ASSRET(condition, ret, format, ...)  ( { if (!(condition)) { progress_newline(); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); return ret; }} )
-#define ASSRET0(condition, ret, string)      ( { if (!(condition)) { progress_newline(); fprintf (stderr, "%s\n", string); return ret; } } )
+#define ASSERTNOTZERO(n,name)                ASSERT ((n), "%s: %s=0", (name), #n)
+#define ASSERTISZERO(n)                      ASSERT (!(n), "%s!=0", #n)
+#define ASSERTW(condition, format, ...)      ( { if (!(condition) && !flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); }} )
+#define ASSERTW0(condition, string)          ASSERTW (condition, string "%s", "")
+#define ASSRET(condition, ret, format, ...)  ( { if (!(condition)) { progress_newline(); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); return (ret); }} )
+#define ASSRET0(condition, ret, string)      ASSRET (condition, ret, string "%s", "")
 #define ASSERTRUNONCE(string)                ( { static bool once = false; /* this code path should run only once */ \
-                                                 ASSINP0 (!once, string); \
-                                                 once = true; } )
-#define RETURNW(condition, ret, format, ...) ( { if (!(condition)) { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } return ret; }} )
-#define RETURNW0(condition, ret, string)     ( { if (!(condition)) { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); } return ret; } } )
-#define ABORT(format, ...)                   ( { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); exit_on_error(true);} )
-#define ABORT_R(format, ...) /*w/ return 0*/ ( { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); exit_on_error(true); return 0;} )
-#define ABORT0(string)                       ( { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, "%s" SUPPORT, string); exit_on_error(true);} )
-#define ABORT0_R(string)                     ( { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, "%s" SUPPORT, string); exit_on_error(true); return 0; } )
-#define WARN(format, ...)                    ( { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } } )
-#define WARN0(string)                        ( { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); } } )
+                                                 ASSINP0 (!__atomic_test_and_set (&once, __ATOMIC_RELAXED), string); } )
+#define RETURNW(condition, ret, format, ...) ( { if (!(condition)) { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); } return ret; }} )
+#define RETURNW0(condition, ret, string)     ( { if (!(condition)) { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); fflush (stderr); } return ret; } } )
+#define ABORT(format, ...)                   ( { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true);} )
+#define ABORT_R(format, ...) /*w/ return 0*/ ( { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true); return 0;} )
+#define ABORT0(string)                       ABORT (string "%s", "")
+#define ABORT0_R(string)                     ABORT_R (string "%s", "")
+#define WARN(format, ...)                    ( { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); } } )
+#define WARN0(string)                        WARN (string "%s", "")
 
 #define WARN_ONCE(format, ...)               ( { static bool warning_shown = false; \
-                                                 if (!flag.quiet && !warning_shown) { \
-                                                     progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); \
-                                                     warning_shown = true; \
-                                                 } \
-                                             } ) 
+                                                 if (!flag.quiet && !__atomic_test_and_set (&warning_shown, __ATOMIC_RELAXED)) \
+                                                    { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } \
+                                               } ) 
 
-#define WARN_ONCE0(string)                   ( { static bool warning_shown = false; \
-                                                 if (!flag.quiet && !warning_shown) { \
-                                                     progress_newline(); fprintf (stderr, "%s\n", string); \
-                                                     warning_shown = true; \
-                                                 } \
-                                             } ) 
+#define WARN_ONCE0(string)                   WARN_ONCE (string "%s", "")
 
 #define ASSERTGOTO(condition, format, ...)   ( { if (!(condition)) { progress_newline(); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); goto error; }} )
 

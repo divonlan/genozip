@@ -17,7 +17,7 @@ extern int32_t locs_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
 extern bool locs_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern void locs_seg_initialize (VBlockP vb);
 extern void locs_seg_finalize (VBlockP vb);
-extern const char *locs_seg_txt_line (VBlockP vb, const char *field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
+extern rom locs_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
 
 #define LOCS_SPECIAL { locs_piz_special_DELTA_FLOAT }
 SPECIAL (LOCS, 0, DELTA_FLOAT, locs_piz_special_DELTA_FLOAT);

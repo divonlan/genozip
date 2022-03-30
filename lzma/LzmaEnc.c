@@ -2648,7 +2648,11 @@ typedef struct
 static size_t SeqOutStreamBuf_Write(const ISeqOutStream *pp, const void *data, size_t size)
 {
   CLzmaEnc_SeqOutStreamBuf *p = CONTAINER_FROM_VTBL(pp, CLzmaEnc_SeqOutStreamBuf, vt);
-  ASSERT0 (p->rem >= size, "Out of memory in compressed buffer while compressing with LZMA");
+
+  if (size > p->rem)
+    return 0; // not enough memory in compressed buffer (added by divon)
+
+  ASSERTW0 (p->rem >= size, "FYI: compressed buffer too small while compressing with LZMA, no harm");
 
   memcpy(p->data, data, size);
   p->rem -= size;

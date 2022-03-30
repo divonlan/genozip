@@ -12,12 +12,12 @@
 
 typedef union { 
     // used if the digest is MD5
-    uint8_t  bytes[16]; 
+    uint8_t bytes[16]; 
     uint32_t words[4];
     uint128_t w128;
 
     // used if the digest is Adler32
-    uint32_t adler_bgen; // Big Endian
+#define adler_bgen words[0] // Big Endian
 } Digest;
 
 #define DIGEST_NONE (Digest){}
@@ -53,13 +53,14 @@ typedef union {
     AdlerContext adler_ctx;
 } DigestContext;
 
+#define DIGEST_CONTEXT_NONE (DigestContext){}
+
 extern void digest_initialize (void);
-extern Digest digest_finalize (DigestContext *ctx, const char *msg);
-extern void digest_update_do (VBlockP vb, DigestContext *ctx, const char *data, uint64_t data_len, const char *msg);
+extern void digest_update_do (VBlockP vb, DigestContext *ctx, rom data, uint64_t data_len, rom msg);
 #define digest_update(ctx, buf, msg) digest_update_do ((buf)->vb, (ctx), STRb(*(buf)), (msg))
 
 extern Digest digest_do (const void *data, uint32_t len);
-extern Digest digest_snapshot (const DigestContext *ctx);
+extern Digest digest_snapshot (const DigestContext *ctx, rom msg);
 extern void digest_one_vb (VBlockP vb);
 extern void digest_piz_verify_one_vb (VBlockP vb);
 extern void digest_start_log (DigestContext *ctx);
@@ -69,11 +70,11 @@ extern DigestDisplay digest_display (Digest digest);
 
 typedef enum { DD_NORMAL, DD_MD5, DD_MD5_IF_MD5, DD_SHORT } DigestDisplayMode;
 extern DigestDisplay digest_display_ex (const Digest digest, DigestDisplayMode mode);
-extern const char *digest_name (void);
+extern rom digest_name (void);
 
 #define digest_is_equal(digest1,digest2) ((digest1).w128 == (digest2).w128)
 extern bool digest_recon_is_equal (const Digest recon_digest, const Digest expected_digest);
-extern void digest_verify_ref_is_equal (const Reference ref, const char *header_ref_filename, const Digest header_md5);
+extern void digest_verify_ref_is_equal (const Reference ref, rom header_ref_filename, const Digest header_md5);
 
 #define md5_is_zero(digest) (!(digest).w128)
 #define v8_digest_is_zero(digest) (command == PIZ && z_file->genozip_version < 9 && md5_is_zero(digest))

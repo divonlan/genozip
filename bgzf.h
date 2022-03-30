@@ -23,7 +23,7 @@
 // data type of vblock.bgzf_blocks
 typedef struct BgzfBlockZip {
     uint32_t txt_index, txt_size;    // index of uncompressed block within vb->txt_data. The first block doesn't necessarily have index=0 bc there could be passed-down data
-    uint32_t compressed_index, comp_size; // index within vb->compressed
+    uint32_t compressed_index, comp_size; // index within vb->scratch
     bool is_decompressed;
 } BgzfBlockZip;
 
@@ -44,7 +44,7 @@ extern int32_t bgzf_read_block (FileP file, uint8_t *block, uint32_t *block_size
 extern void bgzf_uncompress_vb (VBlockP vb);
 extern void bgzf_uncompress_one_block (VBlockP vb, BgzfBlockZip *bb);
 extern void bgzf_compress_bgzf_section (void);
-extern struct FlagsBgzf bgzf_get_compression_level (const char *filename, const uint8_t *comp_block, uint32_t comp_block_size, uint32_t uncomp_block_size);
+extern struct FlagsBgzf bgzf_get_compression_level (rom filename, bytes comp_block, uint32_t comp_block_size, uint32_t uncomp_block_size);
 
 //---------
 // PIZ side

@@ -63,7 +63,7 @@ static int bsc_coder_encode_block(void *vb, const unsigned char * input, unsigne
     if (coder == LIBBSC_CODER_QLFC_STATIC)   return bsc_qlfc_static_encode_block  (vb, input, output, inputSize, outputSize);
     if (coder == LIBBSC_CODER_QLFC_ADAPTIVE) return bsc_qlfc_adaptive_encode_block(vb, input, output, inputSize, outputSize);
 
-    ABORT0_R ("Error in bsc_coder_encode_block: bad parameter");
+    ABORT0_R ("bad parameter");
 }
 
 static void bsc_coder_split_blocks(void *vb, const unsigned char * input, int n, int nBlocks, int * blockStart, int * blockSize)

@@ -19,7 +19,7 @@
 
 typedef struct {
     uint64_t idx;
-    uint32_t vblock_i;
+    VBIType vblock_i;
     char iupac;
 } MakeIupac;
 
@@ -27,7 +27,7 @@ typedef struct {
 void ref_iupacs_add_do (VBlockP vb, uint64_t idx, char iupac)
 {
     buf_alloc (vb, &CTX(FASTA_NONREF_X)->local, 1, 100, MakeIupac, 2, "contexts->local");
-    NEXTENT (MakeIupac, CTX(FASTA_NONREF_X)->local) = (MakeIupac){ .vblock_i = vb->vblock_i, .idx = idx, .iupac = iupac };
+    BNXT (MakeIupac, CTX(FASTA_NONREF_X)->local) = (MakeIupac){ .vblock_i = vb->vblock_i, .idx = idx, .iupac = iupac };
 }
 
 // --make-reference: called by main thread, after each FASTA vb, in order of VBs which is also the order of ranges
@@ -35,7 +35,7 @@ void ref_iupacs_after_compute (VBlockP vb)
 {
     if (CTX(FASTA_NONREF_X)->local.len) {
         buf_add_buf (evb, &gref->iupacs_buf, &CTX(FASTA_NONREF_X)->local, MakeIupac, "iupacs_buf");
-        buf_free (&CTX(FASTA_NONREF_X)->local);
+        buf_free (CTX(FASTA_NONREF_X)->local);
     }
 }
 
@@ -45,31 +45,31 @@ void ref_iupacs_compress (void)
     ARRAY (MakeIupac, make_iupacs, gref->iupacs_buf);
     if (!make_iupacs_len) return;
 
-    ASSERTNOTINUSE (evb->compressed);
-    buf_alloc (evb, &evb->compressed, 0, make_iupacs_len, Iupac, 0, "compressed");
-    ARRAY (Iupac, iupacs, evb->compressed);
+    ASSERTNOTINUSE (evb->scratch);
+    buf_alloc (evb, &evb->scratch, 0, make_iupacs_len, Iupac, 0, "scratch");
+    ARRAY (Iupac, iupacs, evb->scratch);
 
     if (flag.show_ref_iupacs) iprintf ("\nIUPACs found in %s:\n", z_name);
 
     PosType last_gpos = 0;
     for (uint64_t i=0; i < make_iupacs_len; i++) {
-        const Range *r = ENT (Range, gref->ranges, make_iupacs[i].vblock_i-1);
+        const Range *r = B(Range, gref->ranges, make_iupacs[i].vblock_i-1);
 
         PosType gpos = r->gpos + make_iupacs[i].idx;
 
         if (flag.show_ref_iupacs)   
             iprintf ("IUPAC=%c\nCHROM=%s\tPOS=%"PRIu64"\tGPOS=%"PRIu64"\n", 
-                     make_iupacs[i].iupac, ctx_get_zf_nodes_snip (ZCTX(FASTA_CONTIG), r->chrom), r->first_pos + make_iupacs[i].idx, gpos);
+                     make_iupacs[i].iupac, ctx_get_zf_nodes_snip (ZCTX(FASTA_CONTIG), r->chrom, 0, 0), r->first_pos + make_iupacs[i].idx, gpos);
 
         iupacs[i] = (Iupac) { .gpos  = BGEN64 (gpos - last_gpos), // store delta
                               .iupac = make_iupacs[i].iupac };
         last_gpos = gpos;
     }
 
-    evb->compressed.len = sizeof (Iupac) * make_iupacs_len;
-    zfile_compress_section_data_ex (evb, SEC_REF_IUPACS, &evb->compressed, 0,0, CODEC_BSC, SECTION_FLAGS_NONE); 
+    evb->scratch.len = sizeof (Iupac) * make_iupacs_len;
+    zfile_compress_section_data_ex (evb, SEC_REF_IUPACS, &evb->scratch, 0,0, CODEC_BSC, SECTION_FLAGS_NONE); 
 
-    buf_free (&evb->compressed);
+    buf_free (evb->scratch);
 }
 
 
@@ -87,7 +87,7 @@ void ref_iupacs_load (Reference ref)
         goto done; // we don't have iupacs
     }
 
-    zfile_get_global_section (SectionHeader, SEC_REF_IUPACS, sec, &ref->iupacs_buf, "iupacs_buf");
+    zfile_get_global_section (SectionHeader, sec, &ref->iupacs_buf, "iupacs_buf");
 
     if (flag.show_ref_iupacs) 
         iprintf ("\nIUPACs found in %s:\n", z_name);
@@ -102,7 +102,7 @@ void ref_iupacs_load (Reference ref)
             PosType pos;
             WordIndex chrom_index = ref_contig_get_by_gpos (ref, iupacs[i].gpos, &pos);
             iprintf ("IUPAC=%c\tCHROM=%s\tPOS=%"PRIu64"\tGPOS=%"PRIu64"\n", 
-                     iupacs[i].iupac, ctx_get_snip_by_word_index (ZCTX(FASTA_CONTIG), chrom_index, 0, 0), pos, iupacs[i].gpos);
+                     iupacs[i].iupac, ctx_get_snip_by_word_index0 (ZCTX(FASTA_CONTIG), chrom_index), pos, iupacs[i].gpos);
         }
     }
 
@@ -150,14 +150,14 @@ bool ref_iupacs_is_included_do (Reference ref, VBlockP vb, const Range *r, PosTy
 
     ARRAY (Iupac, iupacs, ref->iupacs_buf);
     const Iupac *iupac_ent = ref_iupacs_find (iupacs, 0, (int64_t)iupacs_len-1, gpos);
-    bool is_after = ISAFTERENT (ref->iupacs_buf, iupac_ent);
+    bool is_after = !ref->iupacs_buf.data || BISAFT (ref->iupacs_buf, iupac_ent);
 
     vb->iupacs_last_range[ref_i] = r;
 
     // case: iupac is found at GPOS - now test if it includes vcf_base
     if (!is_after && iupac_ent->gpos == gpos) {
         vb->iupacs_last_pos[ref_i] = pos;
-        vb->iupacs_next_pos[ref_i] = ISLASTENT (ref->iupacs_buf, iupac_ent) ? 1000000000000000LL : ((iupac_ent+1)->gpos - gpos) + pos;
+        vb->iupacs_next_pos[ref_i] = BISLST (ref->iupacs_buf, iupac_ent) ? 1000000000000000LL : ((iupac_ent+1)->gpos - gpos) + pos;
         bool is_included = IUPAC_IS_INCLUDED[(int)iupac_ent->iupac][(int)vcf_base];
 
         if (flag.show_ref_iupacs) 
@@ -170,7 +170,7 @@ bool ref_iupacs_is_included_do (Reference ref, VBlockP vb, const Range *r, PosTy
     
     // case: the reference base at GPOS is not a IUPAC
     else {
-        bool is_before = ISBEFOREENT(ref->iupacs_buf, iupac_ent-1);
+        bool is_before = !ref->iupacs_buf.data || BISBEFORE(ref->iupacs_buf, iupac_ent-1);
         vb->iupacs_last_pos[ref_i] = is_before ? 0 : ((iupac_ent-1)->gpos - gpos) + pos;
         vb->iupacs_next_pos[ref_i] = is_after ? 1000000000000000LL : (iupac_ent->gpos - gpos) + pos;
         return false;
@@ -190,10 +190,10 @@ char ref_iupacs_get (Reference ref, const Range *r, PosType pos, bool reverse,
         return 0;
     }
 
-    const Iupac *last = LASTENT(const Iupac, ref->iupacs_buf);
+    const Iupac *last = BLST(const Iupac, ref->iupacs_buf);
     PosType gpos = r->gpos + (pos - r->first_pos);
     
-    const Iupac *iupac = ref_iupacs_find (FIRSTENT(Iupac, ref->iupacs_buf), 0, ref->iupacs_buf.len-1, gpos);
+    const Iupac *iupac = ref_iupacs_find (B1ST(Iupac, ref->iupacs_buf), 0, ref->iupacs_buf.len-1, gpos);
 
     if (!reverse) {
         *next_pos = (iupac > last)       ? MAX_POS            // our position is beyond the last iupac
@@ -204,7 +204,7 @@ char ref_iupacs_get (Reference ref, const Range *r, PosType pos, bool reverse,
         return (iupac <= last && iupac->gpos == gpos) ? iupac->iupac : 0;
     }
     else { // reverse
-        const Iupac *first = FIRSTENT(const Iupac, ref->iupacs_buf);
+        const Iupac *first = B1ST(const Iupac, ref->iupacs_buf);
 
         *next_pos = (iupac > last)                         ? IUPAC2POS (last)   // our position is beyond the last iupac, next try when we get back to the last iupac
                   : (gpos < iupac->gpos && iupac == first) ? MAX_POS            // our position is smaller than the first iupac (and it will only get smaller as we are in reverse)

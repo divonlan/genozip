@@ -5,41 +5,41 @@
 
 #include "website.h"
 
-static const char *help_genozip[] = {
+static rom help_genozip[] = {
     "",
     "Try (for example): genozip myfile.bam",
     "",
     "Please see the genozip manual here: "WEBSITE_GENOZIP
 };
 
-static const char *help_genozip_developer[] = {
+static rom help_genozip_developer[] = {
     "",
     "Options useful mostly for developers of genozip:",
     "",
     "Please see "WEBSITE_ADVANCED
 };
 
-static const char *help_genounzip[] = {
+static rom help_genounzip[] = {
     "",
     "Please see the genounzip manual here: "WEBSITE_GENOUNZIP
 };
 
-static const char *help_genocat[] = {
+static rom help_genocat[] = {
     "",
     "Please see the genocat manual here: "WEBSITE_GENOCAT
 };
 
-static const char *help_genols[] = {
+static rom help_genols[] = {
     "",
     "Please see the genols manual here: "WEBSITE_GENOLS
 };
 
-static const char *help_attributions[] = {
+static rom help_attributions[] = {
     "",
     "Please see the attributions list here: "WEBSITE_ATTRIBUTIONS
 };
 
-static const char *help_footer[] = {
+static rom help_footer[] = {
     "",
     "Technical questions, bug reports and feature requests: " EMAIL_SUPPORT,
     "Commercial license inquiries: " EMAIL_SALES,

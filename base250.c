@@ -25,7 +25,7 @@ Base250 base250_encode (WordIndex n) // number to encode
     return result;
 }
 
-WordIndex base250_decode (const uint8_t **str, bool advance, const char *ctx_name)
+WordIndex base250_decode (bytes *str, bool advance, rom ctx_name)
 {
     #define ADVANCE(n) if (advance) *str += n
 

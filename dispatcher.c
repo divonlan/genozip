@@ -15,25 +15,26 @@
 #include "progress.h"
 #include "threads.h"
 #include "segconf.h"
+#include "piz.h"
 
 #define MAX_COMPUTED_VBS 4096
 typedef struct {
-    const char *task_name;
-    unsigned max_vb_id_so_far; 
-    VBlock *vbs[MAX_COMPUTED_VBS]; // VBs currently in the pipeline (with a compute thread or just before or after)
-    VBlock *processed_vb; // processed VB returned to caller (VB moved from the "vbs" field to this field)
+    rom task_name;
+    uint32_t max_vb_id_so_far; 
+    VBlockP vbs[MAX_COMPUTED_VBS]; // VBs currently in the pipeline (with a compute thread or just before or after)
+    VBlockP processed_vb; // processed VB returned to caller (VB moved from the "vbs" field to this field)
 
     bool input_exhausted;
     bool paused;
 
-    unsigned next_dispatched; // index into vbs
-    unsigned next_joined;     // index into vbs
+    uint32_t next_dispatched; // index into vbs
+    uint32_t next_joined;     // index into vbs
 
-    unsigned num_running_compute_threads;
-    unsigned next_vb_i;
-    unsigned max_threads;
+    uint32_t num_running_compute_threads;
+    uint32_t next_vb_i;
+    uint32_t max_threads;
     ProgressType prog;
-    const char *filename;
+    rom filename;
     char *progress_prefix;
 } DispatcherData;
 
@@ -83,10 +84,10 @@ void dispatcher_start_wallclock (void)
     clock_gettime (CLOCK_REALTIME, &profiler_timer);
 }
 
-Dispatcher dispatcher_init (const char *task_name, unsigned max_threads, unsigned previous_vb_i,
+Dispatcher dispatcher_init (rom task_name, uint32_t max_threads, uint32_t previous_vb_i,
                             bool test_mode, 
-                            const char *filename, // filename, or NULL if filename is unchanged
-                            ProgressType prog, const char *prog_msg /* used if prog=PROGRESS_MESSAGE */)   
+                            rom filename, // filename, or NULL if filename is unchanged
+                            ProgressType prog, rom prog_msg /* used if prog=PROGRESS_MESSAGE */)   
 {
     DispatcherData *dd   = (DispatcherData *)CALLOC (sizeof(DispatcherData));
     dd->task_name        = task_name;
@@ -98,12 +99,18 @@ Dispatcher dispatcher_init (const char *task_name, unsigned max_threads, unsigne
         dd->filename = filename;
 
     ASSERT (max_threads <= global_max_threads, "expecting max_threads=%u <= global_max_threads=%u", max_threads, global_max_threads);
+
+    uint32_t pool_size = MAX_(1, global_max_threads)                         // compute thread VBs
+                       + (command == PIZ ? 2 : 0)                            // txt header VB and wvb (for PIZ)
+                       + (command == PIZ ? z_file->max_conc_writing_vbs : 0) // writer thread VBs  
+                       + 2;                                                  // background cache creation of (gref + primref) or (gref + gref refhash)
     
+    if (flag.show_vblocks) 
+        iprintf ("CREATING_VB_POOL: global_max_threads=%u max_conc_writing_vbs=%u pool_size=%u\n", global_max_threads, z_file->max_conc_writing_vbs, pool_size); 
+
     // always create the pool based on global_max_threads, not max_threads, because it is the same pool for all fan-outs throughout the execution
-    vb_create_pool (MAX_(1, global_max_threads)    // compute thread VBs
-                  + (command == PIZ)               // txt header VB (for PIZ) or 
-                  + z_file->max_conc_writing_vbs + // writer thread VBs 
-                  + 2);                            // background cache creation of (gref + primref) or (gref + gref refhash)
+    vb_create_pool (pool_size);
+
     if (!flag.unbind && filename) // note: for flag.unbind (in main file), we print this in dispatcher_resume() 
         dd->progress_prefix = progress_new_component (filename, prog_msg, test_mode); 
 
@@ -135,21 +142,28 @@ uint32_t dispatcher_get_next_vb_i (Dispatcher dispatcher)
     return ((DispatcherData *)dispatcher)->next_vb_i;
 }
 
-void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i, bool cleanup_after_me)
+void dispatcher_set_task_name (Dispatcher dispatcher, rom task_name)
+{
+    ((DispatcherData *)dispatcher)->task_name = task_name;
+}
+
+void dispatcher_finish (Dispatcher *dispatcher, uint32_t *last_vb_i, bool cleanup_after_me,
+                        bool show_memory)
 {
     if (! *dispatcher) return; // nothing to do
 
     DispatcherData *dd = (DispatcherData *)*dispatcher;
 
-    // must be before vb_cleanup_memory() 
-    if (flag.show_memory) buf_show_memory (false, dd->max_threads, dd->max_vb_id_so_far);    
+    // must be before vb_cleanup_memory() (in ZIP - show in final component of final file)
+    if (show_memory) 
+        buf_show_memory (false, dd->max_threads, dd->max_vb_id_so_far);    
 
     // free memory allocations between files, when compressing multiple non-bound files or 
     // decompressing multiple files. 
     // don't bother freeing (=save time) if this is the last file, unless we're going to test and need the memory
     if (cleanup_after_me) {
         vb_cleanup_memory(); 
-        vb_release_vb (&evb); // reset memory 
+        vb_release_vb (&evb, dd->task_name); // reset memory 
     }
     
     // only relevant to the ZIP dispatcher
@@ -159,13 +173,13 @@ void dispatcher_finish (Dispatcher *dispatcher, unsigned *last_vb_i, bool cleanu
     FREE (*dispatcher);
 }
 
-VBlock *dispatcher_generate_next_vb (Dispatcher dispatcher, uint32_t vb_i)
+VBlockP dispatcher_generate_next_vb (Dispatcher dispatcher, VBIType vb_i, CompIType comp_i)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
     dd->next_vb_i = vb_i ? vb_i : dd->next_vb_i+1;
 
-    dd->vbs[dd->next_dispatched] = vb_get_vb (dd->task_name, dd->next_vb_i);
+    dd->vbs[dd->next_dispatched] = vb_get_vb (dd->task_name, dd->next_vb_i, comp_i);
     dd->max_vb_id_so_far = MAX_(dd->max_vb_id_so_far, dd->vbs[dd->next_dispatched]->id);
 
     return dd->vbs[dd->next_dispatched];
@@ -193,7 +207,7 @@ void dispatcher_abandon_next_vb (Dispatcher dispatcher)
     DispatcherData *dd = (DispatcherData *)dispatcher;
     VBlockP vb = dd->vbs[dd->next_dispatched];
     ASSERTNOTNULL (vb);
-    ASSERT0 (vb->vblock_i, "dispatcher_compute: cannot dont_compute a VB because vb->vblock_i=0");
+    ASSERT0 (vb->vblock_i, "dispatcher_compute: cannot abandon a VB because vb->vblock_i=0");
 
     dd->processed_vb = vb;
     dd->vbs[dd->next_dispatched] = NULL;
@@ -217,7 +231,7 @@ bool dispatcher_has_processed_vb (Dispatcher dispatcher, bool *is_final)
 }
 
 // returns the next processed VB, or NULL if non-blocking the VBlock is not ready yet, or no running compute threads
-VBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final, bool blocking)
+VBlockP dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final, bool blocking)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
 
@@ -232,7 +246,6 @@ VBlock *dispatcher_get_processed_vb (Dispatcher dispatcher, bool *is_final, bool
     dd->processed_vb = dd->vbs[dd->next_joined];
     dd->vbs[dd->next_joined] = NULL;
     dd->num_running_compute_threads--;
-
     dd->next_joined = (dd->next_joined + 1) % MAX_(1, dd->max_threads);
 
     return dd->processed_vb; 
@@ -244,13 +257,13 @@ bool dispatcher_has_free_thread (Dispatcher dispatcher)
     return dd->num_running_compute_threads < MAX_(1, dd->max_threads);
 }
 
-bool dispatcher_has_active_threads (Dispatcher dispatcher)
+uint32_t dispatcher_get_num_running_compute_threads (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
-    return dd->num_running_compute_threads > 0;
+    return dd->num_running_compute_threads;
 }
 
-VBlock *dispatcher_get_next_vb (Dispatcher dispatcher)
+VBlockP dispatcher_get_next_vb (Dispatcher dispatcher)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
     return dd->vbs[dd->next_dispatched];
@@ -266,8 +279,8 @@ void dispatcher_recycle_vbs (Dispatcher dispatcher, bool release_vb)
 
         if (release_vb) { 
             // WORKAROUND to bug 343: there is a race condition of unknown cause is flag.no_writer_thread=true (eg --coverage, --count) crashes
-            if (flag.no_writer_thread && !flag.test && !strcmp (dd->task_name, "piz")) usleep (1000); 
-            vb_release_vb (&dd->processed_vb); // cleanup vb and get it ready for another usage (without freeing memory)
+            if (flag.no_writer_thread && !flag.test && !strcmp (dd->task_name, PIZ_TASK_NAME)) usleep (1000); 
+            vb_release_vb (&dd->processed_vb, dd->task_name); // cleanup vb and get it ready for another usage (without freeing memory)
         }
 
         // case: VB dispatched to the writer thread, and released there
@@ -281,15 +294,15 @@ void dispatcher_recycle_vbs (Dispatcher dispatcher, bool release_vb)
     COPY_TIMER_VB (evb, dispatcher_recycle_vbs);
 }                           
 
-void dispatcher_set_input_exhausted (Dispatcher dispatcher, bool exhausted)
+void dispatcher_set_no_data_available (Dispatcher dispatcher, DispatchStatus dispatch_status)
 {
     DispatcherData *dd = (DispatcherData *)dispatcher;
-    dd->input_exhausted = exhausted;
+    
+    if (dispatch_status == DATA_EXHAUSTED)
+        dd->input_exhausted = true;
 
-    if (exhausted) {
-        vb_release_vb (&dd->vbs[dd->next_dispatched]);
-        dd->next_vb_i--; // we didn't use this vb_i
-    }
+    vb_release_vb (&dd->vbs[dd->next_dispatched], dd->task_name);
+    dd->next_vb_i--; // we didn't use this vb_i
 }    
 
 bool dispatcher_is_done (Dispatcher dispatcher)
@@ -310,10 +323,10 @@ bool dispatcher_is_input_exhausted (Dispatcher dispatcher)
 }
 
 // returns the number of VBs successfully outputted
-Dispatcher dispatcher_fan_out_task (const char *task_name,
-                                    const char *filename,   // NULL to continue with previous filename
+Dispatcher dispatcher_fan_out_task (rom task_name,
+                                    rom filename,   // NULL to continue with previous filename
                                     ProgressType prog,
-                                    const char *prog_msg,   // used if prog=PROGRESS_MESSAGE 
+                                    rom prog_msg,   // used if prog=PROGRESS_MESSAGE 
                                     bool test_mode,
                                     bool force_single_thread, 
                                     uint32_t previous_vb_i, // used if binding file
@@ -323,8 +336,8 @@ Dispatcher dispatcher_fan_out_task (const char *task_name,
     Dispatcher dispatcher = dispatcher_init (task_name, force_single_thread ? 1 : global_max_threads, 
                                              previous_vb_i, test_mode, filename, prog, prog_msg ? prog_msg : "0%");
     do {
-        VBlock *next_vb = dispatcher_get_next_vb (dispatcher);
-        bool has_vb_ready_to_compute = next_vb && next_vb->ready_to_dispatch;
+        VBlockP next_vb = dispatcher_get_next_vb (dispatcher);
+        bool has_vb_ready_to_compute = next_vb && (next_vb->dispatch == READY_TO_COMPUTE);
         bool has_free_thread = dispatcher_has_free_thread (dispatcher);
 
         // PRIORITY 1: is there a block available and a compute thread available? in that case dispatch it
@@ -335,7 +348,7 @@ Dispatcher dispatcher_fan_out_task (const char *task_name,
         else if (dispatcher_has_processed_vb (dispatcher, NULL) ||  // case 1: there is a VB who's compute processing is completed
                  (has_vb_ready_to_compute && !has_free_thread)) {   // case 2: a VB ready to dispatch but all compute threads are occupied. wait here for one to complete
 
-            VBlock *processed_vb = dispatcher_get_processed_vb (dispatcher, NULL, true); // this will block until one is available
+            VBlockP processed_vb = dispatcher_get_processed_vb (dispatcher, NULL, true); // this will block until one is available
             if (!processed_vb) continue; // no running compute threads 
 
             if (output) output (processed_vb);
@@ -346,12 +359,12 @@ Dispatcher dispatcher_fan_out_task (const char *task_name,
         // PRIORITY 3: If there is no variant block available to compute or to output, but input is not exhausted yet - get one range
         else if (!next_vb && !dispatcher_is_input_exhausted (dispatcher)) {
 
-            next_vb = dispatcher_generate_next_vb (dispatcher, 0);
+            next_vb = dispatcher_generate_next_vb (dispatcher, 0, COMP_NONE);
 
             prepare (next_vb);
 
-            if (!next_vb->ready_to_dispatch) 
-                dispatcher_set_input_exhausted (dispatcher, true);
+            if (next_vb->dispatch != READY_TO_COMPUTE) 
+                dispatcher_set_no_data_available (dispatcher, next_vb->dispatch);
         }
 
         // if no condition was met, we're either done, or we still have some threads processing that are not done yet.

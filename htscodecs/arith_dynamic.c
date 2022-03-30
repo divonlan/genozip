@@ -35,15 +35,6 @@
 // techniques prior to entropy encoding.  This is a significant
 // reduction in some data sets.
 
-// top bits in order byte
-#define X_PACK   0x80    // Pack 2,4,8 or infinite symbols into a byte.
-#define X_RLE    0x40    // Run length encoding with runs & lits encoded separately
-#define X_CAT    0x20    // Nop; for tiny segments where rANS overhead is too big
-#define X_NOSZ   0x10    // Don't store the original size; used by STRIPE mode
-#define X_STRIPE 0x08    // For 4-byte integer data; rotate & encode 4 streams.
-#define X_EXT    0x04    // External compression codec via magic num (gz, xz, bz2)
-#define X_ORDER  0x03    // Mask to obtain order
-
 //#include "config.h"
 #define NO_THREADS
 
@@ -104,7 +95,7 @@ unsigned char *arith_compress_O0(unsigned char *in, unsigned int in_size,
 
     if (!out) {
 	*out_size = bound;
-	out = malloc(*out_size);
+	out = MALLOC(*out_size);
     }
     if (!out || bound > *out_size)
 	return NULL;
@@ -145,7 +136,7 @@ unsigned char *arith_uncompress_O0(unsigned char *in, unsigned int in_size,
     SIMPLE_MODEL(256,_init)(&byte_model, m);
 
     if (!out)
-	out = malloc(out_sz);
+	out = MALLOC(out_sz);
     if (!out)
 	return NULL;
 
@@ -169,7 +160,7 @@ unsigned char *arith_compress_O1(unsigned char *in, unsigned int in_size,
 
     if (!out) {
 	*out_size = bound;
-	out = malloc(*out_size);
+	out = MALLOC(*out_size);
     }
     if (!out || bound > *out_size)
 	return NULL;
@@ -216,7 +207,7 @@ unsigned char *arith_uncompress_O1(unsigned char *in, unsigned int in_size,
 	SIMPLE_MODEL(256,_init)(&byte_model[i], m);
     
     if (!out)
-	out = malloc(out_sz);
+	out = MALLOC(out_sz);
     if (!out)
 	return NULL;
 
@@ -249,7 +240,7 @@ unsigned char *arith_compress_O2(unsigned char *in, unsigned int in_size,
 
     if (!out) {
 	*out_size = bound;
-	out = malloc(*out_size);
+	out = MALLOC(*out_size);
     }
     if (!out || bound > *out_size)
 	return NULL;
@@ -265,7 +256,7 @@ unsigned char *arith_compress_O2(unsigned char *in, unsigned int in_size,
     *out = m;
 
     SIMPLE_MODEL(256,_) *byte_model;
-    byte_model = malloc(256*256*sizeof(*byte_model));
+    byte_model = MALLOC(256*256*sizeof(*byte_model));
     for (i = 0; i < 256; i++)
 	for (j = 0; j < 256; j++)
 	    SIMPLE_MODEL(256,_init)(&byte_model[i*256+j], m);
@@ -281,7 +272,7 @@ unsigned char *arith_compress_O2(unsigned char *in, unsigned int in_size,
 	last1 = in[i];
     }
 
-    free(byte_model);
+    FREE(byte_model);
     RC_FinishEncode(&rc);
 
     // Finalise block size and return it
@@ -299,7 +290,7 @@ unsigned char *arith_compress_O2(unsigned char *in, unsigned int in_size,
 
     if (!out) {
 	*out_size = bound;
-	out = malloc(*out_size);
+	out = MALLOC(*out_size);
     }
     if (!out || bound > *out_size)
 	return NULL;
@@ -315,7 +306,7 @@ unsigned char *arith_compress_O2(unsigned char *in, unsigned int in_size,
     *out = m;
 
     SIMPLE_MODEL(256,_) *byte_model;
-    byte_model = malloc(256*256*sizeof(*byte_model));
+    byte_model = MALLOC(256*256*sizeof(*byte_model));
     for (i = 0; i < 256; i++)
 	for (j = 0; j < 256; j++)
 	    SIMPLE_MODEL(256,_init)(&byte_model[i*256+j], m);
@@ -341,7 +332,7 @@ unsigned char *arith_compress_O2(unsigned char *in, unsigned int in_size,
 	last1 = in[i];
     }
 
-    free(byte_model);
+    FREE(byte_model);
     RC_FinishEncode(&rc);
 
     // Finalise block size and return it
@@ -356,14 +347,14 @@ unsigned char *arith_uncompress_O2(unsigned char *in, unsigned int in_size,
     RangeCoder rc;
 
     SIMPLE_MODEL(256,_) *byte_model;
-    byte_model = malloc(256*256*sizeof(*byte_model));
+    byte_model = MALLOC(256*256*sizeof(*byte_model));
     unsigned int m = in[0] ? in[0] : 256, i, j;
     for (i = 0; i < 256; i++)
 	for (j = 0; j < 256; j++)
 	    SIMPLE_MODEL(256,_init)(&byte_model[i*256+j], m);
     
     if (!out)
-	out = malloc(out_sz);
+	out = MALLOC(out_sz);
     if (!out)
 	return NULL;
 
@@ -377,7 +368,7 @@ unsigned char *arith_uncompress_O2(unsigned char *in, unsigned int in_size,
 	last1 = out[i];
     }
 
-    free(byte_model);
+    FREE(byte_model);
     RC_FinishDecode(&rc);
     
     return out;
@@ -399,7 +390,7 @@ unsigned char *arith_compress_O0_RLE(unsigned char *in, unsigned int in_size,
 
     if (!out) {
 	*out_size = bound;
-	out = malloc(*out_size);
+	out = MALLOC(*out_size);
     }
     if (!out || bound > *out_size)
 	return NULL;
@@ -471,7 +462,7 @@ unsigned char *arith_uncompress_O0_RLE(unsigned char *in, unsigned int in_size,
 	SIMPLE_MODEL(NSYM,_init)(&run_model[i], MAX_RUN);
 
     if (!out)
-	out = malloc(out_sz);
+	out = MALLOC(out_sz);
     if (!out)
 	return NULL;
 
@@ -508,7 +499,7 @@ unsigned char *arith_compress_O1_RLE(unsigned char *in, unsigned int in_size,
 
     if (!out) {
 	*out_size = bound;
-	out = malloc(*out_size);
+	out = MALLOC(*out_size);
     }
     if (!out || bound > *out_size)
 	return NULL;
@@ -585,7 +576,7 @@ unsigned char *arith_uncompress_O1_RLE(unsigned char *in, unsigned int in_size,
 	SIMPLE_MODEL(NSYM,_init)(&run_model[i], MAX_RUN);
 
     if (!out)
-	out = malloc(out_sz);
+	out = MALLOC(out_sz);
     if (!out)
 	return NULL;
 
@@ -649,7 +640,8 @@ unsigned char *arith_compress_to(VBlockP vb, unsigned char *in,  unsigned int in
 	if (N > 255)
 	    return NULL;
 
-	unsigned char *transposed = malloc(in_size);
+	//unsigned char *transposed = MALLOC(in_size);
+	unsigned char *transposed = codec_alloc (vb, in_size, 1);
 	unsigned int part_len[256];
 	unsigned int idx[256];
 	if (!transposed)
@@ -753,7 +745,8 @@ unsigned char *arith_compress_to(VBlockP vb, unsigned char *in,  unsigned int in
 	    c_meta_len += var_put_u32(out+c_meta_len, out_end, olen2);
 	}
 	memmove(out+c_meta_len, out2_start, out2-out2_start);
-	free(transposed);
+	// FREE(transposed);
+	codec_free(vb, transposed);
 	*out_size = c_meta_len + out2-out2_start;
 	return out;
     }
@@ -780,11 +773,11 @@ unsigned char *arith_compress_to(VBlockP vb, unsigned char *in,  unsigned int in
 	// PACK 2, 4 or 8 symbols into one byte.
 	int pmeta_len;
 	uint64_t packed_len;
-	packed = hts_pack(in, in_size, out+c_meta_len, &pmeta_len, &packed_len);
+	packed = hts_pack(vb, in, in_size, out+c_meta_len, &pmeta_len, &packed_len);
 	if (!packed || (pmeta_len == 1 && out[c_meta_len] > 16)) {
 	    out[0] &= ~X_PACK;
 	    do_pack = 0;
-	    free(packed);
+	    codec_free(vb, packed);
 	    packed = NULL;
 	} else {
 	    in = packed;
@@ -820,7 +813,7 @@ unsigned char *arith_compress_to(VBlockP vb, unsigned char *in,  unsigned int in
 	    *out_size = in_size; // Didn't fit with bz2; force X_CAT below instead
 #else
 	fprintf(stderr, "Htscodecs has been compiled without libbz2 support\n");
-	free(out);
+	FREE(out);
 	return NULL;
 #endif
 
@@ -855,8 +848,8 @@ unsigned char *arith_compress_to(VBlockP vb, unsigned char *in,  unsigned int in
 	*out_size = in_size;
     }
 
-    free(rle);
-    free(packed);
+    FREE(rle);
+    codec_free(vb,packed);
 
     *out_size += c_meta_len;
 
@@ -886,13 +879,13 @@ unsigned char *arith_uncompress_to(VBlockP vb, unsigned char *in,  unsigned int 
 	if (!out) {
 	    if (ulen >= INT_MAX)
 		return NULL;
-	    if (!(out_free = out = malloc(ulen))) {
+	    if (!(out_free = out = MALLOC(ulen))) {
 		return NULL;
 	    }
 	    *out_size = ulen;
 	}
 	if (ulen != *out_size) {
-	    free(out_free);
+	    FREE(out_free);
 	    return NULL;
 	}
 
@@ -902,7 +895,7 @@ unsigned char *arith_uncompress_to(VBlockP vb, unsigned char *in,  unsigned int 
 	    c_meta_len += var_get_u32(in+c_meta_len, in_end, &clenN[i]);
 	    clen_tot += clenN[i];
 	    if (c_meta_len > in_size || clenN[i] > in_size || clenN[i] < 1) {
-		free(out_free);
+		FREE(out_free);
 		return NULL;
 	    }
 	}
@@ -911,7 +904,7 @@ unsigned char *arith_uncompress_to(VBlockP vb, unsigned char *in,  unsigned int 
 	// how much we really use we limit it so the recursion becomes easier
 	// to limit.
 	if (c_meta_len + clen_tot > in_size) {
-	    free(out_free);
+	    FREE(out_free);
 	    return NULL;
 	}
 	in_size = c_meta_len + clen_tot;
@@ -919,22 +912,22 @@ unsigned char *arith_uncompress_to(VBlockP vb, unsigned char *in,  unsigned int 
 	//fprintf(stderr, "    stripe meta %d\n", c_meta_len); //c-size
 
 	// Uncompress the N streams
-	unsigned char *outN = malloc(ulen);
+	unsigned char *outN = MALLOC(ulen);
 	if (!outN) {
-	    free(out_free);
+	    FREE(out_free);
 	    return NULL;
 	}
 	for (i = 0; i < N; i++) {
 	    olen = ulenN[i];
 	    if (in_size < c_meta_len) {
-		free(out_free);
-		free(outN);
+		FREE(out_free);
+		FREE(outN);
 		return NULL;
 	    }
 	    if (!arith_uncompress_to(vb, in+c_meta_len, in_size-c_meta_len, outN + idxN[i], &olen)
 		|| olen != ulenN[i]) {
-		free(out_free);
-		free(outN);
+		FREE(out_free);
+		FREE(outN);
 		return NULL;
 	    }
 	    c_meta_len += clenN[i];
@@ -942,7 +935,7 @@ unsigned char *arith_uncompress_to(VBlockP vb, unsigned char *in,  unsigned int 
 
 	unstripe(out, outN, ulen, N, idxN);
 
-	free(outN);
+	FREE(outN);
 	*out_size = ulen;
 	return out;
     }
@@ -978,7 +971,7 @@ unsigned char *arith_uncompress_to(VBlockP vb, unsigned char *in,  unsigned int 
 
     if (!out) {
 	*out_size = osz;
-	if (!(out_free = out = malloc(*out_size)))
+	if (!(out_free = out = MALLOC(*out_size)))
 	    return NULL;
     } else {
 	if (*out_size < osz)
@@ -1001,7 +994,7 @@ unsigned char *arith_uncompress_to(VBlockP vb, unsigned char *in,  unsigned int 
 
     // Format is pack meta data if present, followed by compressed data.
     if (do_pack) {
-	if (!(tmp_free = tmp = malloc(*out_size)))
+	if (!(tmp_free = tmp = MALLOC(*out_size)))
 	    goto err;
 	tmp1 = tmp;  // uncompress
 	tmp2 = out;  // unpack
@@ -1098,14 +1091,14 @@ unsigned char *arith_uncompress_to(VBlockP vb, unsigned char *in,  unsigned int 
     }
 
     if (tmp)
-	free(tmp);
+	FREE(tmp);
 
     *out_size = tmp2_size;
     return tmp2;
 
  err:
-    free(tmp_free);
-    free(out_free);
+    FREE(tmp_free);
+    FREE(out_free);
     return NULL;
 }
 

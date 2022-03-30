@@ -35,6 +35,14 @@
 
 #include "../genozip.h"
 
+#ifndef X_PACK
+#define X_PACK   0x80    // Pack 2,4,8 or infinite symbols into a byte.
+#define X_RLE    0x40    // Run length encoding with runs & lits encoded separately
+#define X_CAT    0x20    // Nop; for tiny segments where rANS overhead is too big
+#define X_NOSZ   0x10    // Don't store the original size; used by STRIPE mode
+#define X_STRIPE 0x08    // For N-byte integer data; rotate & encode N streams.
+#endif
+
 unsigned int rans_compress_bound_4x16(unsigned int size, int order);
 unsigned char *rans_compress_to_4x16(VBlockP vb, unsigned char *in,  unsigned int in_size,
 				     unsigned char *out, unsigned int *out_size,

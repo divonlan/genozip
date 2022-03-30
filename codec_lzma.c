@@ -12,9 +12,9 @@
 #include "strings.h"
 #include "segconf.h"
 
-static const char *lzma_errstr (SRes res) 
+static rom lzma_errstr (SRes res) 
 {
-    static const char *lzma_errors[] = { // from lzma/7zTypes.h
+    static rom lzma_errors[] = { // from lzma/7zTypes.h
         "SZ_OK", "SZ_ERROR_DATA", "SZ_ERROR_MEM", "SZ_ERROR_CRC", "SZ_ERROR_UNSUPPORTED", "SZ_ERROR_PARAM", 
         "SZ_ERROR_INPUT_EOF", "SZ_ERROR_OUTPUT_EOF", "SZ_ERROR_READ", "SZ_ERROR_WRITE", "SZ_ERROR_PROGRESS",
         "SZ_ERROR_FAIL", "SZ_ERROR_THREAD", "Unknown lzma error", "Unknown lzma error", "Unknown lzma error",
@@ -23,9 +23,9 @@ static const char *lzma_errstr (SRes res)
     return lzma_errors[(unsigned)res <= 17 ? res : 13];
 }
 
-static const char *lzma_status (ELzmaStatus status)
+static rom lzma_status (ELzmaStatus status)
 {
-    static const char *lzma_statuses[] = { // from lzma/LzmaDec.h
+    static rom lzma_statuses[] = { // from lzma/LzmaDec.h
         "LZMA_STATUS_NOT_SPECIFIED", "LZMA_STATUS_FINISHED_WITH_MARK", "LZMA_STATUS_NOT_FINISHED",                /* stream was not finished */
         "LZMA_STATUS_NEEDS_MORE_INPUT", "LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK" };
 
@@ -89,12 +89,12 @@ static size_t codec_lzma_data_out_callback (const ISeqOutStream *p, const void *
 }
 
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
-bool codec_lzma_compress (VBlock *vb, SectionHeader *header,
-                          const char *uncompressed,    // option 1 - compress contiguous data
+bool codec_lzma_compress (VBlockP vb, SectionHeader *header,
+                          rom uncompressed,    // option 1 - compress contiguous data
                           uint32_t *uncompressed_len,
                           LocalGetLineCB callback,     // option 2 - compress data one line at a time
                           char *compressed, uint32_t *compressed_len /* in/out */, 
-                          bool soft_fail)
+                          bool soft_fail, rom name)
 {
     START_TIMER;
 
@@ -110,12 +110,12 @@ bool codec_lzma_compress (VBlock *vb, SectionHeader *header,
     LzmaEnc_Create (lzma_handle, vb);
 
     SRes res = LzmaEnc_SetProps (lzma_handle, &props);
-    ASSERT (res == SZ_OK, "LzmaEnc_SetProps failed: %s", lzma_errstr (res));
+    ASSERT (res == SZ_OK, "\"%s\": LzmaEnc_SetProps failed: %s", name, lzma_errstr (res));
     
     // write encoding properties as first 5 bytes of compressed stream
     SizeT props_size = LZMA_PROPS_SIZE; // per documentation in LzmaLib.h
     res = LzmaEnc_WriteProperties (lzma_handle, (uint8_t*)compressed, &props_size);
-    ASSERT (res == SZ_OK && props_size==LZMA_PROPS_SIZE, "LzmaEnc_WriteProperties failed: %s", lzma_errstr (res));
+    ASSERT (res == SZ_OK && props_size==LZMA_PROPS_SIZE, "\"%s\": LzmaEnc_WriteProperties failed: %s", name, lzma_errstr (res));
 
     bool success = true;
 
@@ -151,22 +151,21 @@ bool codec_lzma_compress (VBlock *vb, SectionHeader *header,
         *compressed_len -= outstream.avail_out; 
     }
 
-    if (soft_fail && ((callback && res == SZ_ERROR_WRITE) || (!callback && res == SZ_ERROR_OUTPUT_EOF)))  // data_compressed_len is too small
+    if (soft_fail && (res == SZ_ERROR_WRITE || (!callback && res == SZ_ERROR_OUTPUT_EOF)))  // data_compressed_len is too small
         success = false;
     else
-        ASSERT (res == SZ_OK, "LzmaEnc_MemEncode failed: %s", lzma_errstr (res));
+        ASSERT (res == SZ_OK, "\"%s\": LzmaEnc_MemEncode failed: %s", name, lzma_errstr (res));
 
     LzmaEnc_Destroy (lzma_handle);
 
-    COPY_TIMER (compressor_lzma); // higher level codecs are accounted for in their codec code
+    COPY_TIMER_COMPRESS (compressor_lzma); // higher level codecs are accounted for in their codec code
 
     return success;
 }
 
-void codec_lzma_uncompress (VBlock *vb, Codec codec, uint8_t param,
-                           const char *compressed, uint32_t compressed_len,
-                           Buffer *uncompressed_buf, uint64_t uncompressed_len, 
-                           Codec unused)
+void codec_lzma_uncompress (VBlockP vb, Codec codec, uint8_t param, STRp(compressed),
+                            Buffer *uncompressed_buf, uint64_t uncompressed_len, 
+                            Codec unused, rom name)
 {
     START_TIMER;
     
@@ -180,7 +179,7 @@ void codec_lzma_uncompress (VBlock *vb, Codec codec, uint8_t param,
                            LZMA_FINISH_END, &status);
 
     ASSERT (ret == SZ_OK && status == LZMA_STATUS_FINISHED_WITH_MARK, 
-            "LzmaDecode failed: ret=%s status=%s", lzma_errstr (ret), lzma_status (status)); 
+            "\"%s\": LzmaDecode failed: ret=%s status=%s", name, lzma_errstr (ret), lzma_status (status)); 
 
     COPY_TIMER (compressor_lzma);
 }

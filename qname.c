@@ -38,7 +38,7 @@ static void qname_remove_skip (SmallContainerP con_no_skip, uint32_t *prefix_no_
             con_no_skip->items[con_no_skip->nitems_lo++] = con->items[item_i];
 
     // copy prefix, except last item if it is a SKIP (we only support SKIP for final prefix items)
-    const char *px_skip = con_prefix ? memchr (con_prefix, CI0_SKIP, con_prefix_len) : 0;
+    rom px_skip = con_prefix ? memchr (con_prefix, CI0_SKIP, con_prefix_len) : 0;
     *prefix_no_skip_len = px_skip ? (px_skip - con_prefix) : *prefix_no_skip_len;
 }
 
@@ -142,7 +142,7 @@ void qname_zip_initialize (DidIType qname_did_i)
                 qfs->con_prefix[qfs->con_prefix_len++] = CON_PX_SEP; 
                 qfs->con_prefix[qfs->con_prefix_len++] = CON_PX_SEP; // no container-wide prefix
 
-                for (const char **px = qfs->px_strs; *px ; px++) {
+                for (rom *px = qfs->px_strs; *px ; px++) {
                     unsigned len = strlen (*px);
                     memcpy (&qfs->con_prefix[qfs->con_prefix_len], *px, len);
                     qfs->con_prefix_len += len;
@@ -169,6 +169,20 @@ void qname_zip_initialize (DidIType qname_did_i)
 
             qfs->con_snip2_len = sizeof (qfs->con_snip2);            
             container_prepare_snip ((Container*)&con_no_skip, qfs->con_prefix, prefix_no_skip_len, qfs->con_snip2, &qfs->con_snip2_len);
+
+            // in qname_flavors.h, we keep lists in the form of index lists, for maintenanbility. now
+            // we convert them to a bitmap for ease of segging.
+            for (unsigned i=0; qfs->integer_items[i] != -1; i++) 
+                qfs->is_int[qfs->integer_items[i]] = true;
+
+            for (unsigned i=0; qfs->numeric_items[i] != -1; i++)
+                qfs->is_numeric[qfs->numeric_items[i]] = true;
+
+            for (unsigned i=0; qfs->hex_items[i] != -1; i++)
+                qfs->is_hex[qfs->hex_items[i]] = true;
+            
+            for (unsigned i=0; qfs->in_local[i] != -1; i++)
+                qfs->is_in_local[qfs->in_local[i]] = true;
         }
     }
 
@@ -320,24 +334,6 @@ bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, QnameFlavor qfs, STRp(qname),
     // seg
     int64_t value, prev_value;
 
-    bool is_int[n_items], is_hex[n_items], in_local[n_items], is_numeric[n_items];
-
-    memset (is_int, 0, n_items * sizeof(bool));
-    for (unsigned i=0; qfs->integer_items[i] != -1; i++) 
-        is_int[qfs->integer_items[i]] = true;
-
-    memset (is_numeric, 0, n_items * sizeof(bool));
-    for (unsigned i=0; qfs->numeric_items[i] != -1; i++)
-        is_numeric[qfs->numeric_items[i]] = true;
-
-    memset (is_hex, 0, n_items * sizeof(bool));
-    for (unsigned i=0; qfs->hex_items[i] != -1; i++)
-        is_hex[qfs->hex_items[i]] = true;
-    
-    memset (in_local, 0, n_items * sizeof(bool));
-    for (unsigned i=0; qfs->in_local[i] != -1; i++)
-        in_local[qfs->in_local[i]] = true;
-
     // seg container
     if (!use_qname2)
         seg_by_ctx (vb, STRa(qfs->con_snip),  qname_ctx, qfs->num_seps + add_additional_bytes); // account for container separators, prefixes and caller-requested add_additional_bytes 
@@ -361,10 +357,11 @@ bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, QnameFlavor qfs, STRp(qname),
 
         // case: this is the file is sorted by qname - delta against previous
         if ((item_i == qfs->ordered_item1 || item_i == qfs->ordered_item2) && 
-            !segconf.sam_is_sorted && 
-            str_get_int_dec (STRi(item, item_i), (uint64_t*)&value))
+            !segconf.sam_is_sorted &&
+            ( (!qfs->is_hex[item_i] && str_get_int_dec (STRi(item, item_i), (uint64_t*)&value)) ||
+              ( qfs->is_hex[item_i] && str_get_int_hex (STRi(item, item_i), (uint64_t*)&value))   ))
 
-            seg_self_delta (vb, item_ctx, value, item_lens[item_i]);
+            seg_self_delta (vb, item_ctx, value, (qfs->is_hex[item_i] ? 'x' : 0), item_lens[item_i]);
         
         // case: end-of-range item, seg as delta vs previous item which is start-of-range
         else if (qfs->range_end_item == item_i &&
@@ -376,8 +373,8 @@ bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, QnameFlavor qfs, STRp(qname),
             seg_by_ctx (vb, STRa(snip), item_ctx, item_lens[item_i]);      
         }
 
-        else if (in_local[item_i] && !flag.pair) { // note: we can't store in local if pairing        
-            if (is_int[item_i] || is_numeric[item_i])
+        else if (qfs->is_in_local[item_i] && !flag.pair) { // note: we can't store in local if pairing        
+            if (qfs->is_int[item_i] || qfs->is_numeric[item_i])
                 seg_integer_or_not (vb, item_ctx, STRi(item, item_i), item_lens[item_i]);
 
             else 
@@ -410,7 +407,7 @@ bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, QnameFlavor qfs, STRp(qname),
     return true;
 }
 
-void qname_seg (VBlock *vb, Context *qname_ctx, STRp (qname), unsigned add_additional_bytes)  // account for characters in addition to the field
+void qname_seg (VBlockP vb, Context *qname_ctx, STRp (qname), unsigned add_additional_bytes)  // account for characters in addition to the field
 {
     START_TIMER;
     
@@ -435,7 +432,7 @@ done:
     COPY_TIMER (qname_seg);
 }
 
-const char *qf_name (QnameFlavor qf)
+rom qf_name (QnameFlavor qf)
 {
     return qf ? qf->name : "";
 }

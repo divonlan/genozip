@@ -18,7 +18,9 @@
 // FORMAT/PS and FORMAT/PID
 // ------------------------
 
-#define MAX_PS_PID_LOOKBACK_LINES 12 // may be modified without affecting backward compatability
+// PS/PID for a particular sample often skips variants, so we need to lookback more than a single line
+#define MAX_PS_PID_LOOKBACK_LINES 16
+#define PS_PID_LOOKBACK_LINES (flag.fast ? 4 : flag.best ? 16 : 10) // may be modified without affecting backward compatability
 
 static char ps_lookback_snips[MAX_PS_PID_LOOKBACK_LINES][32], ps_pra_snip[200];
 static unsigned ps_lookback_snip_lens[MAX_PS_PID_LOOKBACK_LINES], ps_pra_snip_len;
@@ -26,19 +28,15 @@ static unsigned ps_lookback_snip_lens[MAX_PS_PID_LOOKBACK_LINES], ps_pra_snip_le
 void vcf_samples_zip_initialize_PS_PID (void)
 {
     // FORMAT/PS related stuff (0=lookback 1 line, 1=lookback 2 lines etc)
-    for (int i=0; i < MAX_PS_PID_LOOKBACK_LINES; i++)
+    for (int i=0; i < PS_PID_LOOKBACK_LINES; i++)
         seg_prepare_snip_other_chari (SNIP_LOOKBACK, (DictId)_VCF_LOOKBACK, 'T'+i, ps_lookback_snip, i);
-
-    #define PSpos "PSpos"
-    #define PSref "PSref"
-    #define PSalt "PSalt"
 
     SmallContainer con_PS_pos_ref_alt = {
         .repeats   = 1,
         .nitems_lo = 3,
-        .items     = { { .dict_id = dict_id_make (PSpos, 5, DTYPE_VCF_FORMAT), .separator = "_"},
-                       { .dict_id = dict_id_make (PSref, 5, DTYPE_VCF_FORMAT), .separator = "_"},
-                       { .dict_id = dict_id_make (PSalt, 5, DTYPE_VCF_FORMAT)                  } } };                       
+        .items     = { { .dict_id = (DictId)_FORMAT_PSpos, .separator = "_"},
+                       { .dict_id = (DictId)_FORMAT_PSref, .separator = "_"},
+                       { .dict_id = (DictId)_FORMAT_PSalt                  } } };                       
 
     ps_pra_snip_len = sizeof (ps_pra_snip);
     container_prepare_snip ((ContainerP)&con_PS_pos_ref_alt, 0, 0, ps_pra_snip, &ps_pra_snip_len); 
@@ -54,7 +52,7 @@ void vcf_samples_seg_initialize_PS_PID (VBlockVCFP vb)
     lookback_ctx->flags.store        = STORE_INT;
     lookback_ctx->dynamic_size_local = true;
     lookback_ctx->local_param        = true;
-    lookback_ctx->local.param        = lookback_size_to_local_param (MAX_PS_PID_LOOKBACK_LINES * vcf_num_samples + 1); // 1+ number of lookback values
+    lookback_ctx->local.param        = lookback_size_to_local_param (PS_PID_LOOKBACK_LINES * vcf_num_samples + 1); // 1+ number of lookback values
     lookback_ctx->local_always       = (lookback_ctx->local.param != 0); // no need for a SEC_LOCAL section if the parameter is 0 (which is the default anyway)
  
     CTX(VCF_SAMPLES)->flags.store = STORE_INDEX; // last_value is number of samples (=con.repeats)
@@ -64,20 +62,26 @@ void vcf_samples_seg_initialize_PS_PID (VBlockVCFP vb)
 
     // initialize all-the-same contexts for the REF and ALT container items of PS_POS_REF_ALT
     if (segconf.has[FORMAT_PID] || segconf.has[FORMAT_PS]) {
-
-        ContextP ctx_ref = ctx_get_ctx (vb, dict_id_make (PSref, 5, DTYPE_VCF_FORMAT));
-        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPY_REForALT, '0' }), 3, ctx_ref, 0);
-
-        ContextP ctx_alt = ctx_get_ctx (vb, dict_id_make (PSalt, 5, DTYPE_VCF_FORMAT));
-        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPY_REForALT, '1' }), 3, ctx_alt, 0);
-
-        ContextP ctx_pos = ctx_get_ctx (vb, dict_id_make (PSpos, 5, DTYPE_VCF_FORMAT));
-        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPYPOS, '0' }), 3, ctx_pos, 0);
-
-        stats_set_consolidation (VB, FORMAT_PS, 4, VCF_LOOKBACK, ctx_ref->did_i, ctx_alt->did_i, ctx_pos->did_i);
+        ctx_create_node (VB, FORMAT_PSref, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPY_REForALT, '0' }), 3);
+        ctx_create_node (VB, FORMAT_PSalt, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPY_REForALT, '1' }), 3);
+        ctx_create_node (VB, FORMAT_PSpos, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPYPOS,       '0' }), 3);
     }
+}
+
+void vcf_samples_seg_finalize_PS_PID (VBlockVCFP vb)
+{
+    // remove PSpos, PSref, PSalt if not needed
+    if (segconf.has[FORMAT_PID] || segconf.has[FORMAT_PS]) {
+        if (!ctx_get_count (VB, CTX(FORMAT_PSpos), 0)) ctx_free_context(CTX(FORMAT_PSpos), FORMAT_PSpos);
+        if (!ctx_get_count (VB, CTX(FORMAT_PSref), 0)) ctx_free_context(CTX(FORMAT_PSref), FORMAT_PSref);
+        if (!ctx_get_count (VB, CTX(FORMAT_PSalt), 0)) ctx_free_context(CTX(FORMAT_PSalt), FORMAT_PSalt);
+    }
+
+    // consolidate to the context actually used 
+    if (CTX(FORMAT_PID)->nodes.len || CTX(FORMAT_PID)->ol_nodes.len)
+        stats_set_consolidation (VB, FORMAT_PID, 4, VCF_LOOKBACK, FORMAT_PSref, FORMAT_PSalt, FORMAT_PSpos);
     else
-        stats_set_consolidation (VB, FORMAT_PS, 1, VCF_LOOKBACK);
+        stats_set_consolidation (VB, FORMAT_PS, 4, VCF_LOOKBACK, FORMAT_PSref, FORMAT_PSalt, FORMAT_PSpos);
 }
 
 static inline void vcf_seg_FORMAT_PS_PID_segconf (VBlockVCFP vb, ContextP ctx, STRp(value), bool is_pid)
@@ -114,10 +118,10 @@ static inline bool vcf_seg_FORMAT_PS_PID_is_same_alt1 (VBlockVCFP vb, STRp(alt))
     }
 }
 
-// returns number ([1,MAX_PS_PID_LOOKBACK_LINES]) of lines back, or 0 if none
+// returns number ([1,PS_PID_LOOKBACK_LINES]) of lines back, or 0 if none
 static inline unsigned vcf_seg_FORMAT_PS_PID_test_lookback (VBlockVCFP vb, ContextP ctx, STRp(value), uint32_t lookback)
 {
-    for (int lb_lines=1; lb_lines <= MAX_PS_PID_LOOKBACK_LINES; lb_lines++)
+    for (int lb_lines=1; lb_lines <= PS_PID_LOOKBACK_LINES; lb_lines++)
         if (lookback_is_same_txt (VB, VCF_LOOKBACK, ctx, lb_lines * lookback, STRa(value)))
             return lb_lines;
 
@@ -126,7 +130,7 @@ static inline unsigned vcf_seg_FORMAT_PS_PID_test_lookback (VBlockVCFP vb, Conte
 
 static inline bool vcf_seg_FORMAT_PS_PID_ps_matches_pid (VBlockVCFP vb, STRp(ps))
 {
-    const char *pid = last_txt (vb, FORMAT_PID);
+    rom pid = last_txt (vb, FORMAT_PID);
     unsigned pid_len = vb->last_txt_len (FORMAT_PID);
 
     return (pid_len > ps_len) && (pid[ps_len] == '_') && str_is_numeric (STRa(ps)) && !memcmp (ps, pid, ps_len);
@@ -192,7 +196,11 @@ void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STR
 
                 // replace PS with COPY_POS, COPY_REF, COPY_ALT container 
                 seg_by_ctx (VB, STRa(ps_pra_snip), ctx, value_len); 
+                
                 // items PSpos, PSref and PSalt of the container are all_the_same - initialized in vcf_samples_seg_initialize
+                ctx_increment_count (VB, CTX(FORMAT_PSpos), 0);
+                ctx_increment_count (VB, CTX(FORMAT_PSref), 0);
+                ctx_increment_count (VB, CTX(FORMAT_PSalt), 0);
             }
             else   
                 goto fallback;
@@ -208,7 +216,7 @@ void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STR
 }
 
 // called if value is defined in FORMAT but missing at the end of the sample string
-void vcf_seg_FORMAT_PS_PID_missing_value (VBlockVCFP vb, ContextP ctx, bool is_pid, const char *end_of_sample)
+void vcf_seg_FORMAT_PS_PID_missing_value (VBlockVCFP vb, ContextP ctx, bool is_pid, rom end_of_sample)
 {
     lookback_insert_txt (VB, VCF_LOOKBACK, (is_pid ? FORMAT_PID : FORMAT_PS), end_of_sample, 0); 
 

@@ -7,6 +7,6 @@
 
 #include "genozip.h"
 
-extern void biopsy_init (const char *optarg);
+extern void biopsy_init (rom optarg);
 extern void biopsy_take (VBlockP vb);
 

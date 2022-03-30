@@ -15,8 +15,8 @@
 
 #include "base64.h"
 
-static const uint8_t *encode_lookup =
-    (uint8_t *)"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+static bytes encode_lookup =
+    (bytes)"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 static const uint8_t decode_lookup[256] = {
 	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, // ASCII 0-15
@@ -38,11 +38,11 @@ static const uint8_t decode_lookup[256] = {
 
 // returns length of encoded (which is at most base64_sizeof)
 // data must be allocated base64_sizeof bytes
-unsigned base64_encode (const uint8_t *data, unsigned data_len, char *b64_str)
+unsigned base64_encode (bytes data, unsigned data_len, char *b64_str)
 {
     ASSERTNOTNULL (data);
 
-	const uint8_t *end = data + data_len;
+	bytes end = data + data_len;
 	char *next = b64_str;
 	while (end - data >= 3) {
 		*next++ = encode_lookup[data[0] >> 2];
@@ -68,7 +68,7 @@ unsigned base64_encode (const uint8_t *data, unsigned data_len, char *b64_str)
 }
 
 
-void base64_decode (const char *b64_str, unsigned *b64_str_len /* in / out */, uint8_t *data)
+void base64_decode (rom b64_str, unsigned *b64_str_len /* in / out */, uint8_t *data)
 {
 	uint8_t block[4];
 	unsigned pad=0, i=0; for (; i < *b64_str_len; i++) {

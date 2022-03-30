@@ -14,37 +14,42 @@
 #include <libkern/OSAtomic.h>
 #endif
 #endif
+#include "genozip.h"
 
 // -----------
 // mutex stuff
 // -----------
 
 typedef struct Mutex {
+    rom name, initialized, lock_func;
     pthread_mutex_t mutex;
-    const char *name, *initialized, *lock_func;
+    VBIType vb_i_last; // used by mutex_lock_by_vb_order
 } Mutex;
 
-extern void mutex_initialize_do (MutexP mutex, const char *name, const char *func);
+extern void mutex_initialize_do (MutexP mutex, rom name, rom func);
 #define mutex_initialize(mutex) mutex_initialize_do (&(mutex), #mutex, __FUNCTION__)
 
-extern void mutex_destroy_do (MutexP mutex, const char *func);
+extern void mutex_destroy_do (MutexP mutex, rom func);
 #define mutex_destroy(mutex) mutex_destroy_do (&(mutex), __FUNCTION__)
 
-extern bool mutex_lock_do (MutexP mutex, bool blocking, const char *func);
+extern bool mutex_lock_do (MutexP mutex, bool blocking, rom func);
 #define mutex_lock(mutex) mutex_lock_do (&(mutex), true, __FUNCTION__)
 #define mutex_trylock(mutex) mutex_lock_do (&(mutex), false, __FUNCTION__)
 
-extern void mutex_unlock_do (MutexP mutex, const char *func, uint32_t line);
-#define mutex_unlock(mutex) mutex_unlock_do (&(mutex), __FUNCTION__, __LINE__)
+extern void mutex_unlock_do (MutexP mutex, FUNCLINE);
+#define mutex_unlock(mutex) mutex_unlock_do (&(mutex), __FUNCLINE)
 
-extern void mutex_wait_do (MutexP mutex, const char *func, uint32_t line);
-#define mutex_wait(mutex) mutex_wait_do (&(mutex), __FUNCTION__, __LINE__)
+extern void mutex_wait_do (MutexP mutex, FUNCLINE);
+#define mutex_wait(mutex) mutex_wait_do (&(mutex), __FUNCLINE)
+
+extern void mutex_lock_by_vb_order_do (VBIType vb_i, MutexP mutex, FUNCLINE);
+#define mutex_lock_by_vb_order(vb_i, mutex) mutex_lock_by_vb_order_do (vb_i, &(mutex), __FUNCLINE)
 
 #define mutex_is_show(name) (flag.show_mutex && (flag.show_mutex==(char*)1 || !strncmp ((name), flag.show_mutex, 8))) // only 8 chars so we can catch all genome_muteces[%u]
 
-// -----------
+// --------------
 // spinlock stuff
-// -----------
+// --------------
 
 #ifdef __APPLE__
 #ifdef __MAC_10_12

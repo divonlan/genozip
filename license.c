@@ -37,7 +37,7 @@
 
 #include "text_license.h"
 
-static const char *license_filename = NULL;  // non-standard filename set with --licfile
+static rom license_filename = NULL;  // non-standard filename set with --licfile
 
 static struct {
     bool initialized;
@@ -60,7 +60,7 @@ static void license_generate (Buffer *license_data)
 {
     for (unsigned i=0; i < sizeof(license) / sizeof(char*); i++) {
         buf_add_string (evb, license_data, license[i]); // allocs one extra char
-        NEXTENT (char, *license_data) = '\n';
+        BNXTc (*license_data) = '\n';
     }
 
     bufprintf (evb, license_data, 
@@ -79,7 +79,7 @@ static void license_generate (Buffer *license_data)
     bufprintf (evb, license_data, LIC_FIELD_NUMBER": %u\n", rec.license_num);
 }
 
-void license_set_filename (const char *filename)
+void license_set_filename (rom filename)
 {
     struct stat sb;
     ASSINP (!stat (filename, &sb), "Failed to access license file %s: %s", filename, strerror (errno));
@@ -87,12 +87,12 @@ void license_set_filename (const char *filename)
     license_filename = filename;
 }
 
-static const char *get_license_filename (bool create_folder_if_needed)
+static rom get_license_filename (bool create_folder_if_needed)
 {
     if (license_filename) return license_filename; // non-standard filename set with --licfile
 
 #ifdef _WIN32
-    ASSINP0 (getenv ("APPDATA"), "%s: cannot store license, because APPDATA env var is not defined");
+    ASSINP0 (getenv ("APPDATA"), "cannot store license, because APPDATA env var is not defined");
 
     char folder[500];
     sprintf (folder, "%s/genozip", getenv ("APPDATA"));
@@ -103,8 +103,8 @@ static const char *get_license_filename (bool create_folder_if_needed)
     }
 
 #else
-    const char *folder = getenv ("HOME");
-    ASSINP0 (folder, "%s: cannot calculate license file name, because $HOME env var is not defined");
+    rom folder = getenv ("HOME");
+    ASSINP0 (folder, "cannot calculate license file name, because $HOME env var is not defined");
 #endif    
 
     char *filename = MALLOC (strlen(folder) + 50);
@@ -113,7 +113,7 @@ static const char *get_license_filename (bool create_folder_if_needed)
     return filename;
 }
 
-static const char *license_load_field (const char *field, unsigned n_lines, const char **lines, const unsigned *line_lens)
+static rom license_load_field (rom field, unsigned n_lines, rom *lines, const unsigned *line_lens)
 {
     unsigned field_len = strlen (field);
 
@@ -131,7 +131,7 @@ static void license_load (void)
 {
     if (rec.initialized) return;
 
-    const char *filename = get_license_filename (true);
+    rom filename = get_license_filename (true);
     
     if (!file_exists (filename)) {
         flag.do_register = "";
@@ -169,10 +169,10 @@ static void license_load (void)
 
     rec.initialized = true;
 
-    buf_destroy (&data);
+    buf_destroy (data);
 }
 
-static bool license_submit (char commerical, char update, const char *os, unsigned cores, const char *endianity, const char *user_host, const char *dist)
+static bool license_submit (char commerical, char update, rom os, unsigned cores, rom endianity, rom user_host, rom dist)
 {
     // reference: https://stackoverflow.com/questions/18073971/http-post-to-a-google-form/47444396#47444396
 
@@ -221,13 +221,13 @@ static bool license_submit (char commerical, char update, const char *os, unsign
     return success;
 }
 
-static bool license_verify_email (char *response, unsigned response_size, const char *unused)
+static bool license_verify_email (char *response, unsigned response_size, rom unused)
 {
     // sanity check that this is an email address
     return strlen (response) > 3 && strchr (response, '@') && strchr (response, '.');
 }
 
-static bool license_verify_name (char *response, unsigned response_size, const char *unused)
+static bool license_verify_name (char *response, unsigned response_size, rom unused)
 {
     if (!strchr (response, ' ')) {
         fprintf (stderr, "Please enter your full name\n");
@@ -237,7 +237,7 @@ static bool license_verify_name (char *response, unsigned response_size, const c
     return true;
 }
 
-static void license_exit_if_not_confirmed (const char *response)
+static void license_exit_if_not_confirmed (rom response)
 {
     if (response[0] == 'N') {
         fprintf (stderr, "\nYou have not registered. You may register at any time in the future.\n\nWishing you a wonderful day from the Genozip team! https://genozip.com\n");
@@ -253,7 +253,7 @@ static void license_exit_if_not_confirmed (const char *response)
 void license_register (void)
 {
     char confirm[100], commercial[100], update[100];
-    const char *os, *dist, *endianity, *user_host;
+    rom os, dist, endianity, user_host;
     unsigned cores;
 
     str_split (flag.do_register, strlen (flag.do_register), 11, '|', field, true);
@@ -264,7 +264,7 @@ void license_register (void)
                                      "If you are unable to register (for example because this is a batch-job machine) please see: " WEBSITE_USING_ON_HPC);
 
 
-    const char *filename = get_license_filename (true);
+    rom filename = get_license_filename (true);
 
     if (!n_fields) {
 
@@ -370,7 +370,7 @@ void license_register (void)
                          "Support: " EMAIL_SUPPORT "\n\n"
                          "Citing: " WEBSITE_PUBLICATIONS "\n\n", rec.institution, rec.name);
 
-    buf_destroy (&license_data);
+    buf_destroy (license_data);
 }
 
 // IF YOU'RE CONSIDERING EDITING THIS CODE TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,
@@ -383,7 +383,7 @@ uint32_t license_get_number (void)
     return rec.license_num;
 }
 
-const char *license_get_one_line (void)
+rom license_get_one_line (void)
 {
     static char s[sizeof (rec) + sizeof (rec.name) + 200];
 
@@ -400,7 +400,7 @@ bool license_has_details (void)
 
 void license_display (void)
 {
-    const char *filename = get_license_filename (false);
+    rom filename = get_license_filename (false);
     static Buffer license_data = {};
     
     if (file_exists (filename) && !flag.force) 

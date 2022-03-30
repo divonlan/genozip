@@ -12,7 +12,7 @@
 #define DTYPE_PLAIN DTYPE_2
 extern DictId dict_id_make (STRp(str), DictIdType dict_id_type);
 
-#define dict_id_is(dict_id, str) (dict_id_make (str, strlen(str)).num == dict_id_typeless (dict_id).num)
+#define dict_id_is(dict_id, str) (dict_id_make (str, strlen(str), DTYPE_PLAIN).num == dict_id_typeless (dict_id).num)
 static inline DictIdType dict_id_type (DictId dict_id) { return ((dict_id.id[0] >> 6) == 0) ? DTYPE_FIELD   
                                                               : ((dict_id.id[0] >> 6) == 1) ? DTYPE_2 
                                                               :                               DTYPE_1; } 
@@ -35,7 +35,9 @@ extern void dict_id_read_aliases (void) ;
 // candidate is a specific dict_id that we test for its matching of the template
 extern bool dict_id_is_match (DictId template, DictId candidate);
 
-extern const char *dict_id_display_type (DataType dt, DictId dict_id);
+extern bool dict_id_is_show (DictId dict_id);
+
+extern rom dict_id_display_type (DataType dt, DictId dict_id);
 
 typedef struct { char s[20]; } DisplayPrintId;
 extern DisplayPrintId dis_dict_id (DictId dict_id);

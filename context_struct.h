@@ -11,7 +11,7 @@
 #include "sections.h"
 
 typedef struct { // initialize with ctx_init_iterator()
-    const uint8_t *next_b250;  // Pointer into b250 of the next b250 to be read (must be initialized to NULL)
+    bytes next_b250;  // Pointer into b250 of the next b250 to be read (must be initialized to NULL)
     WordIndex prev_word_index; // When decoding, if word_index==BASE250_ONE_UP, then make it prev_word_index+1 (must be initialized to -1)
 } SnipIterator;
 
@@ -22,20 +22,21 @@ typedef struct Context {
     #define MAX_TAG_LEN 64     // including terminating nul (must be divisible by 8 for Tag struct)
     char tag_name[MAX_TAG_LEN];// nul-terminated tag name 
     DidIType did_i;            // the index of this ctx within the array vb->contexts
+    union {
     DidIType st_did_i;         // ZIP: in --stats, consolidate this context into st_did_i
-    #define other_did_i st_did_i // PIZ: cache the other context needed for reconstructing this one
+    DidIType other_did_i;      // PIZ: cache the other context needed for reconstructing this one
+    };
     LocalType ltype;           // LT_* - type of local data - included in the section header
     struct FlagsCtx flags;     // flags to be included in section header
     struct FlagsCtx pair_flags;// Used if this file is a PAIR_2 - contains ctx->flags of the PAIR_1
     DictId dict_id;            // which dict_id is this MTF dealing with
     Buffer dict;               // tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
-
-    #define num_ctx_words param// local(LT_TEXT) and b250(after zip_generate_b250): the number of words (len is the number of bytes)
     Buffer b250;               // ZIP: During Seg, .data contains 32b indices into context->nodes. In zip_generate_b250_section, 
                                //      the "node indices" are converted into "word indices" - indices into the future 
-                               //      context->word_list, in base-250. the number of words is moved from .len to .param. 
+                               //      context->word_list, in base-250. the number of words is moved from .len to .count. 
                                // PIZ: .data contains the word indices (i.e. indices into word_list) in base-250
     Buffer local;              // VB: Data private to this VB that is not in the dictionary
+                               // ZIP Z_FILE .len  # fields of this type segged in the file (for stats)
     Buffer pair;               // Used if this file is a PAIR_2 - contains a copy of either b250 or local of the PAIR_1 (if inst.pair_b250 or inst.pair_local is set)
     
     int64_t compressor_time;   // Used when --show-time - time for compressing / decompressing this context
@@ -43,31 +44,40 @@ typedef struct Context {
     // rollback point - used for rolling back during Seg
     int64_t rback_id;          // ZIP: rollback data valid only if ctx->rback_id == vb->rback_id
     uint64_t rback_b250_len, rback_local_len, rback_nodes_len, rback_txt_len; // ZIP: data to roll back the last seg
-    uint32_t rback_num_singletons, rback_last_txt_index, rback_last_txt_len;
+    uint32_t rback_b250_count, rback_local_num_words, rback_last_txt_index, rback_last_txt_len;
     ValueType rback_last_value; // also used in PIZ for rolling back VCF_POS.last_value after INFO/END
     int64_t rback_last_delta, rback_ctx_spec_param;
     
     Buffer ol_dict;            // ZIP VB: tab-delimited list of all unique snips - overlayed all previous VB dictionaries
                                // ZIP zfile: singletons are stored here
                                // PIZ: counts are read to here (from SEC_COUNTS) - aligned to the words in word_list/dict
+    union {
     Buffer ol_nodes;           // ZIP array of CtxNode - overlayed all previous VB dictionaries. char/word indices are into ol_dict.
-    #define ston_nodes ol_nodes// ZIP z_file: nodes of singletons
-    #define piz_ctx_specific_buf ol_nodes // PIZ: used by SAM_CIGAR to store ref_consumed history
-    
+    Buffer ston_nodes;         // ZIP z_file: nodes of singletons
+    Buffer piz_ctx_specific_buf;//PIZ: used by SAM_CIGAR to store ref_consumed history
+                               // PIZ: in kraken's KRAKEN_QNAME context - contains qname_nodes   
+    };
+
+    union {
     Buffer nodes;              // ZIP: array of CtxNode - in this VB that don't exist in ol_nodes. char/word indices are into dict.
-                               // PIZ: in kraken's KRAKEN_QNAME context - contains qname_nodes 
                                // ZIP->PIZ zctx.nodes.param is transferred via SectionHeaderCounts.nodes_param if counts_section=true
+    Buffer piz_word_list_hash; // PIZ: used by ctx_get_word_index_by_snip
+    };
+
     Buffer counts;             // ZIP/PIZ: counts of snips (array of int64_t)
+                               // ZIP: counts.param is a context-specific global counter that gets accumulated in zctx during merge (e.g. OPTION_SA_CIGAR)
     
     // Seg: snip (in dictionary) and node_index the last non-empty ("" or NULL) snip evaluated
-    const char *last_snip;     // also used in PIZ SAM      
+    rom last_snip;     // also used in PIZ SAM      
     unsigned last_snip_len;
     WordIndex last_snip_ni;   
 
     int tag_i;                 // ZIP dual-coordinates, VB only: index into vb->tags for tag renaming 
 
     // settings
-    Codec lcodec, bcodec;      // codec used to compress local and b250
+    uint8_t lcodec_count, bcodec_count; // ZIP z_file, --best: approximate number of VBs in a row that selected this codec
+    Codec lcodec;              // codec used to compress local and dict
+    Codec bcodec;              // codec used to compress b250
     Codec lsubcodec_zip;       // zip to compress with this codec AFTER compressing with lcodec
     Codec lsubcodec_piz;       // piz to decompress with this codec, AFTER decompressing with lcodec
     
@@ -89,9 +99,16 @@ typedef struct Context {
     bool line_is_luft_trans;   // Seg: true if current line, when reconstructed with --luft, should be translated with luft_trans (false if no
                                //      trans_luft exists for this context, or it doesn't trigger for this line, or line is already in LUFT coordinates)
     enum __attribute__ ((__packed__)) { DEP_L0, DEP_L1, DEP_L2, NUM_LOCAL_DEPENDENCY_LEVELS } local_dep; // ZIP: this local is created when another local is compressed (each NONREF_X is created with NONREF is compressed) (value=0,1,2)
+    bool is_loaded;            // PIZ: either dict or local or b250 are loaded (not skipped) so context can be reconstructed
     bool is_initialized;       // ZIP / PIZ: context-specific initialization has been done
+    union {
     bool local_compressed;     // ZIP: VB: local has been compressed
+    bool local_uncompressed;   // PIZ: VB: local has been uncompressed
+    };
+    union {
     bool b250_compressed;      // ZIP: VB: b250 has been compressed
+    bool b250_uncompressed;    // PIZ: VB: b250 has been uncompressed
+    };
     bool dict_merged;          // ZIP: VB: dict has been merged into zctx
     bool please_remove_dict;   // ZFILE: one or more of the VBs request NOT compressing this dict (will be dropped unless another VB insists on keeping it)
     bool dict_len_excessive;   // ZFILE: dict is very big, indicating an ineffecient segging of this context
@@ -103,14 +120,21 @@ typedef struct Context {
     uint32_t b250_in_z;        // ZIP: index and len into z_data where b250 compressed data is
     uint32_t b250_in_z_len;    
 
-    // ZIP only: hash stuff 
-    Buffer local_hash;         // hash table for entries added by this VB that are not yet in the global (until merge_number)
+    union {
+    Buffer local_hash;         // ZIP: hash table for entries added by this VB that are not yet in the global (until merge_number)
                                // obtained by hash function hash(snip) and the rest of linked to them by linked list
+    Buffer history;            // PIZ: used if FlagsCtx.store_per_line and also for lookback (for files compressed starting with v12.0.41) - contains an array of either int64_t (if STORE_INT) or HistoryWord
+    };
+
     uint32_t local_hash_prime; // prime number - size of the core (without extensions) has table 
     int32_t num_new_entries_prev_merged_vb; // zctx: updated in every merge - how many new words happened in this VB
                                // vctx: copied from zctx during clone, and used to initialize the size of local_hash
                                //         0 means no VB merged yet with this. if a previous vb had 0 new words, it will still be 1.
-    Buffer global_hash;        // global hash table that is populated during merge in zctx and is overlayed to vctx during clone.
+    union {
+    Buffer global_hash;        // ZIP: global hash table that is populated during merge in zctx and is overlayed to vctx during clone.
+    Buffer per_line;           // PIZ: data copied from txt_data for fields with textual store_per_line, used in case flag.maybe_lines_dropped
+    };
+
     uint32_t global_hash_prime;// prime number - size of the core (without extensions) has table 
 
     uint32_t merge_num;        // in vctx: the merge_num when global_hash was cloned. only entries with merge_num <= this number 
@@ -121,14 +145,12 @@ typedef struct Context {
     
     // ZIP: stats
     uint64_t txt_len;          // How many characters in reconstructed text are accounted for by snips in this ctx (for stats), when file reconstructed in PRIMARY coordinates (i.e. PRIMARY reconstruction for regular VBs, LUFT reconstruction for ##luft_only VBs, and no reconstruction for ##primary_only VBs)
-    uint32_t num_singletons;   // True singletons that appeared exactly once in the entire file
+    uint32_t local_num_words;  // ZIP: number of words (segs) that went into local. If a field is segged into multiple contexts - this field is incremented in each of them. If the context also uses b250, this field is ignored by stats which uses count instead.
 
-    // PIZ-only
-    #define history local_hash // PIZ: used if FlagsCtx.store_per_line and also for lookback (for files compressed starting with v12.0.41) - contains an array of either int64_t (if STORE_INT) or HistoryWord
-    #define per_line global_hash // PIZ: data copied from txt_data for fields with textual store_per_line, used in case flag.maybe_lines_dropped_by_reconstructor
-
+    union {
     Buffer word_list;          // PIZ and ZIP z_file (ctx_verify_dict_words_uniq): word list. an array of CtxWord - listing the snips in dictionary
-    #define zip_lookback_buf word_list  // ZIP VB: use word_list as lookback_buf
+    Buffer zip_lookback_buf;   // ZIP VB: use word_list as lookback_buf
+    };
 
     bool semaphore;            // valid within the context of reconstructing a single line. MUST be reset ahead of completing the line.
     bool is_frozen;            // PIZ: state is frozen because we're currently peeking

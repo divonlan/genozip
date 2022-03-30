@@ -42,7 +42,7 @@ static void vcf_seg_prepare_minus_snip (DictId dict_id_a, DictId dict_id_b, char
 
 static DictId make_array_item_dict_id (uint64_t dict_id_num, unsigned item_i)
 {
-    const uint8_t *id = ((DictId)dict_id_num).id;
+    bytes id = ((DictId)dict_id_num).id;
     char dict_id_str[8] = { id[0], base32(item_i), id[1], id[2], id[3], id[4], id[5], id[6] };
     
     return dict_id_make (dict_id_str, 8, DTYPE_2);
@@ -151,7 +151,7 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
 
     // determine which way to seg PL - Mux by dosage or Mux by dosageXDP, or test both options
     CTX(FORMAT_PL)->no_stons = true;
-    vb->PL_mux_by_DP = (flag.best && !z_dual_coords && !segconf.running && segconf.has_DP_before_PL) 
+    vb->PL_mux_by_DP = (flag.best && !z_is_dvcf && !segconf.running && segconf.has_DP_before_PL) 
         ? segconf.PL_mux_by_DP // set by a previous VB in vcf_FORMAT_PL_decide or still in its initial value of PL_mux_by_DP_TEST
         : PL_mux_by_DP_NO;
 
@@ -196,6 +196,19 @@ void vcf_samples_seg_finalize (VBlockVCFP vb)
         segconf.GQ_by_GP = (segconf.count_GQ_by_GP > vb->lines.len * vcf_num_samples / 5) && (segconf.count_GQ_by_GP >  segconf.count_GQ_by_PL);
         segconf.GQ_by_PL = (segconf.count_GQ_by_PL > vb->lines.len * vcf_num_samples / 5) && (segconf.count_GQ_by_PL >= segconf.count_GQ_by_GP);
     }
+    else {
+        vcf_samples_seg_finalize_PS_PID(vb);
+    }
+}
+
+// returns true is the sample has a '.' value
+static inline bool vcf_seg_sample_has_null_value (uint64_t dnum, ContextP *ctxs, STRps(sf))
+{
+    for (int i=1; i < n_sfs; i++) // start from 1 - we know 0 is GT
+        if (ctxs[i]->dict_id.num == dnum)
+            return sf_lens[i]==1 && sfs[i][0]=='.'; // null DP found on this line - return true if its not '.' or empty
+
+    return false; // no DP at all on this line
 }
 
 //--------------------
@@ -208,7 +221,7 @@ static inline int vcf_seg_get_mux_channel_i (VBlockVCFP vb, bool fail_if_dvcf_re
 {
     // fail if this is a DVCF ref<>alt switch, if caller requested so,
     // or if there is no valid GT in this sample
-    if (fail_if_dvcf_refalt_switch && z_dual_coords)// && LO_IS_OK_SWITCH (last_ostatus)) // TODO: no real need to fallback unless REF<>ALT switch, but this doesn't work yet
+    if (fail_if_dvcf_refalt_switch && z_is_dvcf)// && LO_IS_OK_SWITCH (last_ostatus)) // TODO: no real need to fallback unless REF<>ALT switch, but this doesn't work yet
         return -1;
 
     // fail if there is no GT in this variant
@@ -245,7 +258,7 @@ static inline ContextP vcf_seg_FORMAT_mux_by_dosage (VBlockVCFP vb, ContextP ctx
 // there return 0/0,0->0 ; 0/1,1/0,1->1 ; 1/1->2 ; others->3
 static inline int vcf_piz_get_mux_channel_i (VBlockP vb)
 {
-    const char *gt = last_txt (vb, FORMAT_GT);
+    rom gt = last_txt (vb, FORMAT_GT);
     unsigned gt_len = CTX(FORMAT_GT)->last_txt_len ;
 
     if (gt_len == 3) { // diploid
@@ -311,7 +324,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_DOSAGExDP)
     unsigned num_channels = ctx->con_cache.len ? ctx->con_cache.len : (1 + str_count_char (STRa(snip), '\t'));
     unsigned num_dps = num_channels / 3;
 
-    const char *DP_str;
+    rom DP_str;
     int64_t DP = reconstruct_peek (vb, CTX(FORMAT_DP), &DP_str, 0).i;
     DP = (*DP_str=='.') ? 0 : MAX_(0, MIN_(DP, num_dps-1));
 
@@ -362,14 +375,14 @@ static inline void vcf_seg_FORMAT_transposed (VBlockVCFP vb, ContextP ctx, STRp(
     buf_alloc (vb, &ctx->local, 1, vb->lines.len * vcf_num_samples, uint32_t, 1, "contexts->local");
 
     if (cell_len == 1 && cell[0] == '.') {
-        NEXTENT (uint32_t, ctx->local) = 0xffffffff;
+        BNXT32 (ctx->local) = 0xffffffff;
     }
     else {
         ASSSEG (str_get_int (STRa(cell), &ctx->last_value.i) && ctx->last_value.i >= 0 && ctx->last_value.i <= 0xfffffffe, 
                 cell, "While compressing %s expecting an integer in the range [0, 0xfffffffe] or a '.', but found: %.*s", 
                 ctx->tag_name, cell_len, cell);
 
-        NEXTENT (uint32_t, ctx->local) = (uint32_t)ctx->last_value.i;
+        BNXT32 (ctx->local) = (uint32_t)ctx->last_value.i;
     }
 
     // add a LOOKUP to b250
@@ -640,12 +653,12 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MINUS)
         DictId two_dicts[2];
         base64_decode (snip, &snip_len, (uint8_t *)two_dicts);
 
-        *ENT(ContextP, ctx->con_cache, 0) = ECTX (two_dicts[0]);
-        *ENT(ContextP, ctx->con_cache, 1) = ECTX (two_dicts[1]);
+        *B(ContextP, ctx->con_cache, 0) = ECTX (two_dicts[0]);
+        *B(ContextP, ctx->con_cache, 1) = ECTX (two_dicts[1]);
     }
 
-    new_value->i = (*ENT(ContextP, ctx->con_cache, 0))->last_value.i - 
-                   (*ENT(ContextP, ctx->con_cache, 1))->last_value.i;
+    new_value->i = (*B(ContextP, ctx->con_cache, 0))->last_value.i - 
+                   (*B(ContextP, ctx->con_cache, 1))->last_value.i;
 
     if (reconstruct)
         RECONSTRUCT_INT (new_value->i); 
@@ -660,7 +673,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MINUS)
 static inline WordIndex vcf_seg_FORMAT_AF (VBlockVCFP vb, ContextP ctx, STRp(cell))
 {
     if (vcf_num_samples == 1 && // very little hope that INFO/AF is equal to FORMAT/AF if we have more than one sample
-        !z_dual_coords &&       // note: we can't use SNIP_COPY in dual coordinates, because when translating, it will translate the already-translated INFO/AF
+        !z_is_dvcf &&       // note: we can't use SNIP_COPY in dual coordinates, because when translating, it will translate the already-translated INFO/AF
         ctx_encountered_in_line (VB, INFO_AF) && 
         str_issame (cell, CTX(INFO_AF)->last_snip))
         return seg_by_ctx (VB, af_snip, af_snip_len, ctx, cell_len);
@@ -672,9 +685,9 @@ static inline WordIndex vcf_seg_FORMAT_AF (VBlockVCFP vb, ContextP ctx, STRp(cel
 // FORMAT/GQ
 // ---------
 
-static int value_sorter(const void *a, const void *b)  
+static SORTER (value_sorter)
 {
-    return *(int64_t *)b - *(int64_t*)a; // sort in reverse order - usually faster as GP[0] / PL[0] are usually the biggest (corresponding to GT=0/0)
+    return DESCENDING_RAW (*(int64_t *)a, *(int64_t*)b); // sort in reverse order - usually faster as GP[0] / PL[0] are usually the biggest (corresponding to GT=0/0)
 }
 
 static int64_t vcf_predict_GQ (VBlockVCFP vb, DidIType src_did_i)
@@ -770,7 +783,7 @@ fallback:
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_GQ)
 {
-    const char *tab = memchr (snip, '\t', snip_len);
+    rom tab = memchr (snip, '\t', snip_len);
 
     ContextP src_ctx = SCTX0 (snip);
 
@@ -833,6 +846,50 @@ static inline void vcf_seg_FORMAT_DP (VBlockVCFP vb, ContextP ctx, STRp(cell))
     }
 }
 
+//-----------
+// FORMAT/PGT
+// ----------
+
+// by default, a ploidy-2 PGT would have 5 values: (0|0, 0|1, 1|0, 1|1, .) this method usually reduces the dictionary
+// to 2 values: SPECIAL and 1|0.
+static inline void vcf_seg_FORMAT_PGT (VBlockVCFP vb, ContextP ctx, STRp(pgt), ContextP *ctxs, STRps(sf))
+{
+    // case: PGT=. and PID=.
+    if ((pgt_len==1 && *pgt=='.' && vcf_seg_sample_has_null_value (_FORMAT_PID, ctxs, STRas(sf)))
+
+    // case: haplotypes of PGT are the same and in the same order as GT
+    || (ctxs[0]->did_i == FORMAT_GT && sf_lens[0] == 3 && pgt_len==3 && 
+        pgt[0]==sfs[0][0] && pgt[2]==sfs[0][2] && pgt[1] == '|'))
+
+        seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_PGT }), 2, ctx, pgt_len); 
+
+    // other cases - normal seg: haplotypes appear in reverse order, . but not PID, ploidy!=2, non-standard PGT or GT format etc
+    else
+        seg_by_ctx (VB, STRa(pgt), ctx, pgt_len);
+}
+
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_PGT)
+{
+    if (reconstruct) {
+        STR(pid);
+        reconstruct_peek (vb, CTX(FORMAT_PID), pSTRa(pid)); // note: we can't use last_txt, because PS might be reconstructed before PID, as its peeked by GT
+        
+        // case: if this SPECIAL was used with PID='.'
+        if (pid_len == 1 && *pid == '.') 
+            RECONSTRUCT1 ('.');
+
+        // case: ht0 and ht1 are the same as in GT
+        else {
+            rom gt = last_txt(vb, FORMAT_GT);
+            RECONSTRUCT1 (gt[0]);
+            RECONSTRUCT1 ('|');
+            RECONSTRUCT1 (gt[2]);
+        }
+    }
+
+    return false; // no new value
+}
+
 // ---------------------
 // INFO/AF and FORMAT/AF
 // ---------------------
@@ -878,7 +935,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_A_1)
 // ---------
 
 // convert an array of probabilities to an array of integer phred scores capped at 60
-static void vcf_convert_prob_to_phred (VBlockVCFP vb, const char *flag_name, STRp(snip), char *optimized_snip, unsigned *optimized_snip_len)
+static void vcf_convert_prob_to_phred (VBlockVCFP vb, rom flag_name, STRp(snip), char *optimized_snip, unsigned *optimized_snip_len)
 {
     str_split_floats (snip, snip_len, 0, ',', prob, false);
     ASSVCF (n_probs, "cannot to apply %s to value \"%.*s\"", flag_name, snip_len, snip); // not an array of floats - abort, because we already changed the FORMAT field
@@ -897,7 +954,7 @@ static void vcf_convert_prob_to_phred (VBlockVCFP vb, const char *flag_name, STR
 }
 
 // converts an array of phred scores (possibly floats) to integers capped at 60
-static bool vcf_phred_optimize (const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len /* in / out */)
+static bool vcf_phred_optimize (rom snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len /* in / out */)
 {
     str_split_floats (snip, len, 0, ',', item, false);
     if (!n_items) return false; // not an array of floats
@@ -928,7 +985,7 @@ static inline void vcf_seg_FORMAT_AB (VBlockVCFP vb, ContextP ctx, STRp(ab))
     bool ab_missing = ab_len==1 && *ab=='.';
 
     if (channel_i==-1                   || // GT didn't produce a mux channel
-        (channel_i==1 && z_dual_coords) || // we can't handle channel 1 in dual coordinates (TODO: limit to REF<>ALT switch)
+        (channel_i==1 && z_is_dvcf) || // we can't handle channel 1 in dual coordinates (TODO: limit to REF<>ALT switch)
         segconf.has[FORMAT_ADALL]           || // we can't handle AD0/AD1 peeking in AD is a delta vs ADALL
         (is_0_or_2 && !ab_missing)) {      // if channel is 0 or 2, we expected a '.' 
     
@@ -966,7 +1023,7 @@ static inline void vcf_seg_FORMAT_AB_verify_channel1 (VBlockVCFP vb)
     ContextP ad0_ctx = ECTX (con_AD.items[0].dict_id);
     ContextP ad1_ctx = ECTX (con_AD.items[1].dict_id);
 
-    const char *ab_str = last_txtx(vb, ab_ctx);
+    rom ab_str = last_txtx(vb, ab_ctx);
     unsigned ab_str_len = vb->last_txt_len(FORMAT_AB);
 
     // rollback if we don't have AD0, AD1 this line, or if their value is not as expected by the formula
@@ -1123,7 +1180,7 @@ void vcf_FORMAT_PL_after_vbs (void)
 // DS is a value [0,ploidy] which is a the sum of GP values that refer to allele!=0. Eg for bi-allelic diploid it is: GP[1] + 2*GP[2] (see: https://www.biostars.org/p/227346/)
 // the DS (allele DoSage) value is usually close to or exactly the sum of '1' alleles in GT. we store it as a delta from that,
 // along with the floating point format to allow exact reconstruction
-static inline WordIndex vcf_seg_FORMAT_DS (VBlockVCFP vb, ContextP ctx, const char *cell, unsigned cell_len)
+static inline WordIndex vcf_seg_FORMAT_DS (VBlockVCFP vb, ContextP ctx, rom cell, unsigned cell_len)
 {
     int64_t dosage = ctx_has_value (VB, FORMAT_GT) ? CTX(FORMAT_GT)->last_value.i : -1; // dosage stored here by vcf_seg_FORMAT_GT
     double ds_val;
@@ -1230,7 +1287,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_G)
 // Validate that ALL subfields in ALL samples can luft-translate as needed
 //------------------------------------------------------------------------
 
-static const char *error_format_field (unsigned n_items, ContextP *ctxs)
+static rom error_format_field (unsigned n_items, ContextP *ctxs)
 {
     static char format[256];
     unsigned len=0;
@@ -1284,10 +1341,9 @@ static inline ContextP vcf_seg_validate_luft_trans_one_sample (VBlockVCFP vb, Co
 // If ALL subfields in ALL samples can luft-translate as required: 1.sets ctx->line_is_luft_trans for all contexts 2.lifted-back if this is a LUFT lne
 // if NOT: ctx->line_is_luft_trans=false for all contexts, line is rejects (LO_FORMAT), and keeps samples in their original LUFT or PRIMARY coordinates.
 static inline void vcf_seg_validate_luft_trans_all_samples (VBlockVCFP vb, uint32_t n_items, ContextP *ctxs, 
-                                                            int32_t len, char *samples_start,
-                                                            const char *backup_luft_samples, uint32_t backup_luft_samples_len)
+                                                            int32_t len, char *samples_start)
 {
-    const char *field_start, *next_field = samples_start;
+    rom field_start, next_field = samples_start;
     unsigned field_len=0;
     bool has_13;
 
@@ -1313,7 +1369,7 @@ static inline void vcf_seg_validate_luft_trans_all_samples (VBlockVCFP vb, uint3
 
             // if this is an untranslatable LUFT-only line, recover the original LUFT-coordinates samples
             if (vb->line_coords == DC_LUFT) 
-                memcpy (samples_start, backup_luft_samples, backup_luft_samples_len);
+                memcpy (samples_start, vb->save_luft_samples.data, vb->save_luft_samples.len);
         }
     }
 }
@@ -1323,23 +1379,13 @@ static inline void vcf_seg_validate_luft_trans_all_samples (VBlockVCFP vb, uint3
 // ----------
 
 // returns true is the sample has a non-'.' PS value
-static inline bool vcf_seg_sample_has_PS (ContextP *ctxs, uint32_t n_sfs, const char **sfs, uint32_t *sf_lens)
+static inline bool vcf_seg_sample_has_PS (ContextP *ctxs, uint32_t n_sfs, rom *sfs, uint32_t *sf_lens)
 {
     for (int i=1; i < n_sfs; i++) // start from 1 - we know 0 is GT
         if (ctxs[i]->dict_id.num == _FORMAT_PS)
             return sf_lens[i] && !(sf_lens[i]==1 && sfs[i][0]=='.'); // PS found on this line - return true if its not '.' or empty
 
     return false; // no PS at all on this line
-}
-
-// returns true is the sample has a non-'.' DP value
-static inline bool vcf_seg_sample_has_null_DP (ContextP *ctxs, uint32_t n_sfs, const char **sfs, uint32_t *sf_lens)
-{
-    for (int i=1; i < n_sfs; i++) // start from 1 - we know 0 is GT
-        if (ctxs[i]->dict_id.num == _FORMAT_DP)
-            return sf_lens[i]==1 && sfs[i][0]=='.'; // null DP found on this line - return true if its not '.' or empty
-
-    return false; // no DP at all on this line
 }
 
 // returns the number of colons in the sample
@@ -1385,7 +1431,8 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
         case _FORMAT_GT: {
             bool has_ps = segconf.ps_pid_type[0] ? vcf_seg_sample_has_PS (ctxs, n_sfs, sfs, sf_lens) : false;
             
-            bool has_null_dp = segconf.use_null_DP_method ? vcf_seg_sample_has_null_DP (ctxs, n_sfs, sfs, sf_lens) : false;
+            bool has_null_dp = segconf.use_null_DP_method ? vcf_seg_sample_has_null_value (_FORMAT_DP, ctxs, STRas(sf)) 
+                                                          : false;
 
             vcf_seg_FORMAT_GT (vb, ctx, dl, STRi(sf, i), has_ps, has_null_dp); 
             break;
@@ -1471,7 +1518,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
             else goto fallback;
             break;
 
-        case _FORMAT_SDP :
+        case _FORMAT_SDP   :
             if (ctx_has_value_in_line_(VB, CTX(INFO_ADP)))
                 seg_delta_vs_other (VB, ctx, CTX(INFO_ADP), STRi(sf, i));
             else goto fallback;
@@ -1486,6 +1533,9 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
                              else
                                 vcf_seg_FORMAT_A_R (vb, ctx, con_AD, STRi(sf, i), STORE_INT, vcf_seg_AD_items); 
                              break;
+
+        // <ID=PGT,Number=1,Type=String,Description="Physical phasing haplotype information, describing how the alternate alleles are phased in relation to one another">
+        case _FORMAT_PGT   :  vcf_seg_FORMAT_PGT (vb, ctx, STRi(sf, i), ctxs, STRas(sf)); break;
 
         // GIAB: <ID=ADALL,Number=R,Type=Integer,Description="Net allele depths across all datasets">
         case _FORMAT_ADALL : vcf_seg_FORMAT_A_R (vb, ctx, con_ADALL, STRi(sf, i), STORE_INT, vcf_seg_ADALL_items); break;
@@ -1573,23 +1623,22 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
 // All samples
 //------------
 
-const char *vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t *len, char *next_field, bool *has_13,
-                             const char *backup_luft_samples, uint32_t backup_luft_samples_len)
+rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t *len, char *next_field, bool *has_13)
 {
     // Container for samples - we have:
     // - repeats as the number of samples in the line (<= vcf_num_samples)
     // - n_items as the number of FORMAT subfields (inc. GT)
 
-    Container samples = *ENT (Container, vb->format_mapper_buf, dl->format_node_i); // make a copy of the template
-    ContextP *ctxs = ENT (ContextP, vb->format_contexts, dl->format_node_i * MAX_FIELDS);
+    Container samples = *B(Container, vb->format_mapper_buf, dl->format_node_i); // make a copy of the template
+    ContextP *ctxs = B(ContextP, vb->format_contexts, dl->format_node_i * MAX_FIELDS);
     uint32_t n_items = con_nitems (samples);
 
     // check that all subfields in all samples can be luft-translated as required, or make this a LUFT-only / PRIMARY-only line.
     // Also, if the data is in LUFT coordinates and is indeed translatable, then this lifts-back the samples to PRIMARY coordinates
-    if (z_dual_coords && LO_IS_OK (last_ostatus))
-        vcf_seg_validate_luft_trans_all_samples (vb, n_items, ctxs, *len, next_field, backup_luft_samples, backup_luft_samples_len);
+    if (z_is_dvcf && LO_IS_OK (last_ostatus))
+        vcf_seg_validate_luft_trans_all_samples (vb, n_items, ctxs, *len, next_field);
 
-    const char *field_start;
+    rom field_start;
     unsigned field_len=0, num_colons=0;
 
     // 0 or more samples
@@ -1618,14 +1667,14 @@ const char *vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t *len, ch
                    vb->chrom_name_len, vb->chrom_name, vb->last_int (VCF_POS), samples.repeats, vcf_num_samples);
 
         if (dl->has_haplotype_data) {
-            char *ht_data = ENT (char, CTX(FORMAT_GT_HT)->local, vb->line_i * vb->ploidy * vcf_num_samples + vb->ploidy * samples.repeats);
+            char *ht_data = Bc (CTX(FORMAT_GT_HT)->local, vb->line_i * vb->ploidy * vcf_num_samples + vb->ploidy * samples.repeats);
             unsigned num_missing = vb->ploidy * (vcf_num_samples - samples.repeats); 
             memset (ht_data, '*', num_missing);
         }
     }
     
     // assign all translators. note: we either have translators for all translatable items, or none at all.
-    if (z_dual_coords)
+    if (z_is_dvcf)
         for (uint32_t i=0; i < n_items; i++)
             if (ctxs[i]->line_is_luft_trans)
                 samples.items[i].translator = ctxs[i]->luft_trans;

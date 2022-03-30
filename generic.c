@@ -37,7 +37,7 @@ bool generic_seg_is_small (ConstVBlockP vb, DictId dict_id)
 
 SPECIAL_RECONSTRUCTOR (generic_piz_TOPLEVEL)
 {
-    buf_destroy (&vb->txt_data);
+    buf_destroy (vb->txt_data);
     buf_move (vb, &vb->txt_data, vb, &CTX(GNRIC_DATA)->local);
     return false; // no new value
 }

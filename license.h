@@ -6,9 +6,9 @@
 #pragma once
 
 extern void license_register (void);
-extern void license_set_filename (const char *filename);
+extern void license_set_filename (rom filename);
 extern uint32_t license_get_number (void);
-extern const char *license_get_one_line (void);
+extern rom license_get_one_line (void);
 extern bool license_has_details (void);
 extern void license_display (void);
 

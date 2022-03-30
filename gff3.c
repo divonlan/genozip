@@ -261,7 +261,7 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, STRp(tag_name), STRp(va
     return dict_id;
 }
 
-static void gff3_seg_attrs_field (VBlock *vb, STRp(field))
+static void gff3_seg_attrs_field (VBlockP vb, STRp(field))
 {
     // case: "." field
     if (field_len == 1 && *field == '.') {
@@ -313,9 +313,9 @@ static void gff3_seg_attrs_field (VBlock *vb, STRp(field))
                    prefixes_len + count_space_seps - 1 - con.drop_final_item_sep); // names inc. = and (; or \n) separator 
 }
 
-const char *gff3_seg_txt_line (VBlockP vb, const char *field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
+rom gff3_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
 {
-    const char *next_field=field_start_line, *field_start;
+    rom next_field=field_start_line, field_start;
     unsigned field_len=0;
     char separator;
     int32_t len = (int32_t)remaining_txt_len;
@@ -340,7 +340,7 @@ const char *gff3_seg_txt_line (VBlockP vb, const char *field_start_line, uint32_
 
     GET_NEXT_ITEM (GFF3_START);
     seg_pos_field (vb, GFF3_START, GFF3_START, 0, 0, STRd(GFF3_START), 0, GFF3_START_len+1);
-    random_access_update_pos (vb, DC_PRIMARY, GFF3_START);
+    random_access_update_pos (vb, 0, GFF3_START);
 
     GET_NEXT_ITEM (GFF3_END);
     seg_pos_field (vb, GFF3_END, GFF3_START, 0, 0, STRd(GFF3_END), 0, GFF3_END_len+1);

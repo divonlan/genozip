@@ -74,8 +74,8 @@ typedef struct {
 #define INTERLACE(signedtype,num) ({ signedtype n=(signedtype)(num); (n < 0) ? ((SAFE_NEGATE(signedtype,n) << 1) - 1) : (((u##signedtype)n) << 1); })
 #define DEINTERLACE(signedtype,unum) (((unum) & 1) ? -(signedtype)(((unum)>>1)+1) : (signedtype)((unum)>>1))
 
-#define NEXTLOCAL(type, ctx) (*ENT (type, (ctx)->local, (ctx)->next_local++))
-#define PEEKNEXTLOCAL(type, ctx, offset) (*ENT (type, (ctx)->local, (ctx)->next_local + offset))
+#define NEXTLOCAL(type, ctx) (*B(type, (ctx)->local, (ctx)->next_local++))
+#define PEEKNEXTLOCAL(type, ctx, offset) (*B(type, (ctx)->local, (ctx)->next_local + offset))
 static inline bool PAIRBIT(ContextP ctx)      { BitArrayP b = buf_get_bitarray (&ctx->pair);  bool ret = bit_array_get (b, ctx->next_local);                    return ret; } // we do it like this and not in a #define to avoid anti-aliasing warning when casting part of a Buffer structure into a BitArray structure
 static inline bool NEXTLOCALBIT(ContextP ctx) { BitArrayP b = buf_get_bitarray (&ctx->local); bool ret = bit_array_get (b, ctx->next_local); ctx->next_local++; return ret; }
 static inline uint8_t NEXTLOCAL2BITS(ContextP ctx) { BitArrayP b = buf_get_bitarray (&ctx->local); uint8_t ret = bit_array_get (b, ctx->next_local) | (bit_array_get (b, ctx->next_local+1) << 1); ctx->next_local += 2; return ret; }
@@ -83,12 +83,14 @@ static inline uint8_t NEXTLOCAL2BITS(ContextP ctx) { BitArrayP b = buf_get_bitar
 // factor in which we grow buffers in CTX upon realloc
 #define CTX_GROWTH 1.75  
 
-#define ctx_node_vb(ctx, node_index, snip_in_dict, snip_len) ctx_node_vb_do(ctx, node_index, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
+#define ctx_node_vb(ctx, node_index, snip_in_dict, snip_len) ctx_node_vb_do(ctx, node_index, snip_in_dict, snip_len, __FUNCLINE)
 #define node_word_index(vb,did_i,index) ((index)!=WORD_INDEX_NONE ? ctx_node_vb (&(vb)->contexts[did_i], (index), 0,0)->word_index.n : WORD_INDEX_NONE)
 
 #define CTX(did_i)   ({ DidIType my_did_i = (did_i); /* could be an expression */\
                         ASSERT (my_did_i < MAX_DICTS, "CTX(): did_i=%u out of range", my_did_i); /* will be optimized-out for constant did_i */ \
                         (&vb->contexts[my_did_i]); })
+
+#define LOADED_CTX(did_i) ({ ContextP ctx=CTX(did_i); ASSISLOADED(ctx); ctx; })
 
 #define ZCTX(did_i)  ({ DidIType my_did_i = (did_i);\
                         ASSERT (my_did_i < MAX_DICTS, "ZCTX(): did_i=%u out of range", my_did_i);  \
@@ -98,7 +100,7 @@ static inline uint8_t NEXTLOCAL2BITS(ContextP ctx) { BitArrayP b = buf_get_bitar
 #define last_index(did_i)   contexts[did_i].last_value.i
 #define last_float(did_i)   contexts[did_i].last_value.f
 #define last_delta(did_i)   contexts[did_i].last_delta
-#define last_txtx(vb, ctx)  ENT (char, (vb)->txt_data, (ctx)->last_txt_index)
+#define last_txtx(vb, ctx)  Bc ((vb)->txt_data, (ctx)->last_txt_index)
 #define last_txt(vb, did_i) last_txtx (vb, &(vb)->contexts[did_i])
 #define last_txt_len(did_i) contexts[did_i].last_txt_len
 
@@ -110,20 +112,22 @@ static inline void ctx_init_iterator (ContextP ctx) { ctx->iterator.next_b250 = 
 extern WordIndex ctx_create_node_do (VBlockP segging_vb, ContextP vctx, STRp (snip), bool *is_new);
 extern WordIndex ctx_create_node (VBlockP vb, DidIType did_i, STRp (snip));
 
-#define LASTb250(ctx) ((ctx)->flags.all_the_same ? *FIRSTENT(WordIndex, (ctx)->b250) : *LASTENT(WordIndex, (ctx)->b250))
+#define LASTb250(ctx) ((ctx)->flags.all_the_same ? *B1ST(WordIndex, (ctx)->b250) : *BLST(WordIndex, (ctx)->b250))
 extern void ctx_append_b250 (VBlockP vb, ContextP vctx, WordIndex node_index);
 
+extern int64_t ctx_get_count (VBlockP vb, ContextP ctx, WordIndex node_index);
 extern int64_t ctx_decrement_count (VBlockP vb, ContextP ctx, WordIndex node_index);
 extern void ctx_increment_count (VBlockP vb, ContextP ctx, WordIndex node_index);
+extern void ctx_protect_from_removal (VBlockP vb, ContextP ctx, WordIndex node_index);
 
 extern WordIndex ctx_get_next_snip (VBlockP vb, ContextP ctx, bool all_the_same, bool is_pair, pSTRp (snip));
 extern WordIndex ctx_peek_next_snip (VBlockP vb, ContextP ctx, bool all_the_same, pSTRp (snip));  
 
 extern WordIndex ctx_search_for_word_index (ContextP ctx, STRp(snip));
 extern void ctx_clone (VBlockP vb);
-extern CtxNode *ctx_node_vb_do (ConstContextP ctx, WordIndex node_index, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
-extern CtxNode *ctx_node_zf_do (ConstContextP ctx, int32_t node_index, const char **snip_in_dict, uint32_t *snip_len, const char *func, uint32_t code_line);
-#define ctx_node_zf(ctx, node_index, snip_in_dict, snip_len) ctx_node_zf_do(ctx, node_index, snip_in_dict, snip_len, __FUNCTION__, __LINE__)
+extern CtxNode *ctx_node_vb_do (ConstContextP ctx, WordIndex node_index, rom *snip_in_dict, uint32_t *snip_len, FUNCLINE);
+extern CtxNode *ctx_node_zf_do (ConstContextP ctx, int32_t node_index, rom *snip_in_dict, uint32_t *snip_len, FUNCLINE);
+#define ctx_node_zf(ctx, node_index, snip_in_dict, snip_len) ctx_node_zf_do(ctx, node_index, snip_in_dict, snip_len, __FUNCLINE)
 extern void ctx_merge_in_vb_ctx (VBlockP vb);
 extern void ctx_substract_txt_len (VBlockP vb, ContextP vctx);
 extern void ctx_add_compressor_time_to_zf_ctx (VBlockP vb);
@@ -187,32 +191,30 @@ extern void ctx_sort_dictionaries_vb_1(VBlockP vb);
 extern void ctx_update_stats (VBlockP vb);
 extern void ctx_free_context (ContextP ctx, DidIType did_i);
 extern void ctx_destroy_context (ContextP ctx, DidIType did_i);
-extern bool ctx_is_show_dict_id (DictId dict_id);
 
 extern CtxNode *ctx_get_node_by_word_index (ConstContextP ctx, WordIndex word_index);
-extern const char *ctx_get_snip_by_word_index (ConstContextP ctx, WordIndex word_index, pSTRp(snip));
-                                               
-extern const char *ctx_get_vb_snip_ex (ConstContextP vctx, WordIndex vb_node_index, pSTRp(snip)); 
-static inline const char *ctx_get_vb_snip (ConstContextP vctx, WordIndex vb_node_index) { return ctx_get_vb_snip_ex (vctx, vb_node_index, 0, 0); }
+extern rom ctx_get_snip_by_word_index_do (ConstContextP ctx, WordIndex word_index, pSTRp(snip), FUNCLINE);
+#define ctx_get_snip_by_word_index(ctx,word_index,snip) ctx_get_snip_by_word_index_do ((ctx), (word_index), &snip, &snip##_len, __FUNCLINE)
+#define ctx_get_snip_by_word_index0(ctx,word_index) ctx_get_snip_by_word_index_do ((ctx), (word_index), 0,0, __FUNCLINE)
+                                                
+extern rom ctx_get_vb_snip_ex (ConstContextP vctx, WordIndex vb_node_index, pSTRp(snip)); 
+static inline rom ctx_get_vb_snip (ConstContextP vctx, WordIndex vb_node_index) { return ctx_get_vb_snip_ex (vctx, vb_node_index, 0, 0); }
  
-static inline const char *ctx_get_words_snip(ConstContextP ctx, WordIndex word_index) 
-    { return ctx_get_snip_by_word_index (ctx, word_index, 0, 0); }
+static inline rom ctx_get_words_snip(ConstContextP ctx, WordIndex word_index)  // PIZ
+    { return ctx_get_snip_by_word_index0 (ctx, word_index); }
 
-extern const char *ctx_get_snip_by_zf_node_index (ConstBufferP nodes, ConstBufferP dict, WordIndex node_index, pSTRp(snip));
+extern WordIndex ctx_get_word_index_by_snip (VBlockP vb, ContextP ctx, STRp(snip));
 
-static inline const char *ctx_get_zf_nodes_snip(ConstContextP ctx, WordIndex node_index) 
-    { return ctx_get_snip_by_zf_node_index (&ctx->nodes, &ctx->dict, node_index, 0, 0); }
+extern rom ctx_get_zf_nodes_snip (ConstContextP zctx, WordIndex node_index, pSTRp(snip));
 
-extern WordIndex ctx_get_word_index_by_snip (ConstContextP ctx, const char *snip);
+extern WordIndex ctx_get_ol_node_index_by_snip (VBlockP vb, ContextP ctx, STRp(snip)); 
 
 extern void ctx_initialize_predefined_ctxs (ContextP contexts /* an array */, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_contexts);
 
-extern void ctx_read_all_dictionaries (void);
 extern void ctx_shorten_unused_dict_words (DidIType did_i);
-extern void ctx_compress_dictionaries (void);
 extern void ctx_read_all_counts (void);
 extern void ctx_compress_counts (void);
-extern const char *ctx_get_snip_with_largest_count (DidIType did_i, int64_t *count);
+extern rom ctx_get_snip_with_largest_count (DidIType did_i, int64_t *count);
 extern void ctx_populate_zf_ctx_from_contigs (Reference ref, DidIType dst_did_i, ConstContigPkgP ctgs);
 extern WordIndex ctx_populate_zf_ctx (DidIType dst_did_i, STRp (contig_name), WordIndex ref_index);
 
@@ -226,16 +228,17 @@ static inline bool ctx_set_rollback (VBlockP vb, ContextP ctx, bool override_id)
 {
     if (ctx->rback_id == vb->rback_id && !override_id) return false; // ctx already in rollback point 
     
-    ctx->rback_b250_len       = ctx->b250.len;
-    ctx->rback_local_len      = ctx->local.len;
-    ctx->rback_nodes_len      = ctx->nodes.len;
-    ctx->rback_txt_len        = ctx->txt_len;
-    ctx->rback_num_singletons = ctx->num_singletons;
-    ctx->rback_last_value     = ctx->last_value;
-    ctx->rback_last_delta     = ctx->last_delta;
-    ctx->rback_last_txt_index = ctx->last_txt_index;
-    ctx->rback_last_txt_len   = ctx->last_txt_len;
-    ctx->rback_id             = vb->rback_id;
+    ctx->rback_b250_len        = ctx->b250.len;
+    ctx->rback_local_len       = ctx->local.len;
+    ctx->rback_nodes_len       = ctx->nodes.len;
+    ctx->rback_txt_len         = ctx->txt_len;
+    ctx->rback_local_num_words = ctx->local_num_words;
+    ctx->rback_b250_count      = ctx->b250.count;
+    ctx->rback_last_value      = ctx->last_value;
+    ctx->rback_last_delta      = ctx->last_delta;
+    ctx->rback_last_txt_index  = ctx->last_txt_index;
+    ctx->rback_last_txt_len    = ctx->last_txt_len;
+    ctx->rback_id              = vb->rback_id;
     return true;
 }
 
@@ -270,8 +273,15 @@ static inline void ctx_set_last_value (VBlockP vb, ContextP ctx, ValueType last_
 // returns true if value is set
 static inline bool ctx_set_last_value_from_str (VBlockP vb, ContextP ctx, STRp(str))
 {
-    return (ctx->flags.store == STORE_INT   && str_get_int   (STRa(str), &ctx->last_value.i)) ||
-           (ctx->flags.store == STORE_FLOAT && str_get_float (STRa(str), &ctx->last_value.f, 0, 0));
+    if ((ctx->flags.store == STORE_INT   && str_get_int   (STRa(str), &ctx->last_value.i)) ||
+        (ctx->flags.store == STORE_FLOAT && str_get_float (STRa(str), &ctx->last_value.f, 0, 0))) {
+
+        ctx->last_line_i   = vb->line_i;
+        ctx->last_sample_i = vb->sample_i; // used for VCF/FORMAT. otherwise meaningless but harmless.
+        return true;
+    }
+    else
+        return false;
 }
 
 // set encountered if not already ctx_set_last_value (encounted = seen, but without setting last_value)
@@ -334,4 +344,6 @@ extern uint64_t ctx_get_ctx_group_z_len (VBlockP vb, DidIType group_did_i);
 typedef enum { KR_KEEP, KR_REMOVE } CtxKeepRemove;
 extern void ctx_declare_winning_group (DidIType winning_group_did_i, DidIType losing_group_did_i, DidIType new_st_did_i);
 
-extern void ctx_foreach_buffer(ContextP ctx, bool set_name, void (*func)(BufferP buf, const char *func, unsigned line));
+extern void ctx_foreach_buffer(ContextP ctx, bool set_name, void (*func)(BufferP buf, FUNCLINE));
+
+extern SORTER (sort_by_dict_id);

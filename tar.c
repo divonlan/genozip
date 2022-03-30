@@ -18,11 +18,17 @@
 #include "file.h"
 #include "endianness.h"
 
+#define MAX_TAR_UID_GID 07777777 // must fit in 8 characters, inc. \0, printed in octal
+#define NOBODY  65534            // used for UID / GID in case real values are beyond MAX_TAR_UID_GID. https://wiki.ubuntu.com/nobody
+
+#define MAX_TAR_MODE 07777777
+#define MAX_TAR_MTIME 077777777777ULL
+
 // each file in the tar file is comprised a 512-byte "ustar" header followed by 512-byte blocks. tar file is terminated
 // by two zero 512B blocks. see: http://manpages.ubuntu.com/manpages/bionic/man5/tar.5.html
 typedef struct __attribute__ ((packed)){
     char name[100];     // nul-terminated
-    char mode[8];
+    char mode[8];       // nul-terminated octal in ASCII
     char uid[8];        // nul-terminated octal in ASCII
     char gid[8];        // Unix: nul-terminated octal in ASCII;  Windows: 0
     union {
@@ -33,7 +39,7 @@ typedef struct __attribute__ ((packed)){
             char size_bgen[8];
         } gnu;
     } size;
-    char mtime[12];     // nul-terminated, octal in ASCII
+    char mtime[12];     // nul-terminated octal in ASCII
     char checksum[8];   // sum of header bytes (as unsigned char), in six-digit zero-padded octal, followed by nul and space. checksum is calculated while the "checksum" field is all-spaces.
     char typeflag[1];   // always '0' - regular file (genozip doesn't support symlinks, directories etc)
     char linkname[100]; // we don't support hard links, so this is always 0
@@ -48,11 +54,11 @@ typedef struct __attribute__ ((packed)){
 } HeaderPosixUstar;
 
 static FILE *tar_file = NULL;
-static const char *tar_name = NULL;
+static rom tar_name = NULL;
 static int64_t file_offset = 0; // after tar_open_file: file start offset within tar (after the file tar header)
 static HeaderPosixUstar hdr = {};
 
-void tar_set_tar_name (const char *tar_filename)
+void tar_set_tar_name (rom tar_filename)
 {
     tar_name = tar_filename;
 }
@@ -67,11 +73,37 @@ void tar_initialize (void)
     ASSINP (tar_file, "cannot create tar file %s: %s", tar_name, strerror (errno)); 
 }
 
-static void tar_copy_metadata_from_file (const char *fn)
+static void tar_copy_metadata_from_file (rom fn)
 {
     struct stat64 st;    
     int ret = stat64 (fn, &st);
     ASSERT (!ret, "stat64 failed on %s: %s", fn, strerror(errno));
+
+    // change UID and/or GID to NOBODY if they go beyond the maximum. This can happen, for example, if
+    // SSSD (https://sssd.io/) uses UIDs from Microsoft Active Directory.
+    if ((uint32_t)st.st_uid > MAX_TAR_UID_GID) {
+        WARN_ONCE ("UID of %s (and perhaps others) is %u - beyond the maximum allowed by the tar file format; recording uid as %u (nobody). --quiet to suppress this message.",
+                   fn, st.st_uid, NOBODY);
+        st.st_uid = NOBODY;
+    }
+
+    if ((uint32_t)st.st_gid > MAX_TAR_UID_GID) {
+        WARN_ONCE ("GID of %s (and perhaps others) is %u - beyond the maximum allowed by the tar file format; recording uid as %u (nogroup). --quiet to suppress this message.",
+                   fn, st.st_gid, NOBODY);
+        st.st_gid = NOBODY;
+    }
+
+    if ((uint32_t)st.st_mode > MAX_TAR_MODE) {
+        WARN_ONCE ("mode of %s (and perhaps others) is 0%o - beyond the maximum allowed by the tar file format; recording mode as 0%o. --quiet to suppress this message.",
+                   fn, st.st_mode, st.st_mode & 0777);
+        st.st_mode &= 0777;
+    }
+
+    if ((uint64_t)st.st_mtime > MAX_TAR_MTIME) {
+        WARN_ONCE ("mtime of %s (and perhaps others) is %"PRIu64" - beyond the maximum allowed by the tar file format; recording mtime as 0. --quiet to suppress this message.",
+                   fn, st.st_mtime);
+        st.st_mtime = 0;
+    }
 
     // convert to nul-terminated octal in ASCII
     sprintf (hdr.uid,   "%.*o", (int)sizeof(hdr.uid)-1,  st.st_uid);
@@ -98,7 +130,7 @@ static void tar_copy_metadata_from_file (const char *fn)
 }
 
 // open z_file within tar, for writing
-FILE *tar_open_file (const char *z_fn)
+FILE *tar_open_file (rom z_fn)
 {
     ASSERTNOTNULL (tar_file);
 
@@ -123,7 +155,7 @@ FILE *tar_open_file (const char *z_fn)
     
     // filename: case: filename is longer than 99 - split between "name" and "prefix" field (separated at a '/', and excluding the seperating '/')
     else {
-        const char *sep = strchr (&z_fn[z_fn_len-100], '/');
+        rom sep = strchr (&z_fn[z_fn_len-100], '/');
         ASSERT (sep || ((sep - z_fn) > 154), "cannot add %s to tar file - name too long", z_fn);
 
         memcpy (hdr.prefix, z_fn, sep - z_fn);
@@ -197,7 +229,7 @@ void tar_close_file (void **file)
     if (file) *file = NULL;
 }
 
-void tar_copy_file (const char *z_fn)
+void tar_copy_file (rom z_fn)
 {
     ASSERTNOTNULL (tar_file);
 

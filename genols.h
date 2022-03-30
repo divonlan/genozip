@@ -5,4 +5,4 @@
 
 #pragma once
 
-extern void genols (const char *z_filename, bool finalize, const char *subdir, bool recursive);
+extern void genols (rom z_filename, bool finalize, rom subdir, bool recursive);

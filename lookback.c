@@ -40,14 +40,14 @@ void lookback_insert (VBlockP vb, DidIType lb_did_i, DidIType did_i, bool copy_l
         value = ctx->last_value;
 
     if (is_word_index) 
-        *ENT (WordIndex, *buf, buf->newest_index) = (WordIndex)value.i; // insert index
+        *B(WordIndex, *buf, buf->newest_index) = (WordIndex)value.i; // insert index
     else              
-        *ENT (ValueType, *buf, buf->newest_index) = value;              // insert value
+        *B(ValueType, *buf, buf->newest_index) = value;              // insert value
 }
 
 void lookback_insert_txt (VBlockP vb, DidIType lb_did_i, DidIType did_i, STRp(txt))
 { 
-    ValueType value = { .txt = { .index =  ENTNUM (vb->txt_data, txt), .len = txt_len } };
+    ValueType value = { .txt = { .index =  BNUMtxt (txt), .len = txt_len } };
     lookback_insert (vb, lb_did_i, did_i, false, value, false);
 }
 
@@ -76,7 +76,7 @@ const void *lookback_get_do (VBlockP vb, ContextP lb_ctx, ContextP ctx,
     ASSERT (lookback > 0 && lookback < lb_size, "Expecting lookback=%d in ctx=%s vb=%d line_i=%"PRIu64"%s%s to be in the range [1,%u]", 
             lookback, ctx->tag_name, vb->vblock_i, vb->line_i, (VB_DT(DT_VCF) ? " sample_i=" : ""), (VB_DT(DT_VCF) ? str_int_s (vb->sample_i).s : ""), lb_size-1);
 
-    return is_word_index ? (void *)ENT (WordIndex, *buf, index) : (void *)ENT (int64_t, *buf, index);
+    return is_word_index ? (void *)B(WordIndex, *buf, index) : (void *)B(int64_t, *buf, index);
 }
 
 // Seg: check if a string is the same of a back txt at a certain lookback
@@ -88,7 +88,7 @@ bool lookback_is_same_txt (VBlockP vb, DidIType lb_did_i, ContextP ctx, uint32_t
 
     ValueType value = lookback_get_value (vb, CTX(lb_did_i), ctx, lookback);
 
-    return str_issame_(STRa(str), ENT(char, vb->txt_data, value.txt.index), value.txt.len);
+    return str_issame_(STRa(str), Bc (vb->txt_data, value.txt.index), value.txt.len);
 }
 
 
@@ -105,7 +105,7 @@ uint32_t lookback_get_next (VBlockP vb, ContextP lb_ctx, ContextP ctx, WordIndex
     uint32_t lookback=0; // initialize to "not found"
 
     for (; !lookback && *iterator != buf->gap_index ; *iterator = RR(*iterator + 1, lb_size))
-        if (*ENT (WordIndex, *buf, *iterator) == search_for) 
+        if (*B(WordIndex, *buf, *iterator) == search_for) 
             lookback = (RR(*iterator - buf->newest_index + 1, lb_size));
 
     ASSERT (lookback >= 0 && lookback < lb_size, "Invalid lookback=%d", lookback);

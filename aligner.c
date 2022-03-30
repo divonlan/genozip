@@ -42,7 +42,7 @@ static const uint32_t nuke_encode[256] = { 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4
 // Foward example: If seq is: G-AGGGCT  (G is the hook)  -- matches reference AGGGCT       - function returns 110110101000 (A=00 is the LSb)
 // Reverse       : If seq is: CGCCCT-C  (C is the hook)  -- also matches reference AGGGCT  - function returns 110110101000 - the same
 // calculates a refhash word from 14 nucleotides following a 'G' (only last G in a sequenece of GGGG...)
-static inline bool aligner_get_word_from_seq (VBlock *vb, const char *seq, uint32_t *refhash_word, int direction /* 1 forward, -1 reverse */)
+static inline bool aligner_get_word_from_seq (VBlockP vb, rom seq, uint32_t *refhash_word, int direction /* 1 forward, -1 reverse */)
                                               
 {   
     START_TIMER;
@@ -70,8 +70,8 @@ static inline bool aligner_get_word_from_seq (VBlock *vb, const char *seq, uint3
 }
 
 // converts a string sequence to a 2-bit bitmap
-BitArray aligner_seq_to_bitmap (const char *seq, word_t seq_len, 
-                                word_t *bitmap_words,  // allocated by caller
+BitArray aligner_seq_to_bitmap (rom seq, uint64_t seq_len, 
+                                uint64_t *bitmap_words,  // allocated by caller
                                 bool *seq_is_all_actg) // optional out
 {
     // covert seq to 2-bit array
@@ -82,7 +82,7 @@ BitArray aligner_seq_to_bitmap (const char *seq, word_t seq_len,
 
     if (seq_is_all_actg) *seq_is_all_actg = true; // starting optimistic
 
-    for (word_t base_i=0; base_i < seq_len; base_i++) {
+    for (uint64_t base_i=0; base_i < seq_len; base_i++) {
         uint8_t encoding = nuke_encode[(uint8_t)seq[base_i]];
     
         if (encoding == 4) { // not A, C, G or T - usually N
@@ -101,7 +101,7 @@ BitArray aligner_seq_to_bitmap (const char *seq, word_t seq_len,
 // returns gpos aligned with seq with M (as in CIGAR) length, containing the longest match to the reference. 
 // returns false if no match found.
 // note: matches that imply a negative GPOS (i.e. their beginning is aligned to before the start of the genome), aren't consisdered
-static inline PosType aligner_best_match (VBlock *vb, STRp(seq), PosType pair_gpos,
+static inline PosType aligner_best_match (VBlockP vb, STRp(seq), PosType pair_gpos,
                                           const BitArray *genome, const BitArray *emoneg, PosType genome_nbases,
                                           bool *is_forward, bool *is_all_ref) // out
 {
@@ -116,7 +116,7 @@ static inline PosType aligner_best_match (VBlock *vb, STRp(seq), PosType pair_gp
     
     // convert seq to a bitmap
     bool maybe_perfect_match;
-    word_t seq_bits_words[roundup_bits2words64(seq_len * 2)];
+    uint64_t seq_bits_words[roundup_bits2words64(seq_len * 2)];
     BitArray seq_bits = aligner_seq_to_bitmap (seq, seq_len, seq_bits_words, &maybe_perfect_match);
     
     //ref_print_bases (&seq_bits, "\nseq_bits fwd", true);
@@ -252,7 +252,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq))
         ASSERT (vb->line_i < gpos_ctx->pair.len, "vb=%u cannot get pair_1 GPOS for line_i=%"PRIu64" because pair_1 GPOS.len=%"PRIu64,
                 vb->vblock_i, vb->line_i, gpos_ctx->pair.len);
 
-        pair_gpos = (PosType)*ENT (uint32_t, gpos_ctx->pair, vb->line_i); // same location, in the pair's local
+        pair_gpos = (PosType)*B32 (gpos_ctx->pair, vb->line_i); // same location, in the pair's local
     }
 
     // our aligner algorithm only works for short reads - long reads tend to have many Indel differences (mostly errors) vs the reference
@@ -298,7 +298,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq))
     
     // store the GPOS in local if its not a 2nd pair, or if it is, but the delta is not small enough
     if (store_local)
-        NEXTENT (uint32_t, gpos_ctx->local) = (uint32_t)gpos;
+        BNXT32 (gpos_ctx->local) = (uint32_t)gpos;
 
     // shortcut if there's no reference match
     if (gpos == NO_GPOS) {
@@ -324,7 +324,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq))
 
     PosType room_fwd = genome_nbases - gpos; // how much reference forward might contain a match
 
-    bit_index_t next_bit = bitmap_ctx->next_local; // copy to automatic variable (optimized to a register) for performace
+    uint64_t next_bit = bitmap_ctx->next_local; // copy to automatic variable (optimized to a register) for performace
     for (uint32_t i=0; i < seq_len; i++) {
                 
         bool use_reference = false;
@@ -334,7 +334,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq))
             char seq_base = is_forward ? seq[i] : complement[(uint8_t)seq[i]];
             
             PosType ref_i = gpos + (is_forward ? i : seq_len-1-i);
-            char ref_base = ACGT_DECODE (genome, ref_i);
+            char ref_base = base_by_idx (genome, ref_i);
 
             if (seq_base == ref_base) {
                 
@@ -348,7 +348,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq))
 
         // case: we can't use the reference (different value than base or we have passed the end of the reference)
         if (!use_reference) 
-            NEXTENT (char, nonref_ctx->local) = seq[i];
+            BNXTc (nonref_ctx->local) = seq[i];
 
         bit_array_assign (bitmap, next_bit, use_reference);
         next_bit++; // can't increment inside macro
@@ -362,7 +362,7 @@ done:
 // PIZ: SEQ reconstruction 
 void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len, bool is_pair_2) // true if this is a second file of a pair
 {
-    if (piz_is_skip_section (vb, SEC_LOCAL, bitmap_ctx->dict_id)) return; // if case we need to skip the SEQ field (for the entire file)
+    if (!bitmap_ctx->is_loaded) return; // if case we need to skip the SEQ field (for the entire file)
 
     Context *nonref_ctx = bitmap_ctx + 1;
     Context *gpos_ctx   = bitmap_ctx + 3;
@@ -404,19 +404,19 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
         if (is_forward)  // normal (note: this condition test is outside of the tight loop)
             for (uint32_t i=0; i < seq_len; i++)
                 if (NEXTLOCALBIT (bitmap_ctx))  // get base from reference
-                    RECONSTRUCT1 (ACGT_DECODE (genome, gpos + i));
+                    RECONSTRUCT1 (base_by_idx (genome, gpos + i));
                 else  // get base from nonref
                     RECONSTRUCT1 (NEXTLOCAL (char, nonref_ctx));
 
         else // reverse complement
             for (uint32_t i=0; i < seq_len; i++) 
                 if (NEXTLOCALBIT (bitmap_ctx))  // case: get base from reference
-                    RECONSTRUCT1 (complement [(uint8_t)ACGT_DECODE (genome, gpos + seq_len-1 - i)]);
+                    RECONSTRUCT1 (complement [(uint8_t)base_by_idx (genome, gpos + seq_len-1 - i)]);
                 else  // case: get base from nonref
                     RECONSTRUCT1 (NEXTLOCAL (char, nonref_ctx));
     }
     else {
-        RECONSTRUCT (ENT (char, nonref_ctx->local, nonref_ctx->next_local), seq_len);
+        RECONSTRUCT (Bc (nonref_ctx->local, nonref_ctx->next_local), seq_len);
         nonref_ctx->next_local += seq_len;
     }
 

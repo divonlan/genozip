@@ -13,11 +13,10 @@ extern void hash_alloc_global (ContextP zctx, uint32_t estimated_entries);
 extern uint32_t hash_next_size_up (uint64_t size, bool allow_huge);
 
 typedef enum { HASH_NEW_OK_SINGLETON_IN_VB, HASH_NEW_OK_NOT_SINGLETON, HASH_READ_ONLY } HashGlobalGetEntryMode; 
-extern WordIndex hash_global_get_entry (ContextP zctx, const char *snip, unsigned snip_len, HashGlobalGetEntryMode mode,
+extern WordIndex hash_global_get_entry (ContextP zctx, STRp(snip), HashGlobalGetEntryMode mode,
                                         CtxNodeP *old_node);
 
-extern WordIndex hash_get_entry_for_seg (VBlockP segging_vb, ContextP vctx,
-                                         const char *snip, unsigned snip_len, 
+extern WordIndex hash_get_entry_for_seg (VBlockP segging_vb, ContextP vctx, STRp(snip), 
                                          WordIndex new_node_i_if_no_old_one,
                                          CtxNodeP *node);
 
@@ -25,7 +24,7 @@ extern WordIndex hash_get_entry_for_seg (VBlockP segging_vb, ContextP vctx,
 // average linked lists. probably bc the CPU can store the entire hash and nodes arrays in L1 or L2
 // memory cache during segmentation
 #define NO_NEXT 0xffffffff
-static inline uint32_t hash_do (uint32_t hash_len, const char *snip, unsigned snip_len)
+static inline uint32_t hash_do (uint32_t hash_len, STRp(snip))
 {
     if (!hash_len) return NO_NEXT; // hash table does not exist
 

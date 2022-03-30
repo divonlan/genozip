@@ -66,7 +66,11 @@
 #pragma GENDICT FORMAT_SB=DTYPE_2=SB       // <ID=SB,Number=4,Type=Integer,Description="Per-sample component statistics which comprise the Fisher's Exact Test to detect strand bias">
 #pragma GENDICT FORMAT_PS=DTYPE_2=PS       // seen 1: <ID=PS,Number=1,Type=Integer,Description="Phasing set (typically the position of the first variant in the set)">
                                            // seen 2: <ID=PS,Number=1,Type=Integer,Description="Physical phasing ID information, where each unique ID within a given sample (but not across samples) connects records within a phasing group">
+#pragma GENDICT FORMAT_PSpos=DTYPE_2=PSpos // 3 contexts used to seg PS and PID
+#pragma GENDICT FORMAT_PSalt=DTYPE_2=PSalt
+#pragma GENDICT FORMAT_PSref=DTYPE_2=PSref
 #pragma GENDICT FORMAT_PID=DTYPE_2=PID     // <ID=PID,Number=1,Type=String,Description="Physical phasing ID information, where each unique ID within a given sample (but not across samples) connects records within a phasing group">
+#pragma GENDICT FORMAT_PGT=DTYPE_2=PGT     // <ID=PGT,Number=1,Type=String,Description="Physical phasing haplotype information, describing how the alternate alleles are phased in relation to one another">
 #pragma GENDICT FORMAT_FL=DTYPE_2=FL       // Seen in Reich's ancient DNA datasets: <ID=FL,Number=1,Type=Character,Description="filter level in range 0-9 or no value (non-integer: N,?) with zero being least reliable; to threshold at FL=n, use all levels n-9">
 
 #pragma GENDICT FORMAT_AB=DTYPE_2=AB       // <ID=AB,Number=1,Type=Float,Description="Allele balance for each het genotype",RendAlg="NONE">
@@ -243,24 +247,31 @@ typedef uint8_t Allele; // elements of ht_matrix: values 48->147 for allele 0 to
 
 // ZIP stuff
 extern void vcf_zip_initialize (void);
-extern void vcf_zip_read_one_vb (VBlockP vb);
+extern void vcf_zip_finalize (void);
+extern void vcf_zip_init_vb (VBlockP vb);
 extern void vcf_liftover_display_lift_report (void);
 extern void vcf_zip_after_compress (VBlockP vb);
-extern void zip_vcf_after_vbs (void);
+extern void vcf_zip_after_vbs (void);
+extern void vcf_zip_set_txt_header_specific (SectionHeaderTxtHeader *txt_header);
+extern void vcf_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeader *vb_header);
+extern bool vcf_zip_vb_has_count (VBlockP vb);
+extern void vcf_zip_generate_recon_plan (void);
+extern void vcf_zip_update_txt_counters (VBlockP vb);
 
 // SEG stuff
-extern const char *vcf_seg_txt_line (VBlockP vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
+extern rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
 extern void vcf_seg_initialize (VBlockP vb_);
 extern void vcf_zip_after_compute (VBlockP vb);
 extern void vcf_seg_finalize (VBlockP vb_);
 extern bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern TranslatorId vcf_lo_luft_trans_id (DictId dict_id, char number);
+extern uint32_t vcf_seg_get_vb_recon_size (VBlockP vb);
 
 // PIZ stuff
-extern bool vcf_piz_read_one_vb (VBlockP vb, Section sl);
+extern bool vcf_piz_maybe_reorder_lines (void);
+extern bool vcf_piz_init_vb (VBlockP vb, const SectionHeaderVbHeader *header, uint32_t *txt_data_so_far_single_0_increment);
 extern void vcf_piz_recon_init (VBlockP vb);
-extern bool vcf_vb_is_luft (VBlockP vb);
-extern bool vcf_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
+extern IS_SKIP (vcf_piz_is_skip_section);
 extern CONTAINER_FILTER_FUNC (vcf_piz_filter);
 extern CONTAINER_CALLBACK (vcf_piz_container_cb);
 extern CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb);
@@ -278,6 +289,10 @@ extern void vcf_vb_cleanup_memory();
 extern unsigned vcf_vb_size (DataType dt);
 extern unsigned vcf_vb_zip_dl_size (void);
 extern bool vcf_vb_has_haplotype_data (VBlockP vb);
+extern bool vcf_vb_is_primary (VBlockP vb);
+extern bool vcf_vb_is_luft (VBlockP vb);
+extern int32_t vcf_vb_get_reject_bytes (VBlockP vb);
+extern rom vcf_coords_name (int coord);
 
 // Liftover - INFO fields
 #define INFO_LUFT_NAME  "LUFT"
@@ -293,7 +308,7 @@ extern void vcf_tags_cmdline_drop_option(void);
 extern void vcf_tags_cmdline_rename_option(void);
 
 // Samples stuff
-extern void vcf_samples_add  (const char *samples_str);
+extern void vcf_samples_add  (rom samples_str);
 
 #define VCF_SPECIAL { vcf_piz_special_main_REFALT, vcf_piz_special_FORMAT, vcf_piz_special_INFO_AC, vcf_piz_special_INFO_SVLEN, \
                       vcf_piz_special_FORMAT_DS_old, vcf_piz_special_INFO_BaseCounts, vcf_piz_special_INFO_SF, vcf_piz_special_MINUS,  \
@@ -304,7 +319,7 @@ extern void vcf_samples_add  (const char *samples_str);
                       vcf_piz_special_INFO_HGVS_DELINS_END_POS, vcf_piz_special_INFO_HGVS_DELINS_PAYLOAD,\
                       vcf_piz_special_MUX_BY_DOSAGE, vcf_piz_special_FORMAT_AB, vcf_piz_special_FORMAT_GQ, \
                       vcf_piz_special_MUX_BY_DOSAGExDP, vcf_piz_special_COPY_REForALT, vcf_piz_special_DP_by_DP, \
-                      vcf_piz_special_PS_by_PID }
+                      vcf_piz_special_PS_by_PID, vcf_piz_special_PGT }
 
 SPECIAL (VCF, 0,  main_REFALT,         vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,              vcf_piz_special_FORMAT)
@@ -334,7 +349,8 @@ SPECIAL (VCF, 24, MUX_BY_DOSAGExDP,    vcf_piz_special_MUX_BY_DOSAGExDP);       
 SPECIAL (VCF, 25, COPY_REForALT,       vcf_piz_special_COPY_REForALT);            // added v13.0.5
 SPECIAL (VCF, 26, DP_by_DP,            vcf_piz_special_DP_by_DP);                 // added v13.0.5
 SPECIAL (VCF, 27, PS_BY_PID,           vcf_piz_special_PS_by_PID);                // added v13.0.11
-#define NUM_VCF_SPECIAL 28
+SPECIAL (VCF, 28, PGT,                 vcf_piz_special_PGT);                      // added v14.0.0
+#define NUM_VCF_SPECIAL 29
 
 // Translators for Luft (=secondary coordinates)
 TRANSLATOR (VCF, VCF,   1,  G,      vcf_piz_luft_G)       // same order as LiftOverStatus starting LO_CANT_G
@@ -353,7 +369,7 @@ TRANSLATOR (VCF, VCF,   10, ALLELE, vcf_piz_luft_ALLELE)
                           vcf_piz_luft_A_1, vcf_piz_luft_PLOIDY, vcf_piz_luft_GT, vcf_piz_luft_END, vcf_piz_luft_XREV, vcf_piz_luft_ALLELE }
 
 typedef struct {
-    const char *alg_name;
+    rom alg_name;
     enum { TW_NEVER, TW_ALWAYS, TW_REF_ALT_SWITCH, TW_XSTRAND } upon;
 } LuftTransLateProp;
 
@@ -373,7 +389,7 @@ typedef struct {
                            
 extern const LuftTransLateProp ltrans_props[NUM_VCF_TRANS];
 
-#define needs_translation(ctx)  (z_dual_coords && (ctx)->luft_trans && \
+#define needs_translation(ctx)  (z_is_dvcf && (ctx)->luft_trans && \
     ((ltrans_props[(ctx)->luft_trans].upon == TW_REF_ALT_SWITCH && LO_IS_OK_SWITCH (last_ostatus)) || \
      (ltrans_props[(ctx)->luft_trans].upon == TW_ALWAYS         && LO_IS_OK (last_ostatus))        || \
      (ltrans_props[(ctx)->luft_trans].upon == TW_XSTRAND        && LO_IS_OK (last_ostatus) && *CTX(VCF_oXSTRAND)->last_snip != '-')))
@@ -386,3 +402,6 @@ extern const LuftTransLateProp ltrans_props[NUM_VCF_TRANS];
 
 #define dict_id_is_vcf_info_sf   dict_id_is_type_1
 #define dict_id_is_vcf_format_sf dict_id_is_type_2
+
+typedef enum { VCF_COMP_MAIN, VCF_COMP_PRIM_ONLY, VCF_COMP_LUFT_ONLY } VcfComponentType;
+#define VCF_COMP_NAMES { "MAIN", "PRIM", "LUFT" }

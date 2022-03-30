@@ -17,7 +17,7 @@
 #pragma GENDICT ME23_TOPLEVEL=DTYPE_FIELD=TOPLEVEL
 #pragma GENDICT ME23_TOP2VCF=DTYPE_FIELD=TOP2VCF
 
-extern const char *me23_seg_txt_line (VBlockP vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
+extern rom me23_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
 extern void me23_seg_initialize (VBlockP vb);
 extern void me23_seg_finalize (VBlockP vb);
 extern bool me23_seg_is_small (ConstVBlockP vb, DictId dict_id);

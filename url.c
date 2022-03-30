@@ -25,7 +25,7 @@
 // our instance of curl - only one at a time is permitted
 static StreamP curl = NULL;
 
-bool url_is_url (const char *filename)
+bool url_is_url (rom filename)
 {
     return !!strstr (filename, "://");
 }
@@ -33,7 +33,7 @@ bool url_is_url (const char *filename)
 #define CURL_RESPONSE_LEN 4096
 
 // returns error string if curl itself (not server) failed, or NULL if successful
-static void url_do_curl (const char *url, bool head,
+static void url_do_curl (rom url, bool head,
                          char *stdout_data, unsigned *stdout_len,
                          char *error, unsigned *error_len) 
 {
@@ -109,7 +109,7 @@ static void url_do_curl (const char *url, bool head,
     *error_len = strlen (error);
 }
 
-static int url_do_curl_head (const char *url,
+static int url_do_curl_head (rom url,
                              char *stdout_data, unsigned *stdout_len,
                              char *stderr_data, unsigned *stderr_len)
 {
@@ -131,7 +131,7 @@ static int url_do_curl_head (const char *url,
 // for a url, returns whether that URL exists, and if possible, its file_size, or -1 if its not available
 // note that the file_size availability is at the discretion of the web/ftp site. 
 // in case of an error, returns the error string
-const char *url_get_status (const char *url, bool *is_file_exists, int64_t *file_size)
+rom url_get_status (rom url, bool *is_file_exists, int64_t *file_size)
 {
     *is_file_exists = false;
     *file_size = 0;
@@ -182,7 +182,7 @@ const char *url_get_status (const char *url, bool *is_file_exists, int64_t *file
             return error;
     } 
         
-    const char *len_start = NULL;
+    rom len_start = NULL;
     if      ((len_start = strstr (response, "content-length:"))) len_start += sizeof "content-length:" -1;
     else if ((len_start = strstr (response, "Content-Length:"))) len_start += sizeof "Content-Length:" -1;
 
@@ -198,7 +198,7 @@ const char *url_get_status (const char *url, bool *is_file_exists, int64_t *file
 
 
 // reads a string response from a URL, returns a nul-terminated string and the number of characters (excluding \0), or -1 if failed
-int32_t url_read_string (const char *url, char *data, uint32_t data_size)
+int32_t url_read_string (rom url, char *data, uint32_t data_size)
 {
     char response[CURL_RESPONSE_LEN], error[CURL_RESPONSE_LEN];
     unsigned response_len=0, error_len=0;
@@ -217,7 +217,7 @@ int32_t url_read_string (const char *url, char *data, uint32_t data_size)
 }
 
 // returns a FILE* which streams the content of a URL
-FILE *url_open (StreamP parent_stream, const char *url)
+FILE *url_open (StreamP parent_stream, rom url)
 {
     ASSERT0 (!curl, "Error url_open failed because curl is already running");
 
@@ -252,7 +252,7 @@ void url_kill_curl (void)
 }
 
 // make a string into a a string containing only valid url characters, eg "first last" -> "first%20last"
-char *url_esc_non_valid_chars (const char *in)
+char *url_esc_non_valid_chars (rom in)
 {
     char *out = MALLOC (strlen(in) * 3 + 1);
     char *next = out;

@@ -25,7 +25,7 @@ const char sep_without_space[256] = { [':']=true, [';']=true, ['/']=true, ['|']=
 //--------------------------------------------
 
 typedef struct { 
-    const char *item;       // pointer into field
+    rom item;       // pointer into field
     unsigned item_len;
     char sep;               // separator after item - 0 if none
     char sep2;              // double space separator - common in FASTA headers
@@ -34,12 +34,12 @@ typedef struct {
     unsigned leading_zeros; // in case of an int - these will go into the container prefix
 } Token;
 
-static void tokenizer_split (STRp(field), const char *is_sep, bool split_on_digit_boundary,
+static void tokenizer_split (STRp(field), rom is_sep, bool split_on_digit_boundary,
                              Token *items, uint8_t *n_items) // out: array of MAX_TOKENS
 {
     bool in_digits = field_len ? IS_DIGIT (field[0]) : false;
     bool is_final_item = false;
-    const char *snip = field;
+    rom snip = field;
     unsigned snip_len = 0;
     *n_items = 0;
 
@@ -98,7 +98,7 @@ Container tokenizer_initialize_container_array (DictId dict_id)
     Container con = (Container){ .repeats = 1 };
 
     for (unsigned i=0; i < MAX_TOKENS; i++) {
-        const uint8_t *id = dict_id.id;
+        bytes id = dict_id.id;
         
         char dict_id_str[8] = { id[0], base32(i), id[1], id[2], id[3], id[4], id[5], id[6] };
         
@@ -109,7 +109,7 @@ Container tokenizer_initialize_container_array (DictId dict_id)
 }
 
 void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field), 
-                    const char *is_sep,   
+                    rom is_sep,   
                     unsigned add_additional_bytes)  // account for characters in addition to the field
 {
     // when generate the items from "TOKEN" - from from field_ctx's dict_id to avoid clashing
@@ -146,7 +146,7 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
                 ABS((delta = ci->value - item_ctx->last_value.i)) < MAX_TOKENIZER_DETLA &&
                 (delta || !item_ctx->flags.all_the_same)) { // don't do delta if it can ruin the all-the-same
 
-                seg_self_delta (vb, item_ctx, ci->value, ci->item_len);
+                seg_self_delta (vb, item_ctx, ci->value, 0, ci->item_len);
                 item_ctx->flags.store = STORE_INT;
             }
             else {

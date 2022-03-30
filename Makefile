@@ -32,18 +32,19 @@ endif
 SRC_DIRS = zlib bzlib lzma bsc libdeflate htscodecs compatibility
 
 MY_SRCS = genozip.c genols.c base250.c context.c container.c strings.c stats.c arch.c license.c \
-		  data_types.c bit_array.c progress.c coords.c writer.c tar.c chrom.c qname.c tokenizer.c \
-          zip.c piz.c reconstruct.c seg.c zfile.c aligner.c flags.c digest.c mutex.c linesorter.c threads.c \
+		  data_types.c bit_array.c progress.c writer.c tar.c chrom.c qname.c tokenizer.c \
+          zip.c piz.c reconstruct.c seg.c zfile.c aligner.c flags.c digest.c mutex.c vcf_linesort.c threads.c \
 		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c \
 		  vcf_piz.c vcf_seg.c vcf_gt.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c vcf_refalt.c vcf_tags.c vcf_ps_pid.c \
-          sam_seg.c sam_piz.c sam_seg_bam.c sam_shared.c sam_header.c sam_md.c sam_tlen.c sam_cigar.c sam_fields.c \
-		  sam_seq.c sam_qual.c sam_gencomp.c sam_sa.c \
+		  sam_seg.c sam_piz.c sam_shared.c sam_header.c sam_md.c sam_tlen.c sam_cigar.c sam_fields.c sam_bsseeker2.c\
+		  sam_seq.c sam_qual.c sam_gc_zip.c sam_gc_piz.c sam_gc_load_grps.c sam_gc_ingest_grps.c sam_pos.c \
+		  bam_seg.c bam_seq.c bam_show.c \
 		  fasta.c fastq.c gff3.c me23.c phylip.c chain.c kraken.c locs.c generic.c \
 		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c lookback.c \
 		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c\
 		  codec_gtshark.c codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c \
 	      txtfile.c profiler.c file.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c gencomp.c \
-		  vblock.c regions.c  optimize.c dict_id.c hash.c stream.c url.c bases_filter.c
+		  vblock.c regions.c  optimize.c dict_id.c hash.c stream.c url.c bases_filter.c dict_io.c recon_plan_io.c
 
 CONDA_COMPATIBILITY_SRCS =  compatibility/mac_gettime.c
 
@@ -68,9 +69,9 @@ CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h tx
              base250.h endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h \
              buffer.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h codec.h stats.h \
              crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h qname.h qname_flavors.h \
-			 lookback.h tokenizer.h codec_longr_alg.c gencomp.h \
-			 reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h linesorter.h threads.h \
-			 arch.h license.h data_types.h base64.h txtheader.h writer.h bases_filter.h genols.h coords.h contigs.h chrom.h \
+			 lookback.h tokenizer.h codec_longr_alg.c gencomp.h dict_io.h recon_plan_io.h \
+			 reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h threads.h \
+			 arch.h license.h data_types.h base64.h txtheader.h writer.h bases_filter.h genols.h contigs.h chrom.h \
 			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h fastq.h gff3.h phylip.h chain.h kraken.h locs.h generic.h \
              compatibility/mac_gettime.h  \
 			 zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h \
@@ -188,7 +189,11 @@ $(OBJDIR)/%.opt-o: %.c $(OBJDIR)/%.d
 
 %.S: %.c $(OBJDIR)/%.d
 	@echo "Generating $@"
-	@$(CC) -S -o $@ $< $(CFLAGS)
+	@$(CC) -S -O3-o $@ $< $(CFLAGS)
+
+%.E: %.c $(OBJDIR)/%.d
+	@echo "Generating $@"
+	@$(CC) -E -o $@ $< $(CFLAGS)
 
 GENDICT_OBJS := $(addprefix $(OBJDIR)/, $(GENDICT_SRCS:.c=.o))
 
@@ -246,7 +251,8 @@ docs = $(DOCS)/genozip.rst $(DOCS)/genounzip.rst $(DOCS)/genocat.rst $(DOCS)/gen
 	   $(DOCS)/using-on-hpc.rst $(DOCS)/match-chrom.rst $(DOCS)/attributions.rst $(DOCS)/testimonials.rst $(DOCS)/pricing-faq.rst \
 	   $(DOCS)/dvcf.rst $(DOCS)/dvcf-rendering.rst $(DOCS)/chain.rst $(DOCS)/dvcf-limitations.rst $(DOCS)/dvcf-renaming.rst $(DOCS)/dvcf-see-also.rst \
 	   $(DOCS)/archiving.rst $(DOCS)/encryption.rst $(DOCS)/release-notes.rst $(DOCS)/benchmarks.rst \
-	   $(DOCS)/data-types.rst $(DOCS)/bam.rst $(DOCS)/fastq.rst $(DOCS)/vcf.rst $(DOCS)/gff3.rst $(DOCS)/publications-list.rst
+	   $(DOCS)/data-types.rst $(DOCS)/bam.rst $(DOCS)/fastq.rst $(DOCS)/vcf.rst $(DOCS)/gff3.rst $(DOCS)/publications-list.rst \
+	   $(DOCS)/sam-flags.rst
 
 $(DOCS)/conf.py: $(DOCS)/conf.template.py version.h
 	@sed -e "s/__VERSION__/$(version)/g" $< |sed -e "s/__YEAR__/`date +'%Y'`/g" > $@ 
@@ -309,7 +315,7 @@ clean-opt:
 clean: clean-docs
 	@echo Cleaning up
 	@rm -f $(DEPS) $(WINDOWS_INSTALLER_OBJS) *.d .archive.tar.gz *.stackdump $(EXECUTABLES) $(OPT_EXECUTABLES) $(DEBUG_EXECUTABLES) 
-	@rm -f *.S *.good *.bad data/*.good data/*.bad *.local genozip.threads-log.* *.b250 test/*.good test/*.bad test/*.local test/*.b250 test/tmp/* test/*.rejects
+	@rm -f *.S *.good *.bad data/*.good data/*.bad *.local genozip.threads-log.* *.b250 test/*.good test/*.bad test/*.local test/*.b250 test/tmp/* test/*.DEPN
 	@rm -R $(OBJDIR)
 	@mkdir $(OBJDIR) $(addprefix $(OBJDIR)/, $(SRC_DIRS))
 
@@ -318,7 +324,6 @@ clean: clean-docs
 # builds prod for local OS
 genozip-prod$(EXE): 
 	@echo "building prod"
-	@$(SH_VERIFY_ALL_COMMITTED)
 	@(cd ../genozip-prod ; git pull ; rm -Rf $(OBJDIR) ; make -j clean ; touch dict_id_gen.h ; make -j)
 	@cp ../genozip-prod/genozip$(EXE) ../genozip/genozip-prod$(EXE)
 	@cp ../genozip-prod/genozip$(EXE) ../genozip/private/releases/genozip-$(version)$(EXE)

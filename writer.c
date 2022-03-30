@@ -12,7 +12,6 @@
 #include "strings.h"
 #include "file.h"
 #include "threads.h"
-#include "linesorter.h"
 #include "sections.h"
 #include "random_access.h"
 #include "writer.h"
@@ -23,40 +22,38 @@
 #include "endianness.h"
 #include "bit_array.h"
 #include "version.h"
+#include "gencomp.h"
+#include "piz.h"
+#include "recon_plan_io.h"
 
 // ---------------
 // Data structures
 // ---------------
 
+#define WRITER_TASK_NAME "writer"
+
 typedef struct {
-    uint32_t comp_i;              // component_i of this VB
-    bool is_loaded;               // has data moving to txt_data completed
-    Mutex wait_for_data;          // initialized locked, unlocked when data is moved to txt_data and is_loaded is set
-    uint32_t pair_vb_i;           // vb_i of pair vb, or 0 if there isn't any. if pair_vb_i > vblock_i then we are pair_1
-    bool in_plan;                 // this VB is used in the reconstruction plan
-    bool no_read;                 // entire VB filtered out and should not be read or reconstructed (despite maybe being in the plan)
-                                  // if no_read=false, VB should be reconstructed, but writing it depends on in_plan
+    Mutex wait_for_data;   // initialized locked, unlocked when data is moved to txt_data and is_loaded is set
+    VBlockP vb;            // data handed over main -> compute -> main -> writer
+    VBIType vblock_i;      // this is the same as the index of this entry, and also of vb->vblock_i (after vb is loaded). for convenience.
+    VBIType pair_vb_i;     // vb_i of pair vb, or 0 if there isn't any. if pair_vb_i > vblock_i then we are pair_1
+    uint32_t num_lines;    // number of lines in this VB - readed from VB header only if needed
+    CompIType comp_i;      // comp_i of this VB (0-3)
+    bool is_loaded;        // has data moving to txt_data completed
+    bool needs_recon;      // VB/TXT_HEADER should be reconstructed, but writing it depends on needs_write
+    bool needs_write;      // VB/TXT_HEADER is written to output file, and hence is in recon_plan
+    bool no_ordinal_filter;// Never filter out lines from this VB due to head/tail/lines/downsample
     bool full_vb;
-    VBlock *vb;                   // data handed over main -> compute -> main -> writer
-} VbInfo;
+    bool encountered;      // used by writer_update_section_list
+    bool fasta_contig_grepped_out; // FASTA: a VB that starts with SEQ data, inherits this from the last contig of the previous VB 
+    Buffer is_dropped_buf; // a bitarray with a bit set is the line is marked for dropping
+    BitArrayP is_dropped;  // pointer into is_dropped_buf
+} VbInfo; // used both for VBs and txt headers
 
-typedef struct {
-    VbInfo info;                  // data in here (in_plan, no_read etc) refers to entire component, vb is txt_header
-    Section txt_header_sl;
-    uint32_t first_vb_i;
-    uint32_t num_vbs;
-    Coords rejects_coord;         // this component is the "liftover rejects" component (containing "##primary_only" or "##luft_only" variants if rejects_coord==DC_PRIMARY or DC_LUFT)
-} CompInfo;
+#define VBINFO(vb_i) B(VbInfo, vb_info, (vb_i))
 
-typedef struct {
-    uint32_t txt_file_i;
-    uint32_t first_comp_i, num_comps;
-    uint32_t first_plan_i, plan_len;
-} TxtFileInfo;
-
-#define vb_info       z_file->vb_info[0] // we use only [0] on the PIZ side
-#define comp_info     z_file->comp_info
-#define txt_file_info z_file->txt_file_info
+#define vb_info         z_file->vb_info[0] // we use only [0] on the PIZ side
+#define txt_header_info z_file->txt_header_info
 
 static ThreadId writer_thread = THREAD_ID_NONE;
 
@@ -65,51 +62,80 @@ static ThreadId writer_thread = THREAD_ID_NONE;
 // --------------------------------
 
 // returns my own number in the pair (1 or 2) and pair_vb_i. return 0 if file is not paired.
-unsigned writer_get_pair (uint32_t vb_i, uint32_t *pair_vb_i)
+unsigned writer_get_pair (VBIType vb_i, uint32_t *pair_vb_i)
 {
     if (!z_file->z_flags.dts_paired) return 0; // not paired
 
-    VbInfo *v = ENT (VbInfo, vb_info, vb_i);
+    VbInfo *v = VBINFO(vb_i);
 
     *pair_vb_i = v->pair_vb_i;
     return *pair_vb_i > vb_i ? 1 : 2;
 }
 
-bool writer_is_txtheader_in_plan (uint32_t component_i)
+bool writer_does_txtheader_need_write (Section sec)
 {
-    bool is_txtheader_in_plan = comp_info.len && // will fail if loading an auxiliary file
-                                ENT (CompInfo, comp_info, component_i)->info.in_plan;
-    return is_txtheader_in_plan;                             
+    ASSERT (sec->st == SEC_TXT_HEADER, "sec->st=%s is not SEC_TXT_HEADER", st_name (sec->st));
+    ASSERT (sec->comp_i < txt_header_info.len, "sec->comp_i=%u out of range [0,%d]", sec->comp_i, (int)txt_header_info.len-1);
+    
+    bool needs_write = B(VbInfo, txt_header_info, sec->comp_i)->needs_write;
+    return needs_write;                             
 }
 
-bool writer_is_component_no_read (uint32_t component_i)
+bool writer_does_txtheader_need_recon (Section sec)
 {
-    bool is_component_skipped = comp_info.len && // will be false if loading an auxiliary file
-                                ENT (CompInfo, comp_info, component_i)->info.no_read;
-    return is_component_skipped;                             
+    ASSERT (sec->st == SEC_TXT_HEADER, "sec->st=%s is not SEC_TXT_HEADER", st_name (sec->st));
+    ASSERT (sec->comp_i < txt_header_info.len, "comp_i=%u out of range [0,%d]", sec->comp_i, (int)txt_header_info.len-1);
+
+    bool needs_recon = B(VbInfo, txt_header_info, sec->comp_i)->needs_recon;
+    return needs_recon;                             
 }
 
-bool writer_is_vb_no_read (uint32_t vb_i)
+bool writer_get_fasta_contig_grepped_out (VBIType vb_i)
 {
-    bool no_read = !vb_info.len || ENT (VbInfo, vb_info, vb_i)->no_read;
-    return no_read;
+    ASSERT (vb_i >= 1 && vb_i < vb_info.len, "vb_i=%u out of range [1,%d]", vb_i, (int)vb_info.len-1);
+
+    return VBINFO(vb_i)->fasta_contig_grepped_out;
 }
 
-bool writer_is_vb_full_vb (uint32_t vb_i)
+void writer_set_fasta_contig_grepped_out (VBIType vb_i)
 {
-    bool full_vb = !vb_info.len || ENT (VbInfo, vb_info, vb_i)->full_vb;
+    ASSERT (vb_i >= 1 && vb_i < vb_info.len, "vb_i=%u out of range [1,%d]", vb_i, (int)vb_info.len-1);
+
+    VBINFO(vb_i)->fasta_contig_grepped_out = true;
+}
+
+bool writer_does_vb_need_recon (VBIType vb_i)
+{
+    ASSERT (vb_i >= 1 && vb_i < vb_info.len, "vb_i=%u out of range [1,%d]", vb_i, (int)vb_info.len-1);
+
+    bool needs_recon = !vb_info.len || VBINFO(vb_i)->needs_recon;
+    return needs_recon;
+}
+
+// called by: 1. PIZ main thread, when writer creates plan and filters by lines/head/tail
+// 2. PIZ compute thread
+BitArray *writer_get_is_dropped (VBIType vb_i)
+{
+    ASSERT (vb_i >= 1 && vb_i < vb_info.len, "vb_i=%u out of range [1,%d]", vb_i, (int)vb_info.len-1);
+    VbInfo *v = VBINFO(vb_i);
+
+    // allocate if needed. buffer was put in evb buffer_list by writer_init_vb_info
+    if (!v->is_dropped) {
+        ASSERTNOTZERO (v->num_lines,"");
+        buf_alloc_bitarr (evb, &v->is_dropped_buf, v->num_lines, "is_dropped");
+        buf_zero (&v->is_dropped_buf);
+        v->is_dropped = buf_get_bitarray (&v->is_dropped_buf);
+    }
+
+    return v->is_dropped;
+}
+
+bool writer_is_vb_full_vb (VBIType vb_i)
+{
+    ASSERT (vb_i >= 1 && vb_i < vb_info.len, "vb_i=%u out of range [0,%u]", vb_i, (int)vb_info.len-1);
+
+    bool full_vb = !vb_info.len || VBINFO(vb_i)->full_vb;
     return full_vb;
-}
-
-void writer_get_txt_file_info (uint32_t *first_comp_i, uint32_t *num_comps, Section *start_sl) // out
-{
-    const TxtFileInfo *tf = ENT (TxtFileInfo, txt_file_info, z_file->num_txt_components_so_far);
-    const CompInfo *first_comp = ENT (CompInfo, comp_info, tf->first_comp_i);
-
-    *first_comp_i = tf->first_comp_i;
-    *num_comps    = tf->num_comps;
-    *start_sl     = first_comp->txt_header_sl->offset ? first_comp->txt_header_sl - 1
-                                                      : NULL; /* before start of array */
 }
 
 // -----------------------------
@@ -117,483 +143,672 @@ void writer_get_txt_file_info (uint32_t *first_comp_i, uint32_t *num_comps, Sect
 // -----------------------------
 
 // PIZ main thread
-static void sort_piz_init_txt_file_info (void)
+static VBIType writer_init_txt_header_info (void)
 {
-    buf_alloc (evb, &txt_file_info, 0, flag.unbind || flag.one_component ? comp_info.len : 1, TxtFileInfo, 1, "txt_file_info"); // maximal size
+    buf_alloc_exact_zero (evb, txt_header_info, sections_get_num_comps(), VbInfo, "txt_header_info"); // info on txt_headers
 
-    if (flag.unbind || flag.one_component) {
-        uint32_t txt_file_i = 0;
-        for (uint32_t comp_i=0; comp_i < comp_info.len; comp_i++) {
+    VBIType num_vbs = 0;
+    Section sec = NULL;
+
+    for (CompIType comp_i=0; comp_i < txt_header_info.len; comp_i++) {
+
+        VbInfo *comp = B(VbInfo, txt_header_info, comp_i);
+        comp->comp_i = comp_i;
+
+        num_vbs += sections_get_num_vbs (comp_i);
+
+        sec = sections_get_comp_txt_header_sec (comp_i);
+        if (!sec) continue; // no SEC_TXT_HEADER section for this component (eg PRIM/DEPN components of SAM/BAM)
+
+        // conditions entire txt header should be read 
+        comp->needs_recon = 
+            (  !Z_DT(DT_VCF) // This clause only limits VCF files  
+            || ( flag.luft && (comp_i == VCF_COMP_MAIN || (comp_i == VCF_COMP_PRIM_ONLY && !flag.header_one))) 
+            || (!flag.luft && (comp_i == VCF_COMP_MAIN || (comp_i == VCF_COMP_LUFT_ONLY && !flag.header_one)))); // --header-one - we don't need the ##primary_only / ##luft_only lines 
             
-            int num_components = flag.interleave ? 2 : 1;
-            if (comp_i+1 < comp_info.len && !!ENT (CompInfo, comp_info, comp_i)->rejects_coord && !!ENT (CompInfo, comp_info, comp_i+1)->rejects_coord)
-                num_components = 3; // 2 reject files
-            else
-                num_components += !!ENT (CompInfo, comp_info, comp_i)->rejects_coord; // 1 reject file
-
-            NEXTENT (TxtFileInfo, txt_file_info) = (TxtFileInfo){
-                .txt_file_i   = txt_file_i++,
-                .first_comp_i = comp_i,
-                .num_comps    = num_components
-            };
-
-            comp_i += (num_components-1); // skip the related components
-        }
-    }
-    else // concatenating all components to a single txt file
-        NEXTENT (TxtFileInfo, txt_file_info) = (TxtFileInfo){ .num_comps = comp_info.len };
-}
-
-// PIZ main thread
-static uint32_t writer_init_comp_info (void)
-{
-    buf_alloc_zero (evb, &comp_info, 0, z_file->num_components, CompInfo, 0, "comp_info");
-    comp_info.len = z_file->num_components;
-
-    uint32_t num_vbs = 0;
-    Section sl = NULL;
-
-    for (unsigned comp_i=0; comp_i < z_file->num_components; comp_i++) {
-
-        CompInfo *comp = ENT (CompInfo, comp_info, comp_i);
-
-        ASSERT (sections_next_sec (&sl, SEC_TXT_HEADER),
-                "Expecting %s to have %u components, but found only %u", z_name, z_file->num_components, comp_i);
-
-        *comp = (CompInfo){ 
-            .info.comp_i   = comp_i, 
-            .txt_header_sl = sl, 
-            .first_vb_i    = 0xffffffff,
-            .rejects_coord = Z_DT(DT_VCF) ? sl->flags.txt_header.gencomp_num : DC_NONE
-        };
-
-        // conditions entire component (header and all VBs) should be skipped (i.e. not even read and inspected)
-        comp->info.no_read =
-           (!flag.luft && comp->rejects_coord == DC_PRIMARY && !flag.one_component)
-        ||
-           (flag.luft && comp->rejects_coord == DC_LUFT && !flag.one_component)
-        ||        
-           (comp->rejects_coord && flag.header_one && Z_DT(DT_VCF)) // --header-one - we don't need the ##primary_only / ##luft_only lines
-        ||        
-           (flag.one_component && flag.one_component-1 != comp_i); // --component specifies a single component, and this is not it 
-
         // conditions we write the txt header (doesn't affect the VBs of this component)
-        comp->info.in_plan =
+        comp->needs_write =
            !flag_loading_auxiliary
         &&
-           !comp->info.no_read
+           comp->needs_recon
         &&
            !flag.no_header
         &&
-           (  !flag.interleave                      // when interleaving, show every header of the first component of every two
-           || comp_i % 2 == 0) 
-        &&                                          // VCF: whether to show this section considering concatenating or unbinding
-           (  !Z_DT(DT_VCF)                         // This clause only limits VCF files 
-           || flag.unbind                           // unbinding: we show all components
-           || ( flag.luft && comp->rejects_coord == DC_PRIMARY)  // concatenating: if --luft, show ##primary_only rejects components (appears in the vcf header)
-           || (!flag.luft && comp->rejects_coord == DC_LUFT)     // concatenating: if primary, show ##luft_only rejects components (appears in the vcf header)
-           || flag.one_component-1 == comp_i        // single component: this is it (note: if dual coord, this will pointing a rejects components since we switched their order)
-           || (!flag.one_component && comp_i==0)    // concatenating: show first header (0 if no rejects)
-           || (!flag.one_component && (comp-1)->rejects_coord)) // concatenating: show first header (first after rejects)
+           (  !Z_DT(DT_VCF) // This clause only limits VCF files 
+           || ( flag.luft && comp_i == VCF_COMP_PRIM_ONLY)  // if luft rendition, show ##primary_only rejects components (appears in the vcf header)
+           || (!flag.luft && comp_i == VCF_COMP_LUFT_ONLY)  // if primary rendtion, show ##luft_only rejects components (appears in the vcf header)
+           || comp_i == VCF_COMP_MAIN)
         &&
-           (  !(Z_DT(DT_SAM) || Z_DT(DT_BAM))       // This clause only limits SAM/BAM
-           || z_file->num_components == 1           // files generated up to v13.0.8
-           || flag.one_component-1 == comp_i        // A specific component is requested
-           || (!flag.one_component && comp_i==2));  // Show only the txt header of the normal component
+           (  !Z_DT(DT_SAM) // This clause only limits SAM/BAM
+           || comp_i == SAM_COMP_MAIN);               // Show only the txt header of the MAIN component
 
-        if (comp->info.in_plan) {
+        if (comp->needs_write) {
             // mutex: locked:    here (at initialization)
             //        waited on: writer thread, wanting the data
             //        unlocked:  by main thread after txtheader data is handed over.
-            mutex_initialize (comp->info.wait_for_data);
-            mutex_lock (comp->info.wait_for_data);
+            mutex_initialize (comp->wait_for_data);
+            mutex_lock (comp->wait_for_data);
         } 
         else
-            z_file->disk_size_minus_skips -= sections_get_section_size (sl); // remove txt header here, VBs will be removed in writer_init_vb_info
-
-        sections_count_component_vbs (sl, &comp->first_vb_i, &comp->num_vbs);
-        num_vbs += comp->num_vbs;
+            z_file->disk_size_minus_skips -= sec->size; // remove txt header here, VBs will be removed in writer_init_vb_info
     }
-
+    
     return num_vbs;
-}
-
-// PIZ main thread - called from writer_init_vb_info
-static void write_set_first_vb_for_tail (void)
-{
-    Section sl = NULL;
-    int64_t count_lines = flag.tail;
-
-    while (sections_prev_sec (&sl, SEC_VB_HEADER)) {
-        SectionHeaderVbHeader header = zfile_read_section_header (evb, sl->offset, sl->vblock_i, SEC_VB_HEADER).vb_header;
-        uint32_t vb_num_lines = BGEN32 (flag.luft ? header.num_lines_luft : header.num_lines_prim); 
-
-        // case: this is the first VB (from the file end) we need
-        if (vb_num_lines > count_lines) { 
-            txt_file->tail_1st_vb = sl->vblock_i;
-            txt_file->tail_1st_line_1st_vb = vb_num_lines - (uint32_t)count_lines;
-            if (flag.out_dt != DT_BAM && !flag.no_header) flag.no_header = 2; // implicit no_header
-            return;
-        }
-
-        count_lines -= vb_num_lines;
-    }
-
-    // all lines are included - we cancel --tail for this txt_file
-    flag.tail = 0;
 }
 
 // PIZ main thread - initialize vb, component, txt_file info. this is run once per z_file
 static void writer_init_vb_info (void)
 {
-    if (comp_info.len) return; // already initialized
+    if (txt_header_info.len) return; // already initialized
 
-    // if we have --tail - find the first VB (near the end) that is needed
-    if (flag.tail)
-        write_set_first_vb_for_tail(); // sets txt_file->tail_1st_vb,tail_1st_line_1st_vb which are hereinafter immutable
-
-    vb_info.len = writer_init_comp_info() + 1; // +1 as first vb_i=1 (entry 0 will be unused) so we have num_vb+1 entries
-
-    sort_piz_init_txt_file_info();
+    vb_info.len = writer_init_txt_header_info() + 1; // +1 as first vb_i=1 (entry 0 will be unused) so we have num_vb+1 entries
 
     buf_alloc_zero (evb, &vb_info, 0, vb_info.len, VbInfo, 1, "z_file->vb_info");
 
-    Section sl = NULL;
-
-    for (unsigned comp_i=0; comp_i < comp_info.len; comp_i++) {
-
-        CompInfo *comp = ENT (CompInfo, comp_info, comp_i);
-
-        for (uint32_t v_comp_i=0; v_comp_i < comp->num_vbs; v_comp_i++) {
-
-            ASSERT0 (sections_next_sec (&sl, SEC_VB_HEADER), "Unexpected end of section list");
-            
-            VbInfo *v = ENT (VbInfo, vb_info, sl->vblock_i); // note: VBs are out of order in dual coordinate files bc writer_move_liftover_rejects_to_front()
-            v->comp_i = comp_i;
-
-            // set pairs (used even if not interleaving)
-            if (z_file->z_flags.dts_paired) 
-                v->pair_vb_i = sl->vblock_i + comp->num_vbs * (comp_i % 2 ? -1 : 1);  
-
-            // conditions this VB should not be read or reconstructed 
-            v->no_read = 
-                comp->info.no_read                                  // entire component is skipped
-            ||  (flag.tail && sl->vblock_i < txt_file->tail_1st_vb) // --tail: this VB is too early, not needed
-            ||  (flag.one_vb && flag.one_vb != sl->vblock_i)        // --one-vb: user only wants to see a single VB, and this is not it
-            ||  (flag.no_header && comp->rejects_coord)             // --no-header: this a rejects VB which is displayed as a header
-            ||  (flag.single_coord && comp->rejects_coord)          // --single-coord - we don't need the ##primary_only / ##luft_only lines (we do need the TXT_HEADER tough as it contains the ##fileformat line)
-            ||  (flag.header_only && !comp->rejects_coord)          // --header-only (except rejects VB)
-            ||  !random_access_is_vb_included (sl->vblock_i);       // --regions: this VB is excluded
-
-            // conditions in which VB should be written 
-            v->in_plan = 
-                !v->no_read
-            &&  !flag_loading_auxiliary; // we're ingesting, but not reconstructing, an auxiliary file
-
-            if (v->in_plan) {
-                // mutex: locked:    here (at initialization)
-                //        waited on: writer thread, wanting the data
-                //        unlocked:  by main thread after txtheader data is handed over.
-                mutex_initialize (v->wait_for_data);
-                mutex_lock (v->wait_for_data);
-            }
-            
-            if (v->no_read)
-                z_file->disk_size_minus_skips -= sections_get_vb_size (sl);
-            else 
-                z_file->disk_size_minus_skips -= sections_get_vb_skipped_sections_size (sl);
+    uint32_t num_vbs_R=0;
+    if (Z_DT(DT_FASTQ) && z_file->z_flags.dts_paired) {
+        num_vbs_R = sections_get_num_vbs (FQ_COMP_R1);
+        uint32_t num_vbs_R2 = sections_get_num_vbs (FQ_COMP_R2);
+        ASSERT (num_vbs_R == num_vbs_R2 || (z_file->genozip_version <= 9 && !num_vbs_R2), // dts_paired introduced 9.0.13
+                "R1 and R2 have a different number of VBs (%u vs %u respecitvely)", num_vbs_R, num_vbs_R2);
+    
+        // v8-9: case not paired after all
+        if (!num_vbs_R2) {
+            num_vbs_R=0;  
+            z_file->z_flags.dts_paired = false;
         }
+    } 
+
+    for (VBIType vb_i=1; vb_i <= z_file->num_vbs; vb_i++) {
+
+        Section sec = sections_vb_header (vb_i, false);
+            
+        VbInfo *v = VBINFO(vb_i); 
+        v->vblock_i  = vb_i;
+        v->comp_i    = sec->comp_i;
+
+        // since v14, num_lines is carried by Section. 
+        // Note: in DVCF, this is different than the number of lines in the default reconstruction which drops luft_only lines.
+        if (z_file->genozip_version >= 14)
+            v->num_lines = sec->num_lines;
+
+        // up until v13, num_lines was in SectionHeaderVbHeader
+        else {  
+            SectionHeaderVbHeader header = zfile_read_section_header (evb, sec->offset, vb_i, sec->st).vb_header;
+            v->num_lines = BGEN32 (header.v13_top_level_repeats);
+        }
+
+        // we add is_dropped_buf to the evb buffer list. allocation will occur in main thread whenw writer 
+        // create the plan, for VBs on the boundary of head/tail/lines, otherwise in reconstruction compute thread.
+        buf_add_to_buffer_list (evb, &v->is_dropped_buf);
+
+        // head/tail/lines/downsample don't apply to DVCF reject components which are part of the VCF header
+        if (z_is_dvcf && v->comp_i != VCF_COMP_MAIN)
+            v->no_ordinal_filter = true;
+
+        // set pairs (used even if not interleaving)
+        if (num_vbs_R) {
+            v->pair_vb_i = vb_i + num_vbs_R * (v->comp_i % 2 ? -1 : 1);
+        
+            // verify that this VB and its pair have the same number of lines (test when initiazing the second one)
+            uint32_t pair_num_lines = VBINFO(v->pair_vb_i)->num_lines;
+            ASSERT (v->pair_vb_i > vb_i || v->num_lines == pair_num_lines, "vb=%u has %u lines, but vb=%u, its pair, has %u lines", 
+                    vb_i, v->num_lines, v->pair_vb_i, pair_num_lines);
+        }
+
+        // conditions this VB should not be read or reconstructed 
+        v->needs_recon = true; // default
+        #define DROP v->needs_recon = false
+
+        // --one-vb: user only wants to see a single VB, and this is not it
+        if (flag.one_vb && flag.one_vb != vb_i) DROP; 
+
+        // --header-only: drop all VBs (except VCF - handled separately below)
+        else if (flag.header_only && z_file->data_type != DT_VCF) DROP; 
+
+        else switch (z_file->data_type) {
+
+            case DT_FASTQ:
+                // --R1 or --R2: we don't show the other component
+                if (flag.one_component && flag.one_component-1 != v->comp_i) DROP;
+
+                break;
+
+            case DT_VCF:
+                // --header-one or --no-header: we don't show ##primary_only/##luft_only components as they are part of theader            
+                if ((flag.header_one || flag.no_header) && v->comp_i != VCF_COMP_MAIN) DROP;
+
+                // in DVCF primary rendition, we don't need ##primary_only lines
+                else if (!flag.luft && v->comp_i == VCF_COMP_PRIM_ONLY) DROP;
+
+                // in DVCF luft rendition, we don't need ##luft_only lines
+                else if (flag.luft && v->comp_i == VCF_COMP_LUFT_ONLY) DROP;
+
+                // --single-coord:  we don't need the ##primary_only / ##luft_only lines (we do need the TXT_HEADER tough as it contains the ##fileformat line)
+                else if (flag.single_coord && v->comp_i != VCF_COMP_MAIN) DROP;
+
+                // --header-only VCF - drop MAIN comp VBs (we DO still show reject VBs as they are part of the VCF header)
+                else if (flag.header_only && v->comp_i == VCF_COMP_MAIN) DROP;
+
+                break;
+
+            case DT_FASTA:
+                if (!fasta_piz_is_vb_needed (vb_i)) DROP;
+                break;
+            
+            default: {} // no special handling of other data types
+        }
+
+        #undef DROP
+        
+        // conditions in which VB should be written. if false, but needs_recon, VB is still read, but not written (eg reading aux files)
+        v->needs_write = 
+            v->needs_recon
+        &&  !flag_loading_auxiliary; // we're ingesting, but not reconstructing, an auxiliary file
+
+        if (v->needs_write) {
+            // mutex: locked:    here (at initialization)
+            //        waited on: writer thread, wanting the data
+            //        unlocked:  by main thread after txtheader data is handed over.
+            mutex_initialize (v->wait_for_data);
+            mutex_lock (v->wait_for_data);
+        }
+        
+        // get actual disk size to be read, for progress indicator
+        if (v->needs_recon)
+            z_file->disk_size_minus_skips -= sections_get_vb_skipped_sections_size (sec);
+        else 
+            z_file->disk_size_minus_skips -= sections_get_vb_size (sec);
     }
 }
 
-// PIZ of dual coordinate files: 
-// concatenating - the relevant rejects component (PRIMARY or LUFT) is moved to the front
-// unbinding - each reject component switches place with its primary component
-// note: currently we support only a single dual+primary+luft triple component. bug 333.
-static void writer_move_liftover_rejects_to_front (void)
+static int64_t writer_get_plan_num_lines (void)
 {
-    ASSERT (sections_count_sections (SEC_TXT_HEADER) == 3, "Error: %s is a dual coordinates file, expecting 3 TXT_HEADER sections", z_name);
+    int64_t num_lines = 0;
+    ARRAY (ReconPlanItem, plan, z_file->recon_plan);
+    
+    for (uint64_t i=0; i < plan_len; i++) 
+        num_lines += plan[i].num_lines;
 
-    Section dual = sections_first_sec (SEC_TXT_HEADER, false);
-    Section prim = dual; sections_next_sec (&prim, SEC_TXT_HEADER);
-    Section luft = prim; sections_next_sec (&luft, SEC_TXT_HEADER);
-
-    ASSERT (dual->flags.txt_header.gencomp_num == DC_NONE && 
-            prim->flags.txt_header.gencomp_num == DC_PRIMARY && 
-            luft->flags.txt_header.gencomp_num == DC_LUFT,
-            "File %s is a dual-coordinates file, components have incorrect gencomp_num", z_name);
-
-    sections_pull_component_up (NULL, flag.luft ? prim : luft); // when rendering in LUFT, show the ##primary_only in the header, and vice versa
+    return num_lines;
 }
 
-// PIZ of SAM/BAM with SA generated components: Make the order Primary->Dependent->Normal 
-// note: currently we support only a single SAM/BAM file. bug 333.
-static void writer_move_sam_gencomp_to_front (void)
+static inline void writer_drop_lines (VbInfo *v, uint32_t start_line, uint32_t num_lines)
 {
-    unsigned num_components = sections_count_sections (SEC_TXT_HEADER);
-    ASSERT (num_components==3, "Error: %s is a SAM/BAM file with generated components, expecting 3 TXT_HEADER sections, but found %u", z_name, num_components);
+    if (!v->is_dropped)
+        v->is_dropped = writer_get_is_dropped (v->vblock_i);
 
-    Section normal=0, gc_1=0, gc_2=0;
-    normal = sections_first_sec (SEC_TXT_HEADER, false);
-    gc_1 = normal; sections_next_sec (&gc_1, SEC_TXT_HEADER);
-    if (num_components == 3)
-        { gc_2 = gc_1; sections_next_sec (&gc_2, SEC_TXT_HEADER); }
-
-    // switch places between the first generated component and the normal components
-    gc_1 = sections_pull_component_up (NULL, gc_1);
-
-    // if we have a second generated component (Dependent), move it to after the first component (Primary)
-    if (num_components == 3)
-        sections_pull_component_up (gc_1, gc_2);
-}
-
-// PIZ main thread: add txtheader entry for the component
-static void writer_add_txtheader_plan (CompInfo *comp)
-{
-    if (!comp->info.in_plan) return; 
-
-    buf_alloc (evb, &z_file->recon_plan, 1, 1000, ReconPlanItem, 1.5, "recon_plan");
-
-    NEXTENT (ReconPlanItem, z_file->recon_plan) = (ReconPlanItem){ 
-        .txt_header.plan_type  = PLAN_TXTHEADER,
-        .txt_header.vb_i       = 0, // component, not VB
-        .txt_header.rp_comp_i  = comp->info.comp_i
-    };
+    #define DROPL(l) bit_array_set (v->is_dropped, start_line + (l))
+    
+    // shortcuts for the most common cases
+    if      (num_lines == 1) { DROPL(0); }
+    else if (num_lines == 2) { DROPL(0); DROPL(1); } 
+    else if (num_lines == 3) { DROPL(0); DROPL(1); DROPL(2); } 
+    else if (num_lines == 4) { DROPL(0); DROPL(1); DROPL(2); DROPL(3); } 
+    else if (num_lines == 5) { DROPL(0); DROPL(1); DROPL(2); DROPL(3); DROPL(4); } 
+    else bit_array_set_region (v->is_dropped, start_line, num_lines);
+    
+    #undef DROPL
 }
 
 // PIZ main thread
-static void writer_add_downsample_plan (const CompInfo *comp)
+static void writer_drop_plan_item (ReconPlanItem *p, uint32_t drop_flavor)
 {
-    buf_alloc (evb, &z_file->recon_plan, comp->num_vbs, 1000, ReconPlanItem, 1.5, "recon_plan");
+    VbInfo *v = VBINFO(p->vb_i);
 
-    uint64_t lines_so_far = 0;
+    switch (p->flavor) {
+        case PLAN_RANGE:
+            if (!v->is_dropped)
+                v->is_dropped = writer_get_is_dropped (p->vb_i);
 
-    for (uint32_t i=0; i < comp->num_vbs; i++) {
-        uint32_t vb_i = comp->first_vb_i + i;
-        VbInfo *v = ENT (VbInfo, vb_info, vb_i);
+            writer_drop_lines (v, p->start_line, p->num_lines);
+            p->flavor = drop_flavor;
+            
+            break;
 
-        uint64_t num_lines_in_vb = zfile_num_lines_in_vb (vb_i); 
-
-        uint64_t num_lines_to_next = (flag.downsample - (lines_so_far % flag.downsample) + flag.shard) % flag.downsample;
-
-        // case: we need at least one line from this VB
-        if (num_lines_to_next <= num_lines_in_vb) 
-            NEXTENT (ReconPlanItem, z_file->recon_plan) = (ReconPlanItem){ 
-                .full_vb.plan_type  = PLAN_FULL_VB, // all lines
-                .full_vb.vb_i       = vb_i
-            };
-
-        // case: we don't need any line from this VB
-        else {
-            NEXTENT (ReconPlanItem, z_file->recon_plan) = (ReconPlanItem){ 
-                .downsample.plan_type = PLAN_DOWNSAMPLE, 
-                .downsample.vb_i      = vb_i,
-                .downsample.num_lines = num_lines_in_vb
-            };
-            v->no_read = true;
-            v->in_plan = false;
-        }
-
-        lines_so_far += num_lines_in_vb;
+        case PLAN_FULL_VB:
+            v->needs_recon = false;
+            p->flavor = drop_flavor;
+            break;
+        
+        case PLAN_INTERLEAVE:
+            v->needs_recon = VBINFO(p->vb2_i)->needs_recon = false;
+            p->flavor = drop_flavor;
+            break;
+    
+        default: {}  // TXTHEADER is never removed by head/tail/lines, 
+                     // END_OF_VB will be removed by writer_cleanup_recon_plan_after_filtering if needed
     }
 }
 
-// PIZ main thread: add "full vb" entry for each VB of the component
-static void writer_add_trival_plan (const CompInfo *comp)
+static void writer_drop_item_lines_from_start (ReconPlanItem *p, uint32_t drop_lines)
 {
-    buf_alloc (evb, &z_file->recon_plan, comp->num_vbs, 1000, ReconPlanItem, 1.5, "recon_plan");
+    VbInfo *v = VBINFO(p->vb_i);
 
-    for (uint32_t i=0; i < comp->num_vbs; i++) {
-        uint32_t vb_i = comp->first_vb_i + i;
-        VbInfo *v = ENT (VbInfo, vb_info, vb_i);
+    switch (p->flavor) {
+        case PLAN_RANGE:
+            writer_drop_lines (v, p->start_line, drop_lines);
+            break;
 
-        if (!v->in_plan) continue;
+        case PLAN_FULL_VB:
+            writer_drop_lines (v, 0, drop_lines);
+            break;
+        
+        case PLAN_INTERLEAVE:
+            writer_drop_lines (v, 0, (drop_lines+1) / 2);           // round up in case of odd number
+            writer_drop_lines (VBINFO(p->vb2_i), 0, drop_lines / 2); // round down in case of odd number
+            break;
 
-        v->full_vb = true; // BGZF-recompression can be done by the compute thread
-
-        NEXTENT (ReconPlanItem, z_file->recon_plan) = (ReconPlanItem){ 
-            .full_vb.plan_type  = PLAN_FULL_VB, // all lines
-            .full_vb.vb_i       = vb_i
-        };
+        default: ABORT0 ("invalid flavor");
     }
+}
+
+static void writer_drop_item_lines_from_end (ReconPlanItem *p, uint32_t drop_lines)
+{
+    VbInfo *v = VBINFO(p->vb_i);
+
+    switch (p->flavor) {
+        case PLAN_RANGE:
+            writer_drop_lines (v, p->start_line + p->num_lines - drop_lines, drop_lines);
+            break;
+
+        case PLAN_FULL_VB:
+            writer_drop_lines (v, v->num_lines - drop_lines, drop_lines);
+            break;
+        
+        case PLAN_INTERLEAVE: {
+            VbInfo *v2 = VBINFO(p->vb2_i);
+            writer_drop_lines (v, v->num_lines - drop_lines/2, drop_lines/2);           // round down in case of odd number
+            writer_drop_lines (v2, v2->num_lines + (drop_lines+1)/2, (drop_lines+1)/2); // round up in case of odd number
+            break;
+        }
+        
+        default: ABORT ("invalid flavor: %s", recon_plan_flavors[p->flavor]);
+    }
+}
+
+static void writer_trim_lines_from_plan_start (int64_t lines_to_trim)
+{
+    ARRAY (ReconPlanItem, plan, z_file->recon_plan);
+
+    // remove plan items before first_line
+    int64_t lines_so_far = 0;
+    for (uint64_t i=0; i < plan_len && lines_so_far < lines_to_trim; i++) {
+        ReconPlanItem *p = &plan[i];
+        if (!p->num_lines) continue; 
+
+        lines_so_far += p->num_lines;
+        
+        // case: plan[i] is fully included in lines to be removed
+        if (lines_so_far <= lines_to_trim)  
+            writer_drop_plan_item (p, PLAN_REMOVE_ME);
+    
+        // case: plan[i] is partially included in lines to be removed
+        else 
+            writer_drop_item_lines_from_start (p, p->num_lines - (lines_so_far - lines_to_trim));
+    }
+}
+
+static void writer_trim_lines_from_plan_end (int64_t num_plan_lines, int64_t lines_to_trim)
+{
+    ARRAY (ReconPlanItem, plan, z_file->recon_plan);
+
+    // remove plan items after last_line
+    int64_t lines_so_far = 0;
+    for (int64_t i=plan_len-1; i >= 0 && lines_so_far <= lines_to_trim; i--) {
+        ReconPlanItem *p = &plan[i];
+        if (!p->num_lines) continue; 
+
+        lines_so_far += p->num_lines;
+        
+        // case: plan[i] is fully included in lines to be removed
+        if (lines_so_far <= lines_to_trim)  
+            writer_drop_plan_item (p, PLAN_REMOVE_ME);
+    
+        // case: plan[i] is partially included in lines to be removed
+        else 
+            writer_drop_item_lines_from_end (p, p->num_lines - (lines_so_far - lines_to_trim));
+    }
+}
+
+static void writer_downsample_plan (void)
+{
+    ARRAY (ReconPlanItem, plan, z_file->recon_plan);
+
+    uint64_t lines_so_far = 0;
+
+    for (uint64_t i=0; i < plan_len; i++) {
+        ReconPlanItem *p = &plan[i];
+
+        uint64_t num_lines_to_next = (flag.downsample - (lines_so_far % flag.downsample) + flag.shard) % flag.downsample;
+
+        // case: we don't need any line from this plan item
+        if (p->num_lines && num_lines_to_next >= p->num_lines)
+            writer_drop_plan_item (p, PLAN_DOWNSAMPLE); // we count these lines for the purpose of downsampling, but don't write them
+
+        lines_so_far += p->num_lines;
+    }
+}
+
+// PIZ main thread: after all ordinal filtering (where all lines where available for the ordinal filters), 
+// we now remove VBs that are entirely filtered out by --regions, and the reconstructor can further filter
+// out lines from the surviving VBs
+static void writer_filter_regions (void)
+{
+    for (VBIType vb_i=1; vb_i <= z_file->num_vbs; vb_i++) 
+        VBINFO(vb_i)->needs_recon &= random_access_is_vb_included (vb_i); // --regions: this VB is excluded
+}
+
+static void writer_cleanup_recon_plan_after_filtering (void)
+{
+    // VBs that have all their lines dropped - make sure they're marked with !need_recon
+    for (VBIType vb_i=1; vb_i <= z_file->num_vbs; vb_i++) {
+        VbInfo *v = VBINFO(vb_i);
+        if (v->needs_recon && v->is_dropped && bit_array_is_fully_set (v->is_dropped))
+            v->needs_recon = false;
+    }
+
+    // remove PLAN_REMOVE_ME items or !need_recon from the recon_plan
+    ARRAY (ReconPlanItem, plan, z_file->recon_plan);
+    uint64_t new_i = 0;
+
+    for (uint64_t old_i=0; old_i < plan_len; old_i++) {
+        ReconPlanItem *old_p = &plan[old_i];
+        if (!old_p->vb_i ||
+            old_p->flavor == PLAN_DOWNSAMPLE || // keep it in plan - just for downsample counting purposes
+            (VBINFO(old_p->vb_i)->needs_recon && old_p->flavor != PLAN_REMOVE_ME)) {
+                
+            if (old_i != new_i) // no need to copy if already in place
+                plan[new_i] = *old_p;
+            new_i++;
+        }
+    }
+
+    z_file->recon_plan.len = new_i;
+}
+
+static void writer_update_section_list (void)
+{
+    // alloate in case we need to replace the section_list
+    #define new_list (&evb->z_section_headers)
+    ASSERTNOTINUSE (*new_list);
+    buf_alloc (evb, new_list, z_file->section_list_buf.len, 0, SectionEnt, 1, "z_section_headers"); // note: the data will be moved to z_file->section_list_buf upon commit
+    
+    // add all TXT_HEADERs and VBs according to the order of their first appearance in the recon_plan
+    ARRAY (ReconPlanItem, plan, z_file->recon_plan);
+    for (uint64_t i=0; i < plan_len; i++) 
+        if (plan[i].flavor == PLAN_TXTHEADER)
+            sections_new_list_add_txt_header (new_list, plan[i].comp_i);
+
+        else {
+            VbInfo *v = VBINFO(plan[i].vb_i); 
+            if (!v->encountered) { // first encounter with this VB
+                sections_new_list_add_vb (new_list, v->vblock_i);
+                v->encountered = true;
+            }
+
+            if (plan[i].flavor == PLAN_INTERLEAVE) {
+                VbInfo *v2 = VBINFO(plan[i].vb2_i); 
+                if (!v2->encountered) { // first encounter with this VB
+                    sections_new_list_add_vb (new_list, v2->vblock_i);
+                    v2->encountered = true;
+                }
+            }
+        }
+
+    // case: SAM - add all PRIM VBs that need to be loaded
+    // case: FASTQ with --R2 - add R1 VBs needed for pair lookup 
+    if ((Z_DT (DT_SAM) && sections_get_num_vbs (SAM_COMP_PRIM)) ||
+        (Z_DT(DT_FASTQ) && flag.one_component == 2)) {
+        Section vb_header = NULL;
+        while (sections_get_next_vb_of_comp_sec ((Z_DT (DT_SAM) ? SAM_COMP_PRIM : FQ_COMP_R1), &vb_header)) 
+            if (!VBINFO(vb_header->vblock_i)->encountered)  // VB not already add bc it is in recon_plan
+                sections_new_list_add_vb (new_list, vb_header->vblock_i);
+    }
+
+    // add SEC_BGZF of all components that have it
+    sections_new_list_add_bgzf (new_list);
+
+    // copy all global sections from current section list to new one
+    sections_new_list_add_global_sections (new_list);
+
+    // replace section list with new list
+    sections_commit_new_list (new_list); 
+    #undef new_list
+}
+
+// PIZ main thread: add txtheader entry for the component
+static void writer_add_txtheader_plan (CompIType comp_i)
+{
+    if (!B(VbInfo, txt_header_info, comp_i)->needs_write) return; 
+
+    buf_alloc (evb, &z_file->recon_plan, 1, 1000, ReconPlanItem, 1.5, "recon_plan");
+
+    BNXT (ReconPlanItem, z_file->recon_plan) = (ReconPlanItem){ 
+        .flavor    = PLAN_TXTHEADER,
+        .comp_i = comp_i
+    };
+}
+
+// PIZ main thread: add "full vb" entry for each VB of the component
+static void writer_add_trivial_plan (CompIType comp_i)
+{
+    VBIType num_vbs = sections_get_num_vbs (comp_i);
+    if (!num_vbs) return;
+
+    buf_alloc (evb, &z_file->recon_plan, num_vbs, 1000, ReconPlanItem, 1.5, "recon_plan");
+
+    Section vb_header = NULL;
+    while (sections_get_next_vb_of_comp_sec (comp_i, &vb_header)) 
+        if (VBINFO(vb_header->vblock_i)->needs_recon)
+            BNXT (ReconPlanItem, z_file->recon_plan) = (ReconPlanItem){ 
+                .flavor    = PLAN_FULL_VB, // all lines
+                .vb_i      = vb_header->vblock_i,
+                .num_lines = B(VbInfo, vb_info, vb_header->vblock_i)->num_lines
+            };
 }
 
 // PIZ main thread: add interleave entry for each VB of the component
 // also interleaves VBs of the two components and eliminates the second TXT_HEADER entry
-static void writer_add_interleave_plan (const CompInfo *comp)
+static void writer_add_interleaved_plan (void)
 {
-    Section sl1 = comp->txt_header_sl;
-    Section sl2 = (comp+1)->txt_header_sl;
-
-    unsigned num_vbs_per_component=0;
-
-    while (sections_next_sec2 (&sl1, SEC_VB_HEADER, SEC_TXT_HEADER) && 
-           sl1->st == SEC_VB_HEADER) {
-
-        ASSERT0 (sections_next_sec2 (&sl2, SEC_VB_HEADER, SEC_TXT_HEADER) &&
-                  sl2->st == SEC_VB_HEADER, "Failed to find matching VB in second component, when --interleave");
-
-        VbInfo *v1 = ENT (VbInfo, vb_info, sl1->vblock_i);
-        VbInfo *v2 = ENT (VbInfo, vb_info, sl2->vblock_i);
-
-        if (v1->in_plan && v2->in_plan) {            
-            buf_alloc (evb, &z_file->recon_plan, 2, 1000, ReconPlanItem, 1.5, "recon_plan");
-            NEXTENT (ReconPlanItem, z_file->recon_plan) = (ReconPlanItem){ 
-                .interleave.plan_type = PLAN_INTERLEAVE, 
-                .interleave.vb_i      = sl1->vblock_i,
-                .interleave.vb2_i     = sl2->vblock_i
-            };
-        }
-        else // if one of them is filtered out, both are
-            v1->in_plan = v2->in_plan = false;
-
-        // get last section index, before pull up
-        Section last_1 = sections_vb_last (sl1);
-        Section last_2 = sections_vb_last (sl2);
-
-        sl1 = sections_pull_vb_up (sl2->vblock_i, last_1); // move the 2nd component VB to be after the corresponding 1st component VB
-        sl2 = last_2; 
-        num_vbs_per_component++;
-    }
-
-    ASSERT0 (num_vbs_per_component, "Component has no VBs");
+    // expecting both componenets to have the same number of VBs
+    VBIType R1_num_vbs = sections_get_num_vbs (FQ_COMP_R1);
+    VBIType R2_num_vbs = sections_get_num_vbs (FQ_COMP_R2);
     
-    // we've iterated to the end of component1 VBs, make sure component2 doesn't have any additional VB
-    ASSERT (!sections_next_sec2 (&sl2, SEC_VB_HEADER, SEC_TXT_HEADER) ||
-            sl2->st == SEC_TXT_HEADER, // either no more VB/TXT headers, or the next header is TXT
-            "First component has %u num_vbs_per_component VBs, but second component has more, when --interleave", num_vbs_per_component);
-}
+    ASSERT (R1_num_vbs == R2_num_vbs, "R1 has %u VBs, but R2 has %u VBs - expecting them to be equal when --interleaved",
+             R1_num_vbs, R2_num_vbs);
 
-// PIZ main thread: for each VB in the component pointed by sl, sort VBs according to first appearance in recon plan
-static void writer_add_plan_from_recon_section (const CompInfo *comp, Section recon_plan_sl,
-                                                uint32_t *conc_writing_vbs, uint32_t *vblock_mb) // out
-{
-    zfile_get_global_section (SectionHeaderReconPlan, SEC_RECON_PLAN, recon_plan_sl, 
-                              &evb->compressed, "compressed");
- 
-    // assign outs
-    *conc_writing_vbs = MAX_(*conc_writing_vbs, BGEN32 (header.conc_writing_vbs));
-    *vblock_mb = BGEN32 (header.vblock_mb);
+    ASSERT0 (R1_num_vbs, "Component has no VBs");
 
-    evb->compressed.len /= sizeof (uint32_t); // len to units of uint32_t
-    BGEN_u32_buf (&evb->compressed, 0);
-    evb->compressed.len /= (sizeof (ReconPlanItem) / sizeof (uint32_t)); // len to units of ReconPlanItem
+    buf_alloc (evb, &z_file->recon_plan, R1_num_vbs, 0, ReconPlanItem, 0, "recon_plan");
 
-    // track if VB has been pulled up already
-    uint8_t *vb_is_pulled_up = CALLOC (comp->num_vbs); // dynamic allocation as number of VBs in a component is unbound
+    for (VBIType i=0; i < R1_num_vbs; i++) {
 
-    ARRAY (const ReconPlanItem, plan, evb->compressed);
-
-    buf_alloc (evb, &z_file->recon_plan, plan_len, 0, ReconPlanItem, 0, "recon_plan");      
-
-    Section sl = comp->txt_header_sl;
-    for (uint64_t i=0; i < plan_len; i++) {
-        if (!ENT (VbInfo, vb_info, plan[i].x.vb_i)->in_plan) continue; // skip plan items from non-included VBs
-
-        NEXTENT (ReconPlanItem, z_file->recon_plan) = plan[i];
+        VBIType vb1_i = i + sections_get_first_vb_i (FQ_COMP_R1);
+        VBIType vb2_2 = i + sections_get_first_vb_i (FQ_COMP_R2);
         
-        if (plan[i].x.plan_type == PLAN_FULL_VB)
-            ENT (VbInfo, vb_info, plan[i].full_vb.vb_i)->full_vb = true; // BGZF recompression can be done by the compute thread
+        VbInfo *v1 = VBINFO(vb1_i);
+        VbInfo *v2 = VBINFO(vb2_2);
 
-        // if we're sorting - re-order section list, so reconstruction is ordered according to the first
-        // occurance of VB in the recon_plan. 
-        if (flag.sort && !vb_is_pulled_up[plan[i].x.vb_i - comp->first_vb_i]) { // first encounter with this VB in the plan
-            // move all sections of vb_i to be immediately after sl ; returns last section of vb_i after move
-            sl = sections_pull_vb_up (plan[i].x.vb_i, sl); 
-            vb_is_pulled_up[plan[i].x.vb_i - comp->first_vb_i] = true;
+        // if one of them is filtered out, both are, and if no reconstructing then obviously no writing either            
+        if (!v1->needs_recon || !v2->needs_recon) 
+            v1->needs_recon = v2->needs_recon = v1->needs_write = v2->needs_write = false;
+
+        if (v1->needs_write && v2->needs_write)           
+            BNXT (ReconPlanItem, z_file->recon_plan) = (ReconPlanItem){ 
+                .flavor    = PLAN_INTERLEAVE, 
+                .vb_i      = vb1_i,
+                .vb2_i     = vb2_2,
+                .num_lines = v1->num_lines * 2
+            };
+        
+        else // if one of them is filtered out, both are
+            v1->needs_write = v2->needs_write = false;
+    }     
+}
+
+// PIZ main thread: for each VB in the component pointed by sec, sort VBs according to first appearance in recon plan
+static void writer_add_plan_from_recon_section (CompIType comp_i, bool is_luft,
+                                                VBIType *conc_writing_vbs, uint32_t *vblock_mb) // out
+{
+    Section recon_plan_sec = sections_get_comp_recon_plan_sec (comp_i, is_luft);
+    if (!recon_plan_sec) {
+        writer_add_trivial_plan (comp_i);
+        return;
+    }
+
+    recon_plan_uncompress (recon_plan_sec, conc_writing_vbs, vblock_mb); // into evb->scratch 
+
+    if (evb->scratch.len) { // this component has a non-empty RECON_PLAN 
+        ARRAY (ReconPlanItem, plan, evb->scratch);
+
+        buf_alloc (evb, &z_file->recon_plan, plan_len, 0, ReconPlanItem, 0, "recon_plan");      
+
+        // convert v12/13
+        if (z_file->genozip_version <= 13) {
+            for (uint64_t i=0; i < plan_len; i++) 
+                if (plan[i].flavor == PLAN_END_OF_VB)
+                    plan[i].num_lines = 0; // in v12/13, this was all 1s 
+        }
+
+        for (uint64_t i=0; i < plan_len; i++) {
+            VbInfo *v = VBINFO(plan[i].vb_i);
+            if (v->needs_write) {
+                if (plan[i].flavor == PLAN_FULL_VB) 
+                    plan[i].num_lines = v->num_lines; // note: in the file format num_lines=0 - improves compression of RECON_PLAN section
+                
+                BNXT (ReconPlanItem, z_file->recon_plan) = plan[i];
+            }
         }
     }
-    FREE (vb_is_pulled_up);
-    buf_free (&evb->compressed);
-}
-
-// returns SL if this component has a SEC_RECON_PLAN section which matchs flag.luft
-// note: on the main component, not the rejects components, has a recon plan. it will have a plan for primary or luft, if either or both need sorting.
-static Section writer_get_recon_plan_sl (const CompInfo *comp)
-{
-    Section sl = comp->txt_header_sl;
-
-    if (sections_next_sec2 (&sl, SEC_RECON_PLAN, SEC_TXT_HEADER) && sl->st == SEC_RECON_PLAN) {
-
-        if (sl->flags.recon_plan.luft == flag.luft) 
-            return sl;   // 1st recon plan matches flag.luft
-                
-        if ((sl+1)->st == SEC_RECON_PLAN && (sl+1)->flags.recon_plan.luft == flag.luft) 
-            return sl+1; // 2nd recon plan matches flag.luft
-    }
     
-    return NULL; // no RECON_PLAN matching flag.luft was found in this component
+    buf_free (evb->scratch);
 }
 
-// PIZ main thread: create reconstruction plan for this z_file, taking account RECON_PLAN sections and interleaving.
-// re-sort all VBs within each component in sections according to VB appearance order in reconstruction plan
+// PIZ main thread: 
+// (1) create reconstruction plan for this z_file, taking account RECON_PLAN sections and interleaving.
+// (2) re-writes z_file->section_list to include only TXT_HEADERs/VBs which need reading, and order them in the order
+// they will be needed by writer.
 void writer_create_plan (void)
 {  
-    // when showing in liftover coordinates, bring the rejects component(s) forward before the primary component(s)
-    if (z_dual_coords) 
-        writer_move_liftover_rejects_to_front(); // must be before writer_init_vb_info as components order changes
-
-    // when showing SAM/BAM with generated components, bring them forward before the primary component(s)
-    else if (z_sam_gencomp)
-        writer_move_sam_gencomp_to_front();
-
     writer_init_vb_info();
 
-    if (flag.no_writer_thread && !flag.show_recon_plan) return; // we prepare the *_info_* data even if not writing
+    uint32_t vblock_mb=0;
+    z_file->max_conc_writing_vbs = 0;
 
-    uint32_t conc_writing_vbs=0, vblock_mb=0;
+    ASSINP (!flag.interleaved || txt_header_info.len == 2, "--interleave cannot be used because %s was not compressed with --pair", z_name);
 
-    ASSERT (!flag.interleave || !(z_file->num_components % 2), "%s has %u components, but --interleave expects an even number", 
-            z_name, z_file->num_components);
+    bool section_list_unchanged = false; // reconstructing the file in the order of VBs and without filtering
 
-    TxtFileInfo *tf_ent = FIRSTENT (TxtFileInfo, txt_file_info);
+    // case: SAM with PRIM/DEPN
+    if (z_sam_gencomp) {        
+        writer_add_txtheader_plan (SAM_COMP_MAIN);
 
-    for (unsigned comp_i = 0; comp_i < z_file->num_components; comp_i += 1 + flag.interleave) {
+        writer_add_plan_from_recon_section (SAM_COMP_MAIN, false, &z_file->max_conc_writing_vbs, &vblock_mb);
 
-        CompInfo *comp = ENT (CompInfo, comp_info, comp_i);
-        Section recon_plan_sl;
-
-        // start plan for this txt_file (unless already started in previous comp)
-        if (!tf_ent->plan_len) 
-            tf_ent->first_plan_i = (uint32_t)z_file->recon_plan.len;
-
-        // add this txt_header to the plan
-        if (comp->info.in_plan)
-            writer_add_txtheader_plan (comp);
-                    
-        // case: interleave the VBs of two components - we ignore RECON_PLAN sections 
-        if (flag.interleave) 
-            writer_add_interleave_plan (comp);
-
-        // case: we have a SEC_RECON section (occurs in dual-coordinates files and SAM/BAM with supplementary/seconday groups)
-        else if ((flag.sort || z_sam_gencomp) && (recon_plan_sl = writer_get_recon_plan_sl (comp)))
-            writer_add_plan_from_recon_section (comp, recon_plan_sl, &conc_writing_vbs, &vblock_mb);
-
-        // case: a fairly large downsample - if lines are not dropped or re-ordered (DVCF, interleave) - we may be able to drop some VBs
-        else if (flag.downsample > 100 && !flag.maybe_lines_dropped_by_reconstructor && !flag.interleave && z_file->genozip_version >= 12)
-            writer_add_downsample_plan (comp);
-
-        // case: just a plain-vanilla VB
-        else 
-            writer_add_trival_plan (comp);
-
-        tf_ent->plan_len = (uint32_t)z_file->recon_plan.len - tf_ent->first_plan_i;
-        
-        if (flag.unbind && !comp->rejects_coord) tf_ent++; // note: if this is a rejects component, we stay on the same txt file one more component 
+        z_file->num_components  = 1; // one txt_file
     }
 
-    // actual number of buffers - compute threads: conc_writing_vbs ; writer thread: conc_writing_vbs (at least 3) ; but no more than num_vbs
-    conc_writing_vbs = MIN_(vb_info.len, MAX_(3, conc_writing_vbs) + global_max_threads);
+    // case: DVCF
+    else if (z_is_dvcf) {
+        // rejected variants that are reconstructed to be the first part of the VCF header
+        CompIType reject_comp_i = flag.luft ? VCF_COMP_PRIM_ONLY : VCF_COMP_LUFT_ONLY;
+        writer_add_txtheader_plan (reject_comp_i);
+        writer_add_trivial_plan (reject_comp_i);
+
+        // main TXT_HEADER is reconstructed after the rejects
+        writer_add_txtheader_plan (VCF_COMP_MAIN);
+
+        // main component (lines with rejected variants are dropped by reconstructor)
+        writer_add_plan_from_recon_section (VCF_COMP_MAIN, flag.luft, &z_file->max_conc_writing_vbs, &vblock_mb);
+    }
+
+    // case: VCF with --sort, other than DVCF
+    else if (Z_DT(DT_VCF) && flag.sort) 
+        writer_add_plan_from_recon_section (VCF_COMP_MAIN, false, &z_file->max_conc_writing_vbs, &vblock_mb);
+
+    // case: paired FASTQ to be written interleaved 
+    else if (Z_DT(DT_FASTQ) && flag.interleaved) 
+        writer_add_interleaved_plan(); // single txt_file, recon_plan with PLAN_INTERLEAVE to interleave pairs of VBs
+
+    // case: paired FASTQ with --R1 or --R2
+    else if (Z_DT(DT_FASTQ) && flag.one_component) 
+        writer_add_trivial_plan (flag.one_component-1); // one_component is 1 or 2
+
+    // cases: paired FASTQ with --unbind (genounzip only - no filtering/modifications)
+    else if (Z_DT(DT_FASTQ) && flag.unbind) {
+        writer_add_txtheader_plan (FQ_COMP_R1); // reading the txt_header is required when unbinding (it contains the filename, digest...)
+        writer_add_trivial_plan (FQ_COMP_R1);
+        z_file->recon_plan.count = z_file->recon_plan.len; // count - length of plan of R1
+
+        writer_add_txtheader_plan (FQ_COMP_R2);
+        writer_add_trivial_plan (FQ_COMP_R2);
+
+        section_list_unchanged = true; 
+    }
+
+    // normal file, not one of the above
+    else {
+        writer_add_txtheader_plan (COMP_MAIN);
+        writer_add_trivial_plan (COMP_MAIN);
+        section_list_unchanged = true;
+    }
+
+    bool has_regions_filter = random_access_has_filter();
+
+    // filtering (these are genocat flags, not available in genounzip): 
+    if (flag.maybe_lines_dropped_by_writer || has_regions_filter) {
+
+        int64_t num_lines = (flag.lines_first >= 0 || flag.tail) ? writer_get_plan_num_lines() : 0; // calculate if needed
+        int64_t lines_to_trim;
+
+        // first - filters based on line ordinal position (--head, --lines, --tail)
+        if ((flag.lines_first > 0 || flag.tail) 
+            && (lines_to_trim = flag.tail ? MIN_(num_lines - flag.tail, num_lines) : flag.lines_first))
+            writer_trim_lines_from_plan_start (lines_to_trim);
+
+        if (flag.lines_last != -1 
+            && (lines_to_trim = num_lines - MIN_(flag.lines_last+1, num_lines)))
+            writer_trim_lines_from_plan_end (num_lines, lines_to_trim);
+
+        // second - filters based on contents of line - remove VBs by random_access here, more in reconstructor
+        if (has_regions_filter) 
+            writer_filter_regions (); // note: only filters out whole VBs, does not mark lines for dropping
+
+        // if --downsample is the only line dropping filter, we can remove some plan items now 
+        // note: this is an optimization, lines which are not removed now, will be discarded by the writer thread,
+        // and lines that are moved, will still be counted for downsampling purposes by the writer thread.
+        if (flag.downsample && !flag.tail && flag.lines_first == -1 && !flag.maybe_lines_dropped_by_reconstructor)
+            writer_downsample_plan(); 
+
+        // mark VBs that are fully dropped as !needs_recon + remove REMOVE_ME items from recon_plan
+        writer_cleanup_recon_plan_after_filtering();
+
+        section_list_unchanged = false; // since we filtered, this is no longer plain vanilla
+    }
+
+    // build and commit new section list from recon_plan (unless plain vanilla - section list is fine as is)
+    if (!section_list_unchanged)
+        writer_update_section_list(); 
+
+    if (flag.show_gheader == 2) { // --show-gheader=2 : show modified section list 
+        sections_show_section_list (z_file->data_type);
+        if (exe_type == EXE_GENOCAT) exit_ok();
+    }
+
+    // actual number of buffers - the maximum of any recon_plan in this z_file, but not less than 3 or more than num_vbs
+    z_file->max_conc_writing_vbs = MIN_(vb_info.len, MAX_(3, z_file->max_conc_writing_vbs));
 
     if (flag.show_recon_plan) {
-        linesorter_show_recon_plan (z_file, flag.luft, conc_writing_vbs, vblock_mb);    
+        recon_plan_show (z_file, flag.luft, z_file->max_conc_writing_vbs, vblock_mb);    
         if (exe_type == EXE_GENOCAT) exit_ok();
     }
 
 #if defined _WIN32 || defined APPLE
-    ASSERTW ((uint64_t)conc_writing_vbs * (((uint64_t)vblock_mb) << 20) < MEMORY_WARNING_THREASHOLD,
-             "\nWARNING: This file will be output sorted. Sorting is done in-memory and will consume %u MB.\n"
-             "Alternatively, use the --unsorted option to avoid in-memory sorting", vblock_mb * conc_writing_vbs);
+    ASSERTW ((uint64_t)z_file->max_conc_writing_vbs * (((uint64_t)vblock_mb) << 20) < MEMORY_WARNING_THREASHOLD,
+             "\nWARNING: This file's output will be re-ordered in-memory, which will consume %u MB.\n"
+             "Alternatively, use the --unsorted option to avoid in-memory sorting", vblock_mb * z_file->max_conc_writing_vbs);
 #endif
 }
 
@@ -607,17 +822,16 @@ static void writer_flush_vb (VBlockP wvb, VBlockP vb, bool is_txt_header, bool i
 
     // note: normally digest calculation is done in the compute thread in piz_reconstruct_one_vb, but in
     // case of an unmodified VB that inserts lines from gencomp VBs, we do it here, as we re-assemble the original VB
-    if (z_has_gencomp && !flag.data_modified && !is_txt_header)
-        digest_update_do (vb, &txt_file->digest_ctx_bound, STRb(vb->txt_data),
-                          flag.unbind ? "vb:digest_ctx_single" : "vb:digest_ctx_bound"); 
+    if (!flag.data_modified && !is_txt_header && !gencomp_comp_eligible_for_digest(vb))
+        digest_update_do (vb, &z_file->digest_ctx, STRb(vb->txt_data), "vb"); 
 
     if (!flag.no_writer) {
 
         if (txt_file->codec == CODEC_BGZF) {
             // compress now if not compressed yet by compute thread (VBs) or main thread (txt_header)
-            if (flag.maybe_vb_modified_by_writer || // compute thread didn't compress because writer could modify the data (--interleave, --downsample, sorting)
+            if (flag.maybe_lines_out_of_order || // compute thread didn't compress because writer could modify the data (--interleave, --downsample, sorting)
                 (!is_full_vb && !is_txt_header))    // the recon plan for this VB is NOT FULL_VB - either because it was modified or because SAM/BAM gencomp lines are re-integrated to the VB to re-assemble the original un-modified VB
-                bgzf_compress_vb (vb); // compress data into vb->compressed (using BGZF blocks from source file or new ones)
+                bgzf_compress_vb (vb); // compress data into vb->scratch (using BGZF blocks from source file or new ones)
 
             bgzf_write_to_disk (wvb, vb); 
         }
@@ -631,9 +845,9 @@ static void writer_flush_vb (VBlockP wvb, VBlockP vb, bool is_txt_header, bool i
     }
 
     // free, so in case this is wvb we can use it for more lines
-    buf_free (&vb->txt_data);
-    buf_free (&vb->compressed);
-    buf_free (&vb->bgzf_blocks);
+    buf_free (vb->txt_data);
+    buf_free (vb->scratch);
+    buf_free (vb->bgzf_blocks);
 
     COPY_TIMER (write);
 }
@@ -643,36 +857,35 @@ static inline bool writer_line_survived_downsampling (VbInfo *v)
 {
     if (!flag.downsample) return true;
 
-    uint64_t line_i = txt_file->lines_written_so_far / ((flag.interleave || flag.sequential) ? 2ULL : 1ULL); // 2 lines at a time if interleave (FASTQ) or sequential (FASTA)
+    uint64_t line_i = txt_file->lines_written_so_far / ((flag.interleaved || flag.sequential) ? 2ULL : 1ULL); // 2 lines at a time if interleave (FASTQ) or sequential (FASTA)
 
     // show (or not) the line based on our downsampling rate and shard value
     return (line_i % (uint64_t)flag.downsample) == flag.shard;
 }
 
 // write lines one at a time, watching for dropped lines
-static void writer_write_line_range (VBlock *wvb, VbInfo *v, uint32_t start_line, uint32_t num_lines)
+static void writer_write_line_range (VBlockP wvb, VbInfo *v, uint32_t start_line, uint32_t num_lines)
 {
-    ASSERT (!v->vb->compressed.len, "expecting vb_i=%u data to be BGZF-compressed by writer at flush, but it is already compressed by reconstructor: txt_file->codec=%s compressed.len=%"PRIu64" txt_data.len=%"PRIu64,
-            v->vb->vblock_i, codec_name (txt_file->codec), v->vb->compressed.len, v->vb->txt_data.len);
+    ASSERT (!v->vb->scratch.len, "expecting vb_i=%u data to be BGZF-compressed by writer at flush, but it is already compressed by reconstructor: txt_file->codec=%s compressed.len=%"PRIu64" txt_data.len=%"PRIu64,
+            v->vb->vblock_i, codec_name (txt_file->codec), v->vb->scratch.len, v->vb->txt_data.len);
 
     if (!v->vb->txt_data.len) return; // no data in the VB 
 
-    ARRAY (const char *, lines, v->vb->lines); 
+    ARRAY (rom , lines, v->vb->lines); 
 
-    ASSERT (start_line + num_lines <= lines_len, "vb_i=%u Expecting lines_len=%u to be at least %u", 
-            ENTNUM (vb_info, v), (unsigned)lines_len, start_line + num_lines);
+    ASSERT (start_line + num_lines <= lines_len, "vb_i=%u invalid range: least start_line=%u + num_lines=%u == %u but lines_len=%"PRIu64, 
+            BNUM (vb_info, v), start_line, num_lines, start_line + num_lines, lines_len);
 
     for (uint32_t line_i=start_line; line_i < start_line + num_lines; line_i++) {
         
-        const char *start = lines[line_i];
-        const char *after = lines[line_i+1];  // note: lines has one extra entry so this is always correct
+        rom start = lines[line_i];
+        rom after = lines[line_i+1];  // note: lines has one extra entry so this is always correct
         uint32_t line_len = (uint32_t)(after - start);
         
-        const BitArray *ba = buf_get_bitarray (&v->vb->is_dropped); // prevent compiler aliasing warning
-        bool is_dropped = bit_array_get (ba, line_i);
+        bool is_dropped = bit_array_get (v->is_dropped, line_i);
 
         ASSERT (after >= start, "vb_i=%u Writing line %i (start_line=%u num_lines=%u): expecting start=%p <= after=%p", 
-                ENTNUM (vb_info, v), line_i, start_line, num_lines, start, after);
+                BNUM (vb_info, v), line_i, start_line, num_lines, start, after);
  
         if (!is_dropped) { // don't output lines dropped in container_  reconstruct_do due to vb->drop_curr_line
             
@@ -685,15 +898,15 @@ static void writer_write_line_range (VBlock *wvb, VbInfo *v, uint32_t start_line
     }
 }
 
-static void writer_write_lines_add_pair (VBlock *wvb, VbInfo *v, const char *start, unsigned len, unsigned pair /* 1 or 2 */)
+static void writer_write_lines_add_pair (VBlockP wvb, VbInfo *v, rom start, unsigned len, unsigned pair /* 1 or 2 */)
 {
-    static const char *suffixes[3] = { "", "/1", "/2" }; // suffixes for pair 1 and pair 2 reads
+    static rom suffixes[3] = { "", "/1", "/2" }; // suffixes for pair 1 and pair 2 reads
 
     SAFE_NUL (&start[len]);
     unsigned qname_len = strcspn (start, " \n\t");
     SAFE_RESTORE;
 
-    const char *sep = &start[qname_len];
+    rom sep = &start[qname_len];
     ASSERT (qname_len < len, "Expected to find a newline in the 4-line read:\n%.*s\n", len, start);
 
     // write up to the separator
@@ -707,7 +920,7 @@ static void writer_write_lines_add_pair (VBlock *wvb, VbInfo *v, const char *sta
 }
 
 // write one fastq "line" (actually 4 textual lines) at time, interleaved from v1 and v2
-static void writer_write_lines_interleaves (VBlock *wvb, VbInfo *v1, VbInfo *v2)
+static void writer_write_lines_interleaves (VBlockP wvb, VbInfo *v1, VbInfo *v2)
 {
     if (!v1->vb->txt_data.len || !v2->vb->txt_data.len) return; // no data in the either of the VBs 
 
@@ -716,18 +929,16 @@ static void writer_write_lines_interleaves (VBlock *wvb, VbInfo *v1, VbInfo *v2)
 
     for (uint32_t line_i=0; line_i < v1->vb->lines.len; line_i++) {
 
-        const char **start1 = ENT (const char *, v1->vb->lines, line_i);
-        const char **start2 = ENT (const char *, v2->vb->lines, line_i);
+        rom *start1 = B(rom , v1->vb->lines, line_i);
+        rom *start2 = B(rom , v2->vb->lines, line_i);
         unsigned len1 = (unsigned)(*(start1+1) - *start1);
         unsigned len2 = (unsigned)(*(start2+1) - *start2);
-        const BitArray *ba1 = buf_get_bitarray (&v1->vb->is_dropped); // prevent compiler aliasing warning
-        const BitArray *ba2 = buf_get_bitarray (&v2->vb->is_dropped); 
-        bool is_dropped1 = bit_array_get (ba1, line_i);
-        bool is_dropped2 = bit_array_get (ba2, line_i);
+        bool is_dropped1 = bit_array_get (v1->is_dropped, line_i);
+        bool is_dropped2 = bit_array_get (v2->is_dropped, line_i);
 
         // skip lines dropped in container_reconstruct_do due to vb->drop_curr_line for either leaf
-        if ((flag.interleave == INTERLEAVE_BOTH && !is_dropped1 && !is_dropped2) || 
-            (flag.interleave == INTERLEAVE_EITHER && (!is_dropped1 || !is_dropped2))) {
+        if ((flag.interleaved == INTERLEAVE_BOTH && !is_dropped1 && !is_dropped2) || 
+            (flag.interleaved == INTERLEAVE_EITHER && (!is_dropped1 || !is_dropped2))) {
             // TODO - INTERLEAVE_EITHER doesn't work yet, bug 396
             if (writer_line_survived_downsampling(v1)) { 
                 if (len1) writer_write_lines_add_pair (wvb, v1, *start1, len1, 1); // also adds /1 and /2 if paired
@@ -742,19 +953,27 @@ static void writer_write_lines_interleaves (VBlock *wvb, VbInfo *v1, VbInfo *v2)
 // writer thread: waiting for data from a VB and loading it
 static void writer_load_vb (VbInfo *v)
 {
-    bool is_comp = (v < FIRSTENT (VbInfo, vb_info) || v > LASTENT (VbInfo, vb_info));
+    bool is_comp = (v < B1ST (VbInfo, vb_info) || v > BLST (VbInfo, vb_info));
 
     if (flag.show_threads && !is_comp) 
-        iprintf ("writer: vb_i=%u WAITING FOR VB\n", ENTNUM (vb_info, v));
-    
+        iprintf ("writer: vb_i=%u comp=%s WAITING FOR VB\n", BNUM (vb_info, v), comp_name(v->comp_i));
+
+    if (flag.show_vblocks && !is_comp) 
+        iprintf ("WRITER_WAITING_FOR vb_i=%u comp=%s\n", BNUM (vb_info, v), comp_name(v->comp_i));
+
     else if (flag.show_threads && is_comp) 
-        iprintf ("writer: component_i=%u WAITING FOR TXT_HEADER\n", v->comp_i);
+        iprintf ("writer: comp=%s WAITING FOR TXT_HEADER\n", comp_name(v->comp_i));
 
     mutex_wait (v->wait_for_data);
 
-    threads_log_by_vb (v->vb, v->vb->compute_task, v->vb->vblock_i ? "WRITER LOADED VB" : "WRITER LOADED TXT_HEADER", 0);
+    threads_log_by_vb (v->vb, "writer", v->vb->vblock_i ? "WRITER LOADED VB" : "WRITER LOADED TXT_HEADER", 0);
+
+    if (flag.show_vblocks && !is_comp) 
+        iprintf ("WRITER_LOADED vb_i=%u comp=%s\n", BNUM (vb_info, v), comp_name(v->comp_i));
 
     v->is_loaded = true;
+
+    ASSERT (v->vblock_i == v->vb->vblock_i, "Wrong VB: v->vblock_i=%u but v->vb->vblock_i=%u", v->vblock_i, v->vb->vblock_i);
 }
 
 // Thread entry point for writer thread - at this point, the reconstruction plan is ready and unmutable
@@ -767,30 +986,30 @@ static void writer_main_loop (VBlockP wvb)
     // execute reconstruction plan
     for (uint64_t i=0; i < txt_file->recon_plan.len; i++) { // note: recon_plan.len maybe 0 if everything is filtered out
 
-        ReconPlanItem *p = ENT (ReconPlanItem, txt_file->recon_plan, i);
+        ReconPlanItem *p = B(ReconPlanItem, txt_file->recon_plan, i);
 
-        ASSERT (p->x.vb_i >= 0 && p->x.vb_i <= vb_info.len, 
-                "plan[%u].vb_i=%u expected to be in range [1,%u] ", (unsigned)i, p->x.vb_i, (unsigned)vb_info.len);
+        ASSERT (p->vb_i >= 0 && p->vb_i <= vb_info.len, 
+                "plan[%u].vb_i=%u expected to be in range [1,%u] ", (unsigned)i, p->vb_i, (unsigned)vb_info.len);
 
-        VbInfo *v  = p->x.vb_i ? ENT (VbInfo, vb_info, p->x.vb_i) 
-                   : p->txt_header.plan_type == PLAN_TXTHEADER ? &ENT (CompInfo, comp_info, p->txt_header.rp_comp_i)->info
+        VbInfo *v  = p->vb_i ? VBINFO(p->vb_i) 
+                   : p->flavor == PLAN_TXTHEADER ? B(VbInfo, txt_header_info, p->comp_i)
                    : NULL;
 
-        VbInfo *v2 = p->x.vb_i && flag.interleave ? ENT (VbInfo, vb_info, p->interleave.vb2_i) : NULL;
+        VbInfo *v2 = (p->vb_i && p->flavor == PLAN_INTERLEAVE) ? VBINFO(p->vb2_i) : NULL;
 
         // if data for this VB is not ready yet, wait for it
-        if (v && !v->is_loaded && p->x.plan_type != PLAN_DOWNSAMPLE) 
+        if (v && !v->is_loaded && p->flavor != PLAN_DOWNSAMPLE) 
             writer_load_vb (v);
 
         if (v2 && !v2->is_loaded) 
             writer_load_vb (v2);
 
         // case: free data if this is the last line of the VB
-        switch (p->x.plan_type) {
+        switch (p->flavor) {
 
             case PLAN_TXTHEADER:   
                 writer_flush_vb (wvb, v->vb, true, false); // write the txt header in its entirety
-                vb_release_vb (&v->vb);
+                vb_release_vb (&v->vb, PIZ_TASK_NAME);
                 break;
 
             case PLAN_FULL_VB:   
@@ -804,11 +1023,11 @@ static void writer_main_loop (VBlockP wvb)
                 if (z_has_gencomp && !flag.data_modified) 
                     digest_piz_verify_one_vb (v->vb); 
 
-                vb_release_vb (&v->vb);
+                vb_release_vb (&v->vb, PIZ_TASK_NAME);
                 break;
 
             case PLAN_DOWNSAMPLE:
-                txt_file->lines_written_so_far += p->downsample.num_lines;
+                txt_file->lines_written_so_far += p->num_lines;
                 break;
 
             case PLAN_END_OF_VB: // done with VB - free the memory (happens after a series of "default" line range entries)
@@ -818,19 +1037,19 @@ static void writer_main_loop (VBlockP wvb)
                 // note: normally digest calculation is done in the compute thread in piz_reconstruct_one_vb, but in
                 // case of an unmodified VB that inserts lines from gencomp VBs, we do it here, after original VB is re-assembled
                 if (z_has_gencomp && !flag.data_modified) 
-                    digest_piz_verify_one_vb (v->vb); 
+                    digest_piz_verify_one_vb (v->vb); // verify digest so far up to this VB
 
-                vb_release_vb (&v->vb);
+                vb_release_vb (&v->vb, PIZ_TASK_NAME);
                 break;
 
             case PLAN_INTERLEAVE:
                 writer_write_lines_interleaves (wvb, v, v2);
-                vb_release_vb (&v->vb);
-                vb_release_vb (&v2->vb);
+                vb_release_vb (&v->vb, PIZ_TASK_NAME);
+                vb_release_vb (&v2->vb, PIZ_TASK_NAME);
                 break;
 
-            default: 
-                writer_write_line_range (wvb, v, p->range.start_line, p->range.num_lines);
+            default:   // PLAN_RANGE
+                writer_write_line_range (wvb, v, p->  start_line, p->num_lines);
                 break;
         }
 
@@ -839,32 +1058,35 @@ static void writer_main_loop (VBlockP wvb)
     }
 
     writer_flush_vb (wvb, wvb, false, false);
-    vb_release_vb (&wvb); 
+    vb_release_vb (&wvb, WRITER_TASK_NAME); 
 
     threads_unset_writer_thread();
 }
 
-// PIZ main thread: launch writer thread to write to a single txt_file (one or more components)
-static void writer_start_writing (uint32_t txt_file_i)
+//---------------------------------------------------
+// PIZ interaction with writer: start, stop, handover
+//---------------------------------------------------
+
+// PIZ main thread: launch writer thread to write to a single txt_file 
+static void writer_start_writing (CompIType unbind_comp_i)
 {
     ASSERTNOTNULL (txt_file);
 
     if (writer_thread != THREAD_ID_NONE || flag.no_writer_thread) return;
 
-    ASSERT (txt_file_i < txt_file_info.len, "txt_file_i=%u is out of range txt_file_info.len=%u", 
-            txt_file_i, (unsigned)txt_file_info.len);
+    // copy the portion of the reconstruction plan (note: recon_plan may exists only in cases of a single txt file)
+    if (!flag.unbind)
+        buf_copy (evb, &txt_file->recon_plan, &z_file->recon_plan, ReconPlanItem, 0, 0, 0);
+    else if (unbind_comp_i == FQ_COMP_R1) 
+        buf_copy (evb, &txt_file->recon_plan, &z_file->recon_plan, ReconPlanItem, 0, z_file->recon_plan.count, 0); // param = length of R1
+    else // FQ_COMP_R2
+        buf_copy (evb, &txt_file->recon_plan, &z_file->recon_plan, ReconPlanItem, z_file->recon_plan.count, 0, 0);
 
-    TxtFileInfo *tf = ENT (TxtFileInfo, txt_file_info, txt_file_i);
-
-    // copy the portion of the reconstruction plan related to this txt file 
-    if (tf->plan_len)
-        buf_copy (evb, &txt_file->recon_plan, &z_file->recon_plan, ReconPlanItem, tf->first_plan_i, tf->plan_len, 0);
-
-    VBlockP wvb = vb_get_vb ("writer", 0);
+    VBlockP wvb = vb_get_vb (WRITER_TASK_NAME, 0, COMP_NONE);
     writer_thread = threads_create (writer_main_loop, wvb);
 }
 
-// PIZ main thread: wait for writer thread to finish writing a single txt_file (one or more components)
+// PIZ main thread: wait for writer thread to finish writing a single txt_file
 void writer_finish_writing (bool is_last_txt_file)
 {
     if (flag.no_writer_thread || !txt_file || writer_thread == THREAD_ID_NONE) return;
@@ -872,47 +1094,52 @@ void writer_finish_writing (bool is_last_txt_file)
     // wait for thread to complete (possibly it completed already)
     threads_join (&writer_thread, NULL); // also sets writer_thread=THREAD_ID_NONE
     
-    // all mutexes destroyed by main thread, that created them (not sure its important)    
+    // all mutexes destroyed by main thread, that created them (because we will proceed to freeing z_file in which they live)    
     if (is_last_txt_file) {
-        for (unsigned comp_i=0; comp_i < comp_info.len; comp_i++) {
-            CompInfo *comp = ENT (CompInfo, comp_info, comp_i);
-            mutex_destroy (comp->info.wait_for_data);
+        for (CompIType comp_i=0; comp_i < txt_header_info.len; comp_i++) {
+            VbInfo *comp = B(VbInfo, txt_header_info, comp_i);
+            mutex_destroy (comp->wait_for_data);
         }
         
-        for (uint32_t vb_i=0; vb_i < vb_info.len; vb_i++) {
-            VbInfo *v = ENT (VbInfo, vb_info, vb_i);
+        for (VBIType vb_i=1; vb_i <= z_file->num_vbs; vb_i++) {
+            VbInfo *v = VBINFO(vb_i);
             mutex_destroy (v->wait_for_data);
+            buf_destroy (v->is_dropped_buf);
         }
     }                
 }
 
 // PIZ main thread
-static void writer_handover (VbInfo *v, VBlock *vb)
+static void writer_handover (VbInfo *v, VBlockP vb)
 {
     if (flag.no_writer_thread) return;
 
-    if (!v->in_plan) return; // we don't need this data as we are not going to write any of it
+    if (!v->needs_write) return; // we don't need this data as we are not going to write any of it
 
-    writer_start_writing (flag.unbind ? v->comp_i : 0); // start writer thread if not already started
-
-    v->vb = vb; // writer thread now owns this VB, and is the only thread that will modify it, until finally destroying it
+    writer_start_writing (flag.unbind ? v->comp_i : COMP_NONE); // start writer thread if not already started
+    
+    // writer thread now owns this VB, and is the only thread that will modify it, until finally destroying it
+    v->vb = vb;
 
     threads_log_by_vb (vb, vb->compute_task, vb->vblock_i ? "HANDING OVER VB" : "HANDING OVER TXT_HEADER", 0);
 
     mutex_unlock (v->wait_for_data); 
+
+    if (flag.show_vblocks) 
+        iprintf ("HANDED_OVER(task=%s id=%u) vb_i=%u comp=%s\n", PIZ_TASK_NAME, vb->id, vb->vblock_i, comp_name(v->comp_i));
 }
 
 // PIZ main thread: hand over data from a txtheader whose reconstruction main thread has completed, to the writer thread
-void writer_handover_txtheader (VBlockP *comp_vb_p, uint32_t component_i)
+void writer_handover_txtheader (VBlockP *txt_header_vb_p)
 {
-    writer_handover (&ENT (CompInfo, comp_info, component_i)->info, *comp_vb_p);
-    *comp_vb_p = NULL;
+    writer_handover (B(VbInfo, txt_header_info, (*txt_header_vb_p)->comp_i), *txt_header_vb_p);
+    *txt_header_vb_p = NULL;
 }
 
 // PIZ main thread: hand over data from a VB whose reconstruction compute thread has completed, to the writer thread
 void writer_handover_data (VBlockP *vb_p)
 {
-    writer_handover (ENT (VbInfo, vb_info, (*vb_p)->vblock_i), *vb_p);
+    writer_handover (VBINFO((*vb_p)->vblock_i), *vb_p);
     *vb_p = NULL;
 }
 

@@ -9,7 +9,7 @@
 #include "buffer.h"
 #include "bsc/libbsc.h"
 
-static const char *codec_bsc_errstr (int err)
+static rom codec_bsc_errstr (int err)
 {
     switch (err) {
         case LIBBSC_NO_ERROR:              return "LIBBSC_NO_ERROR";
@@ -26,39 +26,39 @@ static const char *codec_bsc_errstr (int err)
     }
 }
 
-bool codec_bsc_compress (VBlock *vb, SectionHeader *header,
-                         const char *uncompressed,      // option 1 - compress contiguous data
-                         uint32_t *uncompressed_len, 
-                         LocalGetLineCB callback, // option 2 - compress data one line at a time
+bool codec_bsc_compress (VBlockP vb, SectionHeader *header, 
+                         rom uncompressed,   // option 1 - compress contiguous data
+                         uint32_t *uncompressed_len, // in/out (might be modified by complex codecs)
+                         LocalGetLineCB callback,    // option 2 - compress data one line at a time
                          char *compressed, uint32_t *compressed_len /* in/out */, 
-                         bool soft_fail)
+                         bool soft_fail, rom name)
 {
     START_TIMER;
 
-    ASSERT (*compressed_len >= *uncompressed_len + LIBBSC_HEADER_SIZE, "compressed_len too small: compress_len=%u < uncompressed_len=%u + LIBBSC_HEADER_SIZE=%u",
-            *compressed_len, *uncompressed_len, LIBBSC_HEADER_SIZE);
+    ASSERT (*compressed_len >= *uncompressed_len + LIBBSC_HEADER_SIZE, "compressed_len too small: \"%s\": compress_len=%u < uncompressed_len=%u + LIBBSC_HEADER_SIZE=%u",
+            name, *compressed_len, *uncompressed_len, LIBBSC_HEADER_SIZE);
 
     // libbsc doesn't allow piecemiel compression, so we need to copy all the data in case of callback
     if (callback) {
 
-        // copy data to vb->compressed
-        ASSERTNOTINUSE (vb->compressed);
-        buf_alloc (vb, &vb->compressed, 0, *uncompressed_len, char, 1.2, "compressed");
+        // copy data to vb->scratch
+        ASSERTNOTINUSE (vb->scratch);
+        buf_alloc (vb, &vb->scratch, 0, *uncompressed_len, char, 1.2, "scratch");
 
         for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
             char *start1=0;
             uint32_t len1=0;        
             
             // note: get what we need, might be less than what's available if calling from zip_assign_best_codec
-            callback (vb, line_i, &start1, &len1, *uncompressed_len - vb->compressed.len, NULL); 
+            callback (vb, line_i, &start1, &len1, *uncompressed_len - vb->scratch.len, NULL); 
 
-            if (start1 && len1) buf_add (&vb->compressed, start1, len1);
+            if (start1 && len1) buf_add (&vb->scratch, start1, len1);
         }
 
-        uncompressed = vb->compressed.data;
+        uncompressed = vb->scratch.data;
     }
 
-    int ret = bsc_compress (vb, (const uint8_t *)uncompressed, (uint8_t *)compressed, *uncompressed_len,
+    int ret = bsc_compress (vb, (bytes )uncompressed, (uint8_t *)compressed, *uncompressed_len,
                             16,  // lzp hash size
                             128, // lzp min size
                             LIBBSC_BLOCKSORTER_BWT, // block sorter 
@@ -66,28 +66,28 @@ bool codec_bsc_compress (VBlock *vb, SectionHeader *header,
                             LIBBSC_FEATURE_FASTMODE); // flags ("features")
 
     if (ret == LIBBSC_NOT_COMPRESSIBLE)
-        ret = bsc_store (vb, (const uint8_t *)uncompressed, (uint8_t *)compressed, *uncompressed_len, LIBBSC_FEATURE_FASTMODE);
+        ret = bsc_store (vb, (bytes )uncompressed, (uint8_t *)compressed, *uncompressed_len, LIBBSC_FEATURE_FASTMODE);
 
-    ASSERT (ret >= LIBBSC_NO_ERROR, "bsc_compress or bsc_store returned %s", codec_bsc_errstr (ret));
+    ASSERT (ret >= LIBBSC_NO_ERROR, "\"%s\": bsc_compress or bsc_store returned %s", name, codec_bsc_errstr (ret));
 
-    if (callback) buf_free (&vb->compressed);
+    if (callback) buf_free (vb->scratch);
 
     *compressed_len = ret;
 
-    COPY_TIMER (compressor_bsc); // higher level codecs are accounted for in their codec code
+    COPY_TIMER_COMPRESS (compressor_bsc); // higher level codecs are accounted for in their codec code
 
     return true;
 }
 
-void codec_bsc_uncompress (VBlock *vb, Codec codec, uint8_t param,
-                          const char *compressed, uint32_t compressed_len,
-                          Buffer *uncompressed_buf, uint64_t uncompressed_len, 
-                          Codec unused)
-{
+void codec_bsc_uncompress (VBlockP vb, Codec codec, uint8_t param,
+                           rom compressed, uint32_t compressed_len,
+                           Buffer *uncompressed_buf, uint64_t uncompressed_len, 
+                           Codec unused, rom name) 
+{ 
     START_TIMER;
-    int ret = bsc_decompress (vb, (const uint8_t *)compressed, compressed_len, (uint8_t *)uncompressed_buf->data, uncompressed_len, LIBBSC_FEATURE_FASTMODE);
+    int ret = bsc_decompress (vb, (bytes )compressed, compressed_len, (uint8_t *)uncompressed_buf->data, uncompressed_len, LIBBSC_FEATURE_FASTMODE);
 
-    ASSERT (ret >= LIBBSC_NO_ERROR, "%s", codec_bsc_errstr (ret));    
+    ASSERT (ret >= LIBBSC_NO_ERROR, "\"%s\": %s", name, codec_bsc_errstr (ret));    
 
     COPY_TIMER (compressor_bsc);
 }
@@ -97,7 +97,7 @@ uint32_t codec_bsc_est_size (Codec codec, uint64_t uncompressed_len)
     return (uint32_t)uncompressed_len + LIBBSC_HEADER_SIZE; // as required by libbsc
 }
 
-static void *codec_bsc_malloc (void *vb, size_t size, const char *func, uint32_t code_line)
+static void *codec_bsc_malloc (void *vb, size_t size, FUNCLINE)
 {
     void *mem =  codec_alloc_do (VB, size, 1.5, func, code_line); 
     return mem;

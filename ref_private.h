@@ -21,8 +21,8 @@ typedef enum { CHROM_STYLE_UNKNOWN, CHROM_STYLE_chr22, CHROM_STYLE_22 } RefChrom
 typedef struct RefStruct {
 
     // file 
-    const char *filename; // filename of external reference file
-    const char *cache_fn;
+    rom filename; // filename of external reference file
+    rom cache_fn;
     Digest file_md5;
     uint8_t genozip_version;
     bool is_primary;
@@ -76,7 +76,7 @@ extern void ref_lock_initialize_denovo_genome (Reference ref);
 extern void ref_lock_free (Reference ref);
 
 // contigs stuff
-extern const char *ref_contigs_get_name_by_ref_index (Reference ref, WordIndex chrom_index, const char **snip, uint32_t *snip_len);
+extern rom ref_contigs_get_name_by_ref_index (Reference ref, WordIndex chrom_index, rom *snip, uint32_t *snip_len);
 extern const Contig *ref_contigs_get_contig_by_ref_index (Reference ref, WordIndex chrom_index, bool soft_fail);
 extern PosType ref_contigs_get_genome_nbases (Reference ref);
 extern void ref_contigs_generate_data_if_denovo (Reference ref);

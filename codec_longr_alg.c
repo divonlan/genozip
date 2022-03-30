@@ -90,6 +90,8 @@ typedef union { // 32 bit
         uint32_t na     : AVG_BITS + ERR_BITS;  // not included in nctx
         uint32_t unused : UNUSED_BITS;
     } nctx;
+
+    uint32_t value;
 } LongrChannel;
 #pragma pack()
 

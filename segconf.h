@@ -7,8 +7,13 @@
 
 #include "genozip.h"
 
-#define MIN_VBLOCK_MEMORY  1    // in MB
+// Documented range for users
+#define MIN_VBLOCK_MEMORY  1    // in MB 
 #define MAX_VBLOCK_MEMORY  2048 
+
+// Range in developer options eg --vblock 10000B 
+#define ABSOLUTE_MIN_VBLOCK_MEMORY ((uint64_t)1000) // in Bytes
+#define ABSOLUTE_MAX_VBLOCK_MEMORY ((uint64_t)MAX_VBLOCK_MEMORY<<20)
 
 typedef enum { TECH_UNKNOWN, TECH_ILLUM_7, TECH_ILLUM_5, TECH_PACBIO, TECH_ONP, TECH_454, TECH_BGI, TECH_IONTORR, TECH_HELICOS } SeqTech;
 
@@ -23,6 +28,8 @@ typedef enum { ms_NONE, ms_BIOBAMBAM, ms_MINIMAP2 } msType; // type of SAM ms:i 
 typedef enum { DP_DEFAULT, by_AD, by_SDP, by_INFO_DP } FormatDPMethod;
 
 typedef enum { L3_UNKNOWN, L3_EMPTY, L3_COPY_DESC, L3_QF, NUM_L3s } FastqLine3Type;
+
+typedef enum { XG_S_UNKNOWN, XG_WITHOUT_S, XG_WITH_S } XgIncSType;
 
 // seg configuration set prior to starting to seg a file during segconfig_calculate or txtheader_zip_read_and_compress
 typedef struct {
@@ -40,6 +47,7 @@ typedef struct {
     bool sam_use_aligner;       // use of aligner is possible if its flag.aligner_available and there are no header contigs
     bool sam_is_unmapped;       // all POS fields in the segconf block were 0
     bool sam_bowtie2;           
+    bool has_bsseeker2;
     bool NM_is_integer;         // true if NM is integer, false if it binary
     bool has_TLEN_non_zero;
     bool has_DP_before_PL;
@@ -48,11 +56,12 @@ typedef struct {
     bool sam_is_sorted;         // every two consecutive lines that have the same RNAME, have non-decreasing POS
     bool sam_is_paired;         // file has a least one read that is marked as "last" in FLAG
     bool sam_buddy_RG;          // attempt to use the same mate for RG:Z as QNAME
-    uint64_t sam_cigar_len;     // approx average CIGAR len (during running==true - total len)
-    uint64_t sam_seq_len;       // approx average CIGAR len (during running==true - total len)
+    uint64_t sam_cigar_len;     // approx average CIGAR len rounded up (during running==true - total len)
+    uint64_t sam_seq_len;       // approx average CIGAR len rounded to the nearest (during running==true - total len)
     int64_t MAPQ_value;         // used during segconf.running to calculate sam_mapq_has_single_value
     bool MAPQ_has_single_value; // all non-0 MAPQ have the same value
     msType sam_ms_type;          
+    XgIncSType sam_XG_inc_S;    // Does XG include soft_clip[0]
 
     // SAM/BAM and FASTQ
     bool nontrivial_qual;       // true if we know that not all QUAL values are the same (as they are in newer PacBio files)
@@ -85,25 +94,20 @@ typedef struct {
     QnameFlavor qname_flavor, qname_flavor2;  
     uint32_t longest_seq_len;   // length of the longest seq_len in the segconf data 
     SeqTech tech;
-
+    bool is_long_reads;
+    
     // FASTQ
     FastqLine3Type line3;       // format of line3
     QnameFlavor line3_flavor;   // in case of L3_QF 
 } SegConf;
 
-extern SegConf segconf;
+extern SegConf segconf; // ZIP: set based on segging a sample of a few first lines of the file
+                        // PIZ: select fields are transferred through SectionHeaderGenozipHeader
 
 extern void segconf_initialize (void);
 extern void segconf_calculate (void);
 extern void segconf_update_qual (STRp (qual));
-
-static inline bool segconf_is_long_reads(void) 
-{ 
-    return segconf.tech == TECH_PACBIO    || 
-           segconf.tech == TECH_ONP       || 
-           segconf.longest_seq_len > 2000 ||
-           flag.debug_LONG;
-}
+extern bool segconf_is_long_reads(void);
 
 static inline void segconf_set_has (DidIType did_i)
 {

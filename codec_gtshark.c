@@ -8,9 +8,9 @@
 #include "genozip.h"
 
 void codec_gtshark_uncompress (VBlockP vb_, Codec codec, uint8_t param,
-                               const char *compressed, uint32_t compressed_len,
+                               rom compressed, uint32_t compressed_len,
                                BufferP uncompressed_buf, uint64_t uncompressed_len,
-                               Codec sub_codec)
+                               Codec sub_codec, rom name)
 {
     ABORT0 ("Support for the gtshark codec has been discontinued. Please use genozip v11 to decompress VCF files compressed with --gtshark");
 }

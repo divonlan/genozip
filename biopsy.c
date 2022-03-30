@@ -13,7 +13,7 @@ static Buffer biopsy_vb_i = { .name = "biopsy_vb_i" };
 static Buffer biopsy_data = { .name = "biopsy_data" };
 static char *biopsy_fn = NULL;
 
-void biopsy_init (const char *optarg)
+void biopsy_init (rom optarg)
 {
     str_split (optarg, strlen(optarg), 0, ',', item, false);
 
@@ -25,7 +25,7 @@ void biopsy_init (const char *optarg)
             uint32_t first_vb_i = atoi (startends[0]);
             uint32_t last_vb_i  = atoi (startends[1]);
 
-            for (uint32_t vb_i = first_vb_i; vb_i <= last_vb_i; vb_i++)
+            for (VBIType vb_i = first_vb_i; vb_i <= last_vb_i; vb_i++)
                 buf_add_int (evb, biopsy_vb_i, vb_i); 
         }
         else // single vb eg "1"    
@@ -41,7 +41,7 @@ void biopsy_init (const char *optarg)
 
 void biopsy_take (VBlockP vb)
 {
-    if (flag.gencomp_num || !biopsy_vb_i.len) return;
+    if (!biopsy_vb_i.len) return;
 
     if (vb->vblock_i == 0) goto start_biopsy; // always output the txt header
 

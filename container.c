@@ -19,6 +19,7 @@
 #include "file.h"
 #include "regions.h"
 #include "piz.h"
+#include "writer.h"
 
 //----------------------
 // Segmentation
@@ -110,7 +111,7 @@ static inline uint32_t container_reconstruct_prefix (VBlockP vb, ConstContainerP
 
     if (! (*prefixes_len)) return 0; // nothing to do
     
-    const char *start = *prefixes;
+    rom start = *prefixes;
     while (**prefixes != CON_PX_SEP && **prefixes != CON_PX_SEP_SHOW_REPEATS) (*prefixes)++; // prefixes are terminated by CON_PX_SEP
     uint32_t len = (unsigned)((*prefixes) - start);
 
@@ -118,8 +119,8 @@ static inline uint32_t container_reconstruct_prefix (VBlockP vb, ConstContainerP
         if (len) {
             RECONSTRUCT (start, len);
 
-            if (flag.show_containers)
-                iprintf ("Prefix(%s,%s)=\"%.*s\"\n", dis_dict_id (con_dict_id).s, dis_dict_id (item_dict_id).s, len, start);
+            if (vb->show_containers)
+                iprintf ("Prefix=\"%.*s\" ", len, start);
         }
 
         // if the separator is CON_PX_SEP_SHOW_REPEATS, output the number of repeats. This is for BAM 'B' array 'count' field.
@@ -152,11 +153,12 @@ static inline unsigned container_reconstruct_item_seperator (VBlockP vb, const C
     // callback before separator reconstruction
     if (item->separator[1] == CI1_ITEM_CB && IS_VALID_SEP1_FLAG) {
 
-        ASSPIZ (DT_FUNC(vb, con_item_cb), "data_type=%s doesn't have con_item_cb requested by dict_id=%s. Please upgrade to the latest version of Genozip",
+        // note: in v13 we had a bug in qname.c that caused a seperator to change { CI0_SKIP, 1 } -> { 0, 1 }, thereby incorrectly triggering this function, so we refrain for erroring in that case
+        ASSPIZ ((DT_FUNC(vb, con_item_cb)) || z_file->genozip_version <= 13, "data_type=%s doesn't have con_item_cb requested by dict_id=%s. Please upgrade to the latest version of Genozip",
                 dt_name (vb->data_type), dis_dict_id (item->dict_id).s);
 
         if (!vb->frozen_state.param) // only if we're not just peeking
-            DT_FUNC(vb, con_item_cb)(vb, item->dict_id, reconstruction_start, AFTERENT (char, vb->txt_data) - reconstruction_start);
+            DT_FUNC(vb, con_item_cb)(vb, item->dict_id, reconstruction_start, BAFTc (vb->txt_data) - reconstruction_start);
     }
     
     if (!item->separator[0])
@@ -173,7 +175,7 @@ static inline unsigned container_reconstruct_item_seperator (VBlockP vb, const C
     }
 
     else if (item->separator[0] == CI0_FIXED_0_PAD) {
-        int recon_len = AFTERENT (char, vb->txt_data) - reconstruction_start;
+        int recon_len = BAFTc (vb->txt_data) - reconstruction_start;
         int pad = (int)item->separator[1] - recon_len;
         if (pad > 0) {
             memmove (reconstruction_start + pad, reconstruction_start, recon_len);
@@ -230,14 +232,13 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
     // for containers, new_value is the sum of all its items, all repeats last_value (either int or float)
     ValueType new_value = {};
 
-    if (flag.show_containers) // show container reconstruction 
+    if (vb->show_containers) // show container reconstruction 
         iprintf ("VB=%u Container: %s repeats=%u items=%u filter_items=%u filter_repeats=%u callback=%u\n", 
                  vb->vblock_i, dis_dict_id (ctx->dict_id).s, con->repeats, con_nitems(*con), con->filter_items, con->filter_repeats, con->callback);
 
     if (con->is_toplevel) {
         buf_alloc (vb, &vb->lines, 0, con->repeats+1, char *, 1.1, "lines"); // note: lines.len was set in piz_read_one_vb
-        buf_alloc_bitarr (vb, &vb->is_dropped, con->repeats, "is_dropped");
-        buf_zero (&vb->is_dropped);
+        vb->is_dropped = writer_get_is_dropped (vb->vblock_i);
     }
 
     for (uint32_t rep_i=0; rep_i < con->repeats; rep_i++) {
@@ -249,21 +250,23 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
             vb->line_start     = vb->txt_data.len;
             vb->drop_curr_line = NULL;    
             vb->buddy_line_i   = NO_BUDDY;
-            *ENT (char *, vb->lines, rep_i) = AFTERENT (char, vb->txt_data); 
+            *B(char *, vb->lines, rep_i) = BAFTc (vb->txt_data); 
+
+            DT_FUNC (z_file, piz_init_line)(vb);
         }
 
         if (con->filter_repeats && !(DT_FUNC (vb, container_filter) (vb, ctx->dict_id, con, rep_i, -1, NULL))) 
             continue; // repeat is filtered out
 
-        char *rep_reconstruction_start = AFTERENT (char, vb->txt_data);
+        char *rep_reconstruction_start = BAFTc (vb->txt_data);
 
-        const char *item_prefixes = prefixes; // the remaining after extracting the first prefix - either one per item or none at all
+        rom item_prefixes = prefixes; // the remaining after extracting the first prefix - either one per item or none at all
         uint32_t remaining_prefix_len = prefixes_len; 
 
         last_non_filtered_item_i = -1;
         unsigned num_preceding_seps = 0;
 
-        if (flag.show_containers) // show container reconstruction 
+        if (vb->show_containers) // show container reconstruction 
             iprintf ("VB=%u Line=%"PRIu64" Repeat=%u LastRepeat=%u %s\n", vb->vblock_i, vb->line_i, rep_i, con->repeats-1, ctx->tag_name);
 
         for (unsigned i=0; i < num_items; i++) {
@@ -283,24 +286,24 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
 
             last_non_filtered_item_i = i;
 
-            if (flag.show_containers && item_ctx && (!flag.dict_id_show_containers.num || dict_id_typeless (item_ctx->dict_id).num == flag.dict_id_show_containers.num)) // show container reconstruction 
+            if (vb->show_containers && item_ctx && (!flag.dict_id_show_containers.num || dict_id_typeless (item_ctx->dict_id).num == flag.dict_id_show_containers.num)) // show container reconstruction 
                 iprintf ("VB=%u Line=%"PRIu64" Repeat=%u %s(%u)->%s(%u) trans_id=%u txt_data.len=%"PRIu64" (0x%04"PRIx64") reconstruct_prefix=%d reconstruct_value=%d : ", 
                          vb->vblock_i, vb->line_i, rep_i, ctx->tag_name, ctx->did_i, item_ctx->tag_name, item_ctx->did_i,
                          translating ? item->translator : 0, 
                          vb->vb_position_txt_file + vb->txt_data.len, vb->vb_position_txt_file + vb->txt_data.len,
                          reconstruct, reconstruct && !trans_nor);
 
-/*BRKPOINT*/uint32_t item_prefix_len = 
+            uint32_t item_prefix_len = 
                 reconstruct ? container_reconstruct_prefix (vb, con, &item_prefixes, &remaining_prefix_len, false, ctx->dict_id, con->items[i].dict_id) : 0; // item prefix (we will have one per item or none at all)
 
             int32_t recon_len=0;
-            char *reconstruction_start = AFTERENT (char, vb->txt_data);
+            char *reconstruction_start = BAFTc (vb->txt_data);
 
             if (item->dict_id.num) {  // not a prefix-only or translator-only item
                 reconstruct &= !trans_nor; // check for prohibition on reconstructing when translating
                 reconstruct &= (item->separator[0] != CI0_INVISIBLE); // check if this item should never be reconstructed
 
-                recon_len = reconstruct_from_ctx (vb, item_ctx->did_i, 0, reconstruct); // -1 if WORD_INDEX_MISSING
+/*BRKPOINT*/    recon_len = reconstruct_from_ctx (vb, item_ctx->did_i, 0, reconstruct); // -1 if WORD_INDEX_MISSING
 
                 // sum up items' values if needed (STORE_INDEX is handled at the end of this function)
                 if (ctx->flags.store == STORE_INT)
@@ -328,9 +331,9 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
                 vb->txt_data.len += (uint8_t)item->separator[1];
 
             // display 10 first reconstructed characters, but all characters if just this ctx was requested 
-            if (flag.show_containers && item_ctx && (!flag.dict_id_show_containers.num || dict_id_typeless (item_ctx->dict_id).num == flag.dict_id_show_containers.num))
+            if (vb->show_containers && item_ctx && (!flag.dict_id_show_containers.num || dict_id_typeless (item_ctx->dict_id).num == flag.dict_id_show_containers.num))
                 iprintf ("\"%.*s\"\n", 
-                  /*len*/(flag.dict_id_show_containers.num ? (int)(AFTERENT(char, vb->txt_data)-reconstruction_start) : MIN_(10,(int)(AFTERENT(char, vb->txt_data)-reconstruction_start))), 
+                  /*len*/(flag.dict_id_show_containers.num ? (int)(BAFTc (vb->txt_data)-reconstruction_start) : MIN_(10,(int)(BAFTc (vb->txt_data)-reconstruction_start))), 
                          reconstruction_start);
                 
         } // items loop
@@ -352,48 +355,32 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
         // call callback if needed now that repeat reconstruction is done (always callback for top level)
         if (con->callback || (con->is_toplevel && DTP (container_cb)))
             DT_FUNC(vb, container_cb)(vb, ctx->dict_id, con->is_toplevel, rep_i, con, rep_reconstruction_start, 
-                    AFTERENT (char, vb->txt_data) - rep_reconstruction_start, prefixes, prefixes_len);
+                    BAFTc (vb->txt_data) - rep_reconstruction_start, prefixes, prefixes_len);
 
         // in top level: after consuming the line's data, if it is not to be outputted - drop it
         if (con->is_toplevel) {
 
+            // filtered out by writer based on --lines, --head or --tail
+            bool dropped_by_writer = false;
+            if (!vb->drop_curr_line && vb->is_dropped && bit_array_get (vb->is_dropped, rep_i)) {
+                vb->drop_curr_line = "lines/head/tail";
+                dropped_by_writer = true;
+            }
+
             // filter by --regions
-            if (!vb->drop_curr_line && flag.regions && !regions_is_site_included (vb)) 
+            else if (!vb->drop_curr_line && flag.regions && !regions_is_site_included (vb)) 
                 vb->drop_curr_line = "regions";
 
-            // filter by --lines
-            if (flag.lines_first >= 0) {
-                int64_t recon_line_i = vb->first_line + (int64_t)rep_i - 1LL; // 0-based (note: can't use vb->line_i as it is textual lines rather than reps)
-                if (recon_line_i < flag.lines_first) 
-                    vb->drop_curr_line = "lines";
-
-                else if (recon_line_i > flag.lines_last) {
-                    vb->drop_curr_line = "lines";
-                    vb->txt_data.len = vb->line_start;
-                    
-                     // skip to the end - no need to reconstruct any further lines
-                    for (rep_i=rep_i+1; rep_i < con->repeats; rep_i++) { 
-                        bit_array_set (buf_get_bitarray (&vb->is_dropped), rep_i);
-                        *ENT (char *, vb->lines, rep_i) = AFTERENT (char, vb->txt_data); 
-                    }
-                }
-            } 
-
-            // filter by --tail
-            if (!vb->drop_curr_line && flag.tail && vb->vblock_i == txt_file->tail_1st_vb &&
-                rep_i < txt_file->tail_1st_line_1st_vb)
-                vb->drop_curr_line = "tail";
-
             // filter by --grep (but not for FASTQ or FASTA - they implement their own logic)
-            if (!vb->drop_curr_line && flag.grep && txt_file->data_type != DT_FASTA /*&& txt_file->data_type != DT_FASTQ*/
-                && !piz_grep_match (rep_reconstruction_start, AFTERENT (char, vb->txt_data)))
+            else if (!vb->drop_curr_line && flag.grep && txt_file->data_type != DT_FASTA /*&& txt_file->data_type != DT_FASTQ*/
+                && !piz_grep_match (rep_reconstruction_start, BAFTc (vb->txt_data)))
                 vb->drop_curr_line = "grep";
 
-            if (!vb->drop_curr_line && TXT_DT(DT_FASTQ)) {
+            else if (!vb->drop_curr_line && TXT_DT(DT_FASTQ)) {
 
                 // in FASTQ --header-only - remove the 3 non-header lines only after --grep
                 if (flag.header_only_fast) 
-                    vb->txt_data.len = ENTNUM (vb->txt_data, strchr (rep_reconstruction_start, '\n') + 1);
+                    vb->txt_data.len = BNUMtxt (strchr (rep_reconstruction_start, '\n') + 1);
 
                 else if (flag.seq_only) {} // TO DO 
 
@@ -401,30 +388,31 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
             }
 
             if (vb->drop_curr_line) {
-                ASSERT (flag.maybe_vb_modified_by_reconstructor, "Attempting drop_curr_line=\"%s\", but lines cannot be dropped because flag.maybe_vb_modified_by_reconstructor=false. This is bug in the code. vb_i=%u line_i=%"PRIu64, 
+                ASSERT (flag.maybe_vb_modified_by_reconstructor || dropped_by_writer, 
+                        "Attempting drop_curr_line=\"%s\", but lines cannot be dropped because flag.maybe_vb_modified_by_reconstructor=false. This is bug in the code. vb_i=%u line_i=%"PRIu64, 
                         vb->drop_curr_line, vb->vblock_i, vb->line_i);
 
-                // remove reconstructed text (to allow writer_flush_vb()), except if interleave, as we might un-drop the line in 
-                if (!flag.interleave) vb->txt_data.len = vb->line_start;
+                // remove reconstructed text (to save memory and allow writer_flush_vb()), except if...
+                if (!flag.interleaved &&               // if --interleave, as we might un-drop the line 
+                    !(Z_DT(DT_SAM) && sam_is_prim_vb)) // if SAM:PRIM line, we still need it to reconstruct its DEPNs
+                    vb->txt_data.len = vb->line_start;
 
-                bit_array_set (buf_get_bitarray (&vb->is_dropped), rep_i);
+                bit_array_set (vb->is_dropped, rep_i);
             }
             else
                 vb->num_nondrop_lines++;
 
-            if (flag.show_containers && vb->drop_curr_line) // show container reconstruction 
+            if (vb->show_containers && vb->drop_curr_line) // show container reconstruction 
                 iprintf ("VB=%u Line=%"PRIu64" dropped due to \"%s\"\n", vb->vblock_i, vb->line_i, vb->drop_curr_line);
         }
     } // repeats loop
 
     if (con->is_toplevel) {
         // final line_start entry (it has a total of num_lines+1 entires) - done last, after possibly dropping line
-        *AFTERENT (char *, vb->lines) = AFTERENT (char, vb->txt_data); // we allocated vb->lines.len+1 entries in lines
+        *BAFT (char *, vb->lines) = BAFTc (vb->txt_data); // we allocated vb->lines.len+1 entries in lines
 
         // sanity checks
         ASSERT (vb->lines.len == con->repeats, "Expected vb->lines.len=%"PRIu64" == con->repeats=%u", vb->lines.len, con->repeats);
-        ASSERT (flag.data_modified || flag_loading_auxiliary || vb->num_nondrop_lines == vb->recon_num_lines, 
-                "Expected vb->num_nondrop_lines=%u == vb->recon_num_lines=%u", vb->num_nondrop_lines, vb->recon_num_lines);
     }
 
     // remove final separator, only of final item (since v12, only remained used (by mistake) by SAM arrays - TODO: obsolete this. see sam_seg_array_field)
@@ -454,8 +442,8 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
     uint16_t cache_item_len;
 
     // if this container exists in the cache - use the cached one
-    if (cache_exists && word_index != WORD_INDEX_NONE && ((cache_item_len = *ENT (uint16_t, ctx->con_len, word_index)))) {
-        con_p = (ContainerP)ENT (char, ctx->con_cache, *ENT (uint32_t, ctx->con_index, word_index));
+    if (cache_exists && word_index != WORD_INDEX_NONE && ((cache_item_len = *B16 (ctx->con_len, word_index)))) {
+        con_p = (ContainerP)Bc (ctx->con_cache, *B32 (ctx->con_index, word_index));
         
         unsigned st_size = con_sizeof (*con_p);
         prefixes = (char *)con_p + st_size; // prefixes are stored after the Container
@@ -508,12 +496,12 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
         // case: add container to cache index - only if it is not a singleton (i.e. has word_index). 
         // note: singleton containers only occur in old files compressed with v8 (since v9 no_stons is set in container_seg_do)
         if (word_index != WORD_INDEX_NONE) 
-            *ENT (uint32_t, ctx->con_index, word_index) = (uint32_t)ctx->con_cache.len;
+            *B32 (ctx->con_index, word_index) = (uint32_t)ctx->con_cache.len;
 
         // place Container followed by prefix in the cache (even if its a singleton)
         buf_alloc (vb, &ctx->con_cache, st_size + prefixes_len + CONTAINER_MAX_SELF_TRANS_CHANGE, 0, char, 2, "contexts->con_cache");
         
-        char *cached_con = AFTERENT (char, ctx->con_cache);
+        char *cached_con = BAFTc (ctx->con_cache);
         buf_add (&ctx->con_cache, con_p, st_size);
         if (prefixes_len) buf_add (&ctx->con_cache, prefixes, prefixes_len);
 
@@ -535,7 +523,7 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
 
         // finally, record the length (possibly updated by the translator) - but not for singletons
         if (word_index != WORD_INDEX_NONE) 
-            *ENT (uint16_t, ctx->con_len, word_index) = (uint16_t)(st_size + prefixes_len);
+            *B16 (ctx->con_len, word_index) = (uint16_t)(st_size + prefixes_len);
     }
 
     if (out_prefixes) {

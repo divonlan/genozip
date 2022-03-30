@@ -16,17 +16,18 @@ typedef struct {
 
 extern void reconstruct_initialize (void);
 
-extern int32_t reconstruct_from_ctx_do (VBlockP vb, DidIType did_i, char sep, bool reconstruct, const char *func);
+extern int32_t reconstruct_from_ctx_do (VBlockP vb, DidIType did_i, char sep, bool reconstruct, rom func);
 #define reconstruct_from_ctx(vb,did_i,sep,reconstruct) reconstruct_from_ctx_do ((VBlockP)(vb),(did_i),(sep),(reconstruct), __FUNCTION__)
 
 extern void reconstruct_one_snip (VBlockP vb, ContextP ctx, WordIndex word_index, STRp(snip), bool reconstruct);
-extern void reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, STRp(snip));
+extern void reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, STRp(snip), bool reconstruct);
+extern int64_t reconstruct_from_local_int (VBlockP vb, ContextP ctx, char separator /* 0 if none */, bool reconstruct);
 
 extern ContextP reconstruct_get_other_ctx_from_snip (VBlockP vb, ContextP ctx, pSTRp (snip));
 
 extern ContextP recon_multi_dict_id_get_ctx_first_time (VBlockP vb, ContextP ctx, STRp(snip), unsigned ctx_i);
-#define MCTX(ctx_i,snip,snip_len) ((ctx->con_cache.len && *ENT(ContextP, ctx->con_cache, ctx_i)) \
-                                        ? *ENT(ContextP, ctx->con_cache, ctx_i)                  \
+#define MCTX(ctx_i,snip,snip_len) ((ctx->con_cache.len && *B(ContextP, ctx->con_cache, ctx_i)) \
+                                        ? *B(ContextP, ctx->con_cache, ctx_i)                  \
                                         : recon_multi_dict_id_get_ctx_first_time ((VBlockP)vb, ctx, (snip), (snip_len), (ctx_i)))
 
 // use SCTX if we are certain that ctx can only be one other_dict_id in its snips 
@@ -43,7 +44,7 @@ extern ContextP recon_multi_dict_id_get_ctx_first_time (VBlockP vb, ContextP ctx
                    })
 
 // a version of SCTX with where just a base64-dict_id
-#define SCTX0(snip) ({ const char *snip0 = (snip)-1;                    \
+#define SCTX0(snip) ({ rom snip0 = (snip)-1;                    \
                        uint32_t snip0_len = base64_sizeof (DictId) + 1; \
                        SCTX(snip0); })
 
@@ -65,21 +66,23 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, DidIType did_i, 
 #define LOAD_SNIP_FROM_LOCAL(ctx) ( {           \
     uint32_t start = ctx->next_local;           \
     ARRAY (char, data, ctx->local);             \
-    while (ctx->next_local < ctx->local.len && data[ctx->next_local] != 0) ctx->next_local++; \
+    uint32_t next_local = ctx->next_local; /* automatic for speed */ \
+    uint32_t len = ctx->local.len;              \
+    while (next_local < len && data[next_local]) next_local++; \
     snip = &data[start];                        \
-    snip_len = ctx->next_local - start;         \
-    ctx->next_local++; /* skip the separator */ \
+    snip_len = next_local - start;         \
+    ctx->next_local = next_local + 1; /* skip the separator */ \
     start;                                      \
 } ) 
 
 #define RECONSTRUCT(s,len) buf_add (&vb->txt_data, (char*)(s), (len))
-#define RECONSTRUCT1(c) NEXTENT (char, vb->txt_data) = c
+#define RECONSTRUCT1(c) BNXTc (vb->txt_data) = c
 #define RECONSTRUCT_SEP(s,len,sep) ({ RECONSTRUCT((s), (len)); RECONSTRUCT1 (sep); })
 #define RECONSTRUCT_TABBED(s,len) RECONSTRUCT_SEP (s, len, '\t')
 #define RECONSTRUCT_BUF(buf) RECONSTRUCT((buf).data,(buf).len)
 
-#define RECONSTRUCT_INT(n) ({ unsigned n_len = str_int ((n), AFTERENT (char, vb->txt_data)); \
-                              vb->txt_data.len += n_len; n_len; })
+#define RECONSTRUCT_INT(n) buf_add_int_as_text (&vb->txt_data, (n)) /* note: don't add nul-terminator, as sometimes we expect reconstruction to be exact, and memory after could be already occupied - eg sam_piz_prim_add_QNAME */ 
+#define RECONSTRUCT_HEX(n, uppercase) buf_add_hex_as_text (&vb->txt_data, (n), (uppercase)) 
 
 #define RECONSTRUCT_FROM_DICT(did_i,add_tab)    \
     ({ WordIndex wi = LOAD_SNIP (did_i);        \

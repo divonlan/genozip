@@ -33,6 +33,8 @@
 
 #pragma once
 
+#include "../genozip.h"
+
 /*
  * Packs multiple symbols into a single byte if the total alphabet of symbols
  * used is <= 16.  Each new symbol takes up 1, 2, 4 or 8 bits, or 0 if the
@@ -44,7 +46,7 @@
  * Returns the packed buffer on success with new length in out_len,
  *         NULL of failure
  */
-uint8_t *hts_pack(uint8_t *data, int64_t len,
+uint8_t *hts_pack(VBlockP vb, uint8_t *data, int64_t len,
 		  uint8_t *out_meta, int *out_meta_len, uint64_t *out_len);
 
 /*

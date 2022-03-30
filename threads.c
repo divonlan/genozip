@@ -28,6 +28,8 @@
 #include "strings.h"
 #include "threads.h"
 #include "vblock.h"
+#include "piz.h"
+#include "sections.h"
 
 static Buffer threads = EMPTY_BUFFER;
 static Mutex threads_mutex = { .name = "threads_mutex-not-initialized" };
@@ -40,8 +42,8 @@ static Mutex log_mutex = {};
 typedef struct {
     bool in_use;
     pthread_t pthread;
-    const char *task_name;
-    uint32_t vb_i, vb_id;
+    rom task_name;
+    VBIType vb_i, vb_id;
 } ThreadEnt;
 
 void threads_print_call_stack (void) 
@@ -157,7 +159,7 @@ void threads_write_log (bool to_info_stream)
 }
 
 // called by MAIN thread only
-static void threads_log_by_thread_id (ThreadId thread_id, const ThreadEnt *ent, const char *event)
+static void threads_log_by_thread_id (ThreadId thread_id, const ThreadEnt *ent, rom event)
 {
     bool has_vb = ent->vb_i != (uint32_t)-1;
 
@@ -177,25 +179,29 @@ static void threads_log_by_thread_id (ThreadId thread_id, const ThreadEnt *ent, 
 }
 
 // called by any thread
-void threads_log_by_vb (ConstVBlockP vb, const char *task_name, const char *event, 
+void threads_log_by_vb (ConstVBlockP vb, rom task_name, rom event, 
                         int time_usec /* optional */)
 {
     if (flag.show_threads) {
         unsigned pthread = (unsigned)(((uint64_t)pthread_self()) % 100000); // 5 digits
+
+        #define COMP (vb->comp_i != COMP_NONE ? " comp=" : ""), \
+                     (vb->comp_i != COMP_NONE ? comp_name (vb->comp_i) : "")
+
         if (time_usec) {
             if (vb->compute_thread_id >= 0)
-                iprintf ("%s: vb_i=%d vb_id=%d %s vb->compute_thread_id=%d pthread=%u compute_thread_time=%s usec\n", 
-                        task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, pthread, str_uint_commas (time_usec).s);
+                iprintf ("%s: vb_i=%d%s%s vb_id=%d %s vb->compute_thread_id=%d pthread=%u compute_thread_time=%s usec\n", 
+                        task_name, vb->vblock_i, COMP, vb->id, event, vb->compute_thread_id, pthread, str_int_commas (time_usec).s);
             else
-                iprintf ("%s: vb_i=%d vb_id=%d %s compute_thread_time=%s usec\n", 
-                        task_name, vb->vblock_i, vb->id, event, str_uint_commas (time_usec).s);
+                iprintf ("%s: vb_i=%d%s%s vb_id=%d %s compute_thread_time=%s usec\n", 
+                        task_name, vb->vblock_i, COMP, vb->id, event, str_int_commas (time_usec).s);
         } else {
             if (vb->compute_thread_id >= 0)
-                iprintf ("%s: vb_i=%d vb_id=%d %s vb->compute_thread_id=%d pthread=%u\n", 
-                        task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, pthread);
+                iprintf ("%s: vb_i=%d%s%s vb_id=%d %s vb->compute_thread_id=%d pthread=%u\n", 
+                        task_name, vb->vblock_i, COMP, vb->id, event, vb->compute_thread_id, pthread);
             else
-                iprintf ("%s: vb_i=%d vb_id=%d %s\n", 
-                        task_name, vb->vblock_i, vb->id, event);
+                iprintf ("%s: vb_i=%d%s%s vb_id=%d %s\n", 
+                        task_name, vb->vblock_i, COMP, vb->id, event);
         }
     }
 
@@ -211,7 +217,7 @@ void threads_log_by_vb (ConstVBlockP vb, const char *task_name, const char *even
 
         if (time_usec)
             bufprintf (evb, &log, "%s: vb_i=%d vb_id=%d %s vb->compute_thread_id=%d pthread=%"PRIu64" compute_thread_time=%s usec\n", 
-                        task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, (uint64_t)pthread_self(), str_uint_commas (time_usec).s);
+                        task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, (uint64_t)pthread_self(), str_int_commas (time_usec).s);
         else
             bufprintf (evb, &log, "%s: vb_i=%d vb_id=%d %s vb->compute_thread_id=%d pthread=%"PRIu64"\n", 
                         task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, (uint64_t)pthread_self());
@@ -233,7 +239,7 @@ static void *thread_entry_caller (void *vb_)
     TimeSpecType start_time, end_time; 
     clock_gettime(CLOCK_REALTIME, &start_time); 
 
-    const char *task_name = vb->compute_task; // save, as vb might be released by compute_func
+    rom task_name = vb->compute_task; // save, as vb might be released by compute_func
 
     // call entry point
     vb->compute_func (vb); 
@@ -252,7 +258,6 @@ ThreadId threads_create (void (*func)(VBlockP), VBlockP vb)
     ASSERTMAINTHREAD;
 
     ASSERT (evb, "evb is NULL. task=%s", vb->compute_task);
-    ASSERT0 (threads_am_i_main_thread(), "threads_create can only be called from the main thread");
 
     if (vb) threads_log_by_vb (vb, vb->compute_task, "ABOUT TO CREATE", 0);
 
@@ -260,7 +265,7 @@ ThreadId threads_create (void (*func)(VBlockP), VBlockP vb)
 
     int thread_id;
     for (thread_id=0; thread_id < threads.len; thread_id++)
-        if (!ENT (ThreadEnt, threads, thread_id)->in_use) break;
+        if (!B(ThreadEnt, threads, thread_id)->in_use) break;
 
     buf_alloc (evb, &threads, 1, global_max_threads + 3, ThreadEnt, 2, "threads");
     threads.len = MAX_(threads.len, thread_id+1);
@@ -279,7 +284,7 @@ ThreadId threads_create (void (*func)(VBlockP), VBlockP vb)
         .vb_id     = vb->id,
         .pthread   = pthread 
     };
-    *ENT (ThreadEnt, threads, thread_id) = ent;
+    *B(ThreadEnt, threads, thread_id) = ent;
 
     vb->compute_thread_id = thread_id; // assigned while thread_entry_caller is waiting on mutex
     vb->compute_func      = func;
@@ -295,14 +300,14 @@ ThreadId threads_create (void (*func)(VBlockP), VBlockP vb)
 // returns success if joined (which is always the case if blocking)
 bool threads_join_do (ThreadId *thread_id, 
                       VBlockP vb, // optional: if given, will return false if VB is not ready, if NULL, join will block
-                      const char *func)
+                      rom func)
 {
     ASSERTMAINTHREAD;
 
     ASSERT (*thread_id != THREAD_ID_NONE, "called from %s: thread not created or already joined", func);
 
     mutex_lock (threads_mutex);
-    const ThreadEnt ent = *ENT (ThreadEnt, threads, *thread_id); // make a copy as array be realloced
+    const ThreadEnt ent = *B(ThreadEnt, threads, *thread_id); // make a copy as array be realloced
     mutex_unlock (threads_mutex);
 
     static ThreadId last_joining = THREAD_ID_NONE;
@@ -320,7 +325,7 @@ bool threads_join_do (ThreadId *thread_id,
     threads_log_by_thread_id (*thread_id, &ent, "JOINED");
 
     mutex_lock (threads_mutex);
-    ENT (ThreadEnt, threads, *thread_id)->in_use = false;
+    B(ThreadEnt, threads, *thread_id)->in_use = false;
     mutex_unlock (threads_mutex);
 
     *thread_id = THREAD_ID_NONE;

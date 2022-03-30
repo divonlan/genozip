@@ -40,6 +40,8 @@
 
 #include "pack.h"
 
+#include "../codec.h"
+
 //-----------------------------------------------------------------------------
 
 /*
@@ -53,11 +55,12 @@
  * Returns the packed buffer on success with new length in out_len,
  *         NULL of failure
  */
-uint8_t *hts_pack(uint8_t *data, int64_t len,
+uint8_t *hts_pack(VBlockP vb, uint8_t *data, int64_t len,
 		  uint8_t *out_meta, int *out_meta_len, uint64_t *out_len) {
     int p[256] = {0}, n;
     uint64_t i, j;
-    uint8_t *out = malloc(len+1);
+    // uint8_t *out = MALLOC(len+1);
+	uint8_t *out = codec_alloc (vb, len+1, 1);
     if (!out)
 	return NULL;
 
@@ -214,7 +217,7 @@ uint8_t *hts_unpack(uint8_t *data, int64_t len, uint8_t *out, uint64_t out_len, 
     int64_t i, j = 0, olen;
 
     if (nsym == 1) {
-	// raw data; FIXME: shortcut the need for malloc & memcpy here
+	// raw data; FIXME: shortcut the need for MALLOC & memcpy here
 	memcpy(out, data, len);
 	return out;
     }
@@ -354,7 +357,7 @@ uint8_t *hts_unpack_(uint8_t *data, int64_t len, uint8_t *out, uint64_t out_len,
     int64_t i, j = 0, olen;
 
     if (nsym == 1) {
-	// raw data; FIXME: shortcut the need for malloc & memcpy here
+	// raw data; FIXME: shortcut the need for MALLOC & memcpy here
 	memcpy(out, data, len);
 	return out;
     }

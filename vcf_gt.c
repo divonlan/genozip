@@ -18,14 +18,14 @@
 
 // complete haplotypes of lines that don't have GT, if any line in the vblock does have GT.
 // In this case, the haplotype matrix must include the lines without GT too
-void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCF *vb)
+void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCFP vb)
 {
     buf_alloc (vb, &CTX(FORMAT_GT_HT)->local, 0, vb->lines.len * vb->ht_per_line, char, CTX_GROWTH, "contexts->local");
 
     for (vb->line_i=0; vb->line_i < (uint32_t)vb->lines.len; vb->line_i++) {
 
         if (CTX(FORMAT_GT_HT) && !DATA_LINE (vb->line_i)->has_haplotype_data) {
-            char *ht_data = ENT (char, CTX(FORMAT_GT_HT)->local, vb->line_i * vb->ht_per_line);
+            char *ht_data = Bc (CTX(FORMAT_GT_HT)->local, vb->line_i * vb->ht_per_line);
             memset (ht_data, '*', vb->ht_per_line);
 
             // NOTE: we DONT set dl->has_haplotype_data to true bc downstream we still
@@ -37,13 +37,13 @@ void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCF *vb)
 }
 
 // increase ploidy of the previous lines, if higher ploidy was encountered
-static void vcf_seg_FORMAT_GT_increase_ploidy (VBlockVCF *vb, unsigned new_ploidy)
+static void vcf_seg_FORMAT_GT_increase_ploidy (VBlockVCFP vb, unsigned new_ploidy)
 {
     buf_alloc (vb, &CTX(FORMAT_GT_HT)->local, 0, new_ploidy * vcf_num_samples * vb->line_i, 
                char, CTX_GROWTH, "contexts->local");
 
     uint32_t num_samples = vb->line_i * vcf_num_samples + vb->sample_i; // all samples in previous lines + previous samples in current line
-    char *ht_data = FIRSTENT (char, CTX(FORMAT_GT_HT)->local);
+    char *ht_data = B1STc (CTX(FORMAT_GT_HT)->local);
 
     // copy the haplotypes backwards (to avoid overlap), padding with '*' (which are NOT counted in .repeats of the GT container)
     for (int sam_i = num_samples-1; sam_i >= 0; sam_i--) {
@@ -95,7 +95,7 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
     buf_alloc (vb, &CTX(FORMAT_GT_HT)->local, vb->ploidy, vb->ht_per_line * vb->lines.len, char, CTX_GROWTH, "contexts->local");
 
     // note - ploidy of this sample might be smaller than vb->ploidy (eg a male sample in an X chromosesome that was preceded by a female sample, or "." sample)
-    Allele *ht_data = ENT (Allele, CTX(FORMAT_GT_HT)->local, vb->line_i * vb->ht_per_line + vb->ploidy * vb->sample_i);
+    Allele *ht_data = B(Allele, CTX(FORMAT_GT_HT)->local, vb->line_i * vb->ht_per_line + vb->ploidy * vb->sample_i);
 
     int64_t dosage=0; // sum of allele values
     for (unsigned ht_i=0; ht_i < gt.repeats; ht_i++) {
@@ -215,10 +215,10 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
 // PIZ
 //------------------
 
-static inline bool vcf_piz_is_in_FORMAT (VBlockP vb, const char *tag/*2-chars*/)
+static inline bool vcf_piz_is_in_FORMAT (VBlockP vb, rom tag/*2-chars*/)
 {
     // get FORMAT field
-    const char *format = last_txt (vb, VCF_FORMAT);
+    rom format = last_txt (vb, VCF_FORMAT);
     uint32_t format_len = vb->last_txt_len (VCF_FORMAT);
 
     // check if a :PS: or :PS\t exists (using PS as an example)

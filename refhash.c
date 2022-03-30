@@ -110,7 +110,7 @@ void refhash_calc_one_range (const Range *r, const Range *next_r /* NULL if r is
     
     ASSERT (this_range_size * 2 == r->ref.nbits, 
             "mismatch between this_range_size=%"PRId64" (x2 = %"PRId64") and r->ref.nbits=%"PRIu64". Expecting the latter to be exactly double the former. chrom=%s r->first_pos=%"PRId64" r->last_pos=%"PRId64" r->range_id=%u", 
-            this_range_size, this_range_size*2, r->ref.nbits, ENT (char, ZCTX(0)->dict, ENT (CtxNode, ZCTX(0)->nodes, r->chrom)->char_index), 
+            this_range_size, this_range_size*2, r->ref.nbits, Bc (ZCTX(0)->dict, B(CtxNode, ZCTX(0)->nodes, r->chrom)->char_index), 
             r->first_pos, r->last_pos, r->range_id);
             
     // number of bases - considering the availability of bases in the next range, as we will overflow to it at the
@@ -127,11 +127,8 @@ void refhash_calc_one_range (const Range *r, const Range *next_r /* NULL if r is
             // since our refhash entries are 32 bit, we cannot use the reference data beyond the first 4Gbp for creating the refhash
             // TO DO: make the hash entries 40bit (or 64 bit?) if genome size > 4Gbp (bug 150)
             if (r->gpos + base_i > MAX_ALIGNER_GPOS) {
-                static bool warning_given = false;
-
-                ASSERTW (warning_given, "FYI: %s contains more than %s nucleaotides. When compressing a FASTQ, FASTA or unaligned (i.e. missing RNAME, POS) SAM/BAM file using the reference being generated, only the first %s nucleotides of the reference will be used (no such limitation when compressing other file types). This might affect the compression ratio.", 
-                         txt_name, str_uint_commas (MAX_ALIGNER_GPOS).s, str_uint_commas (MAX_ALIGNER_GPOS).s);
-                warning_given = true; // display this warning only once
+                WARN_ONCE ("FYI: %s contains more than %s bases. When compressing a FASTQ, FASTA or unaligned (i.e. missing RNAME, POS) SAM/BAM file using the reference being generated, only the first %s bases of the reference will be used (no such limitation when compressing other file types). This might affect the compression ratio.", 
+                            txt_name, str_int_commas (MAX_ALIGNER_GPOS).s, str_int_commas (MAX_ALIGNER_GPOS).s);
                 return;
             }
 
@@ -168,7 +165,7 @@ static void refhash_prepare_for_compress (VBlockP vb)
     // tell this vb what to do
     vb->refhash_layer = next_task_layer;
     vb->refhash_start_in_layer = next_task_start_within_layer;
-    vb->ready_to_dispatch = true;
+    vb->dispatch = READY_TO_COMPUTE;
 
     // incremenet parameters for the next vb
     next_task_start_within_layer += make_ref_vb_size;
@@ -184,7 +181,7 @@ static void refhash_compress_one_vb (VBlockP vb)
 {
     uint32_t uncompressed_size = MIN_(make_ref_vb_size, layer_size[vb->refhash_layer] - vb->refhash_start_in_layer);
     const uint32_t *hash_data = &refhashs[vb->refhash_layer][vb->refhash_start_in_layer / sizeof (uint32_t)];
-//const uint32_t *hash_data = ENT (const uint32_t, refhash_bufs[vb->refhash_layer], vb->refhash_start_in_layer / sizeof (uint32_t));
+//const uint32_t *hash_data = B(const uint32_t, refhash_bufs[vb->refhash_layer], vb->refhash_start_in_layer / sizeof (uint32_t));
 
     // calculate density to decide on compression codec
     uint32_t num_zeros=0;
@@ -202,7 +199,7 @@ static void refhash_compress_one_vb (VBlockP vb)
                                     .layer_bits              = (uint8_t)layer_bits[vb->refhash_layer],
                                     .start_in_layer          = BGEN32 (vb->refhash_start_in_layer)     };
 
-    comp_compress (vb, &vb->z_data, (SectionHeaderP)&header, (char*)hash_data, NULL);
+    comp_compress (vb, &vb->z_data, (SectionHeaderP)&header, (char*)hash_data, NO_CALLBACK, "SEC_REF_HASH");
 
     if (flag.show_ref_hash) 
         iprintf ("vb_i=%u Compressing SEC_REF_HASH num_layers=%u layer_i=%u layer_bits=%u start=%u size=%u bytes size_of_disk=%u bytes\n", 
@@ -228,7 +225,7 @@ void refhash_compress_refhash (void)
 // stuff related to refhash cache file
 // -----------------------------------
 
-static inline const char *refhash_get_cache_fn (void)
+static inline rom refhash_get_cache_fn (void)
 {
     static char *cache_fn = NULL;
 
@@ -315,9 +312,9 @@ static void refhash_read_one_vb (VBlockP vb)
     if (((SectionHeaderRefHash *)vb->z_data.data)->layer_i >= num_layers)
         return; // don't read the high layers if beyond the requested num_layers
 
-    NEXTENT (int32_t, vb->z_section_headers) = section_offset;
+    BNXT (int32_t, vb->z_section_headers) = section_offset;
 
-    vb->ready_to_dispatch = true;
+    vb->dispatch = READY_TO_COMPUTE;
 }
 
 void refhash_load_standalone (void)
@@ -354,7 +351,7 @@ static void refhash_initialize_refhashs_array (void)
     // set layer pointers
     uint64_t offset=0;
     for (unsigned layer_i=0; layer_i < num_layers; layer_i++) {
-        refhashs[layer_i] = (uint32_t*)ENT (uint8_t, refhash_buf, offset);
+        refhashs[layer_i] = (uint32_t*)B8 (refhash_buf, offset);
         offset += layer_size[layer_i];
     }
 }
@@ -410,7 +407,7 @@ void refhash_initialize (bool *dispatcher_invoked)
                                      flag.test, false, 0, 100,
                                      refhash_read_one_vb, 
                                      refhash_uncompress_one_vb, 
-                                     NULL);
+                                     NO_CALLBACK);
  
             refhash_create_cache_in_background();
             
@@ -435,7 +432,7 @@ void refhash_destroy (void)
 {
     refhash_create_cache_join (true); // wait for cache writing, if we're writing
 
-    buf_destroy (&refhash_buf);
+    buf_destroy (refhash_buf);
     FREE (refhashs);
 
     flag.aligner_available = false;

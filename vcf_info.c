@@ -15,7 +15,6 @@
 #include "codec.h"
 #include "reconstruct.h"
 #include "gff3.h"
-#include "coords.h"
 #include "stats.h"
 
 void vcf_info_zip_initialize (void) 
@@ -37,7 +36,7 @@ void vcf_info_seg_initialize (VBlockVCFP vb)
 // -------
 
 // return true if caller still needs to seg 
-static bool vcf_seg_INFO_DP (VBlockVCF *vb, ContextP ctx_dp, STRp(value))
+static bool vcf_seg_INFO_DP (VBlockVCFP vb, ContextP ctx_dp, STRp(value))
 {
     // also tried delta vs DP4, but it made it worse
     Context *ctx_basecounts;
@@ -59,7 +58,7 @@ static bool vcf_seg_INFO_DP (VBlockVCF *vb, ContextP ctx_dp, STRp(value))
 }
 
 // used for multi-sample VCFs, IF FORMAT/DP is segged as a simple integer
-static void vcf_seg_INFO_DP_by_FORMAT_DP (VBlockVCF *vb)
+static void vcf_seg_INFO_DP_by_FORMAT_DP (VBlockVCFP vb)
 {
     SNIP(32) = { SNIP_SPECIAL, VCF_SPECIAL_DP_by_DP };
     snip_len = 2 + str_int (vb->num_dps_this_line, &snip[2]);
@@ -85,9 +84,9 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_DP_by_DP)
             
     uint32_t invalid = lt_desc[format_dp_ctx->ltype].max_int; // represents '.'
     for (int i=0; i < num_dps_this_line; i++) {
-        uint32_t format_dp = (format_dp_ctx->ltype == LT_UINT8)  ? (uint32_t)*ENT (uint8_t,  format_dp_ctx->local, format_dp_ctx->next_local + i)
-                           : (format_dp_ctx->ltype == LT_UINT16) ? (uint32_t)*ENT (uint16_t, format_dp_ctx->local, format_dp_ctx->next_local + i)
-                           : /* LT_UINT32 */                       (uint32_t)*ENT (uint32_t, format_dp_ctx->local, format_dp_ctx->next_local + i);
+        uint32_t format_dp = (format_dp_ctx->ltype == LT_UINT8)  ? (uint32_t)*B8 ( format_dp_ctx->local, format_dp_ctx->next_local + i)
+                           : (format_dp_ctx->ltype == LT_UINT16) ? (uint32_t)*B16 (format_dp_ctx->local, format_dp_ctx->next_local + i)
+                           : /* LT_UINT32 */                       (uint32_t)*B32 (format_dp_ctx->local, format_dp_ctx->next_local + i);
 
         if (format_dp != invalid) sum += format_dp; 
     }
@@ -111,7 +110,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_DP_by_DP)
 // Algorithm: SF is segged either as an as-is string, or as a SPECIAL that includes the index of all the non-'.' samples. 
 // if use_special_sf=YES, we use SNIP_SPECIAL and we validate the correctness during vcf_seg_FORMAT_GT -
 // if it is wrong we set use_special_sf=NO. The assumption is that normally, it is either true for all lines or false.
-static bool vcf_seg_INFO_SF_init (VBlockVCF *vb, Context *sf_ctx, STRp(value))
+static bool vcf_seg_INFO_SF_init (VBlockVCFP vb, Context *sf_ctx, STRp(value))
 {
     switch (vb->use_special_sf) {
 
@@ -125,33 +124,33 @@ static bool vcf_seg_INFO_SF_init (VBlockVCF *vb, Context *sf_ctx, STRp(value))
             // we store the SF value in a buffer, since seg_FORMAT_GT overlays the haplotype buffer onto txt_data and may override the SF field
             // we will need the SF data if the field fails verification in vcf_seg_INFO_SF_one_sample
             buf_alloc (vb, &vb->sf_txt, 0, value_len + 1, char, 2, "sf_txt"); // +1 for nul-terminator
-            memcpy (FIRSTENT (char, vb->sf_txt), value, value_len);
+            memcpy (B1STc (vb->sf_txt), value, value_len);
             vb->sf_txt.len = value_len;
-            *AFTERENT (char, vb->sf_txt) = 0; // nul-terminate
+            *BAFTc (vb->sf_txt) = 0; // nul-terminate
             vb->sf_txt.next = 0; 
             adjustment = 0;      
             
             // snip being contructed 
             buf_alloc (vb, &vb->sf_snip, 0, value_len + 20, char, 2, "sf_snip"); // initial value - we will increase if needed
-            NEXTENT (char, vb->sf_snip) = SNIP_SPECIAL;
-            NEXTENT (char, vb->sf_snip) = VCF_SPECIAL_SF;
+            BNXTc (vb->sf_snip) = SNIP_SPECIAL;
+            BNXTc (vb->sf_snip) = VCF_SPECIAL_SF;
 
             return false; // caller should not seg as we already did
 
         default:
-            ABORT_R ("Error in vcf_seg_INFO_SF_init: invalid use_special_sf=%d", vb->use_special_sf);
+            ABORT_R ("invalid use_special_sf=%d", vb->use_special_sf);
     }
 }
 
 // verify next number on the list of the SF field is sample_i (called from vcf_seg_FORMAT_GT)
-void vcf_seg_INFO_SF_one_sample (VBlockVCF *vb)
+void vcf_seg_INFO_SF_one_sample (VBlockVCFP vb)
 {
     // case: no more SF values left to compare - we ignore this sample
     while (vb->sf_txt.next < vb->sf_txt.len) {
 
         buf_alloc (vb, &vb->sf_snip, 10, 0, char, 2, "sf_snip");
 
-        char *sf_one_value = ENT (char, vb->sf_txt, vb->sf_txt.next); 
+        char *sf_one_value = Bc (vb->sf_txt, vb->sf_txt.next); 
         char *after;
         int32_t value = strtol (sf_one_value, &after, 10);
 
@@ -165,35 +164,35 @@ void vcf_seg_INFO_SF_one_sample (VBlockVCF *vb)
         
         // case: value exists in SF and samples
         else if (value == adjusted_sample_i) {
-            NEXTENT (char, vb->sf_snip) = ',';
-            vb->sf_txt.next = ENTNUM (vb->sf_txt, after) + 1; // +1 to skip comma
+            BNXTc (vb->sf_snip) = ',';
+            vb->sf_txt.next = BNUM (vb->sf_txt, after) + 1; // +1 to skip comma
             break;
         }
 
         // case: value in SF file doesn't appear in samples - keep the value in the snip
         else if (value < adjusted_sample_i) {
-            vb->sf_snip.len += str_int (value, AFTERENT (char, vb->sf_snip));
-            NEXTENT (char, vb->sf_snip) = ',';
+            vb->sf_snip.len += str_int (value, BAFTc (vb->sf_snip));
+            BNXTc (vb->sf_snip) = ',';
             adjustment++;
-            vb->sf_txt.next = ENTNUM (vb->sf_txt, after) + 1; // +1 to skip comma
+            vb->sf_txt.next = BNUM (vb->sf_txt, after) + 1; // +1 to skip comma
             // continue and read the next value
         }
 
         // case: value in SF is larger than current sample - don't advance iterator - perhaps future sample will cover it
         else { // value > adjusted_sample_i
-            NEXTENT (char, vb->sf_snip) = '~'; // skipped sample
+            BNXTc (vb->sf_snip) = '~'; // skipped sample
             break; 
         }
     }
 }
 
-static void vcf_seg_INFO_SF_seg (VBlockVCF *vb)
+static void vcf_seg_INFO_SF_seg (VBlockVCFP vb)
 {   
     // case: SF data remains after all samples - copy it
     int32_t remaining_len = (uint32_t)(vb->sf_txt.len - vb->sf_txt.next); // -1 if all done, because we skipped a non-existing comma
     if (remaining_len > 0) {
-        buf_add_more (VB, &vb->sf_snip, ENT (char, vb->sf_txt, vb->sf_txt.next), remaining_len, "sf_snip");
-        NEXTENT (char, vb->sf_snip) = ','; // buf_add_more allocates one character extra
+        buf_add_more (VB, &vb->sf_snip, Bc (vb->sf_txt, vb->sf_txt.next), remaining_len, "sf_snip");
+        BNXTc (vb->sf_snip) = ','; // buf_add_more allocates one character extra
     }
 
     if (vb->use_special_sf == USE_SF_YES) 
@@ -202,8 +201,8 @@ static void vcf_seg_INFO_SF_seg (VBlockVCF *vb)
     else if (vb->use_special_sf == USE_SF_NO)
         seg_by_ctx (VB, STRb(vb->sf_txt), CTX(INFO_SF), vb->sf_txt.len);
 
-    buf_free (&vb->sf_txt);
-    buf_free (&vb->sf_snip);
+    buf_free (vb->sf_txt);
+    buf_free (vb->sf_snip);
 }
 
 #undef adjustment
@@ -256,10 +255,10 @@ void vcf_piz_GT_cb_calc_INFO_SF (VBlockVCFP vcf_vb, unsigned rep, char *recon, i
         if (sf_snip[snip_i] == ',') {
             snip_i++;
 
-            buf_add_int_as_text ((VBlockP)vcf_vb, &vcf_vb->sf_txt, adjusted_sample_i);
+            buf_add_int_as_text (&vcf_vb->sf_txt, adjusted_sample_i);
 
             if (snip_i < sf_snip_len) // add comma if not done yet
-                NEXTENT (char, vcf_vb->sf_txt) = ',';
+                BNXTc (vcf_vb->sf_txt) = ',';
 
             break;
         }
@@ -299,13 +298,13 @@ void vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VBlockVCFP vcf_vb)
 
     // make room for the SF txt and copy it to its final location
     char *sf_txt = last_txt (vcf_vb, INFO_SF);
-    memmove (sf_txt + vcf_vb->sf_txt.len, sf_txt, AFTERENT (char, vcf_vb->txt_data) - sf_txt); // make room
+    memmove (sf_txt + vcf_vb->sf_txt.len, sf_txt, BAFTc (vcf_vb->txt_data) - sf_txt); // make room
     memcpy (sf_txt, vcf_vb->sf_txt.data, vcf_vb->sf_txt.len); // copy
 
     vcf_vb->txt_data.len += vcf_vb->sf_txt.len;
 
-    buf_free (&vcf_vb->sf_snip);
-    buf_free (&vcf_vb->sf_txt);
+    buf_free (vcf_vb->sf_snip);
+    buf_free (vcf_vb->sf_txt);
 }
 
 #undef sample_i
@@ -339,7 +338,7 @@ static int vcf_INFO_ALLELE_get_allele (VBlockVCFP vb, STRp (value))
 
 // checks if value is identifcal to the REF or one of the ALT alleles, and if so segs a SPECIAL snip
 // Used for INFO/AA, INFO/CSQ/Allele, INFO/ANN/Allele. Any field using this should have the VCF2VCF_ALLELE translator set in vcf_lo_luft_trans_id.
-static bool vcf_seg_INFO_allele (VBlock *vb_, Context *ctx, STRp(value), uint32_t repeat) // returns true if caller still needs to seg 
+static bool vcf_seg_INFO_allele (VBlockP vb_, Context *ctx, STRp(value), uint32_t repeat) // returns true if caller still needs to seg 
 {
     VBlockVCFP vb = (VBlockVCFP)vb_;
     
@@ -373,14 +372,14 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_ALLELE)
     int allele = snip[1] - '0';
     LiftOverStatus ostatus = last_ostatus;
 
-    if (LO_IS_OK_SWITCH (ostatus) && seg_line_coord != vb->vb_coords) {
+    if (LO_IS_OK_SWITCH (ostatus) && seg_line_coord != VB_VCF->vb_coords) {
         ASSPIZ (allele >= 0 && allele <= 1, "unexpected allele=%d with REF<>ALT switch", allele);
         allele = 1 - allele;
     }
 
-    ContextP refalt_ctx = vb->vb_coords == DC_PRIMARY ? CTX (VCF_REFALT) : CTX (VCF_oREFALT); 
+    ContextP refalt_ctx = VB_VCF->vb_coords == DC_PRIMARY ? CTX (VCF_REFALT) : CTX (VCF_oREFALT); 
 
-    const char *refalt = last_txtx (vb, refalt_ctx);
+    rom refalt = last_txtx (vb, refalt_ctx);
     unsigned refalt_len = refalt_ctx->last_txt_len;
 
     if (!refalt_len) goto done; // variant is single coordinate in the other coordinate
@@ -423,7 +422,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_ALLELE)
 
 // ##INFO=<ID=genozip BugP.vcf -ft ,Number=4,Type=Integer,Description="Counts of each base">
 // Sorts BaseCounts vector with REF bases first followed by ALT bases, as they are expected to have the highest values
-static bool vcf_seg_INFO_BaseCounts (VBlockVCF *vb, Context *ctx_basecounts, STRp(value)) // returns true if caller still needs to seg 
+static bool vcf_seg_INFO_BaseCounts (VBlockVCFP vb, Context *ctx_basecounts, STRp(value)) // returns true if caller still needs to seg 
 {
     if (CTX(VCF_REFALT)->last_snip_len != 3 || vb->line_coords == DC_LUFT) 
         return true; // not a bi-allelic SNP or line is a luft line without easy access to REFALT - caller should seg
@@ -443,7 +442,7 @@ static bool vcf_seg_INFO_BaseCounts (VBlockVCF *vb, Context *ctx_basecounts, STR
 
     if (str - value != value_len + 1 /* +1 due to final str++ */) return true; // invalid BaseCounts data - caller should seg
 
-    const char *refalt = CTX(VCF_REFALT)->last_snip;
+    rom refalt = CTX(VCF_REFALT)->last_snip;
 
     unsigned ref_i = acgt_encode[(int)refalt[0]];
     unsigned alt_i = acgt_encode[(int)refalt[2]];
@@ -477,7 +476,7 @@ static bool vcf_seg_INFO_BaseCounts (VBlockVCF *vb, Context *ctx_basecounts, STR
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_BaseCounts)
 {
     STR (refalt);
-    reconstruct_peek (vb, CTX (VCF_REFALT), &refalt, &refalt_len);
+    reconstruct_peek (vb, CTX (VCF_REFALT), pSTRa(refalt));
 
     uint32_t counts[4], sorted_counts[4] = {}; // counts of A, C, G, T
 
@@ -536,7 +535,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_XREV)
 // INFO/AC
 // -------
 
-static void vcf_seg_INFO_AC (VBlockVCF *vb, Context *ac_ctx, STRp(field))
+static void vcf_seg_INFO_AC (VBlockVCFP vb, Context *ac_ctx, STRp(field))
 {
     Context *af_ctx, *an_ctx;
     int64_t ac;
@@ -606,7 +605,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_A_AN)
 // INFO/END
 // --------
 
-static void vcf_seg_INFO_END (VBlockVCFP vb, Context *end_ctx, const char *end_str, unsigned end_len) // note: ctx is INFO/END *not* POS (despite being an alias)
+static void vcf_seg_INFO_END (VBlockVCFP vb, Context *end_ctx, rom end_str, unsigned end_len) // note: ctx is INFO/END *not* POS (despite being an alias)
 {
     // END is an alias of POS
     seg_pos_field (VB, VCF_POS, VCF_POS, SPF_BAD_SNIPS_TOO | SPF_ZERO_IS_BAD | SPF_UNLIMITED_DELTA, 0, end_str, end_len, 0, end_len);
@@ -665,7 +664,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_END)
     ContextP opos_ctx = CTX (VCF_oPOS);
     
     // ZIP liftback (POS is always before END, because we seg INFO/LIFTOVER first)
-    if (command == ZIP && vb->line_coords == DC_LUFT) { // liftback
+    if (command == ZIP && VB_VCF->line_coords == DC_LUFT) { // liftback
         PosType oend;
         if (!str_get_int_range64 (recon, recon_len, 0, MAX_POS, &oend))
             return false;
@@ -717,7 +716,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_COPYPOS)
 // INFO/SVLEN
 // ----------
 
-static inline bool vcf_seg_test_SVLEN (VBlockVCF *vb, STRp(svlen_str))
+static inline bool vcf_seg_test_SVLEN (VBlockVCFP vb, STRp(svlen_str))
 {
     int64_t svlen;
     if (!str_get_int (svlen_str, svlen_str_len, &svlen)) return false;
@@ -753,7 +752,7 @@ static bool vcf_seg_INFO_HGVS_snp (VBlockVCFP vb, ContextP ctx, STRp(value))
 
     if (value_len < 3 + pos_str_len) return false;
 
-    const char *v = &value[value_len - 3];
+    rom v = &value[value_len - 3];
     if (v[0] != vb->main_refalt[0] || v[1] != '>' || v[2] != vb->main_refalt[2]) return false; // REF/ALT differs
 
     v -= pos_str_len;
@@ -788,7 +787,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_SNP_POS)
 {
     ContextP pos_ctx = CTX (VCF_POS);
     
-    if (vb->vb_coords == DC_PRIMARY)
+    if (VB_VCF->vb_coords == DC_PRIMARY)
         RECONSTRUCT (last_txtx (vb, pos_ctx), pos_ctx->last_txt_len); // faster than RECONSTRUCT_INT
     
     else  // if reconstructing Luft, VCF_POS just consumed and last_int set if in Luft coords (see top_luft container)
@@ -799,7 +798,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_SNP_POS)
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_SNP_REFALT)
 {
-    const char *refalt;
+    rom refalt;
     reconstruct_peek (vb, CTX (VCF_REFALT), &refalt, NULL); // this special works only on SNPs, so length is always 3
 
     RECONSTRUCT1 (refalt[0]); // this might overwrite the "peeked" data, but that's ok
@@ -815,9 +814,9 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_SNP_REFALT)
 // Insertion case: "n.10659939_10659940insTG" (POS=10659939 ; TG is the payload of the indel) 
 // Delins: "NC_000001.10:g.5987727_5987729delinsCCACG" POS=5987727 REF=GTT ALT=CCACG
 typedef enum { DEL, INS, DELINS } HgvsType;
-static bool vcf_seg_INFO_HGVS_indel (VBlockVCFP vb, ContextP ctx, STRp(value), const char *op, HgvsType t)
+static bool vcf_seg_INFO_HGVS_indel (VBlockVCFP vb, ContextP ctx, STRp(value), rom op, HgvsType t)
 {
-    const char *payload = &op[3];
+    rom payload = &op[3];
     unsigned payload_len = (unsigned)(&value[value_len] - payload);
 
     if (payload_len) switch (t) {
@@ -833,7 +832,7 @@ static bool vcf_seg_INFO_HGVS_indel (VBlockVCFP vb, ContextP ctx, STRp(value), c
     }
 
     // beginning of number is one after the '.' - scan backwards
-    const char *start_pos = op-1;
+    rom start_pos = op-1;
     while (start_pos[-1] != '.' && start_pos > value) start_pos--;
     if (start_pos[-1] != '.') return false;
 
@@ -901,7 +900,7 @@ static bool vcf_seg_INFO_HGVS_indel (VBlockVCFP vb, ContextP ctx, STRp(value), c
 }
 
 // <ID=CLNHGVS,Number=.,Type=String,Description="Top-level (primary assembly, alt, or patch) HGVS expression.">
-static bool vcf_seg_INFO_HGVS (VBlock *vb_, ContextP ctx, STRp(value), uint32_t repeat)
+static bool vcf_seg_INFO_HGVS (VBlockP vb_, ContextP ctx, STRp(value), uint32_t repeat)
 {
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
@@ -915,7 +914,7 @@ static bool vcf_seg_INFO_HGVS (VBlock *vb_, ContextP ctx, STRp(value), uint32_t 
     SAFE_NULT (value);
 
     bool success = false;
-    const char *op;
+    rom op;
     if      (vb->main_ref_len == 1 && vb->main_alt_len == 1) success = vcf_seg_INFO_HGVS_snp   (vb, ctx, STRa(value));
     else if ((op = strstr (value, "delins")))                success = vcf_seg_INFO_HGVS_indel (vb, ctx, STRa(value), op, DELINS); // must be before del and ins
     else if ((op = strstr (value, "del")))                   success = vcf_seg_INFO_HGVS_indel (vb, ctx, STRa(value), op, DEL);
@@ -936,14 +935,14 @@ static void vcf_piz_special_INFO_HGVS_INDEL_END_POS (VBlockP vb, HgvsType t)
     reconstruct_peek (vb, CTX (VCF_REFALT), pSTRa(refalt)); // this special works only on SNPs, so length is always 3
 
     SAFE_NULT (refalt);
-    const char *tab = strchr (refalt, '\t');
+    rom tab = strchr (refalt, '\t');
     ASSPIZ (tab, "invalid REF+ALT=\"%.*s\"", STRf(refalt));
     SAFE_RESTORE;
 
     // reconstruct the DEL payload - this is the REF except for the first (anchor) base. reconstruct with one (possibly overlapping) copy
     static uint64_t start_pos_dnum[3] = { _INFO_HGVS_del_start_pos, _INFO_HGVS_ins_start_pos, _INFO_HGVS_ins_start_pos }; // ins and delins share start_pos
-    const char *alt   = tab + 1;
-    const char *after = &refalt[refalt_len];
+    rom alt   = tab + 1;
+    rom after = &refalt[refalt_len];
 
     PosType start_pos = ECTX (start_pos_dnum[t])->last_value.i;
     PosType end_pos = (t == DEL) ? (start_pos + tab - refalt - 2)
@@ -964,15 +963,15 @@ static void vcf_piz_special_INFO_HGVS_INDEL_PAYLOAD (VBlockP vb, HgvsType t)
     reconstruct_peek (vb, CTX (VCF_REFALT), pSTRa(refalt)); // this special works only on SNPs, so length is always 3
 
     SAFE_NULT (refalt);
-    const char *tab = strchr (refalt, '\t');
+    rom tab = strchr (refalt, '\t');
     SAFE_RESTORE;
 
     ASSPIZ (tab, "invalid REF+ALT=\"%.*s\"", STRf(refalt));
 
-    const char *alt   = tab + 1;
-    const char *after = &refalt[refalt_len];
+    rom alt   = tab + 1;
+    rom after = &refalt[refalt_len];
 
-    const char *payload = (t == DEL) ? (refalt + 1) // REF except for the anchor base
+    rom payload = (t == DEL) ? (refalt + 1) // REF except for the anchor base
                         : (t == INS) ? (alt + 1)    // ALT except for the anchor base
                         : /* DELINS */ alt;         // the entire ALT
 
@@ -980,7 +979,7 @@ static void vcf_piz_special_INFO_HGVS_INDEL_PAYLOAD (VBlockP vb, HgvsType t)
                         : (t == INS) ? (after - alt - 1)
                         : /* DELINS */ (after - alt);
 
-    memmove (AFTERENT(char, vb->txt_data), payload, payload_len);
+    memmove (BAFTc (vb->txt_data), payload, payload_len);
     vb->txt_data.len += payload_len;
 }
 
@@ -995,7 +994,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_DELINS_PAYLOAD) { vcf_piz_speci
 // ##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|Existing_variation|ALLELE_NUM|DISTANCE|STRAND|FLAGS|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|GMAF|AFR_MAF|AMR_MAF|EAS_MAF|EUR_MAF|SAS_MAF|AA_MAF|EA_MAF|ExAC_MAF|ExAC_Adj_MAF|ExAC_AFR_MAF|ExAC_AMR_MAF|ExAC_EAS_MAF|ExAC_FIN_MAF|ExAC_NFE_MAF|ExAC_OTH_MAF|ExAC_SAS_MAF|CLIN_SIG|SOMATIC|PHENO|PUBMED|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info|context|ancestral">
 // Originating from the VEP software
 // example: CSQ=-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000423562|unprocessed_pseudogene||||||||||rs780379327|1|876|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000438504|unprocessed_pseudogene||||||||||rs780379327|1|876|-1||deletion|1|HGNC|38034|YES||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000450305|transcribed_unprocessed_pseudogene|6/6||ENST00000450305.2:n.448_449delGC||448-449|||||rs780379327|1||1||deletion|1|HGNC|37102|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000456328|processed_transcript|3/3||ENST00000456328.2:n.734_735delGC||734-735|||||rs780379327|1||1||deletion|1|HGNC|37102|YES||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000488147|unprocessed_pseudogene||||||||||rs780379327|1|917|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000515242|transcribed_unprocessed_pseudogene|3/3||ENST00000515242.2:n.727_728delGC||727-728|||||rs780379327|1||1||deletion|1|HGNC|37102|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000518655|transcribed_unprocessed_pseudogene|3/4||ENST00000518655.2:n.565_566delGC||565-566|||||rs780379327|1||1||deletion|1|HGNC|37102|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000538476|unprocessed_pseudogene||||||||||rs780379327|1|924|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000541675|unprocessed_pseudogene||||||||||rs780379327|1|876|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|regulatory_region_variant|MODIFIER|||RegulatoryFeature|ENSR00001576075|CTCF_binding_site||||||||||rs780379327|1||||deletion|1|||||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|
-static inline void vcf_seg_INFO_CSQ (VBlockVCF *vb, Context *ctx, STRp(value))
+static inline void vcf_seg_INFO_CSQ (VBlockVCFP vb, Context *ctx, STRp(value))
 {
     static const MediumContainer csq = {
         .nitems_lo   = 70, 
@@ -1090,7 +1089,7 @@ static inline void vcf_seg_INFO_CSQ (VBlockVCF *vb, Context *ctx, STRp(value))
 // ##INFO=<ID=ANN,Number=.,Type=String,Description="Functional annotations: 'Allele | Annotation | Annotation_Impact | Gene_Name | Gene_ID | Feature_Type | Feature_ID | Transcript_BioType | Rank | HGVS.c | HGVS.p | cDNA.pos / cDNA.length | CDS.pos / CDS.length | AA.pos / AA.length | Distance | ERRORS / WARNINGS / INFO'">
 // See: https://pcingola.github.io/SnpEff/adds/VCFannotationformat_v1.0.pdf
 // example: ANN=T|intergenic_region|MODIFIER|U2|ENSG00000277248|intergenic_region|ENSG00000277248|||n.10510103A>T||||||
-static inline void vcf_seg_INFO_ANN (VBlockVCF *vb, Context *ctx, STRp(value))
+static inline void vcf_seg_INFO_ANN (VBlockVCFP vb, Context *ctx, STRp(value))
 {
     static const MediumContainer ann = {
         .nitems_lo   = 16, 
@@ -1122,7 +1121,7 @@ static inline void vcf_seg_INFO_ANN (VBlockVCF *vb, Context *ctx, STRp(value))
 
 // for dual coordinate files (Primary, Luft and --chain) - add DVCF depending on ostatus (run after
 // all INFO and FORMAT fields, so ostatus is final)
-static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCF *vb)
+static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCFP vb)
 {
     // case: Dual coordinates file line has no PRIM, Lrej or Prej - this can happen if variants were added to the file,
     // for example, as a result of a "bcftools merge" with a non-DVCF file
@@ -1146,7 +1145,7 @@ static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCF *vb)
             vb->line_coords==DC_PRIMARY ? "Missing INFO/LUFT or INFO/Lrej subfield" : "Missing INFO/PRIM or INFO/Prej subfield");
 
     // case: --chain and INFO is '.' - remove the '.' as we are adding a DVCF field
-    if (vb->info_items.len == 1 && FIRSTENT (InfoItem, vb->info_items)->name_len == 1 && *FIRSTENT (InfoItem, vb->info_items)->name == '.') {
+    if (vb->info_items.len == 1 && B1ST (InfoItem, vb->info_items)->name_len == 1 && *B1ST (InfoItem, vb->info_items)->name == '.') {
         vb->info_items.len = 0;
         vb->recon_size--;
         vb->recon_size_luft--;
@@ -1155,14 +1154,14 @@ static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCF *vb)
     // dual coordinate line - we seg both options and vcf_piz_filter will decide which to render
     if (LO_IS_OK (last_ostatus)) {
 
-        NEXTENT (InfoItem, vb->info_items) = (InfoItem) { 
+        BNXT (InfoItem, vb->info_items) = (InfoItem) { 
             .name      = INFO_LUFT_NAME"=", 
             .name_len  = INFO_DVCF_LEN + 1, // +1 for the '='
             .ctx       = CTX (INFO_LUFT),
             .value     = "" // non-zero means value exists
         };  
         
-        NEXTENT (InfoItem, vb->info_items) = (InfoItem) { 
+        BNXT (InfoItem, vb->info_items) = (InfoItem) { 
             .name      = INFO_PRIM_NAME"=", 
             .name_len  = INFO_DVCF_LEN + 1, // +1 for the '='
             .ctx       = CTX (INFO_PRIM),
@@ -1178,14 +1177,14 @@ static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCF *vb)
     }
 
     else { 
-        NEXTENT (InfoItem, vb->info_items) = (InfoItem) { 
+        BNXT (InfoItem, vb->info_items) = (InfoItem) { 
             .name      = INFO_LREJ_NAME"=", 
             .name_len  = INFO_DVCF_LEN + 1, 
             .ctx       = CTX (INFO_LREJ),
             .value     = "" // non-zero means value exists
         };
 
-        NEXTENT (InfoItem, vb->info_items) = (InfoItem) { 
+        BNXT (InfoItem, vb->info_items) = (InfoItem) { 
             .name      = INFO_PREJ_NAME"=", 
             .name_len  = INFO_DVCF_LEN + 1, 
             .ctx       = CTX (INFO_PREJ),
@@ -1203,7 +1202,7 @@ static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCF *vb)
 
     // add tags for the DVCF info items
     if (!vb->is_rejects_vb) {
-        InfoItem *ii = LASTENT (InfoItem, vb->info_items) - 1;
+        InfoItem *ii = BLST (InfoItem, vb->info_items) - 1;
         vcf_tags_add_tag (vb, ii[0].ctx, DTYPE_VCF_INFO, ii[0].ctx->tag_name, ii[0].name_len-1);
         vcf_tags_add_tag (vb, ii[1].ctx, DTYPE_VCF_INFO, ii[1].ctx->tag_name, ii[1].name_len-1);
     }
@@ -1308,8 +1307,8 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
         CALL (seg_delta_vs_other (VB, ctx, other_ctx, STRa(value)));
 
     // ##INFO=<ID=AA,Number=1,Type=String,Description="Ancestral Allele">
-    else if ((z_dual_coords  && ctx->luft_trans == VCF2VCF_ALLELE) || // if DVCF - apply to all fields (perhaps including AA) with RendAlg=ALLELE
-             (!z_dual_coords && dnum == _INFO_AA)) // apply to INFO/AA if not DVCF
+    else if ((z_is_dvcf  && ctx->luft_trans == VCF2VCF_ALLELE) || // if DVCF - apply to all fields (perhaps including AA) with RendAlg=ALLELE
+             (!z_is_dvcf && dnum == _INFO_AA)) // apply to INFO/AA if not DVCF
         CALL (vcf_seg_INFO_allele (VB, ctx, STRa(value), 0));
 
     // ##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|Existing_variation|ALLELE_NUM|DISTANCE|STRAND|FLAGS|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|GMAF|AFR_MAF|AMR_MAF|EAS_MAF|EUR_MAF|SAS_MAF|AA_MAF|EA_MAF|ExAC_MAF|ExAC_Adj_MAF|ExAC_AFR_MAF|ExAC_AMR_MAF|ExAC_EAS_MAF|ExAC_FIN_MAF|ExAC_NFE_MAF|ExAC_OTH_MAF|ExAC_SAS_MAF|CLIN_SIG|SOMATIC|PHENO|PUBMED|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info|context|ancestral">
@@ -1369,7 +1368,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
     #undef CALL_WITH_FALLBACK
 }
 
-static int sort_by_subfield_name (const void *a, const void *b)  
+static SORTER (sort_by_subfield_name)
 { 
     InfoItem *ina = (InfoItem *)a;
     InfoItem *inb = (InfoItem *)b;
@@ -1377,12 +1376,12 @@ static int sort_by_subfield_name (const void *a, const void *b)
     return strncmp (ina->name, inb->name, MIN_(ina->name_len, inb->name_len));
 }
 
-void vcf_seg_info_subfields (VBlockVCF *vb, const char *info_str, unsigned info_len)
+void vcf_seg_info_subfields (VBlockVCFP vb, rom info_str, unsigned info_len)
 {
     vb->info_items.len = 0; // reset from previous line
 
     // case: INFO field is '.' (empty) (but not in DVCF as we will need to deal with DVCF items)
-    if (!z_dual_coords && info_len == 1 && *info_str == '.') {
+    if (!z_is_dvcf && info_len == 1 && *info_str == '.') {
         seg_by_did_i (VB, ".", 1, VCF_INFO, 2); // + 1 for \t or \n
         return;
     }
@@ -1398,7 +1397,7 @@ void vcf_seg_info_subfields (VBlockVCF *vb, const char *info_str, unsigned info_
 
     // pass 1: initialize info items + get indices of AC, and the DVCF items
     for (unsigned i=0; i < n_pairs; i++) {
-        const char *equal_sign = memchr (pairs[i], '=', pair_lens[i]);
+        rom equal_sign = memchr (pairs[i], '=', pair_lens[i]);
         unsigned name_len = (unsigned)(equal_sign - pairs[i]); // nonsense if no equal sign
         unsigned tag_name_len = equal_sign ? name_len : pair_lens[i];
 
@@ -1411,12 +1410,12 @@ void vcf_seg_info_subfields (VBlockVCF *vb, const char *info_str, unsigned info_
         DictId dict_id = dict_id_make (pairs[i], tag_name_len, DTYPE_1);
         ii.ctx = ctx_get_ctx_tag (vb, dict_id, pairs[i], tag_name_len); // create if it doesn't already exist
         
-        if (z_dual_coords && !vb->is_rejects_vb) vcf_tags_add_tag (vb, ii.ctx, DTYPE_VCF_INFO, pairs[i], tag_name_len);
+        if (z_is_dvcf && !vb->is_rejects_vb) vcf_tags_add_tag (vb, ii.ctx, DTYPE_VCF_INFO, pairs[i], tag_name_len);
 
-        ASSVCF (!z_dual_coords || 
+        ASSVCF (!z_is_dvcf || 
                   (((dict_id.num != _INFO_LUFT && dict_id.num != _INFO_LREJ) || vb->line_coords == DC_PRIMARY) && 
                    ((dict_id.num != _INFO_PRIM && dict_id.num != _INFO_PREJ) || vb->line_coords == DC_LUFT)),
-                "Not expecting INFO/%.*s in a %s-coordinate line", tag_name_len, pairs[i], coords_name (vb->line_coords));
+                "Not expecting INFO/%.*s in a %s-coordinate line", tag_name_len, pairs[i], vcf_coords_name (vb->line_coords));
 
         if (dict_id.num == _INFO_AC) 
             ac_i = vb->info_items.len;
@@ -1427,7 +1426,7 @@ void vcf_seg_info_subfields (VBlockVCF *vb, const char *info_str, unsigned info_
         else if (dict_id.num == _INFO_LREJ || dict_id.num == _INFO_PREJ) 
             { rejt_ii = ii; continue; } // dont add Lrej and Prej to Items yet
 
-        NEXTENT (InfoItem, vb->info_items) = ii;
+        BNXT (InfoItem, vb->info_items) = ii;
     }
 
     // case: we have a LUFT or PRIM item - Seg it now, but don't add it yet to InfoItems
@@ -1466,14 +1465,14 @@ void vcf_seg_info_subfields (VBlockVCF *vb, const char *info_str, unsigned info_
 }
 
 // Adds the DVCF items according to ostatus, finalizes INFO/SF and segs the INFO container
-void vcf_finalize_seg_info (VBlockVCF *vb)
+void vcf_finalize_seg_info (VBlockVCFP vb)
 {
-    if (!vb->info_items.len && !z_dual_coords) return; // no INFO items on this line (except if dual-coords - we will add them in a sec)
+    if (!vb->info_items.len && !z_is_dvcf) return; // no INFO items on this line (except if dual-coords - we will add them in a sec)
 
     Container con = { .repeats             = 1, 
                       .drop_final_item_sep = true,
-                      .filter_items        = z_dual_coords,   // vcf_piz_filter chooses which (if any) DVCF item to show based on flag.luft and flag.single_coord
-                      .callback            = z_dual_coords }; // vcf_piz_container_cb appends oSTATUS to INFO if requested 
+                      .filter_items        = z_is_dvcf,   // vcf_piz_filter chooses which (if any) DVCF item to show based on flag.luft and flag.single_coord
+                      .callback            = z_is_dvcf }; // vcf_piz_container_cb appends oSTATUS to INFO if requested 
  
     // seg INFO/SF, if there is one
     if (vb->sf_txt.len) vcf_seg_INFO_SF_seg (vb);
@@ -1483,7 +1482,7 @@ void vcf_finalize_seg_info (VBlockVCF *vb)
         vcf_seg_INFO_DP_by_FORMAT_DP (vb);
 
     // now that we segged all INFO and FORMAT subfields, we have the final ostatus and can add the DVCF items
-    if (z_dual_coords)
+    if (z_is_dvcf)
         vcf_seg_info_add_DVCF_to_InfoItems (vb);
 
     ARRAY (InfoItem, ii, vb->info_items);
@@ -1532,7 +1531,7 @@ void vcf_finalize_seg_info (VBlockVCF *vb)
 
     // --chain: if any tags need renaming we create a second, renames, prefixes string
     char ren_prefixes[con_nitems(con) * MAX_TAG_LEN]; 
-    unsigned ren_prefixes_len = z_dual_coords && !vb->is_rejects_vb ? vcf_tags_rename (vb, con_nitems(con), 0, 0, 0, FIRSTENT (InfoItem, vb->info_items), ren_prefixes) : 0;
+    unsigned ren_prefixes_len = z_is_dvcf && !vb->is_rejects_vb ? vcf_tags_rename (vb, con_nitems(con), 0, 0, 0, B1ST (InfoItem, vb->info_items), ren_prefixes) : 0;
 
     // if we're compressing a Luft rendition, swap the prefixes
     if (vb->line_coords == DC_LUFT && ren_prefixes_len) 

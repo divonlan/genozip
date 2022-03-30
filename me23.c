@@ -5,6 +5,7 @@
 
 #include "genozip.h"
 #include "seg.h"
+#include "piz.h"
 #include "vblock.h"
 #include "context.h"
 #include "file.h"
@@ -26,7 +27,7 @@
 
 bool me23_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags)
 {
-    SAFE_NUL (AFTERENT (char, *txt_header));
+    SAFE_NUL (BAFTc (*txt_header));
 
     ASSINP (strstr (txt_header->data, "23andMe"), "file %s is missing a 23andMe header and thus not identified as a 23andMe file", 
             txt_name);
@@ -39,7 +40,7 @@ bool me23_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flag
 // Segmentation functions for 23andMe files
 //-----------------------------------------
 
-void me23_seg_initialize (VBlock *vb)
+void me23_seg_initialize (VBlockP vb)
 {
     CTX(ME23_CHROM)->no_stons    = true;
     CTX(ME23_CHROM)->no_vb1_sort = true;
@@ -88,9 +89,9 @@ bool me23_seg_is_small (ConstVBlockP vb, DictId dict_id)
            dict_id.num == _ME23_EOL;
 }
 
-const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
+rom me23_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
 {
-    const char *next_field=field_start_line, *field_start;
+    rom next_field=field_start_line, field_start;
     unsigned field_len=0;
     char separator;
 
@@ -104,7 +105,7 @@ const char *me23_seg_txt_line (VBlock *vb, const char *field_start_line, uint32_
 
     GET_NEXT_ITEM (ME23_POS);
     seg_pos_field (vb, ME23_POS, ME23_POS, 0, 0, field_start, field_len, 0, field_len+1);
-    random_access_update_pos (vb, DC_PRIMARY, ME23_POS);
+    random_access_update_pos (vb, 0, ME23_POS);
 
     // Genotype (a combination of one or two bases or "--")
     GET_LAST_ITEM (ME23_GENOTYPE);
@@ -142,14 +143,14 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
                          "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t%.*s\n"
     
     // move the me23 and header to the side for a sec
-    buf_move (comp_vb, &comp_vb->compressed, comp_vb, txtheader_buf);
-    ARRAY (char, header23, comp_vb->compressed);
+    buf_move (comp_vb, &comp_vb->scratch, comp_vb, txtheader_buf);
+    ARRAY (char, header23, comp_vb->scratch);
 
     Context *ctx = ZCTX(ME23_CHROM);
     uint32_t num_chroms = (uint32_t)ctx->word_list.len;
     
     buf_alloc (comp_vb, txtheader_buf, 0, 
-               1.3*comp_vb->compressed.len + (sizeof VCF_HEAD_1 - 1) + (sizeof VCF_HEAD_3p1 - 1) + (sizeof VCF_HEAD_3p2 - 1)+80 + num_chroms * (sizeof VCF_HEAD_2 + 100), 
+               1.3*comp_vb->scratch.len + (sizeof VCF_HEAD_1 - 1) + (sizeof VCF_HEAD_3p1 - 1) + (sizeof VCF_HEAD_3p2 - 1)+80 + num_chroms * (sizeof VCF_HEAD_2 + 100), 
                char, 1, "txt_data");
     
     bufprintf (comp_vb, txtheader_buf, VCF_HEAD_1, ref_get_filename (gref));
@@ -158,8 +159,8 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
     for (uint32_t chrom_i=0; chrom_i < num_chroms; chrom_i++) {
         
         // get contig length from loaded reference
-        uint32_t chrom_name_len;
-        const char *chrom_name = ctx_get_snip_by_word_index (ctx, chrom_i, 0, &chrom_name_len);
+        STR(chrom_name);
+        ctx_get_snip_by_word_index (ctx, chrom_i, chrom_name);
         PosType contig_len = ref_contigs_get_contig_length (gref, WORD_INDEX_NONE, chrom_name, chrom_name_len, true);
 
         bufprintf (comp_vb, txtheader_buf, VCF_HEAD_2, chrom_name, contig_len);
@@ -167,13 +168,13 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
 
     // add original 23andMe header, prefixing lines with "##co=" instead of "#"
     uint64_t header23_line_start = txtheader_buf->len;
-    for (uint64_t i=0; i < comp_vb->compressed.len; i++) {
+    for (uint64_t i=0; i < comp_vb->scratch.len; i++) {
         if (header23[i] == '#') {
             header23_line_start = txtheader_buf->len;
             buf_add (txtheader_buf, "##co=", 5);
         }
         else
-            NEXTENT (char, *txtheader_buf) = header23[i];
+            BNXTc (*txtheader_buf) = header23[i];
     }
     txtheader_buf->len = header23_line_start; // remove last 23andme line ("# rsid chromosome position genotype")
     
@@ -197,7 +198,7 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
     buf_add_string (comp_vb, txtheader_buf, flags_command_line());
     bufprintf (comp_vb, txtheader_buf, VCF_HEAD_3p2, sample_name_len, sample_name);
 
-    buf_free (&comp_vb->compressed);
+    buf_free (comp_vb->scratch);
 }
 
 // reconstruct VCF GENOTYPE field as VCF - REF,ALT,QUAL,FILTER,INFO,FORMAT,Sample
@@ -213,14 +214,12 @@ TRANSLATOR_FUNC (sam_piz_m232vcf_GENOTYPE)
     vb->chrom_node_index = ref_contigs_get_by_name (gref, vb->chrom_name, vb->chrom_name_len, true, false);
 
     // get the value of the loaded reference at this position    
-    const Range *range = ref_piz_get_range (vb, gref, pos, 1);
+    ConstRangeP range = ref_piz_get_range (vb, gref, false);
     vb->chrom_node_index = save_chrom_node_index; // restore
-
-    ASSERT (range, "Failed to find the site chrom='%s' pos=%"PRId64, vb->chrom_name, pos);
 
     uint32_t idx = pos - range->first_pos;
 
-    ASSERT (ref_is_idx_in_range (range, idx), "idx=%u but range has only %"PRIu64" nucleotides. pos=%"PRId64" range=%s", 
+    ASSPIZ (ref_is_idx_in_range (range, idx), "idx=%u but range has only %"PRIu64" nucleotides. pos=%"PRId64" range=%s", 
             idx, range->ref.nbits / 2, pos, ref_display_range (range).s);
 
     char ref_b = ref_base_by_idx (range, idx);

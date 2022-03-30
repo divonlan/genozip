@@ -255,13 +255,13 @@ extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
 
 #ifndef Z_SOLO
    voidpf ZLIB_INTERNAL zcalloc OF((voidpf opaque, unsigned items,
-                                    unsigned size, const char *func, uint32_t code_line));
-   void ZLIB_INTERNAL zcfree  OF((voidpf opaque, voidpf ptr, const char *func, uint32_t code_line));
+                                    unsigned size, FUNCLINE));
+   void ZLIB_INTERNAL zcfree  OF((voidpf opaque, voidpf ptr, FUNCLINE));
 #endif
 
 #define ZALLOC(strm, items, size) \
-           (*((strm)->zalloc))((strm)->opaque, (items), (size), __FUNCTION__, __LINE__)
-#define ZFREE(strm, addr)  (*((strm)->zfree))((strm)->opaque, (voidpf)(addr), __FUNCTION__, __LINE__)
+           (*((strm)->zalloc))((strm)->opaque, (items), (size), __FUNCLINE)
+#define ZFREE(strm, addr)  (*((strm)->zfree))((strm)->opaque, (voidpf)(addr), __FUNCLINE)
 #define TRY_FREE(s, p) {if (p) ZFREE(s, p);}
 
 /* Reverse the bytes in a 32-bit value */

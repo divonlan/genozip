@@ -39,6 +39,9 @@
 #pragma GENDICT SAM_STRAND=DTYPE_FIELD=STRAND
 #pragma GENDICT SAM_QUAL=DTYPE_FIELD=QUAL 
 #pragma GENDICT SAM_DOMQRUNS=DTYPE_FIELD=DOMQRUNS // must be right after SAM_QUAL. Also used by LONGR. For backwards compatability, we can never change its name.
+#pragma GENDICT SAM_QNAMESA=DTYPE_FIELD=QNAMESA   // v14.0.0. PRIM: copy from SA Group
+#pragma GENDICT SAM_SEQSA=DTYPE_FIELD=SEQSA       // v14.0.0. DEPN: Sequence diff vs SA Group PRIM: copy from SA Group 
+#pragma GENDICT SAM_QUALSA=DTYPE_FIELD=QUALSA     // v14.0.0. DEPN: Qual diff vs SA Group PRIM: copy from SA Group 
 #pragma GENDICT SAM_EOL=DTYPE_FIELD=EOL
 #pragma GENDICT SAM_BAM_BIN=DTYPE_FIELD=BAM_BIN
 #pragma GENDICT SAM_TOPLEVEL=DTYPE_FIELD=TOPLEVEL // must be called TOPLEVEL
@@ -47,6 +50,8 @@
 #pragma GENDICT SAM_TOP2FQEX=DTYPE_FIELD=TOP2FQEX
 #pragma GENDICT SAM_TAXID=DTYPE_FIELD=TAXID
 #pragma GENDICT SAM_BUDDY=DTYPE_FIELD=BUDDY  // note: this MUST be the same dict_id ("BUDDY") for all data_types using buddy (they will have different did_i though), expected by reconstruct_from_buddy 
+#pragma GENDICT SAM_SAGROUP=DTYPE_FIELD=SAGROUP // PRIM and DEPN: the SA Group from which to copy data
+#pragma GENDICT SAM_SAALN=DTYPE_FIELD=SAALN  // DEPN: the alignment within SA Group which is this line (not need for PRIM, as the aln_i is always 0)
 #pragma GENDICT SAM_MC_Z=DTYPE_FIELD=MC_Z    // used for consuming OPTION_MC_Z in case of translation to FASTQ
 
 #pragma GENDICT OPTION_AM_i=DTYPE_2=AM:i     // The smallest template-independent mapping quality in the template
@@ -186,7 +191,6 @@
 #pragma GENDICT OPTION_sz_A=DTYPE_2=sz_A     // scrap read: ZMW classification annotation, one of N:=Normal, C:=Control, M:=Malformed, or S:=Sentinel
 #pragma GENDICT OPTION_sc_A=DTYPE_2=sc_A     // scrap read: Scrap region-type annotation, one of A:=Adapter, B:=Barcode, L:=LQRegion, or F:=Filtered
 
-
 // biobambam tags
 #pragma GENDICT OPTION_mc_i=DTYPE_2=mc:i     // MateCoordinate (biobambam)
 #pragma GENDICT OPTION_ms_i=DTYPE_2=ms:i     // MateBaseScore  (biobambam)
@@ -194,6 +198,12 @@
 // Novocraft tags: http://www.novocraft.com/documentation/novosort-2/
 #pragma GENDICT OPTION_Z5_i=DTYPE_2=Z5:i     // During the input phase for unsorted or name sorted alignments, Novosort calculates the signature of each read and adds this as a SAM tag (Z5:i:) to other segments of the template. Later, during the processing of the sorted alignments, we can determine the signature of a read and, from the Z5 tag, the signature of it’s pair. Reads are then grouped according to the two signatures, strand & library and duplicates detected within a group.
 #pragma GENDICT OPTION_Zq_i=DTYPE_2=Zq:i
+
+// BS-Seeker2 flags: https://github.com/BSSeeker/BSseeker2#output-files
+#pragma GENDICT OPTION_XO_Z=DTYPE_2=XO:Z     // Orientation, from forward/reverted
+//#pragma GENDICT OPTION_XS_i=DTYPE_2=XS:i   // (overlaps) 1 when read is recognized as not fully converted by bisulfite treatment, or else 0
+#pragma GENDICT OPTION_XM_Z=DTYPE_2=XM:Z     // number of sites for mismatch: X=methylated CG x=un-methylated CG Y=methylated CHG y=un-methylated CHG Z=methylated CHH z=un-methylated CHH
+#pragma GENDICT OPTION_XG_Z=DTYPE_2=XG:Z     // genome sequences, with 2bp extended on both ends, from 5' to 3'
 
 // added by GATK's BQSR (Base Quality Score Recalibration)
 #pragma GENDICT OPTION_BD_Z=DTYPE_2=BD:Z     // Deletion base quality  (not used in newer versions of GATK)
@@ -220,41 +230,9 @@
 #pragma GENDICT SAM_E2_Z=DTYPE_FIELD=E2:Z    // This used to be the destination alias from OPTION_E2_Z 
 #pragma GENDICT SAM_U2_Z=DTYPE_FIELD=U2:Z    // This used to be the destination alias from OPTION_U2_Z 
 
-// as defined in https://samtools.github.io/hts-specs/SAMv1.pdf 1.4.2
-#define SAM_FLAG_MULTI_SEGMENTS 0x0001 // 1     0000 0000 0001
-#define SAM_FLAG_IS_ALIGNED     0x0002 // 2     0000 0000 0010
-#define SAM_FLAG_UNMAPPED       0x0004 // 4     0000 0000 0100
-#define SAM_FLAG_NEXT_UNMAPPED  0x0008 // 8     0000 0000 1000
-#define SAM_FLAG_REV_COMP       0x0010 // 16    0000 0001 0000
-#define SAM_FLAG_NEXT_REV_COMP  0x0020 // 32    0000 0010 0000
-#define SAM_FLAG_IS_FIRST       0x0040 // 64    0000 0100 0000
-#define SAM_FLAG_IS_LAST        0x0080 // 128   0000 1000 0000
-#define SAM_FLAG_SECONDARY      0x0100 // 256   0001 0000 0000
-#define SAM_FLAG_FAILED_FILTERS 0x0200 // 512   0010 0000 0000
-#define SAM_FLAG_DUPLICATE      0x0400 // 1024  0100 0000 0000
-#define SAM_FLAG_SUPPLEMENTARY  0x0800 // 2048  1000 0000 0000
-#define SAM_MAX_FLAG            0x0FFF
-
-#pragma pack(1) 
-typedef union SamFlags {
-    struct SamFlagsBits {
-        uint8_t multi_segments : 1;
-        uint8_t is_aligned     : 1;
-        uint8_t unmapped       : 1;
-        uint8_t next_unmapped  : 1;
-        uint8_t rev_comp       : 1;
-        uint8_t next_rev_comp  : 1;
-        uint8_t is_first       : 1;
-        uint8_t is_last        : 1;
-        uint8_t secondary      : 1;
-        uint8_t failed_filters : 1;
-        uint8_t duplicate      : 1;
-        uint8_t supplementary  : 1;
-        uint8_t unused         : 4;    
-    } bits;
-    uint16_t value;
-} SamFlags;
-#pragma pack()
+// Note: 32 bit to save memory (we haven't seen a scenario in which there are more than 4B primary alignments), but can trivially extend to 64b if needed.
+// if we ever want to extend to 64 bits, consider than number of PRIM groups is also limited to 1B unique CIGARs - see sam_seg_prim_add_sa_group_SA
+typedef uint32_t SAGroup; 
 
 // ZIP Stuff
 COMPRESSOR_CALLBACK(sam_zip_seq); // used by longr codec
@@ -262,10 +240,13 @@ COMPRESSOR_CALLBACK(sam_zip_qual);
 COMPRESSOR_CALLBACK(sam_zip_U2);
 COMPRESSOR_CALLBACK(sam_zip_BD_BI);
 extern void sam_zip_initialize (void);
-extern bool sam_zip_is_unaligned_line (const char *line, int len);
+extern void sam_zip_finalize (void);
+extern bool sam_zip_is_unaligned_line (rom line, int len);
 extern bool sam_zip_dts_flag (void);
 extern void sam_zip_after_compute (VBlockP vb);
 extern void sam_zip_after_vbs (void);
+extern void sam_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeader *vb_header);
+extern void sam_sa_prim_finalize_ingest (void);
 
 // HEADER stuff
 extern bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags);
@@ -275,25 +256,33 @@ extern void sam_zip_free_end_of_z (void);
 extern ContigPkgP sam_hdr_contigs;
 
 // ZIP/SEG Stuff
-extern void sam_zip_initialize (void);
 extern void sam_seg_initialize (VBlockP vb);
 extern void sam_seg_finalize (VBlockP vb);
 extern bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id);
-extern const char *sam_seg_txt_line (VBlockP vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
+extern rom sam_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
 extern uint32_t sam_seg_seq_len_from_cigar (STRp(cigar));
 extern uint32_t sam_seg_get_seq_len_by_MD_field (STRp(md_str));
-extern void sam_zip_compress_recon_plan (void);
-extern void sam_zip_verify_gc_vb (VBlockP vb);
-
+extern void sam_zip_generate_recon_plan (void);
+extern void sam_zip_init_vb (VBlockP vb);
+extern void sam_zip_after_compress (VBlockP vb);
+extern void sam_stats_reallocate (void);
+extern void sam_zip_genozip_header (SectionHeaderGenozipHeader *header);
 
 // PIZ Stuff
-extern bool sam_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
+extern void sam_piz_genozip_header (const SectionHeaderGenozipHeader *header);
+extern void sam_piz_finalize (void);
+extern IS_SKIP (sam_piz_is_skip_section);
+extern bool sam_piz_maybe_reorder_lines (void);
+extern bool sam_piz_init_vb (VBlockP vb, const SectionHeaderVbHeader *header, uint32_t *txt_data_so_far_single_0_increment);
 extern void sam_piz_recon_init (VBlockP vb);
-extern void sam_reconstruct_vb ();
+extern void sam_piz_after_recon (VBlockP vb);
 extern CONTAINER_FILTER_FUNC (sam_piz_filter);
-extern void sam_reconstruct_SEQ (VBlockP vb, ContextP ctx, const char *unused, unsigned unused2);
-extern void sam_set_FLAG_filter (const char *optarg);
-extern void sam_set_MAPQ_filter (const char *optarg);
+extern void sam_reconstruct_SEQ (VBlockP vb, ContextP ctx, rom unused, unsigned unused2);
+extern void sam_set_FLAG_filter (rom optarg);
+extern void sam_set_MAPQ_filter (rom optarg);
+extern void sam_piz_load_SA_Groups (void);
+extern bool sam_piz_dispatch_one_load_SA_Groups_vb (Dispatcher dispatcher);
+extern void sam_reconstruct_missing_quality (VBlockP vb, char c, bool reconstruct);
 
 // BAM Stuff
 extern void bam_seg_initialize (VBlockP vb);
@@ -301,7 +290,7 @@ extern int32_t bam_is_header_done (bool is_eof);
 extern int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
 extern void bam_read_vblock (VBlockP vb);
 extern void bam_seg_initialize (VBlockP vb);
-extern const char *bam_seg_txt_line (VBlockP vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
+extern rom bam_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
 
 // SAM-to-FASTQ stuff
 CONTAINER_CALLBACK (sam_piz_container_cb);
@@ -311,17 +300,21 @@ extern void sam_vb_release_vb();
 extern void sam_vb_destroy_vb();
 extern unsigned sam_vb_size (DataType dt);
 extern unsigned sam_vb_zip_dl_size (void);
+extern void sam_reset_line (VBlockP vb);
 
 // Special - used for SAM & BAM
-#define SAM_SPECIAL { sam_cigar_special_CIGAR, sam_piz_special_TLEN_old, sam_piz_special_BD_BI, sam_piz_special_SEQ_LEN, \
+#define SAM_SPECIAL { sam_cigar_special_CIGAR, sam_piz_special_TLEN_old, sam_piz_special_BD_BI, sam_piz_special_AS_old, \
                       sam_piz_special_MD_old, bam_piz_special_FLOAT, bam_piz_special_BIN, bam_piz_special_NM,   \
                       sam_piz_special_MD, sam_piz_special_REF_CONSUMED, \
                       sam_piz_special_PNEXT_IS_PREV_POS, sam_piz_special_COPY_BUDDY_FLAG, sam_piz_special_COPY_BUDDY_TLEN_old, \
-                      sam_piz_special_COPY_BUDDY_MC, sam_piz_special_CONSUME_MC_Z, sam_piz_special_TLEN, sam_piz_special_QUAL }
+                      sam_piz_special_COPY_BUDDY_MC, sam_piz_special_CONSUME_MC_Z, sam_piz_special_TLEN, sam_piz_special_QUAL,\
+                      sam_piz_special_pull_from_SAGROUP, sam_piz_special_DEPN_SEQ, sam_piz_special_PRIM_SEQ, \
+                      sam_piz_special_PRIM_QNAME, sam_piz_special_SQUANK, \
+                      sam_piz_special_BSSEEKER2_XO, sam_piz_special_BSSEEKER2_XG, sam_piz_special_BSSEEKER2_XM }
 SPECIAL (SAM, 0,  CIGAR,               sam_cigar_special_CIGAR);
 SPECIAL (SAM, 1,  TLEN_old,            sam_piz_special_TLEN_old);            // used for files compressed up to 12.0.42
 SPECIAL (SAM, 2,  BDBI,                sam_piz_special_BD_BI);
-SPECIAL (SAM, 3,  SEQ_LEN,             sam_piz_special_SEQ_LEN);             // Reconstructs seq_len minus delta. Note: called "AS" until 12.0.37 and used to reconstruct AS:i
+SPECIAL (SAM, 3,  AS_old,              sam_piz_special_AS_old);              // Reconstructs seq_len minus delta. Note: called "AS" until 12.0.37 and used to reconstruct AS:i
 SPECIAL (SAM, 4,  MD_old,              sam_piz_special_MD_old);              // used in files compressed with Genozip up to 12.0.36
 SPECIAL (SAM, 5,  FLOAT,               bam_piz_special_FLOAT);               // used in BAM to represent float optional values
 SPECIAL (SAM, 6,  BIN,                 bam_piz_special_BIN);   
@@ -333,19 +326,27 @@ SPECIAL (SAM, 11, COPY_BUDDY_FLAG,     sam_piz_special_COPY_BUDDY_FLAG);     // 
 SPECIAL (SAM, 12, COPY_BUDDY_TLEN_old, sam_piz_special_COPY_BUDDY_TLEN_old); // Used in 12.0.41 and 12.0.42
 SPECIAL (SAM, 13, COPY_BUDDY_MC,       sam_piz_special_COPY_BUDDY_MC);       // introduced 12.0.41
 SPECIAL (SAM, 14, CONSUME_MC_Z,        sam_piz_special_CONSUME_MC_Z);        // introduced 12.0.41
-SPECIAL (SAM, 15, TLEN,                sam_piz_special_TLEN);                // introduced v13
-SPECIAL (SAM, 16, QUAL,                sam_piz_special_QUAL);                // introduced v13
-#define NUM_SAM_SPECIAL 17
+SPECIAL (SAM, 15, TLEN,                sam_piz_special_TLEN);                // introduced 13.0.1
+SPECIAL (SAM, 16, QUAL,                sam_piz_special_QUAL);                // introduced 13.0.1
+SPECIAL (SAM, 17, SAGROUP,             sam_piz_special_pull_from_SAGROUP);   // introduced 14.0.0
+SPECIAL (SAM, 18, DEPN_SEQ,            sam_piz_special_DEPN_SEQ);            // introduced 14.0.0
+SPECIAL (SAM, 19, PRIM_SEQ,            sam_piz_special_PRIM_SEQ);            // introduced 14.0.0
+SPECIAL (SAM, 20, PRIM_QNAME,          sam_piz_special_PRIM_QNAME);          // introduced 14.0.0
+SPECIAL (SAM, 21, SQUANK,              sam_piz_special_SQUANK);              // introduced 14.0.0
+SPECIAL (SAM, 22, BSSEEKER2_XO,        sam_piz_special_BSSEEKER2_XO);        // introduced 14.0.0
+SPECIAL (SAM, 23, BSSEEKER2_XG,        sam_piz_special_BSSEEKER2_XG);        // introduced 14.0.0
+SPECIAL (SAM, 24, BSSEEKER2_XM,        sam_piz_special_BSSEEKER2_XM);        // introduced 14.0.0
+#define NUM_SAM_SPECIAL 25
 
-#define SAM_LOCAL_GET_LINE_CALLBACKS           \
-    { DT_SAM, _OPTION_BD_BI,  sam_zip_BD_BI }, \
-    { DT_SAM, _SAM_QUAL,      sam_zip_qual  }, \
-    { DT_SAM, _OPTION_U2_Z,   sam_zip_U2    }, 
+#define SAM_LOCAL_GET_LINE_CALLBACKS                          \
+    { DT_SAM, _OPTION_BD_BI,       sam_zip_BD_BI           }, \
+    { DT_SAM, _SAM_QUAL,           sam_zip_qual            }, \
+    { DT_SAM, _OPTION_U2_Z,        sam_zip_U2              }, 
 
-#define BAM_LOCAL_GET_LINE_CALLBACKS           \
-    { DT_BAM, _OPTION_BD_BI,  sam_zip_BD_BI }, \
-    { DT_BAM, _SAM_QUAL,      sam_zip_qual  }, \
-    { DT_BAM, _OPTION_U2_Z,   sam_zip_U2    }, 
+#define BAM_LOCAL_GET_LINE_CALLBACKS                          \
+    { DT_BAM, _OPTION_BD_BI,       sam_zip_BD_BI           }, \
+    { DT_BAM, _SAM_QUAL,           sam_zip_qual            }, \
+    { DT_BAM, _OPTION_U2_Z,        sam_zip_U2              }, 
     
 // Important: Numbers (and order) of translators cannot be changed, as they are part of the file format
 // (they are included in the TOP2BAM container)
@@ -381,3 +382,10 @@ TXTHEADER_TRANSLATOR (sam_header_sam2bam);
 TXTHEADER_TRANSLATOR (txtheader_sam2fq);
 
 #define SAM_CONTIG_FMT "@SQ	SN:%.*s	LN:%"PRId64
+
+typedef enum { SAM_COMP_MAIN, SAM_COMP_PRIM, SAM_COMP_DEPN } SamComponentType;
+#define SAM_COMP_NAMES { "MAIN", "PRIM", "DEPN" }
+
+#define sam_is_main_vb (vb->comp_i == SAM_COMP_MAIN)
+#define sam_is_prim_vb (vb->comp_i == SAM_COMP_PRIM)
+#define sam_is_depn_vb (vb->comp_i == SAM_COMP_DEPN)

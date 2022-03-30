@@ -6,7 +6,9 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-
+#ifdef _WIN32
+#include <direct.h>
+#endif
 #define Z_LARGE64
 #ifdef __APPLE__
     #define off64_t __int64_t
@@ -27,23 +29,22 @@
 #include "progress.h"
 #include "endianness.h"
 #include "tar.h"
-#include "mutex.h"
 
 // globals
 File *z_file   = NULL;
 File *txt_file = NULL;
 
-static StreamP input_decompressor  = NULL; // bcftools or xz, unzip or samtools - only one at a time
-static StreamP output_compressor   = NULL; // samtools (for cram), bcftools
+static StreamP input_decompressor = NULL; // bcftools or xz, unzip or samtools - only one at a time
+static StreamP output_compressor  = NULL; // samtools (for cram), bcftools
 
 static FileType stdin_type = UNKNOWN_FILE_TYPE; // set by the --input command line option
 
 // global pointers - so the can be compared eg "if (mode == READ)"
-const char *READ  = "rb";  // use binary mode (b) in read and write so Windows doesn't add \r
-const char *WRITE = "wb";
-const char *WRITEREAD = "wb+"; // only supported for z_file
+rom READ      = "rb";  // use binary mode (b) in read and write so Windows doesn't add \r
+rom WRITE     = "wb";
+rom WRITEREAD = "wb+"; // only supported for z_file and gencomp disk files
 
-const char *file_exts[] = FILE_EXTS;
+rom file_exts[] = FILE_EXTS;
 
 static const struct { FileType in; Codec codec; FileType out; } txt_in_ft_by_dt[NUM_DATATYPES][50] = TXT_IN_FT_BY_DT;
 static const FileType txt_out_ft_by_dt[NUM_DATATYPES][20] = TXT_OUT_FT_BY_DT;
@@ -63,7 +64,7 @@ DataType file_get_data_type (FileType ft, bool is_input)
     return DT_NONE;
 }
 
-const char *file_plain_text_ext_of_dt (DataType dt) 
+rom file_plain_text_ext_of_dt (DataType dt) 
 {
     return file_exts [txt_out_ft_by_dt[dt][0]];
 }
@@ -78,8 +79,10 @@ FileType file_get_z_ft_by_txt_in_ft (DataType dt, FileType txt_ft)
 }
 
 // get codec by txt file type
-Codec file_get_codec_by_txt_ft (DataType dt, FileType txt_ft)
+Codec file_get_codec_by_txt_ft (DataType dt, FileType txt_ft, bool source)
 {
+    if (source && txt_ft == BAM) return CODEC_BAM; // if !source, it would be CODEC_BGZF
+
     for (unsigned i=0; txt_in_ft_by_dt[dt][i].in; i++)
         if (txt_in_ft_by_dt[dt][i].in == txt_ft) 
             return txt_in_ft_by_dt[dt][i].codec;
@@ -140,7 +143,7 @@ char *file_compressible_extensions (bool plain_only)
     return s;
 }
 
-FileType file_get_type (const char *filename)
+FileType file_get_type (rom filename)
 {
     if (!filename) return UNKNOWN_FILE_TYPE;
 
@@ -163,7 +166,7 @@ FileType file_get_type (const char *filename)
     return UNKNOWN_FILE_TYPE; // this should never happen, because GNRIC_ is "" so it will catch everything
 }
 
-static FileType file_get_type_force_dt (const char *filename, DataType dt)
+static FileType file_get_type_force_dt (rom filename, DataType dt)
 {
     FileType ft = file_get_type (filename); 
     switch (ft) {
@@ -198,10 +201,17 @@ void file_get_raw_name_and_type (char *filename, char **raw_name, FileType *out_
 // rules for pair filename: two filenames need to differ by exactly one character, which is '1' and '2',
 // if test_only we validate the rule
 // if !test_only, only fn1 needs to be provided, we assume the rule is valid, and we create the output file with "1+2"
-char *file_get_fastq_pair_filename (const char *fn1, const char *fn2, bool test_only)
+char *file_get_fastq_pair_filename (rom fn1, rom fn2, bool test_only)
 {
     FileType ft1, ft2;
     char *rn1, *rn2;
+
+    // case: new directory - take only the basename
+    unsigned dn_len = flag.out_dirname ? strlen (flag.out_dirname) : 0;
+    if (dn_len) {
+        fn1 = file_basename (fn1, 0,0,0,0);
+        fn2 = file_basename (fn2, 0,0,0,0);
+    }
 
     file_get_raw_name_and_type ((char *)fn1, &rn1, &ft1);
     file_get_raw_name_and_type ((char *)fn2, &rn2, &ft2);
@@ -220,13 +230,20 @@ char *file_get_fastq_pair_filename (const char *fn1, const char *fn2, bool test_
 
     if (test_only) return (char *)1;
 
-    char *pair_fn = MALLOC (len+20);
-    sprintf (pair_fn, "%.*s1+2%s" FASTQ_GENOZIP_, df, rn1, &rn1[df+1]);
+    char *pair_fn = MALLOC (len + dn_len + 20);
+    sprintf (pair_fn, "%s%s%.*s1+2%s" FASTQ_GENOZIP_, 
+             (dn_len ? flag.out_dirname : ""), (dn_len ? "/" : ""), 
+             df, rn1, &rn1[df+1]);
     
+    if (dn_len) {
+        FREE (fn1);
+        FREE (fn2);
+    }
+
     return pair_fn;
 }
 
-void file_set_input_size (const char *size_str)
+void file_set_input_size (rom size_str)
 {   
     unsigned len = strlen (size_str);
 
@@ -237,7 +254,7 @@ void file_set_input_size (const char *size_str)
     }
 }
 
-void file_set_input_type (const char *type_str)
+void file_set_input_type (rom type_str)
 {
     char ext[strlen (type_str) + 2]; // +1 for . +1 for \0
     sprintf (ext, ".%s", type_str);
@@ -269,7 +286,7 @@ FileType file_get_stdin_type (void)
     return stdin_type;
 }
 
-static void file_ask_user_to_confirm_overwrite (const char *filename)
+static void file_ask_user_to_confirm_overwrite (rom filename)
 {
     if (!strcmp (filename, "/dev/null")) return; // don't ask for /dev/null
     
@@ -291,7 +308,7 @@ static void file_ask_user_to_confirm_overwrite (const char *filename)
 }
 
 static void file_redirect_output_to_stream (File *file, char *exec_name, 
-                                            const char *stdout_option, const char *format_option_1, const char *format_option_2, const char *format_option_3)
+                                            rom stdout_option, rom format_option_1, rom format_option_2, rom format_option_3)
 {
     char threads_str[20];
     sprintf (threads_str, "%u", global_max_threads);
@@ -317,9 +334,9 @@ static void file_redirect_output_to_stream (File *file, char *exec_name,
 // starting samtools 1.10, a PG record is added to the SAM header every "samtools view", and an option, --no-PG, 
 // is provided to avoid this. See: https://github.com/samtools/samtools/releases/
 // returns "--no-PG" if the option exists, or NULL if not
-static const char *file_samtools_no_PG (void)
+static rom file_samtools_no_PG (void)
 {
-    static const char *ret_str[2] = { NULL, "--no-PG" };
+    static rom ret_str[2] = { NULL, "--no-PG" };
     static int has_no_PG = -1; // unknown
 
     if (has_no_PG >= 0) return ret_str[has_no_PG]; // we already tested
@@ -403,18 +420,19 @@ static bool file_open_txt_read (File *file)
         WARN_ONCE ("FYI: genozip doesn't recognize %s file's type, so it will be compressed as GENERIC. In the future, you may specify the type with \"--input <type>\". To suppress this warning, use \"--input generic\".", file->name);
     
     // open the file, based on the codec (as guessed by file extension)
-    file->codec = file_get_codec_by_txt_ft (file->data_type, file->type);
+    file->codec        = file_get_codec_by_txt_ft (file->data_type, file->type, false);
+    file->source_codec = file_get_codec_by_txt_ft (file->data_type, file->type, true);
 
-    ASSINP0 (!flag.is_windows || !file->redirected || file->codec == CODEC_NONE, 
-             "genozip on Windows supports piping in only plain (uncompressed) data");
+    //xxx ASSINP0 (!flag.is_windows || !file->redirected || file->codec == CODEC_NONE, 
+    //          "genozip on Windows supports piping in only plain (uncompressed) data");
 
     switch (file->codec) { 
         case CODEC_CRAM: {
             input_decompressor = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 
                                                 file->is_remote ? file->name : NULL,      // url                                        
                                                 file->redirected,
-                                                "To compress a CRAM file", 
-                                                "samtools", "view", "-bu", "--threads", "8", "-h", // in practice, samtools is able to consume 1.3 cores
+                                                "To decompress a CRAM file", 
+                                                "samtools", "view", "-bu", "--threads", "8", "-h", // in practice, samtools is able to consume ~4 cores
                                                 file_samtools_no_PG() ? "--no-PG" : "-h", // don't add a PG line to the header (just repeat -h if this is an older samtools without --no-PG - no harm)
                                                 file->is_remote ? SKIP_ARG : file->name,  // local file name 
                                                 ref_get_cram_ref(gref), NULL);
@@ -428,14 +446,10 @@ static bool file_open_txt_read (File *file)
         case CODEC_NONE: {
             file->file = file->is_remote  ? url_open (NULL, file->name)  
                        : file->redirected ? fdopen (STDIN_FILENO,  "rb") 
-                       : flag.gencomp_num ? z_file->gencomp_file[flag.gencomp_num-1]  // already open
-                       :                                    fopen (file->name, READ);
+                       :                    fopen (file->name, READ);
             ASSERT (file->file, "failed to open %s: %s", file->name, strerror (errno));
 
-fallthrough_from_cram:
-            if (flag.gencomp_num)
-                file_seek (file, 0, SEEK_SET, false); // we finished writing the gencomp file - now we will read it
-
+fallthrough_from_cram: {}
             // read the first potential BGZF block to test if this is GZ or BGZF
             uint8_t block[BGZF_MAX_BLOCK_SIZE]; 
             uint32_t block_size;
@@ -445,15 +459,17 @@ fallthrough_from_cram:
             // TO DO: this doesn't work over a pipe - so we can't pipe-in non-BGZF GZIP files (bug 243)
             setvbuf (file->file, 0, _IONBF, 0); 
 
+            ASSERTNOTINUSE (evb->scratch);
+
             int32_t bgzf_uncompressed_size = bgzf_read_block (file, block, &block_size, true);
 
-            // case: this is indeed a bgzf - we put the still-compressed data in vb->compressed for later consumption
+            // case: this is indeed a bgzf - we put the still-compressed data in vb->scratch for later consumption
             // is txtfile_read_block_bgzf
             if (bgzf_uncompressed_size > 0) {
                 file->codec = CODEC_BGZF;
                 
-                evb->compressed.param = bgzf_uncompressed_size; // pass uncompressed size in param
-                buf_add_more (evb, &evb->compressed, (char*)block, block_size, "compressed");
+                evb->scratch.count = bgzf_uncompressed_size; // pass uncompressed size in param
+                buf_add_more (evb, &evb->scratch, (char*)block, block_size, "scratch");
                 
                 file->bgzf_flags = bgzf_get_compression_level (file->name ? file->name : FILENAME_STDIN, 
                                                                block, block_size, (uint32_t)bgzf_uncompressed_size);
@@ -489,7 +505,7 @@ fallthrough_from_cram:
                 gzinject (file->file, block, block_size); // a hack - adds a 18 bytes of compressed data to the in stream, which will be consumed next, instead of reading from disk
             } 
 
-            // case: this is not GZIP format at all. treat as a plain file, and put the data read in vb->compressed 
+            // case: this is not GZIP format at all. treat as a plain file, and put the data read in vb->scratch 
             // for later consumption is txtfile_read_block_plain
             else if (bgzf_uncompressed_size == BGZF_BLOCK_IS_NOT_GZIP) {
 
@@ -507,20 +523,20 @@ fallthrough_from_cram:
                 }
 
                 file->codec = CODEC_NONE;
-                buf_add_more (evb, &evb->compressed, (char*)block, block_size, "compressed");
+                buf_add_more (evb, &evb->scratch, (char*)block, block_size, "scratch");
             }
 
             // Notes 1. We currently only support plain and BGZF data piped in - see bug 243
             // 2. On Windows, we can't pipe binary files, bc Windows converts \n to \r\n
             // 3. The codec at this point is what the user declared in -i (we haven't tested for gz yet)
-#ifdef _WIN32 
-            ASSINP0 (!flag.is_windows || !file->redirected || file->codec == CODEC_NONE, 
-                    "genozip on Windows supports piping in only plain (uncompressed) data");
-#else
+//xxx #ifdef _WIN32 
+//             ASSINP0 (!flag.is_windows || !file->redirected || file->codec == CODEC_NONE, 
+//                     "genozip on Windows supports piping in only plain (uncompressed) data");
+// #else
             ASSINP (!file->redirected || file->codec == CODEC_NONE || file->codec == CODEC_BGZF, 
                     "genozip only supports piping in data that is either plain (uncompressed) or compressed in BGZF format (typically with .gz extension) (codec=%s)", 
                     codec_name (file->codec));
-#endif
+// #endif
             break;
         }
         case CODEC_BZ2:
@@ -612,26 +628,28 @@ static bool file_open_txt_write (File *file)
     }
 
     // implicit translation flags - eg. "genocat xx.bam.genozip -o xx.fq" implies --fastq
-    DataType dt_by_filename = file_get_data_type (file->type, true);
-    if ((file->data_type == DT_SAM    && dt_by_filename == DT_BAM  )  ||
-        (file->data_type == DT_BAM    && dt_by_filename == DT_SAM  )  ||
-        (file->data_type == DT_SAM    && dt_by_filename == DT_FASTQ)  ||
-        (file->data_type == DT_BAM    && dt_by_filename == DT_FASTQ)  ||
-        (file->data_type == DT_VCF    && dt_by_filename == DT_BCF)    ||
-        (file->data_type == DT_FASTA  && dt_by_filename == DT_PHYLIP) ||
-        (file->data_type == DT_PHYLIP && dt_by_filename == DT_FASTA)  ||
-        (file->data_type == DT_ME23   && dt_by_filename == DT_VCF  ) )
-    {
-        flag.out_dt = file->data_type = dt_by_filename;
-        flag.explicit_out_dt = true;   // specifiying output data type by filename is considered explicit
-        flags_update_piz_one_file(-1); // update flags accordingly
+    if (! flag.test) {
+        DataType dt_by_filename = file_get_data_type (file->type, true);
+        if ((file->data_type == DT_SAM    && dt_by_filename == DT_BAM  )  ||
+            (file->data_type == DT_BAM    && dt_by_filename == DT_SAM  )  ||
+            (file->data_type == DT_SAM    && dt_by_filename == DT_FASTQ)  ||
+            (file->data_type == DT_BAM    && dt_by_filename == DT_FASTQ)  ||
+            (file->data_type == DT_VCF    && dt_by_filename == DT_BCF)    ||
+            (file->data_type == DT_FASTA  && dt_by_filename == DT_PHYLIP) ||
+            (file->data_type == DT_PHYLIP && dt_by_filename == DT_FASTA)  ||
+            (file->data_type == DT_ME23   && dt_by_filename == DT_VCF  ) )
+        {
+            flag.out_dt = file->data_type = dt_by_filename;
+            flag.explicit_out_dt = true;   // specifiying output data type by filename is considered explicit
+            flags_update_piz_one_file(-1); // update flags accordingly
+        }
     }
 
     if (Z_DT(DT_ME23) && flag.out_dt == DT_VCF)
         ASSINP0 (flag.reference, "--reference must be specified when translating 23andMe to VCF");
 
     // get the codec    
-    file->codec = file_get_codec_by_txt_ft (file->data_type, file->type);
+    file->codec = file_get_codec_by_txt_ft (file->data_type, file->type, false);
     
     // set to bgzf if the file type implies it
     if (file->codec == CODEC_GZ) {
@@ -696,30 +714,38 @@ static bool file_open_txt_write (File *file)
     return file->file != 0;
 }
 
+// we add all buffers to evb's buf_list in advance, to avoid thread issues of accessing buf_lists when using
+// these in VBs other than evb
 static void file_initialize_bufs (File *file)
 {
-#define INIT(buf) file->buf.name = #buf; \
-                  buf_add_to_buffer_list (evb, &file->buf);
+#define INIT(buf) ({ buf_add_to_buffer_list_(evb, &file->buf, #buf); })
     
     INIT (ra_buf);
     INIT (ra_buf_luft);
     INIT (chrom2ref_map);
     INIT (ref2chrom_map);
     INIT (section_list_buf);
+    INIT (section_list_vb1);
     INIT (stats_buf);
     INIT (STATS_buf);
     INIT (bound_txt_names);
     INIT (recon_plan);
-    INIT (comp_info);
-    INIT (txt_file_info);
+    INIT (txt_header_info);
     INIT (vb_info[0]);
     INIT (vb_info[1]);
     INIT (line_info[0]);
     INIT (line_info[1]);
     INIT (sa_alns);
     INIT (sa_groups);
+    INIT (sa_groups_index);
+    INIT (sa_qnames);
+    INIT (sa_cigars);
+    INIT (sa_seq);
+    INIT (sa_qual);
     INIT (rejects_report);
     INIT (apriori_tags);
+    INIT (vb_sections_index);
+    INIT (comp_sections_index);
     INIT (unconsumed_txt);
     INIT (bgzf_isizes);
     INIT (coverage);
@@ -737,9 +763,9 @@ static void file_initialize_bufs (File *file)
 // resulting in data corruption in evb.buf_list. If evb.buf_list gets corrupted this might result in termination 
 // of the execution.
 // with these buf_add_to_buffer_list() the buffers will already be in evb's buf_list before any compute thread is run.
-static void file_initialize_z_add_to_buf_list (Buffer *buf, const char *func, unsigned line)
+static void file_initialize_z_add_to_buf_list (Buffer *buf, FUNCLINE)
 {
-    buf_add_to_buffer_list (evb, buf);
+    buf_add_to_buffer_list_do (evb, buf, func, code_line);
 }
 
 static void file_initialize_z_file_data (File *file)
@@ -781,7 +807,7 @@ static bool file_open_z (File *file)
                 "Tip: You can create a genozip chain file from a chain file with eg 'genozip my-chain-file.chain.gz --reference target-coord-ref.ref.genozip'",
                 file->name, (command==ZIP) ? "--chain" : "--show-chain", GENOZIP_EXT);
 
-        if (!flag.seg_only || flag_loading_auxiliary) {
+        if ((!flag.seg_only && !flag.show_bam) || flag_loading_auxiliary) {
 
             // make sure file is a regular file (not FIFO, directory etc)
             struct stat sb;
@@ -810,7 +836,7 @@ static bool file_open_z (File *file)
 
                 if (flag.validate == VLD_REPORT_INVALID) flag.validate = VLD_INVALID_FOUND; 
 
-                const char *cause_str = cause==1 ? strerror (errno)
+                rom cause_str = cause==1 ? strerror (errno)
                                       : cause==2 ? "file is empty"
                                       : cause==3 ? "file_seek failed"
                                       : cause==4 ? "fread failed"
@@ -870,19 +896,20 @@ static bool file_open_z (File *file)
     
     file_initialize_z_file_data (file);
 
-    return file->file != 0 || flag.seg_only;
+    return file->file != 0 || flag.seg_only || flag.show_bam;
 }
 
-File *file_open (const char *filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE or WRITEREAD */)
+File *file_open (rom filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE or WRITEREAD */)
 {
     START_TIMER;
 
     File *file = (File *)CALLOC (sizeof(File));
 
-    file->supertype  = supertype;
-    file->is_remote  = filename && url_is_url (filename);
-    file->redirected = !filename;
-    file->mode       = mode;
+    file->supertype   = supertype;
+    file->is_remote   = filename && url_is_url (filename);
+    file->redirected  = !filename; // later on, also CRAM etc will be set as redirected
+    file->no_progress = !filename;
+    file->mode        = mode;
 
     bool is_file_exists = false;
 
@@ -890,7 +917,7 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
     ASSINP ((mode == READ && supertype == TXT_FILE) || !file->is_remote, "expecting file %s to be local, not a URL", filename);
 
     int64_t url_file_size = 0; // will be -1 if the web/ftp site does not provide the file size
-    const char *error = NULL;
+    rom error = NULL;
     
     if (file->is_remote) {
         error = url_get_status (filename, &is_file_exists, &url_file_size); // accessing is expensive - get existance and size in one call
@@ -901,12 +928,8 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
         is_file_exists = file_exists (filename);
         error = strerror (errno);
 
-        if (!flag.gencomp_num) {
-            if (is_file_exists && mode == READ) 
-                file->disk_size = file_get_size (filename);
-        }
-        else 
-            file->disk_size = z_file->gencomp_disk_size[flag.gencomp_num-1];
+        if (is_file_exists && mode == READ) 
+            file->disk_size = file_get_size (filename);
     }
 
     // return null if genozip input file size is known to be 0, so we can skip it. note: file size of url might be unknown
@@ -926,9 +949,11 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
             is_file_exists && 
             !(!file->is_remote && !file->redirected && file_is_fifo (filename)) && // a fifo can be "overwritten" (that's just normal writing to a fifo)
             !flag.force && 
-            !(supertype==TXT_FILE && flag.test) &&   // not testing piz
+            !(supertype==TXT_FILE && flag.test)   && // not testing piz
             !(supertype==Z_FILE && flag.seg_only) && // not zip with --seg-only
+            !(supertype==Z_FILE && flag.show_bam) && // not zip with --show-bam
             !(supertype==Z_FILE && tar_is_tar()))    // not z_file is within a tar file
+
             file_ask_user_to_confirm_overwrite (filename); // function doesn't return if user responds "no"
 
         // copy filename 
@@ -946,13 +971,11 @@ File *file_open (const char *filename, FileMode mode, FileSupertype supertype, D
             file->data_type = data_type; // for READ, data_type is set by file_open_*
         }
     }
-    else if (mode==READ) {  // stdin
-
+    else if (mode==READ) {  // stdin (can only be TXT_FILE, not Z_FILE)
         file->type = stdin_type; 
         file->data_type = file_get_data_type (stdin_type, true);
-
-        Codec codec = file_get_codec_by_txt_ft (file->data_type, file->type);
-        if (supertype == TXT_FILE) file->codec = codec;
+        file->codec        = file_get_codec_by_txt_ft (file->data_type, file->type, false);
+        file->source_codec = file_get_codec_by_txt_ft (file->data_type, file->type, true);
     }
     else { // stdout
         file->data_type = data_type; 
@@ -1024,10 +1047,6 @@ void file_close (File **file_p,
 
     if (!file) return; // nothing to do
 
-    // if this is the rejects file, unlink it first to prevent unnecessary flushing when closing
-    if (file->supertype == TXT_FILE && flag.gencomp_num) 
-        unlink (z_file->gencomp_file_name[flag.gencomp_num-1]); // ignore errors (this doesn't work on NTFS)
-
     if (file->file && file->supertype == TXT_FILE) {
 
         // finalize a BGZF-compressed reconstructed txt file
@@ -1056,21 +1075,10 @@ void file_close (File **file_p,
 
     else if (file->file && file->supertype == Z_FILE) {
 
-        // if there are still DVCF rejects files when close z_file (eg when closing from main_exit()), delete them too
-        for (unsigned i=0; i < 2; i++)
-            if (file->gencomp_file_name[i]) 
-                remove (file->gencomp_file_name[i]); // ignore errors
-    
         if (tar_is_tar() && file->mode != READ)
             tar_close_file (&file->file);
         else
             FCLOSE (file->file, file_printname (file));
-    }
-
-    // in case the unlinking didn't work (eg NTFS) - remove the rejects file now that its closed
-    if (file->supertype == TXT_FILE && flag.gencomp_num) {
-        remove (z_file->gencomp_file_name[flag.gencomp_num-1]); // ignore errors
-        FREE (z_file->gencomp_file_name[flag.gencomp_num-1]);
     }
 
     // create an index file using samtools, bcftools etc, if applicable
@@ -1089,35 +1097,40 @@ void file_close (File **file_p,
         for (unsigned i=0; i < MAX_DICTS; i++) // we need to destory all even if unused, because they were initialized in file_initialize_z_file_data
             ctx_destroy_context (&file->contexts[i], i);
 
-        buf_destroy (&file->ra_buf);
-        buf_destroy (&file->ra_buf_luft);
-        buf_destroy (&file->chrom2ref_map);
-        buf_destroy (&file->ref2chrom_map);
-        buf_destroy (&file->section_list_buf);
-        buf_destroy (&file->unconsumed_txt);
-        buf_destroy (&file->bgzf_isizes);
-        buf_destroy (&file->coverage);
-        buf_destroy (&file->read_count);
-        buf_destroy (&file->unmapped_read_count);
-        buf_destroy (&file->stats_buf);
-        buf_destroy (&file->STATS_buf);
-        buf_destroy (&file->bound_txt_names);
-        buf_destroy (&file->line_info[0]);
-        buf_destroy (&file->line_info[1]);
-        buf_destroy (&file->vb_info[0]);
-        buf_destroy (&file->vb_info[1]);
-        buf_destroy (&file->recon_plan);
-        buf_destroy (&file->comp_info);
-        buf_destroy (&file->txt_file_info);
-        buf_destroy (&file->sa_groups);
-        buf_destroy (&file->sa_alns);
-        buf_destroy (&file->rejects_report);
-        buf_destroy (&file->apriori_tags);
+        buf_destroy (file->ra_buf);
+        buf_destroy (file->ra_buf_luft);
+        buf_destroy (file->chrom2ref_map);
+        buf_destroy (file->ref2chrom_map);
+        buf_destroy (file->section_list_buf);
+        buf_destroy (file->section_list_vb1);
+        buf_destroy (file->unconsumed_txt);
+        buf_destroy (file->bgzf_isizes);
+        buf_destroy (file->coverage);
+        buf_destroy (file->read_count);
+        buf_destroy (file->unmapped_read_count);
+        buf_destroy (file->stats_buf);
+        buf_destroy (file->STATS_buf);
+        buf_destroy (file->bound_txt_names);
+        buf_destroy (file->line_info[0]);
+        buf_destroy (file->line_info[1]);
+        buf_destroy (file->vb_info[0]);
+        buf_destroy (file->vb_info[1]);
+        buf_destroy (file->recon_plan);
+        buf_destroy (file->txt_header_info);
+        buf_destroy (file->sa_groups);
+        buf_destroy (file->sa_groups_index);
+        buf_destroy (file->sa_alns);
+        buf_destroy (file->sa_qnames);
+        buf_destroy (file->sa_cigars);
+        buf_destroy (file->sa_seq);
+        buf_destroy (file->sa_qual);
+        buf_destroy (file->rejects_report);
+        buf_destroy (file->apriori_tags);
+        buf_destroy (file->vb_sections_index);
+        buf_destroy (file->comp_sections_index);
 
         FREE (file->name);
         FREE (file->basename);
-        FREE (file->gencomp_file_name[0]);
-        FREE (file->gencomp_file_name[1]);
         FREE (file);
     }
 
@@ -1142,7 +1155,7 @@ void file_write (File *file, const void *data, unsigned len)
     ASSERT (bytes_written == len, "failed to write %u bytes to %s: %s", len, file->name, strerror(errno));
 }
 
-void file_remove (const char *filename, bool fail_quietly)
+void file_remove (rom filename, bool fail_quietly)
 {
     chmod (filename, S_IRUSR | S_IWUSR); // make sure its +w so we don't get permission denied (ignore errors)
 
@@ -1150,7 +1163,7 @@ void file_remove (const char *filename, bool fail_quietly)
     ASSERTW (!ret || fail_quietly, "Warning: failed to remove %s: %s", filename, strerror (errno));
 }
 
-void file_mkfifo (const char *filename)
+void file_mkfifo (rom filename)
 {
 #ifndef _WIN32
     file_remove (filename, true);
@@ -1161,7 +1174,7 @@ void file_mkfifo (const char *filename)
 #endif
 }
 
-bool file_is_fifo (const char *filename)
+bool file_is_fifo (rom filename)
 {
     if (flag.is_windows) return false; // we don't support FIFOs in Win32 yet
 
@@ -1171,14 +1184,14 @@ bool file_is_fifo (const char *filename)
     return S_ISFIFO (st.st_mode);
 }
 
-bool file_exists (const char *filename)
+bool file_exists (rom filename)
 {
     if (!filename || !filename[0]) return false;
 
     return !access (filename, F_OK);
 }
 
-bool file_has_ext (const char *filename, const char *extension)
+bool file_has_ext (rom filename, rom extension)
 {
     if (!filename) return false;
 
@@ -1189,8 +1202,8 @@ bool file_has_ext (const char *filename, const char *extension)
 }
 
 // get basename of a filename - we write our own basename for Visual C and Windows compatibility
-const char *file_basename (const char *filename, bool remove_exe, const char *default_basename,
-                           char *basename /* optional pre-allocated memory */, unsigned basename_size /* basename bytes */)
+rom file_basename (rom filename, bool remove_exe, rom default_basename,
+                   char *basename /* optional pre-allocated memory */, unsigned basename_size /* basename bytes */)
 {
     if (!filename) filename = default_basename;
 
@@ -1198,7 +1211,7 @@ const char *file_basename (const char *filename, bool remove_exe, const char *de
     if (remove_exe && file_has_ext (filename, ".exe")) len -= 4; // for Windows
 
     // get start of basename
-    const char *start = filename;
+    rom start = filename;
     for (int i=len-1; i >= 0; i--)
         if (filename[i]=='/' || filename[i]=='\\') {
             start = &filename[i+1];
@@ -1250,7 +1263,7 @@ bool file_seek (File *file, int64_t offset,
     return !ret;
 }
 
-int64_t file_tell_do (File *file, bool soft_fail, const char *func, unsigned line)
+int64_t file_tell_do (File *file, bool soft_fail, rom func, unsigned line)
 {
     if (command == ZIP && file->supertype == TXT_FILE && file->codec == CODEC_GZ)
         return gzconsumed64 ((gzFile)file->file); 
@@ -1270,7 +1283,7 @@ int64_t file_tell_do (File *file, bool soft_fail, const char *func, unsigned lin
     return offset;    
 }
 
-uint64_t file_get_size (const char *filename)
+uint64_t file_get_size (rom filename)
 {
     struct stat64 st;
     
@@ -1280,7 +1293,7 @@ uint64_t file_get_size (const char *filename)
     return st.st_size;
 }
 
-bool file_is_dir (const char *filename)
+bool file_is_dir (rom filename)
 {
     struct stat64 st;
     int ret = stat64(filename, &st); // 0 if successful
@@ -1288,8 +1301,20 @@ bool file_is_dir (const char *filename)
     return !ret && S_ISDIR (st.st_mode);
 }
 
+void file_mkdir (rom dirname)
+{
+    if (file_is_dir (dirname)) return; // already exists - that's ok
+
+#ifdef _WIN32
+    int ret = _mkdir (flag.out_dirname);
+#else
+    int ret = mkdir (flag.out_dirname, 0777);
+#endif
+    ASSERT (!ret, "mkdir(%s) failed: %s", flag.out_dirname, strerror (errno));
+}
+
 // reads an entire file into a buffer. if filename is "-", reads from stdin
-void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *buf_name,
+void file_get_file (VBlockP vb, rom filename, Buffer *buf, rom buf_name,
                     bool add_string_terminator)
 {
     #define MAX_STDIN_DATA_SIZE 10000000
@@ -1307,7 +1332,7 @@ void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *b
     ASSERT (!is_stdin || buf->len < MAX_STDIN_DATA_SIZE, "Error reading from stdin: too much data for stdin (beyond maximum of %u bytes). Try placing the data in a file instead.", MAX_STDIN_DATA_SIZE-1);
 
     if (add_string_terminator) 
-        *AFTERENT (char, *buf) = 0;
+        *BAFTc (*buf) = 0;
 
     FCLOSE (file, filename);
 }
@@ -1316,10 +1341,10 @@ void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *b
 
 static Mutex put_data_mutex = {};
 #define MAX_PUT_DATA_FILES_PER_EXECUTION 10 // maximum files deletable at abort
-static const char *put_data_tmp_filenames[MAX_PUT_DATA_FILES_PER_EXECUTION] = {};
+static rom put_data_tmp_filenames[MAX_PUT_DATA_FILES_PER_EXECUTION] = {};
 static unsigned num_put_files=0;
 
-bool file_put_data (const char *filename, const void *data, uint64_t len, 
+bool file_put_data (rom filename, const void *data, uint64_t len, 
                     mode_t mode) // optional - ignored if 0
 {
     int fn_len = strlen (filename);
@@ -1351,7 +1376,11 @@ bool file_put_data (const char *filename, const void *data, uint64_t len,
 
     mutex_unlock (put_data_mutex);
 
-    size_t written = fwrite (data, 1, len, file);
+    // write in blocks (Windows hangs if the block is too big, a few GB)
+    size_t written = 0;
+    const uint64_t block_size = 1 << 24; // 16MB
+    for (int i=0; i < (len + block_size - 1) / block_size; i++) // round up
+        written += fwrite (&((rom)data)[i * block_size], 1, MIN_(block_size, len - i*block_size), file);
     
     SAVE_VALUE (errno);
     fflush (file);    
@@ -1421,13 +1450,13 @@ void file_kill_external_compressors (void)
     stream_close (&output_compressor,  STREAM_KILL_PROCESS);
 }
 
-const char *ft_name (FileType ft)
+rom ft_name (FileType ft)
 {
     return type_name (ft, &file_exts[ft], sizeof(file_exts)/sizeof(file_exts[0]));
 }
 
 // PIZ: guess original filename from uncompressed txt filename and compression algoritm (allocated memory)
-const char *file_guess_original_filename (const File *file)
+rom file_guess_original_filename (const File *file)
 {
     if (file->codec == CODEC_NONE) return file->name;
 
@@ -1435,7 +1464,7 @@ const char *file_guess_original_filename (const File *file)
     char *org_name = MALLOC (len);
     strcpy (org_name, file->name);
 
-    const char *ext = codec_args[file->codec].ext;
+    rom ext = codec_args[file->codec].ext;
 
     // remove existing extension if needed (eg when replacing .sam with .bam)
     if (ext[0] == '-') {
@@ -1453,7 +1482,7 @@ const char *file_guess_original_filename (const File *file)
     return org_name;
 }
 
-const char *file_plain_ext_by_dt (DataType dt)
+rom file_plain_ext_by_dt (DataType dt)
 {
     FileType plain_ft = txt_in_ft_by_dt[dt][0].in;
 
@@ -1463,7 +1492,7 @@ const char *file_plain_ext_by_dt (DataType dt)
 // eg "file.fastq.gz" -> "file.fastq"
 void file_remove_codec_ext (char *filename, FileType ft)
 {
-    const char *codec_ext;
+    rom codec_ext;
     if (!((codec_ext = strchr (&file_exts[ft][1], '.')))) return; // this file type's extension doesn't have a codec ext (it is, eg ".fastq" not ".fastq.gz")
     
     unsigned codec_ext_len = strlen (codec_ext);

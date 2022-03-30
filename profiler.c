@@ -61,7 +61,8 @@ void profiler_add (ConstVBlockP vb)
     ADD(codec_hapmat_piz_get_one_line);
     ADD(sam_seg_SEQ);
     ADD(sam_cigar_seg);
-    ADD(ctx_compress_one_dict_fragment);
+    ADD(dict_io_compress_one_fragment);
+    ADD(recon_plan_compress_one_fragment);
     ADD(zfile_uncompress_section);
     ADD(buf_alloc);
     ADD(dispatcher_recycle_vbs);
@@ -76,18 +77,23 @@ void profiler_add (ConstVBlockP vb)
     ADD(digest);
     ADD(wait_for_vb_1_mutex);
     ADD(ctx_clone);
-    ADD(ctx_dict_build_word_lists);
+    ADD(dict_io_build_word_lists);
     ADD(aligner_best_match);
     ADD(aligner_get_match_len);
     ADD(aligner_get_word_from_seq);
     ADD(generate_rev_complement_genome);
-    ADD(ctx_read_all_dictionaries);
+    ADD(dict_io_read_all_dictionaries);
     ADD(ref_contigs_compress);
-    ADD(linesorter_compress_recon_plan);
-    ADD(linesorter_compress_qsort);
+    ADD(generate_recon_plan);
+    ADD(vcf_linesort_compress_qsort);
     ADD(ref_load_stored_reference);
     ADD(ref_read_one_range);
     ADD(ref_uncompress_one_range);
+    ADD(sam_sa_prim_finalize_ingest);
+    ADD(sam_zip_prim_ingest_vb);
+    ADD(sam_zip_recon_plan_add_gc_lines);
+    ADD(sam_zip_gc_calc_depn_vb_info);
+    ADD(sam_load_groups_add_one_prim_vb);
     ADD(tmp1);
     ADD(tmp2);
     ADD(tmp3);
@@ -101,7 +107,7 @@ void profiler_add (ConstVBlockP vb)
 
 static inline uint32_t ms(uint64_t ns) { return (uint32_t)(ns / 1000000);}
 
-const char *profiler_print_short (const ProfilerRec *p)
+rom profiler_print_short (const ProfilerRec *p)
 {
     static char str[200]; // not thread safe
     sprintf (str, "read: %u compute:%u write: %u", ms(p->read), ms(p->compute), ms(p->write));
@@ -122,19 +128,19 @@ static void print_ctx_compressor_times (void)
 
 void profiler_print_report (void)
 {
-    static const char *space = "                                                   ";
+    static rom space = "                                                   ";
 #   define PRINT(x, level) if (ms(profile.x)) iprintf ("%.*s" #x ": %u\n", level*3, space, ms(profile.x));
     
-    const char *os = flag.is_windows ? "Windows"
-                   : flag.is_mac     ? "MacOS"
-                   : flag.is_linux   ? "Linux"
-                   :                   "Unknown OS";
+    rom os = flag.is_windows ? "Windows"
+           : flag.is_mac     ? "MacOS"
+           : flag.is_linux   ? "Linux"
+           :                   "Unknown OS";
 
     iprintf ("\n%s PROFILER:\n", command == ZIP ? "ZIP" : "PIZ");
     iprintf ("OS=%s\n", os);
     iprintf ("Build=%s\n", flag.debug ? "Debug" : "Optimized");
 
-    iprintf ("Wallclock: %s milliseconds\n", str_uint_commas (ms (CHECK_TIMER)).s);
+    iprintf ("Wallclock: %s milliseconds\n", str_int_commas (ms (CHECK_TIMER)).s);
 
     if (command != ZIP) { // this is a uncompress operation
 
@@ -143,14 +149,15 @@ void profiler_print_report (void)
         PRINT (ref_load_stored_reference, 2);
         PRINT (ref_read_one_range, 3);
         PRINT (ref_uncompress_one_range, 3);
-        PRINT (ctx_read_all_dictionaries, 2);
-        PRINT (ctx_dict_build_word_lists, 3);
+        PRINT (dict_io_read_all_dictionaries, 2);
+        PRINT (dict_io_build_word_lists, 3);
         PRINT (vb_get_vb, 1);
         PRINT (piz_read_one_vb, 1);
         PRINT (read, 2);
         PRINT (bgzf_io_thread, 1);
         PRINT (bgzf_writer_thread, 1);
         PRINT (write, 1);
+        PRINT (sam_sa_prim_finalize_ingest, 1);
         iprintf ("GENOUNZIP compute threads: %u\n", ms(profile.compute));
         PRINT (zfile_uncompress_section, 1);
         PRINT (compressor_bz2,  2);
@@ -164,10 +171,12 @@ void profiler_print_report (void)
         PRINT (compressor_longr, 2);
         print_ctx_compressor_times();
         PRINT (reconstruct_vb, 1);
+        PRINT (sam_zip_prim_ingest_vb, 1);
         PRINT (digest, 1); // note: in SAM/BAM digest is done in the writer thread, otherwise its done in the compute thread. TODO: change level to 0 in case of SAM/BAM
         PRINT (bgzf_compute_thread, 1);
         PRINT (piz_get_line_subfields, 2);
         PRINT (codec_hapmat_piz_get_one_line, 2);
+        PRINT (sam_load_groups_add_one_prim_vb, 1);
     }
     else { // compress
         iprint0 ("GENOZIP main thread (zip_one_file):\n");
@@ -178,8 +187,11 @@ void profiler_print_report (void)
         PRINT (write, 1);
         PRINT (bgzf_io_thread, 1);
         PRINT (ref_contigs_compress, 1);
-        PRINT (linesorter_compress_recon_plan, 1);
-        PRINT (linesorter_compress_qsort, 2);
+        PRINT (generate_recon_plan, 1);
+        PRINT (vcf_linesort_compress_qsort, 2);
+        PRINT (sam_zip_gc_calc_depn_vb_info, 1);
+        PRINT (sam_zip_recon_plan_add_gc_lines, 1);
+        PRINT (sam_sa_prim_finalize_ingest, 1);
         iprintf ("GENOZIP compute threads %u\n", ms(profile.compute));
         PRINT (ctx_clone, 1);
         PRINT (seg_all_data_lines, 1);
@@ -208,8 +220,9 @@ void profiler_print_report (void)
         PRINT (compressor_pbwt, 2);
         PRINT (compressor_longr, 2);
         PRINT (codec_hapmat_count_alt_alleles, 2);
-
-        PRINT (ctx_compress_one_dict_fragment, 1);
+        PRINT (dict_io_compress_one_fragment, 1);
+        PRINT (recon_plan_compress_one_fragment, 1);
+        PRINT (sam_zip_prim_ingest_vb, 1);
         PRINT (digest, 1);
         PRINT (bgzf_compute_thread, 1);
     }    

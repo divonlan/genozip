@@ -27,7 +27,7 @@ extern bool phy_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struc
 extern void phy_seg_initialize (VBlockP vb);
 extern void phy_seg_finalize (VBlockP vb);
 extern bool phy_seg_is_small (ConstVBlockP vb, DictId dict_id);
-extern const char *phy_seg_txt_line (VBlockP vb, const char *line, uint32_t remaining_txt_len, bool *has_13);
+extern rom phy_seg_txt_line (VBlockP vb, rom line, uint32_t remaining_txt_len, bool *has_13);
 
 //---------------------------------------
 // PHYLIP -> Multifasta translation stuff

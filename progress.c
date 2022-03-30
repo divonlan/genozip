@@ -16,7 +16,7 @@ static bool ever_start_time_initialized = false, test_mode, show_progress;
 static TimeSpecType ever_start_time, component_start_time;
 static float last_percent=0;
 static unsigned last_seconds_so_far=0;
-static const char *component_name=NULL;
+static rom component_name=NULL;
 static unsigned last_len=0; // so we know how many characters to erase on next update
 
 static void progress_human_time (unsigned secs, char *str /* out */)
@@ -33,7 +33,7 @@ static void progress_human_time (unsigned secs, char *str /* out */)
         sprintf (str, "%u %s", secs, secs==1 ? "second" : "seconds");
 }
 
-static const char *progress_ellapsed_time (bool ever)
+static rom progress_ellapsed_time (bool ever)
 {
     TimeSpecType tb; 
     clock_gettime(CLOCK_REALTIME, &tb); 
@@ -48,8 +48,8 @@ static const char *progress_ellapsed_time (bool ever)
     return time_str;
 }
 
-char *progress_new_component (const char *new_component_name, 
-                              const char *message, // can be NULL
+char *progress_new_component (rom new_component_name, 
+                              rom message, // can be NULL
                               int new_test_mode)   // true, false or -1 for unchanged
 {
     char *prefix = NULL;
@@ -148,12 +148,12 @@ void progress_update (char **prefix, uint64_t sofar, uint64_t total, bool done)
     last_seconds_so_far = seconds_so_far;
 }
 
-void progress_update_status (char **prefix, const char *status)
+void progress_update_status (char **prefix, rom status)
 {
     if (flag.quiet) return;
 
-    static const char *eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
-    static const char *spaces = "                                                                                ";
+    static rom eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
+    static rom spaces = "                                                                                ";
 
     if (prefix && *prefix) {
         iprintf ("%s", *prefix);
@@ -170,7 +170,7 @@ void progress_update_status (char **prefix, const char *status)
     progress_newline_since_update = false;
 }
 
-void progress_finalize_component (const char *status)
+void progress_finalize_component (rom status)
 {
     if (!flag.quiet) {
         progress_update_status (NULL, status);
@@ -188,12 +188,12 @@ void progress_finalize_component (const char *status)
     progress_finalize_component (s);  \
 }
 
-void progress_finalize_component_time (const char *status, Digest md5)
+void progress_finalize_component_time (rom status, Digest md5)
 {
     FINALIZE ("%s (%s)", status, progress_ellapsed_time (false));
 }
 
-void progress_finalize_component_time_ratio (const char *me, float ratio, Digest md5)
+void progress_finalize_component_time_ratio (rom me, float ratio, Digest md5)
 {
     if (component_name)
         FINALIZE ("Done (%s, %s compression ratio: %1.1f)", progress_ellapsed_time (false), me, ratio)
@@ -201,7 +201,7 @@ void progress_finalize_component_time_ratio (const char *me, float ratio, Digest
         FINALIZE ("Time: %s, %s compression ratio: %1.1f", progress_ellapsed_time (false), me, ratio);
 }
 
-void progress_finalize_component_time_ratio_better (const char *me, float ratio, const char *better_than, float ratio_than, Digest md5)
+void progress_finalize_component_time_ratio_better (rom me, float ratio, rom better_than, float ratio_than, Digest md5)
 {
     if (component_name) 
         FINALIZE ("Done (%s, %s compression ratio: %1.1f - better than %s by a factor of %1.1f)", 
@@ -211,7 +211,7 @@ void progress_finalize_component_time_ratio_better (const char *me, float ratio,
                   progress_ellapsed_time (false), me, ratio, better_than, ratio_than)
 }
 
-void progress_concatenated_md5 (const char *me, Digest md5)
+void progress_concatenated_md5 (rom me, Digest md5)
 {
     ASSERT0 (!component_name, "expecting component_name=NULL");
 

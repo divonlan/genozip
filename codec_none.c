@@ -8,16 +8,17 @@
 #include "vblock.h"
 #include "buffer.h"
 
-bool codec_none_compress (VBlock *vb, SectionHeader *header,
-                         const char *uncompressed, uint32_t *uncompressed_len, // option 1 - compress contiguous data
-                         LocalGetLineCB callback,                        // option 2 - compress data one line at a tim
-                         char *compressed, uint32_t *compressed_len /* in/out */, 
-                         bool soft_fail)
+bool codec_none_compress (VBlockP vb, SectionHeader *header,
+                          rom uncompressed,   // option 1 - compress contiguous data
+                          uint32_t *uncompressed_len, // in/out (might be modified by complex codecs)
+                          LocalGetLineCB callback,    // option 2 - compress data one line at a tim
+                          char *compressed, uint32_t *compressed_len /* in/out */, 
+                          bool soft_fail, rom name)
 {
     if (*compressed_len < *uncompressed_len && soft_fail) 
         return false;
     
-    ASSERT (*compressed_len >= *uncompressed_len, "expecting compressed_len=%u >= uncompressed_len=%u for ", *compressed_len, *uncompressed_len);
+    ASSERT (*compressed_len >= *uncompressed_len, "\"%s\": expecting compressed_len=%u >= uncompressed_len=%u for ", name, *compressed_len, *uncompressed_len);
 
     if (callback) {
         char *next = compressed;
@@ -38,10 +39,10 @@ bool codec_none_compress (VBlock *vb, SectionHeader *header,
     return true;
 }
 
-void codec_none_uncompress (VBlock *vb, Codec codec, uint8_t param,
-                           const char *compressed, uint32_t compressed_len,
+void codec_none_uncompress (VBlockP vb, Codec codec, uint8_t param,
+                           rom compressed, uint32_t compressed_len,
                            Buffer *uncompressed_buf, uint64_t uncompressed_len, 
-                           Codec unused)
+                           Codec unused, rom name)
 {
     memcpy (uncompressed_buf->data, compressed, compressed_len);
 }

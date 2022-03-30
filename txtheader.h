@@ -9,11 +9,11 @@
 // ZIP stuff
 //----------
 
-extern bool txtheader_zip_read_and_compress (uint64_t *txt_header_size);
+extern bool txtheader_zip_read_and_compress (int64_t *txt_header_offset, CompIType comp_i);
 
 //----------
 // PIZ stuff
 //----------
 
-extern Coords txtheader_piz_read_and_reconstruct (uint32_t component_i, Section txt_header_sl);
+extern void txtheader_piz_read_and_reconstruct (Section txt_header_sec);
 
