@@ -184,8 +184,10 @@ FILE *tar_open_file (const char *z_fn)
     }
 
     // filename: case: last component is longer than 99 - use Gnu LongLink extension
-    else 
+    else {
+        memcpy (hdr.name, z_fn, 99); // fallback for extracting using non-GNU tar: truncated filename 
         tar_write_gnu_long_filename (z_fn, z_fn_len+1);
+    }
 
     // copy mode, uid, gid, uname, gname, mtime from an existing file
     if (!txt_file)                                         tar_copy_metadata_from_file (z_fn);     // case: we're copying an exiting genozip file - take from that genozip file
