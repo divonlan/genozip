@@ -320,11 +320,11 @@ clean: clean-docs
 genozip-prod$(EXE): 
 	@echo "building prod"
 	@$(SH_VERIFY_ALL_COMMITTED)
-	#@(cd ../genozip-prod ; git pull ; rm -Rf $(OBJDIR) ; make -j clean ; touch dict_id_gen.h ; make -j)
-	#@cp ../genozip-prod/genozip$(EXE) ../genozip/genozip-prod$(EXE)
-	#@cp ../genozip-prod/genozip$(EXE) ../genozip/private/releases/genozip-$(version)$(EXE)
-	#@cp ../genozip-prod/genounzip$(EXE) ../genozip/genounzip-prod$(EXE)
-	#@cp ../genozip-prod/genocat$(EXE) ../genozip/genocat-prod$(EXE)
+	@(cd ../genozip-prod ; git pull ; rm -Rf $(OBJDIR) ; make -j clean ; touch dict_id_gen.h ; make -j)
+	@cp ../genozip-prod/genozip$(EXE) ../genozip/genozip-prod$(EXE)
+	@cp ../genozip-prod/genozip$(EXE) ../genozip/private/releases/genozip-$(version)$(EXE)
+	@cp ../genozip-prod/genounzip$(EXE) ../genozip/genounzip-prod$(EXE)
+	@cp ../genozip-prod/genocat$(EXE) ../genozip/genocat-prod$(EXE)
 
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
 ifeq ($(OS),Windows_NT)
@@ -458,7 +458,7 @@ distribution: increment-version testfiles $(DOCS)/genozip-linux-x86_64.tar.build
 	@(cd ../genozip-feedstock/ ; git pull)
 
 distribution-maintenance: increment-version testfiles $(DOCS)/genozip-linux-x86_64.tar.build $(DOCS)/genozip-installer.exe $(DOCS)/RELEASE_NOTES.for-docs.txt \
-                          push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
+                          push-build conda/.conda-timestamp mak
 	@(cd ../genozip-feedstock/ ; git pull)
 
 test-backup: genozip.exe
