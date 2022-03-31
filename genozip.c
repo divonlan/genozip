@@ -393,7 +393,7 @@ static void main_genozip (const char *txt_filename,
     if (!txt_file) {
         if (tar_is_tar()) {
             tar_copy_file (txt_filename);
-            WARN ("Copied %s which has size=0 to the tar file", txt_filename);
+            WARN ("Copied %s to the tar file", txt_filename);
         }    
         else
             WARN ("Cannot compress file %s because its size is 0 - skipping it", txt_filename);

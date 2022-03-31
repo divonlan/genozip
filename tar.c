@@ -21,6 +21,8 @@
 #define MAX_TAR_UID_GID 07777777 // must fit in 8 characters, inc. \0, printed in octal
 #define NOBODY  65534            // used for UID / GID in case real values are beyond MAX_TAR_UID_GID. https://wiki.ubuntu.com/nobody
 
+#define ROUNDUP512(x) (((x) + 0x1ff) & ~(typeof(x))0x1ff)    // round up to the nearest 512
+
 // each file in the tar file is comprised a 512-byte "ustar" header followed by 512-byte blocks. tar file is terminated
 // by two zero 512B blocks. see: http://manpages.ubuntu.com/manpages/bionic/man5/tar.5.html
 typedef struct __attribute__ ((packed)){
@@ -114,6 +116,42 @@ static void tar_copy_metadata_from_file (const char *fn)
     #endif
 }
 
+// filenames that have a last component longer than 99 characters don't fit in POSIX tar. Instead, we use a GNU-specific extension
+// of storing the filename as a pseudo-file in the tarball. See: https://itecnote.com/tecnote/r-what-exactly-is-the-gnu-tar-longlink-trick/
+static void tar_write_gnu_long_filename (const char *z_fn, unsigned z_fn_len/* including \0 */)
+{
+    HeaderPosixUstar ll_hdr = {
+        .name     = "././@LongLink",
+        .mode     = "0000644",
+        .uid      = "0000000", 
+        .gid      = "0000000", 
+        .mtime    = "00000000000",
+        .typeflag = { 'L' }, // long file name
+        .magic    = "ustar",
+        .version  = {'0', '0'},
+        .uname    = "root",
+        .gname    = "root",
+        .checksum = {' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ' }, // required checksum value, while calculating the checksum (8 spaces)
+    };
+    sprintf (ll_hdr.size.std, "%o", z_fn_len); // +1 for \0
+
+    // header checksum
+    unsigned checksum = 0;
+    for (unsigned i=0; i < 512; i++) checksum += ((unsigned char*)&ll_hdr)[i];
+    sprintf (ll_hdr.checksum, "%06o", checksum);
+
+    ASSERT (fwrite (&ll_hdr, 512,   1, tar_file) == 1, "failed to write LongLink header of %s to %s", z_fn, tar_name); 
+    ASSERT (fwrite (z_fn, z_fn_len, 1, tar_file) == 1, "failed to write long filename of %s to %s", z_fn, tar_name); 
+
+    // pad to full block
+    if (z_fn_len % 512) {
+        char padding[512] = "";
+        ASSERT (fwrite (padding, ROUNDUP512(z_fn_len) - z_fn_len, 1, tar_file) == 1, "failed to write long filename padding of %s to %s", z_fn, tar_name); 
+    }
+
+    file_offset += 512 + ROUNDUP512(z_fn_len);
+}
+
 // open z_file within tar, for writing
 FILE *tar_open_file (const char *z_fn)
 {
@@ -135,17 +173,19 @@ FILE *tar_open_file (const char *z_fn)
 
     // filename: case: name is up to 99 characters 
     unsigned z_fn_len = strlen (z_fn);
+    const char *sep;
     if (z_fn_len <= 99) 
         memcpy (hdr.name, z_fn, z_fn_len);
     
-    // filename: case: filename is longer than 99 - split between "name" and "prefix" field (separated at a '/', and excluding the seperating '/')
-    else {
-        const char *sep = strchr (&z_fn[z_fn_len-100], '/');
-        ASSERT (sep || ((sep - z_fn) > 154), "cannot add %s to tar file - name too long", z_fn);
-
+    // filename: case: filename is longer than 99, but last component is at most 99 - split between "name" and "prefix" field (separated at a '/', and excluding the seperating '/')
+    else if ((sep = strchr (&z_fn[z_fn_len-100], '/'))) {
         memcpy (hdr.prefix, z_fn, sep - z_fn);
         memcpy (hdr.name, sep+1, (&z_fn[z_fn_len] - (sep+1)));
     }
+
+    // filename: case: last component is longer than 99 - use Gnu LongLink extension
+    else 
+        tar_write_gnu_long_filename (z_fn, z_fn_len+1);
 
     // copy mode, uid, gid, uname, gname, mtime from an existing file
     if (!txt_file)                                         tar_copy_metadata_from_file (z_fn);     // case: we're copying an exiting genozip file - take from that genozip file
@@ -153,8 +193,8 @@ FILE *tar_open_file (const char *z_fn)
     else                                                   tar_copy_metadata_from_file (txt_name); // case: zipping a txt_file on disk - take from that txt file
 
     ASSERT (fwrite (&hdr, 512, 1, tar_file) == 1, "failed to write header of %s to %s", z_fn, tar_name); // place holder - we will update this upon close
-
     file_offset += 512; // past tar header
+
     return tar_file;
 }
 
@@ -180,12 +220,13 @@ void tar_close_file (void **file)
     int64_t z_size = tar_size - file_offset;
 
     // file consist of full 512-byte records. pad it to make it so:
-    int64_t bytes_to_full_record = (tar_size & 0x1ff) ? (512 - (tar_size & 0x1ff)) : 0;
-    if (bytes_to_full_record) {
-        char s[512] = "";
-        ASSERT (fwrite (s, bytes_to_full_record, 1, tar_file) == 1, "failed to write file padding to %s", tar_name);
+    int64_t padding_len = ROUNDUP512(tar_size) - tar_size;
+
+    if (padding_len) {
+        char padding[512] = "";
+        ASSERT (fwrite (padding, padding_len, 1, tar_file) == 1, "failed to write file padding to %s", tar_name);
         
-        tar_size += bytes_to_full_record; 
+        tar_size += padding_len; 
     }
 
     // size - case < 8GB store in nul-terminated octal in ASCII (33 bits = 11 octal numerals x 3 bits each) - standard tar
