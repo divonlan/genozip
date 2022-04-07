@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_md.c
-//   Copyright (C) 2021-2022 Black Paw Ventures Limited
+//   Copyright (C) 2021-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 // ----------------------------------------------------------------------------------------
@@ -137,6 +137,8 @@ static inline bool sam_md_consume_M (VBlockSAMP vb, char **md_in_out, uint32_t *
 //   sam_seg_SEQ will conduct the final verification step of comparing this bitmap to the one calculated from the SEQ data.
 void sam_seg_MD_Z_analyze (VBlockSAMP vb, STRp(md), PosType pos, rom cigar)
 {
+    if (!sam_is_main_vb) return; // we don't yet use SPECIAL for MDs in PRIM/DEPN, because we reconstruct from SA Group, not SQBITMAP. TO DO: need version of SPECIAL that copied from SEQ
+
     RangeP range = NULL;
     RefLock lock;
 
@@ -201,7 +203,7 @@ not_verified:
     vb->md_verified = false;
 
     if (flag.show_wrong_md)
-        iprintf ("vb=%u line=%"PRIu64" RNAME=%.*s POS=%"PRId64" CIGAR=%s MD=%.*s Special MD not suitable (no harm)\n", 
+        iprintf ("vb=%u line=%d RNAME=%.*s POS=%"PRId64" CIGAR=%s MD=%.*s Special MD not suitable (no harm)\n", 
                  vb->vblock_i, vb->line_i, STRf(vb->chrom_name), pos, vb->last_cigar, vb->last_txt_len(OPTION_MD_Z), last_txt(vb, OPTION_MD_Z));
 }
 
@@ -212,7 +214,7 @@ void sam_MD_Z_seg (VBlockSAMP vb,  ZipDataLineSAM *dl, STRp(md), unsigned add_by
 {
     segconf_set_has (OPTION_MD_Z);
 
-    if (vb->md_verified) 
+    if (vb->md_verified && sam_is_main_vb) 
         seg_by_did_i (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_MD }, 2, OPTION_MD_Z, add_bytes);
     else if (md_len <= 7)
         seg_by_did_i (VB, STRa(md), OPTION_MD_Z, add_bytes);
@@ -243,9 +245,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_MD)
         uint32_t n = cigar[op_i].n;
 
         switch (cigar[op_i].op) {
-            case BC_M :
-            case BC_E :
-            case BC_X :               
+            case BC_M : case BC_E : case BC_X :               
                 // reconstruct a series of <number><base> where number can be 0 and the base of the last pair can be missing. eg: 0T12A4
                 while (n) {
                     while (n && NEXTLOCALBIT (sqbitmap_ctx)) {

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   regions.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "genozip.h"
@@ -13,6 +13,7 @@
 #include "vcf.h"
 #include "file.h"
 #include "contigs.h"
+#include "piz.h"
 
 // region as parsed from the --regions option
 typedef struct {
@@ -399,8 +400,8 @@ bool regions_is_site_included (VBlockP vb)
     if (chrom == WORD_INDEX_NONE ||  
         (vb->data_type==DT_VCF && (vcf_vb_is_luft(vb) != flag.luft))) return true; // always include all rejected variants in the vcf header
 
-    ASSERT (chrom >= 0 && chrom < num_chroms, "chrom=%d is out of range: num_chroms=%u chrom_did_i=%u vb_i=%u vb->line_i=%"PRIu64, 
-            chrom, num_chroms, chrom_did_i, vb->vblock_i, vb->line_i);
+    ASSPIZ (chrom >= 0 && chrom < num_chroms, "chrom=%d is out of range: num_chroms=%u chrom_did_i=%u", 
+            chrom, num_chroms, chrom_did_i);
 
     // it sufficient that the site is included in one (positive) region
     Buffer *chregs_buf = &chregs[chrom];

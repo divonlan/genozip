@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   gff3.h
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #pragma once
@@ -24,6 +24,7 @@
 #pragma GENDICT GFF3_EOL=DTYPE_FIELD=EOL
 #pragma GENDICT GFF3_TOPLEVEL=DTYPE_FIELD=TOPLEVEL
 #pragma GENDICT GFF3_COMMENT=DTYPE_FIELD=COMMENT
+#pragma GENDICT GFF3_DEBUG_LINES=DTYPE_FIELD=DBGLINES      // used by --debug-lines
 
 // standard GFF3 attributes defined in https://github.com/The-Sequence-Ontology/Specifications/blob/master/gff3.md
 #pragma GENDICT ATTR_ID=DTYPE_1=ID

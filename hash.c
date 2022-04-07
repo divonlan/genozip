@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   hash.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include <math.h>
@@ -198,7 +198,7 @@ uint32_t hash_get_estimated_entries (VBlockP merging_vb, Context *zctx, const Co
 
         effective_num_vbs = ceil (log (1/n3) / (3 * log (1/n2n3_density_ratio) )); // note that n2n3_density_ratio > 1.05 and n3 >= 1 due to the if statements above
 
-        for (gp = sizeof(growth_plan) / sizeof(growth_plan[0]) - 1; gp >= 0 ; gp--)
+        for (gp = ARRAY_LEN(growth_plan) - 1; gp >= 0 ; gp--)
             if (MIN_(effective_num_vbs + 1 /* +1 for first vb */, estimated_num_vbs) > growth_plan[gp].vbs) {
                 estimated_entries = first_merging_vb_ctx->nodes.len * n2_n3_density * growth_plan[gp].factor;
                 break;

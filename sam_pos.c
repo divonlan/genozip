@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_pos.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 // a module for handling POS and PNEXT
@@ -21,7 +21,7 @@ static void sam_seg_POS_segconf (VBlockSAMP vb, WordIndex prev_line_chrom, PosTy
 
     // evidence of not being sorted: our RNAME is different than previous line, but we encountered it before
     if (segconf.sam_is_sorted && (prev_line_chrom != NODE_INDEX_NONE) && (prev_line_chrom != vb->chrom_node_index) && 
-        *B(int64_t, CTX(SAM_RNAME)->counts, vb->chrom_node_index) > 1) // 1 if it has been segged on this line for the first time
+        *B32 (CTX(SAM_RNAME)->counts, vb->chrom_node_index) > 1) // 1 if it has been segged on this line for the first time
         segconf.sam_is_sorted = false;
     
     // evidence of not being entirely unmapped: we have POS in at least one line

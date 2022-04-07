@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   context_struct.h
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #pragma once
@@ -50,7 +50,7 @@ typedef struct Context {
     
     Buffer ol_dict;            // ZIP VB: tab-delimited list of all unique snips - overlayed all previous VB dictionaries
                                // ZIP zfile: singletons are stored here
-                               // PIZ: counts are read to here (from SEC_COUNTS) - aligned to the words in word_list/dict
+                               // PIZ: counts are read to here (from SEC_COUNTS) - aligned to the words in word_list/dict (VB:uint32_t, z_file:uint64_t)
     union {
     Buffer ol_nodes;           // ZIP array of CtxNode - overlayed all previous VB dictionaries. char/word indices are into ol_dict.
     Buffer ston_nodes;         // ZIP z_file: nodes of singletons
@@ -174,8 +174,8 @@ typedef struct Context {
     uint32_t last_txt_index;   // ZIP/PIZ: index into vb->txt_data of last seg/reconstruction (always in PIZ, sometimes in Seg) (introduced 10.0.5)
     uint32_t last_txt_len;     // ZIP/PIZ: length (in vb->txt_data) of last seg/reconstruction (always in PIZ, sometimes in Seg)
 
-    #define LAST_LINE_I_INIT -0x7fffffffffffffffULL
-    int64_t last_line_i;       // ZIP/PIZ: =vb->line_i this line, so far, generated a valid last_value that can be used by downstream fields 
+    #define LAST_LINE_I_INIT -0x7fffffff
+    LineIType last_line_i;     // ZIP/PIZ: =vb->line_i this line, so far, generated a valid last_value that can be used by downstream fields 
                                //          =(-vb->line_i-1) means ctx encountered in this line (so far) but last_value was not set 
     int32_t last_sample_i;     // ZIP/PIZ: Current sample in VCF/FORMAT ; must be set to 0 if not VCF/FORMAT
     int32_t ctx_specific;

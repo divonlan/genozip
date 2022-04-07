@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   vblock.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 // vb stands for VBlock - it started its life as VBlockVCF when genozip could only compress VCFs, but now
@@ -64,7 +64,7 @@ void vb_release_vb_do (VBlockP *vb_p, rom task_name, rom func)
     threads_log_by_vb (vb, vb->compute_task ? vb->compute_task : func, "RELEASING VB", 0);
 
     if (flag.show_vblocks) 
-        iprintf ("VB_RELEASE(task=%s id=%d) vb_i=%d comp_i=%u caller=%s\n", task_name, vb->id, vb->vblock_i, vb->comp_i, func);
+        iprintf ("VB_RELEASE(task=%s id=%d) vb=%s/%d caller=%s\n", task_name, vb->id, comp_name (vb->comp_i), vb->vblock_i, func);
 
     if (flag.show_time) 
         profiler_add (vb);
@@ -82,15 +82,16 @@ void vb_release_vb_do (VBlockP *vb_p, rom task_name, rom func)
     // vb->data_type_alloced (maybe changed by vb_get_vb)
     // vb->id
 
-    vb->first_line = vb->vblock_i = vb->fragment_len = vb->fragment_num_words = 0;
-    vb->recon_size = vb->txt_size = vb->txt_size_source_comp = vb->longest_line_len = vb->line_i = vb->sample_i = 0;
+    vb->vblock_i = vb->fragment_len = vb->fragment_num_words = 0;
+    vb->line_i = 0;
+    vb->recon_size = vb->txt_size = vb->txt_size_source_comp = vb->longest_line_len = vb->sample_i = 0;
     vb->comp_i = 0;
     vb->dispatch = vb->is_processed = vb->preprocessing = vb->has_ctx_index = vb->maybe_lines_dropped = vb->show_containers = false;
     vb->z_next_header_i = 0;
     vb->num_contexts = 0;
     vb->chrom_node_index = vb->chrom_name_len = vb->seq_len = 0; 
     vb->vb_position_txt_file = vb->line_start = 0;
-    vb->num_lines_at_1_3 = vb->num_lines_at_2_3 = vb->num_nondrop_lines = 0;
+    vb->num_lines_at_1_3 = vb->num_lines_at_2_3 = vb->num_nondrop_lines = vb->debug_line_hash = 0;
     vb->num_type1_subfields = vb->num_type2_subfields = 0;
     vb->range = NULL;
     vb->flags = (union FlagsVbHeader){};
@@ -171,7 +172,7 @@ void vb_destroy_vb_do (VBlockP *vb_p, rom func)
             if (*c) {
                 #define REL_LOC(field) (((char*)(&((VBlockP )vb)->field)) - (char*)vb) // <-- to use private datatype VBlocks, temporarily include the private .h for debugging
                 fprintf (stderr, "sizeof_vb=%u sizeof(VBlock)=%u. Bad byte=%u Your field: %u\n", 
-                         sizeof_vb, (int)sizeof (VBlock), (unsigned)(c - (char*)vb), (int)REL_LOC(show_containers)); // <-- to find the offending field, plug in field names and run iteratively
+                         sizeof_vb, (int)sizeof (VBlock), (unsigned)(c - (char*)vb), (int)REL_LOC(contexts[300])); // <-- to find the offending field, plug in field names and run iteratively
                 
                 ABORT ("vb_release_vb_do of %s didn't fully clear the VB, byte %u != 0", dt_name(dt), (unsigned)(c - (char*)vb));
             }
@@ -335,7 +336,7 @@ void vb_cleanup_memory (void)
         VBlockP vb = pool->vb[vb_i];
         if (vb && 
             vb->data_type == z_file->data_type && // skip VBs that were initialized by a previous file of a different data type and not used by this file
-            DTPZ(cleanup_memory)) 
+            DTPZ(cleanup_memory))        
             DTPZ(cleanup_memory)(vb);
     }
 

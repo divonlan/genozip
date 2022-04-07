@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   buffer.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 // memory management - when running the same code by the same thread for another variant block - we reuse
@@ -78,9 +78,21 @@ char *buf_display (const Buffer *buf)
 
 const BufDescType buf_desc (const Buffer *buf)
 {
+    #define IS_CONTEXT(ctxs) ((rom)buf >= (rom)ctxs && (rom)buf < (rom)&ctxs[MAX_DICTS])
+    #define TAG_NAME(ctxs) ctxs[((rom)buf - (rom)ctxs) / (sizeof (ctxs) / MAX_DICTS /*note: may be different than sizeof(Context) due to word alignment*/)].tag_name
+
+    // case: buffer is one of the Buffers within a Context - show tag_name
+    rom tag_name = NULL;
+    if (buf->vb && buf->vb != evb && IS_CONTEXT(buf->vb->contexts))
+        tag_name = TAG_NAME (buf->vb->contexts);
+    else if (buf->vb && buf->vb == evb && IS_CONTEXT(z_file->contexts))
+        tag_name = TAG_NAME (z_file->contexts);
+
     BufDescType desc; // use static memory instead of malloc since we could be in the midst of a memory issue when this is called
-    sprintf (desc.s, "\"%s\" param=%"PRId64" len=%"PRIu64" size=%"PRId64" type=%s allocated in %s:%u by vb_i=%d", 
-             buf->name ? buf->name : "(no name)", buf->param, buf->len, buf->size, buf_display_type (buf), buf->func ? buf->func : "(no func)", buf->code_line, 
+    sprintf (desc.s, "\"%s\"%s%s param=%"PRId64" len=%"PRIu64" size=%"PRId64" type=%s allocated in %s:%u by vb_i=%d", 
+             buf->name ? buf->name : "(no name)", 
+             tag_name ? " ctx=" : "", tag_name ? tag_name : "",
+             buf->param, buf->len, buf->size, buf_display_type (buf), buf->func ? buf->func : "(no func)", buf->code_line, 
              (buf->vb ? buf->vb->vblock_i : -999));
     return desc;
 }
@@ -127,7 +139,7 @@ static inline void buf_verify_integrity (const Buffer *buf, FUNCLINE, rom buf_fu
     if (buf->vb == evb) return; // we cannot (easily) test evb (see comment in buf_has_overflowed)
  
     // note: // overlayed buffers might be partial and start at a different address 
-    ASSERTGOTO (buf->type == BUF_OVERLAY || *(uint64_t *)(buf->memory) == UNDERFLOW_TRAP, "called from %s:%u to %s: Error in of %s: buffer has corrupt underflow trap",
+    ASSERTGOTO (buf->type == BUF_OVERLAY || *(uint64_t *)(buf->memory) == UNDERFLOW_TRAP, "called from %s:%u to %s: Error in %s: buffer has corrupt underflow trap",
                 func, code_line, buf_func, buf_desc(buf).s);
 
     ASSERTGOTO (*(uint64_t *)(buf->memory + sizeof(uint64_t) + buf->size) == OVERFLOW_TRAP, "called from %s:%u to %s: Error in %s: buffer has corrupt overflow trap",
@@ -144,6 +156,7 @@ error:
 static void buf_find_underflow_culprit (rom memory, rom msg)
 {
     VBlockPool *vb_pool = vb_get_pool();
+    if (!vb_pool) return; // pool not allocated yet (eg error is in segconf)
     
     bool found=false;
     for (int vb_i=-1; vb_i < (int)vb_pool->num_vbs; vb_i++) {
@@ -511,7 +524,7 @@ uint64_t buf_alloc_do (VBlockP vb,
 
 #define REQUEST_TOO_BIG_THREADSHOLD (3ULL << 30) // 3 GB
     if (requested_size > REQUEST_TOO_BIG_THREADSHOLD && !buf->can_be_big) // use WARN instead of ASSERTW to have a place for breakpoint
-        WARN ("Warning: buf_alloc called from %s:%u requested %s. This is suspiciously high and might indicate a bug. buf=%s line_i=%"PRIu64,
+        WARN ("Warning: buf_alloc called from %s:%u requested %s. This is suspiciously high and might indicate a bug. buf=%s line_i=%d",
               func, code_line, str_size (requested_size).s, buf_desc (buf).s, vb->line_i);
 
     // sanity checks

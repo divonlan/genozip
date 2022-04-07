@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   vblock.h
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #pragma once
@@ -42,9 +42,9 @@
     Buffer lines;                 /* ZIP: An array of *DataLine* - the lines in this VB */\
                                   /* PIZ: array of (num_lines+1) x (char *) - pointer to within txt_data - start of each line. last item is BAFT(txt_data). */\
     BitArrayP is_dropped;         /* PIZ: a bitarray with a bit set is the line is marked for dropping by container_reconstruct_do */ \
-    uint64_t first_line;          /* PIZ: line number in source txt file (counting from 1), of this variant block */\
-                                  /* ZIP: used for optimize_DESC in FASTQ and add_line_numbers in VCF */ \
     uint32_t num_lines_at_1_3, num_lines_at_2_3; /* ZIP VB=1 the number of lines segmented when 1/3 + 2/3 of estimate was reached  */\
+    uint32_t debug_line_hash;     /* Seg: adler32 of line, used if Seg modifies line */\
+    bool debug_line_hash_skip;    /* Seg: don't calculate debug_line_hash as line is skipped */\
     \
     /* tracking execution */\
     uint64_t vb_position_txt_file;/* position of this VB's data in the plain text file (i.e after decompression if the txt_file is compressed) */\
@@ -54,7 +54,7 @@
     int32_t txt_size_source_comp; /* ZIP: when source file is internally compressed - apporx. compressed size attributable to this VB's data */\
     uint32_t longest_line_len;    /* length of longest line of text line in this vb. calculated by seg_all_data_lines */\
     uint32_t sample_i;            /* ZIP/PIZ: VCF: current sample in line (0-based) */ \
-    uint64_t line_i;              /* ZIP: current line in VB (0-based) being segmented PIZ: current line in txt file */\
+    LineIType line_i;             /* ZIP/PIZ: current line in VB (0-based) being segmented/reconstructed */\
     int64_t rback_id;             /* ZIP: sequential number of current rollback point */ \
     uint32_t line_start;          /* ZIP/PIZ: position of start of line currently being segged / reconstructed in vb->txt_data */\
     \
@@ -69,7 +69,7 @@
     uint8_t num_type2_subfields; \
     RangeP range;                 /* ZIP: used for compressing the reference ranges. SAM PIZ: used */ \
     \
-    int32_t buddy_line_i;         /* ZIP/PIZ: buddy line of current line (Seg: set in sam_seg_QNAME ; PIZ: set in reconstruct_from_buddy) */\
+    LineIType buddy_line_i;       /* ZIP/PIZ: buddy line of current line (Seg: set in sam_seg_QNAME ; PIZ: set in reconstruct_from_buddy) */\
     \
     uint32_t num_rollback_ctxs;   /* ZIP: Seg rollback contexts */ \
     ContextP rollback_ctxs[MEDIUM_CON_NITEMS]; \

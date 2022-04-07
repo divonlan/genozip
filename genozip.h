@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   genozip.h
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #pragma once
@@ -84,9 +84,9 @@ typedef enum { DT_NONE=-1, // used in the code logic, never written to the file
                DT_BAM=7, DT_BCF=8, DT_GENERIC=9, DT_PHYLIP=10, DT_CHAIN=11, DT_KRAKEN=12, 
                DT_LOCS=13, DT_BCL=14, NUM_DATATYPES 
              } DataType; 
-#define Z_DT(dt) (z_file->data_type == (dt))
+#define Z_DT(dt)   (z_file->data_type   == (dt))
 #define TXT_DT(dt) (txt_file->data_type == (dt))
-#define VB_DT(dt) (vb->data_type == (dt))
+#define VB_DT(dt)  (vb->data_type       == (dt))
 
 typedef enum { DTYPE_FIELD, DTYPE_1, DTYPE_2 } DictIdType;
 
@@ -122,6 +122,7 @@ typedef uint32_t VBIType;     // vblock_i
 typedef uint64_t CharIndex;   // index within dictionary
 typedef int32_t WordIndex;    // used for word and node indices
 typedef int64_t PosType;      // used for position coordinate within a genome
+typedef int32_t LineIType;
 typedef const char *rom;      // "read-only memory"
 typedef const uint8_t *bytes; // read-only array of bytes
 
@@ -247,7 +248,7 @@ typedef SORTER ((*Sorter));
 #define DESCENDING_SORTER(func_name,struct_type,struct_field) \
     SORTER (func_name) { return DESCENDING (struct_type, struct_field); }
 
-#define DO_ONCE static uint64_t do_once=0; if (!(do_once++))  // note: not thread-safe - in compute threads, in rare race-conditions, this can be executed more than once
+#define DO_ONCE static uint64_t do_once=0; if (!__atomic_test_and_set (&do_once, __ATOMIC_RELAXED))  
 
 // Strings - declarations
 #define STR(x)   rom x;        uint32_t x##_len
@@ -341,7 +342,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 #define ENC_NAMES { "NO_ENC", "AES256" }
 
 #define COMPRESSOR_CALLBACK(func) \
-void func (VBlockP vb, uint64_t vb_line_i, \
+void func (VBlockP vb, LineIType vb_line_i, \
            char **line_data, uint32_t *line_data_len,  \
            uint32_t maximum_size, /* might be less than the size available if we're sampling in zip_assign_best_codec() */ \
            bool *is_rev)          // QUAL and SEQ callbacks - must be returned in SAM/BAM and set to 0 elsewhere

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   phylip.h
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #pragma once
@@ -13,6 +13,7 @@
 #pragma GENDICT PHY_EOL=DTYPE_FIELD=EOL
 #pragma GENDICT PHY_TOPLEVEL=DTYPE_FIELD=TOPLEVEL
 #pragma GENDICT PHY_TOP2FASTA=DTYPE_FIELD=TOP2FA
+#pragma GENDICT PHY_DEBUG_LINES=DTYPE_FIELD=DBGLINES      // used by --debug-lines
 
 // ZIP side
 COMPRESSOR_CALLBACK(phy_zip_id);

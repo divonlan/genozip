@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   chain.c
-//   Copyright (C) 2021-2022 Black Paw Ventures Limited
+//   Copyright (C) 2021-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 // handle UCSC Chain format: https://genome.ucsc.edu/goldenPath/help/chain.html
@@ -374,7 +374,7 @@ rom chain_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_tx
 
     seg_create_rollback_point (VB, NULL, NUM_CHAIN_FIELDS, CHAIN_NAMELUFT, CHAIN_STRNDLUFT, CHAIN_STARTLUFT, CHAIN_ENDLUFT, CHAIN_SIZELUFT, 
                                CHAIN_NAMEPRIM, CHAIN_STRNDPRIM, CHAIN_STARTPRIM, CHAIN_ENDPRIM, CHAIN_SIZEPRIM, CHAIN_CHAIN, CHAIN_SCORE, 
-                               CHAIN_ID, CHAIN_VERIFIED, CHAIN_SET, CHAIN_SIZE, CHAIN_GAPS, CHAIN_EOL, CHAIN_TOPLEVEL, CHAIN_SEP);
+                               CHAIN_ID, CHAIN_VERIFIED, CHAIN_SET, CHAIN_SIZE, CHAIN_GAPS, CHAIN_EOL, CHAIN_TOPLEVEL, CHAIN_SEP, CHAIN_DEBUG_LINES);
     typeof(vb->recon_size) save_recon_size = vb->recon_size;
 
     int32_t len = BAFTc (vb->txt_data) - field_start_line;
@@ -522,8 +522,8 @@ bool chain_piz_initialize (void)
     mutex_initialize (chain_mutex);
 
     if (flag.reading_chain) {
-        contigs_build_contig_pkg_from_ctx (&prim_ctgs, ZCTX(CHAIN_NAMEPRIM), SORT_BY_NAME | SORT_BY_AC);
-        contigs_build_contig_pkg_from_ctx (&luft_ctgs, ZCTX(CHAIN_NAMELUFT), SORT_BY_NONE);
+        contigs_build_contig_pkg_from_zctx (&prim_ctgs, ZCTX(CHAIN_NAMEPRIM), SORT_BY_NAME | SORT_BY_AC);
+        contigs_build_contig_pkg_from_zctx (&luft_ctgs, ZCTX(CHAIN_NAMELUFT), SORT_BY_NONE);
 
         // add length from reference - same index as the contigs were copied from the reference to the CHAIN_NAMELUFT ctx during ZIP
         ARRAY (Contig, ctg, luft_ctgs.contigs);
@@ -763,17 +763,17 @@ uint64_t chain_get_num_prim_contigs (void)
 
 static void chain_contigs_show (bool is_primary)
 {
-    ContextP ctx = ZCTX (is_primary ? CHAIN_NAMEPRIM : CHAIN_NAMELUFT);
-    ASSERTISALLOCED (ctx->counts); // will fail with chain files compressed prior to 12.0.35
+    ContextP zctx = ZCTX (is_primary ? CHAIN_NAMEPRIM : CHAIN_NAMELUFT);
+    ASSERTISALLOCED (zctx->counts); // will fail with chain files compressed prior to 12.0.35
 
     const Buffer *contigs = is_primary ? &prim_ctgs.contigs : &luft_ctgs.contigs;
     ARRAY (const Contig, cn, *contigs);
 
     iprintf ("\n%s chain file contigs:\n", is_primary ? "PRIMARY" : "LUFT");
     for (uint32_t i=0; i < contigs->len; i++) 
-        if (*B(int64_t, ctx->counts, i)) // counts>0 means contig (copied from reference) appears in chain file
+        if (*B64(zctx->counts, i)) // counts>0 means contig (copied from reference) appears in chain file
             iprintf ("%s index=%-2u %s length=%"PRId64" %s\n", is_primary ? "PRIMARY" : "LUFT", i, 
-                     ctx_get_words_snip (ctx, i), cn[i].max_pos, display_acc_num (&cn[i].metadata.parsed.ac).s);
+                     ctx_get_words_snip (zctx, i), cn[i].max_pos, display_acc_num (&cn[i].metadata.parsed.ac).s);
 }
 
 // zip: load chain file as a result of genozip --chain

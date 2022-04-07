@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   txtfile.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
  
 #ifdef __APPLE__
@@ -24,18 +24,13 @@
 #include "libdeflate/libdeflate.h"
 #include "bzlib/bzlib.h"
 
-rom txtfile_dump_filename (VBlockP vb, rom base_name, rom ext) 
-{
-    char *dump_filename = MALLOC (strlen (base_name) + 100); // we're going to leak this allocation
-    sprintf (dump_filename, "%s.vblock-%u.start-%"PRIu64".len-%u.%s", 
-             base_name, vb->vblock_i, vb->vb_position_txt_file, (uint32_t)vb->txt_data.len, ext);
-    return dump_filename;
-}
-
 // dump bad vb to disk
 rom txtfile_dump_vb (VBlockP vb, rom base_name)
 {
-    rom dump_filename = txtfile_dump_filename (vb, base_name, "bad");
+    char *dump_filename = MALLOC (strlen (base_name) + 100); // we're going to leak this allocation
+    sprintf (dump_filename, "%s.vblock-%u.start-%"PRIu64".len-%u.bad", 
+             base_name, vb->vblock_i, vb->vb_position_txt_file, (uint32_t)vb->txt_data.len);
+
     buf_dump_to_file (dump_filename, &vb->txt_data, 1, false, false, false, false);
 
     return dump_filename;

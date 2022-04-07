@@ -1,6 +1,6 @@
 This program, "Genozip", which includes four tools (genozip, genounzip, genocat and genols), source
 code, object code, executables, documentation and other files, was developed by Divon Lan (
-"Developer") and is copyright (C) 2019-2022 Black Paw Ventures Limited ("Licensor"). All rights
+"Developer") and is copyright (C) 2019-2022 Genozip Limited ("Licensor"). All rights
 reserved.
 
 TERMS AND CONDITIONS FOR USE
@@ -62,8 +62,10 @@ compressed file would not cause any harm.
 from Licensor.
 
    d. Any software source code intentionally submitted for inclusion in Genozip by You to the
-Licensor shall imply complete and irrevocable assignment by You to Licensor of all copyright in the
-submitted source code.
+Licensor or the Developer, including by using a Github Pull Request, shall imply complete and
+irrevocable assignment by You to Licensor of all copyright in the submitted source code. Regarding
+any such source code You submitted for inclusion in Genozip in the past, You hereby assign all
+copyright in this submitted source code to Licensor.
 
 4. Unauthorized use of Genozip. Use for a purpose other than as permitted in section 2 or failing
 to register as required by section 3a shall be considered unauthorized use of Genozip. In this
@@ -92,5 +94,5 @@ if Licensor or Developer have been advised of the possibility of such damages.
 
 END OF TERMS AND CONDITIONS
 
-Genozip license version: 13.0.10
+Genozip license version: 14.0.-1
 

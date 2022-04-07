@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   chrom.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include <stdarg.h>
@@ -48,12 +48,12 @@ void chrom_2ref_compress (Reference ref)
     
     ASSERTNOTINUSE (evb->scratch);
     buf_alloc (evb, &evb->scratch, 0, z_file->chrom2ref_map.len, Chrom2Ref, 1, "scratch");
-    ContextP ctx = ZCTX(DTFZ(prim_chrom));
+    ContextP zctx = ZCTX(DTFZ(prim_chrom));
 
     for (uint32_t i=0; i < c2r_len; i++) {
 
         if (flag.show_chrom2ref) {
-            rom chrom_name = ctx_get_zf_nodes_snip (ctx, i, 0, 0);
+            rom chrom_name = ctx_get_zf_nodes_snip (zctx, i, 0, 0);
             rom ref_name = c2r[i] >= 0 ? ref_contigs_get_name (ref, c2r[i], NULL) : "(none)";
 
             if (c2r[i] != WORD_INDEX_NONE) 
@@ -70,7 +70,7 @@ void chrom_2ref_compress (Reference ref)
         // adds the mapping if not identify and adds -1 if this chrom doesn't map to a ref contig.
         // note: we add only contigs that are used (count>0) except for aligner_available in which case we don't have counts (for REF_EXTERNAL, we have 
         // populated all contigs in zip_initialize, and for REF_EXT_STORE we add contigs with any bit set in is_set) 
-        if (c2r[i] != i && (*B(int64_t, ctx->counts, i) || flag.aligner_available))
+        if (c2r[i] != i && (*B64(zctx->counts, i) || flag.aligner_available))
             BNXT (Chrom2Ref, evb->scratch) = (Chrom2Ref){ .chrom_index = BGEN32(i), .ref_index = BGEN32 (c2r[i]) };
     }
 
@@ -93,15 +93,15 @@ void chrom_2ref_load (Reference ref)
         iprint0 ("\nAlternative chrom indices (output of --show-chrom2ref): chroms that are in the txt file and are mapped to a different index in the reference\n");
 
     evb->scratch.len /= sizeof (Chrom2Ref);
-    Context *ctx = ZCTX(CHROM);
+    Context *zctx = ZCTX(CHROM);
 
     // create mapping user index -> reference index
-    buf_alloc (evb, &z_file->chrom2ref_map, 0, ctx->word_list.len, WordIndex, 1, "z_file->chrom2ref_map");
-    z_file->chrom2ref_map.len = ctx->word_list.len;
+    buf_alloc (evb, &z_file->chrom2ref_map, 0, zctx->word_list.len, WordIndex, 1, "z_file->chrom2ref_map");
+    z_file->chrom2ref_map.len = zctx->word_list.len;
 
     // initialize with unity mapping
     ARRAY (WordIndex, map, z_file->chrom2ref_map);
-    for (uint32_t i=0; i < ctx->word_list.len; i++)
+    for (uint32_t i=0; i < zctx->word_list.len; i++)
         map[i] = i;
 
     // the indices of chroms that are NOT in the reference (they are only in the user file), will be mapped to ref chroms
@@ -112,14 +112,14 @@ void chrom_2ref_load (Reference ref)
         WordIndex chrom_index = BGEN32 (ent->chrom_index);
         WordIndex ref_index = BGEN32 (ent->ref_index);
 
-        ASSERT (chrom_index >= 0 && chrom_index < ctx->word_list.len, "chrom_index=%d out of range [0,%d]", chrom_index, (int32_t)ctx->word_list.len-1);
+        ASSERT (chrom_index >= 0 && chrom_index < zctx->word_list.len, "chrom_index=%d out of range [0,%d]", chrom_index, (int32_t)zctx->word_list.len-1);
         ASSERT (!num_ref_contigs /* ref not loaded */ || (ref_index >= -1 && ref_index < num_ref_contigs), 
                 "ref_index=%d out of range [-1,%u]", ref_index, num_ref_contigs-1);
 
         map[chrom_index] = ref_index;
 
         if (flag.show_chrom2ref) {
-            rom chrom_name = ctx_get_words_snip (ctx, chrom_index);
+            rom chrom_name = ctx_get_words_snip (zctx, chrom_index);
             rom ref_name   = ref_index >= 0 ? ref_contigs_get_name (ref, ref_index, NULL) : NULL;
             if (ref_name)
                 iprintf ("In file: '%s' (%d)\tIn reference: '%s' (%d)\n", chrom_name, chrom_index, ref_name, ref_index);
@@ -322,17 +322,20 @@ static SORTER (chrom_create_piz_sorter)
 void chrom_index_by_name (DidIType chrom_did_i)
 {
     sorter_ctx = ZCTX(chrom_did_i);
+    uint32_t num_words = (command==ZIP) ? sorter_ctx->nodes.len32 : sorter_ctx->word_list.len32;
 
     buf_free (chrom_sorter);
 
     // chrom_sorter - an array of uint32 of indexes into ZCTX(CHROM)->word_list - sorted by alphabetical order of the snip in ZCTX(CHROM)->dict
-    chrom_sorter.len = sorter_ctx->nodes.len;
-    buf_alloc (evb, &chrom_sorter, 0, chrom_sorter.len, uint32_t, 1, "chrom_sorter");
+    buf_alloc (evb, &chrom_sorter, 0, num_words, uint32_t, 1, "chrom_sorter");
     
-    ARRAY (WordIndex, ents, chrom_sorter);
-    for (WordIndex i=0; i < ents_len; i++) ents[i] = i;
+    //ARRAY (WordIndex, ents, chrom_sorter);
+    for (WordIndex i=0; i < num_words; i++) 
+        if ((command == ZIP && B(CtxNode, sorter_ctx->nodes,     i)->snip_len) ||
+            (command == PIZ && B(CtxWord, sorter_ctx->word_list, i)->snip_len))
+            BNXT32(chrom_sorter) = i;
 
-    qsort (ents, ents_len, sizeof(uint32_t), command == ZIP ? chrom_create_zip_sorter : chrom_create_piz_sorter);
+    qsort (chrom_sorter.data, chrom_sorter.len, sizeof(uint32_t), command == ZIP ? chrom_create_zip_sorter : chrom_create_piz_sorter);
 }
 
 // binary search for this chrom in ZCTX(CHROM). we count on gcc tail recursion optimization to keep this fast.

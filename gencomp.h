@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   gencomp.h - "generated component"
-//   Copyright (C) 2022-2022 Black Paw Ventures Limited
+//   Copyright (C) 2022-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #pragma once

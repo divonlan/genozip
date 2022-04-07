@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   recon_plan_io.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include <errno.h>
@@ -269,18 +269,3 @@ void recon_plan_uncompress (Section sec, uint32_t *out_conc_writing_vbs, uint32_
     if (z_file->genozip_version >= 14) // we started to deltify in v14
         recon_plan_dedeltify();
 }
-
-//xxx // PIZ: get the maximum value of conc_writing_vbs across all SEC_RECON_PLAN sections in the z_file
-// uint32_t recon_plan_piz_get_max_conc_writing_vbs (void)
-// {
-//     Section sl = NULL;
-//     uint32_t max_conc_writing_vbs=0;
-
-//     CompIType num_comps = sections_get_num_comps();
-//     for (CompIType comp_i=0; comp_i < num_comps; comp_i++) {
-//         max_conc_writing_vbs = MAX_(max_conc_writing_vbs, sections_get_comp_recon_plan_sec (comp_i, false));
-//         max_conc_writing_vbs = MAX_(max_conc_writing_vbs, sections_get_comp_recon_plan_sec (comp_i, true));
-//     }
-
-//     return max_conc_writing_vbs;
-// }

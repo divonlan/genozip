@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   vcf_private.h
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #pragma once
@@ -49,6 +49,7 @@ typedef struct VBlockVCF {
     
     uint16_t ploidy;                // ZIP only
     VcfVersion vcf_version;
+    uint64_t first_line;     // ZIP: used for --add_line_numbers  
 
     // used for segging FORMAT/GT
     uint32_t gt_prev_ploidy;
@@ -65,7 +66,7 @@ typedef struct VBlockVCF {
     Buffer sf_txt, sf_snip; // INFO/SF data as it appears in the snip being constructed
 
     // INFO/END
-    uint64_t last_end_line_i;       // PIZ: last line on which INFO/END was encountered
+    int32_t last_end_line_i;       // PIZ: last line on which INFO/END was encountered
     
     // FORMAT/DP
     int64_t sum_dp_this_line;       // ZIP: sum of values of FORMAT/DP in samples of this line - '.' counts as 0.

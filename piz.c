@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   piz.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "genozip.h"
@@ -305,14 +305,12 @@ static void piz_reconstruct_one_vb (VBlockP vb)
     reconstruct_from_ctx (vb, top_level_did_i, 0, true);
 
     // compress txt_data into BGZF blocks (in vb->scratch) if applicable
-    if (txt_file && txt_file->codec == CODEC_BGZF && !flag.no_writer &&
-        !flag.maybe_lines_out_of_order &&  // if --downsample, --interleave or sorting - writer will BGZF-compress
-        writer_is_vb_full_vb (vb->vblock_i))  // in SAM/BAM reconstruction, this compute thread recompresses only if no gencomp lines are re-assembled by writer, otherwise writer recompresses  
+    if (writer_is_bgzf_by_compute_thread (vb->vblock_i))
         bgzf_compress_vb (vb);
 
-    // calculate the digest contribution of this VB to the single file and bound files, and the digest snapshot of this VB
+    // calculate the digest contribution of this VB, and the digest snapshot of this VB
     // note: if we have generated components from which lines might be inserted into the VB - we verify in writer instead 
-    if (!v8_digest_is_zero (vb->digest_so_far) && !flag.data_modified && !flag.reading_chain && !z_has_gencomp) 
+    if (piz_need_digest && !z_has_gencomp) 
         digest_one_vb (vb); // LOOKING FOR A DEADLOCK BUG? CHECK HERE
 
     if (DTPZ(piz_after_recon)) DTPZ(piz_after_recon)(vb);
@@ -498,17 +496,16 @@ bool piz_read_one_vb (VBlockP vb, bool for_reconstruction)
 
     // any of these might be overridden by callback
     vb->flags            = header.h.flags.vb_header;
-    vb->recon_size       = BGEN32 (header.recon_size_prim); 
+    vb->recon_size       = BGEN32 (header.recon_size_prim);   // might be modified by callback (if DVCF Luft)
     vb->longest_line_len = BGEN32 (header.longest_line_len);
     vb->digest_so_far    = header.digest_so_far;
     vb->chrom_node_index = WORD_INDEX_NONE;
     vb->lines.len        = z_file->genozip_version >= 14 ? (sec-1)->num_lines : BGEN32 (header.v13_top_level_repeats);
     vb->comp_i           = (sec-1)->comp_i; 
     vb->maybe_lines_dropped = flag.maybe_lines_dropped; // a per-VB value bc in SAM Load-Prim VBs =true vs normal VBs have the flag value
-    vb->show_containers  = flag.show_containers; // a per-VB value bc in SAM Load-Prim VBs =false vs normal VBs have the flag value (set in sam_piz_dispatch_one_load_SA_Groups_vb)
+    vb->show_containers  = (flag.show_containers == SHOW_CONTAINERS_ALL_VBs || flag.show_containers == vb->vblock_i); // a per-VB value bc in SAM Load-Prim VBs =false vs normal VBs have the flag value (set in sam_piz_dispatch_one_load_SA_Groups_vb)
 
     if (txt_file) { // sometimes we don't have a txtfile, eg when genocat is used with some flags that emit other data, no the file
-        vb->first_line   = 1 + txt_file->num_lines; // doesn't count a dropped txtheader
         vb->vb_position_txt_file = txt_file->txt_data_so_far_single_0; // position in original txt file (before any ZIP or PIZ modifications)
         txt_file->num_lines += vb->lines.len; // source file lines
     }
@@ -520,8 +517,8 @@ bool piz_read_one_vb (VBlockP vb, bool for_reconstruction)
     if (flag.unbind) vb->vblock_i = BGEN32 (header.h.vblock_i);
 
     if (flag.show_vblocks) 
-        iprintf ("READING(id=%d) vb_i=%u comp=%s first_line=%"PRIu64" num_lines=%u recon_size=%u genozip_size=%u longest_line_len=%u\n",
-                 vb->id, vb->vblock_i, comp_name(vb->comp_i), vb->first_line, (uint32_t)vb->lines.len, vb->recon_size, BGEN32 (header.z_data_bytes), vb->longest_line_len);
+        iprintf ("READING(id=%d) vb=%s/%u num_lines=%u recon_size=%u genozip_size=%u longest_line_len=%u\n",
+                 vb->id, comp_name(vb->comp_i), vb->vblock_i, vb->lines.len32, vb->recon_size, BGEN32 (header.z_data_bytes), vb->longest_line_len);
 
     ctx_overlay_dictionaries_to_vb (VB); /* overlay all dictionaries (not just those that have fragments in this vblock) to the vb */ 
 
@@ -600,8 +597,12 @@ static void piz_handover_or_discard_vb (Dispatcher dispatcher, VBlockP *vb)
         writer_handover_data (vb);
         dispatcher_recycle_vbs (dispatcher, false); // don't release VB- it will be released in writer_release_vb when writing is completed
     }
-    else
+    else {
+        if ((*vb)->preprocessing) 
+            DT_FUNC (z_file, piz_after_preproc)(*vb);
+
         dispatcher_recycle_vbs (dispatcher, true);  // also release VB
+    }
 }
 
 // returns false if VB was dispatched, and true if vb was skipped
@@ -628,15 +629,15 @@ static void piz_dispatch_one_vb (Dispatcher dispatcher, Section sec)
 static void piz_handle_reconstructed_vb (Dispatcher dispatcher, VBlockP vb, uint64_t *num_nondrop_lines)
 {
     ASSERTW (vb->txt_data.len == vb->recon_size || flag.data_modified, // files are the same size, unless we intended to modify the data
-            "Warning: vblock_i=%s/%u (num_lines=%u vb_start_line_in_file=%"PRIu64") had %s bytes in the original %s file but %s bytes in the reconstructed file (diff=%d)", 
-            comp_name (vb->comp_i), vb->vblock_i, (unsigned)vb->lines.len, vb->first_line, str_int_commas (vb->recon_size).s, dt_name (txt_file->data_type), 
+            "Warning: vblock_i=%s/%u (num_lines=%u) had %s bytes in the original %s file but %s bytes in the reconstructed file (diff=%d)", 
+            comp_name (vb->comp_i), vb->vblock_i, vb->lines.len32, str_int_commas (vb->recon_size).s, dt_name (txt_file->data_type), 
             str_int_commas (vb->txt_data.len).s, 
             (int32_t)vb->txt_data.len - (int32_t)vb->recon_size);
 
     *num_nondrop_lines += vb->num_nondrop_lines;
     if (flag.count == COUNT_VBs)
         iprintf ("vb_i=%u lines=%u nondropped_lines=%u txt_data.len=%u\n", 
-                  vb->vblock_i, (unsigned)vb->lines.len, vb->num_nondrop_lines, (unsigned)vb->txt_data.len);
+                  vb->vblock_i, vb->lines.len32, vb->num_nondrop_lines, vb->txt_data.len32);
 
     if (flag.collect_coverage)    
         coverage_add_one_vb (vb);
@@ -748,8 +749,8 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
         VBlockP recon_vb = dispatcher_get_processed_vb (dispatcher, NULL, false);  // non-blocking
         if (recon_vb) {    
             if (flag.show_vblocks) 
-                iprintf ("END_OF_COMPUTE(id=%d) vb_i=%u num_running_compute_threads(after)=%u\n", 
-                         recon_vb->id, recon_vb->vblock_i, dispatcher_get_num_running_compute_threads(dispatcher));
+                iprintf ("END_OF_COMPUTE(id=%d) vb=%s/%u num_running_compute_threads(after)=%u\n", 
+                         recon_vb->id, comp_name(recon_vb->comp_i), recon_vb->vblock_i, dispatcher_get_num_running_compute_threads(dispatcher));
 
             if (!recon_vb->preprocessing)
                 piz_handle_reconstructed_vb (dispatcher, recon_vb, &num_nondrop_lines);

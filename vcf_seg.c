@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   vcf_seg.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "vcf_private.h"
@@ -89,7 +89,7 @@ void vcf_zip_init_vb (VBlockP vb_)
 
     // in case we're replacing ID with the line number
     if (flag.add_line_numbers) {
-        vb->first_line = txt_file->num_lines + 1; // this is normally not used in ZIP
+        vb->first_line = txt_file->num_lines + 1; 
         txt_file->num_lines += str_count_char (STRb(vb->txt_data), '\n');  // update here instead of in zip_update_txt_counters;
     }
 }
@@ -618,7 +618,7 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
         PosType pos = dl->pos[0] = seg_pos_field (vb_, VCF_POS, VCF_POS, 0, '.', VCF_POS_str, VCF_POS_len, 0, VCF_POS_len+1);
 
         if (pos == 0 && !(*VCF_POS_str == '.' && VCF_POS_len == 1)) // POS == 0 - invalid value return from seg_pos_field
-            WARN_ONCE ("FYI: invalid POS=%"PRId64" value in chrom=%.*s vb_i=%u vb_line_i=%"PRIu64": line will be compressed, but not indexed", 
+            WARN_ONCE ("FYI: invalid POS=%"PRId64" value in chrom=%.*s vb_i=%u vb_line_i=%d: line will be compressed, but not indexed", 
                        pos, vb->chrom_name_len, vb->chrom_name, vb->vblock_i, vb->line_i);
                 
         if (pos) random_access_update_pos (vb_, 0, VCF_POS);

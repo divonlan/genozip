@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   codec_longr.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 // This codec is for quality scores of Nanopore and PacBio data, based on https://pubmed.ncbi.nlm.nih.gov/32470109/. This file contains 
@@ -67,7 +67,7 @@ void codec_longr_segconf_calculate_bins (VBlockP vb, ContextP ctx,
     uint32_t num_values = 0;
 
     if (callback)
-        for (uint64_t line_i=0; line_i < vb->lines.len; line_i++) {
+        for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {
             uint8_t *values; uint32_t values_len;
             callback (vb, line_i, (char **)pSTRa(values), vb->txt_data.len, NULL);
             add_to_histogram (histogram, STRa(values));
@@ -111,7 +111,7 @@ void codec_longr_segconf_calculate_bins (VBlockP vb, ContextP ctx,
     memset (&value_to_bin[next_val], NUM_BINS-1, 256 - next_val); // remaining high values (with 0 in their histogram) go to the top bin
 
     // store the value-to-bin map in the file as a global SEC_COUNTS section - convert to uint64 (luckily, it is small)
-    buf_alloc (evb, &zctx->counts, 0, 256, uint64_t, 0, "contexts->ctx");
+    buf_alloc (evb, &zctx->counts, 0, 256, uint64_t, 0, "zctx->counts");
     for (unsigned i=0; i < 256; i++)
         BNXT64 (zctx->counts) = value_to_bin[i];
 }
@@ -169,7 +169,7 @@ bool codec_longr_compress (VBlockP vb,
     // calculate state->base_chan - the channel for each base. reads are treated in their
     // original (FASTQ) orientation.
     uint32_t total_len=0;
-    for (uint64_t line_i=0; line_i < vb->lines.len; line_i++) {
+    for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {
 
         seq_callback (vb, line_i,  pSTRa(seq), 0, &is_rev);
         qual_callback (vb, line_i, pSTRa(qual), vb->txt_data.len, NULL);
@@ -178,11 +178,11 @@ bool codec_longr_compress (VBlockP vb,
 
         codec_longr_calc_channels (state, STRa(seq), (uint8_t*)qual, is_rev);
 
-        ASSERT (seq_len == qual_len, "\"%s\": Expecting seq_len=%u == qual_len=%u in vb_i=%u component=%s line_i=%"PRIu64, 
+        ASSERT (seq_len == qual_len, "\"%s\": Expecting seq_len=%u == qual_len=%u in vb_i=%u component=%s line_i=%d", 
                 name, seq_len, qual_len, vb->vblock_i, comp_name(vb->comp_i), vb->line_i);
 
         total_len += qual_len;
-        ASSERT (total_len <= *uncompressed_len, "\"%s\": Expecting total_len=%u <= total_len=%u in vb_i=%u component=%s line_i=%"PRIu64, 
+        ASSERT (total_len <= *uncompressed_len, "\"%s\": Expecting total_len=%u <= total_len=%u in vb_i=%u component=%s line_i=%d", 
                 name, total_len, *uncompressed_len, vb->vblock_i, comp_name(vb->comp_i), vb->line_i);
     }
     
@@ -200,7 +200,7 @@ bool codec_longr_compress (VBlockP vb,
         next_of_chan[chan] = next_of_chan[chan-1] + state->chan_num_bases[chan-1];
 
     uint32_t base_i=0;
-    for (uint64_t line_i=0; line_i < vb->lines.len; line_i++) {
+    for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {
         qual_callback (vb, line_i, pSTRa(qual), vb->txt_data.len, &is_rev);
 
         // we create a sorted_qual array, which contains LONGR_NUM_CHANNELS segments, one for each channel,

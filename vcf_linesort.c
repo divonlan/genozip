@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   linesorter.c
-//   Copyright (C) 2021-2022 Black Paw Ventures Limited
+//   Copyright (C) 2021-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "genozip.h"
@@ -373,7 +373,6 @@ void vcf_zip_generate_recon_plan (void)
     START_TIMER;
 
     // we only need a linesorter recon plan if we're sorting (note: we always sort for DVCF)
-    //xxx if (!vcf_is_sorting (VCF_COMP_MAIN)) return;
     if (!flag.sort && !z_is_dvcf) return;
 
     // reconstruction plans for primary and luft (might not exist)

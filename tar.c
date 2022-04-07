@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   tar.c
-//   Copyright (C) 2021-2022 Black Paw Ventures Limited
+//   Copyright (C) 2021-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include <errno.h>
@@ -88,7 +88,7 @@ static void tar_copy_metadata_from_file (rom fn)
     }
 
     if ((uint32_t)st.st_gid > MAX_TAR_UID_GID) {
-        WARN_ONCE ("GID of %s (and perhaps others) is %u - beyond the maximum allowed by the tar file format; recording uid as %u (nogroup). --quiet to suppress this message.",
+        WARN_ONCE ("GID of %s (and perhaps others) is %u - beyond the maximum allowed by the tar file format; recording gid as %u (nogroup). --quiet to suppress this message.",
                    fn, st.st_gid, NOBODY);
         st.st_gid = NOBODY;
     }

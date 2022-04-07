@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   tokenizer.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "tokenizer.h"
@@ -119,7 +119,7 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
     Container con = tokenizer_initialize_container_array (generator_dict_id); 
     Token items[MAX_TOKENS];
 
-    tokenizer_split (field, field_len, is_sep, false, items, &con.nitems_lo);
+    tokenizer_split (STRa(field), is_sep, false, items, &con.nitems_lo);
     
     char prefixes[field_len + con.nitems_lo + 2];
     prefixes[0] = prefixes[1] = CON_PX_SEP;

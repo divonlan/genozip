@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   writer.h
-//   Copyright (C) 2021-2022 Black Paw Ventures Limited
+//   Copyright (C) 2021-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #pragma once
@@ -21,7 +21,8 @@ extern bool writer_does_txtheader_need_write (Section sec);
 extern bool writer_does_txtheader_need_recon (Section sec);
 extern bool writer_does_vb_need_recon (VBIType vb_i);
 extern BitArrayP writer_get_is_dropped (VBIType vb_i);
-extern bool writer_is_vb_full_vb (VBIType vb_i);
+extern bool writer_is_bgzf_by_compute_thread (VBIType vb_i);
 extern bool writer_get_fasta_contig_grepped_out (VBIType vb_i);
 extern void writer_set_fasta_contig_grepped_out (VBIType vb_i);
-
+extern uint64_t writer_get_txt_line_i (VBlockP vb);
+extern void writer_set_num_txtheader_lines (CompIType comp_i, uint32_t num_txtheader_lines);

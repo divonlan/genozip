@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   seg.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include <stdarg.h>
@@ -26,6 +26,7 @@
 #include "segconf.h"
 #include "website.h"
 #include "stats.h"
+#include "libdeflate/libdeflate.h"
 
 WordIndex seg_by_ctx_ex (VBlockP vb, STRp(snip), ContextP ctx, uint32_t add_bytes,
                          bool *is_new) // optional out
@@ -50,7 +51,7 @@ WordIndex seg_known_node_index (VBlockP vb, ContextP ctx, WordIndex node_index, 
     ctx_append_b250 (vb, ctx, node_index);
     ctx->txt_len += add_bytes;
     
-    (*B(int64_t, ctx->counts, node_index))++;
+    (*B32 (ctx->counts, node_index))++;
 
     return node_index;
 }
@@ -363,7 +364,7 @@ PosType seg_pos_field (VBlockP vb,
         
         else {
             this_pos = seg_scan_pos_snip (vb, STRa(pos_str), IS_FLAG (opt, SPF_ZERO_IS_BAD), &err);
-            ASSERT (IS_FLAG (opt, SPF_BAD_SNIPS_TOO) || !err, "invalid value %.*s in %s vb=%u line_i=%"PRIu64, 
+            ASSERT (IS_FLAG (opt, SPF_BAD_SNIPS_TOO) || !err, "invalid value %.*s in %s vb=%u line_i=%d", 
                     pos_str_len, pos_str, CTX(snip_did_i)->tag_name, vb->vblock_i, vb->line_i);
         }
 
@@ -483,7 +484,7 @@ void seg_id_field_do (VBlockP vb, ContextP ctx, STRp(id_snip))
     if (num_digits) {
         int64_t id_num;
         ASSERT (str_get_int (&id_snip[id_snip_len - num_digits], num_digits, &id_num), 
-                "Failed str_get_int ctx=%s vb=%u line=%"PRIu64, ctx->tag_name, vb->vblock_i, vb->line_i);
+                "Failed str_get_int ctx=%s vb=%u line=%d", ctx->tag_name, vb->vblock_i, vb->line_i);
         seg_add_to_local_resizable (vb, ctx, id_num, 0);
     }
 
@@ -807,6 +808,26 @@ void seg_add_to_local_fixed_do (VBlockP vb, Context *ctx, STRp(data), bool add_n
         seg_by_ctx (vb, (char[]){ SNIP_LOOKUP }, 1, ctx, 0);
 }
 
+
+void seg_add_to_local_nonresizeable (VBlockP vb, Context *ctx, void *number, bool with_lookup, unsigned add_bytes) 
+{
+    buf_alloc (vb, &ctx->local, 0, MAX_(ctx->local.len+1, 32768) * lt_desc[ctx->ltype].width, char, CTX_GROWTH, "contexts->local");
+
+    switch (lt_desc[ctx->ltype].width) {
+        case 1  : BNXT8  (ctx->local) = *(uint8_t  *)number; break;
+        case 2  : BNXT16 (ctx->local) = *(uint16_t *)number; break;
+        case 4  : BNXT32 (ctx->local) = *(uint32_t *)number; break;
+        case 8  : BNXT64 (ctx->local) = *(uint64_t *)number; break;
+        default : ABORT ("Unexpected ltype=%s", lt_name(ctx->ltype));
+    }
+
+    if (add_bytes) ctx->txt_len += add_bytes;
+    ctx->local_num_words++;
+
+    if (with_lookup)     
+        seg_by_ctx (vb, (char[]){ SNIP_LOOKUP }, 1, ctx, 0);
+}
+
 void seg_xor_diff (VBlockP vb, ContextP ctx, STRp(value), bool no_xor_if_same, unsigned add_bytes)
 {
     if (ctx->last_txt_len != value_len || !value_len) goto fallback;
@@ -921,13 +942,20 @@ void seg_all_data_lines (VBlockP vb)
                   : segconf.line_len ? MAX_(1, vb->txt_data.len / segconf.line_len)
                   :                    1;            // eg DT_GENERIC
 
+
+    ContextP debug_lines_ctx = NULL;
+    if (flag.debug_lines && !segconf.running) { 
+        debug_lines_ctx = ECTX (_SAM_DEBUG_LINES); // same dict_id for all data_types (ie _SAM_DEBUG_LINES==_VCF_DEBUG_LINES etc)
+        if (debug_lines_ctx) debug_lines_ctx->ltype = LT_UINT32;
+    }
+    
     DT_FUNC (vb, seg_initialize)(vb);  // data-type specific initialization
 
     // allocate lines
     uint32_t sizeof_line = DT_FUNC_OPTIONAL (vb, sizeof_zip_dataline, 1)(); // 1 - we waste a little bit of memory to avoid making exceptions throughout the code logic
     buf_alloc_zero (vb, &vb->lines, 0, vb->lines.len * sizeof_line, char, 1, "lines");
 
-    rom field_start = vb->txt_data.data;
+    rom field_start = B1STtxt;
     bool hash_hints_set_1_3 = false, hash_hints_set_2_3 = false;
     for (vb->line_i=0; vb->line_i < vb->lines.len; vb->line_i++) {
 
@@ -938,16 +966,28 @@ void seg_all_data_lines (VBlockP vb)
             break;
         }
 
-        //fprintf (stderr, "vb->line_i=%u\n", vb->line_i);
         bool has_13 = false;
         vb->line_start = BNUMtxt (field_start);
 
         if (flag.show_lines)
-            iprintf ("vb=%u line_i=%"PRIu64" byte-in-vb=%u\n", vb->vblock_i, vb->line_i, vb->line_start);
+            iprintf ("vb=%u line_i=%d byte-in-vb=%u\n", vb->vblock_i, vb->line_i, vb->line_start);
 
         // Call the segmenter of the data type to segment one line
         rom next_field = DT_FUNC (vb, seg_txt_line) (vb, field_start, remaining_txt_len, &has_13);
         if (!next_field) next_field = field_start + remaining_txt_len; // DT_GENERIC has no segmenter
+
+        if (debug_lines_ctx) {
+            if (!vb->debug_line_hash_skip) {
+                uint32_t hash = DTP(seg_modifies) ? vb->debug_line_hash // if seg_modifies, Seg calculates hash before modifications
+                                                  : adler32 (2, field_start, next_field - field_start); // same as in container_verify_line_integrity
+                seg_add_to_local_nonresizeable (vb, debug_lines_ctx, &hash, false, 0);
+            }
+            else 
+                vb->debug_line_hash_skip = false; // reset
+        }
+
+        if (flag.biopsy_line.line_i == vb->line_i && flag.biopsy_line.vb_i == vb->vblock_i && !DTP(seg_modifies))
+            file_put_line (vb, field_start, next_field - field_start, "Line biopsy:");
 
         vb->longest_line_len = MAX_(vb->longest_line_len, (next_field - field_start));
         field_start = next_field;
@@ -989,6 +1029,8 @@ void seg_all_data_lines (VBlockP vb)
 
     if (!flag.make_reference && !segconf.running) 
         seg_verify_file_size (vb);
+
+    if (flag.debug) buf_test_overflows(vb, __FUNCTION__); 
 
     COPY_TIMER (seg_all_data_lines);
 }

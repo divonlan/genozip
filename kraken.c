@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   kraken.c
-//   Copyright (C) 2021-2022 Black Paw Ventures Limited
+//   Copyright (C) 2021-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 // handle kraken output format: https://github.com/DerrickWood/kraken/wiki/Manual#output-formats
@@ -325,7 +325,7 @@ CONTAINER_CALLBACK (kraken_piz_container_cb)
     } 
 
     // when pizzing a kraken to be filtered by itself (loaded or stored) (useful only for testing) - apply :kraken_is_included_loaded" filter 
-    else if (flag.kraken_taxid && 
+    else if (flag.kraken_taxid != TAXID_NONE && 
              dict_id.num == _KRAKEN_TOPLEVEL && 
              (   ( kraken_is_loaded && !kraken_is_included_loaded (vb, last_txt (vb, KRAKEN_QNAME), vb->last_txt_len (KRAKEN_QNAME)))
               || (!kraken_is_loaded && !kraken_is_included_stored (vb, KRAKEN_TAXID, true)))) // TAXID was recon in the TOPLEVEL container
@@ -345,14 +345,14 @@ bool kraken_piz_initialize (void)
     ASSERT (z_file->num_components <= 2, "--kraken requires a .kraken.genozip file with up to 2 components, but %s has %u components",
             z_name, z_file->num_components);
 
-    Context *ctx = ZCTX(KRAKEN_TAXID);
-    ARRAY (int64_t, counts, ctx->counts);
+    Context *zctx = ZCTX(KRAKEN_TAXID);
+    ARRAY (uint64_t, counts, zctx->counts);
 
     // verify that the user selected taxonomy ID is in the kraken data
     if (exe_type == EXE_GENOCAT) {
         ASSINP0 (flag.kraken_taxid != TAXID_NONE, "--taxid must be provided if --kraken is used");
 
-        WordIndex taxid_word_i = ctx_get_word_index_by_snip (evb, ctx, str_int_s (flag.kraken_taxid).s, 0);
+        WordIndex taxid_word_i = ctx_get_word_index_by_snip (evb, zctx, str_int_s (flag.kraken_taxid).s, 0);
         if (taxid_word_i == WORD_INDEX_NONE) {
             progress_finalize_component ("Skipped");
             WARN ("FYI: %s has no sequences with a Taxanomic ID of \"%d\"", z_name, flag.kraken_taxid);
@@ -361,25 +361,25 @@ bool kraken_piz_initialize (void)
     }
 
     // calculate the total number of sequences in the kraken file (and the FASTQ file(s) from which it was generated)
-    int64_t total_sequences_in_file=0; 
-    int64_t max_count = 0;
+    uint64_t total_sequences_in_file=0; 
+    uint64_t max_count = 0;
     WordIndex max_count_word_index = WORD_INDEX_NONE;
 
-    for (uint64_t i=0; i < counts_len; i++) {
+    for (uint32_t i=0; i < counts_len; i++) {
         total_sequences_in_file += counts[i];
         if (counts[i] > max_count) {
             max_count = counts[i];
             max_count_word_index = i;
         }
     }
-    int64_t num_non_dom_seqs = total_sequences_in_file - max_count;
+    uint64_t num_non_dom_seqs = total_sequences_in_file - max_count;
 
-    dom_taxid = atoi (ctx_get_words_snip (ctx, max_count_word_index));
+    dom_taxid = atoi (ctx_get_words_snip (zctx, max_count_word_index));
 
     ASSERT0 (total_sequences_in_file, "unexpectedly, total_sequences_in_file=0");
 
     // calculate the average length of a QNAME string in the file
-    int64_t total_qname_length = ctx->nodes.count; // sent ZIP->PIZ via SectionHeaderCounts.node_param
+    int64_t total_qname_length = zctx->nodes.count; // sent ZIP->PIZ via SectionHeaderCounts.node_param
     one_qname_length = (unsigned)(1 + total_qname_length / total_sequences_in_file); // average (rounded up) QNAME length in the file
   
     // allocate

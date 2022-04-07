@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   file.h
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #pragma once
@@ -336,8 +336,7 @@ typedef struct File {
     // this relate to the textual data represented. In case of READ - only data that was picked up from the read buffer.
     int64_t txt_data_so_far_single;    // txt_file: data read (ZIP) or written (PIZ) to/from txt file so far
                                        // z_file: txt data represented in the GENOZIP data written (ZIP) or read (PIZ) to/from the genozip file so far for the current VCF
-    int64_t header_size;               // txt_file ZIP: size of txt header 
-    int64_t txt_txtheader_so_far_bind; // z_file ZIP: combined size of all headers in bound file
+    int64_t header_size;               // txt_file ZIP: size of txt header  z_file ZIP: size of MAIN txt header
     
     //      seggable_data_so_far = txt_data_so_far_single - header_size
     int64_t seggable_data_so_far_gz_bz2; // txt_file ZIP: if source gz or bz2 compression, this is the compressed txt_data_so_far_single 
@@ -445,6 +444,7 @@ typedef struct File {
     // Information content stats - how many bytes and how many sections does this file have in each section type
     uint32_t num_vbs;                  // ZIP: z_file/txt_file PIZ: txt_file: number of VBs processed z_file: total VBs in file
     uint32_t num_vbs_dispatched;       // ZIP: txt_file
+    uint32_t num_preproc_vbs_joined;   // PIZ: z_file
     uint32_t max_conc_writing_vbs;     // PIZ z_file: the maximal value conc_writing_vbs across all SEC_RECON_PLAN sections in this z_file
 
     // Used for reading txt files
@@ -487,6 +487,7 @@ extern char *file_get_fastq_pair_filename (rom fn1, rom fn2, bool test_only);
 extern void file_get_file (VBlockP vb, rom filename, Buffer *buf, rom buf_name, bool add_string_terminator);
 extern bool file_put_data (rom filename, const void *data, uint64_t len, mode_t mode);
 extern void file_put_data_abort (void);
+extern void file_put_line (VBlockP vb, STRp(line), rom msg);
 extern bool file_exists (rom filename);
 extern bool file_is_fifo (rom filename);
 extern bool file_is_dir (rom filename);

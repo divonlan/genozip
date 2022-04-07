@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sections.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "genozip.h"
@@ -409,7 +409,7 @@ void sections_list_memory_to_file_format (bool in_place) // in place, or to evb-
     }
 
     Buffer *out = in_place ? &z_file->section_list_buf : &evb->scratch;
-    ARRAY (SectionEntModifiable, mem_sec, z_file->section_list_buf); // memory format (entries are larger)
+    ARRAY (const SectionEntModifiable, mem_sec, z_file->section_list_buf); // memory format (entries are larger)
     ARRAY (SectionEntFileFormat, file_sec, *out); // file format
         
     for (uint32_t i=0; i < file_sec_len; i++) {
@@ -457,7 +457,7 @@ void sections_list_file_to_memory_format (SectionHeaderGenozipHeader *genozip_he
     buf_alloc (evb, &z_file->section_list_buf, 0, z_file->section_list_buf.len, SectionEnt, 0, NULL); // extend
 
     ARRAY (SectionEntModifiable, mem_sec,  z_file->section_list_buf); // memory format (entries are larger)
-    ARRAY (SectionEntFileFormat, file_sec, z_file->section_list_buf); // file format
+    ARRAY (const SectionEntFileFormat, file_sec, z_file->section_list_buf); // file format
 
     // note: we work backwards as mem_sec items are larger than file_sec
     for (int i=file_sec_len-1; i >= 0; i--) {
@@ -468,7 +468,7 @@ void sections_list_file_to_memory_format (SectionHeaderGenozipHeader *genozip_he
             .st_specific = sec.st_specific,  
             .vblock_i    = BGEN32 (sec.vblock_i),
             .st          = sec.st,
-            .comp_i     = (V >= 14 && IS_COMP_SEC(sec.st)) ? sec.comp_i : COMP_NONE, // note: in file format, COMP_NONE sections have 0, as comp_i is just 2 bit
+            .comp_i      = (V >= 14 && IS_COMP_SEC(sec.st)) ? sec.comp_i : COMP_NONE, // note: in file format, COMP_NONE sections have 0, as comp_i is just 2 bit
             .flags       = (V >= 12) ? sec.flags  : (SectionFlags){} // flags were introduced in v12
         };
 
@@ -612,7 +612,7 @@ Section sections_first_sec (SectionType st, bool soft_fail)
 {
     ARRAY (SectionEnt, sec, z_file->section_list_buf);
 
-    for (unsigned i=0; i < z_file->section_list_buf.len; i++)
+    for (unsigned i=0; i < sec_len; i++)
         if (sec[i].st == st) return &sec[i];
 
     ASSERT (soft_fail, "Cannot find section_type=%s in z_file", st_name (st));
@@ -625,7 +625,7 @@ Section sections_last_sec (SectionType st, bool soft_fail)
 {
     ARRAY (SectionEnt, sec, z_file->section_list_buf);
 
-    for (int i=z_file->section_list_buf.len-1; i >= 0; i--)
+    for (int i=sec_len-1; i >= 0; i--)
         if (sec[i].st == st) return &sec[i];
 
     ASSERT (soft_fail, "Cannot find section_type=%s in z_file", st_name (st));
@@ -996,7 +996,7 @@ void sections_show_section_list (DataType dt) // optional - take data from z_dat
                      sections_dis_flags (s->flags, s->st, dt).s);
         
         else if (s->st == SEC_VB_HEADER)
-            iprintf ("%5u %-20.20s\t\t\tvb=%s/%-4u offset=%-8"PRIu64"  size=%-6u  num_lines=%-6u%s\n", 
+            iprintf ("%5u %-20.20s\t\t\tvb=%s/%-4u offset=%-8"PRIu64"  size=%-6u  num_lines=%-8u%s\n", 
                      BNUM(z_file->section_list_buf, s), st_name(s->st), comp_name (s->comp_i), 
                      s->vblock_i, s->offset, s->size, s->num_lines, sections_dis_flags (s->flags, s->st, dt).s);
 

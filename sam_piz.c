@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_piz.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include <math.h>
@@ -23,6 +23,16 @@
 #include "lookback.h"
 #include "qname.h"
 #include "writer.h"
+
+void sam_piz_xtra_line_data (VBlockP vb_)
+{
+    VBlockSAMP vb = (VBlockSAMP)vb_;
+
+    if (SAM_PIZ_HAS_SA_GROUP) {
+        iprintf ("grp_i=%u aln_i=%"PRIu64" (%d within group)\n", ZGRP_I(vb->sa_grp), ZALN_I(vb->sa_aln), (int)(ZALN_I(vb->sa_aln) - vb->sa_grp->first_aln_i));
+        sam_show_sa_one_grp (ZGRP_I(VB_SAM->sa_grp));
+    }
+}
 
 void sam_piz_genozip_header (const SectionHeaderGenozipHeader *header)
 {
@@ -65,12 +75,6 @@ void sam_piz_after_recon (VBlockP vb)
 void sam_piz_finalize (void)
 {
     sam_header_finalize();
-
-    // To do: we can display this earlier - after all SA Loading (=preprocessing) VBs are processed (=joined)
-    if (flag.show_sa) {
-        sam_show_sa();
-        if (exe_type == EXE_GENOCAT) exit(0);
-    }
 }
 
 // returns true if section is to be skipped reading / uncompressing
@@ -137,6 +141,10 @@ IS_SKIP (sam_piz_is_skip_section)
             KEEPIF (preproc || dict_needed_for_preproc);
             SKIPIF (cnt || cov);
             SKIPIFF (prim);                                         
+
+        case _SAM_FLAG     : 
+            KEEPIF (preproc || dict_needed_for_preproc);            
+            SKIPIFF (cnt && !flag.sam_flag_filter && !flag.bases);
             
         case _SAM_MC_Z     : KEEPIFF (flag.out_dt == DT_FASTQ);
         
@@ -147,7 +155,6 @@ IS_SKIP (sam_piz_is_skip_section)
         case _SAM_SAALN    : KEEP;
         case _SAM_CIGAR    : 
         case _OPTION_MC_Z  : SKIPIFF (preproc || (cnt && !flag.bases));
-        case _SAM_FLAG     : SKIPIFF (preproc || (cnt && !flag.sam_flag_filter && !flag.bases));
         case _SAM_AUX      : SKIPIFF (preproc);
         case _SAM_MAPQ     : 
         case _OPTION_MQ_i  : SKIPIFF (preproc || ((cov || cnt) && !flag.bases && !flag.sam_mapq_filter));
@@ -444,7 +451,7 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
             vb->drop_curr_line = "not_primary";
 
         // --taxid: filter out by Kraken taxid (SAM, BAM, FASTQ)
-        if (flag.kraken_taxid && !vb->drop_curr_line 
+        if (flag.kraken_taxid != TAXID_NONE && !vb->drop_curr_line 
         && (   (kraken_is_loaded  && !kraken_is_included_loaded (vb, last_txt(vb, SAM_QNAME), vb->last_txt_len (SAM_QNAME)))// +1 in case of FASTQ to skip "@"
             || (!kraken_is_loaded && !kraken_is_included_stored (vb, SAM_TAXID, !flag.collect_coverage && !flag.count)))) 
             vb->drop_curr_line = "taxid";

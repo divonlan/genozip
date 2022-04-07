@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   digest.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "libdeflate/libdeflate.h"
@@ -119,20 +119,22 @@ void digest_piz_verify_one_vb (VBlockP vb)
         Digest piz_digest_so_far = digest_snapshot (&z_file->digest_ctx, NULL);
 
         // warn if VB is bad, but don't exit, so file reconstruction is complete and we can debug it
-        if (!digest_recon_is_equal (piz_digest_so_far, vb->digest_so_far) && !digest_is_equal (vb->digest_so_far, DIGEST_NONE)) {
+        if (!digest_recon_is_equal (piz_digest_so_far, vb->digest_so_far) && !digest_is_zero (vb->digest_so_far)) {
 
             TEMP_FLAG (quiet, flag.quiet && !flag.show_digest);
 
             // dump bad vb to disk
-            WARN ("reconstructed vblock=%u, component=%u (%s=%s) differs from original file (%s=%s).\n"
+            WARN ("reconstructed vblock=%s/%u, (%s=%s) differs from original file (%s=%s).\n"
+                  "expecting: VB_HEADER.recon_size=%u == txt_data.len=%"PRIu64"\n"
                   "Note: genounzip is unable to check the %s subsequent vblocks once a vblock is bad\n"
                   "Bad reconstructed vblock has been dumped to: %s\n"
                   "To see the same data in the original file:\n"
                   "genozip --biopsy %u %s (+any parameters used to compress this file)\n"
                   "If this is unexpected, please contact support@genozip.com.\n", 
-                  vb->vblock_i, vb->comp_i,  
+                  comp_name (vb->comp_i), vb->vblock_i, 
                   DIGEST_NAME, digest_display (piz_digest_so_far).s, 
                   DIGEST_NAME, digest_display (vb->digest_so_far).s, 
+                  vb->recon_size, vb->txt_data.len,
                   DIGEST_NAME, txtfile_dump_vb (vb, z_name), vb->vblock_i, file_guess_original_filename (txt_file));
 
             RESTORE_FLAG (quiet);

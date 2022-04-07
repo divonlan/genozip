@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   reconstruct.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "reconstruct.h"
@@ -27,9 +27,9 @@ static int64_t reconstruct_from_delta (VBlockP vb,
                                        STRp(delta_snip),
                                        bool reconstruct) 
 {
-    ASSPIZ (delta_snip, "delta_snip is NULL. vb_i=%u", vb->vblock_i);
-    ASSPIZ (base_ctx->flags.store == STORE_INT, "reconstructing %s - calculating delta \"%.*s\" from a base of %s, but %s, doesn't have STORE_INT. vb_i=%u line_in_vb=%"PRIu64,
-            my_ctx->tag_name, delta_snip_len, delta_snip, base_ctx->tag_name, base_ctx->tag_name, vb->vblock_i, vb->line_i - vb->first_line);
+    ASSPIZ0 (delta_snip, "delta_snip is NULL");
+    ASSPIZ (base_ctx->flags.store == STORE_INT, "reconstructing %s - calculating delta \"%.*s\" from a base of %s, but %s, doesn't have STORE_INT",
+            my_ctx->tag_name, delta_snip_len, delta_snip, base_ctx->tag_name, base_ctx->tag_name);
 
     int64_t base_value = (my_ctx->flags.delta_peek && my_ctx != base_ctx)
         ? reconstruct_peek (vb, base_ctx, 0, 0).i // value of this line/sample - whether already encountered or peek a future value
@@ -217,8 +217,8 @@ void reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, STRp(snip), bool
 
     else {
         len = vb->seq_len;
-        ASSPIZ (ctx->next_local + len <= ctx->local.len, "reading txt_line=%"PRIu64" vb_i=%u: unexpected end of %s data: expecting ctx->next_local=%u + seq_len=%u <= local.len=%u", 
-                vb->line_i, vb->vblock_i, ctx->tag_name, ctx->next_local, len, (uint32_t)ctx->local.len);
+        ASSPIZ (ctx->next_local + len <= ctx->local.len, "unexpected end of %s data: expecting ctx->next_local=%u + seq_len=%u <= local.len=%u", 
+                ctx->tag_name, ctx->next_local, len, ctx->local.len32);
 
         if (reconstruct) RECONSTRUCT (Bc(ctx->local, ctx->next_local), len);
     }
@@ -282,7 +282,7 @@ void reconstruct_set_buddy (VBlockP vb)
     if (!buddy_ctx->local.param)    
         num_lines_back = BGEN32 ((uint32_t)num_lines_back);
 
-    vb->buddy_line_i = (vb->line_i - vb->first_line) - num_lines_back; // convert value passed (distance in lines to buddy) to 0-based buddy_line_i
+    vb->buddy_line_i = vb->line_i - num_lines_back; // convert value passed (distance in lines to buddy) to 0-based buddy_line_i
 
     ASSPIZ (vb->buddy_line_i >= 0, "Expecting vb->buddy_line_i=%d to be non-negative. num_lines_back=%d buddy_ctx->local.param=%d", vb->buddy_line_i, num_lines_back, (int)buddy_ctx->local.param);
 }
@@ -486,7 +486,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
 
     case SNIP_PAIR_DELTA: { // used for FASTQ_GPOS - uint32_t stored in originating in the pair's local
         ASSPIZ (snip_ctx->pair_local, "no pair_1 local data for ctx=%s, while reconstructing pair_2 vb=%u", snip_ctx->tag_name, vb->vblock_i);
-        uint32_t fastq_line_i = vb->line_i / 4 - vb->first_line; // see fastq_piz_filter for calculation
+        int32_t fastq_line_i = vb->line_i / 4; // see fastq_piz_filter for calculation
         int64_t pair_value = (int64_t) *B32 (snip_ctx->pair, fastq_line_i);  
         int64_t delta = (int64_t)strtoull (snip+1, NULL, 10 /* base 10 */); 
         new_value.i = pair_value + delta;
@@ -503,8 +503,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
         break;
 
     case SNIP_SPECIAL:
-        ASSPIZ (snip_len >= 2, "SNIP_SPECIAL expects snip_len=%u >= 2. ctx=%s vb_i=%u line_i=%"PRIu64, 
-                snip_len, snip_ctx->tag_name, vb->vblock_i, vb->line_i);
+        ASSPIZ (snip_len >= 2, "SNIP_SPECIAL expects snip_len=%u >= 2. ctx=\"%s\"", snip_len, snip_ctx->tag_name);
                 
         uint8_t special = snip[1] - 32; // +32 was added by SPECIAL macro
 
@@ -599,16 +598,16 @@ static inline void reconstruct_store_history (VBlockP vb, ContextP ctx, uint32_t
 {
     // case: store last integer value
     if (ctx->flags.store == STORE_INT) 
-        *B(int64_t, ctx->history, vb->line_i - vb->first_line) = ctx->last_value.i;
+        *B(int64_t, ctx->history, vb->line_i) = ctx->last_value.i;
     
     // case: textual value will remain in txt_data - just point to it
     else if (!vb->maybe_lines_dropped) 
-        *B(HistoryWord, ctx->history, vb->line_i - vb->first_line) = 
+        *B(HistoryWord, ctx->history, vb->line_i) = 
             (HistoryWord){ .lookup = LookupTxtData, .char_index = last_txt_index, .snip_len = ctx->last_txt_len };
     
     // case: textual value might be removed from txt_data - copy it
     else {
-        *B(HistoryWord, ctx->history, vb->line_i - vb->first_line) = 
+        *B(HistoryWord, ctx->history, vb->line_i) = 
             (HistoryWord){ .lookup = LookupPerLine, .char_index = ctx->per_line.len, .snip_len = ctx->last_txt_len };
 
         if (ctx->last_txt_len) {
@@ -698,7 +697,7 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, DidIType did_i,
             reconstruct_from_local_text (vb, ctx, reconstruct); break;
 
         default:
-            ABORT ("Invalid ltype=%u in ctx=%s of vb_i=%u line_i=%"PRIu64, ctx->ltype, ctx->tag_name, vb->vblock_i, vb->line_i);
+            ASSPIZ (false, "Invalid ltype=%u in ctx=%s", ctx->ltype, ctx->tag_name);
         }
     }
 
@@ -715,7 +714,7 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, DidIType did_i,
     }
 
     else ASSPIZ (flag.missing_contexts_allowed,
-                 "ctx %s/%s has no data (dict, b250 or local) in vb_i=%u line_i=%"PRIu64" did_i=%u ctx->did=%u ctx->dict_id=%s ctx->is_loaded=%s", 
+                 "ctx %s/%s has no data (dict, b250 or local) in vb_i=%u line_i=%d did_i=%u ctx->did=%u ctx->dict_id=%s ctx->is_loaded=%s", 
                  dtype_name_z (ctx->dict_id), ctx->tag_name, vb->vblock_i, vb->line_i, did_i, ctx->did_i, dis_dict_id (ctx->dict_id).s, TF(ctx->is_loaded));
         
     if (sep && reconstruct) RECONSTRUCT1 (sep); 

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_seq.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "genozip.h"
@@ -83,7 +83,7 @@ void sam_seg_SEQ (VBlockSAMP vb, DidIType bitmap_did, STRp(seq), const PosType p
     if (!recursion_level) {
 
         ASSERTW (seq_len < 100000 || segconf.running || segconf.is_long_reads, 
-                 "Warning: sam_seg_SEQ: seq_len=%u is suspiciously high and might indicate a bug. vb=%u line_i=%"PRIu64, seq_len, vb->vblock_i, vb->line_i);
+                 "Warning: sam_seg_SEQ: seq_len=%u is suspiciously high and might indicate a bug. vb=%u line_i=%d", seq_len, vb->vblock_i, vb->line_i);
 
         buf_alloc (vb, &bitmap_ctx->local, roundup_bits2words64 (ref_and_seq_consumed), 
                    (segconf.is_long_reads ? vb->lines.len/2 : vb->lines.len) * (MIN_(ref_and_seq_consumed, segconf.sam_seq_len)) / 64,  // this formula was chosen after extensive trial & error - easy to get wrong, esp for long reads
@@ -288,7 +288,7 @@ void sam_seg_SEQ (VBlockSAMP vb, DidIType bitmap_did, STRp(seq), const PosType p
         bool bitmap_matches_MD = vb->md_verified && !bit_array_hamming_distance (M_is_ref, 0, bitmap, bitmap_start, M_is_ref->nbits);
 
         if (flag.show_wrong_md && vb->md_verified && !bitmap_matches_MD) {
-            iprintf ("vb=%u line=%"PRIu64" RNAME=%.*s POS=%"PRId64" CIGAR=%s MD=%.*s SEQ=%.*s\n", 
+            iprintf ("vb=%u line=%d RNAME=%.*s POS=%"PRId64" CIGAR=%s MD=%.*s SEQ=%.*s\n", 
                     vb->vblock_i, vb->line_i, STRf(vb->chrom_name), pos, vb->last_cigar, vb->last_txt_len(OPTION_MD_Z), last_txt(vb, OPTION_MD_Z), STRf(seq));
             bit_array_print_substr ("SEQ match to ref", bitmap, bitmap_start, M_is_ref->nbits, info_stream);
             bit_array_print_substr ("MD implied match", M_is_ref, 0, M_is_ref->nbits, info_stream); 
@@ -492,7 +492,7 @@ void sam_reconstruct_SEQ (VBlockP vb_, Context *bitmap_ctx, rom unused, unsigned
             subcigar_len = strtod (next_cigar, (char **)&next_cigar); // get number and advance next_cigar
         
             cigar_op = cigar_lookup_sam[(uint8_t)*(next_cigar++)];
-            ASSERT (cigar_op, "Invalid CIGAR op while reconstructing line %"PRIu64": '%c' (ASCII %u)", vb->line_i, *(next_cigar-1), *(next_cigar-1));
+            ASSERT (cigar_op, "Invalid CIGAR op while reconstructing line %d: '%c' (ASCII %u)", vb->line_i, *(next_cigar-1), *(next_cigar-1));
             cigar_op &= 0x0f; // remove validity bit
         }
 
@@ -512,11 +512,10 @@ void sam_reconstruct_SEQ (VBlockP vb_, Context *bitmap_ctx, rom unused, unsigned
                          (!flag.regions || regions_is_site_included (VB))) { // if this line is not included, then possibly its reference range is not loaded. we complete consumption (resulting in bad reconstruction) and drop the line in container_reconstruct_do
 
                         ref_print_is_set (range, pos + ref_consumed, stderr);
-                        ABORT ("while reconstructing line %"PRIu64" (vb_i=%u: last_txt_line=%"PRIu64" num_lines=%"PRIu64"): reference is not set: chrom=%u \"%.*s\" pos=%"PRId64" range=[%"PRId64"-%"PRId64"]"
-                               " (cigar=%s seq_start_pos=%"PRId64" ref_consumed=%u seq_consumed=%u)",
-                               vb->line_i, vb->vblock_i, (vb->first_line + vb->lines.len - 1), vb->lines.len, 
-                               range->chrom, range->chrom_name_len, range->chrom_name, pos + ref_consumed, 
-                               range->first_pos, range->last_pos, B1STc (vb->textual_cigar), pos, ref_consumed, seq_consumed);
+                        ASSPIZ (false, "reference is not set: chrom=%u \"%.*s\" pos=%"PRId64" range=[%"PRId64"-%"PRId64"]"
+                                " (cigar=%s seq_start_pos=%"PRId64" ref_consumed=%u seq_consumed=%u)",
+                                range->chrom, range->chrom_name_len, range->chrom_name, pos + ref_consumed, 
+                                range->first_pos, range->last_pos, B1STc (vb->textual_cigar), pos, ref_consumed, seq_consumed);
                     }
 
                     char ref = ref_base_by_idx (range, idx);
@@ -678,11 +677,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_DEPN_SEQ)
 
     BitArray *depn = buf_alloc_bitarr (vb, &vb->scratch, depn_seq_len * 2, "scratch");
     bit_array_copy (depn, 0, seqdepn, 2 * seqdepn_ctx->next_local, 2 * depn_seq_len); // this is prim XOR depn 
-    // bit_array_print_substr_bases ("xxx xor ", depn, 0, depn_seq_len, stdout);
-
     bit_array_xor (depn, depn, prim); // this is now depn in actg format
-    // bit_array_print_substr_bases ("xxx prim", prim, 0, depn_seq_len, stdout);
-    // bit_array_print_substr_bases ("xxx depn", depn, 0, depn_seq_len, stdout);
 
     // reverse complement if needed
     if (xstrand) 

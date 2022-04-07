@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   locs.h
-//   Copyright (C) 2021-2022 Black Paw Ventures Limited
+//   Copyright (C) 2021-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #pragma once
@@ -11,6 +11,7 @@
 #pragma GENDICT LOCS_X=DTYPE_FIELD=X
 #pragma GENDICT LOCS_Y=DTYPE_FIELD=Y
 #pragma GENDICT LOCS_TOPLEVEL=DTYPE_FIELD=TOPLEVEL
+#pragma GENDICT LOCS_DEBUG_LINES=DTYPE_FIELD=DBGLINES      // used by --debug-lines
 
 extern int32_t locs_is_header_done (bool is_eof);
 extern int32_t locs_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);

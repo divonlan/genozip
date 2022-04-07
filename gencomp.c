@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   gencomp.c - "generated component"
-//   Copyright (C) 2021-2022 Black Paw Ventures Limited
+//   Copyright (C) 2021-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include <errno.h>
@@ -168,8 +168,8 @@ void gencomp_initialize (CompIType comp_i, GencompType gct)
 
     if (!queueP[gct].gc_txts) {
         queueP[gct] = (QueueStruct) {
-            .queue_size    = global_max_threads * ((gct == GCT_OOB) ? 1 : 5), // OOB: global_max_threads is the theoretical maximum number of gencomp txt_data generatable from global_max_threads concurrently running ZIP compute threads
-                                                                              // DEPN: buffers are stored until all MAIN is segged, and is therefore unlimited. We store it compressed in memory, so we can be a bit generous with the number of buffers
+            .queue_size    = (gct == GCT_OOB) ? global_max_threads // OOB:  global_max_threads is the theoretical maximum number of gencomp txt_data generatable from global_max_threads concurrently running ZIP compute threads
+                                              : 1,                 // DEPN: No strong beneift of having more buffers in memory, see: private/internal-docs/gencomp-depn-memory-queue-vs-disk.txt
             .next_unused   = 0,           // 0 means gc_txts[0]
             .last_added    = END_OF_LIST, // ready-to-dispatch queue is initially empty
             .next_to_leave = END_OF_LIST

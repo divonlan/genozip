@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   phylip.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "genozip.h"
@@ -50,7 +50,10 @@ bool phy_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
 
     uint32_t num_seqs;
     int ret = sscanf (header, "%u %u", &num_seqs, &phy_seq_len);
-    ASSINP (ret==2, "Error: invalid Phylip header line: \"%.*s\"", (int)txt_header->len, txt_header->data);
+    ASSINP (ret==2, "Error: invalid PHYLIP header line: \"%.*s\"", (int)txt_header->len, txt_header->data);
+
+    ASSERTW0 (num_seqs > 0, "FYI: unusual PHYLIP header: number_of_sequences==0");
+    ASSERTW0 (phy_seq_len > 0, "FYI: unusual PHYLIP header: sequence_length==0");
 
     return true;
 }

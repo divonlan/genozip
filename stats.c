@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   stats.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include <stdarg.h>
@@ -382,7 +382,7 @@ void stats_generate (CompIType comp_i) // specific section, or COMP_NONE if for 
 
         if (st == SEC_DICT || st == SEC_B250 || st == SEC_LOCAL || st == SEC_COUNTS) continue; // these are covered by individual contexts
 
-        s->txt_len    = st == SEC_TXT_HEADER  ? z_file->txt_txtheader_so_far_bind : 0; // note: this excludes generated headers for DVCF and SAM/BAM
+        s->txt_len    = st == SEC_TXT_HEADER  ? z_file->header_size : 0; // note: MAIN header only, ie excluding generated headers for DVCF
         s->type       = "Global";
         s->my_did_i   = s->st_did_i = DID_I_NONE;
         s->did_i.s[0] = s->words.s[0] = s->hash.s[0] = s->uncomp_dict.s[0] = s->comp_dict.s[0] = '-';
@@ -395,7 +395,7 @@ void stats_generate (CompIType comp_i) // specific section, or COMP_NONE if for 
         all_txt_len   += s->txt_len;
     }
 
-    z_file->txt_txtheader_so_far_bind = 0; // reset (in case of showing components)
+    z_file->header_size = 0; // reset (in case of showing components)
     
     // contexts
     for (DidIType did_i=0; did_i < z_file->num_contexts; did_i++) { 
@@ -510,6 +510,10 @@ void stats_generate (CompIType comp_i) // specific section, or COMP_NONE if for 
         zfile_compress_section_data (evb, SEC_STATS, &z_file->STATS_buf);
     }
 
+    // store stats overhead, for stats_display (because when stats_display runs, section list won't be accessible since it is already converted to SectionEntFileFormat)
+    Section sec = sections_last_sec (SEC_STATS, false) - 1; // first stats section     
+    z_file->stats_buf.count = z_file->disk_so_far - sec->offset;
+
     buf_free (sbl_buf);
 }
 
@@ -517,15 +521,13 @@ void stats_display (void)
 {
     Buffer *buf = flag.show_stats == 1 ? &z_file->stats_buf : &z_file->STATS_buf;
 
-    if (!buf_is_alloc (buf)) return; // no stats available
+    if (!buf_is_alloc (buf)) return;  // no stats available
 
     buf_print (buf , false);
 
-    Section sec = sections_last_sec (SEC_STATS, false) - 1; // first stats section 
-
-    if (z_file->disk_size < (1<<20))  // no need to print this note if total size > 1MB, as the ~2K of overhead is rounded off anyway
+    if (z_file->disk_size < (1<<20) && command==ZIP)  // no need to print this note if total size > 1MB, as the ~2K of overhead is rounded off anyway
         // stats text doesn't include SEC_STATS and SEC_GENOZIP_HEADER - the last 3 sections in the file - since stats text is generated before these sections are compressed
-        iprintf ("\nNote: ZIP total file size excludes overhead of %s\n", str_size (z_file->disk_size - sec->offset).s);
+        iprintf ("\nNote: ZIP total file size excludes overhead of %s\n", str_size (z_file->stats_buf.count).s);
 
     iprint0 ("\n");
 }

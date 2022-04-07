@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_header.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 // ----------------------
@@ -223,7 +223,7 @@ static void bam_foreach_SQ_line (rom txt_header, uint32_t txt_header_len, // bin
     return;
 
 incomplete_header:
-    ABORT ("incomplete BAM header (next=%u)", next);
+    ASSERT (flag.show_bam, "incomplete BAM header (next=%u)", next); // missing BAM header allowed only if --show-bam
 
     #undef HDRSKIP
     #undef HDR32
@@ -352,8 +352,10 @@ int32_t bam_is_header_done (bool is_eof)
     uint32_t next=0;
 
     HDRSKIP(4); // magic
-    ASSINP (!memcmp (evb->txt_data.data, BAM_MAGIC, 4), // magic
-            "%s doesn't have a BAM magic - it doesn't seem to be a BAM file: magic=%2.2x%2.2x%2.2x%2.2x ", txt_name, (uint8_t)evb->txt_data.data[0], (uint8_t)evb->txt_data.data[1], (uint8_t)evb->txt_data.data[2], (uint8_t)evb->txt_data.data[3]);
+    bool is_magical = !memcmp (evb->txt_data.data, BAM_MAGIC, 4);
+    if (flag.show_bam && !is_magical) return 0; // BAM file has no header - allowed only with --show-bam
+
+    ASSINP (is_magical, "%s doesn't have a BAM magic - it doesn't seem to be a BAM file: magic=%2.2x%2.2x%2.2x%2.2x ", txt_name, (uint8_t)evb->txt_data.data[0], (uint8_t)evb->txt_data.data[1], (uint8_t)evb->txt_data.data[2], (uint8_t)evb->txt_data.data[3]);
 
     // sam header text
     uint32_t l_text = HDR32;

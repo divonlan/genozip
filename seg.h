@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   seg.h
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #pragma once
@@ -65,8 +65,7 @@ static inline void seg_add_to_local_text (VBlockP vb, ContextP ctx, STRp(snip), 
 static inline void seg_add_to_local_fixed (VBlockP vb, ContextP ctx, STRp(data))
     { seg_add_to_local_fixed_do (vb, ctx, STRa(data), false, false, 0); }
 
-#define seg_add_to_local_nonresizeable(vb, ctx, int_value, with_lookup, add_bytes) \
-    seg_add_to_local_fixed_do ((VBlockP)(vb), (ctx), (rom)&(int_value), sizeof (int_value), false, (with_lookup), (add_bytes))
+extern void seg_add_to_local_nonresizeable (VBlockP vb, Context *ctx, void *number, bool with_lookup, unsigned add_bytes);
 
 // requires setting ctx->dynamic_size_local=true in seg_initialize, but not need to set ltype as it will be set in zip_resize_local
 static inline void seg_add_to_local_resizable (VBlockP vb, ContextP ctx, int64_t value, unsigned add_bytes)
@@ -257,13 +256,13 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, MultiplexerP mux, uint32_t 
 #define SEG_EOL(f,account_for_ascii10) do { seg_by_did_i (VB, *(has_13) ? "\r\n" : "\n", 1 + *(has_13), (f), (account_for_ascii10) + *(has_13)); } while (0)
 
 #define ASSSEG(condition, p_into_txt, format, ...) \
-    ASSINP (condition, "Error in file %s: "format "\n\nvb_line_i:%"PRIu64" vb_i:%u pos_in_vb: %"PRIi64" pos_in_file: %"PRIi64\
+    ASSINP (condition, "Error in file %s: "format "\n\nvb:%s/%u line_i:%d pos_in_vb: %"PRIi64" pos_in_file: %"PRIi64\
                        "\nvb pos in file (0-based):%"PRIu64" - %"PRIu64" (length %"PRIu64")" \
                        "\n%d characters before to %d characters after (in quotes): \"%.*s\"" \
                        "\n%d characters before to %d characters after (in quotes): \"%.*s\"" \
                        "\nTo get vblock: %s %s | head -c %"PRIu64" | tail -c %u > vb.%u%s"   \
                        "\nDumped bad vblock from memory: %s",                                \
-                                     txt_name, __VA_ARGS__, vb->line_i, vb->vblock_i, \
+                                     txt_name, __VA_ARGS__, comp_name (vb->comp_i), vb->vblock_i, vb->line_i, \
             /* pos_in_vb:         */ (PosType)(p_into_txt ? ((rom)p_into_txt - vb->txt_data.data) : -1), \
             /* pos_in_file:       */ (PosType)(p_into_txt ? (vb->vb_position_txt_file + ((rom)p_into_txt - vb->txt_data.data)) : -1),\
             /* vb start pos file: */ vb->vb_position_txt_file, \

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_qual.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "genozip.h"
@@ -123,7 +123,7 @@ static void sam_get_sa_grp_qual (VBlockSAMP vb)
         void *success = rans_uncompress_to_4x16 (VB, B8(z_file->sa_qual, vb->sa_grp->qual), vb->sa_grp->qual_comp_len,
                                                  B1ST(uint8_t, vb->scratch), &uncomp_len); 
 
-        ASSERTGOTO (success && uncomp_len == vb->sa_grp->seq_len, "rans_uncompress_to_4x16 failed to decompress an SA Group QUAL data: vb_i=%u line_i=%"PRIu64" grp_i=%u success=%u comp_len=%u uncomp_len=%u expected_uncomp_len=%u qual=%"PRIu64,
+        ASSERTGOTO (success && uncomp_len == vb->sa_grp->seq_len, "rans_uncompress_to_4x16 failed to decompress an SA Group QUAL data: vb_i=%u line_i=%d grp_i=%u success=%u comp_len=%u uncomp_len=%u expected_uncomp_len=%u qual=%"PRIu64,
                     vb->vblock_i, vb->line_i, ZGRP_I(vb->sa_grp), !!success, vb->sa_grp->qual_comp_len, uncomp_len, vb->sa_grp->seq_len, vb->sa_grp->qual);
 
         vb->scratch.len = uncomp_len;
@@ -152,17 +152,13 @@ static void sam_seg_QUAL_diff_vs_primary (VBlockSAMP vb, ZipDataLineSAM *dl, STR
 
     if (!xstrand) {
         rom grp_qual = Bc (vb->scratch, vb->hard_clip[0]);
-        for (uint32_t i=0; i < qual_len; i++) {
+        for (uint32_t i=0; i < qual_len; i++) 
             diff[i] = qual[i] - grp_qual[i]; // a value [-93,93] as qual is [33,126]
-//printf ("xxx i=%u qual[i]=%u = grp_qual[i]=%u + diff[i]=%d\n", i, qual[i], grp_qual[i], diff[i]);
-        }            
     }
     else {
         rom grp_qual = Bc (vb->scratch, vb->sa_grp->seq_len - 1 - vb->hard_clip[0]);
-        for (int32_t/*signed*/ i=0; i < qual_len; i++) {
-//printf ("xxx XXXXX i=%u qual[i]=%u = grp_qual[i]=%u + diff[i]=%d\n", i, qual[i], grp_qual[i], diff[i]);
+        for (int32_t/*signed*/ i=0; i < qual_len; i++) 
             diff[i] = qual[i] - grp_qual[-i]; // a value [-93,93] as qual is [33,126]
-        }
     }
 
     buf_free (vb->scratch);

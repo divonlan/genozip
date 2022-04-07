@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   chain.h
-//   Copyright (C) 2021-2022 Black Paw Ventures Limited
+//   Copyright (C) 2021-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #pragma once
@@ -28,6 +28,7 @@
 #pragma GENDICT CHAIN_EOL=DTYPE_FIELD=EOL
 #pragma GENDICT CHAIN_TOPLEVEL=DTYPE_FIELD=TOPLEVEL
 #pragma GENDICT CHAIN_SEP=DTYPE_FIELD=SEP
+#pragma GENDICT CHAIN_DEBUG_LINES=DTYPE_FIELD=DBGLINES // used by --debug-lines
 
 // vblock stuff
 extern unsigned chain_vb_size (DataType dt);

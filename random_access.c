@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   random_access.h
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "buffer.h"
@@ -267,21 +267,22 @@ void random_access_finalize_entries (Buffer *ra_buf)
     FREE (sorter);
 
     // now that the VBs are in order, we can updated the "CONTINUED FROM PREVIOUS VB" ra's to their final values
-    for (uint32_t i=0; i < ra_buf->len; i++) {
-        
-        RAEntry *ra = B(RAEntry, *ra_buf, i);
+    if (Z_DT(DT_FASTA) || Z_DT(DT_REF))
+        for (uint32_t i=0; i < ra_buf->len; i++) {
+            
+            RAEntry *ra = B(RAEntry, *ra_buf, i);
 
-        // case: chrom is unknown - if the sequence started in the previous VB (this happens in FASTA) - we update now
-        if (ra->chrom_index == WORD_INDEX_NONE) {
-            // we expect this ra to be the first in its VB, and the previous ra to be of the previous VB
-            ASSERT (i && (ra->vblock_i == (ra-1)->vblock_i+1), "corrupt ra[%u]: chrom_index=WORD_INDEX_NONE but vb_i=%u and (ra-1)->vb_i=%u (expecting it to be %u)",
-                    i, ra->vblock_i, (ra-1)->vblock_i, ra->vblock_i-1);
+            // case: FASTA: chrom is unknown - if the sequence started in the previous VB - we update now
+            if (ra->chrom_index == WORD_INDEX_NONE) {
+                // we expect this ra to be the first in its VB, and the previous ra to be of the previous VB
+                ASSERT (i && (ra->vblock_i == (ra-1)->vblock_i+1), "corrupt ra[%u]: chrom_index=WORD_INDEX_NONE but vb_i=%u and (ra-1)->vb_i=%u (expecting it to be %u)",
+                        i, ra->vblock_i, (ra-1)->vblock_i, ra->vblock_i-1);
 
-            ra->chrom_index = (ra-1)->chrom_index;
-            ra->min_pos    += (ra-1)->max_pos;
-            ra->max_pos    += (ra-1)->max_pos;
+                ra->chrom_index = (ra-1)->chrom_index;
+                ra->min_pos    += (ra-1)->max_pos;
+                ra->max_pos    += (ra-1)->max_pos;
+            }
         }
-    }
 }
 
 void random_access_compress (ConstBufferP ra_buf_, SectionType sec_type, int ra_i, rom msg)

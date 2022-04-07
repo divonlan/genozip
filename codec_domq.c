@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   codec_domq.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 // compression algorithm for QUAL value that has a dominant value ("dom") (roughly over 50%) - as typically does binned Illumina
@@ -14,6 +14,7 @@
 
 #include "vblock.h"
 #include "data_types.h"
+#include "file.h"
 #include "piz.h"
 #include "reconstruct.h"
 #include "profiler.h"
@@ -46,7 +47,7 @@ bool codec_domq_comp_init (VBlockP vb, DidIType qual_did_i, LocalGetLineCB callb
     uint32_t num_sampled_lines = MIN_(NUM_LINES_IN_SAMPLE, vb->lines.len);
     uint32_t sampled_one_line = DOMQUAL_SAMPLE_LEN / MAX_(1,num_sampled_lines);
 
-    for (uint32_t line_i=0; line_i < num_sampled_lines; line_i++) {   
+    for (LineIType line_i=0; line_i < num_sampled_lines; line_i++) {   
         STRw(qual_data);
         callback (vb, line_i, pSTRa (qual_data), CALLBACK_NO_SIZE_LIMIT, NULL);
     
@@ -127,7 +128,7 @@ bool codec_domq_compress (VBlockP vb,
     qual_buf->len = 0; 
     uint32_t runlen = 0;
     
-    for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {   
+    for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {   
         STRw0 (qual);
         callback (vb, line_i, pSTRa(qual), CALLBACK_NO_SIZE_LIMIT, NULL);
 
@@ -212,8 +213,7 @@ static inline uint32_t shorten_run (uint8_t *run, uint32_t old_num_bytes, uint32
 // reconstructed a run of the dominant character
 static inline uint32_t codec_domq_reconstruct_dom_run (VBlockP vb, Context *domqruns_ctx, char dom, uint32_t max_len)
 {
-    ASSERT (domqruns_ctx->next_local < domqruns_ctx->local.len, "unexpectedly reached the end of vb->domqruns_ctx in vb_i=%u (first_line=%"PRIu64" len=%u)", 
-            vb->vblock_i, vb->first_line, (uint32_t)vb->lines.len);
+    ASSPIZ0 (domqruns_ctx->next_local < domqruns_ctx->local.len, "unexpectedly reached the end of vb->domqruns_ctx");
 
     // read the entire runlength (even bytes that are in excess of max_len)
     uint32_t runlen=0, num_bytes;
@@ -289,6 +289,5 @@ void codec_domq_reconstruct (VBlockP vb, Codec codec, ContextP qual_ctx)
         qual_len++;
     }
 
-    ASSERT (qual_len == expected_qual_len, "expecting qual_len(%u) == expected_qual_len(%u) in vb_i=%u (last_line=%"PRIu64", num_lines=%"PRIu64") line_i=%"PRIu64"", 
-            qual_len, expected_qual_len, vb->vblock_i, vb->first_line + vb->lines.len-1, vb->lines.len, vb->line_i);   
+    ASSPIZ (qual_len == expected_qual_len, "expecting qual_len(%u) == expected_qual_len(%u)", qual_len, expected_qual_len);   
 }

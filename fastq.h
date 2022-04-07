@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   fastq.h
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #pragma once
@@ -44,6 +44,8 @@
 #pragma GENDICT FASTQ_DOMQRUNS=DTYPE_FIELD=DOMQRUNS // must be 1 after QUAL. Also used by LONGR. For backwards compatability, we can never change its name.
 #pragma GENDICT FASTQ_TOPLEVEL=DTYPE_FIELD=TOPLEVEL
 #pragma GENDICT FASTQ_TAXID=DTYPE_FIELD=TAXID
+#pragma GENDICT FASTQ_DEBUG_LINES=DTYPE_FIELD=DBGLINES      // used by --debug-lines
+
 
 #pragma GENDICT FASTQ_LINE3=DTYPE_FIELD=LINE3
 #define MAX_LINE3_ITEMS 9

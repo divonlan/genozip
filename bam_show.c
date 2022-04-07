@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_bam.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "genozip.h"
@@ -65,7 +65,7 @@ rom bam_show_line (VBlockSAMP vb, rom alignment, uint32_t remaining_txt_len)
 
     // a non-sensical block_size might indicate an false-positive identification of a BAM alignment in bam_unconsumed
     ASSERT (block_size + 4 >= sizeof (BAMAlignmentFixed) && block_size + 4 <= remaining_txt_len, 
-            "vb=%u line_i=%"PRIu64" (block_size+4)=%u is out of range - too small, or goes beyond end of txt data: remaining_txt_len=%u",
+            "vb=%u line_i=%d (block_size+4)=%u is out of range - too small, or goes beyond end of txt data: remaining_txt_len=%u",
             vb->vblock_i, vb->line_i, block_size+4, remaining_txt_len);
 
 

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sections.h
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #pragma once
@@ -332,8 +332,8 @@ typedef struct SectionHeaderReconPlan {
 } SectionHeaderReconPlan;
 
 // plan flavors (3 bit)
-typedef enum { PLAN_RANGE=0, PLAN_FULL_VB=2, PLAN_INTERLEAVE=3, PLAN_TXTHEADER=4,
-               PLAN_REMOVE_ME=5, PLAN_DOWNSAMPLE=6, PLAN_END_OF_VB=7 } PlanFlavor;
+typedef enum { PLAN_RANGE=0, PLAN_FULL_VB=2, PLAN_INTERLEAVE=3/*PIZ-only*/, PLAN_TXTHEADER=4/*PIZ-only*/,
+               PLAN_REMOVE_ME=5/*PIZ-only*/, PLAN_DOWNSAMPLE=6/*PIZ-only*/, PLAN_END_OF_VB=7 } PlanFlavor;
 #define PLAN_FLAVOR_NAMES { "RANGE", "invalid", "FULL_VB", "INTERLEAVE", "TXTHEADER", "REMOVE_ME", "DOWNSAMPLE", "END_OF_VB" }
 typedef struct {
     VBIType vb_i;               

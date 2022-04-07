@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   zip.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include <math.h>
@@ -633,9 +633,9 @@ static void zip_compress_one_vb (VBlockP vb)
     if (txt_file->codec == CODEC_BGZF && flag.pair != PAIR_READ_2) 
         bgzf_uncompress_vb (vb);    // some of the blocks might already have been decompressed while reading - we decompress the remaining
 
-    // calculate the digest contribution of this VB to the single file and bound files, and the digest snapshot of this VB
+    // calculate the digest contribution of this VB, and the digest snapshot of this VB
     if (!flag.make_reference && !flag.data_modified) 
-        digest_one_vb (vb); 
+        digest_one_vb (vb); // serializes VBs in order
 
     // allocate memory for the final compressed data of this vb. allocate 33% of the
     // vb size on the original file - this is normally enough. if not, we will realloc downstream

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   genozip.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include <getopt.h>
@@ -281,25 +281,25 @@ static void main_test_after_genozip (rom exec_path, rom z_filename, bool is_last
         }
 
         StreamP test = stream_create (0, 0, 0, 0, 0, 0, 0,
-                                    "To use the --test option",
-                                    exec_path, "--decompress", "--test", z_filename,
-                                    flag.quiet         ? "--quiet"         : SKIP_ARG,
-                                    password           ? "--password"      : SKIP_ARG,
-                                    password           ? password          : SKIP_ARG,
-                                    flag.show_digest   ? "--show-digest"   : SKIP_ARG,
-                                    flag.log_digest    ? "--log-digest"    : SKIP_ARG,
-                                    flag.show_memory   ? "--show-memory"   : SKIP_ARG,
-                                    flag.show_time     ? "--show-time"     : SKIP_ARG,
-                                    flag.threads_str   ? "--threads"       : SKIP_ARG,
-                                    flag.threads_str   ? flag.threads_str  : SKIP_ARG,
-                                    flag.xthreads      ? "--xthreads"      : SKIP_ARG,
-                                    flag.show_alleles  ? "--show-alleles"  : SKIP_ARG,
-                                    flag.debug_threads ? "--debug-threads" : SKIP_ARG,
-                                    flag.echo          ? "--echo"          : SKIP_ARG,
-                                    flag.verify_codec  ? "--verify-codec"  : SKIP_ARG,
-                                    flag.reference == REF_EXTERNAL && !is_chain ? "--reference" : SKIP_ARG, // normal pizzing of a chain file doesn't require a reference
-                                    flag.reference == REF_EXTERNAL && !is_chain ? ref_get_filename(gref) : SKIP_ARG, 
-                                    NULL);
+                                      "To use the --test option",
+                                      exec_path, "--decompress", "--test", z_filename,
+                                      flag.quiet         ? "--quiet"         : SKIP_ARG,
+                                      password           ? "--password"      : SKIP_ARG,
+                                      password           ? password          : SKIP_ARG,
+                                      flag.show_digest   ? "--show-digest"   : SKIP_ARG,
+                                      flag.log_digest    ? "--log-digest"    : SKIP_ARG,
+                                      flag.show_memory   ? "--show-memory"   : SKIP_ARG,
+                                      flag.show_time     ? "--show-time"     : SKIP_ARG,
+                                      flag.threads_str   ? "--threads"       : SKIP_ARG,
+                                      flag.threads_str   ? flag.threads_str  : SKIP_ARG,
+                                      flag.xthreads      ? "--xthreads"      : SKIP_ARG,
+                                      flag.show_alleles  ? "--show-alleles"  : SKIP_ARG,
+                                      flag.debug_threads ? "--debug-threads" : SKIP_ARG,
+                                      flag.echo          ? "--echo"          : SKIP_ARG,
+                                      flag.verify_codec  ? "--verify-codec"  : SKIP_ARG,
+                                      flag.reference == REF_EXTERNAL && !is_chain ? "--reference" : SKIP_ARG, // normal pizzing of a chain file doesn't require a reference
+                                      flag.reference == REF_EXTERNAL && !is_chain ? ref_get_filename(gref) : SKIP_ARG, 
+                                      NULL);
 
         // wait for child process to finish, so that the shell doesn't print its prompt until the test is done
         int exit_code = stream_wait_for_exit (test);
@@ -331,6 +331,7 @@ static void main_test_after_genozip (rom exec_path, rom z_filename, bool is_last
         if (flag.debug_threads) argv[argc++] = "--debug-threads";
         if (flag.echo)          argv[argc++] = "--echo";
         if (flag.verify_codec)  argv[argc++] = "--verify-codec";
+        if (flag.debug_lines)   argv[argc++] = "--debug-lines";
         if (flag.reference == REF_EXTERNAL && !is_chain) 
                               { argv[argc++] = "--reference"; 
                                 argv[argc++] = ref_get_filename(gref); }
@@ -575,7 +576,7 @@ static void main_get_filename_list (unsigned num_files, char **filenames, // in
         i--;
     }
 
-    ASSINP0 (fn_buf->len, "No work me :( all files listed are directories.");
+    ASSINP0 (fn_buf->len, "No work for me :( all files listed are directories.");
 
     flags_update (fn_buf->len, B1ST (rom , *fn_buf));
 

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   contigs.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "genozip.h"
@@ -123,8 +123,11 @@ static ConstBufferP sorter_contigs=0, sorter_contigs_dicts=0;
 static SORTER (contigs_alphabetical_sorter)
 {
     DEF_SORTER_CONTIGS;
-    return strcmp (Bc (*sorter_contigs_dicts, contig_a->char_index),
-                   Bc (*sorter_contigs_dicts, contig_b->char_index));
+
+    rom contig_a_str = contig_a->snip_len ? Bc (*sorter_contigs_dicts, contig_a->char_index) : "~unused";
+    rom contig_b_str = contig_b->snip_len ? Bc (*sorter_contigs_dicts, contig_b->char_index) : "~unused";
+
+    return strcmp (contig_a_str, contig_b_str);
 }
 
 static SORTER (contigs_accession_number_sorter)
@@ -460,18 +463,18 @@ void contigs_create_index (ContigPkg *ctgs, SortBy sort_by)
     ctgs->sorted_by |= sort_by;
 }
 
-void contigs_build_contig_pkg_from_ctx (ContigPkg *ctgs, ConstContextP ctx, SortBy sort_by)
+void contigs_build_contig_pkg_from_zctx (ContigPkg *ctgs, ConstContextP zctx, SortBy sort_by)
 {
     ASSERTNOTNULL (ctgs);
 
-    buf_copy (evb, &ctgs->dict, &ctx->dict, char, 0, 0, "ContigPkg->dict");
+    buf_copy (evb, &ctgs->dict, &zctx->dict, char, 0, 0, "ContigPkg->dict");
     
     // note: we take num_contigs from nodes (ZIP) or word_list (PIZ), but in the case of nodes, we can't rely
     // on chrom_ctx->nodes for the correct order as vb_i=1 resorted. so we generate directly from dict
-    uint32_t num_contigs = MAX_(ctx->nodes.len, ctx->word_list.len);
-    uint32_t num_counts  = ctx->counts.len;
+    uint32_t num_contigs = MAX_(zctx->nodes.len, zctx->word_list.len);
+    uint32_t num_counts  = zctx->counts.len;
 
-    ASSERT (!num_counts || ctx->counts.len == num_contigs, "expecting ctx=%s to have num_contigs=%u == num_counts=%u", ctx->tag_name, num_contigs, num_counts);
+    ASSERT (!num_counts || zctx->counts.len == num_contigs, "expecting zctx=%s to have num_contigs=%u == num_counts=%u", zctx->tag_name, num_contigs, num_counts);
 
     ctgs->contigs.len = ctgs->dict.count = num_contigs;
     ctgs->has_counts = (num_counts > 0);
@@ -484,7 +487,7 @@ void contigs_build_contig_pkg_from_ctx (ContigPkg *ctgs, ConstContextP ctx, Sort
     for (uint32_t i=0; i < num_contigs; i++, contig++) {
 
         if (num_counts)
-            contig->metadata.parsed.count = *B(int64_t, ctx->counts, i);
+            contig->metadata.parsed.count = *B64(zctx->counts, i);
 
         char *c=start; while (*c) c++;
         contig->snip_len   = c - start;

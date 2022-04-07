@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   file.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include <errno.h>
@@ -29,6 +29,7 @@
 #include "progress.h"
 #include "endianness.h"
 #include "tar.h"
+#include "writer.h"
 
 // globals
 File *z_file   = NULL;
@@ -423,9 +424,6 @@ static bool file_open_txt_read (File *file)
     file->codec        = file_get_codec_by_txt_ft (file->data_type, file->type, false);
     file->source_codec = file_get_codec_by_txt_ft (file->data_type, file->type, true);
 
-    //xxx ASSINP0 (!flag.is_windows || !file->redirected || file->codec == CODEC_NONE, 
-    //          "genozip on Windows supports piping in only plain (uncompressed) data");
-
     switch (file->codec) { 
         case CODEC_CRAM: {
             input_decompressor = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 
@@ -526,17 +524,9 @@ fallthrough_from_cram: {}
                 buf_add_more (evb, &evb->scratch, (char*)block, block_size, "scratch");
             }
 
-            // Notes 1. We currently only support plain and BGZF data piped in - see bug 243
-            // 2. On Windows, we can't pipe binary files, bc Windows converts \n to \r\n
-            // 3. The codec at this point is what the user declared in -i (we haven't tested for gz yet)
-//xxx #ifdef _WIN32 
-//             ASSINP0 (!flag.is_windows || !file->redirected || file->codec == CODEC_NONE, 
-//                     "genozip on Windows supports piping in only plain (uncompressed) data");
-// #else
             ASSINP (!file->redirected || file->codec == CODEC_NONE || file->codec == CODEC_BGZF, 
                     "genozip only supports piping in data that is either plain (uncompressed) or compressed in BGZF format (typically with .gz extension) (codec=%s)", 
                     codec_name (file->codec));
-// #endif
             break;
         }
         case CODEC_BZ2:
@@ -718,7 +708,7 @@ static bool file_open_txt_write (File *file)
 // these in VBs other than evb
 static void file_initialize_bufs (File *file)
 {
-#define INIT(buf) ({ buf_add_to_buffer_list_(evb, &file->buf, #buf); })
+#define INIT(buf) ({ buf_add_to_buffer_list_(evb, &file->buf, "file->" #buf); })
     
     INIT (ra_buf);
     INIT (ra_buf_luft);
@@ -883,13 +873,16 @@ static bool file_open_z (File *file)
 
         mutex_initialize (file->dicts_mutex);
     
-        if (flag.force && !tar_is_tar()) 
-            unlink (file->name); // delete file if it already exists (needed in weird cases, eg symlink to non-existing file)
+        if (!flag.seg_only && !flag.show_bam) {
 
-        // if we're writing to a tar file, we get the already-openned tar file
-        file->file = tar_is_tar() ? tar_open_file (file->name) 
-                                  : fopen (file->name, file->mode);
+            if (flag.force && !tar_is_tar()) 
+                unlink (file->name); // delete file if it already exists (needed in weird cases, eg symlink to non-existing file)
 
+            // if we're writing to a tar file, we get the already-openned tar file
+            file->file = tar_is_tar() ? tar_open_file (file->name) 
+                                    : fopen (file->name, file->mode);
+        }
+        
         if (chain_is_loaded)
             file->z_flags.has_gencomp = true; // dual-coordinate file
     }
@@ -1426,6 +1419,18 @@ void file_put_data_abort (void)
         }
 
     // mutex remains locked - no more files can be put after this point
+}
+
+void file_put_line (VBlockP vb, STRp(line), rom msg)
+{
+    char fn[64];
+    sprintf (fn, "line.%s.%u.%d%s", command==ZIP ? "zip" : "piz",
+             vb->vblock_i, vb->line_i, file_plain_ext_by_dt ((VB_DT(DT_SAM) && z_file->z_flags.txt_is_bin) ? DT_BAM : vb->data_type));
+    
+    file_put_data (fn, STRa(line), 0);
+
+    WARN ("\n%s vb=%s/%u line_in_file(1-based)=%"PRIu64" vb->line_i(0-based)=%d. Dumped %s (dumping first occurance only)", 
+            msg, comp_name(vb->comp_i), vb->vblock_i, writer_get_txt_line_i (vb), vb->line_i, fn);
 }
 
 void file_assert_ext_decompressor (void)

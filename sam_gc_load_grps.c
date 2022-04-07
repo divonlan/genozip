@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_gc_load_sa.c
-//   Copyright (C) 2022-2022 Black Paw Ventures Limited
+//   Copyright (C) 2022-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "genozip.h"
@@ -17,6 +17,7 @@
 #include "bit_array.h"
 #include "writer.h"
 #include "htscodecs/rANS_static4x16.h"
+#include "libdeflate/libdeflate.h"
 
 typedef struct {
     VBIType vblock_i;
@@ -57,9 +58,11 @@ ShowAln sam_show_sa_one_aln (const SAGroupType *g, const SAAlnType *a)
         else
             sprintf (cigar_info, "in=%"PRIu64" l=%u comp=%u", (uint64_t)a->cigar.piz.index, ALN_CIGAR_LEN(a), (int)a->cigar.piz.comp_len);
 
-        sprintf (s.s, "aln_i=%u.%u: rname=%-7s pos=%-10u mapq=%-3u strand=%c nm=%-3u cigar[%u]=\"%s\"(%s)",
-                ZGRP_I(g), (unsigned)(ZALN_I(a) - g->first_aln_i), 
-                ctx_get_snip_by_word_index0 (ZCTX(OPTION_SA_RNAME), a->rname), 
+        char rname_str[64]; // should be big enough...
+        sprintf (rname_str, "\"%.48s\"(%u)", ctx_get_snip_by_word_index0 (ZCTX(OPTION_SA_RNAME), a->rname), a->rname);
+
+        sprintf (s.s, "aln_i=%u.%u: sa_rname=%-13s pos=%-10u mapq=%-3u strand=%c nm=%-3u cigar[%u]=\"%s\"(%s)",
+                ZGRP_I(g), (unsigned)(ZALN_I(a) - g->first_aln_i), rname_str,
                 a->pos, a->mapq, "+-"[a->revcomp], a->nm,
                 SA_CIGAR_DISPLAY_LEN, sam_piz_display_aln_cigar (a), cigar_info);
     }
@@ -75,10 +78,13 @@ void sam_show_sa_one_grp (SAGroup grp_i)
 {
     const SAGroupType *g = B(SAGroupType, z_file->sa_groups, grp_i);
 
-    iprintf ("grp_i=%u: qname(%"PRIu64",%u)=%.*s seq=(%"PRIu64",%u) qual=(%"PRIu64",%u)[%u]=\"%s\" strand=%c num_alns=%u first_aln=%"PRIu64"%s\n",
-             grp_i, (uint64_t)g->qname, g->qname_len, g->qname_len, GRP_QNAME(g) , g->seq, g->seq_len, 
+    iprintf ("grp_i=%u: qname(i=%"PRIu64",l=%u,hash=%u)=%.*s seq=(i=%"PRIu64",l=%u) qual=(i=%"PRIu64",comp_l=%u)[%u]=\"%s\" strand=%c mul/fst/lst=%u,%u,%u num_alns=%u first_aln=%"PRIu64"%s\n",
+             grp_i, (uint64_t)g->qname, g->qname_len, 
+             QNAME_HASH (GRP_QNAME(g), g->qname_len, g->is_last), // the hash is part of the index in ZIP, and not part of the SAGroup struct. Its provided here for its usefulness in debugging
+             g->qname_len, GRP_QNAME(g) , g->seq, g->seq_len, 
              g->qual, g->qual_comp_len, SA_QUAL_DISPLAY_LEN, sam_display_qual_from_SA_Group (g),  
-             "+-"[g->revcomp], g->num_alns, (uint64_t)g->first_aln_i, g->first_grp_in_vb ? " FIRST_GRP_IN_VB" : "");
+             "+-"[g->revcomp], g->multi_segments, g->is_first, g->is_last,
+             g->num_alns, (uint64_t)g->first_aln_i, g->first_grp_in_vb ? " FIRST_GRP_IN_VB" : "");
 
     for (uint64_t aln_i=g->first_aln_i; aln_i < g->first_aln_i + g->num_alns; aln_i++) 
         iprintf ("    %s\n", sam_show_sa_one_aln (g, B(SAAlnType, z_file->sa_alns, aln_i)).s);
@@ -109,7 +115,7 @@ static inline void sam_load_groups_add_qname (VBlockSAMP vb, PlsgVbInfo *plsg, S
     
     vb->txt_data.len = 0;
     for (SAGroup grp_i=0; grp_i < plsg->num_grps ; grp_i++) {
-        vb->line_i = vb->first_line + grp_i; // needed for buddying to word
+        vb->line_i = grp_i; // needed for buddying to word
         vb->buddy_line_i = NO_BUDDY;
 
         vb_grps[grp_i].qname = plsg->qname_start + vb->txt_data.len;
@@ -119,10 +125,27 @@ static inline void sam_load_groups_add_qname (VBlockSAMP vb, PlsgVbInfo *plsg, S
         // PRIMARY alignment with the QNAME has a buddy (but no info here about DEPN alignments!)
         // When reconstructing a primary VB, sam_piz_set_sa_grp will set the buddy if vb_grps[grp_i].prim_set_buddy is true
         vb_grps[grp_i].prim_set_buddy = (vb->buddy_line_i != NO_BUDDY); 
-// printf ("xxxZ grp_i=%u vb=%u q=%u q=%u z_file->sa_qnames.len=%u\n", grp_i, vb->vblock_i, z_file->sa_qnames.data[8324], z_file->sa_qnames.data[8325], (int)z_file->sa_qnames.len);
     }
 
     buf_free (vb->txt_data);
+}
+
+// FLAGS: get multi_segments, is_first, is_last from SAM_FLAGS. 
+static inline void sam_load_groups_add_flags (VBlockSAMP vb, PlsgVbInfo *plsg, SAGroupType *vb_grps) 
+{
+    for (SAGroup grp_i=0; grp_i < plsg->num_grps ; grp_i++) {
+
+        // get SAM_FLAG snip, which is a SPECIAL with the parameter being the flags without revcomp (see sam_seg_FLAG)
+        STR0(snip);
+        LOAD_SNIP(SAM_FLAG); 
+
+        ASSERT0 (snip[0]==SNIP_SPECIAL && snip[1]==SAM_SPECIAL_SAGROUP, "expecting FLAG to be SAM_SPECIAL_SAGROUP");
+
+        SamFlags sam_flags = { .value = atoi (&snip[2]) };
+        vb_grps[grp_i].multi_segments = sam_flags.bits.multi_segments;
+        vb_grps[grp_i].is_first       = sam_flags.bits.is_first;
+        vb_grps[grp_i].is_last        = sam_flags.bits.is_last;
+    }
 }
 
 // Grp loader compute thread: copy to z_file->sa_qual
@@ -161,12 +184,8 @@ static inline void sam_load_groups_move_comp_to_zfile (VBlockSAMP vb, PlsgVbInfo
     buf_free (vb_qual_buf);
     buf_free (vb_cigars_buf);
 
-    for (SAGroup grp_i=0; grp_i < plsg->num_grps ; grp_i++) {
+    for (SAGroup grp_i=0; grp_i < plsg->num_grps ; grp_i++) 
         vb_grps[grp_i].qual += start_qual;
-// if (vb->vblock_i==11 && grp_i==0)  // xxx
-// printf ("vb_grps[grp_i].qual=%u len=%u comp_len=%u adler=%u\n", (int)vb_grps[grp_i].qual, vb_grps[grp_i].seq_len, vb_grps[grp_i].qual_comp_len, adler32(1, Bc(z_file->sa_qual, 447454), 5654));
-}
-// printf ("xxx1 adler=%u vb=%u adding from %u len=%u\n", adler32(1, Bc(z_file->sa_qual, 447454), 5654), vb->vblock_i, (int)start_qual, (int)vb_qual_buf.len);
 
     for (SAGroup aln_i=0; aln_i < plsg->num_alns ; aln_i++) 
         if (!vb_alns[aln_i].cigar.piz.is_word)
@@ -206,7 +225,6 @@ static inline void sam_load_groups_add_qual (VBlockSAMP vb, PlsgVbInfo *plsg, SA
     // Reconstruct QUAL of one line into txt_data which is overlaid on codec_bufs[0]
     reconstruct_from_ctx (vb, SAM_QUAL, 0, true); // reconstructs into vb->txt_data
     vb->codec_bufs[0].len = vb->txt_data.len;
-//xxx    g->no_qual = (vb->txt_data.len == 1 && *B1STtxt == '*'); // missing QUAL
     g->no_qual = vb->qual_missing;
     buf_free (vb->txt_data); // un-overlay
 
@@ -235,7 +253,6 @@ static inline void sam_load_groups_add_qual (VBlockSAMP vb, PlsgVbInfo *plsg, SA
     }
 
     vb->codec_bufs[0].len = 0; // faster than buf_free
-//if (ZGRP_I(g)==0) printf ("xxx q[3]=%d,%d,%d\n", )
 }
 
 // populates the cigar data of one alignment
@@ -490,6 +507,7 @@ static void sam_load_groups_add_one_prim_vb (VBlockP vb_)
 
     sam_load_groups_add_alns (vb, plsg, vb_grps, vb_alns);
     if (CTX(SAM_QNAME)->is_loaded) sam_load_groups_add_qname (vb, plsg, vb_grps);
+    sam_load_groups_add_flags (vb, plsg, vb_grps);
     sam_load_groups_add_grps (vb, plsg, vb_grps);
     sam_load_groups_move_comp_to_zfile (vb, plsg, vb_grps, vb_alns); // last, as it might block
     
@@ -525,10 +543,22 @@ bool sam_piz_dispatch_one_load_SA_Groups_vb (Dispatcher dispatcher)
 
 done_loading:
     // restore globals
-    flag = save_flag;  // also resets flag.processing
+    flag = save_flag;  // also resets flag.preprocessing
     dispatcher_set_task_name (dispatcher, PIZ_TASK_NAME);
 
     return false;
+}
+
+// PIZ main thread: after joining a preprocessing VB
+void sam_piz_after_preproc (VBlockP vb)
+{
+    z_file->num_preproc_vbs_joined++;
+
+    // print SA after all groups are loaded
+    if (flag.show_sa && sections_get_num_vbs (SAM_COMP_PRIM) == z_file->num_preproc_vbs_joined) {
+        sam_show_sa();
+        if (exe_type == EXE_GENOCAT) exit(0);
+    }
 }
 
 // PIZ main thread: a callback of piz_after_global_area 

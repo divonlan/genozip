@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   digest.h
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #pragma once
@@ -79,5 +79,7 @@ extern void digest_verify_ref_is_equal (const Reference ref, rom header_ref_file
 #define md5_is_zero(digest) (!(digest).w128)
 #define v8_digest_is_zero(digest) (command == PIZ && z_file->genozip_version < 9 && md5_is_zero(digest))
 #define digest_is_zero md5_is_zero
+
+#define piz_need_digest (!v8_digest_is_zero (z_file->digest) && !flag.data_modified && !flag.reading_chain) 
 
 // backward compatability note: in v8 files compressed without --md5 or --test, we had no digest. starting v9, we have Adler32

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   fasta.h
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #pragma once
@@ -18,6 +18,7 @@
 #pragma GENDICT FASTA_NONREF_X=DTYPE_FIELD=NONREF_X
 #pragma GENDICT FASTA_TOPLEVEL=DTYPE_FIELD=TOPLEVEL
 #pragma GENDICT FASTA_TAXID=DTYPE_FIELD=TAXID
+#pragma GENDICT FASTA_DEBUG_LINES=DTYPE_FIELD=DBGLINES      // used by --debug-lines
 
 // Txtfile stuff
 extern int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);

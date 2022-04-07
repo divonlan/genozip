@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   fast.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "fastq.h"
@@ -48,6 +48,7 @@ typedef struct VBlockFASTQ {
     uint32_t pair_num_lines; // number of lines in the equivalent vb in the first file
     char *optimized_desc;    // base of desc in flag.optimize_DESC 
     uint32_t optimized_desc_len;
+    uint64_t first_line;     // ZIP: used for optimize_DESC  
 } VBlockFASTQ;
 
 #define VB_FASTQ ((VBlockFASTQ *)vb)
@@ -60,6 +61,7 @@ unsigned fastq_vb_zip_dl_size (void) { return sizeof (ZipDataLineFASTQ); }
 void fastq_vb_release_vb (VBlockFASTQ *vb)
 {
     vb->pair_num_lines = vb->pair_vb_i = vb->optimized_desc_len = 0;
+    vb->first_line = 0;
     FREE (vb->optimized_desc);
 }
 
@@ -149,7 +151,7 @@ void fastq_zip_init_vb (VBlockP vb)
         uint32_t num_lines = str_count_char (STRb(vb->txt_data), '\n');
         ASSERT (num_lines % 4 == 0, "expecting number of txt lines in VB to be a multiple of 4, but found %u", num_lines);
 
-        vb->first_line = txt_file->num_lines + 1; // this is normally not used in ZIP
+        VB_FASTQ->first_line = txt_file->num_lines + 1;
         txt_file->num_lines += num_lines / 4;     // update here instead of in zip_update_txt_counters;
     }
 }
@@ -627,7 +629,7 @@ CONTAINER_FILTER_FUNC (fastq_piz_filter)
 {
     if (dict_id.num == _FASTQ_TOPLEVEL) {
         if (item < 0)   // filter for repeat (FASTQ record)
-            vb->line_i = 4 * (vb->first_line + rep); // each vb line is a fastq record which is 4 txt lines (needed for --pair)
+            vb->line_i = 4 * rep; // each vb line is a fastq record which is 4 txt lines (needed for --pair)
 
         else { // filter for item
             // case: --header-only: dont show items 2+. note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast
@@ -713,7 +715,7 @@ CONTAINER_CALLBACK (fastq_piz_container_cb)
         if (!kraken_is_loaded && !kraken_is_included_stored (vb, FASTQ_TAXID, false))
             vb->drop_curr_line = "taxid";
         
-        else if (kraken_is_loaded && flag.kraken_taxid >= 0) {
+        else if (kraken_is_loaded && flag.kraken_taxid != TAXID_NONE) {
             rom qname = last_txt (vb, FASTQ_DESC) + !prefixes_len; // +1 to skip the "@", if '@' is in DESC and not in prefixes (for files up to version 12.0.13)
             unsigned qname_len = strcspn (qname, " \t\n\r");
 

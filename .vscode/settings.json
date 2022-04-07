@@ -1,7 +1,7 @@
 {
     "files.associations": {
         "*.eb": "python",
-        "reconstruct.h": "c"
+        "compressor.h": "c"
     },
     "C_Cpp.dimInactiveRegions": false,
     "restructuredtext.confPath": "${workspaceFolder}\\docs",

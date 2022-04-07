@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_cigar.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 // a module for handling CIGAR and MC:Z
@@ -219,13 +219,8 @@ void sam_cigar_analyze (VBlockSAMP vb, STRp(cigar)/* textual */, bool cigar_is_i
         DATA_LINE (vb->line_i)->ref_consumed = vb->ref_consumed; // consumed by sam_seg_predict_TLEN 
 
     // PIZ reconstructing: we store ref_consumed in ctx->piz_ctx_specific_buf because ctx->history is already taken for storing the CIGAR string
-    else if (!vb->preprocessing) {
-        uint64_t line_i = vb->line_i - vb->first_line;
-        if (!line_i)
-            buf_alloc_zero (vb, &CTX(SAM_CIGAR)->piz_ctx_specific_buf, 0, vb->lines.len, uint32_t, 0, "piz_ctx_specific_buf"); // initialize to exactly one per line.
-
-        *B32 (CTX(SAM_CIGAR)->piz_ctx_specific_buf, line_i) = vb->ref_consumed;
-    }
+    else if (!vb->preprocessing) 
+        *B32 (CTX(SAM_CIGAR)->piz_ctx_specific_buf, vb->line_i) = vb->ref_consumed;
     
     ASSINP (!n, "Invalid CIGAR in %s: expecting it to end with an operation character. CIGAR=\"%.*s\"", 
             txt_name, cigar_len, cigar);
@@ -271,14 +266,14 @@ void bam_seg_cigar_analyze (VBlockSAMP vb, uint32_t *seq_consumed)
             case BC_S : LAST_OR_1ST ; SEQ_CONSUMED_ ; COUNT_(soft_clip[op_i > 0]) ; break ; // Note: a "121S" (just one op S or H) is considered a left-clip (eg as expected by sam_seg_XG_Z_analyze)
             case BC_H : LAST_OR_1ST ; COUNT_ (hard_clip[op_i > 0])                ; break ;
             case BC_P :                                                             break ;
-            default   : ASSINP (false, "Invalid CIGAR in %s vb=%u line=%u: invalid operation %u", txt_name, vb->vblock_i, (uint32_t)vb->line_i, cigar[op_i].op);
+            default   : ASSINP (false, "Invalid CIGAR in %s vb=%u line=%d: invalid operation %u", txt_name, vb->vblock_i, vb->line_i, cigar[op_i].op);
         }
     }          
 
     DATA_LINE (vb->line_i)->ref_consumed = vb->ref_consumed; // consumed by sam_seg_predict_TLEN 
 
-    ASSINP (!seq_consumed || *seq_consumed, "Invalid CIGAR in %s vb=%u line=%u: CIGAR implies 0-length SEQ CIGAR=\"%.*s\"", 
-            txt_name, vb->vblock_i, (uint32_t)vb->line_i, (int)vb->textual_cigar.len, vb->textual_cigar.data);
+    ASSINP (!seq_consumed || *seq_consumed, "Invalid CIGAR in %s vb=%u line=%d: CIGAR implies 0-length SEQ CIGAR=\"%.*s\"", 
+            txt_name, vb->vblock_i, vb->line_i, (int)vb->textual_cigar.len, vb->textual_cigar.data);
 
     // note: if there's ever any need to support both S and H, we need to fix sam_sa_seg_depn_find_sagroup too
     ASSINP (!((vb->hard_clip[0] || vb->hard_clip[1]) && (vb->soft_clip[0] || vb->soft_clip[1])),
@@ -835,14 +830,14 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_CONSUME_MC_Z)
             snip_len=0;
 
         else 
-            *B(HistoryWord, mc_ctx->history, vb->line_i - vb->first_line) = 
+            *B(HistoryWord, mc_ctx->history, vb->line_i) = 
                 (HistoryWord){ .char_index = BNUM (mc_ctx->dict, snip), .snip_len = snip_len, .lookup = LookupDict };
     }
     
     // case: MC:Z is in local
     if (!snip_len) {
         uint32_t char_index = LOAD_SNIP_FROM_LOCAL (mc_ctx);
-        *B(HistoryWord, mc_ctx->history, vb->line_i - vb->first_line) = 
+        *B(HistoryWord, mc_ctx->history, vb->line_i) = 
             (HistoryWord){ .char_index = char_index, .snip_len = snip_len, .lookup = LookupLocal }; 
     }
 
@@ -876,8 +871,8 @@ void sam_reconstruct_main_cigar_from_SA_Group (VBlockSAMP vb, bool substitute_S,
             uint32_t uncomp_len = cigar_len;
             void *success = rans_uncompress_to_4x16 (VB, comp, a->cigar.piz.comp_len,
                                                      B1ST(uint8_t, vb->scratch), &uncomp_len); 
-            ASSPIZ (success && uncomp_len == cigar_len, "rans_uncompress_to_4x16 failed to decompress an SA Aln CIGAR data: vb_i=%u line_i=%"PRIu64" grp_i=%u aln_i=%"PRIu64" success=%u comp_len=%u uncomp_len=%u expected_uncomp_len=%u cigar_index=%"PRIu64" comp[10]=%s",
-                    vb->vblock_i, vb->line_i, ZGRP_I(vb->sa_grp), ZALN_I(a), !!success, (uint32_t)a->cigar.piz.comp_len, uncomp_len, cigar_len, (uint64_t)a->cigar.piz.index, str_hex10 (comp, a->cigar.piz.comp_len).s);
+            ASSPIZ (success && uncomp_len == cigar_len, "rans_uncompress_to_4x16 failed to decompress an SA Aln CIGAR data: grp_i=%u aln_i=%"PRIu64" success=%u comp_len=%u uncomp_len=%u expected_uncomp_len=%u cigar_index=%"PRIu64" comp[10]=%s",
+                    ZGRP_I(vb->sa_grp), ZALN_I(a), !!success, (uint32_t)a->cigar.piz.comp_len, uncomp_len, cigar_len, (uint64_t)a->cigar.piz.index, str_hex10 (comp, a->cigar.piz.comp_len).s);
         }
 
         // case: not compressed
@@ -891,7 +886,7 @@ void sam_reconstruct_main_cigar_from_SA_Group (VBlockSAMP vb, bool substitute_S,
     if (substitute_S) sam_cigar_S_to_H (STRa(cigar));
 
     sam_cigar_special_CIGAR (VB, CTX(SAM_CIGAR), STRa(cigar), NULL, reconstruct);
-// printf ("xxx cigar=%.*s\n", cigar_len, cigar);
+
     buf_free (vb->scratch);
 }
 
@@ -912,16 +907,15 @@ void sam_reconstruct_SA_cigar_from_SA_Group (VBlockSAMP vb, SAAlnType *a)
     
             void *success = rans_uncompress_to_4x16 (VB, B8(z_file->sa_cigars, a->cigar.piz.index), a->cigar.piz.comp_len,
                                                      BAFT(uint8_t, vb->txt_data), &uncomp_len); 
-            ASSPIZ (success && uncomp_len == cigar_len, "rans_uncompress_to_4x16 failed to decompress an SA Aln CIGAR data: vb_i=%u line_i=%"PRIu64" grp_i=%u aln_i=%"PRIu64" success=%u comp_len=%u uncomp_len=%u expected_uncomp_len=%u cigar_index=%"PRIu64,
-                    vb->vblock_i, vb->line_i, ZGRP_I(vb->sa_grp), ZALN_I(a), !!success, (uint32_t)a->cigar.piz.comp_len, uncomp_len, cigar_len, (uint64_t)a->cigar.piz.index);
-// printf("xxx SAcigar comp=%.*s\n", cigar_len, BAFTtxt);
+            ASSPIZ (success && uncomp_len == cigar_len, "rans_uncompress_to_4x16 failed to decompress an SA Aln CIGAR data: grp_i=%u aln_i=%"PRIu64" success=%u comp_len=%u uncomp_len=%u expected_uncomp_len=%u cigar_index=%"PRIu64,
+                    ZGRP_I(vb->sa_grp), ZALN_I(a), !!success, (uint32_t)a->cigar.piz.comp_len, uncomp_len, cigar_len, (uint64_t)a->cigar.piz.index);
+
             vb->txt_data.len += cigar_len;
         }
 
-        else { // not compressed
-// printf("xxx SAcigar noncomp=%.*s\n", cigar_len, B8(z_file->sa_cigars, a->cigar));
+        else  // not compressed
             RECONSTRUCT (B8(z_file->sa_cigars, a->cigar.piz.index), cigar_len);
-}
+
         RECONSTRUCT1 (',');
     }
 }

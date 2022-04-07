@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--                                                                                                      -->
 <!-- README.md                                                                                            -->
-<!-- Copyright (C) 2019-2022 Black Paw Ventures Limited                                                -->
+<!-- Copyright (C) 2019-2022 Genozip Limited                                                -->
 <!-- Please see terms and conditions in the file LICENSE.txt   -->
 <!--                                                                                                      -->
 <!-- This file needs to be compliant to both Markdown and HTML. It is:                                    -->
@@ -17,7 +17,7 @@
 <br>
 Genozip is also available on <b>Conda</b> and binary downloads. For additional installation options, See: https://genozip.com<br>
 <br>
-<b>Genozip</b> is a universal compressor for genomic files - it compresses FASTQ, BAM/CRAM, VCF and many other file formats (including non-genomic files) - see https://genozip.com<br>
+<b>Genozip</b> is a compressor for BAM, FASTQ, VCF and other genomic files - see https://genozip.com<br>
 <br>
 For Illumina data <i>.bam</i> and <i>.fastq.gz</i> files, the typical gain over gzip is around 4X. For PacBio and Oxford Nanopore data aligned <i>.bam</i> files, the gain is typically around 2X. For <i>.vcf.gz</i> files, the gain over gzip is typically 3-6X. Here are some examples: https://genozip.com/benchmarks.html.<br>
 <br>

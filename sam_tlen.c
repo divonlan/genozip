@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_tlen.c
-//   Copyright (C) 2021-2022 Black Paw Ventures Limited
+//   Copyright (C) 2021-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "genozip.h"
@@ -90,7 +90,7 @@ void sam_seg_TLEN (VBlockSAMP vb, ZipDataLineSAM *dl,
 /*        if (predicted_tlen != tlen_value)
             printf ("WRONG FLAG=%x tlen=%d expected=%d : line_i=%u POS=%u PNEXT=%u RefConsumed=%u mate_RefConsumed=%u sup=%u next_unmapped=%u is_first=%u rev=%u next_rev=%u aligned=%u\n", 
                     dl->FLAG.value, (int)tlen_value, (int)predicted_tlen,
-                    (int)vb->line_i, (int)dl->POS, (int)dl->PNEXT, vb->ref_consumed, (int)CTX(OPTION_MC_Z)->last_value.i,
+                    vb->line_i, (int)dl->POS, (int)dl->PNEXT, vb->ref_consumed, (int)CTX(OPTION_MC_Z)->last_value.i,
                     dl->FLAG.bits.supplementary, dl->FLAG.bits.next_unmapped, dl->FLAG.bits.is_first, dl->FLAG.bits.rev_comp, dl->FLAG.bits.next_rev_comp, dl->FLAG.bits.is_aligned);
 */
         char tlen_by_calc[30] = { SNIP_SPECIAL, SAM_SPECIAL_TLEN, '0' + segconf.has[OPTION_MC_Z] };

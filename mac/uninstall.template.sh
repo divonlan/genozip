@@ -2,7 +2,7 @@
 
 # ------------------------------------------------------------------
 #   uninstall.sh
-#   Copyright (C) 2020-2022 Black Paw Ventures Limited where applies
+#   Copyright (C) 2020-2022 Genozip Limited where applies
 #   Please see terms and conditions in the file LICENSE.txt
 
 # loosely based on https://github.com/KosalaHerath/macos-installer-builder which is licensed under Apache 2.0 license

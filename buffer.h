@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   buffer.h
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #pragma once
@@ -10,8 +10,7 @@
 #include <stdint.h>
 #include "genozip.h"
 #include "strings.h"
-
-struct variant_block_; 
+#include "endianness.h"
 
 typedef enum { BUF_UNALLOCATED=0, BUF_REGULAR, BUF_OVERLAY, BUF_MMAP, BUF_STANDALONE_BITARRAY, BUF_NUM_TYPES } BufferType; // BUF_UNALLOCATED must be 0, must be identical to BitArrayType
 #define BUFTYPE_NAMES { "UNALLOCATED", "REGULAR", "OVERLAY", "MMAP" }
@@ -31,7 +30,16 @@ typedef struct Buffer {
         uint64_t nbits;   // for BitArray
         uint32_t prm32[2];
     };
-    uint64_t len;     // used by the buffer user according to its internal logic. not modified by malloc/realloc, zeroed by buf_free (in BitArray - nwords)
+    union {
+        uint64_t len;     // used by the buffer user according to its internal logic. not modified by malloc/realloc, zeroed by buf_free (in BitArray - nwords)
+        struct {
+#ifdef __LITTLE_ENDIAN__
+            uint32_t len32, len32hi; // we use len32 instead of len if easier, in cases where we are certain len is smaller than 4B
+#else                
+            uint32_t len32hi, len32;
+#endif  
+        };
+    };
     //------------------------------------------------------------------------------------------------------
 
     char *memory;     // memory allocated to this buffer - amount is: size + 2*sizeof(longlong) to allow for OVERFLOW and UNDERFLOW)
@@ -286,7 +294,7 @@ extern void buf_add_to_buffer_list_do (VBlockP vb, BufferP buf, FUNCLINE);
 #define buf_add_to_buffer_list(vb,buf) buf_add_to_buffer_list_do ((vb), (buf), __FUNCLINE)
 #define buf_add_to_buffer_list_(vb,buf,buf_name) ({ buf_add_to_buffer_list_do ((vb), (buf), __FUNCLINE); (buf)->name = (buf_name); })
 
-void buf_update_buf_list_vb_addr_change (VBlockP new_vb, VBlockP old_vb);
+extern void buf_update_buf_list_vb_addr_change (VBlockP new_vb, VBlockP old_vb);
 
 extern void buf_compact_buf_list (VBlockP vb);
 

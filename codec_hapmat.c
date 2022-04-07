@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   codec_hapmat.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 // *** RETIRED CODEC. USED JUST FOR DECOMPRESSING OLD VCF FILES (retired officially in v13, but hasn't been in use since some earlier version) ***
@@ -11,6 +11,7 @@
 #include "buffer.h"
 #include "strings.h"
 #include "file.h"
+#include "piz.h"
 #include "endianness.h"
 #include "context.h"
 #include "dict_id.h"
@@ -68,7 +69,7 @@ static inline void codec_hapmat_piz_get_one_line (VBlockVCFP vb)
     ARRAY (rom , hapmat_columns_data, vb->hapmat_columns_data); 
     uint32_t ht_i_after = vb->ht_per_line; // automatic variable - faster
     uint64_t *next = B1ST64 (vb->hapmat_one_array);
-    uint32_t vb_line_i = vb->line_i - vb->first_line;
+    // LineIType vb_line_i = vb->line_i - vb->first_line;
 
     // this loop can consume up to 25-50% of the entire decompress compute time (tested with 1KGP data)
     // note: we do memory assignment 64 bit at time (its about 10% faster than byte-by-byte)
@@ -76,28 +77,28 @@ static inline void codec_hapmat_piz_get_one_line (VBlockVCFP vb)
     for (uint32_t ht_i=0; ht_i < ht_i_after; ht_i += 8) {
 
 #ifdef __LITTLE_ENDIAN__
-        *(next++) = ((uint64_t)(uint8_t)hapmat_columns_data[ht_i    ][vb_line_i]      ) |  // this is LITTLE ENDIAN order
-                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 1][vb_line_i] << 8 ) |
-                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 2][vb_line_i] << 16) |
-                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 3][vb_line_i] << 24) |
-                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 4][vb_line_i] << 32) |
-                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 5][vb_line_i] << 40) |
-                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 6][vb_line_i] << 48) |
-                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 7][vb_line_i] << 56) ;  // no worries if ht_per_line is not a multiple of 4 - we have extra columns of zero
+        *(next++) = ((uint64_t)(uint8_t)hapmat_columns_data[ht_i    ][vb->line_i]      ) |  // this is LITTLE ENDIAN order
+                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 1][vb->line_i] << 8 ) |
+                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 2][vb->line_i] << 16) |
+                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 3][vb->line_i] << 24) |
+                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 4][vb->line_i] << 32) |
+                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 5][vb->line_i] << 40) |
+                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 6][vb->line_i] << 48) |
+                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 7][vb->line_i] << 56) ;  // no worries if ht_per_line is not a multiple of 4 - we have extra columns of zero
 #else
-        *(next++) = ((uint64_t)(uint8_t)hapmat_columns_data[ht_i    ][vb_line_i] << 56) |  // this is BIG ENDIAN order
-                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 1][vb_line_i] << 48) |
-                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 2][vb_line_i] << 40) |
-                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 3][vb_line_i] << 32) |
-                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 4][vb_line_i] << 24) |
-                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 5][vb_line_i] << 16) |
-                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 6][vb_line_i] << 8 ) |
-                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 7][vb_line_i]      ) ;  
+        *(next++) = ((uint64_t)(uint8_t)hapmat_columns_data[ht_i    ][vb->line_i] << 56) |  // this is BIG ENDIAN order
+                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 1][vb->line_i] << 48) |
+                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 2][vb->line_i] << 40) |
+                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 3][vb->line_i] << 32) |
+                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 4][vb->line_i] << 24) |
+                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 5][vb->line_i] << 16) |
+                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 6][vb->line_i] << 8 ) |
+                    ((uint64_t)(uint8_t)hapmat_columns_data[ht_i + 7][vb->line_i]      ) ;  
 #endif
     }
 
     if (flag.show_alleles)
-        iprintf ("Line %-2u : %.*s\n", vb_line_i, (int)vb->hapmat_one_array.len, vb->hapmat_one_array.data);
+        iprintf ("Line %-2d : %.*s\n", vb->line_i, vb->hapmat_one_array.len32, vb->hapmat_one_array.data);
 
     COPY_TIMER (codec_hapmat_piz_get_one_line);
 }
@@ -113,10 +114,10 @@ void codec_hapmat_reconstruct (VBlockP vb_, Codec codec, Context *ctx)
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
     // get one row of the haplotype matrix for this line into vb->hapmat_one_array if we don't have it already
-    if (vb->hapmat_one_array.param != vb->line_i) { // we store the line_i in param
+    if (vb->hapmat_one_array.param != vb->line_i + 1) { // we store the line_i in param (+1 to distguish from "not set" value of 0)
         codec_hapmat_piz_get_one_line (vb);
         vb->hapmat_one_array.len = 0; // length of data consumed
-        vb->hapmat_one_array.param = vb->line_i;
+        vb->hapmat_one_array.param = vb->line_i + 1;
     }
 
     // find next allele - skipping unused spots ('*')
@@ -149,8 +150,7 @@ void codec_hapmat_reconstruct (VBlockP vb_, Codec codec, Context *ctx)
             break;
 
         default: 
-            ABORT ("reconstructing txt_line=%"PRIu64" vb_i=%u: Invalid character found in decompressed HT array: '%c' (ASCII %u)", 
-                   vb->line_i, vb->vblock_i, ht, ht);
+            ASSPIZ (false, "Invalid character found in decompressed HT array: '%c' (ASCII %u)",  ht, ht);
     }
 }
 

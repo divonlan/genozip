@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   vcf.h
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #pragma once
@@ -38,6 +38,7 @@
 #pragma GENDICT VCF_COPYSTAT=DTYPE_FIELD=CoPYSTAT
 #pragma GENDICT VCF_TOPLUFT=DTYPE_FIELD=ToPLUFT
 #pragma GENDICT VCF_LINE_NUM=DTYPE_FIELD=LINE_NUM
+#pragma GENDICT VCF_DEBUG_LINES=DTYPE_FIELD=DBGLINES      // used by --debug-lines
 
 // FORMAT fields
 #pragma GENDICT FORMAT_AD=DTYPE_2=AD       // <ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">

@@ -993,6 +993,9 @@ batch_reference_fastq()
 
     echo "4 paired FASTQ with --REFERENCE (BGZF, decompress concatenated, password)"
     test_standard "COPY -E$GRCh38 -2 -p 123" " " test.human2-R1.100K.fq.gz test.human2-R2.100K.fq.gz
+
+    # solexa read style
+    test_standard "-e$GRCh38 --pair" "" special.solexa-R1.fq special.solexa-R2.fq
 }
 
 batch_reference_sam()

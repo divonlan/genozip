@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   context.h
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #pragma once
@@ -115,8 +115,8 @@ extern WordIndex ctx_create_node (VBlockP vb, DidIType did_i, STRp (snip));
 #define LASTb250(ctx) ((ctx)->flags.all_the_same ? *B1ST(WordIndex, (ctx)->b250) : *BLST(WordIndex, (ctx)->b250))
 extern void ctx_append_b250 (VBlockP vb, ContextP vctx, WordIndex node_index);
 
-extern int64_t ctx_get_count (VBlockP vb, ContextP ctx, WordIndex node_index);
-extern int64_t ctx_decrement_count (VBlockP vb, ContextP ctx, WordIndex node_index);
+extern uint32_t ctx_get_count (VBlockP vb, ContextP ctx, WordIndex node_index);
+extern void ctx_decrement_count (VBlockP vb, ContextP ctx, WordIndex node_index);
 extern void ctx_increment_count (VBlockP vb, ContextP ctx, WordIndex node_index);
 extern void ctx_protect_from_removal (VBlockP vb, ContextP ctx, WordIndex node_index);
 
@@ -302,13 +302,13 @@ static inline void ctx_unset_encountered (VBlockP vb, ContextP ctx)
 // returns true if dict_id was *previously* segged on this line (last_value may be valid or not)
 static inline bool ctx_encountered_in_line (VBlockP vb, DidIType did_i) 
 { 
-    ContextP ctx=CTX(did_i); 
+    ContextP ctx = CTX(did_i); 
     return ((ctx->last_line_i == vb->line_i) || (ctx->last_line_i == -(int64_t)vb->line_i - 1)); 
 }
 
 static inline bool ctx_encountered_in_prev_line (VBlockP vb, DidIType did_i) 
 { 
-    ContextP ctx=CTX(did_i); 
+    ContextP ctx = CTX(did_i); 
     return ((ctx->last_line_i == vb->line_i-1) || (ctx->last_line_i == -(int64_t)(vb->line_i-1) - 1)); 
 }
 
@@ -347,3 +347,4 @@ extern void ctx_declare_winning_group (DidIType winning_group_did_i, DidIType lo
 extern void ctx_foreach_buffer(ContextP ctx, bool set_name, void (*func)(BufferP buf, FUNCLINE));
 
 extern SORTER (sort_by_dict_id);
+

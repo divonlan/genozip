@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_ingest_grps.c
-//   Copyright (C) 2022-2022 Black Paw Ventures Limited
+//   Copyright (C) 2022-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "genozip.h"
@@ -27,9 +27,9 @@
 
 static Mutex seq_mutex={}, qual_mutex={}, qname_mutex={}, aln_mutex={}, grp_mutex={};
 
-typedef struct __attribute__ ((__packed__)) { uint32_t qname_adler, grp_i; } SAGroupIndexEntry; 
+typedef struct __attribute__ ((__packed__)) { uint32_t qname_hash, grp_i; } SAGroupIndexEntry; 
 
-static ASCENDING_SORTER (group_index_sorter, SAGroupIndexEntry, qname_adler)
+static ASCENDING_SORTER (group_index_sorter, SAGroupIndexEntry, qname_hash)
 
 static void sam_sa_create_group_index (void)
 {
@@ -46,7 +46,7 @@ static void sam_sa_create_group_index (void)
     ARRAY (SAGroupIndexEntry, index, z_file->sa_groups_index);
     for (uint64_t i=0; i < grp_len; i++) {
         rom grp_qname = GRP_QNAME(&grp[i]);
-        index[i] = (SAGroupIndexEntry){ .grp_i = i, .qname_adler = adler32 (1, grp_qname, grp[i].qname_len) };
+        index[i] = (SAGroupIndexEntry){ .grp_i = i, .qname_hash = QNAME_HASH (grp_qname, grp[i].qname_len, grp[i].is_last) };
     }
 
     qsort (index, index_len, sizeof(SAGroupIndexEntry), group_index_sorter);
@@ -102,7 +102,7 @@ static uint32_t sam_zip_prim_ingest_vb_compress_qual (VBlockSAMP vb, SAGroupType
         if (comp_qual_buf->len + comp_len <= max_comp_len)  { // still room to compress
             uint8_t *qual = B8 (vb->txt_data, vb_grp->qual); // always in SAM format
             ASSERT (rans_compress_to_4x16 (evb, qual, vb_grp->seq_len, BAFT(uint8_t, *comp_qual_buf), &comp_len, X_NOSZ) && comp_len,
-                    "Failed to compress PRIM qual of vb=%u line_i=%"PRIu64" qual_len=%u", vb->vblock_i, vb->line_i, vb_grp->seq_len);
+                    "Failed to compress PRIM qual of vb=%u line_i=%d qual_len=%u", vb->vblock_i, vb->line_i, vb_grp->seq_len);
         }
 
         // add to buffer only if compression actually compresses (otherwise it remains pointing at txt_data)

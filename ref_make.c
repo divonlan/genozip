@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   ref_make.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "data_types.h"
@@ -130,7 +130,7 @@ void ref_make_prepare_range_for_compress (VBlockP vb)
 // make-refernece called by main thread after completing compute thread of VB 
 void ref_make_after_compute (VBlockP vb_)
 {
-    VBlockFASTA *vb = (VBlockFASTA *)vb_;
+    VBlockFASTAP vb = (VBlockFASTAP)vb_;
 
     // add contig metadata
     if (vb->has_contig_metadata) {

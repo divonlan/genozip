@@ -2,7 +2,7 @@
 
 # ------------------------------------------------------------------
 #   primary-to-luft.sed
-#   Copyright (C) 2021-2022 Black Paw Ventures Limited
+#   Copyright (C) 2021-2022 Genozip Limited
 #   Please see terms and conditions in the file LICENSE.txt
 #
 #   Convert a PRIMARY VCF to a LUFT VCF (just renaming strings, no liftover). Used for testing during development.

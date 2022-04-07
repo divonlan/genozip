@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   ref_contigs.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "genozip.h"
@@ -71,7 +71,7 @@ static void ref_contigs_show (const Buffer *contigs_buf, bool created)
     iprintf ("\nContigs as they appear in the reference%s:\n", created ? " created (note: contig names are as they appear in the txt data, not the reference)" : "");
     for (uint32_t i=0; i < cn_len; i++) {
 
-        rom chrom_name = B(const char, ZCTX(CHROM)->dict, cn[i].char_index);
+        rom chrom_name = cn[i].snip_len ? B(const char, ZCTX(CHROM)->dict, cn[i].char_index) : "~unused";
         bool ext_ref = (flag.reference & REF_ZIP_LOADED) || Z_DT(DT_REF);
 
         if (ext_ref && created)
@@ -126,8 +126,10 @@ void ref_contigs_compress_internal (Reference ref)
         Range *r = B(Range, ref->ranges, range_i);
 
         // chrom_word_index might still be WORD_INDEX_NONE. We get it now from the z_file data
-        if (r->chrom == WORD_INDEX_NONE)
+        if (r->chrom == WORD_INDEX_NONE) {
             r->chrom = chrom_get_by_name (STRa(r->chrom_name));
+            ASSERT (r->chrom != WORD_INDEX_NONE, "Unable to find chrom index for contig \"%.*s\"", r->chrom_name_len, r->chrom_name);
+        }
 
         // first range of a contig
         if (!last || r->chrom != last->ref_index) {
@@ -135,15 +137,11 @@ void ref_contigs_compress_internal (Reference ref)
             // we assign 64-aligned gpos
             r->gpos = range_i ? ROUNDUP64 ((r-1)->gpos + (r-1)->last_pos - (r-1)->first_pos + 1) : 0;
                 
-            CtxNode *chrom_node = (r->chrom != WORD_INDEX_NONE) ? B(CtxNode, ZCTX(CHROM)->nodes, r->chrom) : NULL;
-
             BNXT (Contig, created_contigs) = (Contig){
                 .gpos        = r->gpos, 
                 .min_pos     = r->first_pos,
                 .max_pos     = r->last_pos,
-                .ref_index   = r->chrom,  // index into ZCTX(CHROM)
-                .char_index  = chrom_node ? chrom_node->char_index : 0, 
-                .snip_len    = chrom_node ? chrom_node->snip_len   : 0
+                .ref_index   = r->chrom,  // word_index in ZCTX(CHROM)
             };
 
             last = BLST (Contig, created_contigs);
@@ -168,7 +166,7 @@ void ref_contigs_compress_ext_store (Reference ref)
 {
     START_TIMER;
     ContextP ctx = ZCTX(CHROM);
-    uint64_t num_chroms = ctx->nodes.len;
+    uint32_t num_chroms = ctx->nodes.len32;
 
     static Buffer created_contigs = EMPTY_BUFFER;          
 
@@ -182,10 +180,8 @@ void ref_contigs_compress_ext_store (Reference ref)
     created_contigs.len = num_chroms;
     ARRAY (Contig, cn, created_contigs);
 
-    for (uint64_t i=0; i < num_chroms; i++) {
+    for (WordIndex i=0; i < num_chroms; i++) {
         cn[i].ref_index  = WORD_INDEX_NONE; // initialize (not all CHROMs have contigs, eg "*" in SAM)
-        cn[i].char_index = nodes[i].char_index;
-        cn[i].snip_len   = nodes[i].snip_len;
         cn[i].ref_index  = i; // ref_index always refers to the CHROM index of the file in which it is stored (eg REF_CONTIG in References files, RNAME in SAM etc)
         cn[i].gpos       = 0; // ref_initialize_ranges overlays even empty contigs on the genome, so GPOS must be valid number
     }
@@ -202,7 +198,7 @@ void ref_contigs_compress_ext_store (Reference ref)
         PosType delta = r->gpos % 64;
 
         WordIndex chrom = *B(WordIndex, z_file->ref2chrom_map, r->chrom); // the CHROM corresponding to this ref_index, even if a different version of the chrom name 
-        if (chrom == WORD_INDEX_NONE) continue; // this contig was not used in the data 
+        if (chrom == WORD_INDEX_NONE || ! B(CtxNode, ZCTX(CHROM)->nodes, chrom)->snip_len) continue; // this contig was not used in the data 
         
         cn[chrom].gpos    = r->gpos - delta;
         cn[chrom].min_pos = r->first_pos - delta;
@@ -212,6 +208,23 @@ void ref_contigs_compress_ext_store (Reference ref)
     COPY_TIMER_VB (evb, ref_contigs_compress); // we don't count the compression itself and the disk writing
 
     ref_contigs_compress_do (&created_contigs);
+}
+
+static void ref_contigs_load_set_contig_names (Reference ref)
+{
+    ASSERT0 (ZCTX(CHROM)->dict.len, "CHROM dictionary is empty");
+
+    buf_copy (evb, &ref->ctgs.dict, &ZCTX(CHROM)->dict, char, 0, 0, "ContigPkg->dict");
+
+    ARRAY (CtxWord, chrom, ZCTX(CHROM)->word_list);
+    ARRAY (Contig, contig, ref->ctgs.contigs);
+
+    for (uint32_t i=0; i < contig_len; i++) {
+        WordIndex chrom_index = contig[i].ref_index;
+        ASSERT (chrom_index >= 0 && chrom_index < chrom_len, "Expecting contig[%u].ref_index=%d to be in the range [0,%d]", i, chrom_index, (int)chrom_len-1);
+        contig[i].char_index = chrom[chrom_index].char_index;
+        contig[i].snip_len   = chrom[chrom_index].snip_len;
+    }
 }
 
 // read and uncompress a contigs section (when pizzing the reference file or pizzing a data file with a stored reference)
@@ -225,9 +238,8 @@ void ref_contigs_load_contigs (Reference ref)
     ref->ctgs.contigs.len /= sizeof (Contig);
     BGEN_ref_contigs (&ref->ctgs.contigs);
     
-    ASSERT0 (ZCTX(CHROM)->dict.len, "CHROM dictionary is empty");
-
-    buf_copy (evb, &ref->ctgs.dict, &ZCTX(CHROM)->dict, char, 0, 0, "ContigPkg->dict");
+    // get contig names from CHROM char_index/snip_len from CHROM
+    ref_contigs_load_set_contig_names (ref);
 
     contigs_create_index (&ref->ctgs, SORT_BY_NAME | SORT_BY_AC);
 
@@ -297,7 +309,7 @@ void ref_contigs_generate_data_if_denovo (Reference ref)
     // word_list generation as done in PIZ, we guarantee that we will get the same ref_index
     // in case of multiple bound files, we re-do this in every file in case of additional chroms (not super effecient, but good enough because the context is small)
     contigs_free (&ref->ctgs);
-    contigs_build_contig_pkg_from_ctx (&ref->ctgs, chrom_ctx, SORT_BY_NAME);
+    contigs_build_contig_pkg_from_zctx (&ref->ctgs, chrom_ctx, SORT_BY_NAME);
 }
 
 // ZIP SAM/BAM and VCF: verify that we have the specified chrom (name & last_pos) loaded from the reference at the same index. 

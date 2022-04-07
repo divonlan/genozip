@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   kraken.h
-//   Copyright (C) 2021-2022 Black Paw Ventures Limited
+//   Copyright (C) 2021-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #pragma once
@@ -35,6 +35,7 @@
 #pragma GENDICT KRAKEN_EOL=DTYPE_FIELD=EOL
 #pragma GENDICT KRAKEN_TOPLEVEL=DTYPE_FIELD=TOPLEVEL
 #pragma GENDICT KRAKEN_TOP2TAXID=DTYPE_FIELD=TOP2HASH
+#pragma GENDICT KRAKEN_DEBUG_LINES=DTYPE_FIELD=DBGLINES      // used by --debug-lines
 
 typedef int32_t TaxonomyId;
 #define TAXID_NONE         ((TaxonomyId)-1)

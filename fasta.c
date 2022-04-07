@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   fasta.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "fasta_private.h"
@@ -25,13 +25,11 @@
 #define dict_id_is_fasta_desc_sf dict_id_is_type_1
 #define dict_id_fasta_desc_sf dict_id_type_1
 
-#define VB_FASTA ((VBlockFASTA *)vb)
-
 typedef struct {
     uint32_t seq_data_start, seq_len; // regular fasta and make-reference: start & length within vb->txt_data
     bool has_13;
 } ZipDataLineFASTA;
-#define DATA_LINE(i) B(ZipDataLineFASTA, vb->lines, (i))
+#define DATA_LINE(i) B(ZipDataLineFASTA, VB_FASTA->lines, (i))
 
 unsigned fasta_vb_size (DataType dt) 
 { 
@@ -40,7 +38,7 @@ unsigned fasta_vb_size (DataType dt)
 
 unsigned fasta_vb_zip_dl_size (void) { return sizeof (ZipDataLineFASTA); }
 
-void fasta_vb_release_vb (VBlockFASTA *vb)
+void fasta_vb_release_vb (VBlockFASTAP vb)
 {
     if (VB_DT(DT_REF) && command == PIZ) return; // this is actually a VBlock, not VBlockFASTA
     
@@ -48,13 +46,11 @@ void fasta_vb_release_vb (VBlockFASTA *vb)
     CTX(FASTA_NONREF)->local.len = 0; // len might be is used even though buffer is not allocated (in make-ref)
 }
 
-void fasta_vb_destroy_vb (VBlockFASTA *vb) {}
+void fasta_vb_destroy_vb (VBlockFASTAP vb) {}
 
 // used by ref_make_create_range
-void fasta_get_data_line (VBlockP vb_, uint32_t line_i, uint32_t *seq_data_start, uint32_t *seq_len)
+void fasta_get_data_line (VBlockP vb, uint32_t line_i, uint32_t *seq_data_start, uint32_t *seq_len)
 {
-    VBlockFASTA *vb = (VBlockFASTA *)vb_;
-
     *seq_data_start = DATA_LINE(line_i)->seq_data_start;
     *seq_len        = DATA_LINE(line_i)->seq_len;
 }
@@ -135,7 +131,7 @@ int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *last_i)
             // otherwise - tolerate a VB that ends part way through a SEQ
             else if (is_entire_vb && i+1 < vb->txt_data.len &&
                      txt[i+1] != ';' && txt[i+1] != '>') { // partial line isn't a Description or a Comment, hence its a Sequence
-                ((VBlockFASTA *)vb)->vb_has_no_newline = true;
+                ((VBlockFASTAP)vb)->vb_has_no_newline = true;
                 return 0;                
             }
                 
@@ -147,7 +143,7 @@ int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *last_i)
 out_of_data:
     // case: an entire FASTA VB without newlines (i.e. a very long sequential SEQ) - we accept a VB without newlines and deal with it in Seg
     if (is_entire_vb && !segconf.running) {
-        ((VBlockFASTA *)vb)->vb_has_no_newline = true;
+        ((VBlockFASTAP)vb)->vb_has_no_newline = true;
         return 0;
     }
 
@@ -211,6 +207,9 @@ void fasta_seg_initialize (VBlockP vb)
     // in --stats, consolidate stats into FASTA_NONREF
     stats_set_consolidation (vb, FASTA_NONREF, 1, FASTA_NONREF_X);
 
+    if (segconf.running)
+        segconf.fasta_has_contigs = true; // initialize optimistically
+        
     COPY_TIMER (seg_initialize);
 }
 
@@ -237,14 +236,14 @@ void fasta_seg_finalize (VBlockP vb)
         uint64_t avg_contig_size_this_vb = vb->txt_data.len / num_contigs_this_vb;
         uint64_t est_num_contigs_in_file = txtfile_get_seggable_size() / avg_contig_size_this_vb;
 
+        // case: we've seen only characters that are both nucleotide and protein (as are A,C,G,T,N) - call it as nucleotide
+        if (segconf.seq_type == SQT_NUKE_OR_AMINO) segconf.seq_type = SQT_NUKE;
+
         // limit the number of contigs, to avoid the FASTA_CONTIG dictionary becoming too big. note this also
         // sets a limit for fasta-to-phylip translation
         #define MAX_CONTIGS_IN_FILE 1000000 
-        segconf.fasta_has_contigs = num_contigs_this_vb == 1 || // the entire VB is a single contig
-                                    est_num_contigs_in_file <  MAX_CONTIGS_IN_FILE; 
-
-        // case: we've seen only characters that are both nucleotide and protein (as are A,C,G,T,N) - call it as nucleotide
-        if (segconf.seq_type == SQT_NUKE_OR_AMINO) segconf.seq_type = SQT_NUKE;
+        segconf.fasta_has_contigs &= (num_contigs_this_vb == 1 || // the entire VB is a single contig
+                                      est_num_contigs_in_file <  MAX_CONTIGS_IN_FILE); 
     }
 }
 
@@ -259,7 +258,7 @@ bool fasta_seg_is_small (ConstVBlockP vb, DictId dict_id)
 
 // description line - we segment it to its components
 // note: we store the DESC container in its own ctx rather than just directly in LINEMETA, to make it easier to grep
-static void fasta_seg_desc_line (VBlockFASTA *vb, rom line_start, uint32_t line_len, bool *has_13)
+static void fasta_seg_desc_line (VBlockFASTAP vb, rom line_start, uint32_t line_len, bool *has_13)
 {
     SAFE_NUL (&line_start[line_len]);
     
@@ -270,11 +269,16 @@ static void fasta_seg_desc_line (VBlockFASTA *vb, rom line_start, uint32_t line_
     ASSSEG0 (chrom_name_len, line_start, "contig is missing a name");
 
     if (!flag.make_reference) {
-        tokenizer_seg (VB, CTX(FASTA_DESC), line_start, line_len, sep_with_space, 0);
-        
+        if (segconf.fasta_has_contigs) 
+            tokenizer_seg (VB, CTX(FASTA_DESC), line_start, line_len, sep_with_space, 0);
+
+        // if we don't have contigs, eg this is an amino acid fasta, we're better off
+        // not tokenizing the description line as its components are often correlated
+        else
+            seg_add_to_local_text (VB, CTX(FASTA_DESC), line_start, line_len, true, line_len);
+
         char special_snip[100]; unsigned special_snip_len = sizeof (special_snip);
         seg_prepare_snip_other_do (SNIP_REDIRECTION, (DictId)_FASTA_DESC, false, 0, 0, &special_snip[2], &special_snip_len);
-
         special_snip[0] = SNIP_SPECIAL;
         special_snip[1] = FASTA_SPECIAL_DESC;
 
@@ -292,21 +296,32 @@ static void fasta_seg_desc_line (VBlockFASTA *vb, rom line_start, uint32_t line_
 
     // add contig to CONTIG dictionary (but not b250) and verify that its unique
     if (segconf.fasta_has_contigs || flag.make_reference || segconf.running) {
+        
+        if (segconf.running)
+            seg_create_rollback_point (VB, NULL, 1, FASTA_CONTIG);
+            
         bool is_new;
         chrom_seg_no_b250 (VB, STRa(chrom_name), &is_new);
 
-        vb->ra_initialized = true;
+        if (!is_new && segconf.running) {
+            segconf.fasta_has_contigs = false; // this FASTA is not of contigs. It might be just a collection of variants of a sequence.
+            seg_rollback (VB);
+        }
 
-        ASSINP (is_new || segconf.running, "Error: bad FASTA file - sequence \"%.*s\" appears more than once%s", chrom_name_len, chrom_name,
-                flag.bind ? " (possibly in another FASTA being bound)" : 
-                (flag.reference & REF_ZIP_LOADED) ? " (possibly the sequence size exceeds vblock size, try enlarging with --vblock)" : "");
+        else {
+            ASSINP (is_new || segconf.running, "Error: bad FASTA file - sequence \"%.*s\" appears more than once%s", chrom_name_len, chrom_name,
+                    flag.bind ? " (possibly in another FASTA being bound)" : 
+                    (flag.reference & REF_ZIP_LOADED) ? " (possibly the sequence size exceeds vblock size, try enlarging with --vblock)" : "");
+         
+            vb->ra_initialized = true;
+        }
     }
 
     vb->last_line = FASTA_LINE_DESC;    
     SAFE_RESTORE;
 }
 
-static void fast_seg_comment_line (VBlockFASTA *vb, rom line_start, uint32_t line_len, bool *has_13)
+static void fast_seg_comment_line (VBlockFASTAP vb, rom line_start, uint32_t line_len, bool *has_13)
 {
     if (!flag.make_reference) {
         seg_add_to_local_text (VB, CTX(FASTA_COMMENT), line_start, line_len, false, line_len); 
@@ -358,7 +373,7 @@ static SeqType fasta_get_seq_type (STRp(seq))
     return segconf.seq_type; // unchanged
 }
 
-static void fasta_seg_seq_line_do (VBlockFASTA *vb, uint32_t line_len, bool is_first_line_in_contig)
+static void fasta_seg_seq_line_do (VBlockFASTAP vb, uint32_t line_len, bool is_first_line_in_contig)
 {
     Context *lm_ctx  = CTX(FASTA_LINEMETA);
     Context *seq_ctx = CTX(FASTA_NONREF);
@@ -386,7 +401,7 @@ static void fasta_seg_seq_line_do (VBlockFASTA *vb, uint32_t line_len, bool is_f
     seq_ctx->local.len += line_len;
 } 
 
-static void fasta_seg_seq_line (VBlockFASTA *vb, STRp(line), 
+static void fasta_seg_seq_line (VBlockFASTAP vb, STRp(line), 
                                 bool is_last_line_vb_no_newline, bool is_last_line_in_contig, 
                                 bool has_13)
 {
@@ -423,13 +438,14 @@ static void fasta_seg_seq_line (VBlockFASTA *vb, STRp(line),
 
     // case: this sequence is continuation from the previous VB - we don't yet know the chrom - we will update it,
     // and increment the min/max_pos relative to the beginning of the seq in the vb later, in random_access_finalize_entries
-    if (!vb->chrom_name && !vb->ra_initialized) {
+    if (segconf.fasta_has_contigs && !vb->chrom_name && !vb->ra_initialized) {
         random_access_update_chrom (VB, 0, WORD_INDEX_NONE, 0, 0);
         vb->ra_initialized = true;
         vb->chrom_node_index = WORD_INDEX_NONE; // the chrom started in a previous VB, we don't yet know its index
     }
 
-    random_access_increment_last_pos (VB, 0, line_len); 
+    if (segconf.fasta_has_contigs)
+        random_access_increment_last_pos (VB, 0, line_len); 
 }
 
 // Fasta format(s): https://en.wikipedia.org/wiki/FASTA_format
@@ -443,11 +459,11 @@ static void fasta_seg_seq_line (VBlockFASTA *vb, STRp(line),
 //     note: if a comment line is the first line in a VB - it will be segmented as a description. No harm done.
 // 123 - a sequence line - any line that's not a description of sequence line - store its length
 // these ^ are preceded by a 'Y' if the line has a Windows-style \r\n line ending or 'X' if not
-rom fasta_seg_txt_line (VBlockFASTA *vb, rom line_start, uint32_t remaining_txt_len, bool *has_13) // index in vb->txt_data where this line starts
+rom fasta_seg_txt_line (VBlockFASTAP vb, rom line_start, uint32_t remaining_txt_len, bool *has_13) // index in vb->txt_data where this line starts
 {
     // get entire line
     unsigned line_len;
-    int32_t remaining_vb_txt_len = BAFTc (vb->txt_data) - line_start;
+    int32_t remaining_vb_txt_len = BAFTtxt - line_start;
     
     rom next_field = seg_get_next_line (vb, line_start, &remaining_vb_txt_len, &line_len, !vb->vb_has_no_newline, has_13, "FASTA line");
 
@@ -497,7 +513,7 @@ IS_SKIP (fasta_piz_is_skip_section)
         return true;
 
     // no need for the TAXID data if user didn't specify --taxid
-    if (flag.kraken_taxid==TAXID_NONE && dict_id.num == _FASTA_TAXID)
+    if (flag.kraken_taxid == TAXID_NONE && dict_id.num == _FASTA_TAXID)
         return true;
 
     return false;
@@ -505,24 +521,24 @@ IS_SKIP (fasta_piz_is_skip_section)
 
 // remove trailing newline before SEQ lines in case of --sequential. Note that there might be more than one newline
 // in which case the subsequent newlines were part of empty COMMENT lines
-static inline void fasta_piz_unreconstruct_trailing_newlines (VBlockFASTA *vb)
+static inline void fasta_piz_unreconstruct_trailing_newlines (VBlockFASTAP vb)
 {
     char c;
     while ((c = *BLSTc (vb->txt_data)) == '\n' || c == '\r') 
         vb->txt_data.len--;
 
     // update final entries vb->lines to reflect the removal of the final newlines
-    for (int32_t line_i = vb->line_i - vb->first_line; 
-         line_i >= 0 && *B(char *, vb->lines, line_i) > BAFTc (vb->txt_data); 
+    for (int32_t line_i = vb->line_i; 
+         line_i >= 0 && *B(char *, vb->lines, line_i) > BAFTtxt; 
          line_i--)
-        *B(char *, vb->lines, line_i) = BAFTc (vb->txt_data);
+        *B(char *, vb->lines, line_i) = BAFTtxt;
 }
 
 // this is used for end-of-lines of a sequence line, that are not the last line of the sequence. we skip reconstructing
 // the newline if the user selected --sequential
 SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_SEQ)
 {
-    VBlockFASTA *vb = (VBlockFASTA *)vb_;
+    VBlockFASTAP vb = (VBlockFASTAP)vb_;
 
     bool is_first_seq_line_in_this_contig = snip[0] - '0';
 
@@ -541,7 +557,7 @@ SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_SEQ)
 
     // case: --sequential, and this seq line is the last line in the vb, and it continues in the next vb
     if (  flag.sequential && // if we are asked for a sequential SEQ
-          vb->line_i - vb->first_line == vb->lines.len-1 && // and this is the last line in this vb 
+          vb->line_i == vb->lines.len-1 && // and this is the last line in this vb 
           !vb->drop_curr_line && 
           random_access_does_last_chrom_continue_in_next_vb (vb->vblock_i)) // and this sequence continues in the next VB 
         fasta_piz_unreconstruct_trailing_newlines (vb); // then: delete final newline if this VB ends with a 
@@ -553,7 +569,7 @@ SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_SEQ)
 
 SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_COMMENT)
 {
-    VBlockFASTA *vb = (VBlockFASTA *)vb_;
+    VBlockFASTAP vb = (VBlockFASTAP)vb_;
 
     // skip showing comment line in case cases - but consume it anyway:
     if (  vb->contig_grepped_out || // 1. if this contig is grepped out
@@ -610,7 +626,7 @@ bool fasta_piz_is_vb_needed (VBIType vb_i)
         vb->txt_data.len = 0; // reset
         reconstruct_from_ctx (vb, FASTA_DESC, 0, true);
 
-        bool match = flag.grep && piz_grep_match (B1STc (vb->txt_data), BAFTc (vb->txt_data));
+        bool match = flag.grep && piz_grep_match (B1STtxt, BAFTtxt);
         grepped_in |= match;
         if (match && desc_i == num_descs - 1) last_contig_grepped_in = true;
     }
@@ -634,11 +650,11 @@ bool fasta_piz_is_vb_needed (VBIType vb_i)
     return needed;
 }
 
-// Phylip format mandates exact 10 space-padded characters: http://scikit-bio.org/docs/0.2.3/generated/skbio.io.phylip.html
-static inline void fasta_piz_translate_desc_to_phylip (VBlockFASTA *vb, char *desc_start)
+// Phylip format mandates exactly 10 space-padded characters: http://scikit-bio.org/docs/0.2.3/generated/skbio.io.phylip.html
+static inline void fasta_piz_translate_desc_to_phylip (VBlockFASTAP vb, char *desc_start)
 {
-    uint32_t recon_len = BAFT (const char, vb->txt_data) - desc_start;
-    *BAFTc (vb->txt_data) = 0; // nul-terminate
+    uint32_t recon_len = BAFTtxt - desc_start;
+    *BAFTtxt = 0; // nul-terminate
 
     rom chrom_name = desc_start + 1;
     unsigned chrom_name_len = strcspn (desc_start + 1, " \t\r\n");
@@ -651,10 +667,10 @@ static inline void fasta_piz_translate_desc_to_phylip (VBlockFASTA *vb, char *de
 }
 
 // shorten DESC to the first white space
-static inline void fasta_piz_desc_header_one (VBlockFASTA *vb, char *desc_start)
+static inline void fasta_piz_desc_header_one (VBlockFASTAP vb, char *desc_start)
 {
-    uint32_t recon_len = BAFT (const char, vb->txt_data) - desc_start;
-    *BAFTc (vb->txt_data) = 0; // nul-terminate
+    uint32_t recon_len = BAFTtxt - desc_start;
+    *BAFTtxt = 0; // nul-terminate
     unsigned chrom_name_len = strcspn (desc_start + 1, " \t\r\n");
     
     vb->txt_data.len -= recon_len - chrom_name_len -1;
@@ -662,12 +678,12 @@ static inline void fasta_piz_desc_header_one (VBlockFASTA *vb, char *desc_start)
 
 SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_DESC)
 {
-    VBlockFASTA *vb = (VBlockFASTA *)vb_;
+    VBlockFASTAP vb = (VBlockFASTAP)vb_;
     vb->contig_grepped_out = false;
 
-    char *desc_start = BAFTc (vb->txt_data);
+    char *desc_start = BAFTtxt;
     reconstruct_one_snip (VB, ctx, WORD_INDEX_NONE, snip, snip_len, true);    
-    *BAFTc (vb->txt_data) = 0; // for strstr and strcspn
+    *BAFTtxt = 0; // for strstr and strcspn
 
     // if --grep: here we decide whether to show this contig or not
     if (flag.grep) 
@@ -675,19 +691,21 @@ SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_DESC)
     
     unsigned chrom_name_len = strcspn (desc_start + 1, " \t\r\n"); // +1 to skip the '>'
     
-    // --taxid: grep out by Kraken taxid 
-    if (flag.kraken_taxid) 
-        vb->contig_grepped_out |= 
-            (!kraken_is_loaded && !kraken_is_included_stored (VB, FASTA_TAXID, false)) ||
-            ( kraken_is_loaded && !kraken_is_included_loaded (VB, desc_start + 1, chrom_name_len));
+    if (CTX(FASTA_CONTIG)->is_loaded) { // some FASTAs may not have contigs
+        // --taxid: grep out by Kraken taxid 
+        if (flag.kraken_taxid != TAXID_NONE) 
+            vb->contig_grepped_out |= 
+                ((!kraken_is_loaded && !kraken_is_included_stored (VB, FASTA_TAXID, false)) ||
+                ( kraken_is_loaded && !kraken_is_included_loaded (VB, desc_start + 1, chrom_name_len)));
+        
+        vb->chrom_node_index = vb->last_index(CHROM) = ctx_search_for_word_index (CTX(CHROM), desc_start + 1, chrom_name_len);
+
+        // note: this logic allows the to grep contigs even if --no-header 
+        if (vb->contig_grepped_out)
+            vb->drop_curr_line = "grep";     
+    }
     
-    vb->chrom_node_index = vb->last_index(CHROM) = ctx_search_for_word_index (CTX(CHROM), desc_start + 1, chrom_name_len);
-
-    // note: this logic allows the to grep contigs even if --no-header 
-    if (vb->contig_grepped_out)
-        vb->drop_curr_line = "grep";     
-
-    else if (flag.no_header)
+    if (flag.no_header)
         vb->drop_curr_line = "no_header";     
 
     if (flag.out_dt == DT_PHYLIP) 

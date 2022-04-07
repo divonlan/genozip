@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_seg.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "sam_private.h"
@@ -189,7 +189,7 @@ void sam_seg_initialize (VBlockP vb)
     CTX(SAM_BUDDY)->dynamic_size_local = true;
     CTX(SAM_QNAME)->no_stons    = true;        // no singletons, bc sam_piz_filter uses PEEK_SNIP
     CTX(SAM_QUAL) ->flags.store = STORE_INT;   // since v13 - store QUAL_score for buddy ms:i
-
+    
     // MAPQ is uint8_t by BAM specification
     CTX(SAM_MAPQ)->ltype = CTX(OPTION_SA_MAPQ)->ltype = CTX(OPTION_OA_MAPQ)->ltype = LT_UINT8;
     
@@ -213,7 +213,7 @@ void sam_seg_initialize (VBlockP vb)
 
     // PRIM stuff
     else if (sam_is_prim_vb) { 
-        CTX(SAM_SAALN)->ltype              = LT_UINT16; // index of alignment with SA Group
+        CTX(SAM_SAALN)->ltype              = LT_UINT16;   // index of alignment with SA Group
         CTX(OPTION_SA_Z)->ltype            = LT_UINT8;    // we store num_alns in local
         CTX(SAM_QNAMESA)->st_did_i         = SAM_QNAME;   // consolidate stats
         
@@ -223,6 +223,8 @@ void sam_seg_initialize (VBlockP vb)
         CTX(OPTION_SA_POS)->flags.store    = STORE_INT;
         CTX(OPTION_SA_MAPQ)->flags.store   = STORE_INT;
         CTX(OPTION_SA_NM)->flags.store     = STORE_INT;
+
+        CTX(SAM_FLAG)->no_stons            = true;        // 
     }
 
     // we sometimes copy from buddy alignments (mates etc), but only in sorted files
@@ -492,10 +494,11 @@ void sam_seg_finalize (VBlockP vb)
 void sam_zip_after_vbs (void)
 {
     // shorten unused RNAME / RNEXT dictionary strings to "" (dict pre-populated in sam_zip_initialize)
-    // note: we prevent shortening of RNAMEs that appear in SA:Z fields of primary alignments, but not
-    // in the main RNAME field, by incrementing their count in sam_seg_prim_add_sa_group
-    ctx_shorten_unused_dict_words (SAM_RNAME);
-    ctx_shorten_unused_dict_words (SAM_RNEXT);
+    // note: some rnames may be protected from removal by ctx_protect_from_removal
+    if (flag.reference != REF_INTERNAL) { // TO DO: for this to work for REF_INTERNAL, ctx_shorten_unused_dict_words needs to update char_index to the new value
+        ctx_shorten_unused_dict_words (SAM_RNAME);
+        ctx_shorten_unused_dict_words (SAM_RNEXT);
+    }
 }
 
 bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)
@@ -665,7 +668,7 @@ void sam_seg_verify_RNAME_POS (VBlockSAMP vb, rom p_into_txt, PosType this_pos)
         LN = contigs_get_LN (ref_get_ctgs (gref), ref_index);
     }
 
-    ASSINP (this_pos <= LN, "%s: Error POS=%"PRId64" is beyond the size of \"%.*s\" which is %"PRId64". In vb=%u line_i=%"PRIu64" chrom_node_index=%d", 
+    ASSINP (this_pos <= LN, "%s: Error POS=%"PRId64" is beyond the size of \"%.*s\" which is %"PRId64". In vb=%u line_i=%d chrom_node_index=%d", 
             txt_name, this_pos, vb->chrom_name_len, vb->chrom_name, LN, vb->vblock_i, vb->line_i, vb->chrom_node_index);
 }
 
@@ -712,7 +715,7 @@ void sam_seg_aux_all (VBlockSAMP vb, ZipDataLineSAM *dl, STRps(aux))
         else             sam_get_one_optional (vb, STRi(aux,f), &tag, &sam_type, &array_subtype, pSTRa(value));
 
         if (sam_type == 'i') {
-            ASSERT (str_get_int (STRa(value), &numeric.i), "Expecting integer value for auxiliary field %c%c but found \"%.*s\". vb=%u line=%"PRIu64,
+            ASSERT (str_get_int (STRa(value), &numeric.i), "Expecting integer value for auxiliary field %c%c but found \"%.*s\". vb=%u line=%d",
                     tag[0], tag[1], value_len, value, vb->vblock_i, vb->line_i);
             value=0;
         }
@@ -720,7 +723,7 @@ void sam_seg_aux_all (VBlockSAMP vb, ZipDataLineSAM *dl, STRps(aux))
         if (!bam_type) bam_type = sam_seg_sam_type_to_bam_type (sam_type, numeric.i);
         if (!sam_type) sam_type = sam_seg_bam_type_to_sam_type (bam_type);
         
-        ASSERT (bam_type, "value %"PRId64" of field %c%c is out of range of the BAM specification: [%d-%u]. vb=%u line=%"PRIu64, 
+        ASSERT (bam_type, "value %"PRId64" of field %c%c is out of range of the BAM specification: [%d-%u]. vb=%u line=%d", 
                 numeric.i, tag[0], tag[1], -0x80000000, 0x7fffffff, vb->vblock_i, vb->line_i);
 
         con.items[con_nitems(con)] = (ContainerItem) {
@@ -840,7 +843,7 @@ void sam_seg_MAPQ (VBlockSAMP vb, ZipDataLineSAM *dl, unsigned add_bytes)
         // in PRIM, we also seg it as the first SA alignment (used for PIZ to load alignments to memory, not used for reconstructing SA)
         if (sam_is_prim_vb) {
             ContextP sa_mapq_ctx = CTX(OPTION_SA_MAPQ);
-            seg_add_to_local_nonresizeable (vb, sa_mapq_ctx, dl->MAPQ, false, 0);
+            seg_add_to_local_nonresizeable (VB, sa_mapq_ctx, &dl->MAPQ, false, 0);
 
             // count MAPQ field contribution to OPTION_SA_MAPQ, so sam_stats_reallocate can allocate the z_data between MAPQ and SA:Z
             sa_mapq_ctx->counts.count += add_bytes; 
@@ -851,7 +854,7 @@ void sam_seg_MAPQ (VBlockSAMP vb, ZipDataLineSAM *dl, unsigned add_bytes)
         seg_by_ctx (VB, STRa(MAPQ_buddy_snip), ctx, add_bytes); // copy MQ from earlier-line buddy 
 
     else 
-        seg_add_to_local_nonresizeable (vb, CTX(SAM_MAPQ), dl->MAPQ, true, add_bytes);
+        seg_add_to_local_nonresizeable (VB, CTX(SAM_MAPQ), &dl->MAPQ, true, add_bytes);
 }
 
 void sam_seg_RNAME_RNEXT (VBlockSAMP vb, DidIType did_i, STRp (chrom), unsigned add_bytes)
@@ -929,15 +932,6 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
 
     chrom_seg_ex (VB, SAM_RNAME, STRfld(RNAME), 0, NULL, fld_lens[RNAME]+1, true, NULL);
 
-    // xxx // for a header-full SAM, we expected to be in the SAM header, needed by sam_seg_is_gc_line and 
-    // // sam_sa_seg_depn_find_sagroup (that only run in headerful files). Otherwise it is set in chrom_seg_ex.
-    // if (!segconf.running && sam_hdr_contigs && !(fld_lens[RNAME]==1 && *flds[RNAME]=='*')) {
-    //     vb->chrom_node_index = ctx_get_ol_node_index_by_snip (VB, CTX(SAM_RNAME), STRfld(RNAME));
-    //     vb->chrom_name       = flds[RNAME];
-    //     vb->chrom_name_len   = fld_lens[RNAME];
-    //     ASSSEG (vb->chrom_node_index != WORD_INDEX_NONE, flds[RNAME], "RNAME=\"%.*s\", not found in SAM header", vb->chrom_name_len, vb->chrom_name);
-    // }
-
     ASSSEG (str_get_int (STRfld(POS), &dl->POS), 
             flds[POS], "Invalid POS \"%.*s\": expecting an integer", fld_lens[POS], flds[POS]);
 
@@ -959,6 +953,7 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
     // the line to the appropriate component and skip it here (no segging done yet)
     if (vb->check_for_gc && sam_seg_is_gc_line (vb, dl, flds[0], next_line - flds[0], STRasi(fld,AUX), false)) {
         seg_rollback (VB); // cancelling segging of RNAME
+        vb->debug_line_hash_skip = true;
         goto done;
     }
 
@@ -976,7 +971,6 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
     sam_seg_QNAME (vb, dl, STRfld(QNAME), 1);
 
     sam_seg_FLAG (vb, dl, fld_lens[FLAG]+1);
-    
 
     // note: pos can have a value even if RNAME="*" - this happens if a SAM with a RNAME that is not in the header is converted to BAM with samtools
     sam_seg_POS (vb, dl, prev_line_chrom, fld_lens[POS]+1);

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_gc_piz.c
-//   Copyright (C) 2022-2022 Black Paw Ventures Limited
+//   Copyright (C) 2022-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "sam_private.h"
@@ -46,7 +46,7 @@ static void sam_sa_reconstruct_SA_from_SA_Group (VBlockSAMP vb)
 // PIZ: reconstruction of a PRIM or DEPN VB: Called in reconstruction of lines with SPECIAL_SAGROUP (=all lines if PRIM)
 void sam_piz_set_sa_grp (VBlockSAMP vb)
 {
-    if (vb->sa_grp_line_i == vb->line_i) return; // vb->sa_grp and sa_aln are already set for this line
+    if (SAM_PIZ_HAS_SA_GROUP) return; // vb->sa_grp and sa_aln are already set for this line 
 
     // get sa_grp_i
     int64_t sa_grp_i, sa_aln_i;
@@ -80,7 +80,7 @@ void sam_piz_set_sa_grp (VBlockSAMP vb)
     vb->sa_aln = B(const SAAlnType, z_file->sa_alns, sa_aln_i);
 
     // indicate that we have already updated sa_grp and sa_aln for this line_i
-    vb->sa_grp_line_i = vb->line_i;
+    vb->sa_grp_line_i = vb->line_i + 1; // +1 as sa_grp_line_i==0 means "not set"
 }
 
 // PIZ compute thread: called when reconstructing a PRIM or DEPN line - reconstruct pulling info from
@@ -112,7 +112,6 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_pull_from_SAGROUP)
 
         case SAM_POS:
             new_value->i = a->pos;
-// printf ("xxx pos=%u\n",a->pos);
             if (reconstruct) RECONSTRUCT_INT (new_value->i);
             return true;
 
@@ -121,10 +120,17 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_pull_from_SAGROUP)
             if (reconstruct) RECONSTRUCT_INT (new_value->i);
             return true;
 
-        case SAM_FLAG: 
-            new_value->i = atoi (snip) | (a->revcomp ? SAM_FLAG_REV_COMP : 0);
+        case SAM_FLAG: {
+            SamFlags sam_flags = { .value = atoi (snip) };
+            sam_flags.bits.rev_comp        = a->revcomp;
+            sam_flags.bits.multi_segments  = g->multi_segments;
+            sam_flags.bits.is_first        = g->is_first;
+            sam_flags.bits.is_last         = g->is_last;
+
+            new_value->i = sam_flags.value;
             if (reconstruct) RECONSTRUCT_INT (new_value->i);
             return true;
+        }
 
         case SAM_CIGAR:
             sam_reconstruct_main_cigar_from_SA_Group (vb, *snip == '0'/*replace S by H*/, reconstruct);

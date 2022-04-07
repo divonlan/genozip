@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   contigs.h
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #pragma once
@@ -59,7 +59,7 @@ typedef struct ContigPkg {
 //-------------------------------------------------------------------------
 
 // initialization & finalization
-extern void contigs_build_contig_pkg_from_ctx (ContigPkg *ctgs, ConstContextP ctx, SortBy sort_by);
+extern void contigs_build_contig_pkg_from_zctx (ContigPkg *ctgs, ConstContextP ctx, SortBy sort_by);
 extern void contigs_create_index (ContigPkg *ctgs, SortBy sort_by);
 extern void contigs_free (ContigPkg *ctg);
 extern void contigs_destroy (ContigPkg *ctg);

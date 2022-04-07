@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------
 #   Makefile
-#   Copyright (C) 2019-2022 Black Paw Ventures Limited
+#   Copyright (C) 2019-2022 Genozip Limited
 #   Please see terms and conditions in the file LICENSE.txt
 
 # Note for Windows: to run this make, you need mingw (for the gcc compiler) and cygwin (for Unix-like tools):
@@ -246,7 +246,7 @@ docs = $(DOCS)/genozip.rst $(DOCS)/genounzip.rst $(DOCS)/genocat.rst $(DOCS)/gen
 	   $(DOCS)/opt-help.rst $(DOCS)/opt-piz.rst $(DOCS)/opt-quiet.rst $(DOCS)/opt-stats.rst $(DOCS)/opt-threads.rst $(DOCS)/opt-subdirs.rst \
 	   $(DOCS)/manual.rst $(DOCS)/sex-assignment.rst $(DOCS)/sex-assignment-alg-sam.rst $(DOCS)/sex-assignment-alg-fastq.rst \
 	   $(DOCS)/fastq-to-bam-pipeline.rst $(DOCS)/coverage.rst $(DOCS)/algorithms.rst $(DOCS)/losslessness.rst $(DOCS)/idxstats.rst \
-	   $(DOCS)/downsampling.rst $(DOCS)/capabilities.rst $(DOCS)/kraken.rst \
+	   $(DOCS)/downsampling.rst $(DOCS)/capabilities.rst $(DOCS)/mime-type.rst $(DOCS)/kraken.rst \
 	   $(DOCS)/sam2fq.rst $(DOCS)/23andMe2vcf.rst $(DOCS)/multifasta2phylip.rst $(DOCS)/gatk-unexpected-base.rst $(DOCS)/digest.rst $(DOCS)/commercial.rst \
 	   $(DOCS)/using-on-hpc.rst $(DOCS)/match-chrom.rst $(DOCS)/attributions.rst $(DOCS)/testimonials.rst $(DOCS)/pricing-faq.rst \
 	   $(DOCS)/dvcf.rst $(DOCS)/dvcf-rendering.rst $(DOCS)/chain.rst $(DOCS)/dvcf-limitations.rst $(DOCS)/dvcf-renaming.rst $(DOCS)/dvcf-see-also.rst \
@@ -274,7 +274,9 @@ build-docs: $(DOCS)/_build/html/.buildinfo $(DOCS)/LICENSE.for-docs.txt $(DOCS)/
 test-docs: $(DOCS)/conf.py $(docs) # don't require license or release notes - so code needn't be built
 	@echo "Building HTML docs (TEST)"
 	@run-on-wsl.sh /home/divon/miniconda3/bin/sphinx-build -M html $(DOCS) $(DOCS)/_build -q -a 
-	@"/c/Program Files (x86)/Google/Chrome/Application/chrome.exe" file:///c:/Users/divon/projects/genozip/docs/docs/_build/html/index.html --new-window
+	@echo $(PWD)
+	@# Open chrome on the last doc edited
+	@"/c/Program Files (x86)/Google/Chrome/Application/chrome.exe" "file:///c:"`pwd |cut -c3-`/docs/docs/_build/html/`cd docs/docs ; ls -1 *.rst -t|head -1|rev|cut -c5-|rev`.html --new-window
 
 # this is used by build.sh to install on conda for Linux and Mac. Installation for Windows in in bld.bat
 install: genozip$(EXE)
@@ -290,7 +292,7 @@ endif
 
 version = $(shell head -n1 version.h |cut -d\" -f2)
 
-SH_VERIFY_ALL_COMMITTED = (( `git status |grep 'modified\|Untracked files'|grep -v .gitkeep |wc -l ` == 0 )) || \
+SH_VERIFY_ALL_COMMITTED = (( `git status |grep 'modified\|Untracked files'|grep -v .gitkeep |wc -l` == 0 )) || \
                           (echo ERROR: there are some uncommitted changes: ; echo ; git status ; exit 1)
 
 test:
@@ -314,7 +316,7 @@ clean-opt:
 
 clean: clean-docs
 	@echo Cleaning up
-	@rm -f $(DEPS) $(WINDOWS_INSTALLER_OBJS) *.d .archive.tar.gz *.stackdump $(EXECUTABLES) $(OPT_EXECUTABLES) $(DEBUG_EXECUTABLES) 
+	@rm -f $(DEPS) $(filter-out LICENSE.txt,$(WINDOWS_INSTALLER_OBJS)) *.d .archive.tar.gz *.stackdump $(EXECUTABLES) $(OPT_EXECUTABLES) $(DEBUG_EXECUTABLES) 
 	@rm -f *.S *.good *.bad data/*.good data/*.bad *.local genozip.threads-log.* *.b250 test/*.good test/*.bad test/*.local test/*.b250 test/tmp/* test/*.DEPN
 	@rm -R $(OBJDIR)
 	@mkdir $(OBJDIR) $(addprefix $(OBJDIR)/, $(SRC_DIRS))
@@ -422,7 +424,7 @@ $(DOCS)/genozip-installer.exe: clean-optimized $(WINDOWS_INSTALLER_OBJS) # clean
 	@echo 'WINDOWS: Using the UI:'
 	@echo '  (1) Open genozip-installer.ifp'
 	@echo '  (2) Set General-Program version to $(version)'
-	@echo '  (3) Copy&paste to Dialogs->License from windows/LICENSE-for-installer.txt'
+	@echo '  (3) In Dialogs->License upload license from windows/LICENSE-for-installer.txt'
 	@echo '  (3) Click Save, then click Build'
 	@echo '  (4) Optionally: Click Yes, and copy the resulting files to releases/* and also c:\bin'	
 	@echo '  (5) Exit the UI (close the window)'
@@ -461,7 +463,8 @@ push-build:
 distribution: increment-version testfiles $(DOCS)/genozip-linux-x86_64.tar.build $(DOCS)/genozip-installer.exe build-docs push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
 	@(cd ../genozip-feedstock/ ; git pull)
 
-distribution-maintenance: increment-version testfiles $(DOCS)/genozip-linux-x86_64.tar.build $(DOCS)/genozip-installer.exe push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
+distribution-maintenance: increment-version testfiles $(DOCS)/genozip-linux-x86_64.tar.build $(DOCS)/genozip-installer.exe $(DOCS)/RELEASE_NOTES.for-docs.txt \
+                          push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
 	@(cd ../genozip-feedstock/ ; git pull)
 
 test-backup: genozip.exe

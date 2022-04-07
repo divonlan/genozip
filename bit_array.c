@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   bit_array.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //   Copyright claimed on additions and modifications vs public domain.
 //
@@ -966,7 +966,7 @@ void bit_array_concat_do (BitArray *base, const BitArray *add,
                           base->nbits + (add->nbits * (1+additional_concats_expected)), // low level allocation of anticipated additional similar-size concats - improves performance
                           false, func, code_line);
                        
-//xxx fix this to support additional_concats_expected in buffer. remove is_Buffer as it is always true.
+//xxx fix this to support additional_concats_expected in buffer. 
 /*    Buffer *buf = buf_get_buffer_from_bit_array (base);
 
     uint64_t more_words =  roundup_bits2words64 (add->nbits * (1+additional_concats_expected));

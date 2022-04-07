@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   vcf_vblock.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 // vb stands for VBlock - it started its life as VBlockVCF when genozip could only compress VCFs, but now
@@ -34,6 +34,7 @@ void vcf_vb_release_vb (VBlockVCFP vb)
     vb->is_rejects_vb = vb->is_unsorted[0] = vb->is_unsorted[1] = false;    
     vb->recon_size_luft = vb->reject_bytes = 0;
     vb->sort = false;
+    vb->first_line = 0;
 
     memset (&vb->mux_PLn,    0, sizeof(vb->mux_PLn));
     memset (&vb->mux_GL,     0, sizeof(vb->mux_GL));

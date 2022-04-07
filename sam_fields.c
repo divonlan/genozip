@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_fields.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "genozip.h"
@@ -62,10 +62,26 @@ void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM *dl, unsigned add_bytes)
 {
     ZipDataLineSAM *buddy_dl = DATA_LINE (vb->buddy_line_i); // note: an invalid pointer if buddy_line_i is -1
     
+    // case: PRIM line: we store FLAG.rev_comp in OPTION_SA_STRAND instead of FLAG
+    if (sam_is_prim_vb) {
+        sam_seg_against_sa_group_int (vb, CTX(SAM_FLAG), dl->FLAG.value & ~SAM_FLAG_REV_COMP, add_bytes);
+
+        ContextP sa_strand_ctx = CTX(OPTION_SA_STRAND);
+        seg_by_ctx (VB, dl->FLAG.bits.rev_comp ? "-" : "+", 1, sa_strand_ctx, 0); 
+
+        // count FLAG field contribution to OPTION_SA_CIGAR, so sam_stats_reallocate can allocate the z_data between CIGAR and SA:Z
+        sa_strand_ctx->counts.count++; // contributed z_data due to a single-byte + or -
+    }
+
+    // case: DEPN line with SA Group: we know some flags from SA Groups, so we store FLAG without them (reduces FLAG entropy)
+    else if (sam_is_depn_vb && sam_seg_has_SA_Group(vb))
+        #define SA_GROUP_FLAGS (SAM_FLAG_MULTI_SEGMENTS | SAM_FLAG_IS_FIRST | SAM_FLAG_IS_LAST | SAM_FLAG_REV_COMP)
+        sam_seg_against_sa_group_int (vb, CTX(SAM_FLAG), dl->FLAG.value & ~SA_GROUP_FLAGS, add_bytes);
+    
     // case: we can retrieve the FLAG from this line's buddy
     #define SAME_AS_BUDDY_FLAGS (SAM_FLAG_MULTI_SEGMENTS | SAM_FLAG_IS_ALIGNED | SAM_FLAG_SECONDARY | SAM_FLAG_FILTERED | \
                                  SAM_FLAG_DUPLICATE | SAM_FLAG_SUPPLEMENTARY)
-    if (segconf.sam_is_sorted && vb->buddy_line_i != -1 &&
+    else if (segconf.sam_is_sorted && vb->buddy_line_i != -1 &&
         (dl->FLAG.value & SAME_AS_BUDDY_FLAGS) == (buddy_dl->FLAG.value & SAME_AS_BUDDY_FLAGS) &&
          dl->FLAG.bits.unmapped       == buddy_dl->FLAG.bits.next_unmapped &&
          dl->FLAG.bits.next_unmapped  == buddy_dl->FLAG.bits.unmapped      &&
@@ -74,25 +90,11 @@ void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM *dl, unsigned add_bytes)
          dl->FLAG.bits.is_first       == buddy_dl->FLAG.bits.is_last       &&
          dl->FLAG.bits.is_last        == buddy_dl->FLAG.bits.is_first)
         seg_by_did_i (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_COPY_BUDDY_FLAG }, 2, SAM_FLAG, add_bytes); // added 12.0.41
-    
-    // case: DEPN line with SA Group, and PRIM line (unless already segged us buddy): we know FLAG.rev_comp from SA Groups (=strand), so we store
-    // FLAG without rev_comp (reduces FLAG entropy)
-    else if (sam_seg_has_SA_Group(vb))
-        sam_seg_against_sa_group_int (vb, CTX(SAM_FLAG), dl->FLAG.value & ~SAM_FLAG_REV_COMP, add_bytes);
 
     // case: normal snip
     else {
         seg_integer_as_text (vb, SAM_FLAG, dl->FLAG.value, false);
         CTX(SAM_FLAG)->txt_len += add_bytes; 
-    }
-
-    // in PRIM, we also seg it as the first (primary) alignment (used for PIZ to load alignments to memory, not used for reconstructing SA)
-    if (sam_is_prim_vb) {
-        ContextP sa_strand_ctx = CTX(OPTION_SA_STRAND);
-        seg_by_ctx (VB, dl->FLAG.bits.rev_comp ? "-" : "+", 1, sa_strand_ctx, 0); 
-
-        // count FLAG field contribution to OPTION_SA_CIGAR, so sam_stats_reallocate can allocate the z_data between CIGAR and SA:Z
-        sa_strand_ctx->counts.count++; // contributed z_data due to a single-byte + or -
     }
 
     if (segconf.running && dl->FLAG.bits.is_last && !dl->FLAG.bits.is_first)
@@ -170,7 +172,7 @@ COMPRESSOR_CALLBACK (sam_zip_BD_BI)
     
     if (!bd && !bi) return; // no BD or BI on this line
 
-    ASSERT (bd && bi, "A line has one of the BD:Z/BI:Z pair - Genozip can only compress lines that have either both BD:Z and BI:Z or neither. vb=%u vb_line_i=%"PRIu64, 
+    ASSERT (bd && bi, "A line has one of the BD:Z/BI:Z pair - Genozip can only compress lines that have either both BD:Z and BI:Z or neither. vb=%u vb_line_i=%d", 
             vb->vblock_i, vb_line_i);
 
     // note: maximum_len might be shorter than the data available if we're just sampling data in zip_assign_best_codec
@@ -199,8 +201,8 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_BD_BI)
 
     // note: bd and bi use their own next_local to retrieve data from bdbi_ctx. the actual index
     // in bdbi_ctx.local is calculated given the interlacing
-    ASSERT (ctx->next_local + vb->seq_len * 2 <= bdbi_ctx->local.len, "Error reading txt_line=%"PRIu64": unexpected end of %s data. Expecting ctx->next_local=%u + vb->seq_len=%u * 2 <= bdbi_ctx->local.len=%"PRIu64, 
-            vb->line_i, dis_dict_id (bdbi_ctx->dict_id).s, ctx->next_local, vb->seq_len, bdbi_ctx->local.len);
+    ASSPIZ (ctx->next_local + vb->seq_len * 2 <= bdbi_ctx->local.len, "Error reading: unexpected end of %s data. Expecting ctx->next_local=%u + vb->seq_len=%u * 2 <= bdbi_ctx->local.len=%"PRIu64, 
+            dis_dict_id (bdbi_ctx->dict_id).s, ctx->next_local, vb->seq_len, bdbi_ctx->local.len);
 
     char *dst        = BAFTc (vb->txt_data);
     rom src          = Bc (bdbi_ctx->local, ctx->next_local * 2);
@@ -294,7 +296,7 @@ static bool sam_seg_0A_mapq_cb (VBlockP vb, ContextP ctx, STRp (mapq_str), uint3
     uint8_t mapq; // 8 bit by BAM specification of main field MAPQ
     if (!str_get_int_range8 (STRa(mapq_str), 0, 255, &mapq)) return false;
     
-    seg_add_to_local_nonresizeable (vb, ctx, mapq, false, mapq_str_len);
+    seg_add_to_local_nonresizeable (VB, ctx, &mapq, false, mapq_str_len);
     return true;
 }
 
@@ -488,7 +490,7 @@ static void sam_seg_SA_field (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa))
         sam_seg_against_sa_group (vb, ctx, 0); // This will be reconstructed
 
         // we need to seg the primary NM before the SA NMs, if not segged yet
-        ASSERT (vb->NM_len, "PRIM line with SA is missing NM. Not expecting MAIN to send this line to PRIM. vb=%u line_i=%u", vb->vblock_i, (unsigned)vb->line_i);
+        ASSERT (vb->NM_len, "PRIM line with SA is missing NM. Not expecting MAIN to send this line to PRIM. vb=%u line_i=%d", vb->vblock_i, vb->line_i);
         sam_seg_NM_field (vb, vb->NM, vb->NM_len);
 
         SegCallback callbacks[NUM_SA_ITEMS] = { [SA_RNAME]=chrom_seg_cb, [SA_POS]=seg_pos_field_cb, [SA_CIGAR]=sam_seg_0A_cigar_cb, [SA_MAPQ]=sam_seg_0A_mapq_cb };            
@@ -500,7 +502,7 @@ static void sam_seg_SA_field (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa))
 
         // use SA.local to store number of alignments in this SA Group (inc. primary)
         uint8_t num_alns_8b = num_alns;
-        seg_add_to_local_nonresizeable (vb, ctx, num_alns_8b, false, 0); // for non-SA PRIM lines, this is segged in sam_seg_sa_group_stuff
+        seg_add_to_local_nonresizeable (VB, ctx, &num_alns_8b, false, 0); // for non-SA PRIM lines, this is segged in sam_seg_sa_group_stuff
     
         // PRIM: Remove the container b250 - Reconstruct will consume the SPECIAL_SAGROUP, and sam_piz_load_SA_Groups will
         // consume OPTION_SA_* (to which we have already added the main fields of this line - RNAME, POS...)
@@ -577,9 +579,6 @@ static inline void sam_seg_AS_field (VBlockSAMP vb, ZipDataLineSAM *dl, ValueTyp
         else
             // TODO: AS prediction, see bug 520
             seg_integer_as_text_do (VB, CTX(OPTION_AS_i), AS.i, add_bytes);    
-if (!strncmp (Btxt(dl->QNAME.index), "A00217:76:HFLT3DSXX:3:2272:23999:28401", 38))
-printf ("xxxB vb=%s/%u AS=%"PRIu64" buddy_line_i=%u\n", 
-comp_name(vb->comp_i), vb->vblock_i, AS.i, vb->buddy_line_i);
 
         dl->AS = AS.i;
     }
@@ -588,9 +587,6 @@ comp_name(vb->comp_i), vb->vblock_i, AS.i, vb->buddy_line_i);
     else {
         char new_snip[20] = { SNIP_SPECIAL, SAM_SPECIAL_REF_CONSUMED };
         unsigned delta_len = str_int ((int32_t)vb->ref_consumed-AS.i, &new_snip[2]);
-if (!strncmp (Btxt(dl->QNAME.index), "A00217:76:HFLT3DSXX:3:2272:23999:28401", 38))
-printf ("xxxA vb=%s/%u POS=%u AS=%"PRIu64" delta_len=%u ref_consumed=%u new_snip=%.*s\n", 
-comp_name(vb->comp_i), vb->vblock_i, (int)dl->POS, AS.i, delta_len, vb->ref_consumed, delta_len, new_snip+2);
 
         seg_by_ctx (VB, new_snip, delta_len+2, CTX (OPTION_AS_i), add_bytes); 
     }
@@ -609,9 +605,6 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_AS_old)
 // reconstruct ref_consumed or (ref_consumed-snip)
 SPECIAL_RECONSTRUCTOR (sam_piz_special_REF_CONSUMED)
 {
-if (!strncmp (last_txt(vb, SAM_QNAME), "A00217:76:HFLT3DSXX:3:2272:23999:28401", 38)) // xxx
-printf ("xxx vb=%s/%u POS=%u snip=\"%.*s\" ref_consumed=%u CIGAR=\"%.*s\"\n", 
-comp_name(vb->comp_i), vb->vblock_i, (uint32_t)CTX(SAM_POS)->last_value.i, snip_len, snip, VB_SAM->ref_consumed, (int)VB_SAM->textual_cigar.len, VB_SAM->textual_cigar.data);
     new_value->i = (int32_t)VB_SAM->ref_consumed - atoi (snip); // ref_consumed if snip=""
     if (reconstruct) RECONSTRUCT_INT (new_value->i);
     
@@ -793,7 +786,7 @@ static inline SmallContainer *sam_seg_array_field_get_con (VBlockSAMP vb, Contex
     StoreType store_type = aux_field_store_flag[type];
     (*elem_ctx)->flags.store = store_type;
 
-    ASSERT (store_type, "Invalid type \"%c\" in array of %s. vb=%u line=%"PRIu64, type, con_ctx->tag_name, vb->vblock_i, vb->line_i);
+    ASSERT (store_type, "Invalid type \"%c\" in array of %s. vb=%u line=%d", type, con_ctx->tag_name, vb->vblock_i, vb->line_i);
 
     if (store_type == STORE_INT) {
         (*elem_ctx)->ltype = aux_field_to_ltype[type];
@@ -830,7 +823,7 @@ static void sam_seg_array_field (VBlockSAMP vb, DictId dict_id, uint8_t type,
         buf_alloc (vb, &elem_ctx->local, con->repeats * width, con->repeats * width * 50, char, CTX_GROWTH, "contexts->local"); // careful not * line.len - we can get OOM
     }
 
-    ASSERT (is_int || (type=='f' && !callback), "Type not supported for SAM/BAM arrays '%c'(%u) in ctx=%s vb=%u line=%"PRIu64,
+    ASSERT (is_int || (type=='f' && !callback), "Type not supported for SAM/BAM arrays '%c'(%u) in ctx=%s vb=%u line=%d",
             type, type, con_ctx->tag_name, vb->vblock_i, vb->line_i);
 
     char *local_start = BAFTc (elem_ctx->local);
@@ -860,7 +853,7 @@ static void sam_seg_array_field (VBlockSAMP vb, DictId dict_id, uint8_t type,
 
             if (is_int) { 
                 int64_t value;
-                ASSERT (str_get_int (STRa(snip), &value), "Invalid array: \"%.*s\", expecting an integer in an array element of %s. vb=%u line=%"PRIu64, 
+                ASSERT (str_get_int (STRa(snip), &value), "Invalid array: \"%.*s\", expecting an integer in an array element of %s. vb=%u line=%d", 
                         snip_len, snip, con_ctx->tag_name, vb->vblock_i, vb->line_i);
                 value = LTEN64 (value); // consistent with BAM and avoid a condition before the memcpy below 
                 memcpy (&local_start[i*width], &value, width);
@@ -915,8 +908,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
 
         // note: we cannot seg MD using SPECIAL if we're segging the line against SA Group, because
         // the MD alg requires the SQBITMAP.
-        case _OPTION_MD_Z: SEG_COND (sam_is_main_vb,
-                                     sam_MD_Z_seg (vb, dl, STRa(value), add_bytes)); break;
+        case _OPTION_MD_Z: sam_MD_Z_seg (vb, dl, STRa(value), add_bytes); break;
 
         case _OPTION_NM_i: sam_seg_NM_field (vb, numeric, add_bytes); break;
 

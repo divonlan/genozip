@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   flags.h
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #pragma once
@@ -94,15 +94,19 @@ typedef struct {
     int show_memory, show_sa, show_depn, show_dict, show_b250, show_aliases, show_digest, log_digest, show_recon_plan,
         show_index, show_gheader, show_ref_contigs, show_chain_contigs, show_ref_seq, show_ref_diff,
         show_reference, show_ref_hash, show_ref_index, show_chrom2ref, show_ref_iupacs, show_chain, show_ranges,
-        show_codec, show_containers, show_alleles, show_bgzf, show_txt_contigs, show_lines,
+        show_codec, 
+        show_alleles, show_bgzf, show_txt_contigs, show_lines,
         show_vblocks, show_threads, show_uncompress, biopsy,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
-        debug_LONG, debug_qname, debug_read_ctxs, debug_sa, debug_gencomp,
+        debug_LONG, debug_qname, debug_read_ctxs, debug_sa, debug_gencomp, debug_lines,
         verify_codec, seg_only, show_bam, xthreads, show_flags, show_rename_tags,
+        #define SHOW_CONTAINERS_ALL_VBs (-1)
+        show_containers, 
         echo,         // show the command line in case of an error
         show_headers; // (1 + SectionType to display) or 0=flag off or -1=all sections
     rom help, dump_section, show_is_set, show_time, show_mutex;
-
+    struct biopsy_line { VBIType vb_i; int32_t line_i/*within vb*/; } biopsy_line; // argument of --biopsy-line (line_i=-1 means: not used)
+    
     DictId dict_id_show_one_b250,   // argument of --show-b250-one
            show_one_counts,
            dump_one_b250_dict_id,   // argument of --dump-b250-one

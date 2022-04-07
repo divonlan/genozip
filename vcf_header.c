@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   header_vcf.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "vcf_private.h"
@@ -692,7 +692,7 @@ static bool vcf_inspect_txt_header_zip (Buffer *txt_header)
         buf_add_more (evb, &evb->scratch, B1STc(*txt_header), fileformat_line_len, "scratch"); // add the ##fileformat line, if there is one
         buf_add_more (evb, &evb->scratch, STRa(chrom_line), "scratch"); // add the #CHROM line
  
-        zfile_write_txt_header (&evb->scratch, evb->scratch.len, DIGEST_NONE, false, VCF_COMP_PRIM_ONLY); // xxx are len and is_first_vcf correct?
+        zfile_write_txt_header (&evb->scratch, evb->scratch.len, DIGEST_NONE, false, VCF_COMP_PRIM_ONLY); 
         zfile_write_txt_header (&evb->scratch, evb->scratch.len, DIGEST_NONE, false, VCF_COMP_LUFT_ONLY);
         
         buf_free (evb->scratch);

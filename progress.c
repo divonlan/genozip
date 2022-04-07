@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   progress.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include <time.h>

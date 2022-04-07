@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   txtheader.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "genozip.h"
@@ -70,14 +70,11 @@ bool txtheader_zip_read_and_compress (int64_t *txt_header_offset, CompIType comp
 
     if (flag.show_lines)
         iprintf ("txtheader bytes=%"PRIu64"\n", txt_header_size);
-
-    // for stats: combined length of txt headers in this bound file, or only one file if not bound
-    if (!flag.bind) z_file->txt_txtheader_so_far_bind=0;
     
     // DVCF note: we don't account for rejects files as txt_len - the variant lines are already accounted for in the main file, and the added header lines are duplicates of the main header
     // SAM/BAM note: we don't account for PRIM/DEPN txt headers generated in gencomp_initialize
     if (!comp_i) 
-        z_file->txt_txtheader_so_far_bind += evb->txt_data.len; 
+        z_file->header_size = txt_file->header_size; 
 
     z_file->num_txts_so_far++; // when compressing
 
@@ -204,37 +201,39 @@ void txtheader_piz_read_and_reconstruct (Section sec)
 
         if (txt_header_vb->txt_data.len) {
 
-            bool test_digest = !digest_is_zero (z_file->digest);
+            // count textual lines in header, used for line= reporting in ASSPIZ
+            if (!DTPT (is_binary)) {
+                uint32_t num_textual_lines = str_count_char (STRb(txt_header_vb->txt_data), '\n');
+                writer_set_num_txtheader_lines (sec->comp_i, num_textual_lines);
+            }
 
-            if (test_digest) {
+            if (piz_need_digest) {
                 if (flag.log_digest) digest_start_log (&z_file->digest_ctx); 
                 digest_update (&z_file->digest_ctx, &txt_header_vb->txt_data, "txt_header");
+
+                // backward compatability note: For v8 files, we don't test against MD5 for the header, as we had a bug 
+                // in which we included a junk MD5 if they user didn't --md5 or --test. any file integrity problem will
+                // be discovered though on the whole-file MD5 so no harm in skipping this.
+                if (z_file->genozip_version >= 9) {  
+                    Digest reconstructed_header_digest = digest_snapshot (&z_file->digest_ctx, NULL);
+                    
+                    TEMP_FLAG (quiet, flag.quiet && !flag.show_digest);
+
+                    ASSERTW (digest_is_zero (header->digest_header) || 
+                             digest_recon_is_equal (reconstructed_header_digest, header->digest_header),
+                             "%s of reconstructed %s header (%s) differs from original file (%s)\n"
+                             "Bad reconstructed header has been dumped to: %s\n", digest_name(),
+                             dt_name (z_file->data_type), digest_display (reconstructed_header_digest).s, digest_display (header->digest_header).s,
+                             txtfile_dump_vb (txt_header_vb, z_name));
+
+                    RESTORE_FLAG (quiet);
+                }
             }
 
-            if (txt_file->codec == CODEC_BGZF) {
+            if (txt_file->codec == CODEC_BGZF) 
                 // inherit BGZF blocks from source file, if isizes was loaded (i.e. not flag.data_modified) - 
-                // into txt_header_vb->bgzf_blocks
+                // into txt_header_vb->bgzf_blocks. compression will be done by writer.
                 bgzf_calculate_blocks_one_vb (txt_header_vb, txt_header_vb->txt_data.len); 
-
-                // compress unless flag.maybe_lines_out_of_order (we compress in writer_flush_vb instead)
-                if (!flag.maybe_lines_out_of_order)
-                    bgzf_compress_vb (txt_header_vb); 
-            }
-
-            if (test_digest && z_file->genozip_version >= 9) {  // backward compatability with v8: we don't test against v8 MD5 for the header, as we had a bug in v8 in which we included a junk MD5 if they user didn't --md5 or --test. any file integrity problem will be discovered though on the whole-file MD5 so no harm in skipping this.
-                Digest reconstructed_header_digest = digest_do (STRb(txt_header_vb->txt_data));
-                
-                TEMP_FLAG (quiet, flag.quiet && !flag.show_digest);
-
-                ASSERTW (digest_is_zero (header->digest_header) || 
-                         digest_recon_is_equal (reconstructed_header_digest, header->digest_header),
-                         "%s of reconstructed %s header (%s) differs from original file (%s)\n"
-                         "Bad reconstructed header has been dumped to: %s\n", digest_name(),
-                         dt_name (z_file->data_type), digest_display (reconstructed_header_digest).s, digest_display (header->digest_header).s,
-                         txtfile_dump_vb (txt_header_vb, z_name));
-
-                RESTORE_FLAG (quiet);
-            }
         }
 
         writer_handover_txtheader (&txt_header_vb); // handover data to writer thread (even if the header is empty, as the writer thread is waiting for it)

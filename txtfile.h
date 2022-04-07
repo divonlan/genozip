@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   txtfile.h
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #pragma once
@@ -13,7 +13,6 @@ extern rom txtfile_piz_get_filename (rom orig_name, rom prefix, bool is_orig_nam
 typedef bool (*TxtFileTestFunc)(rom , int);
 extern bool txtfile_test_data (char first_char, unsigned num_lines_to_test, float success_threashold, TxtFileTestFunc test_func);
 
-extern rom txtfile_dump_filename (VBlockP vb, rom base_name, rom ext);
 extern rom txtfile_dump_vb (VBlockP vb, rom base_name);
 
 extern void txtfile_read_header (bool is_first_txt);

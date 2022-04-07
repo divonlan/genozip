@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   aligner.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "genozip.h"
@@ -249,8 +249,8 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq))
     // get mate's GPOS
     PosType pair_gpos = NO_GPOS;
     if (gpos_ctx->pair_local) {
-        ASSERT (vb->line_i < gpos_ctx->pair.len, "vb=%u cannot get pair_1 GPOS for line_i=%"PRIu64" because pair_1 GPOS.len=%"PRIu64,
-                vb->vblock_i, vb->line_i, gpos_ctx->pair.len);
+        ASSERT (vb->line_i < gpos_ctx->pair.len, "vb=%u cannot get pair_1 GPOS for line_i=%d because pair_1 GPOS.len=%u",
+                vb->vblock_i, vb->line_i, gpos_ctx->pair.len32);
 
         pair_gpos = (PosType)*B32 (gpos_ctx->pair, vb->line_i); // same location, in the pair's local
     }
@@ -265,7 +265,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq))
     if (gpos_ctx->pair_local) {
         const BitArray *pair_strand = buf_get_bitarray (&strand_ctx->pair);
         
-        ASSERT (vb->line_i < pair_strand->nbits, "vb=%u cannot get pair_1 STRAND bit for line_i=%"PRIu64" because pair_1 strand bitarray has only %u bits",
+        ASSERT (vb->line_i < pair_strand->nbits, "vb=%u cannot get pair_1 STRAND bit for line_i=%d because pair_1 strand bitarray has only %u bits",
                 vb->vblock_i, vb->line_i, (unsigned)pair_strand->nbits);
 
         bool pair_is_forward = bit_array_get (pair_strand, vb->line_i); // same location, in the pair's local

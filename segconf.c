@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   segconf.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "genozip.h"
@@ -78,7 +78,7 @@ static void segconf_set_vb_size (ConstVBlockP vb, uint64_t curr_vb_size)
                             (vcf_header_get_num_samples() << 17 /* 0 if not vcf */);
 
         uint64_t min_memory = !segconf.sam_is_sorted     ? VBLOCK_MEMORY_MIN_DYN
-                            : !segconf.is_long_reads   ? VBLOCK_MEMORY_MIN_DYN
+                            : !segconf.is_long_reads     ? VBLOCK_MEMORY_MIN_DYN
                             : arch_get_num_cores() <= 8  ? VBLOCK_MEMORY_MIN_DYN // eg a personal computer
                             : arch_get_num_cores() <= 20 ? (128 << 20)           // higher minimum memory for long reads in sorted SAM - enables CPU scaling
                             :                              (256 << 20);
@@ -89,9 +89,14 @@ static void segconf_set_vb_size (ConstVBlockP vb, uint64_t curr_vb_size)
         int64_t est_seggable_size = txtfile_get_seggable_size();
         if (est_seggable_size) segconf.vb_size = MIN_(segconf.vb_size, est_seggable_size * 1.5);
 
-        if (flag.show_memory)
-            iprintf ("\nDyamically set vblock_memory to %u MB (num_contexts=%u num_vcf_samples=%u)\n", 
-                        (unsigned)(segconf.vb_size >> 20), num_used_contexts, vcf_header_get_num_samples());
+        if (flag.show_memory) {
+            if (Z_DT(DT_VCF))
+                iprintf ("\nDyamically set vblock_memory to %u MB (num_contexts=%u num_vcf_samples=%u)\n", 
+                         (unsigned)(segconf.vb_size >> 20), num_used_contexts, vcf_header_get_num_samples());
+            else
+                iprintf ("\nDyamically set vblock_memory to %u MB (num_contexts=%u)\n", 
+                         (unsigned)(segconf.vb_size >> 20), num_used_contexts);
+        }
 
         // on Windows (inc. WSL2) and Mac - which tend to have less memory in typical configurations, warn if we need a lot
         // (note: if user sets --vblock, we won't get here)

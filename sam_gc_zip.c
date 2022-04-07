@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_gc_zip.c
-//   Copyright (C) 2022-2022 Black Paw Ventures Limited
+//   Copyright (C) 2022-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "genozip.h"
@@ -58,9 +58,9 @@ void sam_gc_zip_init_vb (VBlockP vb)
 // In PRIM, we abort because this is not not expected as MAIN component should not have moved this line to PRIM
 #define FAILIF(condition, format, ...) \
   ( { if (condition) { \
-          if (flag.debug_sa) iprintf ("vb=%u line=%u " format "\n", vb->vblock_i, (unsigned)vb->line_i, __VA_ARGS__); \
+          if (flag.debug_sa) iprintf ("vb=%u line=%d " format "\n", vb->vblock_i, vb->line_i, __VA_ARGS__); \
           if (sam_is_main_vb) return false; \
-          else { progress_newline(); fprintf (stderr, "Error in %s:%u: Failed PRIM line in vb=%u, line_i=%"PRIu64" because ", __FUNCLINE, vb->vblock_i, vb->line_i); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true); }} \
+          else { progress_newline(); fprintf (stderr, "Error in %s:%u: Failed PRIM line in vb=%u, line_i=%d because ", __FUNCLINE, vb->vblock_i, vb->line_i); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true); }} \
     } )
 
 // Call in seg PRIM line (both in MAIN and PRIM vb): 
@@ -92,15 +92,18 @@ static bool sam_seg_prim_add_sa_group (VBlockSAMP vb, ZipDataLineSAM *dl, uint16
 
         // add SA group
         BNXT (SAGroupType, vb->sa_groups) = (SAGroupType){
-            .first_aln_i = vb->sa_alns.len,
-            .num_alns    = num_alns,
-            .qname       = dl->QNAME.index,
-            .qname_len   = dl->QNAME.len,
-            .qual        = dl->QUAL.index,
-            .no_qual     = vb->qual_missing,
-            .revcomp     = dl->FLAG.bits.rev_comp,
-            .seq         = dl->SEQ.index,
-            .seq_len     = seq_len,
+            .first_aln_i    = vb->sa_alns.len,
+            .num_alns       = num_alns,
+            .qname          = dl->QNAME.index,
+            .qname_len      = dl->QNAME.len,
+            .qual           = dl->QUAL.index,
+            .no_qual        = vb->qual_missing,
+            .revcomp        = dl->FLAG.bits.rev_comp,
+            .multi_segments = dl->FLAG.bits.multi_segments,
+            .is_first       = dl->FLAG.bits.is_first,
+            .is_last        = dl->FLAG.bits.is_last,
+            .seq            = dl->SEQ.index,
+            .seq_len        = seq_len,
         };
     }
 
@@ -232,42 +235,42 @@ bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(alignment), STR
 // QNAME
 // ------------------
 
-typedef struct __attribute__ ((__packed__)) { uint32_t qname_adler, grp_i; } SAGroupIndexEntry; 
+typedef struct __attribute__ ((__packed__)) { uint32_t qname_hash, grp_i; } SAGroupIndexEntry; 
 
-// ZIP DEPN: search for index entry by qname_adler 
-static int64_t sam_sa_binary_search_for_qname (const SAGroupIndexEntry *index, uint64_t this_qname_adler, int64_t first, int64_t last)
+// ZIP DEPN: search for index entry by qname_hash 
+static int64_t sam_sa_binary_search_for_qname_hash (const SAGroupIndexEntry *index, uint64_t this_qname_hash, int64_t first, int64_t last)
 {
     if (first > last) return -1; // not found
 
     int64_t mid = (first + last) / 2;
 
-    int64_t cmp = (int64_t)index[mid].qname_adler - (int64_t)this_qname_adler;
-    if      (cmp < 0) return sam_sa_binary_search_for_qname (index, this_qname_adler, mid+1, last);
-    else if (cmp > 0) return sam_sa_binary_search_for_qname (index, this_qname_adler, first, mid-1);
+    int64_t cmp = (int64_t)index[mid].qname_hash - (int64_t)this_qname_hash;
+    if      (cmp < 0) return sam_sa_binary_search_for_qname_hash (index, this_qname_hash, mid+1, last);
+    else if (cmp > 0) return sam_sa_binary_search_for_qname_hash (index, this_qname_hash, first, mid-1);
 
-    // mid contains the this_qname_adler - scan the index backwards for the first matching entry as there might be several
-    while (mid >= 1 && index[mid-1].qname_adler == this_qname_adler) mid--;
+    // mid contains the this_qname_hash - scan the index backwards for the first matching entry as there might be several different qnames with the same hash
+    while (mid >= 1 && index[mid-1].qname_hash == this_qname_hash) mid--;
 
     return mid;
 }
 
 // ZIP DEPN: find group index with this_qname in z_file->sa_groups, and if there are several - return the first
-static SAGroupType *sam_sa_get_first_group_by_qname (VBlockSAMP vb, STRp(this_qname), int64_t *grp_index_i)
+static SAGroupType *sam_sa_get_first_group_by_qname_hash (VBlockSAMP vb, STRp(this_qname), bool is_last, int64_t *grp_index_i)
 {
     // search for a group with qname in z_file->sa_qname
-    uint32_t this_qname_adler = adler32 (1, STRa(this_qname));
-    *grp_index_i = sam_sa_binary_search_for_qname (B1ST (SAGroupIndexEntry, z_file->sa_groups_index), this_qname_adler, 0, z_file->sa_groups_index.len-1);
+    uint32_t this_qname_hash = QNAME_HASH (this_qname, this_qname_len, is_last);
+    *grp_index_i = sam_sa_binary_search_for_qname_hash (B1ST (SAGroupIndexEntry, z_file->sa_groups_index), this_qname_hash, 0, z_file->sa_groups_index.len-1);
 
     const SAGroupIndexEntry *index_ent = B(SAGroupIndexEntry, z_file->sa_groups_index, *grp_index_i); // invalid pointer if grp_index_i==-1, that's ok    
     return (*grp_index_i >= 0) ? B(SAGroupType, z_file->sa_groups, index_ent->grp_i) : NULL; 
 }
 
-// ZIP DEPN: if there are more groups in z_file->sa_groups with this_qname, return the next group index
-static SAGroupType *sam_sa_get_next_group_by_qname (VBlockSAMP vb, STRp(this_qname), int64_t *grp_index_i)
+// ZIP DEPN: if there are more groups in z_file->sa_groups with the qname adlers, return the next group index
+static SAGroupType *sam_sa_get_next_group_by_qname_hash (VBlockSAMP vb, int64_t *grp_index_i)
 {
     const SAGroupIndexEntry *index_ent = B(SAGroupIndexEntry, z_file->sa_groups_index, *grp_index_i);
 
-    if (*grp_index_i < z_file->sa_groups_index.len-1 && index_ent->qname_adler == (index_ent+1)->qname_adler) {
+    if (*grp_index_i < z_file->sa_groups_index.len-1 && index_ent->qname_hash == (index_ent+1)->qname_hash) {
         (*grp_index_i)++;
         return B(SAGroupType, z_file->sa_groups, (index_ent+1)->grp_i);
     }
@@ -419,7 +422,7 @@ static void sam_sa_seg_depn_find_sagroup (VBlockSAMP vb, ZipDataLineSAM *dl, STR
     buf_alloc (vb, &CTX(SAM_SAALN)->local,   1, vb->lines.len, uint16_t,  1, "contexts->local");
 
     int64_t grp_index_i=-1;
-    const SAGroupType *g = sam_sa_get_first_group_by_qname (vb, STRtxtw(dl->QNAME), &grp_index_i);
+    const SAGroupType *g = sam_sa_get_first_group_by_qname_hash (vb, STRtxtw(dl->QNAME), dl->FLAG.bits.is_last, &grp_index_i);
     if (!g) return; // no PRIM with this qname
 
     // temporarily replace H replaced by S
@@ -453,20 +456,24 @@ static void sam_sa_seg_depn_find_sagroup (VBlockSAMP vb, ZipDataLineSAM *dl, STR
             DONE; // cannot make sense of the SA alignments
     }
 
-    // iterate on all groups with matching QNAME
+    // iterate on all groups with matching QNAME hash
     do {
         uint16_t my_aln_i=0; // relative to group
 
         // case: we have SA - get alignment where SA and my alignment perfectly match the group 
         // for SEQ - we tolerate a diff in SA alignments, but if no SA - it has to be a perfect match (modulo revcomp) 
-        if (vb->qual_missing == g->no_qual &&
+        if (dl->FLAG.bits.is_first == g->is_first && // note: order tests in the condition is optimized to fail fast with minimal effort
             g->seq_len == vb->hard_clip[0] + seq_len + vb->hard_clip[1] &&
-            (!SA || sam_seg_depn_find_aln (vb, g, n_my_alns, my_alns, &my_aln_i)) &&
+            vb->qual_missing == g->no_qual &&
+            dl->FLAG.bits.is_last  == g->is_last &&
+            dl->FLAG.bits.multi_segments == g->multi_segments &&
+            str_issame_(STRtxtw(dl->QNAME), GRP_QNAME(g), g->qname_len) && 
+            (!SA || (n_my_alns == g->num_alns && sam_seg_depn_find_aln (vb, g, n_my_alns, my_alns, &my_aln_i))) &&
             (SA || sam_seg_depn_is_subseq_of_prim (vb, (uint8_t*)textual_seq, dl->SEQ.len, (revcomp != g->revcomp), g, is_bam))) {
 
             // found - seg into local
             BNXT (SAGroup, CTX(SAM_SAGROUP)->local) = ZGRP_I(g);
-            BNXT16 (CTX(SAM_SAALN)->local)  = my_aln_i;
+            BNXT16 (CTX(SAM_SAALN)->local) = my_aln_i;
             
             vb->sa_grp = g;
             vb->sa_aln = SA ? B(SAAlnType, z_file->sa_alns, g->first_aln_i + my_aln_i) : NULL;
@@ -478,12 +485,12 @@ static void sam_sa_seg_depn_find_sagroup (VBlockSAMP vb, ZipDataLineSAM *dl, STR
             break;
         }
 
-    } while ((g = sam_sa_get_next_group_by_qname (vb, STRtxtw(dl->QNAME), &grp_index_i)));
+    } while ((g = sam_sa_get_next_group_by_qname_hash (vb, &grp_index_i)));
 
     DONE;
-//printf ("xxx %.*s %.*s %.*s no group found\n", STRf(qname), STRf(rname), STRf(pos_str));
 }
 
+// Seg compute VB: called when segging PRIM/DEPN VBs
 void sam_seg_sa_group_stuff (VBlockSAMP vb, ZipDataLineSAM *dl, 
                              STRps(aux), STRp(textual_cigar), rom textual_seq, bool is_bam)
 {
@@ -506,7 +513,7 @@ void sam_seg_sa_group_stuff (VBlockSAMP vb, ZipDataLineSAM *dl,
         else { 
             // we seg the main fields into the single (primary) alignment for non-SA lines
             uint8_t num_alns_8b = 1; 
-            seg_add_to_local_nonresizeable (vb, CTX(OPTION_SA_Z), num_alns_8b, false, 0);
+            seg_add_to_local_nonresizeable (VB, CTX(OPTION_SA_Z), &num_alns_8b, false, 0);
 
             // case PRIM line with no SA and no NM: we still need NM, which is used to load the primary alignment in piz. 
             // If this line has NM, it will be segged in sam_seg_NM_field. If it doesn't, we seg it as 0 here. In case of a file

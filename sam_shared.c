@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_shared.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "sam_private.h"
@@ -98,6 +98,9 @@ void sam_reset_line (VBlockP vb_)
         vb->chrom_node_index = WORD_INDEX_NONE;
         vb->chrom_name = "";
         vb->chrom_name_len = 0;
+
+        if (!vb->preprocessing) 
+            buf_alloc_zero (vb, &CTX(SAM_CIGAR)->piz_ctx_specific_buf, 0, vb->lines.len, uint32_t, 0, "piz_ctx_specific_buf"); // initialize to exactly one per line.
     }
 }
 

@@ -1,7 +1,7 @@
 
 // ------------------------------------------------------------------
 //   container.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #if defined __APPLE__ 
@@ -20,6 +20,7 @@
 #include "regions.h"
 #include "piz.h"
 #include "writer.h"
+#include "libdeflate/libdeflate.h"
 
 //----------------------
 // Segmentation
@@ -87,7 +88,7 @@ WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con,
         container_prepare_snip (con, prefixes, prefixes_len, snip, &snip_len);
 
     if (flag.show_containers) { 
-        iprintf ("VB=%u Line=%"PRIu64" Ctx=%u:%s Repeats=%u RepSep=%u,%u Items=", 
+        iprintf ("VB=%u Line=%d Ctx=%u:%s Repeats=%u RepSep=%u,%u Items=", 
                  vb->vblock_i, vb->line_i, ctx->did_i, ctx->tag_name, con->repeats, con->repsep[0], con->repsep[1]);
         for (unsigned i=0; i < con_nitems (*con); i++) {
             const ContainerItem *item = &con->items[i];
@@ -103,6 +104,22 @@ WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con,
 //----------------------
 // Reconstruction
 //----------------------
+
+static inline void container_verify_line_integrity (VBlockP vb, ContextP debug_lines_ctx, rom recon_start)
+{
+    uint32_t recon_len = BAFTtxt - recon_start;
+    uint32_t seg_hash = *B(uint32_t, debug_lines_ctx->local, debug_lines_ctx->next_local++);
+    uint32_t piz_hash = adler32 (2, recon_start, recon_len); // same as in seg_all_data_lines
+
+    if (seg_hash != piz_hash) {
+        DO_ONCE {
+            file_put_line (vb, recon_start, recon_len, "Failed line integrity check");
+
+            // show data-type-specific information about defective line
+            DT_FUNC (z_file, piz_xtra_line_data)(vb);
+        }
+    }
+}
 
 static inline uint32_t container_reconstruct_prefix (VBlockP vb, ConstContainerP con, pSTRp(prefixes),
                                                      bool skip, DictId con_dict_id, DictId item_dict_id)
@@ -236,16 +253,20 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
         iprintf ("VB=%u Container: %s repeats=%u items=%u filter_items=%u filter_repeats=%u callback=%u\n", 
                  vb->vblock_i, dis_dict_id (ctx->dict_id).s, con->repeats, con_nitems(*con), con->filter_items, con->filter_repeats, con->callback);
 
+    ContextP debug_lines_ctx = NULL;
     if (con->is_toplevel) {
         buf_alloc (vb, &vb->lines, 0, con->repeats+1, char *, 1.1, "lines"); // note: lines.len was set in piz_read_one_vb
         vb->is_dropped = writer_get_is_dropped (vb->vblock_i);
+
+        debug_lines_ctx = ECTX(_SAM_DEBUG_LINES); // same dict_id for all data types
+        if (!debug_lines_ctx || !debug_lines_ctx->is_loaded) debug_lines_ctx = NULL;
     }
 
     for (uint32_t rep_i=0; rep_i < con->repeats; rep_i++) {
 
         // case this is the top-level snip: initialize line
         if (con->is_toplevel) {
-            vb->line_i         = vb->first_line + rep_i; // 1-based line from the begginging for the file, including the txt header            
+            vb->line_i         = rep_i;
             vb->sample_i       = 0;
             vb->line_start     = vb->txt_data.len;
             vb->drop_curr_line = NULL;    
@@ -267,7 +288,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
         unsigned num_preceding_seps = 0;
 
         if (vb->show_containers) // show container reconstruction 
-            iprintf ("VB=%u Line=%"PRIu64" Repeat=%u LastRepeat=%u %s\n", vb->vblock_i, vb->line_i, rep_i, con->repeats-1, ctx->tag_name);
+            iprintf ("VB=%u Line=%d Repeat=%u LastRepeat=%u %s\n", vb->vblock_i, vb->line_i, rep_i, con->repeats-1, ctx->tag_name);
 
         for (unsigned i=0; i < num_items; i++) {
             const ContainerItem *item = &con->items[i];
@@ -287,7 +308,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
             last_non_filtered_item_i = i;
 
             if (vb->show_containers && item_ctx && (!flag.dict_id_show_containers.num || dict_id_typeless (item_ctx->dict_id).num == flag.dict_id_show_containers.num)) // show container reconstruction 
-                iprintf ("VB=%u Line=%"PRIu64" Repeat=%u %s(%u)->%s(%u) trans_id=%u txt_data.len=%"PRIu64" (0x%04"PRIx64") reconstruct_prefix=%d reconstruct_value=%d : ", 
+                iprintf ("VB=%u Line=%d Repeat=%u %s(%u)->%s(%u) trans_id=%u txt_data.len=%"PRIu64" (0x%04"PRIx64") reconstruct_prefix=%d reconstruct_value=%d : ", 
                          vb->vblock_i, vb->line_i, rep_i, ctx->tag_name, ctx->did_i, item_ctx->tag_name, item_ctx->did_i,
                          translating ? item->translator : 0, 
                          vb->vb_position_txt_file + vb->txt_data.len, vb->vb_position_txt_file + vb->txt_data.len,
@@ -360,6 +381,9 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
         // in top level: after consuming the line's data, if it is not to be outputted - drop it
         if (con->is_toplevel) {
 
+            if (debug_lines_ctx) 
+                container_verify_line_integrity (vb, debug_lines_ctx, rep_reconstruction_start);
+
             // filtered out by writer based on --lines, --head or --tail
             bool dropped_by_writer = false;
             if (!vb->drop_curr_line && vb->is_dropped && bit_array_get (vb->is_dropped, rep_i)) {
@@ -388,9 +412,9 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
             }
 
             if (vb->drop_curr_line) {
-                ASSERT (flag.maybe_vb_modified_by_reconstructor || dropped_by_writer, 
-                        "Attempting drop_curr_line=\"%s\", but lines cannot be dropped because flag.maybe_vb_modified_by_reconstructor=false. This is bug in the code. vb_i=%u line_i=%"PRIu64, 
-                        vb->drop_curr_line, vb->vblock_i, vb->line_i);
+                ASSPIZ (flag.maybe_vb_modified_by_reconstructor || dropped_by_writer, 
+                        "Attempting drop_curr_line=\"%s\", but lines cannot be dropped because flag.maybe_vb_modified_by_reconstructor=false. This is bug in the code", 
+                        vb->drop_curr_line);
 
                 // remove reconstructed text (to save memory and allow writer_flush_vb()), except if...
                 if (!flag.interleaved &&               // if --interleave, as we might un-drop the line 
@@ -403,7 +427,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
                 vb->num_nondrop_lines++;
 
             if (vb->show_containers && vb->drop_curr_line) // show container reconstruction 
-                iprintf ("VB=%u Line=%"PRIu64" dropped due to \"%s\"\n", vb->vblock_i, vb->line_i, vb->drop_curr_line);
+                iprintf ("VB=%u Line=%d dropped due to \"%s\"\n", vb->vblock_i, vb->line_i, vb->drop_curr_line);
         }
     } // repeats loop
 
@@ -556,8 +580,8 @@ void container_display (ConstContainerP con)
 #define SET_n(type,mn,mx) \
     type n = (type)ctx->last_value.i; \
     ASSPIZ (ctx->last_value.i>=(int64_t)(mn) && ctx->last_value.i<=(int64_t)(mx),\
-            "Error: Failed to convert %s to %s because of bad data in line %"PRIu64" of the %s file: value of %s=%"PRId64" is out of range for type \"%s\"=[%"PRId64"-%"PRId64"]",\
-            dt_name (z_file->data_type), dt_name (flag.out_dt), vb->line_i, dt_name (z_file->data_type), \
+            "Error: Failed to convert %s to %s because of bad %s data: value of %s=%"PRId64" is out of range for type \"%s\"=[%"PRId64"-%"PRId64"]",\
+            dt_name (z_file->data_type), dt_name (flag.out_dt), dt_name (z_file->data_type), \
             ctx->tag_name, ctx->last_value.i, #type, (int64_t)(mn), (int64_t)(mx))
 
 TRANSLATOR_FUNC (container_translate_I8)       { SET_n (int8_t,   INT8_MIN,  INT8_MAX  );               RECONSTRUCT1(n);       return 0; }

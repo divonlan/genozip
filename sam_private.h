@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_private.h
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #pragma once
@@ -130,18 +130,18 @@ typedef struct VBlockSAM {
 
     // SA stuff
     uint32_t plsg_i;               // PIZ: prim_vb: index of this VB in the plsg array  
+    LineIType sa_grp_line_i;       // PIZ: the vb->line_i for which sa_grp was set
     Buffer sa_groups;              // ZIP/PIZ: an SA group is a group of alignments, including the primary aligngment
     Buffer sa_alns;                // ZIP/PIZ: array of {RNAME, STRAND, POS, CIGAR, NM, MAPQ} of the alignment
     Buffer sa_prim_cigars;         // ZIP/PIZ: textual primary CIGARs of SA groups (SAM & BAM)
     const struct SAGroupType *sa_grp; // ZIP/PIZ of SAM_COMP_DEPN: SA Group of this line (pointer into ZIP: z_file->sa_groups PIZ:prim_vb->sa_groups), NULL if none
     const struct SAAlnType *sa_aln;   // ZIP/PIZ of SAM_COMP_DEPN: Alignment withing SA Group of this line 
-    uint64_t sa_grp_line_i;        // PIZ: the vb->line_i for which sa_grp was set
-    int64_t NM;                    // ZIP: Value of NM:i and its length
-    uint8_t NM_len;
     uint32_t comp_qual_len;        // ZIP PRIM: compressed length of QUAL as it appears in in-memory SA Group
     uint32_t comp_cigars_len;      // ZIP PRIM: compressed length of CIGARS as it appears in in-memory SA Group
-    SAGroup first_grp_i;           // ZIP PRIM: the index of first group of this PRIM VB, in z_file->sa_groups 
+    int64_t NM;                    // ZIP: Value of NM:i and its length
+    uint8_t NM_len;
     bool check_for_gc;             // ZIP: true if Seg should check for gencomp lines
+    SAGroup first_grp_i;           // ZIP PRIM: the index of first group of this PRIM VB, in z_file->sa_groups 
     
     // data used in genocat --show-sex
     WordIndex x_index, y_index, a_index; // word index of the X, Y and chr1 chromosomes
@@ -232,9 +232,12 @@ typedef struct __attribute__ ((__packed__)) SAAlnType {
 // note: fields ordered to packed and word-aligned. These structures are NOT written to the genozip file.
 typedef struct __attribute__ ((__packed__)) SAGroupType {
     // 40 bytes
-    uint64_t qname           : 62;// index into: vb: txt_data ; z_file: zfile->sa_qnames
+    uint64_t qname           : 59;// index into: vb: txt_data ; z_file: zfile->sa_qnames
     uint64_t prim_set_buddy  : 1; // When reconstructing primary QNAME, sam_piz_set_sa_grp needs to reconstruct_set_buddy. 
     uint64_t first_grp_in_vb : 1; // This group is the first group in its PRIM vb
+    uint64_t multi_segments  : 1; // FLAG.multi_segnments is set for all alignments of this group
+    uint64_t is_first        : 1; // FLAG.is_last is set for all alignments of this group
+    uint64_t is_last         : 1; // FLAG.is_last is set for all alignments of this group
     uint64_t seq;                 // index into: vb: txt_data ; z_file: zfile->sa_seq
     uint64_t qual;                // index into: vb: txt_data ; z_file: zfile->sa_qual
     uint64_t first_aln_i     : 47;// index into z_file->sa_alns (up to 128 trillion)
@@ -377,6 +380,7 @@ extern void sam_piz_XA_field_insert_lookback (VBlockP vb);
 // -----------------------------------
 // supplementary/secondary group stuff
 // -----------------------------------
+#define QNAME_HASH(qname,qname_len,is_last) ((libdeflate_crc32 (0, (qname), (qname_len)) & 0xfffffffe) | is_last) // note: adler32 is not good for qnames - since qnames in a SAM tend to be similar, many can end of up with the same hash and adler32 will use only a tiny bit of its 32b space
 extern void sam_gc_zip_init_vb (VBlockP vb);
 extern bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(alignment), STRps(aux), bool is_bam);
 extern bool sam_seg_prim_add_sa_group_SA (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), int64_t this_nm, bool is_bam);
@@ -396,7 +400,7 @@ typedef struct { char s[1024]; } ShowAln;
 extern void sam_show_sa_one_grp (SAGroup grp_i);
 extern ShowAln sam_show_sa_one_aln (const SAGroupType *g, const SAAlnType *a);
 
-#define SAM_PIZ_HAS_SA_GROUP (((VBlockSAMP)vb)->sa_grp && ((VBlockSAMP)vb)->sa_grp_line_i == vb->line_i)
+#define SAM_PIZ_HAS_SA_GROUP (((VBlockSAMP)vb)->sa_grp && ((VBlockSAMP)vb)->sa_grp_line_i == vb->line_i + 1)
 
 extern const char aux_sep_by_type[2][256];
 

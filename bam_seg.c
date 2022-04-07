@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_bam.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "genozip.h"
@@ -23,10 +23,16 @@
 #include "kraken.h"
 #include "segconf.h"
 #include "qname.h"
+#include "libdeflate/libdeflate.h"
 
 void bam_seg_initialize (VBlockP vb)
 {
     sam_seg_initialize (vb);
+
+    // we store special quality values at the end of txt_data, as they need to be somewhere in txt_data
+    buf_alloc (vb, &vb->txt_data, 2, 0, char, 0, 0); // add 2 character after the end of txt_data
+    BAFTtxt[0] = '*'; // QUAL_MISSING_STANDARD;
+    BAFTtxt[1] = 127; // QUAL_MISSING_PYSAM;
 
     if (!segconf.running && segconf.has[OPTION_MC_Z])
         buf_alloc (vb, &VB_SAM->buddy_textual_cigars, 0, segconf.sam_cigar_len * vb->lines.len, char, CTX_GROWTH, "buddy_textual_cigars");
@@ -150,12 +156,12 @@ uint32_t bam_split_aux (VBlockSAMP vb, rom aux, rom after_aux, rom *auxs, uint32
         else if (size[(int)aux[2]])
             aux_lens[n_auxs] = 3 + size[(int)aux[2]];
         else
-            ABORT ("vb=%u line_i=%"PRIu64" Unrecognized aux type '%c' (ASCII %u)", vb->vblock_i, vb->line_i, aux[2], aux[2]);
+            ABORT ("vb=%u line_i=%d Unrecognized aux type '%c' (ASCII %u)", vb->vblock_i, vb->line_i, aux[2], aux[2]);
         
         aux += aux_lens[n_auxs++];
     }
 
-    ASSERT (aux == after_aux, "vb=%u line_i=%"PRIu64" overflow while parsing auxilliary fields", vb->vblock_i, vb->line_i);
+    ASSERT (aux == after_aux, "vb=%u line_i=%d overflow while parsing auxilliary fields", vb->vblock_i, vb->line_i);
 
     return n_auxs;
 }
@@ -171,7 +177,7 @@ void bam_seg_BIN (VBlockSAMP vb, ZipDataLineSAM *dl, uint16_t bin /* used only i
     
     else {
 #ifdef DEBUG // we show this warning only in DEBUG because I found actual files that have edge cases that don't work with our formula (no harm though)
-        WARN_ONCE ("FYI: bad bin value in vb=%u vb->line_i=%"PRIu64": this_pos=%"PRId64" ref_consumed=%u flag=%u last_pos=%"PRId64": bin=%u but reg2bin=%u. No harm. This warning will not be shown again for this file.",
+        WARN_ONCE ("FYI: bad bin value in vb=%u vb->line_i=%d: this_pos=%"PRId64" ref_consumed=%u flag=%u last_pos=%"PRId64": bin=%u but reg2bin=%u. No harm. This warning will not be shown again for this file.",
                     vb->vblock_i, vb->line_i, this_pos, vb->ref_consumed, dl->FLAG.value, last_pos, bin, reg2bin);
 #endif
         seg_integer_as_text (vb, SAM_BAM_BIN, bin, is_bam);
@@ -181,7 +187,7 @@ void bam_seg_BIN (VBlockSAMP vb, ZipDataLineSAM *dl, uint16_t bin /* used only i
 
 static inline void bam_seg_ref_id (VBlockSAMP vb, DidIType did_i, int32_t ref_id, int32_t compare_to_ref_i)
 {
-    ASSERT (ref_id >= -1 && ref_id < (int32_t)sam_hdr_contigs->contigs.len, "vb=%u line_i=%"PRIu64": encountered ref_id=%d but header has only %u contigs",
+    ASSERT (ref_id >= -1 && ref_id < (int32_t)sam_hdr_contigs->contigs.len, "vb=%u line_i=%d: encountered ref_id=%d but header has only %u contigs",
             vb->vblock_i, vb->line_i, ref_id, (uint32_t)sam_hdr_contigs->contigs.len);
 
     // get snip and snip_len
@@ -213,7 +219,7 @@ static inline bool bam_rewrite_qual (uint8_t *qual, uint32_t l_seq)
     return true;
 }
 
-static inline QualMissingType bam_get_missing_qual_type (VBlockSAMP vb, uint8_t *qual, uint32_t l_seq)
+static inline QualMissingType bam_get_missing_qual_type (VBlockSAMP vb, const uint8_t *qual, uint32_t l_seq)
 {
     if (l_seq <= 1) return QUAL_MISSING_STANDARD;
 
@@ -270,13 +276,13 @@ void bam_get_one_optional (VBlockSAMP vb, STRp(aux),
                     default: break;
                 }
 
-            ASSERT (aux_width[(uint8_t)*array_subtype], "Invalid array type: '%c' for field \"%c%c\". vb=%u line=%"PRIu64, 
+            ASSERT (aux_width[(uint8_t)*array_subtype], "Invalid array type: '%c' for field \"%c%c\". vb=%u line=%d", 
                     *array_subtype, (*tag)[0], (*tag)[1], vb->vblock_i, vb->line_i);
 
             break;
 
         default:
-            ABORT ("Invalid field type: '%c' for field \"%c%c\". vb=%u line=%"PRIu64, 
+            ABORT ("Invalid field type: '%c' for field \"%c%c\". vb=%u line=%d", 
                     *type, (*tag)[0], (*tag)[1], vb->vblock_i, vb->line_i);
     }
 }
@@ -300,12 +306,19 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
 
     // a non-sensical block_size might indicate an false-positive identification of a BAM alignment in bam_unconsumed
     ASSERT (block_size + 4 >= sizeof (BAMAlignmentFixed) && block_size + 4 <= remaining_txt_len, 
-            "vb=%u line_i=%"PRIu64" (block_size+4)=%u is out of range - too small, or goes beyond end of txt data: remaining_txt_len=%u",
+            "vb=%u line_i=%d (block_size+4)=%u is out of range - too small, or goes beyond end of txt data: remaining_txt_len=%u",
             vb->vblock_i, vb->line_i, block_size+4, remaining_txt_len);
 
     rom after = alignment + block_size + sizeof (uint32_t);
 
-    vb->chrom_node_index = (int32_t)NEXT_UINT32;    // corresponding to CHROMs in the BAM header. -1 in BAM means '*' (no RNAME) - which luckily is WORD_INDEX_NONE.    
+    // note: in BAM, we calculate here instead of in seg_all_data_lines, bc we rewrite qual
+    if (flag.debug_lines) 
+        vb->debug_line_hash = adler32 (2, alignment, after - alignment); 
+
+    if (flag.biopsy_line.line_i == vb->line_i && flag.biopsy_line.vb_i == vb->vblock_i)
+        file_put_line (VB, alignment, after - alignment, "Line biopsy:");
+
+    vb->chrom_node_index = (int32_t)NEXT_UINT32;     // corresponding to CHROMs in the BAM header. -1 in BAM means '*' (no RNAME) - which luckily is WORD_INDEX_NONE.    
     dl->POS              = 1 + (int32_t)NEXT_UINT32; // pos in BAM is 0 based, -1 for unknown 
     uint8_t l_read_name  = NEXT_UINT8;               // QNAME length
     dl->MAPQ             = NEXT_UINT8;
@@ -341,10 +354,12 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     buf_alloc (vb, &vb->textual_seq, 0, l_seq+1 /* +1 for last half-byte */, char, 1.5, "textual_seq");
     bam_seq_to_sam (vb, seq, l_seq, false, true, &vb->textual_seq);
 
-    // if this is a secondary / supplamentary read (aka Dependent) or a read that has an associated sec/sup read (aka Primary) - move
-    // the line to the appropriate component and skip it here (no segging done yet)
-    if (vb->check_for_gc && sam_seg_is_gc_line (vb, dl, alignment, after - alignment, STRas(aux), true)) 
+    // if this is a secondary / supplamentary read (aka Dependent) or a read that has an associated sec/sup read 
+    // (aka Primary) - move the line to the appropriate component and skip it here (no segging done yet)
+    if (vb->check_for_gc && sam_seg_is_gc_line (vb, dl, alignment, after - alignment, STRas(aux), true)) {
+        vb->debug_line_hash_skip = true;
         goto done;
+    }
 
     // analyze (but not seg yet) cigar
     buf_add_more_(vb, &vb->binary_cigar, BamCigarOp, cigar, n_cigar_op, "binary_cigar");
@@ -362,6 +377,7 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     // convert BAM QUAL format to SAM
     if (!l_seq || !bam_rewrite_qual ((uint8_t *)qual, l_seq)) // add 33 to Phred scores to make them ASCII
         vb->qual_missing = bam_get_missing_qual_type (vb, (uint8_t *)qual, l_seq);
+
 
     if (!sam_is_main_vb)
         sam_seg_sa_group_stuff (vb, dl , STRas(aux), STRb(vb->textual_cigar), B1STc(vb->textual_seq), true);
@@ -405,7 +421,8 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
 
     else { // cases 1. were both SEQ and QUAL are '*' (seq_len=0) and 2. SEQ exists, QUAL not (bam_rewrite_qual returns false)
         *(char *)alignment = (vb->qual_missing == QUAL_MISSING_STANDARD) ? '*' : 127; // overwrite as we need it somewhere in txt_data
-        dl->QUAL = (TxtWord){ .index=BNUMtxt(alignment), .len = 1 }; // index of "*" (or 127)
+        dl->QUAL = (TxtWord){ .index=vb->txt_data.len + (vb->qual_missing == QUAL_MISSING_PYSAM), // special values set in bam_seg_initialize 
+                              .len = 1 }; // index of "*" (or 127)
 
         sam_seg_QUAL (vb, dl, alignment, 1, l_seq /* account of l_seq 0xff */);
         
@@ -421,8 +438,10 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     // TLEN - must be after AUX as we might need data from MC:Z
     sam_seg_TLEN (vb, dl, 0, 0, (int64_t)tlen, vb->chrom_node_index == next_ref_id); // TLEN
 
-done:
+done: {}
+
     buf_free (vb->textual_cigar);
     buf_free (vb->textual_seq);
+
     return after;
 }
