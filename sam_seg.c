@@ -393,8 +393,10 @@ void sam_seg_finalize (VBlockP vb)
 void zip_sam_after_vbs (void)
 {
     // shorten unused RNAME / RNEXT dictionary strings to "" (dict pre-populated in sam_zip_initialize)
-    ctx_shorten_unused_dict_words (SAM_RNAME);
-    ctx_shorten_unused_dict_words (SAM_RNEXT);
+    if (flag.reference != REF_INTERNAL) { // TO DO: for this to work for REF_INTERNAL, ctx_shorten_unused_dict_words needs to update char_index to the new value
+        ctx_shorten_unused_dict_words (SAM_RNAME);
+        ctx_shorten_unused_dict_words (SAM_RNEXT);
+    }
 }
 
 bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)

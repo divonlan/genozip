@@ -87,7 +87,7 @@ static void tar_copy_metadata_from_file (const char *fn)
     }
 
     if ((uint32_t)st.st_gid > MAX_TAR_UID_GID) {
-        WARN_ONCE ("GID of %s (and perhaps others) is %u - beyond the maximum allowed by the tar file format; recording uid as %u (nogroup). No harm.",
+        WARN_ONCE ("GID of %s (and perhaps others) is %u - beyond the maximum allowed by the tar file format; recording gid as %u (nogroup). No harm.",
                    fn, st.st_gid, NOBODY);
         st.st_gid = NOBODY;
     }

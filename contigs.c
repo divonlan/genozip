@@ -123,8 +123,11 @@ static ConstBufferP sorter_contigs=0, sorter_contigs_dicts=0;
 static int contigs_alphabetical_sorter (const void *a, const void *b)
 {
     DEF_SORTER_CONTIGS;
-    return strcmp (ENT (char, *sorter_contigs_dicts, contig_a->char_index),
-                   ENT (char, *sorter_contigs_dicts, contig_b->char_index));
+
+    const char *contig_a_str = contig_a->snip_len ? ENT (char, *sorter_contigs_dicts, contig_a->char_index) : "~unused";
+    const char *contig_b_str = contig_b->snip_len ? ENT (char, *sorter_contigs_dicts, contig_b->char_index) : "~unused";
+
+    return strcmp (contig_a_str, contig_b_str);
 }
 
 static int contigs_accession_number_sorter (const void *a, const void *b)

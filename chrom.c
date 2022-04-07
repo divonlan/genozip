@@ -323,17 +323,21 @@ static int chrom_create_piz_sorter (const void *a, const void *b)
 void chrom_index_by_name (DidIType chrom_did_i)
 {
     sorter_ctx = ZCTX(chrom_did_i);
+    uint32_t num_words = (command==ZIP) ? sorter_ctx->nodes.len : sorter_ctx->word_list.len;
 
     buf_free (&chrom_sorter);
 
     // chrom_sorter - an array of uint32 of indexes into ZCTX(CHROM)->word_list - sorted by alphabetical order of the snip in ZCTX(CHROM)->dict
-    chrom_sorter.len = sorter_ctx->nodes.len;
-    buf_alloc (evb, &chrom_sorter, 0, chrom_sorter.len, uint32_t, 1, "chrom_sorter");
+    buf_alloc (evb, &chrom_sorter, 0, num_words, uint32_t, 1, "chrom_sorter");
     
-    ARRAY (WordIndex, ents, chrom_sorter);
-    for (WordIndex i=0; i < ents_len; i++) ents[i] = i;
+    //ARRAY (WordIndex, ents, chrom_sorter);
+    for (WordIndex i=0; i < num_words; i++) 
+        if ((command == ZIP && ENT (CtxNode, sorter_ctx->nodes, i)->snip_len) ||
+            (command == PIZ && ENT (CtxWord, sorter_ctx->word_list, i)->snip_len))
 
-    qsort (ents, ents_len, sizeof(uint32_t), command == ZIP ? chrom_create_zip_sorter : chrom_create_piz_sorter);
+            NEXTENT (uint32_t, chrom_sorter) = i;
+
+    qsort (chrom_sorter.data, chrom_sorter.len, sizeof(uint32_t), command == ZIP ? chrom_create_zip_sorter : chrom_create_piz_sorter);
 }
 
 // binary search for this chrom in ZCTX(CHROM). we count on gcc tail recursion optimization to keep this fast.
