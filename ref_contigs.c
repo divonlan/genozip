@@ -237,8 +237,8 @@ void ref_contigs_load_contigs (Reference ref)
 
     ref->ctgs.contigs.len /= sizeof (Contig);
     BGEN_ref_contigs (&ref->ctgs.contigs);
-    
-    // get contig names from CHROM char_index/snip_len from CHROM
+
+    // get contig names from CHROM 
     ref_contigs_load_set_contig_names (ref);
 
     contigs_create_index (&ref->ctgs, SORT_BY_NAME | SORT_BY_AC);

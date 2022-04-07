@@ -417,7 +417,7 @@ static bool file_open_txt_read (File *file)
     // show meaningful error if file is not a supported data type
     if (file_open_txt_read_test_valid_dt (file)) return true; // skip this file
 
-    if (file->data_type == DT_GENERIC && !stdin_type) 
+    if (file->data_type == DT_GENERIC && !stdin_type && !tar_is_tar()) 
         WARN_ONCE ("FYI: genozip doesn't recognize %s file's type, so it will be compressed as GENERIC. In the future, you may specify the type with \"--input <type>\". To suppress this warning, use \"--input generic\".", file->name);
     
     // open the file, based on the codec (as guessed by file extension)
@@ -1179,9 +1179,17 @@ bool file_is_fifo (rom filename)
 
 bool file_exists (rom filename)
 {
-    if (!filename || !filename[0]) return false;
 
-    return !access (filename, F_OK);
+    if (!filename || !filename[0]) return false;
+    bool exists = !access (filename, F_OK);
+
+#ifdef _WIN32
+    // TO DO: overcome this limitation, see: https://docs.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
+    if (!exists && strlen (filename) > MAX_PATH)
+        WARN_ONCE ("Genozip limitation: filenames on Windows are limited to %u characters. Please contact "EMAIL_SUPPORT" for advice: %s", PATH_MAX, filename);
+#endif
+
+    return exists;
 }
 
 bool file_has_ext (rom filename, rom extension)

@@ -19,6 +19,12 @@ Note on versioning:
 - New advanced options: --log-digest, --show-sa, --show-depn, --show-lines, --show-gheader=2, --cstats, --CSTATS, --debug-read-ctxs, --debug-sa, --debug-gencomp, --show-wrong-XG, --show-wrong-XM, --vblock with bytes specification, --show-bam, --debug-lines, --biopsy-line
 - Discontinued functionality: The little-used yet difficult to maintain feature allowing "Binding" of multiples files of the same type using eg "genozip file1.vcf file2.vcf --output bound.vcf.genozip" is no longer supported. This does NOT affect genozip files which contain two FASTQ files compressed with --pair. To compress multiple files into a single "archive" file, use "genozip --tar". To decompress existing genozip files compressed with the Binding feature, use Genozip v13. 
 
+13.0.16 7/April/2022
+- Bug fixes
+
+13.0.15 31/March/2022
+- --tar: added support for long filenames
+
 13.0.14 29/March/2022
 - Support --tar, where file uids are very large - e.g. when pulled from Active Directory using SSSD
 

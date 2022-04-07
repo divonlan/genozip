@@ -94,5 +94,5 @@ if Licensor or Developer have been advised of the possibility of such damages.
 
 END OF TERMS AND CONDITIONS
 
-Genozip license version: 14.0.-1
+Genozip license version: 13.0.15
 
