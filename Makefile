@@ -458,7 +458,7 @@ distribution: increment-version testfiles $(DOCS)/genozip-linux-x86_64.tar.build
 	@(cd ../genozip-feedstock/ ; git pull)
 
 distribution-maintenance: increment-version testfiles $(DOCS)/genozip-linux-x86_64.tar.build $(DOCS)/genozip-installer.exe $(DOCS)/RELEASE_NOTES.for-docs.txt \
-                          push-build conda/.conda-timestamp mak
+                          push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
 	@(cd ../genozip-feedstock/ ; git pull)
 
 test-backup: genozip.exe
