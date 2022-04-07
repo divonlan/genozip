@@ -245,7 +245,8 @@ docs = $(DOCS)/genozip.rst $(DOCS)/genounzip.rst $(DOCS)/genocat.rst $(DOCS)/gen
 	   $(DOCS)/using-on-hpc.rst $(DOCS)/match-chrom.rst $(DOCS)/attributions.rst $(DOCS)/testimonials.rst $(DOCS)/pricing-faq.rst \
 	   $(DOCS)/dvcf.rst $(DOCS)/dvcf-rendering.rst $(DOCS)/chain.rst $(DOCS)/dvcf-limitations.rst $(DOCS)/dvcf-renaming.rst $(DOCS)/dvcf-see-also.rst \
 	   $(DOCS)/archiving.rst $(DOCS)/encryption.rst $(DOCS)/release-notes.rst $(DOCS)/benchmarks.rst \
-	   $(DOCS)/data-types.rst $(DOCS)/bam.rst $(DOCS)/fastq.rst $(DOCS)/vcf.rst $(DOCS)/gff3.rst $(DOCS)/publications-list.rst
+	   $(DOCS)/data-types.rst $(DOCS)/bam.rst $(DOCS)/fastq.rst $(DOCS)/vcf.rst $(DOCS)/gff3.rst $(DOCS)/publications-list.rst \
+	   $(DOCS)/resellers.rst
 
 $(DOCS)/conf.py: $(DOCS)/conf.template.py version.h
 	@sed -e "s/__VERSION__/$(version)/g" $< |sed -e "s/__YEAR__/`date +'%Y'`/g" > $@ 
