@@ -109,7 +109,7 @@ extern uint64_t buf_alloc_do (VBlockP vb,
 #define ARRAY(element_type, name, buf) \
     element_type *name = ((element_type *)((buf).data)); \
     const uint64_t name##_len __attribute__((unused)) = (buf).len; // read-only copy of len 
-    
+
 // entry #index in Buffer
 #define B(type, buf, index) ((type *)(&(buf).data[(index) * sizeof(type)]))
 #define Bc(buf, index)      B(char,     (buf), (index))
@@ -145,6 +145,14 @@ extern uint64_t buf_alloc_do (VBlockP vb,
 #define BAFT32(buf)         BAFT(uint32_t,(buf))
 #define BAFT64(buf)         BAFT(uint64_t,(buf))
 #define BAFTtxt             (&vb->txt_data.data[vb->txt_data.len])
+
+#define for_buf(element_type, iterator, buf)  \
+    for (element_type *iterator=B1ST(element_type, (buf)); iterator < BAFT(element_type, (buf)); iterator++)
+
+// loop with two concurrent iterators "iterator" (pointer to element_type) and i (32bit) 
+#define for_buf2(element_type, iter_p, iter_i, buf) \
+    for (uint32_t iter_i=0; iter_i < (buf).len32;)  \
+        for (element_type *iter_p=B1ST(element_type, (buf)); iter_p < BAFT(element_type, (buf)); iter_p++, iter_i++)
 
 typedef struct { char s[300]; } BufDescType;
 extern const BufDescType buf_desc (ConstBufferP buf);

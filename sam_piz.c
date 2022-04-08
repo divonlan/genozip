@@ -438,6 +438,12 @@ TXTHEADER_TRANSLATOR (txtheader_sam2fq)
 CONTAINER_CALLBACK (sam_piz_container_cb)
 {
     if (is_top_level) {
+
+        if (flag.add_line_numbers && TXT_DT(DT_SAM)) {
+            vb->txt_data.len32 -= 1 + (*(BLSTtxt-1) == '\r'); // remove \n or \r\n
+            vb->txt_data.len32 += sprintf (BAFTtxt, "\tVB:Z:%s/%u/%u\n", comp_name(vb->comp_i), vb->vblock_i, vb->line_i);
+        }
+
         // case SAM to BAM translation: set alignment.block_size (was in sam_piz_sam2bam_AUX until v11)
         if (dict_id.num == _SAM_TOP2BAM) { 
             BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)Bc (vb->txt_data, vb->line_start);

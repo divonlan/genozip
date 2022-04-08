@@ -449,5 +449,5 @@ extern DisFlagsStr sam_dis_flags (SamFlags flags);
 
 extern const uint8_t aux_width[256];
 
-extern char taxid_redirection_snip[100], xa_strand_pos_snip[100], XS_snip[30], XM_snip[30], MC_buddy_snip[30], MQ_buddy_snip[30], AS_buddy_snip[30], YS_buddy_snip[30], QUAL_buddy_snip[30], XA_lookback_snip[30], POS_buddy_snip[100], PNEXT_buddy_snip[100];
-extern unsigned taxid_redirection_snip_len, xa_strand_pos_snip_len, XS_snip_len, XM_snip_len, MC_buddy_snip_len, MQ_buddy_snip_len, AS_buddy_snip_len, YS_buddy_snip_len, QUAL_buddy_snip_len, XA_lookback_snip_len, POS_buddy_snip_len, PNEXT_buddy_snip_len;
+extern char taxid_redirection_snip[100], xa_strand_pos_snip[100], XS_snip[30], XM_snip[30], MC_buddy_snip[30], MQ_buddy_snip[30], AS_buddy_snip[30], YS_buddy_snip[30], QUAL_buddy_snip[30], QUALSA_buddy_snip[30], XA_lookback_snip[30], POS_buddy_snip[100], PNEXT_buddy_snip[100];
+extern unsigned taxid_redirection_snip_len, xa_strand_pos_snip_len, XS_snip_len, XM_snip_len, MC_buddy_snip_len, MQ_buddy_snip_len, AS_buddy_snip_len, YS_buddy_snip_len, QUAL_buddy_snip_len, QUALSA_buddy_snip_len, XA_lookback_snip_len, POS_buddy_snip_len, PNEXT_buddy_snip_len;

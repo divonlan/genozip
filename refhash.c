@@ -127,7 +127,7 @@ void refhash_calc_one_range (const Range *r, const Range *next_r /* NULL if r is
             // since our refhash entries are 32 bit, we cannot use the reference data beyond the first 4Gbp for creating the refhash
             // TO DO: make the hash entries 40bit (or 64 bit?) if genome size > 4Gbp (bug 150)
             if (r->gpos + base_i > MAX_ALIGNER_GPOS) {
-                WARN_ONCE ("FYI: %s contains more than %s bases. When compressing a FASTQ, FASTA or unaligned (i.e. missing RNAME, POS) SAM/BAM file using the reference being generated, only the first %s bases of the reference will be used (no such limitation when compressing other file types). This might affect the compression ratio.", 
+                WARN_ONCE ("FYI: %s contains more than %s bases. When compressing a FASTQ or unaligned (i.e. missing RNAME, POS) SAM/BAM file using the reference being generated, only the first %s bases of the reference will be used (no such limitation when compressing other file types). This might affect the compression ratio.", 
                             txt_name, str_int_commas (MAX_ALIGNER_GPOS).s, str_int_commas (MAX_ALIGNER_GPOS).s);
                 return;
             }

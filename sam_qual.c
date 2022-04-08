@@ -96,8 +96,10 @@ COMPRESSOR_CALLBACK (sam_zip_qual)
 void sam_seg_QUAL_initialize (VBlockSAMP vb)
 {
     if (segconf.sam_ms_type == ms_BIOBAMBAM) {     // handle QUAL_scores for ms:i - added v13
-        CTX(SAM_QUAL)->flags.store_per_line = true;
-        CTX(SAM_QUAL)->no_stons = true; // since we're storing QUAL data in local
+        DidIType score_did_i = (vb->comp_i != SAM_COMP_PRIM) ? SAM_QUAL : SAM_QUALSA; // in PRIM, calc_score goes to QUALSA
+        
+        CTX(score_did_i)->flags.store_per_line = true;
+        CTX(score_did_i)->no_stons = true; // since we're storing QUAL data in local
     }
 
     // in case of BIOBAMBAM or DEPN we go through the SPECIAL for extra functionality
@@ -106,9 +108,9 @@ void sam_seg_QUAL_initialize (VBlockSAMP vb)
         seg_by_did_i (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_QUAL, '0'+(segconf.sam_ms_type == ms_BIOBAMBAM) }, 3, SAM_QUAL, 0);
 
     // if PRIM - TOPLEVEL reconstructs all-the-same SAM_QUALSA instead of SAM_QUAL. SAM_QUAL is consumed when loading SA Groups.
-    // note: in DEPN QUALSA is used to store the diff vs primary
+    // note: in DEPN QUALSA is used to store the diff vs primary (note: we can't just ctx_create_node because we need to transfer flags to piz, so need b250)
     if (sam_is_prim_vb)
-        ctx_create_node (VB, SAM_QUALSA, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_QUAL, '0'+(segconf.sam_ms_type == ms_BIOBAMBAM) }, 3);
+        seg_by_did_i (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_QUAL, '0'+(segconf.sam_ms_type == ms_BIOBAMBAM) }, 3, SAM_QUALSA, 0);
 }
 
 // ZIP/PIZ: decompresses grp qual of grp, into vb->scratch
@@ -198,9 +200,12 @@ void sam_seg_ms_field (VBlockSAMP vb, ValueType ms, unsigned add_bytes)
 {
     ZipDataLineSAM *buddy_dl = DATA_LINE (vb->buddy_line_i); // an invalid pointer if buddy_line_i is -1
     
-    if (vb->buddy_line_i != -1 && buddy_dl->QUAL_score == ms.i)  // successful in ~97% of lines with buddy
-        seg_by_did_i (VB, STRa(QUAL_buddy_snip), OPTION_ms_i, add_bytes); // copy ms from earlier-line buddy 
-
+    if (vb->buddy_line_i != -1 && buddy_dl->QUAL_score == ms.i) { // successful in ~97% of lines with buddy
+        if (vb->comp_i != SAM_COMP_PRIM)
+            seg_by_did_i (VB, STRa(QUAL_buddy_snip), OPTION_ms_i, add_bytes); // copy ms from earlier-line buddy 
+        else
+            seg_by_did_i (VB, STRa(QUALSA_buddy_snip), OPTION_ms_i, add_bytes); 
+    }
     else
         seg_integer (VB, CTX(OPTION_ms_i), ms.i, true, add_bytes);    
 }
@@ -261,6 +266,7 @@ void sam_reconstruct_missing_quality (VBlockP vb, char c, bool reconstruct)
 
 // called in case file contains ms:i, to calculate the QUAL_score after reconstructing QUAL,
 // or to calculate DEPN qual from PRIM qual
+// Note: in PRIM, it is called with ctx=QUALSA, in MAIN and DEPN with ctx=QUAL
 SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
 {
     VBlockSAMP vb = (VBlockSAMP)vb_;

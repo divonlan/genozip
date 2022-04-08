@@ -77,28 +77,25 @@ void chain_vb_release_vb (VBlockCHAIN *vb)
 
 static void chain_display_alignments (void) 
 {
-    ARRAY (ChainAlignment, aln, chain);
-
     iprint0 ("##fileformat=GENOZIP-CHAIN\n");
     iprintf ("##primary_reference=%s\n", ref_get_filename (prim_ref));
     iprintf ("##luft_reference=%s\n", ref_get_filename (gref));
     iprint0 ("##documentation=" WEBSITE_CHAIN "\n");
     iprint0 ("#ALN_I\tPRIM_CONTIG\tPRIM_START\tPRIM_END\tLUFT_CONTIG\tLUFT_START\tLUFT_ENDS\tXSTRAND\tALN_OVERLAP\n");
 
-    for (uint32_t i=0; i < chain.len; i++) {
+    for_buf (ChainAlignment, aln, chain) {
+        if (aln->aln_i == -1) continue; // duplicate
 
-        if (aln[i].aln_i == -1) continue; // duplicate
-
-        rom luft_chrom = ctx_get_words_snip (ZCTX(CHAIN_NAMELUFT), aln[i].luft_chrom);
-        rom prim_chrom = ctx_get_words_snip (ZCTX(CHAIN_NAMEPRIM), aln[i].prim_chrom);
+        rom luft_chrom = ctx_get_words_snip (ZCTX(CHAIN_NAMELUFT), aln->luft_chrom);
+        rom prim_chrom = ctx_get_words_snip (ZCTX(CHAIN_NAMEPRIM), aln->prim_chrom);
 
         iprintf ("%u\t%s\t%"PRId64"\t%"PRId64"\t%s\t%"PRId64"\t%"PRId64"\t%c",
-                 aln[i].aln_i, prim_chrom, aln[i].prim_first_1pos, aln[i].prim_last_1pos, 
-                 luft_chrom, aln[i].luft_first_1pos, aln[i].luft_last_1pos,
-                 aln[i].is_xstrand ? 'X' : '-');
+                 aln->aln_i, prim_chrom, aln->prim_first_1pos, aln->prim_last_1pos, 
+                 luft_chrom, aln->luft_first_1pos, aln->luft_last_1pos,
+                 aln->is_xstrand ? 'X' : '-');
 
-        if (aln[i].overlap_aln_i)
-            iprintf ("\t%u\n", aln[i].overlap_aln_i);
+        if (aln->overlap_aln_i)
+            iprintf ("\t%u\n", aln->overlap_aln_i);
         else
             iprint0 ("\n");
     }
@@ -526,9 +523,8 @@ bool chain_piz_initialize (void)
         contigs_build_contig_pkg_from_zctx (&luft_ctgs, ZCTX(CHAIN_NAMELUFT), SORT_BY_NONE);
 
         // add length from reference - same index as the contigs were copied from the reference to the CHAIN_NAMELUFT ctx during ZIP
-        ARRAY (Contig, ctg, luft_ctgs.contigs);
-        for (uint32_t i=0; i < ctg_len; i++) 
-            ctg[i].max_pos = ref_contigs_get_contig_length (gref, i, 0, 0, false);
+        for_buf2 (Contig, ctg, i, luft_ctgs.contigs) 
+            ctg->max_pos = ref_contigs_get_contig_length (gref, i, 0, 0, false);
     }
 
     return true; // proceed with PIZ

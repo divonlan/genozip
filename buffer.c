@@ -57,7 +57,7 @@ void buf_initialize()
     mutex_initialize (only_once_mutex);
 }
 
-static rom buf_display_type (const Buffer *buf)
+static rom buf_display_type (ConstBufferP buf)
 {
     static rom names[] = BUFTYPE_NAMES;
     if (buf->type >= 0 && buf->type < BUF_NUM_TYPES) 
@@ -67,7 +67,7 @@ static rom buf_display_type (const Buffer *buf)
 }
 
 // get string with buffer's metadata for debug message. this function is NOT thread-safe
-char *buf_display (const Buffer *buf)
+char *buf_display (ConstBufferP buf)
 {
     static char str[200]; // NOT thread-safe
 
@@ -76,7 +76,7 @@ char *buf_display (const Buffer *buf)
     return str;    
 }
 
-const BufDescType buf_desc (const Buffer *buf)
+const BufDescType buf_desc (ConstBufferP buf)
 {
     #define IS_CONTEXT(ctxs) ((rom)buf >= (rom)ctxs && (rom)buf < (rom)&ctxs[MAX_DICTS])
     #define TAG_NAME(ctxs) ctxs[((rom)buf - (rom)ctxs) / (sizeof (ctxs) / MAX_DICTS /*note: may be different than sizeof(Context) due to word alignment*/)].tag_name
@@ -97,7 +97,7 @@ const BufDescType buf_desc (const Buffer *buf)
     return desc;
 }
 
-static inline void buf_reset (Buffer *buf)
+static inline void buf_reset (BufferP buf)
 {
     VBlockP save_vb = buf->vb;
     memset (buf, 0, sizeof (Buffer)); // make this buffer UNALLOCATED
@@ -105,7 +105,7 @@ static inline void buf_reset (Buffer *buf)
     buf->vb = save_vb;
 }
 
-static inline bool buf_has_overflowed (const Buffer *buf, rom msg)
+static inline bool buf_has_overflowed (ConstBufferP buf, rom msg)
 {
     // memory==BUFFER_BEING_MODIFIED if an evb buffer is currently being allocated by another thread, and hence memory is not set yet.
     // for example, global_hash_prime is realloced by all threads (under mutex protection)
@@ -119,7 +119,7 @@ static inline bool buf_has_overflowed (const Buffer *buf, rom msg)
     return *((uint64_t*)(memory + buf->size + sizeof(uint64_t))) != OVERFLOW_TRAP; // note on evb: if another thread reallocs the memory concurrently, this might seg-fault
 }
 
-static inline bool buf_has_underflowed (const Buffer *buf, rom msg)
+static inline bool buf_has_underflowed (ConstBufferP buf, rom msg)
 {
     if (buf->type == BUF_OVERLAY) return false; // overlayed buffers might be partial and start at a different address 
 
@@ -134,7 +134,7 @@ static inline bool buf_has_underflowed (const Buffer *buf, rom msg)
 }
 
 // check overflow and underflow in an allocated buffer
-static inline void buf_verify_integrity (const Buffer *buf, FUNCLINE, rom buf_func)
+static inline void buf_verify_integrity (ConstBufferP buf, FUNCLINE, rom buf_func)
 {
     if (buf->vb == evb) return; // we cannot (easily) test evb (see comment in buf_has_overflowed)
  
@@ -161,14 +161,10 @@ static void buf_find_underflow_culprit (rom memory, rom msg)
     bool found=false;
     for (int vb_i=-1; vb_i < (int)vb_pool->num_vbs; vb_i++) {
         VBlockP vb = vb_get_from_pool (vb_i);
-
         if (!vb) continue;
         
-        ARRAY (Buffer *, buf_list, vb->buffer_list);
-
-        for (unsigned buf_i=0; buf_i < buf_list_len; buf_i++) {
-            const Buffer *buf = buf_list[buf_i];
-
+        for_buf2 (BufferP , buf_p, i, vb->buffer_list) {
+            BufferP buf = *buf_p;
             if (buf) {
                 char *after_buf = buf->memory + buf->size + control_size;
                 if (after_buf <= memory && (after_buf + 100 > memory) && buf_has_overflowed (buf, msg)) {
@@ -177,7 +173,7 @@ static void buf_find_underflow_culprit (rom memory, rom msg)
                             "Candidate culprit: vb_id=%d (vb_i=%d): buffer: %s %s memory: %s-%s name: %s vb_i=%u buf_i=%u Overflow fence=%c%c%c%c%c%c%c%c\n",
                             vb ? vb->id : -999, vb->vblock_i, buf_display_type(buf), 
                             str_pointer(buf).s, str_pointer(buf->memory).s, str_pointer(after_buf-1).s, 
-                            buf_desc (buf).s, buf->vb->vblock_i, buf_i, 
+                            buf_desc (buf).s, buf->vb->vblock_i, i, 
                             of[0], of[1], of[2], of[3], of[4], of[5], of[6], of[7]);
                     found = true;
                 }
@@ -213,7 +209,7 @@ static bool buf_test_overflows_do (ConstVBlockP vb, bool primary, rom msg)
 
     int corruption = 0;
 
-    const Buffer *buf; // declare outside, so it is observable in the debugger in case of a crash
+    ConstBufferP buf; // declare outside, so it is observable in the debugger in case of a crash
     for (uint32_t buf_i=0; buf_i < vb->buffer_list.len; buf_i++) {
         static rom nl[2] = {"", "\n\n"};
 
@@ -222,7 +218,7 @@ static bool buf_test_overflows_do (ConstVBlockP vb, bool primary, rom msg)
         // we attempt to prevent many of the cases by not checking buffers that are BUFFER_BEING_MODIFIED at the onset, but they still may
         // become BUFFER_BEING_MODIFIED mid way through the test
 
-        buf = *B(Buffer *, vb->buffer_list, buf_i);
+        buf = *B(BufferP , vb->buffer_list, buf_i);
         if (BL_IS_REMOVED (buf)) continue; // buf was 'buf_destroy'd
 
 #ifdef WIN32
@@ -317,23 +313,21 @@ static DESCENDING_SORTER (buf_stats_sort_by_bytes, MemStats, bytes)
 void buf_update_buf_list_vb_addr_change (VBlockP new_vb, VBlockP old_vb)
 {
     if (old_vb == new_vb) return; // no change in address
-    
-    ARRAY (Buffer *, bl, new_vb->buffer_list);
-    
-    for (uint32_t buf_i=0; buf_i < bl_len; buf_i++) {
+        
+    for_buf (BufferP , bl, new_vb->buffer_list) {
 
-        if (BL_IS_REMOVED (bl[buf_i])) continue;
+        if (BL_IS_REMOVED (*bl)) continue;
 
         // if this buffer is within the moved VB - update its address to the same offset relative to the new vb address
-        if ((char*)bl[buf_i] >= (char*)old_vb && (char*)bl[buf_i] < (char *)(old_vb+1)) 
-            bl[buf_i] = (Buffer *)((char*)new_vb + ((char*)bl[buf_i] - (char*)old_vb)); 
+        if ((char*)*bl >= (char*)old_vb && (char*)*bl < (char *)(old_vb+1)) 
+            *bl = (BufferP )((char*)new_vb + ((char*)*bl - (char*)old_vb)); 
 
         // update VB address within the buffer
-        bl[buf_i]->vb = new_vb; 
+        (*bl)->vb = new_vb; 
     }
 }
 
-static void buf_foreach_buffer (void (*callback)(const Buffer *, void *arg), void *arg)
+static void buf_foreach_buffer (void (*callback)(ConstBufferP , void *arg), void *arg)
 {
     VBlockPool *vb_pool = vb_get_pool ();
     if (!vb_pool) return;
@@ -344,23 +338,21 @@ static void buf_foreach_buffer (void (*callback)(const Buffer *, void *arg), voi
 
         VBlockP vb = vb_i >= 0 ? vb_get_from_pool (vb_i) : evb;
         if (!vb) continue;
-
-        ARRAY (const Buffer *, bl, vb->buffer_list);
         
-        for (uint32_t buf_i=0; buf_i < bl_len; buf_i++) {
-            if (BL_IS_REMOVED (bl[buf_i]) || !bl[buf_i]->memory) continue; // exclude destroyed, not-yet-allocated, overlay buffers and buffers that were src in buf_move
+        for_buf2 (ConstBufferP , bl, buf_i, vb->buffer_list) {
+            if (BL_IS_REMOVED (*bl) || !(*bl)->memory) continue; // exclude destroyed, not-yet-allocated, overlay buffers and buffers that were src in buf_move
 
             #ifdef WIN32
-            if (IsBadReadPtr (&bl[buf_i], sizeof (Buffer))) 
+            if (IsBadReadPtr (bl, sizeof (Buffer))) 
                 ABORT ("buffer structure inaccessible (invalid pointer) in buf_i=%u of vb_i=%d", buf_i, vb_i); 
             #endif
 
-            callback (bl[buf_i], arg); 
+            callback (*bl, arg); 
         }
     }
 }
 
-static void buf_count_mem_usage (const Buffer *buf, void *mem_usage)
+static void buf_count_mem_usage (ConstBufferP buf, void *mem_usage)
 {
     *((uint64_t *)mem_usage) += buf->size + control_size;
 }
@@ -377,7 +369,7 @@ uint64_t buf_get_memory_usage (void)
 static MemStats stats[MAX_MEMORY_STATS]; // must be pre-allocated, because buf_show_memory is called when malloc fails, so it cannot malloc
 static unsigned num_stats=0, num_buffers=0;
 
-static void buf_add_mem_usage_to_stats (const Buffer *buf, void *unused)
+static void buf_add_mem_usage_to_stats (ConstBufferP buf, void *unused)
 {
     ASSERTW (buf->name && strlen (buf->name) > 0, "FYI: buffer allocated in %s:%u has no name", buf->func, buf->code_line);
 
@@ -447,7 +439,7 @@ void buf_show_memory_handler (void)
 
 // thread safety: only the thread owning the VB of the buffer (main thread of evb) can add a buffer
 // to the buf list OR it may be added by the main thread IF the compute thread of this VB is not running yet
-void buf_add_to_buffer_list_do (VBlockP vb, Buffer *buf, FUNCLINE)
+void buf_add_to_buffer_list_do (VBlockP vb, BufferP buf, FUNCLINE)
 {
     if (buf->vb == vb) return; // already in buf_list - nothing to do
 
@@ -461,7 +453,7 @@ void buf_add_to_buffer_list_do (VBlockP vb, Buffer *buf, FUNCLINE)
              func, code_line, buf_desc(buf).s, vb->vblock_i, buf); // BL_SET_REMOVED expects this
 
 #define INITIAL_MAX_MEM_NUM_BUFFERS 10000 /* for files that have ht,gt,phase,variant,and line - the factor would be about 5.5 so there will be 1 realloc per vb, but most files don't */
-    Buffer *bl = &vb->buffer_list;
+    BufferP bl = &vb->buffer_list;
 
     buf_alloc (vb, bl, 1, INITIAL_MAX_MEM_NUM_BUFFERS, BufferP, 2, "buffer_list");
     BNXT (BufferP, *bl) = buf;
@@ -474,7 +466,7 @@ void buf_add_to_buffer_list_do (VBlockP vb, Buffer *buf, FUNCLINE)
                  func, buf_desc(buf).s, buf->size, str_pointer(buf).s, vb->id, (uint32_t)vb->buffer_list.len-1);    
 }
 
-static void buf_init (Buffer *buf, char *memory, uint64_t size, uint64_t old_size, 
+static void buf_init (BufferP buf, char *memory, uint64_t size, uint64_t old_size, 
                       FUNCLINE, rom name)
 {
     // set some parameters before allocation so they can go into the error message in case of failure
@@ -510,7 +502,7 @@ static void buf_init (Buffer *buf, char *memory, uint64_t size, uint64_t old_siz
 // if it needs to enlarge a buffer fully overlaid by an overlay buffer - it abandons its memory (leaving it to
 // the overlaid buffer) and allocates new memory
 uint64_t buf_alloc_do (VBlockP vb,
-                       Buffer *buf, 
+                       BufferP buf, 
                        uint64_t requested_size,
                        float grow_at_least_factor, // IF we need to allocate or reallocate physical memory, we get this much more than requested
                        FUNCLINE,
@@ -625,7 +617,7 @@ finish:
 }
 
 BitArray *buf_alloc_bitarr_do (VBlockP vb,
-                               Buffer *buf, 
+                               BufferP buf, 
                                uint64_t nbits,
                                FUNCLINE,
                                rom name)
@@ -639,14 +631,14 @@ BitArray *buf_alloc_bitarr_do (VBlockP vb,
     return bitarr;
 }
 
-void buf_alloc_bitarr_buffer_do (VBlockP vb, Buffer *buf, uint64_t nbits, FUNCLINE, rom name)
+void buf_alloc_bitarr_buffer_do (VBlockP vb, BufferP buf, uint64_t nbits, FUNCLINE, rom name)
 {
     uint64_t nwords = roundup_bits2words64 (nbits);
     buf_alloc_do (vb, buf, nwords * sizeof (uint64_t), 1, func, code_line, name);
 }
 
 BitArray *buf_overlay_bitarr_do (VBlockP vb,
-                                 Buffer *overlaid_buf, Buffer *regular_buf,  
+                                 BufferP overlaid_buf, BufferP regular_buf,  
                                  uint64_t start_byte_in_regular_buf,
                                  uint64_t nbits,
                                  FUNCLINE,
@@ -664,8 +656,8 @@ BitArray *buf_overlay_bitarr_do (VBlockP vb,
 
 // an overlay buffer is a buffer using some of the memory of another buffer - it doesn't have its own memory
 void buf_overlay_do (VBlockP vb, 
-                     Buffer *overlaid_buf, // dst 
-                     Buffer *regular_buf, 
+                     BufferP overlaid_buf, // dst 
+                     BufferP regular_buf, 
                      uint64_t start_in_regular, // 0 means full overlay, and copy len 
                      FUNCLINE, rom name)
 {
@@ -705,7 +697,7 @@ void buf_overlay_do (VBlockP vb,
 
 // creates a file mapping: data is mapping from a read-only file, any modifications are private
 // to the process and not written back to the file. buf->param is used for mmapping.
-bool buf_mmap_do (VBlockP vb, Buffer *buf, rom filename, 
+bool buf_mmap_do (VBlockP vb, BufferP buf, rom filename, 
                   bool read_only_buffer, // if false, make a copy-on-write memory mapping, creating private pages upon write
                   FUNCLINE, rom name)
 {
@@ -776,7 +768,7 @@ error:
 }
 
 // free buffer - without freeing memory. A future buf_alloc of this buffer will reuse the memory if possible.
-void buf_free_do (Buffer *buf, FUNCLINE) 
+void buf_free_do (BufferP buf, FUNCLINE) 
 {
     uint16_t *overlay_count; // number of buffers (overlay and regular) sharing buf->memory
 
@@ -897,7 +889,7 @@ void buf_compact_buf_list (VBlockP vb)
 // remove from buffer_list of this vb
 // thread safety: only the thread owning the VB of the buffer (main thread of evb) can remove a buffer
 // from the buf list, OR the main thread may remove for all VBs, IF no compute thread is running
-static void buf_remove_from_buffer_list (Buffer *buf)
+static void buf_remove_from_buffer_list (BufferP buf)
 {
     if (!buf->vb) return; // this buffer is not on the buf_list - nothing to do
 
@@ -927,7 +919,7 @@ static void buf_remove_from_buffer_list (Buffer *buf)
     COPY_TIMER(buf_remove_from_buffer_list);
 }
 
-void buf_destroy_do (Buffer *buf, FUNCLINE)
+void buf_destroy_do (BufferP buf, FUNCLINE)
 {
     if (!buf) return; // nothing to do
 
@@ -960,7 +952,7 @@ void buf_destroy_do (Buffer *buf, FUNCLINE)
 // similar to buf_move, but also moves buffer between buf_lists. can be run by the main thread only.
 // IMPORTANT: only works when called from main thread, when BOTH src and dst VB are in full control of main thread, so that there
 // no chance another thread is concurrently modifying the buf_list of the src or dst VBs 
-void buf_grab_do (VBlockP dst_vb, Buffer *dst_buf, rom dst_name, Buffer *src_buf, FUNCLINE)
+void buf_grab_do (VBlockP dst_vb, BufferP dst_buf, rom dst_name, BufferP src_buf, FUNCLINE)
 {
     ASSERT (src_buf, "called from %s:%u: buf is NULL", func, code_line);
     if (src_buf->type == BUF_UNALLOCATED) return; // nothing to grab
@@ -981,7 +973,7 @@ void buf_grab_do (VBlockP dst_vb, Buffer *dst_buf, rom dst_name, Buffer *src_buf
 }
 
 // copy data - possibly within the same buffer
-void buf_copy_do (VBlockP dst_vb, Buffer *dst, const Buffer *src, 
+void buf_copy_do (VBlockP dst_vb, BufferP dst, ConstBufferP src, 
                   uint64_t bytes_per_entry, // how many bytes are counted by a unit of .len
                   uint64_t src_start_entry, uint64_t max_entries,  // if 0 copies the entire buffer 
                   FUNCLINE,
@@ -1012,7 +1004,7 @@ void buf_copy_do (VBlockP dst_vb, Buffer *dst, const Buffer *src,
 
 // moves all the data from one buffer to another, leaving the source buffer unallocated
 // both the src and dst buffer remain (or are added) to the buf_lists of their respective VBs
-void buf_move (VBlockP dst_vb, Buffer *dst, VBlockP src_vb, Buffer *src)
+void buf_move (VBlockP dst_vb, BufferP dst, VBlockP src_vb, BufferP src)
 {
     if (dst->type == BUF_REGULAR && !dst->data) buf_destroy (*dst);
     
@@ -1032,7 +1024,7 @@ void buf_move (VBlockP dst_vb, Buffer *dst, VBlockP src_vb, Buffer *src)
 }
 
 // removes a section from the buffer
-void buf_cut_out_do (Buffer *buf, unsigned sizeof_item, uint64_t remove_start, uint64_t remove_len)
+void buf_cut_out_do (BufferP buf, unsigned sizeof_item, uint64_t remove_start, uint64_t remove_len)
 {
     if (!remove_len) return;
 
@@ -1048,7 +1040,7 @@ void buf_cut_out_do (Buffer *buf, unsigned sizeof_item, uint64_t remove_start, u
     buf->len -= remove_len;
 }
 
-void buf_add_string (VBlockP vb, Buffer *buf, rom str) 
+void buf_add_string (VBlockP vb, BufferP buf, rom str) 
 { 
     uint64_t len = strlen (str); 
     ASSERT (len < 10000000, "len=%"PRIu64" too long, looks like a bug", len);
@@ -1057,7 +1049,7 @@ void buf_add_string (VBlockP vb, Buffer *buf, rom str)
     buf->data[buf->len] = '\0'; // string terminator without increasing buf->len
 }
 
-void buf_print (Buffer *buf, bool add_newline)
+void buf_print (BufferP buf, bool add_newline)
 {
     for (uint64_t i=0; i < buf->len; i++) 
         fputc (buf->data[i], info_stream);  // safer than printf %.*s ?
@@ -1110,7 +1102,7 @@ void *buf_low_level_malloc (size_t size, bool zero, FUNCLINE)
 }
 
 // convert a Buffer from a z_file section whose len is in char to a bitarray
-BitArray *buf_zfile_buf_to_bitarray (Buffer *buf, uint64_t nbits)
+BitArray *buf_zfile_buf_to_bitarray (BufferP buf, uint64_t nbits)
 {
     ASSERT (roundup_bits2bytes (nbits) <= buf->len, "nbits=%"PRId64" indicating a length of at least %"PRId64", but buf->len=%"PRId64,
             nbits, roundup_bits2bytes (nbits), buf->len);
@@ -1129,7 +1121,7 @@ BitArray *buf_zfile_buf_to_bitarray (Buffer *buf, uint64_t nbits)
     return bitarr;
 }
 
-void buf_add_bit (Buffer *buf, int64_t new_bit) 
+void buf_add_bit (BufferP buf, int64_t new_bit) 
 {
     BitArray *bar = buf_get_bitarray (buf);
 
@@ -1143,7 +1135,7 @@ void buf_add_bit (Buffer *buf, int64_t new_bit)
         bit_array_assign (bar, bar->nbits-1, new_bit);  
 }
  
-uint64_t buf_extend_bits (Buffer *buf, int64_t num_new_bits) 
+uint64_t buf_extend_bits (BufferP buf, int64_t num_new_bits) 
 {
     BitArray *bar = buf_get_bitarray (buf);
 
@@ -1162,7 +1154,7 @@ uint64_t buf_extend_bits (Buffer *buf, int64_t num_new_bits)
 // writes a buffer to a file, return true if successful
 // note: this is run as separate thread from ref_create_cache_in_background and refhash_create_cache_in_background
 // so it cannot allocate any buffers
-bool buf_dump_to_file (rom filename, const Buffer *buf, unsigned buf_word_width, bool including_control_region, 
+bool buf_dump_to_file (rom filename, ConstBufferP buf, unsigned buf_word_width, bool including_control_region, 
                        bool no_dirs, bool verbose, bool do_gzip)
 {
     RETURNW (buf->type == BUF_REGULAR || buf->type == BUF_OVERLAY, false, 
@@ -1211,109 +1203,25 @@ bool buf_dump_to_file (rom filename, const Buffer *buf, unsigned buf_word_width,
     return success;
 }
  
-void interlace_d8_buf (Buffer *buf, LocalType *lt)
-{
-    for (uint64_t i=0; i < buf->len; i++) 
-        *B(int8_t, *buf, i) = INTERLACE(int8_t,*B8 (*buf, i)); 
-}
+void interlace_d8_buf       (BufferP buf, LocalType *lt) { for_buf (int8_t,  num, *buf) *num =        (INTERLACE(int8_t,  *num)); }
+void BGEN_interlace_d16_buf (BufferP buf, LocalType *lt) { for_buf (int16_t, num, *buf) *num = BGEN16 (INTERLACE(int16_t, *num)); }
+void BGEN_interlace_d32_buf (BufferP buf, LocalType *lt) { for_buf (int32_t, num, *buf) *num = BGEN32 (INTERLACE(int32_t, *num)); }
+void BGEN_interlace_d64_buf (BufferP buf, LocalType *lt) { for_buf (int64_t, num, *buf) *num = BGEN64 (INTERLACE(int64_t, *num)); }
+void LTEN_interlace_d16_buf (BufferP buf, LocalType *lt) { for_buf (int16_t, num, *buf) *num = LTEN16 (INTERLACE(int16_t, *num)); }
+void LTEN_interlace_d32_buf (BufferP buf, LocalType *lt) { for_buf (int32_t, num, *buf) *num = LTEN32 (INTERLACE(int32_t, *num)); }
+void LTEN_interlace_d64_buf (BufferP buf, LocalType *lt) { for_buf (int64_t, num, *buf) *num = LTEN64 (INTERLACE(int64_t, *num)); }
 
-void BGEN_interlace_d16_buf (Buffer *buf, LocalType *lt)
-{
-    for (uint64_t i=0; i < buf->len; i++) 
-        *B(int16_t, *buf, i) = BGEN16 (INTERLACE(int16_t,*B16 (*buf, i))); 
-}
-
-void BGEN_interlace_d32_buf (Buffer *buf, LocalType *lt)
-{
-    for (uint64_t i=0; i < buf->len; i++) 
-        *B(int32_t, *buf, i) = BGEN32 (INTERLACE(int32_t,*B32 (*buf, i))); 
-}
-
-void BGEN_interlace_d64_buf (Buffer *buf, LocalType *lt)
-{
-    for (uint64_t i=0; i < buf->len; i++) 
-        *B(int64_t, *buf, i) = BGEN64 (INTERLACE(int64_t,*B64 (*buf, i))); 
-}
-
-void LTEN_interlace_d16_buf (Buffer *buf, LocalType *lt)
-{
-    for (uint64_t i=0; i < buf->len; i++) 
-        *B(int16_t, *buf, i) = LTEN16 (INTERLACE(int16_t,*B16 (*buf, i))); 
-}
-
-void LTEN_interlace_d32_buf (Buffer *buf, LocalType *lt)
-{
-    for (uint64_t i=0; i < buf->len; i++) 
-        *B(int32_t, *buf, i) = LTEN32 (INTERLACE(int32_t,*B32 (*buf, i))); 
-}
-
-void LTEN_interlace_d64_buf (Buffer *buf, LocalType *lt)
-{
-    for (uint64_t i=0; i < buf->len; i++) 
-        *B(int64_t, *buf, i) = LTEN64 (INTERLACE(int64_t,*B64 (*buf, i))); 
-}
-
-void BGEN_u8_buf (Buffer *buf, LocalType *lt)
-{
-}
-
-void BGEN_u16_buf (Buffer *buf, LocalType *lt)
-{
-    if (flag.is_lten)
-        for (uint64_t i=0; i < buf->len; i++) {
-            uint16_t num_big_en = *B16 (*buf, i);
-            *B16 (*buf, i) = BGEN16 (num_big_en);            
-        }
-}
-
-void BGEN_u32_buf (Buffer *buf, LocalType *lt)
-{
-    if (flag.is_lten)
-        for (uint64_t i=0; i < buf->len; i++) {
-            uint32_t num_big_en = *B32 (*buf, i);
-            *B32 (*buf, i) = BGEN32 (num_big_en);  
-        }
-}
-
-void BGEN_u64_buf (Buffer *buf, LocalType *lt)
-{
-    if (flag.is_lten)
-        for (uint64_t i=0; i < buf->len; i++) {
-            uint64_t num_big_en = *B64 (*buf, i);
-            *B64 (*buf, i) = BGEN64 (num_big_en);            
-        }
-}
-
-void LTEN_u16_buf (Buffer *buf, LocalType *lt)
-{
-    if (!flag.is_lten)
-        for (uint64_t i=0; i < buf->len; i++) {
-            uint16_t num_big_en = *B16 (*buf, i);
-            *B16 (*buf, i) = LTEN16 (num_big_en);            
-        }
-}
-
-void LTEN_u32_buf (Buffer *buf, LocalType *lt)
-{
-    if (!flag.is_lten)
-        for (uint64_t i=0; i < buf->len; i++) {
-            uint32_t num_big_en = *B32 (*buf, i);
-            *B32 ( *buf, i) = LTEN32 (num_big_en);  
-        }
-}
-
-void LTEN_u64_buf (Buffer *buf, LocalType *lt)
-{
-    if (!flag.is_lten)
-        for (uint64_t i=0; i < buf->len; i++) {
-            uint64_t num_big_en = *B64 (*buf, i);
-            *B64 (*buf, i) = LTEN64 (num_big_en);            
-        }
-}
+void BGEN_u8_buf  (BufferP buf, LocalType *lt) {}
+void BGEN_u16_buf (BufferP buf, LocalType *lt) { if ( flag.is_lten) for_buf (uint16_t, num, *buf) *num = BGEN16 (*num); }
+void BGEN_u32_buf (BufferP buf, LocalType *lt) { if ( flag.is_lten) for_buf (uint32_t, num, *buf) *num = BGEN32 (*num); }
+void BGEN_u64_buf (BufferP buf, LocalType *lt) { if ( flag.is_lten) for_buf (uint64_t, num, *buf) *num = BGEN64 (*num); }
+void LTEN_u16_buf (BufferP buf, LocalType *lt) { if (!flag.is_lten) for_buf (uint16_t, num, *buf) *num = LTEN16 (*num); }
+void LTEN_u32_buf (BufferP buf, LocalType *lt) { if (!flag.is_lten) for_buf (uint32_t, num, *buf) *num = LTEN32 (*num); }
+void LTEN_u64_buf (BufferP buf, LocalType *lt) { if (!flag.is_lten) for_buf (uint64_t, num, *buf) *num = LTEN64 (*num); }
 
 // number of columns is trasmitted in the count, except if this is a matrix of VCF samples, in which case param=0 and we take 
 // the number of columns to be the number of samples in the VCF header
-static inline uint32_t BGEN_transpose_num_cols (const Buffer *buf)
+static inline uint32_t BGEN_transpose_num_cols (ConstBufferP buf)
 {
     uint32_t cols = buf->count; // cols and rows in terms of the target non-transposed matrix (0 if VCF)
 
@@ -1323,7 +1231,7 @@ static inline uint32_t BGEN_transpose_num_cols (const Buffer *buf)
     return cols;
 }
 
-void BGEN_transpose_u8_buf (Buffer *buf, LocalType *lt)
+void BGEN_transpose_u8_buf (BufferP buf, LocalType *lt)
 {
     if (!buf->len) return;
 
@@ -1346,7 +1254,7 @@ void BGEN_transpose_u8_buf (Buffer *buf, LocalType *lt)
     *lt = LT_UINT8; // no longer transposed
 }
 
-void BGEN_transpose_u16_buf (Buffer *buf, LocalType *lt)
+void BGEN_transpose_u16_buf (BufferP buf, LocalType *lt)
 {
     if (!buf->len) return;
 
@@ -1369,7 +1277,7 @@ void BGEN_transpose_u16_buf (Buffer *buf, LocalType *lt)
     *lt = LT_UINT16; // no longer transposed
 }
 
-void BGEN_transpose_u32_buf (Buffer *buf, LocalType *lt)
+void BGEN_transpose_u32_buf (BufferP buf, LocalType *lt)
 {
     if (!buf->len) return;
 
@@ -1392,7 +1300,7 @@ void BGEN_transpose_u32_buf (Buffer *buf, LocalType *lt)
     *lt = LT_UINT32; // no longer transposed
 }
 
-void BGEN_transpose_u64_buf (Buffer *buf, LocalType *lt)
+void BGEN_transpose_u64_buf (BufferP buf, LocalType *lt)
 {
     if (!buf->len) return;
 
@@ -1415,7 +1323,7 @@ void BGEN_transpose_u64_buf (Buffer *buf, LocalType *lt)
     *lt = LT_UINT64; // no longer transposed
 }
 
-void BGEN_deinterlace_d8_buf (Buffer *buf, LocalType *lt)
+void BGEN_deinterlace_d8_buf (BufferP buf, LocalType *lt)
 {
     for (uint64_t i=0; i < buf->len; i++) {
         uint8_t unum = *B8 (*buf, i);
@@ -1423,7 +1331,7 @@ void BGEN_deinterlace_d8_buf (Buffer *buf, LocalType *lt)
     }
 }
 
-void BGEN_deinterlace_d16_buf (Buffer *buf, LocalType *lt)
+void BGEN_deinterlace_d16_buf (BufferP buf, LocalType *lt)
 {
     for (uint64_t i=0; i < buf->len; i++) {
         uint16_t num_big_en = *B16 (*buf, i);
@@ -1432,7 +1340,7 @@ void BGEN_deinterlace_d16_buf (Buffer *buf, LocalType *lt)
     }
 }
 
-void BGEN_deinterlace_d32_buf (Buffer *buf, LocalType *lt)
+void BGEN_deinterlace_d32_buf (BufferP buf, LocalType *lt)
 {
     for (uint64_t i=0; i < buf->len; i++) {
         uint32_t num_big_en = *B32 ( *buf, i);
@@ -1441,7 +1349,7 @@ void BGEN_deinterlace_d32_buf (Buffer *buf, LocalType *lt)
     }
 }
 
-void BGEN_deinterlace_d64_buf (Buffer *buf, LocalType *lt)
+void BGEN_deinterlace_d64_buf (BufferP buf, LocalType *lt)
 {
     for (uint64_t i=0; i < buf->len; i++) {
         uint64_t num_big_en = *B64 (*buf, i);

@@ -166,7 +166,6 @@ void ref_contigs_compress_ext_store (Reference ref)
 {
     START_TIMER;
     ContextP ctx = ZCTX(CHROM);
-    uint32_t num_chroms = ctx->nodes.len32;
 
     static Buffer created_contigs = EMPTY_BUFFER;          
 
@@ -176,11 +175,11 @@ void ref_contigs_compress_ext_store (Reference ref)
     // NOTE: ref_get_range_by_chrom access ranges by chrom, but ref_initialize_loaded_ranges (incorrectly) allocates ranges.len by ref->ctgs.contigs.len 
     // (for non REF_INTERNAL) therefore, we must have ref_contigs aligned with CHROM
     
-    buf_alloc_zero (evb, &created_contigs, 0, num_chroms, Contig, 1, "created_contigs");
-    created_contigs.len = num_chroms;
+    buf_alloc_zero (evb, &created_contigs, 0, nodes_len, Contig, 1, "created_contigs");
+    created_contigs.len = nodes_len;
     ARRAY (Contig, cn, created_contigs);
 
-    for (WordIndex i=0; i < num_chroms; i++) {
+    for (WordIndex i=0; i < nodes_len; i++) {
         cn[i].ref_index  = WORD_INDEX_NONE; // initialize (not all CHROMs have contigs, eg "*" in SAM)
         cn[i].ref_index  = i; // ref_index always refers to the CHROM index of the file in which it is stored (eg REF_CONTIG in References files, RNAME in SAM etc)
         cn[i].gpos       = 0; // ref_initialize_ranges overlays even empty contigs on the genome, so GPOS must be valid number
@@ -198,7 +197,7 @@ void ref_contigs_compress_ext_store (Reference ref)
         PosType delta = r->gpos % 64;
 
         WordIndex chrom = *B(WordIndex, z_file->ref2chrom_map, r->chrom); // the CHROM corresponding to this ref_index, even if a different version of the chrom name 
-        if (chrom == WORD_INDEX_NONE || ! B(CtxNode, ZCTX(CHROM)->nodes, chrom)->snip_len) continue; // this contig was not used in the data 
+        if (chrom == WORD_INDEX_NONE || !nodes[chrom].snip_len) continue; // this contig was not used in the data 
         
         cn[chrom].gpos    = r->gpos - delta;
         cn[chrom].min_pos = r->first_pos - delta;

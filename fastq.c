@@ -321,13 +321,20 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i, bool must_have)
             BNXT32 (vb->z_section_headers) = vb->z_data.len; 
             int32_t offset = zfile_read_section (z_file, vb, vb->pair_vb_i, &vb->z_data, "z_data", sec->st, sec); // returns 0 if section is skipped
             
-            ContextP ctx = ctx_get_ctx (vb, ((SectionHeaderCtx *)Bc(vb->z_section_headers, offset))->dict_id);
-            ctx->is_loaded = true; // not skipped. note: possibly already true if it has a dictionary - set in ctx_overlay_dictionaries_to_vb
+            ASSERT (offset <= (int)vb->z_data.len32 - (int)sizeof (SectionHeaderCtx), "offset=%d out of range: vb->z_section_headers.len=%u, when reading pair1 of vb=%s/%u st=%s ctx=%s", 
+                    offset, vb->z_data.len32, comp_name(sec->comp_i), sec->vblock_i, st_name (sec->st), dis_dict_id (sec->dict_id).s);
 
-            if (offset == SECTION_SKIPPED) vb->z_section_headers.len--; // section skipped
+            if (offset == SECTION_SKIPPED) 
+                vb->z_section_headers.len--; // section skipped
 
-            if (flag.debug_read_ctxs)
-                sections_show_header ((SectionHeader *)Bc (vb->z_data, offset), NULL, sec->offset, '2');
+            else {
+                SectionHeaderCtx *header = (SectionHeaderCtx *)Bc(vb->z_data, offset);
+                ContextP ctx = ctx_get_ctx (vb, header->dict_id);
+                ctx->is_loaded = true; // not skipped. note: possibly already true if it has a dictionary - set in ctx_overlay_dictionaries_to_vb
+
+                if (flag.debug_read_ctxs)
+                    sections_show_header (&header->h, NULL, sec->offset, '2');
+            }
         }
     }
 

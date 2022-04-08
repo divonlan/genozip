@@ -28,10 +28,10 @@
 typedef enum { QNAME, FLAG, RNAME, POS, MAPQ, CIGAR, RNEXT, PNEXT, TLEN, SEQ, QUAL, AUX } SamFields __attribute__((unused)); // quick way to define constants
 
 char taxid_redirection_snip[100], xa_strand_pos_snip[100], XS_snip[30], XM_snip[30], MC_buddy_snip[30], 
-     MQ_buddy_snip[30], MAPQ_buddy_snip[30], QUAL_buddy_snip[30], XA_lookback_snip[30],
+     MQ_buddy_snip[30], MAPQ_buddy_snip[30], QUAL_buddy_snip[30], QUALSA_buddy_snip[30], XA_lookback_snip[30],
      AS_buddy_snip[30], YS_buddy_snip[30], POS_buddy_snip[100], PNEXT_buddy_snip[100];
 unsigned taxid_redirection_snip_len, xa_strand_pos_snip_len, XS_snip_len, XM_snip_len, MC_buddy_snip_len,
-     MQ_buddy_snip_len, MAPQ_buddy_snip_len, QUAL_buddy_snip_len, XA_lookback_snip_len,
+     MQ_buddy_snip_len, MAPQ_buddy_snip_len, QUAL_buddy_snip_len, QUALSA_buddy_snip_len, XA_lookback_snip_len,
      AS_buddy_snip_len, YS_buddy_snip_len, POS_buddy_snip_len, PNEXT_buddy_snip_len;
 WordIndex xa_lookback_strand_word_index = WORD_INDEX_NONE, xa_lookback_rname_word_index = WORD_INDEX_NONE;
 
@@ -87,6 +87,7 @@ void sam_zip_initialize (void)
     seg_prepare_snip_other (SNIP_COPY_BUDDY, _SAM_POS,     false, 0, PNEXT_buddy_snip);
     seg_prepare_snip_other (SNIP_COPY_BUDDY, _SAM_MAPQ,    false, 0, MQ_buddy_snip);
     seg_prepare_snip_other (SNIP_COPY_BUDDY, _SAM_QUAL,    false, 0, QUAL_buddy_snip);
+    seg_prepare_snip_other (SNIP_COPY_BUDDY, _SAM_QUALSA,  false, 0, QUALSA_buddy_snip);
     seg_prepare_snip_other (SNIP_COPY_BUDDY, _OPTION_MQ_i, false, 0, MAPQ_buddy_snip);
     seg_prepare_snip_other (SNIP_COPY_BUDDY, _OPTION_YS_i, false, 0, AS_buddy_snip);
     seg_prepare_snip_other (SNIP_COPY_BUDDY, _OPTION_AS_i, false, 0, YS_buddy_snip);
@@ -182,13 +183,14 @@ void sam_seg_initialize (VBlockP vb)
     for (int i=0; i < ARRAY_LEN(numeric_fields); i++)
         CTX(numeric_fields[i])->flags.store = STORE_INT;
 
-    CTX(SAM_SQBITMAP)->ltype    = LT_BITMAP;
-    CTX(SAM_RNAME)->flags.store = STORE_INDEX; // since v12
-    CTX(SAM_STRAND)->ltype      = LT_BITMAP;
-    CTX(SAM_GPOS)->ltype        = LT_UINT32;
+    CTX(SAM_SQBITMAP)->ltype     = LT_BITMAP;
+    CTX(SAM_RNAME)->flags.store  = STORE_INDEX; // since v12
+    CTX(SAM_STRAND)->ltype       = LT_BITMAP;
+    CTX(SAM_GPOS)->ltype         = LT_UINT32;
     CTX(SAM_BUDDY)->dynamic_size_local = true;
-    CTX(SAM_QNAME)->no_stons    = true;        // no singletons, bc sam_piz_filter uses PEEK_SNIP
-    CTX(SAM_QUAL) ->flags.store = STORE_INT;   // since v13 - store QUAL_score for buddy ms:i
+    CTX(SAM_QNAME)->no_stons     = true;        // no singletons, bc sam_piz_filter uses PEEK_SNIP
+    CTX(SAM_QUAL) ->flags.store  = STORE_INT;   // since v13 - store QUAL_score for buddy ms:i
+    CTX(SAM_QUALSA)->flags.store = STORE_INT;   // since v14 - in PRIM, QUAL_score is stored in QUAL_SA
     
     // MAPQ is uint8_t by BAM specification
     CTX(SAM_MAPQ)->ltype = CTX(OPTION_SA_MAPQ)->ltype = CTX(OPTION_OA_MAPQ)->ltype = LT_UINT8;

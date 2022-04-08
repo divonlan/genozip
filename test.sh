@@ -1016,7 +1016,7 @@ batch_reference_sam()
     test_standard "-me$hg19 --password 123" "-p123 -e$hg19" test.human2.bam  
 
     echo "SAM with large (>4GB) plant genome"  
-    test_standard "-me$chinese_spring --password 123" "-p123 -e$chinese_spring" test.bsseeker2-wbgs.sam.gz  
+    test_standard "-me$chinese_spring --password 123" "-p123 -e$chinese_spring" test.bsseeker2-wgbs.sam.gz  
 }
 
 batch_reference_vcf()

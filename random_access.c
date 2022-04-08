@@ -32,13 +32,11 @@ void random_access_initialize(void)
 // Called by PIZ main thread (piz_read_global_area) and ZIP main thread (zip_write_global_area)
 static void BGEN_random_access (Buffer *ra_buf)
 {
-    ARRAY (RAEntry, ra, *ra_buf);
-
-    for (unsigned i=0; i < ra_buf->len; i++) {
-        ra[i].vblock_i    = BGEN32 (ra[i].vblock_i);
-        ra[i].chrom_index = BGEN32 (ra[i].chrom_index);
-        ra[i].min_pos     = BGEN64 (ra[i].min_pos);
-        ra[i].max_pos     = BGEN64 (ra[i].max_pos);
+    for_buf (RAEntry, ra, *ra_buf) {
+        ra->vblock_i    = BGEN32 (ra->vblock_i);
+        ra->chrom_index = BGEN32 (ra->chrom_index);
+        ra->min_pos     = BGEN64 (ra->min_pos);
+        ra->max_pos     = BGEN64 (ra->max_pos);
     }
 }
 
@@ -46,16 +44,14 @@ static void random_access_show_index (const Buffer *ra_buf, bool from_zip, DidIT
 {
     iprintf ("\n%s:\n", msg);
     
-    ARRAY (const RAEntry, ra, *ra_buf);
-
     Context *ctx = ZCTX (chrom_did_i);
 
-    for (uint32_t i=0; i < ra_buf->len; i++) {
+    for_buf (const RAEntry, ra, *ra_buf) {
         
         STR(chrom_snip);
         if (from_zip) {
-            if (ra[i].chrom_index != WORD_INDEX_NONE) {
-                CtxNode *chrom_node = ctx_get_node_by_word_index (ctx, ra[i].chrom_index);
+            if (ra->chrom_index != WORD_INDEX_NONE) {
+                CtxNode *chrom_node = ctx_get_node_by_word_index (ctx, ra->chrom_index);
                 chrom_snip     = Bc (ctx->dict, chrom_node->char_index);
                 chrom_snip_len = chrom_node->snip_len;
             }
@@ -65,12 +61,12 @@ static void random_access_show_index (const Buffer *ra_buf, bool from_zip, DidIT
             }
         }
         else {
-            CtxWord *chrom_word = B(CtxWord, ctx->word_list, ra[i].chrom_index);
+            CtxWord *chrom_word = B(CtxWord, ctx->word_list, ra->chrom_index);
             chrom_snip = Bc (ctx->dict, chrom_word->char_index);
             chrom_snip_len = chrom_word->snip_len;
         }
         iprintf ("vb_i=%u chrom='%.*s' (chrom_word_index=%d) min_pos=%"PRId64" max_pos=%"PRId64"\n",
-                 ra[i].vblock_i, chrom_snip_len, chrom_snip, ra[i].chrom_index, ra[i].min_pos, ra[i].max_pos);
+                 ra->vblock_i, chrom_snip_len, chrom_snip, ra->chrom_index, ra->min_pos, ra->max_pos);
     }
 }
 
@@ -257,7 +253,7 @@ void random_access_finalize_entries (Buffer *ra_buf)
     buf_alloc (evb, &sorted_ra_buf, 0, ra_buf->len, RAEntry, 1, ra_buf->name);
     sorted_ra_buf.len = ra_buf->len;
 
-    for (uint32_t i=0; i < ra_buf->len; i++) 
+    for (uint32_t i=0; i < ra_buf->len32; i++) 
         *B(RAEntry, sorted_ra_buf, i) = *B(RAEntry, *ra_buf, sorter[i]);
 
     // replace ra_buf with sorted one
@@ -266,13 +262,9 @@ void random_access_finalize_entries (Buffer *ra_buf)
 
     FREE (sorter);
 
-    // now that the VBs are in order, we can updated the "CONTINUED FROM PREVIOUS VB" ra's to their final values
-    if (Z_DT(DT_FASTA) || Z_DT(DT_REF))
-        for (uint32_t i=0; i < ra_buf->len; i++) {
-            
-            RAEntry *ra = B(RAEntry, *ra_buf, i);
-
-            // case: FASTA: chrom is unknown - if the sequence started in the previous VB - we update now
+    // now that the VBs are in order, we can updated the "CONTINUED FROM PREVIOUS VB"(=WORD_INDEX_NONE) ra's to their final values
+    if (Z_DT(DT_FASTA) || Z_DT(DT_REF)) 
+        for_buf2 (RAEntry, ra, i, *ra_buf) 
             if (ra->chrom_index == WORD_INDEX_NONE) {
                 // we expect this ra to be the first in its VB, and the previous ra to be of the previous VB
                 ASSERT (i && (ra->vblock_i == (ra-1)->vblock_i+1), "corrupt ra[%u]: chrom_index=WORD_INDEX_NONE but vb_i=%u and (ra-1)->vb_i=%u (expecting it to be %u)",
@@ -281,8 +273,7 @@ void random_access_finalize_entries (Buffer *ra_buf)
                 ra->chrom_index = (ra-1)->chrom_index;
                 ra->min_pos    += (ra-1)->max_pos;
                 ra->max_pos    += (ra-1)->max_pos;
-            }
-        }
+            } 
 }
 
 void random_access_compress (ConstBufferP ra_buf_, SectionType sec_type, int ra_i, rom msg)
@@ -358,14 +349,14 @@ bool random_access_is_vb_included (VBIType vb_i)
 int32_t random_access_get_last_included_vb_i (void)
 {
     int32_t last_vb_i = -1;
-    for (unsigned ra_i=0; ra_i < z_file->ra_buf.len; ra_i++) { 
-        
-        const RAEntry *ra = B(RAEntry, z_file->ra_buf, ra_i);
+    
+    for_buf (const RAEntry, ra, z_file->ra_buf) {
         if ((int32_t)ra->vblock_i <= last_vb_i) continue; // we already decided to include this vb_i - no need to check further
 
         if (regions_get_ra_intersection (ra->chrom_index, ra->min_pos, ra->max_pos))
             last_vb_i = (int32_t)ra->vblock_i; 
     }   
+
     return last_vb_i;
 }
 
@@ -403,13 +394,12 @@ uint32_t random_access_verify_all_contigs_same_length (void)
     buf_alloc (evb, &max_lens_buf, 0, ctx->word_list.len, PosType, 1, "max_lens");
     buf_zero (&max_lens_buf);
 
-    ARRAY (const RAEntry, ra, z_file->ra_buf);
     ARRAY (PosType, max_lens, max_lens_buf);
 
     PosType max_of_maxes=0;
-    for (uint32_t ra_i=0; ra_i < ra_len; ra_i++) {
-        max_lens[ra[ra_i].chrom_index] = MAX_(ra[ra_i].max_pos, max_lens[ra[ra_i].chrom_index]);
-        max_of_maxes = MAX_(max_of_maxes, max_lens[ra[ra_i].chrom_index]);
+    for_buf (const RAEntry, ra, z_file->ra_buf) {
+        max_lens[ra->chrom_index] = MAX_(ra->max_pos, max_lens[ra->chrom_index]);
+        max_of_maxes = MAX_(max_of_maxes, max_lens[ra->chrom_index]);
     }
 
     for (uint32_t contig_i=0; contig_i < ctx->word_list.len; contig_i++) 

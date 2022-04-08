@@ -215,17 +215,19 @@ void fasta_seg_initialize (VBlockP vb)
 
 void fasta_seg_finalize (VBlockP vb)
 {
-    // top level snip
-    SmallContainer top_level = { 
-        .repeats      = vb->lines.len,
-        .is_toplevel  = true,
-        .callback     = true,
-        .nitems_lo    = 2,
-        .items        = { { .dict_id = { _FASTA_LINEMETA }  },
-                          { .dict_id = { _FASTA_EOL }, .translator = FASTA2PHYLIP_EOL } }
-    };
+    if (!flag.make_reference) {
+        // top level snip
+        SmallContainer top_level = { 
+            .repeats      = vb->lines.len,
+            .is_toplevel  = true,
+            .callback     = true,
+            .nitems_lo    = 2,
+            .items        = { { .dict_id = { _FASTA_LINEMETA }  },
+                            { .dict_id = { _FASTA_EOL }, .translator = FASTA2PHYLIP_EOL } }
+        };
 
-    container_seg (vb, CTX(FASTA_TOPLEVEL), (ContainerP)&top_level, 0, 0, 0);
+        container_seg (vb, CTX(FASTA_TOPLEVEL), (ContainerP)&top_level, 0, 0, 0);
+    }
 
     // decide whether the sequences in this FASTA represent contigs (in which case we want a FASTA_CONTIG dictionary
     // and random access) or do they represent reads (in which case they are likely to numerous to be added to a dict)
@@ -238,12 +240,15 @@ void fasta_seg_finalize (VBlockP vb)
 
         // case: we've seen only characters that are both nucleotide and protein (as are A,C,G,T,N) - call it as nucleotide
         if (segconf.seq_type == SQT_NUKE_OR_AMINO) segconf.seq_type = SQT_NUKE;
+        ASSINP0 (!flag.make_reference || segconf.seq_type == SQT_NUKE, "Can't use --make-reference on this file, because it contains amino acids instead of nucleotides");
 
         // limit the number of contigs, to avoid the FASTA_CONTIG dictionary becoming too big. note this also
         // sets a limit for fasta-to-phylip translation
         #define MAX_CONTIGS_IN_FILE 1000000 
         segconf.fasta_has_contigs &= (num_contigs_this_vb == 1 || // the entire VB is a single contig
                                       est_num_contigs_in_file <  MAX_CONTIGS_IN_FILE); 
+
+        ASSINP0 (!flag.make_reference || segconf.fasta_has_contigs, "Can't use --make-reference on this file, because Genozip can't find the contig names in the FASTA description lines");
     }
 }
 

@@ -206,10 +206,9 @@ Codec codec_assign_best_codec (VBlockP vb,
     uint8_t zselected_codec_count = !zctx ? 0 : is_local ? zctx->lcodec_count : is_b250 ? zctx->bcodec_count : 0;
 
     // we don't change assigned non-simple codecs
-    if (!codec_args[*selected_codec].is_simple) {
-//if (is_b250) printf ("xxxq vb=%u is ALREADYASSIGNED with %s\n", vb->vblock_i, zctx->tag_name);        
+    if (!codec_args[*selected_codec].is_simple) 
         return *selected_codec;
-    }
+
     // in --best mode, we accept a codec that's been selected by 5 previous VBs in a row
     else if (flag.best && zselected_codec != CODEC_UNKNOWN && 
              zselected_codec_count >= BEST_LOCK_IN_THREASHOLD)
@@ -223,10 +222,8 @@ Codec codec_assign_best_codec (VBlockP vb,
     else if (!flag.best && zselected_codec != CODEC_UNKNOWN) 
         *selected_codec = zselected_codec;
 
-    if (*selected_codec != CODEC_UNKNOWN) {
-//if (is_b250) printf ("xxxq vb=%u is ALREADYASSIGNED2 with %s\n", vb->vblock_i, zctx->tag_name);        
+    if (*selected_codec != CODEC_UNKNOWN) 
         return *selected_codec; // if already assigned - no need to test
-    }
 
     CodecTest tests[] = { { CODEC_BZ2 }, { CODEC_NONE }, { CODEC_BSC }, { CODEC_LZMA }, 
                           { CODEC_RANS8 }, { CODEC_RANS32 }, { CODEC_RANS8_pack }, { CODEC_RANS32_pack }, 

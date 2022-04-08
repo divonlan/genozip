@@ -69,7 +69,6 @@ static rom sam_seg_XG_Z_analyze_test_lens (VBlockSAMP vb, STRp(XG))
 
         if (segconf.running) 
             segconf.sam_XG_inc_S = vb->XG_inc_S;
-// xxx printf ("With S? %u\n", vb->XG_inc_S);
     }
     
     // no soft_clip in this line - any value of XG_inc_S will work, we try to pick a consistent value for better compression
@@ -118,7 +117,6 @@ void sam_seg_XG_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XG), PosType 
     }
 
     inc_soft_clip = (vb->XG_inc_S == XG_WITH_S) ? vb->soft_clip[0] : 0; // soft clip length, if we need to include it
-//xxx printf ("vb->XG_inc_S=%d inc_soft_clip=%d vb->soft_clip[0]=%u\n", vb->XG_inc_S, inc_soft_clip, vb->soft_clip[0]);
 
     PosType start_pos = line_pos - inc_soft_clip - 2;
     if (start_pos < 1) FAIL("start_pos");

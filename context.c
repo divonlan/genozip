@@ -777,7 +777,6 @@ void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vctx, bool is_lcodec)
 
     mutex_lock (zctx->mutex);
 
-// printf ("xxxq vb=%u is_lcodec=%u is ASSIGNED %s\n", vb->vblock_i, is_lcodec, zctx->tag_name);
     if (is_lcodec) {
         if (zctx->lcodec == vctx->lcodec) {
             if (zctx->lcodec_count < 255) zctx->lcodec_count++; // counts number of VBs in a row that set this codec
@@ -1482,7 +1481,7 @@ static void ctx_show_counts (ContextP zctx)
     bool is_qual = zctx->dict_id.num == _SAM_DOMQRUNS;
 
     uint64_t total=0;
-    for (uint32_t i=0; i < zctx->counts.len; i++) {
+    for (uint32_t i=0; i < zctx->counts.len32; i++) {
         uint64_t count = *B64(zctx->counts, i) & ~COUNT_PROTECTED_FROM_REMOVAL64;
         if (!count && !is_qual) continue;
 

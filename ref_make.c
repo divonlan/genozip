@@ -32,6 +32,8 @@ void ref_make_seg_initialize (VBlockP vb)
     CTX(FASTA_CONTIG)->no_vb1_sort = true; // keep contigs in the order of the reference, i.e. in the order they would appear in BAM header created with this reference 
     CTX(FASTA_CONTIG)->no_stons = true; // needs b250 node_index for reference
 
+    if (segconf.running) segconf.fasta_has_contigs = true; // initialize optimistically
+
     COPY_TIMER (seg_initialize);
 }
 

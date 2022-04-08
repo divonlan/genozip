@@ -180,7 +180,7 @@ static void zip_generate_b250 (VBlockP vb, Context *ctx)
     bool show = flag.show_b250 || dict_id_typeless (ctx->dict_id).num == flag.dict_id_show_one_b250.num;
     if (show) bufprintf (vb, &vb->show_b250_buf, "vb_i=%u %s: ", vb->vblock_i, ctx->tag_name);
 
-    // case: all-the-same b250 survived dropping - we just shorten it to one entry
+    // case: all-the-same b250 survived dropping (in ctx_drop_all_the_same) - we just shorten it to one entry
     if (ctx->flags.all_the_same && ctx->b250.len > 1) { 
         if (flag.debug_generate) iprintf ("%s.b250 vb_i=%u is \"all_the_same\" - shortened b250 from len=%"PRIu64" to 1\n", ctx->tag_name, vb->vblock_i, ctx->b250.len);
         ctx->b250.len = 1;
@@ -190,7 +190,7 @@ static void zip_generate_b250 (VBlockP vb, Context *ctx)
 
     ARRAY (WordIndex, b250, ctx->b250);
 
-    ctx->b250.count = b250_len; // we move the number of words to param, as len will now contain the of bytes. used by ctx_update_stats()
+    ctx->b250.count = b250_len; // we move the number of words to count, as len will now contain the of bytes. used by ctx_update_stats()
     ctx->b250.len = 0; // we are going to overwrite b250 with the converted indices
 
     // convert b250 from an array of node_index (4 bytes each) to word_index (1-4 bytes each)    
@@ -463,8 +463,8 @@ void zip_compress_all_contexts_b250 (VBlockP vb)
 
         if (flag.show_time) codec_show_time (vb, "B250", ctx->tag_name, ctx->bcodec);
         
-        if (HAS_DEBUG_SEG(ctx)) iprintf ("zip_compress_all_contexts_b250: vb_i=%u %s: B250.len=%"PRIu64" NODES.len=%"PRIu64"\n", 
-                                     vb->vblock_i, ctx->tag_name, ctx->b250.len, ctx->nodes.len);
+        if (HAS_DEBUG_SEG(ctx)) iprintf ("zip_compress_all_contexts_b250: vb=%s/%u %s: B250.len=%"PRIu64" NODES.len=%"PRIu64"\n", 
+                                         comp_name (vb->comp_i), vb->vblock_i, ctx->tag_name, ctx->b250.len, ctx->nodes.len);
 
         START_TIMER; // for compressor_time
 
