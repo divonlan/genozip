@@ -277,6 +277,9 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_MD)
                 count_match=0;
             }
 
+            if (!vb->range) 
+                vb->range = (RangeP)ref_piz_get_range (vb, gref, vb->last_int(SAM_POS), VB_SAM->ref_consumed);
+
             RECONSTRUCT1 ('^');
             while (subcigar_len) { 
                 RECONSTRUCT1 (ref_base_by_pos (vb->range, pos)); 

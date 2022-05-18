@@ -783,6 +783,8 @@ batch_backward_compatability()
 
 batch_prod_compatability()
 {
+    if [ "$i_am_prod" == "1" ]; then return; fi 
+
     if [ ! -d ../genozip-prod ]; then return; fi
 
     (cd ../genozip-prod; make -j ${debug:1})
@@ -837,6 +839,7 @@ batch_real_world_1() # $1 extra genozip argument
 batch_real_world_1_backcomp()
 {
     batch_print_header
+    if [ "$i_am_prod" == "1" ]; then return; fi 
 
     cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
 
@@ -887,6 +890,8 @@ batch_real_world_with_ref() # $1 extra genozip argument
 
 batch_real_world_with_ref_backcomp()
 {
+    if [ "$i_am_prod" == "1" ]; then return; fi 
+
     batch_print_header
 
     cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
@@ -1084,6 +1089,8 @@ batch_make_reference()
 # ref files are expected have the same MD5
 batch_reference_backcomp()
 {
+    if [ "$i_am_prod" == "1" ]; then return; fi 
+
     local fa_file=data/GRCh38_full_analysis_set_plus_decoy_hla.fa.gz 
     local ref_file=$OUTDIR/output.ref.genozip
     local prod_ref_file=$OUTDIR/output.prod.ref.genozip
@@ -1181,6 +1188,10 @@ fi
 
 if [ ! -n "$dir" ]; then 
     dir=.
+fi
+
+if (( `pwd | grep genozip-prod | wc -l` == 1 )); then
+    i_am_prod=1;
 fi
 
 # -----------------

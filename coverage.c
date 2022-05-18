@@ -201,10 +201,16 @@ void coverage_show_coverage (void)
     }
 
     // calculate CVR_PRIMARY - all bases in the contig (i.e. excluding unmapped, secondary, supplementary, duplicate, soft-clipped)
+    bool has_short_name_contigs = false;
     for (uint64_t i=0; i < coverage_len; i++) {
         coverage_special  [CVR_ALL_CONTIGS] += coverage[i];
         read_count_special[CVR_ALL_CONTIGS] += read_count[i];
+
+        has_short_name_contigs |= ({ unsigned cn_len ; ctx_get_snip_by_word_index (ZCTX(CHROM), i, 0, &cn_len) ; cn_len <= 5; });
     }
+
+    // case: if we have no short-name contigs, show all contigs 
+    if (!has_short_name_contigs) flag.show_coverage = COV_ALL; 
 
     PosType genome_nbases = 0;
 
@@ -227,7 +233,7 @@ void coverage_show_coverage (void)
             read_count_special[CVR_OTHER_CONTIGS] += read_count[i];
         }
 
-        if (cn_len <= 5) genome_nbases += len;
+        genome_nbases += len; // all bases, not just short chromosomes
     }
 
     char all_coverage[7] = "0";

@@ -850,7 +850,7 @@ DictId sam_seg_aux_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_OA_Z: sam_seg_OA_field (vb, STRa(value)); break;
 
         case _OPTION_XA_Z: 
-            if (segconf.running && !segconf.has_XA) segconf.has_XA = sam_seg_which_XA (STRa(value));
+            if (!segconf.has_XA) segconf.has_XA = sam_seg_which_XA (STRa(value)); // doesn't matter if several VBs set this in a parallel, even if conflicting results. The last one wins.
 
             SEG_COND (segconf.has_XA == XA_BWA, sam_seg_BWA_XA_field (vb, STRa(value))); 
         

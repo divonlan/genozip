@@ -657,10 +657,12 @@ int main (int argc, char **argv)
     random_access_initialize();
     codec_initialize();
 
-    if      (strstr (argv[0], "genols"))    exe_type = EXE_GENOLS;
-    else if (strstr (argv[0], "genocat"))   exe_type = EXE_GENOCAT;
-    else if (strstr (argv[0], "genounzip")) exe_type = EXE_GENOUNZIP;
-    else                                    exe_type = EXE_GENOZIP; // default
+    const char *bn = file_basename (argv[0], false, NULL, NULL, 0);
+    if      (strstr (bn, "genols"))    exe_type = EXE_GENOLS;
+    else if (strstr (bn, "genocat"))   exe_type = EXE_GENOCAT;
+    else if (strstr (bn, "genounzip")) exe_type = EXE_GENOUNZIP;
+    else                               exe_type = EXE_GENOZIP; // default
+    FREE(bn);
     
     global_cmd = file_basename (argv[0], true, "(executable)", NULL, 0); // global var
 
@@ -730,7 +732,7 @@ int main (int argc, char **argv)
 
     primary_command = command; 
 
-    // IF YOU'RE CONSIDERING EDITING THIS CODE TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,
+    // IF YOU'RE CONSIDERING TAMPERING WITH THIS CODE TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,
     // and might put you personally as well as your organization at legal and financial risk - see "Unauthorized use of Genozip"
     // section of the license. Rather, please contact sales@genozip.com to discuss which license would be appropriate for your case.
     if (command == ZIP) license_get_number(); 

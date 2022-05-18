@@ -107,9 +107,9 @@ typedef enum { GS_READ, GS_TEST, GS_UNCOMPRESS } GrepStages;
     \
     /* regions & filters */ \
     \
-    /* used by --show-coverage and --show-sex */ \
+    /* used by --coverage and --sex */ \
     Buffer coverage;           /* number of bases of each contig - exluding 'S' CIGAR, excluding reads flagged as Duplicate, Seconday arnd Failed filters */ \
-    Buffer read_count;         /* number of mapped reads of each contig for show-coverage/idxstats (for show-coverage - excluding reads flagged as Duplicate, Seconday arnd Failed filters) */\
+    Buffer read_count;         /* number of mapped reads of each contig for coverage/idxstats (for coverage - excluding reads flagged as Duplicate, Seconday arnd Failed filters) */\
     Buffer unmapped_read_count;   \
     \
     /* crypto stuff */\

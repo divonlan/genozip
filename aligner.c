@@ -271,7 +271,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq))
         bool pair_is_forward = bit_array_get (pair_strand, vb->line_i); // same location, in the pair's local
         buf_add_bit (&strand_ctx->local, is_forward == pair_is_forward);
     }
-    // case: not 2nd in a pair - just store the strange
+    // case: not 2nd in a pair - just store the strand
     else 
         buf_add_bit (&strand_ctx->local, is_forward);
     

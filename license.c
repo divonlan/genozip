@@ -124,7 +124,7 @@ static const char *license_load_field (const char *field, unsigned n_lines, cons
     return ""; // not found
 }
 
-// IF YOU'RE CONSIDERING EDITING THIS CODE TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,
+// IF YOU'RE CONSIDERING TAMPERING WITH THIS CODE TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,
 // and might put you personally as well as your organization at legal and financial risk - see "Unauthorized use of Genozip"
 // section of the license. Rather, please contact sales@genozip.com to discuss which license would be appropriate for your case.
 static void license_load (void)
@@ -172,7 +172,7 @@ static void license_load (void)
     buf_destroy (&data);
 }
 
-static bool license_submit (char commerical, char update, const char *os, unsigned cores, const char *endianity, const char *user_host, const char *dist)
+static bool license_submit (const char *lic_type_str, char update, const char *os, unsigned cores, const char *endianity, const char *user_host, const char *dist)
 {
     // reference: https://stackoverflow.com/questions/18073971/http-post-to-a-google-form/47444396#47444396
 
@@ -195,7 +195,7 @@ static bool license_submit (char commerical, char update, const char *os, unsign
                        "?entry.344252538=%.100s"
                        "&entry.926671216=%.50s"
                        "&entry.1734045469=%.50s"
-                       "&entry.2009586582=%c"
+                       "&entry.2009586582=%.20s"
                        "&entry.119966790=%c"
                        "&entry.81542373=%s"
                        "&entry.1668073218=%u"
@@ -209,11 +209,12 @@ static bool license_submit (char commerical, char update, const char *os, unsign
     char *institutionE = url_esc_non_valid_chars (rec.institution);
     char *nameE        = url_esc_non_valid_chars (rec.name);
     char *emailE       = url_esc_non_valid_chars (rec.email);
+    char *lic_typeE    = url_esc_non_valid_chars (lic_type_str);
     char *osE          = url_esc_non_valid_chars (os);
     char *user_hostE   = url_esc_non_valid_chars (user_host);
 
     char url[sizeof (rec) + 200];
-    sprintf (url, url_format, institutionE, nameE, emailE, commerical, update, osE, cores, rec.ip, user_hostE, rec.license_num, rec.version, dist, endianity);
+    sprintf (url, url_format, institutionE, nameE, emailE, lic_typeE, update, osE, cores, rec.ip, user_hostE, rec.license_num, rec.version, dist, endianity);
 
     bool success = url_read_string (url, NULL, 0) >= 0;
     
@@ -237,6 +238,11 @@ static bool license_verify_name (char *response, unsigned response_size, const c
     return true;
 }
 
+static bool license_verify_license (char *response, unsigned response_size, const char *unused)
+{
+    return strlen (response) == 1 && (*response=='1' || *response=='2' || *response=='3');
+}
+
 static void license_exit_if_not_confirmed (const char *response)
 {
     if (response[0] == 'N') {
@@ -247,12 +253,12 @@ static void license_exit_if_not_confirmed (const char *response)
 
 // UI flow to generate a new license for the user
 
-// IF YOU'RE CONSIDERING EDITING THIS CODE TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,
+// IF YOU'RE CONSIDERING TAMPERING WITH THIS CODE TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,
 // and might put you personally as well as your organization at legal and financial risk - see "Unauthorized use of Genozip"
 // section of the license. Rather, please contact sales@genozip.com to discuss which license would be appropriate for your case.
 void license_register (void)
 {
-    char confirm[100], commercial[100], update[100];
+    char confirm[100], lic_type[100], update[100];
     const char *os, *dist, *endianity, *user_host;
     unsigned cores;
 
@@ -287,7 +293,7 @@ void license_register (void)
         strncpy (rec.institution, fields[0], sizeof(rec.institution)-1);
         strncpy (rec.name,        fields[1], sizeof(rec.name)-1);
         strncpy (rec.email,       fields[2], sizeof(rec.email)-1);
-        strncpy (commercial,      fields[3], sizeof(commercial)-1);
+        strncpy (lic_type,        fields[3], sizeof(lic_type)-1);
         strncpy (update,          fields[4], sizeof(update)-1);
         strncpy (rec.ip,          fields[5], sizeof(rec.ip)-1);
         os        = fields[6];
@@ -305,8 +311,13 @@ void license_register (void)
         
         str_query_user ("\nYour email address: ", rec.email, sizeof(rec.email), license_verify_email, NULL);
         
-        str_query_user ("\nDo you require a commercial license? If yes, we will contact you (this will not stop the registration now) (y or [n]) ", 
-                        commercial, sizeof(commercial), str_verify_y_n, "N");
+        str_query_user ("\nWhat type of license do you require?\n"
+                        "1. Academic license (free, available to recognized research institutions, but excluding mixed clinical/research use)\n"
+                        "2. Non-academic license - 30 days evaluation (free for 30 days, for clinical or mixed clinical/research settings, biotech/agrotech/SaaS companies and other commercial uses)\n"
+                        "3. I have already paid for a non-academic license or have an exemption\n"
+                        "Remember your Mom taught you to be honest!\n"
+                        "Please enter 1, 2 or 3: ",
+                        lic_type, sizeof(lic_type), license_verify_license, NULL);
 
         str_query_user ("\nShall we update you by email when new features are added to genozip? ([y] or n) ", 
                         update, sizeof(update), str_verify_y_n, "Y");
@@ -331,8 +342,9 @@ void license_register (void)
     static Buffer license_data = EMPTY_BUFFER;
     license_generate (&license_data);
 
-    if (!n_fields) {
+    const char *lic_type_str = lic_type[0]=='1'?"Academic" : lic_type[0]=='2'?"30-day evaluation" : "Paid or exempted";
 
+    if (!n_fields) {
         fprintf (stderr, "\nThank you. To complete your license registration, genozip will now submit the following information to the genozip licensing server:\n\n");
 
         // note: text needs to match scripts/register.sh
@@ -340,7 +352,7 @@ void license_register (void)
         fprintf (stderr, LIC_FIELD_INSTITUTION": %s\n", rec.institution);
         fprintf (stderr, LIC_FIELD_NAME": %s\n", rec.name);
         fprintf (stderr, LIC_FIELD_EMAIL": %s\n", rec.email);
-        fprintf (stderr, "Commercial: %s\n", commercial[0]=='Y' ? "Yes" : "No");
+        fprintf (stderr, "License: %s\n", lic_type_str);
         fprintf (stderr, "Send new feature updates: %s\n", update[0]=='Y' ? "Yes" : "No");
         fprintf (stderr, "System info: OS=%s cores=%u endianity=%s IP=%s\n", os, cores, endianity, rec.ip);
         fprintf (stderr, "Username: %s\n", user_host);
@@ -353,7 +365,7 @@ void license_register (void)
         license_exit_if_not_confirmed (confirm);
     }
         
-    bool submitted = license_submit (commercial[0], update[0], os, cores, endianity, user_host, dist);
+    bool submitted = license_submit (lic_type_str, update[0], os, cores, endianity, user_host, dist);
 
     ASSINP0 (submitted,
              "Failed to register the license, possibly because the Internet is not accessible or the registration server\n"
@@ -363,17 +375,25 @@ void license_register (void)
     ASSINP (file_put_data (filename, STRb(license_data), S_IRUSR), 
             "Failed to write license file %s: %s. If this is unexpected, email "EMAIL_SUPPORT" for help.", filename, strerror (errno));
 
-    if (!n_fields) 
+    if (!n_fields) {
         fprintf (stderr, "\nSUCCESS. A Genozip license has been granted:\n"
                          "License type: Single User\nLicensee: %s\nFor use by: %s\n\n" 
                          "Documentation: " GENOZIP_URL "\n\n"
-                         "Support: " EMAIL_SUPPORT "\n\n"
-                         "Citing: " WEBSITE_PUBLICATIONS "\n\n", rec.institution, rec.name);
+                         "Support: " EMAIL_SUPPORT "\n\n", rec.institution, rec.name);
+
+        if (lic_type[0]=='1')
+            fprintf (stderr, "Please take a moment now to make a note to not forget to cite Genozip:\n"
+                             "Lan, D., et al. (2021) Genozip: a universal extensible genomic data compressor, Bioinformatics, 37, 2225-2230\n"
+                             "Lan, D., et al. (2020) genozip: a fast and efficient compression tool for VCF files, Bioinformatics, 36, 4091-4092\n");
+
+        else if (lic_type[0]=='2')
+            fprintf (stderr, "We will contact you in 30 days to ask whether you are interested to proceed with purchasing a license\n\n");
+    }
 
     buf_destroy (&license_data);
 }
 
-// IF YOU'RE CONSIDERING EDITING THIS CODE TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,
+// IF YOU'RE CONSIDERING TAMPERING WITH THIS CODE TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,
 // and might put you personally as well as your organization at legal and financial risk - see "Unauthorized use of Genozip"
 // section of the license. Rather, please contact sales@genozip.com to discuss which license would be appropriate for your case.
 uint32_t license_get_number (void)

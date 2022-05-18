@@ -39,7 +39,7 @@ static int32_t bam_unconsumed_scan_forwards (VBlockP vb)
     if (txt_len < sizeof (BAMAlignmentFixed)) return -1; // this VB doesn't not even contain one single full alignment
 
     uint32_t aln_size, i;
-    for (i=0 ; i < txt_len; i += aln_size) 
+    for (i=0 ; i < txt_len - 3; i += aln_size) 
         aln_size = LTEN32 ((BAMAlignmentFixed *)&txt[i])->block_size + 4;
 
     if (aln_size > txt_len) 

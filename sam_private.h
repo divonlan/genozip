@@ -57,7 +57,7 @@ typedef struct VBlockSAM {
 
     Buffer bd_bi_line;             // ZIP: interlaced BD and BI data for one line
     
-    // data used in genocat --show-sex
+    // data used in genocat --sex
     WordIndex x_index, y_index, a_index;    // word index of the X, Y and chr1 chromosomes
     uint64_t x_bases, y_bases, a_bases;     // counters of number chromosome X, Y and chr1 bases
 

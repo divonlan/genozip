@@ -539,7 +539,7 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
          (!flag.bases && (dict_id.num == _FASTQ_NONREF || dict_id.num == _FASTQ_NONREF_X || dict_id.num == _FASTQ_GPOS || dict_id.num == _FASTQ_STRAND)))) // we don't need the SEQ line        return true;
         return true;
 
-    // if we're doing --show-sex/coverage, we only need TOPLEVEL, FASTQ_SQBITMAP and GPOS
+    // if we're doing --sex/coverage, we only need TOPLEVEL, FASTQ_SQBITMAP and GPOS
     if (flag.collect_coverage && 
         (dict_id.num == _FASTQ_DESC     || 
          dict_id.num == _FASTQ_QUAL     || 

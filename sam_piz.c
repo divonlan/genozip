@@ -390,6 +390,8 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
             else
                 (*ENT (uint64_t, vb->read_count, vb->last_index(SAM_RNAME)))++;
         }
+
+        vb->range = NULL;
     }
 }
 
