@@ -595,14 +595,19 @@ uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(con_pre
             default:
                 ASSERT (IS_PRINTABLE(sep), "item_i=%u sep=%u is not a printable character in string \"%.*s\"", item_i, sep, str_len, save_str);
 
+                char sep1 = con->items[item_i].separator[1];
                 *items = str;
-                while (*str != sep && str < after_str) str++; 
+
+                if (!sep1) 
+                    while (str < after_str && *str != sep) str++; 
+                else 
+                    while (str < (after_str-1) && (str[0] != sep || str[1] != sep1)) str++; 
 
                 ASSSPLIT (str < after_str, "item_i=%u reached end of string without finding separator '%c' in string \"%.*s\"", 
                           item_i, sep, str_len, save_str);
 
                 *item_lens = str - *items;
-                str++; // skip seperator
+                str += 1 + (sep1 > 0); // skip seperator
         }
 
         items++; item_lens++; // increment pointers        

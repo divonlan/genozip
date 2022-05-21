@@ -313,7 +313,7 @@ void license_register (void)
         
         str_query_user ("\nWhat type of license do you require?\n"
                         "1. Academic license (free, available to recognized research institutions, but excluding mixed clinical/research use)\n"
-                        "2. Non-academic license - 30 days evaluation (free for 30 days, for clinical or mixed clinical/research settings, biotech/agrotech/SaaS companies and other commercial uses)\n"
+                        "2. Non-academic license - 30 days evaluation (free for 30 days, for clinical or mixed clinical/research settings, biotech/agrotech/SaaS companies and other non-academic uses)\n"
                         "3. I have already paid for a non-academic license or have an exemption\n"
                         "Remember your Mom taught you to be honest!\n"
                         "Please enter 1, 2 or 3: ",
