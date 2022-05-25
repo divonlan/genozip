@@ -111,11 +111,12 @@ typedef union DictId {
 #pragma pack()
 
 typedef uint16_t DidIType;    // index of a context in vb->contexts or z_file->contexts / a counter of contexts
-#define DID_I_NONE ((DidIType)0xFFFF)
+#define DID_I_NONE  ((DidIType)0xFFFF)
 
 typedef uint8_t CompIType;    // comp_i 
 #define COMP_MAIN ((CompIType)0)
 #define COMP_NONE ((CompIType)255)
+#define MAX_NUM_COMPS 3       // can be increased if needed
 
 typedef uint32_t VBIType;     // vblock_i
 typedef uint64_t CharIndex;   // index within dictionary
@@ -125,10 +126,15 @@ typedef int32_t LineIType;
 typedef const char *rom;      // "read-only memory"
 typedef const uint8_t *bytes; // read-only array of bytes
 
+// a reference into txt_data
+typedef struct __attribute__ ((__packed__)) { uint32_t index, len; } TxtWord; // 32b as VBs are limited to 2GB (usually used as reference into txt_data)
+#define TXTWORD(snip) ((TxtWord){ .index = BNUMtxt (snip),    .len = snip##_len }) // get coordinates in txt_data
+#define TXTWORDi(x,i) ((TxtWord){ .index = BNUMtxt (x##s[i]), .len = x##_lens[i] }) 
+
 typedef union { // 64 bit
     int64_t i;
     double f;
-    struct { uint32_t index, len; } txt; // txt in txt_data
+    TxtWord; // index into in txt_data (note: gcc/clang flag -fms-extensions is needed for this type of anonymous struct use)
 } ValueType __attribute__((__transparent_union__));
 
 // global parameters - set before any thread is created, and never change
@@ -161,7 +167,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     CODEC_BAM=23,       // in v8 BAM was a codec which was compressed using samtools as external compressor. Since v14 we use the codec name for displaying "BAM" in stats total line.
     CODEC_CRAM=24, CODEC_ZIP=25,
 
-    CODEC_LONGR=26,
+    CODEC_LONGR=26, CODEC_NORMQ=27,
 
     NUM_CODECS,
 } Codec; 
@@ -226,7 +232,20 @@ typedef          __int128 int128_t;
 #define ABS(a) ({ __typeof__(a) _a_=(a); (_a_ >= 0) ? _a_ : -_a_; })
 #endif
 
-#define ARRAY_LEN(array) (sizeof(array) / sizeof(array[0]))
+// round up or down to the nearest
+#define ROUNDUP2(x)    (((x) + 1)       & ~(typeof(x))0x1) 
+#define ROUNDUP4(x)    (((x) + 3)       & ~(typeof(x))0x3)
+#define ROUNDUP8(x)    (((x) + 7)       & ~(typeof(x))0x7)
+#define ROUNDUP16(x)   (((x) + 0xf)     & ~(typeof(x))0xf)
+#define ROUNDUP32(x)   (((x) + 0x1f)    & ~(typeof(x))0x1f)    
+#define ROUNDDOWN32(x) ((x)             & ~(typeof(x))0x1f)
+
+#define ROUNDUP64(x)   (((x) + 0x3f)    & ~(typeof(x))0x3f)
+#define ROUNDDOWN64(x) ((x)             & ~(typeof(x))0x3f)
+#define ROUNDUP512(x)  (((x) + 0x1ff)   & ~(typeof(x))0x1ff)    
+#define ROUNDUP1M(x)   (((x) + 0xfffff) & ~(typeof(x))0xfffff) 
+
+#define ARRAY_LEN(array) ((unsigned)(sizeof(array) / sizeof(array[0])))
 
 #define IS_FLAG(flag, mask) (((flag) & (mask)) == (mask))
 
@@ -250,14 +269,34 @@ typedef SORTER ((*Sorter));
 #define DO_ONCE static uint64_t do_once=0; if (!__atomic_test_and_set (&do_once, __ATOMIC_RELAXED))  
 
 // Strings - declarations
+#define SNIP(len) uint32_t snip_len=(len); char snip[len]
+
+#define SNIPi1(op,n)            \
+    char snip[24];              \
+    snip[0] = (op);             \
+    unsigned snip_len = 1 + str_int ((n), &snip[1]);
+
+#define SNIPi2(op0,op1,n)       \
+    char snip[24];              \
+    snip[0] = (op0);            \
+    snip[1] = (op1);            \
+    unsigned snip_len = 2 + str_int ((n), &snip[2]);
+
+#define SNIPi3(op0,op1,op2,n)   \
+    char snip[24];              \
+    snip[0] = (op0);            \
+    snip[1] = (op1);            \
+    snip[2] = (op2);            \
+    unsigned snip_len = 3 + str_int ((n), &snip[3]);
+
 #define STR(x)   rom x;        uint32_t x##_len
 #define STR0(x)  rom x=NULL;   uint32_t x##_len=0
 #define STRw(x)  char *x;      uint32_t x##_len    // writeable
 #define STRw0(x) char *x=NULL; uint32_t x##_len=0  // writeable, initializedx
 #define STRl(name,len) char name[len]; uint32_t name##_len
 
-#define STRlast(name,ctx) rom name = last_txtx((VBlockP)(vb), (ctx)); unsigned name##_len = (ctx)->last_txt_len
-#define CTXlast(name,ctx)  ({ name = last_txtx((VBlockP)(vb), (ctx));          name##_len = (ctx)->last_txt_len; })
+#define STRlast(name,ctx) rom name = last_txtx((VBlockP)(vb), (ctx)); unsigned name##_len = (ctx)->last_txt.len
+#define CTXlast(name,ctx)  ({ name = last_txtx((VBlockP)(vb), (ctx));          name##_len = (ctx)->last_txt.len; })
 
 // Strings - function parameters
 #define STRp(x)  rom x,   uint32_t x##_len    
@@ -271,19 +310,23 @@ typedef SORTER ((*Sorter));
 #define STRas(x)   n_##x##s, x##s, x##_lens                       
 #define STRasi(x,i) (n_##x##s-(i)), &x##s[i], &x##_lens[i] // subset strating from item i
 #define STRd(x)    x##_str, x##_len                   
-#define STRb(x)    (x).data, (x).len                  
+#define STRb(buf)  (buf).data, (buf).len                  
 #define STRi(x,i)  x##s[i], x##_lens[i]             
 #define pSTRa(x)   &x, &x##_len                      
-#define cSTR(x) x, sizeof x-1              // a use with a string literal
-#define STRf(x)    ((int)x##_len), x       // for printf %.*s argument list
-#define STRfi(x,i) x##_lens[i], x##s[i]    // for printf %.*s argument list
+#define cSTR(x) x, sizeof x-1                 // a use with a string literal
+
+// for printf %.*s argument list
+#define STRf(x)    ((int)x##_len), x          
+#define STRfi(x,i) x##_lens[i], x##s[i]
+#define STRfb(buf) (int)(buf).len, (buf).data 
+#define STRfw(txtword) (txtword).len, Btxt ((txtword).index) // used with TxtWord
 
 #define STRcpy(dst,src)    ({ if (src##_len) { memcpy(dst,src,src##_len) ; dst##_len = src##_len; } })
 #define STRcpyi(dst,i,src) ({ if (src##_len) { memcpy(dst##s[i],src,src##_len) ; dst##_lens[i] = src##_len; } })
 #define STRset(dst,src)    ({ dst=src; dst##_len=src##_len; })
 #define STRLEN(string_literal) (sizeof string_literal - 1)
 #define STRtxt(x) Btxt (x), x##_len
-#define STRtxtw(x) Btxt ((x).index), (x).len
+#define STRtxtw(txtword) Btxt ((txtword).index), (txtword).len // used with TxtWord
 
 #define FUNCLINE rom func, uint32_t code_line
 #define __FUNCLINE __FUNCTION__, __LINE__
@@ -296,9 +339,9 @@ typedef SORTER ((*Sorter));
 #define RESTORE_VALUE(var) var = save_##var
 
 // returns true if new_value has been set
-typedef enum { NO_NEW_VALUE, HAS_NEW_VALUE } SpecialReconstructorRetVal;
-#define SPECIAL_RECONSTRUCTOR(func) SpecialReconstructorRetVal func (VBlockP vb, ContextP ctx, rom snip, uint32_t snip_len, ValueType *new_value, bool reconstruct)
-#define SPECIAL_RECONSTRUCTOR_DT(func) SpecialReconstructorRetVal func (VBlockP vb_/*vb_ instead of vb*/, ContextP ctx, rom snip, uint32_t snip_len, ValueType *new_value, bool reconstruct)
+typedef enum { NO_NEW_VALUE, HAS_NEW_VALUE } HasNewValue;
+#define SPECIAL_RECONSTRUCTOR(func) HasNewValue func (VBlockP vb, ContextP ctx, rom snip, uint32_t snip_len, ValueType *new_value, bool reconstruct)
+#define SPECIAL_RECONSTRUCTOR_DT(func) HasNewValue func (VBlockP vb_/*vb_ instead of vb*/, ContextP ctx, rom snip, uint32_t snip_len, ValueType *new_value, bool reconstruct)
 typedef SPECIAL_RECONSTRUCTOR ((*PizSpecialReconstructor));
 
 #define SPECIAL(dt,num,name,func) \

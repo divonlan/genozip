@@ -39,6 +39,7 @@ extern bool fasta_piz_is_vb_needed (VBIType vb_i);
 extern bool fasta_piz_init_vb (VBlockP vb, const SectionHeaderVbHeader *header, uint32_t *txt_data_so_far_single_0_increment);
 extern void fasta_reconstruct_vb(); // no parameter - implicit casting of VBlockP
 extern IS_SKIP (fasta_piz_is_skip_section);
+extern bool fastq_piz_get_pair2_is_forward (VBlockP vb);
 
 // VBlock stuff
 extern void fasta_vb_release_vb();

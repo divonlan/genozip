@@ -60,8 +60,7 @@ static void dispatcher_show_progress (Dispatcher dispatcher)
     } 
         
     // case PIZ: physical z_file size, minus any bytes skipped 
-    else if (command == PIZ || 
-             (command == ZIP && file_is_read_via_int_decompressor (txt_file))) {
+    else if (command == PIZ) {
         total = z_file->disk_size_minus_skips; 
         sofar = z_file->disk_so_far; 
     } 

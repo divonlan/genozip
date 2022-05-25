@@ -10,18 +10,18 @@
 
 #pragma pack(1)
 #define CONTAINER_MAX_PREFIXES_LEN (32 * MAX_FIELDS)    // max len of just the names string, without the data eg "INFO1=INFO2=INFO3="
-#define CON_PX_SEP              '\x4'  // starts the prefix string and terminates every prefix within it
-#define CON_PX_SEP_             "\4"   // string version (careful not \x4 as it can combine with the next character to eg \x4F)
-#define CON_PX_SEP_SHOW_REPEATS '\x5'  // an alternative terminator - outputs the number of repeats in LTEN32 after the prefix (used for BAM 'B' array count field)
+#define CON_PX_SEP              '\x4'        // starts the prefix string and terminates every prefix within it
+#define CON_PX_SEP_             "\4"         // string version (careful not \x4 as it can combine with the next character to eg \x4F)
+#define CON_PX_SEP_SHOW_REPEATS '\x5'        // an alternative terminator - outputs the number of repeats in LTEN32 after the prefix (used for BAM 'B' array count field)
 
-#define CONTAINER_MAX_REPEATS 0xfffffe     // 3 byte unsigned int (16M) (minus 1 for easier detection of overflows)
+#define CONTAINER_MAX_REPEATS 0xfffffe       // 3 byte unsigned int (16M) (minus 1 for easier detection of overflows)
 #define CONTAINER_MAX_SELF_TRANS_CHANGE 50
 
-#define CONTAINER_MAX_DICTS 2047           // 11 bits -matches CONTAINER_FIELDS.nitems_lo+nitems_hi
+#define CONTAINER_MAX_DICTS 2047             // 11 bits -matches CONTAINER_FIELDS.nitems_lo+nitems_hi
 
 typedef struct ContainerItem {
-    DictId dict_id;                        // note: the code counts on this field being first (assigning "item = { dict_id }")
-    uint8_t did_i_small;                   // PIZ only: can store dids 0->254, 255 means did_i too large to store
+    DictId dict_id;                          // note: the code counts on this field being first (assigning "item = { dict_id }")
+    uint8_t did_i_small;                     // PIZ only: can store dids 0->254, 255 means did_i too large to store
 
     // special values of seperator[0]
     #define CI0_NONE         ((uint8_t)0x00) // no seperator 
@@ -42,9 +42,9 @@ typedef struct ContainerItem {
     #define CI1_ITEM_CB      ((uint8_t)0x01) // item callback
     #define CI1_ITEM_PRIVATE ((uint8_t)0x02) // flag interpreted by the context logic, ignored by container code
 
-    uint8_t separator[2];                   // 2 byte separator reconstructed after the item (or flags)
+    uint8_t separator[2];                    // 2 byte separator reconstructed after the item (or flags)
     
-    TranslatorId translator;                // instructions how to translate this item, if this Container is reconstructed translating from one data type to another
+    TranslatorId translator;                 // instructions how to translate this item, if this Container is reconstructed translating from one data type to another
 } ContainerItem;
 
 // container snip: it starts with SNIP_CONTAINER, following by a base64 of a big endian Container, with the number of
@@ -103,6 +103,7 @@ extern WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con
 
 extern ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, STRp(prefixes));
 extern ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, STRp(snip), pSTRp(out_prefixes));
+extern bool container_does_contain (ContextP ctx, DictId dict_id);
 
 extern void container_display (ConstContainerP con);
 

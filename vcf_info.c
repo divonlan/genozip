@@ -44,12 +44,14 @@ static bool vcf_seg_INFO_DP (VBlockVCFP vb, ContextP ctx_dp, STRp(value))
         seg_delta_vs_other (VB, ctx_dp, ctx_basecounts, STRa(value));
         return false; // caller needn't seg
     }
+
     // postpone segging to vcf_seg_INFO_DP_by_FORMAT_DP after samples have been segged
     else if (segconf.INFO_DP_by_FORMAT_DP) {
         ctx_set_last_value (VB, ctx_dp, (int64_t)atoi (value));
         ctx_dp->txt_len += value_len; // just add bytes for now
         return false; // caller shouldn't seg
     }
+    
     else {
         // store last_value of INFO/DP field in case we have FORMAT/DP as well (used in vcf_seg_one_sample, for 1-sample files)
         ctx_set_last_value (VB, ctx_dp, (int64_t)atoi (value));
@@ -80,7 +82,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_DP_by_DP)
     int64_t sum=0;
 
     ASSPIZ (format_dp_ctx->next_local + num_dps_this_line <= format_dp_ctx->local.len, "Not enough data in FORMAT/DP.local to reconstructed INFO/DP: next_local=%u local.len=%u but needed num_dps_this_line=%u",
-            format_dp_ctx->next_local, (unsigned)format_dp_ctx->local.len, num_dps_this_line);
+            format_dp_ctx->next_local, format_dp_ctx->local.len32, num_dps_this_line);
             
     uint32_t invalid = lt_desc[format_dp_ctx->ltype].max_int; // represents '.'
     for (int i=0; i < num_dps_this_line; i++) {
@@ -95,7 +97,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_DP_by_DP)
 
     RECONSTRUCT_INT (new_value->i);
 
-    return true; // have new_value
+    return HAS_NEW_VALUE;
 }
 
 //--------
@@ -227,10 +229,10 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_SF)
         vcf_vb->sf_txt.len = 0;
 
         // copy snip to sf_snip (note: the SNIP_SPECIAL+code are already removed)
-        buf_add_more (vb, &vcf_vb->sf_snip, snip, snip_len, "sf_snip");
+        buf_add_more (vb, &vcf_vb->sf_snip, STRa(snip), "sf_snip");
     }
 
-    return false; // no new value
+    return NO_NEW_VALUE;
 }
 
 // While reconstructing the GT fields of the samples - calculate the INFO/SF field
@@ -297,7 +299,7 @@ void vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VBlockVCFP vcf_vb)
     }
 
     // make room for the SF txt and copy it to its final location
-    char *sf_txt = last_txt (vcf_vb, INFO_SF);
+    char *sf_txt = last_txt ((VBlockP)vcf_vb, INFO_SF);
     memmove (sf_txt + vcf_vb->sf_txt.len, sf_txt, BAFTc (vcf_vb->txt_data) - sf_txt); // make room
     memcpy (sf_txt, vcf_vb->sf_txt.data, vcf_vb->sf_txt.len); // copy
 
@@ -380,7 +382,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_ALLELE)
     ContextP refalt_ctx = VB_VCF->vb_coords == DC_PRIMARY ? CTX (VCF_REFALT) : CTX (VCF_oREFALT); 
 
     rom refalt = last_txtx (vb, refalt_ctx);
-    unsigned refalt_len = refalt_ctx->last_txt_len;
+    unsigned refalt_len = refalt_ctx->last_txt.len;
 
     if (!refalt_len) goto done; // variant is single coordinate in the other coordinate
 
@@ -398,7 +400,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_ALLELE)
     }
 
 done:
-    return false; // no new value
+    return NO_NEW_VALUE;
 }
 
 // translator only validates - as vcf_piz_special_ALLELE copies verbatim (revcomp, if xstrand, is already done in REF/ALT)
@@ -506,7 +508,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_BaseCounts)
     bufprintf (vb, &vb->txt_data, "%u,%u,%u,%u", counts[0], counts[1], counts[2], counts[3]);
 
 done:
-    return true; // has new value
+    return HAS_NEW_VALUE;
 }
 
 // currently used only for CountBases - reverses the vector in case of XSTRAND
@@ -539,7 +541,7 @@ static void vcf_seg_INFO_AC (VBlockVCFP vb, Context *ac_ctx, STRp(field))
 {
     Context *af_ctx, *an_ctx;
     int64_t ac;
-    bool ac_has_value_in_line = str_get_int (field, field_len, &ac);
+    bool ac_has_value_in_line = str_get_int (STRa(field), &ac);
     bool an_has_value_in_line = ctx_has_value_in_line (vb, _INFO_AN, &an_ctx);
 
     // case: AC = AN * AF (might not be, due to rounding errors, esp if AF is a very small fraction)
@@ -554,7 +556,7 @@ static void vcf_seg_INFO_AC (VBlockVCFP vb, Context *ac_ctx, STRp(field))
 
     // case: AC is multi allelic, or an invalid value, or missing AN or AF or AF*AN != AC
     else 
-        seg_by_ctx (VB, field, field_len, ac_ctx, field_len);
+        seg_by_ctx (VB, STRa(field), ac_ctx, field_len);
 
     ac_ctx->flags.store = STORE_INT;
 }
@@ -570,7 +572,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_AC)
     ctx->last_value.i = new_value->i = (int64_t)round (reconstruct_peek_(vb, _INFO_AN, 0, 0).i * reconstruct_peek_(vb, _INFO_AF, 0, 0).f);
     RECONSTRUCT_INT (new_value->i); 
 
-    return true;
+    return HAS_NEW_VALUE;
 }
 
 // Lift-over translator for INFO/AC fields, IF it is bi-allelic and we have a ALT<>REF switch AND we have an AN and AF field
@@ -584,7 +586,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_A_AN)
     if (command == ZIP) {
         Context *an_ctx;
         if (!ctx_has_value_in_line (vb, _INFO_AN, &an_ctx) ||
-            !str_get_int_range64 (recon, recon_len, 0, (an = an_ctx->last_value.i), &ac))
+            !str_get_int_range64 (STRa(recon), 0, (an = an_ctx->last_value.i), &ac))
             return false; // in Seg, AC is always segged last, so this means there is no AN in the line for sure
         
         if (validate_only) return true;  // Yay! AC can be lifted - all it needs in AN in the line, which it has 
@@ -666,7 +668,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_END)
     // ZIP liftback (POS is always before END, because we seg INFO/LIFTOVER first)
     if (command == ZIP && VB_VCF->line_coords == DC_LUFT) { // liftback
         PosType oend;
-        if (!str_get_int_range64 (recon, recon_len, 0, MAX_POS, &oend))
+        if (!str_get_int_range64 (STRa(recon), 0, MAX_POS, &oend))
             return false;
 
         translated_end = pos_ctx->last_value.i + (oend - opos_ctx->last_value.i);
@@ -690,7 +692,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_END)
 // Also used for FORMAT/PS
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_COPYPOS)
 {
-    if (!reconstruct) return false; // no new value
+    if (!reconstruct) return NO_NEW_VALUE;
     
     bool has_end = VB_VCF->last_end_line_i == vb->line_i; // true if INFO/END was encountered
 
@@ -709,7 +711,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_COPYPOS)
         pos += atoi (snip); // add optional delta (since 13.0.5)
 
     RECONSTRUCT_INT (pos); // vcf_piz_luft_END makes sure it always contains the value of POS, not END
-    return false; // no new value
+    return NO_NEW_VALUE;
 }
 
 // ----------
@@ -731,12 +733,10 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_SVLEN)
     if (!reconstruct) goto done;
 
     int64_t value = -CTX (VCF_POS)->last_delta; // END is a alias of POS - they share the same data stream - so last_delta would be the delta between END and POS
-    char str[30];
-    unsigned str_len = str_int (value, str);
-    RECONSTRUCT (str, str_len);
+    RECONSTRUCT_INT (value);
 
 done:
-    return false; // no new value
+    return NO_NEW_VALUE;
 }
 
 // ------------
@@ -788,12 +788,12 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_SNP_POS)
     ContextP pos_ctx = CTX (VCF_POS);
     
     if (VB_VCF->vb_coords == DC_PRIMARY)
-        RECONSTRUCT (last_txtx (vb, pos_ctx), pos_ctx->last_txt_len); // faster than RECONSTRUCT_INT
+        RECONSTRUCT (last_txtx (vb, pos_ctx), pos_ctx->last_txt.len); // faster than RECONSTRUCT_INT
     
     else  // if reconstructing Luft, VCF_POS just consumed and last_int set if in Luft coords (see top_luft container)
         RECONSTRUCT_INT (pos_ctx->last_value.i);
     
-    return false; // no new value
+    return NO_NEW_VALUE;
 }
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_SNP_REFALT)
@@ -805,7 +805,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_SNP_REFALT)
     RECONSTRUCT1 ('>');
     RECONSTRUCT1 (refalt[2]);
 
-    return false; // no new value
+    return NO_NEW_VALUE;
 }
 
 // Deletion case: "n.10571909_10571915delCCCGCCG" (POS=10571908 ; 10571909 are the bases except for the left-anchor, CCCGCCG is the payload of the indel)
@@ -953,9 +953,9 @@ static void vcf_piz_special_INFO_HGVS_INDEL_END_POS (VBlockP vb, HgvsType t)
 }
 
 // three separate SPECIAL snips, so that they each because all_the_same
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_DEL_END_POS)    { vcf_piz_special_INFO_HGVS_INDEL_END_POS (vb, DEL);    return false; }
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_INS_END_POS)    { vcf_piz_special_INFO_HGVS_INDEL_END_POS (vb, INS);    return false; }
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_DELINS_END_POS) { vcf_piz_special_INFO_HGVS_INDEL_END_POS (vb, DELINS); return false; }
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_DEL_END_POS)    { vcf_piz_special_INFO_HGVS_INDEL_END_POS (vb, DEL);    return NO_NEW_VALUE; }
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_INS_END_POS)    { vcf_piz_special_INFO_HGVS_INDEL_END_POS (vb, INS);    return NO_NEW_VALUE; }
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_DELINS_END_POS) { vcf_piz_special_INFO_HGVS_INDEL_END_POS (vb, DELINS); return NO_NEW_VALUE; }
 
 static void vcf_piz_special_INFO_HGVS_INDEL_PAYLOAD (VBlockP vb, HgvsType t)
 {
@@ -979,7 +979,7 @@ static void vcf_piz_special_INFO_HGVS_INDEL_PAYLOAD (VBlockP vb, HgvsType t)
                         : (t == INS) ? (after - alt - 1)
                         : /* DELINS */ (after - alt);
 
-    memmove (BAFTc (vb->txt_data), payload, payload_len);
+    memmove (BAFTtxt, payload, payload_len);
     vb->txt_data.len += payload_len;
 }
 

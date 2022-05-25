@@ -30,7 +30,7 @@ void random_access_initialize(void)
 }
 
 // Called by PIZ main thread (piz_read_global_area) and ZIP main thread (zip_write_global_area)
-static void BGEN_random_access (Buffer *ra_buf)
+static void BGEN_random_access (BufferP ra_buf)
 {
     for_buf (RAEntry, ra, *ra_buf) {
         ra->vblock_i    = BGEN32 (ra->vblock_i);
@@ -40,7 +40,7 @@ static void BGEN_random_access (Buffer *ra_buf)
     }
 }
 
-static void random_access_show_index (const Buffer *ra_buf, bool from_zip, DidIType chrom_did_i, rom msg)
+static void random_access_show_index (ConstBufferP ra_buf, bool from_zip, DidIType chrom_did_i, rom msg)
 {
     iprintf ("\n%s:\n", msg);
     
@@ -178,7 +178,7 @@ void random_access_merge_in_vb (VBlockP vb, int ra_i)
 {
     if (!vb->ra_buf[ra_i].len) return; // nothing to merge
 
-    Buffer *z_buf  = ra_i==0 ? &z_file->ra_buf : &z_file->ra_buf_luft;
+    BufferP z_buf  = ra_i==0 ? &z_file->ra_buf : &z_file->ra_buf_luft;
     ARRAY (const RAEntry, src_ra, vb->ra_buf[ra_i]);
      
     mutex_lock (ra_mutex[ra_i]);
@@ -216,7 +216,7 @@ void random_access_merge_in_vb (VBlockP vb, int ra_i)
 }
 
 // ZIP
-static Buffer *ra_buf_being_sorted;
+static BufferP ra_buf_being_sorted;
 int random_access_sort_by_vb_i (const void *a_, const void *b_)
 {
     ARRAY (RAEntry, ra, *ra_buf_being_sorted);
@@ -233,7 +233,7 @@ int random_access_sort_by_vb_i (const void *a_, const void *b_)
 }
 
 // ZIP (main thread) sort RA, update overflowing chroms, create and merge in evb ra
-void random_access_finalize_entries (Buffer *ra_buf)
+void random_access_finalize_entries (BufferP ra_buf)
 {
     if (!ra_buf->len) return; // no random access
 
@@ -412,7 +412,7 @@ uint32_t random_access_verify_all_contigs_same_length (void)
 }
 
 // PIZ: read SEC_RANDOM_ACCESS. If --luft - read the luft section instead.
-void random_access_load_ra_section (SectionType sec_type, DidIType chrom_did_i, Buffer *ra_buf, rom buf_name, rom show_index_msg)
+void random_access_load_ra_section (SectionType sec_type, DidIType chrom_did_i, BufferP ra_buf, rom buf_name, rom show_index_msg)
 {
     Section ra_sl = sections_first_sec (sec_type, true);
     if (!ra_sl) return; // section doesn't exist

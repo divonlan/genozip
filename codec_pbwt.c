@@ -26,8 +26,8 @@ typedef struct {
 } PermEnt;
 
 typedef struct {
-    Buffer *runs;       // array of uint32_t - alternating bg ('0') / fg runs
-    Buffer *fgrc;       // array PbwtFgRunCount describing the fg runs
+    BufferP runs;       // array of uint32_t - alternating bg ('0') / fg runs
+    BufferP fgrc;       // array PbwtFgRunCount describing the fg runs
     Allele run_allele;  // current allele for which we're constructing a run 
     PermEnt *perm;      // a permutation - expressed as indices into the haplotype line 
     PermEnt *temp;      // working memory
@@ -87,7 +87,7 @@ static void show_runs (const PbwtState *state)
 #define show_line    if (flag.show_alleles) SHOW ("LINE", (htputc (*B(Allele, vb->ht_matrix_ctx->local, line_i * vb->ht_per_line + i))))
 #define show_perm(s) if (flag.show_alleles) SHOW ("PERM", (fprintf (info_stream, "%d ", (s)->perm[i].index)));       
 
-static PbwtState codec_pbwt_initialize_state (VBlockP vb, Buffer *runs, Buffer *fgrc)
+static PbwtState codec_pbwt_initialize_state (VBlockP vb, BufferP runs, BufferP fgrc)
 {
     buf_alloc (vb, &vb->codec_bufs[0], 0, vb->ht_per_line * 2, PermEnt, 1, "codec_bufs");
     buf_zero (&vb->codec_bufs[0]); // re-zero every time
@@ -242,13 +242,7 @@ static void inline codec_pbwt_run_len_encode (PbwtState *state, uint32_t line_le
 // but it creates no compressed data for ht_matrix_ctx - instead it generates one or more PBWT sections (one for each allele
 // in the VB) with CODEC_PBWT. Since these sections have a higher did_i, this function will call again compressing these sections,
 // and this time it will simply copy the data to z_data.
-bool codec_pbwt_compress (VBlockP vb, 
-                          SectionHeader *header,    
-                          rom uncompressed, // option 1 - compress contiguous data
-                          uint32_t *uncompressed_len, 
-                          LocalGetLineCB callback,  // option 2 - not supported
-                          char *compressed, uint32_t *compressed_len /* in/out */, 
-                          bool soft_fail, rom name)           // soft fail not supported
+COMPRESS (codec_pbwt_compress)
 {
     START_TIMER;
 
@@ -375,10 +369,7 @@ static inline void pbwt_decode_one_line (VBlockP vb, PbwtState *state, uint32_t 
 }
 
 // this function is called for the FORMAT_PBWT_FGRC section - after the FORMAT_PBWT_RUNS was already decompressed
-void codec_pbwt_uncompress (VBlockP vb, Codec codec, uint8_t unused /* param */,
-                            rom compressed, uint32_t compressed_len,
-                            Buffer *uncompressed_buf, uint64_t uncompressed_len,
-                            Codec sub_codec, rom name)
+UNCOMPRESS (codec_pbwt_uncompress)
 {
     START_TIMER;
 
@@ -432,7 +423,7 @@ void codec_pbwt_reconstruct (VBlockP vb, Codec codec, Context *ctx)
     // in the case we have phased data, but missing samples appear as "./.". With this, we seg ".|%" instead of "./."
     // and hence the repsep and hence the entire GT container are the same beteen "./." and eg "1|0" samples.
     else if (ht == '%') {
-        if (*BLSTc (vb->txt_data) == '|' || *BLSTc (vb->txt_data) == '/') { // second % in "%|%" 
+        if (*BLSTtxt == '|' || *BLSTtxt == '/') { // second % in "%|%" 
             vb->txt_data.len -= 1;  // remove | or /
             RECONSTRUCT ("/.", 2);
         }

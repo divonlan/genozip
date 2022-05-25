@@ -450,9 +450,9 @@ unsigned copy;
 /* check function to use adler32() for zlib or crc32() for gzip */
 #ifdef GUNZIP
 #  define UPDATE(check, buf, len) \
-    (state->flags ? libdeflate_crc32(check, buf, len) : libdeflate_adler32(check, buf, len))
+    (state->flags ? crc32(check, buf, len) : adler32(check, buf, len))
 #else
-#  define UPDATE(check, buf, len) libdeflate_adler32(check, buf, len)
+#  define UPDATE(check, buf, len) adler32(check, buf, len)
 #endif
 
 /* check macros for header crc */
@@ -461,7 +461,7 @@ unsigned copy;
     do { \
         hbuf[0] = (unsigned char)(word); \
         hbuf[1] = (unsigned char)((word) >> 8); \
-        check = libdeflate_crc32(check, hbuf, 2); \
+        check = crc32(check, hbuf, 2); \
     } while (0)
 
 #  define CRC4(check, word) \
@@ -470,7 +470,7 @@ unsigned copy;
         hbuf[1] = (unsigned char)((word) >> 8); \
         hbuf[2] = (unsigned char)((word) >> 16); \
         hbuf[3] = (unsigned char)((word) >> 24); \
-        check = libdeflate_crc32(check, hbuf, 4); \
+        check = crc32(check, hbuf, 4); \
     } while (0)
 #endif
 
@@ -666,7 +666,7 @@ int flush;
             if ((state->wrap & 2) && hold == 0x8b1f) {  /* gzip header */
                 if (state->wbits == 0)
                     state->wbits = 15;
-                state->check = libdeflate_crc32(0L, Z_NULL, 0);
+                state->check = crc32(0L, Z_NULL, 0);
                 CRC2(state->check, hold);
                 INITBITS();
                 state->mode = FLAGS;
@@ -700,7 +700,7 @@ int flush;
             }
             state->dmax = 1U << len;
             Tracev((stderr, "inflate:   zlib header ok\n"));
-            strm->adler = state->check = libdeflate_adler32(0L, Z_NULL, 0);
+            strm->adler = state->check = adler32(0L, Z_NULL, 0);
             state->mode = hold & 0x200 ? DICTID : TYPE;
             INITBITS();
             break;
@@ -768,7 +768,7 @@ int flush;
                                 state->head->extra_max - len : copy);
                     }
                     if ((state->flags & 0x0200) && (state->wrap & 4))
-                        state->check = libdeflate_crc32(state->check, next, copy);
+                        state->check = crc32(state->check, next, copy);
                     have -= copy;
                     next += copy;
                     state->length -= copy;
@@ -789,7 +789,7 @@ int flush;
                         state->head->name[state->length++] = (Bytef)len;
                 } while (len && copy < have);
                 if ((state->flags & 0x0200) && (state->wrap & 4))
-                    state->check = libdeflate_crc32(state->check, next, copy);
+                    state->check = crc32(state->check, next, copy);
                 have -= copy;
                 next += copy;
                 if (len) goto inf_leave;
@@ -810,7 +810,7 @@ int flush;
                         state->head->comment[state->length++] = (Bytef)len;
                 } while (len && copy < have);
                 if ((state->flags & 0x0200) && (state->wrap & 4))
-                    state->check = libdeflate_crc32(state->check, next, copy);
+                    state->check = crc32(state->check, next, copy);
                 have -= copy;
                 next += copy;
                 if (len) goto inf_leave;
@@ -832,7 +832,7 @@ int flush;
                 state->head->hcrc = (int)((state->flags >> 9) & 1);
                 state->head->done = 1;
             }
-            strm->adler = state->check = libdeflate_crc32(0L, Z_NULL, 0);
+            strm->adler = state->check = crc32(0L, Z_NULL, 0);
             state->mode = TYPE;
             break;
 #endif
@@ -846,7 +846,7 @@ int flush;
                 zRESTORE();
                 return Z_NEED_DICT;
             }
-            strm->adler = state->check = libdeflate_adler32(0L, Z_NULL, 0);
+            strm->adler = state->check = adler32(0L, Z_NULL, 0);
             state->mode = TYPE;
         case TYPE:
             if (flush == Z_BLOCK || flush == Z_TREES) goto inf_leave;
@@ -1331,8 +1331,8 @@ uInt dictLength;
 
     /* check for correct dictionary identifier */
     if (state->mode == DICT) {
-        dictid = libdeflate_adler32(0L, Z_NULL, 0);
-        dictid = libdeflate_adler32(dictid, dictionary, dictLength);
+        dictid = adler32(0L, Z_NULL, 0);
+        dictid = adler32(dictid, dictionary, dictLength);
         if (dictid != state->check)
             return Z_DATA_ERROR;
     }

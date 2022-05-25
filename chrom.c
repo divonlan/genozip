@@ -148,7 +148,9 @@ static void chrom_2ref_seg_set (VBlockP vb, WordIndex chrom_node_index, WordInde
 // returns the ref index by the chrom index, works only after Segging of CHROM
 WordIndex chrom_2ref_seg_get (Reference ref, ConstVBlockP vb, WordIndex chrom_index)
 { 
-    int32_t ol_len = vb->ol_chrom2ref_map.len;
+    if (chrom_index == NODE_INDEX_NONE) return NODE_INDEX_NONE;
+
+    int32_t ol_len = vb->ol_chrom2ref_map.len32;
     return (chrom_index < ol_len) ? *B(WordIndex, vb->ol_chrom2ref_map, chrom_index)
                                   : *B(WordIndex, vb->chrom2ref_map, chrom_index - ol_len);
 }
@@ -181,7 +183,7 @@ WordIndex chrom_seg_ex (VBlockP vb, DidIType did_i,
     ASSERTNOTZERO (chrom_len,"");
     ContextP ctx = CTX(did_i);
     bool is_primary = did_i == DTF(prim_chrom);
-    bool is_luft    = did_i == DTF(luft_chrom);
+    bool is_luft    =  did_i == DTF(luft_chrom);
     bool has_chain  = chain_is_loaded || flag.reference == REF_MAKE_CHAIN;
 
     WordIndex chrom_node_index = WORD_INDEX_NONE, ref_index = WORD_INDEX_NONE;
@@ -201,7 +203,7 @@ WordIndex chrom_seg_ex (VBlockP vb, DidIType did_i,
         // case: chrom is the same as previous line - use cached (note: might be different than ctx->last_snip since we match_chrom_to_reference)
         #define last_is_alt ctx_specific // CHROM: last CHROM was an alt
         #define last_growth last_delta
-        if (vb->line_i && chrom_len == ctx->last_txt_len && ctx->last_txt_index != INVALID_LAST_TXT_INDEX && 
+        if (vb->line_i && chrom_len == ctx->last_txt.len && ctx->last_txt.index != INVALID_LAST_TXT_INDEX && 
             !memcmp (chrom, last_txtx(vb, ctx), chrom_len)) {
             if (is_alt_out) *is_alt_out = ctx->last_is_alt;
             if (is_new_out) *is_new_out = false;
@@ -254,7 +256,7 @@ WordIndex chrom_seg_ex (VBlockP vb, DidIType did_i,
             else
                 WARN ("FYI: Contigs name mismatch between %s and reference file %s. For example: %s file: \"%.*s\" Reference file: \"%.*s\". "
                       "You may use --match-chrom-to-reference to create %s with contigs matching those of the reference. This makes no difference for the compression. More info: %s",
-                      txt_name, ref_get_filename (ref), dt_name (vb->data_type), STRf(chrom), STRf(ref_contig), z_name, WEBSITE_GENOZIP);
+                      txt_name, ref_get_filename (ref), dt_name (vb->data_type), STRf(chrom), STRf(ref_contig), z_name, WEBSITE_MATCH_CHROM);
     } // we don't use WARN_ONCE bc we want the "once" to also include ref_contigs_get_matching
 
     if (is_alt_out) *is_alt_out = false;
@@ -263,7 +265,7 @@ finalize:
     if (is_new_out) *is_new_out = is_new;        
 
     if (is_primary || is_luft)
-        random_access_update_chrom (vb, !is_primary, chrom_node_index, chrom, chrom_len); 
+        random_access_update_chrom (vb, !is_primary, chrom_node_index, STRa(chrom)); 
 
     if (is_primary) {
         vb->chrom_node_index = chrom_node_index;

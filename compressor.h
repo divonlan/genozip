@@ -16,4 +16,6 @@ extern bool comp_compress_complex_codec (VBlockP vb, ContextP ctx, SectionHeader
                                          uint32_t *uncompressed_len, STRe (compressed), rom name);
 
 extern void comp_uncompress (VBlockP vb, Codec codec, Codec sub_codec, uint8_t param,
-                             STRp(compressed_data), Buffer *uncompressed_data, uint64_t uncompressed_len, rom name);
+                             STRp(compressed_data), BufferP uncompressed_data, uint64_t uncompressed_len, rom name);
+
+

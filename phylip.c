@@ -146,14 +146,12 @@ rom phy_seg_txt_line (VBlockP vb, rom line, uint32_t remaining_txt_len, bool *ha
     DATA_LINE (vb->line_i)->line_start = line - vb->txt_data.data;
 
     // ID
-    static char id_lookup[3] = { SNIP_LOOKUP, '1', '0' }; // lookup 10 characters from local
-    seg_by_ctx (VB, id_lookup, sizeof (id_lookup), id_ctx, PHY_ID_LEN);
+    seg_by_ctx (VB, (char[]){ SNIP_LOOKUP, '1', '0' }, 3, id_ctx, PHY_ID_LEN); // lookup 10 characters from local
     id_ctx ->local.len += PHY_ID_LEN;
 
     // SEQ
-    static char seq_lookup[10] = { SNIP_LOOKUP }; 
-    unsigned snip_len = 1 + str_int (phy_seq_len, &seq_lookup[1]);
-    seg_by_ctx (VB, seq_lookup, snip_len, seq_ctx, phy_seq_len);
+    SNIPi1 (SNIP_LOOKUP, phy_seq_len);
+    seg_by_ctx (VB, STRa(snip), seq_ctx, phy_seq_len);
     seq_ctx->local.len += phy_seq_len;
 
     // EOL
@@ -175,7 +173,7 @@ TXTHEADER_TRANSLATOR (txtheader_phy2fa)
 // Translating PHYLIP->FASTA: remove redundant terminating spaces from ID (FASTA's DESC)
 TRANSLATOR_FUNC (phy_piz_phy2fasta_ID)
 {
-    while (vb->txt_data.len && *BLSTc (vb->txt_data)==' ')
+    while (vb->txt_data.len && *BLSTtxt==' ')
         vb->txt_data.len--;
 
     return 0;

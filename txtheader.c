@@ -101,6 +101,9 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     SectionHeaderTxtHeader *header = (SectionHeaderTxtHeader *)txt_header_vb->z_data.data;
     ASSERT0 (header, "Incorrectly skipped SEC_TXT_HEADER - check skip function");
 
+    if (sec->comp_i == COMP_MAIN)
+        z_file->txt_header_single = *header;
+        
     // 1. if flag.unbind (genounzip) - we open the output txt file of the component
     // 2. if flag.one_component (genocat) - output to stdout or --output
     // 3. when reading an auxiliary file or no_writer- we create txt_file here (but don't actually open the physical file)

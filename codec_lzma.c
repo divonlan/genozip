@@ -89,12 +89,7 @@ static size_t codec_lzma_data_out_callback (const ISeqOutStream *p, const void *
 }
 
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
-bool codec_lzma_compress (VBlockP vb, SectionHeader *header,
-                          rom uncompressed,    // option 1 - compress contiguous data
-                          uint32_t *uncompressed_len,
-                          LocalGetLineCB callback,     // option 2 - compress data one line at a time
-                          char *compressed, uint32_t *compressed_len /* in/out */, 
-                          bool soft_fail, rom name)
+COMPRESS (codec_lzma_compress)
 {
     START_TIMER;
 
@@ -130,7 +125,7 @@ bool codec_lzma_compress (VBlockP vb, SectionHeader *header,
         *compressed_len = (uint32_t)data_compressed_len64 + LZMA_PROPS_SIZE;
     }
     // option 2 - compress data one line at a time
-    else if (callback) {
+    else if (get_line_cb) {
 
         ISeqInStream instream =   { .Read          = codec_lzma_data_in_callback, 
                                     .vb            = vb,
@@ -140,7 +135,7 @@ bool codec_lzma_compress (VBlockP vb, SectionHeader *header,
                                     .avail_in_1    = 0,
                                     .next_in_2     = NULL,
                                     .avail_in_2    = 0,
-                                    .callback      = callback };
+                                    .callback      = get_line_cb };
                                   
         ISeqOutStream outstream = { .Write        = codec_lzma_data_out_callback,
                                     .next_out     = compressed + LZMA_PROPS_SIZE,
@@ -151,7 +146,7 @@ bool codec_lzma_compress (VBlockP vb, SectionHeader *header,
         *compressed_len -= outstream.avail_out; 
     }
 
-    if (soft_fail && (res == SZ_ERROR_WRITE || (!callback && res == SZ_ERROR_OUTPUT_EOF)))  // data_compressed_len is too small
+    if (soft_fail && (res == SZ_ERROR_WRITE || (!get_line_cb && res == SZ_ERROR_OUTPUT_EOF)))  // data_compressed_len is too small
         success = false;
     else
         ASSERT (res == SZ_OK, "\"%s\": LzmaEnc_MemEncode failed: %s", name, lzma_errstr (res));
@@ -163,9 +158,7 @@ bool codec_lzma_compress (VBlockP vb, SectionHeader *header,
     return success;
 }
 
-void codec_lzma_uncompress (VBlockP vb, Codec codec, uint8_t param, STRp(compressed),
-                            Buffer *uncompressed_buf, uint64_t uncompressed_len, 
-                            Codec unused, rom name)
+UNCOMPRESS (codec_lzma_uncompress)
 {
     START_TIMER;
     

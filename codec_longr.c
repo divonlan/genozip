@@ -139,13 +139,7 @@ static void codec_longr_calc_channels (LongrState *state, STRp(seq), bytes qual,
             CALC_ONE (acgt_encode_comp[(uint8_t)codec_longr_next_base_rev (STRa(seq), i)]);
 }
 
-bool codec_longr_compress (VBlockP vb, 
-                           SectionHeader *header,    
-                           rom uncompressed,             // option 1 - not supported
-                           uint32_t *uncompressed_len, 
-                           LocalGetLineCB qual_callback, // option 2 - get one line
-                           STRe (compressed),            // in/out 
-                           bool soft_fail, rom name)     // soft fail not supported
+COMPRESS (codec_longr_compress)
 {
     START_TIMER;
     ASSERTISNULL (uncompressed);
@@ -172,18 +166,16 @@ bool codec_longr_compress (VBlockP vb,
     for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {
 
         seq_callback (vb, line_i,  pSTRa(seq), 0, &is_rev);
-        qual_callback (vb, line_i, pSTRa(qual), vb->txt_data.len, NULL);
+        get_line_cb (vb, line_i, pSTRa(qual), vb->txt_data.len, NULL);
 
         if (!qual_len) continue; // this can happen, for example, if a SAM DEPN line is compressed against SA Group
 
         codec_longr_calc_channels (state, STRa(seq), (uint8_t*)qual, is_rev);
 
-        ASSERT (seq_len == qual_len, "\"%s\": Expecting seq_len=%u == qual_len=%u in vb_i=%u component=%s line_i=%d", 
-                name, seq_len, qual_len, vb->vblock_i, comp_name(vb->comp_i), vb->line_i);
+        ASSERT (seq_len == qual_len, "%s: \"%s\": Expecting seq_len=%u == qual_len=%u", LN_NAME, name, seq_len, qual_len);
 
         total_len += qual_len;
-        ASSERT (total_len <= *uncompressed_len, "\"%s\": Expecting total_len=%u <= total_len=%u in vb_i=%u component=%s line_i=%d", 
-                name, total_len, *uncompressed_len, vb->vblock_i, comp_name(vb->comp_i), vb->line_i);
+        ASSERT (total_len <= *uncompressed_len, "%s: \"%s\": Expecting total_len=%u <= total_len=%u", LN_NAME, name, total_len, *uncompressed_len);
     }
     
     // we now sort the quality data by channel (reversing qual of revcomp reads)
@@ -201,7 +193,7 @@ bool codec_longr_compress (VBlockP vb,
 
     uint32_t base_i=0;
     for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {
-        qual_callback (vb, line_i, pSTRa(qual), vb->txt_data.len, &is_rev);
+        get_line_cb (vb, line_i, pSTRa(qual), vb->txt_data.len, &is_rev);
 
         // we create a sorted_qual array, which contains LONGR_NUM_CHANNELS segments, one for each channel,
         // containing all the bases of that belong to that channel
@@ -238,7 +230,7 @@ bool codec_longr_compress (VBlockP vb,
     // make sure we have enough memory - since this is a lengths array, our estimate is expected to always be sufficient, no need for soft_fail
     uint32_t min_required_compressed_len = codec_args[header->sub_codec].est_size (header->sub_codec, *uncompressed_len);
     if (*compressed_len < min_required_compressed_len) 
-        ABORT ("\"%s\": Compressing %s in vb_i=%u with %s need %u bytes, but allocated only %u", name, lens_ctx->tag_name, vb->vblock_i, codec_name(header->sub_codec), min_required_compressed_len, *compressed_len);
+        ABORT ("%s: \"%s\": Compressing %s with %s need %u bytes, but allocated only %u", VB_NAME, name, lens_ctx->tag_name, codec_name(header->sub_codec), min_required_compressed_len, *compressed_len);
 
     // length is a numeric context, and as such it must be written first, as piz_uncompress_all_ctxs needs to complete piz_adjust_one_local
     COPY_TIMER_COMPRESS (compressor_longr);
@@ -300,7 +292,7 @@ static void codec_longr_reconstruct_init (VBlockP vb, Context *lens_ctx, Context
     values_ctx->con_cache.len = 256;
 
     // until 13.0.11, stored in SEC_COUNTS of lens_ctx, and after in values_ctx
-    Buffer *value_to_bin = ZCTX(values_ctx->did_i)->counts.len ? &ZCTX(values_ctx->did_i)->counts 
+    BufferP value_to_bin = ZCTX(values_ctx->did_i)->counts.len ? &ZCTX(values_ctx->did_i)->counts 
                                                                : &ZCTX(lens_ctx->did_i)->counts;
 
     ARRAY (uint64_t, value_to_bin_src, *value_to_bin); 
@@ -326,8 +318,7 @@ void codec_longr_reconstruct (VBlockP vb, Codec codec, Context *lens_ctx)
     if (!lens_ctx->is_initialized) 
         codec_longr_reconstruct_init (vb, lens_ctx, values_ctx);
 
-    bool is_rev = !VB_DT(DT_FASTQ) /* SAM or BAM */ && lens_ctx->dict_id.num == _SAM_QUAL && 
-                  (CTX(SAM_FLAG)->last_value.i & SAM_FLAG_REV_COMP);
+    bool is_rev = !VB_DT(DT_FASTQ) /* SAM or BAM */ && lens_ctx->dict_id.num == _SAM_QUAL && last_flags.bits.rev_comp;
 
     ARRAY (uint8_t, sorted_qual, values_ctx->local);
     ARRAY (uint32_t, next_of_chan, lens_ctx->local);
@@ -337,7 +328,7 @@ void codec_longr_reconstruct (VBlockP vb, Codec codec, Context *lens_ctx)
     rom seq = (Z_DT(DT_SAM) && VB_SAM->textual_seq.len) ? B1STc (VB_SAM->textual_seq) // note: textual_seq is prepared in sam_piz_sam2bam_SEQ and sam_piz_prim_add_Grps_and_CIGAR
                                                         : last_txtx (vb, seq_ctx); 
 
-    codec_longr_recon_one_read (state, seq, vb->seq_len, is_rev, sorted_qual, next_of_chan, BAFTc (vb->txt_data));
+    codec_longr_recon_one_read (state, seq, vb->seq_len, is_rev, sorted_qual, next_of_chan, BAFTtxt);
     vb->txt_data.len += vb->seq_len;
 }
 

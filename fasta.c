@@ -179,7 +179,7 @@ void fasta_seg_initialize (VBlockP vb)
 {
     START_TIMER;
 
-    ASSINP (vb->vblock_i > 1 || *B1STc (vb->txt_data) == '>' || *B1STc (vb->txt_data) == ';',
+    ASSINP (vb->vblock_i > 1 || *B1STtxt == '>' || *B1STtxt == ';',
             "Error: expecting FASTA file %s to start with a '>' or a ';'", txt_name);
 
     CTX(FASTA_TOPLEVEL)->no_stons  = true; // keep in b250 so it can be eliminated as all_the_same
@@ -349,7 +349,7 @@ static SeqType fasta_get_seq_type (STRp(seq))
 {
     // we determine the type by characters that discriminate between protein and nucleotides, 
     // according to: https://www.bioinformatics.org/sms/iupac.html and https://en.wikipedia.org/wiki/FASTA_format
-    // A,C,D,G,H,K,M,N,R,S,T,V,W,Y are can be either nucleoide or protein - in particular all of A,C,T,G,N can
+    // A,C,D,G,H,K,M,N,R,S,T,V,W,Y are can be either nucleoide or protein - in particular all of A,C,G,T,N can
     static bool uniq_amino[256]    = { ['E']=true, ['F']=true, ['I']=true, ['L']=true, ['P']=true, ['Q']=true, 
                                        ['X']=true, ['Z']=true,  // may be protein according to the FASTA_format page
                                        ['e']=true, ['f']=true, ['i']=true, ['l']=true, ['p']=true, ['q']=true, 
@@ -529,7 +529,7 @@ IS_SKIP (fasta_piz_is_skip_section)
 static inline void fasta_piz_unreconstruct_trailing_newlines (VBlockFASTAP vb)
 {
     char c;
-    while ((c = *BLSTc (vb->txt_data)) == '\n' || c == '\r') 
+    while ((c = *BLSTtxt) == '\n' || c == '\r') 
         vb->txt_data.len--;
 
     // update final entries vb->lines to reflect the removal of the final newlines
@@ -569,7 +569,7 @@ SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_SEQ)
 
     vb->last_line = FASTA_LINE_SEQ;
 
-    return false; // no new value
+    return NO_NEW_VALUE;
 }
 
 SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_COMMENT)
@@ -589,7 +589,7 @@ SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_COMMENT)
 
     vb->last_line = FASTA_LINE_COMMENT;
 
-    return false; // no new value
+    return NO_NEW_VALUE;
 }
 
 bool fasta_piz_init_vb (VBlockP vb, const SectionHeaderVbHeader *header, uint32_t *txt_data_so_far_single_0_increment)
@@ -617,7 +617,7 @@ bool fasta_piz_is_vb_needed (VBIType vb_i)
     buf_alloc (vb, &vb->txt_data, 0, longest_line_len, char, 1.1, "txt_data");
 
     // uncompress & map desc field (filtered by piz_is_skip_section)
-    piz_uncompress_all_ctxs (VB, 0);
+    piz_uncompress_all_ctxs (VB);
 
     Context *desc_ctx = CTX(FASTA_DESC);
     desc_ctx->iterator.next_b250 = B1ST8 (desc_ctx->b250); 
@@ -721,7 +721,7 @@ SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_DESC)
 
     vb->last_line = FASTA_LINE_DESC;
 
-    return false; // no new value
+    return NO_NEW_VALUE;
 }
 
 //---------------------------------------

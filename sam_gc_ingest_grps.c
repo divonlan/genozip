@@ -69,7 +69,7 @@ void sam_sa_prim_finalize_ingest (void)
 {
     START_TIMER;
 
-    // build index by adler32(qname). 
+    // build index by crc32(qname). 
     sam_sa_create_group_index();
 
     if (flag.show_sa) sam_show_sa();
@@ -79,7 +79,7 @@ void sam_sa_prim_finalize_ingest (void)
 
 // separately compress qual of each PRIM line - into overlaid buffer. returns total qual length.
 static uint32_t sam_zip_prim_ingest_vb_compress_qual (VBlockSAMP vb, SAGroupType *vb_grps, uint32_t vb_grps_len,
-                                                      Buffer *underlying_buf, Buffer *comp_qual_buf)
+                                                      BufferP underlying_buf, BufferP comp_qual_buf)
 {
     // initialize total_qual_len to total uncompressed size of QUAL 
     uint32_t total_qual_len=0;
@@ -102,7 +102,7 @@ static uint32_t sam_zip_prim_ingest_vb_compress_qual (VBlockSAMP vb, SAGroupType
         if (comp_qual_buf->len + comp_len <= max_comp_len)  { // still room to compress
             uint8_t *qual = B8 (vb->txt_data, vb_grp->qual); // always in SAM format
             ASSERT (rans_compress_to_4x16 (evb, qual, vb_grp->seq_len, BAFT(uint8_t, *comp_qual_buf), &comp_len, X_NOSZ) && comp_len,
-                    "Failed to compress PRIM qual of vb=%u line_i=%d qual_len=%u", vb->vblock_i, vb->line_i, vb_grp->seq_len);
+                    "%s: Failed to compress PRIM qual: qual_len=%u", LN_NAME, vb_grp->seq_len);
         }
 
         // add to buffer only if compression actually compresses (otherwise it remains pointing at txt_data)

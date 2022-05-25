@@ -226,7 +226,7 @@ static void recon_plan_read_one_vb (VBlockP vb)
     evb->scratch.len += vb->fragment_len / sizeof (ReconPlanItem);
 
     ASSERT (evb->scratch.len * sizeof (ReconPlanItem) <= evb->scratch.size, "%u X recon_plan.len=%"PRIu64" exceeds allocated size=%"PRIu64" (num_fragments=%u max_frag_size=%"PRIu64")", 
-            (int)sizeof (ReconPlanItem), evb->scratch.len, evb->scratch.size, (unsigned)evb->scratch.count, max_frag_size);
+            (int)sizeof (ReconPlanItem), evb->scratch.len, (uint64_t)evb->scratch.size, (unsigned)evb->scratch.count, max_frag_size);
 
     next_sec++;
     vb->dispatch = READY_TO_COMPUTE;

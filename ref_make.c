@@ -26,7 +26,7 @@ void ref_make_seg_initialize (VBlockP vb)
 {
     START_TIMER;
 
-    ASSINP (vb->vblock_i > 1 || *B1STc (vb->txt_data) == '>' || *B1STc (vb->txt_data) == ';',
+    ASSINP (vb->vblock_i > 1 || *B1STtxt == '>' || *B1STtxt == ';',
             "Error: expecting FASTA file %s to start with a '>' or a ';'", txt_name);
 
     CTX(FASTA_CONTIG)->no_vb1_sort = true; // keep contigs in the order of the reference, i.e. in the order they would appear in BAM header created with this reference 
@@ -69,16 +69,15 @@ void ref_make_create_range (VBlockP vb)
         fasta_get_data_line (vb, line_i, &seq_data_start, &seq_len);
 
         bytes line_seq = B8 (vb->txt_data, seq_data_start);
-        for (uint64_t base_i=0; base_i < seq_len; base_i++) {
+        for (uint64_t base_i=0; base_i < seq_len; base_i++, bit_i += 2) {
             char base = line_seq[base_i];
-            uint8_t encoding = acgt_encode[(int)base];
-            bit_array_assign (&r->ref, bit_i, encoding & 1);
-            bit_array_assign (&r->ref, bit_i + 1, (encoding >> 1) & 1);
+            bit_array_assign2 (&r->ref, bit_i, acgt_encode[(int)base]); 
+            // uint8_t encoding = acgt_encode[(int)base];
+            //xxx bit_array_assign (&r->ref, bit_i, encoding & 1);
+            // bit_array_assign (&r->ref, bit_i + 1, (encoding >> 1) & 1);
 
             // store very rare IUPAC bases (GRCh38 has 94 of them)
             ref_iupacs_add (vb, bit_i/2, base);
-
-            bit_i += 2;
         }
     }
 

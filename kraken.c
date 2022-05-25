@@ -276,11 +276,11 @@ void kraken_piz_handover_data (VBlockP vb)
     uint64_t dict_start = qname_dict.len;
     buf_add_buf (evb, &qname_dict, &vb->txt_data, char, "qname_dict");
 
-    ARRAY (QnameNode, nodes, CTX(KRAKEN_QNAME)->piz_ctx_specific_buf);
+    ARRAY (QnameNode, nodes, CTX(KRAKEN_QNAME)->qname_nodes);
     for (uint64_t i=0; i < nodes_len; i++)
         nodes[i].char_index += dict_start;
 
-    buf_add_buf (evb, &qname_nodes, &CTX(KRAKEN_QNAME)->piz_ctx_specific_buf, QnameNode, "qname_nodes");
+buf_add_buf (evb, &qname_nodes, &CTX(KRAKEN_QNAME)->qname_nodes, QnameNode, "qname_nodes");
 }
 
 // callback called after every repeat of TOP2HASH, i.e. when run with --taxid
@@ -306,12 +306,12 @@ CONTAINER_CALLBACK (kraken_piz_container_cb)
                 snip_len -= 2;
             }
 
-            buf_alloc (vb, &CTX(KRAKEN_QNAME)->piz_ctx_specific_buf, 1, vb->lines.len, QnameNode, 1.5, "contexts->piz_ctx_specific_buf");
+            buf_alloc (vb, &CTX(KRAKEN_QNAME)->qname_nodes, 1, vb->lines.len, QnameNode, 1.5, "contexts->qname_nodes");
             
             ASSERT (this_taxid <= MAX_TAXID, "taxid=%u exceeds maximum of %u", this_taxid, MAX_TAXID);
             ASSERT (snip_len <= MAX_SNIP_LEN, "Length of QNAME \"%.*s\" exceeds maximum of %u", snip_len, recon, MAX_SNIP_LEN);
 
-            BNXT (QnameNode, CTX(KRAKEN_QNAME)->piz_ctx_specific_buf) = (QnameNode){ 
+            BNXT (QnameNode, CTX(KRAKEN_QNAME)->qname_nodes) = (QnameNode){ 
                 .char_index = recon - vb->txt_data.data, // will be updated in kraken_piz_handover_data
                 .snip_len   = snip_len,
                 .hash       = hash_do (qname_hashtab.len, recon, snip_len),

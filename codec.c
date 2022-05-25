@@ -31,7 +31,7 @@ void *codec_alloc_do (VBlockP vb, uint64_t size, float grow_at_least_factor, rom
             //printf ("codec_alloc: %u bytes buf=%u\n", size, i);
             return vb->codec_bufs[i].data;
         }
-    ABORT_R ("Error: called from %s:%u codec_alloc could not find a free buffer. vb_i=%d", func, code_line, vb->vblock_i);
+    ABORT_R ("%s: called from %s:%u codec_alloc could not find a free buffer", VB_NAME, func, code_line);
 }
 
 void codec_free_do (void *vb_, void *addr, rom func, uint32_t code_line)
@@ -46,8 +46,8 @@ void codec_free_do (void *vb_, void *addr, rom func, uint32_t code_line)
             return;
         }
 
-    ABORT ("Error: codec_free_do called from %s:%u: failed to find buffer to free. vb_i=%d codec=%s addr=%s", 
-           func, code_line, vb->vblock_i, codec_name(vb->codec_using_codec_bufs), str_pointer (addr).s);
+    ABORT ("Error: codec_free_do called from %s:%u: failed to find buffer to free. vb_i=%d codec=%s addr=%p", 
+           func, code_line, vb->vblock_i, codec_name(vb->codec_using_codec_bufs), addr);
 }
 
 void codec_free_all (VBlockP vb)
@@ -72,7 +72,7 @@ static bool codec_compress_error (VBlockP vb, SectionHeader *header, rom uncompr
 
 static void codec_uncompress_error (VBlockP vb, Codec codec, uint8_t param,
                                     rom compressed, uint32_t compressed_len,
-                                    Buffer *uncompressed_buf, uint64_t uncompressed_len,
+                                    BufferP uncompressed_buf, uint64_t uncompressed_len,
                                     Codec sub_codec, rom name)
 {
     ABORT ("Error in comp_uncompress: \"%s\": unsupported codec: %s. Please upgrade to the most recent version of Genozip.", name, codec_name (codec));
@@ -312,6 +312,8 @@ done:
 void codec_assign_best_qual_codec (VBlockP vb, DidIType qual_did_i,  
                                    LocalGetLineCB callback, bool no_longr)
 {
+    ContextP ctx = CTX(qual_did_i);
+
     if (segconf.running) {
         if (!flag.fast && segconf.nontrivial_qual && segconf_is_long_reads()) // note: we can't use segconf.is_long_reads (variable) because it is not set yet 
             codec_longr_segconf_calculate_bins (vb, CTX(qual_did_i+1), callback);
@@ -321,12 +323,19 @@ void codec_assign_best_qual_codec (VBlockP vb, DidIType qual_did_i,
     if (!flag.fast && segconf.is_long_reads && !no_longr && segconf.nontrivial_qual)
         codec_longr_comp_init (vb, qual_did_i);
 
-    else if (codec_domq_comp_init (vb, qual_did_i, callback)) 
+    else if (!flag.no_domqual && codec_domq_comp_init (vb, qual_did_i, callback)) 
         {} // domqual    
     
-    else // to be assigned by codec_assign_best_codec
-        CTX(qual_did_i)->ltype = LT_SEQUENCE; 
+    else if (Z_DT(DT_SAM) || Z_DT (DT_BAM)) { 
+        ctx->ltype  = LT_CODEC;
+        ctx->lcodec = CODEC_NORMQ;
+    }
 
+    else { // FASTQ
+        ctx->ltype = LT_SEQUENCE;  // codec to be assigned by codec_assign_best_codec
+        ctx->flags.is_qual = true;
+    }
+    
     if (flag.show_codec) // aligned to the output of codec_assign_best_codec
         iprintf ("vb_i=%-2u %-12s %-5s          *[%s]\n", vb->vblock_i, "QUAL", "LOCAL", codec_name(CTX(qual_did_i)->lcodec));
 }
@@ -355,6 +364,11 @@ void codec_show_time (VBlockP vb, rom name, rom subname, Codec codec)
         vb->profile.next_name    = name;
         vb->profile.next_subname = subname;
     }
+}
+
+UNCOMPRESS (codec_gtshark_uncompress)
+{
+    ABORT0 ("Support for the gtshark codec has been discontinued. To decompress VCF files compressed with --gtshark, use Genozip v11.");
 }
 
 // needs to be after all the functions as it refers to them

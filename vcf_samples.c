@@ -30,16 +30,6 @@ static unsigned sb_snip_lens[2], mb_snip_lens[2], f2r1_snip_lens[VCF_MAX_ARRAY_I
     af_snip_len, sac_snip_lens[VCF_MAX_ARRAY_ITEMS/2], rdf_snip_len, rdr_snip_len, adf_snip_len, adr_snip_len, ad_varscan_snip_len,
     ab_snip_len, gq_by_pl_len, gq_by_gp_len, PL_to_PLn_redirect_snip_len, PL_to_PLy_redirect_snip_len;
 
-// prepare snip of A - B
-static void vcf_seg_prepare_minus_snip (DictId dict_id_a, DictId dict_id_b, char *snip, unsigned *snip_len)
-{
-    snip[0] = SNIP_SPECIAL;
-    snip[1] = VCF_SPECIAL_MINUS;
-    
-    DictId two_dicts[2] = { dict_id_a, dict_id_b };
-    *snip_len = 2 + base64_encode ((uint8_t *)two_dicts, sizeof (two_dicts), &snip[2]);
-}
-
 static DictId make_array_item_dict_id (uint64_t dict_id_num, unsigned item_i)
 {
     bytes id = ((DictId)dict_id_num).id;
@@ -79,24 +69,24 @@ void vcf_samples_zip_initialize (void)
 
     // prepare special snips for the odd elements of SB and MB - (AD minus even item 0) 
     for (unsigned i=0; i < 2; i++) {
-        vcf_seg_prepare_minus_snip (con_AD.items[i].dict_id, con_SB.items[i*2].dict_id, sb_snips[i], &sb_snip_lens[i]);
-        vcf_seg_prepare_minus_snip (con_AD.items[i].dict_id, con_MB.items[i*2].dict_id, mb_snips[i], &mb_snip_lens[i]);
+        seg_prepare_minus_snip_i (VCF, con_AD.items[i].dict_id, con_SB.items[i*2].dict_id, sb_snip, i);
+        seg_prepare_minus_snip_i (VCF, con_AD.items[i].dict_id, con_MB.items[i*2].dict_id, mb_snip, i);
     }
 
     for (unsigned i=0; i < VCF_MAX_ARRAY_ITEMS/2; i++) 
-        vcf_seg_prepare_minus_snip (con_AD.items[i].dict_id, con_SAC.items[i*2].dict_id, sac_snips[i], &sac_snip_lens[i]);
+        seg_prepare_minus_snip_i (VCF, con_AD.items[i].dict_id, con_SAC.items[i*2].dict_id, sac_snip, i);
 
     for (unsigned i=0; i < VCF_MAX_ARRAY_ITEMS; i++) {
-        vcf_seg_prepare_minus_snip (con_AD.items[i].dict_id, con_F1R2.items[i].dict_id, f2r1_snips[i], &f2r1_snip_lens[i]);
-        vcf_seg_prepare_minus_snip (con_AD.items[i].dict_id, con_ADF.items[i].dict_id,  adr_snips[i],  &adr_snip_lens[i]);
-        vcf_seg_prepare_minus_snip (con_AD.items[i].dict_id, con_ADR.items[i].dict_id,  adf_snips[i],  &adf_snip_lens[i]);
+        seg_prepare_minus_snip_i (VCF, con_AD.items[i].dict_id, con_F1R2.items[i].dict_id, f2r1_snip, i);
+        seg_prepare_minus_snip_i (VCF, con_AD.items[i].dict_id, con_ADF.items[i].dict_id,  adr_snip,  i);
+        seg_prepare_minus_snip_i (VCF, con_AD.items[i].dict_id, con_ADR.items[i].dict_id,  adf_snip,  i);
     }
 
-    vcf_seg_prepare_minus_snip ((DictId)_FORMAT_RD, (DictId)_FORMAT_RDR, rdf_snip, &rdf_snip_len);
-    vcf_seg_prepare_minus_snip ((DictId)_FORMAT_RD, (DictId)_FORMAT_RDF, rdr_snip, &rdr_snip_len);
-    vcf_seg_prepare_minus_snip ((DictId)_FORMAT_AD, (DictId)_FORMAT_ADR, adf_snip, &adf_snip_len);
-    vcf_seg_prepare_minus_snip ((DictId)_FORMAT_AD, (DictId)_FORMAT_ADF, adr_snip, &adr_snip_len);
-    vcf_seg_prepare_minus_snip ((DictId)_FORMAT_DP, (DictId)_FORMAT_RD,  ad_varscan_snip,  &ad_varscan_snip_len);
+    seg_prepare_minus_snip (VCF, _FORMAT_RD, _FORMAT_RDR, rdf_snip);
+    seg_prepare_minus_snip (VCF, _FORMAT_RD, _FORMAT_RDF, rdr_snip);
+    seg_prepare_minus_snip (VCF, _FORMAT_AD, _FORMAT_ADR, adf_snip);
+    seg_prepare_minus_snip (VCF, _FORMAT_AD, _FORMAT_ADF, adr_snip);
+    seg_prepare_minus_snip (VCF, _FORMAT_DP, _FORMAT_RD,  ad_varscan_snip);
 
     seg_prepare_snip_other (SNIP_COPY, _INFO_AF, 0, 0, af_snip);
 
@@ -259,7 +249,7 @@ static inline ContextP vcf_seg_FORMAT_mux_by_dosage (VBlockVCFP vb, ContextP ctx
 static inline int vcf_piz_get_mux_channel_i (VBlockP vb)
 {
     rom gt = last_txt (vb, FORMAT_GT);
-    unsigned gt_len = CTX(FORMAT_GT)->last_txt_len ;
+    unsigned gt_len = CTX(FORMAT_GT)->last_txt.len;
 
     if (gt_len == 3) { // diploid
         if ((gt[0]!='0' && gt[0]!='1') || (gt[2]!='0' && gt[2]!='1')) return 3; 
@@ -276,17 +266,18 @@ static inline int vcf_piz_get_mux_channel_i (VBlockP vb)
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_DOSAGE)
 {
     int channel_i = vcf_piz_get_mux_channel_i (vb);
-    
+    return reconstruct_demultiplex (vb, ctx, STRa(snip), channel_i, new_value, reconstruct);
+/*xxx    
     ContextP channel_ctx = MCTX (channel_i, snip, snip_len);
     ASSPIZ (channel_ctx, "Cannot find channel context of channel_i=%d of multiplexed context %s", channel_i, ctx->tag_name);
 
     reconstruct_from_ctx (vb, channel_ctx->did_i, 0, reconstruct);
 
-    if (ctx->flags.store == STORE_NONE) return false;
+    if (ctx->flags.store == STORE_NONE) return NO_NEW_VALUE;
 
     // propagate last_value up
     new_value->i = channel_ctx->last_value.i; // note: last_value is a union, this copies the entire union
-    return true; 
+    return HAS_NEW_VALUE; */
 }
 
 // if cell is NULL, leaves it up to the caller to seg to the channel 
@@ -297,7 +288,7 @@ static inline void vcf_seg_FORMAT_mux_by_dosagexDP (VBlockVCFP vb, ContextP ctx,
     if (!ctx_encountered (VB, FORMAT_DP)) goto cannot_use_special; // no DP in the FORMAT of this line
 
     int64_t DP;
-    if (!str_get_int (last_txt(vb, FORMAT_DP), vb->last_txt_len(FORMAT_DP), &DP)) // In some files, DP may be '.'
+    if (!str_get_int (last_txt(VB, FORMAT_DP), vb->last_txt_len(FORMAT_DP), &DP)) // In some files, DP may be '.'
         DP=0;
 
     int channel_i = vcf_seg_get_mux_channel_i (vb, true); // we don't use the multiplexer if its a DVCF REF<>ALT switch variant as GT changes
@@ -336,11 +327,11 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_DOSAGExDP)
 
     reconstruct_from_ctx (vb, channel_ctx->did_i, 0, reconstruct);
 
-    if (ctx->flags.store == STORE_NONE) return false;
+    if (ctx->flags.store == STORE_NONE) return NO_NEW_VALUE;
 
     // propagate last_value up
     new_value->i = channel_ctx->last_value.i; // note: last_value is a union, this copies the entire union
-    return true; 
+    return HAS_NEW_VALUE; 
 }
 
 // used when CTX is expected to be (BaseCtx-MinusCtx) - if it indeed is, we use a special snip
@@ -428,7 +419,7 @@ static WordIndex vcf_seg_FORMAT_A_R (VBlockVCFP vb, ContextP ctx, SmallContainer
         for (unsigned i=0; i < con.nitems_lo; i++) 
             seg_by_ctx (VB, STRi(item, i), item_ctxs[i], item_lens[i]);
 
-    ctx->last_txt_len = con.nitems_lo; // seg only: for use by vcf_seg_*_items callbacks
+    ctx->last_txt.len = con.nitems_lo; // seg only: for use by vcf_seg_*_items callbacks
     
     return container_seg (vb, ctx, (ContainerP)&con, 0, 0, con.nitems_lo-1); // account for the commas
 }
@@ -531,8 +522,8 @@ static void vcf_seg_AD_complement_items (VBlockVCFP vb, ContextP ctx, STRps(item
     ContextP ad_ctx=CTX(FORMAT_AD), other_ctx;
     bool use_formula = ctx_encountered (VB, FORMAT_AD) &&
                        ctx_encountered_by_dict_id (VB, other_dict_id, &other_ctx) &&
-                       ad_ctx->last_txt_len    == n_items &&  // last_txt_len is # of items stored by vcf_seg_FORMAT_A_R 
-                       other_ctx->last_txt_len == n_items;
+                       ad_ctx->last_txt.len    == n_items &&  // last_txt_len is # of items stored by vcf_seg_FORMAT_A_R 
+                       other_ctx->last_txt.len == n_items;
 
     for (unsigned i=0; i < n_items; i++) {
 
@@ -574,7 +565,7 @@ static void vcf_seg_SB_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP
 {
     // verify that AD was encountered in this line, and that it has exactly half the number of items as us
     ContextP ad_ctx=CTX(FORMAT_AD);
-    bool use_formula = ctx_encountered (VB, FORMAT_AD) && ad_ctx->last_txt_len == 2 && n_items == 4; // note: last_txt_len = # of items stored by vcf_seg_FORMAT_A_R
+    bool use_formula = ctx_encountered (VB, FORMAT_AD) && ad_ctx->last_txt.len == 2 && n_items == 4; // note: last_txt_len = # of items stored by vcf_seg_FORMAT_A_R
 
     for (unsigned i=0; i < n_items; i++) {
 
@@ -597,7 +588,7 @@ static void vcf_seg_SB_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP
 static void vcf_seg_SAC_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *item_ctxs, const int64_t *values)
 {
     // verify that AD was encountered in this line, and that it has exactly half the number of items as us
-    bool use_formula = ctx_encountered (VB, FORMAT_AD) && 2 * CTX(FORMAT_AD)->last_txt_len == n_items; // note: last_txt_len = # of items stored by vcf_seg_FORMAT_A_R
+    bool use_formula = ctx_encountered (VB, FORMAT_AD) && 2 * CTX(FORMAT_AD)->last_txt.len == n_items; // note: last_txt_len = # of items stored by vcf_seg_FORMAT_A_R
 
     for (unsigned i=0; i < n_items; i++) {
 
@@ -621,8 +612,8 @@ static void vcf_seg_SAC_items (VBlockVCFP vb, ContextP ctx, STRps(item), Context
 // Seg the even items as delta from F2R1 and odd items as a MINUS snip between AD and the preceding even item
 static void vcf_seg_MB_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *item_ctxs, const int64_t *values)
 {
-    bool use_formula_even = ctx_encountered (VB, FORMAT_F2R1) && CTX(FORMAT_F2R1)->last_txt_len == 2 && n_items == 4;
-    bool use_formula_odd  = ctx_encountered (VB, FORMAT_AD)   && CTX(FORMAT_AD)  ->last_txt_len == 2 && n_items == 4; // last_txt_len is # of items set by vcf_seg_FORMAT_A_R
+    bool use_formula_even = ctx_encountered (VB, FORMAT_F2R1) && CTX(FORMAT_F2R1)->last_txt.len == 2 && n_items == 4;
+    bool use_formula_odd  = ctx_encountered (VB, FORMAT_AD)   && CTX(FORMAT_AD)  ->last_txt.len == 2 && n_items == 4; // last_txt_len is # of items set by vcf_seg_FORMAT_A_R
 
     for (unsigned i=0; i < n_items; i++) {
 
@@ -641,29 +632,6 @@ static void vcf_seg_MB_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP
             item_ctxs[i]->flags.store = STORE_INT; // possibly consumed by the odd items (^)
         }
     }
-}
-
-// parameter is two dict_id's (in base64). reconstructs dict1.last_value - dict2.last_value
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_MINUS)
-{
-    // decode and store the the contexts in the first call for ctx (only one MINUS snip allowed per ctx)
-    if (!ctx->con_cache.len) {
-        buf_alloc_zero (vb, &ctx->con_cache, 0, 2, ContextP, 1, "con_cache");
-
-        DictId two_dicts[2];
-        base64_decode (snip, &snip_len, (uint8_t *)two_dicts);
-
-        *B(ContextP, ctx->con_cache, 0) = ECTX (two_dicts[0]);
-        *B(ContextP, ctx->con_cache, 1) = ECTX (two_dicts[1]);
-    }
-
-    new_value->i = (*B(ContextP, ctx->con_cache, 0))->last_value.i - 
-                   (*B(ContextP, ctx->con_cache, 1))->last_value.i;
-
-    if (reconstruct)
-        RECONSTRUCT_INT (new_value->i); 
-
-    return true; // has new_value
 }
 
 //----------
@@ -792,7 +760,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_GQ)
 
     RECONSTRUCT_INT (prediction - delta);
 
-    return false; // no new value
+    return NO_NEW_VALUE;
 }
 
 //----------
@@ -810,12 +778,12 @@ static inline void vcf_seg_FORMAT_DP (VBlockVCFP vb, ContextP ctx, STRp(cell))
         if (!segconf.FORMAT_DP_method) {
             if (ctx_has_value (VB, FORMAT_AD)) {
                 segconf.FORMAT_DP_method = by_AD;
-                segconf.INFO_DP_by_FORMAT_DP = false; // why?
+                segconf.INFO_DP_by_FORMAT_DP = false; // bc vcf_piz_special_DP_by_DP cannot retrieve FORMAT/DP from local
             }
 
             else if (ctx_has_value (VB, FORMAT_SDP)) {
                 segconf.FORMAT_DP_method = by_SDP;
-                segconf.INFO_DP_by_FORMAT_DP = false; // why?
+                segconf.INFO_DP_by_FORMAT_DP = false; // bc vcf_piz_special_DP_by_DP cannot retrieve FORMAT/DP from local
             }
 
             else if (vcf_num_samples == 1 && ctx_has_value (VB, INFO_DP))            
@@ -887,7 +855,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_PGT)
         }
     }
 
-    return false; // no new value
+    return NO_NEW_VALUE;
 }
 
 // ---------------------
@@ -905,10 +873,10 @@ static int32_t vcf_piz_luft_trans_complement_to_max_value (VBlockP vb, ContextP 
     // if we're validating a FORMAT field with --chain (in vcf_seg_validate_luft_trans_one_sample, if REF<>ALT) - accept a valid scientific notation
     // as it will be converted to normal notation in vcf_seg_one_sample
     if (validate_only && chain_is_loaded && dict_id_is_vcf_format_sf (ctx->dict_id) &&
-        str_scientific_to_decimal (recon, recon_len, NULL, NULL, &f) && f >= 0.0 && f <= max_value) return true; // scientific notation in the valid range
+        str_scientific_to_decimal (STRa(recon), NULL, NULL, &f) && f >= 0.0 && f <= max_value) return true; // scientific notation in the valid range
 
     // if item format is inconsistent with AF being a probability value - we won't translate it
-    if (!str_get_float (recon, recon_len, &f, format, NULL) || f < 0.0 || f > max_value) 
+    if (!str_get_float (STRa(recon), &f, format, NULL) || f < 0.0 || f > max_value) 
         return false;
     
     if (validate_only) return true; 
@@ -927,7 +895,7 @@ static int32_t vcf_piz_luft_trans_complement_to_max_value (VBlockP vb, ContextP 
 // returns true if successful (return value used only if validate_only)
 TRANSLATOR_FUNC (vcf_piz_luft_A_1)
 {
-    return vcf_piz_luft_trans_complement_to_max_value (vb, ctx, recon, recon_len, validate_only, 1);
+    return vcf_piz_luft_trans_complement_to_max_value (vb, ctx, STRa(recon), validate_only, 1);
 }
 
 //----------
@@ -938,7 +906,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_A_1)
 static void vcf_convert_prob_to_phred (VBlockVCFP vb, rom flag_name, STRp(snip), char *optimized_snip, unsigned *optimized_snip_len)
 {
     str_split_floats (snip, snip_len, 0, ',', prob, false);
-    ASSVCF (n_probs, "cannot to apply %s to value \"%.*s\"", flag_name, snip_len, snip); // not an array of floats - abort, because we already changed the FORMAT field
+    ASSVCF (n_probs, "cannot to apply %s to value \"%.*s\"", flag_name, STRf(snip)); // not an array of floats - abort, because we already changed the FORMAT field
 
     unsigned phred_len = 0;
     for (unsigned i=0; i < n_probs; i++) {
@@ -1073,7 +1041,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_AB)
         reconstruct_from_ctx (vb, ab3_ctx->did_i, 0, reconstruct);
     }
 
-    return false; // no new value
+    return NO_NEW_VALUE;
 }
 
 //----------
@@ -1211,7 +1179,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_DS_old)
     bufprintf (vb, &vb->txt_data, float_format, (double)val / 1000000 + dosage);
 
 done:
-    return false; // no new value
+    return NO_NEW_VALUE;
 }
 
 // Lift-over translator for FORMAT/DS, IF it is bi-allelic and we have a ALT<>REF switch.
@@ -1222,7 +1190,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_PLOIDY)
     if (!ctx_encountered (VB, FORMAT_GT)) return false; // we can't translate unless this variant as GT
 
     // use gt_prev_ploidy: in Seg, set by vcf_seg_FORMAT_GT, in validate and piz set by vcf_piz_luft_GT 
-    return vcf_piz_luft_trans_complement_to_max_value (vb, ctx, recon, recon_len, validate_only, VB_VCF->gt_prev_ploidy);
+    return vcf_piz_luft_trans_complement_to_max_value (vb, ctx, STRa(recon), validate_only, VB_VCF->gt_prev_ploidy);
 }
 
 //------------------------------------------------
@@ -1270,17 +1238,17 @@ static bool vcf_piz_luft_switch_first_last (VBlockP vb, ContextP ctx, char *reco
 // 'R2': We switch between the two PAIRS of comma-separated values.
 // 'G' : We have 3 values which represent the genotypes REF/REF,REF/ALT,ALT/ALT We switch between the 1st and 3rd value.
 // returns true if successful 
-TRANSLATOR_FUNC (vcf_piz_luft_R)  { return vcf_piz_luft_switch_first_last (vb, ctx, recon, recon_len, 2, 'R', validate_only); } // 2 bc we only handle bi-allelic
-TRANSLATOR_FUNC (vcf_piz_luft_R2) { return vcf_piz_luft_switch_first_last (vb, ctx, recon, recon_len, 4, '.', validate_only); } // 4 bc we only handle bi-allelic
+TRANSLATOR_FUNC (vcf_piz_luft_R)  { return vcf_piz_luft_switch_first_last (vb, ctx, STRa(recon), 2, 'R', validate_only); } // 2 bc we only handle bi-allelic
+TRANSLATOR_FUNC (vcf_piz_luft_R2) { return vcf_piz_luft_switch_first_last (vb, ctx, STRa(recon), 4, '.', validate_only); } // 4 bc we only handle bi-allelic
 
 TRANSLATOR_FUNC (vcf_piz_luft_G)  
 { 
     if (IS_TRIVAL_FORMAT_SUBFIELD) return true; // This is FORMAT field which is empty or "." - all good
 
-    unsigned num_values = str_count_char (recon, recon_len, ',')+1;
+    unsigned num_values = str_count_char (STRa(recon), ',')+1;
     if (num_values != 3 && num_values != 2) return false; // Genozip currently only support haploid (2 bi-allelic genotypes) and diploid (3 bi-allelic genotypes) 
 
-    return vcf_piz_luft_switch_first_last (vb, ctx, recon, recon_len, num_values, 'G', validate_only); 
+    return vcf_piz_luft_switch_first_last (vb, ctx, STRa(recon), num_values, 'G', validate_only); 
 }
 
 //------------------------------------------------------------------------

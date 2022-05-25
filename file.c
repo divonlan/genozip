@@ -430,7 +430,7 @@ static bool file_open_txt_read (File *file)
                                                 file->is_remote ? file->name : NULL,      // url                                        
                                                 file->redirected,
                                                 "To decompress a CRAM file", 
-                                                "samtools", "view", "-bu", "--threads", "8", "-h", // in practice, samtools is able to consume ~4 cores
+                                                "samtools", "view", "-bu", "--threads", "10", "-h", // in practice, samtools is able to consume ~4 cores
                                                 file_samtools_no_PG() ? "--no-PG" : "-h", // don't add a PG line to the header (just repeat -h if this is an older samtools without --no-PG - no harm)
                                                 file->is_remote ? SKIP_ARG : file->name,  // local file name 
                                                 ref_get_cram_ref(gref), NULL);
@@ -753,7 +753,7 @@ static void file_initialize_bufs (File *file)
 // resulting in data corruption in evb.buf_list. If evb.buf_list gets corrupted this might result in termination 
 // of the execution.
 // with these buf_add_to_buffer_list() the buffers will already be in evb's buf_list before any compute thread is run.
-static void file_initialize_z_add_to_buf_list (Buffer *buf, FUNCLINE)
+static void file_initialize_z_add_to_buf_list (BufferP buf, FUNCLINE)
 {
     buf_add_to_buffer_list_do (evb, buf, func, code_line);
 }
@@ -1145,7 +1145,7 @@ void file_write (File *file, const void *data, unsigned len)
     if (bytes_written < len && !file->name) exit (EXIT_DOWNSTREAM_LOST);
 
     // error if failed to write to file
-    ASSERT (bytes_written == len, "failed to write %u bytes to %s: %s", len, file->name, strerror(errno));
+    ASSERT (bytes_written == len, "wrote only %u of the expected %u bytes to %s: %s", (int)bytes_written, len, file->name, strerror(errno));
 }
 
 void file_remove (rom filename, bool fail_quietly)
@@ -1315,7 +1315,7 @@ void file_mkdir (rom dirname)
 }
 
 // reads an entire file into a buffer. if filename is "-", reads from stdin
-void file_get_file (VBlockP vb, rom filename, Buffer *buf, rom buf_name,
+void file_get_file (VBlockP vb, rom filename, BufferP buf, rom buf_name,
                     bool add_string_terminator)
 {
     #define MAX_STDIN_DATA_SIZE 10000000
@@ -1429,16 +1429,21 @@ void file_put_data_abort (void)
     // mutex remains locked - no more files can be put after this point
 }
 
-void file_put_line (VBlockP vb, STRp(line), rom msg)
+PutLineFn file_put_line (VBlockP vb, STRp(line), rom msg)
 {
-    char fn[64];
-    sprintf (fn, "line.%s.%u.%d%s", command==ZIP ? "zip" : "piz",
-             vb->vblock_i, vb->line_i, file_plain_ext_by_dt ((VB_DT(DT_SAM) && z_file->z_flags.txt_is_bin) ? DT_BAM : vb->data_type));
+    PutLineFn fn;
+    sprintf (fn.s, "line.%u.%d.%s%s", vb->vblock_i, vb->line_i, command==ZIP ? "zip" : "piz",
+             file_plain_ext_by_dt ((VB_DT(DT_SAM) && z_file->z_flags.txt_is_bin) ? DT_BAM : vb->data_type));
     
-    file_put_data (fn, STRa(line), 0);
+    file_put_data (fn.s, STRa(line), 0);
 
-    WARN ("\n%s vb=%s/%u line_in_file(1-based)=%"PRIu64" vb->line_i(0-based)=%d. Dumped %s (dumping first occurance only)", 
-            msg, comp_name(vb->comp_i), vb->vblock_i, writer_get_txt_line_i (vb), vb->line_i, fn);
+    if (command == PIZ)
+        WARN ("\n%s line=%s line_in_file(1-based)=%"PRIu64". Dumped %s (dumping first occurance only)", 
+                msg, line_name(vb).s, writer_get_txt_line_i (vb), fn.s);
+    else
+        WARN ("\n%s line=%s vb_size=%u MB. Dumped %s", msg, line_name(vb).s, (int)(segconf.vb_size >> 20), fn.s);
+
+    return fn;
 }
 
 void file_assert_ext_decompressor (void)
@@ -1465,7 +1470,7 @@ void file_kill_external_compressors (void)
 
 rom ft_name (FileType ft)
 {
-    return type_name (ft, &file_exts[ft], sizeof(file_exts)/sizeof(file_exts[0]));
+    return type_name (ft, &file_exts[ft], ARRAY_LEN(file_exts));
 }
 
 // PIZ: guess original filename from uncompressed txt filename and compression algoritm (allocated memory)

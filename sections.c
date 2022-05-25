@@ -77,7 +77,7 @@ void sections_remove_from_list (VBlockP vb, uint64_t offset, uint64_t len)
     for (sec=BLST (SectionEntModifiable, vb->section_list_buf); sec->offset > offset; sec--) 
         sec->offset -= len;
 
-    ASSERT (sec->offset == offset, "cannot find section with offset=%"PRIu64" in vb=%u", offset, vb->vblock_i);
+    ASSERT (sec->offset == offset, "cannot find section with offset=%"PRIu64" in vb=%s", offset, VB_NAME);
 
     buf_remove (&vb->section_list_buf, SectionEnt, BNUM (vb->section_list_buf, sec), 1);
 }
@@ -346,7 +346,7 @@ void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_layer_bi
 // PIZ: constructing a updated section list
 //---------------------------------------------
 
-void sections_new_list_add_vb (Buffer *new_list, VBIType vb_i)
+void sections_new_list_add_vb (BufferP new_list, VBIType vb_i)
 {
     SectionsVbIndexEnt *vbent = B(SectionsVbIndexEnt, z_file->vb_sections_index, vb_i);
     uint32_t num_sections = vbent->last_sec - vbent->first_sec + 1;
@@ -355,7 +355,7 @@ void sections_new_list_add_vb (Buffer *new_list, VBIType vb_i)
     new_list->len += num_sections;
 }
 
-void sections_new_list_add_txt_header (Buffer *new_list, CompIType comp_i)
+void sections_new_list_add_txt_header (BufferP new_list, CompIType comp_i)
 {
     SectionsCompIndexEnt *compent = B(SectionsCompIndexEnt, z_file->comp_sections_index, comp_i);
     
@@ -363,7 +363,7 @@ void sections_new_list_add_txt_header (Buffer *new_list, CompIType comp_i)
 }
 
 // PIZ: If any of the components has a SEC_BGZF add it
-void sections_new_list_add_bgzf (Buffer *new_list)
+void sections_new_list_add_bgzf (BufferP new_list)
 {
     for (CompIType comp_i=0; comp_i < z_file->comp_sections_index.len; comp_i++) {
         SectionsCompIndexEnt *comp = B(SectionsCompIndexEnt, z_file->comp_sections_index, comp_i);
@@ -373,7 +373,7 @@ void sections_new_list_add_bgzf (Buffer *new_list)
     } 
 }
 
-void sections_new_list_add_global_sections (Buffer *new_list)
+void sections_new_list_add_global_sections (BufferP new_list)
 {
     uint32_t num_sections = BAFT(SectionEnt, z_file->section_list_buf) - z_file->first_dict_section;
 
@@ -382,7 +382,7 @@ void sections_new_list_add_global_sections (Buffer *new_list)
 }
 
 // replace current section list with the new list (if one exists)
-void sections_commit_new_list (Buffer *new_list)
+void sections_commit_new_list (BufferP new_list)
 {
     if (!new_list->len) return;
 
@@ -408,7 +408,7 @@ void sections_list_memory_to_file_format (bool in_place) // in place, or to evb-
                          SectionEntFileFormat, "scratch");
     }
 
-    Buffer *out = in_place ? &z_file->section_list_buf : &evb->scratch;
+    BufferP out = in_place ? &z_file->section_list_buf : &evb->scratch;
     ARRAY (const SectionEntModifiable, mem_sec, z_file->section_list_buf); // memory format (entries are larger)
     ARRAY (SectionEntFileFormat, file_sec, *out); // file format
         
@@ -438,7 +438,7 @@ void sections_list_file_to_memory_format (SectionHeaderGenozipHeader *genozip_he
 
     // For files v13 and earlier, we can only read them if they are a single component, or two paired FASTQs, or DVCF
     // Other bound files need to be decompressed with Genozip v13
-    uint32_t v13_num_components = genozip_header->num_components + (genozip_header->unused[2] << 8) + (genozip_header->unused[1] << 16) + (genozip_header->unused[0] << 24); // up to v13, we had a BGEN uint32_t
+    uint32_t v13_num_components = BGEN32 (genozip_header->v13_num_components);
     ASSINP (V >= 14 || 
             v13_num_components == 1 || // single file
             (dt == DT_VCF && f.has_gencomp) || // DVCF
@@ -525,7 +525,7 @@ rom st_name (SectionType sec_type)
 {
     ASSERT (sec_type >= SEC_NONE && sec_type < NUM_SEC_TYPES, "sec_type=%u out of range [-1,%u]", sec_type, NUM_SEC_TYPES-1);
 
-    return (sec_type == SEC_NONE) ? "SEC_NONE" : type_name (sec_type, &abouts[sec_type].name , sizeof(abouts)/sizeof(abouts[0]));
+    return (sec_type == SEC_NONE) ? "SEC_NONE" : type_name (sec_type, &abouts[sec_type].name , ARRAY_LEN(abouts));
 }
 
 rom comp_name (CompIType comp_i)
@@ -534,6 +534,8 @@ rom comp_name (CompIType comp_i)
     static rom comp_names[NUM_DATATYPES][3] = { [DT_VCF] = VCF_COMP_NAMES, [DT_BCF] = VCF_COMP_NAMES,
                                                 [DT_SAM] = SAM_COMP_NAMES, [DT_BAM] = SAM_COMP_NAMES,
                                                 [DT_FASTQ] = FASTQ_COMP_NAMES };
+    if (!z_file) return "EMEM"; // can happen if another thread is busy exiting the process
+    
     DataType dt = z_file->data_type;
 
     if (!max_comps_by_dt[dt] && comp_i==0)
@@ -554,12 +556,30 @@ rom comp_name (CompIType comp_i)
 
 rom comp_name_ex (CompIType comp_i, SectionType st)
 {
-    if (IS_COMP_SEC (st)) return comp_name (comp_i);
+    if (IS_COMP_SEC (st))     return comp_name (comp_i);
     if (st == SEC_REFERENCE)  return "REFR";
     if (st == SEC_REF_IS_SET) return "REFR";
     if (st == SEC_REF_HASH)   return "REFH";
     if (st == SEC_DICT)       return "DICT";
-    return "----";
+    else                      return "----";
+}
+
+VbNameStr vb_name (VBlockP vb)
+{
+    VbNameStr s;
+    if (vb && vb->vblock_i)
+        sprintf (s.s, "%s/%u", comp_name (vb->comp_i), vb->vblock_i);
+    else
+        strcpy (s.s, "NONCOMPUTE");
+
+    return s;
+}
+
+LineNameStr line_name (VBlockP vb)
+{
+    LineNameStr s;
+    sprintf (s.s, "%s/%u/%u", comp_name (vb->comp_i), vb->vblock_i, vb->line_i);
+    return s;
 }
 
 // called to parse the optional argument to --show-headers. we accept eg "REFERENCE" or "SEC_REFERENCE" or even "ref"
@@ -782,13 +802,13 @@ static FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt)
             break;
 
         case SEC_LOCAL:
-            sprintf (str.s, "store=%-5s per_ln=%u delta=%u paired=%u cy_prm=%u specific=%u",
-                     store[f.ctx.store], f.ctx.store_per_line, f.ctx.store_delta, f.ctx.paired, f.ctx.copy_local_param, f.ctx.ctx_specific_flag); // note: we don't print ctx_specific as its not currently used
+            sprintf (str.s, "store=%-5s per_ln=%u delta=%u paired=%u spl_custom=%u specific=%u",
+                     store[f.ctx.store], f.ctx.store_per_line, f.ctx.store_delta, f.ctx.paired, f.ctx.spl_custom, f.ctx.ctx_specific_flag); // note: we don't print ctx_specific as its not currently used
             break;
 
         case SEC_B250:
-            sprintf (str.s, "store=%-5s per_ln=%u delta=%u paired=%u cy_prm=%u same=%u specific=%u",
-                     store[f.ctx.store], f.ctx.store_per_line, f.ctx.store_delta, f.ctx.paired, f.ctx.copy_local_param, f.ctx.all_the_same, f.ctx.ctx_specific_flag); 
+            sprintf (str.s, "store=%-5s per_ln=%u delta=%u paired=%u spl_custom=%u specific=%u same=%u",
+                     store[f.ctx.store], f.ctx.store_per_line, f.ctx.store_delta, f.ctx.paired, f.ctx.spl_custom, f.ctx.ctx_specific_flag, f.ctx.all_the_same); 
             break;
  
         case SEC_RANDOM_ACCESS:
@@ -849,21 +869,22 @@ void sections_show_header (const SectionHeader *header, VBlockP vb /* optional i
                      digest_display_ex (h->chain.prim_file_md5, DD_MD5).s);
 
         else if ((dt == DT_SAM || dt == DT_BAM) && v14)
-            sprintf (dt_specific, SEC_TAB "segconf_seq_len=%u", BGEN32 (h->sam.segconf_seq_len));
+            sprintf (dt_specific, SEC_TAB "segconf=(seq_len=%u,ms_type=%u)\n", 
+                     BGEN32 (h->sam.segconf_seq_len), h->sam.segconf_ms_type);
 
         else if (dt == DT_REF)
-            sprintf (dt_specific, SEC_TAB "fast_md5=%s", digest_display (h->REF_fasta_md5).s);
+            sprintf (dt_specific, SEC_TAB "fast_md5=%s\n", digest_display (h->REF_fasta_md5).s);
 
         else if (dt == DT_FASTQ && h->genozip_version <= 13) 
-            sprintf (dt_specific, SEC_TAB "bound_digest=%s", digest_display (h->FASTQ_v13_digest_bound).s);
+            sprintf (dt_specific, SEC_TAB "bound_digest=%s\n", digest_display (h->FASTQ_v13_digest_bound).s);
 
-        sprintf (str, "\n"SEC_TAB "ver=%u enc=%s dt=%s usize=%"PRIu64" lines=%"PRIu64" secs=%u txts=%u\n" 
+        sprintf (str, "\n"SEC_TAB "ver=%u enc=%s dt=%s usize=%"PRIu64" lines=%"PRIu64" secs=%u comps=%u vb_size=%u\n" 
                       SEC_TAB "%s ref=\"%.*s\" md5ref=%s\n"
                       "%s" // dt_specific, if there is any
                       SEC_TAB "created=\"%.*s\"\n",
                  h->genozip_version, encryption_name (h->encryption_type), dt_name (dt), 
                  BGEN64 (h->recon_size_prim), BGEN64 (h->num_lines_bound), BGEN32 (h->num_sections), BGEN32 (h->num_components),
-                 sections_dis_flags (f, st, dt).s,
+                 BGEN16(h->vb_size), sections_dis_flags (f, st, dt).s,
                  REF_FILENAME_LEN, h->ref_filename, digest_display_ex (h->ref_file_md5, DD_MD5).s,
                  dt_specific, 
                  FILE_METADATA_LEN, h->created);

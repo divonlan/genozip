@@ -65,8 +65,8 @@ rom bam_show_line (VBlockSAMP vb, rom alignment, uint32_t remaining_txt_len)
 
     // a non-sensical block_size might indicate an false-positive identification of a BAM alignment in bam_unconsumed
     ASSERT (block_size + 4 >= sizeof (BAMAlignmentFixed) && block_size + 4 <= remaining_txt_len, 
-            "vb=%u line_i=%d (block_size+4)=%u is out of range - too small, or goes beyond end of txt data: remaining_txt_len=%u",
-            vb->vblock_i, vb->line_i, block_size+4, remaining_txt_len);
+            "%s: (block_size+4)=%u is out of range - too small, or goes beyond end of txt data: remaining_txt_len=%u",
+            LN_NAME, block_size+4, remaining_txt_len);
 
 
     iprintf ("rname=%d ", NEXT_UINT32);
@@ -83,7 +83,7 @@ rom bam_show_line (VBlockSAMP vb, rom alignment, uint32_t remaining_txt_len)
     iprintf ("rnext=%d ", NEXT_UINT32);
     iprintf ("pnext=%u ", 1+NEXT_UINT32);
     iprintf ("tlen=%u ", NEXT_UINT32);
-    iprintf ("qname=%.*s cigar=", l_read_name-1, next_field); next_field += l_read_name; // note: l_read_name includes \0
+    iprintf ("qname=\"%.*s\" cigar=\"", l_read_name-1, next_field); next_field += l_read_name; // note: l_read_name includes \0
 
     for (int i=0; i < n_cigar_op; i++) {
         BamCigarOp op = (BamCigarOp){ .value = NEXT_UINT32 };
@@ -91,10 +91,10 @@ rom bam_show_line (VBlockSAMP vb, rom alignment, uint32_t remaining_txt_len)
     }
     
     rom textual_seq = bam_seq_display ((bytes)next_field, l_seq);
-    iprintf (" seq=%s ", textual_seq); next_field += (l_seq+1)/2; FREE(textual_seq);
+    iprintf ("\" seq=\"%s\" ", textual_seq); next_field += (l_seq+1)/2; FREE(textual_seq);
     
     rom textual_qual = bam_qual_display ((bytes)next_field, l_seq);
-    iprintf ("qual=%s ", textual_qual); next_field += l_seq; FREE (textual_qual);
+    iprintf ("qual=\"%s\" ", textual_qual); next_field += l_seq; FREE (textual_qual);
 
     // split auxillary fields
     rom auxs[MAX_FIELDS]; 

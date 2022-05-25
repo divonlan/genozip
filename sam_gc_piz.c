@@ -72,7 +72,7 @@ void sam_piz_set_sa_grp (VBlockSAMP vb)
 
         // set buddy if needed and not already set. Note: vb->sa_grp->prim_set_buddy is for PRIM lines. DEPN lines get
         // their buddy from SAM_QNAME (see sam_seg_QNAME)
-        if (vb->sa_grp->prim_set_buddy && vb->buddy_line_i == NO_BUDDY)
+        if (vb->sa_grp->prim_set_buddy && vb->buddy_line_i == NO_LINE)
             reconstruct_set_buddy (VB);
     }
 
@@ -99,7 +99,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_pull_from_SAGROUP)
         case SAM_QNAME: {
             rom qname = GRP_QNAME(g);
             if (reconstruct) RECONSTRUCT (qname, g->qname_len);
-            return false; // no new value
+            return NO_NEW_VALUE;
         }
 
         case SAM_RNAME: {
@@ -120,7 +120,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_pull_from_SAGROUP)
             if (reconstruct) RECONSTRUCT_INT (new_value->i);
             return true;
 
-        case SAM_FLAG: {
+        case SAM_FLAG: case SAM_FLAG0: case SAM_FLAG1: {
             SamFlags sam_flags = { .value = atoi (snip) };
             sam_flags.bits.rev_comp        = a->revcomp;
             sam_flags.bits.multi_segments  = g->multi_segments;
@@ -146,7 +146,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_pull_from_SAGROUP)
             return false;
 
         case SAM_SQBITMAP:
-            ASSPIZ0 (false, "Expecting SAM_SQBITMAP to be handled by sam_piz_special_DEPN_SEQ");
+            ASSPIZ0 (false, "Expecting SAM_SQBITMAP to be handled by sam_piz_special_SEQ");
         
         case SAM_QUAL:
             ASSPIZ0 (false, "Expecting SAM_QUAL to be handled by sam_piz_special_QUAL");
@@ -165,5 +165,5 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_PRIM_QNAME)
 
     RECONSTRUCT (GRP_QNAME(VB_SAM->sa_grp), VB_SAM->sa_grp->qname_len);
     
-    return false; // no new value
+    return NO_NEW_VALUE;
 }

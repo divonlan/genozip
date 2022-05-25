@@ -12,8 +12,9 @@
 #include "reconstruct.h"
 #include "random_access.h"
 #include "segconf.h"
+#include "codec.h"
 
-static void sam_seg_POS_segconf (VBlockSAMP vb, WordIndex prev_line_chrom, PosType pos, PosType prev_line_pos)
+static void sam_seg_POS_segconf (VBlockSAMP vb, WordIndex prev_line_chrom, SamPosType pos, SamPosType prev_line_pos)
 {
     // evidence of not being sorted: our RNAME is the same as the previous line, but POS has decreased
     if (segconf.sam_is_sorted && prev_line_chrom == vb->chrom_node_index && prev_line_pos > pos)
@@ -29,18 +30,22 @@ static void sam_seg_POS_segconf (VBlockSAMP vb, WordIndex prev_line_chrom, PosTy
         segconf.sam_is_unmapped = false; 
 }
 
-PosType sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM *dl, WordIndex prev_line_chrom, unsigned add_bytes)
+SamPosType sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM *dl, WordIndex prev_line_chrom, unsigned add_bytes)
 {
-    ContextP ctx = CTX(SAM_POS);
-    ZipDataLineSAM *buddy_dl = DATA_LINE (vb->buddy_line_i); // an invalid pointer if buddy_line_i is -1
-    PosType pos = dl->POS;
-    PosType prev_line_pos = vb->line_i ? (dl-1)->POS : 0;
+    ZipDataLineSAM *mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
+    SamPosType pos = dl->POS;
+    SamPosType prev_line_pos = vb->line_i ? (dl-1)->POS : 0;
+
+    bool do_mux = sam_is_main_vb && segconf.sam_is_paired; // for simplicity. To do: also for prim/depn components
+    int channel_i = zip_has_mate?1 : zip_has_prim?2 : 0;
+    ContextP channel_ctx = do_mux ? seg_mux_get_channel_ctx (VB, (MultiplexerP)&vb->mux_POS, channel_i) 
+                                  : CTX(SAM_POS);
 
     // case: DEPN or PRIM line.
     // Note: in DEPN, pos already verified in sam_sa_seg_depn_find_sagroup to be as in SA alignment
     if (sam_seg_has_SA_Group(vb)) {
-        sam_seg_against_sa_group (vb, ctx, add_bytes);
-        ctx_set_last_value (VB, ctx, pos);
+        sam_seg_against_sa_group (vb, channel_ctx, add_bytes);
+        ctx_set_last_value (VB, CTX(SAM_POS), (int64_t)pos);
 
         // in PRIM, we also seg it as the first SA alignment (used for PIZ to load alignments to memory, not used for reconstructing SA)
         if (sam_is_prim_vb) {
@@ -50,63 +55,83 @@ PosType sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM *dl, WordIndex prev_line_chro
             CTX(OPTION_SA_POS)->counts.count += add_bytes; 
         }
     }
-
-    // in a collated file, we expect that in about half of the lines, the POS will be equal to the previous PNEXT.
-    else if (segconf.sam_is_collated && pos != ctx->last_value.i && pos == CTX(SAM_PNEXT)->last_value.i) {
-
-        seg_pos_field (VB, SAM_POS, SAM_PNEXT, 0, 0, 0, 0, pos, add_bytes);
-
-        ctx->last_delta = pos - prev_line_pos; // always store a self delta, even if we delta'd against PNEXT. This mirrors flags.store_delta we set for PIZ
-    }
     
-    // seg against buddy
-    else if (segconf.sam_is_sorted && vb->buddy_line_i != -1 && buddy_dl->PNEXT == pos) {
-        seg_by_did_i (VB, STRa(POS_buddy_snip), SAM_POS, add_bytes); // copy POS from earlier-line buddy PNEXT
-        ctx_set_last_value (VB, ctx, pos);
-    }
+    // case: seg against mate's PNEXT
+    else if (zip_has_mate && mate_dl->PNEXT == pos) 
+        seg_by_ctx (VB, STRa(copy_buddy_PNEXT_snip), channel_ctx, add_bytes); // copy POS from earlier-line mate PNEXT
+
+    // case: seg against POS in the predicted alignment in prim line SA:Z 
+    else if (zip_has_prim && sam_seg_is_item_predicted_by_prim_SA (vb, SA_POS, pos)) 
+        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_COPY_PRIM, '0'+SA_POS }, 3, channel_ctx, add_bytes); 
 
     else  
-        pos = seg_pos_field (VB, SAM_POS, SAM_POS, 0, 0, 0, 0, pos, add_bytes);
-    
-    random_access_update_pos (VB, 0, SAM_POS);
+        pos = seg_pos_field (VB, channel_ctx->did_i, SAM_POS, 0, 0, 0, 0, pos, add_bytes);
 
-    dl->POS = pos;
+    ctx_set_last_value (VB, CTX(SAM_POS), (int64_t)pos);
+
+    if (do_mux)
+        seg_by_did_i (VB, STRa(vb->mux_POS.snip), SAM_POS, 0); // de-multiplexor
+
+    random_access_update_pos (VB, 0, SAM_POS);
 
     if (segconf.running) sam_seg_POS_segconf (vb, prev_line_chrom, pos, prev_line_pos);
 
     return pos;
 }
 
-void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pnext_str)/* option 1 */, PosType pnext/* option 2 */, PosType prev_line_pos, unsigned add_bytes)
+static inline int sam_PNEXT_get_mux_channel (bool has_mate, bool has_prim, bool rnext_is_equal)
 {
-    PosType this_pnext=0;
-    ZipDataLineSAM *buddy_dl = DATA_LINE (vb->buddy_line_i); // note: an invalid pointer if buddy_line_i is -1
+    return has_mate?0 : has_prim?1 : rnext_is_equal?2 : 3;
+}
 
-    if (!pnext) str_get_int (STRa(pnext_str), &pnext);
+void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pnext_str)/* option 1 */, SamPosType pnext/* option 2 */, unsigned add_bytes)
+{
+    if (pnext_str) 
+        ASSSEG (str_get_int_range32 (STRa(pnext_str), 0, MAX_POS_SAM, &pnext), pnext_str,
+                "PNEXT=\"%.*s\" out of range [0,%d] (pnext_str=%p)", pnext_str_len, pnext_str, (int)MAX_POS_SAM, pnext_str);
 
-    if (segconf.sam_is_collated && pnext) { // note: if sam_is_sorted, this will be handled by buddy
+    int channel_i = sam_PNEXT_get_mux_channel (zip_has_mate, zip_has_prim, vb->RNEXT_is_equal);
+    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, (MultiplexerP)&vb->mux_PNEXT, channel_i);
+    
+    // case: copy mate's POS
+    if (channel_i==0 && DATA_LINE (vb->mate_line_i)->POS == pnext) 
+        seg_by_ctx (VB, STRa(copy_buddy_POS_snip), channel_ctx, add_bytes); // copy PNEXT from earlier-line mate POS
 
-        // case: 2nd mate - PNEXT = previous line POS 
-        if (pnext == prev_line_pos) {
-            seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_PNEXT_IS_PREV_POS}, 2, CTX(SAM_PNEXT), add_bytes);
-            ctx_set_last_value (VB, CTX(SAM_PNEXT), pnext);
-        }
+    // case: copy prim lines PNEXT
+    else if (channel_i==1 && DATA_LINE (vb->prim_line_i)->PNEXT == pnext) 
+        seg_by_ctx (VB, STRa(copy_buddy_PNEXT_snip), channel_ctx, add_bytes); 
 
-        // case: supplamentary alignment - PNEXT = previous line PNEXT
-        else if (this_pnext == CTX(SAM_PNEXT)->last_value.i)
-            seg_pos_field (VB, SAM_PNEXT, SAM_PNEXT, 0, 0, 0, 0, pnext, add_bytes);
+    else 
+        pnext = seg_pos_field (VB, channel_ctx->did_i, SAM_POS, 0, 0, 0, 0, pnext, add_bytes);
 
-        else
-            seg_pos_field (VB, SAM_PNEXT, SAM_POS, 0, 0, 0, 0, pnext, add_bytes);
-    }
+    seg_by_did_i (VB, STRa(vb->mux_PNEXT.snip), SAM_PNEXT, 0);
 
-    else if (segconf.sam_is_sorted && pnext && vb->buddy_line_i != -1 && buddy_dl->POS == pnext) {
-        seg_by_did_i (VB, STRa(PNEXT_buddy_snip), SAM_PNEXT, add_bytes); // copy PNEXT from earlier-line buddy POS
-        ctx_set_last_value (VB, CTX(SAM_PNEXT), pnext);
-    }
-
-    else
-        pnext = seg_pos_field (VB, SAM_PNEXT, SAM_POS, 0, 0, 0, 0, pnext, add_bytes);
-
+    ctx_set_last_value (VB, CTX(SAM_PNEXT), (int64_t)pnext);
     dl->PNEXT = pnext;
+}
+
+// v14: De-multiplex PNEXT
+SPECIAL_RECONSTRUCTOR (sam_piz_special_PNEXT)
+{
+    bool is_depn  = last_flags.bits.supplementary || last_flags.bits.secondary;
+    bool has_mate = piz_has_buddy && !is_depn;
+    bool has_prim = piz_has_buddy && is_depn;
+    
+    // compare RNAME and RNEXT without assuming that their word_index's are the same (they might not be in headerless SAM)
+    STR(RNAME); ctx_get_snip_by_word_index (CTX(SAM_RNAME), CTX(SAM_RNAME)->last_value.i, RNAME);
+    STR(RNEXT); ctx_get_snip_by_word_index (CTX(SAM_RNEXT), CTX(SAM_RNEXT)->last_value.i, RNEXT);
+     
+    bool rnext_is_equal = (RNEXT_len == 1 && *RNEXT == '=') || str_issame (RNAME, RNEXT);
+    
+    int channel_i = sam_PNEXT_get_mux_channel (has_mate, has_prim, rnext_is_equal);
+    return reconstruct_demultiplex (vb, ctx, STRa(snip), channel_i, new_value, reconstruct);
+}
+
+// 12.0.41 up to v13: For collated files, in lines where PNEXT equal the previous line's POS.
+SPECIAL_RECONSTRUCTOR (sam_piz_special_PNEXT_IS_PREV_POS_old)
+{
+    new_value->i = CTX(SAM_POS)->last_value.i - CTX(SAM_POS)->last_delta;
+    if (reconstruct) RECONSTRUCT_INT (new_value->i);
+    
+    return true; // new value
 }

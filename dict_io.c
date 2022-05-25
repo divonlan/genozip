@@ -50,18 +50,17 @@ void dict_io_assign_codecs (void)
     next_ctx = ZCTX(0);
     
     // handle some dictionaries here, so save on thread creation for trival dictionaries
-    for (ContextP ctx=ZCTX(0); ctx < ZCTX(z_file->num_contexts); ctx++) {
-        
+    for_zctx {
         // assign CODEC_NONE to all the to-small-to-compress dictionaries, 
-        if (ctx->dict.len < MIN_LEN_FOR_COMPRESSION)
-            ctx->lcodec = CODEC_NONE;
+        if (zctx->dict.len < MIN_LEN_FOR_COMPRESSION)
+            zctx->lcodec = CODEC_NONE;
 
         // assign CODEC_ARTB to dictionaries under 1KB (unless --best)
-        else if (!flag.best && ctx->dict.len < 1024)
-            ctx->lcodec = CODEC_ARITH8;
+        else if (!flag.best && zctx->dict.len < 1024)
+            zctx->lcodec = CODEC_ARITH8;
 
         else
-            ctx->lcodec = CODEC_UNKNOWN; // only dicts big enough are assigned dynamically
+            zctx->lcodec = CODEC_UNKNOWN; // only dicts big enough are assigned dynamically
     }
 
     dispatcher_fan_out_task ("assign_dict_codecs", NULL, PROGRESS_MESSAGE, "Writing dictionaries...", false, false, 0, 20000,
@@ -146,7 +145,7 @@ static void dict_io_compress_one_fragment (VBlockP vb)
     };
 
     if (flag.show_dict) 
-        iprintf ("%s (vb_i=%u, did=%u, num_snips=%u)\n", 
+        iprintf ("%s (vb=%u, did=%u, num_snips=%u)\n", 
                  vb->fragment_ctx->tag_name, vb->vblock_i, vb->fragment_ctx->did_i, vb->fragment_num_words);
     
     if (dict_id_is_show (vb->fragment_ctx->dict_id))
@@ -203,7 +202,7 @@ static void dict_io_read_one_vb (VBlockP vb)
 
     if (piz_is_skip_section (SEC_DICT, COMP_NONE, dict_sec->dict_id, SKIP_PURPOSE_RECON)) {
         if (flag.debug_read_ctxs)
-            iprintf ("%c Skipped loading vb=DICT/%u %s.dict\n", sections_read_prefix, vb->vblock_i, dict_ctx->tag_name);
+            iprintf ("%c Skipped loading DICT/%u %s.dict\n", sections_read_prefix, vb->vblock_i, dict_ctx->tag_name);
         goto done;
     }
     dict_ctx->is_loaded = true; // not skipped
@@ -247,7 +246,7 @@ static void dict_io_read_one_vb (VBlockP vb)
         dict_ctx->dict.len      += (uint64_t)vb->fragment_len;
 
         ASSERT (dict_ctx->dict.len <= dict_ctx->dict.size, "Dict %s len=%"PRIu64" exceeds allocated size=%"PRIu64" (num_fragments=%u fragment_1_len=%u)", 
-                dict_ctx->tag_name, dict_ctx->dict.len, dict_ctx->dict.size, dict_ctx->dict.prm32[0], dict_ctx->dict.prm32[1]);
+                dict_ctx->tag_name, dict_ctx->dict.len, (uint64_t)dict_ctx->dict.size, dict_ctx->dict.prm32[0], dict_ctx->dict.prm32[1]);
 
         if (flag.debug_read_ctxs)
             sections_show_header ((SectionHeader *)header, NULL, dict_sec->offset, sections_read_prefix);

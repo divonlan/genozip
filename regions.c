@@ -30,7 +30,7 @@ typedef struct {
 } Chreg; // = Chromosome Region
 
 static Buffer regions_buf = EMPTY_BUFFER; // all regions together
-static Buffer *chregs = NULL;     // one entry per chrom
+static BufferP chregs = NULL;     // one entry per chrom
 
 static WordIndex num_chroms; // signed value as its compared to chrom
 
@@ -275,7 +275,7 @@ void regions_transform_negative_to_positive_complement()
 {
     if (!is_negative_regions) return; // nothing to do
 
-    Buffer *neg_chregs = chregs;
+    BufferP neg_chregs = chregs;
     chregs = CALLOC (num_chroms * sizeof (Buffer));
 
     // initialize regions for each chr - to be the whole chr
@@ -370,7 +370,7 @@ bool regions_get_range_intersection (WordIndex chrom_word_index, PosType min_pos
         return true;
     }
 
-    Buffer *chregs_buf = &chregs[chrom_word_index];
+    BufferP chregs_buf = &chregs[chrom_word_index];
     if (intersect_i >= chregs_buf->len) return false; // intersect_i is out of range with this chromosome (possibly because len=0 - no intersections with this chromosome)
 
     Chreg *chreg = B(Chreg, *chregs_buf, intersect_i);
@@ -404,7 +404,7 @@ bool regions_is_site_included (VBlockP vb)
             chrom, num_chroms, chrom_did_i);
 
     // it sufficient that the site is included in one (positive) region
-    Buffer *chregs_buf = &chregs[chrom];
+    BufferP chregs_buf = &chregs[chrom];
     for (unsigned chreg_i=0; chreg_i < chregs_buf->len; chreg_i++) {
         Chreg *chreg = B(Chreg, *chregs_buf, chreg_i);
         if (pos >= chreg->start_pos && pos <= chreg->end_pos) return true;
@@ -419,7 +419,7 @@ bool regions_is_range_included (WordIndex chrom_word_index, PosType start_pos, P
             chrom_word_index, num_chroms);
 
     // it sufficient that the site is included in one (positive) region
-    Buffer *chregs_buf = &chregs[chrom_word_index];
+    BufferP chregs_buf = &chregs[chrom_word_index];
     for (unsigned chreg_i=0; chreg_i < chregs_buf->len; chreg_i++) {
         Chreg *chreg = B(Chreg, *chregs_buf, chreg_i);
 

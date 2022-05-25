@@ -455,7 +455,7 @@ bool str_get_float (STRp(float_str),
         static const double pow10[16] = { 1.0, 10.0, 100.0, 1000.0, 10000.0, 100000.0, 1000000.0, 10000000.0, 100000000.0, 1000000000.0, 
                                           10000000000.0, 100000000000.0, 1000000000000.0, 10000000000000.0, 100000000000000.0, 1000000000000000.0 };
                                         
-        if (num_decimals >= sizeof (pow10) / sizeof (pow10[0])) return false; // too many decimals
+        if (num_decimals >= ARRAY_LEN (pow10)) return false; // too many decimals
 
         *value = (is_negative ? -1 : 1) * (val / pow10[num_decimals]);
     }
@@ -508,13 +508,6 @@ bool str_scientific_to_decimal (STRp(float_str), char *modified, uint32_t *modif
 not_scientific_float:
     SAFE_RESTORE;
     return false;
-}
-
-StrText str_pointer (const void *p)
-{
-    StrText s;
-    sprintf (s.s, "0x%"PRIx64, (uint64_t)p);
-    return s;
 }
 
 bool str_is_in_range (rom str, uint32_t str_len, char first_c, char last_c)
@@ -712,14 +705,19 @@ uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(con_pre
             default:
                 ASSERT (IS_PRINTABLE(sep), "item_i=%u sep=%u is not a printable character in string \"%.*s\"", item_i, sep, str_len, save_str);
 
+                char sep1 = con->items[item_i].separator[1];
                 *items = str;
-                while (*str != sep && str < after_str) str++; 
+
+                if (!sep1) 
+                    while (str < after_str && *str != sep) str++; 
+                else 
+                    while (str < (after_str-1) && (str[0] != sep || str[1] != sep1)) str++; 
 
                 ASSSPLIT (str < after_str, "item_i=%u reached end of string without finding separator '%c' in string \"%.*s\"", 
                           item_i, sep, str_len, save_str);
 
                 *item_lens = str - *items;
-                str++; // skip seperator
+                str += 1 + (sep1 != 0); // skip seperator
         }
 
         items++; item_lens++; // increment pointers        
@@ -822,6 +820,8 @@ rom type_name (uint32_t item,
 
 void str_print_dict (FILE *fp, STRp(data), bool add_newline, bool remove_equal_asterisk)
 {
+    WordIndex word_index=0;
+
     for (uint32_t i=0; i < data_len; i++) {
         // in case we are showing chrom data in --list-chroms in SAM - don't show * and =
         if (remove_equal_asterisk && (data[i]=='*' || data[i]=='=') && !data[i+1]) {
@@ -829,16 +829,21 @@ void str_print_dict (FILE *fp, STRp(data), bool add_newline, bool remove_equal_a
             continue; // skip character and following separator
         }
 
-        if (i && !data[i] && !data[i-1]) continue; // skip empty words
-        
-        switch (data[i]) {
-            case 32 ... 127 : fputc (data[i], fp);      break;
-            case 0          : fputc (add_newline ? '\n' : ' ', fp); break; // snip separator
-            case '\t'       : fwrite ("\\t", 1, 2, fp); break;
-            case '\n'       : fwrite ("\\n", 1, 2, fp); break;
-            case '\r'       : fwrite ("\\r", 1, 2, fp); break;
-            default         : fprintf (fp, "\\x%x", (uint8_t)data[i]);
+        if (!i || data[i] || data[i-1]) { // skip empty words
+            
+            if (!i || !data[i-1]) fprintf (fp, "%u%c", word_index, add_newline ? '\t' : '='); 
+
+            switch (data[i]) {
+                case 32 ... 127 : fputc (data[i], fp);      break;
+                case 0          : fputc (add_newline ? '\n' : ' ', fp); break; // snip separator
+                case '\t'       : fwrite ("\\t", 1, 2, fp); break;
+                case '\n'       : fwrite ("\\n", 1, 2, fp); break;
+                case '\r'       : fwrite ("\\r", 1, 2, fp); break;
+                default         : fprintf (fp, "\\x%x", (uint8_t)data[i]);
+            }
         }
+
+        if (!data[i]) word_index++;
     }
     fflush (fp);
 }
@@ -959,7 +964,7 @@ char *str_revcomp_in_out (char *dst_seq, rom src_seq, uint32_t seq_len)
     return dst_seq;
 }
 
-// reverse-complements a string in-place - complements A,C,T,G characters and leaves others intact. set dst_seq=src_seq to output in-place.
+// reverse-complements a string in-place - complements A,C,G,T characters and leaves others intact. set dst_seq=src_seq to output in-place.
 char *str_revcomp_actg (char *dst_seq, rom src_seq, uint32_t seq_len)
 {
     for (uint32_t i=0; i < seq_len / 2; i++) {

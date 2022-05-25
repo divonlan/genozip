@@ -67,8 +67,8 @@ void codec_acgt_comp_init (VBlockP vb)
         nonref_x_ctx->lcodec    = CODEC_XCGT; // prevent codec_assign_best from assigning it a different codec
 }
 
-// packing of an array A,G,C,T characters into a 2-bit BitArray, stored in vb->scratch. 
-static inline void codec_acgt_pack (BitArray *packed, rom data, uint64_t data_len)
+// packing of an array A,C,G,T characters into a 2-bit BitArray, stored in vb->scratch. 
+static inline void codec_acgt_pack (BitArrayP packed, rom data, uint64_t data_len)
 {
     // increase bit array to accomodate data
     uint64_t next_bit = packed->nbits;
@@ -76,14 +76,15 @@ static inline void codec_acgt_pack (BitArray *packed, rom data, uint64_t data_le
     packed->nwords = roundup_bits2words64 (packed->nbits);
     
     // pack nucleotides - each character is packed into 2 bits
-    for (uint64_t i=0 ; i < data_len ; i++) {
+    for (uint64_t i=0 ; i < data_len ; i++, next_bit += 2)       
+        bit_array_assign2 (packed, next_bit, acgt_encode[(uint8_t)data[i]]);
 
-        uint8_t encoding = acgt_encode[(uint8_t)data[i]];
-        
-        bit_array_assign (packed, next_bit,   (encoding & 1)     );
-        bit_array_assign (packed, next_bit+1, (encoding & 2) >> 1);
-        next_bit += 2;
-    }
+    //xxx for (uint64_t i=0 ; i < data_len ; i++) {
+    //     uint8_t encoding = acgt_encode[(uint8_t)data[i]];
+    //     bit_array_assign (packed, next_bit,   (encoding & 1)     );
+    //     bit_array_assign (packed, next_bit+1, (encoding & 2) >> 1);
+    //     next_bit += 2;
+    // }
 }
 
 // This function decompsoses SEQ data into two buffers:
@@ -93,12 +94,7 @@ static inline void codec_acgt_pack (BitArray *packed, rom data, uint64_t data_le
 // -- an a,c,g or t character in SEQ is corresponds to a \1 in NONREF_X 
 // -- any other character is copied from SEQ as is
 // NONREF_X.local is later compressed as a normal context (codec=XCGT, subcodec=as assigned)
-bool codec_acgt_compress (VBlockP vb, SectionHeader *header,
-                          rom uncompressed,    // option 1 - compress contiguous data
-                          uint32_t *uncompressed_len,
-                          LocalGetLineCB callback,     // option 2 - compress data one line at a time
-                          char *compressed, uint32_t *compressed_len /* in/out */, 
-                          bool soft_fail, rom name)
+COMPRESS (codec_acgt_compress)
 {
     // table to convert SEQ data to ACGT exceptions. The character is XORed with the entry in the table
     static const uint8_t acgt_exceptions[256] = { 
@@ -140,14 +136,14 @@ bool codec_acgt_compress (VBlockP vb, SectionHeader *header,
     }
 
     // option 2 - callback to get each line
-    else if (callback) {
+    else if (get_line_cb) {
         buf_alloc (vb, &nonref_x_ctx->local, 0, *uncompressed_len, uint8_t, CTX_GROWTH, "contexts->local");
         for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
 
             char *data_1=0;
             uint32_t data_1_len=0;
             
-            callback (vb, line_i, &data_1, &data_1_len, *uncompressed_len - nonref_x_ctx->local.len, NULL);
+            get_line_cb (vb, line_i, &data_1, &data_1_len, *uncompressed_len - nonref_x_ctx->local.len, NULL);
 
             PACK (data_1, data_1_len);
 
@@ -200,9 +196,7 @@ bool codec_acgt_compress (VBlockP vb, SectionHeader *header,
 
 // two options: 1. the length maybe given (textually) in snip/snip_len. in that case, it is used and vb->seq_len is updated.
 // if snip_len==0, then the length is taken from seq_len.
-void codec_xcgt_uncompress (VBlockP vb, Codec codec, uint8_t param,
-                            STRp(compressed), Buffer *uncompressed_buf, uint64_t uncompressed_len,
-                            Codec sub_codec, rom name)
+UNCOMPRESS (codec_xcgt_uncompress)
 {
     // uncompress NONREF_X using CODEC_XCGT.sub_codec (passed to us as sub_codec)
     codec_args[sub_codec].uncompress (vb, sub_codec, param, STRa(compressed), uncompressed_buf, uncompressed_len, CODEC_NONE, name);
@@ -227,14 +221,11 @@ void codec_xcgt_uncompress (VBlockP vb, Codec codec, uint8_t param,
 // 1) NONREF contains a 2-bit representation of the bases: is is uncompressed by codec_acgt_uncompress into vb->scratch using sub_codec
 // 2) NONREF_X is a character array of exceptions and is uncompressed into NONREF_X.local by codec_xcgt_uncompress
 // 3) codec_xcgt_uncompress also combines vb->scratch with NONREF_X.local to recreate NONREF.local - an LT_SEQUENCE local buffer
-void codec_acgt_uncompress (VBlockP vb, Codec codec, uint8_t param,
-                            rom compressed, uint32_t compressed_len,
-                            Buffer *uncompressed_buf, uint64_t num_bases,
-                            Codec sub_codec, rom name)
+UNCOMPRESS (codec_acgt_uncompress)
 {
     ASSERTNOTINUSE (vb->scratch);
 
-    uint64_t bitmap_num_bytes = roundup_bits2bytes64 (num_bases * 2); // 4 nucleotides per byte, rounded up to whole 64b words
+    uint64_t bitmap_num_bytes = roundup_bits2bytes64 (uncompressed_len * 2); // 4 nucleotides per byte, rounded up to whole 64b words
     buf_alloc (vb, &vb->scratch, 0, bitmap_num_bytes, char, 1, "scratch");    
 
     // uncompress bitmap using CODEC_ACGT.sub_codec (passed to us as sub_codec) into vb->scratch
@@ -242,7 +233,7 @@ void codec_acgt_uncompress (VBlockP vb, Codec codec, uint8_t param,
 
     // finalize bitmap structure
     BitArray *packed     = buf_get_bitarray (&vb->scratch);
-    packed->nbits  = num_bases * 2;
+    packed->nbits  = uncompressed_len * 2;
     packed->nwords = roundup_bits2words64 (packed->nbits);
 
     LTEN_bit_array (packed);

@@ -29,31 +29,30 @@
 
 // Tell PIZ to replace this character by something else (can appear in any part of a snip in a dictionary, or even multiple times in a snip)
 // We use characters that cannot appear in a snip - i.e. other than ApCII 32-127, \t (\x9) \n (\xA) \r (\xD)
-#define SNIP_SEP                 '\x0'   // Seperator between snips - both for dict and local 
-#define SNIP_LOOKUP              '\x1'   // Lookup from local (optionally followed by a snip - interpreted differently by local type, see reconstruct_one_snip)
-#define SNIP_OTHER_LOOKUP        '\x2'   // Lookup from local of other dict_id (possibly with length for sequence storage)
-#define SNIP_MATE_LOOKUP         '\x3'   // Lookup from paired file (when using --pair)  
-#define SNIP_CONTAINER           '\x4'   // Appears as first character in the SNIP, followed by a specification of a container field
-#define SNIP_SELF_DELTA          '\x5'   // The value is a uint32_t which is a result of the last value + the positive or negative textual int32_t value following this character
-#define SNIP_OTHER_DELTA         '\x6'   // The value is a uint32_t which is a result of the last value of another field + the delta value. following this char, {DictId dict_id, int32_t delta, bool update_other} in base64)
-#define SNIP_PAIR_DELTA          '\x7'   // The value is a uint32_t which is a result of the equivalent value in the paired file + the delta value (when using --pair)
-#define SNIP_SPECIAL             '\x8'   // Special algorithm followed by ID of the algorithm 
-#define SNIP_REDIRECTION         '\xB'   // Get the data from another dict_id (can be in b250, local...)
-#define SNIP_DONT_STORE          '\xC'   // Reconstruct the following value, but don't store it in last_value (overriding flags.store)
-#define SNIP_COPY                '\xE'   // Copy the last_txt of dict_id (same or other)
-#define SNIP_DUAL                '\xF'   // A snip containing two snips separated by a SNIP_DUAL - for Primary and Luft reconstruction respectively
-#define SNIP_LOOKBACK            '\x10'  // Copy an earlier snip in the same context. Snip is dict_id from which to take the lookback offset, and an optional delta to be applied to the retrieved numeric value. note: line number of the previous snip is variable, but its offset back is fixed (introduced 12.0.41)
-#define SNIP_COPY_BUDDY          '\x11'  // Copy a snip on an earlier "buddy" line in the same or another context (note: offset back to the previous snip is variable, but its line number is fixed) (introduced 12.0.41)
-#define SNIP_XOR_DIFF            '\x12'  // XOR a string vs. previous string (introduced 13.0.5)    
-#define SNIP_RESERVED            '\x13'  // A value guaranteed not to exist in dictionary data. Used internally by ctx_shorten_unused_dict_words. (13.0.7)
-#define NUM_SNIP_CODES           20
+#define SNIP_SEP                  '\x0'   // Seperator between snips - both for dict and local 
+#define SNIP_LOOKUP               '\x1'   // Lookup from local (optionally followed by a snip - interpreted differently by local type, see reconstruct_one_snip)
+#define SNIP_OTHER_LOOKUP         '\x2'   // Lookup from local of other dict_id (possibly with length for sequence storage)
+#define SNIP_MATE_LOOKUP          '\x3'   // Lookup from paired file (when using --pair)  
+#define SNIP_CONTAINER            '\x4'   // Appears as first character in the SNIP, followed by a specification of a container field
+#define SNIP_SELF_DELTA           '\x5'   // The value is a uint32_t which is a result of the last value + the positive or negative textual int32_t value following this character
+#define SNIP_OTHER_DELTA          '\x6'   // The value is a uint32_t which is a result of the last value of another field + the delta value. following this char, {DictId dict_id, int32_t delta, bool update_other} in base64)
+#define v13_SNIP_FASTQ_PAIR2_GPOS '\x7'   // up to v13: (replaced by FASTQ_SPECIAL_PAIR2_GPOS) The value is a uint32_t which is a result of the equivalent value in the paired file + the delta value (when using --pair)
+#define SNIP_SPECIAL              '\x8'   // Special algorithm followed by ID of the algorithm 
+#define SNIP_REDIRECTION          '\xB'   // Get the data from another dict_id (can be in b250, local...)
+#define SNIP_DONT_STORE           '\xC'   // Reconstruct the following value, but don't store it in last_value (overriding flags.store)
+#define SNIP_COPY                 '\xE'   // Copy the last_txt of dict_id (same or other)
+#define SNIP_DUAL                 '\xF'   // A snip containing two snips separated by a SNIP_DUAL - for Primary and Luft reconstruction respectively
+#define SNIP_LOOKBACK             '\x10'  // Copy an earlier snip in the same context. Snip is dict_id from which to take the lookback offset, and an optional delta to be applied to the retrieved numeric value. note: line number of the previous snip is variable, but its offset back is fixed (introduced 12.0.41)
+#define SNIP_COPY_BUDDY           '\x11'  // Copy a snip on an earlier "buddy" line in the same or another context (note: offset back to the previous snip is variable, but its line number is fixed) (introduced 12.0.41)
+#define SNIP_XOR_DIFF             '\x12'  // XOR a string vs. previous string (introduced 13.0.5)    
+#define SNIP_RESERVED             '\x13'  // A value guaranteed not to exist in dictionary data. Used internally by ctx_shorten_unused_dict_words. (13.0.7)
+#define NUM_SNIP_CODES            20
 
 #define SNIP_CODES { "SNIP_SEP", "SNIP_LOOKUP", "SNIP_OTHER_LOOKUP", "SNIP_MATE_LOOKUP",\
-                     "SNIP_CONTAINER", "SNIP_SELF_DELTA", "SNIP_OTHER_DELTA", "SNIP_PAIR_DELTA", \
+                     "SNIP_CONTAINER", "SNIP_SELF_DELTA", "SNIP_OTHER_DELTA", "v13_SNIP_FASTQ_PAIR2_GPOS", \
                      "SNIP_SPECIAL", "<TAB>", "<NL>", "SNIP_REDIRECTION",\
                      "SNIP_DONT_STORE", "<LF>", "SNIP_COPY", "SNIP_DUAL", "SNIP_LOOKBACK",\
                      "SNIP_COPY_BUDDY", "SNIP_XOR_DIFF", "SNIP_RESERVED" }
-#define SNIP(len) uint32_t snip_len=(len); char snip[len]
 
 typedef struct CtxNode {
     CharIndex char_index; // character index into dictionary array
@@ -74,11 +73,8 @@ typedef struct {
 #define INTERLACE(signedtype,num) ({ signedtype n=(signedtype)(num); (n < 0) ? ((SAFE_NEGATE(signedtype,n) << 1) - 1) : (((u##signedtype)n) << 1); })
 #define DEINTERLACE(signedtype,unum) (((unum) & 1) ? -(signedtype)(((unum)>>1)+1) : (signedtype)((unum)>>1))
 
-#define NEXTLOCAL(type, ctx) (*B(type, (ctx)->local, (ctx)->next_local++))
-#define PEEKNEXTLOCAL(type, ctx, offset) (*B(type, (ctx)->local, (ctx)->next_local + offset))
-static inline bool PAIRBIT(ContextP ctx)      { BitArrayP b = buf_get_bitarray (&ctx->pair);  bool ret = bit_array_get (b, ctx->next_local);                    return ret; } // we do it like this and not in a #define to avoid anti-aliasing warning when casting part of a Buffer structure into a BitArray structure
-static inline bool NEXTLOCALBIT(ContextP ctx) { BitArrayP b = buf_get_bitarray (&ctx->local); bool ret = bit_array_get (b, ctx->next_local); ctx->next_local++; return ret; }
-static inline uint8_t NEXTLOCAL2BITS(ContextP ctx) { BitArrayP b = buf_get_bitarray (&ctx->local); uint8_t ret = bit_array_get (b, ctx->next_local) | (bit_array_get (b, ctx->next_local+1) << 1); ctx->next_local += 2; return ret; }
+static inline bool NEXTLOCALBIT(ContextP ctx)      { bool ret = bit_array_get ((BitArrayP)&ctx->local, ctx->next_local); ctx->next_local++; return ret; }
+static inline uint8_t NEXTLOCAL2BITS(ContextP ctx) { uint8_t ret = bit_array_get ((BitArrayP)&ctx->local, ctx->next_local) | (bit_array_get ((BitArrayP)&ctx->local, ctx->next_local+1) << 1); ctx->next_local += 2; return ret; }
 
 // factor in which we grow buffers in CTX upon realloc
 #define CTX_GROWTH 1.75  
@@ -100,12 +96,12 @@ static inline uint8_t NEXTLOCAL2BITS(ContextP ctx) { BitArrayP b = buf_get_bitar
 #define last_index(did_i)   contexts[did_i].last_value.i
 #define last_float(did_i)   contexts[did_i].last_value.f
 #define last_delta(did_i)   contexts[did_i].last_delta
-#define last_txtx(vb, ctx)  Bc ((vb)->txt_data, (ctx)->last_txt_index)
-#define last_txt(vb, did_i) last_txtx (vb, &(vb)->contexts[did_i])
-#define last_txt_len(did_i) contexts[did_i].last_txt_len
+#define last_txtx(vb, ctx)  Btxt ((ctx)->last_txt.index)
+static inline char *last_txt (VBlockP vb, DidIType did_i) { return last_txtx (vb, CTX(did_i)); }
+#define last_txt_len(did_i) contexts[did_i].last_txt.len
 
-static inline bool is_last_txt_valid(ContextP ctx) { return ctx->last_txt_index != INVALID_LAST_TXT_INDEX; }
-static inline bool is_same_last_txt(VBlockP vb, ContextP ctx, STRp(str)) { return str_len == ctx->last_txt_len && !memcmp (str, last_txtx(vb, ctx), str_len); }
+static inline bool is_last_txt_valid(ContextP ctx) { return ctx->last_txt.index != INVALID_LAST_TXT_INDEX; }
+static inline bool is_same_last_txt(VBlockP vb, ContextP ctx, STRp(str)) { return str_len == ctx->last_txt.len && !memcmp (str, last_txtx(vb, ctx), str_len); }
 
 static inline void ctx_init_iterator (ContextP ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; ctx->next_local = 0; }
 
@@ -120,8 +116,8 @@ extern void ctx_decrement_count (VBlockP vb, ContextP ctx, WordIndex node_index)
 extern void ctx_increment_count (VBlockP vb, ContextP ctx, WordIndex node_index);
 extern void ctx_protect_from_removal (VBlockP vb, ContextP ctx, WordIndex node_index);
 
-extern WordIndex ctx_get_next_snip (VBlockP vb, ContextP ctx, bool all_the_same, bool is_pair, pSTRp (snip));
-extern WordIndex ctx_peek_next_snip (VBlockP vb, ContextP ctx, bool all_the_same, pSTRp (snip));  
+extern WordIndex ctx_get_next_snip (VBlockP vb, ContextP ctx, bool is_pair, pSTRp (snip));
+extern WordIndex ctx_peek_next_snip (VBlockP vb, ContextP ctx, pSTRp (snip));  
 
 extern WordIndex ctx_search_for_word_index (ContextP ctx, STRp(snip));
 extern void ctx_clone (VBlockP vb);
@@ -177,7 +173,7 @@ static inline DidIType ctx_get_existing_did_i_do (DictId dict_id, const Context 
 static inline ContextP ctx_get_existing_ctx_do (VBlockP vb, DictId dict_id)  // returns NULL if context doesn't exist
 {
     DidIType did_i = ctx_get_existing_did_i(vb, dict_id); 
-    return (did_i == DID_I_NONE) ? NULL : &vb->contexts[did_i]; 
+    return (did_i == DID_I_NONE) ? NULL : CTX(did_i); 
 }
 #define ECTX(dict_id) ctx_get_existing_ctx_do ((VBlockP)(vb), (DictId)(dict_id))
 
@@ -228,16 +224,15 @@ static inline bool ctx_set_rollback (VBlockP vb, ContextP ctx, bool override_id)
 {
     if (ctx->rback_id == vb->rback_id && !override_id) return false; // ctx already in rollback point 
     
-    ctx->rback_b250_len        = ctx->b250.len;
-    ctx->rback_local_len       = ctx->local.len;
-    ctx->rback_nodes_len       = ctx->nodes.len;
+    ctx->rback_b250_len        = ctx->b250.len32;
+    ctx->rback_local_len       = ctx->local.len32;
+    ctx->rback_nodes_len       = ctx->nodes.len32;
     ctx->rback_txt_len         = ctx->txt_len;
     ctx->rback_local_num_words = ctx->local_num_words;
     ctx->rback_b250_count      = ctx->b250.count;
     ctx->rback_last_value      = ctx->last_value;
     ctx->rback_last_delta      = ctx->last_delta;
-    ctx->rback_last_txt_index  = ctx->last_txt_index;
-    ctx->rback_last_txt_len    = ctx->last_txt_len;
+    ctx->rback_last_txt        = ctx->last_txt;
     ctx->rback_id              = vb->rback_id;
     return true;
 }
@@ -348,3 +343,6 @@ extern void ctx_foreach_buffer(ContextP ctx, bool set_name, void (*func)(BufferP
 
 extern SORTER (sort_by_dict_id);
 
+#define for_zctx for (ContextP zctx=ZCTX(0); zctx < ZCTX(z_file->num_contexts); zctx++) 
+#define for_vctx for (ContextP vctx=CTX(0);  vctx < CTX(vb->num_contexts);      vctx++) 
+#define for_ctx  for (ContextP ctx=CTX(0);   ctx  < CTX(vb->num_contexts);      ctx++) 

@@ -37,12 +37,7 @@ static rom BZ2_errstr (int err)
 }
 
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
-bool codec_bz2_compress (VBlockP vb, SectionHeader *header,
-                         rom uncompressed,       // option 1 - compress contiguous data
-                         uint32_t *uncompressed_len, 
-                         LocalGetLineCB callback,  // option 2 - compress data one line at a tim
-                         char *compressed, uint32_t *compressed_len /* in/out */, 
-                         bool soft_fail, rom name)
+COMPRESS (codec_bz2_compress)
 {
     // good manual: http://linux.math.tifr.res.in/manuals/html/manual_3.html
     START_TIMER;
@@ -75,7 +70,7 @@ bool codec_bz2_compress (VBlockP vb, SectionHeader *header,
     }
     
     // option 2 - compress data one line at a time
-    else if (callback) {
+    else if (get_line_cb) {
 
         uint32_t in_so_far = 0;
         for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
@@ -86,7 +81,7 @@ bool codec_bz2_compress (VBlockP vb, SectionHeader *header,
             strm.next_in=0;
             strm.avail_in=0;
 
-            callback (vb, line_i, &strm.next_in, &strm.avail_in, *uncompressed_len - in_so_far, NULL);
+            get_line_cb (vb, line_i, &strm.next_in, &strm.avail_in, *uncompressed_len - in_so_far, NULL);
             in_so_far += strm.avail_in;
 
             bool is_last_line = (line_i == vb->lines.len - 1);
@@ -117,10 +112,7 @@ bool codec_bz2_compress (VBlockP vb, SectionHeader *header,
     return success;
 }
 
-void codec_bz2_uncompress (VBlockP vb, Codec codec, uint8_t param,
-                           rom compressed, uint32_t compressed_len,
-                           Buffer *uncompressed_buf, uint64_t uncompressed_len, 
-                           Codec unused, rom name)
+UNCOMPRESS (codec_bz2_uncompress)
 {
     START_TIMER;
 

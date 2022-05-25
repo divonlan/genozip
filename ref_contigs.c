@@ -25,7 +25,7 @@
 extern int strncasecmp (rom s1, rom s2, size_t n); // defined in <strings.h>, but file name conflicts with "strings.h" (to do: sort this out in the Makefile)
 #endif
 
-static void BGEN_ref_contigs (Buffer *contigs_buf)
+static void BGEN_ref_contigs (BufferP contigs_buf)
 {
     for (uint32_t i=0; i < contigs_buf->len; i++) {
         Contig *cn   = B(Contig, *contigs_buf, i);
@@ -46,9 +46,7 @@ void ref_contigs_populate_aligned_chroms (void)
     // create sorted index into CHROM
     chrom_index_by_name (CHROM);
 
-    for (uint32_t range_i=0; range_i < gref->ranges.len; range_i++) {
-        Range *r = B(Range, gref->ranges, range_i);
-
+    for_buf (Range, r, gref->ranges) {
         bool already_exists = (chrom_get_by_name (STRa(r->chrom_name)) != WORD_INDEX_NONE); // it might exist, eg in a case of a SAM with mixed aligned and unaligned reads
         if (already_exists) continue;
 
@@ -64,29 +62,27 @@ void ref_contigs_populate_aligned_chroms (void)
     }
 }
 
-static void ref_contigs_show (const Buffer *contigs_buf, bool created)
+static void ref_contigs_show (ConstBufferP contigs_buf, bool created)
 {
-    ARRAY (const Contig, cn, *contigs_buf);
-
     iprintf ("\nContigs as they appear in the reference%s:\n", created ? " created (note: contig names are as they appear in the txt data, not the reference)" : "");
-    for (uint32_t i=0; i < cn_len; i++) {
+    for_buf2 (const Contig, cn, i, *contigs_buf) {
 
-        rom chrom_name = cn[i].snip_len ? B(const char, ZCTX(CHROM)->dict, cn[i].char_index) : "~unused";
+        rom chrom_name = cn->snip_len ? B(const char, ZCTX(CHROM)->dict, cn->char_index) : "~unused";
         bool ext_ref = (flag.reference & REF_ZIP_LOADED) || Z_DT(DT_REF);
 
         if (ext_ref && created)
             iprintf ("\"%s\" length=%"PRId64" ref_index=%d gpos=%"PRId64" metadata=\"%s\"\n",
-                     chrom_name,  cn[i].max_pos, cn[i].ref_index, cn[i].gpos, cn[i].metadata.str);
+                     chrom_name, cn->max_pos, cn->ref_index, cn->gpos, cn->metadata.str);
 
         else if (ext_ref) 
             iprintf ("\"%s\" length=%"PRId64" ref_index=%d gpos=%"PRId64" %s\n",
-                     chrom_name,  cn[i].max_pos, cn[i].ref_index, cn[i].gpos, display_acc_num (&cn[i].metadata.parsed.ac).s);
+                     chrom_name,  cn->max_pos, cn->ref_index, cn->gpos, display_acc_num (&cn->metadata.parsed.ac).s);
 
-        else if (cn[i].snip_len)
+        else if (cn->snip_len)
             iprintf ("i=%d '%s' gpos=%"PRId64" min_pos=%"PRId64" max_pos=%"PRId64" ref_index=%d char_index=%"PRIu64" snip_len=%u\n",
-                     i, chrom_name, cn[i].gpos, cn[i].min_pos, cn[i].max_pos, cn[i].ref_index, cn[i].char_index, cn[i].snip_len);
+                     i, chrom_name, cn->gpos, cn->min_pos, cn->max_pos, cn->ref_index, cn->char_index, cn->snip_len);
         else
-            iprintf ("i=%d (unused - not present in txt data)\n", cn[i].ref_index);
+            iprintf ("i=%d (unused - not present in txt data)\n", cn->ref_index);
     }
 }
 
@@ -122,8 +118,10 @@ void ref_contigs_compress_internal (Reference ref)
 
     ConstBufferP contig_metadata = ref_make_get_contig_metadata(); // empty unless this is --make-reference
 
-    for (uint32_t range_i=0; range_i < ref->ranges.len; range_i++) {
-        Range *r = B(Range, ref->ranges, range_i);
+    Range *prev_r = NULL;
+    for_buf (Range, r, ref->ranges) {
+
+        if (r->first_pos > r->last_pos) continue; // range not actually used
 
         // chrom_word_index might still be WORD_INDEX_NONE. We get it now from the z_file data
         if (r->chrom == WORD_INDEX_NONE) {
@@ -135,7 +133,7 @@ void ref_contigs_compress_internal (Reference ref)
         if (!last || r->chrom != last->ref_index) {
 
             // we assign 64-aligned gpos
-            r->gpos = range_i ? ROUNDUP64 ((r-1)->gpos + (r-1)->last_pos - (r-1)->first_pos + 1) : 0;
+            r->gpos = prev_r ? ROUNDUP64 (prev_r->gpos + prev_r->last_pos - prev_r->first_pos + 1) : 0;
                 
             BNXT (Contig, created_contigs) = (Contig){
                 .gpos        = r->gpos, 
@@ -151,9 +149,11 @@ void ref_contigs_compress_internal (Reference ref)
         }
         else {
             // set gpos of the next range relative to this chrom (note: ranges might not be contiguous)
-            r->gpos = (r-1)->gpos + (r->first_pos - (r-1)->first_pos); // note: only the first range in the chrom needs to be 64-aligned            
+            r->gpos = prev_r->gpos + (r->first_pos - prev_r->first_pos); // note: only the first range in the chrom needs to be 64-aligned            
             last->max_pos = r->last_pos; // update
         }
+
+        prev_r = r;
     }
     
     COPY_TIMER_VB (evb, ref_contigs_compress); // we don't count the compression itself and the disk writing
@@ -175,22 +175,19 @@ void ref_contigs_compress_ext_store (Reference ref)
     // NOTE: ref_get_range_by_chrom access ranges by chrom, but ref_initialize_loaded_ranges (incorrectly) allocates ranges.len by ref->ctgs.contigs.len 
     // (for non REF_INTERNAL) therefore, we must have ref_contigs aligned with CHROM
     
-    buf_alloc_zero (evb, &created_contigs, 0, nodes_len, Contig, 1, "created_contigs");
-    created_contigs.len = nodes_len;
-    ARRAY (Contig, cn, created_contigs);
+    buf_alloc_exact_zero (evb, created_contigs, nodes_len, Contig, "created_contigs");
 
-    for (WordIndex i=0; i < nodes_len; i++) {
-        cn[i].ref_index  = WORD_INDEX_NONE; // initialize (not all CHROMs have contigs, eg "*" in SAM)
-        cn[i].ref_index  = i; // ref_index always refers to the CHROM index of the file in which it is stored (eg REF_CONTIG in References files, RNAME in SAM etc)
-        cn[i].gpos       = 0; // ref_initialize_ranges overlays even empty contigs on the genome, so GPOS must be valid number
+    for_buf2 (Contig, cn, i, created_contigs) {
+        cn->ref_index  = WORD_INDEX_NONE; // initialize (not all CHROMs have contigs, eg "*" in SAM)
+        cn->ref_index  = i; // ref_index always refers to the CHROM index of the file in which it is stored (eg REF_CONTIG in References files, RNAME in SAM etc)
+        cn->gpos       = 0; // ref_initialize_ranges overlays even empty contigs on the genome, so GPOS must be valid number
     }
 
     // create sorted index into CHROM
     chrom_index_by_name (CHROM);
 
-    for (uint32_t range_i=0; range_i < ref->ranges.len; range_i++) {
-        Range *r = B(Range, ref->ranges, range_i);
-
+    ARRAY (Contig, cn, created_contigs);
+    for_buf (Range, r, ref->ranges) {
         // if gpos of the first range in this contig has been increased due to removing flanking regions and is no longer 64-aligned,
         // we start the contig a little earlier to be 64-aligned (note: this is guaranteed to be within the original contig before 
         // compacting, because the original contig had a 64-aligned gpos)
@@ -395,14 +392,10 @@ PosType ref_contigs_get_genome_nbases (const Reference ref)
     if (!ref->ctgs.contigs.len) return 0;
 
     // note: contigs are sorted by chrom and then pos within chrom, NOT by gpos! (chroms might have been added out of order during reference creation)
-    ARRAY (const Contig, rc, ref->ctgs.contigs);
     const Contig *rc_with_largest_gpos = NULL;
-
-    for (uint64_t i=0; i < rc_len; i++)  {
-
-        if (!rc[i].min_pos && !rc[i].max_pos) continue; // not real contig, eg "*" in SAM
-
-        if (!rc_with_largest_gpos || rc[i].gpos > rc_with_largest_gpos->gpos) rc_with_largest_gpos = &rc[i];
+    for_buf (const Contig, rc, ref->ctgs.contigs)  {
+        if (!rc->min_pos && !rc->max_pos) continue; // not a real contig, eg "*" in SAM
+        if (!rc_with_largest_gpos || rc->gpos > rc_with_largest_gpos->gpos) rc_with_largest_gpos = rc;
     }
     
     ASSERT (rc_with_largest_gpos, "There are %"PRIu64" elements in the contigs array, but none are actual contigs", ref->ctgs.contigs.len);
@@ -416,8 +409,7 @@ WordIndex ref_contig_get_by_gpos (const Reference ref, PosType gpos,
                                   PosType *pos) // optional out, POS within the CHROM matching gpos
 {
     // note: contigs are sorted by chrom and then pos within chrom, NOT by gpos! (chroms might have been added out of order during reference creation)
-    for (WordIndex ref_index=0 ; ref_index < ref->ctgs.contigs.len; ref_index++) {
-        Contig *rc = B(Contig, ref->ctgs.contigs, ref_index);
+    for_buf2 (Contig, rc, ref_index, ref->ctgs.contigs) 
         if (gpos >= rc->gpos && gpos <= rc->gpos + (rc->max_pos - rc->min_pos)) {
             if (pos) {
                 ASSERT (ref_index < ref->ranges.len, "Unexpected ref_index=%d >= ref->ranges.len=%"PRIu64, ref_index, ref->ranges.len);  
@@ -427,7 +419,6 @@ WordIndex ref_contig_get_by_gpos (const Reference ref, PosType gpos,
             }
             return ref_index;
         }
-    }
 
     return WORD_INDEX_NONE; // not found
 }

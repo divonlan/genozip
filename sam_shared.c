@@ -34,22 +34,35 @@ void sam_vb_release_vb (VBlockSAMP vb)
     vb->plsg_i = 0;
     vb->last_cigar = NULL;
     vb->ref_consumed = vb->ref_and_seq_consumed = vb->soft_clip[0] = vb->soft_clip[1] = 0;
-    vb->mismatch_bases = vb->hard_clip[0] = vb->hard_clip[1] = 0;
+    vb->mismatch_bases_by_SEQ = vb->mismatch_bases_by_MD = vb->hard_clip[0] = vb->hard_clip[1] = vb->deletions = vb->insertions = 0;
     vb->a_bases = vb->x_bases = vb->y_bases = 0;
     vb->a_index = vb->x_index = vb->y_index = 0;
     vb->md_verified = 0;
-    vb->qual_codec_no_longr = false;
-    vb->seq_missing = vb->cigar_missing = vb->check_for_gc = 0;
+    vb->qual_codec_no_longr = vb->has_qual = false;
+    vb->seq_missing = vb->cigar_missing = vb->check_for_gc = vb->RNEXT_is_equal = 0;
     vb->qual_missing = 0;
     vb->sa_grp = 0;
     vb->sa_aln = 0;
     vb->comp_qual_len = vb->comp_cigars_len = 0;
-    vb->NM = 0;
-    vb->NM_len = 0;
     vb->XG_inc_S = 0;
     vb->first_grp_i = 0;
     vb->sa_grp_line_i = 0;
+    vb->prim_line_i = vb->mate_line_i = 0;
+    vb->depn_clipping_type = 0;
 
+    memset (&vb->first_idx, 0, (char*)&vb->after_idx - (char*)&vb->first_idx); // all idx's 
+    memset (&vb->mux_PNEXT, 0, sizeof(vb->mux_PNEXT));
+    memset (&vb->mux_FLAG,  0, sizeof(vb->mux_FLAG));
+    memset (&vb->mux_POS,   0, sizeof(vb->mux_POS));
+    memset (&vb->mux_MAPQ,  0, sizeof(vb->mux_MAPQ));
+    memset (&vb->mux_XS,    0, sizeof(vb->mux_XS));
+    memset (&vb->mux_MQ,    0, sizeof(vb->mux_MQ));
+    memset (&vb->mux_MC,    0, sizeof(vb->mux_MC));
+    memset (&vb->mux_ms,    0, sizeof(vb->mux_ms));
+    memset (&vb->mux_AS,    0, sizeof(vb->mux_AS));
+    memset (&vb->mux_YS,    0, sizeof(vb->mux_YS));
+    memset (&vb->mux_RG,    0, sizeof(vb->mux_RG));
+    
     buf_free (vb->bd_bi_line);
     buf_free (vb->XG);
     buf_free (vb->textual_cigar);
@@ -60,7 +73,7 @@ void sam_vb_release_vb (VBlockSAMP vb)
     buf_free (vb->sa_alns);
     buf_free (vb->sa_prim_cigars);
     buf_free (vb->qname_hash);
-    buf_free (vb->buddy_textual_cigars);
+    buf_free (vb->mate_textual_cigars);
 }
 
 void sam_vb_destroy_vb (VBlockSAMP vb)
@@ -75,7 +88,7 @@ void sam_vb_destroy_vb (VBlockSAMP vb)
     buf_destroy (vb->sa_alns);
     buf_destroy (vb->sa_prim_cigars);
     buf_destroy (vb->qname_hash);
-    buf_destroy (vb->buddy_textual_cigars);
+    buf_destroy (vb->mate_textual_cigars);
 }
 
 // initialization of the line
@@ -83,24 +96,30 @@ void sam_reset_line (VBlockP vb_)
 {
     VBlockSAMP vb = (VBlockSAMP)vb_;
 
-    vb->textual_cigar.len = VB_SAM->binary_cigar.len = 0;
+    vb->textual_cigar.len = vb->binary_cigar.len = vb->binary_cigar.next = 0;
     vb->seq_missing = vb->cigar_missing = false;
     vb->qual_missing = QUAL_NOT_MISSING;
     vb->XG.len = 0;
-    vb->buddy_line_i = NO_BUDDY; 
     vb->ref_consumed         = 0;
     vb->ref_and_seq_consumed = 0;
-    vb->mismatch_bases       = 0;
     vb->soft_clip[0] = vb->soft_clip[1] = 0;
     vb->hard_clip[0] = vb->hard_clip[1] = 0;
+    vb->deletions = vb->insertions = 0;
+    vb->mismatch_bases_by_SEQ = vb->mismatch_bases_by_MD = 0;
 
     if (command == PIZ) {
+        vb->buddy_line_i = NO_LINE; 
         vb->chrom_node_index = WORD_INDEX_NONE;
         vb->chrom_name = "";
         vb->chrom_name_len = 0;
+        vb->range = NULL;
+        CTX(SAM_SQBITMAP)->line_sqbitmap.len = 0;
+    }
 
-        if (!vb->preprocessing) 
-            buf_alloc_zero (vb, &CTX(SAM_CIGAR)->piz_ctx_specific_buf, 0, vb->lines.len, uint32_t, 0, "piz_ctx_specific_buf"); // initialize to exactly one per line.
+    else { // ZIP
+        memset (&vb->first_idx, 0xff, (char*)&vb->after_idx - (char*)&vb->first_idx); // set all idx's to -1
+        vb->prim_line_i = vb->mate_line_i = NO_LINE;
+        vb->md_verified = false;
     }
 }
 
@@ -124,12 +143,11 @@ uint16_t bam_reg2bin (int32_t first_pos, int32_t last_pos)
     return 0;
 }
 
-DisFlagsStr sam_dis_flags (SamFlags flags)
+DisFlagsStr sam_dis_flags (SamFlags f)
 {
-    struct SamFlagsBits f = flags.bits;
     DisFlagsStr s;
     sprintf (s.s, "multi_segments=%u is_aligned=%u unmapped=%u:%u revcomp=%u:%u mate#=%u:%u secondary=%u failfilt=%u dup=%u supp=%u",
-             f.multi_segments, f.is_aligned, f.unmapped, f.next_unmapped, f.rev_comp, f.next_rev_comp, 
-             f.is_first, f.is_last, f.secondary, f.filtered, f.duplicate, f.supplementary);
+             f.bits.multi_segments, f.bits.is_aligned, f.bits.unmapped, f.bits.next_unmapped, f.bits.rev_comp, f.bits.next_rev_comp, 
+             f.bits.is_first, f.bits.is_last, f.bits.secondary, f.bits.filtered, f.bits.duplicate, f.bits.supplementary);
     return s;
 }

@@ -12,26 +12,31 @@
 #include "strings.h"
 #include "endianness.h"
 
-typedef enum { BUF_UNALLOCATED=0, BUF_REGULAR, BUF_OVERLAY, BUF_MMAP, BUF_STANDALONE_BITARRAY, BUF_NUM_TYPES } BufferType; // BUF_UNALLOCATED must be 0, must be identical to BitArrayType
+typedef enum __attribute__ ((__packed__)) { // 1 byte 
+    BUF_UNALLOCATED=0, BUF_REGULAR, BUF_OVERLAY, BUF_MMAP, BUF_STANDALONE_BITARRAY, BUF_NUM_TYPES 
+} BufferType; // BUF_UNALLOCATED must be 0, must be identical to BitArrayType
+
 #define BUFTYPE_NAMES { "UNALLOCATED", "REGULAR", "OVERLAY", "MMAP" }
 
-typedef struct Buffer {
-    rom name;         // name of allocator - used for memory debugging & statistics.
-    uint64_t size;    // number of bytes available to the user (i.e. not including the allocated overhead). Note: accessed from 
-
+typedef struct Buffer { // 64 bytes
     //------------------------------------------------------------------------------------------------------
-    // these 4 fields can be overlayed with a BitArray - their order and size is identical to BitArray
-    BufferType type;
-    char *data;       // ==memory+8 if buffer is allocated or NULL if not
-    union {           // various options to use the parameter
+    // these 4 fields, must be first, and can be overlayed with a BitArray - their order and size is identical to BitArray
+    union {
+        char *data;       // ==memory+8 if buffer is allocated or NULL if not
+        uint64_t *words;  // for BitArray
+    };
+    union {               // the "parameter" field is for discretionary use by the caller. some options to use the parameter are provided.
         int64_t param;    
         int64_t next;     
         int64_t count;    
         uint64_t nbits;   // for BitArray
         uint32_t prm32[2];
+        uint16_t prm16[4];
+        uint8_t  prm8 [8];
     };
     union {
         uint64_t len;     // used by the buffer user according to its internal logic. not modified by malloc/realloc, zeroed by buf_free (in BitArray - nwords)
+        uint64_t nwords;  // for BitArray
         struct {
 #ifdef __LITTLE_ENDIAN__
             uint32_t len32, len32hi; // we use len32 instead of len if easier, in cases where we are certain len is smaller than 4B
@@ -40,19 +45,22 @@ typedef struct Buffer {
 #endif  
         };
     };
+    uint64_t type        : 3;  // BufferType
     //------------------------------------------------------------------------------------------------------
+    uint64_t overlayable : 1;  // this buffer may be fully overlaid by one or more overlay buffers
+    uint64_t can_be_big  : 1;  // do not display warning if buffer grows very big
+    uint64_t code_line   : 12; // the allocating line number in source code file (up to 4095)
+    #define MAX_BUFFER_SIZE ((1ULL<<47)-1) // according to bits of "size" (128 TB)
+    uint64_t size        : 47; // number of bytes available to the user (i.e. not including the allocated overhead). 
+
+    VBlockP vb;       // vb that owns this buffer, and which this buffer is in its buf_list
+
+    rom name;         // name of allocator - used for memory debugging & statistics.
+    rom func;         // the allocating function
 
     char *memory;     // memory allocated to this buffer - amount is: size + 2*sizeof(longlong) to allow for OVERFLOW and UNDERFLOW)
 
-    // info on the allocator of this buffer
-    VBlockP vb;       // vb that owns this buffer, and which this buffer is in its buf_list
-    rom func;         // the allocating function
-    uint32_t code_line;
-
-    bool overlayable; // this buffer may be fully overlaid by one or more overlay buffers
-    bool can_be_big;  // do not display warning if buffer grows very big
-    
-} Buffer;
+} Buffer; 
 
 #define EMPTY_BUFFER ((Buffer){})
 
@@ -249,7 +257,7 @@ static inline void buf_add_more (VBlockP vb, BufferP buf, STRp(new_data), rom na
 extern void buf_add_string (VBlockP vb, BufferP buf, rom str);
 
 // adds a textual int at the end of a buffer. caller needs to allocate enough space in the buffer.
-static inline unsigned buf_add_int_as_text (Buffer *buf, int64_t n)
+static inline unsigned buf_add_int_as_text (BufferP buf, int64_t n)
 {
     unsigned n_len = str_int_ex (n, BAFTc (*buf), false); 
     buf->len += n_len; 
@@ -257,7 +265,7 @@ static inline unsigned buf_add_int_as_text (Buffer *buf, int64_t n)
 }
 
 // adds a textual int at the end of a buffer. caller needs to allocate enough space in the buffer.
-static inline unsigned buf_add_hex_as_text (Buffer *buf, int64_t n, bool uppercase)
+static inline unsigned buf_add_hex_as_text (BufferP buf, int64_t n, bool uppercase)
 {
     unsigned n_len = str_hex_ex (n, BAFTc (*buf), uppercase, false); 
     buf->len += n_len; 
@@ -299,8 +307,8 @@ extern void buf_show_memory_handler (void);
 #define buf_zero(buf_p) buf_set(buf_p, 0)
 
 extern void buf_add_to_buffer_list_do (VBlockP vb, BufferP buf, FUNCLINE);
-#define buf_add_to_buffer_list(vb,buf) buf_add_to_buffer_list_do ((vb), (buf), __FUNCLINE)
-#define buf_add_to_buffer_list_(vb,buf,buf_name) ({ buf_add_to_buffer_list_do ((vb), (buf), __FUNCLINE); (buf)->name = (buf_name); })
+#define buf_add_to_buffer_list(vb,buf) buf_add_to_buffer_list_do ((VBlockP)(vb), (buf), __FUNCLINE)
+#define buf_add_to_buffer_list_(vb,buf,buf_name) ({ buf_add_to_buffer_list_do ((VBlockP)(vb), (buf), __FUNCLINE); (buf)->name = (buf_name); })
 
 extern void buf_update_buf_list_vb_addr_change (VBlockP new_vb, VBlockP old_vb);
 
@@ -348,12 +356,12 @@ extern void buf_overlay_do (VBlockP vb, BufferP overlaid_buf, BufferP regular_bu
 extern uint64_t buf_extend_bits (BufferP buf, int64_t num_new_bits);
 extern void buf_add_bit (BufferP buf, int64_t new_bit);
 extern BitArrayP buf_zfile_buf_to_bitarray (BufferP buf, uint64_t nbits);
-#define buf_get_bitarray(buf) ((BitArrayP)(&(buf)->type))
+#define buf_get_bitarray(buf) ((BitArrayP)(buf))
 #define buf_add_set_bit(buf)   buf_add_bit (buf, 1)
 #define buf_add_clear_bit(buf) buf_add_bit (buf, 0)
 
 extern Buffer dummy_buf; // used for calculating sizes
-#define buf_get_buffer_from_bit_array(bitarr) ((BufferP)(((char*)bitarr) - ((char*)&dummy_buf.type - (char*)&dummy_buf))) // for bit arrays embedded in a buffer
+#define buf_get_buffer_from_bit_array(bitarr) ((BufferP)(bitarr))
 
 extern char *buf_display (ConstBufferP buf);
 

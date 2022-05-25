@@ -67,10 +67,12 @@ unsigned base64_encode (bytes data, unsigned data_len, char *b64_str)
     return next - b64_str;
 }
 
-
-void base64_decode (rom b64_str, unsigned *b64_str_len /* in / out */, uint8_t *data)
+// returns length of decoded data. b64_str_len is updated to the length of b64 string that was consumed.
+uint32_t base64_decode (rom b64_str, unsigned *b64_str_len /* in / out */, uint8_t *data)
 {
 	uint8_t block[4];
+	bytes start_data = data;
+
 	unsigned pad=0, i=0; for (; i < *b64_str_len; i++) {
 		if (b64_str[i] == '=') pad++;
 		block[i&3] = decode_lookup[(unsigned)b64_str[i]];
@@ -85,4 +87,6 @@ void base64_decode (rom b64_str, unsigned *b64_str_len /* in / out */, uint8_t *
 	}	
 
 	*b64_str_len = i;
+
+	return (uint32_t)(data - start_data);
 }

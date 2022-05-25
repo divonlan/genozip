@@ -27,7 +27,7 @@ rom bam_seq_display (bytes seq, uint32_t l_seq) // caller should free memory
 }
 
 // called from sam_zip_prim_ingest_vb, somewhat similar to sam_piz_sam2bam_SEQ
-void sam_seq_to_bam (STRp (seq_sam), Buffer *seq_bam_buf)
+void sam_seq_to_bam (STRp (seq_sam), BufferP seq_bam_buf)
 {
     uint8_t *seq_bam = BAFT8 (*seq_bam_buf);
     uint32_t seq_bam_len = (seq_sam_len+1)/2;
@@ -58,7 +58,7 @@ void sam_seq_to_bam (STRp (seq_sam), Buffer *seq_bam_buf)
 void bam_seq_to_sam (VBlockSAMP vb, bytes bam_seq, uint32_t seq_len /*bases, not bytes*/, 
                      bool start_mid_byte,    // ignore first nibble of bam_seq (seq_len doesn't include the ignored nibble)
                      bool test_final_nibble, // if true, we test that the final nibble, if unused, is 0, and warn if not
-                     Buffer *out)            // appends to end of buffer - caller should allocate
+                     BufferP out)            // appends to end of buffer - caller should allocate
 {
     if (!seq_len) {
         BNXTc (*out) = '*';
@@ -90,13 +90,13 @@ void bam_seq_to_sam (VBlockSAMP vb, bytes bam_seq, uint32_t seq_len /*bases, not
         out->len += seq_len;
 
     ASSERTW (!test_final_nibble || !(seq_len % 2) || (*BAFTc (*out)=='='), 
-             "Warning in bam_seq_to_sam vb=%u: expecting the unused lower 4 bits of last seq byte in an odd-length seq_len=%u to be 0, but its not. This will cause an incorrect MD5",
-             vb->vblock_i, seq_len);
+             "%s: Warning in bam_seq_to_sam: expecting the unused lower 4 bits of last seq byte in an odd-length seq_len=%u to be 0, but its not. This will cause an incorrect MD5",
+             LN_NAME, seq_len);
 }
 
 void bam_seq_copy (VBlockSAMP vb, bytes bam_seq, uint32_t seq_len /*bases, not bytes*/, 
                    bool start_mid_byte, // ignore first nibble of bam_seq (seq_len doesn't include the ignored nibble)
-                   Buffer *out_buf)     // appends to end of buffer (byte-aligned) - caller should allocate
+                   BufferP out_buf)     // appends to end of buffer (byte-aligned) - caller should allocate
 {
     uint8_t *out = BAFT(uint8_t, *out_buf);
 

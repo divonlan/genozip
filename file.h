@@ -329,13 +329,13 @@ typedef struct File {
 
     // these relate to actual bytes on the disk
     int64_t disk_size;                 // 0 if not known (eg stdin or http stream). 
-    int64_t disk_so_far;               // data read/write to/from "disk" (using fread/fwrite)
+    int64_t disk_so_far;               // data read/write to/from "disk" (using fread/fwrite) (possibley gz/bz2 compressed)
     int64_t disk_size_minus_skips;     // PIZ z_file: disk_size minus any data skipped
     int64_t est_seggable_size;         // ZIP txt_file, access via txtfile_get_seggable_size(). Estimated size of txt_data in file, i.e. excluding the header. It is exact for plain files, or based on test_vb if the file has source compression
 
     // this relate to the textual data represented. In case of READ - only data that was picked up from the read buffer.
     int64_t txt_data_so_far_single;    // txt_file: data read (ZIP) or written (PIZ) to/from txt file so far
-                                       // z_file: txt data represented in the GENOZIP data written (ZIP) or read (PIZ) to/from the genozip file so far for the current VCF
+                                       // z_file: txt data represented in the GENOZIP data written (ZIP) or read (PIZ) to/from the genozip file so far for the current txt file
     int64_t header_size;               // txt_file ZIP: size of txt header  z_file ZIP: size of MAIN txt header
     
     //      seggable_data_so_far = txt_data_so_far_single - header_size
@@ -349,7 +349,12 @@ typedef struct File {
     int64_t txt_bgzf_blocks_so_far;    // txt_file: ZIP: BGZF blocks read so far
     int64_t num_lines;                 // z_file: number of lines in all txt files bound into this z_file
                                        // txt_file: number of lines, in source file terms, (read so far) in single txt file
-    
+
+    // per-component data (ZIP)
+    int64_t disk_so_far_comp[MAX_NUM_COMPS];
+    int64_t txt_data_so_far_bind_comp[MAX_NUM_COMPS];
+    int64_t txt_data_so_far_bind_0_comp[MAX_NUM_COMPS];
+
     // Used for READING & WRITING txt files - but stored in the z_file structure for zip to support bindenation (and in the txt_file structure for piz)
     DigestContext digest_ctx;          // ZIP/PIZ: z_file: digest context of txt file being compressed / reconstructed
     Digest digest;                     // ZIP: z_file: digest of txt data read from input file  PIZ: z_file: as read from TxtHeader section
@@ -374,7 +379,8 @@ typedef struct File {
     
     uint8_t txt_header_enc_padding[AES_BLOCKLEN-1];  // just so we can overwrite txt_header with encryption padding
 
-    SectionHeaderTxtHeader txt_header_single;        // store the txt header of single component in bound mode
+    SectionHeaderTxtHeader txt_header_single;        // ZIP: store the txt header of single component in bound mode
+                                                     // PIZ: z_file: header of COMP_MAIN
     uint8_t txt_header_enc_padding2[AES_BLOCKLEN-1]; // same
 
     bool z_closes_after_me;            // Z_FILE ZIP: this z_file will close after completing the current txt_file
@@ -484,10 +490,12 @@ extern rom file_guess_original_filename (const File *file);
 extern char *file_get_fastq_pair_filename (rom fn1, rom fn2, bool test_only);
 
 // wrapper operations for operating system files
-extern void file_get_file (VBlockP vb, rom filename, Buffer *buf, rom buf_name, bool add_string_terminator);
+extern void file_get_file (VBlockP vb, rom filename, BufferP buf, rom buf_name, bool add_string_terminator);
 extern bool file_put_data (rom filename, const void *data, uint64_t len, mode_t mode);
 extern void file_put_data_abort (void);
-extern void file_put_line (VBlockP vb, STRp(line), rom msg);
+
+typedef struct { char s[64]; } PutLineFn;
+extern PutLineFn file_put_line (VBlockP vb, STRp(line), rom msg);
 extern bool file_exists (rom filename);
 extern bool file_is_fifo (rom filename);
 extern bool file_is_dir (rom filename);

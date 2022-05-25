@@ -298,8 +298,8 @@ void vcf_lo_seg_rollback_and_reject (VBlockVCFP vb, LiftOverStatus ostatus, Cont
     // unaccount for INFO/LUFT (in primary reconstruction) and INFO/PRIM (in Luft reconstruction)
     Context *luft_ctx = CTX(INFO_LUFT); 
     if (ctx_encountered_in_line (VB, INFO_LUFT)) { // we always have both LUFT and PRIM, or neither
-        vb->recon_size      -= luft_ctx->last_txt_len;
-        vb->recon_size_luft -= CTX(INFO_PRIM)->last_txt_len;
+        vb->recon_size      -= luft_ctx->last_txt.len;
+        vb->recon_size_luft -= CTX(INFO_PRIM)->last_txt.len;
     }
 
     // note: we can't use seg_create_rollback_point as vb->num_rollback_ctxs is used in seg, eg seg_array_of_struct
@@ -397,12 +397,12 @@ void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl)
 
     // Add LUFT container - we modified the txt by adding these 4 fields to INFO/LUFT. We account for them now, and we will account for the INFO name etc in vcf_seg_info_field
     Context *luft_ctx = vcf_lo_seg_lo_snip (vb, info_luft_snip, info_luft_snip_len, INFO_LUFT, 3);
-    luft_ctx->last_txt_len = opos_len + ochrom_len + oref_len + 4; // used for rollback: 4 = 3 commas + xstrand (the "PRIM="/"LUFT=" is accounted for in vcf_seg_info_add_DVCF_to_InfoItems)
-    vb->recon_size += luft_ctx->last_txt_len; // We added INFO/LUFT to the Primary coordinates reconstruction
+    luft_ctx->last_txt.len = opos_len + ochrom_len + oref_len + 4; // used for rollback: 4 = 3 commas + xstrand (the "PRIM="/"LUFT=" is accounted for in vcf_seg_info_add_DVCF_to_InfoItems)
+    vb->recon_size += luft_ctx->last_txt.len; // We added INFO/LUFT to the Primary coordinates reconstruction
 
     // Do the same for PRIM. 
     Context *prim_ctx = vcf_lo_seg_lo_snip (vb, info_prim_snip, info_prim_snip_len, INFO_PRIM, 0);
-    prim_ctx->last_txt_len = 0; // 0 as not added to recon_size (txt_len is used only for Primary coordinates)
+    prim_ctx->last_txt.len = 0; // 0 as not added to recon_size (txt_len is used only for Primary coordinates)
     vb->recon_size_luft += vb->last_txt_len (VCF_POS) + vb->chrom_name_len + vb->main_ref_len + 4; // 4=3 commas + xstrand. We added INFO/PRIM to the Luft coordinates reconstruction
 
     // ostatus is OK 
@@ -572,8 +572,8 @@ void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, ContextP ctx, STRp (value))
     Context *luft_ctx = vcf_lo_seg_lo_snip (vb, info_luft_snip, info_luft_snip_len, INFO_LUFT, 3); // account for 3 commas
     Context *prim_ctx = vcf_lo_seg_lo_snip (vb, info_prim_snip, info_prim_snip_len, INFO_PRIM, 0); // 0 as this container is not reconstructed in Primary coords
     
-    if (ctx->dict_id.num == _INFO_LUFT) luft_ctx->last_txt_len = value_len;
-    else                                prim_ctx->last_txt_len = value_len;
+    if (ctx->dict_id.num == _INFO_LUFT) luft_ctx->last_txt.len = value_len;
+    else                                prim_ctx->last_txt.len = value_len;
 }
 
 // Segging a Primary or Luft dual-coordinates VCF file, INFO/Prej or Lrej field:
@@ -616,7 +616,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_COPYSTAT)
     
     // note: we can't use last_txt because oStatus is not reconstructed
     ctx_get_snip_by_word_index (&vb->contexts[VCF_oSTATUS], CTX (VCF_oSTATUS)->last_value.i, snip); 
-    RECONSTRUCT (snip, snip_len); // works for unrecognized reject statuses too
+    RECONSTRUCT_snip; // works for unrecognized reject statuses too
     return false; // new_value was not set
 }
 

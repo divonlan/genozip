@@ -12,6 +12,7 @@
 #pragma GENDICT GNRIC_TOPLEVEL=DTYPE_FIELD=TOPLEVEL
 
 extern int32_t generic_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
+extern void generic_seg_initialize (VBlockP vb);
 extern void generic_seg_finalize (VBlockP vb);
 extern bool generic_seg_is_small (ConstVBlockP vb, DictId dict_id);
 

@@ -149,5 +149,5 @@ void crypt_pad (uint8_t *data, uint32_t data_len, uint32_t padding_len)
 rom encryption_name (EncryptionType encryption_type)
 {
     static rom names[NUM_ENCRYPTION_TYPES] = ENC_NAMES;
-    return type_name (encryption_type, &names[encryption_type], sizeof(names)/sizeof(names[0]));
+    return type_name (encryption_type, &names[encryption_type], ARRAY_LEN(names));
 }

@@ -347,6 +347,11 @@ static inline uint32_t adler32 (uint32_t adler, const void *buffer, size_t len) 
 LIBDEFLATEEXPORT uint32_t LIBDEFLATEAPI
 libdeflate_crc32(uint32_t crc, const void *buffer, size_t len);
 
+static inline uint32_t crc32 (uint32_t crc, const void *buffer, size_t len) // divon
+{
+	return libdeflate_crc32 (crc, buffer, len);
+}
+
 /* ========================================================================== */
 /*                           Custom memory allocator                          */
 /* ========================================================================== */

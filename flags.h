@@ -20,6 +20,8 @@ typedef enum {
     REF_ZIP_CHROM2REF = REF_EXTERNAL | REF_EXT_STORE | REF_LIFTOVER,                  // ZIP: chrom2ref mapping is stored
 } ReferenceType;
 
+typedef enum { STATS_NONE, STATS_SHORT, STATS_LONG } StatsType;
+
 typedef struct {
     
     // genozip options that affect the compressed file
@@ -81,9 +83,11 @@ typedef struct {
     ReferenceType reference;
 
     // stats / metadata flags for end users
-    int show_stats, show_dvcf, show_ostatus, show_lift, show_wrong_md, show_wrong_xg, show_wrong_xm; 
+    int show_dvcf, show_ostatus, show_lift, show_wrong_md, show_wrong_xg, show_wrong_xm; 
     enum { VLD_NONE, VLD_REPORT_INVALID, VLD_REPORT_VALID, VLD_INVALID_FOUND } validate; // genocat: tests if this is a valid genozip file (z_file opens correctly)
-    
+    StatsType show_stats;
+    CompIType show_stats_comp_i;
+
     // analysis
     int list_chroms, show_sex, idxstats;
     enum { CNT_NONE, CNT_TOTAL, COUNT_VBs } count; 
@@ -98,10 +102,10 @@ typedef struct {
         show_alleles, show_bgzf, show_txt_contigs, show_lines,
         show_vblocks, show_threads, show_uncompress, biopsy,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
-        debug_LONG, debug_qname, debug_read_ctxs, debug_sa, debug_gencomp, debug_lines,
+        debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sa, debug_gencomp, debug_lines, no_gencomp, no_domqual,
         verify_codec, seg_only, show_bam, xthreads, show_flags, show_rename_tags,
         #define SHOW_CONTAINERS_ALL_VBs (-1)
-        show_containers, 
+        show_containers, show_aligner,
         echo,         // show the command line in case of an error
         show_headers; // (1 + SectionType to display) or 0=flag off or -1=all sections
     rom help, dump_section, show_is_set, show_time, show_mutex;
@@ -135,7 +139,6 @@ typedef struct {
          multiple_files,     // Command line includes multiple files
          reconstruct_as_src, // the reconstructed data type is the same as the source data type
          maybe_txt_header_modified,
-         maybe_lines_dropped,
          maybe_lines_dropped_by_reconstructor,
          maybe_lines_dropped_by_writer,
          maybe_vb_modified_by_reconstructor,
@@ -166,6 +169,8 @@ typedef struct {
 } Flags;
 
 extern Flags flag;
+
+#define NO_LINE (-1) // used for lines_first, lines_last, biopsy_lines, vb->buddy_line_i, VB_SAM->prim_line_i
 
 #define SAVE_FLAGS Flags save_flag = flag
 #define RESTORE_FLAGS flag = save_flag

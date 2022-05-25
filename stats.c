@@ -32,7 +32,7 @@ typedef struct {
 } StatsByLine;
 
 // store the sizes of dict / b250 / local in zctx->*.param, and of other sections in sbl[st].z_size
-static void stats_get_compressed_sizes (StatsByLine *sbl, CompIType comp_i) 
+static void stats_get_compressed_sizes (StatsByLine *sbl) 
 {
     ContextIndex ctx_index[MAX_DICTS];
 
@@ -47,12 +47,15 @@ static void stats_get_compressed_sizes (StatsByLine *sbl, CompIType comp_i)
 
     for (Section sec = section_next(0); sec; sec = section_next (sec)) {
 
-        if (comp_i != COMP_NONE && comp_i != sec->comp_i) continue;
-
-        if (sec->st != SEC_B250 && sec->st != SEC_DICT && sec->st != SEC_LOCAL && sec->st != SEC_COUNTS) 
+        if (flag.show_stats_comp_i == COMP_NONE && sec->st != SEC_B250 && sec->st != SEC_DICT && sec->st != SEC_LOCAL && sec->st != SEC_COUNTS)
             sbl[sec->st].z_size += sec->size;
             
-        else {
+        else if (flag.show_stats_comp_i != COMP_NONE && flag.show_stats_comp_i == sec->comp_i && 
+            (sec->st==SEC_VB_HEADER || sec->st==SEC_TXT_HEADER || sec->st==SEC_RECON_PLAN))
+            sbl[sec->st].z_size += sec->size;
+            
+        else if ((flag.show_stats_comp_i == COMP_NONE || flag.show_stats_comp_i == sec->comp_i) && 
+                 (sec->st == SEC_B250 || sec->st == SEC_DICT || sec->st == SEC_LOCAL || sec->st == SEC_COUNTS)) {
             DidIType did_i = ctx_get_existing_did_i_do (sec->dict_id, z_file->contexts, z_file->dict_id_to_did_i_map,
                                                         ctx_index, z_file->num_contexts);
 
@@ -71,7 +74,7 @@ static void stats_get_compressed_sizes (StatsByLine *sbl, CompIType comp_i)
     if (DTPZ(stats_reallocate)) DTPZ(stats_reallocate)();
 }
 
-static void stats_output_file_metadata (Buffer *buf)
+static void stats_output_file_metadata (BufferP buf)
 {
     bufprint0 (evb, buf, "\n\n");
     if (txt_file->name) 
@@ -92,11 +95,11 @@ static void stats_output_file_metadata (Buffer *buf)
         bufprintf (evb, buf, "Samples: %u   ", vcf_header_get_num_samples());
 
     uint32_t num_used_ctxs=0;
-    for (ContextP ctx=ZCTX(0); ctx < ZCTX(z_file->num_contexts); ctx++)
-        if (ctx->nodes.len || ctx->txt_len) num_used_ctxs++;
+    for_zctx 
+        if (zctx->nodes.len || zctx->txt_len) num_used_ctxs++;
 
-    if (Z_DT(DT_SAM) || Z_DT(DT_BAM))
-        bufprintf (evb, buf, "%ss: %s (Prim: %s Supp/Secn: %s)  Contexts: %u   Vblocks: %u x %u MB  Sections: %u\n", 
+    if ((Z_DT(DT_SAM) || Z_DT(DT_BAM)) && z_has_gencomp)
+        bufprintf (evb, buf, "%ss: %s (PRIM component: %s DEPN component: %s)  Contexts: %u   Vblocks: %u x %u MB  Sections: %u\n", 
                    DTPZ (line_name), str_int_commas (z_file->num_lines).s, str_int_commas (gencomp_get_num_lines (SAM_COMP_PRIM)).s, 
                    str_int_commas (gencomp_get_num_lines (SAM_COMP_DEPN)).s, num_used_ctxs, 
                    z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), (uint32_t)z_file->section_list_buf.len);
@@ -292,7 +295,7 @@ static void stats_output_stats (StatsByLine *s, unsigned num_stats, float src_co
                        str_size ((float)s->txt_len).s, s->pc_of_txt, // txt size and % of total txt which is in this line
                        (float)s->txt_len / (float)s->z_size); // ratio z vs txt
 
-    if (src_comp_ratio != 1 && flag.show_stats != STATS_SHORT_COMP)
+    if (src_comp_ratio != 1 && flag.show_stats_comp_i == COMP_NONE)
         bufprintf (evb, &z_file->stats_buf, 
                    "GENOZIP vs %-9s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
                    codec_name (codec),
@@ -300,8 +303,8 @@ static void stats_output_stats (StatsByLine *s, unsigned num_stats, float src_co
                    str_size (all_txt_len_0 / src_comp_ratio).s, all_pc_of_txt, // total txt fize and ratio z vs txt
                    all_comp_ratio / src_comp_ratio);
     
-    // note: no point showing this per component in SAM and DVCF, bc all_txt_len_0 is fully accounted for in the MAIN component and it is 0 in the others
-    if (!(z_has_gencomp && flag.show_stats == STATS_SHORT_COMP))
+    // note: no point showing this per component in DVCF, bc all_txt_len_0 is fully accounted for in the MAIN component and it is 0 in the others
+    if (flag.show_stats_comp_i == COMP_NONE || !z_is_dvcf)
         bufprintf (evb, &z_file->stats_buf, 
                 "%-20s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
                 src_comp_ratio != 1 ? "GENOZIP vs TXT" : "TOTAL",
@@ -317,7 +320,7 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
 #define PC(pc) ((pc==0 || pc>=10) ? 0 : (pc<1 ? 2:1))
 
     // add diagnostic info
-    if (flag.show_stats != STATS_SHORT_COMP && flag.show_stats != STATS_LONG_COMP) {
+    if (flag.show_stats_comp_i == COMP_NONE) {
         bufprintf (evb, &z_file->STATS_buf, "\nSystem info: OS=%s cores=%u endianity=%s\n", 
                 arch_get_os(), arch_get_num_cores(), arch_get_endianity());
         bufprintf (evb, &z_file->STATS_buf, "\nSections (sorted by %% of genozip file):%s\n", "");
@@ -336,7 +339,7 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
                        str_size ((float)s->txt_len).s, (float)s->txt_len / (float)s->z_size, s->pc_of_txt, s->pc_of_z);
 
     // note: no point showing this per component in SAM and DVCF, bc all_txt_len_0 is fully accounted for in the MAIN component and it is 0 in the others
-    if (!(z_has_gencomp && flag.show_stats == STATS_LONG_COMP))
+    if (!(z_has_gencomp && flag.show_stats_comp_i != COMP_NONE))
         bufprintf (evb, &z_file->STATS_buf, "TOTAL                                                                               "
                 "%9s %9s %9s %9s %9s %9s %6.1fX %5.1f%% %5.1f%%\n", 
                 str_size (all_uncomp_dict).s, str_size (all_comp_dict).s,  str_size (all_comp_b250).s, 
@@ -345,9 +348,9 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
 }
 
 // generate the stats text - all sections except genozip header and the two stats sections 
-void stats_generate (CompIType comp_i) // specific section, or COMP_NONE if for the entire file
+void stats_generate (void) // specific section, or COMP_NONE if for the entire file
 {
-    if (comp_i == COMP_NONE) {
+    if (flag.show_stats_comp_i == COMP_NONE) {
         stats_output_file_metadata (&z_file->stats_buf);
         buf_copy (evb, &z_file->STATS_buf, &z_file->stats_buf, char,0,0, "z_file->STATS_buf");
     }
@@ -361,29 +364,20 @@ void stats_generate (CompIType comp_i) // specific section, or COMP_NONE if for 
 
     #define ST_NAME(st) (&st_name(st)[4]) // cut off "SEC_" 
 
-    stats_get_compressed_sizes (sbl, comp_i); // ctx sizes in ctx->local/dict/ctx.param, and other sections in sbl[st]->z_size.
+    stats_get_compressed_sizes (sbl); // ctx sizes in ctx->local/dict/ctx.param, and other sections in sbl[st]->z_size.
     
-    // use watermarks, to calculate amount attributable to each component
-    static uint64_t z_size_watermark=0, txt_size_water_mark=0, txt_size_0_water_mark=0;
-    if (comp_i == COMP_NONE || comp_i == COMP_MAIN) z_size_watermark = txt_size_water_mark = txt_size_0_water_mark = 0; // initialize
-
-    uint64_t z_size   = z_file->disk_so_far - z_size_watermark;
-    z_size_watermark  = z_file->disk_so_far;
-
-    uint64_t txt_size = z_file->txt_data_so_far_bind - txt_size_water_mark;
-    txt_size_water_mark = z_file->txt_data_so_far_bind;
-
-    uint64_t txt_size_0 = z_file->txt_data_so_far_bind_0 - txt_size_0_water_mark;
-    txt_size_0_water_mark = z_file->txt_data_so_far_bind_0;
-
-    // non-contexts
+    uint64_t z_size     = flag.show_stats_comp_i==COMP_NONE ? z_file->disk_so_far            : z_file->disk_so_far_comp           [flag.show_stats_comp_i];
+    uint64_t txt_size   = flag.show_stats_comp_i==COMP_NONE ? z_file->txt_data_so_far_bind   : z_file->txt_data_so_far_bind_comp  [flag.show_stats_comp_i];
+    uint64_t txt_size_0 = flag.show_stats_comp_i==COMP_NONE ? z_file->txt_data_so_far_bind_0 : z_file->txt_data_so_far_bind_0_comp[flag.show_stats_comp_i];
     StatsByLine *s = sbl;
+
     for (SectionType st=0; st < NUM_SEC_TYPES; st++, s++) { 
 
         if (st == SEC_DICT || st == SEC_B250 || st == SEC_LOCAL || st == SEC_COUNTS) continue; // these are covered by individual contexts
 
         s->txt_len    = st == SEC_TXT_HEADER  ? z_file->header_size : 0; // note: MAIN header only, ie excluding generated headers for DVCF
-        s->type       = "Global";
+        s->type       = (st==SEC_REFERENCE || st==SEC_REF_IS_SET || st==SEC_REF_CONTIGS || st==SEC_REF_RAND_ACC || st == SEC_CHROM2REF_MAP || st==SEC_REF_IUPACS)
+                      ? "SEQUENCE" : "Other"; // note: some contexts appear as "Other" in --stats, but in --STATS their parent is themself, not "Other"
         s->my_did_i   = s->st_did_i = DID_I_NONE;
         s->did_i.s[0] = s->words.s[0] = s->hash.s[0] = s->uncomp_dict.s[0] = s->comp_dict.s[0] = '-';
         s->pc_of_txt  = txt_size ? 100.0 * (float)s->txt_len / (float)txt_size : 0;
@@ -398,50 +392,52 @@ void stats_generate (CompIType comp_i) // specific section, or COMP_NONE if for 
     z_file->header_size = 0; // reset (in case of showing components)
     
     // contexts
-    for (DidIType did_i=0; did_i < z_file->num_contexts; did_i++) { 
-        ContextP ctx = ZCTX(did_i);
+    for_zctx {    
+        s->z_size = zctx->dict.count + zctx->b250.count + zctx->local.count;
 
-        s->z_size = ctx->dict.count + ctx->b250.count + ctx->local.count;
-
-        if (!ctx->b250.count && !ctx->txt_len && !ctx->b250.len && !ctx->is_stats_parent && !s->z_size) 
+        if (!zctx->b250.count && !zctx->txt_len && !zctx->b250.len && !zctx->is_stats_parent && !s->z_size) 
             continue;
 
-        s->txt_len = ctx->txt_len;
+        s->txt_len = zctx->txt_len;
         
-        all_comp_dict   += ctx->dict.count;
-        all_uncomp_dict += ctx->dict.len;
-        all_comp_b250   += ctx->b250.count;
-        all_comp_data   += ctx->local.count;
+        all_comp_dict   += zctx->dict.count;
+        all_uncomp_dict += zctx->dict.len;
+        all_comp_b250   += zctx->b250.count;
+        all_comp_data   += zctx->local.count;
         all_z_size      += s->z_size;
         all_txt_len     += s->txt_len;
 
-        if (Z_DT(DT_VCF) && dict_id_type(ctx->dict_id))
-            sprintf (s->name, "%s/%s", dtype_name_z(ctx->dict_id), ctx->tag_name);
+        if (Z_DT(DT_VCF) && dict_id_type(zctx->dict_id))
+            sprintf (s->name, "%s/%s", dtype_name_z(zctx->dict_id), zctx->tag_name);
         else 
-            strcpy (s->name, ctx->tag_name);
+            strcpy (s->name, zctx->tag_name);
 
-        s->type  = ctx->st_did_i != DID_I_NONE ? ZCTX(ctx->st_did_i)->tag_name : ctx->tag_name;
+        // parent
+        s->type  = zctx->dict_id.num                 == _SAM_SQBITMAP ? "SEQUENCE"
+                 : zctx->st_did_i == DID_I_NONE                       ? zctx->tag_name
+                 : ZCTX(zctx->st_did_i)->dict_id.num == _SAM_SQBITMAP ? "SEQUENCE"
+                 :                                                     ZCTX(zctx->st_did_i)->tag_name;
 
         // note: each VB contributes local.len contains its b250.count if it has it, and local_num_len if not 
-        float n_words = ctx->local.len;
+        float n_words = zctx->local.len;
 
-        s->my_did_i             = ctx->did_i;
-        s->st_did_i             = ctx->st_did_i;
-        s->did_i                = str_int_commas ((uint64_t)ctx->did_i); 
+        s->my_did_i             = zctx->did_i;
+        s->st_did_i             = zctx->st_did_i;
+        s->did_i                = str_int_commas ((uint64_t)zctx->did_i); 
         s->words                = str_uint_commas_limit (n_words, 99999);
-        s->pc_dict              = !n_words ? 0 : 100.0 * (float)MIN_(ctx->nodes.len, n_words) / n_words; // MIN_ is a workaround - not sure why nodes.len sometimes exceeds the dictionary words on the file (eg in TOPLEVEL)
-        s->pc_in_local          = !n_words ? 0 : 100.0 * (float)ctx->local_num_words / n_words;
-        s->pc_failed_singletons = !ctx->b250.count ? 0 : 100.0 * (float)ctx->num_failed_singletons / (float)ctx->b250.len;
-        s->pc_hash_occupancy    = !ctx->global_hash_prime   ? 0 : 100.0 * (float)(ctx->nodes.len + ctx->ol_nodes.len) / (float)ctx->global_hash_prime;
-        s->hash                 = str_size (ctx->global_hash_prime);
-        s->uncomp_dict          = str_size (ctx->dict.len);
-        s->comp_dict            = str_size (ctx->dict.count);
-        s->comp_b250            = str_size (ctx->b250.count);
-        s->comp_data            = str_size (ctx->local.count);
+        s->pc_dict              = !n_words ? 0 : 100.0 * (float)MIN_(zctx->nodes.len, n_words) / n_words; // MIN_ is a workaround - not sure why nodes.len sometimes exceeds the dictionary words on the file (eg in TOPLEVEL)
+        s->pc_in_local          = !n_words ? 0 : 100.0 * (float)zctx->local_num_words / n_words;
+        s->pc_failed_singletons = !zctx->b250.count ? 0 : 100.0 * (float)zctx->num_failed_singletons / (float)zctx->b250.len;
+        s->pc_hash_occupancy    = !zctx->global_hash_prime   ? 0 : 100.0 * (float)(zctx->nodes.len + zctx->ol_nodes.len) / (float)zctx->global_hash_prime;
+        s->hash                 = str_size (zctx->global_hash_prime);
+        s->uncomp_dict          = str_size (zctx->dict.len);
+        s->comp_dict            = str_size (zctx->dict.count);
+        s->comp_b250            = str_size (zctx->b250.count);
+        s->comp_data            = str_size (zctx->local.count);
         s->pc_of_txt            = txt_size ? 100.0 * (float)s->txt_len / (float)txt_size : 0;
         s->pc_of_z              = z_size   ? 100.0 * (float)s->z_size  / (float)z_size   : 0;
     
-        ctx->b250.count = ctx->dict.count = ctx->local.count = ctx->txt_len = 0; // reset
+        zctx->b250.count = zctx->dict.count = zctx->local.count = zctx->txt_len = 0; // reset
 
         s++; // increment only if it has some data, otherwise already continued
     }
@@ -466,7 +462,7 @@ void stats_generate (CompIType comp_i) // specific section, or COMP_NONE if for 
     stats_consolidate_ctxs (sbl, num_stats);
     
     stats_consolidate_non_ctx (sbl, num_stats, 
-                               flag.reference == REF_INTERNAL ? "SEQ" : "Reference", // when compressing SAM with REF_INTERNAL, count the internal reference data as part of SEQ
+                               flag.reference == REF_EXT_STORE ? "Reference" : "SEQ", // when compressing SAM/FASTQ with REF_EXT_STORE, account for the reference in its own "Parent"
                                6, ST_NAME (SEC_REFERENCE), ST_NAME (SEC_REF_IS_SET), 
                                ST_NAME (SEC_REF_CONTIGS), ST_NAME (SEC_REF_RAND_ACC), ST_NAME (SEC_CHROM2REF_MAP),
                                ST_NAME (SEC_REF_IUPACS));
@@ -490,9 +486,9 @@ void stats_generate (CompIType comp_i) // specific section, or COMP_NONE if for 
     stats_output_stats (sbl, num_stats, src_comp_ratio, txt_file->source_codec, all_txt_len, txt_size_0, all_z_size, all_pc_of_txt, all_pc_of_z, all_comp_ratio);
     
     // if we're showing stats of a single components - output it now
-    if (comp_i != COMP_NONE) {
-        iprintf ("\n\nComponent=%s:\n", comp_name (comp_i));
-        buf_print (flag.show_stats == STATS_SHORT_COMP ? &z_file->stats_buf : &z_file->STATS_buf, false);
+    if (flag.show_stats_comp_i != COMP_NONE) {
+        iprintf ("\n\nComponent=%s:\n", comp_name (flag.show_stats_comp_i));
+        buf_print (flag.show_stats == STATS_SHORT ? &z_file->stats_buf : &z_file->STATS_buf, false);
         buf_free (z_file->stats_buf);
         buf_free (z_file->STATS_buf);
     }
@@ -500,26 +496,29 @@ void stats_generate (CompIType comp_i) // specific section, or COMP_NONE if for 
     // note: we use txt_data_so_far_bind is the sum of recon_sizes - see zip_update_txt_counters - which is
     // expected to be the sum of txt_len. However, this NOT the size of the original file which is stored in
     // z_file->txt_data_so_far_bind_0.
-    ASSERTW (comp_i != COMP_NONE || all_txt_len == txt_size || flag.data_modified || flag.make_reference, 
+    ASSERTW (flag.show_stats_comp_i != COMP_NONE || all_txt_len == txt_size || flag.data_modified || flag.make_reference, 
              "Hmm... incorrect calculation for %s sizes: total section sizes=%s but file size is %s (diff=%d)", 
              dt_name (z_file->data_type), str_int_commas (all_txt_len).s, str_int_commas (txt_size).s, 
              (int32_t)(txt_size - all_txt_len)); 
 
-    if (comp_i == COMP_NONE) {
+    if (flag.show_stats_comp_i == COMP_NONE) {
         zfile_compress_section_data (evb, SEC_STATS, &z_file->stats_buf);
         zfile_compress_section_data (evb, SEC_STATS, &z_file->STATS_buf);
+
+        // store stats overhead, for stats_display (because when stats_display runs, section list won't be accessible since it is already converted to SectionEntFileFormat)
+        Section sec = sections_last_sec (SEC_STATS, false) - 1; // first stats section     
+        z_file->stats_buf.count = z_file->disk_so_far - sec->offset;
     }
 
-    // store stats overhead, for stats_display (because when stats_display runs, section list won't be accessible since it is already converted to SectionEntFileFormat)
-    Section sec = sections_last_sec (SEC_STATS, false) - 1; // first stats section     
-    z_file->stats_buf.count = z_file->disk_so_far - sec->offset;
+    if (flag.show_stats_comp_i != COMP_NONE) 
+        iprint0 ("\nNote: Components stats don't include global sections like SEC_DICT, SEC_REFERENCE etc\n");
 
     buf_free (sbl_buf);
 }
 
 void stats_display (void)
 {
-    Buffer *buf = flag.show_stats == 1 ? &z_file->stats_buf : &z_file->STATS_buf;
+    BufferP buf = flag.show_stats == 1 ? &z_file->stats_buf : &z_file->STATS_buf;
 
     if (!buf_is_alloc (buf)) return;  // no stats available
 

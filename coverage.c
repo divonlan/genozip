@@ -39,7 +39,7 @@ static WordIndex coverage_get_chrom_index (char chrom_char)
                                    { 'c', 'h', 'r', chrom_char, 0 },
                                    { 'C', 'h', 'r', chrom_char, 0 } };
 
-    for (unsigned i=0; i < sizeof (chrom_names) / sizeof (chrom_names[0]); i++) {
+    for (unsigned i=0; i < ARRAY_LEN (chrom_names); i++) {
         WordIndex chrom_word_index = ctx_get_word_index_by_snip (evb, ZCTX(CHROM), chrom_names[i], 0);
         if (chrom_word_index != WORD_INDEX_NONE) return chrom_word_index;
     }
@@ -203,10 +203,16 @@ void coverage_show_coverage (void)
     }
 
     // calculate CVR_PRIMARY - all bases in the contig (i.e. excluding unmapped, secondary, supplementary, duplicate, soft-clipped)
+    bool has_short_name_contigs = false;
     for (uint64_t i=0; i < coverage_len; i++) {
         coverage_special  [CVR_ALL_CONTIGS] += coverage[i];
         read_count_special[CVR_ALL_CONTIGS] += read_count[i];
+
+        has_short_name_contigs |= ({ STR(chrom_name) ; ctx_get_snip_by_word_index (ZCTX(CHROM), i, chrom_name) ; chrom_name_len <= 5; });
     }
+
+    // case: if we have no short-name contigs, show all contigs 
+    if (!has_short_name_contigs) flag.show_coverage = COV_ALL; 
 
     PosType genome_nbases = 0;
 
@@ -229,7 +235,7 @@ void coverage_show_coverage (void)
             read_count_special[CVR_OTHER_CONTIGS] += read_count[i];
         }
 
-        if (chrom_name_len <= 5) genome_nbases += len;
+        genome_nbases += len;
     }
 
     char all_coverage[7] = "0";

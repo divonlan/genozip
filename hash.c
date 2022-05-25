@@ -43,7 +43,7 @@ uint32_t hash_next_size_up (uint64_t size, bool allow_huge)
                                      11863279, 16777213, 19951579, 23726561, 28215799, 33554393, 39903161, 47453111, 56431601, 67108859,
                                      94906265, 134217757, 189812533, 268435459, 379625083, 536870923 };
     #define NUM_HASH_REGULAR 25
-    #define NUM_HASH_HUGE (sizeof(hash_sizes) / sizeof(hash_sizes[0]))
+    #define NUM_HASH_HUGE ARRAY_LEN(hash_sizes)
     #define NUM_HASH_SIZES (allow_huge ? NUM_HASH_HUGE : NUM_HASH_REGULAR)
 
     for (int i=0; i < NUM_HASH_SIZES; i++)
@@ -325,8 +325,17 @@ WordIndex hash_global_get_entry (Context *zctx, STRp(snip), HashGlobalGetEntryMo
     new_hashent->node_index    = is_singleton_global ? (-zctx->ston_nodes.len++ - 2) : zctx->nodes.len++; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is NODE_INDEX_NONE)
     new_hashent->next          = NO_NEXT;
 
-    ASSERT (zctx->nodes.len <= MAX_NODE_INDEX, "number of nodes in context %s exceeded the maximum of %u", 
+    ASSERT (zctx->nodes.len32 <= MAX_NODE_INDEX, "number of nodes in context %s exceeded the maximum of %u", 
             zctx->tag_name, MAX_NODE_INDEX);
+
+#ifdef DEBUG
+    #define HASH_OCC_WARNING 2ULL
+#else
+    #define HASH_OCC_WARNING 10ULL
+#endif
+    if (zctx->nodes.len > HASH_OCC_WARNING * (uint64_t)zctx->global_hash_prime)
+        WARN_ONCE ("Unexpected structure of file is causing unusually slow compression. Please report this to support@genozip.com. ctx=%s hash_prime=%u snip=\"%.*s\"", 
+                   zctx->tag_name, zctx->local_hash_prime, STRf(snip));
     
     // now, with the new g_hashent set, we can atomically update the "next"
     __atomic_store_n (&g_hashent->next, next, __ATOMIC_RELAXED);

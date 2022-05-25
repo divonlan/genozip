@@ -17,7 +17,7 @@
 
 // compresses data - either a contiguous block or one line at a time. If both are NULL that there is no data to compress.
 // returns data_compressed_len
-uint32_t comp_compress (VBlockP vb, Buffer *z_data,
+uint32_t comp_compress (VBlockP vb, BufferP z_data,
                         SectionHeader *header, 
                         rom uncompressed_data,  // option 1 - compress contiguous data
                         LocalGetLineCB callback,        // option 2 - compress data one line at a time
@@ -187,19 +187,19 @@ bool comp_compress_complex_codec (VBlockP vb, ContextP ctx, SectionHeader *heade
     uint32_t min_required_compressed_len = codec_args[header->sub_codec].est_size (header->sub_codec, ctx->local.len);
     if (*compressed_len < min_required_compressed_len) {
         if (!is_2nd_try) return false; // call me again with more memory
-        ABORT ("Compressing %s in vb_i=%u with codec %s + sub-codec %s need %u bytes, but allocated only %u", 
-                ctx->tag_name, vb->vblock_i, codec_name(ctx->lcodec), codec_name(header->sub_codec), min_required_compressed_len, *compressed_len);
+        ABORT ("%s: Compressing %s with codec %s + sub-codec %s need %u bytes, but allocated only %u", 
+                VB_NAME, ctx->tag_name, codec_name(ctx->lcodec), codec_name(header->sub_codec), min_required_compressed_len, *compressed_len);
     }
 
     return compress (vb, header, ctx->local.data, uncompressed_len, NULL, compressed, compressed_len, false, name);
 }
 
 void comp_uncompress (VBlockP vb, Codec codec, Codec sub_codec, uint8_t param, STRp(compressed),
-                      Buffer *uncompressed_data, uint64_t uncompressed_len, rom name)
+                      BufferP uncompressed_data, uint64_t uncompressed_len, rom name)
 {
     ASSERTNOTZERO (compressed_len, name);
     ASSERTNOTZERO (uncompressed_len, name);
-    ASSERT (codec != sub_codec, "vb=%u \"%s\": Expectedly, codec=%s == sub_codec=%s", vb->vblock_i, name, codec_name(codec), codec_name(sub_codec));
+    ASSERT (codec != sub_codec, "vb=%s \"%s\": Expectedly, codec=%s == sub_codec=%s", VB_NAME, name, codec_name(codec), codec_name(sub_codec));
 
     // if this is (1) a simple codec (including CODEC_UNKNOWN) that has a sub-codec or
     // (2) or no codec uncompressor - run the sub-codec uncompressor directly

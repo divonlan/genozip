@@ -61,13 +61,13 @@ void vcf_header_piz_init (void)
 }
 
 
-static void vcf_header_subset_samples (Buffer *vcf_header);
-static bool vcf_header_set_globals (rom filename, Buffer *vcf_header, bool soft_fail);
-static void vcf_header_trim_field_name_line (Buffer *vcf_header);
+static void vcf_header_subset_samples (BufferP vcf_header);
+static bool vcf_header_set_globals (rom filename, BufferP vcf_header, bool soft_fail);
+static void vcf_header_trim_field_name_line (BufferP vcf_header);
 
 // returns the length of the first line, if it starts with ##fileformat, or 0
 // note: per VCF spec, the ##fileformat line must be the first in the file
-static inline unsigned vcf_header_parse_fileformat_line (const Buffer *txt_header)
+static inline unsigned vcf_header_parse_fileformat_line (ConstBufferP txt_header)
 {
     ARRAY (char, line, *txt_header);
     if (!LINEIS ("##fileformat")) return 0;
@@ -93,7 +93,7 @@ static inline bool is_field_name_line (STRp(line))
 // returns the length of the last line, if it starts with #CHROM, or 0
 static bool vcf_header_get_last_line_cb (STRp(line), void *unused1, void *unused2, unsigned unused3)
 { return true; }
-static unsigned vcf_header_get_last_line (Buffer *txt_header, char **line_p)
+static unsigned vcf_header_get_last_line (BufferP txt_header, char **line_p)
 {
     int64_t line_len;
     char *line = txtfile_foreach_line (txt_header, true, vcf_header_get_last_line_cb, 0, 0, 0, &line_len);
@@ -102,7 +102,7 @@ static unsigned vcf_header_get_last_line (Buffer *txt_header, char **line_p)
     return is_field_name_line (STRa(line)) ? (unsigned)line_len : 0;
 }
 
-static void vcf_header_add_genozip_command (VBlockP txt_header_vb, Buffer *txt_header)
+static void vcf_header_add_genozip_command (VBlockP txt_header_vb, BufferP txt_header)
 {
     // the command line length is unbound, careful not to put it in a bufprintf
     buf_add_string (txt_header_vb, txt_header, HK_GENOZIP_CMD"\"");
@@ -189,7 +189,7 @@ static bool vcf_header_get_dual_coords (STRp(line), void *unused1, void *unused2
 // PIZ with --luft - one line: remove fileformat, update *contig, *reference, dual_coordinates keys to Luft format
 static bool vcf_header_piz_liftover_header (STRp(line), void *new_txt_header_, void *unused1, unsigned unused2)
 {
-    Buffer *new_txt_header = (Buffer *)new_txt_header_;
+    BufferP new_txt_header = (BufferP )new_txt_header_;
 
     if      (LINEIS (HK_LUFT_CONTIG)) SUBST_LABEL (HK_LUFT_CONTIG, "##contig=");
     else if (LINEIS ("##contig="))    SUBST_LABEL ("##contig=", HK_PRIM_CONTIG);
@@ -204,7 +204,7 @@ static bool vcf_header_piz_liftover_header (STRp(line), void *new_txt_header_, v
 // used with --single-coord: PIZ remove DVCF related lines
 static bool vcf_header_piz_single_coord (STRp(line), void *new_txt_header_, void *unused1, unsigned unused2)
 {
-    Buffer *new_txt_header = (Buffer *)new_txt_header_;
+    BufferP new_txt_header = (BufferP )new_txt_header_;
 
     if (!LINEIS (HK_LUFT_CONTIG) && !LINEIS (HK_PRIM_CONTIG) &&
         !LINEIS (HK_LUFT_REF) && !LINEIS (HK_PRIM_REF) &&
@@ -217,7 +217,7 @@ static bool vcf_header_piz_single_coord (STRp(line), void *new_txt_header_, void
 }
 
 // PIZ with --luft: remove fileformat, update *contig, *reference, dual_coordinates keys to Luft format
-static void vcf_header_rewrite_header (VBlockP txt_header_vb, Buffer *txt_header, TxtIteratorCallback callback, void *ret)
+static void vcf_header_rewrite_header (VBlockP txt_header_vb, BufferP txt_header, TxtIteratorCallback callback, void *ret)
 {
     #define new_txt_header txt_header_vb->codec_bufs[0]
 
@@ -234,7 +234,7 @@ static void vcf_header_rewrite_header (VBlockP txt_header_vb, Buffer *txt_header
 
 // squeeze in the liftover rejects from the header, with their label removed, before the existing unconsumed text
 // (data that was read beyond the header) 
-static void vcf_header_move_rejects_to_unconsumed_text (Buffer *rejects)
+static void vcf_header_move_rejects_to_unconsumed_text (BufferP rejects)
 {
     if (rejects->len) {
         buf_alloc (evb, &txt_file->unconsumed_txt, rejects->len, 0, char, 0, "txt_file->unconsumed_txt");
@@ -254,9 +254,9 @@ static void vcf_header_move_rejects_to_unconsumed_text (Buffer *rejects)
 static bool vcf_header_zip_liftback_header_one_line (STRp(line), 
                                                      void *new_txt_header_, void *rejects_, unsigned unused)
 {
-    Buffer *new_txt_header = (Buffer *)new_txt_header_;
+    BufferP new_txt_header = (BufferP )new_txt_header_;
     
-    if      (LINEIS (HK_PRIM_ONLY))   buf_add_more (evb, (Buffer *)rejects_, line + (sizeof HK_PRIM_ONLY -1), line_len - (sizeof HK_PRIM_ONLY -1), NULL); // add ##primary_only variants to "rejects" buffer
+    if      (LINEIS (HK_PRIM_ONLY))   buf_add_more (evb, (BufferP )rejects_, line + (sizeof HK_PRIM_ONLY -1), line_len - (sizeof HK_PRIM_ONLY -1), NULL); // add ##primary_only variants to "rejects" buffer
     else if (LINEIS (HK_PRIM_CONTIG)) SUBST_LABEL (HK_PRIM_CONTIG, "##contig=");
     else if (LINEIS ("##contig="))    SUBST_LABEL ("##contig=", HK_LUFT_CONTIG);
     else if (LINEIS (HK_PRIM_REF))    SUBST_LABEL (HK_PRIM_REF, "##reference=");
@@ -268,7 +268,7 @@ static bool vcf_header_zip_liftback_header_one_line (STRp(line),
 }
 
 // ZIP of LUFT-coords file: update *contig, *reference, dual_coordinates keys to Primary format, and move rejects to unconsumed_txt
-static void vcf_header_zip_liftback_header (Buffer *txt_header)
+static void vcf_header_zip_liftback_header (BufferP txt_header)
 {
     #define new_txt_header evb->codec_bufs[0]
     #define rejects        evb->codec_bufs[1]
@@ -296,12 +296,12 @@ static void vcf_header_zip_liftback_header (Buffer *txt_header)
 static bool vcf_header_zip_get_luft_only_lines_do (STRp(line), void *rejects_, void *unused1, unsigned unused2)
 {
     // add ##luft_only variants to "rejects" buffer
-    if (LINEIS (HK_LUFT_ONLY)) buf_add_more (evb, (Buffer *)rejects_, line + sizeof HK_LUFT_ONLY -1, line_len - sizeof HK_LUFT_ONLY -1, NULL); 
+    if (LINEIS (HK_LUFT_ONLY)) buf_add_more (evb, (BufferP )rejects_, line + sizeof HK_LUFT_ONLY -1, line_len - sizeof HK_LUFT_ONLY -1, NULL); 
     return false; // continue iterating
 }
 
 // ZIP of PRIMARY-coords file: update *contig, *reference, dual_coordinates keys to Primary format, and move rejects to unconsumed_txt
-static void vcf_header_zip_get_luft_only_lines (Buffer *txt_header)
+static void vcf_header_zip_get_luft_only_lines (BufferP txt_header)
 {
     #define rejects evb->codec_bufs[1]
 
@@ -316,7 +316,7 @@ static void vcf_header_zip_get_luft_only_lines (Buffer *txt_header)
 }
 
 // add a key=value to the end of an existing VCF header line
-static void vcf_header_add_line_add_attrs (Buffer *new_header, STRp(line), Attr *attrs, unsigned num_attr)
+static void vcf_header_add_line_add_attrs (BufferP new_header, STRp(line), Attr *attrs, unsigned num_attr)
 {
     bool has_nl, has_13, has_bt;
     line_len -= (has_nl = (line_len >= 1 && line[line_len-1] == '\n'));
@@ -350,7 +350,7 @@ static void vcf_header_remove_attribute (char *line, unsigned *line_len, STRp(ke
     *line_len -= attr_len;
 }
 
-static void vcf_header_zip_convert_header_to_dc_add_lines (Buffer *new_header)
+static void vcf_header_zip_convert_header_to_dc_add_lines (BufferP new_header)
 {
     // sanity, these should never happen
     ASSERT0 (ref_get_filename (gref), "can't find Luft reference file name - looks like reference was not loaded properly");
@@ -396,7 +396,7 @@ static TranslatorId vcf_header_set_luft_trans (STRp(id), bool is_info, Translato
 
 // If Liftover doesn't exist - adds it according to Genozip's capabilities and also sets ctx->trans_luft
 // If it does exist - verifies that it is recognized by Genozip, and sets ctx->trans_luft accordingly
-static void vcf_header_update_INFO_FORMAT (STRp(line), bool is_info, Buffer *new_header)
+static void vcf_header_update_INFO_FORMAT (STRp(line), bool is_info, BufferP new_header)
 {
     STR (number); STR(type); STR (id); STR (rendalg);
     Attr attrs[NUM_RENAME_ATTRS + 1]; unsigned num_attrs=0;
@@ -466,7 +466,7 @@ static void vcf_header_update_INFO_FORMAT (STRp(line), bool is_info, Buffer *new
 // --chain: convert one line at a time to dual-coordinate format, and add all additional lines before #CHROM
 static bool vcf_header_zip_update_to_dual_coords_one_line (STRp(line), void *new_header_p, void *unused2, unsigned unused3)
 {
-    Buffer *new_txt_header = (Buffer *)new_header_p;
+    BufferP new_txt_header = (BufferP )new_header_p;
     bool is_info;
     
     if ((is_info = LINEIS ("##INFO=")) || LINEIS ("##FORMAT=")) 
@@ -489,7 +489,7 @@ static bool vcf_header_zip_update_to_dual_coords_one_line (STRp(line), void *new
 }
 
 // ZIP with --chain: add tags that are missing bc they are only in the command line, or symmetrical tags of header tags
-static void vcf_header_zip_add_missing_tags (Buffer *txt_header)
+static void vcf_header_zip_add_missing_tags (BufferP txt_header)
 {
     Tag *tag = NULL;
     txt_header->len -= vcf_field_name_line.len; // remove field name line
@@ -519,7 +519,7 @@ static void vcf_header_zip_add_missing_tags (Buffer *txt_header)
 }
 
 // ZIP with --chain: add liftover_contig, liftover_reference, chain, dual_coordinates keys
-static void vcf_header_zip_update_to_dual_coords (Buffer *txt_header)
+static void vcf_header_zip_update_to_dual_coords (BufferP txt_header)
 {
     #define new_txt_header evb->codec_bufs[0]
     
@@ -545,7 +545,7 @@ static SORTER (dst_contigs_sorter) { return ASCENDING_RAW (*(WordIndex *)a, *(Wo
 static bool vcf_header_handle_contigs (STRp(line), void *new_txt_header_, void *num_contig_lines, unsigned unused2)
 {
     bool printed = false;
-    Buffer *new_txt_header = (Buffer *)new_txt_header_;
+    BufferP new_txt_header = (BufferP )new_txt_header_;
 
     const bool is_contig    = LINEIS (HK_CONTIG);
     const bool is_lo_contig = LINEIS (HK_LUFT_CONTIG);
@@ -609,7 +609,7 @@ copy_line:
     return false; // continue iterating
 }
 
-static void vcf_header_add_FORMAT_lines (Buffer *txt_header)
+static void vcf_header_add_FORMAT_lines (BufferP txt_header)
 {
     txt_header->len -= vcf_field_name_line.len; // remove field name line
 
@@ -620,7 +620,7 @@ static void vcf_header_add_FORMAT_lines (Buffer *txt_header)
     buf_add_more (evb, txt_header, STRb(vcf_field_name_line), "txt_data");
 }
 
-static void vcf_add_all_ref_contigs_to_header (Buffer *txt_header)
+static void vcf_add_all_ref_contigs_to_header (BufferP txt_header)
 {
     txt_header->len -= vcf_field_name_line.len; // remove field name line
 
@@ -638,7 +638,7 @@ static void vcf_add_all_ref_contigs_to_header (Buffer *txt_header)
     buf_add_more (evb, txt_header, STRb(vcf_field_name_line), "txt_data");
 }
 
-static bool vcf_inspect_txt_header_zip (Buffer *txt_header)
+static bool vcf_inspect_txt_header_zip (BufferP txt_header)
 {
     if (!vcf_header_set_globals (txt_file->name, txt_header, true)) return false; // samples are different than a previous concatented file
 
@@ -724,7 +724,7 @@ static bool vcf_inspect_txt_header_zip (Buffer *txt_header)
     return true; // all good
 }
 
-static bool vcf_inspect_txt_header_piz (VBlockP txt_header_vb, Buffer *txt_header, struct FlagsTxtHeader txt_header_flags)
+static bool vcf_inspect_txt_header_piz (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags)
 {
     vcf_header_set_globals (z_file->name, txt_header, false);
 
@@ -775,13 +775,13 @@ static bool vcf_inspect_txt_header_piz (VBlockP txt_header_vb, Buffer *txt_heade
     return true; // all good
 }
 
-bool vcf_inspect_txt_header (VBlockP txt_header_vb, Buffer *txt_header, struct FlagsTxtHeader txt_header_flags)
+bool vcf_inspect_txt_header (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags)
 {
     return (command == ZIP) ? vcf_inspect_txt_header_zip (txt_header)
                             : vcf_inspect_txt_header_piz (txt_header_vb, txt_header, txt_header_flags);
 }
 
-static bool vcf_header_set_globals (rom filename, Buffer *vcf_header, bool soft_fail)
+static bool vcf_header_set_globals (rom filename, BufferP vcf_header, bool soft_fail)
 {
     static rom vcf_field_name_line_filename = NULL; // file from which the header line was taken
 
@@ -845,7 +845,7 @@ static bool vcf_header_set_globals (rom filename, Buffer *vcf_header, bool soft_
 
 // genocat: remove FORMAT and sample names from the vcf header line, in case of --drop-genotypes
 // TODO - remove FORMAT lines from header itself
-static void vcf_header_trim_field_name_line (Buffer *vcf_header)
+static void vcf_header_trim_field_name_line (BufferP vcf_header)
 {
     char *line;
     unsigned line_len = vcf_header_get_last_line (vcf_header, &line);
@@ -870,7 +870,7 @@ uint32_t vcf_header_get_num_samples (void)
 
 // processes the vcf header sample line according to the --samples option, removing samples that are not required
 // and building a bytemap PIZ filter the samples
-static void vcf_header_subset_samples (Buffer *vcf_field_name_line)
+static void vcf_header_subset_samples (BufferP vcf_field_name_line)
 {
     // accept a sample from the vcf file's samples as consistent with the --samples requested
     #define samples_accept(sample_str) { \

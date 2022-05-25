@@ -103,7 +103,7 @@ static void sam_header_verify_contig (STRp (hdr_contig), PosType hdr_contig_LN, 
 // call a callback for each SQ line (contig). Note: callback function is the same as foreach_contig
 static void sam_foreach_SQ_line (rom txt_header, // nul-terminated string
                                  ContigsIteratorCallback callback, void *callback_param,
-                                 Buffer *new_txt_header) // optional - if provided, all lines need to be copied (modified or not) to this buffer
+                                 BufferP new_txt_header) // optional - if provided, all lines need to be copied (modified or not) to this buffer
 {
     rom line = txt_header;
 
@@ -156,7 +156,7 @@ static void sam_foreach_SQ_line (rom txt_header, // nul-terminated string
 // call a callback for each SQ line (contig). Note: callback function is the same as foreach_contig
 static void bam_foreach_SQ_line (rom txt_header, uint32_t txt_header_len, // binary BAM header
                                  ContigsIteratorCallback callback, void *callback_param,
-                                 Buffer *new_txt_header) // optional - if provided, all lines need to be copied (modified or not) to this buffer
+                                 BufferP new_txt_header) // optional - if provided, all lines need to be copied (modified or not) to this buffer
 {
     #define HDRSKIP(n) if (txt_header_len < next + n) goto incomplete_header; next += n
     #define HDR32 (next + 4 <= txt_header_len ? GET_UINT32 (&txt_header[next]) : 0) ; if (txt_header_len < next + 4) goto incomplete_header; next += 4;
@@ -388,14 +388,14 @@ incomplete_header:
 //------------------------------------------------------------------
 
 // add @PG line
-static inline void sam_header_add_PG (Buffer *txtheader_buf)
+static inline void sam_header_add_PG (BufferP txtheader_buf)
 {
     if (flag.no_pg) return; // user specified --no-PG
 
     TimeSpecType tb;
     clock_gettime (CLOCK_REALTIME, &tb);
 
-    uint32_t unique_id = adler32 (1, &tb, sizeof (tb));
+    uint32_t unique_id = crc32 (0, &tb, sizeof (tb));
 
     // the command line length is unbound, careful not to put it in a bufprintf
     bufprintf (txtheader_buf->vb, txtheader_buf, "@PG\tID:genozip-%u\tPN:genozip\tDS:%s\tVN:%s\tCL:", 
@@ -428,7 +428,7 @@ static void sam_header_sam2bam_count_sq (rom chrom_name, unsigned chrom_name_len
 
 static void sam_header_sam2bam_ref_info (STRp (ref_contig_name), PosType last_pos, void *callback_param)
 {
-    Buffer *txtheader_buf = (Buffer *)callback_param;
+    BufferP txtheader_buf = (BufferP )callback_param;
 
     buf_alloc (txtheader_buf->vb, txtheader_buf, ref_contig_name_len+9, 0, char, 1, 0);
 

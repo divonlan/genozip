@@ -23,7 +23,6 @@
 #define MAX_TAR_MTIME 077777777777ULL
 
 #define NOBODY  65534            // used for UID / GID in case real values are beyond MAX_TAR_UID_GID. https://wiki.ubuntu.com/nobody
-#define ROUNDUP512(x) (((x) + 0x1ff) & ~(typeof(x))0x1ff)    // round up to the nearest 512
 
 // each file in the tar file is comprised a 512-byte "ustar" header followed by 512-byte blocks. tar file is terminated
 // by two zero 512B blocks. see: http://manpages.ubuntu.com/manpages/bionic/man5/tar.5.html

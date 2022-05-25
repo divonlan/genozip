@@ -128,8 +128,9 @@ extern const uint8_t acgt_encode_comp[256];
 
 // note that the following work on idx and not pos! (idx is the index within the range)
 static inline void ref_set_nucleotide (RangeP range, uint32_t idx, uint8_t value) 
-    { bit_array_assign (&range->ref, idx * 2,      acgt_encode[value] & 1)       ; 
-      bit_array_assign (&range->ref, idx * 2 + 1, (acgt_encode[value] & 2) >> 1) ; }
+    { bit_array_assign2 (&range->ref, idx*2, acgt_encode[value]); }
+//xxx { bit_array_assign (&range->ref, idx * 2,      acgt_encode[value] & 1)       ; 
+//   bit_array_assign (&range->ref, idx * 2 + 1, (acgt_encode[value] & 2) >> 1) ; }
 
 static inline bool ref_is_nucleotide_set (ConstRangeP range, uint32_t idx) { return (bool)bit_array_get (&range->is_set, idx); }
 

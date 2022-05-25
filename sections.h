@@ -93,15 +93,18 @@ typedef union SectionFlags {
 
     struct FlagsCtx {
         StoreType store          : 2;  // after reconstruction of a snip, store it in ctx.last_value
-        uint8_t paired           : 1;  // reconstruction of this context requires access to the same section from the same vb of the previous (paired) file
+        uint8_t paired           : 1;  // FASTQ: reconstruction of this context requires access to the same section from the same vb of the previous (paired) file
         #define v8_container     store_delta  // in v8 files - if the context contains 1 or more containers
         uint8_t store_delta      : 1;  // introduced v12.0.41: after reconstruction of a snip, store last_delta. notes: 1. last_delta also stored in case of a delta snip. 2. if using this, store=STORE_INT must be set.
-        uint8_t copy_local_param : 1;  // copy ctx.b250/local.param from SectionHeaderCtx.param
+        #define v13_copy_local_param spl_custom  // up to v13: copy ctx.b250/local.param from SectionHeaderCtx.param. since v14, piz always copies, except for LT_BITMAP
+        uint8_t spl_custom       : 1;  // introduced v14: similar to store_per_line, but storing is done by the context's SPECIAL function, instead of in reconstruct_store_history
         uint8_t all_the_same     : 1;  // SEC_B250: the b250 data contains only one element, and should be used to reconstruct any number of snips from this context
-        #define delta_peek     ctx_specific_flag // v13.0.5: Valid for contexts that use SNIP_OTHER_DELTA: whether reconstruct_from_delta should peek a value or use last_value
-        #define no_textual_seq ctx_specific_flag // v14.0.0: SAM_SQBITMAP: indicates that sam_piz_sam2bam_SEQ doesn't need to store textual_seq. 
-        uint8_t ctx_specific_flag: 1;  // flag specific a context (introduced 10.0.3)
-        uint8_t store_per_line   : 1;  // introduced v12.0.41: store last_txt for each line - in context->txt_per_prev        
+        #define delta_peek       ctx_specific_flag // v13.0.5: Valid for contexts that use SNIP_OTHER_DELTA: whether reconstruct_from_delta should peek a value or use last_value
+        #define no_textual_seq   ctx_specific_flag // v14.0.0: SAM_SQBITMAP: indicates that sam_piz_sam2bam_SEQ doesn't need to store textual_seq. 
+        #define depn_clip_hard   ctx_specific_flag // v14.0.0: OPTION_SA_Z in SAM_COMP_MAIN: if true: depn lines, if their CIGAR has a clipping, it is hard clipping (H)
+        #define is_qual          ctx_specific_flag // v14.0.0: if ltype==LT_SEQUENCE: true if this data is QUAL
+        uint8_t ctx_specific_flag: 1;  // v10.0.3: flag specific a context 
+        uint8_t store_per_line   : 1;  // v12.0.41: store value or text for each line - in context->history        
     } ctx;
 
     struct FlagsRandomAccess {
@@ -142,8 +145,14 @@ typedef struct {
     uint64_t recon_size_prim;          // data size of reconstructed file, if uncompressing as a single file in primary coordinates
     uint64_t num_lines_bound;          // number of lines in a bound file. "line" is data_type-dependent. For FASTQ, it is a read.
     uint32_t num_sections;             // number sections in this file (including this one)
-    char unused[3];                    // up to v13 - part of uint32_t num_components (but old files with > 3 components are blocked from decompressing in v14+ in sections_list_file_to_memory_format)
-    CompIType num_components;          // number of txt bound components in this file (1 if no binding)
+    union {
+        struct {                       // v14
+            uint16_t vb_size;          // segconf.vb_size >> 20 (i.e. size in MB)
+            char unused;                       
+            CompIType num_components;  // number of txt bound components in this file (1 if no binding)
+        };
+        uint32_t v13_num_components;
+    };
     union { // 16 bytes
         Digest REF_fasta_md5;          // DT_REF: MD5 of original FASTA file
         Digest FASTQ_v13_digest_bound; // DT_FASTQ: up to v13: digest of concatenated pair of FQ (regarding other bound files in v13 - DVCF has digest 0, and other bound files are not reconstructable with v14+)    
@@ -153,7 +162,7 @@ typedef struct {
     char     created[FILE_METADATA_LEN];  // nul-terminated metadata
     Digest   license_hash;             // MD5(license_num)
 #define REF_FILENAME_LEN 256
-    char     ref_filename[REF_FILENAME_LEN]; // external reference filename, nul-terimated. ref_filename[0]=0 if there is no external reference.
+    char     ref_filename[REF_FILENAME_LEN]; // external reference filename, nul-terimated. ref_filename[0]=0 if there is no external reference. DT_CHAIN: LUFT reference filename.
     Digest   ref_file_md5;             // SectionHeaderGenozipHeader.REF_fasta_md5 of the reference FASTA genozip file
     union { // 272 bytes
         struct DtSpecificChain {
@@ -161,8 +170,11 @@ typedef struct {
             Digest prim_file_md5;      // SectionHeaderGenozipHeader.REF_fasta_md5 of the primary reference file. added v12.
         } chain;
         struct DtSpecificSam {
-            uint32_t segconf_seq_len;  // SAM: "standard" seq_len (only applicable to some short-read files) - copied from segconf.sam_seq_len
-            char unused[268];
+            uint32_t segconf_seq_len;  // SAM: "standard" seq_len (only applicable to some short-read files) - copied from segconf.sam_seq_len. added v14.
+            uint8_t segconf_ms_type      : 3; // SAM: copied from segconf.sam_ms_type. added v14.
+            uint8_t segconf_has_MD_or_NM : 1; // SAM: PIZ should call sam_analyze_copied_SEQ for dependent reads unless explicitly told not to. v14.
+            uint8_t unused_bits          : 4;
+            char unused[267];
         } sam;
     };    
 } SectionHeaderGenozipHeader;
@@ -293,7 +305,7 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
 typedef struct {
     SectionHeader h;
     LocalType ltype; // populated in both SEC_B250 and SEC_LOCAL: goes into ctx.ltype - type of data for the ctx.local buffer
-    uint8_t param;   // Three options: 1. goes into ctx.b250/local.param if flags.copy_local_param. (4/4/2021: actually NOT b250 bc not implemented in zfile_compress_b250_data) 
+    uint8_t param;   // Three options: 1. goes into ctx.local.param. (until v13: if flags.copy_local_param. since v14: always, except if ltype=LT_BITMAP) 
                      //                2. given to comp_uncompress as a codec parameter
                      //                3. starting 9.0.11 for ltype=LT_BITMAP: number of unused bits in top bitarray word
     uint8_t ffu[2];
@@ -480,6 +492,15 @@ extern void sections_show_gheader (const SectionHeaderGenozipHeader *header);
 extern void sections_show_section_list (DataType dt);
 extern rom st_name (SectionType sec_type);
 extern rom lt_name (LocalType lt);
+
+typedef struct { char s[48]; } VbNameStr;
+extern VbNameStr vb_name (VBlockP vb);
+#define VB_NAME vb_name((VBlockP)vb).s
+
+typedef struct { char s[48]; } LineNameStr;
+extern LineNameStr line_name (VBlockP vb);
+#define LN_NAME line_name((VBlockP)vb).s
+
 extern rom comp_name (CompIType comp_i);
 extern rom comp_name_ex (CompIType comp_i, SectionType st);
 

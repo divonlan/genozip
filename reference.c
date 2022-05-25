@@ -744,7 +744,7 @@ static Range *ref_seg_get_locked_range_denovo (VBlockP vb, Reference ref, WordIn
 
     // case: we're asking for the same range as the previous one (for example, subsequent line in a sorted SAM)
     if (vb && vb->prev_range[0] && vb->prev_range_chrom_node_index[0] == chrom && vb->prev_range_range_i == range_i) {
-        *lock = ref_lock_range (ref, BNUM (ref->ranges, vb->prev_range[0]));
+        if (lock) *lock = ref_lock_range (ref, BNUM (ref->ranges, vb->prev_range[0]));
         return vb->prev_range[0];
     }
 
@@ -753,13 +753,13 @@ static Range *ref_seg_get_locked_range_denovo (VBlockP vb, Reference ref, WordIn
         pos >= ROUNDUP1M (contigs_get_LN (sam_hdr_contigs, chrom))) // end of last range for this contig. note: for optimization, we first test just contigs_get_LN - faster 
         return NULL;
 
-    // in case of header contigs, sam_seg_RNAME_RNEXT enforces that chrom is defined in the header
+    // in case of header contigs, sam_seg_RNAME/RNEXT enforces that chrom is defined in the header
     uint32_t range_id = sam_hdr_contigs ? (contigs_get_gpos (sam_hdr_contigs, chrom) >> REF_NUM_DENOVO_SITES_PER_RANGE_BITS) + range_i // note: GPOS maybe beyond 4GB
                                         : ref_range_id_by_hash (vb, range_i);
     ASSSEG (range_id < ref->ranges.len, field, "range_id=%u expected to be smaller than ranges.len=%u", range_id, (uint32_t)ref->ranges.len);
 
     Range *range = B(Range, ref->ranges, range_id);
-    *lock = ref_lock_range (ref, range_id);
+    if (lock) *lock = ref_lock_range (ref, range_id);
 
     // case: range is already initialized 
     if (range->ref.nbits) {
@@ -768,8 +768,8 @@ static Range *ref_seg_get_locked_range_denovo (VBlockP vb, Reference ref, WordIn
         if (!sam_hdr_contigs && (range->range_i != range_i || !str_issame (vb->chrom_name, range->chrom_name))) {
             *lock = ref_unlock (ref, *lock);
 
-            ASSERTW (!flag.seg_only && !flag.debug, "DEBUG: ref range contention: chrom=%.*s pos=%u (this slightly affects compression ratio, but is harmless)", 
-                     vb->chrom_name_len, vb->chrom_name, (uint32_t)pos); // only show this in --seg-only
+            DO_ONCE ASSERTW (!flag.seg_only && !flag.debug, "DEBUG: ref range contention (showing once): chrom=%.*s pos=%u (this slightly affects compression ratio, but is harmless)", 
+                             vb->chrom_name_len, vb->chrom_name, (uint32_t)pos); // only show this in --seg-only
 
             range = NULL;  // no soup for you
         }
@@ -1618,8 +1618,7 @@ static void ref_initialize_loaded_ranges (Reference ref, RangesType type)
 
     ContextP chrom_ctx = ZCTX(CHROM);
 
-    for (uint32_t range_id=0; range_id < ref->ranges.len; range_id++) {
-        Range *r = B(Range, ref->ranges, range_id);
+    for_buf2 (Range, r, range_id, ref->ranges) {
         r->range_id = r->chrom = range_id;
 
         if (flag.reference == REF_STORED) // PIZ
@@ -1644,7 +1643,7 @@ static void overlay_ranges_on_loaded_genome (Reference ref)
 {
     // overlay all chromosomes (range[i] goes to chrom_index=i) - note some chroms might not have a contig in 
     // which case their range is not initialized
-    for (Range *r = B1ST (Range, ref->ranges) ; r < BAFT (Range, ref->ranges); r++) {
+    for_buf (Range, r, ref->ranges) {
         r->chrom = BNUM (ref->ranges, r);
         const Contig *rc = ref_contigs_get_contig_by_ref_index (ref, r->chrom, true);
 

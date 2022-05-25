@@ -74,6 +74,25 @@ CON_BGI_R(8);
 
 #define PX_bgi_R { "", "", "C", "R", "", (char[]){CI0_SKIP} }
 
+//--------------------------------------------------------------------------------------------------------------
+// Same as CON_BGI_R, but the first separator is two L
+//  DP8400010271TLL1C005R0511863479
+
+#define CON_BGI_LL(n) \
+static SmallContainer con_bgi_LL##n = {  \
+    .repeats             = 1,            \
+    .nitems_lo           = 6,            \
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { 'L', 'L'           } }, /* Flow cell */ \
+                             { .dict_id = { _SAM_Q1NAME }, .separator = { CI0_FIXED_0_PAD, 1 } }, /* Lane      */ \
+                             { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, /* Column    */ \
+                             { .dict_id = { _SAM_Q3NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, /* Row       */ \
+                             { .dict_id = { _SAM_Q4NAME }, .separator = { CI0_FIXED_0_PAD, n } }, /* Tile      */ \
+                             { .dict_id = { _SAM_QmNAME }, .separator = { CI0_SKIP           } } }/* Mate      */ \
+}
+CON_BGI_LL(7); // only encountered with 7 so far
+
+#define PX_bgi_LL PX_bgi_R
+
 //--------------------------------------------------------------------------------------------------------------------
 // BGI_CL format: CL, FlowCellSerialNumber[9], L, Lane[1], C, Column[3], R, Row[3], _, variable-length number
 //  CL100025298L1C002R050_244547 reported by https://en.wikipedia.org/wiki/File:BGI_seq_platform_read_name_description.png
@@ -451,6 +470,7 @@ static QnameFlavorStruct qf[] = {
     {},  { "BGI-R7",        { "V300017009_8AL2C001R0030001805", "V300022116L2C001R0010002968", "V300014296L2C001R0010000027", "E100001117L1C001R0030000000", "E1000536L1C002R0020000005" },         
                                                                           TECH_BGI,     0, &con_bgi_R7,        3, {1, -1},        {2,3,4,-1},     {-1},           {-1},           1,-1,  -1, 0,  PX_bgi_R     },
     {},  { "BGI-R8",        { "V300046476L1C001R00100001719" },           TECH_BGI,     0, &con_bgi_R8,        3, {1, -1},        {2,3,4,-1},     {-1},           {-1},           1,-1,  -1, 0,  PX_bgi_R     },
+    {},  { "BGI-LL7",       { "DP8400010271TLL1C005R0511863479" },        TECH_BGI,     0, &con_bgi_LL7,       4, {1, -1},        {2,3,4,-1},     {-1},           {-1},           1,-1,  -1, 0,  PX_bgi_LL    },
     {},  { "BGI-CL",        { "CL100025298L1C002R050_244547" },           TECH_BGI,     0, &con_bgi_CL,        4, {-1},           {0,1,2,3,4,-1}, {-1},           {-1},           4,-1,  -1, 0,  PX_bgi_CL    }, 
     {},  { "IonTorrent",    { "ZEWTM:10130:07001" },                      TECH_IONTORR, 0, &con_ion_torrent_3, 2, {-1},           {1,2,-1},       {-1},           {-1},           -1,-1, -1, 17               },
     {},  { "Illumina-o-fq", { "SOLEXA6_0104:3:1:1852:13550 1:N:0:0" },    TECH_ILLUM_5, 1, &con_illumina_5_fq, 5, {1,2,3,4,-1},   {-1},           {-1},           {-1},           -1,-1, -1,                  }, // v14.0.0

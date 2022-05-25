@@ -3,6 +3,7 @@
 //   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
+#include <stdarg.h>
 #include "genozip.h"
 #include "vblock.h"
 #include "file.h"
@@ -14,6 +15,22 @@
 #include "arch.h"
 
 SegConf segconf = {}; // system-wide global
+
+// mark contexts as used, for calculation of vb_size
+void segconf_mark_as_used (VBlockP vb, unsigned num_ctxs, ...)
+{
+    ASSERTNOTZERO (segconf.running, "");
+
+    va_list args;
+    va_start (args, num_ctxs);
+
+    for (unsigned i=0; i < num_ctxs; i++) {
+        DidIType did_i = (DidIType)va_arg (args, int);
+        CTX(did_i)->local.len32 = 1;
+    } 
+    
+    va_end (args);
+}
 
 static void segconf_set_vb_size (ConstVBlockP vb, uint64_t curr_vb_size)
 {
@@ -199,6 +216,10 @@ void segconf_calculate (void)
 
     segconf_set_vb_size (vb, save_vb_size);
     segconf.is_long_reads = segconf_is_long_reads();
+
+    // case: long reads. we can't use the genozip aligner.
+    if (segconf.is_long_reads)
+        flag.aligner_available = false; // note: original value of flag will be restore when zip of this file is complete (see main_genozip)
 
     // return the data to txt_file->unconsumed_txt - squeeze it in before the passed-up data
     buf_alloc (evb, &txt_file->unconsumed_txt, txt_data_copy.len, 0, char, 0, "txt_file->unconsumed_txt");

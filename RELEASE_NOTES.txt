@@ -4,20 +4,24 @@ Note on versioning:
 - Some minor versions are skipped due to failed deployment pipelines
 
 14.0.0
+Compression improvement:
 - SAM/BAM: Better compression of Supplementary / Secondary alignments 
-- SAM/BAM: Better compression of SA/XA/OA and CIGAR
-- SAM/BAM: genocat --FLAG now also accepts names of flags eg "--FLAG +REVCOMP". See genozip.com/bam.html.
+- SAM/BAM: Better compression of SA/XA/OA, CIGAR and QNAME
 - SAM/BAM: Better compression of files created with BS-Seeker2 (methylation)
+- SAM/BAM/FASTQ: Improvements in compression of short-read QUAL.
+- FASTA: Better compression of amino acid fastas.
+- VCF: Better compression of FORMAT/PGT
+Command line option improvements:
+- SAM/BAM: genocat --FLAG now also accepts names of flags eg "--FLAG +REVCOMP". See genozip.com/bam.html.
 - The --output option can now also accept a directory name - the output file is written into the specified directory, keeping its name
 - BAM: BAM files created by python programs using the pysam library and which have alignments with missing quality scores (i.e. QUAL="*"), pysam encodes the missing quality in a way that violates of the SAM specification. Genozip can now handle these files regardless.
 - FASTQ: Change in genocat options for FASTQ files compressed with --pair: (1) --R1 and --R2 replace the discontinued option "--component". (2) The default output format of genocat is now interleaved (up to v13, it would show the two files concatenated).
 - FASTQ: Support format where read name is a number, and line3 is an SRA format
 - FASTA: Much faster subsetting with --grep
-- FASTA: Better compression of amino acid fastas.
-- VCF: Better compression of FORMAT/PGT
 - --test now defaults to verify correctness with Adler32 which is much faster than MD5. To use MD5 instead of Adler32, specifiy --md5. 
-- New advanced options: --log-digest, --show-sa, --show-depn, --show-lines, --show-gheader=2, --cstats, --CSTATS, --debug-read-ctxs, --debug-sa, --debug-gencomp, --show-wrong-XG, --show-wrong-XM, --vblock with bytes specification, --show-bam, --debug-lines, --biopsy-line
-- Discontinued functionality: The little-used yet difficult to maintain feature allowing "Binding" of multiples files of the same type using eg "genozip file1.vcf file2.vcf --output bound.vcf.genozip" is no longer supported. This does NOT affect genozip files which contain two FASTQ files compressed with --pair. To compress multiple files into a single "archive" file, use "genozip --tar". To decompress existing genozip files compressed with the Binding feature, use Genozip v13. 
+- New advanced options (see genozip.com/advanced.html for details): --log-digest, --show-sa, --show-depn, --show-lines, --show-gheader=2, --debug-read-ctxs, --debug-sa, --debug-gencomp, --no-gencomp, --no-domqual, --show-wrong-XG, --show-wrong-XM, --vblock with bytes specification, --show-bam, --debug-lines, --biopsy-line, --show-qual, --show-aligner
+Discontinued functionality: 
+- The little-used yet difficult to maintain feature allowing "Binding" of multiples files of the same type using eg "genozip file1.vcf file2.vcf --output bound.vcf.genozip" is no longer supported. This does NOT affect the --tar option, and also does not affect genozip files which contain two FASTQ files compressed with --pair. To compress multiple files into a single "archive" file, use "genozip --tar". To decompress existing genozip files compressed with the Binding feature, use Genozip v13. 
 
 13.0.16 7/April/2022
 - Bug fixes

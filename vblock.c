@@ -64,7 +64,7 @@ void vb_release_vb_do (VBlockP *vb_p, rom task_name, rom func)
     threads_log_by_vb (vb, vb->compute_task ? vb->compute_task : func, "RELEASING VB", 0);
 
     if (flag.show_vblocks) 
-        iprintf ("VB_RELEASE(task=%s id=%d) vb=%s/%d caller=%s\n", task_name, vb->id, comp_name (vb->comp_i), vb->vblock_i, func);
+        iprintf ("VB_RELEASE(task=%s id=%d) vb=%s caller=%s\n", task_name, vb->id, VB_NAME, func);
 
     if (flag.show_time) 
         profiler_add (vb);
@@ -73,7 +73,7 @@ void vb_release_vb_do (VBlockP *vb_p, rom task_name, rom func)
         buf_test_overflows(vb, func); 
 
     // verify that gzip_compressor was released after use
-    ASSERT (!vb->gzip_compressor, "vb=%u: expecting gzip_compressor=NULL", vb->vblock_i);
+    ASSERT (!vb->gzip_compressor, "vb=%s: expecting gzip_compressor=NULL", VB_NAME);
 
     // STUFF THAT PERSISTS BETWEEN VBs (i.e. we don't free / reset):
     // vb->buffer_list : we DON'T free this because the buffers listed are still available and going to be re-used/
@@ -86,7 +86,7 @@ void vb_release_vb_do (VBlockP *vb_p, rom task_name, rom func)
     vb->line_i = 0;
     vb->recon_size = vb->txt_size = vb->txt_size_source_comp = vb->longest_line_len = vb->sample_i = 0;
     vb->comp_i = 0;
-    vb->dispatch = vb->is_processed = vb->preprocessing = vb->has_ctx_index = vb->maybe_lines_dropped = vb->show_containers = false;
+    vb->dispatch = vb->is_processed = vb->preprocessing = vb->has_ctx_index = vb->show_containers = false;
     vb->z_next_header_i = 0;
     vb->num_contexts = 0;
     vb->chrom_node_index = vb->chrom_name_len = vb->seq_len = 0; 
@@ -111,7 +111,7 @@ void vb_release_vb_do (VBlockP *vb_p, rom task_name, rom func)
     vb->buddy_line_i = 0;
     vb->rback_id = 0;
     vb->is_dropped = 0;
-
+    
     memset(&vb->profile, 0, sizeof (vb->profile));
     memset(vb->dict_id_to_did_i_map, 0, sizeof(vb->dict_id_to_did_i_map));
     memset(vb->ctx_index, 0, sizeof(vb->ctx_index));
@@ -223,6 +223,7 @@ VBlockP vb_initialize_nonpool_vb (int vb_id, DataType dt, rom task)
     vb->data_type         = dt;
     vb->in_use            = true;
     vb->data_type_alloced = dt;
+    vb->comp_i            = COMP_NONE;
     memset (vb->dict_id_to_did_i_map, 0xff, sizeof(vb->dict_id_to_did_i_map)); // DID_I_NONE
     return vb;
 }

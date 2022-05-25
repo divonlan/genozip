@@ -52,8 +52,8 @@ void vcf_samples_seg_initialize_PS_PID (VBlockVCFP vb)
     lookback_ctx->flags.store        = STORE_INT;
     lookback_ctx->dynamic_size_local = true;
     lookback_ctx->local_param        = true;
-    lookback_ctx->local.param        = lookback_size_to_local_param (PS_PID_LOOKBACK_LINES * vcf_num_samples + 1); // 1+ number of lookback values
-    lookback_ctx->local_always       = (lookback_ctx->local.param != 0); // no need for a SEC_LOCAL section if the parameter is 0 (which is the default anyway)
+    lookback_ctx->local.prm8[0]      = lookback_size_to_local_param (PS_PID_LOOKBACK_LINES * vcf_num_samples + 1); // 1+ number of lookback values
+    lookback_ctx->local_always       = (lookback_ctx->local.prm8[0] != 0); // no need for a SEC_LOCAL section if the parameter is 0 (which is the default anyway)
  
     CTX(VCF_SAMPLES)->flags.store = STORE_INDEX; // last_value is number of samples (=con.repeats)
 
@@ -130,7 +130,7 @@ static inline unsigned vcf_seg_FORMAT_PS_PID_test_lookback (VBlockVCFP vb, Conte
 
 static inline bool vcf_seg_FORMAT_PS_PID_ps_matches_pid (VBlockVCFP vb, STRp(ps))
 {
-    rom pid = last_txt (vb, FORMAT_PID);
+    rom pid = last_txt (VB, FORMAT_PID);
     unsigned pid_len = vb->last_txt_len (FORMAT_PID);
 
     return (pid_len > ps_len) && (pid[ps_len] == '_') && str_is_numeric (STRa(ps)) && !memcmp (ps, pid, ps_len);
@@ -180,8 +180,7 @@ void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STR
         if (segconf.ps_pid_type[is_pid] == PS_POS && vb->line_coords == DC_PRIMARY &&
             str_get_int (STRa(value), &ps_value)) {
 
-            char snip[16] = { SNIP_SPECIAL, VCF_SPECIAL_COPYPOS };
-            unsigned snip_len = 2 + str_int (ps_value - dl->pos[0], &snip[2]);
+            SNIPi2 (SNIP_SPECIAL, VCF_SPECIAL_COPYPOS, ps_value - dl->pos[0]);
             seg_by_ctx (VB, STRa(snip), ctx, value_len);
         }
 
@@ -190,7 +189,7 @@ void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STR
             str_split (value, value_len, 3, '_', item, true);
 
             if (n_items && 
-                str_issame_(STRi(item,0), last_txt(vb, VCF_POS), vb->last_txt_len(VCF_POS)) &&
+                str_issame_(STRi(item,0), last_txt(VB, VCF_POS), vb->last_txt_len(VCF_POS)) &&
                 str_issame_(STRi(item,1), vb->main_refalt, vb->main_ref_len) &&
                 vcf_seg_FORMAT_PS_PID_is_same_alt1(vb, STRi(item,2))) {
 
@@ -225,7 +224,7 @@ void vcf_seg_FORMAT_PS_PID_missing_value (VBlockVCFP vb, ContextP ctx, bool is_p
     // note: we DONT generate a SPECIAL if PS is '.'
     if (!is_pid && ctx_encountered (VB, FORMAT_PID) && 
         (segconf.ps_pid_type[1] == PS_POS_REF_ALT || segconf.ps_pid_type[1] == PS_UNKNOWN) &&    
-        vb->last_txt_len(FORMAT_PID)==1 && *last_txt(vb, FORMAT_PID)=='.') {
+        vb->last_txt_len(FORMAT_PID)==1 && *last_txt(VB, FORMAT_PID)=='.') {
 
         seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_PS_BY_PID }), 2, ctx, 0); 
     }
@@ -265,5 +264,5 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_PS_by_PID)
         }
     }
 
-    return false; // no new value
+    return NO_NEW_VALUE;
 }

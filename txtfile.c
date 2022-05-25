@@ -38,7 +38,7 @@ rom txtfile_dump_vb (VBlockP vb, rom base_name)
 
 static inline uint32_t txtfile_read_block_plain (VBlockP vb, uint32_t max_bytes)
 {
-    char *data = BAFTc (vb->txt_data);
+    char *data = BAFTtxt;
     int32_t bytes_read;
 
     // case: we have data passed to us from file_open_txt_read - handle it first
@@ -86,7 +86,7 @@ static inline uint32_t txtfile_read_block_plain (VBlockP vb, uint32_t max_bytes)
 
 static inline uint32_t txtfile_read_block_gz (VBlockP vb, uint32_t max_bytes)
 {
-    uint32_t bytes_read = gzfread (BAFTc (vb->txt_data), 1, max_bytes, (gzFile)txt_file->file);
+    uint32_t bytes_read = gzfread (BAFTtxt, 1, max_bytes, (gzFile)txt_file->file);
     vb->txt_data.len += bytes_read;
 
     if (bytes_read)
@@ -99,7 +99,7 @@ static inline uint32_t txtfile_read_block_gz (VBlockP vb, uint32_t max_bytes)
 
 static inline uint32_t txtfile_read_block_bz2 (VBlockP vb, uint32_t max_bytes)
 {
-    uint32_t bytes_read = BZ2_bzread ((BZFILE *)txt_file->file, BAFTc (vb->txt_data), max_bytes);
+    uint32_t bytes_read = BZ2_bzread ((BZFILE *)txt_file->file, BAFTtxt, max_bytes);
     vb->txt_data.len += bytes_read;
 
     if (bytes_read)
@@ -159,8 +159,8 @@ static inline uint32_t txtfile_read_block_bgzf (VBlockP vb, int32_t max_uncomp /
                 dump_buffer.len   += block_comp_len; // compressed size
                 buf_dump_to_file (dump_fn, &dump_buffer, 1, false, false, true, false);
 
-                ABORT ("Invalid BGZF block in vb=%u block_comp_len=%u. Entire BGZF data of this vblock dumped to %s, bad block stats at offset 0x%X",
-                       vb->vblock_i, block_comp_len, dump_fn, (uint32_t)vb->scratch.len);
+                ABORT ("%s: Invalid BGZF block: block_comp_len=%u. Entire BGZF data of this vblock dumped to %s, bad block stats at offset 0x%X",
+                       VB_NAME, block_comp_len, dump_fn, (uint32_t)vb->scratch.len);
             }
 
             // add block to list - including the EOF block (block_comp_len=BGZF_EOF_LEN block_uncomp_len=0)
@@ -185,10 +185,10 @@ static inline uint32_t txtfile_read_block_bgzf (VBlockP vb, int32_t max_uncomp /
             }
         }
 
-        this_uncomp_len           += block_uncomp_len; // total uncompressed length of data read by this function call
+        this_uncomp_len        += block_uncomp_len; // total uncompressed length of data read by this function call
         vb->scratch.uncomp_len += block_uncomp_len; // total uncompressed length of data in vb->compress
-        vb->txt_data.len          += block_uncomp_len; // total length of txt_data after adding decompressed vb->scratch (may also include pass-down data)
-        txt_file->disk_so_far     += block_comp_len;   
+        vb->txt_data.len       += block_uncomp_len; // total length of txt_data after adding decompressed vb->scratch (may also include pass-down data)
+        txt_file->disk_so_far  += block_comp_len;   
 
         // we decompress one block a time in the loop so that the decompression is parallel with the disk reading into cache
         if (uncompress) bgzf_uncompress_one_block (vb, BLST (BgzfBlockZip, vb->bgzf_blocks));  
@@ -237,7 +237,7 @@ static uint32_t txtfile_read_block (VBlockP vb, uint32_t max_bytes,
 
 // iterator on a buffer containing newline-terminated lines
 // false means continue iterating, true means stop
-char *txtfile_foreach_line (Buffer *txt_header,
+char *txtfile_foreach_line (BufferP txt_header,
                             bool reverse, // iterate backwards
                             TxtIteratorCallback callback, 
                             void *cb_param1, void *cb_param2, unsigned cb_param3, // passed as-is to callback
@@ -364,7 +364,7 @@ int32_t def_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 static uint32_t txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb)
 {
     int32_t pass_to_next_vb_len;
-    int32_t last_i = vb->txt_data.len-1; // next index to test (going backwards)
+    int32_t last_i = vb->txt_data.len32-1; // next index to test (going backwards)
 
     // case: the data is BGZF-compressed in vb->scratch, except for passed down data from prev VB        
     // uncompress one block at a time to see if its sufficient. usually, one block is enough
@@ -391,13 +391,13 @@ static uint32_t txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb)
     // case: we're testing memory and this VB is too small for a single line - return and caller will try again with a larger VB
     if (segconf.running && pass_to_next_vb_len < 0) return (uint32_t)-1;
 
-    ASSERT (pass_to_next_vb_len >= 0, "Reason: failed to find a full line %sin vb=%u data_type=%s codec=%s.\n"
+    ASSERT (pass_to_next_vb_len >= 0, "Reason: failed to find a full line %sin vb=%s data_type=%s codec=%s.\n"
             "Known possible causes:\n"
             "- The file is %s %s.\n"
             "- The file is not a %s file.\n"
             "VB dumped: %s\n",  
             DTPT(is_binary) ? "" : "(i.e. newline-terminated) ",
-            vb->vblock_i, dt_name (txt_file->data_type), codec_name (txt_file->codec),
+            VB_NAME, dt_name (txt_file->data_type), codec_name (txt_file->codec),
             DTPT(is_binary) ? "truncated but not on the boundary of the" : "missing a newline on the last", DTPT(line_name),
             TXT_DT(DT_REF) ? "FASTA" : dt_name (txt_file->data_type),
             txtfile_dump_vb (vb, txt_name));
@@ -509,10 +509,10 @@ void txtfile_read_vblock (VBlockP vb)
             if (flag.pair == PAIR_READ_2 &&  // we are reading the second file of a fastq file pair (with --pair)
                 !fastq_txtfile_have_enough_lines (vb, &pass_to_next_vb_len, &my_lines, &her_lines)) { // we don't yet have all the data we need
 
-                ASSINP (len, "File %s has less FASTQ reads than its R1 counterpart (vb=%u has %u lines while counterpart has %u lines)", 
-                        txt_name, vb->vblock_i, my_lines, her_lines);
+                ASSINP (len, "File %s has less FASTQ reads than its R1 counterpart (vb=%s has %u lines while counterpart has %u lines)", 
+                        txt_name, VB_NAME, my_lines, her_lines);
 
-                ASSERT (vb->txt_data.len, "txt_data.len=0 when reading pair_2 vb=%u", vb->vblock_i);
+                ASSERT (vb->txt_data.len, "txt_data.len=0 when reading pair_2 vb=%s", VB_NAME);
 
                 // if we need more lines - increase memory and keep on reading
                 max_memory_per_vb *= 1.1; 
@@ -569,46 +569,6 @@ void txtfile_read_vblock (VBlockP vb)
         biopsy_take (vb);
 
     COPY_TIMER (txtfile_read_vblock);
-}
-
-// read num_lines of the txtfile (after the header), and call test_func for each line. true iff the proportion of lines
-// that past the test is at least success_threashold
-bool txtfile_test_data (char first_char,            // first character in every header line
-                        unsigned num_lines_to_test, // number of lines to test
-                        float success_threashold,  // proportion of lines that need to pass the test, for this function to return true
-                        TxtFileTestFunc test_func)
-{
-    uint32_t line_start_i = 0;
-    unsigned num_lines_so_far = 0; // number of data (non-header) lines
-    unsigned successes = 0;
-
-    #define TEST_BLOCK_SIZE (256 * 1024)
-
-    while (1) {      // read data from the file until either 1. EOF is reached 2. we pass the header + num_lines_to_test lines
-        buf_alloc (evb, &evb->txt_data, TEST_BLOCK_SIZE + 1 /* for \0 */, 0, char, 1.2, "txt_data");    
-
-        uint64_t start_read = evb->txt_data.len;
-        txtfile_read_block (evb, TEST_BLOCK_SIZE, true);
-        if (start_read == evb->txt_data.len) break; // EOF
-
-        ARRAY (char, str, evb->txt_data); // declare here, in case of a realloc ^ 
-        for (uint64_t i=start_read; i < evb->txt_data.len; i++) {
-
-            if (str[i] == '\n') { 
-                if (str[line_start_i] != first_char) {  // data line
-                    successes += test_func (&str[line_start_i], i - line_start_i);
-                    num_lines_so_far++;
-
-                    if (num_lines_so_far == num_lines_to_test) goto done;
-                }
-                line_start_i = i+1; 
-            }
-        }
-    }
-    // note: read data is left in evb->txt_data for the use of txtfile_read_header
-
-done:
-    return (float)successes / (float)num_lines_so_far >= success_threashold;
 }
 
 DataType txtfile_get_file_dt (rom filename)

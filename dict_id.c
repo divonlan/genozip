@@ -72,13 +72,13 @@ static void dict_id_show_aliases (void)
 }
 
 // called by ZIP main thread for writing to global section
-Buffer *dict_id_create_aliases_buf (void)
+BufferP dict_id_create_aliases_buf (void)
 {
     static struct { DataType dt; uint64_t dict_id_alias; uint64_t dict_id_dst; } aliases_def[] = DICT_ID_ALIASES;
 
     // count
     dict_id_num_aliases = 0;
-    for (unsigned i=0; i < sizeof(aliases_def)/sizeof(aliases_def[0]); i++)
+    for (unsigned i=0; i < ARRAY_LEN(aliases_def); i++)
         if (aliases_def[i].dt == z_file->data_type)
             dict_id_num_aliases++;
 
@@ -87,7 +87,7 @@ Buffer *dict_id_create_aliases_buf (void)
     buf_alloc (evb, &dict_id_aliases_buf, 0, dict_id_aliases_buf.len, char, 1, "dict_id_aliases_buf");
 
     DictIdAlias *next = B1ST (DictIdAlias, dict_id_aliases_buf);
-    for (unsigned i=0; i < sizeof(aliases_def)/sizeof(aliases_def[0]); i++)
+    for (unsigned i=0; i < ARRAY_LEN(aliases_def); i++)
         if (aliases_def[i].dt == z_file->data_type) {
             next->alias = (DictId)aliases_def[i].dict_id_alias;
             next->dst   = (DictId)aliases_def[i].dict_id_dst;
@@ -148,13 +148,11 @@ rom dict_id_display_type (DataType dt, DictId dict_id)
 // print the dict_id - NOT thread safe, for use in execution-termination messages
 DisplayPrintId dis_dict_id (DictId dict_id)
 {
-    DisplayPrintId s = {};
+    if (!dict_id.num) return (DisplayPrintId){ .s = "(none)" };
 
-    if (!dict_id.num) return (DisplayPrintId){ .s = "<none>" };
+    DisplayPrintId s = { .s[0] = (dict_id.id[0] & 0x7f) | 0x40 }; // set 2 Msb to 01
 
-    s.s[0] = (dict_id.id[0] & 0x7f) | 0x40;  // set 2 Msb to 01
-
-    for (unsigned i=1; i < DICT_ID_LEN; i++) 
+    for (int i=1; i < DICT_ID_LEN; i++) 
         s.s[i] = dict_id.id[i] == 0  ? ' '
                : dict_id.id[i] < 32  ? '?' // non printable char is converted to '?'
                : dict_id.id[i] > 126 ? '?'

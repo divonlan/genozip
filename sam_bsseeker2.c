@@ -29,7 +29,7 @@ void sam_seg_XO_Z_field (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XO), unsigned a
         (XO[1] != 'F')                             ||
         (XO[2] != 'R' && XO[2] != 'W')             || 
         ((XO[0] == '-') != dl->FLAG.bits.rev_comp) ||     // expecting: '-' iff FLAG.rev_comp
-        ((XO[2] == 'R') != dl->FLAG.bits.multi_segments)) // expecting: 'R' iff FLAG.multi_segments
+        ((XO[2] == 'R') != dl->FLAG.bits.multi_segments)) // expecting: 'R' iff FLAG.bits.multi_segments
         seg_by_did_i (VB, STRa(XO), OPTION_XO_Z, add_bytes);
 
     // case: prediction successful - seg as SPECIAL
@@ -39,11 +39,9 @@ void sam_seg_XO_Z_field (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XO), unsigned a
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_BSSEEKER2_XO)
 {
-    SamFlags FLAG = { .value = CTX(SAM_FLAG)->last_value.i };
-
-    RECONSTRUCT1 (FLAG.bits.rev_comp ? '-' : '+');
+    RECONSTRUCT1 (last_flags.bits.rev_comp ? '-' : '+');
     RECONSTRUCT1 ('F');
-    RECONSTRUCT1 (FLAG.bits.multi_segments ? 'R' : 'W');
+    RECONSTRUCT1 (last_flags.bits.multi_segments ? 'R' : 'W');
 
     return NO_NEW_VALUE;
 }
@@ -88,7 +86,7 @@ static rom sam_seg_XG_Z_analyze_test_lens (VBlockSAMP vb, STRp(XG))
 // called for analyzing SG before segging SEQ and later XG
 // - Verifies the bases in XG are identical to the refernece, or if not in the reference yet (in REF_INTERNAL), adds them
 // Example: XG:Z:AC_CCCGTCCCTACTAAAATACAAAAATTAGCCCAGCTTGGTGGTGGGCACCTGTAATCTTAGCTACTGCAGAGACTGAGGCAGGAGAATCGCTTGAACCCAGGAGGTGGAGGTT_GC
-void sam_seg_XG_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XG), PosType line_pos)
+void sam_seg_XG_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XG), SamPosType line_pos)
 {
     RefLock lock = REFLOCK_NONE;
     rom result = NULL; // initialize to "success"
@@ -118,11 +116,11 @@ void sam_seg_XG_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XG), PosType 
 
     inc_soft_clip = (vb->XG_inc_S == XG_WITH_S) ? vb->soft_clip[0] : 0; // soft clip length, if we need to include it
 
-    PosType start_pos = line_pos - inc_soft_clip - 2;
+    SamPosType start_pos = line_pos - inc_soft_clip - 2;
     if (start_pos < 1) FAIL("start_pos");
 
     rom xg = B1STc(vb->XG);
-    PosType after_pos = start_pos + vb->ref_consumed + inc_soft_clip + 4/*flanking*/;
+    SamPosType after_pos = start_pos + vb->ref_consumed + inc_soft_clip + 4/*flanking*/;
 
     // get range
     RangeP range = ref_seg_get_locked_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), start_pos, after_pos - start_pos, 
@@ -132,7 +130,7 @@ void sam_seg_XG_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XG), PosType 
     if (!range) FAIL("no_range"); // either hash contention in REF_INTERNAL or this chromosome is missing in the reference file 
     if (range->last_pos < after_pos-1) FAIL("multi_range"); // sequence spans two ranges - can only happen in REF_INTERNAL
 
-    for (PosType pos = start_pos ; pos < after_pos; pos++, xg++) {
+    for (SamPosType pos = start_pos ; pos < after_pos; pos++, xg++) {
         uint32_t pos_index = pos - range->first_pos; // index within range
 
         bool is_populated = (flag.reference & REF_ZIP_LOADED) || ref_is_nucleotide_set (range, pos_index);
@@ -146,7 +144,7 @@ void sam_seg_XG_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XG), PosType 
     if (flag.reference == REF_INTERNAL) {
         xg = B1STc(vb->XG);
         
-        for (PosType pos = start_pos ; pos < after_pos; pos++, xg++) {
+        for (SamPosType pos = start_pos ; pos < after_pos; pos++, xg++) {
             uint32_t pos_index = pos - range->first_pos; // index within range
             bool is_populated = ref_is_nucleotide_set (range, pos_index);
 
@@ -164,8 +162,8 @@ void sam_seg_XG_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XG), PosType 
 
 done:
     if (result && flag.show_wrong_xg)
-        iprintf ("vb=%u line=%d RNAME=%.*s POS=%"PRId64" FLAG=%u CIGAR=\"%s\" ref_consumed%s=%u XG_len-6=%u Special XG not suitable (reason: \"%s\") (no harm)\n", 
-                 vb->vblock_i, vb->line_i, STRf(vb->chrom_name), line_pos, dl->FLAG.value, vb->last_cigar, (vb->XG_inc_S  == XG_WITH_S ? "+soft_clip[0]" : ""), vb->ref_consumed + inc_soft_clip, XG_len-6, result);
+        iprintf ("%s: RNAME=%.*s POS=%d FLAG=%u CIGAR=\"%s\" ref_consumed%s=%u XG_len-6=%u Special XG not suitable (reason: \"%s\") (no harm)\n", 
+                 LN_NAME, STRf(vb->chrom_name), line_pos, dl->FLAG.value, vb->last_cigar, (vb->XG_inc_S  == XG_WITH_S ? "+soft_clip[0]" : ""), vb->ref_consumed + inc_soft_clip, XG_len-6, result);
 
     ref_unlock (gref, lock);
     #undef FAIL
@@ -218,7 +216,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_BSSEEKER2_XG)
     RECONSTRUCT1 (ref_base_by_idx (range, idx + recon_len));
     RECONSTRUCT1 (ref_base_by_idx (range, idx + recon_len + 1));
 
-    if (CTX(SAM_FLAG)->last_value.i & SAM_FLAG_REV_COMP)
+    if (last_flags.bits.rev_comp)
         str_revcomp_actg (recon-3, recon-3, recon_len + 6);
 
     done: return NO_NEW_VALUE;
@@ -270,16 +268,16 @@ void sam_seg_XM_Z_field (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XM), unsigned a
 
     if (expected_xm_len != XM_len)  { // XM includes entries for I,D,M, maybe left-S
         if (flag.show_wrong_xm)
-            iprintf ("XM not special bc bad length (no harm): in vb=%u line=%u cigar=\"%s\". Expecting: ref_consumed + seq_len - ref_and_seq_consumed=%d == XM_len=%d\n",
-                    vb->vblock_i, vb->line_i, vb->last_cigar, vb->ref_consumed + dl->SEQ.len - vb->ref_and_seq_consumed, XM_len);
+            iprintf ("%s: XM not special bc bad length (no harm): cigar=\"%s\". Expecting: ref_consumed + seq_len - ref_and_seq_consumed=%d == XM_len=%d\n",
+                     LN_NAME, vb->last_cigar, vb->ref_consumed + dl->SEQ.len - vb->ref_and_seq_consumed, XM_len);
         goto fallback;
     }
 
     // note: we don't require XG to be verified, but we require it to be the expected length
     if (vb->ref_consumed + inc_soft_clip != vb->XG.len - 4) {
         if (flag.show_wrong_xm)
-            iprintf ("XM not special bc bad length (no harm): in vb=%u line=%u cigar=\"%s\". Expecting: (vb->ref_consumed%s)=%d != (vb->XG.len-4)=%d\n",
-                    vb->vblock_i, vb->line_i, vb->last_cigar, (vb->XG_inc_S==XG_WITH_S ? " + vb->soft_clip[0]":""), vb->ref_consumed + inc_soft_clip, (int)vb->XG.len - 4);
+            iprintf ("%s: XM not special bc bad length (no harm): cigar=\"%s\". Expecting: (vb->ref_consumed%s)=%d != (vb->XG.len-4)=%d\n",
+                     LN_NAME, vb->last_cigar, (vb->XG_inc_S==XG_WITH_S ? " + vb->soft_clip[0]":""), vb->ref_consumed + inc_soft_clip, (int)vb->XG.len - 4);
         goto fallback;
     }
 
@@ -303,8 +301,8 @@ void sam_seg_XM_Z_field (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XM), unsigned a
 
         if (predicted_xm != this_xm) {
             if (flag.show_wrong_xm)
-                iprintf ("XM mis-predicted (no harm): in vb=%u line=%u xm_i=%u revcomp=%s: cigar=%s op=%c xg=%c seq=%c predicted_xm=%c xm=%c\n",
-                        vb->vblock_i, vb->line_i, xm_i, TF(rev_comp), vb->last_cigar, cigar_op_to_char[op.op], *xg, *seq, predicted_xm, this_xm);
+                iprintf ("%s: XM mis-predicted (no harm): xm_i=%u revcomp=%s: cigar=%s op=%c xg=%c seq=%c predicted_xm=%c xm=%c\n",
+                         LN_NAME, xm_i, TF(rev_comp), vb->last_cigar, cigar_op_to_char[op.op], *xg, *seq, predicted_xm, this_xm);
             goto fallback;
         }
 
@@ -331,7 +329,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_BSSEEKER2_XM)
     STR(xg);
     reconstruct_peek (VB, CTX (OPTION_XG_Z), pSTRa(xg));
 
-    bool rev_comp = CTX(SAM_FLAG)->last_value.i & SAM_FLAG_REV_COMP;
+    bool rev_comp = last_flags.bits.rev_comp;
 
     // case: reconstructed to txt_data: copy data peeked 1. because our recon will overwrite it 2. so we don't need to reconstruct it again
     buf_alloc_exact (vb, vb->XG, xg_len-2, char, "xg"); // remove the two underscores
@@ -342,7 +340,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_BSSEEKER2_XM)
     xg_len = vb->XG.len;
     int32_t xg_i=0;
 
-    rom seq = IS_BAM_RECON ? vb->textual_seq.data : last_txt(vb, SAM_SQBITMAP);
+    rom seq = IS_BAM_RECON ? vb->textual_seq.data : last_txt(VB, SAM_SQBITMAP);
     char *recon = BAFTtxt;
     ARRAY (BamCigarOp, cigar, vb->binary_cigar);
     int op_i = (XG_inc_S == XG_WITHOUT_S && cigar[0].op == BC_S);

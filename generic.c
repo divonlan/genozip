@@ -16,6 +16,10 @@ int32_t generic_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
     return 0;
 }
 
+void generic_seg_initialize (VBlockP vb)
+{
+}
+
 void generic_seg_finalize (VBlockP vb)
 {
     Context *data_ctx = CTX(GNRIC_DATA);
@@ -39,5 +43,5 @@ SPECIAL_RECONSTRUCTOR (generic_piz_TOPLEVEL)
 {
     buf_destroy (vb->txt_data);
     buf_move (vb, &vb->txt_data, vb, &CTX(GNRIC_DATA)->local);
-    return false; // no new value
+    return NO_NEW_VALUE;
 }

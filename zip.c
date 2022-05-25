@@ -118,7 +118,7 @@ static void zip_display_compression_ratio (Digest md5)
 // 2) We optimize the representation of word_index giving privilage to 3 popular words (the most popular
 //    words in VB=1) to be represented by a single byte
 static inline void zip_generate_one_b250 (VBlockP vb, ContextP ctx, uint32_t word_i, WordIndex node_index,
-                                          Buffer *b250_buf, 
+                                          BufferP b250_buf, 
                                           WordIndex *prev_word_index,  // in/out
                                           bool show)
 {
@@ -178,19 +178,19 @@ static void zip_generate_b250 (VBlockP vb, Context *ctx)
     ASSERT (ctx->dict_id.num, "tag_name=%s did_i=%u: ctx->dict_id=0 despite ctx->b250 containing data", ctx->tag_name, (unsigned)(ctx - vb->contexts));
 
     bool show = flag.show_b250 || dict_id_typeless (ctx->dict_id).num == flag.dict_id_show_one_b250.num;
-    if (show) bufprintf (vb, &vb->show_b250_buf, "vb_i=%u %s: ", vb->vblock_i, ctx->tag_name);
+    if (show) bufprintf (vb, &vb->show_b250_buf, "%s %s: ", VB_NAME, ctx->tag_name);
+
+    ctx->b250.count = ctx->b250.len; // we move the number of words to count, as len will now contain the of bytes. used by ctx_update_stats()
 
     // case: all-the-same b250 survived dropping (in ctx_drop_all_the_same) - we just shorten it to one entry
     if (ctx->flags.all_the_same && ctx->b250.len > 1) { 
-        if (flag.debug_generate) iprintf ("%s.b250 vb_i=%u is \"all_the_same\" - shortened b250 from len=%"PRIu64" to 1\n", ctx->tag_name, vb->vblock_i, ctx->b250.len);
+        if (flag.debug_generate) iprintf ("%s: %s.b250 is \"all_the_same\" - shortened b250 from len=%"PRIu64" to 1\n", VB_NAME, ctx->tag_name, ctx->b250.len);
         ctx->b250.len = 1;
     }
     else
-        if (flag.debug_generate) iprintf ("%s.b250 vb_i=%u len=%"PRIu64" all_the_same=%u\n", ctx->tag_name, vb->vblock_i, ctx->b250.len, ctx->flags.all_the_same);
+        if (flag.debug_generate) iprintf ("%s: %s.b250 len=%"PRIu64" all_the_same=%u\n", VB_NAME, ctx->tag_name, ctx->b250.len, ctx->flags.all_the_same);
 
     ARRAY (WordIndex, b250, ctx->b250);
-
-    ctx->b250.count = b250_len; // we move the number of words to count, as len will now contain the of bytes. used by ctx_update_stats()
     ctx->b250.len = 0; // we are going to overwrite b250 with the converted indices
 
     // convert b250 from an array of node_index (4 bytes each) to word_index (1-4 bytes each)    
@@ -202,7 +202,7 @@ static void zip_generate_b250 (VBlockP vb, Context *ctx)
     if (ctx->pair_b250 && !ctx->flags.all_the_same &&
         ctx->pair.len == ctx->b250.len && !memcmp (ctx->b250.data, ctx->pair.data, ctx->b250.len)) {
         ctx_convert_generated_b250_to_mate_lookup (vb, ctx);
-        if (flag.debug_generate) iprintf ("%s.b250 vb_i=%u is all_the_same=1 mate_lookup=1\n", ctx->tag_name, vb->vblock_i);
+        if (flag.debug_generate) iprintf ("%s: %s.b250 is all_the_same=1 mate_lookup=1\n", VB_NAME, ctx->tag_name);
     }
     else
         ctx->pair_b250 = false;
@@ -327,7 +327,8 @@ static void zip_generate_transposed_local (VBlockP vb, Context *ctx)
 
     uint32_t rows = ctx->local.len / cols;
 
-    ctx->flags.copy_local_param = true;
+    ctx->local_param/*xxx flags.copy_local_param*/ = true;
+    /* xxx I don't see where col goes into param??? need to test */
     
     for (uint32_t r=0; r < rows; r++) 
         for (uint32_t c=0; c < cols; c++) {
@@ -353,8 +354,7 @@ done:
 // we move it to local instead of needlessly cluttering the global dictionary
 static void zip_handle_unique_words_ctxs (VBlockP vb)
 {
-    for (ContextP ctx=CTX(0); ctx < CTX(vb->num_contexts); ctx++) {
-    
+    for_ctx {
         if (!ctx->nodes.len || ctx->nodes.len != ctx->b250.len) continue; // check that all words are unique (and new to this vb)
         if (VB_DT(DT_VCF) && dict_id_is_vcf_format_sf (ctx->dict_id)) continue; // this doesn't work for FORMAT fields
         if (ctx->nodes.len < vb->lines.len / 5) continue; // don't bother if this is a rare field less than 20% of the lines
@@ -388,6 +388,8 @@ static void zip_generate_local (VBlockP vb, ContextP ctx)
         
         switch (ctx->ltype) {
             case LT_BITMAP    : LTEN_bit_array (buf_get_bitarray (&ctx->local));    
+                                ctx->local.prm8[0] = ((uint8_t)64 - (uint8_t)(ctx->local.nbits % 64)) % (uint8_t)64;
+                                ctx->local_param   = true;
                                 break;
 
             case LT_UINT32_TR : zip_generate_transposed_local (vb, ctx);            
@@ -431,8 +433,8 @@ static void zip_generate_local (VBlockP vb, ContextP ctx)
 
     codec_assign_best_codec (vb, ctx, NULL, SEC_LOCAL);
 
-    if (flag.debug_generate) iprintf ("%s.local in vb_i=%u ltype=%s len=%"PRIu64" codec=%s\n", 
-                                      ctx->tag_name, vb->vblock_i, lt_name (ctx->ltype), ctx->local.len, codec_name(ctx->lcodec));
+    if (flag.debug_generate) iprintf ("%s: %s.local ltype=%s len=%"PRIu64" codec=%s\n", 
+                                      VB_NAME, ctx->tag_name, lt_name (ctx->ltype), ctx->local.len, codec_name(ctx->lcodec));
 }
 
 // generate & write b250 data for all contexts - do them in random order, to reduce the chance of multiple doing codec_assign_best_codec for the same context at the same time
@@ -463,8 +465,8 @@ void zip_compress_all_contexts_b250 (VBlockP vb)
 
         if (flag.show_time) codec_show_time (vb, "B250", ctx->tag_name, ctx->bcodec);
         
-        if (HAS_DEBUG_SEG(ctx)) iprintf ("zip_compress_all_contexts_b250: vb=%s/%u %s: B250.len=%"PRIu64" NODES.len=%"PRIu64"\n", 
-                                         comp_name (vb->comp_i), vb->vblock_i, ctx->tag_name, ctx->b250.len, ctx->nodes.len);
+        if (HAS_DEBUG_SEG(ctx)) iprintf ("zip_compress_all_contexts_b250: vb=%s %s: B250.len=%"PRIu64" NODES.len=%"PRIu64"\n", 
+                                         VB_NAME, ctx->tag_name, ctx->b250.len, ctx->nodes.len);
 
         START_TIMER; // for compressor_time
 
@@ -491,7 +493,7 @@ static void compress_all_contexts_local (VBlockP vb)
         // initialize list of contexts at this dependency level that need compression
         ContextP ctxs[vb->num_contexts];
         unsigned num_ctxs=0;
-        for (ContextP ctx=CTX(0); ctx < CTX(vb->num_contexts); ctx++) 
+        for_ctx
             if ((ctx->local.len || ctx->local_always) && ctx->local_dep == dep_level && !ctx->local_compressed)
                 ctxs[num_ctxs++] = ctx;
 
@@ -509,8 +511,8 @@ static void compress_all_contexts_local (VBlockP vb)
 
             if (flag.show_time) codec_show_time (vb, "LOCAL", ctx->tag_name, ctx->lcodec);
 
-            if (HAS_DEBUG_SEG(ctx)) iprintf ("compress_all_contexts_local: vb_i=%u %s: LOCAL.len=%"PRIu64" LOCAL.param=%"PRIu64"\n", 
-                                            vb->vblock_i, ctx->tag_name, ctx->local.len, ctx->local.param);
+            if (HAS_DEBUG_SEG(ctx)) iprintf ("%s: compress_all_contexts_local: %s: LOCAL.len=%"PRIu64" LOCAL.param=%"PRIu64"\n", 
+                                            VB_NAME, ctx->tag_name, ctx->local.len, ctx->local.param);
 
             START_TIMER; // for compressor_time
             zfile_compress_local_data (vb, ctx, 0);
@@ -540,13 +542,13 @@ static void zip_update_txt_counters (VBlockP vb)
     // note: in case of an FASTQ with flag.optimize_DESC or VCF with add_line_numbers, we already updated this in *_zip_init_vb
     if (!(flag.optimize_DESC && VB_DT(DT_FASTQ)) &&
         !(flag.add_line_numbers && (VB_DT(DT_VCF) || VB_DT(DT_BCF))))
-        txt_file->num_lines += (int64_t)vb->lines.len; // lines in this txt file
+        txt_file->num_lines += vb->lines.len; // lines in this txt file
 
     // counters of data AS IT APPEARS IN THE TXT FILE
     if (!(z_is_dvcf && vb->comp_i))  // in DVCF, the generated to components contain copied data so we don't need to count it again
-        z_file->num_lines += (int64_t)vb->lines.len; // lines in all bound files in this z_file
+        z_file->num_lines += vb->lines.len; // lines in all bound files in this z_file
 
-    if (!vb->comp_i) { // in SAM and DVCF, vb->txt_size of the main file, as read from disk, contains all the data
+    if (vb->comp_i==COMP_MAIN || !z_is_dvcf) { // DVCF, vb->txt_size of the main file, as read from disk, contains all the data
         z_file->txt_data_so_far_single_0 += (int64_t)vb->txt_size;  // length of data before any modifications
         z_file->txt_data_so_far_bind_0   += (int64_t)vb->txt_size;
     }
@@ -556,6 +558,14 @@ static void zip_update_txt_counters (VBlockP vb)
 
     // counter of data in DEFAULT RECONSTRUCTION (For DVCF, this is corrected in vcf_zip_update_txt_counters)
     z_file->txt_data_so_far_bind += vb->recon_size;
+
+    // per-component data for stats
+    z_file->txt_data_so_far_bind_0_comp[vb->comp_i] += (int64_t)vb->txt_size;
+    
+    // note: in case of SAM gencomp, MAIN, we add recon_size - assuming the discrepency vs txt_data.len
+    // is only due to lines being deporting to gencomp 
+    z_file->txt_data_so_far_bind_comp[vb->comp_i] += 
+        (z_sam_gencomp && vb->comp_i==SAM_COMP_MAIN) ? vb->recon_size : vb->txt_data.len;
 
     // add up context compress time
     if (flag.show_time)
@@ -595,7 +605,7 @@ static void zip_write_global_area (void)
     }
 
     // add dict_id aliases list, if we have one
-    Buffer *dict_id_aliases_buf = dict_id_create_aliases_buf();
+    BufferP dict_id_aliases_buf = dict_id_create_aliases_buf();
     if (dict_id_aliases_buf->len) zfile_compress_section_data (evb, SEC_DICT_ID_ALIASES, dict_id_aliases_buf);
 
     // if this data has random access (i.e. it has chrom and pos), compress all random access records into evb->z_data
@@ -605,16 +615,7 @@ static void zip_write_global_area (void)
     if (store_ref) 
         random_access_compress (ref_get_stored_ra (gref), SEC_REF_RAND_ACC, 0, flag.show_ref_index ? RA_MSG_REF : NULL);
 
-    // note: we can't generate file-wide stats if we're showing component stats, because we reset ctx->txt_len after each component
-    if (flag.show_stats != STATS_SHORT_COMP && flag.show_stats != STATS_LONG_COMP)
-        stats_generate (COMP_NONE);
-
-    else {
-        CompIType num_components = sections_get_num_comps();
-        for (CompIType comp_i=0; comp_i < num_components; comp_i++)
-        // xxx broken, need to accumulate stats for each component
-            stats_generate (comp_i);
-    }
+    stats_generate();
 
     // compress genozip header (including its payload sectionlist and footer) into evb->z_data
     zfile_compress_genozip_header();    
@@ -746,7 +747,7 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
         }
 
         // --head advanced option in ZIP cuts a certain number of first lines from vb=1, and discards other VBs
-        else if (flag.lines_last >= 0) {
+        else if (flag.lines_last != NO_LINE) {
             vb->dispatch = DATA_EXHAUSTED;
             return;
         }

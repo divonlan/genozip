@@ -328,7 +328,7 @@ static WordIndex chain_seg_name_and_size (VBlockCHAIN *vb, Reference ref, bool i
 
     static bool once[2] = {};
     *verified &= is_alt || chain_seg_verify_contig (vb, ref, node_index, &once[is_luft], STRa (name), 
-                                                    last_txt(vb, did_i_name), vb->last_txt_len(did_i_name), size_value, mismatch);
+                                                    last_txt(VB, did_i_name), vb->last_txt_len(did_i_name), size_value, mismatch);
 
     seg_set_last_txt (VB, CTX(did_i_name), STRa(name)); // note: in some cases, this is already done by chrom_seg_ex. no harm.
 
@@ -374,7 +374,7 @@ rom chain_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_tx
                                CHAIN_ID, CHAIN_VERIFIED, CHAIN_SET, CHAIN_SIZE, CHAIN_GAPS, CHAIN_EOL, CHAIN_TOPLEVEL, CHAIN_SEP, CHAIN_DEBUG_LINES);
     typeof(vb->recon_size) save_recon_size = vb->recon_size;
 
-    int32_t len = BAFTc (vb->txt_data) - field_start_line;
+    int32_t len = BAFTtxt - field_start_line;
 
     SEG_NEXT_ITEM_SP (CHAIN_CHAIN);
     SEG_NEXT_ITEM_SP (CHAIN_SCORE);
@@ -650,10 +650,10 @@ static inline void chain_piz_filter_ingest_alignmet (VBlockCHAIN *vb)
 
     int64_t size = vb->last_int(CHAIN_SIZE);
 
-    ASSINP (*last_txt(vb, CHAIN_STRNDPRIM) == '+', "Chain file contains alignments with tStrand=\"%c\" (strand of Primary reference), this is not support by Genozip.",
-            *last_txt(vb, CHAIN_STRNDLUFT));
+    ASSINP (*last_txt(VB, CHAIN_STRNDPRIM) == '+', "Chain file contains alignments with tStrand=\"%c\" (strand of Primary reference), this is not support by Genozip.",
+            *last_txt(VB, CHAIN_STRNDLUFT));
 
-    bool is_xstrand = (*last_txt(vb, CHAIN_STRNDLUFT) == '-');
+    bool is_xstrand = (*last_txt(VB, CHAIN_STRNDLUFT) == '-');
     PosType last_prim_0pos = vb->next_prim_0pos + size - 1; // last POS of the dst alignment, 0-based
     PosType last_luft_0pos = vb->next_luft_0pos + size - 1; // last POS of the dst alignment, 0-based
     PosType size_dst = vb->last_int (CHAIN_SIZELUFT);  // contig LN
@@ -762,7 +762,7 @@ static void chain_contigs_show (bool is_primary)
     ContextP zctx = ZCTX (is_primary ? CHAIN_NAMEPRIM : CHAIN_NAMELUFT);
     ASSERTISALLOCED (zctx->counts); // will fail with chain files compressed prior to 12.0.35
 
-    const Buffer *contigs = is_primary ? &prim_ctgs.contigs : &luft_ctgs.contigs;
+    ConstBufferP contigs = is_primary ? &prim_ctgs.contigs : &luft_ctgs.contigs;
     ARRAY (const Contig, cn, *contigs);
 
     iprintf ("\n%s chain file contigs:\n", is_primary ? "PRIMARY" : "LUFT");
@@ -884,7 +884,7 @@ static ChainAlignment *chain_get_first_aln (WordIndex prim_ref_index, int32_t st
 }
 
 // append luft_contigs buffer with all dst chroms indicies for which there exists alignment with prim_chrom
-void chain_append_all_luft_ref_index (rom prim_contig_name, unsigned prim_contig_name_len, PosType LN, Buffer *luft_contigs)
+void chain_append_all_luft_ref_index (rom prim_contig_name, unsigned prim_contig_name_len, PosType LN, BufferP luft_contigs)
 {
     WordIndex prim_ref_index = contigs_get_matching (&prim_ctgs, STRa(prim_contig_name), LN, false, NULL);
     WordIndex prev_dst = WORD_INDEX_NONE;

@@ -27,18 +27,18 @@
 #  define _tr_stored_block      z__tr_stored_block
 #  define _tr_tally             z__tr_tally
 //#  define adler32               z_adler32
-#  define adler32_combine       z_adler32_combine
-#  define adler32_combine64     z_adler32_combine64
-#  define adler32_z             z_adler32_z
+// #  define adler32_combine       z_adler32_combine
+// #  define adler32_combine64     z_adler32_combine64
+//#  define adler32_z             z_adler32_z
 #  ifndef Z_SOLO
 #    define compress              z_compress
 #    define compress2             z_compress2
 #    define compressBound         z_compressBound
 #  endif
-#  define crc32                 z_crc32
-#  define crc32_combine         z_crc32_combine
-#  define crc32_combine64       z_crc32_combine64
-#  define crc32_z               z_crc32_z
+// #  define crc32                 z_crc32
+// #  define crc32_combine         z_crc32_combine
+// #  define crc32_combine64       z_crc32_combine64
+// #  define crc32_z               z_crc32_z
 #  define deflate               z_deflate
 #  define deflateBound          z_deflateBound
 #  define deflateCopy           z_deflateCopy

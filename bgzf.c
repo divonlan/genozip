@@ -168,14 +168,14 @@ void bgzf_uncompress_one_block (VBlockP vb, BgzfBlockZip *bb)
     // verify that entire block is within vb->scratch
     ASSERT (bb->compressed_index + sizeof (BgzfHeader) < vb->scratch.len && // we have at least the header - we can access bsize
             bb->compressed_index + (uint32_t)LTEN16 (h->bsize) + 1 <= vb->scratch.len, 
-            "bgzf block size goes past the end of in vb->scratch: bb=%s vb=%u compressed_index=%u vb->scratch.len=%"PRIu64, 
-            display_bb (bb).s, vb->vblock_i, bb->compressed_index, vb->scratch.len);
+            "bgzf block size goes past the end of in vb->scratch: bb=%s vb=%s compressed_index=%u vb->scratch.len=%"PRIu64, 
+            display_bb (bb).s, VB_NAME, bb->compressed_index, vb->scratch.len);
 
-    ASSERT (h->id1==31 && h->id2==139, "not a valid bgzf block in vb->scratch: vb=%u compressed_index=%u", vb->vblock_i, bb->compressed_index);
+    ASSERT (h->id1==31 && h->id2==139, "not a valid bgzf block in vb->scratch: vb=%s compressed_index=%u", VB_NAME, bb->compressed_index);
 
     if (flag.show_bgzf)
-        iprintf ("%-7s vb=%u i=%u compressed_index=%u size=%u txt_index=%u size=%u ",
-                 threads_am_i_main_thread() ? "MAIN" : "COMPUTE", vb->vblock_i, 
+        iprintf ("%-7s vb=%s i=%u compressed_index=%u size=%u txt_index=%u size=%u ",
+                 threads_am_i_main_thread() ? "MAIN" : "COMPUTE", VB_NAME, 
                  BNUM (vb->bgzf_blocks, bb), bb->compressed_index, bb->comp_size, bb->txt_index, bb->txt_size);
 
     enum libdeflate_result ret = 
@@ -256,7 +256,7 @@ struct FlagsBgzf bgzf_get_compression_level (rom filename, bytes comp_block, uin
     uint32_t recomp_size;
     uint8_t recomp_block[BGZF_MAX_BLOCK_SIZE]; 
 
-    for (int level_i=0; level_i < sizeof (levels) / sizeof (levels[0]); level_i++) { 
+    for (int level_i=0; level_i < ARRAY_LEN (levels); level_i++) { 
         struct FlagsBgzf l = { .library = levels[level_i].library, .level = levels[level_i].level };
 
         if (l.library == BGZF_LIBDEFLATE) {
@@ -394,7 +394,7 @@ static void bgzf_free_compressor (VBlockP vb, struct FlagsBgzf bgzf_flags)
 
 static uint32_t bgzf_compress_one_block (VBlockP vb, rom in, uint32_t isize, 
                                          int32_t block_i, int32_t txt_index, // for show_bgzf (both may be negative - indicating previous VB)
-                                         Buffer *compressed)
+                                         BufferP compressed)
 {
     START_TIMER;
 
@@ -443,8 +443,8 @@ static uint32_t bgzf_compress_one_block (VBlockP vb, rom in, uint32_t isize,
 
     if (flag.show_bgzf)
         #define C(i) (i < isize ? char_to_printable (in[i]).s : "")
-        iprintf ("%-7s vb=%u i=%d compressed_index=%u size=%u txt_index=%d size=%u txt_data[5]=%1s%1s%1s%1s%1s %s\n",
-                threads_am_i_main_thread() ? "MAIN" : threads_am_i_writer_thread() ? "WRITER" : "COMPUTE", vb->vblock_i, block_i,
+        iprintf ("%-7s vb=%s i=%d compressed_index=%u size=%u txt_index=%d size=%u txt_data[5]=%1s%1s%1s%1s%1s %s\n",
+                threads_am_i_main_thread() ? "MAIN" : threads_am_i_writer_thread() ? "WRITER" : "COMPUTE", VB_NAME, block_i,
                 comp_index, (unsigned)out_size, txt_index, isize, C(0), C(1), C(2), C(3), C(4),
                 out_size == BGZF_EOF_LEN ? "EOF" : "");
         #undef C
@@ -454,7 +454,7 @@ static uint32_t bgzf_compress_one_block (VBlockP vb, rom in, uint32_t isize,
 
     header->bsize = LTEN16 ((uint16_t)(sizeof (BgzfHeader) + out_size + sizeof (BgzfFooter) - 1));
 
-    BgzfFooter footer = { .crc32 = LTEN32 (libdeflate_crc32 (0, in, isize)),
+    BgzfFooter footer = { .crc32 = LTEN32 (crc32 (0, in, isize)),
                           .isize = LTEN32 (isize) };
     buf_add (compressed, &footer, sizeof (BgzfFooter));
 
@@ -559,7 +559,7 @@ void bgzf_write_to_disk (VBlockP wvb, VBlockP vb)
         if (first_data_len <= vb->txt_data.len) {
             char block[BGZF_MAX_BLOCK_SIZE];
             memcpy (block, intercall_txt.data, intercall_txt.len);
-            memcpy (&block[intercall_txt.len], B1STc (vb->txt_data), first_data_len); 
+            memcpy (&block[intercall_txt.len], B1STtxt, first_data_len); 
 
             // note: we can't use vb->scratch here, because it might already contain data - for example when if a txt_header is included
             // in the BGZF block together with the beginning of the first VB - the other BGZF blocks of the VB will be in vb->scratch.

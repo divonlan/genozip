@@ -25,6 +25,8 @@
 #pragma GENDICT SAM_Q9NAME=DTYPE_1=Q7NAME 
 #pragma GENDICT SAM_QmNAME=DTYPE_1=QmNAME // QmNAME reserved for mate number (always the last dict_id in the container)
 #pragma GENDICT SAM_FLAG=DTYPE_FIELD=FLAG
+#pragma GENDICT SAM_FLAG0=DTYPE_FIELD=F0LAG0
+#pragma GENDICT SAM_FLAG1=DTYPE_FIELD=F1LAG1
 #pragma GENDICT SAM_POS=DTYPE_FIELD=POS
 #pragma GENDICT SAM_MAPQ=DTYPE_FIELD=MAPQ
 #pragma GENDICT SAM_CIGAR=DTYPE_FIELD=CIGAR
@@ -37,8 +39,14 @@
 #pragma GENDICT SAM_NONREF_X=DTYPE_FIELD=NONREF_X
 #pragma GENDICT SAM_GPOS=DTYPE_FIELD=GPOS
 #pragma GENDICT SAM_STRAND=DTYPE_FIELD=STRAND
+#pragma GENDICT SAM_SEQMIS_A=DTYPE_FIELD=SEQMIS_A // v14: mismatch bases vs the reference, when ref=A
+#pragma GENDICT SAM_SEQMIS_C=DTYPE_FIELD=SEQMIS_C // v14: mismatch bases vs the reference, when ref=A
+#pragma GENDICT SAM_SEQMIS_G=DTYPE_FIELD=SEQMIS_G // v14: mismatch bases vs the reference, when ref=A
+#pragma GENDICT SAM_SEQMIS_T=DTYPE_FIELD=SEQMIS_T // v14: mismatch bases vs the reference, when ref=A
 #pragma GENDICT SAM_QUAL=DTYPE_FIELD=QUAL 
-#pragma GENDICT SAM_DOMQRUNS=DTYPE_FIELD=DOMQRUNS // must be right after SAM_QUAL. Also used by LONGR. For backwards compatability, we can never change its name.
+#pragma GENDICT SAM_DOMQRUNS=DTYPE_FIELD=DOMQRUNS // these 3 must be right after SAM_QUAL. DOMQRUNS is also used by LONGR. For backwards compatability, we can never change its name.
+#pragma GENDICT SAM_QUALMPLX=DTYPE_FIELD=QUALMPLX // v14.0.0. DOMQUAL codec: dom multiplexer 
+#pragma GENDICT SAM_DIVRQUAL=DTYPE_FIELD=DIVRQUAL // v14.0.0. DOMQUAL codec: lines that don't have enough dom.
 #pragma GENDICT SAM_QNAMESA=DTYPE_FIELD=QNAMESA   // v14.0.0. PRIM: copy from SA Group
 #pragma GENDICT SAM_SEQSA=DTYPE_FIELD=SEQSA       // v14.0.0. DEPN: Sequence diff vs SA Group PRIM: copy from SA Group 
 #pragma GENDICT SAM_QUALSA=DTYPE_FIELD=QUALSA     // v14.0.0. DEPN: Qual diff vs SA Group PRIM: copy from SA Group 
@@ -97,17 +105,20 @@
 #pragma GENDICT OPTION_SA_CIGAR=DTYPE_2=S3A_CIGAR 
 #pragma GENDICT OPTION_SA_NM=DTYPE_2=S4A_NM 
 #pragma GENDICT OPTION_SA_MAPQ=DTYPE_2=S5A_MAPQ 
+#pragma GENDICT OPTION_SA_MAIN=DTYPE_2=S6A_MAIN 
 
 #pragma GENDICT OPTION_SM_i=DTYPE_2=SM:i     // Template-independent mapping quality
 #pragma GENDICT OPTION_TC_i=DTYPE_2=TC:i     // The number of segments in the template
 #pragma GENDICT OPTION_UQ_i=DTYPE_2=UQ:i     // Phred likelihood of the segment, conditional on the mapping being correct
 #pragma GENDICT OPTION_U2_Z=DTYPE_2=U2:Z     // Phred probability of the 2nd call being wrong conditional on the best being wrong
-#pragma GENDICT OPTION_D2OMQRUN=DTYPE_2=D2OMQRUN // must be right after OPTION_U2_Z
+#pragma GENDICT OPTION_U2_DOMQRUNS=DTYPE_2=DOMQRUNS // these 3 must be right after SAM_QUAL. DOMQRUNS is also used by LONGR. For backwards compatability, we can never change its name.
+#pragma GENDICT OPTION_U2_QUALMPLX=DTYPE_2=QUALMPLX // v14.0.0. DOMQUAL alg: dom multiplexer 
+#pragma GENDICT OPTION_U2_DIVRQUAL=DTYPE_2=DIVRQUAL // v14.0.0. DOMQUAL alg: lines that don't have enough dom. NORMQ codec: lines that are of length other than segconf.sam_seq_len 
                 
 // bwa tags see here: http://bio-bwa.sourceforge.net/bwa.shtml : "SAM ALIGNMENT FORMAT"
 #pragma GENDICT OPTION_X0_i=DTYPE_2=X0:i     // Number of best hits
 #pragma GENDICT OPTION_X1_i=DTYPE_2=X1:i     // Number of suboptimal hits found by BWA
-#pragma GENDICT OPTION_XC_i=DTYPE_2=XC:i     // ???
+#pragma GENDICT OPTION_XC_i=DTYPE_2=XC:i     // Undocumented: usually seq_len minus the final soft-clip (right if forward and left if rev-comp) 
 #pragma GENDICT OPTION_XN_i=DTYPE_2=XN:i     // Number of ambiguous bases in the referenece
 #pragma GENDICT OPTION_XM_i=DTYPE_2=XM:i     // Number of mismatches in the alignment
 #pragma GENDICT OPTION_XO_i=DTYPE_2=XO:i     // Number of gap opens
@@ -241,7 +252,6 @@ COMPRESSOR_CALLBACK(sam_zip_U2);
 COMPRESSOR_CALLBACK(sam_zip_BD_BI);
 extern void sam_zip_initialize (void);
 extern void sam_zip_finalize (void);
-extern bool sam_zip_is_unaligned_line (rom line, int len);
 extern bool sam_zip_dts_flag (void);
 extern void sam_zip_after_compute (VBlockP vb);
 extern void sam_zip_after_vbs (void);
@@ -277,7 +287,7 @@ extern bool sam_piz_init_vb (VBlockP vb, const SectionHeaderVbHeader *header, ui
 extern void sam_piz_recon_init (VBlockP vb);
 extern void sam_piz_after_recon (VBlockP vb);
 extern CONTAINER_FILTER_FUNC (sam_piz_filter);
-extern void sam_reconstruct_SEQ (VBlockP vb, ContextP ctx, rom unused, unsigned unused2);
+extern void sam_reconstruct_SEQ (VBlockP vb, ContextP ctx, rom unused, unsigned unused2, bool reconstruct);
 extern void sam_set_FLAG_filter (rom optarg);
 extern void sam_set_MAPQ_filter (rom optarg);
 extern void sam_piz_load_SA_Groups (void);
@@ -306,39 +316,53 @@ extern void sam_reset_line (VBlockP vb);
 
 // Special - used for SAM & BAM
 #define SAM_SPECIAL { sam_cigar_special_CIGAR, sam_piz_special_TLEN_old, sam_piz_special_BD_BI, sam_piz_special_AS_old, \
-                      sam_piz_special_MD_old, bam_piz_special_FLOAT, bam_piz_special_BIN, bam_piz_special_NM,   \
+                      sam_piz_special_MD_old, bam_piz_special_FLOAT, bam_piz_special_BIN, sam_piz_special_NM,   \
                       sam_piz_special_MD, sam_piz_special_REF_CONSUMED, \
-                      sam_piz_special_PNEXT_IS_PREV_POS, sam_piz_special_COPY_BUDDY_FLAG, sam_piz_special_COPY_BUDDY_TLEN_old, \
-                      sam_piz_special_COPY_BUDDY_MC, sam_piz_special_CONSUME_MC_Z, sam_piz_special_TLEN, sam_piz_special_QUAL,\
-                      sam_piz_special_pull_from_SAGROUP, sam_piz_special_DEPN_SEQ, sam_piz_special_PRIM_SEQ, \
+                      sam_piz_special_PNEXT_IS_PREV_POS_old, sam_piz_special_COPY_BUDDY_FLAG, sam_piz_special_COPY_MATE_TLEN_old, \
+                      sam_piz_special_RECON_BUDDY_CIGAR, sam_piz_special_CONSUME_MC_Z, sam_piz_special_TLEN, sam_piz_special_QUAL,\
+                      sam_piz_special_pull_from_SAGROUP, sam_piz_special_SEQ, \
                       sam_piz_special_PRIM_QNAME, sam_piz_special_SQUANK, \
-                      sam_piz_special_BSSEEKER2_XO, sam_piz_special_BSSEEKER2_XG, sam_piz_special_BSSEEKER2_XM }
+                      sam_piz_special_BSSEEKER2_XO, sam_piz_special_BSSEEKER2_XG, sam_piz_special_BSSEEKER2_XM,\
+                      sam_piz_special_SA_main, sam_piz_special_COPY_PRIM, sam_piz_special_XC, sam_piz_special_XT,\
+                      sam_piz_special_SM, sam_piz_special_AM, sam_piz_special_X1, sam_piz_special_XS, sam_piz_special_PNEXT, \
+                      sam_piz_special_DEMUX_BY_MATE, sam_piz_special_DEMUX_BY_MATE_PRIM, sam_piz_special_DEMUX_BY_BUDDY }
 SPECIAL (SAM, 0,  CIGAR,               sam_cigar_special_CIGAR);
-SPECIAL (SAM, 1,  TLEN_old,            sam_piz_special_TLEN_old);            // used for files compressed up to 12.0.42
+SPECIAL (SAM, 1,  TLEN_old,            sam_piz_special_TLEN_old);            // used up to 12.0.42
 SPECIAL (SAM, 2,  BDBI,                sam_piz_special_BD_BI);
 SPECIAL (SAM, 3,  AS_old,              sam_piz_special_AS_old);              // Reconstructs seq_len minus delta. Note: called "AS" until 12.0.37 and used to reconstruct AS:i
 SPECIAL (SAM, 4,  MD_old,              sam_piz_special_MD_old);              // used in files compressed with Genozip up to 12.0.36
 SPECIAL (SAM, 5,  FLOAT,               bam_piz_special_FLOAT);               // used in BAM to represent float optional values
 SPECIAL (SAM, 6,  BIN,                 bam_piz_special_BIN);   
-SPECIAL (SAM, 7,  NM,                  bam_piz_special_NM);                  // introduced 12.0.37
+SPECIAL (SAM, 7,  NM,                  sam_piz_special_NM);                  // introduced 12.0.37
 SPECIAL (SAM, 8,  MD,                  sam_piz_special_MD);                  // introduced 12.0.37
 SPECIAL (SAM, 9,  REF_CONSUMED,        sam_piz_special_REF_CONSUMED);        // introduced 12.0.41: Reconstructs based on ref_consumed
-SPECIAL (SAM, 10, PNEXT_IS_PREV_POS,   sam_piz_special_PNEXT_IS_PREV_POS);   // introduced 12.0.41
+SPECIAL (SAM, 10, PNEXT_IS_PREV_POS_old,sam_piz_special_PNEXT_IS_PREV_POS_old); // introduced 12.0.41 up to v13
 SPECIAL (SAM, 11, COPY_BUDDY_FLAG,     sam_piz_special_COPY_BUDDY_FLAG);     // introduced 12.0.41
-SPECIAL (SAM, 12, COPY_BUDDY_TLEN_old, sam_piz_special_COPY_BUDDY_TLEN_old); // Used in 12.0.41 and 12.0.42
-SPECIAL (SAM, 13, COPY_BUDDY_MC,       sam_piz_special_COPY_BUDDY_MC);       // introduced 12.0.41
+SPECIAL (SAM, 12, COPY_MATE_TLEN_old,  sam_piz_special_COPY_MATE_TLEN_old);  // Used in 12.0.41 and 12.0.42
+SPECIAL (SAM, 13, RECON_BUDDY_CIGAR,   sam_piz_special_RECON_BUDDY_CIGAR);   // introduced 12.0.41
 SPECIAL (SAM, 14, CONSUME_MC_Z,        sam_piz_special_CONSUME_MC_Z);        // introduced 12.0.41
 SPECIAL (SAM, 15, TLEN,                sam_piz_special_TLEN);                // introduced 13.0.1
 SPECIAL (SAM, 16, QUAL,                sam_piz_special_QUAL);                // introduced 13.0.1
 SPECIAL (SAM, 17, SAGROUP,             sam_piz_special_pull_from_SAGROUP);   // introduced 14.0.0
-SPECIAL (SAM, 18, DEPN_SEQ,            sam_piz_special_DEPN_SEQ);            // introduced 14.0.0
-SPECIAL (SAM, 19, PRIM_SEQ,            sam_piz_special_PRIM_SEQ);            // introduced 14.0.0
-SPECIAL (SAM, 20, PRIM_QNAME,          sam_piz_special_PRIM_QNAME);          // introduced 14.0.0
-SPECIAL (SAM, 21, SQUANK,              sam_piz_special_SQUANK);              // introduced 14.0.0
-SPECIAL (SAM, 22, BSSEEKER2_XO,        sam_piz_special_BSSEEKER2_XO);        // introduced 14.0.0
-SPECIAL (SAM, 23, BSSEEKER2_XG,        sam_piz_special_BSSEEKER2_XG);        // introduced 14.0.0
-SPECIAL (SAM, 24, BSSEEKER2_XM,        sam_piz_special_BSSEEKER2_XM);        // introduced 14.0.0
-#define NUM_SAM_SPECIAL 25
+SPECIAL (SAM, 18, SEQ,                 sam_piz_special_SEQ);                 // introduced 14.0.0
+SPECIAL (SAM, 19, PRIM_QNAME,          sam_piz_special_PRIM_QNAME);          // introduced 14.0.0
+SPECIAL (SAM, 20, SQUANK,              sam_piz_special_SQUANK);              // introduced 14.0.0
+SPECIAL (SAM, 21, BSSEEKER2_XO,        sam_piz_special_BSSEEKER2_XO);        // introduced 14.0.0
+SPECIAL (SAM, 22, BSSEEKER2_XG,        sam_piz_special_BSSEEKER2_XG);        // introduced 14.0.0
+SPECIAL (SAM, 23, BSSEEKER2_XM,        sam_piz_special_BSSEEKER2_XM);        // introduced 14.0.0
+SPECIAL (SAM, 24, SA_main,             sam_piz_special_SA_main);             // introduced 14.0.0
+SPECIAL (SAM, 25, COPY_PRIM,           sam_piz_special_COPY_PRIM);           // introduced 14.0.0
+SPECIAL (SAM, 26, XC,                  sam_piz_special_XC);                  // introduced 14.0.0
+SPECIAL (SAM, 27, XT,                  sam_piz_special_XT);                  // introduced 14.0.0
+SPECIAL (SAM, 28, SM,                  sam_piz_special_SM);                  // introduced 14.0.0
+SPECIAL (SAM, 29, AM,                  sam_piz_special_AM);                  // introduced 14.0.0
+SPECIAL (SAM, 30, X1,                  sam_piz_special_X1);                  // introduced 14.0.0
+SPECIAL (SAM, 31, XS,                  sam_piz_special_XS);                  // introduced 14.0.0
+SPECIAL (SAM, 32, PNEXT,               sam_piz_special_PNEXT);               // introduced 14.0.0
+SPECIAL (SAM, 33, DEMUX_BY_MATE,       sam_piz_special_DEMUX_BY_MATE);       // introduced 14.0.0
+SPECIAL (SAM, 34, DEMUX_BY_MATE_PRIM,  sam_piz_special_DEMUX_BY_MATE_PRIM);  // introduced 14.0.0
+SPECIAL (SAM, 35, DEMUX_BY_BUDDY,      sam_piz_special_DEMUX_BY_BUDDY);      // introduced 14.0.0
+#define NUM_SAM_SPECIAL 36
 
 #define SAM_LOCAL_GET_LINE_CALLBACKS                          \
     { DT_SAM, _OPTION_BD_BI,       sam_zip_BD_BI           }, \
@@ -391,3 +415,8 @@ typedef enum { SAM_COMP_MAIN, SAM_COMP_PRIM, SAM_COMP_DEPN } SamComponentType;
 #define sam_is_main_vb (vb->comp_i == SAM_COMP_MAIN)
 #define sam_is_prim_vb (vb->comp_i == SAM_COMP_PRIM)
 #define sam_is_depn_vb (vb->comp_i == SAM_COMP_DEPN)
+
+#define IS_BAM_ZIP TXT_DT(DT_BAM)
+#define IS_BAM_PIZ (Z_DT(DT_SAM) && z_file->z_flags.txt_is_bin) // note: this means z_file is BAM, NOT that the reconstruction is BAM! 
+#define IS_BAM_RECON (IS_BAM_PIZ && vb->translation.trans_containers)
+#define IS_BAM (command==ZIP ? IS_BAM_ZIP : IS_BAM_PIZ)

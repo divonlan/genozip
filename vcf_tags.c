@@ -70,7 +70,7 @@ static void vcf_tags_cmdline_add_attr (rom option, DictIdType dtype, STRp(attr_s
 
     ASSINP (dest_len < MAX_TAG_LEN, "tag \"%.*s\" is beyond Genozip's length limit of %u", STRf(dest), MAX_TAG_LEN); // leave room for \0
 
-    Buffer *tags = z_file ? &z_file->apriori_tags : &command_line_tags; // command line tags are added before z_file is created
+    BufferP tags = z_file ? &z_file->apriori_tags : &command_line_tags; // command line tags are added before z_file is created
 
     // check if tag already exists - searching backwards
     Tag *tag = NULL;

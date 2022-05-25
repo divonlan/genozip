@@ -24,7 +24,7 @@
 #define END_OF_LIST (MAX_QUEUE_SIZE+1)
 
 typedef struct {
-    Buffer *gc_txts;         // Buffer array - each buffer is either on the "ready-to-dispatch queue" or on the "unused buffers' stack"
+    BufferP gc_txts;         // Buffer array - each buffer is either on the "ready-to-dispatch queue" or on the "unused buffers' stack"
     uint16_t queue_size;     // number of buffers allocated on queue
     volatile uint16_t queue_len;  // number of buffers ready for dispatching (NOT including buffers offloaded to disk)
     uint16_t next_to_leave;  // Head of queue (FIFO): doubly-linked list of buffers 
@@ -67,7 +67,7 @@ typedef struct {
 
 typedef struct  {
     GencompType type;
-    Buffer txt_data;         // we absorb gencomp lines separately for each component, and then flush a single-component VB to the queue - the queue may have VBs from several components
+    Buffer txt_data;        // we absorb gencomp lines separately for each component, and then flush a single-component VB to the queue - the queue may have VBs from several components
     int64_t num_lines;       // for stats
 } CompStruct;
 
@@ -244,7 +244,7 @@ int64_t gencomp_get_num_lines (CompIType comp_i)
 // the Absorb thread (for the final flush, the Absorbing and Dispatching is the same thread)
 //-----------------------------------------------------------------------------------------------
 
-static uint32_t compress_depn_buf (Buffer *comp_buf)
+static uint32_t compress_depn_buf (BufferP comp_buf)
 {
     uint32_t uncomp_len = depn.thread_data.len;
     uint32_t comp_len = codec_RANB_est_size (CODEC_RANS8, uncomp_len);
@@ -290,7 +290,7 @@ static void gencomp_offload_DEPN_to_disk (CompIType comp_i, bool is_final_flush)
         unlink (depn.name); // ignore errors (this doesn't work on NTFS)
     }
 
-    Buffer *buf = &componentsP[comp_i].txt_data;
+    BufferP buf = &componentsP[comp_i].txt_data;
 
     buf_alloc (evb, &depn.offload_info, 1, 100, TxtDataInfoType, 2, "depn.offload_info");
     BNXT (TxtDataInfoType, depn.offload_info) = (TxtDataInfoType){
@@ -489,7 +489,7 @@ static int gencomp_buf_leaves_queue (GencompType gct)
 static void gencomp_get_txt_data_from_queue (VBlockP vb, GencompType gct)
 {
     int buf_i = gencomp_buf_leaves_queue (gct);
-    Buffer *buf = &queueP[gct].gc_txts[buf_i];
+    BufferP buf = &queueP[gct].gc_txts[buf_i];
 
     if (gct == GCT_OOB)
         buf_copy (vb, &vb->txt_data, buf, char, 0, 0, "txt_data");
@@ -542,8 +542,8 @@ static void gencomp_get_txt_data_from_disk (VBlockP vb)
                            &vb->txt_data, vb->txt_data.len, 0, "txt_data");
 
     if (flag.debug_gencomp) 
-        iprintf ("Read from disk: buf=%"PRIu64" vb=%s/%u num_lines=%u uncomp_len=%u comp_len=%u uncomp_alder32=%u comp_adler32=%u\n",
-                  depn.offload_info.next-1, comp_name(vb->comp_i), vb->vblock_i, info->num_lines, (uint32_t)vb->txt_data.len, info->comp_len, 
+        iprintf ("Read from disk: buf=%"PRIu64" vb=%s num_lines=%u uncomp_len=%u comp_len=%u uncomp_alder32=%u comp_adler32=%u\n",
+                  depn.offload_info.next-1, VB_NAME, info->num_lines, (uint32_t)vb->txt_data.len, info->comp_len, 
                   adler32 (1, STRb(vb->txt_data)), adler32 (1, STRb(depn.thread_data_comp))); 
 
     depn.thread_data_comp.len = depn.thread_data.len = 0;
@@ -617,7 +617,7 @@ bool gencomp_am_i_expecting_more_txt_data (void)
 
     bool expecting = !finished_absorbingP || queueP[GCT_OOB].queue_len || queueP[GCT_DEPN].queue_len;
 
-    if ((Z_DT(DT_SAM) || Z_DT(DT_BAM)) && finished_absorbingP && !queueP[GCT_OOB].queue_len && !num_vbs_dispatched[GCT_OOB]) {
+    if ((TXT_DT(DT_SAM) || TXT_DT(DT_BAM)) && finished_absorbingP && !queueP[GCT_OOB].queue_len && !num_vbs_dispatched[GCT_OOB]) {
         sam_finished_ingesting_prim = true;
         if (flag.debug_gencomp) iprint0 ("No PRIM VBs in this file\n");
     }
@@ -646,7 +646,7 @@ void gencomp_sam_prim_vb_has_been_ingested (VBlockP vb)
     uint16_t prim_queue_len = queueP[GCT_OOB].queue_len; // in SAM, GetQBit is PRIM
     mutex_unlock (gc_protected);
 
-    if (flag.debug_gencomp) iprintf ("Ingested SA Groups of vb=%s/%u\n", comp_name(vb->comp_i), vb->vblock_i);
+    if (flag.debug_gencomp) iprintf ("Ingested SA Groups of vb=%s\n", VB_NAME);
 
     // thread safety: 1. finished_absorbingP and  prim_queue_len these two are updated by the gencomp_absorb_vb_gencomp_lines 
     // which guarantees that if we have data, at least one of these two conditions will be true. 

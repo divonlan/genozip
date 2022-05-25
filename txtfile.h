@@ -9,12 +9,7 @@
 #include "digest.h"
 
 extern rom txtfile_piz_get_filename (rom orig_name, rom prefix, bool is_orig_name_genozip);
-
-typedef bool (*TxtFileTestFunc)(rom , int);
-extern bool txtfile_test_data (char first_char, unsigned num_lines_to_test, float success_threashold, TxtFileTestFunc test_func);
-
 extern rom txtfile_dump_vb (VBlockP vb, rom base_name);
-
 extern void txtfile_read_header (bool is_first_txt);
 
 #define TXTFILE_READ_VB_PADDING 16 // txtfile_read_vblock ensure this quantity of bytes at the end of vb.txt_data are unused

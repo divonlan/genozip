@@ -36,8 +36,11 @@ void sam_piz_xtra_line_data (VBlockP vb_)
 
 void sam_piz_genozip_header (const SectionHeaderGenozipHeader *header)
 {
-    if (z_file->genozip_version >= 14) 
-        segconf.sam_seq_len = BGEN32 (header->sam.segconf_seq_len); // introduced v14
+    if (z_file->genozip_version >= 14) {
+        segconf.sam_seq_len      = BGEN32 (header->sam.segconf_seq_len); 
+        segconf.sam_ms_type      = header->sam.segconf_ms_type;
+        segconf.has_MD_or_NM     = header->sam.segconf_has_MD_or_NM;
+    }
 }
 
 // main thread: is it possible that genocat of this file will re-order lines
@@ -54,6 +57,7 @@ bool sam_piz_init_vb (VBlockP vb, const SectionHeaderVbHeader *header, uint32_t 
     return true; // all good
 }
 
+// PIZ compute thread: called after uncompressing contexts and before reconstructing
 void sam_piz_recon_init (VBlockP vb)
 {
     // we can proceed with reconstructing a PRIM or DEPN vb, only after SA Groups is loaded - busy-wait for it
@@ -65,6 +69,8 @@ void sam_piz_recon_init (VBlockP vb)
         lookback_init (vb, CTX(OPTION_XA_LOOKBACK), CTX (OPTION_XA_STRAND), STORE_INDEX);
         lookback_init (vb, CTX(OPTION_XA_LOOKBACK), CTX (OPTION_XA_POS),    STORE_INT);
     }
+
+    buf_alloc_zero (vb, &CTX(SAM_CIGAR)->ref_consumed_history, 0, vb->lines.len, uint32_t, 0, "ref_consumed_history"); // initialize to exactly one per line.
 }
 
 // PIZ: piz_after_recon callback: called by the compute thread from piz_reconstruct_one_vb. order of VBs is arbitrary
@@ -93,25 +99,33 @@ IS_SKIP (sam_piz_is_skip_section)
 
     if (dict_id_is_qname_sf(dict_id)) dnum = _SAM_Q1NAME; // treat all QNAME subfields as _SAM_Q1NAME
     bool prim = (comp_i == SAM_COMP_PRIM) && !preproc;
+    bool main = (comp_i == SAM_COMP_MAIN);
     bool cov  = flag.collect_coverage;
     bool cnt  = flag.count && !flag.grep; // we skip based on --count, but not if --grep, because grepping requires full reconstruction
     
     switch (dnum) {
-        case _SAM_SQBITMAP : case _SAM_NONREF : case _SAM_NONREF_X : case _SAM_GPOS : case _SAM_STRAND :
+        case _SAM_SQBITMAP : 
+            SKIPIFF ((cov || cnt) && !flag.bases);
+            KEEPIFF (st == SEC_B250);
+            
+        case _SAM_NONREF   : case _SAM_NONREF_X : case _SAM_GPOS     : case _SAM_STRAND :
+        case _SAM_SEQMIS_A : case _SAM_SEQMIS_C : case _SAM_SEQMIS_G : case _SAM_SEQMIS_T : 
             SKIPIF (prim); // in PRIM, we skip sections that we used for loading the SA Groups in sam_piz_load_SA_Groups, but not needed for reconstruction
                            // (during PRIM SA Group loading, skip function is temporarily changed to sam_plsg_only). see also: sam_load_groups_add_grps
             SKIPIFF ((cov || cnt) && !flag.bases);
 
-        case _SAM_QUAL : case _SAM_DOMQRUNS :
+        case _SAM_QUAL : case _SAM_DOMQRUNS : case _SAM_QUALMPLX : case _SAM_DIVRQUAL :
             SKIPIF (prim);                                         
             SKIPIFF (cov || cnt);
         
         case _SAM_QUALSA  :
-        case _SAM_RNEXT   :
         case _SAM_TLEN    :
         case _SAM_EOL     :
         case _SAM_BAM_BIN :
             SKIPIFF (preproc || cov || (cnt && !(flag.bases && flag.out_dt == DT_BAM)));
+
+        case _SAM_RNEXT   :
+            SKIPIFF (preproc || (cnt && !(flag.bases && flag.out_dt == DT_BAM))); // needed to reconstruct RNAME from a mate
 
         case _SAM_Q1NAME : case _SAM_QNAMESA :
             KEEPIF (preproc || dict_needed_for_preproc || (cnt && flag.bases && flag.out_dt == DT_BAM)); // if output is BAM we need the entire BAM record to correctly analyze the SEQ for IUPAC, as it is a structure.
@@ -119,27 +133,28 @@ IS_SKIP (sam_piz_is_skip_section)
 
         case _OPTION_SA_Z :
             KEEPIF (preproc && st == SEC_LOCAL);
+            KEEPIF (main); // needed for reconstructing depn line from a same-VB prim line
             SKIPIF (prim && st == SEC_LOCAL);
-            SKIPIFF (cnt || cov);
+            SKIPIFF (cnt);
                      
         case _OPTION_SA_RNAME :    
-            KEEPIF (preproc || dict_needed_for_preproc);
+            KEEPIF (preproc || dict_needed_for_preproc || main);
             SKIPIF (cnt); 
             SKIPIFF (prim);    
 
         case _OPTION_SA_CIGAR :
-            KEEPIF (preproc || dict_needed_for_preproc);
+            KEEPIF (preproc || dict_needed_for_preproc || main);
             SKIPIF (cnt && !flag.bases);
             SKIPIFF (prim);    
 
         case _OPTION_SA_MAPQ : 
             KEEPIF (preproc || dict_needed_for_preproc);
-            SKIPIF ((cnt || cov) && !flag.sam_mapq_filter);
+            SKIPIF (cnt && !flag.sam_mapq_filter);
             SKIPIFF (prim);                                         
         
         case _OPTION_SA_STRAND : case _OPTION_SA_NM  : case _OPTION_SA_POS :
             KEEPIF (preproc || dict_needed_for_preproc);
-            SKIPIF (cnt || cov);
+            SKIPIF (cnt);
             SKIPIFF (prim);                                         
 
         case _SAM_FLAG     : 
@@ -185,7 +200,7 @@ void sam_set_FLAG_filter (rom optarg)
         case '+': flag.sam_flag_filter = SAM_FLAG_INCLUDE_IF_ALL  ; break;
         case '-': flag.sam_flag_filter = SAM_FLAG_INCLUDE_IF_NONE ; break;
         case '^': flag.sam_flag_filter = SAM_FLAG_EXCLUDE_IF_ALL  ; break;
-        default : ASSERT (false, FLAG_ERR, optarg);
+        default : ABORTINP (FLAG_ERR, optarg);
     }
 
     STR(value) = strlen (optarg)-1;
@@ -202,9 +217,9 @@ void sam_set_FLAG_filter (rom optarg)
     else if (!strncmp (value, "LAST",          value_len)) flag.FLAG = SAM_FLAG_IS_LAST;
     else if (!strncmp (value, "SECONDARY",     value_len)) flag.FLAG = SAM_FLAG_SECONDARY;
     else if (!strncmp (value, "FILTERED",      value_len)) flag.FLAG = SAM_FLAG_FILTERED;
-    else if (!strncmp (value, "DUPLICATE",    value_len)) flag.FLAG = SAM_FLAG_DUPLICATE;
+    else if (!strncmp (value, "DUPLICATE",     value_len)) flag.FLAG = SAM_FLAG_DUPLICATE;
     else if (!strncmp (value, "SUPPLEMENTARY", value_len)) flag.FLAG = SAM_FLAG_SUPPLEMENTARY;
-    else ABORT (FLAG_ERR, optarg);
+    else ABORTINP (FLAG_ERR, optarg);
 }
 
 // set --MAPQ filtering from command line argument
@@ -243,22 +258,13 @@ static inline void sam_piz_update_coverage (VBlockP vb, const uint16_t sam_flag,
     }
 }
 
-// For collated files, in lines where PNEXT equal the previous line's POS.
-SPECIAL_RECONSTRUCTOR (sam_piz_special_PNEXT_IS_PREV_POS)
-{
-    new_value->i = CTX(SAM_POS)->last_value.i - CTX(SAM_POS)->last_delta;
-    if (reconstruct) RECONSTRUCT_INT (new_value->i);
-    
-    return true; // new value
-}
-
 // Case 1: BIN is set to SPECIAL, we will set new_value here to -1 and wait for CIGAR to calculate it, 
 //         as we need vb->ref_consumed - sam_cigar_special_CIGAR will update the reconstruced value
 // Case 2: BIN is an textual integer snip - its BIN.last_value will be set as normal and transltor will reconstruct it
 SPECIAL_RECONSTRUCTOR (bam_piz_special_BIN)
 {
     ctx->semaphore = true; // signal to sam_cigar_special_CIGAR to calculate
-    return false; // no new value
+    return NO_NEW_VALUE;
 }
 
 // note of float reconstruction:
@@ -294,8 +300,8 @@ SPECIAL_RECONSTRUCTOR (bam_piz_special_FLOAT)
         unsigned dec_digits = MAX_(0, NUM_SIGNIFICANT_DIGITS - int_digits);
         
         // reconstruct number with exactly NUM_SIGNIFICANT_DIGITS digits
-        sprintf (BAFTc (vb->txt_data), "%.*f", dec_digits, machine_en.f); 
-        unsigned len = strlen (BAFTc (vb->txt_data)); 
+        sprintf (BAFTtxt, "%.*f", dec_digits, machine_en.f); 
+        unsigned len = strlen (BAFTtxt); 
         vb->txt_data.len += len;
 
         // remove trailing decimal zeros:  "5.500"->"5.5" ; "5.0000"->"5" ; "50"->"50"
@@ -441,7 +447,7 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
 
         if (flag.add_line_numbers && TXT_DT(DT_SAM)) {
             vb->txt_data.len32 -= 1 + (*(BLSTtxt-1) == '\r'); // remove \n or \r\n
-            vb->txt_data.len32 += sprintf (BAFTtxt, "\tVB:Z:%s/%u/%u\n", comp_name(vb->comp_i), vb->vblock_i, vb->line_i);
+            vb->txt_data.len32 += sprintf (BAFTtxt, "\tVB:Z:%s\n", LN_NAME);
         }
 
         // case SAM to BAM translation: set alignment.block_size (was in sam_piz_sam2bam_AUX until v11)
@@ -513,6 +519,8 @@ CONTAINER_FILTER_FUNC (sam_piz_filter)
 {
     // BAM: set buddy at the beginning of each line, as QNAME is reconstructed much later
     // For MAIN and DEPN: buddy, if existing, will have QNAME=SNIP_COPY_BUDDY (see sam_seg_QNAME)
+    // note: we always load buddy, to prevent a situation when in some lines it is consumed
+    // and other lines, which have buddy, it is not consumed because the field that consumes it is skipped
     if (!sam_is_prim_vb && dict_id.num == _SAM_TOP2BAM && item == 0 && 
         CTX(SAM_QNAME)->b250.len) { // might be 0 in special cases, like flag.count
         STR(snip);
@@ -527,6 +535,8 @@ CONTAINER_FILTER_FUNC (sam_piz_filter)
         sam_piz_set_sa_grp (VB_SAM); 
 
     // collect_coverage: set buddy_line_i here, since we don't reconstruct QNAME
+    // note: we always load buddy, to prevent a situation when in some lines it is consumed
+    // and other lines, which have buddy, it is not consumed because the field that consumes it is skipped
     else if (dict_id.num == _SAM_QNAME && flag.collect_coverage) {
         STR(snip);
         LOAD_SNIP(SAM_QNAME);
@@ -566,5 +576,34 @@ TRANSLATOR_FUNC (sam_piz_sam2fastq_FLAG)
     }
 
     return 0;
+}
+
+// v14: De-multiplex by has_mate
+SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_BY_MATE)
+{
+    bool is_depn  = last_flags.bits.supplementary || last_flags.bits.secondary;
+    bool has_mate = piz_has_buddy && !is_depn;
+    return reconstruct_demultiplex (vb, ctx, STRa(snip), has_mate, new_value, reconstruct);
+}
+
+// v14: De-multiplex by has_buddy (which can be mate or prim)
+SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_BY_BUDDY)
+{
+    return reconstruct_demultiplex (vb, ctx, STRa(snip), piz_has_buddy, new_value, reconstruct);
+}
+
+// v14: De-multiplex by has_mate and has_prim
+SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_BY_MATE_PRIM)
+{
+    // note: when reconstructing POS in BAM, FLAG is not known yet, so we peek it here
+    if (!ctx_has_value_in_line_(vb, CTX(SAM_FLAG)))
+        ctx_set_last_value (vb, CTX(SAM_FLAG), reconstruct_peek (vb, CTX(SAM_FLAG), 0, 0));
+
+    bool is_depn  = last_flags.bits.supplementary || last_flags.bits.secondary;
+    bool has_mate = piz_has_buddy && !is_depn;
+    bool has_prim = piz_has_buddy && is_depn;
+    int channel_i = has_mate?1 : has_prim?2 : 0;
+
+    return reconstruct_demultiplex (vb, ctx, STRa(snip), channel_i, new_value, reconstruct);
 }
 

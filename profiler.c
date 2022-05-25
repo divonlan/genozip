@@ -48,6 +48,7 @@ void profiler_add (ConstVBlockP vb)
     ADD(compressor_longr);
     ADD(compressor_rans);
     ADD(compressor_arith);
+    ADD(compressor_normq);
     ADD(zip_generate_b250);
     ADD(zip_generate_local);
     ADD(zip_compress_ctxs);
@@ -166,6 +167,7 @@ void profiler_print_report (void)
         PRINT (compressor_rans, 2);
         PRINT (compressor_arith, 2);
         PRINT (compressor_domq, 2);
+        PRINT (compressor_normq, 2);
         PRINT (compressor_actg, 2);
         PRINT (compressor_pbwt, 2);
         PRINT (compressor_longr, 2);
@@ -216,6 +218,7 @@ void profiler_print_report (void)
         PRINT (compressor_rans, 2);
         PRINT (compressor_arith, 2);
         PRINT (compressor_domq, 2);
+        PRINT (compressor_normq, 2);
         PRINT (compressor_actg, 2);
         PRINT (compressor_pbwt, 2);
         PRINT (compressor_longr, 2);

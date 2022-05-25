@@ -759,8 +759,8 @@ void vcf_refalt_seg_other_REFALT (VBlockVCFP vb, DidIType did_i, LiftOverStatus 
 // PIZ stuff
 // ---------
 
-// single-base re-anchoring, eg REF=ACTG ALT=G anchor="T" --> REF=TACT ALT=T  (assuming reference is TACTG)
-// left aligning: REF=ACTG ALT=G anchor="TCT" --> REF=TCTA ALT=T (assuming reference is TCTACTG)
+// single-base re-anchoring, eg REF=ACGT ALT=G anchor="T" --> REF=TACT ALT=T  (assuming reference is TACTG)
+// left aligning: REF=ACGT ALT=G anchor="TCT" --> REF=TCTA ALT=T (assuming reference is TCTACTG)
 static inline void vcf_refalt_rotate_right (char *seq, unsigned seq_len, STRp(anchor))
 {
     // move what remains of sequence after anchor is inserted
@@ -859,7 +859,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_other_REFALT)
     
     vcf_reconstruct_other_REFALT_do (vb, STRa(snip), xstrand, other_refalt, refalt_len, other_refalt_ctx->tag_name);
 
-    return false; // no new value
+    return NO_NEW_VALUE;
 }
 
 // When segging Luft line: convert REF\tALT from Luft to Primary, in-place, based on ostatus -
@@ -882,17 +882,17 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_LIFT_REF)
 {
     ContextP refalt_ctx = (VB_VCF->vb_coords == DC_LUFT ? CTX (VCF_REFALT) : CTX (VCF_oREFALT));
 
-    snip = BAFTc (vb->txt_data);
+    snip = BAFTtxt;
     reconstruct_from_ctx (vb, refalt_ctx->did_i, 0, true);
-    snip_len = (unsigned)(BAFTc (vb->txt_data) - snip);
+    snip_len = (unsigned)(BAFTtxt - snip);
 
     rom after_ref = memchr (snip, '\t', snip_len);
     ASSPIZ (after_ref, "expected a \\t in the %s snip: \"%.*s\" ostatus=%s", 
-            refalt_ctx->tag_name, snip_len, snip, last_ostatus_name_piz);
+            refalt_ctx->tag_name, STRf(snip), last_ostatus_name_piz);
 
     vb->txt_data.len = BNUMtxt (reconstruct ? after_ref : snip);
 
-    return false; // no new value
+    return NO_NEW_VALUE;
 }
 
 // Sometimes called to reconstruct the "main" refalt (main AT THE TIME OF SEGGING), to reconstruct SNPs that were stored relative to a reference.
@@ -940,7 +940,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_main_REFALT)
     RECONSTRUCT (ref_alt, sizeof (ref_alt));
 
 done:
-    return false; // no new value
+    return NO_NEW_VALUE;
 }   
 
 // used by FORMAT/PS - reconstructs REF or ALT depending on the parameter - '0' REF or '1'..MAX_ALLELES-1 - ALT
@@ -972,7 +972,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_COPY_REForALT)
         }
     }
 
-    return false; // no new value
+    return NO_NEW_VALUE;
 }
 
 // --snps-only implementation (called from vcf_piz_container_cb)
@@ -982,7 +982,7 @@ bool vcf_refalt_piz_is_variant_snp (VBlockVCFP vb)
     unsigned txt_len = vb->last_txt_len (refalt);
     if (txt_len <= 3) return true; // short circuit most common case  of a bi-allelic SNP (<3 can never happen, here to avoid issues)
 
-    rom txt = last_txt (vb, refalt);
+    rom txt = last_txt (VB, refalt);
     return txt[1] == '\t' && str_count_char (&txt[2], txt_len-2, ',') * 2 == txt_len-3; // true if multi-allelic SNP
 }
 
@@ -995,7 +995,7 @@ bool vcf_refalt_piz_is_variant_indel (VBlockVCFP vb)
 
     if (ctx_has_value_in_line_(vb, CTX(INFO_SVTYPE))) return false; // Note an INDEL: its a structural variant
 
-    rom txt = last_txt (vb, refalt);
+    rom txt = last_txt (VB, refalt);
     if (memchr (txt, '<', txt_len) || memchr (txt, '[', txt_len) || memchr (txt, ']', txt_len)) return false; // Not an INDEL: its an SV
 
     return true;

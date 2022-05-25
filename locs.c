@@ -9,6 +9,9 @@
 #include "seg.h"
 #include "locs.h"
 #include "dict_id.h"
+#include "reconstruct.h"
+#include "piz.h"
+#include "file.h"
 
 //------------
 // ZIP

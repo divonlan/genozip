@@ -8,7 +8,7 @@
 // forward.
 
 #define lookback_buf(ctx) ((command == ZIP) ? &ctx->zip_lookback_buf : &ctx->history)
-#define lookback_size(lb_ctx) (1 << ((lb_ctx)->local.param + 10))
+#define lookback_size(lb_ctx) (1 << ((lb_ctx)->local.prm8[0] + 10))
 #define gap_index len // the index of the entry that is not used, one before (i.e. higher) that the oldest entry
 #define newest_index param
 
@@ -27,7 +27,7 @@ void lookback_init (VBlockP vb, ContextP lb_ctx, ContextP ctx, StoreType store_t
 void lookback_insert (VBlockP vb, DidIType lb_did_i, DidIType did_i, bool copy_last_value, ValueType value, bool is_word_index)
 {
     ContextP ctx = CTX(did_i);
-    Buffer *buf = lookback_buf(ctx);
+    BufferP buf = lookback_buf(ctx);
     uint32_t lb_size = lookback_size (CTX(lb_did_i));
 
     buf->newest_index = RR(buf->newest_index - 1, lb_size);
@@ -47,13 +47,12 @@ void lookback_insert (VBlockP vb, DidIType lb_did_i, DidIType did_i, bool copy_l
 
 void lookback_insert_txt (VBlockP vb, DidIType lb_did_i, DidIType did_i, STRp(txt))
 { 
-    ValueType value = { .txt = { .index =  BNUMtxt (txt), .len = txt_len } };
-    lookback_insert (vb, lb_did_i, did_i, false, value, false);
+    lookback_insert (vb, lb_did_i, did_i, false, TXTWORD(txt), false);
 }
 
 static inline unsigned lookback_len (ContextP ctx, uint32_t lb_size)
 {
-    Buffer *buf = lookback_buf(ctx);
+    BufferP buf = lookback_buf(ctx);
 
     if (buf->newest_index <= buf->gap_index) 
         return buf->gap_index - buf->newest_index;
@@ -70,7 +69,7 @@ const void *lookback_get_do (VBlockP vb, ContextP lb_ctx, ContextP ctx,
     ASSERT (lookback <= lookback_len (ctx, lb_size), "expecting lookback=%u <= lookback_len=%u for ctx=%s vb=%d line_i=%d%s%s lb_size=%u", 
             lookback, lookback_len(ctx, lb_size), ctx->tag_name, vb->vblock_i, vb->line_i, (VB_DT(DT_VCF) ? " sample_i=" : ""), (VB_DT(DT_VCF) ? str_int_s (vb->sample_i).s : ""), lb_size);
             
-    Buffer *buf = lookback_buf(ctx);
+    BufferP buf = lookback_buf(ctx);
     unsigned index = RR(buf->newest_index + lookback - 1, lb_size);
 
     ASSERT (lookback > 0 && lookback < lb_size, "Expecting lookback=%d in ctx=%s vb=%d line_i=%d%s%s to be in the range [1,%u]", 
@@ -88,7 +87,7 @@ bool lookback_is_same_txt (VBlockP vb, DidIType lb_did_i, ContextP ctx, uint32_t
 
     ValueType value = lookback_get_value (vb, CTX(lb_did_i), ctx, lookback);
 
-    return str_issame_(STRa(str), Bc (vb->txt_data, value.txt.index), value.txt.len);
+    return str_issame_(STRa(str), STRtxtw(value));
 }
 
 
@@ -96,7 +95,7 @@ bool lookback_is_same_txt (VBlockP vb, DidIType lb_did_i, ContextP ctx, uint32_t
 uint32_t lookback_get_next (VBlockP vb, ContextP lb_ctx, ContextP ctx, WordIndex search_for, 
                             int64_t *iterator) // iterator should be initialized to -1 by caller. updates to the first item to be tested next call.
 {
-    Buffer *buf = lookback_buf(ctx);
+    BufferP buf = lookback_buf(ctx);
     uint32_t lb_size = lookback_size (lb_ctx);
 
     if (buf->newest_index == buf->gap_index) return 0; // buffer is empty
@@ -114,7 +113,7 @@ uint32_t lookback_get_next (VBlockP vb, ContextP lb_ctx, ContextP ctx, WordIndex
 
 void lookback_flush (VBlockP vb, ContextP ctx)
 {
-    Buffer *buf = lookback_buf(ctx);
+    BufferP buf = lookback_buf(ctx);
     buf->gap_index = buf->newest_index = 0;
 }
 

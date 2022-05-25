@@ -26,12 +26,7 @@ static rom codec_bsc_errstr (int err)
     }
 }
 
-bool codec_bsc_compress (VBlockP vb, SectionHeader *header, 
-                         rom uncompressed,   // option 1 - compress contiguous data
-                         uint32_t *uncompressed_len, // in/out (might be modified by complex codecs)
-                         LocalGetLineCB callback,    // option 2 - compress data one line at a time
-                         char *compressed, uint32_t *compressed_len /* in/out */, 
-                         bool soft_fail, rom name)
+COMPRESS (codec_bsc_compress)
 {
     START_TIMER;
 
@@ -39,7 +34,7 @@ bool codec_bsc_compress (VBlockP vb, SectionHeader *header,
             name, *compressed_len, *uncompressed_len, LIBBSC_HEADER_SIZE);
 
     // libbsc doesn't allow piecemiel compression, so we need to copy all the data in case of callback
-    if (callback) {
+    if (get_line_cb) {
 
         // copy data to vb->scratch
         ASSERTNOTINUSE (vb->scratch);
@@ -50,7 +45,7 @@ bool codec_bsc_compress (VBlockP vb, SectionHeader *header,
             uint32_t len1=0;        
             
             // note: get what we need, might be less than what's available if calling from zip_assign_best_codec
-            callback (vb, line_i, &start1, &len1, *uncompressed_len - vb->scratch.len, NULL); 
+            get_line_cb (vb, line_i, &start1, &len1, *uncompressed_len - vb->scratch.len, NULL); 
 
             if (start1 && len1) buf_add (&vb->scratch, start1, len1);
         }
@@ -70,7 +65,7 @@ bool codec_bsc_compress (VBlockP vb, SectionHeader *header,
 
     ASSERT (ret >= LIBBSC_NO_ERROR, "\"%s\": bsc_compress or bsc_store returned %s", name, codec_bsc_errstr (ret));
 
-    if (callback) buf_free (vb->scratch);
+    if (get_line_cb) buf_free (vb->scratch);
 
     *compressed_len = ret;
 
@@ -79,10 +74,7 @@ bool codec_bsc_compress (VBlockP vb, SectionHeader *header,
     return true;
 }
 
-void codec_bsc_uncompress (VBlockP vb, Codec codec, uint8_t param,
-                           rom compressed, uint32_t compressed_len,
-                           Buffer *uncompressed_buf, uint64_t uncompressed_len, 
-                           Codec unused, rom name) 
+UNCOMPRESS (codec_bsc_uncompress) 
 { 
     START_TIMER;
     int ret = bsc_decompress (vb, (bytes )compressed, compressed_len, (uint8_t *)uncompressed_buf->data, uncompressed_len, LIBBSC_FEATURE_FASTMODE);

@@ -112,6 +112,9 @@ void main_exit (bool show_stack, bool is_error)
     if (is_error) // call after canceling the writing threads 
         file_put_data_abort();
 
+    fflush (stdout);
+    fflush (stderr);
+    
     if (!is_error) MAIN0 ("Exiting : Success"); 
 
     exit (is_error ? EXIT_GENERAL_ERROR : EXIT_OK);
@@ -152,7 +155,7 @@ static void main_print_help (bool explicit)
         str_print_text (texts[exe_type], sizes[exe_type] / sizeof(char*), 
                         "                     ",  "\n", 0);
     
-    str_print_text (help_footer, sizeof(help_footer) / sizeof(char*), "", "\n", 0);
+    str_print_text (help_footer, ARRAY_LEN(help_footer), "", "\n", 0);
 
     // in Windows, we ask the user to click a key - this is so that if the user double clicks on the EXE
     // from Windows Explorer - the terminal will open and he will see the help
@@ -294,6 +297,7 @@ static void main_test_after_genozip (rom exec_path, rom z_filename, bool is_last
                                       flag.threads_str   ? flag.threads_str  : SKIP_ARG,
                                       flag.xthreads      ? "--xthreads"      : SKIP_ARG,
                                       flag.show_alleles  ? "--show-alleles"  : SKIP_ARG,
+                                      flag.show_aligner  ? "--show-aligner"  : SKIP_ARG,
                                       flag.debug_threads ? "--debug-threads" : SKIP_ARG,
                                       flag.echo          ? "--echo"          : SKIP_ARG,
                                       flag.verify_codec  ? "--verify-codec"  : SKIP_ARG,
@@ -441,7 +445,7 @@ static void main_genozip (rom txt_filename,
 
     zip_one_file (txt_file->basename, is_last_user_txt_file);
 
-    if ((flag.show_stats == STATS_SHORT || flag.show_stats == STATS_LONG) && z_file->z_closes_after_me && (!z_is_dvcf || flag.zip_comp_i)) 
+    if (flag.show_stats && z_file->z_closes_after_me && (!z_is_dvcf || flag.zip_comp_i)) 
         stats_display();
 
     bool remove_txt_file = z_file && flag.replace && txt_filename;
@@ -518,8 +522,8 @@ static int main_sort_input_filenames (const void *fn1, const void *fn2)
     return *(char **)fn1 - *(char **)fn2;
 }
 
-static void main_get_filename_list (unsigned num_files, char **filenames, // in 
-                                    unsigned *num_z_files, Buffer *fn_buf)      // out
+static void main_get_filename_list (unsigned num_files, char **filenames,  // in 
+                                    unsigned *num_z_files, BufferP fn_buf) // out
 {
     if (!num_files && !flag.files_from) {
         flags_update (0, NULL);
@@ -594,23 +598,15 @@ static void main_load_reference (rom filename, bool is_first_file, bool is_last_
 
     int old_aligner_available = flag.aligner_available;
     DataType dt = main_get_file_dt (filename);
-    flag.aligner_available = (old_aligner_available || dt == DT_FASTQ || dt == DT_FASTA) && primary_command == ZIP;
+    flag.aligner_available = primary_command == ZIP && 
+                            (old_aligner_available || dt == DT_FASTQ || dt == DT_FASTA ||
+                             ((dt==DT_SAM || dt==DT_BAM) && flag.best)); // load refhash only in --best
 
     // no need to load the reference if not needed (unless its genocat of the refernece file itself)
     if (flag.genocat_no_ref_file && dt != DT_REF) return;
 
     // no need to load the reference if just collecting coverage except FASTQ for which we need the contigs
     if (flag.collect_coverage && dt != DT_FASTQ) return;
-
-    // we also need the aligner if this is an unaligned SAM 
-    if (!flag.aligner_available && dt==DT_SAM && primary_command==ZIP) {
-
-        // open here instead of in main_genozip
-        txt_file = file_open (filename, READ, TXT_FILE, 0);
-
-        // use the aligner if over 5 of the 100 first lines of the file are unaligned
-        flag.aligner_available = txt_file && txt_file->file && txtfile_test_data ('@', 100, 0.05, sam_zip_is_unaligned_line); 
-    }
 
     RESET_VALUE (txt_file); // save and reset - for use by reference loader
 
@@ -640,6 +636,18 @@ static void main_load_reference (rom filename, bool is_first_file, bool is_last_
     RESTORE_VALUE (txt_file);
 }
 
+static void set_exe_type (rom argv0)
+{
+    rom bn = file_basename (argv0, false, NULL, NULL, 0);
+    
+    if      (strstr (bn, "genols"))    exe_type = EXE_GENOLS;
+    else if (strstr (bn, "genocat"))   exe_type = EXE_GENOCAT;
+    else if (strstr (bn, "genounzip")) exe_type = EXE_GENOUNZIP;
+    else                               exe_type = EXE_GENOZIP; // default
+
+    FREE (bn);
+}
+
 int main (int argc, char **argv)
 {    
     MAIN0 ("Starting main");
@@ -647,6 +655,7 @@ int main (int argc, char **argv)
     // sometimes the last 3 args are "2>CON", "1>CON", "<CON", not sure where is this from, perhaps the debugger?
     if (argc >= 4 && !strcmp (argv[argc-1], "<CON")) argc -= 3;
 
+    set_exe_type(argv[0]);
     info_stream = stdout; // may be changed during intialization
     profiler_initialize();
     buf_initialize(); 
@@ -656,11 +665,6 @@ int main (int argc, char **argv)
     random_access_initialize();
     codec_initialize();
 
-    if      (strstr (argv[0], "genols"))    exe_type = EXE_GENOLS;
-    else if (strstr (argv[0], "genocat"))   exe_type = EXE_GENOCAT;
-    else if (strstr (argv[0], "genounzip")) exe_type = EXE_GENOUNZIP;
-    else                                    exe_type = EXE_GENOZIP; // default
-    
     global_cmd = file_basename (argv[0], true, "(executable)", NULL, 0); // global var
 
     flags_init_from_command_line (argc, argv);

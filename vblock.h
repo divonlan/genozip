@@ -28,7 +28,7 @@
     void (*compute_func)(VBlockP);/* compute thread entry point */\
     Mutex vb_ready_for_compute_thread; /* threads_create finished initializeing this VB */\
     \
-    DataType data_type;           /* type of this VB */\
+    DataType data_type;           /* type of this VB. In PIZ, this is the z_file data_type, NOT flag.out_dt */\
     DataType data_type_alloced;   /* type of this VB was allocated as. could be different that data_type, see vb_get_vb */\
     \
     /* memory management  */\
@@ -98,7 +98,7 @@
     \
     /* regions & filters */ \
     \
-    /* used by --show-coverage and --show-sex */ \
+    /* PIZ: used by --show-coverage and --show-sex */ \
     Buffer coverage;              /* number of bases of each contig - exluding 'S' CIGAR, excluding reads flagged as Duplicate, Seconday arnd Failed filters */ \
     Buffer read_count;            /* number of mapped reads of each contig for show-coverage/idxstats (for show-coverage - excluding reads flagged as Duplicate, Seconday arnd Failed filters) */\
     Buffer unmapped_read_count;   \
@@ -110,9 +110,9 @@
     uint8_t aes_iv[AES_BLOCKLEN]; \
     \
     /* file data */\
-    Buffer z_data;                /* all headers and section data as read from disk */\
+    Buffer z_data;               /* all headers and section data as read from disk */\
     Buffer z_data_test;           /* for use of codec_assign_best_codec */ \
-    Buffer txt_data;              /* ZIP only: txt_data as read from disk - either the txt header (in evb) or the VB data lines */\
+    Buffer txt_data;              /* ZIP: txt_data as read from disk - either the txt header (in evb) or the VB data lines PIZ: reconstructed data */\
     Buffer z_section_headers;     /* PIZ and Pair-1 reading in ZIP-Fastq: an array of unsigned offsets of section headers within z_data */\
     Buffer scratch;               /* helper buffer: used by many functions. before usage, assert that its free, and buf_free after. */\
     int16_t z_next_header_i;      /* next header of this VB to be encrypted or decrypted */\
@@ -135,8 +135,13 @@
     uint32_t prev_range_range_i;  /* range_i used to calculate previous range */ \
     WordIndex prev_range_chrom_node_index[2]; /* chrom used to calculate previous range */ \
     \
+    union { \
     /* generated components */ \
     Buffer gencomp_lines;         /* ZIP: array of GencompLineIEntry: DVCF: lines rejected for liftover ; SAM-SA: primary/dependent lines */ \
+    \
+    /* DomQual codec (SAM/BAM, FASTQ) */ \
+    Buffer domq_denorm;           /* PIZ SAM/BAM/FASTQ: DomQual codec denormalization table */ \
+    }; \
     \
     /* ref_iupac quick lookup */\
     ConstRangeP iupacs_last_range[2]; /* [0]=prim_ref [1]=gref */ \
@@ -160,7 +165,6 @@
     \
     /* copies of the values in flag, for flags that may change during the execution */\
     bool preprocessing;           /* PIZ: this VB is preprocessing, not reconstructing (SAM: loading SA Groups FASTA/FASTQ: grepping) */ \
-    bool maybe_lines_dropped; \
     bool show_containers; \
     uint64_t ensure_dt_specific_fields_start_on_word_boundary; /* this ensures that the data-type-specific fields start at offset=sizeof(VBlock) - making it easier to release specific fields etc. this field is not used and remains 0. */ 
 
@@ -168,13 +172,7 @@ typedef struct VBlock {
     VBLOCK_COMMON_FIELDS
 } VBlock;
 
-// a reference into txt_data
-typedef struct __attribute__ ((__packed__)) { uint32_t index, len; } TxtWord; // 32b as VBs are limited to 2GB (usually used as reference into txt_data)
-#define TXTWORD(snip) ((TxtWord){ .index = BNUMtxt (snip),    .len = snip##_len }) // get coordinates in txt_data
-#define TXTWORDi(x,i) ((TxtWord){ .index = BNUMtxt (x##s[i]), .len = x##_lens[i] }) 
 // matching STRtxtw defined in genozip.h
-
-#define NO_BUDDY (-1)
 
 extern void vb_cleanup_memory(void);
 extern VBlockP vb_get_vb (rom task_name, VBIType vblock_i, CompIType comp_i);

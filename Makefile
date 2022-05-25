@@ -31,20 +31,22 @@ endif
 
 SRC_DIRS = zlib bzlib lzma bsc libdeflate htscodecs compatibility
 
-MY_SRCS = genozip.c genols.c base250.c context.c container.c strings.c stats.c arch.c license.c \
-		  data_types.c bit_array.c progress.c writer.c tar.c chrom.c qname.c tokenizer.c \
-          zip.c piz.c reconstruct.c seg.c zfile.c aligner.c flags.c digest.c mutex.c vcf_linesort.c threads.c \
-		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c \
-		  vcf_piz.c vcf_seg.c vcf_gt.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c vcf_refalt.c vcf_tags.c vcf_ps_pid.c \
-		  sam_seg.c sam_piz.c sam_shared.c sam_header.c sam_md.c sam_tlen.c sam_cigar.c sam_fields.c sam_bsseeker2.c\
-		  sam_seq.c sam_qual.c sam_gc_zip.c sam_gc_piz.c sam_gc_load_grps.c sam_gc_ingest_grps.c sam_pos.c \
-		  bam_seg.c bam_seq.c bam_show.c \
-		  fasta.c fastq.c gff3.c me23.c phylip.c chain.c kraken.c locs.c generic.c \
-		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c lookback.c \
-		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c\
-		  codec_gtshark.c codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c \
-	      txtfile.c profiler.c file.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c gencomp.c \
-		  vblock.c regions.c  optimize.c dict_id.c hash.c stream.c url.c bases_filter.c dict_io.c recon_plan_io.c
+MY_SRCS = genozip.c genols.c base250.c context.c container.c strings.c stats.c arch.c license.c 				\
+		  data_types.c bit_array.c progress.c writer.c tar.c chrom.c qname.c tokenizer.c 						\
+          zip.c piz.c reconstruct.c recon_history.c seg.c zfile.c aligner.c flags.c digest.c mutex.c threads.c 	\
+		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c 						\
+		  vcf_piz.c vcf_seg.c vcf_gt.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c 		\
+		  vcf_refalt.c vcf_tags.c vcf_ps_pid.c vcf_linesort.c 															\
+		  sam_seg.c sam_piz.c sam_shared.c sam_header.c sam_md.c sam_tlen.c sam_cigar.c sam_fields.c 			\
+		  sam_seq.c sam_qual.c sam_gc_zip.c sam_gc_piz.c sam_gc_load_grps.c sam_gc_ingest_grps.c sam_pos.c	 	\
+		  bam_seg.c bam_seq.c bam_show.c sam_bsseeker2.c sam_sa.c 												\
+		  fasta.c fastq.c gff3.c me23.c phylip.c chain.c kraken.c locs.c generic.c 								\
+		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c lookback.c 				\
+		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c	\
+		  codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c 							\
+	      txtfile.c profiler.c file.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c gencomp.c 			\
+		  vblock.c regions.c  optimize.c dict_id.c hash.c stream.c url.c bases_filter.c dict_io.c 				\
+		  recon_plan_io.c codec_normq.c
 
 CONDA_COMPATIBILITY_SRCS =  compatibility/mac_gettime.c
 
@@ -145,8 +147,8 @@ DEBUG_EXECUTABLES = genozip-debug$(EXE) genounzip-debug$(EXE) genocat-debug$(EXE
 OPT_EXECUTABLES   = genozip-opt$(EXE)   genounzip-opt$(EXE)   genocat-opt$(EXE)   genols-opt$(EXE)
 
 ifeq ($(CC),gcc)
-	OPTFLAGS += -Ofast -std=gnu99
-	DEBUGFLAGS += -std=gnu99 -DDEBUG -g -O0
+	OPTFLAGS += -Ofast -std=gnu11 -fms-extensions
+	DEBUGFLAGS += -std=gnu11 -DDEBUG -g -O0 -fms-extensions
 else
 	OPTFLAGS += -O2 -DDEBUG 
 	DEBUGFLAGS += -DDEBUG -g -O0

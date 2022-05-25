@@ -48,7 +48,7 @@ static struct {
     uint32_t license_num;
 } rec = {};
 
-static uint32_t license_calc_number (const Buffer *license_data)
+static uint32_t license_calc_number (ConstBufferP license_data)
 {
     char data_no_ws[license_data->len];
     unsigned data_no_ws_len = str_remove_whitespace (license_data->data, license_data->len, data_no_ws);        
@@ -56,7 +56,7 @@ static uint32_t license_calc_number (const Buffer *license_data)
     return md5_do (data_no_ws, data_no_ws_len).words[0];
 }
 
-static void license_generate (Buffer *license_data)
+static void license_generate (BufferP license_data)
 {
     for (unsigned i=0; i < sizeof(license) / sizeof(char*); i++) {
         buf_add_string (evb, license_data, license[i]); // allocs one extra char
@@ -299,7 +299,7 @@ void license_register (void)
     else {
         fprintf (stderr, "\nLicense details -\n");
     
-        str_query_user ("\nInstitution / Company name: ", rec.institution, sizeof(rec.institution), str_verify_not_empty, NULL);
+        str_query_user ("\nCompany or institution name: ", rec.institution, sizeof(rec.institution), str_verify_not_empty, NULL);
 
         str_query_user ("\nYour name: ", rec.name, sizeof(rec.name), license_verify_name, NULL);
         

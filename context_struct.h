@@ -11,7 +11,7 @@
 #include "sections.h"
 
 typedef struct { // initialize with ctx_init_iterator()
-    bytes next_b250;  // Pointer into b250 of the next b250 to be read (must be initialized to NULL)
+    bytes next_b250;           // Pointer into b250 of the next b250 to be read (must be initialized to NULL)
     WordIndex prev_word_index; // When decoding, if word_index==BASE250_ONE_UP, then make it prev_word_index+1 (must be initialized to -1)
 } SnipIterator;
 
@@ -37,25 +37,28 @@ typedef struct Context {
                                // PIZ: .data contains the word indices (i.e. indices into word_list) in base-250
     Buffer local;              // VB: Data private to this VB that is not in the dictionary
                                // ZIP Z_FILE .len  # fields of this type segged in the file (for stats)
-    Buffer pair;               // Used if this file is a PAIR_2 - contains a copy of either b250 or local of the PAIR_1 (if inst.pair_b250 or inst.pair_local is set)
+    Buffer pair;               // Used if this file is a PAIR_2 - contains a copy of either b250 or local of the PAIR_1 (if pair_b250 or pair_local is set)
     
     int64_t compressor_time;   // Used when --show-time - time for compressing / decompressing this context
 
     // rollback point - used for rolling back during Seg
     int64_t rback_id;          // ZIP: rollback data valid only if ctx->rback_id == vb->rback_id
-    uint64_t rback_b250_len, rback_local_len, rback_nodes_len, rback_txt_len; // ZIP: data to roll back the last seg
-    uint32_t rback_b250_count, rback_local_num_words, rback_last_txt_index, rback_last_txt_len;
-    ValueType rback_last_value; // also used in PIZ for rolling back VCF_POS.last_value after INFO/END
+    TxtWord rback_last_txt;
+    uint32_t rback_b250_len, rback_local_len, rback_nodes_len, rback_txt_len; // ZIP: data to roll back the last seg
+    uint32_t rback_b250_count, rback_local_num_words;
+    ValueType rback_last_value;// also used in PIZ for rolling back VCF_POS.last_value after INFO/END
     int64_t rback_last_delta, rback_ctx_spec_param;
     
     Buffer ol_dict;            // ZIP VB: tab-delimited list of all unique snips - overlayed all previous VB dictionaries
                                // ZIP zfile: singletons are stored here
-                               // PIZ: counts are read to here (from SEC_COUNTS) - aligned to the words in word_list/dict (VB:uint32_t, z_file:uint64_t)
     union {
     Buffer ol_nodes;           // ZIP array of CtxNode - overlayed all previous VB dictionaries. char/word indices are into ol_dict.
     Buffer ston_nodes;         // ZIP z_file: nodes of singletons
-    Buffer piz_ctx_specific_buf;//PIZ: used by SAM_CIGAR to store ref_consumed history
-                               // PIZ: in kraken's KRAKEN_QNAME context - contains qname_nodes   
+
+    // PIZ: context-specific buffer
+    Buffer qname_nodes;        // PIZ: used in KRAKEN_QNAME
+    Buffer ref_consumed_history;//PIZ: used in SAM_CIGAR 
+    Buffer line_sqbitmap;      // PIZ: used in SAM_SQBITMAP
     };
 
     union {
@@ -64,11 +67,11 @@ typedef struct Context {
     Buffer piz_word_list_hash; // PIZ: used by ctx_get_word_index_by_snip
     };
 
-    Buffer counts;             // ZIP/PIZ: counts of snips (array of int64_t)
+    Buffer counts;             // ZIP/PIZ: counts of snips (VB:uint32_t, z_file:uint64_t)
                                // ZIP: counts.param is a context-specific global counter that gets accumulated in zctx during merge (e.g. OPTION_SA_CIGAR)
     
     // Seg: snip (in dictionary) and node_index the last non-empty ("" or NULL) snip evaluated
-    rom last_snip;     // also used in PIZ SAM      
+    rom last_snip;             // also used in PIZ SAM      
     unsigned last_snip_len;
     WordIndex last_snip_ni;   
 
@@ -132,10 +135,10 @@ typedef struct Context {
                                //         0 means no VB merged yet with this. if a previous vb had 0 new words, it will still be 1.
     union {
     Buffer global_hash;        // ZIP: global hash table that is populated during merge in zctx and is overlayed to vctx during clone.
-    Buffer per_line;           // PIZ: data copied from txt_data for fields with textual store_per_line, used in case flag.maybe_lines_dropped
+    Buffer per_line;           // PIZ: data copied from txt_data for fields with textual store_per_line, used in if the line was dropped
     };
 
-    uint32_t global_hash_prime;// prime number - size of the core (without extensions) has table 
+    uint32_t global_hash_prime;// prime number - size of the core (without extensions) hash table 
 
     uint32_t merge_num;        // in vctx: the merge_num when global_hash was cloned. only entries with merge_num <= this number 
                                // are valid. other entries may be added by later merges and should be ignored.
@@ -143,13 +146,17 @@ typedef struct Context {
     // the next 2 are used in merge to set the size of the global hash table, when the first vb to create a ctx does so
     uint32_t nodes_len_at_1_3, nodes_len_at_2_3;  // value of nodes->len after an estimated 1/3 + 2/3 of the lines have been segmented
     
+    union {
+    ConstContainerP parent_container; // PIZ: last container that invoked reconstruction of this context
+
     // ZIP: stats
     uint64_t txt_len;          // How many characters in reconstructed text are accounted for by snips in this ctx (for stats), when file reconstructed in PRIMARY coordinates (i.e. PRIMARY reconstruction for regular VBs, LUFT reconstruction for ##luft_only VBs, and no reconstruction for ##primary_only VBs)
+    };
     uint32_t local_num_words;  // ZIP: number of words (segs) that went into local. If a field is segged into multiple contexts - this field is incremented in each of them. If the context also uses b250, this field is ignored by stats which uses count instead.
 
     union {
-    Buffer word_list;          // PIZ and ZIP z_file (ctx_verify_dict_words_uniq): word list. an array of CtxWord - listing the snips in dictionary
-    Buffer zip_lookback_buf;   // ZIP VB: use word_list as lookback_buf
+    Buffer word_list;          // PIZ z_file: word list. an array of CtxWord - listing the snips in dictionary
+    Buffer zip_lookback_buf;   // ZIP VB: lookback_buf for contexts that use lookback
     };
 
     bool semaphore;            // valid within the context of reconstructing a single line. MUST be reset ahead of completing the line.
@@ -171,8 +178,7 @@ typedef struct Context {
     int64_t last_delta;        // last delta value calculated
     
     #define INVALID_LAST_TXT_INDEX ((uint32_t)-1)
-    uint32_t last_txt_index;   // ZIP/PIZ: index into vb->txt_data of last seg/reconstruction (always in PIZ, sometimes in Seg) (introduced 10.0.5)
-    uint32_t last_txt_len;     // ZIP/PIZ: length (in vb->txt_data) of last seg/reconstruction (always in PIZ, sometimes in Seg)
+    TxtWord last_txt;          // ZIP/PIZ: index//len into vb->txt_data of last seg/reconstruction (always in PIZ, sometimes in Seg) (introduced 10.0.5)
 
     #define LAST_LINE_I_INIT -0x7fffffff
     LineIType last_line_i;     // ZIP/PIZ: =vb->line_i this line, so far, generated a valid last_value that can be used by downstream fields 
@@ -180,15 +186,16 @@ typedef struct Context {
     int32_t last_sample_i;     // ZIP/PIZ: Current sample in VCF/FORMAT ; must be set to 0 if not VCF/FORMAT
     int32_t ctx_specific;
     bool last_encounter_was_reconstructed; // PIZ: only valid if ctx_encountered() is true. Means last encountered was also reconstructed.
-    uint32_t next_local;       // PIZ: iterator on Context.local
+    uint32_t next_local;       // PIZ: iterator on Context.local 
     SnipIterator iterator;     // PIZ: used to iterate on the context, reading one b250 word_index at a time
-    SnipIterator pair_b250_iter; // PIZ: Iterator on pair, if it contains b250 data  <--- LAST in RECONSTRUCT START
+    SnipIterator pair_b250_iter; // PIZ: Iterator on pair, if it contains b250 data  <--- LAST in RECONSTRUCT START 
+                               // ZIP FASTQ paired: iterating on pair-1 data while compressing pair-2
     // END: RECONSTRUCT STATE 
     // ----------------------------------------------------------------------------------------
 
     // Container cache 
     Buffer con_cache;          // PIZ: Handled by container_reconstruct - an array of Container which includes the did_i. Each struct is truncated to used items, followed by prefixes. 
-                               //      also used to cached Multiplexers in vcf_piz_special_MUX_BY_DOSAGE , vcf_piz_special_MINUS
+                               //      also used to cached Multiplexers in vcf_piz_special_MUX_BY_DOSAGE , piz_special_MINUS
                                // ZIP: Each context is free to use it on its own
     Buffer con_index;          // Array of uint32_t - PIZ: index into con_cache - Each item corresponds to word_index. 
                                // ZIP: used by: 1. seg_array_of_struct

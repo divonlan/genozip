@@ -69,10 +69,10 @@ static rom buf_display_type (ConstBufferP buf)
 // get string with buffer's metadata for debug message. this function is NOT thread-safe
 char *buf_display (ConstBufferP buf)
 {
-    static char str[200]; // NOT thread-safe
+    static char str[256]; // NOT thread-safe
 
-    sprintf (str, "Buffer %s (%"PRId64"): size=%"PRIu64" len=%"PRIu64" data=%s memory=%s",
-             buf->name, buf->param, buf->size, buf->len, str_pointer(buf->data).s, str_pointer(buf->memory).s);
+    sprintf (str, "Buffer %s (%"PRId64"): size=%"PRIu64" len=%"PRIu64" data=%p memory=%p",
+             buf->name, buf->param, (uint64_t)buf->size, buf->len, buf->data, buf->memory);
     return str;    
 }
 
@@ -89,10 +89,10 @@ const BufDescType buf_desc (ConstBufferP buf)
         tag_name = TAG_NAME (z_file->contexts);
 
     BufDescType desc; // use static memory instead of malloc since we could be in the midst of a memory issue when this is called
-    sprintf (desc.s, "\"%s\"%s%s param=%"PRId64" len=%"PRIu64" size=%"PRId64" type=%s allocated in %s:%u by vb_i=%d", 
+    sprintf (desc.s, "\"%s\"%s%s param=%"PRId64" len=%"PRIu64" size=%"PRId64" type=%s allocated in %s:%u by vb=%d", 
              buf->name ? buf->name : "(no name)", 
              tag_name ? " ctx=" : "", tag_name ? tag_name : "",
-             buf->param, buf->len, buf->size, buf_display_type (buf), buf->func ? buf->func : "(no func)", buf->code_line, 
+             buf->param, buf->len, (uint64_t)buf->size, buf_display_type (buf), buf->func ? buf->func : "(no func)", buf->code_line, 
              (buf->vb ? buf->vb->vblock_i : -999));
     return desc;
 }
@@ -114,7 +114,7 @@ static inline bool buf_has_overflowed (ConstBufferP buf, rom msg)
     if (buf->vb && buf->vb->id==-1 && memory == BUFFER_BEING_MODIFIED) return false;
 
     ASSERT (memory != BUFFER_BEING_MODIFIED, "%s: buf->memory=BUFFER_BEING_MODIFIED. buffer %s size=%"PRIu64,
-            msg, buf_desc(buf).s, buf->size);
+            msg, buf_desc(buf).s, (uint64_t)buf->size);
 
     return *((uint64_t*)(memory + buf->size + sizeof(uint64_t))) != OVERFLOW_TRAP; // note on evb: if another thread reallocs the memory concurrently, this might seg-fault
 }
@@ -128,7 +128,7 @@ static inline bool buf_has_underflowed (ConstBufferP buf, rom msg)
     if (buf->vb && buf->vb->id==-1 && memory == BUFFER_BEING_MODIFIED) return false;
 
     ASSERT (memory != BUFFER_BEING_MODIFIED, "%s: buf->memory=BUFFER_BEING_MODIFIED. buffer %s size=%"PRIu64,
-            msg, buf_desc(buf).s, buf->size);
+            msg, buf_desc(buf).s, (uint64_t)buf->size);
 
     return *(uint64_t*)memory != UNDERFLOW_TRAP; // note on evb: if another thread reallocs the memory concurrently, this might seg-fault
 }
@@ -170,9 +170,9 @@ static void buf_find_underflow_culprit (rom memory, rom msg)
                 if (after_buf <= memory && (after_buf + 100 > memory) && buf_has_overflowed (buf, msg)) {
                     char *of = &buf->memory[buf->size + sizeof(uint64_t)];
                     fprintf (stderr,
-                            "Candidate culprit: vb_id=%d (vb_i=%d): buffer: %s %s memory: %s-%s name: %s vb_i=%u buf_i=%u Overflow fence=%c%c%c%c%c%c%c%c\n",
+                            "Candidate culprit: vb_id=%d (vb_i=%d): buffer: %s %p memory: %p-%p name: %s vb_i=%u buf_i=%u Overflow fence=%c%c%c%c%c%c%c%c\n",
                             vb ? vb->id : -999, vb->vblock_i, buf_display_type(buf), 
-                            str_pointer(buf).s, str_pointer(buf->memory).s, str_pointer(after_buf-1).s, 
+                            buf, buf->memory, after_buf-1, 
                             buf_desc (buf).s, buf->vb->vblock_i, i, 
                             of[0], of[1], of[2], of[3], of[4], of[5], of[6], of[7]);
                     found = true;
@@ -223,8 +223,8 @@ static bool buf_test_overflows_do (ConstVBlockP vb, bool primary, rom msg)
 
 #ifdef WIN32
         if (IsBadReadPtr (buf, sizeof (Buffer))) {
-            fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (vb_i=%d) buffer=%s (buf_i=%u): buffer structure inaccessible (invalid pointer)\n", 
-                     nl[primary], msg, vb->id, vb->vblock_i, str_pointer(buf).s, buf_i);
+            fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (vb_i=%d) buffer=%p (buf_i=%u): buffer structure inaccessible (invalid pointer)\n", 
+                     nl[primary], msg, vb->id, vb->vblock_i, buf, buf_i);
             corruption = 100;
             break;
         }
@@ -233,39 +233,39 @@ static bool buf_test_overflows_do (ConstVBlockP vb, bool primary, rom msg)
         if (buf->memory && buf->memory != BUFFER_BEING_MODIFIED) {
 
             if (vb && buf->vb != vb) {
-                fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (vb_i=%d) buffer=%s (buf_i=%u): Corrupt Buffer structure OR invalid buffer pointer - buf->vb=%s != vb=%s\n", 
-                         nl[primary], msg, vb->id, vb->vblock_i, str_pointer(buf).s, buf_i, str_pointer(buf->vb).s, str_pointer(vb).s);
+                fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (vb_i=%d) buffer=%p (buf_i=%u): Corrupt Buffer structure OR invalid buffer pointer - buf->vb=%p != vb=%p\n", 
+                         nl[primary], msg, vb->id, vb->vblock_i, buf, buf_i, buf->vb, vb);
                 corruption = 0;
             }
             else if (buf->data && buf->vb->vblock_i != vb->vblock_i) { // buffers might still be here from the previous incarnation of this vb - its ok if they're not allocated yet
-                        fprintf (stderr, "%s%s: Memory corruption in vb_id=%d: buf_vb_i=%d differs from thread_vb_i=%d: buffer: %s %s memory: %s-%s name: %s vb_i=%u buf_i=%u\n",
+                        fprintf (stderr, "%s%s: Memory corruption in vb_id=%d: buf_vb_i=%d differs from thread_vb_i=%d: buffer: %s %p memory: %p-%p name: %s vb_i=%u buf_i=%u\n",
                         nl[primary], msg, vb ? vb->id : -999, buf->vb->vblock_i, vb->vblock_i, buf_display_type(buf), 
-                        str_pointer(buf).s, str_pointer(buf->memory).s, str_pointer(buf->memory+buf->size+control_size-1).s,
+                        buf, buf->memory, buf->memory+buf->size+control_size-1,
                         buf_desc (buf).s, buf->vb->vblock_i, buf_i);
                 corruption = 1;
             }
             else if (buf->type < 0 || buf->type > BUF_NUM_TYPES) {
-                fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d) buffer=%s (buf_i=%u): Corrupt Buffer structure OR invalid buffer pointer - invalid buf->type", 
-                         nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, str_pointer (buf).s, buf_i);
+                fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d) buffer=%p (buf_i=%u): Corrupt Buffer structure OR invalid buffer pointer - invalid buf->type", 
+                         nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, buf, buf_i);
                 fprintf (stderr, " Buffer=%s\n", buf_desc(buf).s);  // separate fprintf in case it seg faults
                 corruption = 2;
             }
             else if (!buf->name) {
-                fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d): buffer=%s (buf_i=%u): Corrupt Buffer structure - null name", 
-                         nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, str_pointer (buf).s, buf_i);
+                fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d): buffer=%p (buf_i=%u): Corrupt Buffer structure - null name", 
+                         nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, buf, buf_i);
                 fprintf (stderr, " Buffer=%s\n", buf_desc(buf).s);  // separate fprintf in case it seg faults
                 corruption = 3;
             }
             else if (buf->data && buf->type != BUF_OVERLAY && (buf->data != buf->memory + sizeof(uint64_t))) {
                 fprintf (stderr, 
-                         "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d): data!=memory+8: allocating_vb_i=%u buf_i=%u buffer=%s memory=%s name=%s : Corrupt Buffer structure - expecting data+8 == memory. buf->data=%s\n", 
-                         nl[primary], msg, vb ? vb->id : -999, vb->vblock_i,  buf->vb->vblock_i, buf_i, str_pointer(buf).s, str_pointer(buf->memory).s, buf_desc(buf).s, str_pointer(buf->data).s);
+                         "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d): data!=memory+8: allocating_vb_i=%u buf_i=%u buffer=%p memory=%p name=%s : Corrupt Buffer structure - expecting data+8 == memory. buf->data=%p\n", 
+                         nl[primary], msg, vb ? vb->id : -999, vb->vblock_i,  buf->vb->vblock_i, buf_i, buf, buf->memory, buf_desc(buf).s, buf->data);
                 corruption = 4;
             }
             else if (buf_has_underflowed(buf, msg)) {
                 fprintf (stderr, 
-                        "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d): Underflow: buffer: %s %s memory: %s-%s name: %s vb_i=%u buf_i=%u. Fence=%c%c%c%c%c%c%c%c\n",
-                        nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, buf_display_type(buf), str_pointer(buf).s, str_pointer(buf->memory).s, str_pointer(buf->memory+buf->size+control_size-1).s, 
+                        "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d): Underflow: buffer: %s %p memory: %p-%p name: %s vb_i=%u buf_i=%u. Fence=%c%c%c%c%c%c%c%c\n",
+                        nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, buf_display_type(buf), buf, buf->memory, buf->memory+buf->size+control_size-1, 
                         buf_desc (buf).s, buf->vb->vblock_i, buf_i, 
                         buf->memory[0], buf->memory[1], buf->memory[2], buf->memory[3], buf->memory[4], buf->memory[5], buf->memory[6], buf->memory[7]);
 
@@ -279,8 +279,8 @@ static bool buf_test_overflows_do (ConstVBlockP vb, bool primary, rom msg)
             else if (buf_has_overflowed(buf, msg)) {
                 char *of = &buf->memory[buf->size + sizeof(uint64_t)];
                 fprintf (stderr,
-                        "%s%s: Memory corruption in vb_id=%d (vb_i=%d): Overflow: buffer: %s %s memory: %s-%s name: %s vb_i=%u buf_i=%u Fence=%c%c%c%c%c%c%c%c\n",
-                        nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, buf_display_type(buf), str_pointer(buf).s, str_pointer(buf->memory).s, str_pointer(buf->memory+buf->size+control_size-1).s, 
+                        "%s%s: Memory corruption in vb_id=%d (vb_i=%d): Overflow: buffer: %s %p memory: %p-%p name: %s vb_i=%u buf_i=%u Fence=%c%c%c%c%c%c%c%c\n",
+                        nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, buf_display_type(buf), buf, buf->memory, buf->memory+buf->size+control_size-1, 
                         buf_desc (buf).s, buf->vb->vblock_i, buf_i, of[0], of[1], of[2], of[3], of[4], of[5], of[6], of[7]);
                 
                 if (primary) buf_test_overflows_all_other_vb (vb, msg);
@@ -449,7 +449,7 @@ void buf_add_to_buffer_list_do (VBlockP vb, BufferP buf, FUNCLINE)
     ASSERT (!buf->vb, "called from %s:%u: cannot add buffer %s to buf_list of vb_i=%u because it is already in buf_list of vb_i=%u.",
              func, code_line, buf_desc(buf).s, vb->vblock_i, buf->vb->vblock_i);    
 
-    ASSERT (((uint64_t)buf & 1)==0, "called from %s:%u: Expecting buffer %s of vb_i=%u to be word-aligned, but its address is %p",
+    ASSERT (((uint64_t)buf & 7)==0, "called from %s:%u: Expecting buffer %s of vb_i=%u to be word-aligned, but its address is %p",
              func, code_line, buf_desc(buf).s, vb->vblock_i, buf); // BL_SET_REMOVED expects this
 
 #define INITIAL_MAX_MEM_NUM_BUFFERS 10000 /* for files that have ht,gt,phase,variant,and line - the factor would be about 5.5 so there will be 1 realloc per vb, but most files don't */
@@ -462,8 +462,8 @@ void buf_add_to_buffer_list_do (VBlockP vb, BufferP buf, FUNCLINE)
     buf->vb = vb; // successfully added to buf list
 
     if (flag.debug_memory==1 && vb->buffer_list.len > DISPLAY_ALLOCS_AFTER)
-        iprintf ("buf_add_to_buffer_list (%s): %s: size=%"PRIu64" buffer=%s vb->id=%d buf_i=%u\n", 
-                 func, buf_desc(buf).s, buf->size, str_pointer(buf).s, vb->id, (uint32_t)vb->buffer_list.len-1);    
+        iprintf ("buf_add_to_buffer_list (%s): %s: size=%"PRIu64" buffer=%p vb->id=%d buf_i=%u\n", 
+                 func, buf_desc(buf).s, (uint64_t)buf->size, buf, vb->id, (uint32_t)vb->buffer_list.len-1);    
 }
 
 static void buf_init (BufferP buf, char *memory, uint64_t size, uint64_t old_size, 
@@ -514,6 +514,9 @@ uint64_t buf_alloc_do (VBlockP vb,
 
     ASSERT ((int64_t)requested_size > 0, "called from %s:%u: negative requested_size=%"PRId64" for name=%s", func, code_line, requested_size, name);
 
+    ASSERT (requested_size <= MAX_BUFFER_SIZE, "Requested %s bytes which is beyond the Buffer maximum of %s",
+            str_int_commas (requested_size).s, str_int_commas (MAX_BUFFER_SIZE).s);
+
 #define REQUEST_TOO_BIG_THREADSHOLD (3ULL << 30) // 3 GB
     if (requested_size > REQUEST_TOO_BIG_THREADSHOLD && !buf->can_be_big) // use WARN instead of ASSERTW to have a place for breakpoint
         WARN ("Warning: buf_alloc called from %s:%u requested %s. This is suspiciously high and might indicate a bug. buf=%s line_i=%d",
@@ -540,7 +543,7 @@ uint64_t buf_alloc_do (VBlockP vb,
     grow_at_least_factor = MAX_(1.0001, grow_at_least_factor); 
 
     // grow us requested - rounding up to 64 bit boundary to avoid aliasing errors with the overflow indicator
-    uint64_t new_size = (uint64_t)(requested_size * grow_at_least_factor + 7) & 0xfffffffffffffff8ULL; // aligned to 8 bytes
+    uint64_t new_size = MIN_(MAX_BUFFER_SIZE,(uint64_t)(requested_size * grow_at_least_factor + 7)) & 0xfffffffffffffff8ULL; // aligned to 8 bytes
 
     ASSERT (new_size >= requested_size, "called from %s:%u: allocated too little memory for buffer %s: requested=%"PRIu64", allocated=%"PRIu64". vb_i=%u", 
             func, code_line, buf_desc (buf).s, requested_size, new_size, vb->vblock_i); // floating point paranoia
@@ -616,19 +619,14 @@ finish:
     return buf->size;
 }
 
-BitArray *buf_alloc_bitarr_do (VBlockP vb,
-                               BufferP buf, 
-                               uint64_t nbits,
-                               FUNCLINE,
-                               rom name)
+BitArrayP buf_alloc_bitarr_do (VBlockP vb, BufferP buf, uint64_t nbits, FUNCLINE, rom name)
 {
     uint64_t nwords = roundup_bits2words64 (nbits);
     buf_alloc_do (vb, buf, nwords * sizeof (uint64_t), 1, func, code_line, name);
-    BitArray *bitarr = buf_get_bitarray (buf);
-    bitarr->nbits  = nbits;   // Buffer->param
-    bitarr->nwords = nwords;  // Buffer->len
+    buf->nbits  = nbits;   
+    buf->nwords = nwords; 
 
-    return bitarr;
+    return (BitArrayP)buf;
 }
 
 void buf_alloc_bitarr_buffer_do (VBlockP vb, BufferP buf, uint64_t nbits, FUNCLINE, rom name)
@@ -637,7 +635,7 @@ void buf_alloc_bitarr_buffer_do (VBlockP vb, BufferP buf, uint64_t nbits, FUNCLI
     buf_alloc_do (vb, buf, nwords * sizeof (uint64_t), 1, func, code_line, name);
 }
 
-BitArray *buf_overlay_bitarr_do (VBlockP vb,
+BitArrayP buf_overlay_bitarr_do (VBlockP vb,
                                  BufferP overlaid_buf, BufferP regular_buf,  
                                  uint64_t start_byte_in_regular_buf,
                                  uint64_t nbits,
@@ -648,10 +646,9 @@ BitArray *buf_overlay_bitarr_do (VBlockP vb,
 
     buf_overlay_do (evb, overlaid_buf, regular_buf, start_byte_in_regular_buf, func, code_line, name);
 
-    BitArray *bitarr = buf_get_bitarray (overlaid_buf);
-    bitarr->nbits  = nbits;
-    bitarr->nwords = nwords;
-    return bitarr;
+    overlaid_buf->nbits  = nbits;
+    overlaid_buf->nwords = nwords;
+    return (BitArrayP)overlaid_buf;
 }
 
 // an overlay buffer is a buffer using some of the memory of another buffer - it doesn't have its own memory
@@ -683,7 +680,7 @@ void buf_overlay_do (VBlockP vb,
 
     ASSERT (start_in_regular < regular_buf->size, 
             "called from %s:%u: not enough room in regular buffer for overlaid buf: start_in_regular=%"PRIu64" but regular_buf.size=%"PRIu64,
-            func, code_line, start_in_regular, regular_buf->size);
+            func, code_line, start_in_regular, (uint64_t)regular_buf->size);
 
     // note: data+size MUST be at the control region, as we have the overlay counter there
     overlaid_buf->size = regular_buf->size - start_in_regular;
@@ -909,7 +906,7 @@ static void buf_remove_from_buffer_list (BufferP buf)
 
     if (buf_i >= 0) {
         if (flag.debug_memory==1) 
-            iprintf ("Destroy %s: buf_addr=%s vb->id=%d buf_i=%u\n", buf_desc (buf).s, str_pointer(buf).s, vb->id, buf_i);
+            iprintf ("Destroy %s: buf_addr=%p vb->id=%d buf_i=%u\n", buf_desc (buf).s, buf, vb->id, buf_i);
 
         BL_SET_REMOVED (buf_list[buf_i]);
         buf->vb = NULL;
@@ -1064,7 +1061,7 @@ void buf_low_level_free (void *p, FUNCLINE)
     START_TIMER;
 
     if (flag.debug_memory==1) 
-        iprintf ("Memory freed by free(): %s %s:%u\n", str_pointer (p).s, func, code_line);
+        iprintf ("Memory freed by free(): %p %s:%u\n", p, func, code_line);
 
     if (p == BUFFER_BEING_MODIFIED) {
         fprintf (stderr, "Warning in buf_low_level_free: corrupt pointer = 0x777 while attempting free()\n");
@@ -1094,7 +1091,7 @@ void *buf_low_level_malloc (size_t size, bool zero, FUNCLINE)
             command == ZIP ? "Try limiting the number of concurrent threads with --threads (affects speed) or reducing the amount of data processed by each thread with --vblock (affects compression ratio)" : "");
 
     if (flag.debug_memory && size >= flag.debug_memory) 
-        iprintf ("malloc(): %s size=%"PRIu64" %s:%u\n", str_pointer (new).s, (uint64_t)size, func, code_line);
+        iprintf ("malloc(): %p size=%"PRIu64" %s:%u\n", new, (uint64_t)size, func, code_line);
 
     if (zero) memset (new, 0, size);
     
@@ -1112,7 +1109,7 @@ BitArray *buf_zfile_buf_to_bitarray (BufferP buf, uint64_t nbits)
     bitarr->nwords = roundup_bits2words64 (bitarr->nbits);
 
     ASSERT (roundup_bits2bytes64 (nbits) <= buf->size, "buffer to small: buf->size=%"PRId64" but bitarray has %"PRId64" words and hence requires %"PRId64" bytes",
-            buf->size, bitarr->nwords, bitarr->nwords * sizeof(uint64_t));
+            (uint64_t)buf->size, bitarr->nwords, bitarr->nwords * sizeof(uint64_t));
 
     LTEN_bit_array (bitarr);
 
@@ -1140,7 +1137,7 @@ uint64_t buf_extend_bits (BufferP buf, int64_t num_new_bits)
     BitArray *bar = buf_get_bitarray (buf);
 
     ASSERT (bar->nbits + num_new_bits <= buf->size * 8, "Error in %s:%u: no room in Buffer %s to extend the bitmap: nbits=%"PRIu64", num_new_bits=%"PRId64", buf->size=%"PRIu64, 
-            __FUNCLINE, buf->name, bar->nbits, num_new_bits, buf->size);
+            __FUNCLINE, buf->name, bar->nbits, num_new_bits, (uint64_t)buf->size);
     
     uint64_t next_bit = bar->nbits;
 
@@ -1251,7 +1248,7 @@ void BGEN_transpose_u8_buf (BufferP buf, LocalType *lt)
 
     buf_free (buf->vb->scratch);
 
-    *lt = LT_UINT8; // no longer transposed
+    if (lt) *lt = LT_UINT8; // no longer transposed
 }
 
 void BGEN_transpose_u16_buf (BufferP buf, LocalType *lt)

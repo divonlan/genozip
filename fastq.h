@@ -39,9 +39,15 @@
 #pragma GENDICT FASTQ_NONREF_X=DTYPE_FIELD=NONREF_X
 #pragma GENDICT FASTQ_GPOS=DTYPE_FIELD=GPOS
 #pragma GENDICT FASTQ_STRAND=DTYPE_FIELD=STRAND
+#pragma GENDICT FASTQ_SEQMIS_A=DTYPE_FIELD=SEQMIS_A // v14: mismatch bases vs the reference, when ref=A
+#pragma GENDICT FASTQ_SEQMIS_C=DTYPE_FIELD=SEQMIS_C
+#pragma GENDICT FASTQ_SEQMIS_G=DTYPE_FIELD=SEQMIS_G
+#pragma GENDICT FASTQ_SEQMIS_T=DTYPE_FIELD=SEQMIS_T
 #pragma GENDICT FASTQ_E2L=DTYPE_FIELD=E2L
 #pragma GENDICT FASTQ_QUAL=DTYPE_FIELD=QUAL 
-#pragma GENDICT FASTQ_DOMQRUNS=DTYPE_FIELD=DOMQRUNS // must be 1 after QUAL. Also used by LONGR. For backwards compatability, we can never change its name.
+#pragma GENDICT FASTQ_DOMQRUNS=DTYPE_FIELD=DOMQRUNS // these 3 must be right after FASTQ_QUAL. DOMQRUNS is also used by LONGR. For backwards compatability, we can never change its name.
+#pragma GENDICT FASTQ_QUALMPLX=DTYPE_FIELD=QUALMPLX // v14.0.0. DOMQUAL alg: dom multiplexer 
+#pragma GENDICT FASTQ_DIVRQUAL=DTYPE_FIELD=DIVRQUAL // v14.0.0. DOMQUAL alg: lines that don't have enough dom. NORMQ codec: lines that are of length other than segconf.sam_seq_len 
 #pragma GENDICT FASTQ_TOPLEVEL=DTYPE_FIELD=TOPLEVEL
 #pragma GENDICT FASTQ_TAXID=DTYPE_FIELD=TAXID
 #pragma GENDICT FASTQ_DEBUG_LINES=DTYPE_FIELD=DBGLINES      // used by --debug-lines
@@ -75,6 +81,7 @@ extern void fastq_seg_initialize();
 extern void fastq_seg_finalize();
 extern bool fastq_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern rom fastq_seg_txt_line();
+extern void fastq_seg_pair2_gpos (VBlockP vb, PosType pair1_pos, PosType pair2_gpos);
 
 // PIZ Stuff
 extern bool fastq_piz_is_paired (void);
@@ -82,7 +89,7 @@ extern bool fastq_piz_maybe_reorder_lines (void);
 extern bool fastq_piz_init_vb (VBlockP vb, const SectionHeaderVbHeader *header, uint32_t *txt_data_so_far_single_0_increment);
 CONTAINER_FILTER_FUNC (fastq_piz_filter);
 extern IS_SKIP (fastq_piz_is_skip_section);
-extern void fastq_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq_len_str));
+extern void fastq_recon_aligned_SEQ (VBlockP vb, ContextP bitmap_ctx, STRp(seq_len_str), bool reconstruct);
 extern CONTAINER_CALLBACK (fastq_piz_container_cb);
 
 // VBlock stuff
@@ -93,11 +100,16 @@ extern unsigned fastq_vb_zip_dl_size (void);
 
 // file pairing (--pair) stuff
 extern bool fastq_read_pair_1_data (VBlockP vb, uint32_t pair_vb_i, bool must_have);
-extern uint32_t fastq_get_pair_vb_i (VBlockP vb);
 
-#define FASTQ_LOCAL_GET_LINE_CALLBACKS  \
-    { DT_FASTQ, _FASTQ_QUAL, fastq_zip_qual },
+#define FASTQ_LOCAL_GET_LINE_CALLBACKS           \
+    { DT_FASTQ, _FASTQ_QUAL,   fastq_zip_qual }, \
+    { DT_FASTQ, _FASTQ_NONREF, fastq_zip_seq  },
 
 typedef enum { FQ_COMP_R1, FQ_COMP_R2 } FastqComponentType;
 #define FASTQ_COMP_NAMES { "FQR1", "FQR2" }
  
+#define FASTQ_SPECIAL { fastq_special_unaligned_SEQ, fastq_special_PAIR2_GPOS }
+
+SPECIAL (FASTQ, 0,  unaligned_SEQ, fastq_special_unaligned_SEQ);
+SPECIAL (FASTQ, 1,  PAIR2_GPOS,    fastq_special_PAIR2_GPOS);
+#define NUM_FASTQ_SPECIAL 2

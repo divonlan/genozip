@@ -62,7 +62,7 @@ WordIndex seg_duplicate_last(VBlockP vb, ContextP ctx, unsigned add_bytes)
     return seg_known_node_index (vb, ctx, LASTb250(ctx), add_bytes); 
 }
 
-#define MAX_ROLLBACK_CTXS ((unsigned)(sizeof(vb->rollback_ctxs)/sizeof(vb->rollback_ctxs[0])))
+#define MAX_ROLLBACK_CTXS ARRAY_LEN(vb->rollback_ctxs)
 
 // NOTE: this does not save recon_size - if the processing may change recon_size it must be saved and rolled back separately
 void seg_create_rollback_point (VBlockP vb, 
@@ -189,11 +189,11 @@ rom seg_get_next_line (void *vb_, rom str,
 // returns true is value is of type store_type and stored in last_value
 bool seg_set_last_txt_store_value (VBlockP vb, ContextP ctx, STRp(value), StoreType store_type)
 {
-    bool is_value_in_txt_data = value >= B1STc (vb->txt_data) &&
+    bool is_value_in_txt_data = value >= B1STtxt &&
                                 value <= BLST  (char, vb->txt_data);
 
-    ctx->last_txt_index = is_value_in_txt_data ? BNUMtxt (value) : INVALID_LAST_TXT_INDEX;
-    ctx->last_txt_len = value_len;
+    ctx->last_txt = (TxtWord) { .index = is_value_in_txt_data ? BNUMtxt (value) : INVALID_LAST_TXT_INDEX,
+                                .len   = value_len };
 
     bool stored = false;
 
@@ -224,7 +224,7 @@ WordIndex seg_integer_as_text_do (VBlockP vb, ContextP ctx, int64_t n, unsigned 
     return seg_by_ctx (vb, STRa(snip), ctx, add_bytes);
 }
 
-// prepare snips that contain code + dict_id + optional parameter (SNIP_LOOKUP_OTHER, SNIP_OTHER_DELTA, SNIP_REDIRECTION...)
+// prepare snips that contain code + dict_id + optional parameter (SNIP_OTHER_LOOKUP, SNIP_OTHER_DELTA, SNIP_REDIRECTION...)
 void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int64_t int_param, char char_param, 
                                 char *snip, unsigned *snip_len) //  in / out
 {
@@ -258,6 +258,16 @@ void seg_prepare_multi_dict_id_special_snip (uint8_t special_code, unsigned num_
     }
 
     *out_snip_len = (snip + snip_len) - out_snip;
+}
+
+// prepare snip of A - B
+void seg_prepare_minus_snip_do (DictId dict_id_a, DictId dict_id_b, uint8_t special_code, char *snip, unsigned *snip_len)
+{
+    snip[0] = SNIP_SPECIAL;
+    snip[1] = special_code;
+    
+    DictId two_dicts[2] = { dict_id_a, dict_id_b };
+    *snip_len = 2 + base64_encode ((uint8_t *)two_dicts, sizeof (two_dicts), &snip[2]);
 }
 
 void seg_mux_display (MultiplexerP mux)
@@ -333,7 +343,7 @@ static PosType seg_scan_pos_snip (VBlockP vb, rom snip, unsigned snip_len, bool 
     }
 
     ASSSEG (err, snip, "position field must be an integer number between %u and %"PRId64", seeing: %.*s", 
-            !!zero_is_bad, MAX_POS, snip_len, snip);
+            !!zero_is_bad, MAX_POS, STRf(snip));
 
     *err = is_int ? ERR_SEG_OUT_OF_RANGE : ERR_SEG_NOT_INTEGER;
     return value; // in- or out-of- range integer, or 0 if value is not integer
@@ -364,8 +374,8 @@ PosType seg_pos_field (VBlockP vb,
         
         else {
             this_pos = seg_scan_pos_snip (vb, STRa(pos_str), IS_FLAG (opt, SPF_ZERO_IS_BAD), &err);
-            ASSERT (IS_FLAG (opt, SPF_BAD_SNIPS_TOO) || !err, "invalid value %.*s in %s vb=%u line_i=%d", 
-                    pos_str_len, pos_str, CTX(snip_did_i)->tag_name, vb->vblock_i, vb->line_i);
+            ASSERT (IS_FLAG (opt, SPF_BAD_SNIPS_TOO) || !err, "%s: invalid value %.*s in %s", 
+                    LN_NAME, STRf(pos_str), CTX(snip_did_i)->tag_name);
         }
 
         // we accept out-of-range integer values for non-self-delta
@@ -384,9 +394,8 @@ PosType seg_pos_field (VBlockP vb,
         // check out-of-range for self-delta
         if (snip_did_i == base_did_i && (this_pos < 0 || this_pos > MAX_POS)) {
             err = ERR_SEG_OUT_OF_RANGE;
-            char snip[15] = { SNIP_DONT_STORE };
-            unsigned snip_len = 1 + str_int (this_pos, &snip[1]);
-            seg_by_ctx (VB, snip, snip_len, snip_ctx, add_bytes); 
+            SNIPi1 (SNIP_DONT_STORE, this_pos);
+            seg_by_ctx (VB, STRa(snip), snip_ctx, add_bytes); 
             snip_ctx->last_delta = 0;  // on last_delta as we're PIZ won't have access to it - since we're not storing it in b250 
             return 0; // invalid pos
         }
@@ -727,7 +736,9 @@ int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp
     for (unsigned i=0; i < con.nitems_lo; i++) 
         ctxs[i] = ctx_get_ctx (vb, con.items[i].dict_id); 
 
-    stats_set_consolidation_(vb, ctx->did_i, con.nitems_lo, ctxs);
+    if (!ctx->is_stats_parent && ctx->st_did_i == DID_I_NONE) 
+        stats_set_consolidation_(vb, ctx->did_i, con.nitems_lo, ctxs);
+
     seg_create_rollback_point (vb, ctxs, con.nitems_lo);
 
     // get repeats
@@ -752,11 +763,11 @@ int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp
 
         for (unsigned i=0; i < n_items; i++)
             if (callbacks && callbacks[i]) {
-                if (!callbacks[i] (vb, ctxs[i], items[i], item_lens[i], r))
+                if (!callbacks[i] (vb, ctxs[i], STRi(item,i), r))
                     goto badly_formatted;
             }
             else
-                seg_by_ctx (VB, items[i], item_lens[i], ctxs[i], item_lens[i]);
+                seg_by_ctx (VB, STRi(item,i), ctxs[i], item_lens[i]);
     }
 
     // finally, the Container snip itself - we attempt to use the known node_index if it is cached in con_index
@@ -830,7 +841,7 @@ void seg_add_to_local_nonresizeable (VBlockP vb, Context *ctx, void *number, boo
 
 void seg_xor_diff (VBlockP vb, ContextP ctx, STRp(value), bool no_xor_if_same, unsigned add_bytes)
 {
-    if (ctx->last_txt_len != value_len || !value_len) goto fallback;
+    if (ctx->last_txt.len != value_len || !value_len) goto fallback;
 
     ctx->ltype = LT_UINT8;
     
@@ -847,9 +858,7 @@ void seg_xor_diff (VBlockP vb, ContextP ctx, STRp(value), bool no_xor_if_same, u
 
     if (!is_same || !no_xor_if_same) {
         ctx->local.len += value_len;
-
-        SNIP(16) = { SNIP_XOR_DIFF };
-        snip_len = 1 + str_int (value_len, &snip[1]);
+        SNIPi1 (SNIP_XOR_DIFF, value_len);
         seg_by_ctx (vb, STRa(snip), ctx, add_bytes);
     }
     else fallback:
@@ -889,7 +898,7 @@ static void seg_verify_file_size (VBlockP vb)
     uint32_t recon_size = 0; // reconstructed size, as viewed in reconstruction
 
     // sanity checks
-    ASSERT (vb->recon_size >= 0, "recon_size=%d is negative for vb_i=%u", vb->recon_size, vb->vblock_i);
+    ASSERT (vb->recon_size >= 0, "%s: recon_size=%d is negative", VB_NAME, vb->recon_size);
 
     for (DidIType sf_i=0; sf_i < vb->num_contexts; sf_i++) 
         recon_size += CTX(sf_i)->txt_len;
@@ -898,15 +907,15 @@ static void seg_verify_file_size (VBlockP vb)
 
     if ((vb_recon_size != recon_size || flag.debug_recon_size) && !flag.show_bam) { 
 
-        fprintf (stderr, "context.txt_len for vb=%u:\n", vb->vblock_i);
+        fprintf (stderr, "context.txt_len for vb=%s:\n", VB_NAME);
         for (DidIType sf_i=0; sf_i < vb->num_contexts; sf_i++) {
             Context *ctx = CTX(sf_i);
             if (ctx->nodes.len || ctx->local.len || ctx->txt_len)
                 fprintf (stderr, "%s: %u\n", ctx_tag_name_ex (ctx).s, (uint32_t)ctx->txt_len);
         }
 
-        fprintf (stderr, "vb=%u reconstructed_vb_size=%s (calculated by adding up ctx.txt_len after segging) but vb->recon_size%s=%s (initialized when reading the file and adjusted for modifications) (diff=%d) (vblock_memory=%s)\n",
-                 vb->vblock_i, str_int_commas (recon_size).s, (vb->data_type == DT_VCF && vcf_vb_is_luft(vb)) ? "_luft" : "", str_int_commas (vb_recon_size).s, 
+        fprintf (stderr, "%s: reconstructed_vb_size=%s (calculated by adding up ctx.txt_len after segging) but vb->recon_size%s=%s (initialized when reading the file and adjusted for modifications) (diff=%d) (vblock_memory=%s)\n",
+                 VB_NAME, str_int_commas (recon_size).s, (vb->data_type == DT_VCF && vcf_vb_is_luft(vb)) ? "_luft" : "", str_int_commas (vb_recon_size).s, 
                  (int32_t)recon_size - (int32_t)vb_recon_size, str_size (segconf.vb_size).s);
 
         ASSERT (vb_recon_size == recon_size, "Error while verifying reconstructed size - to get vblock:\n"
@@ -922,12 +931,12 @@ void seg_all_data_lines (VBlockP vb)
     START_TIMER;
 
     // sanity
-    ASSERT (vb->lines.len <= vb->txt_data.len, "vb=%s/%u: Expecting lines.len=%"PRIu64" < txt_data.len=%"PRIu64, 
-            comp_name(vb->comp_i), vb->vblock_i, vb->lines.len, vb->txt_data.len);
+    ASSERT (vb->lines.len <= vb->txt_data.len, "%s: Expecting lines.len=%"PRIu64" < txt_data.len=%"PRIu64, 
+            VB_NAME, vb->lines.len, vb->txt_data.len);
 
     // note: empty VB is possible, for example empty SAM generated component
-    ASSERT (!vb->txt_data.len || *BLSTc (vb->txt_data) == '\n' || !DTP(vb_end_nl), "%s txt_data for vb=%u unexpectedly doesn't end with a newline. Last 10 chars: \"%10s\"", 
-            dt_name(vb->data_type), vb->vblock_i, Bc (vb->txt_data, vb->txt_data.len - MIN_(10,vb->txt_data.len)));
+    ASSERT (!vb->txt_data.len || *BLSTtxt == '\n' || !DTP(vb_end_nl), "%s: %s txt_data unexpectedly doesn't end with a newline. Last 10 chars: \"%10s\"", 
+            VB_NAME, dt_name(vb->data_type), Bc (vb->txt_data, vb->txt_data.len - MIN_(10,vb->txt_data.len)));
 
     ctx_initialize_predefined_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_contexts); // Create ctx for the fields in the correct order 
  
@@ -941,7 +950,6 @@ void seg_all_data_lines (VBlockP vb)
                   : segconf.running  ? 10 // low number of avoid memory overallocation for PacBio arrays etc 
                   : segconf.line_len ? MAX_(1, vb->txt_data.len / segconf.line_len)
                   :                    1;            // eg DT_GENERIC
-
 
     ContextP debug_lines_ctx = NULL;
     if (flag.debug_lines && !segconf.running) { 
@@ -957,6 +965,7 @@ void seg_all_data_lines (VBlockP vb)
 
     rom field_start = B1STtxt;
     bool hash_hints_set_1_3 = false, hash_hints_set_2_3 = false;
+
     for (vb->line_i=0; vb->line_i < vb->lines.len; vb->line_i++) {
 
         uint32_t remaining_txt_len = BREMAINS (vb->txt_data, field_start);
@@ -970,7 +979,7 @@ void seg_all_data_lines (VBlockP vb)
         vb->line_start = BNUMtxt (field_start);
 
         if (flag.show_lines)
-            iprintf ("vb=%u line_i=%d byte-in-vb=%u\n", vb->vblock_i, vb->line_i, vb->line_start);
+            iprintf ("%s byte-in-vb=%u\n", LN_NAME, vb->line_start);
 
         // Call the segmenter of the data type to segment one line
         rom next_field = DT_FUNC (vb, seg_txt_line) (vb, field_start, remaining_txt_len, &has_13);
@@ -986,8 +995,10 @@ void seg_all_data_lines (VBlockP vb)
                 vb->debug_line_hash_skip = false; // reset
         }
 
-        if (flag.biopsy_line.line_i == vb->line_i && flag.biopsy_line.vb_i == vb->vblock_i && !DTP(seg_modifies))
+        if (flag.biopsy_line.line_i == vb->line_i && flag.biopsy_line.vb_i == vb->vblock_i && !DTP(seg_modifies)) {
             file_put_line (vb, field_start, next_field - field_start, "Line biopsy:");
+            exit_ok();
+        }
 
         vb->longest_line_len = MAX_(vb->longest_line_len, (next_field - field_start));
         field_start = next_field;
@@ -1009,7 +1020,7 @@ void seg_all_data_lines (VBlockP vb)
         }
 
         // --head advanced option in ZIP cuts a certain number of first lines from vb=1
-        if (vb->vblock_i==1 && (flag.lines_last >= 0) && flag.lines_last == vb->line_i) {
+        if (vb->vblock_i==1 && (flag.lines_last != NO_LINE) && flag.lines_last == vb->line_i) {
             vb->recon_size -= BREMAINS (vb->txt_data, field_start);
             vb->lines.len = vb->line_i + 1;
             break;
@@ -1027,7 +1038,7 @@ void seg_all_data_lines (VBlockP vb)
 
     DT_FUNC (vb, seg_finalize)(vb); // data-type specific finalization
 
-    if (!flag.make_reference && !segconf.running) 
+    if (!flag.make_reference && !segconf.running && flag.biopsy_line.line_i == NO_LINE) 
         seg_verify_file_size (vb);
 
     if (flag.debug) buf_test_overflows(vb, __FUNCTION__); 

@@ -36,21 +36,21 @@ uint32_t codec_RANw_est_size (Codec codec, uint64_t uncompressed_len) { return r
 
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
 static bool codec_hts_compress (VBlockP vb, 
-                                rom uncompressed, // option 1 - compress contiguous data
+                                rom uncompressed,           // option 1 - compress contiguous data
                                 uint32_t *uncompressed_len, 
-                                LocalGetLineCB callback,  // option 2 - compress data one line at a time
-                                STRe(compressed),         // in/out 
+                                LocalGetLineCB get_line_cb, // option 2 - compress data one line at a time
+                                STRe(compressed),           // in/out 
                                 unsigned char *(*func)(VBlockP vb, unsigned char *in,  unsigned int in_size, unsigned char *out, unsigned int *out_size, int order),                                
                                 int order, bool soft_fail, rom name)
 {
     START_TIMER;
 
-    if (callback) {
+    if (get_line_cb) {
         uncompressed = codec_alloc (vb, *uncompressed_len, 1);
         
         for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
             char *line; uint32_t line_len;
-            callback (vb, line_i, pSTRa(line), *uncompressed_len - vb->codec_bufs[0].len, NULL);
+            get_line_cb (vb, line_i, pSTRa(line), *uncompressed_len - vb->codec_bufs[0].len, NULL);
             
             buf_add (&vb->codec_bufs[0], line, line_len);
         }
@@ -66,15 +66,10 @@ static bool codec_hts_compress (VBlockP vb,
 }
 
 #define COMPRESS_FUNC_TEMPLATE(func,codec,order)                                                             \
-bool codec_##codec##_compress (VBlockP vb, SectionHeader *header,                                            \
-                               rom uncompressed, /* option 1 - compress contiguous data */           \
-                               uint32_t *uncompressed_len,                                                   \
-                               LocalGetLineCB callback,  /* option 2 - compress data one line at a time */   \
-                               char *compressed, uint32_t *compressed_len /* in/out */,                      \
-                               bool soft_fail, rom name)                                                     \
+COMPRESS (codec_##codec##_compress)                                                     \
 {                                                                                                            \
     int ret;                                                                                                 \
-    ASSERT ((ret = codec_hts_compress (vb, uncompressed, uncompressed_len, callback, compressed, compressed_len,     \
+    ASSERT ((ret = codec_hts_compress (vb, uncompressed, uncompressed_len, get_line_cb, compressed, compressed_len,     \
                                        func, order, soft_fail, name)) || soft_fail,                          \
             "Failed " #func " uncompressed_len=%u compressed_len=%u", *uncompressed_len, *compressed_len);   \
     return ret;                                                                                              \
@@ -93,9 +88,7 @@ COMPRESS_FUNC_TEMPLATE(arith_compress_to,     ARTw, ORDER_w)
 // Uncompress
 //------------------------
 
-void codec_rans_uncompress (VBlockP vb, Codec codec, uint8_t param, STRp(compressed),
-                            Buffer *uncompressed_buf, uint64_t uncompressed_len, 
-                            Codec unused, rom name)
+UNCOMPRESS (codec_rans_uncompress)
 {
     START_TIMER;
     ASSERTNOTZERO (uncompressed_len, name);
@@ -111,10 +104,7 @@ void codec_rans_uncompress (VBlockP vb, Codec codec, uint8_t param, STRp(compres
     COPY_TIMER (compressor_rans);
 }
 
-void codec_arith_uncompress (VBlockP vb, Codec codec, uint8_t param,
-                             rom compressed, uint32_t compressed_len,
-                             Buffer *uncompressed_buf, uint64_t uncompressed_len, 
-                             Codec unused, rom name)
+UNCOMPRESS (codec_arith_uncompress)
 {
     START_TIMER;
     ASSERTNOTZERO (uncompressed_len, name);

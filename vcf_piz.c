@@ -81,11 +81,11 @@ static void vcf_piz_replace_pos_with_gpos (VBlockVCFP vb)
     DidIType chrom_did_i = (vb->vb_coords == DC_LUFT ? VCF_oCHROM : VCF_CHROM);
     Context *pos_ctx = CTX (vb->vb_coords == DC_LUFT ? VCF_oPOS : VCF_POS);
 
-    WordIndex ref_chrom_index = ref_contigs_get_by_name (gref, last_txt (vb, chrom_did_i), vb->last_txt_len (chrom_did_i), true, true);
+    WordIndex ref_chrom_index = ref_contigs_get_by_name (gref, last_txt(VB, chrom_did_i), vb->last_txt_len (chrom_did_i), true, true);
     Range *r = ref_get_range_by_ref_index (VB, gref, ref_chrom_index); // possibly NULL
 
     // remove CHROM and POS and two \t
-    vb->txt_data.len -= pos_ctx->last_txt_len + vb->last_txt_len (chrom_did_i) + 2; // remove main CHROM\tPOS\t
+    vb->txt_data.len -= pos_ctx->last_txt.len + vb->last_txt_len (chrom_did_i) + 2; // remove main CHROM\tPOS\t
 
     PosType pos = pos_ctx->last_value.i;
     PosType gpos = (r && pos >= r->first_pos && pos <= r->last_pos) ? r->gpos + (pos - r->first_pos) : 0; 
@@ -97,6 +97,12 @@ static void vcf_piz_replace_pos_with_gpos (VBlockVCFP vb)
     RECONSTRUCT ("GPOS\t", 5); 
     RECONSTRUCT_INT (gpos);
     RECONSTRUCT1('\t');
+}
+
+// called before reconstructing each line
+void vcf_reset_line (VBlockP vb)
+{
+    vb->sample_i = 0;
 }
 
 // filter is called before reconstruction of a repeat or an item, and returns false if item should 
@@ -187,14 +193,14 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT)
                 RECONSTRUCT ("GT", 2);
         }
         else 
-            RECONSTRUCT (snip, snip_len);
+            RECONSTRUCT_snip;
     }
 
     // initialize haplotype stuff
     if (has_GT && !vb->ht_matrix_ctx) 
         codec_hapmat_piz_calculate_columns (vb);
 
-    return false; // no new value
+    return NO_NEW_VALUE;
 }
 
 // ------------------------------------
@@ -213,7 +219,7 @@ static void inline vcf_piz_append_ostatus_to_INFO (VBlockP vb)
     ContextP ostatus_ctx = CTX (VCF_oSTATUS);
     ctx_get_snip_by_word_index (ostatus_ctx, ostatus_ctx->last_value.i, snip);
     RECONSTRUCT (";oSTATUS=", 9);
-    RECONSTRUCT (snip, snip_len);
+    RECONSTRUCT_snip;
 }
 
 CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb)
@@ -249,7 +255,7 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
             vcf_piz_GT_cb_null_GT_if_null_DP (vb, recon);
 
         if (have_INFO_SF) 
-            vcf_piz_GT_cb_calc_INFO_SF (VB_VCF, rep, recon, recon_len);
+            vcf_piz_GT_cb_calc_INFO_SF (VB_VCF, rep, STRa(recon));
     }
     else if (is_top_level) {
 

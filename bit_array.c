@@ -167,7 +167,7 @@ static inline void _set_word (BitArray *bitarr, uint64_t start, uint64_t word)
         bitarr->words[word_index] = (word << word_offset) |
                                     (bitarr->words[word_index] & bitmask64(word_offset));
 
-        if (word_index+1 < bitarr->nwords) {
+        if (word_index+1 < bitarr->nwords) { // if last part of the word goes beyond nwords, we drop it
 
             bitarr->words[word_index+1] = (word >> (WORD_SIZE - word_offset)) |
                                           (bitarr->words[word_index+1] & (WORD_MAX << word_offset));
@@ -320,7 +320,7 @@ void bit_array_realloc_do (BitArray *bitarr, uint64_t nbits,
         bitarr->words = buf_low_level_realloc (bitarr->words, nwords * sizeof(uint64_t), "", func, code_line);
 
     else {
-        Buffer *buf = buf_get_buffer_from_bit_array (bitarr);
+        BufferP buf = buf_get_buffer_from_bit_array (bitarr);
         buf_alloc_do (buf->vb, buf, nwords * sizeof(uint64_t), 1, func, code_line, NULL);
     }
 
@@ -609,13 +609,15 @@ uint64_t bit_array_num_bits_set (const BitArray *bitarr)
 }
 
 // added by divon
-uint64_t bit_array_num_bits_set_region(const BitArray *bitarr, uint64_t start, uint64_t length)
+uint64_t bit_array_num_bits_set_region (const BitArray *bitarr, uint64_t start, uint64_t length)
 {
     if (length == 0) return 0;
 
+    ASSERT (start + length <= bitarr->nbits, "out of range: execpting: start=%"PRIu64" + length=%"PRIu64" <= nbits=%"PRIu64, start, length, bitarr->nbits);
+
     uint64_t first_word = bitset64_wrd(start);
     uint64_t last_word  = bitset64_wrd(start+length-1);
-    word_offset_t foffset  = bitset64_idx(start);
+    word_offset_t foffset = bitset64_idx(start);
 
     uint64_t num_of_bits_set = 0;
 
@@ -967,7 +969,7 @@ void bit_array_concat_do (BitArray *base, const BitArray *add,
                           false, func, code_line);
                        
 //xxx fix this to support additional_concats_expected in buffer. 
-/*    Buffer *buf = buf_get_buffer_from_bit_array (base);
+/*    BufferP buf = buf_get_buffer_from_bit_array (base);
 
     uint64_t more_words =  roundup_bits2words64 (add->nbits * (1+additional_concats_expected));
 
@@ -1062,6 +1064,37 @@ void bit_array_or(BitArray *dst, const BitArray *src1, const BitArray *src2)
 void bit_array_xor(BitArray *dst, const BitArray *src1, const BitArray *src2)
 {
     _logical_or_xor(dst, src1, src2, 1);
+}
+
+// xor the entire dst bit array, with a subset of xor_with
+void bit_array_xor_with (BitArrayP dst, uint64_t dst_bit, 
+                         const BitArray *xor_with, uint64_t xor_with_bit, uint64_t num_bits)
+{
+    ASSERT (xor_with_bit + num_bits <= xor_with->nbits, 
+            "Expecting xor_with_bit=%"PRId64" + num_bits=%"PRId64" <= xor_with->nbits=%"PRId64, xor_with_bit, num_bits, xor_with->nbits);
+
+    ASSERT (dst_bit + num_bits <= dst->nbits, 
+            "Expecting dst_bit=%"PRId64" + num_bits=%"PRId64" <= dst->nbits=%"PRId64, dst_bit, num_bits, dst->nbits);
+
+    uint64_t num_of_full_words = num_bits / WORD_SIZE;
+
+    // full words
+    for (uint64_t i=0; i < num_of_full_words; i++, xor_with_bit += 64, dst_bit += 64) {
+        uint64_t xored = _get_word (dst, dst_bit) ^ _get_word (xor_with, xor_with_bit);
+        _set_word (dst, dst_bit, xored);
+    }
+
+    // last partial word - combine xored part of the word, part of the dst word beyond the requested range
+    uint8_t remaining_bits = num_bits - num_of_full_words * 64;
+    if (remaining_bits) {
+        uint64_t dst_word = _get_word (dst, dst_bit);
+        uint64_t mask     = bitmask64 (remaining_bits);
+        uint64_t xored    = (dst_word ^ _get_word (xor_with, xor_with_bit)) & mask;
+        uint64_t result   = xored | (dst_word & ~mask);
+        _set_word (dst, dst_bit, result);
+    }
+
+    DEBUG_VALIDATE(dst);
 }
 
 // If dst is longer than src, top bits are set to 1

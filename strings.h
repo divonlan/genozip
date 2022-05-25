@@ -95,10 +95,16 @@ static inline char *str_toupper_(rom in, char *out, uint32_t len)
     return out;
 }
 
-static inline char *str_reverse (rom in, char *out, uint32_t len)
+static inline char *str_reverse (char *dst, rom src, uint32_t len)
 {
-    for (uint32_t i=0; i < len; i++) out[len-1-i] = in[i]; 
-    return out;
+    for (uint32_t i=0; i < len; i++) dst[len-1-i] = src[i]; 
+    return dst;
+}
+
+static inline char *str_reverse_in_place (char *str, uint32_t len)
+{
+    for (uint32_t i=0; i < len/2; i++) SWAP(str[i], str[len-i-1]);
+    return str;
 }
 
 static inline void str_replace_letter (STRc(str), char before, char after)
@@ -167,7 +173,6 @@ extern bool str_is_in_range (STRp(str), char first_c, char last_c);
 // textual length of a non-negative integer
 extern uint32_t str_get_uint_textual_len (uint64_t n);
 
-extern StrText str_pointer (const void *p);
 extern StrText str_time (void);
 
 #define FLOAT_FORMAT_LEN 12

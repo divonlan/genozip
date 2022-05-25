@@ -82,7 +82,6 @@ uint64_t writer_get_txt_line_i (VBlockP vb)
     ARRAY (ReconPlanItem, plan, z_file->recon_plan);
     
     for (uint64_t i=0; i < plan_len; i++) {
-        
         if (plan[i].vb_i == vb->vblock_i) {
             // case: plan item containing this line
             if (vb_num_lines + plan[i].num_lines > vb->line_i) 
@@ -95,10 +94,25 @@ uint64_t writer_get_txt_line_i (VBlockP vb)
 
         // note: txtheader lines are not included in the plan item, bc they are not counted for --header, --downsample etc
         txt_num_lines += (plan[i].flavor == PLAN_TXTHEADER) ? B(VbInfo, txt_header_info, plan[i].comp_i)->num_lines
-                                                            : plan[i].num_lines;
+                                                            : VB_DT(DT_FASTQ) ? (4 * plan[i].num_lines) : plan[i].num_lines; // in FASTQ, each plan line is 4 txt lines
+        //xxx plan_item_lines = VB_DT(DT_FASTQ) ? (4 * plan[i].num_lines) : plan[i].num_lines; // in FASTQ, each plan line is 4 txt lines
+        
+        // if (plan[i].vb_i == vb->vblock_i) {
+        //     // case: plan item containing this line
+        //     if (vb_num_lines + plan_item_lines > vb->line_i) 
+        //         return txt_num_lines + (vb->line_i - vb_num_lines) + 1; // +1 because 1-based 
+
+        //     // case: plan item is from current VB, but we have not yet reached the current line
+        //     else
+        //         vb_num_lines += plan_item_lines;
+        // }
+
+        // // note: txtheader lines are not included in the plan item, bc they are not counted for --header, --downsample etc
+        // txt_num_lines += (plan[i].flavor == PLAN_TXTHEADER) ? B(VbInfo, txt_header_info, plan[i].comp_i)->num_lines
+        //                                                     : plan_item_lines;
     }
 
-    ASSPIZ0 (false, "Unexpectedly, unable to find current vb/line_i in recon_plan");
+    WARN_ONCE0 ("Unexpectedly, unable to find current vb/line_i in recon_plan");
     return 0;
 }
 
@@ -162,7 +176,6 @@ BitArray *writer_get_is_dropped (VBIType vb_i)
 
     // allocate if needed. buffer was put in evb buffer_list by writer_init_vb_info
     if (!v->is_dropped) {
-        ASSERTNOTZERO (v->num_lines,"");
         buf_alloc_bitarr (evb, &v->is_dropped_buf, v->num_lines, "is_dropped");
         buf_zero (&v->is_dropped_buf);
         v->is_dropped = buf_get_bitarray (&v->is_dropped_buf);
@@ -302,8 +315,10 @@ static void writer_init_vb_info (void)
         v->needs_recon = true; // default
         #define DROP v->needs_recon = false
 
+        if (!v->num_lines) DROP; // can happen if all lines where sent to gencomp
+
         // --one-vb: user only wants to see a single VB, and this is not it
-        if (flag.one_vb && flag.one_vb != vb_i) DROP; 
+        else if (flag.one_vb && flag.one_vb != vb_i) DROP; 
 
         // --header-only: drop all VBs (except VCF - handled separately below)
         else if (flag.header_only && z_file->data_type != DT_VCF) DROP; 
@@ -808,15 +823,15 @@ void writer_create_plan (void)
     // filtering (these are genocat flags, not available in genounzip): 
     if (flag.maybe_lines_dropped_by_writer || has_regions_filter) {
 
-        int64_t num_lines = (flag.lines_first >= 0 || flag.tail) ? writer_get_plan_num_lines() : 0; // calculate if needed
+        int64_t num_lines = (flag.lines_first != NO_LINE || flag.tail) ? writer_get_plan_num_lines() : 0; // calculate if needed
         int64_t lines_to_trim;
 
         // first - filters based on line ordinal position (--head, --lines, --tail)
-        if ((flag.lines_first > 0 || flag.tail) 
+        if ((flag.lines_first != NO_LINE || flag.tail) 
             && (lines_to_trim = flag.tail ? MIN_(num_lines - flag.tail, num_lines) : flag.lines_first))
             writer_trim_lines_from_plan_start (lines_to_trim);
 
-        if (flag.lines_last != -1 
+        if (flag.lines_last != NO_LINE 
             && (lines_to_trim = num_lines - MIN_(flag.lines_last+1, num_lines)))
             writer_trim_lines_from_plan_end (num_lines, lines_to_trim);
 
@@ -827,7 +842,7 @@ void writer_create_plan (void)
         // if --downsample is the only line dropping filter, we can remove some plan items now 
         // note: this is an optimization, lines which are not removed now, will be discarded by the writer thread,
         // and lines that are moved, will still be counted for downsampling purposes by the writer thread.
-        if (flag.downsample && !flag.tail && flag.lines_first == -1 && !flag.maybe_lines_dropped_by_reconstructor)
+        if (flag.downsample && !flag.tail && flag.lines_first == NO_LINE && !flag.maybe_lines_dropped_by_reconstructor)
             writer_downsample_plan(); 
 
         // mark VBs that are fully dropped as !needs_recon + remove REMOVE_ME items from recon_plan

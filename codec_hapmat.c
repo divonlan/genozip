@@ -141,7 +141,7 @@ void codec_hapmat_reconstruct (VBlockP vb_, Codec codec, Context *ctx)
         // "%|%" is used instead of "./." in case the previous sample had a | phase. This is meant to reduce entroy of GT.b250
         // in the case we have phased data, but missing samples appear as "./.".
         case '%': 
-            if (*BLSTc (vb->txt_data) == '|' || *BLSTc (vb->txt_data) == '/') { // second % in "%|%" and act on the 2nd
+            if (*BLSTtxt == '|' || *BLSTtxt == '/') { // second % in "%|%" and act on the 2nd
                 vb->txt_data.len -= 1;  // remove | or /
                 RECONSTRUCT ("/.", 2);
             }

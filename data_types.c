@@ -19,12 +19,10 @@ DataTypeFields     dt_fields[NUM_DATATYPES] = DATA_TYPE_FIELDS;
 const DtTranslation dt_get_translation (VBlockP vb) // vb=NULL relates to the txt header
 {
     static DtTranslation translations[] = TRANSLATIONS;
-    #define NUM_TRANSLATIONS (sizeof (translations) / sizeof (translations[0]))
-
     bool i_am_binary = z_file->z_flags.txt_is_bin;
 
-    for (unsigned i=0; i < NUM_TRANSLATIONS; i++) {
-/*if (i==NUM_TRANSLATIONS-1) { printf ("translations[i].src_z_non_bin_dt=%u z_file->data_type=%u " 
+    for (unsigned i=0; i < ARRAY_LEN (translations); i++) {
+/*if (i==ARRAY_LEN (translations)-1) { printf ("translations[i].src_z_non_bin_dt=%u z_file->data_type=%u " 
             "translations[i].src_z_is_binary=%u i_am_binary=%u "
             "translations[i].dst_txt_dt=%u  flag.out_dt=%u "
             "translations[i].is_translation=%u *translations[i].is_translation=%u\n", 

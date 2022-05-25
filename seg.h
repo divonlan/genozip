@@ -60,7 +60,12 @@ extern bool seg_id_field_cb (VBlockP vb, ContextP ctx, STRp(id_snip), uint32_t r
 extern void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, STRp(data), bool add_nul, bool with_lookup, unsigned add_bytes);
 
 static inline void seg_add_to_local_text (VBlockP vb, ContextP ctx, STRp(snip), bool with_lookup, unsigned add_bytes) 
-    { seg_add_to_local_fixed_do (vb, ctx, STRa(snip), true, with_lookup, add_bytes); }
+{ 
+#ifdef DEBUG
+    ASSERT (ctx->no_stons, "%s: Expecting ctx->no_stons=true in ctx=%s", LN_NAME, ctx->tag_name);
+#endif
+    seg_add_to_local_fixed_do (vb, ctx, STRa(snip), true, with_lookup, add_bytes); 
+}
 
 static inline void seg_add_to_local_fixed (VBlockP vb, ContextP ctx, STRp(data))
     { seg_add_to_local_fixed_do (vb, ctx, STRa(data), false, false, 0); }
@@ -71,7 +76,7 @@ extern void seg_add_to_local_nonresizeable (VBlockP vb, Context *ctx, void *numb
 static inline void seg_add_to_local_resizable (VBlockP vb, ContextP ctx, int64_t value, unsigned add_bytes)
 {
 #ifdef DEBUG
-    ASSERT (ctx->dynamic_size_local, "Expecting ctx->dynamic_size_local=true in ctx=%s vb=%u", ctx->tag_name, vb->vblock_i);
+    ASSERT (ctx->dynamic_size_local, "%s: Expecting ctx->dynamic_size_local=true in ctx=%s", LN_NAME, ctx->tag_name);
 #endif
     // TO DO: find a way to better estimate the size, see b250_per_line
     buf_alloc (vb, &ctx->local, 1, vb->lines.len, int64_t, CTX_GROWTH, "contexts->local");
@@ -113,13 +118,21 @@ extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, 
 
 extern void seg_prepare_multi_dict_id_special_snip (uint8_t special_code, unsigned num_dict_ids, DictId *dict_ids, char *out_snip, unsigned *out_snip_len);
 
+extern void seg_prepare_minus_snip_do (DictId dict_id_a, DictId dict_id_b, uint8_t special_code, char *snip, unsigned *snip_len);
+#define seg_prepare_minus_snip(dt, dict_id_a, dict_id_b, snip) \
+    ({ snip##_len = sizeof (snip);\
+       seg_prepare_minus_snip_do ((DictId)(dict_id_a), (DictId)(dict_id_b), dt##_SPECIAL_MINUS, (snip), &snip##_len); })
+#define seg_prepare_minus_snip_i(dt, dict_id_a, dict_id_b, snip, i) \
+    ({ snip##_lens[i] = sizeof (snip##s[i]);\
+       seg_prepare_minus_snip_do ((DictId)(dict_id_a), (DictId)(dict_id_b), dt##_SPECIAL_MINUS, snip##s[i], &snip##_lens[i]); })
+
 static void inline seg_set_last_txt (VBlockP vb, ContextP ctx, STRp(value))
 {
-    bool is_value_in_txt_data = value >= B1STc (vb->txt_data) &&
+    bool is_value_in_txt_data = value >= B1STtxt &&
                                 value <= BLST  (char, vb->txt_data);
 
-    ctx->last_txt_index = is_value_in_txt_data ? BNUMtxt (value) : INVALID_LAST_TXT_INDEX;
-    ctx->last_txt_len = value_len;
+    ctx->last_txt = (TxtWord){ .index = is_value_in_txt_data ? BNUMtxt (value) : INVALID_LAST_TXT_INDEX,
+                               .len   = value_len };
 
     ctx_set_encountered (vb, ctx);
 }
@@ -256,13 +269,13 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, MultiplexerP mux, uint32_t 
 #define SEG_EOL(f,account_for_ascii10) do { seg_by_did_i (VB, *(has_13) ? "\r\n" : "\n", 1 + *(has_13), (f), (account_for_ascii10) + *(has_13)); } while (0)
 
 #define ASSSEG(condition, p_into_txt, format, ...) \
-    ASSINP (condition, "Error in file %s: "format "\n\nvb:%s/%u line_i:%d pos_in_vb: %"PRIi64" pos_in_file: %"PRIi64\
+    ASSINP (condition, "%s/%s: "format "\n\nvb:%s/%u line_i:%d pos_in_vb: %"PRIi64" pos_in_file: %"PRIi64\
                        "\nvb pos in file (0-based):%"PRIu64" - %"PRIu64" (length %"PRIu64")" \
                        "\n%d characters before to %d characters after (in quotes): \"%.*s\"" \
                        "\n%d characters before to %d characters after (in quotes): \"%.*s\"" \
                        "\nTo get vblock: %s %s | head -c %"PRIu64" | tail -c %u > vb.%u%s"   \
                        "\nDumped bad vblock from memory: %s",                                \
-                                     txt_name, __VA_ARGS__, comp_name (vb->comp_i), vb->vblock_i, vb->line_i, \
+                                     txt_name, LN_NAME, __VA_ARGS__, comp_name (vb->comp_i), vb->vblock_i, vb->line_i, \
             /* pos_in_vb:         */ (PosType)(p_into_txt ? ((rom)p_into_txt - vb->txt_data.data) : -1), \
             /* pos_in_file:       */ (PosType)(p_into_txt ? (vb->vb_position_txt_file + ((rom)p_into_txt - vb->txt_data.data)) : -1),\
             /* vb start pos file: */ vb->vb_position_txt_file, \

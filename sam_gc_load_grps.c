@@ -37,8 +37,8 @@ static Mutex num_prim_vbs_loaded_mutex = {};
 
 static Mutex copy_qual_mutex = {}, copy_cigars_mutex = {};
 
-#define vb_qual_buf   vb->z_data     // used for QUAL data being in-memory compressed in the loader compute thread
-#define vb_cigars_buf vb->scratch // similar for cigar data
+#define vb_qual_buf   vb->z_data  // used for QUAL data being in-memory compressed in the loader compute thread
+#define vb_cigars_buf vb->codec_bufs[1] // similar for cigar data
 
 static Flags save_flag; 
 
@@ -116,7 +116,7 @@ static inline void sam_load_groups_add_qname (VBlockSAMP vb, PlsgVbInfo *plsg, S
     vb->txt_data.len = 0;
     for (SAGroup grp_i=0; grp_i < plsg->num_grps ; grp_i++) {
         vb->line_i = grp_i; // needed for buddying to word
-        vb->buddy_line_i = NO_BUDDY;
+        vb->buddy_line_i = NO_LINE;
 
         vb_grps[grp_i].qname = plsg->qname_start + vb->txt_data.len;
         reconstruct_from_ctx (vb, SAM_QNAME, 0, true); // reconstructs into vb->txt_data, sets vb->buddy_line_i if SNIP_COPY_BUDDY
@@ -124,7 +124,7 @@ static inline void sam_load_groups_add_qname (VBlockSAMP vb, PlsgVbInfo *plsg, S
 
         // PRIMARY alignment with the QNAME has a buddy (but no info here about DEPN alignments!)
         // When reconstructing a primary VB, sam_piz_set_sa_grp will set the buddy if vb_grps[grp_i].prim_set_buddy is true
-        vb_grps[grp_i].prim_set_buddy = (vb->buddy_line_i != NO_BUDDY); 
+        vb_grps[grp_i].prim_set_buddy = piz_has_buddy; 
     }
 
     buf_free (vb->txt_data);
@@ -209,7 +209,7 @@ static inline void sam_load_groups_add_seq (VBlockSAMP vb, PlsgVbInfo *plsg, SAG
 
     // pack SEQ data into z_file->sa_seq
     BitArray *z_sa_seq = buf_get_bitarray (&z_file->sa_seq);
-    sam_sa_native_to_actg (vb, z_sa_seq, z_seq_start * 2, B1STc(vb->textual_seq), vb->seq_len, false); 
+    sam_sa_native_to_acgt (vb, z_sa_seq, z_seq_start * 2, B1STc(vb->textual_seq), vb->seq_len, false, false, false); 
 }
 
 // compress QUAL data for in-memory storage, using fast rans codec.
@@ -267,7 +267,7 @@ static void sam_load_groups_add_aln_cigar (VBlockSAMP vb, PlsgVbInfo *plsg, SAGr
     
     // case: word_list.len==0 if all snips are in local, so dictionary was an all-the-same SNIP_LOOKUP, therefore dropped by ctx_drop_all_the_same, 
     if (ctx->word_list.len)
-        word_index = ctx_get_next_snip (VB, ctx, ctx->flags.all_the_same, false, pSTRa(snip)); 
+        word_index = ctx_get_next_snip (VB, ctx, false, pSTRa(snip)); 
 
     bool is_lookup = is_all_the_same_LOOKUP || *snip == SNIP_LOOKUP;
     bool is_squank = !is_lookup && (is_all_the_same_SQUANK || (snip_len > 2 && snip[0] == SNIP_SPECIAL && snip[1] == SAM_SPECIAL_SQUANK));
@@ -279,11 +279,9 @@ static void sam_load_groups_add_aln_cigar (VBlockSAMP vb, PlsgVbInfo *plsg, SAGr
             LOAD_SNIP_FROM_LOCAL (ctx); // updates snip, snip_len
 
         else { // squank - temporarily reconstruct into txt_data - just for compressing. note: prim cigar is never segged as squank
-            buf_alloc (vb, &vb->txt_data, 0, vb->seq_len * 2, char, 0, "txt_data"); // the CIGAR can be at most twice as long as SEQ eg "1M1I1S"
-            sam_piz_special_SQUANK (VB, ctx, &snip[2], snip_len-2, NULL, true);
-            snip     = vb->txt_data.data;
-            snip_len = vb->txt_data.len;
-            vb->txt_data.len = 0; // reset
+            sam_piz_special_SQUANK (VB, ctx, &snip[2], snip_len-2, NULL/*reconstruct to vb->scratch*/, true);
+            snip     = vb->scratch.data;
+            snip_len = vb->scratch.len;
         }
 
         // note: we put our compressed cigars in vb_cigars_buf, to be copied to z_file->sa_cigars later.
@@ -301,7 +299,7 @@ static void sam_load_groups_add_aln_cigar (VBlockSAMP vb, PlsgVbInfo *plsg, SAGr
             // append compressed cigars to vb_cigars_buf
             ASSERT (rans_compress_to_4x16 (VB, (uint8_t*)STRa(snip), BAFT(uint8_t, vb_cigars_buf), &comp_len, X_NOSZ) && comp_len,
                     "Failed to compress cigar of vb=%u grp_i=%u aln=%"PRId64" cigar_len=%u cigar=\"%.*s\"", 
-                    plsg->vblock_i, ZGRP_I(g), ZALN_I(a), snip_len, snip_len, snip);
+                    plsg->vblock_i, ZGRP_I(g), ZALN_I(a), snip_len, STRf(snip));
         }
                 
         // case: compression doesn't compress - abandon compression and store uncompressed - set comp_len to 0.
@@ -325,18 +323,17 @@ static void sam_load_groups_add_aln_cigar (VBlockSAMP vb, PlsgVbInfo *plsg, SAGr
         a->cigar.piz.index   = word_index;
 
         ASSERT (a->cigar.piz.index < ctx->word_list.len, "word_index=%d out of range [0,%d] snip_len=%u snip[0]=%u snip=\"%.*s", 
-                (uint32_t)a->cigar.piz.index, (int32_t)ctx->word_list.len-1, snip_len, snip[0], snip_len, snip);
+                (uint32_t)a->cigar.piz.index, (int32_t)ctx->word_list.len-1, STRf(snip)[0], STRf(snip));
     }
 
     if (out_cigar) STRset (*out_cigar, snip);
+    if (is_squank) buf_free (vb->scratch);
 }
 
 static void sam_load_groups_add_grp_cigars (VBlockSAMP vb, PlsgVbInfo *plsg, SAGroupType *g, SAAlnType *a, 
                                             bool is_all_the_same_LOOKUP, bool is_all_the_same_SQUANK,
                                             pSTRp(prim_cigar)) // out
 {
-    ASSERTNOTINUSE (vb->txt_data);
-
     // primary alignment CIGAR 
     sam_load_groups_add_aln_cigar (vb, plsg, g, a, ZGRP_I(g)==0, is_all_the_same_LOOKUP, is_all_the_same_SQUANK, STRa(prim_cigar));
 
@@ -346,8 +343,6 @@ static void sam_load_groups_add_grp_cigars (VBlockSAMP vb, PlsgVbInfo *plsg, SAG
     // populate SAAlnType.cigar with the CIGAR word index, for the non-primary alignments of this group
     for (uint8_t aln_i=1; aln_i < g->num_alns; aln_i++) 
         sam_load_groups_add_aln_cigar (vb, plsg, g, a + aln_i, false, is_all_the_same_LOOKUP, is_all_the_same_SQUANK, 0, 0);
-
-    buf_destroy (vb->txt_data); // used by sam_load_groups_add_aln_cigar
 }
 
 // SEQ - ACGT-pack uncompressed sequence directly to z_file->sa_seq
@@ -374,13 +369,13 @@ static inline void sam_load_groups_add_grps (VBlockSAMP vb, PlsgVbInfo *plsg, SA
                                         *B1STc(cigar_ctx->dict)==SNIP_SPECIAL && *Bc(cigar_ctx->dict, 1)==SAM_SPECIAL_SQUANK;
 
     for (SAGroup grp_i=0; grp_i < plsg->num_grps ; grp_i++) {
-
         SAGroupType *g = &vb_grps[grp_i];
 
         ASSERT (g->first_aln_i >= plsg->first_aln_i && g->first_aln_i < z_file->sa_alns.len,
                 "grp_i=%u z_grp_i=%u has first_aln_i=%"PRIu64" which is out of range [0,%"PRIu64"]", 
                 grp_i, ZGRP_I(g), (uint64_t)g->first_aln_i, z_file->sa_alns.len-1);
 
+        vb->line_i = grp_i;
         sam_reset_line (VB);
 
         SAAlnType *prim_aln = B(SAAlnType, z_file->sa_alns, g->first_aln_i); // first Aln of group
@@ -464,7 +459,7 @@ static inline void sam_load_groups_add_alns (VBlockSAMP vb, PlsgVbInfo *plsg, SA
             a->pos = CTX(OPTION_SA_POS)->last_value.i;
         }
 
-        // STRAND - nodes initialized in sam_seg_initialize_0X to 0="-" 1="+"
+        // STRAND - nodes initialized in sam_seg_0X_initialize to 0="-" 1="+"
         if (CTX(OPTION_SA_STRAND)->is_loaded) {
             reconstruct_from_ctx (vb, OPTION_SA_STRAND, 0, false); // don't reconstruct, only set last_value to word_index
             a->revcomp = !CTX(OPTION_SA_STRAND)->last_value.i;
@@ -492,10 +487,9 @@ static inline void sam_load_groups_add_alns (VBlockSAMP vb, PlsgVbInfo *plsg, SA
 static void sam_load_groups_add_one_prim_vb (VBlockP vb_)
 {
     START_TIMER;
-
     VBlockSAMP vb = (VBlockSAMP)vb_;
 
-    piz_uncompress_all_ctxs (VB, 0);
+    piz_uncompress_all_ctxs (VB);
 
     buf_free (vb->z_data); // we will use z_data for vb_qual_buf to avoid allocating a separate buffer
 
@@ -534,7 +528,6 @@ bool sam_piz_dispatch_one_load_SA_Groups_vb (Dispatcher dispatcher)
     vb->comp_i              = SAM_COMP_PRIM;
     vb->preprocessing       = true; // we're done dispatching preprocessing VBs, however, preprocessing VB compute threads may still be running.
     vb->show_containers     = false; 
-    vb->maybe_lines_dropped = true; // reconstructed text is not stored in txt_data, so store lookup data in history instead
 
     piz_read_one_vb (vb, false);
     dispatcher_compute (dispatcher, sam_load_groups_add_one_prim_vb);
@@ -559,6 +552,9 @@ void sam_piz_after_preproc (VBlockP vb)
         sam_show_sa();
         if (exe_type == EXE_GENOCAT) exit(0);
     }
+
+    if (flag.show_vblocks) 
+        iprintf ("LOADED_SA(id=%d) vb=%s\n", vb->id, VB_NAME);
 }
 
 // PIZ main thread: a callback of piz_after_global_area 
@@ -642,7 +638,7 @@ uint32_t sam_piz_get_plsg_i (VBIType vb_i)
         if (plsg[i].vblock_i == vb_i)
             return i;
 
-    ABORT_R ("vb_i==%u is not a PRIM VB", vb_i);
+    ABORT_R ("vb_i=%u is not a PRIM VB", vb_i);
 }
 
 // PIZ reconstruction compute thread

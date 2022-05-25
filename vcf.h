@@ -127,6 +127,8 @@
 #pragma GENDICT INFO_MLEAC=DTYPE_1=MLEAC       // <ID=MLEAC,Number=A,Type=Integer,Description="Maximum likelihood expectation (MLE) for the allele counts (not necessarily the same as the AC), for each ALT allele, in the same order as listed">
 #pragma GENDICT INFO_MLEAF=DTYPE_1=MLEAF       // <ID=MLEAF,Number=A,Type=Float,Description="Maximum likelihood expectation (MLE) for the allele frequency (not necessarily the same as the AF), for each ALT allele, in the same order as listed">
 #pragma GENDICT INFO_LDAF=DTYPE_1=LDAF         //  MLE Allele Frequency Accounting for LD
+#pragma GENDICT INFO_SOR=DTYPE_1=SOR           // <ID=SOR,Number=1,Type=Float,Description="Symmetric Odds Ratio of 2x2 contingency table to detect strand bias">. See: https://gatk.broadinstitute.org/hc/en-us/articles/360036361772-StrandOddsRatio
+#pragma GENDICT INFO_QD=DTYPE_1=QD             // <ID=QD,Number=1,Type=Float,Description="Variant Confidence/Quality by Depth">. See: https://gatk.broadinstitute.org/hc/en-us/articles/360041414572-QualByDepth
 #pragma GENDICT FORMAT_MIN_DP=DTYPE_1=MIN_DP   // <ID=MIN_DP,Number=1,Type=Integer,Description="Minimum DP observed within the GVCF block">
 
 // Ensembl VEP (Variant Effect Predictor) fields: https://www.ensembl.org/info/docs/tools/vep/script/vep_options.html
@@ -289,6 +291,7 @@ extern void vcf_vb_destroy_vb();
 extern void vcf_vb_cleanup_memory();
 extern unsigned vcf_vb_size (DataType dt);
 extern unsigned vcf_vb_zip_dl_size (void);
+extern void vcf_reset_line (VBlockP vb);
 extern bool vcf_vb_has_haplotype_data (VBlockP vb);
 extern bool vcf_vb_is_primary (VBlockP vb);
 extern bool vcf_vb_is_luft (VBlockP vb);
@@ -312,7 +315,7 @@ extern void vcf_tags_cmdline_rename_option(void);
 extern void vcf_samples_add  (rom samples_str);
 
 #define VCF_SPECIAL { vcf_piz_special_main_REFALT, vcf_piz_special_FORMAT, vcf_piz_special_INFO_AC, vcf_piz_special_INFO_SVLEN, \
-                      vcf_piz_special_FORMAT_DS_old, vcf_piz_special_INFO_BaseCounts, vcf_piz_special_INFO_SF, vcf_piz_special_MINUS,  \
+                      vcf_piz_special_FORMAT_DS_old, vcf_piz_special_INFO_BaseCounts, vcf_piz_special_INFO_SF, piz_special_MINUS,  \
                       vcf_piz_special_LIFT_REF, vcf_piz_special_COPYSTAT, vcf_piz_special_other_REFALT, vcf_piz_special_COPYPOS, vcf_piz_special_ALLELE, \
                       vcf_piz_special_INFO_HGVS_SNP_POS, vcf_piz_special_INFO_HGVS_SNP_REFALT, \
                       vcf_piz_special_INFO_HGVS_DEL_END_POS, vcf_piz_special_INFO_HGVS_DEL_PAYLOAD, \
@@ -329,7 +332,7 @@ SPECIAL (VCF, 3,  SVLEN,               vcf_piz_special_INFO_SVLEN);
 SPECIAL (VCF, 4,  DS_old,              vcf_piz_special_FORMAT_DS_old);            // used in files up to 12.0.42
 SPECIAL (VCF, 5,  BaseCounts,          vcf_piz_special_INFO_BaseCounts);
 SPECIAL (VCF, 6,  SF,                  vcf_piz_special_INFO_SF);
-SPECIAL (VCF, 7,  MINUS,               vcf_piz_special_MINUS);                    // added v12.0.0
+SPECIAL (VCF, 7,  MINUS,               piz_special_MINUS);                        // added v12.0.0 
 SPECIAL (VCF, 8,  LIFT_REF,            vcf_piz_special_LIFT_REF);                 // added v12.0.0
 SPECIAL (VCF, 9,  COPYSTAT,            vcf_piz_special_COPYSTAT);                 // added v12.0.0
 SPECIAL (VCF, 10, other_REFALT,        vcf_piz_special_other_REFALT);             // added v12.0.0
@@ -398,8 +401,6 @@ extern const LuftTransLateProp ltrans_props[NUM_VCF_TRANS];
 #define VCF_DICT_ID_ALIASES \
     /*         alias             maps to this ctx  */  \
     { DT_VCF,  _INFO_END, _VCF_POS    }, \
-
-#define VCF_LOCAL_GET_LINE_CALLBACKS
 
 #define dict_id_is_vcf_info_sf   dict_id_is_type_1
 #define dict_id_is_vcf_format_sf dict_id_is_type_2

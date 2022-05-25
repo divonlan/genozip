@@ -130,7 +130,7 @@ static bool vcf_linesort_is_file_sorted (bool is_luft)
     return true; // no evidence of unsortedness found, meaning it is sorted
 }
 
-static void vcf_linesort_create_index (Buffer *index_buf, bool is_luft)
+static void vcf_linesort_create_index (BufferP index_buf, bool is_luft)
 {
     buf_alloc (evb, index_buf, 0, txt_file->line_info[is_luft].len, uint32_t, 1, "scratch");
     
@@ -143,7 +143,7 @@ static void vcf_linesort_create_index (Buffer *index_buf, bool is_luft)
 
 // ZIP: detect duplicate variants in Luft, that are *not* duplicate in Primary (i.e. the duplication is due to many-to-one mapping in the chain file)
 // and output to the a dups file, which can be used with genocat --regions-file or bcftools --regions-file
-static void line_sorter_detect_duplicates (const Buffer *index_buf)
+static void line_sorter_detect_duplicates (ConstBufferP index_buf)
 {
     static Buffer dups = { .name = "dups" };
 

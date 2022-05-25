@@ -21,7 +21,8 @@ extern bool piz_default_skip_section (SectionType st, DictId dict_id);
 extern Dispatcher piz_z_file_initialize (void);
 extern DataType piz_read_global_area (Reference ref);
 extern bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last_z_file, CompIType unbind_comp_i);
-extern uint32_t piz_uncompress_all_ctxs (VBlockP vb, uint32_t pair_vb_i);
+extern void piz_read_all_ctxs (VBlockP vb, Section *sec, bool is_pair_data);
+extern uint32_t piz_uncompress_all_ctxs (VBlockP vb);
 extern bool piz_read_one_vb (VBlockP vb, bool for_reconstruction);
 
 extern bool piz_grep_match (rom start, rom after);
@@ -32,7 +33,7 @@ extern PizDisCoords piz_dis_coords (VBlockP vb); // for ASSPIZ
 typedef struct { char s[100]; } PizDisQname; 
 extern PizDisQname piz_dis_qname (VBlockP vb); // for ASSPIZ
 
-#define ASSPIZ(condition, format, ...) do { if (!(condition)) { progress_newline(); fprintf (stderr, "Error in %s:%u vb=%s/%u line_in_file(1-based)=%"PRIu64" vb->line_i(0-based)=%d%s%s%s%s: ", __FUNCLINE, comp_name(vb->comp_i), vb->vblock_i, writer_get_txt_line_i ((VBlockP)(vb)), vb->line_i, (Z_DT(DT_VCF) ? " sample_i=" : ""), (Z_DT(DT_VCF) ? str_int_s (vb->sample_i).s : ""), piz_dis_coords((VBlockP)(vb)).s, piz_dis_qname((VBlockP)(vb)).s); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }} while(0)
+#define ASSPIZ(condition, format, ...) do { if (!(condition)) { progress_newline(); fprintf (stderr, "%s: Error in %s:%u line_in_file(1-based)=%"PRIu64" %s%s%s%s: ", LN_NAME, __FUNCLINE, writer_get_txt_line_i ((VBlockP)(vb)), (Z_DT(DT_VCF) ? " sample_i=" : ""), (Z_DT(DT_VCF) ? str_int_s (vb->sample_i).s : ""), piz_dis_coords((VBlockP)(vb)).s, piz_dis_qname((VBlockP)(vb)).s); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }} while(0)
 #define ASSPIZ0(condition, string) ASSPIZ (condition, string "%s", "")
 #define ASSISLOADED(ctx) ASSPIZ((ctx)->is_loaded, "%s is not loaded", ctx->tag_name)
 

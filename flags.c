@@ -49,9 +49,10 @@ Flags flag = {
     .out_dt       = DT_NONE, 
     .bgzf         = FLAG_BGZF_BY_ZFILE,
     .kraken_taxid = TAXID_NONE,
-    .lines_first  = -1, 
-    .lines_last   = -1,
-    .biopsy_line  = { .line_i = -1 },
+    .lines_first  = NO_LINE, 
+    .lines_last   = NO_LINE,
+    .biopsy_line  = { .line_i = NO_LINE },
+    .show_stats_comp_i = COMP_NONE,
 };
 
 bool option_is_short[256] = { }; // indexed by character of short option.
@@ -59,7 +60,7 @@ FILE *info_stream = 0;      // stdout, stderr or log file - where non-error mess
 bool is_info_stream_terminal = true;
 
 static Buffer command_line    = EMPTY_BUFFER,
-              debugger_params = EMPTY_BUFFER;
+               debugger_params = EMPTY_BUFFER;
 
 static pid_t pipe_in_pid = 0;
 static char pipe_in_process_name[100] = "";
@@ -174,6 +175,7 @@ static void flags_show_flags (void)
     iprintf ("show_ref_iupacs=%s\n", TF_(show_ref_iupacs));
     iprintf ("show_chain=%s\n", TF_(show_chain));
     iprintf ("show_codec=%s\n", TF_(show_codec));
+    iprintf ("show_aligner=%s\n", TF_(show_aligner));
     iprintf ("show_containers=%d\n", flag.show_containers);
     iprintf ("dict_id_show_containers=%s\n", dis_dict_id (flag.dict_id_show_containers).s);
     iprintf ("show_alleles=%s\n", TF_(show_alleles));
@@ -188,6 +190,7 @@ static void flags_show_flags (void)
     iprintf ("show_uncompress=%s\n", TF_(show_uncompress));
     iprintf ("debug_progress=%s\n", TF_(debug_progress));
     iprintf ("debug_LONG=%s\n", TF_(debug_LONG));
+    iprintf ("show_qual=%s\n", TF_(show_qual));
     iprintf ("debug_qname=%s\n", TF_(debug_qname));
     iprintf ("show_hash=%s\n", TF_(show_hash));
     iprintf ("debug_memory=%s\n", TF_(debug_memory));
@@ -199,6 +202,8 @@ static void flags_show_flags (void)
     iprintf ("debug_read_ctxs=%s\n", TF_(debug_read_ctxs));
     iprintf ("debug_sa=%s\n", TF_(debug_sa));
     iprintf ("debug_gencomp=%s\n", TF_(debug_gencomp));
+    iprintf ("no_gencomp=%s\n", TF_(no_gencomp));
+    iprintf ("no_domqual=%s\n", TF_(no_domqual));
     iprintf ("debug_lines=%s\n", TF_(debug_lines));
     iprintf ("verify_codec=%s\n", TF_(verify_codec)); 
     iprintf ("seg_only=%s\n", TF_(seg_only));
@@ -241,7 +246,6 @@ static void flags_show_flags (void)
     iprintf ("maybe_vb_dropped_after_read=%s\n", TF_(maybe_vb_dropped_after_read));
     iprintf ("missing_contexts_allowed=%s\n", TF_(missing_contexts_allowed));
     iprintf ("maybe_vb_modified_by_reconstructor=%s\n", TF_(maybe_vb_modified_by_reconstructor));
-    iprintf ("maybe_lines_dropped=%s\n", TF_(maybe_lines_dropped));
     iprintf ("maybe_lines_dropped_by_reconstructor=%s\n", TF_(maybe_lines_dropped_by_reconstructor));
     iprintf ("maybe_lines_dropped_by_writer=%s\n", TF_(maybe_lines_dropped_by_writer));
     iprintf ("maybe_lines_out_of_order=%s\n", TF_(maybe_lines_out_of_order));
@@ -269,7 +273,7 @@ static void flags_show_flags (void)
 #define MAX_LINE ((int64_t)1 << 62)
 static void flag_set_lines (rom optarg)
 {
-    ASSINP0 (flag.lines_first==-1 && !flag.tail, "Only one of these can be used: --lines, --head, --tail");
+    ASSINP0 (flag.lines_first==NO_LINE && !flag.tail, "Only one of these can be used: --lines, --head, --tail");
 
     flag.lines_first = 0; // defaults
     flag.lines_last  = MAX_LINE;
@@ -335,7 +339,7 @@ static void flag_set_head (rom optarg)
 
 static void flag_set_tail (rom optarg)
 {
-    ASSINP0 (flag.lines_first==-1 && !flag.tail, "Only one of these can be used: --lines, --head, --tail");
+    ASSINP0 (flag.lines_first==NO_LINE && !flag.tail, "Only one of these can be used: --lines, --head, --tail");
 
     if (!optarg) 
         flag.tail = 10; // default
@@ -391,15 +395,23 @@ static void flag_set_interleaved (rom optarg)
     else ABORTINP0 ("Invalid value for --interleaved : accepted values are 'either' or 'both' (default: 'both')");
 }
 
-// parse argument --biopsy_line=1,1000  <-- first number is vb_i, second is line_i within VB
+// parse argument --biopsy_line=1/1000  <-- first number is vb_i, second is line_i within VB
 static void flag_set_biopsy_line (rom optarg)
 {
-    ASSINP0 (optarg, "--biopsy_line expects an argument, eg: --biopsy_line=1,1000 (meaning: vblock_i=1, line_i=1000 (0-based line within VB))");
+    ASSINP0 (optarg, "--biopsy_line expects an argument, eg: --biopsy_line=1/1000 (meaning: vblock_i=1, line_i=1000 (0-based line within VB))");
 
-    str_split_ints (optarg, optarg ? strlen (optarg) : 0, 2, ',', arg, true);
-    ASSINP0 (n_args==2, "--biopsy_line expects an argument, eg: --biopsy_line=1,1000 (meaning: vblock_i=1, line_i=1000 (0-based line within VB))");
+    str_split_ints (optarg, optarg ? strlen (optarg) : 0, 2, '/', arg, true);
+    ASSINP0 (n_args==2, "--biopsy_line expects an argument, eg: --biopsy_line=1/1000 (meaning: vblock_i=1, line_i=1000 (0-based line within VB))");
 
     flag.biopsy_line = (struct biopsy_line){ .vb_i = args[0], .line_i = args[1] };
+}
+
+static void flag_set_stats (StatsType stats_type, rom optarg)
+{
+    flag.show_stats = stats_type;
+
+    if (optarg)
+        flag.show_stats_comp_i = atoi (optarg);
 }
 
 static void flag_set_show_containers (rom optarg)
@@ -418,210 +430,212 @@ void flags_init_from_command_line (int argc, char **argv)
     // process command line options
     while (1) {
 
-        #define _i  {"input",         required_argument, 0, 'i'                    }
-        #define _I  {"stdin-size",    required_argument, 0, 'I'                    }
-        #define _d  {"decompress",    no_argument,       &command, PIZ             }
-        #define _f  {"force",         no_argument,       &flag.force,            1 }
-        #define _h  {"help",          optional_argument, 0, 'h'                    }
-        #define _l  {"list",          no_argument,       &flag.list,             1 }
-        #define _L1 {"license",       optional_argument, 0, 'L'                    } // US spelling
-        #define _L2 {"licence",       optional_argument, 0, 'L'                    } // British spelling
-        #define _Lf {"licfile",       required_argument, 0, 26                     }
-        #define _q  {"quiet",         no_argument,       &flag.quiet,            1 }
-        #define _Q  {"noisy",         no_argument,       &option_noisy,          1 }
-        #define _so {"sort",          no_argument,       &flag.sort,             1 }
-        #define _SO {"unsorted",      no_argument,       &flag.unsorted,         1 }
-        #define _DL {"replace",       no_argument,       &flag.replace,          1 }
-        #define _V  {"version",       no_argument,       &command, VERSION         }
-        #define _z  {"bgzf",          required_argument, 0, 'z'                    }
-        #define _zb {"bam",           no_argument,       &flag.out_dt,      DT_BAM }
-        #define _zB {"BAM",           no_argument,       &flag.out_dt,      DT_BAM }
-        #define _zs {"sam",           no_argument,       &flag.out_dt,      DT_SAM }
-        #define _zS {"SAM",           no_argument,       &flag.out_dt,      DT_SAM }
-        #define _zq {"fastq",         optional_argument, 0, 130                    }
-        #define _zQ {"FASTQ",         optional_argument, 0, 130                    }
-        #define _zf {"fq",            optional_argument, 0, 130                    }
-        #define _zF {"FQ",            optional_argument, 0, 130                    }
-        #define _za {"fasta",         no_argument,       &flag.out_dt,    DT_FASTA }
-        #define _zA {"FASTA",         no_argument,       &flag.out_dt,    DT_FASTA }
-        #define _zc {"bcf",           no_argument,       &flag.out_dt,      DT_BCF }
-        #define _zC {"BCF",           no_argument,       &flag.out_dt,      DT_BCF }
-        #define _zv {"vcf",           no_argument,       &flag.out_dt,      DT_VCF }
-        #define _zV {"VCF",           no_argument,       &flag.out_dt,      DT_VCF }
-        #define _zy {"phylip",        no_argument,       &flag.out_dt,   DT_PHYLIP }
-        #define _zY {"Phylip",        no_argument,       &flag.out_dt,   DT_PHYLIP }
-        #define _m  {"md5",           no_argument,       &flag.md5,              1 }
-        #define _t  {"test",          no_argument,       &flag.test,             1 }
-        #define _fa {"fast",          no_argument,       &flag.fast,             1 }
-        #define _bs {"best",          optional_argument, 0, 'b'                    }
-        #define _9  {"optimize",      no_argument,       &flag.optimize,         1 } // US spelling
-        #define _99 {"optimise",      no_argument,       &flag.optimize,         1 } // British spelling
-        #define _9s {"optimize-sort", no_argument,       &flag.optimize_sort,    1 }
-        #define _9P {"optimize-phred",no_argument,       &flag.optimize_phred,   1 }
-        #define _9G {"GL-to-PL",      no_argument,       &flag.GL_to_PL,         1 }
-        #define _9g {"GP-to-PP",      no_argument,       &flag.GP_to_PP,         1 }
-        #define _9V {"optimize-VQSLOD", no_argument,     &flag.optimize_VQSLOD,  1 }
-        #define _9Q {"optimize-QUAL", no_argument,       &flag.optimize_QUAL,    1 } 
-        #define _9f {"optimize-Vf",   no_argument,       &flag.optimize_Vf,      1 }
-        #define _9Z {"optimize-ZM",   no_argument,       &flag.optimize_ZM,      1 }
-        #define _9D {"optimize-DESC", no_argument,       &flag.optimize_DESC,    1 }
-        #define _al {"add-line-numbers", no_argument,    &flag.add_line_numbers, 1 }
-        #define _pe {"pair",          no_argument,       &flag.pair,   PAIR_READ_1 } 
-        #define _pt {"dts_paired",    no_argument,       &flag.undocumented_dts_paired, 1 }  // undocumented flag to uncompress paired files older than 9.0.13 when genozip_header.dts_paired was introduced. A user will get an error message instructing her to use it.
-        #define _th {"threads",       required_argument, 0, '@'                    }
-        #define _u  {"prefix",        required_argument, 0, 'u'                    }
-        #define _o  {"output",        required_argument, 0, 'o'                    }
-        #define _T  {"files-from",    required_argument, 0, 'T'                    }
-        #define _TT {"tar",           required_argument, 0, 27                     }
-        #define _p  {"password",      required_argument, 0, 'p'                    }
-        #define _B  {"vblock",        required_argument, 0, 'B'                    }
-        #define _r  {"regions",       required_argument, 0, 'r'                    }
-        #define _R  {"regions-file",  required_argument, 0, 'R'                    }
-        #define _Rg {"gpos",          no_argument,       &flag.gpos,             1 }
-        #define _s  {"samples",       required_argument, 0, 's'                    }
-        #define _sf {"FLAG",          required_argument, 0, 17                     }
-        #define _sq {"MAPQ",          required_argument, 0, 18                     }
-        #define _il {"interleaved",   optional_argument, 0, 29                     } // both --interleave and --interleaved will be accepted
-        #define _e  {"reference",     required_argument, 0, 'e'                    }
-        #define _E  {"REFERENCE",     required_argument, 0, 'E'                    }
-        #define _lo {"luft",          no_argument,       &flag.luft,             1 }
-        #define _ch {"chain",         required_argument, 0, 'C'                    }
-        #define _kr {"kraken",        required_argument, 0, 'K'                    }
-        #define _kR {"taxid",         required_argument, 0, 'k'                    }
-        #define _b  {"bytes",         no_argument,       &flag.bytes,            1 }
-        #define _me {"make-reference",no_argument,       &flag.make_reference,   1 }
-        #define _mf {"multiseq",      no_argument,       &flag.multiseq,         1 }
-        #define _mF {"multi-seq",     no_argument,       &flag.multiseq,         1 }
-        #define _x  {"index",         no_argument,       &flag.index_txt,        1 }
-        #define _D  {"subdirs"  ,     no_argument,       &flag.subdirs,          1 }
-        #define _g  {"grep",          required_argument, 0, 25                     }
-        #define _gw {"grep-w",        required_argument, 0, 'g'                    }
-        #define _n  {"lines",         required_argument, 0, 'n'                    }
-        #define _nh {"head",          optional_argument, 0, 22                     }
-        #define _nt {"tail",          optional_argument , 0, 23                     }
-        #define _G  {"drop-genotypes",no_argument,       &flag.drop_genotypes,   1 }
-        #define _H1 {"no-header",     no_argument,       &flag.no_header,        1 }
-        #define _1  {"header-one",    no_argument,       &flag.header_one,       1 }
-        #define _H0 {"header-only",   no_argument,       &flag.header_only,      1 }
-        #define _H2 {"seq-only",      no_argument,       &flag.seq_only,         1 }
-        #define _H3 {"qual-only",     no_argument,       &flag.qual_only,        1 }
-        #define _aa {"allow-ambiguous", no_argument,     &flag.allow_ambiguous,  1 } 
-        #define _IU {"IUPAC",         required_argument, 0, 24                     }
-        #define _iu {"bases",         required_argument, 0, 24                     }
-        #define _GT {"GT-only",       no_argument,       &flag.gt_only,          1 }
-        #define _Gt {"gt-only",       no_argument,       &flag.gt_only,          1 }
-        #define _So {"snps-only",     no_argument,       &flag.snps_only,        1 }
-        #define _Io {"indels-only",   no_argument,       &flag.indels_only,      1 }
-        #define _ds {"downsample",    required_argument, 0, 9                      }
-        #define _PG {"no-PG",         no_argument,       &flag.no_pg,            1 }
-        #define _pg {"no-pg",         no_argument,       &flag.no_pg,            1 }
-        #define _fs {"sequential",    no_argument,       &flag.sequential,       1 }  
-        #define _rg {"register",      optional_argument, 0, 28                     }
-        #define _sl {"show-lifts",    no_argument,       &flag.show_lift,        1 } 
-        #define _sL {"show-lines",    no_argument,       &flag.show_lines,       1 } 
-        #define _ss {"stats",         no_argument,       &flag.show_stats, STATS_SHORT      } 
-        #define _SS {"STATS",         no_argument,       &flag.show_stats, STATS_LONG       } 
-        #define _qs {"cstats",        no_argument,       &flag.show_stats, STATS_SHORT_COMP } 
-        #define _QS {"CSTATS",        no_argument,       &flag.show_stats, STATS_LONG_COMP  } 
-        #define _lc {"list-chroms",   no_argument,       &flag.list_chroms,      1 } // identical to --show-dict=CHROM 
-        #define _lh {"chroms",        no_argument,       &flag.list_chroms,      1 } // identical to --show-dict=CHROM 
-        #define _lH {"contigs",       no_argument,       &flag.list_chroms,      1 } 
-        #define _s2 {"show-b250",     optional_argument, 0, 2,                     }
-        #define _sd {"show-dict",     optional_argument, 0, 3                      }
-        #define _s7 {"dump-b250",     required_argument, 0, 5                      }
-        #define _S7 {"dump-local",    required_argument, 0, 6                      }
-        #define _S8 {"show-counts",   required_argument, 0, 16                     }
-        #define _S9 {"dump-section",  required_argument, 0, 7                      }        
-        #define _sa {"show-alleles",  no_argument,       &flag.show_alleles,     1 }
-        #define _st {"show-time",     optional_argument, 0, 1                      } 
-        #define _sm {"show-memory",   no_argument,       &flag.show_memory,      1 } 
-        #define _sS {"show-dvcf",     no_argument,       &flag.show_dvcf,        1 } 
-        #define _SC {"single-coord",  no_argument,       &flag.single_coord,     1 } 
-        #define _XS {"show-rename-tags", no_argument,    &flag.show_rename_tags, 1 } 
-        #define _sY {"show-ostatus",  no_argument,       &flag.show_ostatus,     1 } 
-        #define _sy {"show-ostatus-counts",  no_argument, 0, 131                   } 
-        #define _sh {"show-headers",  optional_argument, 0, 10                     } 
-        #define _si {"show-index",    no_argument,       &flag.show_index,       1 } 
-        #define _sG {"show-ranges",   no_argument,       &flag.show_ranges,      1 } 
-        #define _Si {"show-ref-index",no_argument,       &flag.show_ref_index,   1 } 
-        #define _Sh {"show-ref-hash" ,no_argument,       &flag.show_ref_hash,    1 } 
-        #define _sr {"show-gheader",  optional_argument, 0, 135                    }  
-        #define _sT {"show-threads",  no_argument,       &flag.show_threads,     1 }  
-        #define _wM {"show-wrong-MD", no_argument,       &flag.show_wrong_md,    1 }  
-        #define _wm {"show-wrong-XG", no_argument,       &flag.show_wrong_xg,    1 }  
-        #define _WM {"show-wrong-XM", no_argument,       &flag.show_wrong_xm,    1 }  
-        #define _sF {"show-flags",    no_argument,       &flag.show_flags,       1 }  
-        #define _su {"show-uncompress",no_argument,      &flag.show_uncompress,  1 }  
-        #define _sK {"show-kraken",   optional_argument, 0, 21                     }  
-        #define _sv {"show-vblocks",  no_argument,       &flag.show_vblocks,     1 }  
-        #define _sH {"show-chain",    no_argument,       &flag.show_chain,       1 }  
-        #define _sn {"show-filename", no_argument,       &flag.show_filename,    1 }  
-        #define _ov {"one-vb",        required_argument, 0, 8                      }  
-        #define _R1 {"R1",            no_argument,       &flag.one_component,    1 }  // comp_i+1
-        #define _R2 {"R2",            no_argument,       &flag.one_component,    2 }  
-        #define _sR {"show-reference",no_argument,       &flag.show_reference,   1 }  
-        #define _sC {"show-ref-contigs", no_argument,    &flag.show_ref_contigs, 1 }  
-        #define _sD {"show-ref-diff", no_argument,       &flag.show_ref_diff,    1 }  
-        #define _cC {"show-chain-contigs", no_argument,  &flag.show_chain_contigs,1}  
-        #define _rI {"show-ref-iupacs", no_argument,     &flag.show_ref_iupacs,  1 }  
-        #define _rA {"show-chrom2ref", no_argument,      &flag.show_chrom2ref,   1 }  
-        #define _rS {"show-ref-seq",  no_argument,       &flag.show_ref_seq,     1 }  
-        #define _cn {"show-containers", optional_argument, 0, 132                  }  
-        #define _dg {"debug-seg",     optional_argument, 0, 133                    }  
-        #define _hC {"show-txt-contigs", no_argument,    &flag.show_txt_contigs, 1 }
-        #define _sI {"show-is-set",   required_argument, 0, '~',                   }  
-        #define _sA {"show-aliases",  no_argument,       &flag.show_aliases,     1 }  
-        #define _sB {"show-sa",       optional_argument, 0, 136                    }  
-        #define _sP {"show-depn",     no_argument,       &flag.show_depn,        1 }  
-        #define _sc {"show-codec",    no_argument,       &flag.show_codec,       1 }  
-        #define _sb {"show-bgzf",     no_argument,       &flag.show_bgzf,        1 }
-        #define _s5 {"show-digest",   no_argument,       &flag.show_digest,      1 }
-        #define _S5 {"log-digest",    no_argument,       &flag.log_digest,       1 }
-        #define _s6 {"show-plan",     no_argument,       &flag.show_recon_plan,  1 }
-        #define _sM {"show-mutex",    optional_argument, 0, 4                      }
-        #define _dS {"seg-only",      no_argument,       &flag.seg_only,         1 }  
-        #define _bS {"show-bam",      no_argument,       &flag.show_bam,         1 }  
-        #define _xt {"xthreads",      no_argument,       &flag.xthreads,         1 }  
-        #define _dm {"debug-memory",  optional_argument, 0, 12                     }  
-        #define _dp {"debug-progress",no_argument,       &flag.debug_progress,   1 }  
-        #define _dL {"debug-LONG",    no_argument,       &flag.debug_LONG,       1 }  
-        #define _dq {"debug-qname",   no_argument,       &flag.debug_qname,      1 }  
-        #define _dt {"debug-threads", no_argument,       &flag.debug_threads,    1 }  
-        #define _dw {"debug-stats",   no_argument,       &flag.debug_stats,      1 }  
-        #define _dM {"debug-generate",no_argument,       &flag.debug_generate  , 1 }  
-        #define _dr {"debug-recon-size",no_argument,     &flag.debug_recon_size, 1 }  
-        #define _dR {"debug-read-ctxs",no_argument,      &flag.debug_read_ctxs,  1 }  
-        #define _dP {"debug-sa",      no_argument,       &flag.debug_sa,         1 }  
-        #define _dG {"debug-gencomp", no_argument,       &flag.debug_gencomp,    1 }  
-        #define _dl {"debug-lines",   no_argument,       &flag.debug_lines,      1 }  
-        #define _dc {"verify-codec",  no_argument,       &flag.verify_codec,     1 }          
-        #define _oe {"echo",          no_argument,       &flag.echo,             1 }
-        #define _dh {"show-hash",     no_argument,       &flag.show_hash,        1 }  
-        #define _sx {"sex",           no_argument,       &flag.show_sex,         1 }  
-        #define _ct {"count",         optional_argument, 0, 20                     }  
-        #define _SX {"coverage",      optional_argument, 0, 13                     }  
-        #define _ix {"idxstats",      no_argument,       &flag.idxstats,         1 }
-        #define _vl {"validate",      optional_argument, 0, 19                     }  
-        #define _lg {"log",           required_argument, 0, 15                     }  
-        #define _Xr {"dvcf-rename",   required_argument, 0, 128,                   }
-        #define _Xd {"dvcf-drop",     required_argument, 0, 129,                   }
-        #define _bi {"biopsy",        required_argument, 0, 134,                   }
-        #define _bl {"biopsy-line",   required_argument, 0, 137,                   }
+        #define _i  {"input",            required_argument, 0, 'i'                    }
+        #define _I  {"stdin-size",       required_argument, 0, 'I'                    }
+        #define _d  {"decompress",       no_argument,       &command, PIZ             }
+        #define _f  {"force",            no_argument,       &flag.force,            1 }
+        #define _h  {"help",             optional_argument, 0, 'h'                    }
+        #define _l  {"list",             no_argument,       &flag.list,             1 }
+        #define _L1 {"license",          optional_argument, 0, 'L'                    } // US spelling
+        #define _L2 {"licence",          optional_argument, 0, 'L'                    } // British spelling
+        #define _Lf {"licfile",          required_argument, 0, 26                     }
+        #define _q  {"quiet",            no_argument,       &flag.quiet,            1 }
+        #define _Q  {"noisy",            no_argument,       &option_noisy,          1 }
+        #define _so {"sort",             no_argument,       &flag.sort,             1 }
+        #define _SO {"unsorted",         no_argument,       &flag.unsorted,         1 }
+        #define _DL {"replace",          no_argument,       &flag.replace,          1 }
+        #define _V  {"version",          no_argument,       &command, VERSION         }
+        #define _z  {"bgzf",             required_argument, 0, 'z'                    }
+        #define _zb {"bam",              no_argument,       &flag.out_dt,      DT_BAM }
+        #define _zB {"BAM",              no_argument,       &flag.out_dt,      DT_BAM }
+        #define _zs {"sam",              no_argument,       &flag.out_dt,      DT_SAM }
+        #define _zS {"SAM",              no_argument,       &flag.out_dt,      DT_SAM }
+        #define _zq {"fastq",            optional_argument, 0, 130                    }
+        #define _zQ {"FASTQ",            optional_argument, 0, 130                    }
+        #define _zf {"fq",               optional_argument, 0, 130                    }
+        #define _zF {"FQ",               optional_argument, 0, 130                    }
+        #define _za {"fasta",            no_argument,       &flag.out_dt,    DT_FASTA }
+        #define _zA {"FASTA",            no_argument,       &flag.out_dt,    DT_FASTA }
+        #define _zc {"bcf",              no_argument,       &flag.out_dt,      DT_BCF }
+        #define _zC {"BCF",              no_argument,       &flag.out_dt,      DT_BCF }
+        #define _zv {"vcf",              no_argument,       &flag.out_dt,      DT_VCF }
+        #define _zV {"VCF",              no_argument,       &flag.out_dt,      DT_VCF }
+        #define _zy {"phylip",           no_argument,       &flag.out_dt,   DT_PHYLIP }
+        #define _zY {"Phylip",           no_argument,       &flag.out_dt,   DT_PHYLIP }
+        #define _m  {"md5",              no_argument,       &flag.md5,              1 }
+        #define _t  {"test",             no_argument,       &flag.test,             1 }
+        #define _fa {"fast",             no_argument,       &flag.fast,             1 }
+        #define _bs {"best",             optional_argument, 0, 'b'                    }
+        #define _9  {"optimize",         no_argument,       &flag.optimize,         1 } // US spelling
+        #define _99 {"optimise",         no_argument,       &flag.optimize,         1 } // British spelling
+        #define _9s {"optimize-sort",    no_argument,       &flag.optimize_sort,    1 }
+        #define _9P {"optimize-phred",   no_argument,       &flag.optimize_phred,   1 }
+        #define _9G {"GL-to-PL",         no_argument,       &flag.GL_to_PL,         1 }
+        #define _9g {"GP-to-PP",         no_argument,       &flag.GP_to_PP,         1 }
+        #define _9V {"optimize-VQSLOD",  no_argument,       &flag.optimize_VQSLOD,  1 }
+        #define _9Q {"optimize-QUAL",    no_argument,       &flag.optimize_QUAL,    1 } 
+        #define _9f {"optimize-Vf",      no_argument,       &flag.optimize_Vf,      1 }
+        #define _9Z {"optimize-ZM",      no_argument,       &flag.optimize_ZM,      1 }
+        #define _9D {"optimize-DESC",    no_argument,       &flag.optimize_DESC,    1 }
+        #define _al {"add-line-numbers", no_argument,       &flag.add_line_numbers, 1 }
+        #define _pe {"pair",             no_argument,       &flag.pair,   PAIR_READ_1 } 
+        #define _pt {"dts_paired",       no_argument,       &flag.undocumented_dts_paired, 1 }  // undocumented flag to uncompress paired files older than 9.0.13 when genozip_header.dts_paired was introduced. A user will get an error message instructing her to use it.
+        #define _th {"threads",          required_argument, 0, '@'                    }
+        #define _u  {"prefix",           required_argument, 0, 'u'                    }
+        #define _o  {"output",           required_argument, 0, 'o'                    }
+        #define _T  {"files-from",       required_argument, 0, 'T'                    }
+        #define _TT {"tar",              required_argument, 0, 27                     }
+        #define _p  {"password",         required_argument, 0, 'p'                    }
+        #define _B  {"vblock",           required_argument, 0, 'B'                    }
+        #define _r  {"regions",          required_argument, 0, 'r'                    }
+        #define _R  {"regions-file",     required_argument, 0, 'R'                    }
+        #define _Rg {"gpos",             no_argument,       &flag.gpos,             1 }
+        #define _s  {"samples",          required_argument, 0, 's'                    }
+        #define _sf {"FLAG",             required_argument, 0, 17                     }
+        #define _sq {"MAPQ",             required_argument, 0, 18                     }
+        #define _il {"interleaved",      optional_argument, 0, 29                     } // both --interleave and --interleaved will be accepted
+        #define _e  {"reference",        required_argument, 0, 'e'                    }
+        #define _E  {"REFERENCE",        required_argument, 0, 'E'                    }
+        #define _lo {"luft",             no_argument,       &flag.luft,             1 }
+        #define _ch {"chain",            required_argument, 0, 'C'                    }
+        #define _kr {"kraken",           required_argument, 0, 'K'                    }
+        #define _kR {"taxid",            required_argument, 0, 'k'                    }
+        #define _b  {"bytes",            no_argument,       &flag.bytes,            1 }
+        #define _me {"make-reference",   no_argument,       &flag.make_reference,   1 }
+        #define _mf {"multiseq",         no_argument,       &flag.multiseq,         1 }
+        #define _mF {"multi-seq",        no_argument,       &flag.multiseq,         1 }
+        #define _x  {"index",            no_argument,       &flag.index_txt,        1 }
+        #define _D  {"subdirs"  ,        no_argument,       &flag.subdirs,          1 }
+        #define _g  {"grep",             required_argument, 0, 25                     }
+        #define _gw {"grep-w",           required_argument, 0, 'g'                    }
+        #define _n  {"lines",            required_argument, 0, 'n'                    }
+        #define _nh {"head",             optional_argument, 0, 22                     }
+        #define _nt {"tail",             optional_argument, 0, 23                     }
+        #define _G  {"drop-genotypes",   no_argument,       &flag.drop_genotypes,   1 }
+        #define _H1 {"no-header",        no_argument,       &flag.no_header,        1 }
+        #define _1  {"header-one",       no_argument,       &flag.header_one,       1 }
+        #define _H0 {"header-only",      no_argument,       &flag.header_only,      1 }
+        #define _H2 {"seq-only",         no_argument,       &flag.seq_only,         1 }
+        #define _H3 {"qual-only",        no_argument,       &flag.qual_only,        1 }
+        #define _aa {"allow-ambiguous",  no_argument,       &flag.allow_ambiguous,  1 } 
+        #define _IU {"IUPAC",            required_argument, 0, 24                     }
+        #define _iu {"bases",            required_argument, 0, 24                     }
+        #define _GT {"GT-only",          no_argument,       &flag.gt_only,          1 }
+        #define _Gt {"gt-only",          no_argument,       &flag.gt_only,          1 }
+        #define _So {"snps-only",        no_argument,       &flag.snps_only,        1 }
+        #define _Io {"indels-only",      no_argument,       &flag.indels_only,      1 }
+        #define _ds {"downsample",       required_argument, 0, 9                      }
+        #define _PG {"no-PG",            no_argument,       &flag.no_pg,            1 }
+        #define _pg {"no-pg",            no_argument,       &flag.no_pg,            1 }
+        #define _fs {"sequential",       no_argument,       &flag.sequential,       1 }  
+        #define _rg {"register",         optional_argument, 0, 28                     }
+        #define _sl {"show-lifts",       no_argument,       &flag.show_lift,        1 } 
+        #define _sL {"show-lines",       no_argument,       &flag.show_lines,       1 } 
+        #define _ss {"stats",            optional_argument, 0, 138,                   } 
+        #define _SS {"STATS",            optional_argument, 0, 139                    } 
+        #define _lc {"list-chroms",      no_argument,       &flag.list_chroms,      1 } // identical to --show-dict=CHROM 
+        #define _lh {"chroms",           no_argument,       &flag.list_chroms,      1 } // identical to --show-dict=CHROM 
+        #define _lH {"contigs",          no_argument,       &flag.list_chroms,      1 } 
+        #define _s2 {"show-b250",        optional_argument, 0, 2,                     }
+        #define _sd {"show-dict",        optional_argument, 0, 3                      }
+        #define _s7 {"dump-b250",        required_argument, 0, 5                      }
+        #define _S7 {"dump-local",       required_argument, 0, 6                      }
+        #define _S8 {"show-counts",      required_argument, 0, 16                     }
+        #define _S9 {"dump-section",     required_argument, 0, 7                      }        
+        #define _sa {"show-alleles",     no_argument,       &flag.show_alleles,     1 }
+        #define _st {"show-time",        optional_argument, 0, 1                      } 
+        #define _sm {"show-memory",      no_argument,       &flag.show_memory,      1 } 
+        #define _sS {"show-dvcf",        no_argument,       &flag.show_dvcf,        1 } 
+        #define _SC {"single-coord",     no_argument,       &flag.single_coord,     1 } 
+        #define _XS {"show-rename-tags", no_argument,       &flag.show_rename_tags, 1 } 
+        #define _sY {"show-ostatus",     no_argument,       &flag.show_ostatus,     1 } 
+        #define _sy {"show-ostatus-counts", no_argument,    0, 131                    } 
+        #define _sh {"show-headers",     optional_argument, 0, 10                     } 
+        #define _si {"show-index",       no_argument,       &flag.show_index,       1 } 
+        #define _sG {"show-ranges",      no_argument,       &flag.show_ranges,      1 } 
+        #define _Si {"show-ref-index",   no_argument,       &flag.show_ref_index,   1 } 
+        #define _Sh {"show-ref-hash" ,   no_argument,       &flag.show_ref_hash,    1 } 
+        #define _sr {"show-gheader",     optional_argument, 0, 135                    }  
+        #define _sT {"show-threads",     no_argument,       &flag.show_threads,     1 }  
+        #define _wM {"show-wrong-MD",    no_argument,       &flag.show_wrong_md,    1 }  
+        #define _wm {"show-wrong-XG",    no_argument,       &flag.show_wrong_xg,    1 }  
+        #define _WM {"show-wrong-XM",    no_argument,       &flag.show_wrong_xm,    1 }  
+        #define _sF {"show-flags",       no_argument,       &flag.show_flags,       1 }  
+        #define _su {"show-uncompress",  no_argument,       &flag.show_uncompress,  1 }  
+        #define _sK {"show-kraken",      optional_argument, 0, 21                     }  
+        #define _sv {"show-vblocks",     no_argument,       &flag.show_vblocks,     1 }  
+        #define _sH {"show-chain",       no_argument,       &flag.show_chain,       1 }  
+        #define _sn {"show-filename",    no_argument,       &flag.show_filename,    1 }  
+        #define _ov {"one-vb",           required_argument, 0, 8                      }  
+        #define _R1 {"R1",               no_argument,       &flag.one_component,    1 }  // comp_i+1
+        #define _R2 {"R2",               no_argument,       &flag.one_component,    2 }  
+        #define _sR {"show-reference",   no_argument,       &flag.show_reference,   1 }  
+        #define _sC {"show-ref-contigs", no_argument,       &flag.show_ref_contigs, 1 }  
+        #define _sD {"show-ref-diff",    no_argument,       &flag.show_ref_diff,    1 }  
+        #define _cC {"show-chain-contigs", no_argument,     &flag.show_chain_contigs,1}  
+        #define _rI {"show-ref-iupacs",  no_argument,       &flag.show_ref_iupacs,  1 }  
+        #define _rA {"show-chrom2ref",   no_argument,       &flag.show_chrom2ref,   1 }  
+        #define _rS {"show-ref-seq",     no_argument,       &flag.show_ref_seq,     1 }  
+        #define _cn {"show-containers",  optional_argument, 0, 132                    }  
+        #define _dg {"debug-seg",        optional_argument, 0, 133                    }  
+        #define _hC {"show-txt-contigs", no_argument,       &flag.show_txt_contigs, 1 }
+        #define _sI {"show-is-set",      required_argument, 0, '~',                   }  
+        #define _sA {"show-aliases",     no_argument,       &flag.show_aliases,     1 }  
+        #define _sB {"show-sa",          optional_argument, 0, 136                    }  
+        #define _sP {"show-depn",        no_argument,       &flag.show_depn,        1 }  
+        #define _sc {"show-codec",       no_argument,       &flag.show_codec,       1 }  
+        #define _AL {"show-aligner",     no_argument,       &flag.show_aligner,     1 }  
+        #define _sb {"show-bgzf",        no_argument,       &flag.show_bgzf,        1 }
+        #define _s5 {"show-digest",      no_argument,       &flag.show_digest,      1 }
+        #define _S5 {"log-digest",       no_argument,       &flag.log_digest,       1 }
+        #define _s6 {"show-plan",        no_argument,       &flag.show_recon_plan,  1 }
+        #define _sM {"show-mutex",       optional_argument, 0, 4                      }
+        #define _dS {"seg-only",         no_argument,       &flag.seg_only,         1 }  
+        #define _bS {"show-bam",         no_argument,       &flag.show_bam,         1 }  
+        #define _xt {"xthreads",         no_argument,       &flag.xthreads,         1 }  
+        #define _dm {"debug-memory",     optional_argument, 0, 12                     }  
+        #define _dp {"debug-progress",   no_argument,       &flag.debug_progress,   1 }  
+        #define _dL {"debug-LONG",       no_argument,       &flag.debug_LONG,       1 }  
+        #define _dD {"show-qual",        no_argument,       &flag.show_qual,        1 }  
+        #define _dq {"debug-qname",      no_argument,       &flag.debug_qname,      1 }  
+        #define _dt {"debug-threads",    no_argument,       &flag.debug_threads,    1 }  
+        #define _dw {"debug-stats",      no_argument,       &flag.debug_stats,      1 }  
+        #define _dM {"debug-generate",   no_argument,       &flag.debug_generate  , 1 }  
+        #define _dr {"debug-recon-size", no_argument,       &flag.debug_recon_size, 1 }  
+        #define _dR {"debug-read-ctxs",  no_argument,       &flag.debug_read_ctxs,  1 }  
+        #define _dP {"debug-sa",         no_argument,       &flag.debug_sa,         1 }  
+        #define _dG {"debug-gencomp",    no_argument,       &flag.debug_gencomp,    1 }  
+        #define _dN {"no-gencomp",       no_argument,       &flag.no_gencomp,       1 }  
+        #define _dQ {"no-domqual",       no_argument,       &flag.no_domqual,       1 }  
+        #define _dl {"debug-lines",      no_argument,       &flag.debug_lines,      1 }  
+        #define _dc {"verify-codec",     no_argument,       &flag.verify_codec,     1 }          
+        #define _oe {"echo",             no_argument,       &flag.echo,             1 }
+        #define _dh {"show-hash",        no_argument,       &flag.show_hash,        1 }  
+        #define _sx {"sex",              no_argument,       &flag.show_sex,         1 }  
+        #define _ct {"count",            optional_argument, 0, 20                     }  
+        #define _SX {"coverage",         optional_argument, 0, 13                     }  
+        #define _ix {"idxstats",         no_argument,       &flag.idxstats,         1 }
+        #define _vl {"validate",         optional_argument, 0, 19                     }  
+        #define _lg {"log",              required_argument, 0, 15                     }  
+        #define _Xr {"dvcf-rename",      required_argument, 0, 128,                   }
+        #define _Xd {"dvcf-drop",        required_argument, 0, 129,                   }
+        #define _bi {"biopsy",           required_argument, 0, 134,                   }
+        #define _bl {"biopsy-line",      required_argument, 0, 137,                   }
         #define _MR {"match-chrom-to-reference", no_argument, &flag.match_chrom_to_reference, 1 }
-        #define _00 {0, 0, 0, 0                                                    }
+        #define _00 {0, 0, 0, 0                                                       }
 
         typedef const struct option Option;
-        static Option genozip_lo[]    = { _lg, _i, _I, _d, _f, _h,     _D,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th,     _o, _p, _e, _E, _ch,                                                                                                _sl, _sL, _ss, _SS,      _qs, _QS, _sd, _sT, _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn,               _B, _xt, _dm, _dp, _dL, _dq, _dt, _dw, _dM, _dr, _dR, _dP, _dG, _dl, _dc, _dg,                _sy,    _dh,_dS, _bS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe,      _fa, _bs,                              _nh, _rg, _sR,      _sC,           _hC, _rA, _rI, _rS, _me, _mf, _mF,     _s5, _S5, _sM, _sA, _sB, _sP, _sc, _sI, _cn,                                    _so, _SO, _s6, _kr,         _oe, _aa, _al, _Lf, _T, _TT, _Xr, _Xd, _XS, _MR, _wM, _wm, _WM, _bi, _bl, _00 };
-        static Option genounzip_lo[]  = { _lg,         _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                                                                                                   _ss, _SS, _sG,           _sd, _sT, _sF,      _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn,                   _xt, _dm, _dp, _dL,      _dt,                _dR,                _dc,                     _sy,                                                                             _pt,                                                  _sR,      _sC,           _hC, _rA,      _rS,                    _s5, _S5, _sM, _sA, _sB,           _sI, _cn, _pg, _PG, _sx, _SX, _ix,                     _s6,              _oe,                _T,                                                   _00 };
-        static Option genocat_lo[]    = { _lg,         _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q,          _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p,              _lo, _il, _r, _R, _Rg, _s, _sf, _sq, _G, _1, _H0, _H1, _H2, _H3, _Gt, _So, _Io, _IU, _iu, _GT,           _ss, _SS, _sG,           _sd, _sT, _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sH, _sn, _ov, _R1, _R2,    _xt, _dm, _dp, _dL,      _dt,                _dR,                _dc, _ds, _sS, _SC, _sY, _sy,                                                                             _pt,                 _fs, _g, _gw, _n, _nt, _nh,      _sR,      _sC, _sD, _cC, _hC, _rA, _rI, _rS,                    _s5, _S5, _sM, _sA, _sB,           _sI, _cn, _pg, _PG, _sx, _SX, _ix, _ct, _vl,      _SO, _s6, _kr, _kR,    _oe,      _al,      _T,                                                   _00 };
-        static Option genols_lo[]     = { _lg,             _f, _h,        _l, _L1, _L2, _q,              _V,                                                                                                      _p, _e,                                                                                                                                                      _sF,                                                        _st, _sm,                                                                     _dm,      _dL,      _dt,                                                                                                                                                                                                                                                                    _S5, _sM,                                                                                               _b, _oe,                _T,                                                   _00 };
+        static Option genozip_lo[]    = { _lg, _i, _I, _d, _f, _h,     _D,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th,     _o, _p, _e, _E, _ch,                                                                                                _sl, _sL, _ss, _SS,      _sd, _sT,  _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn,               _B, _xt, _dm, _dp, _dL, _dD, _dq, _dt, _dw, _dM, _dr, _dR, _dP, _dG, _dN, _dQ, _dl, _dc, _dg,                _sy,    _dh,_dS, _bS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe,      _fa, _bs,                              _nh, _rg, _sR,      _sC,           _hC, _rA, _rI, _rS, _me, _mf, _mF,     _s5, _S5, _sM, _sA, _sB, _sP, _sc, _AL, _sI, _cn,                                    _so, _SO, _s6, _kr,         _oe, _aa, _al, _Lf, _T, _TT, _Xr, _Xd, _XS, _MR, _wM, _wm, _WM, _bi, _bl, _00 };
+        static Option genounzip_lo[]  = { _lg,         _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q, _t, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                                                                                                   _ss, _SS, _sG, _sd, _sT,  _sF,      _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn, _ov,              _xt, _dm, _dp,      _dD,      _dt,                _dR,                          _dc,                     _sy,                                                                             _pt,                                                  _sR,      _sC,           _hC, _rA,      _rS,                    _s5, _S5, _sM, _sA, _sB,           _AL, _sI, _cn, _pg, _PG, _sx, _SX, _ix,                     _s6,              _oe,                _T,                                                   _00 };
+        static Option genocat_lo[]    = { _lg,         _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q,          _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p, _e,           _lo, _il, _r, _R, _Rg, _s, _sf, _sq, _G, _1, _H0, _H1, _H2, _H3, _Gt, _So, _Io, _IU, _iu, _GT,          _ss, _SS, _sG, _sd, _sT,  _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sH, _sn, _ov, _R1, _R2,    _xt, _dm, _dp,      _dD,      _dt,                _dR,                          _dc, _ds, _sS, _SC, _sY, _sy,                                                                             _pt,                 _fs, _g, _gw, _n, _nt, _nh,      _sR,      _sC, _sD, _cC, _hC, _rA, _rI, _rS,                    _s5, _S5, _sM, _sA, _sB,           _AL, _sI, _cn, _pg, _PG, _sx, _SX, _ix, _ct, _vl,      _SO, _s6, _kr, _kR,    _oe,      _al,      _T,                                                   _00 };
+        static Option genols_lo[]     = { _lg,             _f, _h,        _l, _L1, _L2, _q,              _V,                                                                                                      _p,                                                                                                                                                 _sF,                                                        _st, _sm,                                                                     _dm,                     _dt,                                                                                                                                                                                                                                                                              _S5, _sM,                                                                                               _b, _oe,                _T,                                                   _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
         static rom short_options[NUM_EXE_TYPES] = { // same order as ExeType
-            "z:i:I:cdfhLqQt^Vzm@:o:p:B:9wWFe:E:C:2K:T:Db",  // genozip (note: includes some genounzip options to be used in combination with -d)
-            "cz:fhLqdQt^V@:u:o:p:me:wWxT:D",                // genounzip
-            "hLVp:qfblT:",                                 // genols
+            "z:i:I:cdfhLqQt^Vzm@:o:p:B:9wWFe:E:C:2K:T:Db",   // genozip (note: includes some genounzip options to be used in combination with -d)
+            "cz:fhLqdQt^V@:u:o:p:me:wWxT:D",                 // genounzip
+            "hLVp:qfblT:",                                   // genols
             "z:hLV@:dp:qQ1r:R:s:H1Go:fg:e:E:wWxvk:K:n:yT:D"  // genocat
         };
 
@@ -702,7 +716,7 @@ verify_command:
             case 6   : flag.dump_one_local_dict_id = dict_id_make (optarg, strlen (optarg), DTYPE_PLAIN); break;
             case 7   : flag.dump_section  = optarg  ; break;
             case 8   : ASSINP0 (str_get_int_range32 (optarg, 0, 1, 10000000, (int32_t*)&flag.one_vb), 
-                                "--one-vb expects a VB number, the first VB being 1"); break;
+                                "--one-vb expects a 1-based VBlock number"); break;
             case 9   : flags_set_downsample (optarg); break;
             case 10  : flag.show_headers = 1 + sections_st_by_name (optarg); break; // +1 so SEC_NONE maps to 0
             case 12  : flag.debug_memory  = optarg ? atoi (optarg) : 1; break;
@@ -738,6 +752,8 @@ verify_command:
             case 135 : flag.show_gheader = optarg ? atoi(optarg) : 1; break; // =1 show gheader as in file, =2 show shows section list after possible modiciation by writer_create_plan 
             case 136 : flag.show_sa = optarg ? atoi(optarg)+1 : -1; break;   //-1=show all, >=1 - show grp_i=show_sa-1 
             case 137 : flag_set_biopsy_line (optarg); break;
+            case 138 : flag_set_stats (STATS_SHORT, optarg); break;
+            case 139 : flag_set_stats (STATS_LONG,  optarg); break;
             case 0   : break; // a long option that doesn't have short version will land here - already handled so nothing to do
                  
             default  : // unrecognized option 
@@ -832,7 +848,7 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
     CONFLICT (flag.reference,   flag.make_reference, "--make-reference",   OT("reference", "e"));
     CONFLICT (flag.dump_one_b250_dict_id.num, flag.dump_one_local_dict_id.num, "--dump-one-b250", "--dump-one-local");
     CONFLICT (flag.show_stats,  flag.grep,           OT("stats", "w"),     OT("grep", "g"));
-    CONFLICT (flag.show_stats,  flag.lines_first>=0, OT("stats", "w"),     OT("lines", "n"));
+    CONFLICT (flag.show_stats,  flag.lines_first != NO_LINE, OT("stats", "w"),     OT("lines", "n"));
     CONFLICT (flag.show_stats,  flag.downsample,     OT("stats", "w"),     "--downsample");
     CONFLICT (flag.show_stats,  flag.header_only,    OT("stats", "w"),     "--header-only");
     CONFLICT (flag.show_stats,  flag.MAPQ,           OT("stats", "w"),     "--MAPQ");
@@ -846,6 +862,7 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
     CONFLICT (flag.show_stats,  flag.regions,        OT("stats", "w"),     OT("regions", "r"));
     CONFLICT (flag.show_stats,  flag.samples,        OT("stats", "w"),     OT("samples", "s"));
     CONFLICT (flag.biopsy,      flag.out_filename,   "--biopsy",           OT("output", "o"));
+    CONFLICT (flag.biopsy_line.line_i>=0, flag.out_filename, "--biopsy-line", OT("output", "o"));
     
     if (command == PIZ) {
         CONFLICT (flag.test, flag.out_filename,      OT("output", "o"),    OT("test", "t"));
@@ -881,6 +898,8 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
 
     ASSINP0 (flag.reading_chain || !flag.dvcf_rename, "--dvcf-rename can only be used in combination with --chain. See: " WEBSITE_DVCF);
     ASSINP0 (flag.reading_chain || !flag.dvcf_drop, "--dvcf-drop can only be used in combination with --chain. See: " WEBSITE_DVCF);
+
+    ASSINP0 (exe_type!=EXE_GENOUNZIP || !flag.one_vb || flag.test, "--one-vb can only be used with: (1) genocat, or (2) genounzip --test");
 }
 
 // ZIP: --pair: verify an even number of fastq files, --output, and --reference/--REFERENCE
@@ -915,6 +934,13 @@ static unsigned flags_get_longest_filename (unsigned num_files, rom *filenames)
 // called from main() after flags are assigned, and before analyzing input files
 void flags_update (unsigned num_files, rom *filenames)
 {
+    if (flag.biopsy || flag.biopsy_line.line_i != NO_LINE) {
+        ASSERTW (!flag.test,         "FYI: the %s option is ignored when taking a biopsy", OT("test", "t"));
+        ASSERTW (!flag.out_filename, "FYI: the %s option is ignored when taking a biopsy", OT("output", "o"));
+        flag.test = false;
+        flag.out_filename = NULL;
+    }
+    
     flags_test_conflicts (num_files);
 
     flag.debug_top = flag.echo || getenv ("GENOZIP_TEST");
@@ -926,7 +952,8 @@ void flags_update (unsigned num_files, rom *filenames)
     if (flag.show_dict || flag.show_b250 || flag.show_headers || flag.show_threads || flag.show_bgzf || flag.show_mutex ||
         flag.dict_id_show_one_b250.num || flag.show_one_dict || flag.show_one_counts.num || flag.show_sa || flag.show_depn || 
         flag.show_reference || flag.show_digest || flag.list_chroms || flag.show_coverage == COV_ONE || flag.show_ranges ||
-        flag.show_alleles || flag.show_vblocks || flag.show_codec || flag.debug_gencomp || (flag.show_index && command==PIZ))
+        flag.show_alleles || flag.show_vblocks || flag.show_codec || flag.debug_gencomp || flag.show_qual || flag.show_aligner ||
+        (flag.show_index && command==PIZ))
         flag.quiet=true; // don't show progress or warnings
 
     // override these ^ if user chose to be --noisy
@@ -1026,7 +1053,8 @@ void flags_update_zip_one_file (void)
                       || (chain_is_loaded && dt == DT_VCF) // converting a standard VCF to a dual-coordinates VCF
                       || (flag.add_line_numbers && dt == DT_VCF)
                       || (kraken_is_loaded && (dt == DT_SAM || dt == DT_BAM)) // adding a tx:i optional field
-                      || flag.lines_last >= 0; // --head advanced option to compress only a few lines
+                      || flag.lines_last != NO_LINE  // --head advanced option to compress only a few lines
+                      || flag.biopsy_line.line_i != NO_LINE;
 
     if (chain_is_loaded && dt == DT_VCF && !flag.show_one_counts.num && !flag.quiet)
         flag.show_one_counts = dict_id_typeless ((DictId)_VCF_oSTATUS);
@@ -1040,6 +1068,10 @@ void flags_update_zip_one_file (void)
               : (dt == DT_SAM || dt == DT_BAM)    ? BIND_SAM
               : (dt == DT_VCF && chain_is_loaded) ? BIND_DVCF
               :                                     BIND_NONE;
+
+    // if biopsy, we seg only for speed. current limitation: in paired files we do the whole thing. TO DO: fix this.
+    if (flag.biopsy_line.line_i != NO_LINE && flag.pair != BIND_FQ_PAIR)
+        flag.seg_only = true;
 
     //--------------------------------
     // Data-type specific conditions
@@ -1165,6 +1197,9 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
         flag.luft = 0;
     }
 
+    // check validity of --one-vb
+    ASSINP (flag.one_vb <= z_file->num_vbs, "%s: --one-vb=%u but file has only %u VBlocks", z_name, flag.one_vb, z_file->num_vbs);
+
     // Check if the reconstructed data type is the same as the source data type
     bool is_binary = z_file->z_flags.txt_is_bin;
     flag.reconstruct_as_src = (flag.out_dt == DT_SAM && dt==DT_SAM && !is_binary) || 
@@ -1232,13 +1267,13 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
         flag.no_header = 2; // 2 = assigned here and not from command line
 
     flag.maybe_txt_header_modified = exe_type == EXE_GENOCAT && 
-        (flag.no_header || flag.lines_first >= 0 || // options that may cause dropping of the txt header
+        (flag.no_header || flag.lines_first != NO_LINE || // options that may cause dropping of the txt header
          flag.luft ||                               // --luft modifies the txt header
          (dt == DT_VCF && (flag.header_one || flag.samples || flag.drop_genotypes)) || // VCF specific options that modify the txt header
          (z_file->num_components > (1 + z_is_dvcf))); // txtheaders are dropped if concatenating
 
     flag.maybe_vb_dropped_by_writer = exe_type == EXE_GENOCAT && // dropped by piz_dispatch_one_vb
-        (flag.lines_first >= 0 || // decided by writer_create_plan
+        (flag.lines_first != NO_LINE || // decided by writer_create_plan
          flag.tail             || // decided by writer_create_plan
          flag.downsample       || // decided by writer_create_plan
          flag.regions          || // decided by writer_create_plan
@@ -1264,10 +1299,7 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
          flag.collect_coverage || flag.count);
 
     flag.maybe_lines_dropped_by_writer = exe_type == EXE_GENOCAT && 
-         (flag.downsample || flag.lines_first >= 0 || flag.tail);
-
-    flag.maybe_lines_dropped = exe_type == EXE_GENOCAT &&
-         (flag.maybe_lines_dropped_by_reconstructor || flag.maybe_lines_dropped_by_writer);
+         (flag.downsample || flag.lines_first != NO_LINE || flag.tail);
 
     flag.maybe_vb_modified_by_reconstructor = exe_type == EXE_GENOCAT && 
          // translating to another data
@@ -1293,7 +1325,7 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
     flag.data_modified = flag.maybe_txt_header_modified             || 
                          flag.maybe_vb_dropped_after_read           ||
                          flag.maybe_vb_dropped_by_writer            ||
-                         flag.maybe_lines_dropped                   ||
+                         flag.maybe_lines_dropped_by_reconstructor  ||
                          flag.maybe_vb_modified_by_reconstructor    || 
                          flag.maybe_lines_out_of_order;
 
@@ -1427,7 +1459,7 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
             z_name, z_file->genozip_version);
 
     // num_lines in VbHeader populated since v12 (in v14 moved to SectionEnt)
-    ASSINP (z_file->genozip_version >= 12 || (flag.lines_first == -1 && !flag.tail && !flag.downsample),
+    ASSINP (z_file->genozip_version >= 12 || (flag.lines_first == NO_LINE && !flag.tail && !flag.downsample),
             "%s was created with genozip version %u, --head, --tail, --lines and --downsample are supported only for files created with genozip version 12 or later",
             z_name, z_file->genozip_version);
 

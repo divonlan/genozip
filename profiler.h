@@ -18,7 +18,7 @@ typedef struct {
         sam_seg_SEQ, compressor_domq, compressor_actg, bgzf_io_thread, bgzf_compute_thread, bgzf_writer_thread,
         piz_get_line_subfields, zip_generate_b250, zip_generate_local, zip_compress_ctxs, ctx_merge_in_vb_ctx,
         zfile_uncompress_section, codec_assign_best_codec, compressor_pbwt, compressor_longr, 
-        compressor_rans, compressor_arith,
+        compressor_rans, compressor_arith, compressor_normq,
         reconstruct_vb, buf_alloc, dispatcher_recycle_vbs, txtfile_read_header, txtfile_read_vblock,
         seg_all_data_lines, codec_hapmat_count_alt_alleles, seg_initialize,
         ctx_clone, qname_seg, sam_cigar_seg, sam_seg_XA_pos, sam_sa_prim_finalize_ingest, sam_zip_prim_ingest_vb,
