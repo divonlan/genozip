@@ -42,10 +42,10 @@ void vcf_samples_zip_initialize_PS_PID (void)
     container_prepare_snip ((ContainerP)&con_PS_pos_ref_alt, 0, 0, ps_pra_snip, &ps_pra_snip_len); 
 }
 
-void vcf_samples_seg_initialize_PS_PID (VBlockVCFP vb)
+// initialize VCF_LOOKBACK used by PS and PID
+void vcf_samples_seg_initialize_LOOKBACK (VBlockVCFP vb)
 {
     ContextP lookback_ctx = CTX(VCF_LOOKBACK);
-    if (lookback_ctx->local_param) return; // already initialized
 
     // note: we don't actually Seg anything into VCF_LOOKBACK as we get the lookback from the number of samples
     // this just carries the lb_size as an empty local section
@@ -54,24 +54,38 @@ void vcf_samples_seg_initialize_PS_PID (VBlockVCFP vb)
     lookback_ctx->local_param        = true;
     lookback_ctx->local.prm8[0]      = lookback_size_to_local_param (PS_PID_LOOKBACK_LINES * vcf_num_samples + 1); // 1+ number of lookback values
     lookback_ctx->local_always       = (lookback_ctx->local.prm8[0] != 0); // no need for a SEC_LOCAL section if the parameter is 0 (which is the default anyway)
- 
+    lookback_ctx->is_initialized     = true;
+
     CTX(VCF_SAMPLES)->flags.store = STORE_INDEX; // last_value is number of samples (=con.repeats)
 
     lookback_init (VB, lookback_ctx, CTX(FORMAT_PS),  STORE_INT); // lookback_ctx->local.param must be set before
     lookback_init (VB, lookback_ctx, CTX(FORMAT_PID), STORE_INT);
+}
 
+void vcf_samples_seg_initialize_PS_PID (VBlockVCFP vb, ContextP ctx, STRp(value))
+{
     // initialize all-the-same contexts for the REF and ALT container items of PS_POS_REF_ALT
-    if (segconf.has[FORMAT_PID] || segconf.has[FORMAT_PS]) {
-        ctx_create_node (VB, FORMAT_PSref, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPY_REForALT, '0' }), 3);
-        ctx_create_node (VB, FORMAT_PSalt, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPY_REForALT, '1' }), 3);
-        ctx_create_node (VB, FORMAT_PSpos, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPYPOS,       '0' }), 3);
+    ctx_create_node (VB, FORMAT_PSref, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPY_REForALT, '0' }), 3);
+    ctx_create_node (VB, FORMAT_PSalt, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPY_REForALT, '1' }), 3);
+    ctx_create_node (VB, FORMAT_PSpos, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPYPOS,       '0' }), 3);
+
+    // analyze PS or PID and determine its type
+    if (ctx->did_i == FORMAT_PS && str_is_int (STRa(value)))   // this format appears only for PS, not PID
+        ctx->ps_type = PS_POS;  // eg "73218731"
+    
+    else {
+        str_split (value, value_len, 3, '_', item, true);
+        if (n_items && str_is_int (STRi(item, 0))) 
+            ctx->ps_type = PS_POS_REF_ALT; // eg "18182014_G_A"
+        else
+            ctx->ps_type = PS_UNKNOWN;
     }
 }
 
 void vcf_samples_seg_finalize_PS_PID (VBlockVCFP vb)
 {
     // remove PSpos, PSref, PSalt if not needed
-    if (segconf.has[FORMAT_PID] || segconf.has[FORMAT_PS]) {
+    if (CTX(FORMAT_PID)->ps_type || CTX(FORMAT_PS)->ps_type) {
         if (!ctx_get_count (VB, CTX(FORMAT_PSpos), 0)) ctx_free_context(CTX(FORMAT_PSpos), FORMAT_PSpos);
         if (!ctx_get_count (VB, CTX(FORMAT_PSref), 0)) ctx_free_context(CTX(FORMAT_PSref), FORMAT_PSref);
         if (!ctx_get_count (VB, CTX(FORMAT_PSalt), 0)) ctx_free_context(CTX(FORMAT_PSalt), FORMAT_PSalt);
@@ -82,28 +96,6 @@ void vcf_samples_seg_finalize_PS_PID (VBlockVCFP vb)
         stats_set_consolidation (VB, FORMAT_PID, 4, VCF_LOOKBACK, FORMAT_PSref, FORMAT_PSalt, FORMAT_PSpos);
     else
         stats_set_consolidation (VB, FORMAT_PS, 4, VCF_LOOKBACK, FORMAT_PSref, FORMAT_PSalt, FORMAT_PSpos);
-}
-
-static inline void vcf_seg_FORMAT_PS_PID_segconf (VBlockVCFP vb, ContextP ctx, STRp(value), bool is_pid)
-{
-    // segging once (but may be more if first are '.') during segconf is enough - to create a context
-    if (segconf.running && !segconf.ps_pid_type[is_pid])
-        seg_by_ctx (VB, STRa(value), ctx, value_len); 
-
-    // analyze PS and determine its type
-    if (!segconf.ps_pid_type[is_pid] && *value != '.') {
-        if (!is_pid && str_is_int (STRa(value)))   // this format appears only for PS, not PID
-            segconf.ps_pid_type[is_pid] = PS_POS;  // eg "73218731"
-        else {
-            str_split (value, value_len, 3, '_', item, true);
-            if (n_items && str_is_int (STRi(item, 0))) 
-                segconf.ps_pid_type[is_pid] = PS_POS_REF_ALT; // eg "18182014_G_A"
-            else
-                segconf.ps_pid_type[is_pid] = PS_UNKNOWN;
-        }
-    }
-
-    segconf.has[is_pid ? FORMAT_PID : FORMAT_PS] = true;
 }
 
 static inline bool vcf_seg_FORMAT_PS_PID_is_same_alt1 (VBlockVCFP vb, STRp(alt))
@@ -141,31 +133,21 @@ static inline bool vcf_seg_FORMAT_PS_PID_ps_matches_pid (VBlockVCFP vb, STRp(ps)
 // <ID=PID,Number=1,Type=String,Description="Physical phasing ID information, where each unique ID within a given sample (but not across samples) connects records within a phasing group">
 // Encountered formats: 1. PID="18182014_G_A", PS="18182014" ; 2. PS="18182014_G_A", no PID
 // Value is the same as POS,REF,ALT of this line, or the same as PS/PID of this sample in one of the few previous lines
-void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STRp(value), bool is_pid)
+void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STRp(value))
 {
     int64_t ps_value;
     uint32_t lookback, lb_lines;    
     bool is_missing = (value_len==1 && *value=='.');
 
-    if (segconf.running) {
-        vcf_seg_FORMAT_PS_PID_segconf (vb, ctx, STRa(value), is_pid);
-        return;
-    }
-
-    // case first PS line appears after the lines segged by segconf - so we need to initialize
-    else if (!segconf.ps_pid_type[is_pid]) {
-        if (!is_missing) 
-            vcf_seg_FORMAT_PS_PID_segconf (vb, ctx, STRa(value), is_pid); // set global segconf parameter - no harm even if multiple threads will set concurrently as regardless of the winner, the value is legitimate
-        else 
-            segconf.has[is_pid ? FORMAT_PID : FORMAT_PS] = true;
-        vcf_samples_seg_initialize_PS_PID (vb);
-    }
+    // set ps_type if not already set
+    if (!ctx->ps_type && !is_missing) 
+        vcf_samples_seg_initialize_PS_PID (vb, ctx, STRa(value)); // set global segconf parameter - no harm even if multiple threads will set concurrently as regardless of the winner, the value is legitimate
 
     // case: '.' value - seg normally
     if (is_missing) goto fallback;
 
     // case: this is PS and we also have PID on this line - they are usually the same POS (so no need to lookback)
-    else if (!is_pid && segconf.ps_pid_type[1] == PS_POS_REF_ALT && 
+    else if (ctx->did_i == FORMAT_PS && CTX(FORMAT_PID)->ps_type == PS_POS_REF_ALT && 
              ctx_encountered (VB, FORMAT_PID) && vcf_seg_FORMAT_PS_PID_ps_matches_pid (vb, STRa(value)))
         seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_PS_BY_PID }), 2, ctx, value_len);
 
@@ -177,7 +159,7 @@ void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STR
     // case: not the same as previous line - seg according to ps_type
     else {
         // PS_POS (only applicable to PS, not PID): delta vs POS
-        if (segconf.ps_pid_type[is_pid] == PS_POS && vb->line_coords == DC_PRIMARY &&
+        if (ctx->ps_type == PS_POS && vb->line_coords == DC_PRIMARY &&
             str_get_int (STRa(value), &ps_value)) {
 
             SNIPi2 (SNIP_SPECIAL, VCF_SPECIAL_COPYPOS, ps_value - dl->pos[0]);
@@ -185,7 +167,7 @@ void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STR
         }
 
         // PS_POS_REF_ALT: copy POS, REF, ALT1 in a container
-        else if (segconf.ps_pid_type[is_pid] == PS_POS_REF_ALT && vb->line_coords == DC_PRIMARY) {
+        else if (ctx->ps_type == PS_POS_REF_ALT && vb->line_coords == DC_PRIMARY) {
             str_split (value, value_len, 3, '_', item, true);
 
             if (n_items && 
@@ -209,21 +191,21 @@ void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STR
             seg_by_ctx (VB, STRa(value), ctx, value_len); // segging once during segconf is enough - to create a context        
     }
 
-    lookback_insert_txt (VB, VCF_LOOKBACK, (is_pid ? FORMAT_PID : FORMAT_PS), STRa(value));
+    lookback_insert_txt (VB, VCF_LOOKBACK, ctx->did_i, STRa(value));
 
-    if (is_pid) seg_set_last_txt (VB, ctx, STRa(value));
+    seg_set_last_txt (VB, ctx, STRa(value));
 }
 
 // called if value is defined in FORMAT but missing at the end of the sample string
-void vcf_seg_FORMAT_PS_PID_missing_value (VBlockVCFP vb, ContextP ctx, bool is_pid, rom end_of_sample)
+void vcf_seg_FORMAT_PS_PID_missing_value (VBlockVCFP vb, ContextP ctx, rom end_of_sample)
 {
-    lookback_insert_txt (VB, VCF_LOOKBACK, (is_pid ? FORMAT_PID : FORMAT_PS), end_of_sample, 0); 
+    lookback_insert_txt (VB, VCF_LOOKBACK, ctx->did_i, end_of_sample, 0); 
 
     // special case: a missing PS which follows a PID='.' - we generate a SPECIAL which then uses 
     // ctx->value_is_missing to achieve the same effect as WORD_INDEX_MISSING, so that b250 is have near-all SNIP_SPECIAL.
     // note: we DONT generate a SPECIAL if PS is '.'
-    if (!is_pid && ctx_encountered (VB, FORMAT_PID) && 
-        (segconf.ps_pid_type[1] == PS_POS_REF_ALT || segconf.ps_pid_type[1] == PS_UNKNOWN) &&    
+    if (ctx->did_i == FORMAT_PS && ctx_encountered (VB, FORMAT_PID) && 
+        (CTX(FORMAT_PID)->ps_type == PS_POS_REF_ALT || CTX(FORMAT_PID)->ps_type == PS_UNKNOWN) &&    
         vb->last_txt_len(FORMAT_PID)==1 && *last_txt(VB, FORMAT_PID)=='.') {
 
         seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_PS_BY_PID }), 2, ctx, 0); 

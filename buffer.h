@@ -286,7 +286,7 @@ static inline unsigned buf_add_hex_as_text (BufferP buf, int64_t n, bool upperca
 
 #define BUFPRINTF_MAX_LEN 5000
 #define bufprintf(vb, buf, format, ...)  do { char __s[BUFPRINTF_MAX_LEN]; sprintf (__s, (format), __VA_ARGS__); buf_add_string ((VBlockP)(vb), (buf), __s); } while (0)
-#define bufprint0 buf_add_string 
+#define bufprint0 buf_add_string  // note: the string isn't a printf format, so escaping works differently (eg % doesn't need to be %%)
 
 extern void buf_print (BufferP buf, bool add_newline);
 

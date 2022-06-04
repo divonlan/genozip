@@ -920,7 +920,7 @@ static void seg_verify_file_size (VBlockP vb)
 
         ASSERT (vb_recon_size == recon_size, "Error while verifying reconstructed size - to get vblock:\n"
                 "%s %s | head -c %"PRIu64" | tail -c %u > vb.%u%s",
-                /* head/tail params:  */ codec_args[txt_file->codec].viewer, txt_name, vb->vb_position_txt_file + vb->txt_data.len, (uint32_t)vb->txt_data.len,
+                /* head/tail params:  */ codec_args[txt_file->codec].viewer, txt_name, vb->vb_position_txt_file + vb->txt_data.len, vb->txt_data.len32,
                 /* output filename:   */ vb->vblock_i, file_plain_ext_by_dt (vb->data_type));
     }
 }

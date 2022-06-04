@@ -444,7 +444,6 @@ typedef struct File {
     uint64_t lines_written_so_far;     // TXT_FILE PIZ: number of textual lines (excluding the header) that passed all filters except downsampling, and is to be written to txt_file, or downsampled-out
     
     // Z_FILE 
-    Buffer stats_buf, STATS_buf;       // Stats data: Strings to be outputted in case of --stats or --STATS (generated during ZIP, stored in SEC_STATS)
     Buffer bound_txt_names;            // ZIP: Stats data: a concatenation of all bound txt_names that contributed to this genozip file
     
     // Information content stats - how many bytes and how many sections does this file have in each section type

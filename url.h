@@ -20,4 +20,13 @@ extern int32_t url_read_string (rom url, char *data, uint32_t data_size);
 
 extern void url_kill_curl (void);
 
-extern char *url_esc_non_valid_chars (rom in);
+extern char *url_esc_non_valid_chars_(rom in, char *out);
+static inline char *url_esc_non_valid_chars (rom in) { return url_esc_non_valid_chars_ (in, NULL); } // on heap
+
+typedef struct { char s[256]; } UrlStr;
+static inline UrlStr url_esc_non_valid_charsS (rom in) // for short strings - on stack
+{
+    UrlStr out;
+    url_esc_non_valid_chars_(in, out.s);
+    return out;
+}

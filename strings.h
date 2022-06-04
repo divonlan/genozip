@@ -148,6 +148,7 @@ extern uint32_t str_hex_ex (int64_t n, char *str /* out */, bool uppercase, bool
 static inline uint32_t str_hex (int64_t n, char *str /* out */, bool uppercase) { return str_hex_ex (n, str, uppercase, true); }
 
 extern bool str_get_int (STRp(str), int64_t *value); 
+extern bool str_get_uint32 (STRp(str), uint32_t *value); 
 extern bool str_get_int_range8  (STRp(str), int64_t min_val, int64_t max_val, uint8_t  *value); // unsigned
 extern bool str_get_int_range16 (STRp(str), int64_t min_val, int64_t max_val, uint16_t *value); // unsigned
 extern bool str_get_int_range64 (STRp(str), int64_t min_val, int64_t max_val, int64_t  *value); // signed

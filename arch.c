@@ -193,17 +193,20 @@ rom arch_get_user_host (void)
 {
     static char user_host[200];
 
-#ifdef _WIN32
-    rom host = getenv ("HOSTNAME");
-    if (!host) host = "";
-#else
-    char host[100] = "";
-    gethostname (host, sizeof (host)-1);
-#endif
+    DO_ONCE {
+        char host[100] = "";
+        #ifdef _WIN32
+            DWORD host_len = sizeof host;
+            if (!GetComputerNameExA (ComputerNameDnsFullyQualified, host, &host_len)) host[0] = 0;
+        #else
+            gethostname (host, sizeof (host)-1);
+        #endif
 
-    rom user = getenv (flag.is_windows ? "USERNAME" : "USER");
+        rom user = getenv (flag.is_windows ? "USERNAME" : "USER");
 
-    sprintf (user_host, "%.99s@%.99s", user ? user : "", host);
+        sprintf (user_host, "%.99s@%.99s", user ? user : "", host);
+    }
+
     return user_host;
 }
 

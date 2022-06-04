@@ -146,7 +146,7 @@ void vcf_tags_cmdline_rename_option(void)
             for (unsigned i=0; i < n_attrs; i++) {
                 // parse one attr: "REFALT>DROP_ADF"
                 str_split (attrs[i], attr_lens[i], 2, '>', item, true);
-                ASSINP (n_items == 2 && item_lens[1] > 0, "--dvcf-rename: invalid attr \"%.*s\". See: " WEBSITE_DVCF, attr_lens[i], attrs[i]);
+                ASSINP (n_items == 2 && item_lens[1] > 0, "--dvcf-rename: invalid attr \"%.*s\". See: " WEBSITE_DVCF, STRfi(attr,i));
 
                 if (items[0][item_lens[0]-1] == '\\') item_lens[0]--; // remove escape char for escaping >
                     

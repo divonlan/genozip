@@ -468,7 +468,7 @@ void ctx_decrement_count (VBlockP vb, ContextP ctx, WordIndex node_index)
 // Seg only: if we add a b250 without evaluating (if node_index is known)
 void ctx_increment_count (VBlockP vb, ContextP ctx, WordIndex node_index)
 {
-    ASSERT (node_index < ctx->counts.len, "node_index=%d out of range counts[%s].len=%"PRIu64, node_index, ctx->tag_name, ctx->counts.len);
+    ASSERT (node_index < ctx->counts.len, "%s: node_index=%d out of range counts[%s].len=%"PRIu64, LN_NAME, node_index, ctx->tag_name, ctx->counts.len);
 
     (*B32(ctx->counts, node_index))++;
 }
@@ -624,7 +624,7 @@ WordIndex ctx_populate_zf_ctx (DidIType dst_did_i, STRp (contig_name), WordIndex
     
     if (!buf_is_alloc (&zctx->global_hash)) { // first call
         zctx->no_stons = true;
-        zctx->st_did_i = DID_I_NONE;    
+        zctx->st_did_i = DID_I_NONE;   
         hash_alloc_global (zctx, 0);
     }
 
@@ -657,7 +657,7 @@ void ctx_populate_zf_ctx_from_contigs (Reference ref, DidIType dst_did_i, ConstC
     if (!buf_is_alloc (&zctx->global_hash)) { // first call
         zctx->no_stons = true;
         zctx->st_did_i = DID_I_NONE;
-        hash_alloc_global (zctx, 0);
+        hash_alloc_global (zctx, ctgs->contigs.len32);
     }
 
     if (flag.reference & REF_ZIP_LOADED)
@@ -1394,6 +1394,7 @@ void ctx_free_context (ContextP ctx, DidIType did_i)
     ctx->rback_last_value.i = 0;
     ctx->rback_last_delta = 0;
     ctx->rback_id = 0;
+    ctx->sf_i = 0;
 
     mutex_destroy (ctx->mutex);
 

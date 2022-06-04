@@ -53,7 +53,7 @@ static int64_t reconstruct_from_delta (VBlockP vb,
 {
     ASSPIZ0 (delta_snip, "delta_snip is NULL");
     ASSPIZ (base_ctx->flags.store == STORE_INT, "reconstructing %s - calculating delta \"%.*s\" from a base of %s, but %s, doesn't have STORE_INT",
-            my_ctx->tag_name, delta_snip_len, delta_snip, base_ctx->tag_name, base_ctx->tag_name);
+            my_ctx->tag_name, STRf(delta_snip), base_ctx->tag_name, base_ctx->tag_name);
 
     int64_t base_value = (my_ctx->flags.delta_peek && my_ctx != base_ctx)
         ? reconstruct_peek (vb, base_ctx, 0, 0).i // value of this line/sample - whether already encountered or peek a future value
@@ -86,12 +86,12 @@ static int64_t reconstruct_from_delta (VBlockP vb,
 #define ASSERT_IN_BOUNDS \
     ASSPIZ (ctx->next_local < ctx->local.len, \
             "unexpected end of ctx->local data in %s (len=%u next_local=%u ltype=%s lcodec=%s did_i=%u)", \
-            ctx->tag_name, (uint32_t)ctx->local.len, ctx->next_local, lt_name (ctx->ltype), codec_name (ctx->lcodec), ctx->did_i)
+            ctx->tag_name, ctx->local.len32, ctx->next_local, lt_name (ctx->ltype), codec_name (ctx->lcodec), ctx->did_i)
 
 #define ASSERT_IN_BOUNDS_BEFORE(recon_len) \
     ASSPIZ (ctx->next_local + (recon_len) <= ctx->local.len, \
             "unexpected end of ctx->local data in %s (len=%u next_local=%u ltype=%s lcodec=%s did_i=%u)", \
-            ctx->tag_name, (uint32_t)ctx->local.len, ctx->next_local, lt_name (ctx->ltype), codec_name (ctx->lcodec), ctx->did_i)
+            ctx->tag_name, ctx->local.len32, ctx->next_local, lt_name (ctx->ltype), codec_name (ctx->lcodec), ctx->did_i)
 
 static uint32_t reconstruct_from_local_text (VBlockP vb, ContextP ctx, bool reconstruct)
 {

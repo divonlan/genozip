@@ -266,6 +266,15 @@ str_get_int_range_type(16,uint16_t) // unsigned
 str_get_int_range_type(32,int32_t)  // signed
 str_get_int_range_type(64,int64_t)  // signed
 
+bool str_get_uint32 (STRp(str), uint32_t *value)
+{
+    int64_t v64;
+    if (!str_get_int_range64 (STRa(str), 0, 0xffffffff, &v64)) return false;
+
+    *value = v64;
+    return true;
+}
+
 // get a positive decimal integer, may have leading zeros eg 005
 bool str_get_int_dec (STRp(str), 
                       uint64_t *value) // out - modified only if str is an integer

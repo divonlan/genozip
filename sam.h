@@ -78,6 +78,8 @@
 #pragma GENDICT OPTION_H2_i=DTYPE_2=H2:i     // Number of 2-difference hits
 #pragma GENDICT OPTION_LB_Z=DTYPE_2=LB:Z     // Library
 #pragma GENDICT OPTION_MC_Z=DTYPE_2=MC:Z     // CIGAR string for mate/next segment
+#pragma GENDICT OPTION_MC_Z0=DTYPE_2=M0C:Z0  // multiplexing components of MC:Z
+#pragma GENDICT OPTION_MC_Z1=DTYPE_2=M1C:Z1 
 #pragma GENDICT OPTION_MD_Z=DTYPE_2=MD:Z     // String encoding mismatched and deleted reference bases
 #pragma GENDICT OPTION_MQ_i=DTYPE_2=MQ:i     // Mapping quality of the mate/next segment
 #pragma GENDICT OPTION_NH_i=DTYPE_2=NH:i     // Number of reported alignments that contain the query in the current record

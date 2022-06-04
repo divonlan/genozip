@@ -126,7 +126,7 @@ void ref_contigs_compress_internal (Reference ref)
         // chrom_word_index might still be WORD_INDEX_NONE. We get it now from the z_file data
         if (r->chrom == WORD_INDEX_NONE) {
             r->chrom = chrom_get_by_name (STRa(r->chrom_name));
-            ASSERT (r->chrom != WORD_INDEX_NONE, "Unable to find chrom index for contig \"%.*s\"", r->chrom_name_len, r->chrom_name);
+            ASSERT (r->chrom != WORD_INDEX_NONE, "Unable to find chrom index for contig \"%.*s\"", STRf(r->chrom_name));
         }
 
         // first range of a contig
@@ -313,13 +313,13 @@ void ref_contigs_generate_data_if_denovo (Reference ref)
 WordIndex ref_contigs_ref_chrom_from_header_chrom (Reference ref, STRp(chrom_name), 
                                                    PosType *hdr_LN) // if 0, set from reference, otherwise verify
 {               
-    WordIndex ref_contig_index = ref_contigs_get_by_name (ref, chrom_name, chrom_name_len, true, true); // including alts
+    WordIndex ref_contig_index = ref_contigs_get_by_name (ref, STRa(chrom_name), true, true); // including alts
         
     // if its not found, we ignore it. sequences that have this chromosome will just be non-ref
     if (ref_contig_index == WORD_INDEX_NONE) {
         if (command == ZIP)
             WARN_ONCE ("FYI: header of %s has contig '%.*s' (and maybe others, too), missing in %s. This might impact the compression ratio.",
-                        txt_file->basename, chrom_name_len, chrom_name, ref->filename);
+                        txt_file->basename, STRf(chrom_name), ref->filename);
         return WORD_INDEX_NONE;
     }
 
@@ -335,7 +335,7 @@ WordIndex ref_contigs_ref_chrom_from_header_chrom (Reference ref, STRp(chrom_nam
         
             char fmt[200]; // no unbound names in fmt
             sprintf (fmt, "Error: wrong reference file - different chromosome length: %%s has a \"%s\", but in %%s '%%s' has LN=%%"PRId64, DTPT (hdr_contigs));
-            ASSINP (false, fmt, txt_name, chrom_name_len, chrom_name, *hdr_LN, ref->filename, ref_contig_name, ref_LN);
+            ASSINP (false, fmt, txt_name, STRf(chrom_name), *hdr_LN, ref->filename, ref_contig_name, ref_LN);
         }
     }
 

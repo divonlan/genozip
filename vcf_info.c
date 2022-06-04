@@ -17,6 +17,8 @@
 #include "gff3.h"
 #include "stats.h"
 
+static inline bool vcf_is_use_DP_by_DP (void); // forward
+
 void vcf_info_zip_initialize (void) 
 {
 }
@@ -27,6 +29,10 @@ void vcf_info_seg_initialize (VBlockVCFP vb)
     CTX(INFO_AN)->     flags.store = STORE_INT;
     CTX(INFO_ADP)->    flags.store = STORE_INT;   // since v13
     CTX(INFO_SVTYPE)-> flags.store = STORE_INDEX; // since v13 - consumed by vcf_refalt_piz_is_variant_indel
+    CTX(INFO_DP)->     flags.store = STORE_INT;   // since v14
+    
+    if (!vcf_is_use_DP_by_DP())
+        CTX(INFO_DP)->dynamic_size_local = true; 
 
     seg_id_field_init (CTX(INFO_CSQ_Existing_variation));
 }
@@ -35,42 +41,74 @@ void vcf_info_seg_initialize (VBlockVCFP vb)
 // INFO/DP
 // -------
 
-// return true if caller still needs to seg 
-static bool vcf_seg_INFO_DP (VBlockVCFP vb, ContextP ctx_dp, STRp(value))
+static inline bool vcf_is_use_DP_by_DP (void)
 {
+    // note: we restrict to best, as this method would cause genozip --drop-genotypes, --GT-only, --samples to show INFO/DP=-1
+    return vcf_num_samples > 1 && flag.best;
+}
+
+// return true if caller still needs to seg 
+static void vcf_seg_INFO_DP (VBlockVCFP vb, ContextP ctx_dp, STRp(value_str))
+{
+    // used in: vcf_seg_one_sample (for 1-sample files), vcf_seg_INFO_DP_by_FORMAT_DP (multi sample files)
+    int64_t value;
+    bool has_value = str_get_int (STRa(value_str), &value);
+    if (has_value)
+        ctx_set_last_value (VB, ctx_dp, value);
+
     // also tried delta vs DP4, but it made it worse
     Context *ctx_basecounts;
-    if (ctx_has_value_in_line (vb, _INFO_BaseCounts, &ctx_basecounts)) {
-        seg_delta_vs_other (VB, ctx_dp, ctx_basecounts, STRa(value));
-        return false; // caller needn't seg
-    }
+    if (ctx_has_value_in_line (vb, _INFO_BaseCounts, &ctx_basecounts)) 
+        seg_delta_vs_other (VB, ctx_dp, ctx_basecounts, STRa(value_str));
 
-    // postpone segging to vcf_seg_INFO_DP_by_FORMAT_DP after samples have been segged
-    else if (segconf.INFO_DP_by_FORMAT_DP) {
-        ctx_set_last_value (VB, ctx_dp, (int64_t)atoi (value));
-        ctx_dp->txt_len += value_len; // just add bytes for now
-        return false; // caller shouldn't seg
-    }
-    
-    else {
-        // store last_value of INFO/DP field in case we have FORMAT/DP as well (used in vcf_seg_one_sample, for 1-sample files)
-        ctx_set_last_value (VB, ctx_dp, (int64_t)atoi (value));
-        return true; // caller should seg
-    }
+    // note: if we're doing DP_by_DP, we will seg in vcf_seg_INFO_DP_by_FORMAT_DP
+    else if (!has_value || !vcf_is_use_DP_by_DP()) 
+        seg_integer_or_not (VB, ctx_dp, STRa(value_str), value_str_len);
 }
 
 // used for multi-sample VCFs, IF FORMAT/DP is segged as a simple integer
 static void vcf_seg_INFO_DP_by_FORMAT_DP (VBlockVCFP vb)
 {
-    SNIP(32) = { SNIP_SPECIAL, VCF_SPECIAL_DP_by_DP };
-    snip_len = 2 + str_int (vb->num_dps_this_line, &snip[2]);
-    snip[snip_len++] = '\t';
-    snip_len += str_int (CTX(INFO_DP)->last_value.i - vb->sum_dp_this_line, &snip[snip_len]);
+    ContextP ctx = CTX(INFO_DP);
 
-    seg_by_did_i (VB, STRa(snip), INFO_DP, 0); // 0 bc bytes already added in vcf_seg_INFO_DP
+    int value_len = str_int_len (ctx->last_value.i);
+
+    SNIP(32) = { SNIP_SPECIAL, VCF_SPECIAL_DP_by_DP };
+    snip_len = 2 + str_int (value_len, &snip[2]);
+    snip[snip_len++] = '\t';
+
+    // note: INFO/DP >= sum(FORMAT/DP) as the per-sample value is filtered, see: https://gatk.broadinstitute.org/hc/en-us/articles/360036891012-DepthPerSampleHC
+    snip_len += str_int (ctx->last_value.i - ctx->sum_dp_this_line, &snip[snip_len]);
+
+    seg_by_ctx (VB, STRa(snip), ctx, value_len); 
 }
 
+// initialize reconstructing INFO/DP by sum(FORMAT/DP) - save space in txt_data, and initialize delta
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_DP_by_DP)
+{
+    str_split (snip, snip_len, 2, '\t', item, 2);
+
+    if (reconstruct) {
+        if (!flag.drop_genotypes && !flag.gt_only && !flag.samples) {
+            vb->txt_data.len32   += atoi (items[0]); // number of characters needed to reconstruct the INFO/DP integer
+            ctx->sum_dp_this_line = atoi (items[1]); // initialize with delta
+            ctx->is_initialized = true;              // needs to be finalized
+        }
+        else
+            RECONSTRUCT ("-1", 2); // bc we can't calculate INFO/DP in these cases bc we need FORMAT/DP of all samples
+    }
+
+    return NO_NEW_VALUE; 
+}
+
+// finalize reconstructing INFO/DP by sum(FORMAT/DP) - called after reconstructing all samples
+void vcf_piz_finalize_DP_by_DP (VBlockVCFP vb)
+{
+    str_int_ex (CTX(INFO_DP)->sum_dp_this_line, last_txt(VB, INFO_DP), false);
+}
+
+// used starting v13.0.5, replaced in v14 with a new vcf_piz_special_DP_by_DP
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_DP_by_DP_v13)
 {
     str_split (snip, snip_len, 2, '\t', item, 2);
 
@@ -678,7 +716,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_END)
     else {
         translated_end = opos_ctx->last_value.i + pos_ctx->last_delta; ; // delta for generated this END value (END - POS)
 
-        VB_VCF->last_end_line_i = vb->line_i; // so vcf_piz_special_COPYPOS knows that END was reconstructed
+        CTX(INFO_END)->last_end_line_i = vb->line_i; // so vcf_piz_special_COPYPOS knows that END was reconstructed
     }
 
     // re-reconstruct END
@@ -694,7 +732,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_COPYPOS)
 {
     if (!reconstruct) return NO_NEW_VALUE;
     
-    bool has_end = VB_VCF->last_end_line_i == vb->line_i; // true if INFO/END was encountered
+    bool has_end = CTX(INFO_END)->last_end_line_i == vb->line_i; // true if INFO/END was encountered
 
     Context *pos_ctx = CTX (VCF_POS);
     int64_t pos;
@@ -1210,26 +1248,20 @@ static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCFP vb)
 
 static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
 {
-    #define CALL(f) do { (f); not_yet_segged = false; } while(0) 
-    #define CALL_WITH_FALLBACK(f) do { if (f (vb, ctx, value, value_len)) seg_by_ctx (VB, STRa(value), ctx, value_len); \
-                                       not_yet_segged = false; } while(0) 
-
     unsigned modified_len = value_len + 20;
     char modified[modified_len]; // used for 1. fields that are optimized 2. fields translated luft->primary. A_1 transformed 4.321e-03->0.004321
     
     Context *other_ctx = NULL;
-    uint64_t dnum = ctx->dict_id.num;
-    bool not_yet_segged = true;
     
     // note: since we use modified for both optimization and luft_back - we currently don't support
     // subfields having both translators and optimization. This can be fixed if needed.
-    #define ADJUST_FOR_MODIFIED do { \
+    #define ADJUST_FOR_MODIFIED ({ \
         int32_t shrinkage = (int32_t)value_len - (int32_t)modified_len;\
         vb->recon_size -= shrinkage; \
         vb->recon_size_luft -= shrinkage; \
         value = modified; \
         value_len = modified_len; \
-    } while(0)
+    })
 
     ctx->line_is_luft_trans = false; // initialize
     
@@ -1265,107 +1297,122 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
             REJECT_SUBFIELD (LO_INFO, ctx, ".\tCannot cross-render INFO subfield %s: \"%.*s\"", ctx->tag_name, value_len, value);            
     }
 
-    // ##INFO=<ID=VQSLOD,Number=1,Type=Float,Description="Log odds of being a true variant versus being false under the trained gaussian mixture model">
-    // Optimize VQSLOD
-    if (dnum == _INFO_VQSLOD && flag.optimize_VQSLOD && optimize_float_2_sig_dig (STRa(value), 0, modified, &modified_len)) 
-        ADJUST_FOR_MODIFIED;
-    
-    // ##INFO=<ID=END,Number=1,Type=Integer,Description="Stop position of the interval">
-    // END is an alias of POS - they share the same delta stream - the next POS will be a delta vs this END)
-    else if (dnum == _INFO_END)
-        CALL (vcf_seg_INFO_END (vb, ctx, STRa(value)));
-
-    // if SVLEN is negative, it is expected to be minus the delta between END and POS
-    else if (dnum == _INFO_SVLEN && vcf_seg_test_SVLEN (vb, STRa(value))) 
-        CALL (seg_by_ctx (VB, ((char [2]){ SNIP_SPECIAL, VCF_SPECIAL_SVLEN }), 2, ctx, value_len));
-
-    // ##INFO=<ID=BaseCounts,Number=4,Type=Integer,Description="Counts of each base">
-    else if (dnum == _INFO_BaseCounts) 
-        CALL_WITH_FALLBACK (vcf_seg_INFO_BaseCounts);
-    
-    // ##INFO=<ID=DP,Number=1,Type=Integer,Description="Approximate read depth; some reads may have been filtered">
-    else if (dnum == _INFO_DP) 
-        CALL_WITH_FALLBACK (vcf_seg_INFO_DP);
-
-    // Source File
-    else if (dnum == _INFO_SF) 
-        CALL_WITH_FALLBACK (vcf_seg_INFO_SF_init);
-
-    //##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">
-    else if (dnum == _INFO_AN) 
-        seg_set_last_txt_store_value (VB, ctx, STRa(value), STORE_INT);
-
-    // ##INFO=<ID=AF,Number=A,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed">
-    else if (dnum == _INFO_AF) 
-        seg_set_last_txt_store_value (VB, ctx, STRa(value), STORE_FLOAT);
-
-    // ##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">
-    else if (dnum == _INFO_AC)
-        CALL (vcf_seg_INFO_AC (vb, ctx, STRa(value))); 
-
-    else if (dnum == _INFO_MLEAC && ctx_has_value_in_line (vb, _INFO_AC, &other_ctx)) 
-        CALL (seg_delta_vs_other (VB, ctx, other_ctx, STRa(value)));
-
     // ##INFO=<ID=AA,Number=1,Type=String,Description="Ancestral Allele">
-    else if ((z_is_dvcf  && ctx->luft_trans == VCF2VCF_ALLELE) || // if DVCF - apply to all fields (perhaps including AA) with RendAlg=ALLELE
-             (!z_is_dvcf && dnum == _INFO_AA)) // apply to INFO/AA if not DVCF
-        CALL (vcf_seg_INFO_allele (VB, ctx, STRa(value), 0));
+    if (z_is_dvcf && ctx->luft_trans == VCF2VCF_ALLELE) 
+        vcf_seg_INFO_allele (VB, ctx, STRa(value), 0);
 
-    // ##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|Existing_variation|ALLELE_NUM|DISTANCE|STRAND|FLAGS|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|GMAF|AFR_MAF|AMR_MAF|EAS_MAF|EUR_MAF|SAS_MAF|AA_MAF|EA_MAF|ExAC_MAF|ExAC_Adj_MAF|ExAC_AFR_MAF|ExAC_AMR_MAF|ExAC_EAS_MAF|ExAC_FIN_MAF|ExAC_NFE_MAF|ExAC_OTH_MAF|ExAC_SAS_MAF|CLIN_SIG|SOMATIC|PHENO|PUBMED|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info|context|ancestral">
-    // Originating from the VEP software
-    // example: CSQ=-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000423562|unprocessed_pseudogene||||||||||rs780379327|1|876|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000438504|unprocessed_pseudogene||||||||||rs780379327|1|876|-1||deletion|1|HGNC|38034|YES||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000450305|transcribed_unprocessed_pseudogene|6/6||ENST00000450305.2:n.448_449delGC||448-449|||||rs780379327|1||1||deletion|1|HGNC|37102|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000456328|processed_transcript|3/3||ENST00000456328.2:n.734_735delGC||734-735|||||rs780379327|1||1||deletion|1|HGNC|37102|YES||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000488147|unprocessed_pseudogene||||||||||rs780379327|1|917|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000515242|transcribed_unprocessed_pseudogene|3/3||ENST00000515242.2:n.727_728delGC||727-728|||||rs780379327|1||1||deletion|1|HGNC|37102|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000518655|transcribed_unprocessed_pseudogene|3/4||ENST00000518655.2:n.565_566delGC||565-566|||||rs780379327|1||1||deletion|1|HGNC|37102|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000538476|unprocessed_pseudogene||||||||||rs780379327|1|924|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000541675|unprocessed_pseudogene||||||||||rs780379327|1|876|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|regulatory_region_variant|MODIFIER|||RegulatoryFeature|ENSR00001576075|CTCF_binding_site||||||||||rs780379327|1||||deletion|1|||||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|
-    else if (dnum == _INFO_CSQ) 
-        CALL (vcf_seg_INFO_CSQ (vb, ctx, STRa(value)));
+    else switch (ctx->dict_id.num) {
+        #define CALL(f) (f); break
+        #define CALL_IF(cond,f) if (cond) { (f); break; } else goto standard_seg 
+        #define CALL_WITH_FALLBACK(f) if (f(vb, ctx, STRa(value))) { seg_by_ctx (VB, STRa(value), ctx, value_len); } break
+        #define STORE(store_type) seg_set_last_txt_store_value (VB, ctx, STRa(value), store_type); seg_by_ctx (VB, STRa(value), ctx, value_len); break
+
+        // ##INFO=<ID=VQSLOD,Number=1,Type=Float,Description="Log odds of being a true variant versus being false under the trained gaussian mixture model">
+        // Optimize VQSLOD
+        case _INFO_VQSLOD: 
+            if (flag.optimize_VQSLOD && optimize_float_2_sig_dig (STRa(value), 0, modified, &modified_len)) 
+                ADJUST_FOR_MODIFIED;
+            goto standard_seg;
     
-    // ##INFO=<ID=DP_HIST,Number=R,Type=String,Description="Histogram for DP; Mids: 2.5|7.5|12.5|17.5|22.5|27.5|32.5|37.5|42.5|47.5|52.5|57.5|62.5|67.5|72.5|77.5|82.5|87.5|92.5|97.5">
-    // ##INFO=<ID=GQ_HIST,Number=R,Type=String,Description="Histogram for GQ; Mids: 2.5|7.5|12.5|17.5|22.5|27.5|32.5|37.5|42.5|47.5|52.5|57.5|62.5|67.5|72.5|77.5|82.5|87.5|92.5|97.5">
-    // ##INFO=<ID=AGE_HISTOGRAM_HET,Number=A,Type=String,Description="Histogram of ages of allele carriers; Bins: <30|30|35|40|45|50|55|60|65|70|75|80+">
-    // ##INFO=<ID=AGE_HISTOGRAM_HOM,Number=A,Type=String,Description="Histogram of ages of homozygous allele carriers; Bins: <30|30|35|40|45|50|55|60|65|70|75|80+">
-    else if (dnum == _INFO_vep ||
-             dnum == _INFO_DP_HIST ||
-             dnum == _INFO_GQ_HIST ||
-             dnum == _INFO_AGE_HISTOGRAM_HET ||
-             dnum == _INFO_AGE_HISTOGRAM_HOM) 
-        CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), ',', '|', false, true));
+        // ##INFO=<ID=END,Number=1,Type=Integer,Description="Stop position of the interval">
+        // END is an alias of POS - they share the same delta stream - the next POS will be a delta vs this END)
+        case _INFO_END:
+            CALL (vcf_seg_INFO_END (vb, ctx, STRa(value)));
 
-    else if (dnum == _INFO_DP4) 
-        CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, true));
+        // if SVLEN is negative, it is expected to be minus the delta between END and POS
+        case _INFO_SVLEN:
+            CALL_IF (vcf_seg_test_SVLEN (vb, STRa(value)), 
+                     seg_by_ctx (VB, ((char [2]){ SNIP_SPECIAL, VCF_SPECIAL_SVLEN }), 2, ctx, value_len));
 
-    // ##INFO=<ID=CLNDN,Number=.,Type=String,Description="ClinVar's preferred disease name for the concept specified by disease identifiers in CLNDISDB">
-    else if (dnum == _INFO_CLNDN) 
-        CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), '|', 0, false, false));
+        // ##INFO=<ID=BaseCounts,Number=4,Type=Integer,Description="Counts of each base">
+        case _INFO_BaseCounts: 
+            CALL_WITH_FALLBACK (vcf_seg_INFO_BaseCounts);
+    
+        // ##INFO=<ID=DP,Number=1,Type=Integer,Description="Approximate read depth; some reads may have been filtered">
+        case _INFO_DP: 
+            CALL (vcf_seg_INFO_DP (vb, ctx, STRa(value)));
 
-    // ##INFO=<ID=CLNHGVS,Number=.,Type=String,Description="Top-level (primary assembly, alt, or patch) HGVS expression.">
-    else if (dnum == _INFO_CLNHGVS)
-        CALL (vcf_seg_INFO_HGVS (VB, ctx, STRa(value), 0));
+        // Source File
+        case _INFO_SF: 
+            CALL_WITH_FALLBACK (vcf_seg_INFO_SF_init);
 
-    // ##INFO=<ID=CLNVI,Number=.,Type=String,Description="the variant's clinical sources reported as tag-value pairs of database and variant identifier">
-    // example: CPIC:0b3ac4db1d8e6e08a87b6942|CPIC:647d4339d5c1ddb78daff52f|CPIC:9968ce1c4d35811e7175cd29|CPIC:PA166160951|CPIC:c6c73562e2b9e4ebceb0b8bc
-    // I tried seg_array_of_struct - it is worse than simple seg
+        //##INFO=<ID=AN,Number=1,Type=Integer,Description="Total number of alleles in called genotypes">
+        case _INFO_AN:
+            STORE (STORE_INT);
 
-    // ##INFO=<ID=ALLELEID,Number=1,Type=Integer,Description="the ClinVar Allele ID">
-    // ##INFO=<ID=RS,Number=.,Type=String,Description="dbSNP ID (i.e. rs number)">
-    else if (dnum == _INFO_ALLELEID || dnum == _INFO_RS)
-        CALL (seg_integer_or_not (VB, ctx, STRa(value), value_len));
+        // ##INFO=<ID=AF,Number=A,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed">
+        case _INFO_AF: 
+            STORE (STORE_FLOAT);
 
-    // ##INFO=<ID=ANN,Number=.,Type=String,Description="Functional annotations: 'Allele | Annotation | Annotation_Impact | Gene_Name | Gene_ID | Feature_Type | Feature_ID | Transcript_BioType | Rank | HGVS.c | HGVS.p | cDNA.pos / cDNA.length | CDS.pos / CDS.length | AA.pos / AA.length | Distance | ERRORS / WARNINGS / INFO'">
-    else if (dnum == _INFO_ANN) 
-        CALL (vcf_seg_INFO_ANN (vb, ctx, STRa(value)));
+        // ##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">
+        case _INFO_AC:
+            CALL (vcf_seg_INFO_AC (vb, ctx, STRa(value))); 
 
-    if (not_yet_segged) {
-        seg_by_ctx (VB, STRa(value), ctx, value_len);
+        case _INFO_MLEAF:
+            CALL_IF (ctx_has_value_in_line (vb, _INFO_AF, &other_ctx) && str_issame_(STRa(value), STRtxtw(other_ctx->last_txt)), 
+                     seg_by_ctx (VB, STRa(af_snip), ctx, value_len)); // copy AF
+
+        case _INFO_MLEAC:
+            CALL_IF (ctx_has_value_in_line (vb, _INFO_AC, &other_ctx),
+                     seg_delta_vs_other (VB, ctx, other_ctx, STRa(value)));
+
+        // ##INFO=<ID=AA,Number=1,Type=String,Description="Ancestral Allele">
+        case _INFO_AA: 
+            CALL (vcf_seg_INFO_allele (VB, ctx, STRa(value), 0));
+
+        // ##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|Existing_variation|ALLELE_NUM|DISTANCE|STRAND|FLAGS|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|GMAF|AFR_MAF|AMR_MAF|EAS_MAF|EUR_MAF|SAS_MAF|AA_MAF|EA_MAF|ExAC_MAF|ExAC_Adj_MAF|ExAC_AFR_MAF|ExAC_AMR_MAF|ExAC_EAS_MAF|ExAC_FIN_MAF|ExAC_NFE_MAF|ExAC_OTH_MAF|ExAC_SAS_MAF|CLIN_SIG|SOMATIC|PHENO|PUBMED|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info|context|ancestral">
+        // Originating from the VEP software
+        // example: CSQ=-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000423562|unprocessed_pseudogene||||||||||rs780379327|1|876|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000438504|unprocessed_pseudogene||||||||||rs780379327|1|876|-1||deletion|1|HGNC|38034|YES||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000450305|transcribed_unprocessed_pseudogene|6/6||ENST00000450305.2:n.448_449delGC||448-449|||||rs780379327|1||1||deletion|1|HGNC|37102|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000456328|processed_transcript|3/3||ENST00000456328.2:n.734_735delGC||734-735|||||rs780379327|1||1||deletion|1|HGNC|37102|YES||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000488147|unprocessed_pseudogene||||||||||rs780379327|1|917|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000515242|transcribed_unprocessed_pseudogene|3/3||ENST00000515242.2:n.727_728delGC||727-728|||||rs780379327|1||1||deletion|1|HGNC|37102|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000518655|transcribed_unprocessed_pseudogene|3/4||ENST00000518655.2:n.565_566delGC||565-566|||||rs780379327|1||1||deletion|1|HGNC|37102|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000538476|unprocessed_pseudogene||||||||||rs780379327|1|924|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000541675|unprocessed_pseudogene||||||||||rs780379327|1|876|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|regulatory_region_variant|MODIFIER|||RegulatoryFeature|ENSR00001576075|CTCF_binding_site||||||||||rs780379327|1||||deletion|1|||||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|
+        case _INFO_CSQ:
+            CALL (vcf_seg_INFO_CSQ (vb, ctx, STRa(value)));
         
-        if (ctx->flags.store == STORE_INT) {
-            int64_t val;
-            if (str_get_int (STRa(value), &val))
-                ctx_set_last_value (VB, ctx, (ValueType){ .i = val } );
-        }
-    }    
+        // ##INFO=<ID=DP_HIST,Number=R,Type=String,Description="Histogram for DP; Mids: 2.5|7.5|12.5|17.5|22.5|27.5|32.5|37.5|42.5|47.5|52.5|57.5|62.5|67.5|72.5|77.5|82.5|87.5|92.5|97.5">
+        // ##INFO=<ID=GQ_HIST,Number=R,Type=String,Description="Histogram for GQ; Mids: 2.5|7.5|12.5|17.5|22.5|27.5|32.5|37.5|42.5|47.5|52.5|57.5|62.5|67.5|72.5|77.5|82.5|87.5|92.5|97.5">
+        // ##INFO=<ID=AGE_HISTOGRAM_HET,Number=A,Type=String,Description="Histogram of ages of allele carriers; Bins: <30|30|35|40|45|50|55|60|65|70|75|80+">
+        // ##INFO=<ID=AGE_HISTOGRAM_HOM,Number=A,Type=String,Description="Histogram of ages of homozygous allele carriers; Bins: <30|30|35|40|45|50|55|60|65|70|75|80+">
+        case _INFO_vep:
+        case _INFO_DP_HIST:
+        case _INFO_GQ_HIST:
+        case _INFO_AGE_HISTOGRAM_HET:
+        case _INFO_AGE_HISTOGRAM_HOM: 
+            CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), ',', '|', false, true));
+
+        case _INFO_DP4:
+            CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, true));
+
+        // ##INFO=<ID=CLNDN,Number=.,Type=String,Description="ClinVar's preferred disease name for the concept specified by disease identifiers in CLNDISDB">
+        case _INFO_CLNDN:
+            CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), '|', 0, false, false));
+
+        // ##INFO=<ID=CLNHGVS,Number=.,Type=String,Description="Top-level (primary assembly, alt, or patch) HGVS expression.">
+        case _INFO_CLNHGVS:
+            CALL (vcf_seg_INFO_HGVS (VB, ctx, STRa(value), 0));
+
+        // ##INFO=<ID=CLNVI,Number=.,Type=String,Description="the variant's clinical sources reported as tag-value pairs of database and variant identifier">
+        // example: CPIC:0b3ac4db1d8e6e08a87b6942|CPIC:647d4339d5c1ddb78daff52f|CPIC:9968ce1c4d35811e7175cd29|CPIC:PA166160951|CPIC:c6c73562e2b9e4ebceb0b8bc
+        // I tried seg_array_of_struct - it is worse than simple seg
+
+        // ##INFO=<ID=ALLELEID,Number=1,Type=Integer,Description="the ClinVar Allele ID">
+        // ##INFO=<ID=RS,Number=.,Type=String,Description="dbSNP ID (i.e. rs number)">
+        case _INFO_ALLELEID:
+        case _INFO_RS:
+            CALL (seg_integer_or_not (VB, ctx, STRa(value), value_len));
+
+        // ##INFO=<ID=ANN,Number=.,Type=String,Description="Functional annotations: 'Allele | Annotation | Annotation_Impact | Gene_Name | Gene_ID | Feature_Type | Feature_ID | Transcript_BioType | Rank | HGVS.c | HGVS.p | cDNA.pos / cDNA.length | CDS.pos / CDS.length | AA.pos / AA.length | Distance | ERRORS / WARNINGS / INFO'">
+        case _INFO_ANN: 
+            CALL (vcf_seg_INFO_ANN (vb, ctx, STRa(value)));
+
+        default: standard_seg:
+            seg_by_ctx (VB, STRa(value), ctx, value_len);
+            
+            if (ctx->flags.store == STORE_INT) {
+                int64_t val;
+                if (str_get_int (STRa(value), &val))
+                    ctx_set_last_value (VB, ctx, val);
+            }
+    }
 
     ctx_set_encountered (VB, ctx);
-    
-    #undef CALL
-    #undef CALL_WITH_FALLBACK
 }
 
 static SORTER (sort_by_subfield_name)
@@ -1477,8 +1524,8 @@ void vcf_finalize_seg_info (VBlockVCFP vb)
     // seg INFO/SF, if there is one
     if (vb->sf_txt.len) vcf_seg_INFO_SF_seg (vb);
 
-    // seg INFO/DP, if against some of FORMAT/DP
-    if (segconf.INFO_DP_by_FORMAT_DP && ctx_has_value (VB, INFO_DP)) 
+    // seg INFO/DP, if against sum of FORMAT/DP
+    if (vcf_is_use_DP_by_DP() && ctx_has_value_in_line_(VB, CTX(INFO_DP))) 
         vcf_seg_INFO_DP_by_FORMAT_DP (vb);
 
     // now that we segged all INFO and FORMAT subfields, we have the final ostatus and can add the DVCF items

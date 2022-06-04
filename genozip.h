@@ -290,10 +290,12 @@ typedef SORTER ((*Sorter));
     unsigned snip_len = 3 + str_int ((n), &snip[3]);
 
 #define STR(x)   rom x;        uint32_t x##_len
+#define eSTR(x) extern rom x; extern uint32_t x##_len
 #define STR0(x)  rom x=NULL;   uint32_t x##_len=0
 #define STRw(x)  char *x;      uint32_t x##_len    // writeable
 #define STRw0(x) char *x=NULL; uint32_t x##_len=0  // writeable, initializedx
 #define STRl(name,len) char name[len]; uint32_t name##_len
+#define eSTRl(x) extern char x[]; extern uint32_t x##_len
 
 #define STRlast(name,ctx) rom name = last_txtx((VBlockP)(vb), (ctx)); unsigned name##_len = (ctx)->last_txt.len
 #define CTXlast(name,ctx)  ({ name = last_txtx((VBlockP)(vb), (ctx));          name##_len = (ctx)->last_txt.len; })

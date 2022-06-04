@@ -98,6 +98,7 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
     Allele *ht_data = B(Allele, CTX(FORMAT_GT_HT)->local, vb->line_i * vb->ht_per_line + vb->ploidy * vb->sample_i);
 
     int64_t dosage=0; // sum of allele values
+
     for (unsigned ht_i=0; ht_i < gt.repeats; ht_i++) {
 
         Allele ht = *(cell++); 
@@ -150,7 +151,7 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
             ht_data[ht_i] = '-'; // unlike '*', we DO count '-' in .repeats (so that we can have the same number of repeats = lower entroy in GT.b250)
 
         gt.repeats = vb->ploidy;
-        if (!gt.repsep[0]) gt.repsep[0] = vb->gt_prev_phase; // this happens in case if a 1-ploid sample
+        if (!gt.repsep[0]) gt.repsep[0] = ctx->gt_prev_phase; // this happens in case if a 1-ploid sample
     }
 
     // case DP='.' - we predict that GT=./.
@@ -159,7 +160,7 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
         // case: prediction is correct - re-write GT as "0/0" or "0|0" (use previous phase)
         if (gt.repeats==2 && ht_data[0]=='.' && gt.repsep[0]=='/' && ht_data[1]=='.') {
             ht_data[0] = ht_data[1] = '0';
-            if (vb->gt_prev_phase) gt.repsep[0] = vb->gt_prev_phase;
+            if (ctx->gt_prev_phase) gt.repsep[0] = ctx->gt_prev_phase;
         }
 
         // case: prediction is incorrect tell piz to NOT change the HTs and phase according to the prediction.
@@ -172,7 +173,7 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
 
     // case: phase is predictable from has_ps and ht_data[0]
     // note: a case where this prediction fails is with alleles > 1 eg "1|2". In GIAB, this never have a PS, but can be | or / 
-    else if (segconf.ps_pid_type[0] && gt.repeats==2 &&
+    else if (CTX(FORMAT_PS)->ps_type && gt.repeats==2 &&
             ((ht_data[0] != '.' && (has_ps == (gt.repsep[0]=='|'))) || // ht!=. --> predicted to be as has_ps says
              (ht_data[0] == '.' && gt.repsep[0]=='/'))) {              // ht==. --> predicted to be /
 
@@ -185,7 +186,7 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
     // so that the gt container is likely identical and we reduce GT.b250 entropy. Reason: many tools
     // (including bcftools merge) produce "./." for missing samples even if all other samples are phased
     else if (ht_data[0]=='.' && gt.repeats==2 && ht_data[1]=='.' && gt.repsep[0]=='/') {
-        gt.repsep[0] = vb->gt_prev_phase ? vb->gt_prev_phase : '|'; // '|' is arbitrary
+        gt.repsep[0] = ctx->gt_prev_phase ? ctx->gt_prev_phase : '|'; // '|' is arbitrary
         ht_data[0] = ht_data[1] = '%';
     }
 
@@ -201,12 +202,12 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
     ASSVCF (!cell_len, "Invalid GT data in sample_i=%u", vb->sample_i+1);
     
     // shortcut if we have the same ploidy and phase as previous GT (saves re-genetrating base64 in container_seg)
-    if (gt.repeats == vb->gt_prev_ploidy && gt.repsep[0] == vb->gt_prev_phase && !no_duplicate) 
+    if (gt.repeats == ctx->gt_prev_ploidy && gt.repsep[0] == ctx->gt_prev_phase && !no_duplicate) 
         return seg_duplicate_last (VB, ctx, save_cell_len);
 
     else {
-        vb->gt_prev_ploidy = no_duplicate ? 0 : gt.repeats; // if no_duplicate - 0 to prevent next sample from duplicating this one
-        vb->gt_prev_phase  = gt.repsep[0];
+        ctx->gt_prev_ploidy = no_duplicate ? 0 : gt.repeats; // if no_duplicate - 0 to prevent next sample from duplicating this one
+        ctx->gt_prev_phase  = gt.repsep[0];
         return container_seg (vb, ctx, (ContainerP)&gt, 0, 0, save_cell_len); 
     }
 }
@@ -276,7 +277,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_GT)
     for (uint32_t i=1; i < recon_len; i += 2)  
         if (recon[i] != '/' && recon[i] != '|') return false;
 
-    VB_VCF->gt_prev_ploidy = (recon_len+1) / 2; // consumed by vcf_piz_luft_PLOIDY
+    ctx->gt_prev_ploidy = (recon_len+1) / 2; // consumed by vcf_piz_luft_PLOIDY
 
     if (validate_only) return true;
 

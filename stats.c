@@ -21,6 +21,7 @@
 #include "segconf.h"
 #include "qname.h"
 #include "gencomp.h"
+#include "url.h"
 
 typedef struct {
     DidIType my_did_i, st_did_i;
@@ -29,7 +30,77 @@ typedef struct {
     rom type;
     StrText did_i, words, hash, uncomp_dict, comp_dict, comp_b250, comp_data;
     float pc_of_txt, pc_of_z, pc_dict, pc_in_local, pc_failed_singletons, pc_hash_occupancy;
+    uint32_t global_hash_prime;
 } StatsByLine;
+
+static Buffer stats={}, STATS={}, features={};
+
+static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt_len, float src_comp_ratio, float all_comp_ratio)
+{
+    // run submission in a separate process to not stall the main process 
+#ifndef _WIN32
+    pid_t child_pid = fork();
+    if (child_pid) return; // parent returns
+#endif
+
+    static Buffer url_buf={};
+
+    // reference: https://stackoverflow.com/questions/18073971/http-post-to-a-google-form/47444396#47444396    
+    /* To get entry IDs - in Chrome browser: 1. open form 2. click on eye icon to Preview 2. right-click Inspect 3. go to "console" tab 4. run this code:
+    function loop(e){
+    if(e.children)
+    for(let i=0;i<e.children.length;i++){
+        let c = e.children[i], n = c.getAttribute('name');
+        if(n) console.log(`${c.getAttribute('aria-label')}: ${n}`);
+        loop(e.children[i]);
+     }
+    }; loop(document.body);
+    */ 
+
+    bufprint0 (evb, &url_buf, "https://docs.google.com/forms/d/e/1FAIpQLSdc997k63YnW4fRxnQOHRqngCT_6_fIhrBQZgTXPTgrPCpe_w/formResponse"); // the ID is in the url when previewing the form
+    bufprintf (evb, &url_buf, "?entry.1917122099=%s", GENOZIP_CODE_VERSION);                                                   // Genozip version Eg "14.0.0"
+    bufprintf (evb, &url_buf, "&entry.1014872627=%u", license_get_number());                                                   // license #. Eg "32412351324"
+    bufprintf (evb, &url_buf, "&entry.1861722167=%s", url_esc_non_valid_chars (arch_get_user_host()));                         // user@host. Eg "john@hpc"
+    bufprintf (evb, &url_buf, "&entry.441046403=%s", dt_name (z_file->data_type));                                             // data type. Eg "VCF"
+    bufprintf (evb, &url_buf, "&entry.984213484=%s", url_esc_non_valid_charsS (str_size (all_txt_len).s).s);                   // Txt size (original file size), eg "6.2 GB"
+    bufprintf (evb, &url_buf, "&entry.960659059=%s%%2C%.2f", codec_name (txt_file->codec), src_comp_ratio);                    // Source codec/gain eg "GZ/4.3"
+    bufprintf (evb, &url_buf, "&entry.621670070=%.2f", all_comp_ratio);                                                        // Genozip gain over source txt eg "5.4"
+    bufprintf (evb, &url_buf, "&entry.1635780209=OS=%s%%3Bcores=%u", url_esc_non_valid_charsS(arch_get_os()).s, arch_get_num_cores());  // Environment: OS, # cores, eg:
+    bufprintf (evb, &url_buf, "&entry.2140634550=%s", features.len ? B1STc(features) : "NONE");                                                        // Features. Eg "Sorted"
+
+    bufprint0 (evb, &url_buf, "&entry.988930848=");      // Compression ratio of individual fields ratio, eg "FORMAT/GT,20%,78;..." - each field is triplet - name, percentage of z_data, compression ratio
+    for (uint32_t i=0, need_sep=0; i < num_stats; i++) 
+        if (sbl[i].z_size)
+            bufprintf (evb, &url_buf, "%s%s%%2C%.1f%%25%%2C%.1fX", 
+                       need_sep++ ? "%3B" : "", url_esc_non_valid_charsS(sbl[i].name).s, sbl[i].pc_of_z, (float)sbl[i].txt_len / (float)sbl[i].z_size); // ratio z vs txt
+
+    bufprint0 (evb, &url_buf, "&entry.282448068=");      // Hash ineffeciencies, eg "RNAME,64.0 KB,102%" - each field is quadlet - name, type, hash size, hash occupancy
+    bool found_hash=false;
+    for (uint32_t i=NUM_SEC_TYPES, need_sep=0; i < num_stats; i++) 
+        if (sbl[i].pc_hash_occupancy >= 50) {
+            found_hash = true;
+            bufprintf (evb, &url_buf, "%s%s%%2C%s%%2C%s,%u%%25", 
+                       need_sep++ ? "%3B" : "", url_esc_non_valid_charsS(sbl[i].name).s, url_esc_non_valid_charsS(sbl[i].type).s, 
+                       str_size (sbl[i].global_hash_prime).s, (int)sbl[i].pc_hash_occupancy); // ratio z vs txt
+        }
+    if (!found_hash) bufprint0 (evb, &url_buf, "NONE");
+    
+    bufprint0 (evb, &url_buf, "&entry.1369097179=");     // Flags. Eg "best,reference=INTERNAL"
+    if (flag.best)      bufprint0 (evb, &url_buf, "best%3B");
+    if (flag.fast)      bufprint0 (evb, &url_buf, "fast%3B");
+    if (flag.optimize)  bufprint0 (evb, &url_buf, "optimize%3B");
+    if (flag.reference) bufprintf (evb, &url_buf, "reference=%s%%3B", ref_type_name());
+    if (flag.show_stats_comp_i != COMP_NONE) bufprintf (evb, &url_buf, "stats_comp_i=%u%%3B", flag.show_stats_comp_i);
+    
+    url_read_string (B1STc(url_buf), NULL, 0); // ignore errors
+    
+#ifndef _WIN32
+    exit(0); // child process is done
+#endif
+
+    // note: we leak the (small amount of) memory allocated by url_esc_non_valid_chars()
+    buf_free (url_buf);    
+}
 
 // store the sizes of dict / b250 / local in zctx->*.param, and of other sections in sbl[st].z_size
 static void stats_get_compressed_sizes (StatsByLine *sbl) 
@@ -74,44 +145,44 @@ static void stats_get_compressed_sizes (StatsByLine *sbl)
     if (DTPZ(stats_reallocate)) DTPZ(stats_reallocate)();
 }
 
-static void stats_output_file_metadata (BufferP buf)
+static void stats_output_file_metadata (void)
 {
-    bufprint0 (evb, buf, "\n\n");
+    bufprint0 (evb, &stats, "\n\n");
     if (txt_file->name) 
-        bufprintf (evb, buf, "%s file%s%s: %.*s\n", dt_name (z_file->data_type), 
+        bufprintf (evb, &stats, "%s file%s%s: %.*s\n", dt_name (z_file->data_type), 
                    z_file->bound_txt_names.count > 1 ? "s" : "", // param holds the number of txt files
                    flag.pair ? " (paired)" : "",
                    (int)z_file->bound_txt_names.len, z_file->bound_txt_names.data);
     
     if (flag.reference == REF_MAKE_CHAIN) {
-        bufprintf (evb, buf, "PRIM reference: %s MD5=%s genozip_version=%u\n", ref_get_filename (prim_ref), digest_display (ref_get_file_md5 (prim_ref)).s, ref_get_genozip_version (prim_ref));
-        bufprintf (evb, buf, "LUFT reference: %s MD5=%s genozip_version=%u\n", ref_get_filename (gref), digest_display (ref_get_file_md5 (gref)).s, ref_get_genozip_version (gref));
+        bufprintf (evb, &stats, "PRIM reference: %s MD5=%s genozip_version=%u\n", ref_get_filename (prim_ref), digest_display (ref_get_file_md5 (prim_ref)).s, ref_get_genozip_version (prim_ref));
+        bufprintf (evb, &stats, "LUFT reference: %s MD5=%s genozip_version=%u\n", ref_get_filename (gref), digest_display (ref_get_file_md5 (gref)).s, ref_get_genozip_version (gref));
     }
 
     else if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE || flag.reference == REF_LIFTOVER) 
-        bufprintf (evb, buf, "Reference: %s MD5=%s genozip_version=%u\n", ref_get_filename (gref), digest_display (ref_get_file_md5 (gref)).s, ref_get_genozip_version (gref));
+        bufprintf (evb, &stats, "Reference: %s MD5=%s genozip_version=%u\n", ref_get_filename (gref), digest_display (ref_get_file_md5 (gref)).s, ref_get_genozip_version (gref));
 
     if (Z_DT(DT_VCF)) 
-        bufprintf (evb, buf, "Samples: %u   ", vcf_header_get_num_samples());
+        bufprintf (evb, &stats, "Samples: %u   ", vcf_header_get_num_samples());
 
     uint32_t num_used_ctxs=0;
     for_zctx 
         if (zctx->nodes.len || zctx->txt_len) num_used_ctxs++;
 
     if ((Z_DT(DT_SAM) || Z_DT(DT_BAM)) && z_has_gencomp)
-        bufprintf (evb, buf, "%ss: %s (PRIM component: %s DEPN component: %s)  Contexts: %u   Vblocks: %u x %u MB  Sections: %u\n", 
+        bufprintf (evb, &stats, "%ss: %s (PRIM component: %s DEPN component: %s)  Contexts: %u   Vblocks: %u x %u MB  Sections: %u\n", 
                    DTPZ (line_name), str_int_commas (z_file->num_lines).s, str_int_commas (gencomp_get_num_lines (SAM_COMP_PRIM)).s, 
                    str_int_commas (gencomp_get_num_lines (SAM_COMP_DEPN)).s, num_used_ctxs, 
                    z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), (uint32_t)z_file->section_list_buf.len);
 
     else if (z_is_dvcf)
-        bufprintf (evb, buf, "%ss: %s (Prim-only: %s Luft-only: %s)  Contexts: %u   Vblocks: %u x %u MB  Sections: %u\n", 
+        bufprintf (evb, &stats, "%ss: %s (Prim-only: %s Luft-only: %s)  Contexts: %u   Vblocks: %u x %u MB  Sections: %u\n", 
                    DTPZ (line_name), str_int_commas (z_file->num_lines).s, str_int_commas (gencomp_get_num_lines (VCF_COMP_PRIM_ONLY)).s, 
                    str_int_commas (gencomp_get_num_lines (VCF_COMP_LUFT_ONLY)).s, num_used_ctxs, 
                    z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), (uint32_t)z_file->section_list_buf.len);
 
     else
-        bufprintf (evb, buf, "%ss: %s   Contexts: %u   Vblocks: %u x %u MB  Sections: %u\n", 
+        bufprintf (evb, &stats, "%ss: %s   Contexts: %u   Vblocks: %u x %u MB  Sections: %u\n", 
                    DTPZ (line_name), str_int_commas (z_file->num_lines).s, num_used_ctxs, 
                    z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), (uint32_t)z_file->section_list_buf.len);
 
@@ -120,54 +191,72 @@ static void stats_output_file_metadata (BufferP buf)
         rom dominant_taxid = ctx_get_snip_with_largest_count (KRAKEN_TAXID, &dominant_taxid_count);
 
         if (dominant_taxid_count != -1)
-            bufprintf (evb, buf, "Dominant TaxID: %s  %s: %s (%-5.2f%%)\n", dominant_taxid, DTPZ (line_name),
+            bufprintf (evb, &stats, "Dominant TaxID: %s  %s: %s (%-5.2f%%)\n", dominant_taxid, DTPZ (line_name),
                        str_int_commas (dominant_taxid_count).s, 100.0 * (float)dominant_taxid_count / (float)z_file->num_lines); 
         else
-            bufprint0 (evb, buf, "Dominant TaxID: No dominant species\n"); 
+            bufprint0 (evb, &stats, "Dominant TaxID: No dominant species\n"); 
     }  
     
-    else if (kraken_is_loaded) 
-        bufprint0 (evb, buf, "Features: Per-line taxonomy ID data\n");
-
+    else if (kraken_is_loaded) {
+        bufprint0 (evb, &stats, "Features: Per-line taxonomy ID data\n");
+        bufprint0 (evb, &features, "taxonomy_data%3B");
+    }
+    
     else if (Z_DT(DT_CHAIN) && flag.reference == REF_MAKE_CHAIN && !segconf.chain_mismatches_ref)
-        bufprint0 (evb, buf, "Features: Chain file suitable for use with genozip --chain\n");
+        bufprint0 (evb, &stats, "Features: Chain file suitable for use with genozip --chain\n");
 
     if (Z_DT(DT_VCF)) {
-        if (z_is_dvcf)  
-            bufprintf (evb, buf, "Features: Dual-coordinates: Main VBs: %u Prim-only VBs: %u Luft-only VBs: %u\n", 
+        if (z_is_dvcf) { 
+            bufprintf (evb, &stats, "Features: Dual-coordinates: Main VBs: %u Prim-only VBs: %u Luft-only VBs: %u\n", 
                        sections_get_num_vbs(VCF_COMP_MAIN), sections_get_num_vbs(VCF_COMP_PRIM_ONLY), sections_get_num_vbs(VCF_COMP_LUFT_ONLY));
+            bufprint0 (evb, &features, "DVCF%3B");
+        }
     }
 
     if (Z_DT(DT_SAM) || Z_DT(DT_BAM)) {
-        if (segconf.sam_is_sorted)   
-            bufprint0 (evb, buf, "Sorting: Sorted by POS\n");
+        if (segconf.sam_is_sorted) {
+            bufprint0 (evb, &stats, "Sorting: Sorted by POS\n");
+            bufprint0 (evb, &features, "Sorted%3B");
+        }
         
-        if (segconf.sam_is_collated) 
-            bufprint0 (evb, buf, "Sorting: Collated by QNAME\n");
+        if (segconf.sam_is_collated) {
+            bufprint0 (evb, &stats, "Sorting: Collated by QNAME\n");
+            bufprint0 (evb, &features, "Collated%3B");
+        }
         
-        if (!segconf.sam_is_sorted && !segconf.sam_is_collated) 
-            bufprint0 (evb, buf, "Sorting: Not sorted or collated\n");
+        if (!segconf.sam_is_sorted && !segconf.sam_is_collated) {
+            bufprint0 (evb, &stats, "Sorting: Not sorted or collated\n");
+            bufprint0 (evb, &features, "Not_sorted_or_collated%3B");
+        }
         
-        if (z_has_gencomp) 
-            bufprintf (evb, buf, "Main VBs: %u Prim VBs: %u Depn VBs: %u\n", 
+        if (z_has_gencomp) { 
+            bufprintf (evb, &stats, "Main VBs: %u Prim VBs: %u Depn VBs: %u\n", 
                        sections_get_num_vbs(SAM_COMP_MAIN), sections_get_num_vbs(SAM_COMP_PRIM), sections_get_num_vbs(SAM_COMP_DEPN));
+            bufprint0 (evb, &features, "Has_gencomp%3B");
+        }
     }
 
-    if (Z_DT(DT_FASTA))
-        bufprintf (evb, buf, "Sequence type: %s\n", segconf.seq_type==SQT_AMINO ? "Amino acids" : "Nucleotide bases");
+    if (Z_DT(DT_FASTA)) {
+        bufprintf (evb, &stats, "Sequence type: %s\n", segconf.seq_type==SQT_AMINO ? "Amino acids" : "Nucleotide bases");
+        bufprint0 (evb, &features, segconf.seq_type==SQT_AMINO ? "Amino_acids%3B" : "Nucleotide_bases%3B");
+    }
 
-    if (segconf.qname_flavor) 
-        bufprintf (evb, buf, "Read name style: %s%s%s\n", 
+    if (segconf.qname_flavor) {
+        bufprintf (evb, &stats, "Read name style: %s%s%s\n", 
                    qf_name(segconf.qname_flavor), segconf.qname_flavor2 ? " + " : "", segconf.qname_flavor2 ? qf_name(segconf.qname_flavor2) : "");
+        bufprintf (evb, &features, "Flavor=%s%s%s%%3B", 
+                   qf_name(segconf.qname_flavor), segconf.qname_flavor2 ? "+" : "", segconf.qname_flavor2 ? qf_name(segconf.qname_flavor2) : "");
+    }
+    else if (Z_DT(DT_FASTQ) || Z_DT(DT_BAM) || Z_DT(DT_SAM) || Z_DT(DT_KRAKEN))
+        bufprint0 (evb, &features, "Flavor=unrecognized%3B");   
 
-    bufprintf (evb, buf, "Genozip version: %s %s\nDate compressed: %s\n", 
+    bufprintf (evb, &stats, "Genozip version: %s %s\nDate compressed: %s\n", 
                GENOZIP_CODE_VERSION, arch_get_distribution(), str_time().s);
 
-    bufprint0 (evb, buf, "Command line: ");
-    buf_add_string (evb, buf, flags_command_line()); // careful not to use bufprintf with command_line as it can exceed the maximum length in bufprintf
+    bufprint0 (evb, &stats, "Command line: ");
+    buf_add_string (evb, &stats, flags_command_line()); // careful not to use bufprintf with command_line as it can exceed the maximum length in bufprintf
 
-    if (license_has_details())
-        bufprintf (evb, buf, "\n%s\n", license_get_one_line());
+    bufprintf (evb, &stats, "\n%s\n", license_get_one_line());
 }
 
 static DESCENDING_SORTER (stats_sort_by_z_size, StatsByLine, z_size)
@@ -284,19 +373,19 @@ static void stats_consolidate_non_ctx (StatsByLine *sbl, unsigned num_stats, rom
 static void stats_output_stats (StatsByLine *s, unsigned num_stats, float src_comp_ratio, Codec codec,
                                 int64_t all_txt_len, int64_t all_txt_len_0, int64_t all_z_size, float all_pc_of_txt, float all_pc_of_z, float all_comp_ratio)
 {
-    bufprintf (evb, &z_file->stats_buf, "\nSections (sorted by %% of genozip file):%s\n", "");
-    bufprintf (evb, &z_file->stats_buf, "NAME                   GENOZIP      %%       TXT      %%   RATIO\n%s", "");
+    bufprintf (evb, &stats, "\nSections (sorted by %% of genozip file):%s\n", "");
+    bufprintf (evb, &stats, "NAME                   GENOZIP      %%       TXT      %%   RATIO\n%s", "");
 
     for (uint32_t i=0; i < num_stats; i++, s++)
         if (s->z_size)
-            bufprintf (evb, &z_file->stats_buf, "%-20.20s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
+            bufprintf (evb, &stats, "%-20.20s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
                        s->name, 
                        str_size (s->z_size).s, s->pc_of_z, // z size and % of total z that is in this line
                        str_size ((float)s->txt_len).s, s->pc_of_txt, // txt size and % of total txt which is in this line
                        (float)s->txt_len / (float)s->z_size); // ratio z vs txt
 
     if (src_comp_ratio != 1 && flag.show_stats_comp_i == COMP_NONE)
-        bufprintf (evb, &z_file->stats_buf, 
+        bufprintf (evb, &stats, 
                    "GENOZIP vs %-9s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
                    codec_name (codec),
                    str_size (all_z_size).s, all_pc_of_z, // total z size and sum of all % of z (should be 100)
@@ -305,7 +394,7 @@ static void stats_output_stats (StatsByLine *s, unsigned num_stats, float src_co
     
     // note: no point showing this per component in DVCF, bc all_txt_len_0 is fully accounted for in the MAIN component and it is 0 in the others
     if (flag.show_stats_comp_i == COMP_NONE || !z_is_dvcf)
-        bufprintf (evb, &z_file->stats_buf, 
+        bufprintf (evb, &stats, 
                 "%-20s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
                 src_comp_ratio != 1 ? "GENOZIP vs TXT" : "TOTAL",
                 str_size (all_z_size).s, all_pc_of_z, // total z size and sum of all % of z (should be 100)
@@ -321,17 +410,17 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
 
     // add diagnostic info
     if (flag.show_stats_comp_i == COMP_NONE) {
-        bufprintf (evb, &z_file->STATS_buf, "\nSystem info: OS=%s cores=%u endianity=%s\n", 
-                arch_get_os(), arch_get_num_cores(), arch_get_endianity());
-        bufprintf (evb, &z_file->STATS_buf, "\nSections (sorted by %% of genozip file):%s\n", "");
+        bufprintf (evb, &STATS, "\nSystem info: OS=%s cores=%u endianity=%s\n", 
+                   arch_get_os(), arch_get_num_cores(), arch_get_endianity());
+        bufprintf (evb, &STATS, "\nSections (sorted by %% of genozip file):%s\n", "");
     }
 
-    bufprintf (evb, &z_file->STATS_buf, "did_i Name              Parent            #Words  Snips-(%% of #Words)    Hash-table    uncomp      comp      comp      comp      comp       txt    comp   %% of   %% of  %s\n", "");
-    bufprintf (evb, &z_file->STATS_buf, "                                         in file   Dict  Local FailSton   Size Occp      dict      dict      b250     local     TOTAL             ratio    txt    zip%s\n", "");
+    bufprintf (evb, &STATS, "did_i Name              Parent            #Words  Snips-(%% of #Words)    Hash-table    uncomp      comp      comp      comp      comp       txt    comp   %% of   %% of  %s\n", "");
+    bufprintf (evb, &STATS, "                                         in file   Dict  Local FailSton   Size Occp      dict      dict      b250     local     TOTAL             ratio    txt    zip%s\n", "");
 
     for (uint32_t i=0; i < num_stats; i++, s++)
         if (s->z_size)
-            bufprintf (evb, &z_file->STATS_buf, "%-2.2s    %-17.17s %-17.17s %6s  %4.*f%%  %4.*f%%  %4.*f%% %8s %3.0f%% %9s %9s %9s %9s %9s %9s %6.1fX %5.1f%% %5.1f%%\n", 
+            bufprintf (evb, &STATS, "%-2.2s    %-17.17s %-17.17s %6s  %4.*f%%  %4.*f%%  %4.*f%% %8s %3.0f%% %9s %9s %9s %9s %9s %9s %6.1fX %5.1f%% %5.1f%%\n", 
                        s->did_i.s, s->name, s->type, s->words.s, 
                        PC (s->pc_dict), s->pc_dict, PC(s->pc_in_local), s->pc_in_local, PC(s->pc_failed_singletons), s->pc_failed_singletons, 
                        s->hash.s, s->pc_hash_occupancy, // Up to here - these don't appear in the total
@@ -340,19 +429,24 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
 
     // note: no point showing this per component in SAM and DVCF, bc all_txt_len_0 is fully accounted for in the MAIN component and it is 0 in the others
     if (!(z_has_gencomp && flag.show_stats_comp_i != COMP_NONE))
-        bufprintf (evb, &z_file->STATS_buf, "TOTAL                                                                               "
+        bufprintf (evb, &STATS, "TOTAL                                                                               "
                 "%9s %9s %9s %9s %9s %9s %6.1fX %5.1f%% %5.1f%%\n", 
-                str_size (all_uncomp_dict).s, str_size (all_comp_dict).s,  str_size (all_comp_b250).s, 
-                str_size (all_comp_data).s,   str_size (all_z_size).s, str_size (all_txt_len).s, 
+                str_size (all_uncomp_dict).s, str_size (all_comp_dict).s, str_size (all_comp_b250).s, 
+                str_size (all_comp_data).s,   str_size (all_z_size).s,    str_size (all_txt_len).s, 
                 all_comp_ratio, all_pc_of_txt, all_pc_of_z);
 }
 
 // generate the stats text - all sections except genozip header and the two stats sections 
 void stats_generate (void) // specific section, or COMP_NONE if for the entire file
 {
+    // initial allocation
+    buf_alloc (evb, &stats, 0, 10000, char, 1, "stats"); stats.len = 0; // reset if used for previous file
+    buf_alloc (evb, &STATS, 0, 10000, char, 1, "stats"); STATS.len = 0;
+    buf_alloc (evb, &features,  0, 1000,  char, 1, "stats"); features.len  = 0;
+    
     if (flag.show_stats_comp_i == COMP_NONE) {
-        stats_output_file_metadata (&z_file->stats_buf);
-        buf_copy (evb, &z_file->STATS_buf, &z_file->stats_buf, char,0,0, "z_file->STATS_buf");
+        stats_output_file_metadata();
+        buf_copy (evb, &STATS, &stats, char,0,0, "STATS");
     }
 
     int64_t all_comp_dict=0, all_uncomp_dict=0, all_comp_b250=0, all_comp_data=0, all_z_size=0, all_txt_len=0;
@@ -428,7 +522,8 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
         s->pc_dict              = !n_words ? 0 : 100.0 * (float)MIN_(zctx->nodes.len, n_words) / n_words; // MIN_ is a workaround - not sure why nodes.len sometimes exceeds the dictionary words on the file (eg in TOPLEVEL)
         s->pc_in_local          = !n_words ? 0 : 100.0 * (float)zctx->local_num_words / n_words;
         s->pc_failed_singletons = !zctx->b250.count ? 0 : 100.0 * (float)zctx->num_failed_singletons / (float)zctx->b250.len;
-        s->pc_hash_occupancy    = !zctx->global_hash_prime   ? 0 : 100.0 * (float)(zctx->nodes.len + zctx->ol_nodes.len) / (float)zctx->global_hash_prime;
+        s->pc_hash_occupancy    = !zctx->global_hash_prime ? 0 : 100.0 * (float)(zctx->nodes.len + zctx->ston_nodes.len) / (float)zctx->global_hash_prime;
+        s->global_hash_prime    = zctx->global_hash_prime;
         s->hash                 = str_size (zctx->global_hash_prime);
         s->uncomp_dict          = str_size (zctx->dict.len);
         s->comp_dict            = str_size (zctx->dict.count);
@@ -488,9 +583,9 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     // if we're showing stats of a single components - output it now
     if (flag.show_stats_comp_i != COMP_NONE) {
         iprintf ("\n\nComponent=%s:\n", comp_name (flag.show_stats_comp_i));
-        buf_print (flag.show_stats == STATS_SHORT ? &z_file->stats_buf : &z_file->STATS_buf, false);
-        buf_free (z_file->stats_buf);
-        buf_free (z_file->STATS_buf);
+        buf_print (flag.show_stats == STATS_SHORT ? &stats : &STATS, false);
+        buf_free (stats);
+        buf_free (STATS);
     }
 
     // note: we use txt_data_so_far_bind is the sum of recon_sizes - see zip_update_txt_counters - which is
@@ -502,23 +597,26 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
              (int32_t)(txt_size - all_txt_len)); 
 
     if (flag.show_stats_comp_i == COMP_NONE) {
-        zfile_compress_section_data (evb, SEC_STATS, &z_file->stats_buf);
-        zfile_compress_section_data (evb, SEC_STATS, &z_file->STATS_buf);
+        zfile_compress_section_data (evb, SEC_STATS, &stats);
+        zfile_compress_section_data (evb, SEC_STATS, &STATS);
 
         // store stats overhead, for stats_display (because when stats_display runs, section list won't be accessible since it is already converted to SectionEntFileFormat)
         Section sec = sections_last_sec (SEC_STATS, false) - 1; // first stats section     
-        z_file->stats_buf.count = z_file->disk_so_far - sec->offset;
+        stats.count = z_file->disk_so_far - sec->offset;
     }
 
     if (flag.show_stats_comp_i != COMP_NONE) 
         iprint0 ("\nNote: Components stats don't include global sections like SEC_DICT, SEC_REFERENCE etc\n");
+
+    if (license_get_type() != LIC_TYPE_PAID && !flag.debug && !getenv ("GENOZIP_TEST"))
+        stats_submit (sbl, num_stats, all_txt_len, src_comp_ratio, all_comp_ratio); 
 
     buf_free (sbl_buf);
 }
 
 void stats_display (void)
 {
-    BufferP buf = flag.show_stats == 1 ? &z_file->stats_buf : &z_file->STATS_buf;
+    BufferP buf = flag.show_stats == 1 ? &stats : &STATS;
 
     if (!buf_is_alloc (buf)) return;  // no stats available
 
@@ -526,7 +624,7 @@ void stats_display (void)
 
     if (z_file->disk_size < (1<<20) && command==ZIP)  // no need to print this note if total size > 1MB, as the ~2K of overhead is rounded off anyway
         // stats text doesn't include SEC_STATS and SEC_GENOZIP_HEADER - the last 3 sections in the file - since stats text is generated before these sections are compressed
-        iprintf ("\nNote: ZIP total file size excludes overhead of %s\n", str_size (z_file->stats_buf.count).s);
+        iprintf ("\nNote: ZIP total file size excludes overhead of %s\n", str_size (stats.count).s);
 
     iprint0 ("\n");
 }
@@ -541,7 +639,7 @@ void stats_read_and_display (void)
 
     // read and uncompress the requested stats section
     zfile_get_global_section (SectionHeader, sec - (flag.show_stats==1),
-                              flag.show_stats == 1 ? &z_file->stats_buf : &z_file->STATS_buf, "z_file->stats_buf");
+                              flag.show_stats == 1 ? &stats : &STATS, "stats");
     
     stats_display();
 

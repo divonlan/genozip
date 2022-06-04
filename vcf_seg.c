@@ -216,10 +216,6 @@ void vcf_seg_initialize (VBlockP vb_)
     
     vcf_info_seg_initialize(vb);
     vcf_samples_seg_initialize(vb);
-
-    if (segconf.running) {
-        if (vcf_num_samples > 1) segconf.INFO_DP_by_FORMAT_DP = true; // unless proven otherwise
-    }
 }             
 
 void vcf_seg_finalize (VBlockP vb_)
@@ -438,7 +434,7 @@ static void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt))
 
         format_mapper.items[i] = (ContainerItem) { .dict_id = dict_id, .separator = {':'} };
 
-        if (dict_id.num == _FORMAT_PS || dict_id.num == _FORMAT_PID)
+        if (dict_id.num == _FORMAT_PS || dict_id.num == _FORMAT_PID || dict_id.num == _FORMAT_DP)
             format_mapper.items[i].separator[1] = CI1_ITEM_CB;
 
         // case: GL_to_PL:  FORMAT field snip is changed here to GL. Note: dict_id remains _FORMAT_GL.
@@ -549,8 +545,8 @@ static void vcf_seg_assign_tie_breaker (VBlockVCFP vb, ZipDataLineVCF *dl)
     if (vb->line_coords == DC_LUFT && LO_IS_OK (ostatus))
         vcf_refalt_seg_convert_to_primary (vb, ostatus);
 
-    // tie breaker is Adler32 of the Primary REF\tALT, except for Luft-only lines, where it is the Adler32 of the Luft REF\tALT
-    dl->tie_breaker = adler32 (1, vb->main_refalt, vb->main_ref_len + 1 + vb->main_alt_len);
+    // tie breaker is crc32 of the Primary REF\tALT, except for Luft-only lines, where it is the Adler32 of the Luft REF\tALT
+    dl->tie_breaker = crc32 (1, vb->main_refalt, vb->main_ref_len + 1 + vb->main_alt_len);
 }
 
 /* segment a VCF line into its fields:
@@ -561,13 +557,13 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
 {
     VBlockVCFP vb = (VBlockVCFP)vb_;
     ZipDataLineVCF *dl = DATA_LINE (vb->line_i);
-    vb->sum_dp_this_line  = 0;
-    vb->num_dps_this_line = 0;
 
     rom next_field=field_start_line, field_start;
     int32_t len = remaining_txt_len;
     unsigned field_len=0;
     char separator;
+
+    vcf_reset_line (VB);
 
     vb->line_coords = (vb->comp_i == VCF_COMP_PRIM_ONLY) ? DC_PRIMARY // this is the Primary-only rejects component
                     : (vb->comp_i == VCF_COMP_LUFT_ONLY) ? DC_LUFT    // this is the Luft-only rejects component
@@ -611,8 +607,8 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
     }
 
     GET_NEXT_ITEM (VCF_POS);
-    CTX(VCF_POS)->last_txt_index = BNUMtxt (VCF_POS_str); // consumed by vcf_seg_FORMAT_PS
-    vb->last_txt_len (VCF_POS) = VCF_POS_len;
+    CTX(VCF_POS)->last_txt = (TxtWord){ .index = BNUMtxt (VCF_POS_str), // consumed by vcf_seg_FORMAT_PS
+                                        .len   = VCF_POS_len };
 
     if (vb->line_coords == DC_PRIMARY) {
         PosType pos = dl->pos[0] = seg_pos_field (vb_, VCF_POS, VCF_POS, 0, '.', VCF_POS_str, VCF_POS_len, 0, VCF_POS_len+1);
@@ -651,6 +647,10 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
     vcf_refalt_seg_main_ref_alt (vb, VCF_REF_str, VCF_REF_len, VCF_ALT_str, VCF_ALT_len);
     
     SEG_NEXT_ITEM (VCF_QUAL);
+    CTX(VCF_QUAL)->last_txt = (TxtWord){ .index = BNUMtxt (VCF_QUAL_str), // consumed by vcf_seg_INFO_QD_by_FORMAT_DP
+                                         .len   = VCF_QUAL_len };
+
+
     SEG_NEXT_ITEM (VCF_FILTER);
     
     // if --chain, seg dual coordinate record - lift over CHROM, POS and REFALT to luft coordinates

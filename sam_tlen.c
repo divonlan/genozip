@@ -79,7 +79,7 @@ void sam_seg_TLEN (VBlockSAMP vb, ZipDataLineSAM *dl,
         ASSSEG0 (tlen_len, tlen, "empty TLEN");
 
         bool is_int = str_get_int_range32 (STRa(tlen), MIN_TLEN, MAX_TLEN, &tlen_value); // note: tlen_value remains 0 if not a valid integer
-        ASSSEG (is_int, tlen, "expecting TLEN to be an integer [%d,%d], but found \"%.*s\"", MIN_TLEN, MAX_TLEN, tlen_len, tlen);
+        ASSSEG (is_int, tlen, "expecting TLEN to be an integer [%d,%d], but found \"%.*s\"", MIN_TLEN, MAX_TLEN, STRf(tlen));
     }
 
     if (segconf.running && tlen_value) segconf.has_TLEN_non_zero = true;

@@ -49,7 +49,7 @@
 #pragma GENDICT FORMAT_ADR=DTYPE_2=ADR     // <ID=ADR,Number=R,Type=Float,Description="Allele dosage on rev strand">
                                            // Conflicting VarScan: <ID=ADR,Number=1,Type=Integer,Description="Depth of variant-supporting bases on reverse strand (reads2minus)">
 #pragma GENDICT FORMAT_AF=DTYPE_2=AF       // <ID=AF,Number=A,Type=Float,Description="Allele fractions for alt alleles in the order listed">
-#pragma GENDICT FORMAT_DP=DTYPE_2=DP       // <ID=DP,Number=1,Type=Integer,Description="Approximate read depth (reads with MQ=255 or with bad mates are filtered)">
+#pragma GENDICT FORMAT_DP=DTYPE_2=DP       // <ID=DP,Number=1,Type=Integer,Description="Approximate read depth (reads with MQ=255 or with bad mates are filtered)">. See also: https://gatk.broadinstitute.org/hc/en-us/articles/360036891012-DepthPerSampleHC
 #pragma GENDICT FORMAT_DS=DTYPE_2=DS       // <ID=DS,Number=1,Type=Float,Description="Genotype dosage from MaCH/Thunder">. See: https://genome.sph.umich.edu/wiki/Thunder
 #pragma GENDICT FORMAT_GL=DTYPE_2=GL       // <ID=GL,Number=.,Type=Float,Description="Genotype Likelihoods">
 #pragma GENDICT FORMAT_GP=DTYPE_2=GP       // <ID=GP,Number=G,Type=Float,Description="Phred-scaled posterior probabilities for genotypes as defined in the VCF specification">
@@ -129,7 +129,8 @@
 #pragma GENDICT INFO_LDAF=DTYPE_1=LDAF         //  MLE Allele Frequency Accounting for LD
 #pragma GENDICT INFO_SOR=DTYPE_1=SOR           // <ID=SOR,Number=1,Type=Float,Description="Symmetric Odds Ratio of 2x2 contingency table to detect strand bias">. See: https://gatk.broadinstitute.org/hc/en-us/articles/360036361772-StrandOddsRatio
 #pragma GENDICT INFO_QD=DTYPE_1=QD             // <ID=QD,Number=1,Type=Float,Description="Variant Confidence/Quality by Depth">. See: https://gatk.broadinstitute.org/hc/en-us/articles/360041414572-QualByDepth
-#pragma GENDICT FORMAT_MIN_DP=DTYPE_1=MIN_DP   // <ID=MIN_DP,Number=1,Type=Integer,Description="Minimum DP observed within the GVCF block">
+#pragma GENDICT FORMAT_RGQ=DTYPE_2=RGQ         // <ID=RGQ,Number=1,Type=Integer,Description="Unconditional reference genotype confidence, encoded as a phred quality -10*log10 p(genotype call is wrong)">
+#pragma GENDICT FORMAT_MIN_DP=DTYPE_2=MIN_DP   // <ID=MIN_DP,Number=1,Type=Integer,Description="Minimum DP observed within the GVCF block">
 
 // Ensembl VEP (Variant Effect Predictor) fields: https://www.ensembl.org/info/docs/tools/vep/script/vep_options.html
 #pragma GENDICT INFO_vep=DTYPE_1=vep
@@ -322,8 +323,8 @@ extern void vcf_samples_add  (rom samples_str);
                       vcf_piz_special_INFO_HGVS_INS_END_POS, vcf_piz_special_INFO_HGVS_INS_PAYLOAD, \
                       vcf_piz_special_INFO_HGVS_DELINS_END_POS, vcf_piz_special_INFO_HGVS_DELINS_PAYLOAD,\
                       vcf_piz_special_MUX_BY_DOSAGE, vcf_piz_special_FORMAT_AB, vcf_piz_special_FORMAT_GQ, \
-                      vcf_piz_special_MUX_BY_DOSAGExDP, vcf_piz_special_COPY_REForALT, vcf_piz_special_DP_by_DP, \
-                      vcf_piz_special_PS_by_PID, vcf_piz_special_PGT }
+                      vcf_piz_special_MUX_BY_DOSAGExDP, vcf_piz_special_COPY_REForALT, vcf_piz_special_DP_by_DP_v13, \
+                      vcf_piz_special_PS_by_PID, vcf_piz_special_PGT, vcf_piz_special_DP_by_DP, vcf_piz_special_DP_by_DP_single }
 
 SPECIAL (VCF, 0,  main_REFALT,         vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,              vcf_piz_special_FORMAT)
@@ -351,10 +352,12 @@ SPECIAL (VCF, 22, AB,                  vcf_piz_special_FORMAT_AB);              
 SPECIAL (VCF, 23, GQ,                  vcf_piz_special_FORMAT_GQ);                // added v13
 SPECIAL (VCF, 24, MUX_BY_DOSAGExDP,    vcf_piz_special_MUX_BY_DOSAGExDP);         // added v13.0.3
 SPECIAL (VCF, 25, COPY_REForALT,       vcf_piz_special_COPY_REForALT);            // added v13.0.5
-SPECIAL (VCF, 26, DP_by_DP,            vcf_piz_special_DP_by_DP);                 // added v13.0.5
+SPECIAL (VCF, 26, DP_by_DP_v13,        vcf_piz_special_DP_by_DP_v13);             // used in v13 files starting v13.0.5, but removed in v14
 SPECIAL (VCF, 27, PS_BY_PID,           vcf_piz_special_PS_by_PID);                // added v13.0.11
 SPECIAL (VCF, 28, PGT,                 vcf_piz_special_PGT);                      // added v14.0.0
-#define NUM_VCF_SPECIAL 29
+SPECIAL (VCF, 29, DP_by_DP,            vcf_piz_special_DP_by_DP);                 // added v14.0.0 - multiple samples: INFO/DP by sum(FORMAT/DP)
+SPECIAL (VCF, 30, DP_by_DP_single,     vcf_piz_special_DP_by_DP_single);          // added v14.0.0 - single sample: FORMAT/DP by INFO/DP
+#define NUM_VCF_SPECIAL 31
 
 // Translators for Luft (=secondary coordinates)
 TRANSLATOR (VCF, VCF,   1,  G,      vcf_piz_luft_G)       // same order as LiftOverStatus starting LO_CANT_G

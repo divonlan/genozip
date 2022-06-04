@@ -18,17 +18,13 @@ void vcf_vb_release_vb (VBlockVCFP vb)
 {
     vb->ploidy = 0;
     vb->use_special_sf = 0;
-    vb->gt_prev_ploidy = vb->num_dps_this_line = 0;
-    vb->gt_prev_phase = 0;
     vb->main_refalt = NULL;
     vb->main_ref_len = vb->main_alt_len = 0;
-    vb->last_end_line_i = 0;
     memset (vb->ad_values, 0, sizeof (vb->ad_values));
     vb->new_ref = 0;
     vb->is_del_sv = 0;
     vb->vcf_version = 0;
     vb->PL_mux_by_DP = 0;
-    vb->sum_dp_this_line = 0;
     vb->pos_aln_i = 0;
     vb->vb_coords = vb->line_coords = 0;
     vb->is_rejects_vb = vb->is_unsorted[0] = vb->is_unsorted[1] = false;    
@@ -99,4 +95,15 @@ rom vcf_coords_name (int coord)
     static rom coords_names[4] = { "NONE", "PRIM", "LUFT", "BOTH" };
     
     return (coord < 0 || coord >= NUM_COORDS) ? "(invalid coord)" : coords_names[coord];
+}
+
+// ZIP/PIZ: called before seggign / reconstructing each line
+void vcf_reset_line (VBlockP vb_)
+{
+    VBlockVCFP vb = (VBlockVCFP)vb_;
+
+    vb->sample_i = 0;
+
+    CTX(INFO_DP)->sum_dp_this_line = 0;
+    CTX(INFO_DP)->is_initialized = false;        
 }

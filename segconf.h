@@ -21,11 +21,9 @@ typedef enum __attribute__ ((__packed__)) { SQT_UNKNOWN, SQT_NUKE, SQT_AMINO, SQ
 
 typedef enum __attribute__ ((__packed__)) { PL_mux_by_DP_TEST, PL_mux_by_DP_NO, PL_mux_by_DP_YES } PLMuxByDP;
 
-typedef enum __attribute__ ((__packed__)) { PS_NONE, PS_POS, PS_POS_REF_ALT, PS_UNKNOWN } PSType;
-
 typedef enum __attribute__ ((__packed__)) { ms_NONE, ms_BIOBAMBAM, ms_MINIMAP2 } msType; // type of SAM ms:i field 
 
-typedef enum __attribute__ ((__packed__)) { DP_DEFAULT, by_AD, by_SDP, by_INFO_DP } FormatDPMethod;
+typedef enum __attribute__ ((__packed__)) { DP_DEFAULT, by_AD, by_SDP } FormatDPMethod;
 
 typedef enum __attribute__ ((__packed__)) { L3_UNKNOWN, L3_EMPTY, L3_COPY_DESC, L3_QF, NUM_L3s } FastqLine3Type;
 
@@ -78,9 +76,7 @@ typedef struct {
     bool vcf_is_varscan;        // this VCF file was produced by VarScan
     uint64_t count_dosage[2];   // used to calculate pc_has_dosage
     float pc_has_dosage;        // % of the samples x lines that have a valid (0-2) dosage value [0.0,1.0]
-    PSType ps_pid_type[2];      // [0]=PS [1]=PID
     bool use_null_DP_method;    // A method for predicting GT=./. by DP=.
-    bool INFO_DP_by_FORMAT_DP;  // INFO_DP = Delta vs SUM(FORMAT_DP) 
     FormatDPMethod FORMAT_DP_method;
     PLMuxByDP PL_mux_by_DP;
     Mutex PL_mux_by_DP_mutex;

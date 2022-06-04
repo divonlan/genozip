@@ -29,8 +29,8 @@ extern HasNewValue reconstruct_demultiplex (VBlockP vb, ContextP ctx, STRp(snip)
 extern ContextP reconstruct_get_other_ctx_from_snip (VBlockP vb, ContextP ctx, pSTRp (snip));
 
 extern ContextP recon_multi_dict_id_get_ctx_first_time (VBlockP vb, ContextP ctx, STRp(snip), unsigned ctx_i);
-#define MCTX(ctx_i,snip,snip_len) ((ctx->con_cache.len && *B(ContextP, ctx->con_cache, ctx_i)) \
-                                        ? *B(ContextP, ctx->con_cache, ctx_i)                  \
+#define MCTX(ctx_i,snip,snip_len) ((ctx->con_cache.len32 && *B(ContextP, ctx->con_cache, ctx_i)) \
+                                        ? *B(ContextP, ctx->con_cache, ctx_i)                    \
                                         : recon_multi_dict_id_get_ctx_first_time ((VBlockP)vb, ctx, (snip), (snip_len), (ctx_i)))
 
 // use SCTX if we are certain that ctx can only be one other_dict_id in its snips 

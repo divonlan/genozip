@@ -260,7 +260,7 @@ Range *ref_get_range_by_chrom (Reference ref, WordIndex chrom, rom *chrom_name)
 {
     ContextP ctx = ZCTX(CHROM);
     ASSERT (chrom >= 0 && chrom < ctx->word_list.len, "chrom=%d out of range - ctx->word_list.len=%u",
-            chrom, (uint32_t)ctx->word_list.len);
+            chrom, ctx->word_list.len32);
 
     if (chrom_name)
         *chrom_name = ctx_get_words_snip (ctx, chrom);
@@ -419,7 +419,7 @@ static void ref_uncompress_one_range (VBlockP vb)
                 "uncomp_len=%u inconsistent with compacted_ref_len=%"PRId64, uncomp_len, compacted_ref_len); 
 
         ASSERT0 (BGEN32 (header->chrom_word_index) == chrom && BGEN64 (header->pos) == ref_sec_pos && BGEN64 (header->gpos) == ref_sec_gpos, // chrom should be the same between the two sections
-                  "header mismatch between SEC_REF_IS_SET and SEC_REFERENCE sections");
+                 "header mismatch between SEC_REF_IS_SET and SEC_REFERENCE sections");
     }
     
     // case: not compacted means that entire range is set
@@ -1869,4 +1869,17 @@ rom ref_get_cram_ref (Reference ref)
 
 done:
     return samtools_T_option;
+}
+
+rom ref_type_name(void)
+{
+    switch (flag.reference) {
+        case REF_NONE       : return "NONE"; 
+        case REF_INTERNAL   : return "INTERNAL"; 
+        case REF_EXTERNAL   : return "EXTERNAL";
+        case REF_EXT_STORE  : return "EXT_STORE";
+        case REF_MAKE_CHAIN : return "MAKE_CHAIN";
+        case REF_LIFTOVER   : return "LIFTOVER";
+        default             : return "Other"; 
+    }
 }

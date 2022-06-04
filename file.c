@@ -716,8 +716,6 @@ static void file_initialize_bufs (File *file)
     INIT (ref2chrom_map);
     INIT (section_list_buf);
     INIT (section_list_vb1);
-    INIT (stats_buf);
-    INIT (STATS_buf);
     INIT (bound_txt_names);
     INIT (recon_plan);
     INIT (txt_header_info);
@@ -1101,8 +1099,6 @@ void file_close (File **file_p,
         buf_destroy (file->coverage);
         buf_destroy (file->read_count);
         buf_destroy (file->unmapped_read_count);
-        buf_destroy (file->stats_buf);
-        buf_destroy (file->STATS_buf);
         buf_destroy (file->bound_txt_names);
         buf_destroy (file->line_info[0]);
         buf_destroy (file->line_info[1]);

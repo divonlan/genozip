@@ -203,6 +203,13 @@ int32_t url_read_string (rom url, char *data, uint32_t data_size)
     char response[CURL_RESPONSE_LEN], error[CURL_RESPONSE_LEN];
     unsigned response_len=0, error_len=0;
 
+    int url_len = strlen (url);
+    for (int i=0, in_arg=false; i < url_len ; i++) {
+        ASSERT (!in_arg || IS_VALID_URL_CHAR(url[i]) || url[i]=='&' || url[i]=='=' || url[i]=='%', 
+                "Invalid url character [%u]=%c(%u). url=\"%s\"", i, url[i], (unsigned char)url[i], url); 
+        if (url[i] == '?') in_arg = true;
+    }
+
     url_do_curl (url, false, response, &response_len, error, &error_len);
 
     if (error_len && !response_len) return -1; // failure
@@ -252,9 +259,9 @@ void url_kill_curl (void)
 }
 
 // make a string into a a string containing only valid url characters, eg "first last" -> "first%20last"
-char *url_esc_non_valid_chars (rom in)
+char *url_esc_non_valid_chars_(rom in, char *out/*malloced if NULL*/)
 {
-    char *out = MALLOC (strlen(in) * 3 + 1);
+    if (!out) out = MALLOC (strlen(in) * 3 + 1);
     char *next = out;
 
     for (; *in; in++) {

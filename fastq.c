@@ -30,8 +30,6 @@
 #define dict_id_is_fastq_desc_sf dict_id_is_type_1
 #define dict_id_fastq_desc_sf dict_id_type_1
 
-#define pair1_is_aligned ctx_specific // PIZ: used in SQBITMAP when reconstructing pair-2
-
 typedef struct {
     uint32_t seq_data_start, qual_data_start; // start within vb->txt_data
     uint32_t seq_len;                         // length of SEQ and QUAL within vb->txt_data (they are identical per FASTQ spec)

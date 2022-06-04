@@ -47,31 +47,20 @@ typedef struct VBlockVCF {
 
     // charactaristics of the data
     
-    uint16_t ploidy;                // ZIP only
+    uint16_t ploidy;         // ZIP only
     VcfVersion vcf_version;
     uint64_t first_line;     // ZIP: used for --add_line_numbers  
-
-    // used for segging FORMAT/GT
-    uint32_t gt_prev_ploidy;
-    char gt_prev_phase;
     
     // used for segging INFO
-    Buffer info_items;              // Seg: INFO items of the line being segged
+    Buffer info_items;       // Seg: INFO items of the line being segged
 
-    rom main_refalt;        // used by vcf_refalt_lift and vcf_seg_INFO_BaseCounts, set by vcf_seg_txt_line
+    rom main_refalt;         // used by vcf_refalt_lift and vcf_seg_INFO_BaseCounts, set by vcf_seg_txt_line
     unsigned main_ref_len, main_alt_len;
 
     // INFO/SF stuff
     enum { USE_SF_UNKNOWN, USE_SF_YES, USE_SF_NO } use_special_sf;
     Buffer sf_txt, sf_snip; // INFO/SF data as it appears in the snip being constructed
-
-    // INFO/END
-    int32_t last_end_line_i;       // PIZ: last line on which INFO/END was encountered
-    
-    // FORMAT/DP
-    int64_t sum_dp_this_line;       // ZIP: sum of values of FORMAT/DP in samples of this line - '.' counts as 0.
-    uint32_t num_dps_this_line;     // ZIP: possibley less that vcf_num_samples, in case of missing samples or missing DP fields in some of the samples
-    
+        
     // FORMAT/AD
     int64_t ad_values[VCF_MAX_ARRAY_ITEMS];
     
@@ -86,9 +75,9 @@ typedef struct VBlockVCF {
 
     PLMuxByDP PL_mux_by_DP;
     
-    MULTIPLEXER(1 + 50 * 3) mux_PLy; // num_DP x 3 + 1
+    MULTIPLEXER(1 + 60 * 3) mux_PLy; // num_DP x 3 + 1
     MULTIPLEXER(1 + 7 * 3) mux_GQ;
-
+    
     // used by CODEC_HAPM (for VCF haplotype matrix) 
     Buffer hapmat_helper_index_buf; // ZIP: used by codec_hapmat_count_alt_alleles 
     Buffer hapmat_columns_data;     // used by codec_hapmat_piz_get_one_line 
@@ -280,6 +269,8 @@ extern rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t *len, cha
 extern void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCFP vb);
 extern void vcf_piz_FORMAT_GT_rewrite_predicted_phase (VBlockP vb, char *recon, uint32_t recon_len);
 
+eSTRl(af_snip);
+
 // FORMAT/GT stuff
 extern WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, STRp(cell), bool has_ps, bool has_null_dp);
 extern void vcf_piz_GT_cb_null_GT_if_null_DP (VBlockP vb , char *recon);
@@ -290,11 +281,12 @@ extern void vcf_FORMAT_PL_after_vbs (void);
 
 // FORMAT/PS and FORMAT/PID stuff
 extern void vcf_samples_zip_initialize_PS_PID (void);
-extern void vcf_samples_seg_initialize_PS_PID (VBlockVCFP vb);
+extern void vcf_samples_seg_initialize_LOOKBACK (VBlockVCFP vb);
 extern void vcf_samples_seg_finalize_PS_PID (VBlockVCFP vb);
-extern void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STRp(value), bool is_pid);
-extern void vcf_seg_FORMAT_PS_PID_missing_value (VBlockVCFP vb, ContextP ctx, bool is_pid, rom end_of_sample);
+extern void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STRp(value));
+extern void vcf_seg_FORMAT_PS_PID_missing_value (VBlockVCFP vb, ContextP ctx, rom end_of_sample);
 extern void vcf_piz_initialize_ps_pid (VBlockP vb);
+extern void vcf_samples_seg_initialize_PS_PID (VBlockVCFP vb, ContextP ctx, STRp(value));
 
 // INFO stuff
 
@@ -307,6 +299,7 @@ extern void vcf_info_zip_initialize (void);
 extern void vcf_info_seg_initialize (VBlockVCFP vb);
 extern void vcf_piz_GT_cb_calc_INFO_SF (VBlockVCFP vcf_vb, unsigned rep, char *recon, int32_t recon_len);
 extern void vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VBlockVCFP vcf_vb);
+extern void vcf_piz_finalize_DP_by_DP (VBlockVCFP vb);
 extern void vcf_seg_INFO_SF_one_sample (VBlockVCFP vb);
 extern void vcf_seg_info_subfields (VBlockVCFP vb, rom info_str, unsigned info_len);
 extern void vcf_finalize_seg_info (VBlockVCFP vb);

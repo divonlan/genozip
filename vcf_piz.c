@@ -42,7 +42,7 @@ bool vcf_piz_init_vb (VBlockP vb_, const SectionHeaderVbHeader *header, uint32_t
     *txt_data_so_far_single_0_increment = BGEN32 (txt_file->txt_flags.is_txt_luft ? header->dvcf_recon_size_luft 
                                                                                   : header->recon_size_prim); 
 
-    vb->last_end_line_i = LAST_LINE_I_INIT;
+    CTX(INFO_END)->last_end_line_i = LAST_LINE_I_INIT;
 
     return true; // all good*
 }
@@ -97,12 +97,6 @@ static void vcf_piz_replace_pos_with_gpos (VBlockVCFP vb)
     RECONSTRUCT ("GPOS\t", 5); 
     RECONSTRUCT_INT (gpos);
     RECONSTRUCT1('\t');
-}
-
-// called before reconstructing each line
-void vcf_reset_line (VBlockP vb)
-{
-    vb->sample_i = 0;
 }
 
 // filter is called before reconstruction of a repeat or an item, and returns false if item should 
@@ -226,6 +220,11 @@ CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb)
 {
     switch (dict_id.num) {
 
+        case _FORMAT_DP:
+            if (ctx_has_value (vb, FORMAT_DP)) // not '.' or missing
+                CTX(INFO_DP)->sum_dp_this_line += CTX(FORMAT_DP)->last_value.i;
+            break;
+            
         case _FORMAT_PS:
             lookback_insert_txt (vb, VCF_LOOKBACK, FORMAT_PS, STRa(recon));
             break;
@@ -257,7 +256,12 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
         if (have_INFO_SF) 
             vcf_piz_GT_cb_calc_INFO_SF (VB_VCF, rep, STRa(recon));
     }
+
     else if (is_top_level) {
+
+        // case: we need to finalize INFO/DP
+        if (CTX(INFO_DP)->is_initialized)
+            vcf_piz_finalize_DP_by_DP (VB_VCF);
 
         // case: we have an INFO/SF field and we reconstructed one VCF line
         if (have_INFO_SF) 

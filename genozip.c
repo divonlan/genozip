@@ -739,7 +739,7 @@ int main (int argc, char **argv)
     primary_command = command; 
 
     // IF YOU'RE CONSIDERING EDITING THIS CODE TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,
-    // and might put you personally as well as your organization at legal and financial risk - see "Unauthorized use of Genozip"
+    // and might put you personally as well as your organization at legal and financial risk - see "Severly unauthorized use of Genozip"
     // section of the license. Rather, please contact sales@genozip.com to discuss which license would be appropriate for your case.
     if (command == ZIP) license_get_number(); 
 

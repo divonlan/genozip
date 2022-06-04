@@ -75,7 +75,7 @@ typedef struct Context {
     unsigned last_snip_len;
     WordIndex last_snip_ni;   
 
-    int tag_i;                 // ZIP dual-coordinates, VB only: index into vb->tags for tag renaming 
+    int tag_i;                 // ZIP dual-coordinates VB only: index into vb->tags for tag renaming 
 
     // settings
     uint8_t lcodec_count, bcodec_count; // ZIP z_file, --best: approximate number of VBs in a row that selected this codec
@@ -116,8 +116,10 @@ typedef struct Context {
     bool please_remove_dict;   // ZFILE: one or more of the VBs request NOT compressing this dict (will be dropped unless another VB insists on keeping it)
     bool dict_len_excessive;   // ZFILE: dict is very big, indicating an ineffecient segging of this context
     
-    TranslatorId luft_trans;   // ZIP: Luft translator for the context, set at context init and immutable thereafter
+    TranslatorId luft_trans;   // ZIP: VCF: Luft translator for the context, set at context init and immutable thereafter
     
+    int16_t sf_i;              // ZIP VCF FORMAT fields: 0-based index of this context within the FORMAT of this line (only for fields defined in vcf.h); -1 if not context present in this line
+
     uint32_t local_in_z;       // ZIP: index and len into z_data where local compressed data is
     uint32_t local_in_z_len;   
     uint32_t b250_in_z;        // ZIP: index and len into z_data where b250 compressed data is
@@ -184,7 +186,18 @@ typedef struct Context {
     LineIType last_line_i;     // ZIP/PIZ: =vb->line_i this line, so far, generated a valid last_value that can be used by downstream fields 
                                //          =(-vb->line_i-1) means ctx encountered in this line (so far) but last_value was not set 
     int32_t last_sample_i;     // ZIP/PIZ: Current sample in VCF/FORMAT ; must be set to 0 if not VCF/FORMAT
-    int32_t ctx_specific;
+   
+    union { // 32 bit
+        int32_t ctx_specific;
+        bool last_is_alt;         // CHROM (all DTs): ZIP: last CHROM was an alt
+        bool pair1_is_aligned;    // FASTQ_SQBITMAP:  PIZ: used when reconstructing pair-2
+        bool last_is_new;         // SAM_QNAME:       ZIP: used in segconf.running
+        int32_t sum_dp_this_line; // INFO_DP:         ZIP/PIZ: sum of FORMAT/DP of samples in this line ('.' counts as 0)
+        int32_t last_end_line_i;  // INFO_END:        PIZ: last line on which INFO/END was encountered      
+        struct __attribute__ ((__packed__)) { uint16_t gt_prev_ploidy; char gt_prev_phase; }; // FORMAT_GT: ZIP/PIZ
+        struct __attribute__ ((__packed__)) { enum __attribute__ ((__packed__)) { PS_NONE, PS_POS, PS_POS_REF_ALT, PS_UNKNOWN } ps_type; }; // FORMAT_PS and FORMAT_PID
+    };
+
     bool last_encounter_was_reconstructed; // PIZ: only valid if ctx_encountered() is true. Means last encountered was also reconstructed.
     uint32_t next_local;       // PIZ: iterator on Context.local 
     SnipIterator iterator;     // PIZ: used to iterate on the context, reading one b250 word_index at a time

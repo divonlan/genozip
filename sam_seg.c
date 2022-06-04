@@ -605,7 +605,7 @@ bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)
 static void sam_get_one_aux (VBlockSAMP vb, STRp(aux),
                              rom *tag, char *type, char *array_subtype, pSTRp(value)) // out
 {
-    ASSSEG (aux_len >= 6 && aux[2] == ':' && aux[4] == ':', aux, "invalid optional field format: %.*s", aux_len, aux);
+    ASSSEG (aux_len >= 6 && aux[2] == ':' && aux[4] == ':', aux, "invalid optional field format: %.*s", STRf(aux));
 
     *tag         = aux;
     *type        = aux[3];
@@ -720,7 +720,7 @@ void sam_seg_verify_RNAME_POS (VBlockSAMP vb, rom p_into_txt, SamPosType this_po
     PosType LN; // contigs length are not restricted to MAX_POS_SAM
     if (sam_hdr_contigs) {
         // since this SAM file has a header, all RNAMEs must be listed in it (the header contigs appear first in CTX(RNAME), see sam_zip_initialize
-        ASSSEG (vb->chrom_node_index < sam_hdr_contigs->contigs.len, p_into_txt, "RNAME \"%.*s\" does not have an SQ record in the header", vb->chrom_name_len, vb->chrom_name);
+        ASSSEG (vb->chrom_node_index < sam_hdr_contigs->contigs.len, p_into_txt, "RNAME \"%.*s\" does not have an SQ record in the header", STRf(vb->chrom_name));
         LN = contigs_get_LN (sam_hdr_contigs, vb->chrom_node_index);
     }
     else { // headerless SAM
@@ -734,7 +734,7 @@ void sam_seg_verify_RNAME_POS (VBlockSAMP vb, rom p_into_txt, SamPosType this_po
     }
 
     ASSINP (this_pos <= LN, "%s %s: Error POS=%d is beyond the size of \"%.*s\" which is %"PRId64". chrom_node_index=%d", 
-            txt_name, LN_NAME, this_pos, vb->chrom_name_len, vb->chrom_name, LN, vb->chrom_node_index);
+            txt_name, LN_NAME, this_pos, STRf(vb->chrom_name), LN, vb->chrom_node_index);
 }
 
 static void sam_seg_get_kraken (VBlockSAMP vb, bool *has_kraken, 
@@ -784,7 +784,7 @@ void sam_seg_aux_all (VBlockSAMP vb, ZipDataLineSAM *dl, STRps(aux))
                 numeric.i = dl->NM; 
             else 
                 ASSERT (str_get_int (STRa(value), &numeric.i), "%s: Expecting integer value for auxiliary field %c%c but found \"%.*s\"",
-                        LN_NAME, tag[0], tag[1], value_len, value);
+                        LN_NAME, tag[0], tag[1], STRf(value));
             value=0;
         }
             
@@ -827,7 +827,6 @@ void sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qname), unsigned add
     // in segconf, identify if this file is collated (each QNAME appears in two or more consecutive lines)
     if (segconf.running) {
         if (segconf.sam_is_collated) { // still collated, try to find evidence to the contrary
-            #define last_is_new ctx_specific // QNAME is different than previous line's QNAME  
             bool is_new = (qname_len != vb->last_txt_len (SAM_QNAME) || memcmp (qname, last_txt(VB, SAM_QNAME), qname_len));
             if (is_new && CTX(SAM_QNAME)->last_is_new)
                 segconf.sam_is_collated = false; // two new QNAMEs in a row = not collated
@@ -1057,12 +1056,12 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
     dl->RNAME = sam_seg_RNAME (vb, dl, STRfld(RNAME), false, fld_lens[RNAME]+1);
  
     ASSSEG (str_get_int_range32 (STRfld(POS), 0, MAX_POS_SAM, &dl->POS), 
-            flds[POS], "Invalid POS \"%.*s\": expecting an integer [0,%d]", fld_lens[POS], flds[POS], (int)MAX_POS_SAM);
+            flds[POS], "Invalid POS \"%.*s\": expecting an integer [0,%d]", STRfi(fld,POS), (int)MAX_POS_SAM);
 
     ASSSEG (str_get_int_range8 (STRfld(MAPQ), 0, 255, &dl->MAPQ), 
-            flds[MAPQ], "Invalid MAPQ \"%.*s\": expecting an integer [0,255]", fld_lens[MAPQ], flds[MAPQ]);
+            flds[MAPQ], "Invalid MAPQ \"%.*s\": expecting an integer [0,255]", STRfi(fld,MAPQ));
 
-    ASSSEG (str_get_int_range16 (STRfld(FLAG), 0, SAM_MAX_FLAG, &dl->FLAG.value), flds[FLAG], "invalid FLAG field: \"%.*s\"", fld_lens[FLAG], flds[FLAG]);
+    ASSSEG (str_get_int_range16 (STRfld(FLAG), 0, SAM_MAX_FLAG, &dl->FLAG.value), flds[FLAG], "invalid FLAG field: \"%.*s\"", STRfi(fld,FLAG));
 
     // analyze (but don't seg yet) CIGAR
     uint32_t seq_len;
@@ -1071,7 +1070,7 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
 
     ASSSEG (dl->SEQ.len == fld_lens[SEQ] || (fld_lens[CIGAR] == 1 && *flds[CIGAR] == '*') || flds[SEQ][0] == '*', flds[SEQ], 
             "seq_len implied by CIGAR=%.*s is %u, but actual SEQ length is %u, SEQ=%.*s", 
-            fld_lens[CIGAR], flds[CIGAR], dl->SEQ.len, fld_lens[SEQ], fld_lens[SEQ], flds[SEQ]);
+            STRfi(fld,CIGAR), dl->SEQ.len, fld_lens[SEQ], STRfi(fld,SEQ));
 
     // if this is a secondary / supplamentary read (aka Dependent) or a read that has an associated sec/sup read (aka Primary) - move
     // the line to the appropriate component and skip it here (no segging done yet)
@@ -1139,7 +1138,7 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
     sam_seg_QUAL (vb, dl, STRfld(QUAL), fld_lens[QUAL] + 1); 
     
     ASSSEG (str_is_in_range (flds[QUAL], fld_lens[QUAL], 33, 126), flds[QUAL], "Invalid QUAL - it contains non-Phred characters: \"%.*s\"", 
-            fld_lens[QUAL], flds[QUAL]);
+            STRfi(fld,QUAL));
 
     if (fld_lens[SEQ] != fld_lens[QUAL])
         vb->qual_codec_no_longr = true; // we cannot compress QUAL with CODEC_LONGR in this case

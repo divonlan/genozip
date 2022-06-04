@@ -145,7 +145,7 @@ static bool sam_analyze_copied_SEQ (VBlockSAMP vb, STRp(seq), const SamPosType p
     // in REF_INTERNAL, the sequence can flow over to the next range as each range is 1M bases. this cannot happen
     // in REF_EXTERNAL as each range is the entire contig
     ASSERT (flag.reference == REF_INTERNAL || i == seq_len, "%s: expecting i(%u) == seq_len(%u) pos=%d range=[%.*s %"PRId64"-%"PRId64"] (cigar=%s recursion_level=%u level_0_seq_len=%u)", 
-            LN_NAME, i, seq_len, pos, range->chrom_name_len, range->chrom_name, range->first_pos, range->last_pos, vb->last_cigar, recursion_level, level_0_seq_len);
+            LN_NAME, i, seq_len, pos, STRf(range->chrom_name), range->first_pos, range->last_pos, vb->last_cigar, recursion_level, level_0_seq_len);
 
     // case: we have reached the end of the current reference range, but we still have sequence left - 
     // call recursively with remaining sequence and next reference range 
@@ -154,7 +154,7 @@ static bool sam_analyze_copied_SEQ (VBlockSAMP vb, STRp(seq), const SamPosType p
         ASSERT (this_seq_last_pos <= MAX_POS_SAM, "%s: POS=%d and the consumed reference implied by CIGAR=\"%s\", exceeding MAX_POS=%"PRId64
                 " (next_ref=%u pos_index=%u ref_len_this_level=%u subcigar_len=%u range=[%.*s %"PRId64"-%"PRId64"])",
                 LN_NAME, pos, vb->last_cigar, MAX_POS_SAM, next_ref, pos_index, ref_len_this_level, n, 
-                range->chrom_name_len, range->chrom_name, range->first_pos, range->last_pos);
+                STRf(range->chrom_name), range->first_pos, range->last_pos);
 
         // if current op is not exhausted, next recursion will be starting from current op
         uint32_t save_op_n=0;
@@ -452,7 +452,7 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(s
     // in REF_INTERNAL, the sequence can flow over to the next range as each range is 1M bases. this cannot happen
     // in REF_EXTERNAL as each range is the entire contig
     ASSERT (flag.reference == REF_INTERNAL || i == seq_len, "expecting i(%u) == seq_len(%u) pos=%d range=[%.*s %"PRId64"-%"PRId64"] (cigar=%s recursion_level=%u level_0_seq_len=%u)", 
-            i, seq_len, pos, range->chrom_name_len, range->chrom_name, range->first_pos, range->last_pos, vb->last_cigar, recursion_level, level_0_seq_len);
+            i, seq_len, pos, STRf(range->chrom_name), range->first_pos, range->last_pos, vb->last_cigar, recursion_level, level_0_seq_len);
 
     // case: we have reached the end of the current reference range, but we still have sequence left - 
     // call recursively with remaining sequence and next reference range 
@@ -461,7 +461,7 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(s
         ASSSEG (this_seq_last_pos <= MAX_POS_SAM, vb->last_cigar, "POS=%d and the consumed reference implied by CIGAR=\"%s\", exceeding MAX_POS=%"PRId64
                 " (next_ref=%u pos_index=%u ref_len_this_level=%u subcigar_len=%u range=[%.*s %"PRId64"-%"PRId64"])",
                 pos, vb->last_cigar, MAX_POS_SAM, next_ref, pos_index, ref_len_this_level, n, 
-                range->chrom_name_len, range->chrom_name, range->first_pos, range->last_pos);
+                STRf(range->chrom_name), range->first_pos, range->last_pos);
 
         // if current op is not exhausted, next recursion will be starting from current op
         uint32_t save_op_n=0;
@@ -837,7 +837,7 @@ void sam_reconstruct_SEQ (VBlockP vb_, Context *bitmap_ctx, STRp(snip), bool rec
                     ref_print_is_set (range, pos + ref_consumed, stderr);
                     ASSPIZ (false, "Unexpectedly, reference at this locus has is_set=false: chrom=%u \"%.*s\" pos=%d range=[%"PRId64"-%"PRId64"]"
                             " (cigar=%s seq_start_pos=%d ref_consumed=%u seq_consumed=%u)",
-                            range->chrom, range->chrom_name_len, range->chrom_name, pos + ref_consumed, 
+                            range->chrom, STRf(range->chrom_name), pos + ref_consumed, 
                             range->first_pos, range->last_pos, B1STc (vb->textual_cigar), pos, ref_consumed, seq_consumed);
                 }
 

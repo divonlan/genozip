@@ -19,6 +19,7 @@ typedef enum {
     REF_ZIP_LOADED    = REF_EXTERNAL | REF_EXT_STORE | REF_MAKE_CHAIN | REF_LIFTOVER, // ZIP: external reference is loaded
     REF_ZIP_CHROM2REF = REF_EXTERNAL | REF_EXT_STORE | REF_LIFTOVER,                  // ZIP: chrom2ref mapping is stored
 } ReferenceType;
+extern rom ref_type_name(void);
 
 typedef enum { STATS_NONE, STATS_SHORT, STATS_LONG } StatsType;
 

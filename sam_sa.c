@@ -57,7 +57,7 @@ bool sam_seg_is_item_predicted_by_prim_SA (VBlockSAMP vb, int sa_item_i, int64_t
            sa_item == value;
 }
 
-static inline bool sam_seg_SA_field_is_line_matches_aln_zip (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(aln))
+static inline bool sam_seg_SA_field_is_line_matches_aln (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(aln))
 {
     if (dl->RNAME == WORD_INDEX_NONE) return false; // RNAME="*" for this line
 
@@ -102,7 +102,7 @@ static bool sam_seg_SA_field_is_depn_from_prim (VBlockSAMP vb, ZipDataLineSAM *d
     if (n_prim_alns != n_depn_alns) return false; // different number of alignments
 
     // Step 1: verify that the prim line matches the first alignment in the depn SA
-    if (!sam_seg_SA_field_is_line_matches_aln_zip (vb, prim_dl, STRi(depn_aln, 0)))
+    if (!sam_seg_SA_field_is_line_matches_aln (vb, prim_dl, STRi(depn_aln, 0)))
         return false;
 
     // Step 2: verify that one of the alignments of the prim SA matches the depn line
@@ -132,7 +132,7 @@ static bool sam_seg_SA_field_is_depn_from_prim (VBlockSAMP vb, ZipDataLineSAM *d
     // to do: improve effeciency by testing first the predicted alignment (vb->line-vb->prim_line_i-1)
     int depn_i=0; // index of depn alignment within prim SA
     for (; depn_i < n_prim_alns; depn_i++)
-        if (sam_seg_SA_field_is_line_matches_aln_zip (vb, dl, STRi(prim_aln, depn_i))) break; // found
+        if (sam_seg_SA_field_is_line_matches_aln (vb, dl, STRi(prim_aln, depn_i))) break; // found
 
     sam_cigar_restore_H (htos); // restore
 
@@ -246,7 +246,7 @@ bool sam_seg_0A_mapq_cb (VBlockP vb, ContextP ctx, STRp (mapq_str), uint32_t rep
     return true;
 }
 
-static inline bool sam_seg_SA_field_is_line_matches_aln_piz (VBlockSAMP vb, ContextP ctx,
+static inline bool sam_piz_SA_field_is_line_matches_aln (VBlockSAMP vb, ContextP ctx,
                                                              STRp(my_rname), SamPosType my_pos, char my_strand, int64_t my_mapq, int64_t my_nm, 
                                                              STRp(aln))
 {
@@ -264,7 +264,11 @@ static inline bool sam_seg_SA_field_is_line_matches_aln_piz (VBlockSAMP vb, Cont
                    !memcmp (B1STc(vb->textual_cigar), items[SA_CIGAR], item_lens[SA_CIGAR]) &&
         /*rname */ my_rname_len == item_lens[SA_RNAME] &&
                    !memcmp (my_rname, items[SA_RNAME], my_rname_len) &&
-        /*pos   */ str_get_int (STRi(item, SA_POS),  &aln_pos)  && aln_pos  == my_pos  &&
+        /*pos   */ str_get_int (STRi(item, SA_POS),  &aln_pos)  && aln_pos  == my_pos;
+
+    // we also compare MAPQ and NM, unless --coverage or --count in which case these fields are skipped (because NM requires MD which requires SQBITMAP...)
+    if (!flag.collect_coverage && !flag.count)
+        found &=
         /*mapq  */ str_get_int (STRi(item, SA_MAPQ), &aln_mapq) && aln_mapq == my_mapq &&
         /*NM:i  */ str_get_int (STRi(item, SA_NM),   &aln_nm)   && aln_nm   == my_nm;
 
@@ -321,7 +325,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SA_main)
         // to do: improve effeciency by testing first the predicted alignment (vb->line-vb->prim_line_i-1)
         bool found = false;
         for (int i=0; i < n_prim_alns; i++) { // =1 bc of last empty alignment due terminal ';'
-            if (!found && ((found = sam_seg_SA_field_is_line_matches_aln_piz (vb, ctx, STRa(my_rname), my_pos, my_strand, my_mapq, my_nm, STRi(prim_aln, i)))))
+            if (!found && ((found = sam_piz_SA_field_is_line_matches_aln (vb, ctx, STRa(my_rname), my_pos, my_strand, my_mapq, my_nm, STRi(prim_aln, i)))))
                 continue; // skip the alignment matching this line
 
             RECONSTRUCT_SEP (prim_alns[i], prim_aln_lens[i], ';');
