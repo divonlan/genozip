@@ -811,7 +811,9 @@ uint32_t reconstruct_peek_repeats (VBlockP vb, ContextP ctx, char repsep)
 // peek a context which is normally a container and not yet encountered: return true if the container has the requested item
 bool reconstruct_peek_container_has_item (VBlockP vb, ContextP ctx, DictId item_dict_id)
 {
-    // case: already reconstructed - count repsep
+    ASSISLOADED(ctx);
+
+    // case: already reconstructed - not yet supported (not too difficult to add support for this case if needed)
     ASSPIZ (!ctx_encountered (vb, ctx->did_i), "context %s is already encountered", ctx->tag_name);
 
     STR(snip);

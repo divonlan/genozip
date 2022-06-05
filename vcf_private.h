@@ -263,6 +263,7 @@ extern char *vcf_samples_is_included;
 extern VcfVersion vcf_header_get_version (void);
 
 // Samples stuff
+extern void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt));
 extern void vcf_samples_zip_initialize (void);
 extern void vcf_samples_seg_initialize (VBlockVCFP vb);
 extern void vcf_samples_seg_finalize (VBlockVCFP vb);

@@ -760,10 +760,16 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_GQ)
 //-----------
 // FORMAT/RGQ
 // ----------
+
+// <ID=RGQ,Number=1,Type=Integer,Description="Unconditional reference genotype confidence, encoded as a phred quality -10*log10 p(genotype call is wrong)">
+// Appears in GVCF in lines which are no variants (i.e. no ALT)
 static inline void vcf_seg_FORMAT_RGQ (VBlockVCFP vb, ContextP ctx, STRp(rgq), ContextP gt_ctx, STRp(gt))
 {
     ConstMultiplexerP mux = (ConstMultiplexerP)&vb->mux_RGQ;
 
+    if (segconf.running) 
+        segconf.has[FORMAT_RGQ] = true;
+        
     // prediction: we have GT, and if GT[0]=. then RGQ=0. Fallback seg in case prediction fail
     if (gt_ctx->did_i != FORMAT_GT ||                    // prediction failed: first subfield isn't GT
         (gt[0] == '.' && (rgq_len != 1 || *rgq != '0'))) // prediction failed: GT[0]=. and yet RGQ!="0"

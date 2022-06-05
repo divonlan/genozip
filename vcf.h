@@ -252,6 +252,7 @@ typedef uint8_t Allele; // elements of ht_matrix: values 48->147 for allele 0 to
 // ZIP stuff
 extern void vcf_zip_initialize (void);
 extern void vcf_zip_finalize (void);
+extern void vcf_zip_genozip_header (SectionHeaderGenozipHeader *header);
 extern void vcf_zip_init_vb (VBlockP vb);
 extern void vcf_liftover_display_lift_report (void);
 extern void vcf_zip_after_compress (VBlockP vb);
@@ -272,6 +273,7 @@ extern TranslatorId vcf_lo_luft_trans_id (DictId dict_id, char number);
 extern uint32_t vcf_seg_get_vb_recon_size (VBlockP vb);
 
 // PIZ stuff
+extern void vcf_piz_genozip_header (const SectionHeaderGenozipHeader *header);
 extern bool vcf_piz_maybe_reorder_lines (void);
 extern bool vcf_piz_init_vb (VBlockP vb, const SectionHeaderVbHeader *header, uint32_t *txt_data_so_far_single_0_increment);
 extern void vcf_piz_recon_init (VBlockP vb);

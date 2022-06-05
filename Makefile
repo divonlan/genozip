@@ -36,7 +36,7 @@ MY_SRCS = genozip.c genols.c base250.c context.c container.c strings.c stats.c a
           zip.c piz.c reconstruct.c recon_history.c seg.c zfile.c aligner.c flags.c digest.c mutex.c threads.c 	\
 		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c 						\
 		  vcf_piz.c vcf_seg.c vcf_gt.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c 		\
-		  vcf_refalt.c vcf_tags.c vcf_ps_pid.c vcf_linesort.c 															\
+		  vcf_refalt.c vcf_tags.c vcf_ps_pid.c vcf_linesort.c vcf_format.c       								\
 		  sam_seg.c sam_piz.c sam_shared.c sam_header.c sam_md.c sam_tlen.c sam_cigar.c sam_fields.c 			\
 		  sam_seq.c sam_qual.c sam_gc_zip.c sam_gc_piz.c sam_gc_load_grps.c sam_gc_ingest_grps.c sam_pos.c	 	\
 		  bam_seg.c bam_seq.c bam_show.c sam_bsseeker2.c sam_sa.c 												\

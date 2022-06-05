@@ -22,10 +22,27 @@
 // Seg stuff
 // ---------
 
+static inline bool vcf_refalt_seg_ref_alt_line_has_RGQ (rom str)
+{
+    int count_tabs = 0;
+    while (*str != '\n' && (*str != '\t' || (++count_tabs < 4))) str++;
+
+    if (*str == '\n' || str[2]=='\t' || str[2]=='\n' || str[3]=='\t' || str[3]=='\n') return false; // a line without FORMAT, or FORMAT not long enough for RGQ
+
+    for (str++; str[2] != '\t' && str[2] != '\n'; str++) 
+        if (str[0]=='R' && str[1]=='G' && str[2]=='Q' && (str[3]=='\t' || str[3]==':'))
+            return true;
+
+    return false; // no RGQ in this FORMAT
+}
+
 // optimize REF and ALT, for simple one-character REF/ALT (i.e. mostly a SNP or no-variant)
-static void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char main_ref, char main_alt)
+static void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char main_ref, rom main_alt_start)
 {
     char new_ref=0, new_alt=0;
+    char main_alt = *main_alt_start;
+
+    bool line_has_RGQ = !segconf.running && segconf.has[FORMAT_RGQ] && vcf_refalt_seg_ref_alt_line_has_RGQ (main_alt_start);
 
     // if we have a reference, we use it (we treat the reference as PRIMARY)
     // except: if --match-chrom, we assume the user just wants to match, and we don't burden him with needing the reference to decompress
@@ -59,8 +76,12 @@ static void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char main_ref, char main_
     // A to: G=111967 C=30006 T=26335
     // T to: C=111539 G=29504 A=25599
 
-    // if alt is as predicted, store it as "+"
-    if      (main_alt == 'A' && main_ref == 'G') new_alt = '+';
+    // case line has RGQ: we predit ALT to be '.' (set "+" if "as predicted")
+    if (line_has_RGQ) {
+        if (main_alt == '.') new_alt = '+';
+    }
+    // cases where line does not have RGQ - we predict ALT based on REF ("+" means "as predicted")
+    else if (main_alt == 'A' && main_ref == 'G') new_alt = '+';
     else if (main_alt == 'C' && main_ref == 'T') new_alt = '+';
     else if (main_alt == 'G' && main_ref == 'A') new_alt = '+';
     else if (main_alt == 'T' && main_ref == 'C') new_alt = '+';
@@ -87,7 +108,7 @@ void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, STRp(ref), STRp(alt))
 {
     // optimize ref/alt in the common case of single-character
     if (ref_len == 1 && alt_len == 1) 
-        vcf_refalt_seg_ref_alt_snp (vb, *ref, *alt);
+        vcf_refalt_seg_ref_alt_snp (vb, *ref, alt);
 
     else {
         char ref_alt[ref_len + 1 + alt_len];
@@ -925,9 +946,17 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_main_REFALT)
     else 
         ref_alt[0] = snip[0];
 
+    // if --drop-genotypes, we don't normally conusme VCF_SAMPLES, so we do it here
+    if (flag.drop_genotypes && segconf.has[FORMAT_RGQ]) {
+        ASSPIZ0 (!vb->frozen_state.prm8[0], "Peek mode node supported - we're consuming");
+        LOAD_SNIP (VCF_SAMPLES);
+    }
+    
     // recover alt
     if (snip[1] == '+') { // the alt has the most common value for a SNP
-        if      (ref_alt[0] == 'A') ref_alt[2] = 'G';
+        if (segconf.has[FORMAT_RGQ] && reconstruct_peek_container_has_item (VB, CTX(VCF_SAMPLES), (DictId)_FORMAT_RGQ)) // note: segconf.has[FORMAT_RGQ] can only be set starting v14
+                                    ref_alt[2] = '.';
+        else if (ref_alt[0] == 'A') ref_alt[2] = 'G';
         else if (ref_alt[0] == 'C') ref_alt[2] = 'T';
         else if (ref_alt[0] == 'G') ref_alt[2] = 'A';
         else if (ref_alt[0] == 'T') ref_alt[2] = 'C';

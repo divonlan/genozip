@@ -17,6 +17,13 @@
 #include "piz.h"
 #include "lookback.h"
 
+void vcf_piz_genozip_header (const SectionHeaderGenozipHeader *header)
+{
+    if (z_file->genozip_version >= 14) {
+        segconf.has[FORMAT_RGQ] = header->vcf.segconf_has_RGQ;
+    }
+}
+
 // main thread: is it possible that genocat of this file will re-order lines
 bool vcf_piz_maybe_reorder_lines (void)
 {
@@ -56,7 +63,9 @@ void vcf_piz_recon_init (VBlockP vb)
 IS_SKIP (vcf_piz_is_skip_section)
 {
     if (flag.drop_genotypes && // note: if all samples are filtered out with --samples then flag.drop_genotypes=true (set in vcf_samples_analyze_field_name_line)
-        (dict_id.num == _VCF_FORMAT || dict_id.num == _VCF_SAMPLES || dict_id_is_vcf_format_sf (dict_id)))
+        (dict_id.num == _VCF_FORMAT || 
+         (dict_id.num == _VCF_SAMPLES && !segconf.has[FORMAT_RGQ]) || // note: if has[RGQ], vcf_piz_special_main_REFALT peeks SAMPLES so we need it 
+         dict_id_is_vcf_format_sf (dict_id)))
         return true;
 
     if (flag.gt_only && sections_has_dict_id (st) && dict_id_is_vcf_format_sf (dict_id) 
@@ -116,9 +125,15 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter)
             // fall through
             
         case _VCF_TOPLUFT:
-            // --drop-genotypes: remove the two tabs at the end of the line
-            if (flag.drop_genotypes && dnum == _VCF_EOL)
-                vb->txt_data.len -= 2;
+            if (flag.drop_genotypes) {
+                // --drop-genotypes: remove the two tabs at the end of the line
+                if (dnum == _VCF_EOL)
+                    vb->txt_data.len -= 2;
+
+                // --drop-genotypes: drop SAMPLES (might be loaded if has[RGQ], as needed for vcf_piz_special_main_REFALT)
+                else if (dnum == _VCF_SAMPLES)
+                    return false;
+            }
 
             // in dual-coordinates files - get the COORDS and oSTATUS at the beginning of each line
             else if (dnum == _VCF_oSTATUS || dnum == _VCF_COORDS) {
@@ -174,27 +189,6 @@ CONTAINER_FILTER_FUNC (vcf_piz_filter)
     }
 
     return true;    
-}
-
-// FORMAT - obey GT-only ; load haplotype line (note: if drop_genotypes we don't reach here, as FORMAT is eliminated by vcf_piz_is_skip_section)
-SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT)
-{
-    bool has_GT = (snip_len>=2 && snip[0]=='G' && snip[1] == 'T' && (snip_len==2 || snip[2] == ':'));
-    
-    if (reconstruct) {
-        if (flag.gt_only) {
-            if (has_GT)
-                RECONSTRUCT ("GT", 2);
-        }
-        else 
-            RECONSTRUCT_snip;
-    }
-
-    // initialize haplotype stuff
-    if (has_GT && !vb->ht_matrix_ctx) 
-        codec_hapmat_piz_calculate_columns (vb);
-
-    return NO_NEW_VALUE;
 }
 
 // ------------------------------------
