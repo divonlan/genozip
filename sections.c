@@ -62,7 +62,7 @@ void sections_add_to_list (VBlockP vb, const SectionHeader *header)
         .comp_i    = IS_COMP_SEC(st) ? vb->comp_i : COMP_NONE,
         .offset    = vb->z_data.len,  // this is a partial offset (within d) - we will correct it later
         .flags     = header->flags,
-        .num_lines = st==SEC_VB_HEADER ? (uint32_t)vb->lines.len : 0, 
+        .num_lines = st==SEC_VB_HEADER ? vb->lines.len32 : 0, 
         .size      = BGEN32 (header->compressed_offset) + BGEN32 (header->data_compressed_len)
     };
 
@@ -295,7 +295,7 @@ Section sections_vb_header (VBIType vb_i, bool soft_fail)
 
     else {
         Section sec=NULL;
-        unsigned i=0; for (; i < z_file->section_list_buf.len; i++) {
+        uint32_t i=0; for (; i < z_file->section_list_buf.len32; i++) {
             sec = B(SectionEnt, z_file->section_list_buf, i);
             if (sec->vblock_i == vb_i) break; // found!
         }
@@ -1046,7 +1046,7 @@ void sections_show_gheader (const SectionHeaderGenozipHeader *header)
         iprintf ("  encryption_type: %s\n",         encryption_name (header->encryption_type)); 
         iprintf ("  recon_size_prim: %s\n",         str_int_commas (BGEN64 (header->recon_size_prim)).s);
         iprintf ("  num_lines_bound: %"PRIu64"\n",  BGEN64 (header->num_lines_bound));
-        iprintf ("  num_sections: %u\n",            (unsigned)z_file->section_list_buf.len);
+        iprintf ("  num_sections: %u\n",            z_file->section_list_buf.len32);
         iprintf ("  num_components: %u\n",          header->num_components);
         if (dt == DT_REF)
             iprintf ("  REF_fasta_md5: %s\n",           digest_display (header->REF_fasta_md5).s);

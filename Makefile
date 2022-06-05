@@ -17,7 +17,7 @@ LDFLAGS += -lpthread -lm
 CFLAGS  += -Wall -D_LARGEFILE64_SOURCE=1 -D_7ZIP_ST
 
 ifdef IS_CONDA 
-	CFLAGS  += -DDISTRIBUTION=\"conda\"
+	CFLAGS  += -DDISTRIBUTION=\"conda\" # note: matches the name in version.c
 
 	ifeq ($(OS),Windows_NT)
 		CC=gcc # in Windows, override conda's default Visual C with gcc 
@@ -43,10 +43,10 @@ MY_SRCS = genozip.c genols.c base250.c context.c container.c strings.c stats.c a
 		  fasta.c fastq.c gff3.c me23.c phylip.c chain.c kraken.c locs.c generic.c 								\
 		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c lookback.c 				\
 		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c	\
-		  codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c 							\
+		  codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c codec_normq.c    							\
 	      txtfile.c profiler.c file.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c gencomp.c 			\
 		  vblock.c regions.c  optimize.c dict_id.c hash.c stream.c url.c bases_filter.c dict_io.c 				\
-		  recon_plan_io.c codec_normq.c
+		  recon_plan_io.c version.c
 
 CONDA_COMPATIBILITY_SRCS =  compatibility/mac_gettime.c
 
@@ -350,7 +350,7 @@ genozip-prod:
 #increment-version: $(C_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
 increment-version: # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
 	@echo "Incrementing version.h"
-	@bash increment-version.sh
+	@bash private/scripts/increment-version.sh
 
 decrement-version:
 	@echo "Do manually:"
@@ -407,7 +407,7 @@ conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld
 	@echo "  (7) In ~30 minutes users will be able to 'conda update genozip'"
 
 # Building Windows InstallForge with distribution flag: we delete arch.o to force it to re-compile with DISTRIBUTION=InstallForge.
-windows/%.exe: CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"InstallForge\"
+windows/%.exe: CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"InstallForge\" # note: matches the name in version.c
 windows/%.exe: $(OBJS) %.exe
 	@echo Linking $@
 	@(mkdir windows >& /dev/null ; exit 0)
@@ -491,7 +491,7 @@ genozip-linux-x86_64/clean:
 	@mkdir genozip-linux-x86_64
 
 # note: getpwuid and getgrgid will cause dymanically loading of the locally installed glibc in the --tar option, or segfault. that's normally fine.
-genozip-linux-x86_64/genozip: CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"linux-x86_64\"
+genozip-linux-x86_64/genozip: CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"linux-x86_64\" # note: matches the name in version.c
 genozip-linux-x86_64/genozip: clean-optimized $(OBJS)  # clean first, as we will compile without march=native
 	@echo Linking $@
 	@$(CC) -static -o $@ $(OBJS) $(CFLAGS) $(LDFLAGS)

@@ -471,8 +471,8 @@ void contigs_build_contig_pkg_from_zctx (ContigPkg *ctgs, ConstContextP zctx, So
     
     // note: we take num_contigs from nodes (ZIP) or word_list (PIZ), but in the case of nodes, we can't rely
     // on chrom_ctx->nodes for the correct order as vb_i=1 resorted. so we generate directly from dict
-    uint32_t num_contigs = MAX_(zctx->nodes.len, zctx->word_list.len);
-    uint32_t num_counts  = zctx->counts.len;
+    uint32_t num_contigs = MAX_(zctx->nodes.len32, zctx->word_list.len32);
+    uint32_t num_counts  = zctx->counts.len32;
 
     ASSERT (!num_counts || zctx->counts.len == num_contigs, "expecting zctx=%s to have num_contigs=%u == num_counts=%u", zctx->tag_name, num_contigs, num_counts);
 

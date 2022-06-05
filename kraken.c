@@ -437,7 +437,7 @@ void kraken_load (void)
         ASSERT (qname_nodes.len <= MAX_QNAME_NODES, "qname_nodes.len=%"PRIu64" exceeds the maximum of %u", qname_nodes.len, MAX_QNAME_NODES);
 
         // build the hash table
-        for (uint32_t i=0; i < (uint32_t)qname_nodes.len; i++) {
+        for (uint32_t i=0; i < qname_nodes.len32; i++) {
             uint32_t hash = B(QnameNode, qname_nodes, i)->hash;
             *B32 (qname_hashtab, hash) = i; // overwriting an empty or populated hash entry 
         }
@@ -518,7 +518,7 @@ static TaxonomyId kraken_get_taxid_with_pair (const QnameNode *l1, uint32_t hash
 // genocat --kraken: same, except that if both reads are classified, returns flag.kraken_taxid if one of the reads equals it
 static TaxonomyId kraken_get_taxid (STRp(qname))
 {
-    uint32_t hash = hash_do (qname_hashtab.len, STRa(qname));
+    uint32_t hash = hash_do (qname_hashtab.len32, STRa(qname));
 
     uint32_t list_index = *B32 (qname_hashtab, hash);
     if (list_index == QNAME_NODE_NONE) 

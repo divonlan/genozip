@@ -541,7 +541,7 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
         // case: add container to cache index - only if it is not a singleton (i.e. has word_index). 
         // note: singleton containers only occur in old files compressed with v8 (since v9 no_stons is set in container_seg_do)
         if (word_index != WORD_INDEX_NONE) 
-            *B32 (ctx->con_index, word_index) = (uint32_t)ctx->con_cache.len;
+            *B32 (ctx->con_index, word_index) = ctx->con_cache.len32;
 
         // place Container followed by prefix in the cache (even if its a singleton)
         buf_alloc (vb, &ctx->con_cache, st_size + prefixes_len + CONTAINER_MAX_SELF_TRANS_CHANGE, 0, char, 2, "contexts->con_cache");

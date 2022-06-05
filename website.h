@@ -28,7 +28,22 @@
 #define WEBSITE_USING_ON_HPC GENOZIP_URL "/using-on-hpc.html"
 #define WEBSITE_ATTRIBUTIONS GENOZIP_URL "/attributions.html"
 #define WEBSITE_STATS        GENOZIP_URL "/stats-collected.html"
+#define WEBSITE_COVERAGE     GENOZIP_URL "/coverage.html"
+#define WEBSITE_BENCHMARKS   GENOZIP_URL "/benchmarks.html"
+#define WEBSITE_DOWNSAMPLING GENOZIP_URL "/downsampling.html"
+#define WEBSITE_ENCRYPTION   GENOZIP_URL "/encryption.html"
+#define WEBSITE_PIPELINE     GENOZIP_URL "/fastq-to-bam-pipeline.html"
+#define WEBSITE_MATCH_CHROM  GENOZIP_URL "/match-chrom.html"
+#define WEBSITE_TESTIMONIALS GENOZIP_URL "/testimonials.html"
 
 #define EMAIL_SUPPORT  "support@genozip.com"
 #define EMAIL_SALES    "sales@genozip.com"
 #define EMAIL_REGISTER "register@genozip.com"
+
+#define GITHUB_LATEST_RELEASE    "https://github.com/divonlan/genozip/releases/latest"
+#define GITHUB_WINDOWS_INSTALLER "https://github.com/divonlan/genozip-docs/raw/master/docs/genozip-installer.exe"
+#define GITHUB_LINUX_TARBALL     "https://github.com/divonlan/genozip-docs/raw/master/docs/genozip-linux-x86_64.tar"
+#define GITHUB_REPO              "https://github.com/divonlan/genozip"
+
+#define PAPER1 "https://www.researchgate.net/publication/341408805_genozip_a_fast_and_efficient_compression_tool_for_VCF_files"
+#define PAPER2 "https://www.researchgate.net/publication/349347156_Genozip_-_A_Universal_Extensible_Genomic_Data_Compressor"

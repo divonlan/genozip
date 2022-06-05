@@ -200,7 +200,7 @@ void bgzf_uncompress_vb (VBlockP vb)
 
     vb->gzip_compressor = libdeflate_alloc_decompressor(vb);
 
-    for (uint32_t block_i=0; block_i < vb->bgzf_blocks.len ; block_i++) {
+    for (uint32_t block_i=0; block_i < vb->bgzf_blocks.len32 ; block_i++) {
         BgzfBlockZip *bb = B(BgzfBlockZip, vb->bgzf_blocks, block_i);
         bgzf_uncompress_one_block (vb, bb);
     } 
@@ -492,7 +492,7 @@ static void bgzf_compress_vb_no_blocks (VBlockP vb)
         next += block_isize;
     }
 
-    vb->scratch.uncomp_size = (uint32_t)vb->txt_data.len;
+    vb->scratch.uncomp_size = vb->txt_data.len32;
     
     bgzf_free_compressor (vb, txt_file->bgzf_flags);
 }
@@ -524,7 +524,7 @@ void bgzf_compress_vb (VBlockP vb)
 
         ASSERT (blocks[i].txt_index + blocks[i].txt_size <= vb->txt_data.len, 
                 "block=%"PRIu64" out of range: expecting txt_index=%u txt_size=%u <= txt_data.len=%u",
-                i, blocks[i].txt_index, blocks[i].txt_size, (uint32_t)vb->txt_data.len);
+                i, blocks[i].txt_index, blocks[i].txt_size, vb->txt_data.len32);
 
         // case: all the data is from the current VB. if there is any data from the previous VB, the index will be negative 
         // and we will compress it in bgzf_write_to_disk() instead
@@ -600,8 +600,8 @@ void bgzf_write_to_disk (VBlockP wvb, VBlockP vb)
     //    special case: the previous unconsumed txt, plus all the data in this VB, is not enough to complete the block.
     //    in this case, we just add all the data to unconsumed text.
     BgzfBlockPiz *last_block = BLST (BgzfBlockPiz, vb->bgzf_blocks); // bad pointer if we have no blocks
-    uint32_t last_data_index = vb->bgzf_blocks.len ? last_block->txt_index + last_block->txt_size : 0;
-    uint32_t last_data_len   = (uint32_t)vb->txt_data.len - last_data_index;
+    uint32_t last_data_index = vb->bgzf_blocks.len32 ? last_block->txt_index + last_block->txt_size : 0;
+    uint32_t last_data_len   = (uint32_t)vb->txt_data.len32 - last_data_index;
 
     if (last_data_len)                            
         buf_add_more (wvb, &intercall_txt, Bc (vb->txt_data, last_data_index), last_data_len, "intercall_txt");

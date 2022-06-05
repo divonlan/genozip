@@ -22,6 +22,8 @@
 #include "qname.h"
 #include "gencomp.h"
 #include "url.h"
+#include "crypt.h"
+#include "tar.h"
 
 typedef struct {
     DidIType my_did_i, st_did_i;
@@ -39,6 +41,8 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
 {
     // run submission in a separate process to not stall the main process 
 #ifndef _WIN32
+    fflush ((FILE *)z_file->file); // flush before fork, otherwise both processes will have z_file buffers...
+
     pid_t child_pid = fork();
     if (child_pid) return; // parent returns
 #endif
@@ -63,8 +67,8 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
     bufprintf (evb, &url_buf, "&entry.1861722167=%s", url_esc_non_valid_chars (arch_get_user_host()));                         // user@host. Eg "john@hpc"
     bufprintf (evb, &url_buf, "&entry.441046403=%s", dt_name (z_file->data_type));                                             // data type. Eg "VCF"
     bufprintf (evb, &url_buf, "&entry.984213484=%s", url_esc_non_valid_charsS (str_size (all_txt_len).s).s);                   // Txt size (original file size), eg "6.2 GB"
-    bufprintf (evb, &url_buf, "&entry.960659059=%s%%2C%.2f", codec_name (txt_file->codec), src_comp_ratio);                    // Source codec/gain eg "GZ/4.3"
-    bufprintf (evb, &url_buf, "&entry.621670070=%.2f", all_comp_ratio);                                                        // Genozip gain over source txt eg "5.4"
+    bufprintf (evb, &url_buf, "&entry.960659059=%s%%2C%.1f", codec_name (txt_file->codec), src_comp_ratio);                    // Source codec/gain eg "GZ/4.3"
+    bufprintf (evb, &url_buf, "&entry.621670070=%.1f", all_comp_ratio);                                                        // Genozip gain over source txt eg "5.4"
     bufprintf (evb, &url_buf, "&entry.1635780209=OS=%s%%3Bcores=%u", url_esc_non_valid_charsS(arch_get_os()).s, arch_get_num_cores());  // Environment: OS, # cores, eg:
     bufprintf (evb, &url_buf, "&entry.2140634550=%s", features.len ? B1STc(features) : "NONE");                                                        // Features. Eg "Sorted"
 
@@ -86,12 +90,30 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
     if (!found_hash) bufprint0 (evb, &url_buf, "NONE");
     
     bufprint0 (evb, &url_buf, "&entry.1369097179=");     // Flags. Eg "best,reference=INTERNAL"
-    if (flag.best)      bufprint0 (evb, &url_buf, "best%3B");
-    if (flag.fast)      bufprint0 (evb, &url_buf, "fast%3B");
-    if (flag.optimize)  bufprint0 (evb, &url_buf, "optimize%3B");
-    if (flag.reference) bufprintf (evb, &url_buf, "reference=%s%%3B", ref_type_name());
-    if (flag.show_stats_comp_i != COMP_NONE) bufprintf (evb, &url_buf, "stats_comp_i=%u%%3B", flag.show_stats_comp_i);
-    
+
+    #define F(name) if (flag.name) { bufprint0 (evb, &url_buf, #name "%3B"); }
+    F(best) ; F(fast) ;
+    F(optimize) ; F(optimize_DESC) ; F(optimize_phred) ; F(optimize_QUAL) ; F(optimize_Vf) ;
+    F(optimize_VQSLOD) ; F(optimize_ZM) ; F(optimize_sort) ; F(GL_to_PL) ; F(GP_to_PP) ;
+    F(add_line_numbers) ; F(sort) ; F(unsorted) ; F(md5) ; F(subdirs) ; F(out_filename) ;
+    F(replace) ; F(force) ; F(stdin_size) ; F(test) ; F(match_chrom_to_reference) ;
+    F(reading_chain); F(reading_kraken) ; F(make_reference) ; F(dvcf_rename) ; F(dvcf_drop) ;
+    F(show_lift) ; F(pair) ; F(multiseq) ; F(files_from) ;
+    #undef F
+
+    #define F(name,fmt,none_value) if (flag.name != (none_value)) bufprintf (evb, &url_buf, #name "=" fmt "%%3B", flag.name);
+    F(show_stats_comp_i, "%u", COMP_NONE);
+    F(threads_str, "%s", NULL);
+    F(vblock, "%s", NULL);
+    #undef F
+
+    if (flag.reference)                bufprintf (evb, &url_buf, "reference=%s%%3B", ref_type_name());    
+    if (crypt_have_password())         bufprint0 (evb, &url_buf, "encrypted%3B");    
+    if (tar_is_tar())                  bufprint0 (evb, &url_buf, "tar%3B");    
+    if (flag.kraken_taxid==TAXID_NONE) bufprint0 (evb, &url_buf, "taxid%3B");    
+    if (file_get_stdin_type())         bufprintf (evb, &url_buf, "stdin_type=%s%%3B", ft_name(file_get_stdin_type()));    
+    if (flag.show_one_counts.num)      bufprintf (evb, &url_buf, "show_counts=%s%%3B", dis_dict_id(flag.show_one_counts).s);
+
     url_read_string (B1STc(url_buf), NULL, 0); // ignore errors
     
 #ifndef _WIN32
@@ -173,18 +195,18 @@ static void stats_output_file_metadata (void)
         bufprintf (evb, &stats, "%ss: %s (PRIM component: %s DEPN component: %s)  Contexts: %u   Vblocks: %u x %u MB  Sections: %u\n", 
                    DTPZ (line_name), str_int_commas (z_file->num_lines).s, str_int_commas (gencomp_get_num_lines (SAM_COMP_PRIM)).s, 
                    str_int_commas (gencomp_get_num_lines (SAM_COMP_DEPN)).s, num_used_ctxs, 
-                   z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), (uint32_t)z_file->section_list_buf.len);
+                   z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), z_file->section_list_buf.len32);
 
     else if (z_is_dvcf)
         bufprintf (evb, &stats, "%ss: %s (Prim-only: %s Luft-only: %s)  Contexts: %u   Vblocks: %u x %u MB  Sections: %u\n", 
                    DTPZ (line_name), str_int_commas (z_file->num_lines).s, str_int_commas (gencomp_get_num_lines (VCF_COMP_PRIM_ONLY)).s, 
                    str_int_commas (gencomp_get_num_lines (VCF_COMP_LUFT_ONLY)).s, num_used_ctxs, 
-                   z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), (uint32_t)z_file->section_list_buf.len);
+                   z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), z_file->section_list_buf.len32);
 
     else
         bufprintf (evb, &stats, "%ss: %s   Contexts: %u   Vblocks: %u x %u MB  Sections: %u\n", 
                    DTPZ (line_name), str_int_commas (z_file->num_lines).s, num_used_ctxs, 
-                   z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), (uint32_t)z_file->section_list_buf.len);
+                   z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), z_file->section_list_buf.len32);
 
     if (Z_DT(DT_KRAKEN)) {
         int64_t dominant_taxid_count;

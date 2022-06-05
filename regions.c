@@ -287,12 +287,12 @@ void regions_transform_negative_to_positive_complement()
         chregs[chr_i].len  = 1;
 
         // process each negative regions - substract from positive chreg 
-        for (unsigned negreg_i=0; negreg_i < neg_chregs[chr_i].len; negreg_i++) {
+        for (unsigned negreg_i=0; negreg_i < neg_chregs[chr_i].len32; negreg_i++) {
 
             Chreg *neg_chreg = B(Chreg, neg_chregs[chr_i], negreg_i);
             
             // for each positive region that overlaps the negative region - fix it to remove the negative region
-            for (unsigned posreg_i=0; posreg_i < chregs[chr_i].len; posreg_i++) {
+            for (unsigned posreg_i=0; posreg_i < chregs[chr_i].len32; posreg_i++) {
 
                 Chreg *pos_chreg = B(Chreg, chregs[chr_i], posreg_i);
 
@@ -467,9 +467,9 @@ void regions_display(rom title)
 
     if (buf_is_alloc (&regions_buf)) {
 
-        iprintf ("Showing %u %s regions:\n", (uint32_t)regions_buf.len, is_negative_regions ? "NEGATIVE" : "POSITIVE");
+        iprintf ("Showing %u %s regions:\n", regions_buf.len32, is_negative_regions ? "NEGATIVE" : "POSITIVE");
 
-        for (unsigned reg_i = 0; reg_i < regions_buf.len; reg_i++) {
+        for (unsigned reg_i = 0; reg_i < regions_buf.len32; reg_i++) {
             Region *reg = &((Region *)regions_buf.data)[reg_i];
             iprintf ("chrom=%s start=%"PRId64" end=%"PRId64"\n", 
                      reg->chrom ? reg->chrom : "ALL", reg->start_pos, reg->end_pos); 
@@ -480,7 +480,7 @@ void regions_display(rom title)
         iprintf ("Showing %s chromosomeXregions (\"chregs\") across %u chromosomes:\n", is_negative_regions ? "NEGATIVE" : "POSITIVE", num_chroms);
 
         for (unsigned chr_i = 0; chr_i < num_chroms; chr_i++)
-            for (unsigned chreg_i=0; chreg_i < chregs[chr_i].len; chreg_i++) {
+            for (unsigned chreg_i=0; chreg_i < chregs[chr_i].len32; chreg_i++) {
                 Chreg *chreg = B(Chreg, chregs[chr_i], chreg_i);
                 iprintf ("chrom_word_index=%d start=%"PRId64" end=%"PRId64"\n", chr_i, chreg->start_pos, chreg->end_pos); 
             }

@@ -35,9 +35,9 @@ WordIndex seg_by_ctx_ex (VBlockP vb, STRp(snip), ContextP ctx, uint32_t add_byte
 
     WordIndex node_index = ctx_create_node_do (VB, ctx, STRa(snip), is_new);
 
-    ASSERT (node_index < ctx->nodes.len + ctx->ol_nodes.len || node_index == WORD_INDEX_EMPTY || node_index == WORD_INDEX_MISSING, 
+    ASSERT (node_index < ctx->nodes.len32 + ctx->ol_nodes.len32 || node_index == WORD_INDEX_EMPTY || node_index == WORD_INDEX_MISSING, 
             "out of range: dict=%s node_index=%d nodes.len=%u ol_nodes.len=%u",  
-            ctx->tag_name, node_index, (uint32_t)ctx->nodes.len, (uint32_t)ctx->ol_nodes.len);
+            ctx->tag_name, node_index, ctx->nodes.len32, ctx->ol_nodes.len32);
     
     ctx_append_b250 (vb, ctx, node_index);
     ctx->txt_len += add_bytes;
@@ -281,7 +281,7 @@ void seg_mux_display (MultiplexerP mux)
 }
 
 void seg_mux_init (VBlockP vb, unsigned num_channels, uint8_t special_code, DidIType mux_did_i, DidIType st_did_i,
-                   StoreType store_type, MultiplexerP mux,
+                   StoreType store_type, bool seg_dyn_int, MultiplexerP mux,
                    rom channel_letters) // optional - a string with num_channels unique characters
 {
     ASSERT (num_channels <= 256, "num_channels=%u beyond maximum of 256", num_channels);
@@ -291,6 +291,7 @@ void seg_mux_init (VBlockP vb, unsigned num_channels, uint8_t special_code, DidI
 
     mux->num_channels = num_channels;
     mux->store_type   = store_type;
+    mux->dyn_int      = seg_dyn_int;
     mux->st_did_i     = st_did_i;
 
     // calculate dict_ids, eg: PL -> PlL, PmL, PnL, PoL
@@ -302,6 +303,7 @@ void seg_mux_init (VBlockP vb, unsigned num_channels, uint8_t special_code, DidI
     }
 
     CTX(mux_did_i)->flags.store = store_type;
+    CTX(mux_did_i)->dynamic_size_local = seg_dyn_int;
 
     // prepare snip - a string consisting of num_channels x { special_code or \t , base64(dict_id.id) }
     MUX_SNIP_LEN(mux) = BASE64_DICT_ID_LEN * num_channels;   
@@ -322,7 +324,8 @@ ContextP seg_mux_get_channel_ctx (VBlockP vb, MultiplexerP mux, uint32_t channel
         MUX_CHANNEL_CTX(mux)[channel_i] = channel_ctx;
 
         channel_ctx->is_initialized = true;
-        channel_ctx->flags.store = mux->store_type; 
+        channel_ctx->flags.store = mux->store_type;
+        channel_ctx->dynamic_size_local = mux->dyn_int; 
         stats_set_consolidation (VB, mux->st_did_i, 1, channel_ctx->did_i); // set consolidation for --stats    
     }
 

@@ -1001,7 +1001,7 @@ static unsigned Backward(CLzmaEnc *p, unsigned cur)
   for (;;)
   {
     UInt32 dist = p->opt[cur].dist;
-    unsigned len = (unsigned)p->opt[cur].len;
+    unsigned len   = (unsigned)p->opt[cur].len;
     unsigned extra = (unsigned)p->opt[cur].extra;
     cur -= len;
 

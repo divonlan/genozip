@@ -210,7 +210,7 @@ static bool buf_test_overflows_do (ConstVBlockP vb, bool primary, rom msg)
     int corruption = 0;
 
     ConstBufferP buf; // declare outside, so it is observable in the debugger in case of a crash
-    for (uint32_t buf_i=0; buf_i < vb->buffer_list.len; buf_i++) {
+    for (uint32_t buf_i=0; buf_i < vb->buffer_list.len32; buf_i++) {
         static rom nl[2] = {"", "\n\n"};
 
         // IMPORTANT NOTE regarding evb: testing evb might FAIL and should not be done in production! this if another thread 
@@ -463,7 +463,7 @@ void buf_add_to_buffer_list_do (VBlockP vb, BufferP buf, FUNCLINE)
 
     if (flag.debug_memory==1 && vb->buffer_list.len > DISPLAY_ALLOCS_AFTER)
         iprintf ("buf_add_to_buffer_list (%s): %s: size=%"PRIu64" buffer=%p vb->id=%d buf_i=%u\n", 
-                 func, buf_desc(buf).s, (uint64_t)buf->size, buf, vb->id, (uint32_t)vb->buffer_list.len-1);    
+                 func, buf_desc(buf).s, (uint64_t)buf->size, buf, vb->id, vb->buffer_list.len32-1);    
 }
 
 static void buf_init (BufferP buf, char *memory, uint64_t size, uint64_t old_size, 

@@ -42,12 +42,12 @@ Reference prim_ref = &refs[1]; // chain file primary coordinates reference
 #define ref_is_range_used(r) ((r)->ref.nbits && ((r)->is_set.nbits || flag.make_reference))
 
 // get / set functions 
-rom ref_get_filename (const Reference ref) { return ref->filename; }
-uint8_t ref_get_genozip_version (const Reference ref) { return ref->genozip_version; }
-BufferP ref_get_stored_ra (Reference ref) { return &ref->stored_ra; }
-Digest ref_get_file_md5 (const Reference ref) { return ref->file_md5; }
-ConstContigPkgP ref_get_ctgs (const Reference ref) { return &ref->ctgs; }
-uint32_t ref_num_contigs (Reference ref) { return (uint32_t)ref->ctgs.contigs.len; }
+rom ref_get_filename (const Reference ref)            { return ref->filename;           }
+uint8_t ref_get_genozip_version (const Reference ref) { return ref->genozip_version;    }
+BufferP ref_get_stored_ra (Reference ref)             { return &ref->stored_ra;         }
+Digest ref_get_file_md5 (const Reference ref)         { return ref->file_md5;           }
+ConstContigPkgP ref_get_ctgs (const Reference ref)    { return &ref->ctgs;              }
+uint32_t ref_num_contigs (Reference ref)              { return ref->ctgs.contigs.len32; }
 
 void ref_get_genome (Reference ref, const BitArray **genome, const BitArray **emoneg, PosType *genome_nbases)
 {
@@ -76,7 +76,7 @@ static void ref_free_denovo_ranges (Reference ref)
     if (!buf_is_alloc (&ref->ranges)) return;
 
     ARRAY (Range, r, ref->ranges);
-    for (unsigned i=0; i < ref->ranges.len ; i++) {
+    for (uint32_t i=0; i < ref->ranges.len32 ; i++) {
         FREE (r[i].ref.words);
         FREE (r[i].is_set.words);
         if (primary_command == ZIP) 
@@ -162,7 +162,7 @@ MemStats ref_memory_consumption (Reference ref)
 
     if (ranges_type(ref) == RT_DENOVO) {
         ARRAY (Range, r, ref->ranges);
-        for (unsigned i=0; i < ref->ranges.len; i++) {
+        for (uint32_t i=0; i < ref->ranges.len32; i++) {
             if (r[i].ref.nwords) {
                 stats.bytes += r[i].ref.nwords * sizeof (uint64_t);
                 stats.buffers++;
@@ -306,7 +306,7 @@ static void ref_print_bases (FILE *file, const BitArray *bitarr,
 
 static void ref_show_sequence (Reference ref)
 {
-    for (uint32_t range_i=0; range_i < ref->ranges.len; range_i++) {
+    for (uint32_t range_i=0; range_i < ref->ranges.len32; range_i++) {
         Range *r = B(Range, ref->ranges, range_i);
 
         // get first pos and last pos, potentially modified by --regions
@@ -587,7 +587,7 @@ void ref_load_stored_reference (Reference ref)
     // copied-from-FASTA ranges appear first in the genozip file, and after them could be compacted ranges that originate
     // from a full-contig range in EXT_STORE, whose regions copied-from-FASTA are 0s.
     ARRAY (RegionToSet, rts, ref->region_to_set_list);
-    for (uint32_t i=0; i < ref->region_to_set_list.len; i++)
+    for (uint32_t i=0; i < ref->region_to_set_list.len32; i++)
         bit_array_set_region (rts[i].is_set, rts[i].first_bit, rts[i].len);
 
     COPY_TIMER_VB (evb, ref_load_stored_reference);
@@ -625,7 +625,7 @@ bool ref_mmap_cached_reference (Reference ref)
 
     // PIZ: all ranges of contigs are "set", i.e. the genome is valid in this location (it is not set in the short space between contigs)
     if (primary_command == PIZ) 
-        for (uint32_t chrom=0; chrom < ref->ranges.len; chrom++) {
+        for (uint32_t chrom=0; chrom < ref->ranges.len32; chrom++) {
             Range *r = B(Range, ref->ranges, chrom);
             bit_array_set_region (&r->is_set, 0, ref_size (r));
         }
@@ -756,7 +756,7 @@ static Range *ref_seg_get_locked_range_denovo (VBlockP vb, Reference ref, WordIn
     // in case of header contigs, sam_seg_RNAME/RNEXT enforces that chrom is defined in the header
     uint32_t range_id = sam_hdr_contigs ? (contigs_get_gpos (sam_hdr_contigs, chrom) >> REF_NUM_DENOVO_SITES_PER_RANGE_BITS) + range_i // note: GPOS maybe beyond 4GB
                                         : ref_range_id_by_hash (vb, range_i);
-    ASSSEG (range_id < ref->ranges.len, field, "range_id=%u expected to be smaller than ranges.len=%u", range_id, (uint32_t)ref->ranges.len);
+    ASSSEG (range_id < ref->ranges.len, field, "range_id=%u expected to be smaller than ranges.len=%u", range_id, ref->ranges.len32);
 
     Range *range = B(Range, ref->ranges, range_id);
     if (lock) *lock = ref_lock_range (ref, range_id);
@@ -940,7 +940,7 @@ static void ref_copy_compressed_sections_from_reference_file (Reference ref)
     chrom_index_by_name (CHROM);
 
     // note: use 'genocat --show-index <file.ref.genozip>' to see ref_external_ra
-    for (uint32_t i=0; i < ref->ref_external_ra.len; i++) {
+    for (uint32_t i=0; i < ref->ref_external_ra.len32; i++) {
 
         Range *contig_r = B(Range, ref->ranges, sec_reference[i].chrom_index);
         PosType SEC_REFERENCE_start_in_contig_r = sec_reference[i].min_pos - contig_r->first_pos; // the start of the SEC_REFERENCE section (a bit less than 1MB) within the full-contig range
@@ -1227,7 +1227,7 @@ static void ref_finalize_denovo_ranges (void)
     ref_contigs_generate_data_if_denovo (gref);
 
     // calculate all chrom indices
-    for (uint32_t range_i=0; range_i < gref->ranges.len; range_i++) {
+    for (uint32_t range_i=0; range_i < gref->ranges.len32; range_i++) {
         Range *r = B(Range, gref->ranges, range_i);
         
         if (ref_is_range_used (r)) 
@@ -1242,7 +1242,7 @@ static void ref_finalize_denovo_ranges (void)
     gref->ranges.len = BNUM (gref->ranges, r);
 
     // shorten the last range in each to contig according to usage
-    for (uint32_t range_i=0; range_i < gref->ranges.len; range_i++) {
+    for (uint32_t range_i=0; range_i < gref->ranges.len32; range_i++) {
         Range *r = B(Range, gref->ranges, range_i);
         
         if (range_i < gref->ranges.len - 1 && r->chrom == (r+1)->chrom) continue; // not last range of the contig
@@ -1291,7 +1291,7 @@ void ref_compress_ref (void)
 
     // initialize Range.num_set (used by ref_prepare_range_for_compress)
     if (!flag.make_reference)
-        for (unsigned range_i=0; range_i < gref->ranges.len; range_i++)
+        for (uint32_t range_i=0; range_i < gref->ranges.len32; range_i++)
             if (! B(Range, gref->ranges, range_i)->num_set)  // if not already set by ref_contigs_populate_aligned_chroms
                 B(Range, gref->ranges, range_i)->num_set = -1;
 
@@ -1466,7 +1466,7 @@ void ref_diff_ref (void)
         exit_ok();
     }
 
-    for (uint32_t range_i=0; range_i < gref->ranges.len; range_i++) {
+    for (uint32_t range_i=0; range_i < gref->ranges.len32; range_i++) {
         const Range *r1 = B(Range, gref->ranges, range_i); 
         const Range *r2 = B(Range, prim_ref->ranges, range_i); 
 

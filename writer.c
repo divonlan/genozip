@@ -1058,7 +1058,7 @@ static void writer_main_loop (VBlockP wvb)
         ReconPlanItem *p = B(ReconPlanItem, txt_file->recon_plan, i);
 
         ASSERT (p->vb_i >= 0 && p->vb_i <= vb_info.len, 
-                "plan[%u].vb_i=%u expected to be in range [1,%u] ", (unsigned)i, p->vb_i, (unsigned)vb_info.len);
+                "plan[%"PRIu64"].vb_i=%u expected to be in range [1,%u] ", i, p->vb_i, vb_info.len32);
 
         VbInfo *v  = p->vb_i ? VBINFO(p->vb_i) 
                    : p->flavor == PLAN_TXTHEADER ? B(VbInfo, txt_header_info, p->comp_i)

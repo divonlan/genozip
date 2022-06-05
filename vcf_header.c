@@ -821,8 +821,8 @@ static bool vcf_header_set_globals (rom filename, BufferP vcf_header, bool soft_
                       "%.*s"
                       "=======================================\n", 
                       global_cmd, filename, vcf_field_name_line_filename,
-                      vcf_field_name_line_filename, (uint32_t)vcf_field_name_line.len, vcf_field_name_line.data,
-                      filename, (uint32_t)vcf_header->len-i, &vcf_header->data[i]);
+                      vcf_field_name_line_filename, vcf_field_name_line.len32, vcf_field_name_line.data,
+                      filename, vcf_header->len32-i, &vcf_header->data[i]);
                 
                 if (soft_fail) return false;
                 else           exit_on_error (false);
@@ -981,7 +981,7 @@ void vcf_samples_add  (rom samples_str)
         if (!one_sample) break;
 
         bool is_duplicate = false;
-        for (unsigned s=0; s < cmd_samples_buf.len; s++)
+        for (unsigned s=0; s < cmd_samples_buf.len32; s++)
             if (!strcmp (one_sample, *B(char *, cmd_samples_buf, s))) {
                 is_duplicate = true;
                 break;

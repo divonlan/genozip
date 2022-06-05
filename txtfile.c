@@ -29,7 +29,7 @@ rom txtfile_dump_vb (VBlockP vb, rom base_name)
 {
     char *dump_filename = MALLOC (strlen (base_name) + 100); // we're going to leak this allocation
     sprintf (dump_filename, "%s.vblock-%u.start-%"PRIu64".len-%u.bad", 
-             base_name, vb->vblock_i, vb->vb_position_txt_file, (uint32_t)vb->txt_data.len);
+             base_name, vb->vblock_i, vb->vb_position_txt_file, vb->txt_data.len32);
 
     buf_dump_to_file (dump_filename, &vb->txt_data, 1, false, false, false, false);
 
@@ -154,13 +154,13 @@ static inline uint32_t txtfile_read_block_bgzf (VBlockP vb, int32_t max_uncomp /
             if (block_uncomp_len == BGZF_BLOCK_GZIP_NOT_BGZIP || block_uncomp_len == BGZF_BLOCK_IS_NOT_GZIP) {
                 // dump to file
                 char dump_fn[strlen(txt_name)+100];
-                sprintf (dump_fn, "%s.vb-%u.bad-bgzf.bad-offset-0x%X", txt_name, vb->vblock_i, (uint32_t)vb->scratch.len);
+                sprintf (dump_fn, "%s.vb-%u.bad-bgzf.bad-offset-0x%X", txt_name, vb->vblock_i, vb->scratch.len32);
                 Buffer dump_buffer = vb->scratch; // a copy
                 dump_buffer.len   += block_comp_len; // compressed size
                 buf_dump_to_file (dump_fn, &dump_buffer, 1, false, false, true, false);
 
                 ABORT ("%s: Invalid BGZF block: block_comp_len=%u. Entire BGZF data of this vblock dumped to %s, bad block stats at offset 0x%X",
-                       VB_NAME, block_comp_len, dump_fn, (uint32_t)vb->scratch.len);
+                       VB_NAME, block_comp_len, dump_fn, vb->scratch.len32);
             }
 
             // add block to list - including the EOF block (block_comp_len=BGZF_EOF_LEN block_uncomp_len=0)

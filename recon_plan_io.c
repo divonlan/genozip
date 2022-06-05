@@ -30,7 +30,7 @@ void recon_plan_show (File *file, bool is_luft, uint32_t conc_writing_vbs, uint3
              !z_is_dvcf ? "" : is_luft ? " of LUFT rendition" : " of PRIMARY rendition", 
              z_file->recon_plan.len, conc_writing_vbs, vblock_mb);
 
-    for (uint32_t i=0; i < z_file->recon_plan.len; i++) {
+    for (uint32_t i=0; i < z_file->recon_plan.len32; i++) {
         ReconPlanItem *p = B(ReconPlanItem, file->recon_plan, i);
         rom comp = p->vb_i ? comp_name(sections_vb_header(p->vb_i, false)->comp_i) : NULL;
         rom flav = recon_plan_flavors[p->flavor];

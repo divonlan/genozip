@@ -397,5 +397,5 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
     }
 
     ASSERT (nonref_ctx->next_local <= nonref_ctx->local.len, "nonref_ctx->next_local=%u is out of range: nonref_ctx->local.len=%u",
-            nonref_ctx->next_local, (uint32_t)nonref_ctx->local.len);
+            nonref_ctx->next_local, nonref_ctx->local.len32);
 }

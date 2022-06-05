@@ -101,13 +101,13 @@ void chrom_2ref_load (Reference ref)
 
     // initialize with unity mapping
     ARRAY (WordIndex, map, z_file->chrom2ref_map);
-    for (uint32_t i=0; i < zctx->word_list.len; i++)
+    for (uint32_t i=0; i < zctx->word_list.len32; i++)
         map[i] = i;
 
     // the indices of chroms that are NOT in the reference (they are only in the user file), will be mapped to ref chroms
     ConstContigPkgP ctgs = ref_get_ctgs (ref); 
     WordIndex num_ref_contigs = ctgs->contigs.len; // must be signed int
-    for (uint32_t i=0; i < evb->scratch.len; i++) {
+    for (uint32_t i=0; i < evb->scratch.len32; i++) {
         Chrom2Ref *ent = B(Chrom2Ref, evb->scratch, i);
         WordIndex chrom_index = BGEN32 (ent->chrom_index);
         WordIndex ref_index = BGEN32 (ent->ref_index);

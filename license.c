@@ -453,3 +453,108 @@ void license_display (void)
         str_print_text (license, sizeof(license) / sizeof(char*), "", "\n\n", flag.lic_width);  // Makefile sets lic_width to a fixed width for Windows Installer and for Docs
 }
 
+void license_print_notice (void)
+{
+    switch (time(0) % 25) {
+        case 0 ... 5:
+            switch (license_get_type()) { // note: this also loads the license in PIZ
+
+                case LIC_TYPE_ACADEMIC:
+                    iprintf ("\nGenozip is licensed to %s for use by %s, for academic research purposes at a recognized research institution only. Other use is prohibited. To get a non-academic license, email " EMAIL_SALES ".\n",
+                            rec.institution, rec.name);
+                    break;
+
+                case LIC_TYPE_EVAL: { 
+                    int days_left = 30 - (int)(time(0)-rec.machine_time)/24/60/60;
+
+                    iprintf ("\nGenozip is licensed to %s for use by %s for a 30-day evaluation. %u day%s left. To get a license, email " EMAIL_SALES ".\n",
+                            rec.institution, rec.name, days_left, days_left!=1 ? "s" : "");
+                    break;
+                }
+
+                default: break;
+            }
+            break;
+
+        case 6: 
+            iprintf ("\nInterested in how Genozip works? See the paper: %s\n", PAPER2);
+            break;
+
+        case 7:
+            if (!strcmp (arch_get_distribution(), "github"))
+                iprintf ("\nDo you like Genozip? Please support it by starring it on github: %s\n", GITHUB_REPO);
+            break;
+
+        case 8:
+            iprint0 ("\nIs Genozip useful? Help your colleagues by asking the IT folks to post it on your institution's bioinformatics page\n");
+            break;
+
+        case 9:
+            iprintf ("\nIs Genozip useful? Help your colleagues by asking the IT folks to install it as a module on your institution's HPC, see instructions here: %s\n", WEBSITE_USING_ON_HPC);
+            break;
+
+        case 10:
+            iprintf ("\nTip: you can use Genozip to get coverage information, see: %s\n", WEBSITE_COVERAGE);
+            break;
+
+        case 11:
+            iprintf ("\nTip: you can generate a VCF that describes variants against two different references concurrently, see: %s\n", WEBSITE_DVCF);
+            break;
+
+        case 12:
+            iprintf ("\nTip: you can use Genozip to generate a VCF that describes variants against two different references concurrently, see: %s\n", WEBSITE_DVCF);
+            break;
+
+        case 13:
+            iprintf ("\nFYI, some Genozip benchmarks are available here: %s\n", WEBSITE_BENCHMARKS);
+            break;
+        
+        case 14:
+            iprintf ("\nTip: you can use Genozip to downsample your data, see: %s\n", WEBSITE_DOWNSAMPLING);
+            break;
+        
+        case 15:
+            iprintf ("\nTip: increase the security of your data by using Genozip's built-in encryption, see: %s\n", WEBSITE_ENCRYPTION);
+            break;
+        
+        case 16:
+            iprintf ("\nTip: with Genozip, you can archive entire directories, see: %s\n", WEBSITE_ARCHIVING);
+            break;
+        
+        case 17:
+            iprintf ("\nTip: see an example of a FASTQ-to-BAM pipeline using Genozip: %s\n", WEBSITE_PIPELINE);
+            break;
+        
+        case 18:
+            iprintf ("\nTip: do the chromosomes have different names (eg 22 vs chr22)? Genozip can fix that: %s\n", WEBSITE_MATCH_CHROM);
+            break;
+    
+        case 19:
+            iprintf ("\nInterested in other users' experiences with Genozip? Read their testimonials: %s\n", WEBSITE_TESTIMONIALS);
+            break;
+        
+        case 20:
+            iprint0 ("\nTip: genozip files are an excellent way to share and publish data - uncompressing genozip files does NOT require a license\n");
+            break;
+
+        case 21:
+            iprintf ("\nTip: you can use Genozip to compress a file directly from a URL, see: %s\n", WEBSITE_GENOZIP);
+            break;
+
+        case 22:
+            iprintf ("\nTip: using --reference when compressing FASTQ, BAM and GVCF files results in significantly better compression, see: %s\n", WEBSITE_GENOZIP);
+            break;
+
+        case 23:
+            iprintf ("\nTip: using --optimize permits Genozip to make minor modifications to the data that usually have no impact on downstream analysis, yet result in significantly better compression, see: %s\n", WEBSITE_GENOZIP);
+            break;
+
+        case 24:
+            iprint0 ("\nPlease take a moment now to make a note to not forget to cite Genozip:\n"
+                    "Lan, D., et al. (2021) Genozip: a universal extensible genomic data compressor, Bioinformatics, 37, 2225-2230\n"
+                    "Lan, D., et al. (2020) genozip: a fast and efficient compression tool for VCF files, Bioinformatics, 36, 4091-4092\n\n");
+            break;
+
+        default: break;
+    }
+}

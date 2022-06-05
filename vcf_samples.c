@@ -146,24 +146,25 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
         : PL_mux_by_DP_NO;
 
     // initialize dosage multiplexers
-    #define init_mux(name,store_type) seg_mux_init ((VBlockP)vb, 4, VCF_SPECIAL_MUX_BY_DOSAGE, FORMAT_##name, FORMAT_##name, (store_type), (MultiplexerP)&vb->mux_##name, "0123")
-    init_mux(PRI,  STORE_NONE);
-    init_mux(GL,   STORE_NONE);
-    init_mux(DS,   STORE_NONE);
-    init_mux(PP,   STORE_NONE);
-    init_mux(GP,   STORE_NONE);
-    //init_mux(GQ,   STORE_NONE);
-    init_mux(PVAL, STORE_NONE);
-    init_mux(FREQ, STORE_NONE);
-    init_mux(RD,   STORE_INT);
-    init_mux(PLn,  STORE_NONE);
+    #define init_mux_by_dosage(name,store_type,dyn_int) seg_mux_init ((VBlockP)vb, 4, VCF_SPECIAL_MUX_BY_DOSAGE, FORMAT_##name, FORMAT_##name, (store_type), (dyn_int), (MultiplexerP)&vb->mux_##name, "0123")
+    init_mux_by_dosage(PRI,  STORE_NONE, false);
+    init_mux_by_dosage(GL,   STORE_NONE, false);
+    init_mux_by_dosage(DS,   STORE_NONE, false);
+    init_mux_by_dosage(PP,   STORE_NONE, false);
+    init_mux_by_dosage(GP,   STORE_NONE, false);
+    init_mux_by_dosage(PVAL, STORE_NONE, false);
+    init_mux_by_dosage(FREQ, STORE_NONE, false);
+    init_mux_by_dosage(RD,   STORE_INT,  true);
+    init_mux_by_dosage(PLn,  STORE_NONE, false);
 
-    seg_mux_init (VB, MUX_CAPACITY(vb->mux_PLy), VCF_SPECIAL_MUX_BY_DOSAGExDP, FORMAT_PLy, FORMAT_PLy, STORE_NONE, (MultiplexerP)&vb->mux_PLy, NULL);
+    seg_mux_init (VB, MUX_CAPACITY(vb->mux_PLy), VCF_SPECIAL_MUX_BY_DOSAGExDP, FORMAT_PLy, FORMAT_PLy, STORE_NONE, false, (MultiplexerP)&vb->mux_PLy, NULL);
     
-    if (segconf.has[FORMAT_DP])
-        seg_mux_init (VB, MUX_CAPACITY(vb->mux_GQ), VCF_SPECIAL_MUX_BY_DOSAGExDP, FORMAT_GQ, FORMAT_GQ, STORE_NONE, (MultiplexerP)&vb->mux_GQ, NULL);
+    if (segconf.has[FORMAT_DP]) {
+        seg_mux_init (VB, MUX_CAPACITY(vb->mux_GQ),  VCF_SPECIAL_MUX_BY_DOSAGExDP, FORMAT_GQ,  FORMAT_GQ,  STORE_NONE, true, (MultiplexerP)&vb->mux_GQ,  NULL);
+        seg_mux_init (VB, MUX_CAPACITY(vb->mux_RGQ), VCF_SPECIAL_RGQ,              FORMAT_RGQ, FORMAT_RGQ, STORE_NONE, true, (MultiplexerP)&vb->mux_RGQ, NULL);
+    }
     else
-        init_mux(GQ,STORE_NONE);
+        init_mux_by_dosage(GQ, STORE_NONE, false);
 
     // flags to send to PIZ
     vb->flags.vcf.use_null_DP_method = segconf.use_null_DP_method;
@@ -232,7 +233,12 @@ static inline ContextP vcf_seg_FORMAT_mux_by_dosage (VBlockVCFP vb, ContextP ctx
 
     ContextP channel_ctx = seg_mux_get_channel_ctx (VB, MUX, channel_i);
 
-    if (cell) seg_by_ctx (VB, STRa(cell), channel_ctx, cell_len);
+    if (cell) {
+        if (mux->dyn_int)
+            seg_integer_or_not (VB, channel_ctx, STRa(cell), cell_len);
+        else
+            seg_by_ctx (VB, STRa(cell), channel_ctx, cell_len);
+    }
 
     // note: this is not necessarily all-the-same - there could be unmuxed snips due to REF<>ALT switch, and/or WORD_INDEX_MISSING 
     seg_by_ctx (VB, STRa(mux->snip), ctx, 0);
@@ -285,7 +291,10 @@ static void vcf_seg_FORMAT_mux_by_dosagexDP (VBlockVCFP vb, ContextP ctx, STRp(c
 
     ContextP channel_ctx = seg_mux_get_channel_ctx (VB, MUX, channel_i);
 
-    seg_by_ctx (VB, STRa(cell), channel_ctx, cell_len);
+    if (mux->dyn_int)
+        seg_integer_or_not (VB, channel_ctx, STRa(cell), cell_len);
+    else
+        seg_by_ctx (VB, STRa(cell), channel_ctx, cell_len);
 
     // note: this is not necessarily all-the-same - there could be unmuxed snips due to REF<>ALT switch, and/or WORD_INDEX_MISSING 
     seg_by_ctx (VB, MUX_SNIP(mux), MUX_SNIP_LEN(mux), ctx, 0);
@@ -297,7 +306,7 @@ cannot_use_special:
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_DOSAGExDP)
 {
-    unsigned num_channels = ctx->con_cache.len ? ctx->con_cache.len : (1 + str_count_char (STRa(snip), '\t'));
+    unsigned num_channels = ctx->con_cache.len32 ? ctx->con_cache.len32 : (1 + str_count_char (STRa(snip), '\t'));
     unsigned num_dps = num_channels / 3;
 
     rom DP_str;
@@ -458,7 +467,7 @@ static void vcf_seg_AD_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP
             
             else if (i==0 || i==1) {
                 if (!vb->mux_AD[i].num_channels)
-                    seg_mux_init (VB, 4, VCF_SPECIAL_MUX_BY_DOSAGE, item_ctxs[i]->did_i, FORMAT_AD, STORE_INT, (MultiplexerP)&vb->mux_AD[i], "0123");
+                    seg_mux_init (VB, 4, VCF_SPECIAL_MUX_BY_DOSAGE, item_ctxs[i]->did_i, FORMAT_AD, STORE_INT, false, (MultiplexerP)&vb->mux_AD[i], "0123");
                 
                 vcf_seg_FORMAT_mux_by_dosage (vb, item_ctxs[i], STRi(item, i), &vb->mux_AD[i]);
             }
@@ -486,7 +495,7 @@ static void vcf_seg_ADALL_items (VBlockVCFP vb, ContextP ctx, STRps(item), Conte
     for (unsigned i=0; i < n_items; i++) 
         if (i==0 || i==1) {
             if (!vb->mux_ADALL[i].num_channels)
-                seg_mux_init (VB, 4, VCF_SPECIAL_MUX_BY_DOSAGE, item_ctxs[i]->did_i, FORMAT_ADALL, STORE_INT, (MultiplexerP)&vb->mux_ADALL[i], "0123");
+                seg_mux_init (VB, 4, VCF_SPECIAL_MUX_BY_DOSAGE, item_ctxs[i]->did_i, FORMAT_ADALL, STORE_INT, false, (MultiplexerP)&vb->mux_ADALL[i], "0123");
             
             vcf_seg_FORMAT_mux_by_dosage (vb, item_ctxs[i], STRi(item, i), &vb->mux_ADALL[i]);
         }
@@ -746,6 +755,70 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_GQ)
     RECONSTRUCT_INT (prediction - delta);
 
     return NO_NEW_VALUE;
+}
+
+//-----------
+// FORMAT/RGQ
+// ----------
+static inline void vcf_seg_FORMAT_RGQ (VBlockVCFP vb, ContextP ctx, STRp(rgq), ContextP gt_ctx, STRp(gt))
+{
+    ConstMultiplexerP mux = (ConstMultiplexerP)&vb->mux_RGQ;
+
+    // prediction: we have GT, and if GT[0]=. then RGQ=0. Fallback seg in case prediction fail
+    if (gt_ctx->did_i != FORMAT_GT ||                    // prediction failed: first subfield isn't GT
+        (gt[0] == '.' && (rgq_len != 1 || *rgq != '0'))) // prediction failed: GT[0]=. and yet RGQ!="0"
+        goto fallback;
+
+    // case: GT[0] is not '.' - seg the value of RGQ multiplexed by DP
+    if (gt[0] != '.') {
+        if (!segconf.has[FORMAT_DP]          ||        // segconf didn't detect FORMAT/DP so we didn't initialize the mux
+            !ctx_encountered (VB, FORMAT_DP) ||        // no DP in the FORMAT of this line
+            segconf.running) goto fallback;  // multiplexor not initalized yet 
+
+        int64_t DP;
+        if (!str_get_int (last_txt(VB, FORMAT_DP), vb->last_txt_len(FORMAT_DP), &DP)) // In some files, DP may be '.'
+            DP=0;
+
+        int channel_i = MAX_(0, MIN_(DP, mux->num_channels-1));
+        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, MUX, channel_i);
+
+        seg_integer_or_not (VB, channel_ctx, STRa(rgq), rgq_len);
+    }
+
+    seg_by_ctx (VB, MUX_SNIP(mux), MUX_SNIP_LEN(mux), ctx, (gt[0] == '.' ? rgq_len : 0));
+    return;
+
+fallback:
+    seg_integer_or_not (VB, ctx, STRa(rgq), rgq_len);
+}
+
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_RGQ)
+{
+    rom gt = last_txt(vb, FORMAT_GT);
+    
+    if (gt[0] == '.') {
+        if (reconstruct) RECONSTRUCT1 ('0');
+        new_value->i = 0;
+    }
+    
+    // gt[0] != '.' - demulitplex by FORMAT_DP
+    else {
+        unsigned num_channels = ctx->con_cache.len32 ? ctx->con_cache.len32 : (1 + str_count_char (STRa(snip), '\t'));
+
+        rom DP_str;
+        int64_t DP = reconstruct_peek (vb, CTX(FORMAT_DP), &DP_str, 0).i;
+        int channel_i = (*DP_str=='.') ? 0 : MAX_(0, MIN_(DP, num_channels-1));
+
+        ContextP channel_ctx = MCTX (channel_i, snip, snip_len);
+        ASSPIZ (channel_ctx, "Cannot find channel context of channel_i=%d of multiplexed context %s", channel_i, ctx->tag_name);
+
+        reconstruct_from_ctx (vb, channel_ctx->did_i, 0, reconstruct);
+
+        // propagate last_value up
+        new_value->i = channel_ctx->last_value.i; // note: last_value is a union, this copies the entire union
+    }
+
+    return HAS_NEW_VALUE; 
 }
 
 //----------
@@ -1481,6 +1554,8 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
         // GIAB: <ID=GQ,Number=1,Type=Integer,Description="Net Genotype quality across all datasets, calculated from GQ scores of callsets supporting the consensus GT, using only one callset from each dataset">   
         case _FORMAT_GQ   : seg_set_last_txt (VB, ctx, STRi(sf, i)); break; // postpone to later
             
+        case _FORMAT_RGQ  : vcf_seg_FORMAT_RGQ (vb, ctx, STRi(sf, i), ctxs[0], STRi(sf,0)); break;
+
         // <ID=DP,Number=1,Type=Integer,Description="Approximate read depth (reads with MQ=255 or with bad mates are filtered)">
         case _FORMAT_DP   : vcf_seg_FORMAT_DP (vb, ctx, STRi(sf, i)); break;
             

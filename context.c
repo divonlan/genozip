@@ -86,7 +86,7 @@ CtxNode *ctx_node_vb_do (ConstContextP vctx, WordIndex node_index,
     ASSERT (vctx->dict_id.num, "this vctx is not initialized (dict_id.num=0) - called from %s:%u", func, code_line);
     
     ASSERT (node_index < vctx->nodes.len + vctx->ol_nodes.len, "out of range: dict=%s node_index=%d nodes.len=%u ol_nodes.len=%u. Caller: %s:%u",  
-            vctx->tag_name, node_index, (uint32_t)vctx->nodes.len, (uint32_t)vctx->ol_nodes.len, func, code_line);
+            vctx->tag_name, node_index, vctx->nodes.len32, vctx->ol_nodes.len32, func, code_line);
 
     bool is_ol = node_index < vctx->ol_nodes.len; // is this entry from a previous vb (overlay buffer)
 
@@ -115,9 +115,9 @@ CtxNode *ctx_node_zf_do (ConstContextP zctx, int32_t node_index,
 {
     ASSERT (zctx->dict_id.num, "this zctx is not initialized (dict_id.num=0) - called from %s:%u", func, code_line);
     
-    ASSERT (node_index > -2 - (int32_t)zctx->ol_nodes.len && node_index < (int32_t)zctx->nodes.len, 
+    ASSERT (node_index > -2 - (int32_t)zctx->ol_nodes.len32 && node_index < (int32_t)zctx->nodes.len32, 
             "out of range: dict=%s node_index=%d nodes.len=%u ol_nodes.len=%u. Caller: %s:%u",  
-            zctx->tag_name, node_index, (uint32_t)zctx->nodes.len, (uint32_t)zctx->ol_nodes.len, func, code_line);
+            zctx->tag_name, node_index, zctx->nodes.len32, zctx->ol_nodes.len32, func, code_line);
 
     bool is_singleton = node_index < 0; // is this entry from a previous vb (overlay buffer)
 
@@ -376,7 +376,7 @@ WordIndex ctx_create_node_do (VBlockP vb, ContextP vctx, STRp(snip), bool *is_ne
 
     ASSERT (node_index_if_new <= MAX_NODE_INDEX, 
             "ctx of %s is full (max allowed words=%u): ol_nodes.len=%u nodes.len=%u",
-            vctx->tag_name, MAX_WORDS_IN_CTX, (uint32_t)vctx->ol_nodes.len, (uint32_t)vctx->nodes.len);
+            vctx->tag_name, MAX_WORDS_IN_CTX, vctx->ol_nodes.len32, vctx->nodes.len32);
 
     // get the node from the hash table if it already exists, or add this snip to the hash table if not
     CtxNode *node;
@@ -495,7 +495,7 @@ void ctx_append_b250 (VBlockP vb, ContextP vctx, WordIndex node_index)
         else {
             buf_alloc (vb, &vctx->b250, 1, AT_LEAST(vctx->did_i), WordIndex, CTX_GROWTH, "contexts->b250"); // add 1 more, meaning a total of len+1
         
-            for (unsigned i=1; i < vctx->b250.len; i++) *B(WordIndex, vctx->b250, i) = first_node_index;
+            for (unsigned i=1; i < vctx->b250.len32; i++) *B(WordIndex, vctx->b250, i) = first_node_index;
             BNXT32 (vctx->b250) = node_index;
 
             vctx->flags.all_the_same = false; // no longer all_the_same 
@@ -968,8 +968,8 @@ static bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx)
         WordIndex zf_node_index = 
             ctx_commit_node (vb, zctx, vctx, snip, vb_node->snip_len, count, &zf_node, &is_new); // also allocs nodes, counts and chrom2ref_map
 
-        ASSERT (zf_node_index >= 0 && zf_node_index < zctx->nodes.len, 
-                "zf_node_index=%d out of range - len=%i", zf_node_index, (uint32_t)vctx->nodes.len);
+        ASSERT (zf_node_index >= 0 && zf_node_index < zctx->nodes.len32, 
+                "zf_node_index=%d out of range - len=%i", zf_node_index, vctx->nodes.len32);
 
         if (has_count) 
             add_count (B64(zctx->counts, zf_node_index), count);
@@ -1221,8 +1221,8 @@ rom ctx_get_snip_by_word_index_do (ConstContextP ctx, WordIndex word_index, STRp
 {
     ASSERT (buf_is_alloc (&ctx->word_list), "called from %s:%u: word_list is not allocated for ctx=%s", func, code_line, ctx->tag_name);
 
-    ASSERT ((uint32_t)word_index < ctx->word_list.len, "called from %s:%u: word_index=%d out of range: word_list.len=%u for ctx=%s",
-            func, code_line, word_index, (uint32_t)ctx->word_list.len, ctx->tag_name);
+    ASSERT ((uint32_t)word_index < ctx->word_list.len32, "called from %s:%u: word_index=%d out of range: word_list.len=%u for ctx=%s",
+            func, code_line, word_index, ctx->word_list.len32, ctx->tag_name);
 
     if (word_index < 0) {
         static rom empty="";

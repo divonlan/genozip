@@ -302,7 +302,7 @@ static void codec_pbwt_decode_init_ht_matrix (VBlockP vb, const uint32_t *rc_dat
     uint64_t uncompressed_len = (uint64_t)rc_data[*rc_data_len] | ((uint64_t)rc_data[*rc_data_len + 1] << 32);
     
     ASSERT (vb->lines.len && uncompressed_len, 
-            "Expecting num_lines=%u and uncompressed_len=%"PRIu64" to be >0", (uint32_t)vb->lines.len, uncompressed_len);
+            "Expecting num_lines=%u and uncompressed_len=%"PRIu64" to be >0", vb->lines.len32, uncompressed_len);
 
     buf_alloc (vb, &vb->ht_matrix_ctx->local, 0, uncompressed_len, char, 1, "contexts->local");
 
@@ -392,7 +392,7 @@ UNCOMPRESS (codec_pbwt_uncompress)
     state.runs->next = state.fgrc->next = 0; 
 
     // generate ht_matrix
-    for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) 
+    for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) 
         pbwt_decode_one_line (vb, &state, line_i); 	
 
     buf_free (vb->codec_bufs[0]); // free state data  

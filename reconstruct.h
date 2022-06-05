@@ -59,6 +59,7 @@ extern ValueType reconstruct_peek_do (VBlockP vb, DictId dict_id, pSTRp(txt));
 #define reconstruct_peek_(vb, dict_id, txt, txt_len) reconstruct_peek_do ((VBlockP)(vb), (DictId)(dict_id), (txt), (txt_len))
 extern int64_t reconstruct_peek_local_int (VBlockP vb, ContextP ctx, int offset);
 extern uint32_t reconstruct_peek_repeats (VBlockP vb, ContextP ctx, char repsep);
+extern bool reconstruct_peek_container_has_item (VBlockP vb, ContextP ctx, DictId item_dict_id);
 
 //--------------
 // history stuff

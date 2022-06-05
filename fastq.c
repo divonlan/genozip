@@ -232,7 +232,7 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
     if (flag.pair == PAIR_READ_2) {
 
         ASSERT (vb->lines.len32 == vb->pair_num_lines, "in vb=%s (PAIR_READ_2): pair_num_lines=%u but lines.len=%u",
-                VB_NAME, vb->pair_num_lines, (unsigned)vb->lines.len);
+                VB_NAME, vb->pair_num_lines, vb->lines.len32);
 
         gpos_ctx->pair_local = strand_ctx->pair_local = true;
 

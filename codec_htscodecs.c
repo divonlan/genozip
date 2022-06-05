@@ -48,13 +48,13 @@ static bool codec_hts_compress (VBlockP vb,
     if (get_line_cb) {
         uncompressed = codec_alloc (vb, *uncompressed_len, 1);
         
-        for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
+        for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
             char *line; uint32_t line_len;
             get_line_cb (vb, line_i, pSTRa(line), *uncompressed_len - vb->codec_bufs[0].len, NULL);
             
             buf_add (&vb->codec_bufs[0], line, line_len);
         }
-        ASSERT (vb->codec_bufs[0].len == *uncompressed_len, "\"%s\": Expecting in_so_far=%u == uncompressed_len=%u", name, (unsigned)vb->codec_bufs[0].len, *uncompressed_len);
+        ASSERT (vb->codec_bufs[0].len == *uncompressed_len, "\"%s\": Expecting in_so_far=%u == uncompressed_len=%u", name, vb->codec_bufs[0].len32, *uncompressed_len);
     }
 
     bool ret = !!func (vb, (uint8_t*)uncompressed, *uncompressed_len, (uint8_t*)compressed, compressed_len, order);

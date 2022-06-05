@@ -151,6 +151,8 @@ struct __attribute__ ((__packed__)) {               \
     uint8_t num_channels;                           \
     StoreType store_type;                           \
     DidIType st_did_i;                              \
+    bool dyn_int;                                   \
+    uint8_t unused[3];                              \
     DictId dict_ids[n_channels];                    \
     ContextP channel_ctx[n_channels];               \
     uint32_t snip_len;                              \
@@ -165,7 +167,7 @@ struct __attribute__ ((__packed__)) {               \
 typedef MULTIPLEXER(1000) *MultiplexerP;
 typedef const MULTIPLEXER(1000) *ConstMultiplexerP;
 
-extern void seg_mux_init (VBlockP vb, unsigned num_channels, uint8_t special_code, DidIType mux_did_i, DidIType st_did_i, StoreType store_type, MultiplexerP mux, rom channel_letters);
+extern void seg_mux_init (VBlockP vb, unsigned num_channels, uint8_t special_code, DidIType mux_did_i, DidIType st_did_i, StoreType store_type, bool seg_dyn_int, MultiplexerP mux, rom channel_letters);
 extern ContextP seg_mux_get_channel_ctx (VBlockP vb, MultiplexerP mux, uint32_t channel_i);
 
 // --------------------
@@ -293,7 +295,7 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, MultiplexerP mux, uint32_t 
             /* snip len:          */ p_into_txt ? (unsigned)(MIN_((rom)p_into_txt+3, vb->txt_data.data + vb->txt_data.len) /* end pos */ - MAX_((rom)p_into_txt-2, vb->txt_data.data) /* start_pos */) : -1,\
             /* condition for snip */ (vb->txt_data.data && p_into_txt && ((rom)p_into_txt >= vb->txt_data.data) && ((rom)p_into_txt <= /* = too */ vb->txt_data.data + vb->txt_data.len) ? \
             /* snip start:        */    MAX_((rom)p_into_txt-3, vb->txt_data.data) : "(inaccessible)"),\
-            /* head/tail params:  */ codec_args[txt_file->codec].viewer, txt_name, vb->vb_position_txt_file + vb->txt_data.len, (uint32_t)vb->txt_data.len,\
+            /* head/tail params:  */ codec_args[txt_file->codec].viewer, txt_name, vb->vb_position_txt_file + vb->txt_data.len, vb->txt_data.len32,\
             /* output filename:   */ vb->vblock_i, file_plain_ext_by_dt (vb->data_type),\
             /* dump filename:     */ txtfile_dump_vb (VB, txt_name))
 

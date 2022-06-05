@@ -93,7 +93,7 @@ void sam_seg_gc_initialize (VBlockSAMP vb)
 static bool sam_seg_prim_add_sa_group (VBlockSAMP vb, ZipDataLineSAM *dl, uint16_t num_alns/* inc primary aln*/, bool is_bam)
 {
     rom textual_seq = is_bam ? B1STc(vb->textual_seq) : Btxt (dl->SEQ.index);
-    uint32_t seq_len = is_bam ? vb->textual_seq.len : dl->SEQ.len;
+    uint32_t seq_len = is_bam ? vb->textual_seq.len32 : dl->SEQ.len;
 
     ASSERTNOTNULL (textual_seq);
 
@@ -156,7 +156,7 @@ bool sam_seg_prim_add_sa_group_SA (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), 
         buf_alloc (vb, &vb->sa_alns, n_alns /*+1 for primary aln*/, 64, SAAlnType, CTX_GROWTH, "sa_alns");
 
         // in Seg, we add the Adler32 of CIGAR to save memory, as we just need to verify it, not reconstruct it
-        uint32_t cigar_len = (is_bam ? vb->textual_cigar.len : dl->CIGAR.len);
+        uint32_t cigar_len = (is_bam ? vb->textual_cigar.len32 : dl->CIGAR.len);
         CigarSignature cigar_sig = cigar_sign (is_bam ? B1STc(vb->textual_cigar) : Btxt(dl->CIGAR.index), cigar_len);
 
         // add primary alignment as first alignment in SA group
@@ -638,7 +638,7 @@ void sam_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeader *vb_heade
 {
     if (sam_is_prim_vb) {
         uint32_t total_seq_len=0, total_qname_len=0;
-        for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
+        for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
             ZipDataLineSAM *dl = DATA_LINE (line_i);
             total_seq_len   += dl->SEQ.len;   // length in bases, not bytes
             total_qname_len += dl->QNAME.len;
@@ -647,7 +647,7 @@ void sam_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeader *vb_heade
         vb_header->sam_prim_seq_len          = BGEN32 (total_seq_len);
         vb_header->sam_prim_comp_qual_len    = BGEN32 (VB_SAM->comp_qual_len);
         vb_header->sam_prim_qname_len        = BGEN32 (total_qname_len);
-        vb_header->sam_prim_num_alns         = BGEN32 ((uint32_t)CTX(OPTION_SA_CIGAR)->b250.len); // this is total number of alignments, because we add a CIGAR for each alignment including the primary alignment
+        vb_header->sam_prim_num_alns         = BGEN32 (CTX(OPTION_SA_CIGAR)->b250.len32); // this is total number of alignments, because we add a CIGAR for each alignment including the primary alignment
         vb_header->sam_prim_first_grp_i      = BGEN32 (VB_SAM->first_grp_i);
         vb_header->sam_prim_comp_cigars_len  = BGEN32 (VB_SAM->comp_cigars_len);
     }

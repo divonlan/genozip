@@ -42,6 +42,7 @@ void vcf_vb_release_vb (VBlockVCFP vb)
     memset (&vb->mux_FREQ,   0, sizeof(vb->mux_FREQ));
     memset (&vb->mux_RD,     0, sizeof(vb->mux_RD));
     memset (&vb->mux_GQ,     0, sizeof(vb->mux_GQ));
+    memset (&vb->mux_RGQ,    0, sizeof(vb->mux_RGQ));
     memset (&vb->mux_AD,     0, sizeof(vb->mux_AD));
     memset (&vb->mux_ADALL,  0, sizeof(vb->mux_ADALL));
     memset (&vb->mux_PLy,    0, sizeof(vb->mux_PLy));

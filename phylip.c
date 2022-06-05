@@ -33,7 +33,7 @@ int32_t phy_is_header_done (bool is_eof)
 {
     ARRAY (char, header, evb->txt_data);
 
-    for (uint32_t i=0; i < evb->txt_data.len; i++)
+    for (uint32_t i=0; i < evb->txt_data.len32; i++)
         if (header[i] == '\n') 
             return i+1;
 

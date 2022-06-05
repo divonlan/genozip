@@ -210,7 +210,7 @@ void threads_log_by_vb (ConstVBlockP vb, rom task_name, rom event,
 
         // if thread other than main allocates evb it could cause corruption. we allocating
         if (log.size - log.len < 500) {
-            WARN ("FYI: Thread log is out of space, log.size=%u log.len=%u", (unsigned)log.size, (unsigned)log.len);
+            WARN ("FYI: Thread log is out of space, log.size=%u log.len=%u", (unsigned)log.size, log.len32);
             threads_write_log (false);
             return;
         }
@@ -230,6 +230,8 @@ void threads_log_by_vb (ConstVBlockP vb, rom task_name, rom event,
 static void *thread_entry_caller (void *vb_)
 {
     VBlockP vb = (VBlockP)vb_;
+
+    pthread_setcanceltype (PTHREAD_CANCEL_ASYNCHRONOUS, NULL); // thread can be canceled at any time
 
     // wait for threads_create to complete updating VB
     mutex_wait (vb->vb_ready_for_compute_thread); 

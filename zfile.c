@@ -243,7 +243,7 @@ uint32_t zfile_compress_local_data (VBlockP vb, ContextP ctx, uint32_t sample_si
     if (VB_DT(DT_FASTQ))
         flags.paired = ctx->pair_local;
 
-    uint32_t uncompressed_len = ctx->local.len * lt_desc[ctx->ltype].width;
+    uint32_t uncompressed_len = ctx->local.len32 * lt_desc[ctx->ltype].width;
     
     // case: we're just testing a small sample
     if (sample_size && uncompressed_len > sample_size) 
@@ -784,7 +784,7 @@ void zfile_compress_genozip_header (void)
 
     bool is_encrypted = crypt_have_password();
 
-    uint32_t num_sections = z_file->section_list_buf.len;
+    uint32_t num_sections = z_file->section_list_buf.len32;
 
     sections_list_memory_to_file_format (false); // into evb->scratch, just up to CODEC_ASSIGN_SAMPLE_SIZE
     Codec codec = codec_assign_best_codec (evb, NULL, &evb->scratch, SEC_GENOZIP_HEADER);
@@ -986,7 +986,7 @@ void zfile_update_compressed_vb_header (VBlockP vb)
     if (flag.biopsy) return; // we have no z_data in biopsy mode
 
     SectionHeaderVbHeader *vb_header = (SectionHeaderVbHeader *)vb->z_data.data;
-    vb_header->z_data_bytes = BGEN32 ((uint32_t)vb->z_data.len);
+    vb_header->z_data_bytes = BGEN32 (vb->z_data.len32);
 
     if (flag.show_vblocks) 
         iprintf ("UPDATE_VB_HEADER(id=%d) vb_i=%u comp_i=%u recon_size_prim=%u recon_size_luft=%u genozip_size=%u longest_line_len=%u\n",

@@ -17,7 +17,7 @@ COMPRESS (codec_none_compress)
 
     if (get_line_cb) {
         char *next = compressed;
-        for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
+        for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
             char *start1=0;
             uint32_t len1=0;        
             

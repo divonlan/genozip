@@ -305,18 +305,18 @@ void sam_seg_initialize (VBlockP vb_)
     CTX(OPTION_XA_Z)->flags.store = STORE_INDEX; // for containers this stores repeats - used by sam_piz_special_X1->reconstruct_peek_repeats
 
     if (!segconf.has_bsseeker2) // XS:i is as defined by bwa (and other aligners), not bsseeker2
-        seg_mux_init (VB, 4, SAM_SPECIAL_XS, OPTION_XS_i, OPTION_XS_i, STORE_INT, (MultiplexerP)&vb->mux_XS, "0123");
+        seg_mux_init (VB, 4, SAM_SPECIAL_XS, OPTION_XS_i, OPTION_XS_i, STORE_INT, false, (MultiplexerP)&vb->mux_XS, "0123");
 
-    seg_mux_init (VB, 2, SAM_SPECIAL_DEMUX_BY_BUDDY,     SAM_FLAG,    SAM_FLAG,    STORE_INT,  (MultiplexerP)&vb->mux_FLAG, "01");
-    seg_mux_init (VB, 3, SAM_SPECIAL_DEMUX_BY_MATE_PRIM, SAM_POS,     SAM_POS,     STORE_INT,  (MultiplexerP)&vb->mux_POS, "012");
-    seg_mux_init (VB, 3, SAM_SPECIAL_DEMUX_BY_MATE_PRIM, SAM_MAPQ,    SAM_MAPQ,    STORE_INT,  (MultiplexerP)&vb->mux_MAPQ, "012");
-    seg_mux_init (VB, 4, SAM_SPECIAL_PNEXT,              SAM_PNEXT,   SAM_PNEXT,   STORE_INT,  (MultiplexerP)&vb->mux_PNEXT, "0123");
-    seg_mux_init (VB, 2, SAM_SPECIAL_DEMUX_BY_MATE,      OPTION_MQ_i, OPTION_MQ_i, STORE_INT,  (MultiplexerP)&vb->mux_MQ, "01");
-    seg_mux_init (VB, 2, SAM_SPECIAL_DEMUX_BY_MATE,      OPTION_MC_Z, OPTION_MC_Z, STORE_NONE, (MultiplexerP)&vb->mux_MC, "01");
-    seg_mux_init (VB, 2, SAM_SPECIAL_DEMUX_BY_MATE,      OPTION_ms_i, OPTION_ms_i, STORE_INT,  (MultiplexerP)&vb->mux_ms, "01");
-    seg_mux_init (VB, 2, SAM_SPECIAL_DEMUX_BY_MATE,      OPTION_AS_i, OPTION_AS_i, STORE_INT,  (MultiplexerP)&vb->mux_AS, "01");
-    seg_mux_init (VB, 2, SAM_SPECIAL_DEMUX_BY_MATE,      OPTION_YS_i, OPTION_YS_i, STORE_INT,  (MultiplexerP)&vb->mux_YS, "01");
-    seg_mux_init (VB, 2, SAM_SPECIAL_DEMUX_BY_BUDDY,     OPTION_RG_Z, OPTION_RG_Z, STORE_NONE, (MultiplexerP)&vb->mux_RG, "01");
+    seg_mux_init (VB, 2, SAM_SPECIAL_DEMUX_BY_BUDDY,     SAM_FLAG,    SAM_FLAG,    STORE_INT,  false, (MultiplexerP)&vb->mux_FLAG, "01");
+    seg_mux_init (VB, 3, SAM_SPECIAL_DEMUX_BY_MATE_PRIM, SAM_POS,     SAM_POS,     STORE_INT,  false, (MultiplexerP)&vb->mux_POS, "012");
+    seg_mux_init (VB, 3, SAM_SPECIAL_DEMUX_BY_MATE_PRIM, SAM_MAPQ,    SAM_MAPQ,    STORE_INT,  false, (MultiplexerP)&vb->mux_MAPQ, "012");
+    seg_mux_init (VB, 4, SAM_SPECIAL_PNEXT,              SAM_PNEXT,   SAM_PNEXT,   STORE_INT,  false, (MultiplexerP)&vb->mux_PNEXT, "0123");
+    seg_mux_init (VB, 2, SAM_SPECIAL_DEMUX_BY_MATE,      OPTION_MQ_i, OPTION_MQ_i, STORE_INT,  false, (MultiplexerP)&vb->mux_MQ, "01");
+    seg_mux_init (VB, 2, SAM_SPECIAL_DEMUX_BY_MATE,      OPTION_MC_Z, OPTION_MC_Z, STORE_NONE, false, (MultiplexerP)&vb->mux_MC, "01");
+    seg_mux_init (VB, 2, SAM_SPECIAL_DEMUX_BY_MATE,      OPTION_ms_i, OPTION_ms_i, STORE_INT,  false, (MultiplexerP)&vb->mux_ms, "01");
+    seg_mux_init (VB, 2, SAM_SPECIAL_DEMUX_BY_MATE,      OPTION_AS_i, OPTION_AS_i, STORE_INT,  false, (MultiplexerP)&vb->mux_AS, "01");
+    seg_mux_init (VB, 2, SAM_SPECIAL_DEMUX_BY_MATE,      OPTION_YS_i, OPTION_YS_i, STORE_INT,  false, (MultiplexerP)&vb->mux_YS, "01");
+    seg_mux_init (VB, 2, SAM_SPECIAL_DEMUX_BY_BUDDY,     OPTION_RG_Z, OPTION_RG_Z, STORE_NONE, false, (MultiplexerP)&vb->mux_RG, "01");
 
     if (segconf.running) {
         segconf.sam_is_sorted = segconf.sam_is_collated = segconf.MAPQ_has_single_value = segconf.NM_after_MD = true; // initialize optimistically

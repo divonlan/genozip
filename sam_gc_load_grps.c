@@ -323,7 +323,7 @@ static void sam_load_groups_add_aln_cigar (VBlockSAMP vb, PlsgVbInfo *plsg, SAGr
         a->cigar.piz.index   = word_index;
 
         ASSERT (a->cigar.piz.index < ctx->word_list.len, "word_index=%d out of range [0,%d] snip_len=%u snip[0]=%u snip=\"%.*s", 
-                (uint32_t)a->cigar.piz.index, (int32_t)ctx->word_list.len-1, STRf(snip)[0], STRf(snip));
+                (uint32_t)a->cigar.piz.index, ctx->word_list.len32-1, STRf(snip)[0], STRf(snip));
     }
 
     if (out_cigar) STRset (*out_cigar, snip);
@@ -361,7 +361,7 @@ static inline void sam_load_groups_add_grps (VBlockSAMP vb, PlsgVbInfo *plsg, SA
     // get seq and seq_len from CIGAR
     uint32_t total_seq_len = 0;
 
-    uint32_t sa_rname_len = (uint32_t)CTX(OPTION_SA_RNAME)->word_list.len;
+    uint32_t sa_rname_len = CTX(OPTION_SA_RNAME)->word_list.len32;
 
     ContextP cigar_ctx = CTX(OPTION_SA_CIGAR);
     bool is_cigar_all_the_same_LOOKUP = !cigar_ctx->word_list.len && cigar_ctx->dict.len && *B1STc(cigar_ctx->dict)==SNIP_LOOKUP;
@@ -438,7 +438,7 @@ static inline void sam_load_groups_add_alns (VBlockSAMP vb, PlsgVbInfo *plsg, SA
     ASSERT (vb_num_alns == plsg->num_alns, "Alignment count mismatch for vb=%u: expecting vb_num_alns=%d == plsg->num_alns=%u",
             plsg->vblock_i, vb_num_alns, plsg->num_alns);
 
-    uint32_t sa_rname_len = (uint32_t)rname_ctx->word_list.len;
+    uint32_t sa_rname_len = rname_ctx->word_list.len32;
 
     for (uint32_t aln_i=0; aln_i < plsg->num_alns; aln_i++) {
         

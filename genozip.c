@@ -68,6 +68,11 @@ void main_exit (bool show_stack, bool is_error)
         ref_create_cache_join (gref, false);
         ref_create_cache_join (prim_ref, false);
         refhash_create_cache_join(false);
+
+        bool printed = version_print_notice_if_has_newer();
+
+        if (!printed && !flag.quiet && ((command == ZIP && !flag.test) || flag.check_latest/*PIZ - test after compress*/))
+            license_print_notice();
     }
 
     if (is_error && flag.debug_threads)
@@ -301,6 +306,8 @@ static void main_test_after_genozip (rom exec_path, rom z_filename, bool is_last
                                       flag.debug_threads ? "--debug-threads" : SKIP_ARG,
                                       flag.echo          ? "--echo"          : SKIP_ARG,
                                       flag.verify_codec  ? "--verify-codec"  : SKIP_ARG,
+                                      is_last_txt_file   ? "--check-latest"  : SKIP_ARG,
+                                      flag.debug_latest  ? "--debug-latest"  : SKIP_ARG,
                                       flag.reference == REF_EXTERNAL && !is_chain ? "--reference" : SKIP_ARG, // normal pizzing of a chain file doesn't require a reference
                                       flag.reference == REF_EXTERNAL && !is_chain ? ref_get_filename(gref) : SKIP_ARG, 
                                       NULL);
@@ -322,6 +329,7 @@ static void main_test_after_genozip (rom exec_path, rom z_filename, bool is_last
         argv[argc++] = exec_path;
         argv[argc++] = "--decompress";
         argv[argc++] = "--test";
+        argv[argc++] = "--check-latest";
         argv[argc++] = z_filename;
         if (flag.quiet)         argv[argc++] = "--quiet";
         if (password)         { argv[argc++] = "--password"; 
@@ -336,6 +344,7 @@ static void main_test_after_genozip (rom exec_path, rom z_filename, bool is_last
         if (flag.echo)          argv[argc++] = "--echo";
         if (flag.verify_codec)  argv[argc++] = "--verify-codec";
         if (flag.debug_lines)   argv[argc++] = "--debug-lines";
+        if (flag.debug_latest)  argv[argc++] = "--debug-latest";
         if (flag.reference == REF_EXTERNAL && !is_chain) 
                               { argv[argc++] = "--reference"; 
                                 argv[argc++] = ref_get_filename(gref); }
@@ -737,6 +746,10 @@ int main (int argc, char **argv)
     ASSINP (input_files_len || !isatty(0) || command != PIZ, "missing input file. Example: %s myfile.bam.genozip", global_cmd);
 
     primary_command = command; 
+
+    // we test for a newer version if its a single file compression (if --test is used, we test after PIZ - check_for_newer is set)
+    if (!flag.quiet && ((command == ZIP && input_files_len == 1 && !flag.test) || flag.check_latest/*PIZ - test after compress*/))
+        version_background_test_for_newer();
 
     // IF YOU'RE CONSIDERING EDITING THIS CODE TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,
     // and might put you personally as well as your organization at legal and financial risk - see "Severly unauthorized use of Genozip"

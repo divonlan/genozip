@@ -209,7 +209,7 @@ static void zip_generate_b250 (VBlockP vb, Context *ctx)
     
     if (show) {
         bufprintf (vb, &vb->show_b250_buf, "%s", "\n");
-        iprintf ("%.*s", (uint32_t)vb->show_b250_buf.len, vb->show_b250_buf.data);
+        iprintf ("%.*s", STRfb(vb->show_b250_buf));
         buf_free (vb->show_b250_buf);
     }
 
@@ -230,66 +230,74 @@ static void zip_resize_local (VBlockP vb, Context *ctx)
         if (src[i] > largest) largest = src[i];
         else if (src[i] < smallest) smallest = src[i];
 
-    // uint8
-    if (smallest >= 0 && largest <= 0xffLL) {
-        ctx->ltype = LT_UINT8;
-        ARRAY (uint8_t, dst, ctx->local);
-        for (uint64_t i=0; i < src_len; i++)
-            dst[i] = (uint8_t)src[i];
-    }
+    // in VCF FORMAT fields, a max_int value is reconstructed as . (see reconstruct_from_local_int), which is not applicable for dynamic size -
+    // therefore we increment largest by 1 to ensure that no actual value is max_int
+    if (VB_DT(DT_VCF) && dict_id_is_vcf_format_sf (ctx->dict_id)) largest++;
 
-    // uint16
-    else if (smallest >= 0 && largest <= 0xffffLL) {
-        ctx->ltype = LT_UINT16;
-        ARRAY (uint16_t, dst, ctx->local);
-        for (uint64_t i=0; i < src_len; i++)
-            dst[i] = BGEN16 ((uint16_t)src[i]);
-    }
+    static const LocalType test_ltypes[] = { LT_UINT8, LT_UINT16, LT_UINT32, LT_INT8, LT_INT16, LT_INT32, LT_UINT64, LT_INT64 };  
+    for (LocalType lt_i=0; lt_i < ARRAY_LEN(test_ltypes); lt_i++)
+        if (smallest >= lt_desc[test_ltypes[lt_i]].min_int && largest <= lt_desc[test_ltypes[lt_i]].max_int) {
+            ctx->ltype = test_ltypes[lt_i];
+            break; // found
+        }
 
-    // uint32
-    else if (smallest >= 0 && largest <= 0xffffffffLL) {
-        ctx->ltype = LT_UINT32;
-        ARRAY (uint32_t, dst, ctx->local);
-        for (uint64_t i=0; i < src_len; i++)
-            dst[i] = BGEN32 ((uint32_t)src[i]);
-    }
+    switch (ctx->ltype) {
+        case LT_UINT8: {
+            ARRAY (uint8_t, dst, ctx->local);
+            for (uint64_t i=0; i < src_len; i++)
+                dst[i] = (uint8_t)src[i];
+            break;
+        }
 
-    // int8
-    else if (smallest >= -0x80LL && largest <= 0x7fLL) {
-        ctx->ltype = LT_INT8;
-        ARRAY (uint8_t, dst, ctx->local);
-        for (uint64_t i=0; i < src_len; i++)
-            dst[i] = INTERLACE(int8_t, src[i]);
-    }
+        case LT_UINT16: {
+            ARRAY (uint16_t, dst, ctx->local);
+            for (uint64_t i=0; i < src_len; i++)
+                dst[i] = BGEN16 ((uint16_t)src[i]);
+            break;
+        }
 
-    // int16
-    else if (smallest >= -0x8000LL && largest <= 0x7fffLL) {
-        ctx->ltype = LT_INT16;
-        ARRAY (uint16_t, dst, ctx->local);
-        for (uint64_t i=0; i < src_len; i++)
-            dst[i] = BGEN16 (INTERLACE(int16_t, src[i]));
-    }
+        case LT_UINT32: {
+            ARRAY (uint32_t, dst, ctx->local);
+            for (uint64_t i=0; i < src_len; i++)
+                dst[i] = BGEN32 ((uint32_t)src[i]);
+            break;
+        }
 
-    // int32
-    else if (smallest >= -0x80000000LL && largest <= 0x7fffffffLL) {
-        ctx->ltype = LT_INT32;
-        ARRAY (uint32_t, dst, ctx->local);
-        for (uint64_t i=0; i < src_len; i++)
-            dst[i] = BGEN32 (INTERLACE(int32_t,src[i]));
-    }
+        case LT_INT8: {
+            ARRAY (uint8_t, dst, ctx->local);
+            for (uint64_t i=0; i < src_len; i++)
+                dst[i] = INTERLACE(int8_t, src[i]);
+            break;
+        }
 
-    // uint64
-    else if (smallest >= 0) {
-        ctx->ltype = LT_UINT64;
-        for (uint64_t i=0; i < src_len; i++)
-            src[i] = BGEN64 (src[i]);
-    }
+        case LT_INT16: {
+            ARRAY (uint16_t, dst, ctx->local);
+            for (uint64_t i=0; i < src_len; i++)
+                dst[i] = BGEN16 (INTERLACE(int16_t, src[i]));
+            break;
+        }
 
-    // int64
-    else {
-        ctx->ltype = LT_INT64;
-        for (uint64_t i=0; i < src_len; i++)
-            src[i] = BGEN64 (INTERLACE(int64_t, src[i]));
+        case LT_INT32: {
+            ARRAY (uint32_t, dst, ctx->local);
+            for (uint64_t i=0; i < src_len; i++)
+                dst[i] = BGEN32 (INTERLACE(int32_t,src[i]));
+            break;
+        }
+
+        case LT_UINT64: {
+            for (uint64_t i=0; i < src_len; i++)
+                src[i] = BGEN64 (src[i]);
+            break;
+        }
+
+        case LT_INT64: {\
+            for (uint64_t i=0; i < src_len; i++)
+                src[i] = BGEN64 (INTERLACE(int64_t, src[i]));
+            break;
+        }
+
+        default:
+            ABORT ("%s: %s is not an integer type, ctx=%s", VB_NAME, lt_name(ctx->ltype), ctx->tag_name);
     }
 }
 
@@ -316,16 +324,16 @@ static void zip_generate_transposed_local (VBlockP vb, Context *ctx)
     if (!cols) cols = vcf_header_get_num_samples(); // 0 if not vcf/bcf (not restricted to 255)
     
     // case: matrix is not transposable - just BGEN it
-    if (ctx->local.len % cols) {
+    if (ctx->local.len32 % cols) {
         ctx->ltype = LT_UINT32; // not transposed
 
-        for (unsigned i=0; i < ctx->local.len; i++)
+        for (unsigned i=0; i < ctx->local.len32; i++)
             data[i] = BGEN32 (data[i]);
             
         goto done;
     }
 
-    uint32_t rows = ctx->local.len / cols;
+    uint32_t rows = ctx->local.len32 / cols;
 
     ctx->local_param/*xxx flags.copy_local_param*/ = true;
     /* xxx I don't see where col goes into param??? need to test */

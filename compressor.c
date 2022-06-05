@@ -181,7 +181,7 @@ bool comp_compress_complex_codec (VBlockP vb, ContextP ctx, SectionHeader *heade
     }
 
     CodecCompress *compress = codec_args[header->sub_codec].compress;
-    *uncompressed_len = (uint32_t)ctx->local.len;
+    *uncompressed_len = ctx->local.len32;
 
     // make sure we have enough memory
     uint32_t min_required_compressed_len = codec_args[header->sub_codec].est_size (header->sub_codec, ctx->local.len);

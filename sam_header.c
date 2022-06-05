@@ -70,7 +70,7 @@ static void sam_header_add_contig (STRp (contig_name), PosType LN, void *out_ref
 
     if (flag.show_txt_contigs) 
         iprintf ("index=%u \"%.*s\" LN=%"PRId64" ref_index=%d snip_len=%u gpos=%"PRId64"\n", 
-                 (unsigned)sam_hdr_contigs->contigs.len-1, STRf(contig_name), LN, ref_index, contig_name_len, gpos);
+                 sam_hdr_contigs->contigs.len32-1, STRf(contig_name), LN, ref_index, contig_name_len, gpos);
 
     // add to contigs_dict
     buf_add_more (NULL, &sam_hdr_contigs->dict, contig_name, contig_name_len, NULL);

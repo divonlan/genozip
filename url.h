@@ -18,6 +18,8 @@ extern void url_reset_if_curl (StreamP maybe_curl_stream);
 
 extern int32_t url_read_string (rom url, char *data, uint32_t data_size);
 
+extern void url_get_redirect (rom url, STRc(redirect_url));
+
 extern void url_kill_curl (void);
 
 extern char *url_esc_non_valid_chars_(rom in, char *out);

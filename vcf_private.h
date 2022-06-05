@@ -75,9 +75,11 @@ typedef struct VBlockVCF {
 
     PLMuxByDP PL_mux_by_DP;
     
-    MULTIPLEXER(1 + 60 * 3) mux_PLy; // num_DP x 3 + 1
+    #define MAX_DP_FOR_MUX 60
+    MULTIPLEXER(1 + MAX_DP_FOR_MUX * 3) mux_PLy;
     MULTIPLEXER(1 + 7 * 3) mux_GQ;
-    
+    MULTIPLEXER(MAX_DP_FOR_MUX) mux_RGQ;   
+
     // used by CODEC_HAPM (for VCF haplotype matrix) 
     Buffer hapmat_helper_index_buf; // ZIP: used by codec_hapmat_count_alt_alleles 
     Buffer hapmat_columns_data;     // used by codec_hapmat_piz_get_one_line 

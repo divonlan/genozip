@@ -30,7 +30,7 @@ void vcf_info_seg_initialize (VBlockVCFP vb)
     CTX(INFO_ADP)->    flags.store = STORE_INT;   // since v13
     CTX(INFO_SVTYPE)-> flags.store = STORE_INDEX; // since v13 - consumed by vcf_refalt_piz_is_variant_indel
     CTX(INFO_DP)->     flags.store = STORE_INT;   // since v14
-    
+
     if (!vcf_is_use_DP_by_DP())
         CTX(INFO_DP)->dynamic_size_local = true; 
 
@@ -48,22 +48,23 @@ static inline bool vcf_is_use_DP_by_DP (void)
 }
 
 // return true if caller still needs to seg 
-static void vcf_seg_INFO_DP (VBlockVCFP vb, ContextP ctx_dp, STRp(value_str))
+static void vcf_seg_INFO_DP (VBlockVCFP vb, ContextP ctx, STRp(value_str))
 {
     // used in: vcf_seg_one_sample (for 1-sample files), vcf_seg_INFO_DP_by_FORMAT_DP (multi sample files)
     int64_t value;
     bool has_value = str_get_int (STRa(value_str), &value);
-    if (has_value)
-        ctx_set_last_value (VB, ctx_dp, value);
 
     // also tried delta vs DP4, but it made it worse
     Context *ctx_basecounts;
     if (ctx_has_value_in_line (vb, _INFO_BaseCounts, &ctx_basecounts)) 
-        seg_delta_vs_other (VB, ctx_dp, ctx_basecounts, STRa(value_str));
+        seg_delta_vs_other (VB, ctx, ctx_basecounts, STRa(value_str));
 
-    // note: if we're doing DP_by_DP, we will seg in vcf_seg_INFO_DP_by_FORMAT_DP
+    // note: if we're doing multi-sample DP_by_DP, we will seg in vcf_seg_INFO_DP_by_FORMAT_DP
     else if (!has_value || !vcf_is_use_DP_by_DP()) 
-        seg_integer_or_not (VB, ctx_dp, STRa(value_str), value_str_len);
+        seg_integer_or_not (VB, ctx, STRa(value_str), value_str_len);
+
+    if (has_value)
+        ctx_set_last_value (VB, ctx, value);
 }
 
 // used for multi-sample VCFs, IF FORMAT/DP is segged as a simple integer
@@ -1208,7 +1209,7 @@ static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCFP vb)
 
         // case: --chain - we're adding ONE of these subfields to each of Primary and Luft reconstructions
         if (chain_is_loaded) {
-            uint32_t growth = INFO_DVCF_LEN + 1 + (vb->info_items.len > 2); // +1 for '=', +1 for ';' if we already have item(s)
+            uint32_t growth = INFO_DVCF_LEN + 1 + (vb->info_items.len32 > 2); // +1 for '=', +1 for ';' if we already have item(s)
             vb->recon_size += growth;
             vb->recon_size_luft += growth;
         }
@@ -1231,7 +1232,7 @@ static void vcf_seg_info_add_DVCF_to_InfoItems (VBlockVCFP vb)
 
         // case: we added a REJX INFO field that wasn't in the TXT data: --chain or rolled back (see vcf_lo_seg_rollback_and_reject) or an added variant
         if (chain_is_loaded || rolled_back || added_variant) {
-            uint32_t growth = INFO_DVCF_LEN + 1 + (vb->info_items.len > 2); // +1 for '=', +1 for ';' if we already have item(s) execpt for the DVCF items
+            uint32_t growth = INFO_DVCF_LEN + 1 + (vb->info_items.len32 > 2); // +1 for '=', +1 for ';' if we already have item(s) execpt for the DVCF items
 
             if (vb->line_coords == DC_PRIMARY) vb->recon_size += growth;
             else vb->recon_size_luft += growth;

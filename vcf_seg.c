@@ -485,8 +485,8 @@ static void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt))
     dl->format_node_i = node_index;
 
     if (is_new) {
-        ASSVCF (node_index == vb->format_mapper_buf.len, 
-                "node_index=%u different than vb->format_mapper_buf.len=%u", node_index, (uint32_t)vb->format_mapper_buf.len);
+        ASSVCF (node_index == vb->format_mapper_buf.len32, 
+                "node_index=%u different than vb->format_mapper_buf.len=%u", node_index, vb->format_mapper_buf.len32);
 
         buf_alloc (vb, &vb->format_mapper_buf, 1, 0, Container, CTX_GROWTH, "format_mapper_buf");
         buf_alloc (vb, &vb->format_contexts, 1, 0, ContextPBlock, CTX_GROWTH, "format_contexts");

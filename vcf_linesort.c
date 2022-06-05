@@ -62,9 +62,9 @@ static void vcf_linesort_merge_vb_do (VBlockP vb, bool is_luft)
 
     buf_alloc (evb, &txt_file->line_info[is_luft], vb->lines.len, 0, LineInfo, CTX_GROWTH, 0); // added to evb buf_list in file_initialize_txt_file_data
 
-    uint32_t start_i = txt_file->line_info[is_luft].len;
+    uint32_t start_i = txt_file->line_info[is_luft].len32;
 
-    for (uint32_t line_i=0 ; line_i < vb->lines.len ; line_i++) {
+    for (uint32_t line_i=0 ; line_i < vb->lines.len32 ; line_i++) {
         ZipDataLineVCF *dl = (ZipDataLineVCF *)(&vb->lines.data[dl_size * line_i]);
         PosType pos = dl->pos[is_luft];
         WordIndex chrom_word_index = node_word_index (vb, (is_luft ? DTF(luft_chrom) : DTF(prim_chrom)), dl->chrom[is_luft]);
@@ -96,7 +96,7 @@ static void vcf_linesort_merge_vb_do (VBlockP vb, bool is_luft)
         .last_line   = last_line->info,
         .start_i     = start_i,
         .len         = txt_file->line_info[is_luft].len - start_i,
-        .num_lines   = (uint32_t)vb->lines.len
+        .num_lines   = vb->lines.len32
     };
 
     txt_file->vb_info[is_luft].len = MAX_(txt_file->vb_info[is_luft].len, vb->vblock_i); // note: vblock_i is 1-based

@@ -348,7 +348,7 @@ void dict_io_read_all_dictionaries (void)
             
             if (flag.show_dict) 
                 iprintf ("%s (did_i=%u, num_snips=%u, dict_size=%u bytes)\n", 
-                         ctx->tag_name, did_i, (uint32_t)ctx->word_list.len, (uint32_t)ctx->dict.len);
+                         ctx->tag_name, did_i, ctx->word_list.len32, ctx->dict.len32);
 
             if (dict_id_is_show (ctx->dict_id))
                 str_print_dict (info_stream, STRb(ctx->dict), true, false);

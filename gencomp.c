@@ -246,7 +246,7 @@ int64_t gencomp_get_num_lines (CompIType comp_i)
 
 static uint32_t compress_depn_buf (BufferP comp_buf)
 {
-    uint32_t uncomp_len = depn.thread_data.len;
+    uint32_t uncomp_len = depn.thread_data.len32;
     uint32_t comp_len = codec_RANB_est_size (CODEC_RANS8, uncomp_len);
 
     buf_alloc (evb, comp_buf, 0, comp_len + sizeof (uint32_t), char, 1, NULL);
@@ -262,7 +262,7 @@ static uint32_t compress_depn_buf (BufferP comp_buf)
 static void *gencomp_do_offload (void *info_)
 {
     TxtDataInfoType *info = (TxtDataInfoType *)info_;
-    uint32_t uncomp_len = depn.thread_data.len;
+    uint32_t uncomp_len = depn.thread_data.len32;
     info->comp_len = compress_depn_buf (&depn.thread_data_comp);
 
     ASSERT (1 == fwrite (STRb(depn.thread_data_comp), 1, depn.fp), 
@@ -543,7 +543,7 @@ static void gencomp_get_txt_data_from_disk (VBlockP vb)
 
     if (flag.debug_gencomp) 
         iprintf ("Read from disk: buf=%"PRIu64" vb=%s num_lines=%u uncomp_len=%u comp_len=%u uncomp_alder32=%u comp_adler32=%u\n",
-                  depn.offload_info.next-1, VB_NAME, info->num_lines, (uint32_t)vb->txt_data.len, info->comp_len, 
+                  depn.offload_info.next-1, VB_NAME, info->num_lines, vb->txt_data.len32, info->comp_len, 
                   adler32 (1, STRb(vb->txt_data)), adler32 (1, STRb(depn.thread_data_comp))); 
 
     depn.thread_data_comp.len = depn.thread_data.len = 0;

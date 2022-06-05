@@ -191,7 +191,7 @@ void bam_seg_BIN (VBlockSAMP vb, ZipDataLineSAM *dl, uint16_t bin /* used only i
 static inline void bam_seg_ref_id (VBlockSAMP vb, ZipDataLineSAM *dl, DidIType did_i, int32_t ref_id, int32_t compare_to_ref_i)
 {
     ASSERT (ref_id >= -1 && ref_id < (int32_t)sam_hdr_contigs->contigs.len, "%s: encountered ref_id=%d but header has only %u contigs",
-            LN_NAME, ref_id, (uint32_t)sam_hdr_contigs->contigs.len);
+            LN_NAME, ref_id, sam_hdr_contigs->contigs.len32);
 
     // get snip and snip_len
     STR0(snip);

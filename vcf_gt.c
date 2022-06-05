@@ -22,7 +22,7 @@ void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCFP vb)
 {
     buf_alloc (vb, &CTX(FORMAT_GT_HT)->local, 0, vb->lines.len * vb->ht_per_line, char, CTX_GROWTH, "contexts->local");
 
-    for (vb->line_i=0; vb->line_i < (uint32_t)vb->lines.len; vb->line_i++) {
+    for (vb->line_i=0; vb->line_i < vb->lines.len32; vb->line_i++) {
 
         if (CTX(FORMAT_GT_HT) && !DATA_LINE (vb->line_i)->has_haplotype_data) {
             char *ht_data = Bc (CTX(FORMAT_GT_HT)->local, vb->line_i * vb->ht_per_line);

@@ -213,7 +213,7 @@ static void vcf_tags_show_rename_tags (void)
     }
 
     iprint0 ("\nRenamed tags defined in the VCF meta-information lines or --dvcf-rename or --dvcf-drop options:\n");
-    for (unsigned i=0; i < z_file->apriori_tags.len; i++) {
+    for (unsigned i=0; i < z_file->apriori_tags.len32; i++) {
         Tag *tag = B(Tag, z_file->apriori_tags, i);
         rom src_names[] = TAG_SOURCE_NAMES;
 
@@ -488,7 +488,7 @@ void vcf_tags_add_tag (VBlockVCFP vb, Context *ctx, DictIdType dtype, STRp(tag_n
         if (str_issame (old_tag->tag_name, tag_name)) return; // already added
 
         // since ctx->tag_i has a value, and it is not our tag - check if any of the other tags are our tag
-        for (unsigned i=0; i < vb->tags.len; i++) {
+        for (unsigned i=0; i < vb->tags.len32; i++) {
             old_tag = B(Tag, vb->tags, i);
             if (str_issame (old_tag->tag_name, tag_name)) return; // already added
         }
@@ -520,7 +520,7 @@ static const Tag *vcf_tags_rename_get_tag (VBlockVCFP vb, ConstContextP ctx, STR
     // if two or more tags have the same dict_id and hence the same context. in this case, we search for the tag
     if (!str_issame (tag_name, tag->tag_name)) {
         tag = NULL;
-        for (unsigned t=0; t < vb->tags.len; t++) {
+        for (unsigned t=0; t < vb->tags.len32; t++) {
             const Tag *candidate = B(Tag, vb->tags, t);
             if (str_issame (candidate->tag_name, tag_name)) {
                 tag = candidate;

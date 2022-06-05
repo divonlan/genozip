@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-//   file.c
+//   url.c
 //   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
@@ -22,7 +22,7 @@
 #include "file.h"
 #include "strings.h"
 
-// our instance of curl - only one at a time is permitted
+// our instance of curl for url_open - only one at a time is permitted
 static StreamP curl = NULL;
 
 bool url_is_url (rom filename)
@@ -33,23 +33,14 @@ bool url_is_url (rom filename)
 #define CURL_RESPONSE_LEN 4096
 
 // returns error string if curl itself (not server) failed, or NULL if successful
-static void url_do_curl (rom url, bool head,
-                         char *stdout_data, unsigned *stdout_len,
+static void url_do_curl (rom url, char *stdout_data, unsigned *stdout_len,
                          char *error, unsigned *error_len) 
 {
-    curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
-                          "To read from a URL", // reason in case of failure to execute curl
-                          "curl", url,
-                          head ? "--head" : NULL,
-                          NULL); // not silent - we want to collect errors
-/*
-    if (!url_wait_for_pipe (fileno (stream_from_stream_stdout (curl)), fileno (stream_from_stream_stderr (curl)))) {
-        #define TIMEOUT_ERROR "Timeout while wait for server"
-        strcpy (error, TIMEOUT_ERROR);
-        *error_len = sizeof TIMEOUT_ERROR;
-        return;
-    }
-*/
+    // our own instance of curl - to not conflict with url_open
+    StreamP curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
+                                  "To read from a URL", // reason in case of failure to execute curl
+                                  "curl", url, NULL); 
+
     int fd1 = fileno (stream_from_stream_stdout (curl));
     int fd2 = fileno (stream_from_stream_stderr (curl));
 
@@ -113,9 +104,10 @@ static int url_do_curl_head (rom url,
                              char *stdout_data, unsigned *stdout_len,
                              char *stderr_data, unsigned *stderr_len)
 {
-    curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
-                          "To compress files from a URL",
-                          "curl", "--head", url, NULL); // not silent - we want to collect errors
+    // our own instance of curl - to not conflict with url_open
+    StreamP curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
+                                  "To compress files from a URL",
+                                  "curl", "--head", url, NULL); // not silent - we want to collect errors
 
     *stdout_len = fread (stdout_data, 1, CURL_RESPONSE_LEN-1, stream_from_stream_stdout (curl));
     stdout_data[*stdout_len] = '\0'; // terminate string
@@ -210,7 +202,7 @@ int32_t url_read_string (rom url, char *data, uint32_t data_size)
         if (url[i] == '?') in_arg = true;
     }
 
-    url_do_curl (url, false, response, &response_len, error, &error_len);
+    url_do_curl (url, response, &response_len, error, &error_len);
 
     if (error_len && !response_len) return -1; // failure
 
@@ -221,6 +213,20 @@ int32_t url_read_string (rom url, char *data, uint32_t data_size)
         return len;
     }
     else return 0;
+}
+
+void url_get_redirect (rom url, STRc(redirect_url))
+{
+    // our own instance of curl - to not conflict with url_open
+    StreamP curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
+                                  "To get a URL's redirect", // reason in case of failure to execute curl
+                                  "curl", url, "--location", "--silent", "--output", "/dev/null",
+                                  "--write-out", "%{url_effective}", NULL); 
+
+    redirect_url_len = fread (redirect_url, 1, redirect_url_len - 1, stream_from_stream_stdout (curl));
+    redirect_url[redirect_url_len] = '\0'; // terminate string
+
+    stream_close (&curl, STREAM_WAIT_FOR_PROCESS);
 }
 
 // returns a FILE* which streams the content of a URL

@@ -138,7 +138,7 @@ COMPRESS (codec_acgt_compress)
     // option 2 - callback to get each line
     else if (get_line_cb) {
         buf_alloc (vb, &nonref_x_ctx->local, 0, *uncompressed_len, uint8_t, CTX_GROWTH, "contexts->local");
-        for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
+        for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
 
             char *data_1=0;
             uint32_t data_1_len=0;

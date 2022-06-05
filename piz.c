@@ -329,7 +329,7 @@ void piz_read_all_ctxs (VBlockP vb, Section *sec/*first VB section after VB_HEAD
         vb->preprocessing = true; // inform fastq_piz_is_skip_section
 
     while ((*sec)->st == SEC_B250 || (*sec)->st == SEC_LOCAL) {
-        uint32_t section_start = vb->z_data.len;
+        uint32_t section_start = vb->z_data.len32;
         *B32 (vb->z_section_headers, vb->z_section_headers.len) = section_start; 
 
         ASSERT (is_pair_data || vb->vblock_i == (*sec)->vblock_i, "expecting vb->vblock_i=%u == sec->vblock_i=%u", vb->vblock_i, (*sec)->vblock_i); // sanity

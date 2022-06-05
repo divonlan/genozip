@@ -103,8 +103,8 @@ typedef struct {
         show_alleles, show_bgzf, show_txt_contigs, show_lines,
         show_vblocks, show_threads, show_uncompress, biopsy,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
-        debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sa, debug_gencomp, debug_lines, no_gencomp, no_domqual,
-        verify_codec, seg_only, show_bam, xthreads, show_flags, show_rename_tags,
+        debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sa, debug_gencomp, debug_lines, debug_latest,
+        no_gencomp, no_domqual, verify_codec, seg_only, show_bam, xthreads, show_flags, show_rename_tags,
         #define SHOW_CONTAINERS_ALL_VBs (-1)
         show_containers, show_aligner,
         echo,         // show the command line in case of an error
@@ -152,7 +152,8 @@ typedef struct {
          explicit_ref,       // ref->filename was set by --reference or --REFERENCE (as opposed to being read from the genozip header)
          collect_coverage;   // PIZ: collect coverage data for show_sex/show_coverage/idxstats
 
-    int only_headers;        // genocat --show_headers (not genounzip) show only headers
+    int only_headers,        // genocat --show_headers (not genounzip) show only headers
+        check_latest;        // PIZ: run with "genozip --decompress --test": ZIP passes this to PIZ upon testing of the last file
 
     Reference reading_reference;  // system is currently reading a reference  as a result of --chain (not normal PIZ of a .chain.genozip)
 

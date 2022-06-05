@@ -32,7 +32,7 @@ void codec_hapmat_piz_calculate_columns (VBlockP vb_)
 
     vb->ht_matrix_ctx = ECTX (_PBWT_HT_MATRIX);
 
-    uint32_t ht_per_line = vb->ht_per_line = (uint32_t)(CTX(FORMAT_GT_HT)->local.len / vb->lines.len);
+    uint32_t ht_per_line = vb->ht_per_line = CTX(FORMAT_GT_HT)->local.len32 / vb->lines.len32;
 
     vb->hapmat_one_array.len = ht_per_line + 7; // +7 because depermuting_loop works on a word (32/64 bit) boundary
     buf_alloc (vb, &vb->hapmat_one_array, 0, vb->hapmat_one_array.len, char, 1, "hapmat_one_array");

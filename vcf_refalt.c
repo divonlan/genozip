@@ -59,6 +59,7 @@ static void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char main_ref, char main_
     // A to: G=111967 C=30006 T=26335
     // T to: C=111539 G=29504 A=25599
 
+    // if alt is as predicted, store it as "+"
     if      (main_alt == 'A' && main_ref == 'G') new_alt = '+';
     else if (main_alt == 'C' && main_ref == 'T') new_alt = '+';
     else if (main_alt == 'G' && main_ref == 'A') new_alt = '+';

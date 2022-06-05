@@ -652,7 +652,7 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, DidIType did_i,
     if (sep && reconstruct) RECONSTRUCT1 (sep); 
 
     ctx->last_txt = (TxtWord){ .index = last_txt_index,
-                               .len   = (uint32_t)vb->txt_data.len - last_txt_index };
+                               .len   = vb->txt_data.len32 - last_txt_index };
 
     ctx_set_encountered (vb, ctx); // this is the ONLY place in PIZ where we set encountered
     ctx->last_encounter_was_reconstructed = reconstruct;
@@ -805,4 +805,24 @@ uint32_t reconstruct_peek_repeats (VBlockP vb, ContextP ctx, char repsep)
     // dictionary non-container snip: count repsep in peeked string
     else
         return count_repsep (STRa(snip), repsep);
+}
+
+
+// peek a context which is normally a container and not yet encountered: return true if the container has the requested item
+bool reconstruct_peek_container_has_item (VBlockP vb, ContextP ctx, DictId item_dict_id)
+{
+    // case: already reconstructed - count repsep
+    ASSPIZ (!ctx_encountered (vb, ctx->did_i), "context %s is already encountered", ctx->tag_name);
+
+    STR(snip);
+    WordIndex wi = PEEK_SNIP (ctx->did_i);
+
+    if (*snip != SNIP_CONTAINER) return false; // not a container, so definitely don't contain the item
+
+    ContainerP con = container_retrieve (vb, ctx, wi, snip+1, snip_len-1, 0, 0);
+
+    for (int i=0; i < con_nitems(*con); i++)
+        if (con->items[i].dict_id.num == item_dict_id.num) return true; // found item
+
+    return false; // item doesn't exist in this container
 }

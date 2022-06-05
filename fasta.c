@@ -96,7 +96,7 @@ int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *last_i)
     // (note: first_i=0 when flag.make_reference)
     if (flag.make_reference) {
         bool data_found = false;
-        for (uint32_t i=0; i < vb->txt_data.len; i++) {
+        for (uint32_t i=0; i < vb->txt_data.len32; i++) {
             // just don't allow now-obsolete ';' rather than trying to disentangle comments from descriptions
             ASSINP (txt[i] != ';', "Error: %s contains a ';' character - this is not supported for reference files. Contig descriptions must begin with a >", txt_name);
         

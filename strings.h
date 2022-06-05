@@ -230,8 +230,8 @@ extern uint32_t str_split_floats_do (STRp(str), uint32_t max_items, char sep, bo
     n_##name##s = str_split_floats_do ((str), (str_len), n_##name##s, (sep), (exactly), name##s); 
 
 extern rom type_name (uint32_t item, 
-                              rom  const *name, // the address in which a pointer to name is found, if item is in range
-                              uint32_t num_names);
+                      rom  const *name, // the address in which a pointer to name is found, if item is in range
+                      uint32_t num_names);
 
 extern void str_print_dict (FILE *fp, STRp(data), bool add_newline, bool remove_equal_asterisk);
 

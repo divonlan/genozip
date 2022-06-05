@@ -63,7 +63,7 @@ void ref_make_create_range (VBlockP vb)
     r->range_id = vb->vblock_i-1;
 
     uint64_t bit_i=0;
-    for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
+    for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
         
         uint32_t seq_data_start, seq_len;
         fasta_get_data_line (vb, line_i, &seq_data_start, &seq_len);

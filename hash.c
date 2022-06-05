@@ -85,7 +85,7 @@ void hash_alloc_local (VBlockP segging_vb, Context *vctx)
     
     // default: it could be big - start with num_lines / 10 (this is an estimated num_lines that is likely inflated)
     else
-        vctx->local_hash_prime = hash_next_size_up ((uint32_t)segging_vb->lines.len / 10, false);
+        vctx->local_hash_prime = hash_next_size_up (segging_vb->lines.len32 / 10, false);
 
     // note: we can't be too generous with the initial allocation because this memory is usually physically allocated
     // to ALL VB structures before any of them merges. Better start smaller for vb_i=1 and let it extend if needed
@@ -221,7 +221,7 @@ uint32_t hash_get_estimated_entries (VBlockP merging_vb, Context *zctx, const Co
         iprintf ("dict=%s n1=%d n2=%d n3=%d n2/n3=%2.2lf growth_plan=%u effc_vbs=%u "
                  "n2_n3_lines=%s vctx->nodes.len=%u est_entries=%d hashsize=%s\n", 
                  first_merging_vb_ctx->tag_name, (int)n1, (int)n2, (int)n3, n2n3_density_ratio, gp, (unsigned)effective_num_vbs, 
-                 str_int_commas ((uint64_t)n2_n3_lines).s, (uint32_t)first_merging_vb_ctx->nodes.len, (int)estimated_entries, 
+                 str_int_commas ((uint64_t)n2_n3_lines).s, first_merging_vb_ctx->nodes.len32, (int)estimated_entries, 
                  str_int_commas (hash_next_size_up (estimated_entries * 5, false)).s); 
     }
 
@@ -314,7 +314,7 @@ WordIndex hash_global_get_entry (Context *zctx, STRp(snip), HashGlobalGetEntryMo
     // and accessing it. We make sure to first prepare the new entry including the merge_num which will prohibit old
     // VBs from using it, before we atomically set the "next"
     ASSERT (zctx->global_hash.len <= 0xffffffff, "no more room in global_hash of context %s", zctx->tag_name);
-    uint32_t next = zctx->global_hash.len++;
+    uint32_t next = zctx->global_hash.len32++;
 
     GlobalHashEnt *new_hashent = B(GlobalHashEnt, zctx->global_hash, next);
     new_hashent->merge_num     = zctx->merge_num; // stamp our merge_num as the ones that set the node_index
@@ -410,7 +410,7 @@ WordIndex hash_get_entry_for_seg (VBlockP segging_vb, Context *vctx, STRp(snip),
     while (l_hashent->next != NO_NEXT) {
 
         ASSERT (l_hashent->next < vctx->local_hash.len, 
-                "l_hashent->next=%d out of range, local_hash.len=%u", l_hashent->next, (uint32_t)vctx->local_hash.len);
+                "l_hashent->next=%d out of range, local_hash.len=%u", l_hashent->next, vctx->local_hash.len32);
         l_hashent_i = l_hashent->next;
         l_hashent = B(LocalHashEnt, vctx->local_hash, l_hashent_i);
 
