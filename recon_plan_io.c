@@ -266,6 +266,6 @@ void recon_plan_uncompress (Section sec, uint32_t *out_conc_writing_vbs, uint32_
     if (out_conc_writing_vbs) *out_conc_writing_vbs = conc_writing_vbs;
     if (out_vblock_mb) *out_vblock_mb = vblock_mb;
 
-    if (z_file->genozip_version >= 14) // we started to deltify in v14
+    if (VER(14)) // we started to deltify in v14
         recon_plan_dedeltify();
 }

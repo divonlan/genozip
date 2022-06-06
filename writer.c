@@ -264,7 +264,7 @@ static void writer_init_vb_info (void)
     if (Z_DT(DT_FASTQ) && z_file->z_flags.dts_paired) {
         num_vbs_R = sections_get_num_vbs (FQ_COMP_R1);
         uint32_t num_vbs_R2 = sections_get_num_vbs (FQ_COMP_R2);
-        ASSERT (num_vbs_R == num_vbs_R2 || (z_file->genozip_version <= 9 && !num_vbs_R2), // dts_paired introduced 9.0.13
+        ASSERT (num_vbs_R == num_vbs_R2 || (!VER(10) && !num_vbs_R2), // dts_paired introduced 9.0.13
                 "R1 and R2 have a different number of VBs (%u vs %u respecitvely)", num_vbs_R, num_vbs_R2);
     
         // v8-9: case not paired after all
@@ -284,7 +284,7 @@ static void writer_init_vb_info (void)
 
         // since v14, num_lines is carried by Section. 
         // Note: in DVCF, this is different than the number of lines in the default reconstruction which drops luft_only lines.
-        if (z_file->genozip_version >= 14)
+        if (VER(14))
             v->num_lines = sec->num_lines;
 
         // up until v13, num_lines was in SectionHeaderVbHeader
@@ -727,7 +727,7 @@ static void writer_add_plan_from_recon_section (CompIType comp_i, bool is_luft,
         buf_alloc (evb, &z_file->recon_plan, plan_len, 0, ReconPlanItem, 0, "recon_plan");      
 
         // convert v12/13
-        if (z_file->genozip_version <= 13) {
+        if (!VER(14)) {
             for (uint64_t i=0; i < plan_len; i++) 
                 if (plan[i].flavor == PLAN_END_OF_VB)
                     plan[i].num_lines = 0; // in v12/13, this was all 1s 

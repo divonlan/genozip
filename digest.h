@@ -77,7 +77,7 @@ extern bool digest_recon_is_equal (const Digest recon_digest, const Digest expec
 extern void digest_verify_ref_is_equal (const Reference ref, rom header_ref_filename, const Digest header_md5);
 
 #define md5_is_zero(digest) (!(digest).w128)
-#define v8_digest_is_zero(digest) (command == PIZ && z_file->genozip_version < 9 && md5_is_zero(digest))
+#define v8_digest_is_zero(digest) (command == PIZ && !VER(9) && md5_is_zero(digest))
 #define digest_is_zero md5_is_zero
 
 #define piz_need_digest (!v8_digest_is_zero (z_file->digest) && !flag.data_modified && !flag.reading_chain) 

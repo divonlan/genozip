@@ -190,7 +190,7 @@ static inline unsigned container_reconstruct_item_seperator (VBlockP vb, const C
     if (item->separator[1] == CI1_ITEM_CB && IS_VALID_SEP1_FLAG) {
 
         // note: in v13 we had a bug in qname.c that caused a seperator to change { CI0_SKIP, 1 } -> { 0, 1 }, thereby incorrectly triggering this function, so we refrain for erroring in that case
-        ASSPIZ ((DT_FUNC(vb, con_item_cb)) || z_file->genozip_version <= 13, "data_type=%s doesn't have con_item_cb requested by dict_id=%s. Please upgrade to the latest version of Genozip",
+        ASSPIZ ((DT_FUNC(vb, con_item_cb)) || !VER(14), "data_type=%s doesn't have con_item_cb requested by dict_id=%s. Please upgrade to the latest version of Genozip",
                 dt_name (vb->data_type), dis_dict_id (item->dict_id).s);
 
         if (!vb->frozen_state.prm8[0]) // only if we're not just peeking

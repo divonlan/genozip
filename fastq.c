@@ -663,7 +663,7 @@ bool fastq_piz_is_paired (void)
     if (z_file->z_flags.dts_paired) return true;  
 
     // dts_paired is not set. This flag was introduced in 9.0.13 - if file is compressed with genozip version 10+, then for sure the file is not paired
-    if (z_file->genozip_version >= 10) return false;
+    if (VER(10)) return false;
     
     // for v8, and v9 up to 9.0.12 it is paired iff user is tell us explicitly that this is a paired file
     z_file->z_flags.dts_paired = flag.undocumented_dts_paired;
@@ -726,7 +726,7 @@ void fastq_recon_aligned_SEQ (VBlockP vb_, ContextP bitmap_ctx, STRp(seq_len_str
 
     ASSERT (str_get_int_range32 (STRa(seq_len_str), 0, 0x7fffffff, (int32_t*)&vb->seq_len), "could not parse integer \"%.*s\"", STRf(seq_len_str));
 
-    if (vb->comp_i == FQ_COMP_R2 && z_file->genozip_version >= 14) { 
+    if (vb->comp_i == FQ_COMP_R2 && VER(14)) { 
         STR(snip); 
         ctx_get_next_snip (VB, CTX(FASTQ_SQBITMAP), true, pSTRa(snip)); 
         bitmap_ctx->pair1_is_aligned = (*snip == SNIP_LOOKUP);  
@@ -834,8 +834,8 @@ SPECIAL_RECONSTRUCTOR (fastq_special_PAIR2_GPOS)
 
     // case: pair-1 is aligned, and GPOS is a delta vs pair-1
     else {
-        int64_t pair_value = (int64_t)(z_file->genozip_version >= 14 ? *B32 (ctx->pair, ctx->pair.next++) // starting v14, only aligned lines have GPOS
-                                                                     : *B32 (ctx->pair, vb->line_i));     // up to v13, all lines segged GPOS (possibly NO_GPOS value, but not in this case, since we have a delta)
+        int64_t pair_value = (int64_t)(VER(14) ? *B32 (ctx->pair, ctx->pair.next++) // starting v14, only aligned lines have GPOS
+                                               : *B32 (ctx->pair, vb->line_i));     // up to v13, all lines segged GPOS (possibly NO_GPOS value, but not in this case, since we have a delta)
         int64_t delta = (int64_t)strtoull (snip, NULL, 10 /* base 10 */); 
         new_value->i = pair_value + delta; // just sets value, doesn't reconstruct
 
@@ -850,7 +850,7 @@ bool fastq_piz_get_pair2_is_forward (VBlockP vb)
 {
     ContextP ctx = CTX(FASTQ_STRAND);
 
-    if (z_file->genozip_version <= 13) {
+    if (!VER(14)) {
         bool is_forward_pair_1 = bit_array_get ((BitArrayP)&ctx->pair, vb->line_i); // up to v13, all lines had strand, which was 0 if unaligned
         return NEXTLOCALBIT (ctx) ? is_forward_pair_1 : !is_forward_pair_1;
     }

@@ -221,6 +221,11 @@ void vcf_seg_initialize (VBlockP vb_)
     ctx_create_node (VB, VCF_COPYSTAT, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPYSTAT }, 2);
     ctx_create_node (VB, VCF_COPYPOS,  (char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPYPOS  }, 2);
     
+    if (segconf.has[FORMAT_RGQ]) {
+        seg_mux_init (VB, 2, VCF_SPECIAL_MUX_BY_HAS_RGQ, VCF_QUAL, VCF_QUAL, STORE_NONE, false, (MultiplexerP)&vb->mux_QUAL, "01");
+        seg_mux_init (VB, 2, VCF_SPECIAL_MUX_BY_HAS_RGQ, VCF_INFO, VCF_INFO, STORE_NONE, false, (MultiplexerP)&vb->mux_INFO, "01");        
+    }
+
     vcf_info_seg_initialize(vb);
     vcf_samples_seg_initialize(vb);
 }             
@@ -417,6 +422,37 @@ static void vcf_seg_assign_tie_breaker (VBlockVCFP vb, ZipDataLineVCF *dl)
     dl->tie_breaker = crc32 (1, vb->main_refalt, vb->main_ref_len + 1 + vb->main_alt_len);
 }
 
+static inline bool vcf_refalt_seg_ref_alt_line_has_RGQ (rom str)
+{
+    int count_tabs = 0;
+    while (*str != '\n' && (*str != '\t' || (++count_tabs < 4))) str++;
+
+    if (*str == '\n' || str[2]=='\t' || str[2]=='\n' || str[3]=='\t' || str[3]=='\n') return false; // a line without FORMAT, or FORMAT not long enough for RGQ
+
+    for (str++; str[2] != '\t' && str[2] != '\n'; str++) 
+        if (str[0]=='R' && str[1]=='G' && str[2]=='Q' && (str[3]=='\t' || str[3]==':'))
+            return true;
+
+    return false; // no RGQ in this FORMAT
+}
+
+static inline void vcf_seg_QUAL (VBlockVCFP vb, STRp(qual))
+{
+    CTX(VCF_QUAL)->last_txt = (TxtWord){ .index = BNUMtxt (qual), // consumed by vcf_seg_INFO_QD_by_FORMAT_DP
+                                         .len   = qual_len };
+
+    // case: GVCF - multiplex by has_RGQ
+    if (!segconf.running && segconf.has[FORMAT_RGQ]) {
+        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, (MultiplexerP)&vb->mux_QUAL, vb->line_has_RGQ);
+        seg_by_ctx (VB, STRa(qual), channel_ctx, qual_len+1);
+        seg_by_did_i (VB, STRa(vb->mux_QUAL.snip), VCF_QUAL, 0);
+    }
+    
+    // case: not GVCF
+    else
+        seg_by_did_i (VB, STRa(qual), VCF_QUAL, qual_len+1);
+}
+
 /* segment a VCF line into its fields:
    fields CHROM->FORMAT are "field" contexts
    all samples go into the SAMPLES context, which is a Container
@@ -479,7 +515,7 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
                                         .len   = VCF_POS_len };
 
     if (vb->line_coords == DC_PRIMARY) {
-        PosType pos = dl->pos[0] = seg_pos_field (vb_, VCF_POS, VCF_POS, 0, '.', VCF_POS_str, VCF_POS_len, 0, VCF_POS_len+1);
+        PosType pos = dl->pos[0] = seg_pos_field (vb_, VCF_POS, VCF_POS, 0, '.', STRd(VCF_POS), 0, VCF_POS_len+1);
 
         if (pos == 0 && !(*VCF_POS_str == '.' && VCF_POS_len == 1)) // POS == 0 - invalid value return from seg_pos_field
             WARN_ONCE ("FYI: invalid POS=%"PRId64" value in chrom=%.*s vb_i=%u vb_line_i=%d: line will be compressed, but not indexed", 
@@ -489,7 +525,7 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
     }
 
     else { // LUFT
-        dl->pos[1] = seg_pos_field (vb_, VCF_oPOS, VCF_oPOS, 0, '.', VCF_POS_str, VCF_POS_len, 0, VCF_POS_len);
+        dl->pos[1] = seg_pos_field (vb_, VCF_oPOS, VCF_oPOS, 0, '.', STRd(VCF_POS), 0, VCF_POS_len);
         if (dl->pos[1]) random_access_update_pos (vb_, 1, VCF_oPOS);
         CTX(vb->vb_coords==DC_LUFT ? VCF_oPOS : VCF_POS)->txt_len++; // account for the tab - in oPOS in the ##luft_only VB and in POS (on behalf on the primary POS) if this is a Dual-coord line (we will rollback accounting later if its not)
     }
@@ -510,14 +546,15 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
     vb->main_ref_len = VCF_REF_len;
     vb->main_alt_len = VCF_ALT_len;
  
+    vb->line_has_RGQ = !segconf.running && segconf.has[FORMAT_RGQ] && vcf_refalt_seg_ref_alt_line_has_RGQ (VCF_ALT_str);
+
     // note: we treat REF+\t+ALT as a single field because REF and ALT are highly corrected, in the case of SNPs:
     // e.g. GG has a probability of 0 and GC has a higher probability than GA.
-    vcf_refalt_seg_main_ref_alt (vb, VCF_REF_str, VCF_REF_len, VCF_ALT_str, VCF_ALT_len);
+    vcf_refalt_seg_main_ref_alt (vb, STRd(VCF_REF), STRd(VCF_ALT));
     
-    SEG_NEXT_ITEM (VCF_QUAL);
-    CTX(VCF_QUAL)->last_txt = (TxtWord){ .index = BNUMtxt (VCF_QUAL_str), // consumed by vcf_seg_INFO_QD_by_FORMAT_DP
-                                         .len   = VCF_QUAL_len };
+    GET_NEXT_ITEM (VCF_QUAL);
 
+    vcf_seg_QUAL (vb, STRd (VCF_QUAL));
 
     SEG_NEXT_ITEM (VCF_FILTER);
     

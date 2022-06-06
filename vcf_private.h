@@ -57,6 +57,9 @@ typedef struct VBlockVCF {
     rom main_refalt;         // used by vcf_refalt_lift and vcf_seg_INFO_BaseCounts, set by vcf_seg_txt_line
     unsigned main_ref_len, main_alt_len;
 
+    // GVCF stuff
+    enum { RGQ_UNKNOWN=-1, RGQ_HASNT=false, RGQ_HAS=true } line_has_RGQ;
+
     // INFO/SF stuff
     enum { USE_SF_UNKNOWN, USE_SF_YES, USE_SF_NO } use_special_sf;
     Buffer sf_txt, sf_snip; // INFO/SF data as it appears in the snip being constructed
@@ -79,6 +82,8 @@ typedef struct VBlockVCF {
     MULTIPLEXER(1 + MAX_DP_FOR_MUX * 3) mux_PLy;
     MULTIPLEXER(1 + 7 * 3) mux_GQ;
     MULTIPLEXER(MAX_DP_FOR_MUX) mux_RGQ;   
+
+    MULTIPLEXER(2) mux_QUAL, mux_INFO; // multiplex by has_RGQ (in GVCF)
 
     // used by CODEC_HAPM (for VCF haplotype matrix) 
     Buffer hapmat_helper_index_buf; // ZIP: used by codec_hapmat_count_alt_alleles 
@@ -316,6 +321,9 @@ RefAltEquals vcf_refalt_oref_equals_ref_or_alt (char oref, char ref, STRp(alt), 
 extern bool vcf_refalt_piz_is_variant_snp (VBlockVCFP vb);
 extern bool vcf_refalt_piz_is_variant_indel (VBlockVCFP vb);
 extern void vcf_refalt_seg_convert_to_primary (VBlockVCFP vb, LiftOverStatus ostatus);
+
+// GVCF stuff
+extern bool vcf_piz_line_has_RGQ (VBlockVCFP vb);
 
 // Tags stuff
 

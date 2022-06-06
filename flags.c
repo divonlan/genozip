@@ -1407,7 +1407,7 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
     ASSINP (!flag.qual_only || flag.out_dt == DT_FASTQ, "--qual-only is not supported for %s because it only works on FASTQ data, but this file has %s data", z_name, dt_name (dt));
 
     // --unbind and --component not allowed in SAM/BAM starting v14
-    if (Z_DT(DT_SAM) && z_file->genozip_version >= 14) {
+    if (Z_DT(DT_SAM) && VER(14)) {
         ASSERT0 (!flag.unbind, "--unbind not supported for SAM/BAM files");
         ASSERT0 (!flag.one_component, "--component not supported for SAM/BAM files");
     }
@@ -1453,17 +1453,17 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
     // version limitations
 
     // sam/bam genozip files generated in v9-11 had a critical bug when translating to fastq
-    ASSINP (z_file->genozip_version >= 12 || !(dt == DT_SAM && flag.out_dt == DT_FASTQ),
+    ASSINP (VER(12) || !(dt == DT_SAM && flag.out_dt == DT_FASTQ),
             "%s was created with genozip version %u, SAM/BAM to FASTQ translation is supported only for files created with genozip version 12 or later",
             z_name, z_file->genozip_version);
 
     // version 12 broke backward compatability of being able to translate old multifasta to phylip
-    ASSINP (z_file->genozip_version >= 12 || !(dt == DT_FASTA && flag.out_dt == DT_PHYLIP),
+    ASSINP (VER(12) || !(dt == DT_FASTA && flag.out_dt == DT_PHYLIP),
             "%s was created with genozip version %u, MULTIFASTA to PHYLIP translation is supported only for files created with genozip version 12 or later",
             z_name, z_file->genozip_version);
 
     // num_lines in VbHeader populated since v12 (in v14 moved to SectionEnt)
-    ASSINP (z_file->genozip_version >= 12 || (flag.lines_first == NO_LINE && !flag.tail && !flag.downsample),
+    ASSINP (VER(12) || (flag.lines_first == NO_LINE && !flag.tail && !flag.downsample),
             "%s was created with genozip version %u, --head, --tail, --lines and --downsample are supported only for files created with genozip version 12 or later",
             z_name, z_file->genozip_version);
 

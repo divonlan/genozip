@@ -121,7 +121,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     if (!txt_file->piz_header_init_has_run && DTPZ(piz_header_init))
         txt_file->piz_header_init_has_run = true;
 
-    evb->comp_i                = z_file->genozip_version < 14 ? header->h.flags.txt_header.v13_dvcf_comp_i/*v12,13*/ : sec->comp_i/*since v14*/;
+    evb->comp_i                = !VER(14) ? header->h.flags.txt_header.v13_dvcf_comp_i/*v12,13*/ : sec->comp_i/*since v14*/;
     txt_file->max_lines_per_vb = BGEN32 (header->max_lines_per_vb);
     txt_file->txt_flags        = header->h.flags.txt_header;
     txt_file->num_vbs          = sections_count_sections_until (SEC_VB_HEADER, sec, SEC_TXT_HEADER);
@@ -217,7 +217,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
                 // backward compatability note: For v8 files, we don't test against MD5 for the header, as we had a bug 
                 // in which we included a junk MD5 if they user didn't --md5 or --test. any file integrity problem will
                 // be discovered though on the whole-file MD5 so no harm in skipping this.
-                if (z_file->genozip_version >= 9) {  
+                if (VER(9)) {  
                     Digest reconstructed_header_digest = digest_snapshot (&z_file->digest_ctx, NULL);
                     
                     TEMP_FLAG (quiet, flag.quiet && !flag.show_digest);
@@ -242,7 +242,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
         writer_handover_txtheader (&txt_header_vb); // handover data to writer thread (even if the header is empty, as the writer thread is waiting for it)
 
         // accounting for data as in original source file - affects vb->vb_position_txt_file of next VB
-        txt_file->txt_data_so_far_single_0 = z_file->genozip_version < 12 ? BGEN32 (header->h.data_uncompressed_len) : BGEN64 (header->txt_header_size); 
+        txt_file->txt_data_so_far_single_0 = !VER(12) ? BGEN32 (header->h.data_uncompressed_len) : BGEN64 (header->txt_header_size); 
     }
 
     // case: component is not in plan - discard the VB

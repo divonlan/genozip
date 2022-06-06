@@ -522,7 +522,7 @@ SectionHeaderUnion zfile_read_section_header (VBlockP vb, uint64_t offset,
             st_name (expected_sec_type), z_name);
 
     ASSERT ((BGEN32 (header.common.vblock_i) == original_vb_i && header.common.section_type == expected_sec_type) ||
-            (z_file->genozip_version <= 13 && expected_sec_type == SEC_REF_HASH), // in V<=13, REF_HASH didn't have a vb_i in the section list
+            (!VER(14) && expected_sec_type == SEC_REF_HASH), // in V<=13, REF_HASH didn't have a vb_i in the section list
             "Requested to read %s with vb_i=%u, but actual section is %s with vb_i=%u",
             st_name(expected_sec_type), original_vb_i, st_name(header.common.section_type), BGEN32 (header.common.vblock_i));
 
@@ -568,7 +568,7 @@ static void zfile_read_genozip_header_handle_ref_info (const SectionHeaderGenozi
         rom gref_fn = ref_get_filename (gref);
 
         // case --chain which requires the prim_ref, but an external reference isn't provided (these fields didn't exist before v12)
-        if (flag.reading_chain && !flag.explicit_ref && z_file->genozip_version >= 12) {
+        if (flag.reading_chain && !flag.explicit_ref && VER(12)) {
 
             rom prim_ref_filename = zfile_read_genozip_header_get_ref_filename (header->chain.prim_filename);
             rom luft_ref_filename = zfile_read_genozip_header_get_ref_filename (header->ref_filename);
@@ -645,15 +645,15 @@ static uint64_t zfile_read_genozip_header_get_offset (void)
              z_name, z_file->genozip_version, GENOZIP_CODE_VERSION, WEBSITE_INSTALLING);
 
     // in version 6, we canceled backward compatability with v1-v5
-    ASSRET (z_file->genozip_version >= 6, 0, "Skipping %s: it was compressed with an older version of genozip - version %u.\nIt may be uncompressed with genozip versions %u to 5",
+    ASSRET (VER(6), 0, "Skipping %s: it was compressed with an older version of genozip - version %u.\nIt may be uncompressed with genozip versions %u to 5",
                 z_name, z_file->genozip_version, z_file->genozip_version);
 
     // in version 7, we canceled backward compatability with v6
-    ASSRET (z_file->genozip_version >= 7, 0, "Skipping %s: it was compressed with version 6 of genozip. It may be uncompressed with genozip version 6",
+    ASSRET (VER(7), 0, "Skipping %s: it was compressed with version 6 of genozip. It may be uncompressed with genozip version 6",
                 z_name);
 
     // in version 8, we canceled backward compatability with v7
-    ASSRET (z_file->genozip_version >= 8, 0, "Skipping %s: it was compressed with version 7 of genozip. It may be uncompressed with genozip version 7",
+    ASSRET (VER(8), 0, "Skipping %s: it was compressed with version 7 of genozip. It may be uncompressed with genozip version 7",
                 z_name);
 
     return offset;

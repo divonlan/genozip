@@ -1581,10 +1581,25 @@ void vcf_finalize_seg_info (VBlockVCFP vb)
     char ren_prefixes[con_nitems(con) * MAX_TAG_LEN]; 
     unsigned ren_prefixes_len = z_is_dvcf && !vb->is_rejects_vb ? vcf_tags_rename (vb, con_nitems(con), 0, 0, 0, B1ST (InfoItem, vb->info_items), ren_prefixes) : 0;
 
-    // if we're compressing a Luft rendition, swap the prefixes
-    if (vb->line_coords == DC_LUFT && ren_prefixes_len) 
-        container_seg_with_rename (vb, CTX(VCF_INFO), &con, ren_prefixes, ren_prefixes_len, prefixes, prefixes_len, total_names_len /* names inc. = and separator */, NULL);
-    else 
-        container_seg_with_rename (vb, CTX(VCF_INFO), &con, prefixes, prefixes_len, ren_prefixes, ren_prefixes_len, total_names_len /* names inc. = and separator */, NULL);
+    // case GVCF: multiplex by has_RGQ
+    if (!segconf.running && segconf.has[FORMAT_RGQ]) {
+        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, (MultiplexerP)&vb->mux_INFO, vb->line_has_RGQ);
+        seg_by_did_i (VB, STRa(vb->mux_INFO.snip), VCF_INFO, 0);
+
+        // if we're compressing a Luft rendition, swap the prefixes
+        if (vb->line_coords == DC_LUFT && ren_prefixes_len) 
+            container_seg_with_rename (vb, channel_ctx, &con, ren_prefixes, ren_prefixes_len, prefixes, prefixes_len, total_names_len /* names inc. = and separator */, NULL);
+        else 
+            container_seg_with_rename (vb, channel_ctx, &con, prefixes, prefixes_len, ren_prefixes, ren_prefixes_len, total_names_len /* names inc. = and separator */, NULL);
+    }
+
+    // case: not GVCF
+    else {
+        // if we're compressing a Luft rendition, swap the prefixes
+        if (vb->line_coords == DC_LUFT && ren_prefixes_len) 
+            container_seg_with_rename (vb, CTX(VCF_INFO), &con, ren_prefixes, ren_prefixes_len, prefixes, prefixes_len, total_names_len /* names inc. = and separator */, NULL);
+        else 
+            container_seg_with_rename (vb, CTX(VCF_INFO), &con, prefixes, prefixes_len, ren_prefixes, ren_prefixes_len, total_names_len /* names inc. = and separator */, NULL);
+    }
 }
 

@@ -759,13 +759,13 @@ void sam_reconstruct_SEQ (VBlockP vb_, Context *bitmap_ctx, STRp(snip), bool rec
     ConstRangeP range     = NULL;
     unsigned seq_consumed=0, ref_consumed=0;
 
-    bool unmapped = z_file->genozip_version >= 14 ? (last_flags.bits.unmapped || vb->cigar_missing || !pos || (vb->chrom_name_len==1 && vb->chrom_name[0]=='*'))
-                                                  : (!pos || (vb->chrom_name_len==1 && vb->chrom_name[0]=='*')); // the criterion seg used in up to v13
+    bool unmapped = VER(14) ? (last_flags.bits.unmapped || vb->cigar_missing || !pos || (vb->chrom_name_len==1 && vb->chrom_name[0]=='*'))
+                            : (!pos || (vb->chrom_name_len==1 && vb->chrom_name[0]=='*')); // the criterion seg used in up to v13
                                                   
-    bool aligner_used = z_file->genozip_version >= 14 ? (snip && snip[1] == '1') // starting v14, seg tells us explicitly
-                                                      : (unmapped && z_file->z_flags.aligner); 
+    bool aligner_used = VER(14) ? (snip && snip[1] == '1') // starting v14, seg tells us explicitly
+                                : (unmapped && z_file->z_flags.aligner); 
 
-    bool is_perfect = z_file->genozip_version >= 14 && snip && snip[2] == '1';
+    bool is_perfect = VER(14) && snip && snip[2] == '1';
 
     // case: unmapped, segged against reference using our aligner
     if (aligner_used) {
@@ -794,7 +794,7 @@ void sam_reconstruct_SEQ (VBlockP vb_, Context *bitmap_ctx, STRp(snip), bool rec
 
     if (vb->ref_consumed) {
         if (!(range = ref_piz_get_range (VB, gref, true))) {
-            if (z_file->genozip_version >= 14) goto unmapped; // starting v14, a missing range is another case of unmapped
+            if (VER(14)) goto unmapped; // starting v14, a missing range is another case of unmapped
             ref_display_all_ranges (gref);
             ASSPIZ0 (false, "range is NULL");
         }
@@ -803,7 +803,6 @@ void sam_reconstruct_SEQ (VBlockP vb_, Context *bitmap_ctx, STRp(snip), bool rec
     vb->range = (RangeP)range; // store in vb->range too, for sam_piz_special_MD
 
     SamPosType range_len = range ? (range->last_pos - range->first_pos + 1) : 0;
-    bool v14 = z_file->genozip_version >= 14;
 
     const BamCigarOp *cigar = vb->binary_cigar.len32 ? B1ST(BamCigarOp, vb->binary_cigar) 
                                                      : &(BamCigarOp){ .n = vb->seq_len, .op = BC_S }; // up to v13, alignments with CIGAR=* but with a sequence where segged this way
@@ -848,7 +847,7 @@ void sam_reconstruct_SEQ (VBlockP vb_, Context *bitmap_ctx, STRp(snip), bool rec
                 else {
                     vb->mismatch_bases_by_SEQ++;
 
-                    if (v14) {
+                    if (VER(14)) {
                         uint8_t ref_base_2bit = bit_array_get2 (&range->ref, idx * 2);
                         RECONSTRUCT_NEXT (&seqmis_ctx[ref_base_2bit], 1);
                     }

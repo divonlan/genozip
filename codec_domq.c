@@ -617,7 +617,7 @@ void codec_domq_reconstruct (VBlockP vb, Codec codec, ContextP qual_ctx)
     bool reconstruct = true;
 
     // case: up to v13, all reads were compressed with the same dom (no multiplexing)
-    if (z_file->genozip_version <= 13) 
+    if (!VER(14)) 
         codec_domq_reconstruct_do_v13 (vb, qual_ctx, reconstruct);
     
     else { // v14 and above

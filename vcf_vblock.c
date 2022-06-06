@@ -31,6 +31,7 @@ void vcf_vb_release_vb (VBlockVCFP vb)
     vb->recon_size_luft = vb->reject_bytes = 0;
     vb->sort = false;
     vb->first_line = 0;
+    vb->line_has_RGQ = 0;
 
     memset (&vb->mux_PLn,    0, sizeof(vb->mux_PLn));
     memset (&vb->mux_GL,     0, sizeof(vb->mux_GL));
@@ -46,6 +47,8 @@ void vcf_vb_release_vb (VBlockVCFP vb)
     memset (&vb->mux_AD,     0, sizeof(vb->mux_AD));
     memset (&vb->mux_ADALL,  0, sizeof(vb->mux_ADALL));
     memset (&vb->mux_PLy,    0, sizeof(vb->mux_PLy));
+    memset (&vb->mux_QUAL,   0, sizeof(vb->mux_QUAL));
+    memset (&vb->mux_INFO,   0, sizeof(vb->mux_INFO));
     
     buf_free (vb->sf_txt);
     buf_free (vb->sf_snip);
@@ -104,6 +107,7 @@ void vcf_reset_line (VBlockP vb_)
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
     vb->sample_i = 0;
+    vb->line_has_RGQ = RGQ_UNKNOWN;
 
     CTX(INFO_DP)->sum_dp_this_line = 0;
     CTX(INFO_DP)->is_initialized = false;        

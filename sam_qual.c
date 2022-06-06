@@ -292,7 +292,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
 
     // case: MAIN component, reconstruct depn line against prim line in this VB
     else if (sam_is_main_vb && 
-             z_file->genozip_version >= 14 && // up to v13, we could have buddy lines for sup/sec which are not prim lines
+             VER(14) && // up to v13, we could have buddy lines for sup/sec which are not prim lines
              piz_has_buddy && (last_flags.bits.supplementary || last_flags.bits.secondary)) {
 
         HistoryWord word = *B(HistoryWord, ctx->history, vb->buddy_line_i); // QUAL is always stored as LookupTxtData or LookupPerLine
@@ -317,16 +317,16 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
     uint32_t qual_len = BAFTtxt - qual;
 
     // store quality score in ms:i history 
-    if (z_file->genozip_version <= 13) // up to v13 this special was only when calculating score was needed
+    if (!VER(14)) // up to v13 this special was only when calculating score was needed
         new_value->i = sam_get_QUAL_score (vb, STRa(qual));
     
-    else if (z_file->genozip_version >= 14 && segconf.sam_ms_type == ms_BIOBAMBAM) // note: segconf.sam_ms_type is populated in PIZ since v14
+    else if (VER(14) && segconf.sam_ms_type == ms_BIOBAMBAM) // note: segconf.sam_ms_type is populated in PIZ since v14
         *B(int64_t, CTX(OPTION_ms_i)->history, vb->line_i) = sam_get_QUAL_score (vb, STRa(qual));
 
     //xxx if (reconstruct) // note: At this, this is only used for translating to BAM, so not needed if not reconstructed
     //     vb->qual_missing = (BAFTtxt - qual == 1 && *qual == '*'); 
 
-    return z_file->genozip_version <= 13; // has new value for files up to v13
+    return !VER(14); // has new value for files up to v13
 }
 
 // SAM-to-BAM translator: translate SAM ASCII (33-based) Phred values to BAM's 0-based

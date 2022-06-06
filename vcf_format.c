@@ -170,7 +170,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT)
     }
 
     // initialize haplotype stuff
-    if (z_file->genozip_version <= 13 && has_GT && !vb->ht_matrix_ctx) 
+    if (!VER(14) && has_GT && !vb->ht_matrix_ctx) 
         codec_hapmat_piz_calculate_columns (vb);
 
     return NO_NEW_VALUE;

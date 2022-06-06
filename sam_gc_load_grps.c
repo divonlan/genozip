@@ -517,7 +517,7 @@ static void sam_load_groups_add_one_prim_vb (VBlockP vb_)
 // PIZ main thread - dispatches compute compute thread do read SA Groups from one PRIM VB. returns true if dispatched
 bool sam_piz_dispatch_one_load_SA_Groups_vb (Dispatcher dispatcher)
 {
-    if (z_file->genozip_version < 14 || flag.genocat_no_reconstruct) return false; // no need to load SA groups
+    if (!VER(14) || flag.genocat_no_reconstruct) return false; // no need to load SA groups
 
     // check if we're done
     if (next_plsg_i == plsg_info.len) goto done_loading;

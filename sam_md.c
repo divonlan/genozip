@@ -281,7 +281,7 @@ void sam_MD_Z_seg (VBlockSAMP vb,  ZipDataLineSAM *dl, STRp(md), unsigned add_by
 SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_MD)
 {
     VBlockSAMP vb = (VBlockSAMP)vb_;
-    bool perfect_match = z_file->genozip_version >= 14 && !vb->mismatch_bases_by_SEQ; // "perfect" encoding introduced v14
+    bool perfect_match = VER(14) && !vb->mismatch_bases_by_SEQ; // "perfect" encoding introduced v14
 
     SamPosType pos = LOADED_CTX(SAM_POS)->last_value.i;
 

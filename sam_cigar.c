@@ -802,7 +802,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_cigar_special_CIGAR)
     StoH stoh = {};
 
     // case: we copy the snip from mate MC:Z
-    if (snip[0] == COPY_BUDDY && (!is_depn || z_file->genozip_version <= 13)) // up to v13 there was no !is_depn condition 
+    if (snip[0] == COPY_BUDDY && (!is_depn || !VER(14))) // up to v13 there was no !is_depn condition 
         reconstruct_from_buddy_get_textual_snip (VB, CTX (OPTION_MC_Z), pSTRa(snip));
 
     // case: we copy the predicted alignment in same-vb prim line's SA:Z

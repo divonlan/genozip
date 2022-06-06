@@ -234,9 +234,8 @@ void reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, STRp(snip), bool
 
     // case: handle SAM missing quality (may be expressed as a ' ' or ASCII 127)
     char c = ctx->local.data[ctx->next_local];
-    bool v14 = z_file->genozip_version >= 14;
-    if ((v14 && ctx->flags.is_qual && (c == ' ' || c == 127)) ||
-        (!v14 && c == ' ')) { // prior to v14, we have no c=127, and also no is_qual flag
+    if ((VER(14) && ctx->flags.is_qual && (c == ' ' || c == 127)) ||
+        (!VER(14) && c == ' ')) { // prior to v14, we have no c=127, and also no is_qual flag
         len = 1;
         sam_reconstruct_missing_quality (vb, c, reconstruct);
     }
@@ -357,7 +356,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
     int64_t prev_value = snip_ctx->last_value.i;
     ContextP base_ctx = snip_ctx; // this will change if the snip refers us to another data source
     StoreType store_type = snip_ctx->flags.store;
-    bool store_delta = z_file->genozip_version >= 12 && snip_ctx->flags.store_delta; // note: the flag was used for something else in v8
+    bool store_delta = VER(12) && snip_ctx->flags.store_delta; // note: the flag was used for something else in v8
 
     // case: empty snip
     if (!snip_len) {

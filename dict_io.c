@@ -218,7 +218,7 @@ static void dict_io_read_one_vb (VBlockP vb)
 
     // new context
     // note: in v9+ same-dict fragments are consecutive in the file, and all but the last are frag_size or a bit less, allowing pre-allocation
-    if (header && new_ctx && z_file->genozip_version >= 9) {
+    if (header && new_ctx && VER(9)) {
         unsigned num_fragments=0; 
         for (Section sec=dict_sec; sec->dict_id.num == dict_ctx->dict_id.num; sec++) num_fragments++;
 
@@ -234,7 +234,7 @@ static void dict_io_read_one_vb (VBlockP vb)
     }
 
     // when pizzing a v8 file, we run in single-thread since we need to do the following dictionary enlargement with which fragment
-    if (z_file->genozip_version == 8) {
+    if (!VER(9)) {
         buf_alloc (evb, &dict_ctx->dict, vb->fragment_len, 0, char, 0, "contexts->dict");
         buf_set_overlayable (&dict_ctx->dict);
     }
@@ -326,7 +326,7 @@ void dict_io_read_all_dictionaries (void)
                             :                         "read_dicts",
                              NULL, PROGRESS_NONE, "Reading dictionaries...", 
                              flag.test,
-                             z_file->genozip_version == 8, // For v8 files, we read all fragments in the main thread as was the case in v8. This is because they are very small, and also we can't easily calculate the totel size of each dictionary.
+                             !VER(9), // For v8 files, we read all fragments in the main thread as was the case in v8. This is because they are very small, and also we can't easily calculate the totel size of each dictionary.
                              0, 
                              10, // must be short - many dictionaries are just a few bytes
                              dict_io_read_one_vb, 

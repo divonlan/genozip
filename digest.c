@@ -179,7 +179,7 @@ void digest_one_vb (VBlockP vb)
 // in v6-v11 we had a bug were the 2nd 32b of an MD5 digest was a copy of the first 32b
 bool digest_recon_is_equal (const Digest recon_digest, const Digest expected_digest) 
 {
-    if (z_file->genozip_version >= 12) return digest_is_equal (recon_digest, expected_digest);
+    if (VER(12)) return digest_is_equal (recon_digest, expected_digest);
 
     return recon_digest.words[0] == expected_digest.words[0] &&
            (recon_digest.words[0] == expected_digest.words[1] /* buggy md5 */ || !recon_digest.words[1] /* adler */) &&

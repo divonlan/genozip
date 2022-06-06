@@ -35,13 +35,23 @@ typedef struct {
     uint32_t global_hash_prime;
 } StatsByLine;
 
-static Buffer stats={}, STATS={}, features={};
+static Buffer stats={}, STATS={}, features={}, hash_occ={};
+
+// calculate hash_occ before consolidating stats
+static void stats_submit_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
+{
+    for (uint32_t i=0, need_sep=0; i < num_stats; i++) 
+        if (sbl[i].pc_hash_occupancy >= 50) 
+            bufprintf (evb, &hash_occ, "%s%s%%2C%s%%2C%s%%2C%u%%25", 
+                       need_sep++ ? "%3B" : "", url_esc_non_valid_charsS(sbl[i].name).s, url_esc_non_valid_charsS(sbl[i].type).s, 
+                       url_esc_non_valid_charsS(str_size (sbl[i].global_hash_prime).s).s, (int)sbl[i].pc_hash_occupancy); // ratio z vs txt
+}
 
 static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt_len, float src_comp_ratio, float all_comp_ratio)
 {
     // run submission in a separate process to not stall the main process 
 #ifndef _WIN32
-    fflush ((FILE *)z_file->file); // flush before fork, otherwise both processes will have z_file buffers...
+    fflush ((FILE *)z_file->file); // flush before fork, otherwise both processes will have z_file I/O buffers...
 
     pid_t child_pid = fork();
     if (child_pid) return; // parent returns
@@ -71,6 +81,7 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
     bufprintf (evb, &url_buf, "&entry.621670070=%.1f", all_comp_ratio);                                                        // Genozip gain over source txt eg "5.4"
     bufprintf (evb, &url_buf, "&entry.1635780209=OS=%s%%3Bcores=%u", url_esc_non_valid_charsS(arch_get_os()).s, arch_get_num_cores());  // Environment: OS, # cores, eg:
     bufprintf (evb, &url_buf, "&entry.2140634550=%s", features.len ? B1STc(features) : "NONE");                                                        // Features. Eg "Sorted"
+    bufprintf (evb, &url_buf, "&entry.282448068=%s",  hash_occ.len ? B1STc(hash_occ) : "NONE");      // Hash ineffeciencies, eg "RNAME,64.0 KB,102%" - each field is quadlet - name, type, hash size, hash occupancy    
 
     bufprint0 (evb, &url_buf, "&entry.988930848=");      // Compression ratio of individual fields ratio, eg "FORMAT/GT,20%,78;..." - each field is triplet - name, percentage of z_data, compression ratio
     for (uint32_t i=0, need_sep=0; i < num_stats; i++) 
@@ -78,17 +89,6 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
             bufprintf (evb, &url_buf, "%s%s%%2C%.1f%%25%%2C%.1fX", 
                        need_sep++ ? "%3B" : "", url_esc_non_valid_charsS(sbl[i].name).s, sbl[i].pc_of_z, (float)sbl[i].txt_len / (float)sbl[i].z_size); // ratio z vs txt
 
-    bufprint0 (evb, &url_buf, "&entry.282448068=");      // Hash ineffeciencies, eg "RNAME,64.0 KB,102%" - each field is quadlet - name, type, hash size, hash occupancy
-    bool found_hash=false;
-    for (uint32_t i=NUM_SEC_TYPES, need_sep=0; i < num_stats; i++) 
-        if (sbl[i].pc_hash_occupancy >= 50) {
-            found_hash = true;
-            bufprintf (evb, &url_buf, "%s%s%%2C%s%%2C%s,%u%%25", 
-                       need_sep++ ? "%3B" : "", url_esc_non_valid_charsS(sbl[i].name).s, url_esc_non_valid_charsS(sbl[i].type).s, 
-                       str_size (sbl[i].global_hash_prime).s, (int)sbl[i].pc_hash_occupancy); // ratio z vs txt
-        }
-    if (!found_hash) bufprint0 (evb, &url_buf, "NONE");
-    
     bufprint0 (evb, &url_buf, "&entry.1369097179=");     // Flags. Eg "best,reference=INTERNAL"
 
     #define F(name) if (flag.name) { bufprint0 (evb, &url_buf, #name "%3B"); }
@@ -110,9 +110,9 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
     if (flag.reference)                bufprintf (evb, &url_buf, "reference=%s%%3B", ref_type_name());    
     if (crypt_have_password())         bufprint0 (evb, &url_buf, "encrypted%3B");    
     if (tar_is_tar())                  bufprint0 (evb, &url_buf, "tar%3B");    
-    if (flag.kraken_taxid==TAXID_NONE) bufprint0 (evb, &url_buf, "taxid%3B");    
+    if (flag.kraken_taxid!=TAXID_NONE) bufprint0 (evb, &url_buf, "taxid%3B");    
     if (file_get_stdin_type())         bufprintf (evb, &url_buf, "stdin_type=%s%%3B", ft_name(file_get_stdin_type()));    
-    if (flag.show_one_counts.num)      bufprintf (evb, &url_buf, "show_counts=%s%%3B", dis_dict_id(flag.show_one_counts).s);
+    if (flag.show_one_counts.num)      bufprintf (evb, &url_buf, "show_counts=%s%%3B", url_esc_non_valid_charsS (dis_dict_id(flag.show_one_counts).s).s);
 
     url_read_string (B1STc(url_buf), NULL, 0); // ignore errors
     
@@ -122,6 +122,8 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
 
     // note: we leak the (small amount of) memory allocated by url_esc_non_valid_chars()
     buf_free (url_buf);    
+    buf_free (hash_occ);    
+    buf_free (features);    
 }
 
 // store the sizes of dict / b250 / local in zctx->*.param, and of other sections in sbl[st].z_size
@@ -464,7 +466,8 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     // initial allocation
     buf_alloc (evb, &stats, 0, 10000, char, 1, "stats"); stats.len = 0; // reset if used for previous file
     buf_alloc (evb, &STATS, 0, 10000, char, 1, "stats"); STATS.len = 0;
-    buf_alloc (evb, &features,  0, 1000,  char, 1, "stats"); features.len  = 0;
+    buf_alloc (evb, &features, 0, 1000,  char, 1, "stats"); features.len  = 0;
+    buf_alloc (evb, &hash_occ, 0, 1000,  char, 1, "stats"); features.len  = 0;
     
     if (flag.show_stats_comp_i == COMP_NONE) {
         stats_output_file_metadata();
@@ -574,6 +577,9 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
 
     stats_output_STATS (sbl, num_stats, 
                         all_txt_len, all_uncomp_dict, all_comp_dict, all_comp_b250, all_comp_data, all_z_size, all_pc_of_txt, all_pc_of_z, all_comp_ratio);
+
+    // calculate hash occupancy before consolidating stats
+    stats_submit_calc_hash_occ (sbl, num_stats);
 
     // consolidates stats of child contexts into the parent one
     stats_consolidate_ctxs (sbl, num_stats);

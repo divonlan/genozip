@@ -4,6 +4,7 @@
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include <math.h>
+#include "genozip.h"
 #include "vcf_private.h"
 #include "zfile.h"
 #include "txtfile.h"
@@ -19,7 +20,7 @@
 
 void vcf_piz_genozip_header (const SectionHeaderGenozipHeader *header)
 {
-    if (z_file->genozip_version >= 14) {
+    if (VER(14)) {
         segconf.has[FORMAT_RGQ] = header->vcf.segconf_has_RGQ;
     }
 }
@@ -83,6 +84,19 @@ IS_SKIP (vcf_piz_is_skip_section)
              (dict_id.num != _VCF_POS || !flag.regions))) return true;
 
     return false;
+}
+
+bool vcf_piz_line_has_RGQ (VBlockVCFP vb)
+{
+    if (vb->line_has_RGQ == RGQ_UNKNOWN)
+        vb->line_has_RGQ = segconf.has[FORMAT_RGQ] && reconstruct_peek_container_has_item (VB, CTX(VCF_SAMPLES), (DictId)_FORMAT_RGQ); // note: segconf.has[FORMAT_RGQ] is never set in PIZ prior to v14
+
+    return vb->line_has_RGQ;
+}
+
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_HAS_RGQ)
+{
+    return reconstruct_demultiplex (vb, ctx, STRa(snip), vcf_piz_line_has_RGQ (VB_VCF), new_value, reconstruct);
 }
 
 static void vcf_piz_replace_pos_with_gpos (VBlockVCFP vb)

@@ -237,8 +237,8 @@ uint32_t piz_uncompress_all_ctxs (VBlockP vb)
         else if (!is_pair_section) // b250
             ctx->b250_uncompressed = true;
 
-        if ((z_file->genozip_version >= 14 && ctx->ltype != LT_BITMAP) ||                // starting v14: assign to all except LT_BITMAP (in which param is used to determine nbits)
-            (z_file->genozip_version <= 13 && header->h.flags.ctx.v13_copy_local_param)) // up to v13: copy if v13_copy_local_param is set
+        if ((VER(14) && ctx->ltype != LT_BITMAP) ||                // starting v14: assign to all except LT_BITMAP (in which param is used to determine nbits)
+            (!VER(14) && header->h.flags.ctx.v13_copy_local_param)) // up to v13: copy if v13_copy_local_param is set
             target_buf->prm8[0] = header->param;
 
         if (flag.debug_read_ctxs)
@@ -501,7 +501,7 @@ bool piz_read_one_vb (VBlockP vb, bool for_reconstruction)
     vb->longest_line_len = BGEN32 (header.longest_line_len);
     vb->digest_so_far    = header.digest_so_far;
     vb->chrom_node_index = WORD_INDEX_NONE;
-    vb->lines.len        = z_file->genozip_version >= 14 ? (sec-1)->num_lines : BGEN32 (header.v13_top_level_repeats);
+    vb->lines.len        = VER(14) ? (sec-1)->num_lines : BGEN32 (header.v13_top_level_repeats);
     vb->comp_i           = (sec-1)->comp_i; 
     vb->show_containers  = (flag.show_containers == SHOW_CONTAINERS_ALL_VBs || flag.show_containers == vb->vblock_i); // a per-VB value bc in SAM Load-Prim VBs =false vs normal VBs have the flag value (set in sam_piz_dispatch_one_load_SA_Groups_vb)
 

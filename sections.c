@@ -612,10 +612,10 @@ uint32_t st_header_size (SectionType sec_type)
     ASSERT (sec_type >= SEC_NONE && sec_type < NUM_SEC_TYPES, "sec_type=%u out of range [-1,%u]", sec_type, NUM_SEC_TYPES-1);
 
     return sec_type == SEC_NONE ? 0 
-         : sec_type == SEC_VB_HEADER      && command != ZIP && z_file->genozip_version < 12 ? sizeof (SectionHeaderVbHeader) - 4*sizeof(uint32_t) // in v8-11, SectionHeaderVbHeader was shorter by 4 32b words
-         : sec_type == SEC_VB_HEADER      && command != ZIP && z_file->genozip_version < 14 ? sizeof (SectionHeaderVbHeader) - 1*sizeof(uint32_t) // in v12-13, SectionHeaderVbHeader was shorter by 1 32b word
-         : sec_type == SEC_TXT_HEADER     && command != ZIP && z_file->genozip_version < 12 ? sizeof (SectionHeaderTxtHeader) -  sizeof(uint64_t) // in v8-11, SectionHeaderTxtHeader was shorter
-         : sec_type == SEC_GENOZIP_HEADER && command != ZIP && z_file->genozip_version < 12 ? sizeof (SectionHeaderGenozipHeader) -  REF_FILENAME_LEN - sizeof(Digest) // in v8-11, SectionHeaderTxtHeader was shorter
+         : sec_type == SEC_VB_HEADER      && command != ZIP && !VER(12) ? sizeof (SectionHeaderVbHeader) - 4*sizeof(uint32_t) // in v8-11, SectionHeaderVbHeader was shorter by 4 32b words
+         : sec_type == SEC_VB_HEADER      && command != ZIP && !VER(14) ? sizeof (SectionHeaderVbHeader) - 1*sizeof(uint32_t) // in v12-13, SectionHeaderVbHeader was shorter by 1 32b word
+         : sec_type == SEC_TXT_HEADER     && command != ZIP && !VER(12) ? sizeof (SectionHeaderTxtHeader) -  sizeof(uint64_t) // in v8-11, SectionHeaderTxtHeader was shorter
+         : sec_type == SEC_GENOZIP_HEADER && command != ZIP && !VER(12) ? sizeof (SectionHeaderGenozipHeader) -  REF_FILENAME_LEN - sizeof(Digest) // in v8-11, SectionHeaderTxtHeader was shorter
          : abouts[sec_type].header_size;
 }
 
@@ -833,8 +833,8 @@ void sections_show_header (const SectionHeader *header, VBlockP vb /* optional i
         return;
 
     bool is_dict_offset = (header->section_type == SEC_DICT && rw == 'W'); // at the point calling this function in zip, SEC_DICT offsets are not finalized yet and are relative to the beginning of the dictionary area in the genozip file
-    bool v12 = (command == ZIP || z_file->genozip_version >= 12);
-    bool v14 = (command == ZIP || z_file->genozip_version >= 14);
+    bool v12 = (command == ZIP || VER(12));
+    bool v14 = (command == ZIP || VER(14));
 
     char str[2048];
     #define PRINT { if (vb) buf_add_string (vb, &vb->show_headers_buf, str); else iprintf ("%s", str); } 

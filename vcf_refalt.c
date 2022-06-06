@@ -22,27 +22,10 @@
 // Seg stuff
 // ---------
 
-static inline bool vcf_refalt_seg_ref_alt_line_has_RGQ (rom str)
-{
-    int count_tabs = 0;
-    while (*str != '\n' && (*str != '\t' || (++count_tabs < 4))) str++;
-
-    if (*str == '\n' || str[2]=='\t' || str[2]=='\n' || str[3]=='\t' || str[3]=='\n') return false; // a line without FORMAT, or FORMAT not long enough for RGQ
-
-    for (str++; str[2] != '\t' && str[2] != '\n'; str++) 
-        if (str[0]=='R' && str[1]=='G' && str[2]=='Q' && (str[3]=='\t' || str[3]==':'))
-            return true;
-
-    return false; // no RGQ in this FORMAT
-}
-
 // optimize REF and ALT, for simple one-character REF/ALT (i.e. mostly a SNP or no-variant)
-static void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char main_ref, rom main_alt_start)
+static inline void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char ref, char alt)
 {
     char new_ref=0, new_alt=0;
-    char main_alt = *main_alt_start;
-
-    bool line_has_RGQ = !segconf.running && segconf.has[FORMAT_RGQ] && vcf_refalt_seg_ref_alt_line_has_RGQ (main_alt_start);
 
     // if we have a reference, we use it (we treat the reference as PRIMARY)
     // except: if --match-chrom, we assume the user just wants to match, and we don't burden him with needing the reference to decompress
@@ -57,10 +40,10 @@ static void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char main_ref, rom main_a
             uint32_t index_within_range = pos - range->first_pos;
 
             ref_assert_nucleotide_available (range, pos);
-            char ref = ref_base_by_idx (range, index_within_range);
-
-            if (main_ref == ref) new_ref = '-'; // this should always be the case...
-            if (main_alt == ref) new_alt = '-'; 
+            
+            // note: in GVCF, REF='N' for ~5% of human genome, but we can't identify as our reference doesn't store N
+            if (ref == ref_base_by_idx (range, index_within_range)) 
+                new_ref = '-'; // this should always be the case...
 
             if (flag.reference == REF_EXT_STORE)
                 bit_array_set (&range->is_set, index_within_range);
@@ -69,36 +52,29 @@ static void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char main_ref, rom main_a
         }
     }
 
-    // replace the most common SNP with +
-    // based on counting simple SNPs from from chr22 of 1000 genome project phase 3:
-    // G to: A=239681 C=46244 T=44084
-    // C to: T=238728 G=46508 A=43685
-    // A to: G=111967 C=30006 T=26335
-    // T to: C=111539 G=29504 A=25599
-
-    // case line has RGQ: we predit ALT to be '.' (set "+" if "as predicted")
-    if (line_has_RGQ) {
-        if (main_alt == '.') new_alt = '+';
+    switch (ref) {
+        #define NEW_ALT(p0,p1,p2,p3) ((alt=='.'&&vb->line_has_RGQ)||(alt==p0&&!vb->line_has_RGQ))?'+' : alt==p0?'3' : alt==p1?'0' : alt==p2?'1' : alt==p3?'2' : 0
+        //                           +/3  0   1   2
+        case 'G' : new_alt = NEW_ALT('A','C','T','G'); break; // G to: A=239681 C=46244 T=44084 (based on counting simple SNPs from from chr22 of 1000 genome project phase 3)
+        case 'C' : new_alt = NEW_ALT('T','G','A','C'); break; // C to: T=238728 G=46508 A=43685
+        case 'A' : new_alt = NEW_ALT('G','C','T','A'); break; // A to: G=111967 C=30006 T=26335
+        case 'T' : new_alt = NEW_ALT('C','G','A','T'); break; // T to: C=111539 G=29504 A=25599
+        default  : break;
     }
-    // cases where line does not have RGQ - we predict ALT based on REF ("+" means "as predicted")
-    else if (main_alt == 'A' && main_ref == 'G') new_alt = '+';
-    else if (main_alt == 'C' && main_ref == 'T') new_alt = '+';
-    else if (main_alt == 'G' && main_ref == 'A') new_alt = '+';
-    else if (main_alt == 'T' && main_ref == 'C') new_alt = '+';
 
     // if anything was done, we create a "special" snip
     if (new_ref || new_alt) {
         char refalt_special[4] = { SNIP_SPECIAL, VCF_SPECIAL_main_REFALT };
-        refalt_special[2] = new_ref ? new_ref : main_ref;
-        refalt_special[3] = new_alt ? new_alt : main_alt;
+        refalt_special[2] = new_ref ? new_ref : ref;
+        refalt_special[3] = new_alt ? new_alt : alt;
 
         seg_by_did_i (VB, refalt_special, sizeof(refalt_special), SEL (VCF_REFALT, VCF_oREFALT), 0); // we do the accounting in vcf_refalt_seg_main_ref_alt
     }
     // if not - just the normal snip
     else {
         char refalt_normal[3] = { 0, '\t', 0 };
-        refalt_normal[0] = main_ref;
-        refalt_normal[2] = main_alt;
+        refalt_normal[0] = ref;
+        refalt_normal[2] = alt;
 
         seg_by_did_i (VB, refalt_normal, sizeof(refalt_normal), SEL (VCF_REFALT, VCF_oREFALT), 0); // we do the account in vcf_refalt_seg_main_ref_alt
     }
@@ -108,7 +84,7 @@ void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, STRp(ref), STRp(alt))
 {
     // optimize ref/alt in the common case of single-character
     if (ref_len == 1 && alt_len == 1) 
-        vcf_refalt_seg_ref_alt_snp (vb, *ref, alt);
+        vcf_refalt_seg_ref_alt_snp (vb, *ref, *alt);
 
     else {
         char ref_alt[ref_len + 1 + alt_len];
@@ -941,10 +917,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_main_REFALT)
     }
 
     // recover ref
-    if (snip[0] == '-') 
-        ref_alt[0] = ref_value;
-    else 
-        ref_alt[0] = snip[0];
+    ref_alt[0] = (snip[0] == '-') ? ref_value : snip[0];
 
     // if --drop-genotypes, we don't normally conusme VCF_SAMPLES, so we do it here
     if (flag.drop_genotypes && segconf.has[FORMAT_RGQ]) {
@@ -952,20 +925,17 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_main_REFALT)
         LOAD_SNIP (VCF_SAMPLES);
     }
     
-    // recover alt
-    if (snip[1] == '+') { // the alt has the most common value for a SNP
-        if (segconf.has[FORMAT_RGQ] && reconstruct_peek_container_has_item (VB, CTX(VCF_SAMPLES), (DictId)_FORMAT_RGQ)) // note: segconf.has[FORMAT_RGQ] can only be set starting v14
-                                    ref_alt[2] = '.';
-        else if (ref_alt[0] == 'A') ref_alt[2] = 'G';
-        else if (ref_alt[0] == 'C') ref_alt[2] = 'T';
-        else if (ref_alt[0] == 'G') ref_alt[2] = 'A';
-        else if (ref_alt[0] == 'T') ref_alt[2] = 'C';
+    // recover ALT
+    char r=ref_alt[0];
+    switch (snip[1]) {
+        case '+' : ref_alt[2] = vcf_piz_line_has_RGQ (VB_VCF)?'.' : r=='A'?'G' : r=='C'?'T' : r=='G'?'A' : 'C'; break; // the most common value
+        case '0' : ref_alt[2] = (r=='C' || r=='T') ? 'G' : 'C';             break; // added v14
+        case '1' : ref_alt[2] = (r=='C' || r=='T') ? 'A' : 'T';             break; // added v14
+        case '3' : ref_alt[2] = r=='A'?'G' : r=='C'?'T' : r=='G'?'A' : 'C'; break; // !RGQ, added v14
+        case '2' : ref_alt[2] = r;                                          break; // added v14
+        case '-' : ref_alt[2] = ref_value;                                  break; // existed up to v13
+        default  : ref_alt[2] = snip[1];                 
     }
-    else if (snip[1] == '-')  // the alt has the reference value
-        ref_alt[2] = ref_value;
-
-    else // the alt is specified verbatim
-        ref_alt[2] = snip[1];
 
     RECONSTRUCT (ref_alt, sizeof (ref_alt));
 

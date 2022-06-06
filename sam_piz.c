@@ -36,7 +36,7 @@ void sam_piz_xtra_line_data (VBlockP vb_)
 
 void sam_piz_genozip_header (const SectionHeaderGenozipHeader *header)
 {
-    if (z_file->genozip_version >= 14) {
+    if (VER(14)) {
         segconf.sam_seq_len      = BGEN32 (header->sam.segconf_seq_len); 
         segconf.sam_ms_type      = header->sam.segconf_ms_type;
         segconf.has_MD_or_NM     = header->sam.segconf_has_MD_or_NM;

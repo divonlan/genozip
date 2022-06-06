@@ -361,7 +361,7 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
         ASSERT (gpos == NO_GPOS || gpos + seq_len <= genome->nbits / 2, "gpos=%"PRId64" is out of range: seq_len=%u and genome_nbases=%"PRIu64,
                 gpos, seq_len, genome->nbits / 2);
 
-        if (z_file->genozip_version >= 14) {
+        if (VER(14)) {
 
             if (is_forward)  // normal (note: this condition test is outside of the tight loop)
                 for (uint32_t i=0; i < seq_len; i++) {
