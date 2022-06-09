@@ -71,7 +71,8 @@ void main_exit (bool show_stack, bool is_error)
 
         bool printed = version_print_notice_if_has_newer();
 
-        if (!printed && !flag.quiet && ((command == ZIP && !flag.test) || flag.check_latest/*PIZ - test after compress*/))
+        if (!printed && !flag.quiet && !getenv ("GENOZIP_TEST") &&
+            ((command == ZIP && !flag.test) || flag.check_latest/*PIZ - test after compress*/))
             license_print_notice();
     }
 

@@ -41,10 +41,22 @@ static Buffer stats={}, STATS={}, features={}, hash_occ={};
 static void stats_submit_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
 {
     for (uint32_t i=0, need_sep=0; i < num_stats; i++) 
-        if (sbl[i].pc_hash_occupancy >= 50) 
-            bufprintf (evb, &hash_occ, "%s%s%%2C%s%%2C%s%%2C%u%%25", 
+        if (sbl[i].pc_hash_occupancy >= 50) {
+            ContextP zctx = ZCTX(sbl[i].my_did_i);
+            uint32_t n_words = zctx->nodes.len32;
+             
+            // in case of an over-populated hash table, we send the first 3 and last 3 words in the dictionary, which will help debugging the issue
+            bufprintf (evb, &hash_occ, "%s%s%%2C%s%%2C%s%%2C%u%%25%%2C%s%%2C%s%%2C%s%%2C%s%%2C%s%%2C%s", 
                        need_sep++ ? "%3B" : "", url_esc_non_valid_charsS(sbl[i].name).s, url_esc_non_valid_charsS(sbl[i].type).s, 
-                       url_esc_non_valid_charsS(str_size (sbl[i].global_hash_prime).s).s, (int)sbl[i].pc_hash_occupancy); // ratio z vs txt
+                       url_esc_non_valid_charsS (str_size (sbl[i].global_hash_prime).s).s, (int)sbl[i].pc_hash_occupancy, 
+                       // note: str_replace_letter modifies dict data, but its ok, since we have already written the dicts to z_file
+                       url_esc_non_valid_charsS (str_replace_letter ((char *)ctx_get_zf_nodes_snip (zctx, 0, 0, 0),         sizeof(UrlStr), ',', -127)).s, // first three words in the the dictionary of this field
+                       url_esc_non_valid_charsS (str_replace_letter ((char *)ctx_get_zf_nodes_snip (zctx, 1, 0, 0),         sizeof(UrlStr), ',', -127)).s,
+                       url_esc_non_valid_charsS (str_replace_letter ((char *)ctx_get_zf_nodes_snip (zctx, 2, 0, 0),         sizeof(UrlStr), ',', -127)).s,
+                       url_esc_non_valid_charsS (str_replace_letter ((char *)ctx_get_zf_nodes_snip (zctx, n_words-3, 0, 0), sizeof(UrlStr), ',', -127)).s, // last three words 
+                       url_esc_non_valid_charsS (str_replace_letter ((char *)ctx_get_zf_nodes_snip (zctx, n_words-2, 0, 0), sizeof(UrlStr), ',', -127)).s,
+                       url_esc_non_valid_charsS (str_replace_letter ((char *)ctx_get_zf_nodes_snip (zctx, n_words-1, 0, 0), sizeof(UrlStr), ',', -127)).s);
+        }
 }
 
 static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt_len, float src_comp_ratio, float all_comp_ratio)

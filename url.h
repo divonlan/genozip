@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include "genozip.h"
 #include "stream.h"
+#include "buffer.h"
 
 extern bool url_is_url (rom filename);
 
@@ -28,7 +29,13 @@ static inline char *url_esc_non_valid_chars (rom in) { return url_esc_non_valid_
 typedef struct { char s[256]; } UrlStr;
 static inline UrlStr url_esc_non_valid_charsS (rom in) // for short strings - on stack
 {
+    rom esc = url_esc_non_valid_chars_(in, NULL); // note: might be longer than UrlStr
+    
     UrlStr out;
-    url_esc_non_valid_chars_(in, out.s);
+    int out_len = MIN_(sizeof (out.s)-1, strlen(esc)); // trim if needed
+    memcpy (out.s, esc, out_len);
+    out.s[out_len] = 0;
+    
+    FREE (esc);
     return out;
 }

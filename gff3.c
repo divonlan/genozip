@@ -39,9 +39,10 @@ void gff3_seg_initialize (VBlockP vb)
     CTX(GFF3_SEQID)->flags.store   = STORE_INDEX; // since v12
     CTX(GFF3_START)->flags.store   = STORE_INT;   // since v12
     CTX(GFF3_COMMENT)->flags.store = STORE_INDEX; // COMMENT introduced in 12.0.12
-    CTX(GFF3_COMMENT)->no_stons    = true; // required by STORE_INDEX (otherwise singletons don't get their index stored)
-    CTX(GFF3_SEQID)->no_stons      = true; // needs b250 node_index for random access
-    CTX(GFF3_ATTRS)->no_stons      = true;
+
+    ctx_set_no_stons (vb, 6, GFF3_COMMENT/*required by STORE_INDEX (otherwise singletons don't get their index stored)*/, 
+                      GFF3_SEQID/*needs b250 node_index for random access*/, 
+                      GFF3_ATTRS, ATTR_Variant_seq, ATTR_Reference_seq, ATTR_ancestral_allele);
 
     stats_set_consolidation (vb, ATTR_Target, 3, ATTR_Target_ID, ATTR_Target_POS, ATTR_Target_STRAND);
     stats_set_consolidation (vb, ENSTid, 1, EnNSTid);

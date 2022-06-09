@@ -439,7 +439,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SQUANK) // new_value=NULL means recons
     int32_t segment1_seq_len = sam_cigar_get_seq_len_plus_H (STRa(segment1));
     int32_t segment2_seq_len = sam_cigar_get_seq_len_plus_H (STRa(snip)); 
     int32_t missing_len = seq_len_plus_H - segment1_seq_len - segment2_seq_len;
-    ASSPIZ (missing_len >= 0, "Expecting missing_len=%d > 0. seq_len_plus_H=%d segment1_seq_len=%d segment2_seq_len=%d",
+    ASSPIZ (missing_len >= 0, "Expecting missing_len=%d >= 0. seq_len_plus_H=%d segment1_seq_len=%d segment2_seq_len=%d",
             missing_len, seq_len_plus_H, segment1_seq_len, segment2_seq_len);
             
     // reconstruct always if coming from MAIN - it is needed for sam_cigar_analyze even if reconstruct = false
@@ -529,7 +529,7 @@ static void sam_cigar_update_random_access (VBlockSAMP vb, ZipDataLineSAM *dl)
 {
     SamPosType last_pos = dl->POS + vb->ref_consumed - 1;
 
-    if (flag.reference == REF_INTERNAL)
+    if (flag.reference == REF_INTERNAL && last_pos >= 1)
         random_access_update_last_pos (VB, 0, last_pos);
 
     else { // external ref
@@ -538,7 +538,7 @@ static void sam_cigar_update_random_access (VBlockSAMP vb, ZipDataLineSAM *dl)
 
         if (LN == -1) {}
             
-        else if (last_pos <= LN)
+        else if (last_pos >= 1 && last_pos <= LN)
             random_access_update_last_pos (VB, 0, last_pos);
         
         else  // we circled back to the beginning for the chromosome - i.e. this VB RA is the entire chromosome
@@ -639,7 +639,7 @@ void sam_cigar_seg_textual (VBlockSAMP vb, ZipDataLineSAM *dl, uint32_t last_cig
         segconf.sam_cigar_len += last_cigar_len;
         segconf.sam_seq_len   += seq_data_len + vb->hard_clip[0] + vb->hard_clip[1]; // including hard clips in the calculation, so DEPN lines with hard clips don't ruin the average
     }
-    else
+    else if (dl->POS >= 1 && vb->ref_consumed)
         sam_cigar_update_random_access (vb, dl);
 
     COPY_TIMER(sam_cigar_seg);
@@ -719,7 +719,8 @@ void sam_cigar_seg_binary (VBlockSAMP vb, ZipDataLineSAM *dl, uint32_t l_seq, ro
         buf_add_buf (VB, &vb->mate_textual_cigars, &vb->textual_cigar, char, "mate_textual_cigars");
     }
 
-    sam_cigar_update_random_access (vb, dl);
+    if (dl->POS >= 1 && vb->ref_consumed)
+        sam_cigar_update_random_access (vb, dl);
 
     if (segconf.running) {
         segconf.sam_cigar_len += cigar_snip_len;
@@ -893,64 +894,11 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_RECON_BUDDY_CIGAR)
 // a mate line of a future line in which case this MC will be copied to the future line's CIGAR 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_CONSUME_MC_Z)
 {
-    ContextP mc_ctx = CTX(OPTION_MC_Z);
-    if (!mc_ctx->flags.store_per_line) goto done; // MC is not buddied
-    
-    ContextP opt_ctx = CTX(SAM_AUX);
-    WordIndex opt_word_index = WORD_INDEX_NONE;
+    // if this line has an MC:Z field store it directly history 
+    if (CTX(OPTION_MC_Z)->flags.store_per_line && // MC:Z is buddied
+        reconstruct_peek_container_has_item (vb, CTX(SAM_AUX), (DictId)_OPTION_MC_Z, true)) // line has MC:Z field
+        reconstruct_to_history (vb, CTX(OPTION_MC_Z));
 
-    // get AUX container
-    snip_len=0;
-    if (opt_ctx->b250.len ||
-        (!opt_ctx->b250.len && !opt_ctx->local.len && opt_ctx->dict.len)) {  // all_the_same case - no b250 or local, but have dict      
-        opt_word_index = LOAD_SNIP(opt_ctx->did_i); // note: if we have no b250, local but have dict, this will be word_index=0 (see ctx_get_next_snip)
-
-        if (snip_len==1 && *snip == SNIP_LOOKUP)
-            snip_len=0;
-    }
-    
-    // case: a singleton (SNIP_LOOKUP) or all data is local
-    if (!snip_len) 
-        LOAD_SNIP_FROM_LOCAL (opt_ctx);
-
-    if (!snip_len || snip[0] != SNIP_CONTAINER) goto done; // not a container
-
-    ContainerP opt_con = container_retrieve (vb, opt_ctx, opt_word_index, snip+1, snip_len-1, 0, 0);
-
-    // check if this line has an optional tag MC:Z
-    bool found = false;
-    for (uint32_t item_i=0; item_i < con_nitems (*opt_con); item_i++)
-        if (opt_con->items[item_i].dict_id.num == _OPTION_MC_Z) {
-            found = true;
-            break;
-        }
-    if (!found) goto done; // AUX has no MC:Z tag
-
-    // store MC:Z in history to be used by future line CIGAR. Note: since MC:Z is not reconstructed, ctx->history will point
-    // to either dict or local (depending on where this snip originates) rather than the normal txt_data.
-    snip_len = 0;
-
-    // case: MC:Z is in dict (refered to from a b250)
-    if (mc_ctx->b250.len ||
-        (!mc_ctx->b250.len && !mc_ctx->local.len && mc_ctx->dict.len)) {  // all_the_same case - no b250 or local, but have dict      
-        WordIndex wi = LOAD_SNIP(mc_ctx->did_i); // note: if we have no b250, local but have dict, this will be word_index=0 (see ctx_get_next_snip)
-
-        if (snip_len==1 && *snip == SNIP_LOOKUP)
-            snip_len=0;
-
-        else 
-            *B(HistoryWord, mc_ctx->history, vb->line_i) = 
-                (HistoryWord){ .index = wi, .len = snip_len, .lookup = LookupDict };
-    }
-    
-    // case: MC:Z is in local
-    if (!snip_len) {
-        uint32_t char_index = LOAD_SNIP_FROM_LOCAL (mc_ctx);
-        *B(HistoryWord, mc_ctx->history, vb->line_i) = 
-            (HistoryWord){ .index = char_index, .len = snip_len, .lookup = LookupLocal }; 
-    }
-
-done:
     return NO_NEW_VALUE; 
 }
 

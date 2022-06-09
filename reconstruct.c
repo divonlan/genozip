@@ -429,17 +429,6 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
         has_new_value = HAS_NEW_VALUE;
         break;
 
-    case SNIP_MATE_LOOKUP: {
-        ASSPIZ (z_file->data_type == DT_FASTQ, "SNIP_MATE_LOOKUP is not expected in ctx=%s since this isn't a FASTQ", snip_ctx->tag_name);
-
-        ASSPIZ (snip_ctx->pair_b250, "no pair_1 b250 data for ctx=%s, while reconstructing pair_2. "
-                "If this file was compressed with Genozip version 9.0.12 or older use the --dts_paired command line option. "
-                "You can see the Genozip version used to compress it with 'genocat -w %s'", snip_ctx->tag_name, z_name);
-                
-        ctx_get_next_snip (vb, snip_ctx, true, pSTRa(snip));
-        reconstruct_one_snip (vb, snip_ctx, WORD_INDEX_NONE /* we can't cache pair items */, STRa(snip), reconstruct); // might include delta etc - works because in --pair, ALL the snips in a context are PAIR_LOOKUP
-        break;
-    }
     case SNIP_OTHER_DELTA: 
         base_ctx = reconstruct_get_other_ctx_from_snip (vb, snip_ctx, pSTRa(snip)); // also updates snip and snip_len
         new_value.i = reconstruct_from_delta (vb, snip_ctx, base_ctx, STRa(snip), reconstruct); 
@@ -462,11 +451,6 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
         ASSERT_DT_FUNC (vb, special);
 
         has_new_value = DT_FUNC(vb, special)[special](vb, snip_ctx, snip+2, snip_len-2, &new_value, reconstruct);  
-        break;
-
-    // note: starting v14, this is replaced by FASTQ_SPECIAL_PAIR2_GPOS
-    case v13_SNIP_FASTQ_PAIR2_GPOS: 
-        has_new_value = fastq_special_PAIR2_GPOS (vb, snip_ctx, snip+1, snip_len-1, &new_value, false);
         break;
 
     case SNIP_XOR_DIFF:
@@ -506,9 +490,19 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
         store_type  = STORE_NONE; // override store and fall through
         store_delta = false;
         snip++; snip_len--;
-        // fall through
-        
-    default: {
+        goto normal_snip;
+
+    // note: starting v14, this is replaced by FASTQ_SPECIAL_PAIR2_GPOS
+    case v13_SNIP_FASTQ_PAIR2_GPOS: 
+        has_new_value = fastq_special_PAIR2_GPOS (vb, snip_ctx, snip+1, snip_len-1, &new_value, false);
+        break;
+
+    // note: starting v14, this is replaced by FASTQ_SPECIAL_mate_lookup
+    case v13_SNIP_MATE_LOOKUP: 
+        fastq_special_mate_lookup (vb, snip_ctx, 0, 0, 0, reconstruct);
+        break;
+
+    default: normal_snip: {
         if (reconstruct) RECONSTRUCT_snip; // simple reconstruction
 
         switch (store_type) {
@@ -808,7 +802,7 @@ uint32_t reconstruct_peek_repeats (VBlockP vb, ContextP ctx, char repsep)
 
 
 // peek a context which is normally a container and not yet encountered: return true if the container has the requested item
-bool reconstruct_peek_container_has_item (VBlockP vb, ContextP ctx, DictId item_dict_id)
+bool reconstruct_peek_container_has_item (VBlockP vb, ContextP ctx, DictId item_dict_id, bool consume)
 {
     ASSISLOADED(ctx);
 
@@ -816,9 +810,9 @@ bool reconstruct_peek_container_has_item (VBlockP vb, ContextP ctx, DictId item_
     ASSPIZ (!ctx_encountered (vb, ctx->did_i), "context %s is already encountered", ctx->tag_name);
 
     STR(snip);
-    WordIndex wi = PEEK_SNIP (ctx->did_i);
+    WordIndex wi = consume ? LOAD_SNIP (ctx->did_i) : PEEK_SNIP (ctx->did_i);
 
-    if (*snip != SNIP_CONTAINER) return false; // not a container, so definitely don't contain the item
+    if (!snip || *snip != SNIP_CONTAINER) return false; // not a container, so definitely doesn't contain the item
 
     ContainerP con = container_retrieve (vb, ctx, wi, snip+1, snip_len-1, 0, 0);
 

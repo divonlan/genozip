@@ -203,7 +203,7 @@ static void qname_seg_initialize_do (VBlockP vb, QnameFlavor qfs, QnameFlavor qf
             qname_ctxs[i]->no_stons = true; // prevent singletons, so pair_1 and pair_2 are comparable based on b250 only
             
             if (pairing == PAIR_READ_2)
-                ctx_create_node (vb, qname_did_i + i, (char[]){ SNIP_MATE_LOOKUP }, 1); // required by ctx_convert_generated_b250_to_mate_lookup
+                ctx_create_node (vb, qname_did_i + i, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_mate_lookup }, 2); // required by ctx_convert_generated_b250_to_mate_lookup
         }
     }
 
@@ -213,6 +213,10 @@ static void qname_seg_initialize_do (VBlockP vb, QnameFlavor qfs, QnameFlavor qf
     if (qfs->ordered_item1  != -1) CTX(qname_did_i + 1 + qfs->ordered_item1)->flags.store = STORE_INT; 
     if (qfs->ordered_item2  != -1) CTX(qname_did_i + 1 + qfs->ordered_item2)->flags.store = STORE_INT; 
     if (qfs->range_end_item != -1) CTX(qname_did_i + 1 + qfs->range_end_item - 1)->flags.store = STORE_INT; 
+
+    // // no singletons for in_local items
+    // for (int i=0; qfs->in_local[i] != -1; i++)
+    //     qname_ctxs[qfs->in_local[i]]->no_stons = true;
 
     if (qfs->qname2 != -1 && qfs2)
         qname_seg_initialize_do (vb, qfs2, NULL, FASTQ_QNAME2, st_did_i, num_qname_items-1/*-1 bc no mate*/, pairing);
@@ -274,7 +278,6 @@ void qname_segconf_discover_flavor (VBlockP vb, DidIType qname_did_i, STRp(qname
         if ((VB_DT(DT_FASTQ) || !qfs->fq_only) && !qname_test_flavor (STRa(qname), qfs, pSTRa(qname2))) {
             segconf.qname_flavor = qfs;
             segconf.tech = qfs->tech;
-            qname_seg_initialize (vb, qname_did_i); // so the rest of segconf.running can seg fast using the discovered container
 
             // if it has an embedded qname2 - find the true tech from qname2 (only possible for FASTQ, in SAM we can't find the tech from NCBI qname)
             if (qname2) 
@@ -284,6 +287,8 @@ void qname_segconf_discover_flavor (VBlockP vb, DidIType qname_did_i, STRp(qname
                         segconf.tech = qf2->tech;
                         break;
                     }
+
+            qname_seg_initialize (vb, qname_did_i); // so the rest of segconf.running can seg fast using the discovered container
             break;
         }
 
@@ -374,6 +379,7 @@ bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, QnameFlavor qfs, STRp(qname),
         }
 
         else if (qfs->is_in_local[item_i] && !flag.pair) { // note: we can't store in local if pairing        
+            // item_ctx->no_stons = true; // to do: move this to qname_initialize
             if (qfs->is_int[item_i] || qfs->is_numeric[item_i])
                 seg_integer_or_not (vb, item_ctx, STRi(item, item_i), item_lens[item_i]);
 

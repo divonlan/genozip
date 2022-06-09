@@ -59,7 +59,7 @@ extern ValueType reconstruct_peek_do (VBlockP vb, DictId dict_id, pSTRp(txt));
 #define reconstruct_peek_(vb, dict_id, txt, txt_len) reconstruct_peek_do ((VBlockP)(vb), (DictId)(dict_id), (txt), (txt_len))
 extern int64_t reconstruct_peek_local_int (VBlockP vb, ContextP ctx, int offset);
 extern uint32_t reconstruct_peek_repeats (VBlockP vb, ContextP ctx, char repsep);
-extern bool reconstruct_peek_container_has_item (VBlockP vb, ContextP ctx, DictId item_dict_id);
+extern bool reconstruct_peek_container_has_item (VBlockP vb, ContextP ctx, DictId item_dict_id, bool consume);
 
 //--------------
 // history stuff
@@ -69,7 +69,7 @@ extern void reconstruct_copy_dropped_line_history (VBlockP vb);
 extern void reconstruct_set_buddy (VBlockP vb);
 extern HasNewValue reconstruct_from_buddy (VBlockP vb, ContextP ctx, STRp(snip), bool reconstruct, ValueType *new_value);
 extern void reconstruct_from_buddy_get_textual_snip (VBlockP vb, ContextP ctx, pSTRp(snip));
-
+extern void reconstruct_to_history (VBlockP vb, ContextP ctx);
 
 typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, DidIType did_i, DictId dict_id);
 

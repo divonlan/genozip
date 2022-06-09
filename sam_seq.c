@@ -744,6 +744,34 @@ COMPRESSOR_CALLBACK (sam_zip_seq)
 // PIZ
 //---------
 
+static inline bool v13_sam_recon_SEQ_consume_query 
+    (VBlockSAMP vb, ContextP bitmap_ctx, ConstRangeP range, SamPosType range_len,
+     unsigned seq_consumed, unsigned ref_consumed, SamPosType pos, bool consumes_reference)
+{
+    if (consumes_reference && NEXTLOCALBIT (bitmap_ctx)) /* copy from reference */ {
+
+        if (!vb->drop_curr_line) { // note: if this line is excluded with --regions, then the reference section covering it might not be loaded
+            uint32_t idx = ((pos - range->first_pos) + ref_consumed) % range_len; // circle around (this can only happen when compressed with an external reference)
+
+            if (!ref_is_nucleotide_set (range, idx) &&
+                    (!flag.regions || regions_is_site_included (VB))) { // if this line is not included, then possibly its reference range is not loaded. we complete consumption (resulting in bad reconstruction) and drop the line in container_reconstruct_do
+
+                ref_print_is_set (range, pos + ref_consumed, stderr);
+                ASSPIZ (false, "Error in sam_reconstruct_SEQ: reference is not set: chrom=%u \"%.*s\" pos=%u range=[%"PRId64"-%"PRId64"]"
+                        " (cigar=%s seq_start_pos=%u ref_consumed=%u seq_consumed=%u)",
+                        range->chrom, range->chrom_name_len, range->chrom_name, pos + ref_consumed, 
+                        range->first_pos, range->last_pos, vb->last_cigar, pos, ref_consumed, seq_consumed);
+            }
+
+            char ref = ref_base_by_idx (range, idx);
+            RECONSTRUCT1 (ref); 
+        }
+        return true;
+    }
+    else
+        return false;
+}
+
 // PIZ: SEQ reconstruction 
 void sam_reconstruct_SEQ (VBlockP vb_, Context *bitmap_ctx, STRp(snip), bool reconstruct)
 {
@@ -824,8 +852,11 @@ void sam_reconstruct_SEQ (VBlockP vb_, Context *bitmap_ctx, STRp(snip), bool rec
         }
 
         if (consumes_query) {
+            
+            if (!VER(14) && v13_sam_recon_SEQ_consume_query (vb, bitmap_ctx, range, range_len, seq_consumed, ref_consumed, pos, consumes_reference))
+                {} // done
 
-            if (consumes_reference) {
+            else if (VER(14) && consumes_reference) {
                                 
                 uint32_t idx = (pos - range->first_pos) + ref_consumed; 
                 if (idx >= range_len) idx -= range_len; // circle around (this can only happen when compressed with an external reference)
@@ -855,7 +886,8 @@ void sam_reconstruct_SEQ (VBlockP vb_, Context *bitmap_ctx, STRp(snip), bool rec
                 }
             }
             else nonref: {
-                if (reconstruct) RECONSTRUCT1 (*nonref++);
+                if (reconstruct) RECONSTRUCT1 (*nonref);
+                nonref++;
             }
 
             seq_consumed++;

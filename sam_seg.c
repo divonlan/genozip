@@ -208,76 +208,55 @@ void sam_seg_initialize (VBlockP vb_)
 
     // all numeric fields need STORE_INT / STORE_FLOAT to be reconstructable to BAM (possibly already set)
     // via the translators set in the SAM_TOP2BAM Container
-    DidIType numeric_fields[] = { SAM_TLEN, SAM_MAPQ, SAM_FLAG, SAM_POS, SAM_PNEXT, SAM_GPOS,
-    /* non-fallback fields */     OPTION_NM_i, OPTION_AS_i, OPTION_MQ_i, OPTION_XS_i, OPTION_XM_i, OPTION_mc_i, OPTION_ms_i, OPTION_Z5_i, OPTION_tx_i,
-                                  OPTION_YS_i, OPTION_XC_i, OPTION_AM_i, OPTION_SM_i, OPTION_X0_i, OPTION_X1_i };
-    for (int i=0; i < ARRAY_LEN(numeric_fields); i++)
-        CTX(numeric_fields[i])->flags.store = STORE_INT;
-
-    CTX(SAM_RNAME)->flags.store = CTX(SAM_RNEXT)->flags.store = STORE_INDEX; // when reconstructing BAM, we output the word_index instead of the string
-    CTX(SAM_RNAME)->no_stons    = CTX(SAM_RNEXT)->no_stons = true;  // BAM reconstruction needs RNAME, RNEXT word indices. also needed for random access.
+    ctx_set_store (VB, STORE_INT, 21, SAM_TLEN, SAM_MAPQ, SAM_FLAG, SAM_POS, SAM_PNEXT, SAM_GPOS,
+                   OPTION_NM_i, OPTION_AS_i, OPTION_MQ_i, OPTION_XS_i, OPTION_XM_i, OPTION_mc_i, OPTION_ms_i, OPTION_Z5_i, 
+                   OPTION_tx_i, OPTION_YS_i, OPTION_XC_i, OPTION_AM_i, OPTION_SM_i, OPTION_X0_i, OPTION_X1_i);
+    
+    ctx_set_store (VB, STORE_INDEX, 2, SAM_RNAME, SAM_RNEXT); // when reconstructing BAM, we output the word_index instead of the string
+    
+    ctx_set_no_stons (VB, 5,
+                      SAM_RNAME, SAM_RNEXT,      // BAM reconstruction needs RNAME, RNEXT word indices. also needed for random access.
+                      OPTION_MD_Z, 
+                      OPTION_BI_Z, OPTION_BD_Z); // we can't use local for singletons in BD or BI as next_local is used by sam_piz_special_BD_BI to point into BD_BI
     
     // MAPQ (and hence other fields carrying mapping quality) is uint8_t by BAM specification
-    CTX(SAM_MAPQ)->ltype = CTX(OPTION_SA_MAPQ)->ltype = CTX(OPTION_SM_i)->ltype = CTX(OPTION_AM_i)->ltype = 
-    CTX(OPTION_OA_MAPQ)->ltype = LT_UINT8;
+    ctx_set_ltype (VB, LT_UINT8, 5, SAM_MAPQ, OPTION_SA_MAPQ, OPTION_SM_i, OPTION_AM_i, OPTION_OA_MAPQ);
     
     if (segconf.sam_is_collated) 
         CTX(SAM_POS)->flags.store_delta = true; // since v12.0.41
     
     // we may use mates (other than for QNAME) if not is_long_reads (meaning: no mates in this file) and not DEPN components (bc we seg against PRIM)
-    if (!segconf.is_long_reads && !sam_is_depn_vb) { 
-        CTX(SAM_RNAME  )->flags.store_per_line = true; // note: stores index
-        CTX(SAM_RNEXT  )->flags.store_per_line = true;
-        CTX(SAM_FLAG   )->flags.store_per_line = true;
-        CTX(SAM_POS    )->flags.store_per_line = true;
-        CTX(SAM_PNEXT  )->flags.store_per_line = true;
-        CTX(SAM_MAPQ   )->flags.store_per_line = true;
-        CTX(OPTION_MQ_i)->flags.store_per_line = true; // 13.0.0
-        CTX(SAM_CIGAR  )->flags.store_per_line = true;
-        CTX(OPTION_MC_Z)->flags.store_per_line = true;
-        CTX(OPTION_SM_i)->flags.store_per_line = true; // 14.0.0
+    if (!segconf.is_long_reads && !sam_is_depn_vb) {
+        ctx_set_store_per_line (VB, 10, SAM_RNAME, SAM_RNEXT, SAM_FLAG, SAM_POS, SAM_PNEXT, SAM_MAPQ, SAM_CIGAR,
+                                OPTION_MQ_i, OPTION_MC_Z, OPTION_SM_i);
 
-        if (segconf.sam_bowtie2) {
-            CTX(OPTION_AS_i)->flags.store_per_line = true; // 13.0.7
-            CTX(OPTION_YS_i)->flags.store_per_line = true; // 13.0.7
-        }
+        if (segconf.sam_bowtie2) 
+            ctx_set_store_per_line (VB, 2, OPTION_AS_i, OPTION_YS_i);
     }
 
     // case: some rows may be segged against an in-VB prim line
-    if (sam_is_main_vb && !VB_SAM->check_for_gc) { // 14.0.0
-        CTX(OPTION_SA_Z)->flags.store_per_line = true; 
-        CTX(SAM_RNAME  )->flags.store_per_line = true; // note: stores index
-        CTX(SAM_RNEXT  )->flags.store_per_line = true;
-        CTX(SAM_POS    )->flags.store_per_line = true;
-        CTX(SAM_CIGAR  )->flags.store_per_line = true; // note: set above in case of short reads, here we are setting in case of a different set of conditions
-        CTX(OPTION_NM_i)->flags.store_per_line = true; 
-        CTX(SAM_MAPQ   )->flags.store_per_line = true;
-        CTX(SAM_FLAG   )->flags.store_per_line = true;
-    }
+    if (sam_is_main_vb && !VB_SAM->check_for_gc)  // 14.0.0
+        ctx_set_store_per_line (VB, 9, SAM_RNAME, SAM_RNEXT, SAM_PNEXT, SAM_POS, SAM_CIGAR, SAM_MAPQ, SAM_FLAG,
+                                OPTION_SA_Z, OPTION_NM_i);
 
     if (segconf.sam_multi_RG)
-        CTX(OPTION_RG_Z)->flags.store_per_line = true; // segged against for mate_line_i or prim_line_i
-
-    CTX(OPTION_MD_Z)->no_stons = true;
+        ctx_set_store_per_line (VB, 1, OPTION_RG_Z); // segged against for mate_line_i or prim_line_i
 
     if (segconf.has_bsseeker2) 
-        CTX(OPTION_XM_Z)->no_stons = CTX(OPTION_XG_Z)->no_stons = true;
+        ctx_set_no_stons (VB, 2, OPTION_XM_Z, OPTION_XG_Z);
 
-    CTX(OPTION_BI_Z)->no_stons = CTX(OPTION_BD_Z)->no_stons = true; // we can't use local for singletons in BD or BI as next_local is used by sam_piz_special_BD_BI to point into BD_BI
-    CTX(OPTION_BD_BI)->ltype   = LT_SEQUENCE;
+    ctx_set_ltype (VB, LT_SEQUENCE, 1, OPTION_BD_BI);
     
     // set dynamic_size_local to allow use of seg_integer
-    CTX(OPTION_NM_i) ->dynamic_size_local = true;
-    CTX(OPTION_XM_i) ->dynamic_size_local = true;
-    CTX(OPTION_X1_i) ->dynamic_size_local = true;
+    ctx_set_dyn_size (VB, 3, OPTION_NM_i, OPTION_XM_i, OPTION_X1_i);
 
     // note: we don't set if !has_TLEN_non_zero, bc values are stored in b250 and may require singletons
     if (segconf.has_TLEN_non_zero) 
-        CTX(SAM_TLEN)->dynamic_size_local = true;
+        ctx_set_dyn_size (VB, 1, SAM_TLEN);
 
     if (kraken_is_loaded) {
-        CTX(SAM_TAXID)->flags.store    = STORE_INT;
-        CTX(SAM_TAXID)->no_stons       = true; // must be no_stons the SEC_COUNTS data needs to mirror the dictionary words
+        ctx_set_store (VB, STORE_INT, 1, SAM_TAXID);
+        ctx_set_no_stons (VB,         1, SAM_TAXID); // must be no_stons the SEC_COUNTS data needs to mirror the dictionary words
         CTX(SAM_TAXID)->counts_section = true; 
     }
 
@@ -302,7 +281,7 @@ void sam_seg_initialize (VBlockP vb_)
     sam_seg_0X_initialize (VB, DID_I_NONE, OPTION_SA_RNAME, OPTION_SA_STRAND, OPTION_SA_POS, OPTION_SA_CIGAR);
     sam_seg_0X_initialize (VB, DID_I_NONE, OPTION_OA_RNAME, OPTION_OA_STRAND, OPTION_OA_POS, OPTION_OA_CIGAR);
 
-    CTX(OPTION_XA_Z)->flags.store = STORE_INDEX; // for containers this stores repeats - used by sam_piz_special_X1->reconstruct_peek_repeats
+    ctx_set_store (VB, STORE_INDEX, 1, OPTION_XA_Z); // for containers this stores repeats - used by sam_piz_special_X1->reconstruct_peek_repeats
 
     if (!segconf.has_bsseeker2) // XS:i is as defined by bwa (and other aligners), not bsseeker2
         seg_mux_init (VB, 4, SAM_SPECIAL_XS, OPTION_XS_i, OPTION_XS_i, STORE_INT, false, (MultiplexerP)&vb->mux_XS, "0123");
@@ -402,6 +381,7 @@ static void sam_seg_toplevel (VBlockP vb)
         .items       = { { .dict_id = { qname_dict_id }, .separator = "\n"                  }, 
                          { .dict_id = { _SAM_RNAME    }, .separator = { CI0_TRANS_NOR }     }, // needed for reconstructing seq 
                          { .dict_id = { _SAM_POS      }, .separator = { CI0_TRANS_NOR }     }, // needed for reconstructing seq
+                         { .dict_id = { _SAM_RNEXT    }, .separator = { CI0_TRANS_NOR }     }, // needed for reconstructing PNEXT 
                          { .dict_id = { _SAM_PNEXT    }, .separator = { CI0_TRANS_NOR }     }, // needed for reconstructing POS (in case of BUDDY)
                          { .dict_id = { _SAM_FLAG     }, .separator = { CI0_TRANS_NOR }, .translator = SAM2FASTQ_FLAG }, // need to know if seq is reverse complemented & if it is R2 ; reconstructs "1" for R1 and "2" for R2
                          { .dict_id = { _SAM_CIGAR    }, .separator = { CI0_TRANS_NOR }     }, // needed for reconstructing seq
@@ -944,7 +924,7 @@ WordIndex sam_seg_RNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp (chrom),
     }
 
     // protect rname from removal by ctx_shorten_unused_dict_words if we didn't seg normally
-    if (!normal_seg)
+    if (!normal_seg && node_index != NODE_INDEX_NONE) // note: node_index==-1 when RNAME="*"
         ctx_protect_from_removal (VB, CTX(SAM_RNAME), node_index); 
 
     return node_index;
@@ -1006,7 +986,7 @@ WordIndex sam_seg_RNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp (chrom), unsign
     }
 
     // protect rnext from removal by ctx_shorten_unused_dict_words if we didn't seg normally
-    if (!normal_seg)
+    if (!normal_seg && node_index != NODE_INDEX_NONE) // note: node_index==-1 when RNEXT="*"
         ctx_protect_from_removal (VB, CTX(SAM_RNEXT), node_index); 
 
     return node_index;

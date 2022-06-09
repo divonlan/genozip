@@ -28,11 +28,11 @@
 #define MIN_WORD_INDEX     -4
 
 // Tell PIZ to replace this character by something else (can appear in any part of a snip in a dictionary, or even multiple times in a snip)
-// We use characters that cannot appear in a snip - i.e. other than ApCII 32-127, \t (\x9) \n (\xA) \r (\xD)
+// We can use non-printable characters that - i.e. other than ASCII 32-126, \t (\x9) \n (\xA) \r (\xD)
 #define SNIP_SEP                  '\x0'   // Seperator between snips - both for dict and local 
 #define SNIP_LOOKUP               '\x1'   // Lookup from local (optionally followed by a snip - interpreted differently by local type, see reconstruct_one_snip)
 #define SNIP_OTHER_LOOKUP         '\x2'   // Lookup from local of other dict_id (possibly with length for sequence storage)
-#define SNIP_MATE_LOOKUP          '\x3'   // Lookup from paired file (when using --pair)  
+#define v13_SNIP_MATE_LOOKUP      '\x3'   // up to v13: (replaced by FASTQ_SPECIAL_mate_lookup) Lookup from paired file (when using --pair)  
 #define SNIP_CONTAINER            '\x4'   // Appears as first character in the SNIP, followed by a specification of a container field
 #define SNIP_SELF_DELTA           '\x5'   // The value is a uint32_t which is a result of the last value + the positive or negative textual int32_t value following this character
 #define SNIP_OTHER_DELTA          '\x6'   // The value is a uint32_t which is a result of the last value of another field + the delta value. following this char, {DictId dict_id, int32_t delta, bool update_other} in base64)
@@ -338,6 +338,12 @@ extern uint64_t ctx_get_ctx_group_z_len (VBlockP vb, DidIType group_did_i);
 
 typedef enum { KR_KEEP, KR_REMOVE } CtxKeepRemove;
 extern void ctx_declare_winning_group (DidIType winning_group_did_i, DidIType losing_group_did_i, DidIType new_st_did_i);
+
+extern void ctx_set_store (VBlockP vb, StoreType store_type, unsigned num_ctxs, ...);
+extern void ctx_set_no_stons (VBlockP vb, unsigned num_ctxs, ...);
+extern void ctx_set_store_per_line (VBlockP vb, unsigned num_ctxs, ...);
+extern void ctx_set_ltype (VBlockP vb, LocalType ltype, unsigned num_ctxs, ...);
+extern void ctx_set_dyn_size (VBlockP vb, unsigned num_ctxs, ...);
 
 extern void ctx_foreach_buffer(ContextP ctx, bool set_name, void (*func)(BufferP buf, FUNCLINE));
 

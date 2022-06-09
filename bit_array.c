@@ -499,7 +499,7 @@ void bit_array_clear_region_do (BitArray *bitarr, uint64_t start, uint64_t len, 
 // set all elements of data to one
 void bit_array_set_all (BitArray *bitarr)
 {
-    if (!bitarr->words) return; // nothing to do
+    if (!bitarr->nwords) return; // nothing to do
     
     uint64_t num_of_bytes = bitarr->nwords * sizeof(uint64_t);
     memset(bitarr->words, 0xFF, num_of_bytes);
@@ -510,7 +510,7 @@ void bit_array_set_all (BitArray *bitarr)
 // set all elements of data to zero
 void bit_array_clear_all (BitArray *bitarr)
 {
-    if (!bitarr->words) return; // nothing to do
+    if (!bitarr->nwords) return; // nothing to do
 
     memset(bitarr->words, 0, bitarr->nwords * sizeof(uint64_t));
     DEBUG_VALIDATE(bitarr);

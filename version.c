@@ -57,22 +57,24 @@ bool version_print_notice_if_has_newer (void)
         iprintf ("\nNewer & better version of Genozip is available - version %s. You are currently running version %s\n", 
                  latest_version, GENOZIP_CODE_VERSION);
 
-        // note: distribution names are defined in the Makefile
-        if (!strcmp (arch_get_distribution(), "InstallForge")) 
-            iprintf ("You can install the latest version from here: %s\n", GITHUB_WINDOWS_INSTALLER);
-        
-        else if (!strcmp (arch_get_distribution(), "linux-x86_64"))
-            iprintf ("You can download the latest version from here: %s\n", GITHUB_LINUX_TARBALL);
+        if (is_info_stream_terminal) {
+            // note: distribution names are defined in the Makefile
+            if (!strcmp (arch_get_distribution(), "InstallForge")) 
+                iprintf ("You can install the latest version from here: %s\n", GITHUB_WINDOWS_INSTALLER);
+            
+            else if (!strcmp (arch_get_distribution(), "linux-x86_64"))
+                iprintf ("You can download the latest version from here: %s\n", GITHUB_LINUX_TARBALL);
 
 #ifndef _WIN32
-        else if (!strcmp (arch_get_distribution(), "conda")) {
-            char confirm[16];
-            str_query_user ("Do you want to upgrade now? ([y] or n) ", confirm, sizeof(confirm), str_verify_y_n, "Y");
+            else if (!strcmp (arch_get_distribution(), "conda")) {
+                char confirm[16];
+                str_query_user ("Do you want to upgrade now? ([y] or n) ", confirm, sizeof(confirm), str_verify_y_n, "Y");
 
-            if (confirm[0] == 'Y')
-                system ("conda update genozip");
-        }
+                if (confirm[0] == 'Y')
+                    system ("conda update genozip");
+            }
 #endif
+        }
         return true; // printed
     }
 

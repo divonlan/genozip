@@ -4,6 +4,7 @@
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include <errno.h>
+#include <stdarg.h>
 #include "genozip.h"
 #include "profiler.h"
 #include "sections.h"
@@ -189,7 +190,7 @@ WordIndex ctx_get_next_snip (VBlockP vb, ContextP ctx, bool is_pair, pSTRp (snip
     // we check after (no risk of segfault because of buffer overflow protector) - since b250 word is variable length
     if (command == PIZ)
         ASSPIZ (iterator->next_b250 <= BAFT8 (*b250), 
-                "while reconstructing (vb->lines.len=%u): iterator for %s(%u) %sreached end of b250. %s.len=%u", 
+                "while reconstructing (vb->lines.len=%u): iterator for %s(%u) %sreached end of b250. %s.len=%u. Check Skip function.", 
                 vb->lines.len32, ctx->tag_name, ctx->did_i, is_pair ? "(PAIR) ": "", is_pair ? "pair" : "b250", b250->len32);
     else
         ASSERT (iterator->next_b250 <= BAFT8 (*b250), 
@@ -326,16 +327,16 @@ static WordIndex ctx_commit_node (VBlockP vb, ContextP zctx, ContextP vctx, STRp
     }
 }
 
-// Make ctx an "all-the-same" with SNIP_MATE_LOOKUP. Runs during generate.
+// Make ctx an "all-the-same" with FASTQ_SPECIAL_mate_lookup. Runs during generate.
 void ctx_convert_generated_b250_to_mate_lookup (VBlockP vb, ContextP vctx)
 {
     ContextP zctx  = ctx_get_zctx_from_vctx (vctx);
     ASSERTNOTNULL (zctx);
 
-    // ctx_create_node MUST be run for SNIP_MATE_LOOKUP in seg_initialize, so here we know it exists
+    // ctx_create_node MUST be run for FASTQ_SPECIAL_mate_lookup in seg_initialize, so here we know it exists
     CtxNode *node;
-    WordIndex word_index = hash_global_get_entry (zctx, (char[]){ SNIP_MATE_LOOKUP }, 1, HASH_READ_ONLY, &node);
-    ASSERT (word_index != WORD_INDEX_NONE, "SNIP_MATE_LOOKUP node not found in ctx=%s - expected it to be created in seg_initialize", vctx->tag_name);
+    WordIndex word_index = hash_global_get_entry (zctx, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_mate_lookup }, 2, HASH_READ_ONLY, &node);
+    ASSERT (word_index != WORD_INDEX_NONE, "FASTQ_SPECIAL_mate_lookup node not found in ctx=%s - expected it to be created in seg_initialize", vctx->tag_name);
 
     vctx->flags.all_the_same = true;
 
@@ -974,7 +975,7 @@ static bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx)
         if (has_count) 
             add_count (B64(zctx->counts, zf_node_index), count);
 
-        // set word_index to be indexing the global dict - to be used by vcf_zip_generate_genotype_one_section() and zip_generate_b250_section()
+        // set word_index to be indexing the global dict - to be used by zip_generate_b250_section()
         if (is_new) {
             vb_node->word_index = zf_node->word_index = base250_encode (zf_node_index);
 
@@ -1741,3 +1742,59 @@ void ctx_foreach_buffer(ContextP ctx, bool set_name, void (*func)(BufferP buf, r
 
 // qsort comparison function
 ASCENDING_SORTER (sort_by_dict_id, ContextIndex, dict_id.num)
+
+// ZIP, typically called from seg_initialize
+void ctx_set_no_stons (VBlockP vb, unsigned num_ctxs, ...) // list of did_i
+{
+    va_list args;
+    va_start (args, num_ctxs);
+
+    for (unsigned d=0; d < num_ctxs; d++) 
+        CTX((DidIType)va_arg (args, int))->no_stons = true;
+
+    va_end (args);
+}
+
+void ctx_set_store_per_line (VBlockP vb, unsigned num_ctxs, ...) // list of did_i
+{
+    va_list args;
+    va_start (args, num_ctxs);
+
+    for (unsigned d=0; d < num_ctxs; d++) 
+        CTX((DidIType)va_arg (args, int))->flags.store_per_line = true;
+
+    va_end (args);
+}
+
+void ctx_set_store (VBlockP vb, StoreType store_type, unsigned num_ctxs, ...) // list of did_i
+{
+    va_list args;
+    va_start (args, num_ctxs);
+
+    for (unsigned d=0; d < num_ctxs; d++) 
+        CTX((DidIType)va_arg (args, int))->flags.store = store_type;
+
+    va_end (args);
+}
+
+void ctx_set_ltype (VBlockP vb, LocalType ltype, unsigned num_ctxs, ...) // list of did_i
+{
+    va_list args;
+    va_start (args, num_ctxs);
+
+    for (unsigned d=0; d < num_ctxs; d++) 
+        CTX((DidIType)va_arg (args, int))->ltype = ltype;
+
+    va_end (args);
+}
+
+void ctx_set_dyn_size (VBlockP vb, unsigned num_ctxs, ...) // list of did_i
+{
+    va_list args;
+    va_start (args, num_ctxs);
+
+    for (unsigned d=0; d < num_ctxs; d++) 
+        CTX((DidIType)va_arg (args, int))->dynamic_size_local = true;
+
+    va_end (args);
+}

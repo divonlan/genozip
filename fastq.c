@@ -244,7 +244,7 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
     qname_seg_initialize (VB, FASTQ_DESC);
 
     if (vb->comp_i == FQ_COMP_R2)
-        ctx_create_node (VB, FASTQ_SQBITMAP, (char[]){ SNIP_MATE_LOOKUP }, 1); // required by ctx_convert_generated_b250_to_mate_lookup
+        ctx_create_node (VB, FASTQ_SQBITMAP, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_mate_lookup }, 2); // required by ctx_convert_generated_b250_to_mate_lookup
 
     if (flag.optimize_DESC) 
         fastq_get_optimized_desc_read_name (vb);
@@ -391,7 +391,7 @@ static void fastq_seg_line3 (VBlockFASTQ *vb, STRp(line3), STRp(desc))
     }
 
     else if (segconf.line3 == L3_QF) 
-        ASSSEG (qname_seg_qf (VB, CTX(FASTQ_LINE3), segconf.line3_flavor, STRa(line3), false, 0), line3, 
+        ASSSEG (qname_seg_qf (VB, CTX(FASTQ_LINE3), segconf.line3_flavor, STRa(line3), false, 1), line3, // +1 - account for the '+' (segged as a toplevel container prefix)
                 "Invalid FASTQ file format: expecting middle line to be a \"+\" followed by a \"%s\" flavor, but it is \"%.*s\"", qf_name(segconf.line3_flavor), line3_len+1, line3-1); 
 
     else 
@@ -726,12 +726,6 @@ void fastq_recon_aligned_SEQ (VBlockP vb_, ContextP bitmap_ctx, STRp(seq_len_str
 
     ASSERT (str_get_int_range32 (STRa(seq_len_str), 0, 0x7fffffff, (int32_t*)&vb->seq_len), "could not parse integer \"%.*s\"", STRf(seq_len_str));
 
-    if (vb->comp_i == FQ_COMP_R2 && VER(14)) { 
-        STR(snip); 
-        ctx_get_next_snip (VB, CTX(FASTQ_SQBITMAP), true, pSTRa(snip)); 
-        bitmap_ctx->pair1_is_aligned = (*snip == SNIP_LOOKUP);  
-    }
-
     // just update coverage
     if (flag.collect_coverage) 
         fastq_update_coverage_aligned (vb);
@@ -748,8 +742,7 @@ void fastq_recon_aligned_SEQ (VBlockP vb_, ContextP bitmap_ctx, STRp(seq_len_str
 SPECIAL_RECONSTRUCTOR (fastq_special_unaligned_SEQ)
 {
     // case we are pair-2: advance pair-1 SQBITMAP iterator, and if pair-1 is aligned - also its GPOS iterator
-    if (vb->comp_i == FQ_COMP_R2 && 
-        ({ STR(snip); ctx_get_next_snip (VB, CTX(FASTQ_SQBITMAP), true, pSTRa(snip)); *snip == SNIP_LOOKUP; }))   // note: SNIP_LOOKUP in case of aligned, SNIP_SPECIAL in case of unaligned
+    if (vb->comp_i == FQ_COMP_R2 && CTX(FASTQ_SQBITMAP)->pair1_is_aligned)
         CTX(FASTQ_GPOS)->pair.next++;
 
     // just update coverage (unaligned)
@@ -826,8 +819,8 @@ SPECIAL_RECONSTRUCTOR (fastq_special_PAIR2_GPOS)
 {
     // case: no delta
     if (!snip_len) {
-        if (CTX(FASTQ_SQBITMAP)->pair1_is_aligned)  // always false for V<=13
-            ctx->pair.next++; // we didn't use this pair value
+        if (CTX(FASTQ_SQBITMAP)->pair1_is_aligned)  // always false up to v13
+            ctx->pair.next++; // we didn't use this pair value (since v14, only aligned lines have a GPOS value; up to v13 all lines had a GPOS value)
 
         new_value->i = NEXTLOCAL(uint32_t, ctx);
     }
@@ -850,16 +843,32 @@ bool fastq_piz_get_pair2_is_forward (VBlockP vb)
 {
     ContextP ctx = CTX(FASTQ_STRAND);
 
-    if (!VER(14)) {
+    if (!VER(14)) { // up to v13, all lines had a is_forward value
         bool is_forward_pair_1 = bit_array_get ((BitArrayP)&ctx->pair, vb->line_i); // up to v13, all lines had strand, which was 0 if unaligned
         return NEXTLOCALBIT (ctx) ? is_forward_pair_1 : !is_forward_pair_1;
     }
 
-    else if (CTX(FASTQ_SQBITMAP)->pair1_is_aligned) {
+    else if (CTX(FASTQ_SQBITMAP)->pair1_is_aligned) { // since v14, only aligned lines have a is_forward value)
         bool is_forward_pair_1 = bit_array_get ((BitArrayP)&ctx->pair, CTX(FASTQ_GPOS)->pair.next); // gpos_ctx->pair.next is an iterator for both gpos and strand, and is incremented in fastq_special_PAIR2_GPOS
         return NEXTLOCALBIT (ctx) ? is_forward_pair_1 : !is_forward_pair_1;
     }
 
     else
         return NEXTLOCALBIT (ctx);
+}
+
+SPECIAL_RECONSTRUCTOR (fastq_special_mate_lookup)
+{
+    ASSPIZ (ctx->pair_b250, "no pair_1 b250 data for ctx=%s, while reconstructing pair_2. "
+            "If this file was compressed with Genozip version 9.0.12 or older use the --dts_paired command line option. "
+            "You can see the Genozip version used to compress it with 'genocat -w %s'", ctx->tag_name, z_name);
+            
+    ctx_get_next_snip (vb, ctx, true, pSTRa(snip));
+
+    if (ctx->did_i == FASTQ_SQBITMAP && VER(14))
+        ctx->pair1_is_aligned = snip_len && *snip == SNIP_LOOKUP;
+
+    reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE /* we can't cache pair items */, STRa(snip), reconstruct); // might include delta etc - works because in --pair, ALL the snips in a context are FASTQ_SPECIAL_mate_lookup
+
+    return NO_NEW_VALUE; // last_value already set (if needed) in reconstruct_one_snip
 }

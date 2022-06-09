@@ -108,8 +108,9 @@ extern bool fastq_read_pair_1_data (VBlockP vb, uint32_t pair_vb_i, bool must_ha
 typedef enum { FQ_COMP_R1, FQ_COMP_R2 } FastqComponentType;
 #define FASTQ_COMP_NAMES { "FQR1", "FQR2" }
  
-#define FASTQ_SPECIAL { fastq_special_unaligned_SEQ, fastq_special_PAIR2_GPOS }
+#define FASTQ_SPECIAL { fastq_special_unaligned_SEQ, fastq_special_PAIR2_GPOS, fastq_special_mate_lookup }
 
-SPECIAL (FASTQ, 0,  unaligned_SEQ, fastq_special_unaligned_SEQ);
-SPECIAL (FASTQ, 1,  PAIR2_GPOS,    fastq_special_PAIR2_GPOS);
-#define NUM_FASTQ_SPECIAL 2
+SPECIAL (FASTQ, 0,  unaligned_SEQ, fastq_special_unaligned_SEQ); // v14
+SPECIAL (FASTQ, 1,  PAIR2_GPOS,    fastq_special_PAIR2_GPOS);    // v14
+SPECIAL (FASTQ, 2,  mate_lookup,   fastq_special_mate_lookup);   // v14
+#define NUM_FASTQ_SPECIAL 3

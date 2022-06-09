@@ -107,10 +107,12 @@ static inline char *str_reverse_in_place (char *str, uint32_t len)
     return str;
 }
 
-static inline void str_replace_letter (STRc(str), char before, char after)
+static inline char *str_replace_letter (STRc(str), char before, char after)
 {
     for (uint32_t i=0; i < str_len; i++)
         if (str[i] == before) str[i] = after;
+
+    return str;
 }
 
 extern char *str_revcomp_in_out (char *dst_seq, rom src_seq, uint32_t seq_len);

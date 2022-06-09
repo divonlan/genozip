@@ -453,27 +453,36 @@ void license_display (void)
         str_print_text (license, sizeof(license) / sizeof(char*), "", "\n\n", flag.lic_width);  // Makefile sets lic_width to a fixed width for Windows Installer and for Docs
 }
 
+static void license_print_default_notice (void)
+{
+    switch (license_get_type()) { // note: this also loads the license in PIZ
+
+        case LIC_TYPE_ACADEMIC:
+            iprintf ("\nGenozip is licensed to %s for use by %s, for academic research purposes at a recognized research institution only. Other use is prohibited. To get a non-academic license, email " EMAIL_SALES ".\n",
+                    rec.institution, rec.name);
+            break;
+
+        case LIC_TYPE_EVAL: { 
+            int days_left = 30 - (int)(time(0)-rec.machine_time)/24/60/60;
+
+            iprintf ("\nGenozip is licensed to %s for use by %s for a 30-day evaluation. %u day%s left. To get a license, email " EMAIL_SALES ".\n",
+                    rec.institution, rec.name, days_left, days_left!=1 ? "s" : "");
+            break;
+        }
+
+        default: break;
+    }
+}
+
 void license_print_notice (void)
 {
-    switch (time(0) % 25) {
+    if (!is_info_stream_terminal)
+        license_print_default_notice();
+
+    // if outputting to a terminal - rotate between messages
+    else switch (time(0) % 25) {
         case 0 ... 5:
-            switch (license_get_type()) { // note: this also loads the license in PIZ
-
-                case LIC_TYPE_ACADEMIC:
-                    iprintf ("\nGenozip is licensed to %s for use by %s, for academic research purposes at a recognized research institution only. Other use is prohibited. To get a non-academic license, email " EMAIL_SALES ".\n",
-                            rec.institution, rec.name);
-                    break;
-
-                case LIC_TYPE_EVAL: { 
-                    int days_left = 30 - (int)(time(0)-rec.machine_time)/24/60/60;
-
-                    iprintf ("\nGenozip is licensed to %s for use by %s for a 30-day evaluation. %u day%s left. To get a license, email " EMAIL_SALES ".\n",
-                            rec.institution, rec.name, days_left, days_left!=1 ? "s" : "");
-                    break;
-                }
-
-                default: break;
-            }
+            license_print_default_notice();
             break;
 
         case 6: 

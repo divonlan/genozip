@@ -100,3 +100,4 @@ SEC_*.header
 digest.*.log
 failed-line.*
 *.tar
+*.log

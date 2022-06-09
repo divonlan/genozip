@@ -71,7 +71,7 @@ typedef struct Context {
                                // ZIP: counts.param is a context-specific global counter that gets accumulated in zctx during merge (e.g. OPTION_SA_CIGAR)
     
     // Seg: snip (in dictionary) and node_index the last non-empty ("" or NULL) snip evaluated
-    rom last_snip;             // also used in PIZ SAM      
+    rom last_snip;             
     unsigned last_snip_len;
     WordIndex last_snip_ni;   
 

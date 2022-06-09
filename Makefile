@@ -316,10 +316,13 @@ clean-opt:
 	@echo Cleaning up opt
 	@rm -f $(OPT_OBJS) $(EXECUTABLES) $(OPT_EXECUTABLES)/*.opt-o
 
-clean: clean-docs
+clean-test:
+	@rm -f private/test/*.good private/test/*.bad private/test/*.local private/test/*.b250 private/test/tmp/* private/test/*.DEPN private/test/back-compat/*/*.bad
+
+clean: clean-docs clean-test
 	@echo Cleaning up
 	@rm -f $(DEPS) $(filter-out LICENSE.txt,$(WINDOWS_INSTALLER_OBJS)) *.d .archive.tar.gz *.stackdump $(EXECUTABLES) $(OPT_EXECUTABLES) $(DEBUG_EXECUTABLES) 
-	@rm -f *.S *.good *.bad data/*.good data/*.bad *.local genozip.threads-log.* *.b250 test/*.good test/*.bad test/*.local test/*.b250 test/tmp/* test/*.DEPN
+	@rm -f *.S *.good *.bad data/*.good data/*.bad *.local genozip.threads-log.* *.b250 
 	@rm -R $(OBJDIR)
 	@mkdir $(OBJDIR) $(addprefix $(OBJDIR)/, $(SRC_DIRS))
 

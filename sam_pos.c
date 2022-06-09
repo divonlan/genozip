@@ -118,6 +118,9 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_PNEXT)
     bool has_prim = piz_has_buddy && is_depn;
     
     // compare RNAME and RNEXT without assuming that their word_index's are the same (they might not be in headerless SAM)
+    ASSPIZ0 (ctx_has_value_in_line_(vb, CTX(SAM_RNAME)), "RNAME has no value in line");
+    ASSPIZ0 (ctx_has_value_in_line_(vb, CTX(SAM_RNEXT)), "RNEXT has no value in line");
+
     STR(RNAME); ctx_get_snip_by_word_index (CTX(SAM_RNAME), CTX(SAM_RNAME)->last_value.i, RNAME);
     STR(RNEXT); ctx_get_snip_by_word_index (CTX(SAM_RNEXT), CTX(SAM_RNEXT)->last_value.i, RNEXT);
      

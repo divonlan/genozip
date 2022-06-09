@@ -51,6 +51,43 @@ void reconstruct_store_history (VBlockP vb, ContextP ctx)
     }
 }
 
+// consume and store in history the next value in the context without reconstructing it to txt_data
+void reconstruct_to_history (VBlockP vb, ContextP ctx)
+{
+    STR(snip);
+    HistoryWord *hw = B(HistoryWord, ctx->history, vb->line_i);
+
+    // case: MC:Z is in dict (referred to from a b250)
+    if (ctx->b250.len ||
+        (!ctx->b250.len && !ctx->local.len && ctx->dict.len)) {  // all_the_same case - no b250 or local, but have dict      
+        WordIndex wi = LOAD_SNIP(ctx->did_i); // note: if we have no b250, local but have dict, this will be word_index=0 (see ctx_get_next_snip)
+
+        if (snip_len==1 && *snip == SNIP_LOOKUP) 
+            goto snip_is_in_local;
+        
+        else if (!snip_len || IS_PRINTABLE(snip[0]))
+            *hw = (HistoryWord){ .index = wi, .len = snip_len, .lookup = LookupDict };
+
+        // not a textual snip (eg SNIP_SPECIAL) - reconstruct and then copy
+        else { 
+            rom txt = BAFTtxt;
+            reconstruct_one_snip (vb, ctx, wi, STRa(snip), true);
+            
+            *hw = (HistoryWord){ .index = ctx->per_line.len32, .len = (BAFTtxt - txt), .lookup = LookupPerLine };
+
+            buf_add_more (vb, &ctx->per_line, txt, hw->len, "per_line");
+            BNXTc (ctx->per_line) = 0;         // nul-terminate
+            vb->txt_data.len32 = BNUMtxt(txt); // remove reconstructed text from txt_data
+        } 
+    }
+    
+    // case: snip is in local
+    else snip_is_in_local: {
+        uint32_t char_index = LOAD_SNIP_FROM_LOCAL (ctx);
+        *hw = (HistoryWord){ .index = char_index, .len = snip_len, .lookup = LookupLocal }; 
+    }
+}
+
 //---------------------------------------------
 // Consuming data stored by a "historical" line
 //---------------------------------------------

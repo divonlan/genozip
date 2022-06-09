@@ -186,6 +186,10 @@ void fasta_seg_initialize (VBlockP vb)
     CTX(FASTA_CONTIG)->flags.store = STORE_INDEX; // since v12
     CTX(FASTA_CONTIG)->no_stons    = true; // needs b250 node_index for reference
     CTX(FASTA_LINEMETA)->no_stons  = true; // avoid edge case where entire b250 is moved to local due to singletons, because fasta_reconstruct_vb iterates on ctx->b250
+    CTX(FASTA_COMMENT)->no_stons   = true;
+    
+    if (!segconf.fasta_has_contigs) 
+        CTX(FASTA_DESC)->no_stons  = true;
 
     if (kraken_is_loaded) {
         CTX(FASTA_TAXID)->flags.store    = STORE_INT;

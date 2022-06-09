@@ -192,14 +192,15 @@ ConstRangeP ref_piz_get_range (VBlockP vb, Reference ref, bool soft_fail)
     // eg 'chr22' instead of '22'
     WordIndex ref_contig_index = chrom_2ref_piz_get (vb->chrom_node_index);
 
-    ASSPIZ (ref_contig_index != WORD_INDEX_NONE, "Requested a reference range of a contig \"%s\" (%d) with no reference.", 
+    ASSPIZ (ref_contig_index != WORD_INDEX_NONE || soft_fail, "Requested a reference range of a contig \"%s\" (%d) with no reference.", 
             ctx_get_words_snip (ZCTX(CHROM), vb->chrom_node_index), vb->chrom_node_index);
-
+    if (ref_contig_index == WORD_INDEX_NONE) return NULL; // soft fail
+    
     ASSPIZ (ref_contig_index < ref->ranges.len, "Expecting ref_contig_index=%d < ref->ranges.len=%"PRIu64 " in %s. FYI: z_file->chrom2ref_map.len=%"PRIu64, 
             ref_contig_index, ref->ranges.len, ref_get_filename(ref), z_file->chrom2ref_map.len);
 
     Range *r = B(Range, ref->ranges, ref_contig_index);
-    ASSERT (r->ref.nwords || soft_fail, "No reference data for chrom=\"%s\"", vb->chrom_name);
+    ASSPIZ (r->ref.nwords || soft_fail, "No reference data for chrom=\"%s\"", vb->chrom_name);
     if (!r->ref.nwords) return NULL; // this can ligitimately happen if entire chromosome is verbatim in SAM, eg. unaligned (pos=4) or SEQ or CIGAR are unavailable
 
     // if (first_pos_needed + num_nucleotides_needed - 1 <= r->last_pos) {

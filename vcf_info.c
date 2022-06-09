@@ -1350,7 +1350,8 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
             CALL (vcf_seg_INFO_AC (vb, ctx, STRa(value))); 
 
         case _INFO_MLEAF:
-            CALL_IF (ctx_has_value_in_line (vb, _INFO_AF, &other_ctx) && str_issame_(STRa(value), STRtxtw(other_ctx->last_txt)), 
+            CALL_IF (!z_is_dvcf && // this doesn't work for DVCF yet, to do: fix this
+                     ctx_has_value_in_line (vb, _INFO_AF, &other_ctx) && str_issame_(STRa(value), STRtxtw(other_ctx->last_txt)), 
                      seg_by_ctx (VB, STRa(af_snip), ctx, value_len)); // copy AF
 
         case _INFO_MLEAC:

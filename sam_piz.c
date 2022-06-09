@@ -125,7 +125,7 @@ IS_SKIP (sam_piz_is_skip_section)
             SKIPIFF (preproc || cov || (cnt && !(flag.bases && flag.out_dt == DT_BAM)));
 
         case _SAM_RNEXT   :
-            SKIPIFF (preproc || (cnt && !(flag.bases && flag.out_dt == DT_BAM))); // needed to reconstruct RNAME from a mate
+            SKIPIFF (preproc || (cnt && !flag.bases)); // needed to reconstruct RNAME from a mate
 
         case _SAM_Q1NAME : case _SAM_QNAMESA :
             KEEPIF (preproc || dict_needed_for_preproc || (cnt && flag.bases && flag.out_dt == DT_BAM)); // if output is BAM we need the entire BAM record to correctly analyze the SEQ for IUPAC, as it is a structure.
@@ -134,26 +134,23 @@ IS_SKIP (sam_piz_is_skip_section)
         case _OPTION_SA_Z :
         case _OPTION_SA_MAIN :
             KEEPIF (preproc && st == SEC_LOCAL);
-            KEEPIF (main); // needed for reconstructing depn line from a same-VB prim line
             SKIPIF (prim && st == SEC_LOCAL);
-            SKIPIFF (cnt);
+            SKIPIFF (cnt && !flag.bases);
                      
         case _OPTION_SA_RNAME  :    
         case _OPTION_SA_POS    :    
+        case _OPTION_SA_CIGAR :
         case _OPTION_SA_STRAND : 
         case _OPTION_SA_NM     :
-            KEEPIF (preproc || dict_needed_for_preproc || main);
-            SKIPIF (cnt); 
-            SKIPIFF (prim);    
-
-        case _OPTION_SA_CIGAR :
-            KEEPIF (preproc || dict_needed_for_preproc || main);
-            SKIPIF (cnt && !flag.bases);
+            KEEPIF (preproc || dict_needed_for_preproc);
+            SKIPIF (cnt && !flag.bases); 
+            KEEPIF (main || st == SEC_DICT); // need to reconstruct from prim line
             SKIPIFF (prim);    
 
         case _OPTION_SA_MAPQ : 
-            KEEPIF (preproc || dict_needed_for_preproc || main);
+            KEEPIF (preproc || dict_needed_for_preproc || main || st == SEC_DICT);
             SKIPIF (cnt && !flag.sam_mapq_filter);
+            KEEPIF (main || st == SEC_DICT);
             SKIPIFF (prim);                                         
         
         case _SAM_FLAG     : 
@@ -175,7 +172,7 @@ IS_SKIP (sam_piz_is_skip_section)
         case _SAM_MAPQ     : 
         case _OPTION_MQ_i  : SKIPIFF (preproc || ((cov || cnt) && !flag.bases && !flag.sam_mapq_filter));
         case _SAM_SEQSA    : SKIPIFF (preproc || ((cov || cnt) && !flag.bases));
-        case _SAM_PNEXT    : 
+        case _SAM_PNEXT    : case _SAM_P0NEXT : case _SAM_P1NEXT : case _SAM_P2NEXT : case _SAM_P3NEXT :
         case _SAM_POS      : SKIPIFF (preproc || (cnt && !flag.regions && !flag.bases));
         case _SAM_TAXID    : SKIPIFF (preproc || flag.kraken_taxid == TAXID_NONE);
         case _SAM_TOPLEVEL : SKIPIFF (preproc || flag.out_dt == DT_BAM || flag.out_dt == DT_FASTQ);
