@@ -1431,7 +1431,8 @@ static inline bool vcf_seg_sample_has_PS (VBlockVCFP vb, ContextP *ctxs, STRps(s
     int16_t sf_i = ps_ctx->sf_i;
 
     if (sf_i == -1     ||                        // no SF in this line's FORMAT
-        !sf_lens[sf_i] ||                        // SF is empty
+        sf_i >= n_sfs  ||                        // SF field is missing in this sample despite being in FORMAT
+        !sf_lens[sf_i] ||                        // SF is "" (i.e. empty)
         (sf_lens[sf_i]==1 && sfs[sf_i][0]=='.')) // SF is "."
         return false;
 
@@ -1675,16 +1676,6 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
 // All samples
 //------------
 
-// set ctx->sf_i - for FORMAT fields defined in vcf.h
-static void vcf_seg_init_ctx_sf_i (VBlockVCFP vb, DidIType num_ctxs, ContextP *ctxs)
-{
-    for (DidIType did_i=0; did_i < NUM_VCF_FIELDS; did_i++)
-        CTX(did_i)->sf_i = -1; // initialize
-
-    for (int sf_i=0; sf_i < num_ctxs; sf_i++)
-        ctxs[sf_i]->sf_i = sf_i;
-}
-
 rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t *len, char *next_field, bool *has_13)
 {
     // Container for samples - we have:
@@ -1700,8 +1691,9 @@ rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t *len, char *next
     if (z_is_dvcf && LO_IS_OK (last_ostatus))
         vcf_seg_validate_luft_trans_all_samples (vb, n_items, ctxs, *len, next_field);
         
-    // set ctx->sf_i - for FORMAT fields defined in vcf.h
-    vcf_seg_init_ctx_sf_i (vb, con_nitems(samples), ctxs);
+    // set ctx->sf_i - for the line's FORMAT fields
+    for (int sf_i=0; sf_i < con_nitems(samples); sf_i++)
+        ctxs[sf_i]->sf_i = sf_i;
 
     // initialize LOOKBACK if we have PS or PID
     if (!CTX(VCF_LOOKBACK)->is_initialized && (CTX(FORMAT_PID)->sf_i >= 0 || CTX(FORMAT_PS)->sf_i >= 0))
@@ -1752,7 +1744,7 @@ rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t *len, char *next
 
     ctx_set_last_value (VB, CTX(VCF_SAMPLES), (ValueType){ .i = samples.repeats });
 
-    CTX(FORMAT_GT_HT)->local.len = (vb->line_i+1) * vb->ht_per_line;
+    CTX(FORMAT_GT_HT)->local.len32 = (vb->line_i+1) * vb->ht_per_line;
  
     return next_field;
 }

@@ -44,6 +44,7 @@
 // note: #pragma pack doesn't affect enums
 typedef enum __attribute__ ((__packed__)) { BGZF_LIBDEFLATE, BGZF_ZLIB, NUM_BGZF_LIBRARIES } BgzfLibraryType; // constants for BGZF FlagsBgzf.library
 typedef enum __attribute__ ((__packed__)) { STORE_NONE, STORE_INT, STORE_FLOAT, STORE_INDEX } StoreType; // values for SectionFlags.ctx.store
+typedef enum __attribute__ ((__packed__)) { B250_BYTES_4, B250_BYTES_3, B250_BYTES_2, B250_BYTES_1 } B250Size; // part of the file format - goes into SectionHeaderCtx.b250_size
 
 // goes into SectionHeader.flags and also SectionEnt.flags
 typedef union SectionFlags {  
@@ -309,11 +310,13 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
 // used for SEC_LOCAL and SEC_B250
 typedef struct {
     SectionHeader h;
-    LocalType ltype; // populated in both SEC_B250 and SEC_LOCAL: goes into ctx.ltype - type of data for the ctx.local buffer
-    uint8_t param;   // Three options: 1. goes into ctx.local.param. (until v13: if flags.copy_local_param. since v14: always, except if ltype=LT_BITMAP) 
-                     //                2. given to comp_uncompress as a codec parameter
-                     //                3. starting 9.0.11 for ltype=LT_BITMAP: number of unused bits in top bitarray word
-    uint8_t ffu[2];
+    LocalType ltype;        // populated in both SEC_B250 and SEC_LOCAL: goes into ctx.ltype - type of data for the ctx.local buffer
+    uint8_t param;          // Three options: 1. goes into ctx.local.param. (until v13: if flags.copy_local_param. since v14: always, except if ltype=LT_BITMAP) 
+                            //                2. given to comp_uncompress as a codec parameter
+                            //                3. starting 9.0.11 for ltype=LT_BITMAP: number of unused bits in top bitarray word
+    B250Size b250_size : 2; // b250 sections only: size of each b250 element (v14)
+    uint8_t unused2    : 6;
+    uint8_t unused;
     DictId dict_id;           
 } SectionHeaderCtx;         
 

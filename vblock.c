@@ -23,6 +23,8 @@ static VBlockPool *pool = NULL;
 // one VBlock outside of pool
 VBlockP evb = NULL;
 
+static VBlockP nonpool_vbs[NUM_NONPOOL_VBs] = {}; 
+
 #define FINALIZE_VB_BUFS(func, ctx_func, vb_func) \
     func (vb->lines);               \
     func (vb->ra_buf[0]);           \
@@ -186,6 +188,13 @@ void vb_destroy_vb_do (VBlockP *vb_p, rom func)
 
     FREE (*vb_p);
 
+    // case: this is a nonpool VB
+    for (int i=0; i < NUM_NONPOOL_VBs; i++)
+        if (nonpool_vbs[i] == vb) {
+            nonpool_vbs[i] = 0;
+            NULL;
+        }
+
     if (!is_evb) COPY_TIMER_VB (evb, vb_destroy_vb)
 }
 
@@ -225,6 +234,9 @@ VBlockP vb_initialize_nonpool_vb (int vb_id, DataType dt, rom task)
     vb->data_type_alloced = dt;
     vb->comp_i            = COMP_NONE;
     memset (vb->dict_id_to_did_i_map, 0xff, sizeof(vb->dict_id_to_did_i_map)); // DID_I_NONE
+    
+    nonpool_vbs[NUM_NONPOOL_VBs + vb_id] = vb; // vb_id is a negative integer
+
     return vb;
 }
 
@@ -324,6 +336,18 @@ bool vb_has_free_vb (void)
     uint32_t num_in_use = __atomic_load_n (&pool->num_in_use, __ATOMIC_RELAXED); 
     
     return num_in_use < pool->num_vbs;
+}
+
+bool vb_is_valid (VBlockP vb)
+{
+    if (pool)
+        for (uint32_t vb_id=0; vb_id < pool->num_vbs; vb_id++)
+            if (vb == pool->vb[vb_id]) return true;
+
+    for (int i=0; i < NUM_NONPOOL_VBs; i++)
+        if (nonpool_vbs[i] == vb) return true;
+
+    return false;
 }
 
 // free memory allocations between files, when compressing multiple non-bound files or decompressing multiple files

@@ -7,7 +7,6 @@
 #include "profiler.h"
 #include "zfile.h"
 #include "vblock.h"
-#include "base250.h"
 #include "dispatcher.h"
 #include "context.h"
 #include "file.h"
@@ -145,7 +144,7 @@ static inline void piz_adjust_one_local (BufferP local_buf, LocalType *ltype, ui
 
     if (*ltype == LT_BITMAP) { 
         local_buf->nbits = local_buf->len * 64 - num_bits ; 
-        LTEN_bit_array (buf_get_bitarray (local_buf)); 
+        LTEN_bits (buf_get_bitarray (local_buf)); 
     } 
     else if (lt_desc[*ltype].file_to_native)   
         lt_desc[*ltype].file_to_native (local_buf, ltype); // BGEN, transpose etc - updates ltype in case of Transpose, after untransposing
@@ -183,7 +182,14 @@ uint32_t piz_uncompress_all_ctxs (VBlockP vb)
             
             if (is_local) 
                 ctx->lcodec = header->h.codec;
+
+            else { // b250
+                ctx->iterator  = (SnipIterator){ .next_b250 = B1ST8 (ctx->b250), .prev_word_index = WORD_INDEX_NONE };
+                ctx->b250_size = header->b250_size; // note: for files<=v13, this was always 0, ie B250_BYTES_4
+            }
         }
+
+        // initialize pair stuff (happens in FASTQ only)
         else {
             // overcome bug in ZIP --pair (in some versions <= 13, lost track of which) - local sections with junk data 
             // created in addition to the expected b250. we ignore these local sections (or allow b250 to overwrite them)    
@@ -193,15 +199,10 @@ uint32_t piz_uncompress_all_ctxs (VBlockP vb)
             ctx->pair_b250  = is_b250;                
             ctx->pair_local = is_local;
 
-            // initialize pair iterators (for FASTQ)
-            if (is_b250)
-                ctx->pair_b250_iter = (SnipIterator){ .next_b250 = B1ST8 (ctx->pair), .prev_word_index = -1 };
-        }
-
-        // initialize b250 iterator
-        if (is_b250) {
-            if (is_pair_section) ctx->pair_b250_iter = (SnipIterator){ .next_b250 = B1ST8 (ctx->pair), .prev_word_index = WORD_INDEX_NONE };
-            else                 ctx->iterator       = (SnipIterator){ .next_b250 = B1ST8 (ctx->b250), .prev_word_index = WORD_INDEX_NONE };
+            if (is_b250) {
+                ctx->pair_b250_iter = (SnipIterator){ .next_b250 = B1ST8 (ctx->pair), .prev_word_index = WORD_INDEX_NONE };
+                ctx->pair_b250_size = header->b250_size;
+            }
         }
 
         BufferP target_buf = is_local ? &ctx->local : &ctx->b250;

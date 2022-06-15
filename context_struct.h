@@ -29,6 +29,8 @@ typedef struct Context {
     LocalType ltype;           // LT_* - type of local data - included in the section header
     struct FlagsCtx flags;     // flags to be included in section header
     struct FlagsCtx pair_flags;// Used if this file is a PAIR_2 - contains ctx->flags of the PAIR_1
+    B250Size b250_size;        // Max size of element in b250 data (PIZ and ZIP after generation) v14
+    B250Size pair_b250_size;
     DictId dict_id;            // which dict_id is this MTF dealing with
     Buffer dict;               // tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
     Buffer b250;               // ZIP: During Seg, .data contains 32b indices into context->nodes. In zip_generate_b250_section, 
@@ -190,10 +192,10 @@ typedef struct Context {
     union { // 32 bit
         int32_t ctx_specific;
         bool last_is_alt;         // CHROM (all DTs): ZIP: last CHROM was an alt
-        bool pair1_is_aligned;    // FASTQ_SQBITMAP:  PIZ: used when reconstructing pair-2
         bool last_is_new;         // SAM_QNAME:       ZIP: used in segconf.running
         int32_t sum_dp_this_line; // INFO_DP:         ZIP/PIZ: sum of FORMAT/DP of samples in this line ('.' counts as 0)
         int32_t last_end_line_i;  // INFO_END:        PIZ: last line on which INFO/END was encountered      
+        enum   __attribute__ ((__packed__)) { PAIR1_ALIGNED_UNKNOWN=-1, PAIR1_NOT_ALIGNED=0, PAIR1_ALIGNED=1 } pair1_is_aligned;  // FASTQ_SQBITMAP:  PIZ: used when reconstructing pair-2
         struct __attribute__ ((__packed__)) { uint16_t gt_prev_ploidy; char gt_prev_phase; }; // FORMAT_GT: ZIP/PIZ
         struct __attribute__ ((__packed__)) { enum __attribute__ ((__packed__)) { PS_NONE, PS_POS, PS_POS_REF_ALT, PS_UNKNOWN } ps_type; }; // FORMAT_PS and FORMAT_PID
     };

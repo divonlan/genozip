@@ -67,8 +67,8 @@ void codec_acgt_comp_init (VBlockP vb)
         nonref_x_ctx->lcodec    = CODEC_XCGT; // prevent codec_assign_best from assigning it a different codec
 }
 
-// packing of an array A,C,G,T characters into a 2-bit BitArray, stored in vb->scratch. 
-static inline void codec_acgt_pack (BitArrayP packed, rom data, uint64_t data_len)
+// packing of an array A,C,G,T characters into a 2-bit Bits, stored in vb->scratch. 
+static inline void codec_acgt_pack (BitsP packed, rom data, uint64_t data_len)
 {
     // increase bit array to accomodate data
     uint64_t next_bit = packed->nbits;
@@ -77,18 +77,11 @@ static inline void codec_acgt_pack (BitArrayP packed, rom data, uint64_t data_le
     
     // pack nucleotides - each character is packed into 2 bits
     for (uint64_t i=0 ; i < data_len ; i++, next_bit += 2)       
-        bit_array_assign2 (packed, next_bit, acgt_encode[(uint8_t)data[i]]);
-
-    //xxx for (uint64_t i=0 ; i < data_len ; i++) {
-    //     uint8_t encoding = acgt_encode[(uint8_t)data[i]];
-    //     bit_array_assign (packed, next_bit,   (encoding & 1)     );
-    //     bit_array_assign (packed, next_bit+1, (encoding & 2) >> 1);
-    //     next_bit += 2;
-    // }
+        bits_assign2 (packed, next_bit, acgt_encode[(uint8_t)data[i]]);
 }
 
 // This function decompsoses SEQ data into two buffers:
-// 1. A,C,G,T characters are packed into a 2-bit BitArray, placed in vb->scratch and then compressed with ACGT.sub_codec
+// 1. A,C,G,T characters are packed into a 2-bit Bits, placed in vb->scratch and then compressed with ACGT.sub_codec
 // 2. NONREF_X.local is constructed to be the same length on the SEQ data, with each characer corresponding to a character in SEQ:
 // -- an A,C,G or T character in SEQ is corresponds to a \0 in NONREF_X 
 // -- an a,c,g or t character in SEQ is corresponds to a \1 in NONREF_X 
@@ -108,7 +101,7 @@ COMPRESS (codec_acgt_compress)
 
     Context *nonref_ctx   = CTX(DTF(nonref));
     Context *nonref_x_ctx = nonref_ctx + 1;
-    BitArray *packed;
+    Bits *packed;
 
     // case: this is our second entry, after soft-failing. Just continue from where we stopped
     if (nonref_x_ctx->local.len) {
@@ -143,7 +136,7 @@ COMPRESS (codec_acgt_compress)
             char *data_1=0;
             uint32_t data_1_len=0;
             
-            get_line_cb (vb, line_i, &data_1, &data_1_len, *uncompressed_len - nonref_x_ctx->local.len, NULL);
+            get_line_cb (vb, line_i, &data_1, &data_1_len, *uncompressed_len - nonref_x_ctx->local.len32, NULL);
 
             PACK (data_1, data_1_len);
 
@@ -164,7 +157,7 @@ COMPRESS (codec_acgt_compress)
 
     // note: we store in Little Endian unlike the rest of the data that is in Big Endian, because LTEN keeps the nucleotides in their
     // original order, and improves compression ratio by about 2%
-    LTEN_bit_array (packed);
+    LTEN_bits (packed);
 
     // get codec for NONREF - header->lcodec remains CODEC_ACGT, and we set subcodec to the codec discovered in assign, and set to nonref_ctx->lcodec 
     z_lcodec = ZCTX(nonref_ctx->did_i)->lcodec;
@@ -201,7 +194,7 @@ UNCOMPRESS (codec_xcgt_uncompress)
     // uncompress NONREF_X using CODEC_XCGT.sub_codec (passed to us as sub_codec)
     codec_args[sub_codec].uncompress (vb, sub_codec, param, STRa(compressed), uncompressed_buf, uncompressed_len, CODEC_NONE, name);
 
-    const BitArray *acgt_packed = buf_get_bitarray (&vb->scratch); // data from NONREF context (2-bit per base)
+    const Bits *acgt_packed = buf_get_bitarray (&vb->scratch); // data from NONREF context (2-bit per base)
     rom acgt_x = B1ST (const char, *uncompressed_buf); // data from NONREF_X context
     
     Context *nonref_ctx = CTX(DTF(nonref));
@@ -232,12 +225,12 @@ UNCOMPRESS (codec_acgt_uncompress)
     codec_args[sub_codec].uncompress (vb, sub_codec, param, compressed, compressed_len, &vb->scratch, bitmap_num_bytes, CODEC_NONE, name);
 
     // finalize bitmap structure
-    BitArray *packed     = buf_get_bitarray (&vb->scratch);
+    Bits *packed     = buf_get_bitarray (&vb->scratch);
     packed->nbits  = uncompressed_len * 2;
     packed->nwords = roundup_bits2words64 (packed->nbits);
 
-    LTEN_bit_array (packed);
+    LTEN_bits (packed);
 
-    bit_array_clear_excess_bits_in_top_word (packed);
+    bits_clear_excess_bits_in_top_word (packed);
 }
 

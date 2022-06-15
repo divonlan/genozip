@@ -101,7 +101,7 @@ rom vcf_coords_name (int coord)
     return (coord < 0 || coord >= NUM_COORDS) ? "(invalid coord)" : coords_names[coord];
 }
 
-// ZIP/PIZ: called before seggign / reconstructing each line
+// ZIP/PIZ: called before segging / reconstructing each line
 void vcf_reset_line (VBlockP vb_)
 {
     VBlockVCFP vb = (VBlockVCFP)vb_;
@@ -111,4 +111,9 @@ void vcf_reset_line (VBlockP vb_)
 
     CTX(INFO_DP)->sum_dp_this_line = 0;
     CTX(INFO_DP)->is_initialized = false;        
+
+    if (command == ZIP) {
+        for (DidIType did_i=0; did_i < NUM_VCF_FIELDS; did_i++)
+            CTX(did_i)->sf_i = -1; // initialize
+    }
 }

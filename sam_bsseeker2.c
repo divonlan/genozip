@@ -156,7 +156,7 @@ void sam_seg_XG_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XG), SamPosTy
 
     // set is_set - we will need these bases in the reference to reconstruct XG
     if (flag.reference & REF_STORED) 
-        bit_array_set_region (&range->is_set, start_pos - range->first_pos, after_pos - start_pos); 
+        bits_set_region (&range->is_set, start_pos - range->first_pos, after_pos - start_pos); 
 
     ctx_set_encountered (VB, CTX(OPTION_XG_Z)); // = verified
 

@@ -51,7 +51,7 @@ void ref_contigs_populate_aligned_chroms (void)
         if (already_exists) continue;
 
         // add if chrom doesn't already exist ()
-        if ((r->num_set = bit_array_num_bits_set (&r->is_set))) {
+        if ((r->num_set = bits_num_bits_set (&r->is_set))) {
             
             WordIndex chrom_index = ctx_populate_zf_ctx (CHROM, STRa(r->chrom_name), r->range_i); // add to dictionary
 

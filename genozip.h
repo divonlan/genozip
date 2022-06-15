@@ -61,8 +61,8 @@ typedef struct SectionHeader *SectionHeaderP;
 typedef const struct SectionEnt *Section;
 typedef struct Range *RangeP;
 typedef const struct Range *ConstRangeP;
-typedef struct BitArray *BitArrayP;
-typedef const struct BitArray *ConstBitArrayP;
+typedef struct Bits *BitsP;
+typedef const struct Bits *ConstBitsP;
 typedef struct RAEntry *RAEntryP;
 typedef const struct RAEntry *ConstRAEntryP;
 typedef struct Mutex *MutexP;
@@ -447,7 +447,7 @@ static inline void progress_newline(void) {
 #define ASSERTISZERO(n)                      ASSERT (!(n), "%s!=0", #n)
 #define ASSERTW(condition, format, ...)      ( { if (!(condition) && !flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); }} )
 #define ASSERTW0(condition, string)          ASSERTW (condition, string "%s", "")
-#define ASSRET(condition, ret, format, ...)  ( { if (!(condition)) { progress_newline(); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); return (ret); }} )
+#define ASSRET(condition, ret, format, ...)  ( { if (!(condition)) { progress_newline(); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); return ret; }} )
 #define ASSRET0(condition, ret, string)      ASSRET (condition, ret, string "%s", "")
 #define ASSERTRUNONCE(string)                ( { static bool once = false; /* this code path should run only once */ \
                                                  ASSINP0 (!__atomic_test_and_set (&once, __ATOMIC_RELAXED), string); } )

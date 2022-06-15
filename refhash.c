@@ -16,7 +16,7 @@
 #include "zfile.h"
 #include "refhash.h"
 #include "compressor.h"
-#include "bit_array.h"
+#include "bits.h"
 #include "profiler.h"
 #include "threads.h"
 #include "segconf.h"
@@ -86,12 +86,12 @@ static inline uint32_t refhash_get_word (const Range *r, int64_t base_i)
 
     // if the are any of the 29 bits in this range, use them
     if (num_bits_this_range > 0)
-        refhash_word = bit_array_get_wordn (&r->ref, base_i * 2, num_bits_this_range);
+        refhash_word = bits_get_wordn (&r->ref, base_i * 2, num_bits_this_range);
 
     // if there are any bits in the next range, they are the more significant bits in the word we are forming
     if (num_bits_this_range < bits_per_hash)
         // note: refhash_calc_one_range guarantees us that if the word overflows to the next range, then there is a valid next range with sufficient bits
-        refhash_word |= bit_array_get_wordn (&(r+1)->ref, 0, bits_per_hash - num_bits_this_range) << num_bits_this_range;
+        refhash_word |= bits_get_wordn (&(r+1)->ref, 0, bits_per_hash - num_bits_this_range) << num_bits_this_range;
 
     return refhash_word;
 }

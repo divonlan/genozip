@@ -92,7 +92,7 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
     bufprintf (evb, &url_buf, "&entry.960659059=%s%%2C%.1f", codec_name (txt_file->codec), src_comp_ratio);                    // Source codec/gain eg "GZ/4.3"
     bufprintf (evb, &url_buf, "&entry.621670070=%.1f", all_comp_ratio);                                                        // Genozip gain over source txt eg "5.4"
     bufprintf (evb, &url_buf, "&entry.1635780209=OS=%s%%3Bcores=%u", url_esc_non_valid_charsS(arch_get_os()).s, arch_get_num_cores());  // Environment: OS, # cores, eg:
-    bufprintf (evb, &url_buf, "&entry.2140634550=%s", features.len ? B1STc(features) : "NONE");                                                        // Features. Eg "Sorted"
+    bufprintf (evb, &url_buf, "&entry.2140634550=%s", features.len ? url_esc_non_valid_charsS (B1STc(features)).s : "NONE");                                                        // Features. Eg "Sorted"
     bufprintf (evb, &url_buf, "&entry.282448068=%s",  hash_occ.len ? B1STc(hash_occ) : "NONE");      // Hash ineffeciencies, eg "RNAME,64.0 KB,102%" - each field is quadlet - name, type, hash size, hash occupancy    
 
     bufprint0 (evb, &url_buf, "&entry.988930848=");      // Compression ratio of individual fields ratio, eg "FORMAT/GT,20%,78;..." - each field is triplet - name, percentage of z_data, compression ratio
@@ -293,6 +293,8 @@ static void stats_output_file_metadata (void)
     buf_add_string (evb, &stats, flags_command_line()); // careful not to use bufprintf with command_line as it can exceed the maximum length in bufprintf
 
     bufprintf (evb, &stats, "\n%s\n", license_get_one_line());
+    
+    *BAFTc(features) = '\0';
 }
 
 static DESCENDING_SORTER (stats_sort_by_z_size, StatsByLine, z_size)

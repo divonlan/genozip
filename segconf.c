@@ -215,7 +215,6 @@ void segconf_calculate (void)
     RESTORE_FLAGS;
 
     segconf_set_vb_size (vb, save_vb_size);
-    segconf.is_long_reads = segconf_is_long_reads();
 
     // case: long reads. we can't use the genozip aligner.
     if (segconf.is_long_reads)

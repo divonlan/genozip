@@ -23,7 +23,7 @@
 #include "vblock.h"
 #include "strings.h"
 #include "reference.h"
-#include "bit_array.h"
+#include "bits.h"
 #include "mutex.h"
 #include "file.h"
 #include "endianness.h"
@@ -462,8 +462,8 @@ void buf_add_to_buffer_list_do (VBlockP vb, BufferP buf, FUNCLINE)
     buf->vb = vb; // successfully added to buf list
 
     if (flag.debug_memory==1 && vb->buffer_list.len > DISPLAY_ALLOCS_AFTER)
-        iprintf ("buf_add_to_buffer_list (%s): %s: size=%"PRIu64" buffer=%p vb->id=%d buf_i=%u\n", 
-                 func, buf_desc(buf).s, (uint64_t)buf->size, buf, vb->id, vb->buffer_list.len32-1);    
+        iprintf ("buf_add_to_buffer_list &buf=%p (%s): %s: size=%"PRIu64" buffer=%p vb->id=%d buf_i=%u\n", 
+                 buf, func, buf_desc(buf).s, (uint64_t)buf->size, buf, vb->id, vb->buffer_list.len32-1);    
 }
 
 static void buf_init (BufferP buf, char *memory, uint64_t size, uint64_t old_size, 
@@ -619,14 +619,14 @@ finish:
     return buf->size;
 }
 
-BitArrayP buf_alloc_bitarr_do (VBlockP vb, BufferP buf, uint64_t nbits, FUNCLINE, rom name)
+BitsP buf_alloc_bitarr_do (VBlockP vb, BufferP buf, uint64_t nbits, FUNCLINE, rom name)
 {
     uint64_t nwords = roundup_bits2words64 (nbits);
     buf_alloc_do (vb, buf, nwords * sizeof (uint64_t), 1, func, code_line, name);
     buf->nbits  = nbits;   
     buf->nwords = nwords; 
 
-    return (BitArrayP)buf;
+    return (BitsP)buf;
 }
 
 void buf_alloc_bitarr_buffer_do (VBlockP vb, BufferP buf, uint64_t nbits, FUNCLINE, rom name)
@@ -635,7 +635,7 @@ void buf_alloc_bitarr_buffer_do (VBlockP vb, BufferP buf, uint64_t nbits, FUNCLI
     buf_alloc_do (vb, buf, nwords * sizeof (uint64_t), 1, func, code_line, name);
 }
 
-BitArrayP buf_overlay_bitarr_do (VBlockP vb,
+BitsP buf_overlay_bitarr_do (VBlockP vb,
                                  BufferP overlaid_buf, BufferP regular_buf,  
                                  uint64_t start_byte_in_regular_buf,
                                  uint64_t nbits,
@@ -648,7 +648,7 @@ BitArrayP buf_overlay_bitarr_do (VBlockP vb,
 
     overlaid_buf->nbits  = nbits;
     overlaid_buf->nwords = nwords;
-    return (BitArrayP)overlaid_buf;
+    return (BitsP)overlaid_buf;
 }
 
 // an overlay buffer is a buffer using some of the memory of another buffer - it doesn't have its own memory
@@ -893,6 +893,13 @@ static void buf_remove_from_buffer_list (BufferP buf)
     START_TIMER;
     VBlockP vb = buf->vb;
     
+    if (!vb_is_valid (vb)) { // this is bug 576
+        if (flag.debug || getenv ("GENOZIP_TEST"))
+            WARN ("Unexpected, but unharmful: cannot remove buf=%p from buffer list, because buf->vb=%p refers to a VB that no longer exists", buf, vb);
+        
+        return;
+    }
+
     ASSERT (vb != evb || threads_am_i_main_thread(), "A thread other than main thread is attempting to modify evb buffer list: buf=%s", buf_display (buf));
     
     ARRAY (BufferP, buf_list, vb->buffer_list);
@@ -1099,28 +1106,28 @@ void *buf_low_level_malloc (size_t size, bool zero, FUNCLINE)
 }
 
 // convert a Buffer from a z_file section whose len is in char to a bitarray
-BitArray *buf_zfile_buf_to_bitarray (BufferP buf, uint64_t nbits)
+Bits *buf_zfile_buf_to_bitarray (BufferP buf, uint64_t nbits)
 {
     ASSERT (roundup_bits2bytes (nbits) <= buf->len, "nbits=%"PRId64" indicating a length of at least %"PRId64", but buf->len=%"PRId64,
             nbits, roundup_bits2bytes (nbits), buf->len);
 
-    BitArray *bitarr = buf_get_bitarray (buf);
+    Bits *bitarr = buf_get_bitarray (buf);
     bitarr->nbits  = nbits;
     bitarr->nwords = roundup_bits2words64 (bitarr->nbits);
 
     ASSERT (roundup_bits2bytes64 (nbits) <= buf->size, "buffer to small: buf->size=%"PRId64" but bitarray has %"PRId64" words and hence requires %"PRId64" bytes",
             (uint64_t)buf->size, bitarr->nwords, bitarr->nwords * sizeof(uint64_t));
 
-    LTEN_bit_array (bitarr);
+    LTEN_bits (bitarr);
 
-    bit_array_clear_excess_bits_in_top_word (bitarr);
+    bits_clear_excess_bits_in_top_word (bitarr);
 
     return bitarr;
 }
 
 void buf_add_bit (BufferP buf, int64_t new_bit) 
 {
-    BitArray *bar = buf_get_bitarray (buf);
+    Bits *bar = buf_get_bitarray (buf);
 
     ASSERT (bar->nbits < buf->size * 8, "no room in Buffer %s to extend the bitmap", buf->name);
     bar->nbits++;     
@@ -1129,12 +1136,12 @@ void buf_add_bit (BufferP buf, int64_t new_bit)
         bar->words[bar->nwords-1] = new_bit; // LSb is as requested, other 63 bits are 0
     } 
     else
-        bit_array_assign (bar, bar->nbits-1, new_bit);  
+        bits_assign (bar, bar->nbits-1, new_bit);  
 }
  
 uint64_t buf_extend_bits (BufferP buf, int64_t num_new_bits) 
 {
-    BitArray *bar = buf_get_bitarray (buf);
+    Bits *bar = buf_get_bitarray (buf);
 
     ASSERT (bar->nbits + num_new_bits <= buf->size * 8, "Error in %s:%u: no room in Buffer %s to extend the bitmap: nbits=%"PRIu64", num_new_bits=%"PRId64", buf->size=%"PRIu64, 
             __FUNCLINE, buf->name, bar->nbits, num_new_bits, (uint64_t)buf->size);
@@ -1143,7 +1150,7 @@ uint64_t buf_extend_bits (BufferP buf, int64_t num_new_bits)
 
     bar->nbits += num_new_bits;     
     bar->nwords = roundup_bits2words64 (bar->nbits);
-    bit_array_clear_excess_bits_in_top_word (bar);
+    bits_clear_excess_bits_in_top_word (bar);
 
     return next_bit;
 }

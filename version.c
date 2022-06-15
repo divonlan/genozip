@@ -66,13 +66,9 @@ bool version_print_notice_if_has_newer (void)
                 iprintf ("You can download the latest version from here: %s\n", GITHUB_LINUX_TARBALL);
 
 #ifndef _WIN32
-            else if (!strcmp (arch_get_distribution(), "conda")) {
-                char confirm[16];
-                str_query_user ("Do you want to upgrade now? ([y] or n) ", confirm, sizeof(confirm), str_verify_y_n, "Y");
-
-                if (confirm[0] == 'Y')
-                    system ("conda update genozip");
-            }
+            else if (!strcmp (arch_get_distribution(), "conda") &&
+                     str_query_user_yn ("Do you want to upgrade now?", true))
+                system ("conda update genozip");
 #endif
         }
         return true; // printed

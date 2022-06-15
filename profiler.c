@@ -62,6 +62,8 @@ void profiler_add (ConstVBlockP vb)
     ADD(codec_hapmat_piz_get_one_line);
     ADD(sam_seg_SEQ);
     ADD(sam_cigar_seg);
+    ADD(sam_reconstruct_SEQ);
+    ADD(aligner_reconstruct_seq);    
     ADD(dict_io_compress_one_fragment);
     ADD(recon_plan_compress_one_fragment);
     ADD(zfile_uncompress_section);
@@ -173,6 +175,8 @@ void profiler_print_report (void)
         PRINT (compressor_longr, 2);
         print_ctx_compressor_times();
         PRINT (reconstruct_vb, 1);
+        PRINT (sam_reconstruct_SEQ, 2);
+        PRINT (aligner_reconstruct_seq, 2);
         PRINT (sam_zip_prim_ingest_vb, 1);
         PRINT (digest, 1); // note: in SAM/BAM digest is done in the writer thread, otherwise its done in the compute thread. TODO: change level to 0 in case of SAM/BAM
         PRINT (bgzf_compute_thread, 1);

@@ -20,7 +20,7 @@
 #include "mutex.h"
 #include "codec.h" 
 #include "endianness.h"
-#include "bit_array.h"
+#include "bits.h"
 #include "version.h"
 #include "gencomp.h"
 #include "piz.h"
@@ -47,7 +47,7 @@ typedef struct {
     bool encountered;      // used by writer_update_section_list
     bool fasta_contig_grepped_out; // FASTA: a VB that starts with SEQ data, inherits this from the last contig of the previous VB 
     Buffer is_dropped_buf; // a bitarray with a bit set is the line is marked for dropping
-    BitArrayP is_dropped;  // pointer into is_dropped_buf
+    BitsP is_dropped;  // pointer into is_dropped_buf
 } VbInfo; // used both for VBs and txt headers
 
 #define VBINFO(vb_i) B(VbInfo, vb_info, (vb_i))
@@ -169,7 +169,7 @@ bool writer_does_vb_need_recon (VBIType vb_i)
 
 // called by: 1. PIZ main thread, when writer creates plan and filters by lines/head/tail
 // 2. PIZ compute thread
-BitArray *writer_get_is_dropped (VBIType vb_i)
+Bits *writer_get_is_dropped (VBIType vb_i)
 {
     ASSERT (vb_i >= 1 && vb_i < vb_info.len, "vb_i=%u out of range [1,%d]", vb_i, (int)vb_info.len-1);
     VbInfo *v = VBINFO(vb_i);
@@ -395,7 +395,7 @@ static inline void writer_drop_lines (VbInfo *v, uint32_t start_line, uint32_t n
     if (!v->is_dropped)
         v->is_dropped = writer_get_is_dropped (v->vblock_i);
 
-    #define DROPL(l) bit_array_set (v->is_dropped, start_line + (l))
+    #define DROPL(l) bits_set (v->is_dropped, start_line + (l))
     
     // shortcuts for the most common cases
     if      (num_lines == 1) { DROPL(0); }
@@ -403,7 +403,7 @@ static inline void writer_drop_lines (VbInfo *v, uint32_t start_line, uint32_t n
     else if (num_lines == 3) { DROPL(0); DROPL(1); DROPL(2); } 
     else if (num_lines == 4) { DROPL(0); DROPL(1); DROPL(2); DROPL(3); } 
     else if (num_lines == 5) { DROPL(0); DROPL(1); DROPL(2); DROPL(3); DROPL(4); } 
-    else bit_array_set_region (v->is_dropped, start_line, num_lines);
+    else bits_set_region (v->is_dropped, start_line, num_lines);
     
     #undef DROPL
 }
@@ -561,7 +561,7 @@ static void writer_cleanup_recon_plan_after_filtering (void)
     // VBs that have all their lines dropped - make sure they're marked with !need_recon
     for (VBIType vb_i=1; vb_i <= z_file->num_vbs; vb_i++) {
         VbInfo *v = VBINFO(vb_i);
-        if (v->needs_recon && v->is_dropped && bit_array_is_fully_set (v->is_dropped))
+        if (v->needs_recon && v->is_dropped && bits_is_fully_set (v->is_dropped))
             v->needs_recon = false;
     }
 
@@ -948,7 +948,7 @@ static void writer_write_line_range (VBlockP wvb, VbInfo *v, uint32_t start_line
         rom after = lines[line_i+1];  // note: lines has one extra entry so this is always correct
         uint32_t line_len = (uint32_t)(after - start);
         
-        bool is_dropped = bit_array_get (v->is_dropped, line_i);
+        bool is_dropped = bits_get (v->is_dropped, line_i);
 
         ASSERT (after >= start, "vb_i=%u Writing line %i (start_line=%u num_lines=%u): expecting start=%p <= after=%p", 
                 BNUM (vb_info, v), line_i, start_line, num_lines, start, after);
@@ -999,8 +999,8 @@ static void writer_write_lines_interleaves (VBlockP wvb, VbInfo *v1, VbInfo *v2)
         rom *start2 = B(rom , v2->vb->lines, line_i);
         unsigned len1 = (unsigned)(*(start1+1) - *start1);
         unsigned len2 = (unsigned)(*(start2+1) - *start2);
-        bool is_dropped1 = bit_array_get (v1->is_dropped, line_i);
-        bool is_dropped2 = bit_array_get (v2->is_dropped, line_i);
+        bool is_dropped1 = bits_get (v1->is_dropped, line_i);
+        bool is_dropped2 = bits_get (v2->is_dropped, line_i);
 
         // skip lines dropped in container_reconstruct_do due to vb->drop_curr_line for either leaf
         if ((flag.interleaved == INTERLEAVE_BOTH && !is_dropped1 && !is_dropped2) || 

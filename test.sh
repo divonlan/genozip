@@ -1026,6 +1026,9 @@ batch_reference_vcf()
     echo "multiple VCF with --reference, --md5 using hs37d5 ; alternate chroms names"
     test_standard "COPY -me$hg19" " " test.human2.filtered.snp.vcf
 
+    echo "GVCF with --reference, --md5 using GRCh38"
+    test_standard "-me$GRCh38" " " test.g.vcf.gz
+
     echo "multiple VCF with --REFERENCE using hs37d5, password" 
     test_standard "-mE$hs37d5 -p123" "--password 123" test.1KG-37.vcf test.human2.filtered.snp.vcf
 }

@@ -295,12 +295,7 @@ static void file_ask_user_to_confirm_overwrite (rom filename)
     
     if (!isatty(0) || !isatty(2)) exit_on_error(false); // if we stdin or stderr is redirected - we cannot ask the user an interactive question
     
-    // read all chars available on stdin, so that if we're processing multiple files - and we ask this question
-    // for a subsequent file later - we don't get left overs of this response
-    char read_buf[1000];
-    str_query_user ("Do you wish to overwrite it now? (y or [n]) ", read_buf, sizeof(read_buf), str_verify_y_n, "N");
-
-    if (read_buf[0] == 'N') {
+    if (!str_query_user_yn ("Do you wish to overwrite it now?", false)) {
         fprintf (stderr, "No worries, I'm stopping here - no damage done!\n");
         exit (EXIT_OK);
     }

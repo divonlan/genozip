@@ -621,7 +621,7 @@ static void main_load_reference (rom filename, bool is_first_file, bool is_last_
     RESET_VALUE (txt_file); // save and reset - for use by reference loader
 
     if (!ref_is_external_loaded (gref)) {
-        MAIN0 ("Loading external reference to gref");
+        MAIN ("Loading external reference to gref: %s", ref_get_filename(gref));
         ref_load_external_reference (gref, NULL); // also loads refhash if needed
     }
 
@@ -749,7 +749,7 @@ int main (int argc, char **argv)
     primary_command = command; 
 
     // we test for a newer version if its a single file compression (if --test is used, we test after PIZ - check_for_newer is set)
-    if (!flag.quiet && ((command == ZIP && input_files_len == 1 && !flag.test) || flag.check_latest/*PIZ - test after compress*/))
+    if (!flag.quiet && ((command == ZIP && input_files_len == 1 && !flag.test) || (command == PIZ && flag.check_latest/*PIZ - test after compress*/)))
         version_background_test_for_newer();
 
     // IF YOU'RE CONSIDERING EDITING THIS CODE TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,

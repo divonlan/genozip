@@ -163,7 +163,7 @@ void qname_zip_initialize (DidIType qname_did_i)
             DidIType next_qname2_did_i = FASTQ_Q0NAME2;
             for (unsigned item_i=0; item_i < con_no_skip.nitems_lo; item_i++) 
                 if (con_no_skip.items[item_i].dict_id.num != _SAM_QmNAME && con_no_skip.items[item_i].dict_id.num != _FASTQ_QNAME2) {
-                    con_no_skip.items[item_i].dict_id = dt_fields[DT_FASTQ].predefined[next_qname2_did_i].dict_id; // only FASTQ has QNAME2 dict_ids, this is not nessarilly the current data type
+                    con_no_skip.items[item_i].dict_id = dt_fields[DT_FASTQ].predefined[next_qname2_did_i].dict_id; // only FASTQ has QNAME2 dict_ids, this is not necessarily the current data type
                     next_qname2_did_i++;
                 }
 
@@ -210,13 +210,14 @@ static void qname_seg_initialize_do (VBlockP vb, QnameFlavor qfs, QnameFlavor qf
     stats_set_consolidation_(vb, st_did_i, num_qname_items+1, qname_ctxs); 
 
     // set STORE_INT as appropriate
-    if (qfs->ordered_item1  != -1) CTX(qname_did_i + 1 + qfs->ordered_item1)->flags.store = STORE_INT; 
-    if (qfs->ordered_item2  != -1) CTX(qname_did_i + 1 + qfs->ordered_item2)->flags.store = STORE_INT; 
-    if (qfs->range_end_item != -1) CTX(qname_did_i + 1 + qfs->range_end_item - 1)->flags.store = STORE_INT; 
+    int ctx_delta = (qname_did_i == FASTQ_QNAME2 ? (FASTQ_QNAME2 - FASTQ_DESC) : 0); // con.items[] are expressed relative to QNAME, for QNAME2, we need to shift this much
+    if (qfs->ordered_item1  != -1) (ctx_delta + ctx_get_ctx (vb, qfs->con.items[qfs->ordered_item1].dict_id))   ->flags.store = STORE_INT; 
+    if (qfs->ordered_item2  != -1) (ctx_delta + ctx_get_ctx (vb, qfs->con.items[qfs->ordered_item2].dict_id))   ->flags.store = STORE_INT; 
+    if (qfs->range_end_item != -1) (ctx_delta + ctx_get_ctx (vb, qfs->con.items[qfs->range_end_item-1].dict_id))->flags.store = STORE_INT; 
 
-    // // no singletons for in_local items
-    // for (int i=0; qfs->in_local[i] != -1; i++)
-    //     qname_ctxs[qfs->in_local[i]]->no_stons = true;
+    // no singletons for in_local items
+    for (int i=0; qfs->in_local[i] != -1; i++)
+        (ctx_delta + ctx_get_ctx (vb, qfs->con.items[qfs->in_local[i]].dict_id))->no_stons = true;
 
     if (qfs->qname2 != -1 && qfs2)
         qname_seg_initialize_do (vb, qfs2, NULL, FASTQ_QNAME2, st_did_i, num_qname_items-1/*-1 bc no mate*/, pairing);
@@ -379,7 +380,6 @@ bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, QnameFlavor qfs, STRp(qname),
         }
 
         else if (qfs->is_in_local[item_i] && !flag.pair) { // note: we can't store in local if pairing        
-            // item_ctx->no_stons = true; // to do: move this to qname_initialize
             if (qfs->is_int[item_i] || qfs->is_numeric[item_i])
                 seg_integer_or_not (vb, item_ctx, STRi(item, item_i), item_lens[item_i]);
 

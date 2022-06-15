@@ -34,8 +34,9 @@ void bam_seg_initialize (VBlockP vb)
     BAFTtxt[0] = '*'; // QUAL_MISSING_STANDARD;
     BAFTtxt[1] = 127; // QUAL_MISSING_PYSAM;
 
-    if (!segconf.running && segconf.has[OPTION_MC_Z])
-        buf_alloc (vb, &VB_SAM->mate_textual_cigars, 0, segconf.sam_cigar_len * vb->lines.len, char, CTX_GROWTH, "mate_textual_cigars");
+    if (!segconf.running && line_textual_cigars_used)
+        buf_alloc (vb, &VB_SAM->line_textual_cigars, 0, segconf.sam_cigar_len * vb->lines.len32 / (segconf.is_long_reads ? 4 : 1),/*divide in case sam_cigar_len is not representative*/
+                   char, CTX_GROWTH, "line_textual_cigars");
 }
 
 static int32_t bam_unconsumed_scan_forwards (VBlockP vb)

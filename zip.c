@@ -18,7 +18,6 @@
 #include "context.h"
 #include "zip.h"
 #include "seg.h"
-#include "base250.h"
 #include "random_access.h"
 #include "dict_id.h"
 #include "reference.h"
@@ -117,52 +116,69 @@ static void zip_display_compression_ratio (Digest md5)
 // of the VB's node_index (that is private to this VB)
 // 2) We optimize the representation of word_index giving privilage to 3 popular words (the most popular
 //    words in VB=1) to be represented by a single byte
-static inline void zip_generate_one_b250 (VBlockP vb, ContextP ctx, uint32_t word_i, WordIndex node_index,
-                                          BufferP b250_buf, 
+static inline void zip_generate_one_b250 (VBlockP vb, ContextP ctx, uint32_t word_i, WordIndex word_index,
+                                          uint8_t **next, 
                                           WordIndex *prev_word_index,  // in/out
                                           bool show)
 {
-    if (node_index >= 0) { // normal index
+    if (word_index >= 0) { // normal index
 
-        Base250 b250 = ctx_node_vb (ctx, node_index, NULL, NULL)->word_index;
+        bool one_up = (word_index == *prev_word_index + 1) && (word_i > 0);
 
-        WordIndex n           = b250.n;
-        unsigned num_numerals = base250_len (b250.encoded.numerals);
-        uint8_t *numerals     = b250.encoded.numerals;
-        
-        bool one_up = (n == *prev_word_index + 1) && (word_i > 0);
-
-        if (one_up) { // note: we can't do SEC_VCF_GT_DATA bc we can't PIZ it as many GT data types are in the same section 
-            BNXT(uint8_t, *b250_buf) = (uint8_t)BASE250_ONE_UP;
-            if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:ONE_UP ", word_i);
+        if (one_up) {
+            (*next)[0] = BASE250_ONE_UP;
+            (*next)++;
         }
 
-        else {
-            if (num_numerals == 4) { // assign word byte by byte, as it is not word-boundary aligned
-                memcpy (BAFTc (*b250_buf), numerals, 4); // hopefully the compiler will optimize this memcpy and it won't e a function call...
-                b250_buf->len += 4;
-            } 
-            else
-                BNXT8 (*b250_buf) = *numerals;
-
-            if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:%u ", word_i, n);
+        else if (ctx->b250_size == B250_BYTES_1) {
+            (*next)[0] = word_index;
+            (*next)++;
         }
-        *prev_word_index = n;
+
+        else if (word_index <= 2) { // note: we don't use MOST_FREQ in case BYTES_1
+            (*next)[0] = BASE250_MOST_FREQ0 + word_index;
+            (*next)++;
+        }
+
+        else if (ctx->b250_size == B250_BYTES_2) {
+            (*next)[0] = word_index >> 8; // big endian. note: data not aligned to word boundary
+            (*next)[1] = word_index & 0xff;
+            (*next) += 2;
+        }
+            
+        else if (ctx->b250_size == B250_BYTES_3) {
+            (*next)[0] = (word_index >> 16); 
+            (*next)[1] = (word_index >> 8 ) & 0xff;
+            (*next)[2] = (word_index >> 0 ) & 0xff;
+            (*next) += 3;
+        }
+            
+        else { // 4 bytes
+            (*next)[0] = (word_index >> 24); 
+            (*next)[1] = (word_index >> 16) & 0xff;
+            (*next)[2] = (word_index >> 8 ) & 0xff;
+            (*next)[3] = (word_index >> 0 ) & 0xff;
+            (*next) += 4;
+        }
+
+        if (show) bufprintf (vb, &vb->show_b250_buf, one_up ? "L%u:ONE_UP " : "L%u:%u ", word_i, word_index);
     }
 
-    else if (node_index == WORD_INDEX_MISSING) {
-        BNXT(uint8_t, *b250_buf) = (uint8_t)BASE250_MISSING_SF;
-        *prev_word_index = node_index;
+    else if (word_index == WORD_INDEX_MISSING) {
+        (*next)[0] = BASE250_MISSING_SF;
+        (*next)++;
         if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:MISSING ", word_i);
     }
     
-    else if (node_index == WORD_INDEX_EMPTY) {
-        BNXT(uint8_t, *b250_buf) = (uint8_t)BASE250_EMPTY_SF;
-        *prev_word_index = node_index;
+    else if (word_index == WORD_INDEX_EMPTY) {
+        (*next)[0] = BASE250_EMPTY_SF;
+        (*next)++;
         if (show) bufprintf (vb, &vb->show_b250_buf, "L%u:EMPTY ", word_i);
     }
 
-    else ABORT ("invalid node_index=%u", node_index);        
+    else ABORT ("invalid word_index=%u", word_index);        
+
+    *prev_word_index = word_index;
 }
 
 // here we generate the b250 data: we convert the b250 buffer data from an index into context->nodes
@@ -190,13 +206,28 @@ static void zip_generate_b250 (VBlockP vb, Context *ctx)
     else
         if (flag.debug_generate) iprintf ("%s: %s.b250 len=%"PRIu64" all_the_same=%u\n", VB_NAME, ctx->tag_name, ctx->b250.len, ctx->flags.all_the_same);
 
+    // replace node indices with word indices
+    WordIndex largest_wi=0;
+    for_buf (WordIndex, ent, ctx->b250) 
+        if (*ent >= 0) 
+            if ((*ent = ctx_node_vb (ctx, *ent, NULL, NULL)->word_index) > largest_wi)
+                largest_wi = *ent;
+    
+    // determine size of word_index elements
+    ctx->b250_size = (largest_wi <= B250_MAX_WI_1BYTE ) ? B250_BYTES_1
+                   : (largest_wi <= B250_MAX_WI_2BYTES) ? B250_BYTES_2
+                   : (largest_wi <= B250_MAX_WI_3BYTES) ? B250_BYTES_3
+                   :                                      B250_BYTES_4;
+    
     ARRAY (WordIndex, b250, ctx->b250);
     ctx->b250.len = 0; // we are going to overwrite b250 with the converted indices
 
     // convert b250 from an array of node_index (4 bytes each) to word_index (1-4 bytes each)    
-    WordIndex prev = WORD_INDEX_NONE; 
-    for (uint64_t word_i=0; word_i < b250_len; word_i++) 
-        zip_generate_one_b250 (vb, ctx, word_i, b250[word_i], &ctx->b250, &prev, show);
+    WordIndex prev_word_index = WORD_INDEX_NONE; 
+    uint8_t *next = B1ST8 (ctx->b250);
+    for (uint64_t i=0; i < b250_len; i++) 
+        zip_generate_one_b250 (vb, ctx, i, b250[i], &next, &prev_word_index, show);
+    ctx->b250.len = BNUM (ctx->b250, next);
 
     // in case we are pairing b250 - check if entire section is identical - and reduce it to all-the-same FASTQ_SPECIAL_mate_lookup if it is
     if (ctx->pair_b250 && !ctx->flags.all_the_same &&
@@ -395,7 +426,7 @@ static void zip_generate_local (VBlockP vb, ContextP ctx)
         bool need_lten = (ctx->local_is_lten && !flag.is_lten);
         
         switch (ctx->ltype) {
-            case LT_BITMAP    : LTEN_bit_array (buf_get_bitarray (&ctx->local));    
+            case LT_BITMAP    : LTEN_bits (buf_get_bitarray (&ctx->local));    
                                 ctx->local.prm8[0] = ((uint8_t)64 - (uint8_t)(ctx->local.nbits % 64)) % (uint8_t)64;
                                 ctx->local_param   = true;
                                 break;
@@ -875,7 +906,7 @@ finish:
 
         if (chain_is_loaded && !Z_DT(DT_CHAIN)) vcf_liftover_display_lift_report();
     }
-//xxx TODO fix progress here - no more binding - always just one
+
     zip_display_compression_ratio (digest_snapshot (&z_file->digest_ctx, NULL)); // Done for reference + final compression ratio calculation
     
     if (flag.md5 && flag.bind && z_file->z_closes_after_me &&

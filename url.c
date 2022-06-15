@@ -265,21 +265,46 @@ void url_kill_curl (void)
 }
 
 // make a string into a a string containing only valid url characters, eg "first last" -> "first%20last"
-char *url_esc_non_valid_chars_(rom in, char *out/*malloced if NULL*/)
+char *url_esc_non_valid_chars_(rom in, char *out/*malloced if NULL*/, bool esc_all_or_none)
 {
     if (!out) out = MALLOC (strlen(in) * 3 + 1);
     char *next = out;
+    rom save_in = in;
+    bool any_invalid=false;
 
     for (; *in; in++) {
-        if (IS_VALID_URL_CHAR(*in)) 
-            *(next++) = *in;
+        if (IS_VALID_URL_CHAR(*in)) {
+            if (esc_all_or_none) {
+                sprintf (next, "%%%02X", (unsigned char)*in);
+                next +=3;
+            }
+            else
+                *(next++) = *in;
+        }
 
         else {
-            sprintf (next, "%%%02X", *in);
+            sprintf (next, "%%%02X", (unsigned char)*in);
             next +=3;
+            any_invalid = true;
         }
     }
     *next = '\0';
 
+    if (esc_all_or_none && !any_invalid)
+        strcpy (out, save_in);
+
+    return out;
+}
+
+UrlStr url_esc_non_valid_charsS (rom in) // for short strings - on stack
+{
+    rom esc = url_esc_non_valid_chars_(in, NULL, false); // note: might be longer than UrlStr
+    
+    UrlStr out;
+    int out_len = MIN_(sizeof (out.s)-1, strlen(esc)); // trim if needed
+    memcpy (out.s, esc, out_len);
+    out.s[out_len] = 0;
+    
+    FREE (esc);
     return out;
 }

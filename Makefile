@@ -31,8 +31,8 @@ endif
 
 SRC_DIRS = zlib bzlib lzma bsc libdeflate htscodecs compatibility
 
-MY_SRCS = genozip.c genols.c base250.c context.c container.c strings.c stats.c arch.c license.c 				\
-		  data_types.c bit_array.c progress.c writer.c tar.c chrom.c qname.c tokenizer.c 						\
+MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c license.c 				\
+		  data_types.c bits.c progress.c writer.c tar.c chrom.c qname.c tokenizer.c 						\
           zip.c piz.c reconstruct.c recon_history.c seg.c zfile.c aligner.c flags.c digest.c mutex.c threads.c 	\
 		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c 						\
 		  vcf_piz.c vcf_seg.c vcf_gt.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c 		\
@@ -67,8 +67,8 @@ CONDA_DEVS = Makefile .gitignore
 
 CONDA_DOCS = LICENSE.txt AUTHORS README.md
 
-CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h bit_array.h progress.h website.h \
-             base250.h endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h \
+CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h bits.h progress.h website.h \
+             endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h \
              buffer.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h codec.h stats.h \
              crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h qname.h qname_flavors.h \
 			 lookback.h tokenizer.h codec_longr_alg.c gencomp.h dict_io.h recon_plan_io.h \

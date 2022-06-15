@@ -59,7 +59,7 @@ void ref_make_create_range (VBlockP vb)
 
     // at this point, we don't yet know the first/last pos or the chrom - we just create the 2bit sequence array.
     // the missing details will be added during ref_make_prepare_range_for_compress
-    r->ref = bit_array_alloc (seq_len * 2, false); // 2 bits per base
+    r->ref = bits_alloc (seq_len * 2, false); // 2 bits per base
     r->range_id = vb->vblock_i-1;
 
     uint64_t bit_i=0;
@@ -71,10 +71,7 @@ void ref_make_create_range (VBlockP vb)
         bytes line_seq = B8 (vb->txt_data, seq_data_start);
         for (uint64_t base_i=0; base_i < seq_len; base_i++, bit_i += 2) {
             char base = line_seq[base_i];
-            bit_array_assign2 (&r->ref, bit_i, acgt_encode[(int)base]); 
-            // uint8_t encoding = acgt_encode[(int)base];
-            //xxx bit_array_assign (&r->ref, bit_i, encoding & 1);
-            // bit_array_assign (&r->ref, bit_i + 1, (encoding >> 1) & 1);
+            bits_assign2 (&r->ref, bit_i, acgt_encode[(int)base]); 
 
             // store very rare IUPAC bases (GRCh38 has 94 of them)
             ref_iupacs_add (vb, bit_i/2, base);

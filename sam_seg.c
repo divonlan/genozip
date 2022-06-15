@@ -111,7 +111,7 @@ void sam_zip_init_vb (VBlockP vb)
 {
     vb->chrom_node_index = NODE_INDEX_NONE;    
 
-    // note: we test for sorted and not collated, because we want non-sorted long read files (which are are non-collated)
+    // note: we test for sorted and not collated, because we want non-sorted long read files (which are collated)
     // to seg depn against same-VB prim (i.e. not gencomp) - as the depn lines will follow the prim line
     VB_SAM->check_for_gc = (!segconf.running && !flag.no_gencomp && segconf.sam_is_sorted && !segconf.sam_is_collated && 
                              vb->comp_i == SAM_COMP_MAIN);
@@ -472,6 +472,8 @@ void sam_seg_finalize (VBlockP vb)
         segconf.sam_multi_RG  = CTX(OPTION_RG_Z)->nodes.len32 >= 2; 
         segconf.sam_cigar_len = 1 + ((segconf.sam_cigar_len-1) / vb->lines.len32); // set to the average CIGAR len (rounded up)
         segconf.sam_seq_len   = (uint32_t)(0.5 + (double)segconf.sam_seq_len / (double)vb->lines.len32); // set average seq_len - rounded to the nearest 
+
+        segconf.is_long_reads = segconf_is_long_reads();
 
         if (segconf.is_long_reads) {
 

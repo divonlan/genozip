@@ -351,7 +351,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
                            WordIndex word_index, // WORD_INDEX_NONE if not used.
                            STRp(snip), bool reconstruct) // if false, calculates last_value but doesn't output to vb->txt_data)
 {
-    ValueType new_value = {0};
+    ValueType new_value = {};
     HasNewValue has_new_value = NO_NEW_VALUE;
     int64_t prev_value = snip_ctx->last_value.i;
     ContextP base_ctx = snip_ctx; // this will change if the snip refers us to another data source

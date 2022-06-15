@@ -46,7 +46,7 @@ static inline void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char ref, char alt
                 new_ref = '-'; // this should always be the case...
 
             if (flag.reference == REF_EXT_STORE)
-                bit_array_set (&range->is_set, index_within_range);
+                bits_set (&range->is_set, index_within_range);
 
             ref_unlock (gref, lock); // does nothing if REFLOCK_NONE
         }

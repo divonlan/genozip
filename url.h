@@ -23,19 +23,10 @@ extern void url_get_redirect (rom url, STRc(redirect_url));
 
 extern void url_kill_curl (void);
 
-extern char *url_esc_non_valid_chars_(rom in, char *out);
-static inline char *url_esc_non_valid_chars (rom in) { return url_esc_non_valid_chars_ (in, NULL); } // on heap
+extern char *url_esc_non_valid_chars_(rom in, char *out, bool esc_all_or_none);
+static inline char *url_esc_non_valid_chars (rom in) { return url_esc_non_valid_chars_ (in, NULL, false); } // on heap
 
-typedef struct { char s[256]; } UrlStr;
-static inline UrlStr url_esc_non_valid_charsS (rom in) // for short strings - on stack
-{
-    rom esc = url_esc_non_valid_chars_(in, NULL); // note: might be longer than UrlStr
-    
-    UrlStr out;
-    int out_len = MIN_(sizeof (out.s)-1, strlen(esc)); // trim if needed
-    memcpy (out.s, esc, out_len);
-    out.s[out_len] = 0;
-    
-    FREE (esc);
-    return out;
-}
+static inline char *url_esc_all_or_none (rom in) { return url_esc_non_valid_chars_ (in, NULL, true); } // on heap
+
+typedef struct { char s[1024]; } UrlStr;
+extern UrlStr url_esc_non_valid_charsS (rom in); // for short strings - on stack

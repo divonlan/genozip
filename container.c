@@ -405,7 +405,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
 
             // filtered out by writer based on --lines, --head or --tail
             bool dropped_by_writer = false;
-            if (!vb->drop_curr_line && vb->is_dropped && bit_array_get (vb->is_dropped, rep_i)) {
+            if (!vb->drop_curr_line && vb->is_dropped && bits_get (vb->is_dropped, rep_i)) {
                 vb->drop_curr_line = "lines/head/tail";
                 dropped_by_writer = true;
             }
@@ -440,7 +440,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
                     !(Z_DT(DT_SAM) && sam_is_prim_vb)) // if SAM:PRIM line, we still need it to reconstruct its DEPNs
                     vb->txt_data.len = vb->line_start;
 
-                bit_array_set (vb->is_dropped, rep_i);
+                bits_set (vb->is_dropped, rep_i);
 
                 reconstruct_copy_dropped_line_history (vb);
             }

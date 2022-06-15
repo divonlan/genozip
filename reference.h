@@ -8,7 +8,7 @@
 #include "genozip.h"
 #include "buffer.h"
 #include "digest.h"
-#include "bit_array.h"
+#include "bits.h"
 #include "flags.h"
 #include "sections.h"
 
@@ -23,8 +23,8 @@
 
 typedef struct Range {
     uint32_t range_id;           // index of range within Buffer ranges
-    BitArray ref;                // actual reference data - 2-bit array
-    BitArray is_set;             // a 1-bit array - SEG: a pos is set if seg set this reference PIZ: is set if SEC_REF_IS_SET said so
+    Bits ref;                // actual reference data - 2-bit array
+    Bits is_set;             // a 1-bit array - SEG: a pos is set if seg set this reference PIZ: is set if SEC_REF_IS_SET said so
     int64_t num_set;             // used by ref_prepare_range_for_compress: number of set bits in in_set
     STR (chrom_name);
     WordIndex chrom;             // index to the contig of the in the CHROM of the file from which this reference was loaded.
@@ -88,7 +88,7 @@ extern rom ref_get_filename (const Reference ref);
 extern uint8_t ref_get_genozip_version (const Reference ref);
 extern BufferP ref_get_stored_ra (Reference ref);
 extern Digest ref_get_file_md5 (const Reference ref);
-extern void ref_get_genome (Reference ref, const BitArray **genome, const BitArray **emoneg, PosType *genome_nbases);
+extern void ref_get_genome (Reference ref, const Bits **genome, const Bits **emoneg, PosType *genome_nbases);
 extern void ref_set_genome_is_used (Reference ref, PosType gpos, uint32_t len);
 
 // ZIPping a reference
@@ -128,16 +128,14 @@ extern const uint8_t acgt_encode_comp[256];
 
 // note that the following work on idx and not pos! (idx is the index within the range)
 static inline void ref_set_nucleotide (RangeP range, uint32_t idx, uint8_t value) 
-    { bit_array_assign2 (&range->ref, idx*2, acgt_encode[value]); }
-//xxx { bit_array_assign (&range->ref, idx * 2,      acgt_encode[value] & 1)       ; 
-//   bit_array_assign (&range->ref, idx * 2 + 1, (acgt_encode[value] & 2) >> 1) ; }
+    { bits_assign2 (&range->ref, idx*2, acgt_encode[value]); }
 
-static inline bool ref_is_nucleotide_set (ConstRangeP range, uint32_t idx) { return (bool)bit_array_get (&range->is_set, idx); }
+static inline bool ref_is_nucleotide_set (ConstRangeP range, uint32_t idx) { return (bool)bits_get (&range->is_set, idx); }
 
 static inline bool ref_is_idx_in_range (ConstRangeP range, uint32_t idx) { return idx < range->ref.nbits / 2; }
 
 static inline char acgt_decode (uint8_t b2) { switch (b2) { case 0:return'A' ; case 1:return'C' ; case 2:return'G' ; default:return'T'; }}
-static inline char base_by_idx (ConstBitArrayP bitarr, uint64_t idx) { return acgt_decode (bit_array_get2 (bitarr, idx * 2)); } 
+static inline char base_by_idx (ConstBitsP bitarr, uint64_t idx) { return acgt_decode (bits_get2 (bitarr, idx * 2)); } 
 static inline char ref_base_by_idx (ConstRangeP range, uint64_t idx) { return base_by_idx (&range->ref, idx); }
 static inline char ref_base_by_pos (ConstRangeP range, PosType pos)  { return ref_base_by_idx (range, pos - range->first_pos); }
 
@@ -155,7 +153,7 @@ static inline void ref_assert_nucleotide_available (ConstRangeP range, PosType p
 typedef struct { char s[300]; } RangeStr;
 extern RangeStr ref_display_range (ConstRangeP r);
 extern void ref_display_all_ranges (Reference ref);
-extern void ref_print_bases_region (FILE *file, ConstBitArrayP bitarr, ConstBitArrayP is_set, PosType first_pos, uint64_t start_base, uint64_t num_of_bases, bool is_forward);
+extern void ref_print_bases_region (FILE *file, ConstBitsP bitarr, ConstBitsP is_set, PosType first_pos, uint64_t start_base, uint64_t num_of_bases, bool is_forward);
 extern void ref_print_subrange (rom msg, const Range *r, PosType start_pos, PosType end_pos, FILE *file);
 extern void ref_print_is_set (const Range *r, PosType around_pos, FILE *file);
 extern char *ref_dis_subrange (Reference ref, const Range *r, PosType start_pos, PosType len, char *seq, bool revcomp);

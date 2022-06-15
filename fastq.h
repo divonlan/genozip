@@ -97,13 +97,14 @@ extern void fastq_vb_release_vb();
 extern void fastq_vb_destroy_vb();
 extern unsigned fastq_vb_size (DataType dt);
 extern unsigned fastq_vb_zip_dl_size (void);
+extern void fastq_reset_line (VBlockP vb);
 
 // file pairing (--pair) stuff
 extern bool fastq_read_pair_1_data (VBlockP vb, uint32_t pair_vb_i, bool must_have);
 
 #define FASTQ_LOCAL_GET_LINE_CALLBACKS           \
-    { DT_FASTQ, _FASTQ_QUAL,   fastq_zip_qual }, \
-    { DT_FASTQ, _FASTQ_NONREF, fastq_zip_seq  },
+    { DT_FASTQ, _FASTQ_QUAL,   fastq_zip_qual }, 
+ // { DT_FASTQ, _FASTQ_NONREF, fastq_zip_seq  },  this callback is called directly from codec_longr, it is not added to the list, since it should NOT be called in other codecs
 
 typedef enum { FQ_COMP_R1, FQ_COMP_R2 } FastqComponentType;
 #define FASTQ_COMP_NAMES { "FQR1", "FQR2" }

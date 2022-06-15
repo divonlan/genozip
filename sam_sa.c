@@ -24,7 +24,7 @@
 // SEG
 //---------
 
-// Seg: get item from prim line's SA:Z - of the alignment predicted to correspond to the current line7
+// Seg: get item from prim line's SA:Z - of the alignment predicted to correspond to the current line
 bool sam_seg_SA_get_prim_item (VBlockSAMP vb, int sa_item_i, pSTRp(out))
 {
     // in collated files, normally the location of a depn with a SA:Z string is mirrored in its line following the prim line.
@@ -57,7 +57,7 @@ bool sam_seg_is_item_predicted_by_prim_SA (VBlockSAMP vb, int sa_item_i, int64_t
            sa_item == value;
 }
 
-static inline bool sam_seg_SA_field_is_line_matches_aln (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(aln))
+static inline bool sam_seg_SA_field_is_line_matches_aln (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(aln), bool is_bam)
 {
     if (dl->RNAME == WORD_INDEX_NONE) return false; // RNAME="*" for this line
 
@@ -81,7 +81,27 @@ static inline bool sam_seg_SA_field_is_line_matches_aln (VBlockSAMP vb, ZipDataL
         !str_get_int (STRi(item, SA_MAPQ), &aln_mapq) || aln_mapq != dl->MAPQ ||
         !str_get_int (STRi(item, SA_NM),   &aln_nm)   || aln_nm   != dl->NM) return false;
 
-    return true;
+    // cigar
+    return str_issame_(line_cigar(dl), dl->CIGAR.len, STRi(item, SA_CIGAR));
+}
+
+static inline void sam_seg_set_depn_clip_hard (VBlockSAMP vb)
+{
+    if (vb->depn_clipping_type != DEPN_CLIP_UNKNOWN) return; // already set
+
+    if (vb->hard_clip[0] || vb->hard_clip[1]) {
+        vb->depn_clipping_type = DEPN_CLIP_HARD;
+        CTX(OPTION_SA_Z)->flags.depn_clip_hard = true; // if a depn in this VB has a clipping, it is a H clip.
+    }
+
+    else if (vb->soft_clip[0] || vb->soft_clip[1]) {
+        vb->depn_clipping_type = DEPN_CLIP_SOFT;
+        CTX(OPTION_SA_Z)->flags.depn_clip_hard = false; // if a depn in this VB has a clipping, it is a S clip.
+    }
+
+    // note: CIGAR cannot have both S and H - this is blocked in sam_cigar_analyze (even though valid per SAM specification)
+
+    // note: if CIGAR has neither S or H, depn_clipping_type remains DEPN_CLIP_UNKNOWN
 }
 
 static bool sam_seg_SA_field_is_depn_from_prim (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(depn_sa))
@@ -101,38 +121,26 @@ static bool sam_seg_SA_field_is_depn_from_prim (VBlockSAMP vb, ZipDataLineSAM *d
 
     if (n_prim_alns != n_depn_alns) return false; // different number of alignments
 
+    sam_seg_set_depn_clip_hard (vb); 
+
+    // case: depn line has unexpected type of clipping - can't seg it against prim
+    if ((vb->depn_clipping_type == DEPN_CLIP_SOFT && (vb->hard_clip[0] || vb->hard_clip[1])) || 
+        (vb->depn_clipping_type == DEPN_CLIP_HARD && (vb->soft_clip[0] || vb->soft_clip[1])))
+            return false; 
+
     // Step 1: verify that the prim line matches the first alignment in the depn SA
-    if (!sam_seg_SA_field_is_line_matches_aln (vb, prim_dl, STRi(depn_aln, 0)))
+    if (!sam_seg_SA_field_is_line_matches_aln (vb, prim_dl, STRi(depn_aln, 0), is_bam))
         return false;
 
     // Step 2: verify that one of the alignments of the prim SA matches the depn line
 
-    // temporarily replace H with S
-    HtoS htos = sam_cigar_H_to_S (vb, is_bam ? vb->textual_cigar.data : Btxt (dl->CIGAR.index), 
-                                      is_bam ? vb->textual_cigar.len  : dl->CIGAR.len);
-
-    if (vb->hard_clip[0] || vb->hard_clip[1]) {
-        if (vb->depn_clipping_type == DEPN_CLIP_UNKNOWN) {
-            vb->depn_clipping_type = DEPN_CLIP_HARD;
-            CTX(OPTION_SA_Z)->flags.depn_clip_hard = true; // if a depn in this VB has a clipping, it is a H clip.
-        }
-        else if (vb->depn_clipping_type == DEPN_CLIP_SOFT)
-            return false; // depn line has unexpected type of clipping - can't seg it against prim
-    }
-
-    if (vb->soft_clip[0] || vb->soft_clip[1]) {
-        if (vb->depn_clipping_type == DEPN_CLIP_UNKNOWN) {
-            vb->depn_clipping_type = DEPN_CLIP_SOFT;
-            CTX(OPTION_SA_Z)->flags.depn_clip_hard = false; // if a depn in this VB has a clipping, it is a S clip.
-        }
-        else if (vb->depn_clipping_type == DEPN_CLIP_HARD)
-            return false; // depn line has unexpected type of clipping - can't seg it against prim
-    }
+    // temporarily replace H with S in this (depn) line's CIGAR
+    HtoS htos = sam_cigar_H_to_S (vb, line_cigar(dl), dl->CIGAR.len, false); // points to txt_data in SAM, line_textual_cigars in BAM
 
     // to do: improve effeciency by testing first the predicted alignment (vb->line-vb->prim_line_i-1)
     int depn_i=0; // index of depn alignment within prim SA
     for (; depn_i < n_prim_alns; depn_i++)
-        if (sam_seg_SA_field_is_line_matches_aln (vb, dl, STRi(prim_aln, depn_i))) break; // found
+        if (sam_seg_SA_field_is_line_matches_aln (vb, dl, STRi(prim_aln, depn_i), is_bam)) break; // found
 
     sam_cigar_restore_H (htos); // restore
 
@@ -198,7 +206,8 @@ void sam_SA_Z_seg (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa))
         ctx->txt_len++; // \t in SAM and \0 in BAM 
 
         // We already tested the SA to be good when we added this line to PRIM in sam_seg_prim_add_sa_group_SA
-        ASSSEG (num_alns >= 2 && num_alns <= MAX_SA_NUM_ALNS, sa, "%s: Not expecting a malformed SA field in PRIM. SA:Z=\"%.*s\"", LN_NAME, STRf(sa));
+        ASSSEG (num_alns >= 2 && num_alns <= MAX_SA_NUM_ALNS, sa, "%s: Not expecting a malformed SA field in PRIM. num_alns=%u SA:Z=\"%.*s\"", 
+                LN_NAME, num_alns, STRf(sa));
 
         // use SA.local to store number of alignments in this SA Group (inc. primary)
         uint8_t num_alns_8b = num_alns;
@@ -254,7 +263,7 @@ static inline bool sam_piz_SA_field_is_line_matches_aln (VBlockSAMP vb, ContextP
     ASSPIZ (n_items == NUM_SA_ITEMS, "Invalid SA alignment: %.*s", STRf(aln));
 
     // temporarily replace S with H
-    StoH stoh = ctx->flags.depn_clip_hard ? sam_cigar_S_to_H (vb, (char*)STRi(item, SA_CIGAR)) : (StoH){};
+    StoH stoh = ctx->flags.depn_clip_hard ? sam_cigar_S_to_H (vb, (char*)STRi(item, SA_CIGAR), false) : (StoH){};
 
     // pos, mapq, nm
     int64_t aln_pos, aln_mapq, aln_nm;

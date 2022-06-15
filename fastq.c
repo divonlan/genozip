@@ -263,6 +263,9 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
 
 void fastq_seg_finalize (VBlockP vb)
 {
+    if (segconf.running)
+        segconf.is_long_reads = segconf_is_long_reads();
+
     // assign the QUAL codec
     codec_assign_best_qual_codec (vb, FASTQ_QUAL, fastq_zip_qual, false);
 
@@ -422,7 +425,7 @@ static void fastq_get_pair_1_gpos_strand (VBlockFASTQ *vb, PosType *pair_gpos, b
                 LN_NAME, (unsigned)strand_ctx->pair.nbits);
 
         *pair_gpos = (PosType)*B32 (gpos_ctx->pair, gpos_ctx->pair.next); 
-        *pair_is_forward = bit_array_get ((BitArrayP)&strand_ctx->pair, gpos_ctx->pair.next); 
+        *pair_is_forward = bits_get ((BitsP)&strand_ctx->pair, gpos_ctx->pair.next); 
         gpos_ctx->pair.next++;
     }
 }
@@ -453,10 +456,9 @@ static void fastq_seg_sequence (VBlockFASTQ *vb, STRp(seq))
 
         // case: we don't need to consume pair-1 gpos (bc we are pair-1, or pair-1 was not aligned): look up from NONREF
         SNIPi2 (SNIP_SPECIAL, FASTQ_SPECIAL_unaligned_SEQ, seq_len);
-        seg_by_ctx (VB, STRa(snip), CTX(FASTQ_SQBITMAP), 0); 
+        seg_by_ctx (VB, STRa(snip), CTX(FASTQ_SQBITMAP), 0); // note: FASTQ_SQBITMAP is always segged whether read is aligned or not
         CTX(FASTQ_NONREF)->txt_len += seq_len; // account for the txt data in NONREF
     }
-
 }
 
 // concept: we treat every 4 lines as a "line". the Description/ID is stored in DESC dictionary and segmented to subfields D?ESC.
@@ -702,7 +704,7 @@ static void fastq_update_coverage_aligned (VBlockFASTQ *vb)
         reconstruct_from_ctx (VB, FASTQ_GPOS, 0, false); // calls fastq_special_PAIR2_GPOS
         gpos = gpos_ctx->last_value.i;
     }
-
+    
     ASSPIZ0 (gpos != NO_GPOS, "expecting a GPOS, because sequence is aligned");
 
     WordIndex ref_index = ref_contig_get_by_gpos (gref, gpos, NULL);
@@ -715,11 +717,28 @@ static void fastq_update_coverage_aligned (VBlockFASTQ *vb)
         (*B64 (vb->read_count, ref_index))++;
 }
 
-// PIZ: aligned SEQ reconstruction - called by reconstructing FASTQ_SQBITMAP which is a LOOKUP
+// called when reconstructing R2, to check if R1 is aligned
+static bool fastq_piz_R1_test_aligned (VBlockP vb)
+{
+    ContextP ctx = CTX(FASTQ_SQBITMAP);
+
+    // case we are pair-2: advance pair-1 SQBITMAP iterator, and if pair-1 is aligned - also its GPOS iterator
+    if (ctx->pair1_is_aligned == PAIR1_ALIGNED_UNKNOWN) { // case: not already set by fastq_special_mate_lookup
+        STR(snip);
+        ctx_get_next_snip (vb, ctx, true, pSTRa(snip));
+        ctx->pair1_is_aligned = (snip_len && *snip == SNIP_LOOKUP) ? PAIR1_ALIGNED : PAIR1_NOT_ALIGNED;
+    }
+    
+    return (ctx->pair1_is_aligned == PAIR1_ALIGNED);
+}
+
+// PIZ: aligned SEQ reconstruction - called by reconstructing FASTQ_SQBITMAP which is a LOOKUP (either directly, or via fastq_special_mate_lookup)
 void fastq_recon_aligned_SEQ (VBlockP vb_, ContextP bitmap_ctx, STRp(seq_len_str), bool reconstruct)
 {
     VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
 
+    fastq_piz_R1_test_aligned (VB); // set pair1_is_aligned
+    
     // v14: perfect alignment is expressed by a negative seq_len
     bool perfect_alignment = (seq_len_str[0] == '-');
     if (perfect_alignment) { seq_len_str++; seq_len_str_len--; }
@@ -742,8 +761,9 @@ void fastq_recon_aligned_SEQ (VBlockP vb_, ContextP bitmap_ctx, STRp(seq_len_str
 SPECIAL_RECONSTRUCTOR (fastq_special_unaligned_SEQ)
 {
     // case we are pair-2: advance pair-1 SQBITMAP iterator, and if pair-1 is aligned - also its GPOS iterator
-    if (vb->comp_i == FQ_COMP_R2 && CTX(FASTQ_SQBITMAP)->pair1_is_aligned)
-        CTX(FASTQ_GPOS)->pair.next++;
+    if (vb->comp_i == FQ_COMP_R2)
+        if (fastq_piz_R1_test_aligned (vb) || !VER(14)) // up to v13, even non-aligned reads had a GPOS entry
+            CTX(FASTQ_GPOS)->pair.next++; // gpos_ctx->pair.next is an iterator for both gpos and strand
 
     // just update coverage (unaligned)
     if (flag.collect_coverage) {
@@ -819,8 +839,8 @@ SPECIAL_RECONSTRUCTOR (fastq_special_PAIR2_GPOS)
 {
     // case: no delta
     if (!snip_len) {
-        if (CTX(FASTQ_SQBITMAP)->pair1_is_aligned)  // always false up to v13
-            ctx->pair.next++; // we didn't use this pair value (since v14, only aligned lines have a GPOS value; up to v13 all lines had a GPOS value)
+        if (CTX(FASTQ_SQBITMAP)->pair1_is_aligned == PAIR1_ALIGNED)
+            ctx->pair.next++; // we didn't use this pair value 
 
         new_value->i = NEXTLOCAL(uint32_t, ctx);
     }
@@ -843,20 +863,21 @@ bool fastq_piz_get_pair2_is_forward (VBlockP vb)
 {
     ContextP ctx = CTX(FASTQ_STRAND);
 
-    if (!VER(14)) { // up to v13, all lines had a is_forward value
-        bool is_forward_pair_1 = bit_array_get ((BitArrayP)&ctx->pair, vb->line_i); // up to v13, all lines had strand, which was 0 if unaligned
+    // case: paired read (including all reads in up to v13) - diff vs pair1
+    if (CTX(FASTQ_SQBITMAP)->pair1_is_aligned == PAIR1_ALIGNED) { // always true for files up to v13 and all lines had a is_forward value
+
+        bool is_forward_pair_1 = VER(14) ? bits_get ((BitsP)&ctx->pair, CTX(FASTQ_GPOS)->pair.next) // since v14, gpos_ctx->pair.next is an iterator for both gpos and strand, and is incremented in fastq_special_PAIR2_GPOS
+                                         : bits_get ((BitsP)&ctx->pair, vb->line_i);                // up to v13, all lines had strand, which was 0 if unmapped
+
         return NEXTLOCALBIT (ctx) ? is_forward_pair_1 : !is_forward_pair_1;
     }
 
-    else if (CTX(FASTQ_SQBITMAP)->pair1_is_aligned) { // since v14, only aligned lines have a is_forward value)
-        bool is_forward_pair_1 = bit_array_get ((BitArrayP)&ctx->pair, CTX(FASTQ_GPOS)->pair.next); // gpos_ctx->pair.next is an iterator for both gpos and strand, and is incremented in fastq_special_PAIR2_GPOS
-        return NEXTLOCALBIT (ctx) ? is_forward_pair_1 : !is_forward_pair_1;
-    }
-
+    // case: unpaired read - just take bit
     else
         return NEXTLOCALBIT (ctx);
 }
 
+// Used in pair-2: reconstruct the parallel b250 snip from pair-1
 SPECIAL_RECONSTRUCTOR (fastq_special_mate_lookup)
 {
     ASSPIZ (ctx->pair_b250, "no pair_1 b250 data for ctx=%s, while reconstructing pair_2. "
@@ -866,9 +887,15 @@ SPECIAL_RECONSTRUCTOR (fastq_special_mate_lookup)
     ctx_get_next_snip (vb, ctx, true, pSTRa(snip));
 
     if (ctx->did_i == FASTQ_SQBITMAP && VER(14))
-        ctx->pair1_is_aligned = snip_len && *snip == SNIP_LOOKUP;
+        ctx->pair1_is_aligned = (snip_len && *snip == SNIP_LOOKUP) ? PAIR1_ALIGNED : PAIR1_NOT_ALIGNED;
 
     reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE /* we can't cache pair items */, STRa(snip), reconstruct); // might include delta etc - works because in --pair, ALL the snips in a context are FASTQ_SPECIAL_mate_lookup
 
     return NO_NEW_VALUE; // last_value already set (if needed) in reconstruct_one_snip
+}
+
+void fastq_reset_line (VBlockP vb)
+{
+    CTX(FASTQ_SQBITMAP)->pair1_is_aligned = VER(14) ? PAIR1_ALIGNED_UNKNOWN 
+                                                    : PAIR1_ALIGNED; // up to v13, all lines had alignment data, even if unmapped
 }

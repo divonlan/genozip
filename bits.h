@@ -1,11 +1,11 @@
 // ------------------------------------------------------------------
-//   bit_array.c
+//   bits.c
 //   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //   Copyright claimed on additions and modifications vs public domain.
 //
-// a module for handling arrays of 2-bit elements, partially based on BitArray, a public domain code located in https://github.com/noporpoise/BitArray/. 
-// The unmodified license of BitArray is as follows:
+// a module for handling arrays of 2-bit elements, partially based on Bits, a public domain code located in https://github.com/noporpoise/Bits/. 
+// The unmodified license of Bits is as follows:
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> 
 // Statement of Purpose
 // --------------------
@@ -157,9 +157,9 @@ typedef uint8_t word_offset_t; // Offset within a 64 bit word
 
 typedef enum __attribute__ ((__packed__)) { 
     BITARR_UNALLOCATED=0, BITARR_REGULAR, BITARR_OVERLAY, BITARR_MMAP, BITARR_STANDALONE 
-} BitArrayType; // must be identical to BufferType
+} BitsType; // must be identical to BufferType
 
-typedef struct BitArray
+typedef struct Bits
 {
     // These fields should not be changed or added to, as they map to Buffer
     uint64_t *words;     // maps to Buffer->data
@@ -167,40 +167,40 @@ typedef struct BitArray
     uint64_t nwords;     // maps to Buffer->len  ; round_up (nbits / 64)
     uint64_t type  : 3;  // maps to Buffer->type
     uint64_t other : 61; // actually used if this is a Buffer
-} BitArray;
+} Bits;
 
 #define bits_in_top_word(nbits) ((nbits) ? bitset64_idx((nbits) - 1) + 1 : 0)
 
 // clear excess bits in top used word of bitmap 
-static inline void bit_array_clear_excess_bits_in_top_word (BitArrayP bitarr)
+static inline void bits_clear_excess_bits_in_top_word (BitsP bits)
 {
-    if (bitarr->nwords) {
-        word_offset_t bits_active = bits_in_top_word(bitarr->nbits);
+    if (bits->nwords) {
+        word_offset_t bits_active = bits_in_top_word(bits->nbits);
         //atomic version of &= in case multiple threads do this in concurrently while working on different regions of the bitmap
-        __atomic_and_fetch (&bitarr->words[bitarr->nwords-1], bitmask64(bits_active), __ATOMIC_RELAXED);
+        __atomic_and_fetch (&bits->words[bits->nwords-1], bitmask64(bits_active), __ATOMIC_RELAXED);
     }
 }
 
-static inline void ASSERT_excess_bits_are_0 (BitArrayP bitarr) // divon
+static inline void ASSERT_excess_bits_are_0 (BitsP bits) // divon
 {
-  ASSERT0 (!(bitarr->nbits & 0x3f) || !(bitarr->words[bitarr->nwords-1] & ~bitmask64 (bitarr->nbits & 0x3f)),
+  ASSERT0 (!(bits->nbits & 0x3f) || !(bits->words[bits->nwords-1] & ~bitmask64 (bits->nbits & 0x3f)),
            "Expecting excess bits in top word of bit array to be 0");
 }
 
 
 // Allocate using existing struct
-extern BitArray bit_array_alloc_do (uint64_t nbits, bool clear, FUNCLINE);
-#define bit_array_alloc(nbits, clear) bit_array_alloc_do ((nbits), (clear), __FUNCLINE)
+extern Bits bits_alloc_do (uint64_t nbits, bool clear, FUNCLINE);
+#define bits_alloc(nbits, clear) bits_alloc_do ((nbits), (clear), __FUNCLINE)
 
-extern void bit_array_realloc_do (BitArrayP bitarr, uint64_t nbits, uint64_t low_level_nbits, bool clear, FUNCLINE);
-#define bit_array_realloc(bitarr, nbits, low_level_nbits, clear) bit_array_realloc_do ((bitarr), (nbits), (low_level_nbits), (clear), __FUNCLINE)
+extern void bits_realloc_do (BitsP bits, uint64_t nbits, uint64_t low_level_nbits, bool clear, FUNCLINE);
+#define bits_realloc(bits, nbits, low_level_nbits, clear) bits_realloc_do ((bits), (nbits), (low_level_nbits), (clear), __FUNCLINE)
 
-extern void bit_array_free (BitArrayP bitarr);
+extern void bits_free (BitsP bits);
 
 // Get length of bit array
-extern uint64_t bit_array_length (ConstBitArrayP bit_arr);
+extern uint64_t bits_length (ConstBitsP bit_arr);
 
-extern void LTEN_bit_array (BitArrayP bitarr); // divon
+extern void LTEN_bits (BitsP bits); // divon
 
 //
 // Macros
@@ -210,14 +210,14 @@ extern void LTEN_bit_array (BitArrayP bitarr); // divon
 // Get, set, clear, assign and toggle individual bits
 // Inline functions for fast access -- beware: no bounds checking. 
 //
-static inline bool    bit_array_get (ConstBitArrayP arr, uint64_t i) { return bitset_get (arr->words, i); }
-static inline uint8_t bit_array_get2(ConstBitArrayP arr, uint64_t i) { return bitset_get2(arr->words, i); }
-static inline uint8_t bit_array_get4(ConstBitArrayP arr, uint64_t i) { return bitset_get4(arr->words, i); }
-static inline void bit_array_set    (BitArrayP arr, uint64_t i) { bitset_set(arr->words, i); }
-static inline void bit_array_clear  (BitArrayP arr, uint64_t i) { bitset_del(arr->words, i); }
-static inline void bit_array_toggle (BitArrayP arr, uint64_t i) { bitset_tgl(arr->words, i); }
-static inline void bit_array_assign (BitArrayP arr, uint64_t i, bool value) { bitset_cpy(arr->words, i, value); }
-static inline void bit_array_assign2(BitArrayP arr, uint64_t i/*even number*/, uint8_t value/*0,1,2 or 3*/) { bitset_cpy2(arr->words, i, value); }
+static inline bool    bits_get (ConstBitsP arr, uint64_t i) { return bitset_get (arr->words, i); }
+static inline uint8_t bits_get2(ConstBitsP arr, uint64_t i) { return bitset_get2(arr->words, i); }
+static inline uint8_t bits_get4(ConstBitsP arr, uint64_t i) { return bitset_get4(arr->words, i); }
+static inline void bits_set    (BitsP arr, uint64_t i) { bitset_set(arr->words, i); }
+static inline void bits_clear  (BitsP arr, uint64_t i) { bitset_del(arr->words, i); }
+static inline void bits_toggle (BitsP arr, uint64_t i) { bitset_tgl(arr->words, i); }
+static inline void bits_assign (BitsP arr, uint64_t i, bool value) { bitset_cpy(arr->words, i, value); }
+static inline void bits_assign2(BitsP arr, uint64_t i/*even number*/, uint8_t value/*0,1,2 or 3*/) { bitset_cpy2(arr->words, i, value); }
 
 //
 // Get, set, clear, assign and toggle individual bits
@@ -225,12 +225,12 @@ static inline void bit_array_assign2(BitArrayP arr, uint64_t i/*even number*/, u
 //
 
 // Get the value of a bit (returns 0 or 1)
-extern char bit_array_get_bit(ConstBitArrayP bitarr, uint64_t b);
-extern void bit_array_set_bit(BitArrayP bitarr, uint64_t b);
-extern void bit_array_clear_bit(BitArrayP bitarr, uint64_t b);
-extern void bit_array_toggle_bit(BitArrayP bitarr, uint64_t b);
+extern char bits_get_bit(ConstBitsP bits, uint64_t b);
+extern void bits_set_bit(BitsP bits, uint64_t b);
+extern void bits_clear_bit(BitsP bits, uint64_t b);
+extern void bits_toggle_bit(BitsP bits, uint64_t b);
 // If char c != 0, set bit; otherwise clear bit
-extern void bit_array_assign_bit(BitArrayP bitarr, uint64_t b, char c);
+extern void bits_assign_bit(BitsP bits, uint64_t b, char c);
 
 //
 // Get, set, clear and toggle several bits at once
@@ -239,62 +239,65 @@ extern void bit_array_assign_bit(BitArrayP bitarr, uint64_t b, char c);
 // Get the offsets of the set bits (for offsets start<=offset<end)
 // Returns the number of bits set
 // It is assumed that dst is at least of length (end-start)
-extern uint64_t bit_array_get_bits(ConstBitArrayP bitarr, uint64_t start, uint64_t end, uint64_t* dst);
+extern uint64_t bits_get_bits(ConstBitsP bits, uint64_t start, uint64_t end, uint64_t *dst);
 
 // Set multiple bits at once.
-// e.g. set bits 1, 20 & 31: bit_array_set_bits(bitarr, 3, 1,20,31);
+// e.g. set bits 1, 20 & 31: bits_set_bits(bits, 3, 1,20,31);
 // Note: variable args are of type unsigned int
-extern void bit_array_set_bits(BitArrayP bitarr, size_t n, ...);
+extern void bits_set_bits(BitsP bits, size_t n, ...);
 
 // Clear multiple bits at once.
-// e.g. clear bits 1, 20 & 31: bit_array_clear_bits(bitarr, 3, 1,20,31);
+// e.g. clear bits 1, 20 & 31: bits_clear_bits(bits, 3, 1,20,31);
 // Note: variable args are of type unsigned int
-extern void bit_array_clear_bits(BitArrayP bitarr, size_t n, ...);
+extern void bits_clear_bits(BitsP bits, size_t n, ...);
 
 // Toggle multiple bits at once
-// e.g. toggle bits 1, 20 & 31: bit_array_toggle_bits(bitarr, 3, 1,20,31);
+// e.g. toggle bits 1, 20 & 31: bits_toggle_bits(bits, 3, 1,20,31);
 // Note: variable args are of type unsigned int
-extern void bit_array_toggle_bits(BitArrayP bitarr, size_t n, ...);
+extern void bits_toggle_bits(BitsP bits, size_t n, ...);
 
 //
 // Set, clear and toggle all bits in a region
 //
 
 // Set all the bits in a region
-extern void bit_array_set_region(BitArrayP bitarr, uint64_t start, uint64_t len);
+extern void bits_set_region(BitsP bits, uint64_t start, uint64_t len);
 
 // Clear all the bits in a region
-#define bit_array_clear_region(bitarr,start,len) bit_array_clear_region_do (bitarr, start, len, __FUNCLINE)
-extern void bit_array_clear_region_do (BitArrayP bitarr, uint64_t start, uint64_t len, rom func, unsigned code_line);
+#define bits_clear_region(bits,start,len) bits_clear_region_do (bits, start, len, __FUNCLINE)
+extern void bits_clear_region_do (BitsP bits, uint64_t start, uint64_t len, rom func, unsigned code_line);
 
-extern uint32_t bit_array_hamming_distance (ConstBitArrayP bitarr1, uint64_t index1, ConstBitArrayP bitarr2, uint64_t index2, uint64_t len);
+extern uint32_t bits_hamming_distance (ConstBitsP bits1, uint64_t index1, ConstBitsP bits2, uint64_t index2, uint64_t len);
 
 //
 // Set, clear and toggle all bits at once
 //
 
 // Set all bits in this array to 1
-extern void bit_array_set_all(BitArrayP bitarr);
+extern void bits_set_all(BitsP bits);
 
 // Set all bits in this array to 0
-extern void bit_array_clear_all(BitArrayP bitarr);
+extern void bits_clear_all(BitsP bits);
+
+extern void bits_bit_to_byte  (uint8_t *dst, ConstBitsP src_bits, uint64_t src_bit,  uint32_t num_bits);
+extern void bits_base_to_byte (uint8_t *dst, ConstBitsP src_bits, uint64_t base_i, uint32_t num_2bits);
 
 //
 // Get and set words (low level -- no bounds checking)
 //
-static inline uint64_t _get_word(ConstBitArrayP bitarr, uint64_t start)
+static inline uint64_t _get_word(ConstBitsP bits, uint64_t start)
 {
     uint64_t word_index = bitset64_wrd(start);
     word_offset_t word_offset = bitset64_idx(start);
 
-    uint64_t result = bitarr->words[word_index] >> word_offset;
+    uint64_t result = bits->words[word_index] >> word_offset;
 
     word_offset_t bits_taken = WORD_SIZE - word_offset;
 
     // word_offset is now the number of bits we need from the next word
     // Check the next word has at least some bits
-    if(word_offset > 0 && start + bits_taken < bitarr->nbits)
-        result |= bitarr->words[word_index+1] << (WORD_SIZE - word_offset);
+    if(word_offset > 0 && start + bits_taken < bits->nbits)
+        result |= bits->words[word_index+1] << (WORD_SIZE - word_offset);
 
     return result;
 }
@@ -303,39 +306,39 @@ static inline uint64_t _get_word(ConstBitArrayP bitarr, uint64_t start)
 // Get / set a word of a given size
 //
 
-// bitarray is interpreted as an integer in Little Endian - i.e. first bit in the bitarray is LSb
+// Bits is interpreted as an integer in Little Endian - i.e. first bit in the Bits is LSb
 #define BIT_ARRAY_GET_WORD(width) \
-    static inline uint64_t bit_array_get_word ## width (ConstBitArrayP bitarr, uint64_t start) { \
-        ASSERT (start + width <= bitarr->nbits, "expecting start(%"PRIu64") + " #width " <= bitarr->nbits(%"PRIu64")", start, bitarr->nbits); \
-        return (uint ## width ## _t)_get_word(bitarr, start); \
+    static inline uint64_t bits_get_word ## width (ConstBitsP bits, uint64_t start) { \
+        ASSERT (start + width <= bits->nbits, "expecting start(%"PRIu64") + " #width " <= bits->nbits(%"PRIu64")", start, bits->nbits); \
+        return (uint ## width ## _t)_get_word(bits, start); \
     } 
 BIT_ARRAY_GET_WORD(64)
 BIT_ARRAY_GET_WORD(32)
 BIT_ARRAY_GET_WORD(16)
 BIT_ARRAY_GET_WORD(8)
 
-extern uint64_t bit_array_get_wordn(ConstBitArrayP bitarr, uint64_t start, int n);
+extern uint64_t bits_get_wordn(ConstBitsP bits, uint64_t start, int n);
 
 // Set 64 bits at once from a particular start position
 // Doesn't extend bit array. However it is safe to TRY to set bits beyond the
-// end of the array, as long as: `start` is < `bit_array_length(arr)`
-extern void bit_array_set_word64(BitArrayP bitarr, uint64_t start, uint64_t word);
-extern void bit_array_set_word32(BitArrayP bitarr, uint64_t start, uint32_t word);
-extern void bit_array_set_word16(BitArrayP bitarr, uint64_t start, uint16_t word);
-extern void bit_array_set_word8(BitArrayP bitarr, uint64_t start, uint8_t byte);
-extern void bit_array_set_wordn(BitArrayP bitarr, uint64_t start, uint64_t word, int n);
+// end of the array, as long as: `start` is < `bits_length(arr)`
+extern void bits_set_word64(BitsP bits, uint64_t start, uint64_t word);
+extern void bits_set_word32(BitsP bits, uint64_t start, uint32_t word);
+extern void bits_set_word16(BitsP bits, uint64_t start, uint16_t word);
+extern void bits_set_word8(BitsP bits, uint64_t start, uint8_t byte);
+extern void bits_set_wordn(BitsP bits, uint64_t start, uint64_t word, int n);
 
 //
 // Number of bits set
 //
 
 // Get the number of bits set (hamming weight)
-extern bool bit_array_is_fully_set (ConstBitArrayP bitarr);
-extern uint64_t bit_array_num_bits_set(ConstBitArrayP bitarr);
-extern uint64_t bit_array_num_bits_set_region(ConstBitArrayP bitarr, uint64_t start, uint64_t length); // added by divon
+extern bool bits_is_fully_set (ConstBitsP bits);
+extern uint64_t bits_num_bits_set(ConstBitsP bits);
+extern uint64_t bits_num_bits_set_region(ConstBitsP bits, uint64_t start, uint64_t length); // added by divon
 
 // Get the number of bits not set (length - hamming weight)
-extern uint64_t bit_array_num_bits_cleared(ConstBitArrayP bitarr);
+extern uint64_t bits_num_bits_cleared(ConstBitsP bits);
 
 //
 // Find indices of set/clear bits
@@ -345,116 +348,71 @@ extern uint64_t bit_array_num_bits_cleared(ConstBitArrayP bitarr);
 // Returns 1 if a bit is set, otherwise 0
 // Index of next set bit is stored in the integer pointed to by result
 // If no next bit is set result is not changed
-extern bool bit_array_find_next_set_bit(ConstBitArrayP bitarr, uint64_t offset, uint64_t* result);
-
-// Find the index of the next bit that is NOT set, at or after `offset`
-// Returns 1 if a bit is NOT set, otherwise 0
-// Index of next zero bit is stored in the integer pointed to by `result`
-// If no next bit is zero, value at `result` is not changed
-extern bool bit_array_find_next_clear_bit(ConstBitArrayP bitarr, uint64_t offset,
-                                 uint64_t* result);
-
-// Find the index of the previous bit that is set, before offset.
-// Returns 1 if a bit is set, otherwise 0
-// Index of previous set bit is stored in the integer pointed to by `result`
-// If no previous bit is set result is not changed
-extern bool bit_array_find_prev_set_bit(ConstBitArrayP bitarr, uint64_t offset,
-                                 uint64_t* result);
-
-// Find the index of the previous bit that is NOT set, before offset.
-// Returns 1 if a bit is clear, otherwise 0
-// Index of previous zero bit is stored in the integer pointed to by `result`
-// If no previous bit is zero result is not changed
-extern bool bit_array_find_prev_clear_bit(ConstBitArrayP bitarr, uint64_t offset,
-                                   uint64_t* result);
-
-// Find the index of the first bit that is set.
-// Returns 1 if a bit is set, otherwise 0
-// Index of first set bit is stored in the integer pointed to by `result`
-// If no bit is set result is not changed
-extern bool bit_array_find_first_set_bit(ConstBitArrayP bitarr, uint64_t* result);
-
-// Find the index of the first bit that is NOT set.
-// Returns 1 if a bit is clear, otherwise 0
-// Index of first zero bit is stored in the integer pointed to by `result`
-// If no bit is zero result is not changed
-extern bool bit_array_find_first_clear_bit(ConstBitArrayP bitarr, uint64_t* result);
-
-// Find the index of the last bit that is set.
-// Returns 1 if a bit is set, otherwise 0
-// Index of last set bit is stored in the integer pointed to by `result`
-// If no bit is set result is not changed
-extern bool bit_array_find_last_set_bit(ConstBitArrayP bitarr, uint64_t* result);
-
-// Find the index of the last bit that is NOT set.
-// Returns 1 if a bit is clear, otherwise 0
-// Index of last zero bit is stored in the integer pointed to by `result`
-// If no bit is zero result is not changed
-extern bool bit_array_find_last_clear_bit(ConstBitArrayP bitarr, uint64_t* result);
+extern bool bits_find_next_set_bit   (ConstBitsP bits, uint64_t offset, uint64_t *result);
+extern bool bits_find_next_clear_bit (ConstBitsP bits, uint64_t offset, uint64_t *result);
+extern bool bits_find_prev_set_bit   (ConstBitsP bits, uint64_t offset, uint64_t *result);
+extern bool bits_find_prev_clear_bit (ConstBitsP bits, uint64_t offset, uint64_t *result);
+extern bool bits_find_first_set_bit  (ConstBitsP bits, uint64_t *result);
+extern bool bits_find_first_clear_bit(ConstBitsP bits, uint64_t *result);
+extern bool bits_find_last_set_bit   (ConstBitsP bits, uint64_t *result);
+extern bool bits_find_last_clear_bit (ConstBitsP bits, uint64_t *result);
 
 
 //
 // String and printing methods
 //
 
-// Construct a BitArray from a string.
-extern void bit_array_from_str(BitArrayP bitarr, rom bitstr);
+// Construct a Bits from a string.
+extern void bits_from_str(BitsP bits, rom bitstr);
 
-// Construct a BitArray from a substring with given on and off characters.
-extern void bit_array_from_substr(BitArrayP bitarr, uint64_t offset, rom str, size_t len, rom on, rom off, char left_to_right);
+// Construct a Bits from a substring with given on and off characters.
+extern void bits_from_substr(BitsP bits, uint64_t offset, rom str, size_t len, rom on, rom off, char left_to_right);
 
-// Takes a char array to write to.  `str` must be bitarr->nbits+1 in
+// Takes a char array to write to.  `str` must be bits->nbits+1 in
 // length. Terminates string with '\0'
-extern char* bit_array_to_str(ConstBitArrayP bitarr, char* str);
-extern char* bit_array_to_str_rev(ConstBitArrayP bitarr, char* str);
+extern char* bits_to_str(ConstBitsP bits, char* str);
+extern char* bits_to_str_rev(ConstBitsP bits, char* str);
 
 // Get a string representations for a given region, using given on/off characters.
-extern char *bit_array_to_substr (ConstBitArrayP bitarr,
-                                  uint64_t start, uint64_t length,
-                                  char* str, char on, char off, char left_to_right);
+extern char *bits_to_substr (ConstBitsP bits, uint64_t start, uint64_t length, char *str);
 
 // Print this array to a file stream.  Prints '0's and '1'.  Doesn't print newline.
-extern void bit_array_print_do (ConstBitArrayP bitarr, rom msg, FILE *file);
-#define bit_array_print(bitarr) bit_array_print_do (bitarr, #bitarr, info_stream)
+extern void bits_print_do (ConstBitsP bits, rom msg, FILE *file);
+#define bits_print(bits) bits_print_do (bits, #bits, info_stream)
 
-extern void bit_array_print_binary_word_do (uint64_t word, rom msg, FILE *file);
-#define bit_array_print_binary_word(word) bit_array_print_binary_word_do (word, #word, info_stream)
+extern void bits_print_binary_word_do (uint64_t word, rom msg, FILE *file);
+#define bits_print_binary_word(word) bits_print_binary_word_do (word, #word, info_stream)
 
-extern void bit_array_print_substr (rom msg, ConstBitArrayP bitarr,
-                                    uint64_t start, uint64_t length, FILE *file);
+extern void bits_print_substr (rom msg, ConstBitsP bits, uint64_t start, uint64_t length, FILE *file);
 
-extern void bit_array_print_substr_bases (rom msg, ConstBitArrayP bitarr, uint64_t start, uint64_t length, FILE *file);
+extern void bits_print_substr_bases (rom msg, ConstBitsP bits, uint64_t start, uint64_t length, FILE *file);
 
 // Print bit array as hex
-extern size_t bit_array_print_hex (ConstBitArrayP bitarr,
-                                   uint64_t start, uint64_t length,
-                                   FILE* fout, char uppercase);
+extern size_t bits_print_hex (ConstBitsP bits, uint64_t start, uint64_t length, FILE* fout, char uppercase);
 
 //
 // Clone and copy
 //
 
 // Copy bits from one array to another
-// Note: use MACRO bit_array_copy
-// Destination and source can be the same bit_array and
+// Note: use MACRO bits_copy
+// Destination and source can be the same bits and
 // src/dst regions can overlap
-extern void bit_array_copy_do (BitArrayP dst, uint64_t dstindx,
-                               ConstBitArrayP src, uint64_t srcindx,
-                               uint64_t length, rom func, unsigned code_line);
-#define bit_array_copy(dst,dstindex,src,srcindx,length) \
-    bit_array_copy_do (dst,dstindex,src,srcindx,length, __FUNCLINE)
+extern void bits_copy_do (BitsP dst, uint64_t dstindx, ConstBitsP src, uint64_t srcindx, uint64_t length, rom func, unsigned code_line);
+#define bits_copy(dst,dstindex,src,srcindx,length) \
+    bits_copy_do (dst,dstindex,src,srcindx,length, __FUNCLINE)
 
 // concatenate src at the end of dst (divon)
-extern void bit_array_concat_do (BitArrayP base, ConstBitArrayP add, unsigned additional_concats_expected, FUNCLINE);
-#define bit_array_concat(base,add,additional) bit_array_concat_do((base),(add),(additional), __FUNCLINE)
+extern void bits_concat_do (BitsP base, ConstBitsP add, unsigned additional_concats_expected, FUNCLINE);
+#define bits_concat(base,add,additional) bits_concat_do((base),(add),(additional), __FUNCLINE)
 
 // for each 2 bits in the src array, the dst array will contain those 2 bits in the reverse
 // position, as well as transform them 00->11 11->00 01->10 10->01
 // works on arrays with full words
-extern void bit_array_reverse_complement_aligned (BitArrayP dst, ConstBitArrayP src, uint64_t src_start_base, uint64_t max_num_bases);
-extern void bit_array_reverse_complement_in_place (BitArrayP bitarr) ;
+extern void bits_reverse_complement_aligned (BitsP dst, ConstBitsP src, uint64_t src_start_base, uint64_t max_num_bases);
+extern void bits_reverse_complement_in_place (BitsP bits) ;
 
-extern void bit_array_overlay (BitArrayP overlaid_bitarr, BitArrayP regular_bitarr, uint64_t start, uint64_t nbits);
+extern void bits_overlay (BitsP overlaid_bits, BitsP regular_bits, uint64_t start, uint64_t nbits);
 
 //
 // Logic operators
@@ -463,82 +421,75 @@ extern void bit_array_overlay (BitArrayP overlaid_bitarr, BitArrayP regular_bita
 // BIT_ARRAYs can all be different or the same object
 // dest array will be resized if it is too short
 //
-extern void bit_array_and (BitArrayP dest, ConstBitArrayP src1, ConstBitArrayP src2);
-extern void bit_array_or  (BitArrayP dest, ConstBitArrayP src1, ConstBitArrayP src2);
-extern void bit_array_xor (BitArrayP dest, ConstBitArrayP src1, ConstBitArrayP src2);
-extern void bit_array_not (BitArrayP dest, ConstBitArrayP src);
+extern void bits_and (BitsP dest, ConstBitsP src1, ConstBitsP src2);
+extern void bits_or  (BitsP dest, ConstBitsP src1, ConstBitsP src2);
+extern void bits_xor (BitsP dest, ConstBitsP src1, ConstBitsP src2);
+extern void bits_not (BitsP dest, ConstBitsP src);
 
-extern void bit_array_xor_with (BitArrayP dst, uint64_t dst_start_bit, ConstBitArrayP xor_with, uint64_t xor_with_bit, uint64_t num_bits);
-
-//extern void bit_array_or_with (BitArrayP dst, uint64_t dst_start_bit, BitArrayP src , uint64_t src_start_bit, uint64_t len);
+extern void bits_xor_with (BitsP dst, uint64_t dst_start_bit, ConstBitsP xor_with, uint64_t xor_with_bit, uint64_t num_bits);
 
 //
 // Comparisons
 //
 
-// Note: (bit_array_cmp(a,b) == 0) <=> (bit_array_cmp_big_endian(a,b) == 0)
+// Note: (bits_cmp(a,b) == 0) <=> (bits_cmp_big_endian(a,b) == 0)
 
 // comparison functions return:
-//   1 iff bitarr1 > bitarr2
-//   0 iff bitarr1 == bitarr2
-//  -1 iff bitarr1 < bitarr2
+//   1 iff bits1 > bits2
+//   0 iff bits1 == bits2
+//  -1 iff bits1 < bits2
 
 // Compare two bit arrays by value stored, with index 0 being the Least
 // Significant Bit (LSB). Arrays do not have to be the same length.
 // Example: ..0101 (5) > ...0011 (3) [index 0 is LSB at right hand side]
-extern int bit_array_cmp(ConstBitArrayP bitarr1, ConstBitArrayP bitarr2);
+extern int bits_cmp(ConstBitsP bits1, ConstBitsP bits2);
 
 // Compare two bit arrays by value stored, with index 0 being the Most
 // Significant Bit (MSB). Arrays do not have to be the same length.
 // Example: 10.. > 01.. [index 0 is MSB at left hand side]
-extern int bit_array_cmp_big_endian(ConstBitArrayP bitarr1, ConstBitArrayP bitarr2);
+extern int bits_cmp_big_endian(ConstBitsP bits1, ConstBitsP bits2);
 
-// compare bitarr with (bitarr2 << pos)
-extern int bit_array_cmp_words(ConstBitArrayP bitarr,
-                        uint64_t pos, ConstBitArrayP bitarr2);
+// compare bits with (bits2 << pos)
+extern int bits_cmp_words(ConstBitsP bits, uint64_t pos, ConstBitsP bits2);
 
 //
 // Shift, interleave, reverse
 //
 
-// removes flanking bits on boths sides, shrinking bitarr (divon)
-void bit_array_remove_flanking (BitArrayP bitarr, uint64_t lsb_flanking, uint64_t msb_flanking);
+// removes flanking bits on boths sides, shrinking bits (divon)
+void bits_remove_flanking (BitsP bits, uint64_t lsb_flanking, uint64_t msb_flanking);
 
 // shortens an array to a certain number of bits (divon)
-void bit_array_truncate (BitArrayP bitarr, uint64_t new_num_of_bits);
-
-// Shift array left/right.  
-void bit_array_shift_right_shrink (BitArrayP bitarr, uint64_t shift_dist);
-void bit_array_shift_right(BitArrayP bitarr, uint64_t shift_dist, char fill);
-void bit_array_shift_left (BitArrayP bitarr, uint64_t shift_dist, char fill);
-
-// Cyclic shift
-void bit_array_cycle_right(BitArrayP bitarr, uint64_t dist);
-void bit_array_cycle_left (BitArrayP bitarr, uint64_t dist);
-
-// Reverse the whole array or part of it
-void bit_array_reverse(BitArrayP bitarr);
-void bit_array_reverse_region(BitArrayP bitarr, uint64_t start, uint64_t len);
-
-//
-// Read/Write bit_array to a file
-//
-// File format is [8 bytes: for number of elements in array][data]
-// Number of bytes of data is: (int)((nbits + 7) / 8)
-//
-
-//
-// Generally useful functions
-//
-
-// Generalised 'binary to string' function
-// Adds bits to the string in order of lsb to msb
-// e.g. 0b11010 (26 in decimal) would come out as "01011"
-char* bit_array_word2str(const void *ptr, size_t nbits, char *str);
-
-// Same as above but in reverse
-char* bit_array_word2str_rev(const void *ptr, size_t nbits, char *str);
+void bits_truncate (BitsP bits, uint64_t new_num_of_bits);
 
 // get number of bits in an array, excluding trailing zeros (divon)
-uint64_t bit_array_effective_length (BitArrayP bitarr);
+uint64_t bits_effective_length (BitsP bits);
 
+
+// iterator on bases (2 bits)
+#define BASE_ITER_INIT(bits, base_i, n_bases, is_fwd)       \
+    uint64_t _base_i = (is_fwd) ? (base_i) : ((base_i) + (n_bases) - 1); \
+    uint64_t *_word_p = &(bits)->words[_base_i >> 5];       \
+    uint64_t _word = *_word_p;                              \
+    int8_t _next_2bit = _base_i & 31;                       \
+    bool _is_fwd __attribute__((unused)) = (is_fwd); 
+
+#define BASE_NEXT_FWD ({                                    \
+    uint8_t base = (_word >> (_next_2bit * 2)) & 3;         \
+    if (++_next_2bit == 32) {                               \
+        _next_2bit = 0;                                     \
+        _word_p++;                                          \
+        _word = *_word_p;                                   \
+    }                                                       \
+    base; })
+
+#define BASE_NEXT_REVCOMP ({                                \
+    uint8_t base = 3 - ((_word >> (_next_2bit * 2)) & 3);   \
+    if (--_next_2bit == -1) {                               \
+        _next_2bit = 31;                                    \
+        _word_p--;                                          \
+        _word = *_word_p;                                   \
+    }                                                       \
+    base; })
+
+#define BASE_NEXT (_is_fwd ? BASE_NEXT_FWD : BASE_NEXT_REVCOMP)

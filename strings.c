@@ -4,6 +4,7 @@
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include <time.h>
+#include <wchar.h>
 #include "genozip.h"
 #include "strings.h"
 #include "flags.h"
@@ -891,17 +892,34 @@ int str_print_text (rom *text, uint32_t num_lines,
 }
 
 // receives a user response, a default "Y" or "N" (or NULL) and modifies the response to be "Y" or "N"
-bool str_verify_y_n (char *response, uint32_t len, rom def_res)
+static bool str_verify_y_n (char *response, uint32_t len, rom def_res)
 {
-    ASSERT0 (!def_res || (strlen (def_res)==1 && (def_res[0]=='Y' || def_res[0]=='N')), 
+    ASSERT0 (!def_res || (strlen(def_res)==1 && (def_res[0]=='Y' || def_res[0]=='N')), 
               "def_res needs to be NULL, \"Y\" or \"N\"");
 
     if (len > 1 || (!len && !def_res)) return false;
     
-    response[0] = len ? UPPER_CASE(response[0]) : def_res[0];
+    response[0] = !len             ? def_res[0] 
+                : response[0]=='n' ? 'N' 
+                : response[0]=='y' ? 'Y' 
+                :                    response[0];
+    
     response[1] = 0;
 
     return (response[0] == 'N' || response[0] == 'Y'); // return false if invalid response - we request the user to respond again
+}
+
+bool str_query_user_yn (rom query, DefAnswerType def_answer)
+{
+    char query_str[strlen(query)+32];
+    sprintf (query_str, "%s (%sy%s or %sn%s) ", query, 
+             def_answer==QDEF_YES?"[":"",  def_answer==QDEF_YES?"]":"",  
+             def_answer==QDEF_NO ?"[":"",  def_answer==QDEF_NO ?"]":"");
+
+    char y_n[32];
+    str_query_user (query_str, y_n, sizeof(y_n), str_verify_y_n, def_answer==QDEF_YES ? "Y" : def_answer==QDEF_NO ? "N" : 0);
+
+    return y_n[0] == 'Y';
 }
 
 bool str_verify_not_empty (char *response, uint32_t len, rom unused)
@@ -916,11 +934,12 @@ void str_query_user (rom query, char *response, uint32_t response_size,
     do {
         fprintf (stderr, "%s", query);
 
-        len = read (STDIN_FILENO, response, response_size-1); 
-        if (len && response[len-1] == '\n') len--;
-        if (len && response[len-1] == '\r') len--;
-        
-        response[len] = '\0'; 
+        // Linux: in case of non-Latin, fgets doesn't handle backspace well - not completely removing the multi-byte character from the string (bug 593)
+        // Windows (MingW): the string is terminated before the first non-Latin character on bash terminal and only ???? on Powershell and Command (bug 594)
+        fgets (response, response_size, stdin); 
+        len = strlen (response);
+        if (len && (response[len-1] == '\n')) response[--len] = '\0';         
+        if (len && (response[len-1] == '\r')) response[--len] = '\0'; // in Windows, lines are terminated by \r\n
 
     } while (verifier && !verifier (response, len, verifier_param));
 }

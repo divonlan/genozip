@@ -954,6 +954,8 @@ void seg_all_data_lines (VBlockP vb)
                   : segconf.line_len ? MAX_(1, vb->txt_data.len / segconf.line_len)
                   :                    1;            // eg DT_GENERIC
 
+    vb->scratch.name = "scratch"; // initialize so we don't need to worry about it later
+    
     ContextP debug_lines_ctx = NULL;
     if (flag.debug_lines && !segconf.running) { 
         debug_lines_ctx = ECTX (_SAM_DEBUG_LINES); // same dict_id for all data_types (ie _SAM_DEBUG_LINES==_VCF_DEBUG_LINES etc)

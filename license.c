@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
+#include <wchar.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include "genozip.h"
@@ -44,7 +45,7 @@ static rom license_filename = NULL;  // non-standard filename set with --licfile
 static struct {
     bool initialized;
     LicenseType lic_type; 
-    char name[256], email[256], institution[1024], ip[ARCH_IP_LEN], version[20];
+    char name[256], institution[1024], email[256], ip[ARCH_IP_LEN], version[20];
     StrText timestamp;
     int64_t machine_time; // timestamp expressed as seconds since epoch
     uint32_t license_num;
@@ -208,10 +209,10 @@ static bool license_submit (char update, rom os, unsigned cores, rom endianity, 
 
     // note: identical to register.sh
     char *url_format = PREFIX
-                       "?entry.344252538=%.100s"
-                       "&entry.926671216=%.50s"
-                       "&entry.1734045469=%.50s"
-                       "&entry.2009586582=%.20s"
+                       "?entry.344252538=%s"
+                       "&entry.926671216=%s"
+                       "&entry.1734045469=%s"
+                       "&entry.2009586582=%s"
                        "&entry.119966790=%c"
                        "&entry.81542373=%s"
                        "&entry.1668073218=%u"
@@ -222,14 +223,14 @@ static bool license_submit (char update, rom os, unsigned cores, rom endianity, 
                        "&entry.1598028195=%s"
                        "&entry.1384715202=%s";
 
-    char *institutionE = url_esc_non_valid_chars (rec.institution);
-    char *nameE        = url_esc_non_valid_chars (rec.name);
-    char *emailE       = url_esc_non_valid_chars (rec.email);
+    char *institutionE = url_esc_all_or_none (rec.institution);
+    char *nameE        = url_esc_all_or_none (rec.name);
+    char *emailE       = url_esc_all_or_none (rec.email);
     char *lic_typeE    = url_esc_non_valid_chars (lic_types[rec.lic_type]);
     char *osE          = url_esc_non_valid_chars (os);
     char *user_hostE   = url_esc_non_valid_chars (user_host);
 
-    char url[sizeof (rec) + 200];
+    char url[sizeof (rec)*3 + 200];
     sprintf (url, url_format, institutionE, nameE, emailE, lic_typeE, update, osE, cores, rec.ip, user_hostE, rec.license_num, rec.version, dist, endianity);
 
     bool success = url_read_string (url, NULL, 0) >= 0;
@@ -259,9 +260,9 @@ static bool license_verify_license (char *response, unsigned response_size, rom 
     return strlen (response) == 1 && (*response=='1' || *response=='2' || *response=='3');
 }
 
-static void license_exit_if_not_confirmed (rom response)
+static void license_exit_if_not_confirmed (rom query, DefAnswerType def_answer)
 {
-    if (response[0] == 'N') {
+    if (!str_query_user_yn (query, def_answer)) {
         fprintf (stderr, "\nYou have not registered. You may register at any time in the future.\n\nWishing you a wonderful day from the Genozip team! https://genozip.com\n");
         exit_ok();
     }
@@ -274,9 +275,10 @@ static void license_exit_if_not_confirmed (rom response)
 // section of the license. Rather, please contact sales@genozip.com to discuss which license would be appropriate for your case.
 void license_register (void)
 {
-    char confirm[100], lic_type[100], update[100];
+    char lic_type[100];
     rom os, dist, endianity, user_host;
     unsigned cores;
+    bool update;
 
     str_split (flag.do_register, strlen (flag.do_register), 11, '|', field, true);
     str_nul_separate (field);
@@ -294,11 +296,9 @@ void license_register (void)
                          "- For clinical, mixed research/clinical, commercial and other cases (examples: "WEBSITE_COMMERCIAL") you may evaluate Genozip for free for 30 days.\n\n");
 
         if (file_exists (filename)) 
-            str_query_user ("You are already registered. Are you sure you want to re-register again? (y or n) ", confirm, sizeof(confirm), str_verify_y_n, NULL);
+            license_exit_if_not_confirmed ("You are already registered. Are you sure you want to re-register again?", QDEF_NONE);
         else 
-            str_query_user ("Would you like to register now? ([y] or n) ", confirm, sizeof(confirm), str_verify_y_n, "Y");
-
-        license_exit_if_not_confirmed (confirm);
+            license_exit_if_not_confirmed ("Would you like to register now?", QDEF_YES);
     }
 
     file_remove (filename, true); // remove old license, if one exists
@@ -308,13 +308,13 @@ void license_register (void)
         strncpy (rec.institution, fields[1], sizeof(rec.institution)-1);
         strncpy (rec.name,        fields[2], sizeof(rec.name)-1);
         strncpy (rec.email,       fields[3], sizeof(rec.email)-1);
-        strncpy (update,          fields[4], sizeof(update)-1);
         strncpy (rec.ip,          fields[5], sizeof(rec.ip)-1);
-        os           = fields[6];
-        dist         = fields[7]; 
-        endianity    = fields[8];
-        user_host    = fields[9];
-        cores        = atoi(fields[10]);
+        update    = (fields[4][0] == 'Y');
+        os        = fields[6];
+        dist      = fields[7]; 
+        endianity = fields[8];
+        user_host = fields[9];
+        cores     = atoi(fields[10]);
     }
     else {
         fprintf (stderr, "\nLicense details -\n");
@@ -335,15 +335,13 @@ void license_register (void)
     
         rec.lic_type = lic_type[0] - '0';
     
-        str_query_user ("\nShall we update you by email when new features are added to genozip? ([y] or n) ", 
-                        update, sizeof(update), str_verify_y_n, "Y");
+        update = str_query_user_yn ("\nShall we update you by email when new features are added to genozip?", QDEF_YES); 
 
         fprintf (stderr, "\n\nPlease read the terms and conditions of the license:\n\n"); 
         license_display(); 
         fprintf (stderr, "\n"); 
 
-        str_query_user ("Do you accept the terms and conditions of the license? (y or n) ", confirm, sizeof(confirm), str_verify_y_n, NULL);
-        license_exit_if_not_confirmed (confirm);
+        license_exit_if_not_confirmed ("Do you accept the terms and conditions of the license?", QDEF_NONE);
 
         os           = arch_get_os();
         dist         = arch_get_distribution();
@@ -368,7 +366,7 @@ void license_register (void)
         fprintf (stderr, LIC_FIELD_INSTITUTION": %s\n", rec.institution);
         fprintf (stderr, LIC_FIELD_NAME       ": %s\n", rec.name);
         fprintf (stderr, LIC_FIELD_EMAIL      ": %s\n", rec.email);
-        fprintf (stderr, "Send new feature updates: %s\n", update[0]=='Y' ? "Yes" : "No");
+        fprintf (stderr, "Send new feature updates: %s\n", update ? "Yes" : "No");
         fprintf (stderr, "System info: OS=%s cores=%u endianity=%s IP=%s\n", os, cores, endianity, rec.ip);
         fprintf (stderr, "Username: %s\n", user_host);
         fprintf (stderr, "Genozip info: version=%s distribution=%s\n", GENOZIP_CODE_VERSION, dist);
@@ -376,11 +374,10 @@ void license_register (void)
         fprintf (stderr, "I accept the terms and conditions of the Genozip license\n");
         fprintf (stderr, "=====================================================================\n\n");
         
-        str_query_user ("Proceed with completing the registration? ([y] or n) ", confirm, sizeof(confirm), str_verify_y_n, "Y");
-        license_exit_if_not_confirmed (confirm);
+        license_exit_if_not_confirmed ("Proceed with completing the registration?", QDEF_YES);
     }
         
-    bool submitted = license_submit (update[0], os, cores, endianity, user_host, dist);
+    bool submitted = license_submit ("NY"[update], os, cores, endianity, user_host, dist);
 
     ASSINP0 (submitted,
              "Failed to register the license, possibly because the Internet is not accessible or the registration server "
@@ -458,7 +455,7 @@ static void license_print_default_notice (void)
     switch (license_get_type()) { // note: this also loads the license in PIZ
 
         case LIC_TYPE_ACADEMIC:
-            iprintf ("\nGenozip is licensed to %s for use by %s, for academic research purposes at a recognized research institution only. Other use is prohibited. To get a non-academic license, email " EMAIL_SALES ".\n",
+            iprintf ("\nGenozip is licensed to %s for use by %s, for academic research purposes only (see "WEBSITE_PRICING_FAQ"). Other use is prohibited. To get a non-academic license, email " EMAIL_SALES ".\n",
                     rec.institution, rec.name);
             break;
 

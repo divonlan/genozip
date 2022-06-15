@@ -20,7 +20,7 @@ extern unsigned writer_get_pair (VBIType vb_i, VBIType *pair_vb_i);
 extern bool writer_does_txtheader_need_write (Section sec);
 extern bool writer_does_txtheader_need_recon (Section sec);
 extern bool writer_does_vb_need_recon (VBIType vb_i);
-extern BitArrayP writer_get_is_dropped (VBIType vb_i);
+extern BitsP writer_get_is_dropped (VBIType vb_i);
 extern bool writer_is_bgzf_by_compute_thread (VBIType vb_i);
 extern bool writer_get_fasta_contig_grepped_out (VBIType vb_i);
 extern void writer_set_fasta_contig_grepped_out (VBIType vb_i);

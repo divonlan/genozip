@@ -50,12 +50,12 @@ static void zfile_show_b250_section (void *section_header_p, ConstBufferP b250_d
     bytes after = BAFT (const uint8_t, *b250_data);
 
     while (data < after) {
-        WordIndex word_index = base250_decode (&data, true, "zfile_show_b250_section");
+        WordIndex word_index = ctx_decode_b250 (&data, true, header->b250_size, "zfile_show_b250_section");
         switch (word_index) {
-            case WORD_INDEX_ONE_UP     : iprint0 ("ONE_UP "); break;
-            case WORD_INDEX_EMPTY   : iprint0 ("EMPTY "); break;
-            case WORD_INDEX_MISSING : iprint0 ("MISSING "); break;
-            default: iprintf ("%u ", word_index);
+            case WORD_INDEX_ONE_UP  : iprint0 ("ONE_UP " ) ; break ;
+            case WORD_INDEX_EMPTY   : iprint0 ("EMPTY "  ) ; break ;
+            case WORD_INDEX_MISSING : iprint0 ("MISSING ") ; break ;
+            default                 : iprintf ("%u ", word_index);
         }
     }
     iprint0 ("\n");
@@ -211,7 +211,8 @@ uint32_t zfile_compress_b250_data (VBlockP vb, ContextP ctx)
         .h.vblock_i              = BGEN32 (vb->vblock_i),
         .h.flags.ctx             = flags,
         .dict_id                 = ctx->dict_id,
-        .ltype                   = ctx->ltype
+        .ltype                   = ctx->ltype,
+        .b250_size               = ctx->b250_size
     };
 
     ctx->b250_in_z = vb->z_data.len32;

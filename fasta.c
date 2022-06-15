@@ -161,7 +161,7 @@ void fasta_zip_initialize (void)
 {
 }
 
-// callback function for compress to get data of one line (called by codec_lzma_data_in_callback)
+// callback function for compress to get data of one line 
 COMPRESSOR_CALLBACK (fasta_zip_seq)
 {
     ZipDataLineFASTA *dl = DATA_LINE (vb_line_i);

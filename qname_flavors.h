@@ -439,25 +439,25 @@ static SmallContainer con_ncbi_sra2P_l3 = {
 typedef struct QnameFlavorStruct {
     char name[16]; 
     char example[QFS_MAX_EXAMPLES][256];
-    SeqTech tech;                              // The sequencing technology used to generate this data
-    int fq_only;                               // this QF is only for FASTQ, not SAM/BAM/KRAKEN. FQ: 1 if /1 goes after the first string, 2 after the second space-separated string
-    SmallContainer *con_template;              // container template - copied to con in qname_zip_initialize
-    unsigned num_seps;                         // number of printable separator and prefix characters
-    int integer_items[MAX_QNAME_ITEMS+1];      // array of item_i (0-based) that are expected to be integer - no leading zeros (+1 for termiantor; terminated by -1)
-    int numeric_items[MAX_QNAME_ITEMS+1];      // array of item_i (0-based) that are expected to be numeric - leading zeros ok (+1 for termiantor; terminated by -1)
-    int in_local[MAX_QNAME_ITEMS+1];           // int or numeric items that should be stored in local. if not set, item is segged to dict.
-    int hex_items[MAX_QNAME_ITEMS+1];          // array of item_i (0-based) that are expected to be hexademical (+1 for termiantor; terminated by -1)
-    int ordered_item1, ordered_item2;          // an item that may be delta'd in non-sorted files. this should be the fast-moving item which consecutive values are close
-    int range_end_item;                        // item containing end of range - delta vs preceding item in container
-    unsigned fixed_len;                        // fixed length (0 if it is not fixed length)
-    rom px_strs[MAX_QNAME_ITEMS+1];    // prefixes of items (+1 for terminator; terminated by empty entry) 
-    int qname2;                                // embedded qname2 item (generated in qname_zip_initialize)
-    STRl (con_snip,  200);                     // container snips (generated in qname_zip_initialize)
-    STRl (con_snip2, 200);                     // same as con_snip, just with QNAME2 dict_ids
+    SeqTech tech;                         // The sequencing technology used to generate this data
+    int fq_only;                          // this QF is only for FASTQ, not SAM/BAM/KRAKEN. FQ: 1 if /1 goes after the first string, 2 after the second space-separated string
+    SmallContainer *con_template;         // container template - copied to con in qname_zip_initialize
+    unsigned num_seps;                    // number of printable separator and prefix characters
+    int integer_items[MAX_QNAME_ITEMS+1]; // array of item_i (0-based) that are expected to be integer - no leading zeros (+1 for termiantor; terminated by -1)
+    int numeric_items[MAX_QNAME_ITEMS+1]; // array of item_i (0-based) that are expected to be numeric - leading zeros ok (+1 for termiantor; terminated by -1)
+    int in_local[MAX_QNAME_ITEMS+1];      // int or numeric items that should be stored in local. if not set, item is segged to dict.
+    int hex_items[MAX_QNAME_ITEMS+1];     // array of item_i (0-based) that are expected to be hexademical (+1 for termiantor; terminated by -1)
+    int ordered_item1, ordered_item2;     // an item that may be delta'd in non-sorted files. this should be the fast-moving item which consecutive values are close
+    int range_end_item;                   // item containing end of range - delta vs preceding item in container
+    unsigned fixed_len;                   // fixed length (0 if it is not fixed length)
+    rom px_strs[MAX_QNAME_ITEMS+1];       // prefixes of items (+1 for terminator; terminated by empty entry) 
+    int qname2;                           // embedded qname2 item (generated in qname_zip_initialize)
+    STRl (con_snip,  200);                // container snips (generated in qname_zip_initialize)
+    STRl (con_snip2, 200);                // same as con_snip, just with QNAME2 dict_ids
     #define MAX_PREFIX_LEN 30
-    STRl (con_prefix, MAX_PREFIX_LEN);         // prefix of container
-    SmallContainer con;                        // container
-    bool is_int[MAX_QNAME_ITEMS], is_hex[MAX_QNAME_ITEMS], is_in_local[MAX_QNAME_ITEMS], is_numeric[MAX_QNAME_ITEMS];
+    STRl (con_prefix, MAX_PREFIX_LEN);    // prefix of container
+    SmallContainer con;                   // container
+    bool is_int[MAX_QNAME_ITEMS], is_hex[MAX_QNAME_ITEMS], is_in_local[MAX_QNAME_ITEMS], is_numeric[MAX_QNAME_ITEMS]; // indexed according to order of items in the container (NOT by order of did_i)
 } QnameFlavorStruct;
 
 static QnameFlavorStruct qf[] = { 

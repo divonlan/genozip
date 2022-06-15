@@ -41,7 +41,7 @@
     /* tracking lines */\
     Buffer lines;                 /* ZIP: An array of *DataLine* - the lines in this VB */\
                                   /* PIZ: array of (num_lines+1) x (char *) - pointer to within txt_data - start of each line. last item is BAFT(txt_data). */\
-    BitArrayP is_dropped;         /* PIZ: a bitarray with a bit set is the line is marked for dropping by container_reconstruct_do */ \
+    BitsP is_dropped;         /* PIZ: a bitarray with a bit set is the line is marked for dropping by container_reconstruct_do */ \
     uint32_t num_lines_at_1_3, num_lines_at_2_3; /* ZIP VB=1 the number of lines segmented when 1/3 + 2/3 of estimate was reached  */\
     uint32_t debug_line_hash;     /* Seg: adler32 of line, used if Seg modifies line */\
     bool debug_line_hash_skip;    /* Seg: don't calculate debug_line_hash as line is skipped */\
@@ -172,11 +172,10 @@ typedef struct VBlock {
     VBLOCK_COMMON_FIELDS
 } VBlock;
 
-// matching STRtxtw defined in genozip.h
-
 extern void vb_cleanup_memory(void);
 extern VBlockP vb_get_vb (rom task_name, VBIType vblock_i, CompIType comp_i);
 extern bool vb_has_free_vb (void);
+extern bool vb_is_valid (VBlockP vb);
 
 extern void vb_destroy_vb_do (VBlockP *vb_p, rom func);
 #define vb_destroy_vb(vb_p) vb_destroy_vb_do((vb_p), __FUNCTION__)
@@ -185,6 +184,7 @@ extern void vb_destroy_vb_do (VBlockP *vb_p, rom func);
 #define VB_ID_SEGCONF       -2 // ID of VB used by segconf_calculate
 #define VB_ID_GCACHE_CREATE -3 
 #define VB_ID_HCACHE_CREATE -4 
+#define NUM_NONPOOL_VBs      4
 extern VBlockP vb_initialize_nonpool_vb(int vb_id, DataType dt, rom task);
 
 extern void vb_release_vb_do (VBlockP *vb_p, rom task_name, rom func);

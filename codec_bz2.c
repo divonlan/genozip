@@ -59,8 +59,8 @@ COMPRESS (codec_bz2_compress)
 
     // option 1 - compress contiguous data
     if (uncompressed) {
-        strm.next_in   = (char*)uncompressed;
-        strm.avail_in  = *uncompressed_len;
+        strm.next_in  = (char*)uncompressed;
+        strm.avail_in = *uncompressed_len;
 
         ret = BZ2_bzCompress (&strm, BZ_FINISH);
         if (soft_fail && ret == BZ_FINISH_OK)

@@ -49,21 +49,21 @@ Digest ref_get_file_md5 (const Reference ref)         { return ref->file_md5;   
 ConstContigPkgP ref_get_ctgs (const Reference ref)    { return &ref->ctgs;              }
 uint32_t ref_num_contigs (Reference ref)              { return ref->ctgs.contigs.len32; }
 
-void ref_get_genome (Reference ref, const BitArray **genome, const BitArray **emoneg, PosType *genome_nbases)
+void ref_get_genome (Reference ref, const Bits **genome, const Bits **emoneg, PosType *genome_nbases)
 {
     ASSERT0 (ref->genome, "Reference file not loaded");
     
-    *genome = ref->genome;
-    *emoneg = ref->emoneg;
+    if (genome) *genome = ref->genome;
+    if (emoneg) *emoneg = ref->emoneg;
     *genome_nbases = ref->genome_nbases;
 }
 
 void ref_set_genome_is_used (Reference ref, PosType gpos, uint32_t len)
 {
     if (len == 1)
-        bit_array_set (ref->genome_is_set, gpos); 
+        bits_set (ref->genome_is_set, gpos); 
     else 
-        bit_array_set_region (ref->genome_is_set, gpos, len);
+        bits_set_region (ref->genome_is_set, gpos, len);
 }
 
 static inline bool ref_has_is_set (void)
@@ -223,14 +223,14 @@ ConstRangeP ref_piz_get_range (VBlockP vb, Reference ref, bool soft_fail)
 // -------------------------------------------------------------------------------------------------------
 
 // PIZ: uncompact a region within ref - called by compute thread of reading the reference
-static void ref_uncompact_ref (Range *r, int64_t first_bit, int64_t last_bit, const BitArray *compacted)
+static void ref_uncompact_ref (Range *r, int64_t first_bit, int64_t last_bit, const Bits *compacted)
 {
     uint64_t start_1_offset=first_bit, start_0_offset, len_1; // coordinates into r->is_set (in nucleotides)
     uint64_t next_compacted=0; // coordinates into compacted (in nucleotides)
 
     while (1) {
         // find length of set region
-        bool has_any_bit = bit_array_find_next_clear_bit (&r->is_set, start_1_offset, &start_0_offset);
+        bool has_any_bit = bits_find_next_clear_bit (&r->is_set, start_1_offset, &start_0_offset);
         if (!has_any_bit || start_0_offset > last_bit) 
             start_0_offset = last_bit + 1; // this is the last region of 1s
 
@@ -239,14 +239,14 @@ static void ref_uncompact_ref (Range *r, int64_t first_bit, int64_t last_bit, co
                 start_0_offset, start_1_offset, first_bit, last_bit);
 
         // do actual uncompacting
-        bit_array_copy (&r->ref, start_1_offset * 2, compacted, next_compacted * 2, len_1 * 2);
+        bits_copy (&r->ref, start_1_offset * 2, compacted, next_compacted * 2, len_1 * 2);
 
         next_compacted += len_1;
 
         if (start_0_offset > last_bit) break; // we're done (we always end with a region of 1s because we removed the flanking 0s during compacting)
 
         // skip the clear region
-        has_any_bit = bit_array_find_next_set_bit (&r->is_set, start_0_offset, &start_1_offset); 
+        has_any_bit = bits_find_next_set_bit (&r->is_set, start_0_offset, &start_1_offset); 
         ASSERT0 (has_any_bit, "cannot find next set bit");
         ASSERT (start_1_offset <= last_bit, "expecting start_1_offset(%"PRId64") <= last_bit(%"PRId64")",
                 start_1_offset, last_bit); // we removed the flanking regions, so there is always an 1 after a 0 within the region
@@ -280,7 +280,7 @@ Range *ref_get_range_by_ref_index (VBlockP vb, Reference ref, WordIndex ref_cont
 }
 
 // Print this array to a file stream.  Prints '0's and '1'.  Doesn't print newline.
-static void ref_print_bases (FILE *file, const BitArray *bitarr, 
+static void ref_print_bases (FILE *file, const Bits *bitarr, 
                              uint64_t start_base, uint64_t num_of_bases, bool is_forward)
 {
     static const char fwd[2][2] = { { 'A', 'C' }, {'G', 'T'} };
@@ -292,13 +292,13 @@ static void ref_print_bases (FILE *file, const BitArray *bitarr,
         for (uint64_t i=start_base*2; i < (start_base + num_of_bases)*2; i+=2) {
             if (!flag.sequential && (i-start_base*2) % (BASES_PER_LINE*2) == 0)
                 fprintf (file, "%8"PRIu64": ", i/2);
-            fputc (fwd[bit_array_get(bitarr, i+1)][bit_array_get(bitarr, i)], file);
+            fputc (fwd[bits_get(bitarr, i+1)][bits_get(bitarr, i)], file);
             if (!flag.sequential && ((i-start_base*2) % (BASES_PER_LINE*2) == 2*(BASES_PER_LINE-1))) fputc ('\n', file);
         }
     
     else 
         for (int64_t i=(start_base+num_of_bases-1)*2; i >= start_base*2; i-=2) { // signed type
-            fputc (rev[bit_array_get(bitarr, i+1)][bit_array_get(bitarr, i)], file);
+            fputc (rev[bits_get(bitarr, i+1)][bits_get(bitarr, i)], file);
             if (!flag.sequential && (((start_base+num_of_bases-1)*2-i) % (BASES_PER_LINE*2) == (BASES_PER_LINE-1)*2)) fputc ('\n', file);
         }
     
@@ -390,13 +390,13 @@ static void ref_uncompress_one_range (VBlockP vb)
         ASSERTNOTINUSE (vb->scratch);
         zfile_uncompress_section (vb, (SectionHeaderP)header, &vb->scratch, "scratch", 0, SEC_REF_IS_SET);
 
-        BitArray *is_set = buf_zfile_buf_to_bitarray (&vb->scratch, ref_sec_len);
+        Bits *is_set = buf_zfile_buf_to_bitarray (&vb->scratch, ref_sec_len);
 
         // note on locking: while different threads uncompress regions of the range that are non-overlapping, 
         // there might be a 64b word that is split between two ranges
         RefLock lock = ref_lock (vb->ref, sec_start_gpos, ref_sec_len + 63); // +63 to ensure lock covers entire last word
     
-        bit_array_copy (&r->is_set, sec_start_within_contig, is_set, 0, ref_sec_len); // initialization of is_set - case 3
+        bits_copy (&r->is_set, sec_start_within_contig, is_set, 0, ref_sec_len); // initialization of is_set - case 3
         ref_unlock (vb->ref, lock);
 
         buf_free (vb->scratch);
@@ -429,7 +429,7 @@ static void ref_uncompress_one_range (VBlockP vb)
 
         if (primary_command == ZIP && flag.reference == REF_EXT_STORE) { // initialization of is_set - case 1
             RefLock lock = ref_lock (vb->ref, sec_start_gpos, ref_sec_len + 63); // +63 to ensure lock covers entire last word
-            bit_array_clear_region (&r->is_set, sec_start_within_contig, ref_sec_len); // entire range is cleared
+            bits_clear_region (&r->is_set, sec_start_within_contig, ref_sec_len); // entire range is cleared
             ref_unlock (vb->ref, lock);
         }
 
@@ -447,7 +447,7 @@ static void ref_uncompress_one_range (VBlockP vb)
                     ref_sec_len, initial_flanking_len, final_flanking_len);
 
             RefLock lock = ref_lock (vb->ref, start + r->gpos, len + 63); 
-            bit_array_set_region (&r->is_set, start, len);
+            bits_set_region (&r->is_set, start, len);
             ref_unlock (vb->ref, lock);
 
             // save the region we need to set, we will do the actual setting in ref_load_stored_reference
@@ -469,7 +469,7 @@ static void ref_uncompress_one_range (VBlockP vb)
     // lock - while different threads uncompress regions of the range that are non-overlapping, they might overlap at the bit level
     RefLock lock;
     if (is_compacted) {
-        const BitArray *compacted = buf_zfile_buf_to_bitarray (&vb->scratch, compacted_ref_len * 2);
+        const Bits *compacted = buf_zfile_buf_to_bitarray (&vb->scratch, compacted_ref_len * 2);
 
         // lock = ref_lock (vb->ref, 0, vb->ref->genome_nbases);
         lock = ref_lock (vb->ref, sec_start_gpos, ref_sec_len + 63); // +63 to ensure lock covers entire last word
@@ -478,12 +478,12 @@ static void ref_uncompress_one_range (VBlockP vb)
     }
 
     else {
-        BitArray *ref = buf_zfile_buf_to_bitarray (&vb->scratch, ref_sec_len * 2);
+        Bits *ref = buf_zfile_buf_to_bitarray (&vb->scratch, ref_sec_len * 2);
 
         lock = ref_lock (vb->ref, sec_start_gpos, ref_sec_len + 63); // +63 to ensure lock covers entire last word
 
         // copy the section, excluding the flanking regions
-        bit_array_copy (&r->ref, MAX_(sec_start_within_contig, 0) * 2, // dst
+        bits_copy (&r->ref, MAX_(sec_start_within_contig, 0) * 2, // dst
                         ref, initial_flanking_len * 2, // src
                         (ref_sec_len - initial_flanking_len - final_flanking_len) * 2); // len
     }
@@ -522,8 +522,9 @@ static void ref_read_one_range (VBlockP vb)
     // if the user specified --regions, check if this ref range is needed
     bool range_is_included = true;
     RAEntry *ra = NULL;
-    if (flag.regions) { 
-        if (vb->vblock_i > vb->ref->stored_ra.len) return; // we're done - no more ranges to read, per random access (this is the empty section)
+    if (command==PIZ && flag.regions &&
+        !(Z_DT(DT_REF) || Z_DT(DT_SAM) || Z_DT(DT_BAM) || Z_DT(DT_FASTQ))) { // SAM/BAM/FASTQ: we need the reference even for excluded contigs, so recon can consume FASTQ_SEQMIS/SAM_SEQMIS (also always when reading external referene, as we don't yet know which files it will be use for)
+        if (vb->vblock_i > vb->ref->stored_ra.len32) return; // we're done - no more ranges to read, per random access (this is the empty section)
 
         ra = B(RAEntry, vb->ref->stored_ra, vb->vblock_i-1);
         ASSERT (ra->vblock_i == vb->vblock_i, "expecting ra->vblock_i(%u) == vb->vblock_i(%u)", ra->vblock_i, vb->vblock_i);
@@ -551,7 +552,7 @@ static void ref_read_one_range (VBlockP vb)
 }
 
 // PIZ: loading a reference stored in the genozip file - this could have been originally stored as REF_INTERNAL or REF_EXT_STORE
-// or this could be a .ref.genozip file (called from load_external->piz_one_txt_file)
+// or this could be a .ref.genozip file (called from load_external->piz_one_txt_file, if reference is not cached yet)
 void ref_load_stored_reference (Reference ref)
 {
     START_TIMER;
@@ -589,7 +590,7 @@ void ref_load_stored_reference (Reference ref)
     // from a full-contig range in EXT_STORE, whose regions copied-from-FASTA are 0s.
     ARRAY (RegionToSet, rts, ref->region_to_set_list);
     for (uint32_t i=0; i < ref->region_to_set_list.len32; i++)
-        bit_array_set_region (rts[i].is_set, rts[i].first_bit, rts[i].len);
+        bits_set_region (rts[i].is_set, rts[i].first_bit, rts[i].len);
 
     COPY_TIMER_VB (evb, ref_load_stored_reference);
 }
@@ -628,7 +629,7 @@ bool ref_mmap_cached_reference (Reference ref)
     if (primary_command == PIZ) 
         for (uint32_t chrom=0; chrom < ref->ranges.len32; chrom++) {
             Range *r = B(Range, ref->ranges, chrom);
-            bit_array_set_region (&r->is_set, 0, ref_size (r));
+            bits_set_region (&r->is_set, 0, ref_size (r));
         }
 
     if (flag.show_ref_seq) ref_show_sequence (ref);
@@ -786,8 +787,8 @@ static Range *ref_seg_get_locked_range_denovo (VBlockP vb, Reference ref, WordIn
         .chrom_name_len = vb->chrom_name_len,
         .chrom          = WORD_INDEX_NONE,  // Note: in REF_INTERNAL, in a headerless file, the chrom index is private to the VB prior to merge, so we can't use it. It will be assigned later, in ref_finalize_denovo_ranges.
         .chrom_name     = MALLOC (vb->chrom_name_len),
-        .ref            = bit_array_alloc (REF_NUM_DENOVO_SITES_PER_RANGE * 2, false),
-        .is_set         = bit_array_alloc (REF_NUM_DENOVO_SITES_PER_RANGE, true), // nothing is set yet - in ZIP, bits get set as they are encountered in the compressing txt file
+        .ref            = bits_alloc (REF_NUM_DENOVO_SITES_PER_RANGE * 2, false),
+        .is_set         = bits_alloc (REF_NUM_DENOVO_SITES_PER_RANGE, true), // nothing is set yet - in ZIP, bits get set as they are encountered in the compressing txt file
     };
 
     // vb->chrom_name points into vb->txt_data that will disappear at the end of this VB, 
@@ -947,13 +948,13 @@ static void ref_copy_compressed_sections_from_reference_file (Reference ref)
         PosType SEC_REFERENCE_start_in_contig_r = sec_reference[i].min_pos - contig_r->first_pos; // the start of the SEC_REFERENCE section (a bit less than 1MB) within the full-contig range
 
         PosType SEC_REFERNECE_len = sec_reference[i].max_pos - sec_reference[i].min_pos + 1;
-        PosType bits_is_set   = bit_array_num_bits_set_region (&contig_r->is_set, SEC_REFERENCE_start_in_contig_r, SEC_REFERNECE_len);
+        PosType bits_is_set   = bits_num_bits_set_region (&contig_r->is_set, SEC_REFERENCE_start_in_contig_r, SEC_REFERNECE_len);
 
         // if this at least 95% of the RA is covered, just copy the corresponding FASTA section to our file, and
         // mark all the ranges as is_set=false indicating that they don't need to be compressed individually
         if ((float)bits_is_set / (float)SEC_REFERNECE_len >= 0.95) {
             ref_copy_one_compressed_section (ref, ref_file, &sec_reference[i], &sl);
-            bit_array_clear_region (&contig_r->is_set, SEC_REFERENCE_start_in_contig_r, SEC_REFERNECE_len);
+            bits_clear_region (&contig_r->is_set, SEC_REFERENCE_start_in_contig_r, SEC_REFERNECE_len);
 
             if (contig_r->num_set != -1) contig_r->num_set -= bits_is_set;
         }
@@ -972,14 +973,14 @@ static bool ref_remove_flanking_regions (Reference ref, Range *r, uint64_t *star
     uint64_t end_flanking_region_len, last_1;
     
     // note: ref_prepare_range_for_compress is responsible not to send us 0-bit ranges
-    bool has_any_bit = bit_array_find_first_set_bit (&r->is_set, start_flanking_region_len);
+    bool has_any_bit = bits_find_first_set_bit (&r->is_set, start_flanking_region_len);
 
     char bits[65];
     ASSERT (has_any_bit, "range %u (%s) has no bits set in r->is_set but r->num_set=%"PRIu64" (r->is_set.nbits=%"PRIu64"). is_set(first 64 bits)=%s", 
             BNUM (ref->ranges, r), r->chrom_name, r->num_set, r->is_set.nbits, 
-            bit_array_to_substr (&r->is_set, 0, 64, bits, '1', '0', true)); 
+            bits_to_substr (&r->is_set, 0, 64, bits)); 
 
-    has_any_bit = bit_array_find_prev_set_bit (&r->is_set, r->is_set.nbits, &last_1);
+    has_any_bit = bits_find_prev_set_bit (&r->is_set, r->is_set.nbits, &last_1);
     ASSERT (has_any_bit, "range %u (%s) has no bits set in r->is_set (#2)", BNUM (ref->ranges, r), r->chrom_name); // this should definitely never happen, since we already know the range has bits
     end_flanking_region_len = r->is_set.nbits - last_1 - 1;
 
@@ -994,12 +995,12 @@ static bool ref_remove_flanking_regions (Reference ref, Range *r, uint64_t *star
     ASSERT (r->last_pos >= r->first_pos, "bad removal of flanking regions: r->first_pos=%"PRId64" r->last_pos=%"PRId64,
             r->first_pos, r->last_pos);
 
-    bit_array_remove_flanking (&r->is_set, *start_flanking_region_len, end_flanking_region_len);
+    bits_remove_flanking (&r->is_set, *start_flanking_region_len, end_flanking_region_len);
 
     // if all we're doing is removing the flanking regions, we update ref now. if not, ref_compact_ref will update it
     bool is_compact_needed = num_clear_bits_excluding_flanking_regions >= THRESHOLD_FOR_COMPACTING;
     if (!is_compact_needed) 
-        bit_array_remove_flanking (&r->ref, *start_flanking_region_len * 2, end_flanking_region_len * 2);
+        bits_remove_flanking (&r->ref, *start_flanking_region_len * 2, end_flanking_region_len * 2);
 
     // return true if compacting is needed
     return is_compact_needed;
@@ -1021,17 +1022,17 @@ static bool ref_compact_ref (Reference ref, Range *r)
     while (1) {
         
         // find length of set region
-        bool has_any_bit = bit_array_find_next_clear_bit (&r->is_set, start_1_offset, &start_0_offset);
+        bool has_any_bit = bits_find_next_clear_bit (&r->is_set, start_1_offset, &start_0_offset);
         uint64_t len_1 = (has_any_bit ? start_0_offset : r->is_set.nbits) - start_1_offset;
 
         // do actual compacting - move set region to be directly after the previous set region (or at the begining if its the first)
-        bit_array_copy (&r->ref, compact_len * 2, &r->ref, (start_flanking_region_len + start_1_offset) * 2, len_1 * 2);
+        bits_copy (&r->ref, compact_len * 2, &r->ref, (start_flanking_region_len + start_1_offset) * 2, len_1 * 2);
         compact_len += len_1;
 
         if (!has_any_bit) break; // case: we're done- this 1 region goes to the end the range - there are no more clear regions
 
         // find length of clear region
-        has_any_bit = bit_array_find_next_set_bit (&r->is_set, start_0_offset, &start_1_offset);
+        has_any_bit = bits_find_next_set_bit (&r->is_set, start_0_offset, &start_1_offset);
         ASSERT0 (has_any_bit, "cannot find set bits"); // this should never happen as we removed the flanking regions
     }
 
@@ -1066,7 +1067,7 @@ static void ref_compress_one_range (VBlockP vb)
     // First, SEC_REF_IS_SET section (but not needed if the entire range is used)
     if (r && is_compacted) {
 
-        LTEN_bit_array (&r->is_set);
+        LTEN_bits (&r->is_set);
 
         header.h.section_type          = SEC_REF_IS_SET;  // most of the header is the same as ^
         header.h.codec                 = CODEC_BZ2;
@@ -1082,7 +1083,7 @@ static void ref_compress_one_range (VBlockP vb)
     }
 
     // Second, SEC_REFERENCE
-    if (r) LTEN_bit_array (&r->ref);
+    if (r) LTEN_bits (&r->ref);
 
     header.h.section_type          = SEC_REFERENCE;
     header.h.codec                 = CODEC_LZMA; // better than BSC: slightly better compression and compression speed, 2.5X faster decompression
@@ -1127,7 +1128,7 @@ static inline unsigned ref_prepare_expected_more_merges (const Range *this_r, in
     for (Range *r=(Range *)this_r+1; r < BAFT (Range, gref->ranges) && more <= max_ranges; r++, more++) {
 
         if (r->num_set == -1)  // calcualte num_set if not already calculated
-            r->num_set = bit_array_num_bits_set (&r->is_set);
+            r->num_set = bits_num_bits_set (&r->is_set);
 
         num_set_this_merge += r->num_set;
 
@@ -1160,7 +1161,7 @@ static void ref_prepare_range_for_compress (VBlockP vb)
         if (vb->range && (num_merged >= MAX_MERGED_RANGES || r->chrom != vb->range->chrom || r->first_pos != vb->range->last_pos+1)) break; 
 
         if (r->num_set == -1)  // calculate num_set if not already calculated
-            r->num_set = bit_array_num_bits_set (&r->is_set);
+            r->num_set = bits_num_bits_set (&r->is_set);
 
         if (!r->num_set) {
             r->is_set.nbits = 0;
@@ -1194,10 +1195,10 @@ static void ref_prepare_range_for_compress (VBlockP vb)
             expected_more_merges = (num_merged==1) ? ref_prepare_expected_more_merges (r, vb->range->num_set, MAX_MERGED_RANGES-1)
                                                    : expected_more_merges - 1;
 
-            bit_array_concat (&vb->range->ref, &r->ref, expected_more_merges);            
-            bit_array_concat (&vb->range->is_set, &r->is_set, expected_more_merges);
-            bit_array_free (&r->ref);
-            bit_array_free (&r->is_set);            
+            bits_concat (&vb->range->ref, &r->ref, expected_more_merges);            
+            bits_concat (&vb->range->is_set, &r->is_set, expected_more_merges);
+            bits_free (&r->ref);
+            bits_free (&r->is_set);            
         }
     }
   }
@@ -1248,10 +1249,10 @@ static void ref_finalize_denovo_ranges (void)
         
         if (range_i < gref->ranges.len - 1 && r->chrom == (r+1)->chrom) continue; // not last range of the contig
 
-        uint64_t effective_len = bit_array_effective_length (&r->is_set);
+        uint64_t effective_len = bits_effective_length (&r->is_set);
         r->last_pos = r->first_pos + effective_len - 1;
-        bit_array_truncate (&r->ref, 2 * effective_len);
-        bit_array_truncate (&r->is_set, effective_len);
+        bits_truncate (&r->ref, 2 * effective_len);
+        bits_truncate (&r->is_set, effective_len);
     }
 }
 
@@ -1532,7 +1533,7 @@ static void ref_reverse_compliment_genome_prepare (VBlockP vb)
 
 static void ref_reverse_compliment_genome_do (VBlockP vb)
 {
-    bit_array_reverse_complement_aligned (vb->ref->emoneg, vb->ref->genome, 
+    bits_reverse_complement_aligned (vb->ref->emoneg, vb->ref->genome, 
                                           (uint64_t)(vb->vblock_i-1) * REV_CODEC_GENOME_BASES_PER_THREAD, 
                                           REV_CODEC_GENOME_BASES_PER_THREAD);
 
@@ -1630,7 +1631,7 @@ static void ref_initialize_loaded_ranges (Reference ref, RangesType type)
 
     // we don't need is_set if we're compressing with REF_EXTERNAL 
 
-    // note: genome_nbases must be full words, so that bit_array_reverse_complement doesn't need to shift
+    // note: genome_nbases must be full words, so that bits_reverse_complement doesn't need to shift
     ref->genome_nbases = ROUNDUP64 (ref_contigs_get_genome_nbases (ref)) + 64; // round up to the nearest 64 bases, and add one word, needed by aligner_get_match_len for bit shifting overflow
 
     if (ref_has_is_set()) 
@@ -1659,10 +1660,10 @@ static void overlay_ranges_on_loaded_genome (Reference ref)
             ASSERT (r->gpos + nbases <= ref->genome->nbits / 2, "adding range \"%s\": r->gpos(%"PRId64") + nbases(%"PRId64") (=%"PRId64") is beyond genome_nbases=%"PRId64,
                     r->chrom_name, r->gpos, nbases, r->gpos+nbases, ref->genome_nbases);
 
-            bit_array_overlay (&r->ref, ref->genome, r->gpos*2, nbases*2);
+            bits_overlay (&r->ref, ref->genome, r->gpos*2, nbases*2);
 
             if (ref_has_is_set()) 
-                bit_array_overlay (&r->is_set, ref->genome_is_set, r->gpos, nbases);
+                bits_overlay (&r->is_set, ref->genome_is_set, r->gpos, nbases);
         }
     }
 }
@@ -1798,7 +1799,7 @@ void ref_print_is_set (const Range *r,
     uint64_t next;
     for (uint64_t i=0; i < r->is_set.nbits; ) {
         
-        bool found = bit_array_find_next_clear_bit (&r->is_set, i, &next);
+        bool found = bits_find_next_clear_bit (&r->is_set, i, &next);
         if (!found) next = r->is_set.nbits;
 
         bool in_neighborhood = (around_pos - (PosType)(r->first_pos+i) > -neighborhood) && (around_pos - (PosType)(r->first_pos+i) < neighborhood);
@@ -1812,7 +1813,7 @@ void ref_print_is_set (const Range *r,
 
         i = next;
 
-        found = bit_array_find_next_set_bit (&r->is_set, i, &next);
+        found = bits_find_next_set_bit (&r->is_set, i, &next);
         if (!found) next = r->is_set.nbits;
 
         i = next;

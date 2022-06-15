@@ -73,7 +73,7 @@ void sam_vb_release_vb (VBlockSAMP vb)
     buf_free (vb->sa_alns);
     buf_free (vb->sa_prim_cigars);
     buf_free (vb->qname_hash);
-    buf_free (vb->mate_textual_cigars);
+    buf_free (vb->line_textual_cigars);
 }
 
 void sam_vb_destroy_vb (VBlockSAMP vb)
@@ -88,7 +88,7 @@ void sam_vb_destroy_vb (VBlockSAMP vb)
     buf_destroy (vb->sa_alns);
     buf_destroy (vb->sa_prim_cigars);
     buf_destroy (vb->qname_hash);
-    buf_destroy (vb->mate_textual_cigars);
+    buf_destroy (vb->line_textual_cigars);
 }
 
 // initialization of the line

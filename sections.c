@@ -958,7 +958,15 @@ void sections_show_header (const SectionHeader *header, VBlockP vb /* optional i
         break;
     }
     
-    case SEC_B250:
+    case SEC_B250: {
+        SectionHeaderCtx *h = (SectionHeaderCtx *)header;
+        sprintf (str, "%s/%-8s\tltype=%s b250_size=%u param=%u %s\n",
+                 dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s, lt_name (h->ltype), 
+                 h->b250_size==B250_BYTES_1?1 : h->b250_size==B250_BYTES_2?2 : h->b250_size==B250_BYTES_3?3 : 4,
+                 h->param, sections_dis_flags (f, st, dt).s);
+        break;
+    }
+
     case SEC_LOCAL: {
         SectionHeaderCtx *h = (SectionHeaderCtx *)header;
         sprintf (str, "%s/%-8s\tltype=%s param=%u %s\n",

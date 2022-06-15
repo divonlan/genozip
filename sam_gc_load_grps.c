@@ -14,7 +14,7 @@
 #include "reconstruct.h"
 #include "zfile.h"
 #include "qname.h"
-#include "bit_array.h"
+#include "bits.h"
 #include "writer.h"
 #include "htscodecs/rANS_static4x16.h"
 #include "libdeflate/libdeflate.h"
@@ -208,7 +208,7 @@ static inline void sam_load_groups_add_seq (VBlockSAMP vb, PlsgVbInfo *plsg, SAG
     ASSERT (vb->textual_seq.len == vb->seq_len, "Expecting textual_seq.len=%"PRIu64" == seq_len=%u", vb->textual_seq.len, vb->seq_len);
 
     // pack SEQ data into z_file->sa_seq
-    BitArray *z_sa_seq = buf_get_bitarray (&z_file->sa_seq);
+    Bits *z_sa_seq = buf_get_bitarray (&z_file->sa_seq);
     sam_sa_native_to_acgt (vb, z_sa_seq, z_seq_start * 2, B1STc(vb->textual_seq), vb->seq_len, false, false, false); 
 }
 
@@ -252,7 +252,7 @@ static inline void sam_load_groups_add_qual (VBlockSAMP vb, PlsgVbInfo *plsg, SA
         g->qual_comp_len = 0; // we will use qual_comp_len==0 to mean "not compressed"
     }
 
-    vb->codec_bufs[0].len = 0; // faster than buf_free
+    buf_free (vb->codec_bufs[0]); 
 }
 
 // populates the cigar data of one alignment

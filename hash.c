@@ -388,7 +388,7 @@ WordIndex hash_get_entry_for_seg (VBlockP segging_vb, Context *vctx, STRp(snip),
         *node = ctx_node_vb (vctx, g_hashent->node_index, &snip_in_dict, &snip_in_dict_len);
 
         // case: snip is in the global hash table - we're done
-        if ((*node)->word_index.n != WORD_INDEX_NONE && str_issame (snip, snip_in_dict))  // note: WORD_INDEX_NONE if node was canceled in ctx_rollback
+        if ((*node)->node_index != WORD_INDEX_NONE && str_issame (snip, snip_in_dict))  // note: WORD_INDEX_NONE if node was canceled in ctx_rollback
             return g_hashent->node_index; // case 2
     }
 
@@ -427,7 +427,8 @@ WordIndex hash_get_entry_for_seg (VBlockP segging_vb, Context *vctx, STRp(snip),
             *node = ctx_node_vb (vctx, l_hashent->node_index, &snip_in_dict, &snip_in_dict_len);
 
             // case: snip is in the hash table - we're done
-            if ((*node)->word_index.n != WORD_INDEX_NONE && str_issame (snip, snip_in_dict)) // note: WORD_INDEX_NONE if this node was canceled in ctx_rollback
+            //xxx if ((*node)->word_index.n != WORD_INDEX_NONE && str_issame (snip, snip_in_dict)) // note: WORD_INDEX_NONE if this node was canceled in ctx_rollback
+            if ((*node)->word_index != WORD_INDEX_NONE && str_issame (snip, snip_in_dict)) // note: WORD_INDEX_NONE if this node was canceled in ctx_rollback
                 return l_hashent->node_index;
         }
     }

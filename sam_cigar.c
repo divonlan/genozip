@@ -24,9 +24,10 @@
 static const bool cigar_valid_op[256] = { ['M']=true, ['I']=true, ['D']=true, ['N']=true, ['S']=true, ['H']=true, ['P']=true, ['=']=true, ['X']=true }; 
 
 const char cigar_op_to_char[16] = "MIDNSHP=Xabcdefg"; // BAM to SAM (a-g are invalid values)
-
-static const uint8_t cigar_char_to_op[96] = { ['M']=BC_M, ['I']=BC_I, ['D']=BC_D, ['N']=BC_N, ['S']=BC_S, 
-                                              ['H']=BC_H, ['P']=BC_P, ['=']=BC_E, ['X']=BC_X, ['*']=BC_NONE }; 
+ 
+static const uint8_t cigar_char_to_op[256] = { [0 ... 255]=255, // invalid
+                                               ['M']=BC_M, ['I']=BC_I, ['D']=BC_D, ['N']=BC_N, ['S']=BC_S, 
+                                               ['H']=BC_H, ['P']=BC_P, ['=']=BC_E, ['X']=BC_X, ['*']=BC_NONE }; 
 
 #undef S 
 #define S (c == 'S')
@@ -43,43 +44,77 @@ static const uint8_t cigar_char_to_op[96] = { ['M']=BC_M, ['I']=BC_I, ['D']=BC_D
 // Shared
 //---------
 
-StoH sam_cigar_S_to_H (VBlockSAMP vb, STRc(cigar))
+StoH sam_cigar_S_to_H (VBlockSAMP vb, STRc(cigar), bool is_binary)
 {
-    StoH s2h = {};
+    StoH s2h = { .is_binary = is_binary };
 
-    // replace left clipping - find first op
-    char *c = cigar; while (IS_DIGIT(*c)) c++;
-    if (*c == 'S') {
-        *c = 'H';
-        s2h.left = c;
+    if (is_binary) {
+        BamCigarOp *binary_cigar = (BamCigarOp *)cigar;
+        cigar_len /= sizeof (BamCigarOp);
+
+        if (binary_cigar[0].op == BC_S) {
+            binary_cigar[0].op = BC_H;
+            s2h.left = (char *)&binary_cigar[0];
+        }
+
+        if (binary_cigar[cigar_len-1].op == BC_S) {
+            binary_cigar[cigar_len-1].op = BC_H;
+            s2h.right = (char *)&binary_cigar[cigar_len-1];
+        }
     }
 
-    // replace right clipping
-    if (cigar[cigar_len-1] == 'S') {
-        s2h.right = &cigar[cigar_len-1];
-        *s2h.right = 'H';
+    else {
+        // replace left clipping - find first op
+        char *c = cigar; while (IS_DIGIT(*c)) c++;
+        if (*c == 'S') {
+            *c = 'H';
+            s2h.left = c;
+        }
+
+        // replace right clipping
+        if (cigar[cigar_len-1] == 'S') {
+            s2h.right = &cigar[cigar_len-1];
+            *s2h.right = 'H';
+        }
     }
 
     return s2h;
 }
 
-HtoS sam_cigar_H_to_S (VBlockSAMP vb, STRc(cigar))
+HtoS sam_cigar_H_to_S (VBlockSAMP vb, STRc(cigar), bool is_binary)
 {
-    HtoS h2s = {};
+    HtoS h2s = { .is_binary = is_binary };
 
-    // replace left clipping - find first op
-    if (vb->hard_clip[0]) {
-        char *c = cigar; while (IS_DIGIT(*c)) c++;
-        if (*c == 'H') {
-            *c = 'S';
-            h2s.left = c;
-        } 
+    if (is_binary) {
+        BamCigarOp *binary_cigar = (BamCigarOp *)cigar;
+        cigar_len /= sizeof (BamCigarOp);
+
+        if (binary_cigar[0].op == BC_H) {
+            binary_cigar[0].op = BC_S;
+            h2s.left = (char *)&binary_cigar[0];
+        }
+
+        if (binary_cigar[cigar_len-1].op == BC_H) {
+            binary_cigar[cigar_len-1].op = BC_S;
+            h2s.right = (char *)&binary_cigar[cigar_len-1];
+        }
     }
 
-    // replace right clipping
-    if (cigar[cigar_len-1] == 'H') {
-        h2s.right = &cigar[cigar_len-1];
-        *h2s.right = 'S';
+    else {
+        // replace left clipping - find first op
+        if (vb->hard_clip[0]) {
+            char *c = cigar; while (IS_DIGIT(*c)) c++;
+            if (*c == 'H') {
+                *c = 'S';
+                h2s.left = c;
+            } 
+        }
+
+        // replace right clipping
+        if (cigar[cigar_len-1] == 'H') {
+            h2s.right = &cigar[cigar_len-1];
+            *h2s.right = 'S';
+        }
     }
 
     return h2s;
@@ -141,26 +176,46 @@ finish:
     if (command == ZIP)
         vb->last_cigar = B1STc (*textual_cigar);
 }
-/*
-void sam_cigar_textual_to_binary (VBlockSAMP vb, STRp(cigar))
-{
-   
 
-    if (cigar_len==1 && *cigar == '*') return; // empty binary cigar
+bool sam_cigar_textual_to_binary (VBlockSAMP vb, STRp(cigar), BufferP binary_cigar)
+{
+    ASSERTNOTINUSE (*binary_cigar);
+
+    if (cigar_len==1 && *cigar == '*') return true; // empty binary cigar
 
     uint32_t n_ops = 0;
     for (int i=0; i < cigar_len; i++)
         if (!IS_DIGIT (cigar[i])) n_ops++;
 
-    ARRAY_alloc (BamCigarOp, ops, n_ops, false, vb->binary_cigar, vb, "binary_cigar");
+    ARRAY_alloc (BamCigarOp, ops, n_ops, false, *binary_cigar, vb, NULL); // buffer must be already named by caller
 
     for (int op_i=0; op_i < n_ops; op_i++) {
         uint32_t n=0; // do arith on proper integer, not bit field
         while (IS_DIGIT(*cigar)) { n = 10*n + *cigar - '0' ; cigar++; }
-        ops[op_i] = (BamCigarOp) { .op = cigar_char_to_op[*cigar++], .n = n } ;
+        ops[op_i] = (BamCigarOp) { .op = cigar_char_to_op[(uint8_t)*cigar++], .n = n } ;
+        
+        if (ops[op_i].op == 255) { // invalid op
+            buf_free (*binary_cigar);
+            return false;
+        }
     }
+
+    return true;
 }
-*/
+
+// display first 10K characters of a binary cigar - textually
+CigarStr dis_binary_cigar (VBlockSAMP vb, const BamCigarOp *cigar, uint32_t cigar_len/*in ops*/, Buffer *working_buf)
+{
+    CigarStr out = {};
+    sam_cigar_binary_to_textual (vb, cigar_len, (uint32_t*)cigar, working_buf);
+    uint32_t len = MIN_(working_buf->len32, sizeof(out.s)-1);
+    memcpy (out.s, working_buf->data, len);
+    out.s[len] = 0;
+
+    buf_free (*working_buf);
+    return out;
+}
+
 // calculate the expected length of SEQ and QUAL from the CIGAR string
 // A CIGAR looks something like: "109S19M23S", See: https://samtools.github.io/hts-specs/SAMv1.pdf 
 void sam_cigar_analyze (VBlockSAMP vb, STRp(cigar)/* textual */, bool cigar_is_in_textual_cigar, uint32_t *seq_consumed)
@@ -255,7 +310,7 @@ void sam_cigar_analyze (VBlockSAMP vb, STRp(cigar)/* textual */, bool cigar_is_i
 
     // note: if there's ever any need to support both S and H, we need to fix sam_sa_seg_depn_find_sagroup too
     ASSINP (!((vb->hard_clip[0] || vb->hard_clip[1]) && (vb->soft_clip[0] || vb->soft_clip[1])),
-            "%s: Invalid CIGAR: has both S and H. CIGAR=\"%.*s\"", LN_NAME, STRf(cigar));
+            "%s: CIGAR has both S and H - this is not currently supported by Genozip. Contact support@genozip.com if you need this case supported. CIGAR=\"%.*s\"", LN_NAME, STRf(cigar));
 }
 
 // analyze the binary cigar when segging BAM - faster
@@ -516,7 +571,7 @@ static bool sam_cigar_seg_is_same_as_prim (VBlockSAMP vb, STRp(textual_cigar))
     STR(prim_cigar);
     if (sam_seg_SA_get_prim_item (vb, SA_CIGAR, pSTRa(prim_cigar))) return false;
     
-    HtoS htos = sam_cigar_H_to_S (vb, (char*)STRa(textual_cigar));
+    HtoS htos = sam_cigar_H_to_S (vb, (char*)STRa(textual_cigar), false);
 
     bool is_same = str_issame (textual_cigar, prim_cigar);
     
@@ -611,7 +666,7 @@ void sam_cigar_seg_textual (VBlockSAMP vb, ZipDataLineSAM *dl, uint32_t last_cig
         seg_by_did_i (VB, STRa(cigar_snip), SAM_CIGAR, last_cigar_len+1); // +1 for \t
     }
 
-    // case: copy from same-vb prim (prim_line_i is only set in MAIN VBs for depn lines in collated files)
+    // case: copy from same-vb prim (prim_line_i is only set in MAIN VBs for depn lines in non-sorted files)
     else if (zip_has_prim && sam_cigar_seg_is_same_as_prim (vb, vb->last_cigar, last_cigar_len)) {
         cigar_snip[cigar_snip_len++] = COPY_BUDDY; // always at cigar_snip[2]
         seg_by_did_i (VB, STRa(cigar_snip), SAM_CIGAR, last_cigar_len+1); // +1 for \t
@@ -713,10 +768,10 @@ void sam_cigar_seg_binary (VBlockSAMP vb, ZipDataLineSAM *dl, uint32_t l_seq, ro
             seg_by_ctx (VB, STRa(cigar_snip), ctx, add_bytes);
     }
 
-    // store a copy of the CIGAR in mate_textual_cigars for use by a mate MC:Z
-    if (segconf.has[OPTION_MC_Z] && !segconf.running) {
-        dl->CIGAR =(TxtWord){ .index = vb->mate_textual_cigars.len, .len = vb->textual_cigar.len }; // in BAM dl->CIGAR points into mate_textual_cigars
-        buf_add_buf (VB, &vb->mate_textual_cigars, &vb->textual_cigar, char, "mate_textual_cigars");
+    // store a copy of the CIGAR in line_textual_cigars for use by a mate MC:Z
+    if (line_textual_cigars_used && !segconf.running) {
+        dl->CIGAR =(TxtWord){ .index = vb->line_textual_cigars.len32, .len = vb->textual_cigar.len32 }; // in BAM dl->CIGAR points into line_textual_cigars
+        buf_add_buf (VB, &vb->line_textual_cigars, &vb->textual_cigar, char, "line_textual_cigars");
     }
 
     if (dl->POS >= 1 && vb->ref_consumed)
@@ -764,11 +819,12 @@ void sam_cigar_seg_MC (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(mc), uint32_t add
     segconf_set_has (OPTION_MC_Z);
 
     ZipDataLineSAM *mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
-    BufferP mate_cigar_buf = IS_BAM_ZIP ? &vb->mate_textual_cigars : &vb->txt_data; // mate_dl->MC points into this buffer
 
     ContextP channel_ctx = seg_mux_get_channel_ctx (VB, (MultiplexerP)&vb->mux_MC, zip_has_mate);
 
-    if (zip_has_mate && str_issame_(Bc (*mate_cigar_buf, mate_dl->CIGAR.index), mate_dl->CIGAR.len, STRa(mc)))
+    if (zip_has_mate && 
+        (!IS_BAM_ZIP || line_textual_cigars_used) && // there might be a rare edge case there are no MC:Z lines in the segconf vb, but are after - in which case, in depn/prim VBs, we won't have line_textual_cigars
+        str_issame_(line_cigar (mate_dl), mate_dl->CIGAR.len, STRa(mc)))
         seg_by_ctx (VB, STRa(copy_buddy_CIGAR_snip), channel_ctx, add_bytes); // copy MC from earlier-line mate CIGAR
     
     // case: long CIGAR and SEQ and CIGAR are not missing, with the "standard" sam_seq_len (normally only works for short reads)
@@ -809,7 +865,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_cigar_special_CIGAR)
     // case: we copy the predicted alignment in same-vb prim line's SA:Z
     else if (snip[0] == COPY_BUDDY && is_depn) {
         sam_piz_SA_get_prim_item (vb, SA_CIGAR, pSTRa(snip));
-        stoh = sam_cigar_S_to_H (vb, (char*)STRa(snip));
+        stoh = sam_cigar_S_to_H (vb, (char*)STRa(snip), false);
     }
 
     if (snip[0] == SNIP_LOOKUP) { // squank into vb->scratch
@@ -940,7 +996,7 @@ void sam_reconstruct_main_cigar_from_SA_Group (VBlockSAMP vb, bool substitute_S,
     char *cigar = B1STc (vb->scratch);
 
     // case: we need to replace soft-clipping (S) with hard-clipping (H)
-    if (substitute_S) sam_cigar_S_to_H (vb, STRa(cigar));
+    if (substitute_S) sam_cigar_S_to_H (vb, STRa(cigar), false);
 
     sam_cigar_special_CIGAR (VB, CTX(SAM_CIGAR), STRa(cigar), NULL, reconstruct);
 

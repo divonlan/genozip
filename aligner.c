@@ -70,12 +70,12 @@ static inline bool aligner_get_word_from_seq (VBlockP vb, rom seq, uint32_t *ref
 }
 
 // converts a string sequence to a 2-bit bitmap
-BitArray aligner_seq_to_bitmap (rom seq, uint64_t seq_len, 
+Bits aligner_seq_to_bitmap (rom seq, uint64_t seq_len, 
                                 uint64_t *bitmap_words,  // allocated by caller
                                 bool *seq_is_all_actg) // optional out
 {
     // covert seq to 2-bit array
-    BitArray seq_bits = { .nbits  = seq_len * 2, 
+    Bits seq_bits = { .nbits  = seq_len * 2, 
                           .nwords = roundup_bits2words64(seq_len * 2), 
                           .words        = bitmap_words,
                           .type         = BITARR_REGULAR };
@@ -90,10 +90,10 @@ BitArray aligner_seq_to_bitmap (rom seq, uint64_t seq_len,
             encoding = 0; // arbitrarily convert 4 (any non-actg is 4) to 0 ('A')
         }
     
-        bit_array_assign2 (&seq_bits, (base_i << 1), encoding);
+        bits_assign2 (&seq_bits, (base_i << 1), encoding);
     }
 
-    bit_array_clear_excess_bits_in_top_word (&seq_bits);
+    bits_clear_excess_bits_in_top_word (&seq_bits);
 
     return seq_bits;
 }
@@ -102,7 +102,7 @@ BitArray aligner_seq_to_bitmap (rom seq, uint64_t seq_len,
 // returns false if no match found.
 // note: matches that imply a negative GPOS (i.e. their beginning is aligned to before the start of the genome), aren't consisdered
 static inline PosType aligner_best_match (VBlockP vb, STRp(seq), PosType pair_gpos,
-                                          ConstBitArrayP genome, ConstBitArrayP emoneg, PosType genome_nbases,
+                                          ConstBitsP genome, ConstBitsP emoneg, PosType genome_nbases,
                                           bool *is_forward, bool *is_all_ref) // out
 {
     START_TIMER;
@@ -117,7 +117,7 @@ static inline PosType aligner_best_match (VBlockP vb, STRp(seq), PosType pair_gp
     // convert seq to a bitmap
     bool maybe_perfect_match;
     uint64_t seq_bits_words[roundup_bits2words64(seq_len * 2)];
-    BitArray seq_bits = aligner_seq_to_bitmap (seq, seq_len, seq_bits_words, &maybe_perfect_match);
+    Bits seq_bits = aligner_seq_to_bitmap (seq, seq_len, seq_bits_words, &maybe_perfect_match);
     
     //ref_print_bases (&seq_bits, "\nseq_bits fwd", true);
     //ref_print_bases (&seq_bits, "seq_bits rev", false);
@@ -167,7 +167,7 @@ static inline PosType aligner_best_match (VBlockP vb, STRp(seq), PosType pair_gp
 #       define UPDATE_BEST(fwd)  ({              \
             if (gpos != best_gpos) {             \
                 int32_t match_len = (uint32_t)seq_bits.nbits - \
-                    bit_array_hamming_distance ((fwd) ? genome : emoneg, \
+                    bits_hamming_distance ((fwd) ? genome : emoneg, \
                                                ((fwd) ? gpos : genome_nbases-1 - (gpos + seq_bits.nbits/2 -1)) * 2, \
                                                &seq_bits, 0, \
                                                seq_bits.nbits); \
@@ -223,16 +223,16 @@ done:
 }
 
 MappingType aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq), bool no_bitmap_if_perfect,
-                               bool is_pair_2, PosType pair_gpos, bool pair_is_forward)
+                             bool is_pair_2, PosType pair_gpos, bool pair_is_forward)
 {
-    ConstBitArrayP genome, emoneg;
+    ConstBitsP genome, emoneg;
     PosType genome_nbases;
     ref_get_genome (gref, &genome, &emoneg, &genome_nbases);
 
     // these 4 contexts are consecutive and in the same order for all relevant data_types in data_types.h
-    Context *gpos_ctx   = bitmap_ctx + 3; // GPOS
-    Context *strand_ctx = bitmap_ctx + 4; // STRAND
-    Context *seqmis_ctx = bitmap_ctx + 5; // SEQMIS_A/C/G/T (4 contexts)
+    ContextP gpos_ctx   = bitmap_ctx + 3; // GPOS
+    ContextP strand_ctx = bitmap_ctx + 4; // STRAND
+    ContextP seqmis_ctx = bitmap_ctx + 5; // SEQMIS_A/C/G/T (4 contexts)
 
     bool is_forward=false, is_all_ref=false;
 
@@ -246,7 +246,7 @@ MappingType aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq), bool no
     if (flag.show_aligner)
         iprintf ("%s: gpos=%"PRId64" forward=%s\n", LN_NAME, gpos, TF(is_forward));
 
-    BitArray *bitmap = buf_get_bitarray (&bitmap_ctx->local);
+    Bits *bitmap = buf_get_bitarray (&bitmap_ctx->local);
 
     // allocate bitmaps - don't provide name to avoid re-writing param which would overwrite nbits that overlays it 
     if (!no_bitmap_if_perfect || !is_all_ref) {
@@ -281,7 +281,7 @@ MappingType aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq), bool no
     // shortcut if we have a full reference match
     if (is_all_ref) {
         if (!no_bitmap_if_perfect) {
-            bit_array_set_region (bitmap, bitmap_ctx->next_local, seq_len); // all bases match the reference
+            bits_set_region (bitmap, bitmap_ctx->next_local, seq_len); // all bases match the reference
             bitmap_ctx->next_local += seq_len;
         }
 
@@ -299,15 +299,15 @@ MappingType aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq), bool no
         
         PosType ref_i = gpos + (is_forward ? i : seq_len-1-i);
         
-        uint8_t ref_base_2bit = bit_array_get2 (genome, ref_i * 2);
+        uint8_t ref_base_2bit = bits_get2 (genome, ref_i * 2);
         char ref_base = acgt_decode(ref_base_2bit);
 
         if (seq_base == ref_base) 
-            bit_array_set (bitmap, next_bit++); 
+            bits_set (bitmap, next_bit++); 
 
         // case: we can't use the reference (different value than base or we have passed the end of the reference)
         else {
-            bit_array_clear (bitmap, next_bit++); 
+            bits_clear (bitmap, next_bit++); 
             BNXTc (seqmis_ctx[ref_base_2bit].local) = seq[i];
         }
     }
@@ -321,14 +321,16 @@ done:
 // PIZ: SEQ reconstruction - only for reads compressed with the aligner
 void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len, bool is_pair_2, bool is_perfect_alignment, bool reconstruct)
 {
+    START_TIMER;
+
     if (!bitmap_ctx->is_loaded) return; // if case we need to skip the SEQ field (for the entire file)
 
-    Context *nonref_ctx = bitmap_ctx + 1;
-    Context *gpos_ctx   = bitmap_ctx + 3;
-    Context *strand_ctx = bitmap_ctx + 4;
-    Context *seqmis_ctx = bitmap_ctx + 5; // SEQMIS_A/C/G/T (4 contexts)
+    ContextP nonref_ctx = bitmap_ctx + 1;
+    ContextP gpos_ctx   = bitmap_ctx + 3;
+    ContextP strand_ctx = bitmap_ctx + 4;
+    ContextP seqmis_ctx = bitmap_ctx + 5; // SEQMIS_A/C/G/T (4 contexts)
     
-    if (buf_is_alloc (&bitmap_ctx->local)) { // not all non-ref
+    if (is_perfect_alignment || buf_is_alloc (&bitmap_ctx->local)) { // not all non-ref
 
         bool is_forward;
         PosType gpos;
@@ -351,51 +353,55 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
         if (flag.show_aligner)
             iprintf ("%s: gpos=%"PRId64" forward=%s\n", LN_NAME, gpos, TF(is_forward));
 
-        const BitArray *genome=NULL, *emoneg=NULL;
+        const Bits *genome=NULL;
         PosType genome_nbases;
         
-        if (gpos != NO_GPOS)
-            ref_get_genome (gref, &genome, &emoneg, &genome_nbases);
+        if (gpos != NO_GPOS) 
+            ref_get_genome (gref, &genome, NULL, &genome_nbases);
 
         // sanity check - the sequence is supposed to fit in the 
         ASSERT (gpos == NO_GPOS || gpos + seq_len <= genome->nbits / 2, "gpos=%"PRId64" is out of range: seq_len=%u and genome_nbases=%"PRIu64,
                 gpos, seq_len, genome->nbits / 2);
 
-        if (VER(14)) {
+        BASE_ITER_INIT (genome, gpos, seq_len, is_forward);
 
-            if (is_forward)  // normal (note: this condition test is outside of the tight loop)
-                for (uint32_t i=0; i < seq_len; i++) {
-                    if (is_perfect_alignment || NEXTLOCALBIT (bitmap_ctx)) { // get base from reference
-                        if (reconstruct) RECONSTRUCT1 (base_by_idx (genome, gpos + i));
-                    }
-                    else  { // get base from nonref
-                        uint8_t base_2bit = bit_array_get2 (genome, (gpos + i) * 2);
-                        RECONSTRUCT_NEXT (seqmis_ctx + base_2bit, 1);
-                    }
-                }
+        // faster loop in the common case of a perfect (= no mismatches) alignment (is_perfect_alignment introduced in v14)
+        if (is_perfect_alignment) {
+            if (reconstruct) {
+                char *next = BAFTtxt;
 
-            else // reverse complement
                 for (uint32_t i=0; i < seq_len; i++) 
-                    if (is_perfect_alignment || NEXTLOCALBIT (bitmap_ctx)) { // case: get base from reference
-                        if (reconstruct) RECONSTRUCT1 (complement [(uint8_t)base_by_idx (genome, gpos + seq_len-1 - i)]);
-                    }
-                    else { // case: get base from nonref
-                        uint8_t base_2bit = bit_array_get2 (genome, (gpos + seq_len-1 - i) * 2);
-                        RECONSTRUCT_NEXT (seqmis_ctx + base_2bit, 1);
-                    }
-        }
-        else  // up to v13
-            for (uint32_t i=0; i < seq_len; i++) {
-                if (NEXTLOCALBIT (bitmap_ctx)) { if (reconstruct) RECONSTRUCT1 (is_forward ? base_by_idx (genome, gpos + i)
-                                                                                           : complement [(uint8_t)base_by_idx (genome, gpos + seq_len-1 - i)]); }
-                else                           RECONSTRUCT_NEXT (nonref_ctx, 1);
+                    *next++ = acgt_decode(BASE_NEXT);                    
+                
+                vb->txt_data.len32 += seq_len;
             }
+        }
+
+        else {
+            for (uint32_t i=0; i < seq_len; i++) {
+                uint8_t base = BASE_NEXT; // advance iterator whether v14 or not
+                if (NEXTLOCALBIT (bitmap_ctx)) { // get base from reference
+                    if (reconstruct) RECONSTRUCT1 (acgt_decode(base));
+                }
+                else  { // get base from seqmis_ctx
+                    ContextP ctx = VER(14) ? (seqmis_ctx + (is_forward ? base : (3 - base))) // if is_forward, ref is revcomped - we complement ref[i] back to its original
+                                           : nonref_ctx;
+                    RECONSTRUCT_NEXT (ctx, 1); 
+                }
+            }
+        }
     }
-    else {
+
+    else { 
+        ASSPIZ (nonref_ctx->next_local + seq_len <= nonref_ctx->local.len32, "NONREF exhausted: next_local=%u + seq_len=%u > local.len=%u",
+                nonref_ctx->next_local, seq_len, nonref_ctx->local.len32);
+
         if (reconstruct) RECONSTRUCT (Bc (nonref_ctx->local, nonref_ctx->next_local), seq_len);
         nonref_ctx->next_local += seq_len;
     }
 
     ASSERT (nonref_ctx->next_local <= nonref_ctx->local.len, "nonref_ctx->next_local=%u is out of range: nonref_ctx->local.len=%u",
             nonref_ctx->next_local, nonref_ctx->local.len32);
+
+    COPY_TIMER (aligner_reconstruct_seq);
 }

@@ -6,9 +6,8 @@
 #pragma once
 
 #include "genozip.h"
-#include "base250.h"
 #include "sections.h"
-#include "bit_array.h"
+#include "bits.h"
 #include "mutex.h"
 #include "context_struct.h"
 #include "vblock.h"
@@ -54,10 +53,28 @@
                      "SNIP_DONT_STORE", "<LF>", "SNIP_COPY", "SNIP_DUAL", "SNIP_LOOKBACK",\
                      "SNIP_COPY_BUDDY", "SNIP_XOR_DIFF", "SNIP_RESERVED" }
 
+// Format on data in Context.b250: Each entry is either a single-byte special-code value 0xFA-0xFF, OR a 1, 2 or 4 big-endian integer.
+// The number of bytes is determined by Context.b250_size transmitted via SectionHeaderCtx.b250_size, its selection is done separately for each VB.
+// In FASTQ, for b250-pairing, b250 of the pair is stored in Context.pair and its size in Context.pair_b250_size
+#define BASE250_EMPTY_SF   0xFA // 250 empty string
+#define BASE250_MISSING_SF 0xFB // 251 container item missing, remove preceding separator
+#define BASE250_ONE_UP     0xFC // 252 value is one higher than previous value. 
+#define BASE250_MOST_FREQ0 0xFD // 253 this translates to 0,1,2 representing the most frequent values (according to vb_i=1 sorting).
+#define BASE250_MOST_FREQ1 0xFE // 254
+#define BASE250_MOST_FREQ2 0xFF // 255
+
+#define B250_MAX_WI_1BYTE  (0xFA         - 1) // maximal value in Context.b250 of non-special-code entries, for b250_size to be set to 1 byte
+#define B250_MAX_WI_2BYTES ((0xFA << 8)  - 1) // same, for 2 bytes
+#define B250_MAX_WI_3BYTES ((0xFA << 16) - 1) // same, for 3 bytes
+
+// ZIP only
 typedef struct CtxNode {
     CharIndex char_index; // character index into dictionary array
     uint32_t snip_len;    // not including \0 terminator present in dictionary array
-    Base250  word_index;  // word index into dictionary 
+    union {
+        WordIndex word_index; // zctx, vctx->ol_nodes and vctx->nodes after ctx_merge_in_one_vctx 
+        WordIndex node_index; // vctx->nodes before ctx_merge_in_one_vctx
+    };
 } CtxNode;
 
 typedef struct {
@@ -73,14 +90,14 @@ typedef struct {
 #define INTERLACE(signedtype,num) ({ signedtype n=(signedtype)(num); (n < 0) ? ((SAFE_NEGATE(signedtype,n) << 1) - 1) : (((u##signedtype)n) << 1); })
 #define DEINTERLACE(signedtype,unum) (((unum) & 1) ? -(signedtype)(((unum)>>1)+1) : (signedtype)((unum)>>1))
 
-static inline bool NEXTLOCALBIT(ContextP ctx)      { bool ret = bit_array_get ((BitArrayP)&ctx->local, ctx->next_local); ctx->next_local++; return ret; }
-static inline uint8_t NEXTLOCAL2BITS(ContextP ctx) { uint8_t ret = bit_array_get ((BitArrayP)&ctx->local, ctx->next_local) | (bit_array_get ((BitArrayP)&ctx->local, ctx->next_local+1) << 1); ctx->next_local += 2; return ret; }
+static inline bool NEXTLOCALBIT(ContextP ctx)      { bool ret = bits_get ((BitsP)&ctx->local, ctx->next_local); ctx->next_local++; return ret; }
+static inline uint8_t NEXTLOCAL2BITS(ContextP ctx) { uint8_t ret = bits_get ((BitsP)&ctx->local, ctx->next_local) | (bits_get ((BitsP)&ctx->local, ctx->next_local+1) << 1); ctx->next_local += 2; return ret; }
 
 // factor in which we grow buffers in CTX upon realloc
 #define CTX_GROWTH 1.75  
 
 #define ctx_node_vb(ctx, node_index, snip_in_dict, snip_len) ctx_node_vb_do(ctx, node_index, snip_in_dict, snip_len, __FUNCLINE)
-#define node_word_index(vb,did_i,index) ((index)!=WORD_INDEX_NONE ? ctx_node_vb (&(vb)->contexts[did_i], (index), 0,0)->word_index.n : WORD_INDEX_NONE)
+#define node_word_index(vb,did_i,index) ((index)!=WORD_INDEX_NONE ? ctx_node_vb (&(vb)->contexts[did_i], (index), 0,0)->word_index : WORD_INDEX_NONE)
 
 #define CTX(did_i)   ({ DidIType my_did_i = (did_i); /* could be an expression */\
                         ASSERT (my_did_i < MAX_DICTS, "CTX(): did_i=%u out of range", my_did_i); /* will be optimized-out for constant did_i */ \
@@ -116,6 +133,7 @@ extern void ctx_decrement_count (VBlockP vb, ContextP ctx, WordIndex node_index)
 extern void ctx_increment_count (VBlockP vb, ContextP ctx, WordIndex node_index);
 extern void ctx_protect_from_removal (VBlockP vb, ContextP ctx, WordIndex node_index);
 
+extern WordIndex ctx_decode_b250 (bytes *b, bool advance, B250Size b250_size, rom ctx_name);
 extern WordIndex ctx_get_next_snip (VBlockP vb, ContextP ctx, bool is_pair, pSTRp (snip));
 extern WordIndex ctx_peek_next_snip (VBlockP vb, ContextP ctx, pSTRp (snip));  
 

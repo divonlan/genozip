@@ -105,7 +105,7 @@ typedef int32_t SamASType;
 
 typedef struct {
     TxtWord QUAL, U2, BD_BI[2], SA, QNAME, RG, MC;// coordinates in txt_data 
-    TxtWord CIGAR;                 // SAM: coordinates in txt_data (always); BAM: coordinates in vb->mate_textual_cigars
+    TxtWord CIGAR;                 // SAM: coordinates in txt_data (always); BAM: coordinates in vb->line_textual_cigars
     TxtWord SEQ;                   // coordinates in txt_data. Note: len is actual sequence length in bases (not bytes) determined from any or or of: CIGAR, SEQ, QUAL. If more than one contains the length, they must all agree
     int64_t QUAL_score;
     WordIndex RNAME, RNEXT;
@@ -191,7 +191,7 @@ typedef struct VBlockSAM {
 
     // buddied Seg
     Buffer qname_hash;             // Seg: each entry i contains a line number for which the hash(qname)=i (or -1). prm8[0] is log2(len) (i.e., the number of bits)
-    Buffer mate_textual_cigars;    // Seg of BAM (not SAM): an array of textual CIGARs referred to from DataLine->CIGAR
+    Buffer line_textual_cigars;     // Seg of BAM (not SAM): an array of textual CIGARs referred to from DataLine->CIGAR
     LineIType prim_line_i;         // Seg without gencomp: prim line related to current line, if current line is supplamentary/secondary. Goes into vb->buddy_line_i in Piz.
     LineIType mate_line_i;         // Seg: the mate of this line. Goes into vb->buddy_line_i in Piz.
 
@@ -201,6 +201,10 @@ typedef struct VBlockSAM {
 } VBlockSAM;
 
 #define VB_SAM ((VBlockSAMP)vb)
+
+#define line_textual_cigars_used (segconf.has[OPTION_MC_Z] || /* sam_cigar_seg_MC might be called  */ \
+                                    sam_is_main_vb)             /* sam_seg_SA_field_is_depn_from_prim might be called */
+#define line_cigar(dl) Bc (*(IS_BAM_ZIP ? &vb->line_textual_cigars : &vb->txt_data), (dl)->CIGAR.index)
 
 #define dict_id_is_aux_sf dict_id_is_type_2
 #define dict_id_aux_sf dict_id_type_2
@@ -372,17 +376,23 @@ extern void sam_seg_cigar_initialize (VBlockSAMP vb);
 extern void sam_cigar_analyze (VBlockSAMP vb, STRp(cigar), bool cigar_is_in_textual_cigar, uint32_t *seq_consumed);
 extern void bam_seg_cigar_analyze (VBlockSAMP vb, uint32_t *seq_consumed);
 extern void sam_cigar_binary_to_textual (VBlockSAMP vb, uint16_t n_cigar_op, const uint32_t *cigar, BufferP textual_cigar);
+extern bool sam_cigar_textual_to_binary (VBlockSAMP vb, STRp(cigar), BufferP binary_cigar);
 extern void sam_cigar_seg_textual (VBlockSAMP vb, ZipDataLineSAM *dl, uint32_t last_cigar_len, STRp(seq_data), STRp(qual_data));
 extern void sam_cigar_seg_binary (VBlockSAMP vb, ZipDataLineSAM *dl, uint32_t l_seq, rom cigar, uint32_t n_cigar_op);
 extern void sam_cigar_seg_MC (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(mc), uint32_t add_bytes);
 extern bool sam_cigar_reverse (char *dst, STRp(cigar));
 extern bool sam_cigar_is_valid (STRp(cigar));
 
-typedef struct { char *left, *right; } HtoS, StoH;
-extern HtoS sam_cigar_H_to_S (VBlockSAMP vb, STRc(cigar));
-extern StoH sam_cigar_S_to_H (VBlockSAMP vb, STRc(cigar));
-static inline void sam_cigar_restore_H (HtoS htos) { if (htos.left)  *htos.left  = 'H';  if (htos.right) *htos.right = 'H'; }
-static inline void sam_cigar_restore_S (StoH stoh) { if (stoh.left)  *stoh.left  = 'S';  if (stoh.right) *stoh.right = 'S'; }
+typedef struct { char s[10000]; } CigarStr;
+extern CigarStr dis_binary_cigar (VBlockSAMP vb, const BamCigarOp *cigar, uint32_t cigar_len/*in ops*/, Buffer *working_buf); 
+
+typedef struct { char *left, *right; bool is_binary; } HtoS, StoH;
+extern HtoS sam_cigar_H_to_S (VBlockSAMP vb, STRc(cigar), bool is_binary);
+extern StoH sam_cigar_S_to_H (VBlockSAMP vb, STRc(cigar), bool is_binary);
+static inline void sam_cigar_restore_H (HtoS htos) { if (htos.is_binary) { if (htos.left) ((BamCigarOp*)htos.left)->op = BC_H; if (htos.right) ((BamCigarOp*)htos.right)->op = BC_H; } \
+                                                     else                { if (htos.left)  *htos.left  = 'H';                  if (htos.right) *htos.right = 'H'; } }
+static inline void sam_cigar_restore_S (StoH stoh) { if (stoh.is_binary) { if (stoh.left) ((BamCigarOp*)stoh.left)->op = BC_S; if (stoh.right) ((BamCigarOp*)stoh.right)->op = BC_S; } \
+                                                     else                { if (stoh.left)  *stoh.left  = 'S';  if (stoh.right) *stoh.right = 'S'; } }
 
 extern bool sam_seg_0A_cigar_cb (VBlockP vb, ContextP ctx, STRp (cigar), uint32_t repeat);
 
@@ -404,7 +414,7 @@ extern rom sam_piz_display_aln_cigar (const SAAlnType *a);
 extern void sam_seg_SEQ_initialize (VBlockSAMP vb);
 extern void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(seq), unsigned add_bytes);
 extern void sam_zip_prim_ingest_vb_pack_seq (VBlockSAMP vb, SAGroupType *vb_grps, uint32_t vb_grps_len, BufferP underlying_buf, BufferP packed_seq_buf, bool is_bam_format);
-extern bool sam_sa_native_to_acgt (VBlockSAMP vb, BitArray *packed, uint64_t next_bit, STRp(seq), bool bam_format, bool revcomp, bool soft_fail);
+extern bool sam_sa_native_to_acgt (VBlockSAMP vb, Bits *packed, uint64_t next_bit, STRp(seq), bool bam_format, bool revcomp, bool soft_fail);
 
 // -------------------
 // BAM sequence format
@@ -433,7 +443,7 @@ extern rom sam_display_qual_from_SA_Group (const SAGroupType *g);
 // ----------
 extern void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(md), SamPosType pos);
 extern void sam_MD_Z_seg (VBlockSAMP vb,  ZipDataLineSAM *dl, STRp(md), unsigned add_bytes);
-extern void sam_MD_Z_verify_due_to_seq (VBlockSAMP vb, STRp(seq), SamPosType pos, BitArrayP sqbitmap, uint64_t sqbitmap_start);
+extern void sam_MD_Z_verify_due_to_seq (VBlockSAMP vb, STRp(seq), SamPosType pos, BitsP sqbitmap, uint64_t sqbitmap_start);
 
 // ----------
 // SA:Z stuff

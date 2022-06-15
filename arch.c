@@ -7,6 +7,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <sys/types.h>
+#include <locale.h>
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -102,6 +103,8 @@ void arch_initialize (rom argv0)
     } bittest = { .bit_1 = { .a = 1 } }; // we expect this to set the LSb of .byte and of .bit_3.a
     ASSERT0 (bittest.byte == 1, "unsupported bit order in a struct, please use gcc to compile (1)");
     ASSERT0 (bittest.bit_3.a == 1, "unsupported bit order in a struct, please use gcc to compile (2)");
+
+    setlocale (LC_ALL, ""); // accept and print UTF-8 text 
 
 #ifdef _WIN32
     _setmode(_fileno(stdin),  _O_BINARY);

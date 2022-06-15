@@ -245,8 +245,10 @@ extern int str_print_text (rom *text, uint32_t num_lines,
 typedef bool (*ResponseVerifier) (STRc(response), rom verifier_param);
 extern void str_query_user (rom query, STRc(response), ResponseVerifier verifier, rom verifier_param);
 
+typedef enum { QDEF_NONE, QDEF_NO, QDEF_YES } DefAnswerType;
+extern bool str_query_user_yn (rom query, DefAnswerType def_answer);
+
 // ResponseVerifier functions
-extern bool str_verify_y_n (STRc(response), rom y_or_n);
 extern bool str_verify_not_empty (STRc(response), rom unused);
 
 extern rom my_memrchr (rom str, char c, uint32_t str_len);

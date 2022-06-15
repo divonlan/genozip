@@ -12,7 +12,7 @@
 #include "contigs.h"
 
 typedef struct {
-    BitArray *is_set;
+    Bits *is_set;
     PosType first_bit, len;
 } RegionToSet;
 
@@ -34,7 +34,7 @@ typedef struct RefStruct {
     Buffer ranges; 
 
     Buffer genome_buf, emoneg_buf, genome_is_set_buf, genome_cache;
-    BitArray *genome, *emoneg /* reverse compliment */, *genome_is_set;
+    Bits *genome, *emoneg /* reverse compliment */, *genome_is_set;
 
     PosType genome_nbases;
 

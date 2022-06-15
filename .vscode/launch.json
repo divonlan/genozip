@@ -12,19 +12,13 @@
             // "program": "${workspaceFolder}/genounzip-debug.exe",
             // "program": "${workspaceFolder}/genocat-debug.exe",
             // "program": "${workspaceFolder}/genozip-opt.exe",
-            //"program": "${workspaceFolder}/genozip.exe",ionxpress
+            //"program": "${workspaceFolder}/genozip.exe",
             //"program": "${workspaceFolder}/genounzip.exe",
             //"program": "${workspaceFolder}/genols-debug.exe",
-            
-            // "args" : ["-ftw", "private/test/test.human2.filtered.snp.vcf"],
-            //"args" : ["-dt@1", "private/test/test.human2.filtered.snp.vcf.genozip", "--show-con"],
-            // "args" : ["-ftw", "private/test/test.giab.vcf"],
-            "args" : ["-f", "bug-dogs.vcf"],
-            // "args" : ["-dt", "bug-dogs.vcf.genozip"],
-            // "args" : ["-dt", "private/test/test.NovaSeq.bam.genozip"],
-            // "args" : ["--decompress", "--test", "--echo", "private/test/test.BGI.sam.genozip"],
-            // "args" : ["--echo", "-f", "--md5", "-o", "private/test/tmp/output.genozip", "private/test/basic.chain"],
-                        "stopAtEntry": false,
+
+            "args" : ["-dfo", "bug1.bam", "bug.bam.genozip"],
+
+            "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
             "externalConsole": false,

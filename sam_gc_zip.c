@@ -13,12 +13,12 @@
 #include "context.h"
 #include "profiler.h"
 #include "codec.h"
-#include "bit_array.h"
+#include "bits.h"
 #include "writer.h"
 #include "sections.h"
 #include "codec.h"
 #include "compressor.h"
-#include "bit_array.h"
+#include "bits.h"
 #include "flags.h"
 #include "recon_plan_io.h"
 #include "libdeflate/libdeflate.h"
@@ -134,7 +134,7 @@ static bool sam_seg_prim_add_sa_group (VBlockSAMP vb, ZipDataLineSAM *dl, uint16
     return true;
 }
 
-// Call in seg PRIM line (both in MAIN and PRIM vb): 
+// Called in seg PRIM line (both in MAIN and PRIM vb): 
 // MAIN: test that line is a valid prim before moving it to the PRIM gencomp file
 // PRIM: add SA Group (including alignments) to the data structure in VB (called from sam_SA_Z_seg)
 bool sam_seg_prim_add_sa_group_SA (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), int64_t this_nm, bool is_bam)
@@ -313,12 +313,12 @@ static bool sam_seg_depn_is_subseq_of_prim (VBlockSAMP vb, bytes depn_textual_se
     // seq - DEPN may have hard-clips - check the DEPN sequence as a sub-sequence of PRIM
     if (g->seq_len != vb->hard_clip[0] + depn_seq_len + vb->hard_clip[1]) return false;
     
-    BitArray *prim_seq = buf_get_bitarray (&z_file->sa_seq); // ACGT format
+    Bits *prim_seq = buf_get_bitarray (&z_file->sa_seq); // ACGT format
     uint32_t start_p = g->seq + vb->hard_clip[0];
 
     if (!xstrand)
         for (uint32_t i=0; i < depn_seq_len; i++) {
-            uint8_t p = bit_array_get2 (prim_seq, (start_p + i) * 2);
+            uint8_t p = bits_get2 (prim_seq, (start_p + i) * 2);
 
             switch (depn_textual_seq[i]) {
                 case 'A': if (p != 0) return false; break; // if prim base is not 'A'(=0) then the sequences don't match
@@ -333,7 +333,7 @@ static bool sam_seg_depn_is_subseq_of_prim (VBlockSAMP vb, bytes depn_textual_se
         uint32_t start_p = g->seq + vb->hard_clip[1];
 
         for (uint32_t i=0; i < depn_seq_len; i++) {
-            uint8_t p = bit_array_get2 (prim_seq, (start_p + i) * 2);
+            uint8_t p = bits_get2 (prim_seq, (start_p + i) * 2);
 
             switch (depn_textual_seq[depn_seq_len - i - 1]) {
                 case 'T': if (p != 0) return false; break; // since xstrand depn seq is T, we expect prim seq to be A(=0)
@@ -450,7 +450,7 @@ static void sam_sa_seg_depn_find_sagroup (VBlockSAMP vb, ZipDataLineSAM *dl, STR
     if (!g) return; // no PRIM with this qname
 
     // temporarily replace H with S
-    HtoS htos = sam_cigar_H_to_S (vb, (char*)STRa(textual_cigar));
+    HtoS htos = sam_cigar_H_to_S (vb, (char*)STRa(textual_cigar), false);
 
     // if this is BAM, and we have an odd number of bases, the final seq value in the BAM file of the "missing" base
     // we can't encode last "base" other than 0 (see also bug 531)

@@ -8,35 +8,36 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <wchar.h>
 #include "genozip.h"
 #include "strings.h"
 #include "endianness.h"
 
 typedef enum __attribute__ ((__packed__)) { // 1 byte 
     BUF_UNALLOCATED=0, BUF_REGULAR, BUF_OVERLAY, BUF_MMAP, BUF_STANDALONE_BITARRAY, BUF_NUM_TYPES 
-} BufferType; // BUF_UNALLOCATED must be 0, must be identical to BitArrayType
+} BufferType; // BUF_UNALLOCATED must be 0, must be identical to BitsType
 
 #define BUFTYPE_NAMES { "UNALLOCATED", "REGULAR", "OVERLAY", "MMAP" }
 
 typedef struct Buffer { // 64 bytes
     //------------------------------------------------------------------------------------------------------
-    // these 4 fields, must be first, and can be overlayed with a BitArray - their order and size is identical to BitArray
+    // these 4 fields, must be first, and can be overlayed with a Bits - their order and size is identical to Bits
     union {
         char *data;       // ==memory+8 if buffer is allocated or NULL if not
-        uint64_t *words;  // for BitArray
+        uint64_t *words;  // for Bits
     };
     union {               // the "parameter" field is for discretionary use by the caller. some options to use the parameter are provided.
         int64_t param;    
         int64_t next;     
         int64_t count;    
-        uint64_t nbits;   // for BitArray
+        uint64_t nbits;   // for Bits
         uint32_t prm32[2];
         uint16_t prm16[4];
         uint8_t  prm8 [8];
     };
     union {
-        uint64_t len;     // used by the buffer user according to its internal logic. not modified by malloc/realloc, zeroed by buf_free (in BitArray - nwords)
-        uint64_t nwords;  // for BitArray
+        uint64_t len;     // used by the buffer user according to its internal logic. not modified by malloc/realloc, zeroed by buf_free (in Bits - nwords)
+        uint64_t nwords;  // for Bits
         struct {
 #ifdef __LITTLE_ENDIAN__
             uint32_t len32, len32hi; // we use len32 instead of len if easier, in cases where we are certain len is smaller than 4B
@@ -237,7 +238,7 @@ static inline void buf_add_more_ex (VBlockP vb, BufferP buf, unsigned width, con
 { 
     if (!new_data_len) return;
 
-    buf_alloc (vb ? vb : buf->vb, buf, new_data_len, (buf->len + new_data_len) * width +1 /* +1 - room for \0 or separator */, char, 1.5, name); 
+    buf_alloc (vb ? vb : buf->vb, buf, new_data_len, (buf->len + new_data_len + 1) * width /* +1 - room for char/wchar_t \0 or separator */, char, 1.5, name); 
     memcpy (&buf->data[buf->len * width], new_data, new_data_len * width);   
     buf->len += new_data_len; 
 } 
@@ -330,7 +331,7 @@ extern bool buf_dump_to_file (rom filename, ConstBufferP buf, unsigned buf_word_
 // bitmap stuff
 // ------------
 // allocate bit array and set nbits
-extern BitArrayP buf_alloc_bitarr_do (VBlockP vb, BufferP buf, uint64_t nbits, FUNCLINE, rom name);
+extern BitsP buf_alloc_bitarr_do (VBlockP vb, BufferP buf, uint64_t nbits, FUNCLINE, rom name);
 #define buf_alloc_bitarr(vb, buf, nbits, name) \
     buf_alloc_bitarr_do((VBlockP)(vb), (buf), (nbits), __FUNCLINE, (name))
 
@@ -339,7 +340,7 @@ extern void buf_alloc_bitarr_buffer_do (VBlockP vb, BufferP buf, uint64_t nbits,
 #define buf_alloc_bitarr_buffer(vb, buf, nbits, name) \
     buf_alloc_bitarr_buffer_do((VBlockP)(vb), (buf), (nbits), __FUNCLINE, (name))
 
-extern BitArrayP buf_overlay_bitarr_do (VBlockP vb, BufferP overlaid_buf, BufferP regular_buf, uint64_t start_byte_in_regular_buf, uint64_t nbits, FUNCLINE, rom name);
+extern BitsP buf_overlay_bitarr_do (VBlockP vb, BufferP overlaid_buf, BufferP regular_buf, uint64_t start_byte_in_regular_buf, uint64_t nbits, FUNCLINE, rom name);
 #define buf_overlay_bitarr(vb, overlaid_buf, regular_buf, start_byte_in_regular_buf, nbits, name) \
     buf_overlay_bitarr_do((VBlockP)(vb), (overlaid_buf), (regular_buf), (start_byte_in_regular_buf), (nbits), __FUNCLINE, (name))
 
@@ -355,13 +356,13 @@ extern void buf_overlay_do (VBlockP vb, BufferP overlaid_buf, BufferP regular_bu
 
 extern uint64_t buf_extend_bits (BufferP buf, int64_t num_new_bits);
 extern void buf_add_bit (BufferP buf, int64_t new_bit);
-extern BitArrayP buf_zfile_buf_to_bitarray (BufferP buf, uint64_t nbits);
-#define buf_get_bitarray(buf) ((BitArrayP)(buf))
+extern BitsP buf_zfile_buf_to_bitarray (BufferP buf, uint64_t nbits);
+#define buf_get_bitarray(buf) ((BitsP)(buf))
 #define buf_add_set_bit(buf)   buf_add_bit (buf, 1)
 #define buf_add_clear_bit(buf) buf_add_bit (buf, 0)
 
 extern Buffer dummy_buf; // used for calculating sizes
-#define buf_get_buffer_from_bit_array(bitarr) ((BufferP)(bitarr))
+#define buf_get_buffer_from_bits(bitarr) ((BufferP)(bitarr))
 
 extern char *buf_display (ConstBufferP buf);
 

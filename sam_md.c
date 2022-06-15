@@ -21,21 +21,21 @@
 //---------
 
 // called when segging SEQ
-void sam_MD_Z_verify_due_to_seq (VBlockSAMP vb, STRp(seq), SamPosType pos, BitArrayP sqbitmap, uint64_t sqbitmap_start)
+void sam_MD_Z_verify_due_to_seq (VBlockSAMP vb, STRp(seq), SamPosType pos, BitsP sqbitmap, uint64_t sqbitmap_start)
 {
-    BitArrayP M_is_ref = (BitArrayP)&vb->md_M_is_ref;
+    BitsP M_is_ref = (BitsP)&vb->md_M_is_ref;
 
-    bool bitmap_matches_MD = vb->md_verified && !bit_array_hamming_distance (M_is_ref, 0, sqbitmap, sqbitmap_start, M_is_ref->nbits);
+    bool bitmap_matches_MD = vb->md_verified && !bits_hamming_distance (M_is_ref, 0, sqbitmap, sqbitmap_start, M_is_ref->nbits);
 
     if (flag.show_wrong_md && vb->md_verified && !bitmap_matches_MD) {
 
         iprintf ("%s RNAME=%.*s POS=%d CIGAR=%s MD=%.*s SEQ=%.*s\n", 
                 LN_NAME, STRf(vb->chrom_name), pos, vb->last_cigar, vb->last_txt_len(OPTION_MD_Z), last_txt(VB, OPTION_MD_Z), STRf(seq));
         if (sqbitmap) 
-            bit_array_print_substr ("SEQ match to ref", sqbitmap, sqbitmap_start, M_is_ref->nbits, info_stream);
+            bits_print_substr ("SEQ match to ref", sqbitmap, sqbitmap_start, M_is_ref->nbits, info_stream);
         else
             iprint0 ("SEQ: no bitmap\n");
-        bit_array_print_substr ("MD implied match", M_is_ref, 0, M_is_ref->nbits, info_stream); 
+        bits_print_substr ("MD implied match", M_is_ref, 0, M_is_ref->nbits, info_stream); 
     }
 
     vb->md_verified = bitmap_matches_MD;
@@ -76,7 +76,7 @@ static rom sam_md_set_one_ref_base (VBlockSAMP vb, bool is_depn, SamPosType pos,
 
     // set is_set - we will need this base in the reference to reconstruct MD
     if (flag.reference & REF_STORED)
-        bit_array_set (&(*range_p)->is_set, pos_index); // we will need this ref to reconstruct
+        bits_set (&(*range_p)->is_set, pos_index); // we will need this ref to reconstruct
 
     return NULL; // success
 }
@@ -115,7 +115,7 @@ static inline rom sam_md_consume_D (VBlockSAMP vb, bool is_depn, char **md_in_ou
 
 // verifies that the reference matches as required, and updates reference bases if missing
 static inline rom sam_md_consume_M (VBlockSAMP vb, bool is_depn, char **md_in_out, uint32_t *M_D_bases, SamPosType *pos, int M_bases,
-                                    BitArray *M_is_ref, uint64_t *M_is_ref_i,
+                                    Bits *M_is_ref, uint64_t *M_is_ref_i,
                                     RangeP *range_p, RefLock *lock, bool *critical_error)
 {
     char *md = *md_in_out;
@@ -153,7 +153,7 @@ static inline rom sam_md_consume_M (VBlockSAMP vb, bool is_depn, char **md_in_ou
             if (!error) 
                 error = sam_md_set_one_ref_base (vb, is_depn, *pos, *md, *M_D_bases, range_p, lock); // continue counting mismatch_bases_by_MD despite error
 
-            bit_array_clear (M_is_ref, *M_is_ref_i); // base in SEQ is expected to be NOT equal to the reference base
+            bits_clear (M_is_ref, *M_is_ref_i); // base in SEQ is expected to be NOT equal to the reference base
             (*M_is_ref_i)++;              
 
             M_bases--;
@@ -207,8 +207,8 @@ void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(md), SamPosTy
     if (!md_len || !IS_DIGIT(md[0]) || !IS_DIGIT(md[md_len-1])) not_verified ("Malformed MD:Z field");
 
     buf_alloc_bitarr (vb, &vb->md_M_is_ref, vb->ref_and_seq_consumed, "md_M_is_ref"); 
-    BitArrayP M_is_ref = (BitArrayP)&vb->md_M_is_ref;
-    bit_array_set_all (M_is_ref); // start by marking all as matching, and clear the SNPs later
+    BitsP M_is_ref = (BitsP)&vb->md_M_is_ref;
+    bits_set_all (M_is_ref); // start by marking all as matching, and clear the SNPs later
     uint64_t M_is_ref_i=0;
     
     uint32_t M_D_bases = vb->ref_consumed; // M/=/X and D
@@ -290,7 +290,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_MD)
 
     ContextP sqbitmap_ctx = LOADED_CTX(SAM_SQBITMAP);
     
-    BitArrayP line_sqbitmap = (BitArrayP)&sqbitmap_ctx->line_sqbitmap;
+    BitsP line_sqbitmap = (BitsP)&sqbitmap_ctx->line_sqbitmap;
     bool is_depn = !!line_sqbitmap->nwords;
     uint32_t line_sqbitmap_next = 0;
 
@@ -318,7 +318,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_MD)
                         while (n && NEXTLOCALBIT (sqbitmap_ctx)) 
                             { count_match++; n--; pos++; }
                     else 
-                        while (n && bit_array_get (line_sqbitmap, line_sqbitmap_next++))
+                        while (n && bits_get (line_sqbitmap, line_sqbitmap_next++))
                             { count_match++; n--; pos++; }
 
                     if (n) {

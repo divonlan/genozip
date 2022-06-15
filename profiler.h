@@ -28,7 +28,7 @@ typedef struct {
         piz_read_global_area, ref_load_stored_reference, dict_io_read_all_dictionaries, dict_io_build_word_lists, 
         ref_read_one_range, ref_uncompress_one_range, vb_release_vb_do, vb_destroy_vb,
         wait_for_vb_1_mutex, sam_load_groups_add_one_prim_vb, recon_plan_compress_one_fragment,
-        sam_zip_recon_plan_add_gc_lines, sam_zip_gc_calc_depn_vb_info,
+        sam_zip_recon_plan_add_gc_lines, sam_zip_gc_calc_depn_vb_info, sam_reconstruct_SEQ, aligner_reconstruct_seq,
         tmp1, tmp2, tmp3, tmp4, tmp5;
         rom next_name, next_subname;
         unsigned num_vbs, max_vb_size_mb;

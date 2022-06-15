@@ -13,7 +13,7 @@
 #include "context.h"
 #include "profiler.h"
 #include "codec.h"
-#include "bit_array.h"
+#include "bits.h"
 #include "writer.h"
 #include "sections.h"
 #include "codec.h"
@@ -209,7 +209,7 @@ void sam_zip_prim_ingest_vb (VBlockSAMP vb)
         if (!seq_done && mutex_trylock (seq_mutex)) {
             // concatenate this VB's sequence to z_file->sa_seq (in ACGT format)
             uint64_t z_seq = z_file->sa_seq.nbits / 2; // next_seq in bases, not bits
-            bit_array_concat (buf_get_bitarray(&z_file->sa_seq), buf_get_bitarray (&packed_seq_buf), 0); // also allocate memory
+            bits_concat (buf_get_bitarray(&z_file->sa_seq), buf_get_bitarray (&packed_seq_buf), 0); // also allocate memory
             seq_done = achieved_something = true;                
             mutex_unlock (seq_mutex);
 
