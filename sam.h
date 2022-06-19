@@ -79,6 +79,7 @@
 #pragma GENDICT OPTION_OA_MAPQ=DTYPE_2=O5A_MAPQ 
 
 #pragma GENDICT OPTION_OC_Z=DTYPE_2=OC:Z     // Original CIGAR
+#pragma GENDICT OPTION_OQ_Z=DTYPE_2=OQ:Z     // Original Quality
 #pragma GENDICT OPTION_PG_Z=DTYPE_2=PG:Z     // Program
 #pragma GENDICT OPTION_PQ_i=DTYPE_2=PQ:i     // Phred likelihood of the template
 #pragma GENDICT OPTION_PU_Z=DTYPE_2=PU:Z     // Platform unit

@@ -1463,8 +1463,12 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
         // VarScan: <ID=FREQ,Number=1,Type=String,Description="Variant allele frequency">
         case _FORMAT_FREQ : vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_FREQ) ; break;
         
-        case _FORMAT_PS   : vcf_seg_FORMAT_PS_PID (vb, dl, ctx, STRi(sf, i), false); break;
-        case _FORMAT_PID  : vcf_seg_FORMAT_PS_PID (vb, dl, ctx, STRi(sf, i), true) ; break;
+        case _FORMAT_PS   : if (segconf.ps_pid_type[0]) vcf_seg_FORMAT_PS_PID (vb, dl, ctx, STRi(sf, i), false); 
+                            else goto fallback;
+                            break;
+        case _FORMAT_PID  : if (segconf.ps_pid_type[1]) vcf_seg_FORMAT_PS_PID (vb, dl, ctx, STRi(sf, i), true); 
+                            else goto fallback;
+                            break;
 
         // standard: <ID=GQ,Number=1,Type=Integer,Description="Genotype Quality">
         // GIAB: <ID=GQ,Number=1,Type=Integer,Description="Net Genotype quality across all datasets, calculated from GQ scores of callsets supporting the consensus GT, using only one callset from each dataset">   

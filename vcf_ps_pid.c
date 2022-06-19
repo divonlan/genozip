@@ -148,14 +148,14 @@ void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STR
         return;
     }
 
-    // case first PS line appears after the lines segged by segconf - so we need to initialize
-    else if (!segconf.ps_pid_type[is_pid]) {
-        if (!is_missing) 
-            vcf_seg_FORMAT_PS_PID_segconf (vb, ctx, STRa(value), is_pid); // set global segconf parameter - no harm even if multiple threads will set concurrently as regardless of the winner, the value is legitimate
-        else 
-            segconf.has[is_pid ? FORMAT_PID : FORMAT_PS] = true;
-        vcf_samples_seg_initialize_PS_PID (vb);
-    }
+    // // case first PS line appears after the lines segged by segconf - so we need to initialize
+    // else if (!segconf.ps_pid_type[is_pid]) {
+    //     if (!is_missing) 
+    //         vcf_seg_FORMAT_PS_PID_segconf (vb, ctx, STRa(value), is_pid); // set global segconf parameter - no harm even if multiple threads will set concurrently as regardless of the winner, the value is legitimate
+    //     else 
+    //         segconf.has[is_pid ? FORMAT_PID : FORMAT_PS] = true;
+    //     vcf_samples_seg_initialize_PS_PID (vb);
+    // }
 
     // case: '.' value - seg normally
     if (is_missing) goto fallback;

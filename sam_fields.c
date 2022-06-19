@@ -887,6 +887,8 @@ DictId sam_seg_aux_field (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_bam,
 
         case _OPTION_U2_Z: sam_seg_U2_field (vb, dl, STRa(value), add_bytes); break;
 
+        case _OPTION_OQ_Z: seg_add_to_local_text (VB, CTX(OPTION_OQ_Z), STRa(value), false, add_bytes); break;
+
         case _OPTION_Z5_i: seg_pos_field (VB, OPTION_Z5_i, SAM_PNEXT, 0, 0, 0, 0, numeric.i, add_bytes); break;
 
         case _OPTION_CP_i: SEG_COND (segconf.sam_is_sorted, seg_pos_field (VB, OPTION_CP_i, OPTION_CP_i, 0, 0, 0, 0, numeric.i, add_bytes)); 

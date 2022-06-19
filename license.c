@@ -289,18 +289,20 @@ void license_register (void)
 
     file_remove (filename, true); // remove old license, if one exists
 
+    const char *lic_type_str;
+    
     if (n_fields) {
         strncpy (rec.institution, fields[0], sizeof(rec.institution)-1);
         strncpy (rec.name,        fields[1], sizeof(rec.name)-1);
         strncpy (rec.email,       fields[2], sizeof(rec.email)-1);
-        strncpy (lic_type,        fields[3], sizeof(lic_type)-1);
         strncpy (update,          fields[4], sizeof(update)-1);
         strncpy (rec.ip,          fields[5], sizeof(rec.ip)-1);
-        os        = fields[6];
-        dist      = fields[7]; 
-        endianity = fields[8];
-        user_host = fields[9];
-        cores     = atoi(fields[10]);
+        lic_type_str = fields[3];
+        os           = fields[6];
+        dist         = fields[7]; 
+        endianity    = fields[8];
+        user_host    = fields[9];
+        cores        = atoi(fields[10]);
     }
     else {
         fprintf (stderr, "\nLicense details -\n");
@@ -318,7 +320,7 @@ void license_register (void)
                         "Remember your Mom taught you to be honest!\n"
                         "Please enter 1, 2 or 3: ",
                         lic_type, sizeof(lic_type), license_verify_license, NULL);
-
+    
         str_query_user ("\nShall we update you by email when new features are added to genozip? ([y] or n) ", 
                         update, sizeof(update), str_verify_y_n, "Y");
 
@@ -329,11 +331,12 @@ void license_register (void)
         str_query_user ("Do you accept the terms and conditions of the license? (y or n) ", confirm, sizeof(confirm), str_verify_y_n, NULL);
         license_exit_if_not_confirmed (confirm);
 
-        os        = arch_get_os();
-        dist      = arch_get_distribution();
-        cores     = arch_get_num_cores();
-        endianity = arch_get_endianity();
-        user_host = arch_get_user_host();
+        lic_type_str = lic_type[0]=='1'?"Academic" : lic_type[0]=='2'?"30-day evaluation" : "Paid or exempted";
+        os           = arch_get_os();
+        dist         = arch_get_distribution();
+        cores        = arch_get_num_cores();
+        endianity    = arch_get_endianity();
+        user_host    = arch_get_user_host();
         memcpy (rec.ip, arch_get_ip_addr ("Failed to register the license"), ARCH_IP_LEN);
     }
 
@@ -341,8 +344,6 @@ void license_register (void)
 
     static Buffer license_data = EMPTY_BUFFER;
     license_generate (&license_data);
-
-    const char *lic_type_str = lic_type[0]=='1'?"Academic" : lic_type[0]=='2'?"30-day evaluation" : "Paid or exempted";
 
     if (!n_fields) {
         fprintf (stderr, "\nThank you. To complete your license registration, genozip will now submit the following information to the genozip licensing server:\n\n");
