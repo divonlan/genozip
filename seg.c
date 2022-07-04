@@ -79,7 +79,7 @@ void seg_create_rollback_point (VBlockP vb,
     vb->num_rollback_ctxs = 0;
 
     for (unsigned i=0; i < num_ctxs; i++) {
-        vb->rollback_ctxs[vb->num_rollback_ctxs] = ctxs ? ctxs[i] : CTX(va_arg (args, int)); // note: 'DidIType' {aka 'short unsigned int'} is promoted to 'int' when passed through '...'
+        vb->rollback_ctxs[vb->num_rollback_ctxs] = ctxs ? ctxs[i] : CTX(va_arg (args, int)); // note: 'Did' {aka 'short unsigned int'} is promoted to 'int' when passed through '...'
 
         if (ctx_set_rollback (vb, vb->rollback_ctxs[vb->num_rollback_ctxs], false)) // added
             vb->num_rollback_ctxs++;
@@ -280,36 +280,39 @@ void seg_mux_display (MultiplexerP mux)
         iprintf ("[%u] dict_id=%s channel_ctx=%p\n", i, dis_dict_id (mux->dict_ids[i]).s, MUX_CHANNEL_CTX(mux)[i]);
 }
 
-void seg_mux_init (VBlockP vb, unsigned num_channels, uint8_t special_code, DidIType mux_did_i, DidIType st_did_i,
-                   StoreType store_type, bool seg_dyn_int, MultiplexerP mux,
+void seg_mux_init (VBlockP vb, unsigned num_channels, uint8_t special_code, Did mux_did_i, Did st_did_i,
+                   StoreType store_type, LocalType ltype, bool no_stons, MultiplexerP mux,
                    rom channel_letters) // optional - a string with num_channels unique characters
 {
+    // note: if we ever need more than 256, we need to update the dict_id generation formula below
     ASSERT (num_channels <= 256, "num_channels=%u beyond maximum of 256", num_channels);
 
     bytes id = CTX(mux_did_i)->dict_id.id;
     DictId dict_id_template = (DictId){ .id = { id[0], 0, id[1], id[2], id[3], id[4], id[5], id[6] } };
+    unsigned id_len = 1 + strnlen ((rom)CTX(mux_did_i)->dict_id.id, 7);
 
     mux->num_channels = num_channels;
     mux->store_type   = store_type;
-    mux->dyn_int      = seg_dyn_int;
+    mux->ltype        = ltype;
+    mux->no_stons     = no_stons;
     mux->st_did_i     = st_did_i;
+
 
     // calculate dict_ids, eg: PL -> PlL, PmL, PnL, PoL
     for (int i=0; i < num_channels; i++) {
         mux->dict_ids[i] = dict_id_template;
         mux->dict_ids[i].id[1] = channel_letters ? channel_letters[i] : (((uint16_t)id[1] + (uint16_t)i) & 0xff);
-        unsigned id_len = strnlen ((char*)mux->dict_ids[i].id, 8);
         if (id_len <= 5) str_int (i, (char*)&mux->dict_ids[i].id[id_len]); // add numerical digits for ease of debugging if we have room
     }
 
     CTX(mux_did_i)->flags.store = store_type;
-    CTX(mux_did_i)->dynamic_size_local = seg_dyn_int;
+    CTX(mux_did_i)->ltype = ltype;
 
     // prepare snip - a string consisting of num_channels x { special_code or \t , base64(dict_id.id) }
-    MUX_SNIP_LEN(mux) = BASE64_DICT_ID_LEN * num_channels;   
+    MUX_SNIP_LEN(mux) = BASE64_DICT_ID_LEN * (unsigned)num_channels;   
     seg_prepare_multi_dict_id_special_snip (special_code, num_channels, mux->dict_ids, MUX_SNIP(mux), &MUX_SNIP_LEN(mux));
 
-    //seg_mux_display (mux);
+    // seg_mux_display (mux);
 }
 
 ContextP seg_mux_get_channel_ctx (VBlockP vb, MultiplexerP mux, uint32_t channel_i)
@@ -325,8 +328,9 @@ ContextP seg_mux_get_channel_ctx (VBlockP vb, MultiplexerP mux, uint32_t channel
 
         channel_ctx->is_initialized = true;
         channel_ctx->flags.store = mux->store_type;
-        channel_ctx->dynamic_size_local = mux->dyn_int; 
-        stats_set_consolidation (VB, mux->st_did_i, 1, channel_ctx->did_i); // set consolidation for --stats    
+        channel_ctx->ltype       = mux->ltype; 
+        channel_ctx->no_stons    = mux->no_stons;
+        ctx_consolidate_stats (VB, mux->st_did_i, 2, channel_ctx->did_i, DID_EOL); // set consolidation for --stats    
     }
 
     return channel_ctx;
@@ -354,8 +358,8 @@ static PosType seg_scan_pos_snip (VBlockP vb, rom snip, unsigned snip_len, bool 
 
 // returns POS value if a valid pos, or 0 if not
 PosType seg_pos_field (VBlockP vb, 
-                       DidIType snip_did_i,    // mandatory: the ctx the snip belongs to
-                       DidIType base_did_i,    // mandatory: base for delta
+                       Did snip_did_i,    // mandatory: the ctx the snip belongs to
+                       Did base_did_i,    // mandatory: base for delta
                        unsigned opt,           // a combination of SPF_* options
                        char missing,           // a character allowed (meaning "missing value"), segged as SNIP_DONT_STORE
                        STRp(pos_str),          // option 1
@@ -365,10 +369,7 @@ PosType seg_pos_field (VBlockP vb,
     Context *snip_ctx = CTX(snip_did_i);
     Context *base_ctx = CTX(base_did_i);
 
-    snip_ctx->no_stons = true;
-    base_ctx->flags.store = STORE_INT;
-
-    base_ctx->no_stons = true;
+    // note: *_seg_initialize is required to set both snip_ctx and base_ctx: no_stons=true, store=STORE_INT
 
     SegError err = ERR_SEG_NO_ERROR;
     if (pos_str) { // option 1
@@ -456,7 +457,7 @@ PosType seg_pos_field (VBlockP vb,
     // case: the delta is the negative of the previous delta - add a SNIP_SELF_DELTA with no payload - meaning negated delta
     else {
         char negated_delta = SNIP_SELF_DELTA; // no delta means negate the previous delta
-        seg_by_did_i (VB, &negated_delta, 1, snip_did_i, add_bytes);
+        seg_by_did (VB, &negated_delta, 1, snip_did_i, add_bytes);
         snip_ctx->last_delta = 0; // no negated delta next time
     }
 
@@ -477,7 +478,7 @@ bool seg_pos_field_cb (VBlockP vb, ContextP ctx, STRp(pos_str), uint32_t repeat)
 // example: rs17030902 : in the dictionary we store "rs\1" or "rs\1\2" and in SEC_NUMERIC_ID_DATA we store 17030902.
 //          1423       : in the dictionary we store "\1" and 1423 SEC_NUMERIC_ID_DATA
 //          abcd       : in the dictionary we store "abcd" and nothing is stored SEC_NUMERIC_ID_DATA
-void seg_id_field_init (ContextP ctx) { ctx->no_stons = true; ctx->dynamic_size_local = true; } // must be called in seg_initialize
+void seg_id_field_init (ContextP ctx) { ctx->no_stons = true; ctx->ltype = LT_DYN_INT; } // must be called in seg_initialize
 void seg_id_field_do (VBlockP vb, ContextP ctx, STRp(id_snip))
 {
     int i=id_snip_len-1; for (; i >= 0; i--) 
@@ -513,7 +514,7 @@ bool seg_id_field_cb (VBlockP vb, ContextP ctx, STRp(id_snip), uint32_t repeat)
     return true; // segged successfully
 }
 
-// note: caller must set ctx->dynamic_size_local
+// note: caller must set ctx->ltype=LT_DYN_INT*
 void seg_integer (VBlockP vb, ContextP ctx, int64_t n, bool with_lookup, unsigned add_bytes)
 {
     ctx_set_last_value (vb, ctx, (ValueType){.i = n});
@@ -528,11 +529,13 @@ void seg_integer (VBlockP vb, ContextP ctx, int64_t n, bool with_lookup, unsigne
 bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_bytes)
 {
     int64_t n;
-    bool is_numeric = str_get_int (STRa(value), &n);
+    // TO DO: also support LT_DYN_INT_H
+    bool is_numeric = (ctx->ltype == LT_DYN_INT_h) ? (value[0] != '0' && str_get_int_hex (STRa(value), (uint64_t*)&n)) // number with leading 0 is segged as a snip
+                                                   : str_get_int (STRa(value), &n);
 
     // case: its an integer
     if (!ctx->no_stons && is_numeric) { // we interpret no_stons as means also no moving ints to local (one of the reasons is that an int might actually be a float)
-        ctx->dynamic_size_local = true;
+        ctx->ltype = LT_DYN_INT;
         seg_integer (vb, ctx, n, true, add_bytes);
         return true;
     }
@@ -589,29 +592,36 @@ bool seg_float_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_bytes
 }
 
 WordIndex seg_delta_vs_other_do (VBlockP vb, Context *ctx, Context *other_ctx, 
-                                 STRp(value), // if value==NULL, we use last_value.i
+                                 STRp(value), // if value==NULL, we use value_n
+                                 int64_t value_n,
                                  int64_t max_delta /* max abs value of delta - beyond that, seg as is, ignored if < 0 */,
                                  unsigned add_bytes)
 {
-    if (!other_ctx) goto fallback;
+#ifdef DEBUG
+    ASSERT (ctx->flags.store == STORE_INT && other_ctx->flags.store == STORE_INT, 
+            "expecting ctx=%s and other_ctx=%s to have STORE_INT", ctx->tag_name, other_ctx->tag_name);
+#endif
 
-    if (value && !str_get_int (STRa(value), &ctx->last_value.i)) goto fallback;
+    ASSERTNOTNULL (other_ctx);
+    //xxxif (!other_ctx) goto fallback;
+//xxx    other_ctx->flags.store = STORE_INT;
 
-    int64_t delta = ctx->last_value.i - other_ctx->last_value.i; 
-    if (max_delta >= 0 && (delta > max_delta || delta < -max_delta)) goto fallback;
+    if (value && !str_get_int (STRa(value), &value_n)) goto fallback;
 
-    SNIP(100);
+    //xxx if (ctx->flags.store == STORE_INT) 
+        ctx_set_last_value (vb, ctx, value_n);
+
+    int64_t delta = value_n - other_ctx->last_value.i; 
+    if (max_delta >= 0 && ABS(delta) > max_delta) goto fallback;
+
+    SNIP(32);
     seg_prepare_snip_other (SNIP_OTHER_DELTA, other_ctx->dict_id, true, (int32_t)delta, snip);
-
-    other_ctx->flags.store = STORE_INT;
-
-    if (ctx->flags.store == STORE_INT) 
-        ctx_set_last_value (vb, ctx, ctx->last_value.i);
 
     return seg_by_ctx (VB, STRa(snip), ctx, add_bytes);
 
 fallback:
-    return value ? seg_by_ctx (VB, value, value_len, ctx, add_bytes) : seg_integer_as_text_do (vb, ctx, ctx->last_value.i, add_bytes);
+    return value ? seg_by_ctx (VB, STRa(value), ctx, add_bytes) 
+                 : seg_integer_as_text_do (vb, ctx, value_n, add_bytes);
 }
 
 // note: seg_initialize should set STORE_INT for this ctx
@@ -630,34 +640,38 @@ WordIndex seg_self_delta (VBlockP vb, ContextP ctx, int64_t value, char format/*
 // an array or array of arrays
 // note: if container_ctx->flags.store=STORE_INT, container_ctx->last_value.i will be set to sum of integer
 // elements including recursively from sub-arrays (non-integer elements will be ignored)
-WordIndex seg_array (VBlockP vb, Context *container_ctx, DidIType stats_conslidation_did_i, 
+WordIndex seg_array (VBlockP vb, Context *container_ctx, Did stats_conslidation_did_i, 
                      rom value, int32_t value_len, // must be signed
                      char sep, 
                      char subarray_sep,         // if non-zero, will attempt to find internal arrays
                      bool use_integer_delta,    // first item stored as is, subsequent items stored as deltas
-                     bool store_int_in_local)   // if its an integer, store in local instead of a snip
+                     bool store_int_in_local,   // if its an integer, store in local instead of a snip
+                     DictId arr_dict_id,        // item dict_id, DICT_ID_NONE if we don't care what it is 
+                     int add_bytes)             // account for this much
 {
     MiniContainer *con;
-    DictId arr_dict_id;
     Context *arr_ctx;
+    int additional_bytes = add_bytes - value_len;
 
     // first use in this VB - prepare context where array elements will go in
-    if (!container_ctx->con_cache.len) {
+    if (!container_ctx->con_cache.len32) {
         bytes id = container_ctx->dict_id.id;
-        arr_dict_id = (DictId){ .id = { id[0], 
-                                        ((id[1]+1) % 256) | 128, // different IDs for top array, subarray and items
-                                        id[2], id[3], id[4], id[5], id[6], id[7] } };
+
+        if (!arr_dict_id.num)        
+            arr_dict_id = (DictId){ .id = { id[0], 
+                                            ((id[1]+1) % 256) | 128, // different IDs for top array, subarray and items
+                                            id[2], id[3], id[4], id[5], id[6], id[7] } };
         
         buf_alloc (vb, &container_ctx->con_cache, 0, 1, MiniContainer, 1, "contexts->con_cache");
 
         con = B1ST (MiniContainer, container_ctx->con_cache);
         *con = (MiniContainer){ .nitems_lo = 1, 
-                                .drop_final_repeat_sep = true,
+                                .drop_final_repsep = true,
                                 .repsep    = { sep },
                                 .items     = { { .dict_id = arr_dict_id } } }; // only one item
 
         arr_ctx = ctx_get_ctx (vb, arr_dict_id);
-        arr_ctx->st_did_i = stats_conslidation_did_i;
+        arr_ctx->st_did_i = container_ctx->st_did_i = stats_conslidation_did_i;
     }
     else { 
         con         = B1ST (MiniContainer, container_ctx->con_cache);
@@ -690,7 +704,7 @@ WordIndex seg_array (VBlockP vb, Context *container_ctx, DidIType stats_conslida
 
         // case: it has a sub-array
         if (is_subarray) {
-            seg_array (vb, arr_ctx, stats_conslidation_did_i, STRa(this_item), subarray_sep, 0, use_integer_delta, store_int_in_local);
+            seg_array (vb, arr_ctx, stats_conslidation_did_i, STRa(this_item), subarray_sep, 0, use_integer_delta, store_int_in_local, DICT_ID_NONE, this_item_len);
             this_item_value = arr_ctx->last_value.i;
         }
 
@@ -722,7 +736,7 @@ WordIndex seg_array (VBlockP vb, Context *container_ctx, DidIType stats_conslida
         value++;
     }
 
-    return container_seg (vb, container_ctx, (ContainerP)con, 0, 0, con->repeats-1); // acount for separators
+    return container_seg (vb, container_ctx, (ContainerP)con, 0, 0, con->repeats-1 + additional_bytes); // acount for separators and additional bytes
 }
 
 // a field that looks like: "non_coding_transcript_variant 0 ncRNA ENST00000431238,intron_variant 0 primary_transcript ENST00000431238"
@@ -732,23 +746,24 @@ WordIndex seg_array (VBlockP vb, Context *container_ctx, DidIType stats_conslida
 // the names of the dictionaries are the same as the ctx, with the 2nd character replaced by 1,2,3...
 // the field itself will contain the number of entries
 int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), 
-                             const SegCallback *callbacks) // optional - either NULL, or contains a seg callback for each item (any callback may be NULL)
+                             const SegCallback *callbacks, // optional - either NULL, or contains a seg callback for each item (any callback may be NULL)
+                             unsigned add_bytes)
 {
     ContextP ctxs[con.nitems_lo]; 
 
     for (unsigned i=0; i < con.nitems_lo; i++) 
         ctxs[i] = ctx_get_ctx (vb, con.items[i].dict_id); 
 
-    if (!ctx->is_stats_parent && ctx->st_did_i == DID_I_NONE) 
-        stats_set_consolidation_(vb, ctx->did_i, con.nitems_lo, ctxs);
+    if (!ctx->is_stats_parent && ctx->st_did_i == DID_NONE) 
+        ctx_consolidate_stats_(vb, ctx->did_i, con.nitems_lo, ctxs);
 
     seg_create_rollback_point (vb, ctxs, con.nitems_lo);
 
     // get repeats
     str_split (snip, snip_len, 0, con.repsep[0], repeat, false);
 
-    // if we don't have con.drop_final_repeat_sep, the last "repeat" should be zero length and removed
-    if (!con.drop_final_repeat_sep) {
+    // if we don't have con.drop_final_repsep, the last "repeat" should be zero length and removed
+    if (!con.drop_final_repsep) {
         if (repeat_lens[n_repeats-1]) goto badly_formatted; 
         n_repeats--;
     }
@@ -787,7 +802,7 @@ int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp
         if (con.items[i].separator[0] >= '\t') num_printable_separators++;
 
     WordIndex node_index = *B(WordIndex, ctx->con_index, n_repeats);
-    unsigned account_for = con.repeats * num_printable_separators /* item seperators */ + con.repeats - con.drop_final_repeat_sep /* repeat separators */;
+    unsigned account_for = con.repeats * num_printable_separators /* item seperators */ + con.repeats - con.drop_final_repsep /* repeat separators */ + ((int)add_bytes - snip_len);
 
     // case: first container with the many repeats - seg and add to cache
     if (node_index == WORD_INDEX_NONE) 
@@ -804,7 +819,7 @@ badly_formatted:
     seg_rollback (vb);
 
     // now just seg the entire snip
-    seg_by_ctx (VB, STRa(snip), ctx, snip_len); 
+    seg_by_ctx (VB, STRa(snip), ctx, add_bytes); 
 
     return -1; // not segged as a container
 }                           
@@ -823,7 +838,7 @@ void seg_add_to_local_fixed_do (VBlockP vb, Context *ctx, STRp(data), bool add_n
 }
 
 
-void seg_add_to_local_nonresizeable (VBlockP vb, Context *ctx, void *number, bool with_lookup, unsigned add_bytes) 
+void seg_integer_fixed (VBlockP vb, Context *ctx, void *number, bool with_lookup, unsigned add_bytes) 
 {
     buf_alloc (vb, &ctx->local, 0, MAX_(ctx->local.len+1, 32768) * lt_desc[ctx->ltype].width, char, CTX_GROWTH, "contexts->local");
 
@@ -873,7 +888,7 @@ static void seg_set_hash_hints (VBlockP vb, int third_num)
     if (third_num == 1) vb->num_lines_at_1_3 = vb->line_i + 1;
     else                vb->num_lines_at_2_3 = vb->line_i + 1;
 
-    for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) {
+    for (Did did_i=0; did_i < vb->num_contexts; did_i++) {
 
         Context *ctx = CTX(did_i);
         if (!ctx->nodes.len || ctx->global_hash_prime) continue; // our service is not needed - global_cache for this dict already exists or no nodes
@@ -891,7 +906,7 @@ static void seg_more_lines (VBlockP vb, unsigned sizeof_line)
     vb->lines.len = vb->lines.size / sizeof_line;
 
     // allocate more to the b250 buffer of the fields
-    for (DidIType did_i=0; did_i < DTF(num_fields); did_i++) 
+    for (Did did_i=0; did_i < DTF(num_fields); did_i++) 
         if (segconf.b250_per_line[did_i])
             buf_alloc (vb, &CTX(did_i)->b250, 0, AT_LEAST(did_i), WordIndex, 1, "contexts->b250");
 }
@@ -903,7 +918,7 @@ static void seg_verify_file_size (VBlockP vb)
     // sanity checks
     ASSERT (vb->recon_size >= 0, "%s: recon_size=%d is negative", VB_NAME, vb->recon_size);
 
-    for (DidIType sf_i=0; sf_i < vb->num_contexts; sf_i++) 
+    for (Did sf_i=0; sf_i < vb->num_contexts; sf_i++) 
         recon_size += CTX(sf_i)->txt_len;
     
     uint32_t vb_recon_size = DTP(seg_get_vb_recon_size) ? DTP(seg_get_vb_recon_size)(vb) : vb->recon_size; // normally vb->recon_size, but callback can override
@@ -911,7 +926,7 @@ static void seg_verify_file_size (VBlockP vb)
     if ((vb_recon_size != recon_size || flag.debug_recon_size) && !flag.show_bam) { 
 
         fprintf (stderr, "context.txt_len for vb=%s:\n", VB_NAME);
-        for (DidIType sf_i=0; sf_i < vb->num_contexts; sf_i++) {
+        for (Did sf_i=0; sf_i < vb->num_contexts; sf_i++) {
             Context *ctx = CTX(sf_i);
             if (ctx->nodes.len || ctx->local.len || ctx->txt_len)
                 fprintf (stderr, "%s: %u\n", ctx_tag_name_ex (ctx).s, (uint32_t)ctx->txt_len);
@@ -928,7 +943,7 @@ static void seg_verify_file_size (VBlockP vb)
     }
 }
 
-// split each lines in this variant block to its components
+// split each lines in this VB to its components
 void seg_all_data_lines (VBlockP vb)
 {
     START_TIMER;
@@ -944,7 +959,7 @@ void seg_all_data_lines (VBlockP vb)
     ctx_initialize_predefined_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_contexts); // Create ctx for the fields in the correct order 
  
     // allocate the b250 for the fields which each have num_lines entries
-    for (DidIType did_i=0; did_i < DTF(num_fields); did_i++)
+    for (Did did_i=0; did_i < DTF(num_fields); did_i++)
         if (segconf.b250_per_line[did_i]) 
             buf_alloc (vb, &CTX(did_i)->b250, 0, AT_LEAST(did_i), WordIndex, 1, "contexts->b250");
     
@@ -994,7 +1009,7 @@ void seg_all_data_lines (VBlockP vb)
             if (!vb->debug_line_hash_skip) {
                 uint32_t hash = DTP(seg_modifies) ? vb->debug_line_hash // if seg_modifies, Seg calculates hash before modifications
                                                   : adler32 (2, field_start, next_field - field_start); // same as in container_verify_line_integrity
-                seg_add_to_local_nonresizeable (vb, debug_lines_ctx, &hash, false, 0);
+                seg_integer_fixed (vb, debug_lines_ctx, &hash, false, 0);
             }
             else 
                 vb->debug_line_hash_skip = false; // reset
@@ -1036,7 +1051,7 @@ void seg_all_data_lines (VBlockP vb)
         segconf.line_len = (vb->lines.len ? (vb->txt_data.len / vb->lines.len) : 500) + 1; // get average line length (rounded up ; arbitrary 500 if the segconf data ended up not having any lines (example: all lines were non-matching lines dropped by --match in a chain file))
 
         // limitations: only pre-defined field, not local
-        for (DidIType did_i=0; did_i < DTF(num_fields); did_i++)
+        for (Did did_i=0; did_i < DTF(num_fields); did_i++)
             if (CTX(did_i)->b250.len) 
                 segconf.b250_per_line[did_i] = (float)CTX(did_i)->b250.len / (float)vb->lines.len;
     }

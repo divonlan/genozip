@@ -26,7 +26,7 @@
 #include "tar.h"
 
 typedef struct {
-    DidIType my_did_i, st_did_i;
+    Did my_did_i, st_did_i;
     int64_t txt_len, z_size;
     char name[100];
     rom type;
@@ -41,21 +41,19 @@ static Buffer stats={}, STATS={}, features={}, hash_occ={};
 static void stats_submit_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
 {
     for (uint32_t i=0, need_sep=0; i < num_stats; i++) 
-        if (sbl[i].pc_hash_occupancy >= 50) {
+        if (sbl[i].pc_hash_occupancy >= 50) { // > 50%
             ContextP zctx = ZCTX(sbl[i].my_did_i);
-            uint32_t n_words = zctx->nodes.len32;
              
             // in case of an over-populated hash table, we send the first 3 and last 3 words in the dictionary, which will help debugging the issue
-            bufprintf (evb, &hash_occ, "%s%s%%2C%s%%2C%s%%2C%u%%25%%2C%s%%2C%s%%2C%s%%2C%s%%2C%s%%2C%s", 
+            bufprintf (evb, &hash_occ, "%s%s%%2C%s%%2C%s%%2C%u%%25", 
                        need_sep++ ? "%3B" : "", url_esc_non_valid_charsS(sbl[i].name).s, url_esc_non_valid_charsS(sbl[i].type).s, 
-                       url_esc_non_valid_charsS (str_size (sbl[i].global_hash_prime).s).s, (int)sbl[i].pc_hash_occupancy, 
-                       // note: str_replace_letter modifies dict data, but its ok, since we have already written the dicts to z_file
-                       url_esc_non_valid_charsS (str_replace_letter ((char *)ctx_get_zf_nodes_snip (zctx, 0, 0, 0),         sizeof(UrlStr), ',', -127)).s, // first three words in the the dictionary of this field
-                       url_esc_non_valid_charsS (str_replace_letter ((char *)ctx_get_zf_nodes_snip (zctx, 1, 0, 0),         sizeof(UrlStr), ',', -127)).s,
-                       url_esc_non_valid_charsS (str_replace_letter ((char *)ctx_get_zf_nodes_snip (zctx, 2, 0, 0),         sizeof(UrlStr), ',', -127)).s,
-                       url_esc_non_valid_charsS (str_replace_letter ((char *)ctx_get_zf_nodes_snip (zctx, n_words-3, 0, 0), sizeof(UrlStr), ',', -127)).s, // last three words 
-                       url_esc_non_valid_charsS (str_replace_letter ((char *)ctx_get_zf_nodes_snip (zctx, n_words-2, 0, 0), sizeof(UrlStr), ',', -127)).s,
-                       url_esc_non_valid_charsS (str_replace_letter ((char *)ctx_get_zf_nodes_snip (zctx, n_words-1, 0, 0), sizeof(UrlStr), ',', -127)).s);
+                       url_esc_non_valid_charsS (str_size (sbl[i].global_hash_prime).s).s, (int)sbl[i].pc_hash_occupancy);
+            
+            uint32_t n_words = zctx->nodes.len32; // this is at least 32K as smallest hash table is 64K 
+            WordIndex words[] = { 0, 1, 2, n_words-3, n_words-2, n_words-1 }; // first three and last threewords in the the dictionary of this field
+            for (int i=0; i < ARRAY_LEN(words); i++)
+                // note: str_replace_letter modifies dict data, but its ok, since we have already written the dicts to z_file
+                bufprintf (evb, &hash_occ, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter ((char *)ctx_snip_from_zf_nodes (zctx, words[i], 0, 0), sizeof(UrlStr), ',', -127)).s); 
         }
 }
 
@@ -110,7 +108,8 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
     F(add_line_numbers) ; F(sort) ; F(unsorted) ; F(md5) ; F(subdirs) ; F(out_filename) ;
     F(replace) ; F(force) ; F(stdin_size) ; F(test) ; F(match_chrom_to_reference) ;
     F(reading_chain); F(reading_kraken) ; F(make_reference) ; F(dvcf_rename) ; F(dvcf_drop) ;
-    F(show_lift) ; F(pair) ; F(multiseq) ; F(files_from) ;
+    F(show_lift) ; F(pair) ; F(multiseq) ; F(files_from) ; F(no_gencomp) ; F(force_gencomp) ;
+    F(debug_lines) ; F(show_sag) ; F(show_depn) ; F(no_domqual) ; F(show_aligner) ; F(show_qual) ;
     #undef F
 
     #define F(name,fmt,none_value) if (flag.name != (none_value)) bufprintf (evb, &url_buf, #name "=" fmt "%%3B", flag.name);
@@ -125,7 +124,6 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
     if (flag.kraken_taxid!=TAXID_NONE) bufprint0 (evb, &url_buf, "taxid%3B");    
     if (file_get_stdin_type())         bufprintf (evb, &url_buf, "stdin_type=%s%%3B", ft_name(file_get_stdin_type()));    
     if (flag.show_one_counts.num)      bufprintf (evb, &url_buf, "show_counts=%s%%3B", url_esc_non_valid_charsS (dis_dict_id(flag.show_one_counts).s).s);
-
     url_read_string (B1STc(url_buf), NULL, 0); // ignore errors
     
 #ifndef _WIN32
@@ -144,7 +142,7 @@ static void stats_get_compressed_sizes (StatsByLine *sbl)
     ContextIndex ctx_index[MAX_DICTS];
 
     // initialize & prepare context index
-    for (DidIType did_i=0; did_i < z_file->num_contexts; did_i++) {
+    for (Did did_i=0; did_i < z_file->num_contexts; did_i++) {
         ZCTX(did_i)->b250.len = ZCTX(did_i)->b250.count; // number of b250 words - move to len
         ZCTX(did_i)->b250.count = ZCTX(did_i)->dict.count = ZCTX(did_i)->local.count = 0; 
         ctx_index[did_i] = (ContextIndex){ .did_i = did_i, .dict_id = ZCTX(did_i)->dict_id };
@@ -163,7 +161,7 @@ static void stats_get_compressed_sizes (StatsByLine *sbl)
             
         else if ((flag.show_stats_comp_i == COMP_NONE || flag.show_stats_comp_i == sec->comp_i) && 
                  (sec->st == SEC_B250 || sec->st == SEC_DICT || sec->st == SEC_LOCAL || sec->st == SEC_COUNTS)) {
-            DidIType did_i = ctx_get_existing_did_i_do (sec->dict_id, z_file->contexts, z_file->dict_id_to_did_i_map,
+            Did did_i = ctx_get_existing_did_i_do (sec->dict_id, z_file->contexts, z_file->dict_id_to_did_i_map,
                                                         ctx_index, z_file->num_contexts);
 
             // accumulate z_size for its context in its local/b250/dict.param
@@ -183,6 +181,12 @@ static void stats_get_compressed_sizes (StatsByLine *sbl)
 
 static void stats_output_file_metadata (void)
 {
+    #define FEATURE(cond,stats_str,features_str)        \
+    if (cond) {                                         \
+        bufprint0 (evb, &stats, stats_str "\n");        \
+        bufprint0 (evb, &features, features_str ";");   \
+    }
+
     bufprint0 (evb, &stats, "\n\n");
     if (txt_file->name) 
         bufprintf (evb, &stats, "%s file%s%s: %.*s\n", dt_name (z_file->data_type), 
@@ -191,12 +195,12 @@ static void stats_output_file_metadata (void)
                    (int)z_file->bound_txt_names.len, z_file->bound_txt_names.data);
     
     if (flag.reference == REF_MAKE_CHAIN) {
-        bufprintf (evb, &stats, "PRIM reference: %s MD5=%s genozip_version=%u\n", ref_get_filename (prim_ref), digest_display (ref_get_file_md5 (prim_ref)).s, ref_get_genozip_version (prim_ref));
-        bufprintf (evb, &stats, "LUFT reference: %s MD5=%s genozip_version=%u\n", ref_get_filename (gref), digest_display (ref_get_file_md5 (gref)).s, ref_get_genozip_version (gref));
+        bufprintf (evb, &stats, "PRIM reference: %s MD5=%s reference_version=%u\n", ref_get_filename (prim_ref), digest_display (ref_get_file_md5 (prim_ref)).s, ref_get_genozip_version (prim_ref));
+        bufprintf (evb, &stats, "LUFT reference: %s MD5=%s reference_version=%u\n", ref_get_filename (gref), digest_display (ref_get_file_md5 (gref)).s, ref_get_genozip_version (gref));
     }
 
     else if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE || flag.reference == REF_LIFTOVER) 
-        bufprintf (evb, &stats, "Reference: %s MD5=%s genozip_version=%u\n", ref_get_filename (gref), digest_display (ref_get_file_md5 (gref)).s, ref_get_genozip_version (gref));
+        bufprintf (evb, &stats, "Reference: %s MD5=%s reference_version=%u\n", ref_get_filename (gref), digest_display (ref_get_file_md5 (gref)).s, ref_get_genozip_version (gref));
 
     if (Z_DT(DT_VCF)) 
         bufprintf (evb, &stats, "Samples: %u   ", vcf_header_get_num_samples());
@@ -205,12 +209,17 @@ static void stats_output_file_metadata (void)
     for_zctx 
         if (zctx->nodes.len || zctx->txt_len) num_used_ctxs++;
 
-    if ((Z_DT(DT_SAM) || Z_DT(DT_BAM)) && z_has_gencomp)
+    if ((Z_DT(DT_SAM) || Z_DT(DT_BAM)) && z_has_gencomp) {
         bufprintf (evb, &stats, "%ss: %s (PRIM component: %s DEPN component: %s)  Contexts: %u   Vblocks: %u x %u MB  Sections: %u\n", 
-                   DTPZ (line_name), str_int_commas (z_file->num_lines).s, str_int_commas (gencomp_get_num_lines (SAM_COMP_PRIM)).s, 
-                   str_int_commas (gencomp_get_num_lines (SAM_COMP_DEPN)).s, num_used_ctxs, 
-                   z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), z_file->section_list_buf.len32);
+                DTPZ (line_name), str_int_commas (z_file->num_lines).s, str_int_commas (gencomp_get_num_lines (SAM_COMP_PRIM)).s, 
+                str_int_commas (gencomp_get_num_lines (SAM_COMP_DEPN)).s, num_used_ctxs, 
+                z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), z_file->section_list_buf.len32);
 
+        bufprintf (evb, &stats, "Main VBs: %u Prim VBs: %u Depn VBs: %u\n", 
+                    sections_get_num_vbs(SAM_COMP_MAIN), sections_get_num_vbs(SAM_COMP_PRIM), sections_get_num_vbs(SAM_COMP_DEPN));
+        bufprintf (evb, &features, "sag_type=%s;", sag_type_name(segconf.sag_type));
+    }
+    
     else if (z_is_dvcf)
         bufprintf (evb, &stats, "%ss: %s (Prim-only: %s Luft-only: %s)  Contexts: %u   Vblocks: %u x %u MB  Sections: %u\n", 
                    DTPZ (line_name), str_int_commas (z_file->num_lines).s, str_int_commas (gencomp_get_num_lines (VCF_COMP_PRIM_ONLY)).s, 
@@ -233,10 +242,7 @@ static void stats_output_file_metadata (void)
             bufprint0 (evb, &stats, "Dominant TaxID: No dominant species\n"); 
     }  
     
-    else if (kraken_is_loaded) {
-        bufprint0 (evb, &stats, "Features: Per-line taxonomy ID data\n");
-        bufprint0 (evb, &features, "taxonomy_data%3B");
-    }
+    else FEATURE(kraken_is_loaded, "Features: Per-line taxonomy ID data", "taxonomy_data")
     
     else if (Z_DT(DT_CHAIN) && flag.reference == REF_MAKE_CHAIN && !segconf.chain_mismatches_ref)
         bufprint0 (evb, &stats, "Features: Chain file suitable for use with genozip --chain\n");
@@ -245,46 +251,43 @@ static void stats_output_file_metadata (void)
         if (z_is_dvcf) { 
             bufprintf (evb, &stats, "Features: Dual-coordinates: Main VBs: %u Prim-only VBs: %u Luft-only VBs: %u\n", 
                        sections_get_num_vbs(VCF_COMP_MAIN), sections_get_num_vbs(VCF_COMP_PRIM_ONLY), sections_get_num_vbs(VCF_COMP_LUFT_ONLY));
-            bufprint0 (evb, &features, "DVCF%3B");
+            bufprint0 (evb, &features, "DVCF;");
         }
     }
 
     if (Z_DT(DT_SAM) || Z_DT(DT_BAM)) {
-        if (segconf.sam_is_sorted) {
-            bufprint0 (evb, &stats, "Sorting: Sorted by POS\n");
-            bufprint0 (evb, &features, "Sorted%3B");
-        }
+        FEATURE (segconf.is_sorted,   "Sorting: Sorted by POS",    "Sorted");        
+        FEATURE (segconf.is_collated, "Sorting: Collated by QNAME", "Collated");
+        FEATURE (!segconf.is_sorted && !segconf.is_collated, "Sorting: Not sorted or collated", "Not_sorted_or_collated");
         
-        if (segconf.sam_is_collated) {
-            bufprint0 (evb, &stats, "Sorting: Collated by QNAME\n");
-            bufprint0 (evb, &features, "Collated%3B");
-        }
-        
-        if (!segconf.sam_is_sorted && !segconf.sam_is_collated) {
-            bufprint0 (evb, &stats, "Sorting: Not sorted or collated\n");
-            bufprint0 (evb, &features, "Not_sorted_or_collated%3B");
-        }
-        
-        if (z_has_gencomp) { 
-            bufprintf (evb, &stats, "Main VBs: %u Prim VBs: %u Depn VBs: %u\n", 
-                       sections_get_num_vbs(SAM_COMP_MAIN), sections_get_num_vbs(SAM_COMP_PRIM), sections_get_num_vbs(SAM_COMP_DEPN));
-            bufprint0 (evb, &features, "Has_gencomp%3B");
-        }
+        rom mapper_name[] = SAM_MAPPER_NAME;
+        ASSERT0 (ARRAY_LEN(mapper_name) == NUM_MAPPERS, "Invalid SAM_MAPPER_NAME array length - perhaps missing commas between strings?");
+
+        bufprintf (evb, &stats, "Aligner: %s\n", mapper_name[segconf.sam_mapper]); 
+        bufprintf (evb, &features, "Mapper=%s;", mapper_name[segconf.sam_mapper]);
+
+        FEATURE (segconf.sam_bisulfite, "Feature: Bisulfite", "Bisulfite");
+
+        double mate_line_pc = 100.0 * (double)z_file->mate_line_count / (double)z_file->num_lines;
+        double prim_near_pc = 100.0 * (double)z_file->prim_near_count / (double)z_file->num_lines;
+        double prim_far_pc  = 100.0 * (double)z_file->prim_far_count  / (double)z_file->num_lines;
+        bufprintf (evb, &stats, "Buddying: mate=%.1f%% prim_near=%.1f%% prim_far=%.1f%%\n", mate_line_pc, prim_near_pc, prim_far_pc);
+        bufprintf (evb, &features, "mate=%.1f%%;prim_near=%.1f%%;prim_far=%.1f%%;", mate_line_pc, prim_near_pc, prim_far_pc);
     }
 
     if (Z_DT(DT_FASTA)) {
-        bufprintf (evb, &stats, "Sequence type: %s\n", segconf.seq_type==SQT_AMINO ? "Amino acids" : "Nucleotide bases");
-        bufprint0 (evb, &features, segconf.seq_type==SQT_AMINO ? "Amino_acids%3B" : "Nucleotide_bases%3B");
+        FEATURE (segconf.seq_type==SQT_AMINO, "Sequence type: Amino acids",      "Amino_acids");
+        FEATURE (segconf.seq_type==SQT_NUKE,  "Sequence type: Nucleotide bases", "Nucleotide_bases");
     }
 
     if (segconf.qname_flavor) {
         bufprintf (evb, &stats, "Read name style: %s%s%s\n", 
                    qf_name(segconf.qname_flavor), segconf.qname_flavor2 ? " + " : "", segconf.qname_flavor2 ? qf_name(segconf.qname_flavor2) : "");
-        bufprintf (evb, &features, "Flavor=%s%s%s%%3B", 
+        bufprintf (evb, &features, "Qname=%s%s%s;", 
                    qf_name(segconf.qname_flavor), segconf.qname_flavor2 ? "+" : "", segconf.qname_flavor2 ? qf_name(segconf.qname_flavor2) : "");
     }
     else if (Z_DT(DT_FASTQ) || Z_DT(DT_BAM) || Z_DT(DT_SAM) || Z_DT(DT_KRAKEN))
-        bufprint0 (evb, &features, "Flavor=unrecognized%3B");   
+        bufprint0 (evb, &features, "Flavor=unrecognized;");   
 
     bufprintf (evb, &stats, "Genozip version: %s %s\nDate compressed: %s\n", 
                GENOZIP_CODE_VERSION, arch_get_distribution(), str_time().s);
@@ -304,10 +307,12 @@ static void stats_consolidate_ctxs (StatsByLine *sbl, unsigned num_stats)
     for (unsigned parent=0; parent < num_stats; parent++) 
 
         // case: we might consolidate to this context
-        if (sbl[parent].my_did_i != DID_I_NONE && sbl[parent].st_did_i == DID_I_NONE)  {
+        if (sbl[parent].my_did_i != DID_NONE && 
+            (sbl[parent].st_did_i == DID_NONE || sbl[parent].st_did_i == sbl[parent].my_did_i))  {
+            
             for (unsigned child=0; child < num_stats; child++) {
 
-                if (sbl[parent].my_did_i  == sbl[child].st_did_i) {
+                if (child != parent && sbl[parent].my_did_i  == sbl[child].st_did_i) {
                     sbl[parent].txt_len   += sbl[child].txt_len;
                     sbl[parent].z_size    += sbl[child].z_size;  
                     sbl[parent].pc_of_txt += sbl[child].pc_of_txt;
@@ -318,48 +323,13 @@ static void stats_consolidate_ctxs (StatsByLine *sbl, unsigned num_stats)
                                  sbl[child].name, sbl[child].my_did_i, sbl[child].txt_len, sbl[child].z_size, 
                                  sbl[parent].name, sbl[parent].my_did_i, sbl[parent].txt_len, sbl[parent].z_size);
 
-                    sbl[child] = (StatsByLine){ .my_did_i = DID_I_NONE, .st_did_i = DID_I_NONE };
+                    sbl[child] = (StatsByLine){ .my_did_i = DID_NONE, .st_did_i = DID_NONE };
                 }
             }
 
             if (!strcmp (sbl[parent].name, "SQBITMAP")) strcpy (sbl[parent].name, "SEQ"); // rename
         }
 }
-
-void stats_set_consolidation (VBlockP vb, DidIType parent, unsigned num_deps, ...)
-{
-    va_list args;
-    va_start (args, num_deps);
-
-    for (unsigned d=0; d < num_deps; d++) {
-        DidIType dep = (DidIType)va_arg (args, int); 
-        if (dep != parent) 
-            CTX(dep)->st_did_i = parent;
-    }
-
-    CTX(parent)->is_stats_parent = true;
-    
-    va_end (args);
-}
-
-void stats_set_consolidation_(VBlockP vb, DidIType parent, unsigned num_deps, ContextP *dep_ctxs)
-{
-    for (unsigned d=0; d < num_deps; d++)
-        if (dep_ctxs[d]->did_i != parent) 
-            dep_ctxs[d]->st_did_i = parent;
-
-    CTX(parent)->is_stats_parent = true;
-}
-
-void stats_set_consolidationN (VBlockP vb, DidIType parent, DidIType first_dep, unsigned num_deps)
-{
-    for (ContextP ctx=CTX(first_dep); ctx < CTX(first_dep + num_deps); ctx++)
-        if (ctx->did_i != parent) 
-            ctx->st_did_i = parent;
-
-    CTX(parent)->is_stats_parent = true;
-}
-
 
 static void stats_consolidate_non_ctx (StatsByLine *sbl, unsigned num_stats, rom consolidated_name, 
                                        unsigned num_deps, ...)
@@ -414,6 +384,10 @@ static void stats_output_stats (StatsByLine *s, unsigned num_stats, float src_co
     bufprintf (evb, &stats, "\nSections (sorted by %% of genozip file):%s\n", "");
     bufprintf (evb, &stats, "NAME                   GENOZIP      %%       TXT      %%   RATIO\n%s", "");
 
+    // if -W or -w appear multiple times, we print the stats header to stderr to allow use with "| grep"
+    if (flag.show_stats == STATS_SHORT_GREP) 
+        fprintf (stderr, "NAME                   GENOZIP      %%       TXT      %%   RATIO\n%s", "");
+
     for (uint32_t i=0; i < num_stats; i++, s++)
         if (s->z_size)
             bufprintf (evb, &stats, "%-20.20s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
@@ -433,11 +407,11 @@ static void stats_output_stats (StatsByLine *s, unsigned num_stats, float src_co
     // note: no point showing this per component in DVCF, bc all_txt_len_0 is fully accounted for in the MAIN component and it is 0 in the others
     if (flag.show_stats_comp_i == COMP_NONE || !z_is_dvcf)
         bufprintf (evb, &stats, 
-                "%-20s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
-                src_comp_ratio != 1 ? "GENOZIP vs TXT" : "TOTAL",
-                str_size (all_z_size).s, all_pc_of_z, // total z size and sum of all % of z (should be 100)
-                str_size (all_txt_len_0).s, all_pc_of_txt, // total txt fize and ratio z vs txt
-                all_comp_ratio);
+                   "%-20s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
+                   src_comp_ratio != 1 ? "GENOZIP vs TXT" : "TOTAL",
+                   str_size (all_z_size).s, all_pc_of_z, // total z size and sum of all % of z (should be 100)
+                   str_size (all_txt_len_0).s, all_pc_of_txt, // total txt fize and ratio z vs txt
+                   all_comp_ratio);
 }
 
 static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
@@ -453,8 +427,14 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
         bufprintf (evb, &STATS, "\nSections (sorted by %% of genozip file):%s\n", "");
     }
 
-    bufprintf (evb, &STATS, "did_i Name              Parent            #Words  Snips-(%% of #Words)    Hash-table    uncomp      comp      comp      comp      comp       txt    comp   %% of   %% of  %s\n", "");
-    bufprintf (evb, &STATS, "                                         in file   Dict  Local FailSton   Size Occp      dict      dict      b250     local     TOTAL             ratio    txt    zip%s\n", "");
+    bufprint0 (evb, &STATS, "did_i Name              Parent            #Words  Snips-(%% of #Words)    Hash-table    uncomp      comp      comp      comp      comp       txt    comp   %% of   %% of\n");
+    bufprint0 (evb, &STATS, "                                         in file   Dict  Local FailSton   Size Occp      dict      dict      b250     local     TOTAL             ratio    txt    zip\n");
+
+    // if -W or -w appear multiple times, we print the stats header to stderr to allow use with "| grep"
+    if (flag.show_stats == STATS_LONG_GREP) {
+        fprintf (stderr, "did_i Name              Parent            #Words  Snips-(%% of #Words)    Hash-table    uncomp      comp      comp      comp      comp       txt    comp   %% of   %% of\n");
+        fprintf (stderr, "                                         in file   Dict  Local FailSton   Size Occp      dict      dict      b250     local     TOTAL             ratio    txt    zip\n");
+    }
 
     for (uint32_t i=0; i < num_stats; i++, s++)
         if (s->z_size)
@@ -478,8 +458,8 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
 void stats_generate (void) // specific section, or COMP_NONE if for the entire file
 {
     // initial allocation
-    buf_alloc (evb, &stats, 0, 10000, char, 1, "stats"); stats.len = 0; // reset if used for previous file
-    buf_alloc (evb, &STATS, 0, 10000, char, 1, "stats"); STATS.len = 0;
+    buf_alloc (evb, &stats,    0, 10000, char, 1, "stats"); stats.len = 0; // reset if used for previous file
+    buf_alloc (evb, &STATS,    0, 10000, char, 1, "stats"); STATS.len = 0;
     buf_alloc (evb, &features, 0, 1000,  char, 1, "stats"); features.len  = 0;
     buf_alloc (evb, &hash_occ, 0, 1000,  char, 1, "stats"); features.len  = 0;
     
@@ -509,9 +489,10 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
         if (st == SEC_DICT || st == SEC_B250 || st == SEC_LOCAL || st == SEC_COUNTS) continue; // these are covered by individual contexts
 
         s->txt_len    = st == SEC_TXT_HEADER  ? z_file->header_size : 0; // note: MAIN header only, ie excluding generated headers for DVCF
-        s->type       = (st==SEC_REFERENCE || st==SEC_REF_IS_SET || st==SEC_REF_CONTIGS || st==SEC_REF_RAND_ACC || st == SEC_CHROM2REF_MAP || st==SEC_REF_IUPACS)
-                      ? "SEQUENCE" : "Other"; // note: some contexts appear as "Other" in --stats, but in --STATS their parent is themself, not "Other"
-        s->my_did_i   = s->st_did_i = DID_I_NONE;
+        s->type       = (st==SEC_REFERENCE || st==SEC_REF_IS_SET || st==SEC_REF_CONTIGS || st == SEC_CHROM2REF_MAP || st==SEC_REF_IUPACS) ? "SEQUENCE" 
+                      : (st==SEC_RANDOM_ACCESS || st==SEC_REF_RAND_ACC)                                                                   ? "RandomAccessIndex"
+                      :                                                                                                                     "Other"; // note: some contexts appear as "Other" in --stats, but in --STATS their parent is themself, not "Other"
+        s->my_did_i   = s->st_did_i = DID_NONE;
         s->did_i.s[0] = s->words.s[0] = s->hash.s[0] = s->uncomp_dict.s[0] = s->comp_dict.s[0] = '-';
         s->pc_of_txt  = txt_size ? 100.0 * (float)s->txt_len / (float)txt_size : 0;
         s->pc_of_z    = z_size   ? 100.0 * (float)s->z_size  / (float)z_size   : 0;
@@ -547,7 +528,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
 
         // parent
         s->type  = zctx->dict_id.num                 == _SAM_SQBITMAP ? "SEQUENCE"
-                 : zctx->st_did_i == DID_I_NONE                       ? zctx->tag_name
+                 : zctx->st_did_i == DID_NONE                       ? zctx->tag_name
                  : ZCTX(zctx->st_did_i)->dict_id.num == _SAM_SQBITMAP ? "SEQUENCE"
                  :                                                     ZCTX(zctx->st_did_i)->tag_name;
 
@@ -600,15 +581,17 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     
     stats_consolidate_non_ctx (sbl, num_stats, 
                                flag.reference == REF_EXT_STORE ? "Reference" : "SEQ", // when compressing SAM/FASTQ with REF_EXT_STORE, account for the reference in its own "Parent"
-                               6, ST_NAME (SEC_REFERENCE), ST_NAME (SEC_REF_IS_SET), 
-                               ST_NAME (SEC_REF_CONTIGS), ST_NAME (SEC_REF_RAND_ACC), ST_NAME (SEC_CHROM2REF_MAP),
+                               5, ST_NAME (SEC_REFERENCE), ST_NAME (SEC_REF_IS_SET), 
+                               ST_NAME (SEC_REF_CONTIGS), ST_NAME (SEC_CHROM2REF_MAP),
                                ST_NAME (SEC_REF_IUPACS));
 
-    stats_consolidate_non_ctx (sbl, num_stats, "Other", 22 + (DTPZ(txt_header_required) == HDR_NONE), "E1L", "E2L", "EOL", 
+    stats_consolidate_non_ctx (sbl, num_stats, "Other", 21 + (DTPZ(txt_header_required) == HDR_NONE), "E1L", "E2L", "EOL", 
                                "SAMPLES", "AUX", TOPLEVEL, "ToPLUFT", "TOP2BAM", "TOP2FQ", "TOP2FQEX", "TOP2VCF", "TOP2HASH", 
-                               "LINEMETA", "CONTIG", "COORDS", "SAGROUP", "SAALN",
-                               ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_DICT_ID_ALIASES), ST_NAME (SEC_RECON_PLAN),
+                               "LINEMETA", "CONTIG", "COORDS", "SAG", "SAALN",
+                               ST_NAME (SEC_DICT_ID_ALIASES), ST_NAME (SEC_RECON_PLAN),
                                ST_NAME (SEC_VB_HEADER), ST_NAME (SEC_BGZF), ST_NAME(SEC_TXT_HEADER)/*must be last*/);
+    
+    stats_consolidate_non_ctx (sbl, num_stats, "RandomAccessIndex", 2, ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_REF_RAND_ACC));
     
     ASSERTW (all_txt_len == txt_size || flag.make_reference, // all_txt_len=0 in make-ref as there are no contexts
              "Expecting all_txt_len=%"PRId64" == txt_size=%"PRId64, all_txt_len, txt_size);
@@ -625,7 +608,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     // if we're showing stats of a single components - output it now
     if (flag.show_stats_comp_i != COMP_NONE) {
         iprintf ("\n\nComponent=%s:\n", comp_name (flag.show_stats_comp_i));
-        buf_print (flag.show_stats == STATS_SHORT ? &stats : &STATS, false);
+        buf_print (ABS(flag.show_stats) == STATS_SHORT ? &stats : &STATS, false);
         buf_free (stats);
         buf_free (STATS);
     }
@@ -658,7 +641,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
 
 void stats_display (void)
 {
-    BufferP buf = flag.show_stats == 1 ? &stats : &STATS;
+    BufferP buf = ABS(flag.show_stats) == 1 ? &stats : &STATS;
 
     if (!buf_is_alloc (buf)) return;  // no stats available
 
@@ -679,13 +662,22 @@ void stats_read_and_display (void)
         return; // genozip file does not contain stats sections (SEC_STATS was introduced in v 7.0.5)
     }
 
+    // if -W or -w appear multiple times, we print the stats header to stderr to allow use with "| grep"
+    if (flag.show_stats == STATS_SHORT_GREP) 
+        fprintf (stderr, "NAME                   GENOZIP      %%       TXT      %%   RATIO\n%s", "");
+
+    else if (flag.show_stats == STATS_LONG_GREP) {
+        fprintf (stderr, "did_i Name              Parent            #Words  Snips-(%% of #Words)    Hash-table    uncomp      comp      comp      comp      comp       txt    comp   %% of   %% of\n");
+        fprintf (stderr, "                                         in file   Dict  Local FailSton   Size Occp      dict      dict      b250     local     TOTAL             ratio    txt    zip\n");
+    }
+
     // read and uncompress the requested stats section
-    zfile_get_global_section (SectionHeader, sec - (flag.show_stats==1),
-                              flag.show_stats == 1 ? &stats : &STATS, "stats");
+    zfile_get_global_section (SectionHeader, sec - (ABS(flag.show_stats)==1),
+                              ABS(flag.show_stats) == 1 ? &stats : &STATS, "stats");
     
     stats_display();
 
-    if (exe_type == EXE_GENOCAT) exit_ok(); // if this is genocat - we're done
+    if (is_genocat) exit_ok(); // if this is genocat - we're done
 }
 
 // concatenate txt names of bound files so we can show them all

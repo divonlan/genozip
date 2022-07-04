@@ -29,17 +29,25 @@ void sam_piz_xtra_line_data (VBlockP vb_)
     VBlockSAMP vb = (VBlockSAMP)vb_;
 
     if (SAM_PIZ_HAS_SA_GROUP) {
-        iprintf ("grp_i=%u aln_i=%"PRIu64" (%d within group)\n", ZGRP_I(vb->sa_grp), ZALN_I(vb->sa_aln), (int)(ZALN_I(vb->sa_aln) - vb->sa_grp->first_aln_i));
-        sam_show_sa_one_grp (ZGRP_I(VB_SAM->sa_grp));
+        iprintf ("grp_i=%u aln_i=%"PRIu64" (%d within group)\n", ZGRP_I(vb->sag), ZALN_I(vb->sa_aln), (int)(ZALN_I(vb->sa_aln) - vb->sag->first_aln_i));
+        sam_show_sag_one_grp (ZGRP_I(VB_SAM->sag));
     }
 }
 
 void sam_piz_genozip_header (const SectionHeaderGenozipHeader *header)
 {
     if (VER(14)) {
-        segconf.sam_seq_len      = BGEN32 (header->sam.segconf_seq_len); 
-        segconf.sam_ms_type      = header->sam.segconf_ms_type;
-        segconf.has_MD_or_NM     = header->sam.segconf_has_MD_or_NM;
+        segconf.sam_seq_len           = BGEN32 (header->sam.segconf_seq_len); 
+        segconf.seq_len_to_cm         = header->sam.segconf_seq_len_cm;
+        segconf.sam_ms_type           = header->sam.segconf_ms_type;
+        segconf.has_MD_or_NM          = header->sam.segconf_has_MD_or_NM;
+        segconf.sam_bisulfite         = header->sam.segconf_bisulfite;
+        segconf.is_paired             = header->sam.segconf_is_paired;
+        segconf.sag_type              = header->sam.segconf_sag_type;
+        segconf.sag_has_AS       = header->sam.segconf_sag_has_AS;
+        segconf.AS_is_2ref_consumed   = header->sam.segconf_AS_is_2refc;
+        segconf.pysam_qual            = header->sam.segconf_pysam_qual;
+        segconf.qname_seq_len_dict_id = header->sam.segconf_seq_len_dict_id; 
     }
 }
 
@@ -93,6 +101,10 @@ IS_SKIP (sam_piz_is_skip_section)
     #define SKIPIFF(cond) ({ if (cond) SKIP; else KEEP; })
     #define KEEPIFF(cond) ({ if (cond) KEEP; else SKIP;})
 
+    // if this is a mux channel of an OPTION - consider its parent instead. Eg. "M0C:Z0", "M1C:Z1" -> "MC:i"
+    if (dict_id.id[3]==':' && dict_id.id[1] == dict_id.id[5]&& !dict_id.id[6])
+        dict_id = (DictId){ .id = { dict_id.id[0], dict_id.id[2], ':', dict_id.id[4] } };
+
     uint64_t dnum = dict_id.num;
     bool preproc = (purpose == SKIP_PURPOSE_PREPROC) && (st == SEC_B250 || st == SEC_LOCAL); // when loading SA, don't skip the needed B250/LOCAL
     bool dict_needed_for_preproc = (st == SEC_DICT && z_file->z_flags.has_gencomp);  // when loading a SEC_DICT in a file that has gencomp, don't skip dicts needed for loading SA
@@ -110,7 +122,7 @@ IS_SKIP (sam_piz_is_skip_section)
             
         case _SAM_NONREF   : case _SAM_NONREF_X : case _SAM_GPOS     : case _SAM_STRAND :
         case _SAM_SEQMIS_A : case _SAM_SEQMIS_C : case _SAM_SEQMIS_G : case _SAM_SEQMIS_T : 
-            SKIPIF (prim); // in PRIM, we skip sections that we used for loading the SA Groups in sam_piz_load_SA_Groups, but not needed for reconstruction
+            SKIPIF (prim); // in PRIM, we skip sections that we used for loading the SA Groups in sam_piz_load_sags, but not needed for reconstruction
                            // (during PRIM SA Group loading, skip function is temporarily changed to sam_plsg_only). see also: sam_load_groups_add_grps
             SKIPIFF ((cov || cnt) && !flag.bases);
 
@@ -125,7 +137,7 @@ IS_SKIP (sam_piz_is_skip_section)
             SKIPIFF (preproc || cov || (cnt && !(flag.bases && flag.out_dt == DT_BAM)));
 
         case _SAM_RNEXT   :
-            SKIPIFF (preproc || (cnt && !flag.bases)); // needed to reconstruct RNAME from a mate
+            SKIPIFF ((preproc && IS_SAG_SA) || (cnt && !flag.bases)); // needed to reconstruct RNAME from a mate
 
         case _SAM_Q1NAME : case _SAM_QNAMESA :
             KEEPIF (preproc || dict_needed_for_preproc || (cnt && flag.bases && flag.out_dt == DT_BAM)); // if output is BAM we need the entire BAM record to correctly analyze the SEQ for IUPAC, as it is a structure.
@@ -139,7 +151,7 @@ IS_SKIP (sam_piz_is_skip_section)
                      
         case _OPTION_SA_RNAME  :    
         case _OPTION_SA_POS    :    
-        case _OPTION_SA_CIGAR :
+        case _OPTION_SA_CIGAR  :
         case _OPTION_SA_STRAND : 
         case _OPTION_SA_NM     :
             KEEPIF (preproc || dict_needed_for_preproc);
@@ -157,23 +169,40 @@ IS_SKIP (sam_piz_is_skip_section)
             KEEPIF (preproc || dict_needed_for_preproc);            
             SKIPIFF (cnt && !flag.sam_flag_filter && !flag.bases);
             
+        case _OPTION_NH_i  : 
+            SKIPIFF (preproc || cnt || cov);
+
+        case _OPTION_AS_i  : // we don't skip AS in preprocessing unless it is entirely skipped
+            SKIPIF (preproc && !segconf.sag_has_AS);
+            SKIPIFF ((cov || cnt) && dict_id_is_aux_sf(dict_id));
+  
+        case _OPTION_NH_PRIM :
+            KEEPIFF (preproc || dict_needed_for_preproc);        
+
+        case _OPTION_CR_Z: case _OPTION_CB_Z: case _OPTION_CR_CB:
+        case _OPTION_CY_Z: case _OPTION_CY_ARR: case _OPTION_CY_DIVRQUAL: case _OPTION_CY_DOMQRUNS: case _OPTION_CY_QUALMPLX:
+        case _OPTION_UR_Z: // note: UB is an alias so no data
+        case _OPTION_UY_Z: case _OPTION_UY_DIVRQUAL: case _OPTION_UY_DOMQRUNS: case _OPTION_UY_QUALMPLX:
+        case _OPTION_gx_Z:
+        case _OPTION_gn_Z:
+        case _OPTION_GX_Z:
+        case _OPTION_GN_Z:  
+            SKIPIFF (cov || cnt);
+
         case _SAM_MC_Z     : KEEPIFF (flag.out_dt == DT_FASTQ);
         
         case _SAM_BUDDY    : KEEP; // always needed (if any of these are needed: QNAME, FLAG, MAPQ, CIGAR...)
         case _SAM_QNAME    : KEEP; // always needed as it is used to determine whether this line has a buddy
         case _SAM_RNAME    : KEEP;
-        case _SAM_SAGROUP  : KEEP;
+        case _SAM_SAG  : KEEP;
         case _SAM_SAALN    : KEEP;
-        case _SAM_CIGAR    :
-        case _OPTION_MC_Z0 : 
-        case _OPTION_MC_Z1 : 
+        case _SAM_CIGAR    : SKIPIFF ((preproc && IS_SAG_SA) || (cnt && !flag.bases));
         case _OPTION_MC_Z  : SKIPIFF (preproc || (cnt && !flag.bases));
-        case _SAM_AUX      : SKIPIFF (preproc);
+        case _SAM_AUX      : SKIPIFF (preproc && (!segconf.sag_has_AS && !IS_SAG_SOLO));
         case _SAM_MAPQ     : 
         case _OPTION_MQ_i  : SKIPIFF (preproc || ((cov || cnt) && !flag.bases && !flag.sam_mapq_filter));
-        case _SAM_SEQSA    : SKIPIFF (preproc || ((cov || cnt) && !flag.bases));
         case _SAM_PNEXT    : case _SAM_P0NEXT : case _SAM_P1NEXT : case _SAM_P2NEXT : case _SAM_P3NEXT :
-        case _SAM_POS      : SKIPIFF (preproc || (cnt && !flag.regions && !flag.bases));
+        case _SAM_POS      : SKIPIFF ((preproc && IS_SAG_SA) || (cnt && !flag.regions && !flag.bases));
         case _SAM_TAXID    : SKIPIFF (preproc || flag.kraken_taxid == TAXID_NONE);
         case _SAM_TOPLEVEL : SKIPIFF (preproc || flag.out_dt == DT_BAM || flag.out_dt == DT_FASTQ);
         case _SAM_TOP2BAM  : SKIPIFF (preproc || flag.out_dt == DT_SAM || flag.out_dt == DT_FASTQ);
@@ -205,7 +234,7 @@ void sam_set_FLAG_filter (rom optarg)
     value = &optarg[1];
     
     if (str_get_int_range_allow_hex16 (STRa(value), 1, 65535, &flag.FLAG)) {} // done
-    else if (!strncmp (value, "MULTI",         value_len)) flag.FLAG = SAM_FLAG_MULTI_SEGMENTS;
+    else if (!strncmp (value, "MULTI",         value_len)) flag.FLAG = SAM_FLAG_MULTI_SEG;
     else if (!strncmp (value, "ALIGNED",       value_len)) flag.FLAG = SAM_FLAG_IS_ALIGNED;
     else if (!strncmp (value, "UNMAPPED",      value_len)) flag.FLAG = SAM_FLAG_UNMAPPED;
     else if (!strncmp (value, "NUNMAPPED",     value_len)) flag.FLAG = SAM_FLAG_NEXT_UNMAPPED;
@@ -520,17 +549,17 @@ CONTAINER_FILTER_FUNC (sam_piz_filter)
     // note: we always load buddy, to prevent a situation when in some lines it is consumed
     // and other lines, which have buddy, it is not consumed because the field that consumes it is skipped
     if (!sam_is_prim_vb && dict_id.num == _SAM_TOP2BAM && item == 0 && 
-        CTX(SAM_QNAME)->b250.len) { // might be 0 in special cases, like flag.count
+        CTX(SAM_QNAME)->b250.len32) { // might be 0 in special cases, like flag.count
         STR(snip);
         PEEK_SNIP(SAM_QNAME);
         if (snip_len && *snip == SNIP_COPY_BUDDY)
             reconstruct_set_buddy(vb);
     }
-
-    // BAM of a primary VB: sets sa_grp, and then sets buddy if indicated by sa_grp.
-    // note: it will be so, if SAM_QNAME which was loaded to SA Groups, had a buddy.
+ 
+    // BAM of a primary VB: sets sag, and then sets buddy if indicated by the sag.
+    // note: it will be so, if SAM_QNAME which was loaded to the sag, had a buddy.
     else if (sam_is_prim_vb && dict_id.num == _SAM_TOP2BAM && item == 0)
-        sam_piz_set_sa_grp (VB_SAM); 
+        sam_piz_set_sag (VB_SAM); 
 
     // collect_coverage: set buddy_line_i here, since we don't reconstruct QNAME
     // note: we always load buddy, to prevent a situation when in some lines it is consumed
@@ -579,9 +608,7 @@ TRANSLATOR_FUNC (sam_piz_sam2fastq_FLAG)
 // v14: De-multiplex by has_mate
 SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_BY_MATE)
 {
-    bool is_depn  = last_flags.bits.supplementary || last_flags.bits.secondary;
-    bool has_mate = piz_has_buddy && !is_depn;
-    return reconstruct_demultiplex (vb, ctx, STRa(snip), has_mate, new_value, reconstruct);
+    return reconstruct_demultiplex (vb, ctx, STRa(snip), piz_has_mate, new_value, reconstruct);
 }
 
 // v14: De-multiplex by has_buddy (which can be mate or prim)
@@ -597,10 +624,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_BY_MATE_PRIM)
     if (!ctx_has_value_in_line_(vb, CTX(SAM_FLAG)))
         ctx_set_last_value (vb, CTX(SAM_FLAG), reconstruct_peek (vb, CTX(SAM_FLAG), 0, 0));
 
-    bool is_depn  = last_flags.bits.supplementary || last_flags.bits.secondary;
-    bool has_mate = piz_has_buddy && !is_depn;
-    bool has_prim = piz_has_buddy && is_depn;
-    int channel_i = has_mate?1 : has_prim?2 : 0;
+    int channel_i = piz_has_mate?1 : piz_has_real_prim?2 : 0;
 
     return reconstruct_demultiplex (vb, ctx, STRa(snip), channel_i, new_value, reconstruct);
 }

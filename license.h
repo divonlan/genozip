@@ -15,4 +15,4 @@ extern uint32_t license_get_number (void);
 extern rom license_get_one_line (void);
 extern void license_display (void);
 extern LicenseType license_get_type (void);
-extern void license_print_notice (void);
+extern void license_print_tip (void);

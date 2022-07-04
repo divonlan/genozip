@@ -69,18 +69,15 @@
 
 // ZIP only
 typedef struct CtxNode {
-    CharIndex char_index; // character index into dictionary array
-    uint32_t snip_len;    // not including \0 terminator present in dictionary array
+    CharIndex char_index;     // character index into dictionary array
+    uint32_t snip_len;        // not including \0 terminator present in dictionary array
     union {
         WordIndex word_index; // zctx, vctx->ol_nodes and vctx->nodes after ctx_merge_in_one_vctx 
         WordIndex node_index; // vctx->nodes before ctx_merge_in_one_vctx
     };
 } CtxNode;
 
-typedef struct {
-    CharIndex char_index;
-    uint32_t snip_len;
-} CtxWord;
+typedef ZWord CtxWord;
 
 // for signed numbers, we store them in our "interlaced" format rather than standard ISO format 
 // example signed: 2, -5 <--> interlaced: 4, 9. Why? for example, a int32 -1 will be 0x00000001 rather than 0xfffffffe - 
@@ -99,13 +96,13 @@ static inline uint8_t NEXTLOCAL2BITS(ContextP ctx) { uint8_t ret = bits_get ((Bi
 #define ctx_node_vb(ctx, node_index, snip_in_dict, snip_len) ctx_node_vb_do(ctx, node_index, snip_in_dict, snip_len, __FUNCLINE)
 #define node_word_index(vb,did_i,index) ((index)!=WORD_INDEX_NONE ? ctx_node_vb (&(vb)->contexts[did_i], (index), 0,0)->word_index : WORD_INDEX_NONE)
 
-#define CTX(did_i)   ({ DidIType my_did_i = (did_i); /* could be an expression */\
+#define CTX(did_i)   ({ Did my_did_i = (did_i); /* could be an expression */\
                         ASSERT (my_did_i < MAX_DICTS, "CTX(): did_i=%u out of range", my_did_i); /* will be optimized-out for constant did_i */ \
                         (&vb->contexts[my_did_i]); })
 
 #define LOADED_CTX(did_i) ({ ContextP ctx=CTX(did_i); ASSISLOADED(ctx); ctx; })
 
-#define ZCTX(did_i)  ({ DidIType my_did_i = (did_i);\
+#define ZCTX(did_i)  ({ Did my_did_i = (did_i);\
                         ASSERT (my_did_i < MAX_DICTS, "ZCTX(): did_i=%u out of range", my_did_i);  \
                         &z_file->contexts[my_did_i]; })
 
@@ -114,8 +111,10 @@ static inline uint8_t NEXTLOCAL2BITS(ContextP ctx) { uint8_t ret = bits_get ((Bi
 #define last_float(did_i)   contexts[did_i].last_value.f
 #define last_delta(did_i)   contexts[did_i].last_delta
 #define last_txtx(vb, ctx)  Btxt ((ctx)->last_txt.index)
-static inline char *last_txt (VBlockP vb, DidIType did_i) { return last_txtx (vb, CTX(did_i)); }
+static inline char *last_txt (VBlockP vb, Did did_i) { return last_txtx (vb, CTX(did_i)); }
 #define last_txt_len(did_i) contexts[did_i].last_txt.len
+
+#define history64(did_i, line_i) (*B(int64_t, CTX(did_i)->history, (line_i)))
 
 static inline bool is_last_txt_valid(ContextP ctx) { return ctx->last_txt.index != INVALID_LAST_TXT_INDEX; }
 static inline bool is_same_last_txt(VBlockP vb, ContextP ctx, STRp(str)) { return str_len == ctx->last_txt.len && !memcmp (str, last_txtx(vb, ctx), str_len); }
@@ -123,7 +122,7 @@ static inline bool is_same_last_txt(VBlockP vb, ContextP ctx, STRp(str)) { retur
 static inline void ctx_init_iterator (ContextP ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; ctx->next_local = 0; }
 
 extern WordIndex ctx_create_node_do (VBlockP segging_vb, ContextP vctx, STRp (snip), bool *is_new);
-extern WordIndex ctx_create_node (VBlockP vb, DidIType did_i, STRp (snip));
+extern WordIndex ctx_create_node (VBlockP vb, Did did_i, STRp (snip));
 
 #define LASTb250(ctx) ((ctx)->flags.all_the_same ? *B1ST(WordIndex, (ctx)->b250) : *BLST(WordIndex, (ctx)->b250))
 extern void ctx_append_b250 (VBlockP vb, ContextP vctx, WordIndex node_index);
@@ -148,40 +147,40 @@ extern void ctx_add_compressor_time_to_zf_ctx (VBlockP vb);
 extern void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vctx, bool is_lcodec);
 extern void ctx_convert_generated_b250_to_mate_lookup (VBlockP vb, ContextP vctx);
 
-extern ContextP ctx_get_unmapped_ctx (ContextP contexts, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_contexts, DictId dict_id, STRp(tag_name));
+extern ContextP ctx_get_unmapped_ctx (ContextP contexts, DataType dt, Did *dict_id_to_did_i_map, Did *num_contexts, DictId dict_id, STRp(tag_name));
 
-// returns did_i of dict_id if it is found in the map, or DID_I_NONE if not
-static inline DidIType get_matching_did_i_from_map (const Context *contexts, const DidIType *map, DictId dict_id)
+// returns did_i of dict_id if it is found in the map, or DID_NONE if not
+static inline Did get_matching_did_i_from_map (const Context *contexts, const Did *map, DictId dict_id)
 {
-    DidIType did_i = map[dict_id.map_key];
-    if (did_i != DID_I_NONE && contexts[did_i].dict_id.num == dict_id.num) 
+    Did did_i = map[dict_id.map_key];
+    if (did_i != DID_NONE && contexts[did_i].dict_id.num == dict_id.num) 
         return did_i;
 
     did_i = map[ALT_KEY(dict_id)];
-    if (did_i != DID_I_NONE && contexts[did_i].dict_id.num == dict_id.num) 
+    if (did_i != DID_NONE && contexts[did_i].dict_id.num == dict_id.num) 
         return did_i;
 
-    return DID_I_NONE;
+    return DID_NONE;
 }
 
 // inline function for quick operation typically called several billion times in a typical file and > 99.9% can be served by the inline
-#define ctx_get_ctx(vb,dict_id) ctx_get_ctx_do (((VBlockP)(vb))->contexts, ((VBlockP)(vb))->data_type, ((VBlockP)(vb))->dict_id_to_did_i_map, &((VBlockP)(vb))->num_contexts, (DictId)(dict_id), 0, 0)
-#define ctx_get_ctx_tag(vb,dict_id,tag_name,tag_name_len) ctx_get_ctx_do (((VBlockP)(vb))->contexts, ((VBlockP)(vb))->data_type, ((VBlockP)(vb))->dict_id_to_did_i_map, &((VBlockP)(vb))->num_contexts, (DictId)(dict_id), (tag_name), (tag_name_len))
-static inline ContextP ctx_get_ctx_do (Context *contexts, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_contexts, DictId dict_id, STRp(tag_name))
+#define ctx_get_ctx(vb,dict_id) ctx_get_ctx_do (((VBlockP)(vb))->contexts, ((VBlockP)(vb))->data_type, ((VBlockP)(vb))->dict_id_to_did_i_map, &((VBlockP)(vb))->num_contexts, (dict_id), 0, 0)
+#define ctx_get_ctx_tag(vb,dict_id,tag_name,tag_name_len) ctx_get_ctx_do (((VBlockP)(vb))->contexts, ((VBlockP)(vb))->data_type, ((VBlockP)(vb))->dict_id_to_did_i_map, &((VBlockP)(vb))->num_contexts, (dict_id), (tag_name), (tag_name_len))
+static inline ContextP ctx_get_ctx_do (Context *contexts, DataType dt, Did *dict_id_to_did_i_map, Did *num_contexts, DictId dict_id, STRp(tag_name))
 {
-    DidIType did_i = get_matching_did_i_from_map (contexts, dict_id_to_did_i_map, dict_id);
-    if (did_i != DID_I_NONE) 
+    Did did_i = get_matching_did_i_from_map (contexts, dict_id_to_did_i_map, dict_id);
+    if (did_i != DID_NONE) 
         return &contexts[did_i];
     else    
         return ctx_get_unmapped_ctx (contexts, dt, dict_id_to_did_i_map, num_contexts, dict_id, STRa(tag_name));
 }
 
-extern DidIType ctx_get_unmapped_existing_did_i (const Context *contexts, const ContextIndex *ctx_index, DidIType num_contexts, DictId dict_id);
+extern Did ctx_get_unmapped_existing_did_i (const Context *contexts, const ContextIndex *ctx_index, Did num_contexts, DictId dict_id);
 
-static inline DidIType ctx_get_existing_did_i_do (DictId dict_id, const Context *contexts, DidIType *dict_id_to_did_i_map, const ContextIndex *ctx_index, DidIType num_contexts)
+static inline Did ctx_get_existing_did_i_do (DictId dict_id, const Context *contexts, Did *dict_id_to_did_i_map, const ContextIndex *ctx_index, Did num_contexts)
 {
-    DidIType did_i = get_matching_did_i_from_map (contexts, dict_id_to_did_i_map, dict_id);
-    if (did_i != DID_I_NONE)
+    Did did_i = get_matching_did_i_from_map (contexts, dict_id_to_did_i_map, dict_id);
+    if (did_i != DID_NONE)
         return did_i;
     else
         return ctx_get_unmapped_existing_did_i (contexts, ctx_index, num_contexts, dict_id);
@@ -190,10 +189,10 @@ static inline DidIType ctx_get_existing_did_i_do (DictId dict_id, const Context 
 
 static inline ContextP ctx_get_existing_ctx_do (VBlockP vb, DictId dict_id)  // returns NULL if context doesn't exist
 {
-    DidIType did_i = ctx_get_existing_did_i(vb, dict_id); 
-    return (did_i == DID_I_NONE) ? NULL : CTX(did_i); 
+    Did did_i = ctx_get_existing_did_i(vb, dict_id); 
+    return (did_i == DID_NONE) ? NULL : CTX(did_i); 
 }
-#define ECTX(dict_id) ctx_get_existing_ctx_do ((VBlockP)(vb), (DictId)(dict_id))
+#define ECTX(dict_id) ctx_get_existing_ctx_do ((VBlockP)(vb), (dict_id))
 
 extern ContextP ctx_get_zctx_from_vctx (ConstContextP vctx);
 
@@ -203,8 +202,8 @@ extern void ctx_overlay_dictionaries_to_vb (VBlockP vb);
 extern void ctx_sort_dictionaries_vb_1(VBlockP vb);
 
 extern void ctx_update_stats (VBlockP vb);
-extern void ctx_free_context (ContextP ctx, DidIType did_i);
-extern void ctx_destroy_context (ContextP ctx, DidIType did_i);
+extern void ctx_free_context (ContextP ctx, Did did_i);
+extern void ctx_destroy_context (ContextP ctx, Did did_i);
 
 extern CtxNode *ctx_get_node_by_word_index (ConstContextP ctx, WordIndex word_index);
 extern rom ctx_get_snip_by_word_index_do (ConstContextP ctx, WordIndex word_index, pSTRp(snip), FUNCLINE);
@@ -219,18 +218,18 @@ static inline rom ctx_get_words_snip(ConstContextP ctx, WordIndex word_index)  /
 
 extern WordIndex ctx_get_word_index_by_snip (VBlockP vb, ContextP ctx, STRp(snip));
 
-extern rom ctx_get_zf_nodes_snip (ConstContextP zctx, WordIndex node_index, pSTRp(snip));
+extern rom ctx_snip_from_zf_nodes (ConstContextP zctx, WordIndex node_index, pSTRp(snip));
 
 extern WordIndex ctx_get_ol_node_index_by_snip (VBlockP vb, ContextP ctx, STRp(snip)); 
 
-extern void ctx_initialize_predefined_ctxs (ContextP contexts /* an array */, DataType dt, DidIType *dict_id_to_did_i_map, DidIType *num_contexts);
+extern void ctx_initialize_predefined_ctxs (ContextP contexts /* an array */, DataType dt, Did *dict_id_to_did_i_map, Did *num_contexts);
 
-extern void ctx_shorten_unused_dict_words (DidIType did_i);
+extern void ctx_shorten_unused_dict_words (Did did_i);
 extern void ctx_read_all_counts (void);
 extern void ctx_compress_counts (void);
-extern rom ctx_get_snip_with_largest_count (DidIType did_i, int64_t *count);
-extern void ctx_populate_zf_ctx_from_contigs (Reference ref, DidIType dst_did_i, ConstContigPkgP ctgs);
-extern WordIndex ctx_populate_zf_ctx (DidIType dst_did_i, STRp (contig_name), WordIndex ref_index);
+extern rom ctx_get_snip_with_largest_count (Did did_i, int64_t *count);
+extern void ctx_populate_zf_ctx_from_contigs (Reference ref, Did dst_did_i, ConstContigPkgP ctgs);
+extern WordIndex ctx_populate_zf_ctx (Did dst_did_i, STRp (contig_name), WordIndex ref_index);
 
 extern void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local);
 
@@ -261,7 +260,7 @@ static inline void ctx_unset_rollback (ContextP ctx) { ctx->rback_id = 1; }
 extern void ctx_rollback (VBlockP vb, ContextP ctx, bool override_id);
 
 static inline bool ctx_can_have_singletons (ContextP ctx) 
-    { return (ctx->ltype == LT_TEXT) && !ctx->dynamic_size_local && !ctx->no_stons && 
+    { return (ctx->ltype == LT_TEXT) && !ctx->no_stons && 
               (ctx->flags.store != STORE_INDEX) && !ctx->flags.all_the_same; } 
 
 // returns true if dict_id was *previously* segged on this line, and we stored a valid last_value (int or float)
@@ -274,7 +273,7 @@ static inline bool ctx_has_value_in_line_do (VBlockP vb, DictId dict_id, Context
     if (p_ctx) *p_ctx = ctx;
     return ctx && ctx_has_value_in_line_(vb, ctx);
 }
-#define ctx_has_value_in_line(vb, dict_id, p_ctx) ctx_has_value_in_line_do ((VBlockP)(vb), (DictId)(dict_id), (p_ctx))
+#define ctx_has_value_in_line(vb, dict_id, p_ctx) ctx_has_value_in_line_do ((VBlockP)(vb), (dict_id), (p_ctx))
 
 static inline void ctx_set_last_value (VBlockP vb, ContextP ctx, ValueType last_value)
 {
@@ -313,13 +312,13 @@ static inline void ctx_unset_encountered (VBlockP vb, ContextP ctx)
 }
 
 // returns true if dict_id was *previously* segged on this line (last_value may be valid or not)
-static inline bool ctx_encountered_in_line (VBlockP vb, DidIType did_i) 
+static inline bool ctx_encountered_in_line (VBlockP vb, Did did_i) 
 { 
     ContextP ctx = CTX(did_i); 
     return ((ctx->last_line_i == vb->line_i) || (ctx->last_line_i == -(int64_t)vb->line_i - 1)); 
 }
 
-static inline bool ctx_encountered_in_prev_line (VBlockP vb, DidIType did_i) 
+static inline bool ctx_encountered_in_prev_line (VBlockP vb, Did did_i) 
 { 
     ContextP ctx = CTX(did_i); 
     return ((ctx->last_line_i == vb->line_i-1) || (ctx->last_line_i == -(int64_t)(vb->line_i-1) - 1)); 
@@ -334,7 +333,7 @@ static inline bool ctx_encountered_in_line_by_dict_id (VBlockP vb, DictId dict_i
 
 // note: these macros are good for contexts in VCF/FORMAT or not. Use the *_in_line version in case
 // we are sure its not VCF/FORMAT, they are a bit more efficient.
-static inline bool ctx_encountered (VBlockP vb, DidIType did_i) 
+static inline bool ctx_encountered (VBlockP vb, Did did_i) 
 { 
     ContextP ctx = CTX(did_i);
     return ctx_encountered_in_line(vb, ctx->did_i) && ctx->last_sample_i == vb->sample_i; 
@@ -343,7 +342,7 @@ static inline bool ctx_encountered (VBlockP vb, DidIType did_i)
 static inline bool ctx_encountered_by_dict_id (VBlockP vb, DictId dict_id, ContextP *p_ctx) 
     { return ctx_encountered_in_line_by_dict_id (vb, dict_id, p_ctx) && (*p_ctx)->last_sample_i == vb->sample_i; }
     
-static inline bool ctx_has_value (VBlockP vb, DidIType did_i) 
+static inline bool ctx_has_value (VBlockP vb, Did did_i) 
 {   
     ContextP ctx = CTX(did_i);
     return ctx_has_value_in_line_(vb, ctx) && ctx->last_sample_i == vb->sample_i; 
@@ -352,16 +351,21 @@ static inline bool ctx_has_value (VBlockP vb, DidIType did_i)
 static inline bool ctx_has_value_by_dict_id (VBlockP vb, DictId dict_id, ContextP *p_ctx) 
     { return ctx_has_value_in_line_do (vb, dict_id, p_ctx) && (*p_ctx)->last_sample_i == vb->sample_i; }
 
-extern uint64_t ctx_get_ctx_group_z_len (VBlockP vb, DidIType group_did_i);
+extern uint64_t ctx_get_ctx_group_z_len (VBlockP vb, Did group_did_i);
 
 typedef enum { KR_KEEP, KR_REMOVE } CtxKeepRemove;
-extern void ctx_declare_winning_group (DidIType winning_group_did_i, DidIType losing_group_did_i, DidIType new_st_did_i);
+extern void ctx_declare_winning_group (Did winning_group_did_i, Did losing_group_did_i, Did new_st_did_i);
 
 extern void ctx_set_store (VBlockP vb, StoreType store_type, unsigned num_ctxs, ...);
 extern void ctx_set_no_stons (VBlockP vb, unsigned num_ctxs, ...);
+extern void ctx_set_delta_peek (VBlockP vb, unsigned num_ctxs, ...);
 extern void ctx_set_store_per_line (VBlockP vb, unsigned num_ctxs, ...);
 extern void ctx_set_ltype (VBlockP vb, LocalType ltype, unsigned num_ctxs, ...);
-extern void ctx_set_dyn_size (VBlockP vb, unsigned num_ctxs, ...);
+extern void ctx_consolidate_stats (VBlockP vb, Did parent, unsigned num_deps, ...);
+extern void ctx_consolidate_statsN(VBlockP vb, Did parent, Did first_dep, unsigned num_deps);
+extern void ctx_consolidate_stats_(VBlockP vb, Did parent, unsigned num_deps, ContextP *dep_ctxs);
+
+extern rom dyn_type_name (DynType dyn_type);
 
 extern void ctx_foreach_buffer(ContextP ctx, bool set_name, void (*func)(BufferP buf, FUNCLINE));
 

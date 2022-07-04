@@ -188,26 +188,16 @@ void chain_seg_initialize (VBlockP vb)
     if (segconf.running && flag.reference)
         chain_verify_references_not_reversed (vb);
 
-    CTX(CHAIN_NAMELUFT)-> no_stons  =       
-    CTX(CHAIN_NAMEPRIM)-> no_stons  =       // (these 2 ^) need b250 node_index for reference
-    CTX(CHAIN_TOPLEVEL)-> no_stons  = 
-    CTX(CHAIN_CHAIN)->    no_stons  = 
-    CTX(CHAIN_SEP)->      no_stons  = 
-    CTX(CHAIN_VERIFIED)-> no_stons  = 
-    CTX(CHAIN_STRNDPRIM)->no_stons  = true; // (these 4 ^) keep in b250 so it can be eliminated as all_the_same
+    ctx_set_no_stons (vb, 13, CHAIN_NAMELUFT, CHAIN_NAMEPRIM, CHAIN_TOPLEVEL, 
+                      CHAIN_CHAIN, CHAIN_SEP, CHAIN_VERIFIED, CHAIN_STRNDPRIM,  // keep in b250 so it can be eliminated as all_the_same
+                      CHAIN_STARTPRIM, CHAIN_ENDPRIM, CHAIN_STARTLUFT, CHAIN_ENDLUFT, CHAIN_ID, // required by seg_pos_field
+                      DID_EOL);
+                      
+    ctx_set_store (VB, STORE_INT, 11, CHAIN_STARTPRIM, CHAIN_ENDPRIM, CHAIN_SIZEPRIM,
+                   CHAIN_STARTLUFT, CHAIN_ENDLUFT, CHAIN_SIZELUFT,
+                   CHAIN_SIZE, CHAIN_VERIFIED, CHAIN_GAPS, CHAIN_ID, DID_EOL);
 
-    CTX(CHAIN_STARTPRIM)->flags.store = 
-    CTX(CHAIN_ENDPRIM)->  flags.store = 
-    CTX(CHAIN_SIZEPRIM)-> flags.store = 
-    CTX(CHAIN_STARTLUFT)->flags.store = 
-    CTX(CHAIN_ENDLUFT)->  flags.store = 
-    CTX(CHAIN_SIZELUFT)-> flags.store = 
-    CTX(CHAIN_SIZE)->     flags.store = 
-    CTX(CHAIN_VERIFIED)-> flags.store = 
-    CTX(CHAIN_GAPS)->     flags.store = STORE_INT;
-
-    CTX(CHAIN_NAMEPRIM)-> flags.store =
-    CTX(CHAIN_NAMELUFT)-> flags.store = STORE_INDEX;
+    ctx_set_store (VB, STORE_INDEX, 3, CHAIN_NAMEPRIM, CHAIN_NAMELUFT, DID_EOL);
 
     CTX(CHAIN_NAMEPRIM)-> no_vb1_sort =
     CTX(CHAIN_NAMELUFT)-> no_vb1_sort = true;
@@ -314,14 +304,14 @@ static bool chain_seg_verify_contig (VBlockCHAIN *vb, Reference ref, WordIndex n
     return true; // verified
 }
 
-static WordIndex chain_seg_name_and_size (VBlockCHAIN *vb, Reference ref, bool is_luft, DidIType did_i_name, STRp(name), DidIType did_i_size, STRp(size), 
+static WordIndex chain_seg_name_and_size (VBlockCHAIN *vb, Reference ref, bool is_luft, Did did_i_name, STRp(name), Did did_i_size, STRp(size), 
                                           bool *mismatch, bool *verified) // out
 {
     PosType size_value=0;
     ASSSEG (str_get_int_range64 (STRa(size), 1, 1000000000000000, &size_value),
             size, "Invalid size field of \"%.*s\": %.*s", STRf(name), STRf(size));;
 
-    seg_by_did_i (VB, STRa(size), did_i_size, size_len+1);
+    seg_by_did (VB, STRa(size), did_i_size, size_len+1);
     
     bool is_alt;
     WordIndex node_index = chrom_seg_ex (VB, did_i_name, STRa (name), size_value, &is_alt, name_len+1, true, NULL);
@@ -403,7 +393,7 @@ rom chain_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_tx
     WordIndex luft_chrom = chain_seg_name_and_size (vb, gref, true, CHAIN_NAMELUFT, STRd(CHAIN_NAMELUFT), CHAIN_SIZELUFT, STRd(CHAIN_SIZELUFT), 
                                                     &mismatch, &verified);
 
-    seg_by_did_i (VB, verified ? "1" : "0", 1, CHAIN_VERIFIED, 0);
+    seg_by_did (VB, verified ? "1" : "0", 1, CHAIN_VERIFIED, 0);
 
     SEG_NEXT_ITEM_SP (CHAIN_STRNDLUFT);
     ASSERT_VALID_STRAND (CHAIN_STRNDLUFT);
@@ -421,7 +411,7 @@ rom chain_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_tx
     if (str_is_int (STRd(CHAIN_ID)))
         seg_pos_field (vb_, CHAIN_ID, CHAIN_ID, 0, 0, STRd(CHAIN_ID), 0, field_len + 1); // just a numeric delta    
     else
-        seg_by_did_i (VB, STRd(CHAIN_ID), CHAIN_ID, field_len + 1);
+        seg_by_did (VB, STRd(CHAIN_ID), CHAIN_ID, field_len + 1);
 
     SEG_EOL (CHAIN_EOL, true);
 
@@ -439,21 +429,21 @@ rom chain_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_tx
             last_gap_sep = separator;
 
             // note: we store both DIFFs in the same context as they are correlated (usually one of them is 0)
-            seg_by_did_i (VB, &separator, 1, CHAIN_SEP, 0); // Chain format may have space or tab as a separator
+            seg_by_did (VB, &separator, 1, CHAIN_SEP, 0); // Chain format may have space or tab as a separator
             { SEG_NEXT_ITEM_SP (CHAIN_GAPS); }
 
-            seg_by_did_i (VB, &separator, 1, CHAIN_SEP, 0); // space or tab
+            seg_by_did (VB, &separator, 1, CHAIN_SEP, 0); // space or tab
             { SEG_LAST_ITEM_SP (CHAIN_GAPS); }
         
         }
         // last line doesn't have DLUFT and DPRIM - seg the "standard" separator and then delete it 
         // (this way we don't ruin the all_the_same of CHAIN_SEP)
         else {
-            seg_by_did_i (VB, &last_gap_sep, 1, CHAIN_SEP, 0); 
-            seg_by_did_i (VB, ((char[]){ SNIP_SPECIAL, CHAIN_SPECIAL_BACKSPACE }), 2, CHAIN_GAPS, 0); // prim_gap
+            seg_by_did (VB, &last_gap_sep, 1, CHAIN_SEP, 0); 
+            seg_by_did (VB, ((char[]){ SNIP_SPECIAL, CHAIN_SPECIAL_BACKSPACE }), 2, CHAIN_GAPS, 0); // prim_gap
 
-            seg_by_did_i (VB, &last_gap_sep, 1, CHAIN_SEP, 0); 
-            seg_by_did_i (VB, ((char[]){ SNIP_SPECIAL, CHAIN_SPECIAL_BACKSPACE }), 2, CHAIN_GAPS, 0); // luft_gap
+            seg_by_did (VB, &last_gap_sep, 1, CHAIN_SEP, 0); 
+            seg_by_did (VB, ((char[]){ SNIP_SPECIAL, CHAIN_SPECIAL_BACKSPACE }), 2, CHAIN_GAPS, 0); // luft_gap
         }
         SEG_EOL (CHAIN_EOL, false);
 
@@ -828,7 +818,7 @@ void chain_load (void)
     if (flag.show_chain_contigs) {
         chain_contigs_show (true);
         chain_contigs_show (false);
-        if (exe_type == EXE_GENOCAT) exit_ok();  // in genocat this, not the data
+        if (is_genocat) exit_ok();  // in genocat this, not the data
     }
 
     // sort the alignmants by (prim_ref_index, prim_start)

@@ -34,8 +34,9 @@
 #define WEBSITE_ENCRYPTION   GENOZIP_URL "/encryption.html"
 #define WEBSITE_PIPELINE     GENOZIP_URL "/fastq-to-bam-pipeline.html"
 #define WEBSITE_MATCH_CHROM  GENOZIP_URL "/match-chrom.html"
-#define WEBSITE_TESTIMONIALS GENOZIP_URL "/testimonials.html"
+#define WEBSITE_INSTITUTIONS GENOZIP_URL "/institutions.html"
 #define WEBSITE_PRICING_FAQ  GENOZIP_URL "/pricing-faq.html"
+#define WEBSITE_REFERRAL     GENOZIP_URL "/referral.html"
 
 #define EMAIL_SUPPORT  "support@genozip.com"
 #define EMAIL_SALES    "sales@genozip.com"

@@ -51,14 +51,14 @@ DictId dict_id_make (rom str, unsigned str_len, DictIdType dict_id_type)
                           : (dict_id_type==DTYPE_2)     ?  s[0] \
                           :           /* DTYPE_FIELD */   (s[0] & 0x3f))
 
-#define DICT_ID_MAKE(s, dict_id_type) ((sizeof s <= 2) ? (DictId){.id = { s0(s,dict_id_type), } } \
-                                    :  (sizeof s == 3) ? (DictId){.id = { s0(s,dict_id_type), s[1] } } \
-                                    :  (sizeof s == 4) ? (DictId){.id = { s0(s,dict_id_type), s[1], s[2], } } \
-                                    :  (sizeof s == 5) ? (DictId){.id = { s0(s,dict_id_type), s[1], s[2], s[3] } } \
-                                    :  (sizeof s == 6) ? (DictId){.id = { s0(s,dict_id_type), s[1], s[2], s[3], s[4] } } \
-                                    :  (sizeof s == 7) ? (DictId){.id = { s0(s,dict_id_type), s[1], s[2], s[3], s[4], s[5] } } \
-                                    :  (sizeof s == 8) ? (DictId){.id = { s0(s,dict_id_type), s[1], s[2], s[3], s[4], s[5], s[6] } } \
-                                    :                    (DictId){.id = { s0(s,dict_id_type), s[1], s[2], s[3], s[4], s[5], s[6], s[7] } } )
+#define DICT_ID_MAKE(s, dict_id_type) ((sizeof s <= 2) ? {.id = { s0(s,dict_id_type), } } \
+                                    :  (sizeof s == 3) ? {.id = { s0(s,dict_id_type), s[1] } } \
+                                    :  (sizeof s == 4) ? {.id = { s0(s,dict_id_type), s[1], s[2], } } \
+                                    :  (sizeof s == 5) ? {.id = { s0(s,dict_id_type), s[1], s[2], s[3] } } \
+                                    :  (sizeof s == 6) ? {.id = { s0(s,dict_id_type), s[1], s[2], s[3], s[4] } } \
+                                    :  (sizeof s == 7) ? {.id = { s0(s,dict_id_type), s[1], s[2], s[3], s[4], s[5] } } \
+                                    :  (sizeof s == 8) ? {.id = { s0(s,dict_id_type), s[1], s[2], s[3], s[4], s[5], s[6] } } \
+                                    :                    {.id = { s0(s,dict_id_type), s[1], s[2], s[3], s[4], s[5], s[6], s[7] } } )
 
 static void dict_id_show_aliases (void)
 {
@@ -68,7 +68,7 @@ static void dict_id_show_aliases (void)
                  dtype_name_z (dict_id_aliases[i].alias), dis_dict_id (dict_id_aliases[i].alias).s, 
                  dtype_name_z (dict_id_aliases[i].dst), dis_dict_id (dict_id_aliases[i].dst).s);
 
-    if (exe_type == EXE_GENOCAT) exit_ok();
+    if (is_genocat) exit_ok();
 }
 
 // called by ZIP main thread for writing to global section

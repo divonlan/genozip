@@ -126,7 +126,8 @@ bool gencomp_comp_eligible_for_digest (VBlockP vb)
 {
     CompIType comp_i = vb ? vb->comp_i : flag.zip_comp_i;
     
-    return !comp_i || (vb && vb->data_type == DT_FASTQ) || (!vb && z_file->data_type == DT_FASTQ);
+    return (comp_i == COMP_MAIN) || 
+           (vb && vb->data_type == DT_FASTQ) || (!vb && z_file->data_type == DT_FASTQ); // FASTQ comp_i==1 is R2 and not a generated component
 }
 
 static void debug_gencomp (rom msg, bool needs_lock)
@@ -423,7 +424,6 @@ void gencomp_absorb_vb_gencomp_lines (VBlockP vb)
     mutex_lock_by_vb_order (vb->vblock_i, gc_vb_serialization);
 
     if (vb->comp_i) goto done; // If this not the MAIN component - only advance the serializing gc_vb_serialization
-
     mutex_lock (gc_protected);
 
     if (flag.debug_gencomp) iprintf ("absorb       %s/%u\n", comp_name (vb->comp_i), vb->vblock_i);
@@ -435,11 +435,15 @@ void gencomp_absorb_vb_gencomp_lines (VBlockP vb)
 
     // iterate on all lines the segmenter decided to send to gencomp (lines are of mixed componentsP)
     ARRAY (GencompLineIEntry, gc_lines, vb->gencomp_lines)
-    for (uint32_t line_i=0; line_i < gc_lines_len; line_i++) {
+    for (uint32_t line_i=0; line_i < gc_lines_len; line_i++) { // cannot use for_buf here
 
         GencompLineIEntry *gcl = &gc_lines[line_i];
 
-        if (componentsP[gcl->comp_i].txt_data.len + gcl->line_len > segconf.vb_size) 
+        // limit vb_size of depn to 1.5GB due to a bug in rans_compress_to_4x16 (called from compress_depn_buf) erroring in 
+        // buffers near 2GB. we can return the threadhold to segconf.vb_size after the bug is fixed.
+        uint32_t threadshold = (componentsP[gcl->comp_i].type == GCT_DEPN) ? MIN_(segconf.vb_size, 1610612736) : segconf.vb_size;
+
+        if (componentsP[gcl->comp_i].txt_data.len + gcl->line_len > threadshold) 
             gencomp_flush (gcl->comp_i, false);
 
         buf_add (&componentsP[gcl->comp_i].txt_data, Btxt (gcl->line_index), gcl->line_len);
@@ -616,7 +620,7 @@ bool gencomp_am_i_expecting_more_txt_data (void)
     }
 
     bool expecting = !finished_absorbingP || queueP[GCT_OOB].queue_len || queueP[GCT_DEPN].queue_len;
-
+//printf ("xxx expecting=%u finished_absorbingP=%u queueP[GCT_OOB].queue_len=%u queueP[GCT_DEPN].queue_len=%u\n", expecting, finished_absorbingP, queueP[GCT_OOB].queue_len, queueP[GCT_DEPN].queue_len);
     if ((TXT_DT(DT_SAM) || TXT_DT(DT_BAM)) && finished_absorbingP && !queueP[GCT_OOB].queue_len && !num_vbs_dispatched[GCT_OOB]) {
         sam_finished_ingesting_prim = true;
         if (flag.debug_gencomp) iprint0 ("No PRIM VBs in this file\n");

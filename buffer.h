@@ -70,6 +70,7 @@ extern void buf_initialize(void);
 #define buf_is_alloc(buf_p) ((buf_p)->data != NULL && (buf_p)->type != BUF_UNALLOCATED)
 #define ASSERTNOTINUSE(buf) ASSERT (!buf_is_alloc (&(buf)) && !(buf).len && !(buf).param, "expecting "#buf" to be free, but it's not: %s", buf_desc (&(buf)).s)
 #define ASSERTISALLOCED(buf) ASSERT0 (buf_is_alloc (&(buf)), #buf" is not allocated")
+#define ASSERTISEMPTY(buf) ASSERT (buf_is_alloc (&(buf)) && !(buf).len, "expecting "#buf" to be be allocated an empty, but it isn't: %s", buf_desc (&(buf)).s)
 #define ASSERTNOTEMPTY(buf) ASSERT (buf_is_alloc (&(buf)) && (buf).len, "expecting "#buf" to be contain some data, but it doesn't: %s", buf_desc (&(buf)).s)
 
 extern uint64_t buf_alloc_do (VBlockP vb,
@@ -158,7 +159,7 @@ extern uint64_t buf_alloc_do (VBlockP vb,
 #define for_buf(element_type, iterator, buf)  \
     for (element_type *iterator=B1ST(element_type, (buf)); iterator < BAFT(element_type, (buf)); iterator++)
 
-// loop with two concurrent iterators "iterator" (pointer to element_type) and i (32bit) 
+// loop with two concurrent iterators "iter_p" (pointer to element_type) and "iter_i" (32bit) 
 #define for_buf2(element_type, iter_p, iter_i, buf) \
     for (uint32_t iter_i=0; iter_i < (buf).len32;)  \
         for (element_type *iter_p=B1ST(element_type, (buf)); iter_p < BAFT(element_type, (buf)); iter_p++, iter_i++)
@@ -182,6 +183,7 @@ static inline uint64_t BNXT_get_index (BufferP buf, size_t size, FUNCLINE)
 #define BNXT32(buf)         BNXT(uint32_t, (buf))
 #define BNXT64(buf)         BNXT(uint64_t, (buf))
 #define BNUM(buf, ent)      ((int32_t)((((char*)(ent)) - ((buf).data)) / (int32_t)sizeof (*(ent)))) // signed integer
+#define BNUM64(buf, ent)    ((int64_t)((((char*)(ent)) - ((buf).data)) / (int64_t)sizeof (*(ent)))) // signed integer
 #define BNUMtxt(ent)        BNUM(vb->txt_data, (ent))
 #define BREMAINS(buf, ent)  ((buf).len - BNUM ((buf),(ent)))
 #define BIS1ST(buf,ent)     (BNUM((buf),(ent)) == 0)
@@ -331,14 +333,14 @@ extern bool buf_dump_to_file (rom filename, ConstBufferP buf, unsigned buf_word_
 // bitmap stuff
 // ------------
 // allocate bit array and set nbits
-extern BitsP buf_alloc_bitarr_do (VBlockP vb, BufferP buf, uint64_t nbits, FUNCLINE, rom name);
-#define buf_alloc_bitarr(vb, buf, nbits, name) \
-    buf_alloc_bitarr_do((VBlockP)(vb), (buf), (nbits), __FUNCLINE, (name))
+extern BitsP buf_alloc_bits_do (VBlockP vb, BufferP buf, uint64_t nbits, FUNCLINE, rom name);
+#define buf_alloc_bits(vb, buf, nbits, name) \
+    buf_alloc_bits_do((VBlockP)(vb), (buf), (nbits), __FUNCLINE, (name))
 
 // allocate bit array without setting nbits
-extern void buf_alloc_bitarr_buffer_do (VBlockP vb, BufferP buf, uint64_t nbits, FUNCLINE, rom name);
-#define buf_alloc_bitarr_buffer(vb, buf, nbits, name) \
-    buf_alloc_bitarr_buffer_do((VBlockP)(vb), (buf), (nbits), __FUNCLINE, (name))
+extern void buf_alloc_bits_buffer_do (VBlockP vb, BufferP buf, uint64_t nbits, FUNCLINE, rom name);
+#define buf_alloc_bits_buffer(vb, buf, nbits, name) \
+    buf_alloc_bits_buffer_do((VBlockP)(vb), (buf), (nbits), __FUNCLINE, (name))
 
 extern BitsP buf_overlay_bitarr_do (VBlockP vb, BufferP overlaid_buf, BufferP regular_buf, uint64_t start_byte_in_regular_buf, uint64_t nbits, FUNCLINE, rom name);
 #define buf_overlay_bitarr(vb, overlaid_buf, regular_buf, start_byte_in_regular_buf, nbits, name) \
@@ -357,7 +359,6 @@ extern void buf_overlay_do (VBlockP vb, BufferP overlaid_buf, BufferP regular_bu
 extern uint64_t buf_extend_bits (BufferP buf, int64_t num_new_bits);
 extern void buf_add_bit (BufferP buf, int64_t new_bit);
 extern BitsP buf_zfile_buf_to_bitarray (BufferP buf, uint64_t nbits);
-#define buf_get_bitarray(buf) ((BitsP)(buf))
 #define buf_add_set_bit(buf)   buf_add_bit (buf, 1)
 #define buf_add_clear_bit(buf) buf_add_bit (buf, 0)
 

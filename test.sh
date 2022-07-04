@@ -170,9 +170,9 @@ test_md5()
     cleanup
 }
 
-test_translate_sam_to_bam_to_sam() # $1 bam file $2 genocat options
+test_translate_sam_to_bam_to_sam() # $1 bam file $2 genozip options $3 genocat options
 {
-    test_header "$1 - translate SAM to BAM to SAM $2"
+    test_header "$1 - translate SAM to BAM to SAM \"$2\" \"$3\""
 
     local bam=$TESTDIR/$1
     local sam=${bam%.bam}.sam
@@ -183,17 +183,17 @@ test_translate_sam_to_bam_to_sam() # $1 bam file $2 genocat options
 
     # SAM -> BAM
     echo "STEP 1: sam -> sam.genozip"
-    $genozip -f $sam -o $output || exit 1
+    $genozip -f $sam -o $output $2 || exit 1
 
     echo "STEP 2: sam.genozip -> bam"
-    $genocat $output --bam --no-PG -fo $new_bam $2 || exit 1
+    $genocat $output --bam --no-PG -fo $new_bam $3 || exit 1
 
     # BAM -> SAM
     echo "STEP 3: bam -> bam.genozip"
-    $genozip -f $new_bam -o $output || exit 1
+    $genozip -f $new_bam -o $output $2 || exit 1
 
     echo "STEP 4: bam.genozip -> sam"
-    $genocat $output --sam --no-PG -fo $new_sam $2 || exit 1
+    $genocat $output --sam --no-PG -fo $new_sam $3 || exit 1
 
     # compare original SAM and SAM created via sam->sam.genozip->bam->bam.genozip->sam
     echo "STEP 5: compare original and output SAMs"
@@ -608,13 +608,18 @@ batch_sam_bam_translations()
     batch_print_header
 
     # test different buddy code path for subsetted file
-    test_translate_sam_to_bam_to_sam special.buddy.bam -r22
+    test_translate_sam_to_bam_to_sam special.buddy.bam " " -r22
+
+    # test with gencomp
+    test_translate_sam_to_bam_to_sam special.depn.bam --force-gencomp
 
     # note: we have these files in both sam and bam versions generated with samtools
     local files=(special.buddy.bam 
-                 test.NA12878.chr22.1x.bam 
-                 test.pacbio.ccs.10k.bam  # unaligned SAM/BAM with no SQ records
-                 test.human2.bam)
+                 special.depn.bam            # depn/prim with/without QUAL
+                 special.NA12878.bam 
+                 special.pacbio.ccs.bam      # unaligned SAM/BAM with no SQ records
+                 special.human2.bam          
+                 special.bsseeker2-rrbs.bam) # sam_piz_special_BSSEEKER2_XM sensitive to SAM/BAM
     local file
     for file in ${files[@]}; do
         test_translate_sam_to_bam_to_sam $file
@@ -628,9 +633,10 @@ batch_sam_fq_translations()
 
     # note: we have these files in both sam and bam versions generated with samtools
     local files=(special.buddy.bam 
-                 test.NA12878.chr22.1x.bam 
-                 test.pacbio.ccs.10k.bam  # unaligned SAM/BAM with no SQ records
-                 test.human2.bam)
+                 special.depn.bam        # depn/prim with/without QUAL
+                 special.NA12878.bam 
+                 special.pacbio.ccs.bam  # unaligned SAM/BAM with no SQ records
+                 special.human2.bam)
     local file
     for file in ${files[@]}; do
         test_translate_sambam_to_fastq $file
@@ -841,7 +847,7 @@ batch_real_world_1_backcomp()
     fi
 
     # without reference
-    local files_work_v12_0_42=( basic.phy test.1KG-38.INFO.vcf test.AT.vcf.gz test.1KG-38.vcf.gz test.tomato.vcf.gz test.1KG-37.vcf test.BGI.sam.gz test.bwa-X.sam test.canonical-gene.gff test.cattle.vcf test.chr17.SS6004478.vcf test.1KG-37.indels.vcf test.clinvar37.vcf.gz test.contaminated.kraken test.coronavirus.fasta test.dog.INDEL.vcf.gz test.ExAC.vcf.gz test.exampleFASTA.fasta test.GCF_000001405.39-GCA_009914755.2.gff test.genome_Full.txt test.GenomeAsia100K.vcf.bz2 test.giab.vcf test.gnomad.vcf.gz test.GRCh38_full_analysis_set_plus_decoy_hla.fa test.GRCh38_issues.gff3 test.homo_sapiens_incl_consequences-chrY.gvf test.human.fq.gz test.human2.bam test.human2.filtered.snp.vcf test.human2.sam test.human2-R1.100K.fq.bz2 test.human2-R1.100K.fq.gz test.human2-R2.100K.fq.bz2 test.human2-R2.100K.fq.gz test.human-collated.sam test.human-sorted.sam test.IonXpress.sam test.NA12878.chr22.1x.bam test.NA12878.chr22.1x.sam test.NA12878.sorted.vcf test.NA12878-R1.100k.fq test.nanopore.fq.gz test.nanopore-ext.fq test.nanopore-virus.fq test.nanopore.t2t_v1_1.bam test.normal.kraken test.NovaSeq.bam test.NovaSeq.sam.gz test.pacbio.10k.fasta.xz test.pacbio.10k.hg19.sam.gz test.pacbio.ccs.10k.bam test.pacbio.ccs.10k.sam test.pacbio.clr.bam test.pacbio.clr.sam test.robot.sam test.pacbio.subreads.bam test.sequential.fa.gz test.solexa.sam test.udhr.txt test.unmapped.sam.gz )
+    local files_work_v12_0_42=( basic.phy test.1KG-38.INFO.vcf test.AT.vcf.gz test.1KG-38.vcf.gz test.tomato.vcf.gz test.1KG-37.vcf test.BGI.sam.gz test.bwa-X.sam test.canonical-gene.gff test.cattle.vcf test.chr17.SS6004478.vcf test.1KG-37.indels.vcf test.clinvar37.vcf.gz test.contaminated.kraken test.coronavirus.fasta test.dog.INDEL.vcf.gz test.ExAC.vcf.gz test.exampleFASTA.fasta test.GCF_000001405.39-GCA_009914755.2.gff test.genome_Full.txt test.GenomeAsia100K.vcf.bz2 test.giab.vcf test.gnomad.vcf.gz test.GRCh38_full_analysis_set_plus_decoy_hla.fa test.GRCh38_issues.gff3 test.homo_sapiens_incl_consequences-chrY.gvf test.human.fq.gz test.human2.bam test.human2.filtered.snp.vcf test.human2-R1.100K.fq.bz2 test.human2-R1.100K.fq.gz test.human2-R2.100K.fq.bz2 test.human2-R2.100K.fq.gz test.human-collated.sam test.human-sorted.sam test.IonXpress.sam.gz test.NA12878.chr22.1x.bam test.NA12878.sorted.vcf test.NA12878-R1.100k.fq test.nanopore.fq.gz test.nanopore-ext.fq test.nanopore-virus.fq test.nanopore.t2t_v1_1.bam test.normal.kraken test.NovaSeq.bam test.NovaSeq.sam.gz test.pacbio.10k.fasta.xz test.pacbio.10k.hg19.sam.gz test.pacbio.ccs.10k.bam test.pacbio.clr.bam test.pacbio.clr.sam test.robot.sam test.pacbio.subreads.bam test.sequential.fa.gz test.solexa.sam test.udhr.txt test.unmapped.sam.gz )
     local files_work_v13_0_0=( ${files_work_v12_0_42[*]} test.ensembl-export.gff test.maker.gff test.varscan.vcf )
     local files_work_v13_0_5=( ${files_work_v13_0_0[*]} test.s_1_1101.locs test.s.locs)
     local files_work_v13_0_10=( ${files_work_v13_0_5[*]} test.sparse-PS.vcf.gz )
@@ -862,9 +868,9 @@ batch_real_world_with_ref() # $1 extra genozip argument
     # with two references
     test_standard "-mf $1 -e $GRCh38 -e $hs37d5" " " test.GRCh38_to_GRCh37.chain 
 
-    local files37=( test.IonXpress.sam \
-                    test.human.fq.gz test.human2.bam test.human2.sam test.pacbio.clr.bam \
-                    test.human2-R1.100K.fq.bz2 test.pacbio.ccs.10k.sam test.unmapped.sam.gz \
+    local files37=( test.IonXpress.sam.gz \
+                    test.human.fq.gz test.human2.bam test.pacbio.clr.bam \
+                    test.human2-R1.100K.fq.bz2 test.pacbio.ccs.10k.bam test.unmapped.sam.gz \
                     test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq test.pacbio.10k.hg19.sam.gz \
                     test.human2.filtered.snp.vcf )
 
@@ -887,8 +893,8 @@ batch_real_world_with_ref_backcomp()
     cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
 
     # with a reference
-    local files37=( test.IonXpress.sam \
-                    test.human.fq.gz test.human2.bam test.human2.sam test.pacbio.clr.bam \
+    local files37=( test.IonXpress.sam.gz \
+                    test.human.fq.gz test.human2.bam test.pacbio.clr.bam \
                     test.human2-R1.100K.fq.bz2 test.pacbio.ccs.10k.sam \
                     test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq test.pacbio.10k.hg19.sam.gz \
                     test.human2.filtered.snp.vcf )
@@ -928,8 +934,8 @@ batch_real_world_small_vbs()
     fi
 
     # lots of small VBs
-    local files=( test.IonXpress.sam                                    \
-                  test.human.fq.gz test.human2.bam test.human2.sam      \
+    local files=( test.IonXpress.sam.gz                                 \
+                  test.human.fq.gz test.human2.bam                      \
                   test.human2-R1.100K.fq.bz2 test.pacbio.ccs.10k.bam    \
                   test.pacbio.clr.bam `# multiple PRIM and DEPN vbs`    \
                   test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq     \

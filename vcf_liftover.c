@@ -248,7 +248,7 @@ bool vcf_lo_seg_cross_render_to_primary (VBlockVCFP vb, ContextP ctx, STRp(this_
     }
 }
 
-static inline Context *vcf_lo_seg_lo_snip (VBlockVCFP vb, STRp(snip), DidIType did_i, unsigned add_bytes)
+static inline Context *vcf_lo_seg_lo_snip (VBlockVCFP vb, STRp(snip), Did did_i, unsigned add_bytes)
 {
     Context *ctx = CTX(did_i);
     ctx_set_encountered (VB, ctx);
@@ -273,9 +273,9 @@ static void vcf_lo_seg_REJX_do (VBlockVCFP vb, unsigned add_bytes)
     
     // case: primary-only line: CHROM, POS and REFALT were segged in the main fields, trivial oCHROM, oPOS, oREFLT segged here
     // case: luft-only line: oCHROM, oPOS and oREFALT were segged in the main fields, trivial CHROM, POS, REFLT segged here
-    seg_by_did_i (VB, "", 0, SEL (VCF_oCHROM,  VCF_CHROM),  0);  // 0 for all of these as these fields are not reconstructed 
-    seg_by_did_i (VB, "", 0, SEL (VCF_oREFALT, VCF_REFALT), 0);
-    seg_by_did_i (VB, "", 0, SEL (VCF_oPOS,    VCF_POS),    0);
+    seg_by_did (VB, "", 0, SEL (VCF_oCHROM,  VCF_CHROM),  0);  // 0 for all of these as these fields are not reconstructed 
+    seg_by_did (VB, "", 0, SEL (VCF_oREFALT, VCF_REFALT), 0);
+    seg_by_did (VB, "", 0, SEL (VCF_oPOS,    VCF_POS),    0);
 
     CTX(VCF_COPYSTAT)->txt_len += add_bytes; // we don't need to seg COPYSTAT because it is all_the_same. Just account for add_bytes.
 
@@ -285,7 +285,7 @@ static void vcf_lo_seg_REJX_do (VBlockVCFP vb, unsigned add_bytes)
     else                               vb->recon_size_luft += add_bytes;
 }
 
-static const DidIType rb_did_i[3][8] = { {}, 
+static const Did rb_did_i[3][8] = { {}, 
     { INFO_LUFT, INFO_PRIM, VCF_oSTATUS, VCF_LIFT_REF, VCF_oXSTRAND, VCF_oCHROM, VCF_oPOS, VCF_oREFALT },// primary coord lines
     { INFO_LUFT, INFO_PRIM, VCF_oSTATUS, VCF_LIFT_REF, VCF_oXSTRAND, VCF_CHROM,  VCF_POS,  VCF_REFALT  } // luft coord lines
 };
@@ -314,7 +314,7 @@ void vcf_lo_seg_rollback_and_reject (VBlockVCFP vb, LiftOverStatus ostatus, Cont
     vcf_lo_seg_REJX_do (vb, str_len); 
 
     // seg oSTATUS
-    seg_by_did_i (VB, str, str_len, VCF_oSTATUS, 0);
+    seg_by_did (VB, str, str_len, VCF_oSTATUS, 0);
     vcf_set_ostatus (ostatus); // ONLY this place can set a rejection ostatus, or else it will fail the if at the top of this function
 }
 
@@ -393,7 +393,7 @@ void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl)
                  : is_left_anchored ? '1'   // is_xstrand=true - REF and ALTs were rotated one base to the left due to re-left-anchoring
                  :                    '0';  // is_xstrand=true - REF and ALTs were rev-comped in place
 
-    vb->last_index(VCF_oXSTRAND) = seg_by_did_i (VB, (char[]){xstrand}, 1, VCF_oXSTRAND, 1); // index used by vcf_seg_INFO_END
+    vb->last_index(VCF_oXSTRAND) = seg_by_did (VB, (char[]){xstrand}, 1, VCF_oXSTRAND, 1); // index used by vcf_seg_INFO_END
 
     // Add LUFT container - we modified the txt by adding these 4 fields to INFO/LUFT. We account for them now, and we will account for the INFO name etc in vcf_seg_info_field
     Context *luft_ctx = vcf_lo_seg_lo_snip (vb, info_luft_snip, info_luft_snip_len, INFO_LUFT, 3);
@@ -406,7 +406,7 @@ void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl)
     vb->recon_size_luft += vb->last_txt_len (VCF_POS) + vb->chrom_name_len + vb->main_ref_len + 4; // 4=3 commas + xstrand. We added INFO/PRIM to the Luft coordinates reconstruction
 
     // ostatus is OK 
-    seg_by_did_i (VB, dvcf_status_names[ostatus], strlen (dvcf_status_names[ostatus]), VCF_oSTATUS, 0);
+    seg_by_did (VB, dvcf_status_names[ostatus], strlen (dvcf_status_names[ostatus]), VCF_oSTATUS, 0);
     vcf_set_ostatus (ostatus);
 }
 
@@ -487,7 +487,7 @@ static LiftOverStatus vcf_lo_seg_ostatus_from_LUFT_or_PRIM (VBlockVCFP vb, rom f
 
 finalize:        
     if (LO_IS_OK (ostatus)) {
-        seg_by_did_i (VB, dvcf_status_names[ostatus], strlen (dvcf_status_names[ostatus]), VCF_oSTATUS, 0); // 0 bc doesn't reconstruct by default
+        seg_by_did (VB, dvcf_status_names[ostatus], strlen (dvcf_status_names[ostatus]), VCF_oSTATUS, 0); // 0 bc doesn't reconstruct by default
         vcf_set_ostatus (ostatus); // we can set if OK, but only vcf_lo_seg_rollback_and_reject can set if reject
 
         *info_alt_len = (LO_IS_OK_SWITCH (ostatus) ? main_ref_len : main_alt_len);
@@ -566,7 +566,7 @@ void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, ContextP ctx, STRp (value))
         vb->recon_size += (int)vb->main_ref_len - (int)info_ref_len;
 
     // Seg the XSTRAND (same for both coordinates)
-    seg_by_did_i (VB, strs[IL_XSTRAND], str_lens[IL_XSTRAND], VCF_oXSTRAND, str_lens[IL_XSTRAND]);
+    seg_by_did (VB, strs[IL_XSTRAND], str_lens[IL_XSTRAND], VCF_oXSTRAND, str_lens[IL_XSTRAND]);
 
     // LUFT and PRIM container snips (INFO container filter will determine which is reconstructed)
     Context *luft_ctx = vcf_lo_seg_lo_snip (vb, info_luft_snip, info_luft_snip_len, INFO_LUFT, 3); // account for 3 commas
@@ -602,7 +602,7 @@ void vcf_lo_seg_INFO_REJX (VBlockVCFP vb, ContextP ctx, STRp(value))
 
     SAFE_RESTORE;
 
-    seg_by_did_i (VB, value, value_len, VCF_oSTATUS, value_len); // note: word_index >= NUM_LO_STATUSES if unrecognized string, that's ok
+    seg_by_did (VB, value, value_len, VCF_oSTATUS, value_len); // note: word_index >= NUM_LO_STATUSES if unrecognized string, that's ok
     vcf_lo_seg_REJX_do (vb, 0);
 }
 

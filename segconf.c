@@ -25,7 +25,7 @@ void segconf_mark_as_used (VBlockP vb, unsigned num_ctxs, ...)
     va_start (args, num_ctxs);
 
     for (unsigned i=0; i < num_ctxs; i++) {
-        DidIType did_i = (DidIType)va_arg (args, int);
+        Did did_i = (Did)va_arg (args, int);
         CTX(did_i)->local.len32 = 1;
     } 
     
@@ -86,7 +86,7 @@ static void segconf_set_vb_size (ConstVBlockP vb, uint64_t curr_vb_size)
     else { 
         // count number of contexts used
         unsigned num_used_contexts=0;
-        for (DidIType did_i=0; did_i < vb->num_contexts ; did_i++)
+        for (Did did_i=0; did_i < vb->num_contexts ; did_i++)
             if (CTX(did_i)->b250.len || CTX(did_i)->local.len)
                 num_used_contexts++;
             
@@ -94,7 +94,7 @@ static void segconf_set_vb_size (ConstVBlockP vb, uint64_t curr_vb_size)
         uint64_t bytes = ((uint64_t)num_used_contexts << 20) + 
                             (vcf_header_get_num_samples() << 17 /* 0 if not vcf */);
 
-        uint64_t min_memory = !segconf.sam_is_sorted     ? VBLOCK_MEMORY_MIN_DYN
+        uint64_t min_memory = !segconf.is_sorted     ? VBLOCK_MEMORY_MIN_DYN
                             : !segconf.is_long_reads     ? VBLOCK_MEMORY_MIN_DYN
                             : arch_get_num_cores() <= 8  ? VBLOCK_MEMORY_MIN_DYN // eg a personal computer
                             : arch_get_num_cores() <= 20 ? (128 << 20)           // higher minimum memory for long reads in sorted SAM - enables CPU scaling

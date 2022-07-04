@@ -18,6 +18,7 @@ Compression improvement:
 - Better license flow, upgrade notification, statistics
 
 Command line option improvements:
+- Genozip now tests after compression by decompressing the file in memory. This can be disabled with --no-test.
 - SAM/BAM: genocat --FLAG now also accepts names of flags eg "--FLAG +REVCOMP". See genozip.com/bam.html.
 - The --output option can now also accept a directory name - the output file is written into the specified directory, keeping its name
 - BAM: BAM files created by python programs using the pysam library and which have alignments with missing quality scores (i.e. QUAL="*"), pysam encodes the missing quality in a way that violates of the SAM specification. Genozip can now handle these files regardless.
@@ -25,7 +26,8 @@ Command line option improvements:
 - FASTQ: Support format where read name is a number, and line3 is an SRA format
 - FASTA: Much faster subsetting with --grep
 - --test now defaults to verify correctness with Adler32 which is much faster than MD5. To use MD5 instead of Adler32, specifiy --md5. 
-- New advanced options (see genozip.com/advanced.html for details): --log-digest, --show-sa, --show-depn, --show-lines, --show-gheader=2, --debug-read-ctxs, --debug-sa, --debug-gencomp, --no-gencomp, --no-domqual, --show-wrong-XG, --show-wrong-XM, --vblock with bytes specification, --show-bam, --debug-lines, --biopsy-line, --show-qual, --show-aligner
+- -h is now a shortcut for --header-only (previously it was a shortcut for --help)
+- New advanced options (see genozip.com/advanced.html for details): --log-digest, --show-sag, --show-depn, --show-lines, --show-gheader=2, --debug-read-ctxs, --debug-sag, --debug-gencomp, --no-gencomp, --no-domqual, --show-wrong-XG, --show-wrong-XM, --vblock with bytes specification, --show-bam, --debug-lines, --biopsy-line, --show-qual, --show-aligner
 Discontinued functionality: 
 - The little-used yet difficult to maintain feature allowing "Binding" of multiples files of the same type using eg "genozip file1.vcf file2.vcf --output bound.vcf.genozip" is no longer supported. This does NOT affect the --tar option, and also does not affect genozip files which contain two FASTQ files compressed with --pair. To compress multiple files into a single "archive" file, use "genozip --tar". To decompress existing genozip files compressed with the Binding feature, use Genozip v13. 
 
@@ -623,8 +625,8 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 - backward compatibility to decompress genozip v1 files
 - Columns 1-9 (CHROM to FORMAT) are now put into their own dictionaries (except REF and ALT that are compressed together)
 - Each INFO tag is its own dictionary
-- --vblock for setting the variant block size
-- Allow variant blocks larger than 64K and set the default variant block size based on the number of samples to balance 
+- --vblock for setting the VB size
+- Allow variant blocks larger than 64K and set the default VB size based on the number of samples to balance 
   compression ratio with memory consumption.
 - --sblock for setting the sample block size
 - change haplotype permutation to keep within sample block boundaries

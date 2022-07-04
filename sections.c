@@ -443,7 +443,7 @@ void sections_list_file_to_memory_format (SectionHeaderGenozipHeader *genozip_he
             v13_num_components == 1 || // single file
             (dt == DT_VCF && f.has_gencomp) || // DVCF
             (dt == DT_FASTQ && (f.dts_paired || V <= 9) && v13_num_components == 2) || // Paired FASTQs (the dts_paired flag was introduced in V9.0.13)
-            exe_type == EXE_GENOLS ||
+            is_genols ||
             flags_is_genocat_global_area_only(), // only show meta-data (can't use flag.genocat_global_area_only bc flags are not set yet)
             "%s is comprised of %u files bound together. The bound file feature was discontinued in Genozip v14. To decompress this file, use Genozip v13",
             z_name, v13_num_components);
@@ -569,6 +569,8 @@ VbNameStr vb_name (VBlockP vb)
     VbNameStr s;
     if (vb && vb->vblock_i)
         sprintf (s.s, "%s/%u", comp_name (vb->comp_i), vb->vblock_i);
+    else if (vb && segconf.running)
+        strcpy (s.s, "SEGCONF/0");
     else
         strcpy (s.s, "NONCOMPUTE");
 
@@ -578,7 +580,7 @@ VbNameStr vb_name (VBlockP vb)
 LineNameStr line_name (VBlockP vb)
 {
     LineNameStr s;
-    sprintf (s.s, "%s/%u/%u", comp_name (vb->comp_i), vb->vblock_i, vb->line_i);
+    sprintf (s.s, "%s/%u", vb_name(vb).s, vb->line_i);
     return s;
 }
 
@@ -764,13 +766,23 @@ rom lt_name (LocalType lt)
         return "INVALID_LT";
 }
 
+rom store_type_name (StoreType store)
+{
+    switch (store) {
+        case STORE_NONE  : return "NONE";
+        case STORE_INT   : return "INT";
+        case STORE_FLOAT : return "FLOAT";
+        case STORE_INDEX : return "INDEX";
+        default          : return "InvalidStoreType";
+    }
+}
+
 typedef struct { char s[128]; } FlagStr;
 static FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt)
 {
-    static rom store[4] = { [STORE_NONE]="NONE", [STORE_INT]="INT", [STORE_FLOAT]="FLOAT", [STORE_INDEX]="INDEX"};
     static rom dts[NUM_DATATYPES] = { [DT_FASTQ]="dts_paired", [DT_SAM]="dts_ref_internal", [DT_CHAIN]="dts_mismatch" };
 
-    FlagStr str;
+    FlagStr str = {};
 
     switch (st) {
         case SEC_GENOZIP_HEADER:
@@ -790,7 +802,7 @@ static FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt)
                     sprintf (str.s, "coords=%s null_DP=%u", vcf_coords_name (f.vb_header.vcf.coords), f.vb_header.vcf.use_null_DP_method);
                     break;
                 case DT_SAM: case DT_BAM:
-                    sprintf (str.s, "sorted=%u collated=%u", f.vb_header.sam.is_sorted, f.vb_header.sam.is_collated);
+                    if (VER(13) && !VER(14)) sprintf (str.s, "sorted=%u collated=%u", f.vb_header.sam.v13_is_sorted, f.vb_header.sam.v13_is_collated);
                     break;
                 default:
                     str.s[0] = 0;
@@ -803,12 +815,12 @@ static FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt)
 
         case SEC_LOCAL:
             sprintf (str.s, "store=%-5s per_ln=%u delta=%u paired=%u spl_custom=%u specific=%u",
-                     store[f.ctx.store], f.ctx.store_per_line, f.ctx.store_delta, f.ctx.paired, f.ctx.spl_custom, f.ctx.ctx_specific_flag); // note: we don't print ctx_specific as its not currently used
+                     store_type_name(f.ctx.store), f.ctx.store_per_line, f.ctx.store_delta, f.ctx.paired, f.ctx.spl_custom, f.ctx.ctx_specific_flag); // note: we don't print ctx_specific as its not currently used
             break;
 
         case SEC_B250:
             sprintf (str.s, "store=%-5s per_ln=%u delta=%u paired=%u spl_custom=%u specific=%u same=%u",
-                     store[f.ctx.store], f.ctx.store_per_line, f.ctx.store_delta, f.ctx.paired, f.ctx.spl_custom, f.ctx.ctx_specific_flag, f.ctx.all_the_same); 
+                     store_type_name(f.ctx.store), f.ctx.store_per_line, f.ctx.store_delta, f.ctx.paired, f.ctx.spl_custom, f.ctx.ctx_specific_flag, f.ctx.all_the_same); 
             break;
  
         case SEC_RANDOM_ACCESS:
@@ -869,14 +881,17 @@ void sections_show_header (const SectionHeader *header, VBlockP vb /* optional i
                      digest_display_ex (h->chain.prim_file_md5, DD_MD5).s);
 
         else if ((dt == DT_SAM || dt == DT_BAM) && v14)
-            sprintf (dt_specific, SEC_TAB "segconf=(seq_len=%u,ms_type=%u)\n", 
-                     BGEN32 (h->sam.segconf_seq_len), h->sam.segconf_ms_type);
+            sprintf (dt_specific, SEC_TAB "segconf=(seq_len=%u,seq_len_to_cm=%u,ms_type=%u,has_MD_or_NM=%u,bisulfite=%u,is_paired=%u,sag_type=%s,sag_has_AS=%u,AS_is_2refc=%u,pysam_qual=%u,seq_len_dict_id=%s)\n", 
+                     BGEN32 (h->sam.segconf_seq_len), h->sam.segconf_seq_len_cm, h->sam.segconf_ms_type, h->sam.segconf_has_MD_or_NM, h->sam.segconf_bisulfite,
+                     h->sam.segconf_is_paired, sag_type_name(h->sam.segconf_sag_type), h->sam.segconf_sag_has_AS, h->sam.segconf_AS_is_2refc, 
+                     h->sam.segconf_pysam_qual, dis_dict_id(h->sam.segconf_seq_len_dict_id).s);
 
         else if (dt == DT_REF)
             sprintf (dt_specific, SEC_TAB "fast_md5=%s\n", digest_display (h->REF_fasta_md5).s);
 
         else if (dt == DT_FASTQ && h->genozip_version <= 13) 
-            sprintf (dt_specific, SEC_TAB "bound_digest=%s\n", digest_display (h->FASTQ_v13_digest_bound).s);
+            sprintf (dt_specific, SEC_TAB "bound_digest=%s segconf_seq_len_dict_id=%s\n", 
+                     digest_display (h->FASTQ_v13_digest_bound).s, dis_dict_id(h->fastq.segconf_seq_len_dict_id).s);
 
         sprintf (str, "\n"SEC_TAB "ver=%u enc=%s dt=%s usize=%"PRIu64" lines=%"PRIu64" secs=%u comps=%u vb_size=%u\n" 
                       SEC_TAB "%s ref=\"%.*s\" md5ref=%s\n"
@@ -912,14 +927,15 @@ void sections_show_header (const SectionHeader *header, VBlockP vb /* optional i
                     BGEN32 (h->z_data_bytes), digest_display (h->digest_so_far).s, sections_dis_flags (f, st, dt).s);
         else if (Z_DT(DT_SAM))
             sprintf (str, 
-                    "\n"SEC_TAB "recon_size=%u longest_line=%u z_data_bytes=%u digest_so_far=%s prim=(seq=%u comp_qual=%u qname=%u num_alns=%u first_grp_i=%u comp_cigars=%u) %s\n", 
+                    "\n"SEC_TAB "recon_size=%u longest_line=%u z_data_bytes=%u digest_so_far=%s prim=(seq=%u comp_qual=%u qname=%u num_alns=%u first_grp_i=%u %s=%u) %s\n", 
                     BGEN32 (h->recon_size_prim),  BGEN32 (h->longest_line_len), 
                     BGEN32 (h->z_data_bytes), digest_display (h->digest_so_far).s, 
                     v14 ? BGEN32 (h->sam_prim_seq_len)          : 0,
                     v14 ? BGEN32 (h->sam_prim_comp_qual_len)    : 0,
                     v14 ? BGEN32 (h->sam_prim_qname_len)        : 0,
-                    v14 ? BGEN32 (h->sam_prim_num_alns)         : 0,
+                    v14 ? BGEN32 (h->sam_prim_num_sag_alns)     : 0,
                     v14 ? BGEN32 (h->sam_prim_first_grp_i)      : 0,
+                    IS_SAG_SA?"comp_cigars" : IS_SAG_SOLO?"solo_data" : "unused",
                     v14 ? BGEN32 (h->sam_prim_comp_cigars_len)  : 0,
                     sections_dis_flags (f, st, dt).s);
         else

@@ -222,12 +222,20 @@ void txtheader_piz_read_and_reconstruct (Section sec)
                     
                     TEMP_FLAG (quiet, flag.quiet && !flag.show_digest);
 
-                    ASSERTW (digest_is_zero (header->digest_header) || 
-                             digest_recon_is_equal (reconstructed_header_digest, header->digest_header),
-                             "%s of reconstructed %s header (%s) differs from original file (%s)\n"
-                             "Bad reconstructed header has been dumped to: %s\n", digest_name(),
-                             dt_name (z_file->data_type), digest_display (reconstructed_header_digest).s, digest_display (header->digest_header).s,
-                             txtfile_dump_vb (txt_header_vb, z_name));
+                    if (!digest_is_zero (header->digest_header) &&
+                        !digest_recon_is_equal (reconstructed_header_digest, header->digest_header)) {
+                        
+                        WARN ("%s of reconstructed %s header (%s) differs from original file (%s)\n"
+                              "Bad reconstructed header has been dumped to: %s\n"
+                              "To see the same data in the original file:\n"
+                              "genozip --biopsy 0 %s\n"
+                              "If this is unexpected, please contact support@genozip.com.\n", 
+                              digest_name(),
+                              dt_name (z_file->data_type), digest_display (reconstructed_header_digest).s, digest_display (header->digest_header).s,
+                              txtfile_dump_vb (txt_header_vb, z_name), file_guess_original_filename (txt_file));
+
+                        if (flag.test) exit_on_error(false);
+                    }
 
                     RESTORE_FLAG (quiet);
                 }

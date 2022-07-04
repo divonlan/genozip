@@ -181,7 +181,7 @@ static inline void bits_clear_excess_bits_in_top_word (BitsP bits)
     }
 }
 
-static inline void ASSERT_excess_bits_are_0 (BitsP bits) // divon
+static inline void ASSERT_excess_bits_are_0 (ConstBitsP bits) // divon
 {
   ASSERT0 (!(bits->nbits & 0x3f) || !(bits->words[bits->nwords-1] & ~bitmask64 (bits->nbits & 0x3f)),
            "Expecting excess bits in top word of bit array to be 0");
@@ -334,11 +334,12 @@ extern void bits_set_wordn(BitsP bits, uint64_t start, uint64_t word, int n);
 
 // Get the number of bits set (hamming weight)
 extern bool bits_is_fully_set (ConstBitsP bits);
-extern uint64_t bits_num_bits_set(ConstBitsP bits);
-extern uint64_t bits_num_bits_set_region(ConstBitsP bits, uint64_t start, uint64_t length); // added by divon
+extern bool bits_is_fully_clear (ConstBitsP bits);
+extern uint64_t bits_num_set_bits(ConstBitsP bits);
+extern uint64_t bits_num_set_bits_region(ConstBitsP bits, uint64_t start, uint64_t length); // added by divon
 
 // Get the number of bits not set (length - hamming weight)
-extern uint64_t bits_num_bits_cleared(ConstBitsP bits);
+extern uint64_t bits_num_clear_bits(ConstBitsP bits);
 
 //
 // Find indices of set/clear bits

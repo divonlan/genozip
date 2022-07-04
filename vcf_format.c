@@ -61,7 +61,7 @@ void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt))
     str_split (fmt, fmt_len, 0, ':', sf_name, false);
 
     Container format_mapper = (Container){ 
-        .drop_final_repeat_sep = true,
+        .drop_final_repsep = true,
         .drop_final_item_sep   = true,
         .callback              = true,
         .filter_items          = true,

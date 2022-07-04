@@ -322,7 +322,7 @@ static void ref_show_sequence (Reference ref)
         }
     }
 
-    if (exe_type == EXE_GENOCAT) exit_ok();  // in genocat this, not the data
+    if (is_genocat) exit_ok();  // in genocat this, not the data
 }
 
 // entry point of compute thread of reference decompression. this is called when pizzing a file with a stored reference,
@@ -397,7 +397,7 @@ static void ref_uncompress_one_range (VBlockP vb)
         RefLock lock = ref_lock (vb->ref, sec_start_gpos, ref_sec_len + 63); // +63 to ensure lock covers entire last word
     
         bits_copy (&r->is_set, sec_start_within_contig, is_set, 0, ref_sec_len); // initialization of is_set - case 3
-        ref_unlock (vb->ref, lock);
+        ref_unlock (vb->ref, &lock);
 
         buf_free (vb->scratch);
 
@@ -430,7 +430,7 @@ static void ref_uncompress_one_range (VBlockP vb)
         if (primary_command == ZIP && flag.reference == REF_EXT_STORE) { // initialization of is_set - case 1
             RefLock lock = ref_lock (vb->ref, sec_start_gpos, ref_sec_len + 63); // +63 to ensure lock covers entire last word
             bits_clear_region (&r->is_set, sec_start_within_contig, ref_sec_len); // entire range is cleared
-            ref_unlock (vb->ref, lock);
+            ref_unlock (vb->ref, &lock);
         }
 
         else if (primary_command == PIZ) { // initialization of is_set - case 2
@@ -448,7 +448,7 @@ static void ref_uncompress_one_range (VBlockP vb)
 
             RefLock lock = ref_lock (vb->ref, start + r->gpos, len + 63); 
             bits_set_region (&r->is_set, start, len);
-            ref_unlock (vb->ref, lock);
+            ref_unlock (vb->ref, &lock);
 
             // save the region we need to set, we will do the actual setting in ref_load_stored_reference
             spin_lock (vb->ref->region_to_set_list_spin);
@@ -488,7 +488,7 @@ static void ref_uncompress_one_range (VBlockP vb)
                         (ref_sec_len - initial_flanking_len - final_flanking_len) * 2); // len
     }
 
-    ref_unlock (vb->ref, lock);
+    ref_unlock (vb->ref, &lock);
 
     buf_free (vb->scratch);
 
@@ -768,7 +768,7 @@ static Range *ref_seg_get_locked_range_denovo (VBlockP vb, Reference ref, WordIn
 
         // check for hash conflict (can only happen in headerless mode)
         if (!sam_hdr_contigs && (range->range_i != range_i || !str_issame (vb->chrom_name, range->chrom_name))) {
-            *lock = ref_unlock (ref, *lock);
+            ref_unlock (ref, lock);
 
             DO_ONCE ASSERTW (!flag.seg_only && !flag.debug, "DEBUG: ref range contention (showing once): chrom=%.*s pos=%u (this slightly affects compression ratio, but is harmless)", 
                              vb->chrom_name_len, vb->chrom_name, (uint32_t)pos); // only show this in --seg-only
@@ -948,7 +948,7 @@ static void ref_copy_compressed_sections_from_reference_file (Reference ref)
         PosType SEC_REFERENCE_start_in_contig_r = sec_reference[i].min_pos - contig_r->first_pos; // the start of the SEC_REFERENCE section (a bit less than 1MB) within the full-contig range
 
         PosType SEC_REFERNECE_len = sec_reference[i].max_pos - sec_reference[i].min_pos + 1;
-        PosType bits_is_set   = bits_num_bits_set_region (&contig_r->is_set, SEC_REFERENCE_start_in_contig_r, SEC_REFERNECE_len);
+        PosType bits_is_set   = bits_num_set_bits_region (&contig_r->is_set, SEC_REFERENCE_start_in_contig_r, SEC_REFERNECE_len);
 
         // if this at least 95% of the RA is covered, just copy the corresponding FASTA section to our file, and
         // mark all the ranges as is_set=false indicating that they don't need to be compressed individually
@@ -1128,7 +1128,7 @@ static inline unsigned ref_prepare_expected_more_merges (const Range *this_r, in
     for (Range *r=(Range *)this_r+1; r < BAFT (Range, gref->ranges) && more <= max_ranges; r++, more++) {
 
         if (r->num_set == -1)  // calcualte num_set if not already calculated
-            r->num_set = bits_num_bits_set (&r->is_set);
+            r->num_set = bits_num_set_bits (&r->is_set);
 
         num_set_this_merge += r->num_set;
 
@@ -1161,7 +1161,7 @@ static void ref_prepare_range_for_compress (VBlockP vb)
         if (vb->range && (num_merged >= MAX_MERGED_RANGES || r->chrom != vb->range->chrom || r->first_pos != vb->range->last_pos+1)) break; 
 
         if (r->num_set == -1)  // calculate num_set if not already calculated
-            r->num_set = bits_num_bits_set (&r->is_set);
+            r->num_set = bits_num_set_bits (&r->is_set);
 
         if (!r->num_set) {
             r->is_set.nbits = 0;
@@ -1452,7 +1452,7 @@ void ref_display_ref (Reference ref)
         }
     }
 
-    ctx_free_context (&chrom_ctx, DID_I_NONE);
+    ctx_free_context (&chrom_ctx, DID_NONE);
 }
 
 // show diff between two reference files
@@ -1515,8 +1515,8 @@ void ref_diff_ref (void)
         }
     }
 
-    ctx_free_context (&gref_chrom_ctx, DID_I_NONE);
-    ctx_free_context (&prim_chrom_ctx, DID_I_NONE);
+    ctx_free_context (&gref_chrom_ctx, DID_NONE);
+    ctx_free_context (&prim_chrom_ctx, DID_NONE);
 }
 
 #define REV_CODEC_GENOME_BASES_PER_THREAD (1ULL << 27) // 128Mbp
@@ -1635,7 +1635,7 @@ static void ref_initialize_loaded_ranges (Reference ref, RangesType type)
     ref->genome_nbases = ROUNDUP64 (ref_contigs_get_genome_nbases (ref)) + 64; // round up to the nearest 64 bases, and add one word, needed by aligner_get_match_len for bit shifting overflow
 
     if (ref_has_is_set()) 
-        ref->genome_is_set = buf_alloc_bitarr (evb, &ref->genome_is_set_buf, ref->genome_nbases, "genome_is_set_buf");
+        ref->genome_is_set = buf_alloc_bits (evb, &ref->genome_is_set_buf, ref->genome_nbases, "genome_is_set_buf");
 
     // we protect genome->ref while uncompressing reference data, and genome->is_set while segging
     ref_lock_initialize_loaded_genome (ref);

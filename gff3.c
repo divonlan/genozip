@@ -36,16 +36,17 @@ void gff3_zip_initialize (void)
 // called from seg_all_data_lines
 void gff3_seg_initialize (VBlockP vb)
 {
-    CTX(GFF3_SEQID)->flags.store   = STORE_INDEX; // since v12
-    CTX(GFF3_START)->flags.store   = STORE_INT;   // since v12
-    CTX(GFF3_COMMENT)->flags.store = STORE_INDEX; // COMMENT introduced in 12.0.12
+    ctx_set_store (VB, STORE_INT, 4, GFF3_START/*since v12*/, ATTR_Target_POS, ATTR_ID, DID_EOL);
 
-    ctx_set_no_stons (vb, 6, GFF3_COMMENT/*required by STORE_INDEX (otherwise singletons don't get their index stored)*/, 
+    ctx_set_store (VB, STORE_INDEX, 3, GFF3_SEQID/*v12*/, GFF3_COMMENT/*12.0.12*/, DID_EOL);
+
+    ctx_set_no_stons (vb, 11, GFF3_COMMENT/*required by STORE_INDEX (otherwise singletons don't get their index stored)*/, 
                       GFF3_SEQID/*needs b250 node_index for random access*/, 
-                      GFF3_ATTRS, ATTR_Variant_seq, ATTR_Reference_seq, ATTR_ancestral_allele);
+                      GFF3_ATTRS, ATTR_Variant_seq, ATTR_Reference_seq, ATTR_ancestral_allele,
+                      ATTR_Target_POS, ATTR_ID, GFF3_START, GFF3_END, DID_EOL); // as requied by seg_pos_field
 
-    stats_set_consolidation (vb, ATTR_Target, 3, ATTR_Target_ID, ATTR_Target_POS, ATTR_Target_STRAND);
-    stats_set_consolidation (vb, ENSTid, 1, EnNSTid);
+    ctx_consolidate_stats (vb, ATTR_Target, 4, ATTR_Target_ID, ATTR_Target_POS, ATTR_Target_STRAND, DID_EOL);
+    ctx_consolidate_stats (vb, ENSTid, 2, EnNSTid, DID_EOL);
 
     seg_id_field_init (CTX(ATTR_Dbxref));
     seg_id_field_init (CTX(ATTR_Name));
@@ -55,21 +56,21 @@ void gff3_seg_finalize (VBlockP vb)
 {
     // top level snip
     SmallContainer top_level = { 
-        .repeats   = vb->lines.len,
+        .repeats      = vb->lines.len,
         .is_toplevel  = true,
         .filter_items = true,
-        .nitems_lo = 11,
-        .items     = { { .dict_id = { _GFF3_COMMENT },                  },
-                       { .dict_id = { _GFF3_SEQID },  .separator = "\t" },
-                       { .dict_id = { _GFF3_SOURCE }, .separator = "\t" },
-                       { .dict_id = { _GFF3_TYPE },   .separator = "\t" },
-                       { .dict_id = { _GFF3_START },  .separator = "\t" },
-                       { .dict_id = { _GFF3_END },    .separator = "\t" },
-                       { .dict_id = { _GFF3_SCORE },  .separator = "\t" },
-                       { .dict_id = { _GFF3_STRAND }, .separator = "\t" },
-                       { .dict_id = { _GFF3_PHASE },  .separator = "\t" },
-                       { .dict_id = { _GFF3_ATTRS },                    },
-                       { .dict_id = { _GFF3_EOL },                      } }
+        .nitems_lo    = 11,
+        .items        = { { .dict_id = { _GFF3_COMMENT },                   },
+                          { .dict_id = { _GFF3_SEQID   }, .separator = "\t" },
+                          { .dict_id = { _GFF3_SOURCE  }, .separator = "\t" },
+                          { .dict_id = { _GFF3_TYPE    }, .separator = "\t" },
+                          { .dict_id = { _GFF3_START   }, .separator = "\t" },
+                          { .dict_id = { _GFF3_END     }, .separator = "\t" },
+                          { .dict_id = { _GFF3_SCORE   }, .separator = "\t" },
+                          { .dict_id = { _GFF3_STRAND  }, .separator = "\t" },
+                          { .dict_id = { _GFF3_PHASE   }, .separator = "\t" },
+                          { .dict_id = { _GFF3_ATTRS   },                   },
+                          { .dict_id = { _GFF3_EOL     },                   } }
     };
 
     container_seg (vb, CTX(GFF3_TOPLEVEL), (Container *)&top_level, 0, 0, 0);
@@ -105,12 +106,12 @@ static bool gff3_seg_target (VBlockP vb, STRp(value))
                        { .dict_id = { _ATTR_Target_STRAND }, .separator = " " } }
     };
 
-    seg_by_did_i (VB, items[0], item_lens[0], ATTR_Target_ID, item_lens[0]);
+    seg_by_did (VB, items[0], item_lens[0], ATTR_Target_ID, item_lens[0]);
     seg_pos_field (vb, ATTR_Target_POS, ATTR_Target_POS, 0, 0, items[1], item_lens[1], 0, item_lens[1]);
     seg_pos_field (vb, ATTR_Target_POS, ATTR_Target_POS, 0, 0, items[2], item_lens[2], 0, item_lens[2]);
 
     if (n_items == 4)
-        seg_by_did_i (VB, items[3], item_lens[3], ATTR_Target_STRAND, item_lens[3]);
+        seg_by_did (VB, items[3], item_lens[3], ATTR_Target_STRAND, item_lens[3]);
 
     // TO DO: use seg_duplicate_last if n_items hasn't changed
     container_seg (vb, CTX (ATTR_Target), (ContainerP)&con, NULL, 0, n_items-1); // account for space separators
@@ -126,7 +127,7 @@ static bool gff3_seg_ENSTid (VBlockP vb, ContextP ctx, STRp(enst_id), uint32_t r
     else {
         seg_add_ctx_to_rollback_point (vb, CTX(EnNSTid));
 
-        seg_by_did_i (vb, &enst_id[4], 11, EnNSTid, 11);
+        seg_by_did (vb, &enst_id[4], 11, EnNSTid, 11);
         seg_by_ctx (vb, STRa(ENST_snip), ctx, 4);
     }
     return true;
@@ -146,7 +147,7 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, STRp(tag_name), STRp(va
         if (str_is_int (value, value_len))
             seg_pos_field (vb, ATTR_ID, ATTR_ID, SPF_BAD_SNIPS_TOO, 0, STRa(value), 0, value_len);
         else
-            seg_by_did_i (VB, STRa(value), ATTR_ID, value_len);
+            seg_by_did (VB, STRa(value), ATTR_ID, value_len);
         break;
 
     // Dbxref (example: "dbSNP_151:rs1307114892") - we divide to the non-numeric part which we store
@@ -166,7 +167,7 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, STRp(tag_name), STRp(va
 
     // example: Parent=mRNA00001,mRNA00002,mRNA00003
     case _ATTR_Parent:
-        seg_array (vb, CTX(ATTR_Parent), ATTR_Parent, STRa(value), ',', 0, false, false);
+        seg_array (vb, CTX(ATTR_Parent), ATTR_Parent, STRa(value), ',', 0, false, false, DICT_ID_NONE, value_len);
         break;
 
     //case _ATTR_Gap: // I tried: 1. array (no improvement) ; 2. string of op-codes in b250 + integers in local (negligible improvement)
@@ -176,55 +177,55 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, STRp(tag_name), STRp(va
     case _ATTR_Variant_effect: {
         static const MediumContainer Variant_effect = {
             .nitems_lo   = 4, 
-            .drop_final_repeat_sep = true,
+            .drop_final_repsep = true,
             .repsep      = {','},
             .items       = { { .dict_id={.id="V0arEff" }, .separator = {' '} },
                              { .dict_id={.id="V1arEff" }, .separator = {' '} },
                              { .dict_id={.id="V2arEff" }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid  },                    } }
         };
-        seg_array_of_struct (vb, CTX(ATTR_Variant_effect), Variant_effect, STRa(value), (SegCallback[]){0,0,0,gff3_seg_ENSTid});
+        seg_array_of_struct (vb, CTX(ATTR_Variant_effect), Variant_effect, STRa(value), (SegCallback[]){0,0,0,gff3_seg_ENSTid}, value_len);
         break;
     }
 
     case _ATTR_sift_prediction: {
         static const MediumContainer sift_prediction = {
             .nitems_lo   = 4, 
-            .drop_final_repeat_sep = true,
+            .drop_final_repsep = true,
             .repsep      = {','},
             .items       = { { .dict_id={.id="S0iftPr" }, .separator = {' '} },
                              { .dict_id={.id="S1iftPr" }, .separator = {' '} },
                              { .dict_id={.id="S2iftPr" }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid  },                    } }
         };
-        seg_array_of_struct (vb, CTX(ATTR_sift_prediction), sift_prediction, STRa(value), (SegCallback[]){0,0,0,gff3_seg_ENSTid});
+        seg_array_of_struct (vb, CTX(ATTR_sift_prediction), sift_prediction, STRa(value), (SegCallback[]){0,0,0,gff3_seg_ENSTid}, value_len);
         break;
     }
 
     case _ATTR_polyphen_prediction: {
         static const MediumContainer polyphen_prediction = {
             .nitems_lo   = 4, 
-            .drop_final_repeat_sep = true,
+            .drop_final_repsep = true,
             .repsep      = {','},
             .items       = { { .dict_id={.id="P0olyPhP" }, .separator = {' '} },
                              { .dict_id={.id="P1olyPhP" }, .separator = {' '} },
                              { .dict_id={.id="P2olyPhP" }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid   },                    } }
         };
-        seg_array_of_struct (vb, CTX(ATTR_polyphen_prediction), polyphen_prediction, STRa(value), (SegCallback[]){0,0,0,gff3_seg_ENSTid});
+        seg_array_of_struct (vb, CTX(ATTR_polyphen_prediction), polyphen_prediction, STRa(value), (SegCallback[]){0,0,0,gff3_seg_ENSTid}, value_len);
         break;
     }
 
     case _ATTR_variant_peptide: {
         static const MediumContainer variant_peptide = {
             .nitems_lo   = 3, 
-            .drop_final_repeat_sep = true,
+            .drop_final_repsep = true,
             .repsep      = {','},
             .items       = { { .dict_id={.id="v0arPep"  }, .separator = {' '} }, // small v to differentiate from Variant_effect, so that dict_id to did_i mapper can map both
                              { .dict_id={.id="v1arPep"  }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid   },                    } }
         };
-        seg_array_of_struct (vb, CTX(ATTR_variant_peptide), variant_peptide, STRa(value), (SegCallback[]){0,0,gff3_seg_ENSTid});
+        seg_array_of_struct (vb, CTX(ATTR_variant_peptide), variant_peptide, STRa(value), (SegCallback[]){0,0,gff3_seg_ENSTid}, value_len);
         break;
     }
 
@@ -266,7 +267,7 @@ static void gff3_seg_attrs_field (VBlockP vb, STRp(field))
 {
     // case: "." field
     if (field_len == 1 && *field == '.') {
-        seg_by_did_i (VB, ".", 1, GFF3_ATTRS, 2);
+        seg_by_did (VB, ".", 1, GFF3_ATTRS, 2);
         return;
     }
 
@@ -331,7 +332,7 @@ rom gff3_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_txt_
         goto eol; // if we have a comment, then during piz, the other fields will be filtered out
     }
     else 
-        seg_by_did_i (VB, NULL, 0, GFF3_COMMENT, 0); // missing comment field
+        seg_by_did (VB, NULL, 0, GFF3_COMMENT, 0); // missing comment field
 
     GET_NEXT_ITEM (GFF3_SEQID);
     chrom_seg (vb, STRd(GFF3_SEQID));
@@ -355,7 +356,7 @@ rom gff3_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_txt_
         gff3_seg_attrs_field (vb, STRd(GFF3_ATTRS));
     }
     else
-        seg_by_did_i (VB, NULL, 0, GFF3_ATTRS, 0); // NULL=MISSING so previous \t is removed
+        seg_by_did (VB, NULL, 0, GFF3_ATTRS, 0); // NULL=MISSING so previous \t is removed
 
 eol:             
     SEG_EOL (GFF3_EOL, false);

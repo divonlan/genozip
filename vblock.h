@@ -18,7 +18,7 @@
 
 // IMPORTANT: if changing fields in VBlockVCF, also update vb_release_vb
 #define VBLOCK_COMMON_FIELDS \
-    VBIType vblock_i;             /* number of variant block within VCF file */\
+    VBIType vblock_i;             /* number of VB within VCF file */\
     CompIType comp_i;             /* ZIP/PIZ: txt component within z_file that this VB belongs to  */ \
     int32_t id;                   /* id of vb within the vb pool (-1 is the external vb) */\
     \
@@ -118,9 +118,9 @@
     int16_t z_next_header_i;      /* next header of this VB to be encrypted or decrypted */\
     \
     /* dictionaries stuff - we use them for 1. subfields with genotype data, 2. fields 1-9 of the VCF file 3. infos within the info field */\
-    DidIType num_contexts;        /* total number of dictionaries of all types */\
+    Did num_contexts;        /* total number of dictionaries of all types */\
     Context contexts[MAX_DICTS];    \
-    DidIType dict_id_to_did_i_map[65536 * 2];   /* map for quick look up of did_i from dict_id : 64K for key_map, 64K for alt_map */\
+    Did dict_id_to_did_i_map[65536 * 2];   /* map for quick look up of did_i from dict_id : 64K for key_map, 64K for alt_map */\
     \
     bool has_ctx_index; \
     ContextIndex ctx_index[MAX_DICTS]; /* PIZ VB: sorted index into contexts for binary-search lookup if dict_id_to_did_i_map fails */\
@@ -138,9 +138,6 @@
     union { \
     /* generated components */ \
     Buffer gencomp_lines;         /* ZIP: array of GencompLineIEntry: DVCF: lines rejected for liftover ; SAM-SA: primary/dependent lines */ \
-    \
-    /* DomQual codec (SAM/BAM, FASTQ) */ \
-    Buffer domq_denorm;           /* PIZ SAM/BAM/FASTQ: DomQual codec denormalization table */ \
     }; \
     \
     /* ref_iupac quick lookup */\

@@ -389,11 +389,11 @@ bool regions_get_range_intersection (WordIndex chrom_word_index, PosType min_pos
 // a specific ra (i.e. chromosome)
 bool regions_is_site_included (VBlockP vb)
 {
-    DidIType chrom_did_i = flag.luft ? DTF(luft_chrom) : DTF(prim_chrom);
-    DidIType pos_did_i   = flag.luft ? DTF(luft_pos)   : DTF(pos);
+    Did chrom_did_i = flag.luft ? DTF(luft_chrom) : DTF(prim_chrom);
+    Did pos_did_i   = flag.luft ? DTF(luft_pos)   : DTF(pos);
 
     WordIndex chrom = vb->last_index (chrom_did_i);
-    PosType pos = (pos_did_i == DID_I_NONE)          ? 1 
+    PosType pos = (pos_did_i == DID_NONE)          ? 1 
                 : CTX(pos_did_i)->rback_last_value.i ? CTX(pos_did_i)->rback_last_value.i // use saved value if one exists (used in VCF, bc VCF_POS.last_value might be modified by a INFO/END)
                 :                                      CTX(pos_did_i)->last_value.i;
     

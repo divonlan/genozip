@@ -289,10 +289,18 @@ static void dict_io_dict_build_word_list_one (ContextP ctx)
 
         rom c=word_start; while (*c) c++;
 
-        *B(CtxWord, ctx->word_list, snip_i) = (CtxWord) {
-            .snip_len   = c - word_start,
-            .char_index = word_start - ctx->dict.data
-        };
+        uint64_t index = BNUM64 (ctx->dict, word_start); 
+        uint64_t len   = c - word_start;
+
+        if (index > ZWORD_MAX_INDEX || len > ZWORD_MAX_LEN) {
+            ASSERT (!VER(14), "A word was found in ctx=%s with index=%"PRIu64" amd len=%"PRIu64". This index/len is beyond current limits of Genozip. Use Genozip v13 to decompress this file.",
+                    ctx->tag_name, (uint64_t)index, (uint64_t)len);
+
+            ABORT ("A word was found in ctx=%s with index=%"PRIu64" amd len=%"PRIu64", which are beyond the limits",
+                    ctx->tag_name, (uint64_t)index, (uint64_t)len);
+        }       
+
+        *B(CtxWord, ctx->word_list, snip_i) = (CtxWord){ .index = index, .len = len };
 
         word_start = c+1; // skip over the \0 separator
     }
@@ -302,7 +310,7 @@ static void dict_io_build_word_lists (void)
 {    
     START_TIMER;
 
-    Context *last = ZCTX((flag.show_headers && exe_type == EXE_GENOCAT) ? CHROM : z_file->num_contexts);
+    Context *last = ZCTX((flag.show_headers && is_genocat) ? CHROM : z_file->num_contexts);
 
     for (Context *ctx=z_file->contexts; ctx <= last; ctx++) 
         dict_io_dict_build_word_list_one (ctx);
@@ -347,15 +355,15 @@ void dict_io_read_all_dictionaries (void)
                 str_print_dict (info_stream, STRb(ctx->dict), true, Z_DT(DT_SAM));
             
             if (flag.show_dict) 
-                iprintf ("%s (did_i=%u, num_snips=%u, dict_size=%u bytes)\n", 
-                         ctx->tag_name, did_i, ctx->word_list.len32, ctx->dict.len32);
+                iprintf ("%s (did_i=%u, num_snips=%u, dict_size=%"PRIu64" bytes)\n", 
+                         ctx->tag_name, did_i, ctx->word_list.len32, ctx->dict.len);
 
             if (dict_id_is_show (ctx->dict_id))
                 str_print_dict (info_stream, STRb(ctx->dict), true, false);
         }
         iprint0 ("\n");
 
-        if (exe_type == EXE_GENOCAT) exit_ok(); // if this is genocat - we're done
+        if (is_genocat) exit_ok(); // if this is genocat - we're done
     }
 
     COPY_TIMER_VB (evb, dict_io_read_all_dictionaries);

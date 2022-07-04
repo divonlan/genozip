@@ -146,6 +146,12 @@ static inline unsigned str_int_len (uint32_t n)
 extern uint32_t str_int_ex (int64_t n, char *str /* out */, bool add_nul_terminator);
 static inline uint32_t str_int (int64_t n, char *str /* out */) { return str_int_ex (n, str, true); }
 
+static inline uint32_t str_int_fast (int64_t n, char *str /* out */) // faster if many of the numbers are expected to be single-digit
+{ 
+    if (n <= 9) { *str = '0' + n; return 1; }
+    else return str_int_ex (n, str, true); 
+}
+
 extern uint32_t str_hex_ex (int64_t n, char *str /* out */, bool uppercase, bool add_nul_terminator);
 static inline uint32_t str_hex (int64_t n, char *str /* out */, bool uppercase) { return str_hex_ex (n, str, uppercase, true); }
 

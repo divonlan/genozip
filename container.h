@@ -63,7 +63,7 @@ typedef struct ContainerItem {
     uint8_t nitems_lo;                  /* LSB of num_items */  \
     /* container flags set during Seg */               \
     uint8_t drop_final_item_sep_of_final_repeat : 1; /* Deprecated - should not be used in new code. drop separator of final item of FINAL repeat */  \
-    uint8_t drop_final_repeat_sep : 1;  \
+    uint8_t drop_final_repsep     : 1;  \
     uint8_t filter_repeats        : 1; /* filter called before reconstruction of each repeat to determine if it should be reconstructed */ \
     uint8_t filter_items          : 1; /* filter called before reconstruction of each item to determine if it should be reconstructed */ \
     uint8_t is_toplevel           : 1;  \
@@ -103,7 +103,12 @@ extern WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con
 
 extern ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, STRp(prefixes));
 extern ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, STRp(snip), pSTRp(out_prefixes));
-extern bool container_does_contain (ContextP ctx, DictId dict_id);
+extern bool container_has_item (ContextP ctx, DictId dict_id);
+extern uint32_t container_peek_repeats (VBlockP vb, ContextP ctx, char repsep);
+extern bool container_peek_has_item (VBlockP vb, ContextP ctx, DictId item_dict_id, bool consume);
+
+typedef struct { Did did; int16_t idx; } ContainerPeekItem;
+extern void container_peek_get_idxs (VBlockP vb, ContextP ctx, Did n_items, ContainerPeekItem *items, bool consume);
 
 extern void container_display (ConstContainerP con);
 

@@ -309,12 +309,12 @@ extern rom file_exts[];
 #define MAX_GEN_COMP 2
 
 typedef rom FileMode;
-extern FileMode READ, WRITE, WRITEREAD; // this are pointers to static strings - so they can be compared eg "if (mode==READ)"
+extern FileMode READ, WRITE, WRITEREAD;// this are pointers to static strings - so they can be compared eg "if (mode==READ)"
 
 typedef struct File {
     void *file;
     char *name;                        // allocated by file_open(), freed by file_close()
-    rom basename;              // basename of name
+    rom basename;                      // basename of name
     FileMode mode;
     FileSupertype supertype;            
     FileType type;
@@ -349,7 +349,6 @@ typedef struct File {
     int64_t txt_bgzf_blocks_so_far;    // txt_file: ZIP: BGZF blocks read so far
     int64_t num_lines;                 // z_file: number of lines in all txt files bound into this z_file
                                        // txt_file: number of lines, in source file terms, (read so far) in single txt file
-
     // per-component data (ZIP)
     int64_t disk_so_far_comp[MAX_NUM_COMPS];
     int64_t txt_data_so_far_bind_comp[MAX_NUM_COMPS];
@@ -388,9 +387,9 @@ typedef struct File {
     
     // dictionary information used for writing GENOZIP files - can be accessed only when holding mutex
     Mutex dicts_mutex;                 // this mutex protects contexts and num_contexts from concurrent adding of a new dictionary
-    DidIType num_contexts;             // length of populated subfield_ids and mtx_ctx;
+    Did num_contexts;                  // length of populated subfield_ids and mtx_ctx;
     
-    DidIType dict_id_to_did_i_map[65536 * 2]; // map for quick look up of did_i from dict_id : 64K for key_map, 64K for alt_map 
+    Did dict_id_to_did_i_map[65536 * 2]; // map for quick look up of did_i from dict_id : 64K for key_map, 64K for alt_map 
     Context contexts[MAX_DICTS];       // a merge of dictionaries of all VBs
     Buffer ra_buf;                     // ZIP/PIZ:  RAEntry records: ZIP: of DC_PRIMARY ; PIZ - PRIMARY or LUFT depending on flag.luft
     Buffer ra_buf_luft;                // ZIP only: RAEntry records of DC_LUFT
@@ -416,14 +415,19 @@ typedef struct File {
     Buffer unmapped_read_count;
     
     // Z_FILE: SAM/BAM SA stuff
-    Buffer sa_groups;                  // Z_FILE: an SA group is a group of alignments, including the primary aligngment
-    Buffer sa_groups_index;            // Z_FILE: index z_file->sa_groups by adler32(qname)
-    Buffer sa_alns;                    // Z_FILE: array of {RNAME, STRAND, POS, CIGAR, NM, MAPQ} of the alignment
-    Buffer sa_qnames;                  // Z_FILE
-    Buffer sa_cigars;                  // Z_FILE: compressed CIGARs
-    Buffer sa_seq;                     // Z_FILE: bitmap of seqs in ACGT 2bit format
-    Buffer sa_qual;                    // Z_FILE: compressed QUAL
+    Buffer sag_grps;                   // Z_FILE: an SA group is a group of alignments, including the primary aligngment
+    Buffer sag_gps_index;              // Z_FILE: index z_file->sag_grps by adler32(qname)
+    Buffer sag_alns;                   // Z_FILE: array of {RNAME, STRAND, POS, CIGAR, NM, MAPQ} of the alignment
+    Buffer sag_qnames;                 // Z_FILE
+    union {
+    Buffer sag_cigars;                 // Z_FILE: SAG_BY_SA: compressed CIGARs
+    Buffer solo_data;                  // Z_FILE: SAG_BY_SOLO: solo data
+    };
+    Buffer sag_seq;                    // Z_FILE: bitmap of seqs in ACGT 2bit format
+    Buffer sag_qual;                   // Z_FILE: compressed QUAL
     
+    uint64_t prim_near_count, mate_line_count, prim_far_count; // Z_FILE ZIP: SAM: for stats
+
     // Z_FILE: DVCF stuff
     Buffer rejects_report;             // Z_FILE ZIP --chain: human readable report about rejects
     Buffer apriori_tags;               // Z_FILE ZIP DVCF: used for INFO/FORMAT tag renaming. Data from command line options if --chain, or VCF header if DVCF

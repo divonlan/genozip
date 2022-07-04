@@ -136,8 +136,8 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
     if (vcf_num_samples) 
         codec_pbwt_seg_init (VB, CTX(FORMAT_PBWT_RUNS), CTX(FORMAT_PBWT_FGRC));
 
-    stats_set_consolidation (VB, FORMAT_GT,  4, FORMAT_GT_HT, FORMAT_GT_HT_INDEX, FORMAT_PBWT_RUNS, FORMAT_PBWT_FGRC);
-    stats_set_consolidation (VB, FORMAT_AB,  1, FORMAT_AB3);
+    ctx_consolidate_stats (VB, FORMAT_GT,  5, FORMAT_GT_HT, FORMAT_GT_HT_INDEX, FORMAT_PBWT_RUNS, FORMAT_PBWT_FGRC, DID_EOL);
+    ctx_consolidate_stats (VB, FORMAT_AB,  2, FORMAT_AB3, DID_EOL);
 
     // determine which way to seg PL - Mux by dosage or Mux by dosageXDP, or test both options
     CTX(FORMAT_PL)->no_stons = true;
@@ -146,25 +146,25 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
         : PL_mux_by_DP_NO;
 
     // initialize dosage multiplexers
-    #define init_mux_by_dosage(name,store_type,dyn_int) seg_mux_init ((VBlockP)vb, 4, VCF_SPECIAL_MUX_BY_DOSAGE, FORMAT_##name, FORMAT_##name, (store_type), (dyn_int), (MultiplexerP)&vb->mux_##name, "0123")
-    init_mux_by_dosage(PRI,  STORE_NONE, false);
-    init_mux_by_dosage(GL,   STORE_NONE, false);
-    init_mux_by_dosage(DS,   STORE_NONE, false);
-    init_mux_by_dosage(PP,   STORE_NONE, false);
-    init_mux_by_dosage(GP,   STORE_NONE, false);
-    init_mux_by_dosage(PVAL, STORE_NONE, false);
-    init_mux_by_dosage(FREQ, STORE_NONE, false);
-    init_mux_by_dosage(RD,   STORE_INT,  true);
-    init_mux_by_dosage(PLn,  STORE_NONE, false);
+    #define init_mux_by_dosage(name,store_type,ltype) seg_mux_init ((VBlockP)vb, 4, VCF_SPECIAL_MUX_BY_DOSAGE, FORMAT_##name, FORMAT_##name, (store_type), (ltype), false, (MultiplexerP)&vb->mux_##name, "0123")
+    init_mux_by_dosage(PRI,  STORE_NONE, LT_TEXT);
+    init_mux_by_dosage(GL,   STORE_NONE, LT_TEXT);
+    init_mux_by_dosage(DS,   STORE_NONE, LT_TEXT);
+    init_mux_by_dosage(PP,   STORE_NONE, LT_TEXT);
+    init_mux_by_dosage(GP,   STORE_NONE, LT_TEXT);
+    init_mux_by_dosage(PVAL, STORE_NONE, LT_TEXT);
+    init_mux_by_dosage(FREQ, STORE_NONE, LT_TEXT);
+    init_mux_by_dosage(RD,   STORE_INT,  LT_DYN_INT);
+    init_mux_by_dosage(PLn,  STORE_NONE, LT_TEXT);
 
-    seg_mux_init (VB, MUX_CAPACITY(vb->mux_PLy), VCF_SPECIAL_MUX_BY_DOSAGExDP, FORMAT_PLy, FORMAT_PLy, STORE_NONE, false, (MultiplexerP)&vb->mux_PLy, NULL);
+    seg_mux_init (VB, MUX_CAPACITY(vb->mux_PLy), VCF_SPECIAL_MUX_BY_DOSAGExDP, FORMAT_PLy, FORMAT_PLy, STORE_NONE, LT_TEXT, false, (MultiplexerP)&vb->mux_PLy, NULL);
     
     if (segconf.has[FORMAT_DP]) {
-        seg_mux_init (VB, MUX_CAPACITY(vb->mux_GQ),  VCF_SPECIAL_MUX_BY_DOSAGExDP, FORMAT_GQ,  FORMAT_GQ,  STORE_NONE, true, (MultiplexerP)&vb->mux_GQ,  NULL);
-        seg_mux_init (VB, MUX_CAPACITY(vb->mux_RGQ), VCF_SPECIAL_RGQ,              FORMAT_RGQ, FORMAT_RGQ, STORE_NONE, true, (MultiplexerP)&vb->mux_RGQ, NULL);
+        seg_mux_init (VB, MUX_CAPACITY(vb->mux_GQ),  VCF_SPECIAL_MUX_BY_DOSAGExDP, FORMAT_GQ,  FORMAT_GQ,  STORE_NONE, LT_DYN_INT, false, (MultiplexerP)&vb->mux_GQ,  NULL);
+        seg_mux_init (VB, MUX_CAPACITY(vb->mux_RGQ), VCF_SPECIAL_RGQ,              FORMAT_RGQ, FORMAT_RGQ, STORE_NONE, LT_DYN_INT, false, (MultiplexerP)&vb->mux_RGQ, NULL);
     }
     else
-        init_mux_by_dosage(GQ, STORE_NONE, false);
+        init_mux_by_dosage(GQ, STORE_NONE, LT_TEXT);
 
     // flags to send to PIZ
     vb->flags.vcf.use_null_DP_method = segconf.use_null_DP_method;
@@ -234,7 +234,7 @@ static inline ContextP vcf_seg_FORMAT_mux_by_dosage (VBlockVCFP vb, ContextP ctx
     ContextP channel_ctx = seg_mux_get_channel_ctx (VB, MUX, channel_i);
 
     if (cell) {
-        if (mux->dyn_int)
+        if (mux->ltype == LT_DYN_INT)
             seg_integer_or_not (VB, channel_ctx, STRa(cell), cell_len);
         else
             seg_by_ctx (VB, STRa(cell), channel_ctx, cell_len);
@@ -291,7 +291,7 @@ static void vcf_seg_FORMAT_mux_by_dosagexDP (VBlockVCFP vb, ContextP ctx, STRp(c
 
     ContextP channel_ctx = seg_mux_get_channel_ctx (VB, MUX, channel_i);
 
-    if (mux->dyn_int)
+    if (mux->ltype == LT_DYN_INT)
         seg_integer_or_not (VB, channel_ctx, STRa(cell), cell_len);
     else
         seg_by_ctx (VB, STRa(cell), channel_ctx, cell_len);
@@ -393,7 +393,7 @@ static WordIndex vcf_seg_FORMAT_A_R (VBlockVCFP vb, ContextP ctx, SmallContainer
         if (!item_ctxs[i]->is_initialized) {
             item_ctxs[i]->flags.store = item_store_type;
             item_ctxs[i]->is_initialized = true;
-            stats_set_consolidation (VB, ctx->did_i, 1, item_ctxs[i]->did_i);
+            ctx_consolidate_stats (VB, ctx->did_i, 2, item_ctxs[i]->did_i, DID_EOL);
         }
 
         if (seg_item_cb) {
@@ -467,7 +467,7 @@ static void vcf_seg_AD_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP
             
             else if (i==0 || i==1) {
                 if (!vb->mux_AD[i].num_channels)
-                    seg_mux_init (VB, 4, VCF_SPECIAL_MUX_BY_DOSAGE, item_ctxs[i]->did_i, FORMAT_AD, STORE_INT, false, (MultiplexerP)&vb->mux_AD[i], "0123");
+                    seg_mux_init (VB, 4, VCF_SPECIAL_MUX_BY_DOSAGE, item_ctxs[i]->did_i, FORMAT_AD, STORE_INT, LT_TEXT, false, (MultiplexerP)&vb->mux_AD[i], "0123");
                 
                 vcf_seg_FORMAT_mux_by_dosage (vb, item_ctxs[i], STRi(item, i), &vb->mux_AD[i]);
             }
@@ -495,7 +495,7 @@ static void vcf_seg_ADALL_items (VBlockVCFP vb, ContextP ctx, STRps(item), Conte
     for (unsigned i=0; i < n_items; i++) 
         if (i==0 || i==1) {
             if (!vb->mux_ADALL[i].num_channels)
-                seg_mux_init (VB, 4, VCF_SPECIAL_MUX_BY_DOSAGE, item_ctxs[i]->did_i, FORMAT_ADALL, STORE_INT, false, (MultiplexerP)&vb->mux_ADALL[i], "0123");
+                seg_mux_init (VB, 4, VCF_SPECIAL_MUX_BY_DOSAGE, item_ctxs[i]->did_i, FORMAT_ADALL, STORE_INT, LT_TEXT, false, (MultiplexerP)&vb->mux_ADALL[i], "0123");
             
             vcf_seg_FORMAT_mux_by_dosage (vb, item_ctxs[i], STRi(item, i), &vb->mux_ADALL[i]);
         }
@@ -534,19 +534,19 @@ static void vcf_seg_AD_complement_items (VBlockVCFP vb, ContextP ctx, STRps(item
 // F2R1 = AD - F1R2 (applied if AD and F1R2 are encountered before F2R1)
 static void vcf_seg_F2R1_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *item_ctxs, const int64_t *values)
 {
-    vcf_seg_AD_complement_items (vb, ctx, STRas(item), item_ctxs, values, (DictId)_FORMAT_F1R2, &con_F1R2, f2r1_snips, f2r1_snip_lens);
+    vcf_seg_AD_complement_items (vb, ctx, STRas(item), item_ctxs, values, _FORMAT_F1R2, &con_F1R2, f2r1_snips, f2r1_snip_lens);
 }
 
 // ADF = AD - ADR (applied if AD and ADR are encountered before ADF)
 static void vcf_seg_ADF_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *item_ctxs, const int64_t *values)
 {
-    vcf_seg_AD_complement_items (vb, ctx, STRas(item), item_ctxs, values, (DictId)_FORMAT_ADR, &con_ADR, adf_snips, adf_snip_lens);
+    vcf_seg_AD_complement_items (vb, ctx, STRas(item), item_ctxs, values, _FORMAT_ADR, &con_ADR, adf_snips, adf_snip_lens);
 }
 
 // ADR = AD - ADF (applied if AD and ADF are encountered before ADR)
 static void vcf_seg_ADR_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *item_ctxs, const int64_t *values)
 {
-    vcf_seg_AD_complement_items (vb, ctx, STRas(item), item_ctxs, values, (DictId)_FORMAT_ADF, &con_ADF, adr_snips, adr_snip_lens);
+    vcf_seg_AD_complement_items (vb, ctx, STRas(item), item_ctxs, values, _FORMAT_ADF, &con_ADF, adr_snips, adr_snip_lens);
 }
 
 //----------
@@ -652,7 +652,7 @@ static SORTER (value_sorter)
     return DESCENDING_RAW (*(int64_t *)a, *(int64_t*)b); // sort in reverse order - usually faster as GP[0] / PL[0] are usually the biggest (corresponding to GT=0/0)
 }
 
-static int64_t vcf_predict_GQ (VBlockVCFP vb, DidIType src_did_i)
+static int64_t vcf_predict_GQ (VBlockVCFP vb, Did src_did_i)
 {
     bool is_gp = (src_did_i == FORMAT_GP);
     STR(src);
@@ -699,7 +699,7 @@ static void vcf_seg_FORMAT_GQ_do_seg (VBlockVCFP vb, int64_t gq_value, int64_t p
     memcpy (snip, template_snip, template_snip_len);
     snip_len += str_int (prediction - gq_value, &snip[snip_len]);
 
-    seg_by_did_i (VB, STRa (snip), FORMAT_GQ, gq_len);
+    seg_by_did (VB, STRa (snip), FORMAT_GQ, gq_len);
 }
 
 static inline void vcf_seg_FORMAT_GQ (VBlockVCFP vb)
@@ -1049,7 +1049,7 @@ static inline void vcf_seg_FORMAT_AB (VBlockVCFP vb, ContextP ctx, STRp(ab))
 
     if (channel_i==3) { 
         seg_by_ctx (VB, STRa(ab_snip), ctx, 0);
-        seg_by_did_i (VB, STRa(ab), FORMAT_AB3, ab_len);
+        seg_by_did (VB, STRa(ab), FORMAT_AB3, ab_len);
     }
 
     else // channel 0,1,2
@@ -1159,13 +1159,13 @@ static inline void vcf_seg_FORMAT_PL (VBlockVCFP vb, ContextP ctx, STRp(PL))
     // we seg "redirection to PLn" in all VBs regardless of PL_mux_by_DP, so that ZCTX(FORMAT_PL).dict has
     // only a single word. This word might be updated to PLy in vcf_FORMAT_PL_after_vbs.
     // note: this isn't always "all-the-same" - we can have WORD_INDEX_MISSING in b250 in case of missing PLs in samples
-    seg_by_did_i (VB, STRa(PL_to_PLn_redirect_snip), FORMAT_PL, 0);
+    seg_by_did (VB, STRa(PL_to_PLn_redirect_snip), FORMAT_PL, 0);
 }
 
 // in PL_mux_by_DP_TEST mode, this function is called to pick one of the two compressed options, and drop the others
 void vcf_FORMAT_PL_decide (VBlockVCFP vb)
 {
-    DidIType keep_did_i, remove_did_i;
+    Did keep_did_i, remove_did_i;
 
     mutex_lock (segconf.PL_mux_by_DP_mutex);
 

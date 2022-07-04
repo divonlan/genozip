@@ -65,7 +65,7 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
     // determined by the phase
     MiniContainer gt = { .repeats   = 1, 
                          .nitems_lo = 1, 
-                         .drop_final_repeat_sep = true, 
+                         .drop_final_repsep = true, 
                          .callback = (vb->use_special_sf == USE_SF_YES || segconf.use_null_DP_method),
                          .items = { { .dict_id = (DictId)_FORMAT_GT_HT } },
                        };

@@ -43,6 +43,7 @@ ExeType exe_type;
 CommandType command = NO_COMMAND, primary_command = NO_COMMAND; 
 
 uint32_t global_max_threads = DEFAULT_MAX_THREADS; 
+static bool tip_printed = false;
 
 #define MAIN(format, ...) do { if (flag.debug_top) { progress_newline(); fprintf (stderr, "%s[%u]: ", command_name(), getpid()); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } } while(0)
 #define MAIN0(string)     do { if (flag.debug_top) { progress_newline(); fprintf (stderr, "%s[%u]: %s\n", command_name(), getpid(), string); } } while(0)
@@ -72,8 +73,8 @@ void main_exit (bool show_stack, bool is_error)
         bool printed = version_print_notice_if_has_newer();
 
         if (!printed && !flag.quiet && !getenv ("GENOZIP_TEST") &&
-            ((command == ZIP && !flag.test) || flag.check_latest/*PIZ - test after compress*/))
-            license_print_notice();
+            ((command == ZIP && !tip_printed) || flag.check_latest/*PIZ - test after compress*/))
+            license_print_tip();
     }
 
     if (is_error && flag.debug_threads)
@@ -307,12 +308,14 @@ static void main_test_after_genozip (rom exec_path, rom z_filename, bool is_last
                                       flag.debug_threads ? "--debug-threads" : SKIP_ARG,
                                       flag.echo          ? "--echo"          : SKIP_ARG,
                                       flag.verify_codec  ? "--verify-codec"  : SKIP_ARG,
-                                      is_last_txt_file   ? "--check-latest"  : SKIP_ARG,
                                       flag.debug_latest  ? "--debug-latest"  : SKIP_ARG,
-                                      flag.reference == REF_EXTERNAL && !is_chain ? "--reference" : SKIP_ARG, // normal pizzing of a chain file doesn't require a reference
-                                      flag.reference == REF_EXTERNAL && !is_chain ? ref_get_filename(gref) : SKIP_ARG, 
+                                      is_last_txt_file               && !flag.debug  ? "--check-latest"       : SKIP_ARG,
+                                      flag.reference == REF_EXTERNAL && !is_chain    ? "--reference"          : SKIP_ARG, // normal pizzing of a chain file doesn't require a reference
+                                      flag.reference == REF_EXTERNAL && !is_chain    ? ref_get_filename(gref) : SKIP_ARG, 
                                       NULL);
 
+        tip_printed = is_last_txt_file; // --check-latest sent to PIZ causes it to print the tip
+        
         // wait for child process to finish, so that the shell doesn't print its prompt until the test is done
         int exit_code = stream_wait_for_exit (test);
 

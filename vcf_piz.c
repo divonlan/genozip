@@ -90,7 +90,7 @@ bool vcf_piz_line_has_RGQ (VBlockVCFP vb)
 {
     if (vb->line_has_RGQ == RGQ_UNKNOWN)
         vb->line_has_RGQ = segconf.has[FORMAT_RGQ] && 
-                           reconstruct_peek_container_has_item (VB, CTX(VCF_SAMPLES), (DictId)_FORMAT_RGQ, false); // note: segconf.has[FORMAT_RGQ] is never set in PIZ prior to v14
+                           container_peek_has_item (VB, CTX(VCF_SAMPLES), (DictId)_FORMAT_RGQ, false); // note: segconf.has[FORMAT_RGQ] is never set in PIZ prior to v14
 
     return vb->line_has_RGQ;
 }
@@ -102,7 +102,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_HAS_RGQ)
 
 static void vcf_piz_replace_pos_with_gpos (VBlockVCFP vb)
 {
-    DidIType chrom_did_i = (vb->vb_coords == DC_LUFT ? VCF_oCHROM : VCF_CHROM);
+    Did chrom_did_i = (vb->vb_coords == DC_LUFT ? VCF_oCHROM : VCF_CHROM);
     Context *pos_ctx = CTX (vb->vb_coords == DC_LUFT ? VCF_oPOS : VCF_POS);
 
     WordIndex ref_chrom_index = ref_contigs_get_by_name (gref, last_txt(VB, chrom_did_i), vb->last_txt_len (chrom_did_i), true, true);

@@ -32,7 +32,7 @@ void vcf_info_seg_initialize (VBlockVCFP vb)
     CTX(INFO_DP)->     flags.store = STORE_INT;   // since v14
 
     if (!vcf_is_use_DP_by_DP())
-        CTX(INFO_DP)->dynamic_size_local = true; 
+        CTX(INFO_DP)->ltype = LT_DYN_INT; 
 
     seg_id_field_init (CTX(INFO_CSQ_Existing_variation));
 }
@@ -814,7 +814,7 @@ static bool vcf_seg_INFO_HGVS_snp (VBlockVCFP vb, ContextP ctx, STRp(value))
     SAFE_RESTOREx(2);
 
     // seg special snips
-    stats_set_consolidation (VB, ctx->did_i, 2, INFO_HGVS_snp_pos, INFO_HGVS_snp_refalt);
+    ctx_consolidate_stats (VB, ctx->did_i, 3, INFO_HGVS_snp_pos, INFO_HGVS_snp_refalt, DID_EOL);
 
     seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_HGVS_SNP_POS    }), 2, CTX(INFO_HGVS_snp_pos),    pos_str_len);
     seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_HGVS_SNP_REFALT }), 2, CTX(INFO_HGVS_snp_refalt), 3);
@@ -889,9 +889,9 @@ static bool vcf_seg_INFO_HGVS_indel (VBlockVCFP vb, ContextP ctx, STRp(value), r
     static const DictId dict_id_end_pos[3]   = { { _INFO_HGVS_del_end_pos   }, { _INFO_HGVS_ins_end_pos   }, { _INFO_HGVS_delins_end_pos } };
     static const DictId dict_id_payload[3]   = { { _INFO_HGVS_del_payload   }, { _INFO_HGVS_ins_payload   }, { _INFO_HGVS_delins_payload } };
 
-    static const DidIType did_i_start_pos[3] = { INFO_HGVS_del_start_pos, INFO_HGVS_ins_start_pos, INFO_HGVS_ins_start_pos};
-    static const DidIType did_i_end_pos[3]   = { INFO_HGVS_del_end_pos, INFO_HGVS_ins_end_pos, INFO_HGVS_delins_end_pos};
-    static const DidIType did_i_payload[3]   = { INFO_HGVS_del_payload, INFO_HGVS_ins_payload, INFO_HGVS_delins_payload};
+    static const Did did_i_start_pos[3] = { INFO_HGVS_del_start_pos, INFO_HGVS_ins_start_pos, INFO_HGVS_ins_start_pos};
+    static const Did did_i_end_pos[3]   = { INFO_HGVS_del_end_pos, INFO_HGVS_ins_end_pos, INFO_HGVS_delins_end_pos};
+    static const Did did_i_payload[3]   = { INFO_HGVS_del_payload, INFO_HGVS_ins_payload, INFO_HGVS_delins_payload};
 
     static const uint8_t special_end_pos[3]  = { VCF_SPECIAL_HGVS_DEL_END_POS, VCF_SPECIAL_HGVS_INS_END_POS, VCF_SPECIAL_HGVS_DELINS_END_POS };
     static const uint8_t special_payload[3]  = { VCF_SPECIAL_HGVS_DEL_PAYLOAD, VCF_SPECIAL_HGVS_INS_PAYLOAD, VCF_SPECIAL_HGVS_DELINS_PAYLOAD };
@@ -917,7 +917,7 @@ static bool vcf_seg_INFO_HGVS_indel (VBlockVCFP vb, ContextP ctx, STRp(value), r
     container_seg (vb, ctx, (ContainerP)&con, prefixes, prefixes_len, value_len - pos_lens[0] - (n_poss==2 ? pos_lens[1] : 0) - payload_len);
 
     // seg special snips
-    stats_set_consolidation (VB, ctx->did_i, 3, did_i_start_pos[t], did_i_end_pos[t], did_i_payload[t]);
+    ctx_consolidate_stats (VB, ctx->did_i, 4, did_i_start_pos[t], did_i_end_pos[t], did_i_payload[t], DID_EOL);
 
     CTX(did_i_start_pos[t])->flags.store = STORE_INT; // consumed by vcf_piz_special_INFO_HGVS_DEL_END_POS
 
@@ -1037,7 +1037,7 @@ static inline void vcf_seg_INFO_CSQ (VBlockVCFP vb, Context *ctx, STRp(value))
 {
     static const MediumContainer csq = {
         .nitems_lo   = 70, 
-        .drop_final_repeat_sep = true,
+        .drop_final_repsep = true,
         .repsep      = {','},
         .items       = { { .dict_id={ _INFO_CSQ_Allele             }, .separator = {'|'} },
                          { .dict_id={ _INFO_CSQ_Consequence        }, .separator = {'|'} },
@@ -1118,7 +1118,7 @@ static inline void vcf_seg_INFO_CSQ (VBlockVCFP vb, Context *ctx, STRp(value))
                                   [17] = seg_id_field_cb,       // INFO_CSQ_Existing_variation
                                   [19] = seg_integer_or_not_cb, // INFO_CSQ_DISTANCE 
                                 };
-    seg_array_of_struct (VB, ctx, csq, STRa(value), callbacks);
+    seg_array_of_struct (VB, ctx, csq, STRa(value), callbacks, value_len);
 }
 
 // --------
@@ -1132,7 +1132,7 @@ static inline void vcf_seg_INFO_ANN (VBlockVCFP vb, Context *ctx, STRp(value))
 {
     static const MediumContainer ann = {
         .nitems_lo   = 16, 
-        .drop_final_repeat_sep = true,
+        .drop_final_repsep = true,
         .repsep      = {','},
         .items       = { { .dict_id={ _INFO_ANN_Allele             }, .separator = {'|'} }, 
                          { .dict_id={ _INFO_ANN_Annotation         }, .separator = {'|'} }, 
@@ -1151,7 +1151,7 @@ static inline void vcf_seg_INFO_ANN (VBlockVCFP vb, Context *ctx, STRp(value))
                          { .dict_id={ _INFO_ANN_Distance           }, .separator = {'|'} }, 
                          { .dict_id={ _INFO_ANN_Errors             }                     } } };
 
-    seg_array_of_struct (VB, ctx, ann, STRa(value), (SegCallback[]){vcf_seg_INFO_allele,0,0,0,0,0,0,0,0,vcf_seg_INFO_HGVS,0,0,0,0,0,0});
+    seg_array_of_struct (VB, ctx, ann, STRa(value), (SegCallback[]){vcf_seg_INFO_allele,0,0,0,0,0,0,0,0,vcf_seg_INFO_HGVS,0,0,0,0,0,0}, value_len);
 }
 
 // --------------
@@ -1377,14 +1377,14 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, Context *ctx, STRp(value))
         case _INFO_GQ_HIST:
         case _INFO_AGE_HISTOGRAM_HET:
         case _INFO_AGE_HISTOGRAM_HOM: 
-            CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), ',', '|', false, true));
+            CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), ',', '|', false, true, DICT_ID_NONE, value_len));
 
         case _INFO_DP4:
-            CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, true));
+            CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, true, DICT_ID_NONE, value_len));
 
         // ##INFO=<ID=CLNDN,Number=.,Type=String,Description="ClinVar's preferred disease name for the concept specified by disease identifiers in CLNDISDB">
         case _INFO_CLNDN:
-            CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), '|', 0, false, false));
+            CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), '|', 0, false, false, DICT_ID_NONE, value_len));
 
         // ##INFO=<ID=CLNHGVS,Number=.,Type=String,Description="Top-level (primary assembly, alt, or patch) HGVS expression.">
         case _INFO_CLNHGVS:
@@ -1431,7 +1431,7 @@ void vcf_seg_info_subfields (VBlockVCFP vb, rom info_str, unsigned info_len)
 
     // case: INFO field is '.' (empty) (but not in DVCF as we will need to deal with DVCF items)
     if (!z_is_dvcf && info_len == 1 && *info_str == '.') {
-        seg_by_did_i (VB, ".", 1, VCF_INFO, 2); // + 1 for \t or \n
+        seg_by_did (VB, ".", 1, VCF_INFO, 2); // + 1 for \t or \n
         return;
     }
 
@@ -1585,7 +1585,7 @@ void vcf_finalize_seg_info (VBlockVCFP vb)
     // case GVCF: multiplex by has_RGQ
     if (!segconf.running && segconf.has[FORMAT_RGQ]) {
         ContextP channel_ctx = seg_mux_get_channel_ctx (VB, (MultiplexerP)&vb->mux_INFO, vb->line_has_RGQ);
-        seg_by_did_i (VB, STRa(vb->mux_INFO.snip), VCF_INFO, 0);
+        seg_by_did (VB, STRa(vb->mux_INFO.snip), VCF_INFO, 0);
 
         // if we're compressing a Luft rendition, swap the prefixes
         if (vb->line_coords == DC_LUFT && ren_prefixes_len) 

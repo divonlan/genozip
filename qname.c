@@ -102,7 +102,7 @@ static void qname_genarate_qfs_with_mate (QnameFlavorStruct *qfs)
 }
 
 // note: we need to re-initialize in each file, lest the data type has changed
-void qname_zip_initialize (DidIType qname_did_i)
+void qname_zip_initialize (Did qname_did_i)
 {
     ContextP qname_zctx = ZCTX(qname_did_i);
     ContextP line3_zctx = ZCTX(FASTQ_LINE3);
@@ -160,7 +160,7 @@ void qname_zip_initialize (DidIType qname_did_i)
             container_prepare_snip ((Container*)&con_no_skip, qfs->con_prefix, prefix_no_skip_len, qfs->con_snip, &qfs->con_snip_len);
 
             // prepare snip of identical container, except dict_ids are of QNAME2
-            DidIType next_qname2_did_i = FASTQ_Q0NAME2;
+            Did next_qname2_did_i = FASTQ_Q0NAME2;
             for (unsigned item_i=0; item_i < con_no_skip.nitems_lo; item_i++) 
                 if (con_no_skip.items[item_i].dict_id.num != _SAM_QmNAME && con_no_skip.items[item_i].dict_id.num != _FASTQ_QNAME2) {
                     con_no_skip.items[item_i].dict_id = dt_fields[DT_FASTQ].predefined[next_qname2_did_i].dict_id; // only FASTQ has QNAME2 dict_ids, this is not necessarily the current data type
@@ -190,7 +190,7 @@ void qname_zip_initialize (DidIType qname_did_i)
     seg_prepare_snip_other (SNIP_COPY, qname_zctx->dict_id, false, 0, copy_qname); // QNAME dict_id is the same for SAM, FASTQ, KRAKEN
 }
 
-static void qname_seg_initialize_do (VBlockP vb, QnameFlavor qfs, QnameFlavor qfs2, DidIType qname_did_i, DidIType st_did_i, unsigned num_qname_items, int pairing)
+static void qname_seg_initialize_do (VBlockP vb, QnameFlavor qfs, QnameFlavor qfs2, Did qname_did_i, Did st_did_i, unsigned num_qname_items, int pairing)
 {
     if (!qfs) return;
 
@@ -207,23 +207,31 @@ static void qname_seg_initialize_do (VBlockP vb, QnameFlavor qfs, QnameFlavor qf
         }
     }
 
-    stats_set_consolidation_(vb, st_did_i, num_qname_items+1, qname_ctxs); 
+    ctx_consolidate_stats_(vb, st_did_i, num_qname_items+1, qname_ctxs); 
 
     // set STORE_INT as appropriate
     int ctx_delta = (qname_did_i == FASTQ_QNAME2 ? (FASTQ_QNAME2 - FASTQ_DESC) : 0); // con.items[] are expressed relative to QNAME, for QNAME2, we need to shift this much
-    if (qfs->ordered_item1  != -1) (ctx_delta + ctx_get_ctx (vb, qfs->con.items[qfs->ordered_item1].dict_id))   ->flags.store = STORE_INT; 
-    if (qfs->ordered_item2  != -1) (ctx_delta + ctx_get_ctx (vb, qfs->con.items[qfs->ordered_item2].dict_id))   ->flags.store = STORE_INT; 
-    if (qfs->range_end_item != -1) (ctx_delta + ctx_get_ctx (vb, qfs->con.items[qfs->range_end_item-1].dict_id))->flags.store = STORE_INT; 
+    if (qfs->ordered_item1   != -1) (ctx_delta + ctx_get_ctx (vb, qfs->con.items[qfs->ordered_item1].dict_id))    ->flags.store = STORE_INT; 
+    if (qfs->ordered_item2   != -1) (ctx_delta + ctx_get_ctx (vb, qfs->con.items[qfs->ordered_item2].dict_id))    ->flags.store = STORE_INT; 
+    if (qfs->range_end_item1 != -1) (ctx_delta + ctx_get_ctx (vb, qfs->con.items[qfs->range_end_item1-1].dict_id))->flags.store = STORE_INT; 
+    if (qfs->range_end_item2 != -1) (ctx_delta + ctx_get_ctx (vb, qfs->con.items[qfs->range_end_item2-1].dict_id))->flags.store = STORE_INT; 
+    if (qfs->seq_len_item    != -1) (ctx_delta + ctx_get_ctx (vb, qfs->con.items[qfs->seq_len_item].dict_id))     ->flags.store = STORE_INT; 
 
-    // no singletons for in_local items
+    // no singletons for in_local items (but not if int or numeric, as these go to seg_integer_or_not which interpret no_stons differently)
     for (int i=0; qfs->in_local[i] != -1; i++)
-        (ctx_delta + ctx_get_ctx (vb, qfs->con.items[qfs->in_local[i]].dict_id))->no_stons = true;
+        if (!qfs->is_int[qfs->in_local[i]] && !qfs->is_numeric[qfs->in_local[i]])
+            (ctx_delta + ctx_get_ctx (vb, qfs->con.items[qfs->in_local[i]].dict_id))->no_stons = true;
+
+    // hex items
+    for (int i=0; qfs->hex_items[i] != -1; i++)
+        if (qfs->is_in_local[qfs->hex_items[i]])
+            (ctx_delta + ctx_get_ctx (vb, qfs->con.items[qfs->hex_items[i]].dict_id))->ltype = LT_DYN_INT_h;
 
     if (qfs->qname2 != -1 && qfs2)
         qname_seg_initialize_do (vb, qfs2, NULL, FASTQ_QNAME2, st_did_i, num_qname_items-1/*-1 bc no mate*/, pairing);
 }
 
-void qname_seg_initialize (VBlockP vb, DidIType qname_did_i) 
+void qname_seg_initialize (VBlockP vb, Did qname_did_i) 
 {   
     qname_seg_initialize_do (vb, segconf.qname_flavor, segconf.qname_flavor2, qname_did_i, qname_did_i, MAX_QNAME_ITEMS, flag.pair); 
 
@@ -250,15 +258,15 @@ int qname_test_flavor (STRp(qname), QnameFlavor qfs,
 
     // check that all the items expected to be numeric (leading zeros ok) are indeed so
     for (const int *item_i = qfs->numeric_items; *item_i != -1; item_i++)
-        if (!str_is_numeric (STRi(item, *item_i))) return -7;
+        if (!qfs->is_hex[*item_i] && !str_is_numeric (STRi(item, *item_i))) return -7;
 
-    // check that all the items expected to be hexadecimal are indeed so
+    // check that all the items expected to be lower case hexadecimal are indeed so
     for (const int *item_i = qfs->hex_items; *item_i != -1; item_i++)
         if (!str_is_hexlo (STRi(item, *item_i))) return -8;
 
     // check that all the items expected to be integer (no leading zeros) are indeed so
     for (const int *item_i = qfs->integer_items; *item_i != -1; item_i++)
-        if (!str_is_int (STRi(item, *item_i))) return -9;
+        if (!qfs->is_hex[*item_i] && !str_is_int (STRi(item, *item_i))) return -9;
 
     // return embedded qname2, eg "82a6ce63-eb2d-4812-ad19-136092a95f3d" in "@ERR3278978.1 82a6ce63-eb2d-4812-ad19-136092a95f3d/1"
     if (qname2 && qfs->qname2 != -1) {
@@ -270,7 +278,7 @@ int qname_test_flavor (STRp(qname), QnameFlavor qfs,
 }
 
 // called for the first line in segconf.running
-void qname_segconf_discover_flavor (VBlockP vb, DidIType qname_did_i, STRp(qname))
+void qname_segconf_discover_flavor (VBlockP vb, Did qname_did_i, STRp(qname))
 {
     segconf.qname_flavor = 0; // unknown
     STR0(qname2);
@@ -279,7 +287,10 @@ void qname_segconf_discover_flavor (VBlockP vb, DidIType qname_did_i, STRp(qname
         if ((VB_DT(DT_FASTQ) || !qfs->fq_only) && !qname_test_flavor (STRa(qname), qfs, pSTRa(qname2))) {
             segconf.qname_flavor = qfs;
             segconf.tech = qfs->tech;
-
+            
+            if (qfs->seq_len_item != -1) 
+                segconf.qname_seq_len_dict_id = qfs->con.items[qfs->seq_len_item].dict_id;
+            
             // if it has an embedded qname2 - find the true tech from qname2 (only possible for FASTQ, in SAM we can't find the tech from NCBI qname)
             if (qname2) 
                 for (QnameFlavor qf2=&qf[0]; qf2 < &qf[NUM_QFs]; qf2++) 
@@ -351,7 +362,8 @@ bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, QnameFlavor qfs, STRp(qname),
 
         // get item ctx - Q?NAME did_i are immediately following QNAME, and QmNAME si the last.
         const ContainerItem *item = &qfs->con.items[item_i];
-        
+        value=-1;
+
         // calculate context - a bit messy, but faster than looking up by dict_id
         ContextP item_ctx = (item->dict_id.num == _SAM_QmNAME)   ? (qname_ctx + MAX_QNAME_ITEMS) 
                           : (item->dict_id.num == _FASTQ_QNAME2) ? CTX(FASTQ_QNAME2)
@@ -363,24 +375,24 @@ bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, QnameFlavor qfs, STRp(qname),
 
         // case: this is the file is sorted by qname - delta against previous
         if ((item_i == qfs->ordered_item1 || item_i == qfs->ordered_item2) && 
-            !segconf.sam_is_sorted &&
+            !segconf.is_sorted &&
             ( (!qfs->is_hex[item_i] && str_get_int_dec (STRi(item, item_i), (uint64_t*)&value)) ||
               ( qfs->is_hex[item_i] && str_get_int_hex (STRi(item, item_i), (uint64_t*)&value))   ))
 
             seg_self_delta (vb, item_ctx, value, (qfs->is_hex[item_i] ? 'x' : 0), item_lens[item_i]);
         
         // case: end-of-range item, seg as delta vs previous item which is start-of-range
-        else if (qfs->range_end_item == item_i &&
+        else if ((qfs->range_end_item1 == item_i || qfs->range_end_item2 == item_i) &&
                  !flag.pair && // we don't use delta against other if we're pairing - too complicated
                  str_get_int (STRi(item, item_i), &value) && 
                  str_get_int (STRi(item, item_i-1), &prev_value)) {
             SNIP(32);
-            seg_prepare_snip_other (SNIP_OTHER_DELTA, qfs->con.items[qfs->range_end_item-1].dict_id, true, value - prev_value, snip);
+            seg_prepare_snip_other (SNIP_OTHER_DELTA, qfs->con.items[item_i-1].dict_id, true, value - prev_value, snip);
             seg_by_ctx (vb, STRa(snip), item_ctx, item_lens[item_i]);      
         }
 
         else if (qfs->is_in_local[item_i] && !flag.pair) { // note: we can't store in local if pairing        
-            if (qfs->is_int[item_i] || qfs->is_numeric[item_i])
+            if (qfs->is_int[item_i] || qfs->is_numeric[item_i]) // note: numeric with leading zeros is segged as a snip 
                 seg_integer_or_not (vb, item_ctx, STRi(item, item_i), item_lens[item_i]);
 
             else 
@@ -407,7 +419,11 @@ bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, QnameFlavor qfs, STRp(qname),
 
         // case: textual item
         else
-            seg_by_ctx (vb, STRi(item, item_i), item_ctx, item_lens[item_i]);   
+            seg_by_ctx (vb, STRi(item, item_i), item_ctx, item_lens[item_i]); 
+
+        // case: this item is qname_seq_len - set last_value by the beneficial field (CIGAR in SAM, ? in FASTQ)
+        if (item_i == qfs->seq_len_item && (value >= 0 || str_get_int (STRi(item, item_i), &value))) 
+            ctx_set_last_value (vb, item_ctx, value);  
     }
 
     return true;
@@ -418,8 +434,8 @@ void qname_seg (VBlockP vb, Context *qname_ctx, STRp (qname), unsigned add_addit
     START_TIMER;
     
     // copy if identical to previous (> 50% of lines in collated) - small improvement in compression and compression time
-    // no need in sam_is_sorted, as already handled in sam_seg_QNAME with buddy 
-    if (!segconf.sam_is_sorted && vb->line_i && !flag.optimize_DESC && is_same_last_txt (vb, qname_ctx, STRa(qname))) {
+    // no need in is_sorted, as already handled in sam_seg_QNAME with buddy 
+    if (!segconf.is_sorted && vb->line_i && !flag.optimize_DESC && is_same_last_txt (vb, qname_ctx, STRa(qname))) {
         seg_by_ctx (vb, STRa(copy_qname), qname_ctx, qname_len + add_additional_bytes);
         goto done;
     }

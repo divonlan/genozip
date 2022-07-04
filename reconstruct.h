@@ -18,7 +18,7 @@ typedef struct __attribute__ ((__packed__)) { // 9 bytes
 
 extern void reconstruct_initialize (void);
 
-extern int32_t reconstruct_from_ctx_do (VBlockP vb, DidIType did_i, char sep, bool reconstruct, rom func);
+extern int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i, char sep, bool reconstruct, rom func);
 #define reconstruct_from_ctx(vb,did_i,sep,reconstruct) reconstruct_from_ctx_do ((VBlockP)(vb),(did_i),(sep),(reconstruct), __FUNCTION__)
 
 extern void reconstruct_one_snip (VBlockP vb, ContextP ctx, WordIndex word_index, STRp(snip), bool reconstruct);
@@ -36,7 +36,7 @@ extern ContextP recon_multi_dict_id_get_ctx_first_time (VBlockP vb, ContextP ctx
 // use SCTX if we are certain that ctx can only be one other_dict_id in its snips 
 // snip is expected to be : 1-char-code + base64-dict_id + other stuff. snip is modified to be after the dict_id
 #define SCTX(snip) ({ ContextP sctx;                                \
-                      if (ctx->other_did_i != DID_I_NONE)  {        \
+                      if (ctx->other_did_i != DID_NONE)  {        \
                           snip       += base64_sizeof (DictId) + 1; \
                           snip##_len -= base64_sizeof (DictId) + 1; \
                           sctx = CTX(ctx->other_did_i);             \
@@ -56,10 +56,8 @@ extern ContextP recon_multi_dict_id_get_ctx_first_time (VBlockP vb, ContextP ctx
 //--------------
 extern ValueType reconstruct_peek (VBlockP vb, ContextP ctx, pSTRp(txt));
 extern ValueType reconstruct_peek_do (VBlockP vb, DictId dict_id, pSTRp(txt));
-#define reconstruct_peek_(vb, dict_id, txt, txt_len) reconstruct_peek_do ((VBlockP)(vb), (DictId)(dict_id), (txt), (txt_len))
+#define reconstruct_peek_(vb, dict_id, txt, txt_len) reconstruct_peek_do ((VBlockP)(vb), (dict_id), (txt), (txt_len))
 extern int64_t reconstruct_peek_local_int (VBlockP vb, ContextP ctx, int offset);
-extern uint32_t reconstruct_peek_repeats (VBlockP vb, ContextP ctx, char repsep);
-extern bool reconstruct_peek_container_has_item (VBlockP vb, ContextP ctx, DictId item_dict_id, bool consume);
 
 //--------------
 // history stuff
@@ -71,13 +69,14 @@ extern HasNewValue reconstruct_from_buddy (VBlockP vb, ContextP ctx, STRp(snip),
 extern void reconstruct_from_buddy_get_textual_snip (VBlockP vb, ContextP ctx, pSTRp(snip));
 extern void reconstruct_to_history (VBlockP vb, ContextP ctx);
 
-typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, DidIType did_i, DictId dict_id);
+typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, Did did_i, DictId dict_id);
 
 // gets snip, snip_len from b250 data
 #define LOAD_SNIP(did_i) ctx_get_next_snip (VB, CTX(did_i), false, &snip, &snip_len) 
 #define PEEK_SNIP(did_i) ctx_peek_next_snip (VB, CTX(did_i), &snip, &snip_len)
 
 #define LOAD_SNIP_FROM_LOCAL(ctx) ( {           \
+    ASSPIZ (ctx->next_local < ctx->local.len32, "%s.local exhausted: next_local=%u len=%u", (ctx)->tag_name, (ctx)->next_local, (ctx)->local.len32); \
     uint32_t start = ctx->next_local;           \
     ARRAY (char, data, ctx->local);             \
     uint32_t next_local = ctx->next_local; /* automatic for speed */ \
@@ -89,12 +88,14 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, DidIType did_i, 
     start;                                      \
 } ) 
 
+#define NEXT_ERRFMT "%s: not enough data in %s.local: next_local=%u + recon_len=%u > local.len=%u"
+
 #define NEXTLOCAL(type, ctx) \
-    ({ ASSPIZ ((ctx)->next_local < (ctx)->local.len32, "NEXTLOCAL: not enough data in %s.local", (ctx)->tag_name); \
+    ({ ASSPIZ (ctx->next_local < ctx->local.len32, "%s.local exhausted: next_local=%u len=%u", (ctx)->tag_name, (ctx)->next_local, (ctx)->local.len32); \
        *B(type, (ctx)->local, (ctx)->next_local++); })
 
 #define PEEKNEXTLOCAL(type, ctx, offset) \
-    ({ ASSPIZ ((ctx)->next_local + (offset) < (ctx)->local.len32, "PEEKNEXTLOCAL: not enough data in %s.local", (ctx)->tag_name); \
+    ({ ASSPIZ ((ctx)->next_local + (offset) < (ctx)->local.len32, "PEEKNEXTLOCAL: %s.local exhausted: next_local=%u len=%u", (ctx)->tag_name, (ctx)->next_local, (ctx)->local.len32); \
        *B(type, (ctx)->local, (ctx)->next_local + (offset)); })
 
 #define RECONSTRUCT(s,len) buf_add (&vb->txt_data, (char*)(s), (len))
@@ -104,12 +105,14 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, DidIType did_i, 
 #define RECONSTRUCT_TABBED(s,len) RECONSTRUCT_SEP (s, len, '\t')
 #define RECONSTRUCT_BUF(buf) RECONSTRUCT((buf).data,(buf).len)
 #define RECONSTRUCT_NEXT(ctx,recon_len) \
-    ({ ASSPIZ ((ctx)->next_local + (recon_len) <= (ctx)->local.len, "RECONSTRUCT_NEXT: not enough data in %s.local", (ctx)->tag_name); \
-       if (reconstruct) RECONSTRUCT(Bc((ctx)->local, (ctx)->next_local), (recon_len)); \
-       (ctx)->next_local += (recon_len); })
+    ({ ASSPIZ ((ctx)->next_local + (recon_len) <= (ctx)->local.len32, NEXT_ERRFMT, "RECONSTRUCT_NEXT", (ctx)->tag_name, (ctx)->next_local, (recon_len), (ctx)->local.len32); \
+       rom next = Bc((ctx)->local, (ctx)->next_local); \
+       if (reconstruct) RECONSTRUCT(next, (recon_len)); \
+       (ctx)->next_local += (recon_len); \
+       next; })
 
 #define RECONSTRUCT_NEXT_REV(ctx,recon_len) /* reconstructs reverse string */\
-    ({ ASSPIZ ((ctx)->next_local + (recon_len) <= (ctx)->local.len, "RECONSTRUCT_NEXT_REV: not enough data in %s.local", (ctx)->tag_name); \
+    ({ ASSPIZ ((ctx)->next_local + (recon_len) <= (ctx)->local.len32, NEXT_ERRFMT, "RECONSTRUCT_NEXT_REV", (ctx)->tag_name, (ctx)->next_local, (recon_len), (ctx)->local.len32); \
        if (reconstruct) { \
            str_reverse (BAFTtxt, Bc((ctx)->local, (ctx)->next_local), (recon_len)); \
            vb->txt_data.len += (recon_len); \

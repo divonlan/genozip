@@ -61,7 +61,18 @@ void profiler_add (ConstVBlockP vb)
     ADD(piz_read_one_vb);
     ADD(codec_hapmat_piz_get_one_line);
     ADD(sam_seg_SEQ);
+    ADD(sam_seg_QUAL);
+    ADD(sam_seg_is_gc_line);
+    ADD(sam_seg_aux_all);
+    ADD(sam_cigar_binary_to_textual);
+    ADD(squank_seg);
+    ADD(sam_seg_MD_Z_analyze);
+    ADD(bam_seq_to_sam);
+    ADD(sam_seg_bsseeker2_XG_Z_analyze);
+    ADD(sam_seg_sa_group_stuff);
     ADD(sam_cigar_seg);
+    ADD(sam_seg_SEQ_vs_ref);
+    ADD(aligner_seg_seq);
     ADD(sam_reconstruct_SEQ);
     ADD(aligner_reconstruct_seq);    
     ADD(dict_io_compress_one_fragment);
@@ -73,7 +84,7 @@ void profiler_add (ConstVBlockP vb)
     ADD(txtfile_read_header);
     ADD(seg_all_data_lines);
     ADD(seg_initialize);
-    ADD(sam_seg_XA_pos);
+    ADD(sam_seg_BWA_XA_pos);
     ADD(qname_seg);
     ADD(ctx_merge_in_vb_ctx);
     ADD(codec_hapmat_count_alt_alleles);
@@ -121,7 +132,7 @@ static void print_ctx_compressor_times (void)
 {
 // this prints the compressor time for each context. temporarily disabled bc we moved profile to be global rather than file by file
 // TO DO: revive this, when compressing a single file
-/*    for (DidIType did_i=0; did_i < z_file->num_contexts; did_i++) {
+/*    for (Did did_i=0; did_i < z_file->num_contexts; did_i++) {
         ContextP ctx = ZCTX(did_i);
         if (ms(ctx->compressor_time))
             iprintf ("      %s: %u\n", ctx->tag_name, ms(ctx->compressor_time));
@@ -201,14 +212,25 @@ void profiler_print_report (void)
         iprintf ("GENOZIP compute threads %u\n", ms(profile.compute));
         PRINT (ctx_clone, 1);
         PRINT (seg_all_data_lines, 1);
-        PRINT (sam_seg_XA_pos, 2);
+        PRINT (sam_seg_BWA_XA_pos, 2);
         PRINT (aligner_best_match, 2);
         PRINT (aligner_get_match_len, 3);
         PRINT (aligner_get_word_from_seq, 3);
         PRINT (seg_initialize, 2);
-        PRINT (qname_seg,2);
-        PRINT (sam_cigar_seg,2);
-        PRINT (sam_seg_SEQ,2);
+        PRINT (qname_seg, 2);
+        PRINT (sam_cigar_seg, 2);
+        PRINT (squank_seg, 3);
+        PRINT (sam_seg_SEQ, 2);
+        PRINT (sam_seg_SEQ_vs_ref, 3);
+        PRINT (aligner_seg_seq, Z_DT(DT_FASTQ) ? 2 : 3);
+        PRINT (bam_seq_to_sam, 2);
+        PRINT (sam_seg_QUAL, 2);
+        PRINT (sam_seg_is_gc_line, 2);
+        PRINT (sam_seg_MD_Z_analyze, 2);
+        PRINT (sam_cigar_binary_to_textual, 2);
+        PRINT (sam_seg_bsseeker2_XG_Z_analyze, 2);
+        PRINT (sam_seg_sa_group_stuff, 2);
+        PRINT (sam_seg_aux_all, 2);        
         PRINT (wait_for_vb_1_mutex, 1);
         PRINT (ctx_merge_in_vb_ctx, 1);
         PRINT (zip_compress_ctxs, 1);

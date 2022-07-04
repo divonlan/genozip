@@ -42,13 +42,13 @@ bool me23_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flag
 
 void me23_seg_initialize (VBlockP vb)
 {
-    CTX(ME23_CHROM)->no_stons    = true;
+    ctx_set_no_stons (vb, 5, ME23_CHROM, ME23_POS, ME23_TOPLEVEL, ME23_TOP2VCF, DID_EOL);
+
     CTX(ME23_CHROM)->no_vb1_sort = true;
     CTX(ME23_CHROM)->flags.store = STORE_INDEX; // since v12
     CTX(ME23_POS)->flags.store   = STORE_INT;   // since v12
     CTX(ME23_GENOTYPE)->ltype    = LT_SEQUENCE;
-    CTX(ME23_TOPLEVEL)->no_stons = true; // keep in b250 so it can be eliminated as all_the_same
-    CTX(ME23_TOP2VCF)->no_stons  = true;
+
     seg_id_field_init (CTX(ME23_ID));
 }
 
@@ -116,7 +116,7 @@ rom me23_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_txt_
     seg_add_to_local_fixed (vb, CTX(ME23_GENOTYPE), field_start, field_len); 
         
     char lookup[2] = { SNIP_LOOKUP, '0' + field_len };
-    seg_by_did_i (VB, lookup, 2, ME23_GENOTYPE, field_len + 1);
+    seg_by_did (VB, lookup, 2, ME23_GENOTYPE, field_len + 1);
 
     SEG_EOL (ME23_EOL, false);
     

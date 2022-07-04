@@ -15,16 +15,18 @@ typedef struct { // initialize with ctx_init_iterator()
     WordIndex prev_word_index; // When decoding, if word_index==BASE250_ONE_UP, then make it prev_word_index+1 (must be initialized to -1)
 } SnipIterator;
 
+typedef enum { DYN_DEC, DYN_hex, DYN_HEX } DynType;
+
 typedef struct Context {
     // ----------------------------
     // common fields for ZIP & PIZ
     // ----------------------------
     #define MAX_TAG_LEN 64     // including terminating nul (must be divisible by 8 for Tag struct)
     char tag_name[MAX_TAG_LEN];// nul-terminated tag name 
-    DidIType did_i;            // the index of this ctx within the array vb->contexts
+    Did did_i;            // the index of this ctx within the array vb->contexts
     union {
-    DidIType st_did_i;         // ZIP: in --stats, consolidate this context into st_did_i
-    DidIType other_did_i;      // PIZ: cache the other context needed for reconstructing this one
+    Did st_did_i;         // ZIP: in --stats, consolidate this context into st_did_i
+    Did other_did_i;      // PIZ: cache the other context needed for reconstructing this one
     };
     LocalType ltype;           // LT_* - type of local data - included in the section header
     struct FlagsCtx flags;     // flags to be included in section header
@@ -51,8 +53,11 @@ typedef struct Context {
     ValueType rback_last_value;// also used in PIZ for rolling back VCF_POS.last_value after INFO/END
     int64_t rback_last_delta, rback_ctx_spec_param;
     
-    Buffer ol_dict;            // ZIP VB: tab-delimited list of all unique snips - overlayed all previous VB dictionaries
-                               // ZIP zfile: singletons are stored here
+    union {
+    Buffer ol_dict;            // ZIP VB: tab-delimited list of all unique snips - overlayed zctx->dict (i.e. all previous VB dictionaries)
+    Buffer stons;              // ZIP zfile: singletons are stored here
+    };
+
     union {
     Buffer ol_nodes;           // ZIP array of CtxNode - overlayed all previous VB dictionaries. char/word indices are into ol_dict.
     Buffer ston_nodes;         // ZIP z_file: nodes of singletons
@@ -61,6 +66,7 @@ typedef struct Context {
     Buffer qname_nodes;        // PIZ: used in KRAKEN_QNAME
     Buffer ref_consumed_history;//PIZ: used in SAM_CIGAR 
     Buffer line_sqbitmap;      // PIZ: used in SAM_SQBITMAP
+    Buffer domq_denorm;        // PIZ SAM/BAM/FASTQ: DomQual codec denormalization table for contexts with QUAL data 
     };
 
     union {
@@ -87,7 +93,7 @@ typedef struct Context {
     Codec lsubcodec_piz;       // piz to decompress with this codec, AFTER decompressing with lcodec
     
     // ZIP-only instructions NOT written to the genozip file
-    bool no_stons;             // don't attempt to move singletons to local (singletons are never moved anyway if ltype!=LT_TEXT)
+    bool no_stons;             // ZIP: don't attempt to move singletons to local (singletons are never moved anyway if ltype!=LT_TEXT)
     bool pair_local;           // ZIP: this is the 2nd file of a pair - compare vs the first file, and set flags.paired in the header of SEC_LOCAL
                                // PIZ: pair local data is loaded to context.pair
     bool pair_b250;            // ZIP: this is the 2nd file of a pair - compare vs the first file, and set flags.paired in the header of SEC_B250
@@ -98,7 +104,6 @@ typedef struct Context {
     bool no_vb1_sort;          // don't sort the dictionary in ctx_sort_dictionaries_vb_1
     bool no_drop_b250;         // the b250 section cannot be optimized away in zip_generate_b250_section (eg if we need section header to carry a param)
     bool local_always;         // always create a local section in zfile, even if it is empty 
-    bool dynamic_size_local;   // resize int64_t according to data during generate (also do INTERLACE, BGEN). 
     bool is_stats_parent;      // other contexts have this context in st_did_i
     bool counts_section;       // output a SEC_COUNTS section for this context
     bool line_is_luft_trans;   // Seg: true if current line, when reconstructed with --luft, should be translated with luft_trans (false if no
@@ -194,7 +199,8 @@ typedef struct Context {
         bool last_is_alt;         // CHROM (all DTs): ZIP: last CHROM was an alt
         bool last_is_new;         // SAM_QNAME:       ZIP: used in segconf.running
         int32_t sum_dp_this_line; // INFO_DP:         ZIP/PIZ: sum of FORMAT/DP of samples in this line ('.' counts as 0)
-        int32_t last_end_line_i;  // INFO_END:        PIZ: last line on which INFO/END was encountered      
+        int32_t last_end_line_i;  // INFO_END:        PIZ: last line on which INFO/END was encountered 
+             
         enum   __attribute__ ((__packed__)) { PAIR1_ALIGNED_UNKNOWN=-1, PAIR1_NOT_ALIGNED=0, PAIR1_ALIGNED=1 } pair1_is_aligned;  // FASTQ_SQBITMAP:  PIZ: used when reconstructing pair-2
         struct __attribute__ ((__packed__)) { uint16_t gt_prev_ploidy; char gt_prev_phase; }; // FORMAT_GT: ZIP/PIZ
         struct __attribute__ ((__packed__)) { enum __attribute__ ((__packed__)) { PS_NONE, PS_POS, PS_POS_REF_ALT, PS_UNKNOWN } ps_type; }; // FORMAT_PS and FORMAT_PID
@@ -220,5 +226,5 @@ typedef struct Context {
 
 typedef struct {
     DictId dict_id;
-    DidIType did_i;
+    Did did_i;
 } ContextIndex;

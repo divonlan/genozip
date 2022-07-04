@@ -25,7 +25,7 @@
 #include "codec_longr_alg.c" // seperate source file for this, as it derived from external code with a different license
 
 // similar structure to DOMQUAL 
-void codec_longr_comp_init (VBlockP vb, DidIType qual_did_i)
+void codec_longr_comp_init (VBlockP vb, Did qual_did_i)
 {
     // lens_ctx contains the lens array - an array of uint32 - each entry is the length of the corresponding channel in values_ctx
     ContextP lens_ctx = CTX(qual_did_i);
@@ -39,7 +39,7 @@ void codec_longr_comp_init (VBlockP vb, DidIType qual_did_i)
     values_ctx->lcodec         = CODEC_ARITH8;
     values_ctx->counts_section = true; // we store the global value-to-bin mapper in a SEC_COUNTS
     
-    stats_set_consolidation (vb, qual_did_i, 1, qual_did_i+1);
+    ctx_consolidate_stats (vb, qual_did_i, 2, qual_did_i+1, DID_EOL);
 }
 
 // upper bound of compressed size of length array
@@ -310,15 +310,16 @@ static void codec_longr_reconstruct_init (VBlockP vb, Context *lens_ctx, Context
 
 // When reconstructing a QUAL field on a specific line, piz calls the LT_CODEC reconstructor for CODEC_LONGR, 
 // codec_longr_reconstruct, which combines data from the local buffers of lens, values and SQBITMAP to reconstruct the original QUAL field.
-void codec_longr_reconstruct (VBlockP vb, Codec codec, Context *lens_ctx)
+CODEC_RECONSTRUCT (codec_longr_reconstruct)
 {
-    ContextP values_ctx = lens_ctx + 1;
+    ContextP lens_ctx   = ctx;
+    ContextP values_ctx = ctx + 1;
     ContextP seq_ctx    = CTX(VB_DT(DT_FASTQ) ? FASTQ_SQBITMAP : SAM_SQBITMAP);
     
     if (!lens_ctx->is_initialized) 
         codec_longr_reconstruct_init (vb, lens_ctx, values_ctx);
 
-    bool is_rev = !VB_DT(DT_FASTQ) /* SAM or BAM */ && lens_ctx->dict_id.num == _SAM_QUAL && last_flags.bits.rev_comp;
+    bool is_rev = !VB_DT(DT_FASTQ) /* SAM or BAM */ /*&& lens_ctx->dict_id.num == _SAM_QUAL*/ && last_flags.rev_comp;
 
     ARRAY (uint8_t, sorted_qual, values_ctx->local);
     ARRAY (uint32_t, next_of_chan, lens_ctx->local);
@@ -329,6 +330,6 @@ void codec_longr_reconstruct (VBlockP vb, Codec codec, Context *lens_ctx)
                                                         : last_txtx (vb, seq_ctx); 
 
     codec_longr_recon_one_read (state, seq, vb->seq_len, is_rev, sorted_qual, next_of_chan, BAFTtxt);
-    vb->txt_data.len += vb->seq_len;
+    vb->txt_data.len32 += vb->seq_len;
 }
 

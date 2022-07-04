@@ -34,7 +34,10 @@ typedef UNCOMPRESS (CodecUncompress);
 
 typedef uint32_t CodecEstSizeFunc (Codec codec, uint64_t uncompressed_len);
 
-typedef void CodecReconstruct (VBlockP vb, Codec codec, ContextP ctx);
+#define CODEC_RECONSTRUCT(func) \
+    void func (VBlockP vb, Codec codec, ContextP ctx, STRp(snip))
+
+typedef CODEC_RECONSTRUCT (CodecReconstruct);
 
 typedef struct {
     bool             is_simple;  // a simple codec is one that is compressed into a single section in one step
@@ -121,7 +124,7 @@ extern void codec_show_time (VBlockP vb, rom name, rom subname, Codec codec);
 
 #define CODEC_ASSIGN_SAMPLE_SIZE 99999 // bytes (slightly better results than 50K)
 extern Codec codec_assign_best_codec (VBlockP vb, ContextP ctx, BufferP non_ctx_data, SectionType st);
-extern void codec_assign_best_qual_codec (VBlockP vb, DidIType qual_did, LocalGetLineCB callback, bool no_longr);
+extern void codec_assign_best_qual_codec (VBlockP vb, Did qual_did, LocalGetLineCB callback, bool no_longr);
 
 // ACGT stuff
 extern const uint8_t acgt_encode[256];
@@ -135,7 +138,7 @@ extern void codec_bsc_initialize (void);
 extern void codec_hapmat_piz_calculate_columns (VBlockP vb);
 
 // DOMQ stuff
-extern bool codec_domq_comp_init (VBlockP vb, DidIType qual_did_i, LocalGetLineCB callback);
+extern bool codec_domq_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB callback);
 
 // BZ2 stuff
 extern uint64_t BZ2_consumed (void *bz_file); // a hacky addition to bzip2
@@ -145,5 +148,5 @@ extern void codec_pbwt_seg_init (VBlockP vb, ContextP runs_ctx, ContextP fgrc_ct
 extern void codec_pbwt_display_ht_matrix (VBlockP vb, uint32_t max_rows);
 
 // LONGR stuff
-extern void codec_longr_comp_init (VBlockP vb, DidIType qual_did_i);
+extern void codec_longr_comp_init (VBlockP vb, Did qual_did_i);
 extern void codec_longr_segconf_calculate_bins (VBlockP vb, ContextP ctx, LocalGetLineCB callback);

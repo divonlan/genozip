@@ -42,7 +42,7 @@ bool piz_digest_failed = false;
 PizDisCoords piz_dis_coords (VBlockP vb)
 {
     PizDisCoords out = {};
-    if (DTF(prim_chrom) == DID_I_NONE || !ctx_has_value (vb, DTF(prim_chrom))) return out;
+    if (DTF(prim_chrom) == DID_NONE || !ctx_has_value (vb, DTF(prim_chrom))) return out;
     
     ContextP chrom_ctx = CTX(DTF(prim_chrom));
     WordIndex chrom = chrom_ctx->last_value.i;
@@ -57,7 +57,7 @@ PizDisCoords piz_dis_coords (VBlockP vb)
 
     sprintf (out.s, " CHROM=\"%s\"(%d)", printable_chrom, chrom); // with leading space
 
-    if (DTF(pos) == DID_I_NONE || !ctx_has_value (vb, DTF(pos))) return out;
+    if (DTF(pos) == DID_NONE || !ctx_has_value (vb, DTF(pos))) return out;
     
     sprintf (&out.s[strlen(out.s)], " POS=%"PRId64, CTX(DTF(pos))->last_value.i);
     return out;
@@ -68,7 +68,7 @@ PizDisQname piz_dis_qname (VBlockP vb)
 {
     PizDisQname out = {};
 
-    if (DTF(qname) != DID_I_NONE && ctx_encountered_in_line (vb, DTF(qname)) && !vb->preprocessing) {
+    if (DTF(qname) != DID_NONE && ctx_encountered_in_line (vb, DTF(qname)) && !vb->preprocessing) {
         ContextP ctx = CTX(DTF(qname));
         sprintf (out.s, " %.10s=\"%.*s\"", ctx->tag_name, MIN_(80, ctx->last_txt.len), last_txtx(vb, ctx));
     }
@@ -112,10 +112,10 @@ done:
 bool piz_default_skip_section (SectionType st, DictId dict_id)
 {
     // --show-dict=DICT - read only the one dictionary
-    if (st == SEC_DICT && flag.show_one_dict && exe_type == EXE_GENOCAT && !dict_id_is_show (dict_id)) return true; // skip
+    if (st == SEC_DICT && flag.show_one_dict && is_genocat && !dict_id_is_show (dict_id)) return true; // skip
 
     // B250, LOCAL, COUNT sections
-    bool skip = exe_type == EXE_GENOCAT && dict_id.num 
+    bool skip = is_genocat && dict_id.num 
                 && dict_id.num != DTFZ(predefined)[CHROM].dict_id.num 
                 && (!flag.luft || dict_id.num != DTFZ(predefined)[DTFZ(luft_chrom)].dict_id.num) && (
     
@@ -132,7 +132,7 @@ bool piz_default_skip_section (SectionType st, DictId dict_id)
 
     skip |= flag.genocat_no_ref_file && (st == SEC_REFERENCE || st == SEC_REF_HASH || st == SEC_REF_IS_SET);
 
-    if (skip && (exe_type == EXE_GENOCAT) && dict_id.num && dict_id.num == flag.dump_one_local_dict_id.num)
+    if (skip && (is_genocat) && dict_id.num && dict_id.num == flag.dump_one_local_dict_id.num)
         skip = false;
         
     return skip;
@@ -144,7 +144,7 @@ static inline void piz_adjust_one_local (BufferP local_buf, LocalType *ltype, ui
 
     if (*ltype == LT_BITMAP) { 
         local_buf->nbits = local_buf->len * 64 - num_bits ; 
-        LTEN_bits (buf_get_bitarray (local_buf)); 
+        LTEN_bits ((BitsP)local_buf); 
     } 
     else if (lt_desc[*ltype].file_to_native)   
         lt_desc[*ltype].file_to_native (local_buf, ltype); // BGEN, transpose etc - updates ltype in case of Transpose, after untransposing
@@ -261,7 +261,7 @@ uint32_t piz_uncompress_all_ctxs (VBlockP vb)
 
     // prepare context index
     if (command == PIZ) {
-        for (DidIType did_i=0; did_i < vb->num_contexts; did_i++)
+        for (Did did_i=0; did_i < vb->num_contexts; did_i++)
             vb->ctx_index[did_i] = (ContextIndex){ .did_i = did_i, .dict_id = CTX(did_i)->dict_id };
     
         qsort (vb->ctx_index, vb->num_contexts, sizeof (ContextIndex), sort_by_dict_id);
@@ -295,7 +295,7 @@ static void piz_reconstruct_one_vb (VBlockP vb)
     DT_FUNC (vb, piz_recon_init)(vb);
 
     // reconstruct from top level snip
-    DidIType top_level_did_i = ctx_get_existing_did_i (vb, vb->translation.toplevel); 
+    Did top_level_did_i = ctx_get_existing_did_i (vb, vb->translation.toplevel); 
     reconstruct_from_ctx (vb, top_level_did_i, 0, true);
 
     // compress txt_data into BGZF blocks (in vb->scratch) if applicable
@@ -420,7 +420,6 @@ DataType piz_read_global_area (Reference ref)
         random_access_load_ra_section (SEC_REF_RAND_ACC, CHROM, ref_get_stored_ra (ref), "ref_stored_ra", 
                                        flag.show_ref_index && !flag.reading_reference ? RA_MSG_REF : NULL);
 
-
         if ((flag.reference & REF_ZIP_CHROM2REF) && !flag.reading_reference && !flag.genocat_no_reconstruct)
             // xxx is this actually used? 
             chrom_index_by_name (CHROM); // create alphabetically sorted index for user file (not reference) chrom word list
@@ -429,7 +428,7 @@ DataType piz_read_global_area (Reference ref)
         if (flag.reading_reference) {
 
             // when reading the reference for genocat --show-sex/coverage/idxstats, don't need the actual REF sections 
-            if (exe_type == EXE_GENOCAT && (flag.show_sex || flag.show_coverage || flag.idxstats)) 
+            if (is_genocat && (flag.show_sex || flag.show_coverage || flag.idxstats)) 
                 goto done;  
 
             bool dispatcher_invoked = false;
@@ -452,13 +451,13 @@ DataType piz_read_global_area (Reference ref)
 
             // load the refhash, if we are compressing FASTA or FASTQ, or if user requested to see it
             if (  (primary_command == ZIP && flag.aligner_available) ||
-                  (flag.show_ref_hash && exe_type == EXE_GENOCAT)) {
+                  (flag.show_ref_hash && is_genocat)) {
                 
                 refhash_initialize (&dispatcher_invoked);
             }
 
             // exit now if all we wanted was just to see the reference (we've already shown it)
-            if ((flag.show_reference || flag.show_is_set || flag.show_ref_hash) && exe_type == EXE_GENOCAT) exit_ok();
+            if ((flag.show_reference || flag.show_is_set || flag.show_ref_hash) && is_genocat) exit_ok();
 
             if (dispatcher_invoked) progress_finalize_component ("Done");
         }
@@ -469,7 +468,7 @@ DataType piz_read_global_area (Reference ref)
                 ref_load_stored_reference (gref);
 
                 // exit now if all we wanted was just to see the reference (we've already shown it)
-                if ((flag.show_reference || flag.show_is_set || flag.show_ref_hash) && exe_type == EXE_GENOCAT) exit_ok();
+                if ((flag.show_reference || flag.show_is_set || flag.show_ref_hash) && is_genocat) exit_ok();
             }
             else
                 z_file->disk_size_minus_skips -= sections_get_ref_size();    
@@ -504,7 +503,7 @@ bool piz_read_one_vb (VBlockP vb, bool for_reconstruction)
     vb->chrom_node_index = WORD_INDEX_NONE;
     vb->lines.len        = VER(14) ? (sec-1)->num_lines : BGEN32 (header.v13_top_level_repeats);
     vb->comp_i           = (sec-1)->comp_i; 
-    vb->show_containers  = (flag.show_containers == SHOW_CONTAINERS_ALL_VBs || flag.show_containers == vb->vblock_i); // a per-VB value bc in SAM Load-Prim VBs =false vs normal VBs have the flag value (set in sam_piz_dispatch_one_load_SA_Groups_vb)
+    vb->show_containers  = (flag.show_containers == SHOW_CONTAINERS_ALL_VBs || flag.show_containers == vb->vblock_i); // a per-VB value bc in SAM Load-Prim VBs =false vs normal VBs have the flag value (set in sam_piz_dispatch_one_load_sag_vb)
 
     if (txt_file) { // sometimes we don't have a txtfile, eg when genocat is used with some flags that emit other data, no the file
         vb->vb_position_txt_file = txt_file->txt_data_so_far_single_0; // position in original txt file (before any ZIP or PIZ modifications)
@@ -655,7 +654,7 @@ Dispatcher piz_z_file_initialize (void)
 {
     digest_initialize();
 
-    // read genozip header
+    // read all non-VB non-TxtHeader sections
     DataType data_type = piz_read_global_area (gref);
     if (data_type == DT_NONE || flag.reading_reference) 
         return NULL; // no components in this file (as is always the case with reference files) 

@@ -105,7 +105,7 @@ COMPRESS (codec_acgt_compress)
 
     // case: this is our second entry, after soft-failing. Just continue from where we stopped
     if (nonref_x_ctx->local.len) {
-        packed = buf_get_bitarray (&vb->scratch);
+        packed = (BitsP)&vb->scratch;
         goto compress_sub;
     }
     
@@ -113,7 +113,7 @@ COMPRESS (codec_acgt_compress)
 
     // we will pack into vb->scratch
     buf_alloc (vb, &vb->scratch, 0, roundup_bits2bytes64 (*uncompressed_len * 2), uint8_t, 1, "scratch");
-    packed = buf_get_bitarray (&vb->scratch);
+    packed = (BitsP)&vb->scratch;
 
     // option 1 - pack contiguous data
     if (uncompressed) {
@@ -194,7 +194,7 @@ UNCOMPRESS (codec_xcgt_uncompress)
     // uncompress NONREF_X using CODEC_XCGT.sub_codec (passed to us as sub_codec)
     codec_args[sub_codec].uncompress (vb, sub_codec, param, STRa(compressed), uncompressed_buf, uncompressed_len, CODEC_NONE, name);
 
-    const Bits *acgt_packed = buf_get_bitarray (&vb->scratch); // data from NONREF context (2-bit per base)
+    const Bits *acgt_packed = (BitsP)&vb->scratch; // data from NONREF context (2-bit per base)
     rom acgt_x = B1ST (const char, *uncompressed_buf); // data from NONREF_X context
     
     Context *nonref_ctx = CTX(DTF(nonref));
@@ -225,7 +225,7 @@ UNCOMPRESS (codec_acgt_uncompress)
     codec_args[sub_codec].uncompress (vb, sub_codec, param, compressed, compressed_len, &vb->scratch, bitmap_num_bytes, CODEC_NONE, name);
 
     // finalize bitmap structure
-    Bits *packed     = buf_get_bitarray (&vb->scratch);
+    Bits *packed     = (BitsP)&vb->scratch;
     packed->nbits  = uncompressed_len * 2;
     packed->nwords = roundup_bits2words64 (packed->nbits);
 

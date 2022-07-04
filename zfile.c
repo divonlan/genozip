@@ -311,7 +311,7 @@ typedef struct { uint64_t start, len; } RemovedSection;
 static DESCENDING_SORTER (sort_removed_sections, RemovedSection, start)
 
 // remove ctx and all other ctxs consolidated to it from z_data. akin of unscrambling an egg.
-void zfile_remove_ctx_group_from_z_data (VBlockP vb, DidIType remove_did_i)
+void zfile_remove_ctx_group_from_z_data (VBlockP vb, Did remove_did_i)
 {
     unsigned num_rms=0;
     RemovedSection rm[vb->num_contexts * 2];
@@ -440,7 +440,7 @@ int32_t zfile_read_section_do (File *file,
 
     if (flag.show_headers) {
         sections_show_header (header, NULL, sec ? sec->offset : 0, 'R');
-        if (exe_type == EXE_GENOCAT && (expected_sec_type == SEC_B250      || expected_sec_type == SEC_LOCAL     || 
+        if (is_genocat && (expected_sec_type == SEC_B250      || expected_sec_type == SEC_LOCAL     || 
                                         expected_sec_type == SEC_DICT      || expected_sec_type == SEC_COUNTS    || 
                                         expected_sec_type == SEC_REFERENCE || expected_sec_type == SEC_REF_IS_SET))
              return header_offset; // in genocat --show-header - we only show headers, nothing else
@@ -561,7 +561,7 @@ static void zfile_read_genozip_header_handle_ref_info (const SectionHeaderGenozi
     if (flag.show_reference) {
         iprintf ("%s was compressed using the reference file:\nName: %s\nMD5: %s\n",
                     z_name, header->ref_filename, digest_display (header->ref_file_md5).s);
-        if (exe_type == EXE_GENOCAT) exit_ok(); // in genocat --show-reference, we only show the reference, not the data
+        if (is_genocat) exit_ok(); // in genocat --show-reference, we only show the reference, not the data
     }
 
     if (exe_type != EXE_GENOLS) { // note: we don't need the reference for genols
@@ -686,8 +686,9 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeader *out_header) // optio
 
     flag.genocat_no_ref_file |= (Z_DT(DT_CHAIN) && !flag.reading_chain); // initialized in flags_update: we only need the reference when using the chain file with --chain
 
-    if (txt_file && !flag.explicit_out_dt /*not explicitly specified by genocat user*/ && header->h.flags.genozip_header.txt_is_bin)
-        txt_file->data_type = DTPZ (bin_type);
+    //xxx if (txt_file && !flag.explicit_out_dt /*not explicitly specified by genocat user*/ && header->h.flags.genozip_header.txt_is_bin && 
+    //     DTPZ (txt_type))
+    //     txt_file->data_type = (is_genocat ? DTPZ(txt_type) : DTPZ (bin_type));
 
     ASSINP (header->encryption_type != ENC_NONE || !crypt_have_password() || Z_DT(DT_REF), 
             "password provided, but file %s is not encrypted", z_name);
@@ -726,7 +727,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeader *out_header) // optio
 
         if (flag.show_gheader==1) {
             DO_ONCE sections_show_gheader (header);
-            if (exe_type == EXE_GENOCAT) exit_ok(); // in genocat, exit after showing the requested data
+            if (is_genocat) exit_ok(); // in genocat, exit after showing the requested data
         }
 
         z_file->section_list_buf.param = 1;
@@ -744,7 +745,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeader *out_header) // optio
     // case: we are reading a file that is not expected to be a reference file
     else {
         // case: we are attempting to decompress a reference file - this is not supported
-        ASSERTGOTO (data_type != DT_REF || (flag.genocat_no_reconstruct && exe_type == EXE_GENOCAT) || exe_type == EXE_GENOLS,
+        ASSERTGOTO (data_type != DT_REF || (flag.genocat_no_reconstruct && is_genocat) || is_genols,
                     "%s is a reference file - it cannot be decompressed. Skipping it.", z_name);
 
         // handle reference file info
@@ -775,7 +776,7 @@ void zfile_compress_genozip_header (void)
         .bgzf         = (txt_file->codec == CODEC_BGZF || txt_file->codec == CODEC_GZ), // note: if txt file is compressed with GZ, we will reconstruct it with BGZF
         .adler        = !flag.md5,
         .has_gencomp  = z_file->z_flags.has_gencomp,
-        .has_taxid    = kraken_is_loaded
+        .has_taxid    = kraken_is_loaded,
     };
 
     // "manually" add the genozip section to the section list - normally it is added in comp_compress()
@@ -795,14 +796,14 @@ void zfile_compress_genozip_header (void)
     header.h.compressed_offset     = BGEN32 (sizeof (SectionHeaderGenozipHeader));
     header.h.data_uncompressed_len = BGEN32 (z_file->section_list_buf.len * sizeof (SectionEntFileFormat));
     header.h.codec                 = codec == CODEC_UNKNOWN ? CODEC_NONE : codec;
-    header.genozip_version = GENOZIP_FILE_FORMAT_VERSION;
-    header.data_type       = BGEN16 ((uint16_t)dt_get_txt_dt (z_file->data_type));
-    header.encryption_type = is_encrypted ? ENC_AES256 : ENC_NONE;
-    header.recon_size_prim = BGEN64 (z_file->txt_data_so_far_bind);
-    header.num_lines_bound = BGEN64 (z_file->num_lines);
-    header.num_sections    = BGEN32 (num_sections); 
-    header.num_components  = z_file->num_txts_so_far;
-    header.vb_size         = BGEN16 (segconf.vb_size >> 20);
+    header.genozip_version         = GENOZIP_FILE_FORMAT_VERSION;
+    header.data_type               = BGEN16 ((uint16_t)dt_get_txt_dt (z_file->data_type));
+    header.encryption_type         = is_encrypted ? ENC_AES256 : ENC_NONE;
+    header.recon_size_prim         = BGEN64 (z_file->txt_data_so_far_bind);
+    header.num_lines_bound         = BGEN64 (z_file->num_lines);
+    header.num_sections            = BGEN32 (num_sections); 
+    header.num_components          = z_file->num_txts_so_far;
+    header.vb_size                 = BGEN16 (segconf.vb_size >> 20);
 
     // when decompressing will require an external reference, we set header.ref_filename to the name of the genozip reference file
     if (flag.reference == REF_EXTERNAL || flag.reference == REF_MAKE_CHAIN) {   

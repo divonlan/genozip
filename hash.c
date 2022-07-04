@@ -271,7 +271,18 @@ WordIndex hash_global_get_entry (Context *zctx, STRp(snip), HashGlobalGetEntryMo
 
             if (mode != HASH_READ_ONLY) {
                 g_hashent->next = NO_NEXT;
-                g_hashent->node_index = (mode == HASH_NEW_OK_SINGLETON_IN_VB) ? (-zctx->ston_nodes.len++ - 2) : zctx->nodes.len++; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is NODE_INDEX_NONE)
+
+                if (mode == HASH_NEW_OK_SINGLETON_IN_VB) {
+                    g_hashent->node_index = -((int32_t)zctx->ston_nodes.len++) - 2; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is NODE_INDEX_NONE)
+                    ASSERT (zctx->ston_nodes.len <= MAX_WORDS_IN_CTX, "zctx->ston_nodes is full: too many singletons in zctx=%s len=%u. snip=\"%.*s\"", 
+                            zctx->tag_name, zctx->ston_nodes.len32, STRf(snip));
+                }
+                else {
+                    g_hashent->node_index = zctx->nodes.len32++; 
+                    ASSERT (zctx->nodes.len <= MAX_WORDS_IN_CTX, "zctx->nodes is full: too many nodes in zctx=%s len=%u. snip=\"%.*s\"", 
+                            zctx->tag_name, zctx->nodes.len32, STRf(snip));
+                }                
+
                 __atomic_store_n (&g_hashent->merge_num, zctx->merge_num, __ATOMIC_RELAXED); // stamp our merge_num as the ones that set the node_index
             }
 
@@ -280,9 +291,7 @@ WordIndex hash_global_get_entry (Context *zctx, STRp(snip), HashGlobalGetEntryMo
         }
 
         if (old_node) {  // if node=NULL, caller is telling us it is not in nodes for sure
-            rom snip_in_dict;
-            uint32_t snip_in_dict_len;
-
+            STR (snip_in_dict);
             *old_node = ctx_node_zf (zctx, g_hashent->node_index, &snip_in_dict, &snip_in_dict_len);
         
             // case: snip is in the hash table 
@@ -313,8 +322,8 @@ WordIndex hash_global_get_entry (Context *zctx, STRp(snip), HashGlobalGetEntryMo
     // thread safetey:  VB threads with merge_num < ours, might be segmenting right now, and have this global hash overlayed 
     // and accessing it. We make sure to first prepare the new entry including the merge_num which will prohibit old
     // VBs from using it, before we atomically set the "next"
-    ASSERT (zctx->global_hash.len <= 0xffffffff, "no more room in global_hash of context %s", zctx->tag_name);
-    uint32_t next = zctx->global_hash.len32++;
+    ASSERT (zctx->global_hash.len <= 0xffffffffULL, "no more room in global_hash of context %s", zctx->tag_name);
+    uint32_t next = zctx->global_hash.len++;
 
     GlobalHashEnt *new_hashent = B(GlobalHashEnt, zctx->global_hash, next);
     new_hashent->merge_num     = zctx->merge_num; // stamp our merge_num as the ones that set the node_index
@@ -322,11 +331,15 @@ WordIndex hash_global_get_entry (Context *zctx, STRp(snip), HashGlobalGetEntryMo
     // we enter the node as a singleton (=in ston_nodes) if this was a singleton in this VB but not in any previous VB 
     // (the second occurange in the file isn't a singleton anymore)
     bool is_singleton_global   = ((mode == HASH_NEW_OK_SINGLETON_IN_VB) && !singleton_encountered);
-    new_hashent->node_index    = is_singleton_global ? (-zctx->ston_nodes.len++ - 2) : zctx->nodes.len++; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is NODE_INDEX_NONE)
+    new_hashent->node_index    = is_singleton_global ? (-((int32_t)zctx->ston_nodes.len++) - 2) : zctx->nodes.len++; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is NODE_INDEX_NONE)
     new_hashent->next          = NO_NEXT;
 
-    ASSERT (zctx->nodes.len32 <= MAX_NODE_INDEX, "number of nodes in context %s exceeded the maximum of %u", 
-            zctx->tag_name, MAX_NODE_INDEX);
+    if (is_singleton_global) 
+        ASSERT (zctx->ston_nodes.len <= MAX_NODE_INDEX, "number of singleton in context %s exceeded the maximum of %u. snip=\"%.*s\"", 
+                zctx->tag_name, MAX_NODE_INDEX, STRf(snip));
+    else
+        ASSERT (zctx->nodes.len <= MAX_NODE_INDEX, "number of nodes in context %s exceeded the maximum of %u. snip=\"%.*s\"", 
+                zctx->tag_name, MAX_NODE_INDEX, STRf(snip));
 
 #ifdef DEBUG
     #define HASH_OCC_WARNING 2ULL
@@ -383,8 +396,7 @@ WordIndex hash_get_entry_for_seg (VBlockP segging_vb, Context *vctx, STRp(snip),
         // we skip singletons and continue searching
         if (g_hashent->node_index < 0) continue;
 
-        rom snip_in_dict;
-        uint32_t snip_in_dict_len;
+        STR(snip_in_dict);
         *node = ctx_node_vb (vctx, g_hashent->node_index, &snip_in_dict, &snip_in_dict_len);
 
         // case: snip is in the global hash table - we're done
@@ -427,7 +439,6 @@ WordIndex hash_get_entry_for_seg (VBlockP segging_vb, Context *vctx, STRp(snip),
             *node = ctx_node_vb (vctx, l_hashent->node_index, &snip_in_dict, &snip_in_dict_len);
 
             // case: snip is in the hash table - we're done
-            //xxx if ((*node)->word_index.n != WORD_INDEX_NONE && str_issame (snip, snip_in_dict)) // note: WORD_INDEX_NONE if this node was canceled in ctx_rollback
             if ((*node)->word_index != WORD_INDEX_NONE && str_issame (snip, snip_in_dict)) // note: WORD_INDEX_NONE if this node was canceled in ctx_rollback
                 return l_hashent->node_index;
         }

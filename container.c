@@ -88,7 +88,8 @@ WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con,
         container_prepare_snip (con, prefixes, prefixes_len, snip, &snip_len);
 
     if (flag.show_containers) { 
-        iprintf ("VB=%u Line=%d Ctx=%u:%s Repeats=%u RepSep=%u,%u Items=", 
+        iprintf ("%sVB=%u Line=%d Ctx=%u:%s Repeats=%u RepSep=%u,%u Items=", 
+                 vb->preprocessing ? "preproc " : "",
                  vb->vblock_i, vb->line_i, ctx->did_i, ctx->tag_name, con->repeats, con->repsep[0], con->repsep[1]);
         for (unsigned i=0; i < con_nitems (*con); i++) {
             const ContainerItem *item = &con->items[i];
@@ -105,8 +106,49 @@ WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con,
 // Reconstruction
 //----------------------
 
+static uint32_t count_repsep (STRp (str), char repsep)
+{
+    uint32_t count = str_count_char (STRa(str), repsep);
+
+    // if last repeat separator is dropped - count last item
+    if (str_len && str[str_len-1] != repsep)
+        count++;
+
+    return count;
+}
+
+// PIZ: peek a context, which is normally a container: if it is a container, return the number of
+// repeats. If it is not a container, or if the container is already reconstructedm
+// calculate repeats by counting the number of repsep's (and adding +1 if repsep isn't the final character)
+uint32_t container_peek_repeats (VBlockP vb, ContextP ctx, char repsep)
+{
+    // case: already reconstructed - count repsep
+    if (ctx_encountered (vb, ctx->did_i)) {
+        ASSPIZ (ctx->flags.store == STORE_INDEX, "Expecting ctx=%s to have STORE_INDEX, which for containers stores repeats", ctx->tag_name);
+        return ctx->last_value.i;
+    }
+
+    STR(snip);
+    WordIndex wi = PEEK_SNIP (ctx->did_i);
+
+    // case: container - get number of repeats from containter struct. note: containers are always
+    // segged with no_stons so they are never in local (see container_seg_do)
+    if (*snip == SNIP_CONTAINER)
+        return container_retrieve (vb, ctx, wi, snip+1, snip_len-1, 0, 0)->repeats;
+
+    // lookup snip: count repsep in local string
+    else if (snip_len == 1 && *snip == SNIP_LOOKUP) {
+        snip = Bc(ctx->local, ctx->next_local);
+        return count_repsep (snip, strlen (snip), repsep);
+    }
+
+    // dictionary non-container snip: count repsep in peeked string
+    else
+        return count_repsep (STRa(snip), repsep);
+}
+
 // true if parent container of ctx, also contains the item dict_id (i.e dict_id is a sibling of ctx)
-bool container_does_contain (ContextP ctx, DictId dict_id)
+bool container_has_item (ContextP ctx, DictId dict_id)
 {
     for (unsigned i=0; i < con_nitems (*ctx->parent_container); i++) 
         if (ctx->parent_container->items[i].dict_id.num == dict_id.num)
@@ -115,9 +157,61 @@ bool container_does_contain (ContextP ctx, DictId dict_id)
     return false;
 }
 
+// PIZ: peek a context which is normally a container and not yet encountered: return true if the container has the requested item
+bool container_peek_has_item (VBlockP vb, ContextP ctx, DictId item_dict_id, bool consume)
+{
+    ASSISLOADED(ctx);
+
+    // case: already reconstructed - not yet supported (not too difficult to add support for this case if needed)
+    ASSPIZ (!ctx_encountered (vb, ctx->did_i), "context %s is already encountered", ctx->tag_name);
+
+    STR(snip);
+    WordIndex wi = consume ? LOAD_SNIP (ctx->did_i) : PEEK_SNIP (ctx->did_i);
+
+    if (!snip || *snip != SNIP_CONTAINER) return false; // not a container, so definitely doesn't contain the item
+
+    ContainerP con = container_retrieve (vb, ctx, wi, snip+1, snip_len-1, 0, 0);
+
+    for (int i=0; i < con_nitems(*con); i++)
+        if (con->items[i].dict_id.num == item_dict_id.num) return true; // found item
+
+    return false; // item doesn't exist in this container
+}
+
+// PIZ: peek a context which is normally a container and not yet encountered: get indices of requested items 
+// (-1 if item is not in container). 
+void container_peek_get_idxs (VBlockP vb, ContextP ctx, uint16_t n_items, ContainerPeekItem *req_items, bool consume)
+{
+    ASSISLOADED(ctx);
+
+    // case: already reconstructed - not yet supported (not too difficult to add support for this case if needed)
+    ASSPIZ (!ctx_encountered (vb, ctx->did_i), "context %s is already encountered", ctx->tag_name);
+
+    for (uint16_t req_i=0 ; req_i < n_items; req_i++) {
+        req_items[req_i].idx = -1; // initialize
+        ASSERT (req_items[req_i].did < 255, "req_items[%u].did=%u but only small dids up to 254 are supported", req_i, req_items[req_i].did); // limitation of ContainerItem.small_did_i
+    }
+
+    STR(snip);
+    WordIndex wi = consume ? LOAD_SNIP (ctx->did_i) : PEEK_SNIP (ctx->did_i);
+
+    if (!snip || *snip != SNIP_CONTAINER) return; // not a container, so definitely doesn't contain the item
+
+    ContainerP con = container_retrieve (vb, ctx, wi, snip+1, snip_len-1, 0, 0);
+
+    for (uint16_t item_i=0; item_i < con_nitems(*con); item_i++) 
+        for (uint16_t req_i=0 ; req_i < n_items; req_i++)
+            if (req_items[req_i].idx == -1 && con->items[item_i].did_i_small == req_items[req_i].did) {
+                req_items[req_i].idx = item_i;
+                break;
+            }
+}
+
 static inline void container_verify_line_integrity (VBlockP vb, ContextP debug_lines_ctx, rom recon_start)
 {
-    uint32_t recon_len = BAFTtxt - recon_start;
+    int32_t recon_len = BAFTtxt - recon_start;
+    ASSPIZ (recon_len > 0, "failed line integrity test because line reconstruction length = %d", recon_len);
+
     uint32_t seg_hash = *B(uint32_t, debug_lines_ctx->local, debug_lines_ctx->next_local++);
     uint32_t piz_hash = adler32 (2, recon_start, recon_len); // same as in seg_all_data_lines
 
@@ -126,7 +220,7 @@ static inline void container_verify_line_integrity (VBlockP vb, ContextP debug_l
         
         PutLineFn fn = file_put_line (vb, recon_start, recon_len, "\nFailed line integrity check");
 
-        if (IS_BAM_PIZ)
+        if (IS_RECON_BAM)
             iprintf ("Tip: To view the dumped BAM line with:\n   genozip --show-bam %s\n\n", fn.s);
         
         iprintf ("Tip: To extract the original line for comparison use:\n   genozip --biopsy-line=%u/%u -B%u%s %s\n",
@@ -269,7 +363,8 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
     ValueType new_value = {};
 
     if (vb->show_containers) // show container reconstruction 
-        iprintf ("VB=%u Container: %s repeats=%u items=%u filter_items=%u filter_repeats=%u callback=%u\n", 
+        iprintf ("%sVB=%u Container: %s repeats=%u items=%u filter_items=%u filter_repeats=%u callback=%u\n", 
+                 vb->preprocessing ? "preproc " : "",
                  vb->vblock_i, dis_dict_id (ctx->dict_id).s, con->repeats, con_nitems(*con), con->filter_items, con->filter_repeats, con->callback);
 
     ContextP debug_lines_ctx = NULL;
@@ -305,7 +400,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
         unsigned num_preceding_seps = 0;
 
         if (vb->show_containers) // show container reconstruction 
-            iprintf ("VB=%u Line=%d Repeat=%u LastRepeat=%u %s\n", vb->vblock_i, vb->line_i, rep_i, con->repeats-1, ctx->tag_name);
+            iprintf ("%sVB=%u Line=%d Repeat=%u LastRepeat=%u %s\n", vb->preprocessing ? "preproc " : "", vb->vblock_i, vb->line_i, rep_i, con->repeats-1, ctx->tag_name);
 
         for (unsigned i=0; i < num_items; i++) {
             const ContainerItem *item = &con->items[i];
@@ -325,7 +420,8 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
             last_non_filtered_item_i = i;
 
             if (vb->show_containers && item_ctx && (!flag.dict_id_show_containers.num || dict_id_typeless (item_ctx->dict_id).num == flag.dict_id_show_containers.num)) // show container reconstruction 
-                iprintf ("VB=%u Line=%d Repeat=%u %s(%u)->%s(%u) trans_id=%u txt_data.len=%"PRIu64" (0x%04"PRIx64") reconstruct_prefix=%d reconstruct_value=%d : ", 
+                iprintf ("%sVB=%u Line=%d Repeat=%u %s(%u)->%s(%u) trans_id=%u txt_data.len=%"PRIu64" (0x%04"PRIx64") reconstruct_prefix=%d reconstruct_value=%d : ", 
+                         vb->preprocessing ? "preproc " : "",
                          vb->vblock_i, vb->line_i, rep_i, ctx->tag_name, ctx->did_i, item_ctx->tag_name, item_ctx->did_i,
                          translating ? item->translator : 0, 
                          vb->vb_position_txt_file + vb->txt_data.len, vb->vb_position_txt_file + vb->txt_data.len,
@@ -387,7 +483,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
         }
 
         // reconstruct repeats separator, if neeeded
-        if (rep_i+1 < con->repeats || !con->drop_final_repeat_sep) {
+        if (rep_i+1 < con->repeats || !con->drop_final_repsep) {
             if (con->repsep[0]) RECONSTRUCT1 (con->repsep[0]);
             if (con->repsep[1]) RECONSTRUCT1 (con->repsep[1]);
         }
@@ -448,7 +544,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
                 vb->num_nondrop_lines++;
                 
             if (vb->show_containers && vb->drop_curr_line) // show container reconstruction 
-                iprintf ("VB=%u Line=%d dropped due to \"%s\"\n", vb->vblock_i, vb->line_i, vb->drop_curr_line);
+                iprintf ("%sVB=%u Line=%d dropped due to \"%s\"\n", vb->preprocessing ? "preproc " : "", vb->vblock_i, vb->line_i, vb->drop_curr_line);
         }
     } // repeats loop
 
@@ -483,7 +579,7 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
     Container con, *con_p=NULL;
     STR(prefixes);
 
-    bool cache_exists = buf_is_alloc (&ctx->con_cache);
+    bool cache_exists = (ctx->con_cache.len32 > 0);
     uint16_t cache_item_len;
 
     // if this container exists in the cache - use the cached one
@@ -508,8 +604,8 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
         // get the did_i for each dict_id - unfortunately we can only store did_i up to 254 (changing this would be a change in the file format)
         for (uint32_t item_i=0; item_i < con_nitems (con); item_i++)
             if (con.items[item_i].dict_id.num) { // not a prefix-only item
-                DidIType did_i = ctx_get_existing_did_i (vb, con.items[item_i].dict_id);
-                ASSERT (did_i != DID_I_NONE, "analyzing a %s container in vb=%s: unable to find did_i for item %s/%s",
+                Did did_i = ctx_get_existing_did_i (vb, con.items[item_i].dict_id);
+                ASSERT (did_i != DID_NONE, "analyzing a %s container in vb=%s: unable to find did_i for item %s/%s",
                         ctx->tag_name, VB_NAME, dtype_name_z(con.items[item_i].dict_id), dis_dict_id (con.items[item_i].dict_id).s);
 
                 con.items[item_i].did_i_small = (did_i <= 254 ? (uint8_t)did_i : 255);
@@ -586,7 +682,7 @@ void container_display (ConstContainerP con)
 
     iprintf ("repeats=%u\nnum_items=%u\ndrop_final_item_sep=%u\ndrop_final_repeat_sep=%u\n"
                           "filter_repeats=%u\nfilter_items=%u\nis_toplevel=%u\nrepsep={ %u %u }\n",
-             con->repeats, num_items, con->drop_final_item_sep, con->drop_final_repeat_sep, 
+             con->repeats, num_items, con->drop_final_item_sep, con->drop_final_repsep, 
              con->filter_repeats, con->filter_items, con->is_toplevel, con->repsep[0], con->repsep[1]);
     
     for (unsigned i=0; i < num_items; i++)
@@ -601,9 +697,9 @@ void container_display (ConstContainerP con)
 #define SET_n(type,mn,mx) \
     type n = (type)ctx->last_value.i; \
     ASSPIZ (ctx->last_value.i>=(int64_t)(mn) && ctx->last_value.i<=(int64_t)(mx),\
-            "Error: Failed to convert %s to %s because of bad %s data: value of %s=%"PRId64" is out of range for type \"%s\"=[%"PRId64"-%"PRId64"]",\
+            "Error: Failed to convert %s to %s because of bad %s data: %s.last_value=%"PRId64" is out of range for type \"%s\"=[%"PRId64"-%"PRId64"] ctx.store_type=%s ctx.ltype=%s. Common reasons for a bug here: reconstruction an incorrect number, not returning HAS_NEW_VALUE, or not having STORE_INT.",\
             dt_name (z_file->data_type), dt_name (flag.out_dt), dt_name (z_file->data_type), \
-            ctx->tag_name, ctx->last_value.i, #type, (int64_t)(mn), (int64_t)(mx))
+            ctx->tag_name, ctx->last_value.i, #type, (int64_t)(mn), (int64_t)(mx), store_type_name(ctx->flags.store), lt_name(ctx->ltype))
 
 TRANSLATOR_FUNC (container_translate_I8)       { SET_n (int8_t,   INT8_MIN,  INT8_MAX  );               RECONSTRUCT1(n);       return 0; }
 TRANSLATOR_FUNC (container_translate_U8)       { SET_n (uint8_t,  0,         UINT8_MAX );               RECONSTRUCT1((char)n); return 0; }

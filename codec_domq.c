@@ -38,7 +38,7 @@ typedef struct {
 #define NO_DOMS_v13 '\x1'
 
 #define FIRST_Q 32  // first valid quality (in SAM terms) (' '=32 if QUAL="*")
-#define LAST_Q  127 // note: 127 if QUAL="*" (missing qual) in a PySam BAM file
+#define LAST_Q  126 // last printable ascii
 #define NUM_Qs (LAST_Q-FIRST_Q+1)
 
 #define declare_domq_contexts(ctx)                                \
@@ -75,25 +75,36 @@ static void show_denormalize (VBlockP vb, bytes denormalize, const uint32_t line
     for (uint32_t base_i=0; base_i < (qual_len); base_i++) \
         line_ascii_histogram[((uint8_t*)qual)[base_i]]++
 
-static bool codec_domq_qual_data_is_a_fit_for_domq (VBlockP vb, LocalGetLineCB get_line_cb)
+static bool codec_domq_qual_data_is_a_fit_for_domq (VBlockP vb, ContextP qual_ctx, LocalGetLineCB get_line_cb)
 {
 #   define DOMQUAL_SAMPLE_LEN 2500   // we don't need more than this to find out
 #   define NUM_LINES_IN_SAMPLE 5
 #   define MINIMUM_PERCENT_DOM_PER_LINE   50 // a lower bar for testing - we just need to see that this file is of the time of doms, even if these few reads would be "diversity"
 #   define MINIMUM_PERCENT_LINES_WITH_DOM 50
 
-    uint32_t num_sampled_lines  = MIN_(NUM_LINES_IN_SAMPLE, vb->lines.len32);
+    uint32_t num_sampled_lines  = get_line_cb ? MIN_(NUM_LINES_IN_SAMPLE, vb->lines.len32) : 1;
     uint32_t sampled_one_line   = DOMQUAL_SAMPLE_LEN / MAX_(1,num_sampled_lines);
     uint32_t num_tested_lines=0, num_lines_with_dom=0;
 
     for (LineIType line_i=0; line_i < num_sampled_lines; line_i++) {   
         STRw(qual);
-        get_line_cb (vb, line_i, pSTRa (qual), CALLBACK_NO_SIZE_LIMIT, NULL);
+        
+        if (get_line_cb)
+            get_line_cb (vb, line_i, pSTRa (qual), CALLBACK_NO_SIZE_LIMIT, NULL);
+        else {
+            qual = B1STc (qual_ctx->local);
+            qual_len = qual_ctx->local.len32;
+        }
+
         qual_len = MIN_(qual_len, sampled_one_line);
 
-        if (!qual_len) { // happens when eg depn line qual is copied from prim
-            num_sampled_lines = MIN_(num_sampled_lines+1, vb->lines.len32);
-            continue;
+        if (!qual_len) { 
+            if (get_line_cb && num_sampled_lines < vb->lines.len32) { // happens when eg depn line qual is copied from prim
+                num_sampled_lines++;
+                continue;
+            }
+            else
+                break;
         }
 
         // check if this line as a score value that appears over 50%
@@ -235,11 +246,13 @@ static uint8_t codec_domq_prepare_normalize (VBlockP vb, LocalGetLineCB get_line
 
     // get quality scores 
     buf_free (ql_buf); // we can free local_hash as this function is called from seg_finalize 
-    buf_alloc_exact (vb, ql_buf, vb->lines.len, QualLine, "ql_buf");
-    ql_buf.len = vb->lines.len;
+    buf_alloc_exact (vb, ql_buf, get_line_cb ? vb->lines.len : 1, QualLine, "ql_buf");
 
-    for_buf2 (QualLine, ql, line_i, ql_buf) 
-        get_line_cb (vb, line_i, (char**)pSTRa(ql->qual), CALLBACK_NO_SIZE_LIMIT, &ql->is_rev);
+    if (get_line_cb)
+        for_buf2 (QualLine, ql, line_i, ql_buf) 
+            get_line_cb (vb, line_i, (char**)pSTRa(ql->qual), CALLBACK_NO_SIZE_LIMIT, &ql->is_rev);
+    else
+        *B1ST (QualLine, ql_buf) = (QualLine){ .qual = B1ST8(qual_ctx->local), .qual_len = qual_ctx->local.len32 };
 
     // verify validy of QUAL, get dom of each line, and populate histogram, lines_with_dom
     codec_domq_calc_histogram (vb, qual_ctx, histogram, lines_with_dom, &qual_ctx->local.prm8[1]); // we store has_diverse is prm8[1] for use by codec_domq_compress
@@ -268,19 +281,17 @@ static uint8_t codec_domq_prepare_normalize (VBlockP vb, LocalGetLineCB get_line
 // This is typically with Illumina binning and "normal" samples where most scores are F
 // but might apply with other technologies too, including in combination with our optimize-QUAL
 // Returns the character that appears more than 50% of the sample lines tested, or -1 if there isn't one.
-bool codec_domq_comp_init (VBlockP vb, DidIType qual_did_i, LocalGetLineCB get_line_cb)
+bool codec_domq_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB get_line_cb)
 {
     ContextP declare_domq_contexts (CTX(qual_did_i));
  
-    if (codec_domq_qual_data_is_a_fit_for_domq (vb, get_line_cb)) {
+    if (codec_domq_qual_data_is_a_fit_for_domq (vb, qual_ctx, get_line_cb)) {
         qual_ctx->ltype         = LT_CODEC;
         qual_ctx->lcodec        = CODEC_DOMQ;
 
         domqruns_ctx->ltype     = qualmplx_ctx->ltype     = divrqual_ctx->ltype     = LT_UINT8;
         domqruns_ctx->local_dep = qualmplx_ctx->local_dep = divrqual_ctx->local_dep = DEP_L1;  
         domqruns_ctx->no_stons  = true; // no singletons as we use local for the data
-
-        stats_set_consolidation (vb, qual_ctx->did_i, 3, domqruns_ctx->did_i, qualmplx_ctx->did_i, divrqual_ctx->did_i);
 
         // normalize quality scores in preparation for compression. note: we do it here in seg, as we need to seg the denormalization table
         codec_domq_prepare_normalize (vb, get_line_cb, qual_ctx, domqruns_ctx);
@@ -302,10 +313,9 @@ static inline void codec_domq_normalize_qual (ContextP qual_ctx)
     for_buf2 (QualLine, ql, line_i, ql_buf) {
         if (!ql->qual_len || ql->is_diverse) continue;
 
-        // in case of QUAL="*" (missing qual) we have two cases for qual[0]: normal 0 and PYSAM 127. both are
-        // static pointers in memory which we cannot change in place. We replace to a static pointer to '\0'.
+        // in case of QUAL="*" (missing qual) it is a static pointer in memory which we cannot change in place. We replace to a static pointer to '\0'.
         // (since qual_len=1, the single value definitely got mapped to 0)
-        if (ql->qual_len==1 && (ql->qual[0]==' ' || ql->qual[0]==127))
+        if (ql->qual_len==1 && ql->qual[0]==' ')
             ql->qual = (uint8_t *)"";
 
         else 
@@ -328,7 +338,6 @@ static inline void codec_domq_add_runs (BufferP qdomruns_buf, uint32_t runlen)
 COMPRESS (codec_domq_compress)
 {
     START_TIMER;
-    ASSERT0 (!uncompressed && get_line_cb, "only callback option is supported");
     
     ContextP declare_domq_contexts (ECTX (((SectionHeaderCtx *)header)->dict_id));
 
@@ -342,18 +351,29 @@ COMPRESS (codec_domq_compress)
 
     uint8_t no_doms = qual_ctx->local.prm8[0]; // set by codec_domq_prepare_normalize
 
+    Buffer *non_dom_buf;
+    if (get_line_cb) {
+        non_dom_buf = qual_buf;
+        non_dom_buf->len = 0;
+    }
+
+    // case: qual data is in qual buf - we will construct non-dom in scratch and copy later
+    else {
+        ASSERTNOTINUSE (vb->scratch);
+        non_dom_buf = &vb->scratch;
+    }
+
     // this is usually enough, but might not be in some edge cases
     // note: qual_buf->len is the total length of all qual lines
-    buf_alloc (vb, qual_buf, 0, 1 + qual_buf->len / 5, char, 1, "contexts->local"); 
+    buf_alloc (vb, non_dom_buf, 0, 1 + qual_buf->len / 5, char, 1, "contexts->local"); 
     buf_alloc (vb, qdomruns_buf, 0, 1 + qual_buf->len / 10, char, 1, "contexts->local");
     buf_alloc (vb, &qualmplx_ctx->local, 0, 1 + vb->lines.len, char, 0, "contexts->local");
     
     if (qual_ctx->local.prm8[1]) // has_diverse
         buf_alloc (vb, &divrqual_ctx->local, 0, 1 + qual_buf->len / 5, char, 1, "contexts->local");
 
-    qual_buf->len = 0; 
     uint32_t runlen = 0;
-
+    
     // for_buf (QualLine, ql, ql_buf) {
     for_buf2 (QualLine, ql, line_i, ql_buf) {
 
@@ -372,13 +392,13 @@ COMPRESS (codec_domq_compress)
 
         // case: dominated read
         else {
-            buf_alloc (vb, qual_buf, 2 * ql->qual_len, 0, char, 1.5, 0); // theoretical worst case is 2 characters (added no_doms) per each original character
+            buf_alloc (vb, non_dom_buf, 2 * ql->qual_len, 0, char, 1.5, 0); // theoretical worst case is 2 characters (added no_doms) per each original character
             buf_alloc (vb, qdomruns_buf, ql->qual_len, 0, uint8_t, 1.5, 0);
 
             BNXTc (qualmplx_ctx->local) = ql->dom; // this is dom_i - i.e. the line in the denormalization table
 
             for (uint32_t i=0; i < ql->qual_len; i++) {    
-                if (ql->qual[i] == 0) 
+                if (ql->qual[i] == 0) // dom
                     runlen++;
                 
                 else {
@@ -390,10 +410,10 @@ COMPRESS (codec_domq_compress)
 
                     // this non-dom does not terminate a run of doms - add NO_DOMs to indicate the missing dom run
                     else 
-                        BNXTc (*qual_buf) = no_doms;
+                        BNXTc (*non_dom_buf) = no_doms;
 
                     // add the non-dom character
-                    BNXTc (*qual_buf) = ql->qual[i];
+                    BNXTc (*non_dom_buf) = ql->qual[i];
                 }
             }
         }
@@ -404,7 +424,12 @@ COMPRESS (codec_domq_compress)
     // another letter into the compressed alphabet
     if (runlen) {
         codec_domq_add_runs (qdomruns_buf, runlen); // add final dom runs
-        BNXTc (*qual_buf) = no_doms;
+        BNXTc (*non_dom_buf) = no_doms;
+    }
+
+    if (!get_line_cb) {
+        buf_copy (vb, qual_buf, non_dom_buf, char, 0, 0, "contexts->local");
+        buf_free (vb->scratch);
     }
 
     qual_ctx->lcodec = CODEC_UNKNOWN;
@@ -522,10 +547,10 @@ static inline void codec_domq_reconstruct_do_v13 (VBlockP vb, ContextP qual_ctx,
         else
             c = NEXTLOCAL (char, qual_ctx);
 
-        // case: handle SAM missing quality (may be expressed as a ' ' or ASCII 127)
-        if (c == ' ' || c == 127) {
+        // case: handle SAM missing quality (expressed as a ' ')
+        if (c == ' ') {
             expected_qual_len = 1;
-            sam_reconstruct_missing_quality (vb, c, reconstruct);
+            sam_reconstruct_missing_quality (vb, reconstruct);
         }
         
         else if (reconstruct) 
@@ -537,22 +562,22 @@ static inline void codec_domq_reconstruct_do_v13 (VBlockP vb, ContextP qual_ctx,
     ASSPIZ (qual_len == expected_qual_len, "expecting qual_len(%u) == expected_qual_len(%u)", qual_len, expected_qual_len);   
 }
 
-// returns de-normalization vector for dom_i (i.e. for current line)
+// PIZ: returns de-normalization vector for dom_i (i.e. for current line)
 static inline bytes codec_domq_piz_get_denorm (VBlockP vb, ContextP domqruns_ctx, uint8_t dom_i, uint8_t num_norm_qs)
 {
     // initialize, if not already initialized
-    if (!vb->domq_denorm.len) {
+    if (!domqruns_ctx->domq_denorm.len) {
         STR(snip);
         PEEK_SNIP (domqruns_ctx->did_i); // only one snip per VB - used for all lines
 
-        buf_alloc_exact (vb, vb->domq_denorm, snip_len, uint8_t, "domq_denorm");
-        vb->domq_denorm.len32 = base64_decode (snip, &snip_len, B1ST8(vb->domq_denorm));
+        buf_alloc_exact (vb, domqruns_ctx->domq_denorm, snip_len, uint8_t, "domq_denorm");
+        domqruns_ctx->domq_denorm.len32 = base64_decode (snip, &snip_len, B1ST8(domqruns_ctx->domq_denorm));
 
         if (flag.show_qual)
-            show_denormalize (vb, B1ST8(vb->domq_denorm), NULL, NULL, num_norm_qs, vb->domq_denorm.len32 / (uint32_t)num_norm_qs);
+            show_denormalize (vb, B1ST8(domqruns_ctx->domq_denorm), NULL, NULL, num_norm_qs, domqruns_ctx->domq_denorm.len32 / (uint32_t)num_norm_qs);
     }
 
-    return B8(vb->domq_denorm, (uint32_t)dom_i * (uint32_t)num_norm_qs);    
+    return B8(domqruns_ctx->domq_denorm, (uint32_t)dom_i * (uint32_t)num_norm_qs);    
 }
 
 // Explanation of the reconstruction process of QUAL data compressed with the DOMQ codec:
@@ -561,16 +586,16 @@ static inline bytes codec_domq_piz_get_denorm (VBlockP vb, ContextP domqruns_ctx
 //    codec_domq_reconstruct, which combines data from the local buffers of QUAL and DOMQRUNS to reconstruct the original QUAL field.
 // 3) Starting v14, the resulting data is de-normalized
 static inline void codec_domq_reconstruct_do (VBlockP vb, ContextP qual_ctx, ContextP domqruns_ctx, 
-                                              uint8_t dom_i, uint8_t num_norm_qs, bool reconstruct)
+                                              uint32_t len, uint8_t dom_i, uint8_t num_norm_qs, bool reconstruct)
 {
     bytes denormalize = codec_domq_piz_get_denorm (vb, domqruns_ctx, dom_i, num_norm_qs);
 
     uint8_t dom = denormalize[0];
 
-    bool missing_qual = (dom==' ' || dom==127); // this is QUAL="*"
+    bool missing_qual = (dom==' '); // this is QUAL="*"
 
     uint32_t qual_len=0;
-    uint32_t expected_qual_len = missing_qual ? 1 : vb->seq_len; 
+    uint32_t expected_qual_len = missing_qual ? 1 : len; 
 
     while (qual_len < expected_qual_len) {
         uint8_t q_norm = NEXTLOCAL (uint8_t, qual_ctx);
@@ -602,17 +627,18 @@ static inline void codec_domq_reconstruct_do (VBlockP vb, ContextP qual_ctx, Con
 
     if (missing_qual) { 
         if (reconstruct) vb->txt_data.len32--; // undo
-        sam_reconstruct_missing_quality (vb, dom, reconstruct);
+        sam_reconstruct_missing_quality (vb, reconstruct);
     }
     
-    ASSPIZ (qual_len == expected_qual_len, "expecting qual_len(%u) == expected_qual_len(%u)", qual_len, expected_qual_len);   
+    ASSPIZ (qual_len == expected_qual_len, "expecting qual_len(%u) == expected_qual_len(%u) in ctx=%s", 
+            qual_len, expected_qual_len, qual_ctx->tag_name);   
 }
 
-void codec_domq_reconstruct (VBlockP vb, Codec codec, ContextP qual_ctx)
+CODEC_RECONSTRUCT (codec_domq_reconstruct)
 {   
-    if (!qual_ctx->is_loaded && !(qual_ctx+1)->is_loaded && !(qual_ctx+2)->is_loaded && !(qual_ctx+3)->is_loaded) return;
+    if (!ctx->is_loaded && !(ctx+1)->is_loaded && !(ctx+2)->is_loaded && !(ctx+3)->is_loaded) return;
 
-    declare_domq_contexts (qual_ctx);
+    ContextP declare_domq_contexts (ctx);
 
     bool reconstruct = true;
 
@@ -621,16 +647,18 @@ void codec_domq_reconstruct (VBlockP vb, Codec codec, ContextP qual_ctx)
         codec_domq_reconstruct_do_v13 (vb, qual_ctx, reconstruct);
     
     else { // v14 and above
-        uint8_t dom_i = NEXTLOCAL(uint8_t, qualmplx_ctx); 
+        uint8_t dom_i = (qualmplx_ctx->local.len32 == 1) ? *B1ST8 (qualmplx_ctx->local) // context was not comprssed line-by-line (single buffer) (or had just one line - same effect)
+                                                         : NEXTLOCAL(uint8_t, qualmplx_ctx); 
         uint8_t num_norm_qs = qual_ctx->local.prm8[0];
         ASSPIZ (dom_i <= num_norm_qs, "Expecting dom_i=%u <= num_norm_qs=%u", dom_i, num_norm_qs);
+        uint32_t len = snip_len ? atoi(snip) : vb->seq_len;
 
         // case: dom read
         if (dom_i < num_norm_qs) 
-            codec_domq_reconstruct_do (vb, qual_ctx, domqruns_ctx, dom_i, num_norm_qs, reconstruct);
+            codec_domq_reconstruct_do (vb, qual_ctx, domqruns_ctx, len, dom_i, num_norm_qs, reconstruct);
 
         // case: diverse (non-dom) read.
         else if (reconstruct) 
-            RECONSTRUCT_NEXT (divrqual_ctx, vb->seq_len);
+            RECONSTRUCT_NEXT (divrqual_ctx, len);
     }
 }

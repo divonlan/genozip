@@ -406,9 +406,9 @@ extern const LuftTransLateProp ltrans_props[NUM_VCF_TRANS];
      (ltrans_props[(ctx)->luft_trans].upon == TW_ALWAYS         && LO_IS_OK (last_ostatus))        || \
      (ltrans_props[(ctx)->luft_trans].upon == TW_XSTRAND        && LO_IS_OK (last_ostatus) && *CTX(VCF_oXSTRAND)->last_snip != '-')))
 
-#define VCF_DICT_ID_ALIASES \
-    /*         alias             maps to this ctx  */  \
-    { DT_VCF,  _INFO_END, _VCF_POS    }, \
+#define VCF_DICT_ID_ALIASES             \
+    /*         alias      maps to  */   \
+    { DT_VCF,  _INFO_END, _VCF_POS  },  \
 
 #define dict_id_is_vcf_info_sf   dict_id_is_type_1
 #define dict_id_is_vcf_format_sf dict_id_is_type_2

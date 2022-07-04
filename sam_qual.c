@@ -32,38 +32,38 @@ rom bam_qual_display (bytes qual, uint32_t l_seq) // caller should free memory
 // get a score of the QUAL string - similar to that calculated by biobambam for ms:i:
 // see here: https://github.com/gt1/libmaus/tree/master/src/libmaus/bambam/BamAlignmentDecoderBase.cpp getScore 
 // The sum of phred values of the QUAL string, but only for phred values >= 15
-static int64_t sam_get_QUAL_score (VBlockSAMP vb, STRp(qual))
+static uint32_t sam_get_QUAL_score (VBlockSAMP vb, STRp(qual))
 {
     if (vb->qual_missing) return 0;
 
-    int64_t score=0;
+    uint32_t score=0;
     for (uint32_t i=0; i < qual_len; i++) {
-        char phred = qual[i] - 33;
+        int8_t phred = qual[i] - 33;
         if (phred >= 15) score += phred;
     }
     
     return score;
 }
 
-// main thread (not thread-safe): called from sam_show_sa_one_grp for getting first few characters of alignment cigar
-rom sam_display_qual_from_SA_Group (const SAGroupType *g)
+// main thread (not thread-safe): called from sam_show_sag_one_grp for getting first few characters of alignment cigar
+rom sam_display_qual_from_SA_Group (const Sag *g)
 {
     if (g->no_qual) return "*";
 
     static char qual[SA_QUAL_DISPLAY_LEN+1];
     memset (qual, 0, sizeof(qual));
 
-    uint32_t uncomp_len = MIN_(SA_CIGAR_DISPLAY_LEN, g->seq_len); // possibly shorter than original cigar
+    uint32_t uncomp_len = MIN_(SA_CIGAR_DISPLAY_LEN, (uint32_t)g->seq_len); // possibly shorter than original cigar
 
     if (g->qual_comp_len) { // qual of this group is compressed
-        uint32_t uncomp_len = MIN_(g->seq_len, SA_QUAL_DISPLAY_LEN);
-        void *success = rans_uncompress_to_4x16 (evb, B8(z_file->sa_qual, g->qual), g->qual_comp_len,
+        uint32_t uncomp_len = MIN_((uint32_t)g->seq_len, SA_QUAL_DISPLAY_LEN);
+        void *success = rans_uncompress_to_4x16 (evb, B8(z_file->sag_qual, g->qual), g->qual_comp_len,
                                                 (uint8_t *)qual, &uncomp_len); 
         if (success && uncomp_len) qual[uncomp_len] = '\0';
     }
 
     else // not compressed
-        memcpy (qual, B8(z_file->sa_qual, g->qual), uncomp_len);
+        memcpy (qual, B8(z_file->sag_qual, g->qual), uncomp_len);
 
     return qual;
 }
@@ -77,8 +77,8 @@ COMPRESSOR_CALLBACK (sam_zip_qual)
 {
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
 
-    // note: maximum_len might be shorter than the data available if we're just sampling data in zip_assign_best_codec
-    *line_data_len  = MIN_(maximum_size, dl->QUAL.len);
+    // note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec
+    *line_data_len  = dl->dont_compress_QUAL ? 0 : MIN_(maximum_size, dl->QUAL.len);
 
     if (!line_data) return; // only lengths were requested
 
@@ -92,8 +92,22 @@ COMPRESSOR_CALLBACK (sam_zip_qual)
     else if (flag.optimize_QUAL) 
         optimize_phred_quality_string (STRa(*line_data));
 
-    if (is_rev) *is_rev = dl->FLAG.bits.rev_comp;
+    if (is_rev) *is_rev = dl->FLAG.rev_comp;
 }
+
+#define QUAL_ZIP_CALLBACK(tag)                          \
+COMPRESSOR_CALLBACK (sam_zip_##tag)                     \
+{                                                       \
+    ZipDataLineSAM *dl = DATA_LINE (vb_line_i);         \
+    *line_data_len  = dl->dont_compress_##tag ? 0 : MIN_(maximum_size, dl->tag.len); /* note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec */ \
+    if (!line_data) return; /* only lengths were requested */ \
+    *line_data = Btxt(dl->tag.index);                   \
+    if (dl->OQ.len == 1 && (*line_data)[0] == '*') /* if OQ is just "*" (i.e. unavailable) replace it by " " (same as QUAL) */\
+        *line_data = " "; /* pointer to static string */\
+    if (is_rev) *is_rev = dl->FLAG.rev_comp;            \
+}                               
+QUAL_ZIP_CALLBACK(OQ)
+QUAL_ZIP_CALLBACK(UY)
 
 void sam_zip_QUAL_initialize (void)
 {
@@ -104,17 +118,16 @@ void sam_seg_QUAL_initialize (VBlockSAMP vb)
 {
     CTX(SAM_QUAL)->ltype = LT_UINT8;
 
-    if (sam_is_main_vb) {
-        CTX(SAM_QUAL)->flags.store_per_line = true; // for undiffing depn lines against prim (in same VB)
-        CTX(SAM_FLAG)->flags.store_per_line = true; // also needed for undiffing
-    }
+    if (sam_is_main_vb) 
+        ctx_set_store_per_line (VB, 3, SAM_QUAL, SAM_FLAG, DID_EOL);
 
+    // case: in DEPN and MAIN QUALSA is used to store the diff vs primary 
     if (sam_is_depn_vb || sam_is_main_vb)
-        CTX(SAM_QUALSA)->ltype = LT_INT8;           // diff of prim vs depn qual
+        CTX(SAM_QUALSA)->ltype = LT_INT8; // diff of prim vs depn qual
 
-    // if PRIM - TOPLEVEL reconstructs all-the-same SAM_QUALSA instead of SAM_QUAL. SAM_QUAL is consumed when loading SA Groups.
-    // note: in DEPN and MAIN QUALSA is used to store the diff vs primary (note: we can't just ctx_create_node because we need to transfer flags to piz, so need b250)
-    seg_by_did_i (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_QUAL }, 2, sam_is_prim_vb ? SAM_QUALSA : SAM_QUAL, 0);
+    // case: PRIM - TOPLEVEL reconstructs all-the-same SAM_QUALSA instead of SAM_QUAL. SAM_QUAL is consumed when loading SA Groups.
+    if (sam_is_prim_vb)
+        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_QUAL, '0' }, 3, SAM_QUALSA, 0); // note: we can't just ctx_create_node because we need to transfer flags to piz, so need b250
 
     if (segconf.sam_ms_type == ms_BIOBAMBAM) {      // handle QUAL_scores for ms:i - added v13        
         CTX(OPTION_ms_i)->flags.spl_custom = true;  // custom store-per-line - SPECIAL will handle the storing
@@ -127,39 +140,36 @@ static void sam_get_sa_grp_qual (VBlockSAMP vb)
 {
     ASSERTNOTINUSE (vb->scratch);
 
-    buf_alloc (vb, &vb->scratch, vb->sa_grp->seq_len, 0, char, 1, "scratch");
+    buf_alloc (vb, &vb->scratch, vb->sag->seq_len, 0, char, 1, "scratch");
 
-    if (vb->sa_grp->qual_comp_len) { // qual of this group is compressed
-        uint32_t uncomp_len = vb->sa_grp->seq_len;
-        void *success = rans_uncompress_to_4x16 (VB, B8(z_file->sa_qual, vb->sa_grp->qual), vb->sa_grp->qual_comp_len,
+    if (vb->sag->qual_comp_len) { // qual of this group is compressed
+        uint32_t uncomp_len = vb->sag->seq_len;
+        void *success = rans_uncompress_to_4x16 (VB, B8(z_file->sag_qual, vb->sag->qual), vb->sag->qual_comp_len,
                                                  B1ST(uint8_t, vb->scratch), &uncomp_len); 
 
-        ASSERTGOTO (success && uncomp_len == vb->sa_grp->seq_len, "%s: rans_uncompress_to_4x16 failed to decompress an SA Group QUAL data: grp_i=%u success=%u comp_len=%u uncomp_len=%u expected_uncomp_len=%u qual=%"PRIu64,
-                    LN_NAME, ZGRP_I(vb->sa_grp), !!success, vb->sa_grp->qual_comp_len, uncomp_len, vb->sa_grp->seq_len, vb->sa_grp->qual);
+        ASSERTGOTO (success && uncomp_len == vb->sag->seq_len, "%s: rans_uncompress_to_4x16 failed to decompress an SA Group QUAL data: grp_i=%u success=%u comp_len=%u uncomp_len=%u expected_uncomp_len=%u qual=%"PRIu64,
+                    LN_NAME, ZGRP_I(vb->sag), !!success, vb->sag->qual_comp_len, uncomp_len, vb->sag->seq_len, (uint64_t)vb->sag->qual);
 
         vb->scratch.len = uncomp_len;
     }
     else // not compressed
-        buf_add (&vb->scratch, B8(z_file->sa_qual, vb->sa_grp->qual), vb->sa_grp->seq_len);
+        buf_add (&vb->scratch, B8(z_file->sag_qual, vb->sag->qual), vb->sag->seq_len);
 
     return;
     
 error:
-    sam_show_sa_one_grp (ZGRP_I(vb->sa_grp));
+    sam_show_sag_one_grp (ZGRP_I(vb->sag));
     exit_on_error(true);
 }
 
 static void sam_seg_QUAL_diff_vs_primary (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual), 
-                                          STRp (prim_qual), bool prim_revcomp, 
-                                          unsigned add_bytes)
+                                          STRp (prim_qual), bool prim_revcomp)
 {
-    if (vb->qual_missing) return;
-
     buf_alloc (vb, &CTX(SAM_QUALSA)->local, qual_len, 0, int8_t, CTX_GROWTH, "contexts->local");
     int8_t *diff = BAFT (int8_t, CTX(SAM_QUALSA)->local);
-    CTX(SAM_QUALSA)->local.len += qual_len;
+    CTX(SAM_QUALSA)->local.len32 += qual_len;
 
-    bool xstrand = (dl->FLAG.bits.rev_comp != prim_revcomp);
+    bool xstrand = (dl->FLAG.rev_comp != prim_revcomp);
 
     if (!xstrand) {
         rom grp_qual = &prim_qual[vb->hard_clip[0]];
@@ -175,47 +185,80 @@ static void sam_seg_QUAL_diff_vs_primary (VBlockSAMP vb, ZipDataLineSAM *dl, STR
 
 void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual_data)/*always textual*/, unsigned add_bytes)
 {
+    START_TIMER;
+
     Context *qual_ctx = CTX(SAM_QUAL);
     ZipDataLineSAM *prim_dl;
+    bool prim_has_qual_but_i_dont = false; // will be set if this line has no QUAL, but its prim line does (very rare)
 
     vb->has_qual |= !vb->qual_missing;
 
-    // case: DEPN component, line has SA Group
-    if (vb->sa_grp && sam_is_depn_vb && !vb->qual_missing) {
-        dl->QUAL.len = 0; // don't compress this line
+    // note: if prim (of either type) has no QUAL, we don't attempt to diff - bc piz wouldn't be able to know whether 
+    // the current line has QUAL or not
 
-        sam_get_sa_grp_qual (vb); // decompress prim qual into vb->scratch
+    // case: DEPN component, line has SA Group, and SA Group as qual
+    if (vb->sag && sam_is_depn_vb && !vb->sag->no_qual) {
+        if (vb->qual_missing)
+            prim_has_qual_but_i_dont = true;
 
-        sam_seg_QUAL_diff_vs_primary (vb, dl, STRa(qual_data), STRb(vb->scratch), vb->sa_grp->revcomp, add_bytes);
+        // case: both this line and prim have QUAL - diff them
+        else {
+            sam_get_sa_grp_qual (vb); // decompress prim qual into vb->scratch
+
+            sam_seg_QUAL_diff_vs_primary (vb, dl, STRa(qual_data), STRb(vb->scratch), vb->sag->revcomp);        
+            buf_free (vb->scratch);
+        }
+
+        dl->dont_compress_QUAL = true; // don't compress this line
         CTX(SAM_QUALSA)->txt_len += add_bytes;
-
-        buf_free (vb->scratch);
     }
 
-    // case: MAIN component, depn line corresponding prim line in same VB (i.e. not sorted, or line failed the test to move to gc)
-    else if (zip_has_prim && // note: prim_line_i is set by sam_seg_QNAME only for depn lines in MAIN component
-             ({ prim_dl = DATA_LINE (vb->prim_line_i); prim_dl->QUAL.len; })) {
-        dl->QUAL.len = 0; // don't compress this line
+    // case: MAIN component, depn line corresponding prim line in same VB, and prim line has qual
+    else if (zip_has_prim && // note: prim_line_i is set by sam_seg_QNAME only for depn (with exceptions for STAR) lines in MAIN component
+             ({ prim_dl = DATA_LINE (vb->prim_line_i); !prim_dl->no_qual; })) {
 
-        sam_seg_QUAL_diff_vs_primary (vb, dl, STRa(qual_data), STRtxtw(prim_dl->QUAL), prim_dl->FLAG.bits.rev_comp, add_bytes);
+        if (vb->qual_missing) 
+            prim_has_qual_but_i_dont = true;
+        
+        else 
+            sam_seg_QUAL_diff_vs_primary (vb, dl, STRa(qual_data), STRtxtw(prim_dl->QUAL), prim_dl->FLAG.rev_comp);
+        
+        dl->dont_compress_QUAL = true; // don't compress this line
         qual_ctx->txt_len += add_bytes;
     }
 
-    // MAIN & PRIM: compress. 
+    // case: standard
     // Note: in PRIM, QUAL is not reconstructed (as QUAL is not in TOPLEVEL container) - it is consumed when loading SA Groups
     //       Instead, all-the-same QUALSA is reconstructed (SPECIAL copying from the SA Group)
     else {
-        qual_ctx->local.len += dl->QUAL.len;
-        qual_ctx->txt_len   += add_bytes;
+        qual_ctx->local.len32 += dl->QUAL.len;
+        qual_ctx->txt_len     += add_bytes;
     }   
+
+    // seg SPECIAL. note: prim this is all-the-same and segged in sam_seg_QUAL_initialize
+    if (!sam_is_prim_vb)
+        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_QUAL, '0' + prim_has_qual_but_i_dont }, 3, SAM_QUAL, 0); 
 
     // get QUAL score, consumed by mate ms:i
     if (!segconf.running && segconf.sam_ms_type == ms_BIOBAMBAM)
-        dl->QUAL_score = /*xxx qual_ctx->last_value.i =*/ sam_get_QUAL_score (vb, STRa(qual_data));
+        dl->QUAL_score = sam_get_QUAL_score (vb, STRa(qual_data));
  
     // get stats on qual scores
     if (segconf.running)
         segconf_update_qual (STRa (qual_data));
+
+    COPY_TIMER (sam_seg_QUAL);
+}
+
+//-----------------------------------------------------------------------------------------------------
+// OQ:Z - "Original QUAL" 
+// "Original base quality, usually before recalibration. Same encoding as QUAL" - https://samtools.github.io/hts-specs/SAMtags.pdf
+//-----------------------------------------------------------------------------------------------------
+void sam_seg_OQ_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(oq), unsigned add_bytes)
+{
+    dl->OQ = (TxtWord){ .index = BNUMtxt (oq), .len = oq_len };
+    CTX(OPTION_OQ_Z)->local.len32 += oq_len;
+    CTX(OPTION_OQ_Z)->txt_len     += add_bytes;
 }
 
 //---------
@@ -226,7 +269,7 @@ static void sam_piz_QUAL_undiff_vs_primary (VBlockSAMP vb, STRp (prim_qual), boo
 {
     ContextP qualsa_ctx = LOADED_CTX(SAM_QUALSA);
 
-    bool xstrand = (last_flags.bits.rev_comp != prim_revcomp);
+    bool xstrand = (last_flags.rev_comp != prim_revcomp);
 
     uint32_t qual_len = prim_qual_len - vb->hard_clip[0] - vb->hard_clip[1];
     rom diff = Bc (qualsa_ctx->local, qualsa_ctx->next_local);
@@ -256,14 +299,12 @@ static void sam_piz_QUAL_primary (VBlockSAMP vb)
     buf_free (vb->scratch);
 }
 
-void sam_reconstruct_missing_quality (VBlockP vb, char c, bool reconstruct)
+void sam_reconstruct_missing_quality (VBlockP vb, bool reconstruct)
 {
-    ASSERT (c==' ' || c==127, "%s: Expecting c=%u to 32 or 127", LN_NAME, c);
+    if (reconstruct) 
+        RECONSTRUCT1 ('*');
 
-    if (reconstruct) RECONSTRUCT1 ('*');
-
-    VB_SAM->qual_missing = (c==' ') ? QUAL_MISSING_STANDARD // sam_zip_qual re-wrote a '*' marking 'unavailable' as ' ' to avoid confusing with '*' as a valid quality score
-                         /*c==127*/ : QUAL_MISSING_PYSAM;   // 127 written by bam_seg_txt_line to support pysam BAM reconstruction (introduced V14)
+    VB_SAM->qual_missing = true;
 }
 
 // Note: in PRIM, it is called with ctx=QUALSA, in MAIN and DEPN with ctx=QUAL
@@ -271,19 +312,20 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
 {
     VBlockSAMP vb = (VBlockSAMP)vb_;
     char *qual = BAFTtxt;
-    const SAGroupType *g = vb->sa_grp;
+    const Sag *g = vb->sag;
+    bool prim_has_qual_but_i_dont = snip[0] - '0';
 
-    // case: reconstruct by copying from SA Group 
-    if (SAM_PIZ_HAS_SA_GROUP) {
+    // case: reconstruct by copying from SA Group (except if we are depn and group has no qual)
+    if (SAM_PIZ_HAS_SA_GROUP && (sam_is_prim_vb || (sam_is_depn_vb && !g->no_qual))) {
         if (!reconstruct) {}
 
-        else if (g->no_qual) 
-            RECONSTRUCT1('*');
+        else if (g->no_qual || prim_has_qual_but_i_dont) 
+            sam_reconstruct_missing_quality (VB, reconstruct);
 
         else if (sam_is_depn_vb) {
             sam_get_sa_grp_qual (vb); // uncompress PRIM qual to vb->scratch
             
-            sam_piz_QUAL_undiff_vs_primary (vb, STRb(vb->scratch), vb->sa_grp->revcomp, false);                
+            sam_piz_QUAL_undiff_vs_primary (vb, STRb(vb->scratch), vb->sag->revcomp, false);                
             buf_free (vb->scratch);
         }
         else  // primary vb
@@ -293,26 +335,33 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
     // case: MAIN component, reconstruct depn line against prim line in this VB
     else if (sam_is_main_vb && 
              VER(14) && // up to v13, we could have buddy lines for sup/sec which are not prim lines
-             piz_has_buddy && (last_flags.bits.supplementary || last_flags.bits.secondary)) {
+             piz_has_prim) {
 
         HistoryWord word = *B(HistoryWord, ctx->history, vb->buddy_line_i); // QUAL is always stored as LookupTxtData or LookupPerLine
-        SamFlags prim_flags = { .value = *B(int64_t, CTX(SAM_FLAG)->history, vb->buddy_line_i) };
+        SamFlags prim_flags = { .value = history64 (SAM_FLAG, vb->buddy_line_i) };
+        rom prim_qual = (word.lookup == LookupTxtData) ? Btxt(word.index) : Bc(ctx->per_line, word.index);
 
-        sam_piz_QUAL_undiff_vs_primary (vb, 
-                                        (word.lookup == LookupTxtData) ? Btxt(word.index) : Bc(ctx->per_line, word.index),
-                                        word.len, prim_flags.bits.rev_comp, flag.out_dt == DT_BAM);                
+        if ((uint8_t)*prim_qual == (IS_RECON_BAM ? 0xff : '*'))
+            goto no_diff; // in case prim has no qual - seg did not diff (the current line may or may not have qual)
+
+        else if (prim_has_qual_but_i_dont)
+            sam_reconstruct_missing_quality (VB, reconstruct);
+
+        else
+            sam_piz_QUAL_undiff_vs_primary (vb, prim_qual, word.len, prim_flags.rev_comp, flag.out_dt == DT_BAM);                
     } 
         
     // case: reconstruct from data in local
-    else switch (ctx->ltype) { // the relevant subset of ltypes from reconstruct_from_ctx_do
-        case LT_CODEC:
-            codec_args[ctx->lcodec].reconstruct (VB, ctx->lcodec, ctx); break;
+    else no_diff: 
+        switch (ctx->ltype) { // the relevant subset of ltypes from reconstruct_from_ctx_do
+            case LT_CODEC:
+                codec_args[ctx->lcodec].reconstruct (VB, ctx->lcodec, ctx, NULL, 0); break;
 
-        case LT_SEQUENCE: 
-            reconstruct_from_local_sequence (VB, ctx, NULL, 0, reconstruct); break;
+            case LT_SEQUENCE: 
+                reconstruct_from_local_sequence (VB, ctx, NULL, 0, reconstruct); break;
 
-        default: ASSPIZ (false, "Invalid ltype=%s for QUAL", lt_name (ctx->ltype));
-    }
+            default: ASSPIZ (false, "Invalid ltype=%s for QUAL", lt_name (ctx->ltype));
+        }
 
     uint32_t qual_len = BAFTtxt - qual;
 
@@ -322,9 +371,6 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
     
     else if (VER(14) && segconf.sam_ms_type == ms_BIOBAMBAM) // note: segconf.sam_ms_type is populated in PIZ since v14
         *B(int64_t, CTX(OPTION_ms_i)->history, vb->line_i) = sam_get_QUAL_score (vb, STRa(qual));
-
-    //xxx if (reconstruct) // note: At this, this is only used for translating to BAM, so not needed if not reconstructed
-    //     vb->qual_missing = (BAFTtxt - qual == 1 && *qual == '*'); 
 
     return !VER(14); // has new value for files up to v13
 }
@@ -338,16 +384,16 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_QUAL)
     if (VB_SAM->qual_missing) {
         BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)Btxt(vb->line_start);
         uint32_t l_seq = LTEN32 (alignment->l_seq);
-
+        
         if (!l_seq) // option 1
             vb->txt_data.len--;
         
-        else if (VB_SAM->qual_missing == QUAL_MISSING_STANDARD) {  // option 2 - missing QUAL according to SAM spec
+        else if (VB_SAM->qual_missing && !segconf.pysam_qual) {  // option 2 - missing QUAL according to SAM spec
             memset (BLSTtxt, 0xff, l_seq); // override the '*' and l_seq-1 more
             vb->txt_data.len += l_seq - 1;
         }
 
-        else /* QUAL_MISSING_PYSAM */ {  // option 3 - missing QUAL as created by pysam (non-compliant with SAM spec)
+        else {  // option 3 - missing QUAL as created by pysam (non-compliant with SAM spec)
             *BLSTtxt = 0xff;
             memset (BAFTtxt, 0, l_seq-1); // filler is 0 instead of 0xff as in SAM SPEC
             vb->txt_data.len += l_seq - 1;
@@ -387,7 +433,7 @@ TRANSLATOR_FUNC (sam_piz_sam2fastq_QUAL)
 
 // ms:i: (output of bamsormadup and other biobambam tools - ms in small letters), created here: https://github.com/gt1/libmaus/tree/master/src/libmaus/bambam/BamAlignmentDecoderBase.cpp getScore 
 // It is the sum of phred values of mate's QUAL, but only phred values >= 15
-void sam_seg_ms_field (VBlockSAMP vb, ValueType ms, unsigned add_bytes)
+void sam_seg_ms_i (VBlockSAMP vb, ValueType ms, unsigned add_bytes)
 {
     ZipDataLineSAM *mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is NO_LINE
 
@@ -396,9 +442,9 @@ void sam_seg_ms_field (VBlockSAMP vb, ValueType ms, unsigned add_bytes)
     if (zip_has_mate && mate_dl->QUAL_score == ms.i)     // successful in ~97% of lines with mate
         seg_by_ctx (VB, STRa(ms_mate_snip), channel_ctx, add_bytes); // note: prior to v14, we stored ms qual_score in QUAL history, not in ms:i history 
     else {
-        channel_ctx->dynamic_size_local = true; 
+        channel_ctx->ltype = LT_DYN_INT; 
         seg_integer (VB, channel_ctx, ms.i, true, add_bytes);    
     }
 
-    seg_by_did_i (VB, STRa(vb->mux_ms.snip), OPTION_ms_i, 0); // de-multiplexor
+    seg_by_did (VB, STRa(vb->mux_ms.snip), OPTION_ms_i, 0); // de-multiplexor
 }

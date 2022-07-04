@@ -39,16 +39,16 @@ void sam_vb_release_vb (VBlockSAMP vb)
     vb->a_index = vb->x_index = vb->y_index = 0;
     vb->md_verified = 0;
     vb->qual_codec_no_longr = vb->has_qual = false;
-    vb->seq_missing = vb->cigar_missing = vb->check_for_gc = vb->RNEXT_is_equal = 0;
-    vb->qual_missing = 0;
-    vb->sa_grp = 0;
+    vb->qual_missing = vb->seq_missing = vb->cigar_missing = vb->check_for_gc = vb->RNEXT_is_equal = 0;
+    vb->sag = 0;
     vb->sa_aln = 0;
     vb->comp_qual_len = vb->comp_cigars_len = 0;
     vb->XG_inc_S = 0;
     vb->first_grp_i = 0;
-    vb->sa_grp_line_i = 0;
+    vb->sag_line_i = 0;
     vb->prim_line_i = vb->mate_line_i = 0;
     vb->depn_clipping_type = 0;
+    vb->prim_near_count = vb->mate_line_count = vb->prim_far_count = 0;
 
     memset (&vb->first_idx, 0, (char*)&vb->after_idx - (char*)&vb->first_idx); // all idx's 
     memset (&vb->mux_PNEXT, 0, sizeof(vb->mux_PNEXT));
@@ -61,7 +61,7 @@ void sam_vb_release_vb (VBlockSAMP vb)
     memset (&vb->mux_ms,    0, sizeof(vb->mux_ms));
     memset (&vb->mux_AS,    0, sizeof(vb->mux_AS));
     memset (&vb->mux_YS,    0, sizeof(vb->mux_YS));
-    memset (&vb->mux_RG,    0, sizeof(vb->mux_RG));
+    memset (&vb->mux_buddied_z_fields, 0, sizeof(vb->mux_buddied_z_fields));
     
     buf_free (vb->bd_bi_line);
     buf_free (vb->XG);
@@ -69,8 +69,8 @@ void sam_vb_release_vb (VBlockSAMP vb)
     buf_free (vb->binary_cigar);
     buf_free (vb->textual_seq);
     buf_free (vb->md_M_is_ref);
-    buf_free (vb->sa_groups);
-    buf_free (vb->sa_alns);
+    buf_free (vb->sag_grps);
+    buf_free (vb->sag_alns);
     buf_free (vb->sa_prim_cigars);
     buf_free (vb->qname_hash);
     buf_free (vb->line_textual_cigars);
@@ -84,8 +84,8 @@ void sam_vb_destroy_vb (VBlockSAMP vb)
     buf_destroy (vb->binary_cigar);
     buf_destroy (vb->textual_seq);
     buf_destroy (vb->md_M_is_ref);
-    buf_destroy (vb->sa_groups);
-    buf_destroy (vb->sa_alns);
+    buf_destroy (vb->sag_grps);
+    buf_destroy (vb->sag_alns);
     buf_destroy (vb->sa_prim_cigars);
     buf_destroy (vb->qname_hash);
     buf_destroy (vb->line_textual_cigars);
@@ -97,16 +97,16 @@ void sam_reset_line (VBlockP vb_)
     VBlockSAMP vb = (VBlockSAMP)vb_;
 
     vb->textual_cigar.len = vb->binary_cigar.len = vb->binary_cigar.next = 0;
-    vb->seq_missing = vb->cigar_missing = false;
-    vb->qual_missing = QUAL_NOT_MISSING;
+    vb->qual_missing = vb->seq_missing = vb->cigar_missing = false;
     vb->XG.len = 0;
-    vb->ref_consumed         = 0;
-    vb->ref_and_seq_consumed = 0;
+    vb->seq_len/*xxx*/ = 0;
+    vb->ref_consumed = vb->ref_and_seq_consumed = vb->c2t_minus_g2a = 0;
     vb->soft_clip[0] = vb->soft_clip[1] = 0;
     vb->hard_clip[0] = vb->hard_clip[1] = 0;
     vb->deletions = vb->insertions = 0;
     vb->mismatch_bases_by_SEQ = vb->mismatch_bases_by_MD = 0;
-
+    vb->c2t_minus_g2a = 0;
+    
     if (command == PIZ) {
         vb->buddy_line_i = NO_LINE; 
         vb->chrom_node_index = WORD_INDEX_NONE;
@@ -146,8 +146,8 @@ uint16_t bam_reg2bin (int32_t first_pos, int32_t last_pos)
 DisFlagsStr sam_dis_flags (SamFlags f)
 {
     DisFlagsStr s;
-    sprintf (s.s, "multi_segments=%u is_aligned=%u unmapped=%u:%u revcomp=%u:%u mate#=%u:%u secondary=%u failfilt=%u dup=%u supp=%u",
-             f.bits.multi_segments, f.bits.is_aligned, f.bits.unmapped, f.bits.next_unmapped, f.bits.rev_comp, f.bits.next_rev_comp, 
-             f.bits.is_first, f.bits.is_last, f.bits.secondary, f.bits.filtered, f.bits.duplicate, f.bits.supplementary);
+    sprintf (s.s, "multi_segs=%u is_aligned=%u unmapped=%u:%u revcomp=%u:%u mate#=%u:%u secondary=%u failfilt=%u dup=%u supp=%u",
+             f.multi_segs, f.is_aligned, f.unmapped, f.next_unmapped, f.rev_comp, f.next_rev_comp, 
+             f.is_first, f.is_last, f.secondary, f.filtered, f.duplicate, f.supplementary);
     return s;
 }

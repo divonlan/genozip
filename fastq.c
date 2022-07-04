@@ -256,7 +256,7 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
     }
 
     // in --stats, consolidate stats into SQBITMAP
-    stats_set_consolidation (VB, FASTQ_SQBITMAP, 8, FASTQ_NONREF, FASTQ_NONREF_X, FASTQ_GPOS, FASTQ_STRAND, FASTQ_SEQMIS_A, FASTQ_SEQMIS_C, FASTQ_SEQMIS_G, FASTQ_SEQMIS_T);
+    ctx_consolidate_stats (VB, FASTQ_SQBITMAP, 9, FASTQ_NONREF, FASTQ_NONREF_X, FASTQ_GPOS, FASTQ_STRAND, FASTQ_SEQMIS_A, FASTQ_SEQMIS_C, FASTQ_SEQMIS_G, FASTQ_SEQMIS_T, DID_EOL);
 
     COPY_TIMER (seg_initialize);
 }
@@ -378,19 +378,19 @@ static void fastq_seg_line3 (VBlockFASTQ *vb, STRp(line3), STRp(desc))
     }
 
     if (flag.optimize_DESC) {
-        seg_by_did_i (VB, "", 0, FASTQ_LINE3, 1); // account for the '+' (segged as a toplevel container prefix)
+        seg_by_did (VB, "", 0, FASTQ_LINE3, 1); // account for the '+' (segged as a toplevel container prefix)
         vb->recon_size -= line3_len; 
     }
     
     else if (segconf.line3 == L3_EMPTY) {
         ASSSEG (!line3_len || flag.optimize_DESC, line3, "Invalid FASTQ file format: expecting middle line to be a \"+\", but it is \"%.*s\"", line3_len+1, line3-1);
-        seg_by_did_i (VB, "", 0, FASTQ_LINE3, 1); // account for the '+' (segged as a toplevel container prefix)
+        seg_by_did (VB, "", 0, FASTQ_LINE3, 1); // account for the '+' (segged as a toplevel container prefix)
     }
     
     else if (segconf.line3 == L3_COPY_DESC) {
         ASSSEG (str_issame_(STRa(line3), STRa(desc)), line3, 
                 "Invalid FASTQ file format: expecting middle line to be a \"+\" followed by a copy of the description line, but it is \"%.*s\"", line3_len+1, line3-1); 
-        seg_by_did_i (VB, STRa(copy_desc_snip), FASTQ_LINE3, 1 + line3_len); // +1 - account for the '+' (segged as a toplevel container prefix)
+        seg_by_did (VB, STRa(copy_desc_snip), FASTQ_LINE3, 1 + line3_len); // +1 - account for the '+' (segged as a toplevel container prefix)
     }
 
     else if (segconf.line3 == L3_QF) 
@@ -454,8 +454,12 @@ static void fastq_seg_sequence (VBlockFASTQ *vb, STRp(seq))
         buf_alloc (VB, &nonref_ctx->local, seq_len + 3, vb->txt_data.len / 64, char, CTX_GROWTH, "contexts->local"); 
         buf_add (&nonref_ctx->local, seq, seq_len);
 
+        // TO DO: add seq_len_by_qname also to the case of aligned sequence ^ 
+        bool seq_len_by_qname = segconf.qname_seq_len_dict_id.num &&       // QNAME flavor has "length=""
+        seq_len == ECTX(segconf.qname_seq_len_dict_id)->last_value.i; // length is equal seq_len
+
         // case: we don't need to consume pair-1 gpos (bc we are pair-1, or pair-1 was not aligned): look up from NONREF
-        SNIPi2 (SNIP_SPECIAL, FASTQ_SPECIAL_unaligned_SEQ, seq_len);
+        SNIPi2 (SNIP_SPECIAL, FASTQ_SPECIAL_unaligned_SEQ, seq_len_by_qname ? 0 : seq_len);
         seg_by_ctx (VB, STRa(snip), CTX(FASTQ_SQBITMAP), 0); // note: FASTQ_SQBITMAP is always segged whether read is aligned or not
         CTX(FASTQ_NONREF)->txt_len += seq_len; // account for the txt data in NONREF
     }
@@ -569,7 +573,7 @@ COMPRESSOR_CALLBACK (fastq_zip_qual)
 {
     ZipDataLineFASTQ *dl = DATA_LINE (vb_line_i);
 
-    // note: maximum_len might be shorter than the data available if we're just sampling data in zip_assign_best_codec
+    // note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec
     *line_data_len  = MIN_(dl->seq_len, maximum_size);
     
     if (!line_data) return; // only lengths were requested
@@ -676,6 +680,7 @@ bool fastq_piz_is_paired (void)
 CONTAINER_FILTER_FUNC (fastq_piz_filter)
 {
     if (dict_id.num == _FASTQ_TOPLEVEL) {
+        
         // case: --header-only: dont show items 2+. note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast
         if (flag.header_only_fast && !flag.grep && item >= 2) 
             return false; // don't reconstruct this item (non-header textual)
@@ -777,7 +782,16 @@ SPECIAL_RECONSTRUCTOR (fastq_special_unaligned_SEQ)
     else {
         if (flag.show_aligner) iprintf ("%s: unaligned\n", LN_NAME);
 
-        reconstruct_from_local_sequence (vb, CTX(FASTQ_NONREF), STRa(snip), reconstruct);
+        // case: take seq_len from DESC item with length=
+        if (snip_len==1 && *snip=='0') {
+            STRl(seq_len_str, 12);
+            seq_len_str_len = str_int (ECTX(segconf.qname_seq_len_dict_id)->last_value.i, seq_len_str);
+            reconstruct_from_local_sequence (vb, CTX(FASTQ_NONREF), STRa(seq_len_str), reconstruct);
+        }
+        else {
+            reconstruct_from_local_sequence (vb, CTX(FASTQ_NONREF), STRa(snip), reconstruct);
+            vb->seq_len = CTX(FASTQ_NONREF)->next_local - CTX(FASTQ_NONREF)->last_value.i;
+        }
     }
 
     return NO_NEW_VALUE;
@@ -898,4 +912,20 @@ void fastq_reset_line (VBlockP vb)
 {
     CTX(FASTQ_SQBITMAP)->pair1_is_aligned = VER(14) ? PAIR1_ALIGNED_UNKNOWN 
                                                     : PAIR1_ALIGNED; // up to v13, all lines had alignment data, even if unmapped
+}
+
+//---------------------------------------------------------
+// FASTQ-specific fields in genozip header
+//---------------------------------------------------------
+
+void fastq_zip_genozip_header (SectionHeaderGenozipHeader *header)
+{
+    header->fastq.segconf_seq_len_dict_id = segconf.qname_seq_len_dict_id; // v14
+}
+
+void fastq_piz_genozip_header (const SectionHeaderGenozipHeader *header)
+{
+    if (VER(14)) {
+        segconf.qname_seq_len_dict_id = header->fastq.segconf_seq_len_dict_id; 
+    }
 }

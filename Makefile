@@ -31,15 +31,17 @@ endif
 
 SRC_DIRS = zlib bzlib lzma bsc libdeflate htscodecs compatibility
 
-MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c license.c 				\
-		  data_types.c bits.c progress.c writer.c tar.c chrom.c qname.c tokenizer.c 						\
+MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c license.c 							\
+		  data_types.c bits.c progress.c writer.c tar.c chrom.c qname.c tokenizer.c 							\
           zip.c piz.c reconstruct.c recon_history.c seg.c zfile.c aligner.c flags.c digest.c mutex.c threads.c 	\
 		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c 						\
 		  vcf_piz.c vcf_seg.c vcf_gt.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c 		\
 		  vcf_refalt.c vcf_tags.c vcf_ps_pid.c vcf_linesort.c vcf_format.c       								\
-		  sam_seg.c sam_piz.c sam_shared.c sam_header.c sam_md.c sam_tlen.c sam_cigar.c sam_fields.c 			\
-		  sam_seq.c sam_qual.c sam_gc_zip.c sam_gc_piz.c sam_gc_load_grps.c sam_gc_ingest_grps.c sam_pos.c	 	\
-		  bam_seg.c bam_seq.c bam_show.c sam_bsseeker2.c sam_sa.c 												\
+		  sam_seg.c sam_piz.c sam_shared.c sam_header.c sam_md.c sam_tlen.c sam_cigar.c sam_fields.c  			\
+		  sam_sa.c bam_seg.c bam_seq.c bam_show.c                                             					\
+		  sam_seq.c sam_qual.c sam_sag_zip.c sam_sag_piz.c sam_sag_load.c sam_sag_ingest.c sam_pos.c	     	\
+		  sam_bwa.c sam_bowtie2.c sam_bsseeker2.c sam_bsbolt.c sam_bismark.c sam_gem3.c sam_tmap.c sam_hisat2.c \
+		  sam_blasr.c sam_minimap2.c sam_scrna-seq.c  	      														\
 		  fasta.c fastq.c gff3.c me23.c phylip.c chain.c kraken.c locs.c generic.c 								\
 		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c lookback.c 				\
 		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c	\

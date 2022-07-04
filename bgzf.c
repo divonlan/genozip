@@ -108,9 +108,10 @@ int32_t bgzf_read_block (File *file, // txt_file is not yet assigned when called
     uint32_t bytes = bgzf_fread (file, h+1, body_size);
 
     int save_errno = errno; // we wan't to report errno of fread, not ftell.
-    ASSERT (bytes == body_size, "failed to read body of BGZF block #%"PRId64" (Unexpected-end-of-file=%s bytes_so_far=%"PRId64" file_size=%"PRId64" ftell=%"PRId64") in %s - expecting %u bytes but read %u: %s", 
-            file->txt_bgzf_blocks_so_far, feof ((FILE *)file->file) ? "YES" : "No", file->disk_so_far, file->disk_size, ftello64 ((FILE *)file->file), 
-            file->basename, body_size, bytes, 
+    ASSERT (bytes == body_size, "%s BGZF block #%"PRId64" of %s - expecting %u bytes but read %u (bytes_so_far=%"PRId64" file_size=%"PRId64" ftell=%"PRId64" err=\"%s\")", 
+            feof ((FILE *)file->file) ? "Unexpected end of file while reading" : "Failed to read body of", 
+            file->txt_bgzf_blocks_so_far, file->basename, body_size, bytes, 
+            file->disk_so_far, file->disk_size, ftello64 ((FILE *)file->file), 
             (file->is_remote && save_errno == ESPIPE) ? "Disconnected from remote host" : strerror (save_errno));
 
     file->txt_bgzf_blocks_so_far++;

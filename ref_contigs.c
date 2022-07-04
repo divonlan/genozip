@@ -51,7 +51,7 @@ void ref_contigs_populate_aligned_chroms (void)
         if (already_exists) continue;
 
         // add if chrom doesn't already exist ()
-        if ((r->num_set = bits_num_bits_set (&r->is_set))) {
+        if ((r->num_set = bits_num_set_bits (&r->is_set))) {
             
             WordIndex chrom_index = ctx_populate_zf_ctx (CHROM, STRa(r->chrom_name), r->range_i); // add to dictionary
 
@@ -126,7 +126,11 @@ void ref_contigs_compress_internal (Reference ref)
         // chrom_word_index might still be WORD_INDEX_NONE. We get it now from the z_file data
         if (r->chrom == WORD_INDEX_NONE) {
             r->chrom = chrom_get_by_name (STRa(r->chrom_name));
-            ASSERT (r->chrom != WORD_INDEX_NONE, "Unable to find chrom index for contig \"%.*s\"", STRf(r->chrom_name));
+            
+            if (r->chrom == WORD_INDEX_NONE) {
+                buf_dump_to_file ("RNAME.dict", &ZCTX(CHROM)->dict, 1, false, true, true, false);
+                ABORT ("Unable to find chrom index for contig \"%.*s\"", STRf(r->chrom_name));
+            }
         }
 
         // first range of a contig
@@ -218,8 +222,8 @@ static void ref_contigs_load_set_contig_names (Reference ref)
     for (uint32_t i=0; i < contig_len; i++) {
         WordIndex chrom_index = contig[i].ref_index;
         ASSERT (chrom_index >= 0 && chrom_index < chrom_len, "Expecting contig[%u].ref_index=%d to be in the range [0,%d]", i, chrom_index, (int)chrom_len-1);
-        contig[i].char_index = chrom[chrom_index].char_index;
-        contig[i].snip_len   = chrom[chrom_index].snip_len;
+        contig[i].char_index = chrom[chrom_index].index;
+        contig[i].snip_len   = chrom[chrom_index].len;
     }
 }
 
@@ -241,7 +245,7 @@ void ref_contigs_load_contigs (Reference ref)
 
     if (flag.show_ref_contigs) { 
         ref_contigs_show (&ref->ctgs.contigs, false);
-        if (exe_type == EXE_GENOCAT) exit_ok();  // in genocat this, not the data
+        if (is_genocat) exit_ok();  // in genocat this, not the data
     }
 
     // check chromosome naming - assume the first contig is a chromosome

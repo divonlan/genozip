@@ -140,6 +140,8 @@ void digest_piz_verify_one_vb (VBlockP vb)
                   recon_size_warn,
                   DIGEST_NAME, txtfile_dump_vb (vb, z_name), vb->vblock_i, file_guess_original_filename (txt_file));
 
+            if (flag.test) exit_on_error(false);
+
             RESTORE_FLAG (quiet);
 
             failed = true; // no point in test the rest of the vblocks as they will all fail - MD5 is commulative

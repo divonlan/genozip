@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
-// memory management - when running the same code by the same thread for another variant block - we reuse
+// memory management - when running the same code by the same thread for another VB - we reuse
 // the previous variant's block memory. this way we save repetitive malloc/free cycles which might
 // be very time consuming.
 
@@ -519,8 +519,8 @@ uint64_t buf_alloc_do (VBlockP vb,
 
 #define REQUEST_TOO_BIG_THREADSHOLD (3ULL << 30) // 3 GB
     if (requested_size > REQUEST_TOO_BIG_THREADSHOLD && !buf->can_be_big) // use WARN instead of ASSERTW to have a place for breakpoint
-        WARN ("Warning: buf_alloc called from %s:%u requested %s. This is suspiciously high and might indicate a bug. buf=%s line_i=%d",
-              func, code_line, str_size (requested_size).s, buf_desc (buf).s, vb->line_i);
+        WARN ("Warning: buf_alloc called from %s:%u requested %s. This is suspiciously high and might indicate a bug. vb_i=%u buf=%s line_i=%d",
+              func, code_line, str_size (requested_size).s, vb->vblock_i, buf_desc (buf).s, vb->line_i);
 
     // sanity checks
     ASSERT (buf->type == BUF_REGULAR || buf->type == BUF_UNALLOCATED, "called from %s:%u: cannot buf_alloc a buffer of type %s. details: %s", 
@@ -558,8 +558,8 @@ uint64_t buf_alloc_do (VBlockP vb,
             mutex_lock (overlay_mutex);
             uint16_t *overlay_count = (uint16_t*)(buf->data + buf->size + sizeof(uint64_t));
 
-            char *old_data = buf->data;
-            uint32_t old_len = buf->len;
+            rom old_data     = buf->data;
+            uint64_t old_len = buf->len;
 
             // if there is currently an overlay buffer on top of our buffer - abandon the memory
             // (leave it to the overlay buffer(s) that will eventually free() it), and allocate fresh memory
@@ -619,17 +619,19 @@ finish:
     return buf->size;
 }
 
-BitsP buf_alloc_bitarr_do (VBlockP vb, BufferP buf, uint64_t nbits, FUNCLINE, rom name)
+BitsP buf_alloc_bits_do (VBlockP vb, BufferP buf, uint64_t nbits, FUNCLINE, rom name)
 {
     uint64_t nwords = roundup_bits2words64 (nbits);
     buf_alloc_do (vb, buf, nwords * sizeof (uint64_t), 1, func, code_line, name);
     buf->nbits  = nbits;   
     buf->nwords = nwords; 
 
+    bits_clear_excess_bits_in_top_word ((BitsP)buf);
+
     return (BitsP)buf;
 }
 
-void buf_alloc_bitarr_buffer_do (VBlockP vb, BufferP buf, uint64_t nbits, FUNCLINE, rom name)
+void buf_alloc_bits_buffer_do (VBlockP vb, BufferP buf, uint64_t nbits, FUNCLINE, rom name)
 {
     uint64_t nwords = roundup_bits2words64 (nbits);
     buf_alloc_do (vb, buf, nwords * sizeof (uint64_t), 1, func, code_line, name);
@@ -658,12 +660,12 @@ void buf_overlay_do (VBlockP vb,
                      uint64_t start_in_regular, // 0 means full overlay, and copy len 
                      FUNCLINE, rom name)
 {
-    // if this buffer was used by a previous VB as a regular buffer - we need to "destroy" it first
+     // if this buffer was used by a previous VB as a regular buffer - we need to "destroy" it first
     if (overlaid_buf->type == BUF_REGULAR && overlaid_buf->data == NULL && overlaid_buf->memory) {
         buf_low_level_free (overlaid_buf->memory, func, code_line);
         overlaid_buf->type = BUF_UNALLOCATED;
     }
-    
+   
     ASSERT (overlaid_buf->type == BUF_UNALLOCATED, "Call from %s:%u: cannot buf_overlay to a buffer %s already in use", func, code_line, buf_desc (overlaid_buf).s);
     ASSERT (regular_buf->type == BUF_REGULAR || regular_buf->type == BUF_MMAP, "Call from %s:%u: regular_buf %s in buf_overlay must be a regular or mmap buffer", func, code_line, buf_desc (regular_buf).s);
     ASSERT (regular_buf->overlayable, "Call from %s:%u: buf_overlay: buffer %s is not overlayble", func, code_line, buf_desc (regular_buf).s);
@@ -672,7 +674,7 @@ void buf_overlay_do (VBlockP vb,
     overlaid_buf->memory      = 0;
     overlaid_buf->overlayable = false;
     overlaid_buf->name        = name;
-    overlaid_buf->len         = start_in_regular ? 0 : regular_buf->len;
+    overlaid_buf->len         = start_in_regular ? 0ULL : regular_buf->len;
     // note: we don't add overlaid_buf to buf_list, and because of that we also don't set its overlaid_buf->vb because it won't get updated in buf_update_buf_list_vb_addr_change
 
     // full or partial buffer overlay - if size=0, copy len too and update overlay counter
@@ -1050,7 +1052,7 @@ void buf_add_string (VBlockP vb, BufferP buf, rom str)
     ASSERT (len < 10000000, "len=%"PRIu64" too long, looks like a bug", len);
 
     buf_add_more (vb, buf, str, len, buf->name ? buf->name : "string_buf"); // allocates one char extra
-    buf->data[buf->len] = '\0'; // string terminator without increasing buf->len
+    *BAFTc (*buf) = '\0'; // string terminator without increasing buf->len
 }
 
 void buf_print (BufferP buf, bool add_newline)
@@ -1111,7 +1113,7 @@ Bits *buf_zfile_buf_to_bitarray (BufferP buf, uint64_t nbits)
     ASSERT (roundup_bits2bytes (nbits) <= buf->len, "nbits=%"PRId64" indicating a length of at least %"PRId64", but buf->len=%"PRId64,
             nbits, roundup_bits2bytes (nbits), buf->len);
 
-    Bits *bitarr = buf_get_bitarray (buf);
+    Bits *bitarr = (BitsP)buf;
     bitarr->nbits  = nbits;
     bitarr->nwords = roundup_bits2words64 (bitarr->nbits);
 
@@ -1127,7 +1129,7 @@ Bits *buf_zfile_buf_to_bitarray (BufferP buf, uint64_t nbits)
 
 void buf_add_bit (BufferP buf, int64_t new_bit) 
 {
-    Bits *bar = buf_get_bitarray (buf);
+    Bits *bar = (BitsP)buf;
 
     ASSERT (bar->nbits < buf->size * 8, "no room in Buffer %s to extend the bitmap", buf->name);
     bar->nbits++;     
@@ -1141,7 +1143,7 @@ void buf_add_bit (BufferP buf, int64_t new_bit)
  
 uint64_t buf_extend_bits (BufferP buf, int64_t num_new_bits) 
 {
-    Bits *bar = buf_get_bitarray (buf);
+    Bits *bar = (BitsP)buf;
 
     ASSERT (bar->nbits + num_new_bits <= buf->size * 8, "Error in %s:%u: no room in Buffer %s to extend the bitmap: nbits=%"PRIu64", num_new_bits=%"PRId64", buf->size=%"PRIu64, 
             __FUNCLINE, buf->name, bar->nbits, num_new_bits, (uint64_t)buf->size);
@@ -1178,8 +1180,8 @@ bool buf_dump_to_file (rom filename, ConstBufferP buf, unsigned buf_word_width, 
 
     bool success;
     if (including_control_region) {
-        ASSERT (*(uint64_t *)(buf->memory) == UNDERFLOW_TRAP, "dumping to %s: buffer has underflowed", filename);
-        ASSERT (*(uint64_t *)(buf->data + buf->size) == OVERFLOW_TRAP, "dumping to %s: buffer has underflowed", filename);
+        ASSERT (*(uint64_t *)(buf->memory)           == UNDERFLOW_TRAP, "dumping to %s: buffer has underflowed", filename);
+        ASSERT (*(uint64_t *)(buf->data + buf->size) == OVERFLOW_TRAP,  "dumping to %s: buffer has overflowed",  filename);
 
         success = file_put_data (update_filename, buf->memory, buf->size + control_size, 0);
     }
@@ -1188,7 +1190,7 @@ bool buf_dump_to_file (rom filename, ConstBufferP buf, unsigned buf_word_width, 
 
     if (success && do_gzip) {
         char command[fn_len + 50];
-        sprintf (command, "gzip %s", update_filename);
+        sprintf (command, "gzip -f %s", update_filename);
         int ret = system (command);
         ASSERTW (!ret, "FYI: \"%s\" returned %d. No harm.", command, ret); 
 

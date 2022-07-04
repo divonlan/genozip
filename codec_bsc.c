@@ -44,7 +44,7 @@ COMPRESS (codec_bsc_compress)
             char *start1=0;
             uint32_t len1=0;        
             
-            // note: get what we need, might be less than what's available if calling from zip_assign_best_codec
+            // note: get what we need, might be less than what's available if calling from codec_assign_best_codec
             get_line_cb (vb, line_i, &start1, &len1, *uncompressed_len - vb->scratch.len, NULL); 
 
             if (start1 && len1) buf_add (&vb->scratch, start1, len1);

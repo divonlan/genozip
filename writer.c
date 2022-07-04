@@ -176,9 +176,9 @@ Bits *writer_get_is_dropped (VBIType vb_i)
 
     // allocate if needed. buffer was put in evb buffer_list by writer_init_vb_info
     if (!v->is_dropped) {
-        buf_alloc_bitarr (evb, &v->is_dropped_buf, v->num_lines, "is_dropped");
+        buf_alloc_bits (evb, &v->is_dropped_buf, v->num_lines, "is_dropped");
         buf_zero (&v->is_dropped_buf);
-        v->is_dropped = buf_get_bitarray (&v->is_dropped_buf);
+        v->is_dropped = (BitsP)&v->is_dropped_buf;
     }
 
     return v->is_dropped;
@@ -857,7 +857,7 @@ void writer_create_plan (void)
 
     if (flag.show_gheader == 2) { // --show-gheader=2 : show modified section list 
         sections_show_section_list (z_file->data_type);
-        if (exe_type == EXE_GENOCAT) exit_ok();
+        if (is_genocat) exit_ok();
     }
 
     // actual number of buffers - the maximum of any recon_plan in this z_file, but not less than 3 or more than num_vbs
@@ -865,7 +865,7 @@ void writer_create_plan (void)
 
     if (flag.show_recon_plan) {
         recon_plan_show (z_file, flag.luft, z_file->max_conc_writing_vbs, vblock_mb);    
-        if (exe_type == EXE_GENOCAT) exit_ok();
+        if (is_genocat) exit_ok();
     }
 
 #if defined _WIN32 || defined APPLE

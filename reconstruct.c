@@ -51,6 +51,7 @@ static int64_t reconstruct_from_delta (VBlockP vb,
                                        STRp(delta_snip),
                                        bool reconstruct) 
 {
+    ASSISLOADED (base_ctx);
     ASSPIZ0 (delta_snip, "delta_snip is NULL");
     ASSPIZ (base_ctx->flags.store == STORE_INT, "reconstructing %s - calculating delta \"%.*s\" from a base of %s, but %s, doesn't have STORE_INT",
             my_ctx->tag_name, STRf(delta_snip), base_ctx->tag_name, base_ctx->tag_name);
@@ -84,7 +85,7 @@ static int64_t reconstruct_from_delta (VBlockP vb,
 }
 
 #define ASSERT_IN_BOUNDS \
-    ASSPIZ (ctx->next_local < ctx->local.len, \
+    ASSPIZ (ctx->next_local < ctx->local.len32, \
             "unexpected end of ctx->local data in %s (len=%u next_local=%u ltype=%s lcodec=%s did_i=%u)", \
             ctx->tag_name, ctx->local.len32, ctx->next_local, lt_name (ctx->ltype), codec_name (ctx->lcodec), ctx->did_i)
 
@@ -135,14 +136,14 @@ int64_t reconstruct_from_local_int (VBlockP vb, ContextP ctx, char separator /* 
     int64_t num=0;
 
     switch (ctx->ltype) {
-        case LT_UINT8:  num = NEXTLOCAL(uint8_t,  ctx); break;
-        case LT_UINT32: num = NEXTLOCAL(uint32_t, ctx); break;
-        case LT_INT8:   num = NEXTLOCAL(int8_t,   ctx); break;
-        case LT_INT32:  num = NEXTLOCAL(int32_t,  ctx); break;
-        case LT_UINT16: num = NEXTLOCAL(uint16_t, ctx); break;
-        case LT_INT16:  num = NEXTLOCAL(int16_t,  ctx); break;
-        case LT_UINT64: num = NEXTLOCAL(uint64_t, ctx); break;
-        case LT_INT64:  num = NEXTLOCAL(int64_t,  ctx); break;
+        case LT_UINT8 : case LT_hex8 : case LT_HEX8 :  num = NEXTLOCAL(uint8_t,  ctx); break;
+        case LT_INT8  :                                num = NEXTLOCAL(int8_t,   ctx); break;
+        case LT_UINT16: case LT_hex16: case LT_HEX16:  num = NEXTLOCAL(uint16_t, ctx); break;
+        case LT_INT16 :                                num = NEXTLOCAL(int16_t,  ctx); break;
+        case LT_UINT32: case LT_hex32: case LT_HEX32:  num = NEXTLOCAL(uint32_t, ctx); break;
+        case LT_INT32 :                                num = NEXTLOCAL(int32_t,  ctx); break;
+        case LT_UINT64: case LT_hex64: case LT_HEX64:  num = NEXTLOCAL(uint64_t, ctx); break;
+        case LT_INT64 :                                num = NEXTLOCAL(int64_t,  ctx); break;
         default: 
             ASSPIZ (false, "Unexpected ltype=%s(%u) for ctx=\"%s\"", lt_name(ctx->ltype), ctx->ltype, ctx->tag_name); 
     }
@@ -153,6 +154,10 @@ int64_t reconstruct_from_local_int (VBlockP vb, ContextP ctx, char separator /* 
             RECONSTRUCT1 ('.');
             num = 0; // we consider FORMAT fields that are . to be 0.
         }
+
+        else if (ctx->ltype >= LT_hex8)
+            RECONSTRUCT_HEX (num, (ctx->ltype & 1)); // odd-number hex ltypes are upper case
+
         else 
             RECONSTRUCT_INT (num);
         
@@ -225,23 +230,17 @@ void reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, STRp(snip), bool
 {
     ASSERTNOTNULL (ctx);
 
-    // bool reconstruct = !piz_is_skip_section (vb, SEC_LOCAL, ctx->dict_id);
     if (!ctx->is_loaded) return;
-    uint32_t len;
 
-    // if we have length in the snip, update vb->seq_len (for example in FASTQ, we will a snip for seq but qual will use seq_len)
-    if (snip_len) vb->seq_len = atoi(snip);
+    uint32_t len = snip_len ? atoi (snip) : vb->seq_len;
 
-    // case: handle SAM missing quality (may be expressed as a ' ' or ASCII 127)
-    char c = ctx->local.data[ctx->next_local];
-    if ((VER(14) && ctx->flags.is_qual && (c == ' ' || c == 127)) ||
-        (!VER(14) && c == ' ')) { // prior to v14, we have no c=127, and also no is_qual flag
+    // case: handle SAM missing quality (expressed as a ' ')
+    if (*Bc(ctx->local, ctx->next_local) == ' ' && (ctx->flags.is_qual || !VER(14))) { // prior to v14, there was no is_qual flag
         len = 1;
-        sam_reconstruct_missing_quality (vb, c, reconstruct);
+        sam_reconstruct_missing_quality (vb, reconstruct);
     }
 
     else {
-        len = vb->seq_len;
         ASSPIZ (ctx->next_local + len <= ctx->local.len, "unexpected end of %s data: expecting ctx->next_local=%u + seq_len=%u <= local.len=%u", 
                 ctx->tag_name, ctx->next_local, len, ctx->local.len32);
 
@@ -384,12 +383,12 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
                 reconstruct_from_local_text (vb, base_ctx, reconstruct); // this will call us back recursively with the snip retrieved
                 break;
                 
-            case LT_CODEC:
-                if (reconstruct && snip_len) RECONSTRUCT_snip; // reconstruct this snip before adding the looked up data
-                codec_args[base_ctx->lcodec].reconstruct (vb, base_ctx->lcodec, base_ctx); break;
+            case LT_CODEC: // snip can optionally be the length of the sequence to be reconstructed
+                //xxx if (reconstruct && snip_len) RECONSTRUCT_snip; // reconstruct this snip before adding the looked up data
+                codec_args[base_ctx->lcodec].reconstruct (vb, base_ctx->lcodec, base_ctx, STRa(snip)); break;
                 break;
 
-            case LT_INT8 ... LT_UINT64:
+            case LT_INT8 ... LT_UINT64: case LT_hex32:
                 if (reconstruct && snip_len) RECONSTRUCT_snip; // reconstruct this snip before adding the looked up data
                 new_value.i = reconstruct_from_local_int (vb, base_ctx, 0, reconstruct);
                 has_new_value = HAS_NEW_VALUE;
@@ -546,7 +545,7 @@ done:
 static void reconstruct_peek_add_ctx_to_frozen_state (VBlockP vb, ContextP ctx); // forward declaration
 
 // returns reconstructed length or -1 if snip is missing and previous separator should be deleted
-int32_t reconstruct_from_ctx_do (VBlockP vb, DidIType did_i, 
+int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i, 
                                  char sep, // if non-zero, outputs after the reconstruction
                                  bool reconstruct, // if false, calculates last_value but doesn't output to vb->txt_data
                                  rom func)
@@ -559,7 +558,7 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, DidIType did_i,
     if (vb->frozen_state.prm8[0]) 
         reconstruct_peek_add_ctx_to_frozen_state (vb, ctx);
 
-    ASSPIZ0 (ctx->dict_id.num || ctx->did_i != DID_I_NONE, "ctx not initialized (dict_id=0)");
+    ASSPIZ0 (ctx->dict_id.num || ctx->did_i != DID_NONE, "ctx not initialized (dict_id=0)");
 
     // update ctx, if its an alias (only for primary field aliases as they have contexts, other alias don't have ctx)
     if (!ctx->dict_id.num) 
@@ -599,7 +598,7 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, DidIType did_i,
     // case: all data is only in local
     else if (ctx->local.len32) {
         switch (ctx->ltype) {
-        case LT_INT8 ... LT_UINT64 : {
+        case LT_INT8 ... LT_UINT64 : case LT_hex32: {
             int64_t value = reconstruct_from_local_int (vb, ctx, 0, reconstruct); 
 
             if (ctx->flags.store == STORE_INT) 
@@ -608,7 +607,7 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, DidIType did_i,
             break;
         }
         case LT_CODEC:
-            codec_args[ctx->lcodec].reconstruct (vb, ctx->lcodec, ctx); break;
+            codec_args[ctx->lcodec].reconstruct (vb, ctx->lcodec, ctx, NULL, 0); break;
 
         case LT_SEQUENCE: 
             reconstruct_from_local_sequence (vb, ctx, NULL, 0, reconstruct); break;
@@ -759,65 +758,3 @@ ValueType reconstruct_peek_do (VBlockP vb, DictId dict_id, pSTRp(txt))
     return reconstruct_peek (vb, ctx, txt, txt_len);
 }
 
-static uint32_t count_repsep (STRp (str), char repsep)
-{
-    uint32_t count = str_count_char (STRa(str), repsep);
-
-    // if last repeat separator is dropped - count last item
-    if (str_len && str[str_len-1] != repsep)
-        count++;
-
-    return count;
-}
-
-// peek a context, which is normally a container: if it is a container, return the number of
-// repeats. If it is not a container, or if the container is already reconstructedm
-// calculate repeats by counting the number of repsep's (and adding +1 if repsep isn't the final character)
-uint32_t reconstruct_peek_repeats (VBlockP vb, ContextP ctx, char repsep)
-{
-    // case: already reconstructed - count repsep
-    if (ctx_encountered (vb, ctx->did_i)) {
-        ASSPIZ (ctx->flags.store == STORE_INDEX, "Expecting ctx=%s to have STORE_INDEX, which for containers stores repeats", ctx->tag_name);
-        return ctx->last_value.i;
-    }
-
-    STR(snip);
-    WordIndex wi = PEEK_SNIP (ctx->did_i);
-
-    // case: container - get number of repeats from containter struct. note: containers are always
-    // segged with no_stons so they are never in local (see container_seg_do)
-    if (*snip == SNIP_CONTAINER)
-        return container_retrieve (vb, ctx, wi, snip+1, snip_len-1, 0, 0)->repeats;
-
-    // lookup snip: count repsep in local string
-    else if (snip_len == 1 && *snip == SNIP_LOOKUP) {
-        snip = Bc(ctx->local, ctx->next_local);
-        return count_repsep (snip, strlen (snip), repsep);
-    }
-
-    // dictionary non-container snip: count repsep in peeked string
-    else
-        return count_repsep (STRa(snip), repsep);
-}
-
-
-// peek a context which is normally a container and not yet encountered: return true if the container has the requested item
-bool reconstruct_peek_container_has_item (VBlockP vb, ContextP ctx, DictId item_dict_id, bool consume)
-{
-    ASSISLOADED(ctx);
-
-    // case: already reconstructed - not yet supported (not too difficult to add support for this case if needed)
-    ASSPIZ (!ctx_encountered (vb, ctx->did_i), "context %s is already encountered", ctx->tag_name);
-
-    STR(snip);
-    WordIndex wi = consume ? LOAD_SNIP (ctx->did_i) : PEEK_SNIP (ctx->did_i);
-
-    if (!snip || *snip != SNIP_CONTAINER) return false; // not a container, so definitely doesn't contain the item
-
-    ContainerP con = container_retrieve (vb, ctx, wi, snip+1, snip_len-1, 0, 0);
-
-    for (int i=0; i < con_nitems(*con); i++)
-        if (con->items[i].dict_id.num == item_dict_id.num) return true; // found item
-
-    return false; // item doesn't exist in this container
-}

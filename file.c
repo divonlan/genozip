@@ -718,13 +718,13 @@ static void file_initialize_bufs (File *file)
     INIT (vb_info[1]);
     INIT (line_info[0]);
     INIT (line_info[1]);
-    INIT (sa_alns);
-    INIT (sa_groups);
-    INIT (sa_groups_index);
-    INIT (sa_qnames);
-    INIT (sa_cigars);
-    INIT (sa_seq);
-    INIT (sa_qual);
+    INIT (sag_alns);
+    INIT (sag_grps);
+    INIT (sag_gps_index);
+    INIT (sag_qnames);
+    INIT (sag_cigars);
+    INIT (sag_seq);
+    INIT (sag_qual);
     INIT (rejects_report);
     INIT (apriori_tags);
     INIT (vb_sections_index);
@@ -753,7 +753,7 @@ static void file_initialize_z_add_to_buf_list (BufferP buf, FUNCLINE)
 
 static void file_initialize_z_file_data (File *file)
 {
-    memset (file->dict_id_to_did_i_map, 0xff, sizeof(file->dict_id_to_did_i_map)); // DID_I_NONE
+    memset (file->dict_id_to_did_i_map, 0xff, sizeof(file->dict_id_to_did_i_map)); // DID_NONE
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
         ctx_foreach_buffer (&file->contexts[i], true, file_initialize_z_add_to_buf_list);
@@ -934,7 +934,7 @@ File *file_open (rom filename, FileMode mode, FileSupertype supertype, DataType 
         if ((mode == WRITE || mode == WRITEREAD) && 
             is_file_exists && 
             !(!file->is_remote && !file->redirected && file_is_fifo (filename)) && // a fifo can be "overwritten" (that's just normal writing to a fifo)
-            !flag.force && 
+            !flag.force && !flag.biopsy && flag.biopsy_line.line_i == NO_LINE &&
             !(supertype==TXT_FILE && flag.test)   && // not testing piz
             !(supertype==Z_FILE && flag.seg_only) && // not zip with --seg-only
             !(supertype==Z_FILE && flag.show_bam) && // not zip with --show-bam
@@ -959,7 +959,7 @@ File *file_open (rom filename, FileMode mode, FileSupertype supertype, DataType 
     }
     else if (mode==READ) {  // stdin (can only be TXT_FILE, not Z_FILE)
         file->type = stdin_type; 
-        file->data_type = file_get_data_type (stdin_type, true);
+        file->data_type    = file_get_data_type (stdin_type, true);
         file->codec        = file_get_codec_by_txt_ft (file->data_type, file->type, false);
         file->source_codec = file_get_codec_by_txt_ft (file->data_type, file->type, true);
     }
@@ -1101,13 +1101,13 @@ void file_close (File **file_p,
         buf_destroy (file->vb_info[1]);
         buf_destroy (file->recon_plan);
         buf_destroy (file->txt_header_info);
-        buf_destroy (file->sa_groups);
-        buf_destroy (file->sa_groups_index);
-        buf_destroy (file->sa_alns);
-        buf_destroy (file->sa_qnames);
-        buf_destroy (file->sa_cigars);
-        buf_destroy (file->sa_seq);
-        buf_destroy (file->sa_qual);
+        buf_destroy (file->sag_grps);
+        buf_destroy (file->sag_gps_index);
+        buf_destroy (file->sag_alns);
+        buf_destroy (file->sag_qnames);
+        buf_destroy (file->sag_cigars);
+        buf_destroy (file->sag_seq);
+        buf_destroy (file->sag_qual);
         buf_destroy (file->rejects_report);
         buf_destroy (file->apriori_tags);
         buf_destroy (file->vb_sections_index);

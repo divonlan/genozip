@@ -101,8 +101,7 @@ void reconstruct_set_buddy (VBlockP vb)
     int32_t num_lines_back = reconstruct_from_local_int (vb, buddy_ctx, 0, false);
 
     // a bug that existed 12.0.41-13.0.1 (see bug 367): we stored buddy in machine endianty instead of BGEN32.
-    // When we reach this point pizzing in a buggy file, num_lines_back will be in BGEN since piz_adjust_one_local set it. 
-    // We detect buggy files by local.prm8[0]=0 (see sam_seg_initialize) and convert it back to machine endianity.
+    // We detect buggy files by local.prm8[0]=0 (see sam_seg_qname_initialize) and convert it back to machine endianity.
     if (!buddy_ctx->local.prm8[0])    
         num_lines_back = BGEN32 ((uint32_t)num_lines_back);
 
@@ -124,7 +123,7 @@ void reconstruct_from_buddy_get_textual_snip (VBlockP vb, ContextP ctx, pSTRp(sn
     switch (word.lookup) {
         case LookupTxtData : buf = &vb->txt_data  ; break;
         case LookupDict    : buf = &ctx->dict; 
-                             char_index = B(CtxWord, ctx->word_list, word.index)->char_index; 
+                             char_index = B(CtxWord, ctx->word_list, word.index)->index; 
                              break;
         case LookupLocal   : buf = &ctx->local    ; break;
         case LookupPerLine : buf = &ctx->per_line ; break;

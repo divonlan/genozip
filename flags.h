@@ -21,7 +21,7 @@ typedef enum {
 } ReferenceType;
 extern rom ref_type_name(void);
 
-typedef enum { STATS_NONE, STATS_SHORT, STATS_LONG } StatsType;
+typedef enum { STATS_NONE=0, STATS_SHORT=1, STATS_LONG=2, STATS_SHORT_GREP=-1, STATS_LONG_GREP=-2 } StatsType;
 
 typedef struct {
     
@@ -51,7 +51,7 @@ typedef struct {
 
     // PIZ: data-modifying genocat options for showing only a subset of the file, or otherwise modify the file 
     int header_one, header_only_fast, no_header, header_only, // how to handle the txt header
-        seq_only, qual_only, single_coord,
+        seq_only, qual_only, single_coord, 
         regions, gpos, samples, 
         drop_genotypes, gt_only, luft, sort, unsorted, snps_only, indels_only, // VCF options
         sequential, no_pg, extended_translation,  one_component,
@@ -75,7 +75,7 @@ typedef struct {
         to_stdout,   // set implicitly if genocat without --output
         replace, 
         lic_width,   // width of license output, 0=dynamic (undocumented parameter of --license)
-        test,        // implies md5
+        test, no_test,       
         index_txt,   // create an index
         subdirs,     // recursively traversing subdirectories
         list;        // a genols option
@@ -96,15 +96,15 @@ typedef struct {
     enum { KRK_NONE, KRK_ALL, KRK_INCLUDED, KRK_EXCLUDED } show_kraken;
 
     // stats / debug useful mostly for developers
-    int show_memory, show_sa, show_depn, show_dict, show_b250, show_aliases, show_digest, log_digest, show_recon_plan,
+    int show_memory, show_sag, show_depn, show_dict, show_b250, show_aliases, show_digest, log_digest, show_recon_plan,
         show_index, show_gheader, show_ref_contigs, show_chain_contigs, show_ref_seq, show_ref_diff,
         show_reference, show_ref_hash, show_ref_index, show_chrom2ref, show_ref_iupacs, show_chain, show_ranges,
         show_codec, 
         show_alleles, show_bgzf, show_txt_contigs, show_lines,
         show_vblocks, show_threads, show_uncompress, biopsy,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
-        debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sa, debug_gencomp, debug_lines, debug_latest,
-        no_gencomp, no_domqual, verify_codec, seg_only, show_bam, xthreads, show_flags, show_rename_tags,
+        debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sag, debug_gencomp, debug_lines, debug_latest,
+        no_gencomp, force_gencomp, no_domqual, verify_codec, seg_only, show_bam, xthreads, show_flags, show_rename_tags,
         #define SHOW_CONTAINERS_ALL_VBs (-1)
         show_containers, show_aligner,
         echo,         // show the command line in case of an error

@@ -403,7 +403,7 @@ UNCOMPRESS (codec_pbwt_uncompress)
 
 #undef next
 
-void codec_pbwt_reconstruct (VBlockP vb, Codec codec, Context *ctx)
+CODEC_RECONSTRUCT (codec_pbwt_reconstruct)
 {
     // find next allele - skipping unused spots ('*')
     Allele ht = '*';

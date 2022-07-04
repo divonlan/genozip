@@ -48,7 +48,7 @@ static inline void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char ref, char alt
             if (flag.reference == REF_EXT_STORE)
                 bits_set (&range->is_set, index_within_range);
 
-            ref_unlock (gref, lock); // does nothing if REFLOCK_NONE
+            ref_unlock (gref, &lock); // does nothing if REFLOCK_NONE
         }
     }
 
@@ -68,7 +68,7 @@ static inline void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char ref, char alt
         refalt_special[2] = new_ref ? new_ref : ref;
         refalt_special[3] = new_alt ? new_alt : alt;
 
-        seg_by_did_i (VB, refalt_special, sizeof(refalt_special), SEL (VCF_REFALT, VCF_oREFALT), 0); // we do the accounting in vcf_refalt_seg_main_ref_alt
+        seg_by_did (VB, refalt_special, sizeof(refalt_special), SEL (VCF_REFALT, VCF_oREFALT), 0); // we do the accounting in vcf_refalt_seg_main_ref_alt
     }
     // if not - just the normal snip
     else {
@@ -76,7 +76,7 @@ static inline void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char ref, char alt
         refalt_normal[0] = ref;
         refalt_normal[2] = alt;
 
-        seg_by_did_i (VB, refalt_normal, sizeof(refalt_normal), SEL (VCF_REFALT, VCF_oREFALT), 0); // we do the account in vcf_refalt_seg_main_ref_alt
+        seg_by_did (VB, refalt_normal, sizeof(refalt_normal), SEL (VCF_REFALT, VCF_oREFALT), 0); // we do the account in vcf_refalt_seg_main_ref_alt
     }
 }
 
@@ -92,7 +92,7 @@ void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, STRp(ref), STRp(alt))
         ref_alt[ref_len] = '\t';
         memcpy (&ref_alt[ref_len+1], alt, alt_len);
 
-        seg_by_did_i (VB, ref_alt, ref_len + alt_len + 1, SEL (VCF_REFALT, VCF_oREFALT), 0);
+        seg_by_did (VB, ref_alt, ref_len + alt_len + 1, SEL (VCF_REFALT, VCF_oREFALT), 0);
     }
         
     if (vb->line_coords == DC_PRIMARY) // in the default reconstruction, this REFALT is in the main fields along with 2 tabs
@@ -730,7 +730,7 @@ LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool is
 // -1 means "new REF" - sequence is new REF
 // 0  means - same REF - followed by an optional sequence of reanchoring / left-alignment (left alignment is implemented not implemented yet)
 // 1-(MAX_ALLELES-1) - REF⇄ALT switch with these allele. likewise followed by an optional sequence of reanchoring / left-alignment
-void vcf_refalt_seg_other_REFALT (VBlockVCFP vb, DidIType did_i, LiftOverStatus ostatus, bool is_xstrand, unsigned add_bytes)
+void vcf_refalt_seg_other_REFALT (VBlockVCFP vb, Did did_i, LiftOverStatus ostatus, bool is_xstrand, unsigned add_bytes)
 {
     char snip[5] = { SNIP_SPECIAL, VCF_SPECIAL_other_REFALT };
     int snip_len = 2;
@@ -750,7 +750,7 @@ void vcf_refalt_seg_other_REFALT (VBlockVCFP vb, DidIType did_i, LiftOverStatus 
             snip[snip_len++] = vb->new_ref;
     }
 
-    seg_by_did_i (VB, snip, snip_len, did_i, add_bytes); 
+    seg_by_did (VB, snip, snip_len, did_i, add_bytes); 
 }
 
 // ---------
@@ -978,7 +978,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_COPY_REForALT)
 // --snps-only implementation (called from vcf_piz_container_cb)
 bool vcf_refalt_piz_is_variant_snp (VBlockVCFP vb)
 {
-    DidIType refalt = vb->vb_coords == DC_PRIMARY ? VCF_REFALT : VCF_oREFALT;
+    Did refalt = vb->vb_coords == DC_PRIMARY ? VCF_REFALT : VCF_oREFALT;
     unsigned txt_len = vb->last_txt_len (refalt);
     if (txt_len <= 3) return true; // short circuit most common case  of a bi-allelic SNP (<3 can never happen, here to avoid issues)
 
@@ -989,7 +989,7 @@ bool vcf_refalt_piz_is_variant_snp (VBlockVCFP vb)
 // --indels-only implementation (called from vcf_piz_container_cb)
 bool vcf_refalt_piz_is_variant_indel (VBlockVCFP vb)
 {
-    DidIType refalt = vb->vb_coords == DC_PRIMARY ? VCF_REFALT : VCF_oREFALT;
+    Did refalt = vb->vb_coords == DC_PRIMARY ? VCF_REFALT : VCF_oREFALT;
     unsigned txt_len = vb->last_txt_len (refalt);
     if (txt_len == 3 || vcf_refalt_piz_is_variant_snp (vb)) return false; // Not an INDEL: its a SNP (short circuit most common case of a bi-allelic SNP)
 

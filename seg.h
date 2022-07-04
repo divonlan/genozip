@@ -24,8 +24,8 @@ extern rom seg_get_next_line (void *vb_, rom str, int *str_len, unsigned *len, b
 extern WordIndex seg_by_ctx_ex (VBlockP vb, STRp(snip), ContextP ctx, uint32_t add_bytes, bool *is_new);
 static inline WordIndex seg_by_ctx (VBlockP vb, STRp(snip), ContextP ctx, unsigned add_bytes)                      { return seg_by_ctx_ex (vb, STRa(snip), ctx, add_bytes, NULL); }
 static inline WordIndex seg_by_dict_id (VBlockP vb, STRp(snip), DictId dict_id, unsigned add_bytes)                { return seg_by_ctx_ex (vb, STRa(snip), ctx_get_ctx (vb, dict_id), add_bytes, NULL); }
-static inline WordIndex seg_by_did_i_ex (VBlockP vb, STRp(snip), DidIType did_i, unsigned add_bytes, bool *is_new) { return seg_by_ctx_ex (vb, STRa(snip), CTX(did_i), add_bytes, is_new); }
-static inline WordIndex seg_by_did_i (VBlockP vb, STRp(snip), DidIType did_i, unsigned add_bytes)                  { return seg_by_ctx_ex (vb, STRa(snip), CTX(did_i), add_bytes, NULL); }
+static inline WordIndex seg_by_did_i_ex (VBlockP vb, STRp(snip), Did did_i, unsigned add_bytes, bool *is_new) { return seg_by_ctx_ex (vb, STRa(snip), CTX(did_i), add_bytes, is_new); }
+static inline WordIndex seg_by_did (VBlockP vb, STRp(snip), Did did_i, unsigned add_bytes)                  { return seg_by_ctx_ex (vb, STRa(snip), CTX(did_i), add_bytes, NULL); }
 
 extern WordIndex seg_known_node_index (VBlockP vb, ContextP ctx, WordIndex node_index, unsigned add_bytes);
 extern WordIndex seg_duplicate_last (VBlockP vb, ContextP ctx, unsigned add_bytes);
@@ -47,7 +47,7 @@ extern bool seg_float_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsign
 #define SPF_ZERO_IS_BAD     2  // whether 0 is considered a bad POS (if true and POS is 0, to be handled according to seg_bad_snips_too)
 #define SPF_UNLIMITED_DELTA 4  // Always use delta, even if larger than MAX_POS_DELTA
 #define SPF_NO_DELTA        8  // All integer data goes into local
-extern PosType seg_pos_field (VBlockP vb, DidIType snip_did_i, DidIType base_did_i, unsigned opt, 
+extern PosType seg_pos_field (VBlockP vb, Did snip_did_i, Did base_did_i, unsigned opt, 
                               char missing, STRp(pos_str), PosType this_pos, unsigned add_bytes);
 extern bool seg_pos_field_cb (VBlockP vb, ContextP ctx, STRp(pos_str), uint32_t repeat);
 
@@ -70,13 +70,13 @@ static inline void seg_add_to_local_text (VBlockP vb, ContextP ctx, STRp(snip), 
 static inline void seg_add_to_local_fixed (VBlockP vb, ContextP ctx, STRp(data))
     { seg_add_to_local_fixed_do (vb, ctx, STRa(data), false, false, 0); }
 
-extern void seg_add_to_local_nonresizeable (VBlockP vb, Context *ctx, void *number, bool with_lookup, unsigned add_bytes);
+extern void seg_integer_fixed (VBlockP vb, Context *ctx, void *number, bool with_lookup, unsigned add_bytes);
 
-// requires setting ctx->dynamic_size_local=true in seg_initialize, but not need to set ltype as it will be set in zip_resize_local
+// requires setting ltype=LT_DYN_INT in seg_initialize, but not need to set ltype as it will be set in zip_resize_local
 static inline void seg_add_to_local_resizable (VBlockP vb, ContextP ctx, int64_t value, unsigned add_bytes)
 {
 #ifdef DEBUG
-    ASSERT (ctx->dynamic_size_local, "%s: Expecting ctx->dynamic_size_local=true in ctx=%s", LN_NAME, ctx->tag_name);
+    ASSERT (ctx->ltype==LT_DYN_INT || ctx->ltype==LT_DYN_INT_h || ctx->ltype==LT_DYN_INT_H, "%s: Expecting ctx->ltype=%s to be LT_DYN_INT* in ctx=%s ", LN_NAME, lt_name(ctx->ltype), ctx->tag_name);
 #endif
     // TO DO: find a way to better estimate the size, see b250_per_line
     buf_alloc (vb, &ctx->local, 1, vb->lines.len, int64_t, CTX_GROWTH, "contexts->local");
@@ -85,34 +85,34 @@ static inline void seg_add_to_local_resizable (VBlockP vb, ContextP ctx, int64_t
     ctx->local_num_words++;
 }
 
-extern WordIndex seg_delta_vs_other_do (VBlockP vb, ContextP ctx, ContextP other_ctx, STRp(value), int64_t max_delta, unsigned add_bytes);
+extern WordIndex seg_delta_vs_other_do (VBlockP vb, ContextP ctx, ContextP other_ctx, STRp(value), int64_t value_n, int64_t max_delta, unsigned add_bytes);
 static inline WordIndex seg_delta_vs_other (VBlockP vb, ContextP ctx, ContextP other_ctx, STRp(value))
-    { return seg_delta_vs_other_do (vb, ctx, other_ctx, STRa(value), -1, value_len); }
+    { return seg_delta_vs_other_do (vb, ctx, other_ctx, STRa(value), ctx->last_value.i, -1, value_len); }
 
 extern void seg_xor_diff (VBlockP vb, ContextP ctx, STRp(value), bool no_xor_if_same, unsigned add_bytes);
 
-extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, DidIType stats_conslidation_did_i, rom value, int32_t value_len, char sep, char subarray_sep, bool use_integer_delta, bool store_int_in_local);
+extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_did_i, rom value, int32_t value_len, char sep, char subarray_sep, bool use_integer_delta, bool store_int_in_local, DictId arr_dict_id, int add_bytes);
 
 typedef bool (*SegCallback) (VBlockP vb, ContextP ctx, STRp(value), uint32_t repeat);
-extern int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), const SegCallback *callbacks);
+extern int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), const SegCallback *callbacks, unsigned add_bytes);
 
 extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int64_t int_param, char char_param,
                                        char *snip, unsigned *snip_len /* in / out */);
 #define seg_prepare_snip_other(snip_code, other_dict_id, has_parameter, parameter, snip) \
     snip##_len = sizeof (snip);\
-    seg_prepare_snip_other_do ((snip_code), (DictId)(other_dict_id), (has_parameter), (parameter), 0, (snip), &snip##_len)
+    seg_prepare_snip_other_do ((snip_code), (other_dict_id), (has_parameter), (parameter), 0, (snip), &snip##_len)
 
 #define seg_prepare_snip_other_char(snip_code, other_dict_id, char_param, snip) \
     ({ snip##_len = sizeof (snip);\
-       seg_prepare_snip_other_do ((snip_code), (DictId)(other_dict_id), true, 0, (char_param), (snip), &snip##_len); })
+       seg_prepare_snip_other_do ((snip_code), (other_dict_id), true, 0, (char_param), (snip), &snip##_len); })
 
 #define seg_prepare_snip_other_chari(snip_code, other_dict_id, char_param, snip, i) \
     ({ snip##_lens[i] = sizeof (snip##s);\
-       seg_prepare_snip_other_do ((snip_code), (DictId)(other_dict_id), true, 0, (char_param), (snip##s)[i], &snip##_lens[i]); })
+       seg_prepare_snip_other_do ((snip_code), (other_dict_id), true, 0, (char_param), (snip##s)[i], &snip##_lens[i]); })
 
 #define seg_prepare_snip_special_other(special_code, snip, other_dict_id) do { \
     snip[0]=SNIP_SPECIAL; snip##_len=sizeof(snip)-1; \
-    seg_prepare_snip_other_do ((special_code), (DictId)(other_dict_id), 0, 0, 0, &snip[1], &snip##_len); \
+    seg_prepare_snip_other_do ((special_code), (other_dict_id), 0, 0, 0, &snip[1], &snip##_len); \
     snip##_len++;\
 } while(0)
 
@@ -121,10 +121,10 @@ extern void seg_prepare_multi_dict_id_special_snip (uint8_t special_code, unsign
 extern void seg_prepare_minus_snip_do (DictId dict_id_a, DictId dict_id_b, uint8_t special_code, char *snip, unsigned *snip_len);
 #define seg_prepare_minus_snip(dt, dict_id_a, dict_id_b, snip) \
     ({ snip##_len = sizeof (snip);\
-       seg_prepare_minus_snip_do ((DictId)(dict_id_a), (DictId)(dict_id_b), dt##_SPECIAL_MINUS, (snip), &snip##_len); })
+       seg_prepare_minus_snip_do ((dict_id_a), (dict_id_b), dt##_SPECIAL_MINUS, (snip), &snip##_len); })
 #define seg_prepare_minus_snip_i(dt, dict_id_a, dict_id_b, snip, i) \
     ({ snip##_lens[i] = sizeof (snip##s[i]);\
-       seg_prepare_minus_snip_do ((DictId)(dict_id_a), (DictId)(dict_id_b), dt##_SPECIAL_MINUS, snip##s[i], &snip##_lens[i]); })
+       seg_prepare_minus_snip_do ((dict_id_a), (dict_id_b), dt##_SPECIAL_MINUS, snip##s[i], &snip##_lens[i]); })
 
 static void inline seg_set_last_txt (VBlockP vb, ContextP ctx, STRp(value))
 {
@@ -148,11 +148,12 @@ extern void seg_rollback (VBlockP vb);
 #define MULTIPLEXER(n_channels)                     \
 struct __attribute__ ((__packed__)) {               \
     /* all 32b/64b fields are word-aligned */       \
-    uint8_t num_channels;                           \
+    uint8_t unused[1];                              \
     StoreType store_type;                           \
-    DidIType st_did_i;                              \
-    bool dyn_int;                                   \
-    uint8_t unused[3];                              \
+    Did st_did_i;                                   \
+    LocalType ltype;                                \
+    bool no_stons;                                  \
+    uint16_t num_channels;                          \
     DictId dict_ids[n_channels];                    \
     ContextP channel_ctx[n_channels];               \
     uint32_t snip_len;                              \
@@ -167,7 +168,7 @@ struct __attribute__ ((__packed__)) {               \
 typedef MULTIPLEXER(1000) *MultiplexerP;
 typedef const MULTIPLEXER(1000) *ConstMultiplexerP;
 
-extern void seg_mux_init (VBlockP vb, unsigned num_channels, uint8_t special_code, DidIType mux_did_i, DidIType st_did_i, StoreType store_type, bool seg_dyn_int, MultiplexerP mux, rom channel_letters);
+extern void seg_mux_init (VBlockP vb, unsigned num_channels, uint8_t special_code, Did mux_did_i, Did st_did_i, StoreType store_type, LocalType ltype, bool no_stons, MultiplexerP mux, rom channel_letters);
 extern ContextP seg_mux_get_channel_ctx (VBlockP vb, MultiplexerP mux, uint32_t channel_i);
 
 // --------------------
@@ -208,7 +209,7 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, MultiplexerP mux, uint32_t 
 
 #define SEG_NEXT_ITEM(f) \
     GET_NEXT_ITEM (f); \
-    seg_by_did_i (VB, field_start, field_len, f, field_len+1)
+    seg_by_did (VB, field_start, field_len, f, field_len+1)
 
 #define GET_LAST_ITEM(f) \
     field_start = next_field; \
@@ -217,7 +218,7 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, MultiplexerP mux, uint32_t 
 
 #define SEG_LAST_ITEM(f) do \
     GET_LAST_ITEM (f);\
-    seg_by_did_i (VB, field_start, field_len, f, field_len+1)
+    seg_by_did (VB, field_start, field_len, f, field_len+1)
 
 #define GET_MAYBE_LAST_ITEM(f) \
     field_start = next_field; \
@@ -226,7 +227,7 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, MultiplexerP mux, uint32_t 
 
 #define SEG_MAYBE_LAST_ITEM(f)  \
     GET_MAYBE_LAST_ITEM (f); \
-    seg_by_did_i (VB, field_start, field_len, f, field_len+1)
+    seg_by_did (VB, field_start, field_len, f, field_len+1)
 
 // SPACE separator between fields
 
@@ -237,7 +238,7 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, MultiplexerP mux, uint32_t 
 
 #define SEG_NEXT_ITEM_SP(f) \
     GET_NEXT_ITEM_SP (f); \
-    seg_by_did_i (VB, field_start, field_len, f, field_len+1); 
+    seg_by_did (VB, field_start, field_len, f, field_len+1); 
 
 #define GET_LAST_ITEM_SP(f)  \
     field_start = next_field; \
@@ -246,7 +247,7 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, MultiplexerP mux, uint32_t 
 
 #define SEG_LAST_ITEM_SP(f)  \
     GET_LAST_ITEM_SP (f); \
-    seg_by_did_i (VB, field_start, field_len, f, field_len+1)
+    seg_by_did (VB, field_start, field_len, f, field_len+1)
 
 #define GET_MAYBE_LAST_ITEM_SP(f)  \
     field_start = next_field; \
@@ -255,7 +256,7 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, MultiplexerP mux, uint32_t 
 
 #define SEG_MAYBE_LAST_ITEM_SP(f)  \
     GET_MAYBE_LAST_ITEM_SP (f); \
-    seg_by_did_i (VB, field_start, field_len, f, field_len+1)
+    seg_by_did (VB, field_start, field_len, f, field_len+1)
 
 // NEWLINE separator
 
@@ -266,9 +267,9 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, MultiplexerP mux, uint32_t 
 
 #define SEG_NEXT_ITEM_NL(f)  \
     GET_NEXT_ITEM_NL (f); \
-    seg_by_did_i (VB, field_start, field_len, f, field_len+1);
+    seg_by_did (VB, field_start, field_len, f, field_len+1);
 
-#define SEG_EOL(f,account_for_ascii10) do { seg_by_did_i (VB, *(has_13) ? "\r\n" : "\n", 1 + *(has_13), (f), (account_for_ascii10) + *(has_13)); } while (0)
+#define SEG_EOL(f,account_for_ascii10) do { seg_by_did (VB, *(has_13) ? "\r\n" : "\n", 1 + *(has_13), (f), (account_for_ascii10) + *(has_13)); } while (0)
 
 #define ASSSEG(condition, p_into_txt, format, ...) \
     ASSINP (condition, "%s/%s: "format "\n\nvb:%s/%u line_i:%d pos_in_vb: %"PRIi64" pos_in_file: %"PRIi64\

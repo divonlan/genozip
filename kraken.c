@@ -99,11 +99,11 @@ void kraken_zip_initialize (void)
 
 void kraken_seg_initialize (VBlockP vb)
 {
-    CTX(KRAKEN_TAXID)->flags.store    = STORE_INT;
-    CTX(KRAKEN_TAXID)->no_stons       = true; // must be no_stons the SEC_COUNTS data needs to mirror the dictionary words
-    CTX(KRAKEN_TAXID)->counts_section = true; 
+    ctx_set_no_stons (VB, 3, KRAKEN_SEQLEN, KRAKEN_TAXID, DID_EOL);
 
-    stats_set_consolidation (vb, KRAKEN_KMERS, 2, KRAKEN_KMERTAX, KRAKEN_KMERLEN);
+    ctx_set_store (VB, STORE_INT, 3, KRAKEN_SEQLEN, KRAKEN_TAXID, DID_EOL);
+    
+    ctx_consolidate_stats (vb, KRAKEN_KMERS, 3, KRAKEN_KMERTAX, KRAKEN_KMERLEN, DID_EOL);
 
     qname_seg_initialize (VB, KRAKEN_QNAME);
 }
@@ -169,7 +169,7 @@ static void kraken_seg_kmers (VBlockP vb, rom value, int32_t value_len, rom taxi
     for (unsigned i=0; i < value_len; i++)
         if (value[i] == ' ') {
             if (i && value[i-1] == ' ') { // not valid khmers
-                seg_by_did_i (VB, value, value_len, KRAKEN_KMERS, value_len);
+                seg_by_did (VB, value, value_len, KRAKEN_KMERS, value_len);
                 return;
             }
             num_kmers++;
@@ -181,7 +181,7 @@ static void kraken_seg_kmers (VBlockP vb, rom value, int32_t value_len, rom taxi
         .repsep    = {' '},
         .items     = { { .dict_id = { _KRAKEN_KMERTAX }, .separator = {':'} },
                        { .dict_id = { _KRAKEN_KMERLEN }                     } },
-        .drop_final_repeat_sep = !final_space
+        .drop_final_repsep = !final_space
     };
 
 
@@ -192,12 +192,12 @@ static void kraken_seg_kmers (VBlockP vb, rom value, int32_t value_len, rom taxi
 
         // KMER taxid - either copy from TAXID or seg a normal snip
         if (taxid_len == item_lens[0] && !memcmp (taxid, items[0], taxid_len)) 
-            seg_by_did_i (VB, copy_taxid_snip, copy_taxid_snip_len, KRAKEN_KMERTAX, item_lens[0]);
+            seg_by_did (VB, copy_taxid_snip, copy_taxid_snip_len, KRAKEN_KMERTAX, item_lens[0]);
         else 
-            seg_by_did_i (VB, items[0], item_lens[0], KRAKEN_KMERTAX, item_lens[0]);
+            seg_by_did (VB, items[0], item_lens[0], KRAKEN_KMERTAX, item_lens[0]);
 
         // KMER length
-        seg_by_did_i (VB, items[1], item_lens[1], KRAKEN_KMERLEN, item_lens[1]);
+        seg_by_did (VB, items[1], item_lens[1], KRAKEN_KMERLEN, item_lens[1]);
     }
 
     container_seg (vb, CTX(KRAKEN_KMERS), (ContainerP)&kmers_con, 0, 0, num_kmers*2-1 + final_space); // account for ':' within kmers and ' ' betweem them
@@ -228,7 +228,7 @@ rom kraken_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_tx
                                                     .items     = { { .dict_id = { _KRAKEN_SEQLEN_1 }, .separator = {'|'} },  
                                                                    { .dict_id = { _KRAKEN_SEQLEN_2 },                    } } };
 
-        seg_array_of_struct (VB, CTX(KRAKEN_SEQLEN), con_SEQLEN, field_start, field_len, (SegCallback[]){seg_pos_field_cb, 0}); // first element is good to delta, second is not
+        seg_array_of_struct (VB, CTX(KRAKEN_SEQLEN), con_SEQLEN, field_start, field_len, (SegCallback[]){seg_pos_field_cb, 0}, field_len); // first element is good to delta, second is not
     }
     else 
         seg_pos_field_cb (VB, CTX(KRAKEN_SEQLEN), field_start, field_len, 0);
@@ -349,7 +349,7 @@ bool kraken_piz_initialize (void)
     ARRAY (uint64_t, counts, zctx->counts);
 
     // verify that the user selected taxonomy ID is in the kraken data
-    if (exe_type == EXE_GENOCAT) {
+    if (is_genocat) {
         ASSINP0 (flag.kraken_taxid != TAXID_NONE, "--taxid must be provided if --kraken is used");
 
         WordIndex taxid_word_i = ctx_get_word_index_by_snip (evb, zctx, str_int_s (flag.kraken_taxid).s, 0);
@@ -502,7 +502,7 @@ static TaxonomyId kraken_get_taxid_with_pair (const QnameNode *l1, uint32_t hash
 {
     TaxonomyId l1_taxid = get_taxid (l1);
 
-    if (exe_type == EXE_GENOCAT &&  l1_taxid == flag.kraken_taxid) 
+    if (is_genocat &&  l1_taxid == flag.kraken_taxid) 
         return l1_taxid; // we found the taxid in l1, no need to check l2
 
     const QnameNode *l2 = kraken_search_up_and_down (l1, hash, STRa(qname));
@@ -570,7 +570,7 @@ bool kraken_is_included_loaded (VBlockP vb, STRp(qname))
 }
 
 // Find whether QNAME is included in the taxid filter in O(1) (using the loaded kraken file)
-bool kraken_is_included_stored (VBlockP vb, DidIType did_i_taxid, bool already_reconstructed)
+bool kraken_is_included_stored (VBlockP vb, Did did_i_taxid, bool already_reconstructed)
 {
     if (flag.kraken_taxid == TAXID_NONE) return true; // user didn't specify --taxid - everything's included
 
@@ -590,7 +590,7 @@ bool kraken_is_included_stored (VBlockP vb, DidIType did_i_taxid, bool already_r
 //----------------------------------------------------------------------------------------------------
 
 // returns snip_len if successful, or 0 if failed (only happens if fail_if_missing)
-unsigned kraken_seg_taxid_do (VBlockP vb, DidIType did_i_taxid, STRp(qname), 
+unsigned kraken_seg_taxid_do (VBlockP vb, Did did_i_taxid, STRp(qname), 
                               char *snip, // caller-allocated out
                               bool fail_if_missing)
 {
@@ -609,7 +609,7 @@ unsigned kraken_seg_taxid_do (VBlockP vb, DidIType did_i_taxid, STRp(qname),
         if (flag.show_kraken)
             iprintf ("%.*s\t%d\n", STRf(qname), taxid);
 
-        seg_by_did_i (VB, STRa(snip), did_i_taxid, 0);
+        seg_by_did (VB, STRa(snip), did_i_taxid, 0);
 
         return snip_len;
     }
@@ -617,7 +617,7 @@ unsigned kraken_seg_taxid_do (VBlockP vb, DidIType did_i_taxid, STRp(qname),
 
 // always segs if even_if_missing ; or if even_if_missing=false, returns true if taxid found and segged
 // returns snip_len if successful, or 0 if failed (only happens if fail_if_missing)
-unsigned kraken_seg_taxid (VBlockP vb, DidIType did_i_taxid, STRp(qname), bool fail_if_missing)
+unsigned kraken_seg_taxid (VBlockP vb, Did did_i_taxid, STRp(qname), bool fail_if_missing)
 {
     char snip[20];
     return kraken_seg_taxid_do (vb, did_i_taxid, STRa(qname), snip, fail_if_missing);

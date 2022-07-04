@@ -60,6 +60,11 @@ void bam_seq_to_sam (VBlockSAMP vb, bytes bam_seq, uint32_t seq_len /*bases, not
                      bool test_final_nibble, // if true, we test that the final nibble, if unused, is 0, and warn if not
                      BufferP out)            // appends to end of buffer - caller should allocate
 {
+    START_TIMER;
+    
+    // note" what we really need is the start address to be 16-bit aligned, but so far we always call with an empty buffer
+    ASSERTISZERO (out->len);
+    
     if (!seq_len) {
         BNXTc (*out) = '*';
         return;        
@@ -75,7 +80,8 @@ void bam_seq_to_sam (VBlockSAMP vb, bytes bam_seq, uint32_t seq_len /*bases, not
     
     char *next = BAFTc (*out);
 
-    for (uint32_t i=0; i < (seq_len+1) / 2; i++) {
+    uint32_t sam_len = (seq_len+1) / 2;
+    for (uint32_t i=0; i < sam_len; i++) {
         *next++ = bam_base_codes[*(uint8_t*)bam_seq >> 4];
         *next++ = bam_base_codes[*(uint8_t*)bam_seq & 0xf];
         bam_seq++;
@@ -89,6 +95,38 @@ void bam_seq_to_sam (VBlockSAMP vb, bytes bam_seq, uint32_t seq_len /*bases, not
     else
         out->len += seq_len;
 
+/* TO DO - not working yet
+    uint64_t *next64 = BAFT (uint64_t, *out);
+
+    // highly optimized - the unoptimized loop consumed up to 10% of all seg time in long reads!
+    bytes bam_after = bam_seq + (seq_len+1) / 2;
+
+    // 8 bases at a time (4 bytes in the bam seq, 8 bytes in the sam seq)
+    uint32_t *bam_seq32;
+    for (bam_seq32 = (uint32_t *)bam_seq; (bam_after - (uint8_t*)bam_seq32) >= 4 ; bam_seq32++) {
+#if defined __LITTLE_ENDIAN__
+        uint32_t bs32 = *bam_seq32;
+        *next64++ = ((uint64_t)bam_base_codes[(bs32 >> 4)  & 0xf] << 0 ) | ((uint64_t)bam_base_codes[(bs32 >> 0 ) & 0xf] << 8 ) | 
+                    ((uint64_t)bam_base_codes[(bs32 >> 12) & 0xf] << 16) | ((uint64_t)bam_base_codes[(bs32 >> 8 ) & 0xf] << 24) | 
+                    ((uint64_t)bam_base_codes[(bs32 >> 20) & 0xf] << 32) | ((uint64_t)bam_base_codes[(bs32 >> 16) & 0xf] << 40) | 
+                    ((uint64_t)bam_base_codes[(bs32 >> 28) & 0xf] << 48) | ((uint64_t)bam_base_codes[(bs32 >> 24) & 0xf] << 56) ; 
+    }
+#else
+        #error TO DO
+#endif
+        // *next++ = bam_base_codes[*(uint8_t*)bam_seq >> 4];
+        // *next++ = bam_base_codes[*(uint8_t*)bam_seq & 0xf];
+
+    // last 1-3 bam bytes = 2-6 sam bases
+    if ((uint8_t*)bam_seq32 < bam_after) {
+        uint8_t *next8 = (uint8_t *)next64;
+        for (uint8_t *bam_seq8 = ((uint8_t *)bam_seq32); bam_seq8 < bam_after; bam_seq8++) {
+            uint8_t bs8 = *bam_seq8;
+            *next8++ = bam_base_codes[bs8 >> 4];
+            *next8++ = bam_base_codes[bs8 & 0xf];
+        }
+    }
+    */
     ASSERTW (!test_final_nibble || !(seq_len % 2) || (*BAFTc (*out)=='='), 
              "%s: Warning in bam_seq_to_sam: expecting the unused lower 4 bits of last seq byte in an odd-length seq_len=%u to be 0, but its not. This will cause an incorrect MD5",
              LN_NAME, seq_len);

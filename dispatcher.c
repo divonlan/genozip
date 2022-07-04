@@ -355,7 +355,7 @@ Dispatcher dispatcher_fan_out_task (rom task_name,
             dispatcher_recycle_vbs (dispatcher, true);
         }        
         
-        // PRIORITY 3: If there is no variant block available to compute or to output, but input is not exhausted yet - get one range
+        // PRIORITY 3: If there is no VBs available to compute or to output, but input is not exhausted yet - get one range
         else if (!next_vb && !dispatcher_is_input_exhausted (dispatcher)) {
 
             next_vb = dispatcher_generate_next_vb (dispatcher, 0, COMP_NONE);

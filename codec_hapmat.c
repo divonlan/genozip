@@ -109,21 +109,19 @@ static inline void codec_hapmat_piz_get_one_line (VBlockVCFP vb)
 //    by PIZ as the LT_CODEC reconstructor for CODEC_HAPM. It takes data from GT_HT, consulting GT_HT_INDEX
 //    to find the correct column in the matrix, and skips '*'s (missing haplotypes due to mixed ploidy, missing samples,
 //    or lines missing GT in FORMAT) until it finds a valid haplotype value.
-void codec_hapmat_reconstruct (VBlockP vb_, Codec codec, Context *ctx)
+CODEC_RECONSTRUCT (codec_hapmat_reconstruct)
 {
-    VBlockVCFP vb = (VBlockVCFP)vb_;
-
     // get one row of the haplotype matrix for this line into vb->hapmat_one_array if we don't have it already
-    if (vb->hapmat_one_array.param != vb->line_i + 1) { // we store the line_i in param (+1 to distguish from "not set" value of 0)
-        codec_hapmat_piz_get_one_line (vb);
-        vb->hapmat_one_array.len = 0; // length of data consumed
-        vb->hapmat_one_array.param = vb->line_i + 1;
+    if (VB_VCF->hapmat_one_array.param != vb->line_i + 1) { // we store the line_i in param (+1 to distguish from "not set" value of 0)
+        codec_hapmat_piz_get_one_line (VB_VCF);
+        VB_VCF->hapmat_one_array.len = 0; // length of data consumed
+        VB_VCF->hapmat_one_array.param = vb->line_i + 1;
     }
 
     // find next allele - skipping unused spots ('*')
     uint8_t ht = '*';
-    while (ht == '*' && vb->hapmat_one_array.len < vb->ht_per_line)
-        ht = *B8(vb->hapmat_one_array, vb->hapmat_one_array.len++);
+    while (ht == '*' && VB_VCF->hapmat_one_array.len32 < vb->ht_per_line)
+        ht = *B8(VB_VCF->hapmat_one_array, VB_VCF->hapmat_one_array.len++);
 
     if (vb->drop_curr_line) return;
 

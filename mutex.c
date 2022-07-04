@@ -52,28 +52,28 @@ bool mutex_lock_do (Mutex *mutex, bool blocking, rom func)
     return true;
 }
 
-void mutex_unlock_do (Mutex *mutex, rom func, uint32_t line) 
+void mutex_unlock_do (Mutex *mutex, FUNCLINE) 
 { 
-    ASSERT (mutex->initialized, "called from %s:%u mutex not initialized", func, line);
+    ASSERT (mutex->initialized, "called from %s:%u mutex not initialized", func, code_line);
     ASSERT (mutex->lock_func, "called from %s:%u by thread=%"PRIu64": mutex %s is not locked", 
-            func, line, (uint64_t)pthread_self(), mutex->name);
+            func, code_line, (uint64_t)pthread_self(), mutex->name);
 
     mutex->lock_func = NULL; // mutex->lock_func is protected by the mutex
 
     int ret = pthread_mutex_unlock (&mutex->mutex); 
-    ASSERT (!ret, "called from %s:%u: pthread_mutex_unlock failed for %s: %s", func, line, mutex->name, strerror (ret)); 
+    ASSERT (!ret, "called from %s:%u: pthread_mutex_unlock failed for %s: %s", func, code_line, mutex->name, strerror (ret)); 
 
     if (mutex_is_show (mutex->name))
         iprintf ("UNLOCKED: Mutex %s by thread %"PRIu64" %s\n", mutex->name, (uint64_t)pthread_self(), func);
 }
 
-void mutex_wait_do (Mutex *mutex, rom func, uint32_t line)   
+void mutex_wait_do (Mutex *mutex, FUNCLINE)   
 {
     mutex_lock_do (mutex, true, func);
-    mutex_unlock_do (mutex, func, line);
+    mutex_unlock_do (mutex, func, code_line);
 }
 
-void mutex_lock_by_vb_order_do (VBIType vb_i, Mutex *mutex, rom func, uint32_t line)
+void mutex_lock_by_vb_order_do (VBIType vb_i, Mutex *mutex, rom func, uint32_t code_line)
 {
     #define WAIT_TIME_USEC 5000
     #define TIMEOUT (30*60) // 30 min
@@ -89,7 +89,7 @@ void mutex_lock_by_vb_order_do (VBIType vb_i, Mutex *mutex, rom func, uint32_t l
         }
         
         // not our turn, wait 5ms and try again
-        mutex_unlock_do (mutex, func, line);
+        mutex_unlock_do (mutex, func, code_line);
         usleep (WAIT_TIME_USEC);
 
         // timeout after approx 30 minutes

@@ -544,8 +544,22 @@ bool bits_is_fully_set (ConstBitsP bits)
     return num_of_bits_set == bits_active;
 }
 
+// true if all bits in bit array are clear (divon)
+bool bits_is_fully_clear (ConstBitsP bits)
+{
+    ASSERT_excess_bits_are_0 (bits);
+
+    if (!bits->nbits) return true; // trivially true
+
+    // all words but last one
+    for (uint64_t i=0; i < bits->nwords; i++)
+        if (bits->words[i]) return false;
+
+    return true;
+}
+
 // Get the number of bits set (hamming weight)
-uint64_t bits_num_bits_set (ConstBitsP bits)
+uint64_t bits_num_set_bits (ConstBitsP bits)
 {
     if (!bits->nbits) return 0;
 
@@ -564,7 +578,7 @@ uint64_t bits_num_bits_set (ConstBitsP bits)
 }
 
 // added by divon
-uint64_t bits_num_bits_set_region (ConstBitsP bits, uint64_t start, uint64_t length)
+uint64_t bits_num_set_bits_region (ConstBitsP bits, uint64_t start, uint64_t length)
 {
     if (length == 0) return 0;
 
@@ -598,9 +612,9 @@ uint64_t bits_num_bits_set_region (ConstBitsP bits, uint64_t start, uint64_t len
 }
 
 // Get the number of bits not set (1 - hamming weight)
-uint64_t bits_num_bits_cleared (ConstBitsP bits)
+uint64_t bits_num_clear_bits (ConstBitsP bits)
 {
-    return bits->nbits - bits_num_bits_set(bits);
+    return bits->nbits - bits_num_set_bits(bits);
 }
 
 

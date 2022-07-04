@@ -50,9 +50,9 @@ typedef struct { int32_t first_mutex, last_mutex; } RefLock;
 #define REFLOCK_NONE ((RefLock){-1,-1})
 
 extern RefLock ref_lock (Reference ref, PosType gpos_start, uint32_t seq_len);
-extern RefLock ref_unlock (Reference ref, RefLock lock);
 extern RefLock ref_lock_range (Reference ref, int32_t range_id);
 extern RangeP ref_seg_get_locked_range (VBlockP vb, Reference ref, WordIndex chrom, STRp(chrom_name), PosType pos, uint32_t seq_len, WordIndex ref_index, rom field /* used for ASSSEG */, RefLock *lock);
+extern void ref_unlock (Reference ref, RefLock *lock);
 
 // replace range if POS has moved to next rage
 extern RangeP ref_seg_renew_locked_range_do (VBlockP vb, Reference ref, RangeP range, PosType pos, PosType seq_len, RefLock *lock);

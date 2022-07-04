@@ -42,9 +42,17 @@
 // endianity bugs will be discovered more readily this way
 
 // note: #pragma pack doesn't affect enums
-typedef enum __attribute__ ((__packed__)) { BGZF_LIBDEFLATE, BGZF_ZLIB, NUM_BGZF_LIBRARIES } BgzfLibraryType; // constants for BGZF FlagsBgzf.library
-typedef enum __attribute__ ((__packed__)) { STORE_NONE, STORE_INT, STORE_FLOAT, STORE_INDEX } StoreType; // values for SectionFlags.ctx.store
+typedef enum __attribute__ ((__packed__)) { BGZF_LIBDEFLATE, BGZF_ZLIB, NUM_BGZF_LIBRARIES         } BgzfLibraryType; // constants for BGZF FlagsBgzf.library
+typedef enum __attribute__ ((__packed__)) { STORE_NONE, STORE_INT, STORE_FLOAT, STORE_INDEX        } StoreType; // values for SectionFlags.ctx.store
 typedef enum __attribute__ ((__packed__)) { B250_BYTES_4, B250_BYTES_3, B250_BYTES_2, B250_BYTES_1 } B250Size; // part of the file format - goes into SectionHeaderCtx.b250_size
+
+typedef enum __attribute__ ((__packed__)) { SAG_NONE, SAG_BY_SA, SAG_BY_NH, SAG_BY_SOLO, SAG_BY_CC, SAG_BY_FLAG, NUM_SAG_TYPES } SagType;
+#define SAM_SAG_TYPE_NAMES                { "NONE",   "BY_SA",   "BY_NH",   "NY_SOLO",   "BY_CC",   "BY_FLAG" }
+#define IS_SAG_SA   (segconf.sag_type == SAG_BY_SA)
+#define IS_SAG_NH   (segconf.sag_type == SAG_BY_NH)
+#define IS_SAG_SOLO (segconf.sag_type == SAG_BY_SOLO)
+#define IS_SAG_CC   (segconf.sag_type == SAG_BY_CC)
+#define IS_SAG_FLAG (segconf.sag_type == SAG_BY_FLAG)
 
 // goes into SectionHeader.flags and also SectionEnt.flags
 typedef union SectionFlags {  
@@ -63,7 +71,7 @@ typedef union SectionFlags {
         uint8_t has_gencomp      : 1;  // VCF: file supports dual coordinates - last two components are the "liftover rejects" data (v12)
                                        // SAM/BAM: PRIM and/or DEPN components exist (v14)
         uint8_t has_taxid        : 1;  // each line in the file has Taxonomic ID information (v12)
-        uint8_t unused           : 1;
+        uint8_t unused           : 1; 
     } genozip_header;
 
     struct FlagsTxtHeader {
@@ -75,13 +83,13 @@ typedef union SectionFlags {
     union FlagsVbHeader {
         struct FlagsVbHeaderVcf {
             uint8_t coords             : 2; // DC_PRIMARY if it contains TOPLEVEL container, DC_LUFT if LUFT toplevel container, or DC_BOTH if both (DC_NONE prior to v12)
-            uint8_t use_null_DP_method : 1; // since 13.0.5: "null_DP" method is used
+            uint8_t use_null_DP_method : 1; // since 13.0.5 canceled v14: "null_DP" method is used
             uint8_t unused             : 5;
         } vcf;
         struct FlagsVbHeaderSam {
             uint8_t unused             : 2; // for now, reserved for coords, should we have a dual-coord SAM in the future
-            uint8_t is_sorted          : 1; // Likely sorted (copied from segconf.sam_is_sorted)     - introduced 13.0.3
-            uint8_t is_collated        : 1; // Likely collated (copied from segconf.sam_is_collated) - introduced 13.0.3
+            uint8_t v13_is_sorted      : 1; // Likely sorted (copied from segconf.is_sorted)     - introduced 13.0.3 and canceled v14
+            uint8_t v13_is_collated    : 1; // Likely collated (copied from segconf.is_collated) - introduced 13.0.3 and canceled v14
             uint8_t unused2            : 4;
         } sam;
     } vb_header;
@@ -165,19 +173,35 @@ typedef struct {
 #define REF_FILENAME_LEN 256
     char     ref_filename[REF_FILENAME_LEN]; // external reference filename, nul-terimated. ref_filename[0]=0 if there is no external reference. DT_CHAIN: LUFT reference filename.
     Digest   ref_file_md5;             // SectionHeaderGenozipHeader.REF_fasta_md5 of the reference FASTA genozip file
-    union { // 272 bytes
-        struct DtSpecificChain {
+    union { // 272 bytes - data-type specific
+        struct {
             char prim_filename[REF_FILENAME_LEN]; // external primary coordinates reference file, nul-terimated. added v12.
             Digest prim_file_md5;      // SectionHeaderGenozipHeader.REF_fasta_md5 of the primary reference file. added v12.
+            char unused[0];
         } chain;
-        struct DtSpecificSam {
-            uint32_t segconf_seq_len;  // SAM: "standard" seq_len (only applicable to some short-read files) - copied from segconf.sam_seq_len. added v14.
-            uint8_t segconf_ms_type      : 3; // SAM: copied from segconf.sam_ms_type. added v14.
+        struct {
+            // copied from their respective values in segconf, and copied back to segconf in PIZ
+            DictId segconf_seq_len_dict_id;   // SAM: dict_id of one of the Q?NAME contexts (the "length=" item), which is expected to hold the seq_len for this read. 0 if there is no such item. v14.
+            uint32_t segconf_seq_len;         // SAM: "standard" seq_len (only applicable to some short-read files). v14.
+            SagType segconf_sag_type;         // SAM: v14
+            uint8_t segconf_seq_len_cm;       // SAM: v14   
+            uint8_t segconf_ms_type      : 3; // SAM: v14 
             uint8_t segconf_has_MD_or_NM : 1; // SAM: PIZ should call sam_analyze_copied_SEQ for dependent reads unless explicitly told not to. v14.
-            uint8_t unused_bits          : 4;
-            char unused[267];
+            uint8_t segconf_bisulfite    : 1; // SAM: v14
+            uint8_t segconf_is_paired    : 1; // SAM: v14
+            uint8_t segconf_sag_has_AS   : 1; // SAM: v14
+            uint8_t segconf_AS_is_2refc  : 1; // SAM: v14
+            uint8_t segconf_pysam_qual   : 1; // SAM: v14
+            uint8_t unused_bits          : 7; // SAM: v14
+            char unused[256];
         } sam;
-        struct DtSpecificVcf {
+
+        struct {
+            DictId segconf_seq_len_dict_id;   // FASTQ: dict_id of one of the Q?NAME contexts, which is expected to hold the seq_len for this read. 0 if there is no such item. copied from segconf.qname_seq_len_dict_id. added v14.
+            char unused[264];
+        } fastq;
+
+        struct {
             uint8_t segconf_has_RGQ      : 1; // VCF: copied from segconf.has[FORMAT_RGQ]. added v14.
             uint8_t unused_bits          : 7;
             uint8_t unused[271];
@@ -214,7 +238,7 @@ typedef struct {
     };    
     union {
         uint32_t v13_top_level_repeats;// v12/13: repeats of TOPLEVEL container in this VB. Up to v12 - called num_lines.
-        uint32_t sam_prim_num_alns;    // SAM PRIM: number of alns in this VB (field added and extended structure v14)
+        uint32_t sam_prim_num_sag_alns;    // SAM PRIM: number of alns (prim + depn) in SAGs this VB (v14)
     };
     uint32_t recon_size_prim;          // size of vblock as it appears in the default PRIMARY reconstruction
     uint32_t z_data_bytes;             // total bytes of this vblock in the genozip file including all sections and their headers 
@@ -222,7 +246,7 @@ typedef struct {
     Digest   digest_so_far;            // partial calculation of MD5 or Adler32 up to and including this VB 
     union {
         uint32_t v13_num_lines_prim;   // v12/13: number of lines in default reconstruction in PRIMARY coords (v12)
-        uint32_t sam_prim_first_grp_i; // SAM PRIM: the index of first group of this PRIM VB, in z_file->sa_groups (field added and extended structure v14)
+        uint32_t sam_prim_first_grp_i; // SAM PRIM: the index of first group of this PRIM VB, in z_file->sag_grps (v14)
     };
     
     union {
@@ -236,7 +260,8 @@ typedef struct {
     };
 
     union {
-        uint32_t sam_prim_comp_cigars_len; // SAM PRIM: total size of SA Group's CIGARs, as compressed in-memory in ZIP (i.e. excluding CIGARs stored in OPTION_SA_CIGAR.dict) (v14)
+        uint32_t sam_prim_comp_cigars_len; // SAM PRIM SAG_BY_SA: total size of sag's CIGARs, as compressed in-memory in ZIP (i.e. excluding CIGARs stored in OPTION_SA_CIGAR.dict) (v14)
+        uint32_t sam_prim_solo_data_len;   // SAM PRIM SAG_BY_SOLO: size of solo_data
     };
 } SectionHeaderVbHeader; 
 
@@ -272,6 +297,20 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     LT_UINT16_TR = 15,  // "
     LT_UINT32_TR = 16,  // "
     LT_UINT64_TR = 17,  // "
+    LT_hex8      = 18,  // lower-case UINT8 hex
+    LT_HEX8      = 19,  // upper-case UINT8 hex
+    LT_hex16     = 20,  // lower-case UINT16 hex
+    LT_HEX16     = 21,  // upper-case UINT16 hex
+    LT_hex32     = 22,  // lower-case UINT32 hex
+    LT_HEX32     = 23,  // upper-case UINT32 hex
+    LT_hex64     = 24,  // lower-case UINT64 hex
+    LT_HEX64     = 25,  // upper-case UINT64 hex
+
+    // after here - not part of the file format, just used during seg
+    LT_DYN_INT   = 26,  // dynamic size local 
+    LT_DYN_INT_h = 27,  // dynamic size local - hex
+    LT_DYN_INT_H = 28,  // dynamic size local - HEX
+    
     NUM_LOCAL_TYPES
 } LocalType;
 
@@ -305,6 +344,19 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
    { "T16", 0,   2,  0,     0,                     0xffffLL,              BGEN_transpose_u16_buf   }, \
    { "T32", 0,   4,  0,     0,                     0xffffffffLL,          BGEN_transpose_u32_buf   }, \
    { "T64", 0,   8,  0,     0,                     0x7fffffffffffffffLL,  BGEN_transpose_u64_buf   }, \
+   { "h8",  0,   4,  0,     0,                     0xffLL,                BGEN_u8_buf              }, /* FFU. lower-case UINT8 hex */ \
+   { "H8",  0,   4,  0,     0,                     0xffLL,                BGEN_u8_buf              }, /* FFU. upper-case UINT8 hex */ \
+   { "h16", 0,   4,  0,     0,                     0xffffLL,              BGEN_u16_buf             }, /* FFU. */ \
+   { "H16", 0,   4,  0,     0,                     0xffffLL,              BGEN_u16_buf             }, /* FFU. */ \
+   { "h32", 0,   4,  0,     0,                     0xffffffffLL,          BGEN_u32_buf             }, /* lower-case UINT32 hex */ \
+   { "H32", 0,   4,  0,     0,                     0xffffffffLL,          BGEN_u32_buf             }, /* FFU. */ \
+   { "h64", 0,   4,  0,     0,                     0x7fffffffffffffffLL,  BGEN_u64_buf             }, /* FFU. */ \
+   { "H64", 0,   4,  0,     0,                     0x7fffffffffffffffLL,  BGEN_u64_buf             }, /* FFU. */ \
+                                                                                                      \
+   /* after here - not part of the file format, just used during seg */                               \
+   { "DYN", 0,   8,  0,     0x8000000000000000LL,  0x7fffffffffffffffLL,  0                        }, \
+   { "DYh" ,0,   8,  0,     0x8000000000000000LL,  0x7fffffffffffffffLL,  0                        }, \
+   { "DYH" ,0,   8,  0,     0x8000000000000000LL,  0x7fffffffffffffffLL,  0                        }, \
 }
 
 // used for SEC_LOCAL and SEC_B250
@@ -373,10 +425,10 @@ typedef struct SectionEntFileFormat {
     union {                  // Section-Type-specific field
         DictId dict_id;      // DICT, LOCAL, B250 or COUNT sections
         struct { 
-            uint32_t num_lines; // // VB_HEADER sections - number of lines in this VB. 
+            uint32_t num_lines; // VB_HEADER sections - number of lines in this VB. 
             uint32_t unused;
         };
-        uint64_t st_specific;  // generic access to the value
+        uint64_t st_specific;   // generic access to the value
     };
     VBIType vblock_i;        // 1-based
     SectionType st;          // 1 byte
@@ -425,7 +477,7 @@ typedef const struct SectionEnt {
             uint32_t num_lines; // VB_HEADER sections - number of lines in this VB. 
             uint32_t unused;
         };
-        uint64_t st_specific;  // generic access to the value
+        uint64_t st_specific;   // generic access to the value
     };
     VBIType vblock_i;        // 1-based
     uint32_t size;        
@@ -500,19 +552,20 @@ extern void sections_show_gheader (const SectionHeaderGenozipHeader *header);
 extern void sections_show_section_list (DataType dt);
 extern rom st_name (SectionType sec_type);
 extern rom lt_name (LocalType lt);
+extern rom store_type_name (StoreType store);
 
 typedef struct { char s[48]; } VbNameStr;
 extern VbNameStr vb_name (VBlockP vb);
-#define VB_NAME vb_name((VBlockP)vb).s
+#define VB_NAME vb_name(VB).s
 
-typedef struct { char s[48]; } LineNameStr;
+typedef struct { char s[64]; } LineNameStr;
 extern LineNameStr line_name (VBlockP vb);
-#define LN_NAME line_name((VBlockP)vb).s
+#define LN_NAME line_name(VB).s
 
 extern rom comp_name (CompIType comp_i);
 extern rom comp_name_ex (CompIType comp_i, SectionType st);
 
 #define IS_DICTED_SEC(st) ((st)==SEC_DICT || (st)==SEC_B250 || (st)==SEC_LOCAL || (st)==SEC_COUNTS)
-#define IS_VB_SEC(st) ((st)==SEC_VB_HEADER || (st)==SEC_B250 || (st)==SEC_LOCAL)
-#define IS_COMP_SEC(st) (IS_VB_SEC(st) || (st)==SEC_TXT_HEADER || (st)==SEC_BGZF || (st)==SEC_RECON_PLAN)
-#define IS_FRAG_SEC(st) ((st)==SEC_DICT || (st)==SEC_RECON_PLAN || (st)==SEC_REFERENCE || (st)==SEC_REF_IS_SET || (st)==SEC_REF_HASH) // global sections fragmented with a dispatcher, and hence use vb_i 
+#define IS_VB_SEC(st)     ((st)==SEC_VB_HEADER || (st)==SEC_B250 || (st)==SEC_LOCAL)
+#define IS_COMP_SEC(st)   (IS_VB_SEC(st) || (st)==SEC_TXT_HEADER || (st)==SEC_BGZF || (st)==SEC_RECON_PLAN)
+#define IS_FRAG_SEC(st)   ((st)==SEC_DICT || (st)==SEC_RECON_PLAN || (st)==SEC_REFERENCE || (st)==SEC_REF_IS_SET || (st)==SEC_REF_HASH) // global sections fragmented with a dispatcher, and hence use vb_i 

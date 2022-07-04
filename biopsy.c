@@ -28,7 +28,7 @@ void biopsy_init (rom optarg)
             for (VBIType vb_i = first_vb_i; vb_i <= last_vb_i; vb_i++)
                 buf_add_int (evb, biopsy_vb_i, vb_i); 
         }
-        else // single vb eg "1"    
+        else // single vb eg "1" or "0" (i.e. txt header only)
             buf_add_int (evb, biopsy_vb_i, ((uint32_t)atoi (items[i]))); 
     }
 
@@ -43,8 +43,6 @@ void biopsy_take (VBlockP vb)
 {
     if (!biopsy_vb_i.len) return;
 
-    if (vb->vblock_i == 0) goto start_biopsy; // always output the txt header
-
     ARRAY (uint32_t, vb_i, biopsy_vb_i);
 
     for (int i=0; i < vb_i_len; i++)
@@ -54,6 +52,8 @@ void biopsy_take (VBlockP vb)
 
             goto start_biopsy;
         }
+
+    if (vb->vblock_i == 0) goto start_biopsy; // always output the txt header
 
     return; // we were not requested to take a biopsy from this vb
 

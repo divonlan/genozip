@@ -53,7 +53,7 @@ void chrom_2ref_compress (Reference ref)
     for (uint32_t i=0; i < c2r_len; i++) {
 
         if (flag.show_chrom2ref) {
-            rom chrom_name = ctx_get_zf_nodes_snip (zctx, i, 0, 0);
+            rom chrom_name = ctx_snip_from_zf_nodes (zctx, i, 0, 0);
             rom ref_name = c2r[i] >= 0 ? ref_contigs_get_name (ref, c2r[i], NULL) : "(none)";
 
             if (c2r[i] != WORD_INDEX_NONE) 
@@ -128,19 +128,19 @@ void chrom_2ref_load (Reference ref)
         }
     }
 
-    if (flag.show_chrom2ref && exe_type == EXE_GENOCAT) exit (EXIT_OK); // in genocat this, not the data
+    if (flag.show_chrom2ref && is_genocat) exit (EXIT_OK); // in genocat this, not the data
 
     buf_free (evb->scratch);
 }
 
 static void chrom_2ref_seg_set (VBlockP vb, WordIndex chrom_node_index, WordIndex ref_index)
 {
-    WordIndex index = chrom_node_index - vb->ol_chrom2ref_map.len;
-    ASSERT (index >= 0, "Expecting chrom_node_index=%d >= vb->ol_chrom2ref_map.len=%"PRIu64, 
-            chrom_node_index, vb->ol_chrom2ref_map.len);
+    WordIndex index = chrom_node_index - vb->ol_chrom2ref_map.len32;
+    ASSERT (index >= 0, "Expecting chrom_node_index=%d >= vb->ol_chrom2ref_map.len=%u", 
+            chrom_node_index, vb->ol_chrom2ref_map.len32);
 
     buf_alloc_255 (vb, &vb->chrom2ref_map, 0, index+1, WordIndex, CTX_GROWTH, "chrom2ref_map");
-    vb->chrom2ref_map.len = MAX_(vb->chrom2ref_map.len, index+1);
+    vb->chrom2ref_map.len = MAX_(vb->chrom2ref_map.len32, index+1);
 
     *B(WordIndex, vb->chrom2ref_map, index) = ref_index; 
 }
@@ -172,7 +172,7 @@ void chrom_calculate_ref2chrom (uint64_t num_ref_contigs)
 // Seg stuff
 //-------------
 
-WordIndex chrom_seg_ex (VBlockP vb, DidIType did_i, 
+WordIndex chrom_seg_ex (VBlockP vb, Did did_i, 
                         STRp(chrom), 
                         PosType LN,       // Optional, if readily known
                         bool *is_alt_out, // need iff flag.match_chrom_to_reference.
@@ -183,7 +183,7 @@ WordIndex chrom_seg_ex (VBlockP vb, DidIType did_i,
     ASSERTNOTZERO (chrom_len,"");
     ContextP ctx = CTX(did_i);
     bool is_primary = did_i == DTF(prim_chrom);
-    bool is_luft    =  did_i == DTF(luft_chrom);
+    bool is_luft    = did_i == DTF(luft_chrom);
     bool has_chain  = chain_is_loaded || flag.reference == REF_MAKE_CHAIN;
 
     WordIndex chrom_node_index = WORD_INDEX_NONE, ref_index = WORD_INDEX_NONE;
@@ -302,8 +302,8 @@ static SORTER (chrom_create_zip_sorter)
 
     CtxNode *word_a = B(CtxNode, sorter_ctx->nodes, index_a);
     CtxNode *word_b = B(CtxNode, sorter_ctx->nodes, index_b);
-    
-    return strcmp (Bc (sorter_ctx->dict, word_a->char_index),
+
+    return strcmp (Bc (sorter_ctx->dict, word_a->char_index),  
                    Bc (sorter_ctx->dict, word_b->char_index));
 }
 
@@ -315,12 +315,12 @@ static SORTER (chrom_create_piz_sorter)
     CtxWord *word_a = B(CtxWord, sorter_ctx->word_list, index_a);
     CtxWord *word_b = B(CtxWord, sorter_ctx->word_list, index_b);
     
-    return strcmp (Bc (sorter_ctx->dict, word_a->char_index),
-                   Bc (sorter_ctx->dict, word_b->char_index));
+    return strcmp (Bc (sorter_ctx->dict, word_a->index),
+                   Bc (sorter_ctx->dict, word_b->index));
 }
 
 // ZIP/PIZ MUST be run by the main thread only
-void chrom_index_by_name (DidIType chrom_did_i)
+void chrom_index_by_name (Did chrom_did_i)
 {
     sorter_ctx = ZCTX(chrom_did_i);
     uint32_t num_words = (command==ZIP) ? sorter_ctx->nodes.len32 : sorter_ctx->word_list.len32;
@@ -330,17 +330,19 @@ void chrom_index_by_name (DidIType chrom_did_i)
     // chrom_sorter - an array of uint32 of indexes into ZCTX(CHROM)->word_list - sorted by alphabetical order of the snip in ZCTX(CHROM)->dict
     buf_alloc (evb, &chrom_sorter, 0, num_words, uint32_t, 1, "chrom_sorter");
     
-    //ARRAY (WordIndex, ents, chrom_sorter);
-    for (WordIndex i=0; i < num_words; i++) 
-        if ((command == ZIP && B(CtxNode, sorter_ctx->nodes,     i)->snip_len) ||
-            (command == PIZ && B(CtxWord, sorter_ctx->word_list, i)->snip_len))
-            BNXT32(chrom_sorter) = i;
+    if (command == ZIP) {
+        for_buf2 (CtxNode, node, i, sorter_ctx->nodes)
+            if (node->snip_len) BNXT32(chrom_sorter) = i;
+    }
+    else
+        for_buf2 (CtxWord, word, i, sorter_ctx->word_list)
+            if (word->len) BNXT32(chrom_sorter) = i;
 
     qsort (chrom_sorter.data, chrom_sorter.len, sizeof(uint32_t), command == ZIP ? chrom_create_zip_sorter : chrom_create_piz_sorter);
 }
 
 // binary search for this chrom in ZCTX(CHROM). we count on gcc tail recursion optimization to keep this fast.
-static WordIndex chrom_zip_get_by_name_do (STRp (chrom_name), WordIndex first_sorted_index, WordIndex last_sorted_index)
+static WordIndex chrom_zip_get_by_name_do (rom chrom_name, WordIndex first_sorted_index, WordIndex last_sorted_index)
 {
     if (first_sorted_index > last_sorted_index) return WORD_INDEX_NONE; // not found
 
@@ -348,14 +350,11 @@ static WordIndex chrom_zip_get_by_name_do (STRp (chrom_name), WordIndex first_so
     
     STR (snip);
     WordIndex node_index = *B(WordIndex, chrom_sorter, mid_sorted_index);
-    ctx_get_zf_nodes_snip (ZCTX(CHROM), node_index, pSTRa(snip));
+    ctx_snip_from_zf_nodes (ZCTX(CHROM), node_index, pSTRa(snip));
 
-    int cmp = strncmp (snip, chrom_name, chrom_name_len);
-    if (!cmp && snip_len != chrom_name_len) // identical prefix but different length
-        cmp = snip_len - chrom_name_len;
-
-    if (cmp < 0) return chrom_zip_get_by_name_do (STRa(chrom_name), mid_sorted_index+1, last_sorted_index);
-    if (cmp > 0) return chrom_zip_get_by_name_do (STRa(chrom_name), first_sorted_index, mid_sorted_index-1);
+    int cmp = strcmp (snip, chrom_name);
+    if (cmp < 0) return chrom_zip_get_by_name_do (chrom_name, mid_sorted_index+1, last_sorted_index);
+    if (cmp > 0) return chrom_zip_get_by_name_do (chrom_name, first_sorted_index, mid_sorted_index-1);
 
     return node_index;
 }             
@@ -386,8 +385,14 @@ WordIndex chrom_get_by_name (STRp (chrom_name))
 {
     if (!chrom_sorter.len) return WORD_INDEX_NONE;
 
-    if (command == ZIP) return chrom_zip_get_by_name_do (STRa(chrom_name), 0, chrom_sorter.len-1); // not necessarily all of CHROM, just chrom_sorter.len
-    else                return chrom_piz_get_by_name_do (STRa(chrom_name), 0, chrom_sorter.len-1);
+    WordIndex wi;
+    SAFE_NULT(chrom_name); 
+    
+    if (command == ZIP) wi =  chrom_zip_get_by_name_do (chrom_name, 0, chrom_sorter.len-1); // not necessarily all of CHROM, just chrom_sorter.len
+    else                wi =  chrom_piz_get_by_name_do (STRa(chrom_name), 0, chrom_sorter.len-1);
+    
+    SAFE_RESTORE;
+    return wi;
 }
 
 

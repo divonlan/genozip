@@ -174,7 +174,7 @@ static void line_sorter_detect_duplicates (ConstBufferP index_buf)
         if (is_dup_luft && !is_dup_prim) {
             if (last_dup != index_i-1) // not duplicate duplicate (i.e. 3 or more variants are the same)
                 bufprintf (evb, &dups, "%s\t%"PRIu64"\t%"PRIu64"\n", 
-                           ctx_get_zf_nodes_snip (ZCTX(DTFZ(luft_chrom)), this_li->info.chrom_wi, 0, 0), 
+                           ctx_snip_from_zf_nodes (ZCTX(DTFZ(luft_chrom)), this_li->info.chrom_wi, 0, 0), 
                            this_li->info.start_pos, this_li->info.start_pos);
 
             last_dup = index_i;

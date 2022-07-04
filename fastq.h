@@ -102,6 +102,10 @@ extern void fastq_reset_line (VBlockP vb);
 // file pairing (--pair) stuff
 extern bool fastq_read_pair_1_data (VBlockP vb, uint32_t pair_vb_i, bool must_have);
 
+// FASTQ-specific fields in genozip header
+extern void fastq_zip_genozip_header (SectionHeaderGenozipHeader *header);
+extern void fastq_piz_genozip_header (const SectionHeaderGenozipHeader *header);
+
 #define FASTQ_LOCAL_GET_LINE_CALLBACKS           \
     { DT_FASTQ, _FASTQ_QUAL,   fastq_zip_qual }, 
  // { DT_FASTQ, _FASTQ_NONREF, fastq_zip_seq  },  this callback is called directly from codec_longr, it is not added to the list, since it should NOT be called in other codecs

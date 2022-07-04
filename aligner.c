@@ -18,6 +18,7 @@
 #include "segconf.h"
 #include "fastq.h"
 #include "aligner.h"
+#include "profiler.h"
 
 #define COMPLIMENT(b) (3-(b))
 
@@ -225,6 +226,8 @@ done:
 MappingType aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq), bool no_bitmap_if_perfect,
                              bool is_pair_2, PosType pair_gpos, bool pair_is_forward)
 {
+    START_TIMER;
+
     ConstBitsP genome, emoneg;
     PosType genome_nbases;
     ref_get_genome (gref, &genome, &emoneg, &genome_nbases);
@@ -241,12 +244,15 @@ MappingType aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq), bool no
     PosType gpos = (seq_len <= MAX_SHORT_READ_LEN && !segconf.running) 
                  ? aligner_best_match (VB, STRa(seq), pair_gpos, genome, emoneg, genome_nbases, &is_forward, &is_all_ref) : NO_GPOS; 
 
-    if (gpos == NO_GPOS || gpos > genome_nbases - seq_len || gpos > MAX_ALIGNER_GPOS - seq_len || gpos < 0/*never happens*/) return MAPPING_NO_MAPPING;
-    
+    if (gpos == NO_GPOS || gpos > genome_nbases - seq_len || gpos > MAX_ALIGNER_GPOS - seq_len || gpos < 0/*never happens*/) {
+        COPY_TIMER (aligner_seg_seq);
+        return MAPPING_NO_MAPPING;
+    }
+
     if (flag.show_aligner)
         iprintf ("%s: gpos=%"PRId64" forward=%s\n", LN_NAME, gpos, TF(is_forward));
 
-    Bits *bitmap = buf_get_bitarray (&bitmap_ctx->local);
+    Bits *bitmap = (BitsP)&bitmap_ctx->local;
 
     // allocate bitmaps - don't provide name to avoid re-writing param which would overwrite nbits that overlays it 
     if (!no_bitmap_if_perfect || !is_all_ref) {
@@ -314,7 +320,9 @@ MappingType aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq), bool no
     bitmap_ctx->next_local = next_bit;
 
 done:
-    ref_unlock (gref, lock);
+    ref_unlock (gref, &lock);
+
+    COPY_TIMER (aligner_seg_seq);
     return is_all_ref ? MAPPING_PERFECT : MAPPING_ALIGNED; // successful
 }
 

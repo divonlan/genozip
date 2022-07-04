@@ -31,7 +31,7 @@ rom txtfile_dump_vb (VBlockP vb, rom base_name)
     sprintf (dump_filename, "%s.vblock-%u.start-%"PRIu64".len-%u.bad", 
              base_name, vb->vblock_i, vb->vb_position_txt_file, vb->txt_data.len32);
 
-    buf_dump_to_file (dump_filename, &vb->txt_data, 1, false, false, false, false);
+    buf_dump_to_file (dump_filename, &vb->txt_data, 1, false, false, false, true);
 
     return dump_filename;
 }

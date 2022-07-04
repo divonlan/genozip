@@ -66,26 +66,26 @@ do_compress: ({});
 // PIZ side
 //--------------
 
-void codec_normq_reconstruct (VBlockP vb, Codec codec, ContextP qual_ctx)
+CODEC_RECONSTRUCT (codec_normq_reconstruct)
 {   
-    if (!qual_ctx->is_loaded) return;
+    if (!ctx->is_loaded) return;
 
     bool reconstruct = true;
 
-    rom next_qual = Bc(qual_ctx->local, qual_ctx->next_local);
+    rom next_qual = Bc(ctx->local, ctx->next_local);
 
-    if (*next_qual==' ' || *next_qual==127) { // this is QUAL="*"
-        sam_reconstruct_missing_quality (vb, *next_qual, reconstruct);
-        qual_ctx->next_local++;
+    if (*next_qual==' ') { // this is QUAL="*"
+        sam_reconstruct_missing_quality (vb, reconstruct);
+        ctx->next_local++;
     }
 
     else {
         if (reconstruct) {
-            if (last_flags.bits.rev_comp) str_reverse (BAFTtxt, next_qual, vb->seq_len);
-            else                          memcpy      (BAFTtxt, next_qual, vb->seq_len);
+            if (last_flags.rev_comp) str_reverse (BAFTtxt, next_qual, vb->seq_len);
+            else                     memcpy      (BAFTtxt, next_qual, vb->seq_len);
         }
 
-        qual_ctx->next_local += vb->seq_len;
+        ctx->next_local += vb->seq_len;
         vb->txt_data.len     += vb->seq_len;
     }
 }

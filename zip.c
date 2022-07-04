@@ -265,29 +265,33 @@ static void zip_resize_local (VBlockP vb, Context *ctx)
     // therefore we increment largest by 1 to ensure that no actual value is max_int
     if (VB_DT(DT_VCF) && dict_id_is_vcf_format_sf (ctx->dict_id)) largest++;
 
-    static const LocalType test_ltypes[] = { LT_UINT8, LT_UINT16, LT_UINT32, LT_INT8, LT_INT16, LT_INT32, LT_UINT64, LT_INT64 };  
-    for (LocalType lt_i=0; lt_i < ARRAY_LEN(test_ltypes); lt_i++)
-        if (smallest >= lt_desc[test_ltypes[lt_i]].min_int && largest <= lt_desc[test_ltypes[lt_i]].max_int) {
-            ctx->ltype = test_ltypes[lt_i];
+    static const LocalType test_ltypes[3][8] = { { LT_UINT8, LT_UINT16, LT_UINT32, LT_INT8, LT_INT16, LT_INT32, LT_UINT64, LT_INT64 },  // LT_DYN_INT
+                                                 { LT_hex8, LT_hex16, LT_hex32, LT_hex64 },   // LT_DYN_INT_h
+                                                 { LT_HEX8, LT_HEX16, LT_HEX32, LT_HEX64 } }; // LT_DYN_INT_H
+
+    const LocalType *my_test_ltypes = test_ltypes[ctx->ltype - LT_DYN_INT];
+    for (LocalType lt_i=0; lt_i < (ctx->ltype == LT_DYN_INT ? 8 : 4); lt_i++)
+        if (smallest >= lt_desc[my_test_ltypes[lt_i]].min_int && largest <= lt_desc[my_test_ltypes[lt_i]].max_int) {
+            ctx->ltype = my_test_ltypes[lt_i];
             break; // found
         }
 
     switch (ctx->ltype) {
-        case LT_UINT8: {
+        case LT_UINT8: case LT_hex8: case LT_HEX8:  {
             ARRAY (uint8_t, dst, ctx->local);
             for (uint64_t i=0; i < src_len; i++)
                 dst[i] = (uint8_t)src[i];
             break;
         }
 
-        case LT_UINT16: {
+        case LT_UINT16: case LT_hex16: case LT_HEX16: {
             ARRAY (uint16_t, dst, ctx->local);
             for (uint64_t i=0; i < src_len; i++)
                 dst[i] = BGEN16 ((uint16_t)src[i]);
             break;
         }
 
-        case LT_UINT32: {
+        case LT_UINT32: case LT_hex32: case LT_HEX32: {
             ARRAY (uint32_t, dst, ctx->local);
             for (uint64_t i=0; i < src_len; i++)
                 dst[i] = BGEN32 ((uint32_t)src[i]);
@@ -315,7 +319,7 @@ static void zip_resize_local (VBlockP vb, Context *ctx)
             break;
         }
 
-        case LT_UINT64: {
+        case LT_UINT64: case LT_hex64: case LT_HEX64: {
             for (uint64_t i=0; i < src_len; i++)
                 src[i] = BGEN64 (src[i]);
             break;
@@ -328,7 +332,8 @@ static void zip_resize_local (VBlockP vb, Context *ctx)
         }
 
         default:
-            ABORT ("%s: %s is not an integer type, ctx=%s", VB_NAME, lt_name(ctx->ltype), ctx->tag_name);
+            ABORT ("%s: Cannot find ltype for ctx=%s: value_range=[%"PRId64",%"PRId64"] ltype=%s",
+                   VB_NAME, ctx->tag_name, smallest, largest, lt_name (ctx->ltype));
     }
 }
 
@@ -418,7 +423,7 @@ static void zip_generate_local (VBlockP vb, ContextP ctx)
 
     ASSERT (ctx->dict_id.num, "tag_name=%s did_i=%u: ctx->dict_id=0 despite ctx->local containing data", ctx->tag_name, (unsigned)(ctx - vb->contexts));
 
-    if (ctx->dynamic_size_local) 
+    if (ctx->ltype == LT_DYN_INT || ctx->ltype == LT_DYN_INT_H || ctx->ltype == LT_DYN_INT_h) 
         zip_resize_local (vb, ctx);
 
     else {
@@ -426,7 +431,7 @@ static void zip_generate_local (VBlockP vb, ContextP ctx)
         bool need_lten = (ctx->local_is_lten && !flag.is_lten);
         
         switch (ctx->ltype) {
-            case LT_BITMAP    : LTEN_bits (buf_get_bitarray (&ctx->local));    
+            case LT_BITMAP    : LTEN_bits ((BitsP)&ctx->local);    
                                 ctx->local.prm8[0] = ((uint8_t)64 - (uint8_t)(ctx->local.nbits % 64)) % (uint8_t)64;
                                 ctx->local_param   = true;
                                 break;
@@ -485,7 +490,7 @@ void zip_compress_all_contexts_b250 (VBlockP vb)
     
     // arrays of all contexts in this VB
     ContextP ctxs[vb->num_contexts];
-    for (DidIType did_i=0; did_i < vb->num_contexts; did_i++) ctxs[did_i] = CTX(did_i);
+    for (Did did_i=0; did_i < vb->num_contexts; did_i++) ctxs[did_i] = CTX(did_i);
 
         // in each iteration, pick a context at random and remove it from the list 
     for (unsigned i=0; i < vb->num_contexts; i++) {
@@ -647,12 +652,17 @@ static void zip_write_global_area (void)
     BufferP dict_id_aliases_buf = dict_id_create_aliases_buf();
     if (dict_id_aliases_buf->len) zfile_compress_section_data (evb, SEC_DICT_ID_ALIASES, dict_id_aliases_buf);
 
-    // if this data has random access (i.e. it has chrom and pos), compress all random access records into evb->z_data
-    random_access_compress (&z_file->ra_buf,      SEC_RANDOM_ACCESS, 0, flag.show_index ? RA_MSG_PRIM : NULL);
-    random_access_compress (&z_file->ra_buf_luft, SEC_RANDOM_ACCESS, 1, flag.show_index ? RA_MSG_LUFT : NULL);
+    // SAM/BAM: we don't compress RANDOM_ACCESS for non-sorted in --best (it can be very big, and we want to minimize file size in --best), 
+    if (!flag.best || !(Z_DT(DT_BAM) || Z_DT(DT_SAM)) || segconf.is_sorted) {
+        // if this data has random access (i.e. it has chrom and pos), compress all random access records into evb->z_data
+        Codec codec = random_access_compress (&z_file->ra_buf, SEC_RANDOM_ACCESS, CODEC_UNKNOWN, 0, flag.show_index ? RA_MSG_PRIM : NULL);
+    
+        if (z_is_dvcf)
+            random_access_compress (&z_file->ra_buf_luft, SEC_RANDOM_ACCESS, codec, 1, flag.show_index ? RA_MSG_LUFT : NULL);
 
-    if (store_ref) 
-        random_access_compress (ref_get_stored_ra (gref), SEC_REF_RAND_ACC, 0, flag.show_ref_index ? RA_MSG_REF : NULL);
+        if (store_ref) 
+            random_access_compress (ref_get_stored_ra (gref), SEC_REF_RAND_ACC, codec, 0, flag.show_ref_index ? RA_MSG_REF : NULL);
+    }
 
     stats_generate();
 
@@ -685,7 +695,7 @@ static void zip_compress_one_vb (VBlockP vb)
     if (flag.pair != PAIR_READ_2) // in case of PAIR_READ_2, we already cloned in zip_one_file
         ctx_clone (vb);
 
-    // split each line in this variant block to its components
+    // split each line in this VB to its components
     threads_log_by_vb (vb, "zip", "START SEG", 0);
     seg_all_data_lines (vb);
 
@@ -736,7 +746,7 @@ static void zip_compress_one_vb (VBlockP vb)
     random_access_merge_in_vb (vb, 1);
     
     // compress data-type specific sections
-    DT_FUNC (vb, compress)(vb);
+    DT_FUNC (vb, zip_after_compress)(vb);
 
     // tell dispatcher this thread is done and can be joined.
     // thread safety: this isn't protected by a mutex as it will just be false until it at some point turns to true
@@ -835,7 +845,7 @@ static void zip_complete_processing_one_vb (VBlockP vb)
 }
 
 // this is the main dispatcher function. It first processes the txt header, then proceeds to read 
-// a variant block from the input file and send it off to a thread for computation. When the thread
+// a VB from the input file and send it off to a thread for computation. When the thread
 // completes, this function proceeds to write the output to the output file. It can dispatch
 // several threads in parallel.
 void zip_one_file (rom txt_basename, 
@@ -878,7 +888,7 @@ void zip_one_file (rom txt_basename,
                                  txt_file->no_progress ? PROGRESS_MESSAGE : PROGRESS_PERCENT,
                                  txt_file->no_progress ? "Compressing..." : NULL, 
                                  false,  
-                                 flag.xthreads, prev_file_last_vb_i, 1000,
+                                 flag.xthreads, prev_file_last_vb_i, 5000,
                                  zip_prepare_one_vb_for_dispatching, 
                                  zip_compress_one_vb, 
                                  zip_complete_processing_one_vb);

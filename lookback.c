@@ -24,7 +24,7 @@ void lookback_init (VBlockP vb, ContextP lb_ctx, ContextP ctx, StoreType store_t
     buf_alloc (vb, lookback_buf(ctx), 0, lookback_size(lb_ctx) * (store_type == STORE_INT ? sizeof (int64_t) : sizeof (WordIndex)), char, 1, "lookback_buf");
 }
 
-void lookback_insert (VBlockP vb, DidIType lb_did_i, DidIType did_i, bool copy_last_value, ValueType value, bool is_word_index)
+void lookback_insert (VBlockP vb, Did lb_did_i, Did did_i, bool copy_last_value, ValueType value, bool is_word_index)
 {
     ContextP ctx = CTX(did_i);
     BufferP buf = lookback_buf(ctx);
@@ -45,7 +45,7 @@ void lookback_insert (VBlockP vb, DidIType lb_did_i, DidIType did_i, bool copy_l
         *B(ValueType, *buf, buf->newest_index) = value;              // insert value
 }
 
-void lookback_insert_txt (VBlockP vb, DidIType lb_did_i, DidIType did_i, STRp(txt))
+void lookback_insert_txt (VBlockP vb, Did lb_did_i, Did did_i, STRp(txt))
 { 
     lookback_insert (vb, lb_did_i, did_i, false, TXTWORD(txt), false);
 }
@@ -79,7 +79,7 @@ const void *lookback_get_do (VBlockP vb, ContextP lb_ctx, ContextP ctx,
 }
 
 // Seg: check if a string is the same of a back txt at a certain lookback
-bool lookback_is_same_txt (VBlockP vb, DidIType lb_did_i, ContextP ctx, uint32_t lookback, STRp(str))
+bool lookback_is_same_txt (VBlockP vb, Did lb_did_i, ContextP ctx, uint32_t lookback, STRp(str))
 {
     ContextP lb_ctx = CTX(lb_did_i);
     uint32_t lb_size = lookback_size (lb_ctx);

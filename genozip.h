@@ -30,6 +30,8 @@ typedef _Bool bool;
 
 #define MAX_POS ((PosType)UINT32_MAX) // maximum allowed value for POS (constraint: fit into uint32 ctx.local). Note: in SAM the limit is 2^31-1
 
+#define MAX_DICTS 2048
+
 #define MAX_FIELDS 2048  // Maximum number of fields in a line (eg VCF variant, SAM line etc), including VCF/FORMAT fields, VCF/INFO fields GVF/ATTR fields, SAM/AUX fields etc. 
 
 #define DEFAULT_MAX_THREADS 8 // used if num_cores is not discoverable and the user didn't specifiy --threads
@@ -77,6 +79,10 @@ typedef void *Dispatcher;
 #define VB ((VBlockP)(vb))
 
 typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT, NUM_EXE_TYPES } ExeType;
+#define is_genocat   (exe_type == EXE_GENOCAT)
+#define is_genozip   (exe_type == EXE_GENOZIP)
+#define is_genounzip (exe_type == EXE_GENOUNZIP)
+#define is_genols    (exe_type == EXE_GENOLS)
 
 // IMPORTANT: DATATYPES GO INTO THE FILE FORMAT - THEY CANNOT BE CHANGED
 typedef enum { DT_NONE=-1, // used in the code logic, never written to the file
@@ -107,11 +113,12 @@ typedef union DictId {
         uint64_t b15     : 1; // 1 LSb from 4th character
         uint64_t unused5 : 32;
     } alt_key;
-} DictId;
+} DictId __attribute__((__transparent_union__)); // DictId function parameters can receive arguments that are of the type of members of the union
 #pragma pack()
 
-typedef uint16_t DidIType;    // index of a context in vb->contexts or z_file->contexts / a counter of contexts
-#define DID_I_NONE  ((DidIType)0xFFFF)
+typedef uint16_t Did;    // index of a context in vb->contexts or z_file->contexts / a counter of contexts
+#define DID_NONE ((Did)0xFFFF)
+#define DID_EOL  ((Did)0xFFFe)
 
 typedef uint8_t CompIType;    // comp_i 
 #define COMP_MAIN ((CompIType)0)
@@ -130,6 +137,12 @@ typedef const uint8_t *bytes; // read-only array of bytes
 typedef struct __attribute__ ((__packed__)) { uint32_t index, len; } TxtWord; // 32b as VBs are limited to 2GB (usually used as reference into txt_data)
 #define TXTWORD(snip) ((TxtWord){ .index = BNUMtxt (snip),    .len = snip##_len }) // get coordinates in txt_data
 #define TXTWORDi(x,i) ((TxtWord){ .index = BNUMtxt (x##s[i]), .len = x##_lens[i] }) 
+
+// a reference into data in z_file 
+#define ZWORD_MAX_INDEX ((1ULL << 40) - 1ULL) // 1 TB
+#define ZWORD_MAX_LEN   ((1ULL << 24) - 1ULL) // 16 MB
+typedef struct __attribute__ ((__packed__)) { uint64_t index : 40;  uint64_t len : 24; } ZWord; 
+#define ZWORDtxt(snip) ((ZWord){ .index = BNUMtxt (snip), .len = snip##_len }) // get coordinates in txt_data
 
 typedef union { // 64 bit
     int64_t i;
@@ -212,10 +225,10 @@ typedef enum { SKIP_PURPOSE_PROGRESS, // true if this section doesn't count towa
 typedef IS_SKIP ((*Skip));
 
 // PIZ / ZIP inspired by "We don't sell Duff. We sell Fudd"
-typedef enum { NO_COMMAND=-1, ZIP='z', PIZ='d' /* this is unzip */, LIST='l', LICENSE='L', VERSION='V', HELP='h', SHOW_HEADERS=10, TEST_AFTER_ZIP } CommandType;
+typedef enum { NO_COMMAND=-1, ZIP='z', PIZ='d' /* this is unzip */, LIST='l', LICENSE='L', VERSION='V', HELP=140, SHOW_HEADERS=10, TEST_AFTER_ZIP } CommandType;
 extern CommandType command, primary_command;
 
-// external vb - used when an operation is needed outside of the context of a specific variant block;
+// external vb - used when an operation is needed outside of the context of a specific VB;
 extern VBlockP evb;
 
 // threads
@@ -292,7 +305,7 @@ typedef SORTER ((*Sorter));
     unsigned snip_len = 3 + str_int ((n), &snip[3]);
 
 #define STR(x)   rom x;        uint32_t x##_len
-#define eSTR(x) extern rom x; extern uint32_t x##_len
+#define eSTR(x)  extern rom x; extern uint32_t x##_len
 #define STR0(x)  rom x=NULL;   uint32_t x##_len=0
 #define STRw(x)  char *x;      uint32_t x##_len    // writeable
 #define STRw0(x) char *x=NULL; uint32_t x##_len=0  // writeable, initializedx
@@ -324,6 +337,7 @@ typedef SORTER ((*Sorter));
 #define STRfi(x,i) x##_lens[i], x##s[i]
 #define STRfb(buf) (int)(buf).len, (buf).data 
 #define STRfw(txtword) (txtword).len, Btxt ((txtword).index) // used with TxtWord
+#define STRfBw(buf,txtword) (txtword).len, Bc ((buf), (txtword).index) // used with TxtWord or ZWord
 
 #define STRcpy(dst,src)    ({ if (src##_len) { memcpy(dst,src,src##_len) ; dst##_len = src##_len; } })
 #define STRcpyi(dst,i,src) ({ if (src##_len) { memcpy(dst##s[i],src,src##_len) ; dst##_lens[i] = src##_len; } })
@@ -331,7 +345,7 @@ typedef SORTER ((*Sorter));
 #define STRLEN(string_literal) (sizeof string_literal - 1)
 #define STRtxt(x) Btxt (x), x##_len
 #define STRtxtw(txtword) Btxt ((txtword).index), (txtword).len // used with TxtWord
-
+#define STRBw(buf,txtword) Bc ((buf), (txtword).index), (txtword).len // used with TxtWord
 #define FUNCLINE rom func, uint32_t code_line
 #define __FUNCLINE __FUNCTION__, __LINE__
 #define ARRAYp(name) uint32_t n_##name##s, rom name##s[], uint32_t name##_lens[] // function parameters
@@ -390,7 +404,7 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
 #define COMPRESSOR_CALLBACK(func) \
 void func (VBlockP vb, LineIType vb_line_i, \
            char **line_data, uint32_t *line_data_len,  \
-           uint32_t maximum_size, /* might be less than the size available if we're sampling in zip_assign_best_codec() */ \
+           uint32_t maximum_size, /* might be less than the size available if we're sampling in codec_assign_best_codec() */ \
            bool *is_rev)          // QUAL and SEQ callbacks - must be returned in SAM/BAM and set to 0 elsewhere
 #define CALLBACK_NO_SIZE_LIMIT 0xffffffff // for maximum_size
 

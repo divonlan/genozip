@@ -59,7 +59,7 @@ void ref_iupacs_compress (void)
 
         if (flag.show_ref_iupacs)   
             iprintf ("IUPAC=%c\nCHROM=%s\tPOS=%"PRIu64"\tGPOS=%"PRIu64"\n", 
-                     make_iupacs[i].iupac, ctx_get_zf_nodes_snip (ZCTX(FASTA_CONTIG), r->chrom, 0, 0), r->first_pos + make_iupacs[i].idx, gpos);
+                     make_iupacs[i].iupac, ctx_snip_from_zf_nodes (ZCTX(FASTA_CONTIG), r->chrom, 0, 0), r->first_pos + make_iupacs[i].idx, gpos);
 
         iupacs[i] = (Iupac) { .gpos  = BGEN64 (gpos - last_gpos), // store delta
                               .iupac = make_iupacs[i].iupac };
@@ -107,7 +107,7 @@ void ref_iupacs_load (Reference ref)
     }
 
 done:
-    if (exe_type == EXE_GENOCAT && flag.show_ref_iupacs) exit_ok();
+    if (is_genocat && flag.show_ref_iupacs) exit_ok();
 }
 
 static const Iupac *ref_iupacs_find (Iupac *iupacs, int64_t first, int64_t last, PosType gpos)

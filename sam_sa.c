@@ -66,7 +66,7 @@ static inline bool sam_seg_SA_field_is_line_matches_aln (VBlockSAMP vb, ZipDataL
 
     // revcomp (test this item first as it is the fastest)
     bool aln_revcomp = *items[SA_STRAND] == '-';
-    if (aln_revcomp != dl->FLAG.bits.rev_comp) return false;
+    if (aln_revcomp != dl->FLAG.rev_comp) return false;
 
     // rname (pre-populated from sam header)
     STR(line_rname);
@@ -155,8 +155,10 @@ static bool sam_seg_SA_field_is_depn_from_prim (VBlockSAMP vb, ZipDataLineSAM *d
     return true; // indeed, this depn line is in the same SA group as the prim line
 }
 
-void sam_SA_Z_seg (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa))
+void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), unsigned add_bytes)
 {
+    segconf_set_has (OPTION_SA_Z);
+
     static const MediumContainer container_SA = { .nitems_lo = NUM_SA_ITEMS,      
                                                   .repsep    = { ';' }, // including on last repeat    
                                                   .items     = { { .dict_id = { _OPTION_SA_RNAME  }, .separator = {','} },  
@@ -167,43 +169,42 @@ void sam_SA_Z_seg (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa))
                                                                  { .dict_id = { _OPTION_SA_NM     },                  } } };
 
     ContextP ctx = CTX(OPTION_SA_Z);
-  
+    bool has_prim = zip_has_real_prim;
+
     switch (vb->comp_i) {
 
     // MAIN: special snip with two modes: "normal" if either line has no prim, or line has a matching prim, 
     // or "abnormal", is line has prim, but it is not matching. Container, if needed goes into OPTION_SA_MAIN 
     // note: usually, we expect all lines to be normal, hence making the context an "all the same"  
     case SAM_COMP_MAIN: {
-        bool has_matching_prim = zip_has_prim && sam_seg_SA_field_is_depn_from_prim (vb, dl, STRa(sa));
-        bool abnormal = zip_has_prim && !has_matching_prim; // abnormal if has unmatching prim line
+        bool has_matching_prim = has_prim && sam_seg_SA_field_is_depn_from_prim (vb, dl, STRa(sa));
+        bool abnormal = has_prim && !has_matching_prim; // abnormal if has unmatching prim line
 
         seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_SA_main, '0' + !abnormal }, 3, ctx, 0);
 
         // we seg a container into OPTION_SA_MAIN if there is no prim line, or if the prim line doesn't match (=abnormal)
-        if (abnormal || !zip_has_prim) {
+        if (abnormal || !has_prim) {
             SegCallback callbacks[NUM_SA_ITEMS] = { [SA_RNAME]=chrom_seg_cb, [SA_POS]=seg_pos_field_cb, [SA_CIGAR]=sam_seg_0A_cigar_cb, [SA_MAPQ]=sam_seg_0A_mapq_cb };            
-            seg_array_of_struct (VB, CTX(OPTION_SA_MAIN), container_SA, STRa(sa), callbacks);
-            ctx->txt_len++; // \t or \n in SAM and \0 in BAM 
+            seg_array_of_struct (VB, CTX(OPTION_SA_MAIN), container_SA, STRa(sa), callbacks, add_bytes); 
         }
 
         // special function can reconstruct depn SA from prim SA - no need to seg anything else
         else
-            ctx->txt_len += sa_len + 1; // +1 for \t or \n in SAM and \0 in BAM
+            ctx->txt_len += add_bytes;
             
         break;
     }
 
-    // PRIM - seg against SA Group for reconstruction, and seg normally for consumption by sam_piz_load_SA_Groups
+    // PRIM - seg against SA Group for reconstruction, and seg normally for consumption by sam_piz_load_sags
     case SAM_COMP_PRIM: {
         sam_seg_against_sa_group (vb, ctx, 0); // This will be reconstructed
 
         // we need to seg the primary NM before the SA NMs, if not segged yet
         ASSERT (dl->NM_len, "%s: PRIM line with SA is missing NM. Not expecting MAIN to send this line to PRIM", LN_NAME);
-        sam_seg_NM_field (vb, dl, dl->NM, dl->NM_len);
+        sam_seg_NM_i (vb, dl, dl->NM, dl->NM_len);
 
         SegCallback callbacks[NUM_SA_ITEMS] = { [SA_RNAME]=chrom_seg_cb, [SA_POS]=seg_pos_field_cb, [SA_CIGAR]=sam_seg_0A_cigar_cb, [SA_MAPQ]=sam_seg_0A_mapq_cb };            
-        int32_t num_alns = 1/*primary aln*/ + seg_array_of_struct (VB, ctx, container_SA, STRa(sa), callbacks); // 0 if SA is malformed 
-        ctx->txt_len++; // \t in SAM and \0 in BAM 
+        int32_t num_alns = 1/*primary aln*/ + seg_array_of_struct (VB, ctx, container_SA, STRa(sa), callbacks, add_bytes); // 0 if SA is malformed 
 
         // We already tested the SA to be good when we added this line to PRIM in sam_seg_prim_add_sa_group_SA
         ASSSEG (num_alns >= 2 && num_alns <= MAX_SA_NUM_ALNS, sa, "%s: Not expecting a malformed SA field in PRIM. num_alns=%u SA:Z=\"%.*s\"", 
@@ -211,12 +212,12 @@ void sam_SA_Z_seg (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa))
 
         // use SA.local to store number of alignments in this SA Group (inc. primary)
         uint8_t num_alns_8b = num_alns;
-        seg_add_to_local_nonresizeable (VB, ctx, &num_alns_8b, false, 0); // for non-SA PRIM lines, this is segged in sam_seg_sa_group_stuff
+        seg_integer_fixed (VB, ctx, &num_alns_8b, false, 0); // for non-SA PRIM lines, this is segged in sam_seg_sa_group_stuff
     
-        // PRIM: Remove the container b250 - Reconstruct will consume the SPECIAL_SAGROUP, and sam_piz_load_SA_Groups will
+        // PRIM: Remove the container b250 - Reconstruct will consume the SPECIAL_SAG, and sam_piz_load_sags will
         // consume OPTION_SA_* (to which we have already added the main fields of this line - RNAME, POS...)
         ctx_decrement_count (VB, ctx, LASTb250(ctx));
-        ctx->b250.len--;
+        ctx->b250.len32--;
 
         // build SA Group structure in VB, to be later ingested into z_file->sa_*
         sam_seg_prim_add_sa_group_SA (vb, dl, STRa (sa), dl->NM, IS_BAM_ZIP);
@@ -225,13 +226,12 @@ void sam_SA_Z_seg (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa))
 
     // DEPN with SA Group - Seg against SA Group if we have one, or just a container if we don't
     case SAM_COMP_DEPN:
-        if (vb->sa_grp)  // sam_sa_seg_depn_find_sagroup verified that the group matches the SA field 
+        if (vb->sag)  // sam_sa_seg_depn_find_sagroup verified that the group matches the SA field 
             sam_seg_against_sa_group (vb, ctx, sa_len+1); // +1 for \t in SAM and \0 in BAM
 
         else {
             SegCallback callbacks[NUM_SA_ITEMS] = { [SA_RNAME]=chrom_seg_cb, [SA_POS]=seg_pos_field_cb, [SA_CIGAR]=sam_seg_0A_cigar_cb, [SA_MAPQ]=sam_seg_0A_mapq_cb };            
-            seg_array_of_struct (VB, ctx, container_SA, STRa(sa), callbacks);
-            ctx->txt_len++; // \t in SAM and \0 in BAM 
+            seg_array_of_struct (VB, ctx, container_SA, STRa(sa), callbacks, add_bytes);
         }
         break;
 
@@ -251,7 +251,7 @@ bool sam_seg_0A_mapq_cb (VBlockP vb, ContextP ctx, STRp (mapq_str), uint32_t rep
     uint8_t mapq; // 8 bit by BAM specification of main field MAPQ
     if (!str_get_int_range8 (STRa(mapq_str), 0, 255, &mapq)) return false;
     
-    seg_add_to_local_nonresizeable (VB, ctx, &mapq, false, mapq_str_len);
+    seg_integer_fixed (VB, ctx, &mapq, false, mapq_str_len);
     return true;
 }
 
@@ -292,10 +292,9 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SA_main)
     VBlockSAMP vb = (VBlockSAMP)vb_;
 
     bool normal = snip[0] - '0';
-    bool has_prim = piz_has_buddy && (last_flags.bits.supplementary || last_flags.bits.secondary);
 
     // case: we segged a container 
-    if (!has_prim || !normal) 
+    if (!piz_has_real_prim || !normal) 
         reconstruct_from_ctx (vb, OPTION_SA_MAIN, 0, reconstruct);
 
     // case: we segged against the same-VB prim line
@@ -305,7 +304,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SA_main)
         reconstruct_from_buddy (VB, CTX(SAM_POS),     0, 0, reconstruct, new_value); RECONSTRUCT1(',');
         
         SamFlags prim_flags = (SamFlags) {.value = *B(int64_t, CTX(SAM_FLAG)->history, vb->buddy_line_i) };
-        RECONSTRUCT1 (prim_flags.bits.rev_comp ? '-' : '+');
+        RECONSTRUCT1 (prim_flags.rev_comp ? '-' : '+');
         RECONSTRUCT1(',');
 
         sam_piz_special_RECON_BUDDY_CIGAR (VB, CTX(SAM_CIGAR), 0, 0, new_value, reconstruct);
@@ -326,7 +325,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SA_main)
         int64_t my_pos  = CTX(SAM_POS)->last_value.i;
         int64_t my_mapq = CTX(SAM_MAPQ)->last_value.i;
         int64_t my_nm   = reconstruct_peek (VB, CTX(OPTION_NM_i), 0, 0).i;
-        char my_strand  = last_flags.bits.rev_comp ? '-' : '+';
+        char my_strand  = last_flags.rev_comp ? '-' : '+';
 
         STR(my_rname);
         ctx_get_snip_by_word_index (CTX(SAM_RNAME), CTX(SAM_RNAME)->last_value.i, my_rname);

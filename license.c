@@ -471,13 +471,13 @@ static void license_print_default_notice (void)
     }
 }
 
-void license_print_notice (void)
+void license_print_tip (void)
 {
     if (!is_info_stream_terminal)
         license_print_default_notice();
 
     // if outputting to a terminal - rotate between messages
-    else switch (time(0) % 25) {
+    else switch (time(0) % 28) {
         case 0 ... 5:
             license_print_default_notice();
             break;
@@ -487,9 +487,10 @@ void license_print_notice (void)
             break;
 
         case 7:
-            if (!strcmp (arch_get_distribution(), "github"))
+            if (!strcmp (arch_get_distribution(), "github")) {
                 iprintf ("\nDo you like Genozip? Please support it by starring it on github: %s\n", GITHUB_REPO);
-            break;
+                break;
+            }
 
         case 8:
             iprint0 ("\nIs Genozip useful? Help your colleagues by asking the IT folks to post it on your institution's bioinformatics page\n");
@@ -536,11 +537,11 @@ void license_print_notice (void)
             break;
     
         case 19:
-            iprintf ("\nInterested in other users' experiences with Genozip? Read their testimonials: %s\n", WEBSITE_TESTIMONIALS);
+            iprintf ("\nInterested in seeing who else is using Genozip? Here: %s\n", WEBSITE_INSTITUTIONS);
             break;
         
         case 20:
-            iprint0 ("\nTip: genozip files are an excellent way to share and publish data - uncompressing genozip files does NOT require a license\n");
+            iprint0 ("\nTip: genozip files are an excellent way to share and publish data - uncompressing genozip files is always free\n");
             break;
 
         case 21:
@@ -548,17 +549,37 @@ void license_print_notice (void)
             break;
 
         case 22:
-            iprintf ("\nTip: using --reference when compressing FASTQ, BAM and GVCF files results in significantly better compression, see: %s\n", WEBSITE_GENOZIP);
-            break;
+            if (!flag.reference) {
+                iprintf ("\nTip: using --reference when compressing FASTQ, BAM and GVCF files results in significantly better compression, see: %s\n", WEBSITE_GENOZIP);
+                break;
+            }
 
         case 23:
-            iprintf ("\nTip: using --optimize permits Genozip to make minor modifications to the data that usually have no impact on downstream analysis, yet result in significantly better compression, see: %s\n", WEBSITE_GENOZIP);
+            iprint0 ("\nPlease take a moment now to make a note to not forget to cite Genozip:\n"
+                     "Lan, D., et al. (2021) Genozip: a universal extensible genomic data compressor, Bioinformatics, 37, 2225-2230\n"
+                     "Lan, D., et al. (2020) genozip: a fast and efficient compression tool for VCF files, Bioinformatics, 36, 4091-4092\n\n");
             break;
 
         case 24:
-            iprint0 ("\nPlease take a moment now to make a note to not forget to cite Genozip:\n"
-                    "Lan, D., et al. (2021) Genozip: a universal extensible genomic data compressor, Bioinformatics, 37, 2225-2230\n"
-                    "Lan, D., et al. (2020) genozip: a fast and efficient compression tool for VCF files, Bioinformatics, 36, 4091-4092\n\n");
+            if (!flag.optimize) {
+                iprintf ("\nTip: using --optimize permits Genozip to make minor modifications to the data that usually have no impact on downstream analysis, yet result in significantly better compression, see: %s\n", WEBSITE_GENOZIP);
+                break;
+            }
+
+        case 25: 
+            if (flag.test) {
+                iprint0 ("\nFYI: automatic testing after compression can be disabled with --no-test (not recommended)\n");
+                break;
+            }
+
+        case 26: 
+            if (!flag.best) {
+                iprint0 ("\nTip: to achieve the best compression, use --best\n");
+                break;
+            }
+
+        case 27: 
+            iprintf ("\nMake money with Genozip! Genozip pays a referral fee for referring a customer, See: %s\n", WEBSITE_REFERRAL);
             break;
 
         default: break;

@@ -101,3 +101,4 @@ digest.*.log
 failed-line.*
 *.tar
 *.log
+*.dict

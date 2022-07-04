@@ -758,7 +758,7 @@ static bool vcf_inspect_txt_header_piz (VBlockP txt_header_vb, BufferP txt_heade
         bufprintf (txt_header_vb, txt_header, KH_INFO_oSTATUS"\n", GENOZIP_CODE_VERSION);
 
     // add genozip command line
-    if (!flag.header_one && exe_type == EXE_GENOCAT && !flag.genocat_no_reconstruct && !evb->comp_i
+    if (!flag.header_one && is_genocat && !flag.genocat_no_reconstruct && !evb->comp_i
         && !flag.no_pg && (flag.data_modified || z_is_dvcf)) 
         vcf_header_add_genozip_command (txt_header_vb, txt_header);
 

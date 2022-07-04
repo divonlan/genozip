@@ -29,7 +29,7 @@ void vcf_samples_zip_initialize_PS_PID (void)
 {
     // FORMAT/PS related stuff (0=lookback 1 line, 1=lookback 2 lines etc)
     for (int i=0; i < PS_PID_LOOKBACK_LINES; i++)
-        seg_prepare_snip_other_chari (SNIP_LOOKBACK, (DictId)_VCF_LOOKBACK, 'T'+i, ps_lookback_snip, i);
+        seg_prepare_snip_other_chari (SNIP_LOOKBACK, _VCF_LOOKBACK, 'T'+i, ps_lookback_snip, i);
 
     SmallContainer con_PS_pos_ref_alt = {
         .repeats   = 1,
@@ -49,12 +49,12 @@ void vcf_samples_seg_initialize_LOOKBACK (VBlockVCFP vb)
 
     // note: we don't actually Seg anything into VCF_LOOKBACK as we get the lookback from the number of samples
     // this just carries the lb_size as an empty local section
-    lookback_ctx->flags.store        = STORE_INT;
-    lookback_ctx->dynamic_size_local = true;
-    lookback_ctx->local_param        = true;
-    lookback_ctx->local.prm8[0]      = lookback_size_to_local_param (PS_PID_LOOKBACK_LINES * vcf_num_samples + 1); // 1+ number of lookback values
-    lookback_ctx->local_always       = (lookback_ctx->local.prm8[0] != 0); // no need for a SEC_LOCAL section if the parameter is 0 (which is the default anyway)
-    lookback_ctx->is_initialized     = true;
+    lookback_ctx->flags.store    = STORE_INT;
+    lookback_ctx->ltype          = LT_DYN_INT;
+    lookback_ctx->local_param    = true;
+    lookback_ctx->local.prm8[0]  = lookback_size_to_local_param (PS_PID_LOOKBACK_LINES * vcf_num_samples + 1); // 1+ number of lookback values
+    lookback_ctx->local_always   = (lookback_ctx->local.prm8[0] != 0); // no need for a SEC_LOCAL section if the parameter is 0 (which is the default anyway)
+    lookback_ctx->is_initialized = true;
 
     CTX(VCF_SAMPLES)->flags.store = STORE_INDEX; // last_value is number of samples (=con.repeats)
 
@@ -93,9 +93,9 @@ void vcf_samples_seg_finalize_PS_PID (VBlockVCFP vb)
 
     // consolidate to the context actually used 
     if (CTX(FORMAT_PID)->nodes.len || CTX(FORMAT_PID)->ol_nodes.len)
-        stats_set_consolidation (VB, FORMAT_PID, 4, VCF_LOOKBACK, FORMAT_PSref, FORMAT_PSalt, FORMAT_PSpos);
+        ctx_consolidate_stats (VB, FORMAT_PID, 5, VCF_LOOKBACK, FORMAT_PSref, FORMAT_PSalt, FORMAT_PSpos, DID_EOL);
     else
-        stats_set_consolidation (VB, FORMAT_PS, 4, VCF_LOOKBACK, FORMAT_PSref, FORMAT_PSalt, FORMAT_PSpos);
+        ctx_consolidate_stats (VB, FORMAT_PS, 5, VCF_LOOKBACK, FORMAT_PSref, FORMAT_PSalt, FORMAT_PSpos, DID_EOL);
 }
 
 static inline bool vcf_seg_FORMAT_PS_PID_is_same_alt1 (VBlockVCFP vb, STRp(alt))

@@ -22,17 +22,16 @@ static inline bool sam_seg_predict_TLEN (VBlockSAMP vb, ZipDataLineSAM *dl, bool
 {
     SamPosType pnext_pos_delta = dl->PNEXT - dl->POS;
 
-    //printf ("RNEXT=%.*s\n", vb->last_txt_len(SAM_RNAME), last_txt(vb, SAM_RNAME));
-    if (dl->FLAG.bits.supplementary || dl->FLAG.bits.next_unmapped) 
+    if (dl->FLAG.supplementary || dl->FLAG.next_unmapped) 
         *predicted_tlen = 0;
     
-    else if (!dl->FLAG.bits.multi_segments)
+    else if (!dl->FLAG.multi_segs)
         *predicted_tlen = vb->ref_consumed;
 
     else if (!is_rname_rnext_same) 
         *predicted_tlen = 0;
     
-    else if (!dl->FLAG.bits.rev_comp && dl->FLAG.bits.next_rev_comp) {
+    else if (!dl->FLAG.rev_comp && dl->FLAG.next_rev_comp) {
         
         uint32_t approx_mate_ref_consumed;
 
@@ -54,8 +53,8 @@ static inline bool sam_seg_predict_TLEN (VBlockSAMP vb, ZipDataLineSAM *dl, bool
         *predicted_tlen = pnext_pos_delta + approx_mate_ref_consumed;
     }
 
-    else if (dl->FLAG.bits.rev_comp && !dl->FLAG.bits.next_rev_comp) 
-        *predicted_tlen = pnext_pos_delta - vb->ref_consumed + 2 * !dl->FLAG.bits.is_aligned;
+    else if (dl->FLAG.rev_comp && !dl->FLAG.next_rev_comp) 
+        *predicted_tlen = pnext_pos_delta - vb->ref_consumed + 2 * !dl->FLAG.is_aligned;
 
     else 
         *predicted_tlen = pnext_pos_delta - vb->ref_consumed;
@@ -98,7 +97,7 @@ void sam_seg_TLEN (VBlockSAMP vb, ZipDataLineSAM *dl,
         seg_by_ctx (VB, STRa(snip), ctx, add_bytes);
     }
 
-    else if (segconf.has_TLEN_non_zero && !segconf.running) // note: only in these cases dynamic_size_local is set in sam_seg_initialize
+    else if (segconf.has_TLEN_non_zero && !segconf.running) // note: only in these cases ltype=LT_DYN_INT is set in sam_seg_initialize
         seg_integer (VB, ctx, tlen_value, true, add_bytes);
 
     else
@@ -113,9 +112,9 @@ void sam_seg_TLEN (VBlockSAMP vb, ZipDataLineSAM *dl,
 
 static inline SamPosType sam_piz_predict_TLEN (VBlockSAMP vb, bool has_mc)
 {
-    if (last_flags.bits.supplementary || last_flags.bits.next_unmapped) return 0;
+    if (last_flags.supplementary || last_flags.next_unmapped) return 0;
 
-    if (!last_flags.bits.multi_segments) return vb->ref_consumed;
+    if (!last_flags.multi_segs) return vb->ref_consumed;
 
     rom last_rname  = last_txt(VB, SAM_RNAME);
     rom last_rnext  = last_txt(VB, SAM_RNEXT);
@@ -129,7 +128,7 @@ static inline SamPosType sam_piz_predict_TLEN (VBlockSAMP vb, bool has_mc)
 
     SamPosType pnext_pos_delta = (SamPosType)CTX(SAM_PNEXT)->last_value.i - (SamPosType)CTX(SAM_POS)->last_value.i;
 
-    if (!last_flags.bits.rev_comp && last_flags.bits.next_rev_comp) {
+    if (!last_flags.rev_comp && last_flags.next_rev_comp) {
 
         if (has_mc) {
             STR(MC);
@@ -148,8 +147,8 @@ static inline SamPosType sam_piz_predict_TLEN (VBlockSAMP vb, bool has_mc)
             return pnext_pos_delta + vb->ref_consumed;
     }
 
-    if (last_flags.bits.rev_comp && !last_flags.bits.next_rev_comp) 
-        return pnext_pos_delta - vb->ref_consumed + 2 * !last_flags.bits.is_aligned;
+    if (last_flags.rev_comp && !last_flags.next_rev_comp) 
+        return pnext_pos_delta - vb->ref_consumed + 2 * !last_flags.is_aligned;
 
     else 
         return pnext_pos_delta - vb->ref_consumed;

@@ -14,6 +14,7 @@
 #include "strings.h"
 #include "zfile.h"
 #include "sections.h"
+#include "codec.h"
 
 static Mutex ra_mutex[2] = {};
 
@@ -40,7 +41,7 @@ static void BGEN_random_access (BufferP ra_buf)
     }
 }
 
-static void random_access_show_index (ConstBufferP ra_buf, bool from_zip, DidIType chrom_did_i, rom msg)
+static void random_access_show_index (ConstBufferP ra_buf, bool from_zip, Did chrom_did_i, rom msg)
 {
     iprintf ("\n%s:\n", msg);
     
@@ -62,8 +63,8 @@ static void random_access_show_index (ConstBufferP ra_buf, bool from_zip, DidITy
         }
         else {
             CtxWord *chrom_word = B(CtxWord, ctx->word_list, ra->chrom_index);
-            chrom_snip = Bc (ctx->dict, chrom_word->char_index);
-            chrom_snip_len = chrom_word->snip_len;
+            chrom_snip = Bc (ctx->dict, chrom_word->index);
+            chrom_snip_len = chrom_word->len;
         }
         iprintf ("vb_i=%u chrom='%.*s' (chrom_word_index=%d) min_pos=%"PRId64" max_pos=%"PRId64"\n",
                  ra->vblock_i, chrom_snip_len, chrom_snip, ra->chrom_index, ra->min_pos, ra->max_pos);
@@ -108,7 +109,7 @@ void random_access_update_chrom (VBlockP vb, int ra_i, WordIndex chrom_node_inde
 }
 
 // ZIP only: update the pos in the existing chrom entry
-void random_access_update_pos (VBlockP vb, int ra_i, DidIType did_i_pos)
+void random_access_update_pos (VBlockP vb, int ra_i, Did did_i_pos)
 {
     // if the last chrom was unknown ("*"), we do nothing with pos either
     if (vb->ra_buf[ra_i].param == RA_UNKNOWN_CHROM_SKIP_POS) {
@@ -278,9 +279,9 @@ void random_access_finalize_entries (BufferP ra_buf)
             } 
 }
 
-void random_access_compress (ConstBufferP ra_buf_, SectionType sec_type, int ra_i, rom msg)
+Codec random_access_compress (ConstBufferP ra_buf_, SectionType sec_type, Codec codec, int ra_i, rom msg)
 {
-    if (!ra_buf_->len) return; // no random access
+    if (!ra_buf_->len) return codec; // no random access
 
     BufferP ra_buf = (BufferP)ra_buf_; // we will restore everything so that Const is honoured
 
@@ -291,12 +292,19 @@ void random_access_compress (ConstBufferP ra_buf_, SectionType sec_type, int ra_
     SectionFlags sec_flags = {};
     if (ra_i) sec_flags.random_access.luft = true;
 
+    // assigned codec to lens buffer (lens_ctx.local)
     ra_buf->len *= sizeof (RAEntry); // change len to count bytes
-    zfile_compress_section_data_ex (evb, sec_type, ra_buf, 0,0, CODEC_LZMA, sec_flags); // ra data compresses better with LZMA than BZLIB
+    
+    if (codec == CODEC_UNKNOWN) codec = codec_assign_best_codec (evb, NULL, ra_buf, sec_type);
+    if (codec == CODEC_UNKNOWN) codec = CODEC_NONE; // really small
+
+    zfile_compress_section_data_ex (evb, sec_type, ra_buf, 0,0, codec, sec_flags); // ra data compresses better with LZMA than BZLIB
 
     // restore so we leave it intact as promised by Const
     ra_buf->len /= sizeof (RAEntry); // restore
     BGEN_random_access (ra_buf); // make ra_buf into big endian
+
+    return codec;
 }
 
 // --------------------
@@ -344,22 +352,6 @@ bool random_access_is_vb_included (VBIType vb_i)
             return true; // vb is included
 
     return false; 
-}
-
-// PIZ main threads: get last vb_i that is included in the regions requested with --regions, or -1 if no vb includes regions.
-// used for reading dictionaries from a genozip file - there's no need to read dictionaries beyond this vb_i
-int32_t random_access_get_last_included_vb_i (void)
-{
-    int32_t last_vb_i = -1;
-    
-    for_buf (const RAEntry, ra, z_file->ra_buf) {
-        if ((int32_t)ra->vblock_i <= last_vb_i) continue; // we already decided to include this vb_i - no need to check further
-
-        if (regions_get_ra_intersection (ra->chrom_index, ra->min_pos, ra->max_pos))
-            last_vb_i = (int32_t)ra->vblock_i; 
-    }   
-
-    return last_vb_i;
 }
 
 // FASTA PIZ
@@ -414,7 +406,7 @@ uint32_t random_access_verify_all_contigs_same_length (void)
 }
 
 // PIZ: read SEC_RANDOM_ACCESS. If --luft - read the luft section instead.
-void random_access_load_ra_section (SectionType sec_type, DidIType chrom_did_i, BufferP ra_buf, rom buf_name, rom show_index_msg)
+void random_access_load_ra_section (SectionType sec_type, Did chrom_did_i, BufferP ra_buf, rom buf_name, rom show_index_msg)
 {
     Section ra_sl = sections_first_sec (sec_type, true);
     if (!ra_sl) return; // section doesn't exist
@@ -434,7 +426,7 @@ void random_access_load_ra_section (SectionType sec_type, DidIType chrom_did_i, 
     
     if (show_index_msg) {
         random_access_show_index (ra_buf, false, chrom_did_i, show_index_msg);
-        if (exe_type == EXE_GENOCAT) exit_ok(); // in genocat --show-index, we only show the index, not the data
+        if (is_genocat) exit_ok(); // in genocat --show-index, we only show the index, not the data
     }
 }
 

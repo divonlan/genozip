@@ -166,7 +166,7 @@ COMPRESSOR_CALLBACK (fasta_zip_seq)
 {
     ZipDataLineFASTA *dl = DATA_LINE (vb_line_i);
 
-    // note: maximum_len might be shorter than the data available if we're just sampling data in zip_assign_best_codec
+    // note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec
     *line_data_len = MIN_(dl->seq_len, maximum_size);
     
     if (line_data) // if NULL, only length was requested
@@ -209,7 +209,7 @@ void fasta_seg_initialize (VBlockP vb)
         CTX(FASTA_NONREF)->no_callback = true; // override callback if we are segmenting to a reference
 
     // in --stats, consolidate stats into FASTA_NONREF
-    stats_set_consolidation (vb, FASTA_NONREF, 1, FASTA_NONREF_X);
+    ctx_consolidate_stats (vb, FASTA_NONREF, 2, FASTA_NONREF_X, DID_EOL);
 
     if (segconf.running)
         segconf.fasta_has_contigs = true; // initialize optimistically
@@ -287,11 +287,11 @@ static void fasta_seg_desc_line (VBlockFASTAP vb, rom line_start, uint32_t line_
             seg_add_to_local_text (VB, CTX(FASTA_DESC), line_start, line_len, true, line_len);
 
         char special_snip[100]; unsigned special_snip_len = sizeof (special_snip);
-        seg_prepare_snip_other_do (SNIP_REDIRECTION, (DictId)_FASTA_DESC, false, 0, 0, &special_snip[2], &special_snip_len);
+        seg_prepare_snip_other_do (SNIP_REDIRECTION, _FASTA_DESC, false, 0, 0, &special_snip[2], &special_snip_len);
         special_snip[0] = SNIP_SPECIAL;
         special_snip[1] = FASTA_SPECIAL_DESC;
 
-        seg_by_did_i (VB, special_snip, special_snip_len+2, FASTA_LINEMETA, 0);
+        seg_by_did (VB, special_snip, special_snip_len+2, FASTA_LINEMETA, 0);
         SEG_EOL (FASTA_EOL, true);
     }
 
@@ -336,12 +336,12 @@ static void fast_seg_comment_line (VBlockFASTAP vb, rom line_start, uint32_t lin
         seg_add_to_local_text (VB, CTX(FASTA_COMMENT), line_start, line_len, false, line_len); 
 
         char special_snip[100]; unsigned special_snip_len = sizeof (special_snip);
-        seg_prepare_snip_other_do (SNIP_OTHER_LOOKUP, (DictId)_FASTA_COMMENT, false, 0, 0, &special_snip[2], &special_snip_len);
+        seg_prepare_snip_other_do (SNIP_OTHER_LOOKUP, _FASTA_COMMENT, false, 0, 0, &special_snip[2], &special_snip_len);
 
         special_snip[0] = SNIP_SPECIAL;
         special_snip[1] = FASTA_SPECIAL_COMMENT;
 
-        seg_by_did_i (VB, special_snip, special_snip_len+2, FASTA_LINEMETA, 0);
+        seg_by_did (VB, special_snip, special_snip_len+2, FASTA_LINEMETA, 0);
         SEG_EOL (FASTA_EOL, true);
     }
 
@@ -393,7 +393,7 @@ static void fasta_seg_seq_line_do (VBlockFASTAP vb, uint32_t line_len, bool is_f
 
     else { 
         char special_snip[100]; unsigned special_snip_len = sizeof (special_snip);
-        seg_prepare_snip_other_do (SNIP_OTHER_LOOKUP, (DictId)_FASTA_NONREF, 
+        seg_prepare_snip_other_do (SNIP_OTHER_LOOKUP, _FASTA_NONREF, 
                                    true, (int32_t)line_len, 0, &special_snip[3], &special_snip_len);
 
         special_snip[0] = SNIP_SPECIAL;
@@ -433,9 +433,9 @@ static void fasta_seg_seq_line (VBlockFASTAP vb, STRp(line),
 
             // case last Seq line of VB, and this VB ends part-way through the Seq line (no newline)
             if (is_last_line_vb_no_newline && (i == vb->lines_this_contig - 1)) 
-                seg_by_did_i (VB, dl[i].has_13 ? "\r" : "", dl[i].has_13, FASTA_EOL, dl[i].has_13); // an EOL without \n
+                seg_by_did (VB, dl[i].has_13 ? "\r" : "", dl[i].has_13, FASTA_EOL, dl[i].has_13); // an EOL without \n
             else 
-                seg_by_did_i (VB, dl[i].has_13 ? "\r\n" : "\n", 1 + dl[i].has_13, FASTA_EOL, 1 + dl[i].has_13);
+                seg_by_did (VB, dl[i].has_13 ? "\r\n" : "\n", 1 + dl[i].has_13, FASTA_EOL, 1 + dl[i].has_13);
         }        
         vb->lines_this_contig = 0;
     }

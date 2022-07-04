@@ -78,7 +78,7 @@ static void codec_uncompress_error (VBlockP vb, Codec codec, uint8_t param,
     ABORT ("Error in comp_uncompress: \"%s\": unsupported codec: %s. Please upgrade to the most recent version of Genozip.", name, codec_name (codec));
 }
 
-static void codec_reconstruct_error (VBlockP vb, Codec codec, ContextP ctx)
+static CODEC_RECONSTRUCT (codec_reconstruct_error)
 {
     ABORT ("Error in reconstruct_from_ctx_do: in ctx=%s - codec %s has no LT_CODEC reconstruction. Please upgrade to the most recent version of Genozip.", 
            dis_dict_id (ctx->dict_id).s, codec_name (codec));
@@ -158,19 +158,19 @@ static SORTER (codec_assign_sorter)
 // compression ratio, or if the ratio is very similar, and the time is quite different, then based on time.
 // the codec is then committed to zctx, so that future VBs that clone recieve it and needn't test again.
 // This function is called from two places:
-// 1. For contexts with generic codecs, left as CODEC_UNKNOWN by the segmenter, we are called from zip_assign_best_codec.
+// 1. For contexts with generic codecs, left as CODEC_UNKNOWN by the segmenter, we are called from codec_assign_best_codec.
 //    For vb=1, this is called while holding the vb=1 lock, so that for all such contexts that appear in vb=1, they are
 //    guaranteed to be tested only once. For contexts that make a first appearance in a later VB, parallel VBs might test
 //    in parallel. A bit wasteful, but no harm.
 // 2. For "specific" codecs (DOMQUAL, LONGR...), subordinate contexts generated during compression of the primary
-//    context (compression runs after zip_assign_best_codec is completed already) - those codecs explicitly call us to get the
+//    context (compression runs after codec_assign_best_codec is completed already) - those codecs explicitly call us to get the
 //    codec for the subordinate context. Multiple of the early VBs may call in parallel, but future VBs will receive
 //    the codec during cloning    
 //
 // Codecs for contexts may be assigned in 3 stages:
 // 1. During Seg (a must for all complex codecs - eg HT, DOMQ, ACGT...)
 // 2. At merge - inherit from z_file->context if not set in Seg
-// 3. After merge before compress - if still not assigned - zip_assign_best_codec - which also commits back to z_file->context
+// 3. After merge before compress - if still not assigned - codec_assign_best_codec - which also commits back to z_file->context
 //    (this is the only place we commit to z_file, therefore z_file will only contain simple codecs)
 // Note: if vb=1 commits a codec, it will be during its lock, so that all subsequent VBs will inherit it. But for
 // contexts not committed by vb=1 - multiple contexts running in parallel may commit their codecs overriding each other. that's ok.
@@ -225,11 +225,13 @@ Codec codec_assign_best_codec (VBlockP vb,
     if (*selected_codec != CODEC_UNKNOWN) 
         return *selected_codec; // if already assigned - no need to test
 
-    CodecTest tests[] = { { CODEC_BZ2 }, { CODEC_NONE }, { CODEC_BSC }, { CODEC_LZMA }, 
-                          { CODEC_RANS8 }, { CODEC_RANS32 }, { CODEC_RANS8_pack }, { CODEC_RANS32_pack }, 
-                          { CODEC_ARITH8 }, { CODEC_ARITH32 }, { CODEC_ARITH8_pack }, { CODEC_ARITH32_pack } }; // not using for now due to bug in arith_dynamic
-    const unsigned num_tests = 12;
+    CodecTest tests[] = { { CODEC_RANS8 }, { CODEC_RANS32 }, { CODEC_RANS8_pack }, { CODEC_RANS32_pack }, 
+                          { CODEC_ARITH8 }, { CODEC_ARITH32 }, { CODEC_ARITH8_pack }, { CODEC_ARITH32_pack },
+                          { CODEC_BZ2 }, { CODEC_NONE }, { CODEC_BSC }, { CODEC_LZMA } }; 
     
+    // don't allow LZMA or BSC in buffers being compressed in the main thread - too slow (unless --best)
+    const unsigned num_tests = ARRAY_LEN(tests) - (flag.best ? 0 : 2*(vb == evb)); 
+
     // set data
     if (!data)
         switch (st) {
@@ -309,13 +311,13 @@ done:
     return *selected_codec;
 }
 
-void codec_assign_best_qual_codec (VBlockP vb, DidIType qual_did_i,  
+void codec_assign_best_qual_codec (VBlockP vb, Did qual_did_i,  
                                    LocalGetLineCB callback, bool no_longr)
 {
     ContextP ctx = CTX(qual_did_i);
 
     if (segconf.running) {
-        if (!flag.fast && segconf.nontrivial_qual && segconf_is_long_reads()) // note: we can't use segconf.is_long_reads (variable) because it is not set yet 
+        if (!flag.fast && segconf.nontrivial_qual && !no_longr && segconf_is_long_reads()) // note: we can't use segconf.is_long_reads (variable) because it is not set yet 
             codec_longr_segconf_calculate_bins (vb, CTX(qual_did_i+1), callback);
         return;
     }
@@ -323,8 +325,7 @@ void codec_assign_best_qual_codec (VBlockP vb, DidIType qual_did_i,
     if (!flag.fast && segconf.is_long_reads && !no_longr && segconf.nontrivial_qual)
         codec_longr_comp_init (vb, qual_did_i);
 
-    else if (!flag.no_domqual && codec_domq_comp_init (vb, qual_did_i, callback)) 
-        {} // domqual    
+    else if (!flag.no_domqual && codec_domq_comp_init (vb, qual_did_i, callback));
     
     else if (Z_DT(DT_SAM) || Z_DT (DT_BAM)) { 
         ctx->ltype  = LT_CODEC;
@@ -337,7 +338,7 @@ void codec_assign_best_qual_codec (VBlockP vb, DidIType qual_did_i,
     }
     
     if (flag.show_codec) // aligned to the output of codec_assign_best_codec
-        iprintf ("vb_i=%-2u %-12s %-5s          *[%s]\n", vb->vblock_i, "QUAL", "LOCAL", codec_name(CTX(qual_did_i)->lcodec));
+        iprintf ("vb_i=%-2u %-12s %-5s          *[%s]\n", vb->vblock_i, ctx->tag_name, "LOCAL", codec_name(CTX(qual_did_i)->lcodec));
 }
 
 // complex codec est size - result may be recompressed with RAN, ART

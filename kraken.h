@@ -60,12 +60,12 @@ extern void kraken_piz_handover_data (VBlockP vb);
 extern void kraken_set_taxid (rom optarg);
 extern void kraken_load (void);
 extern bool kraken_is_included_loaded (VBlockP vb, STRp(qname));
-extern bool kraken_is_included_stored (VBlockP vb, DidIType did_i_taxid, bool already_reconstructed);
+extern bool kraken_is_included_stored (VBlockP vb, Did did_i_taxid, bool already_reconstructed);
 extern void kraken_destroy (void);
 
 // using the kraken data in genozip --kraken
-extern unsigned kraken_seg_taxid_do (VBlockP vb, DidIType did_i_taxid, STRp(qname), char *snip, bool fail_if_missing);
-extern unsigned kraken_seg_taxid (VBlockP vb, DidIType did_i_taxid, STRp(qname), bool fail_if_missing);
+extern unsigned kraken_seg_taxid_do (VBlockP vb, Did did_i_taxid, STRp(qname), char *snip, bool fail_if_missing);
+extern unsigned kraken_seg_taxid (VBlockP vb, Did did_i_taxid, STRp(qname), bool fail_if_missing);
 
 // misc
 extern void kraken_set_show_kraken (rom optarg);

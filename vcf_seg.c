@@ -147,35 +147,25 @@ void vcf_seg_initialize (VBlockP vb_)
 {
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
-    CTX(VCF_CHROM)->   no_stons    = true; // needs b250 node_index for random access and reconstrution plan
-    CTX(VCF_oCHROM)->  no_stons    = true; // same
-    CTX(VCF_FORMAT)->  no_stons    = true;
-    CTX(VCF_INFO)->    no_stons    = true;
-    CTX(VCF_oSTATUS)-> no_stons    = true;
-    CTX(VCF_COORDS)->  no_stons    = true;
-    CTX(VCF_TOPLEVEL)->no_stons    = true; 
-    CTX(VCF_TOPLUFT)-> no_stons    = true; 
-    CTX(VCF_LIFT_REF)->no_stons    = true; 
-    CTX(VCF_COPYPOS)-> no_stons    = true; 
-    CTX(VCF_oXSTRAND)->no_stons    = true; // keep in b250 so it can be eliminated as all_the_same
+    ctx_set_no_stons (VB, 18, VCF_CHROM, VCF_oCHROM, VCF_FORMAT, VCF_INFO, VCF_oSTATUS, VCF_COORDS, 
+                      VCF_TOPLEVEL, VCF_TOPLUFT, VCF_LIFT_REF, VCF_COPYPOS, VCF_oXSTRAND, 
+                      VCF_POS, VCF_oPOS, VCF_LINE_NUM, INFO_HGVS_del_start_pos, INFO_HGVS_ins_start_pos, INFO_HGVS_ins_start_pos, // as required by seg_pos_field
+                      DID_EOL);
+
+    ctx_set_store (VB, STORE_INDEX, 6, VCF_oSTATUS, VCF_COORDS, VCF_oXSTRAND, VCF_CHROM, VCF_oCHROM, DID_EOL);
+
+    ctx_set_store (VB, STORE_INT, 4, VCF_POS, VCF_oPOS, VCF_LINE_NUM, DID_EOL); // as required by seg_pos_field
+
     CTX(VCF_oCHROM)->  no_vb1_sort = true; // indices need to remain as in the Chain file
     CTX(VCF_oSTATUS)-> no_vb1_sort = true; // indices need to remaining matching to LiftOverStatus
     CTX(VCF_COORDS)->  no_vb1_sort = true; // indices need to remaining matching to Coords
     CTX(VCF_oXSTRAND)->no_vb1_sort = true; // indices need to order of ctx_create_node
 
-    CTX(VCF_oSTATUS)-> flags.store = STORE_INDEX;
-    CTX(VCF_COORDS)->  flags.store = STORE_INDEX;
-    CTX(VCF_oXSTRAND)->flags.store = STORE_INDEX;
-    CTX(VCF_CHROM)->   flags.store = STORE_INDEX; // since v12
-    CTX(VCF_oCHROM)->  flags.store = STORE_INDEX; // used by regions_is_site_included
-    CTX(VCF_POS)->     flags.store = STORE_INT;   // since v12
-    CTX(VCF_oPOS)->    flags.store = STORE_INT;   // used by vcf_piz_luft_END
-
     seg_id_field_init (CTX(VCF_ID));
 
     // counts sections
-    CTX(VCF_CHROM)->   counts_section = true;
-    CTX(VCF_oCHROM)->  counts_section = true;
+    CTX(VCF_CHROM)-> counts_section = true;
+    CTX(VCF_oCHROM)->counts_section = true;
 
     if (z_is_dvcf) {
         CTX(VCF_oSTATUS)->counts_section = true;
@@ -183,10 +173,10 @@ void vcf_seg_initialize (VBlockP vb_)
     }
 
     // consolidate stats
-    stats_set_consolidation (VB, VCF_REFALT, 2, VCF_oREFALT, VCF_LIFT_REF);
-    stats_set_consolidation (VB, VCF_POS,    2, VCF_oPOS, VCF_COPYPOS);
-    stats_set_consolidation (VB, VCF_CHROM,  1, VCF_oCHROM);
-    stats_set_consolidation (VB, VCF_COORDS, 7, INFO_PRIM, INFO_PREJ, INFO_LUFT, INFO_LREJ, VCF_oSTATUS, VCF_COPYSTAT, VCF_oXSTRAND);
+    ctx_consolidate_stats (VB, VCF_REFALT, 3, VCF_oREFALT, VCF_LIFT_REF, DID_EOL);
+    ctx_consolidate_stats (VB, VCF_POS,    3, VCF_oPOS, VCF_COPYPOS, DID_EOL);
+    ctx_consolidate_stats (VB, VCF_CHROM,  2, VCF_oCHROM, DID_EOL);
+    ctx_consolidate_stats (VB, VCF_COORDS, 8, INFO_PRIM, INFO_PREJ, INFO_LUFT, INFO_LREJ, VCF_oSTATUS, VCF_COPYSTAT, VCF_oXSTRAND, DID_EOL);
 
     // room for already existing FORMATs from previous VBs
     vb->format_mapper_buf.len = vb->format_contexts.len = CTX(VCF_FORMAT)->ol_nodes.len;
@@ -222,8 +212,8 @@ void vcf_seg_initialize (VBlockP vb_)
     ctx_create_node (VB, VCF_COPYPOS,  (char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPYPOS  }, 2);
     
     if (segconf.has[FORMAT_RGQ]) {
-        seg_mux_init (VB, 2, VCF_SPECIAL_MUX_BY_HAS_RGQ, VCF_QUAL, VCF_QUAL, STORE_NONE, false, (MultiplexerP)&vb->mux_QUAL, "01");
-        seg_mux_init (VB, 2, VCF_SPECIAL_MUX_BY_HAS_RGQ, VCF_INFO, VCF_INFO, STORE_NONE, false, (MultiplexerP)&vb->mux_INFO, "01");        
+        seg_mux_init (VB, 2, VCF_SPECIAL_MUX_BY_HAS_RGQ, VCF_QUAL, VCF_QUAL, STORE_NONE, LT_TEXT, false, (MultiplexerP)&vb->mux_QUAL, "01");
+        seg_mux_init (VB, 2, VCF_SPECIAL_MUX_BY_HAS_RGQ, VCF_INFO, VCF_INFO, STORE_NONE, LT_TEXT, false, (MultiplexerP)&vb->mux_INFO, "01");        
     }
 
     vcf_info_seg_initialize(vb);
@@ -390,7 +380,7 @@ static inline LineCmpInfo vcf_seg_make_lci (ZipDataLineVCF *dl, bool is_luft)
                           .tie_breaker = dl->tie_breaker };
 }  
 
-static inline void vcf_seg_evidence_of_unsorted (VBlockVCFP vb, ZipDataLineVCF *dl, DidIType chrom_did_i)
+static inline void vcf_seg_evidence_of_unsorted (VBlockVCFP vb, ZipDataLineVCF *dl, Did chrom_did_i)
 {
     bool is_luft = !!chrom_did_i; // 0 for primary, 1 for last
 
@@ -445,12 +435,12 @@ static inline void vcf_seg_QUAL (VBlockVCFP vb, STRp(qual))
     if (!segconf.running && segconf.has[FORMAT_RGQ]) {
         ContextP channel_ctx = seg_mux_get_channel_ctx (VB, (MultiplexerP)&vb->mux_QUAL, vb->line_has_RGQ);
         seg_by_ctx (VB, STRa(qual), channel_ctx, qual_len+1);
-        seg_by_did_i (VB, STRa(vb->mux_QUAL.snip), VCF_QUAL, 0);
+        seg_by_did (VB, STRa(vb->mux_QUAL.snip), VCF_QUAL, 0);
     }
     
     // case: not GVCF
     else
-        seg_by_did_i (VB, STRa(qual), VCF_QUAL, qual_len+1);
+        seg_by_did (VB, STRa(qual), VCF_QUAL, qual_len+1);
 }
 
 /* segment a VCF line into its fields:
@@ -603,13 +593,13 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
             vb->save_luft_samples.len = 0;
         }
         else 
-            seg_by_did_i (VB, NULL, 0, VCF_SAMPLES, 0); // case no samples: WORD_INDEX_MISSING
+            seg_by_did (VB, NULL, 0, VCF_SAMPLES, 0); // case no samples: WORD_INDEX_MISSING
     }
 
     // case no format or samples
     else {
-        seg_by_did_i (VB, NULL, 0, VCF_FORMAT, 0); 
-        seg_by_did_i (VB, NULL, 0, VCF_SAMPLES, 0);
+        seg_by_did (VB, NULL, 0, VCF_FORMAT, 0); 
+        seg_by_did (VB, NULL, 0, VCF_SAMPLES, 0);
     }
 
     // Adds DVCF items according to ostatus, finalizes INFO/SF and segs the INFO container
@@ -628,7 +618,7 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
 
         Coords reconstructable_coords = lo_ok ? DC_BOTH : vb->line_coords;
         rom name = vcf_coords_name (reconstructable_coords); 
-        seg_by_did_i (VB, name, strlen (name), VCF_COORDS, 0); // 0 as its not in the txt data
+        seg_by_did (VB, name, strlen (name), VCF_COORDS, 0); // 0 as its not in the txt data
                 
         // case: line was rejected
         if (!lo_ok) {

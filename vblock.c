@@ -233,7 +233,7 @@ VBlockP vb_initialize_nonpool_vb (int vb_id, DataType dt, rom task)
     vb->in_use            = true;
     vb->data_type_alloced = dt;
     vb->comp_i            = COMP_NONE;
-    memset (vb->dict_id_to_did_i_map, 0xff, sizeof(vb->dict_id_to_did_i_map)); // DID_I_NONE
+    memset (vb->dict_id_to_did_i_map, 0xff, sizeof(vb->dict_id_to_did_i_map)); // DID_NONE
     
     nonpool_vbs[NUM_NONPOOL_VBs + vb_id] = vb; // vb_id is a negative integer
 
@@ -316,7 +316,7 @@ VBlockP vb_get_vb (rom task_name, VBIType vblock_i, CompIType comp_i)
     vb->buffer_list.vb    = vb;
     vb->compute_thread_id = THREAD_ID_NONE;
     vb->compute_task      = task_name;
-    memset (vb->dict_id_to_did_i_map, 0xff, sizeof(vb->dict_id_to_did_i_map)); // DID_I_NONE
+    memset (vb->dict_id_to_did_i_map, 0xff, sizeof(vb->dict_id_to_did_i_map)); // DID_NONE
 
     if (flag.show_vblocks) 
         iprintf ("VB_GET_VB(task=%s id=%u) vb_i=%s/%d in_use=%u/%u\n", 

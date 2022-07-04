@@ -46,7 +46,7 @@ static rom sam_md_set_one_ref_base (VBlockSAMP vb, bool is_depn, SamPosType pos,
 {
     // case: pos is beyond the existing range
     if ((*range_p) && (*range_p)->last_pos < pos && !is_depn) {
-        ref_unlock (gref, *lock);
+        ref_unlock (gref, lock);
         *range_p = NULL;
     }
 
@@ -178,7 +178,9 @@ static inline rom sam_md_consume_M (VBlockSAMP vb, bool is_depn, char **md_in_ou
 // by an earlier read with a base different than the base in the reference with which this SAM file was generated.
 void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(md), SamPosType pos)
 {
-    if (dl->FLAG.bits.unmapped) return; // sometimes unmapped reads have a bogus CIGAR and MD:Z, however, if we try to verify sam_seg_SEQ_vs_ref (which we no longer do), verification fails.
+    START_TIMER;
+
+    if (segconf.running || dl->FLAG.unmapped) return; // sometimes unmapped reads have a bogus CIGAR and MD:Z, however, if we try to verify sam_seg_SEQ_vs_ref (which we no longer do), verification fails.
 
     rom reason=NULL;
     #define not_verified(s) { reason=s ; goto not_verified; }
@@ -186,12 +188,12 @@ void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(md), SamPosTy
     RangeP range = NULL;
     RefLock lock = REFLOCK_NONE;
     
-    bool is_depn = (sam_is_depn_vb && vb->sa_grp) || zip_has_prim;
+    bool is_depn = (sam_is_depn_vb && vb->sag) || zip_has_prim; // STAR: possibly not real prim 
 
     if (flag.show_wrong_md)
         seg_set_last_txt (VB, CTX(OPTION_MD_Z), STRa(md)); // consumed in sam_seg_SEQ
 
-    // copy of MD as we are going to modify it (but we still need the original intact for sam_MD_Z_seg)
+    // copy of MD as we are going to modify it (but we still need the original intact for sam_seg_MD_Z)
     char md_data[md_len+1];
     memcpy (md_data, md, md_len);
     md_data[md_len] = 0;
@@ -206,7 +208,7 @@ void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(md), SamPosTy
     // Therefore, Genozip only activates the special MD alg if its starts and ends with digit.
     if (!md_len || !IS_DIGIT(md[0]) || !IS_DIGIT(md[md_len-1])) not_verified ("Malformed MD:Z field");
 
-    buf_alloc_bitarr (vb, &vb->md_M_is_ref, vb->ref_and_seq_consumed, "md_M_is_ref"); 
+    buf_alloc_bits (vb, &vb->md_M_is_ref, vb->ref_and_seq_consumed, "md_M_is_ref"); 
     BitsP M_is_ref = (BitsP)&vb->md_M_is_ref;
     bits_set_all (M_is_ref); // start by marking all as matching, and clear the SNPs later
     uint64_t M_is_ref_i=0;
@@ -243,7 +245,7 @@ void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(md), SamPosTy
 
     if (reason) goto not_verified_buf_mismatch_count_ok; // now we can handle the non-critical error raised in sam_md_consume_M
 
-    if (range) ref_unlock (gref, lock);
+    if (range) ref_unlock (gref, &lock);
 
     vb->md_verified = true;    
     return; // verified
@@ -252,23 +254,25 @@ not_verified:
     vb->mismatch_bases_by_MD = -1; // fallthrough
 
 not_verified_buf_mismatch_count_ok:    
-    if (range) ref_unlock (gref, lock);
+    if (range) ref_unlock (gref, &lock);
     vb->md_verified = false;
 
     if (flag.show_wrong_md)
         iprintf ("%s\tRNAME=%.*s\tPOS=%d\tCIGAR=%s\tMD=%.*s\tReason=%s\n", 
                  LN_NAME, STRf(vb->chrom_name), pos, vb->last_cigar, vb->last_txt_len(OPTION_MD_Z), last_txt(VB, OPTION_MD_Z), reason);
+
+    COPY_TIMER (sam_seg_MD_Z_analyze);
 }
 
 // MD's logical length is normally the same as seq_len, we use this to optimize it.
 // In the common case that it is just a number equal the seq_len, we replace it with an empty string.
 // if MD value can be derived from the seq_len, we don't need to store - store just an empty string
-void sam_MD_Z_seg (VBlockSAMP vb,  ZipDataLineSAM *dl, STRp(md), unsigned add_bytes)
+void sam_seg_MD_Z (VBlockSAMP vb,  ZipDataLineSAM *dl, STRp(md), unsigned add_bytes)
 {
     segconf_set_has (OPTION_MD_Z);
 
     if (vb->md_verified && !vb->cigar_missing && !vb->seq_missing) // note: md_verified might have been reset in sam_seg_SEQ 
-        seg_by_did_i (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_MD }, 2, OPTION_MD_Z, add_bytes);
+        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_MD }, 2, OPTION_MD_Z, add_bytes);
 
     else // store in local. note: this is tested to be much better than splitting by length and storing short ones in dict 
         seg_add_to_local_text (VB, CTX(OPTION_MD_Z), STRa(md), true, add_bytes);
