@@ -373,11 +373,14 @@ conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld
 	@echo "Publishing to conda-forge"
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@echo " "
+	@echo "Syncing conda feedstock"
+	@(cd $(CONDA_FEEDSTOCK); git pull)
+	@echo " "
 	@echo "Copying $^ to conda feedstock"
 	@cp conda/README.md $(CONDA_FEEDSTOCK)
 	@cp conda/meta.yaml conda/build.sh conda/bld.bat $(CONDA_RECIPE_DIR)
 	@echo "Committing my files to branch genozip on my fork"
-	@(cd $(CONDA_FEEDSTOCK); git pull; git commit -m "update" recipe/meta.yaml README.md recipe/build.sh recipe/bld.bat; git push) > /dev/null
+	@(cd $(CONDA_FEEDSTOCK); git commit -m "update" recipe/meta.yaml README.md recipe/build.sh recipe/bld.bat; git push) > /dev/null
 	@echo " "
 	@echo "Submitting pull request to conda-forge"
 #	@(cd $(CONDA_RECIPE_DIR); git request-pull master https://github.com://conda-forge/genozip-feedstock master)
@@ -451,11 +454,9 @@ push-build:
 	@(cd $(DOCS); git push) > /dev/null
 
 distribution: increment-version testfiles $(DOCS)/genozip-linux-x86_64.tar.build $(DOCS)/genozip-installer.exe build-docs push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
-	@(cd ../genozip-feedstock/ ; git pull)
 
 distribution-maintenance: increment-version testfiles $(DOCS)/genozip-linux-x86_64.tar.build $(DOCS)/genozip-installer.exe $(DOCS)/RELEASE_NOTES.for-docs.txt \
-                          push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
-	@(cd ../genozip-feedstock/ ; git pull)
+                          build-docs push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
 
 test-backup: genozip.exe
 	@echo "Compressing test/ files for in preparation for backup (except cram and bcf)"
