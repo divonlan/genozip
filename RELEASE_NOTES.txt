@@ -3,6 +3,9 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+13.0.20 13/July/2022
+- Bug fixes
+
 13.0.19 19/June/2022
 - Bug fixes
 - BAM: Better support for OQ:Z 

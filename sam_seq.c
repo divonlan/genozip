@@ -217,7 +217,7 @@ void sam_seg_SEQ (VBlockSAM *vb, DidIType bitmap_did, STRp(seq), const PosType p
         if (next_ref == pos_index + ref_len_this_level && subcigar_len) break;
     }
 
-    ref_unlock (gref, lock); // does nothing if REFLOCK_NONE
+    ref_unlock (gref, &lock); // does nothing if REFLOCK_NONE
 
     uint32_t this_seq_last_pos = pos + (next_ref - pos_index) - 1;
 

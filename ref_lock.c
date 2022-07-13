@@ -69,15 +69,15 @@ RefLock ref_lock (Reference ref, PosType gpos_start, uint32_t seq_len)
     return lock;
 }
 
-RefLock ref_unlock (Reference ref, RefLock lock)
+void ref_unlock (Reference ref, RefLock *lock)
 {
-    if (lock.first_mutex >= 0) {
+    if (lock->first_mutex >= 0) {
         // unlock muteces in reverse order
-        for (int i=lock.last_mutex; i >= lock.first_mutex; i--)
+        for (int i=lock->last_mutex; i >= lock->first_mutex; i--)
             mutex_unlock (ref->genome_muteces[i]);
     }
 
-    return REFLOCK_NONE;
+    *lock = REFLOCK_NONE;
 }
 
 // used for RT_DENOVO - single mutex er range

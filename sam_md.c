@@ -25,7 +25,7 @@ static inline bool sam_md_set_one_ref_base (VBlockSAMP vb, PosType pos, char bas
 {
     // case: pos is beyond the existing range
     if ((*range_p) && (*range_p)->last_pos < pos) {
-        ref_unlock (gref, *lock);
+        ref_unlock (gref, lock);
         *range_p = NULL;
     }
 
@@ -193,11 +193,11 @@ void sam_md_analyze (VBlockSAMP vb, STRp(md), PosType pos, const char *cigar)
 
     if (*md && !(*md=='0' && !md[1])) goto not_verified; // case: we didn't consume the entire MD (except an allowed trailing '0')
 
-    if (range) ref_unlock (gref, lock);
+    if (range) ref_unlock (gref, &lock);
     return;
 
 not_verified:
-    if (range) ref_unlock (gref, lock);
+    if (range) ref_unlock (gref, &lock);
     vb->md_verified = false;
 
     if (flag.show_wrong_md)

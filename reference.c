@@ -392,7 +392,7 @@ static void ref_uncompress_one_range (VBlockP vb)
         RefLock lock = ref_lock (vb->ref, sec_start_gpos, ref_sec_len + 63); // +63 to ensure lock covers entire last word
 
         bit_array_copy (&r->is_set, sec_start_within_contig, is_set, 0, ref_sec_len); // initialization of is_set - case 3
-        ref_unlock (vb->ref, lock);
+        ref_unlock (vb->ref, &lock);
 
         buf_free (&vb->compressed);
 
@@ -425,7 +425,7 @@ static void ref_uncompress_one_range (VBlockP vb)
         if (primary_command == ZIP && flag.reference == REF_EXT_STORE) { // initialization of is_set - case 1
             RefLock lock = ref_lock (vb->ref, sec_start_gpos, ref_sec_len + 63); // +63 to ensure lock covers entire last word
             bit_array_clear_region (&r->is_set, sec_start_within_contig, ref_sec_len); // entire range is cleared
-            ref_unlock (vb->ref, lock);
+            ref_unlock (vb->ref, &lock);
         }
 
         else if (primary_command == PIZ) { // initialization of is_set - case 2
@@ -443,7 +443,7 @@ static void ref_uncompress_one_range (VBlockP vb)
 
             RefLock lock = ref_lock (vb->ref, start + r->gpos, len + 63); 
             bit_array_set_region (&r->is_set, start, len);
-            ref_unlock (vb->ref, lock);
+            ref_unlock (vb->ref, &lock);
 
             // save the region we need to set, we will do the actual setting in ref_load_stored_reference
             spin_lock (vb->ref->region_to_set_list_spin);
@@ -478,7 +478,7 @@ static void ref_uncompress_one_range (VBlockP vb)
                         (ref_sec_len - initial_flanking_len - final_flanking_len) * 2); // len
     }
 
-    ref_unlock (vb->ref, lock);
+    ref_unlock (vb->ref, &lock);
 
     buf_free (&vb->compressed);
 
@@ -755,7 +755,7 @@ static Range *ref_seg_get_locked_range_denovo (VBlockP vb, Reference ref, WordIn
 
         // check for hash conflict (can only happen in headerless mode)
         if (!sam_hdr_contigs && (range->range_i != range_i || !str_issame (vb->chrom_name, range->chrom_name))) {
-            *lock = ref_unlock (ref, *lock);
+            ref_unlock (ref, lock);
 
             ASSERTW (!flag.seg_only && !flag.debug, "DEBUG: ref range contention: chrom=%.*s pos=%u (this slightly affects compression ratio, but is harmless)", 
                      vb->chrom_name_len, vb->chrom_name, (uint32_t)pos); // only show this in --seg-only

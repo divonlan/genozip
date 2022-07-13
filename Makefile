@@ -121,16 +121,12 @@ else
     endif
 endif
 
-ifndef IS_CONDA 
-	# local - static link everything
-	C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(BSC_SRCS) $(LZMA_SRCS) $(DEFLATE_SRCS) $(HTSCODECS_SRC)
-#	ifneq ($(shell uname -a | grep ppc64),)
-#		CFLAGS += -mcpu=native 
-#	endif
+C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(BSC_SRCS) $(LZMA_SRCS) $(DEFLATE_SRCS) $(HTSCODECS_SRC)
 
-else  # conda
-	# use packages for bzip2
-	C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(LZMA_SRCS) $(BSC_SRCS) $(DEFLATE_SRCS) $(HTSCODECS_SRC)
+ifndef IS_CONDA 
+#	ifneq ($(shell uname -a | grep ppc64),)
+		CFLAGS += -march=native 
+#	endif
 endif
 
 OBJS       := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.o))
@@ -150,14 +146,14 @@ else
 	DEBUGFLAGS += -DDEBUG -g -O0
 endif
 
-all   : CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"$(DISTRIBUTION)\" -march=native 
+all   : CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"$(DISTRIBUTION)\"  
 all   : $(OBJDIR) $(EXECUTABLES) 
 	@chmod +x test.sh
 
-debug : CFLAGS += $(DEBUGFLAGS) -march=native -DDISTRIBUTION=\"debug\"
+debug : CFLAGS += $(DEBUGFLAGS) -DDISTRIBUTION=\"debug\"
 debug : $(OBJDIR) $(DEBUG_EXECUTABLES)
 
-opt   : CFLAGS += -g $(OPTFLAGS) -march=native -DDISTRIBUTION=\"opt\"
+opt   : CFLAGS += -g $(OPTFLAGS) -DDISTRIBUTION=\"opt\"
 opt   : $(OBJDIR) $(OPT_EXECUTABLES)
 
 docker : CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"Docker\"
@@ -246,7 +242,7 @@ docs = $(DOCS)/genozip.rst $(DOCS)/genounzip.rst $(DOCS)/genocat.rst $(DOCS)/gen
 	   $(DOCS)/dvcf.rst $(DOCS)/dvcf-rendering.rst $(DOCS)/chain.rst $(DOCS)/dvcf-limitations.rst $(DOCS)/dvcf-renaming.rst $(DOCS)/dvcf-see-also.rst \
 	   $(DOCS)/archiving.rst $(DOCS)/encryption.rst $(DOCS)/release-notes.rst $(DOCS)/benchmarks.rst \
 	   $(DOCS)/data-types.rst $(DOCS)/bam.rst $(DOCS)/fastq.rst $(DOCS)/vcf.rst $(DOCS)/gff3.rst $(DOCS)/publications-list.rst \
-	   $(DOCS)/resellers.rst $(DOCS)/institutions.rst
+	   $(DOCS)/resellers.rst $(DOCS)/institutions.rst $(DOCS)/referral.rst
 
 $(DOCS)/conf.py: $(DOCS)/conf.template.py version.h
 	@sed -e "s/__VERSION__/$(version)/g" $< |sed -e "s/__YEAR__/`date +'%Y'`/g" > $@ 

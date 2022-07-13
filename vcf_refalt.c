@@ -49,7 +49,7 @@ static void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char main_ref, char main_
             if (flag.reference == REF_EXT_STORE)
                 bit_array_set (&range->is_set, index_within_range);
 
-            ref_unlock (gref, lock); // does nothing if REFLOCK_NONE
+            ref_unlock (gref, &lock); // does nothing if REFLOCK_NONE
         }
     }
 

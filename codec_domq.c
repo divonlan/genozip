@@ -164,6 +164,7 @@ bool codec_domq_compress (VBlock *vb,
     // where QUAL is empty if qual is just one run. We use NO_DOMS rather than another marker, to avoid introducing
     // another letter into the compressed alphabet
     if (runlen) {
+        buf_alloc (vb, qdomruns_buf, runlen / 254 + 1, 0, uint8_t, 0, 0);
         codec_domq_add_runs (qdomruns_buf, runlen); // add final dom runs
         NEXTENT (char, *qual_buf) = NO_DOMS;
     }

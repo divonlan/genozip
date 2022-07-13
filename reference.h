@@ -51,7 +51,7 @@ typedef struct { int32_t first_mutex, last_mutex; } RefLock;
 #define REFLOCK_NONE ((RefLock){-1,-1})
 
 extern RefLock ref_lock (Reference ref, PosType gpos_start, uint32_t seq_len);
-extern RefLock ref_unlock (Reference ref, RefLock lock);
+extern void ref_unlock (Reference ref, RefLock *lock);
 extern RefLock ref_lock_range (Reference ref, int32_t range_id);
 
 typedef enum { RT_NONE,      // value of ranges.param if ranges is unallocated

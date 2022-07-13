@@ -28,6 +28,8 @@ char *str_tolower (const char *in, char *out /* out allocated by caller - can be
     for (; *in; in++, out++) 
         *out = LOWER_CASE (*in);
     
+    *out = 0;
+
     return startout;
 }
 
@@ -37,7 +39,9 @@ char *str_toupper (const char *in, char *out /* out allocated by caller - can be
 
     for (; *in; in++, out++) 
         *out = UPPER_CASE (*in);
-    
+
+    *out = 0;
+
     return startout;
 }
 

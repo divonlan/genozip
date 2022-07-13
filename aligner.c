@@ -356,7 +356,7 @@ void aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq))
     bitmap_ctx->next_local = next_bit;
 
 done:
-    ref_unlock (gref, lock);
+    ref_unlock (gref, &lock);
 }
 
 // PIZ: SEQ reconstruction 
