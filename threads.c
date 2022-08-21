@@ -84,6 +84,8 @@ static void *threads_signal_handler (void *sigset)
                            buf_show_memory_handler(); break;
             case SIGUSR2 : fprintf (stderr, "Caught signal SIGUSR2, writing threads log\n");
                            threads_write_log (false); break;
+            case SIGCHLD : break; // Child process has stopped or exited
+            case SIGCONT : break; // Continue executing, if stopped
             default      : ABORT ("Unexpected signal %s", strsignal (sig));
         }
     }

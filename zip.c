@@ -41,7 +41,7 @@
 #include "chrom.h"
 #include "biopsy.h"
 
-static Mutex wait_for_vb_1_mutex = {};
+static Mutex wait_for_vb_1_mutex = {}, make_ref_merge_serializer = {};
 
 static void zip_display_compression_ratio (Digest md5, bool is_final_component)
 {
@@ -653,12 +653,17 @@ static void zip_compress_one_vb (VBlock *vb)
         COPY_TIMER(wait_for_vb_1_mutex);
     }
 
+    // v13.0.21: for --make-reference we serialize merging by VB, so that contigs get their word_index in the order of the reference file
+    if (flag.make_reference) serializer_lock (make_ref_merge_serializer, vb->vblock_i);
+
     // merge new words added in this vb into the z_file.contexts, ahead of zip_generate_b250().
     // writing indices based on the merged dictionaries. dictionaries are compressed. 
     // all this is done while holding exclusive access to the z_file dictionaries.
     // note: vb>=2 will block here, until vb=1 is completed
     threads_log_by_vb (vb, "zip", "START MERGE", 0);
     ctx_merge_in_vb_ctx(vb);
+
+    if (flag.make_reference) mutex_unlock (make_ref_merge_serializer);
 
     if (vb->vblock_i == 1) 
         mutex_unlock (wait_for_vb_1_mutex); 
@@ -718,6 +723,9 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
             mutex_destroy (wait_for_vb_1_mutex); // destroy mutex of previous file (it will still be locked if that file had no VBs)
             mutex_initialize (wait_for_vb_1_mutex);
             mutex_lock (wait_for_vb_1_mutex); 
+
+            mutex_destroy (make_ref_merge_serializer);
+            mutex_initialize (make_ref_merge_serializer); 
         }
 
         vb->vb_coords = !z_dual_coords ? DC_PRIMARY

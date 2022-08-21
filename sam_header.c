@@ -258,7 +258,7 @@ static void sam_header_alloc_contigs (BufferP txt_header)
 void sam_header_finalize (void)
 {
     if (!flag.bind) { // in ZIP with bind we keep the header contigs
-        contigs_free (sam_hdr_contigs);
+        contigs_destroy (sam_hdr_contigs);
         FREE (sam_hdr_contigs);
     }    
 }

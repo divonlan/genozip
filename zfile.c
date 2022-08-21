@@ -482,7 +482,8 @@ SectionHeaderUnion zfile_read_section_header (VBlockP vb, uint64_t offset,
                                               SectionType expected_sec_type)
 {
     uint32_t header_size = st_header_size (expected_sec_type);
-
+    uint32_t unencrypted_header_size = header_size;
+    
     // get the uncompressed size from one of the headers - they are all the same size, and the reference file is never encrypted
     file_seek (z_file, offset, SEEK_SET, false);
 
@@ -497,6 +498,12 @@ SectionHeaderUnion zfile_read_section_header (VBlockP vb, uint64_t offset,
             st_name(expected_sec_type), z_name, strerror (errno));
 
     bool is_magical = BGEN32 (header.common.magic) == GENOZIP_MAGIC;
+
+    // SEC_REFERENCE is never encrypted when originating from a reference file, it is encrypted (if the file is encrypted) if it originates from REF_INTERNAL 
+    if (is_encrypted && header.common.section_type == SEC_REFERENCE && !header.common.data_encrypted_len) {
+        is_encrypted = false;
+        header_size  = unencrypted_header_size;
+    }
 
     // decrypt header 
     if (is_encrypted) {

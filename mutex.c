@@ -18,6 +18,7 @@ void mutex_initialize_do (Mutex *mutex, const char *name, const char *func)
 
     mutex->name = name;
     mutex->initialized = func;
+    mutex->vb_i_last = 0; // reset
 }
 
 void mutex_destroy_do (Mutex *mutex, const char *func) 
@@ -70,4 +71,30 @@ void mutex_wait_do (Mutex *mutex, const char *func, uint32_t line)
 {
     mutex_lock_do (mutex, true, func);
     mutex_unlock_do (mutex, func, line);
+}
+
+void serializer_lock_do (MutexP ser, uint32_t vb_i, const char *func, uint32_t code_line)
+{
+    #define WAIT_TIME_USEC 5000
+    #define TIMEOUT (30*60) // 30 min
+
+    for (unsigned i=0; ; i++) {
+        mutex_lock_do ((MutexP)ser, true, func);
+
+        ASSERT (ser->vb_i_last < vb_i, "called from %s:%u: Expecting vb_i_last=%u < vb->vblock_i=%u. serializer=%s", 
+                func, code_line, ser->vb_i_last, vb_i, ser->name);
+        
+        if (ser->vb_i_last == vb_i - 1) { // its our turn now
+            ser->vb_i_last++; // next please
+            return;           // return with mutex locked
+        }
+        
+        // not our turn, wait 5ms and try again
+        mutex_unlock_do ((MutexP)ser, func, code_line);
+        usleep (WAIT_TIME_USEC);
+
+        // timeout after approx 30 minutes
+        ASSERT (i < TIMEOUT*(1000000/WAIT_TIME_USEC), "called from %s:%u: Timeout (%u sec) while waiting for serializer %s in vb=%u. vb_i_last=%u", 
+                func, code_line, TIMEOUT, ser->name, vb_i, ser->vb_i_last);
+    }
 }

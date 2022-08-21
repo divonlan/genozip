@@ -22,6 +22,7 @@
 typedef struct Mutex {
     pthread_mutex_t mutex;
     const char *name, *initialized, *lock_func;
+    uint32_t vb_i_last; // used by serializer_lock
 } Mutex;
 
 extern void mutex_initialize_do (MutexP mutex, const char *name, const char *func);
@@ -41,6 +42,9 @@ extern void mutex_wait_do (MutexP mutex, const char *func, uint32_t line);
 #define mutex_wait(mutex) mutex_wait_do (&(mutex), __FUNCTION__, __LINE__)
 
 #define mutex_is_show(name) (flag.show_mutex && (flag.show_mutex==(char*)1 || !strncmp ((name), flag.show_mutex, 8))) // only 8 chars so we can catch all genome_muteces[%u]
+
+extern void serializer_lock_do (MutexP ser, uint32_t vb_i, const char *func, uint32_t line);
+#define serializer_lock(ser, vb_i) serializer_lock_do (&(ser), vb_i, __FUNCTION__, __LINE__)
 
 // -----------
 // spinlock stuff

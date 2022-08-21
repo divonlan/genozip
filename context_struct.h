@@ -95,6 +95,7 @@ typedef struct Context {
     bool dict_merged;          // ZIP: VB: dict has been merged into zctx
     bool please_remove_dict;   // ZFILE: one or more of the VBs request NOT compressing this dict (will be dropped unless another VB insists on keeping it)
     bool dict_len_excessive;   // ZFILE: dict is very big, indicating an ineffecient segging of this context
+    bool lcodec_hard_coded;    // ZIP: lcodec is hard-coded and should not be reassigned
     
     TranslatorId luft_trans;   // ZIP: Luft translator for the context, set at context init and immutable thereafter
     

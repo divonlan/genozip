@@ -13,6 +13,7 @@ ulimit -c unlimited # enable core dumps
 
 TESTDIR=private/test
 OUTDIR=$TESTDIR/tmp
+REFDIR=../genozip/data
 
 cleanup() { 
     rm -fR $OUTDIR/* $TESTDIR/*.bad $TESTDIR/*.rejects.* 
@@ -1056,7 +1057,7 @@ batch_make_reference()
 
     # Making a reference
     echo "Making a reference"
-    local fa_file=data/GRCh38_full_analysis_set_plus_decoy_hla.fa.gz 
+    local fa_file=$REFDIR/GRCh38_full_analysis_set_plus_decoy_hla.fa.gz 
     local ref_file=$OUTDIR/output.ref.genozip
     test_header "$genozip --make-reference $fa_file"
     $genozip --make-reference $fa_file --force -o $ref_file || exit 1
@@ -1091,7 +1092,7 @@ batch_reference_backcomp()
 {
     if [ "$i_am_prod" == "1" ]; then return; fi 
 
-    local fa_file=data/GRCh38_full_analysis_set_plus_decoy_hla.fa.gz 
+    local fa_file=$REFDIR/GRCh38_full_analysis_set_plus_decoy_hla.fa.gz 
     local ref_file=$OUTDIR/output.ref.genozip
     local prod_ref_file=$OUTDIR/output.prod.ref.genozip
 
@@ -1153,11 +1154,11 @@ is_windows="`uname|grep -i mingw``uname|grep -i MSYS`"
 is_mac=`uname|grep -i Darwin`
 
 # standard file - test.sh should change these
-hg19=data/hg19.p13.plusMT.full_analysis_set.ref.genozip
-hs37d5=data/hs37d5.ref.genozip
-GRCh38=data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
-T2T1_1=data/chm13.draft_v1.1.ref.genozip
-chain37_38=data/GRCh37_to_GRCh38.chain.genozip
+hg19=$REFDIR/hg19.p13.plusMT.full_analysis_set.ref.genozip
+hs37d5=$REFDIR/hs37d5.ref.genozip
+GRCh38=$REFDIR/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
+T2T1_1=$REFDIR/chm13.draft_v1.1.ref.genozip
+chain37_38=$REFDIR/GRCh37_to_GRCh38.chain.genozip
 
 if (( $# < 1 )); then
     echo "Usage: test.sh [debug|opt|prod] <batch_id-test> [optional-genozip-arg]"
