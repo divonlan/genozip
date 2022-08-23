@@ -35,12 +35,12 @@ uint32_t codec_RANw_est_size (Codec codec, uint64_t uncompressed_len) { return r
 //------------------------
 
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
-static bool codec_hts_compress (VBlockP vb, 
+static bool codec_hts_compress (VBlockP vb, ContextP ctx,
                                 rom uncompressed,           // option 1 - compress contiguous data
                                 uint32_t *uncompressed_len, 
                                 LocalGetLineCB get_line_cb, // option 2 - compress data one line at a time
                                 STRe(compressed),           // in/out 
-                                unsigned char *(*func)(VBlockP vb, unsigned char *in,  unsigned int in_size, unsigned char *out, unsigned int *out_size, int order),                                
+                                unsigned char *(*func)(VBlockP vb, unsigned char *in, unsigned int in_size, unsigned char *out, unsigned int *out_size, int order),                                
                                 int order, bool soft_fail, rom name)
 {
     START_TIMER;
@@ -50,11 +50,14 @@ static bool codec_hts_compress (VBlockP vb,
         
         for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
             char *line; uint32_t line_len;
-            get_line_cb (vb, line_i, pSTRa(line), *uncompressed_len - vb->codec_bufs[0].len, NULL);
+            get_line_cb (vb, ctx, line_i, pSTRa(line), *uncompressed_len - vb->codec_bufs[0].len, NULL);
             
-            buf_add (&vb->codec_bufs[0], line, line_len);
+            if (line_len)
+                buf_add (&vb->codec_bufs[0], line, line_len);
         }
-        ASSERT (vb->codec_bufs[0].len == *uncompressed_len, "\"%s\": Expecting in_so_far=%u == uncompressed_len=%u", name, vb->codec_bufs[0].len32, *uncompressed_len);
+
+        ASSERT (vb->codec_bufs[0].len == *uncompressed_len, "%s: \"%s\": Expecting in_so_far=%u == uncompressed_len=%u ctx=%s callback=%s", 
+                VB_NAME, name, vb->codec_bufs[0].len32, *uncompressed_len, TAG_NAME, !!get_line_cb ? "Yes" : "No");
     }
 
     bool ret = !!func (vb, (uint8_t*)uncompressed, *uncompressed_len, (uint8_t*)compressed, compressed_len, order);
@@ -66,12 +69,12 @@ static bool codec_hts_compress (VBlockP vb,
 }
 
 #define COMPRESS_FUNC_TEMPLATE(func,codec,order)                                                             \
-COMPRESS (codec_##codec##_compress)                                                     \
+COMPRESS (codec_##codec##_compress)                                                                          \
 {                                                                                                            \
     int ret;                                                                                                 \
-    ASSERT ((ret = codec_hts_compress (vb, uncompressed, uncompressed_len, get_line_cb, compressed, compressed_len,     \
+    ASSERT ((ret = codec_hts_compress (vb, ctx, uncompressed, uncompressed_len, get_line_cb, compressed, compressed_len,     \
                                        func, order, soft_fail, name)) || soft_fail,                          \
-            "Failed " #func " uncompressed_len=%u compressed_len=%u", *uncompressed_len, *compressed_len);   \
+            "%s: Failed " #func " uncompressed_len=%u compressed_len=%u. ctx=%s", VB_NAME, *uncompressed_len, *compressed_len, TAG_NAME);   \
     return ret;                                                                                              \
 }
 
@@ -96,10 +99,10 @@ UNCOMPRESS (codec_rans_uncompress)
 
     unsigned out_len = (unsigned)uncompressed_len;
     ASSERT (rans_uncompress_to_4x16 (vb, (uint8_t *)compressed, compressed_len, (uint8_t *)uncompressed_buf->data, &out_len),
-            "Failed rans_uncompress_to_4x16: \"%s\" compressed_len=%u uncompressed_len=%u (expected: %"PRIu64")", 
-            name, compressed_len, out_len, uncompressed_len);
+            "%s: Failed rans_uncompress_to_4x16: \"%s\" compressed_len=%u uncompressed_len=%u (expected: %"PRIu64")", 
+            VB_NAME, name, compressed_len, out_len, uncompressed_len);
 
-    ASSERT (out_len == uncompressed_len, "Expecting, for \"%s\" out_len=%u == uncompressed_len=%"PRIu64, name, out_len, uncompressed_len);
+    ASSERT (out_len == uncompressed_len, "%s: Expecting, for \"%s\" out_len=%u == uncompressed_len=%"PRIu64, VB_NAME, name, out_len, uncompressed_len);
 
     COPY_TIMER (compressor_rans);
 }
@@ -112,9 +115,9 @@ UNCOMPRESS (codec_arith_uncompress)
 
     unsigned out_len = (unsigned)uncompressed_len;
     ASSERT (arith_uncompress_to (vb, (uint8_t *)compressed, compressed_len, (uint8_t *)uncompressed_buf->data, &out_len),
-            "Failed arith_uncompress_to: \"%s\" compressed_len=%u uncompressed_len=%"PRIu64, name, compressed_len, uncompressed_len);
+            "%s: Failed arith_uncompress_to: \"%s\" compressed_len=%u uncompressed_len=%"PRIu64, VB_NAME, name, compressed_len, uncompressed_len);
 
-    ASSERT (out_len == uncompressed_len, "For \"%s\": expecting out_len=%u == uncompressed_len=%"PRIu64, name, out_len, uncompressed_len);
+    ASSERT (out_len == uncompressed_len, "%s: For \"%s\": expecting out_len=%u == uncompressed_len=%"PRIu64, VB_NAME, name, out_len, uncompressed_len);
 
     COPY_TIMER (compressor_arith);
 }

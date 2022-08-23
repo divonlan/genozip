@@ -41,7 +41,7 @@ static void dict_io_prepare_for_assign_codec (VBlockP vb)
 static void dict_io_assign_codec_one_dict (VBlockP vb)
 {
     vb->fragment_ctx->lcodec = codec_assign_best_codec (vb, vb->fragment_ctx, NULL, SEC_DICT);
-    vb->is_processed = true; // tell dispatcher this thread is done and can be joined.
+    vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
 }
 
 // called by main thread in zip_write_global_area
@@ -52,21 +52,25 @@ void dict_io_assign_codecs (void)
     // handle some dictionaries here, so save on thread creation for trival dictionaries
     for_zctx {
         // assign CODEC_NONE to all the to-small-to-compress dictionaries, 
-        if (zctx->dict.len < MIN_LEN_FOR_COMPRESSION)
+        if (zctx->dict.len < MIN_LEN_FOR_COMPRESSION) {
             zctx->lcodec = CODEC_NONE;
+            zctx->lcodec_hard_coded = true;
+        }
 
         // assign CODEC_ARTB to dictionaries under 1KB (unless --best)
-        else if (!flag.best && zctx->dict.len < 1024)
+        else if (!flag.best && zctx->dict.len < 1024) {
             zctx->lcodec = CODEC_ARITH8;
+            zctx->lcodec_hard_coded = true;
+        }
 
         else
             zctx->lcodec = CODEC_UNKNOWN; // only dicts big enough are assigned dynamically
     }
 
-    dispatcher_fan_out_task ("assign_dict_codecs", NULL, PROGRESS_MESSAGE, "Writing dictionaries...", false, false, 0, 20000,
+    dispatcher_fan_out_task ("assign_dict_codecs", NULL, 0, "Writing dictionaries...", true, false, false, 0, 20000,
                              dict_io_prepare_for_assign_codec, 
                              dict_io_assign_codec_one_dict, 
-                             NULL);
+                             NO_CALLBACK);
 }
 
 // -------------------------------------
@@ -156,11 +160,11 @@ static void dict_io_compress_one_fragment (VBlockP vb)
 
     if (flag.show_time) codec_show_time (vb, st_name (SEC_DICT), vb->fragment_ctx->tag_name, vb->fragment_ctx->lcodec);
 
-    comp_compress (vb, &vb->z_data, (SectionHeader*)&header, vb->fragment_start, NO_CALLBACK, "SEC_DICT");
+    comp_compress (vb, vb->fragment_ctx, &vb->z_data, (SectionHeader*)&header, vb->fragment_start, NO_CALLBACK, "SEC_DICT");
 
     COPY_TIMER (dict_io_compress_one_fragment)    
 
-    vb->is_processed = true; // tell dispatcher this thread is done and can be joined.
+    vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
 }
 
 // called by main thread in zip_write_global_area
@@ -171,7 +175,7 @@ void dict_io_compress_dictionaries (void)
 
     dict_io_assign_codecs(); // assign codecs to all contexts' dicts
 
-    dispatcher_fan_out_task ("compress_dicts", NULL, PROGRESS_MESSAGE, "Writing dictionaries...", false, false, 0, 20000,
+    dispatcher_fan_out_task ("compress_dicts", NULL, 0, "Writing dictionaries...", false, false, false, 0, 20000,
                              dict_io_prepare_for_compress, 
                              dict_io_compress_one_fragment, 
                              zfile_output_processed_vb);
@@ -274,7 +278,7 @@ static void dict_io_uncompress_one_vb (VBlockP vb)
     zfile_uncompress_section (vb, header, &copy, NULL, 0, SEC_DICT); // NULL name prevents buf_alloc
 
 done:
-    vb->is_processed = true; // tell dispatcher this thread is done and can be joined.
+    vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
 }
 
 static void dict_io_dict_build_word_list_one (ContextP ctx)
@@ -332,8 +336,8 @@ void dict_io_read_all_dictionaries (void)
                             :flag.reading_chain     ? "read_dicts_chain" 
                             :flag.reading_kraken    ? "read_dicts_kraken" 
                             :                         "read_dicts",
-                             NULL, PROGRESS_NONE, "Reading dictionaries...", 
-                             flag.test,
+                             NULL, 0, 0, 
+                             true, flag.test,
                              !VER(9), // For v8 files, we read all fragments in the main thread as was the case in v8. This is because they are very small, and also we can't easily calculate the totel size of each dictionary.
                              0, 
                              10, // must be short - many dictionaries are just a few bytes

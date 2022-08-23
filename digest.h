@@ -55,15 +55,9 @@ typedef union {
 
 #define DIGEST_CONTEXT_NONE (DigestContext){}
 
-extern void digest_initialize (void);
-extern void digest_update_do (VBlockP vb, DigestContext *ctx, rom data, uint64_t data_len, rom msg);
-#define digest_update(ctx, buf, msg) digest_update_do ((buf)->vb, (ctx), STRb(*(buf)), (msg))
-
-extern Digest digest_do (const void *data, uint32_t len);
 extern Digest digest_snapshot (const DigestContext *ctx, rom msg);
-extern void digest_one_vb (VBlockP vb);
-extern void digest_piz_verify_one_vb (VBlockP vb);
-extern void digest_start_log (DigestContext *ctx);
+extern Digest digest_txt_header (BufferP data, Digest piz_expected_digest);
+extern bool digest_one_vb (VBlockP vb, bool is_compute_thread, BufferP data);
 
 typedef struct { char s[34]; } DigestDisplay;
 extern DigestDisplay digest_display (Digest digest);
@@ -77,7 +71,7 @@ extern bool digest_recon_is_equal (const Digest recon_digest, const Digest expec
 extern void digest_verify_ref_is_equal (const Reference ref, rom header_ref_filename, const Digest header_md5);
 
 #define md5_is_zero(digest) (!(digest).w128)
-#define v8_digest_is_zero(digest) (command == PIZ && !VER(9) && md5_is_zero(digest))
+#define v8_digest_is_zero(digest) (IS_PIZ && !VER(9) && md5_is_zero(digest))
 #define digest_is_zero md5_is_zero
 
 #define piz_need_digest (!v8_digest_is_zero (z_file->digest) && !flag.data_modified && !flag.reading_chain) 

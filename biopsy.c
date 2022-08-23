@@ -10,7 +10,7 @@
 #include "file.h"
 
 static Buffer biopsy_vb_i = { .name = "biopsy_vb_i" };
-static Buffer biopsy_data = { .name = "biopsy_data" };
+static Buffer biopsy_data = { .name = "biopsy_data", .can_be_big = true };
 static char *biopsy_fn = NULL;
 
 void biopsy_init (rom optarg)

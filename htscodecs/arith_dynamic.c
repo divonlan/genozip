@@ -669,7 +669,8 @@ unsigned char *arith_compress_to(VBlockP vb, unsigned char *in,  unsigned int in
 	c_meta_len += var_put_u32(out+c_meta_len, out_end, in_size);
 	out[c_meta_len++] = N;
 
-	out2_start = out2 = out+2+5*N; // shares a buffer with c_meta
+	out2_start = out2 = out+2+5*(N+1); // bug fix per email from James
+//	out2_start = out2 = out+2+5*(N+1); // shares a buffer with c_meta
         for (i = 0; i < N; i++) {
 	    // Brute force try all methods.
 	    // FIXME: optimise this bit.  Maybe learn over time?

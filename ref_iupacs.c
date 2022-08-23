@@ -67,7 +67,7 @@ void ref_iupacs_compress (void)
     }
 
     evb->scratch.len = sizeof (Iupac) * make_iupacs_len;
-    zfile_compress_section_data_ex (evb, SEC_REF_IUPACS, &evb->scratch, 0,0, CODEC_BSC, SECTION_FLAGS_NONE); 
+    zfile_compress_section_data_ex (evb, NULL, SEC_REF_IUPACS, &evb->scratch, 0,0, CODEC_BSC, SECTION_FLAGS_NONE, NULL); 
 
     buf_free (evb->scratch);
 }

@@ -23,6 +23,8 @@ typedef _Bool bool;
 #define false 0
 #endif
 
+typedef enum __attribute__ ((__packed__)) { no=0, yes=1, unknown=2 } thool; // three-way "bool"
+
 // -----------------
 // system parameters
 // -----------------
@@ -36,9 +38,14 @@ typedef _Bool bool;
 
 #define DEFAULT_MAX_THREADS 8 // used if num_cores is not discoverable and the user didn't specifiy --threads
 
-#define MEMORY_WARNING_THREASHOLD  0x100000000  // (4 GB) warning in some cases that we predict that user choices would cause us to consume more than this
+#define MEMORY_WARNING_THREASHOLD 0x100000000  // (4 GB) warning in some cases that we predict that user choices would cause us to consume more than this
 
 #define NO_CALLBACK NULL
+
+typedef enum { POOL_MAIN,  // used for all VBs, except non-pool VBs and BGZF VBs
+               POOL_BGZF,  // PIZ only: used for BGZF-compression dispatcher
+               NUM_POOL_TYPES } VBlockPoolType;
+#define POOL_NAMES { "MAIN", "BGZF" };
 
 // ------------------------------------------------------------------------------------------------------------------------
 // pointers used in header files - so we don't need to include the whole .h (and avoid cyclicity and save compilation time)
@@ -46,7 +53,7 @@ typedef _Bool bool;
 typedef struct VBlock *VBlockP;
 typedef const struct VBlock *ConstVBlockP;
 #define NULL_VB ((VBlockP)0)
-
+typedef struct VBlockPool *VBlockPoolP;
 typedef struct File *FileP;
 typedef const struct File *ConstFileP;
 typedef struct Buffer *BufferP;
@@ -55,7 +62,12 @@ typedef struct Container *ContainerP;
 typedef const struct Container *ConstContainerP;
 typedef struct SmallContainer *SmallContainerP;
 typedef const struct SmallContainer *ConstSmallContainerP;
+typedef struct MediumContainer *MediumContainerP;
+typedef const struct MediumContainer *ConstMediumContainerP;
+typedef struct ContainerItem *ContainerItemP;
+typedef const struct ContainerItem *ConstContainerItemP;
 typedef struct Context *ContextP;
+#define CTX_NONE ((ContextP)0)
 typedef const struct Context *ConstContextP;
 typedef struct CtxNode *CtxNodeP;
 typedef const struct CtxNode *ConstMtfNodeP;
@@ -68,13 +80,14 @@ typedef const struct Bits *ConstBitsP;
 typedef struct RAEntry *RAEntryP;
 typedef const struct RAEntry *ConstRAEntryP;
 typedef struct Mutex *MutexP;
+typedef struct Serializer *SerializerP;
 typedef struct RefStruct *Reference;
 typedef struct Contig *ContigP;
 typedef const struct Contig *ConstContigP;
 typedef struct ContigPkg *ContigPkgP;
 typedef const struct ContigPkg *ConstContigPkgP;
 typedef const struct QnameFlavorStruct *QnameFlavor; 
-typedef void *Dispatcher;
+typedef struct DispatcherData *Dispatcher;
 
 #define VB ((VBlockP)(vb))
 
@@ -137,6 +150,8 @@ typedef const uint8_t *bytes; // read-only array of bytes
 typedef struct __attribute__ ((__packed__)) { uint32_t index, len; } TxtWord; // 32b as VBs are limited to 2GB (usually used as reference into txt_data)
 #define TXTWORD(snip) ((TxtWord){ .index = BNUMtxt (snip),    .len = snip##_len }) // get coordinates in txt_data
 #define TXTWORDi(x,i) ((TxtWord){ .index = BNUMtxt (x##s[i]), .len = x##_lens[i] }) 
+
+typedef struct __attribute__ ((__packed__)) { uint64_t index; uint32_t len; } BufWord; // see also ZWord
 
 // a reference into data in z_file 
 #define ZWORD_MAX_INDEX ((1ULL << 40) - 1ULL) // 1 TB
@@ -217,8 +232,7 @@ typedef enum { DATA_EXHAUSTED, READY_TO_COMPUTE, MORE_DATA_MIGHT_COME } Dispatch
 typedef void BgEnBufFunc (BufferP buf, uint8_t *lt); // we use uint8_t instead of LocalType (which 1 byte) to avoid #including sections.h
 typedef BgEnBufFunc (*BgEnBuf);
 
-typedef enum { SKIP_PURPOSE_PROGRESS, // true if this section doesn't count towards "total" of progress indicator
-               SKIP_PURPOSE_RECON,    // true if this section should be skipped when reading VB data for reconstruction
+typedef enum { SKIP_PURPOSE_RECON,    // true if this section should be skipped when reading VB data for reconstruction
                SKIP_PURPOSE_PREPROC   // true if this section should be skipped when reading data for preprocessing (SAM: SA Loading FASTA: grep)
 } SkipPurpose;
 #define IS_SKIP(func) bool func (SectionType st, CompIType comp_i, DictId dict_id, SkipPurpose purpose)
@@ -227,6 +241,8 @@ typedef IS_SKIP ((*Skip));
 // PIZ / ZIP inspired by "We don't sell Duff. We sell Fudd"
 typedef enum { NO_COMMAND=-1, ZIP='z', PIZ='d' /* this is unzip */, LIST='l', LICENSE='L', VERSION='V', HELP=140, SHOW_HEADERS=10, TEST_AFTER_ZIP } CommandType;
 extern CommandType command, primary_command;
+#define IS_ZIP (command == ZIP)
+#define IS_PIZ (command == PIZ)
 
 // external vb - used when an operation is needed outside of the context of a specific VB;
 extern VBlockP evb;
@@ -319,18 +335,20 @@ typedef SORTER ((*Sorter));
 #define STRp(x)  rom x,   uint32_t x##_len    
 #define STRc(x)  char *x, uint32_t x##_len  // string is fixed-length, but editable 
 #define pSTRp(x) rom *x,  uint32_t *x##_len  
+#define qSTRp(x) char *x, uint32_t *x##_len // function populates a string and updates its length
 #define STRe(x)  char *x, uint32_t *x##_len // string and its length are editable 
 #define STRps(x) uint32_t n_##x##s, rom *x##s, const uint32_t *x##_lens  
 
 // Strings - function arguments
-#define STRa(x)    x, x##_len                       
-#define STRas(x)   n_##x##s, x##s, x##_lens                       
+#define STRa(x)     x, x##_len                       
+#define STRas(x)    n_##x##s, x##s, x##_lens                       
 #define STRasi(x,i) (n_##x##s-(i)), &x##s[i], &x##_lens[i] // subset strating from item i
-#define STRd(x)    x##_str, x##_len                   
-#define STRb(buf)  (buf).data, (buf).len                  
-#define STRi(x,i)  x##s[i], x##_lens[i]             
-#define pSTRa(x)   &x, &x##_len                      
-#define cSTR(x) x, sizeof x-1                 // a use with a string literal
+#define STRd(x)     x##_str, x##_len                   
+#define STRb(buf)   (buf).data, (buf).len                  
+#define STRi(x,i)   x##s[i], x##_lens[i]             
+#define pSTRa(x)    &x, &x##_len                      
+#define qSTRa(x)    x, &x##_len                      
+#define cSTR(x)     x, sizeof x-1                 // a use with a string literal
 
 // for printf %.*s argument list
 #define STRf(x)    ((int)x##_len), x          
@@ -388,22 +406,23 @@ typedef uint8_t TranslatorId;
                                            char *recon, int32_t recon_len, rom prefixes, uint32_t prefixes_len)
 
 // called after reconstruction of an item, if CI1_ITEM_CB is specified
-#define CONTAINER_ITEM_CALLBACK(func) void func(VBlockP vb, DictId dict_id, rom recon, uint32_t recon_len)
+#define CONTAINER_ITEM_CALLBACK(func) void func(VBlockP vb, ConstContainerItemP con_item, rom recon, uint32_t recon_len)
 
 #define TXTHEADER_TRANSLATOR(func) void func (VBlockP comp_vb, BufferP txtheader_buf)
 
 // IMPORTANT: This is part of the genozip file format. 
-typedef enum __attribute__ ((__packed__)) { // 1 byte
-    ENC_NONE   = 0,
-    ENC_AES256 = 1,
-    NUM_ENCRYPTION_TYPES
-} EncryptionType;
-
+typedef enum __attribute__ ((__packed__)) {  ENC_NONE = 0, ENC_AES256 = 1, NUM_ENCRYPTION_TYPES } EncryptionType;
 #define ENC_NAMES { "NO_ENC", "AES256" }
 
-#define COMPRESSOR_CALLBACK(func) \
-void func (VBlockP vb, LineIType vb_line_i, \
-           char **line_data, uint32_t *line_data_len,  \
+// note: #pragma pack doesn't affect enums
+typedef enum __attribute__ ((__packed__)) { BGZF_LIBDEFLATE, BGZF_ZLIB, NUM_BGZF_LIBRARIES         } BgzfLibraryType; // constants for BGZF FlagsBgzf.library
+#define BGZF_LIB_NAMES                    { "libdeflate",    "zlib"                                }
+
+#define COMPRESSOR_CALLBACK(func)                                   \
+void func (VBlockP vb,                                              \
+           ContextP ctx, /* NULL if not compressing a context */    \
+           LineIType vb_line_i,                                     \
+           char **line_data, uint32_t *line_data_len,               \
            uint32_t maximum_size, /* might be less than the size available if we're sampling in codec_assign_best_codec() */ \
            bool *is_rev)          // QUAL and SEQ callbacks - must be returned in SAM/BAM and set to 0 elsewhere
 #define CALLBACK_NO_SIZE_LIMIT 0xffffffff // for maximum_size
@@ -452,8 +471,11 @@ static inline void progress_newline(void) {
 #define ABORTINP0(string)                    ABORTINP (string "%s", "")
 
 // check for a bug - prints stack
+typedef struct { char s[80]; } StrText;
+extern StrText str_time (void);
+
 #define SUPPORT "\nIf this is unexpected, please contact "EMAIL_SUPPORT".\n"
-#define ASSERT(condition, format, ...)       ( { if (!(condition)) { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true); }} )
+#define ASSERT(condition, format, ...)       ( { if (!(condition)) { progress_newline(); fprintf (stderr, "%s Error in %s:%u: ", str_time().s, __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true); }} )
 #define ASSERT0(condition, string)           ASSERT (condition, string "%s", "")
 #define ASSERTISNULL(p)                      ASSERT0 (!p, "expecting "#p" to be NULL")
 #define ASSERTNOTNULL(p)                     ASSERT0 (p, #p" is NULL")
@@ -467,8 +489,8 @@ static inline void progress_newline(void) {
                                                  ASSINP0 (!__atomic_test_and_set (&once, __ATOMIC_RELAXED), string); } )
 #define RETURNW(condition, ret, format, ...) ( { if (!(condition)) { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); } return ret; }} )
 #define RETURNW0(condition, ret, string)     ( { if (!(condition)) { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); fflush (stderr); } return ret; } } )
-#define ABORT(format, ...)                   ( { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true);} )
-#define ABORT_R(format, ...) /*w/ return 0*/ ( { progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true); return 0;} )
+#define ABORT(format, ...)                   ( { progress_newline(); fprintf (stderr, "%s Error in %s:%u: ", str_time().s, __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true);} )
+#define ABORT_R(format, ...) /*w/ return 0*/ ( { progress_newline(); fprintf (stderr, "%s Error in %s:%u: ", str_time().s, __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true); return 0;} )
 #define ABORT0(string)                       ABORT (string "%s", "")
 #define ABORT0_R(string)                     ABORT_R (string "%s", "")
 #define WARN(format, ...)                    ( { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); } } )

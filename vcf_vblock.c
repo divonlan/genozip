@@ -112,7 +112,7 @@ void vcf_reset_line (VBlockP vb_)
     CTX(INFO_DP)->sum_dp_this_line = 0;
     CTX(INFO_DP)->is_initialized = false;        
 
-    if (command == ZIP) {
+    if (IS_ZIP) {
         for (Did did_i=0; did_i < NUM_VCF_FIELDS; did_i++)
             CTX(did_i)->sf_i = -1; // initialize
     }

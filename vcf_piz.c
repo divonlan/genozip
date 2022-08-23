@@ -16,7 +16,6 @@
 #include "codec.h"
 #include "reconstruct.h"
 #include "piz.h"
-#include "lookback.h"
 
 void vcf_piz_genozip_header (const SectionHeaderGenozipHeader *header)
 {
@@ -57,7 +56,6 @@ bool vcf_piz_init_vb (VBlockP vb_, const SectionHeaderVbHeader *header, uint32_t
 
 void vcf_piz_recon_init (VBlockP vb)
 {
-    vcf_piz_initialize_ps_pid (vb);
 }
 
 // returns true if section is to be skipped reading / uncompressing
@@ -227,24 +225,24 @@ static void inline vcf_piz_append_ostatus_to_INFO (VBlockP vb)
 
 CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb)
 {
-    switch (dict_id.num) {
+    switch (con_item->dict_id.num) {
 
         case _FORMAT_DP:
             if (ctx_has_value (vb, FORMAT_DP)) // not '.' or missing
                 CTX(INFO_DP)->sum_dp_this_line += CTX(FORMAT_DP)->last_value.i;
             break;
             
-        case _FORMAT_PS:
-            lookback_insert_txt (vb, VCF_LOOKBACK, FORMAT_PS, STRa(recon));
+        case _FORMAT_PS: // only happens in v13 where PS has item_cb
+            vcf_piz_ps_pid_lookback_insert (vb, FORMAT_PS, STRa(recon));
             break;
 
-        case _FORMAT_PID:
-            lookback_insert_txt (vb, VCF_LOOKBACK, FORMAT_PID, STRa(recon));
+        case _FORMAT_PID: // only happens in v13 where PS has item_cb
+            vcf_piz_ps_pid_lookback_insert (vb, FORMAT_PID, STRa(recon));
             break;
 
         default:
             ASSPIZ (false, "vcf_piz_con_item_cb doesn't know how to handle dict_id=%s. Please upgrade to the latest version of Genozip", 
-                    dis_dict_id (dict_id).s);
+                    dis_dict_id (con_item->dict_id).s);
     }
 }
 

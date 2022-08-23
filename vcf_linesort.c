@@ -108,9 +108,13 @@ static void vcf_linesort_merge_vb_do (VBlockP vb, bool is_luft)
 // (currently used only for VCF - SAM merge happens in main thread in sam_zip_gc_after_compute)
 void vcf_linesort_merge_vb (VBlockP vb)
 {
+    START_TIMER;
+
     vcf_linesort_merge_vb_do (vb, false);
     if (z_is_dvcf) // Luft coordinates exist
         vcf_linesort_merge_vb_do (vb, true);
+
+    COPY_TIMER(vcf_linesort_merge_vb);
 }
 
 static bool vcf_linesort_is_file_sorted (bool is_luft)

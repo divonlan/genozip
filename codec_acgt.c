@@ -55,9 +55,9 @@ const uint8_t acgt_encode_comp[256] =
 // ZIP side
 //--------------
 
-void codec_acgt_comp_init (VBlockP vb)
+void codec_acgt_comp_init (VBlockP vb, Did nonref_did_i)
 {
-        Context *nonref_ctx     = CTX(DTF(nonref));
+        Context *nonref_ctx     = CTX(nonref_did_i);
         nonref_ctx->lcodec      = CODEC_ACGT; // ACGT is better than LZMA and BSC
         nonref_ctx->ltype       = LT_SEQUENCE;
 
@@ -99,7 +99,7 @@ COMPRESS (codec_acgt_compress)
     
     #define PACK(data,len) { if (len) codec_acgt_pack (packed, (data), (len)); }
 
-    Context *nonref_ctx   = CTX(DTF(nonref));
+    Context *nonref_ctx   = ctx;
     Context *nonref_x_ctx = nonref_ctx + 1;
     Bits *packed;
 
@@ -136,7 +136,7 @@ COMPRESS (codec_acgt_compress)
             char *data_1=0;
             uint32_t data_1_len=0;
             
-            get_line_cb (vb, line_i, &data_1, &data_1_len, *uncompressed_len - nonref_x_ctx->local.len32, NULL);
+            get_line_cb (vb, ctx, line_i, &data_1, &data_1_len, *uncompressed_len - nonref_x_ctx->local.len32, NULL);
 
             PACK (data_1, data_1_len);
 
@@ -145,7 +145,7 @@ COMPRESS (codec_acgt_compress)
         }
     }
     else 
-        ABORT ("\"%s\": neither src_data nor callback is provided", name);
+        ABORT ("%s: \"%s\": neither src_data nor callback is provided", VB_NAME, name);
 
     // get codec for NONREF_X header->lcodec remains CODEC_XCGT, and we set subcodec to the codec discovered in assign, and set to nonref_ctx->lcode
     Codec z_lcodec = ZCTX(nonref_x_ctx->did_i)->lcodec;
@@ -172,7 +172,7 @@ COMPRESS (codec_acgt_compress)
         if (flag.show_time) codec_show_time (vb, "Subcodec", vb->profile.next_subname, header->sub_codec);
 
         PAUSE_TIMER(vb); // sub-codec compresssors account for themselves
-        if (!compress (vb, header, (char *)packed->words, &packed_uncompressed_len, NULL, compressed, compressed_len, soft_fail, name)) return false;
+        if (!compress (vb, ctx, header, (char *)packed->words, &packed_uncompressed_len, NULL, compressed, compressed_len, soft_fail, name)) return false;
         RESUME_TIMER (vb, compressor_actg);
     }
 
@@ -198,6 +198,8 @@ UNCOMPRESS (codec_xcgt_uncompress)
     rom acgt_x = B1ST (const char, *uncompressed_buf); // data from NONREF_X context
     
     Context *nonref_ctx = CTX(DTF(nonref));
+    ASSERTISALLOCED (nonref_ctx->local);
+    
     char *nonref = B1STc (nonref_ctx->local); // note: local was allocated by caller ahead of comp_uncompress -> codec_acgt_uncompress of the NONREF context
 
     for (uint32_t i=0; i < uncompressed_len; i++) {

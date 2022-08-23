@@ -13,6 +13,7 @@
 #include "strings.h"
 #include "codec.h"
 #include "arch.h"
+#include "bgzf.h"
 
 SegConf segconf = {}; // system-wide global
 
@@ -158,8 +159,10 @@ void segconf_initialize (void)
     if (segconf_no_calculate()) return;
 
     uint64_t save_vb_size = segconf.vb_size;
-    segconf = (SegConf){}; // reset for new component
-
+    segconf = (SegConf){};
+    
+    // note: data-type specific segconf values are initialized in *_seg_initialize
+    
     if (z_file->num_txts_so_far > 0)
         segconf.vb_size = save_vb_size; // components after first inherit vb_size from first
 
@@ -221,11 +224,11 @@ void segconf_calculate (void)
         flag.aligner_available = false; // note: original value of flag will be restore when zip of this file is complete (see main_genozip)
 
     // return the data to txt_file->unconsumed_txt - squeeze it in before the passed-up data
-    buf_alloc (evb, &txt_file->unconsumed_txt, txt_data_copy.len, 0, char, 0, "txt_file->unconsumed_txt");
-    memmove (&txt_file->unconsumed_txt.data[txt_data_copy.len], txt_file->unconsumed_txt.data, txt_file->unconsumed_txt.len);
-    memcpy (txt_file->unconsumed_txt.data, txt_data_copy.data, txt_data_copy.len);
-    txt_file->unconsumed_txt.len += txt_data_copy.len;
+    buf_insert (evb, txt_file->unconsumed_txt, char, 0, txt_data_copy.data, txt_data_copy.len, "txt_file->unconsumed_txt");
     buf_destroy (txt_data_copy);
+
+    if (txt_file->codec == CODEC_BGZF)
+        bgzf_return_segconf_blocks (vb); // return BGZF used by the segconf VB to the unconsumed BGZF blocks
 
     // in case of generated component data - undo
     vb->gencomp_lines.len = 0;
@@ -242,11 +245,12 @@ void segconf_calculate (void)
         flag.aligner_available = false;
     }
 
-    ASSINP (flag.best != 1                // no --best specified, or specified --best=NO_REF
+    ASSINP (!flag.best                    // no --best specified
+         || flag.force                    // --force overrides
          || !best_requires_ref            // --best doesn't require ref
-         || flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE // reference is provided
-         || flag.seg_only || flag.biopsy, // we're not creating a compressed format
-            "Using --best on a %s file also requires using --reference. You can override this requirement with --best=NO_REF", dt_name(vb->data_type));
+         || flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE   // reference is provided
+         || flag.zip_no_z_file,           // we're not creating a compressed format
+            "Using --best on a %s file also requires using --reference. Override with --force.", dt_name(vb->data_type));
 
 done:
     vb_destroy_vb (&vb);
@@ -265,4 +269,12 @@ void segconf_update_qual (STRp (qual))
             segconf.nontrivial_qual = true;
             break;
         }
+}
+
+rom sam_mapper_name (SamMapperType mp)
+{
+    rom mapper_name[] = SAM_MAPPER_NAME;
+    ASSERT0 (ARRAY_LEN(mapper_name) == NUM_MAPPERS, "Invalid SAM_MAPPER_NAME array length - perhaps missing commas between strings?");
+
+    return (mp >= 0 && mp < NUM_MAPPERS) ? mapper_name[mp] : "INVALID_MAPPER";
 }

@@ -64,9 +64,10 @@ typedef struct Context {
 
     // PIZ: context-specific buffer
     Buffer qname_nodes;        // PIZ: used in KRAKEN_QNAME
-    Buffer ref_consumed_history;//PIZ: used in SAM_CIGAR 
+    Buffer cigar_anal_history; // PIZ: used in SAM_CIGAR - items of type CigarAnalItem
     Buffer line_sqbitmap;      // PIZ: used in SAM_SQBITMAP
     Buffer domq_denorm;        // PIZ SAM/BAM/FASTQ: DomQual codec denormalization table for contexts with QUAL data 
+    Buffer piz_lookback_buf;   // PIZ: SAM: used by contexts with lookback 
     };
 
     union {
@@ -108,6 +109,8 @@ typedef struct Context {
     bool counts_section;       // output a SEC_COUNTS section for this context
     bool line_is_luft_trans;   // Seg: true if current line, when reconstructed with --luft, should be translated with luft_trans (false if no
                                //      trans_luft exists for this context, or it doesn't trigger for this line, or line is already in LUFT coordinates)
+    bool lcodec_hard_coded;    // ZIP: lcodec is hard-coded and should not be reassigned
+
     enum __attribute__ ((__packed__)) { DEP_L0, DEP_L1, DEP_L2, NUM_LOCAL_DEPENDENCY_LEVELS } local_dep; // ZIP: this local is created when another local is compressed (each NONREF_X is created with NONREF is compressed) (value=0,1,2)
     bool is_loaded;            // PIZ: either dict or local or b250 are loaded (not skipped) so context can be reconstructed
     bool is_initialized;       // ZIP / PIZ: context-specific initialization has been done
@@ -169,7 +172,6 @@ typedef struct Context {
     };
 
     bool semaphore;            // valid within the context of reconstructing a single line. MUST be reset ahead of completing the line.
-    bool is_frozen;            // PIZ: state is frozen because we're currently peeking
     bool value_is_missing;     // PIZ: set by a SPECIAL function, as if there was a WORD_INDEX_MISSING b250
     
     // ----------------------------
@@ -187,7 +189,7 @@ typedef struct Context {
     int64_t last_delta;        // last delta value calculated
     
     #define INVALID_LAST_TXT_INDEX ((uint32_t)-1)
-    TxtWord last_txt;          // ZIP/PIZ: index//len into vb->txt_data of last seg/reconstruction (always in PIZ, sometimes in Seg) (introduced 10.0.5)
+    TxtWord last_txt;          // ZIP/PIZ: index/len into vb->txt_data of last seg/reconstruction (always in PIZ, sometimes in Seg) (introduced 10.0.5)
 
     #define LAST_LINE_I_INIT -0x7fffffff
     LineIType last_line_i;     // ZIP/PIZ: =vb->line_i this line, so far, generated a valid last_value that can be used by downstream fields 

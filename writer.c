@@ -25,6 +25,8 @@
 #include "gencomp.h"
 #include "piz.h"
 #include "recon_plan_io.h"
+#include "dispatcher.h"
+#include "progress.h"
 
 // ---------------
 // Data structures
@@ -54,6 +56,8 @@ typedef struct {
 
 #define vb_info         z_file->vb_info[0] // we use only [0] on the PIZ side
 #define txt_header_info z_file->txt_header_info
+
+VBlockP wvb = NULL;
 
 static ThreadId writer_thread = THREAD_ID_NONE;
 
@@ -184,15 +188,6 @@ Bits *writer_get_is_dropped (VBIType vb_i)
     return v->is_dropped;
 }
 
-bool writer_is_bgzf_by_compute_thread (VBIType vb_i)
-{
-    ASSERT (vb_i >= 1 && vb_i < vb_info.len, "vb_i=%u out of range [0,%u]", vb_i, (int)vb_info.len-1);
-
-    bool full_vb = !vb_info.len || VBINFO(vb_i)->full_vb;
- 
-    return full_vb && txt_file && txt_file->codec == CODEC_BGZF && !flag.no_writer;
-}
-
 // -----------------------------
 // PIZ reconstruction plan stuff
 // -----------------------------
@@ -244,8 +239,6 @@ static VBIType writer_init_txt_header_info (void)
             mutex_initialize (comp->wait_for_data);
             mutex_lock (comp->wait_for_data);
         } 
-        else
-            z_file->disk_size_minus_skips -= sec->size; // remove txt header here, VBs will be removed in writer_init_vb_info
     }
     
     return num_vbs;
@@ -315,7 +308,8 @@ static void writer_init_vb_info (void)
         v->needs_recon = true; // default
         #define DROP v->needs_recon = false
 
-        if (!v->num_lines) DROP; // can happen if all lines where sent to gencomp
+        if (!v->num_lines && // can happen if all lines where sent to gencomp
+            !(piz_need_digest && z_has_gencomp)) DROP; // keep anyway if we need to digest
 
         // --one-vb: user only wants to see a single VB, and this is not it
         else if (flag.one_vb && flag.one_vb != vb_i) DROP; 
@@ -370,12 +364,6 @@ static void writer_init_vb_info (void)
             mutex_initialize (v->wait_for_data);
             mutex_lock (v->wait_for_data);
         }
-        
-        // get actual disk size to be read, for progress indicator
-        if (v->needs_recon)
-            z_file->disk_size_minus_skips -= sections_get_vb_skipped_sections_size (sec);
-        else 
-            z_file->disk_size_minus_skips -= sections_get_vb_size (sec);
     }
 }
 
@@ -655,6 +643,10 @@ static void writer_add_trivial_plan (CompIType comp_i)
     if (!num_vbs) return;
 
     buf_alloc (evb, &z_file->recon_plan, num_vbs, 1000, ReconPlanItem, 1.5, "recon_plan");
+    buf_alloc_exact_zero (evb, z_file->recon_plan_index, z_file->num_vbs+1, BufWord, "z_file->recon_plan_index");
+
+    if (z_file->recon_plan.len) // we have a txt header item
+        *B1ST(BufWord, z_file->recon_plan_index) = (BufWord){ .len = 1 };
 
     Section vb_header = NULL;
     while (sections_get_next_vb_of_comp_sec (comp_i, &vb_header)) 
@@ -666,7 +658,14 @@ static void writer_add_trivial_plan (CompIType comp_i)
             };
 
             VBINFO(vb_header->vblock_i)->full_vb = true;
+
+            *B(BufWord, z_file->recon_plan_index, vb_header->vblock_i) = 
+                (BufWord){ .index = z_file->recon_plan.len - 1, .len = 1};
         }
+
+    // sort by VB as VBs in z_file might be out of order (in DVCF we don't allow out-of-order so no need to sort)
+    if (!z_is_dvcf)
+        recon_plan_sort_by_vb (z_file);
 }
 
 // PIZ main thread: add interleave entry for each VB of the component
@@ -762,8 +761,6 @@ void writer_create_plan (void)
 
     ASSINP (!flag.interleaved || txt_header_info.len == 2, "--interleave cannot be used because %s was not compressed with --pair", z_name);
 
-    bool section_list_unchanged = false; // reconstructing the file in the order of VBs and without filtering
-
     // case: SAM with PRIM/DEPN
     if (z_sam_gencomp) {        
         writer_add_txtheader_plan (SAM_COMP_MAIN);
@@ -807,15 +804,12 @@ void writer_create_plan (void)
 
         writer_add_txtheader_plan (FQ_COMP_R2);
         writer_add_trivial_plan (FQ_COMP_R2);
-
-        section_list_unchanged = true; 
     }
 
     // normal file, not one of the above
     else {
         writer_add_txtheader_plan (COMP_MAIN);
         writer_add_trivial_plan (COMP_MAIN);
-        section_list_unchanged = true;
     }
 
     bool has_regions_filter = random_access_has_filter();
@@ -847,13 +841,10 @@ void writer_create_plan (void)
 
         // mark VBs that are fully dropped as !needs_recon + remove REMOVE_ME items from recon_plan
         writer_cleanup_recon_plan_after_filtering();
-
-        section_list_unchanged = false; // since we filtered, this is no longer plain vanilla
     }
 
-    // build and commit new section list from recon_plan (unless plain vanilla - section list is fine as is)
-    if (!section_list_unchanged)
-        writer_update_section_list(); 
+    // build and commit new section list from recon_plan 
+    writer_update_section_list(); 
 
     if (flag.show_gheader == 2) { // --show-gheader=2 : show modified section list 
         sections_show_section_list (z_file->data_type);
@@ -879,43 +870,76 @@ void writer_create_plan (void)
 // Writer thread stuff
 // -------------------
 
-#define FLUSH_THREADSHOLD (4*1024*1024) // flush every 4MB or so
+#define BGZF_FLUSH_THRESHOLD  (32*1024*1024) 
+#define PLAIN_FLUSH_THRESHOLD (4 *1024*1024) 
+#define FLUSH_THRESHOLD ((txt_file->codec == CODEC_BGZF) ? BGZF_FLUSH_THRESHOLD : PLAIN_FLUSH_THRESHOLD)
 
-static void writer_flush_vb (VBlockP wvb, VBlockP vb, bool is_txt_header)
+static void writer_write (BufferP buf, uint64_t txt_data_len)
 {
     START_TIMER;
 
-    // note: normally digest calculation is done in the compute thread in piz_reconstruct_one_vb, but in
-    // case of an unmodified VB that inserts lines from gencomp VBs, we do it here, as we re-assemble the original VB
-    if (piz_need_digest && z_has_gencomp && !is_txt_header) 
-        digest_update_do (vb, &z_file->digest_ctx, STRb(vb->txt_data), "vb"); 
+    if (!buf->len) return;
+    
+    file_write (txt_file, STRb(*buf));
+    
+    txt_file->txt_data_so_far_single += txt_data_len;
+    txt_file->disk_so_far            += buf->len;
 
-    if (!flag.no_writer) {
+    buf_free (*buf);
 
-        if (txt_file->codec == CODEC_BGZF) {
-            // compress now if not compressed yet by compute thread (VBs) or main thread (txt_header)
-            if (vb == wvb || is_txt_header || !writer_is_bgzf_by_compute_thread (vb->vblock_i))
-                bgzf_compress_vb (vb); // compress data into vb->scratch (using BGZF blocks from source file or new ones)
+    COPY_TIMER_FULL (wvb, write);
+}
 
-            bgzf_write_to_disk (wvb, vb); 
+uint32_t writer_get_max_bgzf_threads (void)
+{
+    return MIN_(global_max_threads, 10); // note: we don't need more threads than the ratio between BGZF compression speed and disk write speed
+}
+
+// if bgzf pool is full, wait for one thread to complete
+static bool writer_output_one_processed_bgzf (Dispatcher dispatcher, bool blocking)
+{
+    VBlockP bgzf_vb = dispatcher_get_processed_vb (dispatcher, NULL, blocking);
+
+    if (bgzf_vb) {
+        writer_write (&bgzf_vb->z_data, bgzf_vb->txt_data.len);
+        dispatcher_recycle_vbs (dispatcher, true);  // also release VB
+    }
+
+    return !!bgzf_vb;
+}
+
+static void writer_flush_vb (Dispatcher dispatcher, VBlockP vb, bool is_txt_header, bool is_last)
+{
+    if (!vb->txt_data.len32 && !is_last) return; // no data to flush
+
+    if (!flag.no_writer) { // note: we might have a writer thread despite no writing - eg for calculated the digest if we have SAM gencomp
+        // case: BGZF compression - offload compression to compute threads (a max of BGZF_FLUSH_THRESHOLD per thread)
+        if (dispatcher) {
+            // in case of wvb, write the entire buffer, if its "native" vb, chop it up
+            uint32_t chunk_size = (vb==wvb) ? vb->txt_data.len32 : BGZF_FLUSH_THRESHOLD;
+
+            for (uint32_t i=0; i < vb->txt_data.len32 || is_last; i += chunk_size) { // if txt_data is empty, we still do one iteration in case of is_last
+
+                if (vb_pool_is_full (POOL_BGZF))
+                    writer_output_one_processed_bgzf (dispatcher, true); 
+
+                bgzf_dispatch_compress (dispatcher, Btxt(i), MIN_(chunk_size, vb->txt_data.len32 - i), 
+                                        is_last && (i+chunk_size >= vb->txt_data.len32));
+            
+                is_last = false; // if is is_last, we enter the loop once if txt_data.len=0
+            }
+
+            buf_free (vb->txt_data);
         }
 
-        else if (vb->txt_data.len) {
-            file_write (txt_file, STRb(vb->txt_data));
-
-            txt_file->txt_data_so_far_single += vb->txt_data.len;
-            txt_file->disk_so_far            += vb->txt_data.len;
-        }
+        // case: no BGZF, so we can write to disk right away
+        else if (vb->txt_data.len) 
+            writer_write (&vb->txt_data, vb->txt_data.len);
     }
 
     // case this is wvb: free, so we can use it for more lines (for non-wvb, we will release the VB after verifying digest)
-    if (vb == wvb) {
+    if (vb == wvb)
         buf_free (vb->txt_data);
-        buf_free (vb->scratch);
-        buf_free (vb->bgzf_blocks);
-    }
-
-    COPY_TIMER (write);
 }
 
 // final filter of output lines, based on downsample and shard. returns true if line is to be output
@@ -930,22 +954,22 @@ static inline bool writer_line_survived_downsampling (VbInfo *v)
 }
 
 // write lines one at a time, watching for dropped lines
-static void writer_write_line_range (VBlockP wvb, VbInfo *v, uint32_t start_line, uint32_t num_lines)
+static void writer_write_line_range (VbInfo *v, uint32_t start_line, uint32_t num_lines)
 {
     ASSERT (!v->vb->scratch.len, "expecting vb=%s/%u data to be BGZF-compressed by writer at flush, but it is already compressed by reconstructor: txt_file->codec=%s compressed.len=%"PRIu64" txt_data.len=%"PRIu64,
             comp_name (v->vb->comp_i), v->vb->vblock_i, codec_name (txt_file->codec), v->vb->scratch.len, v->vb->txt_data.len);
 
     if (!v->vb->txt_data.len) return; // no data in the VB 
 
-    ARRAY (rom , lines, v->vb->lines); 
+    ARRAY (uint32_t, lines, v->vb->lines); 
 
     ASSERT (start_line + num_lines <= lines_len, "vb_i=%u invalid range: least start_line=%u + num_lines=%u == %u but lines_len=%"PRIu64, 
             BNUM (vb_info, v), start_line, num_lines, start_line + num_lines, lines_len);
 
     for (uint32_t line_i=start_line; line_i < start_line + num_lines; line_i++) {
         
-        rom start = lines[line_i];
-        rom after = lines[line_i+1];  // note: lines has one extra entry so this is always correct
+        rom start = Bc (v->vb->txt_data, lines[line_i]);
+        rom after = Bc (v->vb->txt_data, lines[line_i+1]);  // note: lines has one extra entry so this is always correct
         uint32_t line_len = (uint32_t)(after - start);
         
         bool is_dropped = bits_get (v->is_dropped, line_i);
@@ -964,7 +988,7 @@ static void writer_write_line_range (VBlockP wvb, VbInfo *v, uint32_t start_line
     }
 }
 
-static void writer_write_lines_add_pair (VBlockP wvb, VbInfo *v, rom start, unsigned len, unsigned pair /* 1 or 2 */)
+static void writer_write_lines_add_pair (VbInfo *v, rom start, unsigned len, unsigned pair /* 1 or 2 */)
 {
     static rom suffixes[3] = { "", "/1", "/2" }; // suffixes for pair 1 and pair 2 reads
 
@@ -986,19 +1010,23 @@ static void writer_write_lines_add_pair (VBlockP wvb, VbInfo *v, rom start, unsi
 }
 
 // write one fastq "line" (actually 4 textual lines) at time, interleaved from v1 and v2
-static void writer_write_lines_interleaves (VBlockP wvb, VbInfo *v1, VbInfo *v2)
+static void writer_write_lines_interleaves (Dispatcher dispatcher, VbInfo *v1, VbInfo *v2)
 {
     if (!v1->vb->txt_data.len || !v2->vb->txt_data.len) return; // no data in the either of the VBs 
 
     ASSERT (v1->num_lines == v2->num_lines, "when interleaving, expecting number of lines of vb_i=%u (%u) to be the same as vb_i=%u (%u)",
             v1->vb->vblock_i, v1->num_lines, v2->vb->vblock_i, v2->num_lines);
 
+    ARRAY (uint32_t, lines1, v1->vb->lines);
+    ARRAY (uint32_t, lines2, v2->vb->lines);
+    
     for (uint32_t line_i=0; line_i < v1->num_lines; line_i++) {
 
-        rom *start1 = B(rom , v1->vb->lines, line_i);
-        rom *start2 = B(rom , v2->vb->lines, line_i);
-        unsigned len1 = (unsigned)(*(start1+1) - *start1);
-        unsigned len2 = (unsigned)(*(start2+1) - *start2);
+        rom start1 = Bc (v1->vb->txt_data, lines1[line_i]);
+        rom start2 = Bc (v2->vb->txt_data, lines2[line_i]);
+        unsigned len1 = lines1[line_i+1] - lines1[line_i];
+        unsigned len2 = lines2[line_i+1] - lines2[line_i];
+        
         bool is_dropped1 = bits_get (v1->is_dropped, line_i);
         bool is_dropped2 = bits_get (v2->is_dropped, line_i);
 
@@ -1007,20 +1035,20 @@ static void writer_write_lines_interleaves (VBlockP wvb, VbInfo *v1, VbInfo *v2)
             (flag.interleaved == INTERLEAVE_EITHER && (!is_dropped1 || !is_dropped2))) {
             // TODO - INTERLEAVE_EITHER doesn't work yet, bug 396
             if (writer_line_survived_downsampling(v1)) { 
-                if (len1) writer_write_lines_add_pair (wvb, v1, *start1, len1, 1); // also adds /1 and /2 if paired
-                if (len2) writer_write_lines_add_pair (wvb, v2, *start2, len2, 2);
+                if (len1) writer_write_lines_add_pair (v1, start1, len1, 1); // also adds /1 and /2 if paired
+                if (len2) writer_write_lines_add_pair (v2, start2, len2, 2);
             }
 
             txt_file->lines_written_so_far += 2; // increment even if downsampled-out, but not if filtered out during reconstruction (for downsampling accounting)
         }
 
-        if (wvb->txt_data.len > FLUSH_THREADSHOLD) 
-            writer_flush_vb (wvb, wvb, false);
+        if (wvb->txt_data.len > FLUSH_THRESHOLD) 
+            writer_flush_vb (dispatcher, wvb, false, false);
     }
 }
 
 // writer thread: waiting for data from a VB and loading it
-static void writer_load_vb (VbInfo *v)
+static void writer_load_vb (Dispatcher dispatcher, VbInfo *v)
 {
     bool is_comp = (v < B1ST (VbInfo, vb_info) || v > BLST (VbInfo, vb_info));
 
@@ -1033,7 +1061,24 @@ static void writer_load_vb (VbInfo *v)
     else if (flag.show_threads && is_comp) 
         iprintf ("writer: comp=%s WAITING FOR TXT_HEADER\n", comp_name(v->comp_i));
 
-    mutex_wait (v->wait_for_data);
+    bool got_data;
+    do {
+        bool computing_bgzf = dispatcher && !vb_pool_is_empty (POOL_BGZF);
+
+        got_data = mutex_wait (v->wait_for_data, !computing_bgzf); // blocking if there is no BGZF currently processing 
+
+        // if data is ready yet, use this waiting time to write processed bgzf to disk
+        if (!got_data) {
+            // output to txt_file all BGZF vbs that completed compression
+            bool any_data_flushed = false;
+            while (writer_output_one_processed_bgzf (dispatcher, false)) // non-blocking
+                any_data_flushed = true;
+
+            if (!any_data_flushed) 
+                usleep (15000); // neither the VB, or processed data is ready - take a nap
+        } 
+
+    } while (!got_data);
 
     threads_log_by_vb (v->vb, "writer", v->vb->vblock_i ? "WRITER LOADED VB" : "WRITER LOADED TXT_HEADER", 0);
 
@@ -1046,11 +1091,17 @@ static void writer_load_vb (VbInfo *v)
 }
 
 // Thread entry point for writer thread - at this point, the reconstruction plan is ready and unmutable
-static void writer_main_loop (VBlockP wvb)
+static void writer_main_loop (VBlockP wvb) // same as wvb global variable
 {
     ASSERTNOTNULL (wvb);
 
     threads_set_writer_thread();
+
+    // if we need to BGZF-compress, we will dispatch the compression workload to compute threads
+    Dispatcher dispatcher = (!flag.no_writer && txt_file->codec == CODEC_BGZF) ? 
+        dispatcher_init ("bgzf", POOL_BGZF, writer_get_max_bgzf_threads(), 0, false, false, NULL, 0, NULL) : NULL;
+        
+    bool do_digest = piz_need_digest && z_has_gencomp;
 
     // execute reconstruction plan
     for (uint64_t i=0; i < txt_file->recon_plan.len; i++) { // note: recon_plan.len maybe 0 if everything is filtered out
@@ -1067,35 +1118,37 @@ static void writer_main_loop (VBlockP wvb)
         VbInfo *v2 = (p->vb_i && p->flavor == PLAN_INTERLEAVE) ? VBINFO(p->vb2_i) : NULL;
 
         // if data for this VB is not ready yet, wait for it
-        if (v && !v->is_loaded && p->flavor != PLAN_DOWNSAMPLE) 
-            writer_load_vb (v);
+        if (v && !v->is_loaded && p->flavor != PLAN_DOWNSAMPLE)
+            writer_load_vb (dispatcher, v);
 
         if (v2 && !v2->is_loaded) 
-            writer_load_vb (v2);
+            writer_load_vb (dispatcher, v2);
 
-        // case: free data if this is the last line of the VB
         switch (p->flavor) {
 
             case PLAN_TXTHEADER:   
-                writer_flush_vb (wvb, v->vb, true); // write the txt header in its entirety
+                writer_flush_vb (dispatcher, v->vb, true, false); // write the txt header in its entirety
                 vb_release_vb (&v->vb, PIZ_TASK_NAME);
                 break;
 
             case PLAN_FULL_VB:   
+                // note: normally digest calculation is done in the compute thread in piz_reconstruct_one_vb, but in
+                // case of an unmodified VB that inserts lines from gencomp VBs, we do it here, as we re-assemble the original VB
+                if (do_digest) digest_one_vb (v->vb, false, NULL); 
+
                 if (!flag.downsample) {
 
                     if (flag.show_vblocks) // only displayed for entire VBs, not line ranges etc 
                         iprintf ("VB_FLUSH_FULL_VB(id=%d) vb=%s/%d txt_data.len=%u\n", v->vb->id, comp_name (v->vb->comp_i), v->vb->vblock_i, v->vb->txt_data.len32);
 
-                    writer_flush_vb (wvb, v->vb, false); // write entire VB
+                    writer_flush_vb (dispatcher, wvb, false, false); // flush any remaining unflushed wvb lines from previous VBs
+                    writer_flush_vb (dispatcher, v->vb, false, false); // write entire VB
                     txt_file->lines_written_so_far += v->vb->num_nondrop_lines;
                 }
                 else 
-                    writer_write_line_range (wvb, v, 0, v->num_lines); // this skips downsampled-out lines
+                    writer_write_line_range (v, 0, v->num_lines); // this skips downsampled-out lines
 
-                if (piz_need_digest && z_has_gencomp) 
-                    digest_piz_verify_one_vb (v->vb); 
-
+                dispatcher_increment_progress ("txt_write", 1); // done writing VB
                 vb_release_vb (&v->vb, PIZ_TASK_NAME);
                 break;
 
@@ -1103,35 +1156,49 @@ static void writer_main_loop (VBlockP wvb)
                 txt_file->lines_written_so_far += p->num_lines;
                 break;
 
-            case PLAN_END_OF_VB: // done with VB - free the memory (happens after a series of "default" line range entries)
-                if (gencomp_comp_eligible_for_digest(v->vb)) {
-                    writer_flush_vb (wvb, wvb, false); // flush remaining unflushed lines of this VB
+            case PLAN_END_OF_VB: { // done with VB - free the memory (happens after a series of "default" line range entries)
+                bool needs_flush = do_digest ? digest_one_vb (v->vb, false, &wvb->txt_data) : true;
 
-                    if (piz_need_digest && z_has_gencomp) 
-                        digest_piz_verify_one_vb (v->vb); // verify digest so far up to this VB
-                }
+                // note: if we're digesting gencomp VBs, we dont flush wvb when finishing a non-digestable VB (eg PRIM/DEPN in SAM/BAM)
+                if (needs_flush)
+                    writer_flush_vb (dispatcher, wvb, false, false); // flush remaining unflushed lines of this VB
 
                 vb_release_vb (&v->vb, PIZ_TASK_NAME);
+                dispatcher_increment_progress ("txt_write", 1); // done writing VB
                 break;
-
+            }
             case PLAN_INTERLEAVE:
-                writer_write_lines_interleaves (wvb, v, v2);
+                writer_write_lines_interleaves (dispatcher, v, v2);
                 vb_release_vb (&v->vb, PIZ_TASK_NAME);
                 vb_release_vb (&v2->vb, PIZ_TASK_NAME);
+                dispatcher_increment_progress ("txt_writeX2", 2); // done writing both VBs
                 break;
 
             default:   // PLAN_RANGE
-                writer_write_line_range (wvb, v, p->start_line, p->num_lines);
+                writer_write_line_range (v, p->start_line, p->num_lines);
                 break;
         }
 
-        if (wvb->txt_data.len > FLUSH_THREADSHOLD)
-            writer_flush_vb (wvb, wvb, false);
+        if (!do_digest && wvb->txt_data.len > FLUSH_THRESHOLD)
+            writer_flush_vb (dispatcher, wvb, false, false);
     }
 
-    if (wvb->txt_data.len) // this can happen with flag.downsample or flag.interleave - we flush at FLUSH_THRESHOLD
-        writer_flush_vb (wvb, wvb, false);
+    ASSERT (!do_digest || !wvb->txt_data.len, "expecting wvb->txt_data.len=%u to be 0. Perhaps a dropped END_OF_VB?", wvb->txt_data.len32); // sanity
 
+    // this might have data (eg with flag.downsample or flag.interleave) or not
+    writer_flush_vb (dispatcher, wvb, false, true);
+
+    // output for all remain BGZF (if any)
+    if (dispatcher) {
+        while (!vb_pool_is_empty (POOL_BGZF)) 
+            writer_output_one_processed_bgzf (dispatcher, true);
+
+        bgzf_write_finalize(); // write final data to wvb->z_data
+        writer_write (&wvb->z_data, 0);
+
+        dispatcher_finish (&dispatcher, NULL, false, false);
+    }
+  
     // The recon plan is supposed to end with all VBs flushed due to END_OF_VB, FULL_VB etc
     ASSERT (!wvb->txt_data.len, "Expected wvb to be flushed, but wvb->txt_data.len=%"PRIu64, wvb->txt_data.len);
 
@@ -1159,7 +1226,7 @@ static void writer_start_writing (CompIType unbind_comp_i)
     else // FQ_COMP_R2
         buf_copy (evb, &txt_file->recon_plan, &z_file->recon_plan, ReconPlanItem, z_file->recon_plan.count, 0, 0);
 
-    VBlockP wvb = vb_get_vb (WRITER_TASK_NAME, 0, COMP_NONE);
+    wvb = vb_get_vb (POOL_MAIN, WRITER_TASK_NAME, 0, COMP_NONE);
     writer_thread = threads_create (writer_main_loop, wvb);
 }
 
@@ -1169,7 +1236,7 @@ void writer_finish_writing (bool is_last_txt_file)
     if (flag.no_writer_thread || !txt_file || writer_thread == THREAD_ID_NONE) return;
 
     // wait for thread to complete (possibly it completed already)
-    threads_join (&writer_thread, NULL); // also sets writer_thread=THREAD_ID_NONE
+    threads_join (&writer_thread); // also sets writer_thread=THREAD_ID_NONE
     
     // all mutexes destroyed by main thread, that created them (because we will proceed to freeing z_file in which they live)    
     if (is_last_txt_file) {

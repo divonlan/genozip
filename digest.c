@@ -18,19 +18,10 @@
 #include "endianness.h"
 #include "profiler.h"
 
-static Mutex vb_digest_mutex = {}; // ZIP: used for serializing MD5ing of VBs
-
-#define IS_ADLER ((command == ZIP) ? !flag.md5 : z_file->z_flags.adler)
+#define IS_ADLER (IS_ZIP ? !flag.md5 : z_file->z_flags.adler)
 #define DIGEST_NAME (IS_ADLER ? "Adler32" : "MD5")
 
 #define DIGEST_LOG_FILENAME (command==ZIP ? "digest.zip.log" : "digest.piz.log")
-
-void digest_initialize (void)
-{
-    // reset if we're starting a new z_file
-    if (!z_file->num_txts_so_far) 
-        mutex_initialize (vb_digest_mutex); 
-}
 
 // get digest of data so far
 Digest digest_snapshot (const DigestContext *ctx, rom msg)
@@ -47,21 +38,14 @@ Digest digest_snapshot (const DigestContext *ctx, rom msg)
     return digest;
 }
 
-void digest_start_log (DigestContext *ctx)
+static Digest digest_do (const void *data, uint32_t len)
 {
-    ctx->common.log = true;
-    file_remove (DIGEST_LOG_FILENAME, true);
+    return IS_ADLER ? (Digest){ .words = { BGEN32 (adler32 (1, data, len)) } }
+                    : md5_do (data, len);
 }
 
-Digest digest_do (const void *data, uint32_t len)
-{
-    if (IS_ADLER)
-        return (Digest) { .words = { BGEN32 (adler32 (1, data, len)) } };
-    else
-        return md5_do (data, len);
-}
-
-void digest_update_do (VBlockP vb, DigestContext *ctx, rom data, uint64_t data_len, rom msg)
+#define digest_update(ctx, buf, msg) digest_update_do ((buf)->vb, (ctx), STRb(*(buf)), (msg))
+static void digest_update_do (VBlockP vb, DigestContext *ctx, rom data, uint64_t data_len, rom msg)
 {
     if (!data_len) return;
     
@@ -109,17 +93,19 @@ void digest_update_do (VBlockP vb, DigestContext *ctx, rom data, uint64_t data_l
     COPY_TIMER_VB (vb, digest);
 }
 
-void digest_piz_verify_one_vb (VBlockP vb)
+static void digest_piz_verify_one_vb (VBlockP vb)
 {
-    static bool failed = false; 
+    static bool failed = false; // we report only the first fail
 
     // if testing, compare digest up to this VB to that calculated on the original file and transferred through SectionHeaderVbHeader
     // note: we cannot test this unbind mode, because the digests are commulative since the beginning of the bound file
-    if (!failed && !flag.unbind && !v8_digest_is_zero (vb->digest_so_far)) {
-        Digest piz_digest_so_far = digest_snapshot (&z_file->digest_ctx, NULL);
+    if (!failed && !flag.unbind && !v8_digest_is_zero (vb->expected_digest)) {
+
+        Digest piz_digest = (VER(14) && IS_ADLER) ? vb->digest  // stand-alone digest of this VB
+                                                  : digest_snapshot (&z_file->digest_ctx, NULL); // commulative digest so far
 
         // warn if VB is bad, but don't exit, so file reconstruction is complete and we can debug it
-        if (!digest_recon_is_equal (piz_digest_so_far, vb->digest_so_far) && !digest_is_zero (vb->digest_so_far)) {
+        if (!digest_recon_is_equal (piz_digest, vb->expected_digest) && !digest_is_zero (vb->expected_digest)) {
 
             TEMP_FLAG (quiet, flag.quiet && !flag.show_digest);
 
@@ -129,18 +115,17 @@ void digest_piz_verify_one_vb (VBlockP vb)
 
             // dump bad vb to disk
             WARN ("reconstructed vblock=%s/%u, (%s=%s) differs from original file (%s=%s).\n%s"
-                  "Note: genounzip is unable to check the %s subsequent vblocks once a vblock is bad\n"
                   "Bad reconstructed vblock has been dumped to: %s\n"
                   "To see the same data in the original file:\n"
                   "genozip --biopsy %u %s (+any parameters used to compress this file)\n"
                   "If this is unexpected, please contact support@genozip.com.\n", 
                   comp_name (vb->comp_i), vb->vblock_i, 
-                  DIGEST_NAME, digest_display (piz_digest_so_far).s, 
-                  DIGEST_NAME, digest_display (vb->digest_so_far).s, 
+                  DIGEST_NAME, digest_display (piz_digest).s, 
+                  DIGEST_NAME, digest_display (vb->expected_digest).s, 
                   recon_size_warn,
-                  DIGEST_NAME, txtfile_dump_vb (vb, z_name), vb->vblock_i, file_guess_original_filename (txt_file));
+                  txtfile_dump_vb (vb, z_name), vb->vblock_i, file_guess_original_filename (txt_file));
 
-            if (flag.test) exit_on_error(false);
+            if (flag.test) exit_on_error (false);
 
             RESTORE_FLAG (quiet);
 
@@ -149,40 +134,111 @@ void digest_piz_verify_one_vb (VBlockP vb)
     }
 }
 
-// ZIP and PIZ: called by compute thread to calculate MD5 for one VB - need to serialize VBs using a mutex
-void digest_one_vb (VBlockP vb)
+
+// ZIP and PIZ: called by compute thread to calculate MD5 or Adler32 of the txt header for one VB - possibly serializing VBs using a mutex
+bool digest_one_vb (VBlockP vb, bool is_compute_thread, 
+                    BufferP data) // if NULL, data digested is vb->txt_data
 {
     #define WAIT_TIME_USEC 1000
     #define DIGEST_TIMEOUT (30*60) // 30 min
 
-    // serialize VBs in order
-    mutex_lock_by_vb_order (vb->vblock_i, vb_digest_mutex);
+    if (!data) data = &vb->txt_data;
 
-    // note: we don't digest generated components, but we need to enter the mutex anyway as it serializes VBs in order
-    if (gencomp_comp_eligible_for_digest(vb)) {
-    
-        if (command == ZIP) {
-            digest_update (&z_file->digest_ctx, &vb->txt_data, "vb");
+    bool digestable = gencomp_comp_eligible_for_digest(vb);
 
-            // take a snapshot of digest as per the end of this VB - this will be used to test for errors in piz after each VB  
-            vb->digest_so_far = digest_snapshot (&z_file->digest_ctx, NULL);
-        }
-        
-        else { // PIZ
-            digest_update (&z_file->digest_ctx, &vb->txt_data, "vb"); // labels consistent with ZIP so we can easily diff PIZ vs ZIP
+    // starting V14, if adler32, we digest each VB stand-alone.
+    if (IS_ADLER && VER(14)) {
+        if (digestable) {
+            vb->digest = digest_do (STRb(*data));
+            
+            if (flag.show_digest)
+                iprintf ("%s digest_one_vb %s: %s\n", DIGEST_NAME, VB_NAME, digest_display_ex (vb->digest, DD_NORMAL).s);
 
-            digest_piz_verify_one_vb (vb);        
+            if (IS_PIZ) digest_piz_verify_one_vb (vb);  
         }
     }
 
-    mutex_unlock (vb_digest_mutex);
+    else {
+        // serialize VBs in order
+        if (is_compute_thread)
+            serializer_lock (z_file->digest_serializer, vb->vblock_i);
+
+        // note: we don't digest generated components, but we need to enter the mutex anyway as otherwise the serialization will go out of sync
+        if (digestable && IS_ZIP) {
+            digest_update (&z_file->digest_ctx, data, "vb");
+
+            // take a snapshot of the commulative digest as per the end of this VB 
+            vb->digest = digest_snapshot (&z_file->digest_ctx, NULL);
+        }
+            
+        else if (digestable && IS_PIZ) {
+            digest_update (&z_file->digest_ctx, data, "vb"); // labels consistent with ZIP so we can easily diff PIZ vs ZIP
+
+            digest_piz_verify_one_vb (vb);        
+        }
+
+        if (is_compute_thread)
+            serializer_unlock (z_file->digest_serializer);
+    }
+
+    return digestable;
 }
 
-// in v6-v11 we had a bug were the 2nd 32b of an MD5 digest was a copy of the first 32b
+// ZIP and PIZ: called by main thread to calculate MD5 or Adler32 of the txt header
+Digest digest_txt_header (BufferP data, Digest piz_expected_digest)
+{
+    // start dogest log if need
+    if (flag.log_digest) {
+        z_file->digest_ctx.common.log = true;
+        file_remove (DIGEST_LOG_FILENAME, true);    
+    }
+
+    if (!data->len) return DIGEST_NONE;
+
+    Digest digest;
+    
+    // starting V14, if adler32, we digest each VB stand-alone.
+    if (IS_ADLER && VER(14))
+        digest = digest_do (STRb(*data));
+
+    // if MD5 or v13 (or earlier) - digest is for commulative for the whole file, and we take a snapshot
+    else {
+        digest_update (&z_file->digest_ctx, data, "txt_header");
+        digest = digest_snapshot (&z_file->digest_ctx, NULL);
+    }
+
+    // backward compatability note: For v8 files, we don't test against MD5 for the header, as we had a bug 
+    // in which we included a junk MD5 if they user didn't --md5 or --test. any file integrity problem will
+    // be discovered though on the whole-file MD5 so no harm in skipping this.
+    if (IS_PIZ && VER(9)) {  
+        TEMP_FLAG (quiet, flag.quiet && !flag.show_digest);
+
+        if (!digest_is_zero (piz_expected_digest) &&
+            !digest_recon_is_equal (digest, piz_expected_digest)) {
+            
+            WARN ("%s of reconstructed %s header (%s) differs from original file (%s)\n"
+                  "Bad reconstructed header has been dumped to: %s\n"
+                  "To see the same data in the original file:\n"
+                  "genozip --biopsy 0 %s\n"
+                  "If this is unexpected, please contact support@genozip.com.\n", 
+                  digest_name(),
+                  dt_name (z_file->data_type), digest_display (digest).s, digest_display (piz_expected_digest).s,
+                  txtfile_dump_vb (data->vb, z_name), file_guess_original_filename (txt_file));
+
+            if (flag.test) exit_on_error(false);
+        }
+
+        RESTORE_FLAG (quiet);
+    }
+
+    return digest;
+}
+
 bool digest_recon_is_equal (const Digest recon_digest, const Digest expected_digest) 
 {
     if (VER(12)) return digest_is_equal (recon_digest, expected_digest);
 
+    // in v6-v11 we had a bug were the 2nd 32b of an MD5 digest was a copy of the first 32b
     return recon_digest.words[0] == expected_digest.words[0] &&
            (recon_digest.words[0] == expected_digest.words[1] /* buggy md5 */ || !recon_digest.words[1] /* adler */) &&
            recon_digest.words[2] == expected_digest.words[2] &&

@@ -18,7 +18,7 @@
 COMPRESS(codec_normq_compress)
 {
     START_TIMER;
-    ASSERT0 (!uncompressed && get_line_cb, "only callback option is supported");
+    ASSERT (!uncompressed && get_line_cb, "%s: only callback option is supported. ctx=%s", VB_NAME, TAG_NAME);
 
     ContextP qual_ctx = ECTX (((SectionHeaderCtx *)header)->dict_id); // may be SAM_QUAL or OPTION_U2_Z  
     BufferP qual_buf = &qual_ctx->local;
@@ -32,7 +32,7 @@ COMPRESS(codec_normq_compress)
     for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
         STRw(qual);
         bool is_rev;
-        get_line_cb (vb, line_i, pSTRa (qual), CALLBACK_NO_SIZE_LIMIT, &is_rev);
+        get_line_cb (vb, ctx, line_i, pSTRa (qual), CALLBACK_NO_SIZE_LIMIT, &is_rev);
 
         if (qual_len) { 
             if (is_rev) str_reverse (Bc(*qual_buf, next), qual, qual_len);
@@ -59,7 +59,7 @@ do_compress: ({});
 
     COPY_TIMER_COMPRESS (compressor_normq); // don't account for sub-codec compressor, it accounts for itself
 
-    return compress (vb, header, B1STc(*qual_buf), uncompressed_len, NULL, STRa(compressed), false, name);
+    return compress (vb, ctx, header, B1STc(*qual_buf), uncompressed_len, NULL, STRa(compressed), false, name);
 }
 
 //--------------
@@ -73,6 +73,7 @@ CODEC_RECONSTRUCT (codec_normq_reconstruct)
     bool reconstruct = true;
 
     rom next_qual = Bc(ctx->local, ctx->next_local);
+    uint32_t len = snip_len ? atoi(snip) : vb->seq_len;
 
     if (*next_qual==' ') { // this is QUAL="*"
         sam_reconstruct_missing_quality (vb, reconstruct);
@@ -81,11 +82,11 @@ CODEC_RECONSTRUCT (codec_normq_reconstruct)
 
     else {
         if (reconstruct) {
-            if (last_flags.rev_comp) str_reverse (BAFTtxt, next_qual, vb->seq_len);
-            else                     memcpy      (BAFTtxt, next_qual, vb->seq_len);
+            if (last_flags.rev_comp) str_reverse (BAFTtxt, next_qual, len);
+            else                     memcpy      (BAFTtxt, next_qual, len);
         }
 
-        ctx->next_local += vb->seq_len;
-        vb->txt_data.len     += vb->seq_len;
+        ctx->next_local    += len;
+        vb->txt_data.len32 += len;
     }
 }

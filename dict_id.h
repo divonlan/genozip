@@ -22,6 +22,8 @@ static inline bool dict_id_is_type_2(DictId dict_id) { return dict_id_type(dict_
 
 static inline DictId dict_id_typeless(DictId dict_id) { dict_id.id[0] = (dict_id.id[0] & 0x7f) | 0x40; return dict_id; } // set 2 Msb to 01
 
+extern bool dict_id_is_in (DictId dict_id, ...);
+
 #define DICT_ID_NONE ((DictId)(uint64_t)0)
 
 typedef struct { DictId alias, dst; } DictIdAlias;

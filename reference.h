@@ -11,6 +11,7 @@
 #include "bits.h"
 #include "flags.h"
 #include "sections.h"
+#include "mutex.h"
 
 #pragma GENDICT_PREFIX REF
 #pragma GENDICT REF_CONTIG=DTYPE_FIELD=CONTIG 
@@ -78,6 +79,7 @@ extern void ref_set_reference (Reference ref, rom filename, ReferenceType ref_ty
 extern void ref_set_ref_file_info (Reference ref, Digest md5, rom fasta_name, uint8_t genozip_version);
 extern void ref_unload_reference (Reference ref);
 extern void ref_destroy_reference (Reference ref, bool destroy_only_if_not_mmap);
+extern void ref_verify_before_exit (void);
 extern MemStats ref_memory_consumption (const Reference ref);
 extern ConstRangeP ref_piz_get_range (VBlockP vb, Reference ref, bool soft_fail);
 extern Range *ref_get_range_by_ref_index (VBlockP vb, Reference ref, WordIndex ref_contig_index);
@@ -102,7 +104,7 @@ extern void ref_make_create_range (VBlockP vb);
 extern void ref_make_after_compute (VBlockP vb);
 extern ConstBufferP ref_make_get_contig_metadata (void);
 extern void ref_make_genozip_header (SectionHeaderGenozipHeader *header);
-extern void ref_make_finalize (void);
+extern void ref_make_finalize (bool unused);
 
 // cache stuff
 extern bool ref_mmap_cached_reference (Reference ref);
@@ -149,6 +151,13 @@ static inline void ref_assert_nucleotide_available (ConstRangeP range, PosType p
     ASSERT (available, "reference is not set: chrom=%.*s pos=%"PRId64, (range)->chrom_name_len, (range)->chrom_name, (pos));
 }
 
+#define REF(idx) ref_base_by_idx (range, (idx))
+
+// round-robin around range
+#define RR_IDX(idx) ( ((idx) > range_len) ? ((idx) - range_len) \
+                    : ((idx) < 0)         ? ((idx) + range_len) \
+                    :                        (idx)) // faster than mod (hopefully)
+
 // display
 typedef struct { char s[300]; } RangeStr;
 extern RangeStr ref_display_range (ConstRangeP r);
@@ -161,3 +170,4 @@ extern void ref_display_ref (const Reference ref);
 
 // globals
 extern Reference gref, prim_ref;
+extern Serializer make_ref_merge_serializer;

@@ -184,6 +184,8 @@ void random_access_merge_in_vb (VBlockP vb, int ra_i)
      
     mutex_lock (ra_mutex[ra_i]);
 
+    START_TIMER; // not including mutex wait time
+
     buf_alloc (evb, z_buf, 0, z_buf->len + src_ra_len, RAEntry, 2, "z_file->ra_buf"); 
 
     Context *chrom_ctx = CTX(ra_i==0 ? DTF(prim_chrom) : DTF(luft_chrom));
@@ -214,6 +216,8 @@ void random_access_merge_in_vb (VBlockP vb, int ra_i)
         else 
             dst_ra->chrom_index = WORD_INDEX_NONE; // to be updated in random_access_finalize_entries()
     }
+
+    COPY_TIMER(random_access_merge_in_vb);
 
     mutex_unlock (ra_mutex[ra_i]);
 }
@@ -298,7 +302,7 @@ Codec random_access_compress (ConstBufferP ra_buf_, SectionType sec_type, Codec 
     if (codec == CODEC_UNKNOWN) codec = codec_assign_best_codec (evb, NULL, ra_buf, sec_type);
     if (codec == CODEC_UNKNOWN) codec = CODEC_NONE; // really small
 
-    zfile_compress_section_data_ex (evb, sec_type, ra_buf, 0,0, codec, sec_flags); // ra data compresses better with LZMA than BZLIB
+    zfile_compress_section_data_ex (evb, NULL, sec_type, ra_buf, 0,0, codec, sec_flags, NULL); // ra data compresses better with LZMA than BZLIB
 
     // restore so we leave it intact as promised by Const
     ra_buf->len /= sizeof (RAEntry); // restore

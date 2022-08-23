@@ -23,10 +23,8 @@ void sam_seg_blasr_FI_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t fi, unsigned
     if (fi == 1 + vb->soft_clip[dl->FLAG.rev_comp])
         seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_FI }, 2, ctx, add_bytes);
 
-    else {
-        ctx->ltype = LT_DYN_INT;
+    else 
         seg_integer (VB, ctx, fi, true, add_bytes);
-    }
 }
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_FI)

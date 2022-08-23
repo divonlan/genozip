@@ -63,8 +63,7 @@ void codec_verify_free_all (VBlockP vb, rom op, Codec codec)
                 op, codec_name (codec), i, buf_desc (&vb->codec_bufs[i]).s);
 }
 
-static bool codec_compress_error (VBlockP vb, SectionHeader *header, rom uncompressed, uint32_t *uncompressed_len, LocalGetLineCB callback,
-                                  char *compressed, uint32_t *compressed_len, bool soft_fail, rom name) 
+static COMPRESS (codec_compress_error) 
 {
     ABORT_R ("compression of \"%s\": Unsupported codec: %s", name, codec_name (header->codec));
 }
@@ -205,29 +204,36 @@ Codec codec_assign_best_codec (VBlockP vb,
 
     uint8_t zselected_codec_count = !zctx ? 0 : is_local ? zctx->lcodec_count : is_b250 ? zctx->bcodec_count : 0;
 
+    // case: codec is hard_coded and should not be reassigned
+    bool hard_coded = (ctx ? ctx->lcodec_hard_coded : false) || (zctx ? zctx->lcodec_hard_coded : false);
+
     // we don't change assigned non-simple codecs
     if (!codec_args[*selected_codec].is_simple) 
         return *selected_codec;
 
-    // in --best mode, we accept a codec that's been selected by 5 previous VBs in a row
-    else if (flag.best && zselected_codec != CODEC_UNKNOWN && 
-             zselected_codec_count >= BEST_LOCK_IN_THREASHOLD)
+    // if --best, we accept a codec that's been selected by 5 previous VBs in a row
+    else if (flag.best && zselected_codec != CODEC_UNKNOWN && zselected_codec_count >= BEST_LOCK_IN_THREASHOLD)
         *selected_codec = zselected_codec;
 
-    // in --best mode, we invalidate (=re-test) a codec previously seleceted if its not yet been selected by (BEST_LOCK_IN_THREASHOLD) VBs in row
-    else if (flag.best && (*selected_codec != zselected_codec || zselected_codec_count < BEST_LOCK_IN_THREASHOLD))
+    // if --best, we invalidate (=re-test) a codec previously seleceted if its not yet been selected by (BEST_LOCK_IN_THREASHOLD) VBs in row
+    else if (flag.best && !hard_coded && (*selected_codec != zselected_codec || zselected_codec_count < BEST_LOCK_IN_THREASHOLD))
         *selected_codec = CODEC_UNKNOWN;
 
-    // in non-best mode, we inherit from z_file if its set by a previous VB
+    // in normal mode, reasign at vb_i=10 ("mid file")
+    else if (!flag.best && !flag.fast && !hard_coded && vb->vblock_i == 10)
+        *selected_codec = CODEC_UNKNOWN;
+
+    // if not reassigning, we inherit from z_file if its set by a previous VB
     else if (!flag.best && zselected_codec != CODEC_UNKNOWN) 
         *selected_codec = zselected_codec;
 
     if (*selected_codec != CODEC_UNKNOWN) 
         return *selected_codec; // if already assigned - no need to test
 
-    CodecTest tests[] = { { CODEC_RANS8 }, { CODEC_RANS32 }, { CODEC_RANS8_pack }, { CODEC_RANS32_pack }, 
+    CodecTest tests[] = { { CODEC_NONE }, 
+                          { CODEC_RANS8 }, { CODEC_RANS32 }, { CODEC_RANS8_pack }, { CODEC_RANS32_pack }, 
                           { CODEC_ARITH8 }, { CODEC_ARITH32 }, { CODEC_ARITH8_pack }, { CODEC_ARITH32_pack },
-                          { CODEC_BZ2 }, { CODEC_NONE }, { CODEC_BSC }, { CODEC_LZMA } }; 
+                          { CODEC_BZ2 }, { CODEC_BSC }, { CODEC_LZMA } }; 
     
     // don't allow LZMA or BSC in buffers being compressed in the main thread - too slow (unless --best)
     const unsigned num_tests = ARRAY_LEN(tests) - (flag.best ? 0 : 2*(vb == evb)); 
@@ -247,7 +253,7 @@ Codec codec_assign_best_codec (VBlockP vb,
     data->len = MIN_(data->len * (is_local ? lt_desc[ctx->ltype].width : 1), CODEC_ASSIGN_SAMPLE_SIZE);
 
     if (data->len < MIN_LEN_FOR_COMPRESSION) 
-        goto done; // if too small - don't assign - compression will use the default BZ2 and the next VB can try to select
+        goto done; // if too small - don't assign - compression will use CODEC_NONE and the next VB can try to select
 
     vb->z_data_test.param = true; // testing
 
@@ -261,9 +267,10 @@ Codec codec_assign_best_codec (VBlockP vb,
 
         if (*selected_codec == CODEC_NONE) tests[t].size = data->len;
         else {
-            LocalGetLineCB *callback = !data_override ? zfile_get_local_data_callback (vb->data_type, ctx) : NULL;
+            LocalGetLineCB *callback = (st == SEC_LOCAL && !data_override) ? zfile_get_local_data_callback (vb->data_type, ctx) : NULL;
 
-            zfile_compress_section_data_ex (vb, SEC_NONE, callback ? NULL : data, callback, data->len, *selected_codec, SECTION_FLAGS_NONE);
+            zfile_compress_section_data_ex (vb, ctx, st, callback ? NULL : data, callback, data->len, *selected_codec, SECTION_FLAGS_NONE, 
+                                            "codec_assign_best_codec");
             tests[t].size = vb->z_data_test.len;
             vb->z_data_test.len = 0;
         }
@@ -275,8 +282,8 @@ Codec codec_assign_best_codec (VBlockP vb,
     qsort (tests, num_tests, sizeof (CodecTest), codec_assign_sorter);
 
     if (flag.show_codec) {
-        iprintf ("vb_i=%-2u %-12s %-5s %6.1fX  *[%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f]\n", 
-                 vb->vblock_i, ctx ? ctx->tag_name : &st_name (st)[4], ctx ? &st_name (st)[4] : "SECT",
+        iprintf ("%-8s %-12s %-5s %6.1fX  *[%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f] [%-4s %5d %4.1f]\n", 
+                 VB_NAME, ctx ? ctx->tag_name : &st_name (st)[4], ctx ? &st_name (st)[4] : "SECT",
                  (float)data->len / tests[0].size,
                  codec_name (tests[0].codec), (int)tests[0].size, tests[0].clock,
                  codec_name (tests[1].codec), (int)tests[1].size, tests[1].clock,
@@ -285,9 +292,9 @@ Codec codec_assign_best_codec (VBlockP vb,
         fflush (info_stream);
     }
 
-    // if we already have an assigned codec (i.e. this is --best) and this codec came in 2nd but has the
+    // --best: if we already have an assigned codec and this codec came in 2nd but has the
     // compression as the first, then keep it - so we don't constantly oscillate between two very similar codecs (eg. ARTb and ARTB)
-    if (zselected_codec != CODEC_UNKNOWN && zselected_codec == tests[1].codec && tests[0].size == tests[1].size)
+    if (flag.best && zselected_codec != CODEC_UNKNOWN && zselected_codec == tests[1].codec && tests[0].size == tests[1].size)
         *selected_codec = zselected_codec;
 
     // assign the best codec - the first one in the sorted array - and commit it to zctx
@@ -311,34 +318,32 @@ done:
     return *selected_codec;
 }
 
-void codec_assign_best_qual_codec (VBlockP vb, Did qual_did_i,  
-                                   LocalGetLineCB callback, bool no_longr)
+void codec_assign_best_qual_codec (VBlockP vb, Did did_i,  
+                                   LocalGetLineCB callback, bool no_longr, bool maybe_revcomped)
 {
-    ContextP ctx = CTX(qual_did_i);
+    ContextP ctx = CTX(did_i);
 
     if (segconf.running) {
         if (!flag.fast && segconf.nontrivial_qual && !no_longr && segconf_is_long_reads()) // note: we can't use segconf.is_long_reads (variable) because it is not set yet 
-            codec_longr_segconf_calculate_bins (vb, CTX(qual_did_i+1), callback);
+            codec_longr_segconf_calculate_bins (vb, CTX(did_i+1), callback);
         return;
     }
 
     if (!flag.fast && segconf.is_long_reads && !no_longr && segconf.nontrivial_qual)
-        codec_longr_comp_init (vb, qual_did_i);
+        codec_longr_comp_init (vb, did_i);
 
-    else if (!flag.no_domqual && codec_domq_comp_init (vb, qual_did_i, callback));
+    else if (!flag.no_domqual && codec_domq_comp_init (vb, did_i, callback));
     
-    else if (Z_DT(DT_SAM) || Z_DT (DT_BAM)) { 
+    else if (maybe_revcomped) { // normq only makes sense where qual is revcomped according to the revcomp flag (SAM/BAM)
         ctx->ltype  = LT_CODEC;
         ctx->lcodec = CODEC_NORMQ;
     }
 
-    else { // FASTQ
+    else
         ctx->ltype = LT_SEQUENCE;  // codec to be assigned by codec_assign_best_codec
-        ctx->flags.is_qual = true;
-    }
     
     if (flag.show_codec) // aligned to the output of codec_assign_best_codec
-        iprintf ("vb_i=%-2u %-12s %-5s          *[%s]\n", vb->vblock_i, ctx->tag_name, "LOCAL", codec_name(CTX(qual_did_i)->lcodec));
+        iprintf ("%-8s %-12s %-5s          *[%s]\n", VB_NAME, ctx->tag_name, "LOCAL", codec_name(CTX(did_i)->lcodec));
 }
 
 // complex codec est size - result may be recompressed with RAN, ART

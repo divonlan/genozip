@@ -144,7 +144,7 @@ void genols (rom z_filename, bool finalize, rom subdir, bool recursive)
 
     // if --list, OR if the user did genols on one file (not a directory), show bound components, if there are any
     if (flag.list || (!flag.multiple_files && !recursive && z_file->num_components >= 2)) {
-        buf_add_string (evb, &str_buf, "Components:\n");
+        buf_append_string (evb, &str_buf, "Components:\n");
         Section sl_ent = NULL;
         uint64_t num_lines_count=0;
         while (sections_next_sec (&sl_ent, SEC_TXT_HEADER)) {
@@ -158,7 +158,7 @@ void genols (rom z_filename, bool finalize, rom subdir, bool recursive)
         }
 
         if (num_lines_count != z_file->num_lines)
-            buf_add_string (evb, &str_buf, "\nNote: the difference between the file's num_lines and the total of its components' is the number of lines of the 1st component's header\n");
+            buf_append_string (evb, &str_buf, "\nNote: the difference between the file's num_lines and the total of its components' is the number of lines of the 1st component's header\n");
     }
     file_close (&z_file, false, false);
 

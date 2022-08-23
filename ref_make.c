@@ -22,6 +22,8 @@ SPINLOCK (make_ref_spin);
 
 static Buffer contig_metadata = {}; // contig header of each contig, except for chrom name
 
+Serializer make_ref_merge_serializer = {};
+
 void ref_make_seg_initialize (VBlockP vb)
 {
     START_TIMER;
@@ -43,7 +45,7 @@ static Range *ref_make_ref_get_range (VBIType vblock_i)
 {
     // access ranges.len under the protection of the mutex
     spin_lock (make_ref_spin);
-    gref->ranges.len = MAX_(gref->ranges.len, (uint64_t)vblock_i); // note that this function might be called out order (called from ref_make_create_range - FASTA ZIP compute thread)
+    gref->ranges.len32 = MAX_(gref->ranges.len32, vblock_i); // note that this function might be called out order (called from ref_make_create_range - FASTA ZIP compute thread)
     ASSERT (gref->ranges.len <= MAKE_REF_NUM_RANGES, "reference file too big - number of ranges exceeds %u", MAKE_REF_NUM_RANGES);
     spin_unlock (make_ref_spin);
 
@@ -99,6 +101,8 @@ void ref_make_ref_init (void)
     refhash_initialize (NULL);
 
     spin_initialize (make_ref_spin);
+
+    serializer_initialize (make_ref_merge_serializer);
 }
 
 
@@ -125,7 +129,9 @@ void ref_make_prepare_range_for_compress (VBlockP vb)
     vb->dispatch = READY_TO_COMPUTE;
 }
 
-// make-refernece called by main thread after completing compute thread of VB 
+// zip_after_compute callback: make-refernece called by main thread after completing compute thread of VB.
+// must be called in order of VBs so that contigs are in the same order as the FASTA, resulting in GPOS being allocated
+// to contigs consistently across executions.
 void ref_make_after_compute (VBlockP vb_)
 {
     VBlockFASTAP vb = (VBlockFASTAP)vb_;
@@ -151,8 +157,10 @@ void ref_make_genozip_header (SectionHeaderGenozipHeader *header)
     header->REF_fasta_md5 = digest_snapshot (&z_file->digest_ctx, "file"); // MD5 or FASTA file
 }
 
-void ref_make_finalize (void) 
+void ref_make_finalize (bool unused) 
 { 
     buf_free (contig_metadata); 
+
+    serializer_destroy (make_ref_merge_serializer);
 }
 

@@ -41,6 +41,7 @@ extern void seg_simple_lookup (VBlockP vb, ContextP ctx, unsigned add_bytes);
 extern bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsigned add_bytes); // segs integer in local if possible
 extern bool seg_integer_or_not_cb (VBlockP vb, ContextP ctx, STRp(int_str), uint32_t repeat);
 extern bool seg_float_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsigned add_bytes);
+extern void seg_numeric_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned field_width, unsigned add_bytes);
 
 #define MAX_POS_DELTA 32000    // the max delta (in either direction) that we will put in a dictionary - above this it goes to random_pos. This number can be changed at any time without affecting backward compatability - it is used only by ZIP, not PIZ
 #define SPF_BAD_SNIPS_TOO   1  // should be FALSE if the file format spec expects this field to by a numeric POS, and true if we empirically see it is a POS, but we have no guarantee of it
@@ -57,27 +58,29 @@ extern void seg_id_field_do (VBlockP vb, ContextP ctx, STRp(id_snip));
     do { seg_id_field_do(VB, (ctx), (id_snip), (id_snip_len)); (ctx)->txt_len += !!(account_for_separator); } while(0)
 extern bool seg_id_field_cb (VBlockP vb, ContextP ctx, STRp(id_snip), uint32_t repeat);
 
-extern void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, STRp(data), bool add_nul, bool with_lookup, unsigned add_bytes);
+extern void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, STRp(data), bool add_nul, bool with_lookup, bool is_singleton, unsigned add_bytes);
 
 static inline void seg_add_to_local_text (VBlockP vb, ContextP ctx, STRp(snip), bool with_lookup, unsigned add_bytes) 
 { 
 #ifdef DEBUG
-    ASSERT (ctx->no_stons, "%s: Expecting ctx->no_stons=true in ctx=%s", LN_NAME, ctx->tag_name);
+    ASSERT (segconf.running || ctx->no_stons, "%s: Expecting ctx->no_stons=true in ctx=%s", LN_NAME, ctx->tag_name);
 #endif
-    seg_add_to_local_fixed_do (vb, ctx, STRa(snip), true, with_lookup, add_bytes); 
+    seg_add_to_local_fixed_do (vb, ctx, STRa(snip), true, with_lookup, false, add_bytes); 
 }
 
 static inline void seg_add_to_local_fixed (VBlockP vb, ContextP ctx, STRp(data))
-    { seg_add_to_local_fixed_do (vb, ctx, STRa(data), false, false, 0); }
+    { seg_add_to_local_fixed_do (vb, ctx, STRa(data), false, false, false, 0); }
 
 extern void seg_integer_fixed (VBlockP vb, Context *ctx, void *number, bool with_lookup, unsigned add_bytes);
 
-// requires setting ltype=LT_DYN_INT in seg_initialize, but not need to set ltype as it will be set in zip_resize_local
+// requires setting ltype=LT_DYN_INT* in seg_initialize, but not need to set ltype as it will be set in zip_resize_local
 static inline void seg_add_to_local_resizable (VBlockP vb, ContextP ctx, int64_t value, unsigned add_bytes)
 {
 #ifdef DEBUG
-    ASSERT (ctx->ltype==LT_DYN_INT || ctx->ltype==LT_DYN_INT_h || ctx->ltype==LT_DYN_INT_H, "%s: Expecting ctx->ltype=%s to be LT_DYN_INT* in ctx=%s ", LN_NAME, lt_name(ctx->ltype), ctx->tag_name);
+    ASSERT (segconf.running || ctx->ltype==LT_DYN_INT || ctx->ltype==LT_DYN_INT_h || ctx->ltype==LT_DYN_INT_H, 
+            "%s: Expecting ctx->ltype=%s to be LT_DYN_INT* in ctx=%s ", LN_NAME, lt_name(ctx->ltype), ctx->tag_name);
 #endif
+
     // TO DO: find a way to better estimate the size, see b250_per_line
     buf_alloc (vb, &ctx->local, 1, vb->lines.len, int64_t, CTX_GROWTH, "contexts->local");
     BNXT (int64_t, ctx->local) = value;
@@ -89,12 +92,15 @@ extern WordIndex seg_delta_vs_other_do (VBlockP vb, ContextP ctx, ContextP other
 static inline WordIndex seg_delta_vs_other (VBlockP vb, ContextP ctx, ContextP other_ctx, STRp(value))
     { return seg_delta_vs_other_do (vb, ctx, other_ctx, STRa(value), ctx->last_value.i, -1, value_len); }
 
-extern void seg_xor_diff (VBlockP vb, ContextP ctx, STRp(value), bool no_xor_if_same, unsigned add_bytes);
+extern void seg_diff (VBlockP vb, ContextP ctx, ContextP base_ctx, STRp(value), bool entire_snip_if_same, unsigned add_bytes);
 
 extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_did_i, rom value, int32_t value_len, char sep, char subarray_sep, bool use_integer_delta, bool store_int_in_local, DictId arr_dict_id, int add_bytes);
 
 typedef bool (*SegCallback) (VBlockP vb, ContextP ctx, STRp(value), uint32_t repeat);
 extern int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), const SegCallback *callbacks, unsigned add_bytes);
+extern bool seg_do_nothing_cb (VBlockP vb, ContextP ctx, STRp(field), uint32_t rep);
+
+extern bool seg_by_container (VBlockP vb, ContextP ctx, ContainerP con, STRp(value), STRp(container_snip), unsigned add_bytes);
 
 extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int64_t int_param, char char_param,
                                        char *snip, unsigned *snip_len /* in / out */);
@@ -110,9 +116,9 @@ extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, 
     ({ snip##_lens[i] = sizeof (snip##s);\
        seg_prepare_snip_other_do ((snip_code), (other_dict_id), true, 0, (char_param), (snip##s)[i], &snip##_lens[i]); })
 
-#define seg_prepare_snip_special_other(special_code, snip, other_dict_id) do { \
+#define seg_prepare_snip_special_other(special_code, other_dict_id, snip, char_param) do { \
     snip[0]=SNIP_SPECIAL; snip##_len=sizeof(snip)-1; \
-    seg_prepare_snip_other_do ((special_code), (other_dict_id), 0, 0, 0, &snip[1], &snip##_len); \
+    seg_prepare_snip_other_do ((special_code), (other_dict_id), char_param, 0, char_param, &snip[1], &snip##_len); \
     snip##_len++;\
 } while(0)
 
@@ -148,11 +154,9 @@ extern void seg_rollback (VBlockP vb);
 #define MULTIPLEXER(n_channels)                     \
 struct __attribute__ ((__packed__)) {               \
     /* all 32b/64b fields are word-aligned */       \
-    uint8_t unused[1];                              \
-    StoreType store_type;                           \
-    Did st_did_i;                                   \
-    LocalType ltype;                                \
+    ContextP ctx;                                   \
     bool no_stons;                                  \
+    uint8_t special_code;                           \
     uint16_t num_channels;                          \
     DictId dict_ids[n_channels];                    \
     ContextP channel_ctx[n_channels];               \
@@ -168,8 +172,15 @@ struct __attribute__ ((__packed__)) {               \
 typedef MULTIPLEXER(1000) *MultiplexerP;
 typedef const MULTIPLEXER(1000) *ConstMultiplexerP;
 
-extern void seg_mux_init (VBlockP vb, unsigned num_channels, uint8_t special_code, Did mux_did_i, Did st_did_i, StoreType store_type, LocalType ltype, bool no_stons, MultiplexerP mux, rom channel_letters);
-extern ContextP seg_mux_get_channel_ctx (VBlockP vb, MultiplexerP mux, uint32_t channel_i);
+typedef MULTIPLEXER(2) Multiplexer2, *Multiplexer2P;
+typedef MULTIPLEXER(3) Multiplexer3, *Multiplexer3P;
+typedef MULTIPLEXER(4) Multiplexer4, *Multiplexer4P;
+typedef MULTIPLEXER(5) Multiplexer5, *Multiplexer5P;
+typedef MULTIPLEXER(6) Multiplexer6, *Multiplexer6P;
+typedef MULTIPLEXER(7) Multiplexer7, *Multiplexer7P;
+
+extern void seg_mux_init (VBlockP vb, ContextP ctx, unsigned num_channels, uint8_t special_code, bool no_stons, MultiplexerP mux, rom channel_letters);
+extern ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux, uint32_t channel_i);
 
 // --------------------
 // handling binary data
@@ -271,34 +282,20 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, MultiplexerP mux, uint32_t 
 
 #define SEG_EOL(f,account_for_ascii10) do { seg_by_did (VB, *(has_13) ? "\r\n" : "\n", 1 + *(has_13), (f), (account_for_ascii10) + *(has_13)); } while (0)
 
-#define ASSSEG(condition, p_into_txt, format, ...) \
-    ASSINP (condition, "%s/%s: "format "\n\nvb:%s/%u line_i:%d pos_in_vb: %"PRIi64" pos_in_file: %"PRIi64\
-                       "\nvb pos in file (0-based):%"PRIu64" - %"PRIu64" (length %"PRIu64")" \
-                       "\n%d characters before to %d characters after (in quotes): \"%.*s\"" \
-                       "\n%d characters before to %d characters after (in quotes): \"%.*s\"" \
-                       "\nTo get vblock: %s %s | head -c %"PRIu64" | tail -c %u > vb.%u%s"   \
-                       "\nDumped bad vblock from memory: %s",                                \
-                                     txt_name, LN_NAME, __VA_ARGS__, comp_name (vb->comp_i), vb->vblock_i, vb->line_i, \
-            /* pos_in_vb:         */ (PosType)(p_into_txt ? ((rom)p_into_txt - vb->txt_data.data) : -1), \
+#define ASSSEG(condition, p_into_txt, format, ...)                                                                  \
+    ASSINP ((condition), "%s %s/%s: "format "\nTechnical details: pos_in_vb: %"PRIi64" pos_in_file: %"PRIi64        \
+                         "\n%d characters before to %d characters after (in quotes): \"%.*s\""                      \
+                         "\nTo get vblock: genozip --biopsy %u %s",                                                 \
+                                     str_time().s, txt_name, LN_NAME, __VA_ARGS__,                                  \
+            /* pos_in_vb:         */ (PosType)(p_into_txt ? ((rom)p_into_txt - vb->txt_data.data) : -1),            \
             /* pos_in_file:       */ (PosType)(p_into_txt ? (vb->vb_position_txt_file + ((rom)p_into_txt - vb->txt_data.data)) : -1),\
-            /* vb start pos file: */ vb->vb_position_txt_file, \
-            /* vb end pos file:   */ vb->vb_position_txt_file + vb->txt_data.len-1, \
-            /* vb length:         */ vb->txt_data.len,\
-            /* +- 30 char snip    */\
-            /* chars before:      */ p_into_txt ? MIN_(30, (unsigned)((rom)p_into_txt - vb->txt_data.data)) : -1, \
-            /* chars after:       */ p_into_txt ? MIN_(30, (unsigned)(vb->txt_data.data + vb->txt_data.len - (rom)p_into_txt)) : -1,\
-            /* snip len:          */ p_into_txt ? (unsigned)(MIN_((rom)p_into_txt+31, vb->txt_data.data + vb->txt_data.len) /* end pos */ - MAX_((rom)p_into_txt-30, vb->txt_data.data) /* start_pos */) : -1,\
+            /* +- 10 char snip    */                                                                                \
+            /* chars before:      */ p_into_txt ? MIN_(10, (unsigned)((rom)p_into_txt - vb->txt_data.data)) : -1,   \
+            /* chars after:       */ p_into_txt ? MIN_(10, (unsigned)(vb->txt_data.data + vb->txt_data.len - (rom)p_into_txt)) : -1,\
+            /* snip len:          */ p_into_txt ? (unsigned)(MIN_((rom)p_into_txt+11, vb->txt_data.data + vb->txt_data.len) /* end pos */ - MAX_((rom)p_into_txt-10, vb->txt_data.data) /* start_pos */) : -1,\
             /* condition for snip */ (vb->txt_data.data && p_into_txt && ((rom)p_into_txt >= vb->txt_data.data) && ((rom)p_into_txt <= /* = too */ vb->txt_data.data + vb->txt_data.len) ? \
-            /* snip start:        */    MAX_((rom)p_into_txt-30, vb->txt_data.data) : "(inaccessible)"),\
-            /* +- 2 char snip     */\
-            /* chars before:      */ p_into_txt ? MIN_(2, (unsigned)((rom)p_into_txt - vb->txt_data.data)) : -1, \
-            /* chars after:       */ p_into_txt ? MIN_(2, (unsigned)(vb->txt_data.data + vb->txt_data.len - (rom)p_into_txt)) : -1,\
-            /* snip len:          */ p_into_txt ? (unsigned)(MIN_((rom)p_into_txt+3, vb->txt_data.data + vb->txt_data.len) /* end pos */ - MAX_((rom)p_into_txt-2, vb->txt_data.data) /* start_pos */) : -1,\
-            /* condition for snip */ (vb->txt_data.data && p_into_txt && ((rom)p_into_txt >= vb->txt_data.data) && ((rom)p_into_txt <= /* = too */ vb->txt_data.data + vb->txt_data.len) ? \
-            /* snip start:        */    MAX_((rom)p_into_txt-3, vb->txt_data.data) : "(inaccessible)"),\
-            /* head/tail params:  */ codec_args[txt_file->codec].viewer, txt_name, vb->vb_position_txt_file + vb->txt_data.len, vb->txt_data.len32,\
-            /* output filename:   */ vb->vblock_i, file_plain_ext_by_dt (vb->data_type),\
-            /* dump filename:     */ txtfile_dump_vb (VB, txt_name))
+            /* snip start:        */    MAX_((rom)p_into_txt-30, vb->txt_data.data) : "(inaccessible)"),            \
+            /* biopsy parameters: */ vb->vblock_i, txt_name)
 
 #define ASSSEG0(condition, p_into_txt, err_str) ASSSEG (condition, p_into_txt, err_str "%s", "")
 

@@ -99,11 +99,13 @@ void kraken_zip_initialize (void)
 
 void kraken_seg_initialize (VBlockP vb)
 {
-    ctx_set_no_stons (VB, 3, KRAKEN_SEQLEN, KRAKEN_TAXID, DID_EOL);
+    CTX(KRAKEN_TAXID)->counts_section = true; 
 
-    ctx_set_store (VB, STORE_INT, 3, KRAKEN_SEQLEN, KRAKEN_TAXID, DID_EOL);
+    ctx_set_no_stons (VB, KRAKEN_SEQLEN, KRAKEN_TAXID, DID_EOL);
+
+    ctx_set_store (VB, STORE_INT, KRAKEN_SEQLEN, KRAKEN_TAXID, DID_EOL);
     
-    ctx_consolidate_stats (vb, KRAKEN_KMERS, 3, KRAKEN_KMERTAX, KRAKEN_KMERLEN, DID_EOL);
+    ctx_consolidate_stats (vb, KRAKEN_KMERS, KRAKEN_KMERTAX, KRAKEN_KMERLEN, DID_EOL);
 
     qname_seg_initialize (VB, KRAKEN_QNAME);
 }
@@ -347,6 +349,7 @@ bool kraken_piz_initialize (void)
 
     Context *zctx = ZCTX(KRAKEN_TAXID);
     ARRAY (uint64_t, counts, zctx->counts);
+    ASSERT0 (counts_len, "KRAKEN_TAXID.counts unexpectedly has len=0");
 
     // verify that the user selected taxonomy ID is in the kraken data
     if (is_genocat) {

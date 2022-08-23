@@ -7,6 +7,17 @@
 #include "genozip.h"
 #include "mutex.h"
 #include "flags.h"
+#include "buffer.h"
+#include "profiler.h"
+
+typedef struct { 
+    rom mutex_name, func; 
+    uint32_t code_line; 
+    int64_t accumulator;
+} LockPoint;
+
+#define MAX_CODE_LINE 4095
+static LockPoint lp[MAX_CODE_LINE+1]; // hard to use Buffer, because it uses muteces...
 
 void mutex_initialize_do (Mutex *mutex, rom name, rom func)
 { 
@@ -16,7 +27,6 @@ void mutex_initialize_do (Mutex *mutex, rom name, rom func)
                 "pthread_mutex_init failed for %s from %s: %s", name, func, strerror (ret)); 
     }
 
-    mutex->vb_i_last   = 0; // reset
     mutex->name        = name;
     mutex->initialized = func;
 }
@@ -29,7 +39,7 @@ void mutex_destroy_do (Mutex *mutex, rom func)
     memset (mutex, 0, sizeof (Mutex));
 }
 
-bool mutex_lock_do (Mutex *mutex, bool blocking, rom func)   
+bool mutex_lock_do (Mutex *mutex, bool blocking, rom func, uint32_t code_line)   
 { 
     ASSERT (mutex->initialized, "called from %s: mutex not initialized", func);
 
@@ -37,10 +47,30 @@ bool mutex_lock_do (Mutex *mutex, bool blocking, rom func)
 
     if (show) iprintf ("LOCKING : Mutex %s by thread %"PRIu64" %s\n", mutex->name, (uint64_t)pthread_self(), func);
 
-    int ret = blocking ? pthread_mutex_lock (&mutex->mutex)
-                       : pthread_mutex_trylock (&mutex->mutex);
+    int ret;
+    if (blocking) {
+        START_TIMER;
+        ret = pthread_mutex_lock (&mutex->mutex);
 
-    if (!blocking && ret == EBUSY) return false;
+        if (flag.show_time) { 
+            if (!lp[code_line].mutex_name) { // first lock at this lockpoint
+                ASSERT (code_line <= MAX_CODE_LINE, "can't use --show-time because of a mutex_lock in a code_line=%u larger than MAX_CODE_LINE=%u. Solution: increase MAX_CODE_LINE", code_line, MAX_CODE_LINE);
+
+                lp[code_line] = (LockPoint){ .mutex_name = mutex->name, .func = func, .code_line = code_line };
+            }
+
+            else 
+                ASSERT (lp[code_line].func == func, "can't use --show-time because two mutex_locks exist on the same code_line: %s @ %s:%u and %s @ %s:%u. To solve, add an empty line to shift the code line number of one of them",
+                        lp[code_line].mutex_name, lp[code_line].func, lp[code_line].code_line, mutex->name, func, code_line);
+                
+            lp[code_line].accumulator += CHECK_TIMER; // luckily, we're proected by the mutex...
+        }
+    }
+    
+    else {
+        ret = pthread_mutex_trylock (&mutex->mutex);
+        if (ret == EBUSY) return false;
+    }
 
     ASSERT (!ret, "called from %s by thread=%"PRIu64": pthread_mutex_lock failed on mutex->name=%s: %s", 
             func, (uint64_t)pthread_self(), mutex && mutex->name ? mutex->name : "(null)", strerror (ret)); 
@@ -67,33 +97,98 @@ void mutex_unlock_do (Mutex *mutex, FUNCLINE)
         iprintf ("UNLOCKED: Mutex %s by thread %"PRIu64" %s\n", mutex->name, (uint64_t)pthread_self(), func);
 }
 
-void mutex_wait_do (Mutex *mutex, FUNCLINE)   
+bool mutex_wait_do (Mutex *mutex, bool blocking, FUNCLINE)   
 {
-    mutex_lock_do (mutex, true, func);
-    mutex_unlock_do (mutex, func, code_line);
+    if (mutex_lock_do (mutex, blocking, func, code_line)) {
+        mutex_unlock_do (mutex, func, code_line);
+        return true;
+    }
+    
+    else
+        return false; // didn't lock (can only happen if non-blocking)
 }
 
-void mutex_lock_by_vb_order_do (VBIType vb_i, Mutex *mutex, rom func, uint32_t code_line)
+void serializer_initialize_do (SerializerP ser, rom name, rom func)
+{
+    ASSERT (!ser->initialized, "called from %s: serializer already initialized", func);
+    mutex_initialize_do ((MutexP)ser, name, func);
+
+    ser->vb_i_last = 0; // reset
+
+    if (buf_is_alloc (&ser->skips)) { // buffer allocated from previous file - reset it
+        memset (ser->skips.data, 0, ser->skips.size);
+        ser->skips.len = 0;
+    }
+
+    else
+        buf_add_to_buffer_list_(evb, &ser->skips, "Serializer.skips"); // so that it can be later alloced in compute threads
+}
+
+void serializer_destroy_do (SerializerP ser, rom func)
+{
+    ASSERT (ser->initialized, "called from %s: serializer not initiatlized", func);
+
+    buf_destroy (ser->skips);
+    mutex_destroy_do ((MutexP)ser, func);
+}
+
+void serializer_lock_do (SerializerP ser, VBIType vb_i, FUNCLINE)
 {
     #define WAIT_TIME_USEC 5000
     #define TIMEOUT (30*60) // 30 min
 
     for (unsigned i=0; ; i++) {
-        mutex_lock_do (mutex, true, func);
+        mutex_lock_do ((MutexP)ser, true, func, code_line);
 
-        ASSERT (mutex->vb_i_last < vb_i, "Expecting vb_i_last=%u < vb->vblock_i=%u. mutex=%s", mutex->vb_i_last, vb_i, mutex->name);
+        ASSERT (ser->vb_i_last < vb_i, "called from %s:%u: Expecting vb_i_last=%u < vb->vblock_i=%u. serializer=%s", 
+                func, code_line, ser->vb_i_last, vb_i, ser->name);
         
-        if (mutex->vb_i_last == vb_i - 1) { // its our turn now
-            mutex->vb_i_last++; // next please
-            return;
+        // skip as instructed by skips bytemap
+        while ((ser->vb_i_last < vb_i-1) && (ser->skips.len32 >= ser->vb_i_last + 2) && *Bc(ser->skips, ser->vb_i_last + 1)) 
+            ser->vb_i_last++;
+
+        if (ser->vb_i_last == vb_i - 1) { // its our turn now
+            ser->vb_i_last++; // next please
+            return;           // return with mutex locked
         }
         
         // not our turn, wait 5ms and try again
-        mutex_unlock_do (mutex, func, code_line);
+        mutex_unlock_do ((MutexP)ser, func, code_line);
         usleep (WAIT_TIME_USEC);
 
         // timeout after approx 30 minutes
-        ASSERT (i < TIMEOUT*(1000000/WAIT_TIME_USEC), "Timeout (%u sec) while waiting for mutex %s in vb=%u. vb_i_last=%u", 
-                TIMEOUT, mutex->name, vb_i, mutex->vb_i_last);
+        ASSERT (i < TIMEOUT*(1000000/WAIT_TIME_USEC), "called from %s:%u: Timeout (%u sec) while waiting for serializer %s in vb=%u. vb_i_last=%u", 
+                func, code_line, TIMEOUT, ser->name, vb_i, ser->vb_i_last);
     }
+}
+
+// tell serializer we are not going to lock this vb_i and it can be skipped
+void serializer_skip_do (SerializerP ser, VBIType vb_i, FUNCLINE)
+{
+    mutex_lock_do ((MutexP)ser, true, func, code_line);
+
+    buf_alloc_zero (NULL, &ser->skips, 0, MAX_(vb_i+1, 1000), bool, 2, NULL);
+    *Bc(ser->skips, vb_i) = true;
+    
+    ser->skips.len32 = MAX_(ser->skips.len32, vb_i+1);
+
+    mutex_unlock_do ((MutexP)ser, func, code_line);
+}
+
+static DESCENDING_SORTER (mutex_sort_by_accumulator, LockPoint, accumulator)
+
+void mutex_show_bottleneck_analsyis (void)
+{
+    qsort (lp, MAX_CODE_LINE+1, sizeof(LockPoint), mutex_sort_by_accumulator);
+
+    iprint0 ("Bottleneck analysis - Time waiting on locks:\n"
+             "Millisec Mutex                   LockPoint\n");
+
+    for (int i=0; i <= MAX_CODE_LINE; i++) {
+        if (!lp[i].accumulator) break; // done, since its sorted
+
+        iprintf ("%-8s %-23s %s:%u\n", str_int_commas (lp[i].accumulator / 1000000).s, lp[i].mutex_name, lp[i].func, lp[i].code_line);
+    }
+
+    memset (lp, 0, sizeof (lp)); // reset 
 }

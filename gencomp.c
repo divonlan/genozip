@@ -14,6 +14,7 @@
 #include "sam.h"
 #include "fastq.h"
 #include "codec.h"
+#include "bgzf.h"
 
 //-----------------------
 // Types & macros
@@ -67,8 +68,8 @@ typedef struct {
 
 typedef struct  {
     GencompType type;
-    Buffer txt_data;        // we absorb gencomp lines separately for each component, and then flush a single-component VB to the queue - the queue may have VBs from several components
-    int64_t num_lines;       // for stats
+    Buffer txt_data;     // we absorb gencomp lines separately for each component, and then flush a single-component VB to the queue - the queue may have VBs from several components
+    int64_t num_lines;   // for stats
 } CompStruct;
 
 // Thread safety model:
@@ -80,7 +81,8 @@ typedef struct  {
 // to be both "Absorb thread" and "Dispatcher thread".
 //
 // gc_protected protects variables that may be accessed by both "Absorbing functions" and "Dispatcher functions" running concurrently.
-static Mutex gc_vb_serialization = {}, gc_protected = {};
+static Mutex gc_protected = {};
+static Serializer gc_vb_serializer = {};
 
 // --------------------------------------------------------------------------------------
 // unprotected data structures - accessed only by "Dispatcher functions" (main thread)
@@ -90,14 +92,22 @@ static VBIType num_SAM_PRIM_vbs_ingested = 0;
 static VBIType num_vbs_dispatched[NUM_GC_TYPES] = {}; // by gencomp type
 static DepnStruct depn = {};              // doesn't need protection because accessed by Dispatcher functions only after Absorption is complete
 
+static enum { DEPN_NONE, DEPN_OFFLOAD, DEPN_REREAD } depn_method; // constant after initialization in gencomp_initialize
+
 // --------------------------------------------------------------------------------------
 // Mutex-protected data structures - accessed by both "Dispatcher functions" (main thread)
 // and "Absorbing functions" (serialized compute thread) running concurrently (P final)
 // --------------------------------------------------------------------------------------
 static bool finished_absorbingP = false;
 static VBIType num_MAIN_vbs_absorbedP = 0; 
-static QueueStruct queueP[NUM_GC_TYPES] = {}; // // queue of txt_data's [1] out-of-band (used for SAM PRIM, DVCF PRIM + LUFT) [2] DEPN (used for SAM DEPN)
+static QueueStruct queueP[NUM_GC_TYPES] = {}; // queue of txt_data's [1] out-of-band (used for SAM PRIM, DVCF PRIM + LUFT) [2] DEPN (used for SAM DEPN)
 static CompStruct componentsP[MAX_GEN_COMP+1] = {};
+
+// --------------------------------------------------------------------------------------
+// unprotected data is accessed by absorbing threads until absorbing is done, 
+// and after by dispatcher functions
+// --------------------------------------------------------------------------------------
+static Buffer reread_depn_lines = {}; // array of type RereadLine
 
 //--------------------------------------------------
 // Seg: adding gencomp lines to vb->gencomp
@@ -115,6 +125,18 @@ void gencomp_seg_add_line (VBlockP vb, CompIType comp_i, STRp(line)/*pointer int
                              .line_index = BNUMtxt (line),
                              .line_len   = line_len,
                              .comp_i     = comp_i };
+
+    // If we're might re-read depn lines from the txt file, we store their coordinates in the txt file
+    if (componentsP[comp_i].type == GCT_DEPN && depn_method == DEPN_REREAD) {
+        if (txt_file->codec == CODEC_BGZF) {
+            uint64_t bb_i = vb->vb_bgzf_i + vb->bgzf_blocks.current_bb_i;
+            ASSERT (bb_i <= MAX_BB_I, "BGZF bb_i=%"PRIu64" exceeds maximum of %"PRIu64, bb_i, MAX_BB_I);
+
+            BLST (GencompLineIEntry, vb->gencomp_lines)->offset = (LineOffset){ .bb_i = bb_i, .uoffset = vb->line_bgzf_uoffset };
+        }
+        else // CODEC_NONE
+            BLST (GencompLineIEntry, vb->gencomp_lines)->offset = (LineOffset){ .offset = vb->vb_position_txt_file + BNUMtxt (line) };
+    }
 }
 
 //--------------------------------------------------
@@ -156,8 +178,10 @@ void gencomp_initialize (CompIType comp_i, GencompType gct)
     componentsP[COMP_MAIN] = (CompStruct){ .type = GCT_NONE }; 
     componentsP[comp_i]    = (CompStruct){ .type = gct      };
 
-    mutex_initialize (gc_vb_serialization);
-    mutex_initialize (gc_protected);
+    if (!gc_vb_serializer.initialized) { // initialize once for all components
+        serializer_initialize (gc_vb_serializer);
+        mutex_initialize (gc_protected);
+    }
 
     // add to buffer list. we can't allocate yet because segconf.vb_size is not known yet
     buf_add_to_buffer_list (evb, &componentsP[comp_i].txt_data);
@@ -167,10 +191,31 @@ void gencomp_initialize (CompIType comp_i, GencompType gct)
     #error MAX_GLOBAL_MAX_THREADS must be at most MAX_QUEUE_SIZE or else the queue_size might overflow
     #endif
 
+    if (gct == GCT_DEPN) {
+
+        buf_add_to_buffer_list_(evb, &depn.thread_data, "depn.thread_data");
+        buf_add_to_buffer_list_(evb, &depn.thread_data_comp, "depn.thread_data_comp");
+
+        // if we cannot re-read the depn lines from the file, we will offload them to disk
+        if ((txt_file->codec != CODEC_BGZF && txt_file->codec != CODEC_NONE) || txt_file->redirected || txt_file->is_remote) {
+            depn_method = DEPN_OFFLOAD;
+
+            depn.name = MALLOC (strlen (z_file->name) + 20);
+            sprintf (depn.name, "%s.DEPN", z_file->name);
+            buf_add_to_buffer_list (evb, &depn.offload_info);
+        }
+
+        else {
+            depn_method = DEPN_REREAD;
+            buf_add_to_buffer_list_(evb, &reread_depn_lines, "reread_depn_lines");
+        }
+    }
+
     if (!queueP[gct].gc_txts) {
         queueP[gct] = (QueueStruct) {
-            .queue_size    = (gct == GCT_OOB) ? global_max_threads // OOB:  global_max_threads is the theoretical maximum number of gencomp txt_data generatable from global_max_threads concurrently running ZIP compute threads
-                                              : 1,                 // DEPN: No strong beneift of having more buffers in memory, see: private/internal-docs/gencomp-depn-memory-queue-vs-disk.txt
+            .queue_size    = (gct == GCT_OOB)             ? global_max_threads // OOB:  global_max_threads is the theoretical maximum number of gencomp txt_data generatable from global_max_threads concurrently running ZIP compute threads
+                           : (depn_method == DEPN_REREAD) ? global_max_threads // DEPN: when re-reading from txt_file data that doesn't fit into the queue - a larger queue is beneficial
+                           :                                1,                 // DEPN: when writing a file with the data that doesn't fit into the queue - No strong benefit of having more buffers in memory, see: private/internal-docs/gencomp-depn-memory-queue-vs-disk.txt
             .next_unused   = 0,           // 0 means gc_txts[0]
             .last_added    = END_OF_LIST, // ready-to-dispatch queue is initially empty
             .next_to_leave = END_OF_LIST
@@ -190,14 +235,6 @@ void gencomp_initialize (CompIType comp_i, GencompType gct)
 
         SetQBit (queueP[gct].queue_size-1, next) = END_OF_LIST;
     }
-
-    if (gct == GCT_DEPN) {
-        depn.name = MALLOC (strlen (z_file->name) + 20);
-        sprintf (depn.name, "%s.DEPN", z_file->name);
-        buf_add_to_buffer_list (evb, &depn.offload_info);
-        buf_add_to_buffer_list_(evb, &depn.thread_data, "depn.thread_data");
-        buf_add_to_buffer_list_(evb, &depn.thread_data_comp, "depn.thread_data_comp");
-    }
 }
 
 // main thread
@@ -213,7 +250,7 @@ void gencomp_destroy (void)
     for (CompIType comp_i=1; comp_i <= MAX_GEN_COMP; comp_i++)
         buf_destroy (componentsP[comp_i].txt_data);
 
-    if (depn.name) {
+    if (depn_method == DEPN_OFFLOAD) {
         if (depn.fp) {
             fclose (depn.fp);
             remove (depn.name);
@@ -224,7 +261,11 @@ void gencomp_destroy (void)
         buf_destroy (depn.thread_data_comp);
     }
 
-    mutex_destroy (gc_vb_serialization);
+    else if (depn_method == DEPN_REREAD) {
+        buf_destroy (reread_depn_lines);
+    }
+
+    serializer_destroy (gc_vb_serializer);
     mutex_destroy (gc_protected);
     memset (queueP,   0, sizeof (queueP));
     memset (componentsP, 0, sizeof (componentsP));
@@ -232,6 +273,7 @@ void gencomp_destroy (void)
     memset ((void*)num_vbs_dispatched, 0, sizeof(num_vbs_dispatched));
     finished_absorbingP = sam_finished_ingesting_prim = false;
     num_SAM_PRIM_vbs_ingested = num_MAIN_vbs_absorbedP = 0;
+    depn_method = DEPN_NONE;
 }
 
 // main thread (from stats)
@@ -247,14 +289,20 @@ int64_t gencomp_get_num_lines (CompIType comp_i)
 
 static uint32_t compress_depn_buf (BufferP comp_buf)
 {
+    static VBlockP compress_depn_vb = NULL;
+
+    if (!compress_depn_vb) 
+        // get VB - needed only for its codec_bufs
+        compress_depn_vb = vb_initialize_nonpool_vb (VB_ID_COMPRESS_DEPN, DT_BAM, "compress_depn_buf");
+    
     uint32_t uncomp_len = depn.thread_data.len32;
     uint32_t comp_len = codec_RANB_est_size (CODEC_RANS8, uncomp_len);
 
-    buf_alloc (evb, comp_buf, 0, comp_len + sizeof (uint32_t), char, 1, NULL);
+    buf_alloc (evb, comp_buf, 0, comp_len + sizeof (uint32_t), char, 1, NULL); // added to evb's buf_list before
     *B1ST32 (*comp_buf) = uncomp_len;
 
     // about 3X compression (BAM) with no impact on time (compression+decompression time is a wash with the saving of I/O time)
-    codec_RANB_compress (evb, NULL, depn.thread_data.data, &uncomp_len, NULL, comp_buf->data + sizeof(uint32_t), 
+    codec_RANB_compress (compress_depn_vb, NULL, NULL, depn.thread_data.data, &uncomp_len, NULL, comp_buf->data + sizeof(uint32_t), 
                          &comp_len, false, NULL);
     
     return (comp_buf->len = comp_len + sizeof (uint32_t));
@@ -416,22 +464,34 @@ static void gencomp_flush (CompIType comp_i, bool is_final_flush) // final flush
 // called from compute_vb, with VBs in arbitrary order, and serializes them to their order. Notes:
 // (1) We need to do it in the compute thread (rather than the main thread) so that zip_prepare_one_vb_for_dispatching, 
 //     running in the main thread, can busy-wait for all MAIN compute threads to complete before flushing the final txt_data.
-// (2) We do it in VB order, as recon_plan creation expects the lines to  e in the same order as in the MAIN component. 
-// (3) Luckily, this thread serialization does not introduce a delay, because this is the final step of the 
-//     compute thread, after which the threads are joined in VB order anyway.
+// (2) We do it in VB order, as recon_plan creation expects the lines to be in the same order as in the MAIN component. 
 void gencomp_absorb_vb_gencomp_lines (VBlockP vb) 
 {
-    mutex_lock_by_vb_order (vb->vblock_i, gc_vb_serialization);
+    // skip VBs that are not MAIN, or have no gencomp lines
+    if (vb->comp_i != COMP_MAIN || !vb->gencomp_lines.len) {        
+        if (vb->comp_i == COMP_MAIN) num_MAIN_vbs_absorbedP++;
+        
+        serializer_skip (gc_vb_serializer, vb->vblock_i);
+        return;
+    } 
 
-    if (vb->comp_i) goto done; // If this not the MAIN component - only advance the serializing gc_vb_serialization
+    serializer_lock (gc_vb_serializer, vb->vblock_i);
+
     mutex_lock (gc_protected);
+
+    START_TIMER; // not including mutex wait times
 
     if (flag.debug_gencomp) iprintf ("absorb       %s/%u\n", comp_name (vb->comp_i), vb->vblock_i);
 
     ASSERT0 (!finished_absorbingP, "Absorbing is done - not expecting to be called");
 
-    buf_alloc (evb, &componentsP[1].txt_data, 0, segconf.vb_size, char, 1, "gencomp_txt_data");    
-    buf_alloc (evb, &componentsP[2].txt_data, 0, segconf.vb_size, char, 1, "gencomp_txt_data");    
+    // limit vb_size of depn to 64MB, to reduce the gencomp write bottleneck, esp in --best in files with lots of depn
+    // also: a bug in rans_compress_to_4x16 (called from compress_depn_buf) erroring in buffers near 2GB.
+    uint32_t comp_size[3] = { [1] = segconf.vb_size,
+                              [2] = componentsP[2].type == GCT_DEPN ? MIN_(segconf.vb_size, 1<<26) : segconf.vb_size };
+
+    for (int i=1; i<=2; i++)
+        buf_alloc (evb, &componentsP[i].txt_data, 0, comp_size[i], char, 1, "gencomp_txt_data");    
 
     // iterate on all lines the segmenter decided to send to gencomp (lines are of mixed componentsP)
     ARRAY (GencompLineIEntry, gc_lines, vb->gencomp_lines)
@@ -439,15 +499,27 @@ void gencomp_absorb_vb_gencomp_lines (VBlockP vb)
 
         GencompLineIEntry *gcl = &gc_lines[line_i];
 
-        // limit vb_size of depn to 1.5GB due to a bug in rans_compress_to_4x16 (called from compress_depn_buf) erroring in 
-        // buffers near 2GB. we can return the threadhold to segconf.vb_size after the bug is fixed.
-        uint32_t threadshold = (componentsP[gcl->comp_i].type == GCT_DEPN) ? MIN_(segconf.vb_size, 1610612736) : segconf.vb_size;
-
-        if (componentsP[gcl->comp_i].txt_data.len + gcl->line_len > threadshold) 
+        // flush previous lines if there is no room for new line
+        if (componentsP[gcl->comp_i].txt_data.len + gcl->line_len > comp_size[gcl->comp_i]) 
             gencomp_flush (gcl->comp_i, false);
 
-        buf_add (&componentsP[gcl->comp_i].txt_data, Btxt (gcl->line_index), gcl->line_len);
-        componentsP[gcl->comp_i].txt_data.count++; 
+        // note: it is possible that the some lines will fit into the queue, while subsequent
+        // lines will be slated for re-reading 
+        if (depn_method == DEPN_REREAD && 
+            componentsP[gcl->comp_i].type == GCT_DEPN && 
+            queueP[GCT_DEPN].next_unused == END_OF_LIST) {
+            
+            RereadLine reread_line = { .offset = gcl->offset, .line_len = gcl->line_len };
+            buf_append_one (reread_depn_lines, reread_line);
+            
+            componentsP[GCT_DEPN].num_lines++; // for non-reread lines, incremented in gencomp_flush
+        }
+
+        // to to componentsP.txt_data to be flushed to the queue later
+        else {
+            buf_add (&componentsP[gcl->comp_i].txt_data, Btxt (gcl->line_index), gcl->line_len);
+            componentsP[gcl->comp_i].txt_data.count++; 
+        }
     }
 
     num_MAIN_vbs_absorbedP++;
@@ -458,8 +530,9 @@ void gencomp_absorb_vb_gencomp_lines (VBlockP vb)
     if (gc_lines_len)
         z_file->z_flags.has_gencomp = true; 
 
-done:
-    mutex_unlock (gc_vb_serialization);
+    COPY_TIMER (gencomp_absorb_vb_gencomp_lines);
+
+    serializer_unlock (gc_vb_serializer);
 }
 
 //------------------------------------------------------------------------------------
@@ -555,19 +628,39 @@ static void gencomp_get_txt_data_from_disk (VBlockP vb)
     if (flag.debug_gencomp) debug_gencomp ("disp_comp2DSK", true);
 }
 
-static inline bool has_offloaded_data()
+// main thread - creates vb->reread_prescription with offsets of lines to be reread. the actual
+// re-reading is done by the Seg compute thread for this vb
+static void gencomp_prescribe_reread (VBlockP vb)
 {
-    return depn.offload_info.next < depn.offload_info.len; // has not-yet-consumed data offloaded to disk
+    ARRAY (RereadLine, lines, reread_depn_lines);
+
+    buf_alloc (vb, &vb->reread_prescription, segconf.vb_size / lines[0].line_len, 0, RereadLine, 2, "reread_prescription"); // initial allocation, might grow
+
+    vb->comp_i = SAM_COMP_DEPN;
+
+    while (reread_depn_lines.next < lines_len) {
+        if (vb->txt_data.len32 + lines[reread_depn_lines.next].line_len > segconf.vb_size) break; // VB is full
+
+        buf_append_one (vb->reread_prescription, lines[reread_depn_lines.next]);
+        vb->txt_data.len32 += lines[reread_depn_lines.next].line_len;
+        vb->lines.len++;
+        reread_depn_lines.next++;
+    }
+
+    if (flag.debug_gencomp) debug_gencomp ("disp_reread", true);
 }
 
 // main thread: populate vb->txt_data with the next buffer on the out-of-band or DEPN queue
 bool gencomp_get_txt_data (VBlockP vb)
 {
+    #define DEBUG_GENCOMP(msg) \
+        if (flag.debug_gencomp) \
+            iprintf ("Returning %s vb=%s/%u with txt_data: len=%"PRIu64" adler32=%u\n", \
+                    (msg), comp_name (vb->comp_i), vb->vblock_i, vb->txt_data.len, adler32 (1, STRb(vb->txt_data))); 
+
     #define RETURN(msg, call) \
         ( { call;\
-            if (flag.debug_gencomp) \
-                iprintf ("Returning %s vb=%s/%u with txt_data: len=%"PRIu64" adler32=%u\n", \
-                        (msg), comp_name (vb->comp_i), vb->vblock_i, vb->txt_data.len, adler32 (1, STRb(vb->txt_data))); \
+            DEBUG_GENCOMP (msg);\
             zip_init_vb (vb);\
             return true; })
 
@@ -592,12 +685,17 @@ bool gencomp_get_txt_data (VBlockP vb)
 
     // case: finished ingesting PRIM and no more out-of-band data, and all MAIN data has been flushed (which also means txt_file reached EOF,
     // see zip_prepare_one_vb_for_dispatching) - so no more MAIN or GetQBit data will be available. time for DEPN data.
-    if (sam_finished_ingesting_prim && has_offloaded_data()) 
+    if (sam_finished_ingesting_prim && depn.offload_info.next < depn.offload_info.len) 
         RETURN ("DISK", gencomp_get_txt_data_from_disk (vb));
 
+    // case: finished ingesting PRIM and no more out-of-band data, and all MAIN data has been flushed (which also means txt_file reached EOF,
+    // see zip_prepare_one_vb_for_dispatching) - so no more MAIN or GetQBit data will be available. time for DEPN data.
+    if (sam_finished_ingesting_prim && reread_depn_lines.next < reread_depn_lines.len) 
+        RETURN (txt_file->codec == CODEC_BGZF ? "REREAD_BGZF" : "REREAD_PLAIN", gencomp_prescribe_reread (vb));
+
     // no more data exists at this point OR we have GCT_DEPN, but not finished ingesting PRIM yet
-    else 
-        return false; // no data available now
+    // DEBUG_GENCOMP ("NO_DATA_AVAILABLE"); // commenting out because there are too many of
+    return false; // no data available now
 
     #undef RETURN
 }
@@ -619,15 +717,15 @@ bool gencomp_am_i_expecting_more_txt_data (void)
         finished_absorbingP = true;
     }
 
-    bool expecting = !finished_absorbingP || queueP[GCT_OOB].queue_len || queueP[GCT_DEPN].queue_len;
-//printf ("xxx expecting=%u finished_absorbingP=%u queueP[GCT_OOB].queue_len=%u queueP[GCT_DEPN].queue_len=%u\n", expecting, finished_absorbingP, queueP[GCT_OOB].queue_len, queueP[GCT_DEPN].queue_len);
+    bool expecting = !finished_absorbingP || queueP[GCT_OOB].queue_len || queueP[GCT_DEPN].queue_len ||
+                     reread_depn_lines.next < reread_depn_lines.len;
+
     if ((TXT_DT(DT_SAM) || TXT_DT(DT_BAM)) && finished_absorbingP && !queueP[GCT_OOB].queue_len && !num_vbs_dispatched[GCT_OOB]) {
         sam_finished_ingesting_prim = true;
         if (flag.debug_gencomp) iprint0 ("No PRIM VBs in this file\n");
     }
 
     mutex_unlock (gc_protected);
-
     return expecting;
 } 
 
@@ -663,3 +761,30 @@ void gencomp_sam_prim_vb_has_been_ingested (VBlockP vb)
     }
 }
 
+// ZIP: compute thread of a DEPN VB: actually re-reading data into txt_data according to vb->reread_prescription
+void gencomp_reread_lines_as_prescribed (VBlockP vb)
+{
+    buf_alloc_exact (vb, vb->txt_data, vb->txt_data.len, char, "txt_data");
+    vb->txt_data.len = 0;
+
+    // open a file handle private to this VB
+    FILE *file = fopen (txt_file->name, "rb");
+    ASSERT (file, "%s: Failed to open %s for rereading depn lines: %s", VB_NAME, txt_file->name, strerror(errno));
+
+    if (txt_file->codec == CODEC_BGZF) 
+        bgzf_reread_uncompress_vb_as_prescribed (vb, file);
+
+    else { // CODEC_NONE
+        for_buf (RereadLine, line, vb->reread_prescription) {
+            ASSERT (!fseeko64 (file, line->offset.offset, SEEK_SET),
+                    "%s: fseeko64 on %s failed while rereading depn lines: %s", VB_NAME, txt_file->name, strerror(errno));
+            
+            ASSERT (fread (BAFTtxt, line->line_len, 1, file) == 1,
+                    "%s: fread of %u bytes on %s failed while rereading depn lines: %s", VB_NAME, line->line_len, txt_file->name, strerror(errno));
+
+            vb->txt_data.len32 += line->line_len;
+        }
+    }
+
+    fclose (file);
+}

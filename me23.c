@@ -42,7 +42,7 @@ bool me23_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flag
 
 void me23_seg_initialize (VBlockP vb)
 {
-    ctx_set_no_stons (vb, 5, ME23_CHROM, ME23_POS, ME23_TOPLEVEL, ME23_TOP2VCF, DID_EOL);
+    ctx_set_no_stons (vb, ME23_CHROM, ME23_POS, ME23_TOPLEVEL, ME23_TOP2VCF, DID_EOL);
 
     CTX(ME23_CHROM)->no_vb1_sort = true;
     CTX(ME23_CHROM)->flags.store = STORE_INDEX; // since v12
@@ -195,7 +195,7 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
 
     // add final lines - the command line length is unbound, careful not to put it in a bufprintf
     bufprintf (comp_vb, txtheader_buf, VCF_HEAD_3p1, GENOZIP_CODE_VERSION, GENOZIP_URL);
-    buf_add_string (comp_vb, txtheader_buf, flags_command_line());
+    buf_append_string (comp_vb, txtheader_buf, flags_command_line());
     bufprintf (comp_vb, txtheader_buf, VCF_HEAD_3p2, sample_name_len, sample_name);
 
     buf_free (comp_vb->scratch);

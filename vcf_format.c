@@ -61,12 +61,12 @@ void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt))
     str_split (fmt, fmt_len, 0, ':', sf_name, false);
 
     Container format_mapper = (Container){ 
-        .drop_final_repsep = true,
-        .drop_final_item_sep   = true,
-        .callback              = true,
-        .filter_items          = true,
-        .filter_repeats        = true,
-        .repsep                = "\t"
+        .drop_final_repsep   = true,
+        .drop_final_item_sep = true,
+        .callback            = true,
+        .filter_items        = true,
+        .filter_repeats      = true,
+        .repsep              = "\t"
     };
 
     ASSVCF (n_sf_names < MAX_FIELDS,
@@ -83,7 +83,7 @@ void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt))
 
         if (possibly_rename) vcf_tags_add_tag (vb, ctxs[i], DTYPE_VCF_FORMAT, sf_names[i], sf_name_lens[i]);
 
-        format_mapper.items[i] = (ContainerItem) { .dict_id = dict_id, .separator = {':'} };
+        format_mapper.items[i] = (ContainerItem){ .dict_id = dict_id, .separator = {':'} };
 
         if (dict_id.num == _FORMAT_PS || dict_id.num == _FORMAT_PID || dict_id.num == _FORMAT_DP)
             format_mapper.items[i].separator[1] = CI1_ITEM_CB;

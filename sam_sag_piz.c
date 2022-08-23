@@ -46,7 +46,7 @@ static void sam_sa_reconstruct_SA_from_SA_Group (VBlockSAMP vb)
 // PIZ: reconstruction of a PRIM or DEPN VB: Called in reconstruction of lines with SPECIAL_SAG (=all lines if PRIM)
 void sam_piz_set_sag (VBlockSAMP vb)
 {
-    if (SAM_PIZ_HAS_SA_GROUP) return; // vb->sag and sa_aln are already set for this line 
+    if (SAM_PIZ_HAS_SAG) return; // vb->sag and sa_aln are already set for this line 
 
     // set vb->sag
     if (sam_is_depn_vb) {
@@ -62,11 +62,6 @@ void sam_piz_set_sag (VBlockSAMP vb)
             vb->sag = sam_piz_get_prim_vb_first_sa_grp (vb);
         else
             vb->sag++; // groups within a VB always have a consecutive grp_i
-
-        // set buddy if needed and not already set. Note: vb->sag->prim_set_buddy is for PRIM lines. DEPN lines get
-        // their buddy from SAM_QNAME (see sam_seg_QNAME)
-        if (vb->sag->prim_set_buddy && vb->buddy_line_i == NO_LINE)
-            reconstruct_set_buddy (VB);
     }
 
     // set vb->sa_aln (only for SA:Z-type SA Groups)
@@ -145,7 +140,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_pull_from_sag)
         }
 
         case SAM_CIGAR:
-            sam_reconstruct_main_cigar_from_SA_Group (vb, *snip == '0'/*replace S by H*/, reconstruct);
+            sam_reconstruct_main_cigar_from_sag (vb, segconf.SA_HtoS==yes && sam_is_depn_vb, reconstruct);
             return NO_NEW_VALUE;
 
         case OPTION_NM_i:
@@ -180,26 +175,15 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_pull_from_sag)
         case SAM_QUAL:
             ASSPIZ0 (false, "Expecting SAM_QUAL to be handled by sam_piz_special_QUAL");
 
-        #define SOLO_RECON(f)   \
-        case OPTION_##f##_Z:    \
-            if (reconstruct) RECONSTRUCT (Bc(z_file->solo_data, vb->solo_aln->f.index), vb->solo_aln->f.len); \
-            return NO_NEW_VALUE
-
-        SOLO_RECON(CR);
-        SOLO_RECON(CB);
-        SOLO_RECON(CY);
-        SOLO_RECON(UY);
-
-        case OPTION_UR_Z: // this might also be UB, which is aliased to UR
-            if (reconstruct) {
-                if (!ctx_encountered_in_line (VB, OPTION_UR_Z)) // first of UB or UR in line
-                    RECONSTRUCT (Bc(z_file->solo_data, vb->solo_aln->UR0.index), vb->solo_aln->UR0.len); 
-                else
-                    RECONSTRUCT (Bc(z_file->solo_data, vb->solo_aln->UR1.index), vb->solo_aln->UR1.len); 
-            }
-            return NO_NEW_VALUE;
-
         default:
+            // solo tags
+            for (SoloTags tag_i=0; tag_i < NUM_SOLO_TAGS; tag_i++)
+                if (ctx->did_i == solo_props[tag_i].did_i) {
+                    if (reconstruct) RECONSTRUCT (Bc(z_file->solo_data, vb->solo_aln->word[tag_i].index), vb->solo_aln->word[tag_i].len); 
+                    return NO_NEW_VALUE;
+                }
+
+            // not a solo tag
             ASSPIZ (false, "Unexpected ctx=%s(%u)", ctx->tag_name, ctx->did_i);
     }
 

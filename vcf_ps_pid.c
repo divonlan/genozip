@@ -191,7 +191,7 @@ void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STR
             seg_by_ctx (VB, STRa(value), ctx, value_len); // segging once during segconf is enough - to create a context        
     }
 
-    lookback_insert_txt (VB, VCF_LOOKBACK, ctx->did_i, STRa(value));
+    lookback_insert (VB, VCF_LOOKBACK, ctx->did_i, false, TXTWORD(value));
 
     seg_set_last_txt (VB, ctx, STRa(value));
 }
@@ -199,7 +199,7 @@ void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STR
 // called if value is defined in FORMAT but missing at the end of the sample string
 void vcf_seg_FORMAT_PS_PID_missing_value (VBlockVCFP vb, ContextP ctx, rom end_of_sample)
 {
-    lookback_insert_txt (VB, VCF_LOOKBACK, ctx->did_i, end_of_sample, 0); 
+    lookback_insert (VB, VCF_LOOKBACK, ctx->did_i, false, (TxtWord){ .index=BNUMtxt(end_of_sample) }); 
 
     // special case: a missing PS which follows a PID='.' - we generate a SPECIAL which then uses 
     // ctx->value_is_missing to achieve the same effect as WORD_INDEX_MISSING, so that b250 is have near-all SNIP_SPECIAL.
@@ -219,13 +219,16 @@ void vcf_seg_FORMAT_PS_PID_missing_value (VBlockVCFP vb, ContextP ctx, rom end_o
 //---------
 
 // called by compute thread, after uncompress, before reconstruct
-void vcf_piz_initialize_ps_pid (VBlockP vb)
+void vcf_piz_ps_pid_lookback_insert (VBlockP vb, Did did_i, STRp(recon))
 {
-    if (CTX(FORMAT_PS)->dict.len)  // this file has PS
-        lookback_init (vb, CTX(VCF_LOOKBACK), CTX (FORMAT_PS), STORE_INT);
+    ContextP ctx = CTX(did_i);
 
-    if (CTX(FORMAT_PID)->dict.len) // this file has PID
-        lookback_init (vb, CTX(VCF_LOOKBACK), CTX (FORMAT_PID), STORE_INT);
+    if (!ctx->is_initialized) {
+        lookback_init (vb, CTX(VCF_LOOKBACK), ctx, STORE_INT);
+        ctx->is_initialized = true;
+    }
+    
+    lookback_insert (vb, VCF_LOOKBACK, did_i, false, TXTWORD(recon));
 }
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_PS_by_PID)

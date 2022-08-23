@@ -175,6 +175,10 @@ void coverage_sex_classifier (bool is_first_z_file)
     fflush (info_stream); // in case output is redirected
 }
 
+typedef struct { WordIndex chrom; STR (chrom_name); uint64_t coverage, read_count; PosType LN; } CovDis;
+
+static __attribute__((unused)) DESCENDING_SORTER (sort_by_LN, CovDis, LN)
+
 // output of genocat --coverage, called from piz_one_txt_file
 void coverage_show_coverage (void)
 {
@@ -214,28 +218,41 @@ void coverage_show_coverage (void)
     // case: if we have no short-name contigs, show all contigs 
     if (!has_short_name_contigs) flag.show_coverage = COV_ALL; 
 
-    PosType genome_nbases = 0;
+    // sort by contig LN
+    buf_alloc (evb, &evb->scratch, 0, coverage_len, CovDis, 0, "scratch");
+    for (uint64_t i=0; i < coverage_len; i++) 
+        if (coverage[i]) {
+            STR (chrom_name);
+            ctx_get_snip_by_word_index (ZCTX(CHROM), i, chrom_name);
 
-    for (uint64_t i=0; i < coverage_len; i++) {
-        if (!coverage[i]) continue;
-
-        STR(chrom_name);
-        ctx_get_snip_by_word_index (ZCTX(CHROM), i, chrom_name);
-
-        PosType len = (chrom_name_len==1 && chrom_name[0]=='*') ? 0 : contigs_get_LN (contigs, i);
-
-        if (flag.show_coverage == COV_ALL || (flag.show_coverage == COV_CHROM && chrom_name_len <= 5))
-            iprintf (is_info_stream_terminal ? "%-*s  %-8s  %-11s  %-10s  %-4.1f%%  %6.2f\n" : "%*s\t%s\t%s\t%s\t%4.1f\t%6.2f\n", 
-                     chr_width, chrom_name, str_bases(len).s, str_int_commas (read_count[i]).s, str_bases(coverage[i]).s, 
-                     100.0 * (float)coverage[i] / (float)coverage_special[CVR_TOTAL], 
-                     len ? (float)coverage[i] / (float)len : 0);
-
-        else {
-            coverage_special[CVR_OTHER_CONTIGS]   += coverage[i]; // other non-chromosome contigs
-            read_count_special[CVR_OTHER_CONTIGS] += read_count[i];
+            BNXT (CovDis, evb->scratch) = (CovDis){
+                .chrom          = i,
+                .chrom_name     = chrom_name,
+                .chrom_name_len = chrom_name_len,
+                .coverage       = coverage[i],
+                .read_count     = read_count[i],
+                .LN             = IS_ASTERISK (chrom_name) ? 0 : contigs_get_LN (contigs, i),
+            };
         }
 
-        genome_nbases += len;
+    // no sorting for now - keep in order of header or reference (to do: sort by numeric component chrom number)
+    // qsort (evb->scratch.data, evb->scratch.len, sizeof (CovDis), sort_by_LN);
+
+    PosType genome_nbases = 0;
+
+    for_buf (CovDis, ctg, evb->scratch) {
+        if (flag.show_coverage == COV_ALL || (flag.show_coverage == COV_CHROM && ctg->chrom_name_len <= 5))
+            iprintf (is_info_stream_terminal ? "%-*s  %-8s  %-11s  %-10s  %-4.1f%%  %6.2f\n" : "%*s\t%s\t%s\t%s\t%4.1f\t%6.2f\n", 
+                     chr_width, ctg->chrom_name, str_bases(ctg->LN).s, str_int_commas (ctg->read_count).s, str_bases(ctg->coverage).s, 
+                     100.0 * (float)ctg->coverage / (float)coverage_special[CVR_TOTAL], 
+                     ctg->LN ? (float)ctg->coverage / (float)ctg->LN : 0);
+
+        else {
+            coverage_special[CVR_OTHER_CONTIGS]   += ctg->coverage; // other non-chromosome contigs
+            read_count_special[CVR_OTHER_CONTIGS] += ctg->read_count;
+        }
+
+        genome_nbases += ctg->LN;
     }
 
     char all_coverage[7] = "0";
@@ -279,7 +296,7 @@ void coverage_show_idxstats (void)
         STR(chrom_name);
         ctx_get_snip_by_word_index (ZCTX(CHROM), i, chrom_name);
 
-        PosType len = (chrom_name_len==1 && chrom_name[0]=='*') ? 0 : contigs_get_LN (contigs, i);
+        PosType len = IS_ASTERISK (chrom_name) ? 0 : contigs_get_LN (contigs, i);
 
         iprintf ("%.*s\t%"PRIu64"\t%"PRId64"\t%"PRIu64"\n", chrom_name_len, chrom_name, len, read_count[i], unmapped_read_count[i]);
     }

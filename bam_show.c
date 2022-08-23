@@ -19,6 +19,7 @@ static void bam_show_one_aux (STRp(aux))
     switch (aux[2]) {
         case 'c' : iprintf ("%d ", NEXT_UINT8);   break;
         case 'C' : iprintf ("%u ", NEXT_UINT8);   break;
+        case 'A' : iprintf ("%c ", NEXT_UINT8);   break;
         case 's' : iprintf ("%d ", NEXT_UINT16);  break;
         case 'S' : iprintf ("%u ", NEXT_UINT16);  break;
         case 'i' : iprintf ("%d ", NEXT_UINT32);  break;
@@ -83,7 +84,10 @@ rom bam_show_line (VBlockSAMP vb, rom alignment, uint32_t remaining_txt_len)
     iprintf ("rnext=%d ", NEXT_UINT32);
     iprintf ("pnext=%u ", 1+NEXT_UINT32);
     iprintf ("tlen=%u ", NEXT_UINT32);
-    iprintf ("qname=\"%.*s\" cigar=\"", l_read_name-1, next_field); next_field += l_read_name; // note: l_read_name includes \0
+
+    char printable_qname[1024];
+    iprintf ("qname=\"%s\" cigar=\"", str_to_printable (next_field, MIN_(l_read_name-1,512), printable_qname)); // restrict to 512 in case l_read_name is corrupted
+    next_field += l_read_name; // note: l_read_name includes \0
 
     for (int i=0; i < n_cigar_op; i++) {
         BamCigarOp op = (BamCigarOp){ .value = NEXT_UINT32 };

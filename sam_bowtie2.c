@@ -16,24 +16,19 @@
 // YS:i mate alignment score (bowtie2 and hisat2)
 // ----------------------------------------------------------------------------------------------
 
-bool sam_has_bowtie2_YS_i (void)
-{
-    return MP(BOWTIE2) || MP(BSSEEKER2) || MP(HISAT2);
-}
-
 void sam_seg_bowtie2_YS_i (VBlockSAMP vb, ZipDataLineSAM *dl, ValueType YS, unsigned add_bytes)
 {
     ASSERT (YS.i >= MIN_AS_i && YS.i <= MAX_AS_i, "%s: YS=%"PRId64" is out of range [%d,%d]", LN_NAME, YS.i, MIN_AS_i, MAX_AS_i);    
 
     ctx_set_last_value (VB, CTX (OPTION_YS_i), YS);
     dl->YS = YS.i;
-
+    
     ZipDataLineSAM *mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
 
-    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, (MultiplexerP)&vb->mux_YS, zip_has_mate);
+    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_YS_i, (MultiplexerP)&vb->mux_YS, sam_has_mate);
 
-    if (zip_has_mate && mate_dl->AS == YS.i) 
-        seg_by_ctx (VB, STRa(copy_buddy_AS_snip), channel_ctx, add_bytes);
+    if (sam_has_mate && mate_dl->AS == YS.i) 
+        seg_by_ctx (VB, STRa(copy_mate_AS_snip), channel_ctx, add_bytes);
 
     else 
         seg_integer_as_text_do (VB, channel_ctx, YS.i, add_bytes);    

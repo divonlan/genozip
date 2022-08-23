@@ -3,6 +3,7 @@
 //   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 
+#include <stdarg.h>
 #include "genozip.h"
 #include "dict_id.h"
 #include "data_types.h"
@@ -145,6 +146,22 @@ rom dict_id_display_type (DataType dt, DictId dict_id)
     ABORT0_R ("");
 }
 
+// return true is dict_id is contained in the DICT_ID_NONE-terminated list
+bool dict_id_is_in (DictId dict_id, ...)
+{
+    va_list args;                                       
+    va_start (args, dict_id);
+
+    uint64_t test_dnum; 
+    do {
+        test_dnum = (uint64_t)va_arg (args, uint64_t);
+    } while (test_dnum && test_dnum != dict_id.num);
+
+    va_end (args);                              
+
+    return test_dnum != 0;
+}
+
 // print the dict_id - NOT thread safe, for use in execution-termination messages
 DisplayPrintId dis_dict_id (DictId dict_id)
 {
@@ -186,3 +203,4 @@ bool dict_id_is_show (DictId dict_id)
     else
         return !dict_id_str[MIN_(len,8)] && !memcmp (dict_id_str, flag.show_one_dict, 4) && !memcmp(&dict_id_str[4], &flag.show_one_dict[len-4], 4);
 }
+

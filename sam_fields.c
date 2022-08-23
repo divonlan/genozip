@@ -84,7 +84,7 @@ void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM *dl, unsigned add_bytes)
     // note: we can only mux FLAG by buddy, not mate, bc sam_piz_special_DEMUX_BY_MATE needs FLAG to determine mate
     // note: in collated files, we're better off without this.
     bool do_mux = (sam_is_main_vb && segconf.is_paired && !segconf.is_collated);
-    ContextP channel_ctx = do_mux ? seg_mux_get_channel_ctx (VB, (MultiplexerP)&vb->mux_FLAG, zip_has_mate || zip_has_prim) 
+    ContextP channel_ctx = do_mux ? seg_mux_get_channel_ctx (VB, SAM_FLAG, (MultiplexerP)&vb->mux_FLAG, sam_has_mate || sam_has_saggy) 
                                   : CTX(SAM_FLAG);
 
     // case: PRIM line: 
@@ -102,10 +102,10 @@ void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM *dl, unsigned add_bytes)
     }
 
     // case: DEPN line with SA Group: we know some flags from SA Groups, so we store FLAG without them (reduces FLAG entropy)
-    else if (sam_is_depn_vb && sam_seg_has_sag_by_nonSA(vb)) // First, Last, Multi are the same for the group
+    else if (sam_is_depn_vb && sam_seg_has_sag_by_nonSA(vb)) // First, Last, Multi are the same for the group (see sam_sa_seg_depn_find_sagroup_noSA)
         sam_seg_against_sa_group_int (vb, CTX(SAM_FLAG), dl->FLAG.value & ~(SAM_FLAG_MULTI_SEG | SAM_FLAG_IS_FIRST | SAM_FLAG_IS_LAST), add_bytes);
 
-    else if (sam_is_depn_vb && sam_seg_has_sag_by_SA(vb)) // in SA, we can get the revcomp from the SA alignment
+    else if (sam_is_depn_vb && sam_seg_has_sag_by_SA(vb)) // in SA, we can get the revcomp from the SA alignment (see sam_sa_seg_depn_find_sagroup_SAtag)
         sam_seg_against_sa_group_int (vb, CTX(SAM_FLAG), dl->FLAG.value & ~(SAM_FLAG_MULTI_SEG | SAM_FLAG_IS_FIRST | SAM_FLAG_IS_LAST | SAM_FLAG_REV_COMP), add_bytes);
     
     // case: depn line in main VB
@@ -116,7 +116,7 @@ void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM *dl, unsigned add_bytes)
     // case: we can retrieve the FLAG from this line's mate
     #define SAME_AS_MATE (SAM_FLAG_MULTI_SEG | SAM_FLAG_IS_ALIGNED | SAM_FLAG_SECONDARY | SAM_FLAG_FILTERED | \
                           SAM_FLAG_DUPLICATE | SAM_FLAG_SUPPLEMENTARY)
-    else if (zip_has_mate &&
+    else if (sam_has_mate && !sam_is_prim_vb && // TO DO: improve sam_load_groups_add_flags to allow FLAG mating in prim VB (bug 620)
         ({ ZipDataLineSAM *mate_dl = DATA_LINE (vb->mate_line_i); 
            (dl->FLAG.value & SAME_AS_MATE) == (mate_dl->FLAG.value & SAME_AS_MATE) &&
             dl->FLAG.unmapped              == mate_dl->FLAG.next_unmapped          &&
@@ -125,7 +125,7 @@ void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM *dl, unsigned add_bytes)
             dl->FLAG.next_rev_comp         == mate_dl->FLAG.rev_comp               &&
             dl->FLAG.is_first              == mate_dl->FLAG.is_last                &&
             dl->FLAG.is_last               == mate_dl->FLAG.is_first; }))
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_COPY_BUDDY_FLAG }, 2, channel_ctx, add_bytes); // added 12.0.41
+        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_COPY_MATE_FLAG }, 2, channel_ctx, add_bytes); // added 12.0.41
 
     // case: normal snip
     else normal:
@@ -144,12 +144,11 @@ void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM *dl, unsigned add_bytes)
     }
 }
 
-SPECIAL_RECONSTRUCTOR (sam_piz_special_COPY_BUDDY_FLAG)
+SPECIAL_RECONSTRUCTOR (sam_piz_special_COPY_MATE_FLAG)
 {
-    if (vb->buddy_line_i == NO_LINE) 
-        reconstruct_set_buddy (vb); 
+    if (!VER(14)) sam_piz_set_buddy_v13 (vb); 
 
-    SamFlags flag = { .value = history64(SAM_FLAG, vb->buddy_line_i) }; 
+    SamFlags flag = { .value = history64(SAM_FLAG, VB_SAM->mate_line_i) }; 
 
     // flip fields to opposite mate
     SWAPbit (flag.unmapped, flag.next_unmapped);
@@ -269,6 +268,16 @@ done:
 // NM:i "Number of differences"
 // ----------------------------
 
+static inline void sam_seg_NM_get_prediction (VBlockSAMP vb, ZipDataLineSAM *dl, 
+                                              int32_t *predicted_by_SEQ, int32_t *predicted_by_MD)
+{
+    *predicted_by_SEQ = (vb->mismatch_bases_by_SEQ != -1          && !vb->cigar_missing && !vb->seq_missing && !dl->FLAG.unmapped) ? 
+        vb->mismatch_bases_by_SEQ + vb->deletions + vb->insertions : -1;
+    
+    *predicted_by_MD  = (has_MD && vb->mismatch_bases_by_MD != -1 && !vb->cigar_missing && !vb->seq_missing && !dl->FLAG.unmapped) ? 
+        vb->mismatch_bases_by_MD  + vb->deletions + vb->insertions : -1;
+}
+
 // Two variations:
 // 1) Integer NM per SAM specification https://samtools.github.io/hts-specs/SAMtags.pdf: "Number of differences (mismatches plus inserted and deleted bases) 
 // between the sequence and reference, counting only (case-insensitive) A, C, G and T bases in sequence and reference as potential matches, with everything
@@ -279,12 +288,14 @@ done:
 // Note: we observed cases (eg PacBio data with bwa-sw) that NM is slightly different than expected, potentially
 // seggable with a delta. However, the added entropy to b250 outweighs the benefit, and we're better off without delta.
 // 2) Binary NM: 0 if sequence fully matches the reference when aligning according to CIGAR, 1 is not.
-void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAM *dl, SamNMType NM, unsigned add_bytes)
+void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAM *dl, SamNMType nm, unsigned add_bytes)
 {
+    START_TIMER;
+
     ContextP ctx = CTX (OPTION_NM_i);
 
     if (segconf.running) {
-        if (NM > 1) segconf.NM_is_integer = true; // we found evidence of integer NM
+        if (nm > 1) segconf.NM_is_integer = true; // we found evidence of integer NM
         if (has_MD && vb->idx_MD_Z > vb->idx_NM_i) segconf.NM_after_MD = false; // we found evidence that sometimes NM is before MD
         goto no_special;
     }
@@ -292,22 +303,19 @@ void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAM *dl, SamNMType NM, unsigned add
     // possible already segged - from sam_seg_SA_Z
     if (ctx_has_value_in_line_(vb, ctx)) return;
 
-    ctx_set_last_value (VB, ctx, (int64_t)NM);
+    ctx_set_last_value (VB, ctx, (int64_t)nm);
 
-    int32_t predicted_by_SEQ = (vb->mismatch_bases_by_SEQ != -1          && !vb->cigar_missing && !vb->seq_missing && !dl->FLAG.unmapped) ? 
-        vb->mismatch_bases_by_SEQ + vb->deletions + vb->insertions : -1;
-    
-    int32_t predicted_by_MD  = (has_MD && vb->mismatch_bases_by_MD != -1 && !vb->cigar_missing && !vb->seq_missing && !dl->FLAG.unmapped) ? 
-        vb->mismatch_bases_by_MD  + vb->deletions + vb->insertions : -1;
+    int32_t predicted_by_SEQ, predicted_by_MD;
+    sam_seg_NM_get_prediction (vb, dl, &predicted_by_SEQ, &predicted_by_MD);
 
-    if (NM < 0) goto no_special; // invalid NM value
+    if (nm < 0) goto no_special; // invalid nm value
 
     // method 1: if we have MD:Z, we use prediction of number of mismatches derived by analyzing it. This is almost always correct, 
     // but the downside is that reconstruction takes longer due to the need to peek MD:Z. Therefore, we limit it to certain cases.
-    else if (segconf.NM_is_integer && NM == predicted_by_MD && 
+    else if (segconf.NM_is_integer && nm == predicted_by_MD && 
                (segconf.NM_after_MD            || // case 1: MD is reconstructed before NM so peek is fast
                 flag.reference == REF_INTERNAL || // case 2: prediction against SEQ performs poorly
-                predicted_by_SEQ != NM         || // case 3: rare cases in which prediction by SEQ is wrong with an external reference.
+                predicted_by_SEQ != nm         || // case 3: rare cases in which prediction by SEQ is wrong with an external reference.
                 flag.best))                       // case 4: the user request the best method
         seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'm'}, 3, OPTION_NM_i, add_bytes);  // 'm' type since v14
 
@@ -317,22 +325,67 @@ void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAM *dl, SamNMType NM, unsigned add
 
     // method 3: use prediction of the number of mismatches derived by comparing SEQ to a reference.
     // this is usually, but surprisingly not always, correct for an external reference, and often correct for an internal one.
-    else if (segconf.NM_is_integer && NM == predicted_by_SEQ)
+    else if (segconf.NM_is_integer && nm == predicted_by_SEQ)
         seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'i'}, 3, OPTION_NM_i, add_bytes); 
 
-    // case NM is a binary 0/1 rather than an integer. We use prediction against SEQ. TO DO: Support prediction against MD:Z too.
-    else if (!segconf.NM_is_integer && predicted_by_SEQ != -1 && (NM > 0) == (predicted_by_SEQ > 0)) 
+    // case nm is a binary 0/1 rather than an integer. We use prediction against SEQ. TO DO: Support prediction against MD:Z too.
+    else if (!segconf.NM_is_integer && predicted_by_SEQ != -1 && (nm > 0) == (predicted_by_SEQ > 0)) 
         seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'b'}, 3, OPTION_NM_i, add_bytes); 
 
     else no_special: 
-        seg_integer (VB, ctx, NM, true, add_bytes);
+        seg_integer (VB, ctx, nm, true, add_bytes);
 
     // in PRIM with SA, we also seg it as the first SA alignment (used for PIZ to load alignments to memory, not used for reconstructing SA)
     if (sam_is_prim_vb && sam_seg_has_sag_by_SA (vb)) {
-        seg_integer_as_text (VB, OPTION_SA_NM, NM, 0);  // note: for PRIM lines without SA:Z and NM:i, we seg "0" into OPTION_SA_NM in sam_seg_sa_group_stuff
+        seg_integer_as_text (VB, OPTION_SA_NM, nm, 0);  // note: for PRIM lines without SA:Z and nm:i, we seg "0" into OPTION_SA_NM in sam_seg_sag_stuff
 
         // count NM field contribution to OPTION_SA_NM, so sam_stats_reallocate can allocate the z_data between NM and SA:Z
         CTX(OPTION_SA_NM)->counts.count += add_bytes; 
+    }
+
+    COPY_TIMER (sam_seg_NM_i);
+}
+
+// --------------------------------------------------------------------------------------------------------------
+// nM:i: (STAR) the number of mismatches per (paired) alignment, not to be confused with NM, which is the number of mismatches in each mate.
+// --------------------------------------------------------------------------------------------------------------
+
+void sam_seg_nM_i (VBlockSAMP vb, ZipDataLineSAM *dl, SamNMType nm, unsigned add_bytes)
+{
+    ContextP ctx = CTX (OPTION_nM_i);
+
+    // case: in paired files, its expected to be the same value as the mate
+    if (segconf.is_paired && !sam_is_depn_vb) 
+        sam_seg_buddied_i_fields (vb, dl, OPTION_nM_i, nm, &dl->nM, (MultiplexerP)&vb->mux_nM, STRa(copy_mate_nM_snip), add_bytes);
+
+    // else: in non-paired files, we use the same method as NM:i
+    else {
+        if (segconf.running) {
+            if (has_MD && !ctx_encountered_in_line (VB, OPTION_MD_Z)) segconf.nM_after_MD = false; // we found evidence that sometimes nM is before MD
+            goto fallback;
+        }
+
+        int32_t predicted_by_SEQ, predicted_by_MD;
+        sam_seg_NM_get_prediction (vb, dl, &predicted_by_SEQ, &predicted_by_MD);
+
+        if (nm < 0) goto fallback; // invalid nm value
+
+        // method 1: if we have MD:Z, we use prediction of number of mismatches derived by analyzing it. This is almost always correct, 
+        // but the downside is that reconstruction takes longer due to the need to peek MD:Z. Therefore, we limit it to certain cases.
+        else if (nm == predicted_by_MD && 
+                    (segconf.nM_after_MD            || // case 1: MD is reconstructed before nM so peek is fast
+                     flag.reference == REF_INTERNAL || // case 2: prediction against SEQ performs poorly
+                     predicted_by_SEQ != nm         || // case 3: rare cases in which prediction by SEQ is wrong with an external reference.
+                     flag.best))                       // case 4: the user request the best method
+            seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'm'}, 3, OPTION_nM_i, add_bytes);  // 'm' type since v14
+
+        // method 3: use prediction of the number of mismatches derived by comparing SEQ to a reference.
+        // this is usually, but surprisingly not always, correct for an external reference, and often correct for an internal one.
+        else if (nm == predicted_by_SEQ)
+            seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'i'}, 3, OPTION_nM_i, add_bytes); 
+
+        else fallback: 
+            seg_integer (VB, ctx, nm, true, add_bytes);
     }
 }
 
@@ -423,7 +476,8 @@ static void sam_seg_AM_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t AM, unsigne
 
     // note: currently we only support for this algorithm AM appearing after SM. Easily fixable if ever needed.
     // AM is often one of 3 options: 0, =SM =MAPQ-SM. If SM=0 then AM is expected to be 0.
-    if (AM >= 0 && AM <= 255 &&   // valid value
+    if (segconf.has[OPTION_SM_i] && 
+        AM >= 0 && AM <= 255 &&   // valid value
         AM != 253 && AM != 254 && // note: 253,254 are valid, but highly improbable values
         !(!dl->SM && AM)) {       // usually, AM=0 if SM=0
         
@@ -464,64 +518,39 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_AM)
 
 // ----------------------------------------------------------------------------------------------------------
 // NH:i Number of reported alignments that contain the query in the current record
-// HI:i Query hit index (a number [1,NH])
 // ----------------------------------------------------------------------------------------------------------
+
 static inline void sam_seg_NH_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t nh, unsigned add_bytes)
 {
-    // just set some stuff and seg
-    segconf_set_has (OPTION_NH_i);
-
     ContextP ctx = CTX(OPTION_NH_i);
 
     dl->NH = nh; 
     ctx_set_encountered (VB, ctx);  // needed by sam_seg_HI_i
 
-    if (sam_seg_has_sag_by_nonSA (vb) && (IS_SAG_NH || IS_SAG_CC || IS_SAG_SOLO)) {
-        
-        // build SA Group structure in VB, to be later ingested into z_file->sa_*
-        if (sam_is_prim_vb) {
-            if      (IS_SAG_NH)   sam_seg_prim_add_sa_group_NH   (vb, dl, nh);
-            else if (IS_SAG_CC)   sam_seg_prim_add_sa_group_CC   (vb, dl, nh);
-        
-            seg_integer (VB, CTX(OPTION_NH_PRIM), nh, false, 0); // used when loading groups while pre-processing
-        }
-
+    // build SAG structure in VB, to be later ingested into z_file->sag_*
+    if (sam_is_depn_vb && vb->sag && vb->sag->num_alns == nh) {
         sam_seg_against_sa_group (vb, ctx, add_bytes);
-
         add_bytes = 0; // if this is prim, we seg again below, but we already added the bytes
     }
 
-    // note: if collated, we're much better off just having runs of the same value
-    else if (!segconf.is_collated && zip_has_prim && DATA_LINE(vb->prim_line_i)->NH == nh) // in MAIN, we seg against "prim" (which is the first alignment with this QNAME in the VB)
-        seg_by_ctx (VB, STRa(copy_buddy_NH_snip), ctx, add_bytes);
-    
-    // we predict that NH=0 iff line is unmapped 
-    else if (dl->FLAG.unmapped == (nh == 0)) {
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NH }, 2, ctx, add_bytes);
-        if (nh) seg_integer (VB, ctx, nh, false, 0); // no need to store NH in local if 0, as we can predict it from unmapped
-    }
-
-    else 
-        seg_integer (VB, ctx, nh, true, add_bytes);
+    else
+        sam_seg_buddied_i_fields (vb, dl, OPTION_NH_i, nh, &dl->NH, (MultiplexerP)&vb->mux_NH, 
+                                  STRa (copy_buddy_NH_snip), add_bytes);
 }
 
-SPECIAL_RECONSTRUCTOR (sam_piz_special_NH)
+// ----------------------------------------------------------------------------------------------------------
+// HI:i Query hit index (a number [1,NH])
+// ----------------------------------------------------------------------------------------------------------
+
+SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_BY_BUDDY_MAP)
 {
-    if (!last_flags.unmapped) 
-        new_value->i = reconstruct_from_local_int (vb, ctx, 0, reconstruct);
+    int channel_i = (last_flags.unmapped?2 : (sam_has_mate || sam_has_saggy)?1 : 0);
 
-    else { // unmapped - its a 0
-        new_value->i = 0;
-        if (reconstruct) RECONSTRUCT1 ('0');
-    }
-
-    return HAS_NEW_VALUE;
+    return reconstruct_demultiplex (vb, ctx, STRa(snip), channel_i, new_value, reconstruct);
 }
 
 static inline void sam_seg_HI_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t hi, unsigned add_bytes)
 {
-    segconf_set_has (OPTION_HI_i);
-
     ContextP ctx = CTX(OPTION_HI_i);
 
     if (segconf.is_collated) {
@@ -564,8 +593,6 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_HI)
 
 static inline void sam_seg_CP_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t cp, unsigned add_bytes)
 {
-    segconf_set_has (OPTION_CP_i);
-
     if (sam_is_depn_vb && vb->sag && IS_SAG_CC && vb->cc_aln->pos == cp) 
         sam_seg_against_sa_group (vb, CTX(OPTION_CP_i), add_bytes);
 
@@ -643,6 +670,8 @@ static void sam_seg_OA_Z (VBlockSAMP vb, STRp(field), unsigned add_bytes)
 // it to be new_value=(value-ref_consumed) 
 static inline void sam_seg_AS_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t as, unsigned add_bytes)
 {
+    START_TIMER;
+
     if (segconf.running) 
         if (ABS((int32_t)2*vb->ref_consumed - as) < 10) segconf.AS_is_2ref_consumed++;
     
@@ -652,20 +681,20 @@ static inline void sam_seg_AS_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t as, 
     if (sam_is_depn_vb && segconf.sag_has_AS && vb->sag) 
         sam_seg_against_sa_group_int (vb, CTX(OPTION_AS_i), (int64_t)vb->sag->as - as, add_bytes);
 
-    // in bowtie2 and hisat2, we might be able to copy from mate
-    else if (MP(BOWTIE2) || MP(BSSEEKER2) || MP(HISAT2)) {
+    // in bowtie2-like data, we might be able to copy from mate
+    else if (is_bowtie2()) {
         ASSERT (as >= MIN_AS_i && as <= MAX_AS_i, "%s: AS=%"PRId64" is out of range [%d,%d]", LN_NAME, as, MIN_AS_i, MAX_AS_i);    
         
         ZipDataLineSAM *mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
 
-        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, (MultiplexerP)&vb->mux_AS, zip_has_mate);
+        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_AS_i, (MultiplexerP)&vb->mux_AS, sam_has_mate);
 
-        if (zip_has_mate && mate_dl->YS == as) 
-            seg_by_ctx (VB, STRa(copy_buddy_YS_snip), channel_ctx, add_bytes);
+        if (sam_has_mate && segconf.has[OPTION_YS_i] && mate_dl->YS == as) 
+            seg_by_ctx (VB, STRa(copy_mate_YS_snip), channel_ctx, add_bytes);
         
         // case: AS:i tends to be close to 2 X ref_consumed
         else if (segconf.AS_is_2ref_consumed && !segconf.running && ABS((int32_t)2*vb->ref_consumed - as) < 10) {
-            SNIPi2 (SNIP_SPECIAL, SAM_SPECIAL_REF_CONSUMED, (int32_t)2*vb->ref_consumed - as);
+            SNIPi3 (SNIP_SPECIAL, SAM_SPECIAL_REF_CONSUMED, 'x', (int32_t)2*vb->ref_consumed - as);
             seg_by_ctx (VB, STRa(snip), channel_ctx, add_bytes); 
         }
 
@@ -675,9 +704,11 @@ static inline void sam_seg_AS_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t as, 
             seg_integer (VB, channel_ctx, as, true, add_bytes);
 
         seg_by_did (VB, STRa(vb->mux_AS.snip), OPTION_AS_i, 0); // de-multiplexor
-
-        dl->AS = as;
     }
+
+    // case: in STAR paired files, AS expected to be the same value as its mate's
+    else if (MP(STAR) && segconf.is_paired && !sam_is_depn_vb) 
+        sam_seg_buddied_i_fields (vb, dl, OPTION_AS_i, as, &dl->AS, (MultiplexerP)&vb->mux_AS, STRa(copy_mate_AS_snip), add_bytes);
 
     // not bowtie2: store a special snip with delta from ref_consumed
     else if (ABS((int32_t)vb->ref_consumed-as) < 10) {
@@ -685,11 +716,17 @@ static inline void sam_seg_AS_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t as, 
         seg_by_did (VB, STRa(snip), OPTION_AS_i, add_bytes); 
     }
 
-    else if (has_ms && (MP(MINIMAP2) || MP(WINNOWMAP))) 
+    else if (has_ms && is_minimap2()) {
+        sam_set_last_value_from_aux (vb, vb->idx_ms_i, OPTION_ms_i);
         seg_delta_vs_other (VB, CTX(OPTION_AS_i), CTX(OPTION_ms_i), NULL, add_bytes);
+    }
 
     else 
         seg_integer (VB, CTX (OPTION_AS_i), as, true, add_bytes);
+
+    dl->AS = as;
+
+    COPY_TIMER(sam_seg_AS_i);
 }
 
 // reconstruct seq_len or (seq_len-snip)
@@ -705,8 +742,8 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_AS_old)
 // reconstruct ref_consumed or (ref_consumed-snip)
 SPECIAL_RECONSTRUCTOR (sam_piz_special_REF_CONSUMED)
 {
-    if (segconf.AS_is_2ref_consumed && ctx->did_i == OPTION_AS_i)
-        new_value->i = 2 * (int32_t)VB_SAM->ref_consumed - atoi (snip); // snip="" is 0
+    if (snip_len && *snip == 'x')
+        new_value->i = 2 * (int32_t)VB_SAM->ref_consumed - atoi (snip+1); // snip="" is 0
     else
         new_value->i =     (int32_t)VB_SAM->ref_consumed - atoi (snip); 
 
@@ -745,10 +782,8 @@ static inline void sam_seg_SEQ_END (VBlockSAMP vb, ZipDataLineSAM *dl, ContextP 
     if (value == prediction)
         seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_SEQ_LEN, op[0], op[1], op[2], op[3] }, 6, ctx, add_bytes);
 
-    else {
-        ctx->ltype = LT_DYN_INT;
+    else 
         seg_integer (VB, ctx, value, true, add_bytes);
-    }
 }
 
 // reconstruct a modified dl->SEQ.len based on a 4-parameter snip
@@ -779,8 +814,8 @@ void sam_seg_MAPQ (VBlockSAMP vb, ZipDataLineSAM *dl, unsigned add_bytes)
     ctx_set_last_value (VB, CTX(SAM_MAPQ), (int64_t)dl->MAPQ);
 
     bool do_mux = sam_is_main_vb && segconf.is_paired; // for simplicity. To do: also for prim/depn components
-    int channel_i = zip_has_mate?1 : zip_has_real_prim?2 : 0;
-    ContextP channel_ctx = do_mux ? seg_mux_get_channel_ctx (VB, (MultiplexerP)&vb->mux_MAPQ, channel_i) 
+    int channel_i = sam_has_mate?1 : sam_has_prim?2 : 0;
+    ContextP channel_ctx = do_mux ? seg_mux_get_channel_ctx (VB, SAM_MAPQ, (MultiplexerP)&vb->mux_MAPQ, channel_i) 
                                   : CTX(SAM_MAPQ);
 
     ZipDataLineSAM *mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
@@ -800,8 +835,8 @@ void sam_seg_MAPQ (VBlockSAMP vb, ZipDataLineSAM *dl, unsigned add_bytes)
 
     // case: seg against mate
     else if (!segconf.MAPQ_has_single_value && segconf.has[OPTION_MQ_i] &&
-             zip_has_mate && dl->MAPQ == mate_dl->MQ)
-        seg_by_ctx (VB, STRa(copy_buddy_MQ_snip), channel_ctx, add_bytes); // copy MQ from earlier-line mate 
+             sam_has_mate && dl->MAPQ == mate_dl->MQ)
+        seg_by_ctx (VB, STRa(copy_mate_MQ_snip), channel_ctx, add_bytes); // copy MQ from earlier-line mate 
 
     // // case: seg against predicted alignment in prim line SA:Z 
     // else if (!segconf.MAPQ_has_single_value && zip_has_prim && 
@@ -822,16 +857,14 @@ void sam_seg_MAPQ (VBlockSAMP vb, ZipDataLineSAM *dl, unsigned add_bytes)
 // Seg against mate if we have one, or else against MAPQ as it is often very similar
 static inline void sam_seg_MQ_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t mq, unsigned add_bytes)
 {
-    segconf_set_has (OPTION_MQ_i);
-
     ASSERT (mq >=0 && mq <= 255, "%s: Invalid MQ:i=%"PRId64": expecting an integer [0,255]", LN_NAME, mq);
     dl->MQ = mq; 
     
-    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, (MultiplexerP)&vb->mux_MQ, zip_has_mate);
+    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_MQ_i, (MultiplexerP)&vb->mux_MQ, sam_has_mate);
 
-    if (zip_has_mate && 
+    if (sam_has_mate && 
         dl->MQ == DATA_LINE (vb->mate_line_i)->MAPQ) 
-        seg_by_ctx (VB, STRa(copy_buddy_MAPQ_snip), channel_ctx, add_bytes); // copy MAPQ from earlier-line mate 
+        seg_by_ctx (VB, STRa(copy_mate_MAPQ_snip), channel_ctx, add_bytes); // copy MAPQ from earlier-line mate 
 
     else 
         seg_delta_vs_other_do (VB, channel_ctx, CTX(SAM_MAPQ), 0, 0, mq, -1, add_bytes);
@@ -840,53 +873,113 @@ static inline void sam_seg_MQ_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t mq, 
 }
 
 // mc:i: (output of bamsormadup and other biobambam tools - mc in small letters) 
-// appears to be a pos value usually close to PNEXT, but it is -1 is POS=PNEXT.
+// appears to be a pos value usually close to PNEXT, but it is -1 is POS=PNEXT. Note: tried muxing by POS=PNEXT, but was worse off
 // from bamsort manual: "adddupmarksupport=<0|1>: add information required for streaming duplicate marking in the aux fields MS and MC.
 // Input is assumed to be collated by query name. This option is ignored unless fixmates=1. By default it is disabled."
 // https://github.com/gt1/biobambam2/blob/master/src/programs/bamsort.cpp says: "biobambam used MC as a mate coordinate tag which now has a clash
 // with the official SAM format spec.  New biobambam version uses mc."
 // ms="MateBaseScore" - sum all characters in QUAL of the mate, where the value of each character is its ASCII minus 33 (i.e. the Phred score)
 // mc="MateCoordinate"
-static inline void sam_seg_mc_i (VBlockSAMP vb, ValueType mc, unsigned add_bytes)
+static inline void sam_seg_mc_i (VBlockSAMP vb, int64_t mc, unsigned add_bytes)
 {
     // if snip is "-1", store as simple snip
-    if (mc.i == -1)
+    if (mc == -1)
         seg_by_did (VB, "-1", 2, OPTION_mc_i, add_bytes);
     
     // delta vs PNEXT
     else
-        seg_pos_field (VB, OPTION_mc_i, SAM_PNEXT, SPF_BAD_SNIPS_TOO, 0, 0, 0, mc.i, add_bytes);
+        seg_pos_field (VB, OPTION_mc_i, SAM_PNEXT, SPF_BAD_SNIPS_TOO, 0, 0, 0, mc, add_bytes);
 }
 
-// RG:Z, PG:Z, PU:Z, LB:Z, RX:Z: we predict that the value will be the same as the buddy
-void sam_seg_buddied_Z_fields (VBlockSAMP vb, ZipDataLineSAM *dl, BuddiedZFields f, Did stats_conslidation_did_i, STRp(value), 
-                               char multi_value_sep, // in case string is multiple values, 0 if not
-                               DictId arr_dict_id, unsigned add_bytes)
+// RG:Z, PG:Z, PU:Z, LB:Z, RX:Z and others: we predict that the value will be the same as the buddy
+void sam_seg_buddied_Z_fields (VBlockSAMP vb, ZipDataLineSAM *dl, MatedZFields f, STRp(value), 
+                               SegBuddiedCallback seg_cb, // optional
+                               unsigned add_bytes)
 {
-    segconf_set_has (buddied_Z_dids[f]);
+    ContextP ctx = CTX(buddied_Z_dids[f]);
 
-    ZipDataLineSAM *buddy_dl = zip_has_mate ? DATA_LINE (vb->mate_line_i) 
-                             : zip_has_prim ? DATA_LINE (vb->prim_line_i) // if collated, it will likely be the same as prev line, so better not use special 
+    ZipDataLineSAM *buddy_dl = sam_has_mate  ? DATA_LINE (vb->mate_line_i)  // mate before saggy, consistent with sam_piz_special_COPY_BUDDY
+                             : sam_has_saggy ? DATA_LINE (vb->saggy_line_i) // if collated, it will likely be the same as prev line, so better not use special 
                              : NULL;
 
-    bool do_mux = segconf.is_paired; // muxing just on prim if not paired is counter-beneficial
+    bool do_mux = segconf.is_paired && !segconf.is_collated; // muxing just on prim if not paired is counter-beneficial
 
-    ContextP channel_ctx = do_mux ? seg_mux_get_channel_ctx (VB, (MultiplexerP)&vb->mux_buddied_z_fields[f], !!buddy_dl)
-                                  : CTX(buddied_Z_dids[f]);
+    ContextP channel_ctx = do_mux ? seg_mux_get_channel_ctx (VB, buddied_Z_dids[f], (MultiplexerP)&vb->mux_mated_z_fields[f], !!buddy_dl)
+                                  : ctx;
 
-    if (do_mux && buddy_dl && str_issame_(STRa(value), STRtxtw (buddy_dl->buddied_z_fields[f])))
+    if (do_mux && buddy_dl && str_issame_(STRa(value), STRtxtw (buddy_dl->mated_z_fields[f])))
         seg_by_ctx (VB, STRi(copy_buddy_Z_snip,f), channel_ctx, add_bytes); 
 
-    else if (multi_value_sep) 
-        seg_array (VB, channel_ctx, stats_conslidation_did_i, STRa(value), multi_value_sep, 0, false, false, arr_dict_id, add_bytes);
+    else if (seg_cb && !segconf.running) 
+        seg_cb (vb, channel_ctx, STRa(value), add_bytes);
 
     else 
-        seg_by_ctx (VB, STRa(value), channel_ctx, add_bytes);    
+        seg_by_ctx (VB, STRa(value), channel_ctx, add_bytes); 
 
     if (do_mux)
-        seg_by_did (VB, STRa(vb->mux_buddied_z_fields[f].snip), buddied_Z_dids[f], 0); // de-multiplexor
+        seg_by_did (VB, STRa(vb->mux_mated_z_fields[f].snip), buddied_Z_dids[f], 0); // de-multiplexor
 
-    dl->buddied_z_fields[f] = TXTWORD(value);
+    dl->mated_z_fields[f] = TXTWORD(value);
+}
+
+// ----------------------------------------------------------------------------------------------
+// ms:i: (output of bamsormadup and other biobambam tools - ms in small letters), created here: https://github.com/gt1/libmaus/tree/master/src/libmaus/bambam/BamAlignmentDecoderBase.cpp getScore 
+//       It is the sum of phred values of mate's QUAL, but only phred values >= 15
+// ----------------------------------------------------------------------------------------------
+
+void sam_seg_buddied_i_fields (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, 
+                               int64_t my_value, 
+                               int32_t *dl_value, // pointer to my dl value (value will be set)
+                               MultiplexerP mux,
+                               STRp(copy_snip),   // buddy_type embedded in snip needs to be consistent with mux->special_code
+                               unsigned add_bytes)
+{
+    // BAM spec permits values up to 0xffffffff, and SAM is unlimited, however for code covenience we limit
+    // values segged with this method to int32_t. If this is ever an issue, it can be solved.
+    ASSERT (my_value >= -0x80000000LL && my_value <= 0x7fffffffLL, "%s: Value of %s is %"PRId64", outside the supported range by Genozip of [%d,%d]",
+            LN_NAME, CTX(did_i)->tag_name, my_value, -0x80000000, 0x7fffffff);
+
+    *dl_value = my_value;
+
+    #define by_mate      (mux->special_code == SAM_SPECIAL_DEMUX_BY_MATE)
+    #define by_buddy     (mux->special_code == SAM_SPECIAL_DEMUX_BY_BUDDY)
+    #define by_buddy_map (mux->special_code == SAM_SPECIAL_DEMUX_BY_BUDDY_MAP)
+    #define by_mate_prim (mux->special_code == SAM_SPECIAL_DEMUX_BY_MATE_PRIM)
+
+    if (!segconf.running && segconf.is_paired && !segconf.is_collated) {
+        int channel_i = by_mate      ? sam_has_mate
+                      : by_buddy     ? (sam_has_mate || sam_has_saggy)
+                      : by_buddy_map ? (dl->FLAG.unmapped?2 : (sam_has_mate || sam_has_saggy)?1 : 0)
+                      : by_mate_prim ? (sam_has_mate?1 : sam_has_prim?2 : 0)
+                      : -1; // invalid
+
+        ASSERT (channel_i >= 0, "mux of %s has unsupported special code %u", CTX(did_i)->tag_name, mux->special_code);
+
+        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, did_i, mux, channel_i);
+
+        // calculating mate value's pointer. Note: this only works if ZipDataLineSAM is NOT packed
+        int32_t *mate_value  = &dl_value[(vb->mate_line_i  - vb->line_i) * sizeof (ZipDataLineSAM) / sizeof (int32_t)];
+        int32_t *saggy_value = &dl_value[(vb->saggy_line_i - vb->line_i) * sizeof (ZipDataLineSAM) / sizeof (int32_t)];
+
+        // note: we don't check if our mate has this field. the math still works, because if it doesn't have 
+        // this field, the dl value in Seg will be 0, as will be the History value in recon.
+
+        if (by_buddy_map && dl->FLAG.unmapped)
+            seg_integer_as_text_do (VB, channel_ctx, my_value, add_bytes); // seg as snip, as this will likely become all-the-same
+
+        else if (sam_has_mate && my_value == *mate_value)     // successful in ~97% of lines with mate
+            seg_by_ctx (VB, STRa(copy_snip), channel_ctx, add_bytes); // note: prior to v14, we stored ms qual_score in QUAL history, not in ms:i history 
+        
+        else if (((by_buddy && sam_has_saggy) || (by_mate_prim && sam_has_prim)) && my_value == *saggy_value)
+            seg_by_ctx (VB, STRa(copy_snip), channel_ctx, add_bytes); 
+
+        else 
+            seg_integer (VB, channel_ctx, my_value, true, add_bytes);    
+
+        seg_by_did (VB, MUX_SNIP(mux), MUX_SNIP_LEN(mux), did_i, 0); // de-multiplexor
+    }
+    else
+        seg_integer (VB, CTX(did_i), my_value, true, add_bytes);        
 }
 
 // E2 - SEQ data. Currently broken. To do: fix.
@@ -1050,25 +1143,25 @@ static void sam_seg_array_field (VBlockSAMP vb, DictId dict_id, uint8_t type,
     container_seg (vb, con_ctx, (ContainerP)con, ((char[]){ CON_PX_SEP, type, ',', CON_PX_SEP }), 4, container_add_bytes);
 }
 
-// static inline void xxx (VBlockSAMP vb, ZipDataLineSAM *dl, ValueType x, unsigned add_bytes)
-// {
-//     printf ("S=%u,%u SEQ.len=%u ref_consumed=%u ref_and_seq_consumed=%u deletions=%u insertions=%u x=%"PRId64"\n", vb->soft_clip[0], vb->soft_clip[1], dl->SEQ.len, vb->ref_consumed, vb->ref_and_seq_consumed, vb->deletions, vb->insertions, x.i);
-// }
-
 // process an optional subfield, that looks something like MX:Z:abcdefg. We use "MX" for the field name, and
 // the data is abcdefg. The full name "MX:Z:" is stored as part of the AUX dictionary entry
 DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam, 
                           rom tag, char bam_type, char array_subtype, 
                           STRp(value), ValueType numeric) // two options 
 {
+    START_TIMER;
+
     char sam_type = sam_seg_bam_type_to_sam_type (bam_type);
     char dict_name[6] = { tag[0], tag[1], ':', sam_type, ':', array_subtype }; // last 2 are ignored if not array
     DictId dict_id = dict_id_make (dict_name, (sam_type=='B' ? 6 : 4), DTYPE_SAM_AUX); // match dict_id as declared in #pragma GENDICT
 
     unsigned add_bytes = sam_seg_aux_add_bytes (bam_type, value_len, is_bam);
 
-    #define SEG_COND0(condition, seg) if (condition) { seg; break; } else  
-    #define SEG_COND(condition, seg) if (condition) { seg; break; } else goto fallback; 
+    #define COND0(condition, seg) if (condition) { seg; break; } else  
+    #define COND(condition,  seg) if (condition) { seg; break; } else goto fallback; 
+
+    if (segconf.running)
+        segconf.has[ctx_get_ctx (VB, dict_id)->did_i] = true;
 
     switch (dict_id.num) {
 
@@ -1084,9 +1177,8 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
 
         case _OPTION_OP_i: seg_pos_field (VB, OPTION_OP_i, SAM_POS, 0, 0, 0, 0, numeric.i, add_bytes); break;
 
-        case _OPTION_OQ_Z: sam_seg_OQ_Z (vb, dl, STRa(value), add_bytes); break;
-
-        case _OPTION_CP_i: sam_seg_CP_i (vb, dl, numeric.i, add_bytes); break;
+        case _OPTION_OQ_Z: sam_seg_other_qual (vb, &dl->OQ, OPTION_OQ_Z, STRa(value), true, add_bytes); break;
+        case _OPTION_TQ_Z: sam_seg_other_qual (vb, &dl->TQ, OPTION_TQ_Z, STRa(value), false, add_bytes); break;
 
         //case _OPTION_CC_Z: see unused code, bug 609
 
@@ -1096,131 +1188,136 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
         // the MD alg requires the SQBITMAP.
         case _OPTION_MD_Z: sam_seg_MD_Z (vb, dl, STRa(value), add_bytes); break;
 
-        case _OPTION_NM_i: SEG_COND (!MP(BLASR), sam_seg_NM_i (vb, dl, (SamNMType)numeric.i, add_bytes)); // blasr uses NM:i in a non-standard way
+        case _OPTION_NM_i: COND (!MP(BLASR), sam_seg_NM_i (vb, dl, (SamNMType)numeric.i, add_bytes)); // blasr uses NM:i in a non-standard way
+
+        case _OPTION_nM_i: COND (MP(STAR), sam_seg_nM_i (vb, dl, (SamNMType)numeric.i, add_bytes)); break;
 
         case _OPTION_BD_Z:
         case _OPTION_BI_Z: sam_seg_BD_BI_Z (vb, dl, STRa(value), dict_id, add_bytes); break;
         
-        case _OPTION_AS_i: sam_seg_AS_i (vb, dl, numeric.i, add_bytes); break;
+        case _OPTION_RG_Z: COND (segconf.sam_multi_RG, sam_seg_buddied_Z_fields (vb, dl, MATED_RG, STRa(value), 0, add_bytes));
 
-        case _OPTION_MQ_i: sam_seg_MQ_i (vb, dl, numeric.i, add_bytes); break;
+        case _OPTION_PG_Z: sam_seg_buddied_Z_fields (vb, dl, MATED_PG, STRa(value), 0, add_bytes); break;
+        case _OPTION_PU_Z: sam_seg_buddied_Z_fields (vb, dl, MATED_PU, STRa(value), 0, add_bytes); break;
+        case _OPTION_LB_Z: sam_seg_buddied_Z_fields (vb, dl, MATED_LB, STRa(value), 0, add_bytes); break;
+        case _OPTION_OX_Z: sam_seg_buddied_Z_fields (vb, dl, MATED_OX, STRa(value), 0, add_bytes); break;
+        case _OPTION_MI_Z: sam_seg_buddied_Z_fields (vb, dl, MATED_MI, STRa(value), 0, add_bytes); break;
 
-        case _OPTION_RG_Z: SEG_COND (segconf.sam_multi_RG, sam_seg_buddied_Z_fields (vb, dl, BUDDIED_RG, OPTION_RG_Z, STRa(value), false, DICT_ID_NONE, add_bytes));
+        case _OPTION_CY_Z: dl->dont_compress_CY = sam_seg_barcode_qual (vb, dl, OPTION_CY_Z, SOLO_CY, segconf.n_CR_CB_CY_seps, STRa(value), qSTRa(segconf.CY_con_snip), &segconf.CY_con, add_bytes); break;
+        case _OPTION_QT_Z: dl->dont_compress_QT = sam_seg_barcode_qual (vb, dl, OPTION_QT_Z, SOLO_QT, segconf.n_BC_QT_seps,    STRa(value), qSTRa(segconf.QT_con_snip), &segconf.QT_con, add_bytes); break;
 
-        case _OPTION_PG_Z: sam_seg_buddied_Z_fields (vb, dl, BUDDIED_PG, OPTION_PG_Z, STRa(value), 0,   DICT_ID_NONE, add_bytes); break;
-        case _OPTION_PU_Z: sam_seg_buddied_Z_fields (vb, dl, BUDDIED_PU, OPTION_PU_Z, STRa(value), 0,   DICT_ID_NONE, add_bytes); break;
-        case _OPTION_LB_Z: sam_seg_buddied_Z_fields (vb, dl, BUDDIED_LB, OPTION_LB_Z, STRa(value), 0,   DICT_ID_NONE, add_bytes); break;
-        case _OPTION_BC_Z: sam_seg_buddied_Z_fields (vb, dl, BUDDIED_BC, OPTION_BC_Z, STRa(value), 0,   DICT_ID_NONE, add_bytes); break;
-        case _OPTION_OX_Z: sam_seg_buddied_Z_fields (vb, dl, BUDDIED_OX, OPTION_OX_Z, STRa(value), 0,   DICT_ID_NONE, add_bytes); break;
-        case _OPTION_MI_Z: sam_seg_buddied_Z_fields (vb, dl, BUDDIED_MI, OPTION_MI_Z, STRa(value), 0,   DICT_ID_NONE, add_bytes); break;
-        case _OPTION_RX_Z: sam_seg_buddied_Z_fields (vb, dl, BUDDIED_RX, OPTION_RX_Z, STRa(value), 0,   DICT_ID_NONE, add_bytes); break;
+        case _OPTION_CR_Z: sam_seg_CR_Z (vb, dl, STRa(value), add_bytes); break;
+        case _OPTION_CB_Z: sam_seg_CB_Z (vb, dl, STRa(value), add_bytes); break;
+        case _OPTION_UR_Z: // alias of RX
+        case _OPTION_RX_Z: sam_seg_RX_Z (vb, dl, STRa(value), add_bytes); break;
+        case _OPTION_UB_Z: // alias of BX
+        case _OPTION_BX_Z: sam_seg_BX_Z (vb, dl, STRa(value), add_bytes); break;
+        case _OPTION_UY_Z: // alias of QX
+        case _OPTION_QX_Z: sam_seg_QX_Z (vb, dl, STRa(value), add_bytes); break;
+        case _OPTION_BC_Z: sam_seg_BC_Z (vb, dl, STRa(value), add_bytes); break;
 
-        case _OPTION_GN_Z: segconf_set_has (OPTION_GN_Z); goto fallback; 
-        case _OPTION_GX_Z: segconf_set_has (OPTION_GX_Z); goto fallback;
-        case _OPTION_gn_Z: segconf_set_has (OPTION_gn_Z); goto fallback;
-        case _OPTION_gx_Z: segconf_set_has (OPTION_gx_Z); goto fallback;
+        case _OPTION_2Y_Z: COND (segconf.has_cellranger, sam_seg_other_qual (vb, &dl->_2Y, OPTION_2Y_Z, STRa(value), false, add_bytes));
+        
+        case _OPTION_GR_Z: COND (segconf.has_cellranger, sam_seg_GR_Z (vb, dl, STRa(value), add_bytes));
+        case _OPTION_GY_Z: COND (segconf.has_cellranger, sam_seg_GY_Z (vb, dl, STRa(value), add_bytes));
+        case _OPTION_2R_Z: COND (segconf.has_cellranger, sam_seg_other_seq (vb, dl, OPTION_2R_Z, STRa(value), add_bytes));
+        case _OPTION_TR_Z: COND (segconf.has_cellranger || MP(LONGRANGER), sam_seg_other_seq (vb, dl, OPTION_TR_Z, STRa(value), add_bytes));
 
+        case _OPTION_TX_Z: COND (segconf.has_cellranger, sam_seg_TX_AN_Z (vb, dl, OPTION_TX_Z, STRa(value), add_bytes));
+        case _OPTION_AN_Z: COND (segconf.has_cellranger, sam_seg_TX_AN_Z (vb, dl, OPTION_AN_Z, STRa(value), add_bytes));
+
+        case _OPTION_GN_Z: sam_seg_gene_name_id (vb, dl, OPTION_GN_Z, STRa(value), add_bytes); break;
+        case _OPTION_GX_Z: sam_seg_gene_name_id (vb, dl, OPTION_GX_Z, STRa(value), add_bytes); break;
+        case _OPTION_gn_Z: sam_seg_gene_name_id (vb, dl, OPTION_gn_Z, STRa(value), add_bytes); break;
+        case _OPTION_gx_Z: sam_seg_gene_name_id (vb, dl, OPTION_gx_Z, STRa(value), add_bytes); break;
+
+        
         //case _OPTION_E2: sam_seg_E2_field (vb, dl, STRa(value), add_bytes); // BROKEN. To do: fix.
 
         case _OPTION_U2_Z: sam_seg_U2_Z (vb, dl, STRa(value), add_bytes); break;
 
+        case _OPTION_AS_i: sam_seg_AS_i (vb, dl, numeric.i, add_bytes); break;
+        case _OPTION_MQ_i: sam_seg_MQ_i (vb, dl, numeric.i, add_bytes); break;
         case _OPTION_SM_i: sam_seg_SM_i (vb, dl, numeric.i, add_bytes); break;
-
         case _OPTION_AM_i: sam_seg_AM_i (vb, dl, numeric.i, add_bytes); break;
-
         case _OPTION_HI_i: sam_seg_HI_i (vb, dl, numeric.i, add_bytes); break;
-
         case _OPTION_NH_i: sam_seg_NH_i (vb, dl, numeric.i, add_bytes); break;
+        case _OPTION_CP_i: sam_seg_CP_i (vb, dl, numeric.i, add_bytes); break;
 
         // ---------------------
         // Non-standard fields
         // ---------------------
-        case _OPTION_XA_Z: SEG_COND (sam_has_BWA_XA_Z(), sam_seg_BWA_XA_Z (vb, STRa(value), add_bytes));
+        case _OPTION_XA_Z: COND (sam_has_BWA_XA_Z(), sam_seg_BWA_XA_Z (vb, STRa(value), add_bytes));
         
-        case _OPTION_XS_i: SEG_COND0 (sam_has_BWA_XS_i(), sam_seg_BWA_XS_i (vb, dl, OPTION_XS_i, numeric.i, add_bytes))
-                           SEG_COND (MP(BLASR), sam_seg_SEQ_END (vb, dl, CTX(OPTION_XS_i), numeric.i, "0+00", add_bytes)); 
+        case _OPTION_XS_i: COND0 (sam_has_BWA_XS_i(), sam_seg_BWA_XS_i (vb, dl, OPTION_XS_i, numeric.i, add_bytes))
+                           COND (MP(BLASR), sam_seg_SEQ_END (vb, dl, CTX(OPTION_XS_i), numeric.i, "0+00", add_bytes)); 
 
-        case _OPTION_XC_i: SEG_COND (MP(BWA) || MP(BSBOLT), sam_seg_BWA_XC_i (vb, dl, numeric.i, add_bytes)); 
+        case _OPTION_XC_i: COND (is_bwa(), sam_seg_BWA_XC_i (vb, dl, numeric.i, add_bytes)); 
 
-        case _OPTION_XT_A: SEG_COND (MP(BWA) || MP(BSBOLT), sam_seg_BWA_XT_A (vb, value[0], add_bytes));
+        case _OPTION_XT_A: COND (is_bwa(), sam_seg_BWA_XT_A (vb, value[0], add_bytes));
 
-        case _OPTION_XM_i: SEG_COND0 (MP(BWA) || MP(BOWTIE2) || MP(BSSEEKER2) || MP(BSBOLT) || MP(HISAT2) || MP(NOVOALIGN), 
+        case _OPTION_XM_i: COND0 (is_bwa() || is_bowtie2() || MP(NOVOALIGN), 
                                       sam_seg_BWA_XM_i (vb, numeric, add_bytes))
-                           SEG_COND (MP(TMAP), sam_seg_TMAP_XM_i (vb, numeric, add_bytes));
+                           COND (MP(TMAP), sam_seg_TMAP_XM_i (vb, numeric, add_bytes));
 
-        case _OPTION_X1_i: SEG_COND (MP(BWA) || MP(BSBOLT), sam_seg_BWA_X1_i (vb, numeric.i, add_bytes)); break;
+        case _OPTION_X1_i: COND (is_bwa(), sam_seg_BWA_X1_i (vb, numeric.i, add_bytes)); break;
 
-        case _OPTION_ZS_i: SEG_COND (MP(HISAT2), sam_seg_BWA_XS_i (vb, dl, OPTION_ZS_i, numeric.i, add_bytes)); 
+        case _OPTION_ZS_i: COND (MP(HISAT2), sam_seg_BWA_XS_i (vb, dl, OPTION_ZS_i, numeric.i, add_bytes)); 
 
-        case _OPTION_YS_i: SEG_COND (sam_has_bowtie2_YS_i(), sam_seg_bowtie2_YS_i (vb, dl, numeric, add_bytes));
+        case _OPTION_YS_i: COND (sam_has_bowtie2_YS_i(), sam_seg_bowtie2_YS_i (vb, dl, numeric, add_bytes));
 
-        // case _OPTION_XR_Z: SEG_COND (MP(BISMARK), sam_seg_bismark_XR_Z (vb, dl, STRa(value), add_bytes));
+        // case _OPTION_XR_Z: COND (MP(BISMARK) || MP(DRAGEN), sam_seg_bismark_XR_Z (vb, dl, STRa(value), add_bytes));
 
-        case _OPTION_XO_Z: SEG_COND (MP(BSSEEKER2), sam_seg_bsseeker2_XO_Z (vb, dl, STRa(value), add_bytes));
+        case _OPTION_XO_Z: COND (MP(BSSEEKER2), sam_seg_bsseeker2_XO_Z (vb, dl, STRa(value), add_bytes));
 
-        case _OPTION_XG_Z: SEG_COND0 (MP(BISMARK), sam_seg_bismark_XG_Z (vb, dl, STRa(value), add_bytes))
-                           SEG_COND (MP(BSSEEKER2), sam_seg_bsseeker2_XG_Z (vb, dl, STRa(value), add_bytes));
+        case _OPTION_XG_Z: COND0 (MP(BISMARK) || MP(DRAGEN), sam_seg_bismark_XG_Z (vb, dl, STRa(value), add_bytes))
+                           COND (MP(BSSEEKER2), sam_seg_bsseeker2_XG_Z (vb, dl, STRa(value), add_bytes));
 
-        case _OPTION_XM_Z: SEG_COND (MP(BSSEEKER2), sam_seg_bsseeker2_XM_Z (vb, dl, STRa(value), add_bytes));
+        case _OPTION_XM_Z: COND0 (MP(BISMARK) || MP(DRAGEN), sam_seg_bismark_XM_Z (vb, dl, OPTION_XM_Z, SAM_SPECIAL_BISMARK_XM, STRa(value), add_bytes))
+                           COND (MP(BSSEEKER2), sam_seg_bsseeker2_XM_Z (vb, dl, STRa(value), add_bytes));
 
-        case _OPTION_XB_A: SEG_COND (MP(GEM3), sam_seg_gem3_XB_A (vb, dl, STRa(value), add_bytes));
+        case _OPTION_XB_A: COND (MP(GEM3), sam_seg_gem3_XB_A (vb, dl, STRa(value), add_bytes));
 
-        // case _OPTION_XB_Z: SEG_COND (MP(BSBOLT), sam_seg_bsbolt_XB (vb, dl, STRa(value), add_bytes));
+        case _OPTION_XB_Z: COND (MP(BSBOLT), sam_seg_bsbolt_XB (vb, dl, STRa(value), add_bytes));
 
-        case _OPTION_YS_Z: SEG_COND (MP(BSBOLT), sam_seg_bsbolt_YS_Z (vb, dl, STRa(value), add_bytes));
+        case _OPTION_YS_Z: COND (MP(BSBOLT), sam_seg_bsbolt_YS_Z (vb, dl, STRa(value), add_bytes));
 
-        case _OPTION_mc_i: sam_seg_mc_i (vb, numeric, add_bytes); break;
+        case _OPTION_mc_i: COND (segconf.sam_ms_type == ms_BIOBAMBAM, sam_seg_mc_i (vb, numeric.i, add_bytes));
 
-        case _OPTION_ms_i: segconf_set_has (OPTION_ms_i);
-                           SEG_COND (segconf.sam_ms_type == ms_BIOBAMBAM, sam_seg_ms_i (vb, numeric, add_bytes));
+        case _OPTION_ms_i: COND (segconf.sam_ms_type == ms_BIOBAMBAM, 
+                                 sam_seg_buddied_i_fields (vb, dl, OPTION_ms_i, numeric.i, &dl->QUAL_score, (MultiplexerP)&vb->mux_ms, STRa(copy_mate_ms_snip), add_bytes));
 
-        case _OPTION_s1_i: SEG_COND (MP(MINIMAP2) || MP(WINNOWMAP), sam_seg_s1_i (vb, dl, numeric.i, add_bytes));
+        case _OPTION_s1_i: COND (is_minimap2(), sam_seg_s1_i (vb, dl, numeric.i, add_bytes));
 
-        case _OPTION_cm_i: SEG_COND (MP(MINIMAP2) || MP(WINNOWMAP), sam_seg_cm_i (vb, dl, numeric.i, add_bytes));
+        case _OPTION_cm_i: COND (is_minimap2(), sam_seg_cm_i (vb, dl, numeric.i, add_bytes));
 
         // tx:i: - we seg this as a primary field SAM_TAX_ID
         case _OPTION_tx_i: seg_by_did (VB, taxid_redirection_snip, taxid_redirection_snip_len, OPTION_tx_i, add_bytes); break;
 
         case _OPTION_Z5_i: seg_pos_field (VB, OPTION_Z5_i, SAM_PNEXT, 0, 0, 0, 0, numeric.i, add_bytes); break;
 
-        case _OPTION_Zs_Z: SEG_COND (MP(HISAT2), sam_seg_HISAT2_Zs_Z (vb, STRa(value), add_bytes));
+        case _OPTION_Zs_Z: COND (MP(HISAT2), sam_seg_HISAT2_Zs_Z (vb, STRa(value), add_bytes));
 
-        case _OPTION_ZM_B_s: SEG_COND (MP(TMAP) && flag.optimize_ZM, sam_seg_array_field (vb, _OPTION_ZM_B_s, array_subtype, STRa(value), sam_optimize_TMAP_ZM, 0));
+        case _OPTION_ZM_B_s: COND (MP(TMAP) && flag.optimize_ZM, sam_seg_array_field (vb, _OPTION_ZM_B_s, array_subtype, STRa(value), sam_optimize_TMAP_ZM, 0));
 
-        case _OPTION_YH_Z: SEG_COND (MP(NOVOALIGN), seg_add_to_local_text (VB, CTX(OPTION_YH_Z), STRa(value), false, add_bytes)); break;
+        case _OPTION_YH_Z: COND (MP(NOVOALIGN), seg_add_to_local_text (VB, CTX(OPTION_YH_Z), STRa(value), false, add_bytes)); break;
+        case _OPTION_YQ_Z: COND (MP(NOVOALIGN), seg_add_to_local_text (VB, CTX(OPTION_YQ_Z), STRa(value), false, add_bytes)); break;
 
-        case _OPTION_YQ_Z: SEG_COND (MP(NOVOALIGN), seg_add_to_local_text (VB, CTX(OPTION_YQ_Z), STRa(value), false, add_bytes)); break;
-
-        case _OPTION_qs_i: SEG_COND (segconf.tech == TECH_PACBIO, sam_seg_SEQ_END (vb, dl, CTX(OPTION_qs_i), numeric.i, "0+00", add_bytes));
+        case _OPTION_qs_i: COND (segconf.tech == TECH_PACBIO, sam_seg_SEQ_END (vb, dl, CTX(OPTION_qs_i), numeric.i, "0+00", add_bytes));
         
-        case _OPTION_qe_i: SEG_COND (segconf.tech == TECH_PACBIO, sam_seg_SEQ_END (vb, dl, CTX(OPTION_qe_i), numeric.i, "++00", add_bytes));
+        case _OPTION_qe_i: COND (segconf.tech == TECH_PACBIO, sam_seg_SEQ_END (vb, dl, CTX(OPTION_qe_i), numeric.i, "++00", add_bytes));
 
-        case _OPTION_QS_i: SEG_COND (MP(NGMLR), sam_seg_SEQ_END (vb, dl, CTX(OPTION_QS_i), numeric.i, "00+0", add_bytes));
+        case _OPTION_QS_i: COND (MP(NGMLR), sam_seg_SEQ_END (vb, dl, CTX(OPTION_QS_i), numeric.i, "00+0", add_bytes));
+        case _OPTION_QE_i: COND (MP(NGMLR), sam_seg_SEQ_END (vb, dl, CTX(OPTION_QE_i), numeric.i, "+00-", add_bytes));
+        case _OPTION_XR_i: COND (MP(NGMLR), sam_seg_SEQ_END (vb, dl, CTX(OPTION_XR_i), numeric.i, "+0--", add_bytes));
+        case _OPTION_XE_i: COND (MP(BLASR), sam_seg_SEQ_END (vb, dl, CTX(OPTION_XE_i), numeric.i, "++00", add_bytes));
+        case _OPTION_XQ_i: COND (MP(BLASR), sam_seg_SEQ_END (vb, dl, CTX(OPTION_XQ_i), numeric.i, "+000", add_bytes));
+        case _OPTION_XL_i: COND (MP(BLASR), sam_seg_SEQ_END (vb, dl, CTX(OPTION_XL_i), numeric.i, "+0--", add_bytes));
 
-        case _OPTION_QE_i: SEG_COND (MP(NGMLR), sam_seg_SEQ_END (vb, dl, CTX(OPTION_QE_i), numeric.i, "+00-", add_bytes));
+        case _OPTION_FI_i: COND (MP(BLASR), sam_seg_blasr_FI_i (vb, dl, numeric.i, add_bytes));
 
-        case _OPTION_XR_i: SEG_COND (MP(NGMLR), sam_seg_SEQ_END (vb, dl, CTX(OPTION_XR_i), numeric.i, "+0--", add_bytes));
-
-        case _OPTION_XE_i: SEG_COND (MP(BLASR), sam_seg_SEQ_END (vb, dl, CTX(OPTION_XE_i), numeric.i, "++00", add_bytes));
-
-        case _OPTION_XQ_i: SEG_COND (MP(BLASR), sam_seg_SEQ_END (vb, dl, CTX(OPTION_XQ_i), numeric.i, "+000", add_bytes));
-
-        case _OPTION_XL_i: SEG_COND (MP(BLASR), sam_seg_SEQ_END (vb, dl, CTX(OPTION_XL_i), numeric.i, "+0--", add_bytes));
-
-        case _OPTION_FI_i: SEG_COND (MP(BLASR), sam_seg_blasr_FI_i (vb, dl, numeric.i, add_bytes));
-
-        case _OPTION_CR_Z: sam_seg_CR_Z (vb, dl, STRa(value), add_bytes); break;
-
-        case _OPTION_CB_Z: sam_seg_CB_Z (vb, dl, STRa(value), add_bytes); break;
-
-        case _OPTION_CY_Z: sam_seg_CY_Z (vb, dl, STRa(value), add_bytes); break;
-
-        case _OPTION_UB_Z: sam_seg_UR_UB_Z (vb, dl, STRa(value), OPTION_UB_Z, add_bytes); break; //alias
-
-        case _OPTION_UR_Z: sam_seg_UR_UB_Z (vb, dl, STRa(value), OPTION_UR_Z, add_bytes); break;
-
-        case _OPTION_UY_Z: sam_seg_UY_Z (vb, dl, STRa(value), add_bytes); break;
-
+        case _OPTION_fx_Z: COND (segconf.has_cellranger, sam_seg_fx_Z (vb, dl, STRa(value), add_bytes));
+        
         default: fallback:
             
             // all types of integer
@@ -1261,5 +1358,6 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
                 seg_by_dict_id (VB, STRa(value), dict_id, add_bytes); 
     }
     
+    COPY_TIMER(tmp1);
     return dict_id;
 }

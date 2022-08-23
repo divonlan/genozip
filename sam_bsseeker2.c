@@ -23,26 +23,23 @@ void sam_seg_bsseeker2_XO_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XO), unsign
     // predicting XO to be one of 4 values: +FR -FR +FW -FW, based on a combination of FLAG.rev_comp and multi_segs
     
     // case: value of XO fails the prediction - seg as normal snip     
-    if ((XO_len != 3)                              ||
-        (XO[0] != '+' && XO[0] != '-')             || 
-        (XO[1] != 'F')                             ||
-        (XO[2] != 'R' && XO[2] != 'W')             || 
-        ((XO[0] == '-') != dl->FLAG.rev_comp) ||     // prediction: '-' iff FLAG.rev_comp
-        ((XO[2] == 'R') != dl->FLAG.multi_segs)) // prediction: 'R' iff FLAG.multi_segs
-        
-        seg_by_did (VB, STRa(XO), OPTION_XO_Z, add_bytes);
+    ASSSEG (XO_len == 3 && (XO[0]=='+' || XO[0]=='-') && XO[1]=='F' && (XO[2]=='R' || XO[2]=='W'), XO,
+            "XO:Z=%.*s but expecting one of four values: +FR -FR +FW -FW", STRf(XO));
 
-    // case: prediction successful - seg as SPECIAL
-    else 
-        seg_by_did (VB, ((char[]){ SNIP_SPECIAL, SAM_SPECIAL_BSSEEKER2_XO }), 2, OPTION_XO_Z, add_bytes);    
+    seg_by_did (VB, ((char[]){ SNIP_SPECIAL, SAM_SPECIAL_BSSEEKER2_XO, 
+                               vb->bisulfite_strand?'*' : ((XO[0] == '-') == dl->FLAG.rev_comp)?'^' : XO[0], // if we have vb->bisulfite_strand - take for it
+                               (XO[2] == 'R') == dl->FLAG.multi_segs ? '*' : XO[2] }), // prediction: 'R' iff FLAG.multi_segs                  
+                4, OPTION_XO_Z, add_bytes);
 }
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_BSSEEKER2_XO)
 {
     if (reconstruct) {
-        RECONSTRUCT1 (last_flags.rev_comp ? '-' : '+');
+        RECONSTRUCT1 (snip[0] == '*' ? "+-"[VB_SAM->bisulfite_strand=='G'] 
+                    : snip[0] == '^' ? "+-"[last_flags.rev_comp] 
+                    :                  snip[0]);
         RECONSTRUCT1 ('F');
-        RECONSTRUCT1 (last_flags.multi_segs ? 'R' : 'W');
+        RECONSTRUCT1 (snip[1] == '*' ? "WR"[last_flags.multi_segs]         : snip[1]);
     }
 
     return NO_NEW_VALUE;
@@ -92,6 +89,8 @@ void sam_seg_bsseeker2_XG_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XG)
 {
     START_TIMER;
 
+    if (!has_XG) return;
+    
     RefLock lock = REFLOCK_NONE;
     rom result = NULL; // initialize to "success"
     vb->XG.len = 0;    // initialize value, to remain in case of failure before generating vb->XG
@@ -145,7 +144,7 @@ void sam_seg_bsseeker2_XG_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XG)
     }
 
     // if successful (all bases are the same, or not populated): populate missing bases in REF_INTERNAL
-    if (flag.reference == REF_INTERNAL) {
+    if (flag.reference == REF_INTERNAL && vb->comp_i == SAM_COMP_MAIN) {
         xg = B1STc(vb->XG);
         
         for (SamPosType pos = start_pos ; pos < after_pos; pos++, xg++) {
@@ -159,7 +158,7 @@ void sam_seg_bsseeker2_XG_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XG)
     }
 
     // set is_set - we will need these bases in the reference to reconstruct XG
-    if (flag.reference & REF_STORED) 
+    if (flag.reference & REF_STORED && vb->comp_i == SAM_COMP_MAIN) 
         bits_set_region (&range->is_set, start_pos - range->first_pos, after_pos - start_pos); 
 
     ctx_set_encountered (VB, CTX(OPTION_XG_Z)); // = verified
@@ -191,9 +190,9 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_BSSEEKER2_XG)
     // case: XG already reconstructed in sam_piz_special_BSSEEKER2_XM and held in vb->XM
     if (vb->XG.len) { // note: XG.len is initialized for every line in sam_reset_line
         RECONSTRUCT (Bc(vb->XG, 0), 2);
-        RECONSTRUCT1('_';)
+        RECONSTRUCT1('_');
         RECONSTRUCT (Bc(vb->XG, 2), vb->XG.len-4);
-        RECONSTRUCT1('_';)
+        RECONSTRUCT1('_');
         RECONSTRUCT (Bc(vb->XG, vb->XG.len-2), 2);
         goto done;
     }
@@ -237,7 +236,6 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_BSSEEKER2_XG)
 
 static inline char XM_predict_fwd (BamCigarOpType op, char xg0, char xg1, char xg2, char seq)
 {
-// xxxx printf ("XM_predict_fwd: xg0=%c xg1=%c xg0=%c seq=%c\n", xg0, xg1, xg2, seq);
     if      (op == BC_I || op == BC_D)         return '-'; // insertion - no reference for this base
     else if (xg0=='C' && xg1=='G')             return seq=='C'?'X' : seq=='T'?'x' : '-'; // CG
     else if (xg0=='C' && xg1!='G' && xg2=='G') return seq=='C'?'Y' : seq=='T'?'y' : '-'; // CHG

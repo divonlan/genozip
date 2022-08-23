@@ -55,10 +55,6 @@ static void qname_genarate_qfs_with_mate (QnameFlavorStruct *qfs)
     qfs->con.items[mate_item_i].separator[0] = CI0_FIXED_0_PAD;
     qfs->con.items[mate_item_i].separator[1] = 1;
     
-    // add new item as numeric item (at beginning of array - easier, and the order doesn't matter)
-    memmove (&qfs->numeric_items[1], qfs->numeric_items, sizeof(qfs->numeric_items) - sizeof(qfs->numeric_items[0])); // make room
-    qfs->numeric_items[0] = mate_item_i;
-
     // name
     strcpy (&qfs->name[strlen(qfs->name)], "/");
     
@@ -93,6 +89,12 @@ static void qname_genarate_qfs_with_mate (QnameFlavorStruct *qfs)
                 qfs->name, mate_item_i);
 
         qfs->px_strs[mate_item_i] = "/";
+    }
+
+    // add new item as numeric item (at beginning of array - easier, and the order doesn't matter)
+    if (qfs->con.items[mate_item_i].separator[0] == CI0_FIXED_0_PAD) {
+        memmove (&qfs->numeric_items[1], qfs->numeric_items, sizeof(qfs->numeric_items) - sizeof(qfs->numeric_items[0])); // make room
+        qfs->numeric_items[0] = mate_item_i;
     }
 
     qfs->num_seps++; // we added / to length of prefixes/seperator
@@ -172,11 +174,17 @@ void qname_zip_initialize (Did qname_did_i)
 
             // in qname_flavors.h, we keep lists in the form of index lists, for maintenanbility. now
             // we convert them to a bitmap for ease of segging.
-            for (unsigned i=0; qfs->integer_items[i] != -1; i++) 
+            for (unsigned i=0; qfs->integer_items[i] != -1; i++) {
+                ASSERT (qfs->con.items[qfs->integer_items[i]].separator[0] != CI0_FIXED_0_PAD,
+                        "since qfs=%s item=%u has seperator[0] == CI0_FIXED_0_PAD, expecting it to be numeric, not int", qfs->name, qfs->integer_items[i]);
                 qfs->is_int[qfs->integer_items[i]] = true;
+            }
 
-            for (unsigned i=0; qfs->numeric_items[i] != -1; i++)
+            for (unsigned i=0; qfs->numeric_items[i] != -1; i++) {
+                ASSERT (qfs->con.items[qfs->numeric_items[i]].separator[0] == CI0_FIXED_0_PAD,
+                        "since qfs=%s item=%u has seperator[0] != CI0_FIXED_0_PAD, expecting it to be int, not numeric", qfs->name, qfs->numeric_items[i]);
                 qfs->is_numeric[qfs->numeric_items[i]] = true;
+            }
 
             for (unsigned i=0; qfs->hex_items[i] != -1; i++)
                 qfs->is_hex[qfs->hex_items[i]] = true;
@@ -224,7 +232,7 @@ static void qname_seg_initialize_do (VBlockP vb, QnameFlavor qfs, QnameFlavor qf
 
     // hex items
     for (int i=0; qfs->hex_items[i] != -1; i++)
-        if (qfs->is_in_local[qfs->hex_items[i]])
+        if (qfs->is_in_local[qfs->hex_items[i]] && (qfs->is_int[qfs->hex_items[i]] || qfs->is_numeric[qfs->hex_items[i]]))
             (ctx_delta + ctx_get_ctx (vb, qfs->con.items[qfs->hex_items[i]].dict_id))->ltype = LT_DYN_INT_h;
 
     if (qfs->qname2 != -1 && qfs2)
@@ -377,7 +385,7 @@ bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, QnameFlavor qfs, STRp(qname),
         if ((item_i == qfs->ordered_item1 || item_i == qfs->ordered_item2) && 
             !segconf.is_sorted &&
             ( (!qfs->is_hex[item_i] && str_get_int_dec (STRi(item, item_i), (uint64_t*)&value)) ||
-              ( qfs->is_hex[item_i] && str_get_int_hex (STRi(item, item_i), (uint64_t*)&value))   ))
+              ( qfs->is_hex[item_i] && str_get_int_hex (STRi(item, item_i), true, false, (uint64_t*)&value)))) // lower-case hex
 
             seg_self_delta (vb, item_ctx, value, (qfs->is_hex[item_i] ? 'x' : 0), item_lens[item_i]);
         
@@ -392,8 +400,11 @@ bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, QnameFlavor qfs, STRp(qname),
         }
 
         else if (qfs->is_in_local[item_i] && !flag.pair) { // note: we can't store in local if pairing        
-            if (qfs->is_int[item_i] || qfs->is_numeric[item_i]) // note: numeric with leading zeros is segged as a snip 
+            if (qfs->is_int[item_i]) 
                 seg_integer_or_not (vb, item_ctx, STRi(item, item_i), item_lens[item_i]);
+
+            else if (qfs->is_numeric[item_i])
+                seg_numeric_or_not (vb, item_ctx, STRi(item, item_i), item->separator[1], item_lens[item_i]);
 
             else 
                 seg_add_to_local_text (vb, item_ctx, STRi(item, item_i), true, item_lens[item_i]);
@@ -401,7 +412,7 @@ bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, QnameFlavor qfs, STRp(qname),
 
         // TO DO - add field xor_diff allowing specifying xor_diff method (if we find a case where its useful)
         // else if (xor_diff[item_i] && !flag.pair) {
-        //    seg_xor_diff (vb, item_ctx, STRi(item, item_i), item_ctx->flags.all_the_same, item_lens[item_i]);
+        //    seg_diff (vb, item_ctx, STRi(item, item_i), item_ctx->flags.all_the_same, item_lens[item_i]);
         //     seg_set_last_txt (vb, item_ctx, STRi(item, item_i));
         // }
         

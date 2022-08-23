@@ -36,17 +36,17 @@ void gff3_zip_initialize (void)
 // called from seg_all_data_lines
 void gff3_seg_initialize (VBlockP vb)
 {
-    ctx_set_store (VB, STORE_INT, 4, GFF3_START/*since v12*/, ATTR_Target_POS, ATTR_ID, DID_EOL);
+    ctx_set_store (VB, STORE_INT, GFF3_START/*since v12*/, ATTR_Target_POS, ATTR_ID, DID_EOL);
 
-    ctx_set_store (VB, STORE_INDEX, 3, GFF3_SEQID/*v12*/, GFF3_COMMENT/*12.0.12*/, DID_EOL);
+    ctx_set_store (VB, STORE_INDEX, GFF3_SEQID/*v12*/, GFF3_COMMENT/*12.0.12*/, DID_EOL);
 
-    ctx_set_no_stons (vb, 11, GFF3_COMMENT/*required by STORE_INDEX (otherwise singletons don't get their index stored)*/, 
+    ctx_set_no_stons (vb, GFF3_COMMENT/*required by STORE_INDEX (otherwise singletons don't get their index stored)*/, 
                       GFF3_SEQID/*needs b250 node_index for random access*/, 
                       GFF3_ATTRS, ATTR_Variant_seq, ATTR_Reference_seq, ATTR_ancestral_allele,
                       ATTR_Target_POS, ATTR_ID, GFF3_START, GFF3_END, DID_EOL); // as requied by seg_pos_field
 
-    ctx_consolidate_stats (vb, ATTR_Target, 4, ATTR_Target_ID, ATTR_Target_POS, ATTR_Target_STRAND, DID_EOL);
-    ctx_consolidate_stats (vb, ENSTid, 2, EnNSTid, DID_EOL);
+    ctx_consolidate_stats (vb, ATTR_Target, ATTR_Target_ID, ATTR_Target_POS, ATTR_Target_STRAND, DID_EOL);
+    ctx_consolidate_stats (vb, ENSTid, EnNSTid, DID_EOL);
 
     seg_id_field_init (CTX(ATTR_Dbxref));
     seg_id_field_init (CTX(ATTR_Name));

@@ -26,10 +26,11 @@ extern bool is_printable[256];
 #define UPPER_CASE(c) (IS_SLETTER(c) ? ((c)-32) : (c))
 #define LOWER_CASE(c) (IS_CLETTER(c) ? ((c)+32) : (c))
 
+#define IS_ASTERISK(str) (str##_len==1 && *str=='*')
+#define IS_EQUAL_SIGN(str) (str##_len==1 && *str=='=')
+
 #define TF(s) ((s) ? "true" : "false")
 #define S(s)  ((s) ? (s) : "(none)")
-
-typedef struct { char s[80]; } StrText;
 
 extern StrText char_to_printable (char c);
 
@@ -119,6 +120,7 @@ extern char *str_revcomp_in_out (char *dst_seq, rom src_seq, uint32_t seq_len);
 static inline char *str_revcomp (STRc(seq)) { return str_revcomp_in_out (seq, seq, seq_len); }
 extern char *str_revcomp_actg (char *dst_seq, rom src_seq, uint32_t seq_len);
 
+// count the number of occurances of a character in a string
 static inline uint64_t str_count_char (rom str, uint64_t len, char c)
 {
     if (!str) return 0;
@@ -128,6 +130,18 @@ static inline uint64_t str_count_char (rom str, uint64_t len, char c)
         if (str[i] == c) count++;
 
     return count;
+}
+
+// count the number of consecutive occurances of a character
+static inline uint64_t str_count_consecutive_char (rom str, uint64_t len, char c)
+{
+    if (!str) return 0;
+    
+    uint64_t i=0;
+    for (i=0; i < len; i++)
+        if (str[i] != c) break;
+
+    return i;
 }
 
 extern StrText str_size (uint64_t size);
@@ -163,7 +177,7 @@ extern bool str_get_int_range64 (STRp(str), int64_t min_val, int64_t max_val, in
 extern bool str_get_int_range32 (STRp(str), int64_t min_val, int64_t max_val, int32_t  *value); // signed
 
 extern bool str_get_int_dec (STRp(str), uint64_t *value); 
-extern bool str_get_int_hex (STRp(str), uint64_t *value); 
+extern bool str_get_int_hex (STRp(str), bool allow_hex, bool allow_HEX, uint64_t *value); 
 extern bool str_get_int_range_allow_hex8  (STRp(str), uint8_t  min_val, uint8_t  max_val, uint8_t  *value);
 extern bool str_get_int_range_allow_hex16 (STRp(str), uint16_t min_val, uint16_t max_val, uint16_t *value);
 extern bool str_get_int_range_allow_hex32 (STRp(str), uint32_t min_val, uint32_t max_val, uint32_t *value);

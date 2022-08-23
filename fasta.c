@@ -33,14 +33,14 @@ typedef struct {
 
 unsigned fasta_vb_size (DataType dt) 
 { 
-    return dt == DT_REF && command == PIZ ? sizeof (VBlock) : sizeof (VBlockFASTA); 
+    return dt == DT_REF && IS_PIZ ? sizeof (VBlock) : sizeof (VBlockFASTA); 
 }
 
 unsigned fasta_vb_zip_dl_size (void) { return sizeof (ZipDataLineFASTA); }
 
 void fasta_vb_release_vb (VBlockFASTAP vb)
 {
-    if (VB_DT(DT_REF) && command == PIZ) return; // this is actually a VBlock, not VBlockFASTA
+    if (VB_DT(DT_REF) && IS_PIZ) return; // this is actually a VBlock, not VBlockFASTA
     
     memset ((char *)vb + sizeof (VBlock), 0, sizeof (VBlockFASTA) - sizeof (VBlock)); // zero all data unique to VBlockFASTA
     CTX(FASTA_NONREF)->local.len = 0; // len might be is used even though buffer is not allocated (in make-ref)
@@ -199,7 +199,7 @@ void fasta_seg_initialize (VBlockP vb)
 
     // if this neocleotide FASTA of unrelated contigs, we're better off with ACGT        
     if (!flag.multiseq && segconf.seq_type == SQT_NUKE)
-        codec_acgt_comp_init (VB);
+        codec_acgt_comp_init (VB, FASTA_NONREF);
 
     // if the contigs in this FASTA are related, let codec_assign_best_codec assign the bext codec 
     else 
@@ -209,7 +209,7 @@ void fasta_seg_initialize (VBlockP vb)
         CTX(FASTA_NONREF)->no_callback = true; // override callback if we are segmenting to a reference
 
     // in --stats, consolidate stats into FASTA_NONREF
-    ctx_consolidate_stats (vb, FASTA_NONREF, 2, FASTA_NONREF_X, DID_EOL);
+    ctx_consolidate_stats (vb, FASTA_NONREF, FASTA_NONREF_X, DID_EOL);
 
     if (segconf.running)
         segconf.fasta_has_contigs = true; // initialize optimistically
@@ -532,15 +532,14 @@ IS_SKIP (fasta_piz_is_skip_section)
 // in which case the subsequent newlines were part of empty COMMENT lines
 static inline void fasta_piz_unreconstruct_trailing_newlines (VBlockFASTAP vb)
 {
-    char c;
-    while ((c = *BLSTtxt) == '\n' || c == '\r') 
-        vb->txt_data.len--;
+    while (*BLSTtxt == '\n' || *BLSTtxt == '\r') 
+        vb->txt_data.len32--;
 
     // update final entries vb->lines to reflect the removal of the final newlines
-    for (int32_t line_i = vb->line_i; 
-         line_i >= 0 && *B(char *, vb->lines, line_i) > BAFTtxt; 
-         line_i--)
-        *B(char *, vb->lines, line_i) = BAFTtxt;
+    uint32_t line_index = BAFTtxt - B1STtxt;
+
+    for (int32_t line_i = vb->line_i; line_i >= 0 && *B32(vb->lines, line_i) > line_index; line_i--)
+        *B32(vb->lines, line_i) = line_index;
 }
 
 // this is used for end-of-lines of a sequence line, that are not the last line of the sequence. we skip reconstructing
@@ -569,7 +568,7 @@ SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_SEQ)
           vb->line_i == vb->lines.len-1 && // and this is the last line in this vb 
           !vb->drop_curr_line && 
           random_access_does_last_chrom_continue_in_next_vb (vb->vblock_i)) // and this sequence continues in the next VB 
-        fasta_piz_unreconstruct_trailing_newlines (vb); // then: delete final newline if this VB ends with a 
+        fasta_piz_unreconstruct_trailing_newlines (vb); // then: delete final newline if this VB ends with a newline
 
     vb->last_line = FASTA_LINE_SEQ;
 
@@ -611,7 +610,7 @@ bool fasta_piz_is_vb_needed (VBIType vb_i)
 
     rom task_name = "fasta_filter_grep";
 
-    VBlockP vb = vb_get_vb (task_name, vb_i, COMP_MAIN);
+    VBlockP vb = vb_get_vb (POOL_MAIN, task_name, vb_i, COMP_MAIN);
     vb->preprocessing = true;
 
     piz_read_one_vb (vb, false); 

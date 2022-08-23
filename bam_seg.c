@@ -158,6 +158,7 @@ uint32_t bam_split_aux (VBlockSAMP vb, rom aux, rom after_aux, rom *auxs, uint32
         
         else if (size[(int)aux[2]])
             aux_lens[n_auxs] = 3 + size[(int)aux[2]];
+            
         else
             ABORT ("%s: Unrecognized aux type '%c' (ASCII %u)", LN_NAME, aux[2], (uint8_t)aux[2]);
         
@@ -245,10 +246,11 @@ static inline void bam_set_missing_qual_type (VBlockSAMP vb, bytes qual, uint32_
         ASSINP0 (!segconf.pysam_qual, "Unsupported BAM format: some lines have pysam-style missing QUAL, and some standard missing QUAL");
 }
 
-void bam_get_one_aux (VBlockSAMP vb, STRp(aux),
+void bam_get_one_aux (VBlockSAMP vb, int16_t idx,
                       rom *tag, char *type, char *array_subtype, // out
                       pSTRp(value), ValueType *numeric) // out - one of these depending on the type
 {
+    rom aux = vb->auxs[idx];
     *tag  = aux;
     *type = aux[2]; // c, C, s, S, i, I, f, A, Z, H or B
     aux += 3;
@@ -264,7 +266,7 @@ void bam_get_one_aux (VBlockSAMP vb, STRp(aux),
         case 'c': *value_len = 1; numeric->i = (int8_t)*aux;                       break;
         case 'C': *value_len = 1; numeric->i = (uint8_t)*aux;                      break;
         case 'Z': 
-        case 'H': *value_len = aux_len - 4; *value = aux;                          break; // value_len excludes the terminating \0
+        case 'H': *value_len = vb->aux_lens[idx] - 4; *value = aux;                break; // value_len excludes the terminating \0
         case 'A': *value_len = 1; *value = aux;                                    break;
 
         // in case of a numerical value we pass the data as is, in machine endianity
@@ -297,17 +299,6 @@ void bam_get_one_aux (VBlockSAMP vb, STRp(aux),
     }
 }
 
-static int64_t bam_get_one_aux_int (VBlockSAMP vb, STRp(aux))
-{
-    rom tag                  __attribute__((unused));
-    char type, array_subtype __attribute__((unused));
-    STR (value)              __attribute__((unused));
-    ValueType numeric;
-
-    bam_get_one_aux (vb, STRa(aux), &tag, &type, &array_subtype, pSTRa(value), &numeric);
-    return numeric.i;
-}
-
 rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line */,
                       uint32_t remaining_txt_len, bool *has_13_unused)   
 {
@@ -319,6 +310,7 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
 
     ZipDataLineSAM *dl = DATA_LINE (vb->line_i);
     rom next_field = alignment;
+   
     // BAM alignment fixed-length fields 
     uint32_t block_size = NEXT_UINT32;
 
@@ -366,9 +358,11 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     // split auxillary fields
     rom auxs[MAX_FIELDS]; 
     uint32_t aux_lens[MAX_FIELDS];
-    uint32_t n_auxs = bam_split_aux (vb, aux, after, auxs, aux_lens);
+    vb->n_auxs   = bam_split_aux (vb, aux, after, auxs, aux_lens);
+    vb->auxs     = auxs;    // note: pointers to data on the stack
+    vb->aux_lens = aux_lens;
 
-    sam_seg_idx_aux (vb, STRas(aux));
+    sam_seg_idx_aux (vb);
     
     if (vb->chrom_node_index != WORD_INDEX_NONE) 
         ctx_get_vb_snip_ex (CTX(SAM_RNAME), vb->chrom_node_index, pSTRa(vb->chrom_name));
@@ -388,11 +382,12 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
 
     // note: sam_seg_is_gc_line needs to know about hard clips - we don't want to analyze the CIGAR (expensive)
     // before sam_seg_is_gc_line - so we just set hard clips for now
-    dl->has_hard_clips = n_cigar_op && (cigar[0].op == BC_H || cigar[n_cigar_op-1].op == BC_H);
+    dl->hard_clip[0] = (n_cigar_op && cigar[0].op == BC_H) ? cigar[0].n : 0;
+    dl->hard_clip[1] = (n_cigar_op >= 2 && cigar[n_cigar_op-1].op == BC_H) ? cigar[n_cigar_op-1].n : 0; // note: if n_cigar_op==1, and the op=H, we consider it a left-clip.
 
     // if this is a secondary / supplamentary read (aka Dependent) or a read that has an associated sec/sup read 
     // (aka Primary) - move the line to the appropriate component and skip it here (no segging done yet)
-    if (vb->check_for_gc && sam_seg_is_gc_line (vb, dl, alignment, after - alignment, STRas(aux), true)) {
+    if (vb->check_for_gc && sam_seg_is_gc_line (vb, dl, alignment, after - alignment, true)) {
         vb->debug_line_hash_skip = true;
         goto done;
     }
@@ -401,12 +396,12 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     if (flag.biopsy_line.line_i != NO_LINE && sam_seg_test_biopsy_line (VB, alignment, block_size + 4)) 
         goto done;  
 
-    // analyze (but not seg yet) cigar
-    buf_add_more_(vb, &vb->binary_cigar, BamCigarOp, cigar, n_cigar_op, "binary_cigar");
+    buf_append (vb, vb->binary_cigar, BamCigarOp, cigar, n_cigar_op, "binary_cigar");
     sam_cigar_binary_to_textual (vb, n_cigar_op, cigar, &vb->textual_cigar); // re-write BAM format CIGAR as SAM textual format in vb->textual_cigar
 
+    // analyze (but not seg yet) cigar
     uint32_t seq_len;
-    bam_seg_cigar_analyze (vb, &seq_len);
+    bam_seg_cigar_analyze (vb, dl, &seq_len);
     dl->SEQ.len = seq_len; // do it this way to avoid compiler warning
 
     // SEQ - calculate diff vs. reference (denovo or loaded)
@@ -421,15 +416,15 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     }
 
     if (has_NM) 
-        dl->NM_len = sam_seg_get_aux_int (vb, STRi(aux, vb->idx_NM_i), &dl->NM, true, MIN_NM_i, MAX_NM_i, false);
+        dl->NM_len = sam_seg_get_aux_int (vb, vb->idx_NM_i, &dl->NM, true, MIN_NM_i, MAX_NM_i, false);
 
     if (!sam_is_main_vb) {
 
-        // set dl->AS needed by sam_seg_prim_add_sa_group
+        // set dl->AS needed by sam_seg_prim_add_sag
         if (sam_is_prim_vb && has_AS)
-            sam_seg_get_aux_int (vb, STRi(aux, vb->idx_AS_i), &dl->AS, true, MIN_AS_i, MAX_AS_i, false);
+            sam_seg_get_aux_int (vb, vb->idx_AS_i, &dl->AS, true, MIN_AS_i, MAX_AS_i, false);
 
-        sam_seg_sa_group_stuff (vb, dl , STRas(aux), STRb(vb->textual_cigar), B1STc(vb->textual_seq), true);
+        sam_seg_sag_stuff (vb, dl, STRb(vb->textual_cigar), B1STc(vb->textual_seq), true);
     }
 
     // seg QNAME first, as it will find the buddy
@@ -453,24 +448,12 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     // Segment BIN after we've gathered bin, flags, pos and vb->ref_confumed (and before sam_seg_SEQ which ruins vb->ref_consumed)
     bam_seg_BIN (vb, dl, bin, true);
 
+    sam_seg_init_bisulfite (vb, dl); 
+
     // we search forward for MD:Z now, XG:Z as we will need it for SEQ if it exists
     if (has_MD)
         sam_seg_MD_Z_analyze (vb, dl, STRauxZ(MD_Z,true), dl->POS);
-
-    if (has_XG)
-        sam_seg_bsseeker2_XG_Z_analyze (vb, dl, STRauxZ(XG_Z,true), dl->POS);
-
-    // analyzing X0 - needed for segging XT:A and X1:i
-    if (has_X0)
-        ctx_set_last_value (VB, CTX(OPTION_X0_i), bam_get_one_aux_int (vb, STRi(aux, vb->idx_X0_i))); 
-
-    // analyzing XA - needed for segging X1:i - set to number of repeats
-    if (has_XA && has_X1)
-        ctx_set_last_value (VB, CTX(OPTION_XA_Z), (int64_t)str_count_char (auxs[vb->idx_XA_Z]+3, aux_lens[vb->idx_XA_Z]-3, ';')); 
-
-    if (has_ms)
-        ctx_set_last_value (VB, CTX(OPTION_s1_i), bam_get_one_aux_int (vb, STRi(aux, vb->idx_ms_i))); 
-
+        
     sam_seg_SEQ (vb, dl, STRb(vb->textual_seq), (l_seq+1)/2 + sizeof (uint32_t) /* account for l_seq and seq fields */);
 
     // QUAL
@@ -486,22 +469,21 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     }
 
     // finally we can segment the textual CIGAR now (including if n_cigar_op=0)
-    sam_cigar_seg_binary (vb, dl, l_seq, cigar, n_cigar_op);
+    sam_seg_CIGAR (vb, dl, vb->textual_cigar.len32, STRb(vb->textual_seq), qual, l_seq, 
+                           ((uint32_t)n_cigar_op * sizeof (uint32_t) /* cigar */ + sizeof (uint16_t) /* n_cigar_op */));
 
     // AUX fields - up to MAX_FIELDS of them
-    sam_seg_aux_all (vb, dl, STRas(aux));
+    sam_seg_aux_all (vb, dl);
     
     // TLEN - must be after AUX as we might need data from MC:Z
     sam_seg_TLEN (vb, dl, 0, 0, tlen, vb->chrom_node_index == dl->RNEXT); // TLEN
 
     if (sam_is_prim_vb) {
-        if (IS_SAG_FLAG)
-            sam_seg_prim_add_sa_group (vb, dl, 0, true);
-
-        else if (IS_SAG_SOLO) 
-            sam_seg_prim_add_sa_group_SOLO (vb, dl);
+        if      (IS_SAG_NH)   sam_seg_prim_add_sag_NH (vb, dl, dl->NH);
+        else if (IS_SAG_CC)   sam_seg_prim_add_sag_CC (vb, dl, dl->NH);
+        else if (IS_SAG_FLAG) sam_seg_prim_add_sag (vb, dl, 0, true);
+        else if (IS_SAG_SOLO) sam_seg_prim_add_sag_SOLO (vb, dl);
     }
-
 
 done: {}
 

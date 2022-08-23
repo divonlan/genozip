@@ -41,13 +41,11 @@
 // the reason for selecting big endian is that I am developing on little endian CPU (Intel) so
 // endianity bugs will be discovered more readily this way
 
-// note: #pragma pack doesn't affect enums
-typedef enum __attribute__ ((__packed__)) { BGZF_LIBDEFLATE, BGZF_ZLIB, NUM_BGZF_LIBRARIES         } BgzfLibraryType; // constants for BGZF FlagsBgzf.library
 typedef enum __attribute__ ((__packed__)) { STORE_NONE, STORE_INT, STORE_FLOAT, STORE_INDEX        } StoreType; // values for SectionFlags.ctx.store
 typedef enum __attribute__ ((__packed__)) { B250_BYTES_4, B250_BYTES_3, B250_BYTES_2, B250_BYTES_1 } B250Size; // part of the file format - goes into SectionHeaderCtx.b250_size
 
 typedef enum __attribute__ ((__packed__)) { SAG_NONE, SAG_BY_SA, SAG_BY_NH, SAG_BY_SOLO, SAG_BY_CC, SAG_BY_FLAG, NUM_SAG_TYPES } SagType;
-#define SAM_SAG_TYPE_NAMES                { "NONE",   "BY_SA",   "BY_NH",   "NY_SOLO",   "BY_CC",   "BY_FLAG" }
+#define SAM_SAG_TYPE_NAMES                { "NONE",   "BY_SA",   "BY_NH",   "BY_SOLO",   "BY_CC",   "BY_FLAG" }
 #define IS_SAG_SA   (segconf.sag_type == SAG_BY_SA)
 #define IS_SAG_NH   (segconf.sag_type == SAG_BY_NH)
 #define IS_SAG_SOLO (segconf.sag_type == SAG_BY_SOLO)
@@ -108,10 +106,10 @@ typedef union SectionFlags {
         #define v13_copy_local_param spl_custom  // up to v13: copy ctx.b250/local.param from SectionHeaderCtx.param. since v14, piz always copies, except for LT_BITMAP
         uint8_t spl_custom       : 1;  // introduced v14: similar to store_per_line, but storing is done by the context's SPECIAL function, instead of in reconstruct_store_history
         uint8_t all_the_same     : 1;  // SEC_B250: the b250 data contains only one element, and should be used to reconstruct any number of snips from this context
-        #define delta_peek       ctx_specific_flag // v13.0.5: Valid for contexts that use SNIP_OTHER_DELTA: whether reconstruct_from_delta should peek a value or use last_value
+        #define same_line        ctx_specific_flag // v13.0.5: Valid for contexts that use SNIP_OTHER_DELTA and SNIP_DIFF: if true, reconstructs gets the value in the line (whether before or after). if false, it gets the last value.
         #define no_textual_seq   ctx_specific_flag // v14.0.0: SAM_SQBITMAP: indicates that sam_piz_sam2bam_SEQ doesn't need to store textual_seq. 
         #define depn_clip_hard   ctx_specific_flag // v14.0.0: OPTION_SA_Z in SAM_COMP_MAIN: if true: depn lines, if their CIGAR has a clipping, it is hard clipping (H)
-        #define is_qual          ctx_specific_flag // v14.0.0: if ltype==LT_SEQUENCE: true if this data is QUAL
+        #define lookback0_ok     ctx_specific_flag // v14.0.0: contexts that are items of a container with lookback. indicates that a SNIP_LOOKBACK when lookback=0 is not an error.
         uint8_t ctx_specific_flag: 1;  // v10.0.3: flag specific a context 
         uint8_t store_per_line   : 1;  // v12.0.41: store value or text for each line - in context->history        
     } ctx;
@@ -190,9 +188,14 @@ typedef struct {
             uint8_t segconf_bisulfite    : 1; // SAM: v14
             uint8_t segconf_is_paired    : 1; // SAM: v14
             uint8_t segconf_sag_has_AS   : 1; // SAM: v14
-            uint8_t segconf_AS_is_2refc  : 1; // SAM: v14
             uint8_t segconf_pysam_qual   : 1; // SAM: v14
-            uint8_t unused_bits          : 7; // SAM: v14
+            uint8_t segconf_cellranger   : 1; // SAM: v14
+            uint8_t segconf_SA_HtoS      : 1; // SAM: v14
+            uint8_t segconf_is_sorted    : 1; // SAM: v14
+            uint8_t segconf_is_collated  : 1; // SAM: v14
+            uint8_t segconf_MD_NM_by_un  : 1; // SAM: v14
+            uint8_t segconf_predict_meth : 1; // SAM: v14
+            uint8_t unused_bits          : 2;
             char unused[256];
         } sam;
 
@@ -223,7 +226,7 @@ typedef struct {
     uint32_t max_lines_per_vb;         // upper bound on how many data lines a VB can have in this file
     Codec    codec;                    // codec of original txt file (none, bgzf, gz, bz2...)
     uint8_t  codec_info[3];            // codec specific info: for CODEC_BGZF, these are the LSB, 2nd-LSB, 3rd-LSB of the source BGZF-compressed file size
-    Digest   digest;                   // digest of original single txt file (except modified and DVCF). v8: 0 if compressed without --md5. 
+    Digest   digest;                   // digest of original single txt file (except modified or DVCF). v8: 0 if compressed without --md5. starting v14: only if md5, not alder32
     Digest   digest_header;            // MD5 or Adler32 of header
 #define TXT_FILENAME_LEN 256
     char     txt_filename[TXT_FILENAME_LEN]; // filename of this single component. without path, 0-terminated. always in base form like .vcf or .sam, even if the original is compressed .vcf.gz or .bam
@@ -243,7 +246,7 @@ typedef struct {
     uint32_t recon_size_prim;          // size of vblock as it appears in the default PRIMARY reconstruction
     uint32_t z_data_bytes;             // total bytes of this vblock in the genozip file including all sections and their headers 
     uint32_t longest_line_len;         // length of the longest line in this vblock 
-    Digest   digest_so_far;            // partial calculation of MD5 or Adler32 up to and including this VB 
+    Digest   digest;                   // commulative MD5 or Adler32 up to and including this VB. Starting V14: if Adler32, stand-alone digest of this VB.
     union {
         uint32_t v13_num_lines_prim;   // v12/13: number of lines in default reconstruction in PRIMARY coords (v12)
         uint32_t sam_prim_first_grp_i; // SAM PRIM: the index of first group of this PRIM VB, in z_file->sag_grps (v14)
@@ -307,9 +310,10 @@ typedef enum __attribute__ ((__packed__)) { // 1 byte
     LT_HEX64     = 25,  // upper-case UINT64 hex
 
     // after here - not part of the file format, just used during seg
-    LT_DYN_INT   = 26,  // dynamic size local 
-    LT_DYN_INT_h = 27,  // dynamic size local - hex
-    LT_DYN_INT_H = 28,  // dynamic size local - HEX
+    // note: the LT_DYN* types are assumed to be the last by 
+    LT_DYN_INT,         // dynamic size local 
+    LT_DYN_INT_h,       // dynamic size local - hex
+    LT_DYN_INT_H,       // dynamic size local - HEX
     
     NUM_LOCAL_TYPES
 } LocalType;
@@ -344,14 +348,14 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
    { "T16", 0,   2,  0,     0,                     0xffffLL,              BGEN_transpose_u16_buf   }, \
    { "T32", 0,   4,  0,     0,                     0xffffffffLL,          BGEN_transpose_u32_buf   }, \
    { "T64", 0,   8,  0,     0,                     0x7fffffffffffffffLL,  BGEN_transpose_u64_buf   }, \
-   { "h8",  0,   4,  0,     0,                     0xffLL,                BGEN_u8_buf              }, /* FFU. lower-case UINT8 hex */ \
-   { "H8",  0,   4,  0,     0,                     0xffLL,                BGEN_u8_buf              }, /* FFU. upper-case UINT8 hex */ \
-   { "h16", 0,   4,  0,     0,                     0xffffLL,              BGEN_u16_buf             }, /* FFU. */ \
-   { "H16", 0,   4,  0,     0,                     0xffffLL,              BGEN_u16_buf             }, /* FFU. */ \
-   { "h32", 0,   4,  0,     0,                     0xffffffffLL,          BGEN_u32_buf             }, /* lower-case UINT32 hex */ \
-   { "H32", 0,   4,  0,     0,                     0xffffffffLL,          BGEN_u32_buf             }, /* FFU. */ \
-   { "h64", 0,   4,  0,     0,                     0x7fffffffffffffffLL,  BGEN_u64_buf             }, /* FFU. */ \
-   { "H64", 0,   4,  0,     0,                     0x7fffffffffffffffLL,  BGEN_u64_buf             }, /* FFU. */ \
+   { "h8",  0,   1,  0,     0,                     0xffLL,                BGEN_u8_buf              }, /* lower-case UINT8 hex */ \
+   { "H8",  0,   1,  0,     0,                     0xffLL,                BGEN_u8_buf              }, /* upper-case UINT8 hex */ \
+   { "h16", 0,   2,  0,     0,                     0xffffLL,              BGEN_u16_buf             }, \
+   { "H16", 0,   2,  0,     0,                     0xffffLL,              BGEN_u16_buf             }, \
+   { "h32", 0,   4,  0,     0,                     0xffffffffLL,          BGEN_u32_buf             }, \
+   { "H32", 0,   4,  0,     0,                     0xffffffffLL,          BGEN_u32_buf             }, \
+   { "h64", 0,   8,  0,     0,                     0x7fffffffffffffffLL,  BGEN_u64_buf             }, \
+   { "H64", 0,   8,  0,     0,                     0x7fffffffffffffffLL,  BGEN_u64_buf             }, \
                                                                                                       \
    /* after here - not part of the file format, just used during seg */                               \
    { "DYN", 0,   8,  0,     0x8000000000000000LL,  0x7fffffffffffffffLL,  0                        }, \
@@ -538,11 +542,6 @@ extern SectionType sections_st_by_name (char *name);
 extern uint32_t st_header_size (SectionType sec_type);
 
 extern void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_layer_bits);
-
-// z_file sizes
-extern int64_t sections_get_vb_size (Section vb_header_sec);
-extern int64_t sections_get_vb_skipped_sections_size (Section vb_header_sec);
-extern int64_t sections_get_ref_size (void);
 
 // display functions
 #define sections_read_prefix (vb->preprocessing ? 'P' : flag_loading_auxiliary ? 'L' : 'R')

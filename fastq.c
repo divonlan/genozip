@@ -227,7 +227,7 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
     }
 
     if (!flag.multiseq)
-        codec_acgt_comp_init (VB);
+        codec_acgt_comp_init (VB, FASTQ_NONREF);
 
     if (flag.pair == PAIR_READ_2) {
 
@@ -256,7 +256,7 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
     }
 
     // in --stats, consolidate stats into SQBITMAP
-    ctx_consolidate_stats (VB, FASTQ_SQBITMAP, 9, FASTQ_NONREF, FASTQ_NONREF_X, FASTQ_GPOS, FASTQ_STRAND, FASTQ_SEQMIS_A, FASTQ_SEQMIS_C, FASTQ_SEQMIS_G, FASTQ_SEQMIS_T, DID_EOL);
+    ctx_consolidate_stats (VB, FASTQ_SQBITMAP, FASTQ_NONREF, FASTQ_NONREF_X, FASTQ_GPOS, FASTQ_STRAND, FASTQ_SEQMIS_A, FASTQ_SEQMIS_C, FASTQ_SEQMIS_G, FASTQ_SEQMIS_T, DID_EOL);
 
     COPY_TIMER (seg_initialize);
 }
@@ -267,7 +267,7 @@ void fastq_seg_finalize (VBlockP vb)
         segconf.is_long_reads = segconf_is_long_reads();
 
     // assign the QUAL codec
-    codec_assign_best_qual_codec (vb, FASTQ_QUAL, fastq_zip_qual, false);
+    codec_assign_best_qual_codec (vb, FASTQ_QUAL, fastq_zip_qual, false, false);
 
     // top level snip
     SmallContainer top_level = { 
@@ -607,37 +607,35 @@ IS_SKIP (fastq_piz_is_skip_section)
     // case: this is pair-2 loading pair-1 sections
     if (purpose == SKIP_PURPOSE_PREPROC)  
         return !(dict_id_is_fastq_desc_sf (dict_id) || 
-                 dict_id.num  == _FASTQ_DESC   ||
-                 dict_id.num  == _FASTQ_GPOS   || 
-                 dict_id.num  == _FASTQ_STRAND ||
+                 dict_id_is_in (dict_id, _FASTQ_DESC, _FASTQ_GPOS, _FASTQ_STRAND, DICT_ID_NONE) ||
                  (dict_id.num == _FASTQ_SQBITMAP && st != SEC_LOCAL));
 
     // note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast: skip all items but DESC and E1L (except if we need them for --grep)
     if (flag.header_only_fast && !flag.grep &&
-        (dict_id.num == _FASTQ_E2L    || dict_id.num == _FASTQ_SQBITMAP || 
-         dict_id.num == _FASTQ_NONREF || dict_id.num == _FASTQ_NONREF_X || 
-         dict_id.num == _FASTQ_GPOS   || dict_id.num == _FASTQ_STRAND   || 
-         dict_id.num == _FASTQ_QUAL   || dict_id.num == _FASTQ_DOMQRUNS ))
+        dict_id_is_in (dict_id, _FASTQ_E2L, _FASTQ_TAXID, _FASTQ_DEBUG_LINES,
+                       _FASTQ_SQBITMAP, _FASTQ_NONREF, _FASTQ_NONREF_X, _FASTQ_GPOS, _FASTQ_STRAND,
+                       _FASTQ_SEQMIS_A, _FASTQ_SEQMIS_C, _FASTQ_SEQMIS_G, _FASTQ_SEQMIS_T, 
+                       _FASTQ_QUAL, _FASTQ_DOMQRUNS, _FASTQ_QUALMPLX, _FASTQ_DIVRQUAL, DICT_ID_NONE))
         return true;
 
-    if (flag.seq_only && !flag.grep &&
-        (dict_id.num == _FASTQ_E1L    || dict_id.num == _FASTQ_DESC || dict_id_is_fastq_desc_sf(dict_id) || // we don't need the DESC line 
-         dict_id.num == _FASTQ_QUAL   || dict_id.num == _FASTQ_DOMQRUNS )) // we don't need the QUAL line
+    if (flag.seq_only && !flag.grep && 
+        (   dict_id_is_in (dict_id, _FASTQ_E1L, _FASTQ_DESC, _FASTQ_TAXID, _FASTQ_DEBUG_LINES, _FASTQ_LINE3,
+                           _FASTQ_QUAL, _FASTQ_DOMQRUNS, _FASTQ_QUALMPLX, _FASTQ_DIVRQUAL, DICT_ID_NONE)  
+         || dict_id_is_fastq_desc_sf(dict_id))) // we don't need the DESC line 
         return true;
 
     if (flag.qual_only && !flag.grep &&
-        (dict_id.num == _FASTQ_E1L || dict_id.num == _FASTQ_DESC || dict_id_is_fastq_desc_sf(dict_id) || // we don't need the DESC line 
-         (!flag.bases && (dict_id.num == _FASTQ_NONREF || dict_id.num == _FASTQ_NONREF_X || dict_id.num == _FASTQ_GPOS || dict_id.num == _FASTQ_STRAND)))) // we don't need the SEQ line        return true;
+        (   dict_id_is_in (dict_id, _FASTQ_E1L, _FASTQ_DESC, _FASTQ_TAXID, _FASTQ_DEBUG_LINES, DICT_ID_NONE) 
+         || dict_id_is_fastq_desc_sf(dict_id) 
+         || (!flag.bases && dict_id_is_in (dict_id, _FASTQ_NONREF, _FASTQ_NONREF_X, _FASTQ_GPOS, _FASTQ_STRAND, _FASTQ_SEQMIS_A, _FASTQ_SEQMIS_C, _FASTQ_SEQMIS_G, _FASTQ_SEQMIS_T, DICT_ID_NONE)))) // we don't need the SEQ line 
         return true;
 
     // if we're doing --show-sex/coverage, we only need TOPLEVEL, FASTQ_SQBITMAP and GPOS
     if (flag.collect_coverage && 
-        (dict_id.num == _FASTQ_DESC     || 
-         dict_id.num == _FASTQ_QUAL     || 
-         dict_id.num == _FASTQ_DOMQRUNS || 
-         (dict_id.num == _FASTQ_STRAND   && !flag.bases)  ||
-         (dict_id.num == _FASTQ_NONREF   && !flag.bases)  || 
-         (dict_id.num == _FASTQ_NONREF_X && !flag.bases))) 
+        (   dict_id_is_in (dict_id, _FASTQ_DESC, _FASTQ_TAXID, _FASTQ_DEBUG_LINES, _FASTQ_LINE3,
+                           _FASTQ_QUAL, _FASTQ_DOMQRUNS, _FASTQ_QUALMPLX, _FASTQ_DIVRQUAL, DICT_ID_NONE)
+         || dict_id_is_fastq_desc_sf(dict_id) 
+         || (!flag.bases && dict_id_is_in (dict_id, _FASTQ_NONREF, _FASTQ_NONREF_X, _FASTQ_STRAND, _FASTQ_SEQMIS_A, _FASTQ_SEQMIS_C, _FASTQ_SEQMIS_G, _FASTQ_SEQMIS_T, DICT_ID_NONE))))
         return true;
 
     // no need for the TAXID data if user didn't specify --taxid
@@ -645,15 +643,11 @@ IS_SKIP (fastq_piz_is_skip_section)
         return true;
 
     // if --count, we only need TOPLEVEL and the fields needed for the available filters (--taxid, --kraken, --grep, --bases)
-    if (flag.count && sections_has_dict_id (st) &&
+    if (flag.count && !flag.grep && sections_has_dict_id (st) &&
          (dict_id.num != _FASTQ_TOPLEVEL && 
          (dict_id.num != _FASTQ_TAXID    || flag.kraken_taxid == TAXID_NONE) && 
+         (!flag.bases || !dict_id_is_in (dict_id, _FASTQ_SQBITMAP, _FASTQ_NONREF, _FASTQ_NONREF_X, _FASTQ_GPOS, _FASTQ_STRAND, _FASTQ_SEQMIS_A, _FASTQ_SEQMIS_C, _FASTQ_SEQMIS_G, _FASTQ_SEQMIS_T, DICT_ID_NONE)) &&
          (dict_id.num != _FASTQ_DESC     || !kraken_is_loaded) && 
-         (dict_id.num != _FASTQ_SQBITMAP || !flag.bases) && 
-         (dict_id.num != _FASTQ_NONREF   || !flag.bases) && 
-         (dict_id.num != _FASTQ_NONREF_X || !flag.bases) && 
-         (dict_id.num != _FASTQ_GPOS     || !flag.bases) && 
-         (dict_id.num != _FASTQ_STRAND   || !flag.bases) && 
          (!dict_id_is_fastq_desc_sf(dict_id) || !kraken_is_loaded))) 
         return true;
 
@@ -687,10 +681,10 @@ CONTAINER_FILTER_FUNC (fastq_piz_filter)
 
         // note: for seq_only and qual_only we show a newline from E2L, but we don't consume the other two newlines produced by this
         // read, so we are going to show a newline from another line. only a potenial but highly unlikely problem if some lines have \n and some \r\n.
-        else if (flag.seq_only && !flag.grep && item != 2 && item != 3) 
+        else if (flag.seq_only && !flag.grep && item != -1 && item != 2 && item != 3) 
             return false; 
 
-        else if (flag.qual_only && !flag.grep && item != 2 && item != 6 && item != 7) 
+        else if (flag.qual_only && !flag.grep && item != -1 && item != 2 && item != 6 && item != 7) 
             return false; 
     }
 
@@ -786,12 +780,11 @@ SPECIAL_RECONSTRUCTOR (fastq_special_unaligned_SEQ)
         if (snip_len==1 && *snip=='0') {
             STRl(seq_len_str, 12);
             seq_len_str_len = str_int (ECTX(segconf.qname_seq_len_dict_id)->last_value.i, seq_len_str);
-            reconstruct_from_local_sequence (vb, CTX(FASTQ_NONREF), STRa(seq_len_str), reconstruct);
+            vb->seq_len = reconstruct_from_local_sequence (vb, CTX(FASTQ_NONREF), STRa(seq_len_str), reconstruct);
         }
-        else {
-            reconstruct_from_local_sequence (vb, CTX(FASTQ_NONREF), STRa(snip), reconstruct);
-            vb->seq_len = CTX(FASTQ_NONREF)->next_local - CTX(FASTQ_NONREF)->last_value.i;
-        }
+        else 
+            vb->seq_len = reconstruct_from_local_sequence (vb, CTX(FASTQ_NONREF), STRa(snip), reconstruct);
+            //xxx vb->seq_len = CTX(FASTQ_NONREF)->next_local - CTX(FASTQ_NONREF)->last_value.i;
     }
 
     return NO_NEW_VALUE;
@@ -894,9 +887,9 @@ bool fastq_piz_get_pair2_is_forward (VBlockP vb)
 // Used in pair-2: reconstruct the parallel b250 snip from pair-1
 SPECIAL_RECONSTRUCTOR (fastq_special_mate_lookup)
 {
-    ASSPIZ (ctx->pair_b250, "no pair_1 b250 data for ctx=%s, while reconstructing pair_2. "
-            "If this file was compressed with Genozip version 9.0.12 or older use the --dts_paired command line option. "
-            "You can see the Genozip version used to compress it with 'genocat -w %s'", ctx->tag_name, z_name);
+    ASSPIZ (ctx->pair_b250, "no pair_1 b250 data for ctx=%s, while reconstructing pair_2. %s%s", ctx->tag_name,
+            !VER(10) ? "If this file was compressed with Genozip version 9.0.12 or older use the --dts_paired command line option. You can see the Genozip version used to compress it with 'genocat -w '" : "",  
+            !VER(10) ? z_name : "");
             
     ctx_get_next_snip (vb, ctx, true, pSTRa(snip));
 

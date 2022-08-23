@@ -15,9 +15,6 @@
 #include "codec.h"
 #include "htscodecs/rANS_static4x16.h"
 
-static char ms_mate_snip[30];
-static unsigned ms_mate_snip_len;
-
 rom bam_qual_display (bytes qual, uint32_t l_seq) // caller should free memory
 {
     char *str = MALLOC (l_seq + 2);
@@ -95,31 +92,28 @@ COMPRESSOR_CALLBACK (sam_zip_qual)
     if (is_rev) *is_rev = dl->FLAG.rev_comp;
 }
 
-#define QUAL_ZIP_CALLBACK(tag)                          \
-COMPRESSOR_CALLBACK (sam_zip_##tag)                     \
-{                                                       \
-    ZipDataLineSAM *dl = DATA_LINE (vb_line_i);         \
-    *line_data_len  = dl->dont_compress_##tag ? 0 : MIN_(maximum_size, dl->tag.len); /* note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec */ \
-    if (!line_data) return; /* only lengths were requested */ \
-    *line_data = Btxt(dl->tag.index);                   \
-    if (dl->OQ.len == 1 && (*line_data)[0] == '*') /* if OQ is just "*" (i.e. unavailable) replace it by " " (same as QUAL) */\
-        *line_data = " "; /* pointer to static string */\
-    if (is_rev) *is_rev = dl->FLAG.rev_comp;            \
+#define QUAL_ZIP_CALLBACK(tag, f, may_be_revcomped)             \
+COMPRESSOR_CALLBACK (sam_zip_##tag)                             \
+{                                                               \
+    ZipDataLineSAM *dl = DATA_LINE (vb_line_i);                 \
+    *line_data_len = dl->dont_compress_##tag ? 0 : MIN_(maximum_size, dl->f.len); /* note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec */ \
+    if (!line_data || ! *line_data_len) return; /* no dat, or only lengths were requested */   \
+    *line_data = Btxt(dl->f.index);                             \
+    if (is_rev) *is_rev = may_be_revcomped ? dl->FLAG.rev_comp : false;\
 }                               
-QUAL_ZIP_CALLBACK(OQ)
-QUAL_ZIP_CALLBACK(UY)
 
-void sam_zip_QUAL_initialize (void)
-{
-    seg_prepare_snip_other (SNIP_COPY_BUDDY, _OPTION_ms_i, false, 0, ms_mate_snip);
-}
+QUAL_ZIP_CALLBACK(OQ, OQ, true)
+QUAL_ZIP_CALLBACK(TQ, TQ, true)
+QUAL_ZIP_CALLBACK(GY, GY, false)
+QUAL_ZIP_CALLBACK(2Y, _2Y, true)
+QUAL_ZIP_CALLBACK(QX, solo_z_fields[SOLO_QX], false)
+QUAL_ZIP_CALLBACK(CY, solo_z_fields[SOLO_CY], false)
+QUAL_ZIP_CALLBACK(QT, solo_z_fields[SOLO_QT], false)
 
 void sam_seg_QUAL_initialize (VBlockSAMP vb)
 {
-    CTX(SAM_QUAL)->ltype = LT_UINT8;
-
     if (sam_is_main_vb) 
-        ctx_set_store_per_line (VB, 3, SAM_QUAL, SAM_FLAG, DID_EOL);
+        ctx_set_store_per_line (VB, SAM_QUAL, SAM_FLAG, DID_EOL);
 
     // case: in DEPN and MAIN QUALSA is used to store the diff vs primary 
     if (sam_is_depn_vb || sam_is_main_vb)
@@ -162,25 +156,55 @@ error:
     exit_on_error(true);
 }
 
-static void sam_seg_QUAL_diff_vs_primary (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual), 
-                                          STRp (prim_qual), bool prim_revcomp)
+// diff current QUAL against prim or saggy's QUAL
+static void sam_seg_QUAL_diff (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual), 
+                               STRp (prim_qual), bool prim_revcomp, uint32_t *prim_hard_clip, unsigned add_bytes)
 {
-    buf_alloc (vb, &CTX(SAM_QUALSA)->local, qual_len, 0, int8_t, CTX_GROWTH, "contexts->local");
-    int8_t *diff = BAFT (int8_t, CTX(SAM_QUALSA)->local);
-    CTX(SAM_QUALSA)->local.len32 += qual_len;
-
     bool xstrand = (dl->FLAG.rev_comp != prim_revcomp);
 
+    // flanks are the regions of qual that are not covered by prim_qual, due to prim_qual's hard clips.
+    // example1: prim: HHHHQQQQQHH  (H=Hard clip, Q=some qual score)
+    //           qual: HHQQQQQHHHH
+    //                   ^^ flank[0]==2  flank[1]==0 (bc qual Q's don't go beyond prim's) overlap_len=3 (bc 3 Qs overlapping)
+    //
+    // example2: prim: HHHHHHHHQQH  (H=Hard clip, Q=some qual score)
+    //           qual: HHQQQHHHHHH flank={3,0} overlap_len=0
+
+    uint32_t flank[2] = { MIN_(qual_len, MAX_((int32_t)prim_hard_clip[xstrand]  - (int32_t)vb->hard_clip[0], 0)),   // left-flanking
+                          MIN_(qual_len, MAX_((int32_t)prim_hard_clip[!xstrand] - (int32_t)vb->hard_clip[1], 0)) }; // right-flanking
+
+    uint32_t overlap_len = qual_len - flank[0] - flank[1];
+
+    CTX(SAM_QUAL)->txt_len += add_bytes - flank[0] - flank[1];
+    CTX(SAM_QUAL_FLANK)->txt_len += flank[0] + flank[1];
+
+    buf_alloc (vb, &CTX(SAM_QUALSA)->local, overlap_len, 0, int8_t, CTX_GROWTH, "contexts->local");
+    int8_t *diff = BAFT (int8_t, CTX(SAM_QUALSA)->local);
+    CTX(SAM_QUALSA)->local.len32 += overlap_len;
+
+    rom overlap_this_qual = &qual[flank[0]];
+
     if (!xstrand) {
-        rom grp_qual = &prim_qual[vb->hard_clip[0]];
-        for (uint32_t i=0; i < qual_len; i++) 
-            diff[i] = qual[i] - grp_qual[i]; // a value [-93,93] as qual is [33,126]
+        uint32_t first_prim_overlap = flank[0] ? 0 : (vb->hard_clip[0] - prim_hard_clip[0]);
+        rom overlap_prim_qual = &prim_qual[first_prim_overlap];
+
+        for (uint32_t i=0; i < overlap_len; i++) 
+            diff[i] = overlap_this_qual[i] - overlap_prim_qual[i]; // a value [-93,93] as qual is [33,126]
     }
     else {
-        rom grp_qual = &prim_qual[prim_qual_len - 1 - vb->hard_clip[0]];
-        for (int32_t/*signed*/ i=0; i < qual_len; i++) 
-            diff[i] = qual[i] - grp_qual[-i]; // a value [-93,93] as qual is [33,126]
+        uint32_t last_prim_overlap = prim_qual_len - 1 - (flank[0] ? 0 : (vb->hard_clip[0] - prim_hard_clip[1]));
+        rom overlap_prim_qual = &prim_qual[last_prim_overlap];
+
+        for (int32_t/*signed*/ i=0; i < overlap_len; i++) 
+            diff[i] = overlap_this_qual[i] - overlap_prim_qual[-i]; 
     }
+
+    // add flanks (regions that could not be diffed) to SAM_QUAL_FLANK.local
+    if (flank[0]) 
+        seg_add_to_local_fixed (VB, CTX(SAM_QUAL_FLANK), qual, flank[0]);
+
+    if (flank[1])
+        seg_add_to_local_fixed (VB, CTX(SAM_QUAL_FLANK), &qual[qual_len - flank[1]], flank[1]);
 }
 
 void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual_data)/*always textual*/, unsigned add_bytes)
@@ -188,7 +212,7 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual_data)/*always te
     START_TIMER;
 
     Context *qual_ctx = CTX(SAM_QUAL);
-    ZipDataLineSAM *prim_dl;
+    ZipDataLineSAM *saggy_dl;
     bool prim_has_qual_but_i_dont = false; // will be set if this line has no QUAL, but its prim line does (very rare)
 
     vb->has_qual |= !vb->qual_missing;
@@ -196,35 +220,45 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual_data)/*always te
     // note: if prim (of either type) has no QUAL, we don't attempt to diff - bc piz wouldn't be able to know whether 
     // the current line has QUAL or not
 
-    // case: DEPN component, line has SA Group, and SA Group as qual
+    // case: DEPN component, line has a sag, and the saq has qual
     if (vb->sag && sam_is_depn_vb && !vb->sag->no_qual) {
-        if (vb->qual_missing)
+        if (vb->qual_missing) {
             prim_has_qual_but_i_dont = true;
+            CTX(SAM_QUALSA)->txt_len += add_bytes;
+        }
 
         // case: both this line and prim have QUAL - diff them
         else {
             sam_get_sa_grp_qual (vb); // decompress prim qual into vb->scratch
 
-            sam_seg_QUAL_diff_vs_primary (vb, dl, STRa(qual_data), STRb(vb->scratch), vb->sag->revcomp);        
+            sam_seg_QUAL_diff (vb, dl, STRa(qual_data), STRb(vb->scratch), vb->sag->revcomp, (uint32_t[]){0, 0}, add_bytes);        
             buf_free (vb->scratch);
         }
 
         dl->dont_compress_QUAL = true; // don't compress this line
-        CTX(SAM_QUALSA)->txt_len += add_bytes;
     }
 
-    // case: MAIN component, depn line corresponding prim line in same VB, and prim line has qual
-    else if (zip_has_prim && // note: prim_line_i is set by sam_seg_QNAME only for depn (with exceptions for STAR) lines in MAIN component
-             ({ prim_dl = DATA_LINE (vb->prim_line_i); !prim_dl->no_qual; })) {
+    // case: MAIN component, the line has a corresponding saggy line in same VB, and saggy line has qual
+    else if (sam_has_saggy && // note: saggy_line_i is set by sam_seg_saggy only for lines in MAIN component
+             ({ saggy_dl = DATA_LINE (vb->saggy_line_i); 
+                !saggy_dl->no_qual && 
+                dl->hard_clip[0] + dl->hard_clip[1] + dl->SEQ.len == saggy_dl->hard_clip[0] + saggy_dl->hard_clip[1] + saggy_dl->SEQ.len; })) {
 
-        if (vb->qual_missing) 
+        if (vb->qual_missing) {
             prim_has_qual_but_i_dont = true;
-        
+            qual_ctx->txt_len += add_bytes;
+        }    
         else 
-            sam_seg_QUAL_diff_vs_primary (vb, dl, STRa(qual_data), STRtxtw(prim_dl->QUAL), prim_dl->FLAG.rev_comp);
+            sam_seg_QUAL_diff (vb, dl, STRa(qual_data), STRtxtw(saggy_dl->QUAL), saggy_dl->FLAG.rev_comp, saggy_dl->hard_clip, add_bytes);
         
         dl->dont_compress_QUAL = true; // don't compress this line
-        qual_ctx->txt_len += add_bytes;
+    }
+
+    // if we suspect entire file might be qual-less, seg as snip (without adding local) so that would become 
+    // all-the-same in that. If we might have mixed qual/no-qual in the file, we add to local to not add entropy to b250
+    else if (dl->no_qual && !segconf.nontrivial_qual) {
+        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_QUAL, '*' }, 3, SAM_QUAL, add_bytes); 
+        goto done;
     }
 
     // case: standard
@@ -247,48 +281,90 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual_data)/*always te
     if (segconf.running)
         segconf_update_qual (STRa (qual_data));
 
+done:
     COPY_TIMER (sam_seg_QUAL);
 }
 
 //-----------------------------------------------------------------------------------------------------
-// OQ:Z - "Original QUAL" 
-// "Original base quality, usually before recalibration. Same encoding as QUAL" - https://samtools.github.io/hts-specs/SAMtags.pdf
+// OQ:Z - Original QUAL (standard)
+//        "Original base quality, usually before recalibration. Same encoding as QUAL" - https://samtools.github.io/hts-specs/SAMtags.pdf
+// GY:Z - CellRanger
+// 2Y:Z - CellRanger - R2 qual?
+// TQ:Z - CellRanger & longranger: Quality values of the 7 trimmed bases following the barcode sequence at the start of R1. Can be used to reconstruct the original R1 quality values.
 //-----------------------------------------------------------------------------------------------------
-void sam_seg_OQ_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(oq), unsigned add_bytes)
+void sam_seg_other_qual (VBlockSAMP vb, TxtWord *dl_word, Did did_i, STRp(qual), bool len_is_seq_len, unsigned add_bytes)
 {
-    dl->OQ = (TxtWord){ .index = BNUMtxt (oq), .len = oq_len };
-    CTX(OPTION_OQ_Z)->local.len32 += oq_len;
-    CTX(OPTION_OQ_Z)->txt_len     += add_bytes;
+    *dl_word = (TxtWord){ .index = BNUMtxt (qual), .len = qual_len };
+    CTX(did_i)->local.len32 += qual_len;
+    CTX(did_i)->txt_len     += add_bytes;
+
+    if (!len_is_seq_len) {
+        SNIPi1 (SNIP_LOOKUP, qual_len);
+        seg_by_did (VB, STRa(snip), did_i, 0);
+    }
 }
 
 //---------
 // QUAL PIZ
 //---------
 
-static void sam_piz_QUAL_undiff_vs_primary (VBlockSAMP vb, STRp (prim_qual), bool prim_revcomp, bool prim_is_bam)
+static void sam_piz_QUAL_undiff_vs_primary (VBlockSAMP vb, STRp (prim_qual), bool prim_revcomp, const CigarAnalItem *saggy_anal, bool prim_is_bam, bool reconstruct)
 {
-    ContextP qualsa_ctx = LOADED_CTX(SAM_QUALSA);
-
     bool xstrand = (last_flags.rev_comp != prim_revcomp);
 
-    uint32_t qual_len = prim_qual_len - vb->hard_clip[0] - vb->hard_clip[1];
-    rom diff = Bc (qualsa_ctx->local, qualsa_ctx->next_local);
-    qualsa_ctx->next_local += qual_len;
+    uint32_t qual_len = prim_qual_len + (saggy_anal ? (saggy_anal->hard_clip[0] + saggy_anal->hard_clip[1]) : 0)
+                      - (vb->hard_clip[0] + vb->hard_clip[1]);
+
+    uint32_t flank[2] = { saggy_anal ? MIN_(qual_len, MAX_((int32_t)saggy_anal->hard_clip[xstrand]  - (int32_t)vb->hard_clip[0], 0)) : 0,   // left-flanking
+                          saggy_anal ? MIN_(qual_len, MAX_((int32_t)saggy_anal->hard_clip[!xstrand] - (int32_t)vb->hard_clip[1], 0)) : 0 }; // right-flanking
+
+    uint32_t overlap_len = qual_len - flank[0] - flank[1];
+
+    rom diff = 0;
+    if (overlap_len) {
+        ContextP qualsa_ctx = LOADED_CTX(SAM_QUALSA);
+        diff = Bc (qualsa_ctx->local, qualsa_ctx->next_local);
+        qualsa_ctx->next_local += overlap_len;
+    }
 
     char *qual = BAFTtxt;
-    vb->txt_data.len32 += qual_len;
     int8_t bam_bump = (prim_is_bam ? 33 : 0);
 
-    if (!xstrand) {
-        prim_qual += vb->hard_clip[0];
-        for (uint32_t i=0; i < qual_len; i++) 
+    uint32_t save_seq_len = vb->seq_len;
+
+    if (flank[0]) {
+        vb->seq_len = flank[0];
+        reconstruct_from_local_sequence (VB, CTX(SAM_QUAL_FLANK), 0, 0, reconstruct); // reconstruct vb->seq_len quality scores
+        qual += flank[0];
+    }
+
+    if (overlap_len && !xstrand && reconstruct) {
+        uint32_t first_prim_overlap = flank[0] ? 0 : (vb->hard_clip[0] - (saggy_anal ? saggy_anal->hard_clip[0] : 0));
+        prim_qual += first_prim_overlap;
+        
+        for (uint32_t i=0; i < overlap_len; i++) 
             qual[i] = prim_qual[i] + diff[i] + bam_bump;
+
+        vb->txt_data.len32 += overlap_len;
     }
-    else {
-        prim_qual += prim_qual_len - 1 - vb->hard_clip[0];
-        for (int32_t/*signed*/ i=0; i < qual_len; i++)
+
+    else if (overlap_len && xstrand && reconstruct) {
+        uint32_t last_prim_overlap = prim_qual_len - 1 - (flank[0] ? 0 : (vb->hard_clip[0] - (saggy_anal ? saggy_anal->hard_clip[1] : 0)));
+        prim_qual += last_prim_overlap;
+
+        for (int32_t/*signed*/ i=0; i < overlap_len; i++) {
             qual[i] = prim_qual[-i] + diff[i] + bam_bump;
+}
+
+        vb->txt_data.len32 += overlap_len;
     }
+
+    if (flank[1]) {
+        vb->seq_len = flank[1];
+        reconstruct_from_local_sequence (VB, CTX(SAM_QUAL_FLANK), 0, 0, reconstruct);
+    }
+
+    vb->seq_len = save_seq_len;
 }
 
 static void sam_piz_QUAL_primary (VBlockSAMP vb)
@@ -310,13 +386,17 @@ void sam_reconstruct_missing_quality (VBlockP vb, bool reconstruct)
 // Note: in PRIM, it is called with ctx=QUALSA, in MAIN and DEPN with ctx=QUAL
 SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
 {
+    START_TIMER;
+
     VBlockSAMP vb = (VBlockSAMP)vb_;
     char *qual = BAFTtxt;
     const Sag *g = vb->sag;
-    bool prim_has_qual_but_i_dont = snip[0] - '0';
+    bool prim_has_qual_but_i_dont = (snip[0] == '1');
+    const CigarAnalItem *saggy_anal;
 
-    // case: reconstruct by copying from SA Group (except if we are depn and group has no qual)
-    if (SAM_PIZ_HAS_SA_GROUP && (sam_is_prim_vb || (sam_is_depn_vb && !g->no_qual))) {
+    // case: reconstruct by copying from sag (except if we are depn and group has no qual)
+    if (SAM_PIZ_HAS_SAG && (sam_is_prim_vb || (sam_is_depn_vb && !g->no_qual))) {
+      
         if (!reconstruct) {}
 
         else if (g->no_qual || prim_has_qual_but_i_dont) 
@@ -325,7 +405,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
         else if (sam_is_depn_vb) {
             sam_get_sa_grp_qual (vb); // uncompress PRIM qual to vb->scratch
             
-            sam_piz_QUAL_undiff_vs_primary (vb, STRb(vb->scratch), vb->sag->revcomp, false);                
+            sam_piz_QUAL_undiff_vs_primary (vb, STRb(vb->scratch), vb->sag->revcomp, NULL, false, reconstruct);                
             buf_free (vb->scratch);
         }
         else  // primary vb
@@ -333,37 +413,46 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
     }
 
     // case: MAIN component, reconstruct depn line against prim line in this VB
-    else if (sam_is_main_vb && 
-             VER(14) && // up to v13, we could have buddy lines for sup/sec which are not prim lines
-             piz_has_prim) {
+    else if (sam_has_saggy && // only appears in the MAIN component and only since v14 (see sam_seg_saggy)
+             ({ saggy_anal = B(CigarAnalItem, CTX(SAM_CIGAR)->cigar_anal_history, vb->saggy_line_i);
+                // note: we've seen cases in the wild where a depn without hard clips is shorter than its prim (eg in test.NA12878.chr22.1x.bam), possibly due to GATK IndelRealigner
+                vb->hard_clip[0] + vb->hard_clip[1] + vb->seq_len == saggy_anal->hard_clip[0] + saggy_anal->hard_clip[1] + saggy_anal->seq_len; })) {
 
-        HistoryWord word = *B(HistoryWord, ctx->history, vb->buddy_line_i); // QUAL is always stored as LookupTxtData or LookupPerLine
-        SamFlags prim_flags = { .value = history64 (SAM_FLAG, vb->buddy_line_i) };
-        rom prim_qual = (word.lookup == LookupTxtData) ? Btxt(word.index) : Bc(ctx->per_line, word.index);
+        HistoryWord word = *B(HistoryWord, ctx->history, vb->saggy_line_i); // QUAL is always stored as LookupTxtData or LookupPerLine
+        SamFlags saggy_flags = { .value = history64 (SAM_FLAG, vb->saggy_line_i) };
+        rom saggy_qual = (word.lookup == LookupTxtData) ? Btxt(word.index) : Bc(ctx->per_line, word.index);
 
-        if ((uint8_t)*prim_qual == (IS_RECON_BAM ? 0xff : '*'))
+        if ((uint8_t)*saggy_qual == (IS_RECON_BAM ? 0xff : '*'))
             goto no_diff; // in case prim has no qual - seg did not diff (the current line may or may not have qual)
 
         else if (prim_has_qual_but_i_dont)
             sam_reconstruct_missing_quality (VB, reconstruct);
 
         else
-            sam_piz_QUAL_undiff_vs_primary (vb, prim_qual, word.len, prim_flags.rev_comp, flag.out_dt == DT_BAM);                
+            sam_piz_QUAL_undiff_vs_primary (vb, saggy_qual, word.len, saggy_flags.rev_comp, saggy_anal, flag.out_dt == DT_BAM, reconstruct);                
     } 
         
     // case: reconstruct from data in local
     else no_diff: 
-        switch (ctx->ltype) { // the relevant subset of ltypes from reconstruct_from_ctx_do
+        if (snip[0] == '*')  // case of seg suspecting entire file is qual-less
+            sam_reconstruct_missing_quality (VB, reconstruct);
+
+        else switch (ctx->ltype) { // the relevant subset of ltypes from reconstruct_from_ctx_do
             case LT_CODEC:
                 codec_args[ctx->lcodec].reconstruct (VB, ctx->lcodec, ctx, NULL, 0); break;
 
             case LT_SEQUENCE: 
                 reconstruct_from_local_sequence (VB, ctx, NULL, 0, reconstruct); break;
 
-            default: ASSPIZ (false, "Invalid ltype=%s for QUAL", lt_name (ctx->ltype));
+            default: ASSPIZ (false, "Invalid ltype=%s for %s", lt_name (ctx->ltype), ctx->tag_name);
         }
 
     uint32_t qual_len = BAFTtxt - qual;
+
+#ifdef DEBUG
+    for (uint32_t i=0; i < qual_len; i++)
+        ASSPIZ (IS_NON_WS_PRINTABLE(qual[i]), "Invalid QUAL character reconstructed: i=%u char=%u\n", i, (uint8_t)qual[i]);
+#endif
 
     // store quality score in ms:i history 
     if (!VER(14)) // up to v13 this special was only when calculating score was needed
@@ -372,12 +461,16 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
     else if (VER(14) && segconf.sam_ms_type == ms_BIOBAMBAM) // note: segconf.sam_ms_type is populated in PIZ since v14
         *B(int64_t, CTX(OPTION_ms_i)->history, vb->line_i) = sam_get_QUAL_score (vb, STRa(qual));
 
+    COPY_TIMER (sam_piz_special_QUAL);
+
     return !VER(14); // has new value for files up to v13
 }
 
 // SAM-to-BAM translator: translate SAM ASCII (33-based) Phred values to BAM's 0-based
 TRANSLATOR_FUNC (sam_piz_sam2bam_QUAL)
 {
+    START_TIMER;
+
     // if QUAL is "*" there are two options:
     // 1. If l_seq is 0, the QUAL is empty
     // 2. If not (i.e. we have SEQ data but not QUAL) - it is a string of 0xff, length l_seq
@@ -404,12 +497,15 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_QUAL)
         for (uint32_t i=0; i < recon_len; i++)
             recon[i] -= 33; 
 
+    COPY_TIMER (sam_piz_sam2bam_QUAL);
     return 0;
 }
 
 // SAM-to-FASTQ translator: reverse the sequence if needed, and drop if "*"
 TRANSLATOR_FUNC (sam_piz_sam2fastq_QUAL)
 {
+    START_TIMER;
+
     uint16_t sam_flag = (uint16_t)vb->last_int(SAM_FLAG);
     
     // case: QUAL is "*" - don't show this fastq record
@@ -424,27 +520,6 @@ TRANSLATOR_FUNC (sam_piz_sam2fastq_QUAL)
             SWAP (recon[i], recon[recon_len-1-i]);
     }
 
+    COPY_TIMER (sam_piz_sam2fastq_QUAL);
     return 0;
-}
-
-//---------
-// ms:i
-//---------
-
-// ms:i: (output of bamsormadup and other biobambam tools - ms in small letters), created here: https://github.com/gt1/libmaus/tree/master/src/libmaus/bambam/BamAlignmentDecoderBase.cpp getScore 
-// It is the sum of phred values of mate's QUAL, but only phred values >= 15
-void sam_seg_ms_i (VBlockSAMP vb, ValueType ms, unsigned add_bytes)
-{
-    ZipDataLineSAM *mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is NO_LINE
-
-    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, (MultiplexerP)&vb->mux_ms, zip_has_mate);
-
-    if (zip_has_mate && mate_dl->QUAL_score == ms.i)     // successful in ~97% of lines with mate
-        seg_by_ctx (VB, STRa(ms_mate_snip), channel_ctx, add_bytes); // note: prior to v14, we stored ms qual_score in QUAL history, not in ms:i history 
-    else {
-        channel_ctx->ltype = LT_DYN_INT; 
-        seg_integer (VB, channel_ctx, ms.i, true, add_bytes);    
-    }
-
-    seg_by_did (VB, STRa(vb->mux_ms.snip), OPTION_ms_i, 0); // de-multiplexor
 }

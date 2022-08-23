@@ -66,7 +66,7 @@ static void hash_populate_from_nodes (Context *zctx)
     }
 }
 
-// This is called when the VB encounters a first entry that's not in the global dictionary (possibly there is no global dict)
+// This is called when the VB encounters a first snip that's not in the ol_dict 
 // allocation algorithm:
 // 1. If we got info on the size of this dict with the previous merged vb - use that size
 // 2. If not - use either num_lines for the size, or the smallest size for dicts that are typically small
@@ -125,7 +125,7 @@ uint32_t hash_get_estimated_entries (VBlockP merging_vb, Context *zctx, const Co
 
         return 1; // will yield smallest hash table - around 64K
     }
-    
+
     // for growth purposes, we discard the first 1/3 of VB1, and compare the growth of the 2nd vs the 3rd 1/3. 
     // this is because many fields display the charactistics of having a relatively small number of high frequency entries
     // which mostly show up in n1, and then a long tail of low frequency entries. The comparison of n2 to n3,
@@ -210,6 +210,10 @@ uint32_t hash_get_estimated_entries (VBlockP merging_vb, Context *zctx, const Co
     // add "stochastic noise" - to cover cases where we have a very large file, and new words continue to be introduced
     // at a low rate throughout. We add words at 10% of what we viewed in n3 - for the entire file
     if (n3_lines) estimated_entries += n3_density * estimated_num_lines * 0.10;
+
+    #define BIG_SIZE (1<<20)
+    if (estimated_entries < BIG_SIZE && (DT_FUNC(merging_vb, seg_is_big)(merging_vb, zctx->dict_id))) 
+        estimated_entries = BIG_SIZE; 
 
     if (flag.show_hash) {
  
@@ -346,10 +350,15 @@ WordIndex hash_global_get_entry (Context *zctx, STRp(snip), HashGlobalGetEntryMo
 #else
     #define HASH_OCC_WARNING 10ULL
 #endif
-    if (zctx->nodes.len > HASH_OCC_WARNING * (uint64_t)zctx->global_hash_prime)
-        WARN_ONCE ("Unexpected structure of file is causing unusually slow compression. Please report this to support@genozip.com. ctx=%s hash_prime=%u snip=\"%.*s\"", 
-                   zctx->tag_name, zctx->local_hash_prime, STRf(snip));
-    
+    if (zctx->nodes.len > HASH_OCC_WARNING * (uint64_t)zctx->global_hash_prime) {
+        if (txt_file->redirected)
+            WARN_ONCE ("Unusually slow compression due to Genozip under-allocating resources because the input file is streaming through a pipe preventing it from knowing the file size. To overcome this, please use --input-size (value in bytes, can be approximate) to inform Genozip of the file size. ctx=%s hash_prime=%u snip=\"%.*s\"", 
+                       zctx->tag_name, zctx->global_hash_prime, STRf(snip));
+        else
+            WARN_ONCE ("Unexpected structure of file is causing unusually slow compression. ctx=%s hash_prime=%u snip=\"%.*s\"", 
+                       zctx->tag_name, zctx->global_hash_prime, STRf(snip));
+    }
+
     // now, with the new g_hashent set, we can atomically update the "next"
     __atomic_store_n (&g_hashent->next, next, __ATOMIC_RELAXED);
 

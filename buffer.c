@@ -44,12 +44,16 @@
 
 static const unsigned control_size = 2*sizeof (uint64_t) + sizeof(uint16_t); // underflow, overflow and user counter
 
-static Mutex overlay_mutex = {}; // used to thread-protect overlay counters (note: not initializing here - different in different OSes)
+static Mutex overlay_mutex   = {}; // used to thread-protect overlay counters (note: not initializing here - different in different OSes)
 static Mutex only_once_mutex = {};
 static uint64_t abandoned_mem_current = 0;
 static uint64_t abandoned_mem_high_watermark = 0;
 
-Buffer dummy_buf;
+typedef struct {
+    BufferP buf;  // address of Buffer structure (not the data!). Buffer is removed if removed bit is set with BL_SET_REMOVED 
+    rom func;     // function in which this Buffer was first allocated (at which time it was added to the buffer_list)
+    uint32_t code_line;
+} BufListEnt;
 
 void buf_initialize()
 {
@@ -121,7 +125,7 @@ static inline bool buf_has_overflowed (ConstBufferP buf, rom msg)
 
 static inline bool buf_has_underflowed (ConstBufferP buf, rom msg)
 {
-    if (buf->type == BUF_OVERLAY) return false; // overlayed buffers might be partial and start at a different address 
+    if (buf->type == BUF_OVERLAY || buf->type == BUF_OVERLAY_RO) return false; // overlayed buffers might be partial and start at a different address 
 
     // see comment in buf_has_overflowed
     char *memory = buf->memory;
@@ -139,7 +143,7 @@ static inline void buf_verify_integrity (ConstBufferP buf, FUNCLINE, rom buf_fun
     if (buf->vb == evb) return; // we cannot (easily) test evb (see comment in buf_has_overflowed)
  
     // note: // overlayed buffers might be partial and start at a different address 
-    ASSERTGOTO (buf->type == BUF_OVERLAY || *(uint64_t *)(buf->memory) == UNDERFLOW_TRAP, "called from %s:%u to %s: Error in %s: buffer has corrupt underflow trap",
+    ASSERTGOTO (buf->type == BUF_OVERLAY || buf->type == BUF_OVERLAY_RO || *(uint64_t *)(buf->memory) == UNDERFLOW_TRAP, "called from %s:%u to %s: Error in %s: buffer has corrupt underflow trap",
                 func, code_line, buf_func, buf_desc(buf).s);
 
     ASSERTGOTO (*(uint64_t *)(buf->memory + sizeof(uint64_t) + buf->size) == OVERFLOW_TRAP, "called from %s:%u to %s: Error in %s: buffer has corrupt overflow trap",
@@ -155,31 +159,34 @@ error:
 // not thread-safe, used in emergency 
 static void buf_find_underflow_culprit (rom memory, rom msg)
 {
-    VBlockPool *vb_pool = vb_get_pool();
-    if (!vb_pool) return; // pool not allocated yet (eg error is in segconf)
-    
     bool found=false;
-    for (int vb_i=-1; vb_i < (int)vb_pool->num_vbs; vb_i++) {
-        VBlockP vb = vb_get_from_pool (vb_i);
-        if (!vb) continue;
-        
-        for_buf2 (BufferP , buf_p, i, vb->buffer_list) {
-            BufferP buf = *buf_p;
-            if (buf) {
-                char *after_buf = buf->memory + buf->size + control_size;
-                if (after_buf <= memory && (after_buf + 100 > memory) && buf_has_overflowed (buf, msg)) {
-                    char *of = &buf->memory[buf->size + sizeof(uint64_t)];
-                    fprintf (stderr,
-                            "Candidate culprit: vb_id=%d (vb_i=%d): buffer: %s %p memory: %p-%p name: %s vb_i=%u buf_i=%u Overflow fence=%c%c%c%c%c%c%c%c\n",
-                            vb ? vb->id : -999, vb->vblock_i, buf_display_type(buf), 
-                            buf, buf->memory, after_buf-1, 
-                            buf_desc (buf).s, buf->vb->vblock_i, i, 
-                            of[0], of[1], of[2], of[3], of[4], of[5], of[6], of[7]);
-                    found = true;
+    for (VBlockPoolType type=POOL_MAIN; type <= POOL_BGZF; type++) {
+        VBlockPool *vb_pool = vb_get_pool (type, true);
+        if (!vb_pool) continue;
+    
+        for (int vb_id=-1; vb_id < (int)vb_pool->num_vbs; vb_id++) {
+            VBlockP vb = vb_get_from_pool (vb_pool, vb_id);
+            if (!vb) continue;
+            
+            for_buf2 (BufferP , buf_p, i, vb->buffer_list) {
+                BufferP buf = *buf_p;
+                if (buf) {
+                    char *after_buf = buf->memory + buf->size + control_size;
+                    if (after_buf <= memory && (after_buf + 100 > memory) && buf_has_overflowed (buf, msg)) {
+                        char *of = &buf->memory[buf->size + sizeof(uint64_t)];
+                        fprintf (stderr,
+                                "Candidate culprit: vb->id=%d (vb->vblock_i=%d): buffer: %s %p memory: %p-%p name: %s vb_id=%u buf_i=%u Overflow fence=%c%c%c%c%c%c%c%c\n",
+                                vb ? vb->id : -999, vb->vblock_i, buf_display_type(buf), 
+                                buf, buf->memory, after_buf-1, 
+                                buf_desc (buf).s, buf->vb->vblock_i, i, 
+                                of[0], of[1], of[2], of[3], of[4], of[5], of[6], of[7]);
+                        found = true;
+                    }
                 }
             }
         }
     }
+
     if (!found) fprintf (stderr, "Cannot find a Buffer which has overflowed, and located just before the underflowed buffer\n\n");
 }
 
@@ -192,13 +199,16 @@ static void buf_test_overflows_all_other_vb(ConstVBlockP caller_vb, rom msg)
     // That's why the "return" is here. It can be removed when debugging specific cases.
     return; 
 
-    VBlockPool *vb_pool = vb_get_pool();
-
     fprintf (stderr, "Testing all other VBs:\n");
-    for (int vb_i=-1; vb_i < (int)vb_pool->num_vbs; vb_i++) {
-        VBlockP vb = vb_get_from_pool (vb_i);
-        if (!vb || vb == caller_vb) continue; // skip caller's VB
-        buf_test_overflows_do (vb, false, msg);
+    for (VBlockPoolType type=POOL_MAIN; type <= POOL_BGZF; type++) {
+        VBlockPool *vb_pool = vb_get_pool (type, true);
+        if (!vb_pool) continue;
+
+        for (int vb_id=-1; vb_id < (int)vb_pool->num_vbs; vb_id++) {
+            VBlockP vb = vb_get_from_pool (vb_pool, vb_id);
+            if (!vb || vb == caller_vb) continue; // skip caller's VB
+            buf_test_overflows_do (vb, false, msg);
+        }
     }
 }
 
@@ -210,6 +220,9 @@ static bool buf_test_overflows_do (ConstVBlockP vb, bool primary, rom msg)
     int corruption = 0;
 
     ConstBufferP buf; // declare outside, so it is observable in the debugger in case of a crash
+    rom func;
+    uint32_t code_line;
+
     for (uint32_t buf_i=0; buf_i < vb->buffer_list.len32; buf_i++) {
         static rom nl[2] = {"", "\n\n"};
 
@@ -218,13 +231,16 @@ static bool buf_test_overflows_do (ConstVBlockP vb, bool primary, rom msg)
         // we attempt to prevent many of the cases by not checking buffers that are BUFFER_BEING_MODIFIED at the onset, but they still may
         // become BUFFER_BEING_MODIFIED mid way through the test
 
-        buf = *B(BufferP , vb->buffer_list, buf_i);
+        buf       = B(BufListEnt, vb->buffer_list, buf_i)->buf;
+        func      = B(BufListEnt, vb->buffer_list, buf_i)->func;
+        code_line = B(BufListEnt, vb->buffer_list, buf_i)->code_line;
+
         if (BL_IS_REMOVED (buf)) continue; // buf was 'buf_destroy'd
 
 #ifdef WIN32
         if (IsBadReadPtr (buf, sizeof (Buffer))) {
-            fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (vb_i=%d) buffer=%p (buf_i=%u): buffer structure inaccessible (invalid pointer)\n", 
-                     nl[primary], msg, vb->id, vb->vblock_i, buf, buf_i);
+            fprintf (stderr, "%s%s: Memory corruption in vb->id=%d (vb->vblock_i=%d) buffer=%p func=%s:%u (buf_i=%u): buffer structure inaccessible (invalid pointer)\n", 
+                     nl[primary], msg, vb->id, vb->vblock_i, buf, func, code_line, buf_i);
             corruption = 100;
             break;
         }
@@ -233,39 +249,39 @@ static bool buf_test_overflows_do (ConstVBlockP vb, bool primary, rom msg)
         if (buf->memory && buf->memory != BUFFER_BEING_MODIFIED) {
 
             if (vb && buf->vb != vb) {
-                fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (vb_i=%d) buffer=%p (buf_i=%u): Corrupt Buffer structure OR invalid buffer pointer - buf->vb=%p != vb=%p\n", 
-                         nl[primary], msg, vb->id, vb->vblock_i, buf, buf_i, buf->vb, vb);
+                fprintf (stderr, "%s%s: Memory corruption in vb->id=%d (vb->vblock_i=%d) buffer=%p func=%s:%u (buf_i=%u): Corrupt Buffer structure OR invalid buffer pointer - buf->vb=%p != vb=%p\n", 
+                         nl[primary], msg, vb->id, vb->vblock_i, buf, func, code_line, buf_i, buf->vb, vb);
                 corruption = 0;
             }
             else if (buf->data && buf->vb->vblock_i != vb->vblock_i) { // buffers might still be here from the previous incarnation of this vb - its ok if they're not allocated yet
-                        fprintf (stderr, "%s%s: Memory corruption in vb_id=%d: buf_vb_i=%d differs from thread_vb_i=%d: buffer: %s %p memory: %p-%p name: %s vb_i=%u buf_i=%u\n",
+                        fprintf (stderr, "%s%s: Memory corruption in vb_id=%d: buf_vb_i=%d differs from thread_vb_i=%d: buffer: %s %p func: %s:%u memory: %p-%p name: %s vb_i=%u buf_i=%u\n",
                         nl[primary], msg, vb ? vb->id : -999, buf->vb->vblock_i, vb->vblock_i, buf_display_type(buf), 
-                        buf, buf->memory, buf->memory+buf->size+control_size-1,
+                        buf, func, code_line, buf->memory, buf->memory+buf->size+control_size-1,
                         buf_desc (buf).s, buf->vb->vblock_i, buf_i);
                 corruption = 1;
             }
             else if (buf->type < 0 || buf->type > BUF_NUM_TYPES) {
-                fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d) buffer=%p (buf_i=%u): Corrupt Buffer structure OR invalid buffer pointer - invalid buf->type", 
-                         nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, buf, buf_i);
+                fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d) buffer=%p func=%s:%u (buf_i=%u): Corrupt Buffer structure OR invalid buffer pointer - invalid buf->type", 
+                         nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, buf, func, code_line, buf_i);
                 fprintf (stderr, " Buffer=%s\n", buf_desc(buf).s);  // separate fprintf in case it seg faults
                 corruption = 2;
             }
             else if (!buf->name) {
-                fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d): buffer=%p (buf_i=%u): Corrupt Buffer structure - null name", 
-                         nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, buf, buf_i);
+                fprintf (stderr, "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d): buffer=%p func=%s:%u (buf_i=%u): Corrupt Buffer structure - null name", 
+                         nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, buf, func, code_line, buf_i);
                 fprintf (stderr, " Buffer=%s\n", buf_desc(buf).s);  // separate fprintf in case it seg faults
                 corruption = 3;
             }
-            else if (buf->data && buf->type != BUF_OVERLAY && (buf->data != buf->memory + sizeof(uint64_t))) {
+            else if (buf->data && buf->type != BUF_OVERLAY && buf->type != BUF_OVERLAY_RO && (buf->data != buf->memory + sizeof(uint64_t))) {
                 fprintf (stderr, 
-                         "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d): data!=memory+8: allocating_vb_i=%u buf_i=%u buffer=%p memory=%p name=%s : Corrupt Buffer structure - expecting data+8 == memory. buf->data=%p\n", 
-                         nl[primary], msg, vb ? vb->id : -999, vb->vblock_i,  buf->vb->vblock_i, buf_i, buf, buf->memory, buf_desc(buf).s, buf->data);
+                         "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d): data!=memory+8: allocating_vb_i=%u buf_i=%u buffer=%p func=%s:%u memory=%p name=%s : Corrupt Buffer structure - expecting data+8 == memory. buf->data=%p\n", 
+                         nl[primary], msg, vb ? vb->id : -999, vb->vblock_i,  buf->vb->vblock_i, buf_i, buf, func, code_line, buf->memory, buf_desc(buf).s, buf->data);
                 corruption = 4;
             }
             else if (buf_has_underflowed(buf, msg)) {
                 fprintf (stderr, 
-                        "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d): Underflow: buffer: %s %p memory: %p-%p name: %s vb_i=%u buf_i=%u. Fence=%c%c%c%c%c%c%c%c\n",
-                        nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, buf_display_type(buf), buf, buf->memory, buf->memory+buf->size+control_size-1, 
+                        "%s%s: Memory corruption in vb_id=%d (thread vb_i=%d): Underflow: buffer: %s %p func: %s:%u memory: %p-%p name: %s vb_i=%u buf_i=%u. Fence=%c%c%c%c%c%c%c%c\n",
+                        nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, buf_display_type(buf), buf, func, code_line, buf->memory, buf->memory+buf->size+control_size-1, 
                         buf_desc (buf).s, buf->vb->vblock_i, buf_i, 
                         buf->memory[0], buf->memory[1], buf->memory[2], buf->memory[3], buf->memory[4], buf->memory[5], buf->memory[6], buf->memory[7]);
 
@@ -279,8 +295,8 @@ static bool buf_test_overflows_do (ConstVBlockP vb, bool primary, rom msg)
             else if (buf_has_overflowed(buf, msg)) {
                 char *of = &buf->memory[buf->size + sizeof(uint64_t)];
                 fprintf (stderr,
-                        "%s%s: Memory corruption in vb_id=%d (vb_i=%d): Overflow: buffer: %s %p memory: %p-%p name: %s vb_i=%u buf_i=%u Fence=%c%c%c%c%c%c%c%c\n",
-                        nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, buf_display_type(buf), buf, buf->memory, buf->memory+buf->size+control_size-1, 
+                        "%s%s: Memory corruption in vb_id=%d (vb_i=%d): Overflow: buffer: %s %p func: %s:%u memory: %p-%p name: %s vb_i=%u buf_i=%u Fence=%c%c%c%c%c%c%c%c\n",
+                        nl[primary], msg, vb ? vb->id : -999, vb->vblock_i, buf_display_type(buf), buf, func, code_line, buf->memory, buf->memory+buf->size+control_size-1, 
                         buf_desc (buf).s, buf->vb->vblock_i, buf_i, of[0], of[1], of[2], of[3], of[4], of[5], of[6], of[7]);
                 
                 if (primary) buf_test_overflows_all_other_vb (vb, msg);
@@ -314,42 +330,57 @@ void buf_update_buf_list_vb_addr_change (VBlockP new_vb, VBlockP old_vb)
 {
     if (old_vb == new_vb) return; // no change in address
         
-    for_buf (BufferP , bl, new_vb->buffer_list) {
+    for_buf (BufListEnt, bl, new_vb->buffer_list) {
 
-        if (BL_IS_REMOVED (*bl)) continue;
+        if (BL_IS_REMOVED (bl->buf)) continue;
 
         // if this buffer is within the moved VB - update its address to the same offset relative to the new vb address
-        if ((char*)*bl >= (char*)old_vb && (char*)*bl < (char *)(old_vb+1)) 
-            *bl = (BufferP )((char*)new_vb + ((char*)*bl - (char*)old_vb)); 
+        if ((char*)bl->buf >= (char*)old_vb && (char*)bl->buf < (char *)(old_vb+1)) 
+            bl->buf = (BufferP)((char*)new_vb + ((char*)bl->buf - (char*)old_vb)); 
 
         // update VB address within the buffer
-        (*bl)->vb = new_vb; 
+        (bl->buf)->vb = new_vb; 
     }
 }
 
-static void buf_foreach_buffer (void (*callback)(ConstBufferP , void *arg), void *arg)
+static void buf_foreach_buffer_in_vb (VBlockP vb, void (*callback)(ConstBufferP, void *arg), void *arg)
 {
-    VBlockPool *vb_pool = vb_get_pool ();
-    if (!vb_pool) return;
+    for_buf2 (BufListEnt, bl, buf_i, vb->buffer_list) {
+        #ifdef __linux__
+            // if (!BL_IS_REMOVED (*bl) && access ((rom)*bl, F_OK) == -1 && errno == EFAULT)
+            //     ABORT ("buffer structure inaccessible (invalid pointer=%p) in buf_i=%u of vb_id=%d", *bl, buf_i, vb_id); 
+        #elif defined WIN32
+            if (!BL_IS_REMOVED (bl->buf) && IsBadReadPtr (bl->buf, sizeof (Buffer))) 
+                ABORT ("buffer structure inaccessible (invalid pointer=%p) in buf_i=%u of vb_id=%d", bl->buf, buf_i, vb->id); 
+        #endif
 
-    // note: we don't cover EVB (only in DEBUG and --show-mem) as it segfaults for an unknown reason (likely the Buffer structure itself resides with a structure
-    // that is freed (eg File)). TODO: debug this.
-    for (int vb_i=(flag.debug || flag.show_memory) ? -1 : 0; vb_i < (int)vb_pool->num_allocated_vbs; vb_i++) {
+        if (BL_IS_REMOVED (bl->buf) || !bl->buf->memory) continue; // exclude destroyed, not-yet-allocated, overlay buffers and buffers that were src in buf_move
 
-        VBlockP vb = vb_i >= 0 ? vb_get_from_pool (vb_i) : evb;
-        if (!vb) continue;
-        
-        for_buf2 (ConstBufferP , bl, buf_i, vb->buffer_list) {
-            if (BL_IS_REMOVED (*bl) || !(*bl)->memory) continue; // exclude destroyed, not-yet-allocated, overlay buffers and buffers that were src in buf_move
+        callback (bl->buf, arg); 
+    }
+}
 
-            #ifdef WIN32
-            if (IsBadReadPtr (bl, sizeof (Buffer))) 
-                ABORT ("buffer structure inaccessible (invalid pointer) in buf_i=%u of vb_i=%d", buf_i, vb_i); 
-            #endif
+static void buf_foreach_buffer (void (*callback)(ConstBufferP, void *arg), void *arg)
+{
+    for (VBlockPoolType pool_type=0; pool_type < NUM_POOL_TYPES; pool_type++) {
 
-            callback (*bl, arg); 
+        VBlockPool *vb_pool = vb_get_pool (pool_type, true);
+        if (!vb_pool) return;
+
+        // note: we don't cover EVB (only in DEBUG and --show-mem) as it segfaults for an unknown reason (likely the Buffer structure itself resides with a structure
+        // that is freed (eg File)). TODO: debug this.
+        for (int vb_id=(flag.debug || flag.show_memory) ? -1 : 0; vb_id < (int)vb_pool->num_allocated_vbs; vb_id++) {
+
+            VBlockP vb = vb_get_from_pool (vb_pool, vb_id);
+            if (!vb) continue;
+            
+            buf_foreach_buffer_in_vb (vb, callback, arg);
         }
     }
+
+    // non-pool VBs
+    buf_foreach_buffer_in_vb (evb, callback, arg);
+    
 }
 
 static void buf_count_mem_usage (ConstBufferP buf, void *mem_usage)
@@ -359,9 +390,11 @@ static void buf_count_mem_usage (ConstBufferP buf, void *mem_usage)
 
 uint64_t buf_get_memory_usage (void)
 {
-    uint64_t mem_usage=0;
+    uint64_t mem_usage = 0;
     buf_foreach_buffer (buf_count_mem_usage, &mem_usage);
-
+    
+    mem_usage += ref_memory_consumption (gref).bytes; // REF_INTERNAL reference data NOT in buffers
+    
     return mem_usage;
 }
 
@@ -399,7 +432,7 @@ void buf_show_memory (bool memory_full, unsigned max_threads, unsigned used_thre
     memset (stats, 0, sizeof(stats));
     num_stats = num_buffers = 0;
     buf_foreach_buffer (buf_add_mem_usage_to_stats, 0);
-
+    
     if (memory_full)
         fprintf (stderr, "\n\nError memory is full:\n");
     else
@@ -415,9 +448,12 @@ void buf_show_memory (bool memory_full, unsigned max_threads, unsigned used_thre
     uint64_t total_bytes=0;
     for (unsigned i=0; i< num_stats; i++) total_bytes += stats[i].bytes;
 
+    uint32_t num_allocated_vbs = (vb_get_pool (POOL_MAIN, true) ? vb_get_pool (POOL_MAIN, false)->num_allocated_vbs : 0)
+                               + (vb_get_pool (POOL_BGZF, true) ? vb_get_pool (POOL_BGZF, false)->num_allocated_vbs : 0);
+
     fprintf (memory_full ? stderr : info_stream, "Total bytes: %s in %u buffers in %u buffer lists. global_max_threads=%u\n", 
-             str_size (total_bytes).s, num_buffers, vb_get_pool() ? vb_get_pool()->num_allocated_vbs : 0, global_max_threads);
-    if (command == ZIP) 
+             str_size (total_bytes).s, num_buffers, num_allocated_vbs, global_max_threads);
+    if (IS_ZIP) 
         fprintf (memory_full ? stderr : info_stream, "vb_size = %u MB\n", (unsigned)(segconf.vb_size >> 20));
     
     if (max_threads)
@@ -446,24 +482,24 @@ void buf_add_to_buffer_list_do (VBlockP vb, BufferP buf, FUNCLINE)
     ASSERT (vb != evb || threads_am_i_main_thread(), "called from %s:%u: A thread other than main thread is attempting to modify evb buffer list: buf=%s", 
             func, code_line, buf_display (buf));
 
-    ASSERT (!buf->vb, "called from %s:%u: cannot add buffer %s to buf_list of vb_i=%u because it is already in buf_list of vb_i=%u.",
+    ASSERT (!buf->vb, "called from %s:%u: cannot add buffer %s to buf_list of vb->vblock_i=%u because it is already in buf_list of vb_i=%u.",
              func, code_line, buf_desc(buf).s, vb->vblock_i, buf->vb->vblock_i);    
 
-    ASSERT (((uint64_t)buf & 7)==0, "called from %s:%u: Expecting buffer %s of vb_i=%u to be word-aligned, but its address is %p",
+    ASSERT (((uint64_t)buf & 7)==0, "called from %s:%u: Expecting buffer %s of vb->vblock_i=%u to be word-aligned, but its address is %p",
              func, code_line, buf_desc(buf).s, vb->vblock_i, buf); // BL_SET_REMOVED expects this
 
 #define INITIAL_MAX_MEM_NUM_BUFFERS 10000 /* for files that have ht,gt,phase,variant,and line - the factor would be about 5.5 so there will be 1 realloc per vb, but most files don't */
     BufferP bl = &vb->buffer_list;
 
-    buf_alloc (vb, bl, 1, INITIAL_MAX_MEM_NUM_BUFFERS, BufferP, 2, "buffer_list");
-    BNXT (BufferP, *bl) = buf;
+    buf_alloc (vb, bl, 1, INITIAL_MAX_MEM_NUM_BUFFERS, BufListEnt, 2, "buffer_list");
+    BNXT (BufListEnt, *bl) = (BufListEnt){ .buf = buf, .func = func, .code_line = code_line };
     bl->param = false; // buffer list is not sorted anymore
 
     buf->vb = vb; // successfully added to buf list
 
     if (flag.debug_memory==1 && vb->buffer_list.len > DISPLAY_ALLOCS_AFTER)
-        iprintf ("buf_add_to_buffer_list &buf=%p (%s): %s: size=%"PRIu64" buffer=%p vb->id=%d buf_i=%u\n", 
-                 buf, func, buf_desc(buf).s, (uint64_t)buf->size, buf, vb->id, vb->buffer_list.len32-1);    
+        iprintf ("buf_add_to_buffer_list &buf=%p (%s): %s: size=%"PRIu64" buffer=%p func=%s:%u vb->id=%d buf_i=%u\n", 
+                 buf, func, buf_desc(buf).s, (uint64_t)buf->size, buf, func, code_line, vb->id, vb->buffer_list.len32-1);    
 }
 
 static void buf_init (BufferP buf, char *memory, uint64_t size, uint64_t old_size, 
@@ -501,12 +537,9 @@ static void buf_init (BufferP buf, char *memory, uint64_t size, uint64_t old_siz
 // allocates or enlarges buffer
 // if it needs to enlarge a buffer fully overlaid by an overlay buffer - it abandons its memory (leaving it to
 // the overlaid buffer) and allocates new memory
-uint64_t buf_alloc_do (VBlockP vb,
-                       BufferP buf, 
-                       uint64_t requested_size,
+uint64_t buf_alloc_do (VBlockP vb, BufferP buf, uint64_t requested_size,
                        float grow_at_least_factor, // IF we need to allocate or reallocate physical memory, we get this much more than requested
-                       FUNCLINE,
-                       rom name)      
+                       FUNCLINE, rom name)      
 {
     START_TIMER;
 
@@ -514,12 +547,12 @@ uint64_t buf_alloc_do (VBlockP vb,
 
     ASSERT ((int64_t)requested_size > 0, "called from %s:%u: negative requested_size=%"PRId64" for name=%s", func, code_line, requested_size, name);
 
-    ASSERT (requested_size <= MAX_BUFFER_SIZE, "Requested %s bytes which is beyond the Buffer maximum of %s",
-            str_int_commas (requested_size).s, str_int_commas (MAX_BUFFER_SIZE).s);
+    ASSERT (requested_size <= MAX_BUFFER_SIZE, "called from %s:%u: Requested %s bytes which is beyond the Buffer maximum of %s",
+            func, code_line, str_int_commas (requested_size).s, str_int_commas (MAX_BUFFER_SIZE).s);
 
 #define REQUEST_TOO_BIG_THREADSHOLD (3ULL << 30) // 3 GB
     if (requested_size > REQUEST_TOO_BIG_THREADSHOLD && !buf->can_be_big) // use WARN instead of ASSERTW to have a place for breakpoint
-        WARN ("Warning: buf_alloc called from %s:%u requested %s. This is suspiciously high and might indicate a bug. vb_i=%u buf=%s line_i=%d",
+        WARN ("Warning: buf_alloc called from %s:%u requested %s. This is suspiciously high and might indicate a bug. vb->vblock_i=%u buf=%s line_i=%d",
               func, code_line, str_size (requested_size).s, vb->vblock_i, buf_desc (buf).s, vb->line_i);
 
     // sanity checks
@@ -545,11 +578,14 @@ uint64_t buf_alloc_do (VBlockP vb,
     // grow us requested - rounding up to 64 bit boundary to avoid aliasing errors with the overflow indicator
     uint64_t new_size = MIN_(MAX_BUFFER_SIZE,(uint64_t)(requested_size * grow_at_least_factor + 7)) & 0xfffffffffffffff8ULL; // aligned to 8 bytes
 
-    ASSERT (new_size >= requested_size, "called from %s:%u: allocated too little memory for buffer %s: requested=%"PRIu64", allocated=%"PRIu64". vb_i=%u", 
+    ASSERT (new_size >= requested_size, "called from %s:%u: allocated too little memory for buffer %s: requested=%"PRIu64", allocated=%"PRIu64". vb->vblock_i=%u", 
             func, code_line, buf_desc (buf).s, requested_size, new_size, vb->vblock_i); // floating point paranoia
 
     // case 2: buffer was allocated already in the past - allocate new memory and copy over the data
     if (buf->memory) {
+
+        ASSERT (buf->type != BUF_MMAP && buf->type != BUF_MMAP_RO, 
+                "called from %s:%u: memory-mapped buffers cannot be realloced", func, code_line);
 
         uint64_t old_size = buf->size;
 
@@ -622,7 +658,10 @@ finish:
 BitsP buf_alloc_bits_do (VBlockP vb, BufferP buf, uint64_t nbits, FUNCLINE, rom name)
 {
     uint64_t nwords = roundup_bits2words64 (nbits);
-    buf_alloc_do (vb, buf, nwords * sizeof (uint64_t), 1, func, code_line, name);
+    
+    if (!buf->data || buf->size < nwords * sizeof (uint64_t))
+        buf_alloc_do (vb, buf, nwords * sizeof (uint64_t), 1, func, code_line, name);
+
     buf->nbits  = nbits;   
     buf->nwords = nwords; 
 
@@ -666,15 +705,18 @@ void buf_overlay_do (VBlockP vb,
         overlaid_buf->type = BUF_UNALLOCATED;
     }
    
-    ASSERT (overlaid_buf->type == BUF_UNALLOCATED, "Call from %s:%u: cannot buf_overlay to a buffer %s already in use", func, code_line, buf_desc (overlaid_buf).s);
-    ASSERT (regular_buf->type == BUF_REGULAR || regular_buf->type == BUF_MMAP, "Call from %s:%u: regular_buf %s in buf_overlay must be a regular or mmap buffer", func, code_line, buf_desc (regular_buf).s);
-    ASSERT (regular_buf->overlayable, "Call from %s:%u: buf_overlay: buffer %s is not overlayble", func, code_line, buf_desc (regular_buf).s);
+    ASSERT (overlaid_buf->type == BUF_UNALLOCATED, "%s: Call from %s:%u: cannot buf_overlay to a buffer %s already in use", VB_NAME, func, code_line, buf_desc (overlaid_buf).s);
+    ASSERT (regular_buf->type == BUF_REGULAR || regular_buf->type == BUF_MMAP || regular_buf->type == BUF_MMAP_RO, 
+            "%s: Call from %s:%u: regular_buf %s in buf_overlay must be a regular or mmap buffer", VB_NAME, func, code_line, buf_desc (regular_buf).s);
+    ASSERT (regular_buf->overlayable, "%s: Call from %s:%u: buf_overlay: buffer %s is not overlayble", VB_NAME, func, code_line, buf_desc (regular_buf).s);
 
-    overlaid_buf->type        = BUF_OVERLAY;
+    overlaid_buf->type        = (regular_buf->type == BUF_MMAP_RO) ? BUF_OVERLAY_RO : BUF_OVERLAY;
     overlaid_buf->memory      = 0;
     overlaid_buf->overlayable = false;
     overlaid_buf->name        = name;
     overlaid_buf->len         = start_in_regular ? 0ULL : regular_buf->len;
+    overlaid_buf->func        = func;
+    overlaid_buf->code_line   = code_line;
     // note: we don't add overlaid_buf to buf_list, and because of that we also don't set its overlaid_buf->vb because it won't get updated in buf_update_buf_list_vb_addr_change
 
     // full or partial buffer overlay - if size=0, copy len too and update overlay counter
@@ -688,10 +730,52 @@ void buf_overlay_do (VBlockP vb,
     overlaid_buf->size = regular_buf->size - start_in_regular;
     overlaid_buf->data = regular_buf->data + start_in_regular;
 
-    uint16_t *overlay_count = (uint16_t*)(regular_buf->data + regular_buf->size + sizeof(uint64_t));
-    (*overlay_count)++; // counter of users of this memory
-
+    if (regular_buf->type != BUF_MMAP_RO) {
+        uint16_t *overlay_count = (uint16_t*)(regular_buf->data + regular_buf->size + sizeof(uint64_t));
+        (*overlay_count)++; // counter of users of this memory
+    }
+    
     mutex_unlock (overlay_mutex);
+}
+
+
+// verify that read-only mapped memory (i.e. reference, refhash) is still the same at the end - detect
+// hardware errors etc that might corrupt data
+static void buf_terminate_background_loading (BufferP buf)
+{
+    if (!buf->bg_loading) return; // not background-loading 
+
+    // reset buf->bg_loading. if thread is still running, this will also instruct it to exit
+    __atomic_or_fetch (((uint64_t*)buf)+2, ~(uint64_t)(1 << BG_LOADING_BIT), __ATOMIC_RELAXED); 
+
+    pthread_join (buf->bg_loader, NULL); 
+}
+
+// thread entry point: access all the memory-mapped buffer's memory, forcing loading from disk to shared memory.
+// note: without this, the code random-accesses very small regions of the memory each time - 
+// this is very slow (guess as to why: the OS only populates the small amount of memory requested,
+// not the entire disk block read, causing repeated reads of the same block)
+volatile uint64_t prevent_optimizer;
+static void *buf_background_load_mmap_buf (void *buf_)
+{
+    BufferP buf = (BufferP)buf_;
+    ARRAY (uint64_t, data, *buf);
+
+    uint64_t checksum = 0; 
+
+    int64_t after = (int64_t)(1 + buf->size / sizeof (uint64_t));
+    for (int64_t i=-1; i < after; i += 1<<20) { // including underflow/overflow region (note: size is always a multiple of 8)
+        for (int64_t j=i; j < i + (1<<20) && j < after; j++)
+            checksum ^= data[j];
+        
+        // check if buf_terminate_background_loading told us to terminate
+        bool bg_loading = (__atomic_load_n (((uint64_t*)buf)+2, __ATOMIC_RELAXED) >> BG_LOADING_BIT) & 1;
+        if (!bg_loading) return 0; 
+    }
+
+    prevent_optimizer = checksum; // prevent optimizer optimizing out the loop
+
+    return NULL;
 }
 
 // creates a file mapping: data is mapping from a read-only file, any modifications are private
@@ -713,20 +797,20 @@ bool buf_mmap_do (VBlockP vb, BufferP buf, rom filename,
     uint64_t file_size = file_get_size (filename);
 
     *buf = (Buffer){
-        .type      = BUF_MMAP,
+        .type      = read_only_buffer ? BUF_MMAP_RO : BUF_MMAP,
         .name      = name,
         .func      = func,
         .code_line = code_line,
         .vb        = vb,
-        .size      = file_size - control_size
+        .size      = file_size - control_size // a memory mapped file includes the Buffer control regions, but .size does not
     };
 
     fd = open (filename, O_RDONLY);    
 
 #ifdef _WIN32
     HANDLE file = (HANDLE)_get_osfhandle (fd);
-    buf->param = (int64_t)CreateFileMapping (file, NULL, PAGE_WRITECOPY, file_size >> 32, file_size & 0xffffffff, NULL);
-    ASSERTGOTO (buf->param, "Failed buf_mmap of %s file_size=%"PRIu64": CreateFileMapping failed: %s", filename, file_size, str_win_error());
+    buf->mmap_handle = CreateFileMapping (file, NULL, PAGE_WRITECOPY, file_size >> 32, file_size & 0xffffffff, NULL);
+    ASSERTGOTO (buf->mmap_handle, "Failed buf_mmap of %s file_size=%"PRIu64": CreateFileMapping failed: %s", filename, file_size, str_win_error());
     
     // note that mmap'ed buffers include the Buffer 
     buf->memory = MapViewOfFile ((HANDLE)buf->param, read_only_buffer ? FILE_MAP_READ : FILE_MAP_COPY, 0, 0, file_size);
@@ -744,10 +828,17 @@ bool buf_mmap_do (VBlockP vb, BufferP buf, rom filename,
     ASSERTGOTO (*(uint64_t *)(buf->memory) == UNDERFLOW_TRAP, "Failed buf_mmap of %s: mmap'ed buffer has corrupt underflow trap", filename);
     ASSERTGOTO (*(uint64_t *)(buf->data + buf->size) == OVERFLOW_TRAP, "Failed buf_mmap of %s: mmap'ed buffer has corrupt overflow trap - possibly file is trucated", filename);
 
-    // reset overlay counter    
+    // reset overlay counter. 
     if (!read_only_buffer)
         *(uint16_t *)(buf->data + buf->size + sizeof (uint64_t)) = 1;
+
+    // load buffer to memory in a background thread
+    buf->bg_loading = true;
     
+    int err;
+    ASSERT (!(err = pthread_create (&buf->bg_loader, NULL, buf_background_load_mmap_buf, buf)), 
+            "failed to create background load thread thread: %s", strerror(err));
+
     COPY_TIMER (buf_mmap_do);
     
     return true;
@@ -757,7 +848,7 @@ error:
     if (fd >= 0) close (fd);
 #ifdef _WIN32
     UnmapViewOfFile (buf->data);
-    CloseHandle ((HANDLE)buf->param);
+    CloseHandle ((HANDLE)buf->mmap_handle);
 #else
     munmap (buf->data, buf->size);
 #endif
@@ -766,62 +857,64 @@ error:
     return false;
 }
 
+static void buf_abandon_overlay (BufferP buf)
+{
+    mutex_lock (overlay_mutex);
+    uint16_t *overlay_count = (uint16_t*)(buf->data + buf->size + sizeof(uint64_t)); // number of buffers (overlay and regular) sharing buf->memory
+
+    if (*overlay_count > 1) { // current overlays exist - abandon memory - leave it to the overlaid buffer(s) which will free() this memory when they're done with it
+        (*overlay_count)--;
+    
+        abandoned_mem_current += buf->size;
+        abandoned_mem_high_watermark = MAX_(abandoned_mem_high_watermark, abandoned_mem_current);
+
+        buf_reset (buf);
+    }
+    else  // case: no overlay exists
+        buf->overlayable = false;
+    
+    mutex_unlock (overlay_mutex);            
+}
+
 // free buffer - without freeing memory. A future buf_alloc of this buffer will reuse the memory if possible.
 void buf_free_do (BufferP buf, FUNCLINE) 
 {
-    uint16_t *overlay_count; // number of buffers (overlay and regular) sharing buf->memory
-
     switch (buf->type) {
 
         case BUF_REGULAR: 
 
             buf_verify_integrity (buf, func, code_line, "buf_free_do");
 
-            if (buf->overlayable) {
+            if (buf->overlayable)   
+                buf_abandon_overlay (buf);
 
-                mutex_lock (overlay_mutex);
-                overlay_count = (uint16_t*)(buf->data + buf->size + sizeof(uint64_t));
-
-                if (*overlay_count > 1) { // current overlays exist - abandon memory - leave it to the overlaid buffer(s) which will free() this memory when they're done with it
-                    (*overlay_count)--;
-             
-                    abandoned_mem_current += buf->size;
-                    abandoned_mem_high_watermark = MAX_(abandoned_mem_high_watermark, abandoned_mem_current);
-
-                    buf_reset (buf);
-                }
-                else  // case: no overlay exists
-                    buf->overlayable = false;
-                
-                mutex_unlock (overlay_mutex);            
-            }
-
-// this causes crashes in rare cases, see bug 308
-/*#ifdef __linux__
+            // this causes crashes in rare cases, see bug 308 (solved?)
+#ifdef __linux__
             // In Windows and Mac, we observe that free() operations are expensive and significantly slow down execution - so we
             // just recycle the same memory
-            if (!buf->overlayable) {
+            if (!buf->overlayable) { // note: possibly lost overlayability in buf_abandon_overlay
                 buf_low_level_free (buf->memory, func, code_line);
                 buf->memory = NULL;
                 buf->size   = 0;
+                buf->type   = BUF_UNALLOCATED; // note: buf->vb is still set, so buf won't be added to buffer_list again in the next alloc
             }
-#endif*/
+#endif
             buf->data        = NULL; 
             buf->overlayable = false;
 
-            // fall through (name (and in Windows also memory and size) are not changed, and buffer is still in buffer list)
+            // fall through (name (and in Windows/Mac also memory and size) are not changed, and buffer is still in buffer list)
 
         case BUF_UNALLOCATED: // reset len and param that may be used even without allocating the buffer
             buf->len         = 0;
             buf->param       = 0;
             break;
 
-        case BUF_OVERLAY:
+        case BUF_OVERLAY: {
             mutex_lock (overlay_mutex);
-            overlay_count = (uint16_t*)(buf->data + buf->size + sizeof(uint64_t));
+            uint16_t *overlay_count = (uint16_t*)(buf->data + buf->size + sizeof(uint64_t));
             (*overlay_count)--;
             mutex_unlock (overlay_mutex);            
-
+            
             // we are the last user - we can free the memory now.
             // do this outside of the mutex - free is a system call and can take some time.
             // this is safe because if we ever observe *overlay_count==0, it means that no buffer has this memory,
@@ -833,11 +926,20 @@ void buf_free_do (BufferP buf, FUNCLINE)
     
             buf_reset (buf);
             break;
+        }
 
+        case BUF_OVERLAY_RO:
+            buf_reset (buf);
+            break;
+
+        case BUF_MMAP_RO:
         case BUF_MMAP:
+            buf_terminate_background_loading (buf);
+
+            // note: we don't support overlayed buffers continuing to use the mmaped memory after MMAP buffer is freed
 #ifdef _WIN32
             ASSERT (UnmapViewOfFile (buf->memory), "called from %s:%u: UnmapViewOfFile failed: %s", buf->func, buf->code_line, str_win_error());
-            ASSERT (CloseHandle ((HANDLE)buf->param), "called from %s:%u: CloseHandle failed: %s", buf->func, buf->code_line, str_win_error());            
+            ASSERT (CloseHandle (buf->mmap_handle), "called from %s:%u: CloseHandle failed: %s", buf->func, buf->code_line, str_win_error());            
 #else
             ASSERT (!munmap (buf->memory, buf->size), "called from %s:%u: munmap failed: %s", buf->func, buf->code_line, strerror (errno));
 #endif
@@ -849,21 +951,18 @@ void buf_free_do (BufferP buf, FUNCLINE)
     }
 } 
 
-static SORTER (buf_list_sorter)
-{
-    return ASCENDING_RAW (*(BufferP *)a, *(BufferP *)b);
-}
+ASCENDING_SORTER (buf_list_sorter, BufListEnt, buf)
 
 // binary-search a buffer in a sorted buffer list
-static int buf_list_find_buffer (const BufferP *buf_list, ConstBufferP buf, int first, int last)
+static int buf_list_find_buffer (const BufListEnt *buf_list, ConstBufferP buf, int first, int last)
 {
     if (first > last) return -1; // not found
 
     int mid = (first + last) / 2;
-    ConstBufferP mid_buf = buf_list[mid];
+    const BufListEnt *mid_buf = &buf_list[mid];
 
-    if (mid_buf < buf) return buf_list_find_buffer (buf_list, buf, mid + 1, last);
-    if (mid_buf > buf) return buf_list_find_buffer (buf_list, buf, first, mid - 1);
+    if (mid_buf->buf < buf) return buf_list_find_buffer (buf_list, buf, mid + 1, last);
+    if (mid_buf->buf > buf) return buf_list_find_buffer (buf_list, buf, first, mid - 1);
     
     return mid; // found
 }
@@ -873,11 +972,11 @@ void buf_compact_buf_list (VBlockP vb)
 {
     if (!vb) return;
     
-    ARRAY (BufferP, bl, vb->buffer_list);
+    ARRAY (BufListEnt, bl, vb->buffer_list);
 
     uint64_t new_i = 0;
     for (uint64_t old_i=0; old_i < bl_len; old_i++)
-        if (!BL_IS_REMOVED (bl[old_i])) {
+        if (!BL_IS_REMOVED (bl[old_i].buf)) {
             if (new_i != old_i) bl[new_i] = bl[old_i];
             new_i++;
         }
@@ -896,18 +995,19 @@ static void buf_remove_from_buffer_list (BufferP buf)
     VBlockP vb = buf->vb;
     
     if (!vb_is_valid (vb)) { // this is bug 576
-        if (flag.debug || getenv ("GENOZIP_TEST"))
+        if (flag.debug || getenv ("GENOZIP_TEST")) {
             WARN ("Unexpected, but unharmful: cannot remove buf=%p from buffer list, because buf->vb=%p refers to a VB that no longer exists", buf, vb);
-        
+            WARN ("%s allocated in %s:%u", buf->name, buf->func, buf->code_line); // separate line in case it segfaults if buf is corrupt
+        }
         return;
     }
 
     ASSERT (vb != evb || threads_am_i_main_thread(), "A thread other than main thread is attempting to modify evb buffer list: buf=%s", buf_display (buf));
     
-    ARRAY (BufferP, buf_list, vb->buffer_list);
+    ARRAY (BufListEnt, buf_list, vb->buffer_list);
 
     if (!vb->buffer_list.param) { // not sorted
-        qsort (buf_list, buf_list_len, sizeof(BufferP), buf_list_sorter);
+        qsort (buf_list, buf_list_len, sizeof(BufListEnt), buf_list_sorter);
         vb->buffer_list.param = true; // now it's sorted
     }
 
@@ -917,7 +1017,7 @@ static void buf_remove_from_buffer_list (BufferP buf)
         if (flag.debug_memory==1) 
             iprintf ("Destroy %s: buf_addr=%p vb->id=%d buf_i=%u\n", buf_desc (buf).s, buf, vb->id, buf_i);
 
-        BL_SET_REMOVED (buf_list[buf_i]);
+        BL_SET_REMOVED (buf_list[buf_i].buf);
         buf->vb = NULL;
     }
     // note: it is possible that the buffer is not found in the list if it is never allocated or destroyed more than once. that's fine.
@@ -933,7 +1033,7 @@ void buf_destroy_do (BufferP buf, FUNCLINE)
 
     // make sure that all overlayers have freed (applicable to BUF_REGULAR and BUF_MMAP)
     uint16_t overlay_count = 1;
-    if (buf->overlayable) {
+    if (buf->overlayable && buf->type != BUF_MMAP_RO) {
         mutex_lock (overlay_mutex);
         overlay_count = (*(uint16_t*)(buf->data + buf->size + sizeof(uint64_t)));
         mutex_unlock (overlay_mutex);            
@@ -946,9 +1046,11 @@ void buf_destroy_do (BufferP buf, FUNCLINE)
             buf_low_level_free (buf->memory, func, code_line); 
             break;
 
-        case BUF_OVERLAY     : buf_free (*buf);   /* stop overlaying */  break;
-        case BUF_MMAP        : buf_free (*buf);   /* stop mmap'ing   */  break;
-        case BUF_UNALLOCATED :                                           break;
+        case BUF_MMAP_RO     :                   // fallthrough - stop mmap'ing  
+        case BUF_MMAP        :                   // fallthrough - stop mmap'ing  
+        case BUF_OVERLAY     :                   // fallthrough - stop overlaying
+        case BUF_OVERLAY_RO  : buf_free (*buf);  // stop overlaying & fallthrough
+        case BUF_UNALLOCATED : break;
         default              : ABORT ("called from %s:%u: Error in buf_destroy_do: invalid buffer type %u", func, code_line, buf->type);
     }
 
@@ -1030,23 +1132,40 @@ void buf_move (VBlockP dst_vb, BufferP dst, VBlockP src_vb, BufferP src)
 }
 
 // removes a section from the buffer
-void buf_cut_out_do (BufferP buf, unsigned sizeof_item, uint64_t remove_start, uint64_t remove_len)
+void buf_remove_do (BufferP buf, unsigned sizeof_item, uint64_t remove_start, uint64_t remove_len)
 {
     if (!remove_len) return;
 
     ASSERT (remove_start + remove_len <= buf->len, "Out of range: remove_start=%"PRIu64" + remove_len=%"PRIu64" > buf->len=%"PRIu64,
             remove_start, remove_len, buf->len);
 
-    uint64_t remove_start_byte = remove_start * sizeof_item;
-    uint64_t remove_bytes      = remove_len   * sizeof_item;
-    memmove (buf->data + remove_start_byte, 
-             buf->data + remove_start_byte + remove_bytes, 
-             (buf->len * sizeof_item) - (remove_start_byte + remove_bytes));
+    if (remove_len != buf->len) { // skip in common case of deleting entire buffer 
+        uint64_t remove_start_byte = remove_start * sizeof_item;
+        uint64_t remove_bytes      = remove_len   * sizeof_item;
+        memmove (buf->data + remove_start_byte, 
+                 buf->data + remove_start_byte + remove_bytes, 
+                 (buf->len * sizeof_item) - (remove_start_byte + remove_bytes));
+    }
 
     buf->len -= remove_len;
 }
 
-void buf_add_string (VBlockP vb, BufferP buf, rom str) 
+void buf_insert_do (VBlockP vb, BufferP buf, unsigned width, uint64_t insert_at, const void *new_data, uint64_t new_data_len, rom name) 
+{ 
+    if (!new_data_len) return;
+
+    buf_alloc (vb ? vb : buf->vb, buf, 0, (buf->len + new_data_len + 1) * width/*room for \0 or separator*/, char, CTX_GROWTH, name); 
+
+    if (insert_at != buf->len) {
+        ASSERT (insert_at < buf->len, "expecting insert_at=%"PRIu64" <= buf->len=%"PRIu64" in buf=%s", insert_at, buf->len, buf_desc(buf).s);
+        memmove (&buf->data[(insert_at + new_data_len) * width], &buf->data[insert_at * width], (buf->len - insert_at) * width);
+    }
+
+    memcpy (&buf->data[insert_at * width], new_data, new_data_len * width);   
+    buf->len += new_data_len; 
+} 
+
+void buf_append_string (VBlockP vb, BufferP buf, rom str) 
 { 
     uint64_t len = strlen (str); 
     ASSERT (len < 10000000, "len=%"PRIu64" too long, looks like a bug", len);
@@ -1085,7 +1204,7 @@ void *buf_low_level_realloc (void *p, size_t size, rom name, FUNCLINE)
 {
     void *new = realloc (p, size);
     ASSERTW (new, "Out of memory in %s:%u: realloc failed (name=%s size=%"PRIu64" bytes). %s", func, code_line, name, (uint64_t)size, 
-             command == ZIP ? "Try limiting the number of concurrent threads with --threads (affects speed) or reducing the amount of data processed by each thread with --vblock (affects compression ratio)" : "");
+             IS_ZIP ? "Try limiting the number of concurrent threads with --threads (affects speed) or reducing the amount of data processed by each thread with --vblock (affects compression ratio)" : "");
 
     if (flag.debug_memory && size >= flag.debug_memory) 
         iprintf ("realloc(): old=%p new=%p name=%s size=%"PRIu64" %s:%u\n", p, new, name, (uint64_t)size, func, code_line);
@@ -1097,7 +1216,7 @@ void *buf_low_level_malloc (size_t size, bool zero, FUNCLINE)
 {
     void *new = malloc (size);
     ASSERT (new, "Out of memory in %s:%u: malloc failed (size=%"PRIu64" bytes). %s", func, code_line, (uint64_t)size,
-            command == ZIP ? "Try limiting the number of concurrent threads with --threads (affects speed) or reducing the amount of data processed by each thread with --vblock (affects compression ratio)" : "");
+            IS_ZIP ? "Try limiting the number of concurrent threads with --threads (affects speed) or reducing the amount of data processed by each thread with --vblock (affects compression ratio)" : "");
 
     if (flag.debug_memory && size >= flag.debug_memory) 
         iprintf ("malloc(): %p size=%"PRIu64" %s:%u\n", new, (uint64_t)size, func, code_line);

@@ -8,8 +8,8 @@
 extern void threads_initialize (void);
 
 extern ThreadId threads_create (void (*func)(VBlockP), VBlockP vb);
-extern bool threads_join_do (ThreadId *thread_id, VBlockP vb, rom func);
-#define threads_join(threads_id,vb) threads_join_do((threads_id),(vb),__FUNCTION__)
+extern void threads_join_do (ThreadId *thread_id, rom func);
+#define threads_join(threads_id) threads_join_do((threads_id), __FUNCTION__)
 extern void threads_cancel_other_threads (void);
 extern bool threads_am_i_main_thread (void);
 extern void threads_print_call_stack (void);

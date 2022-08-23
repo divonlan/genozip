@@ -30,8 +30,8 @@ COMPRESS (codec_bsc_compress)
 {
     START_TIMER;
 
-    ASSERT (*compressed_len >= *uncompressed_len + LIBBSC_HEADER_SIZE, "compressed_len too small: \"%s\": compress_len=%u < uncompressed_len=%u + LIBBSC_HEADER_SIZE=%u",
-            name, *compressed_len, *uncompressed_len, LIBBSC_HEADER_SIZE);
+    ASSERT (*compressed_len >= *uncompressed_len + LIBBSC_HEADER_SIZE, "%s: compressed_len too small: \"%s\": compress_len=%u < uncompressed_len=%u + LIBBSC_HEADER_SIZE=%u. ctx=%s",
+            VB_NAME, name, *compressed_len, *uncompressed_len, LIBBSC_HEADER_SIZE, TAG_NAME);
 
     // libbsc doesn't allow piecemiel compression, so we need to copy all the data in case of callback
     if (get_line_cb) {
@@ -45,7 +45,7 @@ COMPRESS (codec_bsc_compress)
             uint32_t len1=0;        
             
             // note: get what we need, might be less than what's available if calling from codec_assign_best_codec
-            get_line_cb (vb, line_i, &start1, &len1, *uncompressed_len - vb->scratch.len, NULL); 
+            get_line_cb (vb, ctx, line_i, &start1, &len1, *uncompressed_len - vb->scratch.len, NULL); 
 
             if (start1 && len1) buf_add (&vb->scratch, start1, len1);
         }
@@ -63,7 +63,8 @@ COMPRESS (codec_bsc_compress)
     if (ret == LIBBSC_NOT_COMPRESSIBLE)
         ret = bsc_store (vb, (bytes )uncompressed, (uint8_t *)compressed, *uncompressed_len, LIBBSC_FEATURE_FASTMODE);
 
-    ASSERT (ret >= LIBBSC_NO_ERROR, "\"%s\": bsc_compress or bsc_store returned %s", name, codec_bsc_errstr (ret));
+    ASSERT (ret >= LIBBSC_NO_ERROR, "%s: \"%s\": bsc_compress or bsc_store returned %s. ctx=%s", 
+            VB_NAME, name, codec_bsc_errstr (ret), TAG_NAME);
 
     if (get_line_cb) buf_free (vb->scratch);
 
@@ -79,7 +80,7 @@ UNCOMPRESS (codec_bsc_uncompress)
     START_TIMER;
     int ret = bsc_decompress (vb, (bytes )compressed, compressed_len, (uint8_t *)uncompressed_buf->data, uncompressed_len, LIBBSC_FEATURE_FASTMODE);
 
-    ASSERT (ret >= LIBBSC_NO_ERROR, "\"%s\": %s", name, codec_bsc_errstr (ret));    
+    ASSERT (ret >= LIBBSC_NO_ERROR, "%s: \"%s\": %s", VB_NAME, name, codec_bsc_errstr (ret));    
 
     COPY_TIMER (compressor_bsc);
 }

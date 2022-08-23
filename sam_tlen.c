@@ -43,7 +43,7 @@ static inline bool sam_seg_predict_TLEN (VBlockSAMP vb, ZipDataLineSAM *dl, bool
 
         // if this line has a mate, get the mate's ref_consumed. Note: we hope this is our mate, but this is not guaranteed -
         // it is just an earlier read with the same QNAME - could be a supplamentary alignment
-        else if (zip_has_mate) 
+        else if (sam_has_mate) 
             approx_mate_ref_consumed = DATA_LINE (vb->mate_line_i)->ref_consumed; // most of the time we're lucky and this is our mate
 
         // if no MC and no mate, approximate mate's ref_consumed as this line's ref_consumed
@@ -123,7 +123,7 @@ static inline SamPosType sam_piz_predict_TLEN (VBlockSAMP vb, bool has_mc)
     
     if (flag.out_dt == DT_BAM && *(int32_t*)last_rname != *(int32_t*)last_rnext) return 0;
 
-    if (flag.out_dt == DT_SAM && !(last_rnext_len==1 && *last_rnext=='=') &&
+    if (flag.out_dt == DT_SAM && !IS_EQUAL_SIGN (last_rnext) &&
         (last_rname_len != last_rnext_len || memcmp (last_rname, last_rnext, last_rnext_len))) return 0;
 
     SamPosType pnext_pos_delta = (SamPosType)CTX(SAM_PNEXT)->last_value.i - (SamPosType)CTX(SAM_POS)->last_value.i;
@@ -137,10 +137,10 @@ static inline SamPosType sam_piz_predict_TLEN (VBlockSAMP vb, bool has_mc)
             return pnext_pos_delta + MC_ref_consumed;
         }
                 
-        else if (piz_has_buddy) {
-            uint32_t approx_mate_ref_consumed = *B32 (CTX(SAM_CIGAR)->ref_consumed_history, vb->buddy_line_i);
+        else if (sam_has_mate) {
+            uint32_t mate_ref_consumed = B(CigarAnalItem, CTX(SAM_CIGAR)->cigar_anal_history, vb->mate_line_i)->ref_consumed;
 
-            return pnext_pos_delta + approx_mate_ref_consumed;
+            return pnext_pos_delta + mate_ref_consumed;
         }
 
         else
@@ -186,9 +186,9 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_TLEN_old)
 // Used for files compressed with Genozip 12.0.41 and 12.0.42
 SPECIAL_RECONSTRUCTOR (sam_piz_special_COPY_MATE_TLEN_old)
 {
-    ASSPIZ0 (vb->buddy_line_i >= 0, "No buddy line is set for the current line");
+    ASSPIZ0 (VB_SAM->mate_line_i >= 0, "No mate line is set for the current line");
 
-    new_value->i = -*B(int64_t, ctx->history, vb->buddy_line_i); // minus the buddy
+    new_value->i = -*B(int64_t, ctx->history, VB_SAM->mate_line_i); // minus the buddy
     if (reconstruct) RECONSTRUCT_INT (new_value->i);
 
     return true; // new value

@@ -41,8 +41,8 @@ SamPosType sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM *dl, WordIndex prev_line_c
     SamPosType prev_line_pos = vb->line_i ? (dl-1)->POS : 0;
 
     bool do_mux = sam_is_main_vb && segconf.is_paired; // for simplicity. To do: also for prim/depn components
-    int channel_i = zip_has_mate?1 : zip_has_real_prim?2 : 0;
-    ContextP channel_ctx = do_mux ? seg_mux_get_channel_ctx (VB, (MultiplexerP)&vb->mux_POS, channel_i) 
+    int channel_i = sam_has_mate?1 : sam_has_prim?2 : 0;
+    ContextP channel_ctx = do_mux ? seg_mux_get_channel_ctx (VB, SAM_POS, (MultiplexerP)&vb->mux_POS, channel_i) 
                                   : CTX(SAM_POS);
 
     // case: DEPN or PRIM line.
@@ -61,11 +61,11 @@ SamPosType sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM *dl, WordIndex prev_line_c
     }
     
     // case: seg against mate's PNEXT
-    else if (zip_has_mate && mate_dl->PNEXT == pos) 
-        seg_by_ctx (VB, STRa(copy_buddy_PNEXT_snip), channel_ctx, add_bytes); // copy POS from earlier-line mate PNEXT
+    else if (sam_has_mate && mate_dl->PNEXT == pos) 
+        seg_by_ctx (VB, STRa(copy_mate_PNEXT_snip), channel_ctx, add_bytes); // copy POS from earlier-line mate PNEXT
 
     // case: seg against POS in the predicted alignment in prim line SA:Z 
-    else if (zip_has_real_prim && sam_seg_is_item_predicted_by_prim_SA (vb, SA_POS, pos)) 
+    else if (sam_has_prim && sam_seg_is_item_predicted_by_prim_SA (vb, SA_POS, pos)) 
         seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_COPY_PRIM, '0'+SA_POS }, 3, channel_ctx, add_bytes); 
 
     else  
@@ -83,9 +83,9 @@ SamPosType sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM *dl, WordIndex prev_line_c
     return pos;
 }
 
-static inline int sam_PNEXT_get_mux_channel (bool has_mate, bool has_prim, bool rnext_is_equal)
+static inline int sam_PNEXT_get_mux_channel (VBlockSAMP vb, bool rnext_is_equal)
 {
-    return has_mate?0 : has_prim?1 : rnext_is_equal?2 : 3;
+    return sam_has_mate?0 : sam_has_prim?1 : rnext_is_equal?2 : 3;
 }
 
 void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pnext_str)/* option 1 */, SamPosType pnext/* option 2 */, unsigned add_bytes)
@@ -94,19 +94,20 @@ void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pnext_str)/* option 
         ASSSEG (str_get_int_range32 (STRa(pnext_str), 0, MAX_POS_SAM, &pnext), pnext_str,
                 "PNEXT=\"%.*s\" out of range [0,%d] (pnext_str=%p)", pnext_str_len, pnext_str, (int)MAX_POS_SAM, pnext_str);
 
-    if (pnext) segconf_set_has (SAM_PNEXT);
+    if (pnext && segconf.running) 
+        segconf.has[SAM_PNEXT] = true; // "has" means we found evidence of non-zero PNEXT
 
     if (segconf.has[SAM_PNEXT]) {
-        int channel_i = sam_PNEXT_get_mux_channel (zip_has_mate, zip_has_real_prim, vb->RNEXT_is_equal);
-        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, (MultiplexerP)&vb->mux_PNEXT, channel_i);
+        int channel_i = sam_PNEXT_get_mux_channel (vb, vb->RNEXT_is_equal);
+        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, SAM_PNEXT, (MultiplexerP)&vb->mux_PNEXT, channel_i);
 
         // case: copy mate's POS
         if (channel_i==0 && DATA_LINE (vb->mate_line_i)->POS == pnext) 
-            seg_by_ctx (VB, STRa(copy_buddy_POS_snip), channel_ctx, add_bytes); // copy PNEXT from earlier-line mate POS
+            seg_by_ctx (VB, STRa(copy_mate_POS_snip), channel_ctx, add_bytes); // copy PNEXT from earlier-line mate POS
 
         // case: copy prim lines PNEXT
-        else if (channel_i==1 && DATA_LINE (vb->prim_line_i)->PNEXT == pnext) 
-            seg_by_ctx (VB, STRa(copy_buddy_PNEXT_snip), channel_ctx, add_bytes); 
+        else if (channel_i==1 && DATA_LINE (vb->saggy_line_i)->PNEXT == pnext) 
+            seg_by_ctx (VB, STRa(copy_saggy_PNEXT_snip), channel_ctx, add_bytes); // copy from PNEXT to the channel ctx
 
         else 
             pnext = seg_pos_field (VB, channel_ctx->did_i, SAM_POS, 0, 0, 0, 0, pnext, add_bytes);
@@ -136,9 +137,9 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_PNEXT)
     STR(RNAME); ctx_get_snip_by_word_index (CTX(SAM_RNAME), CTX(SAM_RNAME)->last_value.i, RNAME);
     STR(RNEXT); ctx_get_snip_by_word_index (CTX(SAM_RNEXT), CTX(SAM_RNEXT)->last_value.i, RNEXT);
      
-    bool rnext_is_equal = (RNEXT_len == 1 && *RNEXT == '=') || str_issame (RNAME, RNEXT);
+    bool rnext_is_equal = IS_EQUAL_SIGN (RNEXT) || str_issame (RNAME, RNEXT);
     
-    int channel_i = sam_PNEXT_get_mux_channel (piz_has_mate, piz_has_real_prim, rnext_is_equal);
+    int channel_i = sam_PNEXT_get_mux_channel (VB_SAM, rnext_is_equal);
 
     return reconstruct_demultiplex (vb, ctx, STRa(snip), channel_i, new_value, reconstruct);
 }

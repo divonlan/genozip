@@ -43,8 +43,7 @@ typedef struct {
     int undocumented_dts_paired; // undocumented flag to uncompress paired files older than 9.0.13 when genozip_header.dts_paired was introduced
 
     // genounzip options
-    #define FLAG_BGZF_BY_ZFILE -1
-    int bgzf;   // can be set by --bgzf, or by various other conditions. values 0-12 indicate the level of libdeflate, FLAG_BGZF_BY_ZFILE means use SEC_BGZF or default level if it is absent
+    int32_t bgzf;   // can be set by --bgzf, or by various other conditions. values 0-12 indicate the level of libdeflate, BGZF_BY_ZFILE means use SEC_BGZF or default level if it is absent
     
     int out_dt; // used to indicate the desired dt of the output txt - consumed by file_open, and thereafter equal to txt_file->data_type
     #define out_dt_is_binary dt_props[flag.out_dt].is_binary
@@ -84,7 +83,7 @@ typedef struct {
     ReferenceType reference;
 
     // stats / metadata flags for end users
-    int show_dvcf, show_ostatus, show_lift, show_wrong_md, show_wrong_xg, show_wrong_xm; 
+    int show_dvcf, show_ostatus, show_lift, show_wrong_md, show_wrong_xg, show_wrong_xm, show_wrong_xb; 
     enum { VLD_NONE, VLD_REPORT_INVALID, VLD_REPORT_VALID, VLD_INVALID_FOUND } validate; // genocat: tests if this is a valid genozip file (z_file opens correctly)
     StatsType show_stats;
     CompIType show_stats_comp_i;
@@ -104,9 +103,10 @@ typedef struct {
         show_vblocks, show_threads, show_uncompress, biopsy,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
         debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sag, debug_gencomp, debug_lines, debug_latest,
+        debug_peek,
         no_gencomp, force_gencomp, no_domqual, verify_codec, seg_only, show_bam, xthreads, show_flags, show_rename_tags,
         #define SHOW_CONTAINERS_ALL_VBs (-1)
-        show_containers, show_aligner,
+        show_containers, show_aligner, show_buddy,
         echo,         // show the command line in case of an error
         show_headers; // (1 + SectionType to display) or 0=flag off or -1=all sections
     rom help, dump_section, show_is_set, show_time, show_mutex;
@@ -136,6 +136,7 @@ typedef struct {
          genocat_no_reconstruct,   // PIZ: User requested to genocat with only metadata to be shown, not file contents
          no_writer,          // PIZ: User requested to genocat with only metadata to be shown, not file contents (but we still might do reconstruction without output)
          no_writer_thread,   // PIZ: Don't use a Writer thread. Sometimes when no_writer, we still need a writer thread (eg to calculate digest with SAM generated components)
+         zip_no_z_file,      // ZIP: a mode where no z_file is created (eg biopsy)
          preprocessing,      // PIZ: we're currently dispatching compute threads for preprocessing (= loading SA Groups)
          multiple_files,     // Command line includes multiple files
          reconstruct_as_src, // the reconstructed data type is the same as the source data type
@@ -172,7 +173,7 @@ typedef struct {
 
 extern Flags flag;
 
-#define NO_LINE (-1) // used for lines_first, lines_last, biopsy_lines, vb->buddy_line_i, VB_SAM->prim_line_i
+#define NO_LINE (-1) // used for lines_first, lines_last, biopsy_lines, VB_SAM->mate_line_i, VB_SAM->saggy_line_i
 
 #define SAVE_FLAGS Flags save_flag = flag
 #define RESTORE_FLAGS flag = save_flag

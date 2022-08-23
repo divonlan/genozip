@@ -52,15 +52,15 @@ static SRes codec_lzma_data_in_callback (const ISeqInStream *p, void *buf, size_
         instream->next_in_1  = instream->next_in_2  = 0;
         instream->avail_in_1 = instream->avail_in_2 = 0;
 
-        instream->callback (instream->vb, instream->line_i, 
+        instream->callback (instream->vb, instream->ctx, instream->line_i, 
                             &instream->next_in_1, &instream->avail_in_1,
                             instream->avail_in, NULL);
 
         instream->line_i++;
     }
 
-    ASSERT (instream->avail_in_1 <= instream->avail_in, "Expecting avail_in_1=%u <= avail_in=%u",
-            instream->avail_in_1, instream->avail_in);
+    ASSERT (instream->avail_in_1 <= instream->avail_in, "Expecting avail_in_1=%u <= avail_in=%u. ctx=%s",
+            instream->avail_in_1, instream->avail_in, (instream->ctx ? ((ContextP)instream->ctx)->tag_name : "NoContext"));
             
     uint32_t bytes_served_1 = MIN_(instream->avail_in_1, *size);
     if (bytes_served_1) {
@@ -102,15 +102,16 @@ COMPRESS (codec_lzma_compress)
     props.dictSize     = MIN_(*uncompressed_len, segconf.vb_size);
 
     char lzma_handle[LzmaEnc_LzmaHandleSize()];
-    LzmaEnc_Create (lzma_handle, vb);
+    LzmaEnc_Create (lzma_handle, vb, ctx);
 
     SRes res = LzmaEnc_SetProps (lzma_handle, &props);
-    ASSERT (res == SZ_OK, "\"%s\": LzmaEnc_SetProps failed: %s", name, lzma_errstr (res));
+    ASSERT (res == SZ_OK, "%s: \"%s\": LzmaEnc_SetProps failed for ctx=%s: %s", VB_NAME, name, TAG_NAME, lzma_errstr (res));
     
     // write encoding properties as first 5 bytes of compressed stream
     SizeT props_size = LZMA_PROPS_SIZE; // per documentation in LzmaLib.h
     res = LzmaEnc_WriteProperties (lzma_handle, (uint8_t*)compressed, &props_size);
-    ASSERT (res == SZ_OK && props_size==LZMA_PROPS_SIZE, "\"%s\": LzmaEnc_WriteProperties failed: %s", name, lzma_errstr (res));
+    ASSERT (res == SZ_OK && props_size==LZMA_PROPS_SIZE, "%s: \"%s\": LzmaEnc_WriteProperties failed for ctx=%s: %s", 
+            VB_NAME, name, TAG_NAME, lzma_errstr (res));
 
     bool success = true;
 
@@ -149,7 +150,7 @@ COMPRESS (codec_lzma_compress)
     if (soft_fail && (res == SZ_ERROR_WRITE || (!get_line_cb && res == SZ_ERROR_OUTPUT_EOF)))  // data_compressed_len is too small
         success = false;
     else
-        ASSERT (res == SZ_OK, "\"%s\": LzmaEnc_MemEncode failed: %s", name, lzma_errstr (res));
+        ASSERT (res == SZ_OK, "%s: \"%s\": LzmaEnc_MemEncode failed for ctx=%s: %s", VB_NAME, name, TAG_NAME, lzma_errstr (res));
 
     LzmaEnc_Destroy (lzma_handle);
 
@@ -172,7 +173,7 @@ UNCOMPRESS (codec_lzma_uncompress)
                            LZMA_FINISH_END, &status);
 
     ASSERT (ret == SZ_OK && status == LZMA_STATUS_FINISHED_WITH_MARK, 
-            "\"%s\": LzmaDecode failed: ret=%s status=%s", name, lzma_errstr (ret), lzma_status (status)); 
+            "%s: \"%s\": LzmaDecode failed: ret=%s status=%s", VB_NAME, name, lzma_errstr (ret), lzma_status (status)); 
 
     COPY_TIMER (compressor_lzma);
 }

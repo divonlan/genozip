@@ -188,16 +188,16 @@ void chain_seg_initialize (VBlockP vb)
     if (segconf.running && flag.reference)
         chain_verify_references_not_reversed (vb);
 
-    ctx_set_no_stons (vb, 13, CHAIN_NAMELUFT, CHAIN_NAMEPRIM, CHAIN_TOPLEVEL, 
+    ctx_set_no_stons (vb, CHAIN_NAMELUFT, CHAIN_NAMEPRIM, CHAIN_TOPLEVEL, 
                       CHAIN_CHAIN, CHAIN_SEP, CHAIN_VERIFIED, CHAIN_STRNDPRIM,  // keep in b250 so it can be eliminated as all_the_same
                       CHAIN_STARTPRIM, CHAIN_ENDPRIM, CHAIN_STARTLUFT, CHAIN_ENDLUFT, CHAIN_ID, // required by seg_pos_field
                       DID_EOL);
                       
-    ctx_set_store (VB, STORE_INT, 11, CHAIN_STARTPRIM, CHAIN_ENDPRIM, CHAIN_SIZEPRIM,
+    ctx_set_store (VB, STORE_INT, CHAIN_STARTPRIM, CHAIN_ENDPRIM, CHAIN_SIZEPRIM,
                    CHAIN_STARTLUFT, CHAIN_ENDLUFT, CHAIN_SIZELUFT,
                    CHAIN_SIZE, CHAIN_VERIFIED, CHAIN_GAPS, CHAIN_ID, DID_EOL);
 
-    ctx_set_store (VB, STORE_INDEX, 3, CHAIN_NAMEPRIM, CHAIN_NAMELUFT, DID_EOL);
+    ctx_set_store (VB, STORE_INDEX, CHAIN_NAMEPRIM, CHAIN_NAMELUFT, DID_EOL);
 
     CTX(CHAIN_NAMEPRIM)-> no_vb1_sort =
     CTX(CHAIN_NAMELUFT)-> no_vb1_sort = true;

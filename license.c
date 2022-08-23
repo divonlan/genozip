@@ -9,7 +9,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
-#include <wchar.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include "genozip.h"
@@ -64,7 +63,7 @@ static uint32_t license_calc_number (ConstBufferP license_data)
 static void license_generate (BufferP license_data)
 {
     for (int i=0; i < ARRAY_LEN(license); i++) {
-        buf_add_string (evb, license_data, license[i]); // allocs one extra char
+        buf_append_string (evb, license_data, license[i]); // allocs one extra char
         BNXTc (*license_data) = '\n';
     }
 
@@ -573,13 +572,13 @@ void license_print_tip (void)
             }
 
         case 26: 
-            if (!flag.best) {
+            if (!flag.best && !flag.make_reference) {
                 iprint0 ("\nTip: to achieve the best compression, use --best\n");
                 break;
             }
 
         case 27: 
-            iprintf ("\nMake money with Genozip! Genozip pays a referral fee for referring a customer, See: %s\n", WEBSITE_REFERRAL);
+            iprintf ("\nMake money with Genozip! Genozip pays a generous referral fee for referring a customer, See: %s\n", WEBSITE_REFERRAL);
             break;
 
         default: break;

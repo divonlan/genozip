@@ -18,160 +18,196 @@
 // 4 possible values: W_C2T ; W_G2A ; C_C2T ; C_G2A
 void sam_seg_bsbolt_YS_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(ys), unsigned add_bytes)
 {
-    // note: BSBolt always maps Watson strand alignments to the '+' strand and Crick to the '-' strand
-    if (ys_len == 5 && ys[0] == "WC"[dl->FLAG.rev_comp] && (!memcmp (ys+1, "_C2T", 4) || !memcmp (ys+1, "_G2A", 4)))
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_BSBOLT_YS, ys[2] }, 3, OPTION_YS_Z, add_bytes);
+    // note: we expect Watson strand alignments to be revcomp=false and Crick to be revcomp=true
+    ASSSEG (ys_len == 5 && (ys[0]=='W' || ys[0]=='C') && (!memcmp (ys+1, "_C2T", 4) || !memcmp (ys+1, "_G2A", 4)),
+            ys, "Invalid YS:Z=%.*s value: expecting one of: W_C2T ; W_G2A ; C_C2T ; C_G2A", STRf(ys));
 
-    else 
-        seg_by_did (VB, STRa(ys), OPTION_YS_Z, add_bytes);
+    seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_BSBOLT_YS, 
+                              vb->bisulfite_strand?'*' : ((ys[0] == 'C') == dl->FLAG.rev_comp)?'^' : ys[0],
+                              ys[2] }, 
+                4, OPTION_YS_Z, add_bytes);
 }
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_BSBOLT_YS)
 {
     if (reconstruct) {
-        RECONSTRUCT1 ("WC"[last_flags.rev_comp]);
-        RECONSTRUCT (snip[0]=='C' ? "_C2T" : "_G2A", 4);
+        RECONSTRUCT1 (snip[0] == '*' ? "WC"[VB_SAM->bisulfite_strand == 'G'] 
+                    : snip[0] == '^' ? "WC"[last_flags.rev_comp]
+                    :                  snip[0]);
+
+        RECONSTRUCT (snip[1]=='C' ? "_C2T" : "_G2A", 4);
     }
 
     return NO_NEW_VALUE;
 }
 
-// Read bisulfite conversion position and context
-// Example: XB:Z:2z10x4z10z5zzZz10z1z5zZzz3z9z1zzz1zzz1z3z8zz15z1X2z5
-// X=methylated CG x=un-methylated CG Y=methylated CHG y=un-methylated CHG Z=methylated CHH z=un-methylated CHH ; numbers=gaps
-void sam_seg_bsbolt_XB (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XB), unsigned add_bytes)
+// enter methylatble bases into the INTERNAL reference in their unconverted form 
+// (not currently used as bisulfite features are disabled for REF_INTERNAL (bug 648), and not thoroughly tested)
+void sam_seg_bsbolt_XB_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl)
 {
-    if (segconf.running || flag.reference == REF_INTERNAL || vb->cigar_missing || vb->seq_missing) 
-        goto fallback; // note: an external reference is required for this method
-/*
-    int32_t inc_soft_clip = true; //(vb->XG_inc_S == XG_WITH_S) ? vb->soft_clip[0] : 0; // soft clip length, if we need to include it
+    if (flag.reference != REF_INTERNAL || // analyzing sets bases in an internal reference - not needed if not internal
+        has_MD ||                         // analyzing MD sets the same bases
+        !has_XB_Z || !vb->bisulfite_strand || vb->comp_i != SAM_COMP_MAIN) return;
+
+    STR(xb);
+    sam_seg_get_aux_Z (vb, vb->idx_XB_Z, pSTRa(xb), IS_BAM_ZIP);
+    uint32_t xb_i = 0;
+
+    RangeP range = NULL;
+    RefLock lock = REFLOCK_NONE;
+    uint32_t ref_consumed = vb->ref_consumed; // M/=/X and D
+    SamPosType pos = dl->POS;
+    uint32_t number=0;
+
+    #define set_number ({ if (!number) {                                \
+                              char *after;                              \
+                              number = strtol (&xb[xb_i], &after, 10);  \
+                              xb_i += after - &xb[xb_i];                \
+                          }; number; })                                            
+
+    for_buf (BamCigarOp, op, vb->binary_cigar) 
+        if (op->op==BC_M || op->op==BC_E || op->op==BC_X) 
+            for (uint32_t i=0; i < op->n; i++) {
+                if (!number && IS_DIGIT(xb[xb_i])) set_number; 
+
+                if (number) number--;
+                
+                else {
+                    sam_seg_analyze_set_one_ref_base (vb, false, pos, vb->bisulfite_strand, ref_consumed, &range, &lock); // ignore errors
+                    xb_i++;
+                }
         
-    // uint32_t expected_xm_len = vb->ref_consumed + dl->SEQ.len - vb->ref_and_seq_consumed;
-    // if (vb->XG_inc_S == XG_WITHOUT_S) expected_xm_len -= vb->soft_clip[0] + vb->soft_clip[1];
+                pos++;
+                ref_consumed--;
+            }
 
-    // if (expected_xm_len != XM_len)  { // XM includes entries for I,D,M, maybe left-S
-    //     if (flag.show_wrong_xm)
-    //         iprintf ("%s: XM not special bc bad length (no harm): cigar=\"%s\". Expecting: ref_consumed + seq_len - ref_and_seq_consumed=%d == XM_len=%d\n",
-    //                  LN_NAME, vb->last_cigar, vb->ref_consumed + dl->SEQ.len - vb->ref_and_seq_consumed, XM_len);
-    //     goto fallback;
-    // }
+        else if (op->op == BC_D || op->op == BC_N) {
+            pos += op->n;
+            ref_consumed -= op->n;
+        }
+        
+        // note: soft-clip (BC_S) bases are not represented in the XB:Z string
+        else if (op->op == BC_I) {
+            set_number;
+            ASSSEG (number >= op->n, &xb[xb_i], "expecting number=%u >= op->n=%u (XB:Z=\"%.*s\" CIGAR=\"%s\")", 
+                    number, op->n, STRf(xb),
+                    dis_binary_cigar (vb, B1ST(BamCigarOp, vb->binary_cigar), vb->binary_cigar.len32, &vb->scratch).s);
 
-    // // note: we don't require XG to be verified, but we require it to be the expected length
-    // if (vb->ref_consumed + inc_soft_clip != vb->XG.len - 4) {
-    //     if (flag.show_wrong_xm)
-    //         iprintf ("%s: XM not special bc bad length (no harm): cigar=\"%s\". Expecting: (vb->ref_consumed%s)=%d != (vb->XG.len-4)=%d\n",
-    //                  LN_NAME, vb->last_cigar, (vb->XG_inc_S==XG_WITH_S ? " + vb->soft_clip[0]":""), vb->ref_consumed + inc_soft_clip, (int)vb->XG.len - 4);
-    //     goto fallback;
-    // }
-
-    Range *range = vb->cigar_missing ? NULL 
-                                     : ref_seg_get_locked_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, ref_consumed, WORD_INDEX_NONE, seq, 
-                                                                 flag.reference == REF_EXTERNAL ? NULL : &lock);
-
-    rom seq = IS_BAM_ZIP ? B1STc (vb->textual_seq) : Btxt (dl->SEQ.index);
-    bool rev_comp = dl->FLAG.rev_comp;
-
-    ARRAY (BamCigarOp, cigar, vb->binary_cigar);
-    int op_i = (vb->XG_inc_S == XG_WITHOUT_S && cigar[0].op == BC_S);
-    BamCigarOp op = {};
-
-    for (int32_t i=0; i < XM_len; i++, op.n--) {
-
-        XM_UPDATE_OP;
-
-        char predicted_xm = rev_comp ? XM_predict_rev (op.op, xg[0], xg[-1], xg[-2], *seq)
-                                     : XM_predict_fwd (op.op, xg[0], xg[+1], xg[+2], *seq);
-
-        uint32_t xm_i = rev_comp ? XM_len-i-1 : i;
-        char this_xm = XM[xm_i];
-
-        if (predicted_xm != this_xm) {
-            if (flag.show_wrong_xm)
-                iprintf ("%s: XM mis-predicted (no harm): xm_i=%u revcomp=%s: cigar=%s op=%c xg=%c seq=%c predicted_xm=%c xm=%c\n",
-                         LN_NAME, xm_i, TF(rev_comp), vb->last_cigar, cigar_op_to_char[op.op], *xg, *seq, predicted_xm, this_xm);
-            goto fallback;
+            number -= op->n;
         }
 
-// printf ("op=%c\n", cigar_op_to_char[op.op]);
-        if (op.op != BC_I) xg++;
-        if (op.op != BC_D) seq++;
+    ASSSEG (xb_i == xb_len, xb, "Mismatch between XB:Z=\"%.*s\" and CIGAR=\"%s\" (xb_i=%u xb_len=%u)", STRf(xb), 
+            dis_binary_cigar (vb, B1ST(BamCigarOp, vb->binary_cigar), vb->binary_cigar.len32, &vb->scratch).s, xb_i, xb_len);
+
+    if (range) ref_unlock (gref, &lock);
+}
+
+static void show_wrong_xb (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XB), rom extra)
+{
+    iprintf ("%s: QNAME=\"%.*s\" bisulfite_strand=%c XB=\"%.*s\" CIGAR=\"%.*s\" %s\n", 
+             LN_NAME, STRfw(dl->QNAME), vb->bisulfite_strand, STRf(XB), STRfw(dl->CIGAR), extra);
+    if (vb->scratch.len32)   printf ("XM: %.*s\n", STRfb(vb->scratch));
+    if (vb->meth_call.len32) printf ("SQ: %.*s\n\n", STRfb(vb->meth_call));
+}
+
+// Read bisulfite conversion position and context
+// Example: XB:Z:2z10x4z10z5zzZz10z1z5zZzz3z9z1zzz1zzz1z3z8zz15z1X2z5
+// X/x=methylated/unmethylated CpG ; Y/y=CHG Z/z=CHH ; numbers=gaps
+void sam_seg_bsbolt_XB (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XB), unsigned add_bytes)
+{
+    START_TIMER;
+
+    static const char bsbolt_to_bismark[256] = { ['X']='Z', ['x']='z', ['Y']='X', ['y']='x', ['Z']='H', ['z']='h' };    
+
+    // in PRIM and DEPN we dont have the methylation call because we didn't seg SEQ vs reference. To do: generate methylation call prediction in this case too/
+    if (vb->comp_i != SAM_COMP_MAIN) goto fallback;
+
+    // convert XB to Bismark format
+    buf_alloc_exact (vb, vb->scratch, dl->SEQ.len, char, "scratch");
+    char *bis = B1STc (vb->scratch);
+    
+    // soft-clips don't appear in bsbolt's XB but do appear in Bismark's XM
+    if (vb->soft_clip[0]) memset (bis, '.', vb->soft_clip[0]);
+    if (vb->soft_clip[1]) memset (&bis[dl->SEQ.len - vb->soft_clip[1]], '.', vb->soft_clip[1]);
+    
+    uint32_t xb_i=0; 
+    uint32_t bis_i = vb->soft_clip[0];
+    uint32_t after_bis = dl->SEQ.len - vb->soft_clip[1];
+
+    while (xb_i < XB_len && bis_i < after_bis) {
+        if (IS_DIGIT(XB[xb_i])) {
+            char *after;
+            uint32_t n = strtol (&XB[xb_i], &after, 10);
+            if (bis_i + n > dl->SEQ.len) goto fallback;
+
+            memset (&bis[bis_i], '.', n);
+            bis_i += n;
+
+            uint32_t len = after - &XB[xb_i];
+            xb_i += len;
+        }
+
+        else {
+            char bismark = bsbolt_to_bismark[(uint8_t)XB[xb_i]];
+            if (!bismark) goto fallback;
+            
+            bis[bis_i++] = bismark;
+            xb_i++;
+        }
     }
 
-    // we include the argument XG_inc_S because we might have this special even if XG failed verification and has no special
-    seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_BSSEEKER2_XM, '0' + vb->XG_inc_S }, 3, OPTION_XM_Z, add_bytes);
-    return;
+    if (xb_i < XB_len || bis_i < after_bis) goto fallback;
 
-*/
+    if (flag.show_wrong_xb && !segconf.running && vb->scratch.len32 && vb->meth_call.len32 && !str_issame_(STRb(vb->scratch),STRb(vb->meth_call))) 
+        show_wrong_xb (vb, dl, STRa(XB), vb->meth_call.len ? "" : "(no meth_call)");
+
+    COPY_TIMER (sam_seg_bsbolt_XB); // note: sam_seg_bismark_XM_Z accounts for itself
+
+    sam_seg_bismark_XM_Z (vb, dl, OPTION_XB_Z, SAM_SPECIAL_BSBOLT_XB, STRb(vb->scratch), add_bytes);
+
+    buf_free (vb->scratch);
+    return;
+ 
 fallback:
+    if (flag.show_wrong_xb && !segconf.running) 
+        show_wrong_xb (vb, dl, STRa(XB), "(fallback)");
+
+    buf_free (vb->scratch);
     seg_add_to_local_text (VB, CTX(OPTION_XB_Z), STRa(XB), true, add_bytes);
 }
 
-/*    VBlockSAMP vb = (VBlockSAMP)vb_;
 SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_BSBOLT_XB)
 {
+    static const char bismark_to_bsbolt[256] = { ['Z']='X', ['z']='x', ['X']='Y', ['x']='y', ['H']='Z', ['h']='z' };
+
+    VBlockSAMP vb = (VBlockSAMP)vb_; 
+    char *recon = BAFTtxt, *next = recon, *start = recon;
+
+    sam_piz_special_BISMARK_XM (VB, ctx, STRa(snip), new_value, reconstruct);
     if (!reconstruct) goto done;
 
-    XgIncSType XG_inc_S = snip[0] - '0';
+    // convert Bismark format back to BSBolt format
+    char *after = BAFTtxt;
+    while (recon < after) {
+        if (*recon == '.') {
+            uint32_t n = str_count_consecutive_char (recon, after - recon, '.');
+            
+            if (recon == start)     { recon += vb->soft_clip[0] ; n -= vb->soft_clip[0]; }
+            if (recon + n == after) { recon += vb->soft_clip[1] ; n -= vb->soft_clip[1]; }
+            
+            if (n) { // n==0 if all of is soft_clip[1]
+                next  += str_int_ex (n, next, false);
+                recon += n;
+            }
+        }
 
-    STR(xg);
-    reconstruct_peek (VB, CTX (OPTION_XG_Z), pSTRa(xg));
-
-    bool rev_comp = last_flags.rev_comp;
-
-    // case: reconstructed to txt_data: copy data peeked 1. because our recon will overwrite it 2. so we don't need to reconstruct it again
-    buf_alloc_exact (vb, vb->XG, xg_len-2, char, "xg"); // remove the two underscores
-    memcpy (Bc (vb->XG, 0), xg, 2);
-    memcpy (Bc (vb->XG, 2), xg+3, xg_len - 6);
-    memcpy (Bc (vb->XG, vb->XG.len-2), xg+xg_len-2, 2);
-    xg = B1STc(vb->XG);
-    xg_len = vb->XG.len;
-    int32_t xg_i=0;
-
-    rom seq = IS_SRC_and_RECON_BAM_PIZ ? vb->textual_seq.data : last_txt(VB, SAM_SQBITMAP);
-    char *recon = BAFTtxt;
-    ARRAY (BamCigarOp, cigar, vb->binary_cigar);
-    int op_i = (XG_inc_S == XG_WITHOUT_S && cigar[0].op == BC_S);
-    BamCigarOp op = {};
-
-    uint32_t xm_len = vb->ref_consumed + vb->seq_len - vb->ref_and_seq_consumed;
-    if (XG_inc_S == XG_WITHOUT_S) xm_len -= vb->soft_clip[0] + vb->soft_clip[1];
-
-// printf ("xg=%.*s\n", STRf(xg));
-// printf ("SEQ= %.*s\n", seq_len, seq);
-
-// printf ("%.*s cigar=", vb->textual_cigar.len, vb->textual_cigar.data);
-// for (int i=0; i < cigar_len; i++)
-// printf ("%c",cigar_op_to_char[cigar[i].op]);
-// printf ("\n");
-    for (int32_t i=0; i < xm_len; i++, op.n--) {
-
-        XM_UPDATE_OP
-
-        #define XG_FWD(x) xg[(x)+2] 
-        #define XG_REV(x) complem((int)xg[1+(xg_len-4)-(x)])
-                
-        char xm = rev_comp ? XM_predict_rev (op.op, XG_REV(xg_i), XG_REV(xg_i-1), XG_REV(xg_i-2), *seq)
-                           : XM_predict_fwd (op.op, XG_FWD(xg_i), XG_FWD(xg_i+1), XG_FWD(xg_i+2), *seq);
-//  printf ("xg0=%c xg1=%c xg2=%c seq=%c xm=%c      ind0=%d ind1=%d ind2=%d  XG[xg0]=%c\n", 
-//   XG_REV(i), XG_REV(i+1), XG_REV(i+2), seq[i], xm,
-//   XG_REV_IDX(i), XG_REV_IDX(i+1), XG_REV_IDX(i+2), XG_REV(i));
-
-        recon[rev_comp ? xm_len-i-1 : i] = xm;
-//printf ("%c", cigar_op_to_char[op.op]);
-//printf ("op=%c\n", cigar_op_to_char[op.op]);
-        if (op.op != BC_I) xg_i++;
-        if (op.op != BC_D) seq++;
+        else 
+            *next++ = bismark_to_bsbolt[(uint8_t)*recon++];
     }
 
-    vb->txt_data.len += xm_len;
-// printf ("\n");
+    vb->txt_data.len32 = BNUMtxt (next);
 
-// printf ("cigar2=");
-// for (int i=0; i < cigar_len; i++)
-// printf ("%c",cigar_op_to_char[cigar[i].op]);
-// printf ("\n");
-
-    done: return NO_NEW_VALUE;
+done:
+    return NO_NEW_VALUE;
 }
-*/
   

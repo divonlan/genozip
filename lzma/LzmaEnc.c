@@ -269,6 +269,8 @@ typedef UInt32 CProbPrice;
 typedef struct
 {
   VBlockP vb;
+  ContextP ctx;
+  
   void *matchFinderObj;
   IMatchFinder matchFinder;
 
@@ -2118,9 +2120,10 @@ MY_NO_INLINE static void FillDistancesPrices(CLzmaEnc *p)
 
 
 
-static void LzmaEnc_Construct(CLzmaEnc *p, VBlockP vb)
+static void LzmaEnc_Construct(CLzmaEnc *p, VBlockP vb, ContextP ctx)
 {
-  p->vb = vb;
+  p->vb  = vb;
+  p->ctx = ctx;
 
   RangeEnc_Construct(&p->rc);
   MatchFinder_Construct(&p->matchFinderBase);
@@ -2146,9 +2149,9 @@ size_t LzmaEnc_LzmaHandleSize (void) // divon
   return sizeof(CLzmaEnc);
 }
 
-void LzmaEnc_Create(CLzmaEncHandle p, VBlockP vb)
+void LzmaEnc_Create(CLzmaEncHandle p, VBlockP vb, ContextP ctx)
 {
-  LzmaEnc_Construct((CLzmaEnc *)p, vb);
+  LzmaEnc_Construct((CLzmaEnc *)p, vb, ctx);
 }
 
 static void LzmaEnc_FreeLits(CLzmaEnc *p)

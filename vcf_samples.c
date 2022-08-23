@@ -116,28 +116,23 @@ void vcf_samples_zip_initialize (void)
 
 void vcf_samples_seg_initialize (VBlockVCFP vb)
 {
-    CTX(FORMAT_ADALL)->flags.store = STORE_INT;
-    CTX(FORMAT_DP)->   flags.store = STORE_INT;
-    CTX(FORMAT_AD)->   flags.store = STORE_INT;   // since v13
-    CTX(FORMAT_RD)->   flags.store = STORE_INT;   // since v13
-    CTX(FORMAT_RDR)->  flags.store = STORE_INT;   // since v13
-    CTX(FORMAT_RDF)->  flags.store = STORE_INT;   // since v13
-    CTX(FORMAT_ADR)->  flags.store = STORE_INT;   // since v13
-    CTX(FORMAT_ADF)->  flags.store = STORE_INT;   // since v13
-    CTX(FORMAT_SDP)->  flags.store = STORE_INT;   // since v13
+    ctx_set_store (VB, STORE_INT, FORMAT_ADALL, FORMAT_DP, FORMAT_AD, FORMAT_RD, FORMAT_RDR, FORMAT_RDF,
+                   FORMAT_ADR, FORMAT_ADF, FORMAT_SDP, DID_EOL);
 
+    ctx_set_ltype (VB, LT_DYN_INT, FORMAT_RD, FORMAT_GQ, FORMAT_RGQ, DID_EOL);
+    
     CTX(FORMAT_GT)->no_stons  = true; // we store the GT matrix in local, so cannot accomodate singletons
     
     vb->ht_matrix_ctx = CTX(FORMAT_GT_HT); // different for different data types
 
-    CTX(FORMAT_DP)->flags.delta_peek = true; // DP value, when delta's against another ctx, is always relative to the other value in the current sample (regardless of whether DP or the other value are reconstructed first)
+    CTX(FORMAT_DP)->flags.same_line = true; // DP value, when delta's against another ctx, is always relative to the other value in the current sample (regardless of whether DP or the other value are reconstructed first)
 
     // create additional contexts as needed for compressing FORMAT/GT - must be done before merge
     if (vcf_num_samples) 
         codec_pbwt_seg_init (VB, CTX(FORMAT_PBWT_RUNS), CTX(FORMAT_PBWT_FGRC));
 
-    ctx_consolidate_stats (VB, FORMAT_GT,  5, FORMAT_GT_HT, FORMAT_GT_HT_INDEX, FORMAT_PBWT_RUNS, FORMAT_PBWT_FGRC, DID_EOL);
-    ctx_consolidate_stats (VB, FORMAT_AB,  2, FORMAT_AB3, DID_EOL);
+    ctx_consolidate_stats (VB, FORMAT_GT, FORMAT_GT_HT, FORMAT_GT_HT_INDEX, FORMAT_PBWT_RUNS, FORMAT_PBWT_FGRC, DID_EOL);
+    ctx_consolidate_stats (VB, FORMAT_AB, FORMAT_AB3, DID_EOL);
 
     // determine which way to seg PL - Mux by dosage or Mux by dosageXDP, or test both options
     CTX(FORMAT_PL)->no_stons = true;
@@ -146,25 +141,25 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
         : PL_mux_by_DP_NO;
 
     // initialize dosage multiplexers
-    #define init_mux_by_dosage(name,store_type,ltype) seg_mux_init ((VBlockP)vb, 4, VCF_SPECIAL_MUX_BY_DOSAGE, FORMAT_##name, FORMAT_##name, (store_type), (ltype), false, (MultiplexerP)&vb->mux_##name, "0123")
-    init_mux_by_dosage(PRI,  STORE_NONE, LT_TEXT);
-    init_mux_by_dosage(GL,   STORE_NONE, LT_TEXT);
-    init_mux_by_dosage(DS,   STORE_NONE, LT_TEXT);
-    init_mux_by_dosage(PP,   STORE_NONE, LT_TEXT);
-    init_mux_by_dosage(GP,   STORE_NONE, LT_TEXT);
-    init_mux_by_dosage(PVAL, STORE_NONE, LT_TEXT);
-    init_mux_by_dosage(FREQ, STORE_NONE, LT_TEXT);
-    init_mux_by_dosage(RD,   STORE_INT,  LT_DYN_INT);
-    init_mux_by_dosage(PLn,  STORE_NONE, LT_TEXT);
+    #define init_mux_by_dosage(name) seg_mux_init ((VBlockP)vb, CTX(FORMAT_##name), 4, VCF_SPECIAL_MUX_BY_DOSAGE, false, (MultiplexerP)&vb->mux_##name, "0123")
+    init_mux_by_dosage(PRI);
+    init_mux_by_dosage(GL);
+    init_mux_by_dosage(DS);
+    init_mux_by_dosage(PP);
+    init_mux_by_dosage(GP);
+    init_mux_by_dosage(PVAL);
+    init_mux_by_dosage(FREQ);
+    init_mux_by_dosage(RD);
+    init_mux_by_dosage(PLn);
 
-    seg_mux_init (VB, MUX_CAPACITY(vb->mux_PLy), VCF_SPECIAL_MUX_BY_DOSAGExDP, FORMAT_PLy, FORMAT_PLy, STORE_NONE, LT_TEXT, false, (MultiplexerP)&vb->mux_PLy, NULL);
+    seg_mux_init (VB, CTX(FORMAT_PLy), MUX_CAPACITY(vb->mux_PLy), VCF_SPECIAL_MUX_BY_DOSAGExDP, false, (MultiplexerP)&vb->mux_PLy, NULL);
     
     if (segconf.has[FORMAT_DP]) {
-        seg_mux_init (VB, MUX_CAPACITY(vb->mux_GQ),  VCF_SPECIAL_MUX_BY_DOSAGExDP, FORMAT_GQ,  FORMAT_GQ,  STORE_NONE, LT_DYN_INT, false, (MultiplexerP)&vb->mux_GQ,  NULL);
-        seg_mux_init (VB, MUX_CAPACITY(vb->mux_RGQ), VCF_SPECIAL_RGQ,              FORMAT_RGQ, FORMAT_RGQ, STORE_NONE, LT_DYN_INT, false, (MultiplexerP)&vb->mux_RGQ, NULL);
+        seg_mux_init (VB, CTX(FORMAT_GQ),  MUX_CAPACITY(vb->mux_GQ),  VCF_SPECIAL_MUX_BY_DOSAGExDP, false, (MultiplexerP)&vb->mux_GQ,  NULL);
+        seg_mux_init (VB, CTX(FORMAT_RGQ), MUX_CAPACITY(vb->mux_RGQ), VCF_SPECIAL_RGQ, false, (MultiplexerP)&vb->mux_RGQ, NULL);
     }
     else
-        init_mux_by_dosage(GQ, STORE_NONE, LT_TEXT);
+        init_mux_by_dosage(GQ);
 
     // flags to send to PIZ
     vb->flags.vcf.use_null_DP_method = segconf.use_null_DP_method;
@@ -231,10 +226,10 @@ static inline ContextP vcf_seg_FORMAT_mux_by_dosage (VBlockVCFP vb, ContextP ctx
         return ctx;
     }
 
-    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, MUX, channel_i);
+    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, ctx->did_i, MUX, channel_i);
 
     if (cell) {
-        if (mux->ltype == LT_DYN_INT)
+        if (channel_ctx->ltype == LT_DYN_INT)
             seg_integer_or_not (VB, channel_ctx, STRa(cell), cell_len);
         else
             seg_by_ctx (VB, STRa(cell), channel_ctx, cell_len);
@@ -289,9 +284,9 @@ static void vcf_seg_FORMAT_mux_by_dosagexDP (VBlockVCFP vb, ContextP ctx, STRp(c
     DP = MAX_(0, MIN_(DP, num_dps-1));
     channel_i = (channel_i == 3) ? (num_dps * 3) : (DP*3 + channel_i);
 
-    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, MUX, channel_i);
+    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, ctx->did_i, MUX, channel_i);
 
-    if (mux->ltype == LT_DYN_INT)
+    if (channel_ctx->ltype == LT_DYN_INT)
         seg_integer_or_not (VB, channel_ctx, STRa(cell), cell_len);
     else
         seg_by_ctx (VB, STRa(cell), channel_ctx, cell_len);
@@ -393,7 +388,7 @@ static WordIndex vcf_seg_FORMAT_A_R (VBlockVCFP vb, ContextP ctx, SmallContainer
         if (!item_ctxs[i]->is_initialized) {
             item_ctxs[i]->flags.store = item_store_type;
             item_ctxs[i]->is_initialized = true;
-            ctx_consolidate_stats (VB, ctx->did_i, 2, item_ctxs[i]->did_i, DID_EOL);
+            ctx_consolidate_stats (VB, ctx->did_i, item_ctxs[i]->did_i, DID_EOL);
         }
 
         if (seg_item_cb) {
@@ -467,7 +462,7 @@ static void vcf_seg_AD_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP
             
             else if (i==0 || i==1) {
                 if (!vb->mux_AD[i].num_channels)
-                    seg_mux_init (VB, 4, VCF_SPECIAL_MUX_BY_DOSAGE, item_ctxs[i]->did_i, FORMAT_AD, STORE_INT, LT_TEXT, false, (MultiplexerP)&vb->mux_AD[i], "0123");
+                    seg_mux_init (VB, item_ctxs[i], 4, VCF_SPECIAL_MUX_BY_DOSAGE, false, (MultiplexerP)&vb->mux_AD[i], "0123");
                 
                 vcf_seg_FORMAT_mux_by_dosage (vb, item_ctxs[i], STRi(item, i), &vb->mux_AD[i]);
             }
@@ -490,12 +485,10 @@ static void vcf_seg_AD_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP
 // Sepcial treatment for item 0
 static void vcf_seg_ADALL_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *item_ctxs, const int64_t *values)
 {
-    segconf_set_has (FORMAT_ADALL);
-
     for (unsigned i=0; i < n_items; i++) 
         if (i==0 || i==1) {
             if (!vb->mux_ADALL[i].num_channels)
-                seg_mux_init (VB, 4, VCF_SPECIAL_MUX_BY_DOSAGE, item_ctxs[i]->did_i, FORMAT_ADALL, STORE_INT, LT_TEXT, false, (MultiplexerP)&vb->mux_ADALL[i], "0123");
+                seg_mux_init (VB, item_ctxs[i], 4, VCF_SPECIAL_MUX_BY_DOSAGE, false, (MultiplexerP)&vb->mux_ADALL[i], "0123");
             
             vcf_seg_FORMAT_mux_by_dosage (vb, item_ctxs[i], STRi(item, i), &vb->mux_ADALL[i]);
         }
@@ -657,7 +650,7 @@ static int64_t vcf_predict_GQ (VBlockVCFP vb, Did src_did_i)
     bool is_gp = (src_did_i == FORMAT_GP);
     STR(src);
 
-    if (command == ZIP)
+    if (IS_ZIP)
         CTXlast (src, CTX(src_did_i));
     else
         reconstruct_peek (VB, CTX(src_did_i), pSTRa(src));
@@ -786,7 +779,7 @@ static inline void vcf_seg_FORMAT_RGQ (VBlockVCFP vb, ContextP ctx, STRp(rgq), C
             DP=0;
 
         int channel_i = MAX_(0, MIN_(DP, mux->num_channels-1));
-        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, MUX, channel_i);
+        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, FORMAT_RGQ, MUX, channel_i);
 
         seg_integer_or_not (VB, channel_ctx, STRa(rgq), rgq_len);
     }
@@ -1268,7 +1261,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_PLOIDY)
     if (!ctx_encountered (VB, FORMAT_GT)) return false; // we can't translate unless this variant as GT
 
     // use gt_prev_ploidy: in Seg, set by vcf_seg_FORMAT_GT, in validate and piz set by vcf_piz_luft_GT 
-    return vcf_piz_luft_trans_complement_to_max_value (vb, ctx, STRa(recon), validate_only, ctx->gt_prev_ploidy);
+    return vcf_piz_luft_trans_complement_to_max_value (vb, ctx, STRa(recon), validate_only, CTX(FORMAT_GT)->gt_prev_ploidy);
 }
 
 //------------------------------------------------
@@ -1279,7 +1272,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_PLOIDY)
 // three cases: (1) R1,R2->R2,R1 (2) Ra1,Rb1,Ra2,Rb2->Ra2,Rb2,Ra1,Rb1 (3) G11,G12,G22->G22,G12,G11
 // returns true if successful (return value used only if validate_only)
 static bool vcf_piz_luft_switch_first_last (VBlockP vb, ContextP ctx, char *recon, int32_t recon_len, 
-                                           unsigned num_items, char field_type, bool validate_only)
+                                            unsigned num_items, char field_type, bool validate_only)
 {
     if (IS_TRIVAL_FORMAT_SUBFIELD) return true; // This is FORMAT field which is empty or "." - all good
 
@@ -1291,17 +1284,17 @@ static bool vcf_piz_luft_switch_first_last (VBlockP vb, ContextP ctx, char *reco
 
     if (validate_only) return true;
     
-    vb->txt_data.len -= recon_len;
+    vb->txt_data.len32 -= recon_len;
     
-    if (n_items==2 || n_items == 3) {
+    if (num_items==2 || num_items == 3) {
         RECONSTRUCT_SEP (items[n_items-1], item_lens[n_items-1], ',');
 
-        if (n_items==3)
+        if (num_items==3)
             RECONSTRUCT_SEP (items[1], item_lens[1], ',');
 
         RECONSTRUCT (items[0], item_lens[0]);
     }
-    else if (n_items == 4) { // Ra1,Rb1,Ra2,Rb2 -> Ra2,Rb2,Ra1,Rb1
+    else if (num_items == 4) { // Ra1,Rb1,Ra2,Rb2 -> Ra2,Rb2,Ra1,Rb1
         RECONSTRUCT_SEP (items[2], item_lens[2], ',');
         RECONSTRUCT_SEP (items[3], item_lens[3], ',');
         RECONSTRUCT_SEP (items[0], item_lens[0], ',');
@@ -1327,6 +1320,23 @@ TRANSLATOR_FUNC (vcf_piz_luft_G)
     if (num_values != 3 && num_values != 2) return false; // Genozip currently only support haploid (2 bi-allelic genotypes) and diploid (3 bi-allelic genotypes) 
 
     return vcf_piz_luft_switch_first_last (vb, ctx, STRa(recon), num_values, 'G', validate_only); 
+}
+
+//--------------------------------------------------------------------------------------------------------------
+// LongRanger: <ID=BX,Number=.,Type=String,Description="Barcodes and Associated Qual-Scores Supporting Alleles">
+// example: CCTAAAGGTATCGCCG-1_41;TTGTCCGTCGCTAGCG-1_55;TATCATCGTTGGAGGT-1_74
+//--------------------------------------------------------------------------------------------------------------
+static inline void vcf_seg_FORMAT_BX (VBlockVCFP vb, ContextP ctx, STRp(BX))
+{
+    static const MediumContainer con = {
+        .nitems_lo   = 2, 
+        .drop_final_repsep = true,
+        .repsep      = {';'},
+        .items       = { { .dict_id={.id="BXbarcod" }, .separator = {'-'} },
+                         { .dict_id={.id="BXcoords"  },                    } }
+    };
+
+    seg_array_of_struct (VB, CTX(FORMAT_BX), con, STRa(BX), NULL, BX_len);
 }
 
 //------------------------------------------------------------------------
@@ -1623,7 +1633,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
         case _FORMAT_SB    : vcf_seg_FORMAT_A_R (vb, ctx, con_SB, STRi(sf, i), STORE_NONE, vcf_seg_SB_items); break;
 
         // <ID=MB,Number=4,Type=Integer,Description="Per-sample component statistics to detect mate bias">
-        case _FORMAT_MB    : vcf_seg_FORMAT_A_R (vb, ctx, con_MB, STRi(sf, i), STORE_NONE, vcf_seg_MB_items); break;
+        case _FORMAT_MB    : vcf_seg_FORMAT_A_R (vb, ctx, con_MB, STRi(sf, i), STORE_INT, vcf_seg_MB_items); break;
 
         // <ID=SAC,Number=.,Type=Integer,Description="Number of reads on the forward and reverse strand supporting each allele (including reference)">
         case _FORMAT_SAC   : vcf_seg_FORMAT_A_R (vb, ctx, con_SAC, STRi(sf, i), STORE_NONE, vcf_seg_SAC_items); break;
@@ -1637,6 +1647,10 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
         // <ID=AB,Number=1,Type=Float,Description="Allele balance for each het genotype">
         case _FORMAT_AB    : vcf_seg_FORMAT_AB (vb, ctx, STRi(sf, i)); break;
 
+        // <ID=BX,Number=.,Type=String,Description="Barcodes and Associated Qual-Scores Supporting Alleles">
+        // example: CCTAAAGGTATCGCCG-1_41;TTGTCCGTCGCTAGCG-1_55;TATCATCGTTGGAGGT-1_74
+        case _FORMAT_BX    : vcf_seg_FORMAT_BX (vb, ctx, STRi(sf, i)); break;
+        
         default            :
         fallback           : seg_by_ctx (VB, STRi(sf, i), ctx, sf_lens[i]);
         }

@@ -61,10 +61,7 @@ void bam_seq_to_sam (VBlockSAMP vb, bytes bam_seq, uint32_t seq_len /*bases, not
                      BufferP out)            // appends to end of buffer - caller should allocate
 {
     START_TIMER;
-    
-    // note" what we really need is the start address to be 16-bit aligned, but so far we always call with an empty buffer
-    ASSERTISZERO (out->len);
-    
+        
     if (!seq_len) {
         BNXTc (*out) = '*';
         return;        
@@ -132,29 +129,6 @@ void bam_seq_to_sam (VBlockSAMP vb, bytes bam_seq, uint32_t seq_len /*bases, not
              LN_NAME, seq_len);
 }
 
-void bam_seq_copy (VBlockSAMP vb, bytes bam_seq, uint32_t seq_len /*bases, not bytes*/, 
-                   bool start_mid_byte, // ignore first nibble of bam_seq (seq_len doesn't include the ignored nibble)
-                   BufferP out_buf)     // appends to end of buffer (byte-aligned) - caller should allocate
-{
-    uint8_t *out = BAFT(uint8_t, *out_buf);
-
-    if (start_mid_byte) {
-        for (uint32_t i=0; i < seq_len / 2; i++) 
-            *out++ = ((bam_seq[i] & 0x0f) << 4) | (bam_seq[i+1] >> 4); 
-        
-        if (seq_len & 1)
-            *out++ = (bam_seq[seq_len / 2] & 0x0f) << 4;
-    }
-    else {
-        memcpy (out, bam_seq, (seq_len+1)/2);
-
-        if (vb->seq_len & 1)
-            out[seq_len/2] &= 0xf0; // keep the high nibble only (the first BAM base of this byte)
-    }
-
-    out_buf->len += (seq_len+1)/2;
-}
-
 /*
 // compare a sub-sequence to a full sequence and return true if they're the same. Sequeneces in BAM format.
 bool bam_seq_has_sub_seq (bytes full_seq, uint32_t full_seq_len, 
@@ -184,25 +158,68 @@ bool bam_seq_has_sub_seq (bytes full_seq, uint32_t full_seq_len,
         return true; // all bases are the same
     }
 }
+*/
+static void bam_seq_copy (uint8_t *dst, bytes src, 
+                          uint32_t src_start_base, uint32_t n_bases) // bases, not bytes
+{
+    src += src_start_base / 2;
+
+    if (src_start_base & 1) {
+        for (uint32_t i=0; i < n_bases / 2; i++) 
+            *dst++ = ((src[i] & 0x0f) << 4) | (src[i+1] >> 4); 
+        
+        if (n_bases & 1)
+            *dst = (src[n_bases / 2] & 0x0f) << 4;
+    }
+    else {
+        memcpy (dst, src, (n_bases+1)/2);
+
+        if (n_bases & 1)
+            dst[n_bases/2] &= 0xf0; // keep the high nibble only (the first BAM base of this byte)
+    }
+}
 
 // C<>G A<>T ; IUPACs: R<>Y K<>M B<>V D<>H W<>W S<>S N<>N
-static void bam_seq_revcomp_in_place (uint8_t *seq, uint32_t seq_len)
+static void bam_seq_revcomp_in_place (uint8_t *seq, uint32_t n_bases)
 {                                 // Was:  =    A    C    M    G    R    S    V    T    W    Y    H    K    D    B    N                          
                                   // Comp: =    T    G    K    C    Y    S    B    A    W    R    D    M    H    V    N
     static const uint8_t bam_comp[16] = { 0x0, 0x8, 0x4, 0xc, 0x2, 0xa, 0x6, 0xe, 0x1, 0x9, 0x5, 0xd, 0x3, 0xb, 0x7, 0xf };
 
-    for (int32_t i=0, j=seq_len-1; i < seq_len/2; i++, j--) {
+    for (int32_t i=0, j=n_bases-1; i < n_bases/2; i++, j--) {
+        
         uint8_t b1 = (i&1) ? (seq[i/2] & 0xf) : (seq[i/2] >> 4);
         uint8_t b1c = bam_comp[b1];
 
         uint8_t b2 = (j&1) ? (seq[j/2] & 0xf) : (seq[j/2] >> 4);
         uint8_t b2c = bam_comp[b2];
 
-        seq[i/2] = (i&1) ? (b2c | (seq[i/2] & 0xf0)) : ((b2c << 4) | (seq[i/2] & 0xf));
-        seq[j/2] = (j&1) ? (b1c | (seq[j/2] & 0xf0)) : ((b1c << 4) | (seq[j/2] & 0xf));
+        seq[i/2] = (i&1) ? (b2c | (seq[i/2] & 0xf0)) : ((b2c << 4) | (seq[i/2] & 0x0f));
+        seq[j/2] = (j&1) ? (b1c | (seq[j/2] & 0xf0)) : ((b1c << 4) | (seq[j/2] & 0x0f));
     }
 }
 
+// returns length in bytes 
+uint32_t sam_seq_copy (char *dst, rom src, uint32_t src_start_base, uint32_t n_bases, 
+                       bool revcomp, bool is_bam_format)
+{
+    if (!is_bam_format) {
+        if (revcomp)
+            str_revcomp_in_out (dst, src, n_bases);
+        else
+            memcpy (dst, src, n_bases);
+    }
+    
+    else {
+        bam_seq_copy ((uint8_t*)dst, (const uint8_t*)src, src_start_base, n_bases);
+
+        if (revcomp)
+            bam_seq_revcomp_in_place ((uint8_t*)dst, n_bases);
+    } 
+
+    return is_bam_format ? (n_bases + 1) / 2 : n_bases;
+}
+
+/*
 // like bam_seq_has_sub_seq, but sub_seq is reverse complemented, and start_base is relative to END of full_seq
 bool bam_seq_has_sub_seq_revcomp (bytes full_seq, uint32_t full_seq_len, 
                                   bytes sub_seq,  uint32_t sub_seq_len, uint32_t start_base)

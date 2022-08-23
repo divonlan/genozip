@@ -181,7 +181,6 @@ static void refhash_compress_one_vb (VBlockP vb)
 {
     uint32_t uncompressed_size = MIN_(make_ref_vb_size, layer_size[vb->refhash_layer] - vb->refhash_start_in_layer);
     const uint32_t *hash_data = &refhashs[vb->refhash_layer][vb->refhash_start_in_layer / sizeof (uint32_t)];
-//const uint32_t *hash_data = B(const uint32_t, refhash_bufs[vb->refhash_layer], vb->refhash_start_in_layer / sizeof (uint32_t));
 
     // calculate density to decide on compression codec
     uint32_t num_zeros=0;
@@ -199,13 +198,13 @@ static void refhash_compress_one_vb (VBlockP vb)
                                     .layer_bits              = (uint8_t)layer_bits[vb->refhash_layer],
                                     .start_in_layer          = BGEN32 (vb->refhash_start_in_layer)     };
 
-    comp_compress (vb, &vb->z_data, (SectionHeaderP)&header, (char*)hash_data, NO_CALLBACK, "SEC_REF_HASH");
+    comp_compress (vb, NULL, &vb->z_data, (SectionHeaderP)&header, (char*)hash_data, NO_CALLBACK, "SEC_REF_HASH");
 
     if (flag.show_ref_hash) 
         iprintf ("vb_i=%u Compressing SEC_REF_HASH num_layers=%u layer_i=%u layer_bits=%u start=%u size=%u bytes size_of_disk=%u bytes\n", 
                  vb->vblock_i, header.num_layers, header.layer_i, header.layer_bits, vb->refhash_start_in_layer, uncompressed_size, BGEN32 (header.h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderRefHash));
 
-    vb->is_processed = true; // tell dispatcher this thread is done and can be joined.
+    vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
 }
 
 // ZIP-FASTA-make-reference: called by main thread in zip_write_global_area
@@ -214,8 +213,8 @@ void refhash_compress_refhash (void)
     next_task_layer = 0;
     next_task_start_within_layer = 0;
 
-    dispatcher_fan_out_task ("compress_refhash", NULL, PROGRESS_MESSAGE, "Writing hash table (this can take several minutes)...", 
-                             false, false, 0, 100,
+    dispatcher_fan_out_task ("compress_refhash", NULL, 0, "Writing hash table (this can take several minutes)...", 
+                             false, false, false, 0, 100,
                              refhash_prepare_for_compress, 
                              refhash_compress_one_vb, 
                              zfile_output_processed_vb);
@@ -263,7 +262,7 @@ void refhash_create_cache_join (bool free_mem)
 {
     if (!cache_create_vb) return;
 
-    threads_join (&refhash_cache_creation_thread_id, NULL);   
+    threads_join (&refhash_cache_creation_thread_id);   
 
     if (free_mem) vb_destroy_vb (&cache_create_vb);
 }
@@ -297,7 +296,7 @@ static void refhash_uncompress_one_vb (VBlockP vb)
     copy.data = (char *)refhashs[layer_i] + start; // refhashs[layer_i] points to the start of the layer within refhash_buf.data
     zfile_uncompress_section (vb, header, &copy, NULL, 0, SEC_REF_HASH);
 
-    vb->is_processed = true; // tell dispatcher this thread is done and can be joined.
+    vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
 }
 
 static void refhash_read_one_vb (VBlockP vb)
@@ -403,8 +402,8 @@ void refhash_initialize (bool *dispatcher_invoked)
 
             sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
             dispatcher_fan_out_task ("load_refhash", ref_get_filename (gref),
-                                     PROGRESS_MESSAGE, "Reading and caching reference hash table...", 
-                                     flag.test, false, 0, 100,
+                                     0, "Reading and caching reference hash table...",
+                                     true, flag.test, false, 0, 100,
                                      refhash_read_one_vb, 
                                      refhash_uncompress_one_vb, 
                                      NO_CALLBACK);
@@ -428,12 +427,26 @@ void refhash_initialize (bool *dispatcher_invoked)
     if (!refhashs) refhash_initialize_refhashs_array();
 }
 
-void refhash_destroy (void)
+void refhash_destroy (bool destroy_only_if_not_mmap)
 {
+    if (refhash_buf.type == BUF_UNALLOCATED || 
+        (refhash_buf.type == BUF_MMAP_RO && destroy_only_if_not_mmap)) return;
+
     refhash_create_cache_join (true); // wait for cache writing, if we're writing
 
     buf_destroy (refhash_buf);
     FREE (refhashs);
 
     flag.aligner_available = false;
+}
+
+void refhash_verify_before_exit (void)
+{
+    // verify read-only mmap'ed reference integrity before existing process
+    buf_destroy (refhash_buf); // also verifies loaded mmap
+}
+
+bool refhash_has_refhash (void)
+{
+    return buf_is_alloc (&refhash_buf);
 }

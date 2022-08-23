@@ -21,7 +21,7 @@ COMPRESS (codec_none_compress)
             char *start1=0;
             uint32_t len1=0;        
             
-            get_line_cb (vb, line_i, &start1, &len1, *uncompressed_len - (next - compressed), NULL);
+            get_line_cb (vb, ctx, line_i, &start1, &len1, *uncompressed_len - (next - compressed), NULL);
 
             if (start1 && len1) { memcpy (next, start1, len1); next += len1; }
         }

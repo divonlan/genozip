@@ -50,7 +50,7 @@ COMPRESS (codec_bz2_compress)
     strm.opaque  = vb; // just passed to malloc/free
     
     int init_ret = BZ2_bzCompressInit (&strm, flag.fast ? 1 : 9, 0, 30); // we optimize for size (normally) or speed (if user selected --fast)
-    ASSERT (init_ret == BZ_OK, "\"%s\": BZ2_bzCompressInit failed: %s", name, BZ2_errstr(init_ret));
+    ASSERT (init_ret == BZ_OK, "%s: \"%s\": BZ2_bzCompressInit failed for ctx=%s: %s", VB_NAME, name, TAG_NAME, BZ2_errstr(init_ret));
 
     strm.next_out  = compressed;
     strm.avail_out = *compressed_len;
@@ -66,7 +66,7 @@ COMPRESS (codec_bz2_compress)
         if (soft_fail && ret == BZ_FINISH_OK)
             success = false; // data_compressed_len too small
         else 
-            ASSERT (ret == BZ_STREAM_END, "\"%s\": BZ2_bzCompress failed: %s", name, BZ2_errstr (ret));
+            ASSERT (ret == BZ_STREAM_END, "%s: \"%s\": BZ2_bzCompress failed for ctx=%s: %s", VB_NAME, name, TAG_NAME, BZ2_errstr (ret));
     }
     
     // option 2 - compress data one line at a time
@@ -75,13 +75,13 @@ COMPRESS (codec_bz2_compress)
         uint32_t in_so_far = 0;
         for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
 
-            ASSERT (!strm.avail_in, "\"%s\": expecting strm.avail_in to be 0, but it is %u", name, strm.avail_in);
+            ASSERT (!strm.avail_in, "%s: \"%s\": expecting strm.avail_in to be 0, but it is %u. ctx=%s", VB_NAME, name, strm.avail_in, TAG_NAME);
 
             // initialize to 0
             strm.next_in=0;
             strm.avail_in=0;
 
-            get_line_cb (vb, line_i, &strm.next_in, &strm.avail_in, *uncompressed_len - in_so_far, NULL);
+            get_line_cb (vb, ctx, line_i, &strm.next_in, &strm.avail_in, *uncompressed_len - in_so_far, NULL);
             in_so_far += strm.avail_in;
 
             bool is_last_line = (line_i == vb->lines.len - 1);
@@ -96,14 +96,15 @@ COMPRESS (codec_bz2_compress)
                 break;
             }
             else 
-                ASSERT (ret == (final ? BZ_STREAM_END : BZ_RUN_OK), "\"%s\": BZ2_bzCompress failed: %s", name, BZ2_errstr (ret));
+                ASSERT (ret == (final ? BZ_STREAM_END : BZ_RUN_OK), "%s: \"%s\": BZ2_bzCompress failed for ctx=%s: %s", 
+                        VB_NAME, name, TAG_NAME, BZ2_errstr (ret));
         }
     }
     else 
-        ABORT ("\"%s\": neither src_data nor callback is provided", name);
+        ABORT ("%s: \"%s\": neither src_data nor callback is provided", VB_NAME, name);
     
     ret = BZ2_bzCompressEnd (&strm);
-    ASSERT (ret == BZ_OK, "\"%s\": BZ2_bzCompressEnd failed: %s", name, BZ2_errstr (ret));
+    ASSERT (ret == BZ_OK, "%s: \"%s\": BZ2_bzCompressEnd failed for ctx=%s: %s", VB_NAME, name, TAG_NAME, BZ2_errstr (ret));
 
     *compressed_len -= strm.avail_out;
 
@@ -122,7 +123,7 @@ UNCOMPRESS (codec_bz2_uncompress)
     strm.opaque  = vb; // just passed to malloc/free
 
     int ret = BZ2_bzDecompressInit (&strm, 0, 0);
-    ASSERT (ret == BZ_OK, "\"%s\": BZ2_bzDecompressInit failed", name);
+    ASSERT (ret == BZ_OK, "%s: \"%s\": BZ2_bzDecompressInit failed", VB_NAME, name);
 
     strm.next_in   = (char *)compressed;
     strm.avail_in  = compressed_len;
@@ -130,7 +131,8 @@ UNCOMPRESS (codec_bz2_uncompress)
     strm.avail_out = uncompressed_len;
 
     ret = BZ2_bzDecompress (&strm);
-    ASSERT (ret == BZ_STREAM_END || ret == BZ_OK, "\"%s\": BZ2_bzDecompress failed: %s, avail_in=%d, avail_out=%d", name, BZ2_errstr(ret), strm.avail_in, strm.avail_out);
+    ASSERT (ret == BZ_STREAM_END || ret == BZ_OK, "%s: \"%s\": BZ2_bzDecompress failed: %s, avail_in=%d, avail_out=%d", 
+            VB_NAME, name, BZ2_errstr(ret), strm.avail_in, strm.avail_out);
 
     BZ2_bzDecompressEnd (&strm);
 

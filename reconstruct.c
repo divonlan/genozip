@@ -56,7 +56,7 @@ static int64_t reconstruct_from_delta (VBlockP vb,
     ASSPIZ (base_ctx->flags.store == STORE_INT, "reconstructing %s - calculating delta \"%.*s\" from a base of %s, but %s, doesn't have STORE_INT",
             my_ctx->tag_name, STRf(delta_snip), base_ctx->tag_name, base_ctx->tag_name);
 
-    int64_t base_value = (my_ctx->flags.delta_peek && my_ctx != base_ctx)
+    int64_t base_value = (my_ctx->flags.same_line && my_ctx != base_ctx)
         ? reconstruct_peek (vb, base_ctx, 0, 0).i // value of this line/sample - whether already encountered or peek a future value
         : base_ctx->last_value.i; // use last_value even if base_ctx not encountered yet
 
@@ -86,13 +86,13 @@ static int64_t reconstruct_from_delta (VBlockP vb,
 
 #define ASSERT_IN_BOUNDS \
     ASSPIZ (ctx->next_local < ctx->local.len32, \
-            "unexpected end of ctx->local data in %s (len=%u next_local=%u ltype=%s lcodec=%s did_i=%u)", \
-            ctx->tag_name, ctx->local.len32, ctx->next_local, lt_name (ctx->ltype), codec_name (ctx->lcodec), ctx->did_i)
+            "unexpected end of ctx->local data in %s (len=%u next_local=%u ltype=%s lcodec=%s did_i=%u preprocessing=%u). %s", \
+            ctx->tag_name, ctx->local.len32, ctx->next_local, lt_name (ctx->ltype), codec_name (ctx->lcodec), ctx->did_i, vb->preprocessing, ctx->local.len ? "" : "since len=0, perhaps a Skip function issue?");
 
 #define ASSERT_IN_BOUNDS_BEFORE(recon_len) \
     ASSPIZ (ctx->next_local + (recon_len) <= ctx->local.len, \
-            "unexpected end of ctx->local data in %s (len=%u next_local=%u ltype=%s lcodec=%s did_i=%u)", \
-            ctx->tag_name, ctx->local.len32, ctx->next_local, lt_name (ctx->ltype), codec_name (ctx->lcodec), ctx->did_i)
+            "unexpected end of ctx->local data in %s (len=%u next_local=%u ltype=%s lcodec=%s did_i=%u, preprocessing=%u)", \
+            ctx->tag_name, ctx->local.len32, ctx->next_local, lt_name (ctx->ltype), codec_name (ctx->lcodec), ctx->did_i, vb->preprocessing)
 
 static uint32_t reconstruct_from_local_text (VBlockP vb, ContextP ctx, bool reconstruct)
 {
@@ -104,29 +104,61 @@ static uint32_t reconstruct_from_local_text (VBlockP vb, ContextP ctx, bool reco
 
     rom snip = &data[start];
     uint32_t snip_len = ctx->next_local - start; 
-    ctx->next_local++; /* skip the separator */ 
+    ctx->next_local++; // skip the separator 
 
     reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, STRa(snip), reconstruct);
 
     return snip_len;
 }
 
-static void reconstruct_from_xor_diff (VBlockP vb, ContextP ctx, STRp(snip), bool reconstruct)
+static void reconstruct_from_diff (VBlockP vb, ContextP ctx, STRp(snip), bool reconstruct)
 {
-    int64_t str_len;
-    ASSPIZ (str_get_int (STRa(snip), &str_len), "In ctx=%s: Invalid XOR_DIFF snip: \"%.*s", ctx->tag_name, STRf(snip));
+    ContextP base_ctx;
+    if (snip_len >= 10) // a base64 dict_id is of length 14, larger than the largest uint32_t = 10  
+        base_ctx = reconstruct_get_other_ctx_from_snip (vb, ctx, pSTRa(snip)); // also updates snip and snip_len
+    else {
+        base_ctx = ctx;
+        snip++;
+        snip_len--;
+    }
+    STR(base);
 
-    ASSERT_IN_BOUNDS_BEFORE(str_len);
+    // case: we get a value from the same line - set last_txt for the value on this line
+    // note: we don't check here that there is actually a value on the line - the segger should do that
+    if (ctx->flags.same_line && ctx != base_ctx) 
+        reconstruct_peek (vb, base_ctx, pSTRa(base));
+    
+    else {
+        base = last_txtx (vb, base_ctx);
+        base_len = base_ctx->last_txt.len;
+    }
+        
+    int64_t diff_len;
+    ASSPIZ (str_get_int (STRa(snip), &diff_len), "In ctx=%s: Invalid XOR_DIFF snip: \"%.*s", ctx->tag_name, STRf(snip));
+    bool exact = diff_len < 0; // a negative number indicates an exact match - no xor in local
+    diff_len = ABS(diff_len);
 
-    bytes last = (uint8_t *)last_txtx (vb, ctx);
-    bytes this = B8 (ctx->local, ctx->next_local); 
+    bytes diff = B8 (ctx->local, ctx->next_local); 
     uint8_t *recon = BAFT8 (vb->txt_data);
 
-    for (int64_t i=0; i < str_len; i++)
-        recon[i] = last[i] ^ this[i];
+    if (exact)
+        memcpy (recon, base, diff_len);
 
-    vb->txt_data.len += str_len;
-    ctx->next_local  += str_len;    
+    else { 
+        ASSERT_IN_BOUNDS_BEFORE(diff_len);
+    
+        if (VER(14))
+            for (int64_t i=0; i < diff_len; i++)
+                recon[i] = diff[i] ? diff[i] : base[i];
+
+        else // up to v13 this was a xor
+            for (int64_t i=0; i < diff_len; i++)
+                recon[i] = base[i] ^ diff[i];
+
+        ctx->next_local += diff_len;    
+    }
+
+    vb->txt_data.len32 += diff_len;
 }
 
 int64_t reconstruct_from_local_int (VBlockP vb, ContextP ctx, char separator /* 0 if none */, bool reconstruct)
@@ -226,16 +258,16 @@ static double reconstruct_from_local_float (VBlockP vb, ContextP ctx,
 // two options: 1. the length maybe given (textually) in snip/snip_len. in that case, it is used and vb->seq_len is updated.
 // if snip_len==0, then the length is taken from vb->seq_len.
 // NOTE: this serves nucleotide sequences AND qual. Bad design. Should have been two separate things.
-void reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, STRp(snip), bool reconstruct)
+uint32_t reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, STRp(snip), bool reconstruct)
 {
     ASSERTNOTNULL (ctx);
 
-    if (!ctx->is_loaded) return;
-
     uint32_t len = snip_len ? atoi (snip) : vb->seq_len;
 
-    // case: handle SAM missing quality (expressed as a ' ')
-    if (*Bc(ctx->local, ctx->next_local) == ' ' && (ctx->flags.is_qual || !VER(14))) { // prior to v14, there was no is_qual flag
+    if (!ctx->is_loaded) return len;
+
+    // special case: handle SAM_QUAL missing quality (expressed as a ' ')
+    if (*Bc(ctx->local, ctx->next_local) == ' ' && (ctx->did_i == SAM_QUAL && (Z_DT(DT_BAM) || Z_DT(DT_SAM)))) {
         len = 1;
         sam_reconstruct_missing_quality (vb, reconstruct);
     }
@@ -249,6 +281,8 @@ void reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, STRp(snip), bool
 
     ctx->last_value.i = ctx->next_local; // for seq_qual, we use last_value for storing the beginning of the sequence
     ctx->next_local += len;
+
+    return len;
 }
 
 ContextP reconstruct_get_other_ctx_from_snip (VBlockP vb, ContextP ctx, pSTRp (snip))
@@ -346,6 +380,29 @@ HasNewValue reconstruct_demultiplex (VBlockP vb, ContextP ctx, STRp(snip), int c
     return HAS_NEW_VALUE; 
 }
 
+static HasNewValue reconstruct_numeric (VBlockP vb, ContextP ctx, rom snip, ValueType *new_value, bool reconstruct)
+{
+    new_value->i = reconstruct_from_local_int (vb, ctx, 0, false);
+    
+    if (reconstruct) {
+        char format[8] = "%0*";
+
+        if (new_value->i <= 0xffffffffLL)
+            format[3] = "uxX"[snip[1] - '0'];
+
+        else // beyond 32b uint
+            switch (snip[1] - '0') { // snip[1] is type
+                case 0: memcpy (&format[3], PRIu64, STRLEN(PRIu64)); break;
+                case 1: memcpy (&format[3], PRIx64, STRLEN(PRIx64)); break;
+                case 2: memcpy (&format[3], PRIX64, STRLEN(PRIX64)); break;
+            }
+
+        vb->txt_data.len32 += sprintf (BAFTtxt, format, snip[2]-'0', new_value->i); // snip[2] is width
+    }
+
+    return HAS_NEW_VALUE;
+}
+
 void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx, 
                            WordIndex word_index, // WORD_INDEX_NONE if not used.
                            STRp(snip), bool reconstruct) // if false, calculates last_value but doesn't output to vb->txt_data)
@@ -388,7 +445,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
                 codec_args[base_ctx->lcodec].reconstruct (vb, base_ctx->lcodec, base_ctx, STRa(snip)); break;
                 break;
 
-            case LT_INT8 ... LT_UINT64: case LT_hex32:
+            case LT_INT8 ... LT_UINT64: case LT_hex8 ... LT_HEX64:
                 if (reconstruct && snip_len) RECONSTRUCT_snip; // reconstruct this snip before adding the looked up data
                 new_value.i = reconstruct_from_local_int (vb, base_ctx, 0, reconstruct);
                 has_new_value = HAS_NEW_VALUE;
@@ -398,6 +455,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
                 new_value.f = reconstruct_from_local_float (vb, base_ctx, STRa(snip), 0, reconstruct);
                 has_new_value = HAS_NEW_VALUE;
                 break;
+            
             // case: the snip is taken to be the length of the sequence (or if missing, the length will be taken from vb->seq_len)
             case LT_SEQUENCE: 
                 reconstruct_from_local_sequence (vb, base_ctx, STRa(snip), reconstruct);
@@ -414,6 +472,10 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
 
         break;
     }
+
+    case SNIP_NUMERIC: // 0-padded fixed-width non-negative decimal or hexadecimal integer (v14)
+        has_new_value = reconstruct_numeric (vb, snip_ctx, snip, &new_value, reconstruct);
+        break;
 
     case SNIP_CONTAINER: {
         STR(prefixes);
@@ -452,8 +514,8 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
         has_new_value = DT_FUNC(vb, special)[special](vb, snip_ctx, snip+2, snip_len-2, &new_value, reconstruct);  
         break;
 
-    case SNIP_XOR_DIFF:
-        reconstruct_from_xor_diff (vb, snip_ctx, snip+1, snip_len-1, reconstruct);
+    case SNIP_DIFF:
+        reconstruct_from_diff (vb, snip_ctx, snip, snip_len, reconstruct);
         break;
 
     case SNIP_REDIRECTION: 
@@ -477,10 +539,6 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
         has_new_value = HAS_NEW_VALUE;
         break;
 
-    case SNIP_COPY_BUDDY:
-        has_new_value = reconstruct_from_buddy (vb, base_ctx, snip+1, snip_len-1, reconstruct, &new_value);
-        break;
-
     case NUM_SNIP_CODES ... 31:
         ABORT ("%s: File %s requires a SNIP code=%u for %s. Please upgrade to the latest version of Genozip",
                LN_NAME, z_name, snip[0], base_ctx->tag_name);
@@ -491,6 +549,11 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
         snip++; snip_len--;
         goto normal_snip;
 
+    // note: starting v14, this is replaced by SAM_SPECIAL_COPY_BUDDY
+    case v13_SNIP_COPY_BUDDY: {
+        has_new_value = sam_piz_special_COPY_BUDDY (vb, base_ctx, snip+1, snip_len-1, &new_value, reconstruct);
+        break;
+    }
     // note: starting v14, this is replaced by FASTQ_SPECIAL_PAIR2_GPOS
     case v13_SNIP_FASTQ_PAIR2_GPOS: 
         has_new_value = fastq_special_PAIR2_GPOS (vb, snip_ctx, snip+1, snip_len-1, &new_value, false);
@@ -542,8 +605,6 @@ done:
         snip_ctx->last_delta = new_value.i - prev_value;
 }
 
-static void reconstruct_peek_add_ctx_to_frozen_state (VBlockP vb, ContextP ctx); // forward declaration
-
 // returns reconstructed length or -1 if snip is missing and previous separator should be deleted
 int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i, 
                                  char sep, // if non-zero, outputs after the reconstruction
@@ -555,8 +616,8 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i,
     ContextP ctx = CTX(did_i);
 
     // if we're peeking, freeze the context
-    if (vb->frozen_state.prm8[0]) 
-        reconstruct_peek_add_ctx_to_frozen_state (vb, ctx);
+    if (vb->peek_stack_level) 
+        recon_stack_push (vb, ctx);
 
     ASSPIZ0 (ctx->dict_id.num || ctx->did_i != DID_NONE, "ctx not initialized (dict_id=0)");
 
@@ -598,7 +659,7 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i,
     // case: all data is only in local
     else if (ctx->local.len32) {
         switch (ctx->ltype) {
-        case LT_INT8 ... LT_UINT64 : case LT_hex32: {
+        case LT_INT8 ... LT_UINT64 : case LT_hex8 ... LT_HEX64: {
             int64_t value = reconstruct_from_local_int (vb, ctx, 0, reconstruct); 
 
             if (ctx->flags.store == STORE_INT) 
@@ -638,8 +699,8 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i,
     }
 
     else ASSPIZ (flag.missing_contexts_allowed,
-                 "ctx %s/%s has no data (dict, b250 or local) in vb_i=%u line_i=%d did_i=%u ctx->did=%u ctx->dict_id=%s ctx->is_loaded=%s", 
-                 dtype_name_z (ctx->dict_id), ctx->tag_name, vb->vblock_i, vb->line_i, did_i, ctx->did_i, dis_dict_id (ctx->dict_id).s, TF(ctx->is_loaded));
+                 "ctx %s/%s has no data (dict, b250 or local) in did_i=%u ctx->did=%u ctx->dict_id=%s ctx->is_loaded=%s", 
+                 dtype_name_z (ctx->dict_id), ctx->tag_name, did_i, ctx->did_i, dis_dict_id (ctx->dict_id).s, TF(ctx->is_loaded));
         
     if (sep && reconstruct) RECONSTRUCT1 (sep); 
 
@@ -653,6 +714,9 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i,
     if (ctx->flags.store_per_line) 
         reconstruct_store_history (vb, ctx); // note: we don't store if spl_custom - a SPECIAL function should do that
 
+    if (vb->peek_stack_level) 
+        recon_stack_pop (vb, ctx, false);
+
     return (int32_t)ctx->last_txt.len;
 
 missing:
@@ -661,100 +725,8 @@ missing:
     if (ctx->flags.store == STORE_INDEX) 
         ctx_set_last_value (vb, ctx, (int64_t)WORD_INDEX_MISSING);
 
+    if (vb->peek_stack_level) 
+        recon_stack_pop (vb, ctx, false);
+
     return reconstruct ? -1 : 0; // -1 if WORD_INDEX_MISSING - remove preceding separator
 } 
-
-static uint64_t reconstruct_state_size=0, freeze_rec_size=0;
-void reconstruct_initialize (void)
-{
-    reconstruct_state_size = reconstruct_state_size_formula;
-    freeze_rec_size = sizeof(ContextP) + reconstruct_state_size; 
-}
-
-// add a context to the state freeze, unless the context is already frozen
-static void reconstruct_peek_add_ctx_to_frozen_state (VBlockP vb, ContextP ctx)
-{
-    ASSPIZ (!ctx->is_frozen, "Context %s is already frozen - reconstruct_peek is accessing it recursively which is not supported", ctx->tag_name);
-
-    // add this context to the frozen state
-    buf_alloc (vb, &vb->frozen_state, freeze_rec_size, 10*freeze_rec_size, char, 2, "frozen_state");
-
-    char *reconstruct_state = BAFTc (vb->frozen_state);
-    memcpy (reconstruct_state, &ctx, sizeof (ContextP)); // copy pointer to context
-    memcpy (reconstruct_state + sizeof (ContextP), reconstruct_state_start(ctx), reconstruct_state_size); // copy state itself
-
-    vb->frozen_state.len += freeze_rec_size;
-    ctx->is_frozen = true;
-}
-
-static void reconstruct_peek_unfreeze_state (VBlockP vb)
-{
-    // unfreeze state of all involved contexts
-    for (char *state=B1STc (vb->frozen_state); state < BAFTc (vb->frozen_state); state += freeze_rec_size) {
-        ContextP ctx;
-        memcpy (&ctx, state, sizeof (ContextP));
-        memcpy (reconstruct_state_start(ctx), state + sizeof (ContextP), reconstruct_state_size);
-        ctx->is_frozen = false;
-    }
-
-    // de-activate peek
-    vb->frozen_state.prm8[0] = 0; 
-    vb->frozen_state.len     = 0; 
-}
-
-// get reconstructed text without advancing the iterator or changing last_*. context may be already reconstructed or not.
-// Note: txt points into txt_data (past reconstructed or BAFT) - caller should copy it elsewhere
-// LIMITATION: cannot be used with contexts that might reconstruct other contexts as that would require
-// chained peeking (i.e. the secondary contexts should be peeked too, not reconstructed)
-ValueType reconstruct_peek (VBlockP vb, ContextP ctx, 
-                            pSTRp(txt)) // optional in / out
-{
-    // ASSPIZ (!vb->frozen_state.prm8[0], "Requested to peek %s, however already peeking %s. Recursive peeking not supported", 
-    //         ctx->tag_name, (*B1ST(ContextP, vb->frozen_state))->tag_name);
-
-    // case: already reconstructed in this line (or sample in the case of VCF/FORMAT)
-    if (ctx_encountered (vb, ctx->did_i) && (ctx->last_encounter_was_reconstructed || (!txt && !txt_len))) {
-        if (txt) *txt = last_txtx (vb, ctx);
-        if (txt_len) *txt_len = ctx->last_txt.len;
-        return ctx->last_value;
-    }
-
-    bool already_peeking = (bool)vb->frozen_state.prm8[0];
-
-    // we "freeze" the reconstruction state of all contexts involved in this peek reconstruction (there could be more than
-    // one context - eg items of a container, muxed contexts, "other" contexts (SNIP_OTHER etc). We freeze them by saving their state
-    // in vb->frozen_state when reconstruct_from_ctx is called for this ctx.
-    vb->frozen_state.prm8[0] = true; // peeking is active
-
-    uint32_t save_txt_data_len = vb->txt_data.len32;
-
-    reconstruct_from_ctx (vb, ctx->did_i, 0, true);
-
-    // since we are reconstructing unaccounted for data, make sure we didn't go beyond the end of txt_data (this can happen if we are close to the end
-    // of the VB, and reconstructed more than OVERFLOW_SIZE allocated in piz_reconstruct_one_vb)
-    ASSPIZ (vb->txt_data.len <= vb->txt_data.size, "txt_data overflow while peeking %s: len=%"PRIu64" size=%"PRIu64" last_txt_len=%u", 
-            ctx->tag_name, vb->txt_data.len, (uint64_t)vb->txt_data.size, ctx->last_txt.len);
-
-    if (txt) *txt = last_txtx (vb, ctx);
-    if (txt_len) *txt_len = ctx->last_txt.len;
-
-    ValueType last_value = ctx->last_value;
-
-    // unfreeze state of all involved contexts (only in first peek in case of recursive calls to peek)
-    if (!already_peeking)
-        reconstruct_peek_unfreeze_state (vb);
-    
-    // delete data reconstructed for peeking
-    vb->txt_data.len32 = save_txt_data_len; 
-
-    return last_value;
-}
-
-ValueType reconstruct_peek_do (VBlockP vb, DictId dict_id, pSTRp(txt)) 
-{
-    ContextP ctx = ECTX (dict_id); 
-    ASSPIZ (ctx, "context doesn't exist for dict_id=%s", dis_dict_id (dict_id).s);
-
-    return reconstruct_peek (vb, ctx, txt, txt_len);
-}
-

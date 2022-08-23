@@ -28,11 +28,13 @@
 bool sam_seg_SA_get_prim_item (VBlockSAMP vb, int sa_item_i, pSTRp(out))
 {
     // in collated files, normally the location of a depn with a SA:Z string is mirrored in its line following the prim line.
-    // we seg with COPY_BUDDY if this prediction is correct.
-    int predicted_aln_i = (vb->line_i - vb->prim_line_i) - 1;
+    // we seg with COPY_BUDDY if this prediction is correct. in sorted files, we just guess that it's first.
+    int predicted_aln_i = segconf.is_sorted ? 0 : (vb->line_i - vb->saggy_line_i) - 1; // mirrors prediction in sam_seg_SA_get_prim_item
 
     // split SA:Z into alignments
-    ZipDataLineSAM *prim_dl = DATA_LINE (vb->prim_line_i);
+    ZipDataLineSAM *prim_dl = DATA_LINE (vb->saggy_line_i);
+    if (!prim_dl->SA.len) return false; // prim line has no SA:Z
+
     str_split (Btxt(prim_dl->SA.index), prim_dl->SA.len, MAX_SA_NUM_ALNS, ';', prim_aln, false);
     
     // check if SA:Z even contains enough alignment for our prediction
@@ -109,7 +111,7 @@ static bool sam_seg_SA_field_is_depn_from_prim (VBlockSAMP vb, ZipDataLineSAM *d
     bool is_bam = IS_BAM_ZIP;
 
     // parse primary SA
-    ZipDataLineSAM *prim_dl = DATA_LINE (vb->prim_line_i);
+    ZipDataLineSAM *prim_dl = DATA_LINE (vb->saggy_line_i);
     str_split (Btxt(prim_dl->SA.index), prim_dl->SA.len, MAX_SA_NUM_ALNS, ';', prim_aln, false);
     if (n_prim_alns < 2) return false;
     n_prim_alns--; // remove last empty alignment due terminal ';'
@@ -137,7 +139,7 @@ static bool sam_seg_SA_field_is_depn_from_prim (VBlockSAMP vb, ZipDataLineSAM *d
     // temporarily replace H with S in this (depn) line's CIGAR
     HtoS htos = sam_cigar_H_to_S (vb, line_cigar(dl), dl->CIGAR.len, false); // points to txt_data in SAM, line_textual_cigars in BAM
 
-    // to do: improve effeciency by testing first the predicted alignment (vb->line-vb->prim_line_i-1)
+    // to do: improve effeciency by testing first the predicted alignment (vb->line-vb->saggy_line_i-1)
     int depn_i=0; // index of depn alignment within prim SA
     for (; depn_i < n_prim_alns; depn_i++)
         if (sam_seg_SA_field_is_line_matches_aln (vb, dl, STRi(prim_aln, depn_i), is_bam)) break; // found
@@ -157,7 +159,7 @@ static bool sam_seg_SA_field_is_depn_from_prim (VBlockSAMP vb, ZipDataLineSAM *d
 
 void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), unsigned add_bytes)
 {
-    segconf_set_has (OPTION_SA_Z);
+    START_TIMER;
 
     static const MediumContainer container_SA = { .nitems_lo = NUM_SA_ITEMS,      
                                                   .repsep    = { ';' }, // including on last repeat    
@@ -169,15 +171,18 @@ void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), unsigned add_byt
                                                                  { .dict_id = { _OPTION_SA_NM     },                  } } };
 
     ContextP ctx = CTX(OPTION_SA_Z);
-    bool has_prim = zip_has_real_prim;
+    bool has_prim = sam_has_prim;
+
+    if (!IS_SAG_SA) goto fallback;
 
     switch (vb->comp_i) {
 
     // MAIN: special snip with two modes: "normal" if either line has no prim, or line has a matching prim, 
     // or "abnormal", is line has prim, but it is not matching. Container, if needed goes into OPTION_SA_MAIN 
     // note: usually, we expect all lines to be normal, hence making the context an "all the same"  
-    case SAM_COMP_MAIN: {
+    case SAM_COMP_MAIN: fallback: {
         bool has_matching_prim = has_prim && sam_seg_SA_field_is_depn_from_prim (vb, dl, STRa(sa));
+
         bool abnormal = has_prim && !has_matching_prim; // abnormal if has unmatching prim line
 
         seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_SA_main, '0' + !abnormal }, 3, ctx, 0);
@@ -206,13 +211,13 @@ void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), unsigned add_byt
         SegCallback callbacks[NUM_SA_ITEMS] = { [SA_RNAME]=chrom_seg_cb, [SA_POS]=seg_pos_field_cb, [SA_CIGAR]=sam_seg_0A_cigar_cb, [SA_MAPQ]=sam_seg_0A_mapq_cb };            
         int32_t num_alns = 1/*primary aln*/ + seg_array_of_struct (VB, ctx, container_SA, STRa(sa), callbacks, add_bytes); // 0 if SA is malformed 
 
-        // We already tested the SA to be good when we added this line to PRIM in sam_seg_prim_add_sa_group_SA
+        // We already tested the SA to be good when we added this line to PRIM in sam_seg_prim_add_sag_SA
         ASSSEG (num_alns >= 2 && num_alns <= MAX_SA_NUM_ALNS, sa, "%s: Not expecting a malformed SA field in PRIM. num_alns=%u SA:Z=\"%.*s\"", 
                 LN_NAME, num_alns, STRf(sa));
 
         // use SA.local to store number of alignments in this SA Group (inc. primary)
         uint8_t num_alns_8b = num_alns;
-        seg_integer_fixed (VB, ctx, &num_alns_8b, false, 0); // for non-SA PRIM lines, this is segged in sam_seg_sa_group_stuff
+        seg_integer_fixed (VB, ctx, &num_alns_8b, false, 0); // for non-SA PRIM lines, this is segged in sam_seg_sag_stuff
     
         // PRIM: Remove the container b250 - Reconstruct will consume the SPECIAL_SAG, and sam_piz_load_sags will
         // consume OPTION_SA_* (to which we have already added the main fields of this line - RNAME, POS...)
@@ -220,7 +225,7 @@ void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), unsigned add_byt
         ctx->b250.len32--;
 
         // build SA Group structure in VB, to be later ingested into z_file->sa_*
-        sam_seg_prim_add_sa_group_SA (vb, dl, STRa (sa), dl->NM, IS_BAM_ZIP);
+        sam_seg_prim_add_sag_SA (vb, dl, STRa (sa), dl->NM, IS_BAM_ZIP);
         break;
     }
 
@@ -239,6 +244,8 @@ void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), unsigned add_byt
     }
 
     dl->SA = TXTWORD(sa);
+
+    COPY_TIMER (sam_seg_SA_Z);
 }
 
 //---------
@@ -256,8 +263,8 @@ bool sam_seg_0A_mapq_cb (VBlockP vb, ContextP ctx, STRp (mapq_str), uint32_t rep
 }
 
 static inline bool sam_piz_SA_field_is_line_matches_aln (VBlockSAMP vb, ContextP ctx,
-                                                             STRp(my_rname), SamPosType my_pos, char my_strand, int64_t my_mapq, int64_t my_nm, 
-                                                             STRp(aln))
+                                                         STRp(my_rname), SamPosType my_pos, char my_strand, int64_t my_mapq, int64_t my_nm, 
+                                                         STRp(aln))
 {
     str_split (aln, aln_len, NUM_SA_ITEMS, ',', item, true);
     ASSPIZ (n_items == NUM_SA_ITEMS, "Invalid SA alignment: %.*s", STRf(aln));
@@ -286,7 +293,7 @@ static inline bool sam_piz_SA_field_is_line_matches_aln (VBlockSAMP vb, ContextP
     return found;
 }
 
-// called to reconstucted SA in MAIN component
+// called to reconstruct SA in MAIN component
 SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SA_main)
 {
     VBlockSAMP vb = (VBlockSAMP)vb_;
@@ -294,27 +301,33 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SA_main)
     bool normal = snip[0] - '0';
 
     // case: we segged a container 
-    if (!piz_has_real_prim || !normal) 
+    if (!sam_has_prim || !normal) 
         reconstruct_from_ctx (vb, OPTION_SA_MAIN, 0, reconstruct);
 
     // case: we segged against the same-VB prim line
-    else {        
+    else if (reconstruct) {        
         // step 1: reconstruct prim alignments
-        reconstruct_from_buddy (VB, CTX(SAM_RNAME),   0, 0, reconstruct, new_value); RECONSTRUCT1(',');
-        reconstruct_from_buddy (VB, CTX(SAM_POS),     0, 0, reconstruct, new_value); RECONSTRUCT1(',');
+        sam_piz_special_COPY_BUDDY (VB, CTX(SAM_RNAME), (char[]){'0' + BUDDY_SAGGY }, 1, new_value, true); 
+        RECONSTRUCT1(',');
         
-        SamFlags prim_flags = (SamFlags) {.value = *B(int64_t, CTX(SAM_FLAG)->history, vb->buddy_line_i) };
+        sam_piz_special_COPY_BUDDY (VB, CTX(SAM_POS), (char[]){'0' + BUDDY_SAGGY }, 1, new_value, true); 
+        RECONSTRUCT1(',');
+        
+        SamFlags prim_flags = (SamFlags) {.value = *B(int64_t, CTX(SAM_FLAG)->history, vb->saggy_line_i) };
         RECONSTRUCT1 (prim_flags.rev_comp ? '-' : '+');
         RECONSTRUCT1(',');
 
-        sam_piz_special_RECON_BUDDY_CIGAR (VB, CTX(SAM_CIGAR), 0, 0, new_value, reconstruct);
+        sam_piz_special_COPY_BUDDY_CIGAR (VB, CTX(SAM_CIGAR), (char[]){ '0' + BUDDY_SAGGY }, 1, new_value, true);
         RECONSTRUCT1(',');
 
-        reconstruct_from_buddy (VB, CTX(SAM_MAPQ),    0, 0, reconstruct, new_value); RECONSTRUCT1(',');
-        reconstruct_from_buddy (VB, CTX(OPTION_NM_i), 0, 0, reconstruct, new_value); RECONSTRUCT1(';');
+        sam_piz_special_COPY_BUDDY (VB, CTX(SAM_MAPQ), (char[]){'0' + BUDDY_SAGGY }, 1, new_value, true); 
+        RECONSTRUCT1(',');
+
+        sam_piz_special_COPY_BUDDY (VB, CTX(OPTION_NM_i), (char[]){'0' + BUDDY_SAGGY }, 1, new_value, true); 
+        RECONSTRUCT1(';');
 
         // step 2: all alignments in prim SA, except the one matching this line
-        HistoryWord *hw = B(HistoryWord, CTX(OPTION_SA_Z)->history, vb->buddy_line_i);
+        HistoryWord *hw = B(HistoryWord, CTX(OPTION_SA_Z)->history, vb->saggy_line_i);
         rom prim_SA = (hw->lookup == LookupTxtData) ? Btxt (hw->index) 
                                                     : Bc (CTX(OPTION_SA_Z)->per_line, hw->index);
         
@@ -330,7 +343,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SA_main)
         STR(my_rname);
         ctx_get_snip_by_word_index (CTX(SAM_RNAME), CTX(SAM_RNAME)->last_value.i, my_rname);
 
-        // to do: improve effeciency by testing first the predicted alignment (vb->line-vb->prim_line_i-1)
+        // to do: improve effeciency by testing first the predicted alignment (vb->line-vb->saggy_line_i-1)
         bool found = false;
         for (int i=0; i < n_prim_alns; i++) { // =1 bc of last empty alignment due terminal ';'
             if (!found && ((found = sam_piz_SA_field_is_line_matches_aln (vb, ctx, STRa(my_rname), my_pos, my_strand, my_mapq, my_nm, STRi(prim_aln, i)))))
@@ -348,11 +361,11 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SA_main)
 void sam_piz_SA_get_prim_item (VBlockSAMP vb, int sa_item, pSTRp(out))
 {
     STR(SA);
-    reconstruct_from_buddy_get_textual_snip (VB, CTX (OPTION_SA_Z), pSTRa(SA));
+    sam_reconstruct_from_buddy_get_textual_snip (vb, CTX (OPTION_SA_Z), BUDDY_SAGGY, pSTRa(SA));
     
     str_split (SA, SA_len, MAX_SA_NUM_ALNS, ';', prim_aln, false); // split SA:Z into alignments
 
-    int predicted_aln_i = (vb->line_i - vb->buddy_line_i) - 1;
+    int predicted_aln_i = segconf.is_sorted ? 0 : (vb->line_i - vb->saggy_line_i) - 1;
     ASSPIZ (predicted_aln_i < n_prim_alns-1, "predicted_aln_i=%d out of range [0,%d]", predicted_aln_i, n_prim_alns-2);
     
     str_split (prim_alns[predicted_aln_i], prim_aln_lens[predicted_aln_i], NUM_SA_ITEMS, ',', item, true); // split predicted alignment into its items

@@ -113,7 +113,7 @@ void ref_unload_reference (Reference ref)
     }
     
      // in ZIP with REF_EXTERNAL, we just cleanup is_set
-    if (flag.reference == REF_EXTERNAL && command == ZIP) 
+    if (flag.reference == REF_EXTERNAL && IS_ZIP) 
         buf_zero (&ref->genome_is_set_buf);
     
     buf_free (ref->region_to_set_list);
@@ -122,8 +122,22 @@ void ref_unload_reference (Reference ref)
     ref->external_ref_is_loaded = false;
 }
 
+// verify read-only mmap'ed reference integrity before existing process
+void ref_verify_before_exit (void)
+{
+    START_TIMER;
+
+    buf_free (gref->genome_cache); // also verifies loaded mmap
+    buf_free (prim_ref->genome_cache);
+    refhash_verify_before_exit();
+
+    COPY_TIMER_VB (evb, ref_verify_before_exit);
+}
+
 void ref_destroy_reference (Reference ref, bool destroy_only_if_not_mmap)
 {
+    if (!buf_is_alloc (&ref->ranges)) return;
+
     if (destroy_only_if_not_mmap && ranges_type(ref) == RT_CACHED) return;
 
     ref_create_cache_join (ref, true); // wait for cache to finish writing, if applicable
@@ -139,8 +153,10 @@ void ref_destroy_reference (Reference ref, bool destroy_only_if_not_mmap)
     buf_destroy (ref->ref_external_ra);
     buf_destroy (ref->stored_ra);
     buf_destroy (ref->ref_file_section_list);
-    FREE (ref->filename);
     FREE (ref->cache_fn);
+
+    // note: we keep ref->filename, in case it needs to be loaded again
+    rom save_filename = ref->filename;
 
     // ref contig stuff
     contigs_destroy (&ref->ctgs);
@@ -150,9 +166,8 @@ void ref_destroy_reference (Reference ref, bool destroy_only_if_not_mmap)
 
     ref_lock_free (ref);
     
-    refhash_destroy();
-
     memset (ref, 0, sizeof (RefStruct));
+    ref->filename = save_filename;
 }
 
 // account for memory allocations NOT through Buffers 
@@ -493,7 +508,7 @@ static void ref_uncompress_one_range (VBlockP vb)
     buf_free (vb->scratch);
 
 finish:
-    vb->is_processed = true; // tell dispatcher this thread is done and can be joined. 
+    vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined. 
 
     COPY_TIMER (ref_uncompress_one_range);
 }
@@ -572,9 +587,8 @@ void ref_load_stored_reference (Reference ref)
 
     ref_load_stored_reference_ref = ref;
     dispatcher_fan_out_task ("load_ref", external ? ref->filename : z_file->basename, 
-                             external ? PROGRESS_PERCENT : PROGRESS_NONE, 
-                             external ? "Reading reference file" : NULL, 
-                             flag.test, false, 0, 100,
+                             0, external ? "Reading reference file" : NULL,
+                             true, flag.test, false, 0, 100,
                              ref_read_one_range, 
                              ref_uncompress_one_range, 
                              NO_CALLBACK);
@@ -659,7 +673,7 @@ void ref_create_cache_join (Reference ref, bool free_mem)
 {
     if (!ref->cache_create_vb) return;
 
-    threads_join (&ref->ref_cache_creation_thread_id, NULL);
+    threads_join (&ref->ref_cache_creation_thread_id);
 
     if (free_mem) vb_destroy_vb (&ref->cache_create_vb);
 }
@@ -1073,7 +1087,7 @@ static void ref_compress_one_range (VBlockP vb)
         header.h.codec                 = CODEC_BZ2;
         header.h.data_uncompressed_len = BGEN32 (r->is_set.nwords * sizeof (uint64_t));
         header.num_bases               = BGEN32 ((uint32_t)ref_size (r)); // full length, after flanking regions removed
-        comp_compress (vb, &vb->z_data, (SectionHeader*)&header, (char *)r->is_set.words, NO_CALLBACK, "SEC_REF_IS_SET");
+        comp_compress (vb, NULL, &vb->z_data, (SectionHeader*)&header, (char *)r->is_set.words, NO_CALLBACK, "SEC_REF_IS_SET");
 
         if (flag.show_reference && r) 
             iprintf ("vb_i=%u Compressing SEC_REF_IS_SET chrom=%u (%.*s) gpos=%"PRIu64" pos=%"PRIu64" num_bases=%u section_size=%u bytes\n", 
@@ -1090,7 +1104,7 @@ static void ref_compress_one_range (VBlockP vb)
     header.h.compressed_offset     = BGEN32 (sizeof(header)); // reset compressed offset - if we're encrypting - REF_IS_SET was encrypted and compressed_offset padded, by REFERENCE is never encrypted
     header.h.data_uncompressed_len = r ? BGEN32 (r->ref.nwords * sizeof (uint64_t)) : 0;
     header.num_bases               = r ? BGEN32 (r->ref.nbits / 2) : 0; // less than ref_size(r) if compacted
-    comp_compress (vb, &vb->z_data, (SectionHeader*)&header, r ? (char *)r->ref.words : NULL, NO_CALLBACK, "SEC_REFERENCE");
+    comp_compress (vb, NULL, &vb->z_data, (SectionHeader*)&header, r ? (char *)r->ref.words : NULL, NO_CALLBACK, "SEC_REFERENCE");
 
     if (flag.show_reference && r) 
         iprintf ("vb_i=%u Compressing SEC_REFERENCE chrom=%u (%.*s) %s gpos=%"PRIu64" pos=%"PRIu64" num_bases=%u section_size=%u bytes\n", 
@@ -1114,7 +1128,7 @@ static void ref_compress_one_range (VBlockP vb)
     if (flag.make_reference)
         refhash_calc_one_range (r, BISLST (gref->ranges, r) ? NULL : r+1);
 
-    vb->is_processed = true; // tell dispatcher this thread is done and can be joined.
+    vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
 }
 
 #define MAX_BASES_FOR_RANGE_MERGE REF_NUM_DENOVO_SITES_PER_RANGE
@@ -1201,7 +1215,7 @@ static void ref_prepare_range_for_compress (VBlockP vb)
             bits_free (&r->is_set);            
         }
     }
-  }
+}
 
 static SORTER (ref_contigs_range_sorter)
 {
@@ -1299,7 +1313,7 @@ void ref_compress_ref (void)
 
     // proceed to compress all ranges that have still have data in them after copying
     Dispatcher dispatcher = 
-        dispatcher_fan_out_task ("compress_ref", NULL, PROGRESS_MESSAGE, "Writing reference...", false, false, 0, 5000,
+        dispatcher_fan_out_task ("compress_ref", NULL, 0, "Writing reference...", false, false, false, 0, 5000,
                                  flag.make_reference ? ref_make_prepare_range_for_compress : ref_prepare_range_for_compress, 
                                  ref_compress_one_range, 
                                  zfile_output_processed_vb);
@@ -1534,17 +1548,17 @@ static void ref_reverse_compliment_genome_prepare (VBlockP vb)
 static void ref_reverse_compliment_genome_do (VBlockP vb)
 {
     bits_reverse_complement_aligned (vb->ref->emoneg, vb->ref->genome, 
-                                          (uint64_t)(vb->vblock_i-1) * REV_CODEC_GENOME_BASES_PER_THREAD, 
-                                          REV_CODEC_GENOME_BASES_PER_THREAD);
+                                     (uint64_t)(vb->vblock_i-1) * REV_CODEC_GENOME_BASES_PER_THREAD, 
+                                     REV_CODEC_GENOME_BASES_PER_THREAD);
 
-    vb->is_processed = true; // tell dispatcher this thread is done and can be joined.
+    vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
 }
 
 void ref_generate_reverse_complement_genome (Reference ref)
 {
     START_TIMER;
     ref_reverse_compliment_genome_ref = ref;
-    dispatcher_fan_out_task ("generate_rev_comp_genome", NULL, PROGRESS_NONE, 0, false, false, 0, 10,
+    dispatcher_fan_out_task ("generate_rev_comp_genome", NULL, 0, 0, true, false, false, 0, 10,
                              ref_reverse_compliment_genome_prepare, 
                              ref_reverse_compliment_genome_do, 
                              NO_CALLBACK);
@@ -1678,7 +1692,9 @@ void ref_initialize_ranges (Reference ref, RangesType type)
         ref_initialize_loaded_ranges (ref, type);
 
         if (type == RT_CACHED) {
-            if (!buf_mmap (evb, &ref->genome_cache, ref_get_cache_fn(ref), false, "genome_cache")) {
+            if (!buf_mmap (evb, &ref->genome_cache, ref_get_cache_fn(ref), 
+                           flag.reference != REF_EXT_STORE, // in EXT_STORE, buffer is not read-only bc we compact it before storing
+                           "genome_cache")) {
                 // this happens eg if the process writing the cache was aborted
                 ref_remove_cache (ref);
                 type = RT_LOADED;
@@ -1689,10 +1705,6 @@ void ref_initialize_ranges (Reference ref, RangesType type)
             ref->genome_cache.can_be_big = true; // supress warning in case of an extra large genome (eg plant genomes)
             buf_alloc (evb, &ref->genome_cache, 0, ref->genome_nbases / 4 * 2, uint8_t, 1, "genome_cache"); // contains both forward and rev. compliment
         }
-
-        else  // RT_CACHED 
-            ASSERT0 (buf_mmap (evb, &ref->genome_cache, ref_get_cache_fn(ref), false, "genome_cache"),  // we map the entire file (forward and revese complement genomes) onto genome_cache
-                     "failed to map cache. Please try again");
 
         // overlay genome and emoneg. we do it this was so we can use just a single file
         buf_set_overlayable (&ref->genome_cache);
@@ -1736,7 +1748,7 @@ void ref_display_all_ranges (Reference ref)
     iprint0 ("\n\nList or all ranges:\n");
 
     for (uint64_t range_i=0; range_i < r_len; range_i++)
-        if (r[range_i].ref.nbits || command == PIZ)
+        if (r[range_i].ref.nbits || IS_PIZ)
             iprintf ("%s\n", ref_display_range (&r[range_i]).s);
 
     if (!r_len)

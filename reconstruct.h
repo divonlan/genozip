@@ -16,13 +16,11 @@ typedef struct __attribute__ ((__packed__)) { // 9 bytes
     uint8_t ctx_specific : 6;
 } HistoryWord;
 
-extern void reconstruct_initialize (void);
-
 extern int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i, char sep, bool reconstruct, rom func);
 #define reconstruct_from_ctx(vb,did_i,sep,reconstruct) reconstruct_from_ctx_do ((VBlockP)(vb),(did_i),(sep),(reconstruct), __FUNCTION__)
 
 extern void reconstruct_one_snip (VBlockP vb, ContextP ctx, WordIndex word_index, STRp(snip), bool reconstruct);
-extern void reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, STRp(snip), bool reconstruct);
+extern uint32_t reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, STRp(snip), bool reconstruct);
 extern int64_t reconstruct_from_local_int (VBlockP vb, ContextP ctx, char separator /* 0 if none */, bool reconstruct);
 extern HasNewValue reconstruct_demultiplex (VBlockP vb, ContextP ctx, STRp(snip), int channel_i, ValueType *new_value, bool reconstruct);
 
@@ -54,9 +52,14 @@ extern ContextP recon_multi_dict_id_get_ctx_first_time (VBlockP vb, ContextP ctx
 //--------------
 // Peeking
 //--------------
+extern void recon_stack_initialize (void);
+extern void recon_stack_push (VBlockP vb, ContextP ctx);
+extern void recon_stack_pop (VBlockP vb, ContextP ctx, bool is_done_peek);
+
 extern ValueType reconstruct_peek (VBlockP vb, ContextP ctx, pSTRp(txt));
-extern ValueType reconstruct_peek_do (VBlockP vb, DictId dict_id, pSTRp(txt));
-#define reconstruct_peek_(vb, dict_id, txt, txt_len) reconstruct_peek_do ((VBlockP)(vb), (dict_id), (txt), (txt_len))
+extern ValueType reconstruct_peek_by_dict_id (VBlockP vb, DictId dict_id, pSTRp(txt));
+#define reconstruct_peek_(vb, dict_id, txt, txt_len) reconstruct_peek_by_dict_id ((VBlockP)(vb), (dict_id), (txt), (txt_len))
+
 extern int64_t reconstruct_peek_local_int (VBlockP vb, ContextP ctx, int offset);
 
 //--------------
@@ -64,9 +67,6 @@ extern int64_t reconstruct_peek_local_int (VBlockP vb, ContextP ctx, int offset)
 //--------------
 extern void reconstruct_store_history (VBlockP vb, ContextP ctx);
 extern void reconstruct_copy_dropped_line_history (VBlockP vb);
-extern void reconstruct_set_buddy (VBlockP vb);
-extern HasNewValue reconstruct_from_buddy (VBlockP vb, ContextP ctx, STRp(snip), bool reconstruct, ValueType *new_value);
-extern void reconstruct_from_buddy_get_textual_snip (VBlockP vb, ContextP ctx, pSTRp(snip));
 extern void reconstruct_to_history (VBlockP vb, ContextP ctx);
 
 typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, Did did_i, DictId dict_id);
@@ -76,7 +76,7 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, Did did_i, DictI
 #define PEEK_SNIP(did_i) ctx_peek_next_snip (VB, CTX(did_i), &snip, &snip_len)
 
 #define LOAD_SNIP_FROM_LOCAL(ctx) ( {           \
-    ASSPIZ (ctx->next_local < ctx->local.len32, "%s.local exhausted: next_local=%u len=%u", (ctx)->tag_name, (ctx)->next_local, (ctx)->local.len32); \
+    ASSPIZ (ctx->next_local < ctx->local.len32, "%s.local exhausted: next_local=%u len=%u%s", (ctx)->tag_name, (ctx)->next_local, (ctx)->local.len32, !(ctx)->local.len32 ? " (since len=0, perhaps it is not loaded? check IS_SKIP function)" : ""); \
     uint32_t start = ctx->next_local;           \
     ARRAY (char, data, ctx->local);             \
     uint32_t next_local = ctx->next_local; /* automatic for speed */ \
@@ -98,12 +98,16 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, Did did_i, DictI
     ({ ASSPIZ ((ctx)->next_local + (offset) < (ctx)->local.len32, "PEEKNEXTLOCAL: %s.local exhausted: next_local=%u len=%u", (ctx)->tag_name, (ctx)->next_local, (ctx)->local.len32); \
        *B(type, (ctx)->local, (ctx)->next_local + (offset)); })
 
-#define RECONSTRUCT(s,len) buf_add (&vb->txt_data, (char*)(s), (len))
-#define RECONSTRUCT1(c) BNXTc (vb->txt_data) = c
+#define RECONSTRUCT(s,len) \
+    ({ uint32_t new_len = (uint32_t)(len); /* copy in case caller uses ++ */ \
+       memcpy (&vb->txt_data.data[vb->txt_data.len32], (s), new_len);   \
+       vb->txt_data.len32 += new_len; })
+
+#define RECONSTRUCT1(c) vb->txt_data.data[vb->txt_data.len32++] = (c) // we don't use BNXTc bc it is too expensive
 #define RECONSTRUCT_snip RECONSTRUCT (snip, snip_len)
 #define RECONSTRUCT_SEP(s,len,sep) ({ RECONSTRUCT((s), (len)); RECONSTRUCT1 (sep); })
 #define RECONSTRUCT_TABBED(s,len) RECONSTRUCT_SEP (s, len, '\t')
-#define RECONSTRUCT_BUF(buf) RECONSTRUCT((buf).data,(buf).len)
+#define RECONSTRUCT_BUF(buf) RECONSTRUCT((buf).data,(buf).len32)
 #define RECONSTRUCT_NEXT(ctx,recon_len) \
     ({ ASSPIZ ((ctx)->next_local + (recon_len) <= (ctx)->local.len32, NEXT_ERRFMT, "RECONSTRUCT_NEXT", (ctx)->tag_name, (ctx)->next_local, (recon_len), (ctx)->local.len32); \
        rom next = Bc((ctx)->local, (ctx)->next_local); \
@@ -124,7 +128,7 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, Did did_i, DictI
 
 #define RECONSTRUCT_FROM_DICT(did_i,add_tab)    \
     ({ WordIndex wi = LOAD_SNIP (did_i);        \
-       RECONSTRUCT_snip;            \
+       RECONSTRUCT_snip;                        \
        if (add_tab) RECONSTRUCT1 ('\t');        \
        wi;                               })
 

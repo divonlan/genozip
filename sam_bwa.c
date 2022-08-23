@@ -23,13 +23,7 @@
 // -------------------------------------------------------
 
 // Lookup buffer
-#define lookback_buf zip_lookback_buf // we store the previous rname, pos, strand in their ctx->zip_lookback_buf buffer
 #define lookback_value last_value.i
-
-bool sam_has_BWA_XA_Z (void)
-{
-    return MP(BWA) || MP(BSBOLT) || MP(GEM3) || MP(DELVE);
-}
 
 void sam_seg_BWA_XA_initialize (VBlockSAMP vb)
 {
@@ -38,47 +32,70 @@ void sam_seg_BWA_XA_initialize (VBlockSAMP vb)
     ContextP pos_ctx      = CTX(OPTION_XA_POS);
     ContextP lookback_ctx = CTX(OPTION_XA_LOOKBACK); // invalid if lookback_did_i=DID_NONE, that's ok
  
-    // note: we need to allocate lookback even if reps_per_line=0, lest an XA shows up despite not being in segconf
+    pos_ctx->ltype       = LT_DYN_INT;
+    pos_ctx->flags.store = STORE_INT;
+
     if (segconf.is_sorted) {
-        rname_ctx->no_stons              = true;  // as we store by index
-        strand_ctx->no_stons             = true;
-        lookback_ctx->flags.store        = STORE_INT;
-        lookback_ctx->ltype              = LT_DYN_INT;
-        lookback_ctx->local_param        = true;
-        lookback_ctx->local.prm8[0]      = lookback_size_to_local_param (1024);
-        lookback_ctx->local_always       = (lookback_ctx->local.param != 0); // no need for a SEC_LOCAL section if the parameter is 0 (which is the default anyway)
+
+        // note: we need to allocate lookback even if reps_per_line=0, lest an XA shows up despite not being in segconf
+        rname_ctx->no_stons         = true;  // as we store by index
+        strand_ctx->no_stons        = true;
+        strand_ctx->no_vb1_sort     = true;
+        lookback_ctx->flags.store   = STORE_INT;
+        lookback_ctx->ltype         = LT_DYN_INT;
+        lookback_ctx->local_param   = true;
+        lookback_ctx->local.prm8[0] = lookback_size_to_local_param (1024);
+        lookback_ctx->local_always  = (lookback_ctx->local.param != 0); // no need for a SEC_LOCAL section if the parameter is 0 (which is the default anyway)
 
         lookback_init (VB, lookback_ctx, rname_ctx,  STORE_INDEX); // lookback_ctx->local.param must be set before
         lookback_init (VB, lookback_ctx, strand_ctx, STORE_INDEX);
         lookback_init (VB, lookback_ctx, pos_ctx,    STORE_INT);
+
+        // create strand nodes (nodes will be deleted in sam_seg_finalize if not used)
+        ctx_create_node (VB, OPTION_XA_STRAND, cSTR("-"));  // word_index=0
+        ctx_create_node (VB, OPTION_XA_STRAND, cSTR("+"));  // word_index=1
+        ctx_create_node (VB, OPTION_XA_STRAND, cSTR("-C")); // word_index=2. these 4 are used by gem3 mapper with --bisulfite-conversion
+        ctx_create_node (VB, OPTION_XA_STRAND, cSTR("+C")); // word_index=3
+        ctx_create_node (VB, OPTION_XA_STRAND, cSTR("-G")); // word_index=4
+        ctx_create_node (VB, OPTION_XA_STRAND, cSTR("+G")); // word_index=5
+        strand_ctx->no_vb1_sort = true; // keep them in this ^ order
     }
 
-    // create strand nodes (nodes will be deleted in sam_seg_finalize if not used)
-    ctx_create_node (VB, OPTION_XA_STRAND, cSTR("-"));  // word_index=0
-    ctx_create_node (VB, OPTION_XA_STRAND, cSTR("+"));  // word_index=1
-    ctx_create_node (VB, OPTION_XA_STRAND, cSTR("-C")); // word_index=2. these 4 are used by gem3 mapper with --bisulfite-conversion
-    ctx_create_node (VB, OPTION_XA_STRAND, cSTR("+C")); // word_index=3
-    ctx_create_node (VB, OPTION_XA_STRAND, cSTR("-G")); // word_index=4
-    ctx_create_node (VB, OPTION_XA_STRAND, cSTR("+G")); // word_index=5
-    strand_ctx->no_vb1_sort = true; // keep them in this ^ order
+    // case: we're not going to use lookback - create an all-the-same XA_LOOKBACK dict
+    else
+        ctx_create_node (VB, OPTION_XA_LOOKBACK, "0", 1);   // word_index=0
 }
 
-// Seg lookback callback for POS item of XA - seg the POS relative to lookback pos, and replace the already segged RNAME with a lookback if there is one.
-void sam_seg_BWA_XA_pos (VBlockP vb, STRp(pos_str), uint32_t rep)
+static bool sam_seg_BWA_XA_strand_cb (VBlockP vb, ContextP ctx, STRp(strand), uint32_t rep)
+{
+    if (strand_len != 1 || (*strand != '+' && *strand != '-'))  
+        return false; // invalid XA format - expecting pos to begin with the strand
+
+    // seg normally for now, we might change it in sam_seg_BWA_XA_pos
+    WordIndex strand_index = (*strand == '+');
+    seg_known_node_index (vb, CTX (OPTION_XA_STRAND), strand_index, 1); 
+
+    return true; // segged successfully
+}
+
+static bool sam_seg_BWA_XA_pos_cb (VBlockP vb, ContextP ctx, STRp(pos_str), uint32_t rep)
 {
     #define MAX_POS_DISTANCE 10000 // the smaller it is, the more we search for a better XA - the delta-pos will be better, but lookback worse. 10K works well.
     START_TIMER;
 
-    ContextP rname_ctx = CTX (OPTION_XA_RNAME);
-    ContextP pos_ctx   = CTX (OPTION_XA_POS);
-    ContextP lb_ctx    = CTX (OPTION_XA_LOOKBACK);
+    ContextP rname_ctx  = CTX (OPTION_XA_RNAME);
+    ContextP pos_ctx    = CTX (OPTION_XA_POS);
+    ContextP strand_ctx = CTX (OPTION_XA_STRAND);
+    ContextP lb_ctx     = CTX (OPTION_XA_LOOKBACK);
 
     // look back for a node with this index and a similar POS - we use word_index to store the original rname_node_index, pos
     WordIndex rname_index = LASTb250(rname_ctx);
     int64_t lookback = 0;
-    SamPosType pos = -MAX_POS_DISTANCE; // initial to "invalid pos" - value chosen so we can storeit in poses, in lieu of an invalid non-integer value, without a future pos being considered close to it
+    SamPosType pos = -MAX_POS_DISTANCE; // initial to "invalid pos" - value chosen so we can store it in poses, in lieu of an invalid non-integer value, without a future pos being considered close to it
 
-    if (!segconf.running && str_get_int_range32 (STRa(pos_str), 0, MAX_POS_SAM, &pos)) {
+    WordIndex strand_wi = LASTb250(strand_ctx);
+
+    if (str_get_int_range32 (STRa(pos_str), 0, MAX_POS_SAM, &pos)) {
 
         int64_t iterator = -1;
         while ((lookback = lookback_get_next (vb, lb_ctx, rname_ctx, rname_index, &iterator))) {
@@ -87,12 +104,20 @@ void sam_seg_BWA_XA_pos (VBlockP vb, STRp(pos_str), uint32_t rep)
 
             // case: we found a lookback - same rname and close enough pos
             if (ABS (pos-lookback_pos) < MAX_POS_DISTANCE) {
-            //    if (ABS (pos-lookback_pos) <= ABS(CTX(SAM_TLEN)->last_value.i)) { <-- better POS deltas but bigger index - its a wash
+                //    if (ABS (pos-lookback_pos) <= ABS(CTX(SAM_TLEN)->last_value.i)) { <-- better POS deltas but bigger index - its a wash
                 // replace rname with lookback
                 rname_ctx->b250.len--;
                 ctx_decrement_count (vb, rname_ctx, rname_index);
                 
                 seg_by_ctx (vb, STRa(XA_lookback_snip), rname_ctx, 0); // add_bytes=0 bc we already added them when we segged rname the first time
+
+                // possibly replace strand with lookback
+                WordIndex lookback_strand_index = lookback_get_index (vb, lb_ctx, strand_ctx, lookback);
+                if (strand_wi == lookback_strand_index) {
+                    strand_ctx->b250.len--;
+                    ctx_decrement_count (vb, strand_ctx, lookback_strand_index);
+                    seg_by_ctx (vb, STRa(XA_lookback_snip), strand_ctx, 0); // add_bytes=0 bc we already added them when we segged strand the first time
+                }
 
                 // seg pos as a delta
                 SNIP(48);
@@ -110,86 +135,69 @@ void sam_seg_BWA_XA_pos (VBlockP vb, STRp(pos_str), uint32_t rep)
 
     seg_add_to_local_resizable (vb, CTX(OPTION_XA_LOOKBACK), lookback, 0);
 
-    lookback_insert (vb, OPTION_XA_LOOKBACK, OPTION_XA_RNAME, false, (ValueType){.i = rname_index }, true);
-    lookback_insert (vb, OPTION_XA_LOOKBACK, OPTION_XA_POS,   false, (ValueType){.i = pos }, false);
-    
-    CTX(OPTION_XA_Z)->lookback_value = lookback; // for use when segging STRAND
+    lookback_insert (vb, OPTION_XA_LOOKBACK, OPTION_XA_RNAME,  false, (int64_t)rname_index);
+    lookback_insert (vb, OPTION_XA_LOOKBACK, OPTION_XA_POS,    false, (int64_t)pos);
+    lookback_insert (vb, OPTION_XA_LOOKBACK, OPTION_XA_STRAND, false, (int64_t)strand_wi);
 
-    COPY_TIMER (sam_seg_BWA_XA_pos);
-}
-
-// Seg lookback callback for STRAND item of XA
-void sam_seg_BWA_XA_strand (VBlockP vb, WordIndex strand_index, unsigned add_bytes)
-{
-    ContextP strand_ctx = CTX (OPTION_XA_STRAND);
-    int64_t lookback = CTX(OPTION_XA_Z)->lookback_value; // calculated in sam_seg_BWA_XA_pos
-
-    if (lookback && lookback_get_index (vb, CTX(OPTION_XA_LOOKBACK), strand_ctx, lookback) == strand_index) 
-        seg_by_ctx (vb, STRa(XA_lookback_snip), strand_ctx, add_bytes);
-    else
-        seg_known_node_index (vb, strand_ctx, strand_index, add_bytes); 
-
-    lookback_insert (vb, OPTION_XA_LOOKBACK, OPTION_XA_STRAND, false, (ValueType){ .i = strand_index }, true);
-}
-
-// split the pos strand-pos string, eg "-10000" to strand "-" and pos "10000"
-static bool sam_seg_BWA_XA_strand_pos_cb (VBlockP vb, ContextP ctx, STRp(field), uint32_t rep)
-{
-    char strand = field[0];
-    
-    if (field_len < 2 || (strand != '+' && strand != '-'))  
-        return false; // invalid XA format - expecting pos to begin with the strand
-
-    if (segconf.is_sorted && !segconf.running) {
-        sam_seg_BWA_XA_pos (vb, &field[1], field_len-1, rep);
-        sam_seg_BWA_XA_strand (vb, strand == '+', 1); // index is 0 if '-' and 1 if '+' (set in sam_seg_0X_initialize)
-    }
-    // case: for a collated (or otherwise unsorted) file, we just seg normally (also: in segconf.running)
-    else {
-        seg_by_did (VB, field, 1, OPTION_XA_STRAND, 1);
-        seg_integer_or_not (vb, CTX(OPTION_XA_POS), &field[1], field_len-1, field_len-1);
-    }
-    seg_by_ctx (VB, xa_strand_pos_snip, xa_strand_pos_snip_len, ctx, 0); // pre-created constant container
-
+    COPY_TIMER (sam_seg_BWA_XA_pos);        
     return true; // segged successfully
 }
 
-static bool sam_seg_BWA_XA_lookup_cb (VBlockP vb, ContextP ctx, STRp(field), uint32_t rep)
+// used in case of non-sorted files - no lookback as we are not expecting near XAs to be similar
+static bool sam_seg_SA_no_lookback_cb (VBlockP vb, ContextP ctx, STRp(snip), uint32_t rep)
 {
-    return true; // "segged successfully" - do nothing, we will seg it in sam_seg_BWA_XA_strand_pos_cb
+    seg_known_node_index (vb, ctx, 0, 0); // node created in sam_seg_BWA_XA_initialize
+    return true; // segged successfully
 }
 
 void sam_seg_BWA_XA_Z (VBlockSAMP vb, STRp(xa), unsigned add_bytes)
 {
+    START_TIMER;
+
     static const MediumContainer container_XA = {
         .repeats      = 0, 
-        .nitems_lo    = 5, 
-        .filter_items = true, 
+        .nitems_lo    = 6, 
         .repsep       = {';'}, // including last item
-        .items        = { { .dict_id = { _OPTION_XA_LOOKBACK   }, .separator = { CI0_INVISIBLE } }, 
-                          { .dict_id = { _OPTION_XA_RNAME      }, .separator = {','} }, 
-                          { .dict_id = { _OPTION_XA_STRAND_POS }, .separator = {','} },
-                          { .dict_id = { _OPTION_XA_CIGAR      }, .separator = {','} }, // we don't mix the prirmary CIGAR field as the primary has a SNIP_SPECIAL
-                          { .dict_id = { _OPTION_XA_NM         },                    } }  };
+        .items        = { { .dict_id = { _OPTION_XA_LOOKBACK   }, .separator = { CI0_INVISIBLE, CI1_LOOKBACK } }, 
+                          { .dict_id = { _OPTION_XA_RNAME      }, .separator = { ',',           CI1_LOOKBACK } }, 
+                          { .dict_id = { _OPTION_XA_STRAND     }, .separator = { CI0_DIGIT,     CI1_LOOKBACK } },
+                          { .dict_id = { _OPTION_XA_POS        }, .separator = { ',',           CI1_LOOKBACK } },
+                          { .dict_id = { _OPTION_XA_CIGAR      }, .separator = { ','}                          },
+                          { .dict_id = { _OPTION_XA_NM         },                                              } }  };
 
-    SegCallback callbacks[5] = { [0]=sam_seg_BWA_XA_lookup_cb, [1]=chrom_seg_cb, [3]=sam_seg_0A_cigar_cb,
-                                 [2]=((MP(GEM3) && segconf.sam_bisulfite) ? seg_seg_gem3_XA_strand_XB_pos_cb : sam_seg_BWA_XA_strand_pos_cb) };
-    int32_t repeats = seg_array_of_struct (VB, CTX(OPTION_XA_Z), container_XA, STRa(xa), callbacks, add_bytes);
+    // case: for a collated (or otherwise unsorted) file, we just seg without lookback, because XA:Z in near lines 
+    // are not expected to be similar (also: in segconf.running)
+    bool use_lb = segconf.is_sorted && !segconf.running;
+
+    SegCallback callbacks_no_lb[6] = { sam_seg_SA_no_lookback_cb, chrom_seg_cb, 0, seg_integer_or_not_cb, sam_seg_0A_cigar_cb, 0 };
+
+    SegCallback callbacks[6] = { seg_do_nothing_cb, chrom_seg_cb, 
+                                 (MP(GEM3) && segconf.sam_bisulfite) ? sam_seg_gem3_XA_strand_cb : sam_seg_BWA_XA_strand_cb, 
+                                 sam_seg_BWA_XA_pos_cb, sam_seg_0A_cigar_cb, 0 };
+
+    int32_t repeats = seg_array_of_struct (VB, CTX(OPTION_XA_Z), container_XA, STRa(xa), 
+                                           use_lb ? callbacks : callbacks_no_lb, add_bytes);
 
     // case: we failed to seg as a container - flush lookbacks (rare condition, and complicated to rollback given the round-robin and unlimited repeats)
-    if (repeats == -1) {
-        lookback_flush (VB, CTX(OPTION_XA_RNAME));
-        lookback_flush (VB, CTX(OPTION_XA_POS));
-        lookback_flush (VB, CTX(OPTION_XA_STRAND));
-    }
+    if (use_lb && repeats == -1) 
+        lookback_flush (VB, &container_XA);
+
+    COPY_TIMER(sam_seg_BWA_XA_Z);
 }
 
-// PIZ: this is called for XA that are a container, but not for invalid XA that are segged as a simple snip
-void sam_piz_XA_field_insert_lookback (VBlockP vb)
+// PIZ up to v13: this is called for XA that are a container, but not for invalid XA that are segged as a simple snip
+void sam_piz_XA_field_insert_lookback_v13 (VBlockP vb)
 {
-    lookback_insert (vb, OPTION_XA_LOOKBACK, OPTION_XA_RNAME,  true, (ValueType){ .i = 0 }, true);
-    lookback_insert (vb, OPTION_XA_LOOKBACK, OPTION_XA_STRAND, true, (ValueType){ .i = 0 }, true);
-    lookback_insert (vb, OPTION_XA_LOOKBACK, OPTION_XA_POS,    true, (ValueType){ .i = 0 }, false);
+    if (!CTX(OPTION_XA_LOOKBACK)->is_initialized) {
+        lookback_init (vb, CTX(OPTION_XA_LOOKBACK), CTX (OPTION_XA_RNAME),  (CTX(OPTION_XA_RNAME) ->flags.store = STORE_INDEX));
+        lookback_init (vb, CTX(OPTION_XA_LOOKBACK), CTX (OPTION_XA_STRAND), (CTX(OPTION_XA_STRAND)->flags.store = STORE_INDEX));
+        lookback_init (vb, CTX(OPTION_XA_LOOKBACK), CTX (OPTION_XA_POS),    (CTX(OPTION_XA_POS)   ->flags.store = STORE_INT  ));
+    }
+
+    // copy last_value to lookback buffer
+    lookback_insert (vb, OPTION_XA_LOOKBACK, OPTION_XA_RNAME,  true, (int64_t)0);
+    lookback_insert (vb, OPTION_XA_LOOKBACK, OPTION_XA_STRAND, true, (int64_t)0);
+    lookback_insert (vb, OPTION_XA_LOOKBACK, OPTION_XA_POS,    true, (int64_t)0);
 }
 
 // ----------------------------------------------------------------------------------------------------------
@@ -234,11 +242,11 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_BWA_XC)
 // ----------------------------------------------------------------------------------------------------------
 void sam_seg_BWA_XT_A (VBlockSAMP vb, char XT, unsigned add_bytes)
 {
-    bool X0_is_1 = CTX(OPTION_X0_i)->last_value.i == 1; // undefined unless has_X0
+    int64_t X0 = has_X0 ? sam_seg_get_aux_int_(vb, X0_i) : 0;
     
     // predict based on the existance and value of X0
     char prediction = !has_X0 ? 'M'  // Mate Smith-Waterman used for mapping. Note: could also be 'N', but we set our prediction to 'M' as it is very much more common
-                    : X0_is_1 ? 'U'  // Unique mapping
+                    : X0 == 1 ? 'U'  // Unique mapping
                     :           'R'; // Repeat (i.e. not unique)
 
     if (prediction == XT)
@@ -267,10 +275,19 @@ void sam_seg_BWA_X1_i (VBlockSAMP vb, int64_t X1, unsigned add_bytes)
 {
     if (!has_X0) goto fallback; // need X0 to calculate prediction
 
+    int64_t prediction = 0;
+
     // in some files, where XA:Z includes sub-optimal alignments, this is usually true: 
     // (X0 + X1 = 1 + XA.repeats), and (X0 >= 1)
-    int64_t prediction = has_XA ? CTX(OPTION_XA_Z)->last_value.i + 1 - CTX(OPTION_X0_i)->last_value.i : 0;
+    if (has_XA) {
+        STR(xa);
+        sam_seg_get_aux_Z (vb, vb->idx_XA_Z, pSTRa(xa), IS_BAM_ZIP);
 
+        int xa_alns = str_count_char (STRa(xa), ';');
+
+        prediction = xa_alns + 1 - sam_seg_get_aux_int_(vb, X0_i);;
+    }
+    
     if (prediction == X1)
         seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_BWA_X1 }, 2, OPTION_X1_i, add_bytes);
 
@@ -314,7 +331,7 @@ void sam_seg_BWA_XM_i (VBlockSAMP vb, ValueType XM, unsigned add_bytes)
 }
 
 // ----------------------------------------------------------------------------------------------
-// Suboptimal alignment score : XS:i in bwa, bsbolt, tmap and bowtie2 ZS:i in hisat2
+// Suboptimal alignment score : XS:i in bwa, bsbolt, tmap and bowtie2 ; ZS:i in hisat2
 // ----------------------------------------------------------------------------------------------
 
 static inline int sam_XS_get_mux_channel (uint8_t MAPQ)
@@ -327,39 +344,44 @@ static inline int sam_XS_get_mux_channel (uint8_t MAPQ)
     }    
 }
 
-bool sam_has_BWA_XS_i (void)
-{
-    return MP(BWA) || MP(BOWTIE2) || MP(BSBOLT) || MP(TMAP) || MP(GEM3);
-}
-
 // usually XS:i, but ZS:i in hisat2
 void sam_seg_BWA_XS_i (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, int64_t xs, unsigned add_bytes)
 {
+    START_TIMER;
+
     // "Suboptimal alignment score" - multiplex by MAPQ and (sometimes) delta vs AS
-    if (ctx_has_value_in_line_(VB, CTX(OPTION_AS_i)) && xs >= -10000 && xs < 10000) {
+    if (has_AS && ABS(xs) < 10000) {
 
         int channel_i = sam_XS_get_mux_channel (dl->MAPQ);
-        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, (MultiplexerP)&vb->mux_XS, channel_i);
+        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_XS_i, (MultiplexerP)&vb->mux_XS, channel_i);
 
         if (channel_i == 3 ||
             segconf.AS_is_2ref_consumed) { // when AS:i is inflated x2 we observe that XS:i is not very near AS:i or AS:i/2 - we're better of segging in local
 
-            channel_ctx->ltype = LT_DYN_INT;
-            seg_integer (VB, channel_ctx, xs, false, add_bytes);
+            seg_integer (VB, channel_ctx, xs, true, add_bytes);
         }
 
-        else if (xs) 
-            seg_delta_vs_other_do (VB, channel_ctx, CTX(OPTION_AS_i), NULL, xs, 0, -1, add_bytes);
+        else if (xs && // XS can be before or after AS
+                 (dl->AS || sam_seg_get_aux_int (vb, vb->idx_AS_i, &dl->AS, IS_BAM_ZIP, MIN_AS_i, MAX_AS_i, true))) { 
+            
+            CTX(OPTION_AS_i)->last_value.i = dl->AS;
+            seg_delta_vs_other_do (VB, channel_ctx, CTX(OPTION_AS_i), NULL, 0, xs, -1, add_bytes);
+        }
+
+        else if (!xs)
+            seg_by_ctx (VB, "0", 1, channel_ctx, add_bytes);
 
         else
-            seg_by_ctx (VB, "0", 1, channel_ctx, add_bytes);
+            seg_integer_as_text_do (VB, channel_ctx, xs, add_bytes);
 
         seg_by_did (VB, STRa(vb->mux_XS.snip), did_i, 0);
     }
     
     // delta doesn't make sense - store as snip
     else
-        seg_integer_as_text_do (VB, CTX(did_i), xs, add_bytes); // seg as text to not prevent singletons
+        seg_integer (VB, CTX(did_i), xs, true, add_bytes);
+
+    COPY_TIMER (sam_seg_BWA_XS_i);
 }
 
 // v14: De-multiplex XS by MAPQ

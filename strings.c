@@ -4,7 +4,6 @@
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include <time.h>
-#include <wchar.h>
 #include "genozip.h"
 #include "strings.h"
 #include "flags.h"
@@ -26,6 +25,8 @@ char *str_tolower (rom in, char *out /* out allocated by caller - can be the sam
     for (; *in; in++, out++) 
         *out = LOWER_CASE (*in);
     
+    *out = 0;
+
     return startout;
 }
 
@@ -35,7 +36,9 @@ char *str_toupper (rom in, char *out /* out allocated by caller - can be the sam
 
     for (; *in; in++, out++) 
         *out = UPPER_CASE (*in);
-    
+
+    *out = 0;
+
     return startout;
 }
 
@@ -291,7 +294,7 @@ bool str_get_int_dec (STRp(str),
 }
 
 // get a positive hexadecimal integer, may have leading zeros eg 00FFF
-bool str_get_int_hex (STRp(str), 
+bool str_get_int_hex (STRp(str), bool allow_hex, bool allow_HEX,
                       uint64_t *value) // out - modified only if str is an integer
 {
     uint64_t out = 0;
@@ -301,8 +304,8 @@ bool str_get_int_hex (STRp(str),
         char c = str[i];
         
         if      (c >= '0' && c <= '9') out = (out << 4) | (c - '0');
-        else if (c >= 'A' && c <= 'F') out = (out << 4) | (c - 'A' + 10);
-        else if (c >= 'a' && c <= 'f') out = (out << 4) | (c - 'a' + 10);
+        else if (allow_HEX && c >= 'A' && c <= 'F') out = (out << 4) | (c - 'A' + 10);
+        else if (allow_hex && c >= 'a' && c <= 'f') out = (out << 4) | (c - 'a' + 10);
         else return false;
 
         if (out < prev_out) return false; // number overflowed beyond maximum uint64_t
@@ -320,7 +323,7 @@ bool str_get_int_range_allow_hex##bits (rom str, uint32_t str_len, uint##bits##_
                                                                                               \
     if (str_len >= 3 && str[0]=='0' && str[1]=='x') {                                         \
         uint64_t value64; /* unsigned */                                                      \
-        if (!str_get_int_hex (&str[2], str_len ? str_len-2 : strlen (str)-2, &value64)) return false; \
+        if (!str_get_int_hex (&str[2], str_len ? str_len-2 : strlen (str)-2, true, true, &value64)) return false; \
         *value = (uint##bits##_t)value64;                                                     \
     }                                                                                         \
     else {                                                                                    \
@@ -700,17 +703,27 @@ uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(con_pre
                 str += *item_lens;
                 ASSSPLIT (str <= after_str, "item_i=%u fixed_len=%u goes beyond end of string \"%.*s\"", item_i, *item_lens, str_len, save_str);
                 break;
-
+            
             case 0: // no separator - goes to end of string
                 *item_lens = after_str - str;
                 *items = str; // zero-length item - next item will start from the same str_i
                 str = after_str;
                 break;
 
+            case CI0_DIGIT: // items goes until a digit or end-of-string is encountered
+                *items = str;
+
+                while (str < after_str && !IS_DIGIT(*str)) str++;  
+
+                *item_lens = str - *items;
+                break;
+
             default:
                 ASSERT (IS_PRINTABLE(sep), "item_i=%u sep=%u is not a printable character in string \"%.*s\"", item_i, sep, str_len, save_str);
 
                 char sep1 = con->items[item_i].separator[1];
+                if (!IS_PRINTABLE (sep1)) sep1 = 0;
+                
                 *items = str;
 
                 if (!sep1) 

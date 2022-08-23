@@ -71,7 +71,7 @@ static inline ContigP contigs_get_by_index (ConstContigPkgP ctgs, WordIndex inde
 extern WordIndex contigs_get_matching (ConstContigPkgP ctgs, STRp(name), PosType LN /* optional */, bool strictly_alt, bool *is_alt);
 extern rom contigs_get_name (ConstContigPkgP ctgs, WordIndex index, unsigned *contig_name_len /* optional */);
 extern WordIndex contigs_get_by_ref_index (ConstContigPkgP ctgs,WordIndex ref_index);
-static inline PosType contigs_get_LN (ConstContigPkgP ctgs, WordIndex index) { return B(Contig, ctgs->contigs, index)->max_pos; }
+static inline PosType contigs_get_LN (ConstContigPkgP ctgs, WordIndex index) { return index < ctgs->contigs.len32 ? B(Contig, ctgs->contigs, index)->max_pos : 0; }
 static inline PosType contigs_get_gpos (ConstContigPkgP ctgs, WordIndex index) { return B(Contig, ctgs->contigs, index)->gpos; }
 
 // iterator

@@ -20,6 +20,7 @@
 #include "regions.h"
 #include "piz.h"
 #include "writer.h"
+#include "lookback.h"
 #include "libdeflate/libdeflate.h"
 
 //----------------------
@@ -88,8 +89,9 @@ WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con,
         container_prepare_snip (con, prefixes, prefixes_len, snip, &snip_len);
 
     if (flag.show_containers) { 
-        iprintf ("%sVB=%u Line=%d Ctx=%u:%s Repeats=%u RepSep=%u,%u Items=", 
-                 vb->preprocessing ? "preproc " : "",
+        iprintf ("%s%sVB=%u Line=%d Ctx=%u:%s Repeats=%u RepSep=%u,%u Items=", 
+                 vb->preprocessing    ? "preproc " : "",
+                 vb->peek_stack_level ? "peeking " : "",
                  vb->vblock_i, vb->line_i, ctx->did_i, ctx->tag_name, con->repeats, con->repsep[0], con->repsep[1]);
         for (unsigned i=0; i < con_nitems (*con); i++) {
             const ContainerItem *item = &con->items[i];
@@ -222,11 +224,11 @@ static inline void container_verify_line_integrity (VBlockP vb, ContextP debug_l
 
         if (IS_RECON_BAM)
             iprintf ("Tip: To view the dumped BAM line with:\n   genozip --show-bam %s\n\n", fn.s);
-        
+
         iprintf ("Tip: To extract the original line for comparison use:\n   genozip --biopsy-line=%u/%u -B%u%s %s\n",
-                 vb->vblock_i, vb->line_i, (int)segconf.vb_size >> 20, 
-                 ((Z_DT(DT_SAM) || Z_DT(DT_BAM)) && z_file->num_components==1) ? " --no-gencomp" : "",
-                 z_file->txt_header_single.txt_filename);
+                vb->vblock_i, vb->line_i, (int)segconf.vb_size >> 20, 
+                ((Z_DT(DT_SAM) || Z_DT(DT_BAM)) && !z_file->z_flags.has_gencomp) ? " --no-gencomp" : "",
+                z_file->txt_header_single.txt_filename);
 
         // show data-type-specific information about defective line
         DT_FUNC (z_file, piz_xtra_line_data)(vb);
@@ -235,7 +237,7 @@ static inline void container_verify_line_integrity (VBlockP vb, ContextP debug_l
 }
 
 static inline uint32_t container_reconstruct_prefix (VBlockP vb, ConstContainerP con, pSTRp(prefixes),
-                                                     bool skip, DictId con_dict_id, DictId item_dict_id)
+                                                     bool skip, DictId con_dict_id, DictId item_dict_id, bool show)
 {
     ASSERT (*prefixes_len <= CONTAINER_MAX_PREFIXES_LEN, "prefixes_len=%u is too big", *prefixes_len);
 
@@ -249,7 +251,7 @@ static inline uint32_t container_reconstruct_prefix (VBlockP vb, ConstContainerP
         if (len) {
             RECONSTRUCT (start, len);
 
-            if (vb->show_containers)
+            if (show)
                 iprintf ("Prefix=\"%.*s\" ", len, start);
         }
 
@@ -288,10 +290,10 @@ static inline unsigned container_reconstruct_item_seperator (VBlockP vb, const C
                 dt_name (vb->data_type), dis_dict_id (item->dict_id).s);
 
         if (!vb->frozen_state.prm8[0]) // only if we're not just peeking
-            DT_FUNC(vb, con_item_cb)(vb, item->dict_id, reconstruction_start, BAFTtxt - reconstruction_start);
+            DT_FUNC(vb, con_item_cb)(vb, item, reconstruction_start, BAFTtxt - reconstruction_start);
     }
     
-    if (!item->separator[0])
+    if (!item->separator[0] || item->separator[0] == CI0_DIGIT)
         return 0;
 
     else if (translating && IS_CI0_SET (CI0_TRANS_NUL)) {
@@ -321,7 +323,7 @@ static inline unsigned container_reconstruct_item_seperator (VBlockP vb, const C
     }
 
     else if (!CI0_ITEM_HAS_FLAG(item)) { // separator, not flag        
-        unsigned sep_1_valid = item->separator[1] >= '\t'; // 1->8 reserved for special separators ; 0=no seperator
+        unsigned sep_1_valid = IS_PRINTABLE(item->separator[1]);
         
         RECONSTRUCT1 ((char)item->separator[0]);
         if (sep_1_valid) RECONSTRUCT1 ((char)item->separator[1]);
@@ -331,6 +333,18 @@ static inline unsigned container_reconstruct_item_seperator (VBlockP vb, const C
 
     else
         return 0;
+}
+
+static void container_set_lines (VBlockP vb, uint32_t line_i)
+{
+    if ((*B(uint32_t, vb->lines, line_i) = BAFTtxt - B1STtxt) >= 0x80000000) {
+        if (!vb->translation.is_src_dt)
+            // This can happen eg if a BAM was compressed with -B2048 and then reconstructed as SAM.
+            ABORTINP0 ("Reconstructed VB exceeds the maximum permitted 2GB. Use genounzip instead");
+        else
+            // This should never happen
+            ABORT ("%s: Reconstructed VB exceeds the maximum permitted 2GB", LN_NAME);
+    }
 }
 
 ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, STRp(prefixes))
@@ -343,8 +357,10 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
 
     bool translating = vb->translation.trans_containers && !con->no_translation;
 
+    bool show_non_item = vb->show_containers && (!flag.dict_id_show_containers.num || dict_id_typeless (ctx->dict_id).num == flag.dict_id_show_containers.num);
+
     // container wide prefix - it will be missing if Container has no prefixes, or empty if it has only items prefixes
-    container_reconstruct_prefix (vb, con, pSTRa(prefixes), false, ctx->dict_id, DICT_ID_NONE); 
+    container_reconstruct_prefix (vb, con, pSTRa(prefixes), false, ctx->dict_id, DICT_ID_NONE, show_non_item); 
 
     ASSERT (DTP (container_filter) || (!con->filter_repeats && !con->filter_items), 
             "data_type=%s doesn't support container_filter, despite being specified in the Container. Please upgrade to the latest version of Genozip.", 
@@ -362,14 +378,15 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
     // for containers, new_value is the sum of all its items, all repeats last_value (either int or float)
     ValueType new_value = {};
 
-    if (vb->show_containers) // show container reconstruction 
-        iprintf ("%sVB=%u Container: %s repeats=%u items=%u filter_items=%u filter_repeats=%u callback=%u\n", 
-                 vb->preprocessing ? "preproc " : "",
+    if (show_non_item) // show container reconstruction 
+        iprintf ("%s%sVB=%u Container: %s repeats=%u items=%u filter_items=%u filter_repeats=%u callback=%u\n", 
+                 vb->preprocessing    ? "preproc " : "",
+                 vb->peek_stack_level ? "peeking " : "",
                  vb->vblock_i, dis_dict_id (ctx->dict_id).s, con->repeats, con_nitems(*con), con->filter_items, con->filter_repeats, con->callback);
 
     ContextP debug_lines_ctx = NULL;
     if (con->is_toplevel) {
-        buf_alloc (vb, &vb->lines, 0, con->repeats+1, char *, 1.1, "lines"); // note: lines.len was set in piz_read_one_vb
+        buf_alloc (vb, &vb->lines, 0, con->repeats+1, uint32_t, 1.1, "lines"); // note: lines.len was set in piz_read_one_vb
         vb->is_dropped = writer_get_is_dropped (vb->vblock_i);
 
         debug_lines_ctx = ECTX(_SAM_DEBUG_LINES); // same dict_id for all data types
@@ -383,7 +400,8 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
             vb->line_i         = rep_i;
             vb->line_start     = vb->txt_data.len;
             vb->drop_curr_line = NULL;    
-            *B(char *, vb->lines, rep_i) = BAFTtxt; 
+            
+            container_set_lines (vb, rep_i);
 
             DT_FUNC (z_file, piz_init_line)(vb);
         }
@@ -399,8 +417,11 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
         last_non_filtered_item_i = -1;
         unsigned num_preceding_seps = 0;
 
-        if (vb->show_containers) // show container reconstruction 
-            iprintf ("%sVB=%u Line=%d Repeat=%u LastRepeat=%u %s\n", vb->preprocessing ? "preproc " : "", vb->vblock_i, vb->line_i, rep_i, con->repeats-1, ctx->tag_name);
+        if (show_non_item) // show container reconstruction 
+            iprintf ("%s%sVB=%u Line=%d Repeat=%u LastRepeat=%u %s\n", 
+                     vb->preprocessing    ? "preproc " : "", 
+                     vb->peek_stack_level ? "peeking " : "",
+                     vb->vblock_i, vb->line_i, rep_i, con->repeats-1, ctx->tag_name);
 
         for (unsigned i=0; i < num_items; i++) {
             const ContainerItem *item = &con->items[i];
@@ -408,27 +429,31 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
             bool reconstruct = !flag.genocat_no_reconstruct;
             bool trans_nor = translating && IS_CI0_SET (CI0_TRANS_NOR); // check for prohibition on reconstructing when translating
 
+            bool show_item = vb->show_containers && item_ctx && (!flag.dict_id_show_containers.num || dict_id_typeless (item_ctx->dict_id).num == flag.dict_id_show_containers.num || 
+            dict_id_typeless (ctx->dict_id).num == flag.dict_id_show_containers.num);
+
             // an item filter may filter items in two ways:
             // - returns true - item is filter out, and data is not consumed
             // - sets reconstruct=false - data is consumed, but item is not reconstructed
             if (con->filter_items && (!(DT_FUNC (vb, container_filter) (vb, ctx->dict_id, con, rep_i, i, &reconstruct)))) {
                 
-                container_reconstruct_prefix (vb, con, &item_prefixes, &remaining_prefix_len, true, DICT_ID_NONE, DICT_ID_NONE); // skip prefix            
+                container_reconstruct_prefix (vb, con, &item_prefixes, &remaining_prefix_len, true, DICT_ID_NONE, DICT_ID_NONE, false); // skip prefix            
                 continue; // item is filtered out
             }
 
             last_non_filtered_item_i = i;
 
-            if (vb->show_containers && item_ctx && (!flag.dict_id_show_containers.num || dict_id_typeless (item_ctx->dict_id).num == flag.dict_id_show_containers.num)) // show container reconstruction 
-                iprintf ("%sVB=%u Line=%d Repeat=%u %s(%u)->%s(%u) trans_id=%u txt_data.len=%"PRIu64" (0x%04"PRIx64") reconstruct_prefix=%d reconstruct_value=%d : ", 
-                         vb->preprocessing ? "preproc " : "",
+            if (show_item) 
+                iprintf ("%s%sVB=%u Line=%d Repeat=%u %s(%u)->%s(%u) trans_id=%u txt_data.len=%"PRIu64" (0x%04"PRIx64") reconstruct_prefix=%d reconstruct_value=%d : ", 
+                         vb->preprocessing    ? "preproc " : "",
+                         vb->peek_stack_level ? "peeking " : "",
                          vb->vblock_i, vb->line_i, rep_i, ctx->tag_name, ctx->did_i, item_ctx->tag_name, item_ctx->did_i,
                          translating ? item->translator : 0, 
                          vb->vb_position_txt_file + vb->txt_data.len, vb->vb_position_txt_file + vb->txt_data.len,
                          reconstruct, reconstruct && !trans_nor);
 
             uint32_t item_prefix_len = 
-                reconstruct ? container_reconstruct_prefix (vb, con, &item_prefixes, &remaining_prefix_len, false, ctx->dict_id, con->items[i].dict_id) : 0; // item prefix (we will have one per item or none at all)
+                reconstruct ? container_reconstruct_prefix (vb, con, &item_prefixes, &remaining_prefix_len, false, ctx->dict_id, con->items[i].dict_id, show_item) : 0; // item prefix (we will have one per item or none at all)
 
             int32_t recon_len=0;
             char *reconstruction_start = BAFTtxt;
@@ -467,11 +492,10 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
                 vb->txt_data.len += (uint8_t)item->separator[1];
 
             // display 10 first reconstructed characters, but all characters if just this ctx was requested 
-            if (vb->show_containers && item_ctx && (!flag.dict_id_show_containers.num || dict_id_typeless (item_ctx->dict_id).num == flag.dict_id_show_containers.num))
+            if (show_item)
                 iprintf ("\"%.*s\"\n", 
                   /*len*/(flag.dict_id_show_containers.num ? (int)(BAFTtxt-reconstruction_start) : MIN_(10,(int)(BAFTtxt-reconstruction_start))), 
-                         reconstruction_start);
-                
+                         reconstruction_start);  
         } // items loop
 
         // remove final separator, if we need to (introduced v12)
@@ -492,6 +516,9 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
         if (con->callback || (con->is_toplevel && DTP (container_cb)))
             DT_FUNC(vb, container_cb)(vb, ctx->dict_id, con->is_toplevel, rep_i, con, rep_reconstruction_start, 
                     BAFTtxt - rep_reconstruction_start, prefixes, prefixes_len);
+
+        if (con->items[0].separator[1] == CI1_LOOKBACK)
+            lookback_insert_container (vb, con, num_items, item_ctxs);
 
         // in top level: after consuming the line's data, if it is not to be outputted - drop it
         if (con->is_toplevel) {
@@ -515,9 +542,9 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
                 && !piz_grep_match (rep_reconstruction_start, BAFTtxt))
                 vb->drop_curr_line = "grep";
 
-            else if (!vb->drop_curr_line && TXT_DT(DT_FASTQ)) {
+            else if (!vb->drop_curr_line && flag.out_dt == DT_FASTQ) {
 
-                // in FASTQ --header-only - remove the 3 non-header lines only after --grep
+                // in FASTQ --header-only - remove the 3 non-header lines (only after --grep)
                 if (flag.header_only_fast) 
                     vb->txt_data.len = BNUMtxt (strchr (rep_reconstruction_start, '\n') + 1);
 
@@ -543,17 +570,20 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
             else
                 vb->num_nondrop_lines++;
                 
-            if (vb->show_containers && vb->drop_curr_line) // show container reconstruction 
-                iprintf ("%sVB=%u Line=%d dropped due to \"%s\"\n", vb->preprocessing ? "preproc " : "", vb->vblock_i, vb->line_i, vb->drop_curr_line);
+            if (show_non_item && vb->drop_curr_line) // show container reconstruction 
+                iprintf ("%s%sVB=%u Line=%d dropped due to \"%s\"\n", 
+                         vb->preprocessing    ? "preproc " : "", 
+                         vb->peek_stack_level ? "peeking " : "",
+                         vb->vblock_i, vb->line_i, vb->drop_curr_line);
         }
     } // repeats loop
 
     if (con->is_toplevel) {
-        // final line_start entry (it has a total of num_lines+1 entires) - done last, after possibly dropping line
-        *BAFT (char *, vb->lines) = BAFTtxt; // we allocated vb->lines.len+1 entries in lines
-
         // sanity checks
         ASSERT (vb->lines.len == con->repeats, "Expected vb->lines.len=%"PRIu64" == con->repeats=%u", vb->lines.len, con->repeats);
+
+        // final line_start entry (it has a total of num_lines+1 entires) - done last, after possibly dropping line
+        container_set_lines (vb, con->repeats);
     }
 
     // remove final separator, only of final item (since v12, only remained used (by mistake) by SAM arrays - TODO: obsolete this. see sam_seg_array_field)

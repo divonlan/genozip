@@ -146,7 +146,7 @@ static void inline codec_pbwt_calculate_permutation (PbwtState *state, const All
             state->perm[ht_i].index = ht_i;
 
     // ZIP: populate alleles
-    if (command == ZIP) 
+    if (IS_ZIP) 
         for (uint32_t ht_i=0; ht_i < line_len; ht_i++)
             state->perm[ht_i].allele = line[state->perm[ht_i].index];
 }
@@ -302,7 +302,7 @@ static void codec_pbwt_decode_init_ht_matrix (VBlockP vb, const uint32_t *rc_dat
     uint64_t uncompressed_len = (uint64_t)rc_data[*rc_data_len] | ((uint64_t)rc_data[*rc_data_len + 1] << 32);
     
     ASSERT (vb->lines.len && uncompressed_len, 
-            "Expecting num_lines=%u and uncompressed_len=%"PRIu64" to be >0", vb->lines.len32, uncompressed_len);
+            "%s: Expecting num_lines=%u and uncompressed_len=%"PRIu64" to be >0", VB_NAME, vb->lines.len32, uncompressed_len);
 
     buf_alloc (vb, &vb->ht_matrix_ctx->local, 0, uncompressed_len, char, 1, "contexts->local");
 
@@ -365,7 +365,8 @@ static inline void pbwt_decode_one_line (VBlockP vb, PbwtState *state, uint32_t 
     show_perm(state); show_line; 
 
     state->runs->next += runs - start_runs;
-    ASSERT (state->runs->next <= state->runs->len, "state.runs->next=%u is out of range", (uint32_t)state->runs->next);
+    ASSERT (state->runs->next <= state->runs->len, "%s: state.runs->next=%u is out of range", 
+            VB_NAME, (uint32_t)state->runs->next);
 }
 
 // this function is called for the FORMAT_PBWT_FGRC section - after the FORMAT_PBWT_RUNS was already decompressed
@@ -383,7 +384,7 @@ UNCOMPRESS (codec_pbwt_uncompress)
     codec_pbwt_decode_init_ht_matrix (vb, rc_data, &rc_data_len);
 
     Context *runs_ctx = ECTX (_PBWT_RUNS); // might be different did_i for different data types
-    ASSERT (runs_ctx, "\"%s\": Cannot find context for PBWT_RUNS", name);
+    ASSERT (runs_ctx, "%s: \"%s\": Cannot find context for PBWT_RUNS", VB_NAME, name);
 
     PbwtState state = codec_pbwt_initialize_state (vb, &runs_ctx->local, &vb->scratch); // background allele is provided to us in param ; this is a subcodec, so vb->scratch.data == compressed
 

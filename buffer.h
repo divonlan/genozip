@@ -8,13 +8,13 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <wchar.h>
+#include <pthread.h>
 #include "genozip.h"
 #include "strings.h"
 #include "endianness.h"
 
 typedef enum __attribute__ ((__packed__)) { // 1 byte 
-    BUF_UNALLOCATED=0, BUF_REGULAR, BUF_OVERLAY, BUF_MMAP, BUF_STANDALONE_BITARRAY, BUF_NUM_TYPES 
+    BUF_UNALLOCATED=0, BUF_REGULAR, BUF_OVERLAY, BUF_OVERLAY_RO, BUF_MMAP, BUF_MMAP_RO, BUF_STANDALONE_BITARRAY, BUF_NUM_TYPES 
 } BufferType; // BUF_UNALLOCATED must be 0, must be identical to BitsType
 
 #define BUFTYPE_NAMES { "UNALLOCATED", "REGULAR", "OVERLAY", "MMAP" }
@@ -23,21 +23,24 @@ typedef struct Buffer { // 64 bytes
     //------------------------------------------------------------------------------------------------------
     // these 4 fields, must be first, and can be overlayed with a Bits - their order and size is identical to Bits
     union {
-        char *data;       // ==memory+8 if buffer is allocated or NULL if not
-        uint64_t *words;  // for Bits
+        char *data;            // ==memory+8 if buffer is allocated or NULL if not
+        uint64_t *words;       // for Bits
     };
-    union {               // the "parameter" field is for discretionary use by the caller. some options to use the parameter are provided.
+    union {                    // the "parameter" field is for discretionary use by the caller. some options to use the parameter are provided.
         int64_t param;    
         int64_t next;     
         int64_t count;    
-        uint64_t nbits;   // for Bits
+        uint64_t nbits;        // for Bits
         uint32_t prm32[2];
         uint16_t prm16[4];
         uint8_t  prm8 [8];
+#ifdef _WIN32
+        void *mmap_handle;     // handle to memory mmaped object, used by BUF_MMAP and BUF_MMAP_RO (Windows)
+#endif        
     };
     union {
-        uint64_t len;     // used by the buffer user according to its internal logic. not modified by malloc/realloc, zeroed by buf_free (in Bits - nwords)
-        uint64_t nwords;  // for Bits
+        uint64_t len;          // used by the buffer user according to its internal logic. not modified by malloc/realloc, zeroed by buf_free (in Bits - nwords)
+        uint64_t nwords;       // for Bits
         struct {
 #ifdef __LITTLE_ENDIAN__
             uint32_t len32, len32hi; // we use len32 instead of len if easier, in cases where we are certain len is smaller than 4B
@@ -50,16 +53,19 @@ typedef struct Buffer { // 64 bytes
     //------------------------------------------------------------------------------------------------------
     uint64_t overlayable : 1;  // this buffer may be fully overlaid by one or more overlay buffers
     uint64_t can_be_big  : 1;  // do not display warning if buffer grows very big
+    #define BG_LOADING_BIT 5   // bit # of bg_loading within the uint64_t 
+    uint64_t bg_loading  : 1;  // mmap thread is loading in the background
     uint64_t code_line   : 12; // the allocating line number in source code file (up to 4095)
-    #define MAX_BUFFER_SIZE ((1ULL<<47)-1) // according to bits of "size" (128 TB)
-    uint64_t size        : 47; // number of bytes available to the user (i.e. not including the allocated overhead). 
+    #define MAX_BUFFER_SIZE ((1ULL<<46)-1) // according to bits of "size" (64 TB)
+    uint64_t size        : 46; // number of bytes available to the user (i.e. not including the allocated overhead). 
 
-    VBlockP vb;       // vb that owns this buffer, and which this buffer is in its buf_list
+    VBlockP vb;                // vb that owns this buffer, and which this buffer is in its buf_list
 
-    rom name;         // name of allocator - used for memory debugging & statistics.
-    rom func;         // the allocating function
+    rom name;                  // name of allocator - used for memory debugging & statistics.
+    rom func;                  // the allocating function
+    pthread_t bg_loader;       // thread loading mmap data (used by BUF_MMAP and BUF_MMAP_RO)
 
-    char *memory;     // memory allocated to this buffer - amount is: size + 2*sizeof(longlong) to allow for OVERFLOW and UNDERFLOW)
+    char *memory;              // memory allocated to this buffer - amount is: size + 2*sizeof(longlong) to allow for OVERFLOW and UNDERFLOW)
 
 } Buffer; 
 
@@ -91,9 +97,12 @@ extern uint64_t buf_alloc_do (VBlockP vb,
     (buf).len = (exact_len); })
 
 #define buf_alloc_exact_zero(alloc_vb, buf, exact_len, type, name) ({   \
-    buf_alloc((alloc_vb), &(buf), 0, (exact_len), type, 1, name);       \
-    (buf).len = (exact_len);                                            \
+    buf_alloc_exact (alloc_vb, buf, exact_len, type, name); \
     memset ((buf).data, 0, (exact_len) * sizeof(type)); })
+
+#define buf_alloc_exact_255(alloc_vb, buf, exact_len, type, name) ({   \
+    buf_alloc_exact (alloc_vb, buf, exact_len, type, name); \
+    memset ((buf).data, 255, (exact_len) * sizeof(type)); })
 
 // allocates exactly the requested amount and sets let, and declares ARRAY
 #define ARRAY_alloc(element_type, array_name, array_len, init_zero, buf, alloc_vb, buf_name) \
@@ -104,21 +113,23 @@ extern uint64_t buf_alloc_do (VBlockP vb,
     element_type *array_name = ((element_type *)((buf).data)); \
     const uint64_t array_name##_len __attribute__((unused)) = (buf).len; // read-only copy of len 
 
-#define buf_alloc_zero(vb, buf, more, at_least, element_type, grow_at_least_factor,name) do { \
+#define buf_alloc_zero(vb, buf, more, at_least, element_type, grow_at_least_factor,name) ({ \
     uint64_t size_before = (buf)->data ? (buf)->size : 0; /* always zero the whole buffer in an initial allocation */ \
     buf_alloc((vb), (buf), (more), (at_least), element_type, (grow_at_least_factor), (name)); \
-    if ((buf)->data && (buf)->size > size_before) memset (&(buf)->data[size_before], 0, (buf)->size - size_before); \
-} while(0)
+    if ((buf)->data && (buf)->size > size_before) memset (&(buf)->data[size_before], 0, (buf)->size - size_before); })
 
-#define buf_alloc_255(vb, buf, more, at_least, element_type, grow_at_least_factor,name) do { \
+#define buf_alloc_255(vb, buf, more, at_least, element_type, grow_at_least_factor,name) ({ \
     uint64_t size_before = (buf)->data ? (buf)->size : 0; /* always zero the whole buffer in an initial allocation */ \
     buf_alloc((vb), (buf), (more), (at_least), element_type, (grow_at_least_factor), (name)); \
-    if ((buf)->data && (buf)->size > size_before) memset (&(buf)->data[size_before], 255, (buf)->size - size_before); \
-} while(0)
+    if ((buf)->data && (buf)->size > size_before) memset (&(buf)->data[size_before], 255, (buf)->size - size_before); })
 
 #define ARRAY(element_type, name, buf) \
     element_type *name = ((element_type *)((buf).data)); \
     const uint64_t name##_len __attribute__((unused)) = (buf).len; // read-only copy of len 
+
+#define ARRAY32(element_type, name, buf) \
+    element_type *name = ((element_type *)((buf).data)); \
+    const uint32_t name##_len __attribute__((unused)) = (buf).len32; // read-only copy of len 
 
 // entry #index in Buffer
 #define B(type, buf, index) ((type *)(&(buf).data[(index) * sizeof(type)]))
@@ -197,7 +208,7 @@ static inline uint64_t BNXT_get_index (BufferP buf, size_t size, FUNCLINE)
     buf_alloc ((buf).vb, &(buf), 1, 0, type, 1, NULL);  \
     memmove (B(type, (buf), (index)+2), B(type, (buf), (index)+1), ((buf).len - ((index)+1)) * sizeof(type)); \
     (buf).len++;                                        \
-    B(type, (buf), (index)+1);                        \
+    B(type, (buf), (index)+1);                          \
 })
 
 extern bool buf_mmap_do (VBlockP vb, BufferP buf, rom filename, bool read_only_buffer, FUNCLINE, rom name);
@@ -223,8 +234,10 @@ extern void buf_move (VBlockP dst_vb, BufferP dst, VBlockP src_vb, BufferP src);
 extern void buf_grab_do (VBlockP dst_vb, BufferP dst_buf, rom dst_name, BufferP src_buf, FUNCLINE);
 #define buf_grab(dst_vb, dst_buf, dst_name, src_buf) buf_grab_do ((dst_vb), &(dst_buf), (dst_name), &(src_buf), __FUNCLINE)
 
-extern void buf_cut_out_do (BufferP buf, unsigned sizeof_item, uint64_t remove_start, uint64_t remove_len);
-#define buf_remove(buf, type, remove_start, remove_len) buf_cut_out_do ((buf), sizeof(type), (remove_start), (remove_len))
+extern void buf_remove_do (BufferP buf, unsigned sizeof_item, uint64_t remove_start, uint64_t remove_len);
+#define buf_remove(buf, type, remove_start, remove_len) buf_remove_do (&(buf), sizeof(type), (remove_start), (remove_len))
+
+extern void buf_insert_do (VBlockP vb, BufferP buf, unsigned width, uint64_t insert_at, const void *new_data, uint64_t new_data_len, rom name);
 
 #define buf_has_space(buf, new_len) ((buf)->len + (new_len) <= (buf)->size)
 
@@ -236,19 +249,19 @@ extern void buf_cut_out_do (BufferP buf, unsigned sizeof_item, uint64_t remove_s
        memcpy (&(buf)->data[(buf)->len], (new_data), new_len);   \
        (buf)->len += new_len; })
 
-static inline void buf_add_more_ex (VBlockP vb, BufferP buf, unsigned width, const void *new_data, unsigned new_data_len, rom name) 
-{ 
-    if (!new_data_len) return;
-
-    buf_alloc (vb ? vb : buf->vb, buf, new_data_len, (buf->len + new_data_len + 1) * width /* +1 - room for char/wchar_t \0 or separator */, char, 1.5, name); 
-    memcpy (&buf->data[buf->len * width], new_data, new_data_len * width);   
-    buf->len += new_data_len; 
-} 
 static inline void buf_add_more (VBlockP vb, BufferP buf, STRp(new_data), rom name) 
-{   buf_add_more_ex (vb, buf, 1, STRa(new_data), name); }
+{   buf_insert_do (vb, buf, 1, buf->len, STRa(new_data), name); }
 
-#define buf_add_more_(vb, buf, type, new_data, new_data_len, name) \
-    buf_add_more_ex ((VBlockP)(vb), (buf), sizeof(type), (new_data), (new_data_len), (name))
+#define buf_append(vb, buf, type, new_data, new_data_len, name) \
+    buf_insert_do ((VBlockP)(vb), &(buf), sizeof(type), (buf).len, (new_data), (new_data_len), (name))
+
+#define buf_append_one(buf, item) ({ \
+    typeof(item) item_ = (item); /* evaluate once */\
+    buf_insert_do (NULL, &(buf), sizeof(typeof(item)), (buf).len, &item_, 1, NULL);\
+})
+
+#define buf_insert(vb, buf, type, insert_at, new_data, new_data_len, name) \
+    buf_insert_do ((VBlockP)(vb), &(buf), sizeof(type), (insert_at), (new_data), (new_data_len), (name))
 
 #define buf_add_moreC(vb_, buf, literal_str, name) buf_add_more ((VBlockP)(vb_), (buf), literal_str, sizeof literal_str-1, (name))
 #define buf_add_moreS(vb_, buf, str, name) buf_add_more ((VBlockP)(vb_), (buf), str, str##_len, (name))
@@ -257,7 +270,7 @@ static inline void buf_add_more (VBlockP vb, BufferP buf, STRp(new_data), rom na
     memcpy (BAFT(type, *(dst_buf)), (src_buf)->data, (src_buf)->len * sizeof (type));   \
     (dst_buf)->len += (src_buf)->len; })
 
-extern void buf_add_string (VBlockP vb, BufferP buf, rom str);
+extern void buf_append_string (VBlockP vb, BufferP buf, rom str);
 
 // adds a textual int at the end of a buffer. caller needs to allocate enough space in the buffer.
 static inline unsigned buf_add_int_as_text (BufferP buf, int64_t n)
@@ -277,19 +290,18 @@ static inline unsigned buf_add_hex_as_text (BufferP buf, int64_t n, bool upperca
 
 #define buf_add_int(vb, buf, n) ({ buf_alloc ((VBlockP)(vb), &(buf), 1, 0, typeof(n), 0, NULL); BNXT(typeof(n), (buf)) = n; })
 
-#define buf_add_vector(vb, type, dst, src, name) do { \
-    if ((src).len) { \
+#define buf_add_vector(vb, type, dst, src, name)  \
+({  if ((src).len) { \
         if (!(dst).len) \
             buf_copy ((vb), &(dst), &(src), sizeof (type), 0, 0, name); \
         else \
             for (uint64_t i=0; i < (src).len; i++) \
                 *B(type, (dst), i) += *B(type, (src), i); \
-    } \
-} while(0)
+    } })
 
 #define BUFPRINTF_MAX_LEN 5000
-#define bufprintf(vb, buf, format, ...)  do { char __s[BUFPRINTF_MAX_LEN]; sprintf (__s, (format), __VA_ARGS__); buf_add_string ((VBlockP)(vb), (buf), __s); } while (0)
-#define bufprint0 buf_add_string  // note: the string isn't a printf format, so escaping works differently (eg % doesn't need to be %%)
+#define bufprintf(vb, buf, format, ...)  ({ char __s[BUFPRINTF_MAX_LEN]; sprintf (__s, (format), __VA_ARGS__); buf_append_string ((VBlockP)(vb), (buf), __s); })
+#define bufprint0 buf_append_string  // note: the string isn't a printf format, so escaping works differently (eg % doesn't need to be %%)
 
 extern void buf_print (BufferP buf, bool add_newline);
 
@@ -306,7 +318,7 @@ uint64_t buf_get_memory_usage (void);
 extern void buf_show_memory (bool memory_full, unsigned max_threads, unsigned used_threads);
 extern void buf_show_memory_handler (void);
 
-#define buf_set(buf_p,value) do { if ((buf_p)->data) memset ((buf_p)->data, value, (buf_p)->size); } while(0)
+#define buf_set(buf_p,value) ({ if ((buf_p)->data) memset ((buf_p)->data, value, (buf_p)->size); })
 #define buf_zero(buf_p) buf_set(buf_p, 0)
 
 extern void buf_add_to_buffer_list_do (VBlockP vb, BufferP buf, FUNCLINE);
@@ -318,7 +330,7 @@ extern void buf_update_buf_list_vb_addr_change (VBlockP new_vb, VBlockP old_vb);
 extern void buf_compact_buf_list (VBlockP vb);
 
 extern void buf_low_level_free (void *p, FUNCLINE);
-#define FREE(p) do { if (p) { buf_low_level_free (((void*)(p)), __FUNCLINE); p=NULL; } } while(0)
+#define FREE(p) ({ if (p) { buf_low_level_free (((void*)(p)), __FUNCLINE); p=NULL; } })
 
 extern void *buf_low_level_malloc (size_t size, bool zero, FUNCLINE);
 #define MALLOC(size) buf_low_level_malloc (size, false, __FUNCLINE)
@@ -362,7 +374,6 @@ extern BitsP buf_zfile_buf_to_bitarray (BufferP buf, uint64_t nbits);
 #define buf_add_set_bit(buf)   buf_add_bit (buf, 1)
 #define buf_add_clear_bit(buf) buf_add_bit (buf, 0)
 
-extern Buffer dummy_buf; // used for calculating sizes
 #define buf_get_buffer_from_bits(bitarr) ((BufferP)(bitarr))
 
 extern char *buf_display (ConstBufferP buf);

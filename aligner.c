@@ -364,14 +364,19 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
         const Bits *genome=NULL;
         PosType genome_nbases;
         
-        if (gpos != NO_GPOS) 
+        if (gpos != NO_GPOS) { 
             ref_get_genome (gref, &genome, NULL, &genome_nbases);
 
-        // sanity check - the sequence is supposed to fit in the 
-        ASSERT (gpos == NO_GPOS || gpos + seq_len <= genome->nbits / 2, "gpos=%"PRId64" is out of range: seq_len=%u and genome_nbases=%"PRIu64,
-                gpos, seq_len, genome->nbits / 2);
+            // sanity check - the sequence is supposed to fit in the 
+            ASSERT (gpos + seq_len <= genome->nbits / 2, "gpos=%"PRId64" is out of range: seq_len=%u and genome_nbases=%"PRIu64,
+                    gpos, seq_len, genome->nbits / 2);
+        }
+        else {
+            bitmap_ctx->next_local += seq_len; // up to v13 ; not sure if this still can happen since v14
+            goto all_nonref;
+        }
 
-        BASE_ITER_INIT (genome, gpos, seq_len, is_forward);
+        BASE_ITER_INIT (genome, gpos, seq_len, is_forward); // careful: segfault if no genome
 
         // faster loop in the common case of a perfect (= no mismatches) alignment (is_perfect_alignment introduced in v14)
         if (is_perfect_alignment) {
@@ -400,7 +405,7 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
         }
     }
 
-    else { 
+    else all_nonref: { 
         ASSPIZ (nonref_ctx->next_local + seq_len <= nonref_ctx->local.len32, "NONREF exhausted: next_local=%u + seq_len=%u > local.len=%u",
                 nonref_ctx->next_local, seq_len, nonref_ctx->local.len32);
 

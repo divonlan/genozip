@@ -12,10 +12,10 @@
 
 bool progress_newline_since_update = false; // global: might be not 100% with threads, but that's ok
 
-static bool ever_start_time_initialized = false, test_mode, show_progress;
+static bool ever_start_time_initialized = false, test_mode;
 static TimeSpecType ever_start_time, component_start_time;
 static float last_percent=0;
-static unsigned last_seconds_so_far=0;
+static int last_seconds_so_far=-1;
 static rom component_name=NULL;
 static unsigned last_len=0; // so we know how many characters to erase on next update
 
@@ -48,6 +48,25 @@ static rom progress_ellapsed_time (bool ever)
     return time_str;
 }
 
+static void progress_update_status (char **prefix, rom status)
+{
+    if (flag.quiet) return;
+
+    static rom eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
+    static rom spaces = "                                                                                ";
+
+    if (prefix && *prefix) {
+        iprintf ("%s", *prefix);
+        FREE (*prefix);
+    }
+
+    iprintf ("%.*s%.*s%.*s%s", last_len, eraser, last_len, spaces, last_len, eraser, status);
+
+    last_len = strlen (status);
+
+    progress_newline_since_update = false;
+}
+
 char *progress_new_component (rom new_component_name, 
                               rom message, // can be NULL
                               int new_test_mode)   // true, false or -1 for unchanged
@@ -66,8 +85,6 @@ char *progress_new_component (rom new_component_name,
         if (new_test_mode != -1) 
             test_mode = new_test_mode;
 
-        // if !show_progress - we don't show the advancing %, but we still show the filename, done status, compression ratios etc
-        show_progress  = !flag.quiet && !!isatty(2);
         component_name = new_component_name; 
 
         if (!flag.quiet) {
@@ -88,7 +105,6 @@ char *progress_new_component (rom new_component_name,
         }
     }
 
-//    if (message) 
     if (!flag.reading_chain) 
         progress_update_status (&prefix, message ? message : "");
 
@@ -98,18 +114,18 @@ char *progress_new_component (rom new_component_name,
 void progress_update (char **prefix, uint64_t sofar, uint64_t total, bool done)
 {
     char time_str[70], progress[200];
-    if (!show_progress && !flag.debug_progress) return; 
+    if (flag.quiet && !flag.debug_progress) return; 
 
     TimeSpecType tb; 
     clock_gettime(CLOCK_REALTIME, &tb); 
     
     int seconds_so_far = ((tb.tv_sec-component_start_time.tv_sec)*1000 + (tb.tv_nsec-component_start_time.tv_nsec) / 1000000) / 1000; 
 
-    float percent;
+    double percent;
     if (total > 10000000) // gentle handling of really big numbers to avoid integer overflow
-        percent = MIN_(((float)(sofar/100000ULL)*100) / (float)(total/100000ULL), 100.0); // divide by 100000 to avoid number overflows
+        percent = MIN_(((double)(sofar/100000ULL)*100) / (double)(total/100000ULL), 100.0); // divide by 100000 to avoid number overflows
     else
-        percent = MIN_(((float)sofar*100) / (float)total, 100.0); // divide by 100000 to avoid number overflows
+        percent = MIN_(((double)sofar*100) / (double)total, 100.0); // divide by 100000 to avoid number overflows
 
     // need to update progress indicator, max once a second or if 100% is reached
 
@@ -129,7 +145,7 @@ void progress_update (char **prefix, uint64_t sofar, uint64_t total, bool done)
         if (!done) { 
 
             // time remaining
-            unsigned secs = (100.0 - percent) * ((float)seconds_so_far / (float)percent);
+            unsigned secs = (100.0 - percent) * ((double)seconds_so_far / (double)percent);
             progress_human_time (secs, time_str);
 
             if (!flag.debug_progress)
@@ -146,28 +162,6 @@ void progress_update (char **prefix, uint64_t sofar, uint64_t total, bool done)
 
     last_percent = percent;
     last_seconds_so_far = seconds_so_far;
-}
-
-void progress_update_status (char **prefix, rom status)
-{
-    if (flag.quiet) return;
-
-    static rom eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
-    static rom spaces = "                                                                                ";
-
-    if (prefix && *prefix) {
-        iprintf ("%s", *prefix);
-        FREE (*prefix);
-    }
-
-    if (is_info_stream_terminal && !flag.debug_progress) 
-        iprintf ("%.*s%.*s%.*s%s", last_len, eraser, last_len, spaces, last_len, eraser, status);
-    else 
-        iprintf ("%s\n", status); // if we're outputting to a log file or debugging progress, show every status on its own line
-
-    last_len = strlen (status);
-
-    progress_newline_since_update = false;
 }
 
 void progress_finalize_component (rom status)
@@ -217,3 +211,5 @@ void progress_concatenated_md5 (rom me, Digest md5)
 
     FINALIZE ("Bound %s", me);
 }
+
+

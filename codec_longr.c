@@ -33,13 +33,14 @@ void codec_longr_comp_init (VBlockP vb, Did qual_did_i)
     lens_ctx->lcodec  = CODEC_LONGR;
 
     // values_ctx contains the base quality data, sorted by channel
-    ContextP values_ctx        = lens_ctx+1; // used
-    values_ctx->ltype          = LT_UINT8;
-    values_ctx->local_dep      = DEP_L1; 
-    values_ctx->lcodec         = CODEC_ARITH8;
-    values_ctx->counts_section = true; // we store the global value-to-bin mapper in a SEC_COUNTS
+    ContextP values_ctx           = lens_ctx+1; // used
+    values_ctx->ltype             = LT_UINT8;
+    values_ctx->local_dep         = DEP_L1; 
+    values_ctx->lcodec            = CODEC_ARITH8;
+    values_ctx->lcodec_hard_coded = true;
+    values_ctx->counts_section    = true; // we store the global value-to-bin mapper in a SEC_COUNTS
     
-    ctx_consolidate_stats (vb, qual_did_i, 2, qual_did_i+1, DID_EOL);
+    ctx_consolidate_stats (vb, qual_did_i, qual_did_i+1, DID_EOL);
 }
 
 // upper bound of compressed size of length array
@@ -69,7 +70,7 @@ void codec_longr_segconf_calculate_bins (VBlockP vb, ContextP ctx,
     if (callback)
         for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {
             uint8_t *values; uint32_t values_len;
-            callback (vb, line_i, (char **)pSTRa(values), vb->txt_data.len, NULL);
+            callback (vb, ctx, line_i, (char **)pSTRa(values), vb->txt_data.len, NULL);
             add_to_histogram (histogram, STRa(values));
 
             num_values += values_len;
@@ -143,7 +144,7 @@ COMPRESS (codec_longr_compress)
 {
     START_TIMER;
     ASSERTISNULL (uncompressed);
-    ASSERT0 (soft_fail, "second entry not expected");
+    ASSERT (soft_fail, "%s: second entry not expected, ctx=%s", VB_NAME, TAG_NAME);
 
     ContextP lens_ctx   = ECTX (((SectionHeaderCtx *)header)->dict_id);
     ContextP values_ctx = lens_ctx + 1;
@@ -165,17 +166,19 @@ COMPRESS (codec_longr_compress)
     uint32_t total_len=0;
     for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {
 
-        seq_callback (vb, line_i,  pSTRa(seq), 0, &is_rev);
-        get_line_cb (vb, line_i, pSTRa(qual), vb->txt_data.len, NULL);
+        seq_callback (vb, ctx, line_i,  pSTRa(seq), 0, &is_rev);
+        get_line_cb (vb, ctx, line_i, pSTRa(qual), vb->txt_data.len, NULL);
 
         if (!qual_len) continue; // this can happen, for example, if a SAM DEPN line is compressed against SA Group
 
         codec_longr_calc_channels (state, STRa(seq), (uint8_t*)qual, is_rev);
 
-        ASSERT (seq_len == qual_len, "%s: \"%s\": Expecting seq_len=%u == qual_len=%u", LN_NAME, name, seq_len, qual_len);
+        ASSERT (seq_len == qual_len, "%s: \"%s\": Expecting seq_len=%u == qual_len=%u. ctx=%s", 
+                LN_NAME, name, seq_len, qual_len, TAG_NAME);
 
         total_len += qual_len;
-        ASSERT (total_len <= *uncompressed_len, "%s: \"%s\": Expecting total_len=%u <= total_len=%u", LN_NAME, name, total_len, *uncompressed_len);
+        ASSERT (total_len <= *uncompressed_len, "%s: \"%s\": Expecting total_len=%u <= total_len=%u. ctx=%s", 
+                LN_NAME, name, total_len, *uncompressed_len, TAG_NAME);
     }
     
     // we now sort the quality data by channel (reversing qual of revcomp reads)
@@ -193,7 +196,7 @@ COMPRESS (codec_longr_compress)
 
     uint32_t base_i=0;
     for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {
-        get_line_cb (vb, line_i, pSTRa(qual), vb->txt_data.len, &is_rev);
+        get_line_cb (vb, ctx, line_i, pSTRa(qual), vb->txt_data.len, &is_rev);
 
         // we create a sorted_qual array, which contains LONGR_NUM_CHANNELS segments, one for each channel,
         // containing all the bases of that belong to that channel
@@ -236,7 +239,7 @@ COMPRESS (codec_longr_compress)
     COPY_TIMER_COMPRESS (compressor_longr);
 
     // actually compress the lens array
-    return compress (vb, header, lens_ctx->local.data, uncompressed_len, NULL, compressed, compressed_len, false, name);
+    return compress (vb, ctx, header, lens_ctx->local.data, uncompressed_len, NULL, compressed, compressed_len, false, name);
 }
 
 //--------------
@@ -312,6 +315,8 @@ static void codec_longr_reconstruct_init (VBlockP vb, Context *lens_ctx, Context
 // codec_longr_reconstruct, which combines data from the local buffers of lens, values and SQBITMAP to reconstruct the original QUAL field.
 CODEC_RECONSTRUCT (codec_longr_reconstruct)
 {
+    START_TIMER;
+
     ContextP lens_ctx   = ctx;
     ContextP values_ctx = ctx + 1;
     ContextP seq_ctx    = CTX(VB_DT(DT_FASTQ) ? FASTQ_SQBITMAP : SAM_SQBITMAP);
@@ -331,5 +336,7 @@ CODEC_RECONSTRUCT (codec_longr_reconstruct)
 
     codec_longr_recon_one_read (state, seq, vb->seq_len, is_rev, sorted_qual, next_of_chan, BAFTtxt);
     vb->txt_data.len32 += vb->seq_len;
+
+    COPY_TIMER(codec_longr_reconstruct);
 }
 

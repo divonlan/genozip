@@ -13,34 +13,31 @@
 #include "seg.h"
 #include "piz.h"
 #include "reconstruct.h"
+#include "lookback.h"
 
 // ----------------------------------------------------------------------------------------------
-// XB:A gem3: Bisulfite conversion: C if its a C->T and G if its G->A: 
-// http://dcc.blueprint-epigenome.eu/#/md/bs_seq_grch38
+// XB:A gem3: the version of the reference to which the read is mapped (either CT or GA)
+// Two possible values: 'C' or 'G' http://dcc.blueprint-epigenome.eu/#/md/bs_seq_grch38
 // ----------------------------------------------------------------------------------------------
-
-static inline char XB_prediction (VBlockSAMP vb) 
-{ 
-    return (vb->c2t_minus_g2a >= 0) ? 'C' : 'G'; 
-}
 
 // 2 possible values: G C
 void sam_seg_gem3_XB_A (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(xb), unsigned add_bytes)
 {
-    segconf_set_has (OPTION_XB_A);
+    ASSSEG (xb_len==1 && (xb[0]=='C' || xb[0]=='G'), xb, "Invalid XB:A=%.*s, expecting C or G", STRf(xb));
 
-    if (xb_len == 1 && *xb == XB_prediction (vb))
+    if (vb->bisulfite_strand)
         seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_GEM3_XB }, 2, OPTION_XB_A, add_bytes);
 
     else 
-        // note: prediction sometimes fails when both c2t and g2a are near-0, eg "c2t=1 g2a=2" or "c2t=0 g2a=2"
-        seg_by_did (VB, STRa(xb), OPTION_XB_A, add_bytes);
+        seg_by_did (VB, xb, 1, OPTION_XB_A, add_bytes);
 }
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_GEM3_XB)
 {
+    ASSPIZ0 (VB_SAM->bisulfite_strand, "XB:A cannot be reconstructed because bisulfite_strand is not known - likely SEQ was not reconstructed");
+    
     if (reconstruct) 
-        RECONSTRUCT1 (XB_prediction (VB_SAM));
+        RECONSTRUCT1 (VB_SAM->bisulfite_strand);
 
     return NO_NEW_VALUE;
 }
@@ -53,27 +50,17 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_GEM3_XB)
 // ------------------------------------------------------------------------
 
 // split the pos strand-XB-pos string (generated with --bisulfite), eg "-C10000" to strand "-" XB "C" and pos "10000"
-bool seg_seg_gem3_XA_strand_XB_pos_cb (VBlockP vb, ContextP ctx, STRp(field), uint32_t rep)
+bool sam_seg_gem3_XA_strand_cb (VBlockP vb, ContextP ctx, STRp(field), uint32_t rep)
 {
     char strand = field[0];
     char xb     = field[1];
 
-    if (field_len < 3 || (strand != '+' && strand != '-') || (xb != 'C' && xb != 'G'))  
-        return false; // invalid XA format - expecting pos to begin with the strand and XB
+    if (field_len != 2 || (strand != '+' && strand != '-') || (xb != 'C' && xb != 'G'))  
+        return false; // invalid XA format 
 
-    if (segconf.is_sorted && !segconf.running) {
-        sam_seg_BWA_XA_pos (vb, &field[2], field_len-2, rep);
-        sam_seg_BWA_XA_strand (vb, 2 + ((strand=='+') | (xb=='G') << 1), 2); // word_indices set in sam_seg_BWA_XA_initialize
-    }
-    
-    // case: for a collated (or otherwise unsorted) file, we just seg normally (also: in segconf.running)
-    else {
-        seg_by_did (VB, field, 2, OPTION_XA_STRAND, 2);
-        seg_integer_or_not (vb, CTX(OPTION_XA_POS), &field[2], field_len-2, field_len-2);
-    }
-    seg_by_ctx (VB, xa_strand_pos_snip, xa_strand_pos_snip_len, ctx, 0); // pre-created constant container
+    // seg normally for now, we might change it in sam_seg_BWA_XA_pos
+    WordIndex strand_index = (2 + ((strand=='+') | (xb=='G') << 1));
+    seg_known_node_index (vb, CTX (OPTION_XA_STRAND), strand_index, 2); 
 
     return true; // segged successfully
 }
-
-

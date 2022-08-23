@@ -33,15 +33,15 @@ SRC_DIRS = zlib bzlib lzma bsc libdeflate htscodecs compatibility
 
 MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c license.c 							\
 		  data_types.c bits.c progress.c writer.c tar.c chrom.c qname.c tokenizer.c 							\
-          zip.c piz.c reconstruct.c recon_history.c seg.c zfile.c aligner.c flags.c digest.c mutex.c threads.c 	\
-		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c 						\
+          zip.c piz.c reconstruct.c recon_history.c recon_peek.c seg.c zfile.c aligner.c flags.c digest.c    	\
+		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c mutex.c threads.c	\
 		  vcf_piz.c vcf_seg.c vcf_gt.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c 		\
 		  vcf_refalt.c vcf_tags.c vcf_ps_pid.c vcf_linesort.c vcf_format.c       								\
 		  sam_seg.c sam_piz.c sam_shared.c sam_header.c sam_md.c sam_tlen.c sam_cigar.c sam_fields.c  			\
 		  sam_sa.c bam_seg.c bam_seq.c bam_show.c                                             					\
-		  sam_seq.c sam_qual.c sam_sag_zip.c sam_sag_piz.c sam_sag_load.c sam_sag_ingest.c sam_pos.c	     	\
+		  sam_seq.c sam_qual.c sam_sag_zip.c sam_sag_piz.c sam_sag_load.c sam_sag_ingest.c sam_sag_scan.c    	\
 		  sam_bwa.c sam_bowtie2.c sam_bsseeker2.c sam_bsbolt.c sam_bismark.c sam_gem3.c sam_tmap.c sam_hisat2.c \
-		  sam_blasr.c sam_minimap2.c sam_scrna-seq.c  	      														\
+		  sam_blasr.c sam_minimap2.c sam_cellranger.c sam_pos.c    												\
 		  fasta.c fastq.c gff3.c me23.c phylip.c chain.c kraken.c locs.c generic.c 								\
 		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c lookback.c 				\
 		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c	\
@@ -127,16 +127,16 @@ else
     endif
 endif
 
+C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(BSC_SRCS) $(LZMA_SRCS) $(DEFLATE_SRCS) $(HTSCODECS_SRC)
+
 ifndef IS_CONDA 
-	# local - static link everything
-	C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(BSC_SRCS) $(LZMA_SRCS) $(DEFLATE_SRCS) $(HTSCODECS_SRC)
+	CFLAGS += -march=native 
 #	ifneq ($(shell uname -a | grep ppc64),)
 #		CFLAGS += -mcpu=native 
 #	endif
 
 else  # conda
-	# use packages for bzip2
-	C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(LZMA_SRCS) $(BSC_SRCS) $(DEFLATE_SRCS) $(HTSCODECS_SRC)
+
 endif
 
 OBJS       := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.o))
@@ -156,14 +156,14 @@ else
 	DEBUGFLAGS += -DDEBUG -g -O0
 endif
 
-all   : CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"$(DISTRIBUTION)\" -march=native 
+all   : CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"$(DISTRIBUTION)\"  
 all   : $(OBJDIR) $(EXECUTABLES) 
 	@chmod +x test.sh
 
-debug : CFLAGS += $(DEBUGFLAGS) -march=native -DDISTRIBUTION=\"debug\"
+debug : CFLAGS += $(DEBUGFLAGS) -DDISTRIBUTION=\"debug\"
 debug : $(OBJDIR) $(DEBUG_EXECUTABLES)
 
-opt   : CFLAGS += -g $(OPTFLAGS) -march=native -DDISTRIBUTION=\"opt\"
+opt   : CFLAGS += -g $(OPTFLAGS) -DDISTRIBUTION=\"opt\"
 opt   : $(OBJDIR) $(OPT_EXECUTABLES)
 
 docker : CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"Docker\"

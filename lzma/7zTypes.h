@@ -138,7 +138,8 @@ struct ISeqInStream
        (output(*size) < input(*size)) is allowed */
 
   // all the remaining fields (except for Read) were added by Divon
-  void *vb;                    
+  void *vb;        
+  void *ctx;            
   unsigned line_i;        // current partially-consumed line, or next line if no partially consumed line
   unsigned avail_in;      // total bytes remaining
   

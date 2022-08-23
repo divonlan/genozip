@@ -61,7 +61,7 @@ void sam_sa_prim_initialize_ingest (void)
     mutex_initialize (grp_mutex);
 
     // suppress buf_alloc warning of big allocations
-    z_file->sag_seq.can_be_big = z_file->sag_qual.can_be_big = true;
+    z_file->sag_grps.can_be_big = z_file->sag_seq.can_be_big = z_file->sag_qual.can_be_big = true;
 }
 
 // ZIP: called from main thread by sam_zip_after_compute after final PRIM vb
@@ -150,6 +150,7 @@ static void sam_zip_prim_ingest_vb_copy_qual_vb_to_z (VBlockSAMP vb, Sag *vb_grp
 
 static void sam_zip_prim_ingest_vb_copy_qname_vb_to_z (VBlockSAMP vb, Sag *vb_grps, uint32_t vb_grps_len, uint32_t total_qname_len)
 {
+    z_file->sag_qnames.can_be_big = true; // suppress warnings
     buf_alloc (evb, &z_file->sag_qnames, total_qname_len, 200000, char, CTX_GROWTH, "z_file->sag_qnames");
 
     for (uint32_t grp_i=0; grp_i < vb_grps_len; grp_i++) {
@@ -193,25 +194,23 @@ void sam_zip_prim_ingest_solo_data (VBlockSAMP vb)
 
     uint32_t total_solo_len=0;    
     for_buf (ZipDataLineSAM, dl, vb->lines) 
-        total_solo_len += dl->UR.len + dl->UB.len + dl->UY.len + dl->CR.len + dl->CB.len + dl->CY.len; 
+        for (int tag_i = 0; tag_i < NUM_SOLO_TAGS; tag_i++)
+            total_solo_len += dl->solo_z_fields[tag_i].len;
 
-    buf_alloc (evb, &z_file->solo_data, total_solo_len, 0, char, 0, "solo_data");
-    buf_alloc (evb, &z_file->sag_alns, vb->sag_grps.len32, 0, SoloAln, 0, "solo_aln");
+    z_file->solo_data.can_be_big = z_file->sag_alns.can_be_big = true; // suppress warnings
+    buf_alloc (evb, &z_file->solo_data, total_solo_len, 0, char, CTX_GROWTH, "solo_data");
+    buf_alloc (evb, &z_file->sag_alns, vb->sag_grps.len32, 0, SoloAln, CTX_GROWTH, "solo_aln");
 
-    #define COPY_SOLO(f, check_copy) copy_solo (vb, &next, dl->f, (check_copy))
     char *next = BAFTc (z_file->solo_data);
-    for_buf (ZipDataLineSAM, dl, vb->lines) 
-        BNXT(SoloAln, z_file->sag_alns) = (SoloAln){
-            .CR = COPY_SOLO(CR, false),
-            .CB = COPY_SOLO(CB, true ),
-            .CY = COPY_SOLO(CY, false),
-            .UR = COPY_SOLO(UR, false),
-            .UB = COPY_SOLO(UB, true ),
-            .UY = COPY_SOLO(UY, false),
-        };
+    for_buf (ZipDataLineSAM, dl, vb->lines) {
+        SoloAln solo_aln;
+        for (int tag_i = 0; tag_i < NUM_SOLO_TAGS; tag_i++)
+            solo_aln.word[tag_i] = copy_solo (vb, &next, dl->solo_z_fields[tag_i], solo_props[tag_i].maybe_same_as_prev);
+        
+        BNXT(SoloAln, z_file->sag_alns) = solo_aln;
+    }
 
     vb->solo_data_len = BNUM64 (z_file->solo_data, next) - z_file->solo_data.len;
-    
     z_file->solo_data.len = BNUM64 (z_file->solo_data, next);
 }
 

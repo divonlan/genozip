@@ -29,6 +29,7 @@
 // globals
 ContigPkgP sam_hdr_contigs = NULL; // If no contigs in header: BAM: empty structure (RNAME must be * for all lines); SAM: NULL (RNAME in lines may have contigs) 
 HdSoType sam_hd_so = HD_SO_UNKNOWN;
+HdGoType sam_hd_go = HD_GO_UNKNOWN;
 
 static void sam_header_get_ref_index (STRp (contig_name), PosType LN, void *ref_index)
 {
@@ -73,20 +74,27 @@ static void sam_header_add_contig (STRp (contig_name), PosType LN, void *out_ref
 }
 
 // call a callback for each SQ line (contig) in the textual header (SAM and BAM). Note: callback function is the same as foreach_contig
-static void foreach_textual_SQ_line (rom txt_header, // nul-terminated string
+static void foreach_textual_SQ_line (rom txt_header, // nul-terminated string if SAM header
+                                     uint32_t bam_header_len, // if BAM header: total header len. if SAM header: 0
                                      ContigsIteratorCallback callback, void *callback_param,
                                      BufferP new_txt_header) // optional - if provided, all lines need to be copied (modified or not) to this buffer
 {
+    rom line = txt_header;
+    uint32_t bam_txt_hdr_len = 0;
+
     // nul-terminate if BAM (per spec, textual header in BAM is not nul-terminated)
     char __save_=0, *__addr_=0;
-    if (IS_SRC_BAM) {     
-        uint32_t hdr_len = GET_UINT32(txt_header+4);
-        if (!hdr_len) return; // no header
-        __save_ = txt_header[hdr_len + 8]; // temporary \0 after textual header
-        *(__addr_ = (char *)&txt_header[hdr_len + 8]) = 0;
-    }
+    if (bam_header_len) {     
+        bam_txt_hdr_len = GET_UINT32(txt_header+4);
+        if (!bam_txt_hdr_len) return; // no header
+        __save_ = txt_header[bam_txt_hdr_len + 8]; // temporary \0 after textual header
+        *(__addr_ = (char *)&txt_header[bam_txt_hdr_len + 8]) = 0;
 
-    rom line = IS_BAM_ZIP ? (txt_header + 8) : txt_header;
+        if (new_txt_header)
+            buf_add_more (NULL, new_txt_header, txt_header, 8, NULL);
+
+        line += 8;
+    }
 
     for (uint32_t i=0 ; ; i++) {
         line = strchr (line, '@');
@@ -132,7 +140,12 @@ static void foreach_textual_SQ_line (rom txt_header, // nul-terminated string
         line = newline+1;
     }
 
-    if (IS_SRC_BAM) SAFE_RESTORE;
+    if (bam_header_len) {
+        SAFE_RESTORE;
+
+        if (new_txt_header)
+            buf_add_more (NULL, new_txt_header, &txt_header[bam_txt_hdr_len + 8], bam_header_len - bam_txt_hdr_len - 8, NULL);
+    }
 }
 
 // call a callback for each SQ line (contig). Note: callback function is the same as foreach_contig
@@ -162,7 +175,7 @@ static void foreach_binary_SQ_line (rom txt_header, uint32_t txt_header_len, // 
         
         // update SAM plain header with new contigs, but DONT add to hdr_contigs - we will do that in the loop below
         SAFE_NUL (&plain_sam_header[l_text]); // per SAM spec, plain SAM header within a BAM header is not nul terminated
-        foreach_textual_SQ_line (plain_sam_header, sam_header_get_ref_index, NULL, new_txt_header);
+        foreach_textual_SQ_line (plain_sam_header, 0, sam_header_get_ref_index, NULL, new_txt_header);
         SAFE_RESTORE;
 
         // update l_text
@@ -213,7 +226,6 @@ incomplete_header:
     #undef HDR32
 }   
 
-
 static void sam_header_zip_inspect_HD_line (BufferP txt_header) 
 {
     uint32_t hdr_len = IS_BAM_ZIP ? *B32(*txt_header, 1)     : txt_header->len32;
@@ -235,6 +247,21 @@ static void sam_header_zip_inspect_HD_line (BufferP txt_header)
             int len = strlen (hd_so[i]);
             if (nl - so >= len && !memcmp (so, hd_so[i], len)) {
                 sam_hd_so = i;
+                break;
+            }
+        } 
+    }
+
+    rom go = strstr (hdr, "\tGO:");
+    
+    if (go) {
+        static rom hd_go[] = HD_GO_NAMES;
+        so += 4;
+
+        for (int i=0; i < ARRAY_LEN(hd_go); i++) {
+            int len = strlen (hd_go[i]);
+            if (nl - go >= len && !memcmp (go, hd_go[i], len)) {
+                sam_hd_go = i;
                 break;
             }
         } 
@@ -273,10 +300,13 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
 
     if (MP(STAR) && strstr (hdr, "--solo")) segconf.star_solo = true;
 
+    // note: this file *might* be of bisulfite-treated reads. 
+    // This variable might be reset after segconf if it fails additonal conditions 
+    segconf.sam_bisulfite = MP(BISMARK) || MP(BSSEEKER2) || MP(DRAGEN) || MP(BSBOLT) || MP(GEM3);
+
 done:
     SAFE_RESTORE;
 }
-
 
 typedef struct { uint32_t n_contigs, dict_len; } ContigsCbParam;
 static void sam_header_count_contigs_cb (STRp(chrom_name), PosType last_pos, void *cb_param)
@@ -291,10 +321,10 @@ static void sam_header_alloc_contigs (BufferP txt_header)
 {
     // count contigs in textual header
     ContigsCbParam txt_ctg_count={}, bin_ctg_count={}; 
-    foreach_textual_SQ_line (txt_header->data, sam_header_count_contigs_cb, &txt_ctg_count, NULL);
+    foreach_textual_SQ_line (txt_header->data, IS_SRC_BAM ? txt_header->len : 0, sam_header_count_contigs_cb, &txt_ctg_count, NULL);
 
     // count contigs in binary header
-    if (IS_BAM_ZIP)
+    if (IS_SRC_BAM)
         foreach_binary_SQ_line  (STRb(*txt_header), sam_header_count_contigs_cb, &bin_ctg_count,  NULL);
     
     // we expect textual and binary files to be identical, however we observed in the wild files where the binary contigs
@@ -317,7 +347,7 @@ static void sam_header_alloc_contigs (BufferP txt_header)
     if (winner->n_contigs) {
         sam_hdr_contigs = CALLOC (sizeof (ContigPkg));
         sam_hdr_contigs->name = "sam_hdr_contigs";        
-        sam_hdr_contigs->contigs.param = (delta >= 0); // 1 if contigs come from the textual header, 0 if binary
+        sam_hdr_contigs->contigs.param = (delta > 0); // 1 if contigs come from the textual header, 0 if binary
         
         buf_alloc (evb, &sam_hdr_contigs->contigs, 0, winner->n_contigs, Contig, 1, "sam_hdr_contigs->contigs"); 
         buf_alloc (evb, &sam_hdr_contigs->dict,    0, winner->dict_len,  char,   1, "sam_hdr_contigs->dict"); 
@@ -326,7 +356,7 @@ static void sam_header_alloc_contigs (BufferP txt_header)
 
 void sam_header_finalize (void)
 {
-    contigs_free (sam_hdr_contigs);
+    contigs_destroy (sam_hdr_contigs); // destroy bc we need to remove the buffers from the buffer_list ahead of FREEing the memory
     FREE (sam_hdr_contigs);
 }
 
@@ -360,44 +390,48 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
 
     if (flag.show_txt_contigs && is_genocat) exit_ok();
 
-    if (command != ZIP) return true; // nothing to inspect in in PIZ or SA components, all good
+    if (IS_ZIP) {
 
-    if (!IS_BAM_ZIP) *BAFTc (*txt_header) = 0; // nul-terminate as required by foreach_textual_SQ_line
+        if (!IS_BAM_ZIP) *BAFTc (*txt_header) = 0; // nul-terminate as required by foreach_textual_SQ_line
 
-    sam_header_zip_inspect_HD_line (txt_header);
+        sam_header_zip_inspect_HD_line (txt_header);
 
-    sam_header_zip_inspect_PG_lines (txt_header);
+        sam_header_zip_inspect_PG_lines (txt_header);
 
-    // if there is no external reference provided, then we create our internal one, and store it
-    // (if an external reference IS provided, the user can decide whether to store it or not, with --reference vs --REFERENCE)
-    if (flag.reference == REF_NONE) flag.reference = REF_INTERNAL;
+        // if there is no external reference provided, then we create our internal one, and store it
+        // (if an external reference IS provided, the user can decide whether to store it or not, with --reference vs --REFERENCE)
+        if (flag.reference == REF_NONE) flag.reference = REF_INTERNAL;
 
-    // in case of internal reference, we need to initialize. in case of --reference, it was initialized by ref_load_external_reference()
-    if (!flag.reference || flag.reference == REF_INTERNAL) 
-        ref_initialize_ranges (gref, RT_DENOVO); // it will be REF_INTERNAL if this is the 2nd+ non-conatenated file
+        // in case of internal reference, we need to initialize. in case of --reference, it was initialized by ref_load_external_reference()
+        if (!flag.reference || flag.reference == REF_INTERNAL) 
+            ref_initialize_ranges (gref, RT_DENOVO); // it will be REF_INTERNAL if this is the 2nd+ non-conatenated file
 
-    // evb buffers must be alloced by the main thread, since other threads cannot modify evb's buf_list
-    random_access_alloc_ra_buf (evb, 0, 0);
+        // evb buffers must be alloced by the main thread, since other threads cannot modify evb's buf_list
+        random_access_alloc_ra_buf (evb, 0, 0);
+    }
 
-    sam_header_alloc_contigs (txt_header); 
-    if (sam_hdr_contigs) {
+    if (IS_ZIP || flag.collect_coverage) {
 
-        if (flag.match_chrom_to_reference) 
-            buf_alloc (txt_header_vb, &new_txt_header, 0, txt_header->len + 100, char, 0, "codec_bufs[0]"); // initial allocation (might be a bit bigger due to label changes)
+        sam_header_alloc_contigs (txt_header); 
+        if (sam_hdr_contigs) {
 
-        if (sam_hdr_contigs->contigs.param) // contigs originate from textual header
-            foreach_textual_SQ_line (txt_header->data, sam_header_add_contig, NULL, flag.match_chrom_to_reference ? &new_txt_header : NULL);
-        else
-            foreach_binary_SQ_line  (STRb(*txt_header), sam_header_add_contig, NULL, flag.match_chrom_to_reference ? &new_txt_header : NULL);
+            if (flag.match_chrom_to_reference) 
+                buf_alloc (txt_header_vb, &new_txt_header, 0, txt_header->len + 100, char, 0, "codec_bufs[0]"); // initial allocation (might be a bit bigger due to label changes)
 
-        // replace txt_header with the updated one
-        if (flag.match_chrom_to_reference) {
-            buf_free (*txt_header);
-            buf_copy (txt_header_vb, txt_header, &new_txt_header, char, 0, 0, "txt_data");
-            buf_free (new_txt_header);
+            if (sam_hdr_contigs->contigs.param) // contigs originate from textual header
+                foreach_textual_SQ_line (txt_header->data, IS_SRC_BAM ? txt_header->len32 : 0, sam_header_add_contig, NULL, flag.match_chrom_to_reference ? &new_txt_header : NULL);
+            else
+                foreach_binary_SQ_line  (STRb(*txt_header), sam_header_add_contig, NULL, flag.match_chrom_to_reference ? &new_txt_header : NULL);
+
+            // replace txt_header with the updated one
+            if (flag.match_chrom_to_reference) {
+                buf_free (*txt_header);
+                buf_copy (txt_header_vb, txt_header, &new_txt_header, char, 0, 0, "txt_data");
+                buf_free (new_txt_header);
+            }
+
+            contigs_create_index (sam_hdr_contigs, SORT_BY_NAME); // used by sam_sa_add_sa_group
         }
-
-        contigs_create_index (sam_hdr_contigs, SORT_BY_NAME); // used by sam_sa_add_sa_group
     }
 
     return true;
@@ -461,8 +495,8 @@ static inline void sam_header_add_PG (BufferP txtheader_buf)
     // the command line length is unbound, careful not to put it in a bufprintf
     bufprintf (txtheader_buf->vb, txtheader_buf, "@PG\tID:genozip-%u\tPN:genozip\tDS:%s\tVN:%s\tCL:", 
                unique_id, GENOZIP_URL, GENOZIP_CODE_VERSION);
-    buf_add_string (txtheader_buf->vb, txtheader_buf, flags_command_line());
-    buf_add_string (txtheader_buf->vb, txtheader_buf, "\n");
+    buf_append_string (txtheader_buf->vb, txtheader_buf, flags_command_line());
+    buf_append_string (txtheader_buf->vb, txtheader_buf, "\n");
 }
 
 // PIZ main thread: make the txt header either SAM or BAM according to flag.out_dt, and regardless of the source file
@@ -524,7 +558,7 @@ TXTHEADER_TRANSLATOR (sam_header_sam2bam)
 
     // n_ref = count SQ lines in text
     uint32_t n_ref=0;
-    foreach_textual_SQ_line (txtheader_buf->data, sam_header_sam2bam_count_sq, &n_ref, NULL);
+    foreach_textual_SQ_line (txtheader_buf->data, 0, sam_header_sam2bam_count_sq, &n_ref, NULL);
 
     // we can't convert to BAM if its a SAM file with aligned reads but without SQ records, compressed with REF_INTERNAL - as using the REF_INTERNAL
     // contigs would produce lengths that don't match actual reference files - rendering the BAM file useless for downstream
@@ -549,15 +583,15 @@ TXTHEADER_TRANSLATOR (sam_header_sam2bam)
     uint32_t l_text = txtheader_buf->len;
     ASSINP (txtheader_buf->len <= INT32_MAX, "Cannot convert to BAM because SAM header length (%"PRIu64" bytes) exceeds BAM format maximum of %u", txtheader_buf->len, INT32_MAX);
 
-    memmove (text, txtheader_buf->data, l_text);                          // text
-    memcpy (B1STc (*txtheader_buf), BAM_MAGIC, 4);               // magic
-    *B32 (*txtheader_buf, 1) = LTEN32 (l_text);                 // l_text
+    memmove (text, txtheader_buf->data, l_text);    // text
+    memcpy (B1STc (*txtheader_buf), BAM_MAGIC, 4);  // magic
+    *B32 (*txtheader_buf, 1) = LTEN32 (l_text);     // l_text
     *(uint32_t *)Bc (*txtheader_buf, l_text + 8) = LTEN32 (n_ref); // n_ref
     txtheader_buf->len += 12; // BAM header length so far, before adding reference information
 
     // option 1: copy reference information from SAM SQ lines, if available
     if (from_SQ) 
-        foreach_textual_SQ_line (text, sam_header_sam2bam_ref_info, txtheader_buf, NULL);
+        foreach_textual_SQ_line (STRb(*txtheader_buf), sam_header_sam2bam_ref_info, txtheader_buf, NULL);
 
     // option 2: copy reference information from ref_contigs if available - i.e. if pizzed with external or stored reference
     else if (ref_num_contigs (gref)) 

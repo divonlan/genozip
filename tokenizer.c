@@ -157,9 +157,11 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
             ctx_set_last_value (vb, item_ctx, ci->value);
         }
         else if (ctx_encountered_in_prev_line (vb, item_ctx->did_i) &&
-                 item_ctx->last_txt.len == ci->item_len)  
-
-             seg_xor_diff (vb, item_ctx, STRa(ci->item), item_ctx->flags.all_the_same, ci->item_len); // don't xor-diff if it can ruin the all-the-same
+                 item_ctx->last_txt.len == ci->item_len) {
+            
+            item_ctx->ltype = LT_UINT8;
+            seg_diff (vb, item_ctx, item_ctx, STRa(ci->item), item_ctx->flags.all_the_same, ci->item_len); // don't xor-diff if it can ruin the all-the-same
+        }
 
         else fallback: 
             seg_by_ctx (vb, STRa(ci->item), item_ctx, ci->item_len);

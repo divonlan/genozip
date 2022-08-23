@@ -15,12 +15,13 @@
 
 extern void zfile_compress_genozip_header (void);
 
-extern void zfile_compress_section_data_ex (VBlockP vb, SectionType section_type, 
+extern void zfile_compress_section_data_ex (VBlockP vb, ContextP ctx, SectionType section_type, 
                                             BufferP section_data, LocalGetLineCB callback, uint32_t total_len, 
-                                            Codec codec, SectionFlags flags);
+                                            Codec codec, SectionFlags flags,
+                                            rom context_name); // NULL if not context data
 
 #define zfile_compress_section_data(vb, section_type, section_data) \
-    zfile_compress_section_data_ex ((vb), (section_type), (section_data), NULL, 0, CODEC_BZ2, SECTION_FLAGS_NONE)
+    zfile_compress_section_data_ex ((vb), NULL, (section_type), (section_data), NULL, 0, CODEC_BZ2, SECTION_FLAGS_NONE, NULL)
 
 extern uint32_t zfile_compress_b250_data  (VBlockP vb, ContextP ctx);
 extern uint32_t zfile_compress_local_data (VBlockP vb, ContextP ctx, uint32_t sample_size);

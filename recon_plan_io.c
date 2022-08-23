@@ -28,9 +28,9 @@ void recon_plan_show (File *file, bool is_luft, uint32_t conc_writing_vbs, uint3
 {
     iprintf ("\nReconstruction plan%s: entries=%"PRIu64" conc_writing_vbs=%u x %u MB\n", 
              !z_is_dvcf ? "" : is_luft ? " of LUFT rendition" : " of PRIMARY rendition", 
-             z_file->recon_plan.len, conc_writing_vbs, vblock_mb);
+             file->recon_plan.len, conc_writing_vbs, vblock_mb);
 
-    for (uint32_t i=0; i < z_file->recon_plan.len32; i++) {
+    for (uint32_t i=0; i < file->recon_plan.len32; i++) {
         ReconPlanItem *p = B(ReconPlanItem, file->recon_plan, i);
         rom comp = p->vb_i ? comp_name(sections_vb_header(p->vb_i, false)->comp_i) : NULL;
         rom flav = recon_plan_flavors[p->flavor];
@@ -49,6 +49,36 @@ void recon_plan_show (File *file, bool is_luft, uint32_t conc_writing_vbs, uint3
             default              : ABORT ("Unknown flavor %u", p->flavor);
         }
     }               
+}
+
+void recon_plan_sort_by_vb (File *file)
+{
+    ARRAY (BufWord, recon_plan_index, file->recon_plan_index);
+
+    // check if recon_plan is out of order
+    bool in_order = true;
+    for (VBIType vb_i=2; vb_i < recon_plan_index_len; vb_i++)
+        if (recon_plan_index[vb_i].index < recon_plan_index[vb_i-1].index) {
+            in_order = false;
+            break;
+        }
+
+    if (in_order) return; // already in order, nothing to do
+
+    // copy the plan to scratch, and the copy it back to file->recon_plan in order of VBs
+    buf_copy (evb, &evb->scratch, &file->recon_plan, ReconPlanItem, 0, 0, "scratch");
+    ARRAY (ReconPlanItem, src, evb->scratch);
+    ReconPlanItem *dst = B1ST (ReconPlanItem, file->recon_plan);
+
+    for (VBIType vb_i=0; vb_i < recon_plan_index_len; vb_i++) { // vb_i may contain a txt_header item
+        uint32_t len = recon_plan_index[vb_i].len;
+        if (!len) continue;
+
+        memcpy (dst, &src[recon_plan_index[vb_i].index], len * sizeof (ReconPlanItem));
+        dst += len;
+    }
+
+    buf_free (evb->scratch);
 }
 
 // -------------------------------------------------------------------------------
@@ -146,11 +176,11 @@ static void recon_plan_compress_one_fragment (VBlockP vb)
     if (flag.show_time) codec_show_time (vb, st_name(SEC_RECON_PLAN), NULL, frag_codec);
 
     vb->comp_i = 0; // goes into SectionEnt.comp_i (this is correct for DVCF and SAM)
-    comp_compress (vb, &vb->z_data, (SectionHeader*)&header, vb->fragment_start, NO_CALLBACK, "SEC_RECON_PLAN");
+    comp_compress (vb, NULL, &vb->z_data, (SectionHeader*)&header, vb->fragment_start, NO_CALLBACK, "SEC_RECON_PLAN");
 
     COPY_TIMER (recon_plan_compress_one_fragment)    
 
-    vb->is_processed = true; // tell dispatcher this thread is done and can be joined.
+    vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
 }
 
 // called by main thread in zip_write_global_area
@@ -176,7 +206,7 @@ void recon_plan_compress (uint32_t my_conc_writing_vbs,
     is_luft = my_is_luft;
 
     // divvy up recon_plan to fragments of about ~1MB and compress in parallel
-    dispatcher_fan_out_task ("compress_recon_plan", NULL, PROGRESS_MESSAGE, "Writing reconstruction plan...", false, false, 0, 20000,
+    dispatcher_fan_out_task ("compress_recon_plan", NULL, 0, "Writing reconstruction plan...", false, false, false, 0, 20000,
                              recon_plan_prepare_for_compress, 
                              recon_plan_compress_one_fragment, 
                              zfile_output_processed_vb);
@@ -248,7 +278,7 @@ static void recon_plan_uncompress_one_vb (VBlockP vb)
 
     buf_free (vb->scratch); // un-overlay
 
-    vb->is_processed = true; // tell dispatcher this thread is done and can be joined.
+    vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
 }
 
 // PIZ main thread. Reads, uncompresses and reassembles recon_plan into evb->scratch
@@ -259,7 +289,7 @@ void recon_plan_uncompress (Section sec, uint32_t *out_conc_writing_vbs, uint32_
     next_sec = sec;
     is_luft = sec->flags.recon_plan.luft;
 
-    dispatcher_fan_out_task ("uncompress_recon_plan",NULL, PROGRESS_NONE, "Reading reconstruction plan...", flag.test, false, 0, 1000, 
+    dispatcher_fan_out_task ("uncompress_recon_plan", NULL, 0, 0, true, flag.test, false, 0, 1000, 
                              recon_plan_read_one_vb, recon_plan_uncompress_one_vb, NO_CALLBACK);
  
     // assign outs

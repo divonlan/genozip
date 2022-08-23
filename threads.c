@@ -81,13 +81,15 @@ static void *threads_signal_handler (void *sigset)
         ASSERT (!(err = sigwait ((sigset_t *)sigset, &sig)), "sigwait failed: %s", strerror (err));
 
         switch (sig) {
-            case SIGSEGV : threads_sigsegv_handler(); break;
-            case SIGHUP  : threads_sighup_handler();  break;
-            case SIGUSR1 : fprintf (stderr, "Caught signal SIGUSR1, showing memory\n");
-                           buf_show_memory_handler(); break;
-            case SIGUSR2 : fprintf (stderr, "Caught signal SIGUSR2, writing threads log\n");
-                           threads_write_log (false); break;
-            default      : ABORT ("Unexpected signal %s", strsignal (sig));
+            case SIGSEGV  : threads_sigsegv_handler(); break;
+            case SIGHUP   : threads_sighup_handler();  break;
+            case SIGUSR1  : fprintf (stderr, "Caught signal SIGUSR1, showing memory\n");
+                            buf_show_memory_handler(); break;
+            case SIGUSR2  : fprintf (stderr, "Caught signal SIGUSR2, writing threads log\n");
+                            threads_write_log (false); break;
+            case SIGCHLD  : break; // Child process has stopped or exited
+            case SIGCONT  : break; // Continue executing, if stopped
+            default       : ABORT ("Unexpected signal %s", strsignal (sig));
         }
     }
     return 0; // never reaches here
@@ -95,13 +97,15 @@ static void *threads_signal_handler (void *sigset)
 
 #endif
 
+// called by main thread at system initialization
 void threads_initialize (void)
 {
     mutex_initialize (threads_mutex);
     mutex_initialize (log_mutex);
-    main_thread = pthread_self(); // we can't put it in buffer yet, because evb is not yet initialized
+    main_thread = pthread_self(); 
 
     buf_alloc (evb, &log, 500, 1000000, char, 2, "log");
+    buf_alloc (evb, &threads, 0, global_max_threads + 3, ThreadEnt, 2, "threads");
 
 // only Linux, as in Mac sigwait sometimes returns "invalid argument" - TODO solve this
 #ifdef __linux__
@@ -117,7 +121,7 @@ void threads_initialize (void)
     ASSERT (!err, "pthread_sigmask failed: %s", strerror (err));
 
     pthread_t signal_handler_thread;
-    err = pthread_create (&signal_handler_thread, NULL, threads_signal_handler, &sigset); // can't use threads_create as evb isn't initialized yet
+    err = pthread_create (&signal_handler_thread, NULL, threads_signal_handler, &sigset); 
     ASSERT (!err, "failed to create signal_handler_thread: %s", strerror(err));
 #endif
 }
@@ -170,10 +174,10 @@ static void threads_log_by_thread_id (ThreadId thread_id, const ThreadEnt *ent, 
     
     if (flag.debug_threads) {
         mutex_lock (log_mutex);
-        buf_alloc (evb, &log, 10000, 1000000, char, 2, "log");
+        buf_alloc (NULL, &log, 10000, 1000000, char, 2, "log");
         
-        if (has_vb) bufprintf (evb, &log, "%s: vb_i=%u vb_id=%u %s thread_id=%d pthread=%"PRIu64"\n", ent->task_name, ent->vb_i, ent->vb_id, event, thread_id, (uint64_t)ent->pthread);
-        else        bufprintf (evb, &log, "%s: %s thread_id=%d pthread=%"PRIu64"\n", ent->task_name, event, thread_id, (uint64_t)ent->pthread);
+        if (has_vb) bufprintf (NULL, &log, "%s: vb_i=%u vb_id=%u %s thread_id=%d pthread=%"PRIu64"\n", ent->task_name, ent->vb_i, ent->vb_id, event, thread_id, (uint64_t)ent->pthread);
+        else        bufprintf (NULL, &log, "%s: %s thread_id=%d pthread=%"PRIu64"\n", ent->task_name, event, thread_id, (uint64_t)ent->pthread);
         mutex_unlock (log_mutex);
     }
 }
@@ -216,11 +220,11 @@ void threads_log_by_vb (ConstVBlockP vb, rom task_name, rom event,
         }
 
         if (time_usec)
-            bufprintf (evb, &log, "%s: vb_i=%d vb_id=%d %s vb->compute_thread_id=%d pthread=%"PRIu64" compute_thread_time=%s usec\n", 
-                        task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, (uint64_t)pthread_self(), str_int_commas (time_usec).s);
+            bufprintf (NULL, &log, "%s: vb_i=%d vb_id=%d %s vb->compute_thread_id=%d pthread=%"PRIu64" compute_thread_time=%s usec\n", 
+                       task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, (uint64_t)pthread_self(), str_int_commas (time_usec).s);
         else
-            bufprintf (evb, &log, "%s: vb_i=%d vb_id=%d %s vb->compute_thread_id=%d pthread=%"PRIu64"\n", 
-                        task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, (uint64_t)pthread_self());
+            bufprintf (NULL, &log, "%s: vb_i=%d vb_id=%d %s vb->compute_thread_id=%d pthread=%"PRIu64"\n", 
+                       task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, (uint64_t)pthread_self());
 
         mutex_unlock (log_mutex);
     }
@@ -234,7 +238,7 @@ static void *thread_entry_caller (void *vb_)
     pthread_setcanceltype (PTHREAD_CANCEL_ASYNCHRONOUS, NULL); // thread can be canceled at any time
 
     // wait for threads_create to complete updating VB
-    mutex_wait (vb->vb_ready_for_compute_thread); 
+    mutex_wait (vb->ready_for_compute, true); 
 
     threads_log_by_vb (vb, vb->compute_task, "STARTED", 0);
 
@@ -254,13 +258,9 @@ static void *thread_entry_caller (void *vb_)
     return NULL;
 }
 
-// called from main thread only
+// called from main thread or writer threads only
 ThreadId threads_create (void (*func)(VBlockP), VBlockP vb)
 {
-    ASSERTMAINTHREAD;
-
-    ASSERT (evb, "evb is NULL. task=%s", vb->compute_task);
-
     if (vb) threads_log_by_vb (vb, vb->compute_task, "ABOUT TO CREATE", 0);
 
     mutex_lock (threads_mutex);
@@ -269,43 +269,38 @@ ThreadId threads_create (void (*func)(VBlockP), VBlockP vb)
     for (thread_id=0; thread_id < threads.len; thread_id++)
         if (!B(ThreadEnt, threads, thread_id)->in_use) break;
 
-    buf_alloc (evb, &threads, 1, global_max_threads + 3, ThreadEnt, 2, "threads");
+    buf_alloc (NULL, &threads, 1, global_max_threads + 3, ThreadEnt, 2, "threads");
     threads.len = MAX_(threads.len, thread_id+1);
 
-    mutex_initialize (vb->vb_ready_for_compute_thread);
-    mutex_lock (vb->vb_ready_for_compute_thread); // thread_entry_caller will wait on this until VB is initialized
+    mutex_initialize (vb->ready_for_compute);
+    mutex_lock (vb->ready_for_compute); // thread_entry_caller will wait on this until VB is initialized
 
     pthread_t pthread;
     unsigned err = pthread_create (&pthread, NULL, thread_entry_caller, vb);
     ASSERT (!err, "failed to create thread task=\"%s\" vb_i=%d: %s", vb->compute_task, vb->vblock_i, strerror(err));
 
-    ThreadEnt ent = (ThreadEnt){ 
+    *B(ThreadEnt, threads, thread_id) = (ThreadEnt){ 
         .in_use    = true, 
         .task_name = vb->compute_task, 
         .vb_i      = vb->vblock_i,
         .vb_id     = vb->id,
         .pthread   = pthread 
     };
-    *B(ThreadEnt, threads, thread_id) = ent;
 
     vb->compute_thread_id = thread_id; // assigned while thread_entry_caller is waiting on mutex
     vb->compute_func      = func;
-    mutex_unlock (vb->vb_ready_for_compute_thread); // alloc thread_entry_caller to call entry point
+    mutex_unlock (vb->ready_for_compute); // alloc thread_entry_caller to call entry point
 
     mutex_unlock (threads_mutex);
 
-    threads_log_by_thread_id (thread_id, &ent, "CREATED");
+    threads_log_by_thread_id (thread_id, B(ThreadEnt, threads, thread_id), "CREATED");
 
     return thread_id;
 }
 
 // returns success if joined (which is always the case if blocking)
-bool threads_join_do (ThreadId *thread_id, 
-                      VBlockP vb, // optional: if given, will return false if VB is not ready, if NULL, join will block
-                      rom func)
+void threads_join_do (ThreadId *thread_id, rom func)
 {
-    ASSERTMAINTHREAD;
-
     ASSERT (*thread_id != THREAD_ID_NONE, "called from %s: thread not created or already joined", func);
 
     mutex_lock (threads_mutex);
@@ -318,10 +313,7 @@ bool threads_join_do (ThreadId *thread_id,
         last_joining = *thread_id;
     }
 
-    // non-blocking - return false if the VB is not ready yet
-    if (vb && !vb->is_processed) return false;
-
-    // wait for thread to complete (possibly it completed already)
+    // wait for thread to complete (no wait if it completed already)
     pthread_join (ent.pthread, NULL);
     
     threads_log_by_thread_id (*thread_id, &ent, "JOINED");
@@ -331,7 +323,6 @@ bool threads_join_do (ThreadId *thread_id,
     mutex_unlock (threads_mutex);
 
     *thread_id = THREAD_ID_NONE;
-    return true;
 }
 
 // kills all other threads

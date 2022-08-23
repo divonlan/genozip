@@ -1196,7 +1196,8 @@ unsigned char *rans_compress_to_4x16(VBlockP vb, unsigned char *in, unsigned int
 	c_meta_len += var_put_u32(out+c_meta_len, out_end, in_size);
 	out[c_meta_len++] = N;
 	
-	out2_start = out2 = out+2+5*N; // shares a buffer with c_meta
+	out2_start = out2 = out+2+5*(N+1); // bug fix per email from James
+	// out2_start = out2 = out+2+5*N; // shares a buffer with c_meta
         for (i = 0; i < N; i++) {
             // Brute force try all methods.
             int j, m[] = {1,64,128,0}, best_j = 0, best_sz = in_size+10;

@@ -622,7 +622,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_A_AN)
 
     int64_t an, ac;
 
-    if (command == ZIP) {
+    if (IS_ZIP) {
         Context *an_ctx;
         if (!ctx_has_value_in_line (vb, _INFO_AN, &an_ctx) ||
             !str_get_int_range64 (STRa(recon), 0, (an = an_ctx->last_value.i), &ac))
@@ -705,7 +705,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_END)
     ContextP opos_ctx = CTX (VCF_oPOS);
     
     // ZIP liftback (POS is always before END, because we seg INFO/LIFTOVER first)
-    if (command == ZIP && VB_VCF->line_coords == DC_LUFT) { // liftback
+    if (IS_ZIP && VB_VCF->line_coords == DC_LUFT) { // liftback
         PosType oend;
         if (!str_get_int_range64 (STRa(recon), 0, MAX_POS, &oend))
             return false;
@@ -814,7 +814,7 @@ static bool vcf_seg_INFO_HGVS_snp (VBlockVCFP vb, ContextP ctx, STRp(value))
     SAFE_RESTOREx(2);
 
     // seg special snips
-    ctx_consolidate_stats (VB, ctx->did_i, 3, INFO_HGVS_snp_pos, INFO_HGVS_snp_refalt, DID_EOL);
+    ctx_consolidate_stats (VB, ctx->did_i, INFO_HGVS_snp_pos, INFO_HGVS_snp_refalt, DID_EOL);
 
     seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_HGVS_SNP_POS    }), 2, CTX(INFO_HGVS_snp_pos),    pos_str_len);
     seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_HGVS_SNP_REFALT }), 2, CTX(INFO_HGVS_snp_refalt), 3);
@@ -917,7 +917,7 @@ static bool vcf_seg_INFO_HGVS_indel (VBlockVCFP vb, ContextP ctx, STRp(value), r
     container_seg (vb, ctx, (ContainerP)&con, prefixes, prefixes_len, value_len - pos_lens[0] - (n_poss==2 ? pos_lens[1] : 0) - payload_len);
 
     // seg special snips
-    ctx_consolidate_stats (VB, ctx->did_i, 4, did_i_start_pos[t], did_i_end_pos[t], did_i_payload[t], DID_EOL);
+    ctx_consolidate_stats (VB, ctx->did_i, did_i_start_pos[t], did_i_end_pos[t], did_i_payload[t], DID_EOL);
 
     CTX(did_i_start_pos[t])->flags.store = STORE_INT; // consumed by vcf_piz_special_INFO_HGVS_DEL_END_POS
 
@@ -1584,7 +1584,7 @@ void vcf_finalize_seg_info (VBlockVCFP vb)
 
     // case GVCF: multiplex by has_RGQ
     if (!segconf.running && segconf.has[FORMAT_RGQ]) {
-        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, (MultiplexerP)&vb->mux_INFO, vb->line_has_RGQ);
+        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, VCF_INFO, (MultiplexerP)&vb->mux_INFO, vb->line_has_RGQ);
         seg_by_did (VB, STRa(vb->mux_INFO.snip), VCF_INFO, 0);
 
         // if we're compressing a Luft rendition, swap the prefixes

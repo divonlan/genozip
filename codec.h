@@ -14,6 +14,7 @@
 
 #define COMPRESS(func)                                                              \
     bool func (VBlockP vb,                                                          \
+               ContextP ctx, /* NULL if not compressing a context */                \
                SectionHeader *header,                                               \
                rom uncompressed,         /* option 1 - compress contiguous data */  \
                uint32_t *uncompressed_len,                                          \
@@ -43,7 +44,6 @@ typedef struct {
     bool             is_simple;  // a simple codec is one that is compressed into a single section in one step
     const char       *name;
     const char       *ext;       // extensions by compression type. + if it adds to the name ; - if it replaces the extension of the uncompress name
-    const char       *viewer;    // command line to view a file of this type
     CodecCompress    *compress;
     CodecUncompress  *uncompress;
     CodecReconstruct *reconstruct;
@@ -58,35 +58,35 @@ typedef struct {
 #define USE_SUBCODEC NULL
 
 #define CODEC_ARGS { /* aligned with Codec defined in genozip.h */ \
-/*  simp name    ext       viewer         compress                  uncompress                reconstruct                est_size                 */ \
-    { 1, "N/A",  "+",      NA0,           NA1,                      NA2,                      NA3,                       NA4                      }, \
-    { 1, "NONE", "+",      "cat",         codec_none_compress,      codec_none_uncompress,    NA3,                       codec_none_est_size      }, \
-    { 1, "GZ",   "+.gz",   "gunzip -c",   NA1,                      NA2,                      NA3,                       NA4                      }, \
-    { 1, "BZ2",  "+.bz2",  "bzip2 -d -c", codec_bz2_compress,       codec_bz2_uncompress,     NA3,                       NA4                      }, \
-    { 1, "LZMA", "+",      NA0,           codec_lzma_compress,      codec_lzma_uncompress,    NA3,                       codec_none_est_size      }, \
-    { 1, "BSC",  "+",      NA0,           codec_bsc_compress,       codec_bsc_uncompress,     NA3,                       codec_bsc_est_size       }, \
-    { 1, "RANB", "+",      NA0,           codec_RANB_compress,      codec_rans_uncompress,    NA3,                       codec_RANB_est_size      }, \
-    { 1, "RANW", "+",      NA0,           codec_RANW_compress,      codec_rans_uncompress,    NA3,                       codec_RANW_est_size      }, /* STRIPE */\
-    { 1, "RANb", "+",      NA0,           codec_RANb_compress,      codec_rans_uncompress,    NA3,                       codec_RANb_est_size      }, /* PACK */\
-    { 1, "RANw", "+",      NA0,           codec_RANw_compress,      codec_rans_uncompress,    NA3,                       codec_RANw_est_size      }, /* STRIPE & PACK */\
-    { 0, "ACGT", "+",      NA0,           codec_acgt_compress,      codec_acgt_uncompress,    NA3,                       codec_complex_est_size   }, \
-    { 0, "XCGT", "+",      NA0,           USE_SUBCODEC,             codec_xcgt_uncompress,    NA3,                       NA4                      }, \
-    { 0, "HAPM", "+",      NA0,           NA1,                      USE_SUBCODEC,             codec_hapmat_reconstruct,  NA4,                     }, /* HapMat was discontinued and replaced by PBWT. We keep it for decompressing old VCF files */ \
-    { 0, "DOMQ", "+",      NA0,           codec_domq_compress,      USE_SUBCODEC,             codec_domq_reconstruct,    codec_complex_est_size,  }, \
-    { 0, "GTSH", "+",      NA0,           NA1,                      codec_gtshark_uncompress, codec_pbwt_reconstruct,    NA4,                     }, /* gtshark discontinued in v12. keep for displaying an error */\
-    { 0, "PBWT", "+",      NA0,           codec_pbwt_compress,      codec_pbwt_uncompress,    codec_pbwt_reconstruct,    codec_complex_est_size   }, \
-    { 1, "ARTB", "+",      NA0,           codec_ARTB_compress,      codec_arith_uncompress,   NA3,                       codec_ARTB_est_size      }, \
-    { 1, "ARTW", "+",      NA0,           codec_ARTW_compress,      codec_arith_uncompress,   NA3,                       codec_ARTW_est_size      }, /* STRIPE */\
-    { 1, "ARTb", "+",      NA0,           codec_ARTb_compress,      codec_arith_uncompress,   NA3,                       codec_ARTb_est_size      }, /* PACK */\
-    { 1, "ARTw", "+",      NA0,           codec_ARTw_compress,      codec_arith_uncompress,   NA3,                       codec_ARTw_est_size      }, /* STRIPE & PACK */\
-    { 0, "BGZF", "+.gz",   "gunzip -c",   NA1,                      NA2,                      NA3,                       NA4                      }, \
-    { 0, "XZ",   "+.xz",   "xz -d -c",    NA1,                      NA2,                      NA3,                       NA4                      }, \
-    { 0, "BCF",  "-.bcf",  "bcftools view", NA1,                    NA2,                      NA3,                       NA4                      }, \
-    { 0, "BAM",  "-.bam",  "samtools view -h --threads 2", NA1,     NA2,                      NA3,                       NA4                      }, \
-    { 0, "CRAM", "-.cram", "samtools view -h --threads 2", NA1,     NA2,                      NA3,                       NA4                      }, \
-    { 0, "ZIP",  "+.zip",  "unzip -p",    NA1,                      NA2,                      NA3,                       NA4                      }, \
-    { 0, "LNGR", "+",      NA0,           codec_longr_compress,     USE_SUBCODEC,             codec_longr_reconstruct,   codec_longr_est_size     }, \
-    { 0, "NRMQ", "+",      NA0,           codec_normq_compress,     USE_SUBCODEC,             codec_normq_reconstruct,   codec_complex_est_size,  }, \
+/*  simp name    ext       compress                  uncompress                reconstruct                est_size                 */ \
+    { 1, "N/A",  "+",      NA1,                      NA2,                      NA3,                       NA4                      }, \
+    { 1, "NONE", "+",      codec_none_compress,      codec_none_uncompress,    NA3,                       codec_none_est_size      }, \
+    { 1, "GZ",   "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
+    { 1, "BZ2",  "+.bz2",  codec_bz2_compress,       codec_bz2_uncompress,     NA3,                       NA4                      }, \
+    { 1, "LZMA", "+",      codec_lzma_compress,      codec_lzma_uncompress,    NA3,                       codec_none_est_size      }, \
+    { 1, "BSC",  "+",      codec_bsc_compress,       codec_bsc_uncompress,     NA3,                       codec_bsc_est_size       }, \
+    { 1, "RANB", "+",      codec_RANB_compress,      codec_rans_uncompress,    NA3,                       codec_RANB_est_size      }, \
+    { 1, "RANW", "+",      codec_RANW_compress,      codec_rans_uncompress,    NA3,                       codec_RANW_est_size      }, /* STRIPE */\
+    { 1, "RANb", "+",      codec_RANb_compress,      codec_rans_uncompress,    NA3,                       codec_RANb_est_size      }, /* PACK */\
+    { 1, "RANw", "+",      codec_RANw_compress,      codec_rans_uncompress,    NA3,                       codec_RANw_est_size      }, /* STRIPE & PACK */\
+    { 0, "ACGT", "+",      codec_acgt_compress,      codec_acgt_uncompress,    NA3,                       codec_complex_est_size   }, \
+    { 0, "XCGT", "+",      USE_SUBCODEC,             codec_xcgt_uncompress,    NA3,                       NA4                      }, \
+    { 0, "HAPM", "+",      NA1,                      USE_SUBCODEC,             codec_hapmat_reconstruct,  NA4,                     }, /* HapMat was discontinued and replaced by PBWT. We keep it for decompressing old VCF files */ \
+    { 0, "DOMQ", "+",      codec_domq_compress,      USE_SUBCODEC,             codec_domq_reconstruct,    codec_complex_est_size,  }, \
+    { 0, "GTSH", "+",      NA1,                      codec_gtshark_uncompress, codec_pbwt_reconstruct,    NA4,                     }, /* gtshark discontinued in v12. keep for displaying an error */\
+    { 0, "PBWT", "+",      codec_pbwt_compress,      codec_pbwt_uncompress,    codec_pbwt_reconstruct,    codec_complex_est_size   }, \
+    { 1, "ARTB", "+",      codec_ARTB_compress,      codec_arith_uncompress,   NA3,                       codec_ARTB_est_size      }, \
+    { 1, "ARTW", "+",      codec_ARTW_compress,      codec_arith_uncompress,   NA3,                       codec_ARTW_est_size      }, /* STRIPE */\
+    { 1, "ARTb", "+",      codec_ARTb_compress,      codec_arith_uncompress,   NA3,                       codec_ARTb_est_size      }, /* PACK */\
+    { 1, "ARTw", "+",      codec_ARTw_compress,      codec_arith_uncompress,   NA3,                       codec_ARTw_est_size      }, /* STRIPE & PACK */\
+    { 0, "BGZF", "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
+    { 0, "XZ",   "+.xz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
+    { 0, "BCF",  "-.bcf",  NA1,                      NA2,                      NA3,                       NA4                      }, \
+    { 0, "BAM",  "-.bam",  NA1,                      NA2,                      NA3,                       NA4                      }, \
+    { 0, "CRAM", "-.cram", NA1,                      NA2,                      NA3,                       NA4                      }, \
+    { 0, "ZIP",  "+.zip",  NA1,                      NA2,                      NA3,                       NA4                      }, \
+    { 0, "LNGR", "+",      codec_longr_compress,     USE_SUBCODEC,             codec_longr_reconstruct,   codec_longr_est_size     }, \
+    { 0, "NRMQ", "+",      codec_normq_compress,     USE_SUBCODEC,             codec_normq_reconstruct,   codec_complex_est_size,  }, \
 }
 
 extern CodecArgs codec_args[NUM_CODECS];
@@ -124,11 +124,13 @@ extern void codec_show_time (VBlockP vb, rom name, rom subname, Codec codec);
 
 #define CODEC_ASSIGN_SAMPLE_SIZE 99999 // bytes (slightly better results than 50K)
 extern Codec codec_assign_best_codec (VBlockP vb, ContextP ctx, BufferP non_ctx_data, SectionType st);
-extern void codec_assign_best_qual_codec (VBlockP vb, Did qual_did, LocalGetLineCB callback, bool no_longr);
+extern void codec_assign_best_qual_codec (VBlockP vb, Did qual_did, LocalGetLineCB callback, bool no_longr, bool maybe_revcomped);
+
+#define TAG_NAME (ctx ? ctx->tag_name : "NoContext")
 
 // ACGT stuff
 extern const uint8_t acgt_encode[256];
-extern void codec_acgt_comp_init (VBlockP vb);
+extern void codec_acgt_comp_init (VBlockP vb, Did nonref_did_i);
 extern void codec_acgt_reconstruct (VBlockP vb, ContextP ctx, STRp(snip));
 
 // BSC stuff

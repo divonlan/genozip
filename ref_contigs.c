@@ -93,12 +93,12 @@ static void ref_contigs_compress_do (BufferP created_contigs)
     BGEN_ref_contigs (created_contigs);
 
     created_contigs->len *= sizeof (Contig);
-    zfile_compress_section_data_ex (evb, SEC_REF_CONTIGS, created_contigs, 0,0, CODEC_BSC, SECTION_FLAGS_NONE); 
+    zfile_compress_section_data_ex (evb, NULL, SEC_REF_CONTIGS, created_contigs, 0,0, CODEC_BSC, SECTION_FLAGS_NONE, NULL); 
 
     buf_free (*created_contigs);
 }
 
-// REF_INTERNAL (SAM/BAM): create and compress contigs - sorted by chrom_index
+// Used by: 1. REF_INTERNAL (SAM/BAM): create and compress contigs - sorted by chrom_index 2. --make-reference
 void ref_contigs_compress_internal (Reference ref)
 {
     START_TIMER;
@@ -321,7 +321,7 @@ WordIndex ref_contigs_ref_chrom_from_header_chrom (Reference ref, STRp(chrom_nam
         
     // if its not found, we ignore it. sequences that have this chromosome will just be non-ref
     if (ref_contig_index == WORD_INDEX_NONE) {
-        if (command == ZIP)
+        if (IS_ZIP)
             WARN_ONCE ("FYI: header of %s has contig '%.*s' (and maybe others, too), missing in %s. This might impact the compression ratio.",
                         txt_file->basename, STRf(chrom_name), ref->filename);
         return WORD_INDEX_NONE;
@@ -334,12 +334,17 @@ WordIndex ref_contigs_ref_chrom_from_header_chrom (Reference ref, STRp(chrom_nam
         if (! *hdr_LN) *hdr_LN = ref_LN;
 
         // case: file header specifies length - it must be the same as the reference
-        else if (*hdr_LN != ref_LN) {
+        else if (*hdr_LN != ref_LN && IS_ZIP) { // note: in PIZ, the REF_INTERNAL contigs might differ in length from the header contigs
             rom ref_contig_name = ref_contigs_get_name (ref, ref_contig_index, NULL); // might be different that chrom_name if it matches an alt_name
         
             char fmt[200]; // no unbound names in fmt
-            sprintf (fmt, "Error: wrong reference file - different chromosome length: %%s has a \"%s\", but in %%s '%%s' has LN=%%"PRId64, DTPT (hdr_contigs));
-            ASSINP (false, fmt, txt_name, STRf(chrom_name), *hdr_LN, ref->filename, ref_contig_name, ref_LN);
+            sprintf (fmt, "%%s: wrong reference file - different chromosome length: %%s has a \"%s\", but in %%s '%%s' has LN=%%"PRId64".%%s", DTPT (hdr_contigs));
+
+            if (!flag.force)
+                ASSINP (false, fmt, "Error", txt_name, STRf(chrom_name), *hdr_LN, ref->filename, ref_contig_name, ref_LN, " Use --force to override.");
+
+            else
+                WARN (fmt, "Warning", txt_name, STRf(chrom_name), *hdr_LN, ref->filename, ref_contig_name, ref_LN, "");
         }
     }
 

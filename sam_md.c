@@ -41,46 +41,6 @@ void sam_MD_Z_verify_due_to_seq (VBlockSAMP vb, STRp(seq), SamPosType pos, BitsP
     vb->md_verified = bitmap_matches_MD;
 }
 
-static rom sam_md_set_one_ref_base (VBlockSAMP vb, bool is_depn, SamPosType pos, char base, uint32_t M_D_bases,                                      
-                                    RangeP *range_p, RefLock *lock)
-{
-    // case: pos is beyond the existing range
-    if ((*range_p) && (*range_p)->last_pos < pos && !is_depn) {
-        ref_unlock (gref, lock);
-        *range_p = NULL;
-    }
-
-    // get range (and lock it if needed)
-    if (! *range_p) {
-        *range_p = ref_seg_get_locked_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, M_D_bases, WORD_INDEX_NONE, NULL, 
-                                             (flag.reference == REF_EXTERNAL || is_depn) ? NULL : lock);
-        if (! *range_p) return "Range not available"; // cannot access this range in the reference
-    }
-
-    uint32_t pos_index = pos - (*range_p)->first_pos; // index within range
-
-    // case: depn line, but we don't haven't set the reference data for it. since we don't need the reference data for reconstructing
-    // SEQ (it is copied from prim), we don't store it just for MD:Z - so we won't use SPECIAL for this MD:Z
-    if (is_depn && (flag.reference & REF_STORED) && !ref_is_nucleotide_set (*range_p, pos_index))
-        return "Depn alignment base not is_set in reference";
-
-    bool internal_pos_is_populated = (flag.reference == REF_INTERNAL) && ref_is_nucleotide_set (*range_p, pos_index);
-
-    // case: reference already contains a base - but unfortunately it is not "base" - so MD is not reconstractable from reference
-    if (((flag.reference & REF_ZIP_LOADED) || internal_pos_is_populated) && (base != ref_base_by_pos (*range_p, pos))) 
-        return "MD has incorrect reference base"; // encountered in the wild when the reference base is a IUPAC
-    
-    // case: reference is not set yet - set it now
-    if (flag.reference == REF_INTERNAL && !internal_pos_is_populated)
-        ref_set_nucleotide (*range_p, pos_index, base);
-
-    // set is_set - we will need this base in the reference to reconstruct MD
-    if (flag.reference & REF_STORED)
-        bits_set (&(*range_p)->is_set, pos_index); // we will need this ref to reconstruct
-
-    return NULL; // success
-}
-
 static inline rom sam_md_consume_D (VBlockSAMP vb, bool is_depn, char **md_in_out, uint32_t *M_D_bases, SamPosType *pos, int D_bases, 
                                     RangeP *range_p, RefLock *lock, bool *critical_error)
 {
@@ -96,7 +56,7 @@ static inline rom sam_md_consume_D (VBlockSAMP vb, bool is_depn, char **md_in_ou
     rom error=NULL;
     while (IS_NUCLEOTIDE(*md) && D_bases) {
         if (!error)
-            error = sam_md_set_one_ref_base (vb, is_depn, *pos, *md, *M_D_bases, range_p, lock); // // continue counting mismatch_bases_by_MD despite error
+            error = sam_seg_analyze_set_one_ref_base (vb, is_depn, *pos, *md, *M_D_bases, range_p, lock); // // continue counting mismatch_bases_by_MD despite error
             
         D_bases--;
         (*M_D_bases)--;
@@ -151,7 +111,7 @@ static inline rom sam_md_consume_M (VBlockSAMP vb, bool is_depn, char **md_in_ou
                 error = (*md=='N' ? "Encountered 'N' base while parsing M" : "Not A,C,G,T,N while parsing M"); // Genozip reference supports only A,C,G,T, but this "base" in the MD string is not one of them
 
             if (!error) 
-                error = sam_md_set_one_ref_base (vb, is_depn, *pos, *md, *M_D_bases, range_p, lock); // continue counting mismatch_bases_by_MD despite error
+                error = sam_seg_analyze_set_one_ref_base (vb, is_depn, *pos, *md, *M_D_bases, range_p, lock); // continue counting mismatch_bases_by_MD despite error
 
             bits_clear (M_is_ref, *M_is_ref_i); // base in SEQ is expected to be NOT equal to the reference base
             (*M_is_ref_i)++;              
@@ -188,7 +148,7 @@ void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(md), SamPosTy
     RangeP range = NULL;
     RefLock lock = REFLOCK_NONE;
     
-    bool is_depn = (sam_is_depn_vb && vb->sag) || zip_has_prim; // STAR: possibly not real prim 
+    bool is_depn = (sam_is_depn_vb && vb->sag) || sam_has_saggy; 
 
     if (flag.show_wrong_md)
         seg_set_last_txt (VB, CTX(OPTION_MD_Z), STRa(md)); // consumed in sam_seg_SEQ
@@ -200,7 +160,7 @@ void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(md), SamPosTy
     md = md_data;
 
     if (!pos) not_verified ("No POS")
-    if (vb->chrom_name_len==1 && vb->chrom_name[0]=='*') not_verified ("No RNAME");
+    if (IS_ASTERISK (vb->chrom_name)) not_verified ("No RNAME");
     if (vb->cigar_missing) not_verified ("No CIGAR");
 
     // According to the specification (https://samtools.github.io/hts-specs/SAMtags.pdf), an MD string may start or end with a mismatch or D sequence.
@@ -248,7 +208,7 @@ void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(md), SamPosTy
     if (range) ref_unlock (gref, &lock);
 
     vb->md_verified = true;    
-    return; // verified
+    goto done; // verified
 
 not_verified:
     vb->mismatch_bases_by_MD = -1; // fallthrough
@@ -260,7 +220,9 @@ not_verified_buf_mismatch_count_ok:
     if (flag.show_wrong_md)
         iprintf ("%s\tRNAME=%.*s\tPOS=%d\tCIGAR=%s\tMD=%.*s\tReason=%s\n", 
                  LN_NAME, STRf(vb->chrom_name), pos, vb->last_cigar, vb->last_txt_len(OPTION_MD_Z), last_txt(VB, OPTION_MD_Z), reason);
-
+    // fallthrough
+    
+done:
     COPY_TIMER (sam_seg_MD_Z_analyze);
 }
 
@@ -269,7 +231,7 @@ not_verified_buf_mismatch_count_ok:
 // if MD value can be derived from the seq_len, we don't need to store - store just an empty string
 void sam_seg_MD_Z (VBlockSAMP vb,  ZipDataLineSAM *dl, STRp(md), unsigned add_bytes)
 {
-    segconf_set_has (OPTION_MD_Z);
+    ctx_set_encountered (VB, CTX(OPTION_MD_Z));
 
     if (vb->md_verified && !vb->cigar_missing && !vb->seq_missing) // note: md_verified might have been reset in sam_seg_SEQ 
         seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_MD }, 2, OPTION_MD_Z, add_bytes);
@@ -301,7 +263,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_MD)
     uint32_t save_next_local = sqbitmap_ctx->next_local;
     
     if (!perfect_match && !is_depn)
-        sqbitmap_ctx->next_local = sqbitmap_ctx->last_value.i; // rewind back to beginning of the bits of this line (value stored by sam_reconstruct_SEQ)
+        sqbitmap_ctx->next_local = sqbitmap_ctx->last_value.i; // rewind back to beginning of the bits of this line (value stored by sam_reconstruct_SEQ_vs_ref)
 
     uint32_t count_match=0;
 
@@ -326,7 +288,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_MD)
                             { count_match++; n--; pos++; }
 
                     if (n) {
-                        // usually vb->range set in sam_reconstruct_SEQ, except if no base in SEQ matched the reference. In that case, we set it here
+                        // usually vb->range set in sam_reconstruct_SEQ_vs_ref, except if no base in SEQ matched the reference. In that case, we set it here
                         if (!vb->range) 
                             // note: if this throws an error, it is possibly related to private/defects/SAM-MD-external-ref-contig-with-no-ref.txt
                             vb->range = (RangeP)ref_piz_get_range (VB, gref, false);

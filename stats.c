@@ -210,7 +210,7 @@ static void stats_output_file_metadata (void)
         if (zctx->nodes.len || zctx->txt_len) num_used_ctxs++;
 
     if ((Z_DT(DT_SAM) || Z_DT(DT_BAM)) && z_has_gencomp) {
-        bufprintf (evb, &stats, "%ss: %s (PRIM component: %s DEPN component: %s)  Contexts: %u   Vblocks: %u x %u MB  Sections: %u\n", 
+        bufprintf (evb, &stats, "%ss: %s (in Prim VBs: %s in Depn VBs: %s)  Contexts: %u   Vblocks: %u x %u MB  Sections: %u\n", 
                 DTPZ (line_name), str_int_commas (z_file->num_lines).s, str_int_commas (gencomp_get_num_lines (SAM_COMP_PRIM)).s, 
                 str_int_commas (gencomp_get_num_lines (SAM_COMP_DEPN)).s, num_used_ctxs, 
                 z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), z_file->section_list_buf.len32);
@@ -224,6 +224,10 @@ static void stats_output_file_metadata (void)
         bufprintf (evb, &stats, "%ss: %s (Prim-only: %s Luft-only: %s)  Contexts: %u   Vblocks: %u x %u MB  Sections: %u\n", 
                    DTPZ (line_name), str_int_commas (z_file->num_lines).s, str_int_commas (gencomp_get_num_lines (VCF_COMP_PRIM_ONLY)).s, 
                    str_int_commas (gencomp_get_num_lines (VCF_COMP_LUFT_ONLY)).s, num_used_ctxs, 
+                   z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), z_file->section_list_buf.len32);
+
+    else if Z_DT(DT_GENERIC)
+        bufprintf (evb, &stats, "Vblocks: %u x %u MB  Sections: %u\n", 
                    z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), z_file->section_list_buf.len32);
 
     else
@@ -260,19 +264,21 @@ static void stats_output_file_metadata (void)
         FEATURE (segconf.is_collated, "Sorting: Collated by QNAME", "Collated");
         FEATURE (!segconf.is_sorted && !segconf.is_collated, "Sorting: Not sorted or collated", "Not_sorted_or_collated");
         
-        rom mapper_name[] = SAM_MAPPER_NAME;
-        ASSERT0 (ARRAY_LEN(mapper_name) == NUM_MAPPERS, "Invalid SAM_MAPPER_NAME array length - perhaps missing commas between strings?");
-
-        bufprintf (evb, &stats, "Aligner: %s\n", mapper_name[segconf.sam_mapper]); 
-        bufprintf (evb, &features, "Mapper=%s;", mapper_name[segconf.sam_mapper]);
+        rom mapper_name = sam_mapper_name (segconf.sam_mapper);
+        bufprintf (evb, &stats, "Aligner: %s\n", mapper_name); 
+        bufprintf (evb, &features, "Mapper=%s;", mapper_name);
 
         FEATURE (segconf.sam_bisulfite, "Feature: Bisulfite", "Bisulfite");
+        FEATURE (segconf.is_paired, "Feature: Paired-End", "Paired-End");
 
-        double mate_line_pc = 100.0 * (double)z_file->mate_line_count / (double)z_file->num_lines;
-        double prim_near_pc = 100.0 * (double)z_file->prim_near_count / (double)z_file->num_lines;
-        double prim_far_pc  = 100.0 * (double)z_file->prim_far_count  / (double)z_file->num_lines;
-        bufprintf (evb, &stats, "Buddying: mate=%.1f%% prim_near=%.1f%% prim_far=%.1f%%\n", mate_line_pc, prim_near_pc, prim_far_pc);
-        bufprintf (evb, &features, "mate=%.1f%%;prim_near=%.1f%%;prim_far=%.1f%%;", mate_line_pc, prim_near_pc, prim_far_pc);
+        double mate_line_pc  = 100.0 * (double)z_file->mate_line_count  / (double)z_file->num_lines;
+        double saggy_near_pc = 100.0 * (double)z_file->saggy_near_count / (double)z_file->num_lines;
+        double prim_far_pc   = 100.0 * (double)z_file->prim_far_count   / (double)z_file->num_lines;
+        #define PREC(f) ((f && f<10) ? (1 + ((f)<1)) : 0)
+        bufprintf (evb, &stats, "Buddying: sag_type=%s mate=%.*f%% saggy_near=%.*f%% prim_far=%.*f%%\n", 
+                   sag_type_name (segconf.sag_type), PREC(mate_line_pc), mate_line_pc, PREC(saggy_near_pc), saggy_near_pc, PREC(prim_far_pc), prim_far_pc);
+        bufprintf (evb, &features, "sag_type=%s mate=%.*f%%;saggy_near=%.*f%%;prim_far=%.*f%%;", 
+                   sag_type_name (segconf.sag_type), PREC(mate_line_pc), mate_line_pc, PREC(saggy_near_pc), saggy_near_pc, PREC(prim_far_pc), prim_far_pc);
     }
 
     if (Z_DT(DT_FASTA)) {
@@ -293,7 +299,7 @@ static void stats_output_file_metadata (void)
                GENOZIP_CODE_VERSION, arch_get_distribution(), str_time().s);
 
     bufprint0 (evb, &stats, "Command line: ");
-    buf_add_string (evb, &stats, flags_command_line()); // careful not to use bufprintf with command_line as it can exceed the maximum length in bufprintf
+    buf_append_string (evb, &stats, flags_command_line()); // careful not to use bufprintf with command_line as it can exceed the maximum length in bufprintf
 
     bufprintf (evb, &stats, "\n%s\n", license_get_one_line());
     
@@ -390,10 +396,11 @@ static void stats_output_stats (StatsByLine *s, unsigned num_stats, float src_co
 
     for (uint32_t i=0; i < num_stats; i++, s++)
         if (s->z_size)
-            bufprintf (evb, &stats, "%-20.20s %9s %5.1f%% %9s %5.1f%% %6.1fX\n", 
+            bufprintf (evb, &stats, "%-20.20s %9s %5.1f%% %9s %5.1f%% %6.*fX\n", 
                        s->name, 
                        str_size (s->z_size).s, s->pc_of_z, // z size and % of total z that is in this line
                        str_size ((float)s->txt_len).s, s->pc_of_txt, // txt size and % of total txt which is in this line
+                       ((float)s->txt_len / (float)s->z_size) < 1000 ? 1 : 0, // precision
                        (float)s->txt_len / (float)s->z_size); // ratio z vs txt
 
     if (src_comp_ratio != 1 && flag.show_stats_comp_i == COMP_NONE)
@@ -438,12 +445,15 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
 
     for (uint32_t i=0; i < num_stats; i++, s++)
         if (s->z_size)
-            bufprintf (evb, &STATS, "%-2.2s    %-17.17s %-17.17s %6s  %4.*f%%  %4.*f%%  %4.*f%% %8s %3.0f%% %9s %9s %9s %9s %9s %9s %6.1fX %5.1f%% %5.1f%%\n", 
+            bufprintf (evb, &STATS, "%-2.2s    %-17.17s %-17.17s %6s  %4.*f%%  %4.*f%%  %4.*f%% %8s %3.0f%% %9s %9s %9s %9s %9s %9s %6.*fX %5.1f%% %5.1f%%\n", 
                        s->did_i.s, s->name, s->type, s->words.s, 
                        PC (s->pc_dict), s->pc_dict, PC(s->pc_in_local), s->pc_in_local, PC(s->pc_failed_singletons), s->pc_failed_singletons, 
                        s->hash.s, s->pc_hash_occupancy, // Up to here - these don't appear in the total
                        s->uncomp_dict.s, s->comp_dict.s, s->comp_b250.s, s->comp_data.s, str_size (s->z_size).s, 
-                       str_size ((float)s->txt_len).s, (float)s->txt_len / (float)s->z_size, s->pc_of_txt, s->pc_of_z);
+                       str_size ((float)s->txt_len).s, 
+                       ((float)s->txt_len / (float)s->z_size) < 1000 ? 1 : 0, // precision
+                        (float)s->txt_len / (float)s->z_size, // ratio z vs txt
+                       s->pc_of_txt, s->pc_of_z);
 
     // note: no point showing this per component in SAM and DVCF, bc all_txt_len_0 is fully accounted for in the MAIN component and it is 0 in the others
     if (!(z_has_gencomp && flag.show_stats_comp_i != COMP_NONE))

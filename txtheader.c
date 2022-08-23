@@ -29,10 +29,9 @@ static bool is_first_txt = true;
 //----------
 
 // ZIP: reads txt header and writes its compressed form to the GENOZIP file
-bool txtheader_zip_read_and_compress (int64_t *txt_header_offset, CompIType comp_i) // out (-1 if SEC_TXT_HEADER not written)
+int64_t txtheader_zip_read_and_compress (int64_t *txt_header_offset, CompIType comp_i) // out (-1 if SEC_TXT_HEADER not written)
 {    
     Digest header_digest = DIGEST_NONE;
-    digest_initialize(); 
     evb->comp_i = comp_i; // used by def_is_header_done
     
     z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
@@ -42,12 +41,8 @@ bool txtheader_zip_read_and_compress (int64_t *txt_header_offset, CompIType comp
         txtfile_read_header (is_first_txt); // reads into evb->txt_data and evb->lines.len
 
         // get header digest if needed
-        if (evb->txt_data.len && !flag.data_modified && gencomp_comp_eligible_for_digest(evb)) {  
-            if (flag.log_digest) digest_start_log (&z_file->digest_ctx); 
-            digest_update (&z_file->digest_ctx, &evb->txt_data, "txt_header");
-
-            header_digest = digest_snapshot (&z_file->digest_ctx, NULL);
-        }
+        if (!flag.data_modified) 
+            header_digest = digest_txt_header (&evb->txt_data, DIGEST_NONE);
     }
 
     // for VCF, we need to check if the samples are the same before approving binding (other data types can bind without restriction)
@@ -56,7 +51,7 @@ bool txtheader_zip_read_and_compress (int64_t *txt_header_offset, CompIType comp
     uint64_t txt_header_size = evb->txt_data.len;
     if (!(DT_FUNC_OPTIONAL (txt_file, inspect_txt_header, true)(evb, &evb->txt_data, (struct FlagsTxtHeader){}))) { 
         buf_free (evb->txt_data);
-        return false;
+        return -1;
     }
 
     // note: we always write the txt_header for comp_i=0 even if we don't actually have a header, because the
@@ -82,7 +77,7 @@ bool txtheader_zip_read_and_compress (int64_t *txt_header_offset, CompIType comp
     
     is_first_txt = false;
 
-    return true; // everything's good
+    return txt_header_size; // all good
 }
 
 //----------
@@ -94,7 +89,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
 {
     z_file->disk_at_beginning_of_this_txt_file = z_file->disk_so_far;
 
-    VBlockP txt_header_vb = vb_get_vb (PIZ_TASK_NAME, 0, sec->comp_i);
+    VBlockP txt_header_vb = vb_get_vb (POOL_MAIN, PIZ_TASK_NAME, 0, sec->comp_i);
 
     zfile_read_section (z_file, txt_header_vb, 0, &txt_header_vb->z_data, "z_data", SEC_TXT_HEADER, sec);
 
@@ -136,11 +131,11 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     if (!digest_is_zero(header->digest) && !flag.data_modified) 
         z_file->digest = header->digest; 
 
-    ASSINP (!flag.test || !digest_is_zero(header->digest), 
-            "--test cannot be used wih %s, as it was compressed without a digest. See " WEBSITE_DIGEST, z_name);
+    ASSINP (!flag.test || !digest_is_zero(header->digest) || z_file->z_flags.adler, 
+            "--test cannot be used with %s, as it was compressed without a digest. See " WEBSITE_DIGEST, z_name);
 
     // case: we need to reconstruct (or not) the BGZF following the instructions from the z_file
-    if (flag.bgzf == FLAG_BGZF_BY_ZFILE) {
+    if (flag.bgzf == BGZF_BY_ZFILE) {
 
         // load the source file isize if we have it and we are attempting to reconstruct an unmodifed file identical to the source
         bool loaded = false;
@@ -155,7 +150,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
         }
 
         // case: we need to reconstruct back to BGZF, but we don't have a SEC_BGZF to guide us - we'll creating our own BGZF blocks
-        if (!loaded && z_file->z_flags.bgzf)
+        if (!loaded && (txt_file->codec == CODEC_BGZF))
             txt_file->bgzf_flags = (struct FlagsBgzf){ // case: we're creating our own BGZF blocks
                 .has_eof_block = true, // add an EOF block at the end
                 .library       = BGZF_LIBDEFLATE, // default - libdeflate level 6
@@ -202,50 +197,14 @@ void txtheader_piz_read_and_reconstruct (Section sec)
         DtTranslation trans = dt_get_translation(NULL);
         if (trans.txtheader_translator && !flag.no_header) trans.txtheader_translator (txt_header_vb, &txt_header_vb->txt_data); 
 
-        if (txt_header_vb->txt_data.len) {
-
-            // count textual lines in header, used for line= reporting in ASSPIZ
-            if (!DTPT (is_binary)) {
-                uint32_t num_textual_lines = str_count_char (STRb(txt_header_vb->txt_data), '\n');
-                writer_set_num_txtheader_lines (sec->comp_i, num_textual_lines);
-            }
-
-            if (piz_need_digest) {
-                if (flag.log_digest) digest_start_log (&z_file->digest_ctx); 
-                digest_update (&z_file->digest_ctx, &txt_header_vb->txt_data, "txt_header");
-
-                // backward compatability note: For v8 files, we don't test against MD5 for the header, as we had a bug 
-                // in which we included a junk MD5 if they user didn't --md5 or --test. any file integrity problem will
-                // be discovered though on the whole-file MD5 so no harm in skipping this.
-                if (VER(9)) {  
-                    Digest reconstructed_header_digest = digest_snapshot (&z_file->digest_ctx, NULL);
-                    
-                    TEMP_FLAG (quiet, flag.quiet && !flag.show_digest);
-
-                    if (!digest_is_zero (header->digest_header) &&
-                        !digest_recon_is_equal (reconstructed_header_digest, header->digest_header)) {
-                        
-                        WARN ("%s of reconstructed %s header (%s) differs from original file (%s)\n"
-                              "Bad reconstructed header has been dumped to: %s\n"
-                              "To see the same data in the original file:\n"
-                              "genozip --biopsy 0 %s\n"
-                              "If this is unexpected, please contact support@genozip.com.\n", 
-                              digest_name(),
-                              dt_name (z_file->data_type), digest_display (reconstructed_header_digest).s, digest_display (header->digest_header).s,
-                              txtfile_dump_vb (txt_header_vb, z_name), file_guess_original_filename (txt_file));
-
-                        if (flag.test) exit_on_error(false);
-                    }
-
-                    RESTORE_FLAG (quiet);
-                }
-            }
-
-            if (txt_file->codec == CODEC_BGZF) 
-                // inherit BGZF blocks from source file, if isizes was loaded (i.e. not flag.data_modified) - 
-                // into txt_header_vb->bgzf_blocks. compression will be done by writer.
-                bgzf_calculate_blocks_one_vb (txt_header_vb, txt_header_vb->txt_data.len); 
+        // count textual lines in header, used for line= reporting in ASSPIZ
+        if (txt_header_vb->txt_data.len && !DTPT (is_binary)) {
+            uint32_t num_textual_lines = str_count_char (STRb(txt_header_vb->txt_data), '\n');
+            writer_set_num_txtheader_lines (sec->comp_i, num_textual_lines);
         }
+
+        if (piz_need_digest) 
+            digest_txt_header (&txt_header_vb->txt_data, header->digest_header);
 
         writer_handover_txtheader (&txt_header_vb); // handover data to writer thread (even if the header is empty, as the writer thread is waiting for it)
 

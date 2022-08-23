@@ -76,7 +76,7 @@ void chrom_2ref_compress (Reference ref)
 
     if (evb->scratch.len) {
         evb->scratch.len *= sizeof (Chrom2Ref);
-        zfile_compress_section_data_ex (evb, SEC_CHROM2REF_MAP, &evb->scratch, 0,0, CODEC_LZMA, SECTION_FLAGS_NONE); // compresses better with LZMA than BZLIB
+        zfile_compress_section_data_ex (evb, NULL, SEC_CHROM2REF_MAP, &evb->scratch, 0,0, CODEC_LZMA, SECTION_FLAGS_NONE, NULL); // compresses better with LZMA than BZLIB
     }
 
     buf_free (evb->scratch);
@@ -330,7 +330,7 @@ void chrom_index_by_name (Did chrom_did_i)
     // chrom_sorter - an array of uint32 of indexes into ZCTX(CHROM)->word_list - sorted by alphabetical order of the snip in ZCTX(CHROM)->dict
     buf_alloc (evb, &chrom_sorter, 0, num_words, uint32_t, 1, "chrom_sorter");
     
-    if (command == ZIP) {
+    if (IS_ZIP) {
         for_buf2 (CtxNode, node, i, sorter_ctx->nodes)
             if (node->snip_len) BNXT32(chrom_sorter) = i;
     }
@@ -338,7 +338,7 @@ void chrom_index_by_name (Did chrom_did_i)
         for_buf2 (CtxWord, word, i, sorter_ctx->word_list)
             if (word->len) BNXT32(chrom_sorter) = i;
 
-    qsort (chrom_sorter.data, chrom_sorter.len, sizeof(uint32_t), command == ZIP ? chrom_create_zip_sorter : chrom_create_piz_sorter);
+    qsort (chrom_sorter.data, chrom_sorter.len, sizeof(uint32_t), IS_ZIP ? chrom_create_zip_sorter : chrom_create_piz_sorter);
 }
 
 // binary search for this chrom in ZCTX(CHROM). we count on gcc tail recursion optimization to keep this fast.
@@ -388,7 +388,7 @@ WordIndex chrom_get_by_name (STRp (chrom_name))
     WordIndex wi;
     SAFE_NULT(chrom_name); 
     
-    if (command == ZIP) wi =  chrom_zip_get_by_name_do (chrom_name, 0, chrom_sorter.len-1); // not necessarily all of CHROM, just chrom_sorter.len
+    if (IS_ZIP) wi =  chrom_zip_get_by_name_do (chrom_name, 0, chrom_sorter.len-1); // not necessarily all of CHROM, just chrom_sorter.len
     else                wi =  chrom_piz_get_by_name_do (STRa(chrom_name), 0, chrom_sorter.len-1);
     
     SAFE_RESTORE;

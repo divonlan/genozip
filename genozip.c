@@ -69,11 +69,19 @@ void main_exit (bool show_stack, bool is_error)
         ref_create_cache_join (gref, false);
         ref_create_cache_join (prim_ref, false);
         refhash_create_cache_join(false);
+        
+        ref_verify_before_exit();
 
         bool printed = version_print_notice_if_has_newer();
 
-        if (!printed && !flag.quiet && !getenv ("GENOZIP_TEST") &&
-            ((command == ZIP && !tip_printed) || flag.check_latest/*PIZ - test after compress*/))
+        if (flag.show_time && !flag.show_time[0]) { // show-time without the optional parameter 
+            profiler_add (evb);
+            profiler_print_report();
+        }
+
+        else if (!printed && !flag.quiet && !getenv ("GENOZIP_TEST") && 
+            !flag.show_bam && !flag.biopsy && flag.biopsy_line.line_i == NO_LINE &&
+            ((IS_ZIP && !tip_printed) || flag.check_latest/*PIZ - test after compress*/))
             license_print_tip();
     }
 
@@ -260,7 +268,7 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
 
     if (piz_digest_failed) exit_on_error (false); // error message already displayed in piz_one_verify_digest
     
-    // case --replace: now that the file (or multiple bound files) where reconstructed, we can remove the genozip file
+    // case --replace: now that the file was reconstructed, we can remove the genozip file
     if (flag.replace && (txt_filename || flag.unbind) && z_filename) file_remove (z_filename, true); 
 
 done:
@@ -269,7 +277,7 @@ done:
 
 // run the test genounzip after genozip - for the most reliable testing that is nearly-perfectly indicative of actually 
 // genounzipping, we create a new genounzip process
-static void main_test_after_genozip (rom exec_path, rom z_filename, bool is_last_txt_file, bool is_chain)
+static void main_test_after_genozip (rom exec_path, rom z_filename, DataType z_dt, bool is_last_txt_file, bool is_chain)
 {
     rom password = crypt_get_password();
 
@@ -279,20 +287,25 @@ static void main_test_after_genozip (rom exec_path, rom z_filename, bool is_last
 
     refhash_create_cache_join(false);
 
-    if (!is_last_txt_file || flag.is_windows) {
-        // On Windows and Mac that usually have limited memory, if ZIP consumed more than 2GB, free memory before PIZ. 
-        // Note: on Windows, freeing memory takes considerable time.
-        if ((flag.is_windows || flag.is_mac || arch_is_wsl()) && buf_get_memory_usage () > (1ULL<<31)) {
-            ref_destroy_reference (gref, true); // on Windows I observed a race condition: if we unmap mapped memory here, and remap it in the test process, and the system is very slow due to low memory, then "MapViewOfFile" in the test processs will get "Access is Denied". That's why destroy_only_if_not_mmap=true.
-            ref_destroy_reference (prim_ref, true); 
-            kraken_destroy();
-            chain_destroy();
-            vb_destroy_pool_vbs();
-        }
+    // On Windows and Mac that usually have limited memory, if ZIP consumed more than 2GB, free memory before PIZ. 
+    // Note: on Windows, freeing memory takes considerable time.
+    if ((flag.is_windows || flag.is_mac || arch_is_wsl()) && buf_get_memory_usage () > (1ULL<<31)) {
+        ref_destroy_reference (gref, true); // on Windows I observed a race condition: if we unmap mapped memory here, and remap it in the test process, and the system is very slow due to low memory, then "MapViewOfFile" in the test processs will get "Access is Denied". That's why destroy_only_if_not_mmap=true.
+        ref_destroy_reference (prim_ref, true); 
+        refhash_destroy (true);
+        kraken_destroy();
+        chain_destroy();
+        vb_destroy_pool_vbs (POOL_MAIN);
+    }
 
-        StreamP test = stream_create (0, 0, 0, 0, 0, 0, 0,
+    if (!is_last_txt_file || flag.is_windows) {
+
+        StreamP test = stream_create (NULL, 0, 0, 0, 0, 0, 0,
                                       "To use the --test option",
-                                      exec_path, "--decompress", "--test", z_filename,
+                                      exec_path, 
+                                      "--decompress", 
+                                      "--test", 
+                                      z_filename,
                                       flag.quiet         ? "--quiet"         : SKIP_ARG,
                                       password           ? "--password"      : SKIP_ARG,
                                       password           ? password          : SKIP_ARG,
@@ -305,14 +318,18 @@ static void main_test_after_genozip (rom exec_path, rom z_filename, bool is_last
                                       flag.xthreads      ? "--xthreads"      : SKIP_ARG,
                                       flag.show_alleles  ? "--show-alleles"  : SKIP_ARG,
                                       flag.show_aligner  ? "--show-aligner"  : SKIP_ARG,
+                                      flag.show_threads  ? "--show-threads"  : SKIP_ARG,
                                       flag.debug_threads ? "--debug-threads" : SKIP_ARG,
                                       flag.echo          ? "--echo"          : SKIP_ARG,
                                       flag.verify_codec  ? "--verify-codec"  : SKIP_ARG,
+                                      flag.debug_lines   ? "--debug-lines"   : SKIP_ARG,
+                                      flag.show_buddy    ? "--show-buddy"    : SKIP_ARG,
                                       flag.debug_latest  ? "--debug-latest"  : SKIP_ARG,
                                       is_last_txt_file               && !flag.debug  ? "--check-latest"       : SKIP_ARG,
                                       flag.reference == REF_EXTERNAL && !is_chain    ? "--reference"          : SKIP_ARG, // normal pizzing of a chain file doesn't require a reference
                                       flag.reference == REF_EXTERNAL && !is_chain    ? ref_get_filename(gref) : SKIP_ARG, 
                                       NULL);
+                                      // ↓↓↓ Don't forget to add below too ↓↓↓
 
         tip_printed = is_last_txt_file; // --check-latest sent to PIZ causes it to print the tip
         
@@ -328,13 +345,13 @@ static void main_test_after_genozip (rom exec_path, rom z_filename, bool is_last
     // note: in Windows, we can't use execv because it creates a new process with a new pid, while the current process exits
     // and returns an exit code to the shell.
     else {
-        rom argv[32]; 
+      rom argv[32]; 
         int argc = 0;
-        argv[argc++] = exec_path;
-        argv[argc++] = "--decompress";
-        argv[argc++] = "--test";
-        argv[argc++] = "--check-latest";
-        argv[argc++] = z_filename;
+                                argv[argc++] = exec_path;
+                                argv[argc++] = "--decompress";
+                                argv[argc++] = "--test";
+                                argv[argc++] = "--check-latest";
+                                argv[argc++] = z_filename;
         if (flag.quiet)         argv[argc++] = "--quiet";
         if (password)         { argv[argc++] = "--password"; 
                                 argv[argc++] = password; }
@@ -344,15 +361,29 @@ static void main_test_after_genozip (rom exec_path, rom z_filename, bool is_last
         if (flag.threads_str) { argv[argc++] = "--threads"; argv[argc++] = flag.threads_str; }
         if (flag.xthreads)      argv[argc++] = "--xthreads";
         if (flag.show_alleles)  argv[argc++] = "--show-alleles";
+        if (flag.show_aligner)  argv[argc++] = "--show-aligner";
+        if (flag.show_threads)  argv[argc++] = "--show-threads";
         if (flag.debug_threads) argv[argc++] = "--debug-threads";
         if (flag.echo)          argv[argc++] = "--echo";
         if (flag.verify_codec)  argv[argc++] = "--verify-codec";
         if (flag.debug_lines)   argv[argc++] = "--debug-lines";
+        if (flag.show_buddy)    argv[argc++] = "--show-buddy";
         if (flag.debug_latest)  argv[argc++] = "--debug-latest";
+        if (is_last_txt_file && !flag.debug) 
+                                argv[argc++] = "--check-latest";
         if (flag.reference == REF_EXTERNAL && !is_chain) 
                               { argv[argc++] = "--reference"; 
                                 argv[argc++] = ref_get_filename(gref); }
         argv[argc] = NULL;
+                                // ↑↑↑ Don't forget to add above too ↑↑↑
+
+        // verify the integrity of the references
+        ref_verify_before_exit();
+
+        if (flag.show_time && !flag.show_time[0]) { // show-time without the optional parameter 
+            profiler_add (evb);
+            profiler_print_report();
+        }
 
         execv (exec_path, (char **)argv);
         ABORT ("Failed to run the executable \"%s\" for testing the compression: %s", exec_path, strerror (errno));
@@ -421,8 +452,8 @@ static void main_genozip (rom txt_filename,
             tar_copy_file (txt_filename);
             WARN ("Copied %s to the tar file", txt_filename);
         }    
-        else
-            ABORT ("Cannot compress file %s because its size is 0 - skipping it", txt_filename);
+        else 
+            WARN ("Cannot compress file %s because its size is 0 - skipping it", txt_filename);
         return;
     }
 
@@ -472,13 +503,14 @@ static void main_genozip (rom txt_filename,
 
         // take over the name 
         z_filename = z_file->name; 
-        z_file->name = NULL; 
+        z_file->name = NULL;
+        DataType z_dt = z_file->data_type; 
 
         file_close (&z_file, false, !is_last_user_txt_file); 
 
         // test the compression, if the user requested --test
         if (flag.test) 
-            main_test_after_genozip (exec_path, z_filename, is_last_user_txt_file, is_chain);
+            main_test_after_genozip (exec_path, z_filename, z_dt, is_last_user_txt_file, is_chain);
     }
 
     // remove after test (if any) was successful
@@ -486,8 +518,8 @@ static void main_genozip (rom txt_filename,
         
         // add file to remove_list, don't actually remove it yet
         static Buffer remove_list = { .name = "remove_list" };
-        buf_add_string (evb, &remove_list, txt_filename);
-        remove_list.len++;   // include the \0 separator added by buf_add_string
+        buf_append_string (evb, &remove_list, txt_filename);
+        remove_list.len++;   // include the \0 separator added by buf_append_string
         remove_list.count++; // count files
 
         // case: z_file has closed and tested if needed - remove all files included in this z_file 
@@ -544,7 +576,7 @@ static void main_get_filename_list (unsigned num_files, char **filenames,  // in
     }
 
     // add names from command line
-    buf_add_more_(evb, fn_buf, char *, filenames, num_files, NULL);
+    buf_append (evb, *fn_buf, char *, filenames, num_files, NULL);
 
     // set argv to file names
     if (flag.files_from) {
@@ -556,7 +588,7 @@ static void main_get_filename_list (unsigned num_files, char **filenames,  // in
             for (int i=0; i < n_lines; i++)
                 lines[i] += 2;
 
-        buf_add_more_(evb, fn_buf, char *, lines, n_lines, NULL);
+        buf_append (evb, *fn_buf, char *, lines, n_lines, NULL);
     }
 
     // expand directories if --subdirs 
@@ -580,7 +612,7 @@ static void main_get_filename_list (unsigned num_files, char **filenames,  // in
 
                 char *ent_fn = MALLOC (strlen(ent->d_name) + fn_len + 2);
                 sprintf (ent_fn, "%.*s/%s", fn_len, fn, ent->d_name);
-                buf_add_more_(evb, fn_buf, char *, &ent_fn, 1, NULL);
+                buf_append (evb, *fn_buf, char *, &ent_fn, 1, NULL);
             }
             closedir(dir);    
         } 
@@ -589,7 +621,7 @@ static void main_get_filename_list (unsigned num_files, char **filenames,  // in
 
 
         // remove the directory from the list of files to compress
-        buf_remove (fn_buf, char *, i, 1);
+        buf_remove (*fn_buf, char *, i, 1);
         i--;
     }
 
@@ -665,7 +697,7 @@ int main (int argc, char **argv)
 {    
     MAIN0 ("Starting main");
 
-    // sometimes the last 3 args are "2>CON", "1>CON", "<CON", not sure where is this from, perhaps the debugger?
+    // When debugging with Visual Studio Code, its debugger wrapper adds 3 args: "2>CON", "1>CON", "<CON". We remove them.
     if (argc >= 4 && !strcmp (argv[argc-1], "<CON")) argc -= 3;
 
     set_exe_type(argv[0]);
@@ -681,7 +713,7 @@ int main (int argc, char **argv)
     global_cmd = file_basename (argv[0], true, "(executable)", NULL, 0); // global var
 
     flags_init_from_command_line (argc, argv);
-    if (exe_type == EXE_GENOZIP && command == PIZ) exe_type = EXE_GENOUNZIP; // treat "genozip -d" as genounzip
+    if (exe_type == EXE_GENOZIP && IS_PIZ) exe_type = EXE_GENOUNZIP; // treat "genozip -d" as genounzip
 
     flags_store_command_line (argc, argv); // can only be called after --password is processed
 
@@ -752,13 +784,13 @@ int main (int argc, char **argv)
     primary_command = command; 
 
     // we test for a newer version if its a single file compression (if --test is used, we test after PIZ - check_for_newer is set)
-    if (!flag.quiet && ((command == ZIP && input_files_len == 1 && !flag.test) || (command == PIZ && flag.check_latest/*PIZ - test after compress*/)))
+    if (!flag.quiet && ((IS_ZIP && input_files_len == 1 && !flag.test) || (IS_PIZ && flag.check_latest/*PIZ - test after compress*/)))
         version_background_test_for_newer();
 
     // IF YOU'RE CONSIDERING EDITING THIS CODE TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,
     // and might put you personally as well as your organization at legal and financial risk - see "Severly unauthorized use of Genozip"
     // section of the license. Rather, please contact sales@genozip.com to discuss which license would be appropriate for your case.
-    if (command == ZIP) license_get_number(); 
+    if (IS_ZIP) license_get_number(); 
 
     if (flag.reading_chain) {
         vcf_tags_cmdline_rename_option(); 
@@ -834,10 +866,8 @@ int main (int argc, char **argv)
     if (flag.multiple_files && flag.validate==VLD_REPORT_INVALID /* reporting invalid files, and none found */) 
         WARN0 ("All files are valid genozip files");
 
-    if (flag.show_time && !flag.show_time[0]) { // show-time without the optional parameter 
-        profiler_add (evb);
-        profiler_print_report();
-    }
+    ASSINP0 (!flag.biopsy, "biopsy VB not found, try a lower number");
+    ASSINP0 (flag.biopsy_line.line_i == NO_LINE, "biopsy line not found, try a lower number");
 
     exit_ok();
     return 0;

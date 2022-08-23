@@ -9,7 +9,7 @@
 // ZIP stuff
 //----------
 
-extern bool txtheader_zip_read_and_compress (int64_t *txt_header_offset, CompIType comp_i);
+extern int64_t txtheader_zip_read_and_compress (int64_t *txt_header_offset, CompIType comp_i);
 
 //----------
 // PIZ stuff

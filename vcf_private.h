@@ -293,8 +293,8 @@ extern void vcf_samples_seg_initialize_LOOKBACK (VBlockVCFP vb);
 extern void vcf_samples_seg_finalize_PS_PID (VBlockVCFP vb);
 extern void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STRp(value));
 extern void vcf_seg_FORMAT_PS_PID_missing_value (VBlockVCFP vb, ContextP ctx, rom end_of_sample);
-extern void vcf_piz_initialize_ps_pid (VBlockP vb);
 extern void vcf_samples_seg_initialize_PS_PID (VBlockVCFP vb, ContextP ctx, STRp(value));
+extern void vcf_piz_ps_pid_lookback_insert (VBlockP vb, Did did_i, STRp(recon));
 
 // INFO stuff
 

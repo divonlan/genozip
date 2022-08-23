@@ -105,8 +105,8 @@ static unsigned vcf_header_get_last_line (BufferP txt_header, char **line_p)
 static void vcf_header_add_genozip_command (VBlockP txt_header_vb, BufferP txt_header)
 {
     // the command line length is unbound, careful not to put it in a bufprintf
-    buf_add_string (txt_header_vb, txt_header, HK_GENOZIP_CMD"\"");
-    buf_add_string (txt_header_vb, txt_header, flags_command_line());
+    buf_append_string (txt_header_vb, txt_header, HK_GENOZIP_CMD"\"");
+    buf_append_string (txt_header_vb, txt_header, flags_command_line());
     bufprintf (txt_header_vb, txt_header, "\" %s\n", str_time().s);
 }
 
@@ -237,13 +237,7 @@ static void vcf_header_rewrite_header (VBlockP txt_header_vb, BufferP txt_header
 static void vcf_header_move_rejects_to_unconsumed_text (BufferP rejects)
 {
     if (rejects->len) {
-        buf_alloc (evb, &txt_file->unconsumed_txt, rejects->len, 0, char, 0, "txt_file->unconsumed_txt");
-        ARRAY (char, unconsumed_txt, txt_file->unconsumed_txt);
-        
-        memmove (&unconsumed_txt[rejects->len], unconsumed_txt, unconsumed_txt_len);
-        memcpy (unconsumed_txt, rejects->data, rejects->len);
-        
-        txt_file->unconsumed_txt.len += rejects->len;
+        buf_insert (evb, txt_file->unconsumed_txt, char, 0, rejects->data, rejects->len, "txt_file->unconsumed_txt");
         txt_file->reject_bytes = rejects->len;
     }
 
@@ -777,7 +771,7 @@ static bool vcf_inspect_txt_header_piz (VBlockP txt_header_vb, BufferP txt_heade
 
 bool vcf_inspect_txt_header (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags)
 {
-    return (command == ZIP) ? vcf_inspect_txt_header_zip (txt_header)
+    return (IS_ZIP) ? vcf_inspect_txt_header_zip (txt_header)
                             : vcf_inspect_txt_header_piz (txt_header_vb, txt_header, txt_header_flags);
 }
 
@@ -805,7 +799,7 @@ static bool vcf_header_set_globals (rom filename, BufferP vcf_header, bool soft_
         else if (vcf_header->data[i] == '#' && (i==0 || vcf_header->data[i-1] == '\n' || vcf_header->data[i-1] == '\r')) {
         
             // ZIP: if first vcf file ; PIZ: everytime - copy the header to the global
-            if (!buf_is_alloc (&vcf_field_name_line) || command == PIZ) {
+            if (!buf_is_alloc (&vcf_field_name_line) || IS_PIZ) {
                 buf_copy (evb, &vcf_field_name_line, vcf_header, char, i, vcf_header->len - i, "vcf_field_name_line");
                 vcf_field_name_line_filename = filename;
             }
@@ -874,8 +868,8 @@ static void vcf_header_subset_samples (BufferP vcf_field_name_line)
 {
     // accept a sample from the vcf file's samples as consistent with the --samples requested
     #define samples_accept(sample_str) { \
-        buf_add_string (evb, vcf_field_name_line, sample_str); \
-        buf_add_string (evb, vcf_field_name_line, "\t"); \
+        buf_append_string (evb, vcf_field_name_line, sample_str); \
+        buf_append_string (evb, vcf_field_name_line, "\t"); \
         vcf_num_displayed_samples++; \
     }
 

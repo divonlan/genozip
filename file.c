@@ -30,10 +30,12 @@
 #include "endianness.h"
 #include "tar.h"
 #include "writer.h"
+#include "version.h"
 
 // globals
 File *z_file   = NULL;
 File *txt_file = NULL;
+DataType last_z_dt = DT_NONE;
 
 static StreamP input_decompressor = NULL; // bcftools or xz, unzip or samtools - only one at a time
 static StreamP output_compressor  = NULL; // samtools (for cram), bcftools
@@ -402,6 +404,7 @@ static bool file_open_txt_read_test_valid_dt (const File *file)
 
     return false; // all good - no need to skip this file
 }
+
 static bool file_open_txt_read (File *file)
 {
     // if user provided the type with --input, we use that overriding the type derived from the file name
@@ -457,7 +460,7 @@ fallthrough_from_cram: {}
             int32_t bgzf_uncompressed_size = bgzf_read_block (file, block, &block_size, true);
 
             // case: this is indeed a bgzf - we put the still-compressed data in vb->scratch for later consumption
-            // is txtfile_read_block_bgzf
+            // in txtfile_read_block_bgzf
             if (bgzf_uncompressed_size > 0) {
                 file->codec = CODEC_BGZF;
                 
@@ -480,7 +483,7 @@ fallthrough_from_cram: {}
                         "Pipe-in process %s (pid=%u) died without sending any data",
                         flags_pipe_in_process_name(), flags_pipe_in_pid());
 
-                ABORTINP0 ("No input data");
+                ABORTINP ("No data exists in input file %s", file->name ? file->name : FILENAME_STDIN);
             }
 
             // Bug 490: if a gzip- pr bz2-compressed file appears to be uncompressed (CODEC_NONE =
@@ -548,6 +551,8 @@ fallthrough_from_cram: {}
                                                 flag.quiet ? "--quiet" : SKIP_ARG, 
                                                 NULL);            
             file->file = stream_from_stream_stdout (input_decompressor);
+            file->redirected = true;
+            file->codec = CODEC_NONE;
             break;
 
         case CODEC_ZIP:
@@ -560,6 +565,8 @@ fallthrough_from_cram: {}
                                                 flag.quiet ? "--quiet" : SKIP_ARG, 
                                                 NULL);            
             file->file = stream_from_stream_stdout (input_decompressor);
+            file->redirected = true;
+            file->codec = CODEC_NONE;
             break;
 
         case CODEC_BCF: {
@@ -572,6 +579,8 @@ fallthrough_from_cram: {}
                                                 "--no-version", // BCF: do not append version and command line to the header
                                                 NULL);
             file->file = stream_from_stream_stdout (input_decompressor);
+            file->redirected = true;
+            file->codec = CODEC_NONE;
             break;
         }
 
@@ -598,7 +607,7 @@ static bool file_open_txt_write (File *file)
              file_has_ext (file_exts[txt_out_ft_by_dt[file->data_type][1]], ".gz")) { // data type supports .gz txt output
             
             file->type = txt_out_ft_by_dt[file->data_type][1]; 
-            if (flag.bgzf == FLAG_BGZF_BY_ZFILE) flag.bgzf = BGZF_COMP_LEVEL_DEFAULT; // default unless user specified otherwise
+            if (flag.bgzf == BGZF_BY_ZFILE) flag.bgzf = BGZF_COMP_LEVEL_DEFAULT; // default unless user specified otherwise
         }
 
         // case: BAM
@@ -608,7 +617,7 @@ static bool file_open_txt_write (File *file)
         // case: not .gz and not BAM - use the default plain file format
         else { 
             file->type = txt_out_ft_by_dt[file->data_type][0];  
-            ASSINP0 (flag.bgzf == FLAG_BGZF_BY_ZFILE, "using --output in combination with --bgzf, requires the output filename to end with .gz or .bgz");
+            ASSINP0 (flag.bgzf == BGZF_BY_ZFILE, "using --output in combination with --bgzf, requires the output filename to end with .gz or .bgz");
         }
     }
 
@@ -656,7 +665,7 @@ static bool file_open_txt_write (File *file)
             file->codec = CODEC_NONE;
         
         // set BGZF compression level, in cases we can't or won't compress to the original file's BGZF blocks
-        else if (flag.bgzf == FLAG_BGZF_BY_ZFILE) { // user did not use --bgzf to explicitly set the level
+        else if (flag.bgzf == BGZF_BY_ZFILE) { // user did not use --bgzf to explicitly set the level
             
             // if we're reconstructing as BAM (translated or not) - to stdout (terminal or pipe), use the 
             // fastest BGZF compression if BAM (level) - some downstream tools (eg GATK) expect BAM to always be BGZF-compressed
@@ -713,6 +722,7 @@ static void file_initialize_bufs (File *file)
     INIT (section_list_vb1);
     INIT (bound_txt_names);
     INIT (recon_plan);
+    INIT (recon_plan_index);
     INIT (txt_header_info);
     INIT (vb_info[0]);
     INIT (vb_info[1]);
@@ -722,6 +732,7 @@ static void file_initialize_bufs (File *file)
     INIT (sag_grps);
     INIT (sag_gps_index);
     INIT (sag_qnames);
+    INIT (sag_depn_index);
     INIT (sag_cigars);
     INIT (sag_seq);
     INIT (sag_qual);
@@ -730,7 +741,9 @@ static void file_initialize_bufs (File *file)
     INIT (vb_sections_index);
     INIT (comp_sections_index);
     INIT (unconsumed_txt);
+    INIT (unconsumed_bgzf_blocks);
     INIT (bgzf_isizes);
+    INIT (bgzf_starts);
     INIT (coverage);
     INIT (read_count);
     INIT (unmapped_read_count);
@@ -759,6 +772,8 @@ static void file_initialize_z_file_data (File *file)
         ctx_foreach_buffer (&file->contexts[i], true, file_initialize_z_add_to_buf_list);
 
     file_initialize_bufs (file);
+
+    serializer_initialize (file->digest_serializer); 
 }
 
 static void file_initialize_txt_file_data (File *file)
@@ -855,7 +870,6 @@ static bool file_open_z (File *file)
         }
 
         file->data_type = DT_NONE; // we will get the data type from the genozip header, not by the file name
-        file->disk_size_minus_skips = file->disk_size; // will be reduced as we skip sections
     }
     else { // WRITE or WRITEREAD - data_type is already set by file_open
         ASSINP (file_has_ext (file->name, GENOZIP_EXT), 
@@ -878,9 +892,14 @@ static bool file_open_z (File *file)
         
         if (chain_is_loaded)
             file->z_flags.has_gencomp = true; // dual-coordinate file
+    
+        file->genozip_version = GENOZIP_FILE_FORMAT_VERSION; // to allow the VER macro to operate consistently across ZIP/PIZ
     }
     
     file_initialize_z_file_data (file);
+
+    if (file->data_type != DT_REF && file->data_type != DT_NONE) 
+        last_z_dt = file->data_type;
 
     return file->file != 0 || flag.seg_only || flag.show_bam;
 }
@@ -893,8 +912,7 @@ File *file_open (rom filename, FileMode mode, FileSupertype supertype, DataType 
 
     file->supertype   = supertype;
     file->is_remote   = filename && url_is_url (filename);
-    file->redirected  = !filename; // later on, also CRAM etc will be set as redirected
-    file->no_progress = !filename;
+    file->redirected  = !filename; // later on, also CRAM, XZ, BCF will be set as redirected
     file->mode        = mode;
 
     bool is_file_exists = false;
@@ -910,7 +928,7 @@ File *file_open (rom filename, FileMode mode, FileSupertype supertype, DataType 
         if (url_file_size >= 0) file->disk_size = (uint64_t)url_file_size;
     }
     
-    else if (!file->redirected) {
+    else if (!file->redirected) { // not stdin
         is_file_exists = file_exists (filename);
         error = strerror (errno);
 
@@ -1035,10 +1053,6 @@ void file_close (File **file_p,
 
     if (file->file && file->supertype == TXT_FILE) {
 
-        // finalize a BGZF-compressed reconstructed txt file
-        if (file->mode == WRITE && file->codec == CODEC_BGZF)
-            bgzf_write_finalize (file);         
-
         if (file->mode == READ && (file->codec == CODEC_GZ))
             ASSERTW (!gzclose_r((gzFile)file->file), "%s: warning: failed to close file: %s", global_cmd, file_printname (file));
 
@@ -1065,6 +1079,8 @@ void file_close (File **file_p,
             tar_close_file (&file->file);
         else
             FCLOSE (file->file, file_printname (file));
+
+        serializer_destroy (file->digest_serializer);     
     }
 
     // create an index file using samtools, bcftools etc, if applicable
@@ -1090,7 +1106,9 @@ void file_close (File **file_p,
         buf_destroy (file->section_list_buf);
         buf_destroy (file->section_list_vb1);
         buf_destroy (file->unconsumed_txt);
+        buf_destroy (file->unconsumed_bgzf_blocks);        
         buf_destroy (file->bgzf_isizes);
+        buf_destroy (file->bgzf_starts);
         buf_destroy (file->coverage);
         buf_destroy (file->read_count);
         buf_destroy (file->unmapped_read_count);
@@ -1100,11 +1118,13 @@ void file_close (File **file_p,
         buf_destroy (file->vb_info[0]);
         buf_destroy (file->vb_info[1]);
         buf_destroy (file->recon_plan);
+        buf_destroy (file->recon_plan_index);
         buf_destroy (file->txt_header_info);
         buf_destroy (file->sag_grps);
         buf_destroy (file->sag_gps_index);
         buf_destroy (file->sag_alns);
         buf_destroy (file->sag_qnames);
+        buf_destroy (file->sag_depn_index);
         buf_destroy (file->sag_cigars);
         buf_destroy (file->sag_seq);
         buf_destroy (file->sag_qual);
@@ -1125,6 +1145,9 @@ void file_write (File *file, const void *data, unsigned len)
 {
     if (!len) return; // nothing to do
 
+    ASSERTNOTNULL (file->file);
+    ASSERTNOTNULL (data);
+    
     size_t bytes_written = fwrite (data, 1, len, (FILE *)file->file); // use fwrite - let libc manage write buffers for us
 
     // if we're streaming our genounzip/genocat/genols output to another process and that process has 
@@ -1257,10 +1280,10 @@ bool file_seek (File *file, int64_t offset,
 
 int64_t file_tell_do (File *file, bool soft_fail, rom func, unsigned line)
 {
-    if (command == ZIP && file->supertype == TXT_FILE && file->codec == CODEC_GZ)
+    if (IS_ZIP && file->supertype == TXT_FILE && file->codec == CODEC_GZ)
         return gzconsumed64 ((gzFile)file->file); 
     
-    if (command == ZIP && file->supertype == TXT_FILE && file->codec == CODEC_BZ2)
+    if (IS_ZIP && file->supertype == TXT_FILE && file->codec == CODEC_BZ2)
         return BZ2_consumed ((BZFILE *)file->file); 
     int64_t offset = ftello64 ((FILE *)file->file);
     ASSERT (offset >= 0 || soft_fail, "called from %s:%u: ftello64 failed for %s (FILE*=%p remote=%s redirected=%s): %s", 
@@ -1380,6 +1403,7 @@ bool file_put_data (rom filename, const void *data, uint64_t len,
     RESTORE_VALUE (errno); // in cases caller wants to print fwrite error
 
     if (written != len) {
+        WARN ("Failed to write %s: wrote only %"PRIu64" bytes of the expected %"PRIu64, tmp_filename, written, len);
         put_data_tmp_filenames[my_file_i] = NULL; // no need to lock mutex
         remove (tmp_filename);
         return false;
@@ -1394,11 +1418,11 @@ bool file_put_data (rom filename, const void *data, uint64_t len,
     
     mutex_unlock (put_data_mutex);
 
-    ASSERT (!renamed_failed, "failed to rename %s to %s: %s", tmp_filename, filename, strerror (errno));
+    ASSERT (!renamed_failed, "Failed to rename %s to %s: %s", tmp_filename, filename, strerror (errno));
     FREE (tmp_filename);
 
     if (mode) 
-        ASSERT (!chmod (filename, mode), "failed to chmod %s: %s", filename, strerror (errno));
+        ASSERT (!chmod (filename, mode), "Failed to chmod %s: %s", filename, strerror (errno));
     
     return true;
 }
@@ -1428,7 +1452,7 @@ PutLineFn file_put_line (VBlockP vb, STRp(line), rom msg)
     
     file_put_data (fn.s, STRa(line), 0);
 
-    if (command == PIZ)
+    if (IS_PIZ)
         WARN ("\n%s line=%s line_in_file(1-based)=%"PRIu64". Dumped %s (dumping first occurance only)", 
                 msg, line_name(vb).s, writer_get_txt_line_i (vb), fn.s);
     else

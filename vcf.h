@@ -132,6 +132,11 @@
 #pragma GENDICT FORMAT_RGQ=DTYPE_2=RGQ         // <ID=RGQ,Number=1,Type=Integer,Description="Unconditional reference genotype confidence, encoded as a phred quality -10*log10 p(genotype call is wrong)">
 #pragma GENDICT FORMAT_MIN_DP=DTYPE_2=MIN_DP   // <ID=MIN_DP,Number=1,Type=Integer,Description="Minimum DP observed within the GVCF block">
 
+// 10xGenomics: https://support.10xgenomics.com/genome-exome/software/pipelines/latest/output/vcf
+#pragma GENDICT FORMAT_BX=DTYPE_2=BX           // <ID=BX,Number=.,Type=String,Description="Barcodes and Associated Qual-Scores Supporting Alleles">
+#pragma GENDICT FORMAT_PQ=DTYPE_2=PQ           // <ID=PQ,Number=1,Type=Integer,Description="Phred QV indicating probability at this variant is incorrectly phased">
+#pragma GENDICT FORMAT_JQ=DTYPE_2=JQ           // <ID=JQ,Number=1,Type=Integer,Description="Phred QV indicating probability of a phasing switch error in gap prior to this variant">
+
 // Ensembl VEP (Variant Effect Predictor) fields: https://www.ensembl.org/info/docs/tools/vep/script/vep_options.html
 #pragma GENDICT INFO_vep=DTYPE_1=vep
 #pragma GENDICT INFO_AGE_HISTOGRAM_HET=DTYPE_1=AGE_HISTOGRAM_HET 
@@ -251,7 +256,7 @@ typedef uint8_t Allele; // elements of ht_matrix: values 48->147 for allele 0 to
 
 // ZIP stuff
 extern void vcf_zip_initialize (void);
-extern void vcf_zip_finalize (void);
+extern void vcf_zip_finalize (bool is_last_user_txt_file);
 extern void vcf_zip_genozip_header (SectionHeaderGenozipHeader *header);
 extern void vcf_zip_init_vb (VBlockP vb);
 extern void vcf_liftover_display_lift_report (void);

@@ -31,6 +31,8 @@ typedef struct {
 #define SAM_GC_UPDATE_PRIM 0xfffffffe
 #define SAM_GC_UPDATE_DEPN 0xffffffff
 
+const SoloProp solo_props[NUM_SOLO_TAGS] = SOLO_PROPS;
+
 //------------------------
 // Zip - After Reading VB
 //------------------------
@@ -53,37 +55,39 @@ void sam_sag_zip_init_vb (VBlockP vb)
 // Zip - Seg
 //-------------------
 
-void sam_segconf_set_sag_type (void)
+// this is SAM/BAM's zip_after_segconf callback
+void sam_set_sag_type (void)
 {
-    if (flag.no_gencomp || (!segconf.is_sorted && !flag.force_gencomp))
+    if (flag.no_gencomp || flag.fast || (!segconf.is_sorted && !flag.force_gencomp))
         segconf.sag_type = SAG_NONE;
+
+    else if (MP(LONGRANGER))
+        segconf.sag_type = SAG_NONE; // TO DO - new SAG_BY_LONGRANGER type
 
     // SAG_BY_SA: the preferd Sag method - by SA:Z
     // we identify a PRIM line - if it (1) has SA:Z and (2) supp/secondary flags are clear
-    else if (MP(BWA) || MP(NGMLR) || MP(MINIMAP2) || MP(WINNOWMAP) || MP(BSBOLT) || segconf.has[OPTION_SA_Z])
+    else if (sam_has_SA_Z() || (segconf.has[OPTION_SA_Z])) // longranger has non-standard SA:Z format
         segconf.sag_type = SAG_BY_SA;
 
     // SAG_BY_NH: STAR and other aligners with NH:i/HI:i instead of SA:Z
     // we identify a PRIM as a line that is (1) not supp/secondary (2) has NH >= 2
     else if ((MP(STAR) || (segconf.has[OPTION_NH_i] && segconf.has[OPTION_HI_i])) && !segconf.has[OPTION_SA_Z])
-        segconf.sag_type = segconf.star_solo ? SAG_BY_SOLO : SAG_BY_NH; 
+        segconf.sag_type = segconf.has_barcodes ? SAG_BY_SOLO : SAG_BY_NH; 
 
-    // SAG_BY_CC: in TopHat(?) there is NH (but no HI or SA), and all lines in a SAG have NH>=2, and, 
+    // SAG_BY_CC: cases where there is NH, but no HI or SA, and all lines in a SAG have NH>=2, and, 
     // except the last line in the SAG, also have CC and CP.
     // Note: we don't test for CC/CP here, because only lines with NH>=2 have them, and that might not have been encountered yet
     else if (segconf.has[OPTION_NH_i] && !segconf.has[OPTION_HI_i] && !segconf.has[OPTION_SA_Z])
         segconf.sag_type = SAG_BY_CC;
 
-    // SAG_BY_FLAG: in BLASR, there might be dependent lines, but no auxilliary fields to support them
+    // SAG_BY_FLAG: cases (eg BLASR) where there might be dependent lines, but no auxilliary fields to support them
     // We treat all non-depn mapped lines as PRIM (and warn the user of memory consumption)
-    // else if ((MP(BLASR) || segconf.sam_has_depn || flag.force_gencomp) && 
-    //          !segconf.has[OPTION_NH_i] && !segconf.has[OPTION_HI_i] && 
-    //          !segconf.has[OPTION_CP_i] && !segconf.has[OPTION_CC_Z] && !segconf.has[OPTION_SA_Z]) 
-
-    // To do: works but performance is terrible. To do: make the normal VBs PRIM and the OOB gencomp VBs have the MAIN (unmapped lines etc)
-    // Apart from the very old BLASR aligner, its not clear whether there is any other aligner that produces files that would beneift
-    else if (flag.force_gencomp)
-        segconf.sag_type = SAG_BY_FLAG; 
+    else if ((MP(BLASR) || segconf.sam_has_depn || flag.force_gencomp) && 
+             (flag.best || flag.force_gencomp) &&  // too slow for normal mode
+             !txt_file->redirected && !txt_file->is_remote) { // conditions for using sam_sag_by_flag_scan_for_depn
+        sam_sag_by_flag_scan_for_depn ();
+        segconf.sag_type = SAG_BY_FLAG;
+    }
 
     else 
         segconf.sag_type = SAG_NONE;      
@@ -109,12 +113,9 @@ void sam_seg_gc_initialize (VBlockSAMP vb)
         CTX(OPTION_SA_Z)->ltype = LT_UINT8;    // we store num_alns in local
         CTX(SAM_FLAG)->no_stons = true;        
         
-        ctx_set_store (VB, STORE_INDEX, 3, OPTION_SA_RNAME, OPTION_SA_STRAND, DID_EOL);
-        ctx_set_store (VB, STORE_INT, 5, OPTION_SA_POS, OPTION_SA_MAPQ, OPTION_SA_NM, OPTION_NH_PRIM, DID_EOL);
+        ctx_set_store (VB, STORE_INDEX, OPTION_SA_RNAME, OPTION_SA_STRAND, DID_EOL);
+        ctx_set_store (VB, STORE_INT, OPTION_SA_POS, OPTION_SA_MAPQ, OPTION_SA_NM, OPTION_NH_i, DID_EOL);
     }
-
-    if (IS_SAG_FLAG && !flag.force_gencomp)
-        WARN_ONCE0 ("FYI: The SAG_BY_FLAG method is used for this file, which may consume a lot of RAM. Use --no-gencomp to disable it, but the compression won't be as good");
 }
 
 // Note: in MAIN vbs, failure means we will keep this line in MAIN and not move it to PRIM
@@ -129,7 +130,7 @@ void sam_seg_gc_initialize (VBlockSAMP vb)
 // Call in seg PRIM line (both in MAIN and PRIM vb): 
 // MAIN: test that line is a valid prim before moving it to the PRIM gencomp file
 // PRIM: add SA Group (not alignments) to the data structure in VB 
-bool sam_seg_prim_add_sa_group (VBlockSAMP vb, ZipDataLineSAM *dl, uint16_t num_alns/* inc primary aln*/, bool is_bam)
+bool sam_seg_prim_add_sag (VBlockSAMP vb, ZipDataLineSAM *dl, uint16_t num_alns/* inc primary aln*/, bool is_bam)
 {
     rom textual_seq = is_bam ? B1STc(vb->textual_seq) : Btxt (dl->SEQ.index);
     uint32_t seq_len = is_bam ? vb->textual_seq.len32 : dl->SEQ.len;
@@ -138,12 +139,13 @@ bool sam_seg_prim_add_sa_group (VBlockSAMP vb, ZipDataLineSAM *dl, uint16_t num_
 
     // MAIN: check that values are within limits defined in Sag (no need to check in PRIM as we already checked in MAIN)
     if (sam_is_main_vb) {
+        FAILIF (!sam_might_have_saggies_in_other_VBs (vb, dl, num_alns), "all sag alignments are contained in this VB%s", "");
         FAILIF (dl->QNAME.len > MAX_SA_QNAME_LEN, "dl->QNAME.len=%u > %u", dl->QNAME.len, MAX_SA_QNAME_LEN);
         FAILIF (seq_len==1 && *textual_seq == '*', "SEQ=\"*\"%s", ""); // we haven't segged seq yet, so vb->seq_missing is not yet set
         FAILIF (seq_len > MAX_SA_SEQ_LEN, "seq_len=%u > %u", seq_len, MAX_SA_SEQ_LEN);
         FAILIF (!dl->POS, "POS=0%s", ""); // unaligned
         FAILIF (num_alns > MAX_SA_NUM_ALNS, "%s=%u > %u", (IS_SAG_NH || IS_SAG_SOLO || IS_SAG_CC) ? "NH:i" : "num_alns", num_alns, MAX_SA_NUM_ALNS);
-        FAILIF (dl->has_hard_clips, "has_hard_clips%s", ""); // primary cannot have hard clips
+        FAILIF (dl->hard_clip[0] || dl->hard_clip[1], "has_hard_clips%s", ""); // primary cannot have hard clips
         
         uint32_t bad_i;
         FAILIF (!str_is_only_ACGT (textual_seq, seq_len, &bad_i), 
@@ -178,12 +180,13 @@ bool sam_seg_prim_add_sa_group (VBlockSAMP vb, ZipDataLineSAM *dl, uint16_t num_
 
 // MAIN: called in sam_seg_is_gc_line to test that line is a valid prim before moving it to the PRIM gencomp file
 // PRIM: call in seg of seg of SA:Z add SA Group (including alignments) to the data structure in VB
-bool sam_seg_prim_add_sa_group_SA (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), int64_t this_nm, bool is_bam)
+// return n_alns if successful and 0 if not
+int32_t sam_seg_prim_add_sag_SA (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), int64_t this_nm, bool is_bam)
 {
     str_split (sa, sa_len, 0, ';', aln, false); // n_alns is 1+number of repeats in SA, because of terminating ';'. so it is the total number of alignments, including the primary
     FAILIF (n_alns < 2 || n_alns > MAX_SA_NUM_ALNS, "n_alns=%d is not in [2,%u]", n_alns, MAX_SA_NUM_ALNS); // we cannot add this SA - either invalid or over the max number of alignments
 
-    if (!sam_seg_prim_add_sa_group (vb, dl, n_alns, is_bam)) return false; 
+    if (!sam_seg_prim_add_sag (vb, dl, n_alns, is_bam)) return 0; 
 
     // check that values are within limits defined in SAAln
     FAILIF (dl->POS  > MAX_SA_POS, "POS=%d > MAX_SA_POS=%u", dl->POS, MAX_SA_POS);
@@ -199,7 +202,7 @@ bool sam_seg_prim_add_sa_group_SA (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), 
         // in Seg, we add the Adler32 of CIGAR to save memory, as we just need to verify it, not reconstruct it
         uint32_t cigar_len = (is_bam ? vb->textual_cigar.len32 : dl->CIGAR.len);
         CigarSignature cigar_sig = cigar_sign (is_bam ? B1STc(vb->textual_cigar) : Btxt(dl->CIGAR.index), cigar_len);
-
+        
         // add primary alignment as first alignment in SA group
         BNXT (SAAln, vb->sag_alns) = (SAAln){
             .rname           = vb->chrom_node_index,
@@ -217,7 +220,7 @@ bool sam_seg_prim_add_sa_group_SA (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), 
         vb->sag_alns.count += n_alns;
     }
 
-    // add all dependent alignments
+    // test or add all dependent alignments
     for (uint32_t i=0; i < n_alns-1; i++) {
         
         // get items - rname, pos, revcomp, CIGAR, mapQ, NM
@@ -243,6 +246,9 @@ bool sam_seg_prim_add_sa_group_SA (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), 
 
         if (sam_is_prim_vb) { // in PRIM, we actually add the group, in MAIN, we are just testing
 
+            if (!segconf.SA_CIGAR_can_have_H && sam_cigar_has_H (STRi(item,SA_CIGAR)))
+                segconf.SA_CIGAR_can_have_H = true; // no worries about thread safety, this just gets set to true while segging MAIN and is inspected only when segging MAIN is over
+
             CigarSignature cigar_sig = cigar_sign (STRi(item,SA_CIGAR));
 
             BNXT (SAAln, vb->sag_alns) = (SAAln){ 
@@ -256,20 +262,20 @@ bool sam_seg_prim_add_sa_group_SA (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), 
         }
     }
 
-    return true;
+    return n_alns;
 }       
 
 // PRIM: call in seg of seg of NH:i add SA Group to the data structure in VB 
-void sam_seg_prim_add_sa_group_NH (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t nh)
+void sam_seg_prim_add_sag_NH (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t nh)
 {
-    sam_seg_prim_add_sa_group (vb, dl, nh, IS_BAM_ZIP);
+    sam_seg_prim_add_sag (vb, dl, nh, IS_BAM_ZIP);
     vb->sag_alns.count += nh;
 }
 
 // PRIM: call in seg of seg of NH:i add SA Group to the data structure in VB 
-void sam_seg_prim_add_sa_group_CC (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t nh)
+void sam_seg_prim_add_sag_CC (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t nh)
 {
-    sam_seg_prim_add_sa_group (vb, dl, nh, IS_BAM_ZIP);
+    sam_seg_prim_add_sag (vb, dl, nh, IS_BAM_ZIP);
 
     buf_alloc (vb, &vb->sag_alns, 1, 64, CCAln, CTX_GROWTH, "sag_alns");
     BNXT (CCAln, vb->sag_alns) = (CCAln){ 
@@ -282,23 +288,23 @@ void sam_seg_prim_add_sa_group_CC (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t nh
 }
 
 // PRIM: called to ingested a segged VB data into solo "alignments" 
-void sam_seg_prim_add_sa_group_SOLO (VBlockSAMP vb, ZipDataLineSAM *dl)
+void sam_seg_prim_add_sag_SOLO (VBlockSAMP vb, ZipDataLineSAM *dl)
 {
-    sam_seg_prim_add_sa_group (vb, dl, dl->NH, IS_BAM_ZIP);
+    sam_seg_prim_add_sag (vb, dl, dl->NH, IS_BAM_ZIP);
 
-    // TO DO: consider the tradeoff - this way, we don't allocate memory and add in each line (like sam_seg_prim_add_sa_group_CC)
+    // TO DO: consider the tradeoff - this way, we don't allocate memory and add in each line (like sam_seg_prim_add_sag_CC)
     // BUT, we do hundreds of thousands of small memcpy's during ingest - with VBs serialized on a mutex, instead of just
     // one big memcpy
 }
 
 // Seg MAIN: returns true if this line is a Primary or Dependent line of a supplementary/secondary group - 
 // and should be moved to a generated component. Called by compute thread in seg of Normal VB.
-bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(alignment), STRps(aux), bool is_bam)
+bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(alignment), bool is_bam)
 {
     START_TIMER;
 
-    int32_t NH;
-    SamNMType NM; 
+    SamNMType NM;
+    int32_t n_alns; 
     SamComponentType comp_i = COMP_NONE; // generated component
     
     // unmapped or otherwise lacking alignment - not gencomp
@@ -308,43 +314,51 @@ bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(alignment), STR
 
     switch (segconf.sag_type) {
         case SAG_BY_SA:
-            if (has_SA && sam_line_is_depn(dl))
+            if (has_SA && sam_line_is_depn(dl)) {
                 comp_i = SAM_COMP_DEPN;
+
+                if (vb->qname_count.len32)
+                    n_alns = str_count_char (STRauxZ (SA_Z, is_bam), ';') + 1; // +1 for this aln
+            
+                if (dl->hard_clip[0] || dl->hard_clip[1])
+                   segconf.depn_CIGAR_can_have_H = true; // no worries about thread safety, this just gets set to true while segging MAIN and is inspected only when segging MAIN is over
+            }
             
             else if (has_SA && has_NM &&
-                     sam_seg_get_aux_int (vb, STRi(aux, vb->idx_NM_i), &NM, is_bam, MIN_NM_i, MAX_NM_i, true) &&
-                     sam_seg_prim_add_sa_group_SA (vb, dl, STRauxZ (SA_Z, is_bam), NM, is_bam))  // testing to see if we can successfully add an SA Group based on SA
+                     sam_seg_get_aux_int (vb, vb->idx_NM_i, &NM, is_bam, MIN_NM_i, MAX_NM_i, true) &&
+                     (n_alns = sam_seg_prim_add_sag_SA (vb, dl, STRauxZ (SA_Z, is_bam), NM, is_bam)))  // testing to see if we can successfully add a sag based on SA
                 comp_i = SAM_COMP_PRIM;
             break;
         
         case SAG_BY_NH: 
-        case SAG_BY_SOLO:
-            if (has_NH && sam_line_is_depn(dl))
-                comp_i = SAM_COMP_DEPN;
+        case SAG_BY_SOLO: 
+            if (has_NH && sam_seg_get_aux_int (vb, vb->idx_NH_i, &n_alns, is_bam, 2/*at least*/, MAX_HI_NH, true)) {
+                
+                if (sam_line_is_depn(dl)) 
+                    comp_i = SAM_COMP_DEPN;
 
-            else if (has_NH && 
-                     sam_seg_get_aux_int (vb, STRi(aux, vb->idx_NH_i), &NH, is_bam, 2, MAX_HI_NH, true) && // not out of range, i.e. at least 2
-                     sam_seg_prim_add_sa_group (vb, dl, NH, is_bam)) // testing to see if we can successfully add an SA Group based on NH
-                comp_i = SAM_COMP_PRIM;
+                else if (sam_seg_prim_add_sag (vb, dl, n_alns, is_bam)) // testing to see if we can successfully add a sag based on NH
+                    comp_i = SAM_COMP_PRIM;
+            }
             break;
-
+            
         case SAG_BY_CC:
-            if (has_CC && has_CP && has_NH &&
-                sam_seg_get_aux_int (vb, STRi(aux, vb->idx_NH_i), &NH, is_bam, 2, MAX_HI_NH, true)) // not out of range, i.e. at least 2
-                comp_i = SAM_COMP_DEPN;
+            if (has_NH && sam_seg_get_aux_int (vb, vb->idx_NH_i, &n_alns, is_bam, 2, MAX_HI_NH, true)) {  // not out of range, i.e. at least 2
 
-            else if (has_NH && !has_CC && !has_CP && !has_SA && !has_HI && !dl->has_hard_clips &&
-                     sam_seg_get_aux_int (vb, STRi(aux, vb->idx_NH_i), &NH, is_bam, 2, MAX_HI_NH, true) && // not out of range, i.e. at least 2
-                     sam_seg_prim_add_sa_group (vb, dl, NH, is_bam)) // testing to see if we can successfully add an SA Group based on NH
-                comp_i = SAM_COMP_PRIM;
+                if (has_CC && has_CP)
+                    comp_i = SAM_COMP_DEPN;
+
+                else if (!has_CC && !has_CP && !has_SA && !has_HI && !dl->hard_clip[0] && !dl->hard_clip[1] && 
+                         sam_seg_prim_add_sag (vb, dl, n_alns, is_bam)) // testing to see if we can successfully add a sag based on NH
+                    comp_i = SAM_COMP_PRIM;
+                }
             break;
 
-        case SAG_BY_FLAG:
+        case SAG_BY_FLAG: // note: we only possibly set this for BAM (not SAM) files
             if (sam_line_is_depn(dl))
                 comp_i = SAM_COMP_DEPN;
 
-            else if (sam_seg_prim_add_sa_group (vb, dl, 0, is_bam))
-                // TO DO: optimize this - keep the prim lines in the non-gencomp VB 
+            else if (sam_seg_prim_add_sag (vb, dl, 0, is_bam))
                 comp_i = SAM_COMP_PRIM;
             
             // note: if the line is prim, is stays in the VB. if its MAIN (see above), it moves to a gencomp.
@@ -353,13 +367,22 @@ bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(alignment), STR
         default: ABORT ("Invalid sag_type=%u", segconf.sag_type);
     }
 
+    // check if all alignments of this sag are contained in this VB - in which case we will 
+    // seg them vs saggy_line_i rather than using gencomp (note: for SAM_COMP_PRIM, we already tested in sam_seg_prim_add_sag)
+    if (comp_i == SAM_COMP_DEPN && !sam_might_have_saggies_in_other_VBs (vb, dl, n_alns)) 
+        comp_i = COMP_NONE;
+
     if (comp_i != COMP_NONE) {
+
         // store location where this gc line should be inserted    
         gencomp_seg_add_line (VB, comp_i, STRa(alignment));
         
         vb->line_i--;
         vb->recon_size -= alignment_len;
         vb->txt_size   -= alignment_len;
+
+        if      (comp_i == SAM_COMP_PRIM) vb->seg_found_prim_line = true;
+        else if (comp_i == SAM_COMP_DEPN) vb->seg_found_depn_line = true;
     }
 
 done:    
@@ -462,9 +485,9 @@ static bool sam_seg_depn_is_subseq_of_prim (VBlockSAMP vb, bytes depn_textual_se
 // --------------------------------------------------
 
 // Seg DEPN line: verify that this line is a member of group (identical alignments) + return aln_i of this line
-static inline bool sam_seg_depn_find_aln (VBlockSAMP vb, const Sag *g,
-                                          uint32_t n_my_alns, const SAAln *my_alns,
-                                          uint16_t *my_aln_i) // out - relative to group
+static inline bool sam_seg_depn_find_SA_aln (VBlockSAMP vb, const Sag *g,
+                                             uint32_t n_my_alns, const SAAln *my_alns,
+                                             uint16_t *my_aln_i) // out - relative to group
 {
     uint32_t SA_aln_i=1; // index into my_alns
     for (uint64_t grp_aln_i=0; grp_aln_i < g->num_alns; grp_aln_i++) { 
@@ -479,7 +502,7 @@ static inline bool sam_seg_depn_find_aln (VBlockSAMP vb, const Sag *g,
         }
 
         // case: group alignment matches my alignment
-        if (grp_aln_i && !memcmp (grp_aln, &my_alns[0], sizeof (SAAln))) // note: we don't allow a depn line to have my_aln_i=0, bc we make an assumption (eg in sam_reconstruct_main_cigar_from_SA_Group) that a DEPN line cannot have the primary alignment (aln_i=0) in its main fields
+        if (grp_aln_i && !memcmp (grp_aln, &my_alns[0], sizeof (SAAln))) // note: we don't allow a depn line to have my_aln_i=0, bc we make an assumption (eg in sam_reconstruct_main_cigar_from_sag) that a DEPN line cannot have the primary alignment (aln_i=0) in its main fields
             *my_aln_i = grp_aln_i;
 
         // case: group alignment doesn't match the SA alignment and doesn't match my alignment
@@ -491,21 +514,21 @@ static inline bool sam_seg_depn_find_aln (VBlockSAMP vb, const Sag *g,
 }
 
 // parse my SA field, and build my alignments based on my main fields data + SA data
-static inline bool sam_sa_seg_depn_get_my_alns (VBlockSAMP vb,
-                                                WordIndex my_rname_contig, SamPosType my_pos, uint8_t my_mapq, 
-                                                STRp(my_cigar), int64_t my_nm, bool my_revcomp, 
-                                                STRp(SA), // 0,0 if no SA (eg STAR alignment) 
-                                                uint32_t n_my_alns, 
-                                                SAAln *my_alns) // out 
+static inline bool sam_sa_seg_depn_get_my_SA_alns (VBlockSAMP vb,
+                                                   WordIndex my_rname_contig, SamPosType my_pos, uint8_t my_mapq, 
+                                                   STRp(my_cigar), int64_t my_nm, bool my_revcomp, 
+                                                   STRp(SA), // 0,0 if no SA (eg STAR alignment) 
+                                                   uint32_t n_my_alns, 
+                                                   SAAln *my_alns) // out 
 {
     str_split (SA, SA_len, n_my_alns, ';', SA_aln, true);
 
     my_alns[0] = (SAAln){ .cigar.signature = cigar_sign (STRa(my_cigar)),
-                              .mapq            = my_mapq,
-                              .nm              = my_nm,
-                              .pos             = my_pos,
-                              .revcomp         = my_revcomp,
-                              .rname           = my_rname_contig };
+                          .mapq            = my_mapq,
+                          .nm              = my_nm,
+                          .pos             = my_pos,
+                          .revcomp         = my_revcomp,
+                          .rname           = my_rname_contig };
 
     for (uint32_t aln_i=1; aln_i < n_my_alns; aln_i++) { 
 
@@ -541,7 +564,7 @@ static inline bool sam_sa_seg_depn_get_my_alns (VBlockSAMP vb,
 // Seg of DEPN by SA:Z tag: find matching SAGroup and seg SAM_SAG. We identify the group by matching (qname,rname,pos,cigar,revcomp,nm) 
 // and matching flags and SEQ
 // sets vb->sag (NULL if not found).
-static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAM *dl, STRps(aux), 
+static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAM *dl, 
                                                 STRp(textual_cigar), rom textual_seq, bool is_bam)
 {
     #define DONE ({ sam_cigar_restore_H (htos); return; })
@@ -560,8 +583,8 @@ static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAM *d
     const Sag *g = sam_sa_get_first_group_by_qname_hash (vb, STRtxtw(dl->QNAME), dl->FLAG.is_last, &grp_index_i, &qname_hash);
     if (!g) return; // no PRIM with this qname
 
-    // temporarily replace H with S
-    HtoS htos = sam_cigar_H_to_S (vb, (char*)STRa(textual_cigar), false);
+    // temporarily replace H with S if needed
+    HtoS htos = (segconf.SA_HtoS==yes) ? sam_cigar_H_to_S (vb, (char*)STRa(textual_cigar), false) : (HtoS){};
 
     // if this is BAM, and we have an odd number of bases, the final seq value in the BAM file of the "missing" base
     // we can't encode last "base" other than 0 (see also bug 531)
@@ -577,9 +600,9 @@ static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAM *d
     SAAln my_alns[n_my_alns];
 
     // get alignments of this DEPN line ([0]=main field [1...]=SA alignments)
-    if (has_NM) sam_seg_get_aux_int (vb, STRi(aux, vb->idx_NM_i), &my_nm, is_bam, MIN_NM_i, MAX_NM_i, false);
+    if (has_NM) sam_seg_get_aux_int (vb, vb->idx_NM_i, &my_nm, is_bam, MIN_NM_i, MAX_NM_i, false);
 
-    if (!sam_sa_seg_depn_get_my_alns (vb, vb->chrom_node_index, dl->POS, dl->MAPQ, STRa(textual_cigar), my_nm, revcomp, 
+    if (!sam_sa_seg_depn_get_my_SA_alns (vb, vb->chrom_node_index, dl->POS, dl->MAPQ, STRa(textual_cigar), my_nm, revcomp, 
                                         STRauxZ(SA_Z, is_bam), n_my_alns, my_alns))
         DONE; // cannot make sense of the SA alignments
 
@@ -594,7 +617,7 @@ static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAM *d
             dl->FLAG.multi_segs == g->multi_segs                                 &&
             n_my_alns           == g->num_alns                                   && 
             str_issame_(STRtxtw(dl->QNAME), GRP_QNAME(g), g->qname_len)          && 
-            sam_seg_depn_find_aln (vb, g, n_my_alns, my_alns, &my_aln_i)) {
+            sam_seg_depn_find_SA_aln (vb, g, n_my_alns, my_alns, &my_aln_i)) {
 
             // found - seg into local
             BNXT (SAGroup, CTX(SAM_SAG)->local) = ZGRP_I(g);
@@ -604,8 +627,8 @@ static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAM *d
             vb->sa_aln = has_SA ? B(SAAln, z_file->sag_alns, g->first_aln_i + my_aln_i) : NULL;
             vb->prim_far_count++; // for stats
 
-            if (flag.show_depn)
-                 iprintf ("vb=%u grp=%u aln=%s QNAME=\"%.*s\"(%08x)\n", vb->vblock_i, ZGRP_I(g), sam_show_sag_one_aln (vb->sag, vb->sa_aln).s, STRfw(dl->QNAME), qname_hash);                
+            if (flag.show_depn || flag.show_buddy)
+                 iprintf ("%s: %.*s grp=%u aln=%s qname_hash=%08x\n", LN_NAME, STRfw(dl->QNAME), ZGRP_I(g), sam_show_sag_one_aln (vb->sag, vb->sa_aln).s, qname_hash);                
                         
             break;
         }
@@ -618,8 +641,7 @@ static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAM *d
 // Seg of DEPN by NH:Z tag: find matching SAGroup and seg SAM_SAG. We identify the group by matching (qname,rname,pos,cigar,revcomp,nm) 
 // and matching flags and SEQ
 // sets vb->sag (NULL if not found).
-static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAM *dl, STRps(aux), 
-                                               rom textual_seq, bool is_bam)
+static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAM *dl, rom textual_seq, bool is_bam)
 {
     vb->sag = NULL; // initialize to "not found"
 
@@ -636,9 +658,9 @@ static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAM *dl
     STR0(cc); cc="";
     int32_t hi=-1; // stays -1 if the line has no HI:i
     if (flag.show_depn) {
-        if (has_HI) sam_seg_get_aux_int (vb, STRi(aux, vb->idx_HI_i), &hi, is_bam, 1, 0x7fffffff, true);
-        if (has_CP) sam_seg_get_aux_int (vb, STRi(aux, vb->idx_CP_i), &cp, is_bam, 0, MAX_POS_SAM, true);
-        if (has_CC) sam_seg_get_aux_str (vb, STRi(aux, vb->idx_CC_Z), pSTRa(cc), is_bam);
+        if (has_HI) sam_seg_get_aux_int (vb, vb->idx_HI_i, &hi, is_bam, 1, 0x7fffffff, true);
+        if (has_CP) sam_seg_get_aux_int (vb, vb->idx_CP_i, &cp, is_bam, 0, MAX_POS_SAM, true);
+        if (has_CC) sam_seg_get_aux_Z (vb, vb->idx_CC_Z, pSTRa(cc), is_bam);
     }
 
     if (!g) {
@@ -654,7 +676,7 @@ static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAM *dl
     }
     
     int32_t nh;
-    if ((IS_SAG_NH || IS_SAG_SOLO || IS_SAG_CC) && !sam_seg_get_aux_int (vb, STRi(aux, vb->idx_NH_i), &nh, is_bam, 1, 0x7fffffff, true)) {
+    if ((IS_SAG_NH || IS_SAG_SOLO || IS_SAG_CC) && !sam_seg_get_aux_int (vb, vb->idx_NH_i, &nh, is_bam, 1, 0x7fffffff, true)) {
         if (flag.show_depn) iprintf ("vb=%u FAIL:NO_VALID_NH QNAME=\"%.*s\"(%08x) HI=%d CC=\"%.*s\" CP=%d\n", vb->vblock_i, STRfw(dl->QNAME), qname_hash, hi, STRf(cc), cp);
         return; // missing or invalid NH:i in depn line
     }
@@ -680,8 +702,8 @@ static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAM *dl
             else if (IS_SAG_SOLO)
                 vb->solo_aln = B(SoloAln, z_file->sag_alns, ZGRP_I(g));
 
-            if (flag.show_depn) {
-                iprintf ("vb=%u grp=%u QNAME=\"%.*s\"(%08x)", vb->vblock_i, ZGRP_I(g), STRfw(dl->QNAME), qname_hash);
+            if (flag.show_depn || flag.show_buddy) {
+                iprintf ("%s: %.*s grp=%u qname_hash=%08x", LN_NAME, STRfw(dl->QNAME), ZGRP_I(g), qname_hash);
                 if (has_HI) iprintf (" HI=%d\n", hi);
                 else if (has_CC && has_CP) iprintf (" CC=\"%.*s\" CP=%d\n", STRf(cc), cp);
                 else iprint0 ("\n");
@@ -696,23 +718,22 @@ static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAM *dl
 }
 
 // Seg compute VB: called when segging PRIM/DEPN VBs
-void sam_seg_sa_group_stuff (VBlockSAMP vb, ZipDataLineSAM *dl, 
-                             STRps(aux), STRp(textual_cigar), rom textual_seq, bool is_bam)
+void sam_seg_sag_stuff (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_cigar), rom textual_seq, bool is_bam)
 {
     START_TIMER;
 
     // in Dependent component - try to find which SAGroup this line belongs to, and seg it to SAM_SAG and SAM_SAALN
     // (if successful, this will set vb->sag/sa_aln)
     if (sam_is_depn_vb && IS_SAG_SA) 
-        sam_sa_seg_depn_find_sagroup_SAtag (vb, dl, STRas(aux), STRa(textual_cigar), textual_seq, is_bam);
+        sam_sa_seg_depn_find_sagroup_SAtag (vb, dl, STRa(textual_cigar), textual_seq, is_bam);
 
     else if (sam_is_depn_vb && !IS_SAG_SA) 
-        sam_sa_seg_depn_find_sagroup_noSA (vb, dl, STRas(aux), textual_seq, is_bam);
+        sam_sa_seg_depn_find_sagroup_noSA (vb, dl, textual_seq, is_bam);
 
     else if (sam_is_prim_vb && IS_SAG_SA && has_SA) 
         ctx_set_encountered (VB, CTX(OPTION_SA_Z)); // for DEPN, this is done in sam_sa_seg_depn_find_sagroup_SAtag
 
-    COPY_TIMER (sam_seg_sa_group_stuff);
+    COPY_TIMER (sam_seg_sag_stuff);
 }
 
 void sam_seg_against_sa_group (VBlockSAMP vb, ContextP ctx, uint32_t add_bytes)
@@ -727,21 +748,22 @@ void sam_seg_against_sa_group_int (VBlockSAMP vb, ContextP ctx, int64_t paramete
     seg_by_ctx (VB, STRa(snip), ctx, add_bytes);
 }
 
-void sam_seg_against_sa_group_bool (VBlockSAMP vb, ContextP ctx, bool parameter, uint32_t add_bytes)
-{
-    seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_SAG, '0'+parameter }, 3, ctx, add_bytes);
-}
-
 //---------------------
 // Zip - After Compute
 //---------------------
 
-// called in the main thread after_compute, in order of VBs - MAIN component
+// called in the main thread after_compute - VBs might be out of order
 void sam_zip_gc_after_compute_main (VBlockSAMP vb)
 {
     BufferP recon_plan = &txt_file->recon_plan;
+    BufferP recon_plan_index = &txt_file->recon_plan_index;
     ARRAY (GencompLineIEntry, gc_lines, vb->gencomp_lines);
 
+    buf_alloc_zero (evb, recon_plan_index, 0, MAX_(1000, vb->vblock_i+1), BufWord, 2, "txt_file->recon_plan_index");
+    recon_plan_index->len32 = MAX_(recon_plan_index->len32, vb->vblock_i+1);
+
+    uint64_t recon_plan_vb_start = recon_plan->len;
+    
     // we create a "Full VB" recon plan if VB has no Supplementary/Secondary or Dependent lines 
     // Other VBs might have them. If no VB has them, we will get rid of the recon_plan in sam_zip_generate_recon_plan
     if (!gc_lines_len) {
@@ -801,6 +823,9 @@ void sam_zip_gc_after_compute_main (VBlockSAMP vb)
             .flavor = PLAN_END_OF_VB,
         }; 
     }
+
+    *B(BufWord, *recon_plan_index, vb->vblock_i) = (BufWord){ .index = recon_plan_vb_start, 
+                                                              .len   = recon_plan->len - recon_plan_vb_start };
 }
 
 //-------------------
@@ -970,6 +995,9 @@ void sam_zip_generate_recon_plan (void)
 
     // case: MAIN component (not all full VBs - we have some PRIM and/or DEPN lines) - plan that incorporates everything 
     else {
+        // recon_plan may have VBs out of order - fix that now
+        recon_plan_sort_by_vb (txt_file); 
+
         // update recon plan with gencomp lines
         uint32_t conc_writing_vbs = sam_zip_recon_plan_add_gc_lines();
         
@@ -1020,7 +1048,7 @@ void sam_stats_reallocate (void)
     if (ZCTX(OPTION_NM_i)->txt_len) // we have NM:i in this file
         sam_stats_reaccount_one (OPTION_NM_i, OPTION_SA_NM);
     
-    // case: no NM:i in this field, and hence also no SA:Z - all OPTION_SA_NM data is due to "0" added in sam_seg_sa_group_stuff, as we will account for it as 
+    // case: no NM:i in this field, and hence also no SA:Z - all OPTION_SA_NM data is due to "0" added in sam_seg_sag_stuff, as we will account for it as 
     // belonging to SAM_SAG
     else 
         sam_stats_reaccount_one (SAM_SAG, OPTION_SA_NM); 

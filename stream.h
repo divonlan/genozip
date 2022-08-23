@@ -10,11 +10,11 @@
 
 typedef struct stream_ *StreamP;
 
-#define MAX_ARGC 30 // maximum number of arguments including exec_name
+#define MAX_ARGC 50 // maximum number of arguments including exec_name
 
 #define DEFAULT_PIPE_SIZE 65536
 #define SKIP_ARG ((rom )-1)
-extern StreamP stream_create (StreamP parent_stream, uint32_t from_stream, uint32_t from_stream_stderr, uint32_t to_stream, 
+extern StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint32_t from_stream_stderr, uint32_t to_stream, 
                               FILE *redirect_stdout_file, rom input_url_name, bool input_stdin, rom reason,
                               rom exec_name, ...);
 

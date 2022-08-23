@@ -251,6 +251,11 @@ static void zip_generate_b250 (VBlockP vb, Context *ctx)
 
 static void zip_resize_local (VBlockP vb, Context *ctx)
 {
+    if (!ctx->local.len) {
+        ctx->ltype = LT_UINT8;
+        return;
+    }
+    
     ARRAY (int64_t, src, ctx->local);
 
     // search for the largest (stop if largest so far requires 32bit)
@@ -398,6 +403,8 @@ done:
 // we move it to local instead of needlessly cluttering the global dictionary
 static void zip_handle_unique_words_ctxs (VBlockP vb)
 {
+    START_TIMER;
+
     for_ctx {
         if (!ctx->nodes.len || ctx->nodes.len != ctx->b250.len) continue; // check that all words are unique (and new to this vb)
         if (VB_DT(DT_VCF) && dict_id_is_vcf_format_sf (ctx->dict_id)) continue; // this doesn't work for FORMAT fields
@@ -413,17 +420,18 @@ static void zip_handle_unique_words_ctxs (VBlockP vb)
         buf_free (ctx->b250);
         ctx->flags.all_the_same = false;
     }
+
+    COPY_TIMER (zip_handle_unique_words_ctxs);
 }
 
 static void zip_generate_local (VBlockP vb, ContextP ctx)
 {
     START_TIMER;
-
-    if (!ctx->local.len) return;
-
+    
     ASSERT (ctx->dict_id.num, "tag_name=%s did_i=%u: ctx->dict_id=0 despite ctx->local containing data", ctx->tag_name, (unsigned)(ctx - vb->contexts));
 
-    if (ctx->ltype == LT_DYN_INT || ctx->ltype == LT_DYN_INT_H || ctx->ltype == LT_DYN_INT_h) 
+    bool resizeable = ctx->ltype == LT_DYN_INT || ctx->ltype == LT_DYN_INT_H || ctx->ltype == LT_DYN_INT_h; 
+    if (resizeable) 
         zip_resize_local (vb, ctx);
 
     else {
@@ -477,8 +485,9 @@ static void zip_generate_local (VBlockP vb, ContextP ctx)
 
     codec_assign_best_codec (vb, ctx, NULL, SEC_LOCAL);
 
-    if (flag.debug_generate) iprintf ("%s: %s.local ltype=%s len=%"PRIu64" codec=%s\n", 
-                                      VB_NAME, ctx->tag_name, lt_name (ctx->ltype), ctx->local.len, codec_name(ctx->lcodec));
+    if (flag.debug_generate) 
+        iprintf ("%s: %s.local ltype=%s%s len=%"PRIu64" codec=%s\n", VB_NAME, ctx->tag_name, 
+                 lt_name (ctx->ltype), resizeable ? " (resized)" : "", ctx->local.len, codec_name(ctx->lcodec));
 }
 
 // generate & write b250 data for all contexts - do them in random order, to reduce the chance of multiple doing codec_assign_best_codec for the same context at the same time
@@ -526,7 +535,7 @@ void zip_compress_all_contexts_b250 (VBlockP vb)
 }
 
 // generate & write local data for all contexts - in random order, to reduce the chance of multiple doing codec_assign_best_codec for the same context at the same time
-static void compress_all_contexts_local (VBlockP vb)
+static void zip_compress_all_contexts_local (VBlockP vb)
 {
     START_TIMER;
     threads_log_by_vb (vb, "zip", "START COMPRESSING LOCAL", 0);
@@ -555,7 +564,7 @@ static void compress_all_contexts_local (VBlockP vb)
 
             if (flag.show_time) codec_show_time (vb, "LOCAL", ctx->tag_name, ctx->lcodec);
 
-            if (HAS_DEBUG_SEG(ctx)) iprintf ("%s: compress_all_contexts_local: %s: LOCAL.len=%"PRIu64" LOCAL.param=%"PRIu64"\n", 
+            if (HAS_DEBUG_SEG(ctx)) iprintf ("%s: zip_compress_all_contexts_local: %s: LOCAL.len=%"PRIu64" LOCAL.param=%"PRIu64"\n", 
                                             VB_NAME, ctx->tag_name, ctx->local.len, ctx->local.param);
 
             START_TIMER; // for compressor_time
@@ -685,7 +694,7 @@ static void zip_compress_one_vb (VBlockP vb)
 
     // calculate the digest contribution of this VB, and the digest snapshot of this VB
     if (!flag.make_reference && !flag.data_modified) 
-        digest_one_vb (vb); // serializes VBs in order
+        digest_one_vb (vb, true, NULL); // serializes VBs in order
 
     // allocate memory for the final compressed data of this vb. allocate 33% of the
     // vb size on the original file - this is normally enough. if not, we will realloc downstream
@@ -697,6 +706,7 @@ static void zip_compress_one_vb (VBlockP vb)
 
     // split each line in this VB to its components
     threads_log_by_vb (vb, "zip", "START SEG", 0);
+
     seg_all_data_lines (vb);
 
     // identify dictionaries that contain only singleton words (eg a unique id) and move the data from dict to local
@@ -715,31 +725,41 @@ static void zip_compress_one_vb (VBlockP vb)
                          "Results in the format [codec size clock] are in order of quality - the first was selected.\n", CODEC_ASSIGN_SAMPLE_SIZE);
     }
 
+    bool need_compress = !flag.make_reference && !flag.seg_only;
+
     if (vb->vblock_i != 1) {
-        if (!flag.make_reference && !flag.seg_only) 
+        if (need_compress) 
             // while vb_i=1 is busy merging, other VBs can handle local
-            compress_all_contexts_local (vb); // not yet locals that consist of singletons transferred from dict to local in ctx_merge_in_vb_ctx (these will have len=0 at this point)
+            zip_compress_all_contexts_local (vb); // not yet locals that consist of singletons transferred from dict to local in ctx_merge_in_vb_ctx (these will have len=0 at this point)
         
         // let vb_i=1 merge first, as it has the sorted dictionaries, other vbs can go in arbitrary order. 
-        START_TIMER;
-        mutex_wait (wait_for_vb_1_mutex);
-        COPY_TIMER(wait_for_vb_1_mutex);
+        mutex_wait (wait_for_vb_1_mutex, true);
     }
+
+    dispatcher_increment_progress ("compress1", vb->txt_size / 2); // 1/2 compression done
 
     // merge new words added in this vb into the z_file.contexts, ahead of zip_generate_b250().
     // writing indices based on the merged dictionaries. dictionaries are compressed. 
     // all this is done while holding exclusive access to the z_file dictionaries.
     // note: vb>=2 will block here, until vb=1 is completed
     threads_log_by_vb (vb, "zip", "START MERGE", 0);
+
+    // for --make-reference we serialize merging by VB, so that contigs get their word_index in the order of the reference file
+    if (flag.make_reference) serializer_lock (make_ref_merge_serializer, vb->vblock_i);
+
     ctx_merge_in_vb_ctx(vb);
+
+    if (flag.make_reference) serializer_unlock (make_ref_merge_serializer);
 
     if (vb->vblock_i == 1) 
         mutex_unlock (wait_for_vb_1_mutex); 
 
-    if (!flag.make_reference && !flag.seg_only) {
-        compress_all_contexts_local (vb); // for vb=1 - all locals ; for vb>1 - locals which consist of singletons set in ctx_merge_in_vb_ctx (other locals were already compressed above)
+    if (need_compress) {
+        zip_compress_all_contexts_local (vb); // for vb=1 - all locals ; for vb>1 - locals which consist of singletons set in ctx_merge_in_vb_ctx (other locals were already compressed above)
         zip_compress_all_contexts_b250 (vb);
     }
+
+    dispatcher_increment_progress ("compress2", 1 - vb->txt_size / 2); // 1/2 compression done
 
     // merge in random access - IF it is used
     random_access_merge_in_vb (vb, 0);
@@ -749,8 +769,7 @@ static void zip_compress_one_vb (VBlockP vb)
     DT_FUNC (vb, zip_after_compress)(vb);
 
     // tell dispatcher this thread is done and can be joined.
-    // thread safety: this isn't protected by a mutex as it will just be false until it at some point turns to true
-    vb->is_processed = true; 
+    vb_set_is_processed (vb); 
 
     COPY_TIMER (compute);
 }
@@ -821,11 +840,11 @@ dispatch:
     vb->dispatch = READY_TO_COMPUTE;
     txt_file->num_vbs_dispatched++;
 
-    if (!vb->comp_i) // note: we only update the MAIN comp from here, gen comps are updated
+    if (vb->comp_i == COMP_MAIN) // note: we only update the MAIN comp from here, gen comps are updated
         gencomp_a_main_vb_has_been_dispatched();
 }
 
-// called main thread, in order of VBs
+// called main thread, as VBs complete (might be out-of-order)
 static void zip_complete_processing_one_vb (VBlockP vb)
 {
     DT_FUNC (vb, zip_after_compute)(vb);
@@ -839,6 +858,8 @@ static void zip_complete_processing_one_vb (VBlockP vb)
         zfile_output_processed_vb (vb);
     
     zip_update_txt_counters (vb);
+
+    dispatcher_increment_progress ("z_write", vb->txt_size); // writing done.
 
     z_file->num_vbs++;
     txt_file->num_vbs++;
@@ -874,24 +895,36 @@ void zip_one_file (rom txt_basename,
 
     // read the txt header, assign the global variables, and write the compressed header to the GENOZIP file
     int64_t txt_header_offset = -1;
-    bool success = txtheader_zip_read_and_compress (&txt_header_offset, flag.zip_comp_i); // also increments z_file->num_txts_so_far
+    int64_t txt_header_len = txtheader_zip_read_and_compress (&txt_header_offset, flag.zip_comp_i); // also increments z_file->num_txts_so_far
+    
+    bool success = (txt_header_len >= -1);
     if (!success) goto finish; // eg 2nd+ VCF file cannot bind, because of different sample names
 
     DT_FUNC (txt_file, zip_initialize)();
 
     segconf_calculate();
 
+    DT_FUNC (txt_file, zip_after_segconf)();
+
     max_lines_per_vb=0;
+        
+    int64_t est_seggable_size = txtfile_get_seggable_size();
+
+    uint64_t target_progress = est_seggable_size * 3 // read, seg, compress
+                             + (!flag.make_reference && !flag.seg_only) * est_seggable_size; // write
 
     dispatcher = 
         dispatcher_fan_out_task ("zip", txt_basename, 
-                                 txt_file->no_progress ? PROGRESS_MESSAGE : PROGRESS_PERCENT,
-                                 txt_file->no_progress ? "Compressing..." : NULL, 
-                                 false,  
+                                 target_progress, // target progress: 1 for each read, compute, write
+                                 target_progress ? NULL : "Compressing...",
+                                 !flag.make_reference && !z_is_dvcf,   // allow callbacks to zip_complete_processing_one_vb not in order of VBs (not allowed for make-reference as contigs need to be in consistent order; not supported yet for DVCF)
+                                 false,           // not test mode
                                  flag.xthreads, prev_file_last_vb_i, 5000,
                                  zip_prepare_one_vb_for_dispatching, 
                                  zip_compress_one_vb, 
                                  zip_complete_processing_one_vb);
+
+    dispatcher_increment_progress ("txt_header", txt_header_len * 3); // txt_header was already read, computed and written
 
     // go back and update some fields in the txt header's section header and genozip header 
     if (txt_header_offset >= 0) // note: this will be -1 if we didn't write a SEC_TXT_HEADER section for any reason
@@ -901,7 +934,7 @@ void zip_one_file (rom txt_basename,
     bgzf_compress_bgzf_section();
 
     // if this a non-bound file, or the last component of a bound file - write the genozip header, random access and dictionaries
-finish:
+finish:   
     if (!flag.zip_comp_i)
         z_file->txt_disk_so_far_bind += (int64_t)txt_file->disk_so_far + (txt_file->codec==CODEC_BGZF)*BGZF_EOF_LEN;
 
@@ -929,6 +962,6 @@ finish:
     prev_file_first_vb_i = first_vb_i;
     dispatcher_finish (&dispatcher, &prev_file_last_vb_i, z_file->z_closes_after_me && !is_last_user_txt_file,
                        flag.show_memory && z_file->z_closes_after_me && is_last_user_txt_file);
-    
-    DT_FUNC (txt_file, zip_finalize)();
+                            
+    DT_FUNC (txt_file, zip_finalize)(is_last_user_txt_file);
 }

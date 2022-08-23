@@ -21,14 +21,14 @@
 //                     polymorphism. ‘D’ and ‘I’ indicate a deletion and an insertion, respectively." (http://daehwankimlab.github.io/hisat2/manual/)
 void sam_seg_HISAT2_Zs_Z (VBlockSAMP vb, STRp(zs), unsigned add_bytes)
 {
-        static const MediumContainer con = {
-            .nitems_lo   = 3, 
-            .drop_final_repsep = true,
-            .repsep      = {','},
-            .items       = { { .dict_id={.id="Z0s" }, .separator = {'|'} },
-                             { .dict_id={.id="Z1s" }, .separator = {'|'} },
-                             { .dict_id={.id="Z2s" },                    } }
-        };
+    static const MediumContainer con = {
+        .nitems_lo   = 3, 
+        .drop_final_repsep = true,
+        .repsep      = {','},
+        .items       = { { .dict_id={.id="Z0s" }, .separator = {'|'} },
+                            { .dict_id={.id="Z1s" }, .separator = {'|'} },
+                            { .dict_id={.id="Z2s" },                    } }
+    };
 
     seg_array_of_struct (VB, CTX(OPTION_Zs_Z), con, STRa(zs), NULL, add_bytes);
 }

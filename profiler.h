@@ -19,18 +19,26 @@ typedef struct {
         piz_get_line_subfields, zip_generate_b250, zip_generate_local, zip_compress_ctxs, ctx_merge_in_vb_ctx,
         zfile_uncompress_section, codec_assign_best_codec, compressor_pbwt, compressor_longr, 
         compressor_rans, compressor_arith, compressor_normq,
+        codec_domq_reconstruct, codec_domq_reconstruct_dom_run, codec_longr_reconstruct,
         reconstruct_vb, buf_alloc, dispatcher_recycle_vbs, txtfile_read_header, txtfile_read_vblock,
         seg_all_data_lines, codec_hapmat_count_alt_alleles, seg_initialize,
-        ctx_clone, qname_seg, sam_cigar_seg, sam_seg_BWA_XA_pos, sam_sa_prim_finalize_ingest, sam_zip_prim_ingest_vb,
-        sam_seg_SEQ, sam_seg_QUAL, sam_seg_is_gc_line, sam_seg_aux_all, sam_seg_MD_Z_analyze, sam_seg_bsseeker2_XG_Z_analyze,
-        sam_seg_sa_group_stuff, sam_cigar_binary_to_textual, squank_seg, bam_seq_to_sam, sam_seg_SEQ_vs_ref, aligner_seg_seq,
+        ctx_clone, qname_seg, sam_cigar_seg, sam_seg_BWA_XA_Z, sam_seg_BWA_XA_pos, sam_sa_prim_finalize_ingest, sam_zip_prim_ingest_vb,
+        sam_seg_SEQ, sam_seg_verify_saggy_line_SEQ, sam_seg_SEQ_vs_ref, sam_seg_bisulfite_M, reconstruct_SEQ_copy_sag_prim, 
+        sam_analyze_copied_SEQ, sam_cigar_special_CIGAR, sam_piz_special_QUAL,
+        sam_seg_QUAL, sam_seg_is_gc_line, sam_seg_aux_all, sam_seg_MD_Z_analyze, sam_seg_bsseeker2_XG_Z_analyze,
+        sam_seg_bismark_XM_Z, sam_seg_bsbolt_XB, sam_seg_AS_i, sam_seg_NM_i, sam_seg_SA_Z, sam_seg_BWA_XS_i,
+        scan_index_qnames_preprocessing, sam_piz_sam2fastq_QUAL, sam_piz_sam2bam_QUAL,
+        sam_seg_sag_stuff, sam_cigar_binary_to_textual, squank_seg, bam_seq_to_sam, aligner_seg_seq,
         digest,dict_io_compress_one_fragment, aligner_best_match, aligner_get_word_from_seq,
         aligner_get_match_len, generate_rev_complement_genome, ref_contigs_compress,
         vcf_linesort_compress_qsort, generate_recon_plan, 
         piz_read_global_area, ref_load_stored_reference, dict_io_read_all_dictionaries, dict_io_build_word_lists, 
-        ref_read_one_range, ref_uncompress_one_range, vb_release_vb_do, vb_destroy_vb,
-        wait_for_vb_1_mutex, sam_load_groups_add_one_prim_vb, recon_plan_compress_one_fragment,
-        sam_zip_recon_plan_add_gc_lines, sam_zip_gc_calc_depn_vb_info, sam_reconstruct_SEQ, aligner_reconstruct_seq,
+        ref_read_one_range, ref_uncompress_one_range, vb_release_vb_do, vb_destroy_vb, ref_verify_before_exit,
+        sam_load_groups_add_one_prim_vb, recon_plan_compress_one_fragment,
+        sam_zip_recon_plan_add_gc_lines, sam_zip_gc_calc_depn_vb_info, sam_reconstruct_SEQ_vs_ref, aligner_reconstruct_seq,
+        sam_bismark_piz_update_meth_call,
+        zip_handle_unique_words_ctxs, ctx_sort_dictionaries_vb_1, random_access_merge_in_vb, gencomp_absorb_vb_gencomp_lines,
+        vcf_linesort_merge_vb,
         tmp1, tmp2, tmp3, tmp4, tmp5;
         rom next_name, next_subname;
         unsigned num_vbs, max_vb_size_mb;
@@ -64,7 +72,7 @@ typedef struct timespec TimeSpecType;
 
 #define COPY_TIMER(res)       COPY_TIMER_FULL(vb, res)
 #define COPY_TIMER_VB(vb,res) COPY_TIMER_FULL((vb), res)
-#define COPY_TIMER_COMPRESS(res)  ({ if (!vb->z_data_test.param) COPY_TIMER(res); }) // account only if not running from codec_assign_best_codec, because it accounts for itself
+#define COPY_TIMER_COMPRESS(res)  ({ if (!in_assign_codec) COPY_TIMER(res); }) // account only if not running from codec_assign_best_codec, because it accounts for itself
 
 #define PAUSE_TIMER(vb) \
     TimeSpecType on_hold_timer; \

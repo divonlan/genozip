@@ -806,6 +806,8 @@ void bits_print_binary_word_do (uint64_t word, rom msg, FILE *file)
 // Print a string representations for a given region, using given on/off characters.
 void bits_print_substr (rom msg, ConstBitsP bits,uint64_t start, uint64_t length, FILE *file)
 {
+    if (!file) file = info_stream;
+    
     length = MIN_(length, bits->nbits - start);
 
     if (msg) fprintf (file, "%s: ", msg);

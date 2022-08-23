@@ -59,8 +59,10 @@ void vcf_zip_initialize (void)
 }
 
 // called after each file
-void vcf_zip_finalize (void)
+void vcf_zip_finalize (bool is_last_user_txt_file)
 {
+    if (is_last_user_txt_file) return; // no need to waste time freeing if this is the last file - the process will die momentarily
+
     if (z_is_dvcf) gencomp_destroy();
 }
 
@@ -147,14 +149,15 @@ void vcf_seg_initialize (VBlockP vb_)
 {
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
-    ctx_set_no_stons (VB, 18, VCF_CHROM, VCF_oCHROM, VCF_FORMAT, VCF_INFO, VCF_oSTATUS, VCF_COORDS, 
+    ctx_set_no_stons (VB, VCF_CHROM, VCF_oCHROM, VCF_FORMAT, VCF_INFO, VCF_oSTATUS, VCF_COORDS, 
                       VCF_TOPLEVEL, VCF_TOPLUFT, VCF_LIFT_REF, VCF_COPYPOS, VCF_oXSTRAND, 
                       VCF_POS, VCF_oPOS, VCF_LINE_NUM, INFO_HGVS_del_start_pos, INFO_HGVS_ins_start_pos, INFO_HGVS_ins_start_pos, // as required by seg_pos_field
                       DID_EOL);
 
-    ctx_set_store (VB, STORE_INDEX, 6, VCF_oSTATUS, VCF_COORDS, VCF_oXSTRAND, VCF_CHROM, VCF_oCHROM, DID_EOL);
+    ctx_set_store (VB, STORE_INDEX, VCF_oSTATUS, VCF_COORDS, VCF_oXSTRAND, VCF_CHROM, VCF_oCHROM, DID_EOL);
 
-    ctx_set_store (VB, STORE_INT, 4, VCF_POS, VCF_oPOS, VCF_LINE_NUM, DID_EOL); // as required by seg_pos_field
+    ctx_set_store (VB, STORE_INT, VCF_POS, VCF_oPOS, VCF_LINE_NUM, FORMAT_DP, FORMAT_MIN_DP,
+    DID_EOL); 
 
     CTX(VCF_oCHROM)->  no_vb1_sort = true; // indices need to remain as in the Chain file
     CTX(VCF_oSTATUS)-> no_vb1_sort = true; // indices need to remaining matching to LiftOverStatus
@@ -173,10 +176,10 @@ void vcf_seg_initialize (VBlockP vb_)
     }
 
     // consolidate stats
-    ctx_consolidate_stats (VB, VCF_REFALT, 3, VCF_oREFALT, VCF_LIFT_REF, DID_EOL);
-    ctx_consolidate_stats (VB, VCF_POS,    3, VCF_oPOS, VCF_COPYPOS, DID_EOL);
-    ctx_consolidate_stats (VB, VCF_CHROM,  2, VCF_oCHROM, DID_EOL);
-    ctx_consolidate_stats (VB, VCF_COORDS, 8, INFO_PRIM, INFO_PREJ, INFO_LUFT, INFO_LREJ, VCF_oSTATUS, VCF_COPYSTAT, VCF_oXSTRAND, DID_EOL);
+    ctx_consolidate_stats (VB, VCF_REFALT, VCF_oREFALT, VCF_LIFT_REF, DID_EOL);
+    ctx_consolidate_stats (VB, VCF_POS,    VCF_oPOS, VCF_COPYPOS, DID_EOL);
+    ctx_consolidate_stats (VB, VCF_CHROM,  VCF_oCHROM, DID_EOL);
+    ctx_consolidate_stats (VB, VCF_COORDS, INFO_PRIM, INFO_PREJ, INFO_LUFT, INFO_LREJ, VCF_oSTATUS, VCF_COPYSTAT, VCF_oXSTRAND, DID_EOL);
 
     // room for already existing FORMATs from previous VBs
     vb->format_mapper_buf.len = vb->format_contexts.len = CTX(VCF_FORMAT)->ol_nodes.len;
@@ -212,8 +215,8 @@ void vcf_seg_initialize (VBlockP vb_)
     ctx_create_node (VB, VCF_COPYPOS,  (char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPYPOS  }, 2);
     
     if (segconf.has[FORMAT_RGQ]) {
-        seg_mux_init (VB, 2, VCF_SPECIAL_MUX_BY_HAS_RGQ, VCF_QUAL, VCF_QUAL, STORE_NONE, LT_TEXT, false, (MultiplexerP)&vb->mux_QUAL, "01");
-        seg_mux_init (VB, 2, VCF_SPECIAL_MUX_BY_HAS_RGQ, VCF_INFO, VCF_INFO, STORE_NONE, LT_TEXT, false, (MultiplexerP)&vb->mux_INFO, "01");        
+    seg_mux_init (VB, CTX(VCF_QUAL), 2, VCF_SPECIAL_MUX_BY_HAS_RGQ, false, (MultiplexerP)&vb->mux_QUAL, "01");
+        seg_mux_init (VB, CTX(VCF_INFO), 2, VCF_SPECIAL_MUX_BY_HAS_RGQ, false, (MultiplexerP)&vb->mux_INFO, "01");        
     }
 
     vcf_info_seg_initialize(vb);
@@ -433,7 +436,7 @@ static inline void vcf_seg_QUAL (VBlockVCFP vb, STRp(qual))
 
     // case: GVCF - multiplex by has_RGQ
     if (!segconf.running && segconf.has[FORMAT_RGQ]) {
-        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, (MultiplexerP)&vb->mux_QUAL, vb->line_has_RGQ);
+        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, VCF_QUAL, (MultiplexerP)&vb->mux_QUAL, vb->line_has_RGQ);
         seg_by_ctx (VB, STRa(qual), channel_ctx, qual_len+1);
         seg_by_did (VB, STRa(vb->mux_QUAL.snip), VCF_QUAL, 0);
     }

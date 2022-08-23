@@ -20,6 +20,7 @@
 #include "segconf.h"
 #include "biopsy.h"
 #include "zip.h"
+#include "dispatcher.h"
 #include "zlib/zlib.h"
 #include "libdeflate/libdeflate.h"
 #include "bzlib/bzlib.h"
@@ -114,7 +115,7 @@ static inline uint32_t txtfile_read_block_bz2 (VBlockP vb, uint32_t max_bytes)
 // We read data with a *decompressed* size up to max_uncomp. vb->scratch always contains only full BGZF blocks
 static inline uint32_t txtfile_read_block_bgzf (VBlockP vb, int32_t max_uncomp /* must be signed */, bool uncompress)
 {
-    #define uncomp_len param // we use vb->compress.param to hold the uncompressed length of the bgzf data in vb->compress
+    #define uncomp_len prm32[0] // we use vb->compress.param to hold the uncompressed length of the bgzf data in vb->compress
 
     uint32_t block_comp_len, block_uncomp_len, this_uncomp_len=0;
 
@@ -130,7 +131,7 @@ static inline uint32_t txtfile_read_block_bgzf (VBlockP vb, int32_t max_uncomp /
         // case: we have data passed to us from file_open_txt_read - handle it first
         if (!vb->txt_data.len && evb->scratch.len) {
             block_uncomp_len = evb->scratch.uncomp_len;
-            block_comp_len   = evb->scratch.len;
+            block_comp_len   = evb->scratch.len32;
 
             // if we're reading a VB (not the txt header) - copy the compressed data from evb to vb
             if (evb != vb) {
@@ -146,8 +147,13 @@ static inline uint32_t txtfile_read_block_bgzf (VBlockP vb, int32_t max_uncomp /
                   .txt_size         = block_uncomp_len,
                   .comp_size        = block_comp_len,
                   .is_decompressed  = false };           
+
+            // note: this is the first BGZF block of the file, so vb->bgzf_i remains 0
         }
         else {
+            if (!vb->bgzf_blocks.len)
+                vb->vb_bgzf_i = txt_file->bgzf_isizes.len; // first bgzf block number for this VB
+
             block_uncomp_len = (uint32_t)bgzf_read_block (txt_file, BAFT8 (vb->scratch), &block_comp_len, false);
             
             // check for corrupt data - at this point we've already confirm the file is BGZF so not expecting a different block
@@ -155,8 +161,8 @@ static inline uint32_t txtfile_read_block_bgzf (VBlockP vb, int32_t max_uncomp /
                 // dump to file
                 char dump_fn[strlen(txt_name)+100];
                 sprintf (dump_fn, "%s.vb-%u.bad-bgzf.bad-offset-0x%X", txt_name, vb->vblock_i, vb->scratch.len32);
-                Buffer dump_buffer = vb->scratch; // a copy
-                dump_buffer.len   += block_comp_len; // compressed size
+                Buffer dump_buffer = vb->scratch;    // a copy
+                dump_buffer.len32 += block_comp_len; // compressed size
                 buf_dump_to_file (dump_fn, &dump_buffer, 1, false, false, true, false);
 
                 ABORT ("%s: Invalid BGZF block: block_comp_len=%u. Entire BGZF data of this vblock dumped to %s, bad block stats at offset 0x%X",
@@ -167,13 +173,13 @@ static inline uint32_t txtfile_read_block_bgzf (VBlockP vb, int32_t max_uncomp /
             if (block_comp_len) {
                 buf_alloc (vb, &vb->bgzf_blocks, 1, 1.2 * max_uncomp / BGZF_MAX_BLOCK_SIZE, BgzfBlockZip, 2, "bgzf_blocks");
                 BNXT (BgzfBlockZip, vb->bgzf_blocks) = (BgzfBlockZip)
-                    { .txt_index        = vb->txt_data.len, // after passed-down data and all previous blocks
-                      .compressed_index = vb->scratch.len,
+                    { .txt_index        = vb->txt_data.len32,  // after passed-down data and all previous blocks
+                      .compressed_index = vb->scratch.len32,
                       .txt_size         = block_uncomp_len,
                       .comp_size        = block_comp_len,
                       .is_decompressed  = !block_uncomp_len }; // EOF block is always considered decompressed           
 
-                vb->scratch.len += block_comp_len;   // compressed size
+                vb->scratch.len32 += block_comp_len;   // compressed size
             }
 
             // case EOF - happens in 2 cases: 1. EOF block (block_comp_len=BGZF_EOF_LEN) or 2. no EOF block (block_comp_len=0)
@@ -339,10 +345,14 @@ void txtfile_read_header (bool is_first_txt)
     }
 
     // the excess data is for the next vb to read 
-    if (evb->txt_data.len) 
+    if (evb->txt_data.len32 > header_len) { 
         buf_copy (evb, &txt_file->unconsumed_txt, &evb->txt_data, char, header_len, 0, "txt_file->unconsumed_txt");
-    
-    txt_file->txt_data_so_far_single = txt_file->header_size = evb->txt_data.len = header_len; // trim to uncompressed length of txt header
+        evb->txt_data.len = header_len; // trim to uncompressed length of txt header
+
+        bgzf_copy_unconsumed_blocks (evb); // copy unconsumed or partially consumed bgzf_blocks to txt_file->unconsumed_bgzf_blocks
+    }
+
+    txt_file->txt_data_so_far_single = txt_file->header_size = header_len; 
 
     biopsy_take (evb);
 
@@ -407,6 +417,11 @@ done:
     return (uint32_t)pass_to_next_vb_len;
 }
 
+static bool seggable_size_is_modifiable (void)
+{
+    Codec c = txt_file->source_codec;
+    return c==CODEC_GZ || c==CODEC_BGZF || c==CODEC_CRAM || c==CODEC_BZ2 || c==CODEC_BAM;
+}
 // estimate the size of the txt_data of the file - i.e. the uncompressed data excluding the header - 
 // based on the observed or assumed compression ratio of the source compression so far
 static void txtfile_set_seggable_size (void)
@@ -415,7 +430,7 @@ static void txtfile_set_seggable_size (void)
                        : flag.stdin_size     ? flag.stdin_size // user-provided size
                        :                       0; // our estimate will be 0 
 
-    float source_comp_ratio=1;
+    double source_comp_ratio=1;
     switch (txt_file->source_codec) {
         case CODEC_GZ:   // for internal compressors, we use the observed source-compression ratio
         case CODEC_BGZF: 
@@ -424,23 +439,25 @@ static void txtfile_set_seggable_size (void)
             if (txt_file->is_remote || txt_file->redirected)
                 source_comp_ratio = 4;
             else {    
-                float plain_len  = txt_file->txt_data_so_far_single + txt_file->unconsumed_txt.len;
-                float gz_bz2_len = file_tell (txt_file, false); // should always work for bz2 or gz. For BZ2 this includes up to 64K read from disk but still in its internal buffers
+                double plain_len  = txt_file->txt_data_so_far_single + txt_file->unconsumed_txt.len;
+                double gz_bz2_len = file_tell (txt_file, false); // should always work for bz2 or gz. For BZ2 this includes up to 64K read from disk but still in its internal buffers
                 source_comp_ratio = plain_len / gz_bz2_len;
             }
             break;
         }
         
+        // external decompressors
         case CODEC_BCF:  source_comp_ratio = 10; break; // note: .bcf files might be compressed or uncompressed - we have no way of knowing as "bcftools view" always serves them to us in plain VCF format. These ratios are assuming the bcf is compressed as it normally is.
         case CODEC_XZ:   source_comp_ratio = 15; break;
         case CODEC_CRAM: source_comp_ratio = 25; break;
         case CODEC_ZIP:  source_comp_ratio = 3;  break;
+
         case CODEC_NONE: source_comp_ratio = 1;  break;
 
         default: ABORT ("unspecified txt_file->codec=%s (%u)", codec_name (txt_file->codec), txt_file->codec);
     }
         
-    int64_t est_seggable_size = MAX_(0.0, (float)disk_size * source_comp_ratio - (float)txt_file->header_size);
+    int64_t est_seggable_size = MAX_(0.0, (double)disk_size * source_comp_ratio - (double)txt_file->header_size);
     __atomic_store_n (&txt_file->est_seggable_size, est_seggable_size, __ATOMIC_RELAXED); // atomic loading for thread safety
 
     if (segconf.running)
@@ -476,8 +493,10 @@ void txtfile_read_vblock (VBlockP vb)
     if (txt_file->unconsumed_txt.len) {
         uint64_t bytes_moved = MIN_(txt_file->unconsumed_txt.len, max_memory_per_vb);
         buf_copy (vb, &vb->txt_data, &txt_file->unconsumed_txt, char, 0, bytes_moved, "txt_data");
-        buf_copy (evb, &txt_file->unconsumed_txt, &txt_file->unconsumed_txt, char, bytes_moved, txt_file->unconsumed_txt.len - bytes_moved, NULL);
+        buf_remove (txt_file->unconsumed_txt, char, 0, bytes_moved);
     }
+
+    bgzf_zip_init_vb (vb); 
 
     bool always_uncompress = flag.pair == PAIR_READ_2 || // if we're reading the 2nd paired file, fastq_txtfile_have_enough_lines needs the whole data
                              flag.make_reference      || // unconsumed callback for make-reference needs to inspect the whole data
@@ -502,7 +521,7 @@ void txtfile_read_vblock (VBlockP vb)
         // if there is room left for only a partial BGZF block (we can't read partial blocks)
         uint32_t filled_up = max_memory_per_vb - (txt_file->codec == CODEC_BGZF) * BGZF_MAX_BLOCK_SIZE;
 
-        if (!len || vb->txt_data.len >= filled_up) {  // EOF or we have filled up the allocted memory
+        if (!len || vb->txt_data.len >= filled_up) {  // EOF or we have filled up the allocated memory
 
             // case: this is the 2nd file of a fastq pair - make sure it has at least as many fastq "lines" as the first file
             uint32_t my_lines, her_lines;
@@ -543,14 +562,11 @@ void txtfile_read_vblock (VBlockP vb)
 
         // note: we might some unconsumed data, pass it up to the next vb. possibly we still have unconsumed data (can happen if DVCF reject
         // data was passed down from the txt header, greater than max_memory_per_vb)
-        buf_alloc (evb, &txt_file->unconsumed_txt, pass_to_next_vb_len, 0, char, 1, "txt_file->unconsumed_txt");
-        memmove (Bc (txt_file->unconsumed_txt, pass_to_next_vb_len), B1STc (txt_file->unconsumed_txt), txt_file->unconsumed_txt.len);
-        memcpy (B1STc (txt_file->unconsumed_txt), Bc (vb->txt_data, vb->txt_data.len - pass_to_next_vb_len), pass_to_next_vb_len);
-        txt_file->unconsumed_txt.len += pass_to_next_vb_len;
+        buf_insert (evb, txt_file->unconsumed_txt, char, 0, Btxt (vb->txt_data.len - pass_to_next_vb_len), pass_to_next_vb_len, "txt_file->unconsumed_txt");
+        vb->txt_data.len32 -= pass_to_next_vb_len; 
 
-        // now, if our data is bgzf-compressed, txt_data.len becomes shorter than indicated by vb->bgzf_blocks. that's ok - all that data
-        // is decompressed and passed-down to the next VB. because it has been decompressed, the compute thread won't try to decompress it again
-        vb->txt_data.len -= pass_to_next_vb_len; 
+        // copy unconsumed or partially consumed bgzf_blocks to txt_file->unconsumed_bgzf_blocks
+        bgzf_copy_unconsumed_blocks (vb); 
 
         // if is possible we reached eof but still have pass_up_data - this happens eg in make-reference when a
         // VB takes only one contig from txt_data and pass up the rest - reset eof so that we come back here to process the rest
@@ -563,10 +579,13 @@ void txtfile_read_vblock (VBlockP vb)
 
     zip_init_vb (vb);
 
-    txtfile_set_seggable_size();
+    if (segconf.running || seggable_size_is_modifiable())
+        txtfile_set_seggable_size();
 
-    if (!segconf.running)
+    if (!segconf.running) {
         biopsy_take (vb);
+        dispatcher_increment_progress ("read", vb->txt_data.len);
+    }
 
     COPY_TIMER (txtfile_read_vblock);
 }
