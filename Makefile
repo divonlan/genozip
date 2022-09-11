@@ -154,6 +154,9 @@ OPT_EXECUTABLES   = genozip-opt$(EXE)   genounzip-opt$(EXE)   genocat-opt$(EXE) 
 ifeq ($(CC),gcc)
 	OPTFLAGS += -Ofast -std=gnu11 -fms-extensions
 	DEBUGFLAGS += -std=gnu11 -DDEBUG -g -O0 -fms-extensions
+else ifeq ($(CC),clang)
+	OPTFLAGS += -Ofast -std=gnu11 -fms-extensions
+	DEBUGFLAGS += -std=gnu11 -DDEBUG -g -O0 -fms-extensions
 else
 	OPTFLAGS += -O2 -DDEBUG 
 	DEBUGFLAGS += -DDEBUG -g -O0
@@ -184,7 +187,7 @@ $(OBJDIR)/%.d: %.c | $(OBJDIR) # directory is an "order only prerequesite": http
 
 $(OBJDIR)/%.o: %.c $(OBJDIR)/%.d
 	@echo Compiling $<
-	@$(CC) -c -o $@ $< $(CFLAGS)
+	$(CC) -c -o $@ $< $(CFLAGS)
 
 $(OBJDIR)/%.debug-o: %.c $(OBJDIR)/%.d
 	@echo "Compiling $< (debug)"
