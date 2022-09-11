@@ -3,7 +3,7 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
-14.0.0
+14.0.0 11/Sep/2022
 Summary: significant compression improvements for FASTQ, BAM, VCF in a wide range of cases. Compression and decompression are also faster.
 
 Compression improvement:
