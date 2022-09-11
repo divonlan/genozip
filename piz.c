@@ -435,7 +435,7 @@ DataType piz_read_global_area (Reference ref)
         // case: reading reference file
         if (flag.reading_reference) {
 
-            // when reading the reference for genocat --show-sex/coverage/idxstats, don't need the actual REF sections 
+            // when reading the reference for genocat --sex/coverage/idxstats, don't need the actual REF sections 
             if (is_genocat && (flag.show_sex || flag.show_coverage || flag.idxstats)) 
                 goto done;  
 
@@ -799,7 +799,7 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
     if (!flag.test) 
         progress_finalize_component_time ("Done", decompressed_file_digest);
 
-    // --show-sex and --show-coverage - output results
+    // --sex and --coverage - output results
     if (txt_file && !flag_loading_auxiliary) {
         if (flag.show_coverage) coverage_show_coverage();
         if (flag.show_sex) coverage_sex_classifier (is_first_z_file);

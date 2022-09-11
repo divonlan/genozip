@@ -416,7 +416,7 @@ typedef struct File {
     struct FlagsBgzf bgzf_flags;       // correspond to SectionHeader.flags in SEC_BGZF
     uint8_t bgzf_signature[3];         // PIZ: 3 LSB of size of source BGZF-compressed file, as passed in SectionHeaderTxtHeader.codec_info
 
-    // TXT file: data used in --show-sex, --show-coverage and --idxstats
+    // TXT file: data used in --sex, --coverage and --idxstats
     Buffer coverage;
     Buffer read_count;
     Buffer unmapped_read_count;

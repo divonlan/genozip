@@ -633,7 +633,7 @@ IS_SKIP (fastq_piz_is_skip_section)
          || (!flag.bases && dict_id_is_in (dict_id, _FASTQ_NONREF, _FASTQ_NONREF_X, _FASTQ_GPOS, _FASTQ_STRAND, _FASTQ_SEQMIS_A, _FASTQ_SEQMIS_C, _FASTQ_SEQMIS_G, _FASTQ_SEQMIS_T, DICT_ID_NONE)))) // we don't need the SEQ line 
         return true;
 
-    // if we're doing --show-sex/coverage, we only need TOPLEVEL, FASTQ_SQBITMAP and GPOS
+    // if we're doing --sex/coverage, we only need TOPLEVEL, FASTQ_SQBITMAP and GPOS
     if (flag.collect_coverage && 
         (   dict_id_is_in (dict_id, _FASTQ_DESC, _FASTQ_TAXID, _FASTQ_DEBUG_LINES, _FASTQ_LINE3,
                            _FASTQ_QUAL, _FASTQ_DOMQRUNS, _FASTQ_QUALMPLX, _FASTQ_DIVRQUAL, DICT_ID_NONE)

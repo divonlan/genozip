@@ -818,6 +818,8 @@ batch_backward_compatability()
 
 batch_prod_compatability()
 {
+    if [ "$i_am_prod" == "1" ]; then return; fi 
+
     if [ ! -d ../genozip-prod ]; then return; fi
     
     save_genozip=$genozip
@@ -982,6 +984,8 @@ batch_real_world_with_ref_md5() # $1 extra genozip argument
 
 batch_real_world_with_ref_backcomp()
 {
+    if [ "$i_am_prod" == "1" ]; then return; fi 
+
     batch_print_header
 
     cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
@@ -1328,6 +1332,10 @@ fi
 
 if [ ! -n "$dir" ]; then 
     dir=.
+fi
+
+if (( `pwd | grep genozip-prod | wc -l` == 1 )); then
+    i_am_prod=1;
 fi
 
 # -----------------
