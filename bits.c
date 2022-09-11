@@ -2,6 +2,9 @@
 //   bits.c
 //   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 //   Copyright claimed on additions and modifications vs public domain.
 //
 // a module for handling bit arrays, partially based on: https://github.com/noporpoise/bit_array/ which says:

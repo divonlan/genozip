@@ -2,6 +2,9 @@
 //   codec_hapmat.c
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 // *** RETIRED CODEC. USED JUST FOR DECOMPRESSING OLD VCF FILES (retired officially in v13, but hasn't been in use since some earlier version) ***
 

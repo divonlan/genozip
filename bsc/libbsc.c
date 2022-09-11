@@ -34,6 +34,9 @@ See also the bsc and libbsc web site:
 //   This file was extensively modified to adapt it to genozip. All modifications:
 //   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #include <stdlib.h>
 #include <string.h>

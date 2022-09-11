@@ -4,6 +4,9 @@
 #   postinstall
 #   Copyright (C) 2020-2022 Genozip Limited 
 #   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 FILES=(__FILES__)
 

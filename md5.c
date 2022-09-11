@@ -2,6 +2,9 @@
 //   aes.c
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 //   Copyright claimed on additions and modifications vs public domain.
 //
 // This is an implementation of MD5 based on: https://github.com/WaterJuice/WjCryptLib/blob/master/lib/WjCryptLib_Md5.c

@@ -2,6 +2,9 @@
 //   sam_qual.c
 //   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted,
+//   under penalties specified in the license.
 
 #include "genozip.h"
 #include "sam_private.h"

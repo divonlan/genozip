@@ -4,6 +4,9 @@
 #   luft-to-primary.sed
 #   Copyright (C) 2021-2022 Genozip Limited
 #   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 #
 #   Convert a LUFT VCF to a PRIMARY VCF (just renaming stuff, no liftover). Used for testing during development.
 #

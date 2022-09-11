@@ -2,6 +2,9 @@
 //   gff3.c
 //   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 // GFF3 specification and examples: https://github.com/The-Sequence-Ontology/Specifications/blob/master/gff3.md
 // Another one: http://gmod.org/wiki/GFF3 and https://ftp.ncbi.nlm.nih.gov/genomes/README_GFF3.txt

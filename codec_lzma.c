@@ -2,6 +2,9 @@
 //   comp_bz2.c
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #include "lzma/LzmaEnc.h"
 #include "lzma/LzmaDec.h"

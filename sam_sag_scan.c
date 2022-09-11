@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   sam_sag_scan.c
-//   Copyright (C) 2022-2022 Genozip Limited
+//   Copyright (C) 2022-2022 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted,
+//   under penalties specified in the license.
 
 // In BAM files with SAG_BY_FLAG, absent an SA, NH or CC tag, we are unable to distiguish one of the alignments of
 // being primary during, and unable to tell whether a non-secondary, non-supplementary alignment has dependent alignments or not.

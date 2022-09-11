@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   chain.c
-//   Copyright (C) 2021-2022 Genozip Limited
+//   Copyright (C) 2021-2022 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 //
 // handle UCSC Chain format: https://genome.ucsc.edu/goldenPath/help/chain.html
 // also here: http://genomewiki.ucsc.edu/index.php/Chains_Nets#:~:text=5%20FAQs%3F-,Basic%20definitions,and%20mouse%20is%20the%20dst.

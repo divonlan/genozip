@@ -2,6 +2,9 @@
 #   Makefile
 #   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 #   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 # Note for Windows: to run this make, you need mingw (for the gcc compiler) and cygwin (for Unix-like tools):
 # Mingw: http://mingw-w64.org/doku.php 

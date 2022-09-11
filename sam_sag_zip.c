@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   sam_sag_zip.c
-//   Copyright (C) 2022-2022 Genozip Limited
+//   Copyright (C) 2022-2022 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #include "genozip.h"
 #include "sam_private.h"

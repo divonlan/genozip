@@ -2,6 +2,9 @@
 //   endianness.h
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 //   Copyright claimed on additions and modifications.
 //
 // This file is derived from https://gist.github.com/jtbr/7a43e6281e6cca353b33ee501421860c, see unmodified license statement below

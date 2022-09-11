@@ -2,6 +2,9 @@
 //   codec_longr.c
 //   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 // This codec is for quality scores of Nanopore and PacBio data, based on https://pubmed.ncbi.nlm.nih.gov/32470109/. This file contains 
 // only original Genozip code, and the algorithm itself, derived from ENano source code, is located in codec_longr_alg.c
