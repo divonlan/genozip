@@ -8,8 +8,8 @@ Summary: significant compression improvements for FASTQ, BAM, VCF in a wide rang
 
 Compression improvement:
 - SAM/BAM: Better compression of Supplementary / Secondary alignments 
-- SAM/BAM: Better compression of SA/XA/OA, CIGAR, QNAME, MD:Z, NM:i, TLEN, MC:Z, MQ:i, ms:i, sequence, SM, AM, X0, X1, XT
-- SAM/BAM: Better compression of files created with BS-Seeker2 (methylation)
+- SAM/BAM: Better compression of SA/XA/OA, CIGAR, QNAME, MD:Z, NM:i, TLEN, MC:Z, MQ:i, ms:i, sequence, SM, AM, X0, X1, XT and other tags
+- SAM/BAM: Better compression of files with methylation data created with Bismark, BS-Seeker2, Gem3, BSBolt, DRAGEN
 - SAM/BAM/FASTQ: Improvements in compression of short-read QUAL.
 - VCF: Significantly better compression of GVCF files
 - VCF: Better compression of FORMAT/PGT, REF+ALT, QUAL, INFO, INFO/DP, FORMAT/RGQ
