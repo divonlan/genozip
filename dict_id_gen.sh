@@ -4,9 +4,9 @@
 #   dict_id_gen.sh
 #   Copyright (C) 2021-2022 Genozip Limited
 #   Please see terms and conditions in the file LICENSE.txt
-//
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
-//   and subject to penalties specified in the license.
+#
+#   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+#   and subject to penalties specified in the license.
 
 # dict_id_gen.h generation:
 # Step 1: dict_id_gen.sh generates dict_id_gen.c, including all the GENDICT definitions from the data type include files (eg vcf.h)
