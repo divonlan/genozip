@@ -107,7 +107,9 @@ static int url_do_curl_head (rom url,
     // our own instance of curl - to not conflict with url_open
     StreamP curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
                                   "To compress files from a URL",
-                                  "curl", "--head", url, NULL); // not silent - we want to collect errors
+                                  "curl", 
+                                  flag.is_windows ? "--ssl-no-revoke" : SKIP_ARG,                          
+                                  "--head", url, NULL); // not silent - we want to collect errors
 
     *stdout_len = fread (stdout_data, 1, CURL_RESPONSE_LEN-1, stream_from_stream_stdout (curl));
     stdout_data[*stdout_len] = '\0'; // terminate string

@@ -126,9 +126,9 @@ void sam_seg_bsseeker2_XG_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XG)
     SamPosType after_pos = start_pos + vb->ref_consumed + inc_soft_clip + 4/*flanking*/;
 
     // get range
-    RangeP range = ref_seg_get_locked_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), start_pos, after_pos - start_pos, 
-                                             WORD_INDEX_NONE, NULL, 
-                                             flag.reference == REF_EXTERNAL ? NULL : &lock); // lock if we might modify reference or is_set
+    RangeP range = ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), start_pos, after_pos - start_pos, 
+                                      WORD_INDEX_NONE, NULL, 
+                                      IS_REF_EXTERNAL ? NULL : &lock); // lock if we might modify reference or is_set
 
     if (!range) FAIL("no_range"); // either hash contention in REF_INTERNAL or this chromosome is missing in the reference file 
     if (range->last_pos < after_pos-1) FAIL("multi_range"); // sequence spans two ranges - can only happen in REF_INTERNAL
@@ -144,7 +144,7 @@ void sam_seg_bsseeker2_XG_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XG)
     }
 
     // if successful (all bases are the same, or not populated): populate missing bases in REF_INTERNAL
-    if (flag.reference == REF_INTERNAL && vb->comp_i == SAM_COMP_MAIN) {
+    if (IS_REF_INTERNAL && vb->comp_i == SAM_COMP_MAIN) {
         xg = B1STc(vb->XG);
         
         for (SamPosType pos = start_pos ; pos < after_pos; pos++, xg++) {

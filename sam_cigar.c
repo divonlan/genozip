@@ -660,7 +660,7 @@ static void sam_cigar_update_random_access (VBlockSAMP vb, ZipDataLineSAM *dl)
 
     SamPosType last_pos = dl->POS + vb->ref_consumed - 1;
 
-    if (flag.reference == REF_INTERNAL && last_pos >= 1)
+    if (IS_REF_INTERNAL && last_pos >= 1)
         random_access_update_last_pos (VB, 0, last_pos);
 
     else { // external ref
@@ -1106,7 +1106,6 @@ rom sam_piz_display_aln_cigar (const SAAln *a)
 
 CigarSignature cigar_sign (STRp(cigar))
 {
-    START_TIMER;
     CigarSignature sig;
 
     // case: cigar is not longer than the signature - the cigar IS the signature
@@ -1120,7 +1119,7 @@ CigarSignature cigar_sign (STRp(cigar))
         Digest digest = md5_do (STRa(cigar));
         memcpy (sig.bytes, digest.bytes, CIGAR_SIG_LEN);
     }
-COPY_TIMER_VB(evb,tmp1);
+
     return sig;
 }
 

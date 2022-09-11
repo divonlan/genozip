@@ -47,6 +47,8 @@ static void dict_io_assign_codec_one_dict (VBlockP vb)
 // called by main thread in zip_write_global_area
 void dict_io_assign_codecs (void)
 {
+    START_TIMER;
+
     next_ctx = ZCTX(0);
     
     // handle some dictionaries here, so save on thread creation for trival dictionaries
@@ -71,6 +73,8 @@ void dict_io_assign_codecs (void)
                              dict_io_prepare_for_assign_codec, 
                              dict_io_assign_codec_one_dict, 
                              NO_CALLBACK);
+
+    COPY_TIMER_VB (evb, dict_io_assign_codecs);
 }
 
 // -------------------------------------
@@ -170,6 +174,8 @@ static void dict_io_compress_one_fragment (VBlockP vb)
 // called by main thread in zip_write_global_area
 void dict_io_compress_dictionaries (void)
 {
+    START_TIMER;
+
     frag_ctx = ZCTX(0);
     frag_next_node = NULL;
 
@@ -179,6 +185,8 @@ void dict_io_compress_dictionaries (void)
                              dict_io_prepare_for_compress, 
                              dict_io_compress_one_fragment, 
                              zfile_output_processed_vb);
+
+    COPY_TIMER_VB (evb, dict_io_compress_dictionaries);
 }
 
 // -------------------------------------

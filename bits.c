@@ -547,15 +547,13 @@ bool bits_is_fully_set (ConstBitsP bits)
 // true if all bits in bit array are clear (divon)
 bool bits_is_fully_clear (ConstBitsP bits)
 {
-    ASSERT_excess_bits_are_0 (bits);
-
     if (!bits->nbits) return true; // trivially true
 
     // all words but last one
-    for (uint64_t i=0; i < bits->nwords; i++)
+    for (uint64_t i=0; i < bits->nwords - 1; i++)
         if (bits->words[i]) return false;
 
-    return true;
+    return (bits->words[bits->nwords-1] & bitmask64(bits_in_top_word(bits->nbits))) == 0;
 }
 
 // Get the number of bits set (hamming weight)
@@ -937,9 +935,9 @@ void bits_overlay (BitsP overlaid_bits, BitsP regular_bits, uint64_t start, uint
 
     uint64_t word_i = start / 64;
     *overlaid_bits = (Bits){ .type   = BITARR_OVERLAY,
-                                   .words  = &regular_bits->words[word_i],
-                                   .nwords = roundup_bits2words64 (nbits),
-                                   .nbits  = nbits };
+                             .words  = &regular_bits->words[word_i],
+                             .nwords = roundup_bits2words64 (nbits),
+                             .nbits  = nbits };
 } 
 
 // convert a bitsay to a byte array of values 0-1

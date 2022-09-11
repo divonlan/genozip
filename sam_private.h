@@ -463,24 +463,18 @@ static bool inline sam_line_is_prim (ZipDataLineSAM *dl) { return !sam_is_depn (
 #define piz_has_real_prim (piz_has_buddy && ((segconf.is_paired && sam_is_depn(last_flags)) || \
                                              (!segconf.is_paired && !sam_is_depn ((SamFlags){ .value = history64(SAM_FLAG, VB_SAM->buddy_line_i)}))))
 
-// ------------------
 // BUDDY stuff
-// ------------------
 extern void sam_piz_set_buddy_v13 (VBlockP vb);
 extern void sam_reconstruct_from_buddy_get_textual_snip (VBlockSAMP vb, ContextP ctx, BuddyType bt, pSTRp(snip));
 extern rom buddy_type_name (BuddyType bt);
 
-// ------------------
 // FLAG stuff
-// ------------------
 typedef struct { char s[256]; } SamFlagStr;
 extern SamFlagStr sam_dis_FLAG (SamFlags f);
 extern void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM *dl, unsigned add_bytes);
 #define last_flags ((SamFlags){ .value = CTX(SAM_FLAG)->last_value.i })
 
-// ------------------
 // AUX stuff
-// ------------------
 extern void sam_seg_aux_all (VBlockSAMP vb, ZipDataLineSAM *dl);
 extern rom bam_show_line (VBlockSAMP vb, rom alignment, uint32_t remaining_txt_len);
 extern void bam_get_one_aux (VBlockSAMP vb, int16_t idx, rom *tag, char *type, char *array_subtype, pSTRp(value), ValueType *numeric);
@@ -500,15 +494,11 @@ extern void sam_seg_buddied_i_fields (VBlockSAMP vb, ZipDataLineSAM *dl, Did did
 
 #define STRauxZ(name,is_bam) (vb->auxs[vb->idx_##name]+((is_bam) ? 3 : 5)), (vb->aux_lens[vb->idx_##name]-((is_bam) ? 4 : 5))
 
-// ------------------
 // POS / PNEXT stuff
-// ------------------
 extern SamPosType sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM *dl, WordIndex prev_line_chrom, unsigned add_bytes);
 extern void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pnext_str)/* option 1 */, SamPosType pnext/* option 2 */, unsigned add_bytes);
 
-// ------------------
 // CIGAR / MC:Z stuff
-// ------------------
 #define CIGAR_DIGIT              1
 #define CIGAR_CONSUMES_QUERY     2
 #define CIGAR_CONSUMES_REFERENCE 4

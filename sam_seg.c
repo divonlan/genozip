@@ -60,7 +60,7 @@ Did buddied_Z_dids[NUM_MATED_Z_TAGS] = MATED_Z_DIDs;
 // called by zfile_compress_genozip_header to set FlagsGenozipHeader.dt_specific
 bool sam_zip_dts_flag(void)
 {
-    return flag.reference == REF_INTERNAL;
+    return IS_REF_INTERNAL;
 }
 
 // ----------------------
@@ -89,7 +89,7 @@ void sam_zip_initialize(void)
 
     // with REF_EXTERNAL and unaligned data, we don't know which chroms are seen (bc unlike REF_EXT_STORE, we don't use is_set), so
     // we just copy all reference contigs. this are not needed for decompression, just for --coverage/--sex/--idxstats
-    if (z_file->num_txts_so_far == 1 && flag.aligner_available && flag.reference == REF_EXTERNAL)
+    if (z_file->num_txts_so_far == 1 && flag.aligner_available && IS_REF_EXTERNAL)
         ctx_populate_zf_ctx_from_contigs(gref, SAM_RNAME, ref_get_ctgs(gref));
 
     seg_prepare_snip_other(SNIP_REDIRECTION, _SAM_TAXID, false, 0, taxid_redirection_snip);
@@ -138,7 +138,7 @@ void sam_zip_finalize (bool is_last_user_txt_file)
 {
     if (is_last_user_txt_file) return; // no need to waste time freeing if this is the last file - the process will die momentarily
 
-    if (flag.reference == REF_INTERNAL || flag.reference == REF_EXT_STORE) 
+    if (IS_REF_INTERNAL || IS_REF_EXT_STORE) 
         ref_destroy_reference (gref, false);
 
     if (segconf.sag_type) 
@@ -611,12 +611,12 @@ static void sam_seg_finalize_segconf(VBlockP vb)
 
     ASSINP (!segconf.sam_bisulfite        // not a bisulfite file
          || flag.force                    // --force overrides
-         || flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE   // reference is provided
+         || IS_REF_EXTERNAL || IS_REF_EXT_STORE   // reference is provided
          || flag.zip_no_z_file,           // we're not creating a compressed format
             "Compressing bisulfite file %s requires using --reference. Override with --force.", dt_name(vb->data_type));
 
     segconf.sam_predict_meth_call = segconf.sam_bisulfite          &&
-                                    flag.reference != REF_INTERNAL && // bug 648
+                                    !IS_REF_INTERNAL && // bug 648
                                     (MP(BISMARK) || MP(DRAGEN) || MP(BSBOLT)); // have methylation call tags
 
     // in bisulfate data, we still calculate MD:Z and NM:i vs unconverted reference
@@ -683,9 +683,10 @@ static void sam_seg_finalize_segconf(VBlockP vb)
 
 void sam_seg_finalize(VBlockP vb)
 {
-    // We always include the SQBITMAP local section, except if no lines
-    if (vb->lines.len)
-        CTX(SAM_SQBITMAP)->local_always = true;
+    if (vb->lines.len) {
+        CTX(SAM_SQBITMAP)->local_always = true; // We always include the SQBITMAP local section, except if no lines
+        bits_truncate ((BitsP)&CTX(SAM_SQBITMAP)->local, CTX(SAM_SQBITMAP)->next_local); // remove unused bits due to MAPPING_PERFECT
+    }
 
     // assign the QUAL codec
     if (VB_SAM->has_qual)
@@ -759,7 +760,7 @@ void sam_seg_finalize(VBlockP vb)
 void sam_zip_after_vbs(void)
 {
     // shorten unused words in dictionary strings to "" (dict pre-populated in sam_zip_initialize)
-    if (flag.reference != REF_INTERNAL) // TO DO: this doesn't work for REF_INTERNAL for example with test.transcriptome.bam
+    if (!IS_REF_INTERNAL) // TO DO: this doesn't work for REF_INTERNAL for example with test.transcriptome.bam
         ctx_shorten_unused_dict_words(SAM_RNAME);
 
     ctx_shorten_unused_dict_words(SAM_RNEXT);
@@ -999,7 +1000,7 @@ void sam_seg_verify_RNAME(VBlockSAMP vb, rom p_into_txt)
     if (segconf.running)
         return;
 
-    if (flag.reference == REF_INTERNAL && (!sam_hdr_contigs /* SQ-less SAM */ || !sam_hdr_contigs->contigs.len /* SQ-less BAM */))
+    if (IS_REF_INTERNAL && (!sam_hdr_contigs /* SQ-less SAM */ || !sam_hdr_contigs->contigs.len /* SQ-less BAM */))
         return;
     if (IS_ASTERISK(vb->chrom_name))
         return; // unaligned
@@ -1260,9 +1261,9 @@ void sam_seg_QNAME(VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qname), unsigned add_
         seg_by_did(VB, (char[]){SNIP_SPECIAL, SAM_SPECIAL_PRIM_QNAME}, 2, SAM_QNAMESA, 0); // consumed when reconstructing PRIM vb
 }
 
-WordIndex sam_seg_RNAME(VBlockSAMP vb, ZipDataLineSAM *dl, STRp(chrom),
-                        bool against_sa_group_ok, // if true, vb->chrom_node_index must already be set
-                        unsigned add_bytes)
+WordIndex sam_seg_RNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(chrom),
+                         bool against_sa_group_ok, // if true, vb->chrom_node_index must already be set
+                         unsigned add_bytes)
 {
     bool normal_seg = false;
 
@@ -1273,21 +1274,21 @@ WordIndex sam_seg_RNAME(VBlockSAMP vb, ZipDataLineSAM *dl, STRp(chrom),
 
     // case: PRIM or DEPN vb - seg against SA group with alignments
     // Note: in DEPN, rname already verified in sam_sa_seg_depn_find_sagroup to be as in SA alignment
-    if (against_sa_group_ok && sam_seg_has_sag_by_SA(vb))
+    if (against_sa_group_ok && sam_seg_has_sag_by_SA (vb))
     {
-        sam_seg_against_sa_group(vb, CTX(SAM_RNAME), add_bytes);
+        sam_seg_against_sa_group (vb, CTX(SAM_RNAME), add_bytes);
 
         if (sam_is_prim_vb)
         {
             // in PRIM, we also seg it as the first SA alignment (used for PIZ to load alignments to memory, not used for reconstructing SA)
-            seg_by_did(VB, STRa(chrom), OPTION_SA_RNAME, 0);
+            seg_by_did (VB, STRa(chrom), OPTION_SA_RNAME, 0);
 
             // count RNAME field contribution to OPTION_SA_RNAME, so sam_stats_reallocate can allocate the z_data between RNAME and SA:Z
             CTX(OPTION_SA_RNAME)->counts.count += add_bytes;
         }
 
         STRset(vb->chrom_name, chrom);
-        random_access_update_chrom(VB, 0, vb->chrom_node_index, STRa(chrom));
+        random_access_update_chrom (VB, 0, vb->chrom_node_index, STRa(chrom));
 
         node_index = vb->chrom_node_index;
     }
@@ -1301,9 +1302,9 @@ WordIndex sam_seg_RNAME(VBlockSAMP vb, ZipDataLineSAM *dl, STRp(chrom),
              DATA_LINE(vb->mate_line_i)->RNAME != DATA_LINE(vb->mate_line_i)->RNEXT)
     { // protect from pathological case (observed in test.longranger-wgs.bam) where mate_RNAME==mate_RNEXT==my_RNAME but my_RNEXT=*
 
-        seg_by_did(VB, STRa(copy_mate_RNEXT_snip), SAM_RNAME, add_bytes); // copy POS from earlier-line mate PNEXT
+        seg_by_did (VB, STRa(copy_mate_RNEXT_snip), SAM_RNAME, add_bytes); // copy POS from earlier-line mate PNEXT
         STRset(vb->chrom_name, chrom);
-        random_access_update_chrom(VB, 0, dl->RNAME, STRa(chrom));
+        random_access_update_chrom (VB, 0, dl->RNAME, STRa(chrom));
         node_index = dl->RNAME;
     }
 
@@ -1315,18 +1316,18 @@ WordIndex sam_seg_RNAME(VBlockSAMP vb, ZipDataLineSAM *dl, STRp(chrom),
         normal_seg = true;
 
         // don't allow adding chroms to a BAM file or a SAM that has SQ lines in the header, but we do allow to add to a headerless SAM.
-        ASSSEG(!is_new || !sam_hdr_contigs || segconf.running || IS_EQUAL_SIGN(chrom) || IS_ASTERISK(chrom),
-               chrom, "contig '%.*s' appears in file, but is missing in the %s header", STRf(chrom), dt_name(vb->data_type));
+        ASSSEG (!is_new || !sam_hdr_contigs || segconf.running || IS_EQUAL_SIGN(chrom) || IS_ASTERISK(chrom),
+                chrom, "contig '%.*s' appears in file, but is missing in the %s header", STRf(chrom), dt_name(vb->data_type));
     }
 
         // protect rname from removal by ctx_shorten_unused_dict_words if we didn't seg normally
         if (!normal_seg && node_index != NODE_INDEX_NONE) // note: node_index==-1 when RNAME="*"
-            ctx_protect_from_removal(VB, CTX(SAM_RNAME), node_index);
+            ctx_protect_from_removal (VB, CTX(SAM_RNAME), node_index);
 
     return node_index;
 }
 
-WordIndex sam_seg_RNEXT(VBlockSAMP vb, ZipDataLineSAM *dl, STRp(chrom), unsigned add_bytes)
+WordIndex sam_seg_RNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(chrom), unsigned add_bytes)
 {
     bool normal_seg = false;
 
@@ -1348,24 +1349,24 @@ WordIndex sam_seg_RNEXT(VBlockSAMP vb, ZipDataLineSAM *dl, STRp(chrom), unsigned
     // note: for now, this only works in BAM because dl->RNAME/RNEXT are set already. To do: support in SAM.
     else if (IS_BAM_ZIP && sam_has_mate &&
              dl->RNAME != dl->RNEXT && dl->RNEXT == DATA_LINE(vb->mate_line_i)->RNAME)
-        seg_by_did(VB, STRa(copy_mate_RNAME_snip), SAM_RNEXT, add_bytes); // copy POS from earlier-line mate PNEXT
+        seg_by_did (VB, STRa(copy_mate_RNAME_snip), SAM_RNEXT, add_bytes); // copy POS from earlier-line mate PNEXT
 
     // case: seg RNEXT against prim's RNAME. This happens when RNEXT is the same as prim's RNEXT, but prim's
     // RNEXT is the same as prim's RNAME, so PRIM's RNEXT is segged as "=".
     else if (IS_BAM_ZIP && sam_has_saggy &&
              dl->RNAME != dl->RNEXT && dl->RNEXT == DATA_LINE(vb->saggy_line_i)->RNAME)
-        seg_by_did(VB, STRa(copy_saggy_RNAME_snip), SAM_RNEXT, add_bytes);
+        seg_by_did (VB, STRa(copy_saggy_RNAME_snip), SAM_RNEXT, add_bytes);
 
     // case: seg RNEXT against prim's RNEXT
     else if (IS_BAM_ZIP && sam_has_saggy &&
              dl->RNAME != dl->RNEXT && dl->RNEXT == DATA_LINE(vb->saggy_line_i)->RNEXT)
-        seg_by_did(VB, (char[]){SNIP_SPECIAL, SAM_SPECIAL_COPY_BUDDY, '0' + BUDDY_SAGGY}, 3, SAM_RNEXT, add_bytes);
+        seg_by_did (VB, (char[]){SNIP_SPECIAL, SAM_SPECIAL_COPY_BUDDY, '0' + BUDDY_SAGGY}, 3, SAM_RNEXT, add_bytes);
 
     else
     normal_seg:
     {
         bool is_new;
-        node_index = chrom_seg_ex(VB, SAM_RNEXT, STRa(chrom), 0, NULL, add_bytes, !IS_BAM_ZIP, &is_new);
+        node_index = chrom_seg_ex  (VB, SAM_RNEXT, STRa(chrom), 0, NULL, add_bytes, !IS_BAM_ZIP, &is_new);
         normal_seg = true;
 
         // don't allow adding chroms to a BAM file or a SAM that has SQ lines in the header, but we do allow to add to a headerless SAM.
@@ -1375,19 +1376,19 @@ WordIndex sam_seg_RNEXT(VBlockSAMP vb, ZipDataLineSAM *dl, STRp(chrom), unsigned
 
         // protect rnext from removal by ctx_shorten_unused_dict_words if we didn't seg normally
         if (!normal_seg && node_index != NODE_INDEX_NONE) // note: node_index==-1 when RNEXT="*"
-            ctx_protect_from_removal(VB, CTX(SAM_RNEXT), node_index);
+            ctx_protect_from_removal (VB, CTX(SAM_RNEXT), node_index);
 
     return node_index;
 }
 
-bool sam_seg_test_biopsy_line(VBlockP vb, STRp(line))
+bool sam_seg_test_biopsy_line (VBlockP vb, STRp(line))
 {
     if (segconf.running)
         return false; // we need to let segconf run normally, so we get the correct VB size
 
     if (flag.biopsy_line.line_i == vb->line_i && flag.biopsy_line.vb_i == vb->vblock_i)
     {
-        PutLineFn fn = file_put_line(VB, STRa(line), "Line biopsy:");
+        PutLineFn fn = file_put_line (VB, STRa(line), "Line biopsy:");
 
         if (TXT_DT(DT_BAM))
             WARN("Tip: You can view the dumped BAM line with:\n   genozip --show-bam %s", fn.s);
@@ -1402,7 +1403,7 @@ void sam_seg_init_bisulfite (VBlockSAMP vb, ZipDataLineSAM *dl)
     // the converted reference to which this read was mapped (C->T conversion or G->A conversion)
     // note: we calculate it always to avoid needless adding entropy in the snip
     vb->bisulfite_strand =  !segconf.sam_bisulfite    ? 0 
-                            : flag.reference == REF_INTERNAL ? 0 // bug 648
+                            : IS_REF_INTERNAL         ? 0 // bug 648
                             : MP(BISMARK)   && has_XG ? sam_seg_get_aux_A (vb, vb->idx_XG_Z, IS_BAM_ZIP)
                             : MP(DRAGEN)    && has_XG ? sam_seg_get_aux_A (vb, vb->idx_XG_Z, IS_BAM_ZIP)
                             : MP(BSSEEKER2) && has_XO ? "CG"[sam_seg_get_aux_A (vb, vb->idx_XO_Z, IS_BAM_ZIP) == '-']

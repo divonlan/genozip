@@ -32,9 +32,10 @@ typedef struct RefStruct {
 
     // ZIP and PIZ, internal or external reference ranges. If in ZIP-INTERNAL we have REF_NUM_DENOVO_RANGES Range's - each allocated on demand. In all other cases we have one range per contig.
     Buffer ranges; 
-
+    #define rtype param
+    
     Buffer genome_buf, emoneg_buf, genome_is_set_buf, genome_cache;
-    Bits *genome, *emoneg /* reverse compliment */, *genome_is_set;
+    Bits *genome, *emoneg/*reverse compliment*/, *genome_is_set;
 
     PosType genome_nbases;
 
@@ -59,9 +60,8 @@ typedef struct RefStruct {
     ContigPkg ctgs;
 
     // lock stuff
-    Mutex *genome_muteces; // one spinlock per 16K bases - protects genome->is_set
-    uint32_t genome_num_muteces;
-    char *genome_mutex_names;
+    Buffer genome_muteces; // one mutex per 64K bases - protects genome->is_set
+    Buffer genome_mutex_names;
 
     // iupac stuff
     Buffer iupacs_buf; 
@@ -71,20 +71,17 @@ typedef struct RefStruct {
 extern void ref_make_prepare_range_for_compress (VBlockP vb);
 
 // lock stuff
-extern void ref_lock_initialize_loaded_genome (Reference ref);
-extern void ref_lock_initialize_denovo_genome (Reference ref);
+extern void ref_lock_initialize (Reference ref);
 extern void ref_lock_free (Reference ref);
 
 // contigs stuff
 extern rom ref_contigs_get_name_by_ref_index (Reference ref, WordIndex chrom_index, rom *snip, uint32_t *snip_len);
 extern const Contig *ref_contigs_get_contig_by_ref_index (Reference ref, WordIndex chrom_index, bool soft_fail);
 extern PosType ref_contigs_get_genome_nbases (Reference ref);
-extern void ref_contigs_generate_data_if_denovo (Reference ref);
+//xxx extern void ref_contigs_generate_data_if_denovo (Reference ref);
 extern WordIndex ref_seg_get_alt_chrom (VBlockP vb);
-extern void ref_contigs_compress_internal (Reference ref);
-extern void ref_contigs_compress_ext_store (Reference ref);
+extern void ref_contigs_compress_ref_make (Reference ref);
+extern void ref_contigs_compress_stored (Reference ref);
 
-#define ranges_type(ref) (ref)->ranges.param
 
-#define IS_REF_INTERNAL(f) (((f)->data_type == DT_SAM || (f)->data_type == DT_BAM) && (f)->z_flags.dts_ref_internal)
 

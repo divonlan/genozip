@@ -275,11 +275,11 @@ VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompITy
     
     uint64_t sizeof_vb = (dt != DT_NONE && dt_props[dt].sizeof_vb) ? dt_props[dt].sizeof_vb(dt) : sizeof (VBlock);
 
-    DataType alloc_dt = sizeof_vb == sizeof (VBlock)   ? DT_NONE
-                      : dt == DT_REF && IS_PIZ ? DT_NONE
-                      : dt == DT_BAM                   ? DT_SAM
-                      : dt == DT_BCF                   ? DT_VCF 
-                      :                                  dt;
+    DataType alloc_dt = sizeof_vb == sizeof (VBlock) ? DT_NONE
+                      : dt == DT_REF && IS_PIZ       ? DT_NONE
+                      : dt == DT_BAM                 ? DT_SAM
+                      : dt == DT_BCF                 ? DT_VCF 
+                      :                                dt;
 
     // circle around until a VB becomes available (busy wait)
     uint32_t vb_id; for (vb_id=0; ; vb_id = (vb_id+1) % pool->num_vbs) {
@@ -406,7 +406,7 @@ void vb_cleanup_memory (void)
     if (z_file->data_type != DT_NONE && DTPZ(cleanup_memory))
         DTPZ(cleanup_memory)(evb);
 
-    if (IS_ZIP && (flag.reference == REF_INTERNAL || flag.reference == REF_EXT_STORE))
+    if (IS_ZIP && (IS_REF_INTERNAL || IS_REF_EXT_STORE))
         ref_unload_reference (gref);
 }
 

@@ -370,7 +370,6 @@ typedef struct File {
     struct FlagsGenozipHeader z_flags; // z_file: genozip file flags as read from SectionHeaderGenozipHeader.h.flags
     struct FlagsTxtHeader txt_flags;   // txt_file PIZ: genozip file flags as read from SectionHeaderTxtHeader.h.flags
 
-    uint32_t num_copied_ref_sections;  // number of SEC_REFERENCE sections with vblock_i==0 (a result of being created with ref_copy_one_compressed_section)
     Buffer vb_sections_index;          // PIZ z_file: an index into VB sections
     Buffer comp_sections_index;        // PIZ z_file: an index into Txt sections
     Section first_dict_section;        // PIZ z_file

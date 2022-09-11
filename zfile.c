@@ -777,6 +777,8 @@ error:
 
 void zfile_compress_genozip_header (void)
 {
+    START_TIMER;
+
     SectionHeaderGenozipHeader header = {};
 
     // start with just the fields needed by sections_add_to_list
@@ -819,7 +821,7 @@ void zfile_compress_genozip_header (void)
     header.vb_size                 = BGEN16 (segconf.vb_size >> 20);
 
     // when decompressing will require an external reference, we set header.ref_filename to the name of the genozip reference file
-    if (flag.reference == REF_EXTERNAL || flag.reference == REF_MAKE_CHAIN) {   
+    if (IS_REF_EXTERNAL || IS_REF_MAKE_CHAIN) {   
         strncpy (header.ref_filename, ref_get_filename (gref), REF_FILENAME_LEN-1);
         header.ref_file_md5 = ref_get_file_md5 (gref);
     }
@@ -867,6 +869,8 @@ void zfile_compress_genozip_header (void)
     SectionFooterGenozipHeader footer = { .magic                 = BGEN32 (GENOZIP_MAGIC),
                                           .genozip_header_offset = BGEN64 (genozip_header_offset) };
     buf_add_more (evb, z_data, (char*)&footer, sizeof(SectionFooterGenozipHeader), "z_data");
+
+    COPY_TIMER_VB (evb, zfile_compress_genozip_header);
 
     zfile_output_processed_vb (evb); // write footer
 }

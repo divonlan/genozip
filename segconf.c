@@ -248,7 +248,7 @@ void segconf_calculate (void)
     ASSINP (!flag.best                    // no --best specified
          || flag.force                    // --force overrides
          || !best_requires_ref            // --best doesn't require ref
-         || flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE   // reference is provided
+         || IS_REF_EXTERNAL || IS_REF_EXT_STORE   // reference is provided
          || flag.zip_no_z_file,           // we're not creating a compressed format
             "Using --best on a %s file also requires using --reference. Override with --force.", dt_name(vb->data_type));
 

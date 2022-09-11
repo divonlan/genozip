@@ -58,6 +58,8 @@ static void sam_seg_CB_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(cb), un
 
 void sam_seg_CB_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(cb), unsigned add_bytes)
 {
+    START_TIMER;
+
     dl->solo_z_fields[SOLO_CB] = TXTWORD(cb);
 
     if (segconf.running && !segconf.CR_CB_seperator) 
@@ -70,6 +72,8 @@ void sam_seg_CB_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(cb), unsigned add_byt
         sam_seg_buddied_Z_fields (vb, dl, MATED_CB, STRa(cb),  
                                   segconf.CB_con_snip ? sam_seg_CB_do_seg : (SegBuddiedCallback)0, 
                                   add_bytes);
+
+    COPY_TIMER(sam_seg_CB_Z);
 }
 
 static void sam_seg_CR_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(cr), unsigned add_bytes)
@@ -98,6 +102,8 @@ static void sam_seg_CR_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(cr), un
 
 void sam_seg_CR_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(cr), unsigned add_bytes)
 {
+    START_TIMER;
+
     dl->solo_z_fields[SOLO_CR] = TXTWORD(cr);
 
     if (sam_is_depn_vb && vb->sag && IS_SAG_SOLO && str_issame_(STRa(cr), STRBw(z_file->solo_data, vb->solo_aln->word[SOLO_CR])))
@@ -106,6 +112,8 @@ void sam_seg_CR_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(cr), unsigned add_byt
     // copy CB, and if different than CB - xor against it
     else
         sam_seg_buddied_Z_fields (vb, dl, MATED_CR, STRa(cr), sam_seg_CR_do_seg, add_bytes);                                
+
+    COPY_TIMER(sam_seg_CR_Z);
 }
 
 //-----------------------------------------------------------------------------------------------------
@@ -119,6 +127,8 @@ void sam_seg_CR_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(cr), unsigned add_byt
 bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, SoloTags solo, uint8_t n_seps, 
                            STRp(qual), qSTRp (con_snip), MiniContainer *con, unsigned add_bytes)
 {
+    START_TIMER;
+
     Did array_did_i = did_i + 1; // must be one after
     bool dont_compress = false;
 
@@ -168,6 +178,7 @@ bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, SoloTag
         // note: this goes into the primary did_i, not the array item
         seg_add_to_local_text (VB, CTX(did_i), STRa(qual), true, add_bytes);
 
+    COPY_TIMER(sam_seg_barcode_qual);
     return dont_compress;
 }
 
@@ -202,6 +213,8 @@ static void sam_seg_RX_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(rx), un
 
 void sam_seg_RX_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(rx), unsigned add_bytes)
 {
+    START_TIMER;
+
     dl->solo_z_fields[SOLO_RX] = TXTWORD(rx);
 
     if (sam_is_depn_vb && vb->sag && IS_SAG_SOLO && str_issame_(STRa(rx), STRBw(z_file->solo_data, vb->solo_aln->word[SOLO_RX]))) 
@@ -210,10 +223,14 @@ void sam_seg_RX_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(rx), unsigned add_byt
     else
         // if different than UB - xor against it, but not if length is 1 (in STARsolo, UB is always "-" in this case while UR is a single base)
         sam_seg_buddied_Z_fields (vb, dl, MATED_RX, STRa(rx), sam_seg_RX_do_seg, add_bytes);                                
+
+    COPY_TIMER (sam_seg_RX_Z);
 }
 
 void sam_seg_BX_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(bx), unsigned add_bytes)
 {
+    START_TIMER;
+
     dl->solo_z_fields[SOLO_BX] = TXTWORD(bx);
 
     if (sam_is_depn_vb && vb->sag && IS_SAG_SOLO && str_issame_(STRa(bx), STRBw(z_file->solo_data, vb->solo_aln->word[SOLO_BX])))
@@ -221,6 +238,8 @@ void sam_seg_BX_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(bx), unsigned add_byt
 
     else
         sam_seg_buddied_Z_fields (vb, dl, MATED_BX, STRa(bx), 0, add_bytes);
+
+    COPY_TIMER (sam_seg_BX_Z);
 }
 
 //-----------------------------------------------------------------------------------------------------
@@ -229,6 +248,8 @@ void sam_seg_BX_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(bx), unsigned add_byt
 
 void sam_seg_QX_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qx), unsigned add_bytes)
 {
+    START_TIMER;
+
     dl->solo_z_fields[SOLO_QX] = TXTWORD(qx);
 
     if (sam_is_depn_vb && vb->sag && IS_SAG_SOLO && str_issame_(STRa(qx), STRBw(z_file->solo_data, vb->solo_aln->word[SOLO_QX]))) {
@@ -242,6 +263,8 @@ void sam_seg_QX_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qx), unsigned add_byt
         SNIPi1 (SNIP_LOOKUP, qx_len);
         seg_by_did (VB, STRa(snip), OPTION_QX_Z, add_bytes);
     }
+
+    COPY_TIMER (sam_seg_QX_Z);
 }
 
 
@@ -256,6 +279,8 @@ static void sam_seg_BC_array (VBlockSAMP vb, ContextP ctx, STRp(bc), unsigned ad
 
 void sam_seg_BC_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(bc), unsigned add_bytes)
 {
+    START_TIMER;
+
     if (segconf.running && !segconf.n_BC_QT_seps) {    
         if      (memchr (bc, '_', bc_len)) segconf.BC_sep = '_'; 
         else if (memchr (bc, '-', bc_len)) segconf.BC_sep = '-'; // as recommended by the SAM spec
@@ -273,6 +298,8 @@ void sam_seg_BC_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(bc), unsigned add_byt
         sam_seg_buddied_Z_fields (vb, dl, FIRST_SOLO_TAG + SOLO_BC, STRa(bc),  
                                   segconf.n_BC_QT_seps ? sam_seg_BC_array : 0,
                                   add_bytes);
+
+    COPY_TIMER (sam_seg_BC_Z);
 }
 
 //-----------------------------------------------------------------------------------------------------
@@ -284,10 +311,14 @@ void sam_seg_BC_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(bc), unsigned add_byt
 
 void sam_seg_gene_name_id (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, STRp(value), unsigned add_bytes)
 {
+    START_TIMER;
+
     ctx_set_encountered (VB, CTX(did_i));
     seg_set_last_txt (VB, CTX(did_i), STRa(value));
 
     seg_array (VB, CTX(did_i), did_i, STRa(value), ';', 0, false, false, DICT_ID_NONE, add_bytes);
+
+    COPY_TIMER (sam_seg_gene_name_id);
 }
 
 //-----------------------------------------------------------------------------------------------------
@@ -296,6 +327,8 @@ void sam_seg_gene_name_id (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, STRp(va
 
 void sam_seg_fx_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(fx), unsigned add_bytes)
 {
+    START_TIMER;
+
     // it is often a copy of GX. TO DO: support case where fx is before GX (bug 623)
     if (ctx_encountered_in_line (VB, OPTION_GX_Z)) {
         if (str_issame_(STRa(fx), last_txtx(vb, CTX(OPTION_GX_Z)), vb->last_txt_len(OPTION_GX_Z)))
@@ -307,6 +340,8 @@ void sam_seg_fx_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(fx), unsigned add_byt
 
     else fallback:
         seg_by_did (VB, STRa(fx), OPTION_fx_Z, add_bytes);
+
+    COPY_TIMER (sam_seg_fx_Z);
 }
 
 //-----------------------------------------------------------------------------------------------------
@@ -316,10 +351,14 @@ void sam_seg_fx_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(fx), unsigned add_byt
 
 void sam_seg_other_seq (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, STRp(seq), unsigned add_bytes)
 {
+    START_TIMER;
+
     seg_add_to_local_fixed (VB, CTX(did_i), STRa(seq));
     
     SNIPi1 (SNIP_LOOKUP, seq_len);
     seg_by_did (VB, STRa(snip), did_i, add_bytes);
+
+    COPY_TIMER (sam_seg_other_seq);
 }
 
 //-----------------------------------------------------------------------------------------------------
@@ -328,6 +367,8 @@ void sam_seg_other_seq (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, STRp(seq),
 
 void sam_seg_GR_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(gr), unsigned add_bytes)
 {
+    START_TIMER;
+
     // diff against CR if possible
     if (has_CR) {
         STR(cr);
@@ -348,6 +389,8 @@ void sam_seg_GR_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(gr), unsigned add_byt
         // add redirection GR -> GR_X
         seg_by_ctx (VB, STRa(redirect_to_GR_X_snip), CTX(OPTION_GR_Z), 0); 
     }
+
+    COPY_TIMER (sam_seg_GR_Z);
 }
 
 //-----------------------------------------------------------------------------------------------------
@@ -356,6 +399,8 @@ void sam_seg_GR_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(gr), unsigned add_byt
 
 void sam_seg_GY_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(gy), unsigned add_bytes)
 {
+    START_TIMER;
+
     // diff against CY if possible
     if (has_CY) {
         STR(cy);
@@ -376,6 +421,8 @@ void sam_seg_GY_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(gy), unsigned add_byt
         // add redirection GY -> GY_X
         seg_by_ctx (VB, STRa(redirect_to_GY_X_snip), CTX(OPTION_GY_Z), 0); 
     }
+
+    COPY_TIMER (sam_seg_GY_Z);
 }
 
 
@@ -602,6 +649,8 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_COPY_TEXTUAL_CIGAR)
 
 void sam_seg_TX_AN_Z (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, STRp(value), unsigned add_bytes)
 {
+    START_TIMER;
+
     static const MediumContainer tx_con = {
         .nitems_lo         = 7, 
         .drop_final_repsep = true,
@@ -642,4 +691,6 @@ void sam_seg_TX_AN_Z (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, STRp(value),
     // case: we failed to seg as a container - flush lookbacks (rare condition, and complicated to rollback given the round-robin and unlimited repeats)
     if (use_lb && repeats == -1) 
         lookback_flush (VB, con);
+
+    COPY_TIMER(sam_seg_TX_AN_Z);
 }

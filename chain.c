@@ -129,7 +129,7 @@ int32_t chain_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i /* in/out */)
 // main thread: writing data-type specific fields to genozip header
 void chain_zip_genozip_header (SectionHeaderGenozipHeader *header)
 {
-    if (flag.reference == REF_MAKE_CHAIN) {
+    if (IS_REF_MAKE_CHAIN) {
         strncpy (header->chain.prim_filename, ref_get_filename (prim_ref), REF_FILENAME_LEN-1);
         header->chain.prim_file_md5 = ref_get_file_md5 (prim_ref);
     }
@@ -137,9 +137,9 @@ void chain_zip_genozip_header (SectionHeaderGenozipHeader *header)
 
 void chain_zip_initialize (void)
 {
-    ASSINP0 (flag.reference == REF_EXTERNAL || flag.force, "Please specify the destination reference file with --reference or use --force to override this");
+    ASSINP0 (IS_REF_EXTERNAL || flag.force, "Please specify the destination reference file with --reference or use --force to override this");
 
-    if (flag.reference == REF_EXTERNAL && z_file->num_txts_so_far == 1) {
+    if (IS_REF_EXTERNAL && z_file->num_txts_so_far == 1) {
         flag.reference = REF_MAKE_CHAIN; // since we're not attempting to use the data from the reference to compress the chain file itself
        
         // initialize NAMEPRIM and NAMELUFT from references, so chain and ref contigs have identical indices

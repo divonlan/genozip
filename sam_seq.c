@@ -29,27 +29,22 @@
 // Sets vb->mismatch_bases_by_SEQ. ZIP: also sets vb->md_verified and. PIZ: also returns sqbitmap of this line in line_sqbitmap 
 static bool sam_analyze_copied_SEQ (VBlockSAMP vb, STRp(seq), const SamPosType pos, bool is_revcomp,
                                     uint32_t ref_consumed, uint32_t ref_and_seq_consumed,
-                                    unsigned recursion_level, uint32_t level_0_seq_len, uint32_t bit_i/*0 for recursion level 0*/,
                                     BufferP line_sqbitmap)
 {
     RefLock lock = REFLOCK_NONE;
 
-    ASSERT (recursion_level < 500, "%s: excess recursion recursion_level=%u seq_len=%u", // a large number of recursion calls can happen if CIGAR=9M10910N86M3274690N30M1S as observed with the STAR aligner https://physiology.med.cornell.edu/faculty/skrabanek/lab/angsd/lecture_notes/STARmanual.pdf
-            LN_NAME, recursion_level, seq_len);
-
     BitsP bitmap = (BitsP)line_sqbitmap;
+    uint32_t bit_i=0;
 
     if (vb->cigar_missing) goto fail;
     
-    if (!recursion_level) {
-        ASSERT (!line_sqbitmap->len32, "%s: line_sqbitmap is in use", LN_NAME);
-        buf_alloc_bits (VB, line_sqbitmap, ref_and_seq_consumed, line_sqbitmap->name ? line_sqbitmap->name : "line_sqbitmap");        
-        bits_set_region (bitmap, 0, ref_and_seq_consumed); // we initialize all the bits to "set", and clear as needed.
-    }
+    ASSERT (!line_sqbitmap->len32, "%s: line_sqbitmap is in use", LN_NAME);
+    buf_alloc_bits (VB, line_sqbitmap, ref_and_seq_consumed, line_sqbitmap->name ? line_sqbitmap->name : "line_sqbitmap");        
+    bits_set_region (bitmap, 0, ref_and_seq_consumed); // we initialize all the bits to "set", and clear as needed.
 
-    ConstRangeP range = (IS_ZIP) ? ref_seg_get_locked_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, ref_consumed, WORD_INDEX_NONE, seq, 
-                                                                     flag.reference == REF_EXTERNAL ? NULL : &lock)
-                                         : ref_piz_get_range (VB, gref, true);
+    ConstRangeP range = IS_ZIP ? ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, ref_consumed, WORD_INDEX_NONE, seq, 
+                                                    IS_REF_EXTERNAL ? NULL : &lock)
+                               : ref_piz_get_range (VB, gref, true);
     if (!range) goto fail; // can happen in ZIP/REF_INTERNAL due to contig cache contention ; in ZIP/PIZ with an external reference - contig is not in the reference
 
     uint32_t pos_index = pos - range->first_pos;
@@ -58,14 +53,11 @@ static bool sam_analyze_copied_SEQ (VBlockSAMP vb, STRp(seq), const SamPosType p
     uint32_t i=0, n=0;
     BamCigarOpType op = BC_NONE;
 
-    uint32_t ref_len_this_level = (flag.reference == REF_INTERNAL ? MIN_(ref_consumed, range->last_pos - pos + 1)
-                                                                  : ref_consumed); // possibly going around the end of the chromosome in case of a circular chromosome                                   
-
     uint32_t range_len = (range->last_pos - range->first_pos + 1);
         
-    while (i < seq_len || next_ref < pos_index + ref_len_this_level) {
+    while (i < seq_len || next_ref < pos_index + ref_consumed) {
 
-        ASSERT0 (i <= seq_len && next_ref <= pos_index + ref_len_this_level, "i or next_ref are out of range");
+        ASSERT0 (i <= seq_len && next_ref <= pos_index + ref_consumed, "i or next_ref are out of range");
 
         if (vb->binary_cigar.next < vb->binary_cigar.len) {
             BamCigarOp *next_op = B(BamCigarOp, vb->binary_cigar, vb->binary_cigar.next++);
@@ -77,12 +69,11 @@ static bool sam_analyze_copied_SEQ (VBlockSAMP vb, STRp(seq), const SamPosType p
 
             case BC_M: case BC_E: case BC_X: // alignment match or sequence match or mismatch
 
-                ASSERT (n > 0 && n <= (seq_len - i), 
-                        "%s: CIGAR implies seq_len longer than actual seq_len=%u (line=%s n=%u recursion_level=%u level_0_seq_len=%u). CIGAR=\"%.*s\"", 
-                        LN_NAME, seq_len, line_name(VB).s, n, recursion_level, level_0_seq_len, STRfb(vb->textual_cigar));
+                ASSERT (n > 0 && n <= (seq_len - i), "%s: CIGAR implies seq_len longer than actual seq_len=%u (line=%s n=%u). CIGAR=\"%.*s\"", 
+                        LN_NAME, seq_len, line_name(VB).s, n, STRfb(vb->textual_cigar));
 
                 uint32_t start_i = i;
-                for (; n && next_ref < pos_index + ref_len_this_level; n--, next_ref++, i++) {
+                for (; n && next_ref < pos_index + ref_consumed; n--, next_ref++, i++) {
 
                     // circle around to beginning of chrom if out of range (can only happen with external reference, expected only with circular chromosomes) 
                     uint32_t idx = (next_ref >= range_len) ? next_ref - range_len : next_ref; 
@@ -114,7 +105,7 @@ static bool sam_analyze_copied_SEQ (VBlockSAMP vb, STRp(seq), const SamPosType p
 
             // for Deletion or Skipping - we move the next_ref ahead
             case BC_D: case BC_N: {
-                unsigned ref_consumed_skip = (flag.reference == REF_INTERNAL ? MIN_(n, range_len - next_ref)
+                unsigned ref_consumed_skip = (IS_REF_INTERNAL ? MIN_(n, range_len - next_ref)
                                                                              : n);
                 next_ref += ref_consumed_skip;
                 n        -= ref_consumed_skip;
@@ -128,55 +119,26 @@ static bool sam_analyze_copied_SEQ (VBlockSAMP vb, STRp(seq), const SamPosType p
 
             case BC_NONE:
                 ABORT ("%s: End of CIGAR reached but we still have %u reference and %u sequence bases to consume"
-                        "(cigar=%s pos=%d recursion_level=%u level_0_seq_len=%u) (ref_consumed=%d next_ref=%u pos_index=%u ref_len_this_level=%u op.n=%u range=[%.*s %"PRId64"-%"PRId64"])",
-                        LN_NAME, pos_index + ref_len_this_level - next_ref, seq_len-i, vb->last_cigar ? vb->last_cigar : "", pos, recursion_level, level_0_seq_len,
-                        ref_consumed, next_ref, pos_index, ref_len_this_level, n, range->chrom_name_len, range->chrom_name, range->first_pos, range->last_pos);        
+                        "(cigar=%s pos=%d seq_len=%u) (ref_consumed=%d next_ref=%u pos_index=%u op.n=%u range=[%.*s %"PRId64"-%"PRId64"])",
+                        LN_NAME, pos_index + ref_consumed - next_ref, seq_len-i, vb->last_cigar ? vb->last_cigar : "", pos, seq_len,
+                        ref_consumed, next_ref, pos_index, n, range->chrom_name_len, range->chrom_name, range->first_pos, range->last_pos);        
 
             default:
                 ABORT ("%s: Invalid CIGAR op=%u", LN_NAME, op);        
         }
 
         // case: we're at the end of the reference AND we want more of it
-        if (next_ref == pos_index + ref_len_this_level && n) break;
+        if (next_ref == pos_index + ref_consumed && n) break;
     }
 
     ref_unlock (gref, &lock); // does nothing if REFLOCK_NONE
 
-    uint32_t this_seq_last_pos = pos + (next_ref - pos_index) - 1;
-
-    // in REF_INTERNAL, the sequence can flow over to the next range as each range is 1M bases. this cannot happen
-    // in REF_EXTERNAL as each range is the entire contig
-    ASSERT (flag.reference == REF_INTERNAL || i == seq_len, "%s: expecting i(%u) == seq_len(%u) pos=%d range=[%.*s %"PRId64"-%"PRId64"] (cigar=\"%s\" recursion_level=%u level_0_seq_len=%u)", 
-            LN_NAME, i, seq_len, pos, STRf(range->chrom_name), range->first_pos, range->last_pos, (vb->last_cigar ? vb->last_cigar : ""), recursion_level, level_0_seq_len);
-
-    // case: we have reached the end of the current reference range, but we still have sequence left - 
-    // call recursively with remaining sequence and next reference range 
-    if (i < seq_len) {
-
-        ASSERT (this_seq_last_pos <= MAX_POS_SAM, "%s: POS=%d and the consumed reference implied by CIGAR=\"%s\", exceeding MAX_POS=%"PRId64
-                " (next_ref=%u pos_index=%u ref_len_this_level=%u subcigar_len=%u range=[%.*s %"PRId64"-%"PRId64"])",
-                LN_NAME, pos, vb->last_cigar ? vb->last_cigar : "", MAX_POS_SAM, next_ref, pos_index, ref_len_this_level, n, 
-                STRf(range->chrom_name), range->first_pos, range->last_pos);
-
-        // if current op is not exhausted, next recursion will be starting from current op
-        uint32_t save_op_n=0;
-        if (n) {
-            vb->binary_cigar.next--; 
-            save_op_n = B(BamCigarOp, vb->binary_cigar, vb->binary_cigar.next)->n;
-            B(BamCigarOp, vb->binary_cigar, vb->binary_cigar.next)->n = n;
-        }
-
-        bool success = sam_analyze_copied_SEQ (vb, seq + i, seq_len - i, range->last_pos + 1, 
-                                               is_revcomp, ref_consumed - ref_len_this_level, ref_and_seq_consumed,
-                                               recursion_level + 1, level_0_seq_len, bit_i, line_sqbitmap); 
-
-        if (n) B(BamCigarOp, vb->binary_cigar, vb->binary_cigar.next)->n = save_op_n; // restore;
-    
-        if (!success) goto fail;
-    }
+    // an error here can indicate that CIGAR is inconsistent with sequence
+    ASSERT (i == seq_len, "%s: expecting i(%u) == seq_len(%u) pos=%d range=[%.*s %"PRId64"-%"PRId64"] (possibly reason: inconsistency between seq_len and CIGAR=\"%s\")", 
+            LN_NAME, i, seq_len, pos, STRf(range->chrom_name), range->first_pos, range->last_pos, (vb->last_cigar ? vb->last_cigar : ""));
 
     // ZIP: final verification step - does MD:Z correctly reflect matches and mismatches of M/X/=
-    if (!recursion_level && IS_ZIP) {
+    if (IS_ZIP) {
         sam_MD_Z_verify_due_to_seq (vb, STRa(seq), pos, bitmap, 0); // sets vb->md_verified
         buf_free (*line_sqbitmap);
     }
@@ -305,8 +267,7 @@ static void sam_seg_bisulfite_M (VBlockSAMP vb,
 // - Edge case: no SEQ (it is "*") - we '*' in SAM_NONREF and indicate "different from reference" in the bitmap. We store a
 //   single entry, regardless of the number of entries indicated by CIGAR
 static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(seq), const SamPosType pos, bool is_revcomp,
-                                       uint32_t ref_consumed, uint32_t ref_and_seq_consumed, 
-                                       unsigned recursion_level, uint32_t level_0_seq_len, bool no_lock)
+                                       uint32_t ref_consumed, uint32_t ref_and_seq_consumed, bool no_lock)
 {
     START_TIMER;
 
@@ -314,78 +275,52 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(s
     Context *nonref_ctx = CTX(SAM_NONREF);
     Context *seqmis_ctx = CTX(SAM_SEQMIS_A); // 4 contexts
 
-    ASSERT (recursion_level < 500, "excess recursion recursion_level=%u seq_len=%u", // a large number of recursion calls can happen if CIGAR=9M10910N86M3274690N30M1S as observed with the STAR aligner https://physiology.med.cornell.edu/faculty/skrabanek/lab/angsd/lecture_notes/STARmanual.pdf
-            recursion_level, seq_len);
-
     BitsP bitmap = (BitsP)&bitmap_ctx->local;
     uint32_t bitmap_start = bitmap_ctx->next_local;        
 
-    if (!recursion_level) {
+    ASSERTW (seq_len < 100000 || segconf.running || segconf.is_long_reads, 
+                "%s: Warning: sam_seg_SEQ: seq_len=%u is suspiciously high and might indicate a bug", LN_NAME, seq_len);
 
-        ASSERTW (seq_len < 100000 || segconf.running || segconf.is_long_reads, 
-                 "%s: Warning: sam_seg_SEQ: seq_len=%u is suspiciously high and might indicate a bug", LN_NAME, seq_len);
-
-        int64_t missing_bits = (int64_t)ref_and_seq_consumed - ((int64_t)bitmap_ctx->local.nbits - (int64_t)bitmap_ctx->next_local);
-        if (missing_bits > 0) {
-            buf_alloc_do (VB, &bitmap_ctx->local, roundup_bits2bytes64 (bitmap_ctx->local.nbits + seq_len), CTX_GROWTH, __FUNCLINE, NULL); 
-            buf_extend_bits (&bitmap_ctx->local, missing_bits);
-        }
-        
-        bits_set_region (bitmap, bitmap_ctx->next_local, ref_and_seq_consumed); // we initialize all the bits to "set", and clear as needed.
-        
-        if (vb->bisulfite_strand) {
-            if (segconf.sam_predict_meth_call) {
-                buf_alloc_exact (vb, vb->meth_call, seq_len, char, "meth_call");
-                memset (vb->meth_call.data, '.', vb->meth_call.len32);
-            }
-
-            if (segconf.MD_NM_by_unconverted) {
-                buf_alloc_bits (vb, &vb->unconverted_bitmap, ref_and_seq_consumed, "unconverted_bitmap");
-                bits_set_all ((BitsP)&vb->unconverted_bitmap); // we initialize all the bits to "set", and clear as needed.
-                vb->unconverted_bitmap.nbits = 0; // we will grow it back to ref_and_seq_consumed as we go along
-            }
-        }
-
-        for (int i=0; i < 4; i++)
-            buf_alloc (vb, &seqmis_ctx[i].local, ref_and_seq_consumed, 0, char, CTX_GROWTH, "contexts->local"); 
-
-        buf_alloc (vb, &nonref_ctx->local, seq_len + 3, 0, uint8_t, CTX_GROWTH, "contexts->local"); 
+    int64_t missing_bits = (int64_t)ref_and_seq_consumed - ((int64_t)bitmap_ctx->local.nbits - (int64_t)bitmap_ctx->next_local);
+    if (missing_bits > 0) {
+        buf_alloc_do (VB, &bitmap_ctx->local, roundup_bits2bytes64 (bitmap_ctx->local.nbits + seq_len), CTX_GROWTH, __FUNCLINE, NULL); 
+        buf_extend_bits (&bitmap_ctx->local, missing_bits);
+    }
     
-        bitmap_ctx->local_num_words++;
+    bits_set_region (bitmap, bitmap_ctx->next_local, ref_and_seq_consumed); // we initialize all the bits to "set", and clear as needed.
+    
+    if (vb->bisulfite_strand) {
+        if (segconf.sam_predict_meth_call) {
+            buf_alloc_exact (vb, vb->meth_call, seq_len, char, "meth_call");
+            memset (vb->meth_call.data, '.', vb->meth_call.len32);
+        }
 
-        // we don't need to lock if the entire ref_consumed of this read was already is_set by previous reads,
-        no_lock = (flag.reference == REF_EXTERNAL) || 
-                  ((vb->chrom_node_index == vb->consec_is_set_chrom) && (pos >= vb->consec_is_set_pos) && (pos + ref_consumed <= vb->consec_is_set_pos + vb->consec_is_set_len));
-// if (no_lock) printf ("xxx no_lock %s this:pos=%u rc=%u prev:pos=%u rc=%u\n", LN_NAME, dl->POS, dl->ref_consumed, (dl-1)->POS, (dl-1)->ref_consumed);
+        if (segconf.MD_NM_by_unconverted) {
+            buf_alloc_bits (vb, &vb->unconverted_bitmap, ref_and_seq_consumed, "unconverted_bitmap");
+            bits_set_all ((BitsP)&vb->unconverted_bitmap); // we initialize all the bits to "set", and clear as needed.
+            vb->unconverted_bitmap.nbits = 0; // we will grow it back to ref_and_seq_consumed as we go along
+        }
     }
 
+    for (int i=0; i < 4; i++)
+        buf_alloc (vb, &seqmis_ctx[i].local, ref_and_seq_consumed, 0, char, CTX_GROWTH, "contexts->local"); 
+
+    buf_alloc (vb, &nonref_ctx->local, seq_len + 3, 0, uint8_t, CTX_GROWTH, "contexts->local"); 
+
+    bitmap_ctx->local_num_words++;
+
+    // we don't need to lock if the entire ref_consumed of this read was already is_set by previous reads (speed optimization)
+    no_lock = IS_REF_EXTERNAL || ((vb->chrom_node_index == vb->consec_is_set_chrom) && (pos >= vb->consec_is_set_pos) && (pos + ref_consumed <= vb->consec_is_set_pos + vb->consec_is_set_len));
+
     RefLock lock = REFLOCK_NONE;
-    Range *range = vb->cigar_missing ? NULL 
-                 :                     ref_seg_get_locked_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, ref_consumed, WORD_INDEX_NONE, seq, 
-                                                                 no_lock ? NULL : &lock);
+    Range *range = vb->cigar_missing ? NULL : ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, ref_consumed, WORD_INDEX_NONE, seq, (no_lock ? NULL : &lock));
 
     // Cases where we don't consider the refernce and just copy the seq as-is
     // 1. (denovo:) this contig defined in @SQ went beyond the maximum genome size of 4B and is thus ignored
     // 2. (loaded:) case contig doesn't exist in the reference, or POS is out of range of contig (observed in the wild with chrM)    
     if (!range) {
-        vb->md_verified = false; // we can't seg MD:Z with special
-        vb->mismatch_bases_by_SEQ = -1; // we can't seg NM:i with special
-
-        // case: we're in the initial call - just return and seg as a verbatim copy
-        if (!recursion_level) {
-            COPY_TIMER (sam_seg_SEQ_vs_ref);
-            return MAPPING_NO_MAPPING;
-        }
-
-        // case: recursive call - we already segged partially against the reference, so we will continue that    
-        else {
-            // entire remaining seq is added to NONREF
-            buf_add_more (VB, &nonref_ctx->local, STRa(seq), "contexts->local");
-            bits_clear_region (bitmap, bitmap_ctx->next_local, ref_and_seq_consumed); // note: vb->ref_and_seq_consumed==0 if cigar="*"
-            bitmap_ctx->next_local += ref_and_seq_consumed;
-
-            goto done;
-        }    
+        COPY_TIMER (sam_seg_SEQ_vs_ref);
+        return MAPPING_NO_MAPPING; // seg as a verbatim copy
     }
 
     uint32_t pos_index = pos - range->first_pos;
@@ -394,22 +329,15 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(s
     uint32_t i=0, n=0;
     BamCigarOpType op = BC_NONE;
 
-    uint32_t ref_len_this_level = (flag.reference == REF_INTERNAL ? MIN_(ref_consumed, range->last_pos - pos + 1)
-                                                                  : ref_consumed); // possibly going around the end of the chromosome in case of a circular chromosome                                   
-
     uint32_t range_len = (range->last_pos - range->first_pos + 1);
     
-    if (flag.reference == REF_EXT_STORE && !no_lock) {
-        uint32_t overflow = (pos_index + ref_consumed > range_len) ? (pos_index + ref_consumed - range_len) : 0;
-        bits_set_region (&range->is_set, pos_index, ref_consumed - overflow); // we will need this ref to reconstruct
-        if (overflow) // can only happen with external reference, expected only with circular chromosomes
-            bits_set_region (&range->is_set, 0, overflow); // round robin to beginning
-    }
+    if (IS_REF_EXT_STORE && !no_lock) 
+        bits_set_region (&range->is_set, pos_index, ref_consumed); // we will need this ref to reconstruct
 
     bool has_D_N = false;
-    while (i < seq_len || next_ref < pos_index + ref_len_this_level) {
+    while (i < seq_len || next_ref < pos_index + ref_consumed) {
 
-        ASSERT0 (i <= seq_len && next_ref <= pos_index + ref_len_this_level, "i or next_ref are out of range");
+        ASSERT0 (i <= seq_len && next_ref <= pos_index + ref_consumed, "i or next_ref are out of range");
 
         if (vb->binary_cigar.next < vb->binary_cigar.len) {
             BamCigarOp *next_op = B(BamCigarOp, vb->binary_cigar, vb->binary_cigar.next++);
@@ -422,8 +350,8 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(s
             case BC_M: case BC_E: case BC_X: // alignment match or sequence match or mismatch
 
                 ASSERT (n > 0 && n <= (seq_len - i), 
-                        "%s: CIGAR implies seq_len longer than actual seq_len=%u (n=%u recursion_level=%u level_0_seq_len=%u). CIGAR=\"%s\"", 
-                        LN_NAME, seq_len, n, recursion_level, level_0_seq_len, vb->last_cigar ? vb->last_cigar : "");
+                        "%s: CIGAR implies seq_len longer than actual seq_len=%u (n=%u ). CIGAR=\"%s\"", 
+                        LN_NAME, seq_len, n, vb->last_cigar ? vb->last_cigar : "");
 
                 uint32_t bit_i = bitmap_ctx->next_local; // copy to automatic variable for performance
                 uint32_t save_n = n;
@@ -435,7 +363,7 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(s
                     n = 0;
                 }
                 
-                else while (n && next_ref < pos_index + ref_len_this_level) {
+                else while (n && next_ref < pos_index + ref_consumed) {
 
                     bool normal_base = IS_NUCLEOTIDE (seq[i]);
 
@@ -444,7 +372,7 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(s
 
                     // case: we have not yet set a value for this site - we set it now. note: in ZIP, is_set means that the site
                     // will be needed for pizzing. With REF_INTERNAL, this is equivalent to saying we have set the ref value for the site
-                    if (flag.reference == REF_INTERNAL && !no_lock && !ref_is_nucleotide_set (range, idx)) { 
+                    if (IS_REF_INTERNAL && !no_lock && !ref_is_nucleotide_set (range, idx)) { 
 
                         // note: in case this is a non-normal base (eg N), set the reference to an arbitrarily to 'A' as we 
                         // we will store this non-normal base in seqmis_ctx multiplexed by the reference base (i.e. in seqmis_ctx['A']).
@@ -493,7 +421,7 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(s
 
             // for Deletion or Skipping - we move the next_ref ahead
             case BC_D: case BC_N: {
-                unsigned ref_consumed_skip = (flag.reference == REF_INTERNAL ? MIN_(n, range_len - next_ref)
+                unsigned ref_consumed_skip = (IS_REF_INTERNAL ? MIN_(n, range_len - next_ref)
                                                                              : n);
                 next_ref += ref_consumed_skip;
                 n        -= ref_consumed_skip;
@@ -508,75 +436,43 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(s
 
             case BC_NONE:
                 ASSSEG (false, vb->last_cigar, "End of CIGAR reached but we still have %u reference and %u sequence bases to consume"
-                        "(cigar=%s pos=%d recursion_level=%u level_0_seq_len=%u) (ref_consumed=%d next_ref=%u pos_index=%u ref_len_this_level=%u op.n=%u range=[%.*s %"PRId64"-%"PRId64"])",
-                        pos_index + ref_len_this_level - next_ref, seq_len-i, vb->last_cigar, pos, recursion_level, level_0_seq_len,
-                        ref_consumed, next_ref, pos_index, ref_len_this_level, n, range->chrom_name_len, range->chrom_name, range->first_pos, range->last_pos);        
+                        "(cigar=%s pos=%d seq_len=%u) (ref_consumed=%d next_ref=%u pos_index=%u op.n=%u range=[%.*s %"PRId64"-%"PRId64"])",
+                        pos_index + ref_consumed - next_ref, seq_len-i, vb->last_cigar, pos, seq_len,
+                        ref_consumed, next_ref, pos_index, n, range->chrom_name_len, range->chrom_name, range->first_pos, range->last_pos);        
 
             default:
                 ASSSEG (false, vb->last_cigar, "Invalid CIGAR op=%u", op);        
         }
 
         // case: we're at the end of the reference AND we want more of it
-        if (next_ref == pos_index + ref_len_this_level && n) break;
+        if (next_ref == pos_index + ref_consumed && n) break;
     }
 
     ref_unlock (gref, &lock); // does nothing if REFLOCK_NONE
 
-    uint32_t this_seq_last_pos = pos + (next_ref - pos_index) - 1;
-
-    // in REF_INTERNAL, the sequence can flow over to the next range as each range is 1M bases. this cannot happen
-    // in REF_EXTERNAL as each range is the entire contig
-    ASSERT (flag.reference == REF_INTERNAL || i == seq_len, "expecting i(%u) == seq_len(%u) pos=%d range=[%.*s %"PRId64"-%"PRId64"] (cigar=%s recursion_level=%u level_0_seq_len=%u)", 
-            i, seq_len, pos, STRf(range->chrom_name), range->first_pos, range->last_pos, vb->last_cigar, recursion_level, level_0_seq_len);
+    // an error here can indicate that CIGAR is inconsistent with sequence
+    ASSERT (i == seq_len, "%s: expecting i(%u) == seq_len(%u) pos=%d range=[%.*s %"PRId64"-%"PRId64"] (possibly reason: inconsistency between seq_len and CIGAR=\"%s\")", 
+            LN_NAME, i, seq_len, pos, STRf(range->chrom_name), range->first_pos, range->last_pos, (vb->last_cigar ? vb->last_cigar : ""));
 
     // if we set the entire consecutive reference range covered by this read - extend consec_is_set 
-    if (segconf.is_sorted && !no_lock && (flag.reference == REF_EXT_STORE || !has_D_N/*REF_INTERNAL*/)) {
+    if (segconf.is_sorted && !no_lock && (IS_REF_EXT_STORE || !has_D_N/*REF_INTERNAL*/)) {
         // case: current region is not consecutive - start a new region
         if (vb->consec_is_set_chrom != vb->chrom_node_index || vb->consec_is_set_pos + vb->consec_is_set_len < pos) {
             vb->consec_is_set_chrom = vb->chrom_node_index;
             vb->consec_is_set_pos   = pos;
-            vb->consec_is_set_len   = ref_len_this_level;
+            vb->consec_is_set_len   = ref_consumed;
         }
 
         // case: extend current region
-        else if (vb->consec_is_set_pos + vb->consec_is_set_len < pos + ref_len_this_level)
-            vb->consec_is_set_len = (pos + ref_len_this_level) - vb->consec_is_set_pos;
-    }
-
-    // case: we have reached the end of the current reference range, but we still have sequence left - 
-    // call recursively with remaining sequence and next reference range 
-    if (i < seq_len) {
-
-        ASSSEG (this_seq_last_pos <= MAX_POS_SAM, vb->last_cigar, "POS=%d and the consumed reference implied by CIGAR=\"%s\", exceeding MAX_POS=%"PRId64
-                " (next_ref=%u pos_index=%u ref_len_this_level=%u subcigar_len=%u range=[%.*s %"PRId64"-%"PRId64"])",
-                pos, vb->last_cigar, MAX_POS_SAM, next_ref, pos_index, ref_len_this_level, n, 
-                STRf(range->chrom_name), range->first_pos, range->last_pos);
-
-        // if current op is not exhausted, next recursion will be starting from current op
-        uint32_t save_op_n=0;
-        if (n) {
-            vb->binary_cigar.next--; 
-            save_op_n = B(BamCigarOp, vb->binary_cigar, vb->binary_cigar.next)->n;
-            B(BamCigarOp, vb->binary_cigar, vb->binary_cigar.next)->n = n;
-        }
-
-        sam_seg_SEQ_vs_ref (vb, dl, seq + i, seq_len - i, range->last_pos + 1, 
-                            is_revcomp, ref_consumed - ref_len_this_level, ref_and_seq_consumed, 
-                            recursion_level + 1, level_0_seq_len, no_lock); // ignore return value
-
-        if (n) B(BamCigarOp, vb->binary_cigar, vb->binary_cigar.next)->n = save_op_n; // restore;
+        else if (vb->consec_is_set_pos + vb->consec_is_set_len < pos + ref_consumed)
+            vb->consec_is_set_len = (pos + ref_consumed) - vb->consec_is_set_pos;
     }
     
-    // final verification step - does MD:Z correctly reflect matches and mismatches of M/X/=
-    if (!recursion_level) {
-        bool use_un = segconf.MD_NM_by_unconverted && vb->bisulfite_strand;
-        sam_MD_Z_verify_due_to_seq (vb, STRa(seq), pos, 
-                                    use_un ? (BitsP)&vb->unconverted_bitmap : bitmap, 
-                                    use_un ? 0                              : bitmap_start);
-    }
-
-done:
-    if (recursion_level) return 0; // recursive calling ignores return value
+    // verify - does MD:Z correctly reflect matches and mismatches of M/X/=
+    bool use_un = segconf.MD_NM_by_unconverted && vb->bisulfite_strand;
+    sam_MD_Z_verify_due_to_seq (vb, STRa(seq), pos, 
+                                use_un ? (BitsP)&vb->unconverted_bitmap : bitmap, 
+                                use_un ? 0                              : bitmap_start);
 
     // note: change of logic in v14: up to v13, we use to align every recursion level, it seems that this was a bug
     sam_seg_SEQ_pad_nonref (vb);
@@ -587,8 +483,7 @@ done:
         return MAPPING_ALIGNED;
     
     else {
-        bitmap_ctx->local.nbits -= vb->ref_and_seq_consumed; // we don't use the bitmap if there are no mismatches
-        bitmap_ctx->next_local  -= vb->ref_and_seq_consumed;
+        bitmap_ctx->next_local -= vb->ref_and_seq_consumed; // note: we truncate bitmap, if needed, in sam_seg_finalize
         return MAPPING_PERFECT;
     } 
 }
@@ -638,6 +533,7 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq), unsigned
     START_TIMER;
 
     bool force_sequence = false; // true if reconstructor would normally diff, but in this case it should reconstruct from SQBITMAP.local
+    bool force_verbatim = false; // true if reconstructor would normally be vs_ref, but it verbatim
     bool aligner_used = false;
     bool perfect = false;
     bool vs_prim = false;
@@ -659,29 +555,32 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq), unsigned
 
     // case: unmapped line and we have refhash: align to reference
     if (unmapped && flag.aligner_available) {
-    
+        use_aligner:
         switch (aligner_seg_seq (VB, CTX(SAM_SQBITMAP), STRa(textual_seq), true, false, NO_GPOS, false)) {
-            case MAPPING_NO_MAPPING : goto add_seq_verbatim;
-            case MAPPING_PERFECT    : perfect      = true; // fallthrough
-            case MAPPING_ALIGNED    : aligner_used = true; break;
+            case MAPPING_NO_MAPPING : goto add_seq_verbatim; 
+            case MAPPING_PERFECT    : perfect        = true; // fallthrough
+            case MAPPING_ALIGNED    : aligner_used   = true; break;
             default                 : ABORT0 ("bad value");
         }
 
         sam_seg_SEQ_pad_nonref (vb);
         vb->md_verified = false;    
+        vb->mismatch_bases_by_SEQ = -1; // we can't seg NM:i with special
     }
 
     // case: unmapped line, no refhash: just store the sequence in nonref without an indication in the bitmap
-    else if (unmapped && !flag.aligner_available) {
+    else if (unmapped && !flag.aligner_available) { 
         add_seq_verbatim:        
         buf_add_more (VB, &CTX(SAM_NONREF)->local, STRa(textual_seq), "contexts->local");
         sam_seg_SEQ_pad_nonref (vb);
         vb->md_verified = false;    
+        vb->mismatch_bases_by_SEQ = -1; 
     }
 
     // case: no SEQ. we already add '-' to CIGAR - no data added here
     else if (textual_seq[0] == '*') {
         vb->md_verified = false;    
+        vb->mismatch_bases_by_SEQ = -1; 
         vb->seq_missing = dl->no_seq = true;
     }
 
@@ -705,17 +604,17 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq), unsigned
     }
     
     else vs_sequence: 
-        switch (sam_seg_SEQ_vs_ref (vb, dl, STRa(textual_seq), dl->POS, dl->FLAG.rev_comp, vb->ref_consumed, vb->ref_and_seq_consumed, 
-                                    0, textual_seq_len, false)) {
-            case MAPPING_NO_MAPPING : goto add_seq_verbatim;
-            case MAPPING_PERFECT    : perfect = true; // fallthrough
+        switch (sam_seg_SEQ_vs_ref (vb, dl, STRa(textual_seq), dl->POS, dl->FLAG.rev_comp, vb->ref_consumed, vb->ref_and_seq_consumed, false)) {
+            case MAPPING_NO_MAPPING : if (flag.aligner_available) goto use_aligner;
+                                      else { force_verbatim = true; goto add_seq_verbatim; };
+            case MAPPING_PERFECT    : perfect = true; break;
             default                 : break;
         }
 
     // set vb->md_verified and vb->mismatch_bases_by_SEQ needed by MD:Z and NM:i
     bool force_no_analyze_depn_SEQ = false;
     if (vs_prim && segconf.has_MD_or_NM && !vb->cigar_missing && 
-        !sam_analyze_copied_SEQ (vb, STRa(textual_seq), dl->POS, dl->FLAG.rev_comp, vb->ref_consumed, vb->ref_and_seq_consumed, 0, textual_seq_len, 0, &vb->codec_bufs[0]))
+        !sam_analyze_copied_SEQ (vb, STRa(textual_seq), dl->POS, dl->FLAG.rev_comp, vb->ref_consumed, vb->ref_and_seq_consumed, &vb->codec_bufs[0]))
             force_no_analyze_depn_SEQ = true;
 
     // case: PRIM - SQBITMAP context is reconstructed when loading SA Groups (preprocessing) - invoking SPECIAL_SEQ and reconstructing the sequence
@@ -725,8 +624,9 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq), unsigned
     seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_SEQ, '0'+force_sequence, '0'+aligner_used, '0'+perfect, '0'+force_no_analyze_depn_SEQ, 
                                 (!vb->bisulfite_strand) ? '0'
                               : (vb->bisulfite_strand && !segconf.bs_strand_not_by_rev_comp && (vb->bisulfite_strand=='G') == dl->FLAG.rev_comp) ? '*' // bisulfite_strand is predicted by rev_comp
-                              :                           vb->bisulfite_strand }, 
-                7, SAM_SQBITMAP, add_bytes); 
+                              :                           vb->bisulfite_strand,
+                              '0'+force_verbatim },
+                8, SAM_SQBITMAP, add_bytes); 
 
     COPY_TIMER (sam_seg_SEQ);
 }
@@ -802,8 +702,8 @@ rom sam_seg_analyze_set_one_ref_base (VBlockSAMP vb, bool is_depn, SamPosType po
 
     // get range (and lock it if needed)
     if (! *range_p) {
-        *range_p = ref_seg_get_locked_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, ref_consumed, WORD_INDEX_NONE, NULL, 
-                                             (flag.reference == REF_EXTERNAL || is_depn) ? NULL : lock);
+        *range_p = ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, ref_consumed, WORD_INDEX_NONE, NULL, 
+                                      (IS_REF_EXTERNAL || is_depn) ? NULL : lock);
         if (! *range_p) return "Range not available"; // cannot access this range in the reference
     }
 
@@ -814,14 +714,14 @@ rom sam_seg_analyze_set_one_ref_base (VBlockSAMP vb, bool is_depn, SamPosType po
     if (is_depn && (flag.reference & REF_STORED) && !ref_is_nucleotide_set (*range_p, pos_index))
         return "Depn alignment base not is_set in reference";
 
-    bool internal_pos_is_populated = (flag.reference == REF_INTERNAL) && ref_is_nucleotide_set (*range_p, pos_index);
+    bool internal_pos_is_populated = IS_REF_INTERNAL && ref_is_nucleotide_set (*range_p, pos_index);
 
     // case: reference already contains a base - but unfortunately it is not "base" - so MD is not reconstractable from reference
     if (((flag.reference & REF_ZIP_LOADED) || internal_pos_is_populated) && (base != ref_base_by_pos (*range_p, pos))) 
         return "incorrect reference base"; // encountered in the wild when the reference base is a IUPAC
 
     // case: reference is not set yet - set it now (extra careful never to set anything in depn, as range is not locked)
-    if (!is_depn && flag.reference == REF_INTERNAL && !internal_pos_is_populated)
+    if (!is_depn && IS_REF_INTERNAL && !internal_pos_is_populated)
         ref_set_nucleotide (*range_p, pos_index, base);
 
     // set is_set - we will need this base in the reference to reconstruct MD
@@ -909,14 +809,16 @@ static inline uint8_t *sam_reconstruct_SEQ_get_ref_bytemap (VBlockSAMP vb, Conte
     uint32_t num_ref_bases = MIN_(num_bases, range_len - idx);
     bits_base_to_byte (ref, &vb->range->ref, idx, num_ref_bases); // entries with is_set=0 will be garbage
 #ifdef DEBUG
-    bits_bit_to_byte (is_set, &vb->range->is_set, idx, num_ref_bases); 
+    if (!IS_REF_EXTERNAL)
+        bits_bit_to_byte (is_set, &vb->range->is_set, idx, num_ref_bases); 
 #endif
  
     // if ref_consumed goes beyond end of range, take the rest from the beginning of range (i.e. circling around)
     if (num_ref_bases < num_bases) {
         bits_base_to_byte (&ref[num_ref_bases], &vb->range->ref, 0, num_bases - num_ref_bases); 
 #ifdef DEBUG
-        bits_bit_to_byte (&is_set[num_ref_bases], &vb->range->is_set, 0, num_bases - num_ref_bases); 
+        if (!IS_REF_EXTERNAL)
+            bits_bit_to_byte (&is_set[num_ref_bases], &vb->range->is_set, 0, num_bases - num_ref_bases); 
 #endif
     }
     
@@ -929,7 +831,7 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, ContextP bitmap_ctx, STRp(snip), b
     START_TIMER;
 
     #ifdef DEBUG
-        #define verify_is_set(base_i) ASSPIZ (*Bc(vb->piz_is_set, (base_i) + (predict_meth_call ? 2 : 0)) == 1, "Expecting POS=%u + base_i=%u to have is_set=1", (SamPosType)vb->contexts[SAM_POS].last_value.i, (base_i))
+        #define verify_is_set(base_i) ASSPIZ (IS_REF_EXTERNAL || *Bc(vb->piz_is_set, (base_i) + (predict_meth_call ? 2 : 0)) == 1, "Expecting POS=%u + base_i=%u to have is_set=1", (SamPosType)vb->contexts[SAM_POS].last_value.i, (base_i))
     #else
         #define verify_is_set(base_i) 
     #endif
@@ -955,6 +857,8 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, ContextP bitmap_ctx, STRp(snip), b
 
     bool is_perfect = v14 && snip && snip[2] == '1';
 
+    bool force_verbatim = v14 && snip && snip[5] == '1';
+
     char bisulfite = vb->bisulfite_strand; // automatic var for efficiency in tight loop
     bool predict_meth_call = bisulfite && segconf.sam_predict_meth_call;
 
@@ -973,7 +877,7 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, ContextP bitmap_ctx, STRp(snip), b
     }
 
     // case: unmapped, and copied verbatim
-    if (unmapped) unmapped: {
+    if (unmapped || force_verbatim) unmapped: {
         if (reconstruct) RECONSTRUCT (nonref, vb->seq_len); 
         nonref_ctx->next_local += ROUNDUP4 (vb->seq_len);
         goto done;
@@ -986,7 +890,7 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, ContextP bitmap_ctx, STRp(snip), b
         goto done;
     }
 
-    ASSERT0 (bitmap_ctx->local.len32 || nonref_ctx->local.len32, "No SEQ data, perhaps sections were skipped?");
+    ASSERT0 (is_perfect || bitmap_ctx->local.len32 || nonref_ctx->local.len32, "No SEQ data, perhaps sections were skipped?");
 
     bitmap_ctx->last_value.i = bitmap_ctx->next_local; // for SEQ, we use last_value for storing the beginning of the sequence
 
@@ -1149,7 +1053,7 @@ static void reconstruct_SEQ_copy_sag_prim (VBlockSAMP vb, ContextP ctx, BitsP pr
         // NOTE: if SEQ is not loaded or !reconstruct - it is expected that NM and MD also don't reconstruct
         if (segconf.has_MD_or_NM && !vb->cigar_missing && !vb->seq_missing && !force_no_analyze_depn_SEQ) 
             sam_analyze_copied_SEQ (vb, seq, depn_seq_len, CTX(SAM_POS)->last_value.i, last_flags.rev_comp,
-                                    vb->ref_consumed, vb->ref_and_seq_consumed, 0, depn_seq_len, 0, &ctx->line_sqbitmap);        
+                                    vb->ref_consumed, vb->ref_and_seq_consumed, &ctx->line_sqbitmap);        
     }
 
     COPY_TIMER (reconstruct_SEQ_copy_sag_prim);
@@ -1190,7 +1094,7 @@ static void reconstruct_SEQ_copy_saggy (VBlockSAMP vb, ContextP ctx, bool recons
     // NOTE: if SEQ is not loaded or !reconstruct - it is expected that NM and MD also don't reconstruct
     if (segconf.has_MD_or_NM && !vb->cigar_missing && !vb->seq_missing && !force_no_analyze_depn_SEQ) 
         sam_analyze_copied_SEQ (vb, STRa(seq), CTX(SAM_POS)->last_value.i, last_flags.rev_comp,
-                                vb->ref_consumed, vb->ref_and_seq_consumed, 0, seq_len, 0, &ctx->line_sqbitmap);        
+                                vb->ref_consumed, vb->ref_and_seq_consumed, &ctx->line_sqbitmap);        
 }
 
 // PIZ of a SEQ in a MAIN and DEPN components - this is an all-the-same context - SEQ all lines in a DEPN component
@@ -1214,7 +1118,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SEQ)
         // if needed, get vb->mismatch_bases_by_SEQ and line_sqbitmap for use in reconstructing MD:Z and NM:i
         if (segconf.has_MD_or_NM && !vb->cigar_missing && !vb->seq_missing) 
             sam_analyze_copied_SEQ (vb, seq, vb->sag->seq_len, CTX(SAM_POS)->last_value.i, last_flags.rev_comp,
-                                    vb->ref_consumed, vb->ref_and_seq_consumed, 0, vb->sag->seq_len, 0, &ctx->line_sqbitmap);        
+                                    vb->ref_consumed, vb->ref_and_seq_consumed, &ctx->line_sqbitmap);        
     }
 
     // case: DEPN component - line with sag - copy from sag loaded from prim VB
@@ -1312,7 +1216,3 @@ TRANSLATOR_FUNC (sam_piz_sam2fastq_SEQ)
 
     return 0;
 }
-
-
-
-

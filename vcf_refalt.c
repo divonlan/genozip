@@ -29,13 +29,13 @@ static inline void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char ref, char alt
 
     // if we have a reference, we use it (we treat the reference as PRIMARY)
     // except: if --match-chrom, we assume the user just wants to match, and we don't burden him with needing the reference to decompress
-    if (((flag.reference == REF_EXTERNAL && !flag.match_chrom_to_reference) || flag.reference == REF_EXT_STORE) && vb->line_coords == DC_PRIMARY) {
+    if (((IS_REF_EXTERNAL && !flag.match_chrom_to_reference) || IS_REF_EXT_STORE) && vb->line_coords == DC_PRIMARY) {
         PosType pos = vb->last_int(VCF_POS);
 
         RefLock lock = REFLOCK_NONE;
 
-        Range *range = ref_seg_get_locked_range (VB, gref, vb->chrom_node_index, vb->chrom_name, vb->chrom_name_len, pos, 1, WORD_INDEX_NONE, NULL, 
-                                                 (flag.reference == REF_EXT_STORE ? &lock : NULL));
+        Range *range = ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, 1, WORD_INDEX_NONE, NULL, 
+                                          (IS_REF_EXT_STORE ? &lock : NULL));
         if (range) { // this chrom is in the reference
             uint32_t index_within_range = pos - range->first_pos;
 
@@ -45,7 +45,7 @@ static inline void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char ref, char alt
             if (ref == ref_base_by_idx (range, index_within_range)) 
                 new_ref = '-'; // this should always be the case...
 
-            if (flag.reference == REF_EXT_STORE)
+            if (IS_REF_EXT_STORE)
                 bits_set (&range->is_set, index_within_range);
 
             ref_unlock (gref, &lock); // does nothing if REFLOCK_NONE
@@ -647,10 +647,10 @@ LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool is
     if (!opos) return LO_OK_REF_SAME_SNP; // POS==oPOS==0 and REF==oREF=='.'
 
     // note: as we're using external references, the range is always the entire contig, and range->first_pos is always 1.
-    const Range *prim_range = ref_seg_get_locked_range (VB, prim_ref, dl->chrom[0], vb->chrom_name, vb->chrom_name_len, pos, 1, WORD_INDEX_NONE, Bc (vb->txt_data, vb->line_start), NULL); // doesn't lock as lock=NULL
-    ASSVCF (prim_range, "Failed to find PRIM range for chrom=\"%.*s\"", vb->chrom_name_len, vb->chrom_name);
+    const Range *prim_range = ref_seg_get_range (VB, prim_ref, dl->chrom[0], STRa(vb->chrom_name), pos, 1, WORD_INDEX_NONE, Bc (vb->txt_data, vb->line_start), NULL); // doesn't lock as lock=NULL
+    ASSVCF (prim_range, "Failed to find PRIM range for chrom=\"%.*s\"", STRf(vb->chrom_name));
 
-    const Range *luft_range = ref_seg_get_locked_range (VB, gref, dl->chrom[1], NULL, 0, opos, 1, luft_ref_index, Bc (vb->txt_data, vb->line_start), NULL);
+    const Range *luft_range = ref_seg_get_range (VB, gref, dl->chrom[1], NULL, 0, opos, 1, luft_ref_index, Bc (vb->txt_data, vb->line_start), NULL);
     ASSVCF (luft_range, "Failed to find LUFT range for chrom=%d", dl->chrom[1]);
 
     str_toupper_(vb->main_refalt, ref, ref_len);
@@ -658,7 +658,7 @@ LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool is
     
     // split ALT 
     str_split (alt, alt_len, alt_len == 1 ? 1 : 0, ',', alt, false); // short circuit if alt_len=1
-    ASSVCF (n_alts, "Invalid ALT=\"%.*s\"", alt_len, alt);
+    ASSVCF (n_alts, "Invalid ALT=\"%.*s\"", STRf(alt));
 
     // If the alt list has '*' ALTs - remove them as eg ALT="A,*" is still just one non-REF allele
     bool has_missing_alts = vcf_refalt_lift_remove_missing_alts (&n_alts, alts, alt_lens);
@@ -759,7 +759,7 @@ void vcf_refalt_seg_other_REFALT (VBlockVCFP vb, Did did_i, LiftOverStatus ostat
 
 // single-base re-anchoring, eg REF=ACGT ALT=G anchor="T" --> REF=TACT ALT=T  (assuming reference is TACTG)
 // left aligning: REF=ACGT ALT=G anchor="TCT" --> REF=TCTA ALT=T (assuming reference is TCTACTG)
-static inline void vcf_refalt_rotate_right (char *seq, unsigned seq_len, STRp(anchor))
+static inline void vcf_refalt_rotate_right (STRc(seq), STRp(anchor))
 {
     // move what remains of sequence after anchor is inserted
     if (seq_len > anchor_len)
@@ -912,7 +912,10 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_main_REFALT)
         ConstRangeP range = ref_piz_get_range (vb, gref, false);
         
         uint32_t idx = pos - range->first_pos;
-        ASSPIZ (ref_is_nucleotide_set (range, idx), "reference is not set: chrom=%.*s pos=%"PRId64, range->chrom_name_len, range->chrom_name, pos);
+
+        ASSPIZ (!flag.debug || IS_REF_EXTERNAL || ref_is_nucleotide_set (range, idx), 
+                "reference is not set: chrom=%.*s pos=%"PRId64, STRf(range->chrom_name), pos);
+
         ref_value = ref_base_by_idx (range, idx);
     }
 

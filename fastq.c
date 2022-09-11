@@ -183,7 +183,7 @@ void fastq_zip_initialize (void)
 
     // with REF_EXTERNAL, we don't know which chroms are seen (bc unlike REF_EXT_STORE, we don't use is_set), so
     // we just copy all reference contigs. this are not needed for decompression, just for --coverage/--sex/--idxstats
-    if (flag.reference == REF_EXTERNAL && z_file->num_txts_so_far == 1) // first file
+    if (IS_REF_EXTERNAL && z_file->num_txts_so_far == 1) // first file
         ctx_populate_zf_ctx_from_contigs (gref, FASTQ_CONTIG, ref_get_ctgs (gref)); 
 
     qname_zip_initialize (FASTQ_DESC);
@@ -439,7 +439,7 @@ static void fastq_seg_sequence (VBlockFASTQ *vb, STRp(seq))
                
     // case: aligned - lookup from SQBITMAP
     MappingType aln_res;
-    if (flag.aligner_available && 
+    if (false/*xxx*/ && flag.aligner_available && 
         ((aln_res = aligner_seg_seq (VB, CTX(FASTQ_SQBITMAP), STRa(seq), true, (vb->comp_i == FQ_COMP_R2), pair_gpos, pair_is_forward)))) {
         
         SNIPi1 (SNIP_LOOKUP, (aln_res==MAPPING_PERFECT ? -(int64_t)seq_len : (int64_t)seq_len)); // express perfect alignment by passing a negative seq_len 
@@ -455,7 +455,7 @@ static void fastq_seg_sequence (VBlockFASTQ *vb, STRp(seq))
         buf_add (&nonref_ctx->local, seq, seq_len);
 
         // TO DO: add seq_len_by_qname also to the case of aligned sequence ^ 
-        bool seq_len_by_qname = segconf.qname_seq_len_dict_id.num &&       // QNAME flavor has "length=""
+        bool seq_len_by_qname = segconf.qname_seq_len_dict_id.num &&  // QNAME flavor has "length=""
         seq_len == ECTX(segconf.qname_seq_len_dict_id)->last_value.i; // length is equal seq_len
 
         // case: we don't need to consume pair-1 gpos (bc we are pair-1, or pair-1 was not aligned): look up from NONREF

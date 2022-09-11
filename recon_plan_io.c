@@ -187,6 +187,8 @@ static void recon_plan_compress_one_fragment (VBlockP vb)
 void recon_plan_compress (uint32_t my_conc_writing_vbs,
                           bool my_is_luft)
 {
+    START_TIMER;
+
     if (flag.show_recon_plan && txt_file->recon_plan.len)
         recon_plan_show (txt_file, my_is_luft, my_conc_writing_vbs, (uint32_t)(segconf.vb_size >> 20));
 
@@ -212,6 +214,8 @@ void recon_plan_compress (uint32_t my_conc_writing_vbs,
                              zfile_output_processed_vb);
 
     buf_free (txt_file->recon_plan);
+
+    COPY_TIMER_VB (evb, recon_plan_compress);
 }
 
 // -------------------------------------

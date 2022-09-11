@@ -314,7 +314,7 @@ void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAM *dl, SamNMType nm, unsigned add
     // but the downside is that reconstruction takes longer due to the need to peek MD:Z. Therefore, we limit it to certain cases.
     else if (segconf.NM_is_integer && nm == predicted_by_MD && 
                (segconf.NM_after_MD            || // case 1: MD is reconstructed before NM so peek is fast
-                flag.reference == REF_INTERNAL || // case 2: prediction against SEQ performs poorly
+                IS_REF_INTERNAL || // case 2: prediction against SEQ performs poorly
                 predicted_by_SEQ != nm         || // case 3: rare cases in which prediction by SEQ is wrong with an external reference.
                 flag.best))                       // case 4: the user request the best method
         seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'm'}, 3, OPTION_NM_i, add_bytes);  // 'm' type since v14
@@ -374,7 +374,7 @@ void sam_seg_nM_i (VBlockSAMP vb, ZipDataLineSAM *dl, SamNMType nm, unsigned add
         // but the downside is that reconstruction takes longer due to the need to peek MD:Z. Therefore, we limit it to certain cases.
         else if (nm == predicted_by_MD && 
                     (segconf.nM_after_MD            || // case 1: MD is reconstructed before nM so peek is fast
-                     flag.reference == REF_INTERNAL || // case 2: prediction against SEQ performs poorly
+                     IS_REF_INTERNAL || // case 2: prediction against SEQ performs poorly
                      predicted_by_SEQ != nm         || // case 3: rare cases in which prediction by SEQ is wrong with an external reference.
                      flag.best))                       // case 4: the user request the best method
             seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'm'}, 3, OPTION_nM_i, add_bytes);  // 'm' type since v14
@@ -1149,8 +1149,6 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
                           rom tag, char bam_type, char array_subtype, 
                           STRp(value), ValueType numeric) // two options 
 {
-    START_TIMER;
-
     char sam_type = sam_seg_bam_type_to_sam_type (bam_type);
     char dict_name[6] = { tag[0], tag[1], ':', sam_type, ':', array_subtype }; // last 2 are ignored if not array
     DictId dict_id = dict_id_make (dict_name, (sam_type=='B' ? 6 : 4), DTYPE_SAM_AUX); // match dict_id as declared in #pragma GENDICT
@@ -1168,7 +1166,6 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
         // ---------------------
         // Standard fields
         // ---------------------
-//xxx  case _OPTION_XR_i: xxx(vb, dl, numeric.i, add_bytes); break;
         case _OPTION_SA_Z: sam_seg_SA_Z (vb, dl, STRa(value), add_bytes); break;
 
         case _OPTION_OA_Z: sam_seg_OA_Z (vb, STRa(value), add_bytes); break;
@@ -1358,6 +1355,5 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
                 seg_by_dict_id (VB, STRa(value), dict_id, add_bytes); 
     }
     
-    COPY_TIMER(tmp1);
     return dict_id;
 }

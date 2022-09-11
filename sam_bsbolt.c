@@ -45,8 +45,8 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_BSBOLT_YS)
 // (not currently used as bisulfite features are disabled for REF_INTERNAL (bug 648), and not thoroughly tested)
 void sam_seg_bsbolt_XB_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl)
 {
-    if (flag.reference != REF_INTERNAL || // analyzing sets bases in an internal reference - not needed if not internal
-        has_MD ||                         // analyzing MD sets the same bases
+    if (!IS_REF_INTERNAL || // analyzing sets bases in an internal reference - not needed if not internal
+        has_MD ||           // analyzing MD sets the same bases
         !has_XB_Z || !vb->bisulfite_strand || vb->comp_i != SAM_COMP_MAIN) return;
 
     STR(xb);

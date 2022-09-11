@@ -857,8 +857,7 @@ batch_real_world_1_adler32() # $1 extra genozip argument
                    test.*fq* test.*fa* \
                    basic.phy* test.*gvf* test.*gff* test.*locs* \
                    test.*txt* test.*kraken* | \
-                   grep -v "$filter_out" | grep -v .genozip | grep -v .md5 | grep -v .bad |
-                   grep -v test.transcriptome.bam` ) # B/660
+                   grep -v "$filter_out" | grep -v headerless | grep -v .genozip | grep -v .md5 | grep -v .bad ` ) 
 
     for f in ${files[@]}; do rm -f ${f}.genozip; done
 
@@ -886,7 +885,7 @@ batch_real_world_genounzip() # $1 extra genozip argument
                    test.*fq* test.*fa* \
                    basic.phy* test.*gvf* test.*gff* test.*locs* \
                    test.*txt* test.*kraken* | \
-                   grep -v "$filter_out" | grep -v .genozip | grep -v .md5 | grep -v .bad | grep -v .xz | grep -v .bz2` )
+                   grep -v "$filter_out" | grep -v headerless | grep -v .genozip | grep -v .md5 | grep -v .bad | grep -v .xz | grep -v .bz2` )
     
     # test full genounzip (not --test), including generation of BZGF
     for f in ${files[@]}; do 
@@ -967,9 +966,9 @@ batch_real_world_with_ref_md5() # $1 extra genozip argument
                     test.human.fq.gz test.human2.bam test.pacbio.clr.bam \
                     test.human2-R1.100K.fq.bz2 test.pacbio.ccs.10k.bam test.unmapped.sam.gz \
                     test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq test.pacbio-blasr.bam \
-                    test.human2.filtered.snp.vcf )
+                    test.human2.filtered.snp.vcf test.solexa-headerless.sam )
 
-    local files38=( test.1KG-38.vcf.gz )
+    local files38=( test.1KG-38.vcf.gz test.human-collated-headerless.sam test.human-sorted-headerless.sam )
 
     local filesT2T1_1=( test.nanopore.t2t_v1_1.bam )
 
@@ -992,9 +991,9 @@ batch_real_world_with_ref_backcomp()
                     test.human.fq.gz test.human2.bam test.pacbio.clr.bam \
                     test.human2-R1.100K.fq.bz2 test.pacbio.ccs.10k.bam \
                     test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq  \
-                    test.human2.filtered.snp.vcf )
+                    test.human2.filtered.snp.vcf test.solexa-headerless.sam )
 
-    local files38=( test.1KG-38.vcf.gz )
+    local files38=( test.1KG-38.vcf.gz test.human-collated-headerless.sam )
 
     local filesT2T1_1=( test.nanopore.t2t_v1_1.bam )
 
@@ -1111,13 +1110,13 @@ batch_reference_sam()
 
     echo "command line with mixed SAM and FASTQ files with --reference"
     echo "Note: '$GRCh38' needs to be up to date with the latest genozip format"
-    test_standard "-me$GRCh38" " " test.human-collated.sam test.human.fq.gz test.human-sorted.sam
+    test_standard "-me$GRCh38" " " test.human2.bam test.human.fq.gz test.human3-collated.bam
 
-    echo "multiple bound SAM with --REFERENCE" 
-    test_standard "-mE$GRCh38" " " test.human-collated.sam test.human-sorted.sam
+    echo "multiple SAM with --REFERENCE" 
+    test_standard "-mE$GRCh38" " " test.human-collated-headerless.sam test.human3-collated.bam
     
     echo "SAM with --REFERENCE and --password" 
-    test_standard "-E$GRCh38 --password 123" "-p123" test.human-collated.sam
+    test_standard "-E$GRCh38 --password 123" "-p123" test.human-collated-headerless.sam
 
     echo "BAM with --reference and --password, alternate chrom names" 
     test_standard "-me$hg19 --password 123" "-p123 -e$hg19" test.human2.bam  
@@ -1216,7 +1215,7 @@ batch_reference_backcomp()
         $genozip_prod --make-reference $fa_file --force -o $prod_ref_file || exit 1
     fi
 
-    local files38=( test.human.fq.gz test.human-collated.sam test.1KG-38.vcf.gz )
+    local files38=( test.human.fq.gz test.human-collated-headerless.sam test.1KG-38.vcf.gz )
 
     for f in ${files38[@]}; do 
         test_header "$f - reference file backward compatability with prod"
@@ -1226,6 +1225,17 @@ batch_reference_backcomp()
 
     cleanup
 }
+
+# compress headerless SAM with wrong ref. Expected to work (with bad compression ratio)
+batch_headerless_wrong_ref()
+{
+    batch_print_header
+
+    $genozip -ft ${TESTDIR}/test.human-collated-headerless.sam -e $hs37d5 || exit 1 
+    
+    cleanup
+}
+
 
 batch_genols()
 {
@@ -1431,11 +1441,12 @@ if (( $1 <= 47 )) ; then  batch_reference_vcf          ; fi
 if (( $1 <= 48 )) ; then  batch_many_small_files       ; fi
 if (( $1 <= 49 )) ; then  batch_make_reference         ; fi
 if (( $1 <= 50 )) ; then  batch_reference_backcomp     ; fi
+if (( $1 <= 51 )) ; then  batch_headerless_wrong_ref   ; fi
 
 if [[ `basename $PWD` != genozip-prod ]]; then
-    if (( $1 <= 51 )) ; then  batch_real_world_1_backcomp  ; fi 
-    if (( $1 <= 52 )) ; then  batch_real_world_with_ref_backcomp ; fi 
-    next=53
+    if (( $1 <= 52 )) ; then  batch_real_world_1_backcomp  ; fi 
+    if (( $1 <= 53 )) ; then  batch_real_world_with_ref_backcomp ; fi 
+    next=54
     if (( $1 <= $next + $num_batch_prod_compatability_tests )) ; then batch_prod_compatability $1 $next ; fi
 fi
 

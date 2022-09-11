@@ -122,9 +122,15 @@ typedef union SectionFlags {
     struct FlagsReconPlan {
         uint8_t luft             : 1;  // this section is for reconstructing the file in the Luft coordinates (introduced v12)
         uint8_t frag_len_bits    : 4;  // 2^(frag_len_bits+17) is the maximum fragment length (v14) 
+        uint8_t unused           : 3;
     } recon_plan;
 
-} SectionFlags;
+    struct FlagsRefContigs {
+        uint8_t sequential_ref_index : 1;  // v14: first ref_contig has ref_index 0, second has 1 etc. ref_index set to 0 on disk and should be set by piz.
+        uint8_t unused               : 7;
+    } ref_contigs;
+
+} SectionFlags __attribute__((__transparent_union__));
 
 #define SECTION_FLAGS_NONE ((SectionFlags){ .flags = 0 })
 

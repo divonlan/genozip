@@ -77,9 +77,9 @@ Bits aligner_seq_to_bitmap (rom seq, uint64_t seq_len,
 {
     // covert seq to 2-bit array
     Bits seq_bits = { .nbits  = seq_len * 2, 
-                          .nwords = roundup_bits2words64(seq_len * 2), 
-                          .words        = bitmap_words,
-                          .type         = BITARR_REGULAR };
+                      .nwords = roundup_bits2words64(seq_len * 2), 
+                      .words  = bitmap_words,
+                      .type   = BITARR_REGULAR };
 
     if (seq_is_all_actg) *seq_is_all_actg = true; // starting optimistic
 
@@ -279,9 +279,9 @@ MappingType aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq), bool no
         BNXT32 (gpos_ctx->local) = (uint32_t)gpos;
 
     // lock region of reference to protect is_set
-    RefLock lock = (flag.reference == REF_EXT_STORE) ? ref_lock (gref, gpos, seq_len) : REFLOCK_NONE;
+    RefLock lock = (IS_REF_EXT_STORE) ? ref_lock (gref, gpos, seq_len) : REFLOCK_NONE;
 
-    if (flag.reference == REF_EXT_STORE) 
+    if (IS_REF_EXT_STORE) 
         ref_set_genome_is_used (gref, gpos, seq_len); // this region of the reference is used (in case we want to store it with REF_EXT_STORE)
 
     // shortcut if we have a full reference match

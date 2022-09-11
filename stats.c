@@ -194,12 +194,12 @@ static void stats_output_file_metadata (void)
                    flag.pair ? " (paired)" : "",
                    (int)z_file->bound_txt_names.len, z_file->bound_txt_names.data);
     
-    if (flag.reference == REF_MAKE_CHAIN) {
+    if (IS_REF_MAKE_CHAIN) {
         bufprintf (evb, &stats, "PRIM reference: %s MD5=%s reference_version=%u\n", ref_get_filename (prim_ref), digest_display (ref_get_file_md5 (prim_ref)).s, ref_get_genozip_version (prim_ref));
         bufprintf (evb, &stats, "LUFT reference: %s MD5=%s reference_version=%u\n", ref_get_filename (gref), digest_display (ref_get_file_md5 (gref)).s, ref_get_genozip_version (gref));
     }
 
-    else if (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE || flag.reference == REF_LIFTOVER) 
+    else if (IS_REF_EXTERNAL || IS_REF_EXT_STORE || IS_REF_LIFTOVER) 
         bufprintf (evb, &stats, "Reference: %s MD5=%s reference_version=%u\n", ref_get_filename (gref), digest_display (ref_get_file_md5 (gref)).s, ref_get_genozip_version (gref));
 
     if (Z_DT(DT_VCF)) 
@@ -248,7 +248,7 @@ static void stats_output_file_metadata (void)
     
     else FEATURE(kraken_is_loaded, "Features: Per-line taxonomy ID data", "taxonomy_data")
     
-    else if (Z_DT(DT_CHAIN) && flag.reference == REF_MAKE_CHAIN && !segconf.chain_mismatches_ref)
+    else if (Z_DT(DT_CHAIN) && IS_REF_MAKE_CHAIN && !segconf.chain_mismatches_ref)
         bufprint0 (evb, &stats, "Features: Chain file suitable for use with genozip --chain\n");
 
     if (Z_DT(DT_VCF)) {
@@ -590,7 +590,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     stats_consolidate_ctxs (sbl, num_stats);
     
     stats_consolidate_non_ctx (sbl, num_stats, 
-                               flag.reference == REF_EXT_STORE ? "Reference" : "SEQ", // when compressing SAM/FASTQ with REF_EXT_STORE, account for the reference in its own "Parent"
+                               IS_REF_EXT_STORE ? "Reference" : "SEQ", // when compressing SAM/FASTQ with REF_EXT_STORE, account for the reference in its own "Parent"
                                5, ST_NAME (SEC_REFERENCE), ST_NAME (SEC_REF_IS_SET), 
                                ST_NAME (SEC_REF_CONTIGS), ST_NAME (SEC_CHROM2REF_MAP),
                                ST_NAME (SEC_REF_IUPACS));

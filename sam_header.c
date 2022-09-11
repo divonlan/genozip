@@ -38,8 +38,9 @@ static void sam_header_get_ref_index (STRp (contig_name), PosType LN, void *ref_
 
 static void sam_header_add_contig (STRp (contig_name), PosType LN, void *out_ref_index)
 {
-    // case: we have a reference, we use the reference chrom_index
-    WordIndex ref_index = WORD_INDEX_NONE;
+    WordIndex ref_index;
+
+    // case: we have a reference, we use the reference chrom_index    
     if (flag.reference & REF_ZIP_LOADED) {
         ref_index = ref_contigs_ref_chrom_from_header_chrom (gref, STRa(contig_name), &LN); // also verifies LN
 
@@ -52,11 +53,16 @@ static void sam_header_add_contig (STRp (contig_name), PosType LN, void *out_ref
         }
     }
 
-    // In case of REF_INTERNAL compression, and we have a header contigs - we pre-allocate the range space
-    PosType gpos = ref_samheader_denovo_get_header_contig_gpos (sam_hdr_contigs->contigs.len ? BLST (Contig, sam_hdr_contigs->contigs) : NULL);
+    else // internal
+        ref_index = sam_hdr_contigs->contigs.len32;
+
+    // In case of REF_INTERNAL compression, and we have a header contigs - we calculate their GPOS
+    Contig *prev = sam_hdr_contigs->contigs.len ? B(Contig, sam_hdr_contigs->contigs, sam_hdr_contigs->contigs.len-1) : NULL;
+    PosType gpos = (IS_REF_INTERNAL && prev) ? ROUNDUP64 (prev->gpos + prev->max_pos) : 0; // similar to ref_make_prepare_range_for_compress
 
     // add to contigs. note: index is sam_hdr_contigs is by order of appearance in header, not the same as the reference
     BNXT (Contig, sam_hdr_contigs->contigs) = (Contig){ 
+        .min_pos    = 1,
         .max_pos    = LN,        // if last_pos was provided, it is unchanged, and verified = the pos in ref. if not provided, it is what the reference says.
         .char_index = sam_hdr_contigs->dict.len, 
         .snip_len   = contig_name_len,
@@ -97,8 +103,7 @@ static void foreach_textual_SQ_line (rom txt_header, // nul-terminated string if
     }
 
     for (uint32_t i=0 ; ; i++) {
-        line = strchr (line, '@');
-        if (!line) break;
+        if (*line != '@') break;
 
         char *newline = strchr (line, '\n');
         ASSERT (newline, "line %u of textual SAM header does not end with a newline: \"%s\"", i, line);
@@ -136,8 +141,8 @@ static void foreach_textual_SQ_line (rom txt_header, // nul-terminated string if
         if (add_line)
             buf_add_more (NULL, new_txt_header, line, newline-line+1, NULL);
 
-        *newline = '\n'; // restore
-        line = newline+1;
+        *newline = '\n';    // restore
+        line = newline + 1; // beginning of next line or \0
     }
 
     if (bam_header_len) {
@@ -345,7 +350,7 @@ static void sam_header_alloc_contigs (BufferP txt_header)
     ContigsCbParam *winner = delta >= 0 ? &txt_ctg_count : &bin_ctg_count;
 
     if (winner->n_contigs) {
-        sam_hdr_contigs = CALLOC (sizeof (ContigPkg));
+        sam_hdr_contigs = IS_REF_INTERNAL ? ref_get_ctgs (gref) : CALLOC (sizeof (ContigPkg));
         sam_hdr_contigs->name = "sam_hdr_contigs";        
         sam_hdr_contigs->contigs.param = (delta > 0); // 1 if contigs come from the textual header, 0 if binary
         
@@ -355,9 +360,13 @@ static void sam_header_alloc_contigs (BufferP txt_header)
 }
 
 void sam_header_finalize (void)
-{
-    contigs_destroy (sam_hdr_contigs); // destroy bc we need to remove the buffers from the buffer_list ahead of FREEing the memory
-    FREE (sam_hdr_contigs);
+{    
+    if (!IS_REF_INTERNAL) {
+        contigs_destroy (sam_hdr_contigs); // destroy bc we need to remove the buffers from the buffer_list ahead of FREEing the memory
+        FREE (sam_hdr_contigs);
+    }
+    else
+        sam_hdr_contigs = NULL; // memory will be freed when we destroy gref
 }
 
 // ZIP
@@ -388,29 +397,14 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
 {    
     #define new_txt_header txt_header_vb->codec_bufs[0]
 
+    // if there is no external reference provided, then we create our internal one, and store it
+    // (if an external reference IS provided, the user can decide whether to store it or not, with --reference vs --REFERENCE)
+    if (IS_ZIP && flag.reference == REF_NONE) flag.reference = REF_INTERNAL;
+
     if (flag.show_txt_contigs && is_genocat) exit_ok();
 
-    if (IS_ZIP) {
-
-        if (!IS_BAM_ZIP) *BAFTc (*txt_header) = 0; // nul-terminate as required by foreach_textual_SQ_line
-
-        sam_header_zip_inspect_HD_line (txt_header);
-
-        sam_header_zip_inspect_PG_lines (txt_header);
-
-        // if there is no external reference provided, then we create our internal one, and store it
-        // (if an external reference IS provided, the user can decide whether to store it or not, with --reference vs --REFERENCE)
-        if (flag.reference == REF_NONE) flag.reference = REF_INTERNAL;
-
-        // in case of internal reference, we need to initialize. in case of --reference, it was initialized by ref_load_external_reference()
-        if (!flag.reference || flag.reference == REF_INTERNAL) 
-            ref_initialize_ranges (gref, RT_DENOVO); // it will be REF_INTERNAL if this is the 2nd+ non-conatenated file
-
-        // evb buffers must be alloced by the main thread, since other threads cannot modify evb's buf_list
-        random_access_alloc_ra_buf (evb, 0, 0);
-    }
-
-    if (IS_ZIP || flag.collect_coverage) {
+    // get contigs from @SQ lines
+    if (IS_ZIP || flag.collect_coverage) { // note: up to v13, contigs were carried by SEC_REF_CONTIG for REF_INTERNAL too 
 
         sam_header_alloc_contigs (txt_header); 
         if (sam_hdr_contigs) {
@@ -432,6 +426,22 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
 
             contigs_create_index (sam_hdr_contigs, SORT_BY_NAME); // used by sam_sa_add_sa_group
         }
+    }
+
+    if (IS_ZIP) {
+
+        if (!IS_BAM_ZIP) *BAFTc (*txt_header) = 0; // nul-terminate as required by foreach_textual_SQ_line
+
+        sam_header_zip_inspect_HD_line (txt_header);
+
+        sam_header_zip_inspect_PG_lines (txt_header);
+
+        // in case of internal reference, we need to initialize. in case of --reference, it was initialized by ref_load_external_reference()
+        if (IS_REF_INTERNAL && sam_hdr_contigs) 
+            ref_initialize_ranges (gref, RT_DENOVO); 
+
+        // evb buffers must be alloced by the main thread, since other threads cannot modify evb's buf_list
+        random_access_alloc_ra_buf (evb, 0, 0);
     }
 
     return true;

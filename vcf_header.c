@@ -150,13 +150,13 @@ static void vcf_header_consume_contig (STRp (contig_name), PosType *LN, bool is_
 
     // case: we have a reference - verify length
     if (!is_luft_contig && (flag.reference & REF_ZIP_LOADED))
-        ref_index = ref_contigs_ref_chrom_from_header_chrom (flag.reference == REF_LIFTOVER ? prim_ref : gref, 
+        ref_index = ref_contigs_ref_chrom_from_header_chrom (IS_REF_LIFTOVER ? prim_ref : gref, 
                                                              STRa(contig_name), LN);
 
     // if sorting - we have to pre-populate header & reference contigs (in vcf_zip_initialize) so that vb->is_unsorted is calculated correctly 
     // in vcf_seg_evidence_of_unsorted() (if VBs have their own chrom node_index's, they might be in reverse order vs the eventual z_file chroms)
     if (vcf_is_sorting (VCF_COMP_MAIN)) 
-        ctx_populate_zf_ctx (is_luft_contig ? VCF_oCHROM : VCF_CHROM, STRa(contig_name), ref_index); 
+        ctx_populate_zf_ctx (is_luft_contig ? VCF_oCHROM : VCF_CHROM, STRa(contig_name), ref_index, false); 
 
     if (flag.show_txt_contigs) 
         iprintf ("%s \"%.*s\" LN=%"PRId64" ref_index=%d\n", 

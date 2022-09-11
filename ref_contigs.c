@@ -53,7 +53,7 @@ void ref_contigs_populate_aligned_chroms (void)
         // add if chrom doesn't already exist ()
         if ((r->num_set = bits_num_set_bits (&r->is_set))) {
             
-            WordIndex chrom_index = ctx_populate_zf_ctx (CHROM, STRa(r->chrom_name), r->range_i); // add to dictionary
+            WordIndex chrom_index = ctx_populate_zf_ctx (CHROM, STRa(r->chrom_name), r->range_i, true); // add to dictionary and set count (count needed by ref_contigs_compress_stored)
 
             buf_alloc_255 (evb, &z_file->chrom2ref_map, 0, MAX_(1000, chrom_index+1), WordIndex, CTX_GROWTH, "z_file->chrom2ref_map");
 
@@ -67,7 +67,9 @@ static void ref_contigs_show (ConstBufferP contigs_buf, bool created)
     iprintf ("\nContigs as they appear in the reference%s:\n", created ? " created (note: contig names are as they appear in the txt data, not the reference)" : "");
     for_buf2 (const Contig, cn, i, *contigs_buf) {
 
-        rom chrom_name = cn->snip_len ? B(const char, ZCTX(CHROM)->dict, cn->char_index) : "~unused";
+        if (!cn->snip_len) continue; // unused contig
+
+        rom chrom_name = B(const char, ZCTX(CHROM)->dict, cn->char_index);
         bool ext_ref = (flag.reference & REF_ZIP_LOADED) || Z_DT(DT_REF);
 
         if (ext_ref && created)
@@ -86,20 +88,21 @@ static void ref_contigs_show (ConstBufferP contigs_buf, bool created)
     }
 }
 
-static void ref_contigs_compress_do (BufferP created_contigs)
+static void ref_contigs_compress_do (BufferP created_contigs, bool sequential_ref_index)
 {
     if (flag.show_ref_contigs) ref_contigs_show (created_contigs, true);
 
     BGEN_ref_contigs (created_contigs);
 
     created_contigs->len *= sizeof (Contig);
-    zfile_compress_section_data_ex (evb, NULL, SEC_REF_CONTIGS, created_contigs, 0,0, CODEC_BSC, SECTION_FLAGS_NONE, NULL); 
+    zfile_compress_section_data_ex (evb, NULL, SEC_REF_CONTIGS, created_contigs, 0, 0, CODEC_BSC, 
+                                    (struct FlagsRefContigs){ .sequential_ref_index = sequential_ref_index }, NULL); 
 
     buf_free (*created_contigs);
 }
 
 // Used by: 1. REF_INTERNAL (SAM/BAM): create and compress contigs - sorted by chrom_index 2. --make-reference
-void ref_contigs_compress_internal (Reference ref)
+void ref_contigs_compress_ref_make (Reference ref)
 {
     START_TIMER;
 
@@ -109,7 +112,7 @@ void ref_contigs_compress_internal (Reference ref)
 
     // the number of contigs is at most the number of chroms - but could be less if some chroms have no sequence
     // in SAM with header and -E, we don't copy the contigs to CHROM, so we take the length from CHROM.
-    buf_alloc (evb, &created_contigs, 0, ZCTX(CHROM)->nodes.len, Contig, 1, "created_contigs");
+    buf_alloc_zero (evb, &created_contigs, 0, ZCTX(CHROM)->nodes.len, Contig, 1, "created_contigs");
 
     // create sorted index into CHROM
     chrom_index_by_name (CHROM);
@@ -162,55 +165,53 @@ void ref_contigs_compress_internal (Reference ref)
     
     COPY_TIMER_VB (evb, ref_contigs_compress); // we don't count the compression itself and the disk writing
 
-    ref_contigs_compress_do (&created_contigs);
+    ref_contigs_compress_do (&created_contigs, false);
 }
 
-// create and compress contigs (when --make-reference or when compressing with REF_EXT_STORE or REF_INTERNAL)
-void ref_contigs_compress_ext_store (Reference ref)
+// create and compress contigs (when compressing with REF_EXT_STORE or REF_INTERNAL)
+void ref_contigs_compress_stored (Reference ref)
 {
     START_TIMER;
-    ContextP ctx = ZCTX(CHROM);
 
     static Buffer created_contigs = EMPTY_BUFFER;          
 
-    if (!buf_is_alloc (&ctx->nodes)) return; // no contigs
-    ARRAY (CtxNode, nodes, ctx->nodes);
+    ARRAY (uint64_t, chrom_counts, ZCTX(CHROM)->counts);
 
     // NOTE: ref_get_range_by_chrom access ranges by chrom, but ref_initialize_loaded_ranges (incorrectly) allocates ranges.len by ref->ctgs.contigs.len 
     // (for non REF_INTERNAL) therefore, we must have ref_contigs aligned with CHROM
     
-    buf_alloc_exact_zero (evb, created_contigs, nodes_len, Contig, "created_contigs");
-
-    for_buf2 (Contig, cn, i, created_contigs) {
-        cn->ref_index  = WORD_INDEX_NONE; // initialize (not all CHROMs have contigs, eg "*" in SAM)
-        cn->ref_index  = i; // ref_index always refers to the CHROM index of the file in which it is stored (eg REF_CONTIG in References files, RNAME in SAM etc)
-        cn->gpos       = 0; // ref_initialize_ranges overlays even empty contigs on the genome, so GPOS must be valid number
-    }
+    buf_alloc_exact_zero (evb, created_contigs, chrom_counts_len, Contig, "created_contigs");
 
     // create sorted index into CHROM
     chrom_index_by_name (CHROM);
-
+    
     ARRAY (Contig, cn, created_contigs);
-    for_buf (Range, r, ref->ranges) {
+    bool has_some_contigs = false;
+    for_buf2 (Range, r, range_i, ref->ranges) {
         // if gpos of the first range in this contig has been increased due to removing flanking regions and is no longer 64-aligned,
         // we start the contig a little earlier to be 64-aligned (note: this is guaranteed to be within the original contig before 
         // compacting, because the original contig had a 64-aligned gpos)
         PosType delta = r->gpos % 64;
 
-        WordIndex chrom = *B(WordIndex, z_file->ref2chrom_map, r->chrom); // the CHROM corresponding to this ref_index, even if a different version of the chrom name 
-        if (chrom == WORD_INDEX_NONE || !nodes[chrom].snip_len) continue; // this contig was not used in the data 
-        
+        WordIndex chrom = IS_REF_EXT_STORE ? *B(WordIndex, z_file->ref2chrom_map, r->chrom) : r->chrom; // the CHROM corresponding to this ref_index, even if a different version of the chrom name 
+
+        // don't store min_pos/max_pos/gpos (better compression) is this contig was not used explitictly (note: aligner doesn't use contigs, but GPOS)
+        if (chrom == WORD_INDEX_NONE || !chrom_counts[chrom] || 
+            ((IS_REF_INTERNAL || IS_REF_EXT_STORE) && !r->is_set.nbits)) continue; 
+
         cn[chrom].gpos    = r->gpos - delta;
         cn[chrom].min_pos = r->first_pos - delta;
         cn[chrom].max_pos = r->last_pos;
+        has_some_contigs = true;
     }
 
     COPY_TIMER_VB (evb, ref_contigs_compress); // we don't count the compression itself and the disk writing
 
-    ref_contigs_compress_do (&created_contigs);
+    if (has_some_contigs) // Could be false, e.g. in FASTQ if no read was successfully aligned to the reference
+        ref_contigs_compress_do (&created_contigs, true);
 }
 
-static void ref_contigs_load_set_contig_names (Reference ref)
+static void ref_contigs_load_set_contig_names (Reference ref, bool sequential_ref_index)
 {
     ASSERT0 (ZCTX(CHROM)->dict.len, "CHROM dictionary is empty");
 
@@ -220,6 +221,9 @@ static void ref_contigs_load_set_contig_names (Reference ref)
     ARRAY (Contig, contig, ref->ctgs.contigs);
 
     for (uint32_t i=0; i < contig_len; i++) {
+        if (sequential_ref_index) 
+            contig[i].ref_index = i; // ref_index is set to 0 on disk to improve compression, we re-created it here (sequentially)
+
         WordIndex chrom_index = contig[i].ref_index;
         ASSERT (chrom_index >= 0 && chrom_index < chrom_len, "Expecting contig[%u].ref_index=%d to be in the range [0,%d]", i, chrom_index, (int)chrom_len-1);
         contig[i].char_index = chrom[chrom_index].index;
@@ -239,7 +243,7 @@ void ref_contigs_load_contigs (Reference ref)
     BGEN_ref_contigs (&ref->ctgs.contigs);
 
     // get contig names from CHROM 
-    ref_contigs_load_set_contig_names (ref);
+    ref_contigs_load_set_contig_names (ref, sl->flags.ref_contigs.sequential_ref_index);
 
     contigs_create_index (&ref->ctgs, SORT_BY_NAME | SORT_BY_AC);
 
@@ -296,21 +300,20 @@ rom ref_contigs_get_name_by_ref_index (Reference ref, WordIndex ref_index, rom *
     return my_snip; 
 }
 
-void ref_contigs_generate_data_if_denovo (Reference ref)
-{
-    // copy data from the reference FASTA's CONTIG context, so it survives after we finish reading the reference and close z_file
-    Context *chrom_ctx = ZCTX(DTFZ(prim_chrom));
+//xxx void ref_contigs_generate_data_if_denovo (Reference ref)
+// {
+//     // copy data from the reference FASTA's CONTIG context, so it survives after we finish reading the reference and close z_file
+//     Context *chrom_ctx = ZCTX(DTFZ(prim_chrom));
 
-    ASSINP (flag.reference == REF_INTERNAL || (buf_is_alloc (&chrom_ctx->dict) && buf_is_alloc (&chrom_ctx->word_list)),
-            "Error: cannot use %s as a reference as it is missing a CONTIG dictionary", z_name);
+//     ASSINP (IS_REF_INTERNAL || (buf_is_alloc (&chrom_ctx->dict) && buf_is_alloc (&chrom_ctx->word_list)),
+//             "Error: cannot use %s as a reference as it is missing a CONTIG dictionary", z_name);
 
-    // we copy from the z_file context after we completed segging a file
-    // note: we can't rely on chrom_ctx->nodes for the correct order as vb_i=1 resorted. rather, by mimicking the
-    // word_list generation as done in PIZ, we guarantee that we will get the same ref_index
-    // in case of multiple bound files, we re-do this in every file in case of additional chroms (not super effecient, but good enough because the context is small)
-    contigs_free (&ref->ctgs);
-    contigs_build_contig_pkg_from_zctx (&ref->ctgs, chrom_ctx, SORT_BY_NAME);
-}
+//     // we copy from the z_file context after we completed segging a file
+//     // note: we can't rely on chrom_ctx->nodes for the correct order as vb_i=1 resorted. rather, by mimicking the
+//     // word_list generation as done in PIZ, we guarantee that we will get the same ref_index
+//     contigs_free (&ref->ctgs);
+//     contigs_build_contig_pkg_from_zctx (&ref->ctgs, chrom_ctx, SORT_BY_NAME);
+// }
 
 // ZIP SAM/BAM and VCF: verify that we have the specified chrom (name & last_pos) loaded from the reference at the same index. 
 // called by sam_header_add_contig, vcf_header_consume_contig. returns true if contig is in reference
@@ -355,7 +358,7 @@ WordIndex ref_contigs_ref_chrom_from_header_chrom (Reference ref, STRp(chrom_nam
 // a file header of a translated data type eg SAM->BAM or ME23->VCF
 PosType ref_contigs_get_contig_length (const Reference ref,
                                        WordIndex ref_index, // option 1 
-                                       rom chrom_name, unsigned chrom_name_len, // option 2
+                                       STRp(chrom_name),    // option 2
                                        bool enforce)
 {
     if (ref_index == WORD_INDEX_NONE && chrom_name)
@@ -407,7 +410,7 @@ PosType ref_contigs_get_genome_nbases (const Reference ref)
         if (!rc_with_largest_gpos || rc->gpos > rc_with_largest_gpos->gpos) rc_with_largest_gpos = rc;
     }
     
-    ASSERT (rc_with_largest_gpos, "There are %"PRIu64" elements in the contigs array, but none are actual contigs", ref->ctgs.contigs.len);
+    ASSERT (rc_with_largest_gpos, "There are %u elements in the contigs array, but none are actual contigs", ref->ctgs.contigs.len32);
 
     // note: contigs with gpos beyond 4Gb will not be used by the aligner
 

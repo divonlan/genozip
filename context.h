@@ -231,7 +231,7 @@ extern void ctx_read_all_counts (void);
 extern void ctx_compress_counts (void);
 extern rom ctx_get_snip_with_largest_count (Did did_i, int64_t *count);
 extern void ctx_populate_zf_ctx_from_contigs (Reference ref, Did dst_did_i, ConstContigPkgP ctgs);
-extern WordIndex ctx_populate_zf_ctx (Did dst_did_i, STRp (contig_name), WordIndex ref_index);
+extern WordIndex ctx_populate_zf_ctx (Did dst_did_i, STRp (contig_name), WordIndex ref_index, bool set_count);
 
 extern void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local);
 

@@ -392,9 +392,6 @@ uint64_t buf_get_memory_usage (void)
 {
     uint64_t mem_usage = 0;
     buf_foreach_buffer (buf_count_mem_usage, &mem_usage);
-    
-    mem_usage += ref_memory_consumption (gref).bytes; // REF_INTERNAL reference data NOT in buffers
-    
     return mem_usage;
 }
 
@@ -437,10 +434,6 @@ void buf_show_memory (bool memory_full, unsigned max_threads, unsigned used_thre
         fprintf (stderr, "\n\nError memory is full:\n");
     else
         iprint0 ("\n-------------------------------------------------------------------------------------\n");
-
-    // add non-Buffer reference memory
-    if (flag.reference != REF_NONE) 
-        stats[num_stats++] = ref_memory_consumption (gref); // only reports for DENOVO references
 
     // sort stats by bytes
     qsort (stats, num_stats, sizeof (MemStats), buf_stats_sort_by_bytes);

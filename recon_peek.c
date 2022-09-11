@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-//   recon_stack.c
+//   recon_peek.c
 //   Copyright (C) 2019-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 

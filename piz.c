@@ -379,12 +379,12 @@ DataType piz_read_global_area (Reference ref)
     // check if the genozip file includes a reference
     bool has_ref_sections = !!sections_last_sec (SEC_REFERENCE, true);
 
-    ASSERTW (!has_ref_sections || flag.reference != REF_EXTERNAL || flag.reading_reference, 
+    ASSERTW (!has_ref_sections || !IS_REF_EXTERNAL || flag.reading_reference, 
              "%s: ignoring reference file %s because it was not compressed with --reference", z_name, ref_get_filename (ref));
 
     if (!flag.reading_reference && has_ref_sections) {
-        ref_destroy_reference (ref, false);     // destroy an old reference, if one is loaded
-        flag.reference = REF_STORED; // possibly override REF_EXTERNAL (it will be restored for the next file in )
+        ref_destroy_reference (ref, false);  // destroy an old reference, if one is loaded
+        flag.reference = REF_STORED;         // possibly override REF_EXTERNAL (it will be restored for the next file in )
     }
 
     // read all dictionaries - CHROM/RNAME is needed for regions_make_chregs(). 

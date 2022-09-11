@@ -70,8 +70,6 @@ void main_exit (bool show_stack, bool is_error)
         ref_create_cache_join (prim_ref, false);
         refhash_create_cache_join(false);
         
-        ref_verify_before_exit();
-
         bool printed = version_print_notice_if_has_newer();
 
         if (flag.show_time && !flag.show_time[0]) { // show-time without the optional parameter 
@@ -221,8 +219,8 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
     RESTORE_FLAG(genocat_no_reconstruct);
 
     // case: reference not loaded yet bc --reference wasn't specified, and we got the ref name from zfile_read_genozip_header()   
-    if (flag.reference == REF_EXTERNAL && !ref_is_external_loaded(gref)) {
-        ASSINP0 (flag.reference != REF_EXTERNAL || !flag.show_ref_seq, "--show-ref-seq cannot be used on a file that requires a reference file: use genocat --show-ref-seq on the reference file itself instead");
+    if (IS_REF_EXTERNAL && !ref_is_external_loaded(gref)) {
+        ASSINP0 (!IS_REF_EXTERNAL || !flag.show_ref_seq, "--show-ref-seq cannot be used on a file that requires a reference file: use genocat --show-ref-seq on the reference file itself instead");
 
         if (!flag.genocat_no_reconstruct || 
             (flag.collect_coverage && Z_DT(DT_FASTQ))) { // in collect_coverage with FASTQ we read the non-data sections of the reference
@@ -325,9 +323,9 @@ static void main_test_after_genozip (rom exec_path, rom z_filename, DataType z_d
                                       flag.debug_lines   ? "--debug-lines"   : SKIP_ARG,
                                       flag.show_buddy    ? "--show-buddy"    : SKIP_ARG,
                                       flag.debug_latest  ? "--debug-latest"  : SKIP_ARG,
-                                      is_last_txt_file               && !flag.debug  ? "--check-latest"       : SKIP_ARG,
-                                      flag.reference == REF_EXTERNAL && !is_chain    ? "--reference"          : SKIP_ARG, // normal pizzing of a chain file doesn't require a reference
-                                      flag.reference == REF_EXTERNAL && !is_chain    ? ref_get_filename(gref) : SKIP_ARG, 
+                                      is_last_txt_file && !flag.debug ? "--check-latest"       : SKIP_ARG,
+                                      IS_REF_EXTERNAL && !is_chain    ? "--reference"          : SKIP_ARG, // normal pizzing of a chain file doesn't require a reference
+                                      IS_REF_EXTERNAL && !is_chain    ? ref_get_filename(gref) : SKIP_ARG, 
                                       NULL);
                                       // ↓↓↓ Don't forget to add below too ↓↓↓
 
@@ -371,14 +369,16 @@ static void main_test_after_genozip (rom exec_path, rom z_filename, DataType z_d
         if (flag.debug_latest)  argv[argc++] = "--debug-latest";
         if (is_last_txt_file && !flag.debug) 
                                 argv[argc++] = "--check-latest";
-        if (flag.reference == REF_EXTERNAL && !is_chain) 
+        if (IS_REF_EXTERNAL && !is_chain) 
                               { argv[argc++] = "--reference"; 
                                 argv[argc++] = ref_get_filename(gref); }
         argv[argc] = NULL;
                                 // ↑↑↑ Don't forget to add above too ↑↑↑
 
-        // verify the integrity of the references
-        ref_verify_before_exit();
+        // wait for cache write to complete
+        ref_create_cache_join (gref, false);
+        ref_create_cache_join (prim_ref, false);
+        refhash_create_cache_join(false);
 
         if (flag.show_time && !flag.show_time[0]) { // show-time without the optional parameter 
             profiler_add (evb);
@@ -639,7 +639,7 @@ static void main_get_filename_list (unsigned num_files, char **filenames,  // in
 
 static void main_load_reference (rom filename, bool is_first_file, bool is_last_z_file)
 {
-    if (flag.reference != REF_EXTERNAL && flag.reference != REF_EXT_STORE) return;
+    if (!IS_REF_EXTERNAL && !IS_REF_EXT_STORE) return;
 
     int old_aligner_available = flag.aligner_available;
     DataType dt = main_get_file_dt (filename);
@@ -736,7 +736,7 @@ int main (int argc, char **argv)
             }
 
             // case: requesting to display the reference: genocat --reference <ref-file> and optionally --regions
-            if (exe_type == EXE_GENOCAT && (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE)) {
+            if (exe_type == EXE_GENOCAT && (IS_REF_EXTERNAL || IS_REF_EXT_STORE)) {
                 command = PIZ;
                 flags_update (0, NULL);
 

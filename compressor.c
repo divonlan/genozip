@@ -42,7 +42,7 @@ uint32_t comp_compress (VBlockP vb,
     uint32_t encryption_padding_reserve = 0;
 
     if (header->section_type != SEC_GENOZIP_HEADER &&  // genozip header is never encrypted
-        !(header->section_type == SEC_REFERENCE && flag.reference == REF_EXT_STORE)) { // external reference copied over is never encrypted
+        !(header->section_type == SEC_REFERENCE && IS_REF_EXT_STORE)) { // external reference copied over is never encrypted
         is_encrypted = crypt_get_encrypted_len (&compressed_offset, &header_padding); // set to 0 if no encryption
         encryption_padding_reserve = crypt_max_padding_len(); // padding for the body
     }

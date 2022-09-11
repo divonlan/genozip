@@ -94,7 +94,7 @@ void ref_make_ref_init (void)
     refhash_remove_cache();
 
     buf_alloc (evb, &gref->ranges, 0, MAKE_REF_NUM_RANGES, Range, 1, "ranges"); // must be allocated by main thread as its evb
-    ranges_type (gref) = RT_MAKE_REF;
+    gref->ranges.rtype = RT_MAKE_REF;
     
     buf_zero (&gref->ranges);
 

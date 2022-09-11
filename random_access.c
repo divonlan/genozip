@@ -242,6 +242,8 @@ int random_access_sort_by_vb_i (const void *a_, const void *b_)
 // ZIP (main thread) sort RA, update overflowing chroms, create and merge in evb ra
 void random_access_finalize_entries (BufferP ra_buf)
 {
+    START_TIMER;
+
     if (!ra_buf->len) return; // no random access
 
     // build an index into ra_buf that we will sort. we need that, because for same-vb entries we need to 
@@ -281,11 +283,15 @@ void random_access_finalize_entries (BufferP ra_buf)
                 ra->min_pos    += (ra-1)->max_pos;
                 ra->max_pos    += (ra-1)->max_pos;
             } 
+
+    COPY_TIMER_VB (evb, random_access_finalize_entries);
 }
 
 Codec random_access_compress (ConstBufferP ra_buf_, SectionType sec_type, Codec codec, int ra_i, rom msg)
 {
-    if (!ra_buf_->len) return codec; // no random access
+    START_TIMER;
+
+    if (!ra_buf_->len) goto done; // no random access
 
     BufferP ra_buf = (BufferP)ra_buf_; // we will restore everything so that Const is honoured
 
@@ -308,6 +314,8 @@ Codec random_access_compress (ConstBufferP ra_buf_, SectionType sec_type, Codec 
     ra_buf->len /= sizeof (RAEntry); // restore
     BGEN_random_access (ra_buf); // make ra_buf into big endian
 
+done:
+    COPY_TIMER_VB (evb, random_access_compress);
     return codec;
 }
 

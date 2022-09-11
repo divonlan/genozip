@@ -21,6 +21,15 @@ typedef enum {
 } ReferenceType;
 extern rom ref_type_name(void);
 
+#define IS_REF_INTERNAL   (flag.reference == REF_INTERNAL)
+#define IS_REF_EXTERNAL   (flag.reference == REF_EXTERNAL)
+#define IS_REF_EXT_STORE  (flag.reference == REF_EXT_STORE)
+#define IS_REF_MAKE_CHAIN (flag.reference == REF_MAKE_CHAIN)
+#define IS_REF_LIFTOVER   (flag.reference == REF_LIFTOVER)
+
+#define IS_REF_STORED_PIZ (flag.reference == REF_STORED) // 2 bits set
+#define IS_REF_INTERNAL_PIZ ((Z_DT(DT_SAM) || Z_DT(DT_BAM)) && z_file->z_flags.dts_ref_internal)
+
 typedef enum { STATS_NONE=0, STATS_SHORT=1, STATS_LONG=2, STATS_SHORT_GREP=-1, STATS_LONG_GREP=-2 } StatsType;
 
 typedef struct {
@@ -95,7 +104,7 @@ typedef struct {
     enum { KRK_NONE, KRK_ALL, KRK_INCLUDED, KRK_EXCLUDED } show_kraken;
 
     // stats / debug useful mostly for developers
-    int show_memory, show_sag, show_depn, show_dict, show_b250, show_aliases, show_digest, log_digest, show_recon_plan,
+    int debug, show_memory, show_sag, show_depn, show_dict, show_b250, show_aliases, show_digest, log_digest, show_recon_plan,
         show_index, show_gheader, show_ref_contigs, show_chain_contigs, show_ref_seq, show_ref_diff,
         show_reference, show_ref_hash, show_ref_index, show_chrom2ref, show_ref_iupacs, show_chain, show_ranges,
         show_codec, 
@@ -124,8 +133,7 @@ typedef struct {
 
     // internal flags set by the system, not the command line
     CompIType zip_comp_i;    // ZIP only: currently zipping component (copied into VBlock.comp_i, FlagsTxtHeader.comp_i, SectionEntFileFormat.comp_i)
-    bool debug,              // set if DEBUG is defined
-         debug_top,
+    bool debug_top,
          is_windows, is_mac, is_linux, // set according to OS
          is_lten,            // set according to endianness   
          explicit_out_dt,    // genocat - out txt file data type set explicitly from command line
@@ -207,7 +215,6 @@ extern void flags_update_piz_one_file (int z_file_i);
 
 extern void flags_store_command_line (int argc, char **argv);
 extern rom flags_command_line (void);
-extern void flags_display_debugger_params (void);
 extern rom flags_pipe_in_process_name (void);
 extern unsigned flags_pipe_in_pid (void);
 extern bool flags_pipe_in_process_died (void);

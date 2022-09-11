@@ -137,7 +137,7 @@
     Buffer ol_chrom2ref_map;      /* ZIP: mapping from user file chrom to alternate chrom in reference file (chroms cloned) - incides much vb->contexts[CHROM].ol_nodes */\
     \
     /* reference range lookup caching */ \
-    RangeP prev_range[2];         /* previous range returned by ref_seg_get_locked_range */ \
+    RangeP prev_range[2];         /* previous range returned by ref_seg_get_range */ \
     uint32_t prev_range_range_i;  /* range_i used to calculate previous range */ \
     WordIndex prev_range_chrom_node_index[2]; /* chrom used to calculate previous range */ \
     \

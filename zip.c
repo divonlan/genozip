@@ -635,7 +635,7 @@ static void zip_write_global_area (void)
     // if we used the aligner with REF_EXT_STORE, we make sure all the CHROMs referenced are in the CHROM context, so
     // as SEC_REF_CONTIGS refers to them. We do this by seeing which contigs have any bit set in is_set.
     // note: in REF_EXTERNAL we don't use is_set, so we populate all contigs in zip_initialize
-    if (flag.aligner_available && flag.reference == REF_EXT_STORE)
+    if (flag.aligner_available && IS_REF_EXT_STORE)
         ref_contigs_populate_aligned_chroms();
 
     dict_io_compress_dictionaries(); 
@@ -644,7 +644,7 @@ static void zip_write_global_area (void)
 
     // store a mapping of the file's chroms to the reference's contigs, if they are any different
     // note: not needed in REF_EXT_STORE, as we convert the stored ref_contigs to use chrom_index of the file's CHROM
-    if (flag.reference == REF_EXTERNAL) 
+    if (IS_REF_EXTERNAL) 
         chrom_2ref_compress(gref);
 
     // output reference, if needed

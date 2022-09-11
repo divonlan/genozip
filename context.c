@@ -690,7 +690,7 @@ static void ctx_initialize_ctx (ContextP ctx, Did did_i, DictId dict_id, Did *di
     } 
 }
 
-WordIndex ctx_populate_zf_ctx (Did dst_did_i, STRp (contig_name), WordIndex ref_index)
+WordIndex ctx_populate_zf_ctx (Did dst_did_i, STRp (contig_name), WordIndex ref_index, bool set_count)
 {
     ContextP zctx = ZCTX(dst_did_i);
     
@@ -711,6 +711,11 @@ WordIndex ctx_populate_zf_ctx (Did dst_did_i, STRp (contig_name), WordIndex ref_
 
     if (is_primary && ref_index != WORD_INDEX_NONE && (flag.reference & REF_ZIP_LOADED))
         *B(WordIndex, z_file->chrom2ref_map, zf_node_index) = ref_index;
+
+    if (set_count) {
+        buf_alloc_zero (evb, &zctx->counts, 0, zf_node_index + 1, uint64_t, CTX_GROWTH, "counts");
+        *B64(zctx->counts, zf_node_index) = MAX_(*B64(zctx->counts, zf_node_index), 1);
+    }
 
     return zf_node_index;
 }
@@ -1654,6 +1659,8 @@ rom ctx_get_vb_snip_ex (ConstContextP vctx, WordIndex vb_node_index, pSTRp(snip)
 
 void ctx_compress_counts (void)
 {
+    START_TIMER;
+
     for_zctx {
         if (flag.show_one_counts.num == dict_id_typeless (zctx->dict_id).num) 
             ctx_show_counts (zctx);
@@ -1687,6 +1694,8 @@ void ctx_compress_counts (void)
             BGEN_u64_buf (&zctx->counts, NULL); // we need it for stats
         }
     }
+
+    COPY_TIMER_VB (evb, ctx_compress_counts);
 }
 
 // PIZ: called by the main threads from piz_read_global_area

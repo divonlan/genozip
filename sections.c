@@ -916,6 +916,11 @@ void sections_show_header (const SectionHeader *header, VBlockP vb /* optional i
         break;
     }
     
+    case SEC_REF_CONTIGS: {
+        sprintf (str, "sequential_ref_index=%u\n", header->flags.ref_contigs.sequential_ref_index);
+        break;
+    }
+    
     case SEC_RECON_PLAN: {
         SectionHeaderReconPlan *h = (SectionHeaderReconPlan *)header;
         sprintf (str, "conc_writing_vbs=%u %s\n", BGEN32 (h->conc_writing_vbs), sections_dis_flags (f, st, dt).s); 

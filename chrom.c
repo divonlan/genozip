@@ -184,7 +184,7 @@ WordIndex chrom_seg_ex (VBlockP vb, Did did_i,
     ContextP ctx = CTX(did_i);
     bool is_primary = did_i == DTF(prim_chrom);
     bool is_luft    = did_i == DTF(luft_chrom);
-    bool has_chain  = chain_is_loaded || flag.reference == REF_MAKE_CHAIN;
+    bool has_chain  = chain_is_loaded || IS_REF_MAKE_CHAIN;
 
     WordIndex chrom_node_index = WORD_INDEX_NONE, ref_index = WORD_INDEX_NONE;
     int32_t chrom_name_growth=0;

@@ -16,19 +16,17 @@
 #pragma GENDICT_PREFIX REF
 #pragma GENDICT REF_CONTIG=DTYPE_FIELD=CONTIG 
 
-// reference sequences - one per range of 1MB. ranges (chrom, pos) are mapped here with a hash function. In the rare case two unrelated ranges
-// are mapped to the same entry - only the first range will have a reference, and the other ones will not. this will hurt the compression ratio,
-// but not the correctness.
+// reference sequences - 
 // Thread safety: "ref" is set atomically as the last set in initialization. If its set, then it is correct and will never change. If it appears to be
 // not set yet, it is necesarry to lock the mutex and test again, and initialize if still not set.
 
 typedef struct Range {
-    uint32_t range_id;           // index of range within Buffer ranges
-    Bits ref;                // actual reference data - 2-bit array
-    Bits is_set;             // a 1-bit array - SEG: a pos is set if seg set this reference PIZ: is set if SEC_REF_IS_SET said so
+    Bits ref;                    // actual reference data - 2-bit array
+    Bits is_set;                 // a 1-bit array - SEG: a pos is set if seg set this reference PIZ: is set if SEC_REF_IS_SET said so
     int64_t num_set;             // used by ref_prepare_range_for_compress: number of set bits in in_set
     STR (chrom_name);
     WordIndex chrom;             // index to the contig of the in the CHROM of the file from which this reference was loaded.
+    uint32_t range_id;           // index of range within Buffer ranges
     uint32_t range_i;            // range ordinal number within contig
     PosType first_pos, last_pos; // the range that includes all loci (note: in ZIP-INTERNAL it might include unset loci too)
     PosType gpos;                // position of this range in the "global position" 
@@ -36,23 +34,12 @@ typedef struct Range {
 
 #define ref_size(r) ((r) ? ((r)->last_pos - (r)->first_pos + 1) : 0)
 
-#define REF_NUM_DENOVO_RANGES (1 << 20)
-
-#define REF_NUM_DENOVO_SITES_PER_RANGE_BITS 20 // 1 Mbp
-#define REF_NUM_DENOVO_SITES_PER_RANGE (1 << REF_NUM_DENOVO_SITES_PER_RANGE_BITS) // 1 Mbp
-
-// ZIP ONLY: access range_i and index within range, for ranges configured for ZIP
-#define range_i2pos(range_i) ((PosType)(range_i) << REF_NUM_DENOVO_SITES_PER_RANGE_BITS)
-#define pos2range_i(pos)   ((uint32_t)((pos) >> REF_NUM_DENOVO_SITES_PER_RANGE_BITS))
-#define pos2range_idx(pos) ((uint32_t)((pos) & (REF_NUM_DENOVO_SITES_PER_RANGE-1)))
-
 // locks
-typedef struct { int32_t first_mutex, last_mutex; } RefLock;
-#define REFLOCK_NONE ((RefLock){-1,-1})
+typedef struct { int32_t first_mutex, last_mutex, first_mutex_rr, last_mutex_rr; } RefLock;
+#define REFLOCK_NONE ((RefLock){-1,-1,-1,-1})
 
 extern RefLock ref_lock (Reference ref, PosType gpos_start, uint32_t seq_len);
-extern RefLock ref_lock_range (Reference ref, int32_t range_id);
-extern RangeP ref_seg_get_locked_range (VBlockP vb, Reference ref, WordIndex chrom, STRp(chrom_name), PosType pos, uint32_t seq_len, WordIndex ref_index, rom field /* used for ASSSEG */, RefLock *lock);
+extern RangeP ref_seg_get_range (VBlockP vb, Reference ref, WordIndex chrom, STRp(chrom_name), PosType pos, uint32_t ref_consumed, WordIndex ref_index, rom field /* used for ASSSEG */, RefLock *lock);
 extern void ref_unlock (Reference ref, RefLock *lock);
 
 // replace range if POS has moved to next rage
@@ -64,7 +51,7 @@ static inline RangeP ref_seg_renew_locked_range (VBlockP vb, Reference ref, Rang
 
 typedef enum { RT_NONE,      // value of ranges.param if ranges is unallocated
                RT_MAKE_REF,  // used in --make-ref one range per vb of fasta reference file - ranges in order of the fasta file
-               RT_DENOVO,    // used in SAM with REF_INTERNAL - an large array of Range's, hashed by the chrom and pos
+               RT_DENOVO,    // used in SAM with REF_INTERNAL 
                RT_LOADED,    // one Range per chrom (contig), overlayed on genome
                RT_CACHED     // same as RT_LOADED, but data is mmap'ed to a cache file
              } RangesType;
@@ -79,11 +66,8 @@ extern void ref_set_reference (Reference ref, rom filename, ReferenceType ref_ty
 extern void ref_set_ref_file_info (Reference ref, Digest md5, rom fasta_name, uint8_t genozip_version);
 extern void ref_unload_reference (Reference ref);
 extern void ref_destroy_reference (Reference ref, bool destroy_only_if_not_mmap);
-extern void ref_verify_before_exit (void);
-extern MemStats ref_memory_consumption (const Reference ref);
 extern ConstRangeP ref_piz_get_range (VBlockP vb, Reference ref, bool soft_fail);
 extern Range *ref_get_range_by_ref_index (VBlockP vb, Reference ref, WordIndex ref_contig_index);
-extern PosType ref_samheader_denovo_get_header_contig_gpos (ConstContigP prev_contig);
 extern rom ref_get_cram_ref (const Reference ref);
 extern void ref_generate_reverse_complement_genome (Reference ref);
 extern rom ref_get_filename (const Reference ref);
@@ -117,7 +101,7 @@ extern void ref_contigs_populate_aligned_chroms (void);
 extern WordIndex ref_contigs_get_by_name (const Reference ref, STRp(chrom_name), bool alt_ok, bool soft_fail);
 extern WordIndex ref_contigs_get_matching (const Reference ref, PosType LN, STRp(txt_chrom), STRp(*ref_contig), bool strictly_alt, bool *is_alt, int32_t *chrom_name_growth);
 extern rom ref_contigs_get_name (const Reference ref, WordIndex ref_index, unsigned *contig_name_len);
-extern ConstContigPkgP ref_get_ctgs (const Reference ref);
+extern ContigPkgP ref_get_ctgs (Reference ref);
 extern uint32_t ref_num_contigs (const Reference ref);
 extern PosType ref_contigs_get_contig_length (const Reference ref, WordIndex ref_contig_index, STRp(chrom_name), bool enforce);
 extern WordIndex ref_contigs_ref_chrom_from_header_chrom (const Reference ref, STRp(chrom_name), PosType *hdr_LN);
@@ -144,9 +128,9 @@ static inline char ref_base_by_pos (ConstRangeP range, PosType pos)  { return re
 static inline void ref_assert_nucleotide_available (ConstRangeP range, PosType pos) {
     bool available;
     switch (flag.reference) {
-        case REF_STORED    : available = ref_is_nucleotide_set (range, pos2range_idx (pos)); break;
-        case REF_INTERNAL  : available = true; break;
-        default            : available = (pos >= range->first_pos && pos <= range->last_pos); break;
+        case REF_STORED   : available = ref_is_nucleotide_set (range, pos); break;
+        case REF_INTERNAL : available = true; break;
+        default           : available = (pos >= range->first_pos && pos <= range->last_pos); break;
     }
     ASSERT (available, "reference is not set: chrom=%.*s pos=%"PRId64, (range)->chrom_name_len, (range)->chrom_name, (pos));
 }
