@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_cigar.c
-//   Copyright (C) 2019-2022 Genozip Limited
+//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 
 // a module for handling CIGAR and MC:Z

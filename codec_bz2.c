@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   comp_bz2.c
-//   Copyright (C) 2019-2022 Genozip Limited
+//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 
 #include "bzlib/bzlib.h"
