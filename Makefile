@@ -371,7 +371,7 @@ decrement-version:
 	@git push > /dev/null
 	@git tag genozip-$(version) > /dev/null
 	@git push origin genozip-$(version) > /dev/null
-	@curl https://github.com/divonlan/genozip/archive/genozip-$(version).tar.gz --silent --location -o $@ > /dev/null
+	@curl https://github.com/divonlan/genozip/archive/genozip-$(version).tar.gz --ssl-no-revoke --silent --location -o $@ > /dev/null
 	@echo GITHUB: go to here: https://github.com/divonlan/genozip/releases/new
 	@echo "1. Set 'Tag version' and 'Release title' are both: genozip-$(version)"
 	@echo "2. Copy the notes for the version from RELEASE NOTES"
