@@ -54,7 +54,7 @@ extern void mutex_show_bottleneck_analsyis (void);
 // -------------------
 
 typedef struct Serializer {
-    Mutex;
+    Mutex;             // note: gcc/clang flag -fms-extensions is needed for this type of anonymous struct use
     VBIType vb_i_last; // used by serializer_lock
     Buffer skips;      // a bytemap of vb_i's to skip
 } Serializer;
