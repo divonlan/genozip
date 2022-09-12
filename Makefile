@@ -170,7 +170,7 @@ $(OBJDIR)/%.d: %.c | $(OBJDIR) # directory is an "order only prerequesite": http
 
 $(OBJDIR)/%.o: %.c $(OBJDIR)/%.d
 	@echo Compiling $<
-	$(CC) -c -o $@ $< $(CFLAGS)
+	@$(CC) -c -o $@ $< $(CFLAGS)
 
 $(OBJDIR)/%.debug-o: %.c $(OBJDIR)/%.d
 	@echo "Compiling $< (debug)"
