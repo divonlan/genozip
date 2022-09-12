@@ -2,7 +2,7 @@
 ProjectFileVersion = "1.1"
 [General]
 Program name = Genozip
-Program version = 14.0.1
+Program version = 14.0.2
 Windows 2000 = 0
 Windows XP = 0
 Windows Server 2003 = 0
@@ -245,7 +245,7 @@ of such damages.\par
 \par
 END OF TERMS AND CONDITIONS\par
 \par
-Genozip license version: 14.0.0\par
+Genozip license version: 14.0.2\par
 \par
 \par
 }
