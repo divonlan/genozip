@@ -157,7 +157,7 @@ extern ContextP ctx_get_unmapped_ctx (ContextP contexts, DataType dt, Did *dict_
 // returns did_i of dict_id if it is found in the map, or DID_NONE if not
 static inline Did get_matching_did_i_from_map (const Context *contexts, const Did *map, DictId dict_id)
 {
-    Did did_i = map[dict_id.map_key];
+    Did did_i = map[dict_id.map_key[0]];
     if (did_i != DID_NONE && contexts[did_i].dict_id.num == dict_id.num) 
         return did_i;
 
@@ -361,12 +361,12 @@ extern uint64_t ctx_get_ctx_group_z_len (VBlockP vb, Did group_did_i);
 typedef enum { KR_KEEP, KR_REMOVE } CtxKeepRemove;
 extern void ctx_declare_winning_group (Did winning_group_did_i, Did losing_group_did_i, Did new_st_did_i);
 
-extern void ctx_set_store (VBlockP vb, StoreType store_type, ...);
+extern void ctx_set_store (VBlockP vb, int store_type, ...);
 extern void ctx_set_no_stons (VBlockP vb, ...);
 extern void ctx_set_same_line (VBlockP vb, ...);
 extern void ctx_set_store_per_line (VBlockP vb, ...);
-extern void ctx_set_ltype (VBlockP vb, LocalType ltype, ...);
-extern void ctx_consolidate_stats (VBlockP vb, Did parent, ...);
+extern void ctx_set_ltype (VBlockP vb, int ltype, ...);
+extern void ctx_consolidate_stats (VBlockP vb, int parent, ...);
 extern void ctx_consolidate_statsN(VBlockP vb, Did parent, Did first_dep, unsigned num_deps);
 extern void ctx_consolidate_stats_(VBlockP vb, Did parent, unsigned num_deps, ContextP *dep_ctxs);
 

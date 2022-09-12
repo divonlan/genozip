@@ -49,10 +49,10 @@ static inline void set_dict_id_to_did_i_map (Did *map, DictId dict_id, Did did_i
     // thread safety for z_file map: we don't bother with having a mutex, in the worst case scenario, two threads will test an entry
     // as empty and then both write to it, with one of them prevailing. that's fine (+ Likely its the same did_i anyway).
 
-    if (map[dict_id.map_key] == DID_NONE)  // map is free
-        map[dict_id.map_key] = did_i;
+    if (map[dict_id.map_key[0]] == DID_NONE)  // map is free
+        map[dict_id.map_key[0]] = did_i;
 
-    else if (map[dict_id.map_key] == did_i)  // already has requested value - nothing to do 
+    else if (map[dict_id.map_key[0]] == did_i)  // already has requested value - nothing to do 
         {}
     
     else if (map[ALT_KEY(dict_id)] == DID_NONE) // fallback entry is free or we can override it
@@ -1855,9 +1855,9 @@ ASCENDING_SORTER (sort_by_dict_id, ContextIndex, dict_id.num)
 void ctx_set_no_stons (VBlockP vb,                    ...) { SET_MULTI_CTX (vb, no_stons, true); }
 void ctx_set_store_per_line (VBlockP vb,              ...) { SET_MULTI_CTX (vb, flags.store_per_line, true); }
 void ctx_set_same_line (VBlockP vb,                   ...) { SET_MULTI_CTX (vb, flags.same_line, true); }
-void ctx_set_store (VBlockP vb, StoreType store_type, ...) { SET_MULTI_CTX (store_type, flags.store, store_type); }
-void ctx_set_ltype (VBlockP vb, LocalType ltype,      ...) { SET_MULTI_CTX (ltype, ltype, ltype); }
-void ctx_consolidate_stats (VBlockP vb, Did parent,   ...) { SET_MULTI_CTX (parent, st_did_i, parent); CTX(parent)->is_stats_parent = true;}
+void ctx_set_store (VBlockP vb, int store_type, ...)       { SET_MULTI_CTX (store_type, flags.store, store_type); } // clang issues a warning if store_type is of type StoreType
+void ctx_set_ltype (VBlockP vb, int ltype,      ...)       { SET_MULTI_CTX (ltype, ltype, ltype); }                 // clang issues a warning if ltype is of type LocalType
+void ctx_consolidate_stats (VBlockP vb, int parent,   ...) { SET_MULTI_CTX (parent, st_did_i, parent); CTX(parent)->is_stats_parent = true;} // clang issues a warning if parent is of type Did
 
 void ctx_consolidate_stats_(VBlockP vb, Did parent, unsigned num_deps, ContextP *dep_ctxs)
 {

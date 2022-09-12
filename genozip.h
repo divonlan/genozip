@@ -116,7 +116,8 @@ typedef enum { DTYPE_FIELD, DTYPE_1, DTYPE_2 } DictIdType;
 typedef union DictId {
     uint64_t num;             // num is just for easy comparisons - it doesn't have a numeric value and endianity should not be changed
     uint8_t id[DICT_ID_LEN];  // \0-padded IDs 
-    uint16_t map_key;         // we use the first two bytes as they key into vb/z_file->dict_id_mapper
+    uint16_t map_key[4];      // we use the first two bytes ([0]) as they key into vb/z_file->dict_id_mapper
+
     struct {
         #define ALT_KEY(d) (0x10000 | ((d).alt_key.b0_4 << 11) | ((d).alt_key.b5_9 << 6) | ((d).alt_key.b10_14 << 1) | (d).alt_key.b15)
         uint64_t unused1 : 3;
