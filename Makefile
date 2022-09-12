@@ -16,11 +16,14 @@ ifdef BUILD_PREFIX
 IS_CONDA=1
 endif
 
-LDFLAGS += -lpthread -lm 
-CFLAGS  += -Wall -D_LARGEFILE64_SOURCE=1 -D_7ZIP_ST
+LDFLAGS    += -lpthread -lm 
+CFLAGS     += -Wall -D_LARGEFILE64_SOURCE=1 -D_7ZIP_ST -std=gnu11 -fms-extensions 
+OPTFLAGS   += -Ofast 
+DEBUGFLAGS += -DDEBUG -g -O0 
 
 ifdef IS_CONDA 
-	CFLAGS  += -DDISTRIBUTION=\"conda\" # note: matches the name in version.c
+	CFLAGS += -DDISTRIBUTION=\"conda\" # note: matches the name in version.c -DIS_CONDA
+	CFLAGS += -Ofast 
 
 	ifeq ($(OS),Windows_NT)
 		CC=gcc # in Windows, override conda's default Visual C with gcc 
@@ -30,6 +33,7 @@ ifdef IS_CONDA
 
 else
 	CC=gcc
+	CFLAGS += -march=native -DNOT_CONDA # note: conda uses -march=nocona for Linux and -march=core2 for Darwin
 endif 
 
 SRC_DIRS = zlib bzlib lzma bsc libdeflate htscodecs compatibility
@@ -132,16 +136,6 @@ endif
 
 C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(BSC_SRCS) $(LZMA_SRCS) $(DEFLATE_SRCS) $(HTSCODECS_SRC)
 
-ifndef IS_CONDA 
-	CFLAGS += -march=native 
-#	ifneq ($(shell uname -a | grep ppc64),)
-#		CFLAGS += -mcpu=native 
-#	endif
-
-else  # conda
-
-endif
-
 OBJS       := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.o))
 DEBUG_OBJS := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.debug-o)) 
 OPT_OBJS   := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.opt-o))   # optimized but with debug info, for debugging issues that only manifest with compiler optimization
@@ -150,17 +144,6 @@ DEPS       := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.d))
 EXECUTABLES       = genozip$(EXE)       genounzip$(EXE)       genocat$(EXE)       genols$(EXE)
 DEBUG_EXECUTABLES = genozip-debug$(EXE) genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE)
 OPT_EXECUTABLES   = genozip-opt$(EXE)   genounzip-opt$(EXE)   genocat-opt$(EXE)   genols-opt$(EXE)
-
-ifeq ($(CC),gcc)
-	OPTFLAGS += -Ofast -std=gnu11 -fms-extensions
-	DEBUGFLAGS += -std=gnu11 -DDEBUG -g -O0 -fms-extensions
-else ifeq ($(CC),clang)
-	OPTFLAGS += -Ofast -std=gnu11 -fms-extensions
-	DEBUGFLAGS += -std=gnu11 -DDEBUG -g -O0 -fms-extensions
-else
-	OPTFLAGS += -O2 -DDEBUG 
-	DEBUGFLAGS += -DDEBUG -g -O0
-endif
 
 all   : CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"$(DISTRIBUTION)\"  
 all   : $(OBJDIR) $(EXECUTABLES) 
@@ -408,11 +391,10 @@ conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld
 #	@(cd $(CONDA_RECIPE_DIR); git request-pull master https://github.com/divonlan/genozip-feedstock master)
 	@touch $@
 	@echo "CONDA: Using a browser:"
-	@echo "  (1) Go to https://github.com/conda-forge/genozip-feedstock/pulls"
-	@echo "  (2) Click 'Compare and pull request' then 'Create pull request' and wait 30 seconds for the test to start"
-	@echo "      Fallback: if you can't see 'Compare & pull', manually created a pull request 'into conda-forge:master from divonlan:genozip'"
+	@echo "  (1) Go to https://github.com/divonlan/genozip-feedstock/tree/genozip"
+	@echo "  (2) Click 'Contribute' -> 'Open pull request'"
 	@echo "  (3) Go to https://dev.azure.com/conda-forge/feedstock-builds/_build"
-	@echo "  (4) Click on genozip and wait (~5 min) for the test to complete. Fix any issues."
+	@echo "  (4) Click on genozip and wait (~8 min) for the test to complete. Fix any issues."
 	@echo "  (5) Go back to the tab in (2) and click 'Merge pull request' and the 'Confirm merge' (DONT CLICK 'Delete branch')"
 	@echo "  (6) Go to https://dev.azure.com/conda-forge/feedstock-builds/_build and watch the build - it should be fine"
 	@echo "  (7) In ~30 minutes users will be able to 'conda update genozip'"
