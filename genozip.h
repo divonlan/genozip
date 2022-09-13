@@ -18,7 +18,9 @@
 #include "website.h"
 
 #pragma GCC diagnostic ignored "-Wunknown-pragmas"    // needed for our #pragma GENDICT
+#ifdef __clang__ 
 #pragma GCC diagnostic ignored "-Wmicrosoft-anon-tag" // a clang warning
+#endif
 
 // we defined these ourselves (normally defined in stdbool.h), as not always available on all platforms (namely issues with Docker Hub)
 #ifndef __bool_true_false_are_defined
