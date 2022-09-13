@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   regions.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #include "genozip.h"
 #include "regions.h"
@@ -13,10 +16,11 @@
 #include "vcf.h"
 #include "file.h"
 #include "contigs.h"
+#include "piz.h"
 
 // region as parsed from the --regions option
 typedef struct {
-    const char *chrom;        // NULL means all chromosomes (i.e. not a specific chromosome)
+    rom chrom;        // NULL means all chromosomes (i.e. not a specific chromosome)
     PosType start_pos;       // if the user did specify pos then start_pos=0 and end_pos=MAX_POS
     PosType end_pos;         // the region searched will include both the start and the end
 } Region;
@@ -29,14 +33,14 @@ typedef struct {
 } Chreg; // = Chromosome Region
 
 static Buffer regions_buf = EMPTY_BUFFER; // all regions together
-static Buffer *chregs = NULL;     // one entry per chrom
+static BufferP chregs = NULL;     // one entry per chrom
 
 static WordIndex num_chroms; // signed value as its compared to chrom
 
 static bool is_negative_regions = false; // true if the user used ^ to negate the regions
 
 // returns true if this is valid pos range string 
-static bool regions_parse_pos (const char *str, Region *reg) 
+static bool regions_parse_pos (rom str, Region *reg) 
 {
     unsigned len = strlen (str);
 
@@ -50,7 +54,7 @@ static bool regions_parse_pos (const char *str, Region *reg)
     if (str[len-1] == '-') return str_get_int (str, len-1, &reg->start_pos);
 
     // case: "1000-1500" (start 1000, end 1500)
-    const char *sep = strchr (str, '-');
+    rom sep = strchr (str, '-');
     if (sep) {
         if (!str_get_int (str, sep - str, &reg->start_pos)) return false;
         if (!str_get_int (sep+1, str+len-(sep+1), &reg->end_pos)) return false;
@@ -78,7 +82,7 @@ static bool regions_parse_pos (const char *str, Region *reg)
     return true;
 }
 
-static bool regions_is_valid_chrom (const char *str)
+static bool regions_is_valid_chrom (rom str)
 {
     // if it looks like a non-singleton range, we take it as not being a pos
     Region reg;
@@ -88,13 +92,13 @@ static bool regions_is_valid_chrom (const char *str)
     unsigned len = strlen (str);
 
     for (unsigned i=0; i < len; i++)
-        if (str[i] < 33 || str[i] > 127 || str[i] == ':') return false;
+        if (str[i] < 33 || str[i] > 126 || str[i] == ':') return false;
 
     return true;
 }
 
 // called from main when parsing the command line to add the argument of --regions
-void regions_add (const char *region_str)
+void regions_add (rom region_str)
 {
     ASSERTNOTNULL (region_str);
 
@@ -123,7 +127,7 @@ void regions_add (const char *region_str)
 
         ASSINP (before_colon, "Error: invalid region string: %s", region_str);
 
-        Region *reg = &NEXTENT (Region, regions_buf);
+        Region *reg = &BNXT (Region, regions_buf);
         *reg = (Region){ .chrom = NULL, .start_pos = 0, .end_pos = MAX_POS };
 
         // case: we have both chrom and pos - easy!
@@ -153,7 +157,7 @@ void regions_add (const char *region_str)
 
                 // if large number - have two regions: entire chrom of this number, and all chroms at this pos
                 if (reg->start_pos > MAX_NUM_THAT_WE_ASSUME_IS_A_CHROM_AND_NOT_POS) {
-                    NEXTENT (Region, regions_buf) = (Region){ .chrom = reg->chrom, .start_pos = 0, .end_pos = MAX_POS };
+                    BNXT (Region, regions_buf) = (Region){ .chrom = reg->chrom, .start_pos = 0, .end_pos = MAX_POS };
                     reg->chrom = NULL;
                 }
 
@@ -171,14 +175,18 @@ void regions_add (const char *region_str)
 
 // called from main when parsing the command line to add the argument of --regions
 // file format: tab separated file, each line contains 2 or 3 columns: CHROM POS or CHROM POS END (1-based POS like VCF, inclusive range)
-void regions_add_by_file (const char *regions_filename)
+void regions_add_by_file (rom regions_filename)
 {
+    // common user error -R1 instead of --R1
+    ASSINP ((regions_filename[0]!='1' && regions_filename[0]!='2') || regions_filename[1],
+            "-R is the short form of --regions-file, and it expects a filename. Did you mean --R%c (double hyphen)?", regions_filename[0]);
+    
     if (regions_filename[0] == '^') {
         is_negative_regions = true;
         regions_filename++;
         ASSINP0 (regions_filename[0], "bad --regions-file argument");
     }
-    
+
     file_split_lines (regions_filename, "regions");
     if (!n_lines) return; 
 
@@ -208,7 +216,7 @@ void regions_add_by_file (const char *regions_filename)
         ASSINP (!has_len || str_get_int_range64 (fields[2]+1, field_lens[2]-1, 0, MAX_POS, &len), 
                 "Invalid len (column 3 in a tab-separated file) in %s line %u: \"%.*s\"", regions_filename, i+1, field_lens[2], fields[2]);
 
-        NEXTENT (Region, regions_buf) = (Region){ 
+        BNXT (Region, regions_buf) = (Region){ 
             .chrom     = fields[0], 
             .start_pos = start_pos, 
             .end_pos   = (num_fields==2) ? start_pos 
@@ -254,7 +262,7 @@ void regions_make_chregs (ContextP chrom_ctx)
             chregs[chr_i].len++;
             buf_alloc (evb, &chregs[chr_i], 0, chregs[chr_i].len, Chreg, 2, "chregs");
             
-            Chreg *chreg = LASTENT (Chreg, chregs[chr_i]);
+            Chreg *chreg = BLST (Chreg, chregs[chr_i]);
             chreg->revcomp   = reg->end_pos < reg->start_pos; 
             chreg->start_pos = chreg->revcomp ? reg->end_pos : reg->start_pos;
             chreg->end_pos   = chreg->revcomp ? reg->start_pos : reg->end_pos;
@@ -270,30 +278,30 @@ void regions_transform_negative_to_positive_complement()
 {
     if (!is_negative_regions) return; // nothing to do
 
-    Buffer *neg_chregs = chregs;
+    BufferP neg_chregs = chregs;
     chregs = CALLOC (num_chroms * sizeof (Buffer));
 
     // initialize regions for each chr - to be the whole chr
     for (unsigned chr_i=0; chr_i < num_chroms; chr_i++) {
         buf_alloc (evb, &chregs[chr_i], 0, 1, Chreg, 1, "chregs");
-        Chreg *chreg = ENT (Chreg, chregs[chr_i], 0);
+        Chreg *chreg = B(Chreg, chregs[chr_i], 0);
         chreg->start_pos   = 0;
         chreg->end_pos     = MAX_POS;
         chregs[chr_i].len  = 1;
 
         // process each negative regions - substract from positive chreg 
-        for (unsigned negreg_i=0; negreg_i < neg_chregs[chr_i].len; negreg_i++) {
+        for (unsigned negreg_i=0; negreg_i < neg_chregs[chr_i].len32; negreg_i++) {
 
-            Chreg *neg_chreg = ENT (Chreg, neg_chregs[chr_i], negreg_i);
+            Chreg *neg_chreg = B(Chreg, neg_chregs[chr_i], negreg_i);
             
             // for each positive region that overlaps the negative region - fix it to remove the negative region
-            for (unsigned posreg_i=0; posreg_i < chregs[chr_i].len; posreg_i++) {
+            for (unsigned posreg_i=0; posreg_i < chregs[chr_i].len32; posreg_i++) {
 
-                Chreg *pos_chreg = ENT (Chreg, chregs[chr_i], posreg_i);
+                Chreg *pos_chreg = B(Chreg, chregs[chr_i], posreg_i);
 
                 // case: nagative completely eliminates the positive region
                 if (neg_chreg->start_pos <= pos_chreg->start_pos && neg_chreg->end_pos >= pos_chreg->end_pos) {
-                    memcpy (pos_chreg, ENT (Chreg, chregs[chr_i], posreg_i+1), (chregs[chr_i].len - posreg_i -1) * sizeof (Chreg));
+                    memcpy (pos_chreg, B(Chreg, chregs[chr_i], posreg_i+1), (chregs[chr_i].len - posreg_i -1) * sizeof (Chreg));
                     chregs[chr_i].len--;
                 }
 
@@ -310,8 +318,8 @@ void regions_transform_negative_to_positive_complement()
                     chregs[chr_i].len++;
                     buf_alloc (evb, &chregs[chr_i], 0, chregs[chr_i].len, Chreg, 2, "chregs");
                     
-                    Chreg *new_pos_chreg = LASTENT (Chreg, chregs[chr_i]);
-                    Chreg *pos_chreg = ENT (Chreg, chregs[chr_i], posreg_i); // update after realloc
+                    Chreg *new_pos_chreg = BLST (Chreg, chregs[chr_i]);
+                    Chreg *pos_chreg = B(Chreg, chregs[chr_i], posreg_i); // update after realloc
 
                     new_pos_chreg->start_pos = neg_chreg->end_pos + 1;
                     new_pos_chreg->end_pos   = pos_chreg->end_pos;
@@ -323,7 +331,7 @@ void regions_transform_negative_to_positive_complement()
 
     // copy the destroy the negative buffers
     for (unsigned chr_i=0; chr_i < num_chroms; chr_i++) 
-        buf_destroy (&neg_chregs[chr_i]);
+        buf_destroy (neg_chregs[chr_i]);
     
     is_negative_regions = false; // yay!
 
@@ -365,10 +373,10 @@ bool regions_get_range_intersection (WordIndex chrom_word_index, PosType min_pos
         return true;
     }
 
-    Buffer *chregs_buf = &chregs[chrom_word_index];
+    BufferP chregs_buf = &chregs[chrom_word_index];
     if (intersect_i >= chregs_buf->len) return false; // intersect_i is out of range with this chromosome (possibly because len=0 - no intersections with this chromosome)
 
-    Chreg *chreg = ENT (Chreg, *chregs_buf, intersect_i);
+    Chreg *chreg = B(Chreg, *chregs_buf, intersect_i);
 
     if (chreg->start_pos > max_pos || chreg->end_pos < min_pos) 
         return false; // no intersection with this chromosome
@@ -384,24 +392,24 @@ bool regions_get_range_intersection (WordIndex chrom_word_index, PosType min_pos
 // a specific ra (i.e. chromosome)
 bool regions_is_site_included (VBlockP vb)
 {
-    DidIType chrom_did_i = flag.luft ? DTF(luft_chrom) : DTF(prim_chrom);
-    DidIType pos_did_i   = flag.luft ? DTF(luft_pos)   : DTF(pos);
+    Did chrom_did_i = flag.luft ? DTF(luft_chrom) : DTF(prim_chrom);
+    Did pos_did_i   = flag.luft ? DTF(luft_pos)   : DTF(pos);
 
     WordIndex chrom = vb->last_index (chrom_did_i);
-    PosType pos = (pos_did_i == DID_I_NONE)          ? 1 
+    PosType pos = (pos_did_i == DID_NONE)          ? 1 
                 : CTX(pos_did_i)->rback_last_value.i ? CTX(pos_did_i)->rback_last_value.i // use saved value if one exists (used in VCF, bc VCF_POS.last_value might be modified by a INFO/END)
                 :                                      CTX(pos_did_i)->last_value.i;
     
     if (chrom == WORD_INDEX_NONE ||  
-        (z_dual_coords && ((vb->vb_coords==DC_LUFT) != flag.luft))) return true; // always include all rejected variants in the vcf header
+        (vb->data_type==DT_VCF && (vcf_vb_is_luft(vb) != flag.luft))) return true; // always include all rejected variants in the vcf header
 
-    ASSERT (chrom >= 0 && chrom < num_chroms, "chrom=%d is out of range: num_chroms=%u chrom_did_i=%u vb_i=%u vb->line_i=%"PRIu64, 
-            chrom, num_chroms, chrom_did_i, vb->vblock_i, vb->line_i);
+    ASSPIZ (chrom >= 0 && chrom < num_chroms, "chrom=%d is out of range: num_chroms=%u chrom_did_i=%u", 
+            chrom, num_chroms, chrom_did_i);
 
     // it sufficient that the site is included in one (positive) region
-    Buffer *chregs_buf = &chregs[chrom];
+    BufferP chregs_buf = &chregs[chrom];
     for (unsigned chreg_i=0; chreg_i < chregs_buf->len; chreg_i++) {
-        Chreg *chreg = ENT (Chreg, *chregs_buf, chreg_i);
+        Chreg *chreg = B(Chreg, *chregs_buf, chreg_i);
         if (pos >= chreg->start_pos && pos <= chreg->end_pos) return true;
     }
     return false;
@@ -414,9 +422,9 @@ bool regions_is_range_included (WordIndex chrom_word_index, PosType start_pos, P
             chrom_word_index, num_chroms);
 
     // it sufficient that the site is included in one (positive) region
-    Buffer *chregs_buf = &chregs[chrom_word_index];
+    BufferP chregs_buf = &chregs[chrom_word_index];
     for (unsigned chreg_i=0; chreg_i < chregs_buf->len; chreg_i++) {
-        Chreg *chreg = ENT (Chreg, *chregs_buf, chreg_i);
+        Chreg *chreg = B(Chreg, *chregs_buf, chreg_i);
 
         // check for complete inclusion
         if (start_pos >= chreg->start_pos && end_pos <= chreg->end_pos) 
@@ -456,15 +464,15 @@ unsigned regions_max_num_chregs (void)
     return result; 
 }
 
-void regions_display(const char *title)
+void regions_display(rom title)
 {
     iprintf ("regions_display: %s\n", title);
 
     if (buf_is_alloc (&regions_buf)) {
 
-        iprintf ("Showing %u %s regions:\n", (uint32_t)regions_buf.len, is_negative_regions ? "NEGATIVE" : "POSITIVE");
+        iprintf ("Showing %u %s regions:\n", regions_buf.len32, is_negative_regions ? "NEGATIVE" : "POSITIVE");
 
-        for (unsigned reg_i = 0; reg_i < regions_buf.len; reg_i++) {
+        for (unsigned reg_i = 0; reg_i < regions_buf.len32; reg_i++) {
             Region *reg = &((Region *)regions_buf.data)[reg_i];
             iprintf ("chrom=%s start=%"PRId64" end=%"PRId64"\n", 
                      reg->chrom ? reg->chrom : "ALL", reg->start_pos, reg->end_pos); 
@@ -475,8 +483,8 @@ void regions_display(const char *title)
         iprintf ("Showing %s chromosomeXregions (\"chregs\") across %u chromosomes:\n", is_negative_regions ? "NEGATIVE" : "POSITIVE", num_chroms);
 
         for (unsigned chr_i = 0; chr_i < num_chroms; chr_i++)
-            for (unsigned chreg_i=0; chreg_i < chregs[chr_i].len; chreg_i++) {
-                Chreg *chreg = ENT (Chreg, chregs[chr_i], chreg_i);
+            for (unsigned chreg_i=0; chreg_i < chregs[chr_i].len32; chreg_i++) {
+                Chreg *chreg = B(Chreg, chregs[chr_i], chreg_i);
                 iprintf ("chrom_word_index=%d start=%"PRId64" end=%"PRId64"\n", chr_i, chreg->start_pos, chreg->end_pos); 
             }
     }

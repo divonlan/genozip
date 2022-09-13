@@ -58,6 +58,8 @@ mac/scripts/*
 *.chain*
 !test/*
 test/*_ONLY.vcf
+test/*_ONLY.sam
+test/*_ONLY.bam
 test/*rejects
 *.overlaps
 !test/back-compat/*/*
@@ -95,3 +97,8 @@ dict_id_gen.c
 core
 SEC_*.body
 SEC_*.header
+digest.*.log
+failed-line.*
+*.tar
+*.log
+*.dict

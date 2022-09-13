@@ -269,6 +269,8 @@ typedef UInt32 CProbPrice;
 typedef struct
 {
   VBlockP vb;
+  ContextP ctx;
+  
   void *matchFinderObj;
   IMatchFinder matchFinder;
 
@@ -1001,7 +1003,7 @@ static unsigned Backward(CLzmaEnc *p, unsigned cur)
   for (;;)
   {
     UInt32 dist = p->opt[cur].dist;
-    unsigned len = (unsigned)p->opt[cur].len;
+    unsigned len   = (unsigned)p->opt[cur].len;
     unsigned extra = (unsigned)p->opt[cur].extra;
     cur -= len;
 
@@ -2118,9 +2120,10 @@ MY_NO_INLINE static void FillDistancesPrices(CLzmaEnc *p)
 
 
 
-static void LzmaEnc_Construct(CLzmaEnc *p, VBlockP vb)
+static void LzmaEnc_Construct(CLzmaEnc *p, VBlockP vb, ContextP ctx)
 {
-  p->vb = vb;
+  p->vb  = vb;
+  p->ctx = ctx;
 
   RangeEnc_Construct(&p->rc);
   MatchFinder_Construct(&p->matchFinderBase);
@@ -2146,9 +2149,9 @@ size_t LzmaEnc_LzmaHandleSize (void) // divon
   return sizeof(CLzmaEnc);
 }
 
-void LzmaEnc_Create(CLzmaEncHandle p, VBlockP vb)
+void LzmaEnc_Create(CLzmaEncHandle p, VBlockP vb, ContextP ctx)
 {
-  LzmaEnc_Construct((CLzmaEnc *)p, vb);
+  LzmaEnc_Construct((CLzmaEnc *)p, vb, ctx);
 }
 
 static void LzmaEnc_FreeLits(CLzmaEnc *p)
@@ -2648,7 +2651,11 @@ typedef struct
 static size_t SeqOutStreamBuf_Write(const ISeqOutStream *pp, const void *data, size_t size)
 {
   CLzmaEnc_SeqOutStreamBuf *p = CONTAINER_FROM_VTBL(pp, CLzmaEnc_SeqOutStreamBuf, vt);
-  ASSERT0 (p->rem >= size, "Out of memory in compressed buffer while compressing with LZMA");
+
+  if (size > p->rem)
+    return 0; // not enough memory in compressed buffer (added by divon)
+
+  ASSERTW0 (p->rem >= size, "FYI: compressed buffer too small while compressing with LZMA, no harm");
 
   memcpy(p->data, data, size);
   p->rem -= size;

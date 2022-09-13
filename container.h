@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   container.h
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #pragma once
 
@@ -10,25 +13,26 @@
 
 #pragma pack(1)
 #define CONTAINER_MAX_PREFIXES_LEN (32 * MAX_FIELDS)    // max len of just the names string, without the data eg "INFO1=INFO2=INFO3="
-#define CON_PX_SEP              '\x4'  // starts the prefix string and terminates every prefix within it
-#define CON_PX_SEP_             "\4"   // string version (careful not \x4 as it can combine with the next character to eg \x4F)
-#define CON_PX_SEP_SHOW_REPEATS '\x5'  // an alternative terminator - outputs the number of repeats in LTEN32 after the prefix (used for BAM 'B' array count field)
+#define CON_PX_SEP              '\x4'        // starts the prefix string and terminates every prefix within it
+#define CON_PX_SEP_             "\4"         // string version (careful not \x4 as it can combine with the next character to eg \x4F)
+#define CON_PX_SEP_SHOW_REPEATS '\x5'        // an alternative terminator - outputs the number of repeats in LTEN32 after the prefix (used for BAM 'B' array count field)
 
-#define CONTAINER_MAX_REPEATS 0xfffffe     // 3 byte unsigned int (16M) (minus 1 for easier detection of overflows)
+#define CONTAINER_MAX_REPEATS 0xfffffe       // 3 byte unsigned int (16M) (minus 1 for easier detection of overflows)
 #define CONTAINER_MAX_SELF_TRANS_CHANGE 50
 
-#define CONTAINER_MAX_DICTS 2047           // 11 bits -matches CONTAINER_FIELDS.nitems_lo+nitems_hi
+#define CONTAINER_MAX_DICTS 2047             // 11 bits -matches CONTAINER_FIELDS.nitems_lo+nitems_hi
 
 typedef struct ContainerItem {
-    DictId dict_id;                        // note: the code counts on this field being first (assigning "item = { dict_id }")
-    uint8_t did_i_small;                   // PIZ only: can store dids 0->254, 255 means did_i too large to store
+    DictId dict_id;                          // note: the code counts on this field being first (assigning "item = { dict_id }")
+    uint8_t did_i_small;                     // PIZ only: can store dids 0->254, 255 means did_i too large to store
 
     // special values of seperator[0]
     #define CI0_NONE         ((uint8_t)0x00) // no seperator 
     #define CI0_INVISIBLE    ((uint8_t)0x01) // this item does not appear in the original or reconstructed text. it should be consumed with reconstruct=false
     #define CI0_FIXED_0_PAD  ((uint8_t)0x02) // fixed width, zero-left-padded, width in sep[2] (introduced v13)
     #define CI0_SKIP         ((uint8_t)0x03) // instruct str_split to skip this item - Seg side only, needs to be removed with container_remove_skip
- 
+    #define CI0_DIGIT        ((uint8_t)0x04) // item is terminated by first digit (the digit will belong to the next item)
+
     // separator[0] values with bit 7 set (0x80) are interpreted as flags rather than a separator, in 
     // which case separator[1] is a parameter of the flags
     #define CI0_ITEM_HAS_FLAG(item) ((uint8_t)(item)->separator[0] & 0x80)
@@ -41,10 +45,11 @@ typedef struct ContainerItem {
     #define CI1_NONE         ((uint8_t)0x00) // no seperator 
     #define CI1_ITEM_CB      ((uint8_t)0x01) // item callback
     #define CI1_ITEM_PRIVATE ((uint8_t)0x02) // flag interpreted by the context logic, ignored by container code
+    #define CI1_LOOKBACK     ((uint8_t)0x03) // item requires lookback initialize / insertion
 
-    uint8_t separator[2];                   // 2 byte separator reconstructed after the item (or flags)
+    uint8_t separator[2];                    // 2 byte separator reconstructed after the item (or flags)
     
-    TranslatorId translator;                // instructions how to translate this item, if this Container is reconstructed translating from one data type to another
+    TranslatorId translator;                 // instructions how to translate this item, if this Container is reconstructed translating from one data type to another
 } ContainerItem;
 
 // container snip: it starts with SNIP_CONTAINER, following by a base64 of a big endian Container, with the number of
@@ -63,7 +68,7 @@ typedef struct ContainerItem {
     uint8_t nitems_lo;                  /* LSB of num_items */  \
     /* container flags set during Seg */               \
     uint8_t drop_final_item_sep_of_final_repeat : 1; /* Deprecated - should not be used in new code. drop separator of final item of FINAL repeat */  \
-    uint8_t drop_final_repeat_sep : 1;  \
+    uint8_t drop_final_repsep     : 1;  \
     uint8_t filter_repeats        : 1; /* filter called before reconstruction of each repeat to determine if it should be reconstructed */ \
     uint8_t filter_items          : 1; /* filter called before reconstruction of each item to determine if it should be reconstructed */ \
     uint8_t is_toplevel           : 1;  \
@@ -103,6 +108,12 @@ extern WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con
 
 extern ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, STRp(prefixes));
 extern ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, STRp(snip), pSTRp(out_prefixes));
+extern bool container_has_item (ContextP ctx, DictId dict_id);
+extern uint32_t container_peek_repeats (VBlockP vb, ContextP ctx, char repsep);
+extern bool container_peek_has_item (VBlockP vb, ContextP ctx, DictId item_dict_id, bool consume);
+
+typedef struct { Did did; int16_t idx; } ContainerPeekItem;
+extern void container_peek_get_idxs (VBlockP vb, ContextP ctx, Did n_items, ContainerPeekItem *items, bool consume);
 
 extern void container_display (ConstContainerP con);
 

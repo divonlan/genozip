@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   vcf_gt.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #include "vcf_private.h"
 #include "seg.h"
@@ -18,14 +21,14 @@
 
 // complete haplotypes of lines that don't have GT, if any line in the vblock does have GT.
 // In this case, the haplotype matrix must include the lines without GT too
-void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCF *vb)
+void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCFP vb)
 {
     buf_alloc (vb, &CTX(FORMAT_GT_HT)->local, 0, vb->lines.len * vb->ht_per_line, char, CTX_GROWTH, "contexts->local");
 
-    for (vb->line_i=0; vb->line_i < (uint32_t)vb->lines.len; vb->line_i++) {
+    for (vb->line_i=0; vb->line_i < vb->lines.len32; vb->line_i++) {
 
         if (CTX(FORMAT_GT_HT) && !DATA_LINE (vb->line_i)->has_haplotype_data) {
-            char *ht_data = ENT (char, CTX(FORMAT_GT_HT)->local, vb->line_i * vb->ht_per_line);
+            char *ht_data = Bc (CTX(FORMAT_GT_HT)->local, vb->line_i * vb->ht_per_line);
             memset (ht_data, '*', vb->ht_per_line);
 
             // NOTE: we DONT set dl->has_haplotype_data to true bc downstream we still
@@ -37,13 +40,13 @@ void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCF *vb)
 }
 
 // increase ploidy of the previous lines, if higher ploidy was encountered
-static void vcf_seg_FORMAT_GT_increase_ploidy (VBlockVCF *vb, unsigned new_ploidy)
+static void vcf_seg_FORMAT_GT_increase_ploidy (VBlockVCFP vb, unsigned new_ploidy)
 {
     buf_alloc (vb, &CTX(FORMAT_GT_HT)->local, 0, new_ploidy * vcf_num_samples * vb->line_i, 
                char, CTX_GROWTH, "contexts->local");
 
     uint32_t num_samples = vb->line_i * vcf_num_samples + vb->sample_i; // all samples in previous lines + previous samples in current line
-    char *ht_data = FIRSTENT (char, CTX(FORMAT_GT_HT)->local);
+    char *ht_data = B1STc (CTX(FORMAT_GT_HT)->local);
 
     // copy the haplotypes backwards (to avoid overlap), padding with '*' (which are NOT counted in .repeats of the GT container)
     for (int sam_i = num_samples-1; sam_i >= 0; sam_i--) {
@@ -65,7 +68,7 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
     // determined by the phase
     MiniContainer gt = { .repeats   = 1, 
                          .nitems_lo = 1, 
-                         .drop_final_repeat_sep = true, 
+                         .drop_final_repsep = true, 
                          .callback = (vb->use_special_sf == USE_SF_YES || segconf.use_null_DP_method),
                          .items = { { .dict_id = (DictId)_FORMAT_GT_HT } },
                        };
@@ -95,9 +98,10 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
     buf_alloc (vb, &CTX(FORMAT_GT_HT)->local, vb->ploidy, vb->ht_per_line * vb->lines.len, char, CTX_GROWTH, "contexts->local");
 
     // note - ploidy of this sample might be smaller than vb->ploidy (eg a male sample in an X chromosesome that was preceded by a female sample, or "." sample)
-    Allele *ht_data = ENT (Allele, CTX(FORMAT_GT_HT)->local, vb->line_i * vb->ht_per_line + vb->ploidy * vb->sample_i);
+    Allele *ht_data = B(Allele, CTX(FORMAT_GT_HT)->local, vb->line_i * vb->ht_per_line + vb->ploidy * vb->sample_i);
 
     int64_t dosage=0; // sum of allele values
+
     for (unsigned ht_i=0; ht_i < gt.repeats; ht_i++) {
 
         Allele ht = *(cell++); 
@@ -150,7 +154,7 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
             ht_data[ht_i] = '-'; // unlike '*', we DO count '-' in .repeats (so that we can have the same number of repeats = lower entroy in GT.b250)
 
         gt.repeats = vb->ploidy;
-        if (!gt.repsep[0]) gt.repsep[0] = vb->gt_prev_phase; // this happens in case if a 1-ploid sample
+        if (!gt.repsep[0]) gt.repsep[0] = ctx->gt_prev_phase; // this happens in case if a 1-ploid sample
     }
 
     // case DP='.' - we predict that GT=./.
@@ -159,7 +163,7 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
         // case: prediction is correct - re-write GT as "0/0" or "0|0" (use previous phase)
         if (gt.repeats==2 && ht_data[0]=='.' && gt.repsep[0]=='/' && ht_data[1]=='.') {
             ht_data[0] = ht_data[1] = '0';
-            if (vb->gt_prev_phase) gt.repsep[0] = vb->gt_prev_phase;
+            if (ctx->gt_prev_phase) gt.repsep[0] = ctx->gt_prev_phase;
         }
 
         // case: prediction is incorrect tell piz to NOT change the HTs and phase according to the prediction.
@@ -172,7 +176,7 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
 
     // case: phase is predictable from has_ps and ht_data[0]
     // note: a case where this prediction fails is with alleles > 1 eg "1|2". In GIAB, this never have a PS, but can be | or / 
-    else if (segconf.ps_pid_type[0] && gt.repeats==2 &&
+    else if (CTX(FORMAT_PS)->ps_type && gt.repeats==2 &&
             ((ht_data[0] != '.' && (has_ps == (gt.repsep[0]=='|'))) || // ht!=. --> predicted to be as has_ps says
              (ht_data[0] == '.' && gt.repsep[0]=='/'))) {              // ht==. --> predicted to be /
 
@@ -185,7 +189,7 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
     // so that the gt container is likely identical and we reduce GT.b250 entropy. Reason: many tools
     // (including bcftools merge) produce "./." for missing samples even if all other samples are phased
     else if (ht_data[0]=='.' && gt.repeats==2 && ht_data[1]=='.' && gt.repsep[0]=='/') {
-        gt.repsep[0] = vb->gt_prev_phase ? vb->gt_prev_phase : '|'; // '|' is arbitrary
+        gt.repsep[0] = ctx->gt_prev_phase ? ctx->gt_prev_phase : '|'; // '|' is arbitrary
         ht_data[0] = ht_data[1] = '%';
     }
 
@@ -201,12 +205,12 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
     ASSVCF (!cell_len, "Invalid GT data in sample_i=%u", vb->sample_i+1);
     
     // shortcut if we have the same ploidy and phase as previous GT (saves re-genetrating base64 in container_seg)
-    if (gt.repeats == vb->gt_prev_ploidy && gt.repsep[0] == vb->gt_prev_phase && !no_duplicate) 
+    if (gt.repeats == ctx->gt_prev_ploidy && gt.repsep[0] == ctx->gt_prev_phase && !no_duplicate) 
         return seg_duplicate_last (VB, ctx, save_cell_len);
 
     else {
-        vb->gt_prev_ploidy = no_duplicate ? 0 : gt.repeats; // if no_duplicate - 0 to prevent next sample from duplicating this one
-        vb->gt_prev_phase  = gt.repsep[0];
+        ctx->gt_prev_ploidy = no_duplicate ? 0 : gt.repeats; // if no_duplicate - 0 to prevent next sample from duplicating this one
+        ctx->gt_prev_phase  = gt.repsep[0];
         return container_seg (vb, ctx, (ContainerP)&gt, 0, 0, save_cell_len); 
     }
 }
@@ -215,10 +219,10 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
 // PIZ
 //------------------
 
-static inline bool vcf_piz_is_in_FORMAT (VBlockP vb, const char *tag/*2-chars*/)
+static inline bool vcf_piz_is_in_FORMAT (VBlockP vb, rom tag/*2-chars*/)
 {
     // get FORMAT field
-    const char *format = last_txt (vb, VCF_FORMAT);
+    rom format = last_txt (vb, VCF_FORMAT);
     uint32_t format_len = vb->last_txt_len (VCF_FORMAT);
 
     // check if a :PS: or :PS\t exists (using PS as an example)
@@ -276,7 +280,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_GT)
     for (uint32_t i=1; i < recon_len; i += 2)  
         if (recon[i] != '/' && recon[i] != '|') return false;
 
-    VB_VCF->gt_prev_ploidy = (recon_len+1) / 2; // consumed by vcf_piz_luft_PLOIDY
+    ctx->gt_prev_ploidy = (recon_len+1) / 2; // consumed by vcf_piz_luft_PLOIDY
 
     if (validate_only) return true;
 

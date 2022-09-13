@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   gff3.h
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #pragma once
 
@@ -24,6 +27,7 @@
 #pragma GENDICT GFF3_EOL=DTYPE_FIELD=EOL
 #pragma GENDICT GFF3_TOPLEVEL=DTYPE_FIELD=TOPLEVEL
 #pragma GENDICT GFF3_COMMENT=DTYPE_FIELD=COMMENT
+#pragma GENDICT GFF3_DEBUG_LINES=DTYPE_FIELD=DBGLINES      // used by --debug-lines
 
 // standard GFF3 attributes defined in https://github.com/The-Sequence-Ontology/Specifications/blob/master/gff3.md
 #pragma GENDICT ATTR_ID=DTYPE_1=ID
@@ -61,7 +65,7 @@
 
 // SEG Stuff
 extern void gff3_zip_initialize (void);
-extern const char *gff3_seg_txt_line (VBlockP vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
+extern rom gff3_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
 extern void gff3_seg_initialize (VBlockP vb_);
 extern void gff3_seg_finalize (VBlockP vb);
 extern bool gff3_seg_is_small (ConstVBlockP vb, DictId dict_id);
@@ -78,5 +82,3 @@ CONTAINER_FILTER_FUNC (gff3_piz_filter);
     /*          alias                  maps to this ctx          */  \
     { DT_GFF3, _ATTR_Variant_seq  ,    _ATTR_Reference_seq }, \
     { DT_GFF3, _ATTR_ancestral_allele, _ATTR_Reference_seq }, 
-
-#define GFF3_LOCAL_GET_LINE_CALLBACKS

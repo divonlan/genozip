@@ -1,31 +1,30 @@
 // ------------------------------------------------------------------
 //   codec_none.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #include "genozip.h"
 #include "codec.h"
 #include "vblock.h"
 #include "buffer.h"
 
-bool codec_none_compress (VBlock *vb, SectionHeader *header,
-                         const char *uncompressed, uint32_t *uncompressed_len, // option 1 - compress contiguous data
-                         LocalGetLineCB callback,                        // option 2 - compress data one line at a tim
-                         char *compressed, uint32_t *compressed_len /* in/out */, 
-                         bool soft_fail)
+COMPRESS (codec_none_compress)
 {
     if (*compressed_len < *uncompressed_len && soft_fail) 
         return false;
     
-    ASSERT (*compressed_len >= *uncompressed_len, "expecting compressed_len=%u >= uncompressed_len=%u for ", *compressed_len, *uncompressed_len);
+    ASSERT (*compressed_len >= *uncompressed_len, "\"%s\": expecting compressed_len=%u >= uncompressed_len=%u for ", name, *compressed_len, *uncompressed_len);
 
-    if (callback) {
+    if (get_line_cb) {
         char *next = compressed;
-        for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
+        for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
             char *start1=0;
             uint32_t len1=0;        
             
-            callback (vb, line_i, &start1, &len1, *uncompressed_len - (next - compressed), NULL);
+            get_line_cb (vb, ctx, line_i, &start1, &len1, *uncompressed_len - (next - compressed), NULL);
 
             if (start1 && len1) { memcpy (next, start1, len1); next += len1; }
         }
@@ -38,10 +37,7 @@ bool codec_none_compress (VBlock *vb, SectionHeader *header,
     return true;
 }
 
-void codec_none_uncompress (VBlock *vb, Codec codec, uint8_t param,
-                           const char *compressed, uint32_t compressed_len,
-                           Buffer *uncompressed_buf, uint64_t uncompressed_len, 
-                           Codec unused)
+UNCOMPRESS (codec_none_uncompress)
 {
     memcpy (uncompressed_buf->data, compressed, compressed_len);
 }

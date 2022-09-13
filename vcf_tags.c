@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   vcf_tags.c
-//   Copyright (C) 2021-2022 Black Paw Ventures Limited
+//   Copyright (C) 2021-2022 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted,
+//   under penalties specified in the license.
 //
 // Handles renaming INFO and FORMAT tags in DVCF. Tags can be defined explicitly in the VCF header or implicitly in the data lines
 
@@ -33,7 +36,7 @@ static inline int tags_cmp (STRp (tag_name_a), DictIdType dtype_a, STRp (tag_nam
 // ------------------------------------------------------------
 
 // get tag_name and dtype from "FORMAT/ADF"
-static void vcf_tags_cmdline_type_and_name_do (STRp(s), const char *option,
+static void vcf_tags_cmdline_type_and_name_do (STRp(s), rom option,
                                                DictIdType *dtype, STRp (*tag_name)) // out
 {
         str_split (s, s_len, 2, '/', left, false);
@@ -58,7 +61,7 @@ static void vcf_tags_cmdline_type_and_name_do (STRp(s), const char *option,
 
 // add tag from command line (--chain)  
 // adds to last tag in buffer, or creates a new tag if different than last one
-static void vcf_tags_cmdline_add_attr (const char *option, DictIdType dtype, STRp(attr_str), STRp(tag_name), STRp(dest), VcfTagSource source)
+static void vcf_tags_cmdline_add_attr (rom option, DictIdType dtype, STRp(attr_str), STRp(tag_name), STRp(dest), VcfTagSource source)
 {
     // get attr type
     RenameAttr attr=0;
@@ -70,12 +73,12 @@ static void vcf_tags_cmdline_add_attr (const char *option, DictIdType dtype, STR
 
     ASSINP (dest_len < MAX_TAG_LEN, "tag \"%.*s\" is beyond Genozip's length limit of %u", STRf(dest), MAX_TAG_LEN); // leave room for \0
 
-    Buffer *tags = z_file ? &z_file->apriori_tags : &command_line_tags; // command line tags are added before z_file is created
+    BufferP tags = z_file ? &z_file->apriori_tags : &command_line_tags; // command line tags are added before z_file is created
 
     // check if tag already exists - searching backwards
     Tag *tag = NULL;
     for (int i=tags->len-1; i >= 0; i--) {
-        Tag *candidate = ENT (Tag, *tags, i);
+        Tag *candidate = B(Tag, *tags, i);
         if (!tags_cmp (STRa(tag_name), dtype, STRa(candidate->tag_name), candidate->dtype)) {
             tag = candidate;
             break;
@@ -86,7 +89,7 @@ static void vcf_tags_cmdline_add_attr (const char *option, DictIdType dtype, STR
     if (!tag) { 
         buf_alloc_zero (evb, tags, 1, 100, Tag, 2, z_file ? "z_file->apriori_tags" : "command_line_tags"); 
         
-        tag = &NEXTENT (Tag, *tags);
+        tag = &BNXT (Tag, *tags);
         STRcpy (tag->tag_name, tag_name);
         tag->dtype  = dtype;
         tag->source = source; 
@@ -103,13 +106,13 @@ static void vcf_tags_cmdline_add_attr (const char *option, DictIdType dtype, STR
 }
 
 // add symmetrical attrs to the destination tags
-void vcf_tags_cmdline_add_symmetrical (const char *option, DictIdType dtype, STRp(attr_str), STRp(tag_name), STRp(dest_tag_name))
+void vcf_tags_cmdline_add_symmetrical (rom option, DictIdType dtype, STRp(attr_str), STRp(tag_name), STRp(dest_tag_name))
 {
     // use the existing tag, if one exists
     uint64_t save_len = command_line_tags.len ;
 
     for (int tag_i=command_line_tags.len-1; tag_i >= 0; tag_i--) { // search backwards as more likely towards the end
-        Tag *tag = ENT (Tag, command_line_tags, tag_i);
+        Tag *tag = B(Tag, command_line_tags, tag_i);
         if (!tags_cmp (STRa(tag_name), dtype, STRa (tag->tag_name), tag->dtype)) {
             command_line_tags.len = tag_i+1; // set len, so vcf_tags_cmdline_add_attr will use existing tag
             break;
@@ -146,7 +149,7 @@ void vcf_tags_cmdline_rename_option(void)
             for (unsigned i=0; i < n_attrs; i++) {
                 // parse one attr: "REFALT>DROP_ADF"
                 str_split (attrs[i], attr_lens[i], 2, '>', item, true);
-                ASSINP (n_items == 2 && item_lens[1] > 0, "--dvcf-rename: invalid attr \"%.*s\". See: " WEBSITE_DVCF, attr_lens[i], attrs[i]);
+                ASSINP (n_items == 2 && item_lens[1] > 0, "--dvcf-rename: invalid attr \"%.*s\". See: " WEBSITE_DVCF, STRfi(attr,i));
 
                 if (items[0][item_lens[0]-1] == '\\') item_lens[0]--; // remove escape char for escaping >
                     
@@ -213,9 +216,9 @@ static void vcf_tags_show_rename_tags (void)
     }
 
     iprint0 ("\nRenamed tags defined in the VCF meta-information lines or --dvcf-rename or --dvcf-drop options:\n");
-    for (unsigned i=0; i < z_file->apriori_tags.len; i++) {
-        Tag *tag = ENT (Tag, z_file->apriori_tags, i);
-        const char *src_names[] = TAG_SOURCE_NAMES;
+    for (unsigned i=0; i < z_file->apriori_tags.len32; i++) {
+        Tag *tag = B(Tag, z_file->apriori_tags, i);
+        rom src_names[] = TAG_SOURCE_NAMES;
 
         iprintf ("%s/%.*s:\tSrc=%s\tNumber=%.*s\tType=%.*s\t", 
                  DTPT(dtype_names)[tag->dtype], STRf(tag->tag_name), src_names[tag->source], STRf(tag->number), STRf(tag->type));
@@ -234,7 +237,7 @@ static void vcf_tags_show_rename_tags (void)
 }
 
 // sort 
-static int tags_sorter (const void *a, const void *b) 
+static SORTER (tags_sorter)
 { 
     Tag *tag_a = (Tag *)a, *tag_b = (Tag *)b;
 
@@ -242,11 +245,11 @@ static int tags_sorter (const void *a, const void *b)
 }
 
 // sort, but place TAG_NO_SRC and TAG_GENOZIP at the end
-static int tags_sorter_demote_defaults (const void *a, const void *b) 
+static SORTER (tags_sorter_demote_defaults) 
 { 
     Tag *tag_a = (Tag *)a, *tag_b = (Tag *)b;
 
-    return (tag_a->source != tag_b->source) ? tag_b->source - tag_a->source // A
+    return (tag_a->source != tag_b->source) ? DESCENDING (Tag, source) // A
                                             : tags_cmp (STRa(tag_a->tag_name), tag_a->dtype, STRa(tag_b->tag_name), tag_b->dtype);
 }
 
@@ -255,7 +258,7 @@ static Tag *vcf_tags_get_apriori_tag_do (DictIdType dtype, STRp(tag_name), int f
     if (first > last) return NULL;
     
     int mid = (first + last) / 2;
-    Tag *ent = ENT (Tag, z_file->apriori_tags, mid);
+    Tag *ent = B(Tag, z_file->apriori_tags, mid);
 
     // first compare by dtype, and then by tag_name
     int cmp = tags_cmp (STRa(tag_name), dtype, STRa(ent->tag_name), ent->dtype);
@@ -274,7 +277,7 @@ static Tag *vcf_tags_get_apriori_tag (DictIdType dtype, STRp(tag_name))
 
     // linear search the rest
     for (uint64_t i=z_file->apriori_tags.param; i < z_file->apriori_tags.len; i++) {
-        tag = ENT (Tag, z_file->apriori_tags, i);
+        tag = B(Tag, z_file->apriori_tags, i);
         if (!tags_cmp(STRa(tag_name), dtype, STRa (tag->tag_name), tag->dtype)) goto done;
     }
 
@@ -295,7 +298,7 @@ static void vcf_tags_add_system_default (DefaultTag new_tag)
     if (tag) return; // command line overrides system defaults
 
     buf_alloc_zero (evb, &z_file->apriori_tags, 1, 100, Tag, 2, "z_file->apriori_tags"); 
-    tag = &NEXTENT (Tag, z_file->apriori_tags);
+    tag = &BNXT (Tag, z_file->apriori_tags);
     
     tag->dtype  = new_tag.dtype;
     tag->source = TAG_GENOZIP;
@@ -314,7 +317,7 @@ void vcf_tags_populate_tags_from_command_line (void)
 
     if (command_line_tags.len && !z_file->apriori_tags.len) {
         buf_copy (evb, &z_file->apriori_tags, &command_line_tags, Tag, 0, 0, "z_file->apriori_tags");
-        z_file->apriori_tags.param = command_line_tags.len; // sorted length
+        z_file->apriori_tags.count = command_line_tags.len; // sorted length
     }
 
     // add some system-default values (the user can override these with --dvcf-rename and --dvcf-drop)
@@ -341,14 +344,14 @@ void vcf_tags_populate_tags_from_command_line (void)
 
     // sort again
     qsort (STRb(z_file->apriori_tags), sizeof (Tag), tags_sorter); 
-    z_file->apriori_tags.param = z_file->apriori_tags.len;
+    z_file->apriori_tags.count = z_file->apriori_tags.len;
 }
 
 // iterator for getting tags that are in apriori_tags, but not in VCF header. 
 Tag *vcf_tags_get_next_missing_tag (Tag *tag)
 {
-    for (tag = tag ? tag+1 : FIRSTENT (Tag, z_file->apriori_tags);
-         tag < AFTERENT (Tag, z_file->apriori_tags);
+    for (tag = tag ? tag+1 : B1ST (Tag, z_file->apriori_tags);
+         tag < BAFT (Tag, z_file->apriori_tags);
          tag++) 
         // cases we add the tag to the header: it is defined in the command line, or the symmetrical tag is in the header
         if (tag->source == TAG_CMDLINE || tag->source == TAG_CMDLINE_DST || tag->source == TAG_HEADER_DST) return tag;
@@ -397,7 +400,7 @@ void vcf_tags_finalize_tags_from_vcf_header (void)
 
     // sort again, without taking source into account
     qsort (STRb(z_file->apriori_tags), sizeof (Tag), tags_sorter); 
-    z_file->apriori_tags.param = z_file->apriori_tags.len; // sorted length
+    z_file->apriori_tags.count = z_file->apriori_tags.len; // sorted length
 
     if (flag.show_rename_tags) vcf_tags_show_rename_tags ();
 }
@@ -420,7 +423,7 @@ bool vcf_tags_add_attr_from_header (DictIdType dtype, STRp(tag_name), RenameAttr
         ASSINP (*dest_len < MAX_TAG_LEN, "attribute %s=%.*s appe    aring in a ##%s line with ID=%.*s is beyond Genozip's length limit of %u", 
                 vcf_header_rename_attrs[attr], STRf(*dest), DTPT(dtype_names)[dtype], STRf (tag_name), MAX_TAG_LEN); // leave room for \0
 
-        tag = &NEXTENT (Tag, z_file->apriori_tags);
+        tag = &BNXT (Tag, z_file->apriori_tags);
     }
 
     // case: attribute not specified in command line - use attribute from VCF header
@@ -482,14 +485,14 @@ void vcf_tags_add_tag (VBlockVCFP vb, Context *ctx, DictIdType dtype, STRp(tag_n
 {
     // check if tag was already added, considering a multiple tags can be mapped to the same ctx (bc they have the same dict_id)
     if (ctx->tag_i != -1) {
-        Tag *old_tag = ENT (Tag, vb->tags, ctx->tag_i);
+        Tag *old_tag = B(Tag, vb->tags, ctx->tag_i);
         
         // case that tag pointed to from ctx, is indeed the tag we want to add - done!
         if (str_issame (old_tag->tag_name, tag_name)) return; // already added
 
         // since ctx->tag_i has a value, and it is not our tag - check if any of the other tags are our tag
-        for (unsigned i=0; i < vb->tags.len; i++) {
-            old_tag = ENT (Tag, vb->tags, i);
+        for (unsigned i=0; i < vb->tags.len32; i++) {
+            old_tag = B(Tag, vb->tags, i);
             if (str_issame (old_tag->tag_name, tag_name)) return; // already added
         }
     }
@@ -498,7 +501,7 @@ void vcf_tags_add_tag (VBlockVCFP vb, Context *ctx, DictIdType dtype, STRp(tag_n
 
     ctx->tag_i = vb->tags.len;
 
-    Tag *tag = &NEXTENT (Tag, vb->tags);
+    Tag *tag = &BNXT (Tag, vb->tags);
 
     // case: we address this tag in the command line (--chain) or VCF header attributes (DVCF files)
     Tag *apriori_tag = vcf_tags_get_apriori_tag (dtype, STRa(tag_name));
@@ -514,14 +517,14 @@ void vcf_tags_add_tag (VBlockVCFP vb, Context *ctx, DictIdType dtype, STRp(tag_n
 
 static const Tag *vcf_tags_rename_get_tag (VBlockVCFP vb, ConstContextP ctx, STRp(tag_name))
 {
-    const Tag *tag = ENT (const Tag, vb->tags, ctx->tag_i);
+    const Tag *tag = B(const Tag, vb->tags, ctx->tag_i);
 
     // tag[i], pointed to from the context is usually the right tag, but sometimes it might be the wrong tag
     // if two or more tags have the same dict_id and hence the same context. in this case, we search for the tag
     if (!str_issame (tag_name, tag->tag_name)) {
         tag = NULL;
-        for (unsigned t=0; t < vb->tags.len; t++) {
-            const Tag *candidate = ENT (Tag, vb->tags, t);
+        for (unsigned t=0; t < vb->tags.len32; t++) {
+            const Tag *candidate = B(Tag, vb->tags, t);
             if (str_issame (candidate->tag_name, tag_name)) {
                 tag = candidate;
                 break;
@@ -537,7 +540,7 @@ static const Tag *vcf_tags_rename_get_tag (VBlockVCFP vb, ConstContextP ctx, STR
 // if yes - renamed string is in "renamed" and length is returned; if no - returns 0
 unsigned vcf_tags_rename (VBlockVCFP vb, 
                           unsigned num_tags,
-                          const ContextPBlock ctxs, const char *sf_names[], const unsigned sf_name_lens[], // option 1 - FORMAT 
+                          const ContextPBlock ctxs, rom sf_names[], const unsigned sf_name_lens[], // option 1 - FORMAT 
                           const InfoItem *ii,   // option 2 - INFO - an array of InfoItem
                           char *renamed)  // out - allocated by caller
 {

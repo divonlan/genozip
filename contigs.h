@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   contigs.h
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted,
+//   under penalties specified in the license.
 
 #pragma once
 
@@ -47,7 +50,8 @@ typedef enum { SORT_BY_NONE=0, SORT_BY_NAME=1, SORT_BY_AC=2, SORT_BY_REF_INDEX=4
 typedef struct ContigPkg {
     #define cp_next        contigs.param // iterator
     #define cp_num_contigs contigs.len   
-    const char *name;
+    uint64_t unique_id; // id of this specific instance, unique across the entire execution of possibley multiple files
+    rom name;
     bool has_counts;
     Buffer contigs;
     Buffer dict;
@@ -58,7 +62,7 @@ typedef struct ContigPkg {
 //-------------------------------------------------------------------------
 
 // initialization & finalization
-extern void contigs_build_contig_pkg_from_ctx (ContigPkg *ctgs, ConstContextP ctx, SortBy sort_by);
+extern void contigs_build_contig_pkg_from_zctx (ContigPkg *ctgs, ConstContextP ctx, SortBy sort_by);
 extern void contigs_create_index (ContigPkg *ctgs, SortBy sort_by);
 extern void contigs_free (ContigPkg *ctg);
 extern void contigs_destroy (ContigPkg *ctg);
@@ -66,12 +70,12 @@ extern void contigs_destroy (ContigPkg *ctg);
 // finding
 #define WORD_INDEX_NOT_UNIQUE (-2)
 extern WordIndex contigs_get_by_name (ConstContigPkgP ctgs, STRp(contig_name));
-static inline ContigP contigs_get_by_index (ConstContigPkgP ctgs, WordIndex index) { return ENT (Contig, ctgs->contigs, index); }
+static inline ContigP contigs_get_by_index (ConstContigPkgP ctgs, WordIndex index) { return B(Contig, ctgs->contigs, index); }
 extern WordIndex contigs_get_matching (ConstContigPkgP ctgs, STRp(name), PosType LN /* optional */, bool strictly_alt, bool *is_alt);
-extern const char *contigs_get_name (ConstContigPkgP ctgs, WordIndex index, unsigned *contig_name_len /* optional */);
+extern rom contigs_get_name (ConstContigPkgP ctgs, WordIndex index, unsigned *contig_name_len /* optional */);
 extern WordIndex contigs_get_by_ref_index (ConstContigPkgP ctgs,WordIndex ref_index);
-static inline PosType contigs_get_LN (ConstContigPkgP ctgs, WordIndex index) { return ENT (Contig, ctgs->contigs, index)->max_pos; }
-static inline PosType contigs_get_gpos (ConstContigPkgP ctgs, WordIndex index) { return ENT (Contig, ctgs->contigs, index)->gpos; }
+static inline PosType contigs_get_LN (ConstContigPkgP ctgs, WordIndex index) { return index < ctgs->contigs.len32 ? B(Contig, ctgs->contigs, index)->max_pos : 0; }
+static inline PosType contigs_get_gpos (ConstContigPkgP ctgs, WordIndex index) { return B(Contig, ctgs->contigs, index)->gpos; }
 
 // iterator
 typedef void (*ContigsIteratorCallback)(STRp(contig_name), PosType last_pos, void *callback_param);
@@ -81,5 +85,5 @@ extern void foreach_contig (ConstContigPkgP ctgs, ContigsIteratorCallback callba
 typedef struct { char s[ACCESSION_LEN+20]; } AccNumText;
 extern AccNumText display_acc_num (const AccessionNumber *ac);
 
-#define CONTIG(ctg_pkg,ctg_i) ENT (Contig, ((ctg_pkg).contigs), (ctg_i))
+#define CONTIG(ctg_pkg,ctg_i) B(Contig, ((ctg_pkg).contigs), (ctg_i))
 

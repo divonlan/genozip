@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   coverage.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted,
+//   under penalties specified in the license.
 
 #include "coverage.h"
 #include "vblock.h"
@@ -11,7 +14,7 @@
 #include "contigs.h"
 #include "sam_private.h"
 
-void coverage_initialize (VBlock *vb)
+void coverage_initialize (VBlockP vb)
 {
     vb->coverage.len = CTX(CHROM)->word_list.len + NUM_COVER_TYPES;
     buf_alloc (vb, &vb->coverage, 0, vb->coverage.len, uint64_t, 1, "coverage");
@@ -39,15 +42,15 @@ static WordIndex coverage_get_chrom_index (char chrom_char)
                                    { 'c', 'h', 'r', chrom_char, 0 },
                                    { 'C', 'h', 'r', chrom_char, 0 } };
 
-    for (unsigned i=0; i < sizeof (chrom_names) / sizeof (chrom_names[0]); i++) {
-        WordIndex chrom_word_index = ctx_get_word_index_by_snip (ZCTX(CHROM), chrom_names[i]);
+    for (unsigned i=0; i < ARRAY_LEN (chrom_names); i++) {
+        WordIndex chrom_word_index = ctx_get_word_index_by_snip (evb, ZCTX(CHROM), chrom_names[i], 0);
         if (chrom_word_index != WORD_INDEX_NONE) return chrom_word_index;
     }
 
     return WORD_INDEX_NONE;
 }
 
-static ConstContigPkgP coverage_get_contigs (const char *option_name)
+static ConstContigPkgP coverage_get_contigs (rom option_name)
 {
     ConstContigPkgP contigs = ((Z_DT(DT_SAM) || Z_DT(DT_BAM)) && sam_hdr_contigs) ? sam_hdr_contigs : ref_get_ctgs (gref);
 
@@ -65,11 +68,11 @@ static float coverage_get_autosome_depth (ConstContigPkgP contigs, WordIndex ind
 
         if (i == index_chrX || i == index_chrY) continue; // not autosome
 
-        uint64_t coverage = *ENT (uint64_t, txt_file->coverage, i);
+        uint64_t coverage = *B64 (txt_file->coverage, i);
         if (!coverage) continue;
 
-        unsigned cn_len;
-        ctx_get_snip_by_word_index (ZCTX(CHROM), i, 0, &cn_len);
+        STR(cn);
+        ctx_get_snip_by_word_index (ZCTX(CHROM), i, cn);
         
         PosType len = contigs_get_LN (contigs, i);
 
@@ -108,7 +111,7 @@ void coverage_sex_classifier (bool is_first_z_file)
         return;
     }
 
-    //iprintf ("chrY: index=%u cov=%"PRIu64" len=%f\n", index_chrY, *ENT (uint64_t, txt_file->coverage, index_chrY), len_chrY);
+    //iprintf ("chrY: index=%u cov=%"PRIu64" len=%f\n", index_chrY, *B64 (txt_file->coverage, index_chrY), len_chrY);
     
     // in SAM, it is sufficient to look at chr1 as it is already mapped. this allows as to run with --regions, 10 times faster
     // in FASTQ, we rely on our own approximate aligner, so we compare against all autosomes
@@ -159,12 +162,14 @@ void coverage_sex_classifier (bool is_first_z_file)
                                     { "Unassigned",        "Unassigned",                "Unassigned", "Unassigned" }  // XTEST_NA
                                   };
 
-    if (!flag.multiple_files) 
-        iprintf (is_info_stream_terminal ? "\n--sex for: %s\n%-10s  %-*s  %-6s  %-6s  %-6s  %-4s  %-4s\n" 
-                                          : "\n--sex for: %s\n%s\t%*s\t%s\t%s\t%s\t%s\t%s\n",
+    if (!flag.multiple_files) {
+        iprint0 ("\nWARNING: NOT SUITABLE FOR CLINICAL USE\n\n");
+        iprintf (is_info_stream_terminal ? "--sex for: %s\n%-10s  %-*s  %-6s  %-6s  %-6s  %-4s  %-4s\n" 
+                                         : "--sex for: %s\n%s\t%*s\t%s\t%s\t%s\t%s\t%s\n",
                 z_name, "Sex", flag.longest_filename, "File", is_sam ? "DP_1" : "DP_AS", "DP_X", "DP_Y", 
                 is_sam ? "1/X" : "AS/X", "X/Y");
-                
+    }
+
     iprintf (is_info_stream_terminal ? "%-10s  %-*s  %-6.3f  %-6.3f  %-6.3f  %-4.1f  %-4.1f\n" : "%s\t%*s\t%f\t%f\t%f\t%f\t%f\n",  
             is_sam ? sam_call[by_as_x][by_x_y] : fq_call[by_as_x][by_x_y], 
             flag.longest_filename, z_name, 
@@ -172,6 +177,10 @@ void coverage_sex_classifier (bool is_first_z_file)
 
     fflush (info_stream); // in case output is redirected
 }
+
+typedef struct { WordIndex chrom; STR (chrom_name); uint64_t coverage, read_count; PosType LN; } CovDis;
+
+static __attribute__((unused)) DESCENDING_SORTER (sort_by_LN, CovDis, LN)
 
 // output of genocat --coverage, called from piz_one_txt_file
 void coverage_show_coverage (void)
@@ -185,7 +194,7 @@ void coverage_show_coverage (void)
     if (flag.show_coverage != COV_ONE)
         iprintf (is_info_stream_terminal ? "\n--coverage for: %s\n%-*s  %-8s  %-11s  %-10s  %-5s   %s\n" 
                                          : "\n--coverage for: %s\n%*s\t%s\t%s\t%s\t%s\t%s\n", 
-                 z_name, chr_width, "Contig", "LN", "Reads", "Bases", "Bases", "Depth");
+                 z_name, chr_width, "Contig", "LN", Z_DT(DT_FASTQ) ? "Reads" : "Alignments", "Bases", "Bases", "Depth");
 
     txt_file->coverage.len -= NUM_COVER_TYPES; // real contigs only
     ARRAY (uint64_t, coverage, txt_file->coverage);
@@ -206,34 +215,47 @@ void coverage_show_coverage (void)
         coverage_special  [CVR_ALL_CONTIGS] += coverage[i];
         read_count_special[CVR_ALL_CONTIGS] += read_count[i];
 
-        has_short_name_contigs |= ({ unsigned cn_len ; ctx_get_snip_by_word_index (ZCTX(CHROM), i, 0, &cn_len) ; cn_len <= 5; });
+        has_short_name_contigs |= ({ STR(chrom_name) ; ctx_get_snip_by_word_index (ZCTX(CHROM), i, chrom_name) ; chrom_name_len <= 5; });
     }
 
     // case: if we have no short-name contigs, show all contigs 
     if (!has_short_name_contigs) flag.show_coverage = COV_ALL; 
 
-    PosType genome_nbases = 0;
+    // sort by contig LN
+    buf_alloc (evb, &evb->scratch, 0, coverage_len, CovDis, 0, "scratch");
+    for (uint64_t i=0; i < coverage_len; i++) 
+        if (coverage[i]) {
+            STR (chrom_name);
+            ctx_get_snip_by_word_index (ZCTX(CHROM), i, chrom_name);
 
-    for (uint64_t i=0; i < coverage_len; i++) {
-        if (!coverage[i]) continue;
-
-        unsigned cn_len;
-        const char *chrom_name = ctx_get_snip_by_word_index (ZCTX(CHROM), i, 0, &cn_len);
-
-        PosType len = (cn_len==1 && chrom_name[0]=='*') ? 0 : contigs_get_LN (contigs, i);
-
-        if (flag.show_coverage == COV_ALL || (flag.show_coverage == COV_CHROM && cn_len <= 5))
-            iprintf (is_info_stream_terminal ? "%-*s  %-8s  %-11s  %-10s  %-4.1f%%  %6.2f\n" : "%*s\t%s\t%s\t%s\t%4.1f\t%6.2f\n", 
-                     chr_width, chrom_name, str_bases(len).s, str_uint_commas (read_count[i]).s, str_bases(coverage[i]).s, 
-                     100.0 * (float)coverage[i] / (float)coverage_special[CVR_TOTAL], 
-                     len ? (float)coverage[i] / (float)len : 0);
-
-        else {
-            coverage_special[CVR_OTHER_CONTIGS]   += coverage[i]; // other non-chromosome contigs
-            read_count_special[CVR_OTHER_CONTIGS] += read_count[i];
+            BNXT (CovDis, evb->scratch) = (CovDis){
+                .chrom          = i,
+                .chrom_name     = chrom_name,
+                .chrom_name_len = chrom_name_len,
+                .coverage       = coverage[i],
+                .read_count     = read_count[i],
+                .LN             = IS_ASTERISK (chrom_name) ? 0 : contigs_get_LN (contigs, i),
+            };
         }
 
-        genome_nbases += len; // all bases, not just short chromosomes
+    // no sorting for now - keep in order of header or reference (to do: sort by numeric component chrom number)
+    // qsort (evb->scratch.data, evb->scratch.len, sizeof (CovDis), sort_by_LN);
+
+    PosType genome_nbases = 0;
+
+    for_buf (CovDis, ctg, evb->scratch) {
+        if (flag.show_coverage == COV_ALL || (flag.show_coverage == COV_CHROM && ctg->chrom_name_len <= 5))
+            iprintf (is_info_stream_terminal ? "%-*s  %-8s  %-11s  %-10s  %-4.1f%%  %6.2f\n" : "%*s\t%s\t%s\t%s\t%4.1f\t%6.2f\n", 
+                     chr_width, ctg->chrom_name, str_bases(ctg->LN).s, str_int_commas (ctg->read_count).s, str_bases(ctg->coverage).s, 
+                     100.0 * (float)ctg->coverage / (float)coverage_special[CVR_TOTAL], 
+                     ctg->LN ? (float)ctg->coverage / (float)ctg->LN : 0);
+
+        else {
+            coverage_special[CVR_OTHER_CONTIGS]   += ctg->coverage; // other non-chromosome contigs
+            read_count_special[CVR_OTHER_CONTIGS] += ctg->read_count;
+        }
+
+        genome_nbases += ctg->LN;
     }
 
     char all_coverage[7] = "0";
@@ -251,7 +273,7 @@ void coverage_show_coverage (void)
             if (coverage_special[i])
                 iprintf (is_info_stream_terminal ? "%-*s  %-8s  %-11s  %-10s  %-4.1f%%  %s\n" : "%*s\t%s\t%s\t%s\t%4.1f%%\t%s\n", 
                         chr_width, cvr_names[i], "",
-                        (i == CVR_SOFT_CLIP ? "" : str_uint_commas (read_count_special[i]).s),
+                        (i == CVR_SOFT_CLIP ? "" : str_int_commas (read_count_special[i]).s),
                         str_bases(coverage_special[i]).s,
                         100.0 * (float)coverage_special[i] / (float)coverage_special[CVR_TOTAL],
                         i == CVR_ALL_CONTIGS ? all_coverage : "");
@@ -274,16 +296,16 @@ void coverage_show_idxstats (void)
     ARRAY (uint64_t, unmapped_read_count, txt_file->unmapped_read_count);
 
     for (uint64_t i=0; i < read_count_len; i++) {
-        unsigned cn_len;
-        const char *chrom_name = ctx_get_snip_by_word_index (ZCTX(CHROM), i, 0, &cn_len);
+        STR(chrom_name);
+        ctx_get_snip_by_word_index (ZCTX(CHROM), i, chrom_name);
 
-        PosType len = (cn_len==1 && chrom_name[0]=='*') ? 0 : contigs_get_LN (contigs, i);
+        PosType len = IS_ASTERISK (chrom_name) ? 0 : contigs_get_LN (contigs, i);
 
-        iprintf ("%.*s\t%"PRIu64"\t%"PRId64"\t%"PRIu64"\n", cn_len, chrom_name, len, read_count[i], unmapped_read_count[i]);
+        iprintf ("%.*s\t%"PRIu64"\t%"PRId64"\t%"PRIu64"\n", chrom_name_len, chrom_name, len, read_count[i], unmapped_read_count[i]);
     }
 
     // FASTQ (but not SAM) unmapped reads
-    uint64_t unmapped_unknown = AFTERENT(uint64_t, txt_file->read_count)[CVR_UNMAPPED]; 
+    uint64_t unmapped_unknown = BAFT(uint64_t, txt_file->read_count)[CVR_UNMAPPED]; 
     if (unmapped_unknown)
         iprintf ("*\t0\t0\t%"PRIu64"\n", unmapped_unknown);
 

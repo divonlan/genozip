@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   phylip.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #include "genozip.h"
 #include "seg.h"
@@ -33,12 +36,12 @@ int32_t phy_is_header_done (bool is_eof)
 {
     ARRAY (char, header, evb->txt_data);
 
-    for (uint32_t i=0; i < evb->txt_data.len; i++)
+    for (uint32_t i=0; i < evb->txt_data.len32; i++)
         if (header[i] == '\n') 
             return i+1;
 
     // case: the entire file is just a header
-    if (is_eof && *LASTENT (char, evb->txt_data) == '\n') 
+    if (is_eof && *BLSTc (evb->txt_data) == '\n') 
         return evb->txt_data.len;
 
     return -1;
@@ -50,7 +53,10 @@ bool phy_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
 
     uint32_t num_seqs;
     int ret = sscanf (header, "%u %u", &num_seqs, &phy_seq_len);
-    ASSINP (ret==2, "Error: invalid Phylip header line: \"%.*s\"", (int)txt_header->len, txt_header->data);
+    ASSINP (ret==2, "Error: invalid PHYLIP header line: \"%.*s\"", (int)txt_header->len, txt_header->data);
+
+    ASSERTW0 (num_seqs > 0, "FYI: unusual PHYLIP header: number_of_sequences==0");
+    ASSERTW0 (phy_seq_len > 0, "FYI: unusual PHYLIP header: sequence_length==0");
 
     return true;
 }
@@ -62,7 +68,7 @@ bool phy_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
 typedef struct {
     uint32_t line_start;  // start within vb->txt_data
 } ZipDataLinePHY;
-#define DATA_LINE(i) ENT (ZipDataLinePHY, vb->lines, i)
+#define DATA_LINE(i) B(ZipDataLinePHY, vb->lines, i)
 
 unsigned phy_vb_zip_dl_size (void) { return sizeof (ZipDataLinePHY); }
 
@@ -71,7 +77,7 @@ COMPRESSOR_CALLBACK (phy_zip_id)
 {
     ZipDataLinePHY *dl = DATA_LINE (vb_line_i);
     *line_data_len = PHY_ID_LEN;
-    *line_data     = ENT (char, vb->txt_data, dl->line_start);
+    *line_data     = Bc (vb->txt_data, dl->line_start);
     if (is_rev) *is_rev = 0;
 }
 
@@ -79,7 +85,7 @@ COMPRESSOR_CALLBACK (phy_zip_seq)
 {
     ZipDataLinePHY *dl = DATA_LINE (vb_line_i);
     *line_data_len = phy_seq_len;
-    *line_data     = ENT (char, vb->txt_data, dl->line_start) + PHY_ID_LEN;
+    *line_data     = Bc (vb->txt_data, dl->line_start) + PHY_ID_LEN;
     if (is_rev) *is_rev = 0;
 }
 
@@ -87,7 +93,7 @@ COMPRESSOR_CALLBACK (phy_zip_seq)
 // Segmentation functions
 //-----------------------
 
-void phy_seg_initialize (VBlock *vb)
+void phy_seg_initialize (VBlockP vb)
 {
     CTX(PHY_SEQ)->ltype = LT_SEQUENCE;
     CTX(PHY_ID)->ltype  = LT_SEQUENCE;
@@ -129,7 +135,7 @@ bool phy_seg_is_small (ConstVBlockP vb, DictId dict_id)
     return true; // contexts are expected to have small dictionaries
 }
 
-const char *phy_seg_txt_line (VBlock *vb, const char *line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
+rom phy_seg_txt_line (VBlockP vb, rom line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
 {
     Context *id_ctx  = CTX(PHY_ID);
     Context *seq_ctx = CTX(PHY_SEQ);
@@ -143,14 +149,12 @@ const char *phy_seg_txt_line (VBlock *vb, const char *line, uint32_t remaining_t
     DATA_LINE (vb->line_i)->line_start = line - vb->txt_data.data;
 
     // ID
-    static char id_lookup[3] = { SNIP_LOOKUP, '1', '0' }; // lookup 10 characters from local
-    seg_by_ctx (VB, id_lookup, sizeof (id_lookup), id_ctx, PHY_ID_LEN);
+    seg_by_ctx (VB, (char[]){ SNIP_LOOKUP, '1', '0' }, 3, id_ctx, PHY_ID_LEN); // lookup 10 characters from local
     id_ctx ->local.len += PHY_ID_LEN;
 
     // SEQ
-    static char seq_lookup[10] = { SNIP_LOOKUP }; 
-    unsigned snip_len = 1 + str_int (phy_seq_len, &seq_lookup[1]);
-    seg_by_ctx (VB, seq_lookup, snip_len, seq_ctx, phy_seq_len);
+    SNIPi1 (SNIP_LOOKUP, phy_seq_len);
+    seg_by_ctx (VB, STRa(snip), seq_ctx, phy_seq_len);
     seq_ctx->local.len += phy_seq_len;
 
     // EOL
@@ -172,7 +176,7 @@ TXTHEADER_TRANSLATOR (txtheader_phy2fa)
 // Translating PHYLIP->FASTA: remove redundant terminating spaces from ID (FASTA's DESC)
 TRANSLATOR_FUNC (phy_piz_phy2fasta_ID)
 {
-    while (vb->txt_data.len && *LASTENT (char, vb->txt_data)==' ')
+    while (vb->txt_data.len && *BLSTtxt==' ')
         vb->txt_data.len--;
 
     return 0;

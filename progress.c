@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   progress.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #include <time.h>
 #include "genozip.h"
@@ -12,11 +15,11 @@
 
 bool progress_newline_since_update = false; // global: might be not 100% with threads, but that's ok
 
-static bool ever_start_time_initialized = false, test_mode, show_progress;
+static bool ever_start_time_initialized = false, test_mode;
 static TimeSpecType ever_start_time, component_start_time;
 static float last_percent=0;
-static unsigned last_seconds_so_far=0;
-static const char *component_name=NULL;
+static int last_seconds_so_far=-1;
+static rom component_name=NULL;
 static unsigned last_len=0; // so we know how many characters to erase on next update
 
 static void progress_human_time (unsigned secs, char *str /* out */)
@@ -33,7 +36,7 @@ static void progress_human_time (unsigned secs, char *str /* out */)
         sprintf (str, "%u %s", secs, secs==1 ? "second" : "seconds");
 }
 
-static const char *progress_ellapsed_time (bool ever)
+static rom progress_ellapsed_time (bool ever)
 {
     TimeSpecType tb; 
     clock_gettime(CLOCK_REALTIME, &tb); 
@@ -48,8 +51,27 @@ static const char *progress_ellapsed_time (bool ever)
     return time_str;
 }
 
-char *progress_new_component (const char *new_component_name, 
-                              const char *message, // can be NULL
+static void progress_update_status (char **prefix, rom status)
+{
+    if (flag.quiet) return;
+
+    static rom eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
+    static rom spaces = "                                                                                ";
+
+    if (prefix && *prefix) {
+        iprintf ("%s", *prefix);
+        FREE (*prefix);
+    }
+
+    iprintf ("%.*s%.*s%.*s%s", last_len, eraser, last_len, spaces, last_len, eraser, status);
+
+    last_len = strlen (status);
+
+    progress_newline_since_update = false;
+}
+
+char *progress_new_component (rom new_component_name, 
+                              rom message, // can be NULL
                               int new_test_mode)   // true, false or -1 for unchanged
 {
     char *prefix = NULL;
@@ -66,8 +88,6 @@ char *progress_new_component (const char *new_component_name,
         if (new_test_mode != -1) 
             test_mode = new_test_mode;
 
-        // if !show_progress - we don't show the advancing %, but we still show the filename, done status, compression ratios etc
-        show_progress  = !flag.quiet && !!isatty(2);
         component_name = new_component_name; 
 
         if (!flag.quiet) {
@@ -88,7 +108,6 @@ char *progress_new_component (const char *new_component_name,
         }
     }
 
-//    if (message) 
     if (!flag.reading_chain) 
         progress_update_status (&prefix, message ? message : "");
 
@@ -98,18 +117,18 @@ char *progress_new_component (const char *new_component_name,
 void progress_update (char **prefix, uint64_t sofar, uint64_t total, bool done)
 {
     char time_str[70], progress[200];
-    if (!show_progress && !flag.debug_progress) return; 
+    if (flag.quiet && !flag.debug_progress) return; 
 
     TimeSpecType tb; 
     clock_gettime(CLOCK_REALTIME, &tb); 
     
     int seconds_so_far = ((tb.tv_sec-component_start_time.tv_sec)*1000 + (tb.tv_nsec-component_start_time.tv_nsec) / 1000000) / 1000; 
 
-    float percent;
+    double percent;
     if (total > 10000000) // gentle handling of really big numbers to avoid integer overflow
-        percent = MIN_(((float)(sofar/100000ULL)*100) / (float)(total/100000ULL), 100.0); // divide by 100000 to avoid number overflows
+        percent = MIN_(((double)(sofar/100000ULL)*100) / (double)(total/100000ULL), 100.0); // divide by 100000 to avoid number overflows
     else
-        percent = MIN_(((float)sofar*100) / (float)total, 100.0); // divide by 100000 to avoid number overflows
+        percent = MIN_(((double)sofar*100) / (double)total, 100.0); // divide by 100000 to avoid number overflows
 
     // need to update progress indicator, max once a second or if 100% is reached
 
@@ -129,7 +148,7 @@ void progress_update (char **prefix, uint64_t sofar, uint64_t total, bool done)
         if (!done) { 
 
             // time remaining
-            unsigned secs = (100.0 - percent) * ((float)seconds_so_far / (float)percent);
+            unsigned secs = (100.0 - percent) * ((double)seconds_so_far / (double)percent);
             progress_human_time (secs, time_str);
 
             if (!flag.debug_progress)
@@ -148,29 +167,7 @@ void progress_update (char **prefix, uint64_t sofar, uint64_t total, bool done)
     last_seconds_so_far = seconds_so_far;
 }
 
-void progress_update_status (char **prefix, const char *status)
-{
-    if (flag.quiet) return;
-
-    static const char *eraser = "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
-    static const char *spaces = "                                                                                ";
-
-    if (prefix && *prefix) {
-        iprintf ("%s", *prefix);
-        FREE (*prefix);
-    }
-
-    if (is_info_stream_terminal && !flag.debug_progress) 
-        iprintf ("%.*s%.*s%.*s%s", last_len, eraser, last_len, spaces, last_len, eraser, status);
-    else 
-        iprintf ("%s\n", status); // if we're outputting to a log file or debugging progress, show every status on its own line
-
-    last_len = strlen (status);
-
-    progress_newline_since_update = false;
-}
-
-void progress_finalize_component (const char *status)
+void progress_finalize_component (rom status)
 {
     if (!flag.quiet) {
         progress_update_status (NULL, status);
@@ -188,12 +185,12 @@ void progress_finalize_component (const char *status)
     progress_finalize_component (s);  \
 }
 
-void progress_finalize_component_time (const char *status, Digest md5)
+void progress_finalize_component_time (rom status, Digest md5)
 {
     FINALIZE ("%s (%s)", status, progress_ellapsed_time (false));
 }
 
-void progress_finalize_component_time_ratio (const char *me, float ratio, Digest md5)
+void progress_finalize_component_time_ratio (rom me, float ratio, Digest md5)
 {
     if (component_name)
         FINALIZE ("Done (%s, %s compression ratio: %1.1f)", progress_ellapsed_time (false), me, ratio)
@@ -201,7 +198,7 @@ void progress_finalize_component_time_ratio (const char *me, float ratio, Digest
         FINALIZE ("Time: %s, %s compression ratio: %1.1f", progress_ellapsed_time (false), me, ratio);
 }
 
-void progress_finalize_component_time_ratio_better (const char *me, float ratio, const char *better_than, float ratio_than, Digest md5)
+void progress_finalize_component_time_ratio_better (rom me, float ratio, rom better_than, float ratio_than, Digest md5)
 {
     if (component_name) 
         FINALIZE ("Done (%s, %s compression ratio: %1.1f - better than %s by a factor of %1.1f)", 
@@ -211,9 +208,11 @@ void progress_finalize_component_time_ratio_better (const char *me, float ratio,
                   progress_ellapsed_time (false), me, ratio, better_than, ratio_than)
 }
 
-void progress_concatenated_md5 (const char *me, Digest md5)
+void progress_concatenated_md5 (rom me, Digest md5)
 {
     ASSERT0 (!component_name, "expecting component_name=NULL");
 
     FINALIZE ("Bound %s", me);
 }
+
+

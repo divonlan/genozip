@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   dict_id.h
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #pragma once
 
@@ -12,7 +15,7 @@
 #define DTYPE_PLAIN DTYPE_2
 extern DictId dict_id_make (STRp(str), DictIdType dict_id_type);
 
-#define dict_id_is(dict_id, str) (dict_id_make (str, strlen(str)).num == dict_id_typeless (dict_id).num)
+#define dict_id_is(dict_id, str) (dict_id_make (str, strlen(str), DTYPE_PLAIN).num == dict_id_typeless (dict_id).num)
 static inline DictIdType dict_id_type (DictId dict_id) { return ((dict_id.id[0] >> 6) == 0) ? DTYPE_FIELD   
                                                               : ((dict_id.id[0] >> 6) == 1) ? DTYPE_2 
                                                               :                               DTYPE_1; } 
@@ -21,6 +24,8 @@ static inline bool dict_id_is_type_1(DictId dict_id) { return dict_id_type(dict_
 static inline bool dict_id_is_type_2(DictId dict_id) { return dict_id_type(dict_id) == DTYPE_2;     }
 
 static inline DictId dict_id_typeless(DictId dict_id) { dict_id.id[0] = (dict_id.id[0] & 0x7f) | 0x40; return dict_id; } // set 2 Msb to 01
+
+extern bool dict_id_is_in (DictId dict_id, ...);
 
 #define DICT_ID_NONE ((DictId)(uint64_t)0)
 
@@ -35,7 +40,9 @@ extern void dict_id_read_aliases (void) ;
 // candidate is a specific dict_id that we test for its matching of the template
 extern bool dict_id_is_match (DictId template, DictId candidate);
 
-extern const char *dict_id_display_type (DataType dt, DictId dict_id);
+extern bool dict_id_is_show (DictId dict_id);
+
+extern rom dict_id_display_type (DataType dt, DictId dict_id);
 
 typedef struct { char s[20]; } DisplayPrintId;
 extern DisplayPrintId dis_dict_id (DictId dict_id);

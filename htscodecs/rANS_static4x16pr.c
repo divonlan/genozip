@@ -35,13 +35,6 @@
 // techniques prior to entropy encoding.  This is a significant
 // reduction in some data sets.
 
-// top bits in order byte
-#define X_PACK   0x80    // Pack 2,4,8 or infinite symbols into a byte.
-#define X_RLE    0x40    // Run length encoding with runs & lits encoded separately
-#define X_CAT    0x20    // Nop; for tiny segments where rANS overhead is too big
-#define X_NOSZ   0x10    // Don't store the original size; used by STRIPE mode
-#define X_STRIPE 0x08    // For N-byte integer data; rotate & encode N streams.
-
 // FIXME Can we get decoder to return the compressed sized read, avoiding
 // us needing to store it?  Yes we can.  See c-size comments.  If we added all these
 // together we could get rans_uncompress_to_4x16 to return the number of bytes
@@ -395,7 +388,7 @@ unsigned char *rans_compress_O0_4x16(VBlockP vb, unsigned char *in, unsigned int
 
     if (!out) {
 	*out_size = bound;
-	out = malloc(*out_size);
+	out = MALLOC(*out_size);
     }
     if (!out || bound > *out_size)
 	return NULL;
@@ -525,7 +518,7 @@ unsigned char *rans_uncompress_O0_4x16(unsigned char *in, unsigned int in_size,
     uint8_t  ssym [TOTFREQ+64]; // faster to use 16-bit on clang
 
     if (!out)
-	out_free = out = malloc(out_sz);
+	out_free = out = MALLOC(out_sz);
     if (!out)
 	return NULL;
 
@@ -615,7 +608,7 @@ unsigned char *rans_uncompress_O0_4x16(unsigned char *in, unsigned int in_size,
     return out;
 
  err:
-    free(out_free);
+    FREE(out_free);
     return NULL;
 }
 
@@ -795,7 +788,7 @@ unsigned char *rans_compress_O1_4x16(VBlockP vb, unsigned char *in, unsigned int
 	    memcpy(op, c_freq, c_freq_sz);
 	    cp = op+c_freq_sz;
 	}
-	free(c_freq);
+	FREE(c_freq);
     }
 
     //write(2, out+4, cp-(out+4));
@@ -874,7 +867,7 @@ pthread_once_t rans_once = PTHREAD_ONCE_INIT;
 pthread_key_t rans_key;
 
 static void rans_tls_init(void) {
-    pthread_key_create(&rans_key, free);
+    pthread_key_create(&rans_key, FREE);
 }
 #endif
 
@@ -909,13 +902,13 @@ unsigned char *rans_uncompress_O1_4x16(unsigned char *in, unsigned int in_size,
 #ifndef NO_THREADS
     /*
      * The calloc below is expensive as it's a large structure.  We
-     * could use malloc, but we're only initialising parts of the structure
+     * could use MALLOC, but we're only initialising parts of the structure
      * that we need to, as dictated by the frequency table.  This is far
-     * faster than initialising everything (ie malloc+memset => calloc).
+     * faster than initialising everything (ie MALLOC+memset => calloc).
      * Not initialising the data means malformed input with mismatching
      * frequency tables to actual data can lead to accessing of the
      * uninitialised sfb table and in turn potential leakage of the
-     * uninitialised memory returned by malloc.  That could be anything at
+     * uninitialised memory returned by MALLOC.  That could be anything at
      * all, including important encryption keys used within a server (for
      * example).
      *
@@ -950,7 +943,7 @@ unsigned char *rans_uncompress_O1_4x16(unsigned char *in, unsigned int in_size,
     }
 
     if (!out)
-	out_free = out = malloc(out_sz);
+	out_free = out = MALLOC(out_sz);
 
     if (!out)
 	goto err;
@@ -1019,7 +1012,7 @@ unsigned char *rans_uncompress_O1_4x16(unsigned char *in, unsigned int in_size,
 
     if (tab_end)
 	cp = tab_end;
-    free(c_freq);
+    FREE(c_freq);
     c_freq = NULL;
 
     if (cp+16 > cp_end)
@@ -1135,16 +1128,16 @@ unsigned char *rans_uncompress_O1_4x16(unsigned char *in, unsigned int in_size,
     //fprintf(stderr, "    1 Decoded %d bytes\n", (int)(ptr-in)); //c-size
 
 #ifdef NO_THREADS
-    free(sfb_);
+    FREE(sfb_);
 #endif
     return out;
 
  err:
 #ifdef NO_THREADS
-    free(sfb_);
+    FREE(sfb_);
 #endif
-    free(out_free);
-    free(c_freq);
+    FREE(out_free);
+    FREE(c_freq);
 
     return NULL;
 }
@@ -1203,7 +1196,8 @@ unsigned char *rans_compress_to_4x16(VBlockP vb, unsigned char *in, unsigned int
 	c_meta_len += var_put_u32(out+c_meta_len, out_end, in_size);
 	out[c_meta_len++] = N;
 	
-	out2_start = out2 = out+2+5*N; // shares a buffer with c_meta
+	out2_start = out2 = out+2+5*(N+1); // bug fix per email from James
+	// out2_start = out2 = out+2+5*N; // shares a buffer with c_meta
         for (i = 0; i < N; i++) {
             // Brute force try all methods.
             int j, m[] = {1,64,128,0}, best_j = 0, best_sz = in_size+10;
@@ -1262,11 +1256,11 @@ unsigned char *rans_compress_to_4x16(VBlockP vb, unsigned char *in, unsigned int
 	// PACK 2, 4 or 8 symbols into one byte.
 	int pmeta_len;
 	uint64_t packed_len;
-	packed = hts_pack(in, in_size, out+c_meta_len, &pmeta_len, &packed_len);
+	packed = hts_pack(vb, in, in_size, out+c_meta_len, &pmeta_len, &packed_len);
 	if (!packed || (pmeta_len == 1 && out[c_meta_len] > 16)) {
 	    out[0] &= ~X_PACK;
 	    do_pack = 0;
-	    free(packed);
+	    codec_free(vb, packed);
 	    packed = NULL;
 	} else {
 	    in = packed;
@@ -1288,7 +1282,7 @@ unsigned char *rans_compress_to_4x16(VBlockP vb, unsigned char *in, unsigned int
 	unsigned int rmeta_len, c_rmeta_len;
 	uint64_t rle_len;
 	c_rmeta_len = in_size+257;
-	if (!(meta = malloc(c_rmeta_len)))
+	if (!(meta = MALLOC(c_rmeta_len)))
 	    return NULL;
 
 	uint8_t rle_syms[256];
@@ -1305,7 +1299,7 @@ unsigned char *rans_compress_to_4x16(VBlockP vb, unsigned char *in, unsigned int
 	    // Not worth the speed hit.
 	    out[0] &= ~X_RLE;
 	    do_rle = 0;
-	    free(rle);
+	    FREE(rle);
 	    rle = NULL;
 	} else {
 	    // Compress lengths with O0 and literals with O0/O1 ("order" param)
@@ -1330,7 +1324,7 @@ unsigned char *rans_compress_to_4x16(VBlockP vb, unsigned char *in, unsigned int
 	    in_size = rle_len;
 	}
 
-	free(meta);
+	FREE(meta);
     } else if (do_rle) {
 	out[0] &= ~X_RLE;
     }
@@ -1353,8 +1347,8 @@ unsigned char *rans_compress_to_4x16(VBlockP vb, unsigned char *in, unsigned int
 	*out_size = in_size;
     }
 
-    free(rle);
-    free(packed);
+    FREE(rle);
+    codec_free(vb,packed);
 
     *out_size += c_meta_len;
 
@@ -1383,13 +1377,13 @@ unsigned char *rans_uncompress_to_4x16(VBlockP vb, unsigned char *in,  unsigned 
 	if (!out) {
 	    if (ulen >= INT_MAX)
 		return NULL;
-	    if (!(out_free = out = malloc(ulen))) {
+	    if (!(out_free = out = MALLOC(ulen))) {
 		return NULL;
 	    }
 	    *out_size = ulen;
 	}
 	if (ulen != *out_size) {
-	    free(out_free);
+	    FREE(out_free);
 	    return NULL;
 	}
 
@@ -1399,7 +1393,7 @@ unsigned char *rans_uncompress_to_4x16(VBlockP vb, unsigned char *in,  unsigned 
 	    c_meta_len += var_get_u32(in+c_meta_len, in_end, &clenN[i]);
 	    clen_tot += clenN[i];
 	    if (c_meta_len > in_size || clenN[i] > in_size || clenN[i] < 1) {
-		free(out_free);
+		FREE(out_free);
 		return NULL;
 	    }
 	}
@@ -1408,7 +1402,7 @@ unsigned char *rans_uncompress_to_4x16(VBlockP vb, unsigned char *in,  unsigned 
 	// how much we really use we limit it so the recursion becomes easier
 	// to limit.
 	if (c_meta_len + clen_tot > in_size) {
-	    free(out_free);
+	    FREE(out_free);
 	    return NULL;
 	}
 	in_size = c_meta_len + clen_tot;
@@ -1416,22 +1410,22 @@ unsigned char *rans_uncompress_to_4x16(VBlockP vb, unsigned char *in,  unsigned 
 	//fprintf(stderr, "    stripe meta %d\n", c_meta_len); //c-size
 
 	// Uncompress the N streams
-	unsigned char *outN = malloc(ulen);
+	unsigned char *outN = MALLOC(ulen);
 	if (!outN) {
-	    free(out_free);
+	    FREE(out_free);
 	    return NULL;
 	}
 	for (i = 0; i < N; i++) {
 	    olen = ulenN[i];
 	    if (in_size < c_meta_len) {
-		free(out_free);
-		free(outN);
+		FREE(out_free);
+		FREE(outN);
 		return NULL;
 	    }
 	    if (!rans_uncompress_to_4x16(vb, in+c_meta_len, in_size-c_meta_len, outN + idxN[i], &olen)
 		|| olen != ulenN[i]) {
-		free(out_free);
-		free(outN);
+		FREE(out_free);
+		FREE(outN);
 		return NULL;
 	    }
 	    c_meta_len += clenN[i];
@@ -1439,7 +1433,7 @@ unsigned char *rans_uncompress_to_4x16(VBlockP vb, unsigned char *in,  unsigned 
 
 	unstripe(out, outN, ulen, N, idxN);
 
-	free(outN);
+	FREE(outN);
 	*out_size = ulen;
 	return out;
     }
@@ -1470,7 +1464,7 @@ unsigned char *rans_uncompress_to_4x16(VBlockP vb, unsigned char *in,  unsigned 
 
     if (!out) {
 	*out_size = osz;
-	if (!(out = out_free = malloc(*out_size)))
+	if (!(out = out_free = MALLOC(*out_size)))
 	    return NULL;
     } else {
 	if (*out_size < osz)
@@ -1508,7 +1502,7 @@ unsigned char *rans_uncompress_to_4x16(VBlockP vb, unsigned char *in,  unsigned 
     // followed by rANS compressed data.
 
     if (do_pack || do_rle) {
-	if (!(tmp = tmp_free = malloc(*out_size)))
+	if (!(tmp = tmp_free = MALLOC(*out_size)))
 	    goto err;
 	if (do_pack && do_rle) {
 	    tmp1 = out;
@@ -1620,7 +1614,7 @@ unsigned char *rans_uncompress_to_4x16(VBlockP vb, unsigned char *in,  unsigned 
 			meta+1, rle_nsyms, tmp2, &unrle_size))
 	    goto err;
 	tmp3_size = tmp2_size = unrle_size;
-	free(meta_free);
+	FREE(meta_free);
 	meta_free = NULL;
     }
     if (do_pack) {
@@ -1635,14 +1629,14 @@ unsigned char *rans_uncompress_to_4x16(VBlockP vb, unsigned char *in,  unsigned 
     }
 
     if (tmp)
-	free(tmp);
+	FREE(tmp);
 
     *out_size = tmp3_size;
     return tmp3;
 
  err:
-    free(meta_free);
-    free(out_free);
-    free(tmp_free);
+    FREE(meta_free);
+    FREE(out_free);
+    FREE(tmp_free);
     return NULL;
 }

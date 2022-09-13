@@ -208,7 +208,7 @@ local ptr_table table[MAX_PTR];
  * a protected system like OS/2. Use Microsoft C instead.
  */
 
-voidpf ZLIB_INTERNAL zcalloc (voidpf opaque, unsigned items, unsigned size, const char *func, uint32_t code_line)
+voidpf ZLIB_INTERNAL zcalloc (voidpf opaque, unsigned items, unsigned size, FUNCLINE)
 {
     voidpf buf;
     ulg bsize = (ulg)items*size;
@@ -271,7 +271,7 @@ void ZLIB_INTERNAL zcfree (voidpf opaque, voidpf ptr)
 #  define _hfree   hfree
 #endif
 
-voidpf ZLIB_INTERNAL zcalloc (voidpf opaque, uInt items, uInt size, const char *func, uint32_t code_line)
+voidpf ZLIB_INTERNAL zcalloc (voidpf opaque, uInt items, uInt size, FUNCLINE)
 {
     (void)opaque;
     return _halloc((long)items, size);
@@ -296,13 +296,13 @@ extern voidp  calloc OF((uInt items, uInt size));
 extern void   free   OF((voidpf ptr));
 #endif
 
-voidpf ZLIB_INTERNAL zcalloc (voidpf opaque __attribute__((unused)), unsigned items, unsigned size, const char *func, uint32_t code_line)
+voidpf ZLIB_INTERNAL zcalloc (voidpf opaque __attribute__((unused)), unsigned items, unsigned size, FUNCLINE)
 {
     return sizeof(uInt) > 2 ? (voidpf)malloc(items * size) :
                               (voidpf)calloc(items, size);
 }
 
-void ZLIB_INTERNAL zcfree (voidpf opaque __attribute__((unused)), voidpf ptr, const char *func, uint32_t code_line)
+void ZLIB_INTERNAL zcfree (voidpf opaque __attribute__((unused)), voidpf ptr, FUNCLINE)
 {
     free(ptr);
 }

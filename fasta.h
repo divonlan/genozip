@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   fasta.h
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #pragma once
 
@@ -18,6 +21,7 @@
 #pragma GENDICT FASTA_NONREF_X=DTYPE_FIELD=NONREF_X
 #pragma GENDICT FASTA_TOPLEVEL=DTYPE_FIELD=TOPLEVEL
 #pragma GENDICT FASTA_TAXID=DTYPE_FIELD=TAXID
+#pragma GENDICT FASTA_DEBUG_LINES=DTYPE_FIELD=DBGLINES      // used by --debug-lines
 
 // Txtfile stuff
 extern int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
@@ -31,14 +35,14 @@ extern void vcf_zip_after_compute (VBlockP vb);
 extern void fasta_seg_initialize(VBlockP vb);
 extern void fasta_seg_finalize (VBlockP vb);
 extern bool fasta_seg_is_small (ConstVBlockP vb, DictId dict_id);
-extern const char *fasta_seg_txt_line();
+extern rom fasta_seg_txt_line();
 
 // PIZ Stuff
-extern bool fasta_piz_initialize (void);
-extern bool fasta_piz_read_one_vb (VBlockP vb, Section sl);
+extern bool fasta_piz_is_vb_needed (VBIType vb_i);
+extern bool fasta_piz_init_vb (VBlockP vb, const SectionHeaderVbHeader *header, uint32_t *txt_data_so_far_single_0_increment);
 extern void fasta_reconstruct_vb(); // no parameter - implicit casting of VBlockP
-extern bool fasta_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
-extern bool fasta_piz_initialize_contig_grepped_out (VBlockP vb, bool does_vb_have_any_desc, bool last_desc_in_this_vb_matches_grep);
+extern IS_SKIP (fasta_piz_is_skip_section);
+extern bool fastq_piz_get_pair2_is_forward (VBlockP vb);
 
 // VBlock stuff
 extern void fasta_vb_release_vb();

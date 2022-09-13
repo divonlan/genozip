@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   stream.h
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #pragma once
 
@@ -10,13 +13,13 @@
 
 typedef struct stream_ *StreamP;
 
-#define MAX_ARGC 30 // maximum number of arguments including exec_name
+#define MAX_ARGC 50 // maximum number of arguments including exec_name
 
 #define DEFAULT_PIPE_SIZE 65536
-#define SKIP_ARG ((const char *)-1)
-extern StreamP stream_create (StreamP parent_stream, uint32_t from_stream, uint32_t from_stream_stderr, uint32_t to_stream, 
-                              FILE *redirect_stdout_file, const char *input_url_name, bool input_stdin, const char *reason,
-                              const char *exec_name, ...);
+#define SKIP_ARG ((rom )-1)
+extern StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint32_t from_stream_stderr, uint32_t to_stream, 
+                              FILE *redirect_stdout_file, rom input_url_name, bool input_stdin, rom reason,
+                              rom exec_name, ...);
 
 extern void stream_close_pipes (StreamP stream);
 
@@ -25,10 +28,10 @@ extern int stream_close (StreamP *stream, StreamCloseMode close_mode);
 
 extern int stream_wait_for_exit (StreamP stream);
 
-extern void stream_abort_if_cannot_run (const char *exec_name, const char *reason);
+extern void stream_abort_if_cannot_run (rom exec_name, rom reason);
 
 extern FILE *stream_from_stream_stdout (StreamP stream);
 extern FILE *stream_from_stream_stderr (StreamP stream);
 extern FILE *stream_to_stream_stdin    (StreamP stream);
 
-extern const char *exit_code_name (int exit_code);
+extern rom exit_code_name (int exit_code);

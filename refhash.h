@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   refhash.h
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #pragma once
 
@@ -24,7 +27,8 @@ extern uint32_t layer_bitmask[64]; // 1s in the layer_bits[] LSbs
 extern uint32_t **refhashs;
 
 extern void refhash_initialize (bool *dispatcher_invoked);
-extern void refhash_destroy (void);
+extern void refhash_destroy (bool destroy_only_if_not_mmap);
+extern void refhash_verify_before_exit (void);
 
 // make-reference stuff
 extern void refhash_compress_refhash (void);
@@ -34,6 +38,7 @@ extern void refhash_calc_one_range (const Range *r, const Range *next_r);
 extern void refhash_load_standalone (void);
 extern void refhash_create_cache_join (bool free_mem);
 extern void refhash_remove_cache (void);
+extern bool refhash_has_refhash (void);
 
 // globals
 extern const char complement[256];

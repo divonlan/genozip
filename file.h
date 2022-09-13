@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   file.h
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #pragma once
 
@@ -33,7 +36,9 @@
 #define SAM_GENOZIP_   ".sam" GENOZIP_EXT
 
 // BAM
-#define BAM_           ".bam" // can be bgzf-compressed or not
+#define BAM_           ".bam"    // can be bgzf-compressed or not
+#define BAM_GZ_        ".bam.gz" // same as .bam - not observed in the wild, but used by test.sh
+#define BAM_BGZF_      ".bam.bgz" 
 #define CRAM_          ".cram"
 #define BAM_GENOZIP_   ".bam.genozip" 
 
@@ -180,8 +185,8 @@ typedef enum { UNKNOWN_FILE_TYPE,
                CHAIN, CHAIN_GZ, CHAIN_BZ2, CHAIN_XZ,     CHAIN_GENOZIP,
                KRAKEN, KRAKEN_GZ, KRAKEN_BZ2, KRAKEN_XZ, KRAKEN_GENOZIP,
                LOCS,  LOCS_GZ,  LOCS_BZ2,  LOCS_XZ,      LOCS_GENOZIP,
-               BAM, CRAM,                                BAM_GENOZIP,
-               BCF, BCF_GZ, BCF_BGZF,                    BCF_GENOZIP,  
+               BAM,   BAM_GZ,   BAM_BGZF, CRAM,          BAM_GENOZIP,
+               BCF,   BCF_GZ,   BCF_BGZF,                BCF_GENOZIP,  
                // the GNRIC row *must* be the last row, as it consists catch-all extensions (*.gz etc)
                GNRIC_GZ, GNRIC_BZ2, GNRIC_XZ,            GNRIC_GENOZIP, GNRIC, // GNRIC *must* be the very last as it is a catch-all ""
                AFTER_LAST_FILE_TYPE } FileType;
@@ -208,11 +213,11 @@ typedef enum { UNKNOWN_FILE_TYPE,
                    CHAIN_, CHAIN_GZ_, CHAIN_BZ2_, CHAIN_XZ_, CHAIN_GENOZIP_,         \
                    KRAKEN_, KRAKEN_GZ_, KRAKEN_BZ2_, KRAKEN_XZ_, KRAKEN_GENOZIP_,    \
                    LOCS_,  LOCS_GZ_,  LOCS_BZ2_,  LOCS_XZ_,  LOCS_GENOZIP_,          \
-                   BAM_,   CRAM_,                            BAM_GENOZIP_,           \
+                   BAM_,   BAM_GZ_,   BAM_BGZF_,  CRAM_,     BAM_GENOZIP_,           \
                    BCF_,   BCF_GZ_,   BCF_BGZF_,             BCF_GENOZIP_,           \
                    GNRIC_GZ_, GNRIC_BZ2_, GNRIC_XZ_,         GNRIC_GENOZIP_, GNRIC_, /* GNRIC_ is catch all */ \
                    "stdin", "stdout" }
-extern const char *file_exts[];
+extern rom file_exts[];
 
 // Ordered by data_type: txt file types and their corresponding genozip file types for each data type
 // first entry of each data type MUST be the default plain file
@@ -256,8 +261,8 @@ extern const char *file_exts[];
                              { GVF,        CODEC_NONE, GVF_GENOZIP    }, { GVF_GZ,    CODEC_GZ,  GVF_GENOZIP    },\
                              { GVF_BZ2,    CODEC_BZ2,  GVF_GENOZIP    }, { GVF_XZ,    CODEC_XZ,  GVF_GENOZIP    }, { } },\
                            { { ME23,       CODEC_NONE, ME23_GENOZIP   }, { ME23_ZIP,  CODEC_ZIP, ME23_GENOZIP   }, { } },\
-                           { { BAM,        CODEC_BGZF, BAM_GENOZIP    }, { CRAM,      CODEC_CRAM,BAM_GENOZIP    }, { } }, \
-                           { { BCF,        CODEC_BCF,  BCF_GENOZIP    }, { BCF_GZ,    CODEC_BCF, BCF_GENOZIP    }, { BCF_BGZF, CODEC_BCF, BCF_GENOZIP  }, { } }, \
+                           { { BAM,        CODEC_BGZF, BAM_GENOZIP    }, { BAM_GZ,    CODEC_GZ,  BAM_GENOZIP    }, { BAM_BGZF, CODEC_BGZF, BAM_GENOZIP  }, { CRAM, CODEC_CRAM, BAM_GENOZIP }, { } }, \
+                           { { BCF,        CODEC_BCF,  BCF_GENOZIP    }, { BCF_GZ,    CODEC_BCF, BCF_GENOZIP    }, { BCF_BGZF, CODEC_BCF,  BCF_GENOZIP  }, { } }, \
                            { { GNRIC,      CODEC_NONE, GNRIC_GENOZIP  }, { GNRIC_GZ,  CODEC_GZ,  GNRIC_GENOZIP  },\
                              { GNRIC_BZ2,  CODEC_BZ2,  GNRIC_GENOZIP  }, { GNRIC_XZ,  CODEC_XZ,  GNRIC_GENOZIP  }, { } },\
                            { { PHY,        CODEC_NONE, PHY_GENOZIP    }, { PHY_GZ,    CODEC_GZ,  PHY_GENOZIP    },\
@@ -306,75 +311,88 @@ extern const char *file_exts[];
                      { LOCS_GENOZIP, 0 },                   \
                    } 
 
-typedef const char *FileMode;
-extern FileMode READ, WRITE, WRITEREAD; // this are pointers to static strings - so they can be compared eg "if (mode==READ)"
+#define MAX_GEN_COMP 2
+
+typedef rom FileMode;
+extern FileMode READ, WRITE, WRITEREAD;// this are pointers to static strings - so they can be compared eg "if (mode==READ)"
 
 typedef struct File {
     void *file;
     char *name;                        // allocated by file_open(), freed by file_close()
-    const char *basename;              // basename of name
+    rom basename;                      // basename of name
     FileMode mode;
     FileSupertype supertype;            
     FileType type;
     bool is_remote;                    // true if file is downloaded from a url
-    bool redirected;                   // txt_file: true if this file is redirected from stdin/stdout
+    bool redirected;                   // txt_file: true if this file is redirected from stdin/stdout or a pipe
     bool is_eof;                       // we've read the entire file
+    bool header_only;                  // ZIP txt_file: file has only the data-type header and no data
     DataType data_type;
-    Codec codec;                       // ZIP - txt_file: generic codec used with this file (in PIZ we use flag.bgzf instead)
-                                       // ZIP - z_file: copy from txt_file.codec, but not for rejects file    
+    Codec source_codec;                // ZIP - txt_file: codec of txt file before redirection (eg CRAM, XZ, ZIP...)
+    Codec codec;                       // ZIP - txt_file: generic codec used with this file (in PIZ we use flag.bgzf instead). If redirected - as read by txtfile (eg for cram files this is BGZF)
+
     // these relate to actual bytes on the disk
     int64_t disk_size;                 // 0 if not known (eg stdin or http stream). 
-    int64_t disk_so_far;               // data read/write to/from "disk" (using fread/fwrite)
-    int64_t disk_size_minus_skips;     // PIZ z_file: disk_size minus any data skipped
+    int64_t disk_so_far;               // data read/write to/from "disk" (using fread/fwrite) (possibley gz/bz2 compressed)
     int64_t est_seggable_size;         // ZIP txt_file, access via txtfile_get_seggable_size(). Estimated size of txt_data in file, i.e. excluding the header. It is exact for plain files, or based on test_vb if the file has source compression
 
     // this relate to the textual data represented. In case of READ - only data that was picked up from the read buffer.
     int64_t txt_data_so_far_single;    // txt_file: data read (ZIP) or written (PIZ) to/from txt file so far
-                                       // z_file: txt data represented in the GENOZIP data written (ZIP) or read (PIZ) to/from the genozip file so far for the current VCF
-    int64_t header_size;               // txt_file ZIP: size of txt header
+                                       // z_file: txt data represented in the GENOZIP data written (ZIP) or read (PIZ) to/from the genozip file so far for the current txt file
+    int64_t header_size;               // txt_file ZIP: size of txt header  z_file ZIP: size of MAIN txt header
+    
     //      seggable_data_so_far = txt_data_so_far_single - header_size
     int64_t seggable_data_so_far_gz_bz2; // txt_file ZIP: if source gz or bz2 compression, this is the compressed txt_data_so_far_single 
     int64_t txt_data_so_far_bind;      // z_file only: uncompressed txt data represented in the GENOZIP data written so far for all bound files
                                        // note: txt_data_so_far_single/bind accounts for txt modifications due to --optimize or --chain or compressing a Luft file
-    int64_t txt_data_so_far_single_0;  // z_file & ZIP only: same as txt_data_so_far_single/bind, but original sizes without 
-                                       // txt_file PIZ: accounting for data as it was in the original source file, as reading TxtHeader and VbHeader sections from the genozip file
-    int64_t txt_data_so_far_bind_0;    //      modifications due to --chain/--optimize/Luft                                   
+    int64_t txt_data_so_far_single_0;  // txt_file PIZ: accounting for data as it was in the original source file, as reading TxtHeader and VbHeader sections from the genozip file
+                                       // z_file & ZIP only: same as txt_data_so_far_single/bind, but original sizes without modifications due to --chain/--optimize/Luft
+    int64_t txt_data_so_far_bind_0;    // z_file & ZIP only: similar to txt_data_so_far_single_0, but for bound
     int64_t txt_disk_so_far_bind;      // z_file & ZIP only: compressed (with txt_file.codec - eg bgzf) txt data represented in the GENOZIP data written so far for all bound files
-    int64_t txt_bgzf_blocks_so_far;    // txt_file: ZIP: BGZF blocks read so far
     int64_t num_lines;                 // z_file: number of lines in all txt files bound into this z_file
                                        // txt_file: number of lines, in source file terms, (read so far) in single txt file
+    // per-component data (ZIP)
+    int64_t disk_so_far_comp[MAX_NUM_COMPS];
+    int64_t txt_data_so_far_bind_comp[MAX_NUM_COMPS];
+    int64_t txt_data_so_far_bind_0_comp[MAX_NUM_COMPS];
+
+    // Digest stuff - stored in z_file (ZIP & PIZ)
+    Serializer digest_serializer;      // ZIP/PIZ: used for serializing VBs so they are MD5ed in order (not used for Adler32)
+    DigestContext digest_ctx;          // ZIP/PIZ: z_file: digest context of txt file being compressed / reconstructed (used for MD5 and, in v9-13, for Adler32)
+    Digest digest;                     // ZIP: z_file: digest of txt data read from input file  PIZ: z_file: as read from TxtHeader section (used for MD5 and, in v9-13, for Adler32)
 
     // Used for READING & WRITING txt files - but stored in the z_file structure for zip to support bindenation (and in the txt_file structure for piz)
-    DigestContext digest_ctx_bound;    // md5 context of txt file. in bound mode - of the resulting bound txt file
-    DigestContext digest_ctx_single;   // used only in bound mode - md5 of the single txt component
-    Digest digest;                     // PIZ: as read from header: z_file: digest_bound txt_file: digest_single
-
     uint32_t max_lines_per_vb;         // ZIP & PIZ - in ZIP, discovered while segmenting, in PIZ - given by SectionHeaderTxtHeader
     bool piz_header_init_has_run;      // PIZ: true if we called piz_header_init to initialize (only once per outputted txt_file, even if concatenated)
 
     // Used for READING GENOZIP files
     uint8_t genozip_version;           // GENOZIP_FILE_FORMAT_VERSION of the genozip file being read
+        
+    CompIType num_components;          // PIZ z_file: set from genozip header 
 
     struct FlagsGenozipHeader z_flags; // z_file: genozip file flags as read from SectionHeaderGenozipHeader.h.flags
-    struct FlagsTxtHeader txt_flags;   // txt_file: genozip file flags as read from SectionHeaderTxtHeader.h.flags
+    struct FlagsTxtHeader txt_flags;   // txt_file PIZ: genozip file flags as read from SectionHeaderTxtHeader.h.flags
 
-    uint32_t num_components;           // set from genozip header
-    uint32_t num_copied_ref_sections;  // number of SEC_REFERENCE sections with vblock_i==0 (a result of being created with ref_copy_one_compressed_section)
-     
+    Buffer vb_sections_index;          // PIZ z_file: an index into VB sections
+    Buffer comp_sections_index;        // PIZ z_file: an index into Txt sections
+    Section first_dict_section;        // PIZ z_file
+
     // Used for WRITING GENOZIP files
     uint64_t disk_at_beginning_of_this_txt_file;     // z_file: the value of disk_size when starting to read this txt file
     
-    SectionHeaderTxtHeader txt_header_first;         // store the first txt header - we might need to update it at the very end;
     uint8_t txt_header_enc_padding[AES_BLOCKLEN-1];  // just so we can overwrite txt_header with encryption padding
 
-    SectionHeaderTxtHeader txt_header_single;        // store the txt header of single component in bound mode
+    SectionHeaderTxtHeader txt_header_single;        // ZIP: store the txt header of single component in bound mode
+                                                     // PIZ: z_file: header of COMP_MAIN
     uint8_t txt_header_enc_padding2[AES_BLOCKLEN-1]; // same
 
+    bool z_closes_after_me;            // Z_FILE ZIP: this z_file will close after completing the current txt_file
+    
     // dictionary information used for writing GENOZIP files - can be accessed only when holding mutex
     Mutex dicts_mutex;                 // this mutex protects contexts and num_contexts from concurrent adding of a new dictionary
-    DidIType num_contexts;             // length of populated subfield_ids and mtx_ctx;
+    Did num_contexts;                  // length of populated subfield_ids and mtx_ctx;
     
-    DidIType dict_id_to_did_i_map[65536 * 2]; // map for quick look up of did_i from dict_id : 64K for key_map, 64K for alt_map 
+    Did dict_id_to_did_i_map[65536 * 2]; // map for quick look up of did_i from dict_id : 64K for key_map, 64K for alt_map 
     Context contexts[MAX_DICTS];       // a merge of dictionaries of all VBs
     Buffer ra_buf;                     // ZIP/PIZ:  RAEntry records: ZIP: of DC_PRIMARY ; PIZ - PRIMARY or LUFT depending on flag.luft
     Buffer ra_buf_luft;                // ZIP only: RAEntry records of DC_LUFT
@@ -384,96 +402,120 @@ typedef struct File {
 
     // section list - used for READING and WRITING genozip files
     Buffer section_list_buf;           // section list to be written as the payload of the genotype header section
-    uint32_t num_txt_components_so_far;// ZIP/PIZ z_file
+    Buffer section_list_vb1;           // a copy of the section_list of vb_i=1, bc it might be removed from section_list_buf due to recon plan.
+    CompIType num_txts_so_far;         // ZIP z_file: number of txt files compressed into this z_file - each becomes a component
+                                       // PIZ z_file: number of txt files written from this z_file - each generated from one or more components 
+
+    // TXT file: reading
+    Buffer unconsumed_txt;             // ZIP: excess data read from the txt file - moved to the next VB
 
     // TXT file: stuff reading and writing txt files compressed with BGZF
-    Buffer bgzf_isizes;                // of the bgzf blocks in which this txt file is compressed (in BGEN16)
+    Buffer unconsumed_bgzf_blocks;     // ZIP: unconsumed or partially consumed bgzf blocks - moved to the next VB
+    Buffer bgzf_isizes;                // ZIP/PIZ: uncompressed size of the bgzf blocks in which this txt file is compressed (in BGEN16)
+    Buffer bgzf_starts;                // ZIP: offset in txt_file of each BGZF block
     struct FlagsBgzf bgzf_flags;       // correspond to SectionHeader.flags in SEC_BGZF
     uint8_t bgzf_signature[3];         // PIZ: 3 LSB of size of source BGZF-compressed file, as passed in SectionHeaderTxtHeader.codec_info
-    int32_t bzgf_passed_to_next_vb;    // PIZ: bytes at the end of the VB too small for one bgzf block passed to the next block
 
     // TXT file: data used in --sex, --coverage and --idxstats
     Buffer coverage;
     Buffer read_count;
     Buffer unmapped_read_count;
     
+    // Z_FILE: SAM/BAM SA stuff
+    Buffer sag_grps;                   // Z_FILE: an SA group is a group of alignments, including the primary aligngment
+    Buffer sag_gps_index;              // Z_FILE: index z_file->sag_grps by adler32(qname)
+    Buffer sag_alns;                   // Z_FILE: array of {RNAME, STRAND, POS, CIGAR, NM, MAPQ} of the alignment
+    Buffer sag_qnames;                 // Z_FILE
+    Buffer sag_depn_index;             // Z_FILE: SAG_BY_FLAG: uniq-sorted hash(QNAME) of all depn alignments in the file
+    
+    union {
+    Buffer sag_cigars;                 // Z_FILE: SAG_BY_SA: compressed CIGARs
+    Buffer solo_data;                  // Z_FILE: SAG_BY_SOLO: solo data
+    };
+    Buffer sag_seq;                    // Z_FILE: bitmap of seqs in ACGT 2bit format
+    Buffer sag_qual;                   // Z_FILE: compressed QUAL
+    
+    uint64_t saggy_near_count, mate_line_count, prim_far_count; // Z_FILE ZIP: SAM: for stats
+
     // Z_FILE: DVCF stuff
-    char *rejects_file_name[2];        // ZIP: [0]=DC_PRIMARY [1]=DC_LUFT
-    FILE *rejects_file[2];             // ZIP: rejects txt file
-    uint64_t rejects_disk_size[2];     // ZIP
-    Buffer rejects_report;             // ZIP --chain: human readable report about rejects
-    Buffer apriori_tags;               // ZIP DVCF: used for INFO/FORMAT tag renaming. Data from command line options if --chain, or VCF header if DVCF
+    Buffer rejects_report;             // Z_FILE ZIP --chain: human readable report about rejects
+    Buffer apriori_tags;               // Z_FILE ZIP DVCF: used for INFO/FORMAT tag renaming. Data from command line options if --chain, or VCF header if DVCF
     
     // TXT_FILE: DVCF stuff
-    Coords coords;                     // TXT FILE ZIP: Set from ##dual_coordinates and immutable thereafter
-    uint64_t reject_bytes;             // ZIP of a dual coordinate file: number of bytes in lines originating from ##primary_only/##luft_only, not yet assigned to a VB
+    uint8_t coords;                    // TXT_FILE ZIP: DVCF: Set from ##dual_coordinates and immutable thereafter
+    uint64_t reject_bytes;             // ZIP DVCF: number of bytes in lines originating from ##primary_only/##luft_only, not yet assigned to a VB
 
     // Reconstruction plan, for reconstructing in sorted order if --sort: [0] is primary coords, [1] is luft coords
-    Mutex recon_plan_mutex[2];         // TXT_FILE ZIP: protect vb_info and line_info during merging of VB data
-    Buffer vb_info[2];                 // TXT_FILE ZIP: array of ZipVbInfo per VB, indexed by (vb_i-1), 0:PRIMARY, 1:LUFT
-                                       // Z_FILE   PIZ: array of PizVbInfo per VB, indexed by (vb_i-1), only vb_info[0] is used
-    Buffer line_info[2];               // TXT_FILE ZIP: array of LineInfo per line or gapless range in txt_file
-    Buffer recon_plan;                 // TXT_FILE ZIP/PIZ: array of ReconPlanItem - order of reconstruction of ranges of lines, to achieve a sorted file
+    Mutex recon_plan_mutex[2];         // TXT_FILE ZIP: VCF: protect vb_info and line_info during merging of VB data
+    Buffer vb_info[2];                 // TXT_FILE ZIP: VCF: array of ZipVbInfo per VB, indexed by (vb_i-1), 0:PRIMARY, 1:LUFT
+                                       // Z_FILE   ZIP: SAM: array of SamGcVbInfo for: 0:PRIM 1:DEPN
+                                       // Z_FILE   PIZ: [0]: used by writer [1]: used to load SAM SA Groups - array of PlsgVbInfo - entry per PRIM vb 
+    Buffer line_info[2];               // TXT_FILE ZIP: VCF: array of LineInfo per line or gapless range in txt_file
+                                       //               SAM: array of uint32 - lengths of lines in PRIM/DEPN
+    Buffer recon_plan;                 // TXT_FILE ZIP/PIZ: array of ReconPlanItem - order of reconstruction of ranges of lines, to achieve a sorted file. VCF: [0]=PRIM rendition [1]=LUFT rendition
                                        // Z_FILE   PIZ: plan for entire z_file, txt_file.recon_plan is assigned a portion of this plan
-    Buffer comp_info;                  // Z_FILE   PIZ: array of PizCompInfo - component information (param=1 if locks initialized)
-    Buffer txt_file_info;              // Z_FILE   PIZ: array of PizTxtFileInfo - txt_file information
+    Buffer recon_plan_index;           // TXT_FILE ZIP / Z_FILE PIZ: An array of BufWord, one for each VB: start and length of VB in recon_plan
+    Buffer txt_header_info;            // Z_FILE   PIZ: used by writer
     uint64_t lines_written_so_far;     // TXT_FILE PIZ: number of textual lines (excluding the header) that passed all filters except downsampling, and is to be written to txt_file, or downsampled-out
-    uint32_t tail_1st_vb;              // TXT_FILE PIZ: in case of --tail: first vblock_i needed
-    uint32_t tail_1st_line_1st_vb;     // TXT_FILE PIZ: in case of --tail: first line (0-based) in tail_1st_vb needed
     
     // Z_FILE 
-    Buffer stats_buf, STATS_buf;       // Stats data: Strings to be outputted in case of --stats or --STATS (generated during ZIP, stored in SEC_STATS)
     Buffer bound_txt_names;            // ZIP: Stats data: a concatenation of all bound txt_names that contributed to this genozip file
     
     // Information content stats - how many bytes and how many sections does this file have in each section type
-    uint32_t num_vbs;
-    uint32_t max_conc_writing_vbs;     // PIZ z_file: the maximal value conc_writing_vbs across all SEC_RECON_PLAN sections in the file
-
-    // Used for reading txt files
-    Buffer unconsumed_txt;             // ZIP: excess data read from the txt file - moved to the next VB
+    uint32_t num_vbs;                  // ZIP: z_file/txt_file PIZ: txt_file: number of VBs processed z_file: total VBs in file
+    uint32_t num_vbs_dispatched;       // ZIP: txt_file
+    uint32_t num_preproc_vbs_joined;   // PIZ: z_file
+    uint32_t max_conc_writing_vbs;     // PIZ z_file: the maximal value conc_writing_vbs across all SEC_RECON_PLAN sections in this z_file
 } File;
 
-#define z_dual_coords z_file->z_flags.dual_coords
+#define z_has_gencomp z_file->z_flags.has_gencomp
+#define z_is_dvcf (Z_DT(DT_VCF) && z_has_gencomp)
+#define z_sam_gencomp ((Z_DT(DT_SAM) || Z_DT(DT_BAM)) && z_has_gencomp) // note: is BAM file in piz are Z_DT(DT_SAM) and in zip are Z_DT(DT_BAM)
+
+extern DataType last_z_dt; // data_type of last z_file opened
 
 // methods
-extern File *file_open (const char *filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE */);
+extern File *file_open (rom filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE */);
 extern void file_close (FileP *file_p, bool index_txt, bool cleanup_memory /* optional */);
 extern void file_write (FileP file, const void *data, unsigned len);
 extern bool file_seek (File *file, int64_t offset, int whence, int soft_fail); // SEEK_SET, SEEK_CUR or SEEK_END
-extern int64_t file_tell_do (File *file, bool soft_fail, const char *func, unsigned line);
-#define file_tell(file,soft_fail) file_tell_do ((file), (soft_fail), __FUNCTION__, __LINE__) 
-extern void file_set_input_type (const char *type_str);
-extern void file_set_input_size (const char *size_str);
-extern FileType file_get_type (const char *filename);
+extern int64_t file_tell_do (File *file, bool soft_fail, FUNCLINE);
+#define file_tell(file,soft_fail) file_tell_do ((file), (soft_fail), __FUNCLINE) 
+extern void file_set_input_type (rom type_str);
+extern void file_set_input_size (rom size_str);
+extern FileType file_get_type (rom filename);
 extern FileType file_get_stdin_type (void);
 extern DataType file_get_data_type (FileType ft, bool is_input);
-extern Codec file_get_codec_by_txt_ft (DataType dt, FileType txt_ft);
-extern const char *file_plain_text_ext_of_dt (DataType dt);
+extern Codec file_get_codec_by_txt_ft (DataType dt, FileType txt_ft, bool source);
+extern rom file_plain_text_ext_of_dt (DataType dt);
 extern void file_get_raw_name_and_type (char *filename, char **raw_name, FileType *ft);
-extern bool file_has_ext (const char *filename, const char *extension);
-extern const char *file_basename (const char *filename, bool remove_exe, const char *default_basename,
-                                  char *basename /* optional pre-allocated memory */, unsigned basename_size /* basename bytes */);
+extern bool file_has_ext (rom filename, rom extension);
+extern rom file_basename (rom filename, bool remove_exe, rom default_basename, char *basename, unsigned basename_size);
 extern void file_assert_ext_decompressor (void);
 extern void file_kill_external_compressors (void);
 extern FileType file_get_z_ft_by_txt_in_ft (DataType dt, FileType txt_ft);
 extern DataType file_get_dt_by_z_ft (FileType z_ft);
 extern FileType file_get_z_ft_by_dt (DataType dt);
-extern const char *file_plain_ext_by_dt (DataType dt);
+extern rom file_plain_ext_by_dt (DataType dt);
 extern void file_remove_codec_ext (char *filename, FileType ft);
-extern const char *ft_name (FileType ft);
-extern const char *file_guess_original_filename (const File *file);
-extern char *file_get_fastq_pair_filename (const char *fn1, const char *fn2, bool test_only);
+extern rom ft_name (FileType ft);
+extern rom file_guess_original_filename (const File *file);
+extern char *file_get_fastq_pair_filename (rom fn1, rom fn2, bool test_only);
 
 // wrapper operations for operating system files
-extern void file_get_file (VBlockP vb, const char *filename, Buffer *buf, const char *buf_name, bool add_string_terminator);
-extern bool file_put_data (const char *filename, const void *data, uint64_t len, mode_t mode);
+extern void file_get_file (VBlockP vb, rom filename, BufferP buf, rom buf_name, bool add_string_terminator);
+extern bool file_put_data (rom filename, const void *data, uint64_t len, mode_t mode);
 extern void file_put_data_abort (void);
-extern bool file_exists (const char *filename);
-extern bool file_is_fifo (const char *filename);
-extern bool file_is_dir (const char *filename);
-extern void file_remove (const char *filename, bool fail_quietly);
-extern void file_mkfifo (const char *filename);
-extern uint64_t file_get_size (const char *filename);
+
+typedef struct { char s[64]; } PutLineFn;
+extern PutLineFn file_put_line (VBlockP vb, STRp(line), rom msg);
+extern bool file_exists (rom filename);
+extern bool file_is_fifo (rom filename);
+extern bool file_is_dir (rom filename);
+extern void file_mkdir (rom dirname);
+extern void file_remove (rom filename, bool fail_quietly);
+extern void file_mkfifo (rom filename);
+extern uint64_t file_get_size (rom filename);
 extern char *file_compressible_extensions (bool plain_only);
 extern char *file_make_unix_filename (char *filename);
 
@@ -487,8 +529,8 @@ extern char *file_make_unix_filename (char *filename);
 #define txt_name file_printname(txt_file)
 #define z_name   file_printname(z_file)
 
-#define CLOSE(fd,name,quiet) do { ASSERTW (!close (fd) || (quiet),  "Warning in %s:%u: Failed to close %s: %s",  __FUNCTION__, __LINE__, (name), strerror(errno));} while (0)
-#define FCLOSE(fp,name) do { if (fp) { ASSERTW (!fclose (fp), "Warning in %s:%u: Failed to fclose %s: %s", __FUNCTION__, __LINE__, (name), strerror(errno)); fp = NULL; } } while (0)
+#define CLOSE(fd,name,quiet) do { ASSERTW (!close (fd) || (quiet),  "Warning in %s:%u: Failed to close %s: %s",  __FUNCLINE, (name), strerror(errno));} while (0)
+#define FCLOSE(fp,name) do { if (fp) { ASSERTW (!fclose (fp), "Warning in %s:%u: Failed to fclose %s: %s", __FUNCLINE, (name), strerror(errno)); fp = NULL; } } while (0)
  
  // ---------------------------
 // tests for compression types

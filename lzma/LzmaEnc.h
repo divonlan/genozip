@@ -47,7 +47,7 @@ typedef void * CLzmaEncHandle;
 
 extern size_t LzmaEnc_LzmaHandleSize (void); // divon
 
-extern void LzmaEnc_Create(CLzmaEncHandle p, VBlockP vb);
+extern void LzmaEnc_Create(CLzmaEncHandle p, VBlockP vb, ContextP ctx);
 extern void LzmaEnc_Destroy(CLzmaEncHandle p);
 
 extern SRes LzmaEnc_SetProps(CLzmaEncHandle p, const CLzmaEncProps *props);

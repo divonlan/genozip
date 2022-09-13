@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   contigs.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #include "genozip.h"
 #include "contigs.h"
@@ -96,7 +99,7 @@ static void contigs_calculate_accession_numbers (BufferP contigs, ConstBufferP c
 
         // second, try to extract the AC from the contig name. 
         else {
-            const char *contig_name = ENT (const char, *contigs_dict, ctg[i].char_index);
+            rom contig_name = B(const char, *contigs_dict, ctg[i].char_index);
             contig_name_to_acc_num (contig_name, ctg[i].snip_len, &ctg[i].metadata.parsed.ac);
         }
     }
@@ -117,20 +120,20 @@ static ConstBufferP sorter_contigs=0, sorter_contigs_dicts=0;
 #define DEF_SORTER_CONTIGS                                      \
     uint32_t index_a = *(uint32_t *)a;                          \
     uint32_t index_b = *(uint32_t *)b;                          \
-    Contig *contig_a = ENT (Contig, *sorter_contigs, index_a);  \
-    Contig *contig_b = ENT (Contig, *sorter_contigs, index_b);
+    Contig *contig_a = B(Contig, *sorter_contigs, index_a);  \
+    Contig *contig_b = B(Contig, *sorter_contigs, index_b);
 
-static int contigs_alphabetical_sorter (const void *a, const void *b)
+static SORTER (contigs_alphabetical_sorter)
 {
     DEF_SORTER_CONTIGS;
 
-    const char *contig_a_str = contig_a->snip_len ? ENT (char, *sorter_contigs_dicts, contig_a->char_index) : "~unused";
-    const char *contig_b_str = contig_b->snip_len ? ENT (char, *sorter_contigs_dicts, contig_b->char_index) : "~unused";
+    rom contig_a_str = contig_a->snip_len ? Bc (*sorter_contigs_dicts, contig_a->char_index) : "~unused";
+    rom contig_b_str = contig_b->snip_len ? Bc (*sorter_contigs_dicts, contig_b->char_index) : "~unused";
 
     return strcmp (contig_a_str, contig_b_str);
 }
 
-static int contigs_accession_number_sorter (const void *a, const void *b)
+static SORTER (contigs_accession_number_sorter)
 {
     DEF_SORTER_CONTIGS;
     int cmp = memcmp (&contig_a->metadata.parsed.ac.AC, &contig_b->metadata.parsed.ac.AC, sizeof (AccessionNumber));
@@ -139,10 +142,10 @@ static int contigs_accession_number_sorter (const void *a, const void *b)
     return cmp;
 }
 
-static int contigs_ref_index_sorter (const void *a, const void *b)
+static SORTER (contigs_ref_index_sorter)
 {
     DEF_SORTER_CONTIGS;
-    return contig_a->ref_index - contig_b->ref_index;
+    return ASCENDING_RAW (contig_a->ref_index, contig_b->ref_index);
 }
 
 // not thread safe: can only run from the main thread
@@ -180,9 +183,9 @@ WordIndex contigs_get_by_name_do (ConstBufferP contigs, ConstBufferP contigs_dic
 
     WordIndex mid_sorted_index = (first_sorted_index + last_sorted_index) / 2;
     
-    WordIndex word_index = *ENT (WordIndex, *index_buf, mid_sorted_index);
-    Contig *mid_word = ENT (Contig, *contigs, word_index);
-    const char *snip = ENT (const char, *contigs_dict, mid_word->char_index);
+    WordIndex word_index = *B(WordIndex, *index_buf, mid_sorted_index);
+    Contig *mid_word = B(Contig, *contigs, word_index);
+    rom snip = B(const char, *contigs_dict, mid_word->char_index);
     uint32_t snip_len = mid_word->snip_len;
  
     int cmp = strncmp (snip, contig_name, contig_name_len);
@@ -201,7 +204,33 @@ WordIndex contigs_get_by_name (ConstContigPkgP ctgs, STRp(contig_name))
 {
     ASSERT (ctgs->contigs.len == ctgs->by_name.len, "%s: expecting contigs.len=%"PRIu64" == by_name.len=%"PRIu64, ctgs->name, ctgs->contigs.len, ctgs->by_name.len);
 
+#if defined(__linux__) || defined(_WIN32)  // Note: this is a small performance enhancement - you can safely change this to "#if 0" if your system doesn't support thread local storage
+    // cache result (thread-local storage)
+    static __thread uint64_t cache_unique_id = (uint64_t)-1;
+    static __thread char cache_contig_name[64];
+    static __thread int cache_contig_name_len;
+    static __thread WordIndex cache_contig;
+
+    if (ctgs->unique_id == cache_unique_id && 
+        str_issame(contig_name, cache_contig_name)) return cache_contig;
+
+    cache_contig = contigs_get_by_name_do (&ctgs->contigs, &ctgs->dict, &ctgs->by_name, STRa(contig_name), 0, ctgs->contigs.len-1);
+    
+    cache_unique_id = ctgs->unique_id;
+
+    if (contig_name_len <= sizeof (cache_contig_name)) {
+        memcpy (cache_contig_name, contig_name, contig_name_len);
+        cache_contig_name_len = contig_name_len;
+    }
+    else
+        cache_contig_name_len = -1; // cache not set
+
+    return cache_contig;
+
+#else
     return contigs_get_by_name_do (&ctgs->contigs, &ctgs->dict, &ctgs->by_name, STRa(contig_name), 0, ctgs->contigs.len-1);
+
+#endif
 }
 
 // binary search for this chrom in contigs. we count on gcc tail recursion optimization to keep this fast.
@@ -212,8 +241,8 @@ static WordIndex contigs_get_by_accession_number_do (ConstBufferP contigs, Const
 
     WordIndex mid_sorted_index = (first_sorted_index + last_sorted_index) / 2;
     
-    WordIndex word_index = *ENT (WordIndex, *index_buf, mid_sorted_index);
-    Contig *mid_word = ENT (Contig, *contigs, word_index);
+    WordIndex word_index = *B(WordIndex, *index_buf, mid_sorted_index);
+    Contig *mid_word = B(Contig, *contigs, word_index);
  
     int cmp = memcmp (&mid_word->metadata.parsed.ac.AC, ac->AC, sizeof (ac->AC));
     
@@ -253,8 +282,8 @@ static WordIndex contigs_get_by_ref_index_do (ConstBufferP contigs, ConstBufferP
 
     WordIndex mid_sorted_index = (first_sorted_index + last_sorted_index) / 2;
     
-    WordIndex word_index = *ENT (WordIndex, *index_buf, mid_sorted_index);
-    Contig *mid_word = ENT (Contig, *contigs, word_index);
+    WordIndex word_index = *B(WordIndex, *index_buf, mid_sorted_index);
+    Contig *mid_word = B(Contig, *contigs, word_index);
  
     int cmp = mid_word->ref_index - ref_index;
 
@@ -384,15 +413,15 @@ finalize:
     return ctg_i;
 }
 
-const char *contigs_get_name (ConstContigPkgP ctgs, WordIndex index, unsigned *contig_name_len /* optional */)
+rom contigs_get_name (ConstContigPkgP ctgs, WordIndex index, unsigned *contig_name_len /* optional */)
 {
     ASSERT (index >= 0 && index < ctgs->contigs.len, "expecting 0 <= index=%d < %s.len=%"PRIu64, index, ctgs->name, ctgs->contigs.len);
 
-    Contig *ctg = ENT (Contig, ctgs->contigs, index);
+    Contig *ctg = B(Contig, ctgs->contigs, index);
 
     if (contig_name_len) *contig_name_len = ctg->snip_len;
     
-    return ENT (const char, ctgs->dict, ctg->char_index);
+    return B(const char, ctgs->dict, ctg->char_index);
 }
 
 // -----------------------------
@@ -407,7 +436,7 @@ void foreach_contig (ConstContigPkgP ctgs, ContigsIteratorCallback callback, voi
     ARRAY (const Contig, ctg, ctgs->contigs);
 
     for (uint64_t i=0; i < ctg_len; i++) {
-        const char *ref_chrom_name = ENT (const char, ctgs->dict, ctg[i].char_index); 
+        rom ref_chrom_name = B(const char, ctgs->dict, ctg[i].char_index); 
         callback (ref_chrom_name, strlen (ref_chrom_name), ctg[i].max_pos, callback_param);
     }
 }
@@ -419,6 +448,9 @@ void foreach_contig (ConstContigPkgP ctgs, ContigsIteratorCallback callback, voi
 void contigs_create_index (ContigPkg *ctgs, SortBy sort_by)
 {
     ASSERTNOTNULL (ctgs);
+
+    static uint64_t unique_id_generator=0;
+    ctgs->unique_id = unique_id_generator++; // needed for caching in contigs_get_by_name
 
     if (sort_by & SORT_BY_NAME) 
         contigs_sort (&ctgs->contigs, &ctgs->dict, &ctgs->by_name, SORT_BY_NAME);
@@ -434,37 +466,37 @@ void contigs_create_index (ContigPkg *ctgs, SortBy sort_by)
     ctgs->sorted_by |= sort_by;
 }
 
-void contigs_build_contig_pkg_from_ctx (ContigPkg *ctgs, ConstContextP ctx, SortBy sort_by)
+void contigs_build_contig_pkg_from_zctx (ContigPkg *ctgs, ConstContextP zctx, SortBy sort_by)
 {
     ASSERTNOTNULL (ctgs);
 
-    buf_copy (evb, &ctgs->dict, &ctx->dict, char, 0, 0, "ContigPkg->dict");
+    buf_copy (evb, &ctgs->dict, &zctx->dict, char, 0, 0, "ContigPkg->dict");
     
     // note: we take num_contigs from nodes (ZIP) or word_list (PIZ), but in the case of nodes, we can't rely
     // on chrom_ctx->nodes for the correct order as vb_i=1 resorted. so we generate directly from dict
-    uint32_t num_contigs = MAX_(ctx->nodes.len, ctx->word_list.len);
-    uint32_t num_counts  = ctx->counts.len;
+    uint32_t num_contigs = MAX_(zctx->nodes.len32, zctx->word_list.len32);
+    uint32_t num_counts  = zctx->counts.len32;
 
-    ASSERT (!num_counts || ctx->counts.len == num_contigs, "expecting ctx=%s to have num_contigs=%u == num_counts=%u", ctx->tag_name, num_contigs, num_counts);
+    ASSERT (!num_counts || zctx->counts.len == num_contigs, "expecting zctx=%s to have num_contigs=%u == num_counts=%u", zctx->tag_name, num_contigs, num_counts);
 
-    ctgs->contigs.len = ctgs->dict.param = num_contigs;
+    ctgs->contigs.len = ctgs->dict.count = num_contigs;
     ctgs->has_counts = (num_counts > 0);
 
     buf_alloc_zero (evb, &ctgs->contigs, 0, num_contigs, Contig, 1, "ContigPkg->contigs");
 
     // similar logic to ctx_dict_build_word_lists
     char *start = ctgs->dict.data;
-    Contig *contig = FIRSTENT (Contig, ctgs->contigs);
+    Contig *contig = B1ST (Contig, ctgs->contigs);
     for (uint32_t i=0; i < num_contigs; i++, contig++) {
 
         if (num_counts)
-            contig->metadata.parsed.count = *ENT (int64_t, ctx->counts, i);
+            contig->metadata.parsed.count = *B64(zctx->counts, i);
 
         char *c=start; while (*c) c++;
         contig->snip_len   = c - start;
         contig->char_index = start - ctgs->dict.data;
 
-        const char *contig_name = ENT (char, ctgs->dict, contig->char_index);
+        rom contig_name = Bc (ctgs->dict, contig->char_index);
         contig_name_to_acc_num (contig_name, contig->snip_len, &contig->metadata.parsed.ac);
 
         start = c+1; // skip over the \0
@@ -477,12 +509,12 @@ void contigs_free (ContigPkg *ctgs)
 {
     if (!ctgs) return;
 
-    buf_free (&ctgs->contigs);
-    buf_free (&ctgs->dict);
-    buf_free (&ctgs->by_name);
-    buf_free (&ctgs->by_LN);
-    buf_free (&ctgs->by_AC);
-    buf_free (&ctgs->by_ref_index);
+    buf_free (ctgs->contigs);
+    buf_free (ctgs->dict);
+    buf_free (ctgs->by_name);
+    buf_free (ctgs->by_LN);
+    buf_free (ctgs->by_AC);
+    buf_free (ctgs->by_ref_index);
     ctgs->sorted_by = 0;
 }
 
@@ -490,11 +522,11 @@ void contigs_destroy (ContigPkg *ctgs)
 {
     if (!ctgs) return;
 
-    buf_destroy (&ctgs->contigs);
-    buf_destroy (&ctgs->dict);
-    buf_destroy (&ctgs->by_name);
-    buf_destroy (&ctgs->by_LN);
-    buf_destroy (&ctgs->by_AC);
-    buf_destroy (&ctgs->by_ref_index);
+    buf_destroy (ctgs->contigs);
+    buf_destroy (ctgs->dict);
+    buf_destroy (ctgs->by_name);
+    buf_destroy (ctgs->by_LN);
+    buf_destroy (ctgs->by_AC);
+    buf_destroy (ctgs->by_ref_index);
 }
 

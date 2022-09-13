@@ -6,7 +6,7 @@
             "label": "Make Optimized",
             "command": "make",
             "args": [
-                "-j", "all"
+                "-j"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"

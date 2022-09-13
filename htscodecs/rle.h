@@ -56,7 +56,7 @@ extern "C" {
  * rle_nsyms.
  *
  * The "out" buffer may be passed in as NULL in which case it is
- * allocated and returned (and is up to the caller to free).
+ * allocated and returned (and is up to the caller to FREE).
  * Otherwise if specified as non-NULL it will be written to, but
  * it is up to the caller to ensure the buffer size is large enough.
  * A worst case scenario is 2*data_len.

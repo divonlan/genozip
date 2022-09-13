@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   stream.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #include "genozip.h"
 #include <errno.h>
@@ -32,7 +35,7 @@ extern int fcntl (int __fd, int __cmd, ...); // defined in fcntl.h but not linux
 #include "buffer.h"
 
 typedef struct stream_ {
-    const char *exec_name;
+    rom exec_name;
     StreamP substream; // when an input_decompressor itself has a curl input stream
     FILE *from_stream_stdout;
     FILE *from_stream_stderr;
@@ -53,19 +56,25 @@ typedef struct stream_ {
 #define EXIT_STREAM               4
 #define EXIT_SIGHUP               5
 #define EXIT_SIGSEGV              6
+
 #define EXIT_ABNORMAL             7
 
-const char *exit_code_name (int exit_code)
+rom exit_code_name (int exit_code)
 {
-    static const char *names[NUM_EXIT_CODES] = 
+    static rom names[NUM_EXIT_CODES] = 
         { "EXIT_OK", "EXIT_GENERAL_ERROR", "EXIT_INVALID_GENOZIP_FILE", "EXIT_DOWNSTREAM_LOST", "EXIT_STREAM",
           "EXIT_SIGHUP", "EXIT_SIGSEGV", "EXIT_ABNORMAL" };
+
+#ifndef _WIN32 
+    if (WIFSIGNALED(exit_code))
+        return strsignal (WTERMSIG(exit_code)); // name of signal
+#endif
 
     return (exit_code >= 0 && exit_code < NUM_EXIT_CODES) ? names[exit_code] : "Invalid exit code";
 }
 
 #ifdef _WIN32
-static const char *stream_windows_error (void)
+static rom stream_windows_error (void)
 {
     char *msg;
     FormatMessage (FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
@@ -102,7 +111,7 @@ static void stream_pipe (int *fds, uint32_t pipe_size, bool is_stream_to_genozip
 #endif // not Windows
 }
 
-static void stream_abort_cannot_exec (const char *exec_name, const char *reason)
+static void stream_abort_cannot_exec (rom exec_name, rom reason)
 {
     url_kill_curl();
 
@@ -123,7 +132,7 @@ static void stream_set_inheritability (int fd, bool is_inheritable)
 
 static HANDLE stream_exec_child (int *stream_stdout_to_genozip, int *stream_stderr_to_genozip, int *genozip_to_stream_stdin,
                                  FILE *redirect_stdout_file, FILE *redirect_stdin_pipe, 
-                                 unsigned argc, char * const *argv, const char *reason)
+                                 unsigned argc, char * const *argv, rom reason)
 {
     int cmd_line_len = 0;
     for (int i=0; i < argc; i++)
@@ -182,7 +191,7 @@ static HANDLE stream_exec_child (int *stream_stdout_to_genozip, int *stream_stde
 #else // not Windows
 static pid_t stream_exec_child (int *stream_stdout_to_genozip, int *stream_stderr_to_genozip, int *genozip_to_stream_stdin,
                                 FILE *redirect_stdout_file, FILE *redirect_stdin_pipe, 
-                                unsigned argc, char * const *argv, const char *reason)
+                                unsigned argc, char * const *argv, rom reason)
 {
     pid_t child_pid = fork();
  
@@ -246,10 +255,10 @@ static pid_t stream_exec_child (int *stream_stdout_to_genozip, int *stream_stder
 
 StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint32_t from_stream_stderr, uint32_t to_stream_stdin,
                        FILE *redirect_stdout_file, 
-                       const char *input_url_name, // input to exec is coming from a URL
+                       rom input_url_name, // input to exec is coming from a URL
                        bool input_stdin,           // input to exec is coming from stdin 
-                       const char *reason,
-                       const char *exec_name, ...)
+                       rom reason,
+                       rom exec_name, ...)
 {
     ASSERT0 (!from_stream_stdout || !redirect_stdout_file, "cannot redirect child output to both genozip and a file");
     ASSERT0 (!to_stream_stdin    || !input_url_name,       "cannot redirect child input from both genozip and a url");
@@ -268,14 +277,14 @@ StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint3
     va_list argp;
     va_start (argp, exec_name);
 
-    const char *argv[MAX_ARGC] = {};
+    rom argv[MAX_ARGC] = {};
     unsigned argc = 0;
 
     argv[argc++] = exec_name;
 
-    const char *arg;
+    rom arg;
     while (argc < MAX_ARGC) {
-        arg = va_arg (argp, const char *);
+        arg = va_arg (argp, rom );
         if (arg == SKIP_ARG) continue;
         if (arg == NULL) break;
         argv[argc++] = arg;
@@ -377,7 +386,7 @@ int stream_wait_for_exit (Stream *stream)
     int exit_status;
     waitpid (stream->pid, &exit_status, 0); 
     
-    stream->exit_status = WIFEXITED (exit_status) ? WEXITSTATUS (exit_status) : EXIT_ABNORMAL;
+    stream->exit_status = WIFEXITED (exit_status) ? WEXITSTATUS (exit_status) : exit_status;
 
     ASSERTW (WIFEXITED (exit_status), "Child process pid=%d exited abnormally (i.e. not via exit()). I waited for it %u milliseconds",          
              stream->pid, (unsigned)(CHECK_TIMER / 1000000ULL));
@@ -397,7 +406,7 @@ FILE *stream_from_stream_stdout (Stream *stream) { return stream->from_stream_st
 FILE *stream_from_stream_stderr (Stream *stream) { return stream->from_stream_stderr; }
 FILE *stream_to_stream_stdin    (Stream *stream) { return stream->to_stream_stdin;    }
 
-void stream_abort_if_cannot_run (const char *exec_name, const char *reason)
+void stream_abort_if_cannot_run (rom exec_name, rom reason)
 {
     StreamP stream = stream_create (0, 1024, 1024, 0, 0, 0, 0, reason, exec_name, NULL); // will abort if cannot run
 

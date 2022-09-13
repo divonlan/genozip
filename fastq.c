@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   fast.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #include "fastq.h"
 #include "vblock.h"
@@ -48,11 +51,12 @@ typedef struct VBlockFASTQ {
     uint32_t pair_num_lines; // number of lines in the equivalent vb in the first file
     char *optimized_desc;    // base of desc in flag.optimize_DESC 
     uint32_t optimized_desc_len;
+    uint64_t first_line;     // ZIP: used for optimize_DESC  
 } VBlockFASTQ;
 
 #define VB_FASTQ ((VBlockFASTQ *)vb)
 
-#define DATA_LINE(i) ENT (ZipDataLineFASTQ, vb->lines, i)
+#define DATA_LINE(i) B(ZipDataLineFASTQ, vb->lines, i)
 
 unsigned fastq_vb_size (DataType dt) { return sizeof (VBlockFASTQ); }
 unsigned fastq_vb_zip_dl_size (void) { return sizeof (ZipDataLineFASTQ); }
@@ -60,6 +64,7 @@ unsigned fastq_vb_zip_dl_size (void) { return sizeof (ZipDataLineFASTQ); }
 void fastq_vb_release_vb (VBlockFASTQ *vb)
 {
     vb->pair_num_lines = vb->pair_vb_i = vb->optimized_desc_len = 0;
+    vb->first_line = 0;
     FREE (vb->optimized_desc);
 }
 
@@ -72,7 +77,7 @@ void fastq_vb_destroy_vb (VBlockFASTQ *vb)
 //-----------------------
 
 // returns true if txt_data[txt_i] (which is a \n) is the end of a FASTQ record (= block of 4 lines in the file); -1 if out of data
-static inline int fastq_is_end_of_line (VBlock *vb, uint32_t first_i, int32_t txt_i) // index of a \n in txt_data
+static inline int fastq_is_end_of_line (VBlockP vb, uint32_t first_i, int32_t txt_i) // index of a \n in txt_data
 {
     ARRAY (char, txt, vb->txt_data);
 
@@ -120,8 +125,8 @@ bool fastq_txtfile_have_enough_lines (VBlockP vb_, uint32_t *unconsumed_len,
 
     VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
 
-    const char *next  = FIRSTENT (const char, vb->txt_data);
-    const char *after = AFTERENT (const char, vb->txt_data);
+    rom next  = B1STtxt;
+    rom after = BAFTtxt;
 
     uint32_t line_i; for (line_i=0; line_i < vb->pair_num_lines * 4; line_i++) {
         while (*next != '\n' && next < after) next++; 
@@ -142,14 +147,14 @@ bool fastq_txtfile_have_enough_lines (VBlockP vb_, uint32_t *unconsumed_len,
 // ZIP / SEG stuff
 //---------------
 
-void fastq_zip_read_one_vb (VBlockP vb)
+void fastq_zip_init_vb (VBlockP vb)
 {
     // in case we're optimizing DESC in FASTQ, we need to know the number of lines
     if (flag.optimize_DESC) {
         uint32_t num_lines = str_count_char (STRb(vb->txt_data), '\n');
         ASSERT (num_lines % 4 == 0, "expecting number of txt lines in VB to be a multiple of 4, but found %u", num_lines);
 
-        vb->first_line = txt_file->num_lines + 1; // this is normally not used in ZIP
+        VB_FASTQ->first_line = txt_file->num_lines + 1;
         txt_file->num_lines += num_lines / 4;     // update here instead of in zip_update_txt_counters;
     }
 }
@@ -181,7 +186,7 @@ void fastq_zip_initialize (void)
 
     // with REF_EXTERNAL, we don't know which chroms are seen (bc unlike REF_EXT_STORE, we don't use is_set), so
     // we just copy all reference contigs. this are not needed for decompression, just for --coverage/--sex/--idxstats
-    if (flag.reference == REF_EXTERNAL && z_file->num_txt_components_so_far == 1) // first file
+    if (IS_REF_EXTERNAL && z_file->num_txts_so_far == 1) // first file
         ctx_populate_zf_ctx_from_contigs (gref, FASTQ_CONTIG, ref_get_ctgs (gref)); 
 
     qname_zip_initialize (FASTQ_DESC);
@@ -203,32 +208,46 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
     Context *gpos_ctx     = CTX(FASTQ_GPOS);
     Context *strand_ctx   = CTX(FASTQ_STRAND);
     Context *sqbitmap_ctx = CTX(FASTQ_SQBITMAP);
+    Context *nonref_ctx   = CTX(FASTQ_NONREF);
+    Context *seqmis_ctx   = CTX(FASTQ_SEQMIS_A);
 
-    if (flag.reference & REF_ZIP_LOADED) {
-        strand_ctx->ltype = LT_BITMAP;
-        gpos_ctx->ltype   = LT_UINT32;
-        gpos_ctx->flags.store = STORE_INT;
+    if (flag.aligner_available) {
+        strand_ctx->ltype       = LT_BITMAP;
+        gpos_ctx->ltype         = LT_UINT32;
+        gpos_ctx->flags.store   = STORE_INT;
+        nonref_ctx->no_callback = true; // when using aligner, nonref data is in local. without aligner, the entire SEQ is segged into nonref using a callback
+        
+        sqbitmap_ctx->ltype     = LT_BITMAP; // implies no_stons
+        sqbitmap_ctx->local_always = true;
+
+        buf_alloc (vb, &sqbitmap_ctx->local, 1, vb->txt_data.len / 4, uint8_t, 0, "contexts->local"); 
+        buf_alloc (vb, &strand_ctx->local, 0, roundup_bits2bytes64 (vb->lines.len), uint8_t, 0, "contexts->local"); 
+
+        for (int i=0; i < 4; i++)
+            buf_alloc (vb, &seqmis_ctx[i].local, 1, vb->txt_data.len / 128, char, 0, "contexts->local"); 
+
+        buf_alloc (vb, &gpos_ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, "contexts->local"); 
     }
 
-    sqbitmap_ctx->ltype = LT_BITMAP; 
-    sqbitmap_ctx->local_always = true;
-
     if (!flag.multiseq)
-        codec_acgt_comp_init (VB);
+        codec_acgt_comp_init (VB, FASTQ_NONREF);
 
-     if (flag.pair == PAIR_READ_2) {
+    if (flag.pair == PAIR_READ_2) {
 
-        ASSERT (vb->lines.len == vb->pair_num_lines, "in vb=%u (PAIR_READ_2): pair_num_lines=%u but lines.len=%u",
-                vb->vblock_i, vb->pair_num_lines, (unsigned)vb->lines.len);
+        ASSERT (vb->lines.len32 == vb->pair_num_lines, "in vb=%s (PAIR_READ_2): pair_num_lines=%u but lines.len=%u",
+                VB_NAME, vb->pair_num_lines, vb->lines.len32);
 
         gpos_ctx->pair_local = strand_ctx->pair_local = true;
 
-        piz_uncompress_all_ctxs (VB, vb->pair_vb_i);
+        piz_uncompress_all_ctxs (VB);
 
-        vb->z_data.len = 0; // we've finished reading the pair file z_data, next, we're going to write to z_data our compressed output
+        vb->z_data.len32 = 0; // we've finished reading the pair file z_data, next, we're going to write to z_data our compressed output
     }
 
     qname_seg_initialize (VB, FASTQ_DESC);
+
+    if (vb->comp_i == FQ_COMP_R2)
+        ctx_create_node (VB, FASTQ_SQBITMAP, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_mate_lookup }, 2); // required by ctx_convert_generated_b250_to_mate_lookup
 
     if (flag.optimize_DESC) 
         fastq_get_optimized_desc_read_name (vb);
@@ -240,15 +259,18 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
     }
 
     // in --stats, consolidate stats into SQBITMAP
-    stats_set_consolidation (VB, FASTQ_SQBITMAP, 4, FASTQ_NONREF, FASTQ_NONREF_X, FASTQ_GPOS, FASTQ_STRAND);
+    ctx_consolidate_stats (VB, FASTQ_SQBITMAP, FASTQ_NONREF, FASTQ_NONREF_X, FASTQ_GPOS, FASTQ_STRAND, FASTQ_SEQMIS_A, FASTQ_SEQMIS_C, FASTQ_SEQMIS_G, FASTQ_SEQMIS_T, DID_EOL);
 
     COPY_TIMER (seg_initialize);
 }
 
 void fastq_seg_finalize (VBlockP vb)
 {
+    if (segconf.running)
+        segconf.is_long_reads = segconf_is_long_reads();
+
     // assign the QUAL codec
-    codec_assign_best_qual_codec (vb, FASTQ_QUAL, fastq_zip_qual, false);
+    codec_assign_best_qual_codec (vb, FASTQ_QUAL, fastq_zip_qual, false, false);
 
     // top level snip
     SmallContainer top_level = { 
@@ -280,7 +302,7 @@ void fastq_seg_finalize (VBlockP vb)
                                '+', CON_PX_SEP,   // third line prefix
                                CON_PX_SEP      }; // END of prefixes
 
-    container_seg (vb, CTX(FASTQ_TOPLEVEL), (ContainerP)&top_level, prefixes, sizeof (prefixes), 2 * vb->lines.len); // account for the '@' and '+' - one of each for each line
+    container_seg (vb, CTX(FASTQ_TOPLEVEL), (ContainerP)&top_level, prefixes, sizeof (prefixes), 0); // note: the '@' and '+' are accounted for in the DESC and LINE3 fields respectively
 }
 
 bool fastq_seg_is_small (ConstVBlockP vb, DictId dict_id)
@@ -297,42 +319,36 @@ bool fastq_seg_is_small (ConstVBlockP vb, DictId dict_id)
 bool fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i, bool must_have)
 {
     VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
-    uint64_t save_offset = (uint64_t)file_tell (z_file, false);
     uint64_t save_disk_so_far = z_file->disk_so_far;
 
     vb->pair_vb_i = pair_vb_i;
 
-    Section sl = sections_vb_first (vb->pair_vb_i, true);
-    ASSERT (!must_have || sl, "file unexpectedly does not contain data for pair 1 vb_i=%u", pair_vb_i);
-    if (!sl) return false;
+    Section sec = sections_vb_header (pair_vb_i, true);
+    ASSERT (!must_have || sec, "file unexpectedly does not contain data for pair 1 vb_i=%u", pair_vb_i);
+    if (!sec) return false;
 
-    // get num_lines from vb header
-    SectionHeaderVbHeader vb_header = zfile_read_section_header (vb_, sl->offset, vb->pair_vb_i, SEC_VB_HEADER).vb_header;
-    vb->pair_num_lines = BGEN32 (vb_header.num_lines_prim);
+    vb->pair_num_lines = sec->num_lines;
 
     // read into ctx->pair the data we need from our pair: DESC and its components, GPOS and STRAND
     buf_alloc (vb, &vb->z_section_headers, MAX_FIELDS + 10, MAX_DICTS * 2 + 50, uint32_t, 0, "z_section_headers"); // room for section headers  
 
-    for (sl++; sl->st == SEC_B250 || sl->st == SEC_LOCAL; sl++) {
-        
-        if (dict_id_is_fastq_desc_sf (sl->dict_id) || sl->dict_id.num == _FASTQ_DESC ||
-            sl->dict_id.num == _FASTQ_GPOS || sl->dict_id.num == _FASTQ_STRAND) { 
-            
-            NEXTENT (uint32_t, vb->z_section_headers) = vb->z_data.len; 
-            int32_t offset = zfile_read_section (z_file, vb, vb->pair_vb_i, &vb->z_data, "z_data", sl->st, sl); // returns 0 if section is skipped
+    sec++;
+    piz_read_all_ctxs (VB, &sec, true);
 
-            if (offset == SECTION_SKIPPED) vb->z_section_headers.len--; // section skipped
-        }
-    }
-
-    file_seek (z_file, save_offset, SEEK_SET, false); // restore
+    file_seek (z_file, 0, SEEK_END, false); // restore
     z_file->disk_so_far = save_disk_so_far;
 
     return true;
 }
 
+// main thread: is it possible that genocat of this file will re-order lines
+bool fastq_piz_maybe_reorder_lines (void)
+{
+    return sections_get_num_comps() == 2; // genocat always interleaves (= reorders lines) of paired FASTQs
+}
+
 // main thread: called from piz_read_one_vb as DTPZ(piz_read_one_vb)
-bool fastq_piz_read_one_vb (VBlockP vb_, Section sl)
+bool fastq_piz_init_vb (VBlockP vb_, const SectionHeaderVbHeader *header, uint32_t *txt_data_so_far_single_0_increment)
 {
     VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
     uint32_t pair_vb_i=0;
@@ -345,15 +361,117 @@ bool fastq_piz_read_one_vb (VBlockP vb_, Section sl)
     return true;
 }
 
-uint32_t fastq_get_pair_vb_i (VBlockP vb)
+static void fastq_seg_line3 (VBlockFASTQ *vb, STRp(line3), STRp(desc))
 {
-    return VB_FASTQ->pair_vb_i;
+    // first line of segconf VB - discover line3 type
+    if (segconf.running && vb->line_i==0) {
+
+        if (line3_len==0 || flag.optimize_DESC) 
+            segconf.line3 = L3_EMPTY;
+
+        else if (str_issame_(STRa(line3), STRa(desc)))
+            segconf.line3 = L3_COPY_DESC;
+
+        else if (qname_segconf_discover_fastq_line3_sra_flavor (VB, STRa(line3)))
+            segconf.line3 = L3_QF;
+
+        else 
+            ASSSEG (false, line3, "Invalid FASTQ file format: expecting middle line to be a \"+\" with or without a copy of the description, but it is \"%.*s\"",
+                    line3_len+1, line3-1);
+    }
+
+    if (flag.optimize_DESC) {
+        seg_by_did (VB, "", 0, FASTQ_LINE3, 1); // account for the '+' (segged as a toplevel container prefix)
+        vb->recon_size -= line3_len; 
+    }
+    
+    else if (segconf.line3 == L3_EMPTY) {
+        ASSSEG (!line3_len || flag.optimize_DESC, line3, "Invalid FASTQ file format: expecting middle line to be a \"+\", but it is \"%.*s\"", line3_len+1, line3-1);
+        seg_by_did (VB, "", 0, FASTQ_LINE3, 1); // account for the '+' (segged as a toplevel container prefix)
+    }
+    
+    else if (segconf.line3 == L3_COPY_DESC) {
+        ASSSEG (str_issame_(STRa(line3), STRa(desc)), line3, 
+                "Invalid FASTQ file format: expecting middle line to be a \"+\" followed by a copy of the description line, but it is \"%.*s\"", line3_len+1, line3-1); 
+        seg_by_did (VB, STRa(copy_desc_snip), FASTQ_LINE3, 1 + line3_len); // +1 - account for the '+' (segged as a toplevel container prefix)
+    }
+
+    else if (segconf.line3 == L3_QF) 
+        ASSSEG (qname_seg_qf (VB, CTX(FASTQ_LINE3), segconf.line3_flavor, STRa(line3), false, 1), line3, // +1 - account for the '+' (segged as a toplevel container prefix)
+                "Invalid FASTQ file format: expecting middle line to be a \"+\" followed by a \"%s\" flavor, but it is \"%.*s\"", qf_name(segconf.line3_flavor), line3_len+1, line3-1); 
+
+    else 
+        ASSSEG (false, line3, "Invalid FASTQ file format: expecting middle line to be a \"+\" with or without a copy of the description, but it is \"%.*s\"",
+                line3_len+1, line3-1);
+}
+
+static void fastq_get_pair_1_gpos_strand (VBlockFASTQ *vb, PosType *pair_gpos, bool *pair_is_forward)
+{
+    ContextP bitmap_ctx = CTX(FASTQ_SQBITMAP);
+
+    // case: we are pair-1 OR we are pair-2, but this line in pair-1 is not aligned
+    if (!bitmap_ctx->pair_b250 || 
+        ({ STR(snip); ctx_get_next_snip (VB, bitmap_ctx, true, pSTRa(snip)); *snip != SNIP_LOOKUP; })) { // note: SNIP_LOOKUP in case of aligned, SNIP_SPECIAL in case of unaligned
+
+        *pair_gpos = NO_GPOS;
+        *pair_is_forward = 0;
+    }
+
+    // case: we are pair-2, and the corresponding line in pair-1 is aligned: get its gpos and is_forward
+    else {
+        ContextP gpos_ctx   = CTX(FASTQ_GPOS);
+        ContextP strand_ctx = CTX(FASTQ_STRAND);
+
+        ASSERT (gpos_ctx->pair.next < gpos_ctx->pair.len32, "%s: not enough data GPOS.pair (len=%u)", LN_NAME, gpos_ctx->pair.len32); 
+
+        ASSERT (gpos_ctx->pair.next < strand_ctx->pair.nbits, "%s: cannot get pair_1 STRAND bit because pair_1 strand bitarray has only %u bits",
+                LN_NAME, (unsigned)strand_ctx->pair.nbits);
+
+        *pair_gpos = (PosType)*B32 (gpos_ctx->pair, gpos_ctx->pair.next); 
+        *pair_is_forward = bits_get ((BitsP)&strand_ctx->pair, gpos_ctx->pair.next); 
+        gpos_ctx->pair.next++;
+    }
+}
+
+static void fastq_seg_sequence (VBlockFASTQ *vb, STRp(seq))
+{
+    // get pair-1 gpos and is_forward, but only if we are pair-2 and the corresponding pair-1 line is aligned
+    PosType pair_gpos; 
+    bool pair_is_forward;
+    fastq_get_pair_1_gpos_strand (vb, &pair_gpos, &pair_is_forward); // does nothing if we are pair-1
+               
+    // case: aligned - lookup from SQBITMAP
+    MappingType aln_res;
+    if (false/*xxx*/ && flag.aligner_available && 
+        ((aln_res = aligner_seg_seq (VB, CTX(FASTQ_SQBITMAP), STRa(seq), true, (vb->comp_i == FQ_COMP_R2), pair_gpos, pair_is_forward)))) {
+        
+        SNIPi1 (SNIP_LOOKUP, (aln_res==MAPPING_PERFECT ? -(int64_t)seq_len : (int64_t)seq_len)); // express perfect alignment by passing a negative seq_len 
+        seg_by_ctx (VB, STRa(snip), CTX(FASTQ_SQBITMAP), seq_len); 
+    }
+
+    // case: not aligned - just add data to NONREF
+    else {
+        if (flag.show_aligner && !segconf.running) iprintf ("%s: unaligned\n", LN_NAME);
+
+        Context *nonref_ctx = CTX(FASTQ_NONREF);
+        buf_alloc (VB, &nonref_ctx->local, seq_len + 3, vb->txt_data.len / 64, char, CTX_GROWTH, "contexts->local"); 
+        buf_add (&nonref_ctx->local, seq, seq_len);
+
+        // TO DO: add seq_len_by_qname also to the case of aligned sequence ^ 
+        bool seq_len_by_qname = segconf.qname_seq_len_dict_id.num &&  // QNAME flavor has "length=""
+        seq_len == ECTX(segconf.qname_seq_len_dict_id)->last_value.i; // length is equal seq_len
+
+        // case: we don't need to consume pair-1 gpos (bc we are pair-1, or pair-1 was not aligned): look up from NONREF
+        SNIPi2 (SNIP_SPECIAL, FASTQ_SPECIAL_unaligned_SEQ, seq_len_by_qname ? 0 : seq_len);
+        seg_by_ctx (VB, STRa(snip), CTX(FASTQ_SQBITMAP), 0); // note: FASTQ_SQBITMAP is always segged whether read is aligned or not
+        CTX(FASTQ_NONREF)->txt_len += seq_len; // account for the txt data in NONREF
+    }
 }
 
 // concept: we treat every 4 lines as a "line". the Description/ID is stored in DESC dictionary and segmented to subfields D?ESC.
 // The sequence is stored in SEQ data. In addition, we utilize the TEMPLATE dictionary for metadata on the line, namely
 // the length of the sequence and whether each line has a \r.
-const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
+rom fastq_seg_txt_line (VBlockFASTQ *vb, rom line_start, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
 {
     ZipDataLineFASTQ *dl = DATA_LINE (vb->line_i);
 
@@ -362,16 +480,16 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
     ASSSEG (*line_start == '@', line_start, "Invalid FASTQ file format: expecting description line to start with @ but it starts with %c",
             *line_start);
 
-    const char *FASTQ_DESC_str = line_start + 1; // skip the '@' - its already included in the container prefix
+    rom FASTQ_DESC_str = line_start + 1; // skip the '@' - its already included in the container prefix
     char separator;
 
-    int32_t len = (int32_t)(AFTERENT (char, vb->txt_data) - FASTQ_DESC_str);
+    int32_t len = (int32_t)(BAFTtxt - FASTQ_DESC_str);
     
     // DESC - the description/id line is vendor-specific. example:
     // @A00910:85:HYGWJDSXX:1:1101:3025:1000 1:N:0:CAACGAGAGC+GAATTGAGTG <-- Illumina, See: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
     // @20A_V100002704L1C001R012000000/1 <-- BGI, see: https://github.com/IMB-Computational-Genomics-Lab/BGIvsIllumina_scRNASeq
     unsigned FASTQ_DESC_len;
-    const char *FASTQ_SEQ_str = seg_get_next_line (vb, FASTQ_DESC_str, &len, &FASTQ_DESC_len, true, has_13, "DESC");
+    rom FASTQ_SEQ_str = seg_get_next_line (vb, FASTQ_DESC_str, &len, &FASTQ_DESC_len, true, has_13, "DESC");
  
     if (kraken_is_loaded) {
         unsigned qname_len = strcspn (FASTQ_DESC_str, " \t\r\n"); 
@@ -402,33 +520,18 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
     // attempt to parse the desciption line as qname, and fallback to tokenizer no qname format matches
     qname_seg (VB, CTX(FASTQ_DESC), 
                flag.optimize_DESC ? vb->optimized_desc : FASTQ_DESC_str, 
-               flag.optimize_DESC ? optimized_len      : FASTQ_DESC_len, 
-               0);
+               flag.optimize_DESC ? optimized_len      : FASTQ_DESC_len,
+               1); // account for the '@' (segged as a toplevel container prefix)
     SEG_EOL (FASTQ_E1L, true);
 
     // SEQ - just get the whole line
-    dl->seq_data_start = ENTNUM (vb->txt_data, FASTQ_SEQ_str);
-    const char *FASTQ_LINE3_str = seg_get_next_item (vb, FASTQ_SEQ_str, &len, GN_SEP, GN_IGNORE, GN_IGNORE, &dl->seq_len, &separator, has_13, "SEQ");
+    dl->seq_data_start = BNUMtxt (FASTQ_SEQ_str);
+    rom FASTQ_LINE3_str = seg_get_next_item (vb, FASTQ_SEQ_str, &len, GN_SEP, GN_IGNORE, GN_IGNORE, &dl->seq_len, &separator, has_13, "SEQ");
 
     if (segconf.running) 
         segconf.longest_seq_len = MAX_(dl->seq_len, segconf.longest_seq_len);
 
-    // case: compressing without a reference - all data goes to "nonref", and we have no bitmap
-    if (flag.aligner_available) 
-        aligner_seg_seq (VB, CTX(FASTQ_SQBITMAP), FASTQ_SEQ_str, dl->seq_len);
-
-    else {
-        Context *nonref_ctx = CTX(FASTQ_NONREF);
-        buf_alloc (VB, &nonref_ctx->local, dl->seq_len + 3, vb->lines.len * (MIN_(dl->seq_len,1000) + 5), char, CTX_GROWTH, "contexts->local"); 
-        buf_add (&nonref_ctx->local, FASTQ_SEQ_str, dl->seq_len);
-    }
-
-    // Add LOOKUP snip with seq_len
-    char snip[10];
-    snip[0] = SNIP_LOOKUP;
-    unsigned seq_len_str_len = str_int (dl->seq_len, &snip[1]);
-    seg_by_ctx (VB, snip, 1 + seq_len_str_len, CTX(FASTQ_SQBITMAP), 0); 
-    CTX(FASTQ_NONREF)->txt_len += dl->seq_len; // account for the txt data in NONREF
+    fastq_seg_sequence (vb, FASTQ_SEQ_str, dl->seq_len);
 
     SEG_EOL (FASTQ_E2L, true);
 
@@ -437,34 +540,17 @@ const char *fastq_seg_txt_line (VBlockFASTQ *vb, const char *line_start, uint32_
     FASTQ_LINE3_str++; len--; // skip the prefix
 
     unsigned FASTQ_LINE3_len;
-    const char *FASTQ_QUAL_str = seg_get_next_line (vb, FASTQ_LINE3_str, &len, &FASTQ_LINE3_len, true, has_13, "LINE3");
+    rom FASTQ_QUAL_str = seg_get_next_line (vb, FASTQ_LINE3_str, &len, &FASTQ_LINE3_len, true, has_13, "LINE3");
 
-    // line3 can be either empty, or a copy of DESC.
-    if (!FASTQ_LINE3_len) 
-        seg_by_did_i (VB, "", 0, FASTQ_LINE3, 0);
-
-    else if (str_issame_ (FASTQ_LINE3_str, FASTQ_LINE3_len, FASTQ_DESC_str, FASTQ_DESC_len)) {
-
-        // if --optimize-DESC, we always produce an empty line.
-        if (flag.optimize_DESC) {
-            seg_by_did_i (VB, "", 0, FASTQ_LINE3, 0);
-            vb->recon_size -= FASTQ_DESC_len;
-        }
-        else 
-            seg_by_did_i (VB, copy_desc_snip, copy_desc_snip_len, FASTQ_LINE3, (flag.optimize_DESC ? optimized_len : FASTQ_LINE3_len));
-    }
-
-    else 
-        ASSSEG (false, FASTQ_LINE3_str, "Invalid FASTQ file format: expecting middle line to be a \"+\" with or without a copy of the description, but it is \"%.*s\"",
-                FASTQ_LINE3_len+1, FASTQ_QUAL_str-1);
+    fastq_seg_line3 (vb, STRd(FASTQ_LINE3), STRd(FASTQ_DESC));
 
     SEG_EOL (FASTQ_E2L, true); // account for ascii-10
 
     // QUAL - just get the whole line and make sure its length is the same as SEQ
-    dl->qual_data_start = ENTNUM (vb->txt_data, FASTQ_QUAL_str);
+    dl->qual_data_start = BNUMtxt (FASTQ_QUAL_str);
 
     unsigned FASTQ_QUAL_len;
-    const char *after = seg_get_next_item (vb, FASTQ_QUAL_str, &len, GN_SEP, GN_FORBIDEN, GN_IGNORE, &FASTQ_QUAL_len, &separator, has_13, "QUAL"); \
+    rom after = seg_get_next_item (vb, FASTQ_QUAL_str, &len, GN_SEP, GN_FORBIDEN, GN_IGNORE, &FASTQ_QUAL_len, &separator, has_13, "QUAL"); \
 
     CTX(FASTQ_QUAL)->local.len += dl->seq_len;
     CTX(FASTQ_QUAL)->txt_len   += dl->seq_len;
@@ -490,12 +576,12 @@ COMPRESSOR_CALLBACK (fastq_zip_qual)
 {
     ZipDataLineFASTQ *dl = DATA_LINE (vb_line_i);
 
-    // note: maximum_len might be shorter than the data available if we're just sampling data in zip_assign_best_codec
+    // note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec
     *line_data_len  = MIN_(dl->seq_len, maximum_size);
     
     if (!line_data) return; // only lengths were requested
 
-    *line_data = ENT (char, vb->txt_data, dl->qual_data_start);
+    *line_data = Btxt (dl->qual_data_start);
 
     // note - we optimize just before compression - likely the string will remain in CPU cache
     // removing the need for a separate load from RAM
@@ -508,7 +594,7 @@ COMPRESSOR_CALLBACK (fastq_zip_seq)
 {
     ZipDataLineFASTQ *dl = DATA_LINE (vb_line_i);
     *line_data_len = dl->seq_len;
-    *line_data     = ENT (char, vb->txt_data, dl->seq_data_start);
+    *line_data     = Btxt (dl->seq_data_start);
     if (is_rev) *is_rev = 0;
 }
 
@@ -517,36 +603,42 @@ COMPRESSOR_CALLBACK (fastq_zip_seq)
 //-----------------
 
 // returns true if section is to be skipped reading / uncompressing
-bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
+IS_SKIP (fastq_piz_is_skip_section)
 {
-    if (!vb) return false; // we don't skip reading any SEC_DICT/SEC_COUNTS sections
+    if (st != SEC_LOCAL && st != SEC_B250 && st != SEC_DICT) return false; // we only skip contexts
+
+    // case: this is pair-2 loading pair-1 sections
+    if (purpose == SKIP_PURPOSE_PREPROC)  
+        return !(dict_id_is_fastq_desc_sf (dict_id) || 
+                 dict_id_is_in (dict_id, _FASTQ_DESC, _FASTQ_GPOS, _FASTQ_STRAND, DICT_ID_NONE) ||
+                 (dict_id.num == _FASTQ_SQBITMAP && st != SEC_LOCAL));
 
     // note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast: skip all items but DESC and E1L (except if we need them for --grep)
     if (flag.header_only_fast && !flag.grep &&
-        (dict_id.num == _FASTQ_E2L    || dict_id.num == _FASTQ_SQBITMAP || 
-         dict_id.num == _FASTQ_NONREF || dict_id.num == _FASTQ_NONREF_X || 
-         dict_id.num == _FASTQ_GPOS   || dict_id.num == _FASTQ_STRAND   || 
-         dict_id.num == _FASTQ_QUAL   || dict_id.num == _FASTQ_DOMQRUNS ))
+        dict_id_is_in (dict_id, _FASTQ_E2L, _FASTQ_TAXID, _FASTQ_DEBUG_LINES,
+                       _FASTQ_SQBITMAP, _FASTQ_NONREF, _FASTQ_NONREF_X, _FASTQ_GPOS, _FASTQ_STRAND,
+                       _FASTQ_SEQMIS_A, _FASTQ_SEQMIS_C, _FASTQ_SEQMIS_G, _FASTQ_SEQMIS_T, 
+                       _FASTQ_QUAL, _FASTQ_DOMQRUNS, _FASTQ_QUALMPLX, _FASTQ_DIVRQUAL, DICT_ID_NONE))
         return true;
 
-    if (flag.seq_only && !flag.grep &&
-        (dict_id.num == _FASTQ_E1L    || dict_id.num == _FASTQ_DESC || dict_id_is_fastq_desc_sf(dict_id) || // we don't need the DESC line 
-         dict_id.num == _FASTQ_QUAL   || dict_id.num == _FASTQ_DOMQRUNS )) // we don't need the QUAL line
+    if (flag.seq_only && !flag.grep && 
+        (   dict_id_is_in (dict_id, _FASTQ_E1L, _FASTQ_DESC, _FASTQ_TAXID, _FASTQ_DEBUG_LINES, _FASTQ_LINE3,
+                           _FASTQ_QUAL, _FASTQ_DOMQRUNS, _FASTQ_QUALMPLX, _FASTQ_DIVRQUAL, DICT_ID_NONE)  
+         || dict_id_is_fastq_desc_sf(dict_id))) // we don't need the DESC line 
         return true;
 
     if (flag.qual_only && !flag.grep &&
-        (dict_id.num == _FASTQ_E1L || dict_id.num == _FASTQ_DESC || dict_id_is_fastq_desc_sf(dict_id) || // we don't need the DESC line 
-         (!flag.bases && (dict_id.num == _FASTQ_NONREF || dict_id.num == _FASTQ_NONREF_X || dict_id.num == _FASTQ_GPOS || dict_id.num == _FASTQ_STRAND)))) // we don't need the SEQ line        return true;
+        (   dict_id_is_in (dict_id, _FASTQ_E1L, _FASTQ_DESC, _FASTQ_TAXID, _FASTQ_DEBUG_LINES, DICT_ID_NONE) 
+         || dict_id_is_fastq_desc_sf(dict_id) 
+         || (!flag.bases && dict_id_is_in (dict_id, _FASTQ_NONREF, _FASTQ_NONREF_X, _FASTQ_GPOS, _FASTQ_STRAND, _FASTQ_SEQMIS_A, _FASTQ_SEQMIS_C, _FASTQ_SEQMIS_G, _FASTQ_SEQMIS_T, DICT_ID_NONE)))) // we don't need the SEQ line 
         return true;
 
     // if we're doing --sex/coverage, we only need TOPLEVEL, FASTQ_SQBITMAP and GPOS
     if (flag.collect_coverage && 
-        (dict_id.num == _FASTQ_DESC     || 
-         dict_id.num == _FASTQ_QUAL     || 
-         dict_id.num == _FASTQ_DOMQRUNS || 
-         (dict_id.num == _FASTQ_STRAND   && !flag.bases)  ||
-         (dict_id.num == _FASTQ_NONREF   && !flag.bases)  || 
-         (dict_id.num == _FASTQ_NONREF_X && !flag.bases))) 
+        (   dict_id_is_in (dict_id, _FASTQ_DESC, _FASTQ_TAXID, _FASTQ_DEBUG_LINES, _FASTQ_LINE3,
+                           _FASTQ_QUAL, _FASTQ_DOMQRUNS, _FASTQ_QUALMPLX, _FASTQ_DIVRQUAL, DICT_ID_NONE)
+         || dict_id_is_fastq_desc_sf(dict_id) 
+         || (!flag.bases && dict_id_is_in (dict_id, _FASTQ_NONREF, _FASTQ_NONREF_X, _FASTQ_STRAND, _FASTQ_SEQMIS_A, _FASTQ_SEQMIS_C, _FASTQ_SEQMIS_G, _FASTQ_SEQMIS_T, DICT_ID_NONE))))
         return true;
 
     // no need for the TAXID data if user didn't specify --taxid
@@ -554,16 +646,12 @@ bool fastq_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id)
         return true;
 
     // if --count, we only need TOPLEVEL and the fields needed for the available filters (--taxid, --kraken, --grep, --bases)
-    if (flag.count && sections_has_dict_id (st) &&
+    if (flag.count && !flag.grep && sections_has_dict_id (st) &&
          (dict_id.num != _FASTQ_TOPLEVEL && 
          (dict_id.num != _FASTQ_TAXID    || flag.kraken_taxid == TAXID_NONE) && 
+         (!flag.bases || !dict_id_is_in (dict_id, _FASTQ_SQBITMAP, _FASTQ_NONREF, _FASTQ_NONREF_X, _FASTQ_GPOS, _FASTQ_STRAND, _FASTQ_SEQMIS_A, _FASTQ_SEQMIS_C, _FASTQ_SEQMIS_G, _FASTQ_SEQMIS_T, DICT_ID_NONE)) &&
          (dict_id.num != _FASTQ_DESC     || !kraken_is_loaded) && 
-         (dict_id.num != _FASTQ_SQBITMAP || !flag.bases) && 
-         (dict_id.num != _FASTQ_NONREF   || !flag.bases) && 
-         (dict_id.num != _FASTQ_NONREF_X || !flag.bases) && 
-         (dict_id.num != _FASTQ_GPOS     || !flag.bases) && 
-         (dict_id.num != _FASTQ_STRAND   || !flag.bases) && 
-         (!dict_id_is_fastq_desc_sf(dict_id)            || !kraken_is_loaded))) 
+         (!dict_id_is_fastq_desc_sf(dict_id) || !kraken_is_loaded))) 
         return true;
 
     return false;
@@ -578,7 +666,7 @@ bool fastq_piz_is_paired (void)
     if (z_file->z_flags.dts_paired) return true;  
 
     // dts_paired is not set. This flag was introduced in 9.0.13 - if file is compressed with genozip version 10+, then for sure the file is not paired
-    if (z_file->genozip_version >= 10) return false;
+    if (VER(10)) return false;
     
     // for v8, and v9 up to 9.0.12 it is paired iff user is tell us explicitly that this is a paired file
     z_file->z_flags.dts_paired = flag.undocumented_dts_paired;
@@ -589,83 +677,122 @@ bool fastq_piz_is_paired (void)
 CONTAINER_FILTER_FUNC (fastq_piz_filter)
 {
     if (dict_id.num == _FASTQ_TOPLEVEL) {
-        if (item < 0)   // filter for repeat (FASTQ record)
-            vb->line_i = 4 * (vb->first_line + rep); // each vb line is a fastq record which is 4 txt lines (needed for --pair)
+        
+        // case: --header-only: dont show items 2+. note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast
+        if (flag.header_only_fast && !flag.grep && item >= 2) 
+            return false; // don't reconstruct this item (non-header textual)
 
-        else { // filter for item
-            // case: --header-only: dont show items 2+. note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast
-            if (flag.header_only_fast && !flag.grep && item >= 2) 
-                return false; // don't reconstruct this item (non-header textual)
+        // note: for seq_only and qual_only we show a newline from E2L, but we don't consume the other two newlines produced by this
+        // read, so we are going to show a newline from another line. only a potenial but highly unlikely problem if some lines have \n and some \r\n.
+        else if (flag.seq_only && !flag.grep && item != -1 && item != 2 && item != 3) 
+            return false; 
 
-            // note: for seq_only and qual_only we show a newline from E2L, but we don't consume the other two newlines produced by this
-            // read, so we are going to show a newline from another line. only a potenial but highly unlikely problem if some lines have \n and some \r\n.
-            else if (flag.seq_only && !flag.grep && item != 2 && item != 3) 
-                return false; 
-
-            else if (flag.qual_only && !flag.grep && item != 2 && item != 6 && item != 7) 
-                return false; 
-        }
+        else if (flag.qual_only && !flag.grep && item != -1 && item != 2 && item != 6 && item != 7) 
+            return false; 
     }
 
     return true; // reconstruct
 }
 
-static void fastq_update_coverage (VBlockFASTQ *vb)
+static void fastq_update_coverage_aligned (VBlockFASTQ *vb)
 {
     PosType gpos;
     Context *gpos_ctx = CTX(FASTQ_GPOS);
 
-    if (!vb->pair_vb_i) { // first file of a pair ("pair 1") or a non-pair fastq 
-        if (!gpos_ctx->local.len) return;
+    if (vb->comp_i == FQ_COMP_R1) 
         gpos = NEXTLOCAL (uint32_t, gpos_ctx);
-    }
 
-    // 2nd file of a pair ("pair 2")
-    else {
-        // gpos: reconstruct, then cancel the reconstruction and just use last_value
-        reconstruct_from_ctx (VB, FASTQ_GPOS, 0, false);
+    else { // pair-2
+        reconstruct_from_ctx (VB, FASTQ_GPOS, 0, false); // calls fastq_special_PAIR2_GPOS
         gpos = gpos_ctx->last_value.i;
     }
+    
+    ASSPIZ0 (gpos != NO_GPOS, "expecting a GPOS, because sequence is aligned");
 
-    WordIndex ref_index;
-    if (gpos != NO_GPOS && 
-        (ref_index = ref_contig_get_by_gpos (gref, gpos, NULL)) != WORD_INDEX_NONE) {
+    WordIndex ref_index = ref_contig_get_by_gpos (gref, gpos, NULL);
+    ASSPIZ0 (ref_index != WORD_INDEX_NONE, "expecting ref_index, because sequence is aligned");
 
-        if (flag.show_coverage || flag.show_sex)
-            *ENT (uint64_t, vb->coverage, ref_index) += vb->seq_len;
+    if (flag.show_coverage || flag.show_sex)
+        *B64 (vb->coverage, ref_index) += vb->seq_len;
 
-        if (flag.show_coverage || flag.idxstats)
-            (*ENT (uint64_t, vb->read_count, ref_index))++;
-    }
-    else {
-        if (flag.show_coverage || flag.show_sex)
-            *(AFTERENT (uint64_t, vb->coverage) - NUM_COVER_TYPES + CVR_UNMAPPED) += vb->seq_len;
-
-        if (flag.show_coverage || flag.idxstats)
-            (*(AFTERENT (uint64_t, vb->read_count) - NUM_COVER_TYPES + CVR_UNMAPPED))++;
-    }
+    if (flag.show_coverage || flag.idxstats)
+        (*B64 (vb->read_count, ref_index))++;
 }
 
-// PIZ: SEQ reconstruction 
-void fastq_reconstruct_seq (VBlock *vb_, Context *bitmap_ctx, STRp(seq_len_str))
+// called when reconstructing R2, to check if R1 is aligned
+static bool fastq_piz_R1_test_aligned (VBlockP vb)
+{
+    ContextP ctx = CTX(FASTQ_SQBITMAP);
+
+    // case we are pair-2: advance pair-1 SQBITMAP iterator, and if pair-1 is aligned - also its GPOS iterator
+    if (ctx->pair1_is_aligned == PAIR1_ALIGNED_UNKNOWN) { // case: not already set by fastq_special_mate_lookup
+        STR(snip);
+        ctx_get_next_snip (vb, ctx, true, pSTRa(snip));
+        ctx->pair1_is_aligned = (snip_len && *snip == SNIP_LOOKUP) ? PAIR1_ALIGNED : PAIR1_NOT_ALIGNED;
+    }
+    
+    return (ctx->pair1_is_aligned == PAIR1_ALIGNED);
+}
+
+// PIZ: aligned SEQ reconstruction - called by reconstructing FASTQ_SQBITMAP which is a LOOKUP (either directly, or via fastq_special_mate_lookup)
+void fastq_recon_aligned_SEQ (VBlockP vb_, ContextP bitmap_ctx, STRp(seq_len_str), bool reconstruct)
 {
     VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
- 
-    int64_t seq_len_64;
-    ASSERT (str_get_int (STRa(seq_len_str), &seq_len_64), "could not parse integer \"%.*s\"", STRf(seq_len_str));
-    vb->seq_len = (uint32_t)seq_len_64;
+
+    fastq_piz_R1_test_aligned (VB); // set pair1_is_aligned
+    
+    // v14: perfect alignment is expressed by a negative seq_len
+    bool perfect_alignment = (seq_len_str[0] == '-');
+    if (perfect_alignment) { seq_len_str++; seq_len_str_len--; }
+
+    ASSERT (str_get_int_range32 (STRa(seq_len_str), 0, 0x7fffffff, (int32_t*)&vb->seq_len), "could not parse integer \"%.*s\"", STRf(seq_len_str));
 
     // just update coverage
     if (flag.collect_coverage) 
-        fastq_update_coverage (vb);
+        fastq_update_coverage_aligned (vb);
 
     // --qual-only: only set vb->seq_len without reconstructing
     else if (flag.qual_only) {}
 
     // normal reconstruction
     else 
-        aligner_reconstruct_seq (vb_, bitmap_ctx, vb->seq_len, (vb->pair_vb_i > 0));
+        aligner_reconstruct_seq (vb_, bitmap_ctx, vb->seq_len, vb->comp_i == FQ_COMP_R2, perfect_alignment, reconstruct);
 }
+
+// PIZ: SEQ reconstruction - in case of unaligned sequence 
+SPECIAL_RECONSTRUCTOR (fastq_special_unaligned_SEQ)
+{
+    // case we are pair-2: advance pair-1 SQBITMAP iterator, and if pair-1 is aligned - also its GPOS iterator
+    if (vb->comp_i == FQ_COMP_R2)
+        if (fastq_piz_R1_test_aligned (vb) || !VER(14)) // up to v13, even non-aligned reads had a GPOS entry
+            CTX(FASTQ_GPOS)->pair.next++; // gpos_ctx->pair.next is an iterator for both gpos and strand
+
+    // just update coverage (unaligned)
+    if (flag.collect_coverage) {
+        if (flag.show_coverage || flag.show_sex)
+            *(BAFT64 (vb->coverage) - NUM_COVER_TYPES + CVR_UNMAPPED) += vb->seq_len;
+
+        if (flag.show_coverage || flag.idxstats)
+            (*(BAFT64 (vb->read_count) - NUM_COVER_TYPES + CVR_UNMAPPED))++;
+    }
+
+    else {
+        if (flag.show_aligner) iprintf ("%s: unaligned\n", LN_NAME);
+
+        // case: take seq_len from DESC item with length=
+        if (snip_len==1 && *snip=='0') {
+            STRl(seq_len_str, 12);
+            seq_len_str_len = str_int (ECTX(segconf.qname_seq_len_dict_id)->last_value.i, seq_len_str);
+            vb->seq_len = reconstruct_from_local_sequence (vb, CTX(FASTQ_NONREF), STRa(seq_len_str), reconstruct);
+        }
+        else 
+            vb->seq_len = reconstruct_from_local_sequence (vb, CTX(FASTQ_NONREF), STRa(snip), reconstruct);
+            //xxx vb->seq_len = CTX(FASTQ_NONREF)->next_local - CTX(FASTQ_NONREF)->last_value.i;
+    }
+
+    return NO_NEW_VALUE;
+}
+
 
 // filtering during reconstruction: called by container_reconstruct_do for each fastq record (repeat)
 CONTAINER_CALLBACK (fastq_piz_container_cb)
@@ -676,11 +803,11 @@ CONTAINER_CALLBACK (fastq_piz_container_cb)
         if (!kraken_is_loaded && !kraken_is_included_stored (vb, FASTQ_TAXID, false))
             vb->drop_curr_line = "taxid";
         
-        else if (kraken_is_loaded && flag.kraken_taxid >= 0) {
-            const char *qname = last_txt (vb, FASTQ_DESC) + !prefixes_len; // +1 to skip the "@", if '@' is in DESC and not in prefixes (for files up to version 12.0.13)
+        else if (kraken_is_loaded && flag.kraken_taxid != TAXID_NONE) {
+            rom qname = last_txt (vb, FASTQ_DESC) + !prefixes_len; // +1 to skip the "@", if '@' is in DESC and not in prefixes (for files up to version 12.0.13)
             unsigned qname_len = strcspn (qname, " \t\n\r");
 
-            if (!kraken_is_included_loaded (vb, qname, qname_len)) 
+            if (!kraken_is_included_loaded (vb, STRa(qname))) 
                 vb->drop_curr_line = "taxid";
         }
     }
@@ -691,3 +818,110 @@ CONTAINER_CALLBACK (fastq_piz_container_cb)
         vb->drop_curr_line = "bases";
 }
 
+//------------------------
+// Pair-2 GPOS (ZIP & PIZ)
+//------------------------
+
+void fastq_seg_pair2_gpos (VBlockP vb, PosType pair1_pos, PosType pair2_gpos)
+{
+    #define MAX_GPOS_DELTA 1000 // paired reads are usually with a delta less than 300 - so this is more than enough
+
+    ContextP ctx = CTX(FASTQ_GPOS);
+
+    // case: we are pair-2 ; pair-1 is aligned ; delta is small enough : store a delta
+    PosType gpos_delta = pair2_gpos - pair1_pos; 
+    if (pair1_pos != NO_GPOS && pair2_gpos != NO_GPOS &&
+        gpos_delta <= MAX_GPOS_DELTA && gpos_delta >= -MAX_GPOS_DELTA) {
+    
+        SNIPi2(SNIP_SPECIAL, FASTQ_SPECIAL_PAIR2_GPOS, gpos_delta);
+        seg_by_ctx (VB, STRa(snip), ctx, 0);
+    }
+
+    // case: otherwise, store verbatim
+    else {
+        BNXT32 (ctx->local) = (uint32_t)pair2_gpos;
+        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_PAIR2_GPOS }, 2, ctx, 0); // lookup from local and advance pair.next to consume gpos
+    }
+}
+
+// note: in files up to v13, this is triggereed by v13_SNIP_FASTQ_PAIR2_GPOS
+SPECIAL_RECONSTRUCTOR (fastq_special_PAIR2_GPOS)
+{
+    // case: no delta
+    if (!snip_len) {
+        if (CTX(FASTQ_SQBITMAP)->pair1_is_aligned == PAIR1_ALIGNED)
+            ctx->pair.next++; // we didn't use this pair value 
+
+        new_value->i = NEXTLOCAL(uint32_t, ctx);
+    }
+
+    // case: pair-1 is aligned, and GPOS is a delta vs pair-1
+    else {
+        int64_t pair_value = (int64_t)(VER(14) ? *B32 (ctx->pair, ctx->pair.next++) // starting v14, only aligned lines have GPOS
+                                               : *B32 (ctx->pair, vb->line_i));     // up to v13, all lines segged GPOS (possibly NO_GPOS value, but not in this case, since we have a delta)
+        int64_t delta = (int64_t)strtoull (snip, NULL, 10 /* base 10 */); 
+        new_value->i = pair_value + delta; // just sets value, doesn't reconstruct
+
+        ASSPIZ (pair_value != NO_GPOS, "pair_value=NO_GPOS - not expected as we have delta=%d", (int)delta);
+    }
+ 
+    return HAS_NEW_VALUE;
+}
+
+// can only be called before fastq_special_PAIR2_GPOS, because it inquires GPOS.pair.next
+bool fastq_piz_get_pair2_is_forward (VBlockP vb)
+{
+    ContextP ctx = CTX(FASTQ_STRAND);
+
+    // case: paired read (including all reads in up to v13) - diff vs pair1
+    if (CTX(FASTQ_SQBITMAP)->pair1_is_aligned == PAIR1_ALIGNED) { // always true for files up to v13 and all lines had a is_forward value
+
+        bool is_forward_pair_1 = VER(14) ? bits_get ((BitsP)&ctx->pair, CTX(FASTQ_GPOS)->pair.next) // since v14, gpos_ctx->pair.next is an iterator for both gpos and strand, and is incremented in fastq_special_PAIR2_GPOS
+                                         : bits_get ((BitsP)&ctx->pair, vb->line_i);                // up to v13, all lines had strand, which was 0 if unmapped
+
+        return NEXTLOCALBIT (ctx) ? is_forward_pair_1 : !is_forward_pair_1;
+    }
+
+    // case: unpaired read - just take bit
+    else
+        return NEXTLOCALBIT (ctx);
+}
+
+// Used in pair-2: reconstruct the parallel b250 snip from pair-1
+SPECIAL_RECONSTRUCTOR (fastq_special_mate_lookup)
+{
+    ASSPIZ (ctx->pair_b250, "no pair_1 b250 data for ctx=%s, while reconstructing pair_2. %s%s", ctx->tag_name,
+            !VER(10) ? "If this file was compressed with Genozip version 9.0.12 or older use the --dts_paired command line option. You can see the Genozip version used to compress it with 'genocat -w '" : "",  
+            !VER(10) ? z_name : "");
+            
+    ctx_get_next_snip (vb, ctx, true, pSTRa(snip));
+
+    if (ctx->did_i == FASTQ_SQBITMAP && VER(14))
+        ctx->pair1_is_aligned = (snip_len && *snip == SNIP_LOOKUP) ? PAIR1_ALIGNED : PAIR1_NOT_ALIGNED;
+
+    reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE /* we can't cache pair items */, STRa(snip), reconstruct); // might include delta etc - works because in --pair, ALL the snips in a context are FASTQ_SPECIAL_mate_lookup
+
+    return NO_NEW_VALUE; // last_value already set (if needed) in reconstruct_one_snip
+}
+
+void fastq_reset_line (VBlockP vb)
+{
+    CTX(FASTQ_SQBITMAP)->pair1_is_aligned = VER(14) ? PAIR1_ALIGNED_UNKNOWN 
+                                                    : PAIR1_ALIGNED; // up to v13, all lines had alignment data, even if unmapped
+}
+
+//---------------------------------------------------------
+// FASTQ-specific fields in genozip header
+//---------------------------------------------------------
+
+void fastq_zip_genozip_header (SectionHeaderGenozipHeader *header)
+{
+    header->fastq.segconf_seq_len_dict_id = segconf.qname_seq_len_dict_id; // v14
+}
+
+void fastq_piz_genozip_header (const SectionHeaderGenozipHeader *header)
+{
+    if (VER(14)) {
+        segconf.qname_seq_len_dict_id = header->fastq.segconf_seq_len_dict_id; 
+    }
+}

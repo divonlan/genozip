@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   sam_tlen.c
-//   Copyright (C) 2021-2022 Black Paw Ventures Limited
+//   Copyright (C) 2021-2022 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted,
+//   under penalties specified in the license.
 
 #include "genozip.h"
 #include "sam_private.h"
@@ -17,22 +20,21 @@
 // SEG
 //---------
 
-static inline bool sam_seg_predict_TLEN (VBlockSAM *vb, ZipDataLineSAM *dl, bool is_rname_rnext_same,
-                                          int64_t *predicted_tlen)
+static inline bool sam_seg_predict_TLEN (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_rname_rnext_same,
+                                         SamTlenType *predicted_tlen)
 {
-    int64_t pnext_pos_delta = dl->PNEXT - dl->POS;
+    SamPosType pnext_pos_delta = dl->PNEXT - dl->POS;
 
-    //printf ("RNEXT=%.*s\n", vb->last_txt_len(SAM_RNAME), last_txt(vb, SAM_RNAME));
-    if (dl->FLAG.bits.supplementary || dl->FLAG.bits.next_unmapped) 
+    if (dl->FLAG.supplementary || dl->FLAG.next_unmapped) 
         *predicted_tlen = 0;
     
-    else if (!dl->FLAG.bits.multi_segments)
+    else if (!dl->FLAG.multi_segs)
         *predicted_tlen = vb->ref_consumed;
 
     else if (!is_rname_rnext_same) 
         *predicted_tlen = 0;
     
-    else if (!dl->FLAG.bits.rev_comp && dl->FLAG.bits.next_rev_comp) {
+    else if (!dl->FLAG.rev_comp && dl->FLAG.next_rev_comp) {
         
         uint32_t approx_mate_ref_consumed;
 
@@ -42,20 +44,20 @@ static inline bool sam_seg_predict_TLEN (VBlockSAM *vb, ZipDataLineSAM *dl, bool
             approx_mate_ref_consumed = CTX(OPTION_MC_Z)->last_value.i;
         }
 
-        // if this line has a buddy, get the buddy's ref_consumed. Note: we hope this is our mate, but this is not guaranteed -
+        // if this line has a mate, get the mate's ref_consumed. Note: we hope this is our mate, but this is not guaranteed -
         // it is just an earlier read with the same QNAME - could be a supplamentary alignment
-        else if (vb->buddy_line_i != -1) 
-            approx_mate_ref_consumed = DATA_LINE (vb->buddy_line_i)->ref_consumed; // most of the time we're lucky and this is our mate
+        else if (sam_has_mate) 
+            approx_mate_ref_consumed = DATA_LINE (vb->mate_line_i)->ref_consumed; // most of the time we're lucky and this is our mate
 
-        // if no MC and no buddy, approximate buddy's ref_consumed as this line's ref_consumed
+        // if no MC and no mate, approximate mate's ref_consumed as this line's ref_consumed
         else 
             approx_mate_ref_consumed = vb->ref_consumed;
 
         *predicted_tlen = pnext_pos_delta + approx_mate_ref_consumed;
     }
 
-    else if (dl->FLAG.bits.rev_comp && !dl->FLAG.bits.next_rev_comp) 
-        *predicted_tlen = pnext_pos_delta - vb->ref_consumed + 2 * !dl->FLAG.bits.is_aligned;
+    else if (dl->FLAG.rev_comp && !dl->FLAG.next_rev_comp) 
+        *predicted_tlen = pnext_pos_delta - vb->ref_consumed + 2 * !dl->FLAG.is_aligned;
 
     else 
         *predicted_tlen = pnext_pos_delta - vb->ref_consumed;
@@ -64,46 +66,45 @@ static inline bool sam_seg_predict_TLEN (VBlockSAM *vb, ZipDataLineSAM *dl, bool
 }
 
 // TLEN - 4 cases: 
-// 1. case: a non-zero value that is the negative of its mate in a sorted file - a COPY_BUDDY_TLEN special
+// 1. case: a non-zero value that is the negative of its mate in a sorted file - a COPY_MATE_TLEN special
 // 2. case: a non-zero value that is the negative of the previous line (usually a mate in a collated file) - a SNIP_DELTA & "-" (= value negation)
 // 3. case: tlen>0 and pnext_pos_delta>0 and seq_len>0 tlen is stored as SNIP_SPECIAL & tlen-pnext_pos_delta-seq_len
 // 4. otherwise: stored as is
-void sam_seg_TLEN (VBlockSAM *vb, ZipDataLineSAM *dl, 
-                   STRp(tlen), int64_t tlen_value, // option 1 and 2
+void sam_seg_TLEN (VBlockSAMP vb, ZipDataLineSAM *dl, 
+                   STRp(tlen), SamTlenType tlen_value, // option 1 and 2
                    bool is_rname_rnext_same)
 {
     Context *ctx = CTX(SAM_TLEN);
-    unsigned add_bytes = IS_BAM ? sizeof (uint32_t) : tlen_len + 1;
+    unsigned add_bytes = IS_BAM_ZIP ? sizeof (uint32_t) : tlen_len + 1;
 
     if (tlen) { // get tlen_value
         ASSSEG0 (tlen_len, tlen, "empty TLEN");
 
-        bool is_int = str_get_int (tlen, tlen_len, &tlen_value); // note: tlen_value remains 0 if not a valid integer
-        ASSSEG (is_int, tlen, "expecting TLEN to be an integer, but found \"%.*s\"", tlen_len, tlen);
+        bool is_int = str_get_int_range32 (STRa(tlen), MIN_TLEN, MAX_TLEN, &tlen_value); // note: tlen_value remains 0 if not a valid integer
+        ASSSEG (is_int, tlen, "expecting TLEN to be an integer [%d,%d], but found \"%.*s\"", MIN_TLEN, MAX_TLEN, STRf(tlen));
     }
 
     if (segconf.running && tlen_value) segconf.has_TLEN_non_zero = true;
 
-    int64_t predicted_tlen;
-    if (segconf.has_TLEN_non_zero && sam_seg_predict_TLEN (vb, dl, is_rname_rnext_same, &predicted_tlen)) {
+    SamTlenType predicted_tlen;
+    if (segconf.has_TLEN_non_zero && sam_seg_predict_TLEN (vb, dl, is_rname_rnext_same, &predicted_tlen)
+        && ABS (tlen_value - predicted_tlen) <= 7) {
 
 /*        if (predicted_tlen != tlen_value)
             printf ("WRONG FLAG=%x tlen=%d expected=%d : line_i=%u POS=%u PNEXT=%u RefConsumed=%u mate_RefConsumed=%u sup=%u next_unmapped=%u is_first=%u rev=%u next_rev=%u aligned=%u\n", 
                     dl->FLAG.value, (int)tlen_value, (int)predicted_tlen,
-                    (int)vb->line_i, (int)dl->POS, (int)dl->PNEXT, vb->ref_consumed, (int)CTX(OPTION_MC_Z)->last_value.i,
-                    dl->FLAG.bits.supplementary, dl->FLAG.bits.next_unmapped, dl->FLAG.bits.is_first, dl->FLAG.bits.rev_comp, dl->FLAG.bits.next_rev_comp, dl->FLAG.bits.is_aligned);
+                    vb->line_i, (int)dl->POS, (int)dl->PNEXT, vb->ref_consumed, (int)CTX(OPTION_MC_Z)->last_value.i,
+                    dl->FLAG.supplementary, dl->FLAG.next_unmapped, dl->FLAG.is_first, dl->FLAG.rev_comp, dl->FLAG.next_rev_comp, dl->FLAG.is_aligned);
 */
-        char tlen_by_calc[30] = { SNIP_SPECIAL, SAM_SPECIAL_TLEN, '0' + segconf.has[OPTION_MC_Z] };
-        unsigned tlen_by_calc_len = 
-            (tlen_value == predicted_tlen) ? 0 : str_int (tlen_value - predicted_tlen, &tlen_by_calc[3]);
-
-        seg_by_ctx (VB, tlen_by_calc, tlen_by_calc_len + 3, ctx, add_bytes);
+        SNIPi3 (SNIP_SPECIAL, SAM_SPECIAL_TLEN, '0' + segconf.has[OPTION_MC_Z], tlen_value - predicted_tlen);
+        seg_by_ctx (VB, STRa(snip), ctx, add_bytes);
     }
-    else if (tlen)
-        seg_by_ctx (VB, STRa(tlen), ctx, add_bytes);
+
+    else if (segconf.has_TLEN_non_zero && !segconf.running) // note: only in these cases ltype=LT_DYN_INT is set in sam_seg_initialize
+        seg_integer (VB, ctx, tlen_value, true, add_bytes);
 
     else
-        seg_integer_as_text_do (VB, ctx, tlen_value, add_bytes);
+        seg_integer_as_text_do (VB, ctx, tlen_value, add_bytes); // likely all 0, so all-the-same
 
     ctx->last_value.i = tlen_value;
 }
@@ -112,27 +113,25 @@ void sam_seg_TLEN (VBlockSAM *vb, ZipDataLineSAM *dl,
 // PIZ
 //---------
 
-static inline int64_t sam_piz_predict_TLEN (VBlockSAM *vb, bool has_mc)
+static inline SamPosType sam_piz_predict_TLEN (VBlockSAMP vb, bool has_mc)
 {
-    SamFlags sam_flag = { .value = CTX(SAM_FLAG)->last_value.i };
+    if (last_flags.supplementary || last_flags.next_unmapped) return 0;
 
-    if (sam_flag.bits.supplementary || sam_flag.bits.next_unmapped) return 0;
+    if (!last_flags.multi_segs) return vb->ref_consumed;
 
-    if (!sam_flag.bits.multi_segments) return vb->ref_consumed;
-
-    const char *last_rname  = last_txt(vb, SAM_RNAME);
-    const char *last_rnext  = last_txt(vb, SAM_RNEXT);
+    rom last_rname  = last_txt(VB, SAM_RNAME);
+    rom last_rnext  = last_txt(VB, SAM_RNEXT);
     unsigned last_rname_len = vb->last_txt_len(SAM_RNAME);
     unsigned last_rnext_len = vb->last_txt_len(SAM_RNEXT);
     
     if (flag.out_dt == DT_BAM && *(int32_t*)last_rname != *(int32_t*)last_rnext) return 0;
 
-    if (flag.out_dt == DT_SAM && !(last_rnext_len==1 && *last_rnext=='=') &&
+    if (flag.out_dt == DT_SAM && !IS_EQUAL_SIGN (last_rnext) &&
         (last_rname_len != last_rnext_len || memcmp (last_rname, last_rnext, last_rnext_len))) return 0;
 
-    int64_t pnext_pos_delta = CTX(SAM_PNEXT)->last_value.i - CTX(SAM_POS)->last_value.i;
+    SamPosType pnext_pos_delta = (SamPosType)CTX(SAM_PNEXT)->last_value.i - (SamPosType)CTX(SAM_POS)->last_value.i;
 
-    if (!sam_flag.bits.rev_comp && sam_flag.bits.next_rev_comp) {
+    if (!last_flags.rev_comp && last_flags.next_rev_comp) {
 
         if (has_mc) {
             STR(MC);
@@ -141,18 +140,18 @@ static inline int64_t sam_piz_predict_TLEN (VBlockSAM *vb, bool has_mc)
             return pnext_pos_delta + MC_ref_consumed;
         }
                 
-        else if (vb->buddy_line_i != NO_BUDDY) {
-            uint32_t approx_mate_ref_consumed = *ENT (uint32_t, CTX(SAM_CIGAR)->piz_ctx_specific_buf, vb->buddy_line_i);
+        else if (sam_has_mate) {
+            uint32_t mate_ref_consumed = B(CigarAnalItem, CTX(SAM_CIGAR)->cigar_anal_history, vb->mate_line_i)->ref_consumed;
 
-            return pnext_pos_delta + approx_mate_ref_consumed;
+            return pnext_pos_delta + mate_ref_consumed;
         }
 
         else
             return pnext_pos_delta + vb->ref_consumed;
     }
 
-    if (sam_flag.bits.rev_comp && !sam_flag.bits.next_rev_comp) 
-        return pnext_pos_delta - vb->ref_consumed + 2 * !sam_flag.bits.is_aligned;
+    if (last_flags.rev_comp && !last_flags.next_rev_comp) 
+        return pnext_pos_delta - vb->ref_consumed + 2 * !last_flags.is_aligned;
 
     else 
         return pnext_pos_delta - vb->ref_consumed;
@@ -188,11 +187,11 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_TLEN_old)
 }
 
 // Used for files compressed with Genozip 12.0.41 and 12.0.42
-SPECIAL_RECONSTRUCTOR (sam_piz_special_COPY_BUDDY_TLEN_old)
+SPECIAL_RECONSTRUCTOR (sam_piz_special_COPY_MATE_TLEN_old)
 {
-    ASSPIZ0 (vb->buddy_line_i >= 0, "No buddy line is set for the current line");
+    ASSPIZ0 (VB_SAM->mate_line_i >= 0, "No mate line is set for the current line");
 
-    new_value->i = -*ENT (int64_t, ctx->history, vb->buddy_line_i); // minus the buddy
+    new_value->i = -*B(int64_t, ctx->history, VB_SAM->mate_line_i); // minus the buddy
     if (reconstruct) RECONSTRUCT_INT (new_value->i);
 
     return true; // new value
@@ -201,7 +200,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_COPY_BUDDY_TLEN_old)
 // place value in correct location in alignment
 TRANSLATOR_FUNC (sam_piz_sam2bam_TLEN)
 {
-    BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)ENT (char, vb->txt_data, vb->line_start);
+    BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)Bc (vb->txt_data, vb->line_start);
     alignment->tlen = LTEN32 (ctx->last_value.i);
     return 0;
 }

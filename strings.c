@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   strings.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #include <time.h>
 #include "genozip.h"
@@ -14,14 +17,11 @@
 #include <windows.h>
 #endif
 
-bool is_printable[256] = {
-    [9]=1, [10]=1, [13]=1,
-    [32]=1,1,1,1,1,1,1,1,    1,1,1,1,1,1,1,1,    1,1,1,1,1,1,1,1,    1,1,1,1,1,1,1,1, // 32-126
-         1,1,1,1,1,1,1,1,    1,1,1,1,1,1,1,1,    1,1,1,1,1,1,1,1,    1,1,1,1,1,1,1,1,
-         1,1,1,1,1,1,1,1,    1,1,1,1,1,1,1,1,    1,1,1,1,1,1,1,1,    1,1,1,1,1,1,1,1,
-         1,1,1,1,1,1,1,1,    1,1,1,1,1,1,1,1,    1,1,1,1,1,1,1,1,    1,1,1,1,1,1,1    };
+bool is_printable[256] = { [9]=1, [10]=1, [13]=1, [32 ... 126]=1 };
 
-char *str_tolower (const char *in, char *out /* out allocated by caller - can be the same as in */)
+uint64_t p10[] = { 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000, 10000000000ULL, 100000000000ULL, 1000000000000ULL, 10000000000000ULL, 100000000000000ULL, 1000000000000000ULL, 100000000000000000ULL, 100000000000000000ULL };
+
+char *str_tolower (rom in, char *out /* out allocated by caller - can be the same as in */)
 {
     char *startout = out;
 
@@ -33,7 +33,7 @@ char *str_tolower (const char *in, char *out /* out allocated by caller - can be
     return startout;
 }
 
-char *str_toupper (const char *in, char *out /* out allocated by caller - can be the same as in */)
+char *str_toupper (rom in, char *out /* out allocated by caller - can be the same as in */)
 {
     char *startout = out;
 
@@ -70,7 +70,7 @@ char *str_print_snip (STRp(in), char *out) // caller allocated - in_len+20
     
     else {
         if (in[0] < NUM_SNIP_CODES) {
-            static const char *snip_codes[NUM_SNIP_CODES] = SNIP_CODES;
+            static rom snip_codes[NUM_SNIP_CODES] = SNIP_CODES;
             uint32_t len = strlen (snip_codes[(int)in[0]]);
             strcpy (out, snip_codes[(int)in[0]]);
             out[len] = ' ';
@@ -149,7 +149,7 @@ StrText str_bases (uint64_t num_bases)
 }
 
 // returns length
-uint32_t str_int (int64_t n, char *str /* out */)
+uint32_t str_int_ex (int64_t n, char *str /* out */, bool add_nul_terminator)
 {
     uint32_t len=0;
 
@@ -176,7 +176,7 @@ uint32_t str_int (int64_t n, char *str /* out */)
         }
     }
 
-    str[len] = '\0'; // string terminator
+    if (add_nul_terminator) str[len] = '\0'; // string terminator
     return len;
 }
 
@@ -187,6 +187,40 @@ StrText str_int_s (int64_t n)
     return s;
 }
 
+// returns length
+uint32_t str_hex_ex (int64_t n, char *str /* out */, bool uppercase, bool add_nul_terminator)
+{
+    uint32_t len=0;
+
+    if (n==0) {
+        str[0] = '0';
+        len=1;
+    }
+
+    else {
+        bool is_negative = (n<0);
+        if (is_negative) n = -n;
+
+        char rev[50] = {}; // "initialize" to avoid compiler warning
+        while (n) {
+            int hexit = n % 16;
+            rev[len++] = (hexit < 10) ? ('0' + hexit)
+                       : uppercase    ? ('A' + (hexit-10))
+                       :                ('a' + (hexit-10));
+            n /= 16;
+        }
+        // now reverse it
+        for (int i=0; i < len; i++) str[i + is_negative] = rev[len-i-1];
+
+        if (is_negative) {
+            str[0] = '-';
+            len++;
+        }
+    }
+
+    if (add_nul_terminator) str[len] = '\0'; // string terminator
+    return len;
+}
 // similar to strtoull, except it rejects numbers that are shorter than str_len, or that their reconstruction would be different
 // the the original string.
 // returns true if successfully parsed an integer of the full length of the string
@@ -219,7 +253,7 @@ bool str_get_int (STRp(str),
 }
 
 #define str_get_int_range_type(func_num,type) \
-bool str_get_int_range##func_num (const char *str, uint32_t str_len, int64_t min_val, int64_t max_val, type *value /* optional */) \
+bool str_get_int_range##func_num (rom str, uint32_t str_len, int64_t min_val, int64_t max_val, type *value /* optional */) \
 {                                                                                     \
     if (!str) return false;                                                           \
                                                                                       \
@@ -233,6 +267,15 @@ str_get_int_range_type(8,uint8_t)   // unsigned
 str_get_int_range_type(16,uint16_t) // unsigned
 str_get_int_range_type(32,int32_t)  // signed
 str_get_int_range_type(64,int64_t)  // signed
+
+bool str_get_uint32 (STRp(str), uint32_t *value)
+{
+    int64_t v64;
+    if (!str_get_int_range64 (STRa(str), 0, 0xffffffff, &v64)) return false;
+
+    *value = v64;
+    return true;
+}
 
 // get a positive decimal integer, may have leading zeros eg 005
 bool str_get_int_dec (STRp(str), 
@@ -254,7 +297,7 @@ bool str_get_int_dec (STRp(str),
 }
 
 // get a positive hexadecimal integer, may have leading zeros eg 00FFF
-bool str_get_int_hex (STRp(str), 
+bool str_get_int_hex (STRp(str), bool allow_hex, bool allow_HEX,
                       uint64_t *value) // out - modified only if str is an integer
 {
     uint64_t out = 0;
@@ -264,8 +307,8 @@ bool str_get_int_hex (STRp(str),
         char c = str[i];
         
         if      (c >= '0' && c <= '9') out = (out << 4) | (c - '0');
-        else if (c >= 'A' && c <= 'F') out = (out << 4) | (c - 'A' + 10);
-        else if (c >= 'a' && c <= 'f') out = (out << 4) | (c - 'a' + 10);
+        else if (allow_HEX && c >= 'A' && c <= 'F') out = (out << 4) | (c - 'A' + 10);
+        else if (allow_hex && c >= 'a' && c <= 'f') out = (out << 4) | (c - 'a' + 10);
         else return false;
 
         if (out < prev_out) return false; // number overflowed beyond maximum uint64_t
@@ -277,13 +320,13 @@ bool str_get_int_hex (STRp(str),
 
 // positive integer, may be hex prefixed with 0x
 #define str_get_int_range_allow_hex_bits(bits) \
-bool str_get_int_range_allow_hex##bits (const char *str, uint32_t str_len, uint##bits##_t min_val, uint##bits##_t max_val, uint##bits##_t *value) \
+bool str_get_int_range_allow_hex##bits (rom str, uint32_t str_len, uint##bits##_t min_val, uint##bits##_t max_val, uint##bits##_t *value) \
 {                                                                                             \
     if (!str) return false;                                                                   \
                                                                                               \
     if (str_len >= 3 && str[0]=='0' && str[1]=='x') {                                         \
         uint64_t value64; /* unsigned */                                                      \
-        if (!str_get_int_hex (&str[2], str_len ? str_len-2 : strlen (str)-2, &value64)) return false; \
+        if (!str_get_int_hex (&str[2], str_len ? str_len-2 : strlen (str)-2, true, true, &value64)) return false; \
         *value = (uint##bits##_t)value64;                                                     \
     }                                                                                         \
     else {                                                                                    \
@@ -299,18 +342,46 @@ str_get_int_range_allow_hex_bits(16) // unsigned
 str_get_int_range_allow_hex_bits(32) // unsigned
 str_get_int_range_allow_hex_bits(64) // unsigned
 
-StrText str_uint_commas (int64_t n)
+// caller should allocate hex_str[data_len*2+1]. returns nul-terminated string.
+rom str_to_hex (bytes data, uint32_t data_len, char *hex_str)
+{
+    char *s = hex_str;
+
+    for (int i=0; i < data_len; i++) {
+        *s++ = NUM2HEXDIGIT(data[i] >> 4);
+        *s++ = NUM2HEXDIGIT(data[i] & 0xf);
+    }
+
+    *s = 0;
+    return hex_str;
+}
+
+StrText str_hex10 (bytes data, uint32_t data_len)
 {
     StrText s;
+    str_to_hex (data, MIN_(10, data_len), s.s);
+    return s;
+}
+
+
+StrText str_int_commas (int64_t n)
+{
+    StrText s;
+    char *c = s.s; 
 
     uint32_t len = 0, orig_len=0;
 
     if (n==0) {
-        s.s[0] = '0';
+        *c++ = '0';
         len = 1;
     }
     else {
-        char rev[50] = {}; // "initialize" to avoid compiler warning
+        if (n < 0) {
+            *c++ = '-';
+            n = -n;
+        }
+    
+        char rev[50] = {}; 
         while (n) {
             if (orig_len && orig_len % 3 == 0) rev[len++] = ',';    
             rev[len++] = '0' + n % 10;
@@ -318,17 +389,17 @@ StrText str_uint_commas (int64_t n)
             n /= 10;
         }
         // now reverse it
-        for (int i=0; i < len; i++) s.s[i] = rev[len-i-1];
+        for (int i=0; i < len; i++) *c++ = rev[len-i-1];
     }
 
-    s.s[len] = '\0'; // string terminator
+    *c = '\0'; // string terminator
     return s;
 }
 
-// display comma'd number up and including the limit, and there after with K, M etc.
+// display comma'd number up and including the limit, and thereafter with K, M etc.
 StrText str_uint_commas_limit (uint64_t n, uint64_t limit)
 {
-    if (n <= limit) return str_uint_commas (n);
+    if (n <= limit) return str_int_commas (n);
 
     StrText s;
 
@@ -343,7 +414,13 @@ StrText str_uint_commas_limit (uint64_t n, uint64_t limit)
     return s;
 }
 
+uint32_t str_get_uint_textual_len (uint64_t n) 
+{ 
+    for (int i=0; i < ARRAY_LEN(p10); i++)
+        if (n < p10[i]) return i+1;
 
+    ABORT_R ("n=%"PRIu64" too big", n);
+}
 
 // returns 32 bit float value and/or format: "3.123" -> "%5.3f" ; false if not a simple float
 bool str_get_float (STRp(float_str), 
@@ -389,7 +466,7 @@ bool str_get_float (STRp(float_str),
         static const double pow10[16] = { 1.0, 10.0, 100.0, 1000.0, 10000.0, 100000.0, 1000000.0, 10000000.0, 100000000.0, 1000000000.0, 
                                           10000000000.0, 100000000000.0, 1000000000000.0, 10000000000000.0, 100000000000000.0, 1000000000000000.0 };
                                         
-        if (num_decimals >= sizeof (pow10) / sizeof (pow10[0])) return false; // too many decimals
+        if (num_decimals >= ARRAY_LEN (pow10)) return false; // too many decimals
 
         *value = (is_negative ? -1 : 1) * (val / pow10[num_decimals]);
     }
@@ -444,14 +521,7 @@ not_scientific_float:
     return false;
 }
 
-StrText str_pointer (const void *p)
-{
-    StrText s;
-    sprintf (s.s, "0x%"PRIx64, (uint64_t)p);
-    return s;
-}
-
-bool str_is_in_range (const char *str, uint32_t str_len, char first_c, char last_c)
+bool str_is_in_range (rom str, uint32_t str_len, char first_c, char last_c)
 {
     for (; str_len ; str++, str_len--)
         if (*str < first_c || *str > last_c) return false;
@@ -459,7 +529,7 @@ bool str_is_in_range (const char *str, uint32_t str_len, char first_c, char last
 }
 
 // returns true if the strings are case-insensitive similar, and *identical if they are case-sensitive identical
-bool str_case_compare (const char *str1, const char *str2,
+bool str_case_compare (rom str1, rom str2,
                        bool *identical) // optional out
 {
     bool my_identical = true; // optimistic (automatic var)
@@ -485,7 +555,7 @@ differ:
 #define ASSSPLIT(condition, format, ...) ({\
     if (!(condition)) { \
         if (enforce_msg) {  \
-            progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); exit_on_error(true); /* same as ASSERT */ \
+            progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); exit_on_error(true); /* same as ASSERT */ \
         } \
         return 0; /* just return 0 if we're not asked to enforce */ \
     } \
@@ -496,10 +566,10 @@ differ:
 uint32_t str_split_do (STRp(str), 
                        uint32_t max_items,        // optional - if not given, a count of sep is done first
                        char sep,                  // separator
-                       const char **items,        // out - array of char* of length max_items - one more than the number of separators
+                       rom *items,                // out - array of char* of length max_items - one more than the number of separators
                        uint32_t *item_lens,       // optional out - corresponding lengths
                        bool exactly,
-                       const char *enforce_msg)   // non-NULL if enforcement of length is requested
+                       rom enforce_msg)   // non-NULL if enforcement of length is requested
 {
     if (!str) return 0; // note: str!=NULL + str_len==0 results in n_items=1 - one empty item
     
@@ -526,21 +596,68 @@ uint32_t str_split_do (STRp(str),
     return (!exactly || item_i == max_items) ? item_i : 0; // 0 if requested exactly, but too few separators 
 }
 
+// splits a string by tab, ending with the first \n or \r\n. 
+// Returns the address of the byte after the \n if successful, or NULL if not.
+rom str_split_by_tab_do (STRp(str), 
+                         uint32_t *n_items, // in / out
+                         rom *items, uint32_t *item_lens, // out - array of char* of length max_items - one more than the number of separators
+                         bool *has_13)      // out - true if line is terminated by \r\n
+{
+    ASSERTNOTNULL (str);
+    ASSERTNOTZERO (*n_items, "");
+    #define enforce_msg 1
+
+    items[0] = str;
+    uint32_t item_i = 1;
+    uint32_t str_i;
+    for (str_i=0 ; str_i < str_len ; str_i++) {
+        char c = str[str_i]; 
+        if (c == '\t') {
+            ASSSPLIT (item_i < *n_items, "expecting up to %u items but found more", *n_items);
+
+            items[item_i++] = &str[str_i+1];
+        }
+
+        else if (c == '\r') {
+            ASSSPLIT (str_i+1 < str_len && str[str_i+1] == '\n', "encountered a \\r without a following \\n (str_i=%u)", str_i);
+            *has_13 = true;
+            break;
+        }
+
+        else if (c == '\n') {
+            *has_13 = false;
+            break;
+        }
+    }
+
+    ASSSPLIT (str_i < str_len, "Line to terminated by newline (str_len=%u)", str_len);
+
+    for (uint32_t i=0; i < item_i-1; i++)    
+        item_lens[i] = items[i+1] - items[i] - 1; 
+        
+    item_lens[item_i-1] = &str[str_i] - items[item_i-1];
+    *n_items = item_i;
+
+    return &str[str_i + 1 + *has_13]; // byte after \n
+    
+    #undef enforce_msg
+}
+
 // splits a string based on container items (doesn't need to be nul-terminated). 
 // returns the number on unskipped items if successful
 uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(con_prefixes),
-                                    const char **items,        // out - array of char* of length max_items - one more than the number of separators
+                                    rom *items,                // out - array of char* of length max_items - one more than the number of separators
                                     uint32_t *item_lens,       // optional out - corresponding lengths
-                                    const char *enforce_msg)   // non-NULL if enforcement of length is requested
+                                    rom enforce_msg)           // non-NULL if enforcement of length is requested
 {
     if (!str) return 0; // note: str!=NULL + str_len==0 results in n_items=1 - one empty item
 
     uint32_t num_items = con_nitems (*con);
     ASSERT0 (num_items, "Container has no items");
 
-    const char **save_items = items;
-    const char *after_str = &str[str_len], *save_str = str;
-    const char *px = 0, *after_px=0;
+    rom *save_items = items;
+    rom after_str = &str[str_len], save_str = str;
+    rom px = 0, after_px=0;
 
     // if we have prefixes, set px_i to the first item's prefix, after the container-wide prefix
     if (con_prefixes_len) {
@@ -556,7 +673,7 @@ uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(con_pre
         
         // verify item prefix
         if (px < after_px) {
-            const char *item_px = px;
+            rom item_px = px;
             while (*px != CON_PX_SEP) px++;
 
             uint32_t item_px_len = px - item_px;                   
@@ -589,17 +706,27 @@ uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(con_pre
                 str += *item_lens;
                 ASSSPLIT (str <= after_str, "item_i=%u fixed_len=%u goes beyond end of string \"%.*s\"", item_i, *item_lens, str_len, save_str);
                 break;
-
+            
             case 0: // no separator - goes to end of string
                 *item_lens = after_str - str;
                 *items = str; // zero-length item - next item will start from the same str_i
                 str = after_str;
                 break;
 
+            case CI0_DIGIT: // items goes until a digit or end-of-string is encountered
+                *items = str;
+
+                while (str < after_str && !IS_DIGIT(*str)) str++;  
+
+                *item_lens = str - *items;
+                break;
+
             default:
                 ASSERT (IS_PRINTABLE(sep), "item_i=%u sep=%u is not a printable character in string \"%.*s\"", item_i, sep, str_len, save_str);
 
                 char sep1 = con->items[item_i].separator[1];
+                if (!IS_PRINTABLE (sep1)) sep1 = 0;
+                
                 *items = str;
 
                 if (!sep1) 
@@ -611,7 +738,7 @@ uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(con_pre
                           item_i, sep, str_len, save_str);
 
                 *item_lens = str - *items;
-                str += 1 + (sep1 > 0); // skip seperator
+                str += 1 + (sep1 != 0); // skip seperator
         }
 
         items++; item_lens++; // increment pointers        
@@ -624,7 +751,7 @@ uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(con_pre
 }
 
 // remove \r (ASCII Carriage Return) from each lines[] that has it as its final character, but decrementing the matching line_lens
-void str_remove_CR_do (uint32_t n_lines, const char **lines, uint32_t *line_lens)
+void str_remove_CR_do (uint32_t n_lines, rom *lines, uint32_t *line_lens)
 {
     for (uint32_t i=0; i < n_lines; i++)
         if (line_lens[i] >= 1 && lines[i][line_lens[i]-1] == '\r') 
@@ -632,7 +759,7 @@ void str_remove_CR_do (uint32_t n_lines, const char **lines, uint32_t *line_lens
 }
 
 // replace the last character in each item with \0. these are generated by str_split, so expecting a separator after each string
-void str_nul_separate_do (uint32_t n_items, STRps(item))
+void str_nul_separate_do (STRps(item))
 {
     for (uint32_t i=0; i < n_items; i++)
         ((char**)items)[i][item_lens[i]] = '\0';
@@ -655,7 +782,7 @@ uint32_t str_split_ints_do (STRp(str), uint32_t max_items, char sep, bool exactl
                             int64_t *items)  // out - array of integers
                        
 {
-    const char *after = &str[str_len];
+    rom after = &str[str_len];
     SAFE_NUL (after);
 
     uint32_t item_i;
@@ -680,7 +807,7 @@ uint32_t str_split_floats_do (STRp(str), uint32_t max_items, char sep, bool exac
                               double *items)  // out - array of floats
                        
 {
-    const char *after = &str[str_len];
+    rom after = &str[str_len];
     SAFE_NUL (after);
 
     uint32_t item_i;
@@ -699,9 +826,9 @@ uint32_t str_split_floats_do (STRp(str), uint32_t max_items, char sep, bool exac
     return (!exactly || item_i == max_items) ? item_i : 0; // 0 if requested exactly, but too few separators 
 }
 
-const char *type_name (uint32_t item, 
-                       const char * const *name, // the address in which a pointer to name is found, if item is in range
-                       uint32_t num_names)
+rom type_name (uint32_t item, 
+               rom const *name, // the address in which a pointer to name is found, if item is in range
+               uint32_t num_names)
 {
     if (item > num_names) {
         static char str[50];
@@ -714,6 +841,8 @@ const char *type_name (uint32_t item,
 
 void str_print_dict (FILE *fp, STRp(data), bool add_newline, bool remove_equal_asterisk)
 {
+    WordIndex word_index=0;
+
     for (uint32_t i=0; i < data_len; i++) {
         // in case we are showing chrom data in --list-chroms in SAM - don't show * and =
         if (remove_equal_asterisk && (data[i]=='*' || data[i]=='=') && !data[i+1]) {
@@ -721,23 +850,28 @@ void str_print_dict (FILE *fp, STRp(data), bool add_newline, bool remove_equal_a
             continue; // skip character and following separator
         }
 
-        if (i && !data[i] && !data[i-1]) continue; // skip empty words
-        
-        switch (data[i]) {
-            case 32 ... 127 : fputc (data[i], fp);      break;
-            case 0          : fputc (add_newline ? '\n' : ' ', fp); break; // snip separator
-            case '\t'       : fwrite ("\\t", 1, 2, fp); break;
-            case '\n'       : fwrite ("\\n", 1, 2, fp); break;
-            case '\r'       : fwrite ("\\r", 1, 2, fp); break;
-            default         : fprintf (fp, "\\x%x", (uint8_t)data[i]);
+        if (!i || data[i] || data[i-1]) { // skip empty words
+            
+            if (!i || !data[i-1]) fprintf (fp, "%u%c", word_index, add_newline ? '\t' : '='); 
+
+            switch (data[i]) {
+                case 32 ... 127 : fputc (data[i], fp);      break;
+                case 0          : fputc (add_newline ? '\n' : ' ', fp); break; // snip separator
+                case '\t'       : fwrite ("\\t", 1, 2, fp); break;
+                case '\n'       : fwrite ("\\n", 1, 2, fp); break;
+                case '\r'       : fwrite ("\\r", 1, 2, fp); break;
+                default         : fprintf (fp, "\\x%x", (uint8_t)data[i]);
+            }
         }
+
+        if (!data[i]) word_index++;
     }
     fflush (fp);
 }
 
-int str_print_text (const char **text, uint32_t num_lines,
-                    const char *wrapped_line_prefix, 
-                    const char *newline_separator, 
+int str_print_text (rom *text, uint32_t num_lines,
+                    rom wrapped_line_prefix, 
+                    rom newline_separator, 
                     uint32_t line_width /* 0=calcuate optimal */)
 {                       
     ASSERTNOTNULL (text);
@@ -754,7 +888,7 @@ int str_print_text (const char **text, uint32_t num_lines,
     }
 
     for (uint32_t i=0; i < num_lines; i++)  {
-        const char *line = text[i];
+        rom line = text[i];
         uint32_t line_len = strlen (line);
         
         // print line with line wraps
@@ -774,41 +908,59 @@ int str_print_text (const char **text, uint32_t num_lines,
 }
 
 // receives a user response, a default "Y" or "N" (or NULL) and modifies the response to be "Y" or "N"
-bool str_verify_y_n (char *response, uint32_t len, const char *def_res)
+static bool str_verify_y_n (char *response, uint32_t len, rom def_res)
 {
-    ASSERT0 (!def_res || (strlen (def_res)==1 && (def_res[0]=='Y' || def_res[0]=='N')), 
+    ASSERT0 (!def_res || (strlen(def_res)==1 && (def_res[0]=='Y' || def_res[0]=='N')), 
               "def_res needs to be NULL, \"Y\" or \"N\"");
 
     if (len > 1 || (!len && !def_res)) return false;
     
-    response[0] = len ? UPPER_CASE(response[0]) : def_res[0];
+    response[0] = !len             ? def_res[0] 
+                : response[0]=='n' ? 'N' 
+                : response[0]=='y' ? 'Y' 
+                :                    response[0];
+    
     response[1] = 0;
 
     return (response[0] == 'N' || response[0] == 'Y'); // return false if invalid response - we request the user to respond again
 }
 
-bool str_verify_not_empty (char *response, uint32_t len, const char *unused)
+bool str_query_user_yn (rom query, DefAnswerType def_answer)
+{
+    char query_str[strlen(query)+32];
+    sprintf (query_str, "%s (%sy%s or %sn%s) ", query, 
+             def_answer==QDEF_YES?"[":"",  def_answer==QDEF_YES?"]":"",  
+             def_answer==QDEF_NO ?"[":"",  def_answer==QDEF_NO ?"]":"");
+
+    char y_n[32];
+    str_query_user (query_str, y_n, sizeof(y_n), str_verify_y_n, def_answer==QDEF_YES ? "Y" : def_answer==QDEF_NO ? "N" : 0);
+
+    return y_n[0] == 'Y';
+}
+
+bool str_verify_not_empty (char *response, uint32_t len, rom unused)
 { 
     return !!len;
 }
 
-void str_query_user (const char *query, char *response, uint32_t response_size, 
-                     ResponseVerifier verifier, const char *verifier_param)
+void str_query_user (rom query, char *response, uint32_t response_size, 
+                     ResponseVerifier verifier, rom verifier_param)
 {
     uint32_t len;
     do {
         fprintf (stderr, "%s", query);
 
-        len = read (STDIN_FILENO, response, response_size-1); 
-        if (len && response[len-1] == '\n') len--;
-        if (len && response[len-1] == '\r') len--;
-        
-        response[len] = '\0'; 
+        // Linux: in case of non-Latin, fgets doesn't handle backspace well - not completely removing the multi-byte character from the string (bug 593)
+        // Windows (MingW): the string is terminated before the first non-Latin character on bash terminal and only ???? on Powershell and Command (bug 594)
+        fgets (response, response_size, stdin); 
+        len = strlen (response);
+        if (len && (response[len-1] == '\n')) response[--len] = '\0';         
+        if (len && (response[len-1] == '\r')) response[--len] = '\0'; // in Windows, lines are terminated by \r\n
 
     } while (verifier && !verifier (response, len, verifier_param));
 }
 
-const char *str_win_error (void)
+rom str_win_error (void)
 {
     static char msg[100];
 #ifdef _WIN32
@@ -828,14 +980,14 @@ StrText str_time (void)
     return s;
 }
 
-// C<>G A<>T c<>g a<>t ; IUPACs: R<>Y K<>M B<>V D<>H (+ lowercase); other ASCII 32->126 preserved ; other = 0
+// C<>G A<>T c<>g a<>t ; IUPACs: R<>Y K<>M B<>V D<>H W<>W S<>S N<>N (+ lowercase); other ASCII 32->126 preserved ; other = 0
 const char COMPLEM[256] = "-------------------------------- !\"#$\%&'()*+,-./0123456789:;<=>?@TVGHEFCDIJMLKNOPQYSAUBWXRZ[\\]^_`tvghefcdijmlknopqysaubwxrz{|}~";
 
 // same as COMPLEM[UPPER_CASE(c)]
 const char UPPER_COMPLEM[256] = "-------------------------------- !\"#$\%&'()*+,-./0123456789:;<=>?@TVGHEFCDIJMLKNOPQYSAUBWXRZ[\\]^_`TVGHEFCDIJMLKNOPQYSAUBWXRZ{|}~";
 
 // reverse-complements a string in-place
-char *str_revcomp_in_out (char *dst_seq, const char *src_seq, uint32_t seq_len)
+char *str_revcomp_in_out (char *dst_seq, rom src_seq, uint32_t seq_len)
 {
     for (uint32_t i=0; i < seq_len / 2; i++) {
         char l_base = src_seq[i];
@@ -849,4 +1001,30 @@ char *str_revcomp_in_out (char *dst_seq, const char *src_seq, uint32_t seq_len)
         dst_seq[seq_len/2] = COMPLEM[(uint8_t)src_seq[seq_len/2]];
 
     return dst_seq;
+}
+
+// reverse-complements a string in-place - complements A,C,G,T characters and leaves others intact. set dst_seq=src_seq to output in-place.
+char *str_revcomp_actg (char *dst_seq, rom src_seq, uint32_t seq_len)
+{
+    for (uint32_t i=0; i < seq_len / 2; i++) {
+        char l_base = src_seq[i];
+        char r_base = src_seq[seq_len-1-i];
+
+        dst_seq[i]           = complem(r_base);
+        dst_seq[seq_len-1-i] = complem(l_base);
+    }
+
+    if (seq_len % 2) // we have an odd number of bases - now complement the middle one
+        dst_seq[seq_len/2] = complem(src_seq[seq_len/2]);
+
+    return dst_seq;
+}
+
+// implementing (slightly modified) memrchr, as it doesn't exist on Windows
+rom my_memrchr (rom str, char c, uint32_t str_len)
+{
+    for (int32_t i=(int32_t)str_len-1; i >= 0; i++)
+        if (str[i] == c) return &str[i];
+
+    return NULL;
 }

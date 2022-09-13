@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   ref_make.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #include "data_types.h"
 #include "codec.h" // must be included before reference.h
@@ -22,30 +25,34 @@ SPINLOCK (make_ref_spin);
 
 static Buffer contig_metadata = {}; // contig header of each contig, except for chrom name
 
-void ref_make_seg_initialize (VBlock *vb)
+Serializer make_ref_merge_serializer = {};
+
+void ref_make_seg_initialize (VBlockP vb)
 {
     START_TIMER;
 
-    ASSINP (vb->vblock_i > 1 || *FIRSTENT (char, vb->txt_data) == '>' || *FIRSTENT (char, vb->txt_data) == ';',
+    ASSINP (vb->vblock_i > 1 || *B1STtxt == '>' || *B1STtxt == ';',
             "Error: expecting FASTA file %s to start with a '>' or a ';'", txt_name);
 
     CTX(FASTA_CONTIG)->no_vb1_sort = true; // keep contigs in the order of the reference, i.e. in the order they would appear in BAM header created with this reference 
     CTX(FASTA_CONTIG)->no_stons = true; // needs b250 node_index for reference
+
+    if (segconf.running) segconf.fasta_has_contigs = true; // initialize optimistically
 
     COPY_TIMER (seg_initialize);
 }
 
 // called from ref_make_create_range, returns the range for this fasta VB. note that we have exactly one range per VB
 // as txtfile_read_vblock makes sure we have only one full or partial contig per VB (if flag.make_reference)
-static Range *ref_make_ref_get_range (uint32_t vblock_i)
+static Range *ref_make_ref_get_range (VBIType vblock_i)
 {
     // access ranges.len under the protection of the mutex
     spin_lock (make_ref_spin);
-    gref->ranges.len = MAX_(gref->ranges.len, (uint64_t)vblock_i); // note that this function might be called out order (called from ref_make_create_range - FASTA ZIP compute thread)
+    gref->ranges.len32 = MAX_(gref->ranges.len32, vblock_i); // note that this function might be called out order (called from ref_make_create_range - FASTA ZIP compute thread)
     ASSERT (gref->ranges.len <= MAKE_REF_NUM_RANGES, "reference file too big - number of ranges exceeds %u", MAKE_REF_NUM_RANGES);
     spin_unlock (make_ref_spin);
 
-    return ENT (Range, gref->ranges, vblock_i-1);
+    return B(Range, gref->ranges, vblock_i-1);
 }
 
 // called during REF ZIP compute thread, from zip_compress_one_vb (as "compress" defined in data_types.h)
@@ -57,26 +64,22 @@ void ref_make_create_range (VBlockP vb)
 
     // at this point, we don't yet know the first/last pos or the chrom - we just create the 2bit sequence array.
     // the missing details will be added during ref_make_prepare_range_for_compress
-    r->ref = bit_array_alloc (seq_len * 2, false); // 2 bits per base
+    r->ref = bits_alloc (seq_len * 2, false); // 2 bits per base
     r->range_id = vb->vblock_i-1;
 
     uint64_t bit_i=0;
-    for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
+    for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
         
         uint32_t seq_data_start, seq_len;
         fasta_get_data_line (vb, line_i, &seq_data_start, &seq_len);
 
-        const uint8_t *line_seq = ENT (uint8_t, vb->txt_data, seq_data_start);
-        for (uint64_t base_i=0; base_i < seq_len; base_i++) {
+        bytes line_seq = B8 (vb->txt_data, seq_data_start);
+        for (uint64_t base_i=0; base_i < seq_len; base_i++, bit_i += 2) {
             char base = line_seq[base_i];
-            uint8_t encoding = acgt_encode[(int)base];
-            bit_array_assign (&r->ref, bit_i, encoding & 1);
-            bit_array_assign (&r->ref, bit_i + 1, (encoding >> 1) & 1);
+            bits_assign2 (&r->ref, bit_i, acgt_encode[(int)base]); 
 
             // store very rare IUPAC bases (GRCh38 has 94 of them)
             ref_iupacs_add (vb, bit_i/2, base);
-
-            bit_i += 2;
         }
     }
 
@@ -94,13 +97,15 @@ void ref_make_ref_init (void)
     refhash_remove_cache();
 
     buf_alloc (evb, &gref->ranges, 0, MAKE_REF_NUM_RANGES, Range, 1, "ranges"); // must be allocated by main thread as its evb
-    ranges_type (gref) = RT_MAKE_REF;
+    gref->ranges.rtype = RT_MAKE_REF;
     
     buf_zero (&gref->ranges);
 
     refhash_initialize (NULL);
 
     spin_initialize (make_ref_spin);
+
+    serializer_initialize (make_ref_merge_serializer);
 }
 
 
@@ -109,7 +114,7 @@ void ref_make_prepare_range_for_compress (VBlockP vb)
 {
     if (vb->vblock_i-1 == gref->ranges.len) return; // we're done
 
-    Range *r = ENT (Range, gref->ranges, vb->vblock_i-1); // vb_i=1 goes to ranges[0] etc
+    Range *r = B(Range, gref->ranges, vb->vblock_i-1); // vb_i=1 goes to ranges[0] etc
 
     // we have exactly one contig for each VB (but possibly multiple VBs with the same contig), one one RAEntry for that contig
     // during seg we didn't know the chrom,first,last_pos, so we add them now, from the RA
@@ -122,20 +127,22 @@ void ref_make_prepare_range_for_compress (VBlockP vb)
     if (r->gpos % 64 && r->chrom != (r-1)->chrom) // each new chrom needs to have a GPOS aligned to 64, so that we can overload is_set bits between the whole genome and individual chroms
         r->gpos = ROUNDUP64 (r->gpos);
 
-    vb->range             = r; // range to compress
-    vb->range->num_set    = r->ref.nbits / 2;
-    vb->ready_to_dispatch = true;
+    vb->range          = r; // range to compress
+    vb->range->num_set = r->ref.nbits / 2;
+    vb->dispatch = READY_TO_COMPUTE;
 }
 
-// make-refernece called by main thread after completing compute thread of VB 
+// zip_after_compute callback: make-refernece called by main thread after completing compute thread of VB.
+// must be called in order of VBs so that contigs are in the same order as the FASTA, resulting in GPOS being allocated
+// to contigs consistently across executions.
 void ref_make_after_compute (VBlockP vb_)
 {
-    VBlockFASTA *vb = (VBlockFASTA *)vb_;
+    VBlockFASTAP vb = (VBlockFASTAP)vb_;
 
     // add contig metadata
     if (vb->has_contig_metadata) {
         buf_alloc (evb, &contig_metadata, 1, 1000, ContigMetadata, 2, "contig_metadata");
-        NEXTENT (ContigMetadata, contig_metadata) = vb->contig_metadata;
+        BNXT (ContigMetadata, contig_metadata) = vb->contig_metadata;
     }
 
     // collect iupacs
@@ -147,8 +154,16 @@ ConstBufferP ref_make_get_contig_metadata (void)
     return &contig_metadata; 
 }
 
-void ref_make_finalize (void) 
+// callback from zfile_compress_genozip_header
+void ref_make_genozip_header (SectionHeaderGenozipHeader *header)
+{
+    header->REF_fasta_md5 = digest_snapshot (&z_file->digest_ctx, "file"); // MD5 or FASTA file
+}
+
+void ref_make_finalize (bool unused) 
 { 
-    buf_free (&contig_metadata); 
+    buf_free (contig_metadata); 
+
+    serializer_destroy (make_ref_merge_serializer);
 }
 

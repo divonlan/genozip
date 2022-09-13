@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   data_types.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #include "genozip.h"
 #include "data_types.h"
@@ -19,12 +22,10 @@ DataTypeFields     dt_fields[NUM_DATATYPES] = DATA_TYPE_FIELDS;
 const DtTranslation dt_get_translation (VBlockP vb) // vb=NULL relates to the txt header
 {
     static DtTranslation translations[] = TRANSLATIONS;
-    #define NUM_TRANSLATIONS (sizeof (translations) / sizeof (translations[0]))
-
     bool i_am_binary = z_file->z_flags.txt_is_bin;
 
-    for (unsigned i=0; i < NUM_TRANSLATIONS; i++) {
-/*if (i==NUM_TRANSLATIONS-1) { printf ("translations[i].src_z_non_bin_dt=%u z_file->data_type=%u " 
+    for (unsigned i=0; i < ARRAY_LEN (translations); i++) {
+/*if (i==ARRAY_LEN (translations)-1) { printf ("translations[i].src_z_non_bin_dt=%u z_file->data_type=%u " 
             "translations[i].src_z_is_binary=%u i_am_binary=%u "
             "translations[i].dst_txt_dt=%u  flag.out_dt=%u "
             "translations[i].is_translation=%u *translations[i].is_translation=%u\n", 
@@ -57,10 +58,10 @@ DataType dt_get_txt_dt (DataType dt)
         if (dt_props[txt_dt].bin_type == dt)
             return txt_dt;
 
-    ABORT_R ("Error in dt_get_txt_dt: cannot find textual type for binary data type %s", dt_name (dt));
+    ABORT_R ("cannot find textual type for binary data type %s", dt_name (dt));
 }
 
-const char *dt_name (DataType dt)
+rom dt_name (DataType dt)
 {
     if (dt == DT_NONE) return "NONE";
     return type_name (dt, &dt_props[dt].name, NUM_DATATYPES);

@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   codec_htscodecs.c
-//   Copyright (C) 2021-2022 Black Paw Ventures Limited
+//   Copyright (C) 2021-2022 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted,
+//   under penalties specified in the license.
 
 // See: https://github.com/samtools/htscodecs
 
@@ -35,48 +38,46 @@ uint32_t codec_RANw_est_size (Codec codec, uint64_t uncompressed_len) { return r
 //------------------------
 
 // returns true if successful and false if data_compressed_len is too small (but only if soft_fail is true)
-static bool codec_hts_compress (VBlock *vb, 
-                                const char *uncompressed,       // option 1 - compress contiguous data
+static bool codec_hts_compress (VBlockP vb, ContextP ctx,
+                                rom uncompressed,           // option 1 - compress contiguous data
                                 uint32_t *uncompressed_len, 
-                                LocalGetLineCB callback,  // option 2 - compress data one line at a time
-                                char *compressed, uint32_t *compressed_len /* in/out */, 
-                                unsigned char *(*func)(VBlockP vb, unsigned char *in,  unsigned int in_size, unsigned char *out, unsigned int *out_size, int order),                                
-                                int order, bool soft_fail)
+                                LocalGetLineCB get_line_cb, // option 2 - compress data one line at a time
+                                STRe(compressed),           // in/out 
+                                unsigned char *(*func)(VBlockP vb, unsigned char *in, unsigned int in_size, unsigned char *out, unsigned int *out_size, int order),                                
+                                int order, bool soft_fail, rom name)
 {
     START_TIMER;
 
-    if (callback) {
+    if (get_line_cb) {
         uncompressed = codec_alloc (vb, *uncompressed_len, 1);
         
-        for (uint32_t line_i=0; line_i < vb->lines.len; line_i++) {
+        for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
             char *line; uint32_t line_len;
-            callback (vb, line_i, pSTRa(line), *uncompressed_len - vb->codec_bufs[0].len, NULL);
+            get_line_cb (vb, ctx, line_i, pSTRa(line), *uncompressed_len - vb->codec_bufs[0].len, NULL);
             
-            buf_add (&vb->codec_bufs[0], line, line_len);
+            if (line_len)
+                buf_add (&vb->codec_bufs[0], line, line_len);
         }
-        ASSERT (vb->codec_bufs[0].len == *uncompressed_len, "Expecting in_so_far=%u == uncompressed_len=%u", (unsigned)vb->codec_bufs[0].len, *uncompressed_len);
+
+        ASSERT (vb->codec_bufs[0].len == *uncompressed_len, "%s: \"%s\": Expecting in_so_far=%u == uncompressed_len=%u ctx=%s callback=%s", 
+                VB_NAME, name, vb->codec_bufs[0].len32, *uncompressed_len, TAG_NAME, !!get_line_cb ? "Yes" : "No");
     }
 
     bool ret = !!func (vb, (uint8_t*)uncompressed, *uncompressed_len, (uint8_t*)compressed, compressed_len, order);
 
-    if (func == rans_compress_to_4x16) COPY_TIMER (compressor_rans)
-    else                               COPY_TIMER (compressor_arith); // higher level codecs are accounted for in their codec code
+    if (func == rans_compress_to_4x16) COPY_TIMER_COMPRESS (compressor_rans);
+    else                               COPY_TIMER_COMPRESS (compressor_arith); // higher level codecs are accounted for in their codec code
 
     return ret;
 }
 
 #define COMPRESS_FUNC_TEMPLATE(func,codec,order)                                                             \
-bool codec_##codec##_compress (VBlock *vb, SectionHeader *header,                                            \
-                               const char *uncompressed, /* option 1 - compress contiguous data */           \
-                               uint32_t *uncompressed_len,                                                   \
-                               LocalGetLineCB callback,  /* option 2 - compress data one line at a time */   \
-                               char *compressed, uint32_t *compressed_len /* in/out */,                      \
-                               bool soft_fail)                                                               \
+COMPRESS (codec_##codec##_compress)                                                                          \
 {                                                                                                            \
     int ret;                                                                                                 \
-    ASSERT ((ret = codec_hts_compress (vb, uncompressed, uncompressed_len, callback, compressed, compressed_len,     \
-                                       func, order, soft_fail)) || soft_fail,                                \
-            "Failed " #func " uncompressed_len=%u compressed_len=%u", *uncompressed_len, *compressed_len);   \
+    ASSERT ((ret = codec_hts_compress (vb, ctx, uncompressed, uncompressed_len, get_line_cb, compressed, compressed_len,     \
+                                       func, order, soft_fail, name)) || soft_fail,                          \
+            "%s: Failed " #func " uncompressed_len=%u compressed_len=%u. ctx=%s", VB_NAME, *uncompressed_len, *compressed_len, TAG_NAME);   \
     return ret;                                                                                              \
 }
 
@@ -93,34 +94,33 @@ COMPRESS_FUNC_TEMPLATE(arith_compress_to,     ARTw, ORDER_w)
 // Uncompress
 //------------------------
 
-void codec_rans_uncompress (VBlock *vb, Codec codec, uint8_t param,
-                           const char *compressed, uint32_t compressed_len,
-                           Buffer *uncompressed_buf, uint64_t uncompressed_len, 
-                           Codec unused)
+UNCOMPRESS (codec_rans_uncompress)
 {
     START_TIMER;
+    ASSERTNOTZERO (uncompressed_len, name);
+    ASSERTNOTZERO (compressed_len, name);
 
     unsigned out_len = (unsigned)uncompressed_len;
     ASSERT (rans_uncompress_to_4x16 (vb, (uint8_t *)compressed, compressed_len, (uint8_t *)uncompressed_buf->data, &out_len),
-            "Failed rans_uncompress_to_4x16: compressed_len=%u uncompressed_len=%"PRIu64, compressed_len, uncompressed_len);
+            "%s: Failed rans_uncompress_to_4x16: \"%s\" compressed_len=%u uncompressed_len=%u (expected: %"PRIu64")", 
+            VB_NAME, name, compressed_len, out_len, uncompressed_len);
 
-    ASSERT (out_len == uncompressed_len, "Expecting out_len=%u == uncompressed_len=%"PRIu64, out_len, uncompressed_len);
+    ASSERT (out_len == uncompressed_len, "%s: Expecting, for \"%s\" out_len=%u == uncompressed_len=%"PRIu64, VB_NAME, name, out_len, uncompressed_len);
 
     COPY_TIMER (compressor_rans);
 }
 
-void codec_arith_uncompress (VBlock *vb, Codec codec, uint8_t param,
-                             const char *compressed, uint32_t compressed_len,
-                             Buffer *uncompressed_buf, uint64_t uncompressed_len, 
-                             Codec unused)
+UNCOMPRESS (codec_arith_uncompress)
 {
     START_TIMER;
+    ASSERTNOTZERO (uncompressed_len, name);
+    ASSERTNOTZERO (compressed_len, name);
 
     unsigned out_len = (unsigned)uncompressed_len;
     ASSERT (arith_uncompress_to (vb, (uint8_t *)compressed, compressed_len, (uint8_t *)uncompressed_buf->data, &out_len),
-            "Failed arith_uncompress_to: compressed_len=%u uncompressed_len=%"PRIu64, compressed_len, uncompressed_len);
+            "%s: Failed arith_uncompress_to: \"%s\" compressed_len=%u uncompressed_len=%"PRIu64, VB_NAME, name, compressed_len, uncompressed_len);
 
-    ASSERT (out_len == uncompressed_len, "Expecting out_len=%u == uncompressed_len=%"PRIu64, out_len, uncompressed_len);
+    ASSERT (out_len == uncompressed_len, "%s: For \"%s\": expecting out_len=%u == uncompressed_len=%"PRIu64, VB_NAME, name, out_len, uncompressed_len);
 
     COPY_TIMER (compressor_arith);
 }

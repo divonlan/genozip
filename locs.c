@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   locs.c
-//   Copyright (C) 2021-2022 Black Paw Ventures Limited
+//   Copyright (C) 2021-2022 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted,
+//   under penalties specified in the license.
 
 #include "genozip.h"
 #include "vblock.h"
@@ -9,6 +12,9 @@
 #include "seg.h"
 #include "locs.h"
 #include "dict_id.h"
+#include "reconstruct.h"
+#include "piz.h"
+#include "file.h"
 
 //------------
 // ZIP
@@ -57,7 +63,7 @@ void locs_seg_finalize (VBlockP vb)
     container_seg (vb, CTX(LOCS_TOPLEVEL), (ContainerP)&top_level_locs, 0, 0, 0);
 }
 
-const char *locs_seg_txt_line (VBlockP vb, const char *field_start_line, uint32_t remaining_txt_len, bool *has_special_eol)
+rom locs_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_txt_len, bool *has_special_eol)
 {
     float *xy = (float *)field_start_line; 
     uint32_t n_clusters = remaining_txt_len / (sizeof (float) * 2);
@@ -67,7 +73,7 @@ const char *locs_seg_txt_line (VBlockP vb, const char *field_start_line, uint32_
     buf_alloc (vb, &ctxs[0]->local, n_clusters, 0, float, 0, "contexts->local");
     buf_alloc (vb, &ctxs[1]->local, n_clusters, 0, float, 0, "contexts->local");
 
-    // Note: volatile, otherwise the gcc optimizer screws the "precisely reconstructable" test and all
+    // Note: volatile, otherwise the gcc optimizer screws up the "precisely reconstructable" test and all
     // clusters appear to be reconstructable even if they're not.
     volatile float last[2] = {}; 
     for (uint32_t i=0; i < n_clusters * 2; i++) {
@@ -79,13 +85,13 @@ const char *locs_seg_txt_line (VBlockP vb, const char *field_start_line, uint32_
         double test_recon   = (double)last[i&1] + (double)delta;
         
         if ((float)test_correct == (float)test_recon) {
-            NEXTENT (float, ctxs[i&1]->local) = delta; // BGEN in zip_generate_local
+            BNXT (float, ctxs[i&1]->local) = delta; // BGEN in zip_generate_local
             seg_known_node_index (vb, ctxs[i&1], 0, sizeof (float));
         }
         
         // case: X_or_Y is not precisely reconstructable from delta due to dropping mantissa bits
         else {       
-            NEXTENT (float, ctxs[i&1]->local) = X_or_Y; // store whole value, without delta
+            BNXT (float, ctxs[i&1]->local) = X_or_Y; // store whole value, without delta
             seg_simple_lookup (vb, ctxs[i&1], sizeof (float));
         }
         last[i&1] = X_or_Y;

@@ -394,7 +394,7 @@ int ZEXPORT deflateSetDictionary (strm, dictionary, dictLength)
 
     /* when using zlib wrappers, compute Adler-32 for provided dictionary */
     if (wrap == 1)
-        strm->adler = libdeflate_adler32(strm->adler, dictionary, dictLength);
+        strm->adler = adler32(strm->adler, dictionary, dictLength);
     s->wrap = 0;                    /* avoid computing Adler-32 in read_buf */
 
     /* if dictionary would fill window, just replace the history */
@@ -492,9 +492,9 @@ int ZEXPORT deflateResetKeep (strm)
         s->wrap ? INIT_STATE : BUSY_STATE;
     strm->adler =
 #ifdef GZIP
-        s->wrap == 2 ? libdeflate_crc32(0L, Z_NULL, 0) :
+        s->wrap == 2 ? crc32(0L, Z_NULL, 0) :
 #endif
-        libdeflate_adler32(0L, Z_NULL, 0);
+        adler32(0L, Z_NULL, 0);
     s->last_flush = Z_NO_FLUSH;
 
     _tr_init(s);
@@ -756,7 +756,7 @@ local void flush_pending(strm)
 #define HCRC_UPDATE(beg) \
     do { \
         if (s->gzhead->hcrc && s->pending > (beg)) \
-            strm->adler = libdeflate_crc32(strm->adler, s->pending_buf + (beg), \
+            strm->adler = crc32(strm->adler, s->pending_buf + (beg), \
                                 s->pending - (beg)); \
     } while (0)
 
@@ -836,7 +836,7 @@ int ZEXPORT deflate (strm, flush)
             putShortMSB(s, (uInt)(strm->adler >> 16));
             putShortMSB(s, (uInt)(strm->adler & 0xffff));
         }
-        strm->adler = libdeflate_adler32(0L, Z_NULL, 0);
+        strm->adler = adler32(0L, Z_NULL, 0);
         s->status = BUSY_STATE;
 
         /* Compression must start with an empty pending buffer */
@@ -849,7 +849,7 @@ int ZEXPORT deflate (strm, flush)
 #ifdef GZIP
     if (s->status == GZIP_STATE) {
         /* gzip header */
-        strm->adler = libdeflate_crc32(0L, Z_NULL, 0);
+        strm->adler = crc32(0L, Z_NULL, 0);
         put_byte(s, 31);
         put_byte(s, 139);
         put_byte(s, 8);
@@ -892,7 +892,7 @@ int ZEXPORT deflate (strm, flush)
                 put_byte(s, (s->gzhead->extra_len >> 8) & 0xff);
             }
             if (s->gzhead->hcrc)
-                strm->adler = libdeflate_crc32(strm->adler, s->pending_buf,
+                strm->adler = crc32(strm->adler, s->pending_buf,
                                     s->pending);
             s->gzindex = 0;
             s->status = EXTRA_STATE;
@@ -979,7 +979,7 @@ int ZEXPORT deflate (strm, flush)
             }
             put_byte(s, (Byte)(strm->adler & 0xff));
             put_byte(s, (Byte)((strm->adler >> 8) & 0xff));
-            strm->adler = libdeflate_crc32(0L, Z_NULL, 0);
+            strm->adler = crc32(0L, Z_NULL, 0);
         }
         s->status = BUSY_STATE;
 
@@ -1176,11 +1176,11 @@ local unsigned read_buf(strm, buf, size)
 
     zmemcpy(buf, strm->next_in, len);
     if (strm->state->wrap == 1) {
-        strm->adler = libdeflate_adler32(strm->adler, buf, len);
+        strm->adler = adler32(strm->adler, buf, len);
     }
 #ifdef GZIP
     else if (strm->state->wrap == 2) {
-        strm->adler = libdeflate_crc32(strm->adler, buf, len);
+        strm->adler = crc32(strm->adler, buf, len);
     }
 #endif
     strm->next_in  += len;

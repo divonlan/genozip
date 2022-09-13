@@ -91,7 +91,7 @@ test_standard()  # $1 genozip args $2 genounzip args $3... filenames
         local count=`ls -1 $TESTDIR/*.genozip | wc -l`   # unfortunately, these go to TESTDIR not OUTDIR
         local num_files=$(( $# - 1 ))
         if (( $count != $num_files )); then
-            echo "Error: compressed $num_files files, but only $count genozip files found in td. Files compressed: "
+            echo "Error: compressed $num_files files, but only $count genozip files found. Files compressed: "
             echo ${files[@]}
             exit 1
         fi
@@ -141,44 +141,15 @@ test_stdout()
 {
     test_header "$1 - redirecting stdout"
     local file=$TESTDIR/$1
-    
+    local ext=${file#*.}
+    local arg;
+
+    if [ "$ext" = "bam" ]; then arg='--bam -z0'; fi
+
     $genozip ${file} -fo $output || exit 1
-    ($genocat --no-pg $output || exit 1) | tr -d "\r" > $OUTDIR/unix-nl.$1 
+    ($genocat --no-pg $output $arg || exit 1) | tr -d "\r" > $OUTDIR/unix-nl.$1 
 
     cmp_2_files $file $OUTDIR/unix-nl.$1
-    cleanup
-}
-
-test_multi_bound() # $1=filename $2=REPLACE (optional)
-{
-    test_header "$1 - test_multi_bound - bind & unbind (2 files with 2 components each)"
-    local file=$TESTDIR/$1
-    local file1=$OUTDIR/copy1.$1
-    local file2=$OUTDIR/copy2.$1
-
-    cp -f $file $file1 || exit 1
-    if [[ $2 == "REPLACE" ]]; then
-        cat $file | sed 's/PRFX/FIL2/g' > $file2 || exit 1 # note - FIL2 needs to be the same length of PRFX or basic.phy will break
-    else
-        cp -f $file $file2 || exit 1
-    fi
-
-    $genozip $file1 $file2 -ft -o $output || exit 1 # test as bound
-    cp -f $output $output2 || exit 1
-    $genounzip $output $output2 -t || exit 1 # test unbind 2x2
-
-    # test --component
-    if [[ $2 == "REPLACE" ]]; then
-
-        $genocat $output --component 1 -fo $recon || exit 1
-        local wc=`cat $recon | grep PRFX | wc -l`
-        if (( "$wc" == 0 )); then echo "FAILED --component 1 - expected 1 lines, but getting $wc" ; exit 1; fi
-
-        $genocat $output --component 2 -fo $recon || exit 1
-        local wc=`cat $recon | grep FIL2 | wc -l`
-        if (( "$wc" == 0 )); then echo "FAILED --component 2 - expected 1 lines, but getting $wc" ; exit 1; fi
-    fi  
-
     cleanup
 }
 
@@ -204,9 +175,9 @@ test_md5()
     cleanup
 }
 
-test_translate_sam_to_bam_to_sam() # $1 bam file $2 genocat options
+test_translate_sam_to_bam_to_sam() # $1 bam file $2 genozip options $3 genocat options
 {
-    test_header "$1 - translate SAM to BAM to SAM $2"
+    test_header "$1 - translate SAM to BAM to SAM \"$2\" \"$3\""
 
     local bam=$TESTDIR/$1
     local sam=${bam%.bam}.sam
@@ -217,17 +188,17 @@ test_translate_sam_to_bam_to_sam() # $1 bam file $2 genocat options
 
     # SAM -> BAM
     echo "STEP 1: sam -> sam.genozip"
-    $genozip -f $sam -o $output || exit 1
+    $genozip -f $sam -o $output $2 || exit 1
 
     echo "STEP 2: sam.genozip -> bam"
-    $genocat $output --bam --no-PG -fo $new_bam $2 || exit 1
+    $genocat $output --bam --no-PG -fo $new_bam $3 || exit 1
 
     # BAM -> SAM
     echo "STEP 3: bam -> bam.genozip"
-    $genozip -f $new_bam -o $output || exit 1
+    $genozip -f $new_bam -o $output $2 || exit 1
 
     echo "STEP 4: bam.genozip -> sam"
-    $genocat $output --sam --no-PG -fo $new_sam $2 || exit 1
+    $genocat $output --sam --no-PG -fo $new_sam $3 || exit 1
 
     # compare original SAM and SAM created via sam->sam.genozip->bam->bam.genozip->sam
     echo "STEP 5: compare original and output SAMs"
@@ -258,12 +229,6 @@ view_file()
     else
         cat $1
     fi 
-}
-
-test_backward_compatability()
-{
-    test_header "$1 - backward compatability test"
-    $genounzip -t $1 || exit 1
 }
 
 batch_print_header()
@@ -299,6 +264,8 @@ batch_basic()
     #     unset GENOZIP_REFERENCE
     # fi
 
+    test_standard "" "" $file
+
     test_md5 $file # note: basic.bam needs to be non-BGZF for this to pass
 
     if [ $file != basic.bam ] && [ $file != basic.generic ]; then # binary files have no \n 
@@ -311,13 +278,15 @@ batch_basic()
 
     test_standard "NOPREFIX CONCAT $ref" " " file://${path}${TESTDIR}/$file
     test_standard "-p123 $ref" "--password 123" $file
-    if [ $file != basic.bam ] && [ $file != basic.generic ] && [ $file != basic.phy ]; then # issue with redirection on Windows of Phylip files (bug 339)
+    if [ -z "$is_windows" ] || [ $file != basic.bam ]; then # can't redirect binary files in Windows
+    # if [ -z "$is_windows" ]; then # in windows, we don't support redirecting stdin (bug 339)
         test_redirected $file
+    # fi
+#    if [ -z "$is_windows" ] || [ $file != basic.bam ]; then # can't redirect binary files in Windows
         test_stdout $file
     fi
     test_standard "COPY $ref" " " $file
 
-    test_multi_bound $file $replace # REPLACE to adjust the contig name for .fa as we can't have two contigs with the same name
     test_optimize $file
     unset GENOZIP_REFERENCE
 }
@@ -338,6 +307,21 @@ batch_precompressed()
     done
 }
 
+verify_bgzf() # $1 file that we wish to inspect $2 expected result (1 bgzf 0 not-bgzf)
+{
+    if [ "$(head -c4 $1 | od -x | head -1 | awk '{$2=$2};1')" == "0000000 8b1f 0408" ]; then 
+        if [ $2 -eq 0 ]; then
+            echo $1 is unexpectedly BGZF-compressed
+            exit 1
+        fi
+    else
+        if [ $2 -eq 1 ]; then
+            echo $1 is not BGZF-compressed
+            exit 1
+        fi
+    fi
+}
+
 # bgzf files
 batch_bgzf()
 {
@@ -349,38 +333,51 @@ batch_bgzf()
         test_standard " " " " $file
         test_standard "NOPREFIX CONCAT" " " file://${path}${TESTDIR}/$file
         test_standard "-p123" "--password 123" $file
-        if [ -z "$is_windows" ]; then # windows can't redirect binary data
+#        if [ -z "$is_windows" ]; then # in windows, we don't support redirecting stdin
             test_redirected $file
-        fi
+#        fi
         test_standard "COPY" " " $file
-        test_multi_bound $file
     done
 
-    test_header "sam -> sam.genozip -> sam.gz - see that it is BGZF"
+    test_header "sam -> sam.genozip -> genocat to sam.gz - see that it is BGZF"
     local sam_gz=${OUTDIR}/bgzf_test.sam.gz
     $genozip ${TESTDIR}/basic.sam -fo $output || exit 1
     $genocat --no-pg $output -fo $sam_gz || exit 1
-    if [ "$(head -c4 $sam_gz | od -x | head -1 | awk '{$2=$2};1')" != "0000000 8b1f 0408" ] ; then  # the awk converts the Mac output to be the same as Linux (removing redundant spaces)
-        echo $sam_gz is not BGZF-compressed
-        exit 1
-    fi
+#    if [ "$(head -c4 $sam_gz | od -x | head -1 | awk '{$2=$2};1')" != "0000000 8b1f 0408" ] ; then  # the awk converts the Mac output to be the same as Linux (removing redundant spaces)
+    verify_bgzf $sam_gz 1
 
-    test_header "sam-> sam.genozip -> bam - see that it is BGZF"
+    test_header "sam-> sam.genozip -> genocat to bam - see that it is BGZF"
     local bam=${OUTDIR}/bgzf_test.bam
     $genocat --no-pg $output -fo $bam || exit 1
-    if [ "$(head -c4 $bam | od -x | head -1 | awk '{$2=$2};1')" != "0000000 8b1f 0408" ] ; then 
-        echo $bam is not BGZF-compressed
-        exit 1
-    fi
+    verify_bgzf $bam 1
 
-    test_header "sam.gz -> sam.genozip -> sam - see that it is not BGZF"
+    test_header "sam.gz -> sam.genozip -> genocat to sam - see that it is not BGZF"
     local sam=${OUTDIR}/bgzf_test.sam
     $genozip $sam_gz -fo $output || exit 1
     $genocat --no-pg $output -fo $sam || exit 1
-    if [ "$(head -c4 $sam | od -x | head -1 | awk '{$2=$2};1')" == "0000000 8b1f 0408" ] ; then 
-        echo $sam is unexpectedly BGZF-compressed
-        exit 1
-    fi
+    verify_bgzf $sam 0
+
+    test_header "sam.gz -> sam.genozip -> genounzip to sam.gz - see that it is BGZF"
+    local sam_gz2=${OUTDIR}/bgzf_test2.sam.gz
+    $genozip $sam_gz -fo $output || exit 1
+    $genounzip $output -fo $sam_gz2 || exit 1
+    verify_bgzf $sam_gz2 1
+
+    test_header "bam -> bam.genozip -> genounzip to bam - see that it is BGZF"
+    local bam2=${OUTDIR}/bgzf_test2.bam
+    $genozip $bam -fo $output || exit 1
+    $genounzip $output -fo $bam2 || exit 1
+    verify_bgzf $bam2 1
+
+    test_header "bam -> bam.genozip -> genounzip -z0 to bam - see that it is not BGZF"
+    $genounzip $output -z0 -fo $bam2 || exit 1
+    verify_bgzf $bam2 0
+
+    # test with gencomp
+    file=special.sag-by-sa.bam.gz
+    $genozip ${TESTDIR}/$file -fo $output --force-gencomp
+    $genounzip $output -fo ${OUTDIR}/$file
+    verify_bgzf ${OUTDIR}/$file 1
 }
 
 batch_subdirs()
@@ -406,7 +403,6 @@ batch_special_algs()
         test_unix_style $file                # standard
         test_standard "-p123" "-p 123" $file # encrypted
         test_standard "COPY" " " $file       # multiple files unbound
-        test_multi_bound $file               # multiple files bound
         test_optimize $file                  # optimize - only compress to see that it doesn't error
     done
 }
@@ -415,7 +411,7 @@ batch_dvcf()
 {
     batch_print_header
 
-    local files=(basic-dvcf-source.vcf basic-dvcf-luft.vcf test.NA12878.sorted.vcf test.clinvar37.vcf.gz test.1KG-37.indels.vcf test.chr17.SS6004478.vcf test.ExAC.vcf.gz)
+    local files=(minimal.vcf basic-dvcf-source.vcf basic-dvcf-luft.vcf test.NA12878.sorted.vcf test.clinvar37.vcf.gz test.1KG-37.indels.vcf test.chr17.SS6004478.vcf test.ExAC.vcf.gz)
     local file
 
     # prepare chain file
@@ -479,14 +475,14 @@ batch_match_chrom()
 
         # convert to CHROM_STYLE_22
         $genozip --match-chrom $file -fo ${one}.genozip -e $hg19 || exit 1
-        $genounzip ${one}.genozip || exit 1
+        $genounzip -z0 ${one}.genozip || exit 1
 
         #convert CHROM_STYLE_chr22 and then to CHROM_STYLE_22
         $genozip --match-chrom $file -fo ${two}.genozip -e $hs37d5 || exit 1
-        $genounzip -f ${two}.genozip || exit 1
+        $genounzip -z0 -f ${two}.genozip || exit 1
 
         $genozip --match-chrom $two -fo ${three}.genozip -e $hg19 || exit 1
-        $genounzip -f ${three}.genozip || exit 1
+        $genounzip -z0 -f ${three}.genozip || exit 1
 
         cmp_2_files $three $one 
     done
@@ -546,7 +542,7 @@ batch_kraken() # $1 genozip arguments #2 genocat (one of them must include --kra
     
     # testing filtering SAM with a concatenated KRAKEN file (representing slightly different classifications
     # originating from separate kraken2 of R1 and R2 FASTQ files)
-    $genozip ${TESTDIR}/basic.kraken ${TESTDIR}/basic-2nd-file.kraken -fo $kraken
+    cat ${TESTDIR}/basic.kraken ${TESTDIR}/basic-2nd-file.kraken | $genozip -i kraken -fo $kraken
 
     test_kraken "${TESTDIR}/basic.bam $1"\
                 "-k570 $2" \
@@ -592,25 +588,52 @@ batch_iupac()
 {
     batch_print_header
 
-    # SAM
-    non_iupac_lines=$(( `grep -v "^@" ${TESTDIR}/basic.sam | wc -l` - 1 ))
-    test_count_genocat_lines ${TESTDIR}/basic.sam "-H --bases=AGCTN" $non_iupac_lines
-    test_count_genocat_lines ${TESTDIR}/basic.sam "-H --bases=^AGCTN" 1
+    # SAM - genocat and verifying with wc
+    non_iupac_lines=$(( `grep -v "^@" ${TESTDIR}/basic.sam | wc -l` - 1 )) # we have 1 IUPAC line (E100020409L1C001R0030000234)
 
-    # BAM
-    test_header "genocat --bases AGCTN --count --bam"
-    local count=`$genocat_no_echo $output -H --bam --bases AGCTN --count -q`
+    test_header "genocat --bases ACGTN (SAM)"
+    test_count_genocat_lines ${TESTDIR}/basic.sam "-H --bases=ACGTN" $non_iupac_lines
+
+    test_header "genocat --bases ^ACGTN (SAM)"
+    test_count_genocat_lines ${TESTDIR}/basic.sam "-H --bases=^ACGTN" 1
+
+    # SAM - using --count
+    test_header "genocat --bases ACGTN --count (SAM)"
+    local count=`$genocat_no_echo $output -H --bases ACGTN --count -q`
     if [ "$count" == "" ]; then echo genocat error; exit 1; fi
 
     if [ "$count" -ne $non_iupac_lines ]; then echo "bad count = $count, expecting $non_iupac_lines"; exit 1; fi
 
-    test_header "genocat --bases ^AGCTN --count --bam"
-    local count=`$genocat_no_echo $output -H --bam --bases ^AGCTN --count -q`
+    test_header "genocat --bases ^ACGTN --count (SAM)"
+    local count=`$genocat_no_echo $output -H --bases ^ACGTN --count -q`
     if [ "$count" -ne 1 ]; then echo "bad count = $count"; exit 1; fi
 
-    # FASTQ
-    test_count_genocat_lines ${TESTDIR}/basic.fq "-H --IUPAC=AGCTN" 20
-    test_count_genocat_lines ${TESTDIR}/basic.fq "-H --IUPAC=^AGCTN" 4
+    # BAM - using --count
+    test_header "genocat --bases ACGTN --count --bam"
+    local count=`$genocat_no_echo $output --bam --bases ACGTN --count -q`
+    if [ "$count" == "" ]; then echo genocat error; exit 1; fi
+
+    if [ "$count" -ne $non_iupac_lines ]; then echo "bad count = $count, expecting $non_iupac_lines"; exit 1; fi
+
+    test_header "genocat --bases ^ACGTN --count --bam"
+    local count=`$genocat_no_echo $output --bam --bases ^ACGTN --count -q`
+    if [ "$count" -ne 1 ]; then echo "bad count = $count"; exit 1; fi
+
+    # FASTQ (verifying with wc)
+    test_count_genocat_lines ${TESTDIR}/basic.fq "-H --IUPAC=ACGTN" 20
+    test_count_genocat_lines ${TESTDIR}/basic.fq "-H --IUPAC=^ACGTN" 4
+    non_iupac_lines=5
+    
+    # FASTQ - using --count
+    test_header "genocat --bases ACGTN --count (FASTQ)"
+    local count=`$genocat_no_echo $output -H --bases ACGTN --count -q`
+    if [ "$count" == "" ]; then echo genocat error; exit 1; fi
+
+    if [ "$count" -ne $non_iupac_lines ]; then echo "bad count = $count, expecting $non_iupac_lines"; exit 1; fi
+
+    test_header "genocat --bases ^ACGTN --count (FASTQ)"
+    local count=`$genocat_no_echo $output -H --bases ^ACGTN --count -q`
+    if [ "$count" -ne 1 ]; then echo "bad count = $count"; exit 1; fi
 }
 
 # Test SAM/BAM translations
@@ -619,13 +642,18 @@ batch_sam_bam_translations()
     batch_print_header
 
     # test different buddy code path for subsetted file
-    test_translate_sam_to_bam_to_sam special.buddy.bam -r22
+    test_translate_sam_to_bam_to_sam special.buddy.bam " " -r22
+
+    # test with gencomp
+    test_translate_sam_to_bam_to_sam special.depn.bam --force-gencomp
 
     # note: we have these files in both sam and bam versions generated with samtools
     local files=(special.buddy.bam 
-                 test.NA12878.chr22.1x.bam 
-                 test.pacbio.ccs.10k.bam  # unaligned SAM/BAM with no SQ records
-                 test.human2.bam)
+                 special.depn.bam            # depn/prim with/without QUAL
+                 special.NA12878.bam 
+                 special.pacbio.ccs.bam      # unaligned SAM/BAM with no SQ records
+                 special.human2.bam          
+                 special.bsseeker2-rrbs.bam) # sam_piz_special_BSSEEKER2_XM sensitive to SAM/BAM
     local file
     for file in ${files[@]}; do
         test_translate_sam_to_bam_to_sam $file
@@ -639,9 +667,10 @@ batch_sam_fq_translations()
 
     # note: we have these files in both sam and bam versions generated with samtools
     local files=(special.buddy.bam 
-                 test.NA12878.chr22.1x.bam 
-                 test.pacbio.ccs.10k.bam  # unaligned SAM/BAM with no SQ records
-                 test.human2.bam)
+                 special.depn.bam        # depn/prim with/without QUAL
+                 special.NA12878.bam 
+                 special.pacbio.ccs.bam  # unaligned SAM/BAM with no SQ records
+                 special.human2.bam)
     local file
     for file in ${files[@]}; do
         test_translate_sambam_to_fastq $file
@@ -715,17 +744,21 @@ batch_genocat_tests()
 
     # FASTQ genocat tests
     file=$TESTDIR/basic.fq
-    test_count_genocat_lines $file "--header-only" `grep + $file | wc -l` 
-    test_count_genocat_lines $file "--downsample 2" $(( 4 * `grep + $file | wc -l` / 2 )) 
-    test_count_genocat_lines "--pair -E $GRCh38 $file $file" "--interleave" $(( 4 * `grep + $file | wc -l` * 2 )) 
-    test_count_genocat_lines "--pair -E $GRCh38 $file $file" "--interleave --downsample=5,4" $(( 4 * `grep + $file | wc -l` / 5 * 2 )) 
+    local num_lines=`grep + $file | wc -l`
+    test_count_genocat_lines $file "--header-only" $num_lines 
+    test_count_genocat_lines $file "--downsample 2" $(( 4 * $num_lines / 2 )) 
+    test_count_genocat_lines "--pair -E $GRCh38 $file $file" "--interleave" $(( 4 * $num_lines * 2 )) 
+    test_count_genocat_lines "--pair -E $GRCh38 $file $file" "--interleave --downsample=5,4" $(( 4 * $num_lines / 5 * 2 )) 
     test_count_genocat_lines "--pair -E $GRCh38 $file $file" "--grep PRFX --header-only" 2
+    test_count_genocat_lines "--pair -E $GRCh38 $file $file" "--R1" $(( 4 * $num_lines )) 
+    test_count_genocat_lines "--pair -E $GRCh38 $file $file" "--R2" $(( 4 * $num_lines ))
 
     # test --interleave and with --grep
     sed "s/PRFX/prfx/g" $file > $OUTDIR/prfx.fq
     test_count_genocat_lines "--pair -E $GRCh38 $file $OUTDIR/prfx.fq" "--interleave=either --grep PRFX" 8
     test_count_genocat_lines "--pair -E $GRCh38 $file $OUTDIR/prfx.fq" "--interleave=both --grep PRFX" 0
 
+    # grep without pairing
     test_count_genocat_lines $file "--grep line5 --header-only" 1
 }
 
@@ -775,10 +808,11 @@ batch_grep_count_lines()
 batch_backward_compatability()
 {
     batch_print_header
-    local files=( `ls $TESTDIR/back-compat/[0-9]*/*.genozip` )
+    local files=( `ls -r $TESTDIR/back-compat/[0-9]*/*.genozip` )
     local file
     for file in ${files[@]}; do
-        test_backward_compatability $file
+        test_header "$file - backward compatability test"
+        $genounzip -t $file || exit 1
     done
 }
 
@@ -787,31 +821,29 @@ batch_prod_compatability()
     if [ "$i_am_prod" == "1" ]; then return; fi 
 
     if [ ! -d ../genozip-prod ]; then return; fi
-
-    (cd ../genozip-prod; make -j ${debug:1})
     
     save_genozip=$genozip
-    genozip=../genozip-prod/$genozip
+    genozip=$genozip_prod -m
 
-    if (( $1 <= $2 + 1  )) ; then batch_basic basic.vcf     ; fi
-    if (( $1 <= $2 + 2  )) ; then batch_dvcf                ; fi
-    if (( $1 <= $2 + 3  )) ; then batch_reference_fastq     ; fi
-    if (( $1 <= $2 + 4  )) ; then batch_reference_sam       ; fi
-    if (( $1 <= $2 + 5  )) ; then batch_basic basic.bam     ; fi
-    if (( $1 <= $2 + 6  )) ; then batch_basic basic.fq      ; fi
-    if (( $1 <= $2 + 7  )) ; then batch_basic basic.fa      ; fi
-    if (( $1 <= $2 + 8  )) ; then batch_basic basic.chain   ; fi
-    if (( $1 <= $2 + 9  )) ; then batch_basic basic.gvf     ; fi
-    if (( $1 <= $2 + 10 )) ; then batch_basic basic.genome_Full.me23.txt ; fi
-    if (( $1 <= $2 + 11 )) ; then batch_kraken " " "-K$kraken"           ; fi
-    if (( $1 <= $2 + 12 )) ; then batch_basic basic.phy     ; fi
-    if (( $1 <= $2 + 13 )) ; then batch_basic basic.generic ; fi
+    if (( $1 <= $2 + 0  )) ; then batch_basic basic.vcf     ; fi
+    if (( $1 <= $2 + 1  )) ; then batch_dvcf                ; fi
+    if (( $1 <= $2 + 2  )) ; then batch_reference_fastq     ; fi
+    if (( $1 <= $2 + 3  )) ; then batch_reference_sam       ; fi
+    if (( $1 <= $2 + 4  )) ; then batch_basic basic.bam     ; fi
+    if (( $1 <= $2 + 5  )) ; then batch_basic basic.fq      ; fi
+    if (( $1 <= $2 + 6  )) ; then batch_basic basic.fa      ; fi
+    if (( $1 <= $2 + 7  )) ; then batch_basic basic.chain   ; fi
+    if (( $1 <= $2 + 8  )) ; then batch_basic basic.gvf     ; fi
+    if (( $1 <= $2 + 9  )) ; then batch_basic basic.genome_Full.me23.txt ; fi
+    if (( $1 <= $2 + 10 )) ; then batch_kraken " " "-K$kraken"           ; fi
+    if (( $1 <= $2 + 11 )) ; then batch_basic basic.phy     ; fi
+    if (( $1 <= $2 + 12 )) ; then batch_basic basic.generic ; fi
 
     genozip=$save_genozip
 }
 num_batch_prod_compatability_tests=13
     
-batch_real_world_1() # $1 extra genozip argument
+batch_real_world_1_adler32() # $1 extra genozip argument
 {
     batch_print_header
 
@@ -823,24 +855,75 @@ batch_real_world_1() # $1 extra genozip argument
     fi
 
     # without reference
-    local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*sam* test.*bam* \
+    local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*sam* test.*bam \
                    test.*fq* test.*fa* \
                    basic.phy* test.*gvf* test.*gff* test.*locs* \
                    test.*txt* test.*kraken* | \
-                   grep -v "$filter_out" | grep -v .genozip` )
+                   grep -v "$filter_out" | grep -v headerless | grep -v .genozip | grep -v .md5 | grep -v .bad ` ) 
 
     for f in ${files[@]}; do rm -f ${f}.genozip; done
 
+    # test genozip and genounzip --test
     echo "subsets of real world files (without reference)"
-    test_standard "-mf $1" " " ${files[*]}
+    test_standard "-f $1 --show-filename" " " ${files[*]}
 
-    for f in ${files[@]}; do rm -f ${f}.genozip; done
+    # don't remove .genozip files as we will use them in batch_real_world_genounzip
+    #for f in ${files[@]}; do rm -f ${f}.genozip; done
+}
+
+batch_real_world_genounzip() # $1 extra genozip argument
+{
+    batch_print_header
+
+    cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
+
+    local filter_out=nothing
+    if [ ! -x "$(command -v xz)" ] ; then # xz unavailable
+        local filter_out=.xz
+    fi
+
+    # without reference
+    local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*sam* test.*bam \
+                   test.*fq* test.*fa* \
+                   basic.phy* test.*gvf* test.*gff* test.*locs* \
+                   test.*txt* test.*kraken* | \
+                   grep -v "$filter_out" | grep -v headerless | grep -v .genozip | grep -v .md5 | grep -v .bad | grep -v .xz | grep -v .bz2` )
+    
+    # test full genounzip (not --test), including generation of BZGF
+    for f in ${files[@]}; do 
+
+        local genozip_file=${TESTDIR}/${f%.gz}.genozip
+
+        # note: normally, the test runs on files compressed in batch_real_world_1_adler32 - we compress them here if not
+        if [ ! -f $genozip_file ]; then
+            $genozip ${TESTDIR}/$f -fX || exit 1
+        fi
+
+        local recon=${OUTDIR}/$f
+        $genounzip $genozip_file -o $recon || exit 1
+
+        # same is in private/test/Makefile
+        if [[ `head -c2 $recon | od -x | head -1 | cut -d" " -f2 || exit 1` == 8b1f ]]; then
+            local actual_md5=`gzip -dc < $recon | md5sum | cut -d" " -f1`
+        else
+            local actual_md5=`md5sum $recon | cut -d" " -f1`
+        fi
+
+        local expected_md5=`cat ${TESTDIR}/${f}.md5` # calculated in test/Makefile
+        if [[ "$actual_md5" != "$expected_md5" ]] ; then
+            echo "${TESTDIR}/$f has MD5=$expected_md5 but reconstructed file ${OUTDIR}/$f has MD5=$actual_md5"
+            exit 1
+        fi
+
+        rm -f ${OUTDIR}/$f
+    done
+
+    cleanup 
 }
 
 batch_real_world_1_backcomp()
 {
     batch_print_header
-    if [ "$i_am_prod" == "1" ]; then return; fi 
 
     cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
 
@@ -850,19 +933,29 @@ batch_real_world_1_backcomp()
     fi
 
     # without reference
-    local files_work_v12_0_42=( basic.phy test.1KG-38.INFO.vcf test.AT.vcf.gz test.1KG-38.vcf.gz test.tomato.vcf.gz test.1KG-37.vcf test.BGI.sam.gz test.bwa-X.sam test.canonical-gene.gff test.cattle.vcf test.chr17.SS6004478.vcf test.1KG-37.indels.vcf test.clinvar37.vcf.gz test.contaminated.kraken test.coronavirus.fasta test.dog.INDEL.vcf.gz test.ExAC.vcf.gz test.exampleFASTA.fasta test.GCF_000001405.39-GCA_009914755.2.gff test.genome_Full.txt test.GenomeAsia100K.vcf.bz2 test.giab.vcf test.gnomad.vcf.gz test.GRCh38_full_analysis_set_plus_decoy_hla.fa test.GRCh38_issues.gff3 test.homo_sapiens_incl_consequences-chrY.gvf test.human.fq.gz test.human2.bam test.human2.filtered.snp.vcf test.human2.sam test.human2-R1.100K.fq.bz2 test.human2-R1.100K.fq.gz test.human2-R2.100K.fq.bz2 test.human2-R2.100K.fq.gz test.human-collated.sam test.human-sorted.sam test.IonXpress.sam test.NA12878.chr22.1x.bam test.NA12878.chr22.1x.sam test.NA12878.sorted.vcf test.NA12878-R1.100k.fq test.nanopore.fq.gz test.nanopore-ext.fq test.nanopore-virus.fq test.nanopore.t2t_v1_1.bam test.normal.kraken test.NovaSeq.bam test.NovaSeq.sam.gz test.pacbio.10k.fasta.xz test.pacbio.10k.hg19.sam.gz test.pacbio.ccs.10k.bam test.pacbio.ccs.10k.sam test.pacbio.clr.bam test.pacbio.clr.sam test.robot.sam test.pacbio.subreads.bam test.sequential.fa.gz test.solexa.sam test.udhr.txt )
-    local files_work_v13_0_0=( ${files_work_v12_0_42[*]} test.ensembl-export.gff test.maker.gff test.varscan.vcf )
-    local files_work_v13_0_5=( ${files_work_v13_0_0[*]} test.s_1_1101.locs test.s.locs)
-    local files_work_v13_0_10=( ${files_work_v13_0_5[*]} test.sparse-PS.vcf.gz )
-    
-    for f in ${files_work_v13_0_10[@]}; do 
-        test_header "$f - backward compatability with prod"
-        $genozip_prod private/test/$f -fo $output || exit 1
+    local files=(  `cd $TESTDIR; ls -1 test.*vcf test.*vcf.gz test.*sam test.*sam.gz test.*bam \
+                   test.*fq test.*fq.gz test.*fa test.*fa.gz test.*fasta test.*fasta.gz \
+                   basic.phy test.*gvf test.*gvf.gz test.*gff test.*gff.gz test.*locs \
+                   test.*txt test.*txt.gz test.*kraken test.*kraken.gz` ) 
+                   #grep -v test.transcriptome.bam  
+
+    local i=0
+    for f in ${files[@]}; do 
+        i=$(( i + 1 ))
+
+        # exceptions - supported in 14.0.0 but not earlier
+        if [[ $f == test.3rd-line-sra.fq ]]; then continue; fi 
+        if [[ $f == test.bsseeker2-pysam-qual.bam ]]; then continue; fi
+        if [[ $f == test.covid.gisaid.nuke.fasta.gz ]]; then continue; fi
+        if [[ $f == test.transcriptome.bam ]]; then continue; fi
+
+        test_header "$f - backward compatability with prod ($i/${#files[@]})"
+        $genozip_prod private/test/$f --md5 -fo $output || exit 1
         $genounzip -t $output || exit 1
     done
 }
 
-batch_real_world_with_ref() # $1 extra genozip argument
+batch_real_world_with_ref_md5() # $1 extra genozip argument
 {
     batch_print_header $1
 
@@ -871,19 +964,19 @@ batch_real_world_with_ref() # $1 extra genozip argument
     # with two references
     test_standard "-mf $1 -e $GRCh38 -e $hs37d5" " " test.GRCh38_to_GRCh37.chain 
 
-    local files37=( test.IonXpress.sam \
-                    test.human.fq.gz test.human2.bam test.human2.sam test.pacbio.clr.bam \
-                    test.human2-R1.100K.fq.bz2 test.pacbio.ccs.10k.sam \
-                    test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq test.pacbio.10k.hg19.sam.gz \
-                    test.human2.filtered.snp.vcf )
+    local files37=( test.IonXpress.sam.gz \
+                    test.human.fq.gz test.human2.bam test.pacbio.clr.bam \
+                    test.human2-R1.100K.fq.bz2 test.pacbio.ccs.10k.bam test.unmapped.sam.gz \
+                    test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq test.pacbio-blasr.bam \
+                    test.human2.filtered.snp.vcf test.solexa-headerless.sam )
 
-    local files38=( test.1KG-38.vcf.gz )
+    local files38=( test.1KG-38.vcf.gz test.human-collated-headerless.sam test.human-sorted-headerless.sam )
 
     local filesT2T1_1=( test.nanopore.t2t_v1_1.bam )
 
-    test_standard "-mf $1 -e $hs37d5" " " ${files37[*]}
-    test_standard "-mf $1 -e $GRCh38" " " ${files38[*]}
-    test_standard "-mf $1 -e $T2T1_1" " " ${filesT2T1_1[*]}
+    test_standard "-mf $1 -e $hs37d5 --show-filename" " " ${files37[*]}
+    test_standard "-mf $1 -e $GRCh38 --show-filename" " " ${files38[*]}
+    test_standard "-mf $1 -e $T2T1_1 --show-filename" " " ${filesT2T1_1[*]}
 
     for f in ${files37[@]} ${files38[@]} ${filesT2T1_1[@]} test.GRCh38_to_GRCh37.chain; do rm -f ${TESTDIR}/${f}.genozip ; done
 }
@@ -898,30 +991,36 @@ batch_real_world_with_ref_backcomp()
     cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
 
     # with a reference
-    local files37=( test.IonXpress.sam \
-                    test.human.fq.gz test.human2.bam test.human2.sam test.pacbio.clr.bam \
-                    test.human2-R1.100K.fq.bz2 test.pacbio.ccs.10k.sam \
-                    test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq test.pacbio.10k.hg19.sam.gz \
-                    test.human2.filtered.snp.vcf )
+    local files37=( test.IonXpress.sam.gz \
+                    test.human.fq.gz test.human2.bam test.pacbio.clr.bam \
+                    test.human2-R1.100K.fq.bz2 test.pacbio.ccs.10k.bam \
+                    test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq  \
+                    test.human2.filtered.snp.vcf test.solexa-headerless.sam )
 
-    local files38=( test.1KG-38.vcf.gz )
+    local files38=( test.1KG-38.vcf.gz test.human-collated-headerless.sam )
 
     local filesT2T1_1=( test.nanopore.t2t_v1_1.bam )
 
-    for f in ${files37[@]}; do 
-        test_header "$f - backward compatability with prod (with reference) - 37"
+    local total=$(( ${#files37[@]} + ${#files38[@]} + ${#filesT2T1_1[@]} ))
+
+    local i=0
+    for f in ${files37[@]}; do     
+        i=$(( i + 1 ))
+        test_header "$f - backward compatability with prod (with reference) - 37 ($i/$total)"
         $genozip_prod private/test/$f -mf -e $hs37d5 -o $output || exit 1
         $genounzip -t $output || exit 1
     done
 
     for f in ${files38[@]}; do 
-        test_header "$f - backward compatability with prod (with reference) - 38"
+        i=$(( i + 1 ))
+        test_header "$f - backward compatability with prod (with reference) - 38 ($i/$total)"
         $genozip_prod private/test/$f -mf -e $GRCh38 -o $output || exit 1
         $genounzip -t $output || exit 1
     done
 
     for f in ${filesT2T1_1[@]}; do 
-        test_header "$f - backward compatability with prod (with reference) - T2T"
+        i=$(( i + 1 ))
+        test_header "$f - backward compatability with prod (with reference) - T2T ($i/$total)"
         $genozip_prod private/test/$f -mf -e $T2T1_1 -o $output || exit 1
         $genounzip -t $output || exit 1
     done
@@ -939,10 +1038,11 @@ batch_real_world_small_vbs()
     fi
 
     # lots of small VBs
-    local files=( test.IonXpress.sam \
-                  test.human.fq.gz test.human2.bam test.human2.sam \
-                  test.human2-R1.100K.fq.bz2 test.pacbio.ccs.10k.bam \
-                  test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq \
+    local files=( test.IonXpress.sam.gz                                 \
+                  test.human.fq.gz test.human2.bam                      \
+                  test.human2-R1.100K.fq.bz2 test.pacbio.ccs.10k.bam    \
+                  test.pacbio.clr.bam `# multiple PRIM and DEPN vbs`    \
+                  test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq     \
                   test.sequential.fa.gz )
 
     if [ -x "$(command -v xz)" ] ; then # skip .xz files if xz is not installed
@@ -950,7 +1050,7 @@ batch_real_world_small_vbs()
     fi
 
     echo "subsets of real world files (lots of small VBs -B1)"
-    test_standard "-mf $1 -B1" " " ${files[*]}
+    test_standard "-mf $1 -B1 --show-filename" " " ${files[*]}
 
     for f in ${files[@]}; do rm -f ${f}.genozip; done
 }
@@ -965,18 +1065,6 @@ batch_multiseq()
     test_count_genocat_lines "$TESTDIR/test.coronavirus.fasta" "--regions ^MW362225.1" 99978
 
     test_standard "--multiseq" " " test.nanopore-virus.fq
-}
-
-batch_misc_cases()
-{
-    batch_print_header
-
-    # solexa read style
-    test_standard "-e$GRCh38 --pair" "" special.solexa-R1.fq special.solexa-R2.fq
-
-    # Test binding SAM files with lots of contigs (no reference)
-    echo "binding SAM files with lots of contigs (no reference)"
-    test_multi_bound test.human-collated.sam
 }
 
 # CRAM hs37d5
@@ -1010,14 +1098,14 @@ batch_reference_fastq()
 {
     batch_print_header
 
-    echo "paired FASTQ with --reference, --password"
+    echo "paired FASTQ with --reference, --password (BZ2)"
     test_standard "CONCAT -e$GRCh38 -p 123 --pair" "-p123" test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
 
-    echo "4 paired FASTQ with --REFERENCE (BGZF, decompress concatenated)"
-    test_standard "COPY -E$GRCh38 --pair" " " test.human2-R1.100K.fq.gz test.human2-R2.100K.fq.gz
+    echo "4 paired FASTQ with --REFERENCE (BGZF, decompress concatenated, password)"
+    test_standard "COPY -E$GRCh38 -2 -p 123" " " test.human2-R1.100K.fq.gz test.human2-R2.100K.fq.gz
 
-    echo "4 paired FASTQ with --REFERENCE (BZ2, decompress unbound) and password"
-    test_standard "COPY CONCAT -E$GRCh38 -2 -p 123" "-p123" test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
+    # solexa read style
+    test_standard "-e$GRCh38 --pair" "" special.solexa-R1.fq special.solexa-R2.fq
 }
 
 batch_reference_sam()
@@ -1026,27 +1114,49 @@ batch_reference_sam()
 
     echo "command line with mixed SAM and FASTQ files with --reference"
     echo "Note: '$GRCh38' needs to be up to date with the latest genozip format"
-    test_standard "-me$GRCh38" " " test.human-collated.sam test.human.fq.gz test.human-sorted.sam
+    test_standard "-me$GRCh38" " " test.human2.bam test.human.fq.gz test.human3-collated.bam
 
-    echo "multiple bound SAM with --REFERENCE" 
-    test_standard "-mE$GRCh38" " " test.human-collated.sam test.human-sorted.sam
+    echo "multiple SAM with --REFERENCE" 
+    test_standard "-mE$GRCh38" " " test.human-collated-headerless.sam test.human3-collated.bam
     
     echo "SAM with --REFERENCE and --password" 
-    test_standard "-E$GRCh38 --password 123" "-p123" test.human-collated.sam
+    test_standard "-E$GRCh38 --password 123" "-p123" test.human-collated-headerless.sam
 
-    echo "SAM with --reference and --password, alternate chrom names" 
-    test_standard "-me$hg19 --password 123" "-p123 -e$hg19" test.human2.sam    
+    echo "BAM with --reference and --password, alternate chrom names" 
+    test_standard "-me$hg19 --password 123" "-p123 -e$hg19" test.human2.bam  
+
+    echo "SAM with large (>4GB) plant genome"  
+    test_standard "-me$chinese_spring --password 123" "-p123 -e$chinese_spring" test.bsseeker2-wgbs.sam.gz  
 }
 
 batch_reference_vcf()
 {
     batch_print_header
 
-    echo "multiple bound VCF with --reference, --md5 using hs37d5, and unbind ; alternate chroms names"
-    test_standard "COPY CONCAT -me$hg19" " " test.human2.filtered.snp.vcf
+    echo "multiple VCF with --reference, --md5 using hs37d5 ; alternate chroms names"
+    test_standard "COPY -me$hg19" " " test.human2.filtered.snp.vcf
 
-    echo "multiple VCF with --REFERENCE using hs37d5" 
-    test_standard "-mE$hs37d5" " " test.1KG-37.vcf test.human2.filtered.snp.vcf
+    echo "GVCF with --reference, --md5 using GRCh38"
+    test_standard "-me$GRCh38" " " test.g.vcf.gz
+
+    echo "multiple VCF with --REFERENCE using hs37d5, password" 
+    test_standard "-mE$hs37d5 -p123" "--password 123" test.1KG-37.vcf test.human2.filtered.snp.vcf
+}
+
+batch_many_small_files()
+{
+    batch_print_header
+
+    cleanup
+
+    local num_files=300
+    echo "Generating $num_files small files"
+    mkdir ${OUTDIR}/smalls
+    for i in `seq $num_files`; do cp ${TESTDIR}/minimal.sam ${OUTDIR}/smalls/minimal.${i}.sam; done
+
+    $genozip -ft -D ${OUTDIR}/smalls || exit 1
+
+    cleanup
 }
 
 batch_make_reference()
@@ -1080,8 +1190,10 @@ batch_make_reference()
     echo "FASTQ with --REFERENCE"
     test_standard "$REF" " " basic.fq 
 
-    echo "unaligned SAM with --REFERENCE - from stdin"
-    test_redirected basic-unaligned.sam "$REF"
+#    if [ -z "$is_windows" ]; then # in windows, we don't support redirecting stdin
+        echo "unaligned SAM with --REFERENCE - from stdin"
+        test_redirected basic-unaligned.sam "$REF"
+#    fi
 
     #cleanup - no cleanup, we need the reference for batch_reference_backcomp
 }
@@ -1090,8 +1202,8 @@ batch_make_reference()
 # ref files are expected have the same MD5
 batch_reference_backcomp()
 {
-    if [ "$i_am_prod" == "1" ]; then return; fi 
-
+    batch_print_header    
+    
     local fa_file=$REFDIR/GRCh38_full_analysis_set_plus_decoy_hla.fa.gz 
     local ref_file=$OUTDIR/output.ref.genozip
     local prod_ref_file=$OUTDIR/output.prod.ref.genozip
@@ -1107,7 +1219,7 @@ batch_reference_backcomp()
         $genozip_prod --make-reference $fa_file --force -o $prod_ref_file || exit 1
     fi
 
-    local files38=( test.human.fq.gz test.human-collated.sam test.1KG-38.vcf.gz )
+    local files38=( test.human.fq.gz test.human-collated-headerless.sam test.1KG-38.vcf.gz )
 
     for f in ${files38[@]}; do 
         test_header "$f - reference file backward compatability with prod"
@@ -1118,11 +1230,22 @@ batch_reference_backcomp()
     cleanup
 }
 
+# compress headerless SAM with wrong ref. Expected to work (with bad compression ratio)
+batch_headerless_wrong_ref()
+{
+    batch_print_header
+
+    $genozip -ft ${TESTDIR}/test.human-collated-headerless.sam -e $hs37d5 || exit 1 
+    
+    cleanup
+}
+
+
 batch_genols()
 {
     batch_print_header
 
-    $genozip ${TESTDIR}/basic.sam ${TESTDIR}/minimal.sam -fo $output -p abcd || exit 1
+    $genozip ${TESTDIR}/basic.fq ${TESTDIR}/basic.fq -2 -e $GRCh38 -fo $output -p abcd || exit 1
     $genols $output -p abcd || exit 1
     rm -f $output
 }
@@ -1139,8 +1262,27 @@ batch_tar_files_from()
 
     cat ${TESTDIR}/basic-files-from-genozip | $genounzip --files-from - -t || exit 1
     $genols --files-from ${TESTDIR}/basic-files-from-genozip || exit 1
-    $genocat --files-from ${TESTDIR}/basic-files-from-genozip -fo $output || exit 1
+    $genocat --files-from ${TESTDIR}/basic-files-from-genozip > $output || exit 1
     
+    cleanup
+}
+
+batch_gencomp_depn_methods() # note: use --debug-gencomp for detailed tracking
+{
+    batch_print_header
+
+    # invoke REREAD with plain file (test.pacbio.clr.bam is NOT compressed with BGZF)
+    # -B1 forces multiple depn VBs
+    # -@3 sets DEPN queue length to 3 forcing other VBs to be REREAD
+    $genozip -fB1 -@3 -t $TESTDIR/test.pacbio.clr.bam || exit 1 
+
+    # invoke REREAD with BGZF file (test.pacbio.clr.bam.gz is generated by test/Makefile)
+    $genozip -fB1 -@3 -t $TESTDIR/test.pacbio.clr.bam.gz || exit 1
+
+    # invoke OFFLOAD method
+    $genozip -fB1 -@3 -t file://${path}${TESTDIR}/test.pacbio.clr.bam || exit 1
+    cat $TESTDIR/test.pacbio.clr.bam.gz | $genozip -i bam -fB1 -@3 -t - -o $output || exit 1
+
     cleanup
 }
 
@@ -1153,11 +1295,12 @@ chain=${OUTDIR}/chain.genozip
 is_windows="`uname|grep -i mingw``uname|grep -i MSYS`"
 is_mac=`uname|grep -i Darwin`
 
-# standard file - test.sh should change these
+# reference and chain files
 hg19=$REFDIR/hg19.p13.plusMT.full_analysis_set.ref.genozip
 hs37d5=$REFDIR/hs37d5.ref.genozip
 GRCh38=$REFDIR/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip
 T2T1_1=$REFDIR/chm13.draft_v1.1.ref.genozip
+chinese_spring=$REFDIR/161010_Chinese_Spring_v1.0_pseudomolecules_parts.ref.genozip
 chain37_38=$REFDIR/GRCh37_to_GRCh38.chain.genozip
 
 if (( $# < 1 )); then
@@ -1248,7 +1391,7 @@ make -j -C $TESTDIR --quiet || exit 1
 # only if doing a full test (starting from 0) - delete genome and hash caches
 sparkling_clean()
 {
-    rm -f ${hg19}.*cache* ${hs37d5}.*cache* ${GRCh38}.*cache* ${TESTDIR}/*.genozip ${TESTDIR}/basic-subdirs/*.genozip ${TESTDIR}/*rejects* 
+    rm -f ${hg19}.*cache* ${hs37d5}.*cache* ${GRCh38}.*cache* ${TESTDIR}/*.genozip ${TESTDIR}/basic-subdirs/*.genozip ${TESTDIR}/*rejects* ${TESTDIR}/*.DEPN
 }
 
 # unfortunately Mac's bash doesn't support "case" with fall-through ( ;& )
@@ -1288,23 +1431,31 @@ if (( $1 <= 29 )) ; then  batch_copy_ref_section       ; fi
 if (( $1 <= 30 )) ; then  batch_iupac                  ; fi 
 if (( $1 <= 31 )) ; then  batch_genols                 ; fi
 if (( $1 <= 32 )) ; then  batch_tar_files_from         ; fi
-if (( $1 <= 33 )) ; then  batch_real_world_small_vbs   ; fi 
-if (( $1 <= 34 )) ; then  batch_real_world_1           ; fi 
-if (( $1 <= 35 )) ; then  batch_real_world_1 --fast    ; fi 
-if (( $1 <= 36 )) ; then  batch_real_world_with_ref    ; fi 
-if (( $1 <= 37 )) ; then  batch_real_world_with_ref --best  ; fi # BAM/FASTQ with --best require a reference
-if (( $1 <= 38 )) ; then  batch_real_world_1_backcomp  ; fi 
-if (( $1 <= 39 )) ; then  batch_real_world_with_ref_backcomp ; fi 
-if (( $1 <= 40 )) ; then  batch_multiseq               ; fi
-if (( $1 <= 41 )) ; then  batch_misc_cases             ; fi
+if (( $1 <= 33 )) ; then  batch_gencomp_depn_methods   ; fi 
+if (( $1 <= 34 )) ; then  batch_real_world_small_vbs   ; fi 
+if (( $1 <= 35 )) ; then  batch_real_world_1_adler32   ; fi 
+if (( $1 <= 36 )) ; then  batch_real_world_genounzip   ; fi 
+if (( $1 <= 37 )) ; then  batch_real_world_1_adler32 "--best -f" ; fi 
+if (( $1 <= 38 )) ; then  batch_real_world_1_adler32 --fast    ; fi 
+if (( $1 <= 39 )) ; then  batch_real_world_with_ref_md5; fi 
+if (( $1 <= 40 )) ; then  batch_real_world_with_ref_md5 --best ; fi 
+if (( $1 <= 41 )) ; then  batch_multiseq               ; fi
 if (( $1 <= 42 )) ; then  batch_external_cram          ; fi
 if (( $1 <= 43 )) ; then  batch_external_bcf           ; fi
 if (( $1 <= 44 )) ; then  batch_external_unzip         ; fi
 if (( $1 <= 45 )) ; then  batch_reference_fastq        ; fi
 if (( $1 <= 46 )) ; then  batch_reference_sam          ; fi
 if (( $1 <= 47 )) ; then  batch_reference_vcf          ; fi
-if (( $1 <= 48 )) ; then  batch_make_reference         ; fi
-if (( $1 <= 49 )) ; then  batch_reference_backcomp     ; fi
-if (( $1 <= 50 + $num_batch_prod_compatability_tests )) ; then batch_id=49 ; batch_prod_compatability $1 $batch_id ; fi
+if (( $1 <= 48 )) ; then  batch_many_small_files       ; fi
+if (( $1 <= 49 )) ; then  batch_make_reference         ; fi
+if (( $1 <= 50 )) ; then  batch_reference_backcomp     ; fi
+if (( $1 <= 51 )) ; then  batch_headerless_wrong_ref   ; fi
+
+if [[ `basename $PWD` != genozip-prod ]]; then
+    if (( $1 <= 52 )) ; then  batch_real_world_1_backcomp  ; fi 
+    if (( $1 <= 53 )) ; then  batch_real_world_with_ref_backcomp ; fi 
+    next=54
+    if (( $1 <= $next + $num_batch_prod_compatability_tests )) ; then batch_prod_compatability $1 $next ; fi
+fi
 
 printf "\nALL GOOD!\n"

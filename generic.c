@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   generic.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #include "genozip.h"
 #include "vblock.h"
@@ -14,6 +17,10 @@
 int32_t generic_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 {
     return 0;
+}
+
+void generic_seg_initialize (VBlockP vb)
+{
 }
 
 void generic_seg_finalize (VBlockP vb)
@@ -37,7 +44,7 @@ bool generic_seg_is_small (ConstVBlockP vb, DictId dict_id)
 
 SPECIAL_RECONSTRUCTOR (generic_piz_TOPLEVEL)
 {
-    buf_destroy (&vb->txt_data);
+    buf_destroy (vb->txt_data);
     buf_move (vb, &vb->txt_data, vb, &CTX(GNRIC_DATA)->local);
-    return false; // no new value
+    return NO_NEW_VALUE;
 }

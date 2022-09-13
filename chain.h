@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   chain.h
-//   Copyright (C) 2021-2022 Black Paw Ventures Limited
+//   Copyright (C) 2021-2022 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted,
+//   under penalties specified in the license.
 
 #pragma once
 
@@ -28,6 +31,7 @@
 #pragma GENDICT CHAIN_EOL=DTYPE_FIELD=EOL
 #pragma GENDICT CHAIN_TOPLEVEL=DTYPE_FIELD=TOPLEVEL
 #pragma GENDICT CHAIN_SEP=DTYPE_FIELD=SEP
+#pragma GENDICT CHAIN_DEBUG_LINES=DTYPE_FIELD=DBGLINES // used by --debug-lines
 
 // vblock stuff
 extern unsigned chain_vb_size (DataType dt);
@@ -36,11 +40,12 @@ extern void chain_vb_release_vb();
 // zip of a chain file - txtfile
 extern void chain_zip_initialize (void);
 extern int32_t chain_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i /* in/out */);
+extern void chain_zip_genozip_header (SectionHeaderGenozipHeader *header);
 
 // seg of a chain file
 extern void chain_seg_initialize (VBlockP vb);
 extern void chain_seg_finalize (VBlockP vb);
-extern const char *chain_seg_txt_line (VBlockP vb, const char *line, uint32_t remaining_txt_len, bool *has_13);
+extern rom chain_seg_txt_line (VBlockP vb, rom line, uint32_t remaining_txt_len, bool *has_13);
 extern bool chain_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern bool chain_zip_dts_flag (void);
 
@@ -51,9 +56,9 @@ extern CONTAINER_FILTER_FUNC (chain_piz_filter);
 // using the chain data in genozip --chain
 extern void chain_load (void);
 extern void chain_destroy (void);
-extern const char *chain_get_luft_contig (uint32_t contig_i, PosType *length);
+extern rom chain_get_luft_contig (uint32_t contig_i, PosType *length);
 extern uint64_t chain_get_num_prim_contigs (void);
-extern void chain_append_all_luft_ref_index (const char *prim_contig_name, unsigned prim_contig_name_len, PosType LN, Buffer *luft_contigs);
+extern void chain_append_all_luft_ref_index (rom prim_contig_name, unsigned prim_contig_name_len, PosType LN, BufferP luft_contigs);
 extern bool chain_get_liftover_coords (WordIndex prim_ref_index,  PosType prim_1pos, 
                                        WordIndex *luft_ref_index, PosType *luft_1pos, bool *is_xstrand, uint32_t *aln_i);
 extern PosType chain_get_aln_prim_last_pos (uint32_t aln_i);

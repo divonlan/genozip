@@ -1,7 +1,10 @@
 # ------------------------------------------------------------------
 #   Makefile
-#   Copyright (C) 2019-2022 Black Paw Ventures Limited
+#   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 #   Please see terms and conditions in the file LICENSE.txt
+#
+#   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+#   and subject to penalties specified in the license.
 
 # Note for Windows: to run this make, you need mingw (for the gcc compiler) and cygwin (for Unix-like tools):
 # Mingw: http://mingw-w64.org/doku.php 
@@ -13,11 +16,14 @@ ifdef BUILD_PREFIX
 IS_CONDA=1
 endif
 
-LDFLAGS += -lpthread -lm 
-CFLAGS  += -Wall -D_LARGEFILE64_SOURCE=1 -D_7ZIP_ST
+LDFLAGS    += -lpthread -lm 
+CFLAGS     += -Wall -D_LARGEFILE64_SOURCE=1 -D_7ZIP_ST -std=gnu11 -fms-extensions 
+OPTFLAGS   += -Ofast 
+DEBUGFLAGS += -DDEBUG -g -O0 
 
 ifdef IS_CONDA 
-	CFLAGS  += -DDISTRIBUTION=\"conda\"
+	CFLAGS += -DDISTRIBUTION=\"conda\" # note: matches the name in version.c -DIS_CONDA
+	CFLAGS += -Ofast 
 
 	ifeq ($(OS),Windows_NT)
 		CC=gcc # in Windows, override conda's default Visual C with gcc 
@@ -27,22 +33,29 @@ ifdef IS_CONDA
 
 else
 	CC=gcc
+	CFLAGS += -march=native -DNOT_CONDA # note: conda uses -march=nocona for Linux and -march=core2 for Darwin
 endif 
 
 SRC_DIRS = zlib bzlib lzma bsc libdeflate htscodecs compatibility
 
-MY_SRCS = genozip.c genols.c base250.c context.c container.c strings.c stats.c arch.c license.c \
-		  data_types.c bit_array.c progress.c coords.c writer.c tar.c chrom.c qname.c tokenizer.c \
-          zip.c piz.c reconstruct.c seg.c zfile.c aligner.c flags.c digest.c mutex.c linesorter.c threads.c \
-		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c \
-		  vcf_piz.c vcf_seg.c vcf_gt.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c vcf_refalt.c vcf_tags.c vcf_ps_pid.c\
-          sam_seg.c sam_piz.c sam_seg_bam.c sam_shared.c sam_header.c sam_md.c sam_tlen.c sam_cigar.c sam_fields.c sam_seq.c sam_qual.c \
-		  fasta.c fastq.c gff3.c me23.c phylip.c chain.c kraken.c locs.c generic.c \
-		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c lookback.c \
-		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c\
-		  codec_gtshark.c codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c \
-	      txtfile.c profiler.c file.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c \
-		  vblock.c regions.c  optimize.c dict_id.c hash.c stream.c url.c bases_filter.c
+MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c license.c 							\
+		  data_types.c bits.c progress.c writer.c tar.c chrom.c qname.c tokenizer.c 							\
+          zip.c piz.c reconstruct.c recon_history.c recon_peek.c seg.c zfile.c aligner.c flags.c digest.c    	\
+		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c mutex.c threads.c	\
+		  vcf_piz.c vcf_seg.c vcf_gt.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c 		\
+		  vcf_refalt.c vcf_tags.c vcf_ps_pid.c vcf_linesort.c vcf_format.c       								\
+		  sam_seg.c sam_piz.c sam_shared.c sam_header.c sam_md.c sam_tlen.c sam_cigar.c sam_fields.c  			\
+		  sam_sa.c bam_seg.c bam_seq.c bam_show.c                                             					\
+		  sam_seq.c sam_qual.c sam_sag_zip.c sam_sag_piz.c sam_sag_load.c sam_sag_ingest.c sam_sag_scan.c    	\
+		  sam_bwa.c sam_bowtie2.c sam_bsseeker2.c sam_bsbolt.c sam_bismark.c sam_gem3.c sam_tmap.c sam_hisat2.c \
+		  sam_blasr.c sam_minimap2.c sam_cellranger.c sam_pos.c    												\
+		  fasta.c fastq.c gff3.c me23.c phylip.c chain.c kraken.c locs.c generic.c 								\
+		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c lookback.c 				\
+		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c	\
+		  codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c codec_normq.c    							\
+	      txtfile.c profiler.c file.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c gencomp.c 			\
+		  vblock.c regions.c  optimize.c dict_id.c hash.c stream.c url.c bases_filter.c dict_io.c 				\
+		  recon_plan_io.c version.c
 
 CONDA_COMPATIBILITY_SRCS =  compatibility/mac_gettime.c
 
@@ -63,13 +76,13 @@ CONDA_DEVS = Makefile .gitignore
 
 CONDA_DOCS = LICENSE.txt AUTHORS README.md
 
-CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h bit_array.h progress.h website.h \
-             base250.h endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h \
+CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h txtfile.h zip.h bits.h progress.h website.h \
+             endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h \
              buffer.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h codec.h stats.h \
              crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h qname.h qname_flavors.h \
-			 lookback.h tokenizer.h codec_longr_alg.c \
-			 reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h linesorter.h threads.h \
-			 arch.h license.h data_types.h base64.h txtheader.h writer.h bases_filter.h genols.h coords.h contigs.h chrom.h \
+			 lookback.h tokenizer.h codec_longr_alg.c gencomp.h dict_io.h recon_plan_io.h \
+			 reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h threads.h \
+			 arch.h license.h data_types.h base64.h txtheader.h writer.h bases_filter.h genols.h contigs.h chrom.h \
 			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h fastq.h gff3.h phylip.h chain.h kraken.h locs.h generic.h \
              compatibility/mac_gettime.h  \
 			 zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h \
@@ -123,12 +136,6 @@ endif
 
 C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(BSC_SRCS) $(LZMA_SRCS) $(DEFLATE_SRCS) $(HTSCODECS_SRC)
 
-ifndef IS_CONDA 
-#	ifneq ($(shell uname -a | grep ppc64),)
-		CFLAGS += -march=native 
-#	endif
-endif
-
 OBJS       := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.o))
 DEBUG_OBJS := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.debug-o)) 
 OPT_OBJS   := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.opt-o))   # optimized but with debug info, for debugging issues that only manifest with compiler optimization
@@ -137,14 +144,6 @@ DEPS       := $(addprefix $(OBJDIR)/, $(C_SRCS:.c=.d))
 EXECUTABLES       = genozip$(EXE)       genounzip$(EXE)       genocat$(EXE)       genols$(EXE)
 DEBUG_EXECUTABLES = genozip-debug$(EXE) genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE)
 OPT_EXECUTABLES   = genozip-opt$(EXE)   genounzip-opt$(EXE)   genocat-opt$(EXE)   genols-opt$(EXE)
-
-ifeq ($(CC),gcc)
-	OPTFLAGS += -Ofast -std=gnu99
-	DEBUGFLAGS += -std=gnu99 -DDEBUG -g -O0
-else
-	OPTFLAGS += -O2 -DDEBUG 
-	DEBUGFLAGS += -DDEBUG -g -O0
-endif
 
 all   : CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"$(DISTRIBUTION)\"  
 all   : $(OBJDIR) $(EXECUTABLES) 
@@ -183,7 +182,11 @@ $(OBJDIR)/%.opt-o: %.c $(OBJDIR)/%.d
 
 %.S: %.c $(OBJDIR)/%.d
 	@echo "Generating $@"
-	@$(CC) -S -o $@ $< $(CFLAGS)
+	@$(CC) -S -O3-o $@ $< $(CFLAGS)
+
+%.E: %.c $(OBJDIR)/%.d
+	@echo "Generating $@"
+	@$(CC) -E -o $@ $< $(CFLAGS)
 
 GENDICT_OBJS := $(addprefix $(OBJDIR)/, $(GENDICT_SRCS:.c=.o))
 
@@ -242,7 +245,7 @@ docs = $(DOCS)/genozip.rst $(DOCS)/genounzip.rst $(DOCS)/genocat.rst $(DOCS)/gen
 	   $(DOCS)/dvcf.rst $(DOCS)/dvcf-rendering.rst $(DOCS)/chain.rst $(DOCS)/dvcf-limitations.rst $(DOCS)/dvcf-renaming.rst $(DOCS)/dvcf-see-also.rst \
 	   $(DOCS)/archiving.rst $(DOCS)/encryption.rst $(DOCS)/release-notes.rst $(DOCS)/benchmarks.rst \
 	   $(DOCS)/data-types.rst $(DOCS)/bam.rst $(DOCS)/fastq.rst $(DOCS)/vcf.rst $(DOCS)/gff3.rst $(DOCS)/publications-list.rst \
-	   $(DOCS)/resellers.rst $(DOCS)/institutions.rst $(DOCS)/referral.rst
+	   $(DOCS)/sam-flags.rst
 
 $(DOCS)/conf.py: $(DOCS)/conf.template.py version.h
 	@sed -e "s/__VERSION__/$(version)/g" $< |sed -e "s/__YEAR__/`date +'%Y'`/g" > $@ 
@@ -304,10 +307,13 @@ clean-opt:
 	@echo Cleaning up opt
 	@rm -f $(OPT_OBJS) $(EXECUTABLES) $(OPT_EXECUTABLES)/*.opt-o
 
-clean: clean-docs
+clean-test:
+	@rm -f private/test/*.good private/test/*.bad private/test/*.local private/test/*.b250 private/test/tmp/* private/test/*.DEPN private/test/back-compat/*/*.bad
+
+clean: clean-docs clean-test
 	@echo Cleaning up
 	@rm -f $(DEPS) $(filter-out LICENSE.txt,$(WINDOWS_INSTALLER_OBJS)) *.d .archive.tar.gz *.stackdump $(EXECUTABLES) $(OPT_EXECUTABLES) $(DEBUG_EXECUTABLES) 
-	@rm -f *.S *.good *.bad data/*.good data/*.bad *.local genozip.threads-log.* *.b250 test/*.good test/*.bad test/*.local test/*.b250 test/tmp/* test/*.rejects
+	@rm -f *.S *.good *.bad data/*.good data/*.bad *.local genozip.threads-log.* *.b250 
 	@rm -R $(OBJDIR)
 	@mkdir $(OBJDIR) $(addprefix $(OBJDIR)/, $(SRC_DIRS))
 
@@ -315,8 +321,9 @@ clean: clean-docs
 
 # builds prod for local OS
 genozip-prod$(EXE): 
-	@echo "building $@"
-	@(cd ../genozip-prod ; rm -Rf $(OBJDIR) ; make -j clean ; touch dict_id_gen.h ; make -j)
+	@echo "building prod"
+	@$(SH_VERIFY_ALL_COMMITTED)
+	@(cd ../genozip-prod ; git pull ; rm -Rf $(OBJDIR) ; make -j clean ; touch dict_id_gen.h ; make -j)
 	@cp ../genozip-prod/genozip$(EXE) ../genozip/genozip-prod$(EXE)
 	@cp ../genozip-prod/genozip$(EXE) ../genozip/private/releases/genozip-$(version)$(EXE)
 	@cp ../genozip-prod/genounzip$(EXE) ../genozip/genounzip-prod$(EXE)
@@ -337,7 +344,7 @@ genozip-prod:
 #increment-version: $(C_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
 increment-version: # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
 	@echo "Incrementing version.h"
-	@bash increment-version.sh
+	@bash private/scripts/increment-version.sh
 
 decrement-version:
 	@echo "Do manually:"
@@ -350,7 +357,7 @@ decrement-version:
 	@git push > /dev/null
 	@git tag genozip-$(version) > /dev/null
 	@git push origin genozip-$(version) > /dev/null
-	@curl https://github.com/divonlan/genozip/archive/genozip-$(version).tar.gz --silent --location -o $@ > /dev/null
+	@curl https://github.com/divonlan/genozip/archive/genozip-$(version).tar.gz --ssl-no-revoke --silent --location -o $@ > /dev/null
 	@echo GITHUB: go to here: https://github.com/divonlan/genozip/releases/new
 	@echo "1. Set 'Tag version' and 'Release title' are both: genozip-$(version)"
 	@echo "2. Copy the notes for the version from RELEASE NOTES"
@@ -373,31 +380,27 @@ conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld
 	@echo "Publishing to conda-forge"
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@echo " "
-	@echo "Syncing conda feedstock"
-	@(cd $(CONDA_FEEDSTOCK); git pull)
-	@echo " "
 	@echo "Copying $^ to conda feedstock"
 	@cp conda/README.md $(CONDA_FEEDSTOCK)
 	@cp conda/meta.yaml conda/build.sh conda/bld.bat $(CONDA_RECIPE_DIR)
 	@echo "Committing my files to branch genozip on my fork"
-	@(cd $(CONDA_FEEDSTOCK); git commit -m "update" recipe/meta.yaml README.md recipe/build.sh recipe/bld.bat; git push) > /dev/null
+	@(cd $(CONDA_FEEDSTOCK); git pull; git commit -m "update" recipe/meta.yaml README.md recipe/build.sh recipe/bld.bat; git push) > /dev/null
 	@echo " "
 	@echo "Submitting pull request to conda-forge"
 #	@(cd $(CONDA_RECIPE_DIR); git request-pull master https://github.com://conda-forge/genozip-feedstock master)
 #	@(cd $(CONDA_RECIPE_DIR); git request-pull master https://github.com/divonlan/genozip-feedstock master)
 	@touch $@
 	@echo "CONDA: Using a browser:"
-	@echo "  (1) Go to https://github.com/conda-forge/genozip-feedstock/pulls"
-	@echo "  (2) Click 'Compare and pull request' then 'Create pull request' and wait 30 seconds for the test to start"
-	@echo "      Fallback: if you can't see 'Compare & pull', manually created a pull request 'into conda-forge:master from divonlan:genozip'"
+	@echo "  (1) Go to https://github.com/divonlan/genozip-feedstock/tree/genozip"
+	@echo "  (2) Click 'Contribute' -> 'Open pull request'"
 	@echo "  (3) Go to https://dev.azure.com/conda-forge/feedstock-builds/_build"
-	@echo "  (4) Click on genozip and wait (~5 min) for the test to complete. Fix any issues."
+	@echo "  (4) Click on genozip and wait (~8 min) for the test to complete. Fix any issues."
 	@echo "  (5) Go back to the tab in (2) and click 'Merge pull request' and the 'Confirm merge' (DONT CLICK 'Delete branch')"
 	@echo "  (6) Go to https://dev.azure.com/conda-forge/feedstock-builds/_build and watch the build - it should be fine"
 	@echo "  (7) In ~30 minutes users will be able to 'conda update genozip'"
 
 # Building Windows InstallForge with distribution flag: we delete arch.o to force it to re-compile with DISTRIBUTION=InstallForge.
-windows/%.exe: CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"InstallForge\"
+windows/%.exe: CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"InstallForge\" # note: matches the name in version.c
 windows/%.exe: $(OBJS) %.exe
 	@echo Linking $@
 	@(mkdir windows >& /dev/null ; exit 0)
@@ -454,9 +457,11 @@ push-build:
 	@(cd $(DOCS); git push) > /dev/null
 
 distribution: increment-version testfiles $(DOCS)/genozip-linux-x86_64.tar.build $(DOCS)/genozip-installer.exe build-docs push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
+	@(cd ../genozip-feedstock/ ; git pull)
 
 distribution-maintenance: increment-version testfiles $(DOCS)/genozip-linux-x86_64.tar.build $(DOCS)/genozip-installer.exe $(DOCS)/RELEASE_NOTES.for-docs.txt \
-                          build-docs push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
+                          push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
+	@(cd ../genozip-feedstock/ ; git pull)
 
 test-backup: genozip.exe
 	@echo "Compressing test/ files for in preparation for backup (except cram and bcf)"
@@ -479,7 +484,7 @@ genozip-linux-x86_64/clean:
 	@mkdir genozip-linux-x86_64
 
 # note: getpwuid and getgrgid will cause dymanically loading of the locally installed glibc in the --tar option, or segfault. that's normally fine.
-genozip-linux-x86_64/genozip: CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"linux-x86_64\"
+genozip-linux-x86_64/genozip: CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"linux-x86_64\" # note: matches the name in version.c
 genozip-linux-x86_64/genozip: clean-optimized $(OBJS)  # clean first, as we will compile without march=native
 	@echo Linking $@
 	@$(CC) -static -o $@ $(OBJS) $(CFLAGS) $(LDFLAGS)

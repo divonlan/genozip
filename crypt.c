@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   encrypt.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #include "genozip.h"
 #include "aes.h"
@@ -17,7 +20,7 @@ void crypt_set_password (char *new_password)
     password = new_password;
 }
 
-const char *crypt_get_password()
+rom crypt_get_password()
 {
     return password;
 }
@@ -75,12 +78,12 @@ uint32_t crypt_max_padding_len()
 // 256 bit AES is a concatenation of 2 MD5 hashes of the password - each one of length 128 bit
 // each hash is a hash of the password bound with a constant string
 // we add data_len to the hash to give it a near-uniqueness for each section
-static void crypt_generate_aes_key (VBlock *vb,                
-                                    uint32_t vb_i, SectionType sec_type, bool is_header, // used to generate an aes key unique to each block
+static void crypt_generate_aes_key (VBlockP vb,                
+                                    VBIType vb_i, SectionType sec_type, bool is_header, // used to generate an aes key unique to each block
                                     uint8_t *aes_key /* out */)
 {
-    const char *salt   = "frome";     
-    const char *pepper = "vaughan";   
+    rom salt   = "frome";     
+    rom pepper = "vaughan";   
     static uint32_t pw_len=0, salt_len=0, pepper_len=0;
 
     ASSERTNOTNULL (password);
@@ -112,12 +115,12 @@ static void crypt_generate_aes_key (VBlock *vb,
     memcpy (aes_key, salty_hash.bytes, sizeof(Digest)); // first half of key
     memcpy (aes_key + sizeof(Digest), peppered_hash.bytes, sizeof(Digest)); // 2nd half of key
 
-    buf_free (&vb->spiced_pw);
+    buf_free (vb->spiced_pw);
 }
 
 // we generate a different key for each block by salting the password with vb_i, sec_type and is_header
-void crypt_do (VBlock *vb, uint8_t *data, uint32_t data_len, 
-               uint32_t vb_i, SectionType sec_type, bool is_header)  // used to generate an aes key unique to each block
+void crypt_do (VBlockP vb, uint8_t *data, uint32_t data_len, 
+               VBIType vb_i, SectionType sec_type, bool is_header)  // used to generate an aes key unique to each block
 {
     // generate an AES key just for this one section - combining the pasword with vb_i and sec_i
     uint8_t aes_key[AES_KEYLEN]; 
@@ -129,7 +132,7 @@ void crypt_do (VBlock *vb, uint8_t *data, uint32_t data_len,
     aes_xcrypt_buffer (vb, data, data_len);
 }
 
-void crypt_continue (VBlock *vb, uint8_t *data, uint32_t data_len)
+void crypt_continue (VBlockP vb, uint8_t *data, uint32_t data_len)
 {
     aes_xcrypt_buffer (vb, data, data_len);
 }
@@ -146,8 +149,8 @@ void crypt_pad (uint8_t *data, uint32_t data_len, uint32_t padding_len)
     memcpy (&data[data_len-padding_len], hash.bytes, padding_len); // luckily the length of MD5 hash and AES block are both 16 bytes - so one hash is sufficient for the padding
 }
 
-const char *encryption_name (EncryptionType encryption_type)
+rom encryption_name (EncryptionType encryption_type)
 {
-    static const char *names[NUM_ENCRYPTION_TYPES] = ENC_NAMES;
-    return type_name (encryption_type, &names[encryption_type], sizeof(names)/sizeof(names[0]));
+    static rom names[NUM_ENCRYPTION_TYPES] = ENC_NAMES;
+    return type_name (encryption_type, &names[encryption_type], ARRAY_LEN(names));
 }

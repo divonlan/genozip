@@ -3,6 +3,35 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+14.0.3 12/Sep/2022
+Summary: significant compression improvements for FASTQ, BAM, VCF in a wide range of cases. Compression and decompression are also faster.
+
+Compression improvement:
+- SAM/BAM: Better compression of Supplementary / Secondary alignments 
+- SAM/BAM: Better compression of SA/XA/OA, CIGAR, QNAME, MD:Z, NM:i, TLEN, MC:Z, MQ:i, ms:i, sequence, SM, AM, X0, X1, XT and other tags
+- SAM/BAM: Better compression of files with methylation data created with Bismark, BS-Seeker2, Gem3, BSBolt, DRAGEN
+- SAM/BAM/FASTQ: Improvements in compression of short-read QUAL.
+- VCF: Significantly better compression of GVCF files
+- VCF: Better compression of FORMAT/PGT, REF+ALT, QUAL, INFO, INFO/DP, FORMAT/RGQ
+- FASTA: Better compression of amino acid fastas.
+- Usually faster compression and decompression than previous versions
+- Better license flow, upgrade notification, statistics
+
+Command line option improvements:
+- Genozip now tests after compression by decompressing the file in memory. This can be disabled with --no-test.
+- SAM/BAM: genocat --FLAG now also accepts names of flags eg "--FLAG +REVCOMP". See genozip.com/bam.html.
+- The --output option can now also accept a directory name - the output file is written into the specified directory, keeping its name
+- BAM: BAM files created by python programs using the pysam library and which have alignments with missing quality scores (i.e. QUAL="*"), pysam encodes the missing quality in a way that violates of the SAM specification. Genozip can now handle these files regardless.
+- FASTQ: Change in genocat options for FASTQ files compressed with --pair: (1) --R1 and --R2 replace the discontinued option "--component". (2) The default output format of genocat is now interleaved (up to v13, it would show the two files concatenated).
+- FASTQ: Support format where read name is a number, and line3 is an SRA format
+- FASTA: Much faster subsetting with --grep
+- --test now defaults to verify correctness with Adler32 which is much faster than MD5. To use MD5 instead of Adler32, specifiy --md5. 
+- -h is now a shortcut for --header-only (previously it was a shortcut for --help)
+- genounzip --bgzf=exact attempts to uncompress the file into the same BGZF compression level as the original file. Previosuly this behaviour was the default, now genounzip optimizes for speed unless "exact" is requested.
+- New advanced options (see genozip.com/advanced.html for details): --log-digest, --show-sag, --show-depn, --show-lines, --show-gheader=2, --debug-read-ctxs, --debug-sag, --debug-gencomp, --no-gencomp, --no-domqual, --show-wrong-XG, --show-wrong-XM, --show-wrong-XB, --vblock with bytes specification, --show-bam, --debug-lines, --biopsy-line, --show-qual, --show-aligner, --debug-peek, --debug
+Discontinued functionality: 
+- The little-used yet difficult to maintain feature allowing "Binding" of multiples files of the same type using eg "genozip file1.vcf file2.vcf --output bound.vcf.genozip" is no longer supported. This does NOT affect the --tar option, and also does not affect genozip files which contain two FASTQ files compressed with --pair. To compress multiple files into a single "archive" file, use "genozip --tar". To decompress existing genozip files compressed with the Binding feature, use Genozip v13. 
+
 13.0.21 21/August/2022
 - Bug fix related to re-generation of reference files: compression using a reference file of 1. FASTQ files and 2. unaligned SAM/BAM files (unaligned SAM/BAM files are SAM/BAM files which have no contigs (@SQ lines) listed in their header): up to version 13.0.20, generating a Genozip reference file with "genozip --make-reference" unintentionally generated a unique reference file in each execution. It was therefore required to compress and decompress files using the same reference file,
 and re-generation of the reference file from FASTA data was not possible. Starting 13.0.21 genozip --make-reference always generates the same reference file for the same FASTA data. 
@@ -52,6 +81,7 @@ and re-generation of the reference file from FASTA data was not possible. Starti
 - SAM/BAM: bowtie2: Better compression of AS and YS fields
 - Display warning if excessive dictionary size
 - Fix bug where genounzip sometimes output uncompressed files when a .gz-recompression was expected
+- Accept contig name "NC_012920" as equivalent to "chrM"
 
 13.0.6 14/December/2021
 - Better compression of QNAME (SAM/BAM/FASTQ/Kraken)
@@ -239,6 +269,7 @@ f. New advanced options:
 - new option: --show-ref-iupacs. Show non-ACGT iupac codes in a reference file
 - new option: --debug-stats. For debugging development of stats.c
 - new option: --debug-allthesame. For debugging development of the allthesame algorithm
+- new option: --show-buddy. For debugging SAM/BAM buddy method
 g. Much improved website genozip.com
 
 11.0.11 24/March/2021
@@ -288,7 +319,7 @@ g. Much improved website genozip.com
 
 11.0.0  11/Feb/2021
 - VCF: introduce a PBWT based codec for compression of the haplotype matrix. Retire hapmat and gtshark codecs. 
-  backward compatability is providing for decompressing VCF files compressed in earlier versions of genozip with hapmat or gtshark
+  backward compatability is provided for decompressing VCF files compressed in earlier versions of genozip with hapmat or gtshark
 - SAM: better handling of optional fields SA, OA, XA
 - Better memory management in Linux
 - Reduce core oversubscription from 1.4 to 1.2
@@ -432,7 +463,7 @@ Cleanup:
 
 8.0.4 8/Nov/2020
 - 10X improvement in --gtshark speed by moving to in-memory comms using fifo
-- fix thread safety issue in bit_array.c 
+- fix thread safety issue in bits.c 
 
 8.0.3 23/Oct/2020
 - Support samtools with or without --no-PG
@@ -613,8 +644,8 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 - backward compatibility to decompress genozip v1 files
 - Columns 1-9 (CHROM to FORMAT) are now put into their own dictionaries (except REF and ALT that are compressed together)
 - Each INFO tag is its own dictionary
-- --vblock for setting the variant block size
-- Allow variant blocks larger than 64K and set the default variant block size based on the number of samples to balance 
+- --vblock for setting the VB size
+- Allow variant blocks larger than 64K and set the default VB size based on the number of samples to balance 
   compression ratio with memory consumption.
 - --sblock for setting the sample block size
 - change haplotype permutation to keep within sample block boundaries

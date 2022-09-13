@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   txtheader.c
-//   Copyright (C) 2o21-2022 Black Paw Ventures Limited
+//   Copyright (C) 2o21-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted,
+//   under penalties specified in the license.
 
 #include "genozip.h"
 #include "buffer.h"
@@ -10,10 +13,10 @@
 #include "file.h"
 
 static Buffer biopsy_vb_i = { .name = "biopsy_vb_i" };
-static Buffer biopsy_data = { .name = "biopsy_data" };
+static Buffer biopsy_data = { .name = "biopsy_data", .can_be_big = true };
 static char *biopsy_fn = NULL;
 
-void biopsy_init (const char *optarg)
+void biopsy_init (rom optarg)
 {
     str_split (optarg, strlen(optarg), 0, ',', item, false);
 
@@ -25,10 +28,10 @@ void biopsy_init (const char *optarg)
             uint32_t first_vb_i = atoi (startends[0]);
             uint32_t last_vb_i  = atoi (startends[1]);
 
-            for (uint32_t vb_i = first_vb_i; vb_i <= last_vb_i; vb_i++)
+            for (VBIType vb_i = first_vb_i; vb_i <= last_vb_i; vb_i++)
                 buf_add_int (evb, biopsy_vb_i, vb_i); 
         }
-        else // single vb eg "1"    
+        else // single vb eg "1" or "0" (i.e. txt header only)
             buf_add_int (evb, biopsy_vb_i, ((uint32_t)atoi (items[i]))); 
     }
 
@@ -43,8 +46,6 @@ void biopsy_take (VBlockP vb)
 {
     if (!biopsy_vb_i.len) return;
 
-    if (vb->vblock_i == 0) goto start_biopsy; // always output the txt header
-
     ARRAY (uint32_t, vb_i, biopsy_vb_i);
 
     for (int i=0; i < vb_i_len; i++)
@@ -54,6 +55,8 @@ void biopsy_take (VBlockP vb)
 
             goto start_biopsy;
         }
+
+    if (vb->vblock_i == 0) goto start_biopsy; // always output the txt header
 
     return; // we were not requested to take a biopsy from this vb
 

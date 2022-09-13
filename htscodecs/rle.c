@@ -41,6 +41,8 @@
 #include "varint.h"
 #include "rle.h"
 
+#include "../buffer.h"
+
 #define MAGIC 8
 
 //-----------------------------------------------------------------------------
@@ -103,7 +105,7 @@ uint8_t *rle_encode(uint8_t *data, uint64_t data_len,
 		    uint8_t *out, uint64_t *out_len) {
     uint64_t i, j, k;
     if (!out)
-	if (!(out = malloc(data_len*2)))
+	if (!(out = MALLOC(data_len*2)))
 	    return NULL;
 
     // Two pass:  Firstly compute which symbols are worth using RLE on.

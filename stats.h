@@ -1,13 +1,14 @@
 // ------------------------------------------------------------------
 //   stats.h
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #pragma once
 
-extern void stats_compress (void); // ZIP
+extern void stats_generate (void); // ZIP
 extern void stats_display (void);  // PIZ and ZIP
 extern void stats_read_and_display (void);     // PIZ
-extern void stats_add_txt_name (const char *fn);
-extern void stats_set_consolidation (VBlockP vb, DidIType parent, unsigned num_deps, ...);
-extern void stats_set_consolidation_(VBlockP vb, DidIType parent, unsigned num_deps, ContextP *dep_ctxs);
+extern void stats_add_txt_name (rom fn);

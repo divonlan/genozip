@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
-//   file.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   url.c
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #include <string.h>
 #include <stdlib.h>
@@ -22,10 +25,10 @@
 #include "file.h"
 #include "strings.h"
 
-// our instance of curl - only one at a time is permitted
+// our instance of curl for url_open - only one at a time is permitted
 static StreamP curl = NULL;
 
-bool url_is_url (const char *filename)
+bool url_is_url (rom filename)
 {
     return !!strstr (filename, "://");
 }
@@ -33,23 +36,14 @@ bool url_is_url (const char *filename)
 #define CURL_RESPONSE_LEN 4096
 
 // returns error string if curl itself (not server) failed, or NULL if successful
-static void url_do_curl (const char *url, bool head,
-                         char *stdout_data, unsigned *stdout_len,
+static void url_do_curl (rom url, char *stdout_data, unsigned *stdout_len,
                          char *error, unsigned *error_len) 
 {
-    curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
-                          "To read from a URL", // reason in case of failure to execute curl
-                          "curl", url,
-                          head ? "--head" : NULL,
-                          NULL); // not silent - we want to collect errors
-/*
-    if (!url_wait_for_pipe (fileno (stream_from_stream_stdout (curl)), fileno (stream_from_stream_stderr (curl)))) {
-        #define TIMEOUT_ERROR "Timeout while wait for server"
-        strcpy (error, TIMEOUT_ERROR);
-        *error_len = sizeof TIMEOUT_ERROR;
-        return;
-    }
-*/
+    // our own instance of curl - to not conflict with url_open
+    StreamP curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
+                                  "To read from a URL", // reason in case of failure to execute curl
+                                  "curl", url, NULL); 
+
     int fd1 = fileno (stream_from_stream_stdout (curl));
     int fd2 = fileno (stream_from_stream_stderr (curl));
 
@@ -109,13 +103,16 @@ static void url_do_curl (const char *url, bool head,
     *error_len = strlen (error);
 }
 
-static int url_do_curl_head (const char *url,
+static int url_do_curl_head (rom url,
                              char *stdout_data, unsigned *stdout_len,
                              char *stderr_data, unsigned *stderr_len)
 {
-    curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
-                          "To compress files from a URL",
-                          "curl", "--head", url, NULL); // not silent - we want to collect errors
+    // our own instance of curl - to not conflict with url_open
+    StreamP curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
+                                  "To compress files from a URL",
+                                  "curl", 
+                                  flag.is_windows ? "--ssl-no-revoke" : SKIP_ARG,                          
+                                  "--head", url, NULL); // not silent - we want to collect errors
 
     *stdout_len = fread (stdout_data, 1, CURL_RESPONSE_LEN-1, stream_from_stream_stdout (curl));
     stdout_data[*stdout_len] = '\0'; // terminate string
@@ -131,7 +128,7 @@ static int url_do_curl_head (const char *url,
 // for a url, returns whether that URL exists, and if possible, its file_size, or -1 if its not available
 // note that the file_size availability is at the discretion of the web/ftp site. 
 // in case of an error, returns the error string
-const char *url_get_status (const char *url, bool *is_file_exists, int64_t *file_size)
+rom url_get_status (rom url, bool *is_file_exists, int64_t *file_size)
 {
     *is_file_exists = false;
     *file_size = 0;
@@ -182,7 +179,7 @@ const char *url_get_status (const char *url, bool *is_file_exists, int64_t *file
             return error;
     } 
         
-    const char *len_start = NULL;
+    rom len_start = NULL;
     if      ((len_start = strstr (response, "content-length:"))) len_start += sizeof "content-length:" -1;
     else if ((len_start = strstr (response, "Content-Length:"))) len_start += sizeof "Content-Length:" -1;
 
@@ -198,12 +195,19 @@ const char *url_get_status (const char *url, bool *is_file_exists, int64_t *file
 
 
 // reads a string response from a URL, returns a nul-terminated string and the number of characters (excluding \0), or -1 if failed
-int32_t url_read_string (const char *url, char *data, uint32_t data_size)
+int32_t url_read_string (rom url, char *data, uint32_t data_size)
 {
     char response[CURL_RESPONSE_LEN], error[CURL_RESPONSE_LEN];
     unsigned response_len=0, error_len=0;
 
-    url_do_curl (url, false, response, &response_len, error, &error_len);
+    int url_len = strlen (url);
+    for (int i=0, in_arg=false; i < url_len ; i++) {
+        ASSERT (!in_arg || IS_VALID_URL_CHAR(url[i]) || url[i]=='&' || url[i]=='=' || url[i]=='%', 
+                "Invalid url character [%u]=%c(%u). url=\"%s\"", i, url[i], (unsigned char)url[i], url); 
+        if (url[i] == '?') in_arg = true;
+    }
+
+    url_do_curl (url, response, &response_len, error, &error_len);
 
     if (error_len && !response_len) return -1; // failure
 
@@ -216,8 +220,22 @@ int32_t url_read_string (const char *url, char *data, uint32_t data_size)
     else return 0;
 }
 
+void url_get_redirect (rom url, STRc(redirect_url))
+{
+    // our own instance of curl - to not conflict with url_open
+    StreamP curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
+                                  "To get a URL's redirect", // reason in case of failure to execute curl
+                                  "curl", url, "--location", "--silent", "--output", "/dev/null",
+                                  "--write-out", "%{url_effective}", NULL); 
+
+    redirect_url_len = fread (redirect_url, 1, redirect_url_len - 1, stream_from_stream_stdout (curl));
+    redirect_url[redirect_url_len] = '\0'; // terminate string
+
+    stream_close (&curl, STREAM_WAIT_FOR_PROCESS);
+}
+
 // returns a FILE* which streams the content of a URL
-FILE *url_open (StreamP parent_stream, const char *url)
+FILE *url_open (StreamP parent_stream, rom url)
 {
     ASSERT0 (!curl, "Error url_open failed because curl is already running");
 
@@ -252,21 +270,46 @@ void url_kill_curl (void)
 }
 
 // make a string into a a string containing only valid url characters, eg "first last" -> "first%20last"
-char *url_esc_non_valid_chars (const char *in)
+char *url_esc_non_valid_chars_(rom in, char *out/*malloced if NULL*/, bool esc_all_or_none)
 {
-    char *out = MALLOC (strlen(in) * 3 + 1);
+    if (!out) out = MALLOC (strlen(in) * 3 + 1);
     char *next = out;
+    rom save_in = in;
+    bool any_invalid=false;
 
     for (; *in; in++) {
-        if (IS_VALID_URL_CHAR(*in)) 
-            *(next++) = *in;
+        if (IS_VALID_URL_CHAR(*in)) {
+            if (esc_all_or_none) {
+                sprintf (next, "%%%02X", (unsigned char)*in);
+                next +=3;
+            }
+            else
+                *(next++) = *in;
+        }
 
         else {
-            sprintf (next, "%%%02X", *in);
+            sprintf (next, "%%%02X", (unsigned char)*in);
             next +=3;
+            any_invalid = true;
         }
     }
     *next = '\0';
 
+    if (esc_all_or_none && !any_invalid)
+        strcpy (out, save_in);
+
+    return out;
+}
+
+UrlStr url_esc_non_valid_charsS (rom in) // for short strings - on stack
+{
+    rom esc = url_esc_non_valid_chars_(in, NULL, false); // note: might be longer than UrlStr
+    
+    UrlStr out;
+    int out_len = MIN_(sizeof (out.s)-1, strlen(esc)); // trim if needed
+    memcpy (out.s, esc, out_len);
+    out.s[out_len] = 0;
+    
+    FREE (esc);
     return out;
 }

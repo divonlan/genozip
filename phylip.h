@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   phylip.h
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #pragma once
 
@@ -13,6 +16,7 @@
 #pragma GENDICT PHY_EOL=DTYPE_FIELD=EOL
 #pragma GENDICT PHY_TOPLEVEL=DTYPE_FIELD=TOPLEVEL
 #pragma GENDICT PHY_TOP2FASTA=DTYPE_FIELD=TOP2FA
+#pragma GENDICT PHY_DEBUG_LINES=DTYPE_FIELD=DBGLINES      // used by --debug-lines
 
 // ZIP side
 COMPRESSOR_CALLBACK(phy_zip_id);
@@ -27,7 +31,7 @@ extern bool phy_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struc
 extern void phy_seg_initialize (VBlockP vb);
 extern void phy_seg_finalize (VBlockP vb);
 extern bool phy_seg_is_small (ConstVBlockP vb, DictId dict_id);
-extern const char *phy_seg_txt_line (VBlockP vb, const char *line, uint32_t remaining_txt_len, bool *has_13);
+extern rom phy_seg_txt_line (VBlockP vb, rom line, uint32_t remaining_txt_len, bool *has_13);
 
 //---------------------------------------
 // PHYLIP -> Multifasta translation stuff

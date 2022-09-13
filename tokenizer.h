@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   tokenizer.h
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted,
+//   under penalties specified in the license.
 
 #pragma once
 
@@ -9,4 +12,4 @@
 
 extern const char sep_with_space[], sep_without_space[];
 
-extern void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field), const char *is_sep, unsigned add_additional_bytes);
+extern void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field), rom is_sep, unsigned add_additional_bytes);

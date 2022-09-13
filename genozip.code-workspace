@@ -40,7 +40,6 @@
 			"arch.h": "c",
 			"piz.h": "c",
 			"bases_filter.h": "c",
-			"linesorter.h": "c",
 			"endianness.h": "c",
 			"system_error": "cpp",
 			"context.h": "c",

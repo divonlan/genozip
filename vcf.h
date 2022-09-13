@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   vcf.h
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #pragma once
 
@@ -38,6 +41,7 @@
 #pragma GENDICT VCF_COPYSTAT=DTYPE_FIELD=CoPYSTAT
 #pragma GENDICT VCF_TOPLUFT=DTYPE_FIELD=ToPLUFT
 #pragma GENDICT VCF_LINE_NUM=DTYPE_FIELD=LINE_NUM
+#pragma GENDICT VCF_DEBUG_LINES=DTYPE_FIELD=DBGLINES      // used by --debug-lines
 
 // FORMAT fields
 #pragma GENDICT FORMAT_AD=DTYPE_2=AD       // <ID=AD,Number=R,Type=Integer,Description="Allelic depths for the ref and alt alleles in the order listed">
@@ -48,7 +52,7 @@
 #pragma GENDICT FORMAT_ADR=DTYPE_2=ADR     // <ID=ADR,Number=R,Type=Float,Description="Allele dosage on rev strand">
                                            // Conflicting VarScan: <ID=ADR,Number=1,Type=Integer,Description="Depth of variant-supporting bases on reverse strand (reads2minus)">
 #pragma GENDICT FORMAT_AF=DTYPE_2=AF       // <ID=AF,Number=A,Type=Float,Description="Allele fractions for alt alleles in the order listed">
-#pragma GENDICT FORMAT_DP=DTYPE_2=DP       // <ID=DP,Number=1,Type=Integer,Description="Approximate read depth (reads with MQ=255 or with bad mates are filtered)">
+#pragma GENDICT FORMAT_DP=DTYPE_2=DP       // <ID=DP,Number=1,Type=Integer,Description="Approximate read depth (reads with MQ=255 or with bad mates are filtered)">. See also: https://gatk.broadinstitute.org/hc/en-us/articles/360036891012-DepthPerSampleHC
 #pragma GENDICT FORMAT_DS=DTYPE_2=DS       // <ID=DS,Number=1,Type=Float,Description="Genotype dosage from MaCH/Thunder">. See: https://genome.sph.umich.edu/wiki/Thunder
 #pragma GENDICT FORMAT_GL=DTYPE_2=GL       // <ID=GL,Number=.,Type=Float,Description="Genotype Likelihoods">
 #pragma GENDICT FORMAT_GP=DTYPE_2=GP       // <ID=GP,Number=G,Type=Float,Description="Phred-scaled posterior probabilities for genotypes as defined in the VCF specification">
@@ -66,7 +70,11 @@
 #pragma GENDICT FORMAT_SB=DTYPE_2=SB       // <ID=SB,Number=4,Type=Integer,Description="Per-sample component statistics which comprise the Fisher's Exact Test to detect strand bias">
 #pragma GENDICT FORMAT_PS=DTYPE_2=PS       // seen 1: <ID=PS,Number=1,Type=Integer,Description="Phasing set (typically the position of the first variant in the set)">
                                            // seen 2: <ID=PS,Number=1,Type=Integer,Description="Physical phasing ID information, where each unique ID within a given sample (but not across samples) connects records within a phasing group">
+#pragma GENDICT FORMAT_PSpos=DTYPE_2=PSpos // 3 contexts used to seg PS and PID
+#pragma GENDICT FORMAT_PSalt=DTYPE_2=PSalt
+#pragma GENDICT FORMAT_PSref=DTYPE_2=PSref
 #pragma GENDICT FORMAT_PID=DTYPE_2=PID     // <ID=PID,Number=1,Type=String,Description="Physical phasing ID information, where each unique ID within a given sample (but not across samples) connects records within a phasing group">
+#pragma GENDICT FORMAT_PGT=DTYPE_2=PGT     // <ID=PGT,Number=1,Type=String,Description="Physical phasing haplotype information, describing how the alternate alleles are phased in relation to one another">
 #pragma GENDICT FORMAT_FL=DTYPE_2=FL       // Seen in Reich's ancient DNA datasets: <ID=FL,Number=1,Type=Character,Description="filter level in range 0-9 or no value (non-integer: N,?) with zero being least reliable; to threshold at FL=n, use all levels n-9">
 
 #pragma GENDICT FORMAT_AB=DTYPE_2=AB       // <ID=AB,Number=1,Type=Float,Description="Allele balance for each het genotype",RendAlg="NONE">
@@ -122,7 +130,15 @@
 #pragma GENDICT INFO_MLEAC=DTYPE_1=MLEAC       // <ID=MLEAC,Number=A,Type=Integer,Description="Maximum likelihood expectation (MLE) for the allele counts (not necessarily the same as the AC), for each ALT allele, in the same order as listed">
 #pragma GENDICT INFO_MLEAF=DTYPE_1=MLEAF       // <ID=MLEAF,Number=A,Type=Float,Description="Maximum likelihood expectation (MLE) for the allele frequency (not necessarily the same as the AF), for each ALT allele, in the same order as listed">
 #pragma GENDICT INFO_LDAF=DTYPE_1=LDAF         //  MLE Allele Frequency Accounting for LD
-#pragma GENDICT FORMAT_MIN_DP=DTYPE_1=MIN_DP   // <ID=MIN_DP,Number=1,Type=Integer,Description="Minimum DP observed within the GVCF block">
+#pragma GENDICT INFO_SOR=DTYPE_1=SOR           // <ID=SOR,Number=1,Type=Float,Description="Symmetric Odds Ratio of 2x2 contingency table to detect strand bias">. See: https://gatk.broadinstitute.org/hc/en-us/articles/360036361772-StrandOddsRatio
+#pragma GENDICT INFO_QD=DTYPE_1=QD             // <ID=QD,Number=1,Type=Float,Description="Variant Confidence/Quality by Depth">. See: https://gatk.broadinstitute.org/hc/en-us/articles/360041414572-QualByDepth
+#pragma GENDICT FORMAT_RGQ=DTYPE_2=RGQ         // <ID=RGQ,Number=1,Type=Integer,Description="Unconditional reference genotype confidence, encoded as a phred quality -10*log10 p(genotype call is wrong)">
+#pragma GENDICT FORMAT_MIN_DP=DTYPE_2=MIN_DP   // <ID=MIN_DP,Number=1,Type=Integer,Description="Minimum DP observed within the GVCF block">
+
+// 10xGenomics: https://support.10xgenomics.com/genome-exome/software/pipelines/latest/output/vcf
+#pragma GENDICT FORMAT_BX=DTYPE_2=BX           // <ID=BX,Number=.,Type=String,Description="Barcodes and Associated Qual-Scores Supporting Alleles">
+#pragma GENDICT FORMAT_PQ=DTYPE_2=PQ           // <ID=PQ,Number=1,Type=Integer,Description="Phred QV indicating probability at this variant is incorrectly phased">
+#pragma GENDICT FORMAT_JQ=DTYPE_2=JQ           // <ID=JQ,Number=1,Type=Integer,Description="Phred QV indicating probability of a phasing switch error in gap prior to this variant">
 
 // Ensembl VEP (Variant Effect Predictor) fields: https://www.ensembl.org/info/docs/tools/vep/script/vep_options.html
 #pragma GENDICT INFO_vep=DTYPE_1=vep
@@ -243,24 +259,33 @@ typedef uint8_t Allele; // elements of ht_matrix: values 48->147 for allele 0 to
 
 // ZIP stuff
 extern void vcf_zip_initialize (void);
-extern void vcf_zip_read_one_vb (VBlockP vb);
+extern void vcf_zip_finalize (bool is_last_user_txt_file);
+extern void vcf_zip_genozip_header (SectionHeaderGenozipHeader *header);
+extern void vcf_zip_init_vb (VBlockP vb);
 extern void vcf_liftover_display_lift_report (void);
 extern void vcf_zip_after_compress (VBlockP vb);
-extern void zip_vcf_after_vbs (void);
+extern void vcf_zip_after_vbs (void);
+extern void vcf_zip_set_txt_header_specific (SectionHeaderTxtHeader *txt_header);
+extern void vcf_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeader *vb_header);
+extern bool vcf_zip_vb_has_count (VBlockP vb);
+extern void vcf_zip_generate_recon_plan (void);
+extern void vcf_zip_update_txt_counters (VBlockP vb);
 
 // SEG stuff
-extern const char *vcf_seg_txt_line (VBlockP vb_, const char *field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
+extern rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
 extern void vcf_seg_initialize (VBlockP vb_);
 extern void vcf_zip_after_compute (VBlockP vb);
 extern void vcf_seg_finalize (VBlockP vb_);
 extern bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern TranslatorId vcf_lo_luft_trans_id (DictId dict_id, char number);
+extern uint32_t vcf_seg_get_vb_recon_size (VBlockP vb);
 
 // PIZ stuff
-extern bool vcf_piz_read_one_vb (VBlockP vb, Section sl);
+extern void vcf_piz_genozip_header (const SectionHeaderGenozipHeader *header);
+extern bool vcf_piz_maybe_reorder_lines (void);
+extern bool vcf_piz_init_vb (VBlockP vb, const SectionHeaderVbHeader *header, uint32_t *txt_data_so_far_single_0_increment);
 extern void vcf_piz_recon_init (VBlockP vb);
-extern bool vcf_vb_is_luft (VBlockP vb);
-extern bool vcf_piz_is_skip_section (VBlockP vb, SectionType st, DictId dict_id);
+extern IS_SKIP (vcf_piz_is_skip_section);
 extern CONTAINER_FILTER_FUNC (vcf_piz_filter);
 extern CONTAINER_CALLBACK (vcf_piz_container_cb);
 extern CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb);
@@ -277,7 +302,12 @@ extern void vcf_vb_destroy_vb();
 extern void vcf_vb_cleanup_memory();
 extern unsigned vcf_vb_size (DataType dt);
 extern unsigned vcf_vb_zip_dl_size (void);
+extern void vcf_reset_line (VBlockP vb);
 extern bool vcf_vb_has_haplotype_data (VBlockP vb);
+extern bool vcf_vb_is_primary (VBlockP vb);
+extern bool vcf_vb_is_luft (VBlockP vb);
+extern int32_t vcf_vb_get_reject_bytes (VBlockP vb);
+extern rom vcf_coords_name (int coord);
 
 // Liftover - INFO fields
 #define INFO_LUFT_NAME  "LUFT"
@@ -293,18 +323,19 @@ extern void vcf_tags_cmdline_drop_option(void);
 extern void vcf_tags_cmdline_rename_option(void);
 
 // Samples stuff
-extern void vcf_samples_add  (const char *samples_str);
+extern void vcf_samples_add  (rom samples_str);
 
 #define VCF_SPECIAL { vcf_piz_special_main_REFALT, vcf_piz_special_FORMAT, vcf_piz_special_INFO_AC, vcf_piz_special_INFO_SVLEN, \
-                      vcf_piz_special_FORMAT_DS_old, vcf_piz_special_INFO_BaseCounts, vcf_piz_special_INFO_SF, vcf_piz_special_MINUS,  \
+                      vcf_piz_special_FORMAT_DS_old, vcf_piz_special_INFO_BaseCounts, vcf_piz_special_INFO_SF, piz_special_MINUS,  \
                       vcf_piz_special_LIFT_REF, vcf_piz_special_COPYSTAT, vcf_piz_special_other_REFALT, vcf_piz_special_COPYPOS, vcf_piz_special_ALLELE, \
                       vcf_piz_special_INFO_HGVS_SNP_POS, vcf_piz_special_INFO_HGVS_SNP_REFALT, \
                       vcf_piz_special_INFO_HGVS_DEL_END_POS, vcf_piz_special_INFO_HGVS_DEL_PAYLOAD, \
                       vcf_piz_special_INFO_HGVS_INS_END_POS, vcf_piz_special_INFO_HGVS_INS_PAYLOAD, \
                       vcf_piz_special_INFO_HGVS_DELINS_END_POS, vcf_piz_special_INFO_HGVS_DELINS_PAYLOAD,\
                       vcf_piz_special_MUX_BY_DOSAGE, vcf_piz_special_FORMAT_AB, vcf_piz_special_FORMAT_GQ, \
-                      vcf_piz_special_MUX_BY_DOSAGExDP, vcf_piz_special_COPY_REForALT, vcf_piz_special_DP_by_DP, \
-                      vcf_piz_special_PS_by_PID }
+                      vcf_piz_special_MUX_BY_DOSAGExDP, vcf_piz_special_COPY_REForALT, vcf_piz_special_DP_by_DP_v13, \
+                      vcf_piz_special_PS_by_PID, vcf_piz_special_PGT, vcf_piz_special_DP_by_DP, vcf_piz_special_DP_by_DP_single,\
+                      vcf_piz_special_RGQ, vcf_piz_special_MUX_BY_HAS_RGQ }
 
 SPECIAL (VCF, 0,  main_REFALT,         vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,              vcf_piz_special_FORMAT)
@@ -313,7 +344,7 @@ SPECIAL (VCF, 3,  SVLEN,               vcf_piz_special_INFO_SVLEN);
 SPECIAL (VCF, 4,  DS_old,              vcf_piz_special_FORMAT_DS_old);            // used in files up to 12.0.42
 SPECIAL (VCF, 5,  BaseCounts,          vcf_piz_special_INFO_BaseCounts);
 SPECIAL (VCF, 6,  SF,                  vcf_piz_special_INFO_SF);
-SPECIAL (VCF, 7,  MINUS,               vcf_piz_special_MINUS);                    // added v12.0.0
+SPECIAL (VCF, 7,  MINUS,               piz_special_MINUS);                        // added v12.0.0 
 SPECIAL (VCF, 8,  LIFT_REF,            vcf_piz_special_LIFT_REF);                 // added v12.0.0
 SPECIAL (VCF, 9,  COPYSTAT,            vcf_piz_special_COPYSTAT);                 // added v12.0.0
 SPECIAL (VCF, 10, other_REFALT,        vcf_piz_special_other_REFALT);             // added v12.0.0
@@ -327,14 +358,19 @@ SPECIAL (VCF, 17, HGVS_INS_END_POS,    vcf_piz_special_INFO_HGVS_INS_END_POS);  
 SPECIAL (VCF, 18, HGVS_INS_PAYLOAD,    vcf_piz_special_INFO_HGVS_INS_PAYLOAD);    // added v12.0.34
 SPECIAL (VCF, 19, HGVS_DELINS_END_POS, vcf_piz_special_INFO_HGVS_DELINS_END_POS); // added v12.0.34
 SPECIAL (VCF, 20, HGVS_DELINS_PAYLOAD, vcf_piz_special_INFO_HGVS_DELINS_PAYLOAD); // added v12.0.34
-SPECIAL (VCF, 21, MUX_BY_DOSAGE,       vcf_piz_special_MUX_BY_DOSAGE);            // added v13
-SPECIAL (VCF, 22, AB,                  vcf_piz_special_FORMAT_AB);                // added v13
-SPECIAL (VCF, 23, GQ,                  vcf_piz_special_FORMAT_GQ);                // added v13
+SPECIAL (VCF, 21, MUX_BY_DOSAGE,       vcf_piz_special_MUX_BY_DOSAGE);            // added v13.0.0
+SPECIAL (VCF, 22, AB,                  vcf_piz_special_FORMAT_AB);                // added v13.0.0
+SPECIAL (VCF, 23, GQ,                  vcf_piz_special_FORMAT_GQ);                // added v13.0.0
 SPECIAL (VCF, 24, MUX_BY_DOSAGExDP,    vcf_piz_special_MUX_BY_DOSAGExDP);         // added v13.0.3
 SPECIAL (VCF, 25, COPY_REForALT,       vcf_piz_special_COPY_REForALT);            // added v13.0.5
-SPECIAL (VCF, 26, DP_by_DP,            vcf_piz_special_DP_by_DP);                 // added v13.0.5
+SPECIAL (VCF, 26, DP_by_DP_v13,        vcf_piz_special_DP_by_DP_v13);             // added v13.0.5, removed in v14
 SPECIAL (VCF, 27, PS_BY_PID,           vcf_piz_special_PS_by_PID);                // added v13.0.11
-#define NUM_VCF_SPECIAL 28
+SPECIAL (VCF, 28, PGT,                 vcf_piz_special_PGT);                      // added v14.0.0
+SPECIAL (VCF, 29, DP_by_DP,            vcf_piz_special_DP_by_DP);                 // added v14.0.0 - multiple samples: INFO/DP by sum(FORMAT/DP)
+SPECIAL (VCF, 30, DP_by_DP_single,     vcf_piz_special_DP_by_DP_single);          // added v14.0.0 - single sample: FORMAT/DP by INFO/DP
+SPECIAL (VCF, 31, RGQ,                 vcf_piz_special_RGQ);                      // added v14.0.0
+SPECIAL (VCF, 32, MUX_BY_HAS_RGQ,      vcf_piz_special_MUX_BY_HAS_RGQ);           // added v14.0.0
+#define NUM_VCF_SPECIAL 33
 
 // Translators for Luft (=secondary coordinates)
 TRANSLATOR (VCF, VCF,   1,  G,      vcf_piz_luft_G)       // same order as LiftOverStatus starting LO_CANT_G
@@ -353,7 +389,7 @@ TRANSLATOR (VCF, VCF,   10, ALLELE, vcf_piz_luft_ALLELE)
                           vcf_piz_luft_A_1, vcf_piz_luft_PLOIDY, vcf_piz_luft_GT, vcf_piz_luft_END, vcf_piz_luft_XREV, vcf_piz_luft_ALLELE }
 
 typedef struct {
-    const char *alg_name;
+    rom alg_name;
     enum { TW_NEVER, TW_ALWAYS, TW_REF_ALT_SWITCH, TW_XSTRAND } upon;
 } LuftTransLateProp;
 
@@ -373,16 +409,17 @@ typedef struct {
                            
 extern const LuftTransLateProp ltrans_props[NUM_VCF_TRANS];
 
-#define needs_translation(ctx)  (z_dual_coords && (ctx)->luft_trans && \
+#define needs_translation(ctx)  (z_is_dvcf && (ctx)->luft_trans && \
     ((ltrans_props[(ctx)->luft_trans].upon == TW_REF_ALT_SWITCH && LO_IS_OK_SWITCH (last_ostatus)) || \
      (ltrans_props[(ctx)->luft_trans].upon == TW_ALWAYS         && LO_IS_OK (last_ostatus))        || \
      (ltrans_props[(ctx)->luft_trans].upon == TW_XSTRAND        && LO_IS_OK (last_ostatus) && *CTX(VCF_oXSTRAND)->last_snip != '-')))
 
-#define VCF_DICT_ID_ALIASES \
-    /*         alias             maps to this ctx  */  \
-    { DT_VCF,  _INFO_END, _VCF_POS    }, \
-
-#define VCF_LOCAL_GET_LINE_CALLBACKS
+#define VCF_DICT_ID_ALIASES             \
+    /*         alias      maps to  */   \
+    { DT_VCF,  _INFO_END, _VCF_POS  },  \
 
 #define dict_id_is_vcf_info_sf   dict_id_is_type_1
 #define dict_id_is_vcf_format_sf dict_id_is_type_2
+
+typedef enum { VCF_COMP_MAIN, VCF_COMP_PRIM_ONLY, VCF_COMP_LUFT_ONLY } VcfComponentType;
+#define VCF_COMP_NAMES { "MAIN", "PRIM", "LUFT" }

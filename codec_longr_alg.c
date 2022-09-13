@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   codec_longr_alg.c
-//   Copyright (C) 2021-2022 Black Paw Ventures Limited
+//   Copyright (C) 2021-2022 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 //   Copyright claimed on additions and modifications vs EnanoFASTQ.
 //
 // The code in this file is partially derived from: https://github.com/guilledufort/EnanoFASTQ/tree/d6119dbccd19485c8222ec6d72516114401d1a08
@@ -90,6 +93,8 @@ typedef union { // 32 bit
         uint32_t na     : AVG_BITS + ERR_BITS;  // not included in nctx
         uint32_t unused : UNUSED_BITS;
     } nctx;
+
+    uint32_t value;
 } LongrChannel;
 #pragma pack()
 

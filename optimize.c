@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   ploptimize.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #include <string.h>
 #include <stdlib.h>
@@ -11,7 +14,7 @@
 #include "strings.h"
 
 // optimize numbers in the range (-99.5,99.5) to 2 significant digits
-bool optimize_float_2_sig_dig (const char *snip, unsigned len, float cap_value_at /* 0 if no cap */,
+bool optimize_float_2_sig_dig (rom snip, unsigned len, float cap_value_at /* 0 if no cap */,
                                char *optimized_snip, unsigned *optimized_snip_len)
 {
     if (!IS_DIGIT(snip[0]) && snip[0] != '.' && snip[0] != '-') return false; // not a number
@@ -38,7 +41,7 @@ bool optimize_float_2_sig_dig (const char *snip, unsigned len, float cap_value_a
 
     static const float exps[NUM_EXPS]    = { 10, 1, 0.1, 0.01, 0.001, 0.0001, 0.00001, 0.000001 };
     static const float mult_by[NUM_EXPS] = { 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000 };
-    static const char *prefix = "0.0000000000000000000";
+    static rom prefix = "0.0000000000000000000";
     unsigned e=0; for (; e < NUM_EXPS; e++)
         if (fp >= exps[e]) {
             int twodigits = round (fp * mult_by[e]); // eg 4.31->43 ; 4.39->44 ; 0.0451->45
@@ -68,7 +71,7 @@ bool optimize_float_2_sig_dig (const char *snip, unsigned len, float cap_value_a
     return true;
 }
 
-bool optimize_vector_2_sig_dig (const char *snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len /* in / out */)
+bool optimize_vector_2_sig_dig (rom snip, unsigned len, char *optimized_snip, unsigned *optimized_snip_len /* in / out */)
 {
     char *writer = optimized_snip;
     unsigned digit_i=0;

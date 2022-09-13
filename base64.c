@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   base64.c
-//   Copyright (C) 2019-2022 Black Paw Ventures Limited
+//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 //   Copyright claimed on additions and modifications.
 //
 // derived from: https://github.com/launchdarkly/c-client-sdk/blob/master/base64.c
@@ -15,8 +18,8 @@
 
 #include "base64.h"
 
-static const uint8_t *encode_lookup =
-    (uint8_t *)"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+static bytes encode_lookup =
+    (bytes)"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 static const uint8_t decode_lookup[256] = {
 	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, // ASCII 0-15
@@ -38,11 +41,11 @@ static const uint8_t decode_lookup[256] = {
 
 // returns length of encoded (which is at most base64_sizeof)
 // data must be allocated base64_sizeof bytes
-unsigned base64_encode (const uint8_t *data, unsigned data_len, char *b64_str)
+unsigned base64_encode (bytes data, unsigned data_len, char *b64_str)
 {
     ASSERTNOTNULL (data);
 
-	const uint8_t *end = data + data_len;
+	bytes end = data + data_len;
 	char *next = b64_str;
 	while (end - data >= 3) {
 		*next++ = encode_lookup[data[0] >> 2];
@@ -67,10 +70,12 @@ unsigned base64_encode (const uint8_t *data, unsigned data_len, char *b64_str)
     return next - b64_str;
 }
 
-
-void base64_decode (const char *b64_str, unsigned *b64_str_len /* in / out */, uint8_t *data)
+// returns length of decoded data. b64_str_len is updated to the length of b64 string that was consumed.
+uint32_t base64_decode (rom b64_str, unsigned *b64_str_len /* in / out */, uint8_t *data)
 {
 	uint8_t block[4];
+	bytes start_data = data;
+
 	unsigned pad=0, i=0; for (; i < *b64_str_len; i++) {
 		if (b64_str[i] == '=') pad++;
 		block[i&3] = decode_lookup[(unsigned)b64_str[i]];
@@ -85,4 +90,6 @@ void base64_decode (const char *b64_str, unsigned *b64_str_len /* in / out */, u
 	}	
 
 	*b64_str_len = i;
+
+	return (uint32_t)(data - start_data);
 }

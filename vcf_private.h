@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   vcf_private.h
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #pragma once
 
@@ -16,20 +19,29 @@
 
 // IMPORTANT: if changing fields in DataLine, also update vb_release_vb
 typedef struct {
-    VBLOCK_COMMON_LINES_ZIP
+    WordIndex chrom[2];          // Seg: enter as node_index ; Merge: convert to word_index
+    PosType pos[2];              // arrays of [2] - { primary-coord, luft-coord } 
+    PosType end_delta;           // Delta of INFO/END vs POS (same in both coordinates) - used in case chrom and pos are the same
+    uint32_t tie_breaker;        // tie-breaker in case chrom, pos and end are the same
     
     bool has_haplotype_data : 1; // FORMAT field contains GT
     bool has_genotype_data  : 1; // FORMAT field contains subfields other than GT
 
-    WordIndex format_node_i; // the node_index into contexts[VCF_FORMAT].nodes and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_node_i]
+    WordIndex format_node_i;     // the node_index into contexts[VCF_FORMAT].nodes and also format_mapper_buf that applies to this line. Data on the fields is in vb->format_mapper_buf[dl.format_node_i]
 } ZipDataLineVCF;
-#define DATA_LINE(i) ENT (ZipDataLineVCF, vb->lines, i)
+#define DATA_LINE(i) B(ZipDataLineVCF, vb->lines, i)
 
 typedef enum { VCF_v_UNKNOWN, VCF_v4_1, VCF_v4_2, VCF_v4_3, VCF_v4_4, VCF_v4_5 } VcfVersion;
 
 typedef MULTIPLEXER(4) DosageMultiplexer;
 
 #define VCF_MAX_ARRAY_ITEMS SMALL_CON_NITEMS
+
+#define NUM_COORDS 4
+typedef enum __attribute__ ((__packed__)) { DC_NONE, DC_PRIMARY, DC_LUFT, DC_BOTH } Coords; // 2 bits, part of the file format, goes into FlagsTxtHeader, FlagsVbHeader
+
+#define OTHER_COORDS(c) ((c)==DC_PRIMARY ? DC_LUFT : DC_PRIMARY)
+#define SEL(prim,luft) ((vb->line_coords == DC_PRIMARY) ? (prim) : (luft))
 
 // IMPORTANT: if changing fields in VBlockVCF, also update vb_release_vb
 typedef struct VBlockVCF {
@@ -38,30 +50,23 @@ typedef struct VBlockVCF {
 
     // charactaristics of the data
     
-    uint16_t ploidy;                // ZIP only
+    uint16_t ploidy;         // ZIP only
     VcfVersion vcf_version;
-
-    // used for segging FORMAT/GT
-    uint32_t gt_prev_ploidy;
-    char gt_prev_phase;
+    uint64_t first_line;     // ZIP: used for --add_line_numbers  
     
     // used for segging INFO
-    Buffer info_items;              // Seg: INFO items of the line being segged
+    Buffer info_items;       // Seg: INFO items of the line being segged
 
-    const char *main_refalt;        // used by vcf_refalt_lift and vcf_seg_INFO_BaseCounts, set by vcf_seg_txt_line
+    rom main_refalt;         // used by vcf_refalt_lift and vcf_seg_INFO_BaseCounts, set by vcf_seg_txt_line
     unsigned main_ref_len, main_alt_len;
+
+    // GVCF stuff
+    enum { RGQ_UNKNOWN=-1, RGQ_HASNT=false, RGQ_HAS=true } line_has_RGQ;
 
     // INFO/SF stuff
     enum { USE_SF_UNKNOWN, USE_SF_YES, USE_SF_NO } use_special_sf;
     Buffer sf_txt, sf_snip; // INFO/SF data as it appears in the snip being constructed
-
-    // INFO/END
-    uint64_t last_end_line_i;       // PIZ: last line on which INFO/END was encountered
-    
-    // FORMAT/DP
-    int64_t sum_dp_this_line;       // ZIP: sum of values of FORMAT/DP in samples of this line - '.' counts as 0.
-    uint32_t num_dps_this_line;     // ZIP: possibley less that vcf_num_samples, in case of missing samples or missing DP fields in some of the samples
-    
+        
     // FORMAT/AD
     int64_t ad_values[VCF_MAX_ARRAY_ITEMS];
     
@@ -76,8 +81,12 @@ typedef struct VBlockVCF {
 
     PLMuxByDP PL_mux_by_DP;
     
-    MULTIPLEXER(1 + 50 * 3) mux_PLy; // num_DP x 3 + 1
+    #define MAX_DP_FOR_MUX 60
+    MULTIPLEXER(1 + MAX_DP_FOR_MUX * 3) mux_PLy;
     MULTIPLEXER(1 + 7 * 3) mux_GQ;
+    MULTIPLEXER(MAX_DP_FOR_MUX) mux_RGQ;   
+
+    MULTIPLEXER(2) mux_QUAL, mux_INFO; // multiplex by has_RGQ (in GVCF)
 
     // used by CODEC_HAPM (for VCF haplotype matrix) 
     Buffer hapmat_helper_index_buf; // ZIP: used by codec_hapmat_count_alt_alleles 
@@ -86,11 +95,22 @@ typedef struct VBlockVCF {
     Buffer hapmat_one_array;        // one line or column 
 
     // DVCF stuff
+    Buffer save_luft_samples;       // ZIP: backed-up luft line samples
+    bool sort;                      // ZIP: true if this VB will be sorted
+    Coords vb_coords;               // ZIP: DC_PRIMARY, DC_LUFT or DC_BOTH
+                                    // PIZ: DC_PRIMARY or DC_LUFT - influenced by FlagsVbHeader.coords and flag.luft 
+    bool is_rejects_vb;             // PIZ/ZIP: this is a VB of rejects variants for header ##primary_only/##luft_only
+    Coords line_coords;             // Seg: coords of current line - DC_PRIMARY or DC_LUFT
+    uint32_t pos_aln_i;             // ZIP: chain alignment of POS (used to compare to that of END)
+    int32_t recon_size_luft;        // ZIP only: expected reconstruction size if this VB is reconstructed in LUFT coords inc. as ##luft_only in a DC_LUFT rejects VB) 
+
     Buffer tags;                    // Seg: used for FORMAT and INFO tag renaming.
     Buffer rejects_report;          // human readable report about rejects
     char new_ref;                   // SNP: new REF that is neither REF nor ALT; left-anchored INDEL with XSTRAND: new anchor
     bool is_del_sv;                 // is ALT == "<DEL>"
     bool prev_line_rejected;        // ZIP only
+    int32_t reject_bytes;           // ZIP of a Luft file: number of bytes of reject data in this VB (data originating from ##primary_only/##luft_only) 
+    bool is_unsorted[2];            // ZIP: line order of this VB[primary, luft] is unsorted 
 } VBlockVCF;
 
 typedef VBlockVCF *VBlockVCFP;
@@ -172,7 +192,7 @@ typedef enum {
 
 // NOTE: The rejection strings should not change or vcf_lo_seg_INFO_REJX won't identify oStatus in rejected lines when parsing old dual coordinate files (it will fallback to LO_REJECTED)
 // It *IS OK* to add more statuses, change their order or change their numeric values, it is *NOT OK* to modify the names as they are part of the file format
-extern const char *dvcf_status_names[NUM_LO_STATUSES];
+extern rom dvcf_status_names[NUM_LO_STATUSES];
 #define DVCF_STATUS_NAMES { /* for display esthetics - max 25 characters - note: these strings are defined in the dual-coordinate specification */\
     "UNKNOWN", \
     "OK", "OkRefSameSNP", "OkRefSameSNPRev", "OkRefSameSNPIupac", \
@@ -242,7 +262,7 @@ typedef enum { IL_CHROM, IL_POS, IL_REF, IL_XSTRAND, NUM_IL_FIELDS } InfoLiftFie
 
 // Header stuff
 typedef enum { RA_REFALT=0, RA_STRAND, RA_TLAFER, RA_ALWAYS, NUM_RENAME_ATTRS } RenameAttr;
-extern const char *vcf_header_rename_attrs[NUM_RENAME_ATTRS];
+extern rom vcf_header_rename_attrs[NUM_RENAME_ATTRS];
 extern const unsigned vcf_header_rename_attr_lens[NUM_RENAME_ATTRS];
 
 extern uint32_t vcf_num_samples; // ZIP
@@ -251,13 +271,16 @@ extern char *vcf_samples_is_included;
 extern VcfVersion vcf_header_get_version (void);
 
 // Samples stuff
+extern void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt));
 extern void vcf_samples_zip_initialize (void);
 extern void vcf_samples_seg_initialize (VBlockVCFP vb);
 extern void vcf_samples_seg_finalize (VBlockVCFP vb);
 
-extern const char *vcf_seg_samples (VBlockVCF *vb, ZipDataLineVCF *dl, int32_t *len, char *next_field, bool *has_13, const char *backup_luft_samples, uint32_t backup_luft_samples_len);
-extern void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCF *vb);
+extern rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t *len, char *next_field, bool *has_13);
+extern void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCFP vb);
 extern void vcf_piz_FORMAT_GT_rewrite_predicted_phase (VBlockP vb, char *recon, uint32_t recon_len);
+
+eSTRl(af_snip);
 
 // FORMAT/GT stuff
 extern WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, STRp(cell), bool has_ps, bool has_null_dp);
@@ -269,15 +292,17 @@ extern void vcf_FORMAT_PL_after_vbs (void);
 
 // FORMAT/PS and FORMAT/PID stuff
 extern void vcf_samples_zip_initialize_PS_PID (void);
-extern void vcf_samples_seg_initialize_PS_PID (VBlockVCFP vb);
-extern void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STRp(value), bool is_pid);
-extern void vcf_seg_FORMAT_PS_PID_missing_value (VBlockVCFP vb, ContextP ctx, bool is_pid, const char *end_of_sample);
-extern void vcf_piz_initialize_ps_pid (VBlockP vb);
+extern void vcf_samples_seg_initialize_LOOKBACK (VBlockVCFP vb);
+extern void vcf_samples_seg_finalize_PS_PID (VBlockVCFP vb);
+extern void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STRp(value));
+extern void vcf_seg_FORMAT_PS_PID_missing_value (VBlockVCFP vb, ContextP ctx, rom end_of_sample);
+extern void vcf_samples_seg_initialize_PS_PID (VBlockVCFP vb, ContextP ctx, STRp(value));
+extern void vcf_piz_ps_pid_lookback_insert (VBlockP vb, Did did_i, STRp(recon));
 
 // INFO stuff
 
 typedef struct { char name[MAX_TAG_LEN]; // not nul-terminated, including '=' if there is one
-                 const char *value; 
+                 rom value; 
                  unsigned name_len, value_len; 
                  ContextP ctx; } InfoItem;
 
@@ -285,19 +310,23 @@ extern void vcf_info_zip_initialize (void);
 extern void vcf_info_seg_initialize (VBlockVCFP vb);
 extern void vcf_piz_GT_cb_calc_INFO_SF (VBlockVCFP vcf_vb, unsigned rep, char *recon, int32_t recon_len);
 extern void vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VBlockVCFP vcf_vb);
-extern void vcf_seg_INFO_SF_one_sample (VBlockVCF *vb);
-extern void vcf_seg_info_subfields (VBlockVCF *vb, const char *info_str, unsigned info_len);
-extern void vcf_finalize_seg_info (VBlockVCF *vb);
+extern void vcf_piz_finalize_DP_by_DP (VBlockVCFP vb);
+extern void vcf_seg_INFO_SF_one_sample (VBlockVCFP vb);
+extern void vcf_seg_info_subfields (VBlockVCFP vb, rom info_str, unsigned info_len);
+extern void vcf_finalize_seg_info (VBlockVCFP vb);
 
 // Refalt stuff
 extern void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, STRp(ref), STRp(alt));
-extern void vcf_refalt_seg_other_REFALT (VBlockVCFP vb, DidIType did_i, LiftOverStatus ostatus, bool is_xstrand, unsigned add_bytes);
+extern void vcf_refalt_seg_other_REFALT (VBlockVCFP vb, Did did_i, LiftOverStatus ostatus, bool is_xstrand, unsigned add_bytes);
 extern LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool xstrand, WordIndex luft_ref_index, bool *is_left_anchored);
 typedef enum { EQUALS_NEITHER, EQUALS_REF, EQUALS_ALT, EQUALS_MISSING } RefAltEquals;
 RefAltEquals vcf_refalt_oref_equals_ref_or_alt (char oref, char ref, STRp(alt), bool is_xstrand);
-extern bool vcf_refalt_piz_is_variant_snp (VBlockP vb);
-extern bool vcf_refalt_piz_is_variant_indel (VBlockP vb);
+extern bool vcf_refalt_piz_is_variant_snp (VBlockVCFP vb);
+extern bool vcf_refalt_piz_is_variant_indel (VBlockVCFP vb);
 extern void vcf_refalt_seg_convert_to_primary (VBlockVCFP vb, LiftOverStatus ostatus);
+
+// GVCF stuff
+extern bool vcf_piz_line_has_RGQ (VBlockVCFP vb);
 
 // Tags stuff
 
@@ -321,14 +350,13 @@ typedef struct {
 
 extern void vcf_tags_populate_tags_from_command_line (void);
 extern void vcf_tags_add_tag (VBlockVCFP vb, ContextP ctx, DictIdType dtype, STRp(tag_name));
-extern unsigned vcf_tags_rename (VBlockVCFP vb, unsigned num_tags, const ContextPBlock ctxs, const char *sf_names[], const unsigned sf_name_lens[], const InfoItem *info_items, char *renamed);
+extern unsigned vcf_tags_rename (VBlockVCFP vb, unsigned num_tags, const ContextPBlock ctxs, rom sf_names[], const unsigned sf_name_lens[], const InfoItem *info_items, char *renamed);
 extern void vcf_tags_finalize_tags_from_vcf_header (void);
 extern bool vcf_tags_add_attr_from_header (DictIdType dtype, STRp(tag_name), RenameAttr attr, STRp(number), STRp (type), STRp (rendalg), pSTRp(dest), bool recursive);
 extern Tag *vcf_tags_get_next_missing_tag (Tag *tag);
 
 // Liftover Zip
 extern void vcf_lo_zip_initialize (void);
-extern void vcf_lo_append_rejects_file (VBlockP vb, Coords coord);
 extern void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl);
 extern void vcf_lo_set_rollback_point (VBlockVCFP vb);
 extern void vcf_lo_seg_rollback_and_reject (VBlockVCFP vb, LiftOverStatus ostatus, Context *ctx);
@@ -337,22 +365,32 @@ extern void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, ContextP ctx, STRp(val
 extern void vcf_lo_seg_INFO_REJX (VBlockVCFP vb, ContextP ctx, STRp(value));
 extern bool vcf_lo_seg_cross_render_to_primary (VBlockVCFP vb, ContextP ctx, STRp (this_value), char *modified_snip, unsigned *modified_snip_len);
 
+// Line sorter
+typedef struct {
+    WordIndex chrom_wi; 
+    uint32_t tie_breaker;
+    PosType start_pos, end_pos;
+} LineCmpInfo; 
+extern bool vcf_is_sorting (CompIType comp_i);
+extern int vcf_linesort_cmp (LineCmpInfo a, LineCmpInfo b);
+extern void vcf_linesort_merge_vb (VBlockP vb);
+
 #define vcf_set_ostatus(ostatus) ctx_set_last_value (VB, CTX(VCF_oSTATUS), (int64_t)(ostatus))
 
 // Liftover Piz
-extern void vcf_lo_piz_TOPLEVEL_cb_filter_line (VBlockP vb);
+extern void vcf_lo_piz_TOPLEVEL_cb_filter_line (VBlockVCFP vb);
 
-#define VCF_ERR_PREFIX { progress_newline(); fprintf (stderr, "Error %s:%u in variant %s=%.*s %s=%"PRId64": ", __FUNCTION__, __LINE__, (vb->line_coords == DC_PRIMARY ? "CHROM" : "oCHROM"), vb->chrom_name_len, vb->chrom_name, (vb->line_coords == DC_PRIMARY ? "POS" : "oPOS"), vb->last_int (vb->line_coords == DC_PRIMARY ? VCF_POS : VCF_oPOS)); }
+#define VCF_ERR_PREFIX { progress_newline(); fprintf (stderr, "Error %s:%u in variant %s=%.*s %s=%"PRId64": ", __FUNCLINE, (VB_VCF->line_coords == DC_PRIMARY ? "CHROM" : "oCHROM"), vb->chrom_name_len, vb->chrom_name, (VB_VCF->line_coords == DC_PRIMARY ? "POS" : "oPOS"), vb->last_int (VB_VCF->line_coords == DC_PRIMARY ? VCF_POS : VCF_oPOS)); }
 #define ASSVCF(condition, format, ...) do { if (!(condition)) { VCF_ERR_PREFIX; fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }} while(0)
 #define ASSVCF0(condition, msg)        ASSVCF ((condition), msg "%s", "")
 #define WARNVCF(format, ...)           do { if (!flag.quiet)  { VCF_ERR_PREFIX; fprintf (stderr, format "\n", __VA_ARGS__); } } while(0)
 
-#define REJECT(ostatus, reason, ...)              do { if (!flag.rejects_coord) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } while(0)
-#define REJECT_MAPPING(reason)                    do { if (!flag.rejects_coord) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64 "\t.\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0]); return; } while(0)
-#define REJECT_SUBFIELD(ostatus, ctx, reason,...) do { if (!flag.rejects_coord) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t.\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], __VA_ARGS__); \
+#define REJECT(ostatus, reason, ...)              do { if (!vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } while(0)
+#define REJECT_MAPPING(reason)                    do { if (!vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64 "\t.\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0]); return; } while(0)
+#define REJECT_SUBFIELD(ostatus, ctx, reason,...) do { if (!vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t.\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], __VA_ARGS__); \
                                                        vcf_lo_seg_rollback_and_reject (vb, (ostatus), (ctx)); } while(0)
-#define LIFTOK(ostatus, reason, ...) do { if (flag.show_lift && !flag.rejects_coord) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } while(0)
-#define LIFTOKEXT(ostatus, reason, ...) do { if (flag.show_lift && !flag.rejects_coord) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } while(0)
+#define LIFTOK(ostatus, reason, ...) do { if (flag.show_lift && !vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } while(0)
+#define LIFTOKEXT(ostatus, reason, ...) do { if (flag.show_lift && !vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } while(0)
 #define LIFTOK0(ostatus, reason) LIFTOK(ostatus, reason "%s", "")
-#define REJECTIF(condition, ostatus, reason, ...) do { if (condition) { if (!flag.rejects_coord) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } } while(0)
+#define REJECTIF(condition, ostatus, reason, ...) do { if (condition) { if (!vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } } while(0)
 #define REJECTIF0(condition, ostatus, reason)      do { if (condition) REJECT (ostatus, reason "%s", ""); } while (0)

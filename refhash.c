@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   refhash.c
-//   Copyright (C) 2020-2022 Black Paw Ventures Limited
+//   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   and subject to penalties specified in the license.
 
 #include "genozip.h"
 #include "mutex.h"
@@ -16,7 +19,7 @@
 #include "zfile.h"
 #include "refhash.h"
 #include "compressor.h"
-#include "bit_array.h"
+#include "bits.h"
 #include "profiler.h"
 #include "threads.h"
 #include "segconf.h"
@@ -86,12 +89,12 @@ static inline uint32_t refhash_get_word (const Range *r, int64_t base_i)
 
     // if the are any of the 29 bits in this range, use them
     if (num_bits_this_range > 0)
-        refhash_word = bit_array_get_wordn (&r->ref, base_i * 2, num_bits_this_range);
+        refhash_word = bits_get_wordn (&r->ref, base_i * 2, num_bits_this_range);
 
     // if there are any bits in the next range, they are the more significant bits in the word we are forming
     if (num_bits_this_range < bits_per_hash)
         // note: refhash_calc_one_range guarantees us that if the word overflows to the next range, then there is a valid next range with sufficient bits
-        refhash_word |= bit_array_get_wordn (&(r+1)->ref, 0, bits_per_hash - num_bits_this_range) << num_bits_this_range;
+        refhash_word |= bits_get_wordn (&(r+1)->ref, 0, bits_per_hash - num_bits_this_range) << num_bits_this_range;
 
     return refhash_word;
 }
@@ -110,7 +113,7 @@ void refhash_calc_one_range (const Range *r, const Range *next_r /* NULL if r is
     
     ASSERT (this_range_size * 2 == r->ref.nbits, 
             "mismatch between this_range_size=%"PRId64" (x2 = %"PRId64") and r->ref.nbits=%"PRIu64". Expecting the latter to be exactly double the former. chrom=%s r->first_pos=%"PRId64" r->last_pos=%"PRId64" r->range_id=%u", 
-            this_range_size, this_range_size*2, r->ref.nbits, ENT (char, ZCTX(0)->dict, ENT (CtxNode, ZCTX(0)->nodes, r->chrom)->char_index), 
+            this_range_size, this_range_size*2, r->ref.nbits, Bc (ZCTX(0)->dict, B(CtxNode, ZCTX(0)->nodes, r->chrom)->char_index), 
             r->first_pos, r->last_pos, r->range_id);
             
     // number of bases - considering the availability of bases in the next range, as we will overflow to it at the
@@ -127,11 +130,8 @@ void refhash_calc_one_range (const Range *r, const Range *next_r /* NULL if r is
             // since our refhash entries are 32 bit, we cannot use the reference data beyond the first 4Gbp for creating the refhash
             // TO DO: make the hash entries 40bit (or 64 bit?) if genome size > 4Gbp (bug 150)
             if (r->gpos + base_i > MAX_ALIGNER_GPOS) {
-                static bool warning_given = false;
-
-                ASSERTW (warning_given, "FYI: %s contains more than %s nucleaotides. When compressing a FASTQ, FASTA or unaligned (i.e. missing RNAME, POS) SAM/BAM file using the reference being generated, only the first %s nucleotides of the reference will be used (no such limitation when compressing other file types). This might affect the compression ratio.", 
-                         txt_name, str_uint_commas (MAX_ALIGNER_GPOS).s, str_uint_commas (MAX_ALIGNER_GPOS).s);
-                warning_given = true; // display this warning only once
+                WARN_ONCE ("FYI: %s contains more than %s bases. When compressing a FASTQ or unaligned (i.e. missing RNAME, POS) SAM/BAM file using the reference being generated, only the first %s bases of the reference will be used (no such limitation when compressing other file types). This might affect the compression ratio.", 
+                            txt_name, str_int_commas (MAX_ALIGNER_GPOS).s, str_int_commas (MAX_ALIGNER_GPOS).s);
                 return;
             }
 
@@ -168,7 +168,7 @@ static void refhash_prepare_for_compress (VBlockP vb)
     // tell this vb what to do
     vb->refhash_layer = next_task_layer;
     vb->refhash_start_in_layer = next_task_start_within_layer;
-    vb->ready_to_dispatch = true;
+    vb->dispatch = READY_TO_COMPUTE;
 
     // incremenet parameters for the next vb
     next_task_start_within_layer += make_ref_vb_size;
@@ -184,7 +184,6 @@ static void refhash_compress_one_vb (VBlockP vb)
 {
     uint32_t uncompressed_size = MIN_(make_ref_vb_size, layer_size[vb->refhash_layer] - vb->refhash_start_in_layer);
     const uint32_t *hash_data = &refhashs[vb->refhash_layer][vb->refhash_start_in_layer / sizeof (uint32_t)];
-//const uint32_t *hash_data = ENT (const uint32_t, refhash_bufs[vb->refhash_layer], vb->refhash_start_in_layer / sizeof (uint32_t));
 
     // calculate density to decide on compression codec
     uint32_t num_zeros=0;
@@ -202,13 +201,13 @@ static void refhash_compress_one_vb (VBlockP vb)
                                     .layer_bits              = (uint8_t)layer_bits[vb->refhash_layer],
                                     .start_in_layer          = BGEN32 (vb->refhash_start_in_layer)     };
 
-    comp_compress (vb, &vb->z_data, (SectionHeaderP)&header, (char*)hash_data, NULL);
+    comp_compress (vb, NULL, &vb->z_data, (SectionHeaderP)&header, (char*)hash_data, NO_CALLBACK, "SEC_REF_HASH");
 
     if (flag.show_ref_hash) 
         iprintf ("vb_i=%u Compressing SEC_REF_HASH num_layers=%u layer_i=%u layer_bits=%u start=%u size=%u bytes size_of_disk=%u bytes\n", 
                  vb->vblock_i, header.num_layers, header.layer_i, header.layer_bits, vb->refhash_start_in_layer, uncompressed_size, BGEN32 (header.h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderRefHash));
 
-    vb->is_processed = true; // tell dispatcher this thread is done and can be joined.
+    vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
 }
 
 // ZIP-FASTA-make-reference: called by main thread in zip_write_global_area
@@ -217,8 +216,8 @@ void refhash_compress_refhash (void)
     next_task_layer = 0;
     next_task_start_within_layer = 0;
 
-    dispatcher_fan_out_task ("compress_refhash", NULL, PROGRESS_MESSAGE, "Writing hash table (this can take several minutes)...", 
-                             false, true, true, false, 0, 100,
+    dispatcher_fan_out_task ("compress_refhash", NULL, 0, "Writing hash table (this can take several minutes)...", 
+                             false, false, false, 0, 100,
                              refhash_prepare_for_compress, 
                              refhash_compress_one_vb, 
                              zfile_output_processed_vb);
@@ -228,7 +227,7 @@ void refhash_compress_refhash (void)
 // stuff related to refhash cache file
 // -----------------------------------
 
-static inline const char *refhash_get_cache_fn (void)
+static inline rom refhash_get_cache_fn (void)
 {
     static char *cache_fn = NULL;
 
@@ -266,7 +265,7 @@ void refhash_create_cache_join (bool free_mem)
 {
     if (!cache_create_vb) return;
 
-    threads_join (&refhash_cache_creation_thread_id, NULL);   
+    threads_join (&refhash_cache_creation_thread_id);   
 
     if (free_mem) vb_destroy_vb (&cache_create_vb);
 }
@@ -300,7 +299,7 @@ static void refhash_uncompress_one_vb (VBlockP vb)
     copy.data = (char *)refhashs[layer_i] + start; // refhashs[layer_i] points to the start of the layer within refhash_buf.data
     zfile_uncompress_section (vb, header, &copy, NULL, 0, SEC_REF_HASH);
 
-    vb->is_processed = true; // tell dispatcher this thread is done and can be joined.
+    vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
 }
 
 static void refhash_read_one_vb (VBlockP vb)
@@ -315,9 +314,9 @@ static void refhash_read_one_vb (VBlockP vb)
     if (((SectionHeaderRefHash *)vb->z_data.data)->layer_i >= num_layers)
         return; // don't read the high layers if beyond the requested num_layers
 
-    NEXTENT (int32_t, vb->z_section_headers) = section_offset;
+    BNXT (int32_t, vb->z_section_headers) = section_offset;
 
-    vb->ready_to_dispatch = true;
+    vb->dispatch = READY_TO_COMPUTE;
 }
 
 void refhash_load_standalone (void)
@@ -354,7 +353,7 @@ static void refhash_initialize_refhashs_array (void)
     // set layer pointers
     uint64_t offset=0;
     for (unsigned layer_i=0; layer_i < num_layers; layer_i++) {
-        refhashs[layer_i] = (uint32_t*)ENT (uint8_t, refhash_buf, offset);
+        refhashs[layer_i] = (uint32_t*)B8 (refhash_buf, offset);
         offset += layer_size[layer_i];
     }
 }
@@ -406,11 +405,11 @@ void refhash_initialize (bool *dispatcher_invoked)
 
             sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
             dispatcher_fan_out_task ("load_refhash", ref_get_filename (gref),
-                                     PROGRESS_MESSAGE, "Reading and caching reference hash table...", 
-                                     flag.test, true, true, false, 0, 100,
+                                     0, "Reading and caching reference hash table...",
+                                     true, flag.test, false, 0, 100,
                                      refhash_read_one_vb, 
                                      refhash_uncompress_one_vb, 
-                                     NULL);
+                                     NO_CALLBACK);
  
             refhash_create_cache_in_background();
             
@@ -431,12 +430,26 @@ void refhash_initialize (bool *dispatcher_invoked)
     if (!refhashs) refhash_initialize_refhashs_array();
 }
 
-void refhash_destroy (void)
+void refhash_destroy (bool destroy_only_if_not_mmap)
 {
+    if (refhash_buf.type == BUF_UNALLOCATED || 
+        (refhash_buf.type == BUF_MMAP_RO && destroy_only_if_not_mmap)) return;
+
     refhash_create_cache_join (true); // wait for cache writing, if we're writing
 
-    buf_destroy (&refhash_buf);
+    buf_destroy (refhash_buf);
     FREE (refhashs);
 
     flag.aligner_available = false;
+}
+
+void refhash_verify_before_exit (void)
+{
+    // verify read-only mmap'ed reference integrity before existing process
+    buf_destroy (refhash_buf); // also verifies loaded mmap
+}
+
+bool refhash_has_refhash (void)
+{
+    return buf_is_alloc (&refhash_buf);
 }
