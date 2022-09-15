@@ -332,6 +332,7 @@ typedef SORTER ((*Sorter));
 #define STR0(x)  rom x=NULL;   uint32_t x##_len=0
 #define STRw(x)  char *x;      uint32_t x##_len    // writeable
 #define STRw0(x) char *x=NULL; uint32_t x##_len=0  // writeable, initializedx
+#define sSTRl(name,len) static char name[len]; static uint32_t name##_len = (len)
 #define STRl(name,len) char name[len]; uint32_t name##_len
 #define eSTRl(x) extern char x[]; extern uint32_t x##_len
 

@@ -170,7 +170,7 @@ static inline DictId gff3_seg_attr_subfield (VBlockP vb, STRp(tag_name), STRp(va
 
     // example: Parent=mRNA00001,mRNA00002,mRNA00003
     case _ATTR_Parent:
-        seg_array (vb, CTX(ATTR_Parent), ATTR_Parent, STRa(value), ',', 0, false, false, DICT_ID_NONE, value_len);
+        seg_array (vb, CTX(ATTR_Parent), ATTR_Parent, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len);
         break;
 
     //case _ATTR_Gap: // I tried: 1. array (no improvement) ; 2. string of op-codes in b250 + integers in local (negligible improvement)

@@ -446,7 +446,11 @@ bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, QnameFlavor qfs, STRp(qname),
 void qname_seg (VBlockP vb, Context *qname_ctx, STRp (qname), unsigned add_additional_bytes)  // account for characters in addition to the field
 {
     START_TIMER;
-    
+
+    // collect the first 6 qnames, if flavor is unknown    
+    if (segconf.running && !segconf.qname_flavor && vb->line_i < 6) 
+        memcpy (segconf.unknown_flavor_qnames[vb->line_i], qname, MIN_(qname_len, UNK_QNANE_LEN));
+
     // copy if identical to previous (> 50% of lines in collated) - small improvement in compression and compression time
     // no need in is_sorted, as already handled in sam_seg_QNAME with buddy 
     if (!segconf.is_sorted && vb->line_i && !flag.optimize_DESC && is_same_last_txt (vb, qname_ctx, STRa(qname))) {

@@ -303,21 +303,6 @@ rom ref_contigs_get_name_by_ref_index (Reference ref, WordIndex ref_index, rom *
     return my_snip; 
 }
 
-//xxx void ref_contigs_generate_data_if_denovo (Reference ref)
-// {
-//     // copy data from the reference FASTA's CONTIG context, so it survives after we finish reading the reference and close z_file
-//     Context *chrom_ctx = ZCTX(DTFZ(prim_chrom));
-
-//     ASSINP (IS_REF_INTERNAL || (buf_is_alloc (&chrom_ctx->dict) && buf_is_alloc (&chrom_ctx->word_list)),
-//             "Error: cannot use %s as a reference as it is missing a CONTIG dictionary", z_name);
-
-//     // we copy from the z_file context after we completed segging a file
-//     // note: we can't rely on chrom_ctx->nodes for the correct order as vb_i=1 resorted. rather, by mimicking the
-//     // word_list generation as done in PIZ, we guarantee that we will get the same ref_index
-//     contigs_free (&ref->ctgs);
-//     contigs_build_contig_pkg_from_zctx (&ref->ctgs, chrom_ctx, SORT_BY_NAME);
-// }
-
 // ZIP SAM/BAM and VCF: verify that we have the specified chrom (name & last_pos) loaded from the reference at the same index. 
 // called by sam_header_add_contig, vcf_header_consume_contig. returns true if contig is in reference
 WordIndex ref_contigs_ref_chrom_from_header_chrom (Reference ref, STRp(chrom_name), 

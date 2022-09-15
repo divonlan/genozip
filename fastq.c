@@ -258,8 +258,9 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
         CTX(FASTQ_TAXID)->counts_section = true; 
     }
 
-    // in --stats, consolidate stats into SQBITMAP
+    // consolidate stats for --stats,
     ctx_consolidate_stats (VB, FASTQ_SQBITMAP, FASTQ_NONREF, FASTQ_NONREF_X, FASTQ_GPOS, FASTQ_STRAND, FASTQ_SEQMIS_A, FASTQ_SEQMIS_C, FASTQ_SEQMIS_G, FASTQ_SEQMIS_T, DID_EOL);
+    ctx_consolidate_stats(VB, FASTQ_QUAL, FASTQ_DOMQRUNS, FASTQ_QUALMPLX, FASTQ_DIVRQUAL, DID_EOL);
 
     COPY_TIMER (seg_initialize);
 }
@@ -442,7 +443,7 @@ static void fastq_seg_sequence (VBlockFASTQ *vb, STRp(seq))
                
     // case: aligned - lookup from SQBITMAP
     MappingType aln_res;
-    if (false/*xxx*/ && flag.aligner_available && 
+    if (flag.aligner_available && 
         ((aln_res = aligner_seg_seq (VB, CTX(FASTQ_SQBITMAP), STRa(seq), true, (vb->comp_i == FQ_COMP_R2), pair_gpos, pair_is_forward)))) {
         
         SNIPi1 (SNIP_LOOKUP, (aln_res==MAPPING_PERFECT ? -(int64_t)seq_len : (int64_t)seq_len)); // express perfect alignment by passing a negative seq_len 
@@ -787,7 +788,6 @@ SPECIAL_RECONSTRUCTOR (fastq_special_unaligned_SEQ)
         }
         else 
             vb->seq_len = reconstruct_from_local_sequence (vb, CTX(FASTQ_NONREF), STRa(snip), reconstruct);
-            //xxx vb->seq_len = CTX(FASTQ_NONREF)->next_local - CTX(FASTQ_NONREF)->last_value.i;
     }
 
     return NO_NEW_VALUE;

@@ -159,9 +159,10 @@ void vcf_seg_initialize (VBlockP vb_)
 
     ctx_set_store (VB, STORE_INDEX, VCF_oSTATUS, VCF_COORDS, VCF_oXSTRAND, VCF_CHROM, VCF_oCHROM, DID_EOL);
 
-    ctx_set_store (VB, STORE_INT, VCF_POS, VCF_oPOS, VCF_LINE_NUM, FORMAT_DP, FORMAT_MIN_DP,
-    DID_EOL); 
+    ctx_set_store (VB, STORE_INT, VCF_POS, VCF_oPOS, VCF_ID, VCF_LINE_NUM, FORMAT_DP, FORMAT_MIN_DP, DID_EOL); 
 
+    ctx_set_ltype (VB, LT_DYN_INT, INFO_RAW_MQandDP_MQ, INFO_RAW_MQandDP_DP, INFO_dbSNPBuildID, DID_EOL);
+    
     CTX(VCF_oCHROM)->  no_vb1_sort = true; // indices need to remain as in the Chain file
     CTX(VCF_oSTATUS)-> no_vb1_sort = true; // indices need to remaining matching to LiftOverStatus
     CTX(VCF_COORDS)->  no_vb1_sort = true; // indices need to remaining matching to Coords
@@ -340,8 +341,6 @@ bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)
         dict_id.num == _VCF_oCHROM   ||
         dict_id.num == _VCF_FORMAT   ||
         dict_id.num == _VCF_INFO     ||
-        dict_id.num == _VCF_REFALT   ||
-        dict_id.num == _VCF_oREFALT  ||
         dict_id.num == _VCF_FILTER   ||
         dict_id.num == _VCF_EOL      ||
         dict_id.num == _VCF_SAMPLES  ||
@@ -350,23 +349,30 @@ bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)
         dict_id.num == _VCF_oSTATUS  ||
         dict_id.num == _VCF_COORDS   ||
         dict_id.num == _VCF_LIFT_REF ||
-        dict_id.num == _INFO_AC              ||
-        dict_id.num == _INFO_AF              ||
-        dict_id.num == _INFO_AN              ||
-        dict_id.num == _INFO_DP              ||
-        dict_id.num == _INFO_AA              || // stored as a SPECIAL snip
-        dict_id.num == _INFO_MLEAC           ||
-        dict_id.num == _INFO_MLEAF           ||
-        dict_id.num == _INFO_LDAF            ||
-        dict_id.num == _INFO_MQ0             ||
-        dict_id.num == _INFO_LUFT            ||
-        dict_id.num == _INFO_PRIM            ||
-        dict_id.num == _INFO_LREJ            ||
-        dict_id.num == _INFO_PREJ            ||
+        dict_id.num == _INFO_AC      ||
+        dict_id.num == _INFO_AF      ||
+        dict_id.num == _INFO_AN      ||
+        dict_id.num == _INFO_DP      ||
+        dict_id.num == _INFO_AA      || // stored as a SPECIAL snip
+        dict_id.num == _INFO_MLEAC   ||
+        dict_id.num == _INFO_MLEAF   ||
+        dict_id.num == _INFO_LDAF    ||
+        dict_id.num == _INFO_MQ0     ||
+        dict_id.num == _INFO_LUFT    ||
+        dict_id.num == _INFO_PRIM    ||
+        dict_id.num == _INFO_LREJ    ||
+        dict_id.num == _INFO_PREJ    ||
 
         // INFO/ AC_* AN_* AF_* and ???_AF are small
         ((dict_id.id[0] == ('A' | 0xc0)) && (dict_id.id[1] == 'C' || dict_id.id[1] == 'F' || dict_id.id[1] == 'N') && dict_id.id[2] == '_') ||
         (dict_id_is_vcf_info_sf (dict_id) && dict_id.id[3] == '_' && dict_id.id[4] == 'A' && dict_id.id[5] == 'F' && !dict_id.id[6]);
+}
+
+bool vcf_seg_is_big (ConstVBlockP vb, DictId dict_id)
+{
+    return 
+        dict_id.num == _VCF_REFALT ||
+        dict_id.num == _VCF_oREFALT;
 }
 
 // returns length of gencomp before the copying

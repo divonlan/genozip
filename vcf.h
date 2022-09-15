@@ -132,6 +132,11 @@
 #pragma GENDICT INFO_LDAF=DTYPE_1=LDAF         //  MLE Allele Frequency Accounting for LD
 #pragma GENDICT INFO_SOR=DTYPE_1=SOR           // <ID=SOR,Number=1,Type=Float,Description="Symmetric Odds Ratio of 2x2 contingency table to detect strand bias">. See: https://gatk.broadinstitute.org/hc/en-us/articles/360036361772-StrandOddsRatio
 #pragma GENDICT INFO_QD=DTYPE_1=QD             // <ID=QD,Number=1,Type=Float,Description="Variant Confidence/Quality by Depth">. See: https://gatk.broadinstitute.org/hc/en-us/articles/360041414572-QualByDepth
+
+#pragma GENDICT INFO_RAW_MQandDP=DTYPE_1=RAW_MQandDP // comma-seperated two numbers: RAW_MQandDP=720000,200: 1. sum of squared MQ values and 2. total reads over variant genotypes (note: INFO/MQ is sqrt(#1/#2))
+#pragma GENDICT INFO_RAW_MQandDP_MQ=DTYPE_1=R0AW_MQandDP
+#pragma GENDICT INFO_RAW_MQandDP_DP=DTYPE_1=R1AW_MQandDP
+
 #pragma GENDICT FORMAT_RGQ=DTYPE_2=RGQ         // <ID=RGQ,Number=1,Type=Integer,Description="Unconditional reference genotype confidence, encoded as a phred quality -10*log10 p(genotype call is wrong)">
 #pragma GENDICT FORMAT_MIN_DP=DTYPE_2=MIN_DP   // <ID=MIN_DP,Number=1,Type=Integer,Description="Minimum DP observed within the GVCF block">
 
@@ -203,7 +208,6 @@
 // clinvar
 #pragma GENDICT INFO_ALLELEID=DTYPE_1=ALLELEID // <ID=ALLELEID,Number=1,Type=Integer,Description="the ClinVar Allele ID">
 #pragma GENDICT INFO_CLNDN=DTYPE_1=CLNDN       // <ID=CLNDN,Number=.,Type=String,Description="ClinVar's preferred disease name for the concept specified by disease identifiers in CLNDISDB">
-#pragma GENDICT INFO_RS=DTYPE_1=RS             // <ID=RS,Number=.,Type=String,Description="dbSNP ID (i.e. rs number)">
 #pragma GENDICT INFO_CLNHGVS=DTYPE_1=CLNHGVS   // <ID=CLNHGVS,Number=.,Type=String,Description="Top-level (primary assembly, alt, or patch) HGVS expression.">
 #pragma GENDICT INFO_CLNVI=DTYPE_1=CLNVI       // <ID=CLNVI,Number=.,Type=String,Description="the variant's clinical sources reported as tag-value pairs of database and variant identifier">
 
@@ -243,7 +247,14 @@
 #pragma GENDICT INFO_HOM=DTYPE_1=HOM       // <ID=HOM,Number=1,Type=Integer,Description="Number of samples called homozygous-variant">
 #pragma GENDICT INFO_NC=DTYPE_1=NC         // <ID=NC,Number=1,Type=Integer,Description="Number of samples not called">
 
-// genozip INFO fields
+// dbSNP
+#pragma GENDICT INFO_RS=DTYPE_1=RS         // <ID=RS,Number=1,Type=Integer,Description="dbSNP ID (i.e. rs number)">
+#pragma GENDICT INFO_RSPOS=DTYPE_1=RSPOS   // <ID=RSPOS,Number=1,Type=Integer,Description="Chr position reported in dbSNP">
+#pragma GENDICT INFO_TOPMED=DTYPE_1=TOPMED // <ID=TOPMED,Number=.,Type=String,Description="An ordered, comma delimited list of allele frequencies based on TOPMed, starting with the reference allele followed by alternate alleles as ordered in the ALT column. The TOPMed minor allele is the second largest value in the list.">
+#pragma GENDICT INFO_dbSNPBuildID=DTYPE_1=dbSNPBuildID // <ID=dbSNPBuildID,Number=1,Type=Integer,Description="First dbSNP Build for RS">
+#pragma GENDICT INFO_GENEINFO=DTYPE_1=GENEINFO // <ID=GENEINFO,Number=1,Type=String,Description="Pairs each of gene symbol:gene id.  The gene symbol and id are delimited by a colon (:) and each pair is delimited by a vertical bar (|)">
+
+// Genozip INFO fields
 #pragma GENDICT INFO_LUFT=DTYPE_1=LUFT
 #pragma GENDICT INFO_PRIM=DTYPE_1=PRIM
 #pragma GENDICT INFO_LREJ=DTYPE_1=Lrej
@@ -277,6 +288,7 @@ extern void vcf_seg_initialize (VBlockP vb_);
 extern void vcf_zip_after_compute (VBlockP vb);
 extern void vcf_seg_finalize (VBlockP vb_);
 extern bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id);
+extern bool vcf_seg_is_big (ConstVBlockP vb, DictId dict_id);
 extern TranslatorId vcf_lo_luft_trans_id (DictId dict_id, char number);
 extern uint32_t vcf_seg_get_vb_recon_size (VBlockP vb);
 

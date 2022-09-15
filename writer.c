@@ -102,21 +102,6 @@ uint64_t writer_get_txt_line_i (VBlockP vb)
         // note: txtheader lines are not included in the plan item, bc they are not counted for --header, --downsample etc
         txt_num_lines += (plan[i].flavor == PLAN_TXTHEADER) ? B(VbInfo, txt_header_info, plan[i].comp_i)->num_lines
                                                             : VB_DT(DT_FASTQ) ? (4 * plan[i].num_lines) : plan[i].num_lines; // in FASTQ, each plan line is 4 txt lines
-        //xxx plan_item_lines = VB_DT(DT_FASTQ) ? (4 * plan[i].num_lines) : plan[i].num_lines; // in FASTQ, each plan line is 4 txt lines
-        
-        // if (plan[i].vb_i == vb->vblock_i) {
-        //     // case: plan item containing this line
-        //     if (vb_num_lines + plan_item_lines > vb->line_i) 
-        //         return txt_num_lines + (vb->line_i - vb_num_lines) + 1; // +1 because 1-based 
-
-        //     // case: plan item is from current VB, but we have not yet reached the current line
-        //     else
-        //         vb_num_lines += plan_item_lines;
-        // }
-
-        // // note: txtheader lines are not included in the plan item, bc they are not counted for --header, --downsample etc
-        // txt_num_lines += (plan[i].flavor == PLAN_TXTHEADER) ? B(VbInfo, txt_header_info, plan[i].comp_i)->num_lines
-        //                                                     : plan_item_lines;
     }
 
     WARN_ONCE0 ("Unexpectedly, unable to find current vb/line_i in recon_plan");

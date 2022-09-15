@@ -55,7 +55,7 @@ static void sam_seg_CB_Z_segconf (VBlockSAMP vb, STRp(cb))
 
 static void sam_seg_CB_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(cb), unsigned add_bytes)
 {
-    if (!seg_by_container (VB, channel_ctx, (ContainerP)&segconf.CB_con, STRa(cb), STRa(segconf.CB_con_snip), add_bytes))
+    if (!seg_by_container (VB, channel_ctx, (ContainerP)&segconf.CB_con, STRa(cb), STRa(segconf.CB_con_snip), false, add_bytes))
         seg_add_to_local_text (VB, channel_ctx, STRa(cb), true, add_bytes); // requires no_stons
 }
 
@@ -277,7 +277,7 @@ void sam_seg_QX_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qx), unsigned add_byt
 
 static void sam_seg_BC_array (VBlockSAMP vb, ContextP ctx, STRp(bc), unsigned add_bytes)
 {
-    seg_array (VB, ctx, OPTION_BC_Z, STRa(bc), segconf.BC_sep, 0, false, false, _OPTION_BC_ARR, add_bytes);
+    seg_array (VB, ctx, OPTION_BC_Z, STRa(bc), segconf.BC_sep, 0, false, STORE_NONE, _OPTION_BC_ARR, add_bytes);
 }
 
 void sam_seg_BC_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(bc), unsigned add_bytes)
@@ -319,7 +319,7 @@ void sam_seg_gene_name_id (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, STRp(va
     ctx_set_encountered (VB, CTX(did_i));
     seg_set_last_txt (VB, CTX(did_i), STRa(value));
 
-    seg_array (VB, CTX(did_i), did_i, STRa(value), ';', 0, false, false, DICT_ID_NONE, add_bytes);
+    seg_array (VB, CTX(did_i), did_i, STRa(value), ';', 0, false, STORE_NONE, DICT_ID_NONE, add_bytes);
 
     COPY_TIMER (sam_seg_gene_name_id);
 }

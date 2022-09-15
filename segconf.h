@@ -55,7 +55,10 @@ typedef struct {
     // SAM/BAM and FASTQ
     uint32_t longest_seq_len;   // length of the longest seq_len in the segconf data 
     DictId qname_seq_len_dict_id; // dict_id of one of the Q?NAME contexts, which is expected to hold the seq_len for this read. 0 if there is no such item.
-    
+    #define UNK_QNANE_LEN 127
+    #define NUM_COLLECTED_WORDS 6
+    char unknown_flavor_qnames[NUM_COLLECTED_WORDS][UNK_QNANE_LEN+1];
+
     // SAM/BAM stuff
     STRl (std_cigar, 16);       // first CIGAR in the file - used in case all CIGARs in the file are the same
     bool sam_is_unmapped;       // all POS fields in the segconf block were 0

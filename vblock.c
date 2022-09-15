@@ -322,7 +322,7 @@ VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompITy
         }
 
         bool in_use = __atomic_load_n (&pool->vb[vb_id]->in_use, __ATOMIC_SEQ_CST);
-// if (type==POOL_MAIN) printf ("xxx task=%s id=%u in_use=%u\n", task_name, vb_id, in_use);
+
         if (!in_use) break;
 
         // case: we've checked all the VBs and none is available - wait a bit and check again
@@ -355,7 +355,6 @@ VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompITy
     threads_log_by_vb (vb, task_name, "GET VB", 0);
 
     COPY_TIMER_VB (evb, vb_get_vb);
-// if (type==POOL_MAIN) printf ("xxx task=%s RETURN id=%u\n", task_name, vb_id);
 
     return vb;
 }

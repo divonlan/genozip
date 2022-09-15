@@ -503,6 +503,8 @@ void seg_id_field_do (VBlockP vb, ContextP ctx, STRp(id_snip))
         ASSERT (str_get_int (&id_snip[id_snip_len - num_digits], num_digits, &id_num), 
                 "Failed str_get_int ctx=%s vb=%u line=%d", ctx->tag_name, vb->vblock_i, vb->line_i);
         seg_add_to_local_resizable (vb, ctx, id_num, 0);
+
+        if (ctx->flags.store == STORE_INT) ctx_set_last_value (vb, ctx, id_num);
     }
 
     // prefix the textual part with SNIP_LOOKUP_UINT32 if needed (we temporarily overwrite the previous separator or the buffer underflow area)
@@ -683,7 +685,7 @@ WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_
                      char sep, 
                      char subarray_sep,         // if non-zero, will attempt to find internal arrays
                      bool use_integer_delta,    // first item stored as is, subsequent items stored as deltas
-                     bool store_int_in_local,   // if its an integer, store in local instead of a snip
+                     StoreType store_in_local,  // STORE_INT/FLOAT - if its an integer/float, store in local (with LOOKUP) instead of a snip
                      DictId arr_dict_id,        // item dict_id, DICT_ID_NONE if we don't care what it is 
                      int add_bytes)             // account for this much
 {
@@ -742,17 +744,21 @@ WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_
 
         // case: it has a sub-array
         if (is_subarray) {
-            seg_array (vb, arr_ctx, stats_conslidation_did_i, STRa(this_item), subarray_sep, 0, use_integer_delta, store_int_in_local, DICT_ID_NONE, this_item_len);
+            seg_array (vb, arr_ctx, stats_conslidation_did_i, STRa(this_item), subarray_sep, 0, use_integer_delta, store_in_local, DICT_ID_NONE, this_item_len);
             this_item_value = arr_ctx->last_value.i;
         }
 
         // case: its an scalar (we don't delta arrays that have sub-arrays and we don't delta the first item)
         else if (!use_integer_delta || subarray_sep || i==0) {
             
-            if (store_int_in_local) {
+            if (store_in_local == STORE_INT) {
                 bool is_int = seg_integer_or_not (vb, arr_ctx, STRa(this_item), this_item_len);
                 if (is_int) this_item_value = arr_ctx->last_value.i;
             }
+
+            else if (store_in_local == STORE_FLOAT) 
+                seg_float_or_not (vb, arr_ctx, STRa(this_item), this_item_len);
+            
             else {
                 seg_by_ctx (VB, STRa(this_item), arr_ctx, this_item_len);
                 str_get_int (STRa(this_item), &arr_ctx->last_value.i); // sets last_value only if it is indeed an integer
@@ -871,18 +877,31 @@ badly_formatted:
 // returns true if successful
 bool seg_by_container (VBlockP vb, ContextP ctx, ContainerP con, STRp(value), 
                        STRp(container_snip), // optional
+                       bool normal_seg_if_fail,
                        unsigned add_bytes)
 {
     ASSERT (con->repeats == 1, "repeats=%u, but currently only supports repeats=1", con->repeats);
 
     str_split_by_container (value, value_len, con, 0, 0, item);
 
-    if (!n_items) return false; // failed - caller should seg in an alternative method
+    // case: value doesn't match the container
+    if (!n_items) {
+        if (normal_seg_if_fail) {
+            seg_by_ctx (vb, STRa(value), ctx, add_bytes);
+            return true;  // segged
+        }
+        else
+            return false; // not segged
+    }
 
     int accounted_for = 0;
     for (int i=0; i < n_items; i++) {
         ContextP item_ctx = ctx_get_ctx (vb, con->items[i].dict_id);
-        seg_by_ctx (vb, STRi(item, i), item_ctx, item_lens[i]);
+
+        if (item_ctx->ltype >= LT_DYN_INT)
+            seg_integer_or_not (vb, item_ctx, STRi(item, i), item_lens[i]);
+        else
+            seg_by_ctx (vb, STRi(item, i), item_ctx, item_lens[i]);
         
         accounted_for += item_lens[i];
     }

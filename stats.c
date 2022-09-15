@@ -43,7 +43,9 @@ static Buffer stats={}, STATS={}, features={}, hash_occ={};
 // calculate hash_occ before consolidating stats
 static void stats_submit_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
 {
-    for (uint32_t i=0, need_sep=0; i < num_stats; i++) 
+    int need_sep=0;
+
+    for (uint32_t i=0; i < num_stats; i++) 
         if (sbl[i].pc_hash_occupancy >= 50) { // > 50%
             ContextP zctx = ZCTX(sbl[i].my_did_i);
              
@@ -53,11 +55,19 @@ static void stats_submit_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
                        url_esc_non_valid_charsS (str_size (sbl[i].global_hash_prime).s).s, (int)sbl[i].pc_hash_occupancy);
             
             uint32_t n_words = zctx->nodes.len32; // this is at least 32K as smallest hash table is 64K 
-            WordIndex words[] = { 0, 1, 2, n_words-3, n_words-2, n_words-1 }; // first three and last threewords in the the dictionary of this field
-            for (int i=0; i < ARRAY_LEN(words); i++)
+            WordIndex words[NUM_COLLECTED_WORDS] = { 0, 1, 2, n_words-3, n_words-2, n_words-1 }; // first three and last threewords in the the dictionary of this field
+            for (int i=0; i < NUM_COLLECTED_WORDS; i++)
                 // note: str_replace_letter modifies dict data, but its ok, since we have already written the dicts to z_file
                 bufprintf (evb, &hash_occ, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter ((char *)ctx_snip_from_zf_nodes (zctx, words[i], 0, 0), sizeof(UrlStr), ',', -127)).s); 
         }
+
+    // in case of unknown qname flavor, we send the first 6 qnames
+    if (!segconf.qname_flavor) {
+        bufprintf (evb, &hash_occ, "%sQNAME%%2C%%2C%%2C", need_sep++ ? "%3B" : "");
+
+        for (int i=0; i < NUM_COLLECTED_WORDS; i++)
+            bufprintf (evb, &hash_occ, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.unknown_flavor_qnames[i], strlen(segconf.unknown_flavor_qnames[i]), ',', -127)).s); 
+    }
 }
 
 static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt_len, float src_comp_ratio, float all_comp_ratio)
@@ -646,7 +656,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     if (flag.show_stats_comp_i != COMP_NONE) 
         iprint0 ("\nNote: Components stats don't include global sections like SEC_DICT, SEC_REFERENCE etc\n");
 
-    if (license_get_type() != LIC_TYPE_PAID && !flag.debug && !getenv ("GENOZIP_TEST"))
+    if (flag.debug_submit || (license_get_type() != LIC_TYPE_PAID && !flag.debug && !getenv ("GENOZIP_TEST")))
         stats_submit (sbl, num_stats, all_txt_len, src_comp_ratio, all_comp_ratio); 
 
     buf_free (sbl_buf);

@@ -97,13 +97,13 @@ static inline WordIndex seg_delta_vs_other (VBlockP vb, ContextP ctx, ContextP o
 
 extern void seg_diff (VBlockP vb, ContextP ctx, ContextP base_ctx, STRp(value), bool entire_snip_if_same, unsigned add_bytes);
 
-extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_did_i, rom value, int32_t value_len, char sep, char subarray_sep, bool use_integer_delta, bool store_int_in_local, DictId arr_dict_id, int add_bytes);
+extern WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_did_i, rom value, int32_t value_len, char sep, char subarray_sep, bool use_integer_delta, StoreType store_in_local, DictId arr_dict_id, int add_bytes);
 
 typedef bool (*SegCallback) (VBlockP vb, ContextP ctx, STRp(value), uint32_t repeat);
 extern int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip), const SegCallback *callbacks, unsigned add_bytes);
 extern bool seg_do_nothing_cb (VBlockP vb, ContextP ctx, STRp(field), uint32_t rep);
 
-extern bool seg_by_container (VBlockP vb, ContextP ctx, ContainerP con, STRp(value), STRp(container_snip), unsigned add_bytes);
+extern bool seg_by_container (VBlockP vb, ContextP ctx, ContainerP con, STRp(value), STRp(container_snip), bool normal_seg_if_fail, unsigned add_bytes);
 
 extern void seg_prepare_snip_other_do (uint8_t snip_code, DictId other_dict_id, bool has_parameter, int64_t int_param, char char_param,
                                        char *snip, unsigned *snip_len /* in / out */);

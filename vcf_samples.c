@@ -1335,8 +1335,8 @@ static inline void vcf_seg_FORMAT_BX (VBlockVCFP vb, ContextP ctx, STRp(BX))
         .nitems_lo   = 2, 
         .drop_final_repsep = true,
         .repsep      = {';'},
-        .items       = { { .dict_id={.id="BXbarcod" }, .separator = {'-'} },
-                         { .dict_id={.id="BXcoords"  },                    } }
+        .items       = { { .dict_id={ .id="BXbarcod" }, .separator = {'-'} },
+                         { .dict_id={ .id="BXcoords" },                    } }
     };
 
     seg_array_of_struct (VB, CTX(FORMAT_BX), con, STRa(BX), NULL, BX_len);

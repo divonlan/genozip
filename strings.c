@@ -578,7 +578,7 @@ uint32_t str_split_do (STRp(str),
     for (uint32_t str_i=0 ; str_i < str_len ; str_i++) 
         if (str[str_i] == sep) {
             ASSSPLIT (item_i < max_items, "expecting up to %u %s separators but found more: (100 first) %.*s", 
-                    max_items-1, enforce_msg, MIN_(str_len, 100), str);
+                      max_items-1, enforce_msg, MIN_(str_len, 100), str);
 
             items[item_i++] = &str[str_i+1];
         }

@@ -42,7 +42,9 @@ static void url_do_curl (rom url, char *stdout_data, unsigned *stdout_len,
     // our own instance of curl - to not conflict with url_open
     StreamP curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
                                   "To read from a URL", // reason in case of failure to execute curl
-                                  "curl", url, NULL); 
+                                  "curl", 
+                                  flag.is_windows ? "--ssl-no-revoke" : SKIP_ARG, 
+                                  url, NULL); 
 
     int fd1 = fileno (stream_from_stream_stdout (curl));
     int fd2 = fileno (stream_from_stream_stderr (curl));
@@ -226,6 +228,7 @@ void url_get_redirect (rom url, STRc(redirect_url))
     StreamP curl = stream_create (0, DEFAULT_PIPE_SIZE, DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
                                   "To get a URL's redirect", // reason in case of failure to execute curl
                                   "curl", url, "--location", "--silent", "--output", "/dev/null",
+                                  flag.is_windows ? "--ssl-no-revoke" : SKIP_ARG,                          
                                   "--write-out", "%{url_effective}", NULL); 
 
     redirect_url_len = fread (redirect_url, 1, redirect_url_len - 1, stream_from_stream_stdout (curl));
@@ -248,10 +251,13 @@ FILE *url_open (StreamP parent_stream, rom url)
 
     if (has_wget && !is_file)
         curl = stream_create (parent_stream, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0,
-                            "To compress files from a URL", "wget", "--tries=16", "--quiet", "--waitretry=3", "--output-document=/dev/stdout", url, NULL);
+                              "To compress files from a URL", "wget", "--tries=16", "--quiet", "--waitretry=3", "--output-document=/dev/stdout", 
+                              url, NULL);
     else // curl
         curl = stream_create (parent_stream, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0,
-                            "To compress files from a URL", "curl", "--silent", url, NULL);
+                              "To compress files from a URL", "curl", "--silent", 
+                              flag.is_windows ? "--ssl-no-revoke" : SKIP_ARG,                          
+                              url, NULL);
 
     return stream_from_stream_stdout (curl);
 }

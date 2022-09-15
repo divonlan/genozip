@@ -770,7 +770,7 @@ void sam_zip_after_vbs(void)
     ctx_shorten_unused_dict_words(OPTION_XA_STRAND); // remove gem3 bi-sulfite words if not used
 }
 
-bool sam_seg_is_small(ConstVBlockP vb, DictId dict_id)
+bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)
 {
     return
         // typically small
@@ -841,15 +841,15 @@ bool sam_seg_is_small(ConstVBlockP vb, DictId dict_id)
         dict_id.num == _OPTION_XE_i;
 }
 
-bool sam_seg_is_big(ConstVBlockP vb, DictId dict_id)
+bool sam_seg_is_big (ConstVBlockP vb, DictId dict_id)
 {
     return
         // typically big
         dict_id.num == _OPTION_BX_Z;
 }
 
-static void sam_get_one_aux(VBlockSAMP vb, int16_t idx,
-                            rom *tag, char *type, char *array_subtype, pSTRp(value)) // out
+static void sam_get_one_aux (VBlockSAMP vb, int16_t idx,
+                             rom *tag, char *type, char *array_subtype, pSTRp(value)) // out
 {
     rom aux = vb->auxs[idx];
     uint32_t aux_len = vb->aux_lens[idx];

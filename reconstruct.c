@@ -444,7 +444,6 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
                 break;
                 
             case LT_CODEC: // snip can optionally be the length of the sequence to be reconstructed
-                //xxx if (reconstruct && snip_len) RECONSTRUCT_snip; // reconstruct this snip before adding the looked up data
                 codec_args[base_ctx->lcodec].reconstruct (vb, base_ctx->lcodec, base_ctx, STRa(snip)); break;
                 break;
 
