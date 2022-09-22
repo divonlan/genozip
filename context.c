@@ -869,7 +869,7 @@ finish:
 
 // update zctx with codec as it is assigned - don't wait for merge, to increase the chance that subsequent
 // VBs can get this codec and don't need to test for themselves.
-void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vctx, bool is_lcodec)
+void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vctx, bool is_lcodec, bool is_lcodec_inherited)
 {
     ContextP zctx  = ctx_get_zctx_from_vctx (vctx);
     if (!zctx) zctx = ctx_add_new_zf_ctx (vb, vctx); // this context doesn't exist yet in z_file, because no VB with it has merged yet. create it now.
@@ -880,10 +880,12 @@ void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vctx, bool is_lcodec)
         if (zctx->lcodec == vctx->lcodec) {
             if (zctx->lcodec_count < 255) zctx->lcodec_count++; // counts number of VBs in a row that set this codec
         }
-        else {
+        else if (is_lcodec_inherited) {
             zctx->lcodec_count = 0;
             zctx->lcodec = vctx->lcodec; 
         }
+        else 
+            zctx->lcodec_non_inherited = vctx->lcodec; 
     }
     else {
         if (zctx->bcodec == vctx->bcodec) {
@@ -1457,7 +1459,7 @@ void ctx_free_context (ContextP ctx, Did did_i)
     ctx->pair_flags = (struct FlagsCtx){};
     ctx->dict_id.num = 0;
     ctx->pair_b250_iter = (SnipIterator){};
-    ctx->lcodec = ctx->bcodec = ctx->lsubcodec_piz = 0;
+    ctx->lcodec = ctx->bcodec = ctx->lcodec_non_inherited = ctx->lsubcodec_piz = 0;
     ctx->b250_size = ctx->pair_b250_size = 0;
     ctx->no_stons = ctx->pair_local = ctx->pair_b250 = ctx->no_callback = ctx->line_is_luft_trans = ctx->lcodec_hard_coded =
     ctx->local_param = ctx->no_vb1_sort = ctx->local_always = ctx->counts_section = ctx->no_drop_b250 = 
@@ -1584,8 +1586,8 @@ static void ctx_show_counts (ContextP zctx)
     buf_alloc (evb, &show_counts_buf, 0, zctx->counts.len, ShowCountsEnt, 0, "show_counts_buf");
 
     // QUAL counts store Longr value-to-bin mapping
-    bool maybe_longr = ((Z_DT(DT_BAM) || Z_DT(DT_SAM)) && (zctx->dict_id.num == _SAM_DOMQRUNS || zctx->dict_id.num == _OPTION_OQ_DOMQRUNS || zctx->dict_id.num == _OPTION_U2_DOMQRUNS))
-                    || (Z_DT(DT_FASTQ) && zctx->dict_id.num == _FASTQ_DOMQRUNS);
+    bool maybe_longr = ((Z_DT(BAM) || Z_DT(SAM)) && (zctx->dict_id.num == _SAM_DOMQRUNS || zctx->dict_id.num == _OPTION_OQ_DOMQRUNS || zctx->dict_id.num == _OPTION_U2_DOMQRUNS))
+                    || (Z_DT(FASTQ) && zctx->dict_id.num == _FASTQ_DOMQRUNS);
 
     uint64_t total=0;
     for (uint32_t i=0; i < zctx->counts.len32; i++) {
@@ -1734,7 +1736,7 @@ TagNameEx ctx_tag_name_ex (ConstContextP ctx)
     if (!ctx) return (TagNameEx){ .s = "<none>" };
 
     unsigned start=0;
-    if (z_file && (Z_DT(DT_VCF) || Z_DT(DT_BCF))) {
+    if (z_file && (Z_DT(VCF) || Z_DT(BCF))) {
         if      (dict_id_is_vcf_format_sf (ctx->dict_id)) { memcpy (s.s, "FORMAT/", 7); start = 7; }
         else if (dict_id_is_vcf_info_sf   (ctx->dict_id)) { memcpy (s.s, "INFO/",   5); start = 5; }
     }

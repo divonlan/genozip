@@ -95,6 +95,7 @@ typedef struct Context {
     Codec bcodec;              // codec used to compress b250
     Codec lsubcodec_zip;       // zip to compress with this codec AFTER compressing with lcodec
     Codec lsubcodec_piz;       // piz to decompress with this codec, AFTER decompressing with lcodec
+    Codec lcodec_non_inherited;// ZIP z_file: non-inherited lcodec - used only for submitting stats
     
     // ZIP-only instructions NOT written to the genozip file
     bool no_stons;             // ZIP: don't attempt to move singletons to local (singletons are never moved anyway if ltype!=LT_TEXT)

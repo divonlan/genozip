@@ -273,7 +273,7 @@ VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompITy
     VBlockPool *pool = vb_get_pool (type, false);
 
     DataType dt = type == POOL_BGZF ? DT_NONE
-                : IS_ZIP    ? (txt_file ? txt_file->data_type : DT_NONE)
+                : IS_ZIP            ? (txt_file ? txt_file->data_type : DT_NONE)
                 :                     (z_file   ? z_file->data_type   : DT_NONE);
     
     uint64_t sizeof_vb = (dt != DT_NONE && dt_props[dt].sizeof_vb) ? dt_props[dt].sizeof_vb(dt) : sizeof (VBlock);
@@ -415,13 +415,12 @@ void vb_cleanup_memory (void)
 // frees memory of all VBs, except for non-pool VBs (evb, cache_create_vb, segconf...)
 void vb_destroy_pool_vbs (VBlockPoolType type)
 {
-    VBlockPool *pool = vb_get_pool (type, true);
-    if (!pool) return;
+    if (!pools[type]) return;
 
-    for (uint32_t vb_id=0; vb_id < pool->num_vbs; vb_id++) 
-        vb_destroy_vb (&pool->vb[vb_id]);
+    for (uint32_t vb_id=0; vb_id < pools[type]->num_vbs; vb_id++) 
+        vb_destroy_vb (&pools[type]->vb[vb_id]);
 
-    FREE (pool);
+    FREE (pools[type]);
 }
 
 // NOT thread safe, use only in execution-terminating messages

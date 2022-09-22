@@ -31,7 +31,7 @@ extern rom ref_type_name(void);
 #define IS_REF_LIFTOVER   (flag.reference == REF_LIFTOVER)
 
 #define IS_REF_STORED_PIZ (flag.reference == REF_STORED) // 2 bits set
-#define IS_REF_INTERNAL_PIZ ((Z_DT(DT_SAM) || Z_DT(DT_BAM)) && z_file->z_flags.dts_ref_internal)
+#define IS_REF_INTERNAL_PIZ ((Z_DT(SAM) || Z_DT(BAM)) && z_file->z_flags.dts_ref_internal)
 
 typedef enum { STATS_NONE=0, STATS_SHORT=1, STATS_LONG=2, STATS_SHORT_GREP=-1, STATS_LONG_GREP=-2 } StatsType;
 
@@ -115,7 +115,7 @@ typedef struct {
         show_vblocks, show_threads, show_uncompress, biopsy,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
         debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sag, debug_gencomp, debug_lines, debug_latest,
-        debug_peek, debug_submit,
+        debug_peek, submit_stats,
         no_gencomp, force_gencomp, no_domqual, verify_codec, seg_only, show_bam, xthreads, show_flags, show_rename_tags,
         #define SHOW_CONTAINERS_ALL_VBs (-1)
         show_containers, show_aligner, show_buddy,

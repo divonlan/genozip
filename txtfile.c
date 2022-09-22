@@ -412,7 +412,7 @@ static uint32_t txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb)
             DTPT(is_binary) ? "" : "(i.e. newline-terminated) ",
             VB_NAME, dt_name (txt_file->data_type), vb->txt_data.len32, codec_name (txt_file->codec),
             DTPT(is_binary) ? "truncated but not on the boundary of the" : "missing a newline on the last", DTPT(line_name),
-            TXT_DT(DT_REF) ? "FASTA" : dt_name (txt_file->data_type),
+            TXT_DT(REF) ? "FASTA" : dt_name (txt_file->data_type),
             txtfile_dump_vb (vb, txt_name));
 
 done:

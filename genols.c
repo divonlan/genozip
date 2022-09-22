@@ -110,13 +110,13 @@ void genols (rom z_filename, bool finalize, rom subdir, bool recursive)
 
     Digest digest = DIGEST_NONE;
     Section txt_header_sec;
-    if (Z_DT(DT_REF))
+    if (Z_DT(REF))
         digest = header.REF_fasta_md5;
     
-    else if (header.genozip_version <= 13 && Z_DT(DT_FASTQ) && z_file->z_flags.dts_paired)
+    else if (header.genozip_version <= 13 && Z_DT(FASTQ) && z_file->z_flags.dts_paired)
         digest = header.FASTQ_v13_digest_bound;
 
-    else if (!(Z_DT(DT_FASTQ) && z_file->z_flags.dts_paired) // digest for bound fastqs will be shown only with --list 
+    else if (!(Z_DT(FASTQ) && z_file->z_flags.dts_paired) // digest for bound fastqs will be shown only with --list 
         && (txt_header_sec = sections_first_sec (SEC_TXT_HEADER, true))) 
         digest = zfile_read_section_header (evb, txt_header_sec->offset, txt_header_sec->vblock_i, SEC_TXT_HEADER).txt_header.digest;
 

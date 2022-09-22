@@ -289,7 +289,7 @@
 // 10x Genomics longranger lariat aligner: https://support.10xgenomics.com/genome-exome/software/pipelines/latest/output/bam
 
 #pragma GENDICT OPTION_RX_Z=DTYPE_2=RX:Z     // Standard: Sequence bases of the (possibly corrected) unique molecular identifier
-#pragma GENDICT OPTION_RX_Z_X=DTYPE_2=R0X_X  //     longranger: Raw Chromium barcode sequence. This read is subject to sequencing errors.
+#pragma GENDICT OPTION_RX_Z_X=DTYPE_2=R0X_X  // longranger: Raw Chromium barcode sequence. This read is subject to sequencing errors.
   
 #pragma GENDICT OPTION_BX_Z=DTYPE_2=BX:Z     // longranger: Chromium barcode sequence that is error-corrected and confirmed against a list of known-good barcode sequences. 
 
@@ -479,6 +479,7 @@ extern void sam_header_finalize (void);
 extern void sam_zip_free_end_of_z (void);
 
 extern ContigPkgP sam_hdr_contigs;
+extern uint32_t sam_num_header_contigs (void);
 
 // ZIP/SEG Stuff
 extern void sam_seg_initialize (VBlockP vb);
@@ -677,8 +678,8 @@ typedef enum { SAM_COMP_NONE=255, SAM_COMP_MAIN=0, SAM_COMP_PRIM=1, SAM_COMP_DEP
 #define dict_id_is_aux_sf dict_id_is_type_2
 #define dict_id_aux_sf dict_id_type_2
 
-#define IS_BAM_ZIP TXT_DT(DT_BAM)
-#define IS_SRC_BAM_PIZ (Z_DT(DT_SAM) && z_file->z_flags.txt_is_bin)       // source file was BAM, NOT that the reconstruction is BAM! 
+#define IS_BAM_ZIP TXT_DT(BAM)
+#define IS_SRC_BAM_PIZ (Z_DT(SAM) && z_file->z_flags.txt_is_bin)       // source file was BAM, NOT that the reconstruction is BAM! 
 #define IS_RECON_BAM (flag.out_dt == DT_BAM)                              // reconstructed file is BAM, regardless of source file type 
 #define IS_SRC_and_RECON_BAM_PIZ (IS_SRC_BAM_PIZ && vb->translation.trans_containers) 
 #define IS_SRC_BAM (command==ZIP ? IS_BAM_ZIP : IS_SRC_BAM_PIZ)

@@ -66,7 +66,7 @@ static void zip_display_compression_ratio (Digest md5)
         static float comp_bytes_bind = 0;
         static FileType source_file_type = UNKNOWN_FILE_TYPE;
 
-        // reset for every set of bound files (we might have multiple sets if --pair)
+        // reset for every set of bound files (we might have multiple sets of --pair)
         if (z_file->num_txts_so_far == 1) {
             comp_bytes_bind=0; 
             source_file_type = txt_file->type;
@@ -102,7 +102,7 @@ static void zip_display_compression_ratio (Digest md5)
 
     // when compressing BAM report only ratio_vs_comp (compare to BGZF-compress BAM - we don't care about the underlying plain BAM)
     // Likewise, doesn't have a compression extension (eg .gz), even though it may actually be compressed eg .tbi (which is actually BGZF)
-    else if (Z_DT(DT_BAM) || (txt_file && file_get_codec_by_txt_ft (txt_file->data_type, txt_file->type, false) == CODEC_NONE)) 
+    else if (Z_DT(BAM) || (txt_file && file_get_codec_by_txt_ft (txt_file->data_type, txt_file->type, false) == CODEC_NONE)) 
         progress_finalize_component_time_ratio (dt_name (z_file->data_type), ratio_vs_comp, md5);
 
     else if (ratio_vs_comp >= 0) {
@@ -271,7 +271,7 @@ static void zip_resize_local (VBlockP vb, Context *ctx)
 
     // in VCF FORMAT fields, a max_int value is reconstructed as . (see reconstruct_from_local_int), which is not applicable for dynamic size -
     // therefore we increment largest by 1 to ensure that no actual value is max_int
-    if (VB_DT(DT_VCF) && dict_id_is_vcf_format_sf (ctx->dict_id)) largest++;
+    if (VB_DT(VCF) && dict_id_is_vcf_format_sf (ctx->dict_id)) largest++;
 
     static const LocalType test_ltypes[3][8] = { { LT_UINT8, LT_UINT16, LT_UINT32, LT_INT8, LT_INT16, LT_INT32, LT_UINT64, LT_INT64 },  // LT_DYN_INT
                                                  { LT_hex8, LT_hex16, LT_hex32, LT_hex64 },   // LT_DYN_INT_h
@@ -410,7 +410,7 @@ static void zip_handle_unique_words_ctxs (VBlockP vb)
 
     for_ctx {
         if (!ctx->nodes.len || ctx->nodes.len != ctx->b250.len) continue; // check that all words are unique (and new to this vb)
-        if (VB_DT(DT_VCF) && dict_id_is_vcf_format_sf (ctx->dict_id)) continue; // this doesn't work for FORMAT fields
+        if (VB_DT(VCF) && dict_id_is_vcf_format_sf (ctx->dict_id)) continue; // this doesn't work for FORMAT fields
         if (ctx->nodes.len < vb->lines.len / 5) continue; // don't bother if this is a rare field less than 20% of the lines
         if (buf_is_alloc (&ctx->local))     continue; // skip if we are already using local to optimize in some other way
 
@@ -596,8 +596,8 @@ void zip_init_vb (VBlockP vb)
 static void zip_update_txt_counters (VBlockP vb)
 {
     // note: in case of an FASTQ with flag.optimize_DESC or VCF with add_line_numbers, we already updated this in *_zip_init_vb
-    if (!(flag.optimize_DESC && VB_DT(DT_FASTQ)) &&
-        !(flag.add_line_numbers && (VB_DT(DT_VCF) || VB_DT(DT_BCF))))
+    if (!(flag.optimize_DESC && VB_DT(FASTQ)) &&
+        !(flag.add_line_numbers && (VB_DT(VCF) || VB_DT(BCF))))
         txt_file->num_lines += vb->lines.len; // lines in this txt file
 
     // counters of data AS IT APPEARS IN THE TXT FILE
@@ -665,7 +665,7 @@ static void zip_write_global_area (void)
     if (dict_id_aliases_buf->len) zfile_compress_section_data (evb, SEC_DICT_ID_ALIASES, dict_id_aliases_buf);
 
     // SAM/BAM: we don't compress RANDOM_ACCESS for non-sorted in --best (it can be very big, and we want to minimize file size in --best), 
-    if (!flag.best || !(Z_DT(DT_BAM) || Z_DT(DT_SAM)) || segconf.is_sorted) {
+    if (!flag.best || !(Z_DT(BAM) || Z_DT(SAM)) || segconf.is_sorted) {
         // if this data has random access (i.e. it has chrom and pos), compress all random access records into evb->z_data
         Codec codec = random_access_compress (&z_file->ra_buf, SEC_RANDOM_ACCESS, CODEC_UNKNOWN, 0, flag.show_index ? RA_MSG_PRIM : NULL);
     
@@ -689,7 +689,7 @@ static void zip_compress_one_vb (VBlockP vb)
 {
     START_TIMER; 
 
-    if (flag.biopsy) return; // we're just taking a biopsy of the txt data, so no need to actually compress
+    if (flag.biopsy) goto done; // we're just taking a biopsy of the txt data, so no need to actually compress
 
     // if the txt file is compressed with BGZF, we uncompress now, in the compute thread
     if (txt_file->codec == CODEC_BGZF && flag.pair != PAIR_READ_2) 
@@ -772,6 +772,7 @@ static void zip_compress_one_vb (VBlockP vb)
     DT_FUNC (vb, zip_after_compress)(vb);
 
     // tell dispatcher this thread is done and can be joined.
+done:
     vb_set_is_processed (vb); 
 
     COPY_TIMER (compute);
@@ -910,11 +911,14 @@ void zip_one_file (rom txt_basename,
     DT_FUNC (txt_file, zip_after_segconf)();
 
     max_lines_per_vb=0;
-        
-    int64_t est_seggable_size = txtfile_get_seggable_size();
 
-    uint64_t target_progress = est_seggable_size * 3 // read, seg, compress
-                             + (!flag.make_reference && !flag.seg_only) * est_seggable_size; // write
+    static uint64_t target_progress=0;
+    if (flag.pair != 2) { // note: if 2nd of a FASTQ file pair - we leave the target as it was in the first file as seggable_size is not calculated for the 2nd file
+        int64_t est_seggable_size = txtfile_get_seggable_size(); 
+    
+        target_progress = est_seggable_size * 3 // read, seg, compress
+                        + (!flag.make_reference && !flag.seg_only) * est_seggable_size; // write
+    }
 
     dispatcher = 
         dispatcher_fan_out_task ("zip", txt_basename, 
@@ -950,7 +954,7 @@ finish:
     
         zip_write_global_area();
 
-        if (chain_is_loaded && !Z_DT(DT_CHAIN)) vcf_liftover_display_lift_report();
+        if (chain_is_loaded && !Z_DT(CHAIN)) vcf_liftover_display_lift_report();
     }
 
     zip_display_compression_ratio (digest_snapshot (&z_file->digest_ctx, NULL)); // Done for reference + final compression ratio calculation

@@ -178,6 +178,10 @@ static void fastq_get_optimized_desc_read_name (VBlockFASTQ *vb)
 // called by main thread at the beginning of zipping this file
 void fastq_zip_initialize (void)
 {
+    if (!flag.reference && !txt_file->redirected)
+        WARN_ONCE ("Tip: compressing a FASTQ file using a reference file can reduce the compressed file's size by 20%%-60%%.\nUse: \"genozip --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
+                   txt_file->name);
+
     // reset lcodec for STRAND and GPOS, as these may change between PAIR_1 and PAIR_2 files
     ZCTX(FASTQ_STRAND)->lcodec = CODEC_UNKNOWN;
     ZCTX(FASTQ_GPOS  )->lcodec = CODEC_UNKNOWN;

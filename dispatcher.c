@@ -130,7 +130,7 @@ void dispatcher_resume (Dispatcher d)
     d->paused          = false;
     d->filename        = txt_file->basename;
     
-    d->progress_prefix = progress_new_component (d->filename, "0\%", -1);    
+    d->progress_prefix = progress_new_component (d->filename, "0\%", flag.test);    
 }
 
 uint32_t dispatcher_get_next_vb_i (Dispatcher d)

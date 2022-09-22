@@ -34,6 +34,11 @@ ContigPkgP sam_hdr_contigs = NULL; // If no contigs in header: BAM: empty struct
 HdSoType sam_hd_so = HD_SO_UNKNOWN;
 HdGoType sam_hd_go = HD_GO_UNKNOWN;
 
+uint32_t sam_num_header_contigs (void)
+{
+    return sam_hdr_contigs ? sam_hdr_contigs->contigs.len32 : 0;
+}
+
 static void sam_header_get_ref_index (STRp (contig_name), PosType LN, void *ref_index)
 {
     *(WordIndex *)ref_index = ref_contigs_ref_chrom_from_header_chrom (gref, STRa(contig_name), &LN); // also verifies LN

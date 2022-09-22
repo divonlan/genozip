@@ -103,6 +103,9 @@ char *progress_new_component (rom new_component_name,
 
                 sprintf (prefix, "testing: %s %s : ", genounzip_str, component_name);
             }
+            else if (flag.make_reference)
+                sprintf (prefix, "making refernece file: %s %s : ", global_cmd, component_name);
+            
             else
                 sprintf (prefix, "%s %s : ", global_cmd, component_name); 
         }

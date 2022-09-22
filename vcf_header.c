@@ -641,9 +641,13 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
 
     // check if this VCF was produced by VarScan
     SAFE_NUL (BAFTc (*txt_header));
-    if (strstr (txt_header->data, "VarScan"))
-        segconf.vcf_is_varscan = true;
+    if (strstr (txt_header->data, "VarScan")) segconf.vcf_is_varscan = true;
+    if (strstr (txt_header->data, "GenotypeGVCFs")) segconf.vcf_is_gvcf = true;    
     SAFE_RESTORE;
+
+    if (!flag.reference && segconf.vcf_is_gvcf)
+        WARN_ONCE ("Tip: compressing a GVCF file using a reference file can reduce the compressed file's size by 10%%-30%%.\nUse: \"genozip --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
+                   txt_file->name);
 
     if (chain_is_loaded && !evb->comp_i)
         vcf_tags_populate_tags_from_command_line();
@@ -855,7 +859,7 @@ static void vcf_header_trim_field_name_line (BufferP vcf_header)
 
 uint32_t vcf_header_get_num_samples (void)
 {
-    if (Z_DT(DT_VCF) || Z_DT(DT_BCF))
+    if (Z_DT(VCF) || Z_DT(BCF))
         return vcf_num_samples;
     else
         return 0;

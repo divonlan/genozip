@@ -52,9 +52,9 @@ static WordIndex coverage_get_chrom_index (char chrom_char)
 
 static ConstContigPkgP coverage_get_contigs (rom option_name)
 {
-    ConstContigPkgP contigs = ((Z_DT(DT_SAM) || Z_DT(DT_BAM)) && sam_hdr_contigs) ? sam_hdr_contigs : ref_get_ctgs (gref);
+    ConstContigPkgP contigs = ((Z_DT(SAM) || Z_DT(BAM)) && sam_hdr_contigs) ? sam_hdr_contigs : ref_get_ctgs (gref);
 
-    ASSINP (!Z_DT(DT_FASTQ) || contigs->contigs.len, "%s: %s for FASTQ only works on files compressed with a reference", z_name, option_name);
+    ASSINP (!Z_DT(FASTQ) || contigs->contigs.len, "%s: %s for FASTQ only works on files compressed with a reference", z_name, option_name);
 
     return contigs;
 }
@@ -92,8 +92,8 @@ void coverage_sex_classifier (bool is_first_z_file)
 {    
     ConstContigPkgP contigs = coverage_get_contigs ("--sex");
 
-    bool is_sam   = (Z_DT(DT_SAM));
-    bool is_fastq = (Z_DT(DT_FASTQ));
+    bool is_sam   = (Z_DT(SAM));
+    bool is_fastq = (Z_DT(FASTQ));
 
     WordIndex index_chr1 = coverage_get_chrom_index ('1');
     WordIndex index_chrX = coverage_get_chrom_index ('X');
@@ -194,7 +194,7 @@ void coverage_show_coverage (void)
     if (flag.show_coverage != COV_ONE)
         iprintf (is_info_stream_terminal ? "\n--coverage for: %s\n%-*s  %-8s  %-11s  %-10s  %-5s   %s\n" 
                                          : "\n--coverage for: %s\n%*s\t%s\t%s\t%s\t%s\t%s\n", 
-                 z_name, chr_width, "Contig", "LN", Z_DT(DT_FASTQ) ? "Reads" : "Alignments", "Bases", "Bases", "Depth");
+                 z_name, chr_width, "Contig", "LN", Z_DT(FASTQ) ? "Reads" : "Alignments", "Bases", "Bases", "Depth");
 
     txt_file->coverage.len -= NUM_COVER_TYPES; // real contigs only
     ARRAY (uint64_t, coverage, txt_file->coverage);

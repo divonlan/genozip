@@ -779,7 +779,7 @@ void chain_load (void)
     
     bool chain_not_for_use = flag.show_chain || flag.show_chain_contigs;
     
-    ASSINP (Z_DT(DT_CHAIN), "expected %s to be a genozip'ed chain file, but its a %s file. Tip: compress the chain with \"genozip --input chain\"", 
+    ASSINP (Z_DT(CHAIN), "expected %s to be a genozip'ed chain file, but its a %s file. Tip: compress the chain with \"genozip --input chain\"", 
             z_name, dt_name (z_file->data_type));
 
     ASSINP (chain_not_for_use || (ref_get_filename (gref) && ref_get_filename (prim_ref)),

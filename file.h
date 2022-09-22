@@ -469,12 +469,13 @@ typedef struct File {
 } File;
 
 #define z_has_gencomp z_file->z_flags.has_gencomp
-#define z_is_dvcf (Z_DT(DT_VCF) && z_has_gencomp)
-#define z_sam_gencomp ((Z_DT(DT_SAM) || Z_DT(DT_BAM)) && z_has_gencomp) // note: is BAM file in piz are Z_DT(DT_SAM) and in zip are Z_DT(DT_BAM)
+#define z_is_dvcf (Z_DT(VCF) && z_has_gencomp)
+#define z_sam_gencomp ((Z_DT(SAM) || Z_DT(BAM)) && z_has_gencomp) // note: is BAM file in piz are Z_DT(SAM) and in zip are Z_DT(BAM)
 
 extern DataType last_z_dt; // data_type of last z_file opened
 
 // methods
+extern rom file_get_z_filename (rom txt_filename, DataType dt, FileType txt_ft);
 extern File *file_open (rom filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE */);
 extern void file_close (FileP *file_p, bool index_txt, bool cleanup_memory /* optional */);
 extern void file_write (FileP file, const void *data, unsigned len);

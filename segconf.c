@@ -80,7 +80,7 @@ static void segconf_set_vb_size (ConstVBlockP vb, uint64_t curr_vb_size)
     else if (flag.make_reference) 
         segconf.vb_size = VBLOCK_MEMORY_MAKE_REF;
 
-    else if (TXT_DT(DT_GENERIC)) 
+    else if (TXT_DT(GENERIC)) 
         segconf.vb_size = VBLOCK_MEMORY_GENERIC;
 
     // if we failed to calculate an estimated size or file is very small - use default
@@ -111,7 +111,7 @@ static void segconf_set_vb_size (ConstVBlockP vb, uint64_t curr_vb_size)
         if (est_seggable_size) segconf.vb_size = MIN_(segconf.vb_size, est_seggable_size * 1.5);
 
         if (flag.show_memory) {
-            if (Z_DT(DT_VCF))
+            if (Z_DT(VCF))
                 iprintf ("\nDyamically set vblock_memory to %u MB (num_contexts=%u num_vcf_samples=%u)\n", 
                          (unsigned)(segconf.vb_size >> 20), num_used_contexts, vcf_header_get_num_samples());
             else
@@ -154,7 +154,7 @@ bool segconf_is_long_reads(void)
 
 static bool segconf_no_calculate (void)
 {
-    return (Z_DT(DT_FASTQ) && flag.pair == PAIR_READ_2); // FASTQ: no recalculating for 2nd pair 
+    return (Z_DT(FASTQ) && flag.pair == PAIR_READ_2); // FASTQ: no recalculating for 2nd pair 
 }
 
 void segconf_initialize (void)
@@ -177,7 +177,7 @@ void segconf_calculate (void)
 {
     if (segconf_no_calculate()) return;
 
-    if (TXT_DT(DT_GENERIC)) {                                     // nothing to calculate in generic files    
+    if (TXT_DT(GENERIC)) {                                     // nothing to calculate in generic files    
         segconf.vb_size = VBLOCK_MEMORY_GENERIC;
         return;
     }
@@ -210,15 +210,17 @@ void segconf_calculate (void)
     // segment this VB
     ctx_clone (vb);
 
-    int32_t save_luft_reject_bytes = Z_DT(DT_VCF) ? vcf_vb_get_reject_bytes (vb) : 0;
+    int32_t save_luft_reject_bytes = Z_DT(VCF) ? vcf_vb_get_reject_bytes (vb) : 0;
 
     SAVE_FLAGS;
     flag.show_alleles = flag.show_digest = flag.show_codec = flag.show_hash =
     flag.show_reference = flag.show_vblocks = false;
     flag.quiet = true;
 
-    seg_all_data_lines (vb);        
+    seg_all_data_lines (vb);      
+    SAVE_FLAG (aligner_available); // might have been set in sam_seg_finalize_segconf
     RESTORE_FLAGS;
+    RESTORE_FLAG (aligner_available);
 
     segconf_set_vb_size (vb, save_vb_size);
 
@@ -236,14 +238,14 @@ void segconf_calculate (void)
     // in case of generated component data - undo
     vb->gencomp_lines.len = 0;
 
-    if (Z_DT(DT_VCF))
+    if (Z_DT(VCF))
         txt_file->reject_bytes += save_luft_reject_bytes; // return reject bytes to txt_file, to be reassigned to VB
 
     // require compressing with a reference when using --best with SAM/BAM/FASTQ, with some exceptions
-    bool best_requires_ref = ((VB_DT(DT_SAM) || VB_DT(DT_BAM)) && !(segconf.is_long_reads && segconf.sam_is_unmapped))
-                          || (VB_DT(DT_FASTQ) && !segconf.is_long_reads);
+    bool best_requires_ref = ((VB_DT(SAM) || VB_DT(BAM)) && !(segconf.is_long_reads && segconf.sam_is_unmapped))
+                          || (VB_DT(FASTQ) && !segconf.is_long_reads);
 
-    if (segconf.is_long_reads && (VB_DT(DT_FASTQ) || segconf.sam_is_unmapped)) {
+    if (segconf.is_long_reads && (VB_DT(FASTQ) || segconf.sam_is_unmapped)) {
         flag.reference = REF_NONE;
         flag.aligner_available = false;
     }

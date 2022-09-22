@@ -215,15 +215,12 @@ static pid_t stream_exec_child (int *stream_stdout_to_genozip, int *stream_stder
     else CLOSE (STDIN_FILENO, "STDIN_FILENO", true); // no stdin for child. quiet bc stdin may already be closed - if we just finished reading txt input from redirected stdin
 
     // determine what happens to the child's stdout
-
     if (redirect_stdout_file)  // redirect child stdout to a file
         dup2 (fileno (redirect_stdout_file), STDOUT_FILENO);
  
     else if (stream_stdout_to_genozip) {   // redirect child stdout to a pipe to genozip
         dup2 (stream_stdout_to_genozip[1], STDOUT_FILENO);
-        ASSERTW (!close (stream_stdout_to_genozip[0]), 
-                 "Warning in %s: Failed to close stream_stdout_to_genozip[0]=%d of child process to become %s: %s",  
-                 __FUNCTION__, stream_stdout_to_genozip[0], argv[0], strerror(errno));
+        close (stream_stdout_to_genozip[0]); // ignore errors
     }
     else {
         // stdout continues to go to be shared with genozip (e.g. the terminal)
@@ -234,9 +231,7 @@ static pid_t stream_exec_child (int *stream_stdout_to_genozip, int *stream_stder
     if (stream_stderr_to_genozip) { // redirect child stdout to a pipe to genozip
         dup2 (STDERR_FILENO, 3); // keep the original stderr in fd=3 in case we can't execute and need to report an error
         dup2 (stream_stderr_to_genozip[1], STDERR_FILENO);
-        ASSERTW (!close (stream_stderr_to_genozip[0]), 
-                 "Warning in %s: Failed to close stream_stderr_to_genozip[0]=%d of child process to become %s: %s",  
-                 __FUNCTION__, stream_stderr_to_genozip[0], argv[0], strerror(errno));
+        close (stream_stderr_to_genozip[0]); // ignore errors
     } 
     else {
         // stderr continues to go to be shared with genozip (e.g. the terminal)
@@ -256,7 +251,7 @@ static pid_t stream_exec_child (int *stream_stdout_to_genozip, int *stream_stder
 StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint32_t from_stream_stderr, uint32_t to_stream_stdin,
                        FILE *redirect_stdout_file, 
                        rom input_url_name, // input to exec is coming from a URL
-                       bool input_stdin,           // input to exec is coming from stdin 
+                       bool input_stdin,   // input to exec is coming from stdin 
                        rom reason,
                        rom exec_name, ...)
 {

@@ -324,6 +324,8 @@ void refhash_load_standalone (void)
     flag.reading_reference = gref; // tell file.c and fasta.c that this is a reference
 
     TEMP_VALUE (command, PIZ);
+    TEMP_VALUE (z_file, NULL);   // save z_file and txt_file in case we are called from sam_seg_finalize_segconf
+    TEMP_VALUE (txt_file, NULL);
     CLEAR_FLAG (test);
 
     z_file = file_open (ref_get_filename (gref), READ, Z_FILE, DT_FASTA);    
@@ -338,7 +340,9 @@ void refhash_load_standalone (void)
     
     RESTORE_FLAG (test);
     RESTORE_VALUE (command);
-
+    RESTORE_VALUE (z_file);
+    RESTORE_VALUE (txt_file);
+    
     flag.reading_reference = NULL;
 }
 

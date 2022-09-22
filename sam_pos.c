@@ -31,10 +31,6 @@ static void sam_seg_POS_segconf (VBlockSAMP vb, WordIndex prev_line_chrom, SamPo
     // evidence of being sorted: same RNAME, increasing POS
     if (prev_line_chrom == vb->chrom_node_index && prev_line_pos <= pos)
         segconf.evidence_of_sorted = true;
-
-    // evidence of not being entirely unmapped: we have POS in at least one line
-    if (pos)
-        segconf.sam_is_unmapped = false; 
 }
 
 SamPosType sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM *dl, WordIndex prev_line_chrom, unsigned add_bytes)

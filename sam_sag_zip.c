@@ -312,11 +312,14 @@ bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(alignment), boo
     
     // unmapped or otherwise lacking alignment - not gencomp
     if (!segconf.sag_type || vb->chrom_node_index == WORD_INDEX_NONE || // RNAME='*' or headerless SAM (we need header-contigs for sam_sa_add_sa_group)
-        dl->FLAG.unmapped || vb->cigar_missing || !dl->POS) 
+        dl->FLAG.unmapped || vb->cigar_missing || !dl->POS)
             goto done; 
 
     switch (segconf.sag_type) {
         case SAG_BY_SA:
+            if ((vb->hard_clip[0]>0 || vb->hard_clip[1]>0) && (vb->soft_clip[0]>0 || vb->soft_clip[1]>0))
+                goto done; // we don't support adding an alignment with both soft and hard clips to an SA-based sag
+
             if (has_SA && sam_line_is_depn(dl)) {
                 comp_i = SAM_COMP_DEPN;
 

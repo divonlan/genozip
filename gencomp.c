@@ -723,7 +723,7 @@ bool gencomp_am_i_expecting_more_txt_data (void)
     bool expecting = !finished_absorbingP || queueP[GCT_OOB].queue_len || queueP[GCT_DEPN].queue_len ||
                      reread_depn_lines.next < reread_depn_lines.len;
 
-    if ((TXT_DT(DT_SAM) || TXT_DT(DT_BAM)) && finished_absorbingP && !queueP[GCT_OOB].queue_len && !num_vbs_dispatched[GCT_OOB]) {
+    if ((TXT_DT(SAM) || TXT_DT(BAM)) && finished_absorbingP && !queueP[GCT_OOB].queue_len && !num_vbs_dispatched[GCT_OOB]) {
         sam_finished_ingesting_prim = true;
         if (flag.debug_gencomp) iprint0 ("No PRIM VBs in this file\n");
     }
@@ -757,7 +757,7 @@ void gencomp_sam_prim_vb_has_been_ingested (VBlockP vb)
     // which guarantees that if we have data, at least one of these two conditions will be true. 
     // 2. gencomp_get_txt_data ensures that if there is a VB being dispatched, it is accounted for in
     // at least one of: num_vbs_dispatched[GCT_OOB], queueP[GCT_OOB].queue_len
-    if ((VB_DT(DT_SAM) || VB_DT(DT_BAM)) && my_finished_absorbing && !prim_queue_len && num_vbs_dispatched[GCT_OOB] == num_SAM_PRIM_vbs_ingested) {
+    if ((VB_DT(SAM) || VB_DT(BAM)) && my_finished_absorbing && !prim_queue_len && num_vbs_dispatched[GCT_OOB] == num_SAM_PRIM_vbs_ingested) {
         sam_sa_prim_finalize_ingest ();
         sam_finished_ingesting_prim = true;
         if (flag.debug_gencomp) iprintf ("Finished ingesting SA Groups: num_SAM_PRIM_vbs_ingested=%u\n", num_SAM_PRIM_vbs_ingested);

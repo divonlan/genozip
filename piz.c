@@ -680,7 +680,7 @@ Dispatcher piz_z_file_initialize (void)
         ASSINP0 (dt_get_translation(NULL).is_src_dt, "Error: --test or --md5 cannot be used when converting a file to another format"); 
     
     
-    uint64_t target_progress = (Z_DT(DT_SAM) ? sections_get_num_vbs (SAM_COMP_PRIM) : 0) // VBs pre-processed
+    uint64_t target_progress = (Z_DT(SAM) ? sections_get_num_vbs (SAM_COMP_PRIM) : 0) // VBs pre-processed
                              + 3 * z_file->num_vbs; // VBs read, reconstructed, written
 
     Dispatcher dispatcher = dispatcher_init (flag.reading_chain     ? "piz-chain"

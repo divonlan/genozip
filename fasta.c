@@ -43,7 +43,7 @@ unsigned fasta_vb_zip_dl_size (void) { return sizeof (ZipDataLineFASTA); }
 
 void fasta_vb_release_vb (VBlockFASTAP vb)
 {
-    if (VB_DT(DT_REF) && IS_PIZ) return; // this is actually a VBlock, not VBlockFASTA
+    if (VB_DT(REF) && IS_PIZ) return; // this is actually a VBlock, not VBlockFASTA
     
     memset ((char *)vb + sizeof (VBlock), 0, sizeof (VBlockFASTA) - sizeof (VBlock)); // zero all data unique to VBlockFASTA
     CTX(FASTA_NONREF)->local.len = 0; // len might be is used even though buffer is not allocated (in make-ref)

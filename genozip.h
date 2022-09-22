@@ -108,9 +108,9 @@ typedef enum { DT_NONE=-1, // used in the code logic, never written to the file
                DT_REF=0, DT_VCF=1, DT_SAM=2, DT_FASTQ=3, DT_FASTA=4, DT_GFF3=5, DT_ME23=6, // these values go into SectionHeaderGenozipHeader.data_type
                DT_BAM=7, DT_BCF=8, DT_GENERIC=9, DT_PHYLIP=10, DT_CHAIN=11, DT_KRAKEN=12, 
                DT_LOCS=13, DT_BCL=14, NUM_DATATYPES } DataType; 
-#define Z_DT(dt)   (z_file->data_type   == (dt))
-#define TXT_DT(dt) (txt_file->data_type == (dt))
-#define VB_DT(dt)  (vb->data_type       == (dt))
+#define Z_DT(dt)   (z_file->data_type   == (DT_##dt))
+#define TXT_DT(dt) (txt_file->data_type == (DT_##dt))
+#define VB_DT(dt)  (vb->data_type       == (DT_##dt))
 
 typedef enum { DTYPE_FIELD, DTYPE_1, DTYPE_2 } DictIdType;
 

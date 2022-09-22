@@ -876,13 +876,13 @@ void sections_show_header (const SectionHeader *header, VBlockP vb /* optional i
 
     case SEC_VB_HEADER: {
         SectionHeaderVbHeader *h = (SectionHeaderVbHeader *)header;
-        if (Z_DT(DT_VCF)) 
+        if (Z_DT(VCF)) 
             sprintf (str, 
                     "\n"SEC_TAB "recon_size=(PRIM:%u, LUFT:%u) longest_line=%u z_data_bytes=%u digest=%s %s\n",
                     BGEN32 (h->recon_size_prim), v12 ? BGEN32 (h->dvcf_recon_size_luft) : 0, 
                     BGEN32 (h->longest_line_len), 
                     BGEN32 (h->z_data_bytes), digest_display (h->digest).s, sections_dis_flags (f, st, dt).s);
-        else if (Z_DT(DT_SAM))
+        else if (Z_DT(SAM))
             sprintf (str, 
                     "\n"SEC_TAB "recon_size=%u longest_line=%u z_data_bytes=%u digest=%s prim=(seq=%u comp_qual=%u qname=%u num_alns=%u first_grp_i=%u %s=%u) %s\n", 
                     BGEN32 (h->recon_size_prim),  BGEN32 (h->longest_line_len), 

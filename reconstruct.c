@@ -184,7 +184,7 @@ int64_t reconstruct_from_local_int (VBlockP vb, ContextP ctx, char separator /* 
     }
 
     if (reconstruct) { 
-        if (VB_DT(DT_VCF) && num==lt_desc[ctx->ltype].max_int && dict_id_is_vcf_format_sf (ctx->dict_id)
+        if (VB_DT(VCF) && num==lt_desc[ctx->ltype].max_int && dict_id_is_vcf_format_sf (ctx->dict_id)
             && !lt_desc[ctx->ltype].is_signed) {
             RECONSTRUCT1 ('.');
             num = 0; // we consider FORMAT fields that are . to be 0.
@@ -221,7 +221,7 @@ int64_t reconstruct_peek_local_int (VBlockP vb, ContextP ctx, int offset /*0=nex
             ASSPIZ (false, "Unexpected ltype=%s(%u)", lt_name(ctx->ltype), ctx->ltype); 
     }
 
-    if (VB_DT(DT_VCF) && num==lt_desc[ctx->ltype].max_int && dict_id_is_vcf_format_sf (ctx->dict_id)
+    if (VB_DT(VCF) && num==lt_desc[ctx->ltype].max_int && dict_id_is_vcf_format_sf (ctx->dict_id)
         && !lt_desc[ctx->ltype].is_signed)
         return 0; // returns 0 if '.'
 
@@ -270,7 +270,7 @@ uint32_t reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, STRp(snip), 
     if (!ctx->is_loaded) return len;
 
     // special case: handle SAM_QUAL missing quality (expressed as a ' ')
-    if (*Bc(ctx->local, ctx->next_local) == ' ' && (ctx->did_i == SAM_QUAL && (Z_DT(DT_BAM) || Z_DT(DT_SAM)))) {
+    if (*Bc(ctx->local, ctx->next_local) == ' ' && (ctx->did_i == SAM_QUAL && (Z_DT(BAM) || Z_DT(SAM)))) {
         len = 1;
         sam_reconstruct_missing_quality (vb, reconstruct);
     }

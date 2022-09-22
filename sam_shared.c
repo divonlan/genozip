@@ -104,7 +104,7 @@ void sam_reset_line (VBlockP vb_)
     vb->textual_cigar.len = vb->binary_cigar.len = vb->binary_cigar.next = 0;
     vb->qual_missing = vb->seq_missing = vb->cigar_missing = false;
     vb->XG.len = 0;
-    vb->seq_len/*xxx*/ = 0;
+    vb->seq_len = 0;
     vb->ref_consumed = vb->ref_and_seq_consumed = 0;
     vb->soft_clip[0] = vb->soft_clip[1] = 0;
     vb->hard_clip[0] = vb->hard_clip[1] = 0;

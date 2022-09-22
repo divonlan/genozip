@@ -149,7 +149,7 @@ extern CtxNode *ctx_node_zf_do (ConstContextP ctx, int32_t node_index, rom *snip
 extern void ctx_merge_in_vb_ctx (VBlockP vb);
 extern void ctx_substract_txt_len (VBlockP vb, ContextP vctx);
 extern void ctx_add_compressor_time_to_zf_ctx (VBlockP vb);
-extern void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vctx, bool is_lcodec);
+extern void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vctx, bool is_lcodec, bool is_lcodec_inherited);
 extern void ctx_convert_generated_b250_to_mate_lookup (VBlockP vb, ContextP vctx);
 
 extern ContextP ctx_get_unmapped_ctx (ContextP contexts, DataType dt, Did *dict_id_to_did_i_map, Did *num_contexts, DictId dict_id, STRp(tag_name));

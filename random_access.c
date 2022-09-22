@@ -275,7 +275,7 @@ void random_access_finalize_entries (BufferP ra_buf)
     FREE (sorter);
 
     // now that the VBs are in order, we can updated the "CONTINUED FROM PREVIOUS VB"(=WORD_INDEX_NONE) ra's to their final values
-    if (Z_DT(DT_FASTA) || Z_DT(DT_REF)) 
+    if (Z_DT(FASTA) || Z_DT(REF)) 
         for_buf2 (RAEntry, ra, i, *ra_buf) 
             if (ra->chrom_index == WORD_INDEX_NONE) {
                 // we expect this ra to be the first in its VB, and the previous ra to be of the previous VB

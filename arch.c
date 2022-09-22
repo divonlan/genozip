@@ -34,11 +34,14 @@
 #include "flags.h"
 #include "strings.h"
 
+static rom argv0 = NULL;
+
 #ifdef _WIN32
 // add the genozip path to the user's Path environment variable, if its not already there. 
 // Note: We do all string operations in Unicode, so as to preserve any Unicode characters in the existing Path
-static void arch_add_to_windows_path (rom argv0)
+static void arch_add_to_windows_path (rom my_argv0)
 {
+    argv0 = my_argv0;
     rom backslash = strrchr (argv0, '\\');
     if (!backslash) return; // no directory
 
@@ -108,6 +111,7 @@ void arch_initialize (rom argv0)
     ASSERT0 (bittest.bit_3.a == 1, "unsupported bit order in a struct, please use gcc to compile (2)");
 
     setlocale (LC_ALL, ""); // accept and print UTF-8 text 
+    setlocale (LC_NUMERIC, "english"); // printf's %f uses '.' as the decimal separator (not ',')
 
 #ifdef _WIN32
     _setmode(_fileno(stdin),  _O_BINARY);
@@ -230,7 +234,7 @@ bool arch_is_wsl (void)
 }
 
 // good summary here: https://stackoverflow.com/questions/1023306/finding-current-executables-path-without-proc-self-exe/1024937#1024937
-rom arch_get_executable (rom argv0) // caller should free
+rom arch_get_executable (void) // caller should free
 {
 #ifdef __linux__    
     char *path = malloc (PATH_MAX + 1);

@@ -159,7 +159,7 @@ ConstRangeP ref_piz_get_range (VBlockP vb, Reference ref, bool soft_fail)
     ASSPIZ (ref_contig_index < ref->ranges.len, "Expecting ref_contig_index=%d < ref->ranges.len=%"PRIu64 " in %s. FYI: z_file->chrom2ref_map.len=%"PRIu64, 
             ref_contig_index, ref->ranges.len, ref_get_filename(ref), z_file->chrom2ref_map.len);
 
-    Range *r = B(Range, ref->ranges, ref_contig_index);
+    RangeP r = B(Range, ref->ranges, ref_contig_index);
     ASSPIZ (r->ref.nwords || soft_fail, "No reference data for chrom=\"%s\"", vb->chrom_name);
     if (!r->ref.nwords) return NULL; // this can ligitimately happen if entire chromosome is verbatim in SAM, eg. unaligned (pos=4) or SEQ or CIGAR are unavailable
 
@@ -174,7 +174,7 @@ ConstRangeP ref_piz_get_range (VBlockP vb, Reference ref, bool soft_fail)
 // -------------------------------------------------------------------------------------------------------
 
 // PIZ: uncompact a region within ref - called by compute thread of reading the reference
-static void ref_uncompact_ref (Range *r, int64_t first_bit, int64_t last_bit, const Bits *compacted)
+static void ref_uncompact_ref (RangeP r, int64_t first_bit, int64_t last_bit, const Bits *compacted)
 {
     uint64_t start_1_offset=first_bit, start_0_offset, len_1; // coordinates into r->is_set (in nucleotides)
     uint64_t next_compacted=0; // coordinates into compacted (in nucleotides)
@@ -208,7 +208,7 @@ static void ref_uncompact_ref (Range *r, int64_t first_bit, int64_t last_bit, co
 }
 
 // Compute thread: called by ref_uncompress_one_range
-Range *ref_get_range_by_chrom (Reference ref, WordIndex chrom, rom *chrom_name)
+RangeP ref_get_range_by_chrom (Reference ref, WordIndex chrom, rom *chrom_name)
 {
     ContextP ctx = ZCTX(CHROM);
     ASSERT (chrom >= 0 && chrom < ctx->word_list.len, "chrom=%d out of range - ctx->word_list.len=%u",
@@ -219,11 +219,11 @@ Range *ref_get_range_by_chrom (Reference ref, WordIndex chrom, rom *chrom_name)
 
     ASSERT (chrom < ref->ranges.len, "expecting chrom=%d < ranges.len=%"PRIu64, chrom, ref->ranges.len);
     
-    Range *r = B(Range, ref->ranges, chrom); // in PIZ, we have one range per chrom
+    RangeP r = B(Range, ref->ranges, chrom); // in PIZ, we have one range per chrom
     return r;
 }
 
-Range *ref_get_range_by_ref_index (VBlockP vb, Reference ref, WordIndex ref_contig_index)
+RangeP ref_get_range_by_ref_index (VBlockP vb, Reference ref, WordIndex ref_contig_index)
 {
     if (ref_contig_index == WORD_INDEX_NONE || ref_contig_index >= ref->ranges.len) return NULL;
 
@@ -259,7 +259,7 @@ static void ref_print_bases (FILE *file, const Bits *bitarr,
 static void ref_show_sequence (Reference ref)
 {
     for (uint32_t range_i=0; range_i < ref->ranges.len32; range_i++) {
-        Range *r = B(Range, ref->ranges, range_i);
+        RangeP r = B(Range, ref->ranges, range_i);
 
         // get first pos and last pos, potentially modified by --regions
         PosType first_pos, last_pos;
@@ -298,7 +298,7 @@ static void ref_uncompress_one_range (VBlockP vb)
     ASSERT0 (chrom != WORD_INDEX_NONE, "Unexpected reference section with chrom=WORD_INDEX_NONE");
 
     rom chrom_name;
-    Range *r = ref_get_range_by_chrom (vb->ref, chrom, &chrom_name);
+    RangeP r = ref_get_range_by_chrom (vb->ref, chrom, &chrom_name);
     PosType sec_start_within_contig = ref_sec_pos - r->first_pos;
     PosType sec_start_gpos          = r->gpos + sec_start_within_contig;
     PosType sec_end_within_contig   = sec_start_within_contig + ref_sec_len - 1;
@@ -461,7 +461,7 @@ static void ref_read_one_range (VBlockP vb)
 
     if (!sections_next_sec2 (&sec, SEC_REFERENCE, SEC_REF_IS_SET)) return;  // no more reference sections
         
-    unsigned header_len = (Z_DT(DT_SAM) && z_file->z_flags.dts_ref_internal) ? crypt_padded_len (sizeof (SectionHeaderReference)) // REF_INTERNAL sections are encrypted if --password
+    unsigned header_len = (Z_DT(SAM) && z_file->z_flags.dts_ref_internal) ? crypt_padded_len (sizeof (SectionHeaderReference)) // REF_INTERNAL sections are encrypted if --password
                                                                              : sizeof (SectionHeaderReference); // data originating from a reference file is never encrypted
     if (((sec+1)->offset - sec->offset) == header_len) return; // final, terminating header-only section sometimes exists (see ref_compress_ref)
     
@@ -471,7 +471,7 @@ static void ref_read_one_range (VBlockP vb)
     bool range_is_included = true;
     RAEntry *ra = NULL;
     if (command==PIZ && flag.regions &&
-        !(Z_DT(DT_REF) || Z_DT(DT_SAM) || Z_DT(DT_BAM) || Z_DT(DT_FASTQ))) { // SAM/BAM/FASTQ: we need the reference even for excluded contigs, so recon can consume FASTQ_SEQMIS/SAM_SEQMIS (also always when reading external referene, as we don't yet know which files it will be use for)
+        !(Z_DT(REF) || Z_DT(SAM) || Z_DT(BAM) || Z_DT(FASTQ))) { // SAM/BAM/FASTQ: we need the reference even for excluded contigs, so recon can consume FASTQ_SEQMIS/SAM_SEQMIS (also always when reading external referene, as we don't yet know which files it will be use for)
         if (sec->vblock_i > vb->ref->stored_ra.len32) return; // we're done - no more ranges to read, per random access (this is the empty section)
 
         ra = B(RAEntry, vb->ref->stored_ra, vb->vblock_i-1);
@@ -625,10 +625,10 @@ void ref_create_cache_join (Reference ref, bool free_mem)
 // case 1: ZIP: in SAM with REF_INTERNAL, when segging a SEQ field ahead of committing it to the reference
 // case 2: ZIP: SAM and VCF with REF_EXTERNAL: when segging a SAM_SEQ or VCF_REFALT field
 // if range is found, returns a locked range, and its the responsibility of the caller to unlock it. otherwise, returns NULL
-Range *ref_seg_get_range (VBlockP vb, Reference ref, WordIndex chrom, STRp(chrom_name), 
+RangeP ref_seg_get_range (VBlockP vb, Reference ref, WordIndex chrom, STRp(chrom_name), 
                           PosType pos, uint32_t ref_consumed, 
                           WordIndex ref_index, // if known (mandatory if not prim_chrom), WORD_INDEX_NONE if not                                
-                          rom field /* used for ASSSEG */, 
+                          rom field,     // used for ASSSEG 
                           RefLock *lock) // optional if RT_LOADED/RT_CACHED
 {
     // sanity checks
@@ -641,12 +641,11 @@ Range *ref_seg_get_range (VBlockP vb, Reference ref, WordIndex chrom, STRp(chrom
 
     if (ref_index == WORD_INDEX_NONE) return NULL;
 
-    Range *range = B(Range, ref->ranges, ref_index);
+    RangeP range = B(Range, ref->ranges, ref_index);
 
     // when using an external refernce, pos has to be within the reference range
-    // note: in SAM, if a read starts within the valid range, it is allowed to overflow beyond it - and we will circle
-    // around to the beginning of the range assuming its a circular chromosome (see in sam_seg_SEQ)
-    // note: we observed BAM files in the wild with chrM POS=16572 (with the contig len = 16571) - which is why this is a warning and not an error
+    // note: in SAM, if a read starts within the valid range, it can overflow beyond it if its a circular chromosome. 
+    // we even observed BAM files in the wild with chrM POS=16572 (with the contig len = 16571) - which is why this is a warning and not an error
     if (pos < range->first_pos || (pos + ref_consumed - 1) > range->last_pos) {
         if (pos > range->last_pos) // warn only if entire SEQ is outside of range - i.e. don't warn for a read at the end of a circular contig, but still return NULL
             WARN_ONCE ("FYI: %s: contig=\"%.*s\"(%u) pos=%"PRIu64" ref_consumed=%u exceeds contig.last_pos=%"PRIu64". This might be an indication that the wrong reference file is being used (this message will appear only once)",
@@ -751,7 +750,7 @@ static void ref_copy_compressed_sections_from_reference_file (Reference ref)
     // note: use 'genocat --show-index <file.ref.genozip>' to see ref_external_ra
     for (uint32_t i=0; i < ref->ref_external_ra.len32; i++) {
 
-        Range *contig_r = B(Range, ref->ranges, sec_reference[i].chrom_index);
+        RangeP contig_r = B(Range, ref->ranges, sec_reference[i].chrom_index);
         PosType SEC_REFERENCE_start_in_contig_r = sec_reference[i].min_pos - contig_r->first_pos; // the start of the SEC_REFERENCE section (a bit less than 1MB) within the full-contig range
 
         PosType SEC_REFERNECE_len = sec_reference[i].max_pos - sec_reference[i].min_pos + 1;
@@ -773,7 +772,7 @@ static void ref_copy_compressed_sections_from_reference_file (Reference ref)
 }
 
 // remove the unused parts of a range and the beginning and end of the range, and update first/last_pos.
-static bool ref_remove_flanking_regions (Reference ref, Range *r, uint64_t *start_flanking_region_len /* out */)
+static bool ref_remove_flanking_regions (Reference ref, RangeP r, uint64_t *start_flanking_region_len /* out */)
 {
 // threshold - if the number of clear bits (excluding flanking regions) is beneath this, we will not copmact, as the cost in
 // z_file size of a SEC_REF_IS_SET section needed if compacting will be more than what we save in compression of r->ref
@@ -815,7 +814,7 @@ static bool ref_remove_flanking_regions (Reference ref, Range *r, uint64_t *star
 }
 
 // we compact one range by squeezing together all the bases that have is_set=1. return true if compacted
-static bool ref_compact_ref (Reference ref, Range *r)
+static bool ref_compact_ref (Reference ref, RangeP r)
 {
     if (!r || !r->num_set) return false;
 
@@ -855,7 +854,7 @@ static void ref_compress_one_range (VBlockP vb)
 {
     START_TIMER;
 
-    Range *r = vb->range; // will be NULL if we're being asked to write a final, empty section
+    RangeP r = vb->range; // will be NULL if we're being asked to write a final, empty section
 
     // remove flanking regions, and if beneficial also compact it further by removing unused nucleotides 
     bool is_compacted = flag.make_reference ? false : ref_compact_ref (gref, r); // true if it is compacted beyong just the flanking regions
@@ -938,7 +937,7 @@ static void ref_prepare_range_for_compress (VBlockP vb)
 
     // find next occupied range
     for (; next_range_i < gref->ranges.len ; next_range_i++) {
-        Range *r = B(Range, gref->ranges, next_range_i);
+        RangeP r = B(Range, gref->ranges, next_range_i);
 
         if (r->num_set == -1)  // calculate num_set if not already calculated
             r->num_set = bits_num_set_bits (&r->is_set);
@@ -958,8 +957,8 @@ static void ref_prepare_range_for_compress (VBlockP vb)
 
 static SORTER (ref_contigs_range_sorter)
 {
-    const Range *r_a = a;
-    const Range *r_b = b;
+    ConstRangeP r_a = a;
+    ConstRangeP r_b = b;
     
     bool is_used_a = ref_is_range_used (r_a);
     bool is_used_b = ref_is_range_used (r_b);
@@ -1030,7 +1029,7 @@ void ref_compress_ref (void)
     // SAM require at least one reference section, but if the SAM is unaligned, there will be none - create one empty section
     // (this will also happen if SAM has just only reference section, we will just needlessly write another tiny section - no harm)
     // incidentally, this empty section will also be written in case of a small (one vb) reference - no harm
-    if (Z_DT(DT_SAM) && num_vbs_dispatched==1) {
+    if (Z_DT(SAM) && num_vbs_dispatched==1) {
         evb->range = NULL;
         ref_compress_one_range (evb); // written with vb_i=0, section header only (no body)
     }
@@ -1124,7 +1123,7 @@ void ref_display_ref (Reference ref)
 
     if (flag.regions) regions_make_chregs (&chrom_ctx);
 
-    for (const Range *r = B1ST (Range, ref->ranges); r < BAFT (Range, ref->ranges); r++) {
+    for (ConstRangeP r = B1ST (Range, ref->ranges); r < BAFT (Range, ref->ranges); r++) {
 
         unsigned num_intersections = regions_get_num_range_intersections (r->chrom);
         if (!num_intersections) continue;
@@ -1190,8 +1189,8 @@ void ref_diff_ref (void)
     }
 
     for (uint32_t range_i=0; range_i < gref->ranges.len32; range_i++) {
-        const Range *r1 = B(Range, gref->ranges, range_i); 
-        const Range *r2 = B(Range, prim_ref->ranges, range_i); 
+        ConstRangeP r1 = B(Range, gref->ranges, range_i); 
+        ConstRangeP r2 = B(Range, prim_ref->ranges, range_i); 
 
         if (!str_issame(r1->chrom_name, r2->chrom_name)) {
             printf ("*** range_i=%u has a different contig name: R1=\"%.*s\" R2=\"%.*s\"\n", range_i, STRf(r1->chrom_name), STRf(r2->chrom_name));
@@ -1433,7 +1432,7 @@ typedef struct { PosType min_pos, max_pos; } MinMax;
 //---------------------------------------
 // Printing
 //---------------------------------------
-RangeStr ref_display_range (const Range *r)
+RangeStr ref_display_range (ConstRangeP r)
 {
     RangeStr s;
 
@@ -1457,7 +1456,7 @@ void ref_display_all_ranges (Reference ref)
         iprint0 ("reference has no ranges\n");
 }
 
-void ref_print_subrange (rom msg, const Range *r, PosType start_pos, PosType end_pos, FILE *file) /* start_pos=end_pos=0 if entire ref */
+void ref_print_subrange (rom msg, ConstRangeP r, PosType start_pos, PosType end_pos, FILE *file) /* start_pos=end_pos=0 if entire ref */
 {
     uint64_t start_idx = start_pos ? start_pos - r->first_pos : 0;
     uint64_t end_idx   = (end_pos ? MIN_(end_pos, r->last_pos) : r->last_pos) - r->first_pos;
@@ -1470,7 +1469,7 @@ void ref_print_subrange (rom msg, const Range *r, PosType start_pos, PosType end
 }
 
 // outputs in seq, a nul-terminated string of up to (len-1) bases
-char *ref_dis_subrange (Reference ref, const Range *r, PosType start_pos, PosType len, char *seq, bool revcomp) // in_reference allocated by caller to length len
+char *ref_dis_subrange (Reference ref, ConstRangeP r, PosType start_pos, PosType len, char *seq, bool revcomp) // in_reference allocated by caller to length len
 {
     if (!revcomp) {
         PosType next_iupac_pos, pos, end_pos = MIN_(start_pos + len - 1 - 1, r->last_pos);  // -1 to leave room for \0
@@ -1494,7 +1493,7 @@ char *ref_dis_subrange (Reference ref, const Range *r, PosType start_pos, PosTyp
     return seq;
 }
 
-void ref_print_is_set (const Range *r,
+void ref_print_is_set (ConstRangeP r,
                        PosType around_pos,  // display around this neighborhoud ; -1 means entire range
                        FILE *file)
 {
@@ -1599,3 +1598,4 @@ rom ref_type_name (void)
         default             : return "Invalid_reference_type"; 
     }
 }
+

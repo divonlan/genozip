@@ -211,7 +211,7 @@ static void flags_show_flags (void)
     iprintf ("check_lastest=%s\n", TF_(check_latest));
     iprintf ("debug_lastest=%s\n", TF_(debug_latest));
     iprintf ("debug_peek=%s\n", TF_(debug_peek));
-    iprintf ("debug_submit=%s\n", TF_(debug_submit));
+    iprintf ("submit_stats=%s\n", TF_(submit_stats));
     iprintf ("force_gencomp=%s\n", TF_(force_gencomp));
     iprintf ("no_gencomp=%s\n", TF_(no_gencomp));
     iprintf ("no_domqual=%s\n", TF_(no_domqual));
@@ -614,13 +614,13 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _dL {"debug-LONG",       no_argument,       &flag.debug_LONG,       1 }  
         #define _dD {"show-qual",        no_argument,       &flag.show_qual,        1 }  
         #define _dq {"debug-qname",      no_argument,       &flag.debug_qname,      1 }  
-        #define _dB {"show-buddy",      no_argument,       &flag.show_buddy,      1 }  
+        #define _dB {"show-buddy",       no_argument,       &flag.show_buddy,      1 }  
         #define _dt {"debug-threads",    no_argument,       &flag.debug_threads,    1 }  
         #define _dw {"debug-stats",      no_argument,       &flag.debug_stats,      1 }  
         #define _dM {"debug-generate",   no_argument,       &flag.debug_generate  , 1 }  
         #define _dr {"debug-recon-size", no_argument,       &flag.debug_recon_size, 1 }  
         #define _dR {"debug-read-ctxs",  no_argument,       &flag.debug_read_ctxs,  1 }  
-        #define _dP {"debug-sag",         no_argument,       &flag.debug_sag,         1 }  
+        #define _dP {"debug-sag",        no_argument,       &flag.debug_sag,         1 }  
         #define _dG {"debug-gencomp",    no_argument,       &flag.debug_gencomp,    1 }  
         #define _dN {"no-gencomp",       no_argument,       &flag.no_gencomp,       1 }  
         #define _dF {"force-gencomp",    no_argument,       &flag.force_gencomp,    1 }  
@@ -643,7 +643,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _VV {"check-latest",     no_argument,       &flag.check_latest,     1 }
         #define _DV {"debug-latest",     no_argument,       &flag.debug_latest,     1 }
         #define _Dp {"debug-peek",       no_argument,       &flag.debug_peek,       1 }
-        #define _Ds {"debug-submit",     no_argument,       &flag.debug_submit,       1 }
+        #define _Ds {"submit-stats",     no_argument,       &flag.submit_stats,     1 }
         #define _00 {0, 0, 0, 0                                                       }
 
         typedef const struct option Option;
@@ -1377,7 +1377,7 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
     // string (in other cases, it would be an error)
     flag.missing_contexts_allowed = flag.collect_coverage || flag.count || flag.drop_genotypes;
 
-    if (Z_DT(DT_FASTQ)) {
+    if (Z_DT(FASTQ)) {
         bool is_paired_fastq = fastq_piz_is_paired(); // also updates z_file->z_flags in case of backward compatability issues
 
         // --R1/--R2 and --interleaved is only possible for on FASTQ data compressed with --pair
@@ -1436,7 +1436,7 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
     ASSINP (!flag.qual_only || flag.out_dt == DT_FASTQ, "--qual-only is not supported for %s because it only works on FASTQ data, but this file has %s data", z_name, dt_name (dt));
 
     // --unbind and --component not allowed in SAM/BAM starting v14
-    if (Z_DT(DT_SAM) && VER(14)) {
+    if (Z_DT(SAM) && VER(14)) {
         ASSERT0 (!flag.unbind, "--unbind not supported for SAM/BAM files");
         ASSERT0 (!flag.one_component, "--component not supported for SAM/BAM files");
     }

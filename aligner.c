@@ -371,7 +371,7 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
             ref_get_genome (gref, &genome, NULL, &genome_nbases);
 
             // sanity check - the sequence is supposed to fit in the 
-            ASSERT (gpos + seq_len <= genome->nbits / 2, "gpos=%"PRId64" is out of range: seq_len=%u and genome_nbases=%"PRIu64,
+            ASSPIZ (gpos + seq_len <= genome->nbits / 2, "gpos=%"PRId64" is out of range: seq_len=%u and genome_nbases=%"PRIu64,
                     gpos, seq_len, genome->nbits / 2);
         }
         else {
@@ -416,7 +416,7 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
         nonref_ctx->next_local += seq_len;
     }
 
-    ASSERT (nonref_ctx->next_local <= nonref_ctx->local.len, "nonref_ctx->next_local=%u is out of range: nonref_ctx->local.len=%u",
+    ASSPIZ (nonref_ctx->next_local <= nonref_ctx->local.len, "nonref_ctx->next_local=%u is out of range: nonref_ctx->local.len=%u",
             nonref_ctx->next_local, nonref_ctx->local.len32);
 
     COPY_TIMER (aligner_reconstruct_seq);

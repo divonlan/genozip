@@ -226,7 +226,7 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
         ASSINP0 (!IS_REF_EXTERNAL || !flag.show_ref_seq, "--show-ref-seq cannot be used on a file that requires a reference file: use genocat --show-ref-seq on the reference file itself instead");
 
         if (!flag.genocat_no_reconstruct || 
-            (flag.collect_coverage && Z_DT(DT_FASTQ))) { // in collect_coverage with FASTQ we read the non-data sections of the reference
+            (flag.collect_coverage && Z_DT(FASTQ))) { // in collect_coverage with FASTQ we read the non-data sections of the reference
             SAVE_VALUE (z_file); // actually, read the reference first
             ref_load_external_reference (gref, NULL);
             RESTORE_VALUE (z_file);
@@ -278,7 +278,7 @@ done:
 
 // run the test genounzip after genozip - for the most reliable testing that is nearly-perfectly indicative of actually 
 // genounzipping, we create a new genounzip process
-static void main_test_after_genozip (rom exec_path, rom z_filename, DataType z_dt, bool is_last_txt_file, bool is_chain)
+static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last_txt_file, bool is_chain)
 {
     rom password = crypt_get_password();
 
@@ -298,6 +298,8 @@ static void main_test_after_genozip (rom exec_path, rom z_filename, DataType z_d
         chain_destroy();
         vb_destroy_pool_vbs (POOL_MAIN);
     }
+
+    rom exec_path = arch_get_executable();
 
     if (!is_last_txt_file || flag.is_windows) {
 
@@ -340,6 +342,8 @@ static void main_test_after_genozip (rom exec_path, rom z_filename, DataType z_d
         TEMP_VALUE (primary_command, TEST_AFTER_ZIP); // make exit_on_error NOT delete the genozip file in this case, so its available for debugging
         ASSERT (!exit_code, "%s: test exited with status: \"%s\"\n", global_cmd, exit_code_name (exit_code)); // exit with error status 
         RESTORE_VALUE (primary_command); // recover in case of more non-concatenated files
+    
+        FREE (exec_path);
     }
 
     // case: nothing more to do on the compression side - run test replacing the current process, without forking
@@ -393,50 +397,11 @@ static void main_test_after_genozip (rom exec_path, rom z_filename, DataType z_d
     }
 }
 
-static void main_genozip_open_z_file_write (rom *z_filename)
-{
-    DataType z_data_type = txt_file->data_type;
-
-    if (! *z_filename) {
-
-        ASSINP0 (txt_file->name, "use --output to specify the output filename (with a .genozip extension)");
-
-        unsigned dn_len = flag.out_dirname ? strlen (flag.out_dirname) : 0;
-        bool is_url = url_is_url (txt_file->name);
-        rom basename = (is_url || dn_len) ? file_basename (txt_file->name, false, "", 0,0) : NULL;
-        rom local_txt_filename = basename ? basename : txt_file->name; 
-
-        unsigned fn_len = strlen (local_txt_filename);
-
-        *z_filename = (char *)MALLOC (fn_len + dn_len + 30); // add enough the genozip extension e.g. 23andme.genozip
-
-        // if the file has an extension matching its type, replace it with the genozip extension, if not, just add the genozip extension
-        rom genozip_ext = file_exts[file_get_z_ft_by_txt_in_ft (txt_file->data_type, txt_file->type)];
-
-        if (chain_is_loaded && TXT_DT(DT_VCF))
-            genozip_ext = DVCF_GENOZIP_;
-
-        if (file_has_ext (local_txt_filename, file_exts[txt_file->type]))
-            sprintf ((char *)*z_filename, "%s%s%.*s%s", 
-                     (dn_len ? flag.out_dirname : ""), (dn_len ? "/" : ""), 
-                     (int)(fn_len - strlen (file_exts[txt_file->type])), local_txt_filename, genozip_ext); 
-        else 
-            sprintf ((char *)*z_filename, "%s%s%s%s", 
-                     (dn_len ? flag.out_dirname : ""), (dn_len ? "/" : ""), 
-                     local_txt_filename, genozip_ext); 
-
-        FREE (basename);
-    }
-
-    z_file = file_open (*z_filename, flag.pair ? WRITEREAD : WRITE, Z_FILE, z_data_type);
-}
-
 static void main_genozip (rom txt_filename, 
                           rom next_txt_filename,      // ignored unless we are of pair_1 in a --pair
                           rom z_filename,
                           unsigned txt_file_i,        // 0-based
-                          bool is_last_user_txt_file, // very last file in this execution 
-                          rom exec_path)
+                          bool is_last_user_txt_file) // very last file in this execution 
 {
     MAIN ("main_genozip: %s", txt_filename ? txt_filename : "stdin");
     
@@ -468,12 +433,13 @@ static void main_genozip (rom txt_filename,
     bool has_zfile = !!z_file;
 
     // get output FILE
-    if (!z_file) { // skip if we're the second file onwards in bind mode, or pair_2 in unbound list of pairs - nothing to do
+    if (!z_file) { // skip if we're the second file onwards in bind mode, or pair_2 in unbound list of pairs - nothing to do        
         
-        if (flag.pair && !z_filename)  // case: if we're the first file in a pair
-            z_filename = file_get_fastq_pair_filename (txt_filename, next_txt_filename, false);
-        
-        main_genozip_open_z_file_write (&z_filename);
+        z_filename = z_filename                 ? z_filename // given with --output
+                   : (flag.pair && !z_filename) ? file_get_fastq_pair_filename (txt_filename, next_txt_filename, false) // first file in a FASTQ pair
+                   :                              file_get_z_filename (txt_file->name, txt_file->data_type, txt_file->type);
+
+        z_file = file_open (z_filename, flag.pair ? WRITEREAD : WRITE, Z_FILE, txt_file->data_type);
     }
 
     if (!flag.zip_comp_i) {
@@ -499,7 +465,7 @@ static void main_genozip (rom txt_filename,
 
     file_close (&txt_file, false, !(is_last_user_txt_file && z_file->z_closes_after_me));  // no need to waste time closing the last file, the process termination will do that
 
-    bool is_chain = (Z_DT(DT_CHAIN));
+    bool is_chain = (Z_DT(CHAIN));
     
     // close the file if its an open disk file AND we need to close it
     if (!flag.to_stdout && z_file && z_file->z_closes_after_me) {
@@ -513,7 +479,7 @@ static void main_genozip (rom txt_filename,
 
         // test the compression, if the user requested --test
         if (flag.test) 
-            main_test_after_genozip (exec_path, z_filename, z_dt, is_last_user_txt_file, is_chain);
+            main_test_after_genozip (z_filename, z_dt, is_last_user_txt_file, is_chain);
     }
 
     // remove after test (if any) was successful
@@ -813,8 +779,6 @@ int main (int argc, char **argv)
     // if we're genozipping with tar, initialize tar file
     if (tar_is_tar()) tar_initialize();
 
-    rom exec_path = arch_get_executable (argv[0]);
-
     for (unsigned file_i=0, z_file_i=0; file_i < MAX_(input_files_len, 1); file_i++) {
 
         // get file name
@@ -842,7 +806,7 @@ int main (int argc, char **argv)
         switch (command) {
             case ZIP  : main_genozip (next_input_file, 
                                       (next_input_file && file_i < input_files_len-1) ? input_files[file_i+1] : NULL, // file name of next file, if there is one
-                                      flag.out_filename, file_i, !next_input_file || is_last_txt_file, exec_path); 
+                                      flag.out_filename, file_i, !next_input_file || is_last_txt_file); 
                         break;
 
             case PIZ  : main_genounzip (next_input_file, flag.out_filename, file_i, is_last_z_file); 

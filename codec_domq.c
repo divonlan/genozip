@@ -164,9 +164,9 @@ static void codec_domq_calc_histogram (VBlockP vb, ContextP qual_ctx, uint32_t h
             // add line_ascii_histogram to histogram according to its dom
             for (uint8_t q=0; q < NUM_Qs; q++)
                 histogram[ql->dom][q] += line_ascii_histogram[q + FIRST_Q];
-
-            *has_diverse = true;
         }
+        else
+            *has_diverse = true;
 
         if (flag.show_qual) 
             count_dom_lines += !ql->is_diverse;
@@ -215,6 +215,7 @@ static uint8_t codec_domq_calc_norm_table (VBlockP vb, ContextP qual_ctx, Contex
 
         qsort (mapping, NUM_Qs, sizeof(Mapping), mapping_sorter); // sort by count
 
+        // prepare normalization and de-normalization tables:
         // the most common q for this dom is normalized to q_norm=0, the second most common to 1 etc
         uint8_t q_norm = 0; 
         for (; q_norm < NUM_Qs && mapping[q_norm].count; q_norm++) {
@@ -229,7 +230,7 @@ static uint8_t codec_domq_calc_norm_table (VBlockP vb, ContextP qual_ctx, Contex
     // table has a line for each dom, a column for each normalized value, and cell contents are the ascii q
     uint8_t denorm[num_doms * num_norm_qs];
     qual_ctx->local_param = true; 
-    qual_ctx->local.prm8[0] = num_norm_qs; // send this to PIZ
+    qual_ctx->local.prm8[0] = num_norm_qs | 0x80; // send this to PIZ. note: 0x80 means a diverse read is marked by dom_i==255. In 14.0.0-14.0.4 this was 0, and diverse read marker was num_norm_qs
 
     for (uint8_t dom_i=0; dom_i < num_doms; dom_i++)
         for (uint8_t q_norm=0; q_norm < num_norm_qs; q_norm++)
@@ -355,7 +356,7 @@ COMPRESS (codec_domq_compress)
     // case: this is our second entry, after soft-failing. Just continue from where we stopped
     if (!soft_fail) goto do_compress;
 
-    uint8_t no_doms = qual_ctx->local.prm8[0]; // set by codec_domq_prepare_normalize
+    uint8_t no_doms = qual_ctx->local.prm8[0] & 0x7f; // set by codec_domq_prepare_normalize
 
     Buffer *non_dom_buf;
     if (get_line_cb) {
@@ -393,7 +394,7 @@ COMPRESS (codec_domq_compress)
             memcpy (BAFTc(divrqual_ctx->local), ql->qual, ql->qual_len);
             divrqual_ctx->local.len32 += ql->qual_len;
 
-            BNXTc (qualmplx_ctx->local) = no_doms;
+            BNXTc (qualmplx_ctx->local) = 255; 
         }
 
         // case: dominated read
@@ -684,12 +685,15 @@ CODEC_RECONSTRUCT (codec_domq_reconstruct)
     else { // v14 and above
         uint8_t dom_i = (qualmplx_ctx->local.len32 == 1) ? *B1ST8 (qualmplx_ctx->local) // context was not comprssed line-by-line (single buffer) (or had just one line - same effect)
                                                          : NEXTLOCAL(uint8_t, qualmplx_ctx); 
-        uint8_t num_norm_qs = qual_ctx->local.prm8[0];
-        ASSPIZ (dom_i <= num_norm_qs, "Expecting dom_i=%u <= num_norm_qs=%u", dom_i, num_norm_qs);
+        uint8_t num_norm_qs = qual_ctx->local.prm8[0] & 0x7f;
+
         uint32_t len = snip_len ? atoi(snip) : vb->seq_len;
 
+        // note: in v14.0.0-14.0.4 a diverse read was represented by dom_i=num_norm_qs - this was a flawed design, bc dom_i could legitimately be num_norm_qs or larger.
+        bool is_diverse = (dom_i == ((qual_ctx->local.prm8[0] & 0x80/*true starting v14.0.5*/) ? 255 : num_norm_qs)); 
+
         // case: dom read
-        if (dom_i < num_norm_qs) 
+        if (!is_diverse)
             codec_domq_reconstruct_do (vb, qual_ctx, domqruns_ctx, len, dom_i, num_norm_qs, reconstruct);
 
         // case: diverse (non-dom) read.

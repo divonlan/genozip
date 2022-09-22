@@ -18,5 +18,5 @@ extern rom arch_get_user_host (void);
 extern rom arch_get_os (void);
 extern rom arch_get_distribution (void);
 extern bool arch_is_wsl (void);
-extern rom arch_get_executable (rom argv0);
+extern rom arch_get_executable (void);
 

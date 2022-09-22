@@ -19,6 +19,8 @@
 #include "file.h"
 #include "ref_iupacs.h"
 #include "contigs.h"
+#include "stream.h"
+#include "arch.h"
 
 SPINLOCK (make_ref_spin);
 #define MAKE_REF_NUM_RANGES 1000000 // should be more than enough (in GRCh38 we have 6389)
@@ -167,3 +169,32 @@ void ref_make_finalize (bool unused)
     serializer_destroy (make_ref_merge_serializer);
 }
 
+// Get reference file name from FASTA name, and if reference file does not exist, run a separate process to --make-reference
+void ref_fasta_to_ref (File *file)
+{
+    rom ref_filename = file_get_z_filename (file->name, DT_REF, file->type);
+
+    // if file reference doesn't exist yet - --make-reference now, in a separate process
+    if (!file_exists (ref_filename)) {
+
+        WARN ("FYI: cannot find reference file %s: generating it now from %s", ref_filename, file->name);
+
+        rom exec_path = arch_get_executable();
+
+        StreamP make_ref = stream_create (NULL, 0, 0, 0, 0, 0, 0, "Make reference",
+                                          exec_path, "--make-reference", file->name, 
+                                          flag.submit_stats ? "--submit" : SKIP_ARG,
+                                          NULL);
+        
+        // wait for child process to finish
+        ASSINP (!stream_wait_for_exit (make_ref), "Failed to make reference file %s. Try making it explicitly with \"genozip --make-reference <fasta-file>\"", ref_filename); 
+    
+        FREE (exec_path);
+    }
+
+    FREE (file->name);
+    file->name = (char *)ref_filename;
+
+    REALLOC ((char **)&gref->filename, strlen (ref_filename) + 1, "gref->filename");
+    strcpy ((char*)gref->filename, ref_filename);
+}

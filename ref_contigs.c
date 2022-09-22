@@ -73,7 +73,7 @@ static void ref_contigs_show (ConstBufferP contigs_buf, bool created)
         if (!cn->snip_len) continue; // unused contig
 
         rom chrom_name = B(const char, ZCTX(CHROM)->dict, cn->char_index);
-        bool ext_ref = (flag.reference & REF_ZIP_LOADED) || Z_DT(DT_REF);
+        bool ext_ref = (flag.reference & REF_ZIP_LOADED) || Z_DT(REF);
 
         if (ext_ref && created)
             iprintf ("\"%s\" length=%"PRId64" ref_index=%d gpos=%"PRId64" metadata=\"%s\"\n",

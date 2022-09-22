@@ -76,7 +76,9 @@ void sam_seg_bsbolt_XB_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl)
                 if (number) number--;
                 
                 else {
-                    sam_seg_analyze_set_one_ref_base (vb, false, pos, vb->bisulfite_strand, ref_consumed, &range, &lock); // ignore errors
+                    rom error = sam_seg_analyze_set_one_ref_base (vb, false, pos, vb->bisulfite_strand, ref_consumed, &range, &lock); 
+                    if (error == ERR_ANALYZE_RANGE_NOT_AVAILABLE) return; // possibly pos/ref_consumed go beyond end of range
+
                     xb_i++;
                 }
         

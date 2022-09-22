@@ -163,7 +163,7 @@ static void dict_io_compress_one_fragment (VBlockP vb)
         str_print_dict (info_stream, vb->fragment_start, vb->fragment_len, flag.show_dict, false);
 
     if (flag.list_chroms && vb->fragment_ctx->did_i == CHROM)
-        str_print_dict (info_stream, vb->fragment_start, vb->fragment_len, false, VB_DT(DT_SAM) || VB_DT(DT_BAM));
+        str_print_dict (info_stream, vb->fragment_start, vb->fragment_len, false, VB_DT(SAM) || VB_DT(BAM));
 
     if (flag.show_time) codec_show_time (vb, st_name (SEC_DICT), vb->fragment_ctx->tag_name, vb->fragment_ctx->lcodec);
 
@@ -367,7 +367,7 @@ void dict_io_read_all_dictionaries (void)
             if (!ctx->dict.len) continue;
 
             if (flag.list_chroms && ((!flag.luft && ctx->did_i == CHROM) || (flag.luft && ctx->did_i == VCF_oCHROM)))
-                str_print_dict (info_stream, STRb(ctx->dict), true, Z_DT(DT_SAM));
+                str_print_dict (info_stream, STRb(ctx->dict), true, Z_DT(SAM));
             
             if (flag.show_dict) 
                 iprintf ("%s (did_i=%u, num_snips=%u, dict_size=%"PRIu64" bytes)\n", 

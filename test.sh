@@ -936,18 +936,21 @@ batch_real_world_1_backcomp()
     local files=(  `cd $TESTDIR; ls -1 test.*vcf test.*vcf.gz test.*sam test.*sam.gz test.*bam \
                    test.*fq test.*fq.gz test.*fa test.*fa.gz test.*fasta test.*fasta.gz \
                    basic.phy test.*gvf test.*gvf.gz test.*gff test.*gff.gz test.*locs \
-                   test.*txt test.*txt.gz test.*kraken test.*kraken.gz` ) 
-                   #grep -v test.transcriptome.bam  
+                   test.*txt test.*txt.gz test.*kraken test.*kraken.gz \
+                   | grep -v headerless.sam` ) 
 
     local i=0
     for f in ${files[@]}; do 
         i=$(( i + 1 ))
 
         # exceptions - supported in 14.0.0 but not earlier
-        if [[ $f == test.3rd-line-sra.fq ]]; then continue; fi 
-        if [[ $f == test.bsseeker2-pysam-qual.bam ]]; then continue; fi
-        if [[ $f == test.covid.gisaid.nuke.fasta.gz ]]; then continue; fi
-        if [[ $f == test.transcriptome.bam ]]; then continue; fi
+        # if [[ $f == test.3rd-line-sra.fq ]]; then continue; fi 
+        # if [[ $f == test.bsseeker2-pysam-qual.bam ]]; then continue; fi
+        # if [[ $f == test.covid.gisaid.nuke.fasta.gz ]]; then continue; fi
+        # if [[ $f == test.transcriptome.bam ]]; then continue; fi
+
+        # exceptions - supported in 14.0.5 but not earlier
+        if [[ $f == test.novoalign.bam ]]; then continue; fi
 
         test_header "$f - backward compatability with prod ($i/${#files[@]})"
         $genozip_prod private/test/$f --md5 -fo $output || exit 1
@@ -1098,8 +1101,8 @@ batch_reference_fastq()
 {
     batch_print_header
 
-    echo "paired FASTQ with --reference, --password (BZ2)"
-    test_standard "CONCAT -e$GRCh38 -p 123 --pair" "-p123" test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
+    echo "paired FASTQ with --reference, --password (BZ2), --md5, -B1"
+    test_standard "CONCAT -e$GRCh38 -p 123 --pair -mB1" "-p123" test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
 
     echo "4 paired FASTQ with --REFERENCE (BGZF, decompress concatenated, password)"
     test_standard "COPY -E$GRCh38 -2 -p 123" " " test.human2-R1.100K.fq.gz test.human2-R2.100K.fq.gz

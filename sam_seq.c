@@ -284,6 +284,20 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(s
     ASSERTW (seq_len < 100000 || segconf.running || segconf.is_long_reads, 
                 "%s: Warning: sam_seg_SEQ: seq_len=%u is suspiciously high and might indicate a bug", LN_NAME, seq_len);
 
+    // we don't need to lock if the entire ref_consumed of this read was already is_set by previous reads (speed optimization)
+    no_lock = IS_REF_EXTERNAL || ((vb->chrom_node_index == vb->consec_is_set_chrom) && (pos >= vb->consec_is_set_pos) && (pos + ref_consumed <= vb->consec_is_set_pos + vb->consec_is_set_len));
+
+    RefLock lock = REFLOCK_NONE;
+    Range *range = vb->cigar_missing ? NULL : ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, ref_consumed, WORD_INDEX_NONE, seq, (no_lock ? NULL : &lock));
+
+    // Cases where we don't consider the refernce and just copy the seq as-is
+    // 1. (denovo:) this contig defined in @SQ went beyond the maximum genome size of 4B and is thus ignored
+    // 2. (loaded:) case contig doesn't exist in the reference, or POS is out of range of contig (observed in the wild with chrM)    
+    if (!range) {
+        COPY_TIMER (sam_seg_SEQ_vs_ref);
+        return MAPPING_NO_MAPPING; // seg as a verbatim copy or use aligner
+    }
+
     int64_t missing_bits = (int64_t)ref_and_seq_consumed - ((int64_t)bitmap_ctx->local.nbits - (int64_t)bitmap_ctx->next_local);
     if (missing_bits > 0) {
         buf_alloc_do (VB, &bitmap_ctx->local, roundup_bits2bytes64 (bitmap_ctx->local.nbits + seq_len), CTX_GROWTH, __FUNCLINE, NULL); 
@@ -311,20 +325,6 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(s
     buf_alloc (vb, &nonref_ctx->local, seq_len + 3, 0, uint8_t, CTX_GROWTH, "contexts->local"); 
 
     bitmap_ctx->local_num_words++;
-
-    // we don't need to lock if the entire ref_consumed of this read was already is_set by previous reads (speed optimization)
-    no_lock = IS_REF_EXTERNAL || ((vb->chrom_node_index == vb->consec_is_set_chrom) && (pos >= vb->consec_is_set_pos) && (pos + ref_consumed <= vb->consec_is_set_pos + vb->consec_is_set_len));
-
-    RefLock lock = REFLOCK_NONE;
-    Range *range = vb->cigar_missing ? NULL : ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, ref_consumed, WORD_INDEX_NONE, seq, (no_lock ? NULL : &lock));
-
-    // Cases where we don't consider the refernce and just copy the seq as-is
-    // 1. (denovo:) this contig defined in @SQ went beyond the maximum genome size of 4B and is thus ignored
-    // 2. (loaded:) case contig doesn't exist in the reference, or POS is out of range of contig (observed in the wild with chrM)    
-    if (!range) {
-        COPY_TIMER (sam_seg_SEQ_vs_ref);
-        return MAPPING_NO_MAPPING; // seg as a verbatim copy
-    }
 
     uint32_t pos_index = pos - range->first_pos;
     uint32_t next_ref  = pos_index;
@@ -560,7 +560,7 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq), unsigned
     if (unmapped && flag.aligner_available) {
         use_aligner:
         switch (aligner_seg_seq (VB, CTX(SAM_SQBITMAP), STRa(textual_seq), true, false, NO_GPOS, false)) {
-            case MAPPING_NO_MAPPING : goto add_seq_verbatim; 
+            case MAPPING_NO_MAPPING : force_verbatim = true; goto add_seq_verbatim; 
             case MAPPING_PERFECT    : perfect        = true; // fallthrough
             case MAPPING_ALIGNED    : aligner_used   = true; break;
             default                 : ABORT0 ("bad value");
@@ -693,6 +693,9 @@ bool sam_sa_native_to_acgt (VBlockSAMP vb, Bits *packed, uint64_t next_bit, STRp
 }
 
 // setting ref bases by analyze_* functions
+rom ERR_ANALYZE_RANGE_NOT_AVAILABLE = "Range not available";
+rom ERR_ANALYZE_DEPN_NOT_IN_REF     = "Depn alignment base not is_set in reference";
+rom ERR_ANALYZE_INCORRECT_REF_BASE  = "incorrect reference base";
 rom sam_seg_analyze_set_one_ref_base (VBlockSAMP vb, bool is_depn, SamPosType pos, char base, 
                                       uint32_t ref_consumed, // remaining ref_consumed starting at pos                                      
                                       RangeP *range_p, RefLock *lock)
@@ -707,7 +710,7 @@ rom sam_seg_analyze_set_one_ref_base (VBlockSAMP vb, bool is_depn, SamPosType po
     if (! *range_p) {
         *range_p = ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, ref_consumed, WORD_INDEX_NONE, NULL, 
                                       (IS_REF_EXTERNAL || is_depn) ? NULL : lock);
-        if (! *range_p) return "Range not available"; // cannot access this range in the reference
+        if (! *range_p) return ERR_ANALYZE_RANGE_NOT_AVAILABLE; // cannot access this range in the reference
     }
 
     uint32_t pos_index = pos - (*range_p)->first_pos; // index within range
@@ -715,13 +718,13 @@ rom sam_seg_analyze_set_one_ref_base (VBlockSAMP vb, bool is_depn, SamPosType po
     // case: depn line, but we haven't set the reference data for it. since we don't need the reference data for reconstructing
     // SEQ (it is copied from prim), we don't store it just for MD:Z - so we won't use SPECIAL for this MD:Z
     if (is_depn && (flag.reference & REF_STORED) && !ref_is_nucleotide_set (*range_p, pos_index))
-        return "Depn alignment base not is_set in reference";
+        return ERR_ANALYZE_DEPN_NOT_IN_REF;
 
     bool internal_pos_is_populated = IS_REF_INTERNAL && ref_is_nucleotide_set (*range_p, pos_index);
 
     // case: reference already contains a base - but unfortunately it is not "base" - so MD is not reconstractable from reference
     if (((flag.reference & REF_ZIP_LOADED) || internal_pos_is_populated) && (base != ref_base_by_pos (*range_p, pos))) 
-        return "incorrect reference base"; // encountered in the wild when the reference base is a IUPAC
+        return ERR_ANALYZE_INCORRECT_REF_BASE; // encountered in the wild when the reference base is a IUPAC
 
     // case: reference is not set yet - set it now (extra careful never to set anything in depn, as range is not locked)
     if (!is_depn && IS_REF_INTERNAL && !internal_pos_is_populated)
@@ -767,7 +770,7 @@ COMPRESSOR_CALLBACK (sam_zip_seq)
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
     *line_data_len = dl->SEQ.len;
 
-    if (VB_DT(DT_SAM)) 
+    if (VB_DT(SAM)) 
         *line_data = Btxt (dl->SEQ.index);
     else { // BAM
         VB_SAM->textual_seq.len = 0; // reset

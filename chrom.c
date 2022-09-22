@@ -251,7 +251,7 @@ WordIndex chrom_seg_ex (VBlockP vb, Did did_i,
         !flag.match_chrom_to_reference && // we didn't already attempt to match to the reference
         !__atomic_test_and_set (&once[is_primary], __ATOMIC_RELAXED)) {  // skip if we've shown the warning already
             
-            if (VB_DT(DT_CHAIN))
+            if (VB_DT(CHAIN))
                 WARN ("Warning: Contig name mismatch between %s and reference file %s. For example: %s file: \"%.*s\" Reference file: \"%.*s\". "
                       "You may use --match-chrom-to-reference to create %s with contigs matching those of the reference. This is required, if this file is for use with 'genozip --chain'. More info: %s\n",
                       txt_name, ref_get_filename (ref), dt_name (vb->data_type), STRf(chrom), STRf(ref_contig), z_name, WEBSITE_CHAIN);

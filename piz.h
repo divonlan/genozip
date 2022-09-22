@@ -36,7 +36,7 @@ extern PizDisCoords piz_dis_coords (VBlockP vb); // for ASSPIZ
 typedef struct { char s[100]; } PizDisQname; 
 extern PizDisQname piz_dis_qname (VBlockP vb); // for ASSPIZ
 
-#define ASSPIZ(condition, format, ...) do { if (!(condition)) { progress_newline(); fprintf (stderr, "%s %s: Error in %s:%u line_in_file(1-based)=%"PRIu64" %s%s%s%s: ", str_time().s, LN_NAME, __FUNCLINE, writer_get_txt_line_i ((VBlockP)(vb)), (Z_DT(DT_VCF) ? " sample_i=" : ""), (Z_DT(DT_VCF) ? str_int_s (vb->sample_i).s : ""), piz_dis_coords((VBlockP)(vb)).s, piz_dis_qname((VBlockP)(vb)).s); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }} while(0)
+#define ASSPIZ(condition, format, ...) do { if (!(condition)) { progress_newline(); fprintf (stderr, "%s %s: Error in %s:%u line_in_file(1-based)=%"PRIu64" %s%s%s%s: ", str_time().s, LN_NAME, __FUNCLINE, writer_get_txt_line_i ((VBlockP)(vb)), (Z_DT(VCF) ? " sample_i=" : ""), (Z_DT(VCF) ? str_int_s (vb->sample_i).s : ""), piz_dis_coords((VBlockP)(vb)).s, piz_dis_qname((VBlockP)(vb)).s); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }} while(0)
 #define ASSPIZ0(condition, string) ASSPIZ (condition, string "%s", "")
 #define ASSISLOADED(ctx) ASSPIZ((ctx)->is_loaded, "%s is not loaded", ctx->tag_name)
 

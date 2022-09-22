@@ -479,7 +479,7 @@ void license_print_tip (void)
         license_print_default_notice();
 
     // if outputting to a terminal - rotate between messages
-    else switch (time(0) % 28) {
+    else switch (time(0) % 27) {
         case 0 ... 5:
             license_print_default_notice();
             break;
@@ -551,10 +551,8 @@ void license_print_tip (void)
             break;
 
         case 22:
-            if (!flag.reference) {
-                iprintf ("\nTip: using --reference when compressing FASTQ, BAM and GVCF files results in significantly better compression, see: %s\n", WEBSITE_GENOZIP);
-                break;
-            }
+            iprintf ("\nMake money with Genozip! Genozip pays a generous referral fee for referring a customer, See: %s\n", WEBSITE_REFERRAL);
+            break;
 
         case 23:
             iprint0 ("\nPlease take a moment now to make a note to not forget to cite Genozip:\n"
@@ -579,10 +577,6 @@ void license_print_tip (void)
                 iprint0 ("\nTip: to achieve the best compression, use --best\n");
                 break;
             }
-
-        case 27: 
-            iprintf ("\nMake money with Genozip! Genozip pays a generous referral fee for referring a customer, See: %s\n", WEBSITE_REFERRAL);
-            break;
 
         default: break;
     }

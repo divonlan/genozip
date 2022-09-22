@@ -66,7 +66,7 @@ typedef union {
 } BamCigarOp;
 
 typedef enum __attribute__ ((__packed__)) {
-    BC_M=0, BC_I=1, BC_D=2, BC_N=3, BC_S=4, BC_H=5, BC_P=6, BC_E=7, BC_X=8, BC_NONE=15 
+    BC_M=0, BC_I=1, BC_D=2, BC_N=3, BC_S=4, BC_H=5, BC_P=6, BC_E=7, BC_X=8, BC_NONE=15, BC_INVALID=255
 } BamCigarOpType;
 
 #define BAM_CIGAR_OP_NONE ((BamCigarOp){ .op=BC_NONE })
@@ -758,3 +758,5 @@ extern const uint8_t aux_width[256];
 
 extern char taxid_redirection_snip[], copy_AS_snip[], copy_NM_snip[], copy_GX_snip[], copy_RX_snip[], copy_POS_snip[], copy_mate_CIGAR_snip[], copy_mate_MAPQ_snip[], copy_mate_YS_snip[], copy_mate_AS_snip[], XA_lookback_snip[], TX_lookback_snip[], AN_lookback_snip[], copy_mate_PNEXT_snip[], copy_saggy_PNEXT_snip[], copy_mate_POS_snip[], copy_mate_MQ_snip[], copy_mate_ms_snip[], copy_mate_nM_snip[], copy_buddy_NH_snip[], copy_buddy_Z_snips[NUM_MATED_Z_TAGS][30], redirect_to_CR_X_snip[], redirect_to_RX_X_snip[], redirect_to_GR_X_snip[], redirect_to_GY_X_snip[];
 extern unsigned taxid_redirection_snip_len, copy_AS_snip_len, copy_NM_snip_len, copy_GX_snip_len, copy_RX_snip_len, copy_POS_snip_len, copy_mate_CIGAR_snip_len, copy_mate_MAPQ_snip_len, copy_mate_YS_snip_len, copy_mate_AS_snip_len, XA_lookback_snip_len, TX_lookback_snip_len, AN_lookback_snip_len, copy_mate_PNEXT_snip_len, copy_saggy_PNEXT_snip_len, copy_mate_POS_snip_len, copy_mate_MQ_snip_len, copy_mate_ms_snip_len, copy_mate_nM_snip_len, copy_buddy_NH_snip_len, copy_buddy_Z_snip_lens[NUM_MATED_Z_TAGS], redirect_to_CR_X_snip_len, redirect_to_RX_X_snip_len, redirect_to_GR_X_snip_len, redirect_to_GY_X_snip_len;
+
+extern rom ERR_ANALYZE_RANGE_NOT_AVAILABLE, ERR_ANALYZE_DEPN_NOT_IN_REF, ERR_ANALYZE_INCORRECT_REF_BASE;

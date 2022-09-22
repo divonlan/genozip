@@ -358,7 +358,7 @@ static SmallContainer con_ncbi_sra2 = {
     .nitems_lo           = 5,
     .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_FIXED_0_PAD, 3 } },  // three letters - usually all-the-same
                              { .dict_id = { _SAM_Q1NAME }, .separator = "."                    },  // SRA number - usually all-the-same - seg as snip and not numeric
-                             { .dict_id = { _SAM_Q2NAME }, .separator = "."                    },  // first number - usually all-the-same - seg as snip and not numeric
+                             { .dict_id = { _SAM_Q2NAME }, .separator = "."                    },  // first number - sometimes, but not always, all-the-same - seg as integer in local
                              { .dict_id = { _SAM_Q3NAME }                                      },  // 2nd number 
                              { .dict_id = { _SAM_QmNAME }, .separator = { CI0_SKIP }           } }
 };
@@ -369,7 +369,7 @@ static SmallContainer con_ncbi_sra2_fq = {
     .nitems_lo           = 8,
     .items               = { { .dict_id = { _FASTQ_Q0NAME }, .separator = { CI0_FIXED_0_PAD, 3 } },  // three letters - usually all-the-same
                              { .dict_id = { _FASTQ_Q1NAME }, .separator = "."                    },  // SRA number - usually all-the-same - seg as snip and not numeric
-                             { .dict_id = { _FASTQ_Q2NAME }, .separator = "."                    },  // first number - usually all-the-same - seg as snip and not numeric
+                             { .dict_id = { _FASTQ_Q2NAME }, .separator = "."                    },  // first number - sometimes, but not always, all-the-same - seg as integer in local
                              { .dict_id = { _FASTQ_Q3NAME }, .separator = " "                    },  // 2nd number - usually sequential
                              { .dict_id = { _FASTQ_QNAME2 }, .separator = " "                    },  // original qname 
                              { .dict_id = { _FASTQ_QmNAME }, .separator = { CI0_SKIP }           },
@@ -383,7 +383,7 @@ static SmallContainer con_ncbi_sra2P_fq = {
     .nitems_lo           = 9,
     .items               = { { .dict_id = { _FASTQ_Q0NAME }, .separator = { CI0_FIXED_0_PAD, 3 } },  // three letters - usually all-the-same
                              { .dict_id = { _FASTQ_Q1NAME }, .separator = "."                    },  // SRA number - usually all-the-same - seg as snip and not numeric
-                             { .dict_id = { _FASTQ_Q2NAME }, .separator = "."                    },  // first number - usually all-the-same - seg as snip and not numeric
+                             { .dict_id = { _FASTQ_Q2NAME }, .separator = "."                    },  // first number - sometimes, but not always, all-the-same - seg as integer in local
                              { .dict_id = { _FASTQ_Q3NAME }, .separator = " "                    },  // 2nd number - usually sequential
                              { .dict_id = { _FASTQ_QNAME2 }, .separator = " "                    },  // original qname 
                              { .dict_id = { _FASTQ_QmNAME }, .separator = { CI0_SKIP }           },
@@ -486,7 +486,7 @@ static SmallContainer con_ncbi_sra2_l3 = {
     .nitems_lo           = 7,
     .items               = { { .dict_id = { _FASTQ_T0HIRD }, .separator = { CI0_FIXED_0_PAD, 3 } },  // three letters - usually all-the-same
                              { .dict_id = { _FASTQ_T1HIRD }, .separator = "."                    },  // SRA number - usually all-the-same - seg as snip and not numeric
-                             { .dict_id = { _FASTQ_T2HIRD }, .separator = "."                    },  // first number - usually all-the-same - seg as snip and not numeric
+                             { .dict_id = { _FASTQ_T2HIRD }, .separator = "."                    },  // first number - sometimes, but not always, all-the-same - seg as integer in local
                              { .dict_id = { _FASTQ_T3HIRD }, .separator = " "                    },  // 2nd number - usually sequential
 //                             { .dict_id = { _FASTQ_COPY_Q }, .separator = " "                    },  // original qname 
                              { .dict_id = { _FASTQ_T4HIRD }, .separator = " "                    },  // original qname 
@@ -500,7 +500,7 @@ static SmallContainer con_ncbi_sra2P_l3 = {
     .nitems_lo           = 8,
     .items               = { { .dict_id = { _FASTQ_T0HIRD }, .separator = { CI0_FIXED_0_PAD, 3 } },  // three letters - usually all-the-same
                              { .dict_id = { _FASTQ_T1HIRD }, .separator = "."                    },  // SRA number - usually all-the-same - seg as snip and not numeric
-                             { .dict_id = { _FASTQ_T2HIRD }, .separator = "."                    },  // first number - usually all-the-same - seg as snip and not numeric
+                             { .dict_id = { _FASTQ_T2HIRD }, .separator = "."                    },  // first number - sometimes, but not always, all-the-same - seg as integer in local
                              { .dict_id = { _FASTQ_T3HIRD }, .separator = " "                    },  // 2nd number - usually sequential
 //                             { .dict_id = { _FASTQ_COPY_Q }, .separator = " "                    },  // original qname 
                              { .dict_id = { _FASTQ_T4HIRD }, .separator = " "                    },  // original qname 
@@ -574,29 +574,29 @@ static QnameFlavorStruct qf[] = {
                                                                           TECH_UNKNOWN, 0, &con_bamsurgeon,    7,  {1,2,3,4,7,-1}, {-1},           {1,3,7,-1},     {7,-1},         1,3,   2,4,   -1,                   },
     {},  { "NCBI_SRA_LEN",  { "SRR11215720.1_1_length=120" },             TECH_UNKNOWN, 0, &con_ncbi_sra_len,  10, {1,2,-1},       {-1},           {-1},           {-1},           1,-1,  2,-1,  3,   0,  PX_sra_len   },
     {},  { "NCBI-SRA2+-FQ", { "ERR2708427.1.1 51e7525d-fa50-4b1a-ad6d-4f4ae25c1df7 someextradata length=1128" },
-                                                                          TECH_UNKNOWN, 2, &con_ncbi_sra2P_fq, 6,  {2,3,8,-1},     {-1},           {-1},           {-1},           3,-1,  -1,-1, 8,                    },
+                                                                          TECH_UNKNOWN, 2, &con_ncbi_sra2P_fq, 6,  {2,3,8,-1},     {-1},           {2,3,-1},       {-1},           3,-1,  -1,-1, 8,                    },
     {},  { "NCBI-SRA+-FQ",  { "ERR811170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template BOWDEN04_20151016_MN15199_FAA67113_BOWDEN04_MdC_MARC_Phase2a_4833_1_ch19_file1_strand length=52" },
                                                                           TECH_UNKNOWN, 2, &con_ncbi_sraP_fq,  5,  {2,7,-1},       {-1},           {-1},           {-1},           2,-1,  -1,-1, 7,                    },
     {},  { "NCBI-SRA2-FQ",  { "ERR2708427.1.1 51e7525d-fa50-4b1a-ad6d-4f4ae25c1df7 length=1128" },
-                                                                          TECH_UNKNOWN, 2, &con_ncbi_sra2_fq,  5,  {2,3,7,-1},     {-1},           {-1},           {-1},           3,-1,  -1,-1, 7,                    },
+                                                                          TECH_UNKNOWN, 2, &con_ncbi_sra2_fq,  5,  {2,3,7,-1},     {-1},           {2,3,-1},       {-1},           3,-1,  -1,-1, 7,                    },
     {},  { "NCBI-SRA-FQ",   { "ERR811170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template length=52" },
                                                                           TECH_UNKNOWN, 2, &con_ncbi_sra_fq,   4,  {2,6,-1},       {-1},           {-1},           {-1},           2,-1,  -1,-1, 6,                    },
-    {},  { "NCBI-SRA2",     { "ERR2708427.1.1" },                         TECH_UNKNOWN, 0, &con_ncbi_sra2,     2,  {2,3,-1},       {-1},           {3,-1},         {-1},           3,-1,  -1,-1, -1,                   },
+    {},  { "NCBI-SRA2",     { "ERR2708427.1.1" },                         TECH_UNKNOWN, 0, &con_ncbi_sra2,     2,  {2,3,-1},       {-1},           {2,3,-1},       {-1},           3,-1,  -1,-1, -1,                   },
     {},  { "NCBI-SRA",      { "SRR001666.1" },                            TECH_UNKNOWN, 0, &con_ncbi_sra,      1,  {2,-1},         {-1},           {2,-1},         {-1},           2,-1,  -1,-1, -1,                   },
     {},  { "seqan",         { "adeno-reads100.fasta.000000008" },         TECH_UNKNOWN, 0, &con_seqan,         2,  {-1},           {2, -1},        {-1},           {-1},           0,-1,  -1,-1, -1,   0,  PX_seqan    },
     {},  { "CLC-GW",        { "umi64163_count1" },                        TECH_UNKNOWN, 0, &con_clc_gw,        9,  {0,1,-1},       {-1},           {0,1,-1},       {-1},           -1,-1, -1,-1, -1,   0,  PX_clc_gw   },
     {},  { "hex_chr",       { "30cf_chr10" }, /* wgsim simulator? */      TECH_UNKNOWN, 0, &con_hex_chr,       1,  {-1},           {-1},           {-1},           {0,-1},         2,-1,  -1,-1, -1,                   }, // added v14
-    {},  { "Numeric",       { "123" },                                    TECH_UNKNOWN, 0, &con_numeric,       0,  {0,-1},         {-1},           {-1},           {-1},           0,-1,  -1,-1, -1,                   },
+    {},  { "Numeric",       { "123" },                                    TECH_UNKNOWN, 0, &con_numeric,       0,  {0,-1},         {-1},           {0,-1},         {-1},           0,-1,  -1,-1, -1,                   }, 
     {},  { "Str_Numeric",   { "read_1" },   /* eg CLC */                  TECH_UNKNOWN, 0, &con_str_numeric,   1,  {1,-1},         {-1},           {1,-1},         {-1},           1,-1,  -1,-1, -1,                   },
     {},  { "Genozip-opt",   { "basic.1" },  /* must be last */            TECH_UNKNOWN, 0, &con_genozip_opt,   1,  {1,-1},         {-1},           {1,-1},         {-1},           1,-1,  -1,-1, -1,                   },
 
     // FASTQ Line3 QFs
          { "NCBI-SRA2+-L3", { "ERR2708427.1.1 51e7525d-fa50-4b1a-ad6d-4f4ae25c1df7 someextradata length=1128" },
-                                                                          TECH_UNKNOWN, 2, &con_ncbi_sra2P_l3, 6, {2,3,7,-1},     {-1},            {-1},           {-1},           3,4,   -1,-1,  -1,                  },
+                                                                          TECH_UNKNOWN, 2, &con_ncbi_sra2P_l3, 6, {2,3,7,-1},     {-1},            {2,3,-1},       {-1},           3,4,   -1,-1,  -1,                  },
          { "NCBI-SRA+-L3",  { "ERR811170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template BOWDEN04_20151016_MN15199_FAA67113_BOWDEN04_MdC_MARC_Phase2a_4833_1_ch19_file1_strand length=52" },
                                                                           TECH_UNKNOWN, 2, &con_ncbi_sraP_l3,  5, {2,6,-1},       {-1},            {-1},           {-1},           2,3,   -1,-1,  -1,                  },
          { "NCBI-SRA2-L3",  { "ERR2708427.1.1 51e7525d-fa50-4b1a-ad6d-4f4ae25c1df7 length=1128" },
-                                                                          TECH_UNKNOWN, 2, &con_ncbi_sra2_l3,  5, {2,3,6,-1},     {-1},            {-1},           {-1},           3,4,   -1,-1,  -1,                  },
+                                                                          TECH_UNKNOWN, 2, &con_ncbi_sra2_l3,  5, {2,3,6,-1},     {-1},            {2,3,-1},       {-1},           3,4,   -1,-1,  -1,                  },
          { "NCBI-SRA-L3",   { "ERR811170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template length=52" },
                                                                           TECH_UNKNOWN, 2, &con_ncbi_sra_l3,   4, {2,5,-1},       {-1},            {-1},           {-1},           2,3,   -1,-1,  -1,                  },
 };

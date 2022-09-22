@@ -183,7 +183,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
 
     // count header-lines (for --lines etc): before data-modifying inspect_txt_header
     if (writer_does_txtheader_need_write (sec)) {
-        if (flag.header_one && Z_DT(DT_VCF))
+        if (flag.header_one && Z_DT(VCF))
             txt_file->num_lines += 1;
         else if (!DTPT (is_binary))
             txt_file->num_lines += str_count_char (STRb(txt_header_vb->txt_data), '\n'); // number of source-file lines

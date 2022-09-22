@@ -642,7 +642,7 @@ static bool file_open_txt_write (File *file)
         }
     }
 
-    if (Z_DT(DT_ME23) && flag.out_dt == DT_VCF)
+    if (Z_DT(ME23) && flag.out_dt == DT_VCF)
         ASSINP0 (flag.reference, "--reference must be specified when translating 23andMe to VCF");
 
     // get the codec    
@@ -789,6 +789,39 @@ static void file_initialize_txt_file_data (File *file)
 
 #undef INIT
 
+rom file_get_z_filename (rom txt_filename, DataType dt, FileType txt_ft)
+{
+    ASSINP0 (txt_filename, "use --output to specify the output filename (with a .genozip extension)");
+
+    unsigned dn_len = flag.out_dirname ? strlen (flag.out_dirname) : 0;
+    bool is_url = url_is_url (txt_filename);
+    rom basename = (is_url || dn_len) ? file_basename (txt_filename, false, "", 0,0) : NULL;
+    rom local_txt_filename = basename ? basename : txt_filename; 
+
+    unsigned fn_len = strlen (local_txt_filename);
+
+    char *z_filename = (char *)MALLOC (fn_len + dn_len + 30); // add enough the genozip extension e.g. 23andme.genozip
+
+    // if the file has an extension matching its type, replace it with the genozip extension, if not, just add the genozip extension
+    rom genozip_ext = file_exts[file_get_z_ft_by_txt_in_ft (dt, txt_ft)];
+
+    if (chain_is_loaded && TXT_DT(VCF))
+        genozip_ext = DVCF_GENOZIP_;
+
+    if (file_has_ext (local_txt_filename, file_exts[txt_ft]))
+        sprintf (z_filename, "%s%s%.*s%s", 
+                 (dn_len ? flag.out_dirname : ""), (dn_len ? "/" : ""), 
+                 (int)(fn_len - strlen (file_exts[txt_ft])), local_txt_filename, genozip_ext); 
+    else 
+        sprintf (z_filename, "%s%s%s%s", 
+                 (dn_len ? flag.out_dirname : ""), (dn_len ? "/" : ""), 
+                 local_txt_filename, genozip_ext); 
+
+    FREE (basename);
+
+    return z_filename;
+}
+
 // returns true if successful
 static bool file_open_z (File *file)
 {
@@ -798,14 +831,19 @@ static bool file_open_z (File *file)
     // for READ, set data_type
     if (file->mode == READ) {
 
+        // if a FASTA file was given as an argument to --reference or --REFERENCE, get the .ref.genozip file,
+        // possobily running --make-reference in a separate process if needed
+        if (flag.reading_reference && file_get_data_type (file_get_type (file->name), true) == DT_FASTA)
+            ref_fasta_to_ref (file);
+
         ASSINP (!flag.reading_reference || file_has_ext (file->name, REF_GENOZIP_), 
                 "You specified file \"%s\", however with --reference or --REFERENCE, you must specify a genozip reference file (%s extension)\n"
-                "Tip: You can create a genozip reference file from a FASTA file with 'genozip --make-reference myfasta.fa'",
+                "Tip: To create a genozip reference file from a FASTA file, use 'genozip --make-reference myfasta.fa'",
                 file->name, REF_GENOZIP_);
 
         ASSINP (!flag.reading_chain || file_has_ext (file->name, GENOZIP_EXT), 
                 "You specified file \"%s\", however with %s, you must specify a genozip chain file (%s extension)\n"
-                "Tip: You can create a genozip chain file from a chain file with eg 'genozip my-chain-file.chain.gz --reference target-coord-ref.ref.genozip'",
+                "Tip: To create a genozip chain file from a chain file, use e.g. 'genozip my-chain-file.chain.gz --reference target-coord-ref.ref.genozip'",
                 file->name, (command==ZIP) ? "--chain" : "--show-chain", GENOZIP_EXT);
 
         if ((!flag.seg_only && !flag.show_bam) || flag_loading_auxiliary) {
@@ -877,6 +915,7 @@ static bool file_open_z (File *file)
     else { // WRITE or WRITEREAD - data_type is already set by file_open
         ASSINP (file_has_ext (file->name, GENOZIP_EXT), 
                 "file %s must have a " GENOZIP_EXT " extension", file_printname (file));
+        
         // set file->type according to the data type, overriding the previous setting - i.e. if the user
         // uses the --output option, he is unrestricted in the choice of a file name
         file->type = file_get_z_ft_by_txt_in_ft (file->data_type, txt_file->type); 
@@ -1451,7 +1490,7 @@ PutLineFn file_put_line (VBlockP vb, STRp(line), rom msg)
 {
     PutLineFn fn;
     sprintf (fn.s, "line.%u.%d.%s%s", vb->vblock_i, vb->line_i, command==ZIP ? "zip" : "piz",
-             file_plain_ext_by_dt ((VB_DT(DT_SAM) && z_file->z_flags.txt_is_bin) ? DT_BAM : vb->data_type));
+             file_plain_ext_by_dt ((VB_DT(SAM) && z_file->z_flags.txt_is_bin) ? DT_BAM : vb->data_type));
     
     file_put_data (fn.s, STRa(line), 0);
 

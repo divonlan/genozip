@@ -101,7 +101,7 @@ uint64_t writer_get_txt_line_i (VBlockP vb)
 
         // note: txtheader lines are not included in the plan item, bc they are not counted for --header, --downsample etc
         txt_num_lines += (plan[i].flavor == PLAN_TXTHEADER) ? B(VbInfo, txt_header_info, plan[i].comp_i)->num_lines
-                                                            : VB_DT(DT_FASTQ) ? (4 * plan[i].num_lines) : plan[i].num_lines; // in FASTQ, each plan line is 4 txt lines
+                                                            : VB_DT(FASTQ) ? (4 * plan[i].num_lines) : plan[i].num_lines; // in FASTQ, each plan line is 4 txt lines
     }
 
     WARN_ONCE0 ("Unexpectedly, unable to find current vb/line_i in recon_plan");
@@ -200,7 +200,7 @@ static VBIType writer_init_txt_header_info (void)
 
         // conditions entire txt header should be read 
         comp->needs_recon = 
-            (  !Z_DT(DT_VCF) // This clause only limits VCF files  
+            (  !Z_DT(VCF) // This clause only limits VCF files  
             || ( flag.luft && (comp_i == VCF_COMP_MAIN || (comp_i == VCF_COMP_PRIM_ONLY && !flag.header_one))) 
             || (!flag.luft && (comp_i == VCF_COMP_MAIN || (comp_i == VCF_COMP_LUFT_ONLY && !flag.header_one)))); // --header-one - we don't need the ##primary_only / ##luft_only lines 
             
@@ -212,12 +212,12 @@ static VBIType writer_init_txt_header_info (void)
         &&
            !flag.no_header
         &&
-           (  !Z_DT(DT_VCF) // This clause only limits VCF files 
+           (  !Z_DT(VCF) // This clause only limits VCF files 
            || ( flag.luft && comp_i == VCF_COMP_PRIM_ONLY)  // if luft rendition, show ##primary_only rejects components (appears in the vcf header)
            || (!flag.luft && comp_i == VCF_COMP_LUFT_ONLY)  // if primary rendtion, show ##luft_only rejects components (appears in the vcf header)
            || comp_i == VCF_COMP_MAIN)
         &&
-           (  !Z_DT(DT_SAM) // This clause only limits SAM/BAM
+           (  !Z_DT(SAM) // This clause only limits SAM/BAM
            || comp_i == SAM_COMP_MAIN);               // Show only the txt header of the MAIN component
 
         if (comp->needs_write) {
@@ -242,7 +242,7 @@ static void writer_init_vb_info (void)
     buf_alloc_zero (evb, &vb_info, 0, vb_info.len, VbInfo, 1, "z_file->vb_info");
 
     uint32_t num_vbs_R=0;
-    if (Z_DT(DT_FASTQ) && z_file->z_flags.dts_paired) {
+    if (Z_DT(FASTQ) && z_file->z_flags.dts_paired) {
         num_vbs_R = sections_get_num_vbs (FQ_COMP_R1);
         uint32_t num_vbs_R2 = sections_get_num_vbs (FQ_COMP_R2);
         ASSERT (num_vbs_R == num_vbs_R2 || (!VER(10) && !num_vbs_R2), // dts_paired introduced 9.0.13
@@ -591,10 +591,10 @@ static void writer_update_section_list (void)
 
     // case: SAM - add all PRIM VBs that need to be loaded
     // case: FASTQ with --R2 - add R1 VBs needed for pair lookup 
-    if ((Z_DT (DT_SAM) && sections_get_num_vbs (SAM_COMP_PRIM)) ||
-        (Z_DT(DT_FASTQ) && flag.one_component == 2)) {
+    if ((Z_DT(SAM) && sections_get_num_vbs (SAM_COMP_PRIM)) ||
+        (Z_DT(FASTQ) && flag.one_component == 2)) {
         Section vb_header = NULL;
-        while (sections_get_next_vb_of_comp_sec ((Z_DT (DT_SAM) ? SAM_COMP_PRIM : FQ_COMP_R1), &vb_header)) 
+        while (sections_get_next_vb_of_comp_sec ((Z_DT(SAM) ? SAM_COMP_PRIM : FQ_COMP_R1), &vb_header)) 
             if (!VBINFO(vb_header->vblock_i)->encountered)  // VB not already add bc it is in recon_plan
                 sections_new_list_add_vb (new_list, vb_header->vblock_i);
     }
@@ -618,11 +618,13 @@ static void writer_add_txtheader_plan (CompIType comp_i)
     buf_alloc (evb, &z_file->recon_plan, 1, 1000, ReconPlanItem, 1.5, "recon_plan");
 
     BNXT (ReconPlanItem, z_file->recon_plan) = (ReconPlanItem){ 
-        .flavor    = PLAN_TXTHEADER,
+        .flavor = PLAN_TXTHEADER,
         .comp_i = comp_i
         // num_lines remains 0, and txt_header data is not counted for --head, --tail, --downsample etc
     };
 }
+
+static ASCENDING_SORTER (plan_sorter, ReconPlanItem, vb_i);
 
 // PIZ main thread: add "full vb" entry for each VB of the component
 static void writer_add_trivial_plan (CompIType comp_i)
@@ -630,11 +632,9 @@ static void writer_add_trivial_plan (CompIType comp_i)
     VBIType num_vbs = sections_get_num_vbs (comp_i);
     if (!num_vbs) return;
 
-    buf_alloc (evb, &z_file->recon_plan, num_vbs, 1000, ReconPlanItem, 1.5, "recon_plan");
-    buf_alloc_exact_zero (evb, z_file->recon_plan_index, z_file->num_vbs+1, BufWord, "z_file->recon_plan_index");
+    buf_alloc (evb, &z_file->recon_plan, num_vbs + 2, 1000, ReconPlanItem, 1, "recon_plan"); // +2 for potentially 2 TXT_HEADERs in case paired FASTQ
 
-    if (z_file->recon_plan.len) // we have a txt header item
-        *B1ST(BufWord, z_file->recon_plan_index) = (BufWord){ .len = 1 };
+    uint64_t start = z_file->recon_plan.len;
 
     Section vb_header = NULL;
     while (sections_get_next_vb_of_comp_sec (comp_i, &vb_header)) 
@@ -646,14 +646,10 @@ static void writer_add_trivial_plan (CompIType comp_i)
             };
 
             VBINFO(vb_header->vblock_i)->full_vb = true;
-
-            *B(BufWord, z_file->recon_plan_index, vb_header->vblock_i) = 
-                (BufWord){ .index = z_file->recon_plan.len - 1, .len = 1};
         }
 
-    // sort by VB as VBs in z_file might be out of order (in DVCF we don't allow out-of-order so no need to sort)
-    if (!z_is_dvcf)
-        recon_plan_sort_by_vb (z_file);
+    // sort new plan items just added by VB, because VBs in z_file might be out of order
+    qsort (B(ReconPlanItem, z_file->recon_plan, start), z_file->recon_plan.len - start, sizeof (ReconPlanItem), plan_sorter);
 }
 
 // PIZ main thread: add interleave entry for each VB of the component
@@ -763,7 +759,7 @@ void writer_create_plan (void)
         // rejected variants that are reconstructed to be the first part of the VCF header
         CompIType reject_comp_i = flag.luft ? VCF_COMP_PRIM_ONLY : VCF_COMP_LUFT_ONLY;
         writer_add_txtheader_plan (reject_comp_i);
-        writer_add_trivial_plan (reject_comp_i);
+        writer_add_trivial_plan (reject_comp_i); // note: in DVCF we don't allow out-of-order so no need to sort 
 
         // main TXT_HEADER is reconstructed after the rejects
         writer_add_txtheader_plan (VCF_COMP_MAIN);
@@ -773,22 +769,22 @@ void writer_create_plan (void)
     }
 
     // case: VCF with --sort, other than DVCF
-    else if (Z_DT(DT_VCF) && flag.sort) 
+    else if (Z_DT(VCF) && flag.sort) 
         writer_add_plan_from_recon_section (VCF_COMP_MAIN, false, &z_file->max_conc_writing_vbs, &vblock_mb);
 
     // case: paired FASTQ to be written interleaved 
-    else if (Z_DT(DT_FASTQ) && flag.interleaved) 
+    else if (Z_DT(FASTQ) && flag.interleaved) 
         writer_add_interleaved_plan(); // single txt_file, recon_plan with PLAN_INTERLEAVE to interleave pairs of VBs
 
     // case: paired FASTQ with --R1 or --R2
-    else if (Z_DT(DT_FASTQ) && flag.one_component) 
+    else if (Z_DT(FASTQ) && flag.one_component) 
         writer_add_trivial_plan (flag.one_component-1); // one_component is 1 or 2
 
-    // cases: paired FASTQ with --unbind (genounzip only - no filtering/modifications)
-    else if (Z_DT(DT_FASTQ) && flag.unbind) {
+    // cases: genounzip of paired FASTQ - unbinds with no filtering/modifications
+    else if (Z_DT(FASTQ) && flag.unbind) {
         writer_add_txtheader_plan (FQ_COMP_R1); // reading the txt_header is required when unbinding (it contains the filename, digest...)
-        writer_add_trivial_plan (FQ_COMP_R1);
-        z_file->recon_plan.count = z_file->recon_plan.len; // count - length of plan of R1
+        writer_add_trivial_plan (FQ_COMP_R1); // we sort the entire plan in the next call
+        z_file->recon_plan.count = z_file->recon_plan.len; // count = length of plan of R1
 
         writer_add_txtheader_plan (FQ_COMP_R2);
         writer_add_trivial_plan (FQ_COMP_R2);
@@ -1206,7 +1202,7 @@ static void writer_start_writing (CompIType unbind_comp_i)
 
     if (writer_thread != THREAD_ID_NONE || flag.no_writer_thread) return;
 
-    // copy the portion of the reconstruction plan (note: recon_plan may exists only in cases of a single txt file)
+    // copy the portion of the reconstruction plan 
     if (!flag.unbind)
         buf_copy (evb, &txt_file->recon_plan, &z_file->recon_plan, ReconPlanItem, 0, 0, 0);
     else if (unbind_comp_i == FQ_COMP_R1) 

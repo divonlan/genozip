@@ -152,7 +152,7 @@ COMPRESS (codec_longr_compress)
     ContextP lens_ctx   = ECTX (((SectionHeaderCtx *)header)->dict_id);
     ContextP values_ctx = lens_ctx + 1;
     
-    LocalGetLineCB *seq_callback = (VB_DT(DT_FASTQ) ? fastq_zip_seq : sam_zip_seq);
+    LocalGetLineCB *seq_callback = (VB_DT(FASTQ) ? fastq_zip_seq : sam_zip_seq);
     
     LongrState *state = codec_alloc (vb, sizeof (LongrState), 0);
     memset (state, 0, sizeof (LongrState));
@@ -322,19 +322,19 @@ CODEC_RECONSTRUCT (codec_longr_reconstruct)
 
     ContextP lens_ctx   = ctx;
     ContextP values_ctx = ctx + 1;
-    ContextP seq_ctx    = CTX(VB_DT(DT_FASTQ) ? FASTQ_SQBITMAP : SAM_SQBITMAP);
+    ContextP seq_ctx    = CTX(VB_DT(FASTQ) ? FASTQ_SQBITMAP : SAM_SQBITMAP);
     
     if (!lens_ctx->is_initialized) 
         codec_longr_reconstruct_init (vb, lens_ctx, values_ctx);
 
-    bool is_rev = !VB_DT(DT_FASTQ) /* SAM or BAM */ /*&& lens_ctx->dict_id.num == _SAM_QUAL*/ && last_flags.rev_comp;
+    bool is_rev = !VB_DT(FASTQ) /* SAM or BAM */ /*&& lens_ctx->dict_id.num == _SAM_QUAL*/ && last_flags.rev_comp;
 
     ARRAY (uint8_t, sorted_qual, values_ctx->local);
     ARRAY (uint32_t, next_of_chan, lens_ctx->local);
     LongrState *state = B1ST (LongrState, lens_ctx->con_cache);
     state->value_to_bin = B1ST8 (values_ctx->con_cache);
 
-    rom seq = (Z_DT(DT_SAM) && VB_SAM->textual_seq.len) ? B1STc (VB_SAM->textual_seq) // note: textual_seq is prepared in sam_piz_sam2bam_SEQ and sam_piz_prim_add_Grps_and_CIGAR
+    rom seq = (Z_DT(SAM) && VB_SAM->textual_seq.len) ? B1STc (VB_SAM->textual_seq) // note: textual_seq is prepared in sam_piz_sam2bam_SEQ and sam_piz_prim_add_Grps_and_CIGAR
                                                         : last_txtx (vb, seq_ctx); 
 
     codec_longr_recon_one_read (state, seq, vb->seq_len, is_rev, sorted_qual, next_of_chan, BAFTtxt);

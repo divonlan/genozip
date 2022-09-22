@@ -136,7 +136,7 @@ void qname_zip_initialize (Did qname_did_i)
                     qfs->qname2 = item_i;
                 }
                 // verify dict_id (in some cases)
-                else if (dnum != _SAM_QmNAME && dnum != _FASTQ_COPY_Q && (Z_DT(DT_FASTQ) || qfs < &qf[NUM_QFs])) {
+                else if (dnum != _SAM_QmNAME && dnum != _FASTQ_COPY_Q && (Z_DT(FASTQ) || qfs < &qf[NUM_QFs])) {
                     ASSERT (next_zctx->dict_id.num == dnum, "Expecting item #%u of %s to have to be %s", item_i, qfs->name, next_zctx->tag_name);
                     next_zctx++;
                 }
@@ -295,7 +295,7 @@ void qname_segconf_discover_flavor (VBlockP vb, Did qname_did_i, STRp(qname))
     STR0(qname2);
 
     for (QnameFlavor qfs=&qf[0]; qfs < &qf[NUM_QFs]; qfs++) 
-        if ((VB_DT(DT_FASTQ) || !qfs->fq_only) && !qname_test_flavor (STRa(qname), qfs, pSTRa(qname2))) {
+        if ((VB_DT(FASTQ) || !qfs->fq_only) && !qname_test_flavor (STRa(qname), qfs, pSTRa(qname2))) {
             segconf.qname_flavor = qfs;
             segconf.tech = qfs->tech;
             
@@ -464,7 +464,7 @@ void qname_seg (VBlockP vb, Context *qname_ctx, STRp (qname), unsigned add_addit
 
     if (!success) 
         tokenizer_seg (VB, qname_ctx, STRa(qname), 
-                       VB_DT(DT_FASTQ) ? sep_with_space : sep_without_space, 
+                       VB_DT(FASTQ) ? sep_with_space : sep_without_space, 
                        add_additional_bytes);
 
 done:

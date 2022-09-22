@@ -3,6 +3,9 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+14.0.5 22/Sep/2022
+- Bug fixes
+
 14.0.4 15/Sep/2022
 - VCF: better compression of INFO/RAW_MQandDP, INFO/RS, INFO/RSPOS
 - Bug fixes

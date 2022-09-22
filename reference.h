@@ -70,7 +70,7 @@ extern void ref_set_ref_file_info (Reference ref, Digest md5, rom fasta_name, ui
 extern void ref_unload_reference (Reference ref);
 extern void ref_destroy_reference (Reference ref, bool destroy_only_if_not_mmap);
 extern ConstRangeP ref_piz_get_range (VBlockP vb, Reference ref, bool soft_fail);
-extern Range *ref_get_range_by_ref_index (VBlockP vb, Reference ref, WordIndex ref_contig_index);
+extern RangeP ref_get_range_by_ref_index (VBlockP vb, Reference ref, WordIndex ref_contig_index);
 extern rom ref_get_cram_ref (const Reference ref);
 extern void ref_generate_reverse_complement_genome (Reference ref);
 extern rom ref_get_filename (const Reference ref);
@@ -92,6 +92,8 @@ extern void ref_make_after_compute (VBlockP vb);
 extern ConstBufferP ref_make_get_contig_metadata (void);
 extern void ref_make_genozip_header (SectionHeaderGenozipHeader *header);
 extern void ref_make_finalize (bool unused);
+extern void ref_fasta_to_ref (FileP file);
+
 
 // cache stuff
 extern bool ref_mmap_cached_reference (Reference ref);
@@ -150,11 +152,12 @@ typedef struct { char s[300]; } RangeStr;
 extern RangeStr ref_display_range (ConstRangeP r);
 extern void ref_display_all_ranges (Reference ref);
 extern void ref_print_bases_region (FILE *file, ConstBitsP bitarr, ConstBitsP is_set, PosType first_pos, uint64_t start_base, uint64_t num_of_bases, bool is_forward);
-extern void ref_print_subrange (rom msg, const Range *r, PosType start_pos, PosType end_pos, FILE *file);
-extern void ref_print_is_set (const Range *r, PosType around_pos, FILE *file);
-extern char *ref_dis_subrange (Reference ref, const Range *r, PosType start_pos, PosType len, char *seq, bool revcomp);
+extern void ref_print_subrange (rom msg, ConstRangeP r, PosType start_pos, PosType end_pos, FILE *file);
+extern void ref_print_is_set (ConstRangeP r, PosType around_pos, FILE *file);
+extern char *ref_dis_subrange (Reference ref, ConstRangeP r, PosType start_pos, PosType len, char *seq, bool revcomp);
 extern void ref_display_ref (const Reference ref);
 
 // globals
 extern Reference gref, prim_ref;
 extern Serializer make_ref_merge_serializer;
+ 

@@ -28,7 +28,7 @@ static const bool cigar_valid_op[256] = { ['M']=true, ['I']=true, ['D']=true, ['
 
 const char cigar_op_to_char[16] = "MIDNSHP=Xabcdefg"; // BAM to SAM (a-g are invalid values)
  
-static const uint8_t cigar_char_to_op[256] = { [0 ... 255]=255, // invalid
+static const uint8_t cigar_char_to_op[256] = { [0 ... 255]=BC_INVALID, 
                                                ['M']=BC_M, ['I']=BC_I, ['D']=BC_D, ['N']=BC_N, ['S']=BC_S, 
                                                ['H']=BC_H, ['P']=BC_P, ['=']=BC_E, ['X']=BC_X, ['*']=BC_NONE }; 
 
@@ -252,36 +252,35 @@ CigarStr dis_binary_cigar (VBlockSAMP vb, const BamCigarOp *cigar, uint32_t ciga
 // A CIGAR looks something like: "109S19M23S", See: https://samtools.github.io/hts-specs/SAMv1.pdf 
 void sam_cigar_analyze (VBlockSAMP vb, STRp(cigar)/* textual */, bool cigar_is_in_textual_cigar, uint32_t *seq_consumed)
 {
-    *seq_consumed = 0; // everything else is initialized in sam_reset_line
-    
-    ASSERT (cigar[0] != '*' || cigar_len == 1, "%s: Invalid CIGAR: %.*s", LN_NAME, STRf(cigar)); // a CIGAR start with '*' must have 1 character
-
-    // ZIP case: if the CIGAR is "*", later sam_seg_CIGAR uses the length from SEQ and store it as eg "151*". 
-    // In PIZ it will be eg "151*" or "1*" if both SEQ and QUAL are "*", so this condition is always false
-    if (cigar[0] == '*') {
-        vb->cigar_missing = true;
-        return;
+    if (IS_ZIP) {
+        // if the CIGAR is "*", later sam_seg_CIGAR uses the length from SEQ and store it as eg "151*". 
+        // note: In PIZ it will be eg "151*" or "1*" if both SEQ and QUAL are "*", so this condition will be false
+        if (cigar[0] == '*') {
+            ASSINP (cigar_len == 1, "%s: Invalid CIGAR: %.*s", LN_NAME, STRf(cigar)); // expecting exactly "*"
+            goto do_analyze; 
+        }
     }
 
-    // PIZ case: CIGAR string starts with '-' (indicating missing SEQ) - just skip the '-' for now
-    else if (*cigar == '-') {
-        vb->seq_missing = true;
-        cigar++;
-        cigar_len--;
-    }
+    else { // PIZ
+        // case: a CIGAR string starting with '-' indicates missing SEQ 
+        if (*cigar == '-') {
+            vb->seq_missing = true;
+            cigar++; // skip the '-'
+            cigar_len--;
+        }
 
-    // store original textual CIGAR for use of sam_piz_special_MD, as in BAM it will be translated ; also cigar might point to mate data in ctx->per_line - ctx->per_line might be realloced as we store this line's CIGAR in it 
-    if (IS_PIZ && !cigar_is_in_textual_cigar) {
-        buf_add_more (VB, &vb->textual_cigar, STRa(cigar), "textual_cigar");
-        *BAFTc (vb->textual_cigar) = 0; // nul-terminate (buf_add_more allocated space for it)
+        // store original textual CIGAR for use of sam_piz_special_MD, as in BAM it will be translated ; also cigar might point to mate data in ctx->per_line - ctx->per_line might be realloced as we store this line's CIGAR in it 
+        if (!cigar_is_in_textual_cigar) {
+            buf_add_more (VB, &vb->textual_cigar, STRa(cigar), "textual_cigar");
+            *BAFTc (vb->textual_cigar) = 0; // nul-terminate (buf_add_more allocated space for it)
+        }
     }
 
     // create the BAM-style cigar data in binary_cigar. 
-    buf_alloc (vb, &vb->binary_cigar, 0, cigar_len/2 /* max possible n_cigar_op */, BamCigarOp, 2, "binary_cigar");
+    buf_alloc (vb, &vb->binary_cigar, 0, 1 + cigar_len/2 /* max possible n_cigar_op */, BamCigarOp, 2, "binary_cigar");
     ARRAY (BamCigarOp, bam_ops, vb->binary_cigar);
 
-    uint32_t n=0;
-    uint32_t op_i=0;
+    uint32_t n=0, op_i=0;
     for (uint32_t i=0; i < cigar_len; i++) {
 
         char c = cigar[i];
@@ -290,45 +289,68 @@ void sam_cigar_analyze (VBlockSAMP vb, STRp(cigar)/* textual */, bool cigar_is_i
             n = n*10 + (c - '0');
 
         else {
-            ASSINP (n, "%s: Invalid CIGAR: operation %c not preceded by a number. CIGAR=\"%.*s\"", 
-                    LN_NAME, c, STRf(cigar));    
+            ASSINP (n, "%s: Invalid CIGAR: operation %c not preceded by a number. CIGAR=\"%.*s\"", LN_NAME, c, STRf(cigar));    
 
-            #define SEQ_CONSUMED     *seq_consumed            += n
-            #define REF_CONSUMED     vb->ref_consumed         += n
-            #define SEQ_REF_CONSUMED vb->ref_and_seq_consumed += n
-            #define COUNT(x)         vb->x                    += n
-            // Bug 546: Per SAM spec, a CIGAR may have H clips enclosing S clips eg 2H3S5M4S2H. 
-            #define LAST_OR_1ST ({ ASSERT(!op_i || i==cigar_len-1, "'%c' can only appear as the first or last op in the CIGAR string. cigar=\"%.*s\"", c, STRf(cigar)); })
-
-            switch (c) { 
-                case 'M' : 
-                case '=' : 
-                case 'X' : SEQ_CONSUMED ; REF_CONSUMED ; SEQ_REF_CONSUMED          ; break ;
-                case 'I' : SEQ_CONSUMED ; COUNT(insertions)                        ; break ;
-                case 'D' : REF_CONSUMED ; COUNT(deletions)                         ; break ;
-                case 'N' : REF_CONSUMED                                            ; break ;
-                case 'S' : LAST_OR_1ST ; SEQ_CONSUMED ; COUNT(soft_clip[op_i > 0]) ; break ; // Note: a "121S" (just one op S or H) is considered a left-clip (eg as expected by sam_seg_bsseeker2_XG_Z_analyze)
-                case 'H' : LAST_OR_1ST ; COUNT (hard_clip[op_i > 0])               ; break ;
-                case 'P' :                                                           break ;
-                case '*' : SEQ_CONSUMED                                            ; break ; // Note: '*' is when CIGAR is "151*" (PIZ only) - alignment with no CIGAR but a SEQ
-                default  : ASSINP (false, "%s: Invalid CIGAR: invalid operation '%c'(ASCII %u). CIGAR=\"%.*s\"", LN_NAME, c, c, STRf(cigar));
-            }
-
-            // convert character CIGAR op to BAM cigar field op  "MIDNSHP=X" -> 012345678 ; * is our private value of BC_NONE
+            // convert character CIGAR op to BAM cigar field op: "MIDNSHP=X" -> 012345678 ; * is our private value of BC_NONE
             bam_ops[op_i++] = (BamCigarOp){ .op = cigar_char_to_op[(uint8_t)c], .n = n };
-
             n = 0;
         }
     }          
 
-    // note: piz: in case of eg "151*" - *seq_consumed will be updated to the length, but binary_cigar will be empty
-    vb->binary_cigar.len32 = op_i - (op_i==1 && bam_ops[0].op == BC_NONE);  // 0 if CIGAR is "*" 
+    ASSINP (!n, "%s: Invalid CIGAR: expecting it to end with an operation character. CIGAR=\"%.*s\"", LN_NAME, STRf(cigar));
 
-    if (!vb->binary_cigar.len32) 
+    vb->binary_cigar.len32 = op_i;
+
+do_analyze:
+    bam_seg_cigar_analyze (vb, (IS_ZIP ? DATA_LINE (vb->line_i) : NULL), seq_consumed);
+}
+
+// analyze the binary cigar 
+void bam_seg_cigar_analyze (VBlockSAMP vb, ZipDataLineSAM *dl/*NULL if PIZ*/, uint32_t *seq_consumed)
+{
+    *seq_consumed = 0; // everything else is initialized in sam_reset_line
+    ARRAY (BamCigarOp, cigar, vb->binary_cigar);
+
+    // ZIP case: if the CIGAR is "*", later sam_seg_CIGAR uses the length from SEQ and store it as eg "151*". 
+    // note: In PIZ it with a "*" CIGAR, binary_cigar will have a single BC_NONE op, so this condition will be false
+    if (!cigar_len) {
         vb->cigar_missing = true;
+        return;
+    }
 
-    if (IS_ZIP) {
-        ZipDataLineSAM *dl = DATA_LINE (vb->line_i);
+    for (uint32_t op_i=0; op_i < cigar_len; op_i++) {
+
+        #define SEQ_CONSUMED     *seq_consumed            += cigar[op_i].n
+        #define REF_CONSUMED     vb->ref_consumed         += cigar[op_i].n
+        #define SEQ_REF_CONSUMED vb->ref_and_seq_consumed += cigar[op_i].n
+        #define COUNT(x)         vb->x                    += cigar[op_i].n
+        
+        // an H must be the first or last op
+        #define VERIFY_H ({ ASSERT(!op_i || op_i==cigar_len-1, "%s: H can only appear as the first or last op in the CIGAR string. cigar=\"%s\"", \
+                                   LN_NAME, display_binary_cigar(vb)); })
+
+        // an S must be either the first op (possibly proceeded by an H) or the last op (possibly followed by an H), eg 2H3S5M4S2H
+        #define VERIFY_S ({ ASSERT(op_i==0 || (op_i==1 && cigar[0].op==BC_H) || op_i==cigar_len-1 || (op_i==cigar_len-2 && cigar[cigar_len-1].op==BC_H), \
+                                   "%s: S can only appear as the first op (possibly proceeded by an H) or the last op (possibly followed by an H) in the CIGAR string. cigar=\"%s\"", \
+                                   LN_NAME, display_binary_cigar(vb)); })
+
+        switch (cigar[op_i].op) { 
+            case BC_M    : 
+            case BC_E    : 
+            case BC_X    : SEQ_CONSUMED ; REF_CONSUMED ; SEQ_REF_CONSUMED       ; break ;
+            case BC_I    : SEQ_CONSUMED ; COUNT(insertions)                     ; break ;
+            case BC_D    : REF_CONSUMED ; COUNT(deletions)                      ; break ;
+            case BC_N    : REF_CONSUMED                                         ; break ;
+            case BC_S    : VERIFY_S ; SEQ_CONSUMED ; COUNT(soft_clip[op_i > 0]) ; break ; // Note: a "121S" (just one op S or H) is considered a left-clip (eg as expected by sam_seg_bsseeker2_XG_Z_analyze)
+            case BC_H    : VERIFY_H ; COUNT(hard_clip[op_i > 0])                ; break ;
+            case BC_P    :                                                        break ;
+            case BC_NONE : SEQ_CONSUMED; vb->binary_cigar.len = 0               ; break ; // PIZ: eg "151*" - CIGAR is "*" and SEQ/QUAL have length 151: seq_consumed will be updated to the length and binary_cigar will be empty
+
+            default      : ASSINP (false, "%s: Invalid CIGAR: invalid operation %u", LN_NAME, cigar[op_i].op);
+        }
+    }          
+
+    if (dl) { // ZIP
         dl->ref_consumed = vb->ref_consumed; // consumed by sam_seg_predict_TLEN 
         dl->hard_clip[0] = vb->hard_clip[0];
         dl->hard_clip[1] = vb->hard_clip[1];
@@ -341,64 +363,15 @@ void sam_cigar_analyze (VBlockSAMP vb, STRp(cigar)/* textual */, bool cigar_is_i
             .ref_consumed = vb->ref_consumed,
             .hard_clip    = { vb->hard_clip[0], vb->hard_clip[1] }
         };
-    
-    ASSINP (!n, "%s: Invalid CIGAR: expecting it to end with an operation character. CIGAR=\"%.*s\"", 
-            LN_NAME, STRf(cigar));
 
-    ASSINP (!seq_consumed || *seq_consumed, "%s: Invalid CIGAR: CIGAR implies 0-length SEQ. CIGAR=\"%.*s\" FLAG=%s", 
-            LN_NAME, STRf(cigar), sam_dis_FLAG(last_flags).s);
-
-    // note: if there's ever any need to support both S and H, we need to fix sam_sa_seg_depn_find_sagroup too
-    ASSINP (!((vb->hard_clip[0] || vb->hard_clip[1]) && (vb->soft_clip[0] || vb->soft_clip[1])),
-            "%s: CIGAR has both S and H - this is not currently supported by Genozip. Contact support@genozip.com if you need this case supported. CIGAR=\"%.*s\"", LN_NAME, STRf(cigar));
-}
-
-// analyze the binary cigar when segging BAM - faster
-void bam_seg_cigar_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, uint32_t *seq_consumed)
-{
-    *seq_consumed = 0; // everything else is initialized in sam_reset_line
-    ARRAY (BamCigarOp, cigar, vb->binary_cigar);
-
-    // ZIP case: if the CIGAR is "*", later sam_seg_CIGAR uses the length from SEQ and store it as eg "151*". 
-    // In PIZ it will be eg "151*" or "1*" if both SEQ and QUAL are "*", so this condition is always false
-    if (!cigar_len) {
-        vb->cigar_missing = true;
-        return;
+    // evidence of not being entirely unmapped: we have !FLAG.unmapped, RNAME, POS and CIGAR in at least one line
+    if (segconf.running && !dl->FLAG.unmapped && dl->POS && !str_issame_(STRa(vb->chrom_name), "*", 1)) {
+        segconf.num_mapped++;
+        segconf.sam_is_unmapped = false; 
     }
 
-    for (uint32_t op_i=0; op_i < cigar_len; op_i++) {
-
-        #define SEQ_CONSUMED_     *seq_consumed            += cigar[op_i].n
-        #define REF_CONSUMED_     vb->ref_consumed         += cigar[op_i].n
-        #define SEQ_REF_CONSUMED_ vb->ref_and_seq_consumed += cigar[op_i].n
-        #define COUNT_(x)         vb->x                    += cigar[op_i].n
-        // Bug 546: Per SAM spec, a CIGAR may have H clips enclosing S clips eg 2H3S5M4S2H. 
-        #undef LAST_OR_1ST
-        #define LAST_OR_1ST ({ ASSERT(!op_i || op_i==cigar_len-1, "'%c' can only appear as the first or last op in the CIGAR string. cigar=\"%s\"", \
-                                      cigar_op_to_char[cigar[op_i].op], display_binary_cigar(vb)); })
-
-        switch (cigar[op_i].op) { 
-            case BC_M : 
-            case BC_E : 
-            case BC_X : SEQ_CONSUMED_ ; REF_CONSUMED_ ; SEQ_REF_CONSUMED_         ; break ;
-            case BC_I : SEQ_CONSUMED_ ; COUNT_(insertions)                        ; break ;
-            case BC_D : REF_CONSUMED_ ; COUNT_(deletions)                         ; break ;
-            case BC_N : REF_CONSUMED_                                             ; break ;
-            case BC_S : LAST_OR_1ST ; SEQ_CONSUMED_ ; COUNT_(soft_clip[op_i > 0]) ; break ; // Note: a "121S" (just one op S or H) is considered a left-clip (eg as expected by sam_seg_bsseeker2_XG_Z_analyze)
-            case BC_H : LAST_OR_1ST ; COUNT_ (hard_clip[op_i > 0])                ; break ;
-            case BC_P :                                                             break ;
-            default   : ASSINP (false, "%s: Invalid CIGAR: invalid operation %u", LN_NAME, cigar[op_i].op);
-        }
-    }          
-
-    dl->ref_consumed = vb->ref_consumed; // consumed by sam_seg_predict_TLEN 
-
-    ASSINP (!seq_consumed || *seq_consumed, "%s: Invalid CIGAR: CIGAR implies 0-length SEQ CIGAR=\"%s\"", 
+    ASSINP (!seq_consumed || *seq_consumed, "%s: Invalid CIGAR: CIGAR implies 0-length SEQ. CIGAR=\"%s\"", 
             LN_NAME, display_binary_cigar(vb));
-
-    // bug 546: if there's ever any need to support both S and H, we need to fix sam_sa_seg_depn_find_sagroup too
-    ASSINP (!((vb->hard_clip[0] || vb->hard_clip[1]) && (vb->soft_clip[0] || vb->soft_clip[1])),
-            "%s: Invalid CIGAR: has both S and H. CIGAR=\"%s\"", LN_NAME, display_binary_cigar(vb));
 }
 
 bool sam_cigar_is_valid (STRp(cigar))

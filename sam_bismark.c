@@ -59,8 +59,10 @@ void sam_seg_bismark_XM_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl)
     for_buf (BamCigarOp, op, vb->binary_cigar) 
         if (op->op==BC_M || op->op==BC_E || op->op==BC_X) 
             for (uint32_t i=0; i < op->n; i++) {
-                if (xm[xm_i++] != '.') 
-                    sam_seg_analyze_set_one_ref_base (vb, false, pos, vb->bisulfite_strand, ref_consumed, &range, &lock); // ignore errors
+                if (xm[xm_i++] != '.') {
+                    rom error = sam_seg_analyze_set_one_ref_base (vb, false, pos, vb->bisulfite_strand, ref_consumed, &range, &lock); 
+                    if (error == ERR_ANALYZE_RANGE_NOT_AVAILABLE) return; // possibly pos/ref_consumed go beyond end of range
+                }
                 pos++;
                 ref_consumed--;
             }

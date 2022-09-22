@@ -894,6 +894,7 @@ void buf_free_do (BufferP buf, FUNCLINE)
 #endif
             buf->data        = NULL; 
             buf->overlayable = false;
+            buf->can_be_big  = false;
 
             // fall through (name (and in Windows/Mac also memory and size) are not changed, and buffer is still in buffer list)
 
@@ -944,7 +945,7 @@ void buf_free_do (BufferP buf, FUNCLINE)
     }
 } 
 
-ASCENDING_SORTER (buf_list_sorter, BufListEnt, buf)
+static ASCENDING_SORTER (buf_list_sorter, BufListEnt, buf)
 
 // binary-search a buffer in a sorted buffer list
 static int buf_list_find_buffer (const BufListEnt *buf_list, ConstBufferP buf, int first, int last)

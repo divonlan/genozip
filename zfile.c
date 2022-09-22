@@ -203,7 +203,7 @@ uint32_t zfile_compress_b250_data (VBlockP vb, ContextP ctx)
 {
     struct FlagsCtx flags = ctx->flags; // make a copy
     
-    if (VB_DT(DT_FASTQ))
+    if (VB_DT(FASTQ))
         flags.paired = ctx->pair_b250;
 
     SectionHeaderCtx header = (SectionHeaderCtx) { 
@@ -245,7 +245,7 @@ uint32_t zfile_compress_local_data (VBlockP vb, ContextP ctx, uint32_t sample_si
 {   
     struct FlagsCtx flags = ctx->flags; // make a copy
 
-    if (VB_DT(DT_FASTQ))
+    if (VB_DT(FASTQ))
         flags.paired = ctx->pair_local;
 
     uint32_t uncompressed_len = ctx->local.len32 * lt_desc[ctx->ltype].width;
@@ -616,7 +616,7 @@ static void zfile_read_genozip_header_handle_ref_info (const SectionHeaderGenozi
             }
             else 
                 ASSINP (flag.genocat_no_ref_file, "Please use --reference to specify the path to the %sreference file. Original path was: %.*s",
-                        (Z_DT(DT_CHAIN) ? "LUFT (target) coordinates " : ""), REF_FILENAME_LEN, header->ref_filename);
+                        (Z_DT(CHAIN) ? "LUFT (target) coordinates " : ""), REF_FILENAME_LEN, header->ref_filename);
         }
 
         // test for matching MD5 between specified external reference and reference in the header
@@ -690,7 +690,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeader *out_header) // optio
     DataType data_type = (DataType)(BGEN16 (header->data_type)); 
     ASSERT ((unsigned)data_type < NUM_DATATYPES, "unrecognized data_type=%d: please upgrade genozip to the latest version", data_type);
 
-    if (Z_DT(DT_NONE) || Z_DT(DT_GENERIC)) {
+    if (Z_DT(NONE) || Z_DT(GENERIC)) {
         z_file->data_type = data_type;
         z_file->type      = file_get_z_ft_by_dt (z_file->data_type);  
 
@@ -700,9 +700,9 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeader *out_header) // optio
         ASSINP (z_file->data_type == data_type, "%s - file extension indicates this is a %s file, but according to its contents it is a %s", 
                 z_name, dt_name (z_file->data_type), dt_name (data_type));
 
-    flag.genocat_no_ref_file |= (Z_DT(DT_CHAIN) && !flag.reading_chain); // initialized in flags_update: we only need the reference when using the chain file with --chain
+    flag.genocat_no_ref_file |= (Z_DT(CHAIN) && !flag.reading_chain); // initialized in flags_update: we only need the reference when using the chain file with --chain
 
-    ASSINP (header->encryption_type != ENC_NONE || !crypt_have_password() || Z_DT(DT_REF), 
+    ASSINP (header->encryption_type != ENC_NONE || !crypt_have_password() || Z_DT(REF), 
             "password provided, but file %s is not encrypted", z_name);
 
     ASSERT (BGEN32 (header->h.compressed_offset) == st_header_size (SEC_GENOZIP_HEADER),

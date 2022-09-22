@@ -308,7 +308,7 @@ Codec codec_assign_best_codec (VBlockP vb,
     // note: for local (except in --fast), we don't commit for vb=1 bc less representative of data 
     // (ok for --best as we count (BEST_LOCK_IN_THREASHOLD) anyway))
     if ((is_b250 || (is_local && (flag.best || flag.fast || vb->vblock_i > 1))) && *selected_codec != CODEC_UNKNOWN && zctx) 
-        ctx_commit_codec_to_zf_ctx (vb, ctx, is_local);
+        ctx_commit_codec_to_zf_ctx (vb, ctx, is_local, true);
 
 done:
     // roll back
@@ -345,6 +345,9 @@ void codec_assign_best_qual_codec (VBlockP vb, Did did_i,
     else
         ctx->ltype = LT_SEQUENCE;  // codec to be assigned by codec_assign_best_codec
     
+    if (ctx->ltype != LT_SEQUENCE)
+        ctx_commit_codec_to_zf_ctx (vb, ctx, true, false); // used only for submitting stats
+        
     if (flag.show_codec) // aligned to the output of codec_assign_best_codec
         iprintf ("%-8s %-12s %-5s          *[%s]\n", VB_NAME, ctx->tag_name, "LOCAL", codec_name(CTX(did_i)->lcodec));
 }

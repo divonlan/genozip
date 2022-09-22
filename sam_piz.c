@@ -472,7 +472,7 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
 {
     if (is_top_level) {
 
-        if (flag.add_line_numbers && TXT_DT(DT_SAM)) {
+        if (flag.add_line_numbers && TXT_DT(SAM)) {
             vb->txt_data.len32 -= 1 + (*(BLSTtxt-1) == '\r'); // remove \n or \r\n
             vb->txt_data.len32 += sprintf (BAFTtxt, "\tVB:Z:%s\n", LN_NAME);
         }
@@ -523,7 +523,7 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
 
         // --bases
         if (flag.bases && !vb->drop_curr_line && 
-            !(TXT_DT(DT_BAM) ? iupac_is_included_bam   (last_txt (vb, SAM_SQBITMAP), ((BAMAlignmentFixed *)recon)->l_seq)
+            !(TXT_DT(BAM) ? iupac_is_included_bam   (last_txt (vb, SAM_SQBITMAP), ((BAMAlignmentFixed *)recon)->l_seq)
                              : iupac_is_included_ascii (last_txt (vb, SAM_SQBITMAP), vb->last_txt_len (SAM_SQBITMAP))))
             vb->drop_curr_line = "bases";
         
