@@ -833,7 +833,7 @@ static bool file_open_z (File *file)
 
         // if a FASTA file was given as an argument to --reference or --REFERENCE, get the .ref.genozip file,
         // possobily running --make-reference in a separate process if needed
-        if (flag.reading_reference && file_get_data_type (file_get_type (file->name), true) == DT_FASTA)
+        if (flag.reading_reference && (file_get_data_type (file_get_type (file->name), true) == DT_FASTA) && (file_get_type (file->name) != FASTA_GENOZIP))
             ref_fasta_to_ref (file);
 
         ASSINP (!flag.reading_reference || file_has_ext (file->name, REF_GENOZIP_), 
