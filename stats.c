@@ -117,6 +117,7 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
     }; loop(document.body);
     */ 
 
+    arch_set_locale(); // in case not inherited from parent process
     bufprint0 (evb, &url_buf, "https://docs.google.com/forms/d/e/1FAIpQLSdc997k63YnW4fRxnQOHRqngCT_6_fIhrBQZgTXPTgrPCpe_w/formResponse"); // the ID is in the url when previewing the form
     bufprintf (evb, &url_buf, "?entry.1917122099=%s", GENOZIP_CODE_VERSION);                                                   // Genozip version Eg "14.0.0"
     bufprintf (evb, &url_buf, "&entry.1014872627=%u", license_get_number());                                                   // license #. Eg "32412351324"

@@ -28,6 +28,8 @@
 #include "progress.h"
 #include "website.h"
 #include "qname.h"
+#include "stream.h"
+#include "arch.h"
 
 // Search algorithm:
 // A. During kraken loading:
@@ -221,6 +223,10 @@ rom kraken_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_tx
 
     // QNAME - We break down the QNAME into subfields separated by / and/or : - these are vendor-defined strings. See examples in sam_seg_txt_line()
     GET_NEXT_ITEM (KRAKEN_QNAME);
+
+    if (segconf.running && vb->line_i==0) 
+        qname_segconf_discover_flavor (VB, KRAKEN_QNAME, STRd(KRAKEN_QNAME));
+
     qname_seg (VB, CTX(KRAKEN_QNAME), field_start, field_len, 1 /* \t */);
 
     vb->last_int(KRAKEN_QNAME) += field_len+1; // count total QNAME lengths in this VB (+1 for separator)
@@ -405,6 +411,35 @@ bool kraken_piz_initialize (void)
 
 static ASCENDING_SORTER (kraken_qname_nodes_cmp, QnameNode, hash)
 
+// Get reference file name from FASTA name, and if reference file does not exist, run a separate process to --make-reference
+static void kraken_get_genozip_file (FileType ft)
+{
+    rom z_filename = file_get_z_filename (flag.reading_kraken, DT_KRAKEN, ft);
+
+    // if file reference doesn't exist yet - --make-reference now, in a separate process
+    if (!file_exists (z_filename)) {
+
+        WARN ("FYI: cannot find kraken file %s: generating it now from %s", z_filename, flag.reading_kraken);
+
+        rom exec_path = arch_get_executable();
+
+        StreamP generate = stream_create (NULL, 0, 0, 0, 0, 0, 0, "Generating kraken",
+                                          exec_path, flag.reading_kraken, 
+                                          flag.submit_stats ? "--submit"  : SKIP_ARG,
+                                          flag.no_test      ? "--no-test" : SKIP_ARG,
+                                          NULL);
+        
+        // wait for child process to finish
+        ASSINP (!stream_wait_for_exit (generate), "Failed to generate kraken file %s. Try making it explicitly with \"genozip %s\"", 
+                z_filename, flag.reading_kraken); 
+    
+        FREE (exec_path);
+    }
+
+    // update to genozip file
+    flag.reading_kraken = (char *)z_filename;
+}
+
 // genocat: load kraken file as a result of genocat --kraken
 void kraken_load (void)
 {
@@ -419,6 +454,11 @@ void kraken_load (void)
     flag.out_dt           = DT_NONE; // needed for dt_get_translation to find the translation defined in TRANSLATIONS
     flag.reference        = REF_NONE;
     TEMP_VALUE (command, PIZ);
+
+    // if its uncompressed kraken - compress it now, if needed
+    FileType ft = file_get_type (flag.reading_kraken);
+    if (file_get_data_type (ft, true) == DT_KRAKEN && ft != KRAKEN_GENOZIP)
+        kraken_get_genozip_file (ft);
 
     z_file = file_open (flag.reading_kraken, READ, Z_FILE, DT_KRAKEN);    
     zfile_read_genozip_header (0);

@@ -334,7 +334,7 @@ ifeq ($(OS),Windows_NT)
 
 # When running on Windows, builds prod for Linux
 genozip-prod:
-	@run-on-wsl.sh make genozip-prod
+	@run-on-wsl.sh make -j genozip-prod
 
 # increments minor version, eg. 1.0.1 -> 1.0.2. 
 # To increment a major version, manually edit version.h and set minor version to -1 e.g. 1.1.-1 (careful! no newlines or spaces)

@@ -19,7 +19,7 @@
 // memory functions that serve the codecs
 // --------------------------------------
 
-// memory management for bzlib - tesing shows that compress allocates 4 times, and decompress 2 times. Allocations are the same set of sizes
+// memory management for codecs - tesing shows that compress allocates 4 times, and decompress 2 times. Allocations are the same set of sizes
 // every call to compress/decompress with the same parameters, independent on the contents or size of the compressed/decompressed data.
 void *codec_alloc_do (VBlockP vb, uint64_t size, float grow_at_least_factor, rom func, uint32_t code_line)
 {
@@ -30,6 +30,7 @@ void *codec_alloc_do (VBlockP vb, uint64_t size, float grow_at_least_factor, rom
     // so subsequent VBs will allocate roughly the same amount of memory for each buffer
     for (unsigned i=0; i < NUM_CODEC_BUFS ; i++) 
         if (!buf_is_alloc (&vb->codec_bufs[i])) {
+            vb->codec_bufs[i].can_be_big = true; // LZMA, for example, can allocate ~4GB buffers in --best
             buf_alloc_do (vb, &vb->codec_bufs[i], size, grow_at_least_factor, func, code_line, names[i]);
             //printf ("codec_alloc: %u bytes buf=%u\n", size, i);
             return vb->codec_bufs[i].data;

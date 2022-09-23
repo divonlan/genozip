@@ -187,7 +187,8 @@ void ref_fasta_to_ref (File *file)
                                           NULL);
         
         // wait for child process to finish
-        ASSINP (!stream_wait_for_exit (make_ref), "Failed to make reference file %s. Try making it explicitly with \"genozip --make-reference <fasta-file>\"", ref_filename); 
+        ASSINP (!stream_wait_for_exit (make_ref), "Failed to make reference file %s. Try making it explicitly with \"genozip --make-reference %s\"", 
+                ref_filename, file->name); 
     
         FREE (exec_path);
     }

@@ -191,7 +191,7 @@ static HANDLE stream_exec_child (int *stream_stdout_to_genozip, int *stream_stde
 #else // not Windows
 static pid_t stream_exec_child (int *stream_stdout_to_genozip, int *stream_stderr_to_genozip, int *genozip_to_stream_stdin,
                                 FILE *redirect_stdout_file, FILE *redirect_stdin_pipe, 
-                                unsigned argc, char * const *argv, rom reason)
+                                unsigned argc, char *const *argv, rom reason)
 {
     pid_t child_pid = fork();
  

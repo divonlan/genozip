@@ -77,6 +77,12 @@ static void arch_add_to_windows_path (rom my_argv0)
 } 
 #endif
 
+void arch_set_locale (void)
+{
+    ASSERTW0 (setlocale (LC_ALL,     flag.is_windows ? ""        : "en_US.UTF-8"), "Warning: failed to setlocale of LC_ALL");     // accept and print UTF-8 text 
+    ASSERTW0 (setlocale (LC_NUMERIC, flag.is_windows ? "english" : "en_US.UTF-8"), "Warning: failed to setlocale of LC_NUMERIC"); // printf's %f uses '.' as the decimal separator (not ',')
+}
+
 void arch_initialize (rom argv0)
 {
     // verify CPU architecture and compiler is supported
@@ -110,8 +116,7 @@ void arch_initialize (rom argv0)
     ASSERT0 (bittest.byte == 1, "unsupported bit order in a struct, please use gcc to compile (1)");
     ASSERT0 (bittest.bit_3.a == 1, "unsupported bit order in a struct, please use gcc to compile (2)");
 
-    setlocale (LC_ALL, ""); // accept and print UTF-8 text 
-    setlocale (LC_NUMERIC, "english"); // printf's %f uses '.' as the decimal separator (not ',')
+    arch_set_locale();
 
 #ifdef _WIN32
     _setmode(_fileno(stdin),  _O_BINARY);

@@ -16,8 +16,8 @@
             //"program": "${workspaceFolder}/genounzip.exe",
             //"program": "${workspaceFolder}/genols-debug.exe",
 
-            "args" : ["-ft", "-e", "data/hg19.ref.genozip", "--submit", "private/test/test.novoalign.bam"],
-            
+            "args" : ["-fW", "private/test/test.normal.kraken"],
+                        
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],

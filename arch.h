@@ -11,6 +11,7 @@
 extern void arch_initialize (rom argv0);
 extern unsigned arch_get_num_cores (void);
 extern rom arch_get_endianity (void);
+extern void arch_set_locale (void);
 
 #define ARCH_IP_LEN 16
 extern rom arch_get_ip_addr (rom reason);
