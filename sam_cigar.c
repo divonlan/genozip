@@ -27,7 +27,10 @@
 static const bool cigar_valid_op[256] = { ['M']=true, ['I']=true, ['D']=true, ['N']=true, ['S']=true, ['H']=true, ['P']=true, ['=']=true, ['X']=true }; 
 
 const char cigar_op_to_char[16] = "MIDNSHP=Xabcdefg"; // BAM to SAM (a-g are invalid values)
- 
+
+#ifdef __clang__ 
+#pragma GCC diagnostic ignored "-Winitializer-overrides" // overlapping indices in this array initializer
+#endif
 static const uint8_t cigar_char_to_op[256] = { [0 ... 255]=BC_INVALID, 
                                                ['M']=BC_M, ['I']=BC_I, ['D']=BC_D, ['N']=BC_N, ['S']=BC_S, 
                                                ['H']=BC_H, ['P']=BC_P, ['=']=BC_E, ['X']=BC_X, ['*']=BC_NONE }; 

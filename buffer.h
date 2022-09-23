@@ -303,7 +303,11 @@ static inline unsigned buf_add_hex_as_text (BufferP buf, int64_t n, bool upperca
     } })
 
 #define BUFPRINTF_MAX_LEN 5000
-#define bufprintf(vb, buf, format, ...)  ({ char __s[BUFPRINTF_MAX_LEN]; sprintf (__s, (format), __VA_ARGS__); buf_append_string ((VBlockP)(vb), (buf), __s); })
+#define bufprintf(vb, buf, format, ...)  ({ char __s[BUFPRINTF_MAX_LEN+1]; \
+                                            __s[BUFPRINTF_MAX_LEN] = '#';  /* overflow fence */ \
+                                            sprintf (__s, (format), __VA_ARGS__); \
+                                            ASSERT (__s[BUFPRINTF_MAX_LEN] == '#', "bufprintf: String too long - stack overflow: len=%u", (int)strlen (__s)); \
+                                            buf_append_string ((VBlockP)(vb), (buf), __s); })
 #define bufprint0 buf_append_string  // note: the string isn't a printf format, so escaping works differently (eg % doesn't need to be %%)
 
 extern void buf_print (BufferP buf, bool add_newline);

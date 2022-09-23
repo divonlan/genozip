@@ -209,7 +209,7 @@ extern bool str_scientific_to_decimal (STRp(float_str), STRe(modified), double *
 extern uint32_t str_split_do (STRp(str), uint32_t max_items, char sep, rom *items, uint32_t *item_lens, bool exactly, rom enforce_msg);
 
 #define str_split_enforce(str,str_len,max_items,sep,name,exactly,enforce) \
-    uint32_t n_##name##s = (max_items) ? (max_items) : str_count_char ((str), (str_len), (sep)) + 1; /* 0 if str is NULL */ \
+    uint32_t n_##name##s = (max_items) ? (max_items) : (sep)==0 ? 1 : str_count_char ((str), (str_len), (sep)) + 1; /* 0 if str is NULL */ \
     rom name##s[MAX_(n_##name##s, 1)]; \
     uint32_t name##_lens[MAX_(n_##name##s, 1)]; \
     n_##name##s = str_split_do ((str), (str_len), n_##name##s, (sep), name##s, name##_lens, (exactly), (enforce))

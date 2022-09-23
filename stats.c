@@ -127,9 +127,15 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
     bufprintf (evb, &url_buf, "&entry.621670070=%.1f", all_comp_ratio);                                                        // Genozip gain over source txt eg "5.4"
     bufprintf (evb, &url_buf, "&entry.1635780209=OS=%s%%3Bcores=%u", url_esc_non_valid_charsS(arch_get_os()).s, arch_get_num_cores());  // Environment: OS, # cores, eg:
     bufprintf (evb, &url_buf, "&entry.2140634550=%s", features.len ? url_esc_non_valid_charsS (B1STc(features)).s : "NONE");                                                        // Features. Eg "Sorted"
-    bufprintf (evb, &url_buf, "&entry.282448068=%s",  hash_occ.len ? B1STc(hash_occ) : "NONE");      // Hash ineffeciencies, eg "RNAME,64.0 KB,102%" - each field is quadlet - name, type, hash size, hash occupancy    
-    bufprintf (evb, &url_buf, "&entry.1636005533=%s", internals.len ? B1STc(internals) : "NONE");      // Hash ineffeciencies, eg "RNAME,64.0 KB,102%" - each field is quadlet - name, type, hash size, hash occupancy    
+    
+    // careful not to use bufprintf for hash_occ and internals as their size is not bound
+    buf_append_string (evb, &url_buf, "&entry.282448068=");
+    buf_append_string (evb, &url_buf, hash_occ.len  ? B1STc(hash_occ) : "NONE"); // Hash ineffeciencies, eg "RNAME,64.0 KB,102%" - each field is quadlet - name, type, hash size, hash occupancy    
 
+    buf_append_string (evb, &url_buf, "&entry.1636005533=");
+    buf_append_string (evb, &url_buf, internals.len ? B1STc(internals) : "NONE");
+
+    // fields
     bufprint0 (evb, &url_buf, "&entry.988930848=");      // Compression ratio of individual fields ratio, eg "FORMAT/GT,20%,78;..." - each field is triplet - name, percentage of z_data, compression ratio
     for (uint32_t i=0, need_sep=0; i < num_stats; i++) 
         if (sbl[i].z_size)

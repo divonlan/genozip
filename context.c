@@ -180,7 +180,7 @@ WordIndex ctx_decode_b250 (bytes *b, bool advance, B250Size b250_size, rom ctx_n
         case BASE250_ONE_UP     : RETURN (WORD_INDEX_ONE_UP,  1);
         case BASE250_EMPTY_SF   : RETURN (WORD_INDEX_EMPTY,   1);
         case BASE250_MISSING_SF : RETURN (WORD_INDEX_MISSING, 1);
-        case 0 ... 249 : {
+        default /* 0 ... 249 */ : {
             WordIndex value;
             switch (b250_size) {
                 case B250_BYTES_1: 

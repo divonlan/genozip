@@ -87,10 +87,10 @@
 #pragma GENDICT OPTION_MD_Z=DTYPE_2=MD:Z     // String encoding mismatched and deleted reference bases
 #pragma GENDICT OPTION_MQ_i=DTYPE_2=MQ:i     // Mapping quality of the mate/next segment
 #pragma GENDICT OPTION_NH_i=DTYPE_2=NH:i     // Number of reported alignments that contain the query in the current record
-#pragma GENDICT OPTION_IH_i=DTYPE_2=IH:i     // Query hit total count
+#pragma GENDICT OPTION_IH_i=DTYPE_2=IH:i     // Query hit total count. Novoalign: Number of stored alignments in SAM that contains the query in the current record. Only present if there is more than one alignment reported for the read (i.e. IH <= NH)
 #pragma GENDICT OPTION_HI_i=DTYPE_2=HI:i     // Query hit index (a number [1,NH])
 #pragma GENDICT OPTION_NM_i=DTYPE_2=NM:i     // Edit distance to the reference
-#pragma GENDICT OPTION_PQ_i=DTYPE_2=PQ:i     // Phred likelihood of the template
+#pragma GENDICT OPTION_PQ_i=DTYPE_2=PQ:i     // Phred likelihood of the template. Novoalign: "Phred likelihood of the template, conditional on both the mapping being correct. Only for multi-template reads."
 #pragma GENDICT OPTION_SM_i=DTYPE_2=SM:i     // Template-independent mapping quality
 #pragma GENDICT OPTION_TC_i=DTYPE_2=TC:i     // The number of segments in the template
 #pragma GENDICT OPTION_UQ_i=DTYPE_2=UQ:i     // Phred likelihood of the segment, conditional on the mapping being correct

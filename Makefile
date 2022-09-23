@@ -152,7 +152,7 @@ all   : $(OBJDIR) $(EXECUTABLES)
 debug : CFLAGS += $(DEBUGFLAGS) -DDISTRIBUTION=\"debug\"
 debug : $(OBJDIR) $(DEBUG_EXECUTABLES)
 
-opt   : CFLAGS += -g $(OPTFLAGS) -DDISTRIBUTION=\"opt\"
+opt   : CFLAGS += -g $(OPTFLAGS) -DDEBUG -DDISTRIBUTION=\"opt\"
 opt   : $(OBJDIR) $(OPT_EXECUTABLES)
 
 docker : CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"Docker\"

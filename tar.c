@@ -104,7 +104,7 @@ static void tar_copy_metadata_from_file (rom fn)
 
     if ((uint64_t)st.st_mtime > MAX_TAR_MTIME) {
         WARN_ONCE ("mtime of %s (and perhaps others) is %"PRIu64" - beyond the maximum allowed by the tar file format; recording mtime as 0. --quiet to suppress this message.",
-                   fn, st.st_mtime);
+                   fn, (uint64_t)st.st_mtime/*note: 32 bit on Darwin*/);
         st.st_mtime = 0;
     }
 

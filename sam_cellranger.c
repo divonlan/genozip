@@ -24,7 +24,7 @@
 // CB:Z - "Cell identifier, consisting of the optionally-corrected cellular barcode sequence and an optional suffix"
 // CellRanger format: CB:Z:TCACTATCATGGCTGC-1 
 // STARsolo format: CB:Z:GGTGCGAA_TCCGTCTA_CTAAGGGA
-// Sam spec: multiple components and suffix allows, recommended separator '-'.
+// Sam spec: multiple components and suffix allowed, recommended separator '-'.
 //
 // CR:Z - "Cellular barcode. The uncorrected sequence bases of the cellular barcode as reported by the sequencing machine"
 // Example: CR:Z:GGTGCGAA_TCCGTCTA_CTAAGGGA (note: no suffix, even is CB:Z has one)
@@ -65,7 +65,7 @@ void sam_seg_CB_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(cb), unsigned add_byt
 
     dl->solo_z_fields[SOLO_CB] = TXTWORD(cb);
 
-    if (segconf.running && !segconf.CR_CB_seperator) 
+    if (segconf.running && !segconf.CB_con.repeats) 
         sam_seg_CB_Z_segconf (vb, STRa(cb));
 
     if (sam_is_depn_vb && vb->sag && IS_SAG_SOLO && str_issame_(STRa(cb), STRBw(z_file->solo_data, vb->solo_aln->word[SOLO_CB])))
@@ -73,7 +73,7 @@ void sam_seg_CB_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(cb), unsigned add_byt
 
     else
         sam_seg_buddied_Z_fields (vb, dl, MATED_CB, STRa(cb),  
-                                  segconf.CB_con_snip ? sam_seg_CB_do_seg : (SegBuddiedCallback)0, 
+                                  segconf.CB_con.repeats ? sam_seg_CB_do_seg : (SegBuddiedCallback)0, // careful in case container is not initialized
                                   add_bytes);
 
     COPY_TIMER(sam_seg_CB_Z);

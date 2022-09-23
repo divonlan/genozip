@@ -1445,7 +1445,7 @@ bool file_put_data (rom filename, const void *data, uint64_t len,
     RESTORE_VALUE (errno); // in cases caller wants to print fwrite error
 
     if (written != len) {
-        WARN ("Failed to write %s: wrote only %"PRIu64" bytes of the expected %"PRIu64, tmp_filename, written, len);
+        WARN ("Failed to write %s: wrote only %"PRIu64" bytes of the expected %"PRIu64, tmp_filename, (uint64_t)written, len);
         put_data_tmp_filenames[my_file_i] = NULL; // no need to lock mutex
         remove (tmp_filename);
         return false;

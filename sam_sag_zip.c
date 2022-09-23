@@ -543,13 +543,12 @@ static inline bool sam_sa_seg_depn_get_my_SA_alns (VBlockSAMP vb,
         if (!n_SA_items) return false;
 
         // check syntax
-        int32_t SA_mapq, SA_nm, SA_pos; 
-        if (n_SA_items &&
-            (   !str_get_int_range32 (STRi(SA_item, SA_POS),  0, MAX_SA_POS,  &SA_pos)  ||  // pos
-                !str_get_int_range32 (STRi(SA_item, SA_NM),   0, MAX_SA_NM,   &SA_nm)   ||  // nm
-                !str_get_int_range32 (STRi(SA_item, SA_MAPQ), 0, MAX_SA_MAPQ, &SA_mapq) ||  // mapq
-                SA_item_lens[SA_STRAND] != 1                                            || 
-                (*SA_items[SA_STRAND] != '-' && *SA_items[SA_STRAND] != '+')))              // strand
+        int32_t SA_mapq=0, SA_nm=0, SA_pos=0; 
+        if (!str_get_int_range32 (STRi(SA_item, SA_POS),  0, MAX_SA_POS,  &SA_pos)  ||  // pos
+            !str_get_int_range32 (STRi(SA_item, SA_NM),   0, MAX_SA_NM,   &SA_nm)   ||  // nm
+            !str_get_int_range32 (STRi(SA_item, SA_MAPQ), 0, MAX_SA_MAPQ, &SA_mapq) ||  // mapq
+            SA_item_lens[SA_STRAND] != 1                                            || 
+            (*SA_items[SA_STRAND] != '-' && *SA_items[SA_STRAND] != '+'))               // strand
             return false;
 
         my_alns[aln_i] = (SAAln){

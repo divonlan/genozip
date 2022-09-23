@@ -394,7 +394,7 @@ COMPRESS (codec_domq_compress)
             memcpy (BAFTc(divrqual_ctx->local), ql->qual, ql->qual_len);
             divrqual_ctx->local.len32 += ql->qual_len;
 
-            BNXTc (qualmplx_ctx->local) = 255; 
+            BNXT8 (qualmplx_ctx->local) = 255; 
         }
 
         // case: dominated read
