@@ -669,6 +669,8 @@ int main (int argc, char **argv)
     // When debugging with Visual Studio Code, its debugger wrapper adds 3 args: "2>CON", "1>CON", "<CON". We remove them.
     if (argc >= 4 && !strcmp (argv[argc-1], "<CON")) argc -= 3;
 
+    global_cmd = file_basename (argv[0], true, "(executable)", NULL, 0); // global var
+
     set_exe_type(argv[0]);
     info_stream = stdout; // may be changed during intialization
     profiler_initialize();
@@ -678,8 +680,6 @@ int main (int argc, char **argv)
     threads_initialize(); // requires evb
     random_access_initialize();
     codec_initialize();
-
-    global_cmd = file_basename (argv[0], true, "(executable)", NULL, 0); // global var
 
     flags_init_from_command_line (argc, argv);
     if (exe_type == EXE_GENOZIP && IS_PIZ) exe_type = EXE_GENOUNZIP; // treat "genozip -d" as genounzip

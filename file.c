@@ -43,8 +43,6 @@ DataType last_z_dt = DT_NONE;
 static StreamP input_decompressor = NULL; // bcftools or xz, unzip or samtools - only one at a time
 static StreamP output_compressor  = NULL; // samtools (for cram), bcftools
 
-static FileType stdin_type = UNKNOWN_FILE_TYPE; // set by the --input command line option
-
 // global pointers - so the can be compared eg "if (mode == READ)"
 rom READ      = "rb";  // use binary mode (b) in read and write so Windows doesn't add \r
 rom WRITE     = "wb";
@@ -268,20 +266,20 @@ void file_set_input_type (rom type_str)
     str_tolower (ext, ext); // lower-case to allow case-insensitive --input argument (eg vcf or VCF)
 
     if (!strcmp (ext, ".23andme")) 
-        stdin_type = ME23;
+        flag.stdin_type = ME23;
 
     else if (!strcmp (ext, ".23andme.zip")) 
-        stdin_type = ME23_ZIP;
+        flag.stdin_type = ME23_ZIP;
 
     else if (!strcmp (ext, ".generic"))
-        stdin_type = GNRIC;
+        flag.stdin_type = GNRIC;
 
     else {
-        stdin_type = file_get_type (ext); // we don't enforce 23andMe name format - any .txt or .zip will be considered ME23
-        if (stdin_type == GNRIC) stdin_type = UNKNOWN_FILE_TYPE; // This is an unknown input name - not generic
+        flag.stdin_type = file_get_type (ext); // we don't enforce 23andMe name format - any .txt or .zip will be considered ME23
+        if (flag.stdin_type == GNRIC) flag.stdin_type = UNKNOWN_FILE_TYPE; // This is an unknown input name - not generic
     }
 
-    if (file_get_data_type (stdin_type, true) != DT_NONE) return; // all good 
+    if (file_get_data_type (flag.stdin_type, true) != DT_NONE) return; // all good 
 
     // the user's argument is not an accepted input file type - print error message
     ABORT ("%s: --input (or -i) must be ones of these: %s", global_cmd, file_compressible_extensions(false));
@@ -289,7 +287,7 @@ void file_set_input_type (rom type_str)
     
 FileType file_get_stdin_type (void)
 {
-    return stdin_type;
+    return flag.stdin_type;
 }
 
 static void file_ask_user_to_confirm_overwrite (rom filename)
@@ -411,14 +409,14 @@ static bool file_open_txt_read_test_valid_dt (const File *file)
 static bool file_open_txt_read (File *file)
 {
     // if user provided the type with --input, we use that overriding the type derived from the file name
-    if (stdin_type) file->type = stdin_type;
+    if (flag.stdin_type) file->type = flag.stdin_type;
 
     file->data_type = file_get_data_type (file->type, true);
 
     // show meaningful error if file is not a supported data type
     if (file_open_txt_read_test_valid_dt (file)) return true; // skip this file
 
-    if (file->data_type == DT_GENERIC && !stdin_type && !tar_is_tar()) 
+    if (file->data_type == DT_GENERIC && !flag.stdin_type && !tar_is_tar()) 
         WARN_ONCE ("FYI: genozip doesn't recognize %s file's type, so it will be compressed as GENERIC. In the future, you may specify the type with \"--input <type>\". To suppress this warning, use \"--input generic\".", file->name);
     
     // open the file, based on the codec (as guessed by file extension)
@@ -776,7 +774,8 @@ static void file_initialize_z_file_data (File *file)
 
     file_initialize_bufs (file);
 
-    serializer_initialize (file->digest_serializer); 
+    if (flag.biopsy_line.line_i == NO_LINE) // no need to initialize in --biopsy-line (as destroying it later will error)
+        serializer_initialize (file->digest_serializer); 
 }
 
 static void file_initialize_txt_file_data (File *file)
@@ -791,6 +790,9 @@ static void file_initialize_txt_file_data (File *file)
 
 rom file_get_z_filename (rom txt_filename, DataType dt, FileType txt_ft)
 {
+    if (!txt_filename && (flag.biopsy || flag.biopsy_line.line_i != NO_LINE))
+        txt_filename = "dummy"; // we don't have a txt_filename, but that's ok, because we don't need it
+
     ASSINP0 (txt_filename, "use --output to specify the output filename (with a .genozip extension)");
 
     unsigned dn_len = flag.out_dirname ? strlen (flag.out_dirname) : 0;
@@ -1018,8 +1020,8 @@ File *file_open (rom filename, FileMode mode, FileSupertype supertype, DataType 
         }
     }
     else if (mode==READ) {  // stdin (can only be TXT_FILE, not Z_FILE)
-        file->type = stdin_type; 
-        file->data_type    = file_get_data_type (stdin_type, true);
+        file->type = flag.stdin_type; 
+        file->data_type    = file_get_data_type (flag.stdin_type, true);
         file->codec        = file_get_codec_by_txt_ft (file->data_type, file->type, false);
         file->source_codec = file_get_codec_by_txt_ft (file->data_type, file->type, true);
     }

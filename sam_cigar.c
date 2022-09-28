@@ -565,7 +565,7 @@ void sam_seg_other_CIGAR (VBlockSAMP vb, ContextP ctx, STRp (cigar), bool squank
     // complicated CIGARs are better off in local - anything more than eg 112M39S 
     // note: we set no_stons=true in sam_seg_initialize so we can use local for this rather than singletons
     else if (cigar_len > MAX_CIGAR_LEN_IN_DICT)
-        seg_add_to_local_text (VB, ctx, STRa(cigar), true, add_bytes);
+        seg_add_to_local_text (VB, ctx, STRa(cigar), LOOKUP_SIMPLE, add_bytes);
  
     // short CIGAR
     else 
@@ -753,7 +753,7 @@ void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAM *dl, uint32_t last_cigar_len, 
         cigar_snip_len += last_cigar_len;
 
         if (last_cigar_len > MAX_CIGAR_LEN_IN_DICT) 
-            seg_add_to_local_text (VB, ctx, STRa(cigar_snip), true, add_bytes);
+            seg_add_to_local_text (VB, ctx, STRa(cigar_snip), LOOKUP_SIMPLE, add_bytes);
 
         else 
             seg_by_ctx (VB, STRa(cigar_snip), ctx, add_bytes); 
@@ -816,7 +816,7 @@ void sam_cigar_seg_MC_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(mc), uint32_t a
 
     else if (mc_len > MAX_CIGAR_LEN_IN_DICT) {
         channel_ctx->no_stons = true; 
-        seg_add_to_local_text (VB, channel_ctx, STRa(mc), true, add_bytes);
+        seg_add_to_local_text (VB, channel_ctx, STRa(mc), LOOKUP_SIMPLE, add_bytes);
     }
 
     else 

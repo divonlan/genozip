@@ -166,6 +166,6 @@ ValueType reconstruct_peek_by_dict_id (VBlockP vb, DictId dict_id, pSTRp(txt))
     ContextP ctx = ECTX (dict_id); 
     ASSPIZ (ctx, "context doesn't exist for dict_id=%s", dis_dict_id (dict_id).s);
 
-    return reconstruct_peek (vb, ctx, txt, txt_len);
+    return reconstruct_peek (vb, ctx, STRa(txt));
 }
 

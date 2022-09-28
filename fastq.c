@@ -447,12 +447,8 @@ static void fastq_seg_sequence (VBlockFASTQ *vb, STRp(seq))
                
     // case: aligned - lookup from SQBITMAP
     MappingType aln_res;
-    if (flag.aligner_available && 
-        ((aln_res = aligner_seg_seq (VB, CTX(FASTQ_SQBITMAP), STRa(seq), true, (vb->comp_i == FQ_COMP_R2), pair_gpos, pair_is_forward)))) {
-        
-        SNIPi1 (SNIP_LOOKUP, (aln_res==MAPPING_PERFECT ? -(int64_t)seq_len : (int64_t)seq_len)); // express perfect alignment by passing a negative seq_len 
-        seg_by_ctx (VB, STRa(snip), CTX(FASTQ_SQBITMAP), seq_len); 
-    }
+    if (flag.aligner_available && ((aln_res = aligner_seg_seq (VB, CTX(FASTQ_SQBITMAP), STRa(seq), true, (vb->comp_i == FQ_COMP_R2), pair_gpos, pair_is_forward)))) 
+        seg_lookup_with_length (VB, CTX(FASTQ_SQBITMAP), (aln_res==MAPPING_PERFECT ? -(int32_t)seq_len : (int32_t)seq_len), seq_len);
 
     // case: not aligned - just add data to NONREF
     else {
@@ -750,7 +746,7 @@ void fastq_recon_aligned_SEQ (VBlockP vb_, ContextP bitmap_ctx, STRp(seq_len_str
     bool perfect_alignment = (seq_len_str[0] == '-');
     if (perfect_alignment) { seq_len_str++; seq_len_str_len--; }
 
-    ASSERT (str_get_int_range32 (STRa(seq_len_str), 0, 0x7fffffff, (int32_t*)&vb->seq_len), "could not parse integer \"%.*s\"", STRf(seq_len_str));
+    ASSERT (str_get_int_range32 (STRa(seq_len_str), 0, 0x7fffffff, (int32_t*)&vb->seq_len), "seq_len_str=\"%.*s\" out range [0,0x7fffffff]", STRf(seq_len_str));
 
     // just update coverage
     if (flag.collect_coverage) 

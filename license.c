@@ -337,7 +337,7 @@ void license_register (void)
     
         rec.lic_type = lic_type[0] - '0';
     
-        update = str_query_user_yn ("\nShall we update you by email when new features are added to genozip?", QDEF_YES); 
+        update = true; // str_query_user_yn ("\nShall we update you by email when new features are added to genozip?", QDEF_YES); 
 
         fprintf (stderr, "\n\nPlease read the terms and conditions of the license:\n\n"); 
         license_display(); 

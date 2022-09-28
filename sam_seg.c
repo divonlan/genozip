@@ -64,8 +64,11 @@ void sam_zip_free_end_of_z (void)
 void sam_zip_initialize (void)
 {
     if (flag.reference == REF_INTERNAL && !txt_file->redirected)
-        WARN_ONCE ("Tip: compressing a %s file using a reference file can reduce the compressed file's size by 7%%-20%%.\nUse: \"genozip --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
-                   dt_name (txt_file->data_type), txt_file->name);
+        WARN_ONCE ("Tip: compressing %s %s file using a reference file can reduce the compressed file's size by %s.\nUse: \"genozip --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
+                   segconf.sam_mapper ? "a" : "an unaligned",
+                   dt_name (txt_file->data_type), 
+                   segconf.sam_mapper ? "7%-20%" : "30%",
+                   txt_file->name);
 
     bool has_hdr_contigs = sam_hdr_contigs && sam_hdr_contigs->contigs.len;
 
@@ -77,11 +80,6 @@ void sam_zip_initialize (void)
         ctx_populate_zf_ctx_from_contigs (gref, SAM_RNAME, sam_hdr_contigs);
         ctx_populate_zf_ctx_from_contigs (gref, SAM_RNEXT, sam_hdr_contigs);
     }
-
-    // with REF_EXTERNAL and unaligned data, we don't know which chroms are seen (bc unlike REF_EXT_STORE, we don't use is_set), so
-    // we just copy all reference contigs. this are not needed for decompression, just for --coverage/--sex/--idxstats
-    if (z_file->num_txts_so_far == 1 && flag.aligner_available && IS_REF_EXTERNAL)
-        ctx_populate_zf_ctx_from_contigs (gref, SAM_RNAME, ref_get_ctgs (gref));
 
     seg_prepare_snip_other (SNIP_REDIRECTION, _SAM_TAXID, false, 0, taxid_redirection_snip);
 
@@ -255,6 +253,7 @@ void sam_seg_initialize (VBlockP vb_)
                       OPTION_MD_Z,
                       OPTION_BI_Z, OPTION_BD_Z,                                               // we can't use local for singletons in BD or BI as next_local is used by sam_piz_special_BD_BI to point into BD_BI
                       OPTION_SA_CIGAR, OPTION_XA_CIGAR, OPTION_OA_CIGAR, OPTION_OC_Z,         // we can't use local for singletons bc sam_seg_other_CIGAR manually offloads CIGARs to local
+                      OPTION_QX_Z,
                       SAM_POS, SAM_PNEXT, OPTION_mc_i, OPTION_OP_i, OPTION_Z5_i, OPTION_CP_i, // required by seg_pos_field
                       T(MP(BSSEEKER2), OPTION_XM_Z), T(MP(BSSEEKER2), OPTION_XG_Z),
                       T(MP(BSBOLT), OPTION_XB_Z),
@@ -328,7 +327,7 @@ void sam_seg_initialize (VBlockP vb_)
     ctx_consolidate_stats (VB, SAM_QNAME, SAM_BUDDY, SAM_QNAMESA, DID_EOL);
     ctx_consolidate_stats (VB, OPTION_BD_BI, OPTION_BI_Z, OPTION_BD_Z, DID_EOL);
 
-    if (segconf.has[OPTION_NH_i])
+    if (segconf.has[OPTION_HI_i] && !segconf.has[OPTION_SA_Z])
         ctx_consolidate_stats (VB, OPTION_HI_i, OPTION_SA_Z, DID_EOL);
     else
         ctx_consolidate_stats (VB, OPTION_SA_Z, OPTION_SA_RNAME, OPTION_SA_POS, OPTION_SA_STRAND, OPTION_SA_CIGAR, OPTION_SA_MAPQ, OPTION_SA_NM, OPTION_SA_MAIN, DID_EOL);
@@ -654,6 +653,11 @@ static void sam_seg_finalize_segconf (VBlockP vb)
         refhash_load_standalone();
         flag.aligner_available = true;
     }
+
+    // with REF_EXTERNAL and unaligned data, we don't know which chroms are seen (bc unlike REF_EXT_STORE, we don't use is_set), so
+    // we just copy all reference contigs. this are not needed for decompression, just for --coverage/--sex/--idxstats
+    if (z_file->num_txts_so_far == 1 && flag.aligner_available && IS_REF_EXTERNAL)
+        ctx_populate_zf_ctx_from_contigs (gref, SAM_RNAME, ref_get_ctgs (gref));
 }
 
 void sam_seg_finalize (VBlockP vb)
@@ -877,6 +881,7 @@ void sam_seg_idx_aux (VBlockSAMP vb)
         else TEST_AUX(CC_Z, 'C', 'C', 'Z');
         else TEST_AUX(CP_i, 'C', 'P', 'i');
         else TEST_AUX(ms_i, 'm', 's', 'i');
+        else TEST_AUX(SM_i, 'S', 'M', 'i');
         else TEST_AUX(UB_Z, 'U', 'B', 'Z');
         else TEST_AUX(BX_Z, 'B', 'X', 'Z');
         else TEST_AUX(CB_Z, 'C', 'B', 'Z');

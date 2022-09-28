@@ -129,7 +129,7 @@ void serializer_initialize_do (SerializerP ser, rom name, rom func)
 
 void serializer_destroy_do (SerializerP ser, rom func)
 {
-    ASSERT (ser->initialized, "called from %s: serializer not initiatlized", func);
+    if (!ser->initialized) return; // nothing to do
 
     buf_destroy (ser->skips);
     mutex_destroy_do ((MutexP)ser, func);

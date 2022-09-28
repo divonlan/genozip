@@ -919,8 +919,8 @@ void zfile_write_txt_header (BufferP txt_header,
     z_file->disk_so_far += txt_header_buf.len;   // length of GENOZIP data writen to disk
     z_file->disk_so_far_comp[comp_i] += txt_header_buf.len;
 
-    // VCF note: we don't account for DVCF rejects files - the added header lines are duplicates of the main header
-    if (!z_is_dvcf || comp_i == VCF_COMP_MAIN) {        
+    // VCF note: we don't account for DVCF rejects components - the added header lines are duplicates of the main header
+    if (!Z_DT(VCF) || comp_i == VCF_COMP_MAIN) {        
         z_file->txt_data_so_far_single   += txt_header->len; // length of txt header as it would be reconstructed (possibly afer modifications)
         z_file->txt_data_so_far_bind     += txt_header->len;
         z_file->txt_data_so_far_single_0 += unmodified_txt_header_len; // length of the original txt header as read from the file

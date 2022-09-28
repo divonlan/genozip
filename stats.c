@@ -95,12 +95,14 @@ static void stats_submit_calc_large_stats (StatsByLine *sbl, unsigned num_stats,
 static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt_len, 
                           float src_comp_ratio, float all_comp_ratio)
 {
-    // run submission in a separate process to not stall the main process 
+    if (all_txt_len < 65536) goto done; // don't bother for really small files
+
 #ifndef _WIN32
+    // run submission in a separate process to not stall the main process 
     fflush ((FILE *)z_file->file); // flush before fork, otherwise both processes will have z_file I/O buffers...
 
     pid_t child_pid = fork();
-    if (child_pid) return; // parent returns
+    if (child_pid) goto done; // parent returns
 #endif
 
     static Buffer url_buf={};
@@ -119,14 +121,14 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
 
     arch_set_locale(); // in case not inherited from parent process
     bufprint0 (evb, &url_buf, "https://docs.google.com/forms/d/e/1FAIpQLSdc997k63YnW4fRxnQOHRqngCT_6_fIhrBQZgTXPTgrPCpe_w/formResponse"); // the ID is in the url when previewing the form
-    bufprintf (evb, &url_buf, "?entry.1917122099=%s", GENOZIP_CODE_VERSION);                                                   // Genozip version Eg "14.0.0"
-    bufprintf (evb, &url_buf, "&entry.1014872627=%u", license_get_number());                                                   // license #. Eg "32412351324"
-    bufprintf (evb, &url_buf, "&entry.1861722167=%s", url_esc_non_valid_chars (arch_get_user_host()));                         // user@host. Eg "john@hpc"
-    bufprintf (evb, &url_buf, "&entry.441046403=%s", dt_name (z_file->data_type));                                             // data type. Eg "VCF"
-    bufprintf (evb, &url_buf, "&entry.984213484=%s", url_esc_non_valid_charsS (str_size (all_txt_len).s).s);                   // Txt size (original file size), eg "6.2 GB"
-    bufprintf (evb, &url_buf, "&entry.960659059=%s%%2C%.1f", codec_name (txt_file->codec), src_comp_ratio);                    // Source codec/gain eg "GZ/4.3"
-    bufprintf (evb, &url_buf, "&entry.621670070=%.1f", all_comp_ratio);                                                        // Genozip gain over source txt eg "5.4"
-    bufprintf (evb, &url_buf, "&entry.1635780209=OS=%s%%3Bcores=%u", url_esc_non_valid_charsS(arch_get_os()).s, arch_get_num_cores());  // Environment: OS, # cores, eg:
+    bufprintf (evb, &url_buf, "?entry.1917122099=%s", GENOZIP_CODE_VERSION);                                 // Genozip version Eg "14.0.0"
+    bufprintf (evb, &url_buf, "&entry.1014872627=%u", license_get_number());                                 // license #. Eg "32412351324"
+    bufprintf (evb, &url_buf, "&entry.1861722167=%s", url_esc_non_valid_chars (arch_get_user_host()));       // user@host. Eg "john@hpc"
+    bufprintf (evb, &url_buf, "&entry.441046403=%s", dt_name (z_file->data_type));                           // data type. Eg "VCF"
+    bufprintf (evb, &url_buf, "&entry.984213484=%s", url_esc_non_valid_charsS (str_size (all_txt_len).s).s); // Txt size (original file size), eg "6.2 GB"
+    bufprintf (evb, &url_buf, "&entry.960659059=%s%%2C%.1f", codec_name (txt_file->codec), src_comp_ratio);  // Source codec/gain eg "GZ,4.3"
+    bufprintf (evb, &url_buf, "&entry.621670070=%.1f", all_comp_ratio);                                      // Genozip gain over source txt eg "5.4"
+    bufprintf (evb, &url_buf, "&entry.1635780209=OS=%s%%3Bdist=%s%%3Bcores=%u", url_esc_non_valid_charsS(arch_get_os()).s, url_esc_non_valid_charsS(arch_get_distribution()).s, arch_get_num_cores());  // Environment: OS, # cores, eg:
     bufprintf (evb, &url_buf, "&entry.2140634550=%s", features.len ? url_esc_non_valid_charsS (B1STc(features)).s : "NONE");                                                        // Features. Eg "Sorted"
     
     // careful not to use bufprintf for hash_occ and internals as their size is not bound
@@ -152,7 +154,7 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
     F(optimize_VQSLOD) ; F(optimize_ZM) ; F(optimize_sort) ; F(GL_to_PL) ; F(GP_to_PP) ;
     F(add_line_numbers) ; F(sort) ; F(unsorted) ; F(md5) ; F(subdirs) ; F(out_filename) ;
     F(replace) ; F(force) ; F(stdin_size) ; F(test) ; F(match_chrom_to_reference) ;
-    F(reading_chain); F(reading_kraken) ; F(make_reference) ; F(dvcf_rename) ; F(dvcf_drop) ;
+    F(make_reference) ; F(dvcf_rename) ; F(dvcf_drop) ;
     F(show_lift) ; F(pair) ; F(multiseq) ; F(files_from) ; F(no_gencomp) ; F(force_gencomp) ; 
     F(debug_lines) ; F(show_sag) ; F(show_depn) ; F(no_domqual) ; F(show_aligner) ; F(show_qual) ;
     F(show_stats) ; F(show_threads) ; F(debug_threads) ; F(show_vblocks) ; F(show_codec) ;
@@ -167,6 +169,8 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
     #undef F
 
     if (flag.reference)                bufprintf (evb, &url_buf, "reference=%s%%3B", ref_type_name());    
+    if (kraken_is_loaded)              bufprint0 (evb, &url_buf, "kraken%3B");    
+    if (chain_is_loaded)               bufprint0 (evb, &url_buf, "chain%3B");    
     if (crypt_have_password())         bufprint0 (evb, &url_buf, "encrypted%3B");    
     if (tar_is_tar())                  bufprint0 (evb, &url_buf, "tar%3B");    
     if (flag.kraken_taxid!=TAXID_NONE) bufprint0 (evb, &url_buf, "taxid%3B");    
@@ -178,6 +182,7 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
     exit(0); // child process is done
 #endif
 
+done:
     // note: we leak the (small amount of) memory allocated by url_esc_non_valid_chars()
     buf_free (url_buf);    
     buf_free (hash_occ);    
@@ -239,7 +244,8 @@ static void stats_output_file_metadata (void)
     bufprintf (evb, &features, "VBs=%u X %s;", z_file->num_vbs, str_size (segconf.vb_size).s);
     bufprintf (evb, &features, "num_lines=%"PRIu64";", z_file->num_lines);
     if (Z_DT(SAM) || Z_DT(BAM)) bufprintf (evb, &features, "num_hdr_contigs=%u;", sam_num_header_contigs());
-    
+    if (Z_DT(VCF))              bufprintf (evb, &features, "num_samples=%u;", vcf_header_get_num_samples());
+
     bufprint0 (evb, &stats, "\n\n");
     if (txt_file->name) 
         bufprintf (evb, &stats, "%s file%s%s: %.*s\n", dt_name (z_file->data_type), 
@@ -600,9 +606,9 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
 
         // parent
         s->type  = zctx->dict_id.num                 == _SAM_SQBITMAP ? "SEQUENCE"
-                 : zctx->st_did_i == DID_NONE                       ? zctx->tag_name
+                 : zctx->st_did_i == DID_NONE                         ? zctx->tag_name
                  : ZCTX(zctx->st_did_i)->dict_id.num == _SAM_SQBITMAP ? "SEQUENCE"
-                 :                                                     ZCTX(zctx->st_did_i)->tag_name;
+                 :                                                      ZCTX(zctx->st_did_i)->tag_name;
 
         // note: each VB contributes local.len contains its b250.count if it has it, and local_num_len if not 
         float n_words = zctx->local.len;
@@ -626,8 +632,6 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
         s->bcodec               = codec_name (zctx->bcodec);
         s->lcodec               = codec_name (zctx->lcodec_non_inherited ? zctx->lcodec_non_inherited : zctx->lcodec);
         
-        // zctx->b250.count = zctx->dict.count = zctx->local.count = zctx->txt_len = 0; // reset
-
         s++; // increment only if it has some data, otherwise already continued
     }
 
@@ -669,7 +673,8 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     
     stats_consolidate_non_ctx (sbl, num_stats, "RandomAccessIndex", 2, ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_REF_RAND_ACC));
     
-    ASSERTW (all_txt_len == txt_size || flag.make_reference, // all_txt_len=0 in make-ref as there are no contexts
+    ASSERTW (all_txt_len == txt_size || flag.make_reference || // all_txt_len=0 in make-ref as there are no contexts
+             z_is_dvcf, // temporarily remove DVCF - our header data accounting is wrong (bug 681)
              "Expecting all_txt_len=%"PRId64" == txt_size=%"PRId64, all_txt_len, txt_size);
 
     // short form stats from --stats    
@@ -692,7 +697,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     // note: we use txt_data_so_far_bind is the sum of recon_sizes - see zip_update_txt_counters - which is
     // expected to be the sum of txt_len. However, this NOT the size of the original file which is stored in
     // z_file->txt_data_so_far_bind_0.
-    ASSERTW (flag.show_stats_comp_i != COMP_NONE || all_txt_len == txt_size || flag.data_modified || flag.make_reference, 
+    ASSERTW (flag.show_stats_comp_i != COMP_NONE || all_txt_len == txt_size || flag.data_modified || z_is_dvcf || flag.make_reference, 
              "Hmm... incorrect calculation for %s sizes: total section sizes=%s but file size is %s (diff=%d)", 
              dt_name (z_file->data_type), str_int_commas (all_txt_len).s, str_int_commas (txt_size).s, 
              (int32_t)(txt_size - all_txt_len)); 

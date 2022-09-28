@@ -203,7 +203,6 @@ IS_SKIP (sam_piz_is_skip_section)
         case _OPTION_MQ_i  : SKIPIFF (preproc || ((cov || cnt) && !flag.bases && !flag.sam_mapq_filter));
         case _SAM_PNEXT    : case _SAM_P0NEXT : case _SAM_P1NEXT : case _SAM_P2NEXT : case _SAM_P3NEXT : 
         case _SAM_POS      : SKIPIFF ((preproc && IS_SAG_SA) || (cnt && !flag.regions && !flag.bases));
-        case _SAM_TAXID    : SKIPIFF (preproc || flag.kraken_taxid == TAXID_NONE);
         case _SAM_TOPLEVEL : SKIPIFF (preproc || flag.out_dt == DT_BAM || flag.out_dt == DT_FASTQ);
         case _SAM_TOP2BAM  : SKIPIFF (preproc || flag.out_dt == DT_SAM || flag.out_dt == DT_FASTQ);
         case _SAM_TOP2FQ   : SKIPIFF (preproc || flag.out_dt == DT_SAM || flag.out_dt == DT_BAM || flag.extended_translation);

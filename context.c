@@ -349,7 +349,7 @@ static WordIndex ctx_commit_node (VBlockP vb, ContextP zctx, ContextP vctx, STRp
     // instead of the singleton node (which is guaranteed to be non-singleton, and hence >= 0)
     // note: local is dedicated to singletons and contains nothing else, since inst.no_stons is not set
     if (node_index < 0) {
-        seg_add_to_local_fixed_do (vb, vctx, STRa(snip), true, false, true, 0); 
+        seg_add_to_local_fixed_do (vb, vctx, STRa(snip), true, LOOKUP_NONE, true, 0); 
 
         if (HAS_DEBUG_SEG(vctx)) {
             char printable_snip[snip_len+20];

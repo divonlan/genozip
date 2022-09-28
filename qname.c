@@ -410,7 +410,7 @@ bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, QnameFlavor qfs, STRp(qname),
                 seg_numeric_or_not (vb, item_ctx, STRi(item, item_i), item->separator[1], item_lens[item_i]);
 
             else 
-                seg_add_to_local_text (vb, item_ctx, STRi(item, item_i), true, item_lens[item_i]);
+                seg_add_to_local_text (vb, item_ctx, STRi(item, item_i), LOOKUP_SIMPLE, item_lens[item_i]);
         }
 
         // TO DO - add field xor_diff allowing specifying xor_diff method (if we find a case where its useful)

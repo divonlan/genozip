@@ -412,8 +412,17 @@ bool kraken_piz_initialize (void)
 static ASCENDING_SORTER (kraken_qname_nodes_cmp, QnameNode, hash)
 
 // Get reference file name from FASTA name, and if reference file does not exist, run a separate process to --make-reference
-static void kraken_get_genozip_file (FileType ft)
+static void kraken_get_genozip_file (void)
 {
+    FileType ft = file_get_type (flag.reading_kraken);
+    if      (ft == GNRIC)     ft = KRAKEN;
+    else if (ft == GNRIC_GZ)  ft = KRAKEN_GZ;
+    else if (ft == GNRIC_BZ2) ft = KRAKEN_BZ2;
+    else if (ft == GNRIC_XZ)  ft = KRAKEN_XZ;
+    
+    ASSINP (ft == KRAKEN || ft == KRAKEN_GZ || ft == KRAKEN_BZ2 || ft == KRAKEN_XZ,
+            "%s option expects its argument to be Kraken file (judging by its name, %s is not)", OT("kraken", "K"), flag.reading_kraken);
+
     rom z_filename = file_get_z_filename (flag.reading_kraken, DT_KRAKEN, ft);
 
     // if file reference doesn't exist yet - --make-reference now, in a separate process
@@ -425,6 +434,7 @@ static void kraken_get_genozip_file (FileType ft)
 
         StreamP generate = stream_create (NULL, 0, 0, 0, 0, 0, 0, "Generating kraken",
                                           exec_path, flag.reading_kraken, 
+                                          "--input", "kraken", "--no-tip",
                                           flag.submit_stats ? "--submit"  : SKIP_ARG,
                                           flag.no_test      ? "--no-test" : SKIP_ARG,
                                           NULL);
@@ -447,18 +457,17 @@ void kraken_load (void)
     SAVE_FLAGS_AUX;
 
     flag.maybe_vb_modified_by_reconstructor = true;    // we drop the lines not matching --taxid
-    flag.data_modified    = true;    // the reconstructed kraken file is not the same as the original...
+    flag.data_modified = true;       // the reconstructed kraken file is not the same as the original...
     flag.no_writer = flag.no_writer_thread = true;
     flag.genocat_no_reconstruct = false;
     flag.genocat_global_area_only = false;
-    flag.out_dt           = DT_NONE; // needed for dt_get_translation to find the translation defined in TRANSLATIONS
-    flag.reference        = REF_NONE;
+    flag.out_dt = DT_NONE; // needed for dt_get_translation to find the translation defined in TRANSLATIONS
+    flag.reference = REF_NONE;
     TEMP_VALUE (command, PIZ);
 
     // if its uncompressed kraken - compress it now, if needed
-    FileType ft = file_get_type (flag.reading_kraken);
-    if (file_get_data_type (ft, true) == DT_KRAKEN && ft != KRAKEN_GENOZIP)
-        kraken_get_genozip_file (ft);
+    if (!file_has_ext (flag.reading_kraken, ".genozip")) // note: we don't test FileType, to allow kraken flexibility on file name as there is no standard extension
+        kraken_get_genozip_file();
 
     z_file = file_open (flag.reading_kraken, READ, Z_FILE, DT_KRAKEN);    
     zfile_read_genozip_header (0);

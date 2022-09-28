@@ -450,7 +450,7 @@ static void sam_seg_SM_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t SM, unsigne
     else 
         seg_integer_as_text_do (VB, ctx, SM, add_bytes); 
 
-    dl->SM = SM;
+    ctx_set_last_value (VB, ctx, SM);
 }    
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_SM)
@@ -475,34 +475,45 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_SM)
 // ----------------------------------------------------------------------------------------------------------
 static void sam_seg_AM_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t AM, unsigned add_bytes)
 {
-    ContextP ctx = CTX(OPTION_AM_i);
+    ContextP am_ctx = CTX(OPTION_AM_i);
+    ContextP sm_ctx = CTX(OPTION_SM_i);
 
     // note: currently we only support for this algorithm AM appearing after SM. Easily fixable if ever needed.
     // AM is often one of 3 options: 0, =SM =MAPQ-SM. If SM=0 then AM is expected to be 0.
-    if (segconf.has[OPTION_SM_i] && 
+    if (has_SM && 
         AM >= 0 && AM <= 255 &&   // valid value
-        AM != 253 && AM != 254 && // note: 253,254 are valid, but highly improbable values
-        !(!dl->SM && AM)) {       // usually, AM=0 if SM=0
-        
-        if (dl->SM) { // no need to store if SM=0, as we know AM=0
-            uint8_t AM8 = (AM == dl->SM)                  ? 253 // copy SM (note: AM is not 0, since SM is not 0)
-                        : (AM && AM == dl->MAPQ - dl->SM) ? 254 // note subtelty: substraction in uint8_t arithmetics. we are careful to do the same in sam_piz_special_AM.
-                        :                                   AM;
+        AM != 253 && AM != 254) { // note: 253,254 are valid, but highly improbable values
 
-            seg_integer_fixed (VB, ctx, &AM8, false, 0);
+        int32_t SM;
+        if (ctx_has_value_in_line_(VB, sm_ctx)) {
+            if (sm_ctx->last_value.i < 0 || sm_ctx->last_value.i > 255) goto fallback; // not a valid mapping quality value (test 64 bit variable before truncating to 32 bit)
+            SM = sm_ctx->last_value.i;
+        }
+        else
+            if (!sam_seg_get_aux_int (vb, vb->idx_SM_i, &SM, IS_BAM_ZIP, 0, 255, true)) goto fallback;
+
+        if (!SM && AM) goto fallback; // usually, AM=0 if SM=0
+        
+        if (SM) { // no need to store if SM=0, as we know AM=0
+            uint8_t AM8 = (AM == SM)                  ? 253 // copy SM (note: AM is not 0, since SM is not 0)
+                        : (AM && AM == dl->MAPQ - SM) ? 254 // note subtelty: substraction in uint8_t arithmetics. we are careful to do the same in sam_piz_special_AM.
+                        :                               AM;
+
+            seg_integer_fixed (VB, am_ctx, &AM8, false, 0);
         }
         
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_AM }, 2, ctx, add_bytes);
+        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_AM }, 2, am_ctx, add_bytes);
     }
 
-    else  
-        seg_integer_as_text_do (VB, ctx, AM, add_bytes);    
+    else fallback:
+        seg_integer_as_text_do (VB, am_ctx, AM, add_bytes);    
 }    
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_AM)
 {
     uint8_t MAPQ = CTX(SAM_MAPQ)->last_value.i;
-    uint8_t SM   = CTX(OPTION_SM_i)->last_value.i;
+
+    uint8_t SM = reconstruct_peek (vb, CTX(OPTION_SM_i), 0, 0).i;
 
     if (!SM)
         new_value->i = 0;
@@ -1208,11 +1219,11 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
 
         case _OPTION_CR_Z: sam_seg_CR_Z (vb, dl, STRa(value), add_bytes); break;
         case _OPTION_CB_Z: sam_seg_CB_Z (vb, dl, STRa(value), add_bytes); break;
-        case _OPTION_UR_Z: // alias of RX
+        case _OPTION_UR_Z: // alias of RX (cellranger)
         case _OPTION_RX_Z: sam_seg_RX_Z (vb, dl, STRa(value), add_bytes); break;
-        case _OPTION_UB_Z: // alias of BX
+        case _OPTION_UB_Z: // alias of BX (cellranger)
         case _OPTION_BX_Z: sam_seg_BX_Z (vb, dl, STRa(value), add_bytes); break;
-        case _OPTION_UY_Z: // alias of QX
+        case _OPTION_UY_Z: // alias of QX (cellranger)
         case _OPTION_QX_Z: sam_seg_QX_Z (vb, dl, STRa(value), add_bytes); break;
         case _OPTION_BC_Z: sam_seg_BC_Z (vb, dl, STRa(value), add_bytes); break;
 
@@ -1300,8 +1311,8 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
 
         case _OPTION_ZM_B_s: COND (MP(TMAP) && flag.optimize_ZM, sam_seg_array_field (vb, _OPTION_ZM_B_s, array_subtype, STRa(value), sam_optimize_TMAP_ZM, 0));
 
-        case _OPTION_YH_Z: COND (MP(NOVOALIGN), seg_add_to_local_text (VB, CTX(OPTION_YH_Z), STRa(value), false, add_bytes)); break;
-        case _OPTION_YQ_Z: COND (MP(NOVOALIGN), seg_add_to_local_text (VB, CTX(OPTION_YQ_Z), STRa(value), false, add_bytes)); break;
+        case _OPTION_YH_Z: COND (MP(NOVOALIGN), seg_add_to_local_text (VB, CTX(OPTION_YH_Z), STRa(value), LOOKUP_NONE, add_bytes)); break;
+        case _OPTION_YQ_Z: COND (MP(NOVOALIGN), seg_add_to_local_text (VB, CTX(OPTION_YQ_Z), STRa(value), LOOKUP_NONE, add_bytes)); break;
 
         case _OPTION_qs_i: COND (segconf.tech == TECH_PACBIO, sam_seg_SEQ_END (vb, dl, CTX(OPTION_qs_i), numeric.i, "0+00", add_bytes));
         case _OPTION_qe_i: COND (segconf.tech == TECH_PACBIO, sam_seg_SEQ_END (vb, dl, CTX(OPTION_qe_i), numeric.i, "++00", add_bytes));

@@ -113,6 +113,12 @@ void seg_simple_lookup (VBlockP vb, ContextP ctx, unsigned add_bytes)
     seg_by_ctx (VB, (char[]){ SNIP_LOOKUP }, 1, ctx, add_bytes);
 }
 
+void seg_lookup_with_length (VBlockP vb, ContextP ctx, int32_t length/*can be negative*/, unsigned add_bytes)
+{
+    SNIPi1 (SNIP_LOOKUP, length);
+    seg_by_ctx (VB, STRa(snip), ctx, add_bytes);
+}
+
 rom seg_get_next_item (void *vb_, rom str, int *str_len, 
                                GetNextAllow newline, GetNextAllow tab, GetNextAllow space,
                                unsigned *len, char *separator, 
@@ -910,7 +916,7 @@ bool seg_by_container (VBlockP vb, ContextP ctx, ContainerP con, STRp(value),
 }
 
 
-void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, STRp(data), bool add_nul, bool with_lookup, bool is_singleton, unsigned add_bytes) 
+void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, STRp(data), bool add_nul, Lookup lookup_type, bool is_singleton, unsigned add_bytes) 
 {
 #ifdef DEBUG
     ASSERT (is_singleton || ctx->no_stons || ctx->ltype != LT_TEXT, "ctx %s requires no_stons or should have an ltype other than LT_TEXT", ctx->tag_name);
@@ -923,8 +929,11 @@ void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, STRp(data), bool add_n
     if (add_bytes) ctx->txt_len += add_bytes;
     ctx->local_num_words++;
 
-    if (with_lookup)     
-        seg_by_ctx (vb, (char[]){ SNIP_LOOKUP }, 1, ctx, 0);
+    if (lookup_type == LOOKUP_SIMPLE) 
+        seg_simple_lookup (vb, ctx, 0);
+
+    else if (lookup_type == LOOKUP_WITH_LENGTH) 
+        seg_lookup_with_length (vb, ctx, data_len, 0);
 }
 
 

@@ -204,10 +204,10 @@ static void sam_seg_QUAL_diff (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual),
 
     // add flanks (regions that could not be diffed) to SAM_QUAL_FLANK.local
     if (flank[0]) 
-        seg_add_to_local_fixed (VB, CTX(SAM_QUAL_FLANK), qual, flank[0]);
+        seg_add_to_local_fixed (VB, CTX(SAM_QUAL_FLANK), qual, flank[0], LOOKUP_NONE, 0);
 
     if (flank[1])
-        seg_add_to_local_fixed (VB, CTX(SAM_QUAL_FLANK), &qual[qual_len - flank[1]], flank[1]);
+        seg_add_to_local_fixed (VB, CTX(SAM_QUAL_FLANK), &qual[qual_len - flank[1]], flank[1], LOOKUP_NONE, 0);
 }
 
 void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual_data)/*always textual*/, unsigned add_bytes)
@@ -301,10 +301,8 @@ void sam_seg_other_qual (VBlockSAMP vb, TxtWord *dl_word, Did did_i, STRp(qual),
     CTX(did_i)->local.len32 += qual_len;
     CTX(did_i)->txt_len     += add_bytes;
 
-    if (!len_is_seq_len) {
-        SNIPi1 (SNIP_LOOKUP, qual_len);
-        seg_by_did (VB, STRa(snip), did_i, 0);
-    }
+    if (!len_is_seq_len) 
+        seg_lookup_with_length (VB, CTX(did_i), qual_len, 0);
 }
 
 //---------

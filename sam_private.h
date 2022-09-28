@@ -163,7 +163,7 @@ typedef struct {
     SamNMType NM;                  // value of NM:i and its length
     SamFlags FLAG; 
     uint8_t NM_len;                
-    uint8_t MAPQ, MQ, SM;          // MAPQ is 8 bit by BAM specification, and MQ is mate MAPQ by SAMtags specification
+    uint8_t MAPQ, MQ;              // MAPQ is 8 bit by BAM specification, and MQ is mate MAPQ by SAMtags specification
     bool no_seq             : 1;   // SEQ is missing for this line
     bool no_qual            : 1;   // QUAL is missing this line
     bool dont_compress_QUAL : 1;   // don't compress QUAL in this line
@@ -199,7 +199,8 @@ typedef struct VBlockSAM {
 
     // Seg: 0-based index into AUX fields, -1 means field is not present in this line
     #define first_idx idx_NM_i
-    int16_t idx_NM_i, idx_MD_Z, idx_SA_Z, idx_XG_Z, idx_NH_i, idx_HI_i, idx_X0_i, idx_X1_i, idx_XA_Z, idx_AS_i, idx_CC_Z, idx_CP_i, idx_ms_i, 
+    int16_t idx_NM_i, idx_MD_Z, idx_SA_Z, idx_XG_Z, idx_NH_i, idx_HI_i, idx_X0_i, idx_X1_i, idx_XA_Z, idx_AS_i, 
+            idx_CC_Z, idx_CP_i, idx_ms_i, idx_SM_i,
             idx_UB_Z, idx_BX_Z, idx_CB_Z, idx_GX_Z, idx_CR_Z, idx_CY_Z,
             idx_XO_Z, idx_YS_Z, idx_XB_A, idx_XM_Z, idx_XB_Z;
     #define has_NM (vb->idx_NM_i != -1)
@@ -216,6 +217,7 @@ typedef struct VBlockSAM {
     #define has_CC (vb->idx_CC_Z != -1)
     #define has_CP (vb->idx_CP_i != -1)
     #define has_ms (vb->idx_ms_i != -1)
+    #define has_SM (vb->idx_SM_i != -1)
     #define has_UB (vb->idx_UB_Z != -1)
     #define has_BX (vb->idx_BX_Z != -1)
     #define has_CB (vb->idx_CB_Z != -1)

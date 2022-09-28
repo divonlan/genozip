@@ -3,13 +3,21 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
-14.0.7 23/Sep/2022
+14.0.8
+- SAM: better compression of uBAM (unaligned BAM)
+- VCF: better compression of INFO/MLEAC
 - Bug fixes
+
+14.0.7 23/Sep/2022
+- Allow kraken files to be specified as plain files in addition to genozipped files
+- Bug fixes
+- New option: --no-tip
 
 14.0.6 23/Sep/2022
 - Bug fixes
 
 14.0.5 22/Sep/2022
+- Allow reference files to be specified as FASTA in addition to ref.genozip
 - Bug fixes
 
 14.0.4 15/Sep/2022

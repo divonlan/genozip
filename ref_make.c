@@ -184,7 +184,7 @@ void ref_fasta_to_ref (File *file)
         StreamP make_ref = stream_create (NULL, 0, 0, 0, 0, 0, 0, "Make reference",
                                           exec_path, "--make-reference", file->name, 
                                           flag.submit_stats ? "--submit" : SKIP_ARG,
-                                          NULL);
+                                          "--no-tip", NULL);
         
         // wait for child process to finish
         ASSINP (!stream_wait_for_exit (make_ref), "Failed to make reference file %s. Try making it explicitly with \"genozip --make-reference %s\"", 

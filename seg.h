@@ -41,6 +41,8 @@ extern WordIndex seg_integer_as_text_do (VBlockP vb, ContextP ctx, int64_t n, un
 extern WordIndex seg_self_delta (VBlockP vb, ContextP ctx, int64_t value, char format, uint32_t add_bytes);
 
 extern void seg_simple_lookup (VBlockP vb, ContextP ctx, unsigned add_bytes);
+extern void seg_lookup_with_length (VBlockP vb, ContextP ctx, int32_t length, unsigned add_bytes);
+
 extern bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsigned add_bytes); // segs integer in local if possible
 extern bool seg_integer_or_not_cb (VBlockP vb, ContextP ctx, STRp(int_str), uint32_t repeat);
 extern bool seg_float_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsigned add_bytes);
@@ -61,18 +63,19 @@ extern void seg_id_field_do (VBlockP vb, ContextP ctx, STRp(id_snip));
     do { seg_id_field_do(VB, (ctx), (id_snip), (id_snip_len)); (ctx)->txt_len += !!(account_for_separator); } while(0)
 extern bool seg_id_field_cb (VBlockP vb, ContextP ctx, STRp(id_snip), uint32_t repeat);
 
-extern void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, STRp(data), bool add_nul, bool with_lookup, bool is_singleton, unsigned add_bytes);
+typedef enum { LOOKUP_NONE, LOOKUP_SIMPLE, LOOKUP_WITH_LENGTH } Lookup;
+extern void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, STRp(data), bool add_nul, Lookup lookup_type, bool is_singleton, unsigned add_bytes);
 
-static inline void seg_add_to_local_text (VBlockP vb, ContextP ctx, STRp(snip), bool with_lookup, unsigned add_bytes) 
+static inline void seg_add_to_local_text (VBlockP vb, ContextP ctx, STRp(snip), Lookup lookup_type, unsigned add_bytes) 
 { 
 #ifdef DEBUG
     ASSERT (segconf.running || ctx->no_stons, "%s: Expecting ctx->no_stons=true in ctx=%s", LN_NAME, ctx->tag_name);
 #endif
-    seg_add_to_local_fixed_do (vb, ctx, STRa(snip), true, with_lookup, false, add_bytes); 
+    seg_add_to_local_fixed_do (vb, ctx, STRa(snip), lookup_type != LOOKUP_WITH_LENGTH, lookup_type, false, add_bytes); 
 }
 
-static inline void seg_add_to_local_fixed (VBlockP vb, ContextP ctx, STRp(data))
-    { seg_add_to_local_fixed_do (vb, ctx, STRa(data), false, false, false, 0); }
+static inline void seg_add_to_local_fixed (VBlockP vb, ContextP ctx, STRp(data), Lookup lookup_type, unsigned add_bytes)
+    { seg_add_to_local_fixed_do (vb, ctx, STRa(data), false, lookup_type, false, add_bytes); }
 
 extern void seg_integer_fixed (VBlockP vb, Context *ctx, void *number, bool with_lookup, unsigned add_bytes);
 

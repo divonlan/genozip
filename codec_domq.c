@@ -88,8 +88,8 @@ static bool codec_domq_qual_data_is_a_fit_for_domq (VBlockP vb, ContextP qual_ct
 #   define MINIMUM_PERCENT_DOM_PER_LINE   50 // a lower bar for testing - we just need to see that this file is of the time of doms, even if these few reads would be "diversity"
 #   define MINIMUM_PERCENT_LINES_WITH_DOM 50
 
-    uint32_t num_sampled_lines  = get_line_cb ? MIN_(NUM_LINES_IN_SAMPLE, vb->lines.len32) : 1;
-    uint32_t sampled_one_line   = DOMQUAL_SAMPLE_LEN / MAX_(1,num_sampled_lines);
+    uint32_t num_sampled_lines = get_line_cb ? MIN_(NUM_LINES_IN_SAMPLE, vb->lines.len32) : 1;
+    uint32_t sampled_one_line  = DOMQUAL_SAMPLE_LEN / MAX_(1,num_sampled_lines);
     uint32_t num_tested_lines=0, num_lines_with_dom=0;
 
     for (LineIType line_i=0; line_i < num_sampled_lines; line_i++) {   
@@ -381,7 +381,6 @@ COMPRESS (codec_domq_compress)
 
     uint32_t runlen = 0;
     
-    // for_buf (QualLine, ql, ql_buf) {
     for_buf2 (QualLine, ql, line_i, ql_buf) {
 
         // case: qual line should not be compressed. Might happen eg in a SAM DEPN component - line segged against SA Group
@@ -397,7 +396,7 @@ COMPRESS (codec_domq_compress)
             BNXT8 (qualmplx_ctx->local) = 255; 
         }
 
-        // case: dominated read
+        // case: quality string dominated by one particular quality score
         else {
             buf_alloc (vb, non_dom_buf, 2 * ql->qual_len, 0, char, 1.5, 0); // theoretical worst case is 2 characters (added no_doms) per each original character
             buf_alloc (vb, qdomruns_buf, ql->qual_len, 0, uint8_t, 1.5, 0);
@@ -430,7 +429,7 @@ COMPRESS (codec_domq_compress)
     // where QUAL is empty if qual is just one run. We use no_doms rather than another marker, to avoid introducing
     // another letter into the compressed alphabet
     if (runlen &&
-        qdomruns_buf->len32) { // if len=0 - no runs were added - all non-diverse lines contain only the dom. we will keep the buffer empty and handle in reconstruct
+        (qdomruns_buf->len32 || runlen < BLST(QualLine, ql_buf)->qual_len)) { // if len=0 - no runs were added and no non-dom in the last line - all non-diverse lines contain only the dom. we will keep the buffer empty and handle in reconstruct
         
         buf_alloc (vb, qdomruns_buf, runlen / 254 + 1, 0, uint8_t, 0, 0);
         codec_domq_add_runs (qdomruns_buf, runlen); // add final dom runs

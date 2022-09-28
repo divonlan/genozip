@@ -950,7 +950,10 @@ batch_real_world_1_backcomp()
         # if [[ $f == test.transcriptome.bam ]]; then continue; fi
 
         # exceptions - supported in 14.0.5 but not earlier
-        if [[ $f == test.novoalign.bam ]]; then continue; fi
+        # if [[ $f == test.novoalign.bam ]]; then continue; fi
+
+        # exceptions - supported in 14.0.7 but not earlier
+        if [[ $f == test.ubam.bam ]]; then continue; fi
 
         test_header "$f - backward compatability with prod ($i/${#files[@]})"
         $genozip_prod private/test/$f --md5 -fo $output || exit 1

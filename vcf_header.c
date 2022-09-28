@@ -184,7 +184,9 @@ static bool vcf_header_get_dual_coords (STRp(line), void *unused1, void *unused2
 
     else return false; // continue iterating
 
-    ASSINP0 (!flag.test, "--test is not supported for dual-coordinates files");
+    // --test doesn't work with DVCF
+    ASSINP0 (!flag.explicit_test, "--test is not supported for dual-coordinates files");
+    flag.test = false;
 
     return true; // found - no more iterating
 }
@@ -470,7 +472,7 @@ static bool vcf_header_zip_update_to_dual_coords_one_line (STRp(line), void *new
         vcf_header_update_INFO_FORMAT (STRa(line), is_info, new_txt_header);
     
     else if (LINEIS ("##fileformat")) 
-        { } // remove this line - it was added to the rejects file instead
+        { } // remove this line - it was added to the rejects component instead
         
     else if (chain_is_loaded && LINEIS ("##reference="))
         SUBST_LABEL ("##reference=", HK_ORIGINAL_REF);
@@ -706,21 +708,11 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
         vcf_header_zip_get_luft_only_lines (txt_header);
 
     // case: --chain: add liftover_contig, liftover_reference, chain, dual_coordinates keys
-    if ((chain_is_loaded || txt_file->coords) && !evb->comp_i)
+    if ((chain_is_loaded || txt_file->coords) && evb->comp_i == VCF_COMP_MAIN)
         vcf_header_zip_update_to_dual_coords (txt_header);
 
-    // in the 2nd+ binding file, we require the dual-components status to be consistent with earlier files
-    if (z_file) { 
-        if (z_file->num_components) {
-            ASSERT (!(txt_file->coords && !z_is_dvcf), 
-                    "All binding files must be either dual-coordinates or not. However %s is a dual-coordinates file while previous file(s) are not", txt_name);
-
-            ASSERT (!(!txt_file->coords && z_is_dvcf), 
-                    "All binding files must be either dual-coordinates or not. However %s is not a dual-coordinates file while previous file(s) are", txt_name);
-        }
-        else  // first component 
-            z_has_gencomp |= (txt_file->coords != DC_NONE);  // note: in case of --chain, z_flags.dual_coords is set in file_open_z
-    }
+    if (z_file && !z_file->num_components)  // first component 
+        z_has_gencomp |= (txt_file->coords != DC_NONE);  // note: in case of --chain, z_flags.dual_coords is set in file_open_z
 
     return true; // all good
 }

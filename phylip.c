@@ -153,8 +153,7 @@ rom phy_seg_txt_line (VBlockP vb, rom line, uint32_t remaining_txt_len, bool *ha
     id_ctx ->local.len += PHY_ID_LEN;
 
     // SEQ
-    SNIPi1 (SNIP_LOOKUP, phy_seq_len);
-    seg_by_ctx (VB, STRa(snip), seq_ctx, phy_seq_len);
+    seg_lookup_with_length (vb, seq_ctx, phy_seq_len, phy_seq_len);
     seq_ctx->local.len += phy_seq_len;
 
     // EOL

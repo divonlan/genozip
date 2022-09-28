@@ -182,7 +182,7 @@ void sam_seg_bsseeker2_XG_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XG), unsign
     if (ctx_encountered_in_line (VB, OPTION_XG_Z)) // encountered in this line & verified
         seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_BSSEEKER2_XG, '0'+vb->XG_inc_S }, 3, OPTION_XG_Z, add_bytes);
     else
-        seg_add_to_local_text (VB, CTX(OPTION_XG_Z), STRa(XG), true, add_bytes);
+        seg_add_to_local_text (VB, CTX(OPTION_XG_Z), STRa(XG), LOOKUP_SIMPLE, add_bytes);
 }
 
 SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_BSSEEKER2_XG)
@@ -322,7 +322,7 @@ void sam_seg_bsseeker2_XM_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XM), unsign
     return;
 
 fallback:
-    seg_add_to_local_text (VB, CTX(OPTION_XM_Z), STRa(XM), true, add_bytes);
+    seg_add_to_local_text (VB, CTX(OPTION_XM_Z), STRa(XM), LOOKUP_SIMPLE, add_bytes);
 }
 
 SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_BSSEEKER2_XM)

@@ -133,12 +133,12 @@ void sam_seg_bismark_XM_Z (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, int spe
             }
                                                                   
             xm_type = XM_DIFF;
-            seg_add_to_local_fixed (VB, ctx, meth_call, next - meth_call);
+            seg_add_to_local_fixed (VB, ctx, meth_call, next - meth_call, LOOKUP_NONE, 0);
         }
         
         else no_diff: {
             xm_type = XM_IN_LOCAL;
-            seg_add_to_local_fixed (VB, ctx, STRa(xm));
+            seg_add_to_local_fixed (VB, ctx, STRa(xm), LOOKUP_NONE, 0);
         }
     }
 

@@ -42,16 +42,16 @@ void vcf_info_zip_initialize (void)
 
 void vcf_info_seg_initialize (VBlockVCFP vb) 
 {
+    ctx_set_store (VB, STORE_INT, INFO_AN, INFO_AC, INFO_ADP, INFO_DP, INFO_MLEAC, DID_EOL);
     CTX(INFO_AF)->     flags.store = STORE_FLOAT;
-    CTX(INFO_AN)->     flags.store = STORE_INT;
-    CTX(INFO_ADP)->    flags.store = STORE_INT;   // since v13
     CTX(INFO_SVTYPE)-> flags.store = STORE_INDEX; // since v13 - consumed by vcf_refalt_piz_is_variant_indel
-    CTX(INFO_DP)->     flags.store = STORE_INT;   // since v14
 
     if (!vcf_is_use_DP_by_DP())
         CTX(INFO_DP)->ltype = LT_DYN_INT; 
 
     seg_id_field_init (CTX(INFO_CSQ_Existing_variation));
+
+    ctx_consolidate_stats (VB, INFO_RAW_MQandDP, INFO_RAW_MQandDP_MQ, INFO_RAW_MQandDP_DP, DID_EOL);
 }
 
 //--------
@@ -595,16 +595,11 @@ TRANSLATOR_FUNC (vcf_piz_luft_XREV)
 
 static void vcf_seg_INFO_AC (VBlockVCFP vb, ContextP ac_ctx, STRp(field))
 {
-    ContextP af_ctx, an_ctx;
-    int64_t ac;
-    bool ac_has_value_in_line = str_get_int (STRa(field), &ac);
-    bool an_has_value_in_line = ctx_has_value_in_line (vb, _INFO_AN, &an_ctx);
-
     // case: AC = AN * AF (might not be, due to rounding errors, esp if AF is a very small fraction)
-    if (ac_has_value_in_line &&                                 // AC exists and is a valid int
-        an_has_value_in_line &&                                 // AN exists and is a valid int
-        ctx_has_value_in_line (vb, _INFO_AF, &af_ctx) && // AF exists and is a valid float
-        (int64_t)round (af_ctx->last_value.f * an_ctx->last_value.i) == ac) { // AF * AN == AC
+    if (ctx_has_value_in_line_(vb, CTX(INFO_AC)) && // AC exists and is a valid int (set in vcf_seg_info_subfields if AC is a single int)
+        ctx_has_value_in_line_(vb, CTX(INFO_AN)) && // AN exists and is a valid int
+        ctx_has_value_in_line_(vb, CTX(INFO_AF)) && // AF exists and is a valid float
+        (int64_t)round (CTX(INFO_AF)->last_value.f * CTX(INFO_AN)->last_value.i) == CTX(INFO_AC)->last_value.i) { // AF * AN == AC
 
         ac_ctx->no_stons = true;
         seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, VCF_SPECIAL_AC }), 2, ac_ctx, field_len);
@@ -613,8 +608,6 @@ static void vcf_seg_INFO_AC (VBlockVCFP vb, ContextP ac_ctx, STRp(field))
     // case: AC is multi allelic, or an invalid value, or missing AN or AF or AF*AN != AC
     else 
         seg_by_ctx (VB, STRa(field), ac_ctx, field_len);
-
-    ac_ctx->flags.store = STORE_INT;
 }
 
 // reconstruct: AC = AN * AF
@@ -625,7 +618,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_AC)
     // Backward compatability note: In files v6->11, snip has 2 bytes for AN, AF which mean: '0'=appears after AC, '1'=appears before AC. We ignore them.
 
     // note: update last_value too, so its available to vcf_piz_luft_A_AN, which is called becore last_value is updated
-    ctx->last_value.i = new_value->i = (int64_t)round (reconstruct_peek_(vb, _INFO_AN, 0, 0).i * reconstruct_peek_(vb, _INFO_AF, 0, 0).f);
+    ctx->last_value.i = new_value->i = (int64_t)round (reconstruct_peek (vb, CTX(INFO_AN), 0, 0).i * reconstruct_peek(vb, CTX(INFO_AF), 0, 0).f);
     RECONSTRUCT_INT (new_value->i); 
 
     return HAS_NEW_VALUE;
@@ -640,20 +633,19 @@ TRANSLATOR_FUNC (vcf_piz_luft_A_AN)
     int64_t an, ac;
 
     if (IS_ZIP) {
-        ContextP an_ctx;
-        if (!ctx_has_value_in_line (vb, _INFO_AN, &an_ctx) ||
-            !str_get_int_range64 (STRa(recon), 0, (an = an_ctx->last_value.i), &ac))
+        if (!ctx_has_value_in_line_(vb, CTX(INFO_AN)) ||
+            !str_get_int_range64 (STRa(recon), 0, (an = CTX(INFO_AN)->last_value.i), &ac))
             return false; // in Seg, AC is always segged last, so this means there is no AN in the line for sure
         
         if (validate_only) return true;  // Yay! AC can be lifted - all it needs in AN in the line, which it has 
     }
     else {
         ac = ctx->last_value.i;
-        an = reconstruct_peek_(vb, _INFO_AN, 0, 0).i;
+        an = reconstruct_peek (vb, CTX(INFO_AN), 0, 0).i;
     }
 
     // re-reconstruct: AN-AC
-    vb->txt_data.len -= recon_len;
+    vb->txt_data.len32 -= recon_len;
     RECONSTRUCT_INT (an - ac);
 
     return true;    
@@ -1315,9 +1307,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
 {
     unsigned modified_len = value_len + 20;
     char modified[modified_len]; // used for 1. fields that are optimized 2. fields translated luft->primary. A_1 transformed 4.321e-03->0.004321
-    
-    ContextP other_ctx = NULL;
-    
+        
     // note: since we use modified for both optimization and luft_back - we currently don't support
     // subfields having both translators and optimization. This can be fixed if needed.
     #define ADJUST_FOR_MODIFIED ({ \
@@ -1414,13 +1404,14 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
             CALL (vcf_seg_INFO_AC (vb, ctx, STRa(value))); 
 
         case _INFO_MLEAF:
-            CALL_IF (!z_is_dvcf && // this doesn't work for DVCF yet, to do: fix this
-                     ctx_has_value_in_line (vb, _INFO_AF, &other_ctx) && str_issame_(STRa(value), STRtxtw(other_ctx->last_txt)), 
+            CALL_IF (!z_is_dvcf && // this doesn't work for DVCF (bug 680)
+                     ctx_has_value_in_line_(vb, CTX(INFO_AF)) && str_issame_(STRa(value), STRtxtw(CTX(INFO_AF)->last_txt)), 
                      seg_by_ctx (VB, STRa(af_snip), ctx, value_len)); // copy AF
 
         case _INFO_MLEAC:
-            CALL_IF (ctx_has_value_in_line (vb, _INFO_AC, &other_ctx),
-                     seg_delta_vs_other (VB, ctx, other_ctx, STRa(value)));
+            CALL_IF (!z_is_dvcf && // this doesn't work for DVCF (bug 680)
+                     ctx_has_value_in_line_(vb, CTX(INFO_AC)),
+                     seg_delta_vs_other (VB, ctx, CTX(INFO_AC), STRa(value)));
 
         // ##INFO=<ID=AA,Number=1,Type=String,Description="Ancestral Allele">
         case _INFO_AA: 
@@ -1549,8 +1540,13 @@ void vcf_seg_info_subfields (VBlockVCFP vb, rom info_str, unsigned info_len)
                    ((dict_id.num != _INFO_PRIM && dict_id.num != _INFO_PREJ) || vb->line_coords == DC_LUFT)),
                 "Not expecting INFO/%.*s in a %s-coordinate line", tag_name_len, pairs[i], vcf_coords_name (vb->line_coords));
 
-        if (dict_id.num == _INFO_AC) 
+        if (dict_id.num == _INFO_AC) {
+            int64_t ac;
+            if (str_get_int (STRa(ii.value), &ac))
+                ctx_set_last_value (VB, ii.ctx, ac); // needed for MLEAC        
+
             ac_i = vb->info_items.len;
+        }
 
         else if (dict_id.num == _INFO_LUFT || dict_id.num == _INFO_PRIM) 
             { lift_ii = ii; continue; } // dont add LUFT and PRIM to Items yet

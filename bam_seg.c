@@ -383,10 +383,11 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     COPY_TIMER(bam_seq_to_sam);
     }
 
-    // note: sam_seg_is_gc_line needs to know about hard clips - we don't want to analyze the CIGAR (expensive)
-    // before sam_seg_is_gc_line - so we just set hard clips for now
-    dl->hard_clip[0] = (n_cigar_op && cigar[0].op == BC_H) ? cigar[0].n : 0;
-    dl->hard_clip[1] = (n_cigar_op >= 2 && cigar[n_cigar_op-1].op == BC_H) ? cigar[n_cigar_op-1].n : 0; // note: if n_cigar_op==1, and the op=H, we consider it a left-clip.
+    // analyze (but not seg yet) cigar
+    buf_append (vb, vb->binary_cigar, BamCigarOp, cigar, n_cigar_op, "binary_cigar");
+    uint32_t seq_len;
+    bam_seg_cigar_analyze (vb, dl, &seq_len);
+    dl->SEQ.len = seq_len; // do it this way to avoid compiler warning
 
     // if this is a secondary / supplamentary read (aka Dependent) or a read that has an associated sec/sup read 
     // (aka Primary) - move the line to the appropriate component and skip it here (no segging done yet)
@@ -399,13 +400,7 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     if (flag.biopsy_line.line_i != NO_LINE && sam_seg_test_biopsy_line (VB, alignment, block_size + 4)) 
         goto done;  
 
-    buf_append (vb, vb->binary_cigar, BamCigarOp, cigar, n_cigar_op, "binary_cigar");
     sam_cigar_binary_to_textual (vb, n_cigar_op, cigar, &vb->textual_cigar); // re-write BAM format CIGAR as SAM textual format in vb->textual_cigar
-
-    // analyze (but not seg yet) cigar
-    uint32_t seq_len;
-    bam_seg_cigar_analyze (vb, dl, &seq_len);
-    dl->SEQ.len = seq_len; // do it this way to avoid compiler warning
 
     // SEQ - calculate diff vs. reference (denovo or loaded)
     ASSERT (dl->SEQ.len == l_seq || (vb->textual_cigar.len == 1 && *B1STc(vb->textual_cigar) == '*') || !l_seq, 

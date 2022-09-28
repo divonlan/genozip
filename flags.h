@@ -9,6 +9,7 @@
 #pragma once
 
 #include "genozip.h"
+#include "file_types.h"
 
 typedef enum { 
     REF_NONE          = 0,  // ZIP (except SAM) and PIZ when user didn't specify an external reference
@@ -82,15 +83,16 @@ typedef struct {
     int bytes;
 
     // options affecting the software interaction (but not the file contents)
-    int force, quiet, show_filename,
+    int force, quiet, no_tip, show_filename,
         to_stdout,   // set implicitly if genocat without --output
         replace, 
         lic_width,   // width of license output, 0=dynamic (undocumented parameter of --license)
-        test, no_test,       
+        test, no_test, explicit_test,       
         index_txt,   // create an index
         subdirs,     // recursively traversing subdirectories
         list;        // a genols option
     rom threads_str, out_filename, out_dirname, files_from, do_register;
+    FileType stdin_type; // set by the --input command line option
 
     ReferenceType reference;
 
