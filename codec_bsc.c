@@ -63,11 +63,15 @@ COMPRESS (codec_bsc_compress)
                             flag.fast ? LIBBSC_CODER_QLFC_STATIC : LIBBSC_CODER_QLFC_ADAPTIVE, // coder
                             LIBBSC_FEATURE_FASTMODE); // flags ("features")
 
-    if (ret == LIBBSC_NOT_COMPRESSIBLE)
+    if (ret == LIBBSC_NOT_COMPRESSIBLE) {
         ret = bsc_store (vb, (bytes )uncompressed, (uint8_t *)compressed, *uncompressed_len, LIBBSC_FEATURE_FASTMODE);
 
-    ASSERT (ret >= LIBBSC_NO_ERROR, "%s: \"%s\": bsc_compress or bsc_store returned %s. ctx=%s", 
-            VB_NAME, name, codec_bsc_errstr (ret), TAG_NAME);
+        ASSERT (ret >= LIBBSC_NO_ERROR, "%s: \"%s\": bsc_store returned %s. ctx=%s uncompressed_len=%u", 
+                VB_NAME, name, codec_bsc_errstr (ret), TAG_NAME, *uncompressed_len);
+    }
+
+    ASSERT (ret >= LIBBSC_NO_ERROR, "%s: \"%s\": bsc_compress returned %s. ctx=%s uncompressed_len=%u", 
+            VB_NAME, name, codec_bsc_errstr (ret), TAG_NAME, *uncompressed_len);
 
     if (get_line_cb) buf_free (vb->scratch);
 

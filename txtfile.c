@@ -28,6 +28,8 @@
 #include "libdeflate/libdeflate.h"
 #include "bzlib/bzlib.h"
 
+#define MAX_TXT_HEADER_LEN ((uint64_t)0xffffffff) // maximum length of txt header - one issue with enlarging it is that we digest it in one go, and the digest module is 32 bit
+
 // dump bad vb to disk
 rom txtfile_dump_vb (VBlockP vb, rom base_name)
 {
@@ -343,7 +345,11 @@ void txtfile_read_header (bool is_first_txt)
                        dt_name(txt_file->data_type), txt_name, evb->txt_data.len);
         }
 
-        buf_alloc (evb, &evb->txt_data, HEADER_BLOCK, 0, char, 1.15, "txt_data");    
+        ASSERT (evb->txt_data.len + HEADER_BLOCK <= MAX_TXT_HEADER_LEN, "%s header is larger than the maximum Genozip supports: %"PRIu64, 
+                dt_name (txt_file->data_type), MAX_TXT_HEADER_LEN);
+
+        buf_alloc (evb, &evb->txt_data, HEADER_BLOCK, 0, char, 2, "txt_data");    
+        
         bytes_read = txtfile_read_block (evb, HEADER_BLOCK, true);
     }
 

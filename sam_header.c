@@ -241,6 +241,8 @@ incomplete_header:
 
 static void sam_header_zip_inspect_HD_line (BufferP txt_header) 
 {
+    START_TIMER;
+
     uint32_t hdr_len = IS_BAM_ZIP ? *B32(*txt_header, 1)     : txt_header->len32;
     rom hdr          = IS_BAM_ZIP ? (rom)B32(*txt_header, 2) : txt_header->data;
 
@@ -281,10 +283,14 @@ static void sam_header_zip_inspect_HD_line (BufferP txt_header)
     }
 
     SAFE_RESTORE;
+
+    COPY_TIMER_VB (evb, sam_header_zip_inspect_HD_line);
 }
 
 static void sam_header_zip_inspect_PG_lines (BufferP txt_header) 
 {
+    START_TIMER;
+
     uint32_t hdr_len = IS_BAM_ZIP ? *B32(*txt_header, 1)     : txt_header->len32;
     rom hdr          = IS_BAM_ZIP ? (rom)B32(*txt_header, 2) : txt_header->data;
 
@@ -319,6 +325,8 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
 
 done:
     SAFE_RESTORE;
+
+    COPY_TIMER_VB (evb, sam_header_zip_inspect_PG_lines); 
 }
 
 typedef struct { uint32_t n_contigs, dict_len; } ContigsCbParam;
@@ -420,10 +428,14 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
             if (flag.match_chrom_to_reference) 
                 buf_alloc (txt_header_vb, &new_txt_header, 0, txt_header->len + 100, char, 0, "codec_bufs[0]"); // initial allocation (might be a bit bigger due to label changes)
 
+            START_TIMER;
+
             if (sam_hdr_contigs->contigs.param) // contigs originate from textual header
                 foreach_textual_SQ_line (txt_header->data, IS_SRC_BAM ? txt_header->len32 : 0, sam_header_add_contig, NULL, flag.match_chrom_to_reference ? &new_txt_header : NULL);
             else
                 foreach_binary_SQ_line  (STRb(*txt_header), sam_header_add_contig, NULL, flag.match_chrom_to_reference ? &new_txt_header : NULL);
+
+            COPY_TIMER_VB (evb, sam_header_add_contig);
 
             // replace txt_header with the updated one
             if (flag.match_chrom_to_reference) {
@@ -432,7 +444,8 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
                 buf_free (new_txt_header);
             }
 
-            contigs_create_index (sam_hdr_contigs, SORT_BY_NAME); // used by sam_sa_add_sa_group
+            if (IS_ZIP)            
+                contigs_create_index (sam_hdr_contigs, SORT_BY_NAME); // used by sam_sa_add_sa_group
         }
     }
 

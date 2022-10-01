@@ -12,6 +12,7 @@
 // ZIP stuff
 //----------
 
+extern void txtheader_compress (BufferP vcf_header_text, uint64_t unmodified_txt_header_len, Digest header_md5, bool is_first_vcf, CompIType comp_i);
 extern int64_t txtheader_zip_read_and_compress (int64_t *txt_header_offset, CompIType comp_i);
 
 //----------

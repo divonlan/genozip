@@ -478,7 +478,7 @@ bool bgzf_load_isizes (Section sl_ent)
 
     int32_t offset = zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", SEC_BGZF, sl_ent);
 
-    SectionHeader *header = (SectionHeader *)Bc (evb->z_data, offset);
+    SectionHeaderP header = (SectionHeaderP)Bc (evb->z_data, offset);
     txt_file->bgzf_flags = header->flags.bgzf;
 
     // if we don't know the compression level, or if original file had compression level 0 (no compression), go with the default

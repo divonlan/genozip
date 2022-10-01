@@ -41,10 +41,15 @@ Digest digest_snapshot (const DigestContext *ctx, rom msg)
     return digest;
 }
 
-static Digest digest_do (const void *data, uint32_t len)
+static Digest digest_do (const void *data, uint32_t len, rom show_digest_msg)
 {
-    return IS_ADLER ? (Digest){ .words = { BGEN32 (adler32 (1, data, len)) } }
-                    : md5_do (data, len);
+    Digest digest = IS_ADLER ? (Digest){ .words = { BGEN32 (adler32 (1, data, len)) } }
+                             : md5_do (data, len);
+
+    if (flag.show_digest)
+        iprintf ("%s digest_one_vb %s: %s\n", DIGEST_NAME, show_digest_msg, digest_display_ex (digest, DD_NORMAL).s);
+
+    return digest;
 }
 
 #define digest_update(ctx, buf, msg) digest_update_do ((buf)->vb, (ctx), STRb(*(buf)), (msg))
@@ -152,11 +157,8 @@ bool digest_one_vb (VBlockP vb, bool is_compute_thread,
     // starting V14, if adler32, we digest each VB stand-alone.
     if (IS_ADLER && VER(14)) {
         if (digestable) {
-            vb->digest = digest_do (STRb(*data));
+            vb->digest = digest_do (STRb(*data), VB_NAME);
             
-            if (flag.show_digest)
-                iprintf ("%s digest_one_vb %s: %s\n", DIGEST_NAME, VB_NAME, digest_display_ex (vb->digest, DD_NORMAL).s);
-
             if (IS_PIZ) digest_piz_verify_one_vb (vb);  
         }
     }
@@ -190,6 +192,8 @@ bool digest_one_vb (VBlockP vb, bool is_compute_thread,
 // ZIP and PIZ: called by main thread to calculate MD5 or Adler32 of the txt header
 Digest digest_txt_header (BufferP data, Digest piz_expected_digest)
 {
+    START_TIMER;
+
     // start dogest log if need
     if (flag.log_digest) {
         z_file->digest_ctx.common.log = true;
@@ -202,7 +206,7 @@ Digest digest_txt_header (BufferP data, Digest piz_expected_digest)
     
     // starting V14, if adler32, we digest each VB stand-alone.
     if (IS_ADLER && VER(14))
-        digest = digest_do (STRb(*data));
+        digest = digest_do (STRb(*data), "TXT_HEADER");
 
     // if MD5 or v13 (or earlier) - digest is for commulative for the whole file, and we take a snapshot
     else {
@@ -233,6 +237,8 @@ Digest digest_txt_header (BufferP data, Digest piz_expected_digest)
 
         RESTORE_FLAG (quiet);
     }
+
+    COPY_TIMER_VB (evb, digest_txt_header);
 
     return digest;
 }

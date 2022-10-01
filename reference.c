@@ -1359,6 +1359,8 @@ static void overlay_ranges_on_loaded_genome (Reference ref, RangesType type)
 // note: ranges allocation must be called by the main thread as it adds a buffer to evb buf_list
 void ref_initialize_ranges (Reference ref, RangesType type)
 {
+    START_TIMER;
+
     if (flag.reading_reference) {
         buf_copy (evb, &ref->ref_external_ra, &z_file->ra_buf, RAEntry, 0, 0, "ref_external_ra");
         buf_copy (evb, &ref->ref_file_section_list, &z_file->section_list_buf, SectionEnt, 0, 0, "ref_file_section_list");
@@ -1425,6 +1427,8 @@ void ref_initialize_ranges (Reference ref, RangesType type)
         ref->emoneg = buf_overlay_bitarr (evb, &ref->emoneg_buf, &ref->genome_cache, ref->genome_nbases / 4, ref->genome_nbases * 2, "emoneg_buf");
 
     overlay_ranges_on_loaded_genome (ref, type);
+
+    COPY_TIMER_VB (evb, ref_initialize_ranges);
 }
 
 typedef struct { PosType min_pos, max_pos; } MinMax;

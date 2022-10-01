@@ -1111,7 +1111,7 @@ DisCigarSig cigar_display_signature (CigarSignature sig)
 {
     DisCigarSig dis;
     
-    str_to_hex (sig.bytes, CIGAR_SIG_LEN, dis.s);
+    str_to_hex (sig.bytes, CIGAR_SIG_LEN, dis.s, false);
 
     return dis;
 }

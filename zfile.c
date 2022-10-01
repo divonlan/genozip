@@ -36,11 +36,11 @@
 
 static rom password_test_string = "WhenIThinkBackOnAllTheCrapIlearntInHighschool";
 
-static void zfile_show_b250_section (void *section_header_p, ConstBufferP b250_data)
+static void zfile_show_b250_section (SectionHeaderUnionP section_header_p, ConstBufferP b250_data)
 {
     static Mutex show_b250_mutex = {}; // protect so compute thread's outputs don't get mix
 
-    SectionHeaderCtx *header = (SectionHeaderCtx *)section_header_p;
+    SectionHeaderCtx *header = section_header_p.ctx;
 
     if (!flag.show_b250 && dict_id_typeless (header->dict_id).num != flag.dict_id_show_one_b250.num) return;
 
@@ -68,7 +68,7 @@ static void zfile_show_b250_section (void *section_header_p, ConstBufferP b250_d
 
 // Write uncompressed, unencrypted section to <section-type>.<vb>.<dict_id>.[header|body]. 
 // Note: header includes encryption padding if it was encrypted
-static void zfile_dump_section (BufferP uncompressed_data, SectionHeader *section_header, unsigned section_header_len, DictId dict_id)
+static void zfile_dump_section (BufferP uncompressed_data, SectionHeaderP section_header, unsigned section_header_len, DictId dict_id)
 {
     char filename[100];
     VBIType vb_i = BGEN32 (section_header->vblock_i);
@@ -87,26 +87,26 @@ static void zfile_dump_section (BufferP uncompressed_data, SectionHeader *sectio
 // uncompressed a block and adds a \0 at its end. Returns the length of the uncompressed block, without the \0.
 // when we get here, the header is already unencrypted zfile_one_section
 void zfile_uncompress_section (VBlockP vb,
-                               void *section_header_p,
+                               SectionHeaderUnionP section_header_p,
                                BufferP uncompressed_data, 
                                rom uncompressed_data_buf_name, // a name if Buffer, NULL ok if buffer need not be realloced
                                uint32_t expected_vb_i,
                                SectionType expected_section_type) 
 {
     START_TIMER;
-    ASSERTNOTNULL (section_header_p);
+    ASSERTNOTNULL (section_header_p.common);
     
     DictId dict_id = DICT_ID_NONE;
     uint8_t codec_param = 0;
 
     if (expected_section_type == SEC_DICT)
-        dict_id = ((SectionHeaderDictionary *)section_header_p)->dict_id;
+        dict_id = section_header_p.dict->dict_id;
     else if (expected_section_type == SEC_B250 || expected_section_type == SEC_LOCAL) {
-        dict_id = ((SectionHeaderCtx *)section_header_p)->dict_id;
-        codec_param = ((SectionHeaderCtx *)section_header_p)->param; 
+        dict_id = section_header_p.ctx->dict_id;
+        codec_param = section_header_p.ctx->param; 
     }
     else if (expected_section_type == SEC_COUNTS) 
-        dict_id = ((SectionHeaderCounts *)section_header_p)->dict_id;
+        dict_id = section_header_p.counts->dict_id;
 
     ContextP ctx = NULL;
     if (IS_DICTED_SEC (expected_section_type)) { 
@@ -117,7 +117,7 @@ void zfile_uncompress_section (VBlockP vb,
     else 
         if (piz_is_skip_undicted_section (expected_section_type)) return; // section was skipped 
 
-    SectionHeader *section_header  = (SectionHeader *)section_header_p;
+    SectionHeaderP section_header  = section_header_p.common;
     uint32_t compressed_offset     = BGEN32 (section_header->compressed_offset);
     uint32_t data_encrypted_len    = BGEN32 (section_header->data_encrypted_len);
     uint32_t data_compressed_len   = BGEN32 (section_header->data_compressed_len);
@@ -174,6 +174,18 @@ void zfile_uncompress_section (VBlockP vb,
     }
 
     if (vb) COPY_TIMER (zfile_uncompress_section);
+}
+
+// uncompress into a specific offset in a pre-allocated buffer
+void zfile_uncompress_section_into_buf (VBlockP vb, SectionHeaderUnionP section_header_p, uint32_t expected_vb_i, SectionType expected_section_type,
+                                        BufferP dst_buf,
+                                        char *dst) // pointer into dst_buf.data
+{
+    ASSERT (dst >= B1STc(*dst_buf) && dst <= BLSTc(*dst_buf), "expecting dst=%p to be within dst_buf=%s", dst, buf_desc(dst_buf).s);
+
+    Buffer copy = *dst_buf;
+    copy.data = dst; // somewhat of a hack
+    zfile_uncompress_section (vb, section_header_p, &copy, NULL, expected_vb_i, expected_section_type); // NULL name prevents buf_alloc
 }
 
 // generate the metadata string eg "user@domain.com 2019-11-16 16:48:19"
@@ -421,7 +433,7 @@ int32_t zfile_read_section_do (File *file,
     // move the cursor to the section. file_seek is smart not to cause any overhead if no moving is needed
     if (sec) file_seek (file, sec->offset, SEEK_SET, false);
 
-    SectionHeader *header = zfile_read_from_disk (file, vb, data, header_size, expected_sec_type); // note: header in file can be shorter than header_size if its an earlier version
+    SectionHeaderP header = zfile_read_from_disk (file, vb, data, header_size, expected_sec_type); // note: header in file can be shorter than header_size if its an earlier version
     uint32_t bytes_read = header_size;
 
     ASSERT (header, "called from %s:%u: Failed to read data from file %s while expecting section type %s: %s", 
@@ -485,7 +497,7 @@ int32_t zfile_read_section_do (File *file,
     // allocate more memory for the rest of the header + data (note: after this realloc, header pointer is no longer valid)
     buf_alloc (vb, data, 0, header_offset + compressed_offset + data_len, uint8_t, 2, "zfile_read_section");
     data->param = 2;
-    header = (SectionHeader *)Bc(*data, header_offset); // update after realloc
+    header = (SectionHeaderP)Bc(*data, header_offset); // update after realloc
 
     // read section data - but only if header size is as expected
     if (remaining_data_len > 0 && compressed_offset == header_size)
@@ -874,67 +886,6 @@ void zfile_compress_genozip_header (void)
     zfile_output_processed_vb (evb); // write footer
 }
 
-// ZIP
-void zfile_write_txt_header (BufferP txt_header, 
-                             uint64_t unmodified_txt_header_len, // length of header before modifications, eg due to --chain or compressing a Luft file
-                             Digest header_md5, bool is_first_txt, CompIType comp_i)
-{
-    Codec codec = codec_assign_best_codec (evb, NULL, txt_header, SEC_TXT_HEADER);
-
-    SectionHeaderTxtHeader header = {
-        .h.magic                   = BGEN32 (GENOZIP_MAGIC),
-        .h.section_type            = SEC_TXT_HEADER,
-        .h.data_uncompressed_len   = BGEN32 (txt_header->len),
-        .h.compressed_offset       = BGEN32 (sizeof (SectionHeaderTxtHeader)),
-        .h.codec                   = (codec == CODEC_UNKNOWN) ? CODEC_NONE : codec,
-        .codec                     = txt_file->codec, 
-        .digest_header             = flag.data_modified ? DIGEST_NONE : header_md5,
-        .txt_header_size           = BGEN64 (unmodified_txt_header_len),
-    };
-
-    // data type specific fields
-    if (DTPZ(zip_set_txt_header_specific)) DTPZ(zip_set_txt_header_specific)(&header);
-
-    // In BGZF, we store the 3 least significant bytes of the file size, so check if the reconstructed BGZF file is likely the same
-    if (txt_file->codec == CODEC_BGZF) 
-        bgzf_sign (txt_file->disk_size, header.codec_info);
-        
-    file_basename (txt_file->name, false, FILENAME_STDIN, header.txt_filename, TXT_FILENAME_LEN);
-    file_remove_codec_ext (header.txt_filename, txt_file->type); // eg "xx.fastq.gz -> xx.fastq"
-    
-    static Buffer txt_header_buf = EMPTY_BUFFER;
-
-    buf_alloc (evb, &txt_header_buf, 0, sizeof (SectionHeaderTxtHeader) + txt_header->len / 3, // generous guess of compressed size
-               char, 1, "txt_header_buf"); 
-
-    CompIType save_evb_comp_i = evb->comp_i;
-    evb->comp_i = comp_i; // goes into SectionEntFileFormat.comp_i
-    comp_compress (evb, NULL, &txt_header_buf, (SectionHeader*)&header, 
-                   txt_header->len ? txt_header->data : NULL, // actual header may be missing (eg in SAM it is permitted to not have a header)
-                   NO_CALLBACK, "SEC_TXT_HEADER");
-    evb->comp_i = save_evb_comp_i; // restore
-
-    file_write (z_file, STRb(txt_header_buf));
-
-    z_file->disk_so_far += txt_header_buf.len;   // length of GENOZIP data writen to disk
-    z_file->disk_so_far_comp[comp_i] += txt_header_buf.len;
-
-    // VCF note: we don't account for DVCF rejects components - the added header lines are duplicates of the main header
-    if (!Z_DT(VCF) || comp_i == VCF_COMP_MAIN) {        
-        z_file->txt_data_so_far_single   += txt_header->len; // length of txt header as it would be reconstructed (possibly afer modifications)
-        z_file->txt_data_so_far_bind     += txt_header->len;
-        z_file->txt_data_so_far_single_0 += unmodified_txt_header_len; // length of the original txt header as read from the file
-        z_file->txt_data_so_far_bind_0   += unmodified_txt_header_len;
-    }
-
-    z_file->txt_data_so_far_bind_comp[comp_i] += txt_header->len;
-    z_file->txt_data_so_far_bind_0_comp[comp_i] += unmodified_txt_header_len;
-
-    buf_free (txt_header_buf); 
-
-    memcpy (&z_file->txt_header_single, &header, sizeof (header));
-}
-
 // Update SEC_TXT_HEADER. If we're compressing a plain file, we will know
 // the bytes upfront, but if we're binding or compressing a eg .GZ, we will need to update it
 // when we're done. num_lines can only be known after we're done with this txt component.
@@ -949,7 +900,7 @@ bool zfile_update_txt_header_section_header (uint64_t offset_in_z_file, uint32_t
     // sanity check - we skip empty files, so data is expected
     ASSERT (txt_file->txt_data_so_far_single > 0, "Expecting txt_file->txt_data_so_far_single=%"PRId64" > 0", txt_file->txt_data_so_far_single);
     
-    // update the header of the single (current) vcf. 
+    // update the first txt_header fragment of the single (current) txt file. 
     SectionHeaderTxtHeader *curr_header = &z_file->txt_header_single;
     curr_header->txt_data_size    = BGEN64 (txt_file->txt_data_so_far_single);
     curr_header->txt_num_lines    = BGEN64 (txt_file->num_lines);
@@ -959,11 +910,11 @@ bool zfile_update_txt_header_section_header (uint64_t offset_in_z_file, uint32_t
         curr_header->digest = digest_snapshot (&z_file->digest_ctx, "file");
 
     if (flag.show_headers)
-        sections_show_header ((SectionHeader *)curr_header, NULL, offset_in_z_file, 'W'); 
+        sections_show_header ((SectionHeaderP)curr_header, NULL, offset_in_z_file, 'W'); 
 
     // encrypt if needed
     if (crypt_have_password()) 
-        crypt_do (evb, (uint8_t *)curr_header, len, 0, curr_header->h.section_type, true);
+        crypt_do (evb, (uint8_t *)curr_header, len, 1 /*was 0 up to 14.0.8*/, curr_header->h.section_type, true);
 
     file_write (z_file, curr_header, len);
     fflush ((FILE*)z_file->file); // its not clear why, but without this fflush the bytes immediately after the first header get corrupted (at least on Windows with gcc)

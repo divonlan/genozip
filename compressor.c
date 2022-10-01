@@ -21,25 +21,28 @@
 // compresses data - either a contiguous block or one line at a time. If both are NULL that there is no data to compress.
 // returns data_compressed_len
 uint32_t comp_compress (VBlockP vb, 
-                        ContextP ctx, // NULL if not compressing context
+                        ContextP ctx,            // note: NULL if not compressing context
                         BufferP z_data,
-                        SectionHeader *header, 
-                        rom uncompressed_data,  // option 1 - compress contiguous data
-                        LocalGetLineCB callback,        // option 2 - compress data one line at a time
-                        rom name)
+                        SectionHeaderP header, 
+                        rom uncompressed_data,   // option 1 - compress contiguous data
+                        LocalGetLineCB callback, // option 2 - compress data one line at a time
+                        rom name)                // tag name for b250/local, otherwise section name
 { 
     ASSERT (!uncompressed_data || !callback, "\"%s\": expecting either uncompressed_data or callback but not both", name);
 
     ASSERT (BGEN32 (header->magic) == GENOZIP_MAGIC, "\"%s\": corrupt header - bad magic", name);
 
     ASSERT (header->codec < NUM_CODECS, "\"%s\": unsupported section compressor=%u", name, header->codec);
-
+             
     uint32_t compressed_offset     = BGEN32 (header->compressed_offset);
     uint32_t data_uncompressed_len = BGEN32 (header->data_uncompressed_len);
     uint32_t data_compressed_len   = 0;
     uint32_t data_encrypted_len=0, data_padding=0, header_padding=0;
 
     ASSERT (!data_uncompressed_len || uncompressed_data || callback, "\"%s\": data_uncompressed_len!=0 but neither uncompressed_data nor callback are provided", name);
+
+    ASSERTW (data_uncompressed_len < (1<<30), "%s: Excessive uncompressed_data_len=%u: %s. Please report to support@genozip.com", 
+             VB_NAME, data_uncompressed_len, name); // compressing a buffer over 1GB is likely an indication of not handling some edge case well
 
     bool is_encrypted = false;
     uint32_t encryption_padding_reserve = 0;
@@ -130,14 +133,14 @@ uint32_t comp_compress (VBlockP vb,
 
     // encrypt if needed - header & body separately
     unsigned total_z_len;
-    if (is_encrypted) {// create good padding (just padding with 0 exposes a cryptographic vulnerability)
+    if (is_encrypted) { // create good padding (just padding with 0 exposes a cryptographic vulnerability)
         crypt_pad (BAFT(uint8_t, *z_data), compressed_offset, header_padding);
         
         if (data_uncompressed_len) 
             crypt_pad (BAFT(uint8_t, *z_data) + compressed_offset, data_encrypted_len, data_padding);
 
         // encrypt the header - we use vb_i, section_type and is_header to generate a different AES key for each section
-        VBIType vb_i  = BGEN32 (header->vblock_i);
+        VBIType vb_i = BGEN32 (header->vblock_i);
 
         // note: for SEC_VB_HEADER we will encrypt at the end of calculating this VB in zfile_update_compressed_vb_header() 
         // and we will then update z_data in memory prior to writing the encrypted data to disk
@@ -173,7 +176,7 @@ done:
 
 // compress primary context of a complex codec, after codec code as prepared the data in ctx->local. The other contexts 
 // of the complex codec are marked with DEP_L* and will be compressed in the normal ctx->local compression loop
-bool comp_compress_complex_codec (VBlockP vb, ContextP ctx, SectionHeader *header, bool is_2nd_try,
+bool comp_compress_complex_codec (VBlockP vb, ContextP ctx, SectionHeaderP header, bool is_2nd_try,
                                   uint32_t *uncompressed_len, STRe (compressed), rom name)
 {
     if (!is_2nd_try) {

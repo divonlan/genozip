@@ -78,6 +78,7 @@ typedef const struct Context *ConstContextP;
 typedef struct CtxNode *CtxNodeP;
 typedef const struct CtxNode *ConstMtfNodeP;
 typedef struct SectionHeader *SectionHeaderP;
+typedef const struct SectionHeader *ConstSectionHeaderP;
 typedef const struct SectionEnt *Section;
 typedef struct Range *RangeP;
 typedef const struct Range *ConstRangeP;

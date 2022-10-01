@@ -398,8 +398,8 @@ COMPRESS (codec_domq_compress)
 
         // case: quality string dominated by one particular quality score
         else {
-            buf_alloc (vb, non_dom_buf, 2 * ql->qual_len, 0, char, 1.5, 0); // theoretical worst case is 2 characters (added no_doms) per each original character
-            buf_alloc (vb, qdomruns_buf, ql->qual_len, 0, uint8_t, 1.5, 0);
+            buf_alloc (vb, non_dom_buf, 2 * ql->qual_len + 1, 0, char, 1.5, 0); // theoretical worst case is 2 characters (added no_doms) per each original character + 1 for final dom run
+            buf_alloc (vb, qdomruns_buf, 0, qdomruns_buf->len + ql->qual_len + runlen / 254 + 1, uint8_t, 1.5, 0);
 
             BNXTc (qualmplx_ctx->local) = ql->dom; // this is dom_i - i.e. the line in the denormalization table
 

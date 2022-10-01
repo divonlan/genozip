@@ -345,6 +345,7 @@ void piz_read_all_ctxs (VBlockP vb, Section *sec/*first VB section after VB_HEAD
 
         // create a context even if section is skipped, for containers to work (skipping a section should be mirrored in a container filter)
         ContextP zctx = ctx_get_ctx_do (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts, (*sec)->dict_id, 0, 0);
+        ContextP vctx = ctx_get_ctx (vb, zctx->dict_id);
 
         int32_t offset = zfile_read_section (z_file, vb, (*sec)->vblock_i, &vb->z_data, "z_data", (*sec)->st, *sec); // returns 0 if section is skipped
         
@@ -353,14 +354,19 @@ void piz_read_all_ctxs (VBlockP vb, Section *sec/*first VB section after VB_HEAD
             
             // mark as not skipped 
             if (!is_pair_data)
-                ctx_get_ctx (vb, zctx->dict_id)->is_loaded = true; // not skipped. note: possibly already true if it has a dictionary - set in ctx_overlay_dictionaries_to_vb
+                vctx->is_loaded = true; // not skipped. note: possibly already true if it has a dictionary - set in ctx_overlay_dictionaries_to_vb
 
             if (flag.debug_read_ctxs)
-                sections_show_header ((SectionHeader *)Bc (vb->z_data, section_start), NULL, (*sec)->offset, sections_read_prefix);
+                sections_show_header ((SectionHeaderP)Bc (vb->z_data, section_start), NULL, (*sec)->offset, sections_read_prefix);
         }
-        else if (flag.debug_read_ctxs) 
-            iprintf ("%c Skipped loading %s/%u %s.%s\n", sections_read_prefix, 
-                     comp_name((*sec)->comp_i), vb->vblock_i, zctx->tag_name, (*sec)->st==SEC_LOCAL ? "local" : "b250");
+        else {
+            if (!is_pair_data)
+                vctx->is_loaded = false; // skipped 
+
+            if (flag.debug_read_ctxs) 
+                iprintf ("%c Skipped loading %s/%u %s.%s\n", sections_read_prefix, 
+                         comp_name((*sec)->comp_i), vb->vblock_i, zctx->tag_name, (*sec)->st==SEC_LOCAL ? "local" : "b250");
+        }
         
         (*sec)++;                             
     }
@@ -585,7 +591,7 @@ static Digest piz_one_verify_digest (void)
                digest_name(), digest_display (z_file->digest).s, digest_display (decompressed_file_digest).s);
     }
 
-    // if compressed incorrectly - warn, but still give user access to the decompressed file
+    // if decompressed incorrectly - warn, but still give user access to the decompressed file
     else if (!digest_is_zero (z_file->digest)) { // its ok if we decompressed only a partial file
         piz_digest_failed = true; // inspected by main_genounzip
         WARN ("File integrity error: %s of decompressed file %s is %s, but %s of the original %s file was %s", 
@@ -734,6 +740,8 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
 
                 if (!writer_does_txtheader_need_recon (sec)) continue;
 
+                if (sec->vblock_i >= 2) continue; // fragments >= 2 where already handled together with the first fragment
+                
                 // note: also starts writer, and if unbinding, also opens the txt file and hands data over to the writer
                 txtheader_piz_read_and_reconstruct (sec); 
 

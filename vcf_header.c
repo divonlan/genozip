@@ -695,8 +695,8 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
         buf_add_more (evb, &evb->scratch, B1STc(*txt_header), fileformat_line_len, "scratch"); // add the ##fileformat line, if there is one
         buf_add_more (evb, &evb->scratch, STRa(chrom_line), "scratch"); // add the #CHROM line
  
-        zfile_write_txt_header (&evb->scratch, evb->scratch.len, DIGEST_NONE, false, VCF_COMP_PRIM_ONLY); 
-        zfile_write_txt_header (&evb->scratch, evb->scratch.len, DIGEST_NONE, false, VCF_COMP_LUFT_ONLY);
+        txtheader_compress (&evb->scratch, evb->scratch.len, DIGEST_NONE, false, VCF_COMP_PRIM_ONLY); 
+        txtheader_compress (&evb->scratch, evb->scratch.len, DIGEST_NONE, false, VCF_COMP_LUFT_ONLY);
         
         buf_free (evb->scratch);
     }

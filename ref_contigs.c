@@ -214,6 +214,64 @@ void ref_contigs_compress_stored (Reference ref)
         ref_contigs_compress_do (&created_contigs, true);
 }
 
+
+// // create and compress contigs (when compressing with REF_EXT_STORE or REF_INTERNAL)
+//xxx void ref_contigs_compress_stored (Reference ref)
+// {
+//     START_TIMER;
+
+//     static Buffer created_contigs = EMPTY_BUFFER;          
+
+//     ARRAY (uint64_t, chrom_counts, ZCTX(CHROM)->counts);
+
+//     // NOTE: ref_get_range_by_chrom access ranges by chrom, but ref_initialize_loaded_ranges (incorrectly) allocates ranges.len by ref->ctgs.contigs.len 
+//     // (for non REF_INTERNAL) therefore, we must have ref_contigs aligned with CHROM
+    
+//     buf_alloc_exact_zero (evb, created_contigs, chrom_counts_len, Contig, "created_contigs");
+
+//     // create sorted index into CHROM
+//     chrom_index_by_name (CHROM);
+    
+//     bool has_some_contigs = false;
+//     bool sequential_ref_index = true;
+//     ContigP cn = B1ST (Contig, created_contigs);
+
+//     for_buf2 (Range, r, range_i, ref->ranges) {
+//         // if gpos of the first range in this contig has been increased due to removing flanking regions and is no longer 64-aligned,
+//         // we start the contig a little earlier to be 64-aligned (note: this is guaranteed to be within the original contig before 
+//         // compacting, because the original contig had a 64-aligned gpos)
+//         PosType delta = r->gpos % 64;
+
+//         WordIndex chrom = IS_REF_EXT_STORE ? *B(WordIndex, z_file->ref2chrom_map, r->chrom) : r->chrom; // the CHROM corresponding to this ref_index, even if a different version of the chrom name 
+
+//         // don't store min_pos/max_pos/gpos (better compression) is this contig was not used explicitly (note: aligner doesn't use contigs, but GPOS)
+//         if (chrom == WORD_INDEX_NONE || !chrom_counts[chrom] || 
+//             ((IS_REF_INTERNAL || IS_REF_EXT_STORE) && !r->is_set.nbits)) {
+//                 sequential_ref_index = false; // not sequential anymore as we're dropping some contigs
+//                 continue; 
+//             }
+
+//         cn->gpos      = r->gpos - delta;
+//         cn->min_pos   = r->first_pos - delta;
+//         cn->max_pos   = r->last_pos;
+//         cn->ref_index = chrom;
+//         cn++;
+
+//         has_some_contigs = true;
+//     }
+    
+//     created_contigs.len32 = BNUM (created_contigs, cn);
+
+//     // if we didn't skip any contig, we can remove ref_index for better compression
+//     if (sequential_ref_index)
+//         for_buf (Contig, cn, created_contigs) cn->ref_index = 0;
+
+//     COPY_TIMER_VB (evb, ref_contigs_compress); // we don't count the compression itself and the disk writing
+
+//     if (has_some_contigs) // Could be false, e.g. in FASTQ if no read was successfully aligned to the reference
+//         ref_contigs_compress_do (&created_contigs, sequential_ref_index);
+// }
+
 static void ref_contigs_load_set_contig_names (Reference ref, bool sequential_ref_index)
 {
     ASSERT0 (ZCTX(CHROM)->dict.len, "CHROM dictionary is empty");

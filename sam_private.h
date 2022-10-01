@@ -491,7 +491,7 @@ extern uint32_t sam_seg_get_aux_int (VBlockSAMP vb, int16_t idx, int32_t *number
 extern void sam_seg_get_aux_Z (VBlockSAMP vb, int16_t idx, pSTRp (snip), bool is_bam);
 extern char sam_seg_get_aux_A (VBlockSAMP vb, int16_t idx, bool is_bam);
 extern int32_t sam_set_last_value_from_aux (VBlockSAMP vb, int16_t idx, Did did);
-extern uint32_t bam_split_aux (VBlockSAMP vb, rom aux, rom after_aux, rom *auxs, uint32_t *aux_lens);
+extern uint32_t bam_split_aux (VBlockSAMP vb, rom alignment, rom aux, rom after_aux, rom *auxs, uint32_t *aux_lens);
 
 typedef void (*SegBuddiedCallback)(VBlockSAMP, ContextP, STRp(value), unsigned add_bytes);
 extern void sam_seg_buddied_Z_fields (VBlockSAMP vb, ZipDataLineSAM *dl, MatedZFields f, STRp(value), SegBuddiedCallback seg_cb, unsigned add_bytes);

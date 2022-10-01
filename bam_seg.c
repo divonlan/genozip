@@ -143,13 +143,29 @@ int32_t bam_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
     return result; // if -1 - we will be called again with more data
 }
 
-uint32_t bam_split_aux (VBlockSAMP vb, rom aux, rom after_aux, rom *auxs, uint32_t *aux_lens)
+static rom bam_dump_alignment (VBlockSAMP vb, rom alignment, rom after)
+{
+    Buffer alignment_buf = {}; // note: overlaid buffers needn't be static
+    buf_set_overlayable (&vb->txt_data);
+    buf_overlay_partial (vb, &alignment_buf, &vb->txt_data, BNUMtxt(alignment), "alignment_buf");
+    alignment_buf.len = after - alignment;
+
+    rom fn = "bad_alignment.bam";
+    buf_dump_to_file (fn, &alignment_buf, 1, false, false, false, false);
+
+    return fn;
+}
+
+uint32_t bam_split_aux (VBlockSAMP vb, rom alignment, rom aux, rom after_aux, rom *auxs, uint32_t *aux_lens)
 {
     uint32_t n_auxs = 0;
     while (aux < after_aux) {
         auxs[n_auxs] = aux;
 
         static unsigned const size[256] = { ['A']=1, ['c']=1, ['C']=1, ['s']=2, ['S']=2, ['i']=4, ['I']=4, ['f']=4 };
+        
+        ASSERT (after_aux - aux >= 4, "%s: Failed to parse BAM AUX fields after n_aux=%u. Only %u bytes remaining in the field, but expecting at least 4 bytes to contain any auxilliary field. Possibly this BAM file has an incorrect value in the block_size field of this alignment. Dumped alignment to %s", 
+                LN_NAME, n_auxs, (int)(after_aux-aux), bam_dump_alignment (vb, alignment, after_aux));
 
         if (aux[2] == 'Z' || aux[2] == 'H') {
             SAFE_NUL (after_aux);
@@ -163,12 +179,12 @@ uint32_t bam_split_aux (VBlockSAMP vb, rom aux, rom after_aux, rom *auxs, uint32
             aux_lens[n_auxs] = 3 + size[(int)aux[2]];
             
         else
-            ABORT ("%s: Unrecognized aux type '%c' (ASCII %u)", LN_NAME, aux[2], (uint8_t)aux[2]);
+            ABORT ("%s: Unrecognized aux type '%c' (ASCII %u). Dumped alignment to %s", LN_NAME, aux[2], (uint8_t)aux[2], bam_dump_alignment (vb, alignment, after_aux));
         
         aux += aux_lens[n_auxs++];
     }
 
-    ASSERT (aux == after_aux, "%s: overflow while parsing auxilliary fields", LN_NAME);
+    ASSERT (aux == after_aux, "%s: overflow while parsing auxilliary fields. Dumped alignment to %s", LN_NAME, bam_dump_alignment (vb, alignment, after_aux));
 
     return n_auxs;
 }
@@ -361,7 +377,7 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     // split auxillary fields
     rom auxs[MAX_FIELDS]; 
     uint32_t aux_lens[MAX_FIELDS];
-    vb->n_auxs   = bam_split_aux (vb, aux, after, auxs, aux_lens);
+    vb->n_auxs   = bam_split_aux (vb, alignment, aux, after, auxs, aux_lens);
     vb->auxs     = auxs;    // note: pointers to data on the stack
     vb->aux_lens = aux_lens;
 

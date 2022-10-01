@@ -233,7 +233,7 @@ typedef struct {
     uint64_t txt_data_size;            // number of bytes in the original txt file
     uint64_t txt_num_lines;            // number of data (non-header) lines in the original txt file. Concat mode: entire file for first SectionHeaderTxtHeader, and only for that txt if not first
     uint32_t max_lines_per_vb;         // upper bound on how many data lines a VB can have in this file
-    Codec    codec;                    // codec of original txt file (none, bgzf, gz, bz2...)
+    Codec    src_codec;                // codec of original txt file (none, bgzf, gz, bz2...)
     uint8_t  codec_info[3];            // codec specific info: for CODEC_BGZF, these are the LSB, 2nd-LSB, 3rd-LSB of the source BGZF-compressed file size
     Digest   digest;                   // digest of original single txt file (except modified or DVCF). v8: 0 if compressed without --md5. starting v14: only if md5, not alder32
     Digest   digest_header;            // MD5 or Adler32 of header
@@ -250,12 +250,12 @@ typedef struct {
     };    
     union {
         uint32_t v13_top_level_repeats;// v12/13: repeats of TOPLEVEL container in this VB. Up to v12 - called num_lines.
-        uint32_t sam_prim_num_sag_alns;    // SAM PRIM: number of alns (prim + depn) in SAGs this VB (v14)
+        uint32_t sam_prim_num_sag_alns;// SAM PRIM: number of alns (prim + depn) in SAGs this VB (v14)
     };
     uint32_t recon_size_prim;          // size of vblock as it appears in the default PRIMARY reconstruction
     uint32_t z_data_bytes;             // total bytes of this vblock in the genozip file including all sections and their headers 
     uint32_t longest_line_len;         // length of the longest line in this vblock 
-    Digest   digest;                   // commulative MD5 or Adler32 up to and including this VB. Starting V14: if Adler32, stand-alone digest of this VB.
+    Digest   digest;                   // stand-alone Adler32 or commulative MD5 up to and including this VB. Up to v13: Adler32 was commulative too.
     union {
         uint32_t v13_num_lines_prim;   // v12/13: number of lines in default reconstruction in PRIMARY coords (v12)
         uint32_t sam_prim_first_grp_i; // SAM PRIM: the index of first group of this PRIM VB, in z_file->sag_grps (v14)
@@ -479,6 +479,19 @@ typedef union {
     char padding[sizeof(SectionHeaderGenozipHeader) + 15]; // SectionHeaderGenozipHeader is the largest, 15=crypt_max_padding_len()
 } SectionHeaderUnion;
 
+typedef union {
+    SectionHeader *common;
+    SectionHeaderGenozipHeader *genozip_header;
+    SectionHeaderTxtHeader *txt_header;
+    SectionHeaderVbHeader *vb_header;
+    SectionHeaderDictionary *dict;
+    SectionHeaderCounts *counts;
+    SectionHeaderCtx *ctx;
+    SectionHeaderReference *reference;
+    SectionHeaderRefHash *ref_hash;
+    SectionHeaderReconPlan *recon_plan;
+} SectionHeaderUnionP __attribute__((__transparent_union__));
+
 #pragma pack()
 
 // in-memory section 
@@ -503,7 +516,7 @@ typedef const struct SectionEnt {
 // ZIP stuff
 // ---------
 
-extern void sections_add_to_list (VBlockP vb, const SectionHeader *header);
+extern void sections_add_to_list (VBlockP vb, ConstSectionHeaderP header);
 extern void sections_remove_from_list (VBlockP vb, uint64_t offset, uint64_t len);
 extern void sections_list_concat (VBlockP vb);
 
@@ -554,7 +567,7 @@ extern void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_l
 
 // display functions
 #define sections_read_prefix (vb->preprocessing ? 'P' : flag_loading_auxiliary ? 'L' : 'R')
-extern void sections_show_header (const SectionHeader *header, VBlockP vb /* optional if output to buffer */, uint64_t offset, char rw);
+extern void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if output to buffer */, uint64_t offset, char rw);
 extern void genocat_show_headers (rom z_filename);
 extern void sections_show_gheader (const SectionHeaderGenozipHeader *header);
 extern void sections_show_section_list (DataType dt);
@@ -576,4 +589,4 @@ extern rom comp_name_ex (CompIType comp_i, SectionType st);
 #define IS_DICTED_SEC(st) ((st)==SEC_DICT || (st)==SEC_B250 || (st)==SEC_LOCAL || (st)==SEC_COUNTS)
 #define IS_VB_SEC(st)     ((st)==SEC_VB_HEADER || (st)==SEC_B250 || (st)==SEC_LOCAL)
 #define IS_COMP_SEC(st)   (IS_VB_SEC(st) || (st)==SEC_TXT_HEADER || (st)==SEC_BGZF || (st)==SEC_RECON_PLAN)
-#define IS_FRAG_SEC(st)   ((st)==SEC_DICT || (st)==SEC_RECON_PLAN || (st)==SEC_REFERENCE || (st)==SEC_REF_IS_SET || (st)==SEC_REF_HASH) // global sections fragmented with a dispatcher, and hence use vb_i 
+#define IS_FRAG_SEC(st)   ((st)==SEC_DICT || (st)==SEC_TXT_HEADER || (st)==SEC_RECON_PLAN || (st)==SEC_REFERENCE || (st)==SEC_REF_IS_SET || (st)==SEC_REF_HASH) // global sections fragmented with a dispatcher, and hence use vb_i 

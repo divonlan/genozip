@@ -38,7 +38,7 @@ typedef struct {
 } SectionsCompIndexEnt;
 
 // ZIP only: create section list that goes into the genozip header, as we are creating the sections. returns offset
-void sections_add_to_list (VBlockP vb, const SectionHeader *header)
+void sections_add_to_list (VBlockP vb, ConstSectionHeaderP header)
 {
     // case: we're re-creaating a section already on this list - nothing to do
     if (vb->section_list_buf.len && vb->z_data.len <= BLST (SectionEnt, vb->section_list_buf)->offset)
@@ -227,7 +227,7 @@ static void sections_create_index (bool force)
         switch (sec[sec_i].st) {
             
             case SEC_TXT_HEADER : 
-                comp_index[comp_i].txt_header_sec = &sec[sec_i]; 
+                if (!comp_index[comp_i].txt_header_sec) comp_index[comp_i].txt_header_sec = &sec[sec_i]; // first fragment of txt header
                 break;
             
             case SEC_BGZF : 
@@ -301,10 +301,11 @@ Section sections_vb_header (VBIType vb_i, bool soft_fail)
         Section sec=NULL;
         uint32_t i=0; for (; i < z_file->section_list_buf.len32; i++) {
             sec = B(SectionEnt, z_file->section_list_buf, i);
-            if (sec->vblock_i == vb_i) break; // found!
+            if (sec->st == SEC_VB_HEADER && sec->vblock_i == vb_i) break; // found!
         }
 
         if (i >= z_file->section_list_buf.len) goto fail;
+        
         return sec;
     }
 
@@ -363,7 +364,9 @@ void sections_new_list_add_txt_header (BufferP new_list, CompIType comp_i)
 {
     SectionsCompIndexEnt *compent = B(SectionsCompIndexEnt, z_file->comp_sections_index, comp_i);
     
-    BNXT (SectionEntModifiable, *new_list) = *compent->txt_header_sec;
+    // add all fragment of the txt_header of this component
+    for (const SectionEntModifiable *ent = compent->txt_header_sec ; ent->st == SEC_TXT_HEADER && ent->comp_i==comp_i ; ent++)
+        BNXT (SectionEntModifiable, *new_list) = *ent;
 }
 
 // PIZ: If any of the components has a SEC_BGZF add it
@@ -791,7 +794,7 @@ static FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt)
     return str;
 }
 
-void sections_show_header (const SectionHeader *header, VBlockP vb /* optional if output to buffer */, uint64_t offset, char rw)
+void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if output to buffer */, uint64_t offset, char rw)
 {
     if (flag_loading_auxiliary && !flag.debug_read_ctxs) return; // don't show headers of an auxiliary file in --show-header, but show in --debug-read-ctx
     
@@ -869,7 +872,7 @@ void sections_show_header (const SectionHeader *header, VBlockP vb /* optional i
                       SEC_TAB "txt_codec=%s (args=0x%02X.%02X.%02X) %s txt_filename=\"%.*s\"\n",
                  BGEN64 (h->txt_data_size), v12 ? BGEN64 (h->txt_header_size) : 0, BGEN64 (h->txt_num_lines), BGEN32 (h->max_lines_per_vb), 
                  digest_display (h->digest).s, digest_display (h->digest_header).s, 
-                 codec_name (h->codec), h->codec_info[0], h->codec_info[1], h->codec_info[2], 
+                 codec_name (h->src_codec), h->codec_info[0], h->codec_info[1], h->codec_info[2], 
                  sections_dis_flags (f, st, dt).s, TXT_FILENAME_LEN, h->txt_filename);
         break;
     }
@@ -984,7 +987,7 @@ void genocat_show_headers (rom z_filename)
     ARRAY (SectionEnt, sec, z_file->section_list_buf);
     for (uint32_t i=0; i < sec_len; i++) {
         header = zfile_read_section_header (evb, sec[i].offset, sec[i].vblock_i, sec[i].st).genozip_header; // we assign the largest of the SectionHeader* types
-        sections_show_header ((SectionHeader *)&header, NULL, sec[i].offset, 'R');
+        sections_show_header ((SectionHeaderP)&header, NULL, sec[i].offset, 'R');
     }        
 
     exit_ok();

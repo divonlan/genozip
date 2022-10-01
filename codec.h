@@ -18,7 +18,7 @@
 #define COMPRESS(func)                                                              \
     bool func (VBlockP vb,                                                          \
                ContextP ctx, /* NULL if not compressing a context */                \
-               SectionHeader *header,                                               \
+               SectionHeaderP header,                                               \
                rom uncompressed,         /* option 1 - compress contiguous data */  \
                uint32_t *uncompressed_len,                                          \
                LocalGetLineCB get_line_cb,  /* option 2 - call back to get lines */ \

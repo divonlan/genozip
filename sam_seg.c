@@ -65,7 +65,7 @@ void sam_zip_initialize (void)
 {
     if (flag.reference == REF_INTERNAL && !txt_file->redirected)
         WARN_ONCE ("Tip: compressing %s %s file using a reference file can reduce the compressed file's size by %s.\nUse: \"genozip --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
-                   segconf.sam_mapper ? "a" : "an unaligned",
+                   segconf.sam_mapper ? "a" : "an *unaligned*",
                    dt_name (txt_file->data_type), 
                    segconf.sam_mapper ? "7%-20%" : "30%",
                    txt_file->name);

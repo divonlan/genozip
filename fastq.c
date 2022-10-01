@@ -122,8 +122,8 @@ out_of_data:
 bool fastq_txtfile_have_enough_lines (VBlockP vb_, uint32_t *unconsumed_len, 
                                       uint32_t *my_lines, uint32_t *her_lines) // out - only set in case of failure
 {
-
     VBlockFASTQ *vb = (VBlockFASTQ *)vb_;
+    ASSERTNOTZERO (vb->pair_num_lines, "");
 
     rom next  = B1STtxt;
     rom after = BAFTtxt;

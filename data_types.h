@@ -93,7 +93,7 @@ typedef struct DataTypeProperties {
     bool (*zip_dts_flag)(void);                 // called to set FlagsGenozipHeader.dt_specific
     bool (*zip_vb_has_count)(VBlockP);          // called by ctx_merge_in_one_vctx to equire whether this VB adds to counts
     void (*zip_set_vb_header_specific)(VBlockP, SectionHeaderVbHeader *); // main thread from zfile_compress_vb_header: set "specific" fields of VB Header
-    void (*zip_set_txt_header_specific)(SectionHeaderTxtHeader *); // main thread from zfile_write_txt_header: set data-type-specific fields of TXT Header
+    void (*zip_set_txt_header_specific)(SectionHeaderTxtHeader *); // main thread from txtheader_compress: set data-type-specific fields of TXT Header
     void (*seg_initialize)(VBlockP);            // called by Compute thread at the beginning of Seg
     rom (*seg_txt_line)(VBlockP, rom field_start_line, uint32_t remaining_txt_len, bool *has_13);  // Called by Compute thread to Seg one line
     bool (*seg_is_big)(ConstVBlockP, DictId);   // returns true if dict_id is expected to have a large number of values 

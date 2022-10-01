@@ -43,6 +43,8 @@
 #define COUNT_PROTECTED_FROM_REMOVAL64 0x8000000000000000ULL 
 #define COUNT_PROTECTED_FROM_REMOVAL32 0x80000000
 
+#define EXCESSIVE_DICT_SIZE (512 << 20) // warn if dict size goes beyond 512M
+
 // inserts dict_id->did_i to the map, if one of the two entries is available
 static inline void set_dict_id_to_did_i_map (Did *map, DictId dict_id, Did did_i)
 {
@@ -720,6 +722,9 @@ WordIndex ctx_populate_zf_ctx (Did dst_did_i, STRp (contig_name), WordIndex ref_
         *B64(zctx->counts, zf_node_index) = MAX_(*B64(zctx->counts, zf_node_index), 1);
     }
 
+    if (zctx->dict.len > EXCESSIVE_DICT_SIZE)
+        zctx->dict_len_excessive = true; // suppress warning - as this would not be an unexpectedly large dict size due to bad segging
+        
     return zf_node_index;
 }
 
@@ -737,7 +742,7 @@ void ctx_populate_zf_ctx_from_contigs (Reference ref, Did dst_did_i, ConstContig
     if (!buf_is_alloc (&zctx->global_hash)) { // first call
         zctx->no_stons = true;
         zctx->st_did_i = DID_NONE;
-        hash_alloc_global (zctx, ctgs->contigs.len32);
+        hash_alloc_global (zctx, ctgs->contigs.len32 * 2);
     }
 
     if (flag.reference & REF_ZIP_LOADED)
@@ -1070,8 +1075,8 @@ static bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx)
             vb_node->word_index = zf_node->word_index;
     }
 
-    // warn if dict > 512 MB
-    if (zctx->dict.len > (512 << 20) && !zctx->dict_len_excessive) {
+    // warn if dict size is excessive
+    if (zctx->dict.len > EXCESSIVE_DICT_SIZE && !zctx->dict_len_excessive) {
         zctx->dict_len_excessive = true; // warn only once (per context)
         WARN ("WARNING: excessive zctx dictionary size - causing slow compression and decompression and reduced compression ratio. Please report this to support@genozip.com.\n"
               "sam_mapper=%s data_type=%s ctx=%s vb=%s vb_size=%"PRIu64" zctx->dict.len=%"PRIu64" version=%s. First 1000 bytes: ", 

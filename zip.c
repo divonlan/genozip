@@ -619,7 +619,7 @@ static void zip_update_txt_counters (VBlockP vb)
     z_file->txt_data_so_far_bind_0_comp[vb->comp_i] += (int64_t)vb->txt_size;
     
     // note: in case of SAM gencomp, MAIN, we add recon_size - assuming the discrepency vs txt_data.len
-    // is only due to lines being deporting to gencomp 
+    // is only due to lines being deported to gencomp 
     z_file->txt_data_so_far_bind_comp[vb->comp_i] += 
         (z_sam_gencomp && vb->comp_i==SAM_COMP_MAIN) ? vb->recon_size : vb->txt_data.len;
 

@@ -34,7 +34,6 @@ extern LocalGetLineCB *zfile_get_local_data_callback (DataType dt, ContextP ctx)
 extern void zfile_compress_vb_header (VBlockP vb);
 extern void zfile_update_compressed_vb_header (VBlockP vb);
 
-extern void zfile_write_txt_header (BufferP vcf_header_text, uint64_t unmodified_txt_header_len, Digest header_md5, bool is_first_vcf, CompIType comp_i);
 extern bool zfile_update_txt_header_section_header (uint64_t pos_of_current_vcf_header, uint32_t max_lines_per_vb);
 
 extern void zfile_remove_ctx_group_from_z_data (VBlockP vb, Did did_i);
@@ -57,15 +56,13 @@ extern int32_t zfile_read_section_do (FileP file, VBlockP vb, uint32_t original_
 #define zfile_read_section(file,vb,original_vb_i,data,buf_name,expected_sec_type,sl) \
     zfile_read_section_do ((file),(VBlockP)(vb),(original_vb_i),(data),(buf_name),(expected_sec_type),(sl), st_header_size (expected_sec_type), __FUNCLINE)
 
-extern void zfile_uncompress_section (VBlockP vb, void *section_header, 
-                                      BufferP uncompressed_data, 
-                                      rom uncompressed_data_buf_name,
-                                      uint32_t expected_vb_i, SectionType expected_section_type);
+extern void zfile_uncompress_section (VBlockP vb, SectionHeaderUnionP section_header, BufferP uncompressed_data, rom uncompressed_data_buf_name, uint32_t expected_vb_i, SectionType expected_section_type);
+extern void zfile_uncompress_section_into_buf (VBlockP vb, SectionHeaderUnionP section_header_p, uint32_t expected_vb_i, SectionType expected_section_type, BufferP dst_buf, char *dst);
 
 #define zfile_get_global_section(HeaderType, sec,out_buf,out_buf_name) \
     bool skipped = SECTION_SKIPPED == zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", (sec)->st, (sec)); \
     if (!skipped && (!flag.only_headers || (sec)->st == SEC_RANDOM_ACCESS)) \
-        zfile_uncompress_section (evb, evb->z_data.data, (out_buf), (out_buf_name), 0, (sec)->st); \
+        zfile_uncompress_section (evb, B1ST(SectionHeader, evb->z_data), (out_buf), (out_buf_name), 0, (sec)->st); \
     HeaderType header __attribute__((unused)) = !skipped ? *(HeaderType *)evb->z_data.data : (HeaderType){}; /* make a copy of the header */ \
     if (!skipped) buf_free (evb->z_data); 
 

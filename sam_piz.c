@@ -106,7 +106,7 @@ IS_SKIP (sam_piz_is_skip_section)
     #define SKIPIFF(cond) ({ if (cond) SKIP; else KEEP; })
     #define KEEPIFF(cond) ({ if (cond) KEEP; else SKIP;})
 
-    // if this is a mux channel of an OPTION - consider its parent instead. Eg. "M0C:Z0", "M1C:Z1" -> "MC:i"
+    // if this is a mux channel of an OPTION - consider its parent instead. Eg. "M0C:Z0", "M1C:Z1" -> "MC:Z"
     if (dict_id.id[3]==':' && dict_id.id[1] == dict_id.id[5]&& !dict_id.id[6])
         dict_id = (DictId){ .id = { dict_id.id[0], dict_id.id[2], ':', dict_id.id[4] } };
 
@@ -195,10 +195,11 @@ IS_SKIP (sam_piz_is_skip_section)
         case _SAM_RNAME    : KEEP;
         case _SAM_SAG      : KEEP;
         case _SAM_SAALN    : KEEP;
-        case _OPTION_MC_Z  : // note: CIGAR reconstruc;ztion requires MC:Z (mate copy)
+        case _SAM_AUX      : KEEP; // needed in preproc for container_peek_get_idxs
+        case _OPTION_MC_Z  : KEEPIF (preproc || flag.out_dt == DT_FASTQ); // note: CIGAR reconstruction requires MC:Z (mate copy)
+                             SKIPIFF (cnt && !flag.bases);
         case _SAM_CIGAR    : KEEPIF (flag.out_dt == DT_FASTQ);
                              SKIPIFF ((preproc && IS_SAG_SA) || (cnt && !flag.bases));
-        case _SAM_AUX      : SKIPIFF (preproc && (!segconf.sag_has_AS && !IS_SAG_SOLO));
         case _SAM_MAPQ     : // note: MAPQ reconstruction requires MQ:Z (mate copy)
         case _OPTION_MQ_i  : SKIPIFF (preproc || ((cov || cnt) && !flag.bases && !flag.sam_mapq_filter));
         case _SAM_PNEXT    : case _SAM_P0NEXT : case _SAM_P1NEXT : case _SAM_P2NEXT : case _SAM_P3NEXT : 

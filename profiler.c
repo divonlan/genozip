@@ -88,6 +88,16 @@ void profiler_add (ConstVBlockP vb)
     ADD (sam_seg_SEQ_vs_ref);
     ADD (sam_seg_bisulfite_M);
     ADD (sam_reconstruct_SEQ_vs_ref);
+    ADD (sam_header_add_contig); 
+    ADD (contigs_create_index);
+    ADD (sam_header_zip_inspect_PG_lines); 
+    ADD (sam_header_zip_inspect_HD_line);
+    ADD (ref_initialize_ranges);
+    ADD (txtheader_zip_read_and_compress);
+    ADD (txtheader_compress);
+    ADD (txtheader_compress_one_fragment);
+    ADD (txtheader_piz_read_and_reconstruct);
+    ADD (digest_txt_header);
     ADD (scan_index_qnames_preprocessing);
     ADD (aligner_seg_seq);
     ADD (aligner_reconstruct_seq);    
@@ -213,10 +223,13 @@ void profiler_print_report (void)
         iprint0 ("GENOUNZIP main thread (piz_one_txt_file):\n");
         PRINT (piz_read_global_area, 1);
         PRINT (ref_load_stored_reference, 2);
+        PRINT (ref_initialize_ranges, 3);
         PRINT (ref_read_one_range, 3);
         PRINT (ref_uncompress_one_range, 3);
         PRINT (dict_io_read_all_dictionaries, 2);
         PRINT (dict_io_build_word_lists, 3);
+        PRINT (txtheader_piz_read_and_reconstruct, 1);
+        PRINT (digest_txt_header, 2);
         PRINT (vb_get_vb, 1);
         PRINT (piz_read_one_vb, 1);
         PRINT (read, 2);
@@ -269,7 +282,16 @@ void profiler_print_report (void)
     }
     else { // compress
         iprint0 ("GENOZIP main thread (zip_one_file):\n");
-        PRINT (txtfile_read_header, 1);
+        PRINT (txtheader_zip_read_and_compress, 1);
+        PRINT (txtfile_read_header, 2);
+        PRINT (sam_header_add_contig, 2); 
+        PRINT (contigs_create_index, 2);
+        PRINT (sam_header_zip_inspect_PG_lines, 2); 
+        PRINT (sam_header_zip_inspect_HD_line, 2);
+        PRINT (ref_initialize_ranges, 2);
+        PRINT (txtheader_compress, 2);
+        PRINT (txtheader_compress_one_fragment, 3); 
+        PRINT (digest_txt_header, 2);
         PRINT (vb_get_vb, 1);
         PRINT (txtfile_read_vblock, 1);
         PRINT (read, 2);

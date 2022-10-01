@@ -342,16 +342,19 @@ str_get_int_range_allow_hex_bits(16) // unsigned
 str_get_int_range_allow_hex_bits(32) // unsigned
 str_get_int_range_allow_hex_bits(64) // unsigned
 
-// caller should allocate hex_str[data_len*2+1]. returns nul-terminated string.
-rom str_to_hex (bytes data, uint32_t data_len, char *hex_str)
+// caller should allocate hex_str[data_len*2+1] (or *3 if with_dot). returns nul-terminated string.
+rom str_to_hex (bytes data, uint32_t data_len, char *hex_str, bool with_dot)
 {
     char *s = hex_str;
 
     for (int i=0; i < data_len; i++) {
         *s++ = NUM2HEXDIGIT(data[i] >> 4);
         *s++ = NUM2HEXDIGIT(data[i] & 0xf);
+        if (with_dot) *s++ = '.';
     }
 
+    if (with_dot) s--; // remove terminating dot
+    
     *s = 0;
     return hex_str;
 }
@@ -359,7 +362,7 @@ rom str_to_hex (bytes data, uint32_t data_len, char *hex_str)
 StrText str_hex10 (bytes data, uint32_t data_len)
 {
     StrText s;
-    str_to_hex (data, MIN_(10, data_len), s.s);
+    str_to_hex (data, MIN_(10, data_len), s.s, false);
     return s;
 }
 

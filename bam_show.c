@@ -28,14 +28,8 @@ static void bam_show_one_aux (STRp(aux))
         case 'i' : iprintf ("%d ", NEXT_UINT32);  break;
         case 'I' : iprintf ("%u ", NEXT_UINT32);  break;
         case 'f' : iprintf ("%f ", NEXT_FLOAT32); break;
+        case 'H' :
         case 'Z' : iprintf ("%s ", next_field); next_field += strlen (next_field)+1 ; break;
-        
-        case 'H' : { 
-            int len = strlen(next_field);
-            char hex[len];
-            iprintf ("%s ", str_to_hex ((bytes)next_field, len, hex)); next_field += len+1 ; 
-            break;
-        }
         
         case 'B' : {
             uint8_t type   = NEXT_UINT8;
@@ -106,7 +100,7 @@ rom bam_show_line (VBlockSAMP vb, rom alignment, uint32_t remaining_txt_len)
     // split auxillary fields
     rom auxs[MAX_FIELDS]; 
     uint32_t aux_lens[MAX_FIELDS];
-    uint32_t n_auxs = bam_split_aux (vb, next_field, after, auxs, aux_lens);
+    uint32_t n_auxs = bam_split_aux (vb, alignment, next_field, after, auxs, aux_lens);
     for (int i=0; i < n_auxs; i++)
         bam_show_one_aux (auxs[i], aux_lens[i]);
 

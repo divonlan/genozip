@@ -20,13 +20,27 @@
 
 rom bam_qual_display (bytes qual, uint32_t l_seq) // caller should free memory
 {
-    char *str = MALLOC (l_seq + 2);
-
+    bool valid_qual = true;
     for (uint32_t i=0; i < l_seq; i++) 
-        str[i] = qual[i] + 33;
+        if (qual[i] > 93) {
+            valid_qual = false;
+            break;
+        }
 
-    str[l_seq] = 0;
-    return str;
+    if (valid_qual) {
+        char *str = MALLOC (l_seq + 2);
+
+        for (uint32_t i=0; i < l_seq; i++) 
+            str[i] = qual[i] + 33;
+
+        str[l_seq] = 0;
+        return str;
+    }
+
+    else {
+        char *str = MALLOC (l_seq*3 + 2);
+        return str_to_hex (qual, l_seq, str, true);
+    }
 }
 
 // get a score of the QUAL string - similar to that calculated by biobambam for ms:i:

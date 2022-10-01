@@ -578,6 +578,7 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq), unsigned
         sam_seg_SEQ_pad_nonref (vb);
         vb->md_verified = false;    
         vb->mismatch_bases_by_SEQ = -1; 
+        force_verbatim = true;    
     }
 
     // case: no SEQ. we already add '-' to CIGAR - no data added here
@@ -624,6 +625,13 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq), unsigned
     //       and SQBITMAP is reconstructed again during recon - but this SPECIAL_SEQ copies from SA Groups
     // case: MAIN/DEPN - SPECIAL_SEQ is invoked by SQBITMAP - it either reconstructs sequence or diffs vs prim.
     //       (prim SEQ may be taken from SA Groups or from earlier in the current VB (the latter only in MAIN VBs)
+    #define SEQ_SNIP_FORCE_SEQ           0
+    #define SEQ_SNIP_ALIGNER_USER        1
+    #define SEQ_SNIP_PERFECT             2
+    #define SEQ_SNIP_NO_ANALYZE_DEPN_SEQ 3
+    #define SEQ_SNIP_BISULFATE           4
+    #define SEQ_FORCE_VERBATIM           5
+
     seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_SEQ, '0'+force_sequence, '0'+aligner_used, '0'+perfect, '0'+force_no_analyze_depn_SEQ, 
                                 (!vb->bisulfite_strand) ? '0'
                               : (vb->bisulfite_strand && !segconf.bs_strand_not_by_rev_comp && (vb->bisulfite_strand=='G') == dl->FLAG.rev_comp) ? '*' // bisulfite_strand is predicted by rev_comp
@@ -858,12 +866,12 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, ContextP bitmap_ctx, STRp(snip), b
     bool unmapped = v14 ? (!vb->preprocessing && (last_flags.unmapped || vb->cigar_missing || !pos || IS_ASTERISK (vb->chrom_name)))
                         : (!pos || IS_ASTERISK (vb->chrom_name)); // the criterion seg used in up to v13
                                                   
-    bool aligner_used = v14 ? (snip && snip[1] == '1') // starting v14, seg tells us explicitly
+    bool aligner_used = v14 ? (snip && snip[SEQ_SNIP_ALIGNER_USER] == '1') // starting v14, seg tells us explicitly
                             : (unmapped && z_file->z_flags.aligner); 
 
-    bool is_perfect = v14 && snip && snip[2] == '1';
+    bool is_perfect = v14 && snip && snip[SEQ_SNIP_PERFECT] == '1';
 
-    bool force_verbatim = v14 && snip && snip[5] == '1';
+    bool force_verbatim = v14 && snip && snip[SEQ_FORCE_VERBATIM] == '1';
 
     char bisulfite = vb->bisulfite_strand; // automatic var for efficiency in tight loop
     bool predict_meth_call = bisulfite && segconf.sam_predict_meth_call;
@@ -1109,12 +1117,12 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SEQ)
 {
     VBlockSAMP vb = (VBlockSAMP)vb_;
 
-    vb->bisulfite_strand = (!VER(14) || snip[4]=='0') ? 0
-                         : snip[4] == '*'             ? "CG"[last_flags.rev_comp]
-                         :                              snip[4];
+    vb->bisulfite_strand = (!VER(14) || snip[SEQ_SNIP_BISULFATE]=='0') ? 0
+                         : snip[SEQ_SNIP_BISULFATE] == '*'             ? "CG"[last_flags.rev_comp]
+                         :                                               snip[SEQ_SNIP_BISULFATE];
     // case: reconstructor would normally diff, but in this case it should reconstruct from SQBITMAP.local    
-    if (snip[0] == '1') 
-        goto force_sequence;
+    if (snip[SEQ_SNIP_FORCE_SEQ] == '1') 
+        goto vs_seq__aligner__verbatim;
 
     // case: PRIM component - copy from SA Group 
     else if (sam_is_prim_vb && !vb->preprocessing) {
@@ -1127,6 +1135,9 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SEQ)
                                     vb->ref_consumed, vb->ref_and_seq_consumed, &ctx->line_sqbitmap);        
     }
 
+    else if (snip[SEQ_SNIP_ALIGNER_USER] == '1' || snip[SEQ_FORCE_VERBATIM] == '1')
+        goto vs_seq__aligner__verbatim;
+
     // case: DEPN component - line with sag - copy from sag loaded from prim VB
     else if (sam_is_depn_vb && SAM_PIZ_HAS_SAG) {
         const Sag *grp = vb->sag;
@@ -1134,17 +1145,17 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SEQ)
                 ZGRP_I(grp), ZALN_I(vb->sa_aln), grp->seq_len, vb->hard_clip[0], vb->hard_clip[1]);
 
         reconstruct_SEQ_copy_sag_prim (vb, ctx, (BitsP)&z_file->sag_seq, STRa(grp->seq), 
-                                       (last_flags.rev_comp != grp->revcomp), reconstruct, snip[3]-'0');
+                                       (last_flags.rev_comp != grp->revcomp), reconstruct, snip[SEQ_SNIP_NO_ANALYZE_DEPN_SEQ]-'0');
     }
 
     // case: copy from saggy line in this VB
     else if (sam_has_saggy && !B(CigarAnalItem, CTX(SAM_CIGAR)->cigar_anal_history, vb->saggy_line_i)->hard_clip[0] 
                            && !B(CigarAnalItem, CTX(SAM_CIGAR)->cigar_anal_history, vb->saggy_line_i)->hard_clip[1])
-        reconstruct_SEQ_copy_saggy (vb, ctx, reconstruct, snip[3]-'0');
+        reconstruct_SEQ_copy_saggy (vb, ctx, reconstruct, snip[SEQ_SNIP_NO_ANALYZE_DEPN_SEQ]-'0');
 
     // case: reconstruct sequence directly
     else 
-        force_sequence:
+        vs_seq__aligner__verbatim:
         sam_reconstruct_SEQ_vs_ref (VB, ctx, STRa(snip), reconstruct);
 
     return NO_NEW_VALUE;

@@ -141,16 +141,20 @@ void sam_show_sag (void)
     }
 }
 
-static void reset_buddy_iterators (VBlockSAMP vb)
+static void reset_iterators (VBlockSAMP vb)
 {
+    CTX(SAM_AUX  )->iterator = (SnipIterator){}; 
     CTX(SAM_QNAME)->iterator = (SnipIterator){};
     CTX(SAM_BUDDY)->iterator = (SnipIterator){};
     CTX(SAM_BUDDY)->next_local = 0;
+    ctx_unset_encountered (VB, CTX(SAM_AUX));
 }
 
 // QNAME: reconstruct directly into z_file->sa_qname by overlaying txt_data
 static inline void sam_load_groups_add_qname (VBlockSAMP vb, PlsgVbInfo *plsg, Sag *vb_grps) 
 {
+    Buffer save_txt_data = vb->txt_data;
+    vb->txt_data = (Buffer){};
     buf_set_overlayable (&z_file->sag_qnames);
     buf_overlay_partial (vb, &vb->txt_data, &z_file->sag_qnames, plsg->qname_start, "txt_data");
     
@@ -166,7 +170,9 @@ static inline void sam_load_groups_add_qname (VBlockSAMP vb, PlsgVbInfo *plsg, S
     }
 
     buf_free (vb->txt_data);
-    reset_buddy_iterators (vb);
+    vb->txt_data = save_txt_data;
+    
+    reset_iterators (vb);
 }
 
 // FLAGS: get multi_segs, is_first, is_last from SAM_FLAGS. 
@@ -248,11 +254,15 @@ static inline void sam_load_groups_add_seq (VBlockSAMP vb, PlsgVbInfo *plsg, Sag
     // reconstruct SEQ to vb->textual_seq, needed by sam_piz_prim_add_QUAL, and overlay txt_data on it
     buf_alloc (vb, &vb->textual_seq, 0, vb->seq_len, char, 0, "textual_seq");
     buf_set_overlayable (&vb->textual_seq);
+
+    Buffer save_txt_data = vb->txt_data;
+    vb->txt_data = (Buffer){};
     buf_overlay (vb, &vb->txt_data, &vb->textual_seq, "txt_data");
 
     reconstruct_from_ctx (vb, SAM_SQBITMAP, 0, true);
     vb->textual_seq.len32 = vb->txt_data.len32;
     buf_free (vb->txt_data); // un-overlay
+    vb->txt_data = save_txt_data;
 
     ASSERT (vb->textual_seq.len32 == vb->seq_len, "Expecting textual_seq.len=%u == seq_len=%u", vb->textual_seq.len32, vb->seq_len);
 
@@ -269,6 +279,9 @@ static inline void sam_load_groups_add_qual (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
     // to reconstruct into codec_bufs[0], we overlay txt_data on it, as the reconstruct machinery reconstructs to txt_data 
     buf_alloc (vb, &vb->codec_bufs[0], vb->seq_len, 0, char, 1, "codec_bufs[0]");
     buf_set_overlayable (&vb->codec_bufs[0]);
+
+    Buffer save_txt_data = vb->txt_data;
+    vb->txt_data = (Buffer){};
     buf_overlay (vb, &vb->txt_data, &vb->codec_bufs[0], "txt_data");
 
     // Reconstruct QUAL of one line into txt_data which is overlaid on codec_bufs[0]
@@ -276,6 +289,7 @@ static inline void sam_load_groups_add_qual (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
     vb->codec_bufs[0].len = vb->txt_data.len;
     g->no_qual = vb->qual_missing;
     buf_free (vb->txt_data); // un-overlay
+    vb->txt_data = save_txt_data;
 
     if (g->no_qual) goto done; // no quality data for this group - we're done
 
@@ -422,6 +436,8 @@ static inline void sam_load_groups_add_solo_data (VBlockSAMP vb, PlsgVbInfo *pls
     for (int i=0; i < vb->plsg_i; i++) 
         solo_data_start += B(PlsgVbInfo, plsg_info, i)->solo_data_len;
 
+    Buffer save_txt_data = vb->txt_data;
+    vb->txt_data = (Buffer){};
     buf_overlay_partial (vb, &vb->txt_data, &z_file->solo_data, solo_data_start, "txt_data");
     vb->txt_data.len = 0;
 
@@ -444,7 +460,8 @@ static inline void sam_load_groups_add_solo_data (VBlockSAMP vb, PlsgVbInfo *pls
 
     CTX(SAM_AUX)->iterator = (SnipIterator){}; // reset as it might be needed for AS
     buf_free (vb->txt_data); // un-overlay
-    reset_buddy_iterators (vb);
+    vb->txt_data = save_txt_data;
+    reset_iterators (vb);
 }
 
 // SEQ - ACGT-pack uncompressed sequence directly to z_file->sag_seq
@@ -470,6 +487,10 @@ static inline void sam_load_groups_add_grps (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
     bool is_cigar_all_the_same_SQUANK = !cigar_ctx->word_list.len && cigar_ctx->dict.len >= 3 && 
                                         *B1STc(cigar_ctx->dict)==SNIP_SPECIAL && *Bc(cigar_ctx->dict, 1)==SAM_SPECIAL_SQUANK;
 
+    if (CTX(OPTION_MC_Z)->is_loaded) // if we're going to reconstruct MC:Z into txt_data
+        buf_alloc (vb, &vb->txt_data, 0, vb->recon_size, char, 0, "txt_data");
+
+    // every alignment in the Primary VB represents a grp
     for (SAGroup grp_i=0; grp_i < plsg->num_grps ; grp_i++) {
         Sag *g = &vb_grps[grp_i];
 
@@ -478,7 +499,7 @@ static inline void sam_load_groups_add_grps (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
 
         reconstruct_from_ctx (VB, SAM_BUDDY, 0, true); // set buddy (true = consume QNAME)
 
-        // if this is an SA:Z-defined SA Group, load primary alignment
+        // if this is an SA:Z-defined SAG, load primary alignment
         if (IS_SAG_SA) {
 
             ASSERT (g->first_aln_i >= plsg->first_aln_i && g->first_aln_i < z_file->sag_alns.len,
@@ -546,14 +567,22 @@ static inline void sam_load_groups_add_grps (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
         if (CTX(SAM_QUAL)->is_loaded)
             sam_load_groups_add_qual (vb, plsg, g);
 
+        // get the index of the tag in this alignment's AUX container. we're really interested if they exist or not.
+        ContainerPeekItem idxs[2] = { { .did = OPTION_AS_i }, { .did = OPTION_MC_Z } };
+        container_peek_get_idxs (VB, CTX(SAM_AUX), ARRAY_LEN(idxs), idxs, true);
+
         // set AS.last_value, unless AS:i is skipped entirely
-        if (segconf.sag_has_AS     && // depn lines' AS:i was segged against prim 
+        if (segconf.sag_has_AS          && // depn lines' AS:i was segged against prim 
             CTX(OPTION_AS_i)->is_loaded && // we didn't skip AS:i due to subsetting command line options
-            container_peek_has_item (VB, CTX(SAM_AUX), _OPTION_AS_i, true)) { // this line has AS:i
+            idxs[0].idx != -1) {           // this line has AS:i
 
             reconstruct_from_ctx (VB, OPTION_AS_i, 0, false);
             g->as = CAP_SA_AS (vb->last_int(OPTION_AS_i));  // [0,255] capped at 0 and 255
         }
+
+        // if line contains MC:Z - reconstruct is into txt_data, as our mate's CIGAR might copy it
+        if (CTX(OPTION_MC_Z)->is_loaded && idxs[1].idx != -1/*this line has MC:Z */)  
+            reconstruct_from_ctx (VB, OPTION_MC_Z, 0, true);
 
         total_seq_len += vb->seq_len;
         
@@ -562,8 +591,8 @@ static inline void sam_load_groups_add_grps (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
 
     buf_free (vb->textual_seq);
     buf_free (vb->codec_bufs[0]);
-    reset_buddy_iterators (vb);
-    CTX(SAM_AUX)->iterator = (SnipIterator){}; // reset 
+    buf_free (vb->txt_data);
+    reset_iterators (vb);
 }
 
 // Alns - populate RNAME, POS, MAPQ, STRAND and NM (CIGAR is added sam_load_groups_add_grps)

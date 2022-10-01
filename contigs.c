@@ -447,6 +447,8 @@ void foreach_contig (ConstContigPkgP ctgs, ContigsIteratorCallback callback, voi
 
 void contigs_create_index (ContigPkg *ctgs, SortBy sort_by)
 {
+    START_TIMER;
+
     ASSERTNOTNULL (ctgs);
 
     static uint64_t unique_id_generator=0;
@@ -464,6 +466,8 @@ void contigs_create_index (ContigPkg *ctgs, SortBy sort_by)
     }  
 
     ctgs->sorted_by |= sort_by;
+
+    COPY_TIMER_VB (evb, contigs_create_index);
 }
 
 void contigs_build_contig_pkg_from_zctx (ContigPkg *ctgs, ConstContextP zctx, SortBy sort_by)

@@ -264,7 +264,7 @@ static void dict_io_read_one_vb (VBlockP vb)
                 dict_ctx->tag_name, dict_ctx->dict.len, (uint64_t)dict_ctx->dict.size, dict_ctx->dict.prm32[0], dict_ctx->dict.prm32[1]);
 
         if (flag.debug_read_ctxs)
-            sections_show_header ((SectionHeader *)header, NULL, dict_sec->offset, sections_read_prefix);
+            sections_show_header ((SectionHeaderP)header, NULL, dict_sec->offset, sections_read_prefix);
     }
 
 done: 

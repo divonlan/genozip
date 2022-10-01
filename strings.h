@@ -153,7 +153,7 @@ extern StrText str_int_commas (int64_t n);
 extern StrText str_uint_commas_limit (uint64_t n, uint64_t limit);
 extern StrText str_int_s (int64_t n);
 
-extern rom str_to_hex (bytes data, uint32_t data_len, char *hex_str);
+extern rom str_to_hex (bytes data, uint32_t data_len, char *hex_str, bool with_dot);
 extern StrText str_hex10 (bytes data, uint32_t data_len); // up to 10 bytes in hex (21 chars inc. \0)
 
 // string length of an integer. #include <math.h> if using this.
