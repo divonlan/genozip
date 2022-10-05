@@ -20,11 +20,11 @@
 #ifdef __APPLE__
 #include <sys/sysctl.h>
 #include <mach-o/dyld.h>
+#include "compatibility/mac_gettime.h"
 #else // LINUX
 #include <sched.h>
 #include <sys/sysinfo.h>
 #include <sys/utsname.h>
-#include "compatibility/mac_gettime.h"
 #endif
 #endif
 
