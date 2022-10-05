@@ -20,7 +20,6 @@
 #ifdef __APPLE__
 #include <sys/sysctl.h>
 #include <mach-o/dyld.h>
-#include "compatibility/mac_gettime.h"
 #else // LINUX
 #include <sched.h>
 #include <sys/sysinfo.h>
@@ -35,6 +34,7 @@
 #include "sections.h"
 #include "flags.h"
 #include "strings.h"
+#include "profiler.h"
 
 static rom argv0 = NULL;
 
