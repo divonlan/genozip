@@ -11,6 +11,7 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <locale.h>
+#include <time.h>
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -23,6 +24,7 @@
 #include <sched.h>
 #include <sys/sysinfo.h>
 #include <sys/utsname.h>
+#include "compatibility/mac_gettime.h"
 #endif
 #endif
 
