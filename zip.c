@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted,
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
 //   under penalties specified in the license.
 
 #include <math.h>
@@ -942,7 +942,7 @@ void zip_one_file (rom txt_basename,
 
     // if this a non-bound file, or the last component of a bound file - write the genozip header, random access and dictionaries
 finish:   
-    if (!flag.zip_comp_i)
+    if (!flag.zip_comp_i || Z_DT(FASTQ)) // in paired FASTQ we count found files
         z_file->txt_disk_so_far_bind += (int64_t)txt_file->disk_so_far + (txt_file->codec==CODEC_BGZF)*BGZF_EOF_LEN;
 
     // reconstruction plan (for VCF - for DVCF or --sort, for SAM - re-integrate supp/secondary alignments)

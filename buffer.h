@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #pragma once
@@ -173,10 +173,17 @@ extern uint64_t buf_alloc_do (VBlockP vb,
 #define for_buf(element_type, iterator, buf)  \
     for (element_type *iterator=B1ST(element_type, (buf)); iterator < BAFT(element_type, (buf)); iterator++)
 
+#define for_buf_back(element_type, iterator, buf)  \
+    for (element_type *iterator=BLST(element_type, (buf)); iterator >= B1ST(element_type, (buf)); iterator--)
+
 // loop with two concurrent iterators "iter_p" (pointer to element_type) and "iter_i" (32bit) 
 #define for_buf2(element_type, iter_p, iter_i, buf) \
     for (uint32_t iter_i=0; iter_i < (buf).len32;)  \
         for (element_type *iter_p=B1ST(element_type, (buf)); iter_p < BAFT(element_type, (buf)); iter_p++, iter_i++)
+
+#define for_buf2_back(element_type, iter_p, iter_i, buf) \
+    for (int32_t iter_i=(buf).len32-1; iter_i >= 0;)  \
+        for (element_type *iter_p=BLST(element_type, (buf)); iter_p >= B1ST(element_type, (buf)); iter_p--, iter_i--)
 
 typedef struct { char s[300]; } BufDescType;
 extern const BufDescType buf_desc (ConstBufferP buf);

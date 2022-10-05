@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted,
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
 //   under penalties specified in the license.
 
 #include <errno.h>
@@ -47,7 +47,7 @@ static void zfile_show_b250_section (SectionHeaderUnionP section_header_p, Const
     mutex_initialize (show_b250_mutex); // possible unlikely race condition on initializing - good enough for debugging purposes
     mutex_lock (show_b250_mutex);
 
-    iprintf ("vb_i=%u %*.*s: ", BGEN32 (header->h.vblock_i), -DICT_ID_LEN-1, DICT_ID_LEN, dict_id_typeless (header->dict_id).id);
+    iprintf ("vb_i=%u %*.*s: ", BGEN32 (header->vblock_i), -DICT_ID_LEN-1, DICT_ID_LEN, dict_id_typeless (header->dict_id).id);
 
     bytes data  = B1ST (const uint8_t, *b250_data);
     bytes after = BAFT (const uint8_t, *b250_data);
@@ -219,16 +219,16 @@ uint32_t zfile_compress_b250_data (VBlockP vb, ContextP ctx)
         flags.paired = ctx->pair_b250;
 
     SectionHeaderCtx header = (SectionHeaderCtx) { 
-        .h.magic                 = BGEN32 (GENOZIP_MAGIC),
-        .h.section_type          = SEC_B250,
-        .h.data_uncompressed_len = BGEN32 (ctx->b250.len32),
-        .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderCtx)),
-        .h.codec                 = ctx->bcodec == CODEC_UNKNOWN ? CODEC_RANS8 : ctx->bcodec,
-        .h.vblock_i              = BGEN32 (vb->vblock_i),
-        .h.flags.ctx             = flags,
-        .dict_id                 = ctx->dict_id,
-        .ltype                   = ctx->ltype,
-        .b250_size               = ctx->b250_size
+        .magic                 = BGEN32 (GENOZIP_MAGIC),
+        .section_type          = SEC_B250,
+        .data_uncompressed_len = BGEN32 (ctx->b250.len32),
+        .compressed_offset     = BGEN32 (sizeof(SectionHeaderCtx)),
+        .codec                 = ctx->bcodec == CODEC_UNKNOWN ? CODEC_RANS8 : ctx->bcodec,
+        .vblock_i              = BGEN32 (vb->vblock_i),
+        .flags.ctx             = flags,
+        .dict_id               = ctx->dict_id,
+        .ltype                 = ctx->ltype,
+        .b250_size             = ctx->b250_size
     };
 
     ctx->b250_in_z = vb->z_data.len32;
@@ -267,17 +267,17 @@ uint32_t zfile_compress_local_data (VBlockP vb, ContextP ctx, uint32_t sample_si
         uncompressed_len = sample_size;
 
     SectionHeaderCtx header = (SectionHeaderCtx) {
-        .h.magic                 = BGEN32 (GENOZIP_MAGIC),
-        .h.section_type          = SEC_LOCAL,
-        .h.data_uncompressed_len = BGEN32 (uncompressed_len),
-        .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderCtx)),
-        .h.codec                 = ctx->lcodec == CODEC_UNKNOWN ? CODEC_RANS8 : ctx->lcodec, // if codec has not been decided yet, fall back on RANS8
-        .h.sub_codec             = ctx->lsubcodec_piz ? ctx->lsubcodec_piz : CODEC_UNKNOWN,
-        .h.vblock_i              = BGEN32 (vb->vblock_i),
-        .h.flags.ctx             = flags,
-        .dict_id                 = ctx->dict_id,
-        .ltype                   = ctx->ltype,
-        .param                   = ctx->local_param ? ctx->local.prm8[0] : 0,
+        .magic                 = BGEN32 (GENOZIP_MAGIC),
+        .section_type          = SEC_LOCAL,
+        .data_uncompressed_len = BGEN32 (uncompressed_len),
+        .compressed_offset     = BGEN32 (sizeof(SectionHeaderCtx)),
+        .codec                 = ctx->lcodec == CODEC_UNKNOWN ? CODEC_RANS8 : ctx->lcodec, // if codec has not been decided yet, fall back on RANS8
+        .sub_codec             = ctx->lsubcodec_piz ? ctx->lsubcodec_piz : CODEC_UNKNOWN,
+        .vblock_i              = BGEN32 (vb->vblock_i),
+        .flags.ctx             = flags,
+        .dict_id               = ctx->dict_id,
+        .ltype                 = ctx->ltype,
+        .param                 = ctx->local_param ? ctx->local.prm8[0] : 0,
     };
 
     LocalGetLineCB *callback = zfile_get_local_data_callback (vb->data_type, ctx);
@@ -717,9 +717,9 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeader *out_header) // optio
     ASSINP (header->encryption_type != ENC_NONE || !crypt_have_password() || Z_DT(REF), 
             "password provided, but file %s is not encrypted", z_name);
 
-    ASSERT (BGEN32 (header->h.compressed_offset) == st_header_size (SEC_GENOZIP_HEADER),
+    ASSERT (BGEN32 (header->compressed_offset) == st_header_size (SEC_GENOZIP_HEADER),
             "invalid genozip header of %s - expecting compressed_offset to be %u in genozip_version=%u but found %u", 
-            z_name, st_header_size (SEC_GENOZIP_HEADER), header->genozip_version, BGEN32 (header->h.compressed_offset));
+            z_name, st_header_size (SEC_GENOZIP_HEADER), header->genozip_version, BGEN32 (header->compressed_offset));
 
     // get & test password, if file is encrypted
     if (header->encryption_type != ENC_NONE) {
@@ -736,7 +736,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeader *out_header) // optio
     if (z_file->num_components < 2) flag.unbind = 0; // override user's prefix if file has only 1 component (bug 326)
 
     int dts = z_file->z_flags.dt_specific; // save in case its set already (eg dts_paired is set in fastq_piz_is_paired)
-    z_file->z_flags = header->h.flags.genozip_header;
+    z_file->z_flags = header->flags.genozip_header;
     z_file->z_flags.dt_specific |= dts; 
     z_file->num_lines = BGEN64 (header->num_lines_bound);
     z_file->txt_data_so_far_bind = BGEN64 (header->recon_size_prim);
@@ -793,9 +793,9 @@ void zfile_compress_genozip_header (void)
     SectionHeaderGenozipHeader header = {};
 
     // start with just the fields needed by sections_add_to_list
-    header.h.section_type = SEC_GENOZIP_HEADER;
+    header.section_type = SEC_GENOZIP_HEADER;
 
-    header.h.flags.genozip_header  = (struct FlagsGenozipHeader) {
+    header.flags.genozip_header  = (struct FlagsGenozipHeader) {
         .txt_is_bin   = DTPT (is_binary),
         .dt_specific  = (DT_FUNC (z_file, zip_dts_flag)()),
         .aligner      = (flag.aligner_available > 0),
@@ -807,7 +807,7 @@ void zfile_compress_genozip_header (void)
 
     // "manually" add the genozip section to the section list - normally it is added in comp_compress()
     // but in this case the genozip section containing the list will already be ready...
-    sections_add_to_list (evb, &header.h);
+    sections_add_to_list (evb, (SectionHeaderP)&header);
     sections_list_concat (evb); // usually done in output_process_vb, but the section list will be already compressed within the genozip header...
 
     bool is_encrypted = crypt_have_password();
@@ -818,10 +818,10 @@ void zfile_compress_genozip_header (void)
     Codec codec = codec_assign_best_codec (evb, NULL, &evb->scratch, SEC_GENOZIP_HEADER);
     buf_free (evb->scratch);
 
-    header.h.magic                 = BGEN32 (GENOZIP_MAGIC);
-    header.h.compressed_offset     = BGEN32 (sizeof (SectionHeaderGenozipHeader));
-    header.h.data_uncompressed_len = BGEN32 (z_file->section_list_buf.len * sizeof (SectionEntFileFormat));
-    header.h.codec                 = codec == CODEC_UNKNOWN ? CODEC_NONE : codec;
+    header.magic                 = BGEN32 (GENOZIP_MAGIC);
+    header.compressed_offset     = BGEN32 (sizeof (SectionHeaderGenozipHeader));
+    header.data_uncompressed_len = BGEN32 (z_file->section_list_buf.len * sizeof (SectionEntFileFormat));
+    header.codec                 = codec == CODEC_UNKNOWN ? CODEC_NONE : codec;
     header.genozip_version         = GENOZIP_FILE_FORMAT_VERSION;
     header.data_type               = BGEN16 ((uint16_t)dt_get_txt_dt (z_file->data_type));
     header.encryption_type         = is_encrypted ? ENC_AES256 : ENC_NONE;
@@ -873,7 +873,7 @@ void zfile_compress_genozip_header (void)
     sections_list_memory_to_file_format (true);
 
     // compress section into z_data - to be eventually written to disk by the main thread
-    comp_compress (evb, NULL, z_data, &header.h, z_file->section_list_buf.data, NO_CALLBACK, "SEC_GENOZIP_HEADER");
+    comp_compress (evb, NULL, z_data, (SectionHeaderP)&header, z_file->section_list_buf.data, NO_CALLBACK, "SEC_GENOZIP_HEADER");
 
     // add a footer to this section - this footer appears AFTER the genozip header data, 
     // facilitating reading the genozip header in reverse from the end of the file
@@ -914,7 +914,7 @@ bool zfile_update_txt_header_section_header (uint64_t offset_in_z_file, uint32_t
 
     // encrypt if needed
     if (crypt_have_password()) 
-        crypt_do (evb, (uint8_t *)curr_header, len, 1 /*was 0 up to 14.0.8*/, curr_header->h.section_type, true);
+        crypt_do (evb, (uint8_t *)curr_header, len, 1 /*was 0 up to 14.0.8*/, curr_header->section_type, true);
 
     file_write (z_file, curr_header, len);
     fflush ((FILE*)z_file->file); // its not clear why, but without this fflush the bytes immediately after the first header get corrupted (at least on Windows with gcc)
@@ -930,15 +930,15 @@ void zfile_compress_vb_header (VBlockP vb)
     uint32_t sizeof_header = sizeof (SectionHeaderVbHeader);
 
     SectionHeaderVbHeader vb_header = {
-        .h.magic             = BGEN32 (GENOZIP_MAGIC),
-        .h.section_type      = SEC_VB_HEADER,
-        .h.compressed_offset = BGEN32 (sizeof_header),
-        .h.vblock_i          = BGEN32 (vb->vblock_i),
-        .h.codec             = CODEC_NONE,
-        .h.flags.vb_header   = vb->flags,
-        .recon_size_prim     = BGEN32 (vb->recon_size),
-        .longest_line_len    = BGEN32 (vb->longest_line_len),
-        .digest              = flag.data_modified ? DIGEST_NONE : vb->digest,
+        .magic             = BGEN32 (GENOZIP_MAGIC),
+        .section_type      = SEC_VB_HEADER,
+        .compressed_offset = BGEN32 (sizeof_header),
+        .vblock_i          = BGEN32 (vb->vblock_i),
+        .codec             = CODEC_NONE,
+        .flags.vb_header   = vb->flags,
+        .recon_size_prim   = BGEN32 (vb->recon_size),
+        .longest_line_len  = BGEN32 (vb->longest_line_len),
+        .digest            = flag.data_modified ? DIGEST_NONE : vb->digest,
     };
 
     DT_FUNC (vb, zip_set_vb_header_specific)(vb, &vb_header);
@@ -965,8 +965,8 @@ void zfile_update_compressed_vb_header (VBlockP vb)
 
     // now we can finally encrypt the header - if needed
     if (crypt_have_password())  
-        crypt_do (vb, (uint8_t*)vb_header, BGEN32 (vb_header->h.compressed_offset),
-                  BGEN32 (vb_header->h.vblock_i), vb_header->h.section_type, true);
+        crypt_do (vb, (uint8_t*)vb_header, BGEN32 (vb_header->compressed_offset),
+                  BGEN32 (vb_header->vblock_i), vb_header->section_type, true);
 }
 
 // ZIP
@@ -1021,8 +1021,8 @@ DataType zfile_get_file_dt (rom filename)
         int bytes = fread ((char*)&header, 1, sizeof(SectionHeaderGenozipHeader), (FILE *)file->file);
         if (bytes < sizeof(SectionHeaderGenozipHeader)) goto done;
 
-        ASSERTW (BGEN32 (header.h.magic) == GENOZIP_MAGIC, "Error reading %s: corrupt data", z_name);
-        if (BGEN32 (header.h.magic) != GENOZIP_MAGIC) goto done;
+        ASSERTW (BGEN32 (header.magic) == GENOZIP_MAGIC, "Error reading %s: corrupt data", z_name);
+        if (BGEN32 (header.magic) != GENOZIP_MAGIC) goto done;
 
         dt = (DataType)BGEN16 (header.data_type);
     }

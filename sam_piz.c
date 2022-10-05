@@ -3,7 +3,7 @@
 //   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #include <math.h>
@@ -588,12 +588,27 @@ CONTAINER_FILTER_FUNC (sam_piz_filter)
         return v13_ret_value;
      
     // collect_coverage: rather than reconstructing optional, reconstruct SAM_MC_Z that just consumes MC:Z if it exists
-    else if (dict_id.num == _SAM_AUX && flag.collect_coverage) { // filter_repeats is set in theAUX container since v14
-        reconstruct_from_ctx (vb, SAM_MC_Z, 0, false);
-        return false; // don't reconstruct AUX
+    else if (dict_id.num == _SAM_AUX) {
+        if (flag.collect_coverage) { // filter_repeats is set in theAUX container since v14
+            reconstruct_from_ctx (vb, SAM_MC_Z, 0, false);
+            return false; // don't reconstruct AUX
+        }
+
+        else
+            VB_SAM->aux_con = con;
     }
 
     return true; // go ahead and reconstruct
+}
+
+bool sam_piz_line_has_aux_field (VBlockSAMP vb, DictId dict_id)
+{
+    ASSPIZ0 (vb->aux_con, "this function can only be called while reconstructing the AUX container");
+
+    for (int i=0; i < con_nitems (*vb->aux_con); i++)
+        if (vb->aux_con->items[i].dict_id.num == dict_id.num) return true;
+
+    return false;
 }
 
 // emit 1 if (FLAGS & 0x40) or 2 of (FLAGS & 0x80) except if --FLAG is specified too (--FLAG can be
@@ -778,12 +793,13 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_COPY_BUDDY)
     ASSPIZ (buddy_line_i != NO_LINE, "expecting buddy of type %s when copying from %s's %s to our %s but there is none", 
             buddy_type_name(buddy_type), buddy_type_name (buddy_type), base_ctx->tag_name, ctx->tag_name);
 
-    ASSPIZ (buddy_line_i < base_ctx->history.len32, "history not set for %s, perhaps seg forgot to set store_per_line? (buddy_type=%s buddy_line_i=%d history.len=%u)", 
+    // note: a non-existant STORE_INT buddy is taken as 0 (bc in seg, dl->field is 0 is non-existent and might be segged as buddy)
+    ASSPIZ (ctx->flags.store == STORE_INT || buddy_line_i < base_ctx->history.len32, "history not set for %s, perhaps seg forgot to set store_per_line? (buddy_type=%s buddy_line_i=%d history.len=%u)", 
             base_ctx->tag_name, buddy_type_name (buddy_type), buddy_line_i, base_ctx->history.len32);
 
     // case: numeric value 
     if (ctx->flags.store == STORE_INT) {
-        new_value->i = *B(int64_t, base_ctx->history, buddy_line_i);
+        new_value->i = (buddy_line_i < base_ctx->history.len32) ? *B(int64_t, base_ctx->history, buddy_line_i) : 0; // note: a non-existant STORE_INT buddy is taken as 0
         if (reconstruct) RECONSTRUCT_INT (new_value->i);
         return HAS_NEW_VALUE;
     }

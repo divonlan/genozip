@@ -3,7 +3,7 @@
 //   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #include "genozip.h"
@@ -190,22 +190,22 @@ static void refhash_compress_one_vb (VBlockP vb)
     for (uint32_t i=0 ; i < uncompressed_size / sizeof (uint32_t); i++)
         if (!hash_data[i]) num_zeros++;
 
-    SectionHeaderRefHash header = { .h.section_type          = SEC_REF_HASH, 
-                                    .h.codec                 = CODEC_RANS32, // Much!! faster than LZMA (compress and uncompress), 8% worse compression of human refs, MUCH better on small refs
-                                    .h.data_uncompressed_len = BGEN32 (uncompressed_size),
-                                    .h.vblock_i              = BGEN32 (vb->vblock_i),
-                                    .h.magic                 = BGEN32 (GENOZIP_MAGIC),
-                                    .h.compressed_offset     = BGEN32 (sizeof(header)),
-                                    .num_layers              = (uint8_t)num_layers,
-                                    .layer_i                 = (uint8_t)vb->refhash_layer,
-                                    .layer_bits              = (uint8_t)layer_bits[vb->refhash_layer],
-                                    .start_in_layer          = BGEN32 (vb->refhash_start_in_layer)     };
+    SectionHeaderRefHash header = { .section_type          = SEC_REF_HASH, 
+                                    .codec                 = CODEC_RANS32, // Much!! faster than LZMA (compress and uncompress), 8% worse compression of human refs, MUCH better on small refs
+                                    .data_uncompressed_len = BGEN32 (uncompressed_size),
+                                    .vblock_i              = BGEN32 (vb->vblock_i),
+                                    .magic                 = BGEN32 (GENOZIP_MAGIC),
+                                    .compressed_offset     = BGEN32 (sizeof(header)),
+                                    .num_layers            = (uint8_t)num_layers,
+                                    .layer_i               = (uint8_t)vb->refhash_layer,
+                                    .layer_bits            = (uint8_t)layer_bits[vb->refhash_layer],
+                                    .start_in_layer        = BGEN32 (vb->refhash_start_in_layer)     };
 
     comp_compress (vb, NULL, &vb->z_data, (SectionHeaderP)&header, (char*)hash_data, NO_CALLBACK, "SEC_REF_HASH");
 
     if (flag.show_ref_hash) 
         iprintf ("vb_i=%u Compressing SEC_REF_HASH num_layers=%u layer_i=%u layer_bits=%u start=%u size=%u bytes size_of_disk=%u bytes\n", 
-                 vb->vblock_i, header.num_layers, header.layer_i, header.layer_bits, vb->refhash_start_in_layer, uncompressed_size, BGEN32 (header.h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderRefHash));
+                 vb->vblock_i, header.num_layers, header.layer_i, header.layer_bits, vb->refhash_start_in_layer, uncompressed_size, BGEN32 (header.data_compressed_len) + (uint32_t)sizeof (SectionHeaderRefHash));
 
     vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
 }
@@ -279,12 +279,12 @@ static void refhash_uncompress_one_vb (VBlockP vb)
 {
     SectionHeaderRefHash *header = (SectionHeaderRefHash *)vb->z_data.data;
     uint32_t start = BGEN32 (header->start_in_layer);
-    uint32_t size  = BGEN32 (header->h.data_uncompressed_len);
+    uint32_t size  = BGEN32 (header->data_uncompressed_len);
     uint32_t layer_i = header->layer_i;
 
     if (flag.show_ref_hash) // before the sanity checks
         iprintf ("vb_i=%u Uncompressing SEC_REF_HASH num_layers=%u layer_i=%u layer_bits=%u start=%u size=%u bytes size_of_disk=%u bytes\n", 
-                 vb->vblock_i, header->num_layers, layer_i, header->layer_bits, start, size, BGEN32 (header->h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderRefHash));
+                 vb->vblock_i, header->num_layers, layer_i, header->layer_bits, start, size, BGEN32 (header->data_compressed_len) + (uint32_t)sizeof (SectionHeaderRefHash));
 
     // sanity checks
     ASSERT (layer_i < num_layers, "expecting header->layer_i=%u < num_layers=%u", layer_i, num_layers);

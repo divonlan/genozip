@@ -3,7 +3,7 @@
 //   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #include <time.h>
@@ -22,20 +22,6 @@ static int last_seconds_so_far=-1;
 static rom component_name=NULL;
 static unsigned last_len=0; // so we know how many characters to erase on next update
 
-static void progress_human_time (unsigned secs, char *str /* out */)
-{
-    unsigned hours = secs / 3600;
-    unsigned mins  = (secs % 3600) / 60;
-             secs  = secs % 60;
-
-    if (hours) 
-        sprintf (str, "%u %s %u %s", hours, hours==1 ? "hour" : "hours", mins, mins==1 ? "minute" : "minutes");
-    else if (mins)
-        sprintf (str, "%u %s %u %s", mins, mins==1 ? "minute" : "minutes", secs, secs==1 ? "second" : "seconds");
-    else 
-        sprintf (str, "%u %s", secs, secs==1 ? "second" : "seconds");
-}
-
 static rom progress_ellapsed_time (bool ever)
 {
     TimeSpecType tb; 
@@ -43,10 +29,10 @@ static rom progress_ellapsed_time (bool ever)
     
     TimeSpecType start = ever ? ever_start_time : component_start_time;
 
-    int seconds_so_far = ((tb.tv_sec - start.tv_sec)*1000 + (tb.tv_nsec - start.tv_nsec) / 1000000) / 1000; 
+    int seconds_so_far = ((tb.tv_sec - start.tv_sec)*1000 + ((int64_t)tb.tv_nsec - (int64_t)start.tv_nsec) / 1000000) / 1000; 
 
     static char time_str[70];
-    progress_human_time (seconds_so_far, time_str);
+    str_human_time (seconds_so_far, false, time_str);
 
     return time_str;
 }
@@ -152,7 +138,7 @@ void progress_update (char **prefix, uint64_t sofar, uint64_t total, bool done)
 
             // time remaining
             unsigned secs = (100.0 - percent) * ((double)seconds_so_far / (double)percent);
-            progress_human_time (secs, time_str);
+            str_human_time (secs, false, time_str);
 
             if (!flag.debug_progress)
                 sprintf (progress, "%u%% (%s)", (unsigned)percent, time_str);

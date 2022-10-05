@@ -3,7 +3,7 @@
 //   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #include "genozip.h"
@@ -28,7 +28,7 @@
 extern int strncasecmp (rom s1, rom s2, size_t n); // defined in <strings.h>, but file name conflicts with "strings.h" (to do: sort this out in the Makefile)
 #endif
 
-static void BGEN_ref_contigs (BufferP contigs_buf)
+static void BGEN_ref_contigs_not_compacted (BufferP contigs_buf)
 {
     for (uint32_t i=0; i < contigs_buf->len; i++) {
         Contig *cn   = B(Contig, *contigs_buf, i);
@@ -70,10 +70,10 @@ static void ref_contigs_show (ConstBufferP contigs_buf, bool created)
     iprintf ("\nContigs as they appear in the reference%s:\n", created ? " created (note: contig names are as they appear in the txt data, not the reference)" : "");
     for_buf2 (const Contig, cn, i, *contigs_buf) {
 
-        if (!cn->snip_len) continue; // unused contig
+        if (!cn->max_pos) continue; // unused contig
 
         rom chrom_name = B(const char, ZCTX(CHROM)->dict, cn->char_index);
-        bool ext_ref = (flag.reference & REF_ZIP_LOADED) || Z_DT(REF);
+        bool ext_ref = (IS_ZIP && (flag.reference & REF_ZIP_LOADED)) || Z_DT(REF);
 
         if (ext_ref && created)
             iprintf ("\"%s\" length=%"PRId64" ref_index=%d gpos=%"PRId64" metadata=\"%s\"\n",
@@ -81,25 +81,26 @@ static void ref_contigs_show (ConstBufferP contigs_buf, bool created)
 
         else if (ext_ref) 
             iprintf ("\"%s\" length=%"PRId64" ref_index=%d gpos=%"PRId64" %s\n",
-                     chrom_name,  cn->max_pos, cn->ref_index, cn->gpos, display_acc_num (&cn->metadata.parsed.ac).s);
+                     chrom_name, cn->max_pos, cn->ref_index, cn->gpos, display_acc_num (&cn->metadata.parsed.ac).s);
 
         else if (cn->snip_len)
-            iprintf ("i=%d '%s' gpos=%"PRId64" min_pos=%"PRId64" max_pos=%"PRId64" ref_index=%d char_index=%"PRIu64" snip_len=%u\n",
+            iprintf ("[%d] \"%s\" gpos=%"PRId64" min_pos=%"PRId64" max_pos=%"PRId64" ref_index=%d char_index=%"PRIu64" snip_len=%u\n",
                      i, chrom_name, cn->gpos, cn->min_pos, cn->max_pos, cn->ref_index, cn->char_index, cn->snip_len);
         else
-            iprintf ("i=%d (unused - not present in txt data)\n", cn->ref_index);
+            iprintf ("[%d] (unused - not present in txt data)\n", cn->ref_index);
     }
 }
 
-static void ref_contigs_compress_do (BufferP created_contigs, bool sequential_ref_index)
+static void ref_contigs_compress_do (BufferP created_contigs, bool sequential_ref_index, bool compacted)
 {
-    if (flag.show_ref_contigs) ref_contigs_show (created_contigs, true);
+    if (!compacted) // note: compacted contigs are already big endian
+        BGEN_ref_contigs_not_compacted (created_contigs);
 
-    BGEN_ref_contigs (created_contigs);
-
-    created_contigs->len *= sizeof (Contig);
+    created_contigs->len *= compacted ? sizeof (CompactContig) : sizeof (Contig);
     zfile_compress_section_data_ex (evb, NULL, SEC_REF_CONTIGS, created_contigs, 0, 0, CODEC_BSC, 
-                                    (struct FlagsRefContigs){ .sequential_ref_index = sequential_ref_index }, NULL); 
+                                    (struct FlagsRefContigs){ .sequential_ref_index = sequential_ref_index,
+                                                              .compacted            = compacted             }, 
+                                    NULL); 
 
     buf_free (*created_contigs);
 }
@@ -168,7 +169,34 @@ void ref_contigs_compress_ref_make (Reference ref)
     
     COPY_TIMER_VB (evb, ref_contigs_compress); // we don't count the compression itself and the disk writing
 
-    ref_contigs_compress_do (&created_contigs, false);
+    if (flag.show_ref_contigs) ref_contigs_show (&created_contigs, true);
+
+    ref_contigs_compress_do (&created_contigs, false, false);
+}
+
+// convert Contig to CompactContig if possible, ahead of writing to disk
+static bool ref_contigs_compress_compact (BufferP created_contigs)
+{
+    // verify that contigs can be compacted
+    for_buf2 (Contig, cn, i, *created_contigs) 
+        if (cn->min_pos > 0xffffffffULL || cn->max_pos > 0xffffffffULL) 
+            return false;
+
+    // do the compacting
+    CompactContig *next = B1ST (CompactContig, *created_contigs); // replace in-place
+    for_buf2 (Contig, cn, ref_index, *created_contigs) {
+        if (!cn->max_pos) continue; // skip unused (cannot happen if sequential_ref_index)
+
+        CompactContig cc = { .ref_index = BGEN32 (ref_index),
+                             .min_pos   = BGEN32 ((uint32_t)cn->min_pos),
+                             .max_pos   = BGEN32 ((uint32_t)cn->max_pos),
+                             .gpos      = BGEN64 (cn->gpos)              };                                
+        *next++ = cc;
+    }
+
+    created_contigs->len = BNUM (*created_contigs, next);
+
+    return true;
 }
 
 // create and compress contigs (when compressing with REF_EXT_STORE or REF_INTERNAL)
@@ -176,20 +204,19 @@ void ref_contigs_compress_stored (Reference ref)
 {
     START_TIMER;
 
-    static Buffer created_contigs = EMPTY_BUFFER;          
-
     ARRAY (uint64_t, chrom_counts, ZCTX(CHROM)->counts);
 
     // NOTE: ref_get_range_by_chrom access ranges by chrom, but ref_initialize_loaded_ranges (incorrectly) allocates ranges.len by ref->ctgs.contigs.len 
     // (for non REF_INTERNAL) therefore, we must have ref_contigs aligned with CHROM
     
-    buf_alloc_exact_zero (evb, created_contigs, chrom_counts_len, Contig, "created_contigs");
+    static Buffer created_contigs = EMPTY_BUFFER;          
+    ARRAY_alloc (Contig, cn, chrom_counts_len, true, created_contigs, evb, "created_contigs");
 
     // create sorted index into CHROM
     chrom_index_by_name (CHROM);
     
-    ARRAY (Contig, cn, created_contigs);
     bool has_some_contigs = false;
+
     for_buf2 (Range, r, range_i, ref->ranges) {
         // if gpos of the first range in this contig has been increased due to removing flanking regions and is no longer 64-aligned,
         // we start the contig a little earlier to be 64-aligned (note: this is guaranteed to be within the original contig before 
@@ -198,81 +225,29 @@ void ref_contigs_compress_stored (Reference ref)
 
         WordIndex chrom = IS_REF_EXT_STORE ? *B(WordIndex, z_file->ref2chrom_map, r->chrom) : r->chrom; // the CHROM corresponding to this ref_index, even if a different version of the chrom name 
 
-        // don't store min_pos/max_pos/gpos (better compression) is this contig was not used explitictly (note: aligner doesn't use contigs, but GPOS)
+        // don't store min_pos/max_pos/gpos (better compression) is this contig was not used explicitly (note: aligner doesn't use contigs, but GPOS)
         if (chrom == WORD_INDEX_NONE || !chrom_counts[chrom] || 
             ((IS_REF_INTERNAL || IS_REF_EXT_STORE) && !r->is_set.nbits)) continue; 
 
-        cn[chrom].gpos    = r->gpos - delta;
-        cn[chrom].min_pos = r->first_pos - delta;
-        cn[chrom].max_pos = r->last_pos;
+        cn[chrom].gpos      = r->gpos - delta;
+        cn[chrom].min_pos   = r->first_pos - delta;
+        cn[chrom].max_pos   = r->last_pos;
+
         has_some_contigs = true;
     }
 
-    COPY_TIMER_VB (evb, ref_contigs_compress); // we don't count the compression itself and the disk writing
+    if (flag.show_ref_contigs) ref_contigs_show (&created_contigs, true); // note: cannot call this after compacting
+
+    // compact contigs if possible - 20 bytes per contigs vs 132
+    bool is_compacted = ref_contigs_compress_compact (&created_contigs);
 
     if (has_some_contigs) // Could be false, e.g. in FASTQ if no read was successfully aligned to the reference
-        ref_contigs_compress_do (&created_contigs, true);
+        ref_contigs_compress_do (&created_contigs, true, is_compacted); // note: sequential_ref_index introduced v14.0.0, is_compacted introduce v14.0.10.
+
+    COPY_TIMER_VB (evb, ref_contigs_compress); 
 }
 
-
-// // create and compress contigs (when compressing with REF_EXT_STORE or REF_INTERNAL)
-//xxx void ref_contigs_compress_stored (Reference ref)
-// {
-//     START_TIMER;
-
-//     static Buffer created_contigs = EMPTY_BUFFER;          
-
-//     ARRAY (uint64_t, chrom_counts, ZCTX(CHROM)->counts);
-
-//     // NOTE: ref_get_range_by_chrom access ranges by chrom, but ref_initialize_loaded_ranges (incorrectly) allocates ranges.len by ref->ctgs.contigs.len 
-//     // (for non REF_INTERNAL) therefore, we must have ref_contigs aligned with CHROM
-    
-//     buf_alloc_exact_zero (evb, created_contigs, chrom_counts_len, Contig, "created_contigs");
-
-//     // create sorted index into CHROM
-//     chrom_index_by_name (CHROM);
-    
-//     bool has_some_contigs = false;
-//     bool sequential_ref_index = true;
-//     ContigP cn = B1ST (Contig, created_contigs);
-
-//     for_buf2 (Range, r, range_i, ref->ranges) {
-//         // if gpos of the first range in this contig has been increased due to removing flanking regions and is no longer 64-aligned,
-//         // we start the contig a little earlier to be 64-aligned (note: this is guaranteed to be within the original contig before 
-//         // compacting, because the original contig had a 64-aligned gpos)
-//         PosType delta = r->gpos % 64;
-
-//         WordIndex chrom = IS_REF_EXT_STORE ? *B(WordIndex, z_file->ref2chrom_map, r->chrom) : r->chrom; // the CHROM corresponding to this ref_index, even if a different version of the chrom name 
-
-//         // don't store min_pos/max_pos/gpos (better compression) is this contig was not used explicitly (note: aligner doesn't use contigs, but GPOS)
-//         if (chrom == WORD_INDEX_NONE || !chrom_counts[chrom] || 
-//             ((IS_REF_INTERNAL || IS_REF_EXT_STORE) && !r->is_set.nbits)) {
-//                 sequential_ref_index = false; // not sequential anymore as we're dropping some contigs
-//                 continue; 
-//             }
-
-//         cn->gpos      = r->gpos - delta;
-//         cn->min_pos   = r->first_pos - delta;
-//         cn->max_pos   = r->last_pos;
-//         cn->ref_index = chrom;
-//         cn++;
-
-//         has_some_contigs = true;
-//     }
-    
-//     created_contigs.len32 = BNUM (created_contigs, cn);
-
-//     // if we didn't skip any contig, we can remove ref_index for better compression
-//     if (sequential_ref_index)
-//         for_buf (Contig, cn, created_contigs) cn->ref_index = 0;
-
-//     COPY_TIMER_VB (evb, ref_contigs_compress); // we don't count the compression itself and the disk writing
-
-//     if (has_some_contigs) // Could be false, e.g. in FASTQ if no read was successfully aligned to the reference
-//         ref_contigs_compress_do (&created_contigs, sequential_ref_index);
-// }
-
-static void ref_contigs_load_set_contig_names (Reference ref, bool sequential_ref_index)
+static void ref_contigs_load_set_contig_names (Reference ref)
 {
     ASSERT0 (ZCTX(CHROM)->dict.len, "CHROM dictionary is empty");
 
@@ -282,13 +257,31 @@ static void ref_contigs_load_set_contig_names (Reference ref, bool sequential_re
     ARRAY (Contig, contig, ref->ctgs.contigs);
 
     for (uint32_t i=0; i < contig_len; i++) {
-        if (sequential_ref_index) 
-            contig[i].ref_index = i; // ref_index is set to 0 on disk to improve compression, we re-created it here (sequentially)
+        if (!contig[i].max_pos) continue;
 
         WordIndex chrom_index = contig[i].ref_index;
         ASSERT (chrom_index >= 0 && chrom_index < chrom_len, "Expecting contig[%u].ref_index=%d to be in the range [0,%d]", i, chrom_index, (int)chrom_len-1);
         contig[i].char_index = chrom[chrom_index].index;
         contig[i].snip_len   = chrom[chrom_index].len;
+    }
+}
+
+static void ref_contigs_load_uncompact (BufferP compact, BufferP contigs)
+{
+    compact->len /= sizeof (CompactContig);
+
+    ARRAY_alloc (Contig, cn, 
+                 BGEN32 (BLST(CompactContig, *compact)->ref_index) + 1, 
+                 true, *contigs, evb, "ContigPkg->contigs");
+
+    for_buf (CompactContig, compact_cn, *compact) {
+        uint32_t ref_index = BGEN32 (compact_cn->ref_index); 
+        cn[ref_index] = (Contig){
+            .ref_index = ref_index, // chrom
+            .min_pos   = BGEN32 (compact_cn->min_pos),
+            .max_pos   = BGEN32 (compact_cn->max_pos),
+            .gpos      = BGEN64 (compact_cn->gpos)
+        };
     }
 }
 
@@ -298,13 +291,28 @@ void ref_contigs_load_contigs (Reference ref)
     Section sl = sections_last_sec (SEC_REF_CONTIGS, true);
     if (!sl) return; // section doesn't exist
 
-    zfile_get_global_section (SectionHeader, sl, &ref->ctgs.contigs, "ContigPkg->contigs");
+    if (sl->flags.ref_contigs.compacted) { // non-reference-file generated in v14.0.10 or later
+        zfile_get_global_section (SectionHeader, sl, &evb->scratch, "scratch");
 
-    ref->ctgs.contigs.len /= sizeof (Contig);
-    BGEN_ref_contigs (&ref->ctgs.contigs);
+        ref_contigs_load_uncompact (&evb->scratch, &ref->ctgs.contigs);
+
+        buf_free (evb->scratch);
+    }
+    else {
+        zfile_get_global_section (SectionHeader, sl, &ref->ctgs.contigs, "ContigPkg->contigs");
+
+        ref->ctgs.contigs.len /= sizeof (Contig);
+        BGEN_ref_contigs_not_compacted (&ref->ctgs.contigs);
+    }
+
+    // case: ref_index is set to 0 on disk to improve compression, we re-created it here (sequentially)
+    // note: we do this even if compacted, since we also need ref_index set for the skipped contigs
+    if (sl->flags.ref_contigs.sequential_ref_index)
+        for_buf2 (Contig, cn, ref_index, ref->ctgs.contigs) 
+            cn->ref_index = ref_index; 
 
     // get contig names from CHROM 
-    ref_contigs_load_set_contig_names (ref, sl->flags.ref_contigs.sequential_ref_index);
+    ref_contigs_load_set_contig_names (ref);
 
     contigs_create_index (&ref->ctgs, SORT_BY_NAME | SORT_BY_AC);
 
@@ -314,7 +322,7 @@ void ref_contigs_load_contigs (Reference ref)
     }
 
     // check chromosome naming - assume the first contig is a chromosome
-    rom c = ref->ctgs.dict.data;
+    rom c = B1STc(ref->ctgs.dict);
     ref->chrom_style = (IS_DIGIT(c[0]) && (!c[1] || (IS_DIGIT(c[1]) && !c[2]))) ? CHROM_STYLE_22
                      : (c[0]=='c' && c[1]=='h' && c[2]=='r')                    ? CHROM_STYLE_chr22
                      :                                                            CHROM_STYLE_UNKNOWN;

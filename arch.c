@@ -3,7 +3,7 @@
 //   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #include <fcntl.h>
@@ -35,6 +35,9 @@
 #include "strings.h"
 
 static rom argv0 = NULL;
+
+typedef struct timespec TimeSpecType;
+static TimeSpecType execution_start_time; 
 
 #ifdef _WIN32
 // add the genozip path to the user's Path environment variable, if its not already there. 
@@ -85,6 +88,8 @@ void arch_set_locale (void)
 
 void arch_initialize (rom argv0)
 {
+    clock_gettime(CLOCK_REALTIME, &execution_start_time);
+
     // verify CPU architecture and compiler is supported
     ASSERT0 (sizeof(char)==1 && sizeof(short)==2 && sizeof (unsigned)==4 && sizeof(long long)==8, 
              "Unsupported C type lengths, check compiler options");
@@ -278,3 +283,15 @@ rom arch_get_distribution (void)
     return DISTRIBUTION[0] ? DISTRIBUTION : "github"; // DISTRIBUTION is "" if genozip is built with "make" without defining DISTRIBUTION - re-write as "github"
 }
  
+rom arch_get_run_time (void)
+{
+    TimeSpecType tb; 
+    clock_gettime(CLOCK_REALTIME, &tb); 
+
+    int seconds_so_far = ((tb.tv_sec - execution_start_time.tv_sec)*1000 + ((int64_t)tb.tv_nsec - (int64_t)execution_start_time.tv_nsec) / 1000000) / 1000; 
+
+    static char time_str[16];
+    str_human_time (seconds_so_far, true, time_str);
+
+    return time_str;
+}

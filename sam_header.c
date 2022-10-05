@@ -3,7 +3,7 @@
 //   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 // ----------------------
@@ -33,6 +33,8 @@
 ContigPkgP sam_hdr_contigs = NULL; // If no contigs in header: BAM: empty structure (RNAME must be * for all lines); SAM: NULL (RNAME in lines may have contigs) 
 HdSoType sam_hd_so = HD_SO_UNKNOWN;
 HdGoType sam_hd_go = HD_GO_UNKNOWN;
+
+static Buffer sam_hdr_PGs = {};
 
 uint32_t sam_num_header_contigs (void)
 {
@@ -287,13 +289,75 @@ static void sam_header_zip_inspect_HD_line (BufferP txt_header)
     COPY_TIMER_VB (evb, sam_header_zip_inspect_HD_line);
 }
 
+rom sam_get_hdr_PGs (void)
+{
+    return sam_hdr_PGs.len ? B1STc (sam_hdr_PGs) : "No PGs";
+}
+
+static void sam_header_zip_build_hdr_PGs (rom hdr, rom after)
+{
+    #define EQ3(s1,s2) (s1[0]==s2[0] && s1[1]==s2[1] && s1[2]==s2[2])
+
+    uint32_t last_PG_i=0, last_PG_len=0; // last PG added
+    while (hdr < after) {
+        str_split_by_tab (hdr, after - hdr, 10, NULL, false);
+        if (!hdr || n_flds < 2 || fld_lens[0] != 3 || !EQ3(flds[0], "@PG")) break;
+
+        bool added = false;
+        uint32_t this_PG_i = sam_hdr_PGs.len32;
+        uint32_t ID_len=0;
+        int ID_i=-1, PN_i=-1;
+        
+        for (int i=1; i < n_flds; i++) 
+            if (EQ3(flds[i], "ID:")) { // add part before first .
+                ID_i = i;
+                rom dot = memchr (flds[i], '.', fld_lens[i]);
+                ID_len = dot ? (dot - flds[i]) : fld_lens[i];
+                
+                if (added) BNXTc (sam_hdr_PGs) = '\t'; // note: previous buf_add_more->buf_insert_do allocated an extra character
+                buf_add_more (evb, &sam_hdr_PGs, flds[i], ID_len, "sam_hdr_PGs");
+                added = true;
+            }
+            else if (EQ3(flds[i], "PN:")) {
+                PN_i = i;
+                if (added) BNXTc (sam_hdr_PGs) = '\t';
+                buf_add_more (evb, &sam_hdr_PGs, STRi(fld,i), "sam_hdr_PGs");
+                added = true;
+            }
+
+        if (added) {
+            // if ID and PN are the same - keep just the value
+            if (PN_i>=0 && ID_i>=0 && str_issame_(flds[PN_i]+3, fld_lens[PN_i]-3, flds[ID_i]+3, ID_len-3)) {
+                sam_hdr_PGs.len32 = this_PG_i; // undo           
+                buf_add_more (evb, &sam_hdr_PGs, flds[ID_i]+3, ID_len-3, "sam_hdr_PGs"); // just value
+            }
+
+            uint32_t this_PG_len = sam_hdr_PGs.len32 - this_PG_i;
+
+            // case: duplicate PG (perhaps the untaken part of ID - after the dot - is different)
+            if (str_issame_(Bc(sam_hdr_PGs, this_PG_i), this_PG_len, Bc(sam_hdr_PGs, last_PG_i), last_PG_len))    
+                sam_hdr_PGs.len32 -= this_PG_len; // remove the dup
+
+            else { // new, not dup
+                BNXTc (sam_hdr_PGs) = ';';
+                last_PG_i = this_PG_i;
+                last_PG_len = this_PG_len;
+            }
+        }
+    }
+
+    if (sam_hdr_PGs.len) *BLSTc (sam_hdr_PGs) = 0; // replace final ';' 
+}
+
+// ZIP
 static void sam_header_zip_inspect_PG_lines (BufferP txt_header) 
 {
     START_TIMER;
 
     uint32_t hdr_len = IS_BAM_ZIP ? *B32(*txt_header, 1)     : txt_header->len32;
     rom hdr          = IS_BAM_ZIP ? (rom)B32(*txt_header, 2) : txt_header->data;
-
+    rom after = hdr + hdr_len;
+    
     if (!hdr_len) return; // no header
     
     SAFE_NULT(hdr);
@@ -304,7 +368,7 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
         if (hdr[1] == 'P' && hdr[2] == 'G') break; 
 
     if (!hdr) goto done; // header doesn't contain any @PG lines
-    
+
     // hdr is at the beginning of the first PG line, which is typically at the end of the SAM header
     static rom map_sigs[] = SAM_MAPPER_SIGNATURE;
     ASSERT0 (ARRAY_LEN(map_sigs) == NUM_MAPPERS, "Invalid SAM_MAPPER_SIGNATURE array length - perhaps missing commas between strings?");
@@ -315,6 +379,14 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
             break;
         }
 
+    // a small subset of biobambam2 programs - only those that generate ms:i / mc:i tags
+    static rom biobambam_programs[] = { "bamsormadup", "bamsort", "bamtagconversion" }; 
+    for (int i=0; i < ARRAY_LEN(biobambam_programs); i++) 
+        if (strstr (hdr, biobambam_programs[i])) {
+            segconf.is_biobambam2_sort = true;
+            break;
+        }
+
     if (MP(bwa)) segconf.sam_mapper = MP_BWA; // we consider "bwa" to be "BWA"
 
     if (MP(STAR) && strstr (hdr, "--solo")) segconf.star_solo = true;
@@ -322,6 +394,9 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
     // note: this file *might* be of bisulfite-treated reads. 
     // This variable might be reset after segconf if it fails additonal conditions 
     segconf.sam_bisulfite = MP(BISMARK) || MP(BSSEEKER2) || MP(DRAGEN) || MP(BSBOLT) || MP(GEM3);
+
+    // build buffer of unique PN+ID fields, for stats
+    sam_header_zip_build_hdr_PGs (hdr, after);
 
 done:
     SAFE_RESTORE;
@@ -383,6 +458,8 @@ void sam_header_finalize (void)
     }
     else
         sam_hdr_contigs = NULL; // memory will be freed when we destroy gref
+
+    buf_free (sam_hdr_PGs);
 }
 
 // ZIP

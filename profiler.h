@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #pragma once
@@ -64,7 +64,7 @@ typedef struct timespec TimeSpecType;
 
 #define CHECK_TIMER ({ TimeSpecType tb; \
                        clock_gettime(CLOCK_REALTIME, &tb); \
-                       ((uint64_t)((tb).tv_sec-(profiler_timer).tv_sec))*1000000000ULL + ((tb).tv_nsec-(profiler_timer).tv_nsec); })
+                       ((uint64_t)((tb).tv_sec-(profiler_timer).tv_sec))*1000000000ULL + ((int64_t)(tb).tv_nsec-(int64_t)(profiler_timer).tv_nsec); })
 
 #define COPY_TIMER_FULL(vb,res) { /* str - print in case of specific show-time=<res> */ \
     if (flag.show_time) { \
@@ -100,7 +100,7 @@ typedef struct timespec TimeSpecType;
         clock_gettime(CLOCK_REALTIME, &tb); \
         vb->profile.next_name = save_name; \
         vb->profile.next_subname = save_subname; \
-        (vb)->profile.res -= (tb.tv_sec-on_hold_timer.tv_sec)*1000000000ULL + (tb.tv_nsec-on_hold_timer.tv_nsec); \
+        (vb)->profile.res -= (tb.tv_sec-on_hold_timer.tv_sec)*1000000000ULL + ((int64_t)tb.tv_nsec-(int64_t)on_hold_timer.tv_nsec); \
     } 
 
 #define PRINT_TIMER(str) { TimeSpecType tb; \

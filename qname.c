@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #include "qname.h"
@@ -187,13 +187,23 @@ void qname_zip_initialize (Did qname_did_i)
                 ASSERT (qfs->con.items[qfs->numeric_items[i]].separator[0] == CI0_FIXED_0_PAD,
                         "since qfs=%s item=%u has seperator[0] != CI0_FIXED_0_PAD, expecting it to be int, not numeric", qfs->name, qfs->numeric_items[i]);
                 qfs->is_numeric[qfs->numeric_items[i]] = true;
+
+                ASSERT (!qfs->is_int[qfs->numeric_items[i]], "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both an integer_item and numeric_item",
+                        qfs->name, qfs->numeric_items[i]);
             }
 
-            for (unsigned i=0; qfs->hex_items[i] != -1; i++)
+            for (unsigned i=0; qfs->hex_items[i] != -1; i++) {
                 qfs->is_hex[qfs->hex_items[i]] = true;
-            
+
+                ASSERT (!qfs->is_int[qfs->hex_items[i]], "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both an hex_item and integer_item",
+                        qfs->name, qfs->hex_items[i]);
+            }
+
             for (unsigned i=0; qfs->in_local[i] != -1; i++)
                 qfs->is_in_local[qfs->in_local[i]] = true;
+
+            ASSERT (qfs->ordered_item1 == -1 || qfs->is_int[qfs->ordered_item1] || qfs->is_numeric[qfs->ordered_item1] || qfs->is_hex[qfs->ordered_item1], 
+                    "Error in definition of QNAME flavor=%s: item=%u is one of \"ordered_item\" - expecting it to be is_integer or is_numeric or is_hex", qfs->name, qfs->ordered_item1);
         }
     }
 
@@ -380,13 +390,15 @@ bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, QnameFlavor qfs, STRp(qname),
                           : (item->dict_id.num == _FASTQ_QNAME2) ? CTX(FASTQ_QNAME2)
                           : (item->dict_id.num == _FASTQ_COPY_Q) ? CTX(FASTQ_COPY_Q)
                           :                                        (qname_ctx + 1+item_i - encountered_mName - encountered_QNAME2);
-                          
+                        
         encountered_mName  |= item->dict_id.num == _SAM_QmNAME;
         encountered_QNAME2 |= item->dict_id.num == _FASTQ_QNAME2 || item->dict_id.num == _FASTQ_COPY_Q;
 
-        // case: this is the file is sorted by qname - delta against previous
+        // case: this is the file is collated by qname - delta against previous
         if ((item_i == qfs->ordered_item1 || item_i == qfs->ordered_item2) && 
-            !segconf.is_sorted &&
+            segconf.is_collated &&
+            ctx_has_value_in_prev_line_(vb, item_ctx) &&
+            !(item_lens[item_i] >= 2 && items[item_i][0] == '0') && // can't yet handle reproducing leading zeros with a delta
             ( (!qfs->is_hex[item_i] && str_get_int_dec (STRi(item, item_i), (uint64_t*)&value)) ||
               ( qfs->is_hex[item_i] && str_get_int_hex (STRi(item, item_i), true, false, (uint64_t*)&value)))) // lower-case hex
 

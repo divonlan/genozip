@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #include <time.h>
@@ -354,7 +354,7 @@ rom str_to_hex (bytes data, uint32_t data_len, char *hex_str, bool with_dot)
     }
 
     if (with_dot) s--; // remove terminating dot
-    
+
     *s = 0;
     return hex_str;
 }
@@ -567,12 +567,12 @@ differ:
 // splits a string with up to (max_items-1) separators (doesn't need to be nul-terminated) to up to or exactly max_items
 // returns the actual number of items, or 0 is unsuccessful
 uint32_t str_split_do (STRp(str), 
-                       uint32_t max_items,        // optional - if not given, a count of sep is done first
-                       char sep,                  // separator
-                       rom *items,                // out - array of char* of length max_items - one more than the number of separators
-                       uint32_t *item_lens,       // optional out - corresponding lengths
+                       uint32_t max_items,    // optional - if not given, a count of sep is done first
+                       char sep,              // separator
+                       rom *items,            // out - array of char* of length max_items - one more than the number of separators
+                       uint32_t *item_lens,   // optional out - corresponding lengths
                        bool exactly,
-                       rom enforce_msg)   // non-NULL if enforcement of length is requested
+                       rom enforce_msg)       // non-NULL if enforcement of length is requested
 {
     if (!str) return 0; // note: str!=NULL + str_len==0 results in n_items=1 - one empty item
     
@@ -604,15 +604,18 @@ uint32_t str_split_do (STRp(str),
 rom str_split_by_tab_do (STRp(str), 
                          uint32_t *n_items, // in / out
                          rom *items, uint32_t *item_lens, // out - array of char* of length max_items - one more than the number of separators
-                         bool *has_13)      // out - true if line is terminated by \r\n
+                         bool *has_13,      // optional out - true if line is terminated by \r\n instead of \n
+                         bool enforce_msg)  // failure handling: if false return NULL ; if true ABORT
+
 {
     ASSERTNOTNULL (str);
     ASSERTNOTZERO (*n_items, "");
-    #define enforce_msg 1
 
     items[0] = str;
     uint32_t item_i = 1;
     uint32_t str_i;
+    bool my_has_13;
+
     for (str_i=0 ; str_i < str_len ; str_i++) {
         char c = str[str_i]; 
         if (c == '\t') {
@@ -623,17 +626,17 @@ rom str_split_by_tab_do (STRp(str),
 
         else if (c == '\r') {
             ASSSPLIT (str_i+1 < str_len && str[str_i+1] == '\n', "encountered a \\r without a following \\n (str_i=%u)", str_i);
-            *has_13 = true;
+            my_has_13 = true;
             break;
         }
 
         else if (c == '\n') {
-            *has_13 = false;
+            my_has_13 = false;
             break;
         }
     }
 
-    ASSSPLIT (str_i < str_len, "Line to terminated by newline (str_len=%u)", str_len);
+    ASSSPLIT (str_i < str_len, "Line not terminated by newline (str_len=%u)", str_len);
 
     for (uint32_t i=0; i < item_i-1; i++)    
         item_lens[i] = items[i+1] - items[i] - 1; 
@@ -641,9 +644,9 @@ rom str_split_by_tab_do (STRp(str),
     item_lens[item_i-1] = &str[str_i] - items[item_i-1];
     *n_items = item_i;
 
-    return &str[str_i + 1 + *has_13]; // byte after \n
-    
-    #undef enforce_msg
+    if (has_13) *has_13 = my_has_13;
+
+    return &str[str_i + 1 + my_has_13]; // byte after \n
 }
 
 // splits a string based on container items (doesn't need to be nul-terminated). 
@@ -973,16 +976,6 @@ rom str_win_error (void)
     return msg;
 }
 
-// current date and time
-StrText str_time (void)
-{
-    StrText s;
-    time_t now = time (NULL);
-    strftime (s.s, 100, "%Y-%m-%d %H:%M:%S ", localtime (&now));
-    strcpy (&s.s[strlen(s.s)], tzname[daylight]);
-    return s;
-}
-
 // C<>G A<>T c<>g a<>t ; IUPACs: R<>Y K<>M B<>V D<>H W<>W S<>S N<>N (+ lowercase); other ASCII 32->126 preserved ; other = 0
 const char COMPLEM[256] = "-------------------------------- !\"#$\%&'()*+,-./0123456789:;<=>?@TVGHEFCDIJMLKNOPQYSAUBWXRZ[\\]^_`tvghefcdijmlknopqysaubwxrz{|}~";
 
@@ -1030,4 +1023,31 @@ rom my_memrchr (rom str, char c, uint32_t str_len)
         if (str[i] == c) return &str[i];
 
     return NULL;
+}
+
+// print duration in human-readable form eg 1h2' or "1 hour 2 minutes"
+void str_human_time (unsigned secs, bool compact, char *str /* out */)
+{
+    unsigned hours = secs / 3600;
+    unsigned mins  = (secs % 3600) / 60;
+             secs  = secs % 60;
+
+    if (compact)
+        sprintf (str, "%uh%u'%u\"", hours, mins, secs);
+    else if (hours) 
+        sprintf (str, "%u %s %u %s", hours, hours==1 ? "hour" : "hours", mins, mins==1 ? "minute" : "minutes");
+    else if (mins)
+        sprintf (str, "%u %s %u %s", mins, mins==1 ? "minute" : "minutes", secs, secs==1 ? "second" : "seconds");
+    else 
+        sprintf (str, "%u %s", secs, secs==1 ? "second" : "seconds");
+}
+
+// current date and time
+StrText str_time (void)
+{
+    StrText s;
+    time_t now = time (NULL);
+    strftime (s.s, 100, "%Y-%m-%d %H:%M:%S ", localtime (&now));
+    strcpy (&s.s[strlen(s.s)], tzname[daylight]);
+    return s;
 }

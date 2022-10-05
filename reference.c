@@ -3,7 +3,7 @@
 //   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #include <errno.h>
@@ -288,7 +288,7 @@ static void ref_uncompress_one_range (VBlockP vb)
     SectionHeaderReference *header = (SectionHeaderReference *)vb->z_data.data;
 
     WordIndex chrom          = (WordIndex)BGEN32 (header->chrom_word_index);
-    uint32_t uncomp_len      = BGEN32 (header->h.data_uncompressed_len);
+    uint32_t uncomp_len      = BGEN32 (header->data_uncompressed_len);
     PosType ref_sec_pos      = (PosType)BGEN64 (header->pos);
     PosType ref_sec_gpos     = (PosType)BGEN64 (header->gpos); // this is equal to sec_start_gpos. However up to 12.0.3 we had a bug in case of compacted ranges in a SAM/BAM DENOVO reference with start flanking regions - GPOS in the section header of a didn't reflect the flanking removal, so header->gpos cannot be trusted as correct for older SAM/BAM DENOVO reference files
     PosType ref_sec_len      = (PosType)BGEN32 (header->num_bases);
@@ -299,16 +299,18 @@ static void ref_uncompress_one_range (VBlockP vb)
 
     rom chrom_name;
     RangeP r = ref_get_range_by_chrom (vb->ref, chrom, &chrom_name);
+    ASSERT (r->last_pos, "unexpectedly, r->last_pos=0: r=%s", ref_display_range (r).s);
+
     PosType sec_start_within_contig = ref_sec_pos - r->first_pos;
     PosType sec_start_gpos          = r->gpos + sec_start_within_contig;
     PosType sec_end_within_contig   = sec_start_within_contig + ref_sec_len - 1;
     
-    bool is_compacted = (header->h.section_type == SEC_REF_IS_SET); // we have a SEC_REF_IS_SET if SEC_REFERENCE was compacted
+    bool is_compacted = (header->section_type == SEC_REF_IS_SET); // we have a SEC_REF_IS_SET if SEC_REFERENCE was compacted
 
     if (flag.show_reference && primary_command == PIZ && r)  // in ZIP, we show the compression of SEC_REFERENCE into z_file, not the uncompression of the reference file
         iprintf ("vb_i=%u Uncompressing %-14s chrom=%u ('%.*s') gpos=%"PRId64" pos=%"PRId64" num_bases=%u comp_bytes=%u\n", 
-                 vb->vblock_i, st_name (header->h.section_type), BGEN32 (header->chrom_word_index), STRf (r->chrom_name), BGEN64 (header->gpos), 
-                 BGEN64 (header->pos), BGEN32 (header->num_bases), BGEN32 (header->h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
+                 vb->vblock_i, st_name (header->section_type), BGEN32 (header->chrom_word_index), STRf (r->chrom_name), BGEN64 (header->gpos), 
+                 BGEN64 (header->pos), BGEN32 (header->num_bases), BGEN32 (header->data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
 
     // initialization of is_set:
     // case 1: ZIP (reading an external reference) - we CLEAR is_set, and let seg set the bits that are to be
@@ -361,11 +363,11 @@ static void ref_uncompress_one_range (VBlockP vb)
 
         if (flag.show_reference && primary_command == PIZ && r) 
             iprintf ("vb_i=%u Uncompressing %-14s chrom=%u ('%.*s') gpos=%"PRId64" pos=%"PRId64" num_bases=%u comp_bytes=%u\n", 
-                     vb->vblock_i, st_name (header->h.section_type), BGEN32 (header->chrom_word_index), STRf (r->chrom_name), BGEN64 (header->gpos), 
-                     BGEN64 (header->pos), BGEN32 (header->num_bases), BGEN32 (header->h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
+                     vb->vblock_i, st_name (header->section_type), BGEN32 (header->chrom_word_index), STRf (r->chrom_name), BGEN64 (header->gpos), 
+                     BGEN64 (header->pos), BGEN32 (header->num_bases), BGEN32 (header->data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
 
         compacted_ref_len  = (PosType)BGEN32(header->num_bases);
-        uncomp_len         = BGEN32 (header->h.data_uncompressed_len);
+        uncomp_len         = BGEN32 (header->data_uncompressed_len);
 
         ASSERT (uncomp_len == roundup_bits2bytes64 (compacted_ref_len*2), 
                 "uncomp_len=%u inconsistent with compacted_ref_len=%"PRId64, uncomp_len, compacted_ref_len); 
@@ -699,10 +701,10 @@ static void ref_copy_one_compressed_section (Reference ref, File *ref_file, cons
     header->chrom_word_index = BGEN32 (chrom_word_index);
 
     // some minor changes to the header...
-    header->h.vblock_i  = 0; // we don't belong to any VB and there is no encryption of external ref
+    header->vblock_i  = 0; // we don't belong to any VB and there is no encryption of external ref
 
     // "manually" add the reference section to the section list - normally it is added in comp_compress()
-    sections_add_to_list (evb, &header->h);
+    sections_add_to_list (evb, (SectionHeaderP)&header);
     sections_list_concat (evb); // must be called before disk_so_far is updated
 
     // Write header and body of the reference to z_file
@@ -722,7 +724,7 @@ static void ref_copy_one_compressed_section (Reference ref, File *ref_file, cons
                  Bc (ctx->dict, node->char_index), 
                  BGEN64 (header->gpos), BGEN64 (header->pos), 
                  BGEN32 (header->num_bases), 
-                 BGEN32 (header->h.data_compressed_len) + BGEN32 (header->h.compressed_offset));
+                 BGEN32 (header->data_compressed_len) + BGEN32 (header->compressed_offset));
     }
 
     buf_free (ref_seq_section);
@@ -864,12 +866,12 @@ static void ref_compress_one_range (VBlockP vb)
                                : (flag.reference & REF_ZIP_CHROM2REF) ? *B(WordIndex, z_file->ref2chrom_map, r->chrom)
                                :                                        r->chrom;
 
-    SectionHeaderReference header = { .h.vblock_i          = BGEN32 (vb->vblock_i),
-                                      .h.magic             = BGEN32 (GENOZIP_MAGIC),
-                                      .h.compressed_offset = BGEN32 (sizeof(header)),
-                                      .chrom_word_index    = BGEN32 (chrom_word_index),
-                                      .pos                 = r ? BGEN64 (r->first_pos) : 0,
-                                      .gpos                = r ? BGEN64 (r->gpos)      : 0 };
+    SectionHeaderReference header = { .vblock_i          = BGEN32 (vb->vblock_i),
+                                      .magic             = BGEN32 (GENOZIP_MAGIC),
+                                      .compressed_offset = BGEN32 (sizeof(header)),
+                                      .chrom_word_index  = BGEN32 (chrom_word_index),
+                                      .pos               = r ? BGEN64 (r->first_pos) : 0,
+                                      .gpos              = r ? BGEN64 (r->gpos)      : 0 };
 
     vb->z_data.param = vb->vblock_i;
 
@@ -878,9 +880,9 @@ static void ref_compress_one_range (VBlockP vb)
 
         LTEN_bits (&r->is_set);
 
-        header.h.section_type          = SEC_REF_IS_SET;  // most of the header is the same as ^
-        header.h.codec                 = CODEC_BZ2;
-        header.h.data_uncompressed_len = BGEN32 (r->is_set.nwords * sizeof (uint64_t));
+        header.section_type          = SEC_REF_IS_SET;  // most of the header is the same as ^
+        header.codec                 = CODEC_BZ2;
+        header.data_uncompressed_len = BGEN32 (r->is_set.nwords * sizeof (uint64_t));
         header.num_bases               = BGEN32 ((uint32_t)ref_size (r)); // full length, after flanking regions removed
         comp_compress (vb, NULL, &vb->z_data, (SectionHeader*)&header, (char *)r->is_set.words, NO_CALLBACK, "SEC_REF_IS_SET");
 
@@ -888,16 +890,16 @@ static void ref_compress_one_range (VBlockP vb)
             iprintf ("vb_i=%u Compressing SEC_REF_IS_SET chrom=%u (%.*s) gpos=%"PRIu64" pos=%"PRIu64" num_bases=%u section_size=%u bytes\n", 
                      vb->vblock_i, BGEN32 (header.chrom_word_index), STRf (r->chrom_name),
                      BGEN64 (header.gpos), BGEN64 (header.pos), BGEN32 (header.num_bases), 
-                     BGEN32 (header.h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
+                     BGEN32 (header.data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
     }
 
     // Second, SEC_REFERENCE
     if (r) LTEN_bits (&r->ref);
 
-    header.h.section_type          = SEC_REFERENCE;
-    header.h.codec                 = flag.fast ? CODEC_RANS8 : CODEC_LZMA; // LZMA better than BSC: slightly better compression and compression speed, 2.5X faster decompression
-    header.h.compressed_offset     = BGEN32 (sizeof(header)); // reset compressed offset - if we're encrypting - REF_IS_SET was encrypted and compressed_offset padded, by REFERENCE is never encrypted
-    header.h.data_uncompressed_len = r ? BGEN32 (r->ref.nwords * sizeof (uint64_t)) : 0;
+    header.section_type          = SEC_REFERENCE;
+    header.codec                 = flag.fast ? CODEC_RANS8 : CODEC_LZMA; // LZMA better than BSC: slightly better compression and compression speed, 2.5X faster decompression
+    header.compressed_offset     = BGEN32 (sizeof(header)); // reset compressed offset - if we're encrypting - REF_IS_SET was encrypted and compressed_offset padded, by REFERENCE is never encrypted
+    header.data_uncompressed_len = r ? BGEN32 (r->ref.nwords * sizeof (uint64_t)) : 0;
     header.num_bases               = r ? BGEN32 (r->ref.nbits / 2) : 0; // less than ref_size(r) if compacted
     comp_compress (vb, NULL, &vb->z_data, (SectionHeader*)&header, r ? (char *)r->ref.words : NULL, NO_CALLBACK, "SEC_REFERENCE");
 
@@ -905,7 +907,7 @@ static void ref_compress_one_range (VBlockP vb)
         iprintf ("vb_i=%u Compressing SEC_REFERENCE chrom=%u (%.*s) %s gpos=%"PRIu64" pos=%"PRIu64" num_bases=%u section_size=%u bytes\n", 
                  vb->vblock_i, BGEN32 (header.chrom_word_index), STRf (r->chrom_name), is_compacted ? "compacted " : "",
                  BGEN64 (header.gpos), BGEN64 (header.pos), BGEN32 (header.num_bases), 
-                 BGEN32 (header.h.data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
+                 BGEN32 (header.data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
 
     // store the stored_ra data for this range
     if (r) {

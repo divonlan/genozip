@@ -3,7 +3,7 @@
 //   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted,
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
 //   under penalties specified in the license.
 
 #include "genozip.h"
@@ -199,10 +199,10 @@ static void sam_seg_RX_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(rx), un
     }
     
     else fallback: {
-        // add "exception" (i.e. undiffable) rx to CR_X
+        // if undiffable, store verbatim in RX_X
         seg_add_to_local_fixed (VB, CTX(OPTION_RX_Z_X), STRa(rx), LOOKUP_WITH_LENGTH, add_bytes);
 
-        // add redirection UR -> UR_X
+        // add redirection RX -> RX_X
         seg_by_ctx (VB, STRa(redirect_to_RX_X_snip), channel_ctx, 0); 
     }
 }
@@ -217,7 +217,6 @@ void sam_seg_RX_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(rx), unsigned add_byt
         sam_seg_against_sa_group (vb, CTX(OPTION_RX_Z), add_bytes);
 
     else
-        // if different than UB - xor against it, but not if length is 1 (in STARsolo, UB is always "-" in this case while UR is a single base)
         sam_seg_buddied_Z_fields (vb, dl, MATED_RX, STRa(rx), sam_seg_RX_do_seg, add_bytes);                                
 
     COPY_TIMER (sam_seg_RX_Z);

@@ -3,7 +3,7 @@
 //   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #include "sam_private.h"
@@ -55,6 +55,7 @@ void sam_vb_release_vb (VBlockSAMP vb)
     vb->auxs = NULL;
     vb->aux_lens = NULL;
     vb->n_auxs = 0;
+    vb->aux_con = NULL;
     vb->seg_found_prim_line = vb->seg_found_depn_line = 0;
     vb->consec_is_set_chrom = 0;
     vb->consec_is_set_pos = vb->consec_is_set_len = 0;
@@ -114,8 +115,8 @@ void sam_reset_line (VBlockP vb_)
     vb->saggy_is_prim = false;
     vb->meth_call.len32 = 0;
     vb->bisulfite_strand = 0;
-    
     if (IS_PIZ) {
+        vb->aux_con = NULL;
         vb->chrom_node_index = WORD_INDEX_NONE;
         vb->chrom_name = "";
         vb->chrom_name_len = 0;

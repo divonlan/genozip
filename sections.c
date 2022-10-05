@@ -3,7 +3,7 @@
 //   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #include "genozip.h"
@@ -216,10 +216,7 @@ static void sections_create_index (bool force)
     ARRAY_alloc (SectionsVbIndexEnt, vb_index, z_file->num_vbs + 1, true, z_file->vb_sections_index, evb, "z_file->vb_sections_index");
     ARRAY_alloc (SectionsCompIndexEnt, comp_index, num_comps, true, z_file->comp_sections_index, evb, "z_file->comp_sections_index");
     ARRAY (SectionEnt, sec, z_file->section_list_buf);
-    
-    // initialize (or reset if initialized before)
-    z_file->first_dict_section = NULL;
-    
+        
     for (uint32_t sec_i=0; sec_i < sec_len; sec_i++) {
     
         CompIType comp_i = sec[sec_i].comp_i;
@@ -264,10 +261,6 @@ static void sections_create_index (bool force)
                 sec_i = BNUM (z_file->section_list_buf, vb_index[vb_i].last_sec);
                 break;
             }
-
-            case SEC_DICT :
-                if (!z_file->first_dict_section) z_file->first_dict_section = &sec[sec_i];
-                break;
 
             default: break;
         }
@@ -331,18 +324,16 @@ void sections_get_refhash_details (uint32_t *num_layers, uint32_t *base_layer_bi
 {
     ASSERT0 (flag.reading_reference || flag.show_ref_hash, "can only be called while reading reference");
 
-    for (int i=z_file->section_list_buf.len-1; i >= 0; i--) { // search backwards as the refhash sections are near the end
-        Section sec = B(SectionEnt, z_file->section_list_buf, i);
+    for_buf_back (SectionEnt, sec, z_file->section_list_buf)  // search backwards as the refhash sections are near the end
         if (sec->st == SEC_REF_HASH) {
-
             SectionHeaderRefHash header = zfile_read_section_header (evb, sec->offset, sec->vblock_i, SEC_REF_HASH).ref_hash;
             if (num_layers) *num_layers = header.num_layers;
             if (base_layer_bits) *base_layer_bits = header.layer_bits + header.layer_i; // layer_i=0 is the base layer, layer_i=1 has 1 bit less etc
             return;
         }
+
         else if (sec->st == SEC_REFERENCE)
             break; // we arrived at a SEC_REFERENCE - there won't be any more SEC_REF_HASH sections
-    }
 
     ABORT ("can't find SEC_REF_HASH sections in %s", z_name);
 }
@@ -382,10 +373,16 @@ void sections_new_list_add_bgzf (BufferP new_list)
 
 void sections_new_list_add_global_sections (BufferP new_list)
 {
-    uint32_t num_sections = BAFT(SectionEnt, z_file->section_list_buf) - z_file->first_dict_section;
+    // get first section that's not TXT_HEADER/BGZF/VB_HEADER/LOCAL/B250/COUNT/DICT
+    Section sec = NULL;
+    for_buf_back (SectionEnt, s, z_file->section_list_buf) 
+        if (sections_has_dict_id(s->st) || s->st == SEC_VB_HEADER || s->st == SEC_TXT_HEADER || s->st == SEC_BGZF) {
+            sec = s; 
+            break;
+        }
+    sec++;
 
-    memcpy (BAFT (SectionEntModifiable, *new_list), z_file->first_dict_section, num_sections * sizeof (SectionEnt));
-    new_list->len += num_sections;
+    buf_append (NULL, *new_list, SectionEntModifiable, sec, BAFT(SectionEnt, z_file->section_list_buf) - sec, NULL);
 }
 
 // replace current section list with the new list (if one exists)
@@ -439,7 +436,7 @@ void sections_list_memory_to_file_format (bool in_place) // in place, or to evb-
 // PIZ: create in-memory format of the section list - copy from z_file section, BGEN, and add sizes
 void sections_list_file_to_memory_format (SectionHeaderGenozipHeader *genozip_header)
 {
-    struct FlagsGenozipHeader f = genozip_header->h.flags.genozip_header;
+    struct FlagsGenozipHeader f = genozip_header->flags.genozip_header;
     int V = genozip_header->genozip_version;
     DataType dt = BGEN16 (genozip_header->data_type);
 
@@ -500,8 +497,8 @@ void sections_list_file_to_memory_format (SectionHeaderGenozipHeader *genozip_he
         }
     }
 
-    mem_sec[file_sec_len-1].size = BGEN32 (genozip_header->h.data_compressed_len) + 
-                                   BGEN32 (genozip_header->h.compressed_offset) + 
+    mem_sec[file_sec_len-1].size = BGEN32 (genozip_header->data_compressed_len) + 
+                                   BGEN32 (genozip_header->compressed_offset) + 
                                    sizeof (SectionFooterGenozipHeader);
 
     sections_create_index (true);
@@ -832,7 +829,7 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
 
     case SEC_GENOZIP_HEADER: {
         SectionHeaderGenozipHeader *h = (SectionHeaderGenozipHeader *)header;
-        z_file->z_flags.adler = h->h.flags.genozip_header.adler; // needed by digest_display_ex
+        z_file->z_flags.adler = h->flags.genozip_header.adler; // needed by digest_display_ex
         char dt_specific[REF_FILENAME_LEN + 200] = "";
 
         if (dt == DT_CHAIN)
@@ -1045,7 +1042,7 @@ void sections_show_gheader (const SectionHeaderGenozipHeader *header)
             iprintf ("  reference filename: %s\n",  header->ref_filename);
             iprintf ("  reference file hash: %s\n", digest_display (header->ref_file_md5).s);
         }
-        iprintf ("  flags: %s\n",                   sections_dis_flags (header->h.flags, SEC_GENOZIP_HEADER, dt).s);
+        iprintf ("  flags: %s\n",                   sections_dis_flags (header->flags, SEC_GENOZIP_HEADER, dt).s);
 
         switch (dt) {
             case DT_CHAIN:

@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #pragma once
@@ -75,12 +75,11 @@ typedef struct File {
         
     CompIType num_components;          // PIZ z_file: set from genozip header 
 
-    struct FlagsGenozipHeader z_flags; // z_file: genozip file flags as read from SectionHeaderGenozipHeader.h.flags
-    struct FlagsTxtHeader txt_flags;   // txt_file PIZ: genozip file flags as read from SectionHeaderTxtHeader.h.flags
+    struct FlagsGenozipHeader z_flags; // z_file: genozip file flags as read from SectionHeaderGenozipHeader.flags
+    struct FlagsTxtHeader txt_flags;   // txt_file PIZ: genozip file flags as read from SectionHeaderTxtHeader.flags
 
     Buffer vb_sections_index;          // PIZ z_file: an index into VB sections
     Buffer comp_sections_index;        // PIZ z_file: an index into Txt sections
-    Section first_dict_section;        // PIZ z_file
 
     // Used for WRITING GENOZIP files
     uint64_t disk_at_beginning_of_this_txt_file;     // z_file: the value of disk_size when starting to read this txt file

@@ -3,7 +3,7 @@
 //   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted,
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
 //   under penalties specified in the license.
 
 // ---------------------------------------------------------
@@ -84,7 +84,7 @@ static inline bool sam_seg_SA_field_is_line_matches_aln (VBlockSAMP vb, ZipDataL
     int64_t aln_pos, aln_mapq, aln_nm;
     if (!str_get_int (STRi(item, SA_POS),  &aln_pos)  || aln_pos  != dl->POS  ||
         !str_get_int (STRi(item, SA_MAPQ), &aln_mapq) || aln_mapq != dl->MAPQ ||
-        !str_get_int (STRi(item, SA_NM),   &aln_nm)   || aln_nm   != dl->NM) return false;
+        !str_get_int (STRi(item, SA_NM),   &aln_nm)   || aln_nm   != dl->NM) return false; // note: if NM doesn't exist in dl, it is taken as 0. Eg novoalign omits the NM:i field if is is 0
 
     // cigar
     return str_issame_(line_cigar(dl), dl->CIGAR.len, STRi(item, SA_CIGAR));
@@ -197,9 +197,11 @@ void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), unsigned add_byt
         }
 
         // special function can reconstruct depn SA from prim SA - no need to seg anything else
-        else
+        else {
             ctx->txt_len += add_bytes;
-            
+            CTX(OPTION_NM_i)->local_always = true; // carry STORE_INT even if no NM:i in file (required so sam_piz_special_COPY_BUDDY considers a historical NM:i to be 0 if non-existent). In novoalign, NM:i=0 might be omitted.
+        }
+
         break;
     }
 
@@ -340,7 +342,10 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SA_main)
         // get alignment items of current (depn) line
         int64_t my_pos  = CTX(SAM_POS)->last_value.i;
         int64_t my_mapq = CTX(SAM_MAPQ)->last_value.i;
-        int64_t my_nm   = reconstruct_peek (VB, CTX(OPTION_NM_i), 0, 0).i;
+        
+        // note: a non existing NM:i is taken as 0
+        int64_t my_nm   = sam_piz_line_has_aux_field (vb, _OPTION_NM_i) ? reconstruct_peek (VB, CTX(OPTION_NM_i), 0, 0).i : 0;
+        
         char my_strand  = last_flags.rev_comp ? '-' : '+';
 
         STR(my_rname);

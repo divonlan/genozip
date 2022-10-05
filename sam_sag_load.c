@@ -3,7 +3,7 @@
 //   Copyright (C) 2022-2022 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #include "genozip.h"
@@ -411,7 +411,9 @@ static void sam_load_groups_add_grp_cigars (VBlockSAMP vb, PlsgVbInfo *plsg, Sag
 
 static inline ZWord reconstruct_to_solo_aln (VBlockSAMP vb, Did did_i, uint64_t solo_data_start, bool check_copy)
 {
-    if (!CTX(did_i)->is_loaded) return (ZWord){};
+    ContextP ctx = CTX(did_i);
+
+    if (!ctx->is_loaded) return (ZWord){};
 
     uint64_t recon_start = vb->txt_data.len;
     reconstruct_from_ctx (VB, did_i, 0, true); 
@@ -421,6 +423,11 @@ static inline ZWord reconstruct_to_solo_aln (VBlockSAMP vb, Did did_i, uint64_t 
     if (check_copy && recon_start >= recon_len && !memcmp (Btxt(recon_start), Btxt(recon_start-recon_len), recon_len)) {
         recon_start      -= recon_len;
         vb->txt_data.len -= recon_len;
+
+        // update history if needed
+        HistoryWord *hword = B(HistoryWord, ctx->history, vb->line_i);
+        if (ctx->flags.store_per_line && hword->lookup == LookupTxtData)
+            hword->index -= recon_len;
     }
 
     return (ZWord){ .index = solo_data_start + recon_start, .len = recon_len };
@@ -581,6 +588,7 @@ static inline void sam_load_groups_add_grps (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
         }
 
         // if line contains MC:Z - reconstruct is into txt_data, as our mate's CIGAR might copy it
+        // note: a better way to do this would be using reconstruct_to_history
         if (CTX(OPTION_MC_Z)->is_loaded && idxs[1].idx != -1/*this line has MC:Z */)  
             reconstruct_from_ctx (VB, OPTION_MC_Z, 0, true);
 

@@ -3,7 +3,7 @@
 //   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted,
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
 //   under penalties specified in the license.
 
 #include "genozip.h"
@@ -334,7 +334,7 @@ void sam_seg_BWA_XM_i (VBlockSAMP vb, ValueType XM, unsigned add_bytes)
 }
 
 // ----------------------------------------------------------------------------------------------
-// Suboptimal alignment score : XS:i in bwa, bsbolt, tmap and bowtie2 ; ZS:i in hisat2
+// Suboptimal alignment score : XS:i in bwa, dragen, bsbolt, tmap and bowtie2 ; ZS:i in hisat2
 // ----------------------------------------------------------------------------------------------
 
 static inline int sam_XS_get_mux_channel (uint8_t MAPQ)

@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted,
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
 //   under penalties specified in the license.
 
 #include "genozip.h"
@@ -57,8 +57,8 @@ static void txtheader_compress_one_fragment (VBlockP vb)
     START_TIMER;
 
     SectionHeaderTxtHeader my_header = section_header; // duplicating the ~300 bytes header in each fragment, but this negligible vs the fragment length
-    my_header.h.data_uncompressed_len = BGEN32 (vb->fragment_len);
-    my_header.h.vblock_i              = BGEN32 (vb->vblock_i); // up to 14.0.8 (when TXT_HEADER fragmantization was introduced), this was always 0 for SEC_TXT_HEADER
+    my_header.data_uncompressed_len = BGEN32 (vb->fragment_len);
+    my_header.vblock_i              = BGEN32 (vb->vblock_i); // up to 14.0.8 (when TXT_HEADER fragmantization was introduced), this was always 0 for SEC_TXT_HEADER
 
     comp_compress (vb, NULL, &vb->z_data, (SectionHeader*)&my_header, vb->fragment_start, NO_CALLBACK, "SEC_TXT_HEADER");
 
@@ -80,13 +80,13 @@ void txtheader_compress (BufferP txt_header,
     Codec codec = codec_assign_best_codec (evb, NULL, txt_header, SEC_TXT_HEADER);
 
     section_header = (SectionHeaderTxtHeader){
-        .h.magic             = BGEN32 (GENOZIP_MAGIC),
-        .h.section_type      = SEC_TXT_HEADER,
-        .h.compressed_offset = BGEN32 (sizeof (SectionHeaderTxtHeader)),
-        .h.codec             = (codec == CODEC_UNKNOWN) ? CODEC_NONE : codec,
-        .src_codec           = txt_file->codec, 
-        .digest_header       = flag.data_modified ? DIGEST_NONE : header_md5,
-        .txt_header_size     = BGEN64 (unmodified_txt_header_len),
+        .magic             = BGEN32 (GENOZIP_MAGIC),
+        .section_type      = SEC_TXT_HEADER,
+        .compressed_offset = BGEN32 (sizeof (SectionHeaderTxtHeader)),
+        .codec             = (codec == CODEC_UNKNOWN) ? CODEC_NONE : codec,
+        .src_codec         = txt_file->codec, 
+        .digest_header     = flag.data_modified ? DIGEST_NONE : header_md5,
+        .txt_header_size   = BGEN64 (unmodified_txt_header_len),
     };
 
     // data type specific fields
@@ -195,7 +195,7 @@ static void txtheader_read_one_vb (VBlockP vb)
     zfile_read_section (z_file, vb, txtheader_sec->vblock_i, &vb->z_data, "z_data", SEC_TXT_HEADER, txtheader_sec);    
     SectionHeaderTxtHeader *header = B1ST (SectionHeaderTxtHeader, vb->z_data);
 
-    vb->fragment_len   = BGEN32 (header->h.data_uncompressed_len);
+    vb->fragment_len   = BGEN32 (header->data_uncompressed_len);
     vb->fragment_start = Bc (txt_header_vb->txt_data, txt_header_vb->txt_data.next);
 
     ASSERT (txt_header_vb->txt_data.next + vb->fragment_len <= txt_header_vb->txt_data.len, "TxtHeader fragments exceed length=%"PRIu64, txt_header_vb->txt_data.len); 
@@ -211,7 +211,7 @@ static void txtheader_read_one_vb (VBlockP vb)
 static void txtheader_uncompress_one_vb (VBlockP vb)
 {
     SectionHeaderTxtHeader *header = B1ST (SectionHeaderTxtHeader, vb->z_data);
-    zfile_uncompress_section_into_buf (vb, header, BGEN32 (header->h.vblock_i), SEC_TXT_HEADER, &txt_header_vb->txt_data, vb->fragment_start);
+    zfile_uncompress_section_into_buf (vb, header, BGEN32 (header->vblock_i), SEC_TXT_HEADER, &txt_header_vb->txt_data, vb->fragment_start);
 
     vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
 }
@@ -232,7 +232,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     SectionHeaderTxtHeader header = {};
     for (VBIType vb_i=1; my_sec->st == SEC_TXT_HEADER && (my_sec->vblock_i==vb_i || (!my_sec->vblock_i && vb_i==1 /* up to 14.0.8 */)); vb_i++, my_sec++) {
         SectionHeaderTxtHeader frag_header = zfile_read_section_header (txt_header_vb, my_sec->offset, my_sec->vblock_i, SEC_TXT_HEADER).txt_header;
-        txt_header_vb->txt_data.len += BGEN32 (frag_header.h.data_uncompressed_len);
+        txt_header_vb->txt_data.len += BGEN32 (frag_header.data_uncompressed_len);
 
         if (vb_i == 1 && sec->comp_i == COMP_MAIN) 
             z_file->txt_header_single = frag_header;
@@ -241,7 +241,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
             header = frag_header;
     }
 
-    ASSERT0 (header.h.section_type == SEC_TXT_HEADER, "SEC_TXT_HEADER section not found");
+    ASSERT0 (header.section_type == SEC_TXT_HEADER, "SEC_TXT_HEADER section not found");
 
     buf_alloc (txt_header_vb, &txt_header_vb->txt_data, 0, txt_header_vb->txt_data.len, char, 0, "txt_data");
     txt_header_vb->txt_data.next = 0;
@@ -268,9 +268,9 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     if (!txt_file->piz_header_init_has_run && DTPZ(piz_header_init))
         txt_file->piz_header_init_has_run = true;
 
-    evb->comp_i                = !VER(14) ? header.h.flags.txt_header.v13_dvcf_comp_i/*v12,13*/ : sec->comp_i/*since v14*/;
+    evb->comp_i                = !VER(14) ? header.flags.txt_header.v13_dvcf_comp_i/*v12,13*/ : sec->comp_i/*since v14*/;
     txt_file->max_lines_per_vb = BGEN32 (header.max_lines_per_vb);
-    txt_file->txt_flags        = header.h.flags.txt_header;
+    txt_file->txt_flags        = header.flags.txt_header;
     txt_file->num_vbs          = sections_count_sections_until (SEC_VB_HEADER, sec, SEC_TXT_HEADER);
     
     if (txt_file->codec == CODEC_BGZF)
@@ -308,8 +308,6 @@ void txtheader_piz_read_and_reconstruct (Section sec)
                 .library       = BGZF_LIBDEFLATE, // default - libdeflate level 6
                 .level         = BGZF_COMP_LEVEL_DEFAULT 
             };
-
-        //xxx header = B1ST (SectionHeaderTxtHeader, txt_header_vb->z_data); // re-assign after possible realloc of z_data in bgzf_load_isizes
     }
 
     // case: the user wants us to reconstruct (or not) the BGZF blocks in a particular way, this overrides the z_file instructions 
@@ -336,7 +334,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     }
 
     if (txt_header_vb->txt_data.len)
-        DT_FUNC_OPTIONAL (z_file, inspect_txt_header, true)(txt_header_vb, &txt_header_vb->txt_data, header.h.flags.txt_header); // ignore return value
+        DT_FUNC_OPTIONAL (z_file, inspect_txt_header, true)(txt_header_vb, &txt_header_vb->txt_data, header.flags.txt_header); // ignore return value
 
     // hand-over txt header if it is needed (it won't be if flag.no_header)
     if (writer_does_txtheader_need_write (sec)) {
@@ -358,7 +356,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
         writer_handover_txtheader (&txt_header_vb); // handover data to writer thread (even if the header is empty, as the writer thread is waiting for it)
 
         // accounting for data as in original source file - affects vb->vb_position_txt_file of next VB
-        txt_file->txt_data_so_far_single_0 = !VER(12) ? BGEN32 (header.h.data_uncompressed_len) : BGEN64 (header.txt_header_size); 
+        txt_file->txt_data_so_far_single_0 = !VER(12) ? BGEN32 (header.data_uncompressed_len) : BGEN64 (header.txt_header_size); 
     }
 
     // case: component is not in plan - discard the VB

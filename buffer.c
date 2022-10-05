@@ -1303,7 +1303,7 @@ bool buf_dump_to_file (rom filename, ConstBufferP buf, unsigned buf_word_width, 
 
     if (success && do_gzip) {
         char command[fn_len + 50];
-        sprintf (command, "gzip -f %s", update_filename);
+        sprintf (command, "gzip -f \"%s\"", update_filename);
         int ret = system (command);
         ASSERTW (!ret, "FYI: \"%s\" returned %d. No harm.", command, ret); 
 

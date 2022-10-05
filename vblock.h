@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #pragma once
@@ -68,7 +68,7 @@
     \
     DtTranslation translation;    /* PIZ: translation to be applies to this VB */ \
     union FlagsVbHeader flags;    /* ZIP: set by *_seg_finalize and consumed by zfile_compress_vb_header */ \
-                                  /* PIZ: copied from SectionHeaderVbHeader.h.flags.vb_header */ \
+                                  /* PIZ: copied from SectionHeaderVbHeader.flags.vb_header */ \
     \
     rom drop_curr_line;           /* PIZ: line currently in reconstruction is to be dropped due a filter (value is filter name) */\
     uint32_t num_nondrop_lines;   /* PIZ: number of lines NOT dropped as a result of drop_curr_line */\

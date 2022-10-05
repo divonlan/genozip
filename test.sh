@@ -956,10 +956,15 @@ batch_real_world_1_backcomp()
         # if [[ $f == test.ubam.bam ]]; then continue; fi
 
         # exceptions - supported in 14.0.9 but not earlier
-        if [[ $f == test.MC_Z_in_prim.sam ]]; then continue; fi
-        if [[ $f == test.10M-contigs.sam.bz2 ]]; then continue; fi
-        if [[ $f == test.unmapped-is-saggy.sam ]]; then continue; fi
+        # if [[ $f == test.MC_Z_in_prim.sam ]]; then continue; fi
+        # if [[ $f == test.10M-contigs.sam.bz2 ]]; then continue; fi
+        # if [[ $f == test.unmapped-is-saggy.sam ]]; then continue; fi
 
+        # exceptions - supported in 14.0.10 but not earlier
+        if [[ $f == test.minimap2+biobambam.bam ]]; then continue; fi
+        if [[ $f == test.saggy-alns-with-and-without-CIGAR.sam.gz ]]; then continue; fi
+        if [[ $f == test.novoalign-SA+omit-NM=0.sam ]]; then continue; fi
+        
         test_header "$f - backward compatability with prod ($i/${#files[@]})"
         $genozip_prod private/test/$f --md5 -fo $output || exit 1
         $genounzip -t $output || exit 1

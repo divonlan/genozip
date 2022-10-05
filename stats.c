@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #include <stdarg.h>
@@ -28,6 +28,7 @@
 #include "crypt.h"
 #include "tar.h"
 #include "sam.h"
+#include "generic.h"
 
 typedef struct {
     Did my_did_i, st_did_i;
@@ -106,7 +107,7 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
 #endif
 
     static Buffer url_buf={};
-
+    
     // reference: https://stackoverflow.com/questions/18073971/http-post-to-a-google-form/47444396#47444396    
     /* To get entry IDs - in Chrome browser: 1. open form 2. click on eye icon to Preview 2. right-click Inspect 3. go to "console" tab 4. run this code:
     function loop(e){
@@ -125,11 +126,18 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
     bufprintf (evb, &url_buf, "&entry.1014872627=%u", license_get_number());                                 // license #. Eg "32412351324"
     bufprintf (evb, &url_buf, "&entry.1861722167=%s", url_esc_non_valid_chars (arch_get_user_host()));       // user@host. Eg "john@hpc"
     bufprintf (evb, &url_buf, "&entry.441046403=%s", dt_name (z_file->data_type));                           // data type. Eg "VCF"
-    bufprintf (evb, &url_buf, "&entry.984213484=%s", url_esc_non_valid_charsS (str_size (all_txt_len).s).s); // Txt size (original file size), eg "6.2 GB"
-    bufprintf (evb, &url_buf, "&entry.960659059=%s%%2C%.1f", codec_name (txt_file->codec), src_comp_ratio);  // Source codec/gain eg "GZ,4.3"
+    bufprintf (evb, &url_buf, "&entry.984213484=%s%%2C%"PRIu64, url_esc_non_valid_charsS (str_size (all_txt_len).s).s, z_file->txt_disk_so_far_bind); // Txt size (disk size + uncompressed txt size), z_size, eg "2342442046,6.2 GB,2342442046"
+    bufprintf (evb, &url_buf, "&entry.960659059=%s%%2C%.1f", codec_name (txt_file->source_codec), src_comp_ratio);  // Source codec/gain eg "GZ,4.3"
     bufprintf (evb, &url_buf, "&entry.621670070=%.1f", all_comp_ratio);                                      // Genozip gain over source txt eg "5.4"
-    bufprintf (evb, &url_buf, "&entry.1635780209=OS=%s%%3Bdist=%s%%3Bcores=%u", url_esc_non_valid_charsS(arch_get_os()).s, url_esc_non_valid_charsS(arch_get_distribution()).s, arch_get_num_cores());  // Environment: OS, # cores, eg:
+    bufprintf (evb, &url_buf, "&entry.1635780209=OS=%s%%3Bdist=%s%%3Bcores=%u%%3Bruntime=%s", 
+               url_esc_non_valid_charsS(arch_get_os()).s, 
+               url_esc_non_valid_charsS(arch_get_distribution()).s, 
+               arch_get_num_cores(), 
+               url_esc_non_valid_charsS(arch_get_run_time()).s); 
     bufprintf (evb, &url_buf, "&entry.2140634550=%s", features.len ? url_esc_non_valid_charsS (B1STc(features)).s : "NONE");                                                        // Features. Eg "Sorted"
+    
+    if (Z_DT(SAM) || Z_DT(BAM))
+        bufprintf (evb, &url_buf, "&entry.851737826=%s", url_esc_non_valid_charsS (sam_get_hdr_PGs()).s);                                                        // Features. Eg "Sorted"
     
     // careful not to use bufprintf for hash_occ and internals as their size is not bound
     buf_append_string (evb, &url_buf, "&entry.282448068=");
@@ -141,10 +149,14 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
     // fields
     bufprint0 (evb, &url_buf, "&entry.988930848=");      // Compression ratio of individual fields ratio, eg "FORMAT/GT,20%,78;..." - each field is triplet - name, percentage of z_data, compression ratio
     for (uint32_t i=0, need_sep=0; i < num_stats; i++) 
-        if (sbl[i].z_size)
-            bufprintf (evb, &url_buf, "%s%s%%2C%.1f%%25%%2C%.1fX", 
+        if (sbl[i].z_size) {
+            // if (i != 33 && i != 35) see bug 689 - uncommenting causes test.cellranger-3.0.0.bam to submit successfully
+                bufprintf (evb, &url_buf, "%s%s%%2C%.1f%%25%%2C%.1fX", 
                        need_sep++ ? "%3B" : "", url_esc_non_valid_charsS(sbl[i].name).s, sbl[i].pc_of_z, (float)sbl[i].txt_len / (float)sbl[i].z_size); // ratio z vs txt
-
+// printf ("\nxxx %u: %s%s%%2C%.1f%%25%%2C%.1fX\n", i,
+//             need_sep++ ? "%3B" : "", url_esc_non_valid_charsS(sbl[i].name).s, sbl[i].pc_of_z, (float)sbl[i].txt_len / (float)sbl[i].z_size); // ratio z vs txt
+        }
+    
     // Flags. Eg "best,reference=INTERNAL"
     bufprint0 (evb, &url_buf, "&entry.1369097179=");     
 
@@ -242,7 +254,7 @@ static void stats_output_file_metadata (void)
     }
 
     bufprintf (evb, &features, "VBs=%u X %s;", z_file->num_vbs, str_size (segconf.vb_size).s);
-    bufprintf (evb, &features, "num_lines=%"PRIu64";", z_file->num_lines);
+    if (!Z_DT(GENERIC))         bufprintf (evb, &features, "num_lines=%"PRIu64";", z_file->num_lines);
     if (Z_DT(SAM) || Z_DT(BAM)) bufprintf (evb, &features, "num_hdr_contigs=%u;", sam_num_header_contigs());
     if (Z_DT(VCF))              bufprintf (evb, &features, "num_samples=%u;", vcf_header_get_num_samples());
 
@@ -350,6 +362,9 @@ static void stats_output_file_metadata (void)
         FEATURE (segconf.vcf_is_gvcf,    "Feature: GVCF", "GVCF");
     }
 
+    else if (Z_DT(GENERIC)) 
+        bufprintf (evb, &features, "magic=%s;", generic_get_magic());
+
     if (segconf.qname_flavor) {
         bufprintf (evb, &stats, "Read name style: %s%s%s\n", 
                    qf_name(segconf.qname_flavor), segconf.qname_flavor2 ? " + " : "", segconf.qname_flavor2 ? qf_name(segconf.qname_flavor2) : "");
@@ -359,8 +374,10 @@ static void stats_output_file_metadata (void)
     else if (Z_DT(FASTQ) || Z_DT(BAM) || Z_DT(SAM) || Z_DT(KRAKEN))
         bufprint0 (evb, &features, "Flavor=unrecognized;");   
 
-    bufprintf (evb, &features, "segconf.line_len=%u;", segconf.line_len); 
-    if (segconf.longest_seq_len) bufprintf (evb, &features, "segconf.longest_seq_len=%u;", segconf.longest_seq_len); 
+    if (!Z_DT(GENERIC)) { // GENERIC doesn't have lines
+        bufprintf (evb, &features, "segconf.line_len=%u;", segconf.line_len); 
+        if (segconf.longest_seq_len) bufprintf (evb, &features, "segconf.longest_seq_len=%u;", segconf.longest_seq_len); 
+    }
 
     bufprintf (evb, &stats, "Genozip version: %s %s\nDate compressed: %s\n", 
                GENOZIP_CODE_VERSION, arch_get_distribution(), str_time().s);

@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #include <math.h>
@@ -39,14 +39,14 @@ bool vcf_piz_init_vb (VBlockP vb_, const SectionHeaderVbHeader *header, uint32_t
 
     // calculate the coordinates in which this VB will be rendered - PRIMARY or LUFT
     vb->vb_coords = !z_is_dvcf ? DC_PRIMARY // non dual-coordinates file - always PRIMARY
-                    : header->h.flags.vb_header.vcf.coords == DC_PRIMARY ? DC_PRIMARY // reject component ##primary_only
-                    : header->h.flags.vb_header.vcf.coords == DC_LUFT    ? DC_LUFT    // reject component ##luft_only
+                    : header->flags.vb_header.vcf.coords == DC_PRIMARY ? DC_PRIMARY // reject component ##primary_only
+                    : header->flags.vb_header.vcf.coords == DC_LUFT    ? DC_LUFT    // reject component ##luft_only
                     : flag.luft ? DC_LUFT // dual component - render as LUFT
                     : DC_PRIMARY;         // dual component - render as PRIMARY
 
     vb->recon_size = BGEN32 (vb->vb_coords==DC_PRIMARY ? header->recon_size_prim : header->dvcf_recon_size_luft); 
 
-    vb->is_rejects_vb = z_is_dvcf && header->h.flags.vb_header.vcf.coords != DC_BOTH;
+    vb->is_rejects_vb = z_is_dvcf && header->flags.vb_header.vcf.coords != DC_BOTH;
 
     // accounting for data as in the original source file 
     *txt_data_so_far_single_0_increment = BGEN32 (txt_file->txt_flags.is_txt_luft ? header->dvcf_recon_size_luft 

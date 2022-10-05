@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #pragma once
@@ -20,4 +20,5 @@ extern rom arch_get_os (void);
 extern rom arch_get_distribution (void);
 extern bool arch_is_wsl (void);
 extern rom arch_get_executable (void);
+extern rom arch_get_run_time (void);
 

@@ -3,7 +3,7 @@
 //   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #include "genozip.h"
@@ -470,7 +470,11 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
         
     sam_seg_SEQ (vb, dl, STRb(vb->textual_seq), (l_seq+1)/2 + sizeof (uint32_t) /* account for l_seq and seq fields */);
 
-    // QUAL
+    // finally we can segment the textual CIGAR now (including if n_cigar_op=0)
+    sam_seg_CIGAR (vb, dl, vb->textual_cigar.len32, STRb(vb->textual_seq), qual, l_seq, 
+                           ((uint32_t)n_cigar_op * sizeof (uint32_t) /* cigar */ + sizeof (uint16_t) /* n_cigar_op */));
+
+    // QUAL. note: can only be called after sam_seg_CIGAR updates SEQ.len
     if (!vb->qual_missing) // case we have both SEQ and QUAL
         sam_seg_QUAL (vb, dl, qual, l_seq, l_seq /* account for qual field */ );
 
@@ -481,10 +485,6 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
         
         vb->qual_codec_no_longr = true; // we cannot compress QUAL with CODEC_LONGR in this case
     }
-
-    // finally we can segment the textual CIGAR now (including if n_cigar_op=0)
-    sam_seg_CIGAR (vb, dl, vb->textual_cigar.len32, STRb(vb->textual_seq), qual, l_seq, 
-                           ((uint32_t)n_cigar_op * sizeof (uint32_t) /* cigar */ + sizeof (uint16_t) /* n_cigar_op */));
 
     // AUX fields - up to MAX_FIELDS of them
     sam_seg_aux_all (vb, dl);

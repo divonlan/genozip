@@ -3,7 +3,7 @@
 //   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted,
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
 //   under penalties specified in the license.
 
 #include "genozip.h"
@@ -173,8 +173,8 @@ error:
     exit_on_error(true);
 }
 
-// diff current QUAL against prim or saggy's QUAL
-static void sam_seg_QUAL_diff (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual), 
+// diff current QUAL against prim or saggy's QUAL. return false if diff was aborted
+static bool sam_seg_QUAL_diff (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual), 
                                STRp (prim_qual), bool prim_revcomp, uint32_t *prim_hard_clip, unsigned add_bytes)
 {
     bool xstrand = (dl->FLAG.rev_comp != prim_revcomp);
@@ -192,29 +192,35 @@ static void sam_seg_QUAL_diff (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual),
 
     uint32_t overlap_len = qual_len - flank[0] - flank[1];
 
-    CTX(SAM_QUAL)->txt_len += add_bytes - flank[0] - flank[1];
-    CTX(SAM_QUAL_FLANK)->txt_len += flank[0] + flank[1];
-
     buf_alloc (vb, &CTX(SAM_QUALSA)->local, overlap_len, 0, int8_t, CTX_GROWTH, "contexts->local");
     int8_t *diff = BAFT (int8_t, CTX(SAM_QUALSA)->local);
-    CTX(SAM_QUALSA)->local.len32 += overlap_len;
 
     rom overlap_this_qual = &qual[flank[0]];
+
+    uint32_t num_diff_0 = 0; // number of base scores for which diff=0
 
     if (!xstrand) {
         uint32_t first_prim_overlap = flank[0] ? 0 : (vb->hard_clip[0] - prim_hard_clip[0]);
         rom overlap_prim_qual = &prim_qual[first_prim_overlap];
 
-        for (uint32_t i=0; i < overlap_len; i++) 
+        for (uint32_t i=0; i < overlap_len; i++) {
             diff[i] = overlap_this_qual[i] - overlap_prim_qual[i]; // a value [-93,93] as qual is [33,126]
+            num_diff_0 += !diff[i];
+        }
     }
     else {
         uint32_t last_prim_overlap = prim_qual_len - 1 - (flank[0] ? 0 : (vb->hard_clip[0] - prim_hard_clip[1]));
         rom overlap_prim_qual = &prim_qual[last_prim_overlap];
 
-        for (int32_t/*signed*/ i=0; i < overlap_len; i++) 
+        for (int32_t/*signed*/ i=0; i < overlap_len; i++) {
             diff[i] = overlap_this_qual[i] - overlap_prim_qual[-i]; 
+            num_diff_0 += !diff[i];
+        }
     }
+
+    // abort diff if we have too many different base scores - we're better off not diffing
+    if (num_diff_0 < overlap_len / 2) 
+        return false;
 
     // add flanks (regions that could not be diffed) to SAM_QUAL_FLANK.local
     if (flank[0]) 
@@ -222,6 +228,12 @@ static void sam_seg_QUAL_diff (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual),
 
     if (flank[1])
         seg_add_to_local_fixed (VB, CTX(SAM_QUAL_FLANK), &qual[qual_len - flank[1]], flank[1], LOOKUP_NONE, 0);
+
+    CTX(SAM_QUALSA)->local.len32 += overlap_len;
+    CTX(SAM_QUAL)->txt_len += add_bytes - flank[0] - flank[1];
+    CTX(SAM_QUAL_FLANK)->txt_len += flank[0] + flank[1];
+
+    return true; // all good
 }
 
 void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual_data)/*always textual*/, unsigned add_bytes)
@@ -231,6 +243,7 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual_data)/*always te
     Context *qual_ctx = CTX(SAM_QUAL);
     ZipDataLineSAM *saggy_dl;
     bool prim_has_qual_but_i_dont = false; // will be set if this line has no QUAL, but its prim line does (very rare)
+    bool diff_aborted = false;             // quality scores are too different, we're better off not diffing (added 14.0.10)
 
     vb->has_qual |= !vb->qual_missing;
 
@@ -248,8 +261,10 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual_data)/*always te
         else {
             sam_get_sa_grp_qual (vb); // decompress prim qual into vb->scratch
 
-            sam_seg_QUAL_diff (vb, dl, STRa(qual_data), STRb(vb->scratch), vb->sag->revcomp, (uint32_t[]){0, 0}, add_bytes);        
+            diff_aborted = !sam_seg_QUAL_diff (vb, dl, STRa(qual_data), STRb(vb->scratch), vb->sag->revcomp, (uint32_t[]){0, 0}, add_bytes);        
             buf_free (vb->scratch);
+
+            if (diff_aborted) goto standard;
         }
 
         dl->dont_compress_QUAL = true; // don't compress this line
@@ -259,15 +274,18 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual_data)/*always te
     else if (sam_has_saggy && // note: saggy_line_i is set by sam_seg_saggy only for lines in MAIN component
              ({ saggy_dl = DATA_LINE (vb->saggy_line_i); 
                 !saggy_dl->no_qual && 
+                // note: SEQ.len is set if ANY of QUAL, SEQ, CIGAR-implied-seq_consumed have it
                 dl->hard_clip[0] + dl->hard_clip[1] + dl->SEQ.len == saggy_dl->hard_clip[0] + saggy_dl->hard_clip[1] + saggy_dl->SEQ.len; })) {
 
         if (vb->qual_missing) {
             prim_has_qual_but_i_dont = true;
             qual_ctx->txt_len += add_bytes;
         }    
-        else 
-            sam_seg_QUAL_diff (vb, dl, STRa(qual_data), STRtxtw(saggy_dl->QUAL), saggy_dl->FLAG.rev_comp, saggy_dl->hard_clip, add_bytes);
-        
+        else {
+            diff_aborted = !sam_seg_QUAL_diff (vb, dl, STRa(qual_data), STRtxtw(saggy_dl->QUAL), saggy_dl->FLAG.rev_comp, saggy_dl->hard_clip, add_bytes);
+            if (diff_aborted) goto standard;
+        }
+
         dl->dont_compress_QUAL = true; // don't compress this line
     }
 
@@ -281,14 +299,14 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual_data)/*always te
     // case: standard
     // Note: in PRIM, QUAL is not reconstructed (as QUAL is not in TOPLEVEL container) - it is consumed when loading SA Groups
     //       Instead, all-the-same QUALSA is reconstructed (SPECIAL copying from the SA Group)
-    else {
+    else standard: {
         qual_ctx->local.len32 += dl->QUAL.len;
         qual_ctx->txt_len     += add_bytes;
     }   
 
     // seg SPECIAL. note: prim this is all-the-same and segged in sam_seg_QUAL_initialize
-    if (!sam_is_prim_vb)
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_QUAL, '0' + prim_has_qual_but_i_dont }, 3, SAM_QUAL, 0); 
+    if (!sam_is_prim_vb) 
+        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_QUAL, '0' + prim_has_qual_but_i_dont, '0' + diff_aborted }, 4, SAM_QUAL, 0); 
 
     // get QUAL score, consumed by mate ms:i
     if (!segconf.running && segconf.sam_ms_type == ms_BIOBAMBAM)
@@ -367,9 +385,8 @@ static void sam_piz_QUAL_undiff_vs_primary (VBlockSAMP vb, STRp (prim_qual), boo
         uint32_t last_prim_overlap = prim_qual_len - 1 - (flank[0] ? 0 : (vb->hard_clip[0] - (saggy_anal ? saggy_anal->hard_clip[1] : 0)));
         prim_qual += last_prim_overlap;
 
-        for (int32_t/*signed*/ i=0; i < overlap_len; i++) {
+        for (int32_t/*signed*/ i=0; i < overlap_len; i++) 
             qual[i] = prim_qual[-i] + diff[i] + bam_bump;
-}
 
         vb->txt_data.len32 += overlap_len;
     }
@@ -407,6 +424,8 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
     char *qual = BAFTtxt;
     const Sag *g = vb->sag;
     bool prim_has_qual_but_i_dont = (snip[0] == '1');
+    bool diff_aborted             = (snip[1] == '1');
+
     const CigarAnalItem *saggy_anal;
 
     // case: reconstruct by copying from sag (except if we are depn and group has no qual)
@@ -418,6 +437,8 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
             sam_reconstruct_missing_quality (VB, reconstruct);
 
         else if (sam_is_depn_vb) {
+            if (diff_aborted) goto no_diff;
+
             sam_get_sa_grp_qual (vb); // uncompress PRIM qual to vb->scratch
             
             sam_piz_QUAL_undiff_vs_primary (vb, STRb(vb->scratch), vb->sag->revcomp, NULL, false, reconstruct);                
@@ -442,6 +463,9 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
 
         else if (prim_has_qual_but_i_dont)
             sam_reconstruct_missing_quality (VB, reconstruct);
+
+        else if (diff_aborted) 
+            goto no_diff;
 
         else
             sam_piz_QUAL_undiff_vs_primary (vb, saggy_qual, word.len, saggy_flags.rev_comp, saggy_anal, flag.out_dt == DT_BAM, reconstruct);                

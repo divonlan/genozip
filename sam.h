@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #pragma once
@@ -355,10 +355,10 @@
 #pragma GENDICT OPTION_sz_A=DTYPE_2=sz_A     // scrap read: ZMW classification annotation, one of N:=Normal, C:=Control, M:=Malformed, or S:=Sentinel
 #pragma GENDICT OPTION_sc_A=DTYPE_2=sc_A     // scrap read: Scrap region-type annotation, one of A:=Adapter, B:=Barcode, L:=LQRegion, or F:=Filtered
 
-// biobambam tags
-#pragma GENDICT OPTION_mc_i=DTYPE_2=mc:i     // MateCoordinate. Produced by bamsort (biobambam)
-#pragma GENDICT OPTION_ms_i=DTYPE_2=ms:i     // MateBaseScore. Produced by bamsort (biobambam)
-#pragma GENDICT OPTION_cq_Z=DTYPE_2=cq:Z     // Clipped Quality. Produced by bamclipXT (biobambam), see: https://gitlab.com/german.tischler/biobambam2/-/blob/master/src/programs/bamclipXT.1
+// biobambam2 tags (when updating this list here, also update biobambam_programs)
+#pragma GENDICT OPTION_mc_i=DTYPE_2=mc:i     // MateCoordinate.  Produced by bamsort / bamsormadup
+#pragma GENDICT OPTION_ms_i=DTYPE_2=ms:i     // MateBaseScore.   Produced by bamsort / bamsormadup
+#pragma GENDICT OPTION_cq_Z=DTYPE_2=cq:Z     // Clipped Quality. Produced by bamclipXT, see: https://gitlab.com/german.tischler/biobambam2/-/blob/master/src/programs/bamclipXT.1
 
 // Novocraft tags: http://www.novocraft.com/documentation/novosort-2/
 #pragma GENDICT OPTION_Z5_i=DTYPE_2=Z5:i     // During the input phase for unsorted or name sorted alignments, Novosort calculates the signature of each read and adds this as a SAM tag (Z5:i:) to other segments of the template. Later, during the processing of the sorted alignments, we can determine the signature of a read and, from the Z5 tag, the signature of it’s pair. Reads are then grouped according to the two signatures, strand & library and duplicates detected within a group.
@@ -493,6 +493,7 @@ extern void sam_zip_generate_recon_plan (void);
 extern void sam_zip_init_vb (VBlockP vb);
 extern void sam_zip_after_compress (VBlockP vb);
 extern void sam_stats_reallocate (void);
+extern rom sam_get_hdr_PGs (void);
 extern void sam_zip_genozip_header (SectionHeaderGenozipHeader *header);
 
 // PIZ Stuff
@@ -548,7 +549,7 @@ extern void sam_reset_line (VBlockP vb);
                       sam_piz_special_BISMARK_XG, sam_piz_special_HI, sam_piz_special_DEMUX_BY_BUDDY_MAP, sam_piz_special_SEQ_LEN,\
                       sam_piz_special_FI, sam_piz_special_cm, sam_piz_special_COPY_BUDDY, sam_piz_special_SET_BUDDY, \
                       sam_piz_special_TX_AN_POS, sam_piz_special_COPY_TEXTUAL_CIGAR, sam_piz_special_BISMARK_XM, \
-                      sam_piz_special_BSBOLT_XB, \
+                      sam_piz_special_BSBOLT_XB, sam_piz_special_UQ \
                     }
 SPECIAL (SAM, 0,  CIGAR,                 sam_cigar_special_CIGAR);
 SPECIAL (SAM, 1,  TLEN_old,              sam_piz_special_TLEN_old);            // used up to 12.0.42
@@ -601,7 +602,8 @@ SPECIAL (SAM, 47, TX_AN_POS,             sam_piz_special_TX_AN_POS);           /
 SPECIAL (SAM, 48, COPY_TEXTUAL_CIGAR,    sam_piz_special_COPY_TEXTUAL_CIGAR);  // introduced 14.0.0
 SPECIAL (SAM, 49, BISMARK_XM,            sam_piz_special_BISMARK_XM);          // introduced 14.0.0
 SPECIAL (SAM, 50, BSBOLT_XB,             sam_piz_special_BSBOLT_XB);           // introduced 14.0.0
-#define NUM_SAM_SPECIAL 51
+SPECIAL (SAM, 51, UQ,                    sam_piz_special_UQ);                  // introduced 14.0.10
+#define NUM_SAM_SPECIAL 52
  
 #define SAM_LOCAL_GET_LINE_CALLBACKS                          \
     { DT_SAM, _OPTION_BD_BI,       sam_zip_BD_BI           }, \

@@ -3,7 +3,7 @@
 #   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 #   Please see terms and conditions in the file LICENSE.txt
 #
-#   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+#   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 #   and subject to penalties specified in the license.
 
 # Note for Windows: to run this make, you need mingw (for the gcc compiler) and cygwin (for Unix-like tools):
@@ -48,7 +48,7 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c lice
 		  sam_sa.c bam_seg.c bam_seq.c bam_show.c                                             					\
 		  sam_seq.c sam_qual.c sam_sag_zip.c sam_sag_piz.c sam_sag_load.c sam_sag_ingest.c sam_sag_scan.c    	\
 		  sam_bwa.c sam_bowtie2.c sam_bsseeker2.c sam_bsbolt.c sam_bismark.c sam_gem3.c sam_tmap.c sam_hisat2.c \
-		  sam_blasr.c sam_minimap2.c sam_cellranger.c sam_pos.c    												\
+		  sam_blasr.c sam_minimap2.c sam_cellranger.c sam_biobambam.c sam_pos.c									\
 		  fasta.c fastq.c gff3.c me23.c phylip.c chain.c kraken.c locs.c generic.c 								\
 		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c lookback.c 				\
 		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c	\

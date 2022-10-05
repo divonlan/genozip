@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted,
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
 //   under penalties specified in the license.
 
 #pragma once
@@ -42,6 +42,13 @@ typedef struct Contig {
     PosType gpos;                // The GPOS in genome matching min_pos in contig.
     ContigMetadata metadata;
 } Contig; 
+
+// used for the SEC_REF_CONTIG section in non-refernce files, starting 14.0.10
+typedef struct CompactContig {
+    WordIndex ref_index;         // index in reference. zero if sequential_ref_index=true
+    uint32_t min_pos, max_pos;   // POS field value of smallest and largest POS value of this contig
+    PosType gpos;
+} CompactContig; 
 
 #pragma pack()
 

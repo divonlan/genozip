@@ -3,7 +3,7 @@
 //   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #include "sam_private.h"
@@ -64,11 +64,8 @@ void sam_zip_free_end_of_z (void)
 void sam_zip_initialize (void)
 {
     if (flag.reference == REF_INTERNAL && !txt_file->redirected)
-        WARN_ONCE ("Tip: compressing %s %s file using a reference file can reduce the compressed file's size by %s.\nUse: \"genozip --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
-                   segconf.sam_mapper ? "a" : "an *unaligned*",
-                   dt_name (txt_file->data_type), 
-                   segconf.sam_mapper ? "7%-20%" : "30%",
-                   txt_file->name);
+        WARN_ONCE ("Tip: compressing a %s file using a reference file can reduce the size by 7%%-30%%%s.\nUse: \"genozip --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
+                   dt_name (txt_file->data_type), MP(UNKNOWN) ? " (even for unaligned files)" : "", txt_file->name);
 
     bool has_hdr_contigs = sam_hdr_contigs && sam_hdr_contigs->contigs.len;
 
@@ -224,13 +221,15 @@ void sam_seg_initialize (VBlockP vb_)
     if (vb->reread_prescription.len)
         gencomp_reread_lines_as_prescribed (VB);
 
-// all numeric fields need STORE_INT / STORE_FLOAT to be reconstructable to BAM (possibly already set)
-// via the translators set in the SAM_TOP2BAM Container
-#define T(cond, did_i) ((cond) ? (did_i) : DID_NONE)
+    // all numeric fields need STORE_INT / STORE_FLOAT to be reconstructable to BAM (possibly already set)
+    // via the translators set in the SAM_TOP2BAM Container
+    #define T(cond, did_i) ((cond) ? (did_i) : DID_NONE)
+    
     ctx_set_store (VB, STORE_INT, SAM_TLEN, SAM_MAPQ, SAM_FLAG, SAM_POS, SAM_PNEXT, SAM_GPOS,
                    OPTION_NM_i, OPTION_AS_i, OPTION_MQ_i, OPTION_XS_i, OPTION_XM_i, OPTION_mc_i, OPTION_ms_i, OPTION_Z5_i,
                    OPTION_tx_i, OPTION_YS_i, OPTION_XC_i, OPTION_AM_i, OPTION_SM_i, OPTION_X0_i, OPTION_X1_i, OPTION_CP_i,
-                   OPTION_OP_i, OPTION_NH_i, OPTION_HI_i, OPTION_cm_i, OPTION_SA_POS, OPTION_OA_POS,
+                   OPTION_OP_i, OPTION_NH_i, OPTION_HI_i, OPTION_UQ_i, OPTION_cm_i, 
+                   OPTION_SA_POS, OPTION_OA_POS,
                    T(segconf.tech == TECH_PACBIO, OPTION_qs_i), T(segconf.tech == TECH_PACBIO, OPTION_qe_i),
                    T(MP(BLASR), OPTION_XS_i), T(MP(BLASR), OPTION_XE_i), T(MP(BLASR), OPTION_XQ_i), T(MP(BLASR), OPTION_XL_i), T(MP(BLASR), OPTION_FI_i),
                    T(MP(NGMLR), OPTION_QS_i), T(MP(NGMLR), OPTION_QE_i), T(MP(NGMLR), OPTION_XR_i),
@@ -273,7 +272,7 @@ void sam_seg_initialize (VBlockP vb_)
 
     // set ltype=LT_DYN_INT to allow use of seg_integer
     ctx_set_ltype (VB, LT_DYN_INT, SAM_BUDDY, OPTION_HI_i, OPTION_NM_i, OPTION_NH_i, OPTION_XM_i, OPTION_X1_i,
-                   OPTION_AS_i, OPTION_XS_i, OPTION_ZS_i, OPTION_cm_i, OPTION_ms_i, OPTION_nM_i,
+                   OPTION_AS_i, OPTION_XS_i, OPTION_ZS_i, OPTION_cm_i, OPTION_ms_i, OPTION_nM_i, OPTION_UQ_i,
                    T(segconf.has_TLEN_non_zero, SAM_TLEN), // note: we don't set if !has_TLEN_non_zero, bc values are stored in b250 and may require singletons
                    T(segconf.tech == TECH_PACBIO, OPTION_qs_i), T(segconf.tech == TECH_PACBIO, OPTION_qe_i),
                    T(MP(BLASR), OPTION_XS_i), T(MP(BLASR), OPTION_XE_i), T(MP(BLASR), OPTION_XQ_i), T(MP(BLASR), OPTION_XL_i), T(MP(BLASR), OPTION_FI_i),
@@ -369,9 +368,11 @@ void sam_seg_initialize (VBlockP vb_)
         ctx_set_store_per_line (VB, OPTION_AS_i, OPTION_nM_i, DID_EOL);
     }
 
-    if (segconf.sam_ms_type == ms_BIOBAMBAM)
+    if (segconf.sam_ms_type == ms_BIOBAMBAM) {
         seg_mux_init (VB, CTX(OPTION_ms_i), 2, SAM_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mux_ms, "01");
-
+        ctx_set_store_per_line (VB, OPTION_ms_i, DID_EOL);
+    }
+    
     seg_mux_init (VB, CTX(SAM_FLAG), 2, SAM_SPECIAL_DEMUX_BY_BUDDY, false, (MultiplexerP)&vb->mux_FLAG, "01");
     seg_mux_init (VB, CTX(SAM_POS), 3, SAM_SPECIAL_DEMUX_BY_MATE_PRIM, true, (MultiplexerP)&vb->mux_POS, "012");
     seg_mux_init (VB, CTX(SAM_PNEXT), 4, SAM_SPECIAL_PNEXT, true, (MultiplexerP)&vb->mux_PNEXT, "0123");
@@ -595,9 +596,6 @@ static void sam_seg_finalize_segconf (VBlockP vb)
     // in bisulfate data, we still calculate MD:Z and NM:i vs unconverted reference
     segconf.MD_NM_by_unconverted = MP(BISMARK) || MP(DRAGEN) || MP(BSBOLT) || MP(GEM3) || MP(BSSEEKER2);
 
-    if (is_minimap2())
-        segconf.sam_ms_type = ms_MINIMAP2;
-
     segconf.is_long_reads = segconf_is_long_reads();
 
     // if we have @HD-SO "coordinate" or "queryname", then we take that as definitive. Otherwise, we go by our segconf sampling.
@@ -631,14 +629,12 @@ static void sam_seg_finalize_segconf (VBlockP vb)
     segconf.has_MD_or_NM = segconf.has[OPTION_MD_Z] || segconf.has[OPTION_NM_i] ||
                            (MP(STAR) && segconf.has[OPTION_nM_i] && !segconf.is_paired); // we use the NM method to seg nM in this case
 
-    if (segconf.is_long_reads) {
-        if (is_minimap2())
-            segconf.sam_ms_type = ms_MINIMAP2; // definitely not biobambam's MateBaseScore as long reads don't have mates
-    }
-    else {
-        if (segconf.has[OPTION_ms_i] && segconf.is_paired)
-            segconf.sam_ms_type = ms_BIOBAMBAM;
-    }
+    // note: in case of both is_biobambam2_sort and minimap2, it is likely biobambam's tag
+    if (segconf.is_biobambam2_sort && segconf.is_paired) 
+        segconf.sam_ms_type = ms_BIOBAMBAM;
+
+    else if (is_minimap2())
+        segconf.sam_ms_type = ms_MINIMAP2; 
 
     // update context tag names if this file has UB/UR/UY which are aliased to BX/RX/QX
     if (segconf.has[OPTION_UB_Z] || segconf.has[OPTION_UR_Z]) {
@@ -647,9 +643,9 @@ static void sam_seg_finalize_segconf (VBlockP vb)
         strcpy (ZCTX(OPTION_QX_Z)->tag_name, "UY:Z");
     }
 
-    // allow aligner if unmapped file (usually only enabled in best) if we have any unmapped reads in segconf indicating a file enriched
+    // allow aligner if unmapped file (usually only enabled in best) if we have over 3% unmapped reads in segconf indicating a file enriched
     // in unmapped reads (normally, in sorted BAMs unmapped reads are at the end of the file)
-    if (segconf.num_mapped < vb->lines.len32 && !flag.aligner_available && (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE)) {
+    if ((double)segconf.num_mapped < 0.97 * (double)vb->lines.len32 && !flag.aligner_available && (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE)) {
         refhash_load_standalone();
         flag.aligner_available = true;
     }
@@ -921,6 +917,8 @@ uint32_t sam_seg_get_aux_int (VBlockSAMP vb, int16_t idx,
                               bool is_bam,
                               int32_t min_value, int32_t max_value, bool soft_fail)
 {
+    ASSERT (min_value <= max_value, "%s: expecting idx=%u expecting min_value=%d <= max_value=%d", LN_NAME, idx, min_value, max_value);
+
     ValueType numeric;
     uint32_t value_len;
     rom value = sam_seg_get_aux (vb, idx, &value_len, &numeric, is_bam);
@@ -957,15 +955,6 @@ void sam_seg_get_aux_Z(VBlockSAMP vb, int16_t idx, pSTRp (snip), bool is_bam)
 char sam_seg_get_aux_A(VBlockSAMP vb, int16_t idx, bool is_bam)
 {
     return *(vb->auxs[idx] + (is_bam ? 3 : 5));
-}
-
-int32_t sam_set_last_value_from_aux (VBlockSAMP vb, int16_t idx, Did did)
-{
-    int32_t value;
-    sam_seg_get_aux_int (vb, idx, &value, IS_BAM_ZIP, -0x80000000, 0x7fffffff, false);
-
-    ctx_set_last_value (VB, CTX(did), (int64_t)value);
-    return value;
 }
 
 // note: we test RNAME but not POS. POS exceeding contig LN is handled in ref_seg_get_locked_range_loaded
@@ -1374,7 +1363,7 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
 
     ZipDataLineSAM *dl = DATA_LINE(vb->line_i);
 
-    str_split_by_tab (next_line, remaining_txt_len, MAX_FIELDS + AUX, has_13); // also advances next_line to next line
+    str_split_by_tab (next_line, remaining_txt_len, MAX_FIELDS + AUX, has_13, true); // also advances next_line to next line
     vb->n_auxs = n_flds - AUX;
     vb->auxs = &flds[AUX]; // note: pointers to data on the stack
     vb->aux_lens = &fld_lens[AUX];
@@ -1469,8 +1458,6 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
     // calculate diff vs. reference (denovo or loaded)
     sam_seg_SEQ(vb, dl, STRfld (SEQ), fld_lens[SEQ] + 1);
 
-    sam_seg_QUAL(vb, dl, STRfld (QUAL), fld_lens[QUAL] + 1);
-
     ASSSEG (str_is_in_range (flds[QUAL], fld_lens[QUAL], 33, 126), flds[QUAL], "Invalid QUAL - it contains non-Phred characters: \"%.*s\"",
            STRfi (fld, QUAL));
 
@@ -1479,6 +1466,9 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
 
     // finally we can seg CIGAR now
     sam_seg_CIGAR(vb, dl, fld_lens[CIGAR], STRfld (SEQ), STRfld (QUAL), fld_lens[CIGAR] + 1 /*\t*/);
+
+    // note: can only be called after sam_seg_CIGAR updates SEQ.len
+    sam_seg_QUAL(vb, dl, STRfld (QUAL), fld_lens[QUAL] + 1);
 
     // add BIN so this file can be reconstructed as BAM
     bam_seg_BIN(vb, dl, 0, false);
@@ -1509,6 +1499,7 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
     return next_line;
 
 rollback_and_done:
+    memset (dl, 0, sizeof (ZipDataLineSAM));
     seg_rollback (VB); // cancelling segging of RNAME
     return next_line;
 }

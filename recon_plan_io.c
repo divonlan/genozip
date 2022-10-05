@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted,
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
 //   under penalties specified in the license.
 
 #include <errno.h>
@@ -165,15 +165,15 @@ static void recon_plan_compress_one_fragment (VBlockP vb)
         *data32 = BGEN32 (*data32);
 
     SectionHeaderReconPlan header = (SectionHeaderReconPlan){
-        .h.magic                 = BGEN32 (GENOZIP_MAGIC),
-        .h.section_type          = SEC_RECON_PLAN,
-        .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderReconPlan)),
-        .h.data_uncompressed_len = BGEN32 (vb->fragment_len),
-        .h.codec                 = frag_codec,
-        .h.flags.recon_plan.luft = is_luft,
-        .h.flags.recon_plan.frag_len_bits = FRAG_SIZE_BITS - MIN_FRAG_LEN_BITS, 
-        .conc_writing_vbs        = BGEN32 (conc_writing_vbs),
-        .vblock_mb               = BGEN32 ((uint32_t)(segconf.vb_size >> 20))
+        .magic                 = BGEN32 (GENOZIP_MAGIC),
+        .section_type          = SEC_RECON_PLAN,
+        .compressed_offset     = BGEN32 (sizeof(SectionHeaderReconPlan)),
+        .data_uncompressed_len = BGEN32 (vb->fragment_len),
+        .codec                 = frag_codec,
+        .flags.recon_plan.luft = is_luft,
+        .flags.recon_plan.frag_len_bits = FRAG_SIZE_BITS - MIN_FRAG_LEN_BITS, 
+        .conc_writing_vbs      = BGEN32 (conc_writing_vbs),
+        .vblock_mb             = BGEN32 ((uint32_t)(segconf.vb_size >> 20))
     };
 
     if (flag.show_time) codec_show_time (vb, st_name(SEC_RECON_PLAN), NULL, frag_codec);
@@ -235,13 +235,13 @@ static void recon_plan_read_one_vb (VBlockP vb)
     zfile_read_section (z_file, vb, next_sec->vblock_i, &vb->z_data, "z_data", SEC_RECON_PLAN, next_sec);    
     SectionHeaderReconPlan *header =  B1ST(SectionHeaderReconPlan, vb->z_data);
 
-    uint64_t max_frag_size = frag_len(header->h.flags.recon_plan.frag_len_bits + MIN_FRAG_LEN_BITS) * sizeof (ReconPlanItem); // in bytes
+    uint64_t max_frag_size = frag_len(header->flags.recon_plan.frag_len_bits + MIN_FRAG_LEN_BITS) * sizeof (ReconPlanItem); // in bytes
 
     // first vb - set constants that are the same for all VBs, and allocate memory
     if (vb->vblock_i == 1) {
         conc_writing_vbs = BGEN32 (header->conc_writing_vbs);
         vblock_mb        = BGEN32 (header->vblock_mb);
-        is_luft          = header->h.flags.recon_plan.luft;
+        is_luft          = header->flags.recon_plan.luft;
 
         ASSERTNOTINUSE (evb->scratch);
 
@@ -254,7 +254,7 @@ static void recon_plan_read_one_vb (VBlockP vb)
         buf_set_overlayable (&evb->scratch);
     }
 
-    vb->fragment_len   = BGEN32 (header->h.data_uncompressed_len);
+    vb->fragment_len   = BGEN32 (header->data_uncompressed_len);
     vb->fragment_start = Bc (evb->scratch, (vb->vblock_i-1) * max_frag_size);
 
     // overlay vb->scratch on the part of evb->scratch belonging to this thread for storing UNcompressed data
@@ -273,7 +273,7 @@ static void recon_plan_read_one_vb (VBlockP vb)
 static void recon_plan_uncompress_one_vb (VBlockP vb)
 {
     SectionHeaderDictionary *header = (SectionHeaderDictionary *)vb->z_data.data;
-    uint32_t uncomp_len = BGEN32 (header->h.data_uncompressed_len); // in bytes
+    uint32_t uncomp_len = BGEN32 (header->data_uncompressed_len); // in bytes
 
     ASSERT (vb->fragment_start + uncomp_len <= evb->scratch.data + evb->scratch.size, 
             "Buffer overflow when uncompressing recon_plan vb_i=%u", vb->vblock_i);

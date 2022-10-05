@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 // a module for handling CIGAR and MC:Z
@@ -355,6 +355,7 @@ void bam_seg_cigar_analyze (VBlockSAMP vb, ZipDataLineSAM *dl/*NULL if PIZ*/, ui
 
     if (dl) { // ZIP
         dl->ref_consumed = vb->ref_consumed; // consumed by sam_seg_predict_TLEN 
+        dl->seq_consumed = *seq_consumed;
         dl->hard_clip[0] = vb->hard_clip[0];
         dl->hard_clip[1] = vb->hard_clip[1];
     }

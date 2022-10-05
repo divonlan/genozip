@@ -3,7 +3,7 @@
 //   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #include "genozip.h"
@@ -13,6 +13,8 @@
 #include "generic.h"
 #include "dict_id.h"
 
+static char magic[8]; // first 8 bytes of the generic file
+
 // all data is always consumed
 int32_t generic_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 {
@@ -21,6 +23,11 @@ int32_t generic_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 
 void generic_seg_initialize (VBlockP vb)
 {
+    // capture the first 8 bytes to be reported in stats
+    if (vb->vblock_i == 1) {
+        memset (magic, 0, sizeof (magic));
+        memcpy (magic, B1STtxt, MIN_(sizeof (magic), vb->txt_data.len32));
+    }
 }
 
 void generic_seg_finalize (VBlockP vb)
@@ -47,4 +54,19 @@ SPECIAL_RECONSTRUCTOR (generic_piz_TOPLEVEL)
     buf_destroy (vb->txt_data);
     buf_move (vb, &vb->txt_data, vb, &CTX(GNRIC_DATA)->local);
     return NO_NEW_VALUE;
+}
+
+rom generic_get_magic (void)
+{
+    static char s[128];
+    s[0] = '"';
+    str_to_printable (magic, sizeof(magic), &s[1]);
+
+    int len = strlen(s);
+    s[len] = '"';
+    s[len+1] = ' ';
+
+    str_to_hex ((bytes)magic, sizeof(magic), &s[len+2], true);
+
+    return s;
 }

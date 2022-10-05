@@ -3,7 +3,7 @@
 //   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #include <string.h>
@@ -247,7 +247,7 @@ FILE *url_open (StreamP parent_stream, rom url)
     bool is_file = str_case_compare (str5, "file:", NULL); // wget doesn't support file://
 
     // check if wget exists, it is better than curl in flakey connections
-    bool has_wget = !flag.is_windows && !system("which wget > /dev/null 2>&1") && file_exists ("/dev/stdout");
+    bool has_wget = !flag.is_windows && !system ("which wget > /dev/null 2>&1") && file_exists ("/dev/stdout");
 
     if (has_wget && !is_file)
         curl = stream_create (parent_stream, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0,
@@ -312,7 +312,7 @@ UrlStr url_esc_non_valid_charsS (rom in) // for short strings - on stack
     rom esc = url_esc_non_valid_chars_(in, NULL, false); // note: might be longer than UrlStr
     
     UrlStr out;
-    int out_len = MIN_(sizeof (out.s)-1, strlen(esc)); // trim if needed
+    int out_len = MIN_(sizeof (out.s)-1, strlen(esc)); // trim if needed - possibly resulting in an invalid URL!
     memcpy (out.s, esc, out_len);
     out.s[out_len] = 0;
     

@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #pragma once
@@ -130,7 +130,8 @@ typedef union SectionFlags {
 
     struct FlagsRefContigs {
         uint8_t sequential_ref_index : 1;  // v14: first ref_contig has ref_index 0, second has 1 etc. ref_index set to 0 on disk and should be set by piz.
-        uint8_t unused               : 7;
+        uint8_t compacted            : 1;  // v14.0.10: for stored reference (not reference file): contigs stored as CompactContig
+        uint8_t unused               : 6;
     } ref_contigs;
 
 } SectionFlags __attribute__((__transparent_union__));
@@ -154,7 +155,7 @@ typedef struct SectionHeader {
 } SectionHeader; 
 
 typedef struct {
-    SectionHeader h;
+    SectionHeader;
     uint8_t  genozip_version;
     EncryptionType encryption_type;    // one of ENC_TYPE_*
     uint16_t data_type;                // one of DATA_TYPE_*
@@ -229,7 +230,7 @@ typedef struct {
 
 // The text file header section appears once in the file (or multiple times in case of bound file), and includes the txt file header 
 typedef struct {
-    SectionHeader h;
+    SectionHeader;
     uint64_t txt_data_size;            // number of bytes in the original txt file
     uint64_t txt_num_lines;            // number of data (non-header) lines in the original txt file. Concat mode: entire file for first SectionHeaderTxtHeader, and only for that txt if not first
     uint32_t max_lines_per_vb;         // upper bound on how many data lines a VB can have in this file
@@ -243,7 +244,7 @@ typedef struct {
 } SectionHeaderTxtHeader; 
 
 typedef struct {
-    SectionHeader h;     
+    SectionHeader;     
     union {
         uint32_t v11_first_line;       // up to v11 - first_line; if 0, this is the terminating section of the components
         uint32_t sam_prim_seq_len;     // SAM PRIM: total number of bases of SEQ in this VB (v14) 
@@ -278,13 +279,13 @@ typedef struct {
 } SectionHeaderVbHeader; 
 
 typedef struct {
-    SectionHeader h;           
+    SectionHeader;           
     uint32_t num_snips;                // number of items in dictionary
     DictId   dict_id;           
 } SectionHeaderDictionary;    
 
 typedef struct {
-    SectionHeader h;           
+    SectionHeader;           
     int64_t  nodes_param;              // an extra piece of data transferred to/from Context.counts_extra
     DictId   dict_id;           
 } SectionHeaderCounts;     
@@ -374,7 +375,7 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
 
 // used for SEC_LOCAL and SEC_B250
 typedef struct {
-    SectionHeader h;
+    SectionHeader;
     LocalType ltype;        // populated in both SEC_B250 and SEC_LOCAL: goes into ctx.ltype - type of data for the ctx.local buffer
     uint8_t param;          // Three options: 1. goes into ctx.local.param. (until v13: if flags.copy_local_param. since v14: always, except if ltype=LT_BITMAP) 
                             //                2. given to comp_uncompress as a codec parameter
@@ -393,7 +394,7 @@ typedef struct {
 //   with chrom,first_pos same as SEC_REF_IS_SET and last_pos set so that (last_pos-first_pos+1) = number of '1' bits in SEC_REF_IS_SET
 // SEC_REFERENCE (in both cases) contains 2 bits per base, and SEC_REF_IS_SET contains 1 bit per location.
 typedef struct {
-    SectionHeader h;
+    SectionHeader;
     PosType pos;               // first pos within chrom (1-based) of this range         
     PosType gpos;              // first pos within genome (0-based) of this range
     uint32_t num_bases;        // number of bases (nucleotides) in this range
@@ -401,7 +402,7 @@ typedef struct {
 } SectionHeaderReference;
 
 typedef struct {
-    SectionHeader h;
+    SectionHeader;
     uint8_t num_layers;        // total number of layers
     uint8_t layer_i;           // layer number of this section (0=base layer, with the most bits)
     uint8_t layer_bits;        // number of bits in layer
@@ -411,7 +412,7 @@ typedef struct {
 
 // SEC_RECON_PLAN, contains ar array of ReconPlanItem
 typedef struct SectionHeaderReconPlan {
-    SectionHeader h;
+    SectionHeader;
     VBIType conc_writing_vbs;  // max number of concurrent VBs in possesion of the writer thread needed to execute this plan    
     uint32_t vblock_mb;        // size of vblock in MB
 } SectionHeaderReconPlan;

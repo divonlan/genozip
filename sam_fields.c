@@ -3,7 +3,7 @@
 //   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #include "genozip.h"
@@ -53,6 +53,38 @@ const char aux_sep_by_type[2][256] = { { // compressing from SAM
 } };
 
 #define DICT_ID_ARRAY(dict_id) (DictId){ .id = { (dict_id).id[0], (dict_id).id[1], '_','A','R','R','A','Y' } } // DTYPE_2
+
+// gets integer field value - may appear before or after this field. 
+// return false if not found or not integer or out of [min_value,max_value]
+bool sam_seg_peek_int_field (VBlockSAMP vb, Did did_i, int16_t idx, int32_t min_value, int32_t max_value, 
+                             bool set_last_value, // set last value if not already set (only if returning true)
+                             int32_t *value)      // optional out
+{
+    ContextP ctx = CTX(did_i);
+    int32_t my_value;
+
+    if (idx == -1)
+        return false; // this tag doesn't appear in this alignment
+
+    else if (ctx_has_value_in_line_(VB, ctx)) {
+        if (ctx->last_value.i < min_value || ctx->last_value.i > max_value) 
+            return false; // note: we test 64 bit variable before truncating to 32 bit
+
+        else {
+            if (value) *value = ctx->last_value.i;
+            return true;
+        }
+    }
+
+    else if (idx != -1 && sam_seg_get_aux_int (vb, idx, value ? value : &my_value, IS_BAM_ZIP, min_value, max_value, true)) {
+        if (set_last_value)
+            ctx_set_last_value (VB, ctx, (int64_t)(value ? *value : my_value));
+        return true;
+    }
+
+    else
+        return false;
+}
 
 //--------------
 // FLAG
@@ -475,8 +507,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_SM)
 // ----------------------------------------------------------------------------------------------------------
 static void sam_seg_AM_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t AM, unsigned add_bytes)
 {
-    ContextP am_ctx = CTX(OPTION_AM_i);
-    ContextP sm_ctx = CTX(OPTION_SM_i);
+    ContextP ctx = CTX(OPTION_AM_i);
 
     // note: currently we only support for this algorithm AM appearing after SM. Easily fixable if ever needed.
     // AM is often one of 3 options: 0, =SM =MAPQ-SM. If SM=0 then AM is expected to be 0.
@@ -485,12 +516,7 @@ static void sam_seg_AM_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t AM, unsigne
         AM != 253 && AM != 254) { // note: 253,254 are valid, but highly improbable values
 
         int32_t SM;
-        if (ctx_has_value_in_line_(VB, sm_ctx)) {
-            if (sm_ctx->last_value.i < 0 || sm_ctx->last_value.i > 255) goto fallback; // not a valid mapping quality value (test 64 bit variable before truncating to 32 bit)
-            SM = sm_ctx->last_value.i;
-        }
-        else
-            if (!sam_seg_get_aux_int (vb, vb->idx_SM_i, &SM, IS_BAM_ZIP, 0, 255, true)) goto fallback;
+        if (!sam_seg_peek_int_field (vb, OPTION_SM_i, vb->idx_SM_i, 0, 255, false, &SM)) goto fallback;
 
         if (!SM && AM) goto fallback; // usually, AM=0 if SM=0
         
@@ -499,14 +525,14 @@ static void sam_seg_AM_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t AM, unsigne
                         : (AM && AM == dl->MAPQ - SM) ? 254 // note subtelty: substraction in uint8_t arithmetics. we are careful to do the same in sam_piz_special_AM.
                         :                               AM;
 
-            seg_integer_fixed (VB, am_ctx, &AM8, false, 0);
+            seg_integer_fixed (VB, ctx, &AM8, false, 0);
         }
         
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_AM }, 2, am_ctx, add_bytes);
+        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_AM }, 2, ctx, add_bytes);
     }
 
     else fallback:
-        seg_integer_as_text_do (VB, am_ctx, AM, add_bytes);    
+        seg_integer_as_text_do (VB, ctx, AM, add_bytes);    
 }    
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_AM)
@@ -527,6 +553,40 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_AM)
 
     if (reconstruct) RECONSTRUCT_INT (new_value->i);
     
+    return HAS_NEW_VALUE;
+}
+
+// ----------------------------------------------------------------------------------------------------------
+// UQ:i Phred likelihood of the segment, conditional on the mapping being correct
+// ----------------------------------------------------------------------------------------------------------
+static void sam_seg_UQ_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t UQ, unsigned add_bytes)
+{
+    int32_t other; // either AS or NM
+
+    // in Novoalign, usually UQ==AS
+    if (MP(NOVOALIGN) && sam_seg_peek_int_field (vb, OPTION_AS_i, vb->idx_AS_i, 0, 1000, true, &other) && other == UQ)
+        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_UQ, '1' }, 3, OPTION_UQ_i, add_bytes);
+
+    // In GATK produced data, in many cases (~half) UQ==2*NM
+    else if (!MP(NOVOALIGN) && sam_seg_peek_int_field (vb, OPTION_NM_i, vb->idx_NM_i, 0, 0x3fffffff, 
+             false, // bc seg_NM_isam_seg_NM_i inteprets would interpret a set value as "segged already"
+             &other) && other*2 == UQ)
+        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_UQ, '2' }, 3, OPTION_UQ_i, add_bytes);
+
+    else 
+        seg_integer (VB, CTX(OPTION_UQ_i), UQ, true, add_bytes);
+}
+
+SPECIAL_RECONSTRUCTOR (sam_piz_special_UQ)
+{
+    ASSPIZ0 (*snip=='1' || *snip=='2', "Unrecognized snip - upgrade to the most recent version of Genozip");
+
+    int64_t other = reconstruct_peek (vb, CTX(*snip=='1' ? OPTION_AS_i : OPTION_NM_i), 0, 0).i; 
+
+    new_value->i = other * (*snip - '0');
+
+    if (reconstruct) RECONSTRUCT_INT (new_value->i);
+
     return HAS_NEW_VALUE;
 }
 
@@ -730,12 +790,11 @@ static inline void sam_seg_AS_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t as, 
         seg_by_did (VB, STRa(snip), OPTION_AS_i, add_bytes); 
     }
 
-    else if (has_ms && is_minimap2()) {
-        sam_set_last_value_from_aux (vb, vb->idx_ms_i, OPTION_ms_i);
+    // if we have minimap2-produced ms:i, AS is close to it
+    else if (segconf.sam_ms_type == ms_MINIMAP2 && sam_seg_peek_int_field (vb, OPTION_ms_i, vb->idx_ms_i, -0x8000000, 0x7fffffff, true/*needed for delta*/, NULL)) 
         seg_delta_vs_other (VB, CTX(OPTION_AS_i), CTX(OPTION_ms_i), NULL, add_bytes);
-    }
 
-    else 
+    else
         seg_integer (VB, CTX (OPTION_AS_i), as, true, add_bytes);
 
     dl->AS = as;
@@ -886,25 +945,6 @@ static inline void sam_seg_MQ_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t mq, 
     seg_by_did (VB, STRa(vb->mux_MQ.snip), OPTION_MQ_i, 0); // de-multiplexor
 }
 
-// mc:i: (output of bamsormadup and other biobambam tools - mc in small letters) 
-// appears to be a pos value usually close to PNEXT, but it is -1 is POS=PNEXT. Note: tried muxing by POS=PNEXT, but was worse off
-// from bamsort manual: "adddupmarksupport=<0|1>: add information required for streaming duplicate marking in the aux fields MS and MC.
-// Input is assumed to be collated by query name. This option is ignored unless fixmates=1. By default it is disabled."
-// https://github.com/gt1/biobambam2/blob/master/src/programs/bamsort.cpp says: "biobambam used MC as a mate coordinate tag which now has a clash
-// with the official SAM format spec.  New biobambam version uses mc."
-// ms="MateBaseScore" - sum all characters in QUAL of the mate, where the value of each character is its ASCII minus 33 (i.e. the Phred score)
-// mc="MateCoordinate"
-static inline void sam_seg_mc_i (VBlockSAMP vb, int64_t mc, unsigned add_bytes)
-{
-    // if snip is "-1", store as simple snip
-    if (mc == -1)
-        seg_by_did (VB, "-1", 2, OPTION_mc_i, add_bytes);
-    
-    // delta vs PNEXT
-    else
-        seg_pos_field (VB, OPTION_mc_i, SAM_PNEXT, SPF_BAD_SNIPS_TOO, 0, 0, 0, mc, add_bytes);
-}
-
 // RG:Z, PG:Z, PU:Z, LB:Z, RX:Z and others: we predict that the value will be the same as the buddy
 void sam_seg_buddied_Z_fields (VBlockSAMP vb, ZipDataLineSAM *dl, MatedZFields f, STRp(value), 
                                SegBuddiedCallback seg_cb, // optional
@@ -921,7 +961,7 @@ void sam_seg_buddied_Z_fields (VBlockSAMP vb, ZipDataLineSAM *dl, MatedZFields f
     ContextP channel_ctx = do_mux ? seg_mux_get_channel_ctx (VB, buddied_Z_dids[f], (MultiplexerP)&vb->mux_mated_z_fields[f], !!buddy_dl)
                                   : ctx;
 
-    if (do_mux && buddy_dl && str_issame_(STRa(value), STRtxtw (buddy_dl->mated_z_fields[f])))
+    if (do_mux && buddy_dl && str_issame_(STRa(value), STRtxtw (buddy_dl->mated_z_fields[f]))) 
         seg_by_ctx (VB, STRi(copy_buddy_Z_snip,f), channel_ctx, add_bytes); 
 
     else if (seg_cb && !segconf.running) 
@@ -936,11 +976,6 @@ void sam_seg_buddied_Z_fields (VBlockSAMP vb, ZipDataLineSAM *dl, MatedZFields f
     dl->mated_z_fields[f] = TXTWORD(value);
 }
 
-// ----------------------------------------------------------------------------------------------
-// ms:i: (output of bamsormadup and other biobambam tools - ms in small letters), created here: https://github.com/gt1/libmaus/tree/master/src/libmaus/bambam/BamAlignmentDecoderBase.cpp getScore 
-//       It is the sum of phred values of mate's QUAL, but only phred values >= 15
-// ----------------------------------------------------------------------------------------------
-
 void sam_seg_buddied_i_fields (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, 
                                int64_t my_value, 
                                int32_t *dl_value, // pointer to my dl value (value will be set)
@@ -948,10 +983,15 @@ void sam_seg_buddied_i_fields (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i,
                                STRp(copy_snip),   // buddy_type embedded in snip needs to be consistent with mux->special_code
                                unsigned add_bytes)
 {
+    ContextP ctx = CTX(did_i);
+
+    ASSERT (ctx->flags.store_per_line || segconf.running,  
+            "%s: expecting ctx=%s to have store_per_line=true", LN_NAME, ctx->tag_name);
+
     // BAM spec permits values up to 0xffffffff, and SAM is unlimited, however for code covenience we limit
     // values segged with this method to int32_t. If this is ever an issue, it can be solved.
     ASSERT (my_value >= -0x80000000LL && my_value <= 0x7fffffffLL, "%s: Value of %s is %"PRId64", outside the supported range by Genozip of [%d,%d]",
-            LN_NAME, CTX(did_i)->tag_name, my_value, -0x80000000, 0x7fffffff);
+            LN_NAME, ctx->tag_name, my_value, -0x80000000, 0x7fffffff);
 
     *dl_value = my_value;
 
@@ -981,7 +1021,7 @@ void sam_seg_buddied_i_fields (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i,
         if (by_buddy_map && dl->FLAG.unmapped)
             seg_integer_as_text_do (VB, channel_ctx, my_value, add_bytes); // seg as snip, as this will likely become all-the-same
 
-        else if (sam_has_mate && my_value == *mate_value)     // successful in ~97% of lines with mate
+        else if (sam_has_mate && my_value == *mate_value)    
             seg_by_ctx (VB, STRa(copy_snip), channel_ctx, add_bytes); // note: prior to v14, we stored ms qual_score in QUAL history, not in ms:i history 
         
         else if (((by_buddy && sam_has_saggy) || (by_mate_prim && sam_has_prim)) && my_value == *saggy_value)
@@ -990,10 +1030,10 @@ void sam_seg_buddied_i_fields (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i,
         else 
             seg_integer (VB, channel_ctx, my_value, true, add_bytes);    
 
-        seg_by_did (VB, MUX_SNIP(mux), MUX_SNIP_LEN(mux), did_i, 0); // de-multiplexor
+        seg_by_ctx (VB, MUX_SNIP(mux), MUX_SNIP_LEN(mux), ctx, 0); // de-multiplexor
     }
     else
-        seg_integer (VB, CTX(did_i), my_value, true, add_bytes);        
+        seg_integer (VB, ctx, my_value, true, add_bytes);        
 }
 
 // E2 - SEQ data. Currently broken. To do: fix.
@@ -1254,6 +1294,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_HI_i: sam_seg_HI_i (vb, dl, numeric.i, add_bytes); break;
         case _OPTION_NH_i: sam_seg_NH_i (vb, dl, numeric.i, add_bytes); break;
         case _OPTION_CP_i: sam_seg_CP_i (vb, dl, numeric.i, add_bytes); break;
+        case _OPTION_UQ_i: sam_seg_UQ_i (vb, dl, numeric.i, add_bytes); break;
 
         // ---------------------
         // Non-standard fields
@@ -1263,15 +1304,14 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_XS_i: COND0 (sam_has_BWA_XS_i(), sam_seg_BWA_XS_i (vb, dl, OPTION_XS_i, numeric.i, add_bytes))
                            COND (MP(BLASR), sam_seg_SEQ_END (vb, dl, CTX(OPTION_XS_i), numeric.i, "0+00", add_bytes)); 
 
-        case _OPTION_XC_i: COND (is_bwa(), sam_seg_BWA_XC_i (vb, dl, numeric.i, add_bytes)); 
+        case _OPTION_XC_i: COND (sam_has_BWA_XC_i(), sam_seg_BWA_XC_i (vb, dl, numeric.i, add_bytes)); 
 
-        case _OPTION_XT_A: COND (is_bwa(), sam_seg_BWA_XT_A (vb, value[0], add_bytes));
+        case _OPTION_XT_A: COND (sam_has_BWA_XT_A(), sam_seg_BWA_XT_A (vb, value[0], add_bytes));
 
-        case _OPTION_XM_i: COND0 (is_bwa() || is_bowtie2() || MP(NOVOALIGN), 
-                                      sam_seg_BWA_XM_i (vb, numeric, add_bytes))
+        case _OPTION_XM_i: COND0 (sam_has_BWA_XM_i(), sam_seg_BWA_XM_i (vb, numeric, add_bytes))
                            COND (MP(TMAP), sam_seg_TMAP_XM_i (vb, numeric, add_bytes));
 
-        case _OPTION_X1_i: COND (is_bwa(), sam_seg_BWA_X1_i (vb, numeric.i, add_bytes)); break;
+        case _OPTION_X1_i: COND (sam_has_BWA_X0_X1_i(), sam_seg_BWA_X1_i (vb, numeric.i, add_bytes)); break;
 
         case _OPTION_ZS_i: COND (MP(HISAT2), sam_seg_BWA_XS_i (vb, dl, OPTION_ZS_i, numeric.i, add_bytes)); 
 
@@ -1295,8 +1335,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
 
         case _OPTION_mc_i: COND (segconf.sam_ms_type == ms_BIOBAMBAM, sam_seg_mc_i (vb, numeric.i, add_bytes));
 
-        case _OPTION_ms_i: COND (segconf.sam_ms_type == ms_BIOBAMBAM, 
-                                 sam_seg_buddied_i_fields (vb, dl, OPTION_ms_i, numeric.i, &dl->QUAL_score, (MultiplexerP)&vb->mux_ms, STRa(copy_mate_ms_snip), add_bytes));
+        case _OPTION_ms_i: COND (segconf.sam_ms_type == ms_BIOBAMBAM, sam_seg_ms_i (vb, dl, numeric.i, add_bytes));
 
         case _OPTION_s1_i: COND (is_minimap2(), sam_seg_s1_i (vb, dl, numeric.i, add_bytes));
 

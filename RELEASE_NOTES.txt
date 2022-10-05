@@ -3,6 +3,12 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+14.0.10 5/Oct/2022
+- BAM: Compression improvements for DRAGEN-created files 
+- BAM: better compression of UQ:i
+- BAM: better support for files with a very large number (millions) of @SQ records 
+- Bug fixes
+
 14.0.9 1/Oct/2022
 - Bug fixes
 

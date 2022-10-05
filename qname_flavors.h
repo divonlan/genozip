@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #include "container.h"
@@ -402,7 +402,7 @@ static SmallContainer con_genozip_opt = {
 };
 
 // example: read_1
-static SmallContainer con_str_numeric = {
+static SmallContainer con_str_integer = {
     .repeats             = 1,
     .nitems_lo           = 3,
     .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = "_"          }, 
@@ -434,7 +434,7 @@ static SmallContainer con_clc_gw = {
 #define PX_clc_gw { "umi", "count", "" }
 
 // example: 1
-static SmallContainer con_numeric = {
+static SmallContainer con_integer = {
     .repeats             = 1,
     .nitems_lo           = 2,
     .items               = { { .dict_id = { _SAM_Q0NAME }                            },
@@ -541,7 +541,7 @@ typedef struct QnameFlavorStruct {
 } QnameFlavorStruct;
 
 static QnameFlavorStruct qf[] = { 
-/*  mate   name             example                                       tech     fq_only   con_template     #sp  int_items       numeric_items   in-local        hex_items       ord1,2 rng    sqln len px_strs      */
+/*  mate   name             example                                       tech     fq_only   con_template     #sp  integer_items   numeric_items   in-local        hex_items       ord1,2 rng    sqln len px_strs      */
     {},  { "Illumina-fastq",{ "A00488:61:HMLGNDSXX:4:1101:4345:1000 2:N:0:CTGAAGCT+ATAGAGGC" },
                                                                           TECH_ILLUM_7, 1, &con_illumina_7_fq, 7,  {1,3,4,5,6,-1}, {-1},           {1,3,-1},       {-1},           5,6,   -1,-1, -1,                   }, // mate added v14.0.0  
     {},  { "Illumina",      { "A00488:61:HMLGNDSXX:4:1101:4345:1000" },   TECH_ILLUM_7, 0, &con_illumina_7,    6,  {1,3,4,5,6,-1}, {-1},           {1,3,-1},       {-1},           5,6,   -1,-1, -1,                   },
@@ -551,7 +551,7 @@ static QnameFlavorStruct qf[] = {
                                                                           TECH_BGI,     0, &con_bgi_R7,        3,  {-1},           {1,2,3,4,-1},   {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_bgi_R     },
     {},  { "BGI-R8",        { "V300046476L1C001R00100001719" },           TECH_BGI,     0, &con_bgi_R8,        3,  {-1},           {1,2,3,4,-1},   {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_bgi_R     },
     {},  { "BGI-LL7",       { "DP8400010271TLL1C005R0511863479" },        TECH_BGI,     0, &con_bgi_LL7,       4,  {-1},           {1,2,3,4,-1},   {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_bgi_LL    },
-    {},  { "BGI-CL",        { "CL100025298L1C002R050_244547" },           TECH_BGI,     0, &con_bgi_CL,        4,  {-1},           {1,2,3,-1},     {-1},           {-1},           4,-1,  -1,-1, -1,  0,  PX_bgi_CL    }, 
+    {},  { "BGI-CL",        { "CL100025298L1C002R050_244547" },           TECH_BGI,     0, &con_bgi_CL,        4,  {4,-1},         {1,2,3,-1},     {-1},           {-1},           4,-1,  -1,-1, -1,  0,  PX_bgi_CL    }, 
     // {},  { "IonTorrent",    { "ZEWTM:10130:07001" },                      TECH_IONTORR, 0, &con_ion_torrent_3, 2,  {-1},           {1,2,-1},       {-1},           {-1},           -1,-1, -1,-1, -1,  17, PX_ion_torrent_3 },
     {},  { "IonTorrent",    { "ZEWTM:10130:07001" },                      TECH_IONTORR, 0, &con_ion_torrent_3, 2,  {-1},           {-1},           {-1},           {-1},           -1,-1, -1,-1, -1,  17               },
     {},  { "Illumina-o-fq", { "SOLEXA6_0104:3:1:1852:13550 1:N:0:0" },    TECH_ILLUM_5, 1, &con_illumina_5_fq, 5,  {1,2,3,4,-1},   {-1},           {-1},           {-1},           -1,-1, -1,-1, -1,                   }, // v14.0.0
@@ -571,7 +571,7 @@ static QnameFlavorStruct qf[] = {
     {},  { "Nanopore-ext",  { "2a228edf-d8bc-45d4-9c96-3d613b8530dc_Basecall_2D_000_template" },
                                                                           TECH_ONP,     0, &con_nanopore_ext,  5,  {-1},           {0,1,2,3,4,-1}, {0,1,2,3,4,-1}, {0,1,2,3,4,-1}, -1,-1, -1,-1, -1,  0,  PX_nanopore_ext },
     {},  { "BamSurgeon",    { "22:33597495-34324994_726956_727496_0:0:0_0:0:0_2963e" },   
-                                                                          TECH_UNKNOWN, 0, &con_bamsurgeon,    7,  {1,2,3,4,7,-1}, {-1},           {1,3,7,-1},     {7,-1},         1,3,   2,4,   -1,                   },
+                                                                          TECH_UNKNOWN, 0, &con_bamsurgeon,    7,  {1,2,3,4,-1},   {-1},           {1,3,7,-1},     {7,-1},         1,3,   2,4,   -1,                   },
     {},  { "NCBI_SRA_LEN",  { "SRR11215720.1_1_length=120" },             TECH_UNKNOWN, 0, &con_ncbi_sra_len,  10, {1,2,-1},       {-1},           {-1},           {-1},           1,-1,  2,-1,  3,   0,  PX_sra_len   },
     {},  { "NCBI-SRA2+-FQ", { "ERR2708427.1.1 51e7525d-fa50-4b1a-ad6d-4f4ae25c1df7 someextradata length=1128" },
                                                                           TECH_UNKNOWN, 2, &con_ncbi_sra2P_fq, 6,  {2,3,8,-1},     {-1},           {2,3,-1},       {-1},           3,-1,  -1,-1, 8,                    },
@@ -583,11 +583,11 @@ static QnameFlavorStruct qf[] = {
                                                                           TECH_UNKNOWN, 2, &con_ncbi_sra_fq,   4,  {2,6,-1},       {-1},           {-1},           {-1},           2,-1,  -1,-1, 6,                    },
     {},  { "NCBI-SRA2",     { "ERR2708427.1.1" },                         TECH_UNKNOWN, 0, &con_ncbi_sra2,     2,  {2,3,-1},       {-1},           {2,3,-1},       {-1},           3,-1,  -1,-1, -1,                   },
     {},  { "NCBI-SRA",      { "SRR001666.1" },                            TECH_UNKNOWN, 0, &con_ncbi_sra,      1,  {2,-1},         {-1},           {2,-1},         {-1},           2,-1,  -1,-1, -1,                   },
-    {},  { "seqan",         { "adeno-reads100.fasta.000000008" },         TECH_UNKNOWN, 0, &con_seqan,         2,  {-1},           {2, -1},        {-1},           {-1},           0,-1,  -1,-1, -1,   0,  PX_seqan    },
+    {},  { "seqan",         { "adeno-reads100.fasta.000000008" },         TECH_UNKNOWN, 0, &con_seqan,         2,  {-1},           {2, -1},        {-1},           {-1},           2,-1,  -1,-1, -1,   0,  PX_seqan    },
     {},  { "CLC-GW",        { "umi64163_count1" },                        TECH_UNKNOWN, 0, &con_clc_gw,        9,  {0,1,-1},       {-1},           {0,1,-1},       {-1},           -1,-1, -1,-1, -1,   0,  PX_clc_gw   },
-    {},  { "hex_chr",       { "30cf_chr10" }, /* wgsim simulator? */      TECH_UNKNOWN, 0, &con_hex_chr,       1,  {-1},           {-1},           {-1},           {0,-1},         2,-1,  -1,-1, -1,                   }, // added v14
-    {},  { "Numeric",       { "123" },                                    TECH_UNKNOWN, 0, &con_numeric,       0,  {0,-1},         {-1},           {0,-1},         {-1},           0,-1,  -1,-1, -1,                   }, 
-    {},  { "Str_Numeric",   { "read_1" },   /* eg CLC */                  TECH_UNKNOWN, 0, &con_str_numeric,   1,  {1,-1},         {-1},           {1,-1},         {-1},           1,-1,  -1,-1, -1,                   },
+    {},  { "hex_chr",       { "30cf_chr10" }, /* wgsim simulator? */      TECH_UNKNOWN, 0, &con_hex_chr,       1,  {-1},           {-1},           {-1},           {0,-1},         -1,-1,  -1,-1, -1,                  }, // added v14
+    {},  { "Integer",       { "123" },                                    TECH_UNKNOWN, 0, &con_integer,       0,  {0,-1},         {-1},           {0,-1},         {-1},           0,-1,  -1,-1, -1,                   }, 
+    {},  { "Str_Integer",   { "read_1" },   /* eg CLC */                  TECH_UNKNOWN, 0, &con_str_integer,   1,  {1,-1},         {-1},           {1,-1},         {-1},           1,-1,  -1,-1, -1,                   },
     {},  { "Genozip-opt",   { "basic.1" },  /* must be last */            TECH_UNKNOWN, 0, &con_genozip_opt,   1,  {1,-1},         {-1},           {1,-1},         {-1},           1,-1,  -1,-1, -1,                   },
 
     // FASTQ Line3 QFs

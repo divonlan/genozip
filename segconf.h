@@ -3,7 +3,7 @@
 //   Copyright (C) 2021-2022 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #pragma once
@@ -63,7 +63,8 @@ typedef struct {
     STRl (std_cigar, 16);       // first CIGAR in the file - used in case all CIGARs in the file are the same
     int num_mapped;             // number of segconf reads that are mapped - defined as having (!FLAG.unmapped, RNAME, POS, CIGAR)
     bool sam_is_unmapped;       // false if there is at least one read in segconf with (!FLAG.unmapped, RNAME, POS, CIGAR)
-    SamMapperType sam_mapper;           
+    SamMapperType sam_mapper;       
+    bool is_biobambam2_sort;   // PG records indicate running biobambam tag-creating programs    
     bool NM_is_integer;         // true if NM is integer, false if it binary
     bool has_TLEN_non_zero;
     bool has_DP_before_PL;

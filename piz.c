@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted,
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
 //   under penalties specified in the license.
 
 #include "genozip.h"
@@ -169,13 +169,13 @@ uint32_t piz_uncompress_all_ctxs (VBlockP vb)
 
         SectionHeaderCtx *header = (SectionHeaderCtx *)Bc (vb->z_data, section_index[section_i]);
 
-        bool is_local = (header->h.section_type == SEC_LOCAL);
-        bool is_b250  = (header->h.section_type == SEC_B250);
+        bool is_local = (header->section_type == SEC_LOCAL);
+        bool is_b250  = (header->section_type == SEC_B250);
         if (!is_b250 && !is_local) break;
 
         ContextP ctx = ctx_get_ctx (vb, header->dict_id); // gets the context (creating it if it doesn't already exist)
 
-        bool is_pair_section = (BGEN32 (header->h.vblock_i) != vb->vblock_i); // is this a section of "pair 1" 
+        bool is_pair_section = (BGEN32 (header->vblock_i) != vb->vblock_i); // is this a section of "pair 1" 
 
         if (!is_pair_section) {
             
@@ -183,13 +183,13 @@ uint32_t piz_uncompress_all_ctxs (VBlockP vb)
             if ((is_local && ctx->local_uncompressed) || (is_b250 && ctx->b250_uncompressed))
                 continue;
 
-            ctx->flags = header->h.flags.ctx; // overrides default inherited from vb_i=1 (assigned in piz_read_all_ctxs)
+            ctx->flags = header->flags.ctx; // overrides default inherited from vb_i=1 (assigned in piz_read_all_ctxs)
             
             if (is_local || !ctx->ltype) // a b250 can set ltype if its not already set by an earlier SEC_LOCAL section  
                 ctx->ltype = header->ltype; // in case of b250
             
             if (is_local) 
-                ctx->lcodec = header->h.codec;
+                ctx->lcodec = header->codec;
 
             else { // b250
                 ctx->iterator  = (SnipIterator){ .next_b250 = B1ST8 (ctx->b250), .prev_word_index = WORD_INDEX_NONE };
@@ -203,7 +203,7 @@ uint32_t piz_uncompress_all_ctxs (VBlockP vb)
             // created in addition to the expected b250. we ignore these local sections (or allow b250 to overwrite them)    
             if (is_local && ctx->pair_b250) continue;
 
-            ctx->pair_flags = header->h.flags.ctx;            
+            ctx->pair_flags = header->flags.ctx;            
             ctx->pair_b250  = is_b250;                
             ctx->pair_local = is_local;
 
@@ -221,8 +221,8 @@ uint32_t piz_uncompress_all_ctxs (VBlockP vb)
         zfile_uncompress_section (vb, header, 
                                   is_pair_section ? &ctx->pair      : target_buf, 
                                   is_pair_section ? "context->pair" : is_local ? "contexts->local" : "contexts->b250", 
-                                  BGEN32 (header->h.vblock_i),
-                                  header->h.section_type); 
+                                  BGEN32 (header->vblock_i),
+                                  header->section_type); 
 
         if (flag.show_time && exe_type != EXE_GENOZIP)
             ctx->compressor_time = CHECK_TIMER;
@@ -247,7 +247,7 @@ uint32_t piz_uncompress_all_ctxs (VBlockP vb)
             ctx->b250_uncompressed = true;
 
         if ((VER(14) && ctx->ltype != LT_BITMAP) ||                // starting v14: assign to all except LT_BITMAP (in which param is used to determine nbits)
-            (!VER(14) && header->h.flags.ctx.v13_copy_local_param)) // up to v13: copy if v13_copy_local_param is set
+            (!VER(14) && header->flags.ctx.v13_copy_local_param)) // up to v13: copy if v13_copy_local_param is set
             target_buf->prm8[0] = header->param;
 
         if (flag.debug_read_ctxs)
@@ -508,7 +508,7 @@ bool piz_read_one_vb (VBlockP vb, bool for_reconstruction)
     SectionHeaderVbHeader header = *(SectionHeaderVbHeader *)Bc (vb->z_data, vb_header_offset); // copy of header as it will be overwritten in piz_read_all_ctxs
 
     // any of these might be overridden by callback
-    vb->flags            = header.h.flags.vb_header;
+    vb->flags            = header.flags.vb_header;
     vb->recon_size       = BGEN32 (header.recon_size_prim);   // might be modified by callback (if DVCF Luft)
     vb->longest_line_len = BGEN32 (header.longest_line_len);
     vb->expected_digest  = header.digest;
@@ -526,7 +526,7 @@ bool piz_read_one_vb (VBlockP vb, bool for_reconstruction)
 
     // in case of unbind, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
     // because the dispatcher is re-initialized for every txt component
-    if (flag.unbind) vb->vblock_i = BGEN32 (header.h.vblock_i);
+    if (flag.unbind) vb->vblock_i = BGEN32 (header.vblock_i);
 
     if (flag.show_vblocks) 
         iprintf ("READING(id=%d) vb=%s num_lines=%u recon_size=%u genozip_size=%u longest_line_len=%u\n",

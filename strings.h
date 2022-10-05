@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #pragma once
@@ -200,6 +200,7 @@ extern bool str_is_in_range (STRp(str), char first_c, char last_c);
 extern uint32_t str_get_uint_textual_len (uint64_t n);
 
 extern StrText str_time (void);
+extern void str_human_time (unsigned secs, bool compact, char *str /* out */);
 
 #define FLOAT_FORMAT_LEN 12
 extern bool str_get_float (STRp(float_str), double *value, char format[FLOAT_FORMAT_LEN], uint32_t *format_len);
@@ -225,13 +226,13 @@ extern uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(
     uint32_t name##_lens[MAX_(con_nitems(*container), 1)]; \
     uint32_t n_##name##s = str_split_by_container_do ((str), (str_len), (ConstContainerP)(container), (prefix), (prefix_len), name##s, name##_lens, NULL)
 
-extern rom str_split_by_tab_do (STRp(str), uint32_t *n_items, rom *items, uint32_t *item_lens, bool *has_13);
+extern rom str_split_by_tab_do (STRp(str), uint32_t *n_items, rom *items, uint32_t *item_lens, bool *has_13, bool enforce);
 
-#define str_split_by_tab(str,max_len,max_items,has_13) \
+#define str_split_by_tab(str,max_len,max_items,has_13,enforce) \
     rom flds[(max_items)];   \
     uint32_t fld_lens[(max_items)];  \
     uint32_t n_flds = (max_items);   \
-    str = str_split_by_tab_do ((str), (max_len), &n_flds, flds, fld_lens, (has_13))
+    str = str_split_by_tab_do ((str), (max_len), &n_flds, flds, fld_lens, (has_13), (enforce))
 #define STRfld(i) STRi(fld,(i))
 
 extern void str_remove_CR_do (uint32_t n_lines, pSTRp(line));

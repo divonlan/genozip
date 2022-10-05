@@ -16,8 +16,8 @@
             //"program": "${workspaceFolder}/genounzip.exe",
             //"program": "${workspaceFolder}/genols-debug.exe",
 
-            // "args" : ["--decompress", "--test", "bug.genozip"],
-            "args" : ["-e", "data/hs37d5.fa.gz", "-o", "bug.genozip", "-ftb", "bug.sam"],            
+            "args" : ["-ft", "--show-ref-contig", "bug.sam"],
+            
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],

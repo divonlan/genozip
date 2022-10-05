@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #include <errno.h>
@@ -742,7 +742,7 @@ void ctx_populate_zf_ctx_from_contigs (Reference ref, Did dst_did_i, ConstContig
     if (!buf_is_alloc (&zctx->global_hash)) { // first call
         zctx->no_stons = true;
         zctx->st_did_i = DID_NONE;
-        hash_alloc_global (zctx, ctgs->contigs.len32 * 2);
+        hash_alloc_global (zctx, ctgs->contigs.len32);
     }
 
     if (flag.reference & REF_ZIP_LOADED)
@@ -1688,14 +1688,14 @@ void ctx_compress_counts (void)
             Codec codec = codec_assign_best_codec (evb, NULL, &zctx->counts, SEC_COUNTS);
 
             SectionHeaderCounts header = (SectionHeaderCounts){ 
-                .h.magic                 = BGEN32 (GENOZIP_MAGIC),
-                .h.section_type          = SEC_COUNTS,
-                .h.data_uncompressed_len = BGEN32 (zctx->counts.len32),
-                .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderCounts)),
-                .h.codec                 = codec,
-                .h.vblock_i              = 0,
-                .nodes_param             = BGEN64 (zctx->nodes.param),
-                .dict_id                 = zctx->dict_id
+                .magic                 = BGEN32 (GENOZIP_MAGIC),
+                .section_type          = SEC_COUNTS,
+                .data_uncompressed_len = BGEN32 (zctx->counts.len32),
+                .compressed_offset     = BGEN32 (sizeof(SectionHeaderCounts)),
+                .codec                 = codec,
+                .vblock_i              = 0,
+                .nodes_param           = BGEN64 (zctx->nodes.param),
+                .dict_id               = zctx->dict_id
             };
 
             comp_compress (evb, zctx, &evb->z_data, (SectionHeader*)&header, zctx->counts.data, NO_CALLBACK, "SEC_COUNTS");

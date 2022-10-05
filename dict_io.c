@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted,
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
 //   under penalties specified in the license.
 
 #include <errno.h>
@@ -145,14 +145,14 @@ static void dict_io_compress_one_fragment (VBlockP vb)
     START_TIMER;
 
     SectionHeaderDictionary header = (SectionHeaderDictionary){ 
-        .h.magic                 = BGEN32 (GENOZIP_MAGIC),
-        .h.section_type          = SEC_DICT,
-        .h.data_uncompressed_len = BGEN32 (vb->fragment_len),
-        .h.compressed_offset     = BGEN32 (sizeof(SectionHeaderDictionary)),
-        .h.codec                 = vb->fragment_ctx->lcodec,
-        .h.vblock_i              = BGEN32 (vb->vblock_i),
-        .num_snips               = BGEN32 (vb->fragment_num_words),
-        .dict_id                 = vb->fragment_ctx->dict_id
+        .magic                 = BGEN32 (GENOZIP_MAGIC),
+        .section_type          = SEC_DICT,
+        .data_uncompressed_len = BGEN32 (vb->fragment_len),
+        .compressed_offset     = BGEN32 (sizeof(SectionHeaderDictionary)),
+        .codec                 = vb->fragment_ctx->lcodec,
+        .vblock_i              = BGEN32 (vb->vblock_i),
+        .num_snips             = BGEN32 (vb->fragment_num_words),
+        .dict_id               = vb->fragment_ctx->dict_id
     };
 
     if (flag.show_dict) 
@@ -226,7 +226,7 @@ static void dict_io_read_one_vb (VBlockP vb)
     SectionHeaderDictionary *header = 
         (offset != SECTION_SKIPPED) ? (SectionHeaderDictionary *)vb->z_data.data : NULL;
 
-    vb->fragment_len = header ? BGEN32 (header->h.data_uncompressed_len) : 0;
+    vb->fragment_len = header ? BGEN32 (header->data_uncompressed_len) : 0;
 
     ASSERT (!header || header->dict_id.num == dict_sec->dict_id.num, "Expecting dictionary fragment with DictId=%s but found one with DictId=%s",
             dis_dict_id (dict_sec->dict_id).s, dis_dict_id (header->dict_id).s);
@@ -279,7 +279,7 @@ static void dict_io_uncompress_one_vb (VBlockP vb)
     if (!vb->fragment_ctx || flag.only_headers) goto done; // nothing to do in this thread
     SectionHeaderDictionary *header = (SectionHeaderDictionary *)vb->z_data.data;
 
-    ASSERT (vb->fragment_start + BGEN32 (header->h.data_uncompressed_len) <= BAFTc (vb->fragment_ctx->dict), 
+    ASSERT (vb->fragment_start + BGEN32 (header->data_uncompressed_len) <= BAFTc (vb->fragment_ctx->dict), 
             "Buffer overflow when uncompressing dict=%s", vb->fragment_ctx->tag_name);
 
     // a hack for uncompressing to a location within the buffer - while multiple threads are uncompressing into 

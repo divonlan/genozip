@@ -3,7 +3,7 @@
 //   Copyright (C) 2020-2022 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #pragma once
@@ -18,6 +18,7 @@ extern int32_t generic_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
 extern void generic_seg_initialize (VBlockP vb);
 extern void generic_seg_finalize (VBlockP vb);
 extern bool generic_seg_is_small (ConstVBlockP vb, DictId dict_id);
+extern rom generic_get_magic (void);
 
 #define GNRIC_SPECIAL { generic_piz_TOPLEVEL }
 SPECIAL (GNRIC, 0, TOPLEVEL, generic_piz_TOPLEVEL);

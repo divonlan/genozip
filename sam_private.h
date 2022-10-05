@@ -3,7 +3,7 @@
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
 #pragma once
@@ -156,6 +156,7 @@ typedef struct {
     SamASType AS;
     WordIndex RNAME, RNEXT;
     SamPosType POS, PNEXT;         
+    uint32_t seq_consumed;
     uint32_t ref_consumed;
     uint32_t hard_clip[2];        
     int32_t NH;                    // used by sam_seg_HI_i
@@ -192,6 +193,8 @@ typedef struct VBlockSAM {
     rom *auxs;                     
     uint32_t *aux_lens;
 
+    ConstContainerP aux_con;       // AUX container being reconstructed
+
     // REF_INTERNAL and REF_EXT_STORE: the current length of a consecutive range of is_set
     WordIndex consec_is_set_chrom;
     SamPosType consec_is_set_pos;
@@ -203,28 +206,28 @@ typedef struct VBlockSAM {
             idx_CC_Z, idx_CP_i, idx_ms_i, idx_SM_i,
             idx_UB_Z, idx_BX_Z, idx_CB_Z, idx_GX_Z, idx_CR_Z, idx_CY_Z,
             idx_XO_Z, idx_YS_Z, idx_XB_A, idx_XM_Z, idx_XB_Z;
-    #define has_NM (vb->idx_NM_i != -1)
-    #define has_MD (vb->idx_MD_Z != -1 && segconf.has[OPTION_MD_Z])
-    #define has_SA (vb->idx_SA_Z != -1)
-    #define has_XG (vb->idx_XG_Z != -1)
-    #define has_XM (vb->idx_XG_Z != -1)
-    #define has_NH (vb->idx_NH_i != -1)
-    #define has_HI (vb->idx_HI_i != -1)
-    #define has_X0 (vb->idx_X0_i != -1)
-    #define has_X1 (vb->idx_X1_i != -1)
-    #define has_XA (vb->idx_XA_Z != -1)
-    #define has_AS (vb->idx_AS_i != -1)
-    #define has_CC (vb->idx_CC_Z != -1)
-    #define has_CP (vb->idx_CP_i != -1)
-    #define has_ms (vb->idx_ms_i != -1)
-    #define has_SM (vb->idx_SM_i != -1)
-    #define has_UB (vb->idx_UB_Z != -1)
-    #define has_BX (vb->idx_BX_Z != -1)
-    #define has_CB (vb->idx_CB_Z != -1)
-    #define has_CR (vb->idx_CR_Z != -1)
-    #define has_CY (vb->idx_CY_Z != -1)
-    #define has_XO (vb->idx_XO_Z != -1)
-    #define has_YS (vb->idx_YS_Z != -1)
+    #define has_NM   (vb->idx_NM_i != -1)
+    #define has_MD   (vb->idx_MD_Z != -1 && segconf.has[OPTION_MD_Z])
+    #define has_SA   (vb->idx_SA_Z != -1)
+    #define has_XG   (vb->idx_XG_Z != -1)
+    #define has_XM   (vb->idx_XG_Z != -1)
+    #define has_NH   (vb->idx_NH_i != -1)
+    #define has_HI   (vb->idx_HI_i != -1)
+    #define has_X0   (vb->idx_X0_i != -1)
+    #define has_X1   (vb->idx_X1_i != -1)
+    #define has_XA   (vb->idx_XA_Z != -1)
+    #define has_AS   (vb->idx_AS_i != -1)
+    #define has_CC   (vb->idx_CC_Z != -1)
+    #define has_CP   (vb->idx_CP_i != -1)
+    #define has_ms   (vb->idx_ms_i != -1)
+    #define has_SM   (vb->idx_SM_i != -1)
+    #define has_UB   (vb->idx_UB_Z != -1)
+    #define has_BX   (vb->idx_BX_Z != -1)
+    #define has_CB   (vb->idx_CB_Z != -1)
+    #define has_CR   (vb->idx_CR_Z != -1)
+    #define has_CY   (vb->idx_CY_Z != -1)
+    #define has_XO   (vb->idx_XO_Z != -1)
+    #define has_YS   (vb->idx_YS_Z != -1)
     #define has_XB_A (vb->idx_XB_A != -1)
     #define has_XB_Z (vb->idx_XB_Z != -1)
 
@@ -391,7 +394,7 @@ typedef struct __attribute__ ((__packed__)) CCAln {
 
 // PIZ: history of cigar analysis - one item per line
 typedef struct __attribute__ ((__packed__)) CigarAnalItem {
-    uint32_t seq_len;
+    uint32_t seq_len;  // equivalent to dl->SEQ.len in ZIP - set if ANY of SEQ, QUAL, CIGAR-implied-seq-consumed have it
     uint32_t ref_consumed;
     uint32_t hard_clip[2];
 } CigarAnalItem;
@@ -468,6 +471,8 @@ static bool inline sam_line_is_prim (ZipDataLineSAM *dl) { return !sam_is_depn (
 #define piz_has_real_prim (piz_has_buddy && ((segconf.is_paired && sam_is_depn(last_flags)) || \
                                              (!segconf.is_paired && !sam_is_depn ((SamFlags){ .value = history64(SAM_FLAG, VB_SAM->buddy_line_i)}))))
 
+extern bool sam_seg_peek_int_field (VBlockSAMP vb, Did did_i, int16_t idx, int32_t min_value, int32_t max_value, bool set_last_value, int32_t *value);
+
 // BUDDY stuff
 extern void sam_piz_set_buddy_v13 (VBlockP vb);
 extern void sam_reconstruct_from_buddy_get_textual_snip (VBlockSAMP vb, ContextP ctx, BuddyType bt, pSTRp(snip));
@@ -484,13 +489,13 @@ extern void sam_seg_aux_all (VBlockSAMP vb, ZipDataLineSAM *dl);
 extern rom bam_show_line (VBlockSAMP vb, rom alignment, uint32_t remaining_txt_len);
 extern void bam_get_one_aux (VBlockSAMP vb, int16_t idx, rom *tag, char *type, char *array_subtype, pSTRp(value), ValueType *numeric);
 extern void sam_seg_idx_aux (VBlockSAMP vb);
+extern bool sam_piz_line_has_aux_field (VBlockSAMP vb, DictId dict_id);
 
 extern uint32_t sam_seg_get_aux_int (VBlockSAMP vb, int16_t idx, int32_t *number, bool is_bam, int32_t min_value, int32_t max_value, bool soft_fail);
 #define sam_seg_get_aux_int_(vb,tag) ({ int32_t value; sam_seg_get_aux_int (vb, vb->idx_##tag, &value, IS_BAM_ZIP, -0x80000000, 0x7fffffff, false); value; })
 
 extern void sam_seg_get_aux_Z (VBlockSAMP vb, int16_t idx, pSTRp (snip), bool is_bam);
 extern char sam_seg_get_aux_A (VBlockSAMP vb, int16_t idx, bool is_bam);
-extern int32_t sam_set_last_value_from_aux (VBlockSAMP vb, int16_t idx, Did did);
 extern uint32_t bam_split_aux (VBlockSAMP vb, rom alignment, rom aux, rom after_aux, rom *auxs, uint32_t *aux_lens);
 
 typedef void (*SegBuddiedCallback)(VBlockSAMP, ContextP, STRp(value), unsigned add_bytes);
@@ -568,7 +573,6 @@ extern uint32_t sam_seq_copy (char *dst, rom src, uint32_t src_start_base, uint3
 // QUAL stuff
 extern void sam_seg_QUAL_initialize (VBlockSAMP vb);
 extern void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, rom qual, uint32_t qual_data_len, unsigned add_bytes);
-extern void sam_seg_ms_i (VBlockSAMP vb, ValueType ms, unsigned add_bytes);
 extern rom bam_qual_display (bytes qual, uint32_t l_seq); 
 extern void sam_seg_other_qual (VBlockSAMP vb, TxtWord *dl_word, Did did_i, STRp(qual), bool len_is_seq_len, unsigned add_bytes);
 
@@ -578,8 +582,12 @@ static inline bool is_minimap2 (void) { return MP(MINIMAP2) || MP(WINNOWMAP); } 
 static inline bool is_bowtie2 (void)  { return MP(BOWTIE2) || MP(HISAT2) || MP(TOPHAT) || MP(BISMARK) || MP(BSSEEKER2) ; }  // aligners based on bowtie2
 
 static inline bool sam_has_SA_Z (void) { return is_bwa() || is_minimap2() || MP(NGMLR); /*|| MP(LONGRANGER); non-standard SA:Z format (POS is off by 1, main-field NM is missing) */ }
-static inline bool sam_has_BWA_XA_Z (void) { return is_bwa() || MP(GEM3) || MP(GEM2SAM) || MP(DELVE); }
-static inline bool sam_has_BWA_XS_i (void) { return is_bwa() || MP(TMAP) || MP(GEM3) || (is_bowtie2() && !MP(HISAT2)) || MP(CPU) || MP(LONGRANGER); }
+static inline bool sam_has_BWA_XA_Z (void) { return is_bwa() || MP(GEM3) || MP(GEM2SAM) || MP(DELVE) || MP(DRAGEN); }
+static inline bool sam_has_BWA_XS_i (void) { return is_bwa() || MP(TMAP) || MP(GEM3) || (is_bowtie2() && !MP(HISAT2)) || MP(CPU) || MP(LONGRANGER) || MP(DRAGEN); }
+static inline bool sam_has_BWA_XM_i (void) { return is_bwa() || is_bowtie2() || MP(NOVOALIGN) || MP(DRAGEN); }
+static inline bool sam_has_BWA_XT_A (void) { return is_bwa() || MP(DRAGEN); }
+static inline bool sam_has_BWA_XC_i (void) { return is_bwa() || MP(DRAGEN); }
+static inline bool sam_has_BWA_X0_X1_i (void) { return is_bwa() || MP(DRAGEN); }
 
 #define SA_QUAL_DISPLAY_LEN 12
 extern rom sam_display_qual_from_SA_Group (const Sag *g);
@@ -667,6 +675,10 @@ extern void sam_seg_GY_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(gy), unsigned 
 
 extern bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, SoloTags solo, uint8_t n_seps, STRp(qual), qSTRp (con_snip), MiniContainer *con, unsigned add_bytes);
 extern void sam_seg_gene_name_id (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, STRp(value), unsigned add_bytes);
+
+// biobambam2 stuff
+extern void sam_seg_ms_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t ms, unsigned add_bytes);
+extern void sam_seg_mc_i (VBlockSAMP vb, int64_t mc, unsigned add_bytes);
 
 // -----------------------------------
 // SAG stuff

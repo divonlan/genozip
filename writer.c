@@ -3,7 +3,7 @@
 //   Copyright (C) 2021-2022 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
-//   WARNING: Genozip is propeitary, not open source software. Modifying the source code is strictly not permitted,
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
 //   under penalties specified in the license.
 
 #include "genozip.h"
@@ -566,7 +566,7 @@ static void writer_update_section_list (void)
     #define new_list (&evb->z_section_headers)
     ASSERTNOTINUSE (*new_list);
     buf_alloc (evb, new_list, z_file->section_list_buf.len, 0, SectionEnt, 1, "z_section_headers"); // note: the data will be moved to z_file->section_list_buf upon commit
-    
+
     // add all TXT_HEADERs and VBs according to the order of their first appearance in the recon_plan
     ARRAY (ReconPlanItem, plan, z_file->recon_plan);
     for (uint64_t i=0; i < plan_len; i++) 
