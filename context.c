@@ -1464,7 +1464,7 @@ void ctx_free_context (ContextP ctx, Did did_i)
     ctx->pair_flags = (struct FlagsCtx){};
     ctx->dict_id.num = 0;
     ctx->pair_b250_iter = (SnipIterator){};
-    ctx->lcodec = ctx->bcodec = ctx->lcodec_non_inherited = ctx->lsubcodec_piz = 0;
+    ctx->lcodec = ctx->bcodec = ctx->dcodec = ctx->lcodec_non_inherited = ctx->lsubcodec_piz = 0;
     ctx->b250_size = ctx->pair_b250_size = 0;
     ctx->no_stons = ctx->pair_local = ctx->pair_b250 = ctx->no_callback = ctx->line_is_luft_trans = ctx->lcodec_hard_coded =
     ctx->local_param = ctx->no_vb1_sort = ctx->local_always = ctx->counts_section = ctx->no_drop_b250 = 

@@ -57,7 +57,9 @@ typedef struct VBlockVCF {
     // used for segging INFO
     Buffer info_items;       // Seg: INFO items of the line being segged
 
-    rom main_refalt;         // used by vcf_refalt_lift and vcf_seg_INFO_BaseCounts, set by vcf_seg_txt_line
+    rom main_ref;         // used by vcf_refalt_lift and vcf_seg_INFO_BaseCounts, set by vcf_seg_txt_line
+    rom main_alt;
+
     unsigned main_ref_len, main_alt_len;
 
     // GVCF stuff
@@ -76,7 +78,9 @@ typedef struct VBlockVCF {
     Buffer last_format;             // ZIP only: cache previous line's FORMAT string
 
     // Multiplexers
-    DosageMultiplexer mux_PLn, mux_GL, mux_GP, mux_PRI, mux_DS, mux_PP, mux_PVAL, mux_FREQ, mux_RD,
+    #define first_mux mux_PLn
+    DosageMultiplexer mux_PLn, mux_GL, mux_GP, mux_PRI, mux_DS, mux_PP, mux_PVAL, mux_FREQ, mux_RD, 
+                      mux_BAF, mux_X, mux_Y,
                       mux_AD[2], mux_ADALL[2];
 
     PLMuxByDP PL_mux_by_DP;
@@ -88,6 +92,7 @@ typedef struct VBlockVCF {
 
     MULTIPLEXER(2) mux_QUAL, mux_INFO; // multiplex by has_RGQ (in GVCF)
 
+    #define after_mux hapmat_helper_index_buf
     // used by CODEC_HAPM (for VCF haplotype matrix) 
     Buffer hapmat_helper_index_buf; // ZIP: used by codec_hapmat_count_alt_alleles 
     Buffer hapmat_columns_data;     // used by codec_hapmat_piz_get_one_line 
@@ -279,6 +284,8 @@ extern void vcf_samples_seg_finalize (VBlockVCFP vb);
 extern rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t *len, char *next_field, bool *has_13);
 extern void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCFP vb);
 extern void vcf_piz_FORMAT_GT_rewrite_predicted_phase (VBlockP vb, char *recon, uint32_t recon_len);
+extern int vcf_seg_get_mux_channel_i (VBlockVCFP vb, bool fail_if_dvcf_refalt_switch);
+extern int vcf_piz_get_mux_channel_i (VBlockP vb);
 
 eSTRl(af_snip);
 
@@ -324,9 +331,21 @@ RefAltEquals vcf_refalt_oref_equals_ref_or_alt (char oref, char ref, STRp(alt), 
 extern bool vcf_refalt_piz_is_variant_snp (VBlockVCFP vb);
 extern bool vcf_refalt_piz_is_variant_indel (VBlockVCFP vb);
 extern void vcf_refalt_seg_convert_to_primary (VBlockVCFP vb, LiftOverStatus ostatus);
+extern void vcf_piz_refalt_parse (VBlockVCFP vb, STRp(refalt));
 
 // GVCF stuff
 extern bool vcf_piz_line_has_RGQ (VBlockVCFP vb);
+
+// Illumina genotyping stuff
+extern void vcf_illum_gtyping_initialize (VBlockVCFP vb);
+extern void vcf_seg_PROBE_A (VBlockVCFP vb, ContextP ctx, STRp(value));
+extern void vcf_seg_PROBE_B (VBlockVCFP vb, ContextP ctx, STRp(value));
+extern void vcf_seg_ILLUMINA_CHR (VBlockVCFP vb, ContextP ctx, STRp(chr));
+extern void vcf_seg_ILLUMINA_POS (VBlockVCFP vb, ContextP ctx, STRp(pos));
+extern void vcf_seg_ILLUMINA_STRAND (VBlockVCFP vb, ContextP ctx, STRp(strand));
+extern void vcf_seg_ALLELE_A (VBlockVCFP vb, ContextP ctx, STRp(value));
+extern void vcf_seg_ALLELE_B (VBlockVCFP vb, ContextP ctx, STRp(value));
+extern void vcf_seg_mux_by_adjusted_dosage (VBlockVCFP vb, ContextP ctx, STRp(baf), const DosageMultiplexer *mux);
 
 // Tags stuff
 
@@ -354,6 +373,7 @@ extern unsigned vcf_tags_rename (VBlockVCFP vb, unsigned num_tags, const Context
 extern void vcf_tags_finalize_tags_from_vcf_header (void);
 extern bool vcf_tags_add_attr_from_header (DictIdType dtype, STRp(tag_name), RenameAttr attr, STRp(number), STRp (type), STRp (rendalg), pSTRp(dest), bool recursive);
 extern Tag *vcf_tags_get_next_missing_tag (Tag *tag);
+extern void vcf_header_finalize (void);
 
 // Liftover Zip
 extern void vcf_lo_zip_initialize (void);
@@ -385,12 +405,12 @@ extern void vcf_lo_piz_TOPLEVEL_cb_filter_line (VBlockVCFP vb);
 #define ASSVCF0(condition, msg)        ASSVCF ((condition), msg "%s", "")
 #define WARNVCF(format, ...)           do { if (!flag.quiet)  { VCF_ERR_PREFIX; fprintf (stderr, format "\n", __VA_ARGS__); } } while(0)
 
-#define REJECT(ostatus, reason, ...)              do { if (!vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } while(0)
+#define REJECT(ostatus, reason, ...)              do { if (!vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_ref, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } while(0)
 #define REJECT_MAPPING(reason)                    do { if (!vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64 "\t.\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0]); return; } while(0)
 #define REJECT_SUBFIELD(ostatus, ctx, reason,...) do { if (!vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t.\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], __VA_ARGS__); \
                                                        vcf_lo_seg_rollback_and_reject (vb, (ostatus), (ctx)); } while(0)
-#define LIFTOK(ostatus, reason, ...) do { if (flag.show_lift && !vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } while(0)
-#define LIFTOKEXT(ostatus, reason, ...) do { if (flag.show_lift && !vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } while(0)
+#define LIFTOK(ostatus, reason, ...) do { if (flag.show_lift && !vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_ref, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } while(0)
+#define LIFTOKEXT(ostatus, reason, ...) do { if (flag.show_lift && !vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_ref, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } while(0)
 #define LIFTOK0(ostatus, reason) LIFTOK(ostatus, reason "%s", "")
-#define REJECTIF(condition, ostatus, reason, ...) do { if (condition) { if (!vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_refalt, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } } while(0)
+#define REJECTIF(condition, ostatus, reason, ...) do { if (condition) { if (!vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_ref, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } } while(0)
 #define REJECTIF0(condition, ostatus, reason)      do { if (condition) REJECT (ostatus, reason "%s", ""); } while (0)

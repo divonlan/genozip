@@ -31,6 +31,8 @@ extern rom ref_type_name(void);
 #define IS_REF_MAKE_CHAIN (flag.reference == REF_MAKE_CHAIN)
 #define IS_REF_LIFTOVER   (flag.reference == REF_LIFTOVER)
 
+#define IS_REF_LOADED_ZIP (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE)
+
 #define IS_REF_STORED_PIZ (flag.reference == REF_STORED) // 2 bits set
 #define IS_REF_INTERNAL_PIZ ((Z_DT(SAM) || Z_DT(BAM)) && z_file->z_flags.dts_ref_internal)
 

@@ -134,13 +134,13 @@ static inline void ref_assert_nucleotide_available (ConstRangeP range, PosType p
     bool available;
     switch (flag.reference) {
         case REF_STORED   : available = ref_is_nucleotide_set (range, pos); break;
-        case REF_INTERNAL : available = true; break;
         default           : available = (pos >= range->first_pos && pos <= range->last_pos); break;
     }
     ASSERT (available, "reference is not set: chrom=%.*s pos=%"PRId64, (range)->chrom_name_len, (range)->chrom_name, (pos));
 }
 
 #define REF(idx) ref_base_by_idx (range, (idx))
+#define REFp(pos) ref_base_by_idx (range, (pos)-range->first_pos)
 
 // round-robin around range
 #define RR_IDX(idx) ( ((idx) > range_len) ? ((idx) - range_len) \

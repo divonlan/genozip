@@ -181,8 +181,8 @@ bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, SoloTag
 }
 
 //------------------------------------------------------------------------------------------------------------------------
-// RX:Z (longranger, novoalign) ; UR:Z (cellranger) - "Chromium molecular barcode sequence as reported by the sequencer"
-// BX:Z (longranger) ; UB:Z - "Chromium molecular barcode sequence that is error-corrected among other molecular barcodes with the same cellular barcode and gene alignment"
+// RX:Z (SAM standard tag - longranger, novoalign) ; UR:Z (cellranger) - "Chromium molecular barcode sequence as reported by the sequencer"
+// BX:Z (longranger) ; UB:Z (cellranger) - "Chromium molecular barcode sequence that is error-corrected among other molecular barcodes with the same cellular barcode and gene alignment"
 //------------------------------------------------------------------------------------------------------------------------
 
 static void sam_seg_RX_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(rx), unsigned add_bytes)
@@ -207,9 +207,23 @@ static void sam_seg_RX_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(rx), un
     }
 }
 
+static void sam_seg_RX_array (VBlockSAMP vb, ContextP ctx, STRp(rx), unsigned add_bytes)
+{
+    seg_array (VB, ctx, OPTION_RX_Z, STRa(rx), segconf.RX_sep, 0, false, STORE_NONE, _OPTION_RX_Z_X, add_bytes);
+}
+
 void sam_seg_RX_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(rx), unsigned add_bytes)
 {
     START_TIMER;
+
+    // In Novoalign (and maybe others) RX can consist of multiple barcodes eg: "GTCCCT-TTTCTA"
+    if (segconf.running && !segconf.n_RX_seps) {    
+        if      (memchr (rx, '_', rx_len)) segconf.RX_sep = '_'; 
+        else if (memchr (rx, '-', rx_len)) segconf.RX_sep = '-'; // as recommended by the SAM spec
+
+        if (segconf.RX_sep)
+            segconf.n_RX_seps = str_count_char (STRa(rx), segconf.RX_sep);
+    }
 
     dl->solo_z_fields[SOLO_RX] = TXTWORD(rx);
 
@@ -217,7 +231,10 @@ void sam_seg_RX_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(rx), unsigned add_byt
         sam_seg_against_sa_group (vb, CTX(OPTION_RX_Z), add_bytes);
 
     else
-        sam_seg_buddied_Z_fields (vb, dl, MATED_RX, STRa(rx), sam_seg_RX_do_seg, add_bytes);                                
+        sam_seg_buddied_Z_fields (vb, dl, MATED_RX, STRa(rx), 
+                                  segconf.RX_sep ? sam_seg_RX_array   // Novoalign-like case - array of short barcodes
+                                                 : sam_seg_RX_do_seg, // cellranger/longranger-like case - long barcodes, possibly diffed against UB/BX
+                                  add_bytes);                                
 
     COPY_TIMER (sam_seg_RX_Z);
 }

@@ -8,7 +8,11 @@
 
 #pragma once
 
+#include "buffer.h"
+
 extern void stats_generate (void); // ZIP
 extern void stats_display (void);  // PIZ and ZIP
 extern void stats_read_and_display (void);     // PIZ
 extern void stats_add_txt_name (rom fn);
+
+extern Buffer stats_programs;

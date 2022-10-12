@@ -539,9 +539,9 @@ void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, ContextP ctx, STRp (value))
 
     LiftOverStatus ostatus = 
         vcf_lo_seg_ostatus_from_LUFT_or_PRIM (vb, tag_name_ex.s, is_xstrand, primary_is_left_anchored,
-                                              vb->main_refalt, vb->main_ref_len, 
+                                              vb->main_ref, vb->main_ref_len, 
                                               info_ref, info_ref_len, 
-                                              vb->main_refalt + vb->main_ref_len + 1, vb->main_alt_len,
+                                              vb->main_alt, vb->main_alt_len,
                                               &info_alt_len); 
                                               
     if (LO_IS_REJECTED (ostatus)) return; // rolled back and segged *rej instead, due to rejection

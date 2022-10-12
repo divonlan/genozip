@@ -150,8 +150,8 @@ IS_SKIP (sam_piz_is_skip_section)
 
         case _OPTION_SA_Z :
         case _OPTION_SA_MAIN :
-            KEEPIF (preproc && st == SEC_LOCAL);
-            SKIPIF (prim && st == SEC_LOCAL);
+            KEEPIF (IS_SAG_SA && preproc && st == SEC_LOCAL);
+            SKIPIF (IS_SAG_SA && prim && st == SEC_LOCAL);
             SKIPIFF (cnt && !flag.bases);
                      
         case _OPTION_SA_RNAME  :    
@@ -159,16 +159,17 @@ IS_SKIP (sam_piz_is_skip_section)
         case _OPTION_SA_CIGAR  :
         case _OPTION_SA_STRAND : 
         case _OPTION_SA_NM     :
-            KEEPIF (preproc || dict_needed_for_preproc);
+            KEEPIF (IS_SAG_SA && (preproc || dict_needed_for_preproc));
             SKIPIF (cnt && !flag.bases); 
             KEEPIF (main || st == SEC_DICT); // need to reconstruct from prim line
-            SKIPIFF (prim);    
+            SKIPIFF (IS_SAG_SA && prim);    
 
         case _OPTION_SA_MAPQ : 
-            KEEPIF (preproc || dict_needed_for_preproc || main || st == SEC_DICT);
+            KEEPIF (IS_SAG_SA && (preproc || dict_needed_for_preproc));
+            KEEPIF (main || st == SEC_DICT);
             SKIPIF (cnt && !flag.sam_mapq_filter);
             KEEPIF (main || st == SEC_DICT);
-            SKIPIFF (prim);                                         
+            SKIPIFF (IS_SAG_SA && prim);                                         
         
         case _SAM_FLAG     : 
             KEEPIF (preproc || dict_needed_for_preproc);            

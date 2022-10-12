@@ -144,7 +144,7 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
         : PL_mux_by_DP_NO;
 
     // initialize dosage multiplexers
-    #define init_mux_by_dosage(name) seg_mux_init ((VBlockP)vb, CTX(FORMAT_##name), 4, VCF_SPECIAL_MUX_BY_DOSAGE, false, (MultiplexerP)&vb->mux_##name, "0123")
+    #define init_mux_by_dosage(name) seg_mux_init ((VBlockP)vb, CTX(FORMAT_##name), 4, VCF_SPECIAL_MUX_BY_DOSAGE, CTX(FORMAT_##name)->no_stons, (MultiplexerP)&vb->mux_##name, "0123")
     init_mux_by_dosage(PRI);
     init_mux_by_dosage(GL);
     init_mux_by_dosage(DS);
@@ -202,7 +202,7 @@ static inline bool vcf_seg_sample_has_null_value (uint64_t dnum, ContextP *ctxs,
 
 // returns: 0,1,2 correspond to 0/0 0/1 1/1, 3 means "no dosage" - multi-allelic or '.' or ploidy > 2
 // -1 means caller should not use her SPECIAL
-static inline int vcf_seg_get_mux_channel_i (VBlockVCFP vb, bool fail_if_dvcf_refalt_switch)
+int vcf_seg_get_mux_channel_i (VBlockVCFP vb, bool fail_if_dvcf_refalt_switch)
 {
     // fail if this is a DVCF ref<>alt switch, if caller requested so,
     // or if there is no valid GT in this sample
@@ -246,7 +246,7 @@ static inline ContextP vcf_seg_FORMAT_mux_by_dosage (VBlockVCFP vb, ContextP ctx
 
 // mirroring seg, we accept monoploid or diploid genotypes, with alleles 0 and 1.
 // there return 0/0,0->0 ; 0/1,1/0,1->1 ; 1/1->2 ; others->3
-static inline int vcf_piz_get_mux_channel_i (VBlockP vb)
+int vcf_piz_get_mux_channel_i (VBlockP vb)
 {
     rom gt = last_txt (vb, FORMAT_GT);
     unsigned gt_len = CTX(FORMAT_GT)->last_txt.len;
@@ -762,9 +762,6 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_GQ)
 static inline void vcf_seg_FORMAT_RGQ (VBlockVCFP vb, ContextP ctx, STRp(rgq), ContextP gt_ctx, STRp(gt))
 {
     ConstMultiplexerP mux = (ConstMultiplexerP)&vb->mux_RGQ;
-
-    if (segconf.running) 
-        segconf.has[FORMAT_RGQ] = true;
         
     // prediction: we have GT, and if GT[0]=. then RGQ=0. Fallback seg in case prediction fail
     if (gt_ctx->did_i != FORMAT_GT ||                    // prediction failed: first subfield isn't GT
@@ -834,8 +831,6 @@ static inline void vcf_seg_FORMAT_DP (VBlockVCFP vb, ContextP ctx, STRp(cell))
     bool has_value = !is_null && str_get_int (STRa(cell), &value);
 
     if (segconf.running) {
-        segconf.has[FORMAT_DP] = true;
-
         if (is_null) 
             segconf.use_null_DP_method = true;
         
@@ -1026,10 +1021,10 @@ static inline void vcf_seg_FORMAT_AB (VBlockVCFP vb, ContextP ctx, STRp(ab))
     bool is_0_or_2 = (channel_i==0 || channel_i==2); // note: dos02 doesn't change in case of DVCF REF<>ALT switch
     bool ab_missing = ab_len==1 && *ab=='.';
 
-    if (channel_i==-1                   || // GT didn't produce a mux channel
+    if (channel_i==-1               || // GT didn't produce a mux channel
         (channel_i==1 && z_is_dvcf) || // we can't handle channel 1 in dual coordinates (TODO: limit to REF<>ALT switch)
-        segconf.has[FORMAT_ADALL]           || // we can't handle AD0/AD1 peeking in AD is a delta vs ADALL
-        (is_0_or_2 && !ab_missing)) {      // if channel is 0 or 2, we expected a '.' 
+        segconf.has[FORMAT_ADALL]   || // we can't handle AD0/AD1 peeking in AD is a delta vs ADALL
+        (is_0_or_2 && !ab_missing)) {  // if channel is 0 or 2, we expected a '.' 
     
         seg_by_ctx (VB, STRa(ab), ctx, ab_len);
         return;
@@ -1567,6 +1562,17 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
         // VarScan: <ID=FREQ,Number=1,Type=String,Description="Variant allele frequency">
         case _FORMAT_FREQ : vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_FREQ) ; break;
         
+        #define ILLUM_GTYPING_MUX_BY_DOSAGE(tag) \
+            if (segconf.vcf_illum_gtyping) { vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_##tag); break; }\
+            else goto fallback;
+
+        // Illumina Genotyping: <ID=BAF,Number=1,Type=Float,Description="B Allele Frequency">
+        case _FORMAT_BAF  : vcf_seg_mux_by_adjusted_dosage (vb, ctx, STRi (sf, i), &vb->mux_BAF); break;
+
+        // Illumina Genotyping: <ID=X,Number=1,Type=Integer,Description="Raw X intensity"> (same for Y) 
+        case _FORMAT_X    : vcf_seg_mux_by_adjusted_dosage (vb, ctx, STRi (sf, i), &vb->mux_X); break;
+        case _FORMAT_Y    : vcf_seg_mux_by_adjusted_dosage (vb, ctx, STRi (sf, i), &vb->mux_Y); break;
+        
         case _FORMAT_PS   : 
         case _FORMAT_PID  : vcf_seg_FORMAT_PS_PID (vb, dl, ctx, STRi(sf, i)); break;
 
@@ -1709,8 +1715,11 @@ rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t *len, char *next
         vcf_seg_validate_luft_trans_all_samples (vb, n_items, ctxs, *len, next_field);
         
     // set ctx->sf_i - for the line's FORMAT fields
-    for (int sf_i=0; sf_i < con_nitems(samples); sf_i++)
+    for (int sf_i=0; sf_i < con_nitems(samples); sf_i++) {
         ctxs[sf_i]->sf_i = sf_i;
+
+        if (segconf.running) segconf.has[ctxs[sf_i]->did_i] = true;
+    }
 
     // initialize LOOKBACK if we have PS or PID
     if (!CTX(VCF_LOOKBACK)->is_initialized && (CTX(FORMAT_PID)->sf_i >= 0 || CTX(FORMAT_PS)->sf_i >= 0))

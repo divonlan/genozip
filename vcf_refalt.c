@@ -45,7 +45,7 @@ static inline void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char ref, char alt
             ref_assert_nucleotide_available (range, pos);
             
             // note: in GVCF, REF='N' for ~5% of human genome, but we can't identify as our reference doesn't store N
-            if (ref == ref_base_by_idx (range, index_within_range)) 
+            if (ref == REF (index_within_range)) 
                 new_ref = '-'; // this should always be the case...
 
             if (IS_REF_EXT_STORE)
@@ -656,8 +656,8 @@ LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool is
     const Range *luft_range = ref_seg_get_range (VB, gref, dl->chrom[1], NULL, 0, opos, 1, luft_ref_index, Bc (vb->txt_data, vb->line_start), NULL);
     ASSVCF (luft_range, "Failed to find LUFT range for chrom=%d", dl->chrom[1]);
 
-    str_toupper_(vb->main_refalt, ref, ref_len);
-    str_toupper_(&vb->main_refalt[ref_len + 1], alt, alt_len); // +1 for \t
+    str_toupper_(vb->main_ref, ref, ref_len);
+    str_toupper_(&vb->main_ref[ref_len + 1], alt, alt_len); // +1 for \t
     
     // split ALT 
     str_split (alt, alt_len, alt_len == 1 ? 1 : 0, ',', alt, false); // short circuit if alt_len=1
@@ -759,6 +759,17 @@ void vcf_refalt_seg_other_REFALT (VBlockVCFP vb, Did did_i, LiftOverStatus ostat
 // ---------
 // PIZ stuff
 // ---------
+
+// item callback of REFALT in TOPLEVEL, called with files compressed starting 14.0.12
+void vcf_piz_refalt_parse (VBlockVCFP vb, STRp(refalt))
+{
+    ConstContextP ctx = CTX(VCF_REFALT);
+
+    vb->main_ref  = last_txtx (vb, ctx);
+    vb->main_alt     = memchr (vb->main_ref, '\t', ctx->last_txt.len) + 1;
+    vb->main_ref_len = vb->main_alt - vb->main_ref - 1;
+    vb->main_alt_len = ctx->last_txt.len - vb->main_ref_len - 1;
+}
 
 // single-base re-anchoring, eg REF=ACGT ALT=G anchor="T" --> REF=TACT ALT=T  (assuming reference is TACTG)
 // left aligning: REF=ACGT ALT=G anchor="TCT" --> REF=TCTA ALT=T (assuming reference is TCTACTG)
@@ -869,11 +880,11 @@ void vcf_refalt_seg_convert_to_primary (VBlockVCFP vb, LiftOverStatus ostatus)
 {
     // "reconstruct" to vb->txt_data, overwriting current REF\tALT
     uint64_t save_txt_len = vb->txt_data.len;
-    vb->txt_data.len = BNUMtxt (vb->main_refalt);
+    vb->txt_data.len = BNUMtxt (vb->main_ref);
 
     vcf_reconstruct_other_REFALT_do (VB, CTX(VCF_REFALT)->last_snip + 2, CTX(VCF_REFALT)->last_snip_len - 2, 
                                      *CTX(VCF_oXSTRAND)->last_snip, 
-                                     vb->main_refalt, vb->main_ref_len+1+vb->main_alt_len, CTX(VCF_oREFALT)->tag_name);
+                                     vb->main_ref, vb->main_ref_len+1+vb->main_alt_len, CTX(VCF_oREFALT)->tag_name);
 
     vb->txt_data.len = save_txt_len; // restore
 }
@@ -919,7 +930,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_main_REFALT)
         ASSPIZ (!flag.debug || IS_REF_EXTERNAL || ref_is_nucleotide_set (range, idx), 
                 "reference is not set: chrom=%.*s pos=%"PRId64, STRf(range->chrom_name), pos);
 
-        ref_value = ref_base_by_idx (range, idx);
+        ref_value = REF (idx);
     }
 
     // recover ref

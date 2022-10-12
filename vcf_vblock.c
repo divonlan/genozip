@@ -21,7 +21,7 @@ void vcf_vb_release_vb (VBlockVCFP vb)
 {
     vb->ploidy = 0;
     vb->use_special_sf = 0;
-    vb->main_refalt = NULL;
+    vb->main_ref = vb->main_alt = NULL;
     vb->main_ref_len = vb->main_alt_len = 0;
     memset (vb->ad_values, 0, sizeof (vb->ad_values));
     vb->new_ref = 0;
@@ -36,22 +36,7 @@ void vcf_vb_release_vb (VBlockVCFP vb)
     vb->first_line = 0;
     vb->line_has_RGQ = 0;
 
-    memset (&vb->mux_PLn,    0, sizeof(vb->mux_PLn));
-    memset (&vb->mux_GL,     0, sizeof(vb->mux_GL));
-    memset (&vb->mux_GP,     0, sizeof(vb->mux_GP));
-    memset (&vb->mux_PRI,    0, sizeof(vb->mux_PRI));
-    memset (&vb->mux_DS,     0, sizeof(vb->mux_DS));
-    memset (&vb->mux_PP,     0, sizeof(vb->mux_PP));
-    memset (&vb->mux_PVAL,   0, sizeof(vb->mux_PVAL));
-    memset (&vb->mux_FREQ,   0, sizeof(vb->mux_FREQ));
-    memset (&vb->mux_RD,     0, sizeof(vb->mux_RD));
-    memset (&vb->mux_GQ,     0, sizeof(vb->mux_GQ));
-    memset (&vb->mux_RGQ,    0, sizeof(vb->mux_RGQ));
-    memset (&vb->mux_AD,     0, sizeof(vb->mux_AD));
-    memset (&vb->mux_ADALL,  0, sizeof(vb->mux_ADALL));
-    memset (&vb->mux_PLy,    0, sizeof(vb->mux_PLy));
-    memset (&vb->mux_QUAL,   0, sizeof(vb->mux_QUAL));
-    memset (&vb->mux_INFO,   0, sizeof(vb->mux_INFO));
+    memset (&vb->first_mux, 0, (char*)&vb->after_mux - (char*)&vb->first_mux); // all mux's 
     
     buf_free (vb->sf_txt);
     buf_free (vb->sf_snip);

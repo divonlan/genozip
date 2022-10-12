@@ -57,7 +57,7 @@ bool version_print_notice_if_has_newer (void)
     
     // case: thread completed, and there is a new version
     else if (latest_version) {
-        iprintf ("\nNewer & better version of Genozip is available - version %s. You are currently running version %s\n", 
+        iprintf ("\nA newer & better version of Genozip is available - version %s. You are currently running version %s\n", 
                  latest_version, GENOZIP_CODE_VERSION);
 
         if (is_info_stream_terminal) {

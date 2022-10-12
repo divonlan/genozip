@@ -44,7 +44,7 @@ void vcf_info_seg_initialize (VBlockVCFP vb)
 {
     ctx_set_store (VB, STORE_INT, INFO_AN, INFO_AC, INFO_ADP, INFO_DP, INFO_MLEAC, DID_EOL);
     CTX(INFO_AF)->     flags.store = STORE_FLOAT;
-    CTX(INFO_SVTYPE)-> flags.store = STORE_INDEX; // since v13 - consumed by vcf_refalt_piz_is_variant_indel
+    // xxx (is this really needed for --indels-only?) CTX(INFO_SVTYPE)-> flags.store = STORE_INDEX; // since v13 - consumed by vcf_refalt_piz_is_variant_indel
 
     if (!vcf_is_use_DP_by_DP())
         CTX(INFO_DP)->ltype = LT_DYN_INT; 
@@ -380,11 +380,11 @@ static int vcf_INFO_ALLELE_get_allele (VBlockVCFP vb, STRp (value))
     if (value_len == 1 && *value == '.') return -2;
 
     // check if its equal main REF (which can by REF or oREF)
-    if (value_len == vb->main_ref_len && !memcmp (value, vb->main_refalt, value_len))
+    if (value_len == vb->main_ref_len && !memcmp (value, vb->main_ref, value_len))
         return 0;
 
     // check if its equal one of the ALTs
-    str_split (&vb->main_refalt[vb->main_ref_len+1], vb->main_alt_len, 0, ',', alt, false);
+    str_split (vb->main_alt, vb->main_alt_len, 0, ',', alt, false);
 
     for (int alt_i=0; alt_i < n_alts; alt_i++) 
         if (value_len == alt_lens[alt_i] && !memcmp (value, alts[alt_i], value_len)) 
@@ -466,7 +466,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_ALLELE)
 
     // reject if LO_OK_REF_NEW_SNP and value is equal to REF
     if (validate_only && last_ostatus == LO_OK_REF_NEW_SNP && 
-        recon_len == vcf_vb->main_ref_len && !memcmp (recon, vcf_vb->main_refalt, recon_len)) return false;
+        recon_len == vcf_vb->main_ref_len && !memcmp (recon, vcf_vb->main_ref, recon_len)) return false;
 
     // reject if the value is not equal to REF, any ALT or '.'
     if (validate_only && vcf_INFO_ALLELE_get_allele (vcf_vb, STRa(recon)) == -1) return false;
@@ -769,7 +769,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_COPYPOS)
 static inline bool vcf_seg_test_SVLEN (VBlockVCFP vb, STRp(svlen_str))
 {
     int64_t svlen;
-    if (!str_get_int (svlen_str, svlen_str_len, &svlen)) return false;
+    if (!str_get_int (STRa(svlen_str), &svlen)) return false;
 
     int64_t last_delta = CTX (VCF_POS)->last_delta; // INFO_END is an alias of POS - so the last delta would be between END and POS
     return last_delta == -svlen;
@@ -787,6 +787,68 @@ done:
     return NO_NEW_VALUE;
 }
 
+// -----------
+// INFO/SVTYPE
+// -----------
+
+static inline bool vcf_seg_SVTYPE (VBlockVCFP vb, ContextP ctx, STRp(svtype))
+{
+    uint32_t alt_len = vb->main_alt_len;
+    uint32_t ref_len = vb->main_ref_len;
+    rom alt = vb->main_alt;
+
+    // TODO: need careful testing to see this is handled correctly in case of a REF/ALT switch
+    if (z_is_dvcf) goto fallback;
+
+    // prediction: ALT has a '[' or a ']', then SVTYPE is "BND"
+    else if (memchr (alt, '[', alt_len) || memchr (alt, ']', alt_len)) 
+        { if (memcmp (svtype, "BND", 3)) goto fallback; }
+
+    // prediction: if ALT starts/ends with <>, then its the same as SVTYPE except <>
+    else if (alt[0] == '<' && alt[alt_len-1] == '>') 
+        { if (!str_issame_(STRa(svtype), alt+1, alt_len-2)) goto fallback; }
+
+    // prediction: if ref_len>1 and alt_len=1, then SVTYPE is <DEL>
+    else if (ref_len > 1 && alt_len == 1) 
+        { if (memcmp (svtype, "DEL", 3)) goto fallback; }
+
+    // prediction: if ref_len=1 and alt_len>1, then SVTYPE is <INS>
+    else if (ref_len == 1 && alt_len > 1) 
+        { if (memcmp (svtype, "INS", 3)) goto fallback; }
+
+    else fallback:
+        return true;
+
+    // prediction succeeded
+    seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_SVTYPE }, 2, ctx, svtype_len);
+    return false;  // no need for fallback
+}
+
+SPECIAL_RECONSTRUCTOR (vcf_piz_special_SVTYPE)
+{    
+    rom alt = VB_VCF->main_alt;
+    uint32_t alt_len = VB_VCF->main_alt_len;
+    uint32_t ref_len = VB_VCF->main_ref_len;
+
+    // prediction: ALT has a '[' or a ']', then SVTYPE is "BND"
+    if (memchr (alt, '[', alt_len) || memchr (alt, ']', alt_len)) 
+        RECONSTRUCT ("BND", 3);
+    
+    // prediction: if ALT has 2 characters more than SVTYPE, starting/end with <>, then its the same as SVTYPE except <>
+    else if (alt[0] == '<' && alt[alt_len-1] == '>') 
+        RECONSTRUCT (alt+1, alt_len-2);
+
+    // prediction: if ref_len>1 and alt_len=1, then SVTYPE is <DEL>
+    else if (ref_len > 1 && alt_len == 1) 
+        RECONSTRUCT ("DEL", 3);
+
+    // prediction: if ref_len=1 and alt_len>1, then SVTYPE is <INS>
+    else if (ref_len == 1 && alt_len > 1) 
+        RECONSTRUCT ("INS", 3);
+
+    return NO_NEW_VALUE;
+}    
+
 // ------------
 // INFO/CLNHGVS
 // ------------
@@ -801,7 +863,7 @@ static bool vcf_seg_INFO_HGVS_snp (VBlockVCFP vb, ContextP ctx, STRp(value))
     if (value_len < 3 + pos_str_len) return false;
 
     rom v = &value[value_len - 3];
-    if (v[0] != vb->main_refalt[0] || v[1] != '>' || v[2] != vb->main_refalt[2]) return false; // REF/ALT differs
+    if (v[0] != vb->main_ref[0] || v[1] != '>' || v[2] != vb->main_alt[0]) return false; // REF/ALT differs
 
     v -= pos_str_len;
     if (memcmp (v, pos_str, pos_str_len)) return false; // POS differs
@@ -869,13 +931,13 @@ static bool vcf_seg_INFO_HGVS_indel (VBlockVCFP vb, ContextP ctx, STRp(value), r
 
     if (payload_len) switch (t) {
         case DEL    : // Payload is expected to be the same as the REF field, without the first, left-anchor, base
-                      if (payload_len != vb->main_ref_len-1 || memcmp (payload, &vb->main_refalt[1], payload_len)) return false;
+                      if (payload_len != vb->main_ref_len-1 || memcmp (payload, vb->main_ref + 1, payload_len)) return false;
                       break;
         case INS    : // Payload is expected to be the same as the ALT field, without the first, left-anchor, base
-                      if (payload_len != vb->main_alt_len-1 || memcmp (payload, &vb->main_refalt[vb->main_ref_len+2], payload_len)) return false;
+                      if (payload_len != vb->main_alt_len-1 || memcmp (payload, vb->main_alt + 1, payload_len)) return false;
                       break;
                       // Payload is expected to be the same as the entire ALT field
-        case DELINS : if (payload_len != vb->main_alt_len || memcmp (payload, &vb->main_refalt[vb->main_ref_len+1], payload_len)) return false;
+        case DELINS : if (payload_len != vb->main_alt_len || memcmp (payload, vb->main_alt, payload_len)) return false;
                       break;
     }
 
@@ -1371,13 +1433,19 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
     
         // ##INFO=<ID=END,Number=1,Type=Integer,Description="Stop position of the interval">
         // END is an alias of POS - they share the same delta stream - the next POS will be a delta vs this END)
-        case _INFO_END:
+        case _INFO_END:   // alias of POS
             CALL (vcf_seg_INFO_END (vb, ctx, STRa(value)));
+
+        case _INFO_CIEND: // alias of INFO/CIPOS
+            CALL (seg_by_did (VB, STRa(value), INFO_CIPOS, value_len));
 
         // if SVLEN is negative, it is expected to be minus the delta between END and POS
         case _INFO_SVLEN:
             CALL_IF (vcf_seg_test_SVLEN (vb, STRa(value)), 
                      seg_by_ctx (VB, ((char [2]){ SNIP_SPECIAL, VCF_SPECIAL_SVLEN }), 2, ctx, value_len));
+
+        case _INFO_SVTYPE:
+            CALL_WITH_FALLBACK (vcf_seg_SVTYPE);
 
         // ##INFO=<ID=BaseCounts,Number=4,Type=Integer,Description="Counts of each base">
         case _INFO_BaseCounts: 
@@ -1478,6 +1546,15 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_RAW_MQandDP:
             CALL (vcf_seg_INFO_RAW_MQandDP (vb, ctx, STRa(value)));
 
+        case _INFO_PROBE_A:         CALL_IF (segconf.vcf_illum_gtyping, vcf_seg_PROBE_A      (vb, ctx, STRa(value)));
+        case _INFO_PROBE_B:         CALL_IF (segconf.vcf_illum_gtyping, vcf_seg_PROBE_B      (vb, ctx, STRa(value)));
+        case _INFO_ALLELE_A:        CALL_IF (segconf.vcf_illum_gtyping, vcf_seg_ALLELE_A     (vb, ctx, STRa(value)));
+        case _INFO_ALLELE_B:        CALL_IF (segconf.vcf_illum_gtyping, vcf_seg_ALLELE_B     (vb, ctx, STRa(value)));
+        case _INFO_ILLUMINA_CHR:    CALL_IF (segconf.vcf_illum_gtyping, vcf_seg_ILLUMINA_CHR (vb, ctx, STRa(value)));
+        case _INFO_ILLUMINA_POS:    CALL_IF (segconf.vcf_illum_gtyping, vcf_seg_ILLUMINA_POS (vb, ctx, STRa(value)));
+        case _INFO_ILLUMINA_STRAND: CALL_IF (segconf.vcf_illum_gtyping, vcf_seg_ILLUMINA_STRAND (vb, ctx, STRa(value)));
+        case _INFO_refSNP:          CALL_IF (segconf.vcf_illum_gtyping, seg_id_field_do      (VB, ctx, STRa(value)));
+
         default: standard_seg:
             seg_by_ctx (VB, STRa(value), ctx, value_len);
             
@@ -1534,6 +1611,8 @@ void vcf_seg_info_subfields (VBlockVCFP vb, rom info_str, unsigned info_len)
         ii.ctx = ctx_get_ctx_tag (vb, dict_id, pairs[i], tag_name_len); // create if it doesn't already exist
         
         if (z_is_dvcf && !vb->is_rejects_vb) vcf_tags_add_tag (vb, ii.ctx, DTYPE_VCF_INFO, pairs[i], tag_name_len);
+
+        if (segconf.running) segconf.has[ii.ctx->did_i] = true;
 
         ASSVCF (!z_is_dvcf || 
                   (((dict_id.num != _INFO_LUFT && dict_id.num != _INFO_LREJ) || vb->line_coords == DC_PRIMARY) && 

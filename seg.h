@@ -60,7 +60,7 @@ extern bool seg_pos_field_cb (VBlockP vb, ContextP ctx, STRp(pos_str), uint32_t 
 extern void seg_id_field_init (ContextP ctx);
 extern void seg_id_field_do (VBlockP vb, ContextP ctx, STRp(id_snip));
 #define seg_id_field(vb, ctx, id_snip, id_snip_len, account_for_separator) \
-    do { seg_id_field_do(VB, (ctx), (id_snip), (id_snip_len)); (ctx)->txt_len += !!(account_for_separator); } while(0)
+    ({ seg_id_field_do(VB, (ctx), (id_snip), (id_snip_len)); (ctx)->txt_len += !!(account_for_separator); })
 extern bool seg_id_field_cb (VBlockP vb, ContextP ctx, STRp(id_snip), uint32_t repeat);
 
 typedef enum { LOOKUP_NONE, LOOKUP_SIMPLE, LOOKUP_WITH_LENGTH } Lookup;

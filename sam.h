@@ -242,9 +242,9 @@
 // STARsolo: https://github.com/alexdobin/STAR/blob/master/docs/STARsolo.md
 // 10xgenomics cellranger: https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/output/bam
 // also outputs: CB:Z, CR:Z, CY:Z standard fields
-#pragma GENDICT OPTION_UR_Z=DTYPE_2=UR:Z     // (alias or RX:Z) Chromium molecular barcode sequence as reported by the sequencer.
-#pragma GENDICT OPTION_UB_Z=DTYPE_2=UB:Z     // (alias or BX:Z) Chromium molecular barcode sequence that is error-corrected among other molecular barcodes with the same cellular barcode and gene alignment.
-#pragma GENDICT OPTION_UY_Z=DTYPE_2=UY:Z     // (alias or QX:Z) Chromium molecular barcode read quality. Phred scores as reported by sequencer.
+#pragma GENDICT OPTION_UR_Z=DTYPE_2=UR:Z     // (alias of RX:Z) Chromium molecular barcode sequence as reported by the sequencer.
+#pragma GENDICT OPTION_UB_Z=DTYPE_2=UB:Z     // (alias of BX:Z) Chromium molecular barcode sequence that is error-corrected among other molecular barcodes with the same cellular barcode and gene alignment.
+#pragma GENDICT OPTION_UY_Z=DTYPE_2=UY:Z     // (alias of QX:Z) Chromium molecular barcode read quality. Phred scores as reported by sequencer.
 
 #pragma GENDICT OPTION_GN_Z=DTYPE_2=GN:Z     // STARsolo: Gene name for unique-gene reads. CellRanger: (;-seperated list) 
 #pragma GENDICT OPTION_GX_Z=DTYPE_2=GX:Z     // STARsolo: Gene ID for for unique-gene reads. CellRanger: (;-seperated list)
@@ -493,7 +493,6 @@ extern void sam_zip_generate_recon_plan (void);
 extern void sam_zip_init_vb (VBlockP vb);
 extern void sam_zip_after_compress (VBlockP vb);
 extern void sam_stats_reallocate (void);
-extern rom sam_get_hdr_PGs (void);
 extern void sam_zip_genozip_header (SectionHeaderGenozipHeader *header);
 
 // PIZ Stuff

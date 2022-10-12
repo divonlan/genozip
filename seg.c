@@ -481,9 +481,11 @@ bool seg_pos_field_cb (VBlockP vb, ContextP ctx, STRp(pos_str), uint32_t repeat)
 // example: rs17030902 : in the dictionary we store "rs\1" or "rs\1\2" and in SEC_NUMERIC_ID_DATA we store 17030902.
 //          1423       : in the dictionary we store "\1" and 1423 SEC_NUMERIC_ID_DATA
 //          abcd       : in the dictionary we store "abcd" and nothing is stored SEC_NUMERIC_ID_DATA
-void seg_id_field_init (ContextP ctx) { ctx->no_stons = true; ctx->ltype = LT_DYN_INT; } // must be called in seg_initialize
+void seg_id_field_init (ContextP ctx) { ctx->no_stons = true; ctx->ltype = LT_DYN_INT; ctx->is_initialized = true; } // must be called in seg_initialize
 void seg_id_field_do (VBlockP vb, ContextP ctx, STRp(id_snip))
 {
+    ASSERT (ctx->is_initialized, "%s: seg_id_field_init not called for ctx=%s", LN_NAME, ctx->tag_name);
+
     int i=id_snip_len-1; for (; i >= 0; i--) 
         if (!IS_DIGIT (id_snip[i])) break;
     

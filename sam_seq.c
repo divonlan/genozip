@@ -24,8 +24,6 @@
 // Shared ZIP/PIZ
 //---------------
 
-#define REF(idx) ref_base_by_idx (range, (idx))
-
 #define piz_is_set codec_bufs[0] // bytemap
 
 // called when SEQ in a prim or supp/sec line is segged against ref against prim: 

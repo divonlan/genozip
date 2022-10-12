@@ -104,11 +104,11 @@ void vcf_samples_seg_finalize_PS_PID (VBlockVCFP vb)
 static inline bool vcf_seg_FORMAT_PS_PID_is_same_alt1 (VBlockVCFP vb, STRp(alt))
 {
     if (alt_len == vb->main_alt_len)
-        return !memcmp (alt, vb->main_refalt + vb->main_ref_len + 1, alt_len);
+        return !memcmp (alt, vb->main_alt, alt_len);
 
     // case: possibly multi-alt - compare to first ALT (ALT1)
     else {
-        str_split (vb->main_refalt + vb->main_ref_len + 1, vb->main_alt_len, MAX_ALLELES, ',', alt, false);
+        str_split (vb->main_alt, vb->main_alt_len, MAX_ALLELES, ',', alt, false);
         return str_issame_(STRa(alt), STRi(alt,0));
     }
 }
@@ -175,7 +175,7 @@ void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STR
 
             if (n_items && 
                 str_issame_(STRi(item,0), last_txt(VB, VCF_POS), vb->last_txt_len(VCF_POS)) &&
-                str_issame_(STRi(item,1), vb->main_refalt, vb->main_ref_len) &&
+                str_issame_(STRi(item,1), vb->main_ref, vb->main_ref_len) &&
                 vcf_seg_FORMAT_PS_PID_is_same_alt1(vb, STRi(item,2))) {
 
                 // replace PS with COPY_POS, COPY_REF, COPY_ALT container 

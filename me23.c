@@ -225,7 +225,7 @@ TRANSLATOR_FUNC (sam_piz_m232vcf_GENOTYPE)
     ASSPIZ (ref_is_idx_in_range (range, idx), "idx=%u but range has only %"PRIu64" nucleotides. pos=%"PRId64" range=%s", 
             idx, range->ref.nbits / 2, pos, ref_display_range (range).s);
 
-    char ref_b = ref_base_by_idx (range, idx);
+    char ref_b = REF (idx);
 
     // get GENOTYPE from txt_data
     char b1 = recon[0];

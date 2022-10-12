@@ -47,7 +47,7 @@ typedef struct {
         sam_zip_recon_plan_add_gc_lines, sam_zip_gc_calc_depn_vb_info, sam_reconstruct_SEQ_vs_ref, aligner_reconstruct_seq,
         sam_bismark_piz_update_meth_call,
         zip_handle_unique_words_ctxs, ctx_sort_dictionaries_vb_1, random_access_merge_in_vb, gencomp_absorb_vb_gencomp_lines,
-        vcf_linesort_merge_vb, 
+        vcf_linesort_merge_vb, vcf_seg_PROBE_A,
         random_access_finalize_entries, random_access_compress, ctx_compress_counts, zfile_compress_genozip_header,
         ref_compress_ref, ref_compress_one_range, ref_copy_compressed_sections_from_reference_file,
         tmp1, tmp2, tmp3, tmp4, tmp5;

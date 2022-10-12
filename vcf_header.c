@@ -22,6 +22,7 @@
 #include "website.h"
 #include "contigs.h"
 #include "gencomp.h"
+#include "stats.h"
 
 // Globals
 static VcfVersion vcf_version;
@@ -62,7 +63,6 @@ void vcf_header_piz_init (void)
 
     // note: we don't re-initialize vcf_num_displayed_samples - this is calculated only once
 }
-
 
 static void vcf_header_subset_samples (BufferP vcf_header);
 static bool vcf_header_set_globals (rom filename, BufferP vcf_header, bool soft_fail);
@@ -637,18 +637,40 @@ static void vcf_add_all_ref_contigs_to_header (BufferP txt_header)
     buf_add_more (evb, txt_header, STRb(vcf_field_name_line), "txt_data");
 }
 
+static bool vcf_header_build_stats_programs (STRp(line), void *unused1, void *unused2, unsigned unused3)
+{
+    if (LINEIS ("##INFO=") || LINEIS ("##FORMAT=")) {
+        buf_append (evb, stats_programs, char, line, line_len, "stats_programs");
+        *BLSTc (stats_programs) = '\t'; // replace \n with \t - the separator required by stats_programs
+    }
+
+    return false; // continue iterating
+}
+
 static bool vcf_inspect_txt_header_zip (BufferP txt_header)
 {
     if (!vcf_header_set_globals (txt_file->name, txt_header, true)) return false; // samples are different than a previous concatented file
 
+    txtfile_foreach_line (txt_header, false, vcf_header_build_stats_programs, 0, 0, 0, 0);
+    if (stats_programs.len) *BAFTc (stats_programs) = 0; // nul-terminate
+
     // check if this VCF was produced by VarScan
     SAFE_NUL (BAFTc (*txt_header));
-    if (strstr (txt_header->data, "VarScan")) segconf.vcf_is_varscan = true;
-    if (strstr (txt_header->data, "GenotypeGVCFs")) segconf.vcf_is_gvcf = true;    
+    if (strstr (txt_header->data, "VarScan"))            segconf.vcf_is_varscan    = true;
+    if (strstr (txt_header->data, "GenotypeGVCFs"))      segconf.vcf_is_gvcf       = true;  
+    if (strstr (txt_header->data, "beagle"))             segconf.vcf_is_beagle     = true;    
+    if (strstr (txt_header->data, "Illumina GenCall") ||
+        strstr (txt_header->data, "Log R Ratio"))        segconf.vcf_illum_gtyping = true;    
+    
+    bool has_PROBE = !!strstr (txt_header->data, "##INFO=<ID=PROBE_A");
     SAFE_RESTORE;
 
     if (!flag.reference && segconf.vcf_is_gvcf)
         WARN_ONCE ("Tip: compressing a GVCF file using a reference file can reduce the compressed file's size by 10%%-30%%.\nUse: \"genozip --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
+                   txt_file->name);
+
+    if (!flag.reference && segconf.vcf_illum_gtyping && has_PROBE)
+        WARN_ONCE ("Tip: compressing an Illumina Genotyping VCF file using a reference file can reduce the compressed file's size by 20%%.\nUse: \"genozip --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
                    txt_file->name);
 
     if (chain_is_loaded && !evb->comp_i)

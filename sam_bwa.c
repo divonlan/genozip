@@ -54,7 +54,7 @@ void sam_seg_BWA_XA_initialize (VBlockSAMP vb)
         lookback_init (VB, lookback_ctx, strand_ctx, STORE_INDEX);
         lookback_init (VB, lookback_ctx, pos_ctx,    STORE_INT);
 
-        // create strand nodes (nodes will be deleted in sam_seg_finalize if not used)
+        // create strand nodes (nodes will be deleted in sam_zip_after_vbs if not used)
         ctx_create_node (VB, OPTION_XA_STRAND, cSTR("-"));  // word_index=0
         ctx_create_node (VB, OPTION_XA_STRAND, cSTR("+"));  // word_index=1
         ctx_create_node (VB, OPTION_XA_STRAND, cSTR("-C")); // word_index=2. these 4 are used by gem3 mapper with --bisulfite-conversion

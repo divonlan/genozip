@@ -27,7 +27,6 @@
 #include "url.h"
 #include "crypt.h"
 #include "tar.h"
-#include "sam.h"
 #include "generic.h"
 
 typedef struct {
@@ -37,11 +36,13 @@ typedef struct {
     rom type;
     StrText did_i, words, hash, uncomp_dict, comp_dict, comp_b250, comp_data;
     float pc_of_txt, pc_of_z, pc_dict, pc_in_local, pc_failed_singletons, pc_hash_occupancy;
-    rom bcodec, lcodec;
+    rom bcodec, lcodec, dcodec;
     uint32_t global_hash_prime;
 } StatsByLine;
 
 static Buffer stats={}, STATS={}, features={}, hash_occ={}, internals={};
+
+Buffer stats_programs = {}; // data-type specific programs (eg @PG for SAM/BAM FORMAT/INFO tags for VCF)
 
 // calculate hash_occ before consolidating stats
 static void stats_submit_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
@@ -84,12 +85,17 @@ static void stats_submit_calc_large_stats (StatsByLine *sbl, unsigned num_stats,
         if (sbl[i].z_size && sbl[i].my_did_i != DID_NONE) {
             ContextP zctx = ZCTX(sbl[i].my_did_i);
 
-            bufprintf (evb, &internals, "%s%s%%2C%s%%2C%.1f%%25%%2C%s%%2C%.1f%%25%%2C%s%%2C%.1f%%25%%2C%u%%2C%.1f%%25%%2C", 
-                       need_sep++ ? "%3B" : "", 
-                       url_esc_non_valid_charsS(sbl[i].name).s, url_esc_non_valid_charsS(sbl[i].type).s, sbl[i].pc_of_z, 
-                       url_esc_non_valid_charsS(sbl[i].lcodec).s, 100.0 * (double)zctx->local.count / (double)all_z_size,  // local
-                       url_esc_non_valid_charsS(sbl[i].bcodec).s, 100.0 * (double)zctx->b250.count  / (double)all_z_size,  // b250
-                       zctx->nodes.len32,                         100.0 * (double)zctx->dict.count  / (double)all_z_size); // dict
+            bufprintf (evb, &internals, "%s%s%%2C%s%%2C%.1f%%25%%2C", 
+                       need_sep++ ? "%3B" : "", url_esc_non_valid_charsS(sbl[i].name).s, url_esc_non_valid_charsS(sbl[i].type).s, sbl[i].pc_of_z);
+
+            bufprintf (evb, &internals, "%s%%2C%.1f%%25%%2C",
+                       url_esc_non_valid_charsS(sbl[i].lcodec).s, 100.0 * (double)zctx->local.count / (double)all_z_size);  // local
+
+            bufprintf (evb, &internals, "%s%%2C%.1f%%25%%2C",
+                       url_esc_non_valid_charsS(sbl[i].bcodec).s, 100.0 * (double)zctx->b250.count  / (double)all_z_size);  // b250
+
+            bufprintf (evb, &internals, "%s%%2C%.1f%%25%%2C%u%%2C",
+                       url_esc_non_valid_charsS(sbl[i].dcodec).s, 100.0 * (double)zctx->dict.count  / (double)all_z_size, zctx->nodes.len32); // dict
         }
 }
 
@@ -135,9 +141,13 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
                arch_get_num_cores(), 
                url_esc_non_valid_charsS(arch_get_run_time()).s); 
     bufprintf (evb, &url_buf, "&entry.2140634550=%s", features.len ? url_esc_non_valid_charsS (B1STc(features)).s : "NONE");                                                        // Features. Eg "Sorted"
-    
-    if (Z_DT(SAM) || Z_DT(BAM))
-        bufprintf (evb, &url_buf, "&entry.851737826=%s", url_esc_non_valid_charsS (sam_get_hdr_PGs()).s);                                                        // Features. Eg "Sorted"
+        
+    if (stats_programs.len && (Z_DT(SAM) || Z_DT(BAM))) { // doesn't work for an unknown reason with VCF (bug 708)
+        buf_append_string (evb, &url_buf, "&entry.851737826=");
+        rom esc = url_esc_non_valid_chars_(B1STc(stats_programs), NULL, false); // note: can't use url_esc_non_valid_charsS bc length is unbound
+        buf_append_string (evb, &url_buf, esc);
+        FREE(esc);                                                        
+    }
     
     // careful not to use bufprintf for hash_occ and internals as their size is not bound
     buf_append_string (evb, &url_buf, "&entry.282448068=");
@@ -200,6 +210,7 @@ done:
     buf_free (hash_occ);    
     buf_free (features);    
     buf_free (internals);
+    buf_free (stats_programs);
 }
 
 // store the sizes of dict / b250 / local in zctx->*.param, and of other sections in sbl[st].z_size
@@ -358,8 +369,10 @@ static void stats_output_file_metadata (void)
     }
 
     else if (Z_DT(VCF)) {
-        FEATURE (segconf.vcf_is_varscan, "Feature: VarScan", "VarScan");
-        FEATURE (segconf.vcf_is_gvcf,    "Feature: GVCF", "GVCF");
+        FEATURE (segconf.vcf_is_beagle,     "Feature: Beagle", "Beagle");
+        FEATURE (segconf.vcf_is_varscan,    "Feature: VarScan", "VarScan");
+        FEATURE (segconf.vcf_is_gvcf,       "Feature: GVCF", "GVCF");
+        FEATURE (segconf.vcf_illum_gtyping, "Feature: Illumina Genotyping", "Illumina Genotyping");
     }
 
     else if (Z_DT(GENERIC)) 
@@ -646,6 +659,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
         s->comp_data            = str_size (zctx->local.count);
         s->pc_of_txt            = txt_size ? 100.0 * (float)s->txt_len / (float)txt_size : 0;
         s->pc_of_z              = z_size   ? 100.0 * (float)s->z_size  / (float)z_size   : 0;
+        s->dcodec               = codec_name (zctx->dcodec);
         s->bcodec               = codec_name (zctx->bcodec);
         s->lcodec               = codec_name (zctx->lcodec_non_inherited ? zctx->lcodec_non_inherited : zctx->lcodec);
         
@@ -731,7 +745,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     if (flag.show_stats_comp_i != COMP_NONE) 
         iprint0 ("\nNote: Components stats don't include global sections like SEC_DICT, SEC_REFERENCE etc\n");
 
-    if (flag.submit_stats || (license_get_type() != LIC_TYPE_PAID && !flag.debug && !getenv ("GENOZIP_TEST")))
+    if (flag.submit_stats || (license_allow_stats() && !flag.debug && !getenv ("GENOZIP_TEST")))
         stats_submit (sbl, num_stats, all_txt_len, src_comp_ratio, all_comp_ratio); 
 
     buf_free (sbl_buf);

@@ -329,8 +329,14 @@ void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAM *dl, SamNMType nm, unsigned add
 
     ContextP ctx = CTX (OPTION_NM_i);
 
+    // check for evidence that NM is integer (not binary) - usually, this happens in segconf, but it can also happen later in the execution
+    if (nm > 1 && !segconf.NM_is_integer) 
+        segconf.NM_is_integer = true; 
+
+    // make a copy, so it remains consistent throughout the if statements below, even if segconf.NM_is_integer is set by another thread in their midst
+    bool NM_is_integer = segconf.NM_is_integer; 
+
     if (segconf.running) {
-        if (nm > 1) segconf.NM_is_integer = true; // we found evidence of integer NM
         if (has_MD && vb->idx_MD_Z > vb->idx_NM_i) segconf.NM_after_MD = false; // we found evidence that sometimes NM is before MD
         goto no_special;
     }
@@ -347,7 +353,7 @@ void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAM *dl, SamNMType nm, unsigned add
 
     // method 1: if we have MD:Z, we use prediction of number of mismatches derived by analyzing it. This is almost always correct, 
     // but the downside is that reconstruction takes longer due to the need to peek MD:Z. Therefore, we limit it to certain cases.
-    else if (segconf.NM_is_integer && nm == predicted_by_MD && 
+    else if (NM_is_integer && nm == predicted_by_MD && 
                (segconf.NM_after_MD            || // case 1: MD is reconstructed before NM so peek is fast
                 IS_REF_INTERNAL || // case 2: prediction against SEQ performs poorly
                 predicted_by_SEQ != nm         || // case 3: rare cases in which prediction by SEQ is wrong with an external reference.
@@ -360,11 +366,11 @@ void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAM *dl, SamNMType nm, unsigned add
 
     // method 3: use prediction of the number of mismatches derived by comparing SEQ to a reference.
     // this is usually, but surprisingly not always, correct for an external reference, and often correct for an internal one.
-    else if (segconf.NM_is_integer && nm == predicted_by_SEQ)
+    else if (NM_is_integer && nm == predicted_by_SEQ)
         seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'i'}, 3, OPTION_NM_i, add_bytes); 
 
     // case nm is a binary 0/1 rather than an integer. We use prediction against SEQ. TO DO: Support prediction against MD:Z too.
-    else if (!segconf.NM_is_integer && predicted_by_SEQ != -1 && (nm > 0) == (predicted_by_SEQ > 0)) 
+    else if (!NM_is_integer && predicted_by_SEQ != -1 && (nm > 0) == (predicted_by_SEQ > 0)) 
         seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_NM, 'b'}, 3, OPTION_NM_i, add_bytes); 
 
     else no_special: 

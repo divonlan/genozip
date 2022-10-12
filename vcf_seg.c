@@ -225,7 +225,14 @@ void vcf_seg_initialize (VBlockP vb_)
 
     vcf_info_seg_initialize(vb);
     vcf_samples_seg_initialize(vb);
+
+    if (segconf.vcf_illum_gtyping) 
+        vcf_illum_gtyping_initialize (vb);
 }             
+
+static void vcf_seg_finalize_segconf (VBlockVCFP vb)
+{
+}
 
 void vcf_seg_finalize (VBlockP vb_)
 {
@@ -249,7 +256,7 @@ void vcf_seg_finalize (VBlockP vb_)
                           { .dict_id = { _VCF_CHROM },   .separator = "\t" },
                           { .dict_id = { _VCF_POS },     .separator = "\t" },
                           { .dict_id = { _VCF_ID },      .separator = "\t" },
-                          { .dict_id = { _VCF_REFALT },  .separator = "\t" },
+                          { .dict_id = { _VCF_REFALT },  .separator = { '\t', CI1_ITEM_CB } }, // piz calls vcf_piz_refalt_parse
                           { .dict_id = { _VCF_QUAL },    .separator = "\t" },
                           { .dict_id = { _VCF_FILTER },  .separator = "\t" },
                           { .dict_id = { _VCF_INFO },    .separator = "\t" }, // in dual-coordinates, contains INFO/LIFTOVER or INFO/REJTOVER that reconstructs oCHROM, oPOS, oREF, oXSTRAND
@@ -308,6 +315,9 @@ void vcf_seg_finalize (VBlockP vb_)
     vb->flags.vcf.coords = vb->vb_coords;
 
     vcf_samples_seg_finalize (vb);
+
+    if (segconf.running)
+        vcf_seg_finalize_segconf (vb);
 }
 
 // after each VB is compressed and merge (VB order is arbitrary)
@@ -330,6 +340,8 @@ void vcf_zip_after_compress (VBlockP vb)
 void vcf_zip_after_vbs (void)
 {
     vcf_FORMAT_PL_after_vbs ();
+
+    ctx_shorten_unused_dict_words (INFO_ILLUMINA_STRAND);    
 }
 
 bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)
@@ -421,7 +433,7 @@ static void vcf_seg_assign_tie_breaker (VBlockVCFP vb, ZipDataLineVCF *dl)
         vcf_refalt_seg_convert_to_primary (vb, ostatus);
 
     // tie breaker is crc32 of the Primary REF\tALT, except for Luft-only lines, where it is the Adler32 of the Luft REF\tALT
-    dl->tie_breaker = crc32 (1, vb->main_refalt, vb->main_ref_len + 1 + vb->main_alt_len);
+    dl->tie_breaker = crc32 (1, vb->main_ref, vb->main_ref_len + 1 + vb->main_alt_len);
 }
 
 static inline bool vcf_refalt_seg_ref_alt_line_has_RGQ (rom str)
@@ -513,7 +525,7 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
     }
 
     GET_NEXT_ITEM (VCF_POS);
-    CTX(VCF_POS)->last_txt = (TxtWord){ .index = BNUMtxt (VCF_POS_str), // consumed by vcf_seg_FORMAT_PS
+    CTX(VCF_POS)->last_txt = (TxtWord){ .index = BNUMtxt (VCF_POS_str), // consumed by vcf_seg_FORMAT_PS, vcf_seg_ILLUMINA_POS
                                         .len   = VCF_POS_len };
 
     if (vb->line_coords == DC_PRIMARY) {
@@ -544,7 +556,8 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
     GET_NEXT_ITEM (VCF_ALT);
 
     // save REF and ALT (in primary or luft coordinates) to be used for INFO fields
-    vb->main_refalt  = VCF_REF_str;
+    vb->main_ref  = VCF_REF_str;
+    vb->main_alt     = VCF_ALT_str;
     vb->main_ref_len = VCF_REF_len;
     vb->main_alt_len = VCF_ALT_len;
  

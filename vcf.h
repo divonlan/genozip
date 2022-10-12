@@ -53,7 +53,7 @@
                                            // Conflicting VarScan: <ID=ADR,Number=1,Type=Integer,Description="Depth of variant-supporting bases on reverse strand (reads2minus)">
 #pragma GENDICT FORMAT_AF=DTYPE_2=AF       // <ID=AF,Number=A,Type=Float,Description="Allele fractions for alt alleles in the order listed">
 #pragma GENDICT FORMAT_DP=DTYPE_2=DP       // <ID=DP,Number=1,Type=Integer,Description="Approximate read depth (reads with MQ=255 or with bad mates are filtered)">. See also: https://gatk.broadinstitute.org/hc/en-us/articles/360036891012-DepthPerSampleHC
-#pragma GENDICT FORMAT_DS=DTYPE_2=DS       // <ID=DS,Number=1,Type=Float,Description="Genotype dosage from MaCH/Thunder">. See: https://genome.sph.umich.edu/wiki/Thunder
+#pragma GENDICT FORMAT_DS=DTYPE_2=DS       // <ID=DS,Number=1,Type=Float,Description="Genotype dosage from MaCH/Thunder">. See: https://genome.sph.umich.edu/wiki/Thunder Beagle: "estimated ALT dose [P(RA) + P(AA)]"
 #pragma GENDICT FORMAT_GL=DTYPE_2=GL       // <ID=GL,Number=.,Type=Float,Description="Genotype Likelihoods">
 #pragma GENDICT FORMAT_GP=DTYPE_2=GP       // <ID=GP,Number=G,Type=Float,Description="Phred-scaled posterior probabilities for genotypes as defined in the VCF specification">
 #pragma GENDICT FORMAT_GQ=DTYPE_2=GQ       // <ID=GQ,Number=1,Type=Integer,Description="Genotype Quality"> VCF spec: "conditional genotype quality, encoded as a phred quality −10log10 p(genotype call is wrong, conditioned on the site’s being variant) (Integer)"
@@ -105,6 +105,9 @@
 #pragma GENDICT INFO_VQSLOD=DTYPE_1=VQSLOD // <ID=VQSLOD,Number=1,Type=Float,Description="Log odds of being a true variant versus being false under the trained Gaussian mixture model">
 #pragma GENDICT INFO_MQ=DTYPE_1=MQ         // <ID=MQ,Number=1,Type=Integer,Description="Root-mean-square mapping quality of covering reads">    
 #pragma GENDICT INFO_MQ0=DTYPE_1=MQ0       // <ID=MQ0,Number=1,Type=Integer,Description="Total Mapping Quality Zero Reads"> (VCF spec: "Number of MAPQ == 0 reads covering this record")
+#pragma GENDICT INFO_CIPOS=DTYPE_1=CIPOS   // <ID=CIPOS,Number=2,Type=Integer,Description="Confidence interval around POS for imprecise variants">
+#pragma GENDICT INFO_CIEND=DTYPE_1=CIEND   // <ID=CIEND,Number=2,Type=Integer,Description="Confidence interval around END for imprecise variants">
+#pragma GENDICT INFO_NS=DTYPE_1=NS         // <ID=NS,Number=1,Type=Integer,Description="Number of Samples With Data">
 
 // Ann field defined: https://pcingola.github.io/SnpEff/adds/VCFannotationformat_v1.0.pdf
 #pragma GENDICT INFO_ANN=DTYPE_1=ANN       // <ID=ANN,Number=.,Type=String,Description="Functional annotations: 'Allele | Annotation | Annotation_Impact | Gene_Name | Gene_ID | Feature_Type | Feature_ID | Transcript_BioType | Rank | HGVS.c | HGVS.p | cDNA.pos / cDNA.length | CDS.pos / CDS.length | AA.pos / AA.length | Distance | ERRORS / WARNINGS / INFO'">
@@ -113,7 +116,7 @@
 #pragma GENDICT INFO_ANN_Annotation_Impact=DTYPE_1=A2Annotation_Impact
 #pragma GENDICT INFO_ANN_Gene_Name=DTYPE_1=A3Gene_Name
 #pragma GENDICT INFO_ANN_Gene_ID=DTYPE_1=A4Gene_ID
-#pragma GENDICT INFO_ANN_Feature_Type=DTYPE_1=A5Feature_Type
+#pragma GENDICT INFO_ANN_Feature_Type=DTYPE_1=A5Feature_Type 
 #pragma GENDICT INFO_ANN_Feature_ID=DTYPE_1=A6Feature_ID
 #pragma GENDICT INFO_ANN_Transcript_BioType=DTYPE_1=A7Transcript_BioType
 #pragma GENDICT INFO_ANN_Rank=DTYPE_1=A8Rank
@@ -254,6 +257,24 @@
 #pragma GENDICT INFO_dbSNPBuildID=DTYPE_1=dbSNPBuildID // <ID=dbSNPBuildID,Number=1,Type=Integer,Description="First dbSNP Build for RS">
 #pragma GENDICT INFO_GENEINFO=DTYPE_1=GENEINFO // <ID=GENEINFO,Number=1,Type=String,Description="Pairs each of gene symbol:gene id.  The gene symbol and id are delimited by a colon (:) and each pair is delimited by a vertical bar (|)">
 
+// Illumina Genotyping. See explanation: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4751548/
+#pragma GENDICT INFO_PROBE_A=DTYPE_1=PROBE_A   // <ID=PROBE_A,Number=1,Type=String,Description="Probe base pair sequence">
+#pragma GENDICT INFO_PROBE_B=DTYPE_1=PROBE_B   // <ID=PROBE_B,Number=1,Type=String,Description="Probe base pair sequence; not missing for strand-ambiguous SNPs">
+#pragma GENDICT INFO_ALLELE_A=DTYPE_1=ALLELE_A // <ID=ALLELE_A,Number=1,Type=String,Description="A allele">
+#pragma GENDICT INFO_ALLELE_B=DTYPE_1=ALLELE_B // <ID=ALLELE_B,Number=1,Type=String,Description="B allele">
+#pragma GENDICT INFO_refSNP=DTYPE_1=refSNP // <ID=refSNP,Number=1,Type=String,Description="dbSNP rsID">
+#pragma GENDICT INFO_ILLUMINA_CHR=DTYPE_1=ILLUMINA_CHR // <ID=ILLUMINA_CHR,Number=1,Type=String,Description="Chromosome in Illumina manifest">
+#pragma GENDICT INFO_ILLUMINA_POS=DTYPE_1=ILLUMINA_POS // <ID=ILLUMINA_POS,Number=1,Type=Integer,Description="Position in Illumina manifest">
+#pragma GENDICT INFO_ILLUMINA_STRAND=DTYPE_1=ILLUMINA_STRAND // <ID=ILLUMINA_STRAND,Number=1,Type=String,Description="Probe strand">
+#pragma GENDICT FORMAT_BAF=DTYPE_2=BAF     // <ID=BAF,Number=1,Type=Float,Description="B Allele Frequency">
+#pragma GENDICT FORMAT_X=DTYPE_2=X         // <ID=X,Number=1,Type=Integer,Description="Raw X intensity">
+#pragma GENDICT FORMAT_Y=DTYPE_2=Y         // <ID=Y,Number=1,Type=Integer,Description="Raw Y intensity">
+
+// Beagle. See: https://faculty.washington.edu/browning/beagle/beagle_5.0_26May18.pdf
+#pragma GENDICT INFO_AR2=DTYPE_1=AR2       // <ID=AR2,Number=1,Type=Float,Description="Allelic R-Squared: estimated squared correlation between most probable REF dose and true REF dose">
+#pragma GENDICT INFO_DR2=DTYPE_1=DR2       // <ID=DR2,Number=1,Type=Float,Description="Dosage R-Squared: estimated squared correlation between estimated REF dose [P(RA) + 2*P(RR)] and true REF dose">
+#pragma GENDICT INFO_IMP=DTYPE_1=IMP       // <ID=IMP,Number=0,Type=Flag,Description="Imputed marker">
+
 // Genozip INFO fields
 #pragma GENDICT INFO_LUFT=DTYPE_1=LUFT
 #pragma GENDICT INFO_PRIM=DTYPE_1=PRIM
@@ -307,6 +328,7 @@ extern void vcf_header_piz_init (void);
 extern bool vcf_inspect_txt_header (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags);
 extern uint32_t vcf_header_get_num_samples (void);
 extern bool vcf_header_get_has_fileformat (void);
+extern void vcf_piz_finalize (void);
 
 // VBlock stuff
 extern void vcf_vb_release_vb();
@@ -347,7 +369,9 @@ extern void vcf_samples_add  (rom samples_str);
                       vcf_piz_special_MUX_BY_DOSAGE, vcf_piz_special_FORMAT_AB, vcf_piz_special_FORMAT_GQ, \
                       vcf_piz_special_MUX_BY_DOSAGExDP, vcf_piz_special_COPY_REForALT, vcf_piz_special_DP_by_DP_v13, \
                       vcf_piz_special_PS_by_PID, vcf_piz_special_PGT, vcf_piz_special_DP_by_DP, vcf_piz_special_DP_by_DP_single,\
-                      vcf_piz_special_RGQ, vcf_piz_special_MUX_BY_HAS_RGQ }
+                      vcf_piz_special_RGQ, vcf_piz_special_MUX_BY_HAS_RGQ, vcf_piz_special_SVTYPE, \
+                      vcf_piz_special_ALLELE_A, vcf_piz_special_ALLELE_B, vcf_piz_special_MUX_BY_ADJ_DOSAGE,\
+                      vcf_piz_special_PROBE_A, vcf_piz_special_PROBE_B }
 
 SPECIAL (VCF, 0,  main_REFALT,         vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,              vcf_piz_special_FORMAT)
@@ -382,7 +406,13 @@ SPECIAL (VCF, 29, DP_by_DP,            vcf_piz_special_DP_by_DP);               
 SPECIAL (VCF, 30, DP_by_DP_single,     vcf_piz_special_DP_by_DP_single);          // added v14.0.0 - single sample: FORMAT/DP by INFO/DP
 SPECIAL (VCF, 31, RGQ,                 vcf_piz_special_RGQ);                      // added v14.0.0
 SPECIAL (VCF, 32, MUX_BY_HAS_RGQ,      vcf_piz_special_MUX_BY_HAS_RGQ);           // added v14.0.0
-#define NUM_VCF_SPECIAL 33
+SPECIAL (VCF, 33, SVTYPE,              vcf_piz_special_SVTYPE);                   // added v14.0.12
+SPECIAL (VCF, 34, ALLELE_A,            vcf_piz_special_ALLELE_A);                 // added v14.0.12
+SPECIAL (VCF, 35, ALLELE_B,            vcf_piz_special_ALLELE_B);                 // added v14.0.12
+SPECIAL (VCF, 36, MUX_BY_ADJ_DOSAGE,   vcf_piz_special_MUX_BY_ADJ_DOSAGE);        // added v14.0.12
+SPECIAL (VCF, 37, PROBE_A,             vcf_piz_special_PROBE_A);                  // added v14.0.12
+SPECIAL (VCF, 38, PROBE_B,             vcf_piz_special_PROBE_B);                  // added v14.0.12
+#define NUM_VCF_SPECIAL 39
 
 // Translators for Luft (=secondary coordinates)
 TRANSLATOR (VCF, VCF,   1,  G,      vcf_piz_luft_G)       // same order as LiftOverStatus starting LO_CANT_G
@@ -426,9 +456,10 @@ extern const LuftTransLateProp ltrans_props[NUM_VCF_TRANS];
      (ltrans_props[(ctx)->luft_trans].upon == TW_ALWAYS         && LO_IS_OK (last_ostatus))        || \
      (ltrans_props[(ctx)->luft_trans].upon == TW_XSTRAND        && LO_IS_OK (last_ostatus) && *CTX(VCF_oXSTRAND)->last_snip != '-')))
 
-#define VCF_DICT_ID_ALIASES             \
-    /*         alias      maps to  */   \
-    { DT_VCF,  _INFO_END, _VCF_POS  },  \
+#define VCF_DICT_ID_ALIASES                 \
+    /*         alias        maps to     */  \
+    { DT_VCF,  _INFO_END,   _VCF_POS    },  \
+    { DT_VCF,  _INFO_CIEND, _INFO_CIPOS },  \
 
 #define dict_id_is_vcf_info_sf   dict_id_is_type_1
 #define dict_id_is_vcf_format_sf dict_id_is_type_2

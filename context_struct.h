@@ -89,10 +89,11 @@ typedef struct Context {
 
     int tag_i;                 // ZIP dual-coordinates VB only: index into vb->tags for tag renaming 
 
-    // settings
+    // codecs
     uint8_t lcodec_count, bcodec_count; // ZIP z_file, --best: approximate number of VBs in a row that selected this codec
     Codec lcodec;              // codec used to compress local and dict
     Codec bcodec;              // codec used to compress b250
+    Codec dcodec;              // codec used to compress dict
     Codec lsubcodec_zip;       // zip to compress with this codec AFTER compressing with lcodec
     Codec lsubcodec_piz;       // piz to decompress with this codec, AFTER decompressing with lcodec
     Codec lcodec_non_inherited;// ZIP z_file: non-inherited lcodec - used only for submitting stats

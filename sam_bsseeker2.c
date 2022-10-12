@@ -142,7 +142,7 @@ void sam_seg_bsseeker2_XG_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XG)
         bool is_populated = (flag.reference & REF_ZIP_LOADED) || ref_is_nucleotide_set (range, pos_index);
 
         // case: reference already contains a base - but unfortunately it is not "base" - so MD is not reconstractable from reference
-        if (is_populated) { if (*xg != ref_base_by_idx (range, pos_index))    FAIL ("ref_mismatch"); }
+        if (is_populated) { if (*xg != REF (pos_index))    FAIL ("ref_mismatch"); }
         else              { if (*xg!='A' && *xg!='C' && *xg!='G' && *xg!='T') FAIL ("not_ACGT");     }
     }
 
@@ -208,21 +208,21 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_BSSEEKER2_XG)
     uint32_t idx = CTX(SAM_POS)->last_value.i - range->first_pos - inc_soft_clip;
 
     // 2 left-flanking bases
-    RECONSTRUCT1 (ref_base_by_idx (range, idx-2));
-    RECONSTRUCT1 (ref_base_by_idx (range, idx-1));
+    RECONSTRUCT1 (REF (idx-2));
+    RECONSTRUCT1 (REF (idx-1));
     RECONSTRUCT1 ('_');
 
     char *recon = BAFTtxt;
     uint32_t recon_len = vb->ref_consumed + inc_soft_clip;
     for (uint32_t i=0; i < recon_len; i++)
-        recon[i] = ref_base_by_idx (range, idx + i);
+        recon[i] = REF (idx + i);
 
     vb->txt_data.len += recon_len;
 
     // 2 right-flanking bases
     RECONSTRUCT1 ('_');
-    RECONSTRUCT1 (ref_base_by_idx (range, idx + recon_len));
-    RECONSTRUCT1 (ref_base_by_idx (range, idx + recon_len + 1));
+    RECONSTRUCT1 (REF (idx + recon_len));
+    RECONSTRUCT1 (REF (idx + recon_len + 1));
 
     if (last_flags.rev_comp)
         str_revcomp_actg (recon-3, recon-3, recon_len + 6);

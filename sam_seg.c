@@ -645,7 +645,7 @@ static void sam_seg_finalize_segconf (VBlockP vb)
 
     // allow aligner if unmapped file (usually only enabled in best) if we have over 3% unmapped reads in segconf indicating a file enriched
     // in unmapped reads (normally, in sorted BAMs unmapped reads are at the end of the file)
-    if ((double)segconf.num_mapped < 0.97 * (double)vb->lines.len32 && !flag.aligner_available && (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE)) {
+    if ((double)segconf.num_mapped < 0.97 * (double)vb->lines.len32 && !flag.aligner_available && IS_REF_LOADED_ZIP) {
         refhash_load_standalone();
         flag.aligner_available = true;
     }

@@ -195,7 +195,7 @@ Codec codec_assign_best_codec (VBlockP vb,
     Codec non_ctx_codec = CODEC_UNKNOWN; // used for non-b250, non-local sections
     bool data_override = ctx && data;    // caller provided data for us to use *instead* of ctx's own local/b250/dict buffer
     
-    ContextP zctx = ctx ? ctx_get_zctx_from_vctx (ctx) : NULL;
+    ContextP zctx = ctx ? ctx_get_zctx_from_vctx (ctx) : NULL; // note: if is_dict, ctx==zctx
 
     Codec *selected_codec = is_local ? &ctx->lcodec  : 
                             is_b250  ? &ctx->bcodec  :
@@ -209,7 +209,7 @@ Codec codec_assign_best_codec (VBlockP vb,
     uint8_t zselected_codec_count = !zctx ? 0 : is_local ? zctx->lcodec_count : is_b250 ? zctx->bcodec_count : 0;
 
     // case: codec is hard_coded and should not be reassigned
-    bool hard_coded = (ctx ? ctx->lcodec_hard_coded : false) || (zctx ? zctx->lcodec_hard_coded : false);
+    bool hard_coded = is_local && ((ctx ? ctx->lcodec_hard_coded : false) || (zctx ? zctx->lcodec_hard_coded : false));
 
     // we don't change assigned non-simple codecs
     if (!codec_args[*selected_codec].is_simple) 

@@ -149,6 +149,8 @@ void profiler_add (ConstVBlockP vb)
     ADD (ref_contigs_compress);
     ADD (generate_recon_plan);
     ADD (vcf_linesort_compress_qsort);
+    ADD (vcf_linesort_merge_vb);
+    ADD (vcf_seg_PROBE_A);
     ADD (ref_load_stored_reference);
     ADD (ref_read_one_range);
     ADD (ref_uncompress_one_range);
@@ -164,7 +166,6 @@ void profiler_add (ConstVBlockP vb)
     ADD (ctx_sort_dictionaries_vb_1);
     ADD (random_access_merge_in_vb);
     ADD (gencomp_absorb_vb_gencomp_lines);
-    ADD (vcf_linesort_merge_vb);
     ADD (zip_handle_unique_words_ctxs);
     ADD (random_access_finalize_entries);
     ADD (random_access_compress);
@@ -349,6 +350,7 @@ void profiler_print_report (void)
         PRINT (sam_seg_other_seq, 3);
         PRINT (sam_seg_GR_Z, 3);
         PRINT (sam_seg_GY_Z, 3);
+        PRINT (vcf_seg_PROBE_A, 2);
         PRINT (random_access_merge_in_vb, 1); 
         PRINT (gencomp_absorb_vb_gencomp_lines, 1);
         PRINT (vcf_linesort_merge_vb, 1);

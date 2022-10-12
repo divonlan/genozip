@@ -463,7 +463,7 @@ fallthrough_from_cram: {}
             // case: this is indeed a bgzf - we put the still-compressed data in vb->scratch for later consumption
             // in txtfile_read_block_bgzf
             if (bgzf_uncompressed_size > 0) {
-                file->codec = CODEC_BGZF;
+                file->codec = file->source_codec = CODEC_BGZF;
                 
                 evb->scratch.count = bgzf_uncompressed_size; // pass uncompressed size in param
                 buf_add_more (evb, &evb->scratch, (char*)block, block_size, "scratch");
@@ -497,7 +497,7 @@ fallthrough_from_cram: {}
                 
                 ASSERT0 (!file->redirected, "genozip can't read gzip data from a pipe - piped data must be either plain or in BGZF format - i.e. compressed with bgzip, htslib etc");
 
-                file->codec = CODEC_GZ;
+                file->codec = file->source_codec = CODEC_GZ;
                 file->file  = gzdopen (fileno((FILE *)file->file), READ); // we're abandoning the FILE structure (and leaking it, if libc implementation dynamically allocates it) and working only with the fd
                 gzinject (file->file, block, block_size); // a hack - adds a 18 bytes of compressed data to the in stream, which will be consumed next, instead of reading from disk
             } 
@@ -608,7 +608,7 @@ static bool file_open_txt_write (File *file)
              file_has_ext (file_exts[txt_out_ft_by_dt[file->data_type][1]], ".gz")) { // data type supports .gz txt output
             
             file->type = txt_out_ft_by_dt[file->data_type][1]; 
-            if (flag.bgzf == BGZF_BY_ZFILE) flag.bgzf = BGZF_COMP_LEVEL_DEFAULT; // default unless user specified otherwise
+            if (flag.bgzf == BGZF_NOT_INITIALIZED) flag.bgzf = BGZF_COMP_LEVEL_DEFAULT; // default unless user specified otherwise
         }
 
         // case: BAM
@@ -618,7 +618,7 @@ static bool file_open_txt_write (File *file)
         // case: not .gz and not BAM - use the default plain file format
         else { 
             file->type = txt_out_ft_by_dt[file->data_type][0];  
-            ASSINP0 (flag.bgzf == BGZF_BY_ZFILE, "using --output in combination with --bgzf, requires the output filename to end with .gz or .bgz");
+            ASSINP0 (flag.bgzf == 0 || flag.to_stdout, "using --output in combination with --bgzf, requires the output filename to end with .gz or .bgz");
         }
     }
 

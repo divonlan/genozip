@@ -28,13 +28,12 @@
 #include "flags.h"
 #include "buffer.h"
 #include "strings.h"
+#include "stats.h"
 
 // globals
 ContigPkgP sam_hdr_contigs = NULL; // If no contigs in header: BAM: empty structure (RNAME must be * for all lines); SAM: NULL (RNAME in lines may have contigs) 
 HdSoType sam_hd_so = HD_SO_UNKNOWN;
 HdGoType sam_hd_go = HD_GO_UNKNOWN;
-
-static Buffer sam_hdr_PGs = {};
 
 uint32_t sam_num_header_contigs (void)
 {
@@ -289,11 +288,6 @@ static void sam_header_zip_inspect_HD_line (BufferP txt_header)
     COPY_TIMER_VB (evb, sam_header_zip_inspect_HD_line);
 }
 
-rom sam_get_hdr_PGs (void)
-{
-    return sam_hdr_PGs.len ? B1STc (sam_hdr_PGs) : "No PGs";
-}
-
 static void sam_header_zip_build_hdr_PGs (rom hdr, rom after)
 {
     #define EQ3(s1,s2) (s1[0]==s2[0] && s1[1]==s2[1] && s1[2]==s2[2])
@@ -304,7 +298,7 @@ static void sam_header_zip_build_hdr_PGs (rom hdr, rom after)
         if (!hdr || n_flds < 2 || fld_lens[0] != 3 || !EQ3(flds[0], "@PG")) break;
 
         bool added = false;
-        uint32_t this_PG_i = sam_hdr_PGs.len32;
+        uint32_t this_PG_i = stats_programs.len32;
         uint32_t ID_len=0;
         int ID_i=-1, PN_i=-1;
         
@@ -314,39 +308,39 @@ static void sam_header_zip_build_hdr_PGs (rom hdr, rom after)
                 rom dot = memchr (flds[i], '.', fld_lens[i]);
                 ID_len = dot ? (dot - flds[i]) : fld_lens[i];
                 
-                if (added) BNXTc (sam_hdr_PGs) = '\t'; // note: previous buf_add_more->buf_insert_do allocated an extra character
-                buf_add_more (evb, &sam_hdr_PGs, flds[i], ID_len, "sam_hdr_PGs");
+                if (added) BNXTc (stats_programs) = '\t'; // note: previous buf_add_more->buf_insert_do allocated an extra character
+                buf_add_more (evb, &stats_programs, flds[i], ID_len, "stats_programs");
                 added = true;
             }
             else if (EQ3(flds[i], "PN:")) {
                 PN_i = i;
-                if (added) BNXTc (sam_hdr_PGs) = '\t';
-                buf_add_more (evb, &sam_hdr_PGs, STRi(fld,i), "sam_hdr_PGs");
+                if (added) BNXTc (stats_programs) = '\t';
+                buf_add_more (evb, &stats_programs, STRi(fld,i), "stats_programs");
                 added = true;
             }
 
         if (added) {
             // if ID and PN are the same - keep just the value
             if (PN_i>=0 && ID_i>=0 && str_issame_(flds[PN_i]+3, fld_lens[PN_i]-3, flds[ID_i]+3, ID_len-3)) {
-                sam_hdr_PGs.len32 = this_PG_i; // undo           
-                buf_add_more (evb, &sam_hdr_PGs, flds[ID_i]+3, ID_len-3, "sam_hdr_PGs"); // just value
+                stats_programs.len32 = this_PG_i; // undo           
+                buf_add_more (evb, &stats_programs, flds[ID_i]+3, ID_len-3, "stats_programs"); // just value
             }
 
-            uint32_t this_PG_len = sam_hdr_PGs.len32 - this_PG_i;
+            uint32_t this_PG_len = stats_programs.len32 - this_PG_i;
 
             // case: duplicate PG (perhaps the untaken part of ID - after the dot - is different)
-            if (str_issame_(Bc(sam_hdr_PGs, this_PG_i), this_PG_len, Bc(sam_hdr_PGs, last_PG_i), last_PG_len))    
-                sam_hdr_PGs.len32 -= this_PG_len; // remove the dup
+            if (str_issame_(Bc(stats_programs, this_PG_i), this_PG_len, Bc(stats_programs, last_PG_i), last_PG_len))    
+                stats_programs.len32 -= this_PG_len; // remove the dup
 
             else { // new, not dup
-                BNXTc (sam_hdr_PGs) = ';';
+                BNXTc (stats_programs) = ';';
                 last_PG_i = this_PG_i;
                 last_PG_len = this_PG_len;
             }
         }
     }
 
-    if (sam_hdr_PGs.len) *BLSTc (sam_hdr_PGs) = 0; // replace final ';' 
+    if (stats_programs.len) *BLSTc (stats_programs) = 0; // replace final ';' 
 }
 
 // ZIP
@@ -458,8 +452,6 @@ void sam_header_finalize (void)
     }
     else
         sam_hdr_contigs = NULL; // memory will be freed when we destroy gref
-
-    buf_free (sam_hdr_PGs);
 }
 
 // ZIP

@@ -20,7 +20,7 @@
 
 // use level 6 - same as samtools and bgzip default level. if we're lucky (same gzip library and user used default level),
 // we will reconstruct precisely even at the .gz level
-#define BGZF_NOT_INITIALIZED -100 
+#define BGZF_NOT_INITIALIZED    -100 
 #define BGZF_BY_ZFILE           -1
 #define BGZF_COMP_LEVEL_DEFAULT 6 
 #define BGZF_COMP_LEVEL_UNKNOWN 15 

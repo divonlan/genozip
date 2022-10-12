@@ -39,6 +39,7 @@
 #define LIC_FIELD_TIMESTAMP    "Timestamp of acceptance"
 #define LIC_FIELD_IP           "IP address of acceptance"
 #define LIC_FIELD_NUMBER       "License number"
+#define LIC_FIELD_ALLOW_STATS  "Allow_stats"
 
 #include "text_license.h"
 
@@ -47,7 +48,7 @@ static rom license_filename = NULL;  // non-standard filename set with --licfile
 static struct {
     bool initialized;
     LicenseType lic_type; 
-    char name[256], institution[1024], email[256], ip[ARCH_IP_LEN], version[20];
+    char name[256], institution[1024], email[256], ip[ARCH_IP_LEN], version[20], allow_stats[4];
     StrText timestamp;
     int64_t machine_time; // timestamp expressed as seconds since epoch
     uint32_t license_num;
@@ -77,8 +78,10 @@ static void license_generate (BufferP license_data)
                LIC_FIELD_EMAIL": %s\n"
                LIC_FIELD_MACHINE_TIME": %"PRIu64"\n"
                LIC_FIELD_TIMESTAMP": %s\n"
-               LIC_FIELD_IP": %s\n",
-               rec.lic_type, rec.institution, rec.name, rec.email, rec.machine_time, rec.timestamp.s, rec.ip);
+               LIC_FIELD_IP": %s\n"
+               LIC_FIELD_ALLOW_STATS": %s\n", 
+               rec.lic_type, rec.institution, rec.name, rec.email, rec.machine_time, rec.timestamp.s, rec.ip,
+               rec.allow_stats);
     
     rec.initialized = true;
     rec.license_num = license_calc_number (license_data);
@@ -150,7 +153,7 @@ static void license_load (void)
     file_split_lines (filename, "license");
     
     char license_num_str[30] = "", lic_type_str[16]="", machine_time_str[24]="";
-    #define COPY_FIELD(var,field) strncpy (var, license_load_field (field, n_lines, lines, line_lens), sizeof (var)-1)
+    #define COPY_FIELD(var,field) strncpy (var, license_load_field (field, STRas(line)), sizeof (var)-1)
 
     COPY_FIELD (lic_type_str,    LIC_FIELD_TYPE);  // added v14
 
@@ -164,11 +167,12 @@ static void license_load (void)
     COPY_FIELD (machine_time_str, LIC_FIELD_MACHINE_TIME);
     COPY_FIELD (rec.timestamp.s,  LIC_FIELD_TIMESTAMP);
     COPY_FIELD (rec.ip,           LIC_FIELD_IP);
+    COPY_FIELD (rec.allow_stats,  LIC_FIELD_ALLOW_STATS);
     COPY_FIELD (license_num_str,  LIC_FIELD_NUMBER);
 
     if (!str_get_uint32 (license_num_str, strlen (license_num_str), &rec.license_num)) goto reregister;
     if (!str_get_int (machine_time_str, strlen (machine_time_str), &rec.machine_time)) goto reregister;
-
+    
     data.len -= line_lens[n_lines-1] + 2;
     if (rec.license_num != license_calc_number (&data)) goto reregister;
 
@@ -191,7 +195,7 @@ reregister:
     license_register();
 }
 
-static bool license_submit (char update, rom os, unsigned cores, rom endianity, rom user_host, rom dist)
+static bool license_submit (rom os, unsigned cores, rom endianity, rom user_host, rom dist)
 {
     // reference: https://stackoverflow.com/questions/18073971/http-post-to-a-google-form/47444396#47444396
 
@@ -215,7 +219,7 @@ static bool license_submit (char update, rom os, unsigned cores, rom endianity, 
                        "&entry.926671216=%s"
                        "&entry.1734045469=%s"
                        "&entry.2009586582=%s"
-                       "&entry.119966790=%c"
+                       "&entry.119966790=%s"  
                        "&entry.81542373=%s"
                        "&entry.1668073218=%u"
                        "&entry.1943454647=%s"
@@ -233,7 +237,7 @@ static bool license_submit (char update, rom os, unsigned cores, rom endianity, 
     char *user_hostE   = url_esc_non_valid_chars (user_host);
 
     char url[sizeof (rec)*3 + 200];
-    sprintf (url, url_format, institutionE, nameE, emailE, lic_typeE, update, osE, cores, rec.ip, user_hostE, rec.license_num, rec.version, dist, endianity);
+    sprintf (url, url_format, institutionE, nameE, emailE, lic_typeE, rec.allow_stats, osE, cores, rec.ip, user_hostE, rec.license_num, rec.version, dist, endianity);
 
     bool success = url_read_string (url, NULL, 0) >= 0;
     
@@ -280,7 +284,6 @@ void license_register (void)
     char lic_type[100];
     rom os, dist, endianity, user_host;
     unsigned cores;
-    bool update;
 
     str_split (flag.do_register, strlen (flag.do_register), 11, '|', field, true);
     str_nul_separate (field);
@@ -311,12 +314,12 @@ void license_register (void)
         strncpy (rec.name,        fields[2], sizeof(rec.name)-1);
         strncpy (rec.email,       fields[3], sizeof(rec.email)-1);
         strncpy (rec.ip,          fields[5], sizeof(rec.ip)-1);
-        update    = (fields[4][0] == 'Y');
-        os        = fields[6];
-        dist      = fields[7]; 
-        endianity = fields[8];
-        user_host = fields[9];
-        cores     = atoi(fields[10]);
+        strncpy (rec.allow_stats, fields[4], sizeof(rec.allow_stats)-1);
+        os        = fields[5];
+        dist      = fields[6]; 
+        endianity = fields[7];
+        user_host = fields[8];
+        cores     = atoi(fields[9]);
     }
     else {
         fprintf (stderr, "\nLicense details -\n");
@@ -337,7 +340,13 @@ void license_register (void)
     
         rec.lic_type = lic_type[0] - '0';
     
-        update = true; // str_query_user_yn ("\nShall we update you by email when new features are added to genozip?", QDEF_YES); 
+        if (rec.lic_type == LIC_TYPE_PAID) {
+            bool stats_consent = str_query_user_yn ("\nGenozip can optionally collect aggregate statistics and metadata about Genozip's compression performance, helping us improve our algorithms (see https://genozip.com/stats-collected.html). "
+                                                    "Do you agree? ", QDEF_NONE);
+            strcpy (rec.allow_stats, stats_consent ? "Yes" : "No");
+        }
+        else
+            strcpy (rec.allow_stats, "Yes");            
 
         fprintf (stderr, "\n\nPlease read the terms and conditions of the license:\n\n"); 
         license_display(); 
@@ -368,18 +377,18 @@ void license_register (void)
         fprintf (stderr, LIC_FIELD_INSTITUTION": %s\n", rec.institution);
         fprintf (stderr, LIC_FIELD_NAME       ": %s\n", rec.name);
         fprintf (stderr, LIC_FIELD_EMAIL      ": %s\n", rec.email);
-        fprintf (stderr, "Send new feature updates: %s\n", update ? "Yes" : "No");
         fprintf (stderr, "System info: OS=%s cores=%u endianity=%s IP=%s\n", os, cores, endianity, rec.ip);
         fprintf (stderr, "Username: %s\n", user_host);
         fprintf (stderr, "Genozip info: version=%s distribution=%s\n", GENOZIP_CODE_VERSION, dist);
         fprintf (stderr, "Genozip license number: %u\n", rec.license_num);
+        if (rec.lic_type == LIC_TYPE_PAID) fprintf (stderr, "Send statistics: %s\n", rec.allow_stats);
         fprintf (stderr, "I accept the terms and conditions of the Genozip license\n");
         fprintf (stderr, "=====================================================================\n\n");
         
         license_exit_if_not_confirmed ("Proceed with completing the registration?", QDEF_YES);
     }
         
-    bool submitted = license_submit ("NY"[update], os, cores, endianity, user_host, dist);
+    bool submitted = license_submit (os, cores, endianity, user_host, dist);
 
     ASSINP0 (submitted,
              "Failed to register the license, possibly because the Internet is not accessible or the registration server "
@@ -397,6 +406,7 @@ void license_register (void)
 
         if (lic_type[0]=='1')
             fprintf (stderr, "Please take a moment now to make a note to not forget to cite Genozip:\n"
+                             "Lan, D., et al. (2022) Genozip 14 - advances in compression of BAM and CRAM files (pre-print), doi: https://doi.org/10.1101/2022.09.12.507582\n"
                              "Lan, D., et al. (2021) Genozip: a universal extensible genomic data compressor, Bioinformatics, 37, 2225-2230\n"
                              "Lan, D., et al. (2020) genozip: a fast and efficient compression tool for VCF files, Bioinformatics, 36, 4091-4092\n\n");
 
@@ -420,6 +430,11 @@ LicenseType license_get_type (void)
 {
     license_load();
     return rec.lic_type;
+}
+
+bool license_allow_stats (void)
+{
+    return (rec.lic_type == LIC_TYPE_PAID) ? !strcmp (rec.allow_stats, "Yes") : true;
 }
 
 rom license_get_one_line (void)
@@ -556,6 +571,7 @@ void license_print_tip (void)
 
         case 23:
             iprint0 ("\nPlease take a moment now to make a note to not forget to cite Genozip:\n"
+                     "Lan, D., et al. (2022) Genozip 14 - advances in compression of BAM and CRAM files (pre-print), doi: https://doi.org/10.1101/2022.09.12.507582\n"
                      "Lan, D., et al. (2021) Genozip: a universal extensible genomic data compressor, Bioinformatics, 37, 2225-2230\n"
                      "Lan, D., et al. (2020) genozip: a fast and efficient compression tool for VCF files, Bioinformatics, 36, 4091-4092\n\n");
             break;

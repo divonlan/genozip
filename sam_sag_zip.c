@@ -67,6 +67,9 @@ void sam_set_sag_type (void)
     else if (MP(LONGRANGER))
         segconf.sag_type = SAG_NONE; // TO DO - new SAG_BY_LONGRANGER type
 
+    else if (MP(NOVOALIGN))
+        segconf.sag_type = SAG_BY_NH; // NovoAlign may have both NH and SA, we go by NH
+
     // SAG_BY_SA: the preferd Sag method - by SA:Z
     // we identify a PRIM line - if it (1) has SA:Z and (2) supp/secondary flags are clear
     else if (sam_has_SA_Z() || (segconf.has[OPTION_SA_Z])) // longranger has non-standard SA:Z format

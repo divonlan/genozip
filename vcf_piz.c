@@ -243,6 +243,10 @@ CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb)
             vcf_piz_ps_pid_lookback_insert (vb, FORMAT_PID, STRa(recon));
             break;
 
+        case _VCF_REFALT: // files compress starting v14.0.12
+            vcf_piz_refalt_parse (VB_VCF, STRa(recon));
+            break;
+
         default:
             ASSPIZ (false, "vcf_piz_con_item_cb doesn't know how to handle dict_id=%s. Please upgrade to the latest version of Genozip", 
                     dis_dict_id (con_item->dict_id).s);

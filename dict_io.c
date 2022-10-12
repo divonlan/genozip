@@ -31,7 +31,7 @@ static ContextP next_ctx = 0;
 static void dict_io_prepare_for_assign_codec (VBlockP vb)
 {
     // get next non-too-small dict
-    while (next_ctx->lcodec != CODEC_UNKNOWN && 
+    while (next_ctx->dcodec != CODEC_UNKNOWN && 
            next_ctx < ZCTX(z_file->num_contexts)) next_ctx++;
 
     if (next_ctx < ZCTX(z_file->num_contexts)) {
@@ -43,7 +43,9 @@ static void dict_io_prepare_for_assign_codec (VBlockP vb)
 
 static void dict_io_assign_codec_one_dict (VBlockP vb)
 {
-    vb->fragment_ctx->lcodec = codec_assign_best_codec (vb, vb->fragment_ctx, NULL, SEC_DICT);
+    if (!vb->fragment_ctx->dcodec) // not small dict already assigned in dict_io_assign_codecs
+        vb->fragment_ctx->dcodec = codec_assign_best_codec (vb, vb->fragment_ctx, NULL, SEC_DICT);
+    
     vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
 }
 
@@ -57,19 +59,12 @@ void dict_io_assign_codecs (void)
     // handle some dictionaries here, so save on thread creation for trival dictionaries
     for_zctx {
         // assign CODEC_NONE to all the to-small-to-compress dictionaries, 
-        if (zctx->dict.len < MIN_LEN_FOR_COMPRESSION) {
-            zctx->lcodec = CODEC_NONE;
-            zctx->lcodec_hard_coded = true;
-        }
+        if (zctx->dict.len < MIN_LEN_FOR_COMPRESSION) 
+            zctx->dcodec = CODEC_NONE;
 
         // assign CODEC_ARTB to dictionaries under 1KB (unless --best)
-        else if (!flag.best && zctx->dict.len < 1024) {
-            zctx->lcodec = CODEC_ARITH8;
-            zctx->lcodec_hard_coded = true;
-        }
-
-        else
-            zctx->lcodec = CODEC_UNKNOWN; // only dicts big enough are assigned dynamically
+        else if (!flag.best && zctx->dict.len < 1024) 
+            zctx->dcodec = CODEC_ARITH8;
     }
 
     dispatcher_fan_out_task ("assign_dict_codecs", NULL, 0, "Writing dictionaries...", true, false, false, 0, 20000,
@@ -149,7 +144,7 @@ static void dict_io_compress_one_fragment (VBlockP vb)
         .section_type          = SEC_DICT,
         .data_uncompressed_len = BGEN32 (vb->fragment_len),
         .compressed_offset     = BGEN32 (sizeof(SectionHeaderDictionary)),
-        .codec                 = vb->fragment_ctx->lcodec,
+        .codec                 = vb->fragment_ctx->dcodec,
         .vblock_i              = BGEN32 (vb->vblock_i),
         .num_snips             = BGEN32 (vb->fragment_num_words),
         .dict_id               = vb->fragment_ctx->dict_id
@@ -165,7 +160,7 @@ static void dict_io_compress_one_fragment (VBlockP vb)
     if (flag.list_chroms && vb->fragment_ctx->did_i == CHROM)
         str_print_dict (info_stream, vb->fragment_start, vb->fragment_len, false, VB_DT(SAM) || VB_DT(BAM));
 
-    if (flag.show_time) codec_show_time (vb, st_name (SEC_DICT), vb->fragment_ctx->tag_name, vb->fragment_ctx->lcodec);
+    if (flag.show_time) codec_show_time (vb, st_name (SEC_DICT), vb->fragment_ctx->tag_name, vb->fragment_ctx->dcodec);
 
     comp_compress (vb, vb->fragment_ctx, &vb->z_data, (SectionHeader*)&header, vb->fragment_start, NO_CALLBACK, "SEC_DICT");
 
