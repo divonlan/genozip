@@ -334,8 +334,8 @@ CODEC_RECONSTRUCT (codec_longr_reconstruct)
     LongrState *state = B1ST (LongrState, lens_ctx->con_cache);
     state->value_to_bin = B1ST8 (values_ctx->con_cache);
 
-    rom seq = (Z_DT(SAM) && VB_SAM->textual_seq.len) ? B1STc (VB_SAM->textual_seq) // note: textual_seq is prepared in sam_piz_sam2bam_SEQ and sam_piz_prim_add_Grps_and_CIGAR
-                                                        : last_txtx (vb, seq_ctx); 
+    rom seq = (VB_DT(SAM) && VB_SAM->textual_seq.len) ? B1STc (VB_SAM->textual_seq) // note: textual_seq is prepared in sam_piz_sam2bam_SEQ and sam_piz_prim_add_Grps_and_CIGAR
+                                                      : last_txtx (vb, seq_ctx); 
 
     codec_longr_recon_one_read (state, seq, vb->seq_len, is_rev, sorted_qual, next_of_chan, BAFTtxt);
     vb->txt_data.len32 += vb->seq_len;

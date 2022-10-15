@@ -211,22 +211,30 @@ rom arch_get_ip_addr (rom reason) // optional text in case curl execution fails
     return ip_str;
 }
 
-rom arch_get_user_host (void)
+rom arch_get_host (void)
 {
-    static char user_host[200];
+    static char host[100] = {};
 
     DO_ONCE {
-        char host[100] = "";
         #ifdef _WIN32
             DWORD host_len = sizeof host;
             if (!GetComputerNameExA (ComputerNameDnsFullyQualified, host, &host_len)) host[0] = 0;
         #else
             gethostname (host, sizeof (host)-1);
         #endif
+    }
 
+    return host;
+}
+
+rom arch_get_user_host (void)
+{
+    static char user_host[200];
+
+    DO_ONCE {
         rom user = getenv (flag.is_windows ? "USERNAME" : "USER");
 
-        sprintf (user_host, "%.99s@%.99s", user ? user : "", host);
+        sprintf (user_host, "%.99s@%.99s", user ? user : "", arch_get_host());
     }
 
     return user_host;

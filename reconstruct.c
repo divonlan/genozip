@@ -270,7 +270,7 @@ uint32_t reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, STRp(snip), 
     if (!ctx->is_loaded) return len;
 
     // special case: handle SAM_QUAL missing quality (expressed as a ' ')
-    if (*Bc(ctx->local, ctx->next_local) == ' ' && (ctx->did_i == SAM_QUAL && (Z_DT(BAM) || Z_DT(SAM)))) {
+    if (*Bc(ctx->local, ctx->next_local) == ' ' && (ctx->did_i == SAM_QUAL && (VB_DT(BAM) || VB_DT(SAM)))) {
         len = 1;
         sam_reconstruct_missing_quality (vb, reconstruct);
     }

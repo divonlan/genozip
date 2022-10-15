@@ -112,6 +112,9 @@ extern PosType ref_contigs_get_contig_length (const Reference ref, WordIndex ref
 extern WordIndex ref_contigs_ref_chrom_from_header_chrom (const Reference ref, STRp(chrom_name), PosType *hdr_LN);
 extern void ref_contigs_load_contigs (Reference ref);
 
+extern uint32_t ref_contigs_get_num_contigs (Reference ref);
+extern PosType ref_contigs_get_genome_nbases (Reference ref);
+
 extern WordIndex ref_contig_get_by_gpos (const Reference ref, PosType gpos, PosType *pos);
 
 extern const uint8_t acgt_encode[256];

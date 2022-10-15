@@ -32,7 +32,7 @@ static rom license[] = {
     "3. Additional Terms and conditions",
     "   a. You must fully and accurately complete the registration, either by completing the registeration as prompted by the genozip tool or by receiving registration confirmation after registering by emailing "EMAIL_REGISTER".",
     "   b. Using Genozip to compress a file is only permitted if the file is retained in its original form as well or the potential loss of data due to Genozip not being able to uncompress the compressed file would not cause any harm.",
-    "   c. Any changes to the Genozip's source code and/or creation of Derivative Works are not permitted, unless prior written permission is obtained from Licensor.",
+    "   c. Any changes to the Genozip's source code and/or creation of Derivative Works and/or reverse-engineering of Genozip are forbidden, unless prior written permission is obtained from Licensor.",
     "   d. Any software source code intentionally submitted for inclusion in Genozip by You to the Licensor or the Developer, including by using a Github Pull Request, shall imply complete and irrevocable assignment by You to Licensor of all copyright in the submitted source code. Regarding any such source code You submitted for inclusion in Genozip in the past, You hereby assign all copyright in this submitted source code to Licensor.",
 
     "4. Severely unauthorized use of Genozip. Use which is non-compliant with sections 2, 3a, 3c shall be considered severely unauthorized use of Genozip. In this case, You agree that Licensor shall be eligible to 20% ownership of any revenue generated and intellectual property created that involved the severely unauthorized use of Genozip.",

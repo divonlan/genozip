@@ -67,6 +67,8 @@ rom command_name (void) // see CommandType
 
 void main_exit (bool show_stack, bool is_error) 
 {
+    buf_set_cleanup_on_exit();  
+
     // finish dumping reference and/or refhash to cache
     if (!is_error) {
         ref_create_cache_join (gref, false);
@@ -109,6 +111,7 @@ void main_exit (bool show_stack, bool is_error)
     // if we're in ZIP - remove failed genozip file (but don't remove partial failed text file in PIZ - it might be still useful to the user)
     if (primary_command == ZIP && z_file && z_file->name && !flag_loading_auxiliary) {
         char *save_name = NULL;
+
         if (z_file && z_file->name) {
             save_name = malloc (strlen (z_file->name)+1);
             strcpy (save_name, z_file->name);

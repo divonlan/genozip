@@ -49,6 +49,8 @@ static Mutex only_once_mutex = {};
 static uint64_t abandoned_mem_current = 0;
 static uint64_t abandoned_mem_high_watermark = 0;
 
+static bool cleanup_on_exit = false; // if true, the system is cleanup up before an exit()
+
 typedef struct {
     BufferP buf;  // address of Buffer structure (not the data!). Buffer is removed if removed bit is set with BL_SET_REMOVED 
     rom func;     // function in which this Buffer was first allocated (at which time it was added to the buffer_list)
@@ -59,6 +61,12 @@ void buf_initialize()
 {
     mutex_initialize (overlay_mutex);
     mutex_initialize (only_once_mutex);
+}
+
+// note that the system is cleanup up before an exit(). this is irreversible
+void buf_set_cleanup_on_exit (void)
+{
+    __atomic_store_n (&cleanup_on_exit, (bool)true, __ATOMIC_SEQ_CST);
 }
 
 static rom buf_display_type (ConstBufferP buf)
@@ -732,8 +740,6 @@ void buf_overlay_do (VBlockP vb,
 }
 
 
-// verify that read-only mapped memory (i.e. reference, refhash) is still the same at the end - detect
-// hardware errors etc that might corrupt data
 static void buf_terminate_background_loading (BufferP buf)
 {
     if (!buf->bg_loading) return; // not background-loading 
@@ -869,7 +875,7 @@ static void buf_abandon_overlay (BufferP buf)
     mutex_unlock (overlay_mutex);            
 }
 
-// free buffer - without freeing memory. A future buf_alloc of this buffer will reuse the memory if possible.
+// free buffer. A future buf_alloc of this buffer will reuse the memory if possible.
 void buf_free_do (BufferP buf, FUNCLINE) 
 {
     switch (buf->type) {
@@ -1021,7 +1027,7 @@ static void buf_remove_from_buffer_list (BufferP buf)
 
 void buf_destroy_do (BufferP buf, FUNCLINE)
 {
-    if (!buf) return; // nothing to do
+    if (!buf || cleanup_on_exit) return; // nothing to do (we don't destroy on exit, as the exiting thread may not be able to remove from buf_list)
 
     buf_remove_from_buffer_list (buf); 
 

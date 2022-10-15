@@ -453,8 +453,17 @@ const Contig *ref_contigs_get_contig_by_ref_index (const Reference ref, WordInde
     return rc;
 }
 
+uint32_t ref_contigs_get_num_contigs (Reference ref)
+{
+    return flag.make_reference ? ZCTX(CHROM)->nodes.len32 : ref->ctgs.contigs.len32;
+}
+
 PosType ref_contigs_get_genome_nbases (const Reference ref)
 {
+    if (flag.make_reference)
+        return B(Range, ref->ranges, ref->ranges.len-1)->gpos +
+               B(Range, ref->ranges, ref->ranges.len-1)->last_pos;
+
     if (!ref->ctgs.contigs.len) return 0;
 
     // note: contigs are sorted by chrom and then pos within chrom, NOT by gpos! (chroms might have been added out of order during reference creation)

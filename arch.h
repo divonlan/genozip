@@ -15,6 +15,7 @@ extern void arch_set_locale (void);
 
 #define ARCH_IP_LEN 16
 extern rom arch_get_ip_addr (rom reason);
+extern rom arch_get_host (void);
 extern rom arch_get_user_host (void);
 extern rom arch_get_os (void);
 extern rom arch_get_distribution (void);

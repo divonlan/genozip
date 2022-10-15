@@ -12,8 +12,10 @@
 #include "seg.h"
 #include "generic.h"
 #include "dict_id.h"
+#include "file.h"
 
-static char magic[8]; // first 8 bytes of the generic file
+static char magic[8] = {}; // first 8 bytes of the generic file
+static char ext[11]  = {}; // nul-terminated txt filename extension
 
 // all data is always consumed
 int32_t generic_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
@@ -23,10 +25,15 @@ int32_t generic_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 
 void generic_seg_initialize (VBlockP vb)
 {
-    // capture the first 8 bytes to be reported in stats
+    // capture the first 8 bytes and the extension to be reported in stats
     if (vb->vblock_i == 1) {
         memset (magic, 0, sizeof (magic));
         memcpy (magic, B1STtxt, MIN_(sizeof (magic), vb->txt_data.len32));
+
+        memset (ext, 0, sizeof (ext));
+        rom last_dot = txt_file->name ? strrchr (txt_file->name, '.') : NULL;
+        if (last_dot && strlen (last_dot+1) < sizeof(ext)) // only return last component if it is not the whole filename, and short (we want the extension that indicates the file type, not the part of the filename that indicates the data)
+            strcpy (ext, last_dot+1);
     }
 }
 
@@ -70,3 +77,9 @@ rom generic_get_magic (void)
 
     return s;
 }
+
+rom generic_get_ext (void)
+{
+    return ext;
+}
+ 

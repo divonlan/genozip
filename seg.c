@@ -528,7 +528,7 @@ void seg_integer (VBlockP vb, ContextP ctx, int64_t n, bool with_lookup, unsigne
     ASSERT (segconf.running || ctx->ltype == LT_DYN_INT || ctx->ltype == LT_DYN_INT_h || ctx->ltype == LT_DYN_INT_H,
             "ctx=%s must have a LT_DYN_INT* ltype", ctx->tag_name);
 
-ASSERT (segconf.running || !(Z_DT(SAM) || Z_DT(BAM)) || !dict_id_is_aux_sf(ctx->dict_id) || ctx->flags.store == STORE_INT,
+ASSERT (segconf.running || !(VB_DT(SAM) || VB_DT(BAM)) || !dict_id_is_aux_sf(ctx->dict_id) || ctx->flags.store == STORE_INT,
             "ctx=%s must have a STORE_INT ltype", ctx->tag_name); // needed to allow recon to translate to BAM
 #endif
 

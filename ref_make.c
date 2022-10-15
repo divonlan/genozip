@@ -159,9 +159,10 @@ ConstBufferP ref_make_get_contig_metadata (void)
 // callback from zfile_compress_genozip_header
 void ref_make_genozip_header (SectionHeaderGenozipHeader *header)
 {
-    header->REF_fasta_md5 = digest_snapshot (&z_file->digest_ctx, "file"); // MD5 or FASTA file
+    header->REF_fasta_md5 = digest_snapshot (&z_file->digest_ctx, "file"); // MD5 of FASTA file
 }
 
+// zip_finalize callback
 void ref_make_finalize (bool unused) 
 { 
     buf_free (contig_metadata); 

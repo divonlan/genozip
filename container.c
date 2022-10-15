@@ -230,7 +230,7 @@ static inline void container_verify_line_integrity (VBlockP vb, ContextP debug_l
 
         iprintf ("Tip: To extract the original line for comparison use:\n   genozip --biopsy-line=%u/%u -B%u%s %s\n",
                 vb->vblock_i, vb->line_i, (int)segconf.vb_size >> 20, 
-                ((Z_DT(SAM) || Z_DT(BAM)) && !z_file->z_flags.has_gencomp) ? " --no-gencomp" : "",
+                ((VB_DT(SAM) || VB_DT(BAM)) && !z_file->z_flags.has_gencomp) ? " --no-gencomp" : "",
                 z_file->txt_header_single.txt_filename);
 
         // show data-type-specific information about defective line
@@ -563,7 +563,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
 
                 // remove reconstructed text (to save memory and allow writer_flush_vb()), except if...
                 if (!flag.interleaved &&               // if --interleave, as we might un-drop the line 
-                    !(Z_DT(SAM) && sam_is_prim_vb)) // if SAM:PRIM line, we still need it to reconstruct its DEPNs
+                    !(VB_DT(SAM) && sam_is_prim_vb)) // if SAM:PRIM line, we still need it to reconstruct its DEPNs
                     vb->txt_data.len = vb->line_start;
 
                 bits_set (vb->is_dropped, rep_i);

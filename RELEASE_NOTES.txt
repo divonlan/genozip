@@ -3,6 +3,9 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+14.0.13 15/Oct/2022
+- Minor improvements & bug fixes
+
 14.0.12 12/Oct/2022
 - VCF: Better compression for sturctural variant fields: INFO/CIPOS and INFO/CIEND, INFO/SVTYPE
 - VCF: Better compression for Illumina genotyping VCFs
@@ -69,6 +72,10 @@ Command line option improvements:
 - New advanced options (see genozip.com/advanced.html for details): --log-digest, --show-sag, --show-depn, --show-lines, --show-gheader=2, --debug-read-ctxs, --debug-sag, --debug-gencomp, --no-gencomp, --no-domqual, --show-wrong-XG, --show-wrong-XM, --show-wrong-XB, --vblock with bytes specification, --show-bam, --debug-lines, --biopsy-line, --show-qual, --show-aligner, --debug-peek, --debug
 Discontinued functionality: 
 - The little-used yet difficult to maintain feature allowing "Binding" of multiples files of the same type using eg "genozip file1.vcf file2.vcf --output bound.vcf.genozip" is no longer supported. This does NOT affect the --tar option, and also does not affect genozip files which contain two FASTQ files compressed with --pair. To compress multiple files into a single "archive" file, use "genozip --tar". To decompress existing genozip files compressed with the Binding feature, use Genozip v13. 
+
+13.0.22 
+- New option: --submit
+- New advanced option: --debug-submit
 
 13.0.21 21/August/2022
 - Bug fix related to re-generation of reference files: compression using a reference file of 1. FASTQ files and 2. unaligned SAM/BAM files (unaligned SAM/BAM files are SAM/BAM files which have no contigs (@SQ lines) listed in their header): up to version 13.0.20, generating a Genozip reference file with "genozip --make-reference" unintentionally generated a unique reference file in each execution. It was therefore required to compress and decompress files using the same reference file,

@@ -80,7 +80,6 @@ extern void ref_lock_free (Reference ref);
 // contigs stuff
 extern rom ref_contigs_get_name_by_ref_index (Reference ref, WordIndex chrom_index, rom *snip, uint32_t *snip_len);
 extern const Contig *ref_contigs_get_contig_by_ref_index (Reference ref, WordIndex chrom_index, bool soft_fail);
-extern PosType ref_contigs_get_genome_nbases (Reference ref);
 extern WordIndex ref_seg_get_alt_chrom (VBlockP vb);
 extern void ref_contigs_compress_ref_make (Reference ref);
 extern void ref_contigs_compress_stored (Reference ref);

@@ -195,7 +195,6 @@ rom url_get_status (rom url, bool *is_file_exists, int64_t *file_size)
     return NULL; // no error
 }
 
-
 // reads a string response from a URL, returns a nul-terminated string and the number of characters (excluding \0), or -1 if failed
 int32_t url_read_string (rom url, char *data, uint32_t data_size)
 {
@@ -212,6 +211,9 @@ int32_t url_read_string (rom url, char *data, uint32_t data_size)
     url_do_curl (url, response, &response_len, error, &error_len);
 
     if (error_len && !response_len) return -1; // failure
+
+    if (response_len && strstr (response, "Bad Request"))
+        return -2;
 
     if (data) {
         unsigned len = MIN_(data_size-1, response_len);

@@ -196,17 +196,20 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux
 #define GET_UINT8(p)   ((uint8_t)(((uint8_t*)(p))[0]))
 #define GET_UINT16(p)  ((uint16_t)(((uint8_t*)(p))[0] | (((uint8_t*)(p))[1] << 8)))
 #define GET_UINT32(p)  ((uint32_t)(((uint8_t*)(p))[0] | (((uint8_t*)(p))[1] << 8) | (((uint8_t*)(p))[2] << 16) | (((uint8_t*)(p))[3] << 24)))
+#define GET_UINT64(p)  ((uint64_t)(((uint8_t*)(p))[0] | ((uint64_t)((uint8_t*)(p))[1] << 8) | ((uint64_t)((uint8_t*)(p))[2] << 16) | ((uint64_t)((uint8_t*)(p))[3] << 24) | ((uint64_t)((uint8_t*)(p))[4] << 32) | ((uint64_t)((uint8_t*)(p))[5] << 40) | ((uint64_t)((uint8_t*)(p))[6] << 48) | ((uint64_t)((uint8_t*)(p))[7] << 56)))
 #define GET_FLOAT32(p) ({ union { uint32_t i; float f; } n= {.i = GET_UINT32(p)}; n.f; })
 
 // getting integers from the BAM data
-#define NEXT_UINT8   ({ uint8_t  value = GET_UINT8   (next_field); next_field += sizeof (uint8_t);  value; })
-#define NEXT_UINT16  ({ uint16_t value = GET_UINT16  (next_field); next_field += sizeof (uint16_t); value; })
-#define NEXT_UINT32  ({ uint32_t value = GET_UINT32  (next_field); next_field += sizeof (uint32_t); value; })
-#define NEXT_FLOAT32 ({ float    value = GET_FLOAT32 (next_field); next_field += sizeof (float);    value; })
+#define NEXT_UINT8    ({ uint8_t  value = GET_UINT8   (next_field); next_field += sizeof (uint8_t ); value; })
+#define NEXT_UINT16   ({ uint16_t value = GET_UINT16  (next_field); next_field += sizeof (uint16_t); value; })
+#define NEXT_UINT32   ({ uint32_t value = GET_UINT32  (next_field); next_field += sizeof (uint32_t); value; })
+#define NEXT_UINT64   ({ uint64_t value = GET_UINT64  (next_field); next_field += sizeof (uint64_t); value; })
+#define NEXT_FLOAT32  ({ float    value = GET_FLOAT32 (next_field); next_field += sizeof (float);    value; })
 
 #define NEXTP_UINT8   ({ uint8_t  value = GET_UINT8   (*next_field_p); *next_field_p += sizeof (uint8_t);  value; })
 #define NEXTP_UINT16  ({ uint16_t value = GET_UINT16  (*next_field_p); *next_field_p += sizeof (uint16_t); value; })
 #define NEXTP_UINT32  ({ uint32_t value = GET_UINT32  (*next_field_p); *next_field_p += sizeof (uint32_t); value; })
+#define NEXTP_UINT64  ({ uint64_t value = GET_UINT64  (*next_field_p); *next_field_p += sizeof (uint64_t); value; })
 #define NEXTP_FLOAT32 ({ uint32_t value = GET_FLOAT32 (*next_field_p); *next_field_p += sizeof (float);    value; })
 
 // ------------------

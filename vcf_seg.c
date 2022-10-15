@@ -340,8 +340,6 @@ void vcf_zip_after_compress (VBlockP vb)
 void vcf_zip_after_vbs (void)
 {
     vcf_FORMAT_PL_after_vbs ();
-
-    ctx_shorten_unused_dict_words (INFO_ILLUMINA_STRAND);    
 }
 
 bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)

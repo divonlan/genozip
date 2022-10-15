@@ -75,6 +75,7 @@ typedef struct Buffer { // 64 bytes
 #define EMPTY_BUFFER ((Buffer){})
 
 extern void buf_initialize(void);
+extern void buf_set_cleanup_on_exit (void);
 
 #define buf_is_alloc(buf_p) ((buf_p)->data != NULL && (buf_p)->type != BUF_UNALLOCATED)
 #define ASSERTNOTINUSE(buf) ASSERT (!buf_is_alloc (&(buf)) && !(buf).len && !(buf).param, "expecting "#buf" to be free, but it's not: %s", buf_desc (&(buf)).s)

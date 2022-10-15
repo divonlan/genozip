@@ -639,9 +639,9 @@ static void vcf_add_all_ref_contigs_to_header (BufferP txt_header)
 
 static bool vcf_header_build_stats_programs (STRp(line), void *unused1, void *unused2, unsigned unused3)
 {
-    if (LINEIS ("##INFO=") || LINEIS ("##FORMAT=")) {
-        buf_append (evb, stats_programs, char, line, line_len, "stats_programs");
-        *BLSTc (stats_programs) = '\t'; // replace \n with \t - the separator required by stats_programs
+    if (LINEIS ("##source=")) {
+        buf_append (evb, stats_programs, char, &line[9], line_len-9, "stats_programs");
+        *BLSTc (stats_programs) = ';'; // replace \n with ; - the separator required by stats_programs
     }
 
     return false; // continue iterating
@@ -734,7 +734,7 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
         vcf_header_zip_update_to_dual_coords (txt_header);
 
     if (z_file && !z_file->num_components)  // first component 
-        z_has_gencomp |= (txt_file->coords != DC_NONE);  // note: in case of --chain, z_flags.dual_coords is set in file_open_z
+        z_file->z_flags.has_gencomp |= (txt_file->coords != DC_NONE);  // note: in case of --chain, z_flags.dual_coords is set in file_open_z
 
     return true; // all good
 }

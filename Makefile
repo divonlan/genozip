@@ -390,9 +390,9 @@ conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld
 #	@(cd $(CONDA_RECIPE_DIR); git request-pull master https://github.com/divonlan/genozip-feedstock master)
 	@touch $@
 	@echo "CONDA: Using a browser:"
-	@echo "  (1) Go to https://github.com/divonlan/genozip-feedstock/tree/genozip"
+	@echo "  (1) Go to https://github.com/divonlan/genozip-feedstock/tree/genozip "
 	@echo "  (2) Click 'Contribute' -> 'Open pull request'"
-	@echo "  (3) Go to https://dev.azure.com/conda-forge/feedstock-builds/_build"
+	@echo "  (3) Go to https://dev.azure.com/conda-forge/feedstock-builds/_build "
 	@echo "  (4) Click on genozip and wait (~8 min) for the test to complete. Fix any issues."
 	@echo "  (5) Go back to the tab in (2) and click 'Merge pull request' and the 'Confirm merge' (DONT CLICK 'Delete branch')"
 	@echo "  (6) Go to https://dev.azure.com/conda-forge/feedstock-builds/_build and watch the build - it should be fine"

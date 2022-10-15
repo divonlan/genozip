@@ -31,12 +31,14 @@ void vcf_illum_gtyping_initialize (VBlockVCFP vb)
 
     ctx_set_ltype (VB, LT_SEQUENCE, INFO_PROBE_A, INFO_PROBE_B, DID_EOL);
 
-    // create ILLUMINA_STRAND nodes as we will refer to them by index (nodes will be deleted in vcf_zip_after_vbs if not used)
-    ctx_create_node (VB, INFO_ILLUMINA_STRAND, cSTR("TOP"));   // word_index=0
-    ctx_create_node (VB, INFO_ILLUMINA_STRAND, cSTR("BOT"));   // word_index=1
-    ctx_create_node (VB, INFO_ILLUMINA_STRAND, cSTR("PLUS"));  // word_index=2
-    ctx_create_node (VB, INFO_ILLUMINA_STRAND, cSTR("MINUS")); // word_index=3
-    ctx_set_store (VB, STORE_INDEX, INFO_ILLUMINA_STRAND, DID_EOL);
+    // create ILLUMINA_STRAND nodes as we will refer to them by index 
+    if (segconf.has[INFO_ILLUMINA_STRAND]) {
+        ctx_create_node (VB, INFO_ILLUMINA_STRAND, cSTR("TOP"));   // word_index=0
+        ctx_create_node (VB, INFO_ILLUMINA_STRAND, cSTR("BOT"));   // word_index=1
+        ctx_create_node (VB, INFO_ILLUMINA_STRAND, cSTR("PLUS"));  // word_index=2
+        ctx_create_node (VB, INFO_ILLUMINA_STRAND, cSTR("MINUS")); // word_index=3
+        ctx_set_store (VB, STORE_INDEX, INFO_ILLUMINA_STRAND, DID_EOL);
+    }
 }
 
 // <ID=ILLUMINA_STRAND,Number=1,Type=String,Description="Probe strand">

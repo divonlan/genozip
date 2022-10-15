@@ -251,6 +251,22 @@ static bool license_verify_email (char *response, unsigned response_size, rom un
     return strlen (response) > 3 && strchr (response, '@') && strchr (response, '.');
 }
 
+static bool license_is_consumer_email (rom email)
+{
+    rom domain = strchr (email, '@') + 1;
+
+    static rom consumer_domains[] = { 
+        "gmail.com", "qq.com", "yahoo.com", "yahoo.fr", "hotmail.com", "hotmail.fr", "hotmail.co.jp",
+        "outlook.com", "163.com", "web.de",
+        "list.ru", "mail.ru", "protonmail.com",  "naver.com", "yaani.com", "icloud.com"
+    };
+
+    for (int i=0; i < ARRAY_LEN(consumer_domains); i++)
+        if (!strcmp (domain, consumer_domains[i])) return true;
+
+    return false;
+}
+
 static bool license_verify_name (char *response, unsigned response_size, rom unused)
 {
     if (!strchr (response, ' ')) {
@@ -329,7 +345,14 @@ void license_register (void)
         str_query_user ("\nYour name: ", rec.name, sizeof(rec.name), license_verify_name, NULL);
         
         str_query_user ("\nYour email address: ", rec.email, sizeof(rec.email), license_verify_email, NULL);
+        int len = strlen (rec.email);
         
+        if (license_is_consumer_email (rec.email) && len < sizeof (rec.email)-20) {
+            rec.email[len] = ' ';
+            str_query_user ("\nHmm... that looks like a personal email address.\nPlease enter your email address at your institution / company: ", 
+                            &rec.email[len+1], sizeof(rec.email)-len-1, license_verify_email, NULL);
+        }
+
         str_query_user ("\nWhat type of license do you require?\n\n"
                         "1. Academic license (free, available to recognized research institutions, but excluding mixed clinical/research use)\n\n"
                         "2. Non-academic license - 30 days evaluation (free for 30 days, for clinical or mixed clinical/research settings, biotech/agrotech/SaaS companies and other non-academic uses)\n\n"
@@ -341,8 +364,8 @@ void license_register (void)
         rec.lic_type = lic_type[0] - '0';
     
         if (rec.lic_type == LIC_TYPE_PAID) {
-            bool stats_consent = str_query_user_yn ("\nGenozip can optionally collect aggregate statistics and metadata about Genozip's compression performance, helping us improve our algorithms (see https://genozip.com/stats-collected.html). "
-                                                    "Do you agree? ", QDEF_NONE);
+            bool stats_consent = str_query_user_yn ("\nGenozip optionally collects aggregate statistics and metadata, helping us improve our compression algorithms (see "WEBSITE_STATS"). "
+                                                    "This helps us a lot. May we have your permission for this? ", QDEF_NONE);
             strcpy (rec.allow_stats, stats_consent ? "Yes" : "No");
         }
         else

@@ -172,9 +172,9 @@ typedef struct File {
     uint32_t max_conc_writing_vbs;     // PIZ z_file: the maximal value conc_writing_vbs across all SEC_RECON_PLAN sections in this z_file
 } File;
 
-#define z_has_gencomp z_file->z_flags.has_gencomp
-#define z_is_dvcf (Z_DT(VCF) && z_has_gencomp)
-#define z_sam_gencomp ((Z_DT(SAM) || Z_DT(BAM)) && z_has_gencomp) // note: is BAM file in piz are Z_DT(SAM) and in zip are Z_DT(BAM)
+#define z_has_gencomp (z_file && z_file->z_flags.has_gencomp)
+#define z_is_dvcf (z_file && Z_DT(VCF) && z_has_gencomp)
+#define z_sam_gencomp (z_file && (Z_DT(SAM) || Z_DT(BAM)) && z_has_gencomp) // note: is BAM file in piz are Z_DT(SAM) and in zip are Z_DT(BAM)
 
 extern DataType last_z_dt; // data_type of last z_file opened
 

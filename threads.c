@@ -44,6 +44,7 @@ static Mutex log_mutex = {};
 
 typedef struct {
     bool in_use;
+    bool canceled;
     pthread_t pthread;
     rom task_name;
     VBIType vb_i, vb_id;
@@ -331,16 +332,23 @@ void threads_join_do (ThreadId *thread_id, rom func)
 // kills all other threads
 void threads_cancel_other_threads (void)
 {
+#ifndef _WIN32 // segfaults on Windows, see bug 708
     mutex_lock (threads_mutex);
 
     ARRAY (ThreadEnt, th, threads);
-    for (unsigned i=0; i < th_len; i++)
-        if (th->in_use && th->pthread != pthread_self()) {
-            pthread_cancel (th->pthread);    
-            th->in_use = false;
+
+    // send cancellation request to all threads
+    for (unsigned i=0; i < th_len; i++) 
+        if (th[i].in_use && th[i].pthread != pthread_self() && !pthread_cancel (th[i].pthread))
+            th[i].canceled = true;
+
+    // join all threads, which happens after cancellation is processed 
+    for (unsigned i=0; i < th_len; i++) 
+        if (th[i].canceled) {
+            pthread_join (th[i].pthread, NULL);
+            th[i].in_use = th[i].canceled = false;
         }
-
+        
     mutex_unlock (threads_mutex);
-
-    usleep (500000); // wait 0.5 second for the all threads to die. pthread_join here hangs on Windows (not tested on others)
+#endif
 }
