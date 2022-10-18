@@ -2,7 +2,7 @@
 ProjectFileVersion = "1.1"
 [General]
 Program name = Genozip
-Program version = 14.0.13
+Program version = 14.0.14
 Windows 2000 = 0
 Windows XP = 0
 Windows Server 2003 = 0
@@ -88,7 +88,7 @@ C:\Users\divon\Projects\genozip\windows\LICENSE.for-installer.txt
 5.4 KB
 txt
 [Licence_Begin]
-7429
+7933
 {\rtf1\ansi\deff0{\fonttbl{\f0\fnil\fcharset0 Arial;}}
 {\colortbl ;\red0\green0\blue0;}
 \viewkind4\uc1\pard\cf1\lang1033\fs20 This program, "Genozip", which includes four tools \par
@@ -137,22 +137,25 @@ as their usual meaning in the context of a software product\par
 .\par
 \par
 2. Grant of copyright license. Licensor hereby grants to\par
-You a limited non-exclusive copyright license to use\par
-Genozip for any the following limited purposes subject to\par
-the conditions attached to each purpose, and subject to the\par
+You a limited non-exclusive, non-transferrable, non\par
+-sublicensable, revokable copyright license to use Genozip\par
+for any of the following limited purposes subject to the\par
+conditions attached to each purpose, and subject to the\par
 terms and conditions of this License:\par
 \par
    a. For academic research, educational or training\par
-purposes, but excluding use with Clinical Data.\par
+purposes at a recognized academic research institution, but\par
+excluding use with Clinical Data.\par
 \par
    b. For another non-commercial purpose, if it has been\par
 pre-approved by Licensor in writing. Email register@genozip\par
 .com to seek such an approval.\par
 \par
-   c. For any legal purpose, if a Commercial License was\par
-purchased and paid for, and for the duration that it is in\par
-effect. For details, see https://genozip.com/commercial\par
-.html or email sales@genozip.com.\par
+   c. For any legal purpose, if a License was purchased and\par
+paid for, and for the duration that it is in effect, on\par
+computers You own and/or cloud accounts You own at 3rd\par
+party cloud providers. For details, see https://genozip.com\par
+/commercial.html or email sales@genozip.com.\par
 \par
    d. For any legal purpose, if use is limited to the three\par
 tools: genounzip, genocat, genols.\par
@@ -192,8 +195,13 @@ Regarding any such source code You submitted for inclusion\par
 in Genozip in the past, You hereby assign all copyright in\par
 this submitted source code to Licensor.\par
 \par
+   e. Reselling Genozip or services based on Genozip,\par
+whether as a stand-alone product or service, or bundled\par
+with other products or services is not covered by this\par
+license, and requires a separate reseller or OEM license.\par
+\par
 4. Severely unauthorized use of Genozip. Use which is non\par
--compliant with sections 2, 3a, 3c shall be considered\par
+-compliant with sections 2, 3a, 3c, 3e shall be considered\par
 severely unauthorized use of Genozip. In this case, You\par
 agree that Licensor shall be eligible to 20% ownership of\par
 any revenue generated and intellectual property created\par
@@ -206,12 +214,13 @@ provided by you and details about your hardware, operating\par
 system and IP address as displayed at end of the\par
 registration process and confirmed by you.\par
 \par
-   b. Non-paid licenses only: When a file is compressed:\par
-aggregate statistical information about the performance of\par
-the compression algorithm and associated metadata. Details\par
-can be found here: https://genozip.com/stats-collected.html\par
-. This information is not collected when using Genozip with\par
-a paid license.\par
+   b. When a file is compressed: aggregate statistical\par
+information about the performance of the compression\par
+algorithm and associated metadata. Details can be found\par
+here: https://genozip.com/stats-collected.html. This data\par
+is collected when using a non-paid license. When using a\par
+paid license, You will be asked to choose whether or not\par
+You allow this data to be collected.\par
 \par
 6. Trademarks. This License does not grant permission to\par
 use the trade names, trademarks, service marks, or product\par
@@ -246,7 +255,7 @@ of such damages.\par
 \par
 END OF TERMS AND CONDITIONS\par
 \par
-Genozip license version: 14.0.13\par
+Genozip license version: 14.0.14\par
 \par
 \par
 }
