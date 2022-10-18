@@ -14,6 +14,8 @@
 // Illumina-7 format: <instrument>:<run number>:<flowcell ID>:<lane>:<tile>:<x-pos>:<y-pos>  
 // Example: HWI-D00360:5:H814YADXX:1:1106:10370:52569
 // Example FASTQ: A00488:61:HMLGNDSXX:4:1101:1940:1000 2:N:0:CTGAAGCT+ATAGAGGC
+// @<instrument>:<run number>:<flowcell ID>:<lane>:<tile>:<x-pos>:<y-pos> <read>:<is filtered>:<control number>:<sample number>
+// "sample number" can sometimes be the sequence of the index read instead of a number
 // See here: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
 // interpretation of the first field here: https://github.com/10XGenomics/supernova/blob/master/tenkit/lib/python/tenkit/illumina_instrument.py#L12-L45
 //-----------------------------------------------------------------------------------------

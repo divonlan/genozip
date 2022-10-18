@@ -202,7 +202,8 @@ typedef struct VBlockSAM {
 
     // Seg: 0-based index into AUX fields, -1 means field is not present in this line
     #define first_idx idx_NM_i
-    int16_t idx_NM_i, idx_MD_Z, idx_SA_Z, idx_XG_Z, idx_NH_i, idx_HI_i, idx_X0_i, idx_X1_i, idx_XA_Z, idx_AS_i, 
+    int16_t idx_NM_i, idx_MD_Z, idx_SA_Z, idx_XG_Z, idx_NH_i, idx_HI_i, idx_IH_i,
+            idx_X0_i, idx_X1_i, idx_XA_Z, idx_AS_i, 
             idx_CC_Z, idx_CP_i, idx_ms_i, idx_SM_i,
             idx_UB_Z, idx_BX_Z, idx_CB_Z, idx_GX_Z, idx_CR_Z, idx_CY_Z,
             idx_XO_Z, idx_YS_Z, idx_XB_A, idx_XM_Z, idx_XB_Z;
@@ -213,6 +214,7 @@ typedef struct VBlockSAM {
     #define has_XM   (vb->idx_XG_Z != -1)
     #define has_NH   (vb->idx_NH_i != -1)
     #define has_HI   (vb->idx_HI_i != -1)
+    #define has_IH   (vb->idx_IH_i != -1)
     #define has_X0   (vb->idx_X0_i != -1)
     #define has_X1   (vb->idx_X1_i != -1)
     #define has_XA   (vb->idx_XA_Z != -1)

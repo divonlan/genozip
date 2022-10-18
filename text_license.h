@@ -21,10 +21,10 @@ static rom license[] = {
     
     "Other words and terms in this License shall be interpreted as their usual meaning in the context of a software product.",
 
-    "2. Grant of copyright license. Licensor hereby grants to You a limited non-exclusive copyright license to use Genozip for any the following limited purposes subject to the conditions attached to each purpose, and subject to the terms and conditions of this License:",
-    "   a. For academic research, educational or training purposes, but excluding use with Clinical Data.",
+    "2. Grant of copyright license. Licensor hereby grants to You a limited non-exclusive, non-transferrable, non-sublicensable, revokable copyright license to use Genozip for any of the following limited purposes subject to the conditions attached to each purpose, and subject to the terms and conditions of this License:",
+    "   a. For academic research, educational or training purposes at a recognized academic research institution, but excluding use with Clinical Data.",
     "   b. For another non-commercial purpose, if it has been pre-approved by Licensor in writing. Email "EMAIL_REGISTER" to seek such an approval.",
-    "   c. For any legal purpose, if a Commercial License was purchased and paid for, and for the duration that it is in effect. For details, see https://genozip.com/commercial.html or email "EMAIL_SALES".",
+    "   c. For any legal purpose, if a License was purchased and paid for, and for the duration that it is in effect, on computers You own and/or cloud accounts You own at 3rd party cloud providers. For details, see https://genozip.com/commercial.html or email "EMAIL_SALES".",
     "   d. For any legal purpose, if use is limited to the three tools: genounzip, genocat, genols.",
     "   e. For the purpose of evaluating Genozip, for a duration of 30 days.",
     "   f. For the purpose of distributing Genozip to others via a platform that is free of charge, including (but not limited to) an Internet website, a package or container management system, or a module on an institutional HPC.",
@@ -34,12 +34,13 @@ static rom license[] = {
     "   b. Using Genozip to compress a file is only permitted if the file is retained in its original form as well or the potential loss of data due to Genozip not being able to uncompress the compressed file would not cause any harm.",
     "   c. Any changes to the Genozip's source code and/or creation of Derivative Works and/or reverse-engineering of Genozip are forbidden, unless prior written permission is obtained from Licensor.",
     "   d. Any software source code intentionally submitted for inclusion in Genozip by You to the Licensor or the Developer, including by using a Github Pull Request, shall imply complete and irrevocable assignment by You to Licensor of all copyright in the submitted source code. Regarding any such source code You submitted for inclusion in Genozip in the past, You hereby assign all copyright in this submitted source code to Licensor.",
+    "   e. Reselling Genozip or services based on Genozip, whether as a stand-alone product or service, or bundled with other products or services is not covered by this license, and requires a separate reseller or OEM license.",
 
-    "4. Severely unauthorized use of Genozip. Use which is non-compliant with sections 2, 3a, 3c shall be considered severely unauthorized use of Genozip. In this case, You agree that Licensor shall be eligible to 20% ownership of any revenue generated and intellectual property created that involved the severely unauthorized use of Genozip.",
+    "4. Severely unauthorized use of Genozip. Use which is non-compliant with sections 2, 3a, 3c, 3e shall be considered severely unauthorized use of Genozip. In this case, You agree that Licensor shall be eligible to 20% ownership of any revenue generated and intellectual property created that involved the severely unauthorized use of Genozip.",
 
     "5. Data collected",
     "   a. At registration time: registration information provided by you and details about your hardware, operating system and IP address as displayed at end of the registration process and confirmed by you.",
-    "   b. Non-paid licenses only: When a file is compressed: aggregate statistical information about the performance of the compression algorithm and associated metadata. Details can be found here: " WEBSITE_STATS". This information is not collected when using Genozip with a paid license.",
+    "   b. When a file is compressed: aggregate statistical information about the performance of the compression algorithm and associated metadata. Details can be found here: " WEBSITE_STATS". This data is collected when using a non-paid license. When using a paid license, You will be asked to choose whether or not You allow this data to be collected.",
  
     "6. Trademarks. This License does not grant permission to use the trade names, trademarks, service marks, or product names of the Licensor, except as required for reasonable and customary use in describing the origin of the Genozip",
     

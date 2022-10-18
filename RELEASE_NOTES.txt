@@ -3,6 +3,10 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+14.0.14 18/Oct/2022
+- License changes: sections 2, 2a, 2c, 3e, 4, 5b
+- BAM: minor improvement in compression for NovoAlign-generated files
+
 14.0.13 15/Oct/2022
 - Minor improvements & bug fixes
 - Change in article 3c of the license - explicitly prohibiting reverse-engineering

@@ -868,6 +868,7 @@ void sam_seg_idx_aux (VBlockSAMP vb)
         else TEST_AUX(MD_Z, 'M', 'D', 'Z');
         else TEST_AUX(SA_Z, 'S', 'A', 'Z');
         else TEST_AUX(HI_i, 'H', 'I', 'i');
+        else TEST_AUX(IH_i, 'I', 'H', 'i');
         else TEST_AUX(XG_Z, 'X', 'G', 'Z');
         else TEST_AUX(XM_Z, 'X', 'M', 'Z');
         else TEST_AUX(X0_i, 'X', '0', 'i');

@@ -341,6 +341,10 @@ bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(alignment), boo
         
         case SAG_BY_NH: 
         case SAG_BY_SOLO: 
+            // case: IH=1 - no gencomp
+            if (sam_seg_peek_int_field (vb, OPTION_IH_i, vb->idx_IH_i, 1, 1, false, NULL))
+                goto done;
+
             if (has_NH && sam_seg_get_aux_int (vb, vb->idx_NH_i, &n_alns, is_bam, 2/*at least*/, MAX_HI_NH, true)) {
                 
                 if (sam_line_is_depn(dl)) 
