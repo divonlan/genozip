@@ -118,7 +118,8 @@ void vb_release_vb_do (VBlockP *vb_p, rom task_name, rom func)
     vb->drop_curr_line = vb->chrom_name = vb->fragment_start = NULL;
     vb->prev_range[0] = vb->prev_range[1] = NULL;
     vb->prev_range_chrom_node_index[0] = vb->prev_range_chrom_node_index[1] = vb->prev_range_range_i = 0;
-    vb->digest = vb->expected_digest = DIGEST_NONE;
+    vb->digest = DIGEST_NONE;
+    vb->expected_digest = DIGEST_NONE;
     vb->refhash_layer = vb->refhash_start_in_layer = 0;
     vb->fragment_ctx = vb->ht_matrix_ctx = vb->runs_ctx = vb->fgrc_ctx = NULL;
     vb->codec_using_codec_bufs = 0;

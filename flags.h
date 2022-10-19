@@ -119,7 +119,8 @@ typedef struct {
         show_vblocks, show_threads, show_uncompress, biopsy,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
         debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sag, debug_gencomp, debug_lines, debug_latest,
-        debug_peek, submit_stats, debug_submit,
+        debug_peek, submit_stats, debug_submit, 
+        debug_debug, // ad-hoc debug printing in prod
         no_gencomp, force_gencomp, no_domqual, verify_codec, seg_only, show_bam, xthreads, show_flags, show_rename_tags,
         #define SHOW_CONTAINERS_ALL_VBs (-1)
         show_containers, show_aligner, show_buddy,

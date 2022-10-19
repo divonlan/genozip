@@ -16,7 +16,7 @@
             //"program": "${workspaceFolder}/genounzip.exe",
             //"program": "${workspaceFolder}/genols-debug.exe",
 
-            "args" : ["-ft", "--show-ref-contig", "bug.sam"],
+            "args" : ["-fX",  "private/test/basic.vcf"],
             
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

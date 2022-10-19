@@ -914,7 +914,7 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, ContextP bitmap_ctx, STRp(snip), b
                                                      
     BamCigarOp op = {};
     bool consumes_query=false, consumes_reference=false;
-    uint32_t save_n;
+    uint32_t save_n = 0;
     char *recon = BAFTtxt;
 
     while (seq_consumed < vb->seq_len || ref_consumed < vb->ref_consumed) {

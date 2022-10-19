@@ -115,8 +115,8 @@ IS_SKIP (sam_piz_is_skip_section)
     bool dict_needed_for_preproc = (st == SEC_DICT && z_file->z_flags.has_gencomp);  // when loading a SEC_DICT in a file that has gencomp, don't skip dicts needed for loading SA
 
     if (dict_id_is_qname_sf(dict_id)) dnum = _SAM_Q1NAME; // treat all QNAME subfields as _SAM_Q1NAME
-    bool prim = (comp_i == SAM_COMP_PRIM) && !preproc;
-    bool main = (comp_i == SAM_COMP_MAIN);
+    bool is_prim = (comp_i == SAM_COMP_PRIM) && !preproc;
+    bool is_main = (comp_i == SAM_COMP_MAIN);
     bool cov  = flag.collect_coverage;
     bool cnt  = flag.count && !flag.grep; // we skip based on --count, but not if --grep, because grepping requires full reconstruction
     
@@ -127,12 +127,12 @@ IS_SKIP (sam_piz_is_skip_section)
             
         case _SAM_NONREF   : case _SAM_NONREF_X : case _SAM_GPOS     : case _SAM_STRAND :
         case _SAM_SEQMIS_A : case _SAM_SEQMIS_C : case _SAM_SEQMIS_G : case _SAM_SEQMIS_T : 
-            SKIPIF (prim); // in PRIM, we skip sections that we used for loading the SA Groups in sam_piz_load_sags, but not needed for reconstruction
+            SKIPIF (is_prim); // in PRIM, we skip sections that we used for loading the SA Groups in sam_piz_load_sags, but not needed for reconstruction
                            // (during PRIM SA Group loading, skip function is temporarily changed to sam_plsg_only). see also: sam_load_groups_add_grps
             SKIPIFF ((cov || cnt) && !flag.bases);
 
         case _SAM_QUAL : case _SAM_DOMQRUNS : case _SAM_QUALMPLX : case _SAM_DIVRQUAL :
-            SKIPIF (prim);                                         
+            SKIPIF (is_prim);                                         
             SKIPIFF (cov || cnt);
         
         case _SAM_QUALSA  :
@@ -146,12 +146,12 @@ IS_SKIP (sam_piz_is_skip_section)
 
         case _SAM_Q1NAME : case _SAM_QNAMESA :
             KEEPIF (preproc || dict_needed_for_preproc || (cnt && flag.bases && flag.out_dt == DT_BAM)); // if output is BAM we need the entire BAM record to correctly analyze the SEQ for IUPAC, as it is a structure.
-            SKIPIFF (prim);                                         
+            SKIPIFF (is_prim);                                         
 
         case _OPTION_SA_Z :
         case _OPTION_SA_MAIN :
             KEEPIF (IS_SAG_SA && preproc && st == SEC_LOCAL);
-            SKIPIF (IS_SAG_SA && prim && st == SEC_LOCAL);
+            SKIPIF (IS_SAG_SA && is_prim && st == SEC_LOCAL);
             SKIPIFF (cnt && !flag.bases);
                      
         case _OPTION_SA_RNAME  :    
@@ -161,15 +161,15 @@ IS_SKIP (sam_piz_is_skip_section)
         case _OPTION_SA_NM     :
             KEEPIF (IS_SAG_SA && (preproc || dict_needed_for_preproc));
             SKIPIF (cnt && !flag.bases); 
-            KEEPIF (main || st == SEC_DICT); // need to reconstruct from prim line
-            SKIPIFF (IS_SAG_SA && prim);    
+            KEEPIF (is_main || st == SEC_DICT); // need to reconstruct from prim line
+            SKIPIFF (IS_SAG_SA && is_prim);    
 
         case _OPTION_SA_MAPQ : 
             KEEPIF (IS_SAG_SA && (preproc || dict_needed_for_preproc));
-            KEEPIF (main || st == SEC_DICT);
+            KEEPIF (is_main || st == SEC_DICT);
             SKIPIF (cnt && !flag.sam_mapq_filter);
-            KEEPIF (main || st == SEC_DICT);
-            SKIPIFF (IS_SAG_SA && prim);                                         
+            KEEPIF (is_main || st == SEC_DICT);
+            SKIPIFF (IS_SAG_SA && is_prim);                                         
         
         case _SAM_FLAG     : 
             KEEPIF (preproc || dict_needed_for_preproc);            
