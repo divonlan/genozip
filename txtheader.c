@@ -152,7 +152,7 @@ int64_t txtheader_zip_read_and_compress (int64_t *txt_header_offset, CompIType c
 
     // note: we always write the txt_header for comp_i=0 even if we don't actually have a header, because the
     // section header contains the data about the file. Special case: we don't write headers of SAM DEPN
-    if (z_file && !flag.seg_only && !(z_sam_gencomp && comp_i)) {
+    if (z_file && !flag.seg_only && !flag.make_reference && !(z_sam_gencomp && comp_i)) {
         *txt_header_offset = z_file->disk_so_far; // offset of first (vb=1) TXT_HEADER fragment
         txtheader_compress (&evb->txt_data, txt_header_size, header_digest, is_first_txt, comp_i); // we write all headers in bound mode too, to support genounzip
     }

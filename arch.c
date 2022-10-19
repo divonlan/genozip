@@ -84,7 +84,7 @@ static void arch_add_to_windows_path (rom my_argv0)
 
 void arch_set_locale (void)
 {
-    ASSERTWD0 (setlocale (LC_CTYPE,   flag.is_windows ? "" : "C.UTF-8"),            "Warning: failed to setlocale of LC_CTYPE");   // accept and print UTF-8 text (to do: doesn't work for Windows)
+    ASSERTWD0 (setlocale (LC_CTYPE,   flag.is_windows ? ".UTF-8" : "en_US.UTF-8"), "Warning: failed to setlocale of LC_CTYPE");   // accept and print UTF-8 text (to do: doesn't work for Windows)
     ASSERTWD0 (setlocale (LC_NUMERIC, flag.is_windows ? "english" : "en_US.UTF-8"), "Warning: failed to setlocale of LC_NUMERIC"); // printf's %f uses '.' as the decimal separator (not ',')
 }
 
