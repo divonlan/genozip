@@ -391,7 +391,7 @@ $(DOCS)/LICENSE.html: genozip$(EXE)
 	@./genozip$(EXE) --license=-5000 --force > $@
 
 # this must be run ONLY has part of "make distribution" or else versions will be out of sync
-$(DOCS)/genozip-installer.exe: clean-optimized $(WINDOWS_INSTALLER_OBJS) 
+$(DOCS)/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS) 
 	@(mkdir windows >& /dev/null ; exit 0)
 	@echo 'Creating Windows installer'
 	@echo 'WINDOWS: Using the UI:'
@@ -433,10 +433,10 @@ push-build:
 	@(cd $(DOCS); git commit -m $(version) ; exit 0) > /dev/null
 	@(cd $(DOCS); git push) > /dev/null
 
-distribution: increment-version testfiles LICENSE.txt $(DOCS)/LICENSE.html $(DOCS)/genozip-linux-x86_64.tar.build $(DOCS)/genozip-installer.exe push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
+distribution: increment-version testfiles LICENSE.txt $(DOCS)/LICENSE.html $(DOCS)/genozip-linux-x86_64.tar.build clean-optimized $(DOCS)/genozip-installer.exe push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
 	@(cd ../genozip-feedstock/ ; git pull)
 
-distribution-maintenance: increment-version LICENSE.txt testfiles $(DOCS)/genozip-linux-x86_64.tar.build $(DOCS)/genozip-installer.exe \
+distribution-maintenance: increment-version LICENSE.txt testfiles $(DOCS)/genozip-linux-x86_64.tar.build clean-optimized $(DOCS)/genozip-installer.exe \
                           push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
 	@(cd ../genozip-feedstock/ ; git pull)
 
