@@ -47,6 +47,21 @@ static SmallContainer con_illumina_7_fq = {
                    { .dict_id = { _SAM_Q7NAME },                           } } // entire part after space is segged together 
 };
 
+// Example: A00488:61:HMLGNDSXX:4:1101:4345:1000_2:N:0
+static SmallContainer con_illumina_7_ex = {
+    .repeats   = 1,
+    .nitems_lo = 9,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = ":"          },  
+                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q4NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q5NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q6NAME }, .separator = "_"          },
+                   { .dict_id = { _SAM_QmNAME }, .separator = { CI0_SKIP } },
+                   { .dict_id = { _SAM_Q7NAME },                           } } // entire part after underscore is segged together 
+};
+
 //--------------------------------------------------------------------------------------------------------------
 // BGI_E format: 27 characters: E, FlowCellSerialNumber[various], L, Lane[1], C, Column[3], R, Row[3] Tile[6-8]
 // Example: E100020409L1C001R0030000234
@@ -394,6 +409,17 @@ static SmallContainer con_ncbi_sra2P_fq = {
                              { .dict_id = { _FASTQ_Q6NAME },                                     } } // length value
 };
 
+// example: SRR12345678.5 5   <--- it seems that the final two numbers are always the same
+// to do: this should be con_ncbi_sraP_fq + con_integer
+static SmallContainer con_ncbi_srr_fq = {
+    .repeats             = 1,
+    .nitems_lo           = 4,
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = "."                    },  // SRA ID - usually all-the-same
+                             { .dict_id = { _SAM_Q1NAME }, .separator = " "                    },  // first number - sometimes, but not always, all-the-same - seg as integer in local
+                             { .dict_id = { _SAM_Q2NAME }                                      },  // 2nd number 
+                             { .dict_id = { _SAM_QmNAME }, .separator = { CI0_SKIP }           } }
+};
+
 // example: basic.1
 static SmallContainer con_genozip_opt = {
     .repeats             = 1,
@@ -511,7 +537,6 @@ static SmallContainer con_ncbi_sra2P_l3 = {
                              { .dict_id = { _FASTQ_T7HIRD },                                     } } // length value
 };
 
-
 //--------------------------------------------------------------------------------------------------------
 
 #define MAX_QNAME_ITEMS 11 // mate + 10 others (matching Q?NAME defined in sam.h, fastq.h, kraken.h) 
@@ -546,6 +571,8 @@ static QnameFlavorStruct qf[] = {
 /*  mate   name             example                                       tech     fq_only   con_template     #sp  integer_items   numeric_items   in-local        hex_items       ord1,2 rng    sqln len px_strs      */
     {},  { "Illumina-fastq",{ "A00488:61:HMLGNDSXX:4:1101:4345:1000 2:N:0:CTGAAGCT+ATAGAGGC" },
                                                                           TECH_ILLUM_7, 1, &con_illumina_7_fq, 7,  {1,3,4,5,6,-1}, {-1},           {1,3,-1},       {-1},           5,6,   -1,-1, -1,                   }, // mate added v14.0.0  
+         { "Illumina-ex",   { "A00488:61:HMLGNDSXX:4:1101:4345:1000_2:N:0" },
+                                                                          TECH_ILLUM_7, 0, &con_illumina_7_ex, 7,  {1,3,4,5,6,-1}, {-1},           {1,3,-1},       {-1},           5,6,   -1,-1, -1,                   }, // v14.0.17  
     {},  { "Illumina",      { "A00488:61:HMLGNDSXX:4:1101:4345:1000" },   TECH_ILLUM_7, 0, &con_illumina_7,    6,  {1,3,4,5,6,-1}, {-1},           {1,3,-1},       {-1},           5,6,   -1,-1, -1,                   },
     {},  { "BGI-R6",        { "8A_V100004684L3C001R029011637", "V300014293BL2C001R027005967", "V300003413L4C001R016000000" },          
                                                                           TECH_BGI,     0, &con_bgi_R6,        3,  {-1},           {1,2,3,4,-1},   {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_bgi_R     },
@@ -566,10 +593,10 @@ static QnameFlavorStruct qf[] = {
                                                                           TECH_PACBIO,  0, &con_pacbio_range,  4,  {1,2,3,-1},     {-1},           {-1},           {-1},           1,-1,   3,-1, -1,  0,  PX_pacbio    },
     {},  { "PacBio-Label",  { "m64136_200621_234916/18/ccs" },            TECH_PACBIO,  0, &con_pacbio_label,  3,  {1,-1},         {-1},           {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_pacbio    },
     {},  { "PacBio-Plain",  { "m64136_200621_234916/18" },                TECH_PACBIO,  0, &con_pacbio_plain,  2,  {1,-1},         {-1},           {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_pacbio    },
-    // {},  { "Nanopore",      { "af84b0c1-6945-4323-9193-d9f6f2c38f9a" },   TECH_ONP,     0, &con_nanopore,      4,  {-1},           {-1},           {0,1,2,3,4,-1}, {-1},           -1,-1, -1,-1, -1,  36,              },
-    {},  { "Nanopore",      { "af84b0c1-6945-4323-9193-d9f6f2c38f9a" },   TECH_ONP,     0, &con_nanopore,      4,  {-1},           {0,1,2,3,4-1},  {0,1,2,3,4,-1}, {0,1,2,3,4,-1}, -1,-1, -1,-1, -1,  36, PX_nanopore},
+    // {},  { "Nanopore",      { "af84b0c1-6945-4323-9193-d9f6f2c38f9a" },   TECH_ONP,     0, &con_nanopore,      4,  {-1},           {-1},           {0,1,2,3,4,-1}, {-1},           -1,-1, -1,-1, -1,  36,           },
+    {},  { "Nanopore",      { "af84b0c1-6945-4323-9193-d9f6f2c38f9a" },   TECH_ONP,     0, &con_nanopore,      4,  {-1},           {0,1,2,3,4-1},  {0,1,2,3,4,-1}, {0,1,2,3,4,-1}, -1,-1, -1,-1, -1,  36, PX_nanopore  },
     // {},  { "Nanopore-ext",  { "2a228edf-d8bc-45d4-9c96-3d613b8530dc_Basecall_2D_000_template" },
-    //                                                                       TECH_ONP,     0, &con_nanopore_ext,  5,  {-1},           {-1},           {0,1,2,3,4,-1}, {-1},           -1,-1, -1,-1, -1,                   },
+    //                                                                       TECH_ONP,     0, &con_nanopore_ext,  5,  {-1},           {-1},           {0,1,2,3,4,-1}, {-1},           -1,-1, -1,-1, -1,                },
     {},  { "Nanopore-ext",  { "2a228edf-d8bc-45d4-9c96-3d613b8530dc_Basecall_2D_000_template" },
                                                                           TECH_ONP,     0, &con_nanopore_ext,  5,  {-1},           {0,1,2,3,4,-1}, {0,1,2,3,4,-1}, {0,1,2,3,4,-1}, -1,-1, -1,-1, -1,  0,  PX_nanopore_ext },
     {},  { "BamSurgeon",    { "22:33597495-34324994_726956_727496_0:0:0_0:0:0_2963e" },   
@@ -583,6 +610,7 @@ static QnameFlavorStruct qf[] = {
                                                                           TECH_UNKNOWN, 2, &con_ncbi_sra2_fq,  5,  {2,3,7,-1},     {-1},           {2,3,-1},       {-1},           3,-1,  -1,-1, 7,                    },
     {},  { "NCBI-SRA-FQ",   { "ERR811170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template length=52" },
                                                                           TECH_UNKNOWN, 2, &con_ncbi_sra_fq,   4,  {2,6,-1},       {-1},           {-1},           {-1},           2,-1,  -1,-1, 6,                    },
+    {},  { "NCBI-SRR-FQ",   { "SRR12345678.5 5" },                        TECH_UNKNOWN, 2, &con_ncbi_srr_fq,   2,  {1,2,-1},       {-1},           {-1},           {-1},           1,2,   -1,-1, -1,                   },
     {},  { "NCBI-SRA2",     { "ERR2708427.1.1" },                         TECH_UNKNOWN, 0, &con_ncbi_sra2,     2,  {2,3,-1},       {-1},           {2,3,-1},       {-1},           3,-1,  -1,-1, -1,                   },
     {},  { "NCBI-SRA",      { "SRR001666.1" },                            TECH_UNKNOWN, 0, &con_ncbi_sra,      1,  {2,-1},         {-1},           {2,-1},         {-1},           2,-1,  -1,-1, -1,                   },
     {},  { "seqan",         { "adeno-reads100.fasta.000000008" },         TECH_UNKNOWN, 0, &con_seqan,         2,  {-1},           {2, -1},        {-1},           {-1},           2,-1,  -1,-1, -1,   0,  PX_seqan    },

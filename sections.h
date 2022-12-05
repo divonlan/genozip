@@ -104,15 +104,17 @@ typedef union SectionFlags {
     struct FlagsCtx {
         StoreType store          : 2;  // after reconstruction of a snip, store it in ctx.last_value
         uint8_t paired           : 1;  // FASTQ: reconstruction of this context requires access to the same section from the same vb of the previous (paired) file
-        #define v8_container     store_delta  // in v8 files - if the context contains 1 or more containers
+        #define v8_container     store_delta      // in v8 files - if the context contains 1 or more containers
         uint8_t store_delta      : 1;  // introduced v12.0.41: after reconstruction of a snip, store last_delta. notes: 1. last_delta also stored in case of a delta snip. 2. if using this, store=STORE_INT must be set.
-        #define v13_copy_local_param spl_custom  // up to v13: copy ctx.b250/local.param from SectionHeaderCtx.param. since v14, piz always copies, except for LT_BITMAP
+        #define v13_copy_local_param spl_custom   // up to v13: copy ctx.b250/local.param from SectionHeaderCtx.param. since v14, piz always copies, except for LT_BITMAP
         uint8_t spl_custom       : 1;  // introduced v14: similar to store_per_line, but storing is done by the context's SPECIAL function, instead of in reconstruct_store_history
         uint8_t all_the_same     : 1;  // SEC_B250: the b250 data contains only one element, and should be used to reconstruct any number of snips from this context
         #define same_line        ctx_specific_flag // v13.0.5: Valid for contexts that use SNIP_OTHER_DELTA and SNIP_DIFF: if true, reconstructs gets the value in the line (whether before or after). if false, it gets the last value.
         #define no_textual_seq   ctx_specific_flag // v14.0.0: SAM_SQBITMAP: indicates that sam_piz_sam2bam_SEQ doesn't need to store textual_seq. 
         #define depn_clip_hard   ctx_specific_flag // v14.0.0: OPTION_SA_Z in SAM_COMP_MAIN: if true: depn lines, if their CIGAR has a clipping, it is hard clipping (H)
         #define lookback0_ok     ctx_specific_flag // v14.0.0: contexts that are items of a container with lookback. indicates that a SNIP_LOOKBACK when lookback=0 is not an error.
+        #define trailing_zero_ok ctx_specific_flag // v14.0.17: INFO_QD: whether reconstruct with or without trailing zeros. 
+
         uint8_t ctx_specific_flag: 1;  // v10.0.3: flag specific a context 
         uint8_t store_per_line   : 1;  // v12.0.41: store value or text for each line - in context->history        
     } ctx;

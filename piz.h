@@ -12,6 +12,7 @@
 #include "reconstruct.h"
 #include "sam.h"
 #include "writer.h"
+#include "file.h"
 
 #define PIZ_TASK_NAME "piz"
 

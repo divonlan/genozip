@@ -44,6 +44,10 @@ typedef int32_t TaxonomyId;
 #define TAXID_NONE         ((TaxonomyId)-1)
 #define TAXID_UNCLASSIFIED ((TaxonomyId)-0)
 
+// VB management
+extern unsigned kraken_vb_size (DataType dt);
+extern void kraken_vb_release_vb();
+
 // seg of a kraken file
 extern void kraken_zip_initialize (void);
 extern void kraken_seg_initialize (VBlockP vb);
@@ -74,3 +78,7 @@ extern unsigned kraken_seg_taxid (VBlockP vb, Did did_i_taxid, STRp(qname), bool
 extern void kraken_set_show_kraken (rom optarg);
 extern char *kraken_filename; // global
 #define kraken_is_loaded ((bool)kraken_filename)
+
+#define KRAKEN_SPECIAL {  }
+
+#define NUM_KRAKEN_SPECIAL 0

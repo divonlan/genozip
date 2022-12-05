@@ -679,6 +679,7 @@ extern bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, 
 extern void sam_seg_gene_name_id (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, STRp(value), unsigned add_bytes);
 
 // biobambam2 stuff
+extern uint32_t sam_get_QUAL_score (VBlockSAMP vb, STRp(qual));
 extern void sam_seg_ms_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t ms, unsigned add_bytes);
 extern void sam_seg_mc_i (VBlockSAMP vb, int64_t mc, unsigned add_bytes);
 

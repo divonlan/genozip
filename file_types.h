@@ -152,6 +152,7 @@
 #define GNRIC_GZ_        ".gz"
 #define GNRIC_BZ2_       ".bz2"
 #define GNRIC_XZ_        ".xz"
+#define GNRIC_ZIP_       ".zip"
 #define GNRIC_GENOZIP_   GENOZIP_EXT
 
 typedef enum {TXT_FILE, Z_FILE} FileSupertype; 
@@ -181,34 +182,34 @@ typedef enum FileType { UNKNOWN_FILE_TYPE,
                         BAM,   BAM_GZ,   BAM_BGZF, CRAM,          BAM_GENOZIP,
                         BCF,   BCF_GZ,   BCF_BGZF,                BCF_GENOZIP,  
                         // the GNRIC row *must* be the last row, as it consists catch-all extensions (*.gz etc)
-                        GNRIC_GZ, GNRIC_BZ2, GNRIC_XZ,            GNRIC_GENOZIP, GNRIC, // GNRIC *must* be the very last as it is a catch-all ""
+                        GNRIC_GZ, GNRIC_BZ2, GNRIC_XZ, GNRIC_ZIP, GNRIC_GENOZIP, GNRIC, // GNRIC *must* be the very last as it is a catch-all ""
                         AFTER_LAST_FILE_TYPE } FileType;
 
-#define FILE_EXTS {"Unknown", /* order matches the FileType enum */                                \
-                                                                           REF_GENOZIP_,           \
-                   VCF_,      VCF_GZ_, VCF_BGZF_, VCF_BZ2_,    VCF_XZ_,    VCF_GENOZIP_,           \
-                   SAM_,      SAM_GZ_, SAM_BGZF_, SAM_BZ2_,    SAM_XZ_,    SAM_GENOZIP_,           \
-                   FASTQ_,    FASTQ_GZ_,          FASTQ_BZ2_,  FASTQ_XZ_,  FASTQ_GENOZIP_,         \
-                   FQ_,       FQ_GZ_,             FQ_BZ2_,     FQ_XZ_,     FQ_GENOZIP_,            \
-                   FASTA_,    FASTA_GZ_,          FASTA_BZ2_,  FASTA_XZ_,  FASTA_GENOZIP_,         \
-                   FA_,       FA_GZ_,             FA_BZ2_,     FA_XZ_,     FA_GENOZIP_,            \
-                   FAA_,      FAA_GZ_,            FAA_BZ2_,    FAA_XZ_,    FAA_GENOZIP_,           \
-                   FFN_,      FFN_GZ_,            FFN_BZ2_,    FFN_XZ_,    FFN_GENOZIP_,           \
-                   FNN_,      FNN_GZ_,            FNN_BZ2_,    FNN_XZ_,    FNN_GENOZIP_,           \
-                   FNA_,      FNA_GZ_,            FNA_BZ2_,    FNA_XZ_,    FNA_GENOZIP_,           \
-                   FRN_,      FRN_GZ_,            FRN_BZ2_,    FRN_XZ_,    FRN_GENOZIP_,           \
-                   FAS_,      FAS_GZ_,            FAS_BZ2_,    FAS_XZ_,    FAS_GENOZIP_,           \
-                   GFF3_,     GFF3_GZ_,           GFF3_BZ2_,   GFF3_XZ_,   GFF3_GENOZIP_,          \
-                   GFF_,      GFF_GZ_,            GFF_BZ2_,    GFF_XZ_,    GFF_GENOZIP_,           \
-                   GVF_,      GVF_GZ_,            GVF_BZ2_,    GVF_XZ_,    GVF_GENOZIP_,           \
-                   ME23_,     ME23_ZIP_,                                   ME23_GENOZIP_,          \
-                   PHY_,      PHY_GZ_,            PHY_BZ2_,    PHY_XZ_,    PHY_GENOZIP_,           \
-                   CHAIN_,    CHAIN_GZ_,          CHAIN_BZ2_,  CHAIN_XZ_,  CHAIN_GENOZIP_,         \
-                   KRAKEN_,   KRAKEN_GZ_,         KRAKEN_BZ2_, KRAKEN_XZ_, KRAKEN_GENOZIP_,        \
-                   LOCS_,     LOCS_GZ_,           LOCS_BZ2_,   LOCS_XZ_,   LOCS_GENOZIP_,          \
-                   BAM_,      BAM_GZ_, BAM_BGZF_, CRAM_,                   BAM_GENOZIP_,           \
-                   BCF_,      BCF_GZ_, BCF_BGZF_,                          BCF_GENOZIP_,           \
-                              GNRIC_GZ_,          GNRIC_BZ2_,  GNRIC_XZ_,  GNRIC_GENOZIP_, GNRIC_, /* GNRIC_ is catch all */ \
+#define FILE_EXTS {"Unknown", /* order matches the FileType enum */                                             \
+                                                                                        REF_GENOZIP_,           \
+                   VCF_,      VCF_GZ_, VCF_BGZF_, VCF_BZ2_,    VCF_XZ_,                 VCF_GENOZIP_,           \
+                   SAM_,      SAM_GZ_, SAM_BGZF_, SAM_BZ2_,    SAM_XZ_,                 SAM_GENOZIP_,           \
+                   FASTQ_,    FASTQ_GZ_,          FASTQ_BZ2_,  FASTQ_XZ_,               FASTQ_GENOZIP_,         \
+                   FQ_,       FQ_GZ_,             FQ_BZ2_,     FQ_XZ_,                  FQ_GENOZIP_,            \
+                   FASTA_,    FASTA_GZ_,          FASTA_BZ2_,  FASTA_XZ_,               FASTA_GENOZIP_,         \
+                   FA_,       FA_GZ_,             FA_BZ2_,     FA_XZ_,                  FA_GENOZIP_,            \
+                   FAA_,      FAA_GZ_,            FAA_BZ2_,    FAA_XZ_,                 FAA_GENOZIP_,           \
+                   FFN_,      FFN_GZ_,            FFN_BZ2_,    FFN_XZ_,                 FFN_GENOZIP_,           \
+                   FNN_,      FNN_GZ_,            FNN_BZ2_,    FNN_XZ_,                 FNN_GENOZIP_,           \
+                   FNA_,      FNA_GZ_,            FNA_BZ2_,    FNA_XZ_,                 FNA_GENOZIP_,           \
+                   FRN_,      FRN_GZ_,            FRN_BZ2_,    FRN_XZ_,                 FRN_GENOZIP_,           \
+                   FAS_,      FAS_GZ_,            FAS_BZ2_,    FAS_XZ_,                 FAS_GENOZIP_,           \
+                   GFF3_,     GFF3_GZ_,           GFF3_BZ2_,   GFF3_XZ_,                GFF3_GENOZIP_,          \
+                   GFF_,      GFF_GZ_,            GFF_BZ2_,    GFF_XZ_,                 GFF_GENOZIP_,           \
+                   GVF_,      GVF_GZ_,            GVF_BZ2_,    GVF_XZ_,                 GVF_GENOZIP_,           \
+                   ME23_,                                                   ME23_ZIP_,  ME23_GENOZIP_,          \
+                   PHY_,      PHY_GZ_,            PHY_BZ2_,    PHY_XZ_,                 PHY_GENOZIP_,           \
+                   CHAIN_,    CHAIN_GZ_,          CHAIN_BZ2_,  CHAIN_XZ_,               CHAIN_GENOZIP_,         \
+                   KRAKEN_,   KRAKEN_GZ_,         KRAKEN_BZ2_, KRAKEN_XZ_,              KRAKEN_GENOZIP_,        \
+                   LOCS_,     LOCS_GZ_,           LOCS_BZ2_,   LOCS_XZ_,                LOCS_GENOZIP_,          \
+                   BAM_,      BAM_GZ_, BAM_BGZF_, CRAM_,                                BAM_GENOZIP_,           \
+                   BCF_,      BCF_GZ_, BCF_BGZF_,                                       BCF_GENOZIP_,           \
+                              GNRIC_GZ_,          GNRIC_BZ2_,  GNRIC_XZ_,   GNRIC_ZIP_, GNRIC_GENOZIP_, GNRIC_, /* GNRIC_ is catch all */ \
                    "stdin", "stdout" }
 extern rom file_exts[];
 
@@ -257,7 +258,8 @@ extern rom file_exts[];
                            { { BAM,        CODEC_BGZF, BAM_GENOZIP    }, { BAM_GZ,    CODEC_GZ,  BAM_GENOZIP    }, { BAM_BGZF, CODEC_BGZF, BAM_GENOZIP  }, { CRAM, CODEC_CRAM, BAM_GENOZIP }, { } }, \
                            { { BCF,        CODEC_BCF,  BCF_GENOZIP    }, { BCF_GZ,    CODEC_BCF, BCF_GENOZIP    }, { BCF_BGZF, CODEC_BCF,  BCF_GENOZIP  }, { } }, \
                            { { GNRIC,      CODEC_NONE, GNRIC_GENOZIP  }, { GNRIC_GZ,  CODEC_GZ,  GNRIC_GENOZIP  },\
-                             { GNRIC_BZ2,  CODEC_BZ2,  GNRIC_GENOZIP  }, { GNRIC_XZ,  CODEC_XZ,  GNRIC_GENOZIP  }, { } },\
+                             { GNRIC_BZ2,  CODEC_BZ2,  GNRIC_GENOZIP  }, { GNRIC_XZ,  CODEC_XZ,  GNRIC_GENOZIP  },\
+                             { GNRIC_ZIP,  CODEC_ZIP,  GNRIC_GENOZIP  }, { } },\
                            { { PHY,        CODEC_NONE, PHY_GENOZIP    }, { PHY_GZ,    CODEC_GZ,  PHY_GENOZIP    },\
                              { PHY_BZ2,    CODEC_BZ2,  PHY_GENOZIP    }, { PHY_XZ,    CODEC_XZ,  PHY_GENOZIP    }, { } },\
                            { { CHAIN,      CODEC_NONE, CHAIN_GENOZIP  }, { CHAIN_GZ,  CODEC_GZ,  CHAIN_GENOZIP  },\

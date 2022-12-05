@@ -282,8 +282,6 @@ extern void vcf_samples_seg_initialize (VBlockVCFP vb);
 extern void vcf_samples_seg_finalize (VBlockVCFP vb);
 
 extern rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t *len, char *next_field, bool *has_13);
-extern void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCFP vb);
-extern void vcf_piz_FORMAT_GT_rewrite_predicted_phase (VBlockP vb, char *recon, uint32_t recon_len);
 extern int vcf_seg_get_mux_channel_i (VBlockVCFP vb, bool fail_if_dvcf_refalt_switch);
 extern int vcf_piz_get_mux_channel_i (VBlockP vb);
 
@@ -291,7 +289,10 @@ eSTRl(af_snip);
 
 // FORMAT/GT stuff
 extern WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, STRp(cell), bool has_ps, bool has_null_dp);
+extern void vcf_seg_FORMAT_GT_complete_missing_lines (VBlockVCFP vb);
+extern void vcf_piz_FORMAT_GT_rewrite_predicted_phase (VBlockP vb, char *recon, uint32_t recon_len);
 extern void vcf_piz_GT_cb_null_GT_if_null_DP (VBlockP vb , char *recon);
+extern int vcf_piz_GT_get_last_dosage (VBlockP vb);
 
 #define IS_TRIVAL_FORMAT_SUBFIELD ((!recon_len || (recon_len==1 && *recon=='.')) && dict_id_is_vcf_format_sf (ctx->dict_id))
 extern void vcf_FORMAT_PL_decide (VBlockVCFP vb);
@@ -304,7 +305,23 @@ extern void vcf_samples_seg_finalize_PS_PID (VBlockVCFP vb);
 extern void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STRp(value));
 extern void vcf_seg_FORMAT_PS_PID_missing_value (VBlockVCFP vb, ContextP ctx, rom end_of_sample);
 extern void vcf_samples_seg_initialize_PS_PID (VBlockVCFP vb, ContextP ctx, STRp(value));
-extern void vcf_piz_ps_pid_lookback_insert (VBlockP vb, Did did_i, STRp(recon));
+extern void vcf_piz_ps_pid_lookback_insert (VBlockP vb, Did did_i, STRp(recon)); 
+extern void vcf_piz_ps_pid_lookback_shift (VBlockP vb, STRp(insert));
+
+// INFO/SF
+extern bool vcf_seg_INFO_SF_init (VBlockVCFP vb, ContextP sf_ctx, STRp(value));
+extern void vcf_seg_INFO_SF_seg (VBlockVCFP vb);
+extern void vcf_seg_INFO_SF_one_sample (VBlockVCFP vb);
+extern void vcf_piz_GT_cb_calc_INFO_SF (VBlockVCFP vcf_vb, unsigned rep, char *recon, int32_t recon_len);
+extern int vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VBlockVCFP vcf_vb);
+
+// INFO/QD stuff
+typedef enum { QD_PRED_NONE, QD_PRED_INFO_DP, QD_PRED_INFO_DP_P001, QD_PRED_INFO_DP_M001, 
+                             QD_PRED_SUM_DP,  QD_PRED_SUM_DP_P001,  QD_PRED_SUM_DP_M001, NUM_QD_PRED_TYPES } QdPredType;
+extern void vcf_seg_sum_DP_for_QD (VBlockVCFP vb, int64_t value);
+extern void vcf_seg_INFO_QD (VBlockVCFP vb);
+extern void vcf_piz_sum_DP_for_QD (VBlockP vb, STRp(recon));
+extern void vcf_piz_insert_QD (VBlockVCFP vb);
 
 // INFO stuff
 
@@ -315,10 +332,8 @@ typedef struct { char name[MAX_TAG_LEN]; // not nul-terminated, including '=' if
 
 extern void vcf_info_zip_initialize (void);
 extern void vcf_info_seg_initialize (VBlockVCFP vb);
-extern void vcf_piz_GT_cb_calc_INFO_SF (VBlockVCFP vcf_vb, unsigned rep, char *recon, int32_t recon_len);
-extern void vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VBlockVCFP vcf_vb);
 extern void vcf_piz_finalize_DP_by_DP (VBlockVCFP vb);
-extern void vcf_seg_INFO_SF_one_sample (VBlockVCFP vb);
+
 extern void vcf_seg_info_subfields (VBlockVCFP vb, rom info_str, unsigned info_len);
 extern void vcf_finalize_seg_info (VBlockVCFP vb);
 
@@ -401,16 +416,19 @@ extern void vcf_linesort_merge_vb (VBlockP vb);
 extern void vcf_lo_piz_TOPLEVEL_cb_filter_line (VBlockVCFP vb);
 
 #define VCF_ERR_PREFIX { progress_newline(); fprintf (stderr, "Error %s:%u in variant %s=%.*s %s=%"PRId64": ", __FUNCLINE, (VB_VCF->line_coords == DC_PRIMARY ? "CHROM" : "oCHROM"), vb->chrom_name_len, vb->chrom_name, (VB_VCF->line_coords == DC_PRIMARY ? "POS" : "oPOS"), vb->last_int (VB_VCF->line_coords == DC_PRIMARY ? VCF_POS : VCF_oPOS)); }
-#define ASSVCF(condition, format, ...) do { if (!(condition)) { VCF_ERR_PREFIX; fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }} while(0)
+#define ASSVCF(condition, format, ...) ({ if (!(condition)) { VCF_ERR_PREFIX; fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }})
 #define ASSVCF0(condition, msg)        ASSVCF ((condition), msg "%s", "")
-#define WARNVCF(format, ...)           do { if (!flag.quiet)  { VCF_ERR_PREFIX; fprintf (stderr, format "\n", __VA_ARGS__); } } while(0)
+#define WARNVCF(format, ...)           ({ if (!flag.quiet)  { VCF_ERR_PREFIX; fprintf (stderr, format "\n", __VA_ARGS__); } })
 
-#define REJECT(ostatus, reason, ...)              do { if (!vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_ref, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } while(0)
-#define REJECT_MAPPING(reason)                    do { if (!vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64 "\t.\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0]); return; } while(0)
-#define REJECT_SUBFIELD(ostatus, ctx, reason,...) do { if (!vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t.\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], __VA_ARGS__); \
-                                                       vcf_lo_seg_rollback_and_reject (vb, (ostatus), (ctx)); } while(0)
-#define LIFTOK(ostatus, reason, ...) do { if (flag.show_lift && !vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_ref, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } while(0)
-#define LIFTOKEXT(ostatus, reason, ...) do { if (flag.show_lift && !vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_ref, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } while(0)
-#define LIFTOK0(ostatus, reason) LIFTOK(ostatus, reason "%s", "")
-#define REJECTIF(condition, ostatus, reason, ...) do { if (condition) { if (!vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_ref, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } } while(0)
-#define REJECTIF0(condition, ostatus, reason)      do { if (condition) REJECT (ostatus, reason "%s", ""); } while (0)
+#define REJECT(ostatus, reason, ...)              ({ if (!vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_ref, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); })
+#define REJECT_MAPPING(reason)                    ({ if (!vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64 "\t.\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0]); return; })
+#define REJECT_SUBFIELD(ostatus, ctx, reason,...) ({ if (!vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t.\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], __VA_ARGS__); \
+                                                       vcf_lo_seg_rollback_and_reject (vb, (ostatus), (ctx)); })
+#define LIFTOK(ostatus, reason, ...)              ({ if (flag.show_lift && !vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_ref, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); })
+#define LIFTOKEXT(ostatus, reason, ...)           ({ if (flag.show_lift && !vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_ref, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); })
+#define LIFTOK0(ostatus, reason)                  LIFTOK(ostatus, reason "%s", "")
+#define REJECTIF(condition, ostatus, reason, ...) ({ if (condition) { if (!vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_ref, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } })
+#define REJECTIF0(condition, ostatus, reason)     ({ if (condition) REJECT (ostatus, reason "%s", ""); })
+
+// misc
+extern void vcf_piz_insert_field (VBlockVCFP vb, Did did, STRp(value));

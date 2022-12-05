@@ -43,22 +43,6 @@ rom bam_qual_display (bytes qual, uint32_t l_seq) // caller should free memory
     }
 }
 
-// get a score of the QUAL string - similar to that calculated by biobambam for ms:i:
-// see here: https://github.com/gt1/libmaus/tree/master/src/libmaus/bambam/BamAlignmentDecoderBase.cpp getScore 
-// The sum of phred values of the QUAL string, but only for phred values >= 15
-static uint32_t sam_get_QUAL_score (VBlockSAMP vb, STRp(qual))
-{
-    if (vb->qual_missing) return 0;
-
-    uint32_t score=0;
-    for (uint32_t i=0; i < qual_len; i++) {
-        int8_t phred = qual[i] - 33;
-        if (phred >= 15) score += phred;
-    }
-    
-    return score;
-}
-
 // main thread (not thread-safe): called from sam_show_sag_one_grp for getting first few characters of alignment cigar
 rom sam_display_qual_from_SA_Group (const Sag *g)
 {
@@ -139,11 +123,6 @@ void sam_seg_QUAL_initialize (VBlockSAMP vb)
     // case: PRIM - TOPLEVEL reconstructs all-the-same SAM_QUALSA instead of SAM_QUAL. SAM_QUAL is consumed when loading SA Groups.
     if (sam_is_prim_vb)
         seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_QUAL, '0' }, 3, SAM_QUALSA, 0); // note: we can't just ctx_create_node because we need to transfer flags to piz, so need b250
-
-    if (segconf.sam_ms_type == ms_BIOBAMBAM) {      // handle QUAL_scores for ms:i - added v13        
-        CTX(OPTION_ms_i)->flags.spl_custom = true;  // custom store-per-line - SPECIAL will handle the storing
-        CTX(OPTION_ms_i)->flags.store = STORE_INT;  // since v14 - store QUAL_score for mate ms:i (in v13 it was stored in QUAL)
-    }
 }
 
 // ZIP/PIZ: decompresses grp qual of grp, into vb->scratch
@@ -497,12 +476,12 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
     if (!VER(14)) // up to v13 this special was only when calculating score was needed
         new_value->i = sam_get_QUAL_score (vb, STRa(qual));
     
-    else if (VER(14) && segconf.sam_ms_type == ms_BIOBAMBAM) // note: segconf.sam_ms_type is populated in PIZ since v14
+    else if (CTX(OPTION_ms_i)->flags.spl_custom) // since v14 for ms_BIOBAMBAM
         *B(int64_t, CTX(OPTION_ms_i)->history, vb->line_i) = sam_get_QUAL_score (vb, STRa(qual));
 
     COPY_TIMER (sam_piz_special_QUAL);
 
-    return !VER(14); // has new value for files up to v13
+    return !VER(14); // has new value for files up to v13 (QUAL history is used for TxtWord since v14)
 }
 
 // SAM-to-BAM translator: translate SAM ASCII (33-based) Phred values to BAM's 0-based

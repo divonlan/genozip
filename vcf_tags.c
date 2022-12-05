@@ -579,10 +579,10 @@ unsigned vcf_tags_rename (VBlockVCFP vb,
 
     for (unsigned i=0; i < num_tags; i++) {
 
-        #define COPY_TAG(x) do { \
+        #define COPY_TAG(x) ({ \
             memcpy (p, tags[i]->dests[RA_##x], tags[i]->dest_lens[RA_##x]); \
             p += tags[i]->dest_lens[RA_##x]; \
-        } while (0)
+        })
 
         // concatenated (possibly renamed) tag
         if      (                           HAS (ALWAYS)) COPY_TAG (ALWAYS);

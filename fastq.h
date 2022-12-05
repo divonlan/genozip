@@ -71,6 +71,7 @@
 // Txtfile stuff
 extern int32_t fastq_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
 extern bool fastq_txtfile_have_enough_lines (VBlockP vb, uint32_t *unconsumed_len, uint32_t *my_lines, uint32_t *her_lines);
+extern bool is_fastq (STRp(header), bool *need_more);
 
 // ZIP Stuff
 extern void fastq_zip_initialize (void);

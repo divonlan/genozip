@@ -319,18 +319,12 @@ void dispatcher_recycle_vbs (Dispatcher d, bool release_vb)
 
 void dispatcher_set_no_data_available (Dispatcher d, bool abandon_next_vb, DispatchStatus dispatch_status)
 {
-if (flag.debug_debug) {
-printf ("xxx task=%s abandon_next_vb=%u dispatch_status=%u d->next_dispatched=%u d->next_vb_i=%u\n", d->task_name, abandon_next_vb, dispatch_status, d->next_dispatched, d->next_vb_i);
-if (abandon_next_vb) printf ("xxx vb_i=%u id=%u\n", d->vbs[d->next_dispatched]->vblock_i, d->vbs[d->next_dispatched]->id);
-}
     if (dispatch_status == DATA_EXHAUSTED)
         d->input_exhausted = true;
 
     if (abandon_next_vb) {
         ASSERT (d->next_dispatched >= 0, "there is no next VB (task=%s)", d->task_name);
-if (flag.debug_debug) printf ("xxx before release\n");
         vb_release_vb (&d->vbs[d->next_dispatched], d->task_name);
-if (flag.debug_debug) printf ("xxx after release\n");
         d->next_vb_i--; // we didn't use this vb_i
         d->next_dispatched = -1;
     }

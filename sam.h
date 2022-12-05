@@ -355,9 +355,12 @@
 #pragma GENDICT OPTION_sz_A=DTYPE_2=sz_A     // scrap read: ZMW classification annotation, one of N:=Normal, C:=Control, M:=Malformed, or S:=Sentinel
 #pragma GENDICT OPTION_sc_A=DTYPE_2=sc_A     // scrap read: Scrap region-type annotation, one of A:=Adapter, B:=Barcode, L:=LQRegion, or F:=Filtered
 
+// samtools non-standard tags
+#pragma GENDICT OPTION_ms_i=DTYPE_2=ms:i     // mate score. Produced by samtools fixmate -m. Sum of those QUAL scores of mate that are >= 15. See calc_mate_score in samtools source.
+
 // biobambam2 tags (when updating this list here, also update biobambam_programs)
 #pragma GENDICT OPTION_mc_i=DTYPE_2=mc:i     // MateCoordinate.  Produced by bamsort / bamsormadup
-#pragma GENDICT OPTION_ms_i=DTYPE_2=ms:i     // MateBaseScore.   Produced by bamsort / bamsormadup
+//#pragma GENDICT OPTION_ms_i=DTYPE_2=ms:i   // MateBaseScore.   Produced by bamsort / bamsormadup. Identical to samtools' ms:i. Sum of those QUAL scores of mate that are >= 15. See https://github.com/gt1/libmaus/tree/master/src/libmaus/bambam/BamAlignmentDecoderBase.hpp getScore 
 #pragma GENDICT OPTION_cq_Z=DTYPE_2=cq:Z     // Clipped Quality. Produced by bamclipXT, see: https://gitlab.com/german.tischler/biobambam2/-/blob/master/src/programs/bamclipXT.1
 
 // Novocraft tags: http://www.novocraft.com/documentation/novosort-2/
@@ -432,7 +435,7 @@
 #pragma GENDICT OPTION_cm_i=DTYPE_2=cm:i     // Number of minimizers on the chain
 #pragma GENDICT OPTION_s1_i=DTYPE_2=s1:i     // Chaining score
 #pragma GENDICT OPTION_s2_i=DTYPE_2=s2:i     // Chaining score of the best secondary chain
-//#pragma GENDICT OPTION_ms_i=DTYPE_2=ms:i   // Conflict with biobambam: DP score of the max scoring segment in the alignment
+//#pragma GENDICT OPTION_ms_i=DTYPE_2=ms:i   // Conflict with biobambam and samtools: DP score of the max scoring segment in the alignment
 #pragma GENDICT OPTION_nn_i=DTYPE_2=nn:i     // Number of ambiguous bases in the alignment
 #pragma GENDICT OPTION_ts_A=DTYPE_2=ts:A     // Transcript strand (splice mode only)
 #pragma GENDICT OPTION_cs_Z=DTYPE_2=cs:Z     // Difference string, see: https://github.com/lh3/minimap2#cs and https://lh3.github.io/2018/03/27/the-history-the-cigar-x-operator-and-the-md-tag
@@ -477,6 +480,8 @@ extern void sam_sa_prim_finalize_ingest (void);
 extern bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags);
 extern void sam_header_finalize (void);
 extern void sam_zip_free_end_of_z (void);
+extern bool is_sam (STRp(header), bool *need_more);
+extern bool is_bam (STRp(header), bool *need_more);
 
 extern ContigPkgP sam_hdr_contigs;
 extern uint32_t sam_num_header_contigs (void);

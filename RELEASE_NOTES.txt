@@ -3,8 +3,18 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
-14.0.15 19/Oct/2022
-- Fix trivial bug in --make-reference introduced in recent new code, which occastionally caused --make-reference to segfault
+14.0.17 5/Dec/2022
+- Website upgrade
+- Better multi-threading for the case of compressing small files
+- Automatic identification of file types piped into genozip (in many cases)
+- Update of license term 3c
+- Obsolete genounzip option --no-PG is canceled (it remains for genocat)
+- VCF: Better compression of INFO/QD
+- KRAKEN: new option: genozip --no-kmers - drop kmer info that is not needed for subsequent use of this file with --kraken 
+- Bug fixes
+
+14.0.16 19/Oct/2022
+- Fix bug introduced in a recent release that caused a segfault on some CPUs
 
 14.0.14 18/Oct/2022
 - License changes: sections 2, 2a, 2c, 3e, 4, 5b

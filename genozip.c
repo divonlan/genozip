@@ -26,6 +26,7 @@
 #include "stats.h"
 #include "arch.h"
 #include "license.h"
+#include "tip.h"
 #include "reference.h"
 #include "refhash.h"
 #include "random_access.h"
@@ -85,7 +86,7 @@ void main_exit (bool show_stack, bool is_error)
         else if (!printed && !flag.quiet && !getenv ("GENOZIP_TEST") && 
             !flag.show_bam && !flag.biopsy && flag.biopsy_line.line_i == NO_LINE &&
             ((IS_ZIP && !tip_printed) || flag.check_latest/*PIZ - test after compress*/))
-            license_print_tip();
+            tip_print();
     }
 
     if (is_error && flag.debug_threads)
@@ -106,6 +107,10 @@ void main_exit (bool show_stack, bool is_error)
         close (2);
         url_kill_curl();  /* <--- BREAKPOINT BRK */
         file_kill_external_compressors(); 
+    
+        // cancel all other threads before closing z_file, so other threads don't attempt to access it 
+        // (eg. z_file->data_type) and get a segmentation fault.
+        threads_cancel_other_threads();
     }
 
     // if we're in ZIP - remove failed genozip file (but don't remove partial failed text file in PIZ - it might be still useful to the user)
@@ -116,10 +121,6 @@ void main_exit (bool show_stack, bool is_error)
             save_name = malloc (strlen (z_file->name)+1);
             strcpy (save_name, z_file->name);
         }
-
-        // cancel all other threads before closing z_file, so other threads don't attempt to access it 
-        // (eg. z_file->data_type) and get a segmentation fault.
-        threads_cancel_other_threads();
 
         file_close (&z_file, false, false); // also frees file->name
 
@@ -141,40 +142,31 @@ void main_exit (bool show_stack, bool is_error)
 
 static void main_print_help (bool explicit)
 {
-    static rom *texts[NUM_EXE_TYPES] = {help_genozip, help_genounzip, help_genols, help_genocat }; // same order as ExeType
-    static unsigned sizes[] = {sizeof(help_genozip), sizeof(help_genounzip), sizeof(help_genols), sizeof(help_genocat), sizeof(help_genozip_developer)};
-    
-    if (flag.help && !strcmp (flag.help, "dev")) 
-        str_print_text (help_genozip_developer, sizeof(help_genozip_developer) / sizeof(char*), 
-                        "                          ",  "\n", 0);
-    else if (flag.help && !strcmp (flag.help, "genozip")) 
-        str_print_text (help_genozip, sizeof(help_genozip) / sizeof(char*), 
-                        "                          ",  "\n", 0);
+    static rom *texts[NUM_EXE_TYPES] = { help_genozip, help_genounzip, help_genols, help_genocat }; // same order as ExeType
+    static unsigned sizes[NUM_EXE_TYPES] = {sizeof(help_genozip), sizeof(help_genounzip), sizeof(help_genols), sizeof(help_genocat) };
+
+    if (flag.help && !strcmp (flag.help, "genozip")) 
+        str_print_text (help_genozip,      ARRAY_LEN(help_genozip),      "                          ",  "\n", NULL, 0);
 
     else if (flag.help && !strcmp (flag.help, "genounzip")) 
-        str_print_text (help_genounzip, sizeof(help_genounzip) / sizeof(char*), 
-                        "                          ",  "\n", 0);
+        str_print_text (help_genounzip,    ARRAY_LEN(help_genounzip),    "                          ",  "\n", NULL, 0);
 
     else if (flag.help && !strcmp (flag.help, "genols")) 
-        str_print_text (help_genols, sizeof(help_genols) / sizeof(char*), 
-                        "                          ",  "\n", 0);
+        str_print_text (help_genols,       ARRAY_LEN(help_genols),       "                          ",  "\n", NULL, 0);
 
     else if (flag.help && !strcmp (flag.help, "genocat")) 
-        str_print_text (help_genocat, sizeof(help_genocat) / sizeof(char*), 
-                        "                          ",  "\n", 0);
+        str_print_text (help_genocat,      ARRAY_LEN(help_genocat),      "                          ",  "\n", NULL, 0);
 
     else if (flag.help && !strcmp (flag.help, "attributions")) 
-        str_print_text (help_attributions, sizeof(help_attributions) / sizeof(char*), 
-                        "                          ",  "\n", 0);
+        str_print_text (help_attributions, ARRAY_LEN(help_attributions), "                          ",  "\n", NULL, 0);
 
     else if (flag.help && !strcmp (flag.help, "input")) 
         iprintf ("Supported file types for --input:\n%s\n", file_compressible_extensions (false));
     
     else 
-        str_print_text (texts[exe_type], sizes[exe_type] / sizeof(char*), 
-                        "                     ",  "\n", 0);
+        str_print_text (texts[exe_type], sizes[exe_type] / sizeof(char*),  "                     ",  "\n", NULL, 0);
     
-    str_print_text (help_footer, ARRAY_LEN(help_footer), "", "\n", 0);
+    str_print_text (help_footer, ARRAY_LEN(help_footer), "", "\n", NULL, 0);
 
     // in Windows, we ask the user to click a key - this is so that if the user double clicks on the EXE
     // from Windows Explorer - the terminal will open and he will see the help
@@ -266,6 +258,8 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
             file_close (&txt_file, flag.index_txt, !is_last_z_file); 
         }
     }
+
+    tip_dt_encountered (z_file->data_type);
 
     file_close (&z_file, false, false);
     is_first_z_file = false;
@@ -461,6 +455,8 @@ static void main_genozip (rom txt_filename,
 
     zip_one_file (txt_file->basename, is_last_user_txt_file);
 
+    tip_dt_encountered (z_file->data_type);
+
     if (flag.show_stats && z_file->z_closes_after_me && (!z_is_dvcf || flag.zip_comp_i)) 
         stats_display();
 
@@ -495,7 +491,7 @@ static void main_genozip (rom txt_filename,
         remove_list.count++; // count files
 
         // case: z_file has closed and tested if needed - remove all files included in this z_file 
-        if (z_file->z_closes_after_me) {
+        if (!z_file) {
             str_split (remove_list.data, remove_list.len-1, remove_list.count, '\0', rm_file, true); // -1 to remove last \0
 
             for (unsigned i=0; i < n_rm_files; i++)
@@ -685,16 +681,19 @@ int main (int argc, char **argv)
     codec_initialize();
 
     flags_init_from_command_line (argc, argv);
-    if (exe_type == EXE_GENOZIP && IS_PIZ) exe_type = EXE_GENOUNZIP; // treat "genozip -d" as genounzip
+    if (is_genozip && IS_PIZ) exe_type = EXE_GENOUNZIP; // treat "genozip -d" as genounzip
+
+    // --make-reference might be called by genocat or genounzip from ref_fasta_to_ref - we treat it as genozip
+    if (flag.make_reference) exe_type = EXE_GENOZIP;
 
     flags_store_command_line (argc, argv); // can only be called after --password is processed
 
     // if command not chosen explicitly, use the default determined by the executable name
     if (command < 0) { 
 
-        if (exe_type == EXE_GENOLS) command = LIST; // genols can be run without arguments
+        if (is_genols) command = LIST; // genols can be run without arguments
         
-        else if (exe_type == EXE_GENOCAT && flag.show_headers) command = SHOW_HEADERS;
+        else if (is_genocat && flag.show_headers) command = SHOW_HEADERS;
 
         // genozip with no input filename, no output filename, and no input redirection 
         // note: in docker stdin is a pipe even if going to a terminal. so we show the help even if
@@ -708,7 +707,7 @@ int main (int argc, char **argv)
             }
 
             // case: requesting to display the reference: genocat --reference <ref-file> and optionally --regions
-            if (exe_type == EXE_GENOCAT && (IS_REF_EXTERNAL || IS_REF_EXT_STORE)) {
+            if (is_genocat && (IS_REF_EXTERNAL || IS_REF_EXT_STORE)) {
                 command = PIZ;
                 flags_update (0, NULL);
 
@@ -718,6 +717,10 @@ int main (int argc, char **argv)
                     ref_display_ref (gref);
             }
 
+            // genozip with no parameters and not registered yet - register now
+            else if (is_genozip && argc == 1 && isatty(0) && !license_is_registered())
+                license_register();
+                
             // otherwise: show help
             else
                 main_print_help (false);
@@ -725,8 +728,8 @@ int main (int argc, char **argv)
             return 0;
         }
 
-        else if (exe_type == EXE_GENOUNZIP) command = PIZ;
-        else if (exe_type == EXE_GENOCAT) { command = PIZ; flag.to_stdout = !flag.out_filename ; }
+        else if (is_genounzip) command = PIZ;
+        else if (is_genocat) { command = PIZ; flag.to_stdout = !flag.out_filename ; }
         else command = ZIP; // default 
     }
 
@@ -771,7 +774,7 @@ int main (int argc, char **argv)
         MAIN0 ("Loading chain file");
         chain_load();
 
-        if (exe_type == EXE_GENOCAT) exit(0);
+        if (is_genocat) exit(0);
     }
 
     if (flag.reading_kraken) {

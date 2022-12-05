@@ -54,7 +54,7 @@ extern void bgzf_reread_uncompress_vb_as_prescribed (VBlockP vb, FILE *file);
 extern void bgzf_compress_bgzf_section (void);
 extern struct FlagsBgzf bgzf_get_compression_level (rom filename, bytes comp_block, uint32_t comp_block_size, uint32_t uncomp_block_size);
 extern void bgzf_zip_advance_index (VBlockP vb, uint32_t line_len);
-extern void bgzf_copy_unconsumed_blocks (VBlockP vb);
+extern int64_t bgzf_copy_unconsumed_blocks (VBlockP vb);
 extern void bgzf_zip_init_vb (VBlockP vb);
 extern void bgzf_insert_back_segconf_blocks (VBlockP vb);
 extern void bgzf_return_segconf_blocks (VBlockP vb);

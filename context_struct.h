@@ -203,10 +203,14 @@ typedef struct Context {
    
     union { // 32 bit
         int32_t ctx_specific;
-        bool last_is_alt;         // CHROM (all DTs): ZIP: last CHROM was an alt
-        bool last_is_new;         // SAM_QNAME:       ZIP: used in segconf.running
-        int32_t sum_dp_this_line; // INFO_DP:         ZIP/PIZ: sum of FORMAT/DP of samples in this line ('.' counts as 0)
-        int32_t last_end_line_i;  // INFO_END:        PIZ: last line on which INFO/END was encountered 
+        bool last_is_alt;           // CHROM (all DTs): ZIP: last CHROM was an alt
+        bool last_is_new;           // SAM_QNAME:       ZIP: used in segconf.running
+        int32_t sum_dp_this_line;   // INFO_DP:         ZIP/PIZ: sum of FORMAT/DP of samples in this line ('.' counts as 0)
+        struct {                    // INFO_QD:         ZIP/PIZ: 
+            uint32_t sum_dp_with_dosage : 28;  // sum of FORMAT/DP of samples in this line and dosage >= 1
+            uint32_t pred_type          : 4;   // predictor type;
+        } qd;
+        int32_t last_end_line_i;    // INFO_END:        PIZ: last line on which INFO/END was encountered 
              
         enum   __attribute__ ((__packed__)) { PAIR1_ALIGNED_UNKNOWN=-1, PAIR1_NOT_ALIGNED=0, PAIR1_ALIGNED=1 } pair1_is_aligned;  // FASTQ_SQBITMAP:  PIZ: used when reconstructing pair-2
         struct __attribute__ ((__packed__)) { uint16_t gt_prev_ploidy; char gt_prev_phase; }; // FORMAT_GT: ZIP/PIZ

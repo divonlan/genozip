@@ -136,7 +136,7 @@
 #pragma GENDICT INFO_SOR=DTYPE_1=SOR           // <ID=SOR,Number=1,Type=Float,Description="Symmetric Odds Ratio of 2x2 contingency table to detect strand bias">. See: https://gatk.broadinstitute.org/hc/en-us/articles/360036361772-StrandOddsRatio
 #pragma GENDICT INFO_QD=DTYPE_1=QD             // <ID=QD,Number=1,Type=Float,Description="Variant Confidence/Quality by Depth">. See: https://gatk.broadinstitute.org/hc/en-us/articles/360041414572-QualByDepth
 
-#pragma GENDICT INFO_RAW_MQandDP=DTYPE_1=RAW_MQandDP // comma-seperated two numbers: RAW_MQandDP=720000,200: 1. sum of squared MQ values and 2. total reads over variant genotypes (note: INFO/MQ is sqrt(#1/#2))
+#pragma GENDICT INFO_RAW_MQandDP=DTYPE_1=RAW_MQandDP // <ID=RAW_MQandDP,Number=2,Type=Integer,Description="Raw data (sum of squared MQ and total depth) for improved RMS Mapping Quality calculation. Incompatible with deprecated RAW_MQ formulation.">
 #pragma GENDICT INFO_RAW_MQandDP_MQ=DTYPE_1=R0AW_MQandDP
 #pragma GENDICT INFO_RAW_MQandDP_DP=DTYPE_1=R1AW_MQandDP
 
@@ -302,6 +302,7 @@ extern void vcf_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeader *v
 extern bool vcf_zip_vb_has_count (VBlockP vb);
 extern void vcf_zip_generate_recon_plan (void);
 extern void vcf_zip_update_txt_counters (VBlockP vb);
+extern bool is_vcf (STRp(header), bool *need_more);
 
 // SEG stuff
 extern rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
@@ -371,7 +372,7 @@ extern void vcf_samples_add  (rom samples_str);
                       vcf_piz_special_PS_by_PID, vcf_piz_special_PGT, vcf_piz_special_DP_by_DP, vcf_piz_special_DP_by_DP_single,\
                       vcf_piz_special_RGQ, vcf_piz_special_MUX_BY_HAS_RGQ, vcf_piz_special_SVTYPE, \
                       vcf_piz_special_ALLELE_A, vcf_piz_special_ALLELE_B, vcf_piz_special_MUX_BY_ADJ_DOSAGE,\
-                      vcf_piz_special_PROBE_A, vcf_piz_special_PROBE_B }
+                      vcf_piz_special_PROBE_A, vcf_piz_special_PROBE_B, vcf_piz_special_QD }
 
 SPECIAL (VCF, 0,  main_REFALT,         vcf_piz_special_main_REFALT);
 SPECIAL (VCF, 1,  FORMAT,              vcf_piz_special_FORMAT)
@@ -412,7 +413,8 @@ SPECIAL (VCF, 35, ALLELE_B,            vcf_piz_special_ALLELE_B);               
 SPECIAL (VCF, 36, MUX_BY_ADJ_DOSAGE,   vcf_piz_special_MUX_BY_ADJ_DOSAGE);        // added v14.0.12
 SPECIAL (VCF, 37, PROBE_A,             vcf_piz_special_PROBE_A);                  // added v14.0.12
 SPECIAL (VCF, 38, PROBE_B,             vcf_piz_special_PROBE_B);                  // added v14.0.12
-#define NUM_VCF_SPECIAL 39
+SPECIAL (VCF, 39, QD,                  vcf_piz_special_QD);                       // added v14.0.17
+#define NUM_VCF_SPECIAL 40
 
 // Translators for Luft (=secondary coordinates)
 TRANSLATOR (VCF, VCF,   1,  G,      vcf_piz_luft_G)       // same order as LiftOverStatus starting LO_CANT_G

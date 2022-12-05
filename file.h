@@ -45,9 +45,8 @@ typedef struct File {
     int64_t txt_data_so_far_single;    // txt_file: data read (ZIP) or written (PIZ) to/from txt file so far
                                        // z_file: txt data represented in the GENOZIP data written (ZIP) or read (PIZ) to/from the genozip file so far for the current txt file
     int64_t header_size;               // txt_file ZIP: size of txt header  z_file ZIP: size of MAIN txt header
+    int64_t header_size_bgzf;          // txt_file ZIP: compressed size of header - or 0 if not whole BGZF blocks
     
-    //      seggable_data_so_far = txt_data_so_far_single - header_size
-    int64_t seggable_data_so_far_gz_bz2; // txt_file ZIP: if source gz or bz2 compression, this is the compressed txt_data_so_far_single 
     int64_t txt_data_so_far_bind;      // z_file only: uncompressed txt data represented in the GENOZIP data written so far for all bound files
                                        // note: txt_data_so_far_single/bind accounts for txt modifications due to --optimize or --chain or compressing a Luft file
     int64_t txt_data_so_far_single_0;  // txt_file PIZ: accounting for data as it was in the original source file, as reading TxtHeader and VbHeader sections from the genozip file
@@ -234,8 +233,8 @@ extern char *file_make_unix_filename (char *filename);
 #define txt_name file_printname(txt_file)
 #define z_name   file_printname(z_file)
 
-#define CLOSE(fd,name,quiet) do { ASSERTW (!close (fd) || (quiet),  "Warning in %s:%u: Failed to close %s: %s",  __FUNCLINE, (name), strerror(errno));} while (0)
-#define FCLOSE(fp,name) do { if (fp) { ASSERTW (!fclose (fp), "Warning in %s:%u: Failed to fclose %s: %s", __FUNCLINE, (name), strerror(errno)); fp = NULL; } } while (0)
+#define CLOSE(fd,name,quiet) ({ ASSERTW (!close (fd) || (quiet),  "Warning in %s:%u: Failed to close %s: %s",  __FUNCLINE, (name), strerror(errno));})
+#define FCLOSE(fp,name) ({ if (fp) { ASSERTW (!fclose (fp), "Warning in %s:%u: Failed to fclose %s: %s", __FUNCLINE, (name), strerror(errno)); fp = NULL; } })
  
  // ---------------------------
 // tests for compression types

@@ -70,7 +70,7 @@ bool version_print_notice_if_has_newer (void)
 
 #ifndef _WIN32
             else if (!strcmp (arch_get_distribution(), "conda") &&
-                     str_query_user_yn ("Do you want to upgrade now?", true))
+                     str_query_user_yn ("Do you want to upgrade now?", QDEF_YES))
                 system ("conda update genozip");
 #endif
         }

@@ -118,6 +118,9 @@ static inline uint8_t NEXTLOCAL2BITS(ContextP ctx) { uint8_t ret = bits_get ((Bi
 static inline char *last_txt (VBlockP vb, Did did_i) { return last_txtx (vb, CTX(did_i)); }
 #define last_txt_len(did_i) contexts[did_i].last_txt.len
 
+#define set_last_txt_(did_i,value, value_len) CTX(did_i)->last_txt = (TxtWord){ .index = BNUMtxt (value), .len = value_len }
+#define set_last_txt(did_i, value) set_last_txt_(did_i, value, value##_len)
+
 #define history64(did_i, line_i) (*B(int64_t, CTX(did_i)->history, (line_i)))
 
 static inline bool is_last_txt_valid(ContextP ctx) { return ctx->last_txt.index != INVALID_LAST_TXT_INDEX; }

@@ -289,7 +289,7 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux
     GET_NEXT_ITEM_NL (f); \
     seg_by_did (VB, field_start, field_len, f, field_len+1);
 
-#define SEG_EOL(f,account_for_ascii10) do { seg_by_did (VB, *(has_13) ? "\r\n" : "\n", 1 + *(has_13), (f), (account_for_ascii10) + *(has_13)); } while (0)
+#define SEG_EOL(f,account_for_ascii10) ({ seg_by_did (VB, *(has_13) ? "\r\n" : "\n", 1 + *(has_13), (f), (account_for_ascii10) + *(has_13)); })
 
 #define ASSSEG(condition, p_into_txt, format, ...)                                                                  \
     ASSINP ((condition), "%s %s/%s: "format "\nTechnical details: pos_in_vb: %"PRIi64" pos_in_file: %"PRIi64        \

@@ -87,6 +87,21 @@ IS_SKIP (vcf_piz_is_skip_section)
     return false;
 }
 
+// insert a field after following fields have already been reconstructed
+void vcf_piz_insert_field (VBlockVCFP vb, Did did, STRp(value))
+{
+    char *addr = last_txt (VB, did);
+    memmove (addr + value_len, addr, BAFTtxt - addr); // make room
+    memcpy (addr, value, value_len); // copy
+
+    vb->txt_data.len += value_len;
+
+    ASSERT (vb->txt_data.len <= vb->txt_data.size, "txt_data overflow: len=%"PRIu64" > size=%"PRIu64, vb->txt_data.len, (uint64_t)vb->txt_data.size);
+    
+    // adjust lookback addresses that might be affected by this insertion
+    vcf_piz_ps_pid_lookback_shift (VB, addr, value_len);
+}
+
 bool vcf_piz_line_has_RGQ (VBlockVCFP vb)
 {
     if (vb->line_has_RGQ == RGQ_UNKNOWN)
@@ -231,15 +246,21 @@ CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb)
     switch (con_item->dict_id.num) {
 
         case _FORMAT_DP:
-            if (ctx_has_value (vb, FORMAT_DP)) // not '.' or missing
-                CTX(INFO_DP)->sum_dp_this_line += CTX(FORMAT_DP)->last_value.i;
+            if (ctx_has_value (vb, FORMAT_DP)) { // not '.' or missing
+                CTX(INFO_DP)->qd.sum_dp_with_dosage += CTX(FORMAT_DP)->last_value.i;
+            
+                // add up DP's of samples with GT!=0/0, for consumption by INFO/QD predictor
+                QdPredType pd = CTX(INFO_QD)->qd.pred_type;
+                if (pd == QD_PRED_SUM_DP || pd == QD_PRED_SUM_DP_P001 || pd == QD_PRED_SUM_DP_M001)
+                    vcf_piz_sum_DP_for_QD (vb, STRa(recon));
+            }
             break;
             
-        case _FORMAT_PS: // only happens in v13 where PS has item_cb
+        case _FORMAT_PS: // since v13: PS has item_cb
             vcf_piz_ps_pid_lookback_insert (vb, FORMAT_PS, STRa(recon));
             break;
 
-        case _FORMAT_PID: // only happens in v13 where PS has item_cb
+        case _FORMAT_PID: // since v13: PS has item_cb
             vcf_piz_ps_pid_lookback_insert (vb, FORMAT_PID, STRa(recon));
             break;
 
@@ -277,9 +298,19 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
         if (CTX(INFO_DP)->is_initialized)
             vcf_piz_finalize_DP_by_DP (VB_VCF);
 
-        // case: we have an INFO/SF field and we reconstructed one VCF line
-        if (have_INFO_SF) 
-            vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VB_VCF); // cleans up allocations - call even if line will be dropped due oSTATUS
+        // case: insert INFO/SF and move rest of line forward - we have an INFO/SF field and we reconstructed one VCF line
+        int moved_sf_by = 0;
+        if (have_INFO_SF)  
+            moved_sf_by = vcf_piz_TOPLEVEL_cb_insert_INFO_SF (VB_VCF); // cleans up allocations - call even if line will be dropped due oSTATUS
+
+        // case: insert INFO/QD and move rest of line forward
+        if (CTX(INFO_QD)->qd.pred_type) {
+            // adjust QD.last_txt if we inserted SF
+            if (moved_sf_by && last_txt (vb, INFO_SF) < last_txt (vb, INFO_QD))
+                CTX(INFO_QD)->last_txt.index += moved_sf_by;
+            
+            vcf_piz_insert_QD (VB_VCF);
+        }
 
         // case: we are reconstructing with --luft and we reconstructed one VCF line
         if (z_is_dvcf) 

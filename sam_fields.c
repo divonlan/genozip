@@ -991,15 +991,13 @@ void sam_seg_buddied_i_fields (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i,
 {
     ContextP ctx = CTX(did_i);
 
-    ASSERT (ctx->flags.store_per_line || segconf.running,  
-            "%s: expecting ctx=%s to have store_per_line=true", LN_NAME, ctx->tag_name);
+    ASSERT (ctx->flags.store_per_line || ctx->flags.spl_custom || segconf.running,  
+            "%s: expecting ctx=%s to have store_per_line=true or spl_custom=true", LN_NAME, ctx->tag_name);
 
     // BAM spec permits values up to 0xffffffff, and SAM is unlimited, however for code covenience we limit
     // values segged with this method to int32_t. If this is ever an issue, it can be solved.
     ASSERT (my_value >= -0x80000000LL && my_value <= 0x7fffffffLL, "%s: Value of %s is %"PRId64", outside the supported range by Genozip of [%d,%d]",
             LN_NAME, ctx->tag_name, my_value, -0x80000000, 0x7fffffff);
-
-    *dl_value = my_value;
 
     #define by_mate      (mux->special_code == SAM_SPECIAL_DEMUX_BY_MATE)
     #define by_buddy     (mux->special_code == SAM_SPECIAL_DEMUX_BY_BUDDY)
@@ -1042,7 +1040,7 @@ void sam_seg_buddied_i_fields (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i,
         seg_integer (VB, ctx, my_value, true, add_bytes);        
 }
 
-// E2 - SEQ data. Currently broken. To do: fix.
+// E2 - SEQ data. Currently broken. To do: fix (bug 403)
 /*static void sam_seg_E2_field (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(field), unsigned add_bytes)
 {
     ASSSEG0 (dl->SEQ.len, field, "E2 tag without a SEQ"); 
@@ -1339,9 +1337,9 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
 
         case _OPTION_YS_Z: COND (MP(BSBOLT), sam_seg_bsbolt_YS_Z (vb, dl, STRa(value), add_bytes));
 
-        case _OPTION_mc_i: COND (segconf.sam_ms_type == ms_BIOBAMBAM, sam_seg_mc_i (vb, numeric.i, add_bytes));
+        case _OPTION_mc_i: COND (segconf.is_biobambam2_sort, sam_seg_mc_i (vb, numeric.i, add_bytes));
 
-        case _OPTION_ms_i: COND (segconf.sam_ms_type == ms_BIOBAMBAM, sam_seg_ms_i (vb, dl, numeric.i, add_bytes));
+        case _OPTION_ms_i: COND (segconf.sam_ms_type == ms_BIOBAMBAM, sam_seg_ms_i (vb, dl, numeric.i, add_bytes)); // ms:i produced by biobambam or samtools
 
         case _OPTION_s1_i: COND (is_minimap2(), sam_seg_s1_i (vb, dl, numeric.i, add_bytes));
 

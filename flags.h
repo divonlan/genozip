@@ -47,7 +47,7 @@ typedef struct {
     // ZIP: data modifying options
     int optimize, optimize_sort, optimize_phred, GL_to_PL, GP_to_PP, optimize_VQSLOD,  // optimize flags
         optimize_QUAL, optimize_Vf, optimize_ZM, optimize_DESC,
-        allow_ambiguous, add_line_numbers, match_chrom_to_reference;
+        allow_ambiguous, add_line_numbers, match_chrom_to_reference, no_kmers;
     
     char *dvcf_rename, *dvcf_drop;
     

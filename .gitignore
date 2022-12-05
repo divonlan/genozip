@@ -17,6 +17,7 @@ launch.json
 *.bz2
 *.xz
 *.exe
+!installers/*.exe
 *.new
 windows
 genozip-linux-x86_64
@@ -100,5 +101,6 @@ SEC_*.header
 digest.*.log
 failed-line.*
 *.tar
+!installers/*.tar
 *.log
 *.dict

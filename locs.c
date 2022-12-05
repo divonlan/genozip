@@ -24,7 +24,7 @@
 // returns header length if header read is complete, -1 not complete yet 
 int32_t locs_is_header_done (bool is_eof)
 {
-    return evb->txt_data.len >= 12 ? 12 : -1;
+    return evb->txt_data.len >= 12 ? 12 : HEADER_NEED_MORE;
 }
 
 // returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB

@@ -13,6 +13,7 @@
 #include "generic.h"
 #include "dict_id.h"
 #include "file.h"
+#include "tar.h"
 
 static char magic[8] = {}; // first 8 bytes of the generic file
 static char ext[11]  = {}; // nul-terminated txt filename extension
@@ -21,6 +22,48 @@ static char ext[11]  = {}; // nul-terminated txt filename extension
 int32_t generic_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 {
     return 0;
+}
+
+// we use the header callback to try to detect if this generic file can be recognized as another
+// data type by a signature. if not, it remains generic, and we set the header length to 0
+int32_t generic_is_header_done (bool is_eof)
+{
+    ARRAY (char, header, evb->txt_data);
+    DataType new_dt = DT_NONE;
+    
+    if (!header_len)
+        return is_eof ? 0 : HEADER_NEED_MORE;
+    
+    SAFE_NUL(&header[header_len]);
+    bool need_more = false;
+
+    // search for a data type who's signature is in this header
+    for (DataType dt=0; dt < NUM_DATATYPES; dt++)
+        if (dt_props[dt].is_data_type && dt_props[dt].is_data_type (STRa(header), &need_more)) {
+            new_dt = dt;
+            break;
+        }
+
+    SAFE_RESTORE;
+
+    if (new_dt != DT_NONE) {
+        txt_file->data_type = z_file->data_type = new_dt;
+        return HEADER_DATA_TYPE_CHANGED;
+    }
+
+    else if (need_more && !is_eof) // header too short to determine - we need more data
+        return HEADER_NEED_MORE;
+
+    else {
+        // if we can't recognize a piped-in file, then we require the user to tell us what it is with --input
+        ASSINP (!txt_file->redirected || flag.stdin_type, 
+                "to pipe data in, please use --input (or -i) to specify its type, which can be one of the following:\n%s", file_compressible_extensions (true));
+        
+        if (!flag.stdin_type && !tar_is_tar()) 
+            WARN_ONCE ("FYI: genozip doesn't recognize %s file's type, so it will be compressed as GENERIC. In the future, you may specify the type with \"--input <type>\". To suppress this warning, use \"--input generic\".", txt_name);
+
+        return 0;
+    }
 }
 
 void generic_seg_initialize (VBlockP vb)

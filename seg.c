@@ -294,7 +294,7 @@ void seg_mux_init (VBlockP vb, ContextP ctx, unsigned num_channels, uint8_t spec
                    bool no_stons, MultiplexerP mux, rom channel_letters) // optional - a string with num_channels unique characters
 {
     // note: if we ever need more than 256, we need to update the dict_id generation formula below
-    ASSERT (num_channels <= 256, "num_channels=%u beyond maximum of 256", num_channels);
+    ASSERT (num_channels <= 256, "num_channels=%u exceeds maximum of 256", num_channels);
 
     bytes id = ctx->dict_id.id;
     DictId dict_id_template = (DictId){ .id = { id[0], 0, id[1], id[2], id[3], id[4], id[5], id[6] } };

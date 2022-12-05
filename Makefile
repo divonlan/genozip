@@ -33,17 +33,31 @@ ifdef IS_CONDA
 
 else
 	CC=gcc
-	CFLAGS += -march=native -DNOT_CONDA # note: conda uses -march=nocona for Linux and -march=core2 for Darwin
+
+	# set -march. note: if conda, we leave it to conda to set
+	ifeq ($(OS),Windows_NT)
+		CFLAGS += -march=native 
+	else
+		ifeq ($(uname),Linux)
+			CFLAGS += -march=nocona # similar to conda - relatively low optimization, since different hosts in a cluster might have different capabilities
+		endif
+
+		ifeq ($(uname),Darwin) # Mac
+			CFLAGS += -march=native # conda used "core2". We use the highest available optimizations, because it is typically compiled for use on a specific Mac
+		endif
+	endif
+
 endif 
 
 SRC_DIRS = zlib bzlib lzma bsc libdeflate htscodecs compatibility
 
-MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c license.c 							\
+MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c license.c tip.c      				\
 		  data_types.c bits.c progress.c writer.c tar.c chrom.c qname.c tokenizer.c 							\
           zip.c piz.c reconstruct.c recon_history.c recon_peek.c seg.c zfile.c aligner.c flags.c digest.c    	\
 		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c mutex.c threads.c	\
-		  vcf_piz.c vcf_seg.c vcf_gt.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c 		\
-		  vcf_refalt.c vcf_tags.c vcf_ps_pid.c vcf_linesort.c vcf_format.c vcf_illum_gtyping.c           		\
+		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c 		\
+		  vcf_format_GT.c vcf_format_PS_PID.c vcf_info_QD.c vcf_info_SF.c                                                                           \
+		  vcf_refalt.c vcf_tags.c vcf_linesort.c vcf_format.c vcf_illum_gtyping.c           		\
 		  sam_seg.c sam_piz.c sam_shared.c sam_header.c sam_md.c sam_tlen.c sam_cigar.c sam_fields.c  			\
 		  sam_sa.c bam_seg.c bam_seq.c bam_show.c                                             					\
 		  sam_seq.c sam_qual.c sam_sag_zip.c sam_sag_piz.c sam_sag_load.c sam_sag_ingest.c sam_sag_scan.c    	\
@@ -80,7 +94,7 @@ CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h tx
              endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h \
              buffer.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h codec.h stats.h \
              crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h qname.h qname_flavors.h \
-			 lookback.h tokenizer.h codec_longr_alg.c gencomp.h dict_io.h recon_plan_io.h \
+			 lookback.h tokenizer.h codec_longr_alg.c gencomp.h dict_io.h recon_plan_io.h tip.h \
 			 reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h threads.h \
 			 arch.h license.h file_types.h data_types.h base64.h txtheader.h writer.h bases_filter.h genols.h contigs.h chrom.h \
 			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h fastq.h gff3.h phylip.h chain.h kraken.h locs.h generic.h \
@@ -107,7 +121,7 @@ CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h tx
 
 LINUXDIR = genozip-linux-x86_64 # directory for creating the Linux binaries distribution
 
-DOCS = docs/docs
+DOCS = installers
 
 ifeq ($(CC),cl) # Microsoft Visual C
 	$(error Only the gcc compiler is currently supported)
@@ -116,19 +130,17 @@ endif
 OBJDIR=objdir # fallback if not win, linux, mac
 
 ifeq ($(OS),Windows_NT)
-# Windows
-	EXE = .exe
+EXE = .exe
 	LDFLAGS += -static -static-libgcc
 	OBJDIR=objdir.windows
 	WSL=wsl
 else
     ifeq ($(uname),Linux)
-# Linux
         LDFLAGS += -lrt # required by pthreads
     	OBJDIR=objdir.linux
 	endif
-    ifeq ($(uname),Darwin)
-# Mac
+
+    ifeq ($(uname),Darwin) # Mac
 		MY_SRCS += compatibility/mac_gettime.c
     	OBJDIR=objdir.mac
     endif
@@ -233,44 +245,7 @@ LICENSE.txt: text_license.h version.h # not dependent on genozip.exe, so we don'
 	@make -j genozip$(EXE) # recursive call to make genozip.exe with the latest version
 	@echo Generating $@
 	@./genozip$(EXE) --license=100 --force > $@
-
-docs = $(DOCS)/genozip.rst $(DOCS)/genounzip.rst $(DOCS)/genocat.rst $(DOCS)/genols.rst $(DOCS)/advanced.rst $(DOCS)/index.rst $(DOCS)/license.rst \
-       $(DOCS)/publications.rst $(DOCS)/installing.rst $(DOCS)/contact.rst $(DOCS)/compression.rst $(DOCS)/source.rst $(DOCS)/logo.png \
-	   $(DOCS)/opt-help.rst $(DOCS)/opt-piz.rst $(DOCS)/opt-quiet.rst $(DOCS)/opt-stats.rst $(DOCS)/opt-threads.rst $(DOCS)/opt-subdirs.rst \
-	   $(DOCS)/manual.rst $(DOCS)/sex-assignment.rst $(DOCS)/sex-assignment-alg-sam.rst $(DOCS)/sex-assignment-alg-fastq.rst \
-	   $(DOCS)/fastq-to-bam-pipeline.rst $(DOCS)/coverage.rst $(DOCS)/algorithms.rst $(DOCS)/losslessness.rst $(DOCS)/idxstats.rst \
-	   $(DOCS)/downsampling.rst $(DOCS)/capabilities.rst $(DOCS)/mime-type.rst $(DOCS)/kraken.rst \
-	   $(DOCS)/sam2fq.rst $(DOCS)/23andMe2vcf.rst $(DOCS)/multifasta2phylip.rst $(DOCS)/gatk-unexpected-base.rst $(DOCS)/digest.rst $(DOCS)/commercial.rst \
-	   $(DOCS)/using-on-hpc.rst $(DOCS)/match-chrom.rst $(DOCS)/attributions.rst $(DOCS)/testimonials.rst $(DOCS)/pricing-faq.rst \
-	   $(DOCS)/dvcf.rst $(DOCS)/dvcf-rendering.rst $(DOCS)/chain.rst $(DOCS)/dvcf-limitations.rst $(DOCS)/dvcf-renaming.rst $(DOCS)/dvcf-see-also.rst \
-	   $(DOCS)/archiving.rst $(DOCS)/encryption.rst $(DOCS)/release-notes.rst $(DOCS)/benchmarks.rst \
-	   $(DOCS)/data-types.rst $(DOCS)/bam.rst $(DOCS)/fastq.rst $(DOCS)/vcf.rst $(DOCS)/gff3.rst $(DOCS)/publications-list.rst \
-	   $(DOCS)/sam-flags.rst
-
-$(DOCS)/conf.py: $(DOCS)/conf.template.py version.h
-	@sed -e "s/__VERSION__/$(version)/g" $< |sed -e "s/__YEAR__/`date +'%Y'`/g" > $@ 
-
-$(DOCS)/LICENSE.for-docs.txt: genozip$(EXE) version.h
-	@echo Generating $@
-	@./genozip$(EXE) --license=74 --force > $@
-
-$(DOCS)/RELEASE_NOTES.for-docs.txt: RELEASE_NOTES.txt
-	@echo Generating $@
-	@fold -w 63 -s $< > $@
 	
-$(DOCS)/_build/html/.buildinfo: $(DOCS)/LICENSE.for-docs.txt $(DOCS)/RELEASE_NOTES.for-docs.txt $(DOCS)/conf.py $(docs)
-	@echo Building HTML docs
-	@run-on-wsl.sh /home/divon/miniconda3/bin/sphinx-build -M html $(DOCS) $(DOCS)/_build -q -a 
-
-build-docs: $(DOCS)/_build/html/.buildinfo $(DOCS)/LICENSE.for-docs.txt $(DOCS)/RELEASE_NOTES.for-docs.txt # they are actually published after git commit + push
-
-test-docs: $(DOCS)/conf.py $(docs) # don't require license or release notes - so code needn't be built
-	@echo "Building HTML docs (TEST)"
-	@run-on-wsl.sh /home/divon/miniconda3/bin/sphinx-build -M html $(DOCS) $(DOCS)/_build -q -a 
-	@echo $(PWD)
-	@# Open chrome on the last doc edited
-	@"/c/Program Files (x86)/Google/Chrome/Application/chrome.exe" "file:///c:"`pwd |cut -c3-`/docs/docs/_build/html/`cd docs/docs ; ls -1 *.rst -t|head -1|rev|cut -c5-|rev`.html --new-window
-
 # this is used by build.sh to install on conda for Linux and Mac. Installation for Windows in in bld.bat
 install: genozip$(EXE)
 	@echo Installing in $(PREFIX)/bin
@@ -292,7 +267,7 @@ test:
 	@cat test.sh | tr -d "\r" | bash -
 
 clean-docs:
-	@rm -fR $(DOCS)/_build/*
+	@rm -fR $(DOCS)/*
 
 clean-debug:
 	@echo Cleaning up debug
@@ -317,7 +292,7 @@ clean: clean-docs clean-test
 	@rm -R $(OBJDIR)
 	@mkdir $(OBJDIR) $(addprefix $(OBJDIR)/, $(SRC_DIRS))
 
-.PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch build-docs test-docs testfiles test-backup genozip-linux-x86_64/clean genozip-prod genozip-prod.exe dict_id_gen$(EXE) push-build increment-version
+.PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch testfiles test-backup genozip-linux-x86_64/clean genozip-prod genozip-prod.exe dict_id_gen$(EXE) push-build increment-version $(DOCS)/LICENSE.html
 
 # builds prod for local OS
 genozip-prod$(EXE): 
@@ -412,8 +387,11 @@ windows/LICENSE.for-installer.txt: genozip$(EXE) version.h
 
 WINDOWS_INSTALLER_OBJS = windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe windows/LICENSE.for-installer.txt LICENSE.txt
 
+$(DOCS)/LICENSE.html: genozip$(EXE)
+	@./genozip$(EXE) --license=-5000 --force > $@
+
 # this must be run ONLY has part of "make distribution" or else versions will be out of sync
-$(DOCS)/genozip-installer.exe: clean-optimized $(WINDOWS_INSTALLER_OBJS) # clean first, as we will compile without -march=native
+$(DOCS)/genozip-installer.exe: clean-optimized $(WINDOWS_INSTALLER_OBJS) 
 	@(mkdir windows >& /dev/null ; exit 0)
 	@echo 'Creating Windows installer'
 	@echo 'WINDOWS: Using the UI:'
@@ -445,7 +423,7 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 
 BUILD_FILES = version.h genozip-installer.ifp LICENSE.txt Makefile
 
-BUILD_FILES_DOCS = genozip-installer.exe genozip-linux-x86_64.tar conf.py LICENSE.for-docs.txt RELEASE_NOTES.for-docs.txt
+BUILD_FILES_DOCS = genozip-installer.exe genozip-linux-x86_64.tar 
 
 push-build: 
 	@(git stage $(BUILD_FILES) ; exit 0) > /dev/null
@@ -455,10 +433,10 @@ push-build:
 	@(cd $(DOCS); git commit -m $(version) ; exit 0) > /dev/null
 	@(cd $(DOCS); git push) > /dev/null
 
-distribution: increment-version testfiles $(DOCS)/genozip-linux-x86_64.tar.build $(DOCS)/genozip-installer.exe build-docs push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
+distribution: increment-version testfiles LICENSE.txt $(DOCS)/LICENSE.html $(DOCS)/genozip-linux-x86_64.tar.build $(DOCS)/genozip-installer.exe push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
 	@(cd ../genozip-feedstock/ ; git pull)
 
-distribution-maintenance: increment-version testfiles $(DOCS)/genozip-linux-x86_64.tar.build $(DOCS)/genozip-installer.exe $(DOCS)/RELEASE_NOTES.for-docs.txt \
+distribution-maintenance: increment-version LICENSE.txt testfiles $(DOCS)/genozip-linux-x86_64.tar.build $(DOCS)/genozip-installer.exe \
                           push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
 	@(cd ../genozip-feedstock/ ; git pull)
 

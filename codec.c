@@ -308,7 +308,7 @@ Codec codec_assign_best_codec (VBlockP vb,
     // save the assignment for future VBs, but not in --best, where each VB tests on its own.
     // note: for local (except in --fast), we don't commit for vb=1 bc less representative of data 
     // (ok for --best as we count (BEST_LOCK_IN_THREASHOLD) anyway))
-    if ((is_b250 || (is_local && (flag.best || flag.fast || vb->vblock_i > 1))) && *selected_codec != CODEC_UNKNOWN && zctx) 
+    if ((is_b250 || (is_local && (flag.best || flag.fast || vb->vblock_i > 1 || vb->is_eof))) && *selected_codec != CODEC_UNKNOWN && zctx) 
         ctx_commit_codec_to_zf_ctx (vb, ctx, is_local, true);
 
 done:

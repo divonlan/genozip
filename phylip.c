@@ -44,7 +44,7 @@ int32_t phy_is_header_done (bool is_eof)
     if (is_eof && *BLSTc (evb->txt_data) == '\n') 
         return evb->txt_data.len;
 
-    return -1;
+    return HEADER_NEED_MORE;
 }
 
 bool phy_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags)

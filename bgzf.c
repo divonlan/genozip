@@ -399,9 +399,9 @@ void bgzf_zip_advance_index (VBlockP vb, uint32_t line_len)
 
 // ZIP: after reading data for a txt_header or VB, copy unconsumed bgzf_blocks to txt_file->unconsumed_bgzf_blocks
 // The first block might be partially consumed.
-void bgzf_copy_unconsumed_blocks (VBlockP vb)
+int64_t bgzf_copy_unconsumed_blocks (VBlockP vb)
 {
-    if (!vb->bgzf_blocks.len) return; // not a BGZF-compressed file
+    if (!vb->bgzf_blocks.len) return 0; // not a BGZF-compressed file
 
     int32_t consumed = vb->txt_data.len32 +   // amount of data consumed by this VB
                        vb->bgzf_blocks.consumed_by_prev_vb; 
@@ -409,25 +409,33 @@ void bgzf_copy_unconsumed_blocks (VBlockP vb)
     ARRAY (BgzfBlockZip, bb, vb->bgzf_blocks);
 
     bool done = false;
+    bool consumed_full_bgzf_blocks=false;
+    int64_t compressed_size = 0;
+
     for (uint32_t i=0; i < bb_len; i++) {
         // if some of the BGZF blocks are not consumed (the first of them might be partially consumed) - move the blocks
         // to unconsumed_bgzf_blocks - to be moved to the next VB
         if (consumed - bb[i].txt_size < 0 && !done/*enter only once*/) {
             
+            consumed_full_bgzf_blocks = (consumed == 0); // no partially-consumed block
+
             // block i might be partially consumed or not consumed at all, subsequent blocks are not consumed at all
             buf_append (evb, txt_file->unconsumed_bgzf_blocks, BgzfBlockZip, 
                         B(BgzfBlockZip, vb->bgzf_blocks, i), vb->bgzf_blocks.len32 - i, NULL);
 
             txt_file->unconsumed_bgzf_blocks.consumed_by_prev_vb = consumed; // part of first BGZF block already consumed
-        
             done = true;
         }
+        else if (!done)
+            compressed_size += bb[i].comp_size;
 
         consumed -= bb[i].txt_size;
     }
 
     // sanity check
     ASSERT (-consumed == txt_file->unconsumed_txt.len32, "Expecting (-consumed)=%d == unconsumed_txt.len=%u", -consumed, txt_file->unconsumed_txt.len32);
+
+    return consumed_full_bgzf_blocks ? compressed_size : 0;
 } 
 
 // return blocks used by the segconf VB to the unconsumed blocks

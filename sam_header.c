@@ -303,11 +303,14 @@ static void sam_header_zip_build_hdr_PGs (rom hdr, rom after)
         int ID_i=-1, PN_i=-1;
         
         for (int i=1; i < n_flds; i++) 
-            if (EQ3(flds[i], "ID:")) { // add part before first .
+            if (EQ3(flds[i], "ID:")) { // add part before first . and/or -
                 ID_i = i;
                 rom dot = memchr (flds[i], '.', fld_lens[i]);
                 ID_len = dot ? (dot - flds[i]) : fld_lens[i];
                 
+                rom hyphen = memchr (flds[i], '-', ID_len);
+                if (hyphen) ID_len = hyphen - flds[i];
+
                 if (added) BNXTc (stats_programs) = '\t'; // note: previous buf_add_more->buf_insert_do allocated an extra character
                 buf_add_more (evb, &stats_programs, flds[i], ID_len, "stats_programs");
                 added = true;
@@ -572,7 +575,7 @@ int32_t bam_is_header_done (bool is_eof)
     return next; // return BAM header length
 
 incomplete_header:
-    return -1;
+    return HEADER_NEED_MORE;
 
     #undef HDRSKIP
     #undef HDR32

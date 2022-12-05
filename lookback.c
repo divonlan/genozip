@@ -30,7 +30,7 @@ void lookback_init (VBlockP vb, ContextP lb_ctx, ContextP ctx, StoreType store_t
     }
 
     buf_alloc (vb, lookback_buf(ctx), 0, lookback_size(lb_ctx) * (  store_type == STORE_INDEX ? sizeof (WordIndex) : sizeof (int64_t)), char, 1, "lookback_buf");
-}
+ }
 
 void lookback_insert (VBlockP vb, Did lb_did_i, Did did_i, bool copy_last_value, ValueType value)
 {
@@ -85,6 +85,27 @@ const void *lookback_get_do (VBlockP vb, ContextP lb_ctx, ContextP ctx,
 
     return (ctx->flags.store == STORE_INDEX) ? (void *)B(WordIndex, *buf, index) 
                                              : (void *)B(int64_t, *buf, index);
+}
+
+// shift existing lookups after insertion into txt_data
+void lookback_shift_txt_index (VBlockP vb, ContextP lb_ctx, ContextP ctx, STRp (insert))
+{
+    BufferP buf = lookback_buf(ctx);
+    if (!buf_is_alloc (buf)) return;
+
+    uint32_t lb_size = lookback_size (lb_ctx);
+    unsigned lb_len = lookback_len (ctx, lb_size);        
+
+    for (unsigned lookback=1; lookback <= lb_len; lookback++) {
+        unsigned index = RR(buf->newest_index + lookback - 1, lb_size);
+        ValueType *value = B(ValueType, *buf, index);
+        
+        if (value->index > BNUMtxt (insert)) // this lookback is after the insertion, therefore affected by it
+            value->index += insert_len;
+
+        else 
+            break; // we reached the lookbacks that are before the insertion, and thus unaffected it 
+    }
 }
 
 // Seg: check if a string is the same of a back txt at a certain lookback

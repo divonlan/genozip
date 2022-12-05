@@ -15,13 +15,6 @@ static rom help_genozip[] = {
     "Please see the genozip manual here: "WEBSITE_GENOZIP
 };
 
-static rom help_genozip_developer[] = {
-    "",
-    "Options useful mostly for developers of genozip:",
-    "",
-    "Please see "WEBSITE_ADVANCED
-};
-
 static rom help_genounzip[] = {
     "",
     "Please see the genounzip manual here: "WEBSITE_GENOUNZIP
@@ -45,7 +38,7 @@ static rom help_attributions[] = {
 static rom help_footer[] = {
     "",
     "Technical questions, bug reports and feature requests: " EMAIL_SUPPORT,
-    "Commercial license inquiries: " EMAIL_SALES,
+    "License inquiries: " EMAIL_SALES,
     "",
     "THIS SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE AUTHORS, COPYRIGHT HOLDERS OR DISTRIBUTORS OF THIS SOFTWARE BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
 };

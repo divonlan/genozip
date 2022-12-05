@@ -65,7 +65,7 @@ DataType file_get_data_type (FileType ft, bool is_input)
             if ((is_input ? txt_in_ft_by_dt[dt][i].in : txt_out_ft_by_dt[dt][i]) == ft) 
                 return dt;
 
-    return DT_NONE;
+    return (is_input && ft == UNKNOWN_FILE_TYPE) ? DT_GENERIC : DT_NONE;
 }
 
 rom file_plain_text_ext_of_dt (DataType dt) 
@@ -177,6 +177,7 @@ static FileType file_get_type_force_dt (rom filename, DataType dt)
         case GNRIC_GZ  : return file_get_txt_ft_by_codec (dt, CODEC_GZ);
         case GNRIC_BZ2 : return file_get_txt_ft_by_codec (dt, CODEC_BZ2);
         case GNRIC_XZ  : return file_get_txt_ft_by_codec (dt, CODEC_XZ);
+        case GNRIC_ZIP : return file_get_txt_ft_by_codec (dt, CODEC_ZIP);
         default        : return ft;
     }
 }
@@ -298,7 +299,7 @@ static void file_ask_user_to_confirm_overwrite (rom filename)
     
     if (!isatty(0) || !isatty(2)) exit_on_error(false); // if we stdin or stderr is redirected - we cannot ask the user an interactive question
     
-    if (!str_query_user_yn ("Do you wish to overwrite it now?", false)) {
+    if (!str_query_user_yn ("Do you wish to overwrite it now?", QDEF_NO)) {
         fprintf (stderr, "No worries, I'm stopping here - no damage done!\n");
         exit (EXIT_OK);
     }
@@ -392,12 +393,7 @@ static bool file_open_txt_read_test_valid_dt (const File *file)
             ASSINP (!file_has_ext (file->name, ".genozip"), 
                     "cannot compress %s because it is already compressed", file_printname(file));
 
-            if (file->redirected)
-                ABORT ("%s: to pipe data in, please use --input (or -i) to specify its type, which can be one of the following:\n%s", 
-                        global_cmd, file_compressible_extensions (true));
-            else
-                ABORT ("%s: the type of data in %s cannot be determined by its file name extension.\nPlease use --input (or -i) to specify one of the following types, or provide an input file with an extension matching one of these types.\n\nSupported file types: %s", 
-                        global_cmd, file_printname (file),  file_compressible_extensions (false));
+            ABORT0 ("Unexpectedly, data_type==DT_NONE"); // not expecting to ever reach here, bc if file is not recognized, it should have been set to GENERIC
         }
     }
 
@@ -415,9 +411,6 @@ static bool file_open_txt_read (File *file)
 
     // show meaningful error if file is not a supported data type
     if (file_open_txt_read_test_valid_dt (file)) return true; // skip this file
-
-    if (file->data_type == DT_GENERIC && !flag.stdin_type && !tar_is_tar()) 
-        WARN_ONCE ("FYI: genozip doesn't recognize %s file's type, so it will be compressed as GENERIC. In the future, you may specify the type with \"--input <type>\". To suppress this warning, use \"--input generic\".", file->name);
     
     // open the file, based on the codec (as guessed by file extension)
     file->codec        = file_get_codec_by_txt_ft (file->data_type, file->type, false);

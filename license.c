@@ -18,10 +18,8 @@
 #include "strings.h"
 #include "arch.h"
 #include "profiler.h" // for TimeSpecType
-#include "md5.h"
 #include "url.h"
 #include "license.h"
-#include "version.h"
 #include "buffer.h"
 #include "flags.h"
 #include "md5.h"
@@ -29,7 +27,7 @@
 #include "version.h"
 #include "file.h"
 
-// these field names appear in the license file starting V12.0.7
+// these field names appear in the license file starting V12.0.7. They are also consumed in register.sh.
 #define LIC_FIELD_TYPE         "License type"
 #define LIC_FIELD_VERSION      "Genozip license version"
 #define LIC_FIELD_INSTITUTION  "License granted to"
@@ -49,12 +47,12 @@ static struct {
     bool initialized;
     LicenseType lic_type; 
     char name[256], institution[1024], email[256], ip[ARCH_IP_LEN], version[20], allow_stats[4];
-    StrText timestamp;
+    StrTime timestamp;
     int64_t machine_time; // timestamp expressed as seconds since epoch
     uint32_t license_num;
 } rec = {};
 
-static rom lic_types[4] = { "", "Academic", "30-day evaluation", "Paid" }; // these strings are referred to in register.sh
+static rom lic_types[NUM_LIC_TYPES] = { "", "Academic", "30-day evaluation", "Standard" }; // these strings are referred to in register.sh
 
 static uint32_t license_calc_number (ConstBufferP license_data)
 {
@@ -135,6 +133,12 @@ static rom license_load_field (rom field, STRps(line))
     return ""; // not found
 }
 
+bool license_is_registered (void)
+{
+    rom filename = get_license_filename (true);
+    return  file_exists (filename);
+}
+
 // IF YOU'RE CONSIDERING TAMPERING WITH THIS CODE TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,
 // and might put you personally as well as your organization at legal and financial risk - see "Severly unauthorized use of Genozip"
 // section of the license. Rather, please contact sales@genozip.com to discuss which license would be appropriate for your case.
@@ -145,7 +149,6 @@ static void license_load (void)
     rom filename = get_license_filename (true);
     
     if (!file_exists (filename)) {
-        flag.do_register = "";
         license_register ();
         return;
     }
@@ -191,7 +194,6 @@ reregister:
     ASSINP0 (isatty(0) && isatty(2), "Genozip license terms & conditions have changed, please re-register by running: genozip --register");
 
     fprintf (stderr, "Genozip license terms & conditions have changed, please re-register:\n\n");
-    flag.do_register = "";
     license_register();
 }
 
@@ -247,18 +249,44 @@ static bool license_submit (rom os, unsigned cores, rom endianity, rom user_host
 
 static bool license_verify_email (char *response, unsigned response_size, rom unused)
 {
-    // sanity check that this is an email address
-    return strlen (response) > 3 && strchr (response, '@') && strchr (response, '.');
+    rom domain = strchr (response, '@');
+    if (!domain) return false;
+
+    domain++;
+    int domain_len = strlen (domain);
+
+    if (domain_len < 5 || !strchr (response, '.')) return false;
+
+    static rom disposanle_email_domains[] = { // https://gist.github.com/nocturnalgeek/1b8fa44283314544c487
+        "mailinator.com", "binkmail.com", "bobmail.info", "chammy.info", "devnullmail.com",
+        "letthemeatspam.com", "mailinater.com", "mailinator.net", "mailinator2.com", "notmailinator.com",
+        "reallymymail.com", "reconmail.com", "safetymail.info", "sendspamhere.com", "sogetthis.com",
+        "spambooger.com", "spamherelots.com", "spamhereplease.com", "spamthisplease.com",
+        "streetwisemail.com", "suremail.info", "thisisnotmyrealemail.com", "tradermail.info",
+        "veryrealemail.com", "zippymail.info"
+    };
+
+    for (int i=0; i < ARRAY_LEN(disposanle_email_domains); i++)
+        if (!strcmp (domain, disposanle_email_domains[i])) {   
+            fprintf (stderr, "\nHey, we worked very hard to build this software. Please respect us by providing your real email address.\n");
+            return false;
+        }
+
+    return true;
 }
 
 static bool license_is_consumer_email (rom email)
 {
     rom domain = strchr (email, '@') + 1;
+    int domain_len = strlen (domain);
 
-    static rom consumer_domains[] = { 
-        "gmail.com", "qq.com", "yahoo.com", "yahoo.fr", "hotmail.com", "hotmail.fr", "hotmail.co.jp",
-        "outlook.com", "163.com", "web.de",
-        "list.ru", "mail.ru", "protonmail.com",  "naver.com", "yaani.com", "icloud.com"
+    if (domain_len > 5 && !memcmp (domain, "live.",    5)) return true; // "live.com", "live.cn", "live.fr", etc.
+    if (domain_len > 6 && !memcmp (domain, "yahoo.",   6)) return true; // "yahoo.com", "yahoo.com.br", "yahoo.fr", "yahoo.co.uk", etc.
+    if (domain_len > 8 && !memcmp (domain, "hotmail.", 8)) return true; // "hotmail.com", "hotmail.fr", "hotmail.co.jp", etc
+
+    static rom consumer_domains[] = { // except yahoo, live, hotmail
+        "gmail.com", "googlemail.com", "qq.com",  "outlook.com", "163.com", "web.de", "hanmail.net",
+        "list.ru", "mail.ru", "protonmail.com", "naver.com", "yaani.com", "icloud.com"
     };
 
     for (int i=0; i < ARRAY_LEN(consumer_domains); i++)
@@ -301,6 +329,8 @@ void license_register (void)
     rom os, dist, endianity, user_host;
     unsigned cores;
 
+    if (!flag.do_register) flag.do_register = "";
+
     str_split (flag.do_register, strlen (flag.do_register), 11, '|', field, true);
     str_nul_separate (field);
 
@@ -313,8 +343,8 @@ void license_register (void)
     if (!n_fields) {
 
         fprintf (stderr, "Welcome to Genozip!\n\n"
-                         "- Genozip is FREE for for academic research and some other purposes defined in the license (see "WEBSITE_LICENSE"), but requires registration.\n"
-                         "- For clinical, mixed research/clinical, commercial and other cases (examples: "WEBSITE_COMMERCIAL") you may evaluate Genozip for free for 30 days.\n\n");
+                         "- Genozip is a commercial product, however some academic research applications are eligibile for \n"
+                         "  a free Academic License. To check eligibility see: " WEBSITE_GET_GENOZIP "\n\n");
 
         if (file_exists (filename)) 
             license_exit_if_not_confirmed ("You are already registered. Are you sure you want to re-register again?", QDEF_NONE);
@@ -329,13 +359,13 @@ void license_register (void)
         strncpy (rec.institution, fields[1], sizeof(rec.institution)-1);
         strncpy (rec.name,        fields[2], sizeof(rec.name)-1);
         strncpy (rec.email,       fields[3], sizeof(rec.email)-1);
-        strncpy (rec.ip,          fields[5], sizeof(rec.ip)-1);
-        strncpy (rec.allow_stats, fields[4], sizeof(rec.allow_stats)-1);
-        os        = fields[5];
-        dist      = fields[6]; 
-        endianity = fields[7];
-        user_host = fields[8];
-        cores     = atoi(fields[9]);
+        strncpy (rec.ip,          fields[4], sizeof(rec.ip)-1);
+        strncpy (rec.allow_stats, fields[5], sizeof(rec.allow_stats)-1);
+        os        = fields[6];
+        dist      = fields[7]; 
+        endianity = fields[8];
+        user_host = fields[9];
+        cores     = atoi(fields[10]);
     }
     else {
         fprintf (stderr, "\nLicense details -\n");
@@ -349,21 +379,22 @@ void license_register (void)
         
         if (license_is_consumer_email (rec.email) && len < sizeof (rec.email)-20) {
             rec.email[len] = ' ';
-            str_query_user ("\nHmm... that looks like a personal email address.\nPlease enter your email address at your institution / company: ", 
-                            &rec.email[len+1], sizeof(rec.email)-len-1, license_verify_email, NULL);
+            fprintf (stderr, "\nHmm... that looks like a personal email address. Please enter your email address at your institution / company\n");
+            
+            str_query_user ("\nYour email address: ",&rec.email[len+1], sizeof(rec.email)-len-1, license_verify_email, NULL);
         }
 
         str_query_user ("\nWhat type of license do you require?\n\n"
-                        "1. Academic license (free, available to recognized research institutions, but excluding mixed clinical/research use)\n\n"
-                        "2. Non-academic license - 30 days evaluation (free for 30 days, for clinical or mixed clinical/research settings, biotech/agrotech/SaaS companies and other non-academic uses)\n\n"
-                        "3. I have already paid for a non-academic license\n\n"
+                        "1. Academic License (free): Free for officially recognized research institutions, but excluding clinical data\n\n"
+                        "2. Evaluation License (free): Free 30-day evaluation\n\n"
+                        "3. Standard License (paid): I have already paid for a Standard License\n\n"
                         "Remember your Mom taught you to be honest!\n\n"
                         "Please enter 1, 2 or 3: ",
                         lic_type, sizeof(lic_type), license_verify_license, NULL);
     
         rec.lic_type = lic_type[0] - '0';
     
-        if (rec.lic_type == LIC_TYPE_PAID) {
+        if (rec.lic_type == LIC_TYPE_STANDARD) {
             bool stats_consent = str_query_user_yn ("\nGenozip optionally collects aggregate statistics and metadata, helping us improve our compression algorithms (see "WEBSITE_STATS"). "
                                                     "This helps us a lot. May we have your permission for this? ", QDEF_NONE);
             strcpy (rec.allow_stats, stats_consent ? "Yes" : "No");
@@ -377,22 +408,23 @@ void license_register (void)
 
         license_exit_if_not_confirmed ("Do you accept the terms and conditions of the license?", QDEF_NONE);
 
-        os           = arch_get_os();
-        dist         = arch_get_distribution();
-        cores        = arch_get_num_cores();
-        endianity    = arch_get_endianity();
-        user_host    = arch_get_user_host();
-        memcpy (rec.ip, arch_get_ip_addr ("Failed to register the license"), ARCH_IP_LEN);
+        os           = arch_get_os();              printf ("."); // breadcrumbs to catch an ellusive bug
+        dist         = arch_get_distribution();    printf ("."); 
+        cores        = arch_get_num_cores();       printf ("."); 
+        endianity    = arch_get_endianity();       printf ("."); 
+        user_host    = arch_get_user_host();       printf ("."); 
+        memcpy (rec.ip, arch_get_ip_addr ("Failed to register the license"), ARCH_IP_LEN); printf ("."); 
     }
 
-    rec.timestamp = str_time();
-    rec.machine_time = time (0);
+    rec.timestamp = str_time();   printf ("."); 
+    rec.machine_time = time (0);  printf ("."); 
 
     static Buffer license_data = EMPTY_BUFFER;
     license_generate (&license_data);
+    printf (".\n"); 
 
     if (!n_fields) {
-        fprintf (stderr, "\nThank you. To complete your license registration, genozip will now submit the following information to the genozip licensing server:\n\n");
+        // fprintf (stderr, "\nThank you. To complete your license registration, genozip will now submit the following information to the genozip licensing server:\n\n");
 
         // note: text needs to match scripts/register.sh
         fprintf (stderr, "=====================================================================\n");
@@ -404,11 +436,11 @@ void license_register (void)
         fprintf (stderr, "Username: %s\n", user_host);
         fprintf (stderr, "Genozip info: version=%s distribution=%s\n", GENOZIP_CODE_VERSION, dist);
         fprintf (stderr, "Genozip license number: %u\n", rec.license_num);
-        if (rec.lic_type == LIC_TYPE_PAID) fprintf (stderr, "Send statistics: %s\n", rec.allow_stats);
+        if (rec.lic_type == LIC_TYPE_STANDARD) fprintf (stderr, "Send statistics: %s\n", rec.allow_stats);
         fprintf (stderr, "I accept the terms and conditions of the Genozip license\n");
         fprintf (stderr, "=====================================================================\n\n");
         
-        license_exit_if_not_confirmed ("Proceed with completing the registration?", QDEF_YES);
+        // license_exit_if_not_confirmed ("Proceed with completing the registration?", QDEF_YES);
     }
         
     bool submitted = license_submit (os, cores, endianity, user_host, dist);
@@ -422,19 +454,18 @@ void license_register (void)
             "Failed to write license file %s: %s. If this is unexpected, email "EMAIL_SUPPORT" for help.", filename, strerror (errno));
 
     if (!n_fields) {
-        fprintf (stderr, "\nSUCCESS. A Genozip license has been granted:\n"
-                         "License type: %s\nLicensee: %s\nFor use by %s\n\n" 
+        fprintf (stderr, "\nA Genozip %s License has been granted.\n\n"
                          "Documentation: " GENOZIP_URL "\n\n"
-                         "Support: " EMAIL_SUPPORT "\n\n", lic_types[rec.lic_type], rec.institution, rec.name);
+                         "Support: " EMAIL_SUPPORT "\n\n", lic_types[rec.lic_type]);
 
-        if (lic_type[0]=='1')
+        if (rec.lic_type == LIC_TYPE_ACADEMIC)
             fprintf (stderr, "Please take a moment now to make a note to not forget to cite Genozip:\n"
                              "Lan, D., et al. (2022) Genozip 14 - advances in compression of BAM and CRAM files (pre-print), doi: https://doi.org/10.1101/2022.09.12.507582\n"
                              "Lan, D., et al. (2021) Genozip: a universal extensible genomic data compressor, Bioinformatics, 37, 2225-2230\n"
                              "Lan, D., et al. (2020) genozip: a fast and efficient compression tool for VCF files, Bioinformatics, 36, 4091-4092\n\n");
 
-        else if (lic_type[0]=='2')
-            fprintf (stderr, "We will contact you in 30 days to ask whether you are interested to proceed with purchasing a license.\n\n");
+        else if (rec.lic_type == LIC_TYPE_EVAL)
+            fprintf (stderr, "We will contact you in 30 days to ask whether you are interested to proceed with purchasing a Standard License.\n\n");
     }
 
     buf_destroy (license_data);
@@ -457,7 +488,7 @@ LicenseType license_get_type (void)
 
 bool license_allow_stats (void)
 {
-    return (rec.lic_type == LIC_TYPE_PAID) ? !strcmp (rec.allow_stats, "Yes") : true;
+    return (rec.lic_type == LIC_TYPE_STANDARD) ? !strcmp (rec.allow_stats, "Yes") : true;
 }
 
 rom license_get_one_line (void)
@@ -478,145 +509,47 @@ void license_display (void)
     if (file_exists (filename) && !flag.force) 
         file_get_file (evb, filename, &license_data, "license_data", true);
 
+    bool html = (flag.lic_width < 0);
+    int width = ABS(flag.lic_width);
+    rom newline = html ? "<br><br>\n" : "\n\n";
+    rom html_header = html ? "<!DOCTYPE html> <html lang=\"en\"> <body style=\"color:white;\">" : NULL;
+
     // case: user has already accepted the license and it is new style license - display the license file
     if (license_data.len > 100) {
         str_split (license_data.data, license_data.len, 0, '\n', line, false);
         str_nul_separate (line);
-        str_print_text (lines, n_lines-1, "", "\n\n", flag.lic_width);
+        str_print_text (lines, n_lines-1, "", newline, html_header, width);
     }
     
     // case: license not yet accepted or old style (up to 12.0.6) license - display the current version license
     else
-        str_print_text (license, sizeof(license) / sizeof(char*), "", "\n\n", flag.lic_width);  // Makefile sets lic_width to a fixed width for Windows Installer and for Docs
+        str_print_text (license, ARRAY_LEN(license), "", newline, html_header, width);  // Makefile sets lic_width to a fixed width for Windows Installer and for Docs
 }
 
-static void license_print_default_notice (void)
+rom license_print_default_notice (void)
 {
+    char *notice = NULL; 
+
     switch (license_get_type()) { // note: this also loads the license in PIZ
 
         case LIC_TYPE_ACADEMIC:
-            iprintf ("\nGenozip is licensed to %s for use by %s, for academic research purposes only (see "WEBSITE_PRICING_FAQ"). Other use is prohibited. To get a non-academic license, email " EMAIL_SALES ".\n",
-                    rec.institution, rec.name);
+            notice = MALLOC (16384);
+            sprintf (notice, "Genozip is licensed to %s for use by %s, for academic research purposes only (see "WEBSITE_PRICING_FAQ"). Other use is prohibited. To get a non-academic license, email " EMAIL_SALES ".",
+                     rec.institution, rec.name);
             break;
 
         case LIC_TYPE_EVAL: { 
             int days_left = 30 - (int)(time(0)-rec.machine_time)/24/60/60;
+            notice = MALLOC (16384);
 
-            iprintf ("\nGenozip is licensed to %s for use by %s for a 30-day evaluation. %u day%s left. To get a license, email " EMAIL_SALES ".\n",
-                    rec.institution, rec.name, days_left, days_left!=1 ? "s" : "");
+            sprintf (notice, "Genozip is licensed to %s for use by %s for a 30-day evaluation. %u day%s left. To get a license, email " EMAIL_SALES ".",
+                     rec.institution, rec.name, days_left, days_left!=1 ? "s" : "");
             break;
         }
 
         default: break;
     }
+
+    return notice;
 }
 
-void license_print_tip (void)
-{
-    if (!is_info_stream_terminal)
-        license_print_default_notice();
-
-    // if outputting to a terminal - rotate between messages
-    else switch (time(0) % 27) {
-        case 0 ... 5:
-            license_print_default_notice();
-            break;
-
-        case 6: 
-            iprintf ("\nInterested in how Genozip works? See the paper: %s\n", PAPER2);
-            break;
-
-        case 7:
-            if (!strcmp (arch_get_distribution(), "github")) {
-                iprintf ("\nDo you like Genozip? Please support it by starring it on github: %s\n", GITHUB_REPO);
-                break;
-            }
-
-        case 8:
-            iprint0 ("\nIs Genozip useful? Help your colleagues by asking the IT folks to post it on your institution's bioinformatics page\n");
-            break;
-
-        case 9:
-            iprintf ("\nIs Genozip useful? Help your colleagues by asking the IT folks to install it as a module on your institution's HPC, see instructions here: %s\n", WEBSITE_USING_ON_HPC);
-            break;
-
-        case 10:
-            iprintf ("\nTip: you can use Genozip to get coverage information, see: %s\n", WEBSITE_COVERAGE);
-            break;
-
-        case 11:
-            iprintf ("\nTip: you can generate a VCF that describes variants against two different references concurrently, see: %s\n", WEBSITE_DVCF);
-            break;
-
-        case 12:
-            iprintf ("\nTip: you can use Genozip to generate a VCF that describes variants against two different references concurrently, see: %s\n", WEBSITE_DVCF);
-            break;
-
-        case 13:
-            iprintf ("\nFYI, some Genozip benchmarks are available here: %s\n", WEBSITE_BENCHMARKS);
-            break;
-        
-        case 14:
-            iprintf ("\nTip: you can use Genozip to downsample your data, see: %s\n", WEBSITE_DOWNSAMPLING);
-            break;
-        
-        case 15:
-            iprintf ("\nTip: increase the security of your data by using Genozip's built-in encryption, see: %s\n", WEBSITE_ENCRYPTION);
-            break;
-        
-        case 16:
-            iprintf ("\nTip: with Genozip, you can archive entire directories, see: %s\n", WEBSITE_ARCHIVING);
-            break;
-        
-        case 17:
-            iprintf ("\nTip: see an example of a FASTQ-to-BAM pipeline using Genozip: %s\n", WEBSITE_PIPELINE);
-            break;
-        
-        case 18:
-            iprintf ("\nTip: do the chromosomes have different names (eg 22 vs chr22)? Genozip can fix that: %s\n", WEBSITE_MATCH_CHROM);
-            break;
-    
-        case 19:
-            iprintf ("\nInterested in seeing who else is using Genozip? Here: %s\n", WEBSITE_INSTITUTIONS);
-            break;
-        
-        case 20:
-            iprint0 ("\nTip: genozip files are an excellent way to share and publish data - uncompressing genozip files is always free\n");
-            break;
-
-        case 21:
-            iprintf ("\nTip: you can use Genozip to compress a file directly from a URL, see: %s\n", WEBSITE_GENOZIP);
-            break;
-
-        case 22:
-            iprintf ("\nMake money with Genozip! Genozip pays a generous referral fee for referring a customer, See: %s\n", WEBSITE_REFERRAL);
-            break;
-
-        case 23:
-            iprint0 ("\nPlease take a moment now to make a note to not forget to cite Genozip:\n"
-                     "Lan, D., et al. (2022) Genozip 14 - advances in compression of BAM and CRAM files (pre-print), doi: https://doi.org/10.1101/2022.09.12.507582\n"
-                     "Lan, D., et al. (2021) Genozip: a universal extensible genomic data compressor, Bioinformatics, 37, 2225-2230\n"
-                     "Lan, D., et al. (2020) genozip: a fast and efficient compression tool for VCF files, Bioinformatics, 36, 4091-4092\n\n");
-            break;
-
-        case 24:
-            if (!flag.optimize) {
-                iprintf ("\nTip: using --optimize permits Genozip to make minor modifications to the data that usually have no impact on downstream analysis, yet result in significantly better compression, see: %s\n", WEBSITE_GENOZIP);
-                break;
-            }
-
-        case 25: 
-            if (flag.test) {
-                iprint0 ("\nFYI: automatic testing after compression can be disabled with --no-test (not recommended)\n");
-                break;
-            }
-
-        case 26: 
-            if (!flag.best && !flag.make_reference) {
-                iprint0 ("\nTip: to achieve the best compression, use --best\n");
-                break;
-            }
-
-        default: break;
-    }
-}

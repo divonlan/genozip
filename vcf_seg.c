@@ -69,6 +69,12 @@ void vcf_zip_finalize (bool is_last_user_txt_file)
     if (z_is_dvcf) gencomp_destroy();
 }
 
+// detect if a generic file is actually a vcf
+bool is_vcf (STRp(header), bool *need_more)
+{
+    return header_len >= 16 && !memcmp (header, "##fileformat=VCF", 16);
+}
+
 // main thread: writing data-type specific fields to genozip header
 void vcf_zip_genozip_header (SectionHeaderGenozipHeader *header)
 {
@@ -159,7 +165,9 @@ void vcf_seg_initialize (VBlockP vb_)
 
     ctx_set_store (VB, STORE_INDEX, VCF_oSTATUS, VCF_COORDS, VCF_oXSTRAND, VCF_CHROM, VCF_oCHROM, DID_EOL);
 
-    ctx_set_store (VB, STORE_INT, VCF_POS, VCF_oPOS, VCF_ID, VCF_LINE_NUM, FORMAT_DP, FORMAT_MIN_DP, DID_EOL); 
+    ctx_set_store (VB, STORE_INT, VCF_POS, VCF_oPOS, VCF_ID, VCF_LINE_NUM, FORMAT_DP, FORMAT_MIN_DP, INFO_DP, DID_EOL); 
+
+    ctx_set_store (VB, STORE_FLOAT, VCF_QUAL, DID_EOL); // consumed by vcf_piz_special_QD
 
     ctx_set_ltype (VB, LT_DYN_INT, INFO_RAW_MQandDP_MQ, INFO_RAW_MQandDP_DP, INFO_dbSNPBuildID, DID_EOL);
     
@@ -217,9 +225,9 @@ void vcf_seg_initialize (VBlockP vb_)
     ctx_create_node (VB, VCF_LIFT_REF, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_LIFT_REF }, 2);
     ctx_create_node (VB, VCF_COPYSTAT, (char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPYSTAT }, 2);
     ctx_create_node (VB, VCF_COPYPOS,  (char[]){ SNIP_SPECIAL, VCF_SPECIAL_COPYPOS  }, 2);
-    
+
     if (segconf.has[FORMAT_RGQ]) {
-    seg_mux_init (VB, CTX(VCF_QUAL), 2, VCF_SPECIAL_MUX_BY_HAS_RGQ, false, (MultiplexerP)&vb->mux_QUAL, "01");
+        seg_mux_init (VB, CTX(VCF_QUAL), 2, VCF_SPECIAL_MUX_BY_HAS_RGQ, false, (MultiplexerP)&vb->mux_QUAL, "01");
         seg_mux_init (VB, CTX(VCF_INFO), 2, VCF_SPECIAL_MUX_BY_HAS_RGQ, false, (MultiplexerP)&vb->mux_INFO, "01");        
     }
 
@@ -450,8 +458,7 @@ static inline bool vcf_refalt_seg_ref_alt_line_has_RGQ (rom str)
 
 static inline void vcf_seg_QUAL (VBlockVCFP vb, STRp(qual))
 {
-    CTX(VCF_QUAL)->last_txt = (TxtWord){ .index = BNUMtxt (qual), // consumed by vcf_seg_INFO_QD_by_FORMAT_DP
-                                         .len   = qual_len };
+    set_last_txt (VCF_QUAL, qual);
 
     // case: GVCF - multiplex by has_RGQ
     if (!segconf.running && segconf.has[FORMAT_RGQ]) {
@@ -523,8 +530,7 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
     }
 
     GET_NEXT_ITEM (VCF_POS);
-    CTX(VCF_POS)->last_txt = (TxtWord){ .index = BNUMtxt (VCF_POS_str), // consumed by vcf_seg_FORMAT_PS, vcf_seg_ILLUMINA_POS
-                                        .len   = VCF_POS_len };
+    set_last_txt_(VCF_POS, VCF_POS_str, VCF_POS_len); // consumed by vcf_seg_FORMAT_PS, vcf_seg_ILLUMINA_POS
 
     if (vb->line_coords == DC_PRIMARY) {
         PosType pos = dl->pos[0] = seg_pos_field (vb_, VCF_POS, VCF_POS, 0, '.', STRd(VCF_POS), 0, VCF_POS_len+1);

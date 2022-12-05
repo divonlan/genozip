@@ -145,11 +145,13 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
                arch_get_num_cores(), 
                url_esc_non_valid_charsS(arch_get_run_time()).s); 
     bufprintf (evb, &url_buf, "&entry.2140634550=%s", features.len ? url_esc_non_valid_charsS (B1STc(features)).s : "NONE");            // Features. Eg "Sorted"
-    bufprintf (evb, &url_buf, "&entry.851737826=%s", stats_programs.len ? url_esc_non_valid_charsS (B1STc(stats_programs)).s : "NONE"); // Programs. Eg "bwa"
     
-    // careful not to use bufprintf for hash_occ and internals as their size is not bound
+    // careful not to use bufprintf for hash_occ and stats_programs as their size is not bound
+    buf_append_string (evb, &url_buf, "&entry.851737826=");
+    buf_append_string (evb, &url_buf, stats_programs.len ? url_esc_non_valid_chars (B1STc(stats_programs)) : "NONE"); 
+
     buf_append_string (evb, &url_buf, "&entry.282448068=");
-    buf_append_string (evb, &url_buf, hash_occ.len  ? B1STc(hash_occ) : "NONE"); // Hash ineffeciencies, eg "RNAME,64.0 KB,102%" - each field is quadlet - name, type, hash size, hash occupancy    
+    buf_append_string (evb, &url_buf, hash_occ.len ? B1STc(hash_occ) : "NONE"); // Hash ineffeciencies, eg "RNAME,64.0 KB,102%" - each field is quadlet - name, type, hash size, hash occupancy    
 
     // fields
     bufprint0 (evb, &url_buf, "&entry.988930848=");      // Compression ratio of individual fields ratio, eg "FORMAT/GT,20%,78;..." - each field is triplet - name, percentage of z_data, compression ratio
@@ -166,7 +168,7 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
     F(optimize) ; F(optimize_DESC) ; F(optimize_phred) ; F(optimize_QUAL) ; F(optimize_Vf) ;
     F(optimize_VQSLOD) ; F(optimize_ZM) ; F(optimize_sort) ; F(GL_to_PL) ; F(GP_to_PP) ;
     F(add_line_numbers) ; F(sort) ; F(unsorted) ; F(md5) ; F(subdirs) ; F(out_filename) ;
-    F(replace) ; F(force) ; F(stdin_size) ; F(test) ; F(match_chrom_to_reference) ;
+    F(replace) ; F(force) ; F(stdin_size) ; F(test) ; F(match_chrom_to_reference) ; F(no_kmers) ;
     F(make_reference) ; F(dvcf_rename) ; F(dvcf_drop) ;
     F(show_lift) ; F(pair) ; F(multiseq) ; F(files_from) ; F(no_gencomp) ; F(force_gencomp) ; 
     F(debug_lines) ; F(show_sag) ; F(show_depn) ; F(no_domqual) ; F(show_aligner) ; F(show_qual) ;
@@ -208,7 +210,10 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
 
     int ret = url_read_string (B1STc(url_buf), NULL, 0);
     if (ret < 0 && (flag.debug || flag.debug_submit))
-        WARN ("Error: failed to submit to stats (error=%d): URL=\"%s\"", ret, B1STc(url_buf));
+        WARN ("Error: failed to submit to \"stats%s\" (error=%d): URL=\"%s\"", flag.debug_submit ? " DEBUG" : "", ret, B1STc(url_buf));
+    
+    else if (flag.debug_submit)
+        iprintf ("Submitted to \"stats DEBUG\":\n%s\n", B1STc(url_buf));
 
 #ifndef _WIN32
     exit(0); // child process is done
@@ -302,13 +307,13 @@ static void stats_output_file_metadata (void)
                    z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), z_file->section_list_buf.len32); })
 
     #define REPORT_QNAME ({ \
-        if (segconf.qname_flavor) { \
+        if (z_file->num_lines && segconf.qname_flavor) { \
             bufprintf (evb, &stats, "Read name style: %s%s%s\n",  \
                     qf_name(segconf.qname_flavor), segconf.qname_flavor2 ? " + " : "", segconf.qname_flavor2 ? qf_name(segconf.qname_flavor2) : ""); \
             bufprintf (evb, &features, "Qname=%s%s%s;", \
                     qf_name(segconf.qname_flavor), segconf.qname_flavor2 ? "+" : "", segconf.qname_flavor2 ? qf_name(segconf.qname_flavor2) : ""); \
         } \
-        else \
+        else if (z_file->num_lines) \
             bufprint0 (evb, &features, "Flavor=unrecognized;");   })
 
     #define REPORT_KRAKEN \
@@ -330,11 +335,14 @@ static void stats_output_file_metadata (void)
             }
 
             bufprintf (evb, &features, "num_hdr_contigs=%u;", sam_num_header_contigs());
-            FEATURE (segconf.is_sorted && !segconf.sam_is_unmapped, "Sorting: Sorted by POS", "Sorted");        
-            FEATURE (segconf.is_sorted && segconf.sam_is_unmapped, "Sorting: Unmapped", "Unmapped");        
-            FEATURE (segconf.is_collated, "Sorting: Collated by QNAME", "Collated");
-            FEATURE (!segconf.is_sorted && !segconf.is_collated, "Sorting: Not sorted or collated", "Not_sorted_or_collated");
             
+            if (z_file->num_lines) {
+                FEATURE (segconf.is_sorted && !segconf.sam_is_unmapped, "Sorting: Sorted by POS", "Sorted");        
+                FEATURE (segconf.is_sorted && segconf.sam_is_unmapped, "Sorting: Unmapped", "Unmapped");        
+                FEATURE (segconf.is_collated, "Sorting: Collated by QNAME", "Collated");
+                FEATURE (!segconf.is_sorted && !segconf.is_collated, "Sorting: Not sorted or collated", "Not_sorted_or_collated");
+            }
+                        
             rom mapper_name = sam_mapper_name (segconf.sam_mapper);
             bufprintf (evb, &stats, "Aligner: %s\n", mapper_name); 
             bufprintf (evb, &features, "Mapper=%s;", mapper_name);
@@ -343,16 +351,18 @@ static void stats_output_file_metadata (void)
             FEATURE (segconf.is_paired, "Feature: Paired-End", "Paired-End");
             REPORT_KRAKEN;
 
-            double mate_line_pc  = 100.0 * (double)z_file->mate_line_count  / (double)z_file->num_lines;
-            double saggy_near_pc = 100.0 * (double)z_file->saggy_near_count / (double)z_file->num_lines;
-            double prim_far_pc   = 100.0 * (double)z_file->prim_far_count   / (double)z_file->num_lines;
-            #define PREC(f) ((f && f<10) ? (1 + ((f)<1)) : 0)
-            bufprintf (evb, &stats, "Buddying: sag_type=%s mate=%.*f%% saggy_near=%.*f%% prim_far=%.*f%%\n", 
-                    sag_type_name (segconf.sag_type), PREC(mate_line_pc), mate_line_pc, PREC(saggy_near_pc), saggy_near_pc, PREC(prim_far_pc), prim_far_pc);
-            bufprintf (evb, &features, "sag_type=%s;mate=%.*f%%;saggy_near=%.*f%%;prim_far=%.*f%%;", 
-                    sag_type_name (segconf.sag_type), PREC(mate_line_pc), mate_line_pc, PREC(saggy_near_pc), saggy_near_pc, PREC(prim_far_pc), prim_far_pc);
-            
-            REPORT_QNAME;
+            if (z_file->num_lines) {
+                double mate_line_pc  = 100.0 * (double)z_file->mate_line_count  / (double)z_file->num_lines;
+                double saggy_near_pc = 100.0 * (double)z_file->saggy_near_count / (double)z_file->num_lines;
+                double prim_far_pc   = 100.0 * (double)z_file->prim_far_count   / (double)z_file->num_lines;
+                #define PREC(f) ((f && f<10) ? (1 + ((f)<1)) : 0)
+                bufprintf (evb, &stats, "Buddying: sag_type=%s mate=%.*f%% saggy_near=%.*f%% prim_far=%.*f%%\n", 
+                        sag_type_name (segconf.sag_type), PREC(mate_line_pc), mate_line_pc, PREC(saggy_near_pc), saggy_near_pc, PREC(prim_far_pc), prim_far_pc);
+                bufprintf (evb, &features, "sag_type=%s;mate=%.*f%%;saggy_near=%.*f%%;prim_far=%.*f%%;", 
+                        sag_type_name (segconf.sag_type), PREC(mate_line_pc), mate_line_pc, PREC(saggy_near_pc), saggy_near_pc, PREC(prim_far_pc), prim_far_pc);
+
+                REPORT_QNAME;
+            }            
             break;
 
         case DT_VCF:
@@ -429,7 +439,7 @@ static void stats_output_file_metadata (void)
             REPORT_VBs;
     }
     
-    if (!Z_DT(GENERIC) && !flag.make_reference) { // GENERIC doesn't have lines
+    if (!flag.make_reference && z_file->num_lines) {
         bufprintf (evb, &features, "segconf.line_len=%u;", segconf.line_len); 
         if (segconf.longest_seq_len) bufprintf (evb, &features, "segconf.longest_seq_len=%u;", segconf.longest_seq_len); 
     }

@@ -39,6 +39,24 @@ bool me23_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flag
     return true;
 }
 
+// detect if a generic file is actually a 23andMe file
+bool is_me23 (STRp(header), bool *need_more)
+{
+    if (header_len < 1 || header[0] != '#' || !str_is_printable (STRa(header))) return false;
+
+    char *newline = memchr (header, '\n', header_len);
+    if (!newline) {
+        *need_more = true; // we can't tell yet - need more data
+        return false;
+    }
+
+    SAFE_NUL (newline);
+    bool is_me32 = strstr (header, "23andMe"); // in first line
+    SAFE_RESTORE;
+
+    return is_me32;
+}
+
 //-----------------------------------------
 // Segmentation functions for 23andMe files
 //-----------------------------------------

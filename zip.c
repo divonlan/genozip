@@ -892,15 +892,16 @@ void zip_one_file (rom txt_basename,
 
     uint32_t first_vb_i = prev_file_last_vb_i + 1;
 
-    if (!z_file->num_txts_so_far)  // first component of this z_file 
-        ctx_initialize_predefined_ctxs (z_file->contexts, txt_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts);
-
     segconf_initialize(); // before txtheader 
 
     // read the txt header, assign the global variables, and write the compressed header to the GENOZIP file
     int64_t txt_header_offset = -1;
     int64_t txt_header_len = txtheader_zip_read_and_compress (&txt_header_offset, flag.zip_comp_i); // also increments z_file->num_txts_so_far
-    
+
+    // initalize pre-defined ctxs after reading header (in case of generic, generic_is_header_done may change the data type)
+    if (z_file->num_txts_so_far == 1)  // first component of this z_file 
+        ctx_initialize_predefined_ctxs (z_file->contexts, txt_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts);
+
     bool success = (txt_header_len >= -1);
     if (!success) goto finish; // eg 2nd+ VCF file cannot bind, because of different sample names
 

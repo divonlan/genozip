@@ -27,3 +27,5 @@ extern uint32_t lookback_get_next (VBlockP vb, ContextP lb_ctx, ContextP ctx, Wo
 extern void lookback_flush (VBlockP vb, ConstMediumContainerP con);
 
 extern uint8_t lookback_size_to_local_param (uint32_t size);
+
+extern void lookback_shift_txt_index (VBlockP vb, ContextP lb_ctx, ContextP ctx, STRp (insert));

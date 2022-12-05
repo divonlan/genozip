@@ -187,10 +187,11 @@ extern bool str_get_int_range_allow_hex32 (STRp(str), uint32_t min_val, uint32_t
 extern bool str_get_int_range_allow_hex64 (STRp(str), uint64_t min_val, uint64_t max_val, uint64_t *value);
 
 static bool inline str_is_int(STRp(str))       { return str_get_int (STRa(str), NULL); } // integer - leading zeros not allowed
-static bool inline str_is_numeric(STRp(str))   { for (int i=0; i<str_len; i++) if (!IS_DIGIT(str[i])) return false; return true; } // numeric - leading zeros ok
-static bool inline str_is_hex(STRp(str))       { for (int i=0; i<str_len; i++) if (!IS_HEXDIGIT(str[i])) return false; return true; } 
-static bool inline str_is_hexlo(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_HEXDIGITlo(str[i])) return false; return true; } 
-static bool inline str_is_hexup(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_HEXDIGITUP(str[i])) return false; return true; } 
+static bool inline str_is_numeric(STRp(str))   { for (int i=0; i<str_len; i++) if (!IS_DIGIT(str[i]))            return false; return true; } // numeric - leading zeros ok
+static bool inline str_is_hex(STRp(str))       { for (int i=0; i<str_len; i++) if (!IS_HEXDIGIT(str[i]))         return false; return true; } 
+static bool inline str_is_hexlo(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_HEXDIGITlo(str[i]))       return false; return true; } 
+static bool inline str_is_hexup(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_HEXDIGITUP(str[i]))       return false; return true; } 
+static bool inline str_is_printable(STRp(str)) { for (int i=0; i<str_len; i++) if (!IS_PRINTABLE(str[i]))        return false; return true; } 
 static bool inline str_is_no_ws(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_NON_WS_PRINTABLE(str[i])) return false; return true; } 
 static bool inline str_is_only_ACGT(STRp(str), uint32_t *bad_i) { for (int i=0; i<str_len; i++) if (str[i]!='A' && str[i]!='C' && str[i]!='G' && str[i]!='T') { if(bad_i) *bad_i = i; return false; } return true; } 
 
@@ -199,7 +200,7 @@ extern bool str_is_in_range (STRp(str), char first_c, char last_c);
 // textual length of a non-negative integer
 extern uint32_t str_get_uint_textual_len (uint64_t n);
 
-extern StrText str_time (void);
+extern StrTime str_time (void);
 extern void str_human_time (unsigned secs, bool compact, char *str /* out */);
 
 #define FLOAT_FORMAT_LEN 12
@@ -261,10 +262,8 @@ extern rom type_name (uint32_t item,
 
 extern void str_print_dict (FILE *fp, STRp(data), bool add_newline, bool remove_equal_asterisk);
 
-extern int str_print_text (rom *text, uint32_t num_lines,
-                           rom wrapped_line_prefix, 
-                           rom newline_separator, 
-                           uint32_t line_width /* 0=calcuate optimal */);
+extern int str_print_text (rom *text, uint32_t num_lines, rom wrapped_line_prefix, rom newline_separator,
+                           rom added_header, uint32_t line_width /* 0=calcuate optimal */);
 
 typedef bool (*ResponseVerifier) (STRc(response), rom verifier_param);
 extern void str_query_user (rom query, STRc(response), ResponseVerifier verifier, rom verifier_param);

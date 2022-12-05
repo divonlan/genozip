@@ -55,6 +55,16 @@ bool sam_zip_dts_flag (void)
 // Seg stuff
 // ----------------------
 
+// detect if a generic file is actually a SAM
+bool is_sam (STRp(header), bool *need_more)
+{
+    return header_len >= 4  && (!memcmp (header, "@HD\t", 4) || 
+                                !memcmp (header, "@CO\t", 4) || 
+                                !memcmp (header, "@SQ\t", 4) || 
+                                !memcmp (header, "@RG\t", 4) || 
+                                !memcmp (header, "@PG\t", 4));
+}
+
 void sam_zip_free_end_of_z (void)
 {
     sam_header_finalize();
@@ -370,7 +380,9 @@ void sam_seg_initialize (VBlockP vb_)
 
     if (segconf.sam_ms_type == ms_BIOBAMBAM) {
         seg_mux_init (VB, CTX(OPTION_ms_i), 2, SAM_SPECIAL_DEMUX_BY_MATE, false, (MultiplexerP)&vb->mux_ms, "01");
-        ctx_set_store_per_line (VB, OPTION_ms_i, DID_EOL);
+
+        CTX(OPTION_ms_i)->flags.spl_custom = true;  // custom store-per-line - SPECIAL will handle the storing
+        CTX(OPTION_ms_i)->flags.store = STORE_INT;  // since v14 - store QUAL_score for mate ms:i (in v13 it was stored in QUAL)
     }
     
     seg_mux_init (VB, CTX(SAM_FLAG), 2, SAM_SPECIAL_DEMUX_BY_BUDDY, false, (MultiplexerP)&vb->mux_FLAG, "01");
@@ -635,6 +647,10 @@ static void sam_seg_finalize_segconf (VBlockP vb)
 
     else if (is_minimap2())
         segconf.sam_ms_type = ms_MINIMAP2; 
+
+    // if we have no conclusive evidence of either minimap2 or biobambam, this is likely samtools, which has the same logic as biobambam
+    else if (segconf.is_sorted)
+        segconf.sam_ms_type = ms_BIOBAMBAM;
 
     // update context tag names if this file has UB/UR/UY which are aliased to BX/RX/QX
     if (segconf.has[OPTION_UB_Z] || segconf.has[OPTION_UR_Z]) {

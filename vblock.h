@@ -23,6 +23,7 @@
 #define VBLOCK_COMMON_FIELDS \
     VBIType vblock_i;             /* number of VB within VCF file */\
     CompIType comp_i;             /* ZIP/PIZ: txt component within z_file that this VB belongs to  */ \
+    bool is_eof;                  /* encountered EOF when reading this VB data from file */ \
     int32_t id;                   /* id of vb within the vb pool (-1 is the external vb) */\
     VBlockPoolP pool;             /* the VB pool to which this VB belongs */ \
     \

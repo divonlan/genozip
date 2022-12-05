@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-//   vcf_gt.c
+//   vcf_format_GT.c
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
@@ -197,7 +197,7 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
     if (vb->use_special_sf == USE_SF_YES && ht_data[0] != '.') 
         vcf_seg_INFO_SF_one_sample (vb);
 
-    ctx_set_last_value (VB, ctx, dosage); // to be used in vcf_seg_FORMAT_mux_by_dosage
+    ctx_set_last_value (VB, ctx, dosage); // to be used in vcf_seg_FORMAT_mux_by_dosage, vcf_seg_FORMAT_DP
     
     if (segconf.running) 
         segconf.count_dosage[dosage >= 0 && dosage <= 2]++;
@@ -218,6 +218,24 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
 //------------------
 // PIZ
 //------------------
+
+// return dosage derived from GT - equivalent to dosage calculation in vcf_seg_FORMAT_GT
+int vcf_piz_GT_get_last_dosage (VBlockP vb)
+{
+    rom gt = last_txt (vb, FORMAT_GT);
+    unsigned gt_len = CTX(FORMAT_GT)->last_txt.len;
+
+    for (unsigned i=1; i < gt_len; i += 2)
+        if (gt[i] != '/' && gt[i] != '|') return -1; // we have an allele >= 10 - dosage is -1
+
+    int dosage = 0;
+    for (unsigned i=0; i < gt_len; i += 2) {
+        if (gt[i] != '0' && gt[i] != '1') return -1; // dosage only defined if all allele are 0 or 1
+        dosage += (gt[i] - '0');
+    }
+
+    return dosage;
+}
 
 static inline bool vcf_piz_is_in_FORMAT (VBlockP vb, rom tag/*2-chars*/)
 {

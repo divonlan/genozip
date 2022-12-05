@@ -36,6 +36,12 @@ void gff3_zip_initialize (void)
     container_prepare_snip ((ConstContainerP)&enst_con, "\4\4ENST\4", 7, ENST_snip, &ENST_snip_len); 
 }
 
+// detect if a generic file is actually a GFF3
+bool is_gff3 (STRp(header), bool *need_more)
+{
+    return header_len >= 13 && !memcmp (header, "##gff-version", 13);
+}
+
 // called from seg_all_data_lines
 void gff3_seg_initialize (VBlockP vb)
 {

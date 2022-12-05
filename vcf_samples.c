@@ -872,6 +872,10 @@ static inline void vcf_seg_FORMAT_DP (VBlockVCFP vb, ContextP ctx, STRp(cell))
 
     if (*cell != '.') 
         CTX(INFO_DP)->sum_dp_this_line += ctx->last_value.i; // we may delta INFO/DP against this sum
+
+    // add up DP's in certain conditions, for consumption by INFO/QD predictor
+    if (has_value)
+        vcf_seg_sum_DP_for_QD (vb, value);
 }
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_DP_by_DP_single)

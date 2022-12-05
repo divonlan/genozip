@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-//   vcf_ps_pid.c
+//   vcf_format_PS_PID.c
 //   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
@@ -232,6 +232,16 @@ void vcf_piz_ps_pid_lookback_insert (VBlockP vb, Did did_i, STRp(recon))
     }
     
     lookback_insert (vb, VCF_LOOKBACK, did_i, false, TXTWORD(recon));
+}
+
+// update lookback in this line, if it has been shifted due to an insertion
+void vcf_piz_ps_pid_lookback_shift (VBlockP vb, STRp(insert))
+{
+    Did dids[] = { FORMAT_PS, FORMAT_PID };
+
+    for (int i=0; i < ARRAY_LEN(dids); i++) 
+        if (CTX(dids[i])->is_initialized)
+            lookback_shift_txt_index (vb, CTX(VCF_LOOKBACK), CTX(dids[i]), STRa(insert));
 }
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_PS_by_PID)

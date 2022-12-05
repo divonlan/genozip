@@ -23,7 +23,7 @@ typedef union {
 #define adler_bgen words[0] // Big Endian
 } Digest;
 
-#define DIGEST_NONE (Digest){}
+#define DIGEST_NONE ((Digest){})
 
 #pragma pack()
 

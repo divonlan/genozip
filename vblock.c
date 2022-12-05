@@ -106,7 +106,7 @@ void vb_release_vb_do (VBlockP *vb_p, rom task_name, rom func)
     vb->line_i = 0;
     vb->recon_size = vb->txt_size = vb->longest_line_len = vb->sample_i = 0;
     vb->comp_i = 0;
-    vb->dispatch = vb->is_processed = vb->preprocessing = vb->has_ctx_index = vb->show_containers = false;
+    vb->dispatch = vb->is_processed = vb->preprocessing = vb->has_ctx_index = vb->show_containers = vb->is_eof = false;
     vb->z_next_header_i = 0;
     vb->num_contexts = 0;
     vb->chrom_node_index = vb->chrom_name_len = vb->seq_len = 0; 

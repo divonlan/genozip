@@ -65,6 +65,15 @@ typedef struct __attribute__((packed, aligned(1))) {
     uint8_t  taxid_hi;
 } QnameNode;
 
+// IMPORTANT: if changing fields in VBlockKRAKEN, also update kraken_vb_release_vb 
+typedef struct VBlockKRAKEN {    
+    VBLOCK_COMMON_FIELDS
+    MULTIPLEXER(2) mux_KMERLEN;
+} VBlockKRAKEN;
+
+typedef VBlockKRAKEN *VBlockKRAKENP;
+#define VB_KRKAEN ((VBlockKRAKENP)vb)
+
 char *kraken_filename = NULL;               // global - kraken filename. Non-NULL indicates kraken is loaded.
 static bool taxid_negative = false;         // user specified ^
 static bool taxid_also_0   = false;         // user specified +0
@@ -90,6 +99,13 @@ void kraken_set_show_kraken (rom optarg)
     else
         ASSINP0 (false, "--show-kraken argument error: see "WEBSITE_KRAKEN" for valid options");
 }
+
+// cleanup vb (except common) and get it ready for another usage (without freeing memory held in the Buffers)
+void kraken_vb_release_vb (VBlockKRAKENP vb) 
+{
+}
+
+unsigned kraken_vb_size (DataType dt) { return sizeof (VBlockKRAKEN); }
 
 //-----------------------
 // Segmentation functions
@@ -131,7 +147,18 @@ void kraken_seg_finalize (VBlockP vb)
                           { .dict_id = { _KRAKEN_EOL },                        } }
     };
 
-    container_seg (vb, CTX(KRAKEN_TOPLEVEL), (ContainerP)&top_level, 0, 0, 0);
+    SmallContainer top_level_no_kmers = { 
+        .repeats      = vb->lines.len,
+        .is_toplevel  = true,
+        .callback     = true,
+        .nitems_lo    = 4,
+        .items        = { { .dict_id = { _KRAKEN_CU },     .separator = {'\t'} },
+                          { .dict_id = { _KRAKEN_QNAME },  .separator = {'\t'} },
+                          { .dict_id = { _KRAKEN_TAXID },                      },
+                          { .dict_id = { _KRAKEN_EOL },                        } }
+    };
+
+    container_seg (vb, CTX(KRAKEN_TOPLEVEL), flag.no_kmers ? (ContainerP)&top_level_no_kmers : (ContainerP)&top_level, 0, 0, 0);
 
     // top level container when loading a kraken file with --kraken
     SmallContainer top2taxid = { 
@@ -167,6 +194,7 @@ bool kraken_seg_is_small (ConstVBlockP vb, DictId dict_id)
         dict_id.num == _KRAKEN_TOP2TAXID;
 }
 
+// E.g.: "570:62 0:11 570:5 0:13 570:3 0:20" - pairs of taxonomy_id:length
 static void kraken_seg_kmers (VBlockP vb, rom value, int32_t value_len, rom taxid, unsigned taxid_len) // must be signed
 {
     bool final_space = (value_len && value[value_len-1] == ' '); // sometimes there is, sometimes there isn't...
@@ -175,8 +203,8 @@ static void kraken_seg_kmers (VBlockP vb, rom value, int32_t value_len, rom taxi
     unsigned num_kmers=1;
     for (unsigned i=0; i < value_len; i++)
         if (value[i] == ' ') {
-            if (i && value[i-1] == ' ') { // not valid khmers
-                seg_by_did (VB, value, value_len, KRAKEN_KMERS, value_len);
+            if (i && value[i-1] == ' ') { // not valid kmers
+                seg_by_did (VB, STRa(value), KRAKEN_KMERS, value_len);
                 return;
             }
             num_kmers++;
@@ -199,12 +227,12 @@ static void kraken_seg_kmers (VBlockP vb, rom value, int32_t value_len, rom taxi
 
         // KMER taxid - either copy from TAXID or seg a normal snip
         if (taxid_len == item_lens[0] && !memcmp (taxid, items[0], taxid_len)) 
-            seg_by_did (VB, copy_taxid_snip, copy_taxid_snip_len, KRAKEN_KMERTAX, item_lens[0]);
+            seg_by_did (VB, STRa(copy_taxid_snip), KRAKEN_KMERTAX, item_lens[0]);
         else 
-            seg_by_did (VB, items[0], item_lens[0], KRAKEN_KMERTAX, item_lens[0]);
+            seg_by_did (VB, STRi(item,0), KRAKEN_KMERTAX, item_lens[0]);
 
         // KMER length
-        seg_by_did (VB, items[1], item_lens[1], KRAKEN_KMERLEN, item_lens[1]);
+        seg_by_did (VB, STRi(item,1), KRAKEN_KMERLEN, item_lens[1]);
     }
 
     container_seg (vb, CTX(KRAKEN_KMERS), (ContainerP)&kmers_con, 0, 0, num_kmers*2-1 + final_space); // account for ':' within kmers and ' ' betweem them
@@ -232,23 +260,33 @@ rom kraken_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_tx
     vb->last_int(KRAKEN_QNAME) += field_len+1; // count total QNAME lengths in this VB (+1 for separator)
 
     SEG_NEXT_ITEM (KRAKEN_TAXID);
+    if (flag.no_kmers) CTX(KRAKEN_TAXID)->txt_len--; // unaccount for the \t
+
     GET_NEXT_ITEM (KRAKEN_SEQLEN); // for paired files we will have eg "150|149", for non-paired eg "150"
-    if (memchr (field_start, '|', field_len)) { 
-        // struct and not array, bc SEQLEN_2 is often a lot more random than SEQLEN_1 so better use different contexts
-        static const MediumContainer con_SEQLEN = { .nitems_lo = 2,      
-                                                    .items     = { { .dict_id = { _KRAKEN_SEQLEN_1 }, .separator = {'|'} },  
-                                                                   { .dict_id = { _KRAKEN_SEQLEN_2 },                    } } };
 
-        seg_array_of_struct (VB, CTX(KRAKEN_SEQLEN), con_SEQLEN, field_start, field_len, (SegCallback[]){seg_pos_field_cb, 0}, field_len); // first element is good to delta, second is not
+    if (!flag.no_kmers) {
+        if (memchr (field_start, '|', field_len)) { 
+            // struct and not array, bc SEQLEN_2 is often a lot more random than SEQLEN_1 so better use different contexts
+            static const MediumContainer con_SEQLEN = { .nitems_lo = 2,      
+                                                        .items     = { { .dict_id = { _KRAKEN_SEQLEN_1 }, .separator = {'|'} },  
+                                                                    { .dict_id = { _KRAKEN_SEQLEN_2 },                    } } };
+
+            seg_array_of_struct (VB, CTX(KRAKEN_SEQLEN), con_SEQLEN, field_start, field_len, (SegCallback[]){seg_pos_field_cb, 0}, field_len); // first element is good to delta, second is not
+        }
+        else 
+            seg_pos_field_cb (VB, CTX(KRAKEN_SEQLEN), field_start, field_len, 0);
+
+        CTX(KRAKEN_SEQLEN)->txt_len++; // \t
     }
-    else 
-        seg_pos_field_cb (VB, CTX(KRAKEN_SEQLEN), field_start, field_len, 0);
-
-    CTX(KRAKEN_SEQLEN)->txt_len++; // \t
+    else
+        vb->recon_size -= KRAKEN_SEQLEN_len + 1; // +1 - also unaccount for the preceding \t
 
     GET_LAST_ITEM (KRAKEN_KMERS);
-    kraken_seg_kmers (vb, field_start, field_len, KRAKEN_TAXID_str, KRAKEN_TAXID_len);
-    
+    if (!flag.no_kmers)
+        kraken_seg_kmers (vb, field_start, field_len, STRd(KRAKEN_TAXID));
+    else
+        vb->recon_size -= KRAKEN_KMERS_len + 1; // +1 - also unaccount for the preceding \t
+
     SEG_EOL (KRAKEN_EOL, true);
 
     return next_field;
@@ -262,7 +300,6 @@ rom kraken_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_tx
 bool kraken_is_translation (VBlockP vb)
 {
     return flag.reading_kraken;
-    //return flag.kraken_taxid > 0;
 }
 
 // returns true if section is to be skipped reading / uncompressing
@@ -323,7 +360,7 @@ CONTAINER_CALLBACK (kraken_piz_container_cb)
             ASSERT (snip_len <= MAX_SNIP_LEN, "Length of QNAME \"%.*s\" exceeds maximum of %u", snip_len, recon, MAX_SNIP_LEN);
 
             BNXT (QnameNode, CTX(KRAKEN_QNAME)->qname_nodes) = (QnameNode){ 
-                .char_index = recon - vb->txt_data.data, // will be updated in kraken_piz_handover_data
+                .char_index = BNUMtxt(recon), // will be updated in kraken_piz_handover_data
                 .snip_len   = snip_len,
                 .hash       = hash_do (qname_hashtab.len, recon, snip_len),
                 .is_paired  = z_file->num_components == 2 || is_paired,
@@ -404,8 +441,6 @@ bool kraken_piz_initialize (void)
     buf_alloc (evb, &qname_hashtab, 0, qname_hashtab.len, uint32_t, 1, "qname_hashtab");
     buf_set (&qname_hashtab, 0xff); // empty
 
-//printf ("total_sequences_in_file=%u num_non_dom_seqs=%u max_count=%u qname_hashtab.size=%"PRIu64" one_qname_length=%u qname_nodes.size=%"PRIu64" qname_dict.size=%"PRIu64"\n", (int)total_sequences_in_file, (int)num_non_dom_seqs, (int)max_count, qname_hashtab.size, (int)one_qname_length, qname_nodes.size, qname_dict.size);    
-
     return true; // proceed with PIZ of kraken file
 }
 
@@ -434,7 +469,7 @@ static void kraken_get_genozip_file (void)
 
         StreamP generate = stream_create (NULL, 0, 0, 0, 0, 0, 0, "Generating kraken",
                                           exec_path, flag.reading_kraken, 
-                                          "--input", "kraken", "--no-tip",
+                                          "--input", "kraken", "--no-tip", "--no-kmer",
                                           flag.submit_stats ? "--submit"  : SKIP_ARG,
                                           flag.no_test      ? "--no-test" : SKIP_ARG,
                                           NULL);
@@ -540,12 +575,12 @@ static inline const QnameNode *kraken_search_up_and_down (const QnameNode *liste
 {
     // search down
     for (const QnameNode *l=listent-1; l >= B1ST (QnameNode, qname_nodes) && l->hash == hash; l--)
-        if (l->snip_len == qname_len && !memcmp (qname, Bc (qname_dict, l->char_index), qname_len))
+        if (str_issame_(Bc(qname_dict, l->char_index), l->snip_len, STRa(qname)))
             return l;
 
     // search up
     for (const QnameNode *l=listent+1; l <= BLST (QnameNode, qname_nodes) && l->hash == hash; l++)
-        if (l->snip_len == qname_len && !memcmp (qname, Bc (qname_dict, l->char_index), qname_len))
+        if (str_issame_(Bc(qname_dict, l->char_index), l->snip_len, STRa(qname)))
             return l;
 
     return NULL;
@@ -585,7 +620,7 @@ static TaxonomyId kraken_get_taxid (STRp(qname))
     const QnameNode *listent = B(QnameNode, qname_nodes, list_index);
     rom snip = Bc (qname_dict, listent->char_index);
 
-    if (listent->snip_len == qname_len && !memcmp (qname, snip, qname_len))
+    if (str_issame_(snip, listent->snip_len, STRa(qname)))
         return listent->is_paired ? kraken_get_taxid_with_pair (listent, hash, STRa(qname)) : get_taxid (listent);
 
     // we have a hash table contention - the hash file points to a different QNAME with the same hash. 

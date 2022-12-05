@@ -38,12 +38,15 @@ void segconf_mark_as_used (VBlockP vb, unsigned num_ctxs, ...)
 
 static void segconf_set_vb_size (ConstVBlockP vb, uint64_t curr_vb_size)
 {
-    #define VBLOCK_MEMORY_MIN_DYN  (16   << 20) // VB memory - min/max when set in segconf_calculate
-    #define VBLOCK_MEMORY_MAX_DYN  (512  << 20) 
-    #define VBLOCK_MEMORY_BEST     (512  << 20) // VB memory with --best 
-    #define VBLOCK_MEMORY_MAKE_REF (1    << 20) // VB memory with --make-reference - reference data 
-    #define VBLOCK_MEMORY_GENERIC  (16   << 20) // VB memory for the generic data type
-    
+    #define VBLOCK_MEMORY_MIN_DYN   (16  << 20) // VB memory - min/max when set in segconf_calculate
+    #define VBLOCK_MEMORY_MAX_DYN   (512 << 20) 
+    #define VBLOCK_MEMORY_BEST      (512 << 20) // VB memory with --best 
+    #define VBLOCK_MEMORY_MAKE_REF  (1   << 20) // VB memory with --make-reference - reference data 
+    #define VBLOCK_MEMORY_GENERIC   (16  << 20) // VB memory for the generic data type
+    #define VBLOCK_MEMORY_MIN_SMALL (4   << 20) // minimum VB memory for small files
+
+    unsigned num_used_contexts=0;
+
     segconf.vb_size = curr_vb_size;
 
     if (segconf.vb_size) {
@@ -89,7 +92,6 @@ static void segconf_set_vb_size (ConstVBlockP vb, uint64_t curr_vb_size)
 
     else { 
         // count number of contexts used
-        unsigned num_used_contexts=0;
         for (Did did_i=0; did_i < vb->num_contexts ; did_i++)
             if (CTX(did_i)->b250.len || CTX(did_i)->local.len)
                 num_used_contexts++;
@@ -98,7 +100,7 @@ static void segconf_set_vb_size (ConstVBlockP vb, uint64_t curr_vb_size)
         uint64_t bytes = ((uint64_t)num_used_contexts << 20) + 
                             (vcf_header_get_num_samples() << 17 /* 0 if not vcf */);
 
-        uint64_t min_memory = !segconf.is_sorted     ? VBLOCK_MEMORY_MIN_DYN
+        uint64_t min_memory = !segconf.is_sorted         ? VBLOCK_MEMORY_MIN_DYN
                             : !segconf.is_long_reads     ? VBLOCK_MEMORY_MIN_DYN
                             : arch_get_num_cores() <= 8  ? VBLOCK_MEMORY_MIN_DYN // eg a personal computer
                             : arch_get_num_cores() <= 20 ? (128 << 20)           // higher minimum memory for long reads in sorted SAM - enables CPU scaling
@@ -108,38 +110,45 @@ static void segconf_set_vb_size (ConstVBlockP vb, uint64_t curr_vb_size)
         segconf.vb_size = MIN_(MAX_(bytes, min_memory), VBLOCK_MEMORY_MAX_DYN);
         
         int64_t est_seggable_size = txtfile_get_seggable_size();
-        if (est_seggable_size) segconf.vb_size = MIN_(segconf.vb_size, est_seggable_size * 1.5);
 
-        if (flag.show_memory) {
-            if (Z_DT(VCF))
-                iprintf ("\nDyamically set vblock_memory to %u MB (num_contexts=%u num_vcf_samples=%u)\n", 
-                         (unsigned)(segconf.vb_size >> 20), num_used_contexts, vcf_header_get_num_samples());
-            else
-                iprintf ("\nDyamically set vblock_memory to %u MB (num_contexts=%u)\n", 
-                         (unsigned)(segconf.vb_size >> 20), num_used_contexts);
-        }
+        if (est_seggable_size) 
+            segconf.vb_size = MIN_(segconf.vb_size, est_seggable_size * 1.5);
+
+        // for small files - reduce VB size, to take advantage of all cores (subject to a minimum VB size)
+        if (!flag.best && est_seggable_size && global_max_threads > 1)
+            segconf.vb_size = MIN_(segconf.vb_size, MAX_(VBLOCK_MEMORY_MIN_SMALL, est_seggable_size / global_max_threads));
 
         // on Windows (inc. WSL2) and Mac - which tend to have less memory in typical configurations, warn if we need a lot
         // (note: if user sets --vblock, we won't get here)
         if (flag.is_windows || flag.is_mac || strstr (arch_get_os(), "microsoft-standard") /* WSL2 */) {
             segconf.vb_size = MIN_(segconf.vb_size, 32 << 20); // limit to 32MB per VB unless users says otherwise to protect OS UI interactivity 
 
-            uint64_t concurrent_vbs = 1 + (txt_file->disk_size ? MIN_(1+ txt_file->disk_size / segconf.vb_size, global_max_threads)
-                                                               : global_max_threads);
+            int concurrent_vbs = 1 + (est_seggable_size ? MIN_(1+ est_seggable_size / segconf.vb_size, global_max_threads) : global_max_threads);
 
             ASSERTW (segconf.vb_size * concurrent_vbs < MEMORY_WARNING_THREASHOLD,
-                    "\nWARNING: For this file, Genozip selected an optimal setting which consumes a lot of RAM:\n"
-                    "%u threads, each processing %u MB of input data at a time (and using working memory too)\n"
-                    "To reduce RAM consumption, you may use:\n"
-                    "   --threads to set the number of threads (affects speed)\n"
-                    "   --vblock to set the amount of input data (in MB) a thread processes (affects compression ratio)\n"
-                    "   --quiet to silence this warning",
-                    global_max_threads, (uint32_t)(segconf.vb_size >> 20));
+                     "\nWARNING: For this file, Genozip selected an optimal setting which consumes a lot of RAM:\n"
+                     "%u threads, each processing %u MB of input data at a time (and using working memory too)\n"
+                     "To reduce RAM consumption, you may use:\n"
+                     "   --threads to set the number of threads (affects speed)\n"
+                     "   --vblock to set the amount of input data (in MB) a thread processes (affects compression ratio)\n"
+                     "   --quiet to silence this warning",
+                     global_max_threads, (uint32_t)(segconf.vb_size >> 20));
         }
     }
     
     if (flag.best && !flag.vblock)
         segconf.vb_size = MAX_(segconf.vb_size, VBLOCK_MEMORY_BEST);
+
+    segconf.vb_size = ROUNDUP1M (segconf.vb_size);
+
+    if (flag.show_memory && num_used_contexts) {
+        if (Z_DT(VCF))
+            iprintf ("\nDyamically set vblock_memory to %u MB (num_contexts=%u num_vcf_samples=%u)\n", 
+                        (unsigned)(segconf.vb_size >> 20), num_used_contexts, vcf_header_get_num_samples());
+        else
+            iprintf ("\nDyamically set vblock_memory to %u MB (num_contexts=%u)\n", 
+                        (unsigned)(segconf.vb_size >> 20), num_used_contexts);
+    }
 }
 
 // this function is called to set is_long_reads, and may be also called while running segconf before is_long_reads is set
@@ -177,8 +186,8 @@ void segconf_calculate (void)
 {
     if (segconf_no_calculate()) return;
 
-    if (TXT_DT(GENERIC)) {                                     // nothing to calculate in generic files    
-        segconf.vb_size = VBLOCK_MEMORY_GENERIC;
+    if (TXT_DT(GENERIC)) {  // no need for a segconf test VB in generic files    
+        segconf_set_vb_size (NULL, segconf.vb_size);
         return;
     }
 

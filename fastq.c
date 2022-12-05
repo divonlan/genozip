@@ -76,6 +76,25 @@ void fastq_vb_destroy_vb (VBlockFASTQ *vb)
 // TXTFILE stuff
 //-----------------------
 
+// detect if a generic file is actually a FASTQ - we call based on first character being '@', line 3 starting with '+', and line 1 and 3 being the same length
+bool is_fastq (STRp(header), bool *need_more)
+{
+    if (!header_len || header[0] != '@' || !str_is_printable (STRa(header))) return false;
+
+    int num_newlines = str_count_char (STRa(header), '\n');
+    if (num_newlines > 10000) return false; // if num_newlines is huge (for a HEADER_BLOCK=256K header), this is most likely not FASTQ, and we end here as this might cause a stack overflow
+
+    if (num_newlines < 4) {
+        *need_more = true; // we can't tell yet - need more data
+        return false;
+    }
+
+    str_split (header, header_len, num_newlines+1, '\n', line, false);
+
+    return line_lens[1] > 0 && line_lens[1] == line_lens[3] && // SEQ and QUAL lines are of equal length
+           line_lens[3] > 0 && lines[3][0] == '+';
+}
+
 // returns true if txt_data[txt_i] (which is a \n) is the end of a FASTQ record (= block of 4 lines in the file); -1 if out of data
 static inline int fastq_is_end_of_line (VBlockP vb, uint32_t first_i, int32_t txt_i) // index of a \n in txt_data
 {
@@ -89,7 +108,7 @@ static inline int fastq_is_end_of_line (VBlockP vb, uint32_t first_i, int32_t tx
  
     // move two \n's back - the char after is expected to be a '+'
     unsigned count_nl = 0;
-    for (int32_t i=txt_i-1; i >= first_i; i--) {
+    for (int32_t i=txt_i-1; i >= (int32_t)first_i; i--) {
         if (txt[i] == '\n') count_nl++;
         if (count_nl == 2) return txt[i+1] == '+';
     }
@@ -178,7 +197,7 @@ static void fastq_get_optimized_desc_read_name (VBlockFASTQ *vb)
 // called by main thread at the beginning of zipping this file
 void fastq_zip_initialize (void)
 {
-    if (!flag.reference && !txt_file->redirected)
+    if (!flag.reference && !txt_file->redirected && !flag.multiseq)
         WARN_ONCE ("Tip: compressing a FASTQ file using a reference file can reduce the compressed file's size by 20%%-60%%.\nUse: \"genozip --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
                    txt_file->name);
 

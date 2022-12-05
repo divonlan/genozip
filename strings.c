@@ -876,8 +876,8 @@ void str_print_dict (FILE *fp, STRp(data), bool add_newline, bool remove_equal_a
 }
 
 int str_print_text (rom *text, uint32_t num_lines,
-                    rom wrapped_line_prefix, 
-                    rom newline_separator, 
+                    rom wrapped_line_prefix, rom newline_separator, 
+                    rom added_header, // optional
                     uint32_t line_width /* 0=calcuate optimal */)
 {                       
     ASSERTNOTNULL (text);
@@ -893,6 +893,8 @@ int str_print_text (rom *text, uint32_t num_lines,
 #endif
     }
 
+    if (added_header) iprintf ("%s\n", added_header);
+    
     for (uint32_t i=0; i < num_lines; i++)  {
         rom line = text[i];
         uint32_t line_len = strlen (line);
@@ -1043,11 +1045,13 @@ void str_human_time (unsigned secs, bool compact, char *str /* out */)
 }
 
 // current date and time
-StrText str_time (void)
+StrTime str_time (void)
 {
-    StrText s;
+    StrTime s;
     time_t now = time (NULL);
-    strftime (s.s, 100, "%Y-%m-%d %H:%M:%S ", localtime (&now));
-    strcpy (&s.s[strlen(s.s)], tzname[daylight]);
+    strftime (s.s, sizeof (s.s), "%Y-%m-%d %H:%M:%S ", localtime (&now));
+    int len = strlen(s.s);
+
+    strncpy (&s.s[len], tzname[daylight], sizeof (s.s) - len);
     return s;
 }

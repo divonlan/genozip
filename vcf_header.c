@@ -51,8 +51,8 @@ static char *vcf_sample_names_data;    // vcf_sample_names point into here
 
 #define LINEIS(s) (line_len > (sizeof s - 1) && !memcmp (line, (s), sizeof s - 1)) 
 
-#define SUBST_LABEL(old,new) do { buf_add_more (NULL, new_txt_header, (new), (sizeof new - 1), NULL); \
-                                  buf_add_more (NULL, new_txt_header, line + (sizeof old - 1), line_len - (sizeof old - 1), NULL); } while (0)
+#define SUBST_LABEL(old,new) ({ buf_add_more (NULL, new_txt_header, (new), (sizeof new - 1), NULL); \
+                                buf_add_more (NULL, new_txt_header, line + (sizeof old - 1), line_len - (sizeof old - 1), NULL); })
 
 typedef struct { STR (key); STR (value); } Attr;
 
@@ -654,10 +654,10 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
     txtfile_foreach_line (txt_header, false, vcf_header_build_stats_programs, 0, 0, 0, 0);
     if (stats_programs.len) *BAFTc (stats_programs) = 0; // nul-terminate
 
-    // check if this VCF was produced by VarScan
     SAFE_NUL (BAFTc (*txt_header));
     if (strstr (txt_header->data, "VarScan"))            segconf.vcf_is_varscan    = true;
     if (strstr (txt_header->data, "GenotypeGVCFs"))      segconf.vcf_is_gvcf       = true;  
+    if (strstr (txt_header->data, "CombineGVCFs"))       segconf.vcf_is_gvcf       = true;  
     if (strstr (txt_header->data, "beagle"))             segconf.vcf_is_beagle     = true;    
     if (strstr (txt_header->data, "Illumina GenCall") ||
         strstr (txt_header->data, "Log R Ratio"))        segconf.vcf_illum_gtyping = true;    

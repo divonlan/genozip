@@ -58,12 +58,12 @@ static inline uint32_t txtfile_read_block_plain (VBlockP vb, uint32_t max_bytes)
         bytes_read = read (fileno((FILE *)txt_file->file), data, max_bytes); // -1 if error in libc
         ASSERT (bytes_read >= 0, "read failed from %s: %s", txt_name, strerror(errno));
 
-        // bytes_read=0 and we're using an external decompressor - it is either EOF or
-        // there is an error. In any event, the decompressor is done and we can suck in its stderr to inspect it
-        if (!bytes_read && file_is_read_via_ext_decompressor (txt_file)) {
-            file_assert_ext_decompressor();
+        if (!bytes_read) { 
+            // case external decompressor: inspect its stderr to make sure this is just an EOF and not an error 
+            if (file_is_read_via_ext_decompressor (txt_file)) 
+                file_assert_ext_decompressor();
+            
             txt_file->is_eof = true;
-            return 0; // all is good - just a normal end-of-file
         }
     }
 
@@ -350,15 +350,16 @@ void txtfile_read_header (bool is_first_txt)
 
         buf_alloc (evb, &evb->txt_data, HEADER_BLOCK, 0, char, 2, "txt_data");    
         
-        bytes_read = txtfile_read_block (evb, HEADER_BLOCK, true);
+        if (header_len != HEADER_DATA_TYPE_CHANGED) // note: if HEADER_DATA_TYPE_CHANGED - no need to read more data - we just process the same data again, with a different data type
+           bytes_read = txtfile_read_block (evb, HEADER_BLOCK, true);
     }
 
     // the excess data is for the next vb to read 
-    if (evb->txt_data.len32 > header_len) { 
+    if (evb->txt_data.len > header_len) { 
         buf_copy (evb, &txt_file->unconsumed_txt, &evb->txt_data, char, header_len, 0, "txt_file->unconsumed_txt");
         evb->txt_data.len = header_len; // trim to uncompressed length of txt header
 
-        bgzf_copy_unconsumed_blocks (evb); // copy unconsumed or partially consumed bgzf_blocks to txt_file->unconsumed_bgzf_blocks
+        txt_file->header_size_bgzf = bgzf_copy_unconsumed_blocks (evb); // copy unconsumed or partially consumed bgzf_blocks to txt_file->unconsumed_bgzf_blocks
     }
 
     txt_file->txt_data_so_far_single = txt_file->header_size = header_len; 
@@ -450,6 +451,13 @@ static void txtfile_set_seggable_size (void)
             else {    
                 double plain_len  = txt_file->txt_data_so_far_single + txt_file->unconsumed_txt.len;
                 double gz_bz2_len = file_tell (txt_file, false); // should always work for bz2 or gz. For BZ2 this includes up to 64K read from disk but still in its internal buffers
+                
+                // case: header is whole BGZF blocks - remove header from calculation to get a better estimate of the seggable compression ratio
+                if (txt_file->header_size_bgzf) { 
+                    plain_len  -= txt_file->header_size;
+                    gz_bz2_len -= txt_file->header_size_bgzf;
+                }
+
                 source_comp_ratio = plain_len / gz_bz2_len;
             }
             break;
@@ -467,7 +475,7 @@ static void txtfile_set_seggable_size (void)
     }
         
     int64_t est_seggable_size = MAX_(0.0, (double)disk_size * source_comp_ratio - (double)txt_file->header_size);
-    __atomic_store_n (&txt_file->est_seggable_size, est_seggable_size, __ATOMIC_RELAXED); // atomic loading for thread safety
+    __atomic_store_n (&txt_file->est_seggable_size, est_seggable_size, __ATOMIC_RELAXED); 
 
     if (segconf.running)
         txt_file->txt_data_so_far_single = txt_file->header_size; // roll back as we will re-account for this data in VB=1
@@ -584,6 +592,7 @@ void txtfile_read_vblock (VBlockP vb)
 
     vb->comp_i = flag.zip_comp_i;
     vb->vb_position_txt_file = txt_file->txt_data_so_far_single;
+    vb->is_eof = txt_file->is_eof;
     txt_file->txt_data_so_far_single += vb->txt_data.len;
 
     zip_init_vb (vb);

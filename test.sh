@@ -2,9 +2,10 @@
 
 # ------------------------------------------------------------------
 #   test.sh
-#   Copyright (C) 2019-2021 Black Paw Ventures Limited
+#   Copyright (C) 2019-2022 Genozip Limited
 #   Please see terms and conditions in the file LICENSE.txt
 
+start_date=`date`
 shopt -s extglob  # Enables extglob - see https://mywiki.wooledge.org/glob
 export GENOZIP_TEST="Yes" # Causes output of debugger arguments
 unset GENOZIP_REFERENCE   # initialize
@@ -490,7 +491,7 @@ batch_match_chrom()
     cleanup
 }
 
-test_kraken() { # $1 file ; $2 1st genocat arguments ; $3 2nd genocat arguments
+test_kraken() { # $1 file and genozip args ; $2 1st genocat arguments ; $3 2nd genocat arguments
     test_header "$file - kraken test (genozip $1 ; genocat $2 ; genocat $3)"
 
     local zip_args=$1
@@ -523,7 +524,7 @@ batch_kraken() # $1 genozip arguments #2 genocat (one of them must include --kra
                  ${TESTDIR}/basic.sam)
     local file
 
-    $genozip ${TESTDIR}/basic.kraken -fo $kraken
+    $genozip ${TESTDIR}/basic.kraken -fo $kraken --no-kmers # here we test with --no-kmers, below we test without
 
     # testing filtering FASTA, FASTQ, SAM and KRAKEN itself with --taxid 
     for file in ${files[@]}; do
@@ -579,9 +580,11 @@ batch_single_thread()
     # with chain and reference (note: cannot --test dual-coord files)
     $genozip -@1 -C $chain37_38 ${TESTDIR}/basic-dvcf-source.vcf -f || exit 1
 
-    # with kraken aux file
-    $genozip -@1 ${TESTDIR}/basic.kraken -fo $kraken || exit 1
-    test_kraken "-@1 -K$kraken ${TESTDIR}/basic.bam" "-@1 -k570" "-@1 -k^570" 
+    # with kraken aux file - genozip with kraken, not kraken.genozip
+    cp ${TESTDIR}/basic.kraken ${OUTDIR}/kraken.data || exit 1
+    test_kraken "-@1 -K ${OUTDIR}/kraken.data ${TESTDIR}/basic.bam" "-@1 -k570" "-@1 -k^570" 
+
+    cleanup
 }
 
 batch_iupac() 
@@ -1259,6 +1262,56 @@ batch_headerless_wrong_ref()
     cleanup
 }
 
+test_exists()
+{
+    if [ ! -f $1 ]; then echo "Expecting $1 to exist, but it doesn't" ; exit 1 ; fi
+}
+
+test_not_exists()
+{
+    if [ -f $1 ]; then echo "Expecting $1 to not exist, but it does" ; exit 1 ; fi
+}
+
+# test that --replace (or -^) replaces and without --replace doesn't
+batch_replace()
+{
+    batch_print_header
+
+    local f1=${OUTDIR}/f1.fq
+    local f2=${OUTDIR}/f2.fq
+
+    # single file
+    cp ${TESTDIR}/basic.fq $f1
+    $genozip $f1 -f
+    test_exists $f1
+
+    $genozip $f1 -f --replace
+    test_not_exists $f1
+
+    # multiple files
+    cp ${TESTDIR}/basic.fq $f1
+    cp ${TESTDIR}/basic.fq $f2
+    
+    $genozip -f $f1 $f2
+    test_exists $f1
+    test_exists $f2
+
+    $genozip $f1 $f2 -f -^
+    test_not_exists $f1
+    test_not_exists $f2
+
+    # paired
+    cp ${TESTDIR}/basic.fq $f1
+    cp ${TESTDIR}/basic.fq $f2
+    
+    $genozip -f $f1 $f2 -2e $hs37d5
+    test_exists $f1
+    test_exists $f2
+
+    $genozip $f1 $f2 -f^2e $hs37d5
+    test_not_exists $f1
+    test_not_exists $f2
+}
 
 batch_genols()
 {
@@ -1469,12 +1522,13 @@ if (( $1 <= 48 )) ; then  batch_many_small_files       ; fi
 if (( $1 <= 49 )) ; then  batch_make_reference         ; fi
 if (( $1 <= 50 )) ; then  batch_reference_backcomp     ; fi
 if (( $1 <= 51 )) ; then  batch_headerless_wrong_ref   ; fi
+if (( $1 <= 52 )) ; then  batch_replace                ; fi
 
 if [[ `basename $PWD` != genozip-prod ]]; then
-    if (( $1 <= 52 )) ; then  batch_real_world_1_backcomp  ; fi 
-    if (( $1 <= 53 )) ; then  batch_real_world_with_ref_backcomp ; fi 
+    if (( $1 <= 53 )) ; then  batch_real_world_1_backcomp  ; fi 
+    if (( $1 <= 54 )) ; then  batch_real_world_with_ref_backcomp ; fi 
     next=54
     if (( $1 <= $next + $num_batch_prod_compatability_tests )) ; then batch_prod_compatability $1 $next ; fi
 fi
 
-printf "\nALL GOOD!\n"
+printf "\nALL GOOD! \nstart: $start_date\nend:   `date`\n"

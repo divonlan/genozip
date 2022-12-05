@@ -184,7 +184,7 @@ unsigned arch_get_num_cores (void)
 
 rom arch_get_os (void)
 {
-    static char os[256];
+    static char os[1024];
 
 #ifdef _WIN32
     uint32_t windows_version = GetVersion();
@@ -206,21 +206,23 @@ rom arch_get_ip_addr (rom reason) // optional text in case curl execution fails
 {
     static char ip_str[ARCH_IP_LEN] = "0.0.0.0"; // default in case of failure
 
-    url_read_string ("https://api.ipify.org", ip_str, sizeof(ip_str)); // ignore failure
-
+    url_read_string ("https://api.ipify.org", ip_str, ARCH_IP_LEN); // ignore failure
+    ip_str[ARCH_IP_LEN-1] = 0; // just in case
+    
     return ip_str;
 }
 
 rom arch_get_host (void)
 {
-    static char host[100] = {};
+    #define ARCH_HOST_NAME_LEN 1023
+    static char host[ARCH_HOST_NAME_LEN+1] = {};
 
     DO_ONCE {
         #ifdef _WIN32
-            DWORD host_len = sizeof host;
+            DWORD host_len = ARCH_HOST_NAME_LEN + 1;
             if (!GetComputerNameExA (ComputerNameDnsFullyQualified, host, &host_len)) host[0] = 0;
         #else
-            gethostname (host, sizeof (host)-1);
+            gethostname (host, ARCH_HOST_NAME_LEN);
         #endif
     }
 
@@ -229,12 +231,12 @@ rom arch_get_host (void)
 
 rom arch_get_user_host (void)
 {
-    static char user_host[200];
+    static char user_host[2048];
 
     DO_ONCE {
         rom user = getenv (flag.is_windows ? "USERNAME" : "USER");
 
-        sprintf (user_host, "%.99s@%.99s", user ? user : "", arch_get_host());
+        sprintf (user_host, "%.99s@%.*s", user ? user : "", ARCH_HOST_NAME_LEN, arch_get_host());
     }
 
     return user_host;

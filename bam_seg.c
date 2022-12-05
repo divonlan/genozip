@@ -41,6 +41,12 @@ void bam_seg_initialize (VBlockP vb)
                    char, CTX_GROWTH, "line_textual_cigars");
 }
 
+// detect if a generic file is actually a BAM
+bool is_bam (STRp(header), bool *need_more)
+{
+    return header_len >= 4  && !memcmp (header, "BAM\1", 4);
+}
+
 static int32_t bam_unconsumed_scan_forwards (VBlockP vb)
 {
     ARRAY (char, txt, vb->txt_data);

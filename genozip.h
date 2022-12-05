@@ -96,6 +96,8 @@ typedef const struct ContigPkg *ConstContigPkgP;
 typedef const struct QnameFlavorStruct *QnameFlavor; 
 typedef struct DispatcherData *Dispatcher;
 
+typedef struct { char s[80]; } StrText;
+
 #define VB ((VBlockP)(vb))
 
 typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT, NUM_EXE_TYPES } ExeType;
@@ -480,8 +482,8 @@ static inline void progress_newline(void) {
 #define ABORTINP0(string)                    ABORTINP (string "%s", "")
 
 // check for a bug - prints stack
-typedef struct { char s[80]; } StrText;
-extern StrText str_time (void);
+typedef struct { char s[256]; } StrTime; // long, in case of eg Chinese language time zone strings
+extern StrTime str_time (void);
 
 #define SUPPORT "\nIf this is unexpected, please contact "EMAIL_SUPPORT".\n"
 #define ASSERT(condition, format, ...)       ( { if (!(condition)) { progress_newline(); fprintf (stderr, "%s Error in %s:%u: ", str_time().s, __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, SUPPORT); fflush (stderr); exit_on_error(true); }} )

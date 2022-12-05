@@ -94,10 +94,10 @@ extern void serializer_skip_do (SerializerP ser, VBIType vb_i, FUNCLINE);
 #endif // __MAC_10_12
 
 #else // not mac
-#define spin_initialize(name) do { if (! name##_initialized) { \
+#define spin_initialize(name) ({ if (! name##_initialized) { \
                                    int ret; ASSERT (!(ret = pthread_spin_init (&name, PTHREAD_PROCESS_PRIVATE)), "failed for %s: %s", #name, strerror (ret)); \
-                                   name##_initialized = true;  \
-                                 } } while (0)
+                                   name##_initialized = true;\
+                                 } })
 #define spin_destroy(name) if (name##_initialized) { pthread_spin_destroy (&name); name##_initialized = false; }
 
 #endif // __APPLE__
