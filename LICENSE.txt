@@ -74,8 +74,8 @@ irrevocable assignment by You to Licensor of all copyright in the submitted sour
 any such source code You submitted for inclusion in Genozip in the past, You hereby assign all
 copyright in this submitted source code to Licensor.
 
-   e. Reselling Genozip or selling a service or a product that utilizes or can utilize Genozip or 
-any part of Genozip's code or algorithms is not permitted by this license, and requires a separate 
+   e. Reselling Genozip or selling a service or a product that utilizes or can utilize Genozip or
+any part of Genozip's code or algorithms is not permitted by this license, and requires a separate
 reseller or OEM license.
 
 4. Severely unauthorized use of Genozip. Use which is non-compliant with sections 2, 3a, 3c, 3e
@@ -91,8 +91,8 @@ confirmed by you.
 
    b. When a file is compressed: aggregate statistical information about the performance of the
 compression algorithm and associated metadata. Details can be found here: https://genozip.com/stats
--collected.html. This data is collected when using a non-paid license. When using a paid license,
-You will be asked to choose whether or not You allow this data to be collected.
+-collected. This data is collected when using a non-paid license. When using a paid license, You
+will be asked to choose whether or not You allow this data to be collected.
 
 6. Trademarks. This License does not grant permission to use the trade names, trademarks, service
 marks, or product names of the Licensor, except as required for reasonable and customary use in

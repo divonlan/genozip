@@ -283,7 +283,7 @@ clean-optimized:
 	@rm -f $(OBJS) $(EXECUTABLES) $(OBJDIR)/*.o
 
 clean-distribution: # clean all platforms
-	@echo Cleaning up optimized
+	@echo Cleaning up all platforms for distribution
 	@rm -f $(OBJDIR_LINUX)/*.o $(OBJDIR_LINUX)/*.d $(OBJDIR_WINDOWS)/*.o $(OBJDIR_WINDOWS)/*.d $(OBJDIR_MAC)/*.o $(OBJDIR_MAC)/*.d 
 
 clean-opt:
@@ -444,7 +444,7 @@ push-build:
 distribution: clean-distribution increment-version testfiles LICENSE.txt $(DOCS)/LICENSE.html $(DOCS)/genozip-linux-x86_64.tar.build $(DOCS)/genozip-installer.exe push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
 	@(cd ../genozip-feedstock/ ; git pull)
 
-distribution-maintenance: increment-version LICENSE.txt testfiles $(DOCS)/genozip-linux-x86_64.tar.build $(DOCS)/genozip-installer.exe \
+distribution-maintenance: clean-distribution increment-version LICENSE.txt testfiles $(DOCS)/genozip-linux-x86_64.tar.build $(DOCS)/genozip-installer.exe \
                           push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
 	@(cd ../genozip-feedstock/ ; git pull)
 
