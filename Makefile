@@ -283,7 +283,7 @@ clean-optimized:
 	@rm -f $(OBJS) $(EXECUTABLES) $(OBJDIR)/*.o
 
 clean-distribution: # clean all platforms
-	@echo Cleaning up optimized
+	@echo Cleaning up all platforms for distribution
 	@rm -f $(OBJDIR_LINUX)/*.o $(OBJDIR_LINUX)/*.d $(OBJDIR_WINDOWS)/*.o $(OBJDIR_WINDOWS)/*.d $(OBJDIR_MAC)/*.o $(OBJDIR_MAC)/*.d 
 
 clean-opt:
@@ -418,7 +418,7 @@ $(DOCS)/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS)
 
 $(DOCS)/genozip-linux-x86_64.tar.build: genozip-linux-x86_64/LICENSE.txt 
 	@(mkdir genozip-linux-x86_64 >& /dev/null ; exit 0)
-	@run-on-wsl.sh make clean-optimized $(DOCS)/genozip-linux-x86_64.tar # make -j doesn't work well on WSL - filesystem clock issues
+	@run-on-wsl.sh make $(DOCS)/genozip-linux-x86_64.tar # make -j doesn't work well on WSL - filesystem clock issues
 
 mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 	@echo "Creating Mac installer"
@@ -431,7 +431,7 @@ mac/.remote_mac_timestamp: # to be run from Windows to build on a remote mac
 
 BUILD_FILES = version.h genozip-installer.ifp LICENSE.txt Makefile
 
-BUILD_FILES_DOCS = genozip-installer.exe genozip-linux-x86_64.tar 
+BUILD_FILES_DOCS = genozip-installer.exe genozip-linux-x86_64.tar LICENSE.html
 
 push-build: 
 	@(git stage $(BUILD_FILES) ; exit 0) > /dev/null
@@ -444,7 +444,7 @@ push-build:
 distribution: clean-distribution increment-version testfiles LICENSE.txt $(DOCS)/LICENSE.html $(DOCS)/genozip-linux-x86_64.tar.build $(DOCS)/genozip-installer.exe push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
 	@(cd ../genozip-feedstock/ ; git pull)
 
-distribution-maintenance: increment-version LICENSE.txt testfiles $(DOCS)/genozip-linux-x86_64.tar.build $(DOCS)/genozip-installer.exe \
+distribution-maintenance: clean-distribution increment-version LICENSE.txt testfiles $(DOCS)/genozip-linux-x86_64.tar.build $(DOCS)/genozip-installer.exe \
                           push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
 	@(cd ../genozip-feedstock/ ; git pull)
 

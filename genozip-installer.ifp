@@ -88,8 +88,8 @@ C:\Users\divon\Projects\genozip\windows\LICENSE.for-installer.txt
 5.4 KB
 txt
 [Licence_Begin]
-7933
-{\rtf1\ansi\ansicpg1252\deff0{\fonttbl{\f0\fnil\fcharset0 Arial;}}
+8036
+{\rtf1\ansi\deff0{\fonttbl{\f0\fnil\fcharset0 Arial;}}
 {\colortbl ;\red0\green0\blue0;}
 \viewkind4\uc1\pard\cf1\lang1033\fs20 This program, "Genozip", which includes four tools \par
 (genozip, genounzip, genocat and genols), source code,\par
@@ -183,8 +183,10 @@ uncompress the compressed file would not cause any harm.\par
 \par
    c. Any changes to the Genozip's source code and/or\par
 creation of Derivative Works and/or reverse-engineering of\par
-Genozip are forbidden, unless prior written permission is\par
-obtained from Licensor.\par
+Genozip and/or using all or part of Genozip's source code \par
+(even if modified) in another software package are\par
+forbidden, unless prior written permission is obtained from\par
+Licensor.\par
 \par
    d. Any software source code intentionally submitted for\par
 inclusion in Genozip by You to the Licensor or the\par
@@ -195,10 +197,10 @@ Regarding any such source code You submitted for inclusion\par
 in Genozip in the past, You hereby assign all copyright in\par
 this submitted source code to Licensor.\par
 \par
-   e. Reselling Genozip or services based on Genozip,\par
-whether as a stand-alone product or service, or bundled\par
-with other products or services is not covered by this\par
-license, and requires a separate reseller or OEM license.\par
+   e. Reselling Genozip or selling a service or a product\par
+that utilizes or can utilize Genozip or any part of Genozip\par
+'s code or algorithms is not permitted by this license, and\par
+requires a separate reseller or OEM license.\par
 \par
 4. Severely unauthorized use of Genozip. Use which is non\par
 -compliant with sections 2, 3a, 3c, 3e shall be considered\par
@@ -217,10 +219,10 @@ registration process and confirmed by you.\par
    b. When a file is compressed: aggregate statistical\par
 information about the performance of the compression\par
 algorithm and associated metadata. Details can be found\par
-here: https://genozip.com/stats-collected.html. This data\par
-is collected when using a non-paid license. When using a\par
-paid license, You will be asked to choose whether or not\par
-You allow this data to be collected.\par
+here: https://genozip.com/stats-collected. This data is\par
+collected when using a non-paid license. When using a paid\par
+license, You will be asked to choose whether or not You\par
+allow this data to be collected.\par
 \par
 6. Trademarks. This License does not grant permission to\par
 use the trade names, trademarks, service marks, or product\par
@@ -255,7 +257,9 @@ of such damages.\par
 \par
 END OF TERMS AND CONDITIONS\par
 \par
-Genozip license version: 14.0.16\par
+Genozip license version: 14.0.17\par
+\par
+\par
 }
  [Licence_End]
 [Registry]
