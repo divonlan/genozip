@@ -128,21 +128,24 @@ ifeq ($(CC),cl) # Microsoft Visual C
 endif
 
 OBJDIR=objdir # fallback if not win, linux, mac
+OBJDIR_LINUX=objdir.linux
+OBJDIR_WINDOWS=objdir.windows
+OBJDIR_MAC=objdir.mac
 
 ifeq ($(OS),Windows_NT)
 EXE = .exe
 	LDFLAGS += -static -static-libgcc
-	OBJDIR=objdir.windows
+	OBJDIR=$(OBJDIR_WINDOWS)
 	WSL=wsl
 else
     ifeq ($(uname),Linux)
         LDFLAGS += -lrt # required by pthreads
-    	OBJDIR=objdir.linux
+    	OBJDIR=$(OBJDIR_LINUX)
 	endif
 
     ifeq ($(uname),Darwin) # Mac
 		MY_SRCS += compatibility/mac_gettime.c
-    	OBJDIR=objdir.mac
+    	OBJDIR=$(OBJDIR_MAC)
     endif
 endif
 
@@ -245,6 +248,7 @@ LICENSE.txt: text_license.h version.h # not dependent on genozip.exe, so we don'
 	@make -j genozip$(EXE) # recursive call to make genozip.exe with the latest version
 	@echo Generating $@
 	@./genozip$(EXE) --license=100 --force > $@
+	@rm -f $(OBJDIR)/arch.o
 	
 # this is used by build.sh to install on conda for Linux and Mac. Installation for Windows in in bld.bat
 install: genozip$(EXE)
@@ -278,6 +282,10 @@ clean-optimized:
 	@echo Cleaning up optimized
 	@rm -f $(OBJS) $(EXECUTABLES) $(OBJDIR)/*.o
 
+clean-distribution: # clean all platforms
+	@echo Cleaning up optimized
+	@rm -f $(OBJDIR_LINUX)/*.o $(OBJDIR_LINUX)/*.d $(OBJDIR_WINDOWS)/*.o $(OBJDIR_WINDOWS)/*.d $(OBJDIR_MAC)/*.o $(OBJDIR_MAC)/*.d 
+
 clean-opt:
 	@echo Cleaning up opt
 	@rm -f $(OPT_OBJS) $(EXECUTABLES) $(OPT_EXECUTABLES)/*.opt-o
@@ -292,7 +300,7 @@ clean: clean-docs clean-test
 	@rm -R $(OBJDIR)
 	@mkdir $(OBJDIR) $(addprefix $(OBJDIR)/, $(SRC_DIRS))
 
-.PHONY: clean clean-debug clean-optimized clean-docs git-pull macos mac/.remote_mac_timestamp delete-arch testfiles test-backup genozip-linux-x86_64/clean genozip-prod genozip-prod.exe dict_id_gen$(EXE) push-build increment-version $(DOCS)/LICENSE.html
+.PHONY: clean clean-debug clean-optimized clean-docs clean-distribution git-pull macos mac/.remote_mac_timestamp delete-arch testfiles test-backup genozip-linux-x86_64/clean genozip-prod genozip-prod.exe dict_id_gen$(EXE) push-build increment-version $(DOCS)/LICENSE.html
 
 # builds prod for local OS
 genozip-prod$(EXE): 
@@ -433,10 +441,10 @@ push-build:
 	@(cd $(DOCS); git commit -m $(version) ; exit 0) > /dev/null
 	@(cd $(DOCS); git push) > /dev/null
 
-distribution: increment-version testfiles LICENSE.txt $(DOCS)/LICENSE.html $(DOCS)/genozip-linux-x86_64.tar.build clean-optimized $(DOCS)/genozip-installer.exe push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
+distribution: clean-distribution increment-version testfiles LICENSE.txt $(DOCS)/LICENSE.html $(DOCS)/genozip-linux-x86_64.tar.build $(DOCS)/genozip-installer.exe push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
 	@(cd ../genozip-feedstock/ ; git pull)
 
-distribution-maintenance: increment-version LICENSE.txt testfiles $(DOCS)/genozip-linux-x86_64.tar.build clean-optimized $(DOCS)/genozip-installer.exe \
+distribution-maintenance: increment-version LICENSE.txt testfiles $(DOCS)/genozip-linux-x86_64.tar.build $(DOCS)/genozip-installer.exe \
                           push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
 	@(cd ../genozip-feedstock/ ; git pull)
 
