@@ -19,11 +19,11 @@
 <br>
 Genozip is also available on <b>Conda</b> and binary downloads, see <a href="https://genozip.com/installing">installation options</a>.<br>
 <br>
-For Illumina data <i>.bam</i> and <i>.fastq.gz</i> files, the typical gain over gzip is around 4X. For PacBio and Oxford Nanopore data aligned <i>.bam</i> files, the gain is typically around 2X. For <i>.vcf.gz</i> files, the gain over gzip is typically 3-6X. Here are <a href="https://genozip.com/benchmarks">benchmarks</a>.<br>
+For Illumina data <i>.bam</i> and <i>.fastq.gz</i> files, the typical gain over gzip is around 4X. For PacBio and Oxford Nanopore data aligned <i>.bam</i> files, the gain is typically around 2X. For <i>.vcf.gz</i> files, the gain over gzip is typically 3-6X. Here are some <a href="https://genozip.com/benchmarks">benchmarks</a>.<br>
 <br>
 <b>Yes</b>, Genozip can compress already-compressed files (.gz .bz2 .xz .bam .cram).<br> 
 <br> 
-The compression is <a href="https://genozip.com/losslessness">lossless</a> - the decompressed file is 100% identical to the original file (see documentation for exceptions), verifiable by MD5.
+The compression is <a href="https://genozip.com/losslessness">lossless</a> - the decompressed file is 100% identical to the original file (see documentation for exceptions), verifiable by MD5.<br>
 <br>
 <b>Genozip</b> is free for certain academic research use. See <a href="https://genozip.com/get-genozip">eligibility and other licensing options</a> or contact <a href="mailto://sales@genozip.com">sales@genozip.com</a> <br>
 <br>
