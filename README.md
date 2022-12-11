@@ -23,7 +23,7 @@ For Illumina data <i>.bam</i> and <i>.fastq.gz</i> files, the typical gain over 
 <br>
 <b>Yes</b>, Genozip can compress already-compressed files (.gz .bz2 .xz .bam .cram).<br> 
 <br> 
-The compression is <b><a href="https://genozip.com/losslessness">lossless</a></b> - the decompressed file is 100% identical to the original file (see documentation for exceptions), verifiable by MD5.
+The compression is <a href="https://genozip.com/losslessness">lossless</a> - the decompressed file is 100% identical to the original file (see documentation for exceptions), verifiable by MD5.
 <br>
 <b>Genozip</b> is free for certain academic research use. See <a href="https://genozip.com/get-genozip">eligibility and other licensing options</a> or contact <a href="mailto://sales@genozip.com">sales@genozip.com</a> <br>
 <br>
