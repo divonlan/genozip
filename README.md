@@ -15,18 +15,18 @@
 
 <h1>Genozip</h1><br>
 <br>
-Genozip is also available on <b>Conda</b> and binary downloads. For additional installation options, See: https://genozip.com<br>
+Genozip is also available on <b>Conda</b> and binary downloads, see: https://genozip.com/installing<br>
 <br>
-<b>Genozip</b> is a compressor for BAM, FASTQ, VCF and other genomic files - see https://genozip.com<br>
+<b>Genozip</b> is a compressor for BAM / SAM / CRAM, FASTQ, VCF and other genomic files - see https://genozip.com<br>
 <br>
-For Illumina data <i>.bam</i> and <i>.fastq.gz</i> files, the typical gain over gzip is around 4X. For PacBio and Oxford Nanopore data aligned <i>.bam</i> files, the gain is typically around 2X. For <i>.vcf.gz</i> files, the gain over gzip is typically 3-6X. Here are some examples: https://genozip.com/benchmarks.html.<br>
+For Illumina data <i>.bam</i> and <i>.fastq.gz</i> files, the typical gain over gzip is around 4X. For PacBio and Oxford Nanopore data aligned <i>.bam</i> files, the gain is typically around 2X. For <i>.vcf.gz</i> files, the gain over gzip is typically 3-6X. Here are <a href="https://genozip.com/benchmarks">benchmarks</a>.<br>
 <br>
 <b>Yes</b>, Genozip can compress already-compressed files (.gz .bz2 .xz .bam .cram).<br> 
 <br> 
-The compression is <b>lossless</b> - the decompressed file is 100% identical to the original file (see documentation for exceptions).<br> 
+The compression is <b>lossless</b> - the decompressed file is 100% identical to the original file (see documentation for exceptions), verifiable by MD5: https://www.genozip.com/losslessness.<br> 
 <br>
-<b>Genozip</b> is free for academic and training use (as defined in the license). For use with data generated in a clinical or commercial settings, please see https://genozip.com/commercial.html or contact <b>sales@genozip.com</b> <br>
+<b>Genozip</b> is free for certain academic research use. See eligibility and other licensing options: https://genozip.com/get-genozip or contact <b>sales@genozip.com</b> <br>
 <br>
-Usage is subject to terms and conditions. The license can be viewed on https://genozip.com/license.html<br>
+Usage is subject to terms and conditions. The license can be viewed on https://genozip.com/license<br>
 <br>
 <b>THIS SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE AUTHORS, COPYRIGHT HOLDERS OR DISTRIBUTORS OF THIS SOFTWARE BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.</b><br>
