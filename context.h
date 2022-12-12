@@ -48,7 +48,7 @@
 #define v13_SNIP_COPY_BUDDY       '\x11'  // up to v13: Copy a snip on an earlier "buddy" line in the same or another context (note: offset back to the previous snip is variable, but its line number is fixed) (introduced 12.0.41)
 #define SNIP_DIFF                 '\x12'  // XOR a string vs. previous string (introduced 13.0.5)    
 #define SNIP_RESERVED             '\x13'  // A value guaranteed not to exist in dictionary data. Used internally by ctx_shorten_unused_dict_words. (13.0.7)
-#define SNIP_NUMERIC               '\x14'  // Lookup for local, and format output (introduced v14)
+#define SNIP_NUMERIC              '\x14'  // Lookup for local, and format output (introduced v14)
 #define NUM_SNIP_CODES            21
 
 #define SNIP_CODES { "SNIP_SEP", "SNIP_LOOKUP", "SNIP_OTHER_LOOKUP", "SNIP_MATE_LOOKUP",\

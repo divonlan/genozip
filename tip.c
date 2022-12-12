@@ -62,7 +62,7 @@ void tip_print (void)
     if (E(VCF) || E(BCF)) 
         valid_tips[n++] = "Tip: you can use Genozip to generate a VCF that describes variants against two different references concurrently, see: " WEBSITE_DVCF;
 
-    if (E(SAM) || E(BAM) || E(VCF) || E(BCF) || E(GFF3) || E(ME23) || E(CHAIN)) 
+    if (E(SAM) || E(BAM) || E(VCF) || E(BCF) || E(GFF) || E(ME23) || E(CHAIN)) 
         valid_tips[n++] = "Tip: do the chromosomes have different names (eg 22 vs chr22)? Genozip can fix that: " WEBSITE_MATCH_CHROM;
 
     if (E(SAM) || E(BAM))
@@ -71,7 +71,7 @@ void tip_print (void)
     if (E(VCF) || E(BCF))
         valid_tips[n++] = "Please take a moment now to make a note to not forget to cite Genozip:\n " PAPER1_CITATION "\n";
 
-    if (!flag.optimize && (E(SAM) || E(BAM) || E(VCF) || E(BCF) || E(GFF3) || E(FASTQ))) 
+    if (!flag.optimize && (E(SAM) || E(BAM) || E(VCF) || E(BCF) || E(GFF) || E(FASTQ))) 
         valid_tips[n++] = "Tip: using --optimize permits Genozip to make minor modifications to the data that usually have no impact on downstream analysis, yet result in significantly better compression, see: " WEBSITE_GENOZIP;
 
     if (flag.test) 

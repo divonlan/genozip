@@ -590,19 +590,19 @@
 #define _FASTA_TOPLEVEL ((uint64_t)5495893775908622100)
 #define _FASTA_TAXID ((uint64_t)293288296724)
 #define _FASTA_DEBUG_LINES ((uint64_t)6000288155260371460)
-#define _GFF3_SEQID ((uint64_t)293287838995)
-#define _GFF3_SOURCE ((uint64_t)76155446447891)
-#define _GFF3_TYPE ((uint64_t)1162893588)
-#define _GFF3_START ((uint64_t)362157265939)
-#define _GFF3_END ((uint64_t)4476421)
-#define _GFF3_SCORE ((uint64_t)297733669651)
-#define _GFF3_STRAND ((uint64_t)75102894052371)
-#define _GFF3_PHASE ((uint64_t)297749530640)
-#define _GFF3_ATTRS ((uint64_t)357863543809)
-#define _GFF3_EOL ((uint64_t)5000965)
-#define _GFF3_TOPLEVEL ((uint64_t)5495893775908622100)
-#define _GFF3_COMMENT ((uint64_t)23729957600317187)
-#define _GFF3_DEBUG_LINES ((uint64_t)6000288155260371460)
+#define _GFF_SEQID ((uint64_t)293287838995)
+#define _GFF_SOURCE ((uint64_t)76155446447891)
+#define _GFF_TYPE ((uint64_t)1162893588)
+#define _GFF_START ((uint64_t)362157265939)
+#define _GFF_END ((uint64_t)4476421)
+#define _GFF_SCORE ((uint64_t)297733669651)
+#define _GFF_STRAND ((uint64_t)75102894052371)
+#define _GFF_PHASE ((uint64_t)297749530640)
+#define _GFF_ATTRS ((uint64_t)357863543809)
+#define _GFF_EOL ((uint64_t)5000965)
+#define _GFF_TOPLEVEL ((uint64_t)5495893775908622100)
+#define _GFF_COMMENT ((uint64_t)23729957600317187)
+#define _GFF_DEBUG_LINES ((uint64_t)6000288155260371460)
 #define _ATTR_ID ((uint64_t)17609)
 #define _ATTR_Name ((uint64_t)1701667278)
 #define _ATTR_Alias ((uint64_t)495555538113)
@@ -615,6 +615,7 @@
 #define _ATTR_Derives_from ((uint64_t)7885647256730363332)
 #define _ATTR_Note ((uint64_t)1702129614)
 #define _ATTR_Dbxref ((uint64_t)112585898222276)
+#define _ATTR_db_xref ((uint64_t)28821989944681188)
 #define _ATTR_Ontology_term ((uint64_t)7886477448239673039)
 #define _ATTR_Is_circular ((uint64_t)8241988044498891721)
 #define _ATTR_Variant_seq ((uint64_t)8171063952561824214)
@@ -625,9 +626,18 @@
 #define _ATTR_sift_prediction ((uint64_t)7957695015476947443)
 #define _ATTR_polyphen_prediction ((uint64_t)7957695015561228272)
 #define _ATTR_variant_peptide ((uint64_t)7306080444208013814)
+#define _ATTR_gene_id ((uint64_t)28263356115609063)
+#define _ATTR_gene_name ((uint64_t)7308604897068213735)
+#define _ATTR_transcript_id ((uint64_t)7235419230020137716)
+#define _ATTR_transcript_name ((uint64_t)7308604897218360052)
+#define _ATTR_transcript_name_gene ((uint64_t)7308604897001353460)
+#define _ATTR_transcript_name_num ((uint64_t)7308604897001353716)
+#define _ATTR_protein_id ((uint64_t)7235419204351914736)
+#define _ATTR_ccds_id ((uint64_t)28263356349834211)
+#define _ATTR_exon_id ((uint64_t)28263356266674405)
+#define _ATTR_exon_number ((uint64_t)8243102915115317477)
 #define _ATTR_chr ((uint64_t)7497955)
 #define _ENSTid ((uint64_t)110403549089349)
-#define _EnNSTid ((uint64_t)28263308566883909)
 #define _ME23_CHROM ((uint64_t)332043274243)
 #define _ME23_POS ((uint64_t)5459728)
 #define _ME23_ID ((uint64_t)17417)
@@ -1297,22 +1307,22 @@ typedef enum { FASTA_CONTIG, FASTA_LINEMETA, FASTA_EOL, FASTA_DESC, FASTA_COMMEN
     [FASTA_DEBUG_LINES] = { { _FASTA_DEBUG_LINES }, TAG(DBGLINES) }, \
 } 
 
-typedef enum { GFF3_SEQID, GFF3_SOURCE, GFF3_TYPE, GFF3_START, GFF3_END, GFF3_SCORE, GFF3_STRAND, GFF3_PHASE, GFF3_ATTRS, GFF3_EOL, GFF3_TOPLEVEL, GFF3_COMMENT, GFF3_DEBUG_LINES, ATTR_ID, ATTR_Name, ATTR_Alias, ATTR_Parent, ATTR_Target, ATTR_Target_ID, ATTR_Target_POS, ATTR_Target_STRAND, ATTR_Gap, ATTR_Derives_from, ATTR_Note, ATTR_Dbxref, ATTR_Ontology_term, ATTR_Is_circular, ATTR_Variant_seq, ATTR_Reference_seq, ATTR_Variant_freq, ATTR_ancestral_allele, ATTR_Variant_effect, ATTR_sift_prediction, ATTR_polyphen_prediction, ATTR_variant_peptide, ATTR_chr, ENSTid, EnNSTid, NUM_GFF3_FIELDS } GFF3Fields;
+typedef enum { GFF_SEQID, GFF_SOURCE, GFF_TYPE, GFF_START, GFF_END, GFF_SCORE, GFF_STRAND, GFF_PHASE, GFF_ATTRS, GFF_EOL, GFF_TOPLEVEL, GFF_COMMENT, GFF_DEBUG_LINES, ATTR_ID, ATTR_Name, ATTR_Alias, ATTR_Parent, ATTR_Target, ATTR_Target_ID, ATTR_Target_POS, ATTR_Target_STRAND, ATTR_Gap, ATTR_Derives_from, ATTR_Note, ATTR_Dbxref, ATTR_db_xref, ATTR_Ontology_term, ATTR_Is_circular, ATTR_Variant_seq, ATTR_Reference_seq, ATTR_Variant_freq, ATTR_ancestral_allele, ATTR_Variant_effect, ATTR_sift_prediction, ATTR_polyphen_prediction, ATTR_variant_peptide, ATTR_gene_id, ATTR_gene_name, ATTR_transcript_id, ATTR_transcript_name, ATTR_transcript_name_gene, ATTR_transcript_name_num, ATTR_protein_id, ATTR_ccds_id, ATTR_exon_id, ATTR_exon_number, ATTR_chr, ENSTid, NUM_GFF_FIELDS } GFFFields;
 
-#define GFF3_PREDEFINED { \
-    [GFF3_SEQID] = { { _GFF3_SEQID }, TAG(SEQID) }, \
-    [GFF3_SOURCE] = { { _GFF3_SOURCE }, TAG(SOURCE) }, \
-    [GFF3_TYPE] = { { _GFF3_TYPE }, TAG(TYPE) }, \
-    [GFF3_START] = { { _GFF3_START }, TAG(START) }, \
-    [GFF3_END] = { { _GFF3_END }, TAG(END) }, \
-    [GFF3_SCORE] = { { _GFF3_SCORE }, TAG(SCORE) }, \
-    [GFF3_STRAND] = { { _GFF3_STRAND }, TAG(STRAND) }, \
-    [GFF3_PHASE] = { { _GFF3_PHASE }, TAG(PHASE) }, \
-    [GFF3_ATTRS] = { { _GFF3_ATTRS }, TAG(ATTRS) }, \
-    [GFF3_EOL] = { { _GFF3_EOL }, TAG(EOL) }, \
-    [GFF3_TOPLEVEL] = { { _GFF3_TOPLEVEL }, TAG(TOPLEVEL) }, \
-    [GFF3_COMMENT] = { { _GFF3_COMMENT }, TAG(COMMENT) }, \
-    [GFF3_DEBUG_LINES] = { { _GFF3_DEBUG_LINES }, TAG(DBGLINES) }, \
+#define GFF_PREDEFINED { \
+    [GFF_SEQID] = { { _GFF_SEQID }, TAG(SEQID) }, \
+    [GFF_SOURCE] = { { _GFF_SOURCE }, TAG(SOURCE) }, \
+    [GFF_TYPE] = { { _GFF_TYPE }, TAG(TYPE) }, \
+    [GFF_START] = { { _GFF_START }, TAG(START) }, \
+    [GFF_END] = { { _GFF_END }, TAG(END) }, \
+    [GFF_SCORE] = { { _GFF_SCORE }, TAG(SCORE) }, \
+    [GFF_STRAND] = { { _GFF_STRAND }, TAG(STRAND) }, \
+    [GFF_PHASE] = { { _GFF_PHASE }, TAG(PHASE) }, \
+    [GFF_ATTRS] = { { _GFF_ATTRS }, TAG(ATTRS) }, \
+    [GFF_EOL] = { { _GFF_EOL }, TAG(EOL) }, \
+    [GFF_TOPLEVEL] = { { _GFF_TOPLEVEL }, TAG(TOPLEVEL) }, \
+    [GFF_COMMENT] = { { _GFF_COMMENT }, TAG(COMMENT) }, \
+    [GFF_DEBUG_LINES] = { { _GFF_DEBUG_LINES }, TAG(DBGLINES) }, \
     [ATTR_ID] = { { _ATTR_ID }, TAG(ID) }, \
     [ATTR_Name] = { { _ATTR_Name }, TAG(Name) }, \
     [ATTR_Alias] = { { _ATTR_Alias }, TAG(Alias) }, \
@@ -1325,6 +1335,7 @@ typedef enum { GFF3_SEQID, GFF3_SOURCE, GFF3_TYPE, GFF3_START, GFF3_END, GFF3_SC
     [ATTR_Derives_from] = { { _ATTR_Derives_from }, TAG(Derives_from) }, \
     [ATTR_Note] = { { _ATTR_Note }, TAG(Note) }, \
     [ATTR_Dbxref] = { { _ATTR_Dbxref }, TAG(Dbxref) }, \
+    [ATTR_db_xref] = { { _ATTR_db_xref }, TAG(db_xref) }, \
     [ATTR_Ontology_term] = { { _ATTR_Ontology_term }, TAG(Ontology_term) }, \
     [ATTR_Is_circular] = { { _ATTR_Is_circular }, TAG(Is_circular) }, \
     [ATTR_Variant_seq] = { { _ATTR_Variant_seq }, TAG(Variant_seq) }, \
@@ -1335,9 +1346,18 @@ typedef enum { GFF3_SEQID, GFF3_SOURCE, GFF3_TYPE, GFF3_START, GFF3_END, GFF3_SC
     [ATTR_sift_prediction] = { { _ATTR_sift_prediction }, TAG(sift_prediction) }, \
     [ATTR_polyphen_prediction] = { { _ATTR_polyphen_prediction }, TAG(polyphen_prediction) }, \
     [ATTR_variant_peptide] = { { _ATTR_variant_peptide }, TAG(variant_peptide) }, \
+    [ATTR_gene_id] = { { _ATTR_gene_id }, TAG(gene_id) }, \
+    [ATTR_gene_name] = { { _ATTR_gene_name }, TAG(gene_name) }, \
+    [ATTR_transcript_id] = { { _ATTR_transcript_id }, TAG(transcript_id) }, \
+    [ATTR_transcript_name] = { { _ATTR_transcript_name }, TAG(transcript_name) }, \
+    [ATTR_transcript_name_gene] = { { _ATTR_transcript_name_gene }, TAG(t0ranscript_name) }, \
+    [ATTR_transcript_name_num] = { { _ATTR_transcript_name_num }, TAG(t1ranscript_name) }, \
+    [ATTR_protein_id] = { { _ATTR_protein_id }, TAG(protein_id) }, \
+    [ATTR_ccds_id] = { { _ATTR_ccds_id }, TAG(ccds_id) }, \
+    [ATTR_exon_id] = { { _ATTR_exon_id }, TAG(exon_id) }, \
+    [ATTR_exon_number] = { { _ATTR_exon_number }, TAG(exon_number) }, \
     [ATTR_chr] = { { _ATTR_chr }, TAG(chr) }, \
     [ENSTid] = { { _ENSTid }, TAG(ENSTid) }, \
-    [EnNSTid] = { { _EnNSTid }, TAG(EnNSTid) }, \
 } 
 
 typedef enum { ME23_CHROM, ME23_POS, ME23_ID, ME23_GENOTYPE, ME23_EOL, ME23_TOPLEVEL, ME23_TOP2VCF, ME23_DEBUG_LINES, NUM_ME23_FIELDS } ME23Fields;

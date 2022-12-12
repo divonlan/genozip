@@ -16,8 +16,8 @@
             //"program": "${workspaceFolder}/genounzip.exe",
             //"program": "${workspaceFolder}/genols-debug.exe",
 
-            "args" : ["-fX",  "private/test/basic.vcf"],
-            
+            "args" : ["-f@1", "../../Downloads/GCF_009914755.1_T2T-CHM13v2.0_genomic.gtf.gz"],
+
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],

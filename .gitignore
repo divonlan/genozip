@@ -55,7 +55,8 @@ mac/scripts/*
 *.fa.gz
 *.fasta*
 *.gvf*
-*.gff3*
+*.gtf*
+*.gff*
 *.chain*
 !test/*
 test/*_ONLY.vcf

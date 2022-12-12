@@ -25,8 +25,11 @@
 void lookback_init (VBlockP vb, ContextP lb_ctx, ContextP ctx, StoreType store_type)
 {
     if (IS_ZIP) {
+        ASSERT (!ctx->is_initialized, "Context %s already initialized", ctx->tag_name);
+
         ctx->flags.store  = store_type; // tell PIZ store store values, so that the container callback can insert them to the lookback
         ctx->no_drop_b250 = true;       // we cannot have all_the_same, bc we need the b250 section to pass the param (lookback bits)
+        ctx->is_initialized = true;
     }
 
     buf_alloc (vb, lookback_buf(ctx), 0, lookback_size(lb_ctx) * (  store_type == STORE_INDEX ? sizeof (WordIndex) : sizeof (int64_t)), char, 1, "lookback_buf");

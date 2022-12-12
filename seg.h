@@ -59,9 +59,12 @@ extern bool seg_pos_field_cb (VBlockP vb, ContextP ctx, STRp(pos_str), uint32_t 
 
 extern void seg_id_field_init (ContextP ctx);
 extern void seg_id_field_do (VBlockP vb, ContextP ctx, STRp(id_snip));
-#define seg_id_field(vb, ctx, id_snip, id_snip_len, account_for_separator) \
-    ({ seg_id_field_do(VB, (ctx), (id_snip), (id_snip_len)); (ctx)->txt_len += !!(account_for_separator); })
-extern bool seg_id_field_cb (VBlockP vb, ContextP ctx, STRp(id_snip), uint32_t repeat);
+#define seg_id_field(vb, ctx, id, id_len, account_for_separator) \
+    ({ seg_id_field_do(VB, (ctx), (id), (id_len)); (ctx)->txt_len += !!(account_for_separator); })
+extern void seg_id_field2 (VBlockP vb, ContextP ctx, STRp(id), unsigned add_bytes);
+
+extern bool seg_id_field_cb (VBlockP vb, ContextP ctx, STRp(id), uint32_t repeat);
+extern bool seg_id_field2_cb (VBlockP vb, ContextP ctx, STRp(id), uint32_t repeat);
 
 typedef enum { LOOKUP_NONE, LOOKUP_SIMPLE, LOOKUP_WITH_LENGTH } Lookup;
 extern void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, STRp(data), bool add_nul, Lookup lookup_type, bool is_singleton, unsigned add_bytes);
@@ -236,7 +239,7 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux
     next_field = seg_get_next_item (vb, field_start, &len, GN_SEP, GN_FORBIDEN, GN_IGNORE, &field_len, &separator, has_13, #f); \
     FIELD (f)
 
-#define SEG_LAST_ITEM(f) do \
+#define SEG_LAST_ITEM(f) \
     GET_LAST_ITEM (f);\
     seg_by_did (VB, field_start, field_len, f, field_len+1)
 

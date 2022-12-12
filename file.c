@@ -272,12 +272,15 @@ void file_set_input_type (rom type_str)
     else if (!strcmp (ext, ".23andme.zip")) 
         flag.stdin_type = ME23_ZIP;
 
-    else if (!strcmp (ext, ".generic"))
+    else if (!strcmp (ext, ".generic")) {
         flag.stdin_type = GNRIC;
+        flag.exlicitly_generic = true;
+    }
 
     else {
         flag.stdin_type = file_get_type (ext); // we don't enforce 23andMe name format - any .txt or .zip will be considered ME23
-        if (flag.stdin_type == GNRIC) flag.stdin_type = UNKNOWN_FILE_TYPE; // This is an unknown input name - not generic
+        if (flag.stdin_type == GNRIC && !flag.exlicitly_generic) 
+            flag.stdin_type = UNKNOWN_FILE_TYPE; // This is an unknown input name - not generic
     }
 
     if (file_get_data_type (flag.stdin_type, true) != DT_NONE) return; // all good 

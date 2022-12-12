@@ -26,10 +26,10 @@ typedef struct Context {
     // ----------------------------
     #define MAX_TAG_LEN 64     // including terminating nul (must be divisible by 8 for Tag struct)
     char tag_name[MAX_TAG_LEN];// nul-terminated tag name 
-    Did did_i;            // the index of this ctx within the array vb->contexts
+    Did did_i;                 // the index of this ctx within the array vb->contexts
     union {
-    Did st_did_i;         // ZIP: in --stats, consolidate this context into st_did_i
-    Did other_did_i;      // PIZ: cache the other context needed for reconstructing this one
+    Did st_did_i;              // ZIP: in --stats, consolidate this context into st_did_i
+    Did other_did_i;           // PIZ: cache the other context needed for reconstructing this one
     };
     LocalType ltype;           // LT_* - type of local data - included in the section header
     struct FlagsCtx flags;     // flags to be included in section header
@@ -227,7 +227,7 @@ typedef struct Context {
 
     // Container cache 
     Buffer con_cache;          // PIZ: Handled by container_reconstruct - an array of Container which includes the did_i. Each struct is truncated to used items, followed by prefixes. 
-                               //      also used to cached Multiplexers in vcf_piz_special_MUX_BY_DOSAGE , piz_special_MINUS
+                               //      also used to cached Multiplexers in vcf_piz_special_MUX_BY_DOSAGE , piz_special_MINUS, recon_multi_dict_id_get_ctx_first_time
                                // ZIP: Each context is free to use it on its own
     Buffer con_index;          // Array of uint32_t - PIZ: index into con_cache - Each item corresponds to word_index. 
                                // ZIP: used by: 1. seg_array_of_struct

@@ -63,7 +63,7 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c lice
 		  sam_seq.c sam_qual.c sam_sag_zip.c sam_sag_piz.c sam_sag_load.c sam_sag_ingest.c sam_sag_scan.c    	\
 		  sam_bwa.c sam_bowtie2.c sam_bsseeker2.c sam_bsbolt.c sam_bismark.c sam_gem3.c sam_tmap.c sam_hisat2.c \
 		  sam_blasr.c sam_minimap2.c sam_cellranger.c sam_biobambam.c sam_pos.c									\
-		  fasta.c fastq.c gff3.c me23.c phylip.c chain.c kraken.c locs.c generic.c 								\
+		  fasta.c fastq.c gff.c me23.c phylip.c chain.c kraken.c locs.c generic.c 								\
 		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c lookback.c 				\
 		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c	\
 		  codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c codec_normq.c    							\
@@ -97,7 +97,7 @@ CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h tx
 			 lookback.h tokenizer.h codec_longr_alg.c gencomp.h dict_io.h recon_plan_io.h tip.h \
 			 reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h threads.h \
 			 arch.h license.h file_types.h data_types.h base64.h txtheader.h writer.h bases_filter.h genols.h contigs.h chrom.h \
-			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h fastq.h gff3.h phylip.h chain.h kraken.h locs.h generic.h \
+			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h fastq.h gff.h phylip.h chain.h kraken.h locs.h generic.h \
              compatibility/mac_gettime.h  \
 			 zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h \
 			 zlib/deflate.h zlib/trees.h \

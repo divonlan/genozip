@@ -17,7 +17,7 @@
 #include "dict_id.h"
 #include "codec.h"
 #include "reconstruct.h"
-#include "gff3.h"
+#include "gff.h"
 #include "stats.h"
 
 static inline bool vcf_is_use_DP_by_DP (void); // forward

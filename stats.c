@@ -423,6 +423,11 @@ static void stats_output_file_metadata (void)
             REPORT_KRAKEN;
             break;
 
+        case DT_GFF:
+            bufprintf (evb, &stats, "GFF version: %d\n", segconf.gff_version); 
+            bufprintf (evb, &features, "GFF_version=%d;", segconf.gff_version);
+            break;
+            
         case DT_REF: 
             bufprintf (evb, &stats, "Contigs: %u\nBases: %"PRIu64"\n",        ref_contigs_get_num_contigs(gref), ref_contigs_get_genome_nbases(gref)); 
             bufprintf (evb, &features, "num_contigs=%u;num_bases=%"PRIu64";", ref_contigs_get_num_contigs(gref), ref_contigs_get_genome_nbases(gref)); 

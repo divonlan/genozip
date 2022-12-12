@@ -95,13 +95,13 @@
 #define FAS_XZ_        ".fas.xz"
 #define FAS_GENOZIP_   ".fas" GENOZIP_EXT
 
-// GFF3 file variations (including GVF, which is a subtype of GFF3)
+// GFF2 / GFF3 file variations (including GVF, which is a subtype of GFF3 and GTF which is a subtype of GFF2)
 #define GFF3_          ".gff3"
 #define GFF3_GZ_       ".gff3.gz"
 #define GFF3_BZ2_      ".gff3.bz2"
 #define GFF3_XZ_       ".gff3.xz"
 #define GFF3_GENOZIP_  ".gff3" GENOZIP_EXT
-#define GFF_           ".gff"
+#define GFF_           ".gff" // can be GFF1 (not supported), GFF2 or GFF3
 #define GFF_GZ_        ".gff.gz"
 #define GFF_BZ2_       ".gff.bz2"
 #define GFF_XZ_        ".gff.xz"
@@ -111,6 +111,11 @@
 #define GVF_BZ2_       ".gvf.bz2"
 #define GVF_XZ_        ".gvf.xz"
 #define GVF_GENOZIP_   ".gvf" GENOZIP_EXT
+#define GTF_           ".gtf"
+#define GTF_GZ_        ".gtf.gz"
+#define GTF_BZ2_       ".gtf.bz2"
+#define GTF_XZ_        ".gtf.xz"
+#define GTF_GENOZIP_   ".gtf" GENOZIP_EXT
 
 // 23andMe file variations
 // note: 23andMe files come as a .txt, and therefore the user must specify --input to compress them. we have this
@@ -174,6 +179,7 @@ typedef enum FileType { UNKNOWN_FILE_TYPE,
                         GFF3,  GFF3_GZ,  GFF3_BZ2,  GFF3_XZ,      GFF3_GENOZIP,
                         GFF,   GFF_GZ,   GFF_BZ2,   GFF_XZ,       GFF_GENOZIP,
                         GVF,   GVF_GZ,   GVF_BZ2,   GVF_XZ,       GVF_GENOZIP,
+                        GTF,   GTF_GZ,   GTF_BZ2,   GTF_XZ,       GTF_GENOZIP,
                         ME23,  ME23_ZIP,                          ME23_GENOZIP, 
                         PHY,   PHY_GZ,   PHY_BZ2,   PHY_XZ,       PHY_GENOZIP,
                         CHAIN, CHAIN_GZ, CHAIN_BZ2, CHAIN_XZ,     CHAIN_GENOZIP,
@@ -202,6 +208,7 @@ typedef enum FileType { UNKNOWN_FILE_TYPE,
                    GFF3_,     GFF3_GZ_,           GFF3_BZ2_,   GFF3_XZ_,                GFF3_GENOZIP_,          \
                    GFF_,      GFF_GZ_,            GFF_BZ2_,    GFF_XZ_,                 GFF_GENOZIP_,           \
                    GVF_,      GVF_GZ_,            GVF_BZ2_,    GVF_XZ_,                 GVF_GENOZIP_,           \
+                   GTF_,      GTF_GZ_,            GTF_BZ2_,    GTF_XZ_,                 GTF_GENOZIP_,           \
                    ME23_,                                                   ME23_ZIP_,  ME23_GENOZIP_,          \
                    PHY_,      PHY_GZ_,            PHY_BZ2_,    PHY_XZ_,                 PHY_GENOZIP_,           \
                    CHAIN_,    CHAIN_GZ_,          CHAIN_BZ2_,  CHAIN_XZ_,               CHAIN_GENOZIP_,         \
@@ -253,7 +260,9 @@ extern rom file_exts[];
                              { GFF,        CODEC_NONE, GFF_GENOZIP    }, { GFF_GZ,    CODEC_GZ,  GFF_GENOZIP    },\
                              { GFF_BZ2,    CODEC_BZ2,  GFF_GENOZIP    }, { GFF_XZ,    CODEC_XZ,  GFF_GENOZIP    },\
                              { GVF,        CODEC_NONE, GVF_GENOZIP    }, { GVF_GZ,    CODEC_GZ,  GVF_GENOZIP    },\
-                             { GVF_BZ2,    CODEC_BZ2,  GVF_GENOZIP    }, { GVF_XZ,    CODEC_XZ,  GVF_GENOZIP    }, { } },\
+                             { GVF_BZ2,    CODEC_BZ2,  GVF_GENOZIP    }, { GVF_XZ,    CODEC_XZ,  GVF_GENOZIP    },\
+                             { GTF,        CODEC_NONE, GTF_GENOZIP    }, { GTF_GZ,    CODEC_GZ,  GTF_GENOZIP    },\
+                             { GTF_BZ2,    CODEC_BZ2,  GTF_GENOZIP    }, { GTF_XZ,    CODEC_XZ,  GTF_GENOZIP    }, { } },\
                            { { ME23,       CODEC_NONE, ME23_GENOZIP   }, { ME23_ZIP,  CODEC_ZIP, ME23_GENOZIP   }, { } },\
                            { { BAM,        CODEC_BGZF, BAM_GENOZIP    }, { BAM_GZ,    CODEC_GZ,  BAM_GENOZIP    }, { BAM_BGZF, CODEC_BGZF, BAM_GENOZIP  }, { CRAM, CODEC_CRAM, BAM_GENOZIP }, { } }, \
                            { { BCF,        CODEC_BCF,  BCF_GENOZIP    }, { BCF_GZ,    CODEC_BCF, BCF_GENOZIP    }, { BCF_BGZF, CODEC_BCF,  BCF_GENOZIP  }, { } }, \
@@ -278,7 +287,7 @@ extern rom file_exts[];
                            { SAM, SAM_GZ, BAM, 0 },     \
                            { FASTQ, FASTQ_GZ, FQ, FQ_GZ, 0 }, \
                            { FASTA, FASTA_GZ, FA, FA_GZ, FAA, FAA_GZ, FFN, FFN_GZ, FNN, FNN_GZ, FNA, FNA_GZ, FRN, FRN_GZ, FAS, FAS_GZ, 0 },\
-                           { GFF3, GFF3_GZ, GFF, GFF_GZ, GVF, GVF_GZ, 0 }, \
+                           { GFF3, GFF3_GZ, GFF, GFF_GZ, GVF, GVF_GZ, GTF, GTF_GZ, 0 }, \
                            { ME23, ME23 /* no GZ */, ME23_ZIP, 0 }, \
                            { BAM }, /* There are no data_type=DT_BAM genozip files - .bam.genozip have data_type=DT_SAM */ \
                            { 0 }, /* There are no data_type=DT_BCF genozip files - .bam.genozip have data_type=DT_VCF */ \
@@ -295,7 +304,7 @@ extern rom file_exts[];
                      { SAM_GENOZIP, BAM_GENOZIP, 0 },       \
                      { FASTQ_GENOZIP, FQ_GENOZIP, 0 },      \
                      { FASTA_GENOZIP, FA_GENOZIP, FAA_GENOZIP, FFN_GENOZIP, FNN_GENOZIP, FNA_GENOZIP, FRN_GENOZIP, FAS_GENOZIP, 0 }, \
-                     { GFF3_GENOZIP, GFF_GENOZIP, GVF_GENOZIP, 0  }, \
+                     { GFF3_GENOZIP, GFF_GENOZIP, GVF_GENOZIP, GTF_GENOZIP, 0  }, \
                      { ME23_GENOZIP, 0 },                   \
                      { 0 }, /* There are no data_type=DT_BAM genozip files - .bam.genozip have data_type=DT_SAM */ \
                      { 0 }, /* There are no data_type=DT_BCF genozip files - .bam.genozip have data_type=DT_VCF */ \

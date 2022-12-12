@@ -38,11 +38,12 @@ int32_t generic_is_header_done (bool is_eof)
     bool need_more = false;
 
     // search for a data type who's signature is in this header
-    for (DataType dt=0; dt < NUM_DATATYPES; dt++)
-        if (dt_props[dt].is_data_type && dt_props[dt].is_data_type (STRa(header), &need_more)) {
-            new_dt = dt;
-            break;
-        }
+    if (!flag.exlicitly_generic)
+        for (DataType dt=0; dt < NUM_DATATYPES; dt++)
+            if (dt_props[dt].is_data_type && dt_props[dt].is_data_type (STRa(header), &need_more)) {
+                new_dt = dt;
+                break;
+            }
 
     SAFE_RESTORE;
 

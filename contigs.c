@@ -307,7 +307,7 @@ WordIndex contigs_get_matching (ConstContigPkgP ctgs, STRp(name), PosType LN, /*
                                 bool strictly_alt, // only tests for differnet names
                                 bool *is_alt) // if not NULL, also search for as-is, and return whether its alt or not
 {
-    // human chromosomes 1-22,X,Y,M as they appear, eg, on:  ftp://ftp.ncbi.nlm.nih.gov/refseq/H_sapiens/annotation/GRCh37_latest/refseq_identifiers/GRCh37_latest_genomic.fna.gz
+    // GRCh37: human chromosomes 1-22,X,Y,M as they appear, eg, on:  ftp://ftp.ncbi.nlm.nih.gov/refseq/H_sapiens/annotation/GRCh37_latest/refseq_identifiers/GRCh37_latest_genomic.fna.gz
     #define NUM_NCs 26
     static const AccessionNumber NC[NUM_NCs] = { {},
         {.AC="NC_000001"}, {.AC="NC_000002"}, {.AC="NC_000003"}, {.AC="NC_000004"}, {.AC="NC_000005"}, {.AC="NC_000006"},

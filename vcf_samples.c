@@ -139,7 +139,7 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
 
     // determine which way to seg PL - Mux by dosage or Mux by dosageXDP, or test both options
     CTX(FORMAT_PL)->no_stons = true;
-    vb->PL_mux_by_DP = (flag.best && !z_is_dvcf && !segconf.running && segconf.has_DP_before_PL) 
+    vb->PL_mux_by_DP = (flag.best && !z_is_dvcf && !segconf.running && segconf.has_DP_before_PL) // only in --best, because it is very slow
         ? segconf.PL_mux_by_DP // set by a previous VB in vcf_FORMAT_PL_decide or still in its initial value of PL_mux_by_DP_TEST
         : PL_mux_by_DP_NO;
 

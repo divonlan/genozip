@@ -1066,7 +1066,7 @@ void flags_update_zip_one_file (void)
     if (flag.optimize) switch (dt) {
         case DT_BCF   :
         case DT_VCF   : flag.GP_to_PP = flag.GL_to_PL = flag.optimize_phred = flag.optimize_VQSLOD = flag.optimize_sort = true; break;
-        case DT_GFF3  : flag.optimize_sort = flag.optimize_Vf = true; break;
+        case DT_GFF  : flag.optimize_sort = flag.optimize_Vf = true; break;
         case DT_BAM   :
         case DT_SAM   : flag.optimize_QUAL = flag.optimize_ZM = true; break;
         case DT_FASTQ : flag.optimize_QUAL = flag.optimize_DESC = true; break;
@@ -1157,16 +1157,16 @@ void flags_update_zip_one_file (void)
     FLAG_ONLY_FOR_DT(VCF, GL_to_PL,         "GL-to-PL");
     FLAG_ONLY_FOR_DT(VCF, GP_to_PP,         "GP-to-PP");
     FLAG_ONLY_FOR_DT(VCF, optimize_VQSLOD,  "optimize-VQSLOD");
-    FLAG_ONLY_FOR_2DTs(VCF, GFF3, optimize_sort, "optimize-sort");
+    FLAG_ONLY_FOR_2DTs(VCF, GFF, optimize_sort, "optimize-sort");
 
     // FASTA
     ASSINP0 (!flag.make_reference || dt == DT_REF, "--make-reference is only supported for FASTA files"); // data_type is DT_REF
 
-    // GFF3
-    FLAG_ONLY_FOR_DT(GFF3, optimize_Vf,     "optimize-Vf");
+    // GFF
+    FLAG_ONLY_FOR_DT(GFF, optimize_Vf,      "optimize-Vf");
     
     // GENERIC
-    FLAG_NOT_FOR_DT (GENERIC, debug_lines,   "debug-lines"); // GENERIC doesn't have lines 
+    FLAG_NOT_FOR_DT (GENERIC, debug_lines,  "debug-lines"); // GENERIC doesn't have lines 
 
     if (flag.show_flags) flags_show_flags();
 }

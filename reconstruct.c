@@ -383,24 +383,26 @@ HasNewValue reconstruct_demultiplex (VBlockP vb, ContextP ctx, STRp(snip), int c
     return HAS_NEW_VALUE; 
 }
 
-static HasNewValue reconstruct_numeric (VBlockP vb, ContextP ctx, rom snip, ValueType *new_value, bool reconstruct)
+static HasNewValue reconstruct_numeric (VBlockP vb, ContextP ctx, STRp(snip), ValueType *new_value, bool reconstruct)
 {
     new_value->i = reconstruct_from_local_int (vb, ctx, 0, false);
     
     if (reconstruct) {
-        char format[8] = "%0*";
+        char format[32] = "%.*s%0*";
 
         if (new_value->i <= 0xffffffffLL)
-            format[3] = "uxX"[snip[1] - '0'];
+            format[7] = "uxX"[snip[1] - '0'];
 
         else // beyond 32b uint
             switch (snip[1] - '0') { // snip[1] is type
-                case 0: memcpy (&format[3], PRIu64, STRLEN(PRIu64)); break;
-                case 1: memcpy (&format[3], PRIx64, STRLEN(PRIx64)); break;
-                case 2: memcpy (&format[3], PRIX64, STRLEN(PRIX64)); break;
+                case 0: memcpy (&format[7], PRIu64, STRLEN(PRIu64)); break;
+                case 1: memcpy (&format[7], PRIx64, STRLEN(PRIx64)); break;
+                case 2: memcpy (&format[7], PRIX64, STRLEN(PRIX64)); break;
             }
 
-        vb->txt_data.len32 += sprintf (BAFTtxt, format, snip[2]-'0', new_value->i); // snip[2] is width
+        vb->txt_data.len32 += sprintf (BAFTtxt, format, 
+                                       snip_len-3, &snip[3], // prefix - since 14.0.18
+                                       snip[2]-'0', new_value->i); // snip[2] is width
     }
 
     return HAS_NEW_VALUE;
@@ -476,7 +478,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
     }
 
     case SNIP_NUMERIC: // 0-padded fixed-width non-negative decimal or hexadecimal integer (v14)
-        has_new_value = reconstruct_numeric (vb, snip_ctx, snip, &new_value, reconstruct);
+        has_new_value = reconstruct_numeric (vb, snip_ctx, STRa(snip), &new_value, reconstruct);
         break;
 
     case SNIP_CONTAINER: {

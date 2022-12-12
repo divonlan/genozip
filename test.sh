@@ -860,7 +860,7 @@ batch_real_world_1_adler32() # $1 extra genozip argument
     # without reference
     local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*sam* test.*bam \
                    test.*fq* test.*fa* \
-                   basic.phy* test.*gvf* test.*gff* test.*locs* \
+                   basic.phy* test.*gvf* test.*gtf* test.*gff* test.*locs* \
                    test.*txt* test.*kraken* | \
                    grep -v "$filter_out" | grep -v headerless | grep -v .genozip | grep -v .md5 | grep -v .bad ` ) 
 
@@ -888,7 +888,7 @@ batch_real_world_genounzip() # $1 extra genozip argument
     # without reference
     local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*sam* test.*bam \
                    test.*fq* test.*fa* \
-                   basic.phy* test.*gvf* test.*gff* test.*locs* \
+                   basic.phy* test.*gvf* test.*gtf* test.*gff* test.*locs* \
                    test.*txt* test.*kraken* | \
                    grep -v "$filter_out" | grep -v headerless | grep -v .genozip | grep -v .md5 | grep -v .bad | grep -v .xz | grep -v .bz2` )
     
@@ -938,7 +938,7 @@ batch_real_world_1_backcomp()
     # without reference
     local files=(  `cd $TESTDIR; ls -1 test.*vcf test.*vcf.gz test.*sam test.*sam.gz test.*bam \
                    test.*fq test.*fq.gz test.*fa test.*fa.gz test.*fasta test.*fasta.gz \
-                   basic.phy test.*gvf test.*gvf.gz test.*gff test.*gff.gz test.*locs \
+                   basic.phy test.*gvf test.*gvf.gz test.*gtf test.*gtf.gz test.*gff test.*gff.gz test.*locs \
                    test.*txt test.*txt.gz test.*kraken test.*kraken.gz \
                    | grep -v headerless.sam` ) 
 
@@ -1438,7 +1438,7 @@ genocat_no_echo="$genocat_exe $2 $piz_threads"
 genocat="$genocat_exe --echo $2 $piz_threads"
 genols=$genols_exe 
 
-basics=(basic.vcf basic.chain basic.sam basic.vcf basic.bam basic.fq basic.fa basic.gvf basic.genome_Full.me23.txt \
+basics=(basic.vcf basic.chain basic.sam basic.vcf basic.bam basic.fq basic.fa basic.gvf basic.gtf basic.genome_Full.me23.txt \
         basic.kraken basic.phy basic.locs basic.generic)
 
 exes=($genozip_exe $genounzip_exe $genocat_exe $genols_exe)
@@ -1479,55 +1479,56 @@ if (( $1 <= 5  )) ; then  batch_basic basic.fq         ; fi
 if (( $1 <= 6  )) ; then  batch_basic basic.fa         ; fi
 if (( $1 <= 7  )) ; then  batch_basic basic.chain      ; fi
 if (( $1 <= 8  )) ; then  batch_basic basic.gvf        ; fi
-if (( $1 <= 9  )) ; then  batch_basic basic.genome_Full.me23.txt ; fi
-if (( $1 <= 10 )) ; then  batch_basic basic.kraken     ; fi
-if (( $1 <= 11 )) ; then  batch_basic basic.phy        ; fi
-if (( $1 <= 12 )) ; then  batch_basic basic.generic    ; fi
-if (( $1 <= 13 )) ; then  batch_precompressed          ; fi
-if (( $1 <= 14 )) ; then  batch_bgzf                   ; fi
-if (( $1 <= 15 )) ; then  batch_subdirs                ; fi
-if (( $1 <= 16 )) ; then  batch_special_algs           ; fi
-if (( $1 <= 17 )) ; then  batch_dvcf                   ; fi
-if (( $1 <= 18 )) ; then  batch_sam_bam_translations   ; fi
-if (( $1 <= 19 )) ; then  batch_sam_fq_translations    ; fi
-if (( $1 <= 20 )) ; then  batch_23andMe_translations   ; fi
-if (( $1 <= 21 )) ; then  batch_phylip_translations    ; fi
-if (( $1 <= 22 )) ; then  batch_genocat_tests          ; fi
-if (( $1 <= 23 )) ; then  batch_grep_count_lines       ; fi
-if (( $1 <= 24 )) ; then  batch_backward_compatability ; fi
-if (( $1 <= 25 )) ; then  batch_match_chrom            ; fi
-if (( $1 <= 26 )) ; then  batch_kraken " " "-K$kraken" ; fi   # genocat loads kraken data
-if (( $1 <= 27 )) ; then  batch_kraken "-K$kraken" " " ; fi   # genozip loads kraken data
-if (( $1 <= 28 )) ; then  batch_single_thread          ; fi 
-if (( $1 <= 29 )) ; then  batch_copy_ref_section       ; fi 
-if (( $1 <= 30 )) ; then  batch_iupac                  ; fi 
-if (( $1 <= 31 )) ; then  batch_genols                 ; fi
-if (( $1 <= 32 )) ; then  batch_tar_files_from         ; fi
-if (( $1 <= 33 )) ; then  batch_gencomp_depn_methods   ; fi 
-if (( $1 <= 34 )) ; then  batch_real_world_small_vbs   ; fi 
-if (( $1 <= 35 )) ; then  batch_real_world_1_adler32   ; fi 
-if (( $1 <= 36 )) ; then  batch_real_world_genounzip   ; fi 
-if (( $1 <= 37 )) ; then  batch_real_world_1_adler32 "--best -f" ; fi 
-if (( $1 <= 38 )) ; then  batch_real_world_1_adler32 --fast    ; fi 
-if (( $1 <= 39 )) ; then  batch_real_world_with_ref_md5; fi 
-if (( $1 <= 40 )) ; then  batch_real_world_with_ref_md5 --best ; fi 
-if (( $1 <= 41 )) ; then  batch_multiseq               ; fi
-if (( $1 <= 42 )) ; then  batch_external_cram          ; fi
-if (( $1 <= 43 )) ; then  batch_external_bcf           ; fi
-if (( $1 <= 44 )) ; then  batch_external_unzip         ; fi
-if (( $1 <= 45 )) ; then  batch_reference_fastq        ; fi
-if (( $1 <= 46 )) ; then  batch_reference_sam          ; fi
-if (( $1 <= 47 )) ; then  batch_reference_vcf          ; fi
-if (( $1 <= 48 )) ; then  batch_many_small_files       ; fi
-if (( $1 <= 49 )) ; then  batch_make_reference         ; fi
-if (( $1 <= 50 )) ; then  batch_reference_backcomp     ; fi
-if (( $1 <= 51 )) ; then  batch_headerless_wrong_ref   ; fi
-if (( $1 <= 52 )) ; then  batch_replace                ; fi
+if (( $1 <= 9  )) ; then  batch_basic basic.gtf        ; fi
+if (( $1 <= 10 )) ; then  batch_basic basic.genome_Full.me23.txt ; fi
+if (( $1 <= 11 )) ; then  batch_basic basic.kraken     ; fi
+if (( $1 <= 12 )) ; then  batch_basic basic.phy        ; fi
+if (( $1 <= 13 )) ; then  batch_basic basic.generic    ; fi
+if (( $1 <= 14 )) ; then  batch_precompressed          ; fi
+if (( $1 <= 15 )) ; then  batch_bgzf                   ; fi
+if (( $1 <= 16 )) ; then  batch_subdirs                ; fi
+if (( $1 <= 17 )) ; then  batch_special_algs           ; fi
+if (( $1 <= 18 )) ; then  batch_dvcf                   ; fi
+if (( $1 <= 19 )) ; then  batch_sam_bam_translations   ; fi
+if (( $1 <= 20 )) ; then  batch_sam_fq_translations    ; fi
+if (( $1 <= 21 )) ; then  batch_23andMe_translations   ; fi
+if (( $1 <= 22 )) ; then  batch_phylip_translations    ; fi
+if (( $1 <= 23 )) ; then  batch_genocat_tests          ; fi
+if (( $1 <= 24 )) ; then  batch_grep_count_lines       ; fi
+if (( $1 <= 25 )) ; then  batch_backward_compatability ; fi
+if (( $1 <= 26 )) ; then  batch_match_chrom            ; fi
+if (( $1 <= 27 )) ; then  batch_kraken " " "-K$kraken" ; fi   # genocat loads kraken data
+if (( $1 <= 28 )) ; then  batch_kraken "-K$kraken" " " ; fi   # genozip loads kraken data
+if (( $1 <= 29 )) ; then  batch_single_thread          ; fi 
+if (( $1 <= 30 )) ; then  batch_copy_ref_section       ; fi 
+if (( $1 <= 31 )) ; then  batch_iupac                  ; fi 
+if (( $1 <= 32 )) ; then  batch_genols                 ; fi
+if (( $1 <= 33 )) ; then  batch_tar_files_from         ; fi
+if (( $1 <= 34 )) ; then  batch_gencomp_depn_methods   ; fi 
+if (( $1 <= 35 )) ; then  batch_real_world_small_vbs   ; fi 
+if (( $1 <= 36 )) ; then  batch_real_world_1_adler32   ; fi 
+if (( $1 <= 37 )) ; then  batch_real_world_genounzip   ; fi 
+if (( $1 <= 38 )) ; then  batch_real_world_1_adler32 "--best -f" ; fi 
+if (( $1 <= 39 )) ; then  batch_real_world_1_adler32 --fast    ; fi 
+if (( $1 <= 40 )) ; then  batch_real_world_with_ref_md5; fi 
+if (( $1 <= 41 )) ; then  batch_real_world_with_ref_md5 --best ; fi 
+if (( $1 <= 42 )) ; then  batch_multiseq               ; fi
+if (( $1 <= 43 )) ; then  batch_external_cram          ; fi
+if (( $1 <= 44 )) ; then  batch_external_bcf           ; fi
+if (( $1 <= 45 )) ; then  batch_external_unzip         ; fi
+if (( $1 <= 46 )) ; then  batch_reference_fastq        ; fi
+if (( $1 <= 47 )) ; then  batch_reference_sam          ; fi
+if (( $1 <= 48 )) ; then  batch_reference_vcf          ; fi
+if (( $1 <= 49 )) ; then  batch_many_small_files       ; fi
+if (( $1 <= 50 )) ; then  batch_make_reference         ; fi
+if (( $1 <= 51 )) ; then  batch_reference_backcomp     ; fi
+if (( $1 <= 52 )) ; then  batch_headerless_wrong_ref   ; fi
+if (( $1 <= 53 )) ; then  batch_replace                ; fi
 
 if [[ `basename $PWD` != genozip-prod ]]; then
-    if (( $1 <= 53 )) ; then  batch_real_world_1_backcomp  ; fi 
-    if (( $1 <= 54 )) ; then  batch_real_world_with_ref_backcomp ; fi 
-    next=54
+    if (( $1 <= 54 )) ; then  batch_real_world_1_backcomp  ; fi 
+    if (( $1 <= 55 )) ; then  batch_real_world_with_ref_backcomp ; fi 
+    next=55
     if (( $1 <= $next + $num_batch_prod_compatability_tests )) ; then batch_prod_compatability $1 $next ; fi
 fi
 

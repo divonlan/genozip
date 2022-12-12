@@ -501,6 +501,9 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
                          reconstruction_start);  
         } // items loop
 
+        // repeat suffix 
+        container_reconstruct_prefix (vb, con, &item_prefixes, &remaining_prefix_len, false, ctx->dict_id, DICT_ID_NONE, show_non_item); 
+
         // remove final separator, if we need to (introduced v12)
         if (con->drop_final_item_sep && last_non_filtered_item_i >= 0) {
             const ContainerItem *item = &con->items[last_non_filtered_item_i]; // last_non_filtered_item_i is the last item that survived the filter, of the last repeat

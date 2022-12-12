@@ -284,9 +284,13 @@ static bool license_is_consumer_email (rom email)
     if (domain_len > 6 && !memcmp (domain, "yahoo.",   6)) return true; // "yahoo.com", "yahoo.com.br", "yahoo.fr", "yahoo.co.uk", etc.
     if (domain_len > 8 && !memcmp (domain, "hotmail.", 8)) return true; // "hotmail.com", "hotmail.fr", "hotmail.co.jp", etc
 
-    static rom consumer_domains[] = { // except yahoo, live, hotmail
-        "gmail.com", "googlemail.com", "qq.com",  "outlook.com", "163.com", "web.de", "hanmail.net",
-        "list.ru", "mail.ru", "protonmail.com", "naver.com", "yaani.com", "icloud.com"
+    static rom consumer_domains[] = { // except multi-domainers: yahoo, live, hotmail
+        "gmail.com", "googlemail.com", "outlook.com", "protonmail.com", // Global
+        "qq.com", "163.com",               // China 
+        "web.de",                          // Germany 
+        "hanmail.net", "naver.com",        // Korea
+        "list.ru", "mail.ru", "yandex.ru", // Russia 
+        "yaani.com"                        // Turkey
     };
 
     for (int i=0; i < ARRAY_LEN(consumer_domains); i++)

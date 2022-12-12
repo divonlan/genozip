@@ -560,7 +560,7 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
     GET_NEXT_ITEM (VCF_ALT);
 
     // save REF and ALT (in primary or luft coordinates) to be used for INFO fields
-    vb->main_ref  = VCF_REF_str;
+    vb->main_ref     = VCF_REF_str;
     vb->main_alt     = VCF_ALT_str;
     vb->main_ref_len = VCF_REF_len;
     vb->main_alt_len = VCF_ALT_len;

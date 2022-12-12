@@ -95,7 +95,8 @@ typedef struct {
         list;        // a genols option
     rom threads_str, out_filename, out_dirname, files_from, do_register;
     FileType stdin_type; // set by the --input command line option
-
+    bool exlicitly_generic; // user explicitly set the type to generic
+     
     ReferenceType reference;
 
     // stats / metadata flags for end users

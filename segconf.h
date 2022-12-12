@@ -137,6 +137,9 @@ typedef struct {
     SeqType seq_type;           // nucleotide or protein
     unsigned seq_type_counter;  // used for calculating seq_type 
 
+    // GFF stuff
+    int gff_version;
+
     // Chain stuff
     bool chain_mismatches_ref;  // Some contigs mismatch the reference files, so this chain file cannot be used with --chain
 } SegConf;

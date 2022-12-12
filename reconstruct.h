@@ -37,7 +37,7 @@ extern ContextP recon_multi_dict_id_get_ctx_first_time (VBlockP vb, ContextP ctx
 // use SCTX if we are certain that ctx can only be one other_dict_id in its snips 
 // snip is expected to be : 1-char-code + base64-dict_id + other stuff. snip is modified to be after the dict_id
 #define SCTX(snip) ({ ContextP sctx;                                \
-                      if (ctx->other_did_i != DID_NONE)  {        \
+                      if (ctx->other_did_i != DID_NONE)  {          \
                           snip       += base64_sizeof (DictId) + 1; \
                           snip##_len -= base64_sizeof (DictId) + 1; \
                           sctx = CTX(ctx->other_did_i);             \
@@ -48,7 +48,7 @@ extern ContextP recon_multi_dict_id_get_ctx_first_time (VBlockP vb, ContextP ctx
                    })
 
 // a version of SCTX with where just a base64-dict_id
-#define SCTX0(snip) ({ rom snip0 = (snip)-1;                    \
+#define SCTX0(snip) ({ rom snip0 = (snip)-1;                        \
                        uint32_t snip0_len = base64_sizeof (DictId) + 1; \
                        SCTX(snip0); })
 
@@ -78,17 +78,17 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, Did did_i, DictI
 #define LOAD_SNIP(did_i) ctx_get_next_snip (VB, CTX(did_i), false, &snip, &snip_len) 
 #define PEEK_SNIP(did_i) ctx_peek_next_snip (VB, CTX(did_i), &snip, &snip_len)
 
-#define LOAD_SNIP_FROM_LOCAL(ctx) ( {           \
+#define LOAD_SNIP_FROM_LOCAL(ctx) ( {                                   \
     ASSPIZ (ctx->next_local < ctx->local.len32, "%s.local exhausted: next_local=%u len=%u%s", (ctx)->tag_name, (ctx)->next_local, (ctx)->local.len32, !(ctx)->local.len32 ? " (since len=0, perhaps it is not loaded? check IS_SKIP function)" : ""); \
-    uint32_t start = ctx->next_local;           \
-    ARRAY (char, data, ctx->local);             \
-    uint32_t next_local = ctx->next_local; /* automatic for speed */ \
-    uint32_t len = ctx->local.len32;            \
-    while (next_local < len && data[next_local]) next_local++; \
-    snip = &data[start];                        \
-    snip_len = next_local - start;              \
-    ctx->next_local = next_local + 1; /* skip the separator */ \
-    start;                                      \
+    uint32_t start = ctx->next_local;                                   \
+    ARRAY (char, data, ctx->local);                                     \
+    uint32_t next_local = ctx->next_local; /* automatic for speed */    \
+    uint32_t len = ctx->local.len32;                                    \
+    while (next_local < len && data[next_local]) next_local++;          \
+    snip = &data[start];                                                \
+    snip_len = next_local - start;                                      \
+    ctx->next_local = next_local + 1; /* skip the separator */          \
+    start;                                                              \
 } ) 
 
 #define NEXT_ERRFMT "%s: not enough data in %s.local: next_local=%u + recon_len=%u > local.len=%u"
@@ -101,9 +101,9 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, Did did_i, DictI
     ({ ASSPIZ ((ctx)->next_local + (offset) < (ctx)->local.len32, "PEEKNEXTLOCAL: %s.local exhausted: next_local=%u len=%u", (ctx)->tag_name, (ctx)->next_local, (ctx)->local.len32); \
        *B(type, (ctx)->local, (ctx)->next_local + (offset)); })
 
-#define RECONSTRUCT(s,len) \
-    ({ uint32_t new_len = (uint32_t)(len); /* copy in case caller uses ++ */ \
-       memcpy (&vb->txt_data.data[vb->txt_data.len32], (s), new_len);   \
+#define RECONSTRUCT(s,len)                                                      \
+    ({ uint32_t new_len = (uint32_t)(len); /* copy in case caller uses ++ */    \
+       memcpy (&vb->txt_data.data[vb->txt_data.len32], (s), new_len);           \
        vb->txt_data.len32 += new_len; })
 
 #define RECONSTRUCT1(c) vb->txt_data.data[vb->txt_data.len32++] = (c) // we don't use BNXTc bc it is too expensive
@@ -111,19 +111,19 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, Did did_i, DictI
 #define RECONSTRUCT_SEP(s,len,sep) ({ RECONSTRUCT((s), (len)); RECONSTRUCT1 (sep); })
 #define RECONSTRUCT_TABBED(s,len) RECONSTRUCT_SEP (s, len, '\t')
 #define RECONSTRUCT_BUF(buf) RECONSTRUCT((buf).data,(buf).len32)
-#define RECONSTRUCT_NEXT(ctx,recon_len) \
+#define RECONSTRUCT_NEXT(ctx,recon_len)                 \
     ({ ASSPIZ ((ctx)->next_local + (recon_len) <= (ctx)->local.len32, NEXT_ERRFMT, "RECONSTRUCT_NEXT", (ctx)->tag_name, (ctx)->next_local, (recon_len), (ctx)->local.len32); \
-       rom next = Bc((ctx)->local, (ctx)->next_local); \
+       rom next = Bc((ctx)->local, (ctx)->next_local);  \
        if (reconstruct) RECONSTRUCT(next, (recon_len)); \
-       (ctx)->next_local += (recon_len); \
+       (ctx)->next_local += (recon_len);                \
        next; })
 
-#define RECONSTRUCT_NEXT_REV(ctx,recon_len) /* reconstructs reverse string */\
+#define RECONSTRUCT_NEXT_REV(ctx,recon_len) /* reconstructs reverse string */       \
     ({ ASSPIZ ((ctx)->next_local + (recon_len) <= (ctx)->local.len32, NEXT_ERRFMT, "RECONSTRUCT_NEXT_REV", (ctx)->tag_name, (ctx)->next_local, (recon_len), (ctx)->local.len32); \
-       if (reconstruct) { \
+       if (reconstruct) {                                                           \
            str_reverse (BAFTtxt, Bc((ctx)->local, (ctx)->next_local), (recon_len)); \
-           vb->txt_data.len += (recon_len); \
-       } \
+           vb->txt_data.len += (recon_len);                                         \
+       }                                                                            \
        (ctx)->next_local += (recon_len); })
 
 #define RECONSTRUCT_INT(n) buf_add_int_as_text (&vb->txt_data, (n)) /* note: don't add nul-terminator, as sometimes we expect reconstruction to be exact, and memory after could be already occupied - eg sam_piz_prim_add_QNAME */ 

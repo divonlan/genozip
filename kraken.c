@@ -68,7 +68,6 @@ typedef struct __attribute__((packed, aligned(1))) {
 // IMPORTANT: if changing fields in VBlockKRAKEN, also update kraken_vb_release_vb 
 typedef struct VBlockKRAKEN {    
     VBLOCK_COMMON_FIELDS
-    MULTIPLEXER(2) mux_KMERLEN;
 } VBlockKRAKEN;
 
 typedef VBlockKRAKEN *VBlockKRAKENP;

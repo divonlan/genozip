@@ -370,10 +370,10 @@ static PosType seg_scan_pos_snip (VBlockP vb, rom snip, unsigned snip_len, bool 
 PosType seg_pos_field (VBlockP vb, 
                        Did snip_did_i,    // mandatory: the ctx the snip belongs to
                        Did base_did_i,    // mandatory: base for delta
-                       unsigned opt,           // a combination of SPF_* options
-                       char missing,           // a character allowed (meaning "missing value"), segged as SNIP_DONT_STORE
-                       STRp(pos_str),          // option 1
-                       PosType this_pos,       // option 2
+                       unsigned opt,      // a combination of SPF_* options
+                       char missing,      // a character allowed (meaning "missing value"), segged as SNIP_DONT_STORE
+                       STRp(pos_str),     // option 1
+                       PosType this_pos,  // option 2
                        unsigned add_bytes)     
 {
     ContextP snip_ctx = CTX(snip_did_i);
@@ -389,7 +389,7 @@ PosType seg_pos_field (VBlockP vb,
         else {
             this_pos = seg_scan_pos_snip (vb, STRa(pos_str), IS_FLAG (opt, SPF_ZERO_IS_BAD), &err);
             ASSERT (IS_FLAG (opt, SPF_BAD_SNIPS_TOO) || !err, "%s: invalid value %.*s in %s", 
-                    LN_NAME, STRf(pos_str), CTX(snip_did_i)->tag_name);
+                    LN_NAME, STRf(pos_str), snip_ctx->tag_name);
         }
 
         // we accept out-of-range integer values for non-self-delta
@@ -473,27 +473,35 @@ bool seg_pos_field_cb (VBlockP vb, ContextP ctx, STRp(pos_str), uint32_t repeat)
     return true; // segged successfully
 }
 
+// must be called in seg_initialize 
+void seg_id_field_init (ContextP ctx) 
+{ 
+    ctx->no_stons = true; 
+    ctx->ltype = LT_DYN_INT; 
+    ctx->is_initialized = true; 
+}
+
 // Commonly (but not always), IDs are SNPid identifiers like "rs17030902". We store the ID divided to 2:
-// - We store the final digits, if any exist, and up to 9 digits, as an integer in SEC_NUMERIC_ID_DATA, which is
-//   compressed with LZMA
+// - We store the final digits, if any exist, and up to 9 digits, as an integer in SEC_NUMERIC_ID_DATA
 // - In the dictionary we store the prefix up to this number, and \1 if there is a number and a \2 
 //   if the caller (as in seg_me23) wants us to store an extra bit.
 // example: rs17030902 : in the dictionary we store "rs\1" or "rs\1\2" and in SEC_NUMERIC_ID_DATA we store 17030902.
 //          1423       : in the dictionary we store "\1" and 1423 SEC_NUMERIC_ID_DATA
 //          abcd       : in the dictionary we store "abcd" and nothing is stored SEC_NUMERIC_ID_DATA
-void seg_id_field_init (ContextP ctx) { ctx->no_stons = true; ctx->ltype = LT_DYN_INT; ctx->is_initialized = true; } // must be called in seg_initialize
-void seg_id_field_do (VBlockP vb, ContextP ctx, STRp(id_snip))
+
+// this version compresses better if the numeric part is expected to be variable-width without leading zeros
+void seg_id_field_do (VBlockP vb, ContextP ctx, STRp(id))
 {
     ASSERT (ctx->is_initialized, "%s: seg_id_field_init not called for ctx=%s", LN_NAME, ctx->tag_name);
 
-    int i=id_snip_len-1; for (; i >= 0; i--) 
-        if (!IS_DIGIT (id_snip[i])) break;
+    int i=id_len-1; for (; i >= 0; i--) 
+        if (!IS_DIGIT (id[i])) break;
     
-    unsigned num_digits = MIN_(id_snip_len - (i+1), 18); // up to 0x0DE0,B6B3,A763,FFFF - fits in int64_t
+    unsigned num_digits = MIN_(id_len - (i+1), 18); // up to 0x0DE0,B6B3,A763,FFFF - fits in int64_t
 
     // leading zeros will be part of the dictionary data, not the number
-    for (unsigned i = id_snip_len - num_digits; i < id_snip_len; i++) 
-        if (id_snip[i] == '0') 
+    for (unsigned i = id_len - num_digits; i < id_len; i++) 
+        if (id[i] == '0') 
             num_digits--;
         else 
             break;
@@ -501,7 +509,7 @@ void seg_id_field_do (VBlockP vb, ContextP ctx, STRp(id_snip))
     // added to local if we have a trailing number
     if (num_digits) {
         int64_t id_num;
-        ASSERT (str_get_int (&id_snip[id_snip_len - num_digits], num_digits, &id_num), 
+        ASSERT (str_get_int (&id[id_len - num_digits], num_digits, &id_num), 
                 "Failed str_get_int ctx=%s vb=%u line=%d", ctx->tag_name, vb->vblock_i, vb->line_i);
         seg_add_to_local_resizable (vb, ctx, id_num, 0);
 
@@ -509,15 +517,52 @@ void seg_id_field_do (VBlockP vb, ContextP ctx, STRp(id_snip))
     }
 
     // prefix the textual part with SNIP_LOOKUP_UINT32 if needed (we temporarily overwrite the previous separator or the buffer underflow area)
-    unsigned new_len = id_snip_len - num_digits;
-    SAFE_ASSIGN (&id_snip[-1], SNIP_LOOKUP); // we assign it anyway bc of the macro convenience, but we included it only if num_digits>0
-    seg_by_ctx (VB, id_snip-(num_digits > 0), new_len + (num_digits > 0), ctx, id_snip_len); // account for the entire length, and sometimes with \t
+    unsigned new_len = id_len - num_digits;
+    SAFE_ASSIGN (&id[-1], SNIP_LOOKUP); // we assign it anyway bc of the macro convenience, but we included it only if num_digits>0
+    seg_by_ctx (VB, id-(num_digits > 0), new_len + (num_digits > 0), ctx, id_len); // account for the entire length, and sometimes with \t
     SAFE_RESTORE;
 }
 
-bool seg_id_field_cb (VBlockP vb, ContextP ctx, STRp(id_snip), uint32_t repeat)
+// this version compresses better if the numeric part is expected to be fixed-width with possible leading zeros
+void seg_id_field2 (VBlockP vb, ContextP ctx, STRp(id), unsigned add_bytes)
 {
-    seg_id_field_do (vb, ctx, STRa(id_snip));
+    ASSERT (ctx->is_initialized, "%s: seg_id_field_init not called for ctx=%s", LN_NAME, ctx->tag_name);
+
+    int i=id_len-1; for (; i >= 0; i--) 
+        if (!IS_DIGIT (id[i])) break;
+    
+    unsigned num_digits = MIN_(id_len - (i+1), 18); // up to 0x0DE0,B6B3,A763,FFFF - fits in int64_t (excess digits will go in the prefix)
+
+    if (num_digits) {
+        int64_t n;
+        str_get_int_dec (&id[id_len - num_digits], num_digits, (uint64_t*)&n);
+
+        seg_integer (vb, ctx, n, false, add_bytes); // integer into local
+
+        SAFE_ASSIGNx(&id[-3], SNIP_NUMERIC,      1);
+        SAFE_ASSIGNx(&id[-2], '0'/*LT_DYN_INT*/, 2);
+        SAFE_ASSIGNx(&id[-1], '0' + num_digits,  3);
+        
+        seg_by_ctx (vb, id-3, 3 + (id_len - num_digits), ctx, 0); // SNIP_NUMERIC with prefix
+
+        SAFE_RESTOREx(1); SAFE_RESTOREx(2); SAFE_RESTOREx(3);
+
+        if (ctx->flags.store == STORE_INT) ctx_set_last_value (vb, ctx, n);
+    }
+
+    else
+        seg_by_ctx (vb, STRa(id), ctx, add_bytes);
+}
+
+bool seg_id_field_cb (VBlockP vb, ContextP ctx, STRp(id), uint32_t repeat)
+{
+    seg_id_field_do (vb, ctx, STRa(id));
+    return true; // segged successfully
+}
+
+bool seg_id_field2_cb (VBlockP vb, ContextP ctx, STRp(id), uint32_t repeat)
+{
+    seg_id_field2 (vb, ctx, STRa(id), id_len);
     return true; // segged successfully
 }
 

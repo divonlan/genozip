@@ -661,7 +661,7 @@ void ctx_clone (VBlockP vb)
 static void ctx_initialize_ctx (ContextP ctx, Did did_i, DictId dict_id, Did *dict_id_to_did_i_map, STRp(tag_name))
 {
     ctx->did_i       = did_i;
-    ctx->st_did_i    = DID_NONE;
+    ctx->st_did_i    = DID_NONE; // this is other_did_i in PIZ
     ctx->dict_id     = dict_id;
     ctx->last_line_i = LAST_LINE_I_INIT;
     ctx->tag_i       = -1;
