@@ -26,9 +26,9 @@ works that remain separable from Genozip and Derivative Works thereof.
 
 "Your Commercial Data" shall mean data which You (the Legal Entity exercising permissions granted
 by this License) obtained with intention of using it in the development process of a product and/or
-in the process or provisioning of any kind of service (including also clinical, diagnostic, DNA or RNA
-sequencing, bioinformatics and cloud services, but excluding education services) for which You get
-paid. Data derived from Your Commercial Data is also Your Commerical Data.
+in the process or provisioning of any kind of service (including also clinical, diagnostic, DNA or
+RNA sequencing, bioinformatics and cloud services, but excluding education services) for which You
+get paid. Data derived from Your Commercial Data is also Your Commerical Data.
 
 "Your Computers" shall mean computers You own and/or cloud accounts You own at 3rd party cloud
 providers.
@@ -144,5 +144,5 @@ ABOVE STATED REMEDY FAILS OF ITS ESSENTIAL PURPOSE.
 
 END OF TERMS AND CONDITIONS
 
-Genozip license version: 14.0.17
+Genozip license version: 14.0.18
 
