@@ -27,6 +27,8 @@ The compression is <a href="https://genozip.com/losslessness">lossless</a> - the
 <br>
 <b>Genozip</b> is free for certain academic research use. See <a href="https://genozip.com/get-genozip">eligibility and other licensing options</a> or contact <a href="mailto://sales@genozip.com">sales@genozip.com</a> <br>
 <br>
-Usage is subject to terms and conditions. See our <a href="https://genozip.com/license">license</a> for details.<br>
+<b>IMPORTANT</b>: Genozip is a commercial product, <b>NOT AN OPEN SOURCE</b> product - we provide our source code to assure users that they will always have access to the code needed to decompress their files. <b>HOWEVER</b>, reverse engineering, code modifications, derivative works or inclusion of the code or parts thereof into other software packages is strictly forbidden by the <a href="https://genozip.com/license">license</a> (see <a href="https://genozip.com/licensing-faq">FAQ</a>).<br>
+<br>
+Attributions for 3rd party source components: <a href="https://genozip.com/attributions">attributions</a><br>
 <br>
 <b>THIS SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE AUTHORS, COPYRIGHT HOLDERS OR DISTRIBUTORS OF THIS SOFTWARE BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.</b><br>
