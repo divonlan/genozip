@@ -89,7 +89,7 @@ HTSCODECS_SRC = htscodecs/rANS_static4x16pr.c htscodecs/rle.c htscodecs/pack.c h
 DEFLATE_SRCS = libdeflate/deflate_compress.c libdeflate/deflate_decompress.c libdeflate/utils.c libdeflate/x86_cpu_features.c \
              libdeflate/arm_cpu_features.c libdeflate/crc32.c libdeflate/adler32.c
 
-CONDA_DEVS = Makefile .gitignore 
+CONDA_DEVS = Makefile ../.gitignore 
 
 CONDA_DOCS = ../LICENSE.txt ../AUTHORS ../README.md
 
