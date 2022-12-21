@@ -223,6 +223,7 @@ endif # ugly hack to avoid conda failure due to bash issues in dict_id_gen.sh - 
 genozip$(EXE): dict_id_gen.h $(OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $(OBJS) $(CFLAGS) $(LDFLAGS)
+	@ln $@ ../$@
  
 genozip-debug$(EXE): dict_id_gen.h $(DEBUG_OBJS)
 	@echo Linking $@
@@ -236,6 +237,7 @@ genounzip$(EXE) genocat$(EXE) genols$(EXE): genozip$(EXE)
 	@echo Hard linking $@
 	@rm -f $@ 
 	@ln $^ $@
+	@ln $@ ../$@
 
 genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE): genozip-debug$(EXE)
 	@echo Hard linking $@
@@ -257,7 +259,7 @@ genounzip-opt$(EXE) genocat-opt$(EXE) genols-opt$(EXE): genozip-opt$(EXE)
 install: genozip$(EXE)
 	@echo Installing in $(PREFIX)/bin
 	@if ( test ! -d $(PREFIX)/bin ) ; then mkdir -p $(PREFIX)/bin ; fi
-	@cp -f genozip$(EXE) $(PREFIX)/bin/genozip$(EXE)
+	@cp -f src/genozip$(EXE) $(PREFIX)/bin/genozip$(EXE)
 ifneq ($(OS),Windows_NT)
 	@chmod a+x $(PREFIX)/bin/genozip$(EXE)
 endif

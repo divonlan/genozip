@@ -1,3 +1,3 @@
 #!/bin/bash 
 
-make install
+make -C src install
