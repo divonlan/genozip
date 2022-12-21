@@ -342,7 +342,7 @@ decrement-version:
 	@echo Creating github tag genozip-$(version) and archive
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@git push > /dev/null
-	@git tag genozip-$(version) > /dev/null
+	@(git tag genozip-$(version) > /dev/null ; exit 0) # ignore errors if already exists (due to re-run of make)
 	@git push origin genozip-$(version) > /dev/null
 	@curl https://github.com/divonlan/genozip/archive/genozip-$(version).tar.gz --ssl-no-revoke --silent --location -o $@ > /dev/null
 	@echo GITHUB: go to here: https://github.com/divonlan/genozip/releases/new
