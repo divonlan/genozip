@@ -36,7 +36,6 @@ notes.txt
 to do.txt
 junk*
 meta.yaml
-src/windows/LICENSE.for-installer.txt
 src/mac/darwinpkg/Library/genozip/*
 !src/mac/darwinpkg/Library/genozip
 src/mac/Resources/*
@@ -70,10 +69,7 @@ src/mac/scripts/*
 *bug*
 *stackdump
 .altool_app_specifc_password
-src/mac/.mac_username
-src/mac/.mac_ip_address
-src/mac/.remote_mac_timestamp
-src/mac/.from_remote_timestamp
+src/mac/.[a-z_]*
 *.swp
 .notarize.out
 src/mac/*.pkg
