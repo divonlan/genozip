@@ -21,6 +21,7 @@ launch.json
 *.new
 windows
 genozip-linux-x86_64
+genozip-installer.ifp.save
 geno*-prod
 genozip
 genounzip*
