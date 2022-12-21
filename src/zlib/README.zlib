@@ -1,0 +1,12 @@
+Note from the author of genozip regarding the zlib directory:
+
+The files contained in this directory are modified files which are part of zlib project that can be found here: https://github.com/madler/zlib. 
+Use of these files is governed by the unmodified license of which can be found in the file zlib.h.
+
+The modifications are as follows:
+1) remomed files that are not needed by this project
+2) change z_stream.total_in from uLong to z_off64_t
+3) added a counter z_stream.total_ever_in - counting the total number of bytes in, even across inflateReset
+   that occurs when gzip blocks are deflated separately and concatenated, as in the BGZF format
+4) added the function gzconsumed64
+5) replaced adler32 and crc32 with calls to libdeflate

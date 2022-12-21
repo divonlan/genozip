@@ -6,7 +6,7 @@
             "label": "Make Optimized",
             "command": "make",
             "args": [
-                "-j"
+                "-j", "-Csrc"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"
@@ -27,7 +27,7 @@
             "label": "Make Debug",
             "command": "make.exe",
             "args": [
-                "-j", "debug"
+                "-j", "debug", "-Csrc"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"
@@ -48,7 +48,7 @@
             "label": "Make Debug slowly",
             "command": "make.exe",
             "args": [
-                "debug"
+                "debug", "-Csrc"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"
@@ -69,7 +69,7 @@
             "label": "Make Opt - compiler debug info and optimizations",
             "command": "make",
             "args": [
-                "opt", "-j"
+                "opt", "-j", "-Csrc"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"
@@ -90,7 +90,7 @@
             "label": "Make Linux Optimized",
             "command": "c:\\Windows\\system32\\bash.exe",
             "args": [
-                "/home/divon/genozip/wsl-make.sh"
+                "/home/divon/genozip/src/wsl-make.sh"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"
@@ -152,52 +152,10 @@
         },
         {
             "type": "shell",
-            "label": "Test Docs",
-            "command": "make",
-            "args": [
-                "test-docs", "-j"
-            ],
-            "options": {
-                "cwd": "${workspaceRoot}"
-            },
-            "problemMatcher": [
-                "$gcc"
-            ],
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "presentation": {
-                "clear": true
-            }
-        },
-        {
-            "type": "shell",
-            "label": "Publish Docs",
-            "command": "make",
-            "args": [
-                "publish-docs", "-j"
-            ],
-            "options": {
-                "cwd": "${workspaceRoot}"
-            },
-            "problemMatcher": [
-                "$gcc"
-            ],
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "presentation": {
-                "clear": true
-            }
-        },
-        {
-            "type": "shell",
             "label": "Clean All",
             "command": "make.exe",
             "args": [
-                "-j", "clean"
+                "-j", "clean", "-Csrc"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"
@@ -218,7 +176,7 @@
             "label": "Clean Debug",
             "command": "make.exe",
             "args": [
-                "-j", "clean-debug"
+                "-j", "clean-debug", "-Csrc"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"
@@ -239,28 +197,7 @@
             "label": "Clean Optimized",
             "command": "make.exe",
             "args": [
-                "-j", "clean-optimized"
-            ],
-            "options": {
-                "cwd": "${workspaceRoot}"
-            },
-            "problemMatcher": [
-                "$gcc"
-            ],
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "presentation": {
-                "clear": true
-            }
-        },
-        {
-            "type": "shell",
-            "label": "Clean Docs",
-            "command": "make.exe",
-            "args": [
-                "-j", "clean-docs"
+                "-j", "clean-optimized", "-Csrc"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"
@@ -279,7 +216,7 @@
         {
             "type": "shell",
             "label": "Test",
-            "command": "./test.sh",
+            "command": "src/test.sh",
             "args": [
                 "1", "-@3"
             ],
@@ -302,7 +239,7 @@
             "label": "Distribution - conda + windows installer + linux binaries",
             "command": "make.exe",
             "args": [
-                "distribution"
+                "distribution", "-Csrc"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"
@@ -323,7 +260,7 @@
             "label": "Distribution-Maintenance - to be run from genozip-prod",
             "command": "make.exe",
             "args": [
-                "distribution-maintenance"
+                "distribution-maintenance", "-Csrc"
             ],
             "options": {
                 "cwd": "${workspaceRoot}"

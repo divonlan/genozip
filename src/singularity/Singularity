@@ -1,0 +1,45 @@
+Bootstrap:docker  
+From:ubuntu
+
+%labels
+    Maintainer divonlan
+
+%help
+Help me. I'm in the container.
+
+%environment
+    PATH=/code:${PATH}
+    export PATH
+
+%post
+    #echo "Installing genozip into container..."
+    
+%runscript
+    exec /code/genozip "$@"
+
+# apps
+
+%apprun genozip
+    exec /code/genozip "$@"
+
+%apprun genounzip
+    exec /code/genounzip "$@"
+
+%apprun genocat
+    exec /code/genocat "$@"
+
+%apprun genols
+    exec /code/genols "$@"
+
+%apphelp genozip
+    This is the help for genozip app.
+
+%apphelp genounzip
+    This is the help for genounzip app.
+
+%apphelp genocat
+    This is the help for genocat app.
+
+%apphelp genols
+    This is the help for genols app.
+

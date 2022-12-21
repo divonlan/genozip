@@ -1,0 +1,9 @@
+Note from the author of Genozip regarding the bzlib directory:
+
+The files contained in this directory are modified files which are part of bzip2/libbzip2 version 1.0.8. Use of these
+files is governed by the unmodified license of bzip2/libbzip2 included in this directory.
+
+The modifications are as follows:
+1) removal of files that are not needed by Genozip
+2) optimization of the code - 64 bit integers, increased block sizes etc
+3) additional APIs needed by Genozip

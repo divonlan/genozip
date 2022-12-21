@@ -1,0 +1,73 @@
+# ------------------------------------------------------------------
+#   meta.template.yaml
+#   Copyright (C) 2020-2022 Genozip Limited
+#   Please see terms and conditions in the file LICENSE.txt
+#
+# See: https://docs.conda.io/projects/conda-build/en/latest/resources/build-scripts.html
+# See: https://docs.ligo.org/lscsoft/conda/packaging/
+# Note: VERSION and SHA256 are replaced by Makefile
+{% set version = "__VERSION__" %}
+#
+# Example of building Windows with gcc: https://github.com/conda-forge/r-dplyr-feedstock/tree/master/recipe
+{% set posix = 'm2-' if win else '' %}
+{% set native = 'm2w64-' if win else '' %}
+
+package:
+  name: genozip
+  version: {{ version }}
+
+source:
+  url: https://github.com/divonlan/genozip/archive/genozip-{{ version }}.tar.gz
+  sha256: __SHA256__
+ 
+build:
+# Windows builds & tests successfully, but then the test fails in Appveyor - it seems the executable is not loading (maybe missing gcc libraries? just a hunch)
+  skip: True  # [win]
+  number: 0
+
+requirements:
+  build:    
+# Example of a C project: https://github.com/conda-forge/bzip2-feedstock/tree/b49b6b5ecc0035d2e947a4e3f720a3f24519d19e/recipe
+    - {{ compiler('c') }}        # [not win]
+    - {{ compiler('m2w64_c') }}  # [win]
+    - {{posix}}make
+    - {{posix}}sed               # [win]
+    - {{posix}}coreutils         # [win]
+  host:
+    - {{native}}gcc-libs         # [win]
+  run:
+    - {{native}}gcc-libs         # [win]
+    - curl
+
+test:
+#  source_files: 
+#    - test-file.vcf
+
+  commands:
+    {% set genozip_executables = [
+      "genozip",
+      "genounzip",
+      "genocat",
+      "genols"
+    ] %}
+#    {% for executable in genozip_executables %}
+#    - genozip --help
+#    {% endfor %}
+#    - which genozip.exe  # [win]
+    - genozip --help
+
+about:
+  home: https://genozip.com
+  dev_url: https://github.com/divonlan/genozip
+  doc_url: https://genozip.com
+  license: CUSTOM
+  license_family: OTHER
+  license_file: 
+    - LICENSE.txt
+  summary: Compressor for genomic files (FASTQ, BAM, VCF, FASTA and more), up to 5x better than gzip and faster too
+  description: |
+__README_MD__
+
+extra:
+  recipe-maintainers:
+    - divonlan
