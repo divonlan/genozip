@@ -269,7 +269,7 @@ genounzip-opt$(EXE) genocat-opt$(EXE) genols-opt$(EXE): genozip-opt$(EXE)
 install: genozip$(EXE)
 	@echo Installing in $(PREFIX)/bin
 	@if ( test ! -d $(PREFIX)/bin ) ; then mkdir -p $(PREFIX)/bin ; fi
-	@cp -f src/genozip$(EXE) $(PREFIX)/bin/genozip$(EXE)
+	@cp -f genozip$(EXE) $(PREFIX)/bin/genozip$(EXE)
 ifneq ($(OS),Windows_NT)
 	@chmod a+x $(PREFIX)/bin/genozip$(EXE)
 endif
