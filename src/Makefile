@@ -260,7 +260,7 @@ genounzip-opt$(EXE) genocat-opt$(EXE) genols-opt$(EXE): genozip-opt$(EXE)
 	@ln -f $@ ../$@
 
 ../LICENSE.txt: text_license.h version.h # not dependent on genozip.exe, so we don't generate it every compilation
-	@make -j genozip$(EXE) # recursive call to make genozip.exe with the latest version
+	@$(MAKE) -j genozip$(EXE) # recursive call to make genozip.exe with the latest version
 	@echo Generating $@
 	@./genozip$(EXE) --license=100 --force > $@
 	@rm -f $(OBJDIR)/arch.o
@@ -315,12 +315,12 @@ clean: clean-installers clean-test
 	@rm -R $(OBJDIR)
 	@mkdir $(OBJDIR) $(addprefix $(OBJDIR)/, $(SRC_DIRS))
 
-.PHONY: clean clean-debug clean-optimized clean-installers clean-distribution git-pull macos mac/.remote_mac_timestamp delete-arch testfiles test-backup genozip-linux-x86_64/clean genozip-prod genozip-prod.exe dict_id_gen$(EXE) push-build increment-version $(INSTALLERS)/LICENSE.html rm_arch_o
+.PHONY: clean clean-debug clean-optimized clean-installers clean-distribution git-pull macos mac/.remote_mac_timestamp delete-arch testfiles test-backup genozip-linux-x86_64/clean genozip-prod genozip-prod.exe dict_id_gen$(EXE) push-build increment-version $(INSTALLERS)/LICENSE.html refresh_arch_o
 
 # builds prod for local OS
 genozip-prod$(EXE): 
 	@echo "building prod"
-	@(cd $(PROD_SRC) ; git stash ; git pull ; rm -Rf $(OBJDIR) ; make -j clean ; touch dict_id_gen.h ; make -j)
+	@(cd $(PROD_SRC) ; git stash ; git pull ; rm -Rf $(OBJDIR) ; $(MAKE) -j clean ; touch dict_id_gen.h ; $(MAKE) -j)
 	@cp $(PROD_SRC)/genozip$(EXE) $(DEV_DIR)/genozip-prod$(EXE)
 	@cp $(PROD_SRC)/genozip$(EXE) $(RELEASES)/genozip-$(version)$(EXE)
 	@cp $(PROD_SRC)/genounzip$(EXE) $(DEV_DIR)/genounzip-prod$(EXE)
@@ -408,8 +408,9 @@ windows/LICENSE.for-installer.txt: genozip$(EXE) version.h
 	@(mkdir windows >& /dev/null ; exit 0)
 	@./genozip$(EXE) --license=60 --force > $@
 
-rm_arch_o : 
-	@(rm -f $(OBJDIR)/arch.o >& /dev/null ; exit 0) # remove this arch.o which contains DISTRIBUTION
+refresh_arch_o : 
+	@if [ -f $(OBJDIR)/arch.o ]; then rm -f $(OBJDIR)/arch.o >& /dev/null ; fi # remove this arch.o which contains DISTRIBUTION
+	@$(MAKE) $(OBJDIR)/arch.o
 
 WINDOWS_INSTALLER_OBJS = windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe windows/LICENSE.for-installer.txt ../LICENSE.txt
 
@@ -417,7 +418,7 @@ $(INSTALLERS)/LICENSE.html: genozip$(EXE)
 	@./genozip$(EXE) --license=-5000 --force > $@
 
 # this must be run ONLY has part of "make distribution" or else versions will be out of sync
-$(INSTALLERS)/genozip-installer.exe: rm_arch_o $(WINDOWS_INSTALLER_OBJS) 
+$(INSTALLERS)/genozip-installer.exe: refresh_arch_o $(WINDOWS_INSTALLER_OBJS) 
 	@(mkdir windows >& /dev/null ; exit 0)
 	@echo 'Creating Windows installer'
 	@echo 'WINDOWS: Using the UI:'
@@ -429,7 +430,7 @@ $(INSTALLERS)/genozip-installer.exe: rm_arch_o $(WINDOWS_INSTALLER_OBJS)
 	@echo '  (5) Exit the UI (close the window)'
 	@if [ `cd ..; basename ${PWD}` != genozip ] ; then cp $(WINDOWS_INSTALLER_OBJS) $(DEV_SRC)/windows ; cp $(DEV_SRC)/genozip-installer.ifp $(DEV_SRC)/genozip-installer.ifp.save ; fi # so this works for genozip-prod too - because InstallForge uses absolute paths 
 	@($(UTILS)/InstallForge/InstallForge.exe ; exit 0)
-	@rm -f $(OBJDIR)/arch.o # remove this arch.o which contains DISTRIBUTION
+	@if [ -f $(OBJDIR)/arch.o ]; then rm -f $(OBJDIR)/arch.o >& /dev/null ; fi # remove this arch.o which contains DISTRIBUTION
 	@if [ `cd ..; basename ${PWD}` != genozip ] ; then mv $(DEV_SRC)/genozip-installer.ifp . ; mv $(DEV_SRC)/genozip-installer.ifp.save $(DEV_SRC)/genozip-installer.ifp ; fi # we always edit the version in the genozip dir
 #	@(C:\\\\Program\\ Files\\ \\(x86\\)\\\\solicus\\\\InstallForge\\\\bin\\\\ifbuilderenvx86.exe ; exit 0)
 
