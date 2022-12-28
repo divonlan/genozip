@@ -25,12 +25,14 @@ typedef enum __attribute__ ((__packed__)) { SQT_UNKNOWN, SQT_NUKE, SQT_AMINO, SQ
 typedef enum __attribute__ ((__packed__)) { PL_mux_by_DP_TEST, PL_mux_by_DP_NO, PL_mux_by_DP_YES } PLMuxByDP;
 
 typedef enum __attribute__ ((__packed__)) { ms_NONE, ms_BIOBAMBAM, ms_MINIMAP2 } msType; // type of SAM ms:i field 
+#define ms_type_NAME { "None", "biobambam", "minimap2"}
 
 typedef enum __attribute__ ((__packed__)) { DP_DEFAULT, by_AD, by_SDP } FormatDPMethod;
 
 typedef enum __attribute__ ((__packed__)) { L3_UNKNOWN, L3_EMPTY, L3_COPY_DESC, L3_QF, NUM_L3s } FastqLine3Type;
 
 typedef enum __attribute__ ((__packed__)) { XG_S_UNKNOWN, XG_WITHOUT_S, XG_WITH_S } XgIncSType;
+#define XG_INC_S_NAME { "Unknown", "without-S", "with-S"}
 
 // SamMapperType is part of the file format and values should not be changed (new ones can be added)
 typedef enum __attribute__ ((__packed__)) { MP_UNKNOWN, MP_BSBOLT,             MP_bwa,   MP_BWA,   MP_MINIMAP2,   MP_STAR,   MP_BOWTIE2,   MP_DRAGEN,    MP_GEM3,         MP_GEM2SAM,     MP_BISMARK,   MP_BSSEEKER2,     MP_WINNOWMAP,   MP_BAZ2BAM,    MP_BBMAP,   MP_TMAP,   MP_HISAT2,   MP_BOWTIE,   MP_NOVOALIGN,   MP_RAZER3,    MP_BLASR,   MP_NGMLR,           MP_DELVE,   MP_TOPHAT,   MP_CPU,  MP_LONGRANGER,          MP_CLC,             NUM_MAPPERS } SamMapperType;

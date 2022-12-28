@@ -280,8 +280,7 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
     // finish dumping reference and/or refhash to cache before destroying it...
     ref_create_cache_join (gref, true);
     ref_create_cache_join (prim_ref, true);
-
-    refhash_create_cache_join(false);
+    refhash_create_cache_join (false);
 
     // On Windows and Mac that usually have limited memory, if ZIP consumed more than 2GB, free memory before PIZ. 
     // Note: on Windows, freeing memory takes considerable time.
@@ -378,11 +377,6 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
                                 argv[argc++] = ref_get_filename(gref); }
         argv[argc] = NULL;
                                 // ↑↑↑ Don't forget to add above too ↑↑↑
-
-        // wait for cache write to complete
-        ref_create_cache_join (gref, false);
-        ref_create_cache_join (prim_ref, false);
-        refhash_create_cache_join(false);
 
         if (flag.show_time && !flag.show_time[0]) { // show-time without the optional parameter 
             profiler_add (evb);

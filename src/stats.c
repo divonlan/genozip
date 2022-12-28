@@ -351,6 +351,16 @@ static void stats_output_file_metadata (void)
             FEATURE (segconf.is_paired, "Feature: Paired-End", "Paired-End");
             REPORT_KRAKEN;
 
+            if (segconf.sam_ms_type && segconf.has[OPTION_ms_i]) {
+                rom names[] = ms_type_NAME;
+                bufprintf (evb, &features, "ms:i_type=%s;", names[segconf.sam_ms_type]);
+            }
+
+            if (segconf.sam_XG_inc_S) {
+                rom names[] = XG_INC_S_NAME;
+                bufprintf (evb, &features, "XG_include_S=%s;", names[segconf.sam_XG_inc_S]);
+            }
+
             if (z_file->num_lines) {
                 double mate_line_pc  = 100.0 * (double)z_file->mate_line_count  / (double)z_file->num_lines;
                 double saggy_near_pc = 100.0 * (double)z_file->saggy_near_count / (double)z_file->num_lines;

@@ -792,7 +792,7 @@ void str_trim (STRe(str))
 
     if (i) {
         *str_len -= i;
-        memmove (str, str+i, *str_len);
+        memmove (str, str+i, *str_len + 1); // +1 to move \0 as well
     }
 
     // remove trailing whitespace

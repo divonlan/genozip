@@ -14,7 +14,7 @@ ulimit -c unlimited # enable core dumps
 
 TESTDIR=private/test
 OUTDIR=$TESTDIR/tmp
-REFDIR=../../genozip/src/data
+REFDIR=../genozip/data
 
 cleanup() { 
     rm -fR $OUTDIR/* $TESTDIR/*.bad $TESTDIR/*.rejects.* 
@@ -823,7 +823,7 @@ batch_prod_compatability()
 {
     if [ "$i_am_prod" == "1" ]; then return; fi 
 
-    if [ ! -d ../../genozip-prod ]; then return; fi
+    if [ ! -d ../genozip-prod ]; then return; fi
     
     save_genozip=$genozip
     genozip=$genozip_prod -m
@@ -1398,7 +1398,7 @@ fi
 # test prod (for a maintainence release)
 is_prod=`echo $1|grep prod`
 if [ -n "$is_prod" ]; then 
-    dir=../../genozip-prod/src
+    dir=../genozip-prod/src
     shift
 fi
 

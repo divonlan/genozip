@@ -29,8 +29,8 @@ void sam_seg_HISAT2_Zs_Z (VBlockSAMP vb, STRp(zs), unsigned add_bytes)
         .drop_final_repsep = true,
         .repsep      = {','},
         .items       = { { .dict_id={.id="Z0s" }, .separator = {'|'} },
-                            { .dict_id={.id="Z1s" }, .separator = {'|'} },
-                            { .dict_id={.id="Z2s" },                    } }
+                         { .dict_id={.id="Z1s" }, .separator = {'|'} },
+                         { .dict_id={.id="Z2s" },                    } }
     };
 
     seg_array_of_struct (VB, CTX(OPTION_Zs_Z), con, STRa(zs), NULL, add_bytes);

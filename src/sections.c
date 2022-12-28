@@ -47,6 +47,8 @@ void sections_add_to_list (VBlockP vb, ConstSectionHeaderP header)
     SectionType st = header->section_type;
     DictId dict_id = DICT_ID_NONE;
 
+    ASSERT (st >= SEC_NONE && st < NUM_SEC_TYPES, "sec_type=%u out of range [-1,%u]", st, NUM_SEC_TYPES-1);
+
     if (IS_DICTED_SEC(st)) {
         switch (st) {
             case SEC_DICT   : dict_id = ((SectionHeaderDictionary *)header)->dict_id; break;

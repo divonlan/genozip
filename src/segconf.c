@@ -17,6 +17,7 @@
 #include "codec.h"
 #include "arch.h"
 #include "bgzf.h"
+#include "tip.h"
 
 SegConf segconf = {}; // system-wide global
 
@@ -96,9 +97,10 @@ static void segconf_set_vb_size (ConstVBlockP vb, uint64_t curr_vb_size)
             if (CTX(did_i)->b250.len || CTX(did_i)->local.len)
                 num_used_contexts++;
             
+        uint32_t vcf_samples = TXT_DT(VCF) ? vcf_header_get_num_samples() : 0;
+        
         // formula - 1MB for each contexts, 128K for each VCF sample
-        uint64_t bytes = ((uint64_t)num_used_contexts << 20) + 
-                            (vcf_header_get_num_samples() << 17 /* 0 if not vcf */);
+        uint64_t bytes = ((uint64_t)num_used_contexts << 20) + (vcf_samples << 17);
 
         uint64_t min_memory = !segconf.is_sorted         ? VBLOCK_MEMORY_MIN_DYN
                             : !segconf.is_long_reads     ? VBLOCK_MEMORY_MIN_DYN
@@ -115,8 +117,15 @@ static void segconf_set_vb_size (ConstVBlockP vb, uint64_t curr_vb_size)
             segconf.vb_size = MIN_(segconf.vb_size, est_seggable_size * 1.5);
 
         // for small files - reduce VB size, to take advantage of all cores (subject to a minimum VB size)
-        if (!flag.best && est_seggable_size && global_max_threads > 1)
-            segconf.vb_size = MIN_(segconf.vb_size, MAX_(VBLOCK_MEMORY_MIN_SMALL, est_seggable_size / global_max_threads));
+        if (!flag.best && est_seggable_size && global_max_threads > 1) {
+            uint64_t new_vb_size = MAX_(VBLOCK_MEMORY_MIN_SMALL, est_seggable_size / global_max_threads);
+
+            // in case of drastic reduction of large-sample VCF file, provide tip
+            if (vcf_samples > 10 && new_vb_size < segconf.vb_size / 2) 
+                TIP0 ("Tip: using --best can significantly improve compression for this particular file");
+
+            segconf.vb_size = MIN_(segconf.vb_size, new_vb_size);
+        }
 
         // on Windows (inc. WSL) and Mac - which tend to have less memory in typical configurations, warn if we need a lot
         // (note: if user sets --vblock, we won't get here)

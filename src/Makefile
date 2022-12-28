@@ -49,7 +49,13 @@ else
 
 endif 
 
-DEV_SRC = ../../genozip/src
+DEV_DIR  = ../../genozip
+DEV_SRC  = $(DEV_DIR)/src
+TEST_DIR = $(DEV_DIR)/private/test
+SCRIPTS  = $(DEV_DIR)/private/scripts
+UTILS    = $(DEV_DIR)/private/utils
+RELEASES = $(DEV_DIR)/private/releases
+DATA     = $(DEV_DIR)/data
 PROD_SRC = ../../genozip-prod/src
 
 SRC_DIRS = zlib bzlib lzma bsc libdeflate htscodecs compatibility
@@ -223,31 +229,35 @@ endif # ugly hack to avoid conda failure due to bash issues in dict_id_gen.sh - 
 genozip$(EXE): dict_id_gen.h $(OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $(OBJS) $(CFLAGS) $(LDFLAGS)
-	@ln $@ ../$@
+	@ln -f $@ ../$@
  
 genozip-debug$(EXE): dict_id_gen.h $(DEBUG_OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $(DEBUG_OBJS) $(CFLAGS) $(LDFLAGS) 
+	@ln -f $@ ../$@
 
 genozip-opt$(EXE): dict_id_gen.h $(OPT_OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $(OPT_OBJS) $(CFLAGS) $(LDFLAGS)
+	@ln -f $@ ../$@
 
 genounzip$(EXE) genocat$(EXE) genols$(EXE): genozip$(EXE)
 	@echo Hard linking $@
 	@rm -f $@ 
-	@ln $^ $@
-	@ln $@ ../$@
+	@ln -f $^ $@
+	@ln -f $@ ../$@
 
 genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE): genozip-debug$(EXE)
 	@echo Hard linking $@
 	@rm -f $@ 
-	@ln $^ $@
+	@ln -f $^ $@
+	@ln -f $@ ../$@
 
 genounzip-opt$(EXE) genocat-opt$(EXE) genols-opt$(EXE): genozip-opt$(EXE)
 	@echo Hard linking $@
 	@rm -f $@ 
-	@ln $^ $@
+	@ln -f $^ $@
+	@ln -f $@ ../$@
 
 ../LICENSE.txt: text_license.h version.h # not dependent on genozip.exe, so we don't generate it every compilation
 	@make -j genozip$(EXE) # recursive call to make genozip.exe with the latest version
@@ -296,12 +306,12 @@ clean-opt:
 	@rm -f $(OPT_OBJS) $(EXECUTABLES) $(OPT_EXECUTABLES)/*.opt-o
 
 clean-test:
-	@rm -f private/test/*.good private/test/*.bad private/test/*.local private/test/*.b250 private/test/tmp/* private/test/*.DEPN private/test/back-compat/*/*.bad
+	@rm -f $(TEST_DIR)/*.good $(TEST_DIR)/*.bad $(TEST_DIR)/*.local $(TEST_DIR)/*.b250 $(TEST_DIR)/tmp/* $(TEST_DIR)/*.DEPN $(TEST_DIR)/back-compat/*/*.bad
 
 clean: clean-installers clean-test
 	@echo Cleaning up
 	@rm -f $(DEPS) $(filter-out LICENSE.txt,$(WINDOWS_INSTALLER_OBJS)) *.d .archive.tar.gz *.stackdump $(EXECUTABLES) $(OPT_EXECUTABLES) $(DEBUG_EXECUTABLES) 
-	@rm -f *.S *.good *.bad data/*.good data/*.bad *.local genozip.threads-log.* *.b250 
+	@rm -f *.S *.good *.bad $(DATA)/*.good $(DATA)/*.bad *.local genozip.threads-log.* *.b250 
 	@rm -R $(OBJDIR)
 	@mkdir $(OBJDIR) $(addprefix $(OBJDIR)/, $(SRC_DIRS))
 
@@ -311,10 +321,10 @@ clean: clean-installers clean-test
 genozip-prod$(EXE): 
 	@echo "building prod"
 	@(cd $(PROD_SRC) ; git stash ; git pull ; rm -Rf $(OBJDIR) ; make -j clean ; touch dict_id_gen.h ; make -j)
-	@cp $(PROD_SRC)/genozip$(EXE) $(DEV_SRC)/genozip-prod$(EXE)
-	@cp $(PROD_SRC)/genozip$(EXE) $(DEV_SRC)/private/releases/genozip-$(version)$(EXE)
-	@cp $(PROD_SRC)/genounzip$(EXE) $(DEV_SRC)/genounzip-prod$(EXE)
-	@cp $(PROD_SRC)/genocat$(EXE) $(DEV_SRC)/genocat-prod$(EXE)
+	@cp $(PROD_SRC)/genozip$(EXE) $(DEV_DIR)/genozip-prod$(EXE)
+	@cp $(PROD_SRC)/genozip$(EXE) $(RELEASES)/genozip-$(version)$(EXE)
+	@cp $(PROD_SRC)/genounzip$(EXE) $(DEV_DIR)/genounzip-prod$(EXE)
+	@cp $(PROD_SRC)/genocat$(EXE) $(DEV_DIR)/genocat-prod$(EXE)
 
 # currently, I build for conda from my Windows machine so I don't bother supporting other platforms
 ifeq ($(OS),Windows_NT)
@@ -331,7 +341,7 @@ genozip-prod:
 #increment-version: $(C_SRCS) $(CONDA_COMPATIBILITY_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(CONDA_INCS) # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
 increment-version: # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
 	@echo "Incrementing version.h"
-	@bash private/scripts/increment-version.sh
+	@bash $(SCRIPTS)/increment-version.sh
 
 decrement-version:
 	@echo "Do manually:"
@@ -418,7 +428,7 @@ $(INSTALLERS)/genozip-installer.exe: rm_arch_o $(WINDOWS_INSTALLER_OBJS)
 	@echo '  (4) Optionally: Click Yes, and copy the resulting files to releases/* and also c:\bin'	
 	@echo '  (5) Exit the UI (close the window)'
 	@if [ `cd ..; basename ${PWD}` != genozip ] ; then cp $(WINDOWS_INSTALLER_OBJS) $(DEV_SRC)/windows ; cp $(DEV_SRC)/genozip-installer.ifp $(DEV_SRC)/genozip-installer.ifp.save ; fi # so this works for genozip-prod too - because InstallForge uses absolute paths 
-	@(private/utils/InstallForge/InstallForge.exe ; exit 0)
+	@($(UTILS)/InstallForge/InstallForge.exe ; exit 0)
 	@rm -f $(OBJDIR)/arch.o # remove this arch.o which contains DISTRIBUTION
 	@if [ `cd ..; basename ${PWD}` != genozip ] ; then mv $(DEV_SRC)/genozip-installer.ifp . ; mv $(DEV_SRC)/genozip-installer.ifp.save $(DEV_SRC)/genozip-installer.ifp ; fi # we always edit the version in the genozip dir
 #	@(C:\\\\Program\\ Files\\ \\(x86\\)\\\\solicus\\\\InstallForge\\\\bin\\\\ifbuilderenvx86.exe ; exit 0)

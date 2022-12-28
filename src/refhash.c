@@ -70,7 +70,7 @@ const char complement[256] =  { ['A']='T', ['C']='G', ['G']='C', ['T']='A',  // 
                                 [0 ...'@']=4, ['B']=4, ['D'...'F']=4, ['U'...255]=0 };
 
 // cache stuff
-static ThreadId refhash_cache_creation_thread_id;
+static ThreadId refhash_cache_creation_thread_id = THREAD_ID_NONE;
 static VBlockP cache_create_vb = NULL;
 
 // ------------------------------------------------------
@@ -263,11 +263,11 @@ static void refhash_create_cache_in_background (void)
 
 void refhash_create_cache_join (bool free_mem)
 {
-    if (!cache_create_vb) return;
+    if (refhash_cache_creation_thread_id != THREAD_ID_NONE) // not already joined
+        threads_join (&refhash_cache_creation_thread_id);   
 
-    threads_join (&refhash_cache_creation_thread_id);   
-
-    if (free_mem) vb_destroy_vb (&cache_create_vb);
+    if (free_mem && cache_create_vb) 
+        vb_destroy_vb (&cache_create_vb);
 }
 
 // ----------------------------------------------------------------------------------------------

@@ -32,7 +32,8 @@
 #include "chrom.h"
 #include "crypt.h"
 
-static RefStruct refs[2] = { { .ctgs.name = "gref" }, { .ctgs.name = "prim_ref"} };
+static RefStruct refs[2] = { { .ctgs.name = "gref",     .ref_cache_creation_thread_id = THREAD_ID_NONE }, 
+                             { .ctgs.name = "prim_ref", .ref_cache_creation_thread_id = THREAD_ID_NONE } };
 Reference gref     = &refs[0]; // global reference 
 Reference prim_ref = &refs[1]; // chain file primary coordinates reference
 
@@ -611,11 +612,11 @@ void ref_create_cache_in_background (Reference ref)
 
 void ref_create_cache_join (Reference ref, bool free_mem)
 {
-    if (!ref->cache_create_vb) return;
+    if (ref->ref_cache_creation_thread_id != THREAD_ID_NONE) // not already joined
+        threads_join (&ref->ref_cache_creation_thread_id);
 
-    threads_join (&ref->ref_cache_creation_thread_id);
-
-    if (free_mem) vb_destroy_vb (&ref->cache_create_vb);
+    if (ref->cache_create_vb && free_mem) 
+        vb_destroy_vb (&ref->cache_create_vb);
 }
 
 
@@ -701,10 +702,10 @@ static void ref_copy_one_compressed_section (Reference ref, File *ref_file, cons
     header->chrom_word_index = BGEN32 (chrom_word_index);
 
     // some minor changes to the header...
-    header->vblock_i  = 0; // we don't belong to any VB and there is no encryption of external ref
+    header->vblock_i = 0; // we don't belong to any VB and there is no encryption of external ref
 
     // "manually" add the reference section to the section list - normally it is added in comp_compress()
-    sections_add_to_list (evb, (SectionHeaderP)&header);
+    sections_add_to_list (evb, (SectionHeaderP)header);
     sections_list_concat (evb); // must be called before disk_so_far is updated
 
     // Write header and body of the reference to z_file

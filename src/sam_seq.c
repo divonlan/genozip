@@ -811,27 +811,25 @@ static inline uint8_t *sam_reconstruct_SEQ_get_ref_bytemap (VBlockSAMP vb, Conte
     ASSERTNOTINUSE (vb->scratch);
     ARRAY_alloc (uint8_t, ref, num_bases, false, vb->scratch, vb, "scratch");
 
-#ifdef DEBUG
-    ASSERTNOTINUSE (vb->piz_is_set);
-    ARRAY_alloc (uint8_t, is_set, num_bases, false, vb->piz_is_set, vb, "codec_bufs[0]");
-#endif
+    if (flag.debug && !IS_REF_EXTERNAL) {
+        ASSERTNOTINUSE (vb->piz_is_set);
+        buf_alloc_exact (vb, vb->piz_is_set, num_bases, uint8_t, "codec_bufs[0]");
+    }
 
     int32_t idx = RR_IDX ((int32_t)(pos - vb->range->first_pos) - (predict_meth_call ? 2 : 0)); // two bases before pos in case needed for methylation 
 
     uint32_t num_ref_bases = MIN_(num_bases, range_len - idx);
     bits_base_to_byte (ref, &vb->range->ref, idx, num_ref_bases); // entries with is_set=0 will be garbage
-#ifdef DEBUG
-    if (!IS_REF_EXTERNAL)
-        bits_bit_to_byte (is_set, &vb->range->is_set, idx, num_ref_bases); 
-#endif
+
+    if (flag.debug && !IS_REF_EXTERNAL)
+        bits_bit_to_byte (B1ST8(vb->piz_is_set), &vb->range->is_set, idx, num_ref_bases); 
  
     // if ref_consumed goes beyond end of range, take the rest from the beginning of range (i.e. circling around)
     if (num_ref_bases < num_bases) {
         bits_base_to_byte (&ref[num_ref_bases], &vb->range->ref, 0, num_bases - num_ref_bases); 
-#ifdef DEBUG
-        if (!IS_REF_EXTERNAL)
-            bits_bit_to_byte (&is_set[num_ref_bases], &vb->range->is_set, 0, num_bases - num_ref_bases); 
-#endif
+
+        if (flag.debug && !IS_REF_EXTERNAL)
+            bits_bit_to_byte (B8(vb->piz_is_set, num_ref_bases), &vb->range->is_set, 0, num_bases - num_ref_bases); 
     }
     
     return ref + (predict_meth_call ? 2 : 0); // start of ref consumed
@@ -842,11 +840,9 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, ContextP bitmap_ctx, STRp(snip), b
 {
     START_TIMER;
 
-    #ifdef DEBUG
-        #define verify_is_set(base_i) ASSPIZ (IS_REF_EXTERNAL || *Bc(vb->piz_is_set, (base_i) + (predict_meth_call ? 2 : 0)) == 1, "Expecting POS=%u + base_i=%u to have is_set=1", (SamPosType)vb->contexts[SAM_POS].last_value.i, (base_i))
-    #else
-        #define verify_is_set(base_i) 
-    #endif
+    #define adjusted(base_i) ((base_i) + (predict_meth_call ? 2 : 0))
+    #define verify_is_set(base_i) ASSPIZ (!flag.debug || IS_REF_EXTERNAL || (adjusted(base_i) < vb->piz_is_set.len32 && *Bc(vb->piz_is_set, adjusted(base_i)) == 1), \
+                                          "Expecting POS=%u + base_i=%u to have is_set=1", (SamPosType)vb->contexts[SAM_POS].last_value.i, (base_i))
 
     VBlockSAMP vb = (VBlockSAMP)vb_;
 
@@ -1020,9 +1016,8 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, ContextP bitmap_ctx, STRp(snip), b
     nonref_ctx->next_local += ROUNDUP4 (nonref - nonref_start);
 
     buf_free (vb->scratch); // allocated by sam_reconstruct_SEQ_get_ref_bytemap
-#ifdef DEBUG
-    buf_free (vb->piz_is_set); 
-#endif
+
+    if (flag.debug) buf_free (vb->piz_is_set); 
 
 done:
     COPY_TIMER (sam_reconstruct_SEQ_vs_ref);
