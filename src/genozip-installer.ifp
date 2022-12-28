@@ -2,7 +2,7 @@
 ProjectFileVersion = "1.1"
 [General]
 Program name = Genozip
-Program version = 14.0.19
+Program version = 14.0.20
 Windows 2000 = 0
 Windows XP = 0
 Windows Server 2003 = 0
@@ -57,7 +57,7 @@ Time = 2
 PlaySound = 0
 Allow = 1
 [Build]
-File = C:\Users\divon\Projects\genozip\windows\genozip-installer.exe
+File = C:\Users\divon\Projects\genozip\src\windows\genozip-installer.exe
 [Updater]
 Allow = 0
 1 = <appname>
@@ -301,7 +301,7 @@ ESSENTIAL PURPOSE.\par
 \par
 END OF TERMS AND CONDITIONS\par
 \par
-Genozip license version: 14.0.19\par
+Genozip license version: 14.0.20\par
 \par
 \par
 }
