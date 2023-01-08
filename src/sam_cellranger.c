@@ -520,7 +520,8 @@ static bool sam_seg_TX_AN_gene (VBlockP vb, ContextP gene_ctx, STRp(gene), uint3
         seg_by_ctx (vb, STRa(AN_lookback_snip), gene_ctx, gene_len); 
 
     else 
-        gene_index = seg_by_ctx (vb, STRa(gene), gene_ctx, gene_len); // no lookback - seg normally
+        // no lookback - seg normally. Note: we can't seg_id_field2 because we are looking back by index
+        gene_index = seg_by_ctx (vb, STRa(gene), gene_ctx, gene_len); 
 
     seg_add_to_local_resizable (vb, lb_ctx, lookback, 0);
 
@@ -597,6 +598,7 @@ static bool sam_seg_TX_AN_pos (VBlockP vb, ContextP pos_ctx, STRp(pos), uint32_t
         
         seg_integer (vb, pos_ctx, this_pos, true, pos_len);
     }
+    
     lookback_insert (vb, lb_ctx->did_i, pos_ctx->did_i,      false, (int64_t)this_pos);
     lookback_insert (vb, lb_ctx->did_i, sam_pos_ctx->did_i,  false, (int64_t)this_sam_pos); 
     lookback_insert (vb, lb_ctx->did_i, negative_ctx->did_i, false, (int64_t)negative);   
@@ -652,6 +654,8 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_COPY_TEXTUAL_CIGAR)
     return NO_NEW_VALUE;
 }
 
+// eg: TX:Z:hg19_ENST00000456328,+1336,91M;hg19_ENST00000515242,+1329,91M;hg19_ENST00000518655,+1162,91M
+//     AN:Z:hg19_ENST00000456328,-1400,91M;hg19_ENST00000515242,-1393,91M;hg19_ENST00000518655,-1226,91M
 void sam_seg_TX_AN_Z (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, STRp(value), unsigned add_bytes)
 {
     START_TIMER;

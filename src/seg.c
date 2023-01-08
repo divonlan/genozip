@@ -476,9 +476,34 @@ bool seg_pos_field_cb (VBlockP vb, ContextP ctx, STRp(pos_str), uint32_t repeat)
 // must be called in seg_initialize 
 void seg_id_field_init (ContextP ctx) 
 { 
-    ctx->no_stons = true; 
-    ctx->ltype = LT_DYN_INT; 
+    ContextP zctx = ctx_get_zctx_from_vctx (ctx, false);
+    if (zctx) ctx->id_type = zctx->id_type; // set in segconf
+
+    if (ctx->id_type == ID_TYPE_ALPHA_NUMERIC) 
+        ctx->ltype = LT_DYN_INT; 
+
+    ctx->no_stons = true; // we use local to store the numeric part (ALPHA_NUMERIC) or the entire ID (OTHER), so cannot also have singletons
     ctx->is_initialized = true; 
+}
+
+void seg_id_segconf_update_type (ContextP ctx, STRp(id))
+{
+    // scan for non-digits
+    int i=0; for (; i < id_len; i++) 
+        if (IS_DIGIT (id[i])) break;
+
+    // scan for digits
+    for (;i < id_len; i++)
+        if (!IS_DIGIT (id[i])) break;
+
+    bool is_alpha_then_numeric = (i == id_len); // non-digits then digits - either group can be of 0 length
+
+    // note: we set zctx->id_type only in segconf
+    if (!is_alpha_then_numeric)
+        ctx_get_zctx_from_vctx (ctx, true)->id_type = ID_TYPE_OTHER; // its suffienct that one is not alphanumeric to make it "Other"
+
+    else if (ctx->id_type != ID_TYPE_OTHER)
+        ctx_get_zctx_from_vctx (ctx, true)->id_type = ID_TYPE_ALPHA_NUMERIC; // can only be alpha numeric if not already declared "other"
 }
 
 // Commonly (but not always), IDs are SNPid identifiers like "rs17030902". We store the ID divided to 2:
@@ -494,33 +519,51 @@ void seg_id_field_do (VBlockP vb, ContextP ctx, STRp(id))
 {
     ASSERT (ctx->is_initialized, "%s: seg_id_field_init not called for ctx=%s", LN_NAME, ctx->tag_name);
 
-    int i=id_len-1; for (; i >= 0; i--) 
-        if (!IS_DIGIT (id[i])) break;
-    
-    unsigned num_digits = MIN_(id_len - (i+1), 18); // up to 0x0DE0,B6B3,A763,FFFF - fits in int64_t
-
-    // leading zeros will be part of the dictionary data, not the number
-    for (unsigned i = id_len - num_digits; i < id_len; i++) 
-        if (id[i] == '0') 
-            num_digits--;
-        else 
-            break;
-
-    // added to local if we have a trailing number
-    if (num_digits) {
-        int64_t id_num;
-        ASSERT (str_get_int (&id[id_len - num_digits], num_digits, &id_num), 
-                "Failed str_get_int ctx=%s vb=%u line=%d", ctx->tag_name, vb->vblock_i, vb->line_i);
-        seg_add_to_local_resizable (vb, ctx, id_num, 0);
-
-        if (ctx->flags.store == STORE_INT) ctx_set_last_value (vb, ctx, id_num);
+    if (segconf.running) {
+        seg_id_segconf_update_type (ctx, STRa(id));
+        seg_by_ctx (vb, STRa(id), ctx, id_len);
+        return;
     }
+    
+    // case: first appearance of this context is after segconf lines - decide type based on this line
+    if (ctx->id_type == ID_TYPE_UNKNOWN) {
+        seg_id_segconf_update_type (ctx, STRa(id));
+        seg_id_field_init (ctx);
+    }
+    
+    // if not alphanumeric - store ID in local as IDs are expected to be quite unique
+    if (ctx->id_type == ID_TYPE_OTHER) 
+        seg_add_to_local_text (vb, ctx, STRa(id), LOOKUP_SIMPLE, id_len);
+    
+    else { // ID_TYPE_ALPHA_NUMERIC
+        int i=id_len-1; for (; i >= 0; i--) 
+            if (!IS_DIGIT (id[i])) break;
+        
+        unsigned num_digits = MIN_(id_len - (i+1), 18); // up to 0x0DE0,B6B3,A763,FFFF - fits in int64_t
 
-    // prefix the textual part with SNIP_LOOKUP_UINT32 if needed (we temporarily overwrite the previous separator or the buffer underflow area)
-    unsigned new_len = id_len - num_digits;
-    SAFE_ASSIGN (&id[-1], SNIP_LOOKUP); // we assign it anyway bc of the macro convenience, but we included it only if num_digits>0
-    seg_by_ctx (VB, id-(num_digits > 0), new_len + (num_digits > 0), ctx, id_len); // account for the entire length, and sometimes with \t
-    SAFE_RESTORE;
+        // leading zeros will be part of the dictionary data, not the number
+        for (unsigned i = id_len - num_digits; i < id_len; i++) 
+            if (id[i] == '0') 
+                num_digits--;
+            else 
+                break;
+
+        // added to local if we have a trailing number
+        if (num_digits) {
+            int64_t id_num;
+            ASSERT (str_get_int (&id[id_len - num_digits], num_digits, &id_num), 
+                    "Failed str_get_int ctx=%s vb=%u line=%d", ctx->tag_name, vb->vblock_i, vb->line_i);
+            seg_add_to_local_resizable (vb, ctx, id_num, 0);
+
+            if (ctx->flags.store == STORE_INT) ctx_set_last_value (vb, ctx, id_num);
+        }
+
+        // prefix the textual part with SNIP_LOOKUP_UINT32 if needed (we temporarily overwrite the previous separator or the buffer underflow area)
+        unsigned new_len = id_len - num_digits;
+        SAFE_ASSIGN (&id[-1], SNIP_LOOKUP); // we assign it anyway bc of the macro convenience, but we included it only if num_digits>0
+        seg_by_ctx (VB, id-(num_digits > 0), new_len + (num_digits > 0), ctx, id_len); // account for the entire length, and sometimes with \t
+        SAFE_RESTORE;
+    }
 }
 
 // this version compresses better if the numeric part is expected to be fixed-width with possible leading zeros
@@ -528,30 +571,48 @@ void seg_id_field2 (VBlockP vb, ContextP ctx, STRp(id), unsigned add_bytes)
 {
     ASSERT (ctx->is_initialized, "%s: seg_id_field_init not called for ctx=%s", LN_NAME, ctx->tag_name);
 
-    int i=id_len-1; for (; i >= 0; i--) 
-        if (!IS_DIGIT (id[i])) break;
-    
-    unsigned num_digits = MIN_(id_len - (i+1), 18); // up to 0x0DE0,B6B3,A763,FFFF - fits in int64_t (excess digits will go in the prefix)
-
-    if (num_digits) {
-        int64_t n;
-        str_get_int_dec (&id[id_len - num_digits], num_digits, (uint64_t*)&n);
-
-        seg_integer (vb, ctx, n, false, add_bytes); // integer into local
-
-        SAFE_ASSIGNx(&id[-3], SNIP_NUMERIC,      1);
-        SAFE_ASSIGNx(&id[-2], '0'/*LT_DYN_INT*/, 2);
-        SAFE_ASSIGNx(&id[-1], '0' + num_digits,  3);
-        
-        seg_by_ctx (vb, id-3, 3 + (id_len - num_digits), ctx, 0); // SNIP_NUMERIC with prefix
-
-        SAFE_RESTOREx(1); SAFE_RESTOREx(2); SAFE_RESTOREx(3);
-
-        if (ctx->flags.store == STORE_INT) ctx_set_last_value (vb, ctx, n);
+    if (segconf.running) {
+        seg_id_segconf_update_type (ctx, STRa(id));
+        seg_by_ctx (vb, STRa(id), ctx, id_len);
+        return;
     }
 
-    else
-        seg_by_ctx (vb, STRa(id), ctx, add_bytes);
+    // case: first appearance of this context is after segconf lines - decide type based on this line
+    if (ctx->id_type == ID_TYPE_UNKNOWN) {
+        seg_id_segconf_update_type (ctx, STRa(id));
+        seg_id_field_init (ctx);
+    }
+    
+    // if not alphanumeric - store ID in local as IDs are expected to be quite unique
+    if (ctx->id_type == ID_TYPE_OTHER) 
+        seg_add_to_local_text (vb, ctx, STRa(id), LOOKUP_SIMPLE, id_len);
+
+    else { // ID_TYPE_ALPHA_NUMERIC
+        int i=id_len-1; for (; i >= 0; i--) 
+            if (!IS_DIGIT (id[i])) break;
+        
+        unsigned num_digits = MIN_(id_len - (i+1), 18); // up to 0x0DE0,B6B3,A763,FFFF - fits in int64_t (excess digits will go in the prefix)
+
+        if (num_digits) {
+            int64_t n;
+            str_get_int_dec (&id[id_len - num_digits], num_digits, (uint64_t*)&n);
+
+            seg_integer (vb, ctx, n, false, add_bytes); // integer into local
+
+            SAFE_ASSIGNx(&id[-3], SNIP_NUMERIC,      1);
+            SAFE_ASSIGNx(&id[-2], '0'/*LT_DYN_INT*/, 2);
+            SAFE_ASSIGNx(&id[-1], '0' + num_digits,  3);
+            
+            seg_by_ctx (vb, id-3, 3 + (id_len - num_digits), ctx, 0); // SNIP_NUMERIC with prefix
+
+            SAFE_RESTOREx(1); SAFE_RESTOREx(2); SAFE_RESTOREx(3);
+
+            if (ctx->flags.store == STORE_INT) ctx_set_last_value (vb, ctx, n);
+        }
+
+        else
+            seg_by_ctx (vb, STRa(id), ctx, add_bytes);
+    }
 }
 
 bool seg_id_field_cb (VBlockP vb, ContextP ctx, STRp(id), uint32_t repeat)
@@ -573,8 +634,10 @@ void seg_integer (VBlockP vb, ContextP ctx, int64_t n, bool with_lookup, unsigne
     ASSERT (segconf.running || ctx->ltype == LT_DYN_INT || ctx->ltype == LT_DYN_INT_h || ctx->ltype == LT_DYN_INT_H,
             "ctx=%s must have a LT_DYN_INT* ltype", ctx->tag_name);
 
-ASSERT (segconf.running || !(VB_DT(SAM) || VB_DT(BAM)) || !dict_id_is_aux_sf(ctx->dict_id) || ctx->flags.store == STORE_INT,
-            "ctx=%s must have a STORE_INT ltype", ctx->tag_name); // needed to allow recon to translate to BAM
+    ASSERT (segconf.running || ctx->flags.store == STORE_INT ||
+            !(VB_DT(SAM) || VB_DT(BAM)) || ctx->tag_name[2] != ':' || // applicable to SAM/BAM optional fields
+            !dict_id_is_aux_sf(ctx->dict_id),
+            "ctx=%s must have flags.store=STORE_INT", ctx->tag_name); // needed to allow recon to translate to BAM
 #endif
 
     ctx_set_last_value (vb, ctx, (ValueType){.i = n});
@@ -1045,7 +1108,7 @@ skip_diff:
         seg_by_ctx (vb, STRa(snip), ctx, add_bytes);
     }
     else {
-        STRl(snip, 48) = 48;
+        STRli(snip, 48);
         seg_prepare_snip_other (SNIP_DIFF, base_ctx->dict_id, true, exact ? -(int32_t)value_len : (int32_t)value_len, snip);
         seg_by_ctx (vb, STRa(snip), ctx, add_bytes);
     }

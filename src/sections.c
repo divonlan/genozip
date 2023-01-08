@@ -878,7 +878,7 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
 
     case SEC_VB_HEADER: {
         SectionHeaderVbHeader *h = (SectionHeaderVbHeader *)header;
-        if (Z_DT(VCF)) 
+        if (Z_DT(VCF) || Z_DT(BCF)) 
             sprintf (str, 
                     "\n"SEC_TAB "recon_size=(PRIM:%u, LUFT:%u) longest_line=%u z_data_bytes=%u digest=%s %s\n",
                     BGEN32 (h->recon_size_prim), v12 ? BGEN32 (h->dvcf_recon_size_luft) : 0, 

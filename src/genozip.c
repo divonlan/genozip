@@ -49,8 +49,8 @@ CommandType command = NO_COMMAND, primary_command = NO_COMMAND;
 uint32_t global_max_threads = DEFAULT_MAX_THREADS; 
 static bool tip_printed = false;
 
-#define MAIN(format, ...) do { if (flag.debug_top) { progress_newline(); fprintf (stderr, "%s[%u]: ", command_name(), getpid()); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } } while(0)
-#define MAIN0(string)     do { if (flag.debug_top) { progress_newline(); fprintf (stderr, "%s[%u]: %s\n", command_name(), getpid(), string); } } while(0)
+#define MAIN(format, ...) ({ if (flag.debug_top) { progress_newline(); fprintf (stderr, "%s[%u]: ", command_name(), getpid()); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } })
+#define MAIN0(string)     ({ if (flag.debug_top) { progress_newline(); fprintf (stderr, "%s[%u]: %s\n", command_name(), getpid(), string); } })
 
 rom command_name (void) // see CommandType
 {
@@ -111,20 +111,19 @@ void main_exit (bool show_stack, bool is_error)
         threads_cancel_other_threads();
     }
 
-    // if we're in ZIP - remove failed genozip file (but don't remove partial failed text file in PIZ - it might be still useful to the user)
+    // if we're in ZIP - rename failed genozip file (but not in PIZ - as its not expected to change the file)
     if (primary_command == ZIP && z_file && z_file->name && !flag_loading_auxiliary) {
-        char *save_name = NULL;
+        STRli (save_name, strlen (z_file->name)+1);
 
-        if (z_file && z_file->name) {
-            save_name = malloc (strlen (z_file->name)+1);
+        if (z_file && z_file->name) 
             strcpy (save_name, z_file->name);
-        }
 
         file_close (&z_file, false, false); // also frees file->name
 
         // note: logic to avoid a race condition causing the file not to be removed - if another thread seg-faults
         // because it can't access a z_file filed after z_file is freed, and threads_sigsegv_handler aborts
-        if (save_name) file_remove (save_name, true);
+        if (is_error && !getenv ("GENOZIP_TEST") && !flag.debug && file_exists (save_name)) 
+            file_remove (save_name, true);
     }
 
     if (is_error) // call after canceling the writing threads 
@@ -392,9 +391,10 @@ static void main_genozip (rom txt_filename,
                           rom next_txt_filename,      // ignored unless we are of pair_1 in a --pair
                           rom z_filename,
                           unsigned txt_file_i,        // 0-based
+                          unsigned n_txt_files,
                           bool is_last_user_txt_file) // very last file in this execution 
 {
-    MAIN ("main_genozip: %s", txt_filename ? txt_filename : "stdin");
+    MAIN ("main_genozip (%u/%u): %s", txt_file_i+1, n_txt_files, txt_filename ? txt_filename : "stdin");
     
     SAVE_FLAGS;
 
@@ -451,7 +451,7 @@ static void main_genozip (rom txt_filename,
 
     tip_dt_encountered (z_file->data_type);
 
-    if (flag.show_stats && z_file->z_closes_after_me && (!z_is_dvcf || flag.zip_comp_i)) 
+    if (flag.show_stats && z_file->z_closes_after_me)
         stats_display();
 
     bool remove_txt_file = z_file && flag.replace && txt_filename;
@@ -634,7 +634,7 @@ static void main_load_reference (rom filename, bool is_first_file, bool is_last_
                 "When compressing a chain file, you must also specify two --reference arguments: the first is the reference file in Primary coordinates "
                 "(i.e. those of the VCF files to be lifted), and the second is the reference file in Luft coordinates (i.e. the coordinates aftering lifting). See "WEBSITE_DVCF);
 
-        MAIN0 ("Loading external reference to prim_ref");
+        MAIN ("Loading external reference to prim_ref: %s", ref_get_filename (prim_ref));
         ref_load_external_reference (prim_ref, NULL);
     }
 
@@ -783,7 +783,8 @@ int main (int argc, char **argv)
     // if we're genozipping with tar, initialize tar file
     if (tar_is_tar()) tar_initialize();
 
-    for (unsigned file_i=0, z_file_i=0; file_i < MAX_(input_files_len, 1); file_i++) {
+    unsigned n_files = MAX_(input_files_len, 1);
+    for (unsigned file_i=0, z_file_i=0; file_i < n_files; file_i++) {
 
         // get file name
         rom next_input_file = input_files_len ? input_files[file_i] : NULL;  // NULL means stdin
@@ -810,7 +811,7 @@ int main (int argc, char **argv)
         switch (command) {
             case ZIP  : main_genozip (next_input_file, 
                                       (next_input_file && file_i < input_files_len-1) ? input_files[file_i+1] : NULL, // file name of next file, if there is one
-                                      flag.out_filename, file_i, !next_input_file || is_last_txt_file); 
+                                      flag.out_filename, file_i, n_files, !next_input_file || is_last_txt_file); 
                         break;
 
             case PIZ  : main_genounzip (next_input_file, flag.out_filename, file_i, is_last_z_file); 

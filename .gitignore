@@ -19,6 +19,7 @@ launch.json
 *.exe
 !installers/*.exe
 *.new
+*.crdownload
 windows
 genozip-linux-x86_64
 genozip-installer.ifp.save
@@ -54,6 +55,7 @@ src/mac/scripts/*
 *.fa
 *.fa.gz
 *.fasta*
+*.fna*
 *.gvf*
 *.gtf*
 *.gff*
@@ -99,3 +101,5 @@ failed-line.*
 !installers/*.tar
 *.log
 *.dict
+out
+*.backup

@@ -123,7 +123,7 @@ static void digest_piz_verify_one_vb (VBlockP vb)
 
             // dump bad vb to disk
             WARN ("reconstructed vblock=%s/%u, (%s=%s) differs from original file (%s=%s).\n%s"
-                  "Bad reconstructed vblock has been dumped to: %s\n"
+                  "Bad reconstructed vblock has been dumped to: %s.gz\n"
                   "To see the same data in the original file:\n"
                   "genozip --biopsy %u %s (+any parameters used to compress this file)\n"
                   "If this is unexpected, please contact support@genozip.com.\n", 

@@ -197,6 +197,8 @@ void ref_fasta_to_ref (File *file)
     FREE (file->name);
     file->name = (char *)ref_filename;
 
-    REALLOC ((char **)&gref->filename, strlen (ref_filename) + 1, "gref->filename");
-    strcpy ((char*)gref->filename, ref_filename);
+    Reference ref = flag.reading_reference ? flag.reading_reference : gref;
+
+    REALLOC ((char **)&ref->filename, strlen (ref_filename) + 1, "ref->filename");
+    strcpy ((char*)ref->filename, ref_filename);
 }

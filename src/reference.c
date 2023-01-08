@@ -1078,6 +1078,7 @@ void ref_set_reference (Reference ref, rom filename, ReferenceType ref_type, boo
 
     static int num_explicit = 0; // user can have up to 2 --reference arguments
     ASSINP0 (!is_explicit || (++num_explicit <= 2), "More than two --reference arguments");
+    ASSINP0 (!is_explicit || is_genozip || num_explicit == 1, "More than one --reference argument"); // two references only needed in ZIP of a chain file
     
     // no need for a reference if we're just doing "genocat --show-chain myfile.chain.genozip" (--show-chain only works for genocat and chain files)
     if (!flag.show_chain) {
@@ -1291,7 +1292,7 @@ void ref_load_external_reference (Reference ref, ContextP chrom_ctx)
     ASSERTNOTNULL (ref->filename);
     SAVE_FLAGS_AUX;
 
-    flag.reading_reference = ref; // tell file.c and fasta.c that this is a reference
+    flag.reading_reference = ref; // tell file.c, fasta.c and ref_fasta_to_ref that this is a reference
     flag.no_writer = flag.no_writer_thread = true;
     flag.luft = false;
     flag.list_chroms = false;

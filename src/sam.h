@@ -24,8 +24,9 @@
 #pragma GENDICT SAM_Q5NAME=DTYPE_1=Q5NAME
 #pragma GENDICT SAM_Q6NAME=DTYPE_1=Q6NAME 
 #pragma GENDICT SAM_Q7NAME=DTYPE_1=Q7NAME 
-#pragma GENDICT SAM_Q8NAME=DTYPE_1=Q7NAME 
-#pragma GENDICT SAM_Q9NAME=DTYPE_1=Q7NAME 
+#pragma GENDICT SAM_Q8NAME=DTYPE_1=Q8NAME 
+#pragma GENDICT SAM_Q9NAME=DTYPE_1=Q9NAME 
+#pragma GENDICT SAM_QANAME=DTYPE_1=QANAME // if adding more Q*NAMEs - add to fastq.h and kraken.h too, and update MAX_QNAME_ITEMS
 #pragma GENDICT SAM_QmNAME=DTYPE_1=QmNAME // QmNAME reserved for mate number (always the last dict_id in the container)
 #pragma GENDICT SAM_FLAG=DTYPE_FIELD=FLAG
 #pragma GENDICT SAM_FLAG0=DTYPE_FIELD=F0LAG0
@@ -206,6 +207,9 @@
 // many more undocumented tags - see hisat2's sam.h: YN:i, Yn:i, YP:i, YM:i, XT:i, XD:i, Xd:i, XU:i, Xu:i, YE:i, Ye:i, YL:i, Yl:i, YU:i, Yu:i, XP:B:I, YR:i, ZB:i, ZF:i, Zf:i, ZM:Z, ZI:i
 #pragma GENDICT OPTION_ZS_i=DTYPE_2=ZS:i     // Alignment score for the best-scoring alignment found other than the alignment reported. Can be negative. (but code says: "Pseudo-random seed for read")
 #pragma GENDICT OPTION_Zs_Z=DTYPE_2=Zs:Z     // When the alignment of a read involves SNPs that are in the index, this option is used to indicate where exactly the read involves the SNPs
+#pragma GENDICT OPTION_Zs_POS=DTYPE_2=Z0s_POS
+#pragma GENDICT OPTION_Zs_TYPE=DTYPE_2=Z1s_TYPE
+#pragma GENDICT OPTION_Zs_RS=DTYPE_2=Z2s_RS
 
 // Ion Torrent Base Caller tags (source: "Torrent Suite Software 5.12 Help": http://192.167.218.6/ion-docs/GUID-965C5ED4-20C8-45D5-AF07-8B0008AF74AD.html)
 #pragma GENDICT OPTION_ZA_i=DTYPE_2=ZA:i     // Number of library insert bases, where the library insert is defined as the sequence after the key and barcode adapter, and before the 3' adapter. (Only present if a 3' adapter was found.)

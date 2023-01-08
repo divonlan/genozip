@@ -803,7 +803,7 @@ rom file_get_z_filename (rom txt_filename, DataType dt, FileType txt_ft)
     // if the file has an extension matching its type, replace it with the genozip extension, if not, just add the genozip extension
     rom genozip_ext = file_exts[file_get_z_ft_by_txt_in_ft (dt, txt_ft)];
 
-    if (chain_is_loaded && TXT_DT(VCF))
+    if (chain_is_loaded && (TXT_DT(VCF) || TXT_DT(BCF)))
         genozip_ext = DVCF_GENOZIP_;
 
     if (file_has_ext (local_txt_filename, file_exts[txt_ft]))
@@ -835,7 +835,7 @@ static bool file_open_z (File *file)
             ref_fasta_to_ref (file);
 
         ASSINP (!flag.reading_reference || file_has_ext (file->name, REF_GENOZIP_), 
-                "You specified file \"%s\", however with --reference or --REFERENCE, you must specify a genozip reference file (%s extension)\n"
+                "You specified file \"%s\", however with --reference or --REFERENCE, you must specify a reference file (%s file or FASTA file)\n"
                 "Tip: To create a genozip reference file from a FASTA file, use 'genozip --make-reference myfasta.fa'",
                 file->name, REF_GENOZIP_);
 
@@ -1208,6 +1208,16 @@ void file_remove (rom filename, bool fail_quietly)
 
     int ret = remove (filename); 
     ASSERTW (!ret || fail_quietly, "Warning: failed to remove %s: %s", filename, strerror (errno));
+}
+
+bool file_rename (rom old_name, rom new_name, bool fail_quietly)
+{
+    chmod (old_name, S_IRUSR | S_IWUSR); // make sure its +w so we don't get permission denied (ignore errors)
+
+    int ret = rename (old_name, new_name); 
+    ASSERTW (!ret || fail_quietly, "Warning: failed to rename %s to %s: %s", old_name, new_name, strerror (errno));
+
+    return !ret; // true if successful
 }
 
 void file_mkfifo (rom filename)

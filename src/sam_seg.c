@@ -355,8 +355,7 @@ void sam_seg_initialize (VBlockP vb_)
     if (sam_has_BWA_XA_Z())
         sam_seg_BWA_XA_initialize (vb);
 
-    if (segconf.has_cellranger)
-    {
+    if (segconf.has_cellranger) {
         sam_seg_TX_AN_initialize (vb, OPTION_TX_Z);
         sam_seg_TX_AN_initialize (vb, OPTION_AN_Z);
     }
@@ -722,7 +721,7 @@ void sam_seg_finalize (VBlockP vb)
     static const Did delete_me[] = {
         OPTION_XA_LOOKBACK, OPTION_XA_STRAND, OPTION_OA_STRAND, OPTION_SA_STRAND, // nodes added in sam_seg_0X_initialize. note: we use SA_STRAND in PRIM lines even if there is no SA:Z field
         OPTION_TX_NEGATIVE, OPTION_TX_LOOKBACK, OPTION_TX_SAM_POS,
-        OPTION_AN_NEGATIVE, OPTION_AN_LOOKBACK, OPTION_AN_SAM_POS}; // nodes added in sam_seg_TX_AN_initialize
+        OPTION_AN_NEGATIVE, OPTION_AN_LOOKBACK, OPTION_AN_SAM_POS };  // nodes added in sam_seg_TX_AN_initialize
 
     for (int i = 0; i < ARRAY_LEN(delete_me); i++)
         if (!CTX(delete_me[i])->b250.len && !CTX(delete_me[i])->local.len)
@@ -762,78 +761,82 @@ bool sam_seg_is_small (ConstVBlockP vb, DictId dict_id)
 {
     return
         // typically small
-        dict_id.num == _SAM_TOPLEVEL ||
-        dict_id.num == _SAM_TOP2BAM  ||
-        dict_id.num == _SAM_TOP2FQ   ||
-        dict_id.num == _SAM_TOP2FQEX ||
-        dict_id.num == _SAM_FLAG ||
-        dict_id.num == _SAM_MAPQ ||
-        dict_id.num == _SAM_QNAME ||
-        dict_id.num == _SAM_RNAME ||
-        dict_id.num == _SAM_RNEXT ||
-        dict_id.num == _SAM_TLEN ||
-        dict_id.num == _SAM_AUX ||
-        dict_id.num == _SAM_EOL ||
-        dict_id.num == _SAM_TAXID ||
-        dict_id.num == _SAM_BUDDY ||
+        dict_id.num == _SAM_TOPLEVEL     ||
+        dict_id.num == _SAM_TOP2BAM      ||
+        dict_id.num == _SAM_TOP2FQ       ||
+        dict_id.num == _SAM_TOP2FQEX     ||
+        dict_id.num == _SAM_FLAG         ||
+        dict_id.num == _SAM_MAPQ         ||
+        dict_id.num == _SAM_QNAME        ||
+        dict_id.num == _SAM_RNAME        ||
+        dict_id.num == _SAM_RNEXT        ||
+        dict_id.num == _SAM_TLEN         ||
+        dict_id.num == _SAM_AUX          ||
+        dict_id.num == _SAM_EOL          ||
+        dict_id.num == _SAM_TAXID        ||
+        dict_id.num == _SAM_BUDDY        ||
 
         // standard tags, see here: https://samtools.github.io/hts-specs/SAMtags.pdf
-        dict_id.num == _OPTION_AM_i ||
-        dict_id.num == _OPTION_AS_i ||
-        dict_id.num == _OPTION_CC_Z ||
-        dict_id.num == _OPTION_CM_i ||
-        dict_id.num == _OPTION_LB_Z ||
-        dict_id.num == _OPTION_FI_i ||
-        dict_id.num == _OPTION_H0_i ||
-        dict_id.num == _OPTION_H1_i ||
-        dict_id.num == _OPTION_H2_i ||
-        dict_id.num == _OPTION_HI_i ||
-        dict_id.num == _OPTION_MQ_i ||
-        dict_id.num == _OPTION_NH_i ||
-        dict_id.num == _OPTION_NM_i ||
-        dict_id.num == _OPTION_OA_Z ||
-        dict_id.num == _OPTION_OA_RNAME ||
-        dict_id.num == _OPTION_OA_NM ||
+        dict_id.num == _OPTION_AM_i      ||
+        dict_id.num == _OPTION_AS_i      ||
+        dict_id.num == _OPTION_CC_Z      ||
+        dict_id.num == _OPTION_CM_i      ||
+        dict_id.num == _OPTION_LB_Z      ||
+        dict_id.num == _OPTION_FI_i      ||
+        dict_id.num == _OPTION_H0_i      ||
+        dict_id.num == _OPTION_H1_i      ||
+        dict_id.num == _OPTION_H2_i      ||
+        dict_id.num == _OPTION_HI_i      ||
+        dict_id.num == _OPTION_MQ_i      ||
+        dict_id.num == _OPTION_NH_i      ||
+        dict_id.num == _OPTION_NM_i      ||
+        dict_id.num == _OPTION_OA_Z      ||
+        dict_id.num == _OPTION_OA_RNAME  ||
+        dict_id.num == _OPTION_OA_NM     ||
         dict_id.num == _OPTION_OA_STRAND ||
-        dict_id.num == _OPTION_OA_MAPQ ||
-        dict_id.num == _OPTION_OA_CIGAR ||
-        dict_id.num == _OPTION_OC_Z ||
-        dict_id.num == _OPTION_PG_Z ||
-        dict_id.num == _OPTION_PQ_i ||
-        dict_id.num == _OPTION_PU_Z ||
-        dict_id.num == _OPTION_RG_Z ||
-        dict_id.num == _OPTION_RG_Z ||
-        dict_id.num == _OPTION_SA_Z ||
-        dict_id.num == _OPTION_SA_RNAME ||
-        dict_id.num == _OPTION_SA_NM ||
+        dict_id.num == _OPTION_OA_MAPQ   ||
+        dict_id.num == _OPTION_OA_CIGAR  ||
+        dict_id.num == _OPTION_OC_Z      ||
+        dict_id.num == _OPTION_PG_Z      ||
+        dict_id.num == _OPTION_PQ_i      ||
+        dict_id.num == _OPTION_PU_Z      ||
+        dict_id.num == _OPTION_RG_Z      ||
+        dict_id.num == _OPTION_RG_Z      ||
+        dict_id.num == _OPTION_SA_Z      ||
+        dict_id.num == _OPTION_SA_RNAME  ||
+        dict_id.num == _OPTION_SA_NM     ||
         dict_id.num == _OPTION_SA_STRAND ||
-        dict_id.num == _OPTION_SA_MAPQ ||
-        dict_id.num == _OPTION_SA_CIGAR ||
-        dict_id.num == _OPTION_SM_i ||
-        dict_id.num == _OPTION_TC_i ||
-        dict_id.num == _OPTION_UQ_i ||
+        dict_id.num == _OPTION_SA_MAPQ   ||
+        dict_id.num == _OPTION_SA_CIGAR  ||
+        dict_id.num == _OPTION_SM_i      ||
+        dict_id.num == _OPTION_TC_i      ||
+        dict_id.num == _OPTION_UQ_i      ||
 
         // bwa tags see here: http://bio-bwa.sourceforge.net/bwa.shtml : "SAM ALIGNMENT FORMAT"
-        dict_id.num == _OPTION_X0_i ||
-        dict_id.num == _OPTION_X1_i ||
-        dict_id.num == _OPTION_XA_Z ||
-        dict_id.num == _OPTION_XA_RNAME ||
-        dict_id.num == _OPTION_XA_NM ||
+        dict_id.num == _OPTION_X0_i      ||
+        dict_id.num == _OPTION_X1_i      ||
+        dict_id.num == _OPTION_XA_Z      ||
+        dict_id.num == _OPTION_XA_RNAME  ||
+        dict_id.num == _OPTION_XA_NM     ||
         dict_id.num == _OPTION_XA_STRAND ||
-        dict_id.num == _OPTION_XA_CIGAR ||
-        dict_id.num == _OPTION_XN_i ||
-        dict_id.num == _OPTION_XM_i ||
-        dict_id.num == _OPTION_XO_i ||
-        dict_id.num == _OPTION_XG_i ||
-        dict_id.num == _OPTION_XS_i ||
-        dict_id.num == _OPTION_XE_i;
+        dict_id.num == _OPTION_XA_CIGAR  ||
+        dict_id.num == _OPTION_XN_i      ||
+        dict_id.num == _OPTION_XM_i      ||
+        dict_id.num == _OPTION_XO_i      ||
+        dict_id.num == _OPTION_XG_i      ||
+        dict_id.num == _OPTION_XS_i      ||
+        dict_id.num == _OPTION_XE_i      ||
+        0;
 }
 
 bool sam_seg_is_big (ConstVBlockP vb, DictId dict_id)
 {
     return
         // typically big
-        dict_id.num == _OPTION_BX_Z;
+        dict_id.num == _OPTION_BX_Z      ||
+        dict_id.num == _OPTION_TX_GENE   ||
+        dict_id.num == _OPTION_AN_GENE   ||
+        0;
 }
 
 static void sam_get_one_aux (VBlockSAMP vb, int16_t idx,

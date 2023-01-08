@@ -786,7 +786,7 @@ verify_command:
             case 0   : break; // a long option that doesn't have short version will land here - already handled so nothing to do
                  
             default  : // unrecognized option 
-                fprintf (stderr, "Usage: %s [OPTIONS] filename1 filename2...\nManual page: "GENOZIP_URL"/%s.html\n", global_cmd, global_cmd);
+                fprintf (stderr, "Usage: %s [OPTIONS] filename1 filename2...\nManual page: "GENOZIP_URL"/%s\n", global_cmd, global_cmd);
                 exit (EXIT_GENERAL_ERROR);  
         }
     }
@@ -1377,6 +1377,11 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
                          flag.maybe_lines_dropped_by_reconstructor  ||
                          flag.maybe_vb_modified_by_reconstructor    || 
                          flag.maybe_lines_out_of_order;
+
+    // additional per-line reconstruction txt_data space needed, due to flags.
+    flag.recon_per_line_overhead = (z_is_dvcf && flag.show_ostatus) ? 48 // per-line addition of e.g. ";oSTATUS=RefNewAlleleInsSameRef"
+                                 : (z_is_dvcf && flag.show_dvcf)    ? 48 // per-line addition of e.g. "BOTH OkRefAltSwitchSNP"
+                                 :                                    0; 
 
     // calculation depends on flag.data_modified
     bool pg_line_added_to_header = ((flag.out_dt == DT_SAM || flag.out_dt == DT_BAM) && !flag.reconstruct_as_src)

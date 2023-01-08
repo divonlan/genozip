@@ -111,10 +111,15 @@ CtxNode *ctx_node_vb_do (ConstContextP vctx, WordIndex node_index,
         ConstBufferP dict = is_ol ? &vctx->ol_dict : &vctx->dict;
         ASSERT0 (buf_is_alloc (dict), "dict not allocated");
 
-        if (is_ol) 
-            ASSERT (node->char_index + (uint64_t)node->snip_len < dict->len, "Called from %s:%u: snip of %s out of range: node_index=%d is_ol=TRUE node->char_index=%"PRIu64" + node->snip_len=%u >= ol_dict->len=%"PRIu64". ol_dict->size=%"PRIu64". ol_nodes.len=%"PRIu64" zctx->nodes.len=%"PRIu64" zctx->dict.len=%"PRIu64" zctx->ston_nodes.len=%"PRIu64" zctx->stons.len=%"PRIu64,
-                    func, code_line, vctx->tag_name, node_index, node->char_index, node->snip_len, dict->len, (uint64_t)dict->size, vctx->ol_nodes.len,
-                    /*if is_ol, we know zctx exists*/ctx_get_zctx_from_vctx (vctx)->nodes.len, ctx_get_zctx_from_vctx (vctx)->dict.len, ctx_get_zctx_from_vctx (vctx)->ston_nodes.len, ctx_get_zctx_from_vctx (vctx)->stons.len);
+        if (is_ol) {
+            if (node->char_index + (uint64_t)node->snip_len >= dict->len) {
+                ContextP zctx = ctx_get_zctx_from_vctx (vctx, false); // if is_ol, we know zctx exists
+
+                ASSERT (node->char_index + (uint64_t)node->snip_len < dict->len, "Called from %s:%u: snip of %s out of range: node_index=%d is_ol=TRUE node->char_index=%"PRIu64" + node->snip_len=%u >= ol_dict->len=%"PRIu64". ol_dict->size=%"PRIu64". ol_nodes.len=%"PRIu64" zctx->nodes.len=%"PRIu64" zctx->dict.len=%"PRIu64" zctx->ston_nodes.len=%"PRIu64" zctx->stons.len=%"PRIu64,
+                        func, code_line, vctx->tag_name, node_index, node->char_index, node->snip_len, dict->len, (uint64_t)dict->size, vctx->ol_nodes.len,
+                        zctx->nodes.len, zctx->dict.len, zctx->ston_nodes.len, zctx->stons.len);
+            }
+        }
         else
             ASSERT (node->char_index + (uint64_t)node->snip_len < dict->len, "Called from %s:%u: snip of %s out of range: node_index=%d is_ol=FALSE node->char_index=%"PRIu64" + node->snip_len=%u >= dict->len=%"PRIu64". dict->size=%"PRIu64". ol_nodes.len=%"PRIu64,
                     func, code_line, vctx->tag_name, node_index, node->char_index, node->snip_len, dict->len, (uint64_t)dict->size, vctx->ol_nodes.len);
@@ -385,7 +390,7 @@ static WordIndex ctx_commit_node (VBlockP vb, ContextP zctx, ContextP vctx, STRp
 // Make ctx an "all-the-same" with FASTQ_SPECIAL_mate_lookup. Runs during generate.
 void ctx_convert_generated_b250_to_mate_lookup (VBlockP vb, ContextP vctx)
 {
-    ContextP zctx  = ctx_get_zctx_from_vctx (vctx);
+    ContextP zctx  = ctx_get_zctx_from_vctx (vctx, false);
     ASSERTNOTNULL (zctx);
 
     // ctx_create_node MUST be run for FASTQ_SPECIAL_mate_lookup in seg_initialize, so here we know it exists
@@ -781,18 +786,8 @@ static ContextP ctx_get_zctx (DictId dict_id, bool check_predefined)
     return NULL;
 }
 
-ContextP ctx_get_zctx_from_vctx (ConstContextP vctx)  // returns NULL if context doesn't exist
-{
-    if (vctx->did_i < DTFZ(num_fields)) 
-        return ZCTX(vctx->did_i); 
-    
-    // check dict_id->did_i map, and if not found search linearly
-    Did did_i = ctx_get_existing_did_i_do (vctx->dict_id, z_file->contexts, z_file->dict_id_to_did_i_map, NULL, z_file->num_contexts);
-    return did_i != DID_NONE ? ZCTX(did_i) : NULL;
-}
-
 // ZIP only: called by merging VBs to add a new dict to z_file - copying some stuff from vctx
-static ContextP ctx_add_new_zf_ctx (VBlockP vb, ConstContextP vctx)
+static ContextP ctx_add_new_zf_ctx (ConstContextP vctx)
 {
     // adding a new dictionary is proctected by a mutex. note that z_file->num_contexts is accessed by other threads
     // without mutex proction when searching for a dictionary - that's why we update it at the end, after the new
@@ -800,7 +795,7 @@ static ContextP ctx_add_new_zf_ctx (VBlockP vb, ConstContextP vctx)
     mutex_lock (z_file->dicts_mutex);
 
     // check if another thread raced and created this dict before us
-    ContextP zctx = ctx_get_zctx_from_vctx (vctx);
+    ContextP zctx = ctx_get_zctx_from_vctx (vctx, false);
     if (zctx) goto finish;
 
     ASSERT (z_file->num_contexts+1 < MAX_DICTS, // load num_contexts - this time with mutex protection - it could have changed
@@ -829,6 +824,19 @@ static ContextP ctx_add_new_zf_ctx (VBlockP vb, ConstContextP vctx)
 finish:
     mutex_unlock (z_file->dicts_mutex);
     return zctx;
+}
+
+ContextP ctx_get_zctx_from_vctx (ConstContextP vctx, bool create_if_missing)  // returns NULL if context doesn't exist
+{
+    if (vctx->did_i < DTFZ(num_fields)) 
+        return ZCTX(vctx->did_i); 
+    
+    // check dict_id->did_i map, and if not found search linearly
+    Did did_i = ctx_get_existing_did_i_do (vctx->dict_id, z_file->contexts, z_file->dict_id_to_did_i_map, NULL, z_file->num_contexts);
+    
+    return (did_i != DID_NONE) ? ZCTX(did_i) 
+         : create_if_missing   ? ctx_add_new_zf_ctx (vctx) 
+         :                       NULL;
 }
 
 // ZIP only: called by main thread when inspecting a txtheader for assigning liftover translators
@@ -876,8 +884,8 @@ finish:
 // VBs can get this codec and don't need to test for themselves.
 void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vctx, bool is_lcodec, bool is_lcodec_inherited)
 {
-    ContextP zctx  = ctx_get_zctx_from_vctx (vctx);
-    if (!zctx) zctx = ctx_add_new_zf_ctx (vb, vctx); // this context doesn't exist yet in z_file, because no VB with it has merged yet. create it now.
+    // case: context might not exist yet in z_file, because no VB with it has merged yet - in which case we create it.
+    ContextP zctx  = ctx_get_zctx_from_vctx (vctx, true);
 
     mutex_lock (zctx->mutex);
 
@@ -967,7 +975,7 @@ no_drop:
 // in case we're dropping vctx after already merging it - substract txt_len added in ctx_merge_in_one_vctx
 void ctx_substract_txt_len (VBlockP vb, ContextP vctx)
 {
-    ContextP zctx = ctx_get_zctx_from_vctx (vctx);
+    ContextP zctx = ctx_get_zctx_from_vctx (vctx, false);
     if (!zctx) return;
 
     mutex_lock (zctx->mutex);
@@ -993,8 +1001,7 @@ static inline void add_count (uint64_t *counter, uint32_t increment)
 static bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx)
 {
     // get the ctx or create a new one. note: ctx_add_new_zf_ctx() must be called before mutex_lock() because it locks the z_file mutex (avoid a deadlock)
-    ContextP zctx = ctx_get_zctx_from_vctx (vctx);
-    if (!zctx) zctx = ctx_add_new_zf_ctx (vb, vctx);
+    ContextP zctx = ctx_get_zctx_from_vctx (vctx, true);
 
     if (!mutex_trylock (zctx->mutex)) 
         return false; // zctx is currently locked by another VB 
@@ -1019,7 +1026,7 @@ static bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx)
         zctx->txt_len += vctx->txt_len; // for stats
 
     if (vctx->st_did_i != DID_NONE && zctx->st_did_i == DID_NONE) {
-        ContextP st_ctx = ctx_get_zctx_from_vctx (CTX(vctx->st_did_i));
+        ContextP st_ctx = ctx_get_zctx_from_vctx (CTX(vctx->st_did_i), false);
         if (st_ctx) zctx->st_did_i = st_ctx->did_i; // st_did_i is not necessarily the same for vb and zf
     }
 
@@ -1144,8 +1151,8 @@ void ctx_add_compressor_time_to_zf_ctx (VBlockP vb)
 {
     for_vctx
         if (vctx->compressor_time) {
-            ContextP zctx = vctx->st_did_i != DID_NONE ? ctx_get_zctx_from_vctx (CTX(vctx->st_did_i)) // we accumulate at stats parent context if there is one
-                                                         : ctx_get_zctx_from_vctx (vctx);
+            ContextP zctx = vctx->st_did_i != DID_NONE ? ctx_get_zctx_from_vctx (CTX(vctx->st_did_i), false) // we accumulate at stats parent context if there is one
+                                                       : ctx_get_zctx_from_vctx (vctx, false);
             zctx->compressor_time += vctx->compressor_time;
         }
 }
@@ -1227,6 +1234,7 @@ ContextP ctx_get_unmapped_ctx (Context *contexts/* array */, DataType dt, Did *d
 // called from seg_all_data_lines (ZIP) and dict_io_read_all_dictionaries (PIZ) to initialize all
 // primary field ctx's. these are not always used (e.g. when some are not read from disk due to genocat options)
 // but we maintain their fixed positions anyway as the code relies on it
+// Note: Context Buffers are already initialized in file_initialize_z_file_data
 void ctx_initialize_predefined_ctxs (Context *contexts /* an array */, 
                                      DataType dt,
                                      Did *dict_id_to_did_i_map,
@@ -1439,7 +1447,7 @@ void ctx_sort_dictionaries_vb_1 (VBlockP vb)
 void ctx_update_stats (VBlockP vb)
 {
     for_vctx {    
-        ContextP zctx = ctx_get_zctx_from_vctx (vctx);
+        ContextP zctx = ctx_get_zctx_from_vctx (vctx, false);
         if (!zctx) continue; // this can happen if FORMAT subfield appears, but no line has data for it
 
         zctx->b250.count      += vctx->b250.count; 

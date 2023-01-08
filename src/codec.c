@@ -195,7 +195,7 @@ Codec codec_assign_best_codec (VBlockP vb,
     Codec non_ctx_codec = CODEC_UNKNOWN; // used for non-b250, non-local sections
     bool data_override = ctx && data;    // caller provided data for us to use *instead* of ctx's own local/b250/dict buffer
     
-    ContextP zctx = ctx ? ctx_get_zctx_from_vctx (ctx) : NULL; // note: if is_dict, ctx==zctx
+    ContextP zctx = ctx ? ctx_get_zctx_from_vctx (ctx, false) : NULL; // note: if is_dict, ctx==zctx
 
     Codec *selected_codec = is_local ? &ctx->lcodec  : 
                             is_b250  ? &ctx->bcodec  :

@@ -11,6 +11,7 @@
 #include "genozip.h"
 #include "sections.h"
 
+#define STORE_LAST_TXT STORE_NONE
 extern void lookback_init (VBlockP vb, ContextP lb_ctx, ContextP ctx, StoreType store_type);
 
 extern void lookback_insert (VBlockP vb, Did lb_did_i, Did did_i, bool copy_last_value, ValueType value);

@@ -236,6 +236,9 @@ void vcf_seg_initialize (VBlockP vb_)
 
     if (segconf.vcf_illum_gtyping) 
         vcf_illum_gtyping_initialize (vb);
+
+    if (segconf.vcf_is_gwas)
+        vcf_gwas_seg_initialize (vb);
 }             
 
 static void vcf_seg_finalize_segconf (VBlockVCFP vb)
@@ -368,8 +371,7 @@ bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)
         dict_id.num == _VCF_COORDS   ||
         dict_id.num == _VCF_LIFT_REF ||
         dict_id.num == _INFO_AC      ||
-        dict_id.num == _INFO_AF      ||
-        dict_id.num == _INFO_AN      ||
+        dict_id.num == _INFO_AN      || // note: not _INFO_AF, e.g. big in GWAS VCF
         dict_id.num == _INFO_DP      ||
         dict_id.num == _INFO_AA      || // stored as a SPECIAL snip
         dict_id.num == _INFO_MLEAC   ||
@@ -389,7 +391,7 @@ bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id)
 bool vcf_seg_is_big (ConstVBlockP vb, DictId dict_id)
 {
     return 
-        dict_id.num == _VCF_REFALT ||
+        dict_id.num == _VCF_REFALT  ||
         dict_id.num == _VCF_oREFALT;
 }
 
@@ -552,8 +554,10 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
 
     if (flag.add_line_numbers) 
         vcf_seg_add_line_number (vb, VCF_ID_len);
-    else
+    else {
         seg_id_field (vb_, CTX(VCF_ID), VCF_ID_str, VCF_ID_len, true);
+        seg_set_last_txt (VB, CTX(VCF_ID), STRd(VCF_ID));
+    }
 
     // REF + ALT 
     GET_NEXT_ITEM (VCF_REF);
@@ -612,14 +616,8 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
 
             ASSVCF0 (dl->has_genotype_data || dl->has_haplotype_data, "expecting line to end as it has no sample data, but it has not");
             
-            // Segging LUFT samples is destructive: Samples are first lift-back to PRIMARY. vcf_seg_samples will
-            // use save_luft_samples to recover the original, if it turns out to be a Luft-only reject 
-            if (vb->line_coords == DC_LUFT) 
-                buf_add_more (VB, &vb->save_luft_samples, next_field, line_len - (next_field - field_start_line), "save_luft_samples");
-
             // seg all samples. note that this is destructive: Samples are first lift-back to PRIMARY if needed 
             next_field = vcf_seg_samples (vb, dl, &len, (char*)next_field, has_13); 
-            vb->save_luft_samples.len = 0;
         }
         else 
             seg_by_did (VB, NULL, 0, VCF_SAMPLES, 0); // case no samples: WORD_INDEX_MISSING

@@ -1313,14 +1313,16 @@ bool buf_dump_to_file (rom filename, ConstBufferP buf, unsigned buf_word_width, 
         int ret = system (command);
         ASSERTW (!ret, "FYI: \"%s\" returned %d. No harm.", command, ret); 
 
-        // special case: rename .bam.gz -> .bam
-        if (fn_len >= 4 && !memcmp (&update_filename[fn_len-4], ".bam", 4)) {
-            char gz_filename[fn_len + 10];
-            sprintf (gz_filename, "%s.gz", update_filename);
-            rename (gz_filename, update_filename);
+        if (!ret) {
+            // special case: rename .bam.gz -> .bam
+            if (fn_len >= 4 && !memcmp (&update_filename[fn_len-4], ".bam", 4)) {
+                char gz_filename[fn_len + 10];
+                sprintf (gz_filename, "%s.gz", update_filename);
+                file_rename (gz_filename, update_filename, false);
+            }
+            else 
+                strcpy (&update_filename[fn_len], ".gz");
         }
-        else 
-            strcpy (&update_filename[fn_len], ".gz");
     }        
 
     if (success && verbose) iprintf ("\nDumped file %s\n", update_filename);

@@ -50,6 +50,7 @@ void vcf_info_seg_initialize (VBlockVCFP vb)
         CTX(INFO_DP)->ltype = LT_DYN_INT; 
 
     seg_id_field_init (CTX(INFO_CSQ_Existing_variation));
+    seg_id_field_init (CTX(INFO_RSID));
 
     ctx_consolidate_stats (VB, INFO_RAW_MQandDP, INFO_RAW_MQandDP_MQ, INFO_RAW_MQandDP_DP, DID_EOL);
 }
@@ -224,8 +225,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_ALLELE)
 
     ContextP refalt_ctx = VB_VCF->vb_coords == DC_PRIMARY ? CTX (VCF_REFALT) : CTX (VCF_oREFALT); 
 
-    rom refalt = last_txtx (vb, refalt_ctx);
-    unsigned refalt_len = refalt_ctx->last_txt.len;
+    STRlast (refalt, refalt_ctx);
 
     if (!refalt_len) goto done; // variant is single coordinate in the other coordinate
 
@@ -683,7 +683,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_INFO_HGVS_SNP_POS)
     ContextP pos_ctx = CTX (VCF_POS);
     
     if (VB_VCF->vb_coords == DC_PRIMARY)
-        RECONSTRUCT (last_txtx (vb, pos_ctx), pos_ctx->last_txt.len); // faster than RECONSTRUCT_INT
+        RECONSTRUCT_LAST_TXT (pos_ctx); // faster than RECONSTRUCT_INT
     
     else  // if reconstructing Luft, VCF_POS just consumed and last_int set if in Luft coords (see top_luft container)
         RECONSTRUCT_INT (pos_ctx->last_value.i);
@@ -1042,7 +1042,7 @@ static inline void vcf_seg_INFO_RSPOS (VBlockVCFP vb, ContextP ctx, STRp(rspos))
             seg_by_ctx (VB, STRa(copy_POS_snip), ctx, rspos_len);
 
         else {
-            STRl(snip, 32) = 32;
+            STRli(snip, 32);
             seg_prepare_snip_other (SNIP_OTHER_DELTA, _VCF_POS, true, rspos_value - CTX(VCF_POS)->last_value.i, snip);
             seg_by_ctx (VB, STRa(snip), ctx, rspos_len);            
         }
@@ -1159,29 +1159,30 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         
     // note: since we use modified for both optimization and luft_back - we currently don't support
     // subfields having both translators and optimization. This can be fixed if needed.
-    #define ADJUST_FOR_MODIFIED ({ \
-        int32_t shrinkage = (int32_t)value_len - (int32_t)modified_len;\
-        vb->recon_size -= shrinkage; \
-        vb->recon_size_luft -= shrinkage; \
-        value = modified; \
-        value_len = modified_len; \
-    })
 
     ctx->line_is_luft_trans = false; // initialize
     
-    // --chain: if this is RendAlg=A_1 subfield in a REF<>ALT variant, convert a eg 4.31e-03 to e.g. 0.00431. This is to
+    #define ADJUST_FOR_MODIFIED ({                                  \
+        int32_t growth = (int32_t)modified_len - (int32_t)value_len;\
+        if (growth) {                                               \
+            vb->recon_size      += growth;                          \
+            vb->recon_size_luft += growth;                          \
+        }                                                           \
+        STRset (value, modified); })                                       
+
+    // --chain: if this is RendAlg=A_1 subfield in a REF⇆ALT variant, convert a eg 4.31e-03 to e.g. 0.00431. This is to
     // ensure primary->luft->primary is lossless (4.31e-03 cannot be converted losslessly as we can't preserve format info)
     if (chain_is_loaded && ctx->luft_trans == VCF2VCF_A_1 && LO_IS_OK_SWITCH (last_ostatus) && 
-        str_scientific_to_decimal (STRa(value), modified, &modified_len, NULL))
+        str_scientific_to_decimal (STRa(value), qSTRa(modified), NULL)) {
         ADJUST_FOR_MODIFIED;
-        
+    }        
+
     // Translatable item on a Luft line: attempt to lift-back the value, so we can seg it as primary
     if (vb->line_coords == DC_LUFT && needs_translation (ctx)) {
 
         // If cross-rendering to Primary is successful - proceed to Seg this value in primary coords, and assign a translator for reconstructing if --luft
-        if (vcf_lo_seg_cross_render_to_primary (vb, ctx, STRa(value), modified, &modified_len)) {
-            value = modified; 
-            value_len = modified_len; 
+        if (vcf_lo_seg_cross_render_to_primary (vb, ctx, STRa(value), qSTRa(modified), false)) {
+            STRset (value, modified); 
             ctx->line_is_luft_trans = true; // assign translator to this item in the container, to be activated with --luft
         } 
 
@@ -1209,7 +1210,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         #define CALL(f) (f); break
         #define CALL_IF(cond,f) if (cond) { (f); break; } else goto standard_seg 
         #define CALL_WITH_FALLBACK(f) if (f(vb, ctx, STRa(value))) { seg_by_ctx (VB, STRa(value), ctx, value_len); } break
-        #define STORE_AND_SEG(store_type) seg_set_last_txt_store_value (VB, ctx, STRa(value), store_type); seg_by_ctx (VB, STRa(value), ctx, value_len); break
+        #define STORE_AND_SEG(store_type) ({ seg_set_last_txt_store_value (VB, ctx, STRa(value), store_type); seg_by_ctx (VB, STRa(value), ctx, value_len); break; })
 
         // ##INFO=<ID=VQSLOD,Number=1,Type=Float,Description="Log odds of being a true variant versus being false under the trained gaussian mixture model">
         // Optimize VQSLOD
@@ -1315,6 +1316,10 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         // ##INFO=<ID=dbSNPBuildID,Number=1,Type=Integer,Description="First dbSNP Build for RS">
         case _INFO_dbSNPBuildID:
             CALL (seg_integer_or_not (VB, ctx, STRa(value), value_len));
+
+        // ##INFO=<ID=RSID,Number=1,Type=String,Description="dbSNP identifier">
+        case _INFO_RSID:
+            CALL (seg_id_field_do (VB, ctx, STRa(value)));
 
         // ##INFO=<ID=RS,Number=.,Type=String,Description="dbSNP ID (i.e. rs number)">
         case _INFO_RS:

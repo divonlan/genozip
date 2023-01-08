@@ -1,7 +1,7 @@
 {
     "files.associations": {
         "*.eb": "python",
-        "mac_gettime.h": "c"
+        "seg.h": "c"
     },
     "C_Cpp.dimInactiveRegions": false,
     "restructuredtext.confPath": "${workspaceFolder}\\docs",

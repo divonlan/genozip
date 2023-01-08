@@ -50,7 +50,6 @@ void vcf_vb_release_vb (VBlockVCFP vb)
     buf_free (vb->tags);
     buf_free (vb->rejects_report);
     buf_free (vb->last_format);
-    buf_free (vb->save_luft_samples);
 }
 
 void vcf_vb_destroy_vb (VBlockVCFP vb)
@@ -67,7 +66,6 @@ void vcf_vb_destroy_vb (VBlockVCFP vb)
     buf_destroy (vb->tags);
     buf_destroy (vb->rejects_report);
     buf_destroy (vb->last_format);
-    buf_destroy (vb->save_luft_samples);
 }
 
 // free memory allocations that assume subsequent files will have the same number of samples.

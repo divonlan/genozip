@@ -114,6 +114,8 @@ void vcf_samples_zip_initialize (void)
     ASSERT (PL_to_PLy_redirect_snip_len == PL_to_PLn_redirect_snip_len, "Expecting PL_to_PLy_redirect_snip_len%u == PL_to_PLn_redirect_snip_len=%u", PL_to_PLy_redirect_snip_len, PL_to_PLn_redirect_snip_len);
 
     vcf_samples_zip_initialize_PS_PID();
+
+    vcf_gwas_zip_initialize(); // no harm if not GWAS
 }
 
 
@@ -164,6 +166,10 @@ void vcf_samples_seg_initialize (VBlockVCFP vb)
     else
         init_mux_by_dosage(GQ);
 
+    if (segconf.vcf_is_gwas) {
+        seg_id_field_init (CTX(FORMAT_ID));
+    }
+
     // flags to send to PIZ
     vb->flags.vcf.use_null_DP_method = segconf.use_null_DP_method;
 }
@@ -206,7 +212,7 @@ int vcf_seg_get_mux_channel_i (VBlockVCFP vb, bool fail_if_dvcf_refalt_switch)
 {
     // fail if this is a DVCF ref<>alt switch, if caller requested so,
     // or if there is no valid GT in this sample
-    if (fail_if_dvcf_refalt_switch && z_is_dvcf)// && LO_IS_OK_SWITCH (last_ostatus)) // TODO: no real need to fallback unless REF<>ALT switch, but this doesn't work yet
+    if (fail_if_dvcf_refalt_switch && z_is_dvcf)// && LO_IS_OK_SWITCH (last_ostatus)) // TODO: no real need to fallback unless REF⇆ALT switch, but this doesn't work yet
         return -1;
 
     // fail if there is no GT in this variant
@@ -223,7 +229,7 @@ static inline ContextP vcf_seg_FORMAT_mux_by_dosage (VBlockVCFP vb, ContextP ctx
 {
     int channel_i = vcf_seg_get_mux_channel_i (vb, true);
 
-    // we don't use the multiplexer if its a DVCF REF<>ALT switch variant as GT changes
+    // we don't use the multiplexer if its a DVCF REF⇆ALT switch variant as GT changes
     if (channel_i == -1) {
         if (cell) seg_by_ctx (VB, STRa(cell), ctx, cell_len);
         return ctx;
@@ -238,7 +244,7 @@ static inline ContextP vcf_seg_FORMAT_mux_by_dosage (VBlockVCFP vb, ContextP ctx
             seg_by_ctx (VB, STRa(cell), channel_ctx, cell_len);
     }
 
-    // note: this is not necessarily all-the-same - there could be unmuxed snips due to REF<>ALT switch, and/or WORD_INDEX_MISSING 
+    // note: this is not necessarily all-the-same - there could be unmuxed snips due to REF⇆ALT switch, and/or WORD_INDEX_MISSING 
     seg_by_ctx (VB, STRa(mux->snip), ctx, 0);
 
     return channel_ctx;
@@ -280,7 +286,7 @@ static void vcf_seg_FORMAT_mux_by_dosagexDP (VBlockVCFP vb, ContextP ctx, STRp(c
     if (!str_get_int (last_txt(VB, FORMAT_DP), vb->last_txt_len(FORMAT_DP), &DP)) // In some files, DP may be '.'
         DP=0;
 
-    int channel_i = vcf_seg_get_mux_channel_i (vb, true); // we don't use the multiplexer if its a DVCF REF<>ALT switch variant as GT changes
+    int channel_i = vcf_seg_get_mux_channel_i (vb, true); // we don't use the multiplexer if its a DVCF REF⇆ALT switch variant as GT changes
     if (channel_i == -1) goto cannot_use_special;
 
     unsigned num_dps = mux->num_channels / 3;
@@ -294,7 +300,7 @@ static void vcf_seg_FORMAT_mux_by_dosagexDP (VBlockVCFP vb, ContextP ctx, STRp(c
     else
         seg_by_ctx (VB, STRa(cell), channel_ctx, cell_len);
 
-    // note: this is not necessarily all-the-same - there could be unmuxed snips due to REF<>ALT switch, and/or WORD_INDEX_MISSING 
+    // note: this is not necessarily all-the-same - there could be unmuxed snips due to REF⇆ALT switch, and/or WORD_INDEX_MISSING 
     seg_by_ctx (VB, MUX_SNIP(mux), MUX_SNIP_LEN(mux), ctx, 0);
     return;
 
@@ -943,7 +949,7 @@ static int32_t vcf_piz_luft_trans_complement_to_max_value (VBlockP vb, ContextP 
     char format[20];
     double f;
 
-    // if we're validating a FORMAT field with --chain (in vcf_seg_validate_luft_trans_one_sample, if REF<>ALT) - accept a valid scientific notation
+    // if we're validating a FORMAT field with --chain (in vcf_seg_validate_luft_trans_one_sample, if REF⇆ALT) - accept a valid scientific notation
     // as it will be converted to normal notation in vcf_seg_one_sample
     if (validate_only && chain_is_loaded && dict_id_is_vcf_format_sf (ctx->dict_id) &&
         str_scientific_to_decimal (STRa(recon), NULL, NULL, &f) && f >= 0.0 && f <= max_value) return true; // scientific notation in the valid range
@@ -1022,11 +1028,11 @@ static bool vcf_phred_optimize (rom snip, unsigned len, char *optimized_snip, un
 static inline void vcf_seg_FORMAT_AB (VBlockVCFP vb, ContextP ctx, STRp(ab))
 {
     int channel_i = vcf_seg_get_mux_channel_i (vb, false);
-    bool is_0_or_2 = (channel_i==0 || channel_i==2); // note: dos02 doesn't change in case of DVCF REF<>ALT switch
+    bool is_0_or_2 = (channel_i==0 || channel_i==2); // note: dos02 doesn't change in case of DVCF REF⇆ALT switch
     bool ab_missing = ab_len==1 && *ab=='.';
 
     if (channel_i==-1               || // GT didn't produce a mux channel
-        (channel_i==1 && z_is_dvcf) || // we can't handle channel 1 in dual coordinates (TODO: limit to REF<>ALT switch)
+        (channel_i==1 && z_is_dvcf) || // we can't handle channel 1 in dual coordinates (TODO: limit to REF⇆ALT switch)
         segconf.has[FORMAT_ADALL]   || // we can't handle AD0/AD1 peeking in AD is a delta vs ADALL
         (is_0_or_2 && !ab_missing)) {  // if channel is 0 or 2, we expected a '.' 
     
@@ -1064,8 +1070,7 @@ static inline void vcf_seg_FORMAT_AB_verify_channel1 (VBlockVCFP vb)
     ContextP ad0_ctx = ECTX (con_AD.items[0].dict_id);
     ContextP ad1_ctx = ECTX (con_AD.items[1].dict_id);
 
-    rom ab_str = last_txtx(vb, ab_ctx);
-    unsigned ab_str_len = vb->last_txt_len(FORMAT_AB);
+    STRlast (ab_str, ab_ctx);
 
     // rollback if we don't have AD0, AD1 this line, or if their value is not as expected by the formula
     if (!ad0_ctx || !ad1_ctx) goto rollback;
@@ -1130,15 +1135,14 @@ static inline void vcf_seg_FORMAT_PL (VBlockVCFP vb, ContextP ctx, STRp(PL))
     seg_set_last_txt (VB, ctx, STRa(PL)); // used by GQ (points into txt_data, before optimization)
 
     // attempt to optimize PL string, if requested
-    unsigned modified_len = PL_len*2 + 10;                 
-    char modified[PL_len]; // note: modifying functions need to make sure not to overflow this space
+    unsigned optimized_len = PL_len*2 + 10;                 
+    char optimized[PL_len]; // note: modifying functions need to make sure not to overflow this space
 
-    if (flag.optimize_phred && vcf_phred_optimize (STRa(PL), modified, &modified_len)) {
-        int shrinkage = (int)PL_len - (int)modified_len;
-        vb->recon_size      -= shrinkage;               
-        vb->recon_size_luft -= shrinkage;
-        PL = modified;
-        PL_len = modified_len;
+    if (flag.optimize_phred && vcf_phred_optimize (STRa(PL), qSTRa(optimized))) {
+        int growth = (int)optimized_len - (int)PL_len;
+        vb->recon_size      += growth;               
+        vb->recon_size_luft += growth;
+        STRset(PL, optimized);
     }
         
     // seg into either PLy or PLn, or into both if we're testing (vcf_FORMAT_PL_decide will drop one of them) 
@@ -1263,7 +1267,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_PLOIDY)
     if (!ctx_encountered (VB, FORMAT_GT)) return false; // we can't translate unless this variant as GT
 
     // use gt_prev_ploidy: in Seg, set by vcf_seg_FORMAT_GT, in validate and piz set by vcf_piz_luft_GT 
-    return vcf_piz_luft_trans_complement_to_max_value (vb, ctx, STRa(recon), validate_only, CTX(FORMAT_GT)->gt_prev_ploidy);
+    return vcf_piz_luft_trans_complement_to_max_value (vb, ctx, STRa(recon), validate_only, CTX(FORMAT_GT)->gt_actual_last_ploidy);
 }
 
 //------------------------------------------------
@@ -1307,9 +1311,10 @@ static bool vcf_piz_luft_switch_first_last (VBlockP vb, ContextP ctx, char *reco
 }
 
 // Lift-over translator assigned to a Number=R item, IF it is bi-allelic and we have a ALT<>REF switch.
-// 'R' : We switch between the two comma-separated values.
-// 'R2': We switch between the two PAIRS of comma-separated values.
-// 'G' : We have 3 values which represent the genotypes REF/REF,REF/ALT,ALT/ALT We switch between the 1st and 3rd value.
+// 'R'   : We switch between the two comma-separated values.
+// 'R2'  : We switch between the two PAIRS of comma-separated values.
+// 'G'   : We have 3 values which represent the genotypes REF/REF,REF/ALT,ALT/ALT We switch between the 1st and 3rd value.
+// 'NEG' : We negate a numeric value
 // returns true if successful 
 TRANSLATOR_FUNC (vcf_piz_luft_R)  { return vcf_piz_luft_switch_first_last (vb, ctx, STRa(recon), 2, 'R', validate_only); } // 2 bc we only handle bi-allelic
 TRANSLATOR_FUNC (vcf_piz_luft_R2) { return vcf_piz_luft_switch_first_last (vb, ctx, STRa(recon), 4, '.', validate_only); } // 4 bc we only handle bi-allelic
@@ -1376,10 +1381,11 @@ static inline ContextP vcf_seg_validate_luft_trans_one_sample (VBlockVCFP vb, Co
     ContextP failed_ctx = NULL; // optimistic initialization - nothing failed
 
     uint32_t save_ploidy = CTX(FORMAT_GT)->gt_prev_ploidy; // ruined by vcf_piz_luft_GT 
-    
+
     for (unsigned i=0; i < n_items; i++) {
         if (needs_translation (ctxs[i]) && item_lens[i]) {
-            if ((vb->line_coords == DC_LUFT && !vcf_lo_seg_cross_render_to_primary (vb, ctxs[i], STRi(item,i), NULL, NULL)) ||
+
+            if ((vb->line_coords == DC_LUFT && !vcf_lo_seg_cross_render_to_primary (vb, ctxs[i], STRi(item,i), NULL, 0, true/*validate only*/)) ||
                 (vb->line_coords == DC_PRIMARY && !(DT_FUNC(vb, translator)[ctxs[i]->luft_trans](VB, ctxs[i], (char *)STRi(item,i), 0, true)))) {
                 failed_ctx = ctxs[i];  // failed translation
                 break;
@@ -1388,7 +1394,7 @@ static inline ContextP vcf_seg_validate_luft_trans_one_sample (VBlockVCFP vb, Co
         ctx_set_encountered (VB, ctxs[i]); // might be needed for validation 
     }
 
-    // reset modified values, in preparation for real Seg
+    // restore values, in preparation for real Seg
     CTX(FORMAT_GT)->gt_prev_ploidy = save_ploidy;
     for (unsigned i=0; i < n_items; i++) 
         ctx_unset_encountered (VB, ctxs[i]); 
@@ -1396,7 +1402,7 @@ static inline ContextP vcf_seg_validate_luft_trans_one_sample (VBlockVCFP vb, Co
     return failed_ctx; 
 }
 
-// If ALL subfields in ALL samples can luft-translate as required: 1.sets ctx->line_is_luft_trans for all contexts 2.lifted-back if this is a LUFT lne
+// If ALL subfields in ALL samples can luft-translate as required and sets ctx->line_is_luft_trans for all contexts
 // if NOT: ctx->line_is_luft_trans=false for all contexts, line is rejects (LO_FORMAT), and keeps samples in their original LUFT or PRIMARY coordinates.
 static inline void vcf_seg_validate_luft_trans_all_samples (VBlockVCFP vb, uint32_t n_items, ContextP *ctxs, 
                                                             int32_t len, char *samples_start)
@@ -1424,10 +1430,6 @@ static inline void vcf_seg_validate_luft_trans_all_samples (VBlockVCFP vb, uint3
             // make all contexts untranslateable in this line
             for (unsigned i=0; i < n_items; i++)  // iterate on the order as in the line
                 ctxs[i]->line_is_luft_trans = false;
-
-            // if this is an untranslatable LUFT-only line, recover the original LUFT-coordinates samples
-            if (vb->line_coords == DC_LUFT) 
-                memcpy (samples_start, vb->save_luft_samples.data, vb->save_luft_samples.len);
         }
     }
 }
@@ -1468,25 +1470,46 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
         DictId dict_id = samples->items[i].dict_id;
         ContextP ctx = ctxs[i];
 
-        unsigned modified_len = sf_lens[i]*2 + 10;                 
-        char modified[modified_len]; // note: modifying functions need to make sure not to overflow this space
+        STRli(translated, sf_lens[i]*2 + 10); // for translations 
+        STRli(optimized,  sf_lens[i]*2 + 10); // for optimizations - separate space - we can optimize a "translated" string
 
         #define SEG_OPTIMIZED_MUX_BY_DOSAGE(tag) ({                     \
-            vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRa(modified), &vb->mux_##tag);  \
-            int32_t shrinkage = (int)sf_lens[i] - (int)modified_len;    \
-            vb->recon_size      -= shrinkage;                           \
-            vb->recon_size_luft -= shrinkage; })
-               
+            vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRa(optimized), &vb->mux_##tag);  \
+            int32_t growth = (int)optimized_len - (int)sf_lens[i];      \
+            vb->recon_size      += growth;                              \
+            vb->recon_size_luft += growth; })
+
         // --chain: if this is RendAlg=A_1 and RendAlg=PLOIDY subfield, convert a eg 4.31e-03 to e.g. 0.00431. This is to
         // ensure primary->luft->primary is lossless (4.31e-03 cannot be converted losslessly as we can't preserve format info)
-        if (chain_is_loaded && (ctx->luft_trans == VCF2VCF_A_1 || ctx->luft_trans == VCF2VCF_PLOIDY) && 
-            str_scientific_to_decimal (STRi(sf, i), modified, &modified_len, NULL)) {
-            
-            int32_t shrinkage = (int32_t)sf_lens[i] - (int32_t)modified_len; // possibly negative = growth
-            vb->recon_size      -= shrinkage; 
-            vb->recon_size_luft -= shrinkage; 
-            sfs[i] = modified; 
-            sf_lens[i] = modified_len; 
+        // Warning: last_txt will be invalid for this context
+        if (chain_is_loaded && 
+            (ctx->luft_trans == VCF2VCF_A_1 || ctx->luft_trans == VCF2VCF_PLOIDY) && 
+            str_scientific_to_decimal (STRi(sf, i), qSTRa(translated), NULL)) {          
+
+            int32_t growth = (int32_t)translated_len - (int32_t)sf_lens[i];    
+            if (growth) {                                               
+                vb->recon_size      += growth;                          
+                vb->recon_size_luft += growth;                          
+            }                                                           
+            sfs[i] = translated;                                                 
+            sf_lens[i] = translated_len; 
+        }
+
+        if (vb->line_coords == DC_LUFT && needs_translation (ctx)) {
+
+            // case: translate into "translated" if the translation might modify the size
+            // Warning: last_txt will be invalid for this context
+            if (ctx->luft_trans == VCF2VCF_NEG) {
+                ASSERT (vcf_lo_seg_cross_render_to_primary (vb, ctx, STRi(sf,i), qSTRa(translated), false),
+                        "Expecting translation of %s to succeed, because it was already validated", ctx->tag_name);
+                
+                sfs[i] = translated;   // note: recon_size was adjusted in vcf_lo_seg_cross_render_to_primary                                   
+                sf_lens[i] = translated_len; 
+            }
+
+            else
+                ASSERT (vcf_lo_seg_cross_render_to_primary (vb, ctx, STRi(sf,i), NULL, 0, false),
+                        "Expecting translation of %s to succeed, because it was already validated", ctx->tag_name);
         }
 
         if (!sf_lens[i])
@@ -1511,7 +1534,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
             // note: we changed the FORMAT field GL->PL in vcf_seg_format_field. data is still stored in the GL context.
             // <ID=PL,Number=G,Type=Integer,Description="Phred-scaled genotype likelihoods rounded to the closest integer">
             if (flag.GL_to_PL) {
-                vcf_convert_prob_to_phred (vb, "--GL-to-PL", STRi(sf, i), modified, &modified_len);
+                vcf_convert_prob_to_phred (vb, "--GL-to-PL", STRi(sf, i), qSTRa(optimized));
                 SEG_OPTIMIZED_MUX_BY_DOSAGE(GL);
             }
             else // I tried muxing against DS instead of dosage (41 channels) - worse results than dosage in 1KGP-37 even with --best 
@@ -1522,11 +1545,11 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
         case _FORMAT_GP:
             // convert GP (probabilities) to PP (phred values). PP was introduced in VCF v4.3.
             if (flag.GP_to_PP && vb->vcf_version >= VCF_v4_3) {
-                vcf_convert_prob_to_phred (vb, "--GP-to-PP", STRi(sf, i), modified, &modified_len);
+                vcf_convert_prob_to_phred (vb, "--GP-to-PP", STRi(sf, i), qSTRa(optimized));
                 SEG_OPTIMIZED_MUX_BY_DOSAGE(GP);
             }
             else if (flag.optimize_phred && vb->vcf_version <= VCF_v4_2 &&
-                     vcf_phred_optimize (STRi(sf, i), modified, &modified_len)) 
+                     vcf_phred_optimize (STRi(sf, i), qSTRa(optimized))) 
                 SEG_OPTIMIZED_MUX_BY_DOSAGE(GP);
             else
                 vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_GP);
@@ -1539,7 +1562,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
 
         // <ID=PP,Number=G,Type=Integer,Description="Phred-scaled genotype posterior probabilities rounded to the closest integer">
         case _FORMAT_PP:
-            if (flag.optimize_phred && vcf_phred_optimize (STRi(sf, i), modified, &modified_len)) 
+            if (flag.optimize_phred && vcf_phred_optimize (STRi(sf, i), qSTRa(optimized))) 
                 SEG_OPTIMIZED_MUX_BY_DOSAGE(PP);
             else
                 vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_PP);
@@ -1547,7 +1570,7 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
         
         // <ID=PRI,Number=G,Type=Float,Description="Phred-scaled prior probabilities for genotypes">
         case _FORMAT_PRI:
-            if (flag.optimize_phred && vcf_phred_optimize (STRi(sf, i), modified, &modified_len)) 
+            if (flag.optimize_phred && vcf_phred_optimize (STRi(sf, i), qSTRa(optimized))) 
                 SEG_OPTIMIZED_MUX_BY_DOSAGE(PRI);
             else
                 vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRi (sf, i), &vb->mux_PRI);
@@ -1664,6 +1687,12 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, Co
         // example: CCTAAAGGTATCGCCG-1_41;TTGTCCGTCGCTAGCG-1_55;TATCATCGTTGGAGGT-1_74
         case _FORMAT_BX    : vcf_seg_FORMAT_BX (vb, ctx, STRi(sf, i)); break;
         
+        // GWAS-VCF fields
+        #define IF_GWAS(f) ({ if (segconf.vcf_is_gwas) {f; break;} else goto fallback; })
+        
+        // VCF-GWAS: <ID=ID,Number=1,Type=String,Description="Study variant identifier">
+        case _FORMAT_ID    : IF_GWAS(vcf_gwas_seg_FORMAT_ID (vb, ctx, STRi(sf, i)));
+
         default            :
         fallback           : seg_by_ctx (VB, STRi(sf, i), ctx, sf_lens[i]);
         }

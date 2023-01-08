@@ -213,7 +213,8 @@ typedef struct Context {
         int32_t last_end_line_i;    // INFO_END:        PIZ: last line on which INFO/END was encountered 
              
         enum   __attribute__ ((__packed__)) { PAIR1_ALIGNED_UNKNOWN=-1, PAIR1_NOT_ALIGNED=0, PAIR1_ALIGNED=1 } pair1_is_aligned;  // FASTQ_SQBITMAP:  PIZ: used when reconstructing pair-2
-        struct __attribute__ ((__packed__)) { uint16_t gt_prev_ploidy; char gt_prev_phase; }; // FORMAT_GT: ZIP/PIZ
+        enum   __attribute__ ((__packed__)) { ID_TYPE_UNKNOWN, ID_TYPE_ALPHA_NUMERIC, ID_TYPE_OTHER } id_type; // type of field segged with seg_id_field        
+        struct __attribute__ ((__packed__)) { Ploidy gt_prev_ploidy, gt_actual_last_ploidy; char gt_prev_phase; }; // FORMAT_GT: ZIP/PIZ
         struct __attribute__ ((__packed__)) { enum __attribute__ ((__packed__)) { PS_NONE, PS_POS, PS_POS_REF_ALT, PS_UNKNOWN } ps_type; }; // FORMAT_PS and FORMAT_PID
     };
 

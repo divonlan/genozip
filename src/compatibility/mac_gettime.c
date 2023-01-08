@@ -1,3 +1,5 @@
+// Source: https://gist.github.com/alfwatt/3588c5aa1f7a1ef7a3bb
+
 #if defined __APPLE__ 
 
 #include "mac_gettime.h"

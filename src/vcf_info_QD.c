@@ -96,7 +96,7 @@ static QdPredType vcf_seg_is_QD_predictable (VBlockVCFP vb, ContextP ctx, STRp(q
     }
 
     // prediction based on sum of FORMAT/DP, excluding samples with 0/0 or ./.
-    if ((vcf_num_samples + !has_info_dp >= 2) && !LO_IS_OK_SWITCH (last_ostatus) &&  // can't use this in case of a REF<>ALT switch, because GT changes)
+    if ((vcf_num_samples + !has_info_dp >= 2) && !LO_IS_OK_SWITCH (last_ostatus) &&  // can't use this in case of a REF⇆ALT switch, because GT changes)
          ctx->qd.sum_dp_with_dosage >= ratio-1 && ctx->qd.sum_dp_with_dosage <= ratio+1) {
         if (vcf_seg_QD_verify_prediction (ctx, qual_value, ctx->qd.sum_dp_with_dosage, STRa(qd), 0 )) return QD_PRED_SUM_DP;
         if (vcf_seg_QD_verify_prediction (ctx, qual_value, ctx->qd.sum_dp_with_dosage, STRa(qd), 1 )) return QD_PRED_SUM_DP_P001;

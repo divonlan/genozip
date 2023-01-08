@@ -57,7 +57,7 @@ uint32_t hash_next_size_up (uint64_t size, bool allow_huge)
 
 // this is called when allocing memory for global hash - it copies pre-exiting nodes data, for example, when copying in a
 // reference contig dictionary  
-static void hash_populate_from_nodes (Context *zctx)
+static void hash_populate_from_nodes (ContextP zctx)
 {
     uint64_t len = zctx->nodes.len;
     zctx->nodes.len = 0; // hash_global_get_entry will increment it back to its original value
@@ -73,7 +73,7 @@ static void hash_populate_from_nodes (Context *zctx)
 // allocation algorithm:
 // 1. If we got info on the size of this dict with the previous merged vb - use that size
 // 2. If not - use either num_lines for the size, or the smallest size for dicts that are typically small
-void hash_alloc_local (VBlockP segging_vb, Context *vctx)
+void hash_alloc_local (VBlockP segging_vb, ContextP vctx)
 {
     vctx->local_hash_prime = 0; // initialize
 
@@ -108,7 +108,7 @@ void hash_alloc_local (VBlockP segging_vb, Context *vctx)
 // goes up (because of the need to traverse linked lists) during the bottleneck time. Coversely, if the hash
 // table size is too big, it both consumes a lot memory, as well as slows down the search time as the dictionary
 // is less likely to fit into the CPU memory caches
-uint32_t hash_get_estimated_entries (VBlockP merging_vb, Context *zctx, const Context *first_merging_vb_ctx)
+uint32_t hash_get_estimated_entries (VBlockP merging_vb, ContextP zctx, ConstContextP first_merging_vb_ctx)
 {
     double effective_num_vbs   = 0; 
     double estimated_num_vbs   = MAX_(1, (double)txtfile_get_seggable_size() / (double)merging_vb->txt_data.len);
@@ -253,7 +253,7 @@ void hash_alloc_global (ContextP zctx, uint32_t estimated_entries)
 // creates a node in the hash table, unless the snip is already there. 
 // the old node is in node, and NULL if its a new node.
 // returns the node_index (positive if in nodes and negative-2 if in ston_nodes - the singleton buffer)
-WordIndex hash_global_get_entry (Context *zctx, STRp(snip), HashGlobalGetEntryMode mode,
+WordIndex hash_global_get_entry (ContextP zctx, STRp(snip), HashGlobalGetEntryMode mode,
                                  CtxNode **old_node)        // out - node if node is found, NULL if not
 {
     GlobalHashEnt g_head, *g_hashent = &g_head;
@@ -376,7 +376,7 @@ WordIndex hash_global_get_entry (Context *zctx, STRp(snip), HashGlobalGetEntryMo
 // 1. if its in the global hash table, with merge_num lower or equal to ours - i.e. added by an earler thread - we take it 
 // 2. if its in the local hash table - i.e. added by us (this vb) earlier - we take it
 // 3. if not found - we add it to the local hash table
-WordIndex hash_get_entry_for_seg (VBlockP segging_vb, Context *vctx, STRp(snip), 
+WordIndex hash_get_entry_for_seg (VBlockP segging_vb, ContextP vctx, STRp(snip), 
                                   WordIndex node_index_if_new, // NODE_INDEX_NONE means "read only in global hash (ol_nodes)"
                                   CtxNode **node)        // out - node if node is found, NULL if not
 {

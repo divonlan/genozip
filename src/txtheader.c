@@ -109,7 +109,7 @@ void txtheader_compress (BufferP txt_header,
                              zfile_output_processed_vb);
 
     // VCF note: we don't account for DVCF rejects components - the added header lines are duplicates of the main header
-    if (!Z_DT(VCF) || comp_i == VCF_COMP_MAIN) {        
+    if (!(Z_DT(VCF) || Z_DT(BCF)) || comp_i == VCF_COMP_MAIN) {        
         z_file->txt_data_so_far_single   += txt_header->len; // length of txt header as it would be reconstructed (possibly afer modifications)
         z_file->txt_data_so_far_bind     += txt_header->len;
         z_file->txt_data_so_far_single_0 += unmodified_txt_header_len; // length of the original txt header as read from the file
@@ -327,7 +327,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
 
     // count header-lines (for --lines etc): before data-modifying inspect_txt_header
     if (writer_does_txtheader_need_write (sec)) {
-        if (flag.header_one && Z_DT(VCF))
+        if (flag.header_one && (Z_DT(VCF) || Z_DT(BCF)))
             txt_file->num_lines += 1;
         else if (!DTPT (is_binary))
             txt_file->num_lines += str_count_char (STRb(txt_header_vb->txt_data), '\n'); // number of source-file lines

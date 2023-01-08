@@ -120,6 +120,7 @@ typedef struct {
     bool vcf_is_varscan;        // this VCF file was produced by VarScan
     bool vcf_is_gvcf;
     bool vcf_is_beagle;
+    bool vcf_is_gwas;           // GWAS-VCF format: https://github.com/MRCIEU/gwas-vcf-specification
     bool vcf_illum_gtyping;     // tags from Illumina GenCall genotyping software
     uint64_t count_dosage[2];   // used to calculate pc_has_dosage
     float pc_has_dosage;        // % of the samples x lines that have a valid (0-2) dosage value [0.0,1.0]

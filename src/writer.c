@@ -200,7 +200,7 @@ static VBIType writer_init_txt_header_info (void)
 
         // conditions entire txt header should be read 
         comp->needs_recon = 
-            (  !Z_DT(VCF) // This clause only limits VCF files  
+            (  !(Z_DT(VCF) || Z_DT(BCF)) // This clause only limits VCF files  
             || ( flag.luft && (comp_i == VCF_COMP_MAIN || (comp_i == VCF_COMP_PRIM_ONLY && !flag.header_one))) 
             || (!flag.luft && (comp_i == VCF_COMP_MAIN || (comp_i == VCF_COMP_LUFT_ONLY && !flag.header_one)))); // --header-one - we don't need the ##primary_only / ##luft_only lines 
             
@@ -212,7 +212,7 @@ static VBIType writer_init_txt_header_info (void)
         &&
            !flag.no_header
         &&
-           (  !Z_DT(VCF) // This clause only limits VCF files 
+           (  !(Z_DT(VCF) || Z_DT(BCF)) // This clause only limits VCF files 
            || ( flag.luft && comp_i == VCF_COMP_PRIM_ONLY)  // if luft rendition, show ##primary_only rejects components (appears in the vcf header)
            || (!flag.luft && comp_i == VCF_COMP_LUFT_ONLY)  // if primary rendtion, show ##luft_only rejects components (appears in the vcf header)
            || comp_i == VCF_COMP_MAIN)
@@ -769,7 +769,7 @@ void writer_create_plan (void)
     }
 
     // case: VCF with --sort, other than DVCF
-    else if (Z_DT(VCF) && flag.sort) 
+    else if ((Z_DT(VCF) || Z_DT(BCF)) && flag.sort) 
         writer_add_plan_from_recon_section (VCF_COMP_MAIN, false, &z_file->max_conc_writing_vbs, &vblock_mb);
 
     // case: paired FASTQ to be written interleaved 

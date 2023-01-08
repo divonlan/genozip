@@ -16,8 +16,8 @@
             //"program": "${workspaceFolder}/src/genounzip.exe",
             //"program": "${workspaceFolder}/src/genols-debug.exe",
 
-            "args" : ["--register"],
-
+            "args" : ["-td", "private/test/test.gwas-v1.0.vcf.genozip"],
+            
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],

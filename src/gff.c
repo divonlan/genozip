@@ -278,6 +278,7 @@ static inline DictId gff_seg_attr_subfield (VBlockP vb, STRp(tag), STRp(value))
             goto plain_seg;
         break;
 
+    // example: Name=gene021872.2
     case _ATTR_Name:
         seg_id_field (vb, CTX(ATTR_Name), value, value_len, false);
         break;

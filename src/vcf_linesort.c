@@ -39,7 +39,7 @@ typedef struct {
     LineCmpInfo info;
     uint32_t start_line, num_lines;
     WordIndex prim_chrom_wi;
-    PosType prim_start_pos;
+    VcfPosType prim_start_pos;
 } LineInfo;
 
 bool vcf_is_sorting (CompIType comp_i)
@@ -180,7 +180,7 @@ static void line_sorter_detect_duplicates (ConstBufferP index_buf)
         bool is_dup_prim = (this_li->prim_chrom_wi == prev_li->prim_chrom_wi) && (this_li->prim_start_pos == prev_li->prim_start_pos);
         if (is_dup_luft && !is_dup_prim) {
             if (last_dup != index_i-1) // not duplicate duplicate (i.e. 3 or more variants are the same)
-                bufprintf (evb, &dups, "%s\t%"PRIu64"\t%"PRIu64"\n", 
+                bufprintf (evb, &dups, "%s\t%d\t%d\n", 
                            ctx_snip_from_zf_nodes (ZCTX(DTFZ(luft_chrom)), this_li->info.chrom_wi, 0, 0), 
                            this_li->info.start_pos, this_li->info.start_pos);
 
@@ -204,7 +204,7 @@ typedef struct { char s[200]; } LcText;
 static LcText vcf_linesort_dis_info (LineCmpInfo a)
 {
     LcText s;
-    sprintf (s.s, "wi=%d start_pos=%"PRId64" end_pos=%"PRId64" tie_breaker=%u", a.chrom_wi, a.start_pos, a.end_pos, a.tie_breaker);
+    sprintf (s.s, "wi=%d start_pos=%d end_pos=%d tie_breaker=%u", a.chrom_wi, a.start_pos, a.end_pos, a.tie_breaker);
     return s;
 }
 #endif

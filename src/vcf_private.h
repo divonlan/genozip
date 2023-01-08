@@ -17,11 +17,13 @@
 #define VCF_FIELD_NAMES "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO"
 #define VCF_FIELD_NAMES_LONG VCF_FIELD_NAMES "\tFORMAT"
 
+typedef int32_t VcfPosType;      // per VCF v4.3 spec 1.6.1
+
 // IMPORTANT: if changing fields in DataLine, also update vb_release_vb
 typedef struct {
     WordIndex chrom[2];          // Seg: enter as node_index ; Merge: convert to word_index
-    PosType pos[2];              // arrays of [2] - { primary-coord, luft-coord } 
-    PosType end_delta;           // Delta of INFO/END vs POS (same in both coordinates) - used in case chrom and pos are the same
+    VcfPosType pos[2];           // arrays of [2] - { primary-coord, luft-coord } 
+    VcfPosType end_delta;        // Delta of INFO/END vs POS (same in both coordinates) - used in case chrom and pos are the same
     uint32_t tie_breaker;        // tie-breaker in case chrom, pos and end are the same
     
     bool has_haplotype_data : 1; // FORMAT field contains GT
@@ -50,14 +52,14 @@ typedef struct VBlockVCF {
 
     // charactaristics of the data
     
-    uint16_t ploidy;         // ZIP only
+    Ploidy ploidy;           // ZIP only
     VcfVersion vcf_version;
     uint64_t first_line;     // ZIP: used for --add_line_numbers  
     
     // used for segging INFO
     Buffer info_items;       // Seg: INFO items of the line being segged
 
-    rom main_ref;         // used by vcf_refalt_lift and vcf_seg_INFO_BaseCounts, set by vcf_seg_txt_line
+    rom main_ref;            // used by vcf_refalt_lift and vcf_seg_INFO_BaseCounts, set by vcf_seg_txt_line
     rom main_alt;
 
     unsigned main_ref_len, main_alt_len;
@@ -100,7 +102,6 @@ typedef struct VBlockVCF {
     Buffer hapmat_one_array;        // one line or column 
 
     // DVCF stuff
-    Buffer save_luft_samples;       // ZIP: backed-up luft line samples
     bool sort;                      // ZIP: true if this VB will be sorted
     Coords vb_coords;               // ZIP: DC_PRIMARY, DC_LUFT or DC_BOTH
                                     // PIZ: DC_PRIMARY or DC_LUFT - influenced by FlagsVbHeader.coords and flag.luft 
@@ -136,7 +137,7 @@ typedef enum {
     LO_OK_REF_SAME_SNP,             // REF and ALT are the same for a SNP
     LO_OK_REF_SAME_SNP_REV,         // REF and ALT are the same for a SNP - reverse complemented
     LO_OK_REF_SAME_SNP_IUPAC,       // REF considered unchanged as it matches a IUPAC \"base\" in the Luft reference
-    LO_OK_REF_SAME_INDEL,           // REF and ALT are the same for an INDEL, and confirmed not to be a REF<>ALT switch
+    LO_OK_REF_SAME_INDEL,           // REF and ALT are the same for an INDEL, and confirmed not to be a REF⇆ALT switch
     LO_OK_REF_SAME_NDNI_REV,        // Same, non-Ins non-Del left-aligned Indel, reverse complemented
     LO_OK_REF_SAME_DEL_REV,         // Same deletion - reverse complemented
     LO_OK_REF_SAME_INS_REV,         // Same insertion - reverse complemented
@@ -172,7 +173,7 @@ typedef enum {
     LO_NEW_ALLELE_SNP,              // The Luft reference represents an allele that is neither REF or ALT
     LO_REF_MULTIALT_SWITCH_INDEL,   // REF changes for a multi-allelic INDEL, or REF change would make a bi-allelic into a tri-allelic INDEL
     LO_NEW_ALLELE_DEL_REF_CHANGED_MISSING,  // REF changed in a Deletion variant that has a "*" ALT
-    LO_NEW_ALLELE_DEL_REF_CHANGED,  // REF changed in Deletion variant, but not REF<>ALT switch (i.e. Deletion not integrated into new reference)
+    LO_NEW_ALLELE_DEL_REF_CHANGED,  // REF changed in Deletion variant, but not REF⇆ALT switch (i.e. Deletion not integrated into new reference)
     LO_NEW_ALLELE_DEL_SAME_REF,     // REF bases match, but this is a new Deletion allele based on context
     LO_NEW_ALLELE_INS_REF_CHANGED,  // REF changed in Insertion variant
     LO_NEW_ALLELE_INS_SAME_REF,     // REF bases match, but this is a new Insertion allele based on context
@@ -192,6 +193,7 @@ typedef enum {
     LO_INFO,                        // An error cross-rending an INFO subfield (including INFO/END)
     LO_FORMAT,                      // An error cross-rending an FORMAT subfield
     
+    LO_ALTS_NOT_SAME_LEN_INS_REV,   // A multi-allelic insertion with xstrand contains ALTs of different length, eg: "C CT,T". Re-anchoring whould make each ALT have a different POS        
     NUM_LO_STATUSES
 } LiftOverStatus;
 
@@ -212,7 +214,7 @@ extern rom dvcf_status_names[NUM_LO_STATUSES];
     "RefNewAlleleInsRefChanged", "RefNewAlleleInsSameRef", "RefNewAlleleIndelNoSwitch", "RefNewAlleleNDNI",\
     "XstrandNotLeftAnc", "RefNewAlleleNotLeftAnc","RefNewAlleleSV", "XstrandSV", "ComplexRearrangements", \
     "AddedVariant", "UnsupportedRefAlt", \
-    "INFO", "FORMAT" \
+    "INFO", "FORMAT", "AltsNotSameLenInsRev" \
 }
 
 #define LO_IS_REJECTED(ost) ((ost) >= LO_REJECTED) // note: this condition works also for unrecognized reject strings (that an have index >= NUM_LO_STATUSES)
@@ -246,7 +248,7 @@ typedef enum { IL_CHROM, IL_POS, IL_REF, IL_XSTRAND, NUM_IL_FIELDS } InfoLiftFie
 #define HK_RENAME_ALWAYS_ATTR "RenameAlways="
 #define TAG_SOURCE      "Source=\""GENOZIP_URL"\""
 #define KH_INFO         "##INFO=<ID="
-#define KH_INFO_LUFT    KH_INFO INFO_LUFT_NAME ",Number=4,Type=String,Description=\"Info for rendering variant in LUFT coords. See " WEBSITE_COORDS "\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
+#define KH_INFO_LUFT    KH_INFO INFO_LUFT_NAME ",Number=4,Type=String,Description=\"Info for rendering variant in LUFT coords. See " WEBSITE_DVCF "\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
 #define KH_INFO_PRIM    KH_INFO INFO_PRIM_NAME ",Number=4,Type=String,Description=\"Info for rendering variant in PRIMARY coords\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
 #define KH_INFO_LREJ    KH_INFO INFO_LREJ_NAME ",Number=1,Type=String,Description=\"Reason variant was rejected for LUFT coords\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
 #define KH_INFO_PREJ    KH_INFO INFO_PREJ_NAME ",Number=1,Type=String,Description=\"Reason variant was rejected for PRIMARY coords\","TAG_SOURCE",Version=\"%s\"," HK_RENDALG_ATTR "\"NONE\">"
@@ -362,24 +364,29 @@ extern void vcf_seg_ALLELE_A (VBlockVCFP vb, ContextP ctx, STRp(value));
 extern void vcf_seg_ALLELE_B (VBlockVCFP vb, ContextP ctx, STRp(value));
 extern void vcf_seg_mux_by_adjusted_dosage (VBlockVCFP vb, ContextP ctx, STRp(baf), const DosageMultiplexer *mux);
 
+// GWAS-VCF stuff
+extern void vcf_gwas_zip_initialize (void);
+extern void vcf_gwas_seg_initialize (VBlockVCFP vb);
+extern void vcf_gwas_seg_FORMAT_ID (VBlockVCFP vb, ContextP ctx, STRp(id));
+
 // Tags stuff
 
 // tag sources - ordered from least authorative to most 
 typedef enum { TAG_NO_SRC, TAG_GENOZIP, TAG_HEADER_DST, TAG_HEADER, TAG_CMDLINE_DST, TAG_CMDLINE } VcfTagSource;
 #define TAG_SOURCE_NAMES { "NoSrc", "Genozip", "HeaderDst", "Header", "CmdLineDst", "CmdLine" }
 
-#define MAX_NUMBER_LEN 8 // maximum length of Number attribute 
+#define MAX_NUMBER_LEN 8            // maximum length of Number attribute 
 #define MAX_TYPE_LEN 12
 #define MAX_RENDALG_LEN (MAX_TAG_LEN+16)
 typedef struct { 
-    char tag_name[MAX_TAG_LEN]; // this can also be refered to as dests[RA_NAME] since MAX_TAG_LEN is word-aligned
+    char tag_name[MAX_TAG_LEN];     // this can also be refered to as dests[RA_NAME] since MAX_TAG_LEN is word-aligned
     char dests[NUM_RENAME_ATTRS][MAX_TAG_LEN];
     unsigned tag_name_len, dest_lens[NUM_RENAME_ATTRS];
     DictIdType dtype;
-    char number[MAX_NUMBER_LEN];   unsigned number_len;  // Number attribute  (only used in --chain)
-    char type[MAX_TYPE_LEN];       unsigned type_len;    // Type attribute    (only used in --chain)
-    char rendalg[MAX_RENDALG_LEN]; unsigned rendalg_len; // RendAlg attribute (only used in --chain)
-    VcfTagSource source; // where did this tag originate
+    STRl(number, MAX_NUMBER_LEN);   // Number attribute  (only used in --chain)
+    STRl(type, MAX_TYPE_LEN);       // Type attribute    (only used in --chain)
+    STRl(rendalg, MAX_RENDALG_LEN); // RendAlg attribute (only used in --chain)
+    VcfTagSource source;            // where this tag originated
 } Tag;
 
 extern void vcf_tags_populate_tags_from_command_line (void);
@@ -395,16 +402,16 @@ extern void vcf_lo_zip_initialize (void);
 extern void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl);
 extern void vcf_lo_set_rollback_point (VBlockVCFP vb);
 extern void vcf_lo_seg_rollback_and_reject (VBlockVCFP vb, LiftOverStatus ostatus, Context *ctx);
-extern LiftOverStatus vcf_lo_get_liftover_coords (VBlockVCFP vb, PosType pos, WordIndex *dst_contig_index, PosType *dst_1pos, bool *xstrand, uint32_t *aln_i); // out
+extern LiftOverStatus vcf_lo_get_liftover_coords (VBlockVCFP vb, VcfPosType pos, WordIndex *dst_contig_index, VcfPosType *dst_1pos, bool *xstrand, uint32_t *aln_i); // out
 extern void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, ContextP ctx, STRp(value));
 extern void vcf_lo_seg_INFO_REJX (VBlockVCFP vb, ContextP ctx, STRp(value));
-extern bool vcf_lo_seg_cross_render_to_primary (VBlockVCFP vb, ContextP ctx, STRp (this_value), char *modified_snip, unsigned *modified_snip_len);
+extern bool vcf_lo_seg_cross_render_to_primary (VBlockVCFP vb, ContextP ctx, STRp (this_value), qSTRp (primary_snip), bool validate_only);
 
 // Line sorter
 typedef struct {
     WordIndex chrom_wi; 
     uint32_t tie_breaker;
-    PosType start_pos, end_pos;
+    VcfPosType start_pos, end_pos;
 } LineCmpInfo; 
 extern bool vcf_is_sorting (CompIType comp_i);
 extern int vcf_linesort_cmp (LineCmpInfo a, LineCmpInfo b);
@@ -420,15 +427,9 @@ extern void vcf_lo_piz_TOPLEVEL_cb_filter_line (VBlockVCFP vb);
 #define ASSVCF0(condition, msg)        ASSVCF ((condition), msg "%s", "")
 #define WARNVCF(format, ...)           ({ if (!flag.quiet)  { VCF_ERR_PREFIX; fprintf (stderr, format "\n", __VA_ARGS__); } })
 
-#define REJECT(ostatus, reason, ...)              ({ if (!vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_ref, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); })
-#define REJECT_MAPPING(reason)                    ({ if (!vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64 "\t.\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0]); return; })
-#define REJECT_SUBFIELD(ostatus, ctx, reason,...) ({ if (!vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t.\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], __VA_ARGS__); \
+#define REJECT(ostatus, reason, ...)              ({ if (!vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%d\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_ref, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); })
+#define REJECT_MAPPING(reason)                    ({ if (!vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%d\t.\t"      reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0]); return; })
+#define REJECT_SUBFIELD(ostatus, ctx, reason,...) ({ if (!vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%d\t.\t"      reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], __VA_ARGS__); \
                                                        vcf_lo_seg_rollback_and_reject (vb, (ostatus), (ctx)); })
-#define LIFTOK(ostatus, reason, ...)              ({ if (flag.show_lift && !vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_ref, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); })
-#define LIFTOKEXT(ostatus, reason, ...)           ({ if (flag.show_lift && !vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_ref, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); })
-#define LIFTOK0(ostatus, reason)                  LIFTOK(ostatus, reason "%s", "")
-#define REJECTIF(condition, ostatus, reason, ...) ({ if (condition) { if (!vb->comp_i) bufprintf (vb, &vb->rejects_report, "%s\t%.*s\t%"PRId64"\t%.*s%s\t" reason "\n", dvcf_status_names[ostatus], vb->chrom_name_len, vb->chrom_name, DATA_LINE (vb->line_i)->pos[0], MIN_(100, vb->main_ref_len), vb->main_ref, vb->main_ref_len > 100 ? "..." :"", __VA_ARGS__); return (ostatus); } })
-#define REJECTIF0(condition, ostatus, reason)     ({ if (condition) REJECT (ostatus, reason "%s", ""); })
-
 // misc
 extern void vcf_piz_insert_field (VBlockVCFP vb, Did did, STRp(value));

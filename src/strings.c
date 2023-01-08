@@ -1068,11 +1068,25 @@ void str_human_time (unsigned secs, bool compact, char *str /* out */)
 // current date and time
 StrTime str_time (void)
 {
-    StrTime s;
-    time_t now = time (NULL);
-    strftime (s.s, sizeof (s.s), "%Y-%m-%d %H:%M:%S ", localtime (&now));
-    int len = strlen(s.s);
+    StrTime s = {};
 
-    strncpy (&s.s[len], tzname[daylight], sizeof (s.s) - len);
+#ifdef _WIN32
+    int len = GetDateFormatA (LOCALE_USER_DEFAULT, DATE_SHORTDATE, NULL, NULL, s.s, sizeof(s.s)-1) - 1;
+    s.s[len++] = ' ';
+    len += GetTimeFormatA (LOCALE_USER_DEFAULT, TIME_FORCE24HOURFORMAT, NULL, NULL, &s.s[len], sizeof(s.s)-len-1) - 1;
+
+    s.s[len++] = ' ';
+    sprintf (&s.s[len], tzname[daylight != 0], sizeof (s.s) - len - 1);
+
+#else
+    time_t now = time (NULL);
+    struct tm lnow;
+    localtime_r (&now, &lnow);
+
+    static rom month[12] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+    sprintf (s.s, "%02u-%s-%04u %02u:%02u:%02u UTC%s", 
+             lnow.tm_mday, month[lnow.tm_mon], lnow.tm_year+1900, lnow.tm_hour, lnow.tm_min, lnow.tm_sec, tzname[daylight != 0]);
+#endif
+
     return s;
 }

@@ -202,7 +202,7 @@ static inline ContextP ctx_get_existing_ctx_do (VBlockP vb, DictId dict_id)  // 
 }
 #define ECTX(dict_id) ctx_get_existing_ctx_do ((VBlockP)(vb), (dict_id))
 
-extern ContextP ctx_get_zctx_from_vctx (ConstContextP vctx);
+extern ContextP ctx_get_zctx_from_vctx (ConstContextP vctx, bool create_if_missing);
 
 extern ContextP ctx_add_new_zf_ctx_from_txtheader (STRp(tag_name), DictId dict_id, TranslatorId luft_translator);
 

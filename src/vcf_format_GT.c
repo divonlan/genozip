@@ -146,6 +146,8 @@ WordIndex vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, ST
         }
     } // for characters in a sample
 
+    ctx->gt_actual_last_ploidy = gt.repeats; // set before increasing gt.repeats to vb->ploidy
+
     // if the ploidy of the sample is lower than vb->ploidy, set missing ht as '-' (which will cause deletion of themselves and their separator)
     // and set the ploidy to vb->ploidy - to avoid increase in entroy of GT.b250
     if (gt.repeats != vb->ploidy) {
@@ -298,7 +300,7 @@ TRANSLATOR_FUNC (vcf_piz_luft_GT)
     for (uint32_t i=1; i < recon_len; i += 2)  
         if (recon[i] != '/' && recon[i] != '|') return false;
 
-    ctx->gt_prev_ploidy = (recon_len+1) / 2; // consumed by vcf_piz_luft_PLOIDY
+    ctx->gt_actual_last_ploidy = (recon_len+1) / 2; // consumed by vcf_piz_luft_PLOIDY
 
     if (validate_only) return true;
 

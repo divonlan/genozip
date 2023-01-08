@@ -379,7 +379,7 @@ WordIndex ref_contigs_ref_chrom_from_header_chrom (Reference ref, STRp(chrom_nam
     // if its not found, we ignore it. sequences that have this chromosome will just be non-ref
     if (ref_contig_index == WORD_INDEX_NONE) {
         if (IS_ZIP)
-            WARN_ONCE ("FYI: header of %s has contig '%.*s' (and maybe others, too), missing in %s. This might impact the compression ratio.",
+            WARN_ONCE ("FYI: header of %s has contig '%.*s' (and maybe others, too), missing in %s. If the file contains many variants with this contig, the compression might be negatively impacted.",
                         txt_file->basename, STRf(chrom_name), ref->filename);
         return WORD_INDEX_NONE;
     }

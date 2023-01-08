@@ -172,7 +172,7 @@ typedef struct File {
 } File;
 
 #define z_has_gencomp (z_file && z_file->z_flags.has_gencomp)
-#define z_is_dvcf (z_file && Z_DT(VCF) && z_has_gencomp)
+#define z_is_dvcf (z_file && (Z_DT(VCF) || Z_DT(BCF)) && z_has_gencomp)
 #define z_sam_gencomp (z_file && (Z_DT(SAM) || Z_DT(BAM)) && z_has_gencomp) // note: is BAM file in piz are Z_DT(SAM) and in zip are Z_DT(BAM)
 
 extern DataType last_z_dt; // data_type of last z_file opened
@@ -218,6 +218,7 @@ extern bool file_is_fifo (rom filename);
 extern bool file_is_dir (rom filename);
 extern void file_mkdir (rom dirname);
 extern void file_remove (rom filename, bool fail_quietly);
+extern bool file_rename (rom old_name, rom new_name, bool fail_quietly);
 extern void file_mkfifo (rom filename);
 extern uint64_t file_get_size (rom filename);
 extern char *file_compressible_extensions (bool plain_only);

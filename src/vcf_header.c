@@ -662,6 +662,8 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
     if (strstr (txt_header->data, "beagle"))             segconf.vcf_is_beagle     = true;    
     if (strstr (txt_header->data, "Illumina GenCall") ||
         strstr (txt_header->data, "Log R Ratio"))        segconf.vcf_illum_gtyping = true;    
+    if (strstr (txt_header->data, "Number of cases used to estimate genetic effect") || // v1.0
+        strstr (txt_header->data, "##trait")) /*v1.2*/   segconf.vcf_is_gwas       = true;
     
     bool has_PROBE = !!strstr (txt_header->data, "##INFO=<ID=PROBE_A");
     SAFE_RESTORE;

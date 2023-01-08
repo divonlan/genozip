@@ -64,9 +64,9 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c lice
 		  data_types.c bits.c progress.c writer.c tar.c chrom.c qname.c tokenizer.c 							\
           zip.c piz.c reconstruct.c recon_history.c recon_peek.c seg.c zfile.c aligner.c flags.c digest.c    	\
 		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c mutex.c threads.c	\
-		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c 		\
-		  vcf_format_GT.c vcf_format_PS_PID.c vcf_info_QD.c vcf_info_SF.c                                                                           \
-		  vcf_refalt.c vcf_tags.c vcf_linesort.c vcf_format.c vcf_illum_gtyping.c           		\
+		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_liftover.c          		\
+		  vcf_format_GT.c vcf_format_PS_PID.c vcf_info_QD.c vcf_info_SF.c                                       \
+		  vcf_refalt.c vcf_tags.c vcf_linesort.c vcf_format.c vcf_illum_gtyping.c vcf_gwas.c             		\
 		  sam_seg.c sam_piz.c sam_shared.c sam_header.c sam_md.c sam_tlen.c sam_cigar.c sam_fields.c  			\
 		  sam_sa.c bam_seg.c bam_seq.c bam_show.c                                             					\
 		  sam_seq.c sam_qual.c sam_sag_zip.c sam_sag_piz.c sam_sag_load.c sam_sag_ingest.c sam_sag_scan.c    	\
@@ -260,7 +260,7 @@ genounzip-opt$(EXE) genocat-opt$(EXE) genols-opt$(EXE): genozip-opt$(EXE)
 	@ln -f $@ ../$@
 
 ../LICENSE.txt: text_license.h version.h # not dependent on genozip.exe, so we don't generate it every compilation
-	@$(MAKE) -j genozip$(EXE) # recursive call to make genozip.exe with the latest version
+	@$(MAKE) genozip$(EXE) # recursive call to make genozip.exe with the latest version
 	@echo Generating $@
 	@./genozip$(EXE) --license=100 --force > $@
 	@rm -f $(OBJDIR)/arch.o
@@ -315,12 +315,12 @@ clean: clean-installers clean-test
 	@rm -R $(OBJDIR)
 	@mkdir $(OBJDIR) $(addprefix $(OBJDIR)/, $(SRC_DIRS))
 
-.PHONY: clean clean-debug clean-optimized clean-installers clean-distribution git-pull macos mac/.remote_mac_timestamp delete-arch testfiles test-backup genozip-linux-x86_64/clean genozip-prod genozip-prod.exe dict_id_gen$(EXE) push-build increment-version $(INSTALLERS)/LICENSE.html refresh_arch_o
+.PHONY: clean clean-debug clean-optimized clean-installers clean-distribution git-pull macos mac/.remote_mac_timestamp delete-arch testfiles test-backup genozip-linux-x86_64/clean genozip-prod genozip-prod.exe dict_id_gen$(EXE) push-build increment-version $(INSTALLERS)/LICENSE.html refresh_arch_o genozip-linux-x86_64/clean
 
 # builds prod for local OS
 genozip-prod$(EXE): 
 	@echo "building prod"
-	@(cd $(PROD_SRC) ; git stash ; git pull ; rm -Rf $(OBJDIR) ; $(MAKE) -j clean ; touch dict_id_gen.h ; $(MAKE) -j)
+	@(cd $(PROD_SRC) ; git stash ; git pull ; rm -Rf $(OBJDIR) ; $(MAKE) clean ; touch dict_id_gen.h ; $(MAKE))
 	@cp $(PROD_SRC)/genozip$(EXE) $(DEV_DIR)/genozip-prod$(EXE)
 	@cp $(PROD_SRC)/genozip$(EXE) $(RELEASES)/genozip-$(version)$(EXE)
 	@cp $(PROD_SRC)/genounzip$(EXE) $(DEV_DIR)/genounzip-prod$(EXE)
@@ -331,7 +331,7 @@ ifeq ($(OS),Windows_NT)
 
 # When running on Windows, builds prod for Linux
 genozip-prod:
-	@run-on-wsl.sh make -j genozip-prod
+	@run-on-wsl.sh make genozip-prod
 
 # increments minor version, eg. 1.0.1 -> 1.0.2. 
 # To increment a major version, manually edit version.h and set minor version to -1 e.g. 1.1.-1 (careful! no newlines or spaces)
@@ -433,7 +433,7 @@ $(INSTALLERS)/genozip-installer.exe: refresh_arch_o $(WINDOWS_INSTALLER_OBJS)
 	@if [ -f $(OBJDIR)/arch.o ]; then rm -f $(OBJDIR)/arch.o >& /dev/null ; fi # remove this arch.o which contains DISTRIBUTION
 	@if [ `cd ..; basename $$PWD` != genozip ] ; then mv $(DEV_SRC)/genozip-installer.ifp . ; mv $(DEV_SRC)/genozip-installer.ifp.save $(DEV_SRC)/genozip-installer.ifp ; fi # we always edit the version in the genozip dir
 	@cp $(DEV_SRC)/windows/genozip-installer.exe $(INSTALLERS)
-	
+
 $(INSTALLERS)/genozip-linux-x86_64.tar.build: genozip-linux-x86_64/LICENSE.txt 
 	@(mkdir genozip-linux-x86_64 >& /dev/null ; exit 0)
 	@run-on-wsl.sh make $(INSTALLERS)/genozip-linux-x86_64.tar # make -j doesn't work well on WSL - filesystem clock issues
@@ -490,7 +490,7 @@ genozip-linux-x86_64/clean:
 genozip-linux-x86_64/genozip: CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"linux-x86_64\" # note: matches the name in version.c
 genozip-linux-x86_64/genozip: clean-optimized $(OBJS)  # clean first, as we will compile without march=native
 	@echo Linking $@
-	@$(CC) -static -o $@ $(OBJS) $(CFLAGS) $(LDFLAGS)
+	@$(CC) -o $@ $(OBJS) $(CFLAGS) $(LDFLAGS)
 
 genozip-linux-x86_64/genounzip genozip-linux-x86_64/genocat genozip-linux-x86_64/genols: genozip-linux-x86_64/genozip 
 	@echo Generating $@
@@ -499,7 +499,8 @@ genozip-linux-x86_64/genounzip genozip-linux-x86_64/genocat genozip-linux-x86_64
 LINUX_TARGZ_OBJS = genozip-linux-x86_64/genozip genozip-linux-x86_64/genounzip genozip-linux-x86_64/genocat genozip-linux-x86_64/genols 
 
 # this must be run ONLY as part of "make distribution" or else versions will be out of sync
-$(INSTALLERS)/genozip-linux-x86_64.tar: version.h genozip-linux-x86_64/clean $(LINUX_TARGZ_OBJS) # run on Linux by make-linux-from-windows.sh
+# this is run on Linux by run-on-wsl.sh
+$(INSTALLERS)/genozip-linux-x86_64.tar: version.h genozip-linux-x86_64/clean $(LINUX_TARGZ_OBJS) 
 	@echo "Creating $@"
 	@tar cf $@ -z genozip-linux-x86_64
 	@rm -f $(OBJDIR)/arch.o # remove this arch.o which contains DISTRIBUTION

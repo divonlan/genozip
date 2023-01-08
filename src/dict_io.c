@@ -287,33 +287,36 @@ done:
     vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
 }
 
-static void dict_io_dict_build_word_list_one (ContextP ctx)
+static void dict_io_dict_build_word_list_one (ContextP zctx)
 {
-    if (!ctx->word_list.len || ctx->word_list.data) return; // skip if 1. no words, or 2. already built
+    if (!zctx->word_list.len || zctx->word_list.data) return; // skip if 1. no words, or 2. already built
 
-    buf_alloc (evb, &ctx->word_list, 0, ctx->word_list.len, CtxWord, 0, "contexts->word_list");
-    buf_set_overlayable (&ctx->word_list);
+    buf_alloc (evb, &zctx->word_list, 0, zctx->word_list.len, CtxWord, 0, "contexts->word_list");
+    buf_set_overlayable (&zctx->word_list);
 
-    rom word_start = ctx->dict.data;
-    for (uint64_t snip_i=0; snip_i < ctx->word_list.len; snip_i++) {
+    rom word_start = zctx->dict.data;
+    for (uint64_t snip_i=0; snip_i < zctx->word_list.len; snip_i++) {
 
         rom c=word_start; while (*c) c++;
 
-        uint64_t index = BNUM64 (ctx->dict, word_start); 
+        uint64_t index = BNUM64 (zctx->dict, word_start); 
         uint64_t len   = c - word_start;
 
         if (index > ZWORD_MAX_INDEX || len > ZWORD_MAX_LEN) {
-            ASSERT (!VER(14), "A word was found in ctx=%s with index=%"PRIu64" amd len=%"PRIu64". This index/len is beyond current limits of Genozip. Use Genozip v13 to decompress this file.",
-                    ctx->tag_name, (uint64_t)index, (uint64_t)len);
+            ASSERT (!VER(14), "A word was found in zctx=%s with index=%"PRIu64" amd len=%"PRIu64". This index/len is beyond current limits of Genozip. Use Genozip v13 to decompress this file.",
+                    zctx->tag_name, (uint64_t)index, (uint64_t)len);
 
-            ABORT ("A word was found in ctx=%s with index=%"PRIu64" amd len=%"PRIu64", which are beyond the limits",
-                    ctx->tag_name, (uint64_t)index, (uint64_t)len);
+            ABORT ("A word was found in zctx=%s with index=%"PRIu64" amd len=%"PRIu64", which are beyond the limits",
+                    zctx->tag_name, (uint64_t)index, (uint64_t)len);
         }       
 
-        *B(CtxWord, ctx->word_list, snip_i) = (CtxWord){ .index = index, .len = len };
+        *B(CtxWord, zctx->word_list, snip_i) = (CtxWord){ .index = index, .len = len };
 
         word_start = c+1; // skip over the \0 separator
     }
+
+    ASSERT (word_start == BAFTc(zctx->dict), "When building %s.word_list: expected to consume dict.len=%"PRIu64" bytes (in %"PRIu64" words), but consumed %"PRIu64" bytes",
+            zctx->tag_name, zctx->dict.len, zctx->word_list.len, BNUM64(zctx->dict, word_start));
 }
 
 static void dict_io_build_word_lists (void)
@@ -322,8 +325,8 @@ static void dict_io_build_word_lists (void)
 
     Context *last = ZCTX((flag.show_headers && is_genocat) ? CHROM : z_file->num_contexts);
 
-    for (Context *ctx=z_file->contexts; ctx <= last; ctx++) 
-        dict_io_dict_build_word_list_one (ctx);
+    for (Context *zctx=z_file->contexts; zctx <= last; zctx++) 
+        dict_io_dict_build_word_list_one (zctx);
 
     COPY_TIMER_VB (evb, dict_io_build_word_lists);
 }

@@ -376,6 +376,7 @@ static void stats_output_file_metadata (void)
             break;
 
         case DT_VCF:
+        case DT_BCF:
             bufprintf (evb, &stats, "Samples: %u   ", vcf_header_get_num_samples());
             bufprintf (evb, &features, "num_samples=%u;", vcf_header_get_num_samples());
 
@@ -395,6 +396,7 @@ static void stats_output_file_metadata (void)
 
             FEATURE (segconf.vcf_is_beagle,     "Feature: Beagle", "Beagle");
             FEATURE (segconf.vcf_is_varscan,    "Feature: VarScan", "VarScan");
+            FEATURE (segconf.vcf_is_gwas,       "Feature: GWAS-VCF", "GWAS-VCF");
             FEATURE (segconf.vcf_is_gvcf,       "Feature: GVCF", "GVCF");
             FEATURE (segconf.vcf_illum_gtyping, "Feature: Illumina Genotyping", "Illumina Genotyping");
             break;
@@ -698,7 +700,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
         all_z_size      += s->z_size;
         all_txt_len     += s->txt_len;
 
-        if (Z_DT(VCF) && dict_id_type(zctx->dict_id))
+        if ((Z_DT(VCF) || Z_DT(BCF)) && dict_id_type(zctx->dict_id))
             sprintf (s->name, "%s/%s", dtype_name_z(zctx->dict_id), zctx->tag_name);
         else 
             strcpy (s->name, zctx->tag_name);

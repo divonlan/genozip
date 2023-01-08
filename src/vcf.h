@@ -279,6 +279,19 @@
 #pragma GENDICT FORMAT_RC=DTYPE_2=RC       // ##FORMAT=<ID=RC,Number=1,Type=Integer,Description="Count of reads with REF allele">
 #pragma GENDICT FORMAT_AC=DTYPE_2=AC       // ##FORMAT=<ID=AC,Number=1,Type=Integer,Description="Count of reads with ALT allele">
 
+// Gwas2VCF: https://github.com/MRCIEU/gwas-vcf-specification
+#pragma GENDICT INFO_RSID=DTYPE_1=RSID     // ##INFO=<ID=RSID,Number=1,Type=String,Description="dbSNP identifier">
+#pragma GENDICT FORMAT_NS=DTYPE_2=NS       // ##FORMAT=<ID=NS,Number=A,Type=Float,Description="Variant-specific number of samples/individuals with called genotypes used to test association with specified trait">
+#pragma GENDICT FORMAT_EZ=DTYPE_2=EZ       // ##FORMAT=<ID=EZ,Number=A,Type=Float,Description="Z-score provided if it was used to derive the ES and SE fields">
+#pragma GENDICT FORMAT_SI=DTYPE_2=SI       // ##FORMAT=<ID=SI,Number=A,Type=Float,Description="Accuracy score of summary association statistics imputation">
+#pragma GENDICT FORMAT_NC=DTYPE_2=NC       // ##FORMAT=<ID=NC,Number=A,Type=Float,Description="Variant-specific number of cases used to estimate genetic effect (binary traits only)">
+#pragma GENDICT FORMAT_ES=DTYPE_2=ES       // ##FORMAT=<ID=ES,Number=A,Type=Float,Description="Effect size estimate relative to the alternative allele">
+#pragma GENDICT FORMAT_SE=DTYPE_2=SE       // ##FORMAT=<ID=SE,Number=A,Type=Float,Description="Standard error of effect size estimate">
+#pragma GENDICT FORMAT_LP=DTYPE_2=LP       // ##FORMAT=<ID=LP,Number=A,Type=Float,Description="-log10 p-value for effect estimate">
+#pragma GENDICT FORMAT_ID=DTYPE_2=ID       // (v1 of GWAS-VCF)  ##FORMAT=<ID=ID,Number=1,Type=String,Description="Study variant identifier">
+//#pragma GENDICT FORMAT_AF=DTYPE_2=AF     // (overlap) ##FORMAT=<ID=AF,Number=A,Type=Float,Description="Alternative allele frequency in trait subset">
+//#pragma GENDICT FORMAT_AC=DTYPE_2=AC     // (overlap) ##FORMAT=<ID=AC,Number=A,Type=Float,Description="Alternative allele count in the trait subset">
+
 // Genozip INFO fields
 #pragma GENDICT INFO_LUFT=DTYPE_1=LUFT
 #pragma GENDICT INFO_PRIM=DTYPE_1=PRIM
@@ -286,8 +299,8 @@
 #pragma GENDICT INFO_PREJ=DTYPE_1=Prej
 
 #define VCF_MAX_PLOIDY 100  // set to a reasonable 100 to avoid memory allocation explosion in case of an error in the VCF file
-#if VCF_MAX_PLOIDY > 65535
-#error "VCF_MAX_PLOIDY cannot go beyond 65535 VBlockVCF.ploidy are uint16_t"
+#if VCF_MAX_PLOIDY > 255
+#error "VCF_MAX_PLOIDY cannot go beyond 255 because Ploidy is uint8_t"
 #endif
 
 #define MAX_ALLELES 100 // REF (allele #0) + 99 ALTs (alleles # 1-99)
@@ -431,10 +444,12 @@ TRANSLATOR (VCF, VCF,   7,  GT,     vcf_piz_luft_GT)
 TRANSLATOR (VCF, VCF,   8,  END,    vcf_piz_luft_END)      
 TRANSLATOR (VCF, VCF,   9,  XREV,   vcf_piz_luft_XREV)      
 TRANSLATOR (VCF, VCF,   10, ALLELE, vcf_piz_luft_ALLELE)      
+TRANSLATOR (VCF, VCF,   11, NEG,    vcf_piz_luft_NEG)      
 
-#define NUM_VCF_TRANS   11 // including "none"
-#define VCF_TRANSLATORS { NULL /* none */, vcf_piz_luft_G, vcf_piz_luft_R, vcf_piz_luft_R2, vcf_piz_luft_A_AN, \
-                          vcf_piz_luft_A_1, vcf_piz_luft_PLOIDY, vcf_piz_luft_GT, vcf_piz_luft_END, vcf_piz_luft_XREV, vcf_piz_luft_ALLELE }
+#define NUM_VCF_TRANS   12 // including "none"
+#define VCF_TRANSLATORS { NULL /* none */, vcf_piz_luft_G, vcf_piz_luft_R, vcf_piz_luft_R2, vcf_piz_luft_A_AN,         \
+                          vcf_piz_luft_A_1, vcf_piz_luft_PLOIDY, vcf_piz_luft_GT, vcf_piz_luft_END, vcf_piz_luft_XREV, \
+                          vcf_piz_luft_ALLELE, vcf_piz_luft_NEG }
 
 typedef struct {
     rom alg_name;
@@ -444,17 +459,17 @@ typedef struct {
 // names of INFO / FORMAT algorithms, goes into VCF header's ##INFO / ##FORMAT "RendAlg" attribute
                            /* Algorithm   Trigger          */
 #define DVCF_TRANS_PROPS { { "NONE",      TW_NEVER          },   /* never translate */\
-                           { "G",         TW_REF_ALT_SWITCH },   /* reshuffle a  'G' vector (one element per genotype) if REF<>ALT changed */\
-                           { "R",         TW_REF_ALT_SWITCH },   /* reshuffle an 'R' vector (one element per ref/alt allele) if REF<>ALT changed */\
-                           { "R2",        TW_REF_ALT_SWITCH },   /* reshuffle a vector with 2 elements per ref/alt allele, if REF<>ALT changed */\
-                           { "A_AN",      TW_REF_ALT_SWITCH },   /* recalculate an 'A' vector (one element per ALT allele) if REF<>ALT changed, who's elements, including a missing element for REF, add up to AN (example: AC). */ \
-                           { "A_1",       TW_REF_ALT_SWITCH },   /* recalculate an 'A' vector (one element per ALT allele) if REF<>ALT changed, who's elements, including a missing element for REF, add up to 1 (example: AF). */ \
+                           { "G",         TW_REF_ALT_SWITCH },   /* reshuffle a  'G' vector (one element per genotype) if REF⇆ALT changed */\
+                           { "R",         TW_REF_ALT_SWITCH },   /* reshuffle an 'R' vector (one element per ref/alt allele) if REF⇆ALT changed */\
+                           { "R2",        TW_REF_ALT_SWITCH },   /* reshuffle a vector with 2 elements per ref/alt allele, if REF⇆ALT changed */\
+                           { "A_AN",      TW_REF_ALT_SWITCH },   /* recalculate an 'A' vector (one element per ALT allele) if REF⇆ALT changed, who's elements, including a missing element for REF, add up to AN (example: AC). */ \
+                           { "A_1",       TW_REF_ALT_SWITCH },   /* recalculate an 'A' vector (one element per ALT allele) if REF⇆ALT changed, who's elements, including a missing element for REF, add up to 1 (example: AF). */ \
                            { "PLOIDY",    TW_REF_ALT_SWITCH },   /* recalculate a float to (ploidy-value) */ \
-                           { "GT",        TW_REF_ALT_SWITCH },   /* recalculate the allele numbers FORMAT/GT if REF<>ALT changed */ \
+                           { "GT",        TW_REF_ALT_SWITCH },   /* recalculate the allele numbers FORMAT/GT if REF⇆ALT changed */ \
                            { "END",       TW_ALWAYS         },   /* recalculate INFO/END */\
                            { "XREV",      TW_XSTRAND        },   /* reverse the elements of a vector if XSTRAND. Example: INFO/BaseCounts */\
-                           { "ALLELE",    TW_ALWAYS         } }  /* copy an allele verbatim including if changes or changes order. example: INFO/AA */ 
-                           
+                           { "ALLELE",    TW_ALWAYS         },   /* copy an allele verbatim including if changes or changes order. example: INFO/AA */ \
+                           { "NEG",       TW_REF_ALT_SWITCH } }  /* negate numeric value if REF⇆ALT */
 extern const LuftTransLateProp ltrans_props[NUM_VCF_TRANS];
 
 #define needs_translation(ctx)  (z_is_dvcf && (ctx)->luft_trans && \

@@ -131,10 +131,8 @@ static void reconstruct_from_diff (VBlockP vb, ContextP ctx, STRp(snip), bool re
     if (ctx->flags.same_line && ctx != base_ctx) 
         reconstruct_peek (vb, base_ctx, pSTRa(base));
     
-    else {
-        base = last_txtx (vb, base_ctx);
-        base_len = base_ctx->last_txt.len;
-    }
+    else 
+        CTXlast (base, base_ctx);
         
     int64_t diff_len;
     ASSPIZ (str_get_int (STRa(snip), &diff_len), "In ctx=%s: Invalid XOR_DIFF snip: \"%.*s", ctx->tag_name, STRf(snip));
@@ -184,7 +182,7 @@ int64_t reconstruct_from_local_int (VBlockP vb, ContextP ctx, char separator /* 
     }
 
     if (reconstruct) { 
-        if (VB_DT(VCF) && num==lt_desc[ctx->ltype].max_int && dict_id_is_vcf_format_sf (ctx->dict_id)
+        if ((VB_DT(VCF) || VB_DT(BCF)) && num==lt_desc[ctx->ltype].max_int && dict_id_is_vcf_format_sf (ctx->dict_id)
             && !lt_desc[ctx->ltype].is_signed) {
             RECONSTRUCT1 ('.');
             num = 0; // we consider FORMAT fields that are . to be 0.
@@ -221,7 +219,7 @@ int64_t reconstruct_peek_local_int (VBlockP vb, ContextP ctx, int offset /*0=nex
             ASSPIZ (false, "Unexpected ltype=%s(%u)", lt_name(ctx->ltype), ctx->ltype); 
     }
 
-    if (VB_DT(VCF) && num==lt_desc[ctx->ltype].max_int && dict_id_is_vcf_format_sf (ctx->dict_id)
+    if ((VB_DT(VCF) || VB_DT(BCF)) && num==lt_desc[ctx->ltype].max_int && dict_id_is_vcf_format_sf (ctx->dict_id)
         && !lt_desc[ctx->ltype].is_signed)
         return 0; // returns 0 if '.'
 
@@ -502,7 +500,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
 
     case SNIP_COPY: 
         base_ctx = (snip_len==1) ? snip_ctx : reconstruct_get_other_ctx_from_snip (vb, snip_ctx, pSTRa(snip)); 
-        RECONSTRUCT (last_txtx (vb, base_ctx), base_ctx->last_txt.len);
+        RECONSTRUCT_LAST_TXT (base_ctx);
         new_value = base_ctx->last_value; 
         has_new_value = HAS_NEW_VALUE;
         break;

@@ -61,8 +61,8 @@ void vcf_samples_seg_initialize_LOOKBACK (VBlockVCFP vb)
 
     CTX(VCF_SAMPLES)->flags.store = STORE_INDEX; // last_value is number of samples (=con.repeats)
 
-    lookback_init (VB, lookback_ctx, CTX(FORMAT_PS),  STORE_INT); // lookback_ctx->local.param must be set before
-    lookback_init (VB, lookback_ctx, CTX(FORMAT_PID), STORE_INT);
+    lookback_init (VB, lookback_ctx, CTX(FORMAT_PS),  STORE_LAST_TXT); // lookback_ctx->local.param must be set before
+    lookback_init (VB, lookback_ctx, CTX(FORMAT_PID), STORE_LAST_TXT);
 }
 
 void vcf_samples_seg_initialize_PS_PID (VBlockVCFP vb, ContextP ctx, STRp(value))
@@ -96,9 +96,9 @@ void vcf_samples_seg_finalize_PS_PID (VBlockVCFP vb)
 
     // consolidate to the context actually used 
     if (CTX(FORMAT_PID)->nodes.len || CTX(FORMAT_PID)->ol_nodes.len)
-        ctx_consolidate_stats (VB, FORMAT_PID, 5, VCF_LOOKBACK, FORMAT_PSref, FORMAT_PSalt, FORMAT_PSpos, DID_EOL);
+        ctx_consolidate_stats (VB, FORMAT_PID, VCF_LOOKBACK, FORMAT_PSref, FORMAT_PSalt, FORMAT_PSpos, DID_EOL);
     else
-        ctx_consolidate_stats (VB, FORMAT_PS, 5, VCF_LOOKBACK, FORMAT_PSref, FORMAT_PSalt, FORMAT_PSpos, DID_EOL);
+        ctx_consolidate_stats (VB, FORMAT_PS, VCF_LOOKBACK, FORMAT_PSref, FORMAT_PSalt, FORMAT_PSpos, DID_EOL);
 }
 
 static inline bool vcf_seg_FORMAT_PS_PID_is_same_alt1 (VBlockVCFP vb, STRp(alt))
@@ -227,7 +227,7 @@ void vcf_piz_ps_pid_lookback_insert (VBlockP vb, Did did_i, STRp(recon))
     ContextP ctx = CTX(did_i);
 
     if (!ctx->is_initialized) {
-        lookback_init (vb, CTX(VCF_LOOKBACK), ctx, STORE_INT);
+        lookback_init (vb, CTX(VCF_LOOKBACK), ctx, STORE_LAST_TXT);
         ctx->is_initialized = true;
     }
     

@@ -97,7 +97,7 @@ static void segconf_set_vb_size (ConstVBlockP vb, uint64_t curr_vb_size)
             if (CTX(did_i)->b250.len || CTX(did_i)->local.len)
                 num_used_contexts++;
             
-        uint32_t vcf_samples = TXT_DT(VCF) ? vcf_header_get_num_samples() : 0;
+        uint32_t vcf_samples = (TXT_DT(VCF) || TXT_DT(BCF)) ? vcf_header_get_num_samples() : 0;
         
         // formula - 1MB for each contexts, 128K for each VCF sample
         uint64_t bytes = ((uint64_t)num_used_contexts << 20) + (vcf_samples << 17);
@@ -151,7 +151,7 @@ static void segconf_set_vb_size (ConstVBlockP vb, uint64_t curr_vb_size)
     segconf.vb_size = ROUNDUP1M (segconf.vb_size);
 
     if (flag.show_memory && num_used_contexts) {
-        if (Z_DT(VCF))
+        if (Z_DT(VCF) || Z_DT(BCF))
             iprintf ("\nDyamically set vblock_memory to %u MB (num_contexts=%u num_vcf_samples=%u)\n", 
                         (unsigned)(segconf.vb_size >> 20), num_used_contexts, vcf_header_get_num_samples());
         else
@@ -256,7 +256,7 @@ void segconf_calculate (void)
     // in case of generated component data - undo
     vb->gencomp_lines.len = 0;
 
-    if (Z_DT(VCF))
+    if (Z_DT(VCF) || Z_DT(BCF))
         txt_file->reject_bytes += save_luft_reject_bytes; // return reject bytes to txt_file, to be reassigned to VB
 
     // require compressing with a reference when using --best with SAM/BAM/FASTQ, with some exceptions

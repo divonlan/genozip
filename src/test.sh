@@ -376,8 +376,8 @@ batch_bgzf()
 
     # test with gencomp
     file=special.sag-by-sa.bam.gz
-    $genozip ${TESTDIR}/$file -fo $output --force-gencomp
-    $genounzip $output -fo ${OUTDIR}/$file
+    $genozip ${TESTDIR}/$file -fo $output --force-gencomp || exit 1
+    $genounzip $output -fo ${OUTDIR}/$file || exit 1
     verify_bgzf ${OUTDIR}/$file 1
 }
 
@@ -412,7 +412,8 @@ batch_dvcf()
 {
     batch_print_header
 
-    local files=(minimal.vcf basic-dvcf-source.vcf basic-dvcf-luft.vcf test.NA12878.sorted.vcf test.clinvar37.vcf.gz test.1KG-37.indels.vcf test.chr17.SS6004478.vcf test.ExAC.vcf.gz)
+    local files=(minimal.vcf basic-dvcf-source.vcf basic-dvcf-luft.vcf test.NA12878.sorted.vcf test.gwas-v1.0.vcf.gz \
+                 test.clinvar37.vcf.gz test.1KG-37.indels.vcf test.chr17.SS6004478.vcf test.ExAC.vcf.gz)
     local file
 
     # prepare chain file
@@ -563,7 +564,7 @@ batch_copy_ref_section()
     #created with -r1:9660000-10650000, and contains 99% of vb=11 of hs37d5.ref.genozip which is 3867649-4834572
     local file=${TESTDIR}/unit-test.-E.copy-ref-section.sam.gz
 
-    $genozip -E $hs37d5 -p 123 -ft $file
+    $genozip -E $hs37d5 -p 123 -ft $file || exit 1
 }    
 
 # test -@1 - different code paths
@@ -694,7 +695,7 @@ batch_23andMe_translations()
     local me23=$TESTDIR/$file
     local vcf=$OUTDIR/copy.vcf.gz
 
-    $genozip -f $me23 -o $output       || exit 1
+    $genozip -f $me23 -o $output         || exit 1
     $genocat $output -fo $vcf -e $hs37d5 || exit 1
 
     cleanup
@@ -790,7 +791,7 @@ batch_grep_count_lines()
         test_count_genocat_lines $TESTDIR/$file "--grep NONEXISTANT --no-header" 0
 
         # count
-        $genozip $TESTDIR/$file -fo $output
+        $genozip $TESTDIR/$file -fo $output || exit 1
         local count=`$genocat_no_echo --quiet --count $output || exit`
         if [ "$count" == "" ]; then echo genocat error; exit 1; fi
 
@@ -997,8 +998,8 @@ batch_real_world_with_ref_md5() # $1 extra genozip argument
     local filesT2T1_1=( test.nanopore.t2t_v1_1.bam )
 
     test_standard "-mf $1 -e $hs37d5 --show-filename" " " ${files37[*]}
-    test_standard "-mf $1 -e $GRCh38 --show-filename" " " ${files38[*]}
-    test_standard "-mf $1 -e $T2T1_1 --show-filename" " " ${filesT2T1_1[*]}
+    test_standard "-mf $1 -E $GRCh38 --show-filename" " " ${files38[*]}
+    test_standard "-mf $1 -E $T2T1_1 --show-filename" " " ${filesT2T1_1[*]}
 
     for f in ${files37[@]} ${files38[@]} ${filesT2T1_1[@]} test.GRCh38_to_GRCh37.chain; do rm -f ${TESTDIR}/${f}.genozip ; done
 }
@@ -1282,21 +1283,21 @@ batch_replace()
 
     # single file
     cp ${TESTDIR}/basic.fq $f1
-    $genozip $f1 -f
+    $genozip $f1 -f || exit 1
     test_exists $f1
 
-    $genozip $f1 -f --replace
+    $genozip $f1 -f --replace || exit 1
     test_not_exists $f1
 
     # multiple files
     cp ${TESTDIR}/basic.fq $f1
     cp ${TESTDIR}/basic.fq $f2
     
-    $genozip -f $f1 $f2
+    $genozip -f $f1 $f2 || exit 1
     test_exists $f1
     test_exists $f2
 
-    $genozip $f1 $f2 -f -^
+    $genozip $f1 $f2 -f -^ || exit 1
     test_not_exists $f1
     test_not_exists $f2
 
@@ -1304,11 +1305,11 @@ batch_replace()
     cp ${TESTDIR}/basic.fq $f1
     cp ${TESTDIR}/basic.fq $f2
     
-    $genozip -f $f1 $f2 -2e $hs37d5
+    $genozip -f $f1 $f2 -2e $hs37d5 || exit 1
     test_exists $f1
     test_exists $f2
 
-    $genozip $f1 $f2 -f^2e $hs37d5
+    $genozip $f1 $f2 -f^2e $hs37d5 || exit 1
     test_not_exists $f1
     test_not_exists $f2
 }

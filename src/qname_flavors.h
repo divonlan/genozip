@@ -33,6 +33,39 @@ static SmallContainer con_illumina_7 = {
                    { .dict_id = { _SAM_QmNAME }, .separator = { CI0_SKIP } } } 
 };
 
+// Example: G10321:222:ASCASDFDA:1:2299:15331:1995#CTGGGAAG
+static SmallContainer con_illumina_7i = {
+    .repeats   = 1,
+    .nitems_lo = 9,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = ":"          },  
+                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q4NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q5NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q6NAME }, .separator = "#"          },
+                   { .dict_id = { _SAM_Q7NAME },                           },
+                   { .dict_id = { _SAM_QmNAME }, .separator = { CI0_SKIP } } } 
+};
+
+// Example: ATATA-ATGCATAG|ab|A00488:61:HMLGNDSXX:4:1101:4345:1000|1
+static SmallContainer con_illumina_7_gs = {
+    .repeats   = 1,
+    .nitems_lo = 12,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = "-"          },  
+                   { .dict_id = { _SAM_Q1NAME }, .separator = "|"          },
+                   { .dict_id = { _SAM_Q2NAME }, .separator = "|"          },
+                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"          },  
+                   { .dict_id = { _SAM_Q4NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q5NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q6NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q7NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q8NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q9NAME }, .separator = "|"          },
+                   { .dict_id = { _SAM_QANAME },                           },
+                   { .dict_id = { _SAM_QmNAME }, .separator = { CI0_SKIP } } } 
+};
+
 static SmallContainer con_illumina_7_fq = {
     .repeats   = 1,
     .nitems_lo = 9,
@@ -539,7 +572,7 @@ static SmallContainer con_ncbi_sra2P_l3 = {
 
 //--------------------------------------------------------------------------------------------------------
 
-#define MAX_QNAME_ITEMS 11 // mate + 10 others (matching Q?NAME defined in sam.h, fastq.h, kraken.h) 
+#define MAX_QNAME_ITEMS 12 // mate + 10 others (matching Q?NAME defined in sam.h, fastq.h, kraken.h) 
 #define QFS_MAX_EXAMPLES 5
 
 typedef struct QnameFlavorStruct {
@@ -559,8 +592,8 @@ typedef struct QnameFlavorStruct {
     unsigned fixed_len;                   // fixed length (0 if it is not fixed length)
     rom px_strs[MAX_QNAME_ITEMS+1];       // prefixes of items (+1 for terminator; terminated by empty entry) 
     int qname2;                           // embedded qname2 item (generated in qname_zip_initialize)
-    STRl (con_snip,  200);                // container snips (generated in qname_zip_initialize)
-    STRl (con_snip2, 200);                // same as con_snip, just with QNAME2 dict_ids
+    STRl (con_snip,  256);                // container snips (generated in qname_zip_initialize)
+    STRl (con_snip2, 256);                // same as con_snip, just with QNAME2 dict_ids
     #define MAX_PREFIX_LEN 30
     STRl (con_prefix, MAX_PREFIX_LEN);    // prefix of container
     SmallContainer con;                   // container
@@ -568,21 +601,25 @@ typedef struct QnameFlavorStruct {
 } QnameFlavorStruct;
 
 static QnameFlavorStruct qf[] = { 
-/*  mate   name             example                                       tech     fq_only   con_template     #sp  integer_items   numeric_items   in-local        hex_items       ord1,2 rng    sqln len px_strs      */
+/*  mate   name             example                                       tech    fq_only  con_template       #sp  integer_items   numeric_items   in-local        hex_items       ord1,2 rng    sqln len px_strs      */
     {},  { "Illumina-fastq",{ "A00488:61:HMLGNDSXX:4:1101:4345:1000 2:N:0:CTGAAGCT+ATAGAGGC" },
                                                                           TECH_ILLUM_7, 1, &con_illumina_7_fq, 7,  {1,3,4,5,6,-1}, {-1},           {1,3,-1},       {-1},           5,6,   -1,-1, -1,                   }, // mate added v14.0.0  
          { "Illumina-ex",   { "A00488:61:HMLGNDSXX:4:1101:4345:1000_2:N:0" },
                                                                           TECH_ILLUM_7, 0, &con_illumina_7_ex, 7,  {1,3,4,5,6,-1}, {-1},           {1,3,-1},       {-1},           5,6,   -1,-1, -1,                   }, // v14.0.17  
     {},  { "Illumina",      { "A00488:61:HMLGNDSXX:4:1101:4345:1000" },   TECH_ILLUM_7, 0, &con_illumina_7,    6,  {1,3,4,5,6,-1}, {-1},           {1,3,-1},       {-1},           5,6,   -1,-1, -1,                   },
+    {},  { "Illumina#",     { "A00488:61:HMLGNDSXX:4:1101:4345:1000#CTGGGAAG" }, 
+                                                                          TECH_ILLUM_7, 0, &con_illumina_7i,   7,  {1,3,4,5,6,-1}, {-1},           {1,3,-1},       {-1},           5,6,   -1,-1, -1,                   },
+    {},  { "Illumina-gs",   { "ATATA-ATGCATAG|ab|A00488:61:HMLGNDSXX:4:1101:4345:1000|1" },   
+                                                                          TECH_ILLUM_7, 0, &con_illumina_7_gs, 10, {4,6,7,8,9,-1}, {-1},           {4,6,-1},       {-1},           8,9,   -1,-1, -1,                   },
     {},  { "BGI-R6",        { "8A_V100004684L3C001R029011637", "V300014293BL2C001R027005967", "V300003413L4C001R016000000" },          
                                                                           TECH_BGI,     0, &con_bgi_R6,        3,  {-1},           {1,2,3,4,-1},   {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_bgi_R     },
     {},  { "BGI-R7",        { "V300017009_8AL2C001R0030001805", "V300022116L2C001R0010002968", "V300014296L2C001R0010000027", "E100001117L1C001R0030000000", "E1000536L1C002R0020000005" },         
                                                                           TECH_BGI,     0, &con_bgi_R7,        3,  {-1},           {1,2,3,4,-1},   {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_bgi_R     },
     {},  { "BGI-R8",        { "V300046476L1C001R00100001719" },           TECH_BGI,     0, &con_bgi_R8,        3,  {-1},           {1,2,3,4,-1},   {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_bgi_R     },
     {},  { "BGI-LL7",       { "DP8400010271TLL1C005R0511863479" },        TECH_BGI,     0, &con_bgi_LL7,       4,  {-1},           {1,2,3,4,-1},   {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_bgi_LL    },
-    {},  { "BGI-CL",        { "CL100025298L1C002R050_244547" },           TECH_BGI,     0, &con_bgi_CL,        4,  {4,-1},         {1,2,3,-1},     {-1},           {-1},           4,-1,  -1,-1, -1,  0,  PX_bgi_CL    }, 
+    {},  { "BGI-CL",        { "CL100025298L1C002R050_244547" },           TECH_BGI,     0,&con_bgi_CL,        4,  {4,-1},         {1,2,3,-1},     {-1},           {-1},           4,-1,  -1,-1, -1,  0,  PX_bgi_CL    }, 
     // {},  { "IonTorrent",    { "ZEWTM:10130:07001" },                      TECH_IONTORR, 0, &con_ion_torrent_3, 2,  {-1},           {1,2,-1},       {-1},           {-1},           -1,-1, -1,-1, -1,  17, PX_ion_torrent_3 },
-    {},  { "IonTorrent",    { "ZEWTM:10130:07001" },                      TECH_IONTORR, 0, &con_ion_torrent_3, 2,  {-1},           {-1},           {-1},           {-1},           -1,-1, -1,-1, -1,  17               },
+    {},  { "IonTorrent",    { "ZEWTM:10130:07001" },                      TECH_IONTORR, 0,&con_ion_torrent_3, 2,  {-1},           {-1},           {-1},           {-1},           -1,-1, -1,-1, -1,  17               },
     {},  { "Illumina-o-fq", { "SOLEXA6_0104:3:1:1852:13550 1:N:0:0" },    TECH_ILLUM_5, 1, &con_illumina_5_fq, 5,  {1,2,3,4,-1},   {-1},           {-1},           {-1},           -1,-1, -1,-1, -1,                   }, // v14.0.0
     {},  { "Illumina-old#", { "HWI-ST550_0201:3:1101:1626:2216#ACAGTG" }, TECH_ILLUM_5, 0, &con_illumina_5i,   5,  {1,2,3,4,-1},   {-1},           {-1},           {-1},           -1,-1, -1,-1, -1,                   },
     {},  { "Illumina-old",  { "SOLEXA-1GA-1_4_FC20ENL:7:258:737:870" },   TECH_ILLUM_5, 0, &con_illumina_5,    4,  {1,2,3,4,-1},   {-1},           {1,2,3,4-1},    {-1},           -1,-1, -1,-1, -1,                   },
@@ -625,7 +662,7 @@ static QnameFlavorStruct qf[] = {
                                                                           TECH_UNKNOWN, 2, &con_ncbi_sra2P_l3, 6, {2,3,7,-1},     {-1},            {2,3,-1},       {-1},           3,4,   -1,-1,  -1,                  },
          { "NCBI-SRA+-L3",  { "ERR811170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template BOWDEN04_20151016_MN15199_FAA67113_BOWDEN04_MdC_MARC_Phase2a_4833_1_ch19_file1_strand length=52" },
                                                                           TECH_UNKNOWN, 2, &con_ncbi_sraP_l3,  5, {2,6,-1},       {-1},            {-1},           {-1},           2,3,   -1,-1,  -1,                  },
-         { "NCBI-SRA2-L3",  { "ERR2708427.1.1 51e7525d-fa50-4b1a-ad6d-4f4ae25c1df7 length=1128" },
+         { "NCBI-SRA2-L3",  { "ERR2708427.1.1 51e7525d-fa50-4b1a-ad6d-4f4ae25c1df7 length=0, 1128" },
                                                                           TECH_UNKNOWN, 2, &con_ncbi_sra2_l3,  5, {2,3,6,-1},     {-1},            {2,3,-1},       {-1},           3,4,   -1,-1,  -1,                  },
          { "NCBI-SRA-L3",   { "ERR811170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template length=52" },
                                                                           TECH_UNKNOWN, 2, &con_ncbi_sra_l3,   4, {2,5,-1},       {-1},            {-1},           {-1},           2,3,   -1,-1,  -1,                  },

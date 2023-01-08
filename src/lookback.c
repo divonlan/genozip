@@ -27,14 +27,15 @@ void lookback_init (VBlockP vb, ContextP lb_ctx, ContextP ctx, StoreType store_t
     if (IS_ZIP) {
         ASSERT (!ctx->is_initialized, "Context %s already initialized", ctx->tag_name);
 
-        ctx->flags.store  = store_type; // tell PIZ store store values, so that the container callback can insert them to the lookback
-        ctx->no_drop_b250 = true;       // we cannot have all_the_same, bc we need the b250 section to pass the param (lookback bits)
+        ctx->flags.store    = store_type; // tell PIZ store store values, so that the container callback can insert them to the lookback
+        ctx->no_drop_b250   = true;       // we cannot have all_the_same, bc we need the b250 section to pass the param (lookback bits)
         ctx->is_initialized = true;
     }
 
-    buf_alloc (vb, lookback_buf(ctx), 0, lookback_size(lb_ctx) * (  store_type == STORE_INDEX ? sizeof (WordIndex) : sizeof (int64_t)), char, 1, "lookback_buf");
+    buf_alloc (vb, lookback_buf(ctx), 0, lookback_size(lb_ctx) * (store_type == STORE_INDEX ? sizeof (WordIndex) : sizeof (ValueType)), char, 1, "lookback_buf");
  }
 
+// Seg and PIZ
 void lookback_insert (VBlockP vb, Did lb_did_i, Did did_i, bool copy_last_value, ValueType value)
 {
     ContextP ctx = CTX(did_i);
@@ -72,7 +73,7 @@ const void *lookback_get_do (VBlockP vb, ContextP lb_ctx, ContextP ctx,
     uint32_t lb_size = lookback_size (lb_ctx);
 
     ASSERT (lookback <= lookback_len (ctx, lb_size), "expecting lookback=%u <= lookback_len=%u for ctx=%s vb=%d line_i=%d%s%s lb_size=%u", 
-            lookback, lookback_len(ctx, lb_size), ctx->tag_name, vb->vblock_i, vb->line_i, (VB_DT(VCF) ? " sample_i=" : ""), (VB_DT(VCF) ? str_int_s (vb->sample_i).s : ""), lb_size);
+            lookback, lookback_len(ctx, lb_size), ctx->tag_name, vb->vblock_i, vb->line_i, ((VB_DT(VCF) || VB_DT(BCF)) ? " sample_i=" : ""), ((VB_DT(VCF) || VB_DT(BCF)) ? str_int_s (vb->sample_i).s : ""), lb_size);
             
     BufferP buf = lookback_buf(ctx);
     unsigned index = RR(buf->newest_index + lookback - 1, lb_size);
@@ -84,10 +85,10 @@ const void *lookback_get_do (VBlockP vb, ContextP lb_ctx, ContextP ctx,
     }
 
     ASSERT (lookback > 0 && lookback < lb_size, "Expecting lookback=%d in ctx=%s vb=%d line_i=%d%s%s to be in the range [1,%u]", 
-            lookback, ctx->tag_name, vb->vblock_i, vb->line_i, (VB_DT(VCF) ? " sample_i=" : ""), (VB_DT(VCF) ? str_int_s (vb->sample_i).s : ""), lb_size-1);
+            lookback, ctx->tag_name, vb->vblock_i, vb->line_i, ((VB_DT(VCF) || VB_DT(BCF)) ? " sample_i=" : ""), ((VB_DT(VCF) || VB_DT(BCF)) ? str_int_s (vb->sample_i).s : ""), lb_size-1);
 
     return (ctx->flags.store == STORE_INDEX) ? (void *)B(WordIndex, *buf, index) 
-                                             : (void *)B(int64_t, *buf, index);
+                                             : (void *)B(ValueType, *buf, index);
 }
 
 // shift existing lookups after insertion into txt_data
@@ -124,7 +125,7 @@ bool lookback_is_same_txt (VBlockP vb, Did lb_did_i, ContextP ctx, uint32_t look
 }
 
 
-// Returns the next lookup value that contains the WordIndex search_for, or 0 if there isn't one.  
+// Seg: Returns the next lookup value that contains the WordIndex search_for, or 0 if there isn't one.  
 uint32_t lookback_get_next (VBlockP vb, ContextP lb_ctx, ContextP ctx, WordIndex search_for, 
                             int64_t *iterator) // iterator should be initialized to -1 by caller. updates to the first item to be tested next call.
 {
@@ -160,7 +161,7 @@ void lookback_flush (VBlockP vb, ConstMediumContainerP con)
         }
 }
 
-// PIZ 
+// PIZ: insert all values of lookbackable items in a container
 void lookback_insert_container (VBlockP vb, ConstContainerP con, unsigned num_items, ContextP *item_ctxs)
 {        
     if (!item_ctxs[0]->is_initialized) {
@@ -173,8 +174,8 @@ void lookback_insert_container (VBlockP vb, ConstContainerP con, unsigned num_it
 
     for (unsigned i=1; i < num_items; i++) 
         if (con->items[i].separator[1] == CI1_LOOKBACK) {
-            if (item_ctxs[i]->flags.store)
-                lookback_insert (vb, item_ctxs[0]->did_i, item_ctxs[i]->did_i, true, (int64_t)0);
+            if (item_ctxs[i]->flags.store != STORE_LAST_TXT)
+                lookback_insert (vb, item_ctxs[0]->did_i, item_ctxs[i]->did_i, true, NO_VALUE); // copy last_value
             else
                 lookback_insert (vb, item_ctxs[0]->did_i, item_ctxs[i]->did_i, false, item_ctxs[i]->last_txt);
         }

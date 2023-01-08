@@ -770,7 +770,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeader *out_header) // optio
     else {
         // case: we are attempting to decompress a reference file - this is not supported
         ASSERTGOTO (data_type != DT_REF || (flag.genocat_no_reconstruct && is_genocat) || is_genols,
-                    "%s is a reference file - it cannot be decompressed. Skipping it.", z_name);
+                    "%s is a reference file - it cannot be decompressed - skipping it. Did you intend to use --reference?.", z_name);
 
         // handle reference file info
         if (!flag.genocat_no_ref_file)

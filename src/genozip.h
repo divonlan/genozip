@@ -156,6 +156,8 @@ typedef int32_t LineIType;
 typedef const char *rom;      // "read-only memory"
 typedef const uint8_t *bytes; // read-only array of bytes
 
+typedef uint8_t Ploidy;       // ploidy of a genotype
+
 // a reference into txt_data
 typedef struct __attribute__ ((__packed__)) { uint32_t index, len; } TxtWord; // 32b as VBs are limited to 2GB (usually used as reference into txt_data)
 #define TXTWORD(snip) ((TxtWord){ .index = BNUMtxt (snip),    .len = snip##_len }) // get coordinates in txt_data
@@ -174,6 +176,7 @@ typedef union { // 64 bit
     double f;
     TxtWord; // index into in txt_data (note: gcc/clang flag -fms-extensions is needed for this type of anonymous struct use)
 } ValueType __attribute__((__transparent_union__));
+#define NO_VALUE ((ValueType){})
 
 // global parameters - set before any thread is created, and never change
 extern uint32_t global_max_threads;
@@ -337,10 +340,12 @@ typedef SORTER ((*Sorter));
 #define STRw0(x) char *x=NULL; uint32_t x##_len=0  // writeable, initialized
 #define sSTRl(name,len) static char name[len]; static uint32_t name##_len = (len)
 #define STRl(name,len) char name[len]; uint32_t name##_len
+#define STRli(name,len) uint32_t name##_len = (len) ; char name[name##_len] // avoid evaluating len twice
 #define eSTRl(x) extern char x[]; extern uint32_t x##_len
 
-#define STRlast(name,ctx) rom name = last_txtx((VBlockP)(vb), (ctx)); unsigned name##_len = (ctx)->last_txt.len
-#define CTXlast(name,ctx)  ({ name = last_txtx((VBlockP)(vb), (ctx));          name##_len = (ctx)->last_txt.len; })
+#define ASSERT_LAST_TXT_VALID(ctx) ASSERT (is_last_txt_valid(ctx), "%s.last_txt is INVALID", (ctx)->tag_name)
+#define STRlast(name,ctx)  ASSERT_LAST_TXT_VALID(ctx); rom name = last_txtx((VBlockP)(vb), (ctx)); unsigned name##_len = (ctx)->last_txt.len
+#define CTXlast(name,ctx)  ({ ASSERT_LAST_TXT_VALID(ctx); name = last_txtx((VBlockP)(vb), (ctx)); name##_len = (ctx)->last_txt.len; })
 
 // Strings - function parameters
 #define STRp(x)  rom x,   uint32_t x##_len    

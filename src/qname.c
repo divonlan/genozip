@@ -130,12 +130,14 @@ void qname_zip_initialize (Did qname_did_i)
             ContextP next_zctx = (qfs < &qf[NUM_QFs] ? qname_zctx : line3_zctx) + 1;
             for (int item_i=0; item_i < qfs->con.nitems_lo; item_i++) {
                 uint64_t dnum = qfs->con.items[item_i].dict_id.num;
+                
                 // set qname2
                 if (dnum == _FASTQ_QNAME2) {
                     ASSERT0 (qfs->fq_only && qfs->tech==TECH_UNKNOWN, "Bad embedded qname2 definition"); // a con with FASTQ_QNAME2 must have these properties
                     qfs->qname2 = item_i;
                 }
-                // verify dict_id (in some cases)
+                
+                // verify that the fields are consecutive Q*NAME contexts (except for QmNAME and COPY_Q)
                 else if (dnum != _SAM_QmNAME && dnum != _FASTQ_COPY_Q && (Z_DT(FASTQ) || qfs < &qf[NUM_QFs])) {
                     ASSERT (next_zctx->dict_id.num == dnum, "Expecting item #%u of %s to have to be %s", item_i, qfs->name, next_zctx->tag_name);
                     next_zctx++;

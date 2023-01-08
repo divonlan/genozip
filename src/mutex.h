@@ -112,10 +112,10 @@ extern void serializer_skip_do (SerializerP ser, VBIType vb_i, FUNCLINE);
 #endif // __MAC_10_12
 
 #else
-#define spin_lock(m)   do { int ret = pthread_spin_lock (&m); \
-                            ASSERT (!ret, "pthread_spin_lock failed: %s", strerror (ret)); } while(0)
+#define spin_lock(m)   ({ int ret = pthread_spin_lock (&m); \
+                          ASSERT (!ret, "pthread_spin_lock failed: %s", strerror (ret)); })
 
-#define spin_unlock(m) do { int ret = pthread_spin_unlock (&m); \
-                            ASSERT (!ret, "pthread_spin_lock failed: %s", strerror (ret)); } while(0)
+#define spin_unlock(m) ({ int ret = pthread_spin_unlock (&m); \
+                          ASSERT (!ret, "pthread_spin_lock failed: %s", strerror (ret)); })
 #endif
 

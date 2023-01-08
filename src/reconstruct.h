@@ -9,6 +9,16 @@
 #pragma once
 
 #include "genozip.h"
+#include "writer.h"
+
+typedef struct { char s[100]; } PizDisCoords; 
+extern PizDisCoords piz_dis_coords (VBlockP vb); // for ASSPIZ
+
+typedef struct { char s[100]; } PizDisQname; 
+extern PizDisQname piz_dis_qname (VBlockP vb); // for ASSPIZ
+
+#define ASSPIZ(condition, format, ...) ({ if (!(condition)) { progress_newline(); fprintf (stderr, "%s %s: Error in %s:%u line_in_file(1-based)=%"PRIu64" %s%s%s%s: ", str_time().s, LN_NAME, __FUNCLINE, writer_get_txt_line_i ((VBlockP)(vb)), ((Z_DT(VCF) || Z_DT(BCF)) ? " sample_i=" : ""), ((Z_DT(VCF) || Z_DT(BCF)) ? str_int_s (vb->sample_i).s : ""), piz_dis_coords((VBlockP)(vb)).s, piz_dis_qname((VBlockP)(vb)).s); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }})
+#define ASSPIZ0(condition, string) ASSPIZ (condition, string "%s", "")
 
 // goes into ctx->history if not STORE_INT
 typedef enum __attribute__ ((__packed__)) { LookupTxtData, LookupDict, LookupLocal, LookupPerLine } LookupType;
@@ -101,9 +111,11 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, Did did_i, DictI
     ({ ASSPIZ ((ctx)->next_local + (offset) < (ctx)->local.len32, "PEEKNEXTLOCAL: %s.local exhausted: next_local=%u len=%u", (ctx)->tag_name, (ctx)->next_local, (ctx)->local.len32); \
        *B(type, (ctx)->local, (ctx)->next_local + (offset)); })
 
-#define RECONSTRUCT(s,len)                                                      \
-    ({ uint32_t new_len = (uint32_t)(len); /* copy in case caller uses ++ */    \
-       memcpy (&vb->txt_data.data[vb->txt_data.len32], (s), new_len);           \
+#define RECONSTRUCT(s,s_len)                                                    \
+    ({ uint32_t new_len = (uint32_t)(s_len); /* copy in case caller uses ++ */  \
+       ASSPIZ (vb->txt_data.len + new_len <= vb->txt_data.size, "RECONSTRUCT: txt_data overflow: txt_data.len=%u str_len=%u", \
+               vb->txt_data.len32, new_len);                                    \
+       memcpy (&vb->txt_data.data[vb->txt_data.len32], s, new_len);             \
        vb->txt_data.len32 += new_len; })
 
 #define RECONSTRUCT1(c) vb->txt_data.data[vb->txt_data.len32++] = (c) // we don't use BNXTc bc it is too expensive
@@ -111,6 +123,7 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, Did did_i, DictI
 #define RECONSTRUCT_SEP(s,len,sep) ({ RECONSTRUCT((s), (len)); RECONSTRUCT1 (sep); })
 #define RECONSTRUCT_TABBED(s,len) RECONSTRUCT_SEP (s, len, '\t')
 #define RECONSTRUCT_BUF(buf) RECONSTRUCT((buf).data,(buf).len32)
+#define RECONSTRUCT_LAST_TXT(ctx) ({ ASSERT_LAST_TXT_VALID(ctx); RECONSTRUCT (last_txtx (vb, (ctx)), (ctx)->last_txt.len); })
 #define RECONSTRUCT_NEXT(ctx,recon_len)                 \
     ({ ASSPIZ ((ctx)->next_local + (recon_len) <= (ctx)->local.len32, NEXT_ERRFMT, "RECONSTRUCT_NEXT", (ctx)->tag_name, (ctx)->next_local, (recon_len), (ctx)->local.len32); \
        rom next = Bc((ctx)->local, (ctx)->next_local);  \

@@ -49,6 +49,14 @@ int32_t generic_is_header_done (bool is_eof)
 
     if (new_dt != DT_NONE) {
         txt_file->data_type = z_file->data_type = new_dt;
+
+        // release pre-defined GENERIC contexts
+        for_zctx ctx_destroy_context (zctx, zctx->did_i);
+        z_file->num_contexts = 0;
+
+        // recreate predefined contexts
+        ctx_initialize_predefined_ctxs (z_file->contexts, new_dt, z_file->dict_id_to_did_i_map, &z_file->num_contexts);
+        
         return HEADER_DATA_TYPE_CHANGED;
     }
 

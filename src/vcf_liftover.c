@@ -159,16 +159,21 @@ TranslatorId vcf_lo_luft_trans_id (DictId dict_id, char number)
         return VCF2VCF_G;
 
     else if (dict_id.num == _FORMAT_GT)       return VCF2VCF_GT;
+    
     else if (dict_id.num == _INFO_END )       return VCF2VCF_END;
+    
     else if (dict_id.num == _INFO_AC
     ||       dict_id.num == _INFO_MLEAC)      return VCF2VCF_A_AN;
+    
     else if (dict_id.num == _INFO_AF 
     ||       dict_id.num == _INFO_MLEAF  
     ||       dict_id.num == _INFO_LDAF  
     ||       dict_id.num == _FORMAT_AF  
     ||       vcf_lo_is_INFO_AF_type (dict_id))
           return VCF2VCF_A_1; // eg 0.150 -> 0.850 (upon REF⇄ALT SWITCH)
+    
     else if (dict_id.num == _FORMAT_DS)       return VCF2VCF_PLOIDY; // eg (if ploidy=2): 1.25 -> 0.75 
+    
     else if (dict_id.num == _INFO_AA          
     ||       dict_id.num == _INFO_CSQ_Allele
     ||       dict_id.num == _INFO_ANN_Allele ) return VCF2VCF_ALLELE; 
@@ -176,13 +181,18 @@ TranslatorId vcf_lo_luft_trans_id (DictId dict_id, char number)
     else if (dict_id.num == _FORMAT_SAC       // eg 25,1,6,2 --> 6,2,25,1 (upon REF⇄ALT SWITCH)
     ||       dict_id.num == _FORMAT_SB        // SB and MB - I don't fully understand these, but at least for bi-allelic variants, empirically the sum of the first two values equals first value of AD and the sum of last two values adds up to the second value of AD
     ||       dict_id.num == _FORMAT_MB)       return VCF2VCF_R2;   
+    
     else if (dict_id.num == _INFO_BaseCounts) return VCF2VCF_XREV; // eg 10,6,3,4 -> 4,3,6,10  (upon XSTRAND)
+    
+    else if (segconf.vcf_is_gwas && (
+             dict_id.num == _FORMAT_ES
+    ||       dict_id.num == _FORMAT_EZ))      return VCF2VCF_NEG;
     
     return TRANS_ID_NONE;
 }
 
 // SEG: map coordinates primary->luft. In case of failure, sets luft_ref_index, dst_1pos, xstrand to 0.
-LiftOverStatus vcf_lo_get_liftover_coords (VBlockVCFP vb, PosType pos, WordIndex *luft_ref_index, PosType *dst_1pos, bool *xstrand, uint32_t *aln_i) // out
+LiftOverStatus vcf_lo_get_liftover_coords (VBlockVCFP vb, VcfPosType pos, WordIndex *luft_ref_index, VcfPosType *dst_1pos, bool *xstrand, uint32_t *aln_i) // out
 {
     WordIndex prim_ref_index = chrom_2ref_seg_get (prim_ref, VB, vb->chrom_node_index);
     if (prim_ref_index == WORD_INDEX_NONE) { // primary CHROM is not in primary reference
@@ -194,7 +204,9 @@ LiftOverStatus vcf_lo_get_liftover_coords (VBlockVCFP vb, PosType pos, WordIndex
     }
     
     else {
-        bool mapping_ok = chain_get_liftover_coords (prim_ref_index, pos, luft_ref_index, dst_1pos, xstrand, aln_i); // if failure, sets output to 0.
+        PosType dst_1pos_64;
+        bool mapping_ok = chain_get_liftover_coords (prim_ref_index, pos, luft_ref_index, &dst_1pos_64, xstrand, aln_i); // if failure, sets output to 0.
+        if (dst_1pos) *dst_1pos = (VcfPosType)dst_1pos_64;
         return mapping_ok ? LO_OK : LO_NO_MAPPING_IN_CHAIN_REF; // note: we call this function for testing the first and last POS of REF
     }
 }                                
@@ -204,13 +216,14 @@ LiftOverStatus vcf_lo_get_liftover_coords (VBlockVCFP vb, PosType pos, WordIndex
 // Notes: 1. all translators are symmetrical - running on primary results in luft and vice versa
 // 2. AC and END translators might result in bigger or smaller text - we handle this
 bool vcf_lo_seg_cross_render_to_primary (VBlockVCFP vb, ContextP ctx, STRp(this_value), 
-                                         char *modified_snip, unsigned *modified_snip_len) // NULL means translate in-place (MUST be the same length)
+                                         qSTRp (primary_snip), // NULL if translate in-place: must not change size
+                                         bool validate_only)
 {
     // save original value (and TXTFILE_READ_VB_PADDING extra bytes) and txt_data.len
     uint64_t save_txt_data_len = vb->txt_data.len;
     char save[this_value_len + TXTFILE_READ_VB_PADDING];
     
-    if (modified_snip) 
+    if (primary_snip) 
         memcpy (save, this_value, this_value_len + TXTFILE_READ_VB_PADDING);
 
     // set txt_data as if we just reconsturcted value - len ending after value
@@ -218,30 +231,33 @@ bool vcf_lo_seg_cross_render_to_primary (VBlockVCFP vb, ContextP ctx, STRp(this_
 
     // convert Primary->Luft in place. Note: if untranslatable (because it was an untranslatable Primary value
     // to be begin with), this function will do nothing.
-    if (DT_FUNC(vb, translator)[ctx->luft_trans](VB, ctx, (char *)this_value, this_value_len, 0, false)) {
+    if (DT_FUNC(vb, translator)[ctx->luft_trans](VB, ctx, (char *)STRa(this_value), 0, validate_only)) {
 
-        int len_diff = (int)vb->txt_data.len - (int)len_before;
-        
-        ASSERT (!len_diff || modified_snip, "len_diff=%d, but translation in place of %s is only allowed if len_diff=0", len_diff, ctx->tag_name);
+        // case: we're translating into primary_snip 
+        if (primary_snip) {
+            int growth = (int)vb->txt_data.len - (int)len_before;
+            
+            // length only changes for AC and END - and since they are 32 bit ints in the VCF spec - they change by at most 9 
+            // characters (1 character -> 10 characters)
+            ASSERT (growth <= TXTFILE_READ_VB_PADDING, "When translating luft->primary of %s, length grew by %d - that's too much",
+                    ctx->tag_name, growth);
 
-        // length only changes for AC and END - and since they are 32 bit ints in the VCF spec - they change by at most 9 
-        // characters (1 character -> 10 characters)
-        ASSERT (len_diff <= TXTFILE_READ_VB_PADDING, "When translating luft->primary of %s, length grew by %d - that's too much",
-                ctx->tag_name, len_diff);
+            // case: copy result to primary_snip, and revert txt_data to its original
+            *primary_snip_len = (int)this_value_len + growth;
+            vb->recon_size += growth;
 
-        // copy result
-        if (modified_snip) {
-            *modified_snip_len = (int)this_value_len + len_diff;
-            vb->recon_size -= (int)this_value_len - (int)*modified_snip_len; // Primary reconstruction is smaller
-
-            memcpy (modified_snip, this_value, *modified_snip_len);
+            memcpy (primary_snip, this_value, *primary_snip_len);
 
             // restore original
             memcpy ((char *)this_value, save, this_value_len + TXTFILE_READ_VB_PADDING);
         }
 
-        vb->txt_data.len = save_txt_data_len;
+        // case: translated in place
+        else if (!validate_only) 
+            ASSERT (vb->txt_data.len == len_before, "When translating luft->primary of %s \"in-place\", length incorrectly changed",
+                    ctx->tag_name);
 
+        vb->txt_data.len = save_txt_data_len;
         return true;
     }
     else { // failed lift over
@@ -334,7 +350,7 @@ void vcf_lo_set_rollback_point (VBlockVCFP vb)
 void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl)
 {
     bool is_xstrand;
-    PosType pos = vb->last_int(VCF_POS);
+    VcfPosType pos = vb->last_int(VCF_POS);
 
     WordIndex luft_ref_index; // note: chain file contigs are copied from the reference, so have the same indices
     LiftOverStatus ostatus = vcf_lo_get_liftover_coords (vb, pos, &luft_ref_index, &dl->pos[1], &is_xstrand, &vb->pos_aln_i);
@@ -379,6 +395,8 @@ void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl)
     // Complex, that is not left-anchored (can be an inversion, del-ins, or right-aligned indel, see: http://varnomen.hgvs.org/recommendations/DNA/variant/delins/)
     if (is_xstrand && LO_IS_OK_COMPLEX(ostatus)) 
         dl->pos[1] -= oref_len - 1;
+
+    // TO DO: test that ref is same as luft for new pos[1] and reject if not
 
     // we add oPOS, oCHROM, oREF and oXSTRAND-  only in case ostatus is LO_IS_OK - they will be consumed by the info_luft_snip container
     // note: no need to seg VCF_COPYPOS explicitly here, as it is all_the_same handled in vcf_seg_initialize
@@ -665,10 +683,10 @@ void vcf_liftover_display_lift_report (void)
 
     if (!flag.quiet)
         iprintf ("\nCongratulations! %s is a dual-coordinate VCF (DVCF). You can now:\n"
-                "1. Render the data in Primary coordinates: genocat %s\n"
-                "2. Render the data in Luft coordinates: genocat --luft %s\n"
-                "3. See line by line variant status: genocat --show-dvcf %s (also works in combination with --luft)\n"
-                "4. See the lift rejects report (only exists in case of rejects): see %s\n"
-                "5. Learn more about DVCF: https://genozip.com/dvcf.html\n\n", 
-                z_name, z_name, z_name, z_name, report_fn);
+                 "1. Render the data in Primary coordinates: genocat %s\n"
+                 "2. Render the data in Luft coordinates: genocat --luft %s\n"
+                 "3. See line by line variant status: genocat --show-dvcf %s (also works in combination with --luft)\n"
+                 "4. See the lift rejects report (only exists in case of rejects): see %s\n"
+                 "5. Learn more about DVCF: " WEBSITE_DVCF "\n\n", 
+                 z_name, z_name, z_name, z_name, report_fn);
 }

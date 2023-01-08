@@ -171,6 +171,7 @@ typedef struct {
          collect_coverage;   // PIZ: collect coverage data for show_sex/show_coverage/idxstats
 
     int only_headers,        // genocat --show_headers (not genounzip) show only headers
+        recon_per_line_overhead, // genocat - additional per-line reconstruction txt_data space needed, due to flags
         check_latest;        // PIZ: run with "genozip --decompress --test": ZIP passes this to PIZ upon testing of the last file
 
     Reference reading_reference;  // system is currently reading a reference  as a result of --chain (not normal PIZ of a .chain.genozip)

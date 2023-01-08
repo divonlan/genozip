@@ -28,11 +28,13 @@ void sam_seg_HISAT2_Zs_Z (VBlockSAMP vb, STRp(zs), unsigned add_bytes)
         .nitems_lo   = 3, 
         .drop_final_repsep = true,
         .repsep      = {','},
-        .items       = { { .dict_id={.id="Z0s" }, .separator = {'|'} },
-                         { .dict_id={.id="Z1s" }, .separator = {'|'} },
-                         { .dict_id={.id="Z2s" },                    } }
+        .items       = { { .dict_id=(DictId)_OPTION_Zs_POS,  .separator = {'|'} },
+                         { .dict_id=(DictId)_OPTION_Zs_TYPE, .separator = {'|'} },
+                         { .dict_id=(DictId)_OPTION_Zs_RS                       } }
     };
 
-    seg_array_of_struct (VB, CTX(OPTION_Zs_Z), con, STRa(zs), NULL, add_bytes);
+    if (!CTX(OPTION_Zs_RS)->is_initialized) seg_id_field_init (CTX(OPTION_Zs_RS));
+    
+    seg_array_of_struct (VB, CTX(OPTION_Zs_Z), con, STRa(zs), (SegCallback[]){0, 0, seg_id_field_cb}, add_bytes);
 }
 

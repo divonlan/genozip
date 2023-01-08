@@ -15,7 +15,6 @@
 #define GITHUB_REPO "https://github.com" REPO
 
 #define WEBSITE_QUICK_GUIDE  GENOZIP_URL "/compression"
-#define WEBSITE_COORDS       GENOZIP_URL "/dvcf"
 #define WEBSITE_RENDERING    GENOZIP_URL "/dvcf-rendering" // link in manuscript
 #define WEBSITE_KRAKEN       GENOZIP_URL "/kraken"
 #define WEBSITE_GENOZIP      GENOZIP_URL "/genozip"

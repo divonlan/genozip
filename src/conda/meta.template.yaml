@@ -51,10 +51,10 @@ test:
       "genols"
     ] %}
 #    {% for executable in genozip_executables %}
-#    - genozip --help
+#    - genozip --version
 #    {% endfor %}
 #    - which genozip.exe  # [win]
-    - genozip --help
+    - genozip --version
 
 about:
   home: https://genozip.com

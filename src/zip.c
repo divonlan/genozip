@@ -271,7 +271,7 @@ static void zip_resize_local (VBlockP vb, Context *ctx)
 
     // in VCF FORMAT fields, a max_int value is reconstructed as . (see reconstruct_from_local_int), which is not applicable for dynamic size -
     // therefore we increment largest by 1 to ensure that no actual value is max_int
-    if (VB_DT(VCF) && dict_id_is_vcf_format_sf (ctx->dict_id)) largest++;
+    if ((VB_DT(VCF) || VB_DT(BCF)) && dict_id_is_vcf_format_sf (ctx->dict_id)) largest++;
 
     static const LocalType test_ltypes[3][8] = { { LT_UINT8, LT_UINT16, LT_UINT32, LT_INT8, LT_INT16, LT_INT32, LT_UINT64, LT_INT64 },  // LT_DYN_INT
                                                  { LT_hex8, LT_hex16, LT_hex32, LT_hex64 },   // LT_DYN_INT_h
@@ -410,7 +410,7 @@ static void zip_handle_unique_words_ctxs (VBlockP vb)
 
     for_ctx {
         if (!ctx->nodes.len || ctx->nodes.len != ctx->b250.len) continue; // check that all words are unique (and new to this vb)
-        if (VB_DT(VCF) && dict_id_is_vcf_format_sf (ctx->dict_id)) continue; // this doesn't work for FORMAT fields
+        if ((VB_DT(VCF) || VB_DT(BCF)) && dict_id_is_vcf_format_sf (ctx->dict_id)) continue; // this doesn't work for FORMAT fields
         if (ctx->nodes.len < vb->lines.len / 5) continue; // don't bother if this is a rare field less than 20% of the lines
         if (buf_is_alloc (&ctx->local))     continue; // skip if we are already using local to optimize in some other way
 
@@ -894,13 +894,14 @@ void zip_one_file (rom txt_basename,
 
     segconf_initialize(); // before txtheader 
 
+    // initalize pre-defined ctxs after reading header 
+    // note: in case of GENERIC, generic_is_header_done may change the data type and re-initialize the contexts
+    if (z_file->num_txts_so_far == 0)  // first component of this z_file 
+        ctx_initialize_predefined_ctxs (z_file->contexts, txt_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts);
+
     // read the txt header, assign the global variables, and write the compressed header to the GENOZIP file
     int64_t txt_header_offset = -1;
     int64_t txt_header_len = txtheader_zip_read_and_compress (&txt_header_offset, flag.zip_comp_i); // also increments z_file->num_txts_so_far
-
-    // initalize pre-defined ctxs after reading header (in case of generic, generic_is_header_done may change the data type)
-    if (z_file->num_txts_so_far == 1)  // first component of this z_file 
-        ctx_initialize_predefined_ctxs (z_file->contexts, txt_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts);
 
     bool success = (txt_header_len >= -1);
     if (!success) goto finish; // eg 2nd+ VCF file cannot bind, because of different sample names
