@@ -3,7 +3,7 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
-14.0.23 10/Jan/2023
+14.0.24 10/Jan/2023
 - Fix license enforcement bug
 - Update copyright
 
