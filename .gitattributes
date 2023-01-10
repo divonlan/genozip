@@ -17,3 +17,7 @@ genome_*.txt binary
 *.phy binary
 *.kraken binary
 *.genozip binary
+
+# installer files
+*.tar
+*.exe
