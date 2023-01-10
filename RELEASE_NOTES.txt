@@ -3,6 +3,10 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+14.0.23 10/Jan/2023
+- Fix license enforcement bug
+- Update copyright
+
 14.0.22 8/Jan/2023
 - VCF: better compression for GWAS-VCF files including support for GWAS-VCF fields in DVCF
 - DVCF: better handling of some edge cases

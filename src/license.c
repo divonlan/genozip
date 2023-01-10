@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   license.c
-//   Copyright (C) 2020-2022 Genozip Limited
+//   Copyright (C) 2020-2023 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -187,7 +187,7 @@ static void license_load (void)
 
     #define EVAL_NUM_FILES 100 // if updating, also update the web page get-genozip 
     #define EVAL_NUM_FILES_STR "100"
-    ASSINP (!counter_has_exceeded (filename, EVAL_NUM_FILES),
+    ASSINP (rec.lic_type != LIC_TYPE_EVAL || !counter_has_exceeded (filename, EVAL_NUM_FILES),
             "You reached the maximum number of files (%u) compressible with the Evaluation License.\n" BUY, EVAL_NUM_FILES);
 
     rec.initialized = true;
@@ -596,7 +596,8 @@ rom license_print_default_notice (void)
 
 void license_one_file_compressed (void)
 {    
-    counter_increment (license_get_filename (false), 1);
+    if (rec.lic_type == LIC_TYPE_EVAL)
+        counter_increment (license_get_filename (false), 1);
 }
 
 #define COUNTER_MAGIC 27

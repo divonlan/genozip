@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   gencomp.h - "generated component"
-//   Copyright (C) 2022-2022 Genozip Limited. Patent pending.
+//   Copyright (C) 2022-2023 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
