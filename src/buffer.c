@@ -84,7 +84,7 @@ char *buf_display (ConstBufferP buf)
     static char str[256]; // NOT thread-safe
 
     sprintf (str, "Buffer %s (%"PRId64"): size=%"PRIu64" len=%"PRIu64" data=%p memory=%p",
-             buf->name, buf->param, (uint64_t)buf->size, buf->len, buf->data, buf->memory);
+             buf->name, buf->param, (uint64_t)buf->size, STRfb(*buf), buf->memory);
     return str;    
 }
 

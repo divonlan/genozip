@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   license.c
-//   Copyright (C) 2020-2022 Genozip Limited
+//   Copyright (C) 2020-2023 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -37,6 +37,14 @@
 #define LIC_FIELD_NUMBER       "License number"
 #define LIC_FIELD_ALLOW_STATS  "Allow_stats"
 
+#ifndef DEBUG
+    #define EVAL_NUM_FILES 100 // if updating, also update the web page get-genozip 
+    #define EVAL_NUM_FILES_STR "100"
+#else
+    #define EVAL_NUM_FILES 2 
+    #define EVAL_NUM_FILES_STR "2"
+#endif
+
 #include "text_license.h"
 
 static rom license_filename = NULL;  // non-standard filename set with --licfile
@@ -50,7 +58,7 @@ static struct {
     uint32_t license_num;
 } rec = {};
 
-static rom lic_types[NUM_LIC_TYPES] = { "", "Academic", "30-day evaluation", "Standard" }; // these strings are referred to in register.sh
+static rom lic_types[NUM_LIC_TYPES] = { "", "Academic", "30-day evaluation", "Standard", "Deep" }; // these strings are referred to in register.sh
 
 static void counter_reset (rom filename);
 static bool counter_increment (rom filename, long inc);
@@ -59,7 +67,7 @@ static bool counter_has_exceeded (rom filename, uint32_t exceeded_this);
 static uint32_t license_calc_number (ConstBufferP license_data)
 {
     char data_no_ws[license_data->len];
-    unsigned data_no_ws_len = str_remove_whitespace (license_data->data, license_data->len, data_no_ws);        
+    unsigned data_no_ws_len = str_remove_whitespace (STRb(*license_data), data_no_ws);        
 
     return md5_do (data_no_ws, data_no_ws_len).words[0];
 }
@@ -144,7 +152,7 @@ bool license_is_registered (void)
 // IF YOU'RE CONSIDERING TAMPERING WITH THIS CODE TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,
 // and might put you personally as well as your organization at legal and financial risk - see "Severly unauthorized use of Genozip"
 // section of the license. Rather, please contact sales@genozip.com to discuss which license would be appropriate for your case.
-static void license_load (void)
+void license_load (void)
 {
     if (rec.initialized) return;
 
@@ -181,14 +189,21 @@ static void license_load (void)
     data.len -= line_lens[n_lines-1] + 2;
     if (rec.license_num != license_calc_number (&data)) goto reregister;
 
-    #define BUY "To purchase a Standard License: " WEBSITE_BUY " or contact " EMAIL_SALES "\n"
-    ASSINP0 (rec.lic_type != LIC_TYPE_EVAL || time(0)-rec.machine_time < (30*24*60*60),
-             "You reached the end of the 30 evaluation period of Evaluation License.\n" BUY);
+    if (rec.lic_type == LIC_TYPE_EVAL) {
+        #define BUY "To purchase a Standard or Deep License: " WEBSITE_BUY " or contact " EMAIL_SALES "\n"
+        ASSINP0 (time(0) - rec.machine_time < (30*24*60*60),
+                 "You reached the end of the 30 evaluation period of Evaluation License.\n" BUY);
 
-    #define EVAL_NUM_FILES 100 // if updating, also update the web page get-genozip 
-    #define EVAL_NUM_FILES_STR "100"
-    ASSINP (!counter_has_exceeded (filename, EVAL_NUM_FILES),
-            "You reached the maximum number of files (%u) compressible with the Evaluation License.\n" BUY, EVAL_NUM_FILES);
+        ASSINP (!counter_has_exceeded (filename, EVAL_NUM_FILES),
+                "You reached the maximum number of files (%u) compressible with the Evaluation License.\n" BUY, EVAL_NUM_FILES);
+    }
+
+    else if (rec.lic_type == LIC_TYPE_ACADEMIC || rec.lic_type == LIC_TYPE_STANDARD) {
+        ASSINP (!counter_has_exceeded (filename, EVAL_NUM_FILES),
+                "You reached %u --deep compressions, which is the maximum number granted with the %s License.\n"
+                "To upgrade to a Deep License: " WEBSITE_BUY " or contact " EMAIL_SALES "\n", EVAL_NUM_FILES, lic_types[rec.lic_type]);
+    }
+
 
     rec.initialized = true;
 
@@ -341,7 +356,7 @@ static bool license_verify_name (STRc(response), rom unused)
 
 static bool license_verify_license (STRc(response), rom unused)
 {
-    return strlen (response) == 1 && (*response=='1' || *response=='2' || *response=='3');
+    return strlen (response) == 1 && (*response >= '1' && *response <= '4');
 }
 
 static void license_exit_if_not_confirmed (rom query, DefAnswerType def_answer)
@@ -422,8 +437,9 @@ void license_register (void)
                         "1. Academic License (free): Free for officially recognized research institutions (excluding data obtained commercially)\n\n"
                         "2. Evaluation License (free): Free use for 30-day (limited to " EVAL_NUM_FILES_STR " files)\n\n"
                         "3. Standard License (paid): I have already paid for a Standard License\n\n"
+                        "3. Deep License (paid): I have already paid for a Deep License\n\n"
                         "Remember your Mom taught you to be honest!\n\n"
-                        "Please enter 1, 2 or 3: ",
+                        "Please enter 1, 2, 3 or 4: ",
                         lic_type, sizeof(lic_type), false, license_verify_license, NULL);
     
         rec.lic_type = lic_type[0] - '0';
@@ -517,14 +533,7 @@ void license_register (void)
 // section of the license. Rather, please contact sales@genozip.com to discuss which license would be appropriate for your case.
 uint32_t license_get_number (void)
 {
-    license_load();
     return rec.license_num;
-}
-
-LicenseType license_get_type (void)
-{
-    license_load();
-    return rec.lic_type;
 }
 
 bool license_allow_stats (void)
@@ -567,36 +576,38 @@ void license_display (void)
         str_print_text (license, ARRAY_LEN(license), "", newline, html_header, width);  // Makefile sets lic_width to a fixed width for Windows Installer and for Docs
 }
 
-rom license_print_default_notice (void)
+StrNotice license_print_default_notice (void)
 {
-    char *notice = NULL; 
+    StrNotice notice = {}; 
 
-    switch (license_get_type()) { // note: this also loads the license in PIZ
+    if (IS_PIZ) license_load(); // happens when PIZ is run in --test after ZIP
+    
+    if (rec.lic_type == LIC_TYPE_ACADEMIC)
+        sprintf (notice.s, "Genozip is licensed to %s for use by %s, for academic research purposes only (see "WEBSITE_PRICING_FAQ"). Other use is prohibited. To get a non-academic license, email " EMAIL_SALES ".",
+                 rec.institution, rec.name);
 
-        case LIC_TYPE_ACADEMIC:
-            notice = MALLOC (16384);
-            sprintf (notice, "Genozip is licensed to %s for use by %s, for academic research purposes only (see "WEBSITE_PRICING_FAQ"). Other use is prohibited. To get a non-academic license, email " EMAIL_SALES ".",
-                     rec.institution, rec.name);
-            break;
+    else if (rec.lic_type == LIC_TYPE_EVAL) {
+        int days_left = 30 - (int)(time(0)-rec.machine_time)/24/60/60;
 
-        case LIC_TYPE_EVAL: { 
-            int days_left = 30 - (int)(time(0)-rec.machine_time)/24/60/60;
-            notice = MALLOC (16384);
-
-            sprintf (notice, "Genozip is licensed to %s for use by %s for a 30-day evaluation. %u day%s left. To get a license, email " EMAIL_SALES ".",
-                     rec.institution, rec.name, days_left, days_left!=1 ? "s" : "");
-            break;
-        }
-
-        default: break;
+        sprintf (notice.s, "Genozip is licensed to %s for use by %s for a 30-day evaluation. %u day%s left. To get a license, email " EMAIL_SALES ".",
+                 rec.institution, rec.name, days_left, days_left!=1 ? "s" : "");
     }
-
+    
     return notice;
 }
 
-void license_one_file_compressed (void)
+void license_show_deep_notice (void)
+{
+    if (flag.deep && (rec.lic_type == LIC_TYPE_STANDARD || rec.lic_type == LIC_TYPE_ACADEMIC))
+        iprintf ("Note: using --deep requires a Genozip Deep License. It is provided to you on an evaluation basis, limited to compressing %u files\n"
+                 "To upgrade to a Deep License: " WEBSITE_BUY " or contact " EMAIL_SALES "\n", EVAL_NUM_FILES);
+}
+
+void license_one_file_compressed (DataType dt)
 {    
-    counter_increment (license_get_filename (false), 1);
+    if (rec.lic_type == LIC_TYPE_EVAL || 
+        ((rec.lic_type == LIC_TYPE_ACADEMIC || rec.lic_type == LIC_TYPE_STANDARD) && flag.deep && (dt==DT_BAM || dt==DT_SAM)))
+        counter_increment (license_get_filename (false), 1);
 }
 
 #define COUNTER_MAGIC 27

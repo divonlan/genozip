@@ -470,7 +470,7 @@ static void main_genozip (rom txt_filename,
 
         file_close (&z_file, false, !is_last_user_txt_file); 
 
-        license_one_file_compressed();
+        license_one_file_compressed(z_dt);
 
         // test the compression, if the user requested --test
         if (flag.test) 
@@ -763,7 +763,7 @@ int main (int argc, char **argv)
     // IF YOU'RE CONSIDERING EDITING THIS CODE TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,
     // and might put you personally as well as your organization at legal and financial risk - see "Severly unauthorized use of Genozip"
     // section of the license. Rather, please contact sales@genozip.com to discuss which license would be appropriate for your case.
-    if (IS_ZIP) license_get_number(); 
+    if (IS_ZIP) license_load(); 
 
     if (flag.reading_chain) {
         vcf_tags_cmdline_rename_option(); 

@@ -839,7 +839,7 @@ static bool vcf_header_set_globals (rom filename, BufferP vcf_header, bool soft_
                       "%.*s"
                       "=======================================\n", 
                       global_cmd, filename, vcf_field_name_line_filename,
-                      vcf_field_name_line_filename, vcf_field_name_line.len32, vcf_field_name_line.data,
+                      vcf_field_name_line_filename, STRbf(vcf_field_name_line),
                       filename, vcf_header->len32-i, &vcf_header->data[i]);
                 
                 if (soft_fail) return false;

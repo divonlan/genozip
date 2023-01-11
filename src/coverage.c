@@ -239,7 +239,7 @@ void coverage_show_coverage (void)
         }
 
     // no sorting for now - keep in order of header or reference (to do: sort by numeric component chrom number)
-    // qsort (evb->scratch.data, evb->scratch.len, sizeof (CovDis), sort_by_LN);
+    // qsort (STRb(evb->scratch)), sizeof (CovDis), sort_by_LN);
 
     PosType genome_nbases = 0;
 

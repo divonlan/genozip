@@ -28,19 +28,19 @@ void tip_print (void)
 
     if (flag.no_tip) return; // protect from spamming the user with more than one tip
 
-    rom notice = license_print_default_notice ();
+    StrNotice notice = license_print_default_notice ();
 
     if (!is_info_stream_terminal) {
-        if (notice) iprintf ("\n%s\n", notice);
+        if (notice.s[0]) iprintf ("\n%s\n", notice.s);
         return;
     }
 
     rom valid_tips[256];
     int n=0;
 
-    if (notice)
+    if (notice.s[0])
         for (int i=0; i < 5; i++)
-            valid_tips[n++] = notice; // 5X more likely than other tips
+            valid_tips[n++] = notice.s; // 5X more likely than other tips
 
     valid_tips[n++] = "Interested in how Genozip works? See the paper: " PAPER2;
     valid_tips[n++] = "FYI, some Genozip benchmarks are available here: " WEBSITE_BENCHMARKS;

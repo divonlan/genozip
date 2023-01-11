@@ -41,7 +41,7 @@ typedef enum { STATS_NONE=0, STATS_SHORT=1, STATS_LONG=2, STATS_SHORT_GREP=-1, S
 typedef struct {
     
     // genozip options that affect the compressed file
-    int fast, best, make_reference, multiseq, md5;
+    int fast, best, make_reference, multiseq, md5, deep;
     rom vblock;
     
     // ZIP: data modifying options

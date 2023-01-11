@@ -341,7 +341,7 @@ void chrom_index_by_name (Did chrom_did_i)
         for_buf2 (CtxWord, word, i, sorter_ctx->word_list)
             if (word->len) BNXT32(chrom_sorter) = i;
 
-    qsort (chrom_sorter.data, chrom_sorter.len, sizeof(uint32_t), IS_ZIP ? chrom_create_zip_sorter : chrom_create_piz_sorter);
+    qsort (STRb(chrom_sorter), sizeof(uint32_t), IS_ZIP ? chrom_create_zip_sorter : chrom_create_piz_sorter);
 }
 
 // binary search for this chrom in ZCTX(CHROM). we count on gcc tail recursion optimization to keep this fast.
