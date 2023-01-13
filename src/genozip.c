@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   genozip.c
-//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -546,7 +546,7 @@ static void main_get_filename_list (unsigned num_files, char **filenames,  // in
 
     // set argv to file names
     if (flag.files_from) {
-        file_split_lines (flag.files_from, "files-from");
+        file_split_lines (flag.files_from, "files-from", true);
         
         // handle case of "tar xvf myfile.tar |& genounzip --files-from -" when using bsdtar:
         // the output has an added "x " prefix eg "x junk.sam.genozip"

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   context.c
-//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -615,6 +615,7 @@ void ctx_clone (VBlockP vb)
                 // overlay the hash table, that may still change by future vb's merging... this vb will only use
                 // entries that are up to this merge_num
                 buf_overlay (vb, &vctx->global_hash, &zctx->global_hash, "contexts->global_hash");
+                buf_overlay (vb, &vctx->global_ents, &zctx->global_ents, "contexts->global_ents");
                 vctx->merge_num = zctx->merge_num;
                 vctx->global_hash_prime = zctx->global_hash_prime; // can never change
                 vctx->num_new_entries_prev_merged_vb = zctx->num_new_entries_prev_merged_vb;
@@ -1039,13 +1040,10 @@ static bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx)
     
     if (!buf_is_alloc (&vctx->dict)) goto finish; // no new snips introduced in this VB
  
-    if (!buf_is_alloc (&zctx->dict)) {
-        // allocate hash table, based on the statistics gather by this first vb that is merging this dict and 
-        // populate the hash table without needing to reevalate the snips (we know none are in the hash table, but all are in nodes and dict)
-        if (zctx->global_hash.size <= 1) { // only initial allocation in zip_dict_data_initialize
-            uint32_t estimated_entries = hash_get_estimated_entries (vb, zctx, vctx);
-            hash_alloc_global (zctx, estimated_entries);
-        }
+    // case: this is first vb that is merging this dict: allocate hash tabl based on the statistics gathered by this VB. 
+    if (!buf_is_alloc (&zctx->global_hash)) {
+        uint32_t estimated_entries = hash_get_estimated_entries (vb, zctx, vctx);
+        hash_alloc_global (zctx, estimated_entries);
     }
 
     // merge in words that are potentially new (but may have been already added by other VBs since we cloned for this VB)
@@ -1843,7 +1841,9 @@ void ctx_foreach_buffer(ContextP ctx, bool set_name, void (*func)(BufferP buf, r
     { BufferP buf = &(ctx)->nodes;       if (set_name) buf->name = "contexts->nodes"       ; func (buf, __FUNCLINE); }  
     { BufferP buf = &(ctx)->counts;      if (set_name) buf->name = "contexts->counts"      ; func (buf, __FUNCLINE); }  
     { BufferP buf = &(ctx)->local_hash;  if (set_name) buf->name = "contexts->local_hash"  ; func (buf, __FUNCLINE); }  
+    { BufferP buf = &(ctx)->local_ents;  if (set_name) buf->name = "contexts->local_ents"  ; func (buf, __FUNCLINE); }  
     { BufferP buf = &(ctx)->global_hash; if (set_name) buf->name = "contexts->global_hash" ; func (buf, __FUNCLINE); }  
+    { BufferP buf = &(ctx)->global_ents; if (set_name) buf->name = "contexts->global_ents" ; func (buf, __FUNCLINE); }  
     { BufferP buf = &(ctx)->word_list;   if (set_name) buf->name = "contexts->word_list"   ; func (buf, __FUNCLINE); }  
     { BufferP buf = &(ctx)->con_cache;   if (set_name) buf->name = "contexts->con_cache"   ; func (buf, __FUNCLINE); }  
     { BufferP buf = &(ctx)->con_index;   if (set_name) buf->name = "contexts->con_index"   ; func (buf, __FUNCLINE); }  

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   recon_plan_io.c
-//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -27,7 +27,7 @@
 
 rom recon_plan_flavors[8] = PLAN_FLAVOR_NAMES;
 
-void recon_plan_show (File *file, bool is_luft, uint32_t conc_writing_vbs, uint32_t vblock_mb)
+void recon_plan_show (FileP file, bool is_luft, uint32_t conc_writing_vbs, uint32_t vblock_mb)
 {
     iprintf ("\nReconstruction plan%s: entries=%"PRIu64" conc_writing_vbs=%u x %u MB\n", 
              !z_is_dvcf ? "" : is_luft ? " of LUFT rendition" : " of PRIMARY rendition", 
@@ -54,7 +54,7 @@ void recon_plan_show (File *file, bool is_luft, uint32_t conc_writing_vbs, uint3
     }               
 }
 
-void recon_plan_sort_by_vb (File *file)
+void recon_plan_sort_by_vb (FileP file)
 {
     ARRAY (BufWord, recon_plan_index, file->recon_plan_index);
 

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   tip.c
-//   Copyright (C) 2020-2022 Genozip Limited
+//   Copyright (C) 2020-2023 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -53,7 +53,7 @@ void tip_print (void)
     valid_tips[n++] = "Tip: you can use Genozip to compress a file directly from a URL, see: " WEBSITE_GENOZIP;
     valid_tips[n++] = "Is Genozip useful? Help your colleagues by asking the IT folks to post it on your institution's bioinformatics page\n";
     valid_tips[n++] = "Is Genozip useful? Help your colleagues by asking the IT folks to install it as a module on your institution's HPC, see instructions here: " WEBSITE_USING_ON_HPC;
-    valid_tips[n++] = "Please take a moment now to make a note to not forget to cite Genozip:\n " PAPER2_CITATION "\n";
+    valid_tips[n++] = "Please take a moment now to make a note to not forget to cite Genozip:\n" PAPER2_CITATION "\n";
 
     if (!strcmp (arch_get_distribution(), "github")) 
         valid_tips[n++] = "Do you like Genozip? Please support it by starring it on github: " GITHUB_REPO;

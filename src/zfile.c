@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   zfile.c
-//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -377,7 +377,7 @@ void zfile_remove_ctx_group_from_z_data (VBlockP vb, Did remove_did_i)
 
 // reads exactly the length required, error otherwise. 
 // return a pointer to the data read
-static void *zfile_read_from_disk (File *file, VBlockP vb, BufferP buf, uint32_t len, SectionType st)
+static void *zfile_read_from_disk (FileP file, VBlockP vb, BufferP buf, uint32_t len, SectionType st)
 {
     START_TIMER;
 
@@ -400,7 +400,7 @@ static void *zfile_read_from_disk (File *file, VBlockP vb, BufferP buf, uint32_t
 
 // read section header - called from the main thread. 
 // returns offset of header within data, or SECTION_SKIPPED if section is skipped
-int32_t zfile_read_section_do (File *file,
+int32_t zfile_read_section_do (FileP file,
                                VBlockP vb, 
                                uint32_t original_vb_i, // the vblock_i used for compressing. this is part of the encryption key. dictionaries are compressed by the compute thread/vb, but uncompressed by the main thread (vb=0)
                                BufferP data, rom buf_name, // buffer to append 
@@ -993,7 +993,7 @@ DataType zfile_get_file_dt (rom filename)
 {
     FileType ft = file_get_type (filename);
     DataType dt = file_get_dt_by_z_ft (ft);
-    File *file = NULL;
+    FileP file = NULL;
 
     // case: we don't know yet what file type this is - we need to read the genozip header to determine
     if (dt == DT_NONE && filename) {

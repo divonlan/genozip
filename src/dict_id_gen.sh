@@ -2,7 +2,7 @@
 
 # ------------------------------------------------------------------
 #   dict_id_gen.sh
-#   Copyright (C) 2021-2022 Genozip Limited
+#   Copyright (C) 2021-2023 Genozip Limited
 #   Please see terms and conditions in the file LICENSE.txt
 #
 #   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -87,7 +87,7 @@ generate_dict_id_gen_h()
     cat > dict_id_gen.h << END
 // ------------------------------------------------------------------
 // dict_id_gen.h
-//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited

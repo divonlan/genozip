@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   hash.c
-//   Copyright (C) 2020-2022 Genozip Limited
+//   Copyright (C) 2020-2023 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -19,14 +19,14 @@
 
 typedef struct {        
     WordIndex node_index;     // index into Context.ston_nodes (if < ston_nodes.len) or Context.nodes or NODE_INDEX_NONE
-    uint32_t next;            // linked list - index into Context.global/local_hash or NO_NEXT
-                              //               local_hash indices started at LOCAL_HASH_OFFSET
+    uint32_t next;            // linked list - index into Context.global/local_ents or NO_NEXT
+                              //               local_ents indices start at LOCAL_HASH_OFFSET
 } LocalHashEnt;
 
 #pragma pack(4)
 typedef struct {        
     WordIndex node_index;     // index into Context.nodes or NODE_INDEX_NONE
-    uint32_t next;            // linked list - index into Context.global/local_hash or NO_NEXT
+    uint32_t next;            // linked list - index into Context.global/local_ents or NO_NEXT
     int32_t merge_num;        // the merge_num in which the "node_index" field was set. when this global hash is overlayed 
                               // to a vctx, that vctx is permitted use the node_index value if this merge_num is <= vctx->merge_num,
                               // otherwise, it should treat it as NODE_INDEX_NONE.
@@ -59,10 +59,10 @@ uint32_t hash_next_size_up (uint64_t size, bool allow_huge)
 // reference contig dictionary  
 static void hash_populate_from_nodes (ContextP zctx)
 {
-    uint64_t len = zctx->nodes.len;
-    zctx->nodes.len = 0; // hash_global_get_entry will increment it back to its original value
+    uint32_t len = zctx->nodes.len32;
+    zctx->nodes.len32 = 0; // hash_global_get_entry will increment it back to its original value
 
-    for (uint64_t i=0; i < len; i++) {
+    for (uint32_t i=0; i < len; i++) {
         CtxNode *node = B(CtxNode, zctx->nodes, i);
         rom snip = Bc (zctx->dict, node->char_index);
         hash_global_get_entry (zctx, snip, node->snip_len, HASH_NEW_OK_NOT_SINGLETON, NULL /* the snip is not in the hash for sure */); 
@@ -73,13 +73,13 @@ static void hash_populate_from_nodes (ContextP zctx)
 // allocation algorithm:
 // 1. If we got info on the size of this dict with the previous merged vb - use that size
 // 2. If not - use either num_lines for the size, or the smallest size for dicts that are typically small
-void hash_alloc_local (VBlockP segging_vb, ContextP vctx)
+static void hash_alloc_local (VBlockP segging_vb, ContextP vctx)
 {
     vctx->local_hash_prime = 0; // initialize
 
     // if known from previously merged vb - use those values
     if (vctx->num_new_entries_prev_merged_vb)
-        // 3X the expected number of entries to reduce spill-over
+        // 3X the expected number of entries to reduce hash contention
         vctx->local_hash_prime = hash_next_size_up (vctx->num_new_entries_prev_merged_vb * 3, false);
 
     // if known to small, use hash table of ~ 64K
@@ -92,11 +92,10 @@ void hash_alloc_local (VBlockP segging_vb, ContextP vctx)
 
     // note: we can't be too generous with the initial allocation because this memory is usually physically allocated
     // to ALL VB structures before any of them merges. Better start smaller for vb_i=1 and let it extend if needed
-    buf_alloc (segging_vb, &vctx->local_hash, 0, vctx->local_hash_prime * 1.2, LocalHashEnt /* room for expansion */, 1, 
-               "contexts->local_hash");
-    vctx->local_hash.len = vctx->local_hash_prime;
-    memset (vctx->local_hash.data, 0xff, vctx->local_hash_prime * sizeof (LocalHashEnt)); // initialize core table
-//printf ("Seg vb_i=%u: local hash: dict=%.8s size=%u\n", segging_vb->vblock_i, vctx->tag_name, vctx->local_hash_prime); 
+    buf_alloc_exact_255 (segging_vb, vctx->local_hash, vctx->local_hash_prime, uint32_t, "contexts->local_hash");
+
+    buf_alloc_exact_255 (segging_vb, vctx->local_ents, vctx->local_hash_prime / 3, LocalHashEnt, "contexts->local_ents");
+    vctx->local_ents.len = 0;
 }
 
 // ZIP merge: allocating the global cache for a dictionary, when merging the first VB that encountered it
@@ -237,38 +236,43 @@ uint32_t hash_get_estimated_entries (VBlockP merging_vb, ContextP zctx, ConstCon
 
 void hash_alloc_global (ContextP zctx, uint32_t estimated_entries)
 {
+    if (!estimated_entries) estimated_entries = 1000; // this happens when populating contigs outside of seg
+    
     zctx->global_hash_prime = hash_next_size_up (estimated_entries * 5, false);
 
-    buf_alloc (evb, &zctx->global_hash, 0, zctx->global_hash_prime * 1.5, GlobalHashEnt, 1,  // 1.5 - leave some room for extensions
-               "zctx->global_hash");
-    buf_set (&zctx->global_hash, 0xff); // we set all entries to {NO_NEXT, NODE_INDEX_NONE, NODE_INDEX_NONE} == {0xffffffff x 3} (note: GlobalHashEnt is packed)
+    // note: we set all entries to NO_NEXT == 0xffffffff
+    buf_alloc_exact_255 (evb, zctx->global_hash, zctx->global_hash_prime, uint32_t, "zctx->global_hash");
     buf_set_overlayable (&zctx->global_hash);
 
-    zctx->global_hash.len = zctx->global_hash_prime; // global_hash.len can get longer over time as extension links are added
+    // note: we set all entries to {NODE_INDEX_NONE, NO_NEXT, NODE_INDEX_NONE} == {0xffffffff x 3} (note: GlobalHashEnt is packed)
+    buf_alloc_exact_255 (evb, zctx->global_ents, estimated_entries, GlobalHashEnt, "zctx->global_ents");
+    buf_set_overlayable (&zctx->global_ents);
+    zctx->global_ents.len = 0;
 
     hash_populate_from_nodes (zctx);
 }
 
 
-// creates a node in the hash table, unless the snip is already there. 
+// creates a node in the hash_ents, unless the snip is already there. 
 // the old node is in node, and NULL if its a new node.
 // returns the node_index (positive if in nodes and negative-2 if in ston_nodes - the singleton buffer)
 WordIndex hash_global_get_entry (ContextP zctx, STRp(snip), HashGlobalGetEntryMode mode,
                                  CtxNode **old_node)        // out - node if node is found, NULL if not
-{
-    GlobalHashEnt g_head, *g_hashent = &g_head;
-    g_hashent->next = hash_do (zctx->global_hash_prime, STRa(snip)); // entry in hash table determined by hash function on snip
+{    
+    uint32_t *hash_p = B32(zctx->global_hash, hash_do (zctx->global_hash_prime, STRa(snip)));
+    GlobalHashEnt g_head = { .next = *hash_p }, *g_hashent = &g_head;
+    g_hashent->next = *hash_p; 
     int32_t hashent_i = NO_NEXT; // squash compiler warning (note: global hash table is always allocated in the first merge)
     bool singleton_encountered = false;
 
     while (g_hashent->next != NO_NEXT) {
 
-        ASSERT (g_hashent->next < zctx->global_hash.len, "g_hashent->next=%d out of range in context=%s, hash.len=%"PRIu64,  
-                g_hashent->next, zctx->tag_name, zctx->global_hash.len);
+        ASSERT (g_hashent->next < zctx->global_ents.len, "g_hashent->next=%d out of range in context=%s, global_ents.len=%"PRIu64,  
+                g_hashent->next, zctx->tag_name, zctx->global_ents.len);
 
         hashent_i = g_hashent->next;
 
-        g_hashent = B(GlobalHashEnt, zctx->global_hash, hashent_i);
+        g_hashent = B(GlobalHashEnt, zctx->global_ents, hashent_i);
 
         // case: snip is not in core hash table and also no other snip occupies the slot (node_index==NODE_INDEX_NONE happens only in the core table)
         if (g_hashent->node_index == NODE_INDEX_NONE) { // unoccupied space in core hash table
@@ -290,14 +294,14 @@ WordIndex hash_global_get_entry (ContextP zctx, STRp(snip), HashGlobalGetEntryMo
                             zctx->tag_name, zctx->nodes.len32, STRf(snip));
                 }                
 
-                __atomic_store_n (&g_hashent->merge_num, zctx->merge_num, __ATOMIC_RELAXED); // stamp our merge_num as the ones that set the node_index
+                __atomic_store_n (&g_hashent->merge_num, zctx->merge_num, __ATOMIC_RELEASE); // stamp our merge_num as the ones that set the node_index
             }
 
             if (old_node) *old_node = NULL; // no old node
             return g_hashent->node_index;
         }
 
-        if (old_node) {  // if node=NULL, caller is telling us it is not in nodes for sure
+        if (old_node) {  // note: if node=NULL, caller is telling us it is not in nodes for sure
             STR (snip_in_dict);
             *old_node = ctx_node_zf (zctx, g_hashent->node_index, &snip_in_dict, &snip_in_dict_len);
         
@@ -316,36 +320,38 @@ WordIndex hash_global_get_entry (ContextP zctx, STRp(snip), HashGlobalGetEntryMo
         }
     }
 
-    // case: not found in hash table, and we are required to provide a new hash entry on the linked list
+    // case: not found - return if this was a read only request
     if (mode == HASH_READ_ONLY) {
         if (old_node) *old_node = NULL; // we don't have an old node
         return NODE_INDEX_NONE;
     }
 
-    buf_alloc (evb, &zctx->global_hash, 1, 0, GlobalHashEnt, 2, "zctx->global_hash");
+    // case: not found, and we are required to provide a new entry in global_ents
+    buf_alloc (evb, &zctx->global_ents, 1, 0, GlobalHashEnt, 2, "zctx->global_ents");
 
-    g_hashent = B(GlobalHashEnt, zctx->global_hash, hashent_i); // might have changed after realloc
+    if (g_hashent != &g_head)
+        g_hashent = B(GlobalHashEnt, zctx->global_ents, hashent_i); // might have changed after realloc
 
     // thread safetey:  VB threads with merge_num < ours, might be segmenting right now, and have this global hash overlayed 
     // and accessing it. We make sure to first prepare the new entry including the merge_num which will prohibit old
     // VBs from using it, before we atomically set the "next"
-    ASSERT (zctx->global_hash.len <= 0xffffffffULL, "no more room in global_hash of context %s", zctx->tag_name);
-    uint32_t next = zctx->global_hash.len++;
+    ASSERT (zctx->global_ents.len32 < 0xffffffff, "no more room in global_ents of context %s", zctx->tag_name);
+    uint32_t next = zctx->global_ents.len32++;
 
-    GlobalHashEnt *new_hashent = B(GlobalHashEnt, zctx->global_hash, next);
-    new_hashent->merge_num     = zctx->merge_num; // stamp our merge_num as the ones that set the node_index
+    GlobalHashEnt *new_hashent = B(GlobalHashEnt, zctx->global_ents, next);
+    __atomic_store_n (&new_hashent->merge_num, zctx->merge_num, __ATOMIC_RELEASE); // stamp our merge_num as the ones that set the node_index
     
-    // we enter the node as a singleton (=in ston_nodes) if this was a singleton in this VB but not in any previous VB 
-    // (the second occurange in the file isn't a singleton anymore)
+    // we enter the node as a singleton (=in ston_nodes) if this was a singleton in this VB and not found in any previous VB 
+    // (the second occurance in the file isn't a singleton anymore)
     bool is_singleton_global   = ((mode == HASH_NEW_OK_SINGLETON_IN_VB) && !singleton_encountered);
-    new_hashent->node_index    = is_singleton_global ? (-((int32_t)zctx->ston_nodes.len++) - 2) : zctx->nodes.len++; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is NODE_INDEX_NONE)
+    new_hashent->node_index    = is_singleton_global ? (-((int32_t)zctx->ston_nodes.len32++) - 2) : zctx->nodes.len32++; // -2 because: 0 is mapped to -2, 1 to -3 etc (as 0 is ambiguius and -1 is NODE_INDEX_NONE)
     new_hashent->next          = NO_NEXT;
 
     if (is_singleton_global) 
-        ASSERT (zctx->ston_nodes.len <= MAX_NODE_INDEX, "number of singleton in context %s exceeded the maximum of %u. snip=\"%.*s\"", 
+        ASSERT (zctx->ston_nodes.len32 <= MAX_NODE_INDEX, "number of singleton in context %s exceeded the maximum of %u. snip=\"%.*s\"", 
                 zctx->tag_name, MAX_NODE_INDEX, STRf(snip));
     else
-        ASSERT (zctx->nodes.len <= MAX_NODE_INDEX, "number of nodes in context %s exceeded the maximum of %u. snip=\"%.*s\"", 
+        ASSERT (zctx->nodes.len32 <= MAX_NODE_INDEX, "number of nodes in context %s exceeded the maximum of %u. snip=\"%.*s\"", 
                 zctx->tag_name, MAX_NODE_INDEX, STRf(snip));
 
 #ifdef DEBUG
@@ -362,8 +368,11 @@ WordIndex hash_global_get_entry (ContextP zctx, STRp(snip), HashGlobalGetEntryMo
                        zctx->tag_name, zctx->global_hash_prime, STRf(snip));
     }
 
-    // now, with the new g_hashent set, we can atomically update the "next"
-    __atomic_store_n (&g_hashent->next, next, __ATOMIC_RELAXED);
+    // now, with the new_hashent set, we can atomically update the "next"
+    if (g_hashent == &g_head)
+        __atomic_store_n (hash_p, next, __ATOMIC_RELEASE);
+    else
+        __atomic_store_n (&g_hashent->next, next, __ATOMIC_RELEASE);
 
     if (singleton_encountered)  // a snip that was previously counted as a singleton is encountered for the second time. it is therefore a failed singleton
         zctx->num_failed_singletons++;
@@ -382,7 +391,13 @@ WordIndex hash_get_entry_for_seg (VBlockP segging_vb, ContextP vctx, STRp(snip),
 {
     // first, search for the snip in the global table
     GlobalHashEnt g_head, *g_hashent = &g_head;
-    g_hashent->next = hash_do (vctx->global_hash_prime, STRa(snip)); // entry in hash table determined by hash function on snip
+    
+    if (vctx->global_hash.len32) {
+        uint32_t hash = hash_do (vctx->global_hash_prime, STRa(snip)); // entry in hash table determined by hash function on snip
+        g_hashent->next = __atomic_load_n (B32(vctx->global_hash, hash), __ATOMIC_ACQUIRE); // ACQUIRE means: compiler may not re-order load/store appearing in the code after this line, to before it
+    }
+    else
+        g_hashent->next = NO_NEXT;
 
     for (unsigned depth=0; ; depth++) {
         
@@ -394,12 +409,12 @@ WordIndex hash_get_entry_for_seg (VBlockP segging_vb, ContextP vctx, STRp(snip),
         //    which its merge_num prohibits us from consuming
         // 4. "next" falls outside the length cloned by us - entries added to hash, but without reallocing
         //    after we cloned. in this case, we will detected that "next" is out of range.
-        uint32_t next = __atomic_load_n (&g_hashent->next, __ATOMIC_RELAXED);
+        uint32_t next = __atomic_load_n (&g_hashent->next, __ATOMIC_ACQUIRE); 
         
-        if (next == NO_NEXT || /* case 1 */ next >= vctx->global_hash.len) // case 4
+        if (next == NO_NEXT || /* case 1 */ next >= vctx->global_ents.len32) // case 4
             break;
 
-        g_hashent = B(GlobalHashEnt, vctx->global_hash, next);
+        g_hashent = B(GlobalHashEnt, vctx->global_ents, next);
                 
         // case: snip is not in core hash table (at least it wasn't there when we cloned and set our maximum merge_num we accept)
         uint32_t merge_num = __atomic_load_n (&g_hashent->merge_num, __ATOMIC_RELAXED);
@@ -427,16 +442,17 @@ WordIndex hash_get_entry_for_seg (VBlockP segging_vb, ContextP vctx, STRp(snip),
     if (!buf_is_alloc (&vctx->local_hash)) 
         hash_alloc_local (segging_vb, vctx);
 
-    LocalHashEnt l_head, *l_hashent = &l_head;
-    l_hashent->next = hash_do (vctx->local_hash_prime, snip, snip_len); // entry in hash table determined by hash function on snip
+    uint32_t hash = hash_do (vctx->local_hash_prime, STRa(snip));
+    LocalHashEnt l_head = { .next = *B32(vctx->local_hash, hash) }, *l_hashent = &l_head;
+
     int32_t l_hashent_i = NO_NEXT; // initialize to squash compiler warning
 
     while (l_hashent->next != NO_NEXT) {
 
-        ASSERT (l_hashent->next < vctx->local_hash.len, 
-                "l_hashent->next=%d out of range, local_hash.len=%u", l_hashent->next, vctx->local_hash.len32);
+        ASSERT (l_hashent->next < vctx->local_ents.len32, 
+                "l_hashent->next=%d out of range, local_ents.len=%u", l_hashent->next, vctx->local_ents.len32);
         l_hashent_i = l_hashent->next;
-        l_hashent = B(LocalHashEnt, vctx->local_hash, l_hashent_i);
+        l_hashent = B(LocalHashEnt, vctx->local_ents, l_hashent_i);
 
         // case: snip is not in hash table and also no other snip occupies the slot (node_index==NODE_INDEX_NONE happens only in the core table)
         if (l_hashent->node_index == NODE_INDEX_NONE) { // unoccupied space in core hash table
@@ -457,13 +473,17 @@ WordIndex hash_get_entry_for_seg (VBlockP segging_vb, ContextP vctx, STRp(snip),
     }
 
     // case: not found in hash table, and we are required to provide a new hash entry on the linked list
-    buf_alloc (segging_vb, &vctx->local_hash, 0, 1 + vctx->local_hash.len, LocalHashEnt, // realloc if needed
-               1.5, "contexts->local_hash");
+    buf_alloc (segging_vb, &vctx->local_ents, 1, 0, LocalHashEnt, 1.5, "contexts->local_ents");
 
-    l_hashent = B(LocalHashEnt, vctx->local_hash, l_hashent_i);  // might have changed after realloc
-    l_hashent->next = vctx->local_hash.len++;
+    // case: first entry in local_ent for this hash value - link from local_hash
+    if (l_hashent == &l_head) 
+        *B32(vctx->local_hash, hash) = vctx->local_ents.len32++;
 
-    LocalHashEnt *new_l_hashent = B(LocalHashEnt, vctx->local_hash, l_hashent->next);
+    // case: not first entry in local_ent for this hash value - link from previous entry with same hash
+    else
+        B(LocalHashEnt, vctx->local_ents, l_hashent_i)->next = vctx->local_ents.len32++; // note: don't use l_hashent as it might have changed after realloc
+
+    LocalHashEnt *new_l_hashent = BLST(LocalHashEnt, vctx->local_ents);
     new_l_hashent->next = NO_NEXT;
     new_l_hashent->node_index = node_index_if_new;
 

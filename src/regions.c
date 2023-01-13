@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   regions.c
-//   Copyright (C) 2020-2022 Genozip Limited
+//   Copyright (C) 2020-2023 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -187,7 +187,7 @@ void regions_add_by_file (rom regions_filename)
         ASSINP0 (regions_filename[0], "bad --regions-file argument");
     }
 
-    file_split_lines (regions_filename, "regions");
+    file_split_lines (regions_filename, "regions", true);
     if (!n_lines) return; 
 
     buf_alloc (evb, &regions_buf, 0, n_lines, Region, 0, "regions_buf");

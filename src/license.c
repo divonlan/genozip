@@ -163,7 +163,7 @@ void license_load (void)
         return;
     }
 
-    file_split_lines (filename, "license");
+    file_split_lines (filename, "license", false/*we allow UTF-8*/);
     
     char license_num_str[30] = "", lic_type_str[16]="", machine_time_str[24]="";
     #define COPY_FIELD(var,field) strncpy (var, license_load_field (field, STRas(line)), sizeof (var)-1)
@@ -190,7 +190,8 @@ void license_load (void)
     if (rec.license_num != license_calc_number (&data)) goto reregister;
 
     if (rec.lic_type == LIC_TYPE_EVAL) {
-        #define BUY "To purchase a Standard or Deep License: " WEBSITE_BUY " or contact " EMAIL_SALES "\n"
+//xxx        #define BUY "To purchase a Standard or Deep License: " WEBSITE_BUY " or contact " EMAIL_SALES "\n"
+        #define BUY "To purchase a Standard License: " WEBSITE_BUY " or contact " EMAIL_SALES "\n"
         ASSINP0 (time(0) - rec.machine_time < (30*24*60*60),
                  "You reached the end of the 30 evaluation period of Evaluation License.\n" BUY);
 
@@ -198,12 +199,11 @@ void license_load (void)
                 "You reached the maximum number of files (%u) compressible with the Evaluation License.\n" BUY, EVAL_NUM_FILES);
     }
 
-    else if (rec.lic_type == LIC_TYPE_ACADEMIC || rec.lic_type == LIC_TYPE_STANDARD) {
-        ASSINP (!counter_has_exceeded (filename, EVAL_NUM_FILES),
-                "You reached %u --deep compressions, which is the maximum number granted with the %s License.\n"
-                "To upgrade to a Deep License: " WEBSITE_BUY " or contact " EMAIL_SALES "\n", EVAL_NUM_FILES, lic_types[rec.lic_type]);
-    }
-
+    //xxx else if (rec.lic_type == LIC_TYPE_ACADEMIC || rec.lic_type == LIC_TYPE_STANDARD) {
+    //     ASSINP (!counter_has_exceeded (filename, EVAL_NUM_FILES),
+    //             "You reached %u --deep compressions, which is the maximum number granted with the %s License.\n"
+    //             "To upgrade to a Deep License: " WEBSITE_BUY " or contact " EMAIL_SALES "\n", EVAL_NUM_FILES, lic_types[rec.lic_type]);
+    // }
 
     rec.initialized = true;
 
@@ -356,7 +356,8 @@ static bool license_verify_name (STRc(response), rom unused)
 
 static bool license_verify_license (STRc(response), rom unused)
 {
-    return strlen (response) == 1 && (*response >= '1' && *response <= '4');
+    //xxx return strlen (response) == 1 && (*response >= '1' && *response <= '4');
+    return strlen (response) == 1 && (*response >= '1' && *response <= '3');
 }
 
 static void license_exit_if_not_confirmed (rom query, DefAnswerType def_answer)
@@ -437,9 +438,10 @@ void license_register (void)
                         "1. Academic License (free): Free for officially recognized research institutions (excluding data obtained commercially)\n\n"
                         "2. Evaluation License (free): Free use for 30-day (limited to " EVAL_NUM_FILES_STR " files)\n\n"
                         "3. Standard License (paid): I have already paid for a Standard License\n\n"
-                        "3. Deep License (paid): I have already paid for a Deep License\n\n"
+                        //xxx "4. Deep License (paid): I have already paid for a Deep License\n\n"
                         "Remember your Mom taught you to be honest!\n\n"
-                        "Please enter 1, 2, 3 or 4: ",
+                        //xxx "Please enter 1, 2, 3 or 4: ",
+                        "Please enter 1, 2 or 3: ",
                         lic_type, sizeof(lic_type), false, license_verify_license, NULL);
     
         rec.lic_type = lic_type[0] - '0';
@@ -557,7 +559,7 @@ void license_display (void)
     static Buffer license_data = {};
     
     if (file_exists (filename) && !flag.force) 
-        file_get_file (evb, filename, &license_data, "license_data", true);
+        file_get_file (evb, filename, &license_data, "license_data", false/*bc we allow UTF-8*/, true);
 
     bool html = (flag.lic_width < 0);
     int width = ABS(flag.lic_width);

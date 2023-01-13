@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   bgzf.c
-//   Copyright (C) 2020-2022 Genozip Limited
+//   Copyright (C) 2020-2023 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -119,7 +119,7 @@ static int32_t bgzf_read_block_raw (FILE *file, // txt_file is not yet assigned 
 }
 
 // ZIP: reads and validates a BGZF block, and returns the uncompressed size or (only if soft_fail) an error
-int32_t bgzf_read_block (File *file, // txt_file is not yet assigned when called from file_open_txt_read
+int32_t bgzf_read_block (FileP file, // txt_file is not yet assigned when called from file_open_txt_read
                          uint8_t *block /* must be BGZF_MAX_BLOCK_SIZE in size */, uint32_t *block_size /* out */,
                          bool soft_fail)
 {

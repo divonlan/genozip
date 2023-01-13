@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   file.c
-//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -54,7 +54,7 @@ static const struct { FileType in; Codec codec; FileType out; } txt_in_ft_by_dt[
 static const FileType txt_out_ft_by_dt[NUM_DATATYPES][20] = TXT_OUT_FT_BY_DT;
 static const FileType z_ft_by_dt[NUM_DATATYPES][20] = Z_FT_BY_DT;
 
-static void file_initialize_txt_file_data (File *file);
+static void file_initialize_txt_file_data (FileP file);
 
 // get data type by file type
 DataType file_get_data_type (FileType ft, bool is_input)
@@ -86,6 +86,7 @@ FileType file_get_z_ft_by_txt_in_ft (DataType dt, FileType txt_ft)
 Codec file_get_codec_by_txt_ft (DataType dt, FileType txt_ft, bool source)
 {
     if (source && txt_ft == BAM) return CODEC_BAM; // if !source, it would be CODEC_BGZF
+    if (source && txt_ft == BCF) return CODEC_BCF; 
 
     for (unsigned i=0; txt_in_ft_by_dt[dt][i].in; i++)
         if (txt_in_ft_by_dt[dt][i].in == txt_ft) 
@@ -310,7 +311,7 @@ static void file_ask_user_to_confirm_overwrite (rom filename)
     fprintf (stderr, "\n");
 }
 
-static void file_redirect_output_to_stream (File *file, char *exec_name, 
+static void file_redirect_output_to_stream (FileP file, char *exec_name, 
                                             rom stdout_option, rom format_option_1, rom format_option_2, rom format_option_3)
 {
     char threads_str[20];
@@ -372,7 +373,7 @@ static rom file_samtools_no_PG (void)
 }
 
 // show meaningful error if file is not a supported type and return TRUE if it file should be skipped
-static bool file_open_txt_read_test_valid_dt (const File *file)
+static bool file_open_txt_read_test_valid_dt (ConstFileP file)
 { 
     if (file->data_type == DT_NONE) { 
 
@@ -405,7 +406,7 @@ static bool file_open_txt_read_test_valid_dt (const File *file)
     return false; // all good - no need to skip this file
 }
 
-static bool file_open_txt_read (File *file)
+static bool file_open_txt_read (FileP file)
 {
     // if user provided the type with --input, we use that overriding the type derived from the file name
     if (flag.stdin_type) file->type = flag.stdin_type;
@@ -459,7 +460,10 @@ fallthrough_from_cram: {}
             // case: this is indeed a bgzf - we put the still-compressed data in vb->scratch for later consumption
             // in txtfile_read_block_bgzf
             if (bgzf_uncompressed_size > 0) {
-                file->codec = file->source_codec = CODEC_BGZF;
+                if (file->source_codec != CODEC_CRAM && file->source_codec != CODEC_BAM && file->source_codec != CODEC_BCF) 
+                    file->source_codec = CODEC_BGZF;
+
+                file->codec = CODEC_BGZF;
                 
                 evb->scratch.count = bgzf_uncompressed_size; // pass uncompressed size in param
                 buf_add_more (evb, &evb->scratch, (char*)block, block_size, "scratch");
@@ -479,6 +483,9 @@ fallthrough_from_cram: {}
                 ASSINP (!flags_pipe_in_process_died(), // only works for Linux
                         "Pipe-in process %s (pid=%u) died without sending any data",
                         flags_pipe_in_process_name(), flags_pipe_in_pid());
+
+                // bug 748: we observe that at about the 1000th CRAM file, we get empty input on the pipe
+                ASSINP0 (file->source_codec != CODEC_CRAM, "Error: Known issue - too many CRAM files in a single genozip command line. Solution: split the files to multiple separate genozip commands"); 
 
                 ABORTINP ("No data exists in input file %s", file->name ? file->name : FILENAME_STDIN);
             }
@@ -591,7 +598,7 @@ fallthrough_from_cram: {}
 }
 
 // returns true if successful
-static bool file_open_txt_write (File *file)
+static bool file_open_txt_write (FileP file)
 {
     ASSERT (file->data_type > DT_NONE && file->data_type < NUM_DATATYPES ,"invalid data_type=%s (%u)", 
             dt_name (file->data_type), file->data_type);
@@ -707,7 +714,7 @@ static bool file_open_txt_write (File *file)
 
 // we add all buffers to evb's buf_list in advance, to avoid thread issues of accessing buf_lists when using
 // these in VBs other than evb
-static void file_initialize_bufs (File *file)
+static void file_initialize_bufs (FileP file)
 {
 #define INIT(buf) ({ buf_add_to_buffer_list_(evb, &file->buf, "file->" #buf); })
     
@@ -761,7 +768,7 @@ static void file_initialize_z_add_to_buf_list (BufferP buf, FUNCLINE)
     buf_add_to_buffer_list_do (evb, buf, func, code_line);
 }
 
-static void file_initialize_z_file_data (File *file)
+static void file_initialize_z_file_data (FileP file)
 {
     memset (file->dict_id_to_did_i_map, 0xff, sizeof(file->dict_id_to_did_i_map)); // DID_NONE
 
@@ -774,7 +781,7 @@ static void file_initialize_z_file_data (File *file)
         serializer_initialize (file->digest_serializer); 
 }
 
-static void file_initialize_txt_file_data (File *file)
+static void file_initialize_txt_file_data (FileP file)
 {
     mutex_initialize (file->recon_plan_mutex[0]);
     mutex_initialize (file->recon_plan_mutex[1]);
@@ -821,7 +828,7 @@ rom file_get_z_filename (rom txt_filename, DataType dt, FileType txt_ft)
 }
 
 // returns true if successful
-static bool file_open_z (File *file)
+static bool file_open_z (FileP file)
 {
     ASSINP (!file->is_remote, "it is not possible to access remote genozip files; when attempting to open %s", file->name);
     ASSINP0 (file->name, "it is not possible to redirect genozip files from stdin / stdout");
@@ -926,8 +933,20 @@ static bool file_open_z (File *file)
                 unlink (file->name); // delete file if it already exists (needed in weird cases, eg symlink to non-existing file)
 
             // if we're writing to a tar file, we get the already-openned tar file
-            file->file = tar_is_tar() ? tar_open_file (file->name) 
-                                    : fopen (file->name, file->mode);
+            if (tar_is_tar())
+                file->file = tar_open_file (file->name);
+
+            else {
+                file->file = fopen (file->name, file->mode);
+#ifndef _WIN32
+                // set z_file permissions to be the same as the txt_file permissions (if possible)
+                struct stat st;
+                if (txt_file && txt_file->file && !txt_file->redirected && !txt_file->is_remote &&
+                    !fstat (fileno (txt_file->file), &st))
+    
+                    fchmod (fileno (file->file), st.st_mode); // ignore errors (e.g. this doesn't work on NTFS)
+#endif
+            }
         }
         
         if (chain_is_loaded)
@@ -944,11 +963,11 @@ static bool file_open_z (File *file)
     return file->file != 0 || flag.seg_only || flag.show_bam;
 }
 
-File *file_open (rom filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE or WRITEREAD */)
+FileP file_open (rom filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE or WRITEREAD */)
 {
     START_TIMER;
 
-    File *file = (File *)CALLOC (sizeof(File));
+    FileP file = (FileP )CALLOC (sizeof(File));
 
     file->supertype   = supertype;
     file->is_remote   = filename && url_is_url (filename);
@@ -1042,7 +1061,7 @@ File *file_open (rom filename, FileMode mode, FileSupertype supertype, DataType 
 }
 
 // index file is it is a disk file of a type that can be indexed
-static void file_index_txt (const File *file)
+static void file_index_txt (ConstFileP file)
 {
     RETURNW (file->name,, "%s: cannot create an index file when output goes to stdout", global_cmd);
 
@@ -1080,13 +1099,13 @@ static void file_index_txt (const File *file)
     }
 }
 
-void file_close (File **file_p, 
+void file_close (FileP *file_p, 
                  bool index_txt,      // true if we should also index the txt file after it is closed
                  bool cleanup_memory) // true means destroy buffers - use if the closed is NOT near the end of the execution, eg when dealing with unbinding bound files
 {
     START_TIMER;
 
-    File *file = *file_p;
+    FileP file = *file_p;
     *file_p = NULL;
 
     if (!file) return; // nothing to do
@@ -1181,7 +1200,7 @@ void file_close (File **file_p,
     COPY_TIMER_VB (evb, file_close);
 }
 
-void file_write (File *file, const void *data, unsigned len)
+void file_write (FileP file, const void *data, unsigned len)
 {
     if (!len) return; // nothing to do
 
@@ -1297,7 +1316,7 @@ rom file_basename (rom filename, bool remove_exe, rom default_basename,
 
 // returns true if successful. depending on soft_fail, a failure will either emit an error 
 // (and exit) or a warning (and return).
-bool file_seek (File *file, int64_t offset, 
+bool file_seek (FileP file, int64_t offset, 
                 int whence, // SEEK_SET, SEEK_CUR or SEEK_END
                 int soft_fail) // 1=warning 2=silent
 {
@@ -1328,7 +1347,7 @@ bool file_seek (File *file, int64_t offset,
     return !ret;
 }
 
-int64_t file_tell_do (File *file, bool soft_fail, rom func, unsigned line)
+int64_t file_tell_do (FileP file, bool soft_fail, rom func, unsigned line)
 {
     if (IS_ZIP && file->supertype == TXT_FILE && file->codec == CODEC_GZ)
         return gzconsumed64 ((gzFile)file->file); 
@@ -1380,7 +1399,7 @@ void file_mkdir (rom dirname)
 
 // reads an entire file into a buffer. if filename is "-", reads from stdin
 void file_get_file (VBlockP vb, rom filename, BufferP buf, rom buf_name,
-                    bool add_string_terminator)
+                    bool verify_textual/*plain ascii*/, bool add_string_terminator)
 {
     #define MAX_STDIN_DATA_SIZE 10000000
     bool is_stdin = !strcmp (filename, "-");
@@ -1395,6 +1414,8 @@ void file_get_file (VBlockP vb, rom filename, BufferP buf, rom buf_name,
     buf->len = fread (buf->data, 1, size, file);
     ASSERT (is_stdin || buf->len == size, "Error reading file %s: %s", filename, strerror (errno));
     ASSERT (!is_stdin || buf->len < MAX_STDIN_DATA_SIZE, "Error reading from stdin: too much data for stdin (beyond maximum of %u bytes). Try placing the data in a file instead.", MAX_STDIN_DATA_SIZE-1);
+
+    ASSINP (!verify_textual || str_is_printable (STRb(*buf)), "Expecting \"%s\" to be a textual file", filename);
 
     if (add_string_terminator) 
         *BAFTc (*buf) = 0;
@@ -1539,7 +1560,7 @@ rom ft_name (FileType ft)
 }
 
 // PIZ: guess original filename from uncompressed txt filename and compression algoritm (allocated memory)
-rom file_guess_original_filename (const File *file)
+rom file_guess_original_filename (ConstFileP file)
 {
     if (file->codec == CODEC_NONE) return file->name;
 

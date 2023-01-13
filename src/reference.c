@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   reference.c
-//   Copyright (C) 2020-2022 Genozip Limited
+//   Copyright (C) 2020-2023 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -672,7 +672,7 @@ RangeP ref_seg_get_range (VBlockP vb, Reference ref, WordIndex chrom, STRp(chrom
 // ----------------------------------------------
 
 // ZIP main thread
-static void ref_copy_one_compressed_section (Reference ref, File *ref_file, const RAEntry *ra, Section *sl)
+static void ref_copy_one_compressed_section (Reference ref, FileP ref_file, const RAEntry *ra, Section *sl)
 {
     // get section list entry from ref_file_section_list - which will be used by zfile_read_section to seek to the correct offset
     while (*sl < BAFT (SectionEnt, ref->ref_file_section_list) && 
@@ -739,7 +739,7 @@ static void ref_copy_compressed_sections_from_reference_file (Reference ref)
     ASSERT (primary_command == ZIP && IS_REF_EXT_STORE, 
             "not expecting to be here: primary_command=%u flag.reference=%u", primary_command, flag.reference);
 
-    File *ref_file = file_open (ref->filename, READ, Z_FILE, DT_FASTA);
+    FileP ref_file = file_open (ref->filename, READ, Z_FILE, DT_FASTA);
 
     // note: in a FASTA file compressed with --make-reference, there is exactly one RA per VB (a contig or part of a contig)
     // and, since this is ZIP with EXT_STORE, also exactly one range per contig. We loop one RA at a time and:

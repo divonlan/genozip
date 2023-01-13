@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   seg.c
-//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -1127,10 +1127,10 @@ static void seg_set_hash_hints (VBlockP vb, int third_num)
     for (Did did_i=0; did_i < vb->num_contexts; did_i++) {
 
         ContextP ctx = CTX(did_i);
-        if (!ctx->nodes.len || ctx->global_hash_prime) continue; // our service is not needed - global_cache for this dict already exists or no nodes
+        if (!ctx->nodes.len32 || ctx->global_hash_prime) continue; // our service is not needed - global_hash for this dict already exists or no nodes
 
-        if (third_num == 1) ctx->nodes_len_at_1_3 = ctx->nodes.len;
-        else                ctx->nodes_len_at_2_3 = ctx->nodes.len;
+        if (third_num == 1) ctx->nodes_len_at_1_3 = ctx->nodes.len32;
+        else                ctx->nodes_len_at_2_3 = ctx->nodes.len32;
     }
 }
 
@@ -1184,12 +1184,12 @@ void seg_all_data_lines (VBlockP vb)
 
     // sanity
     ASSERT (vb->lines.len <= vb->txt_data.len, "%s: Expecting lines.len=%"PRIu64" < txt_data.len=%"PRIu64, 
-            VB_NAME, vb->lines.len, vb->txt_data.len);
+            VB_NAME, vb->lines.len, vb->txt_data.len); // 64 bit test in case of memory corruption
 
     // note: empty VB is possible, for example empty SAM generated component
     // note: if re-reading, data is not loaded yet (it will be in *_seg_initialize)
     ASSERT (!vb->txt_data.len || vb->reread_prescription.len || *BLSTtxt == '\n' || !DTP(vb_end_nl), "%s: %s txt_data unexpectedly doesn't end with a newline. Last 10 chars: \"%10s\"", 
-            VB_NAME, dt_name(vb->data_type), Bc (vb->txt_data, vb->txt_data.len - MIN_(10,vb->txt_data.len)));
+            VB_NAME, dt_name(vb->data_type), Btxt (vb->txt_data.len32 - MIN_(10,vb->txt_data.len32)));
 
     ctx_initialize_predefined_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_contexts); // Create ctx for the fields in the correct order 
  
@@ -1199,10 +1199,10 @@ void seg_all_data_lines (VBlockP vb)
             buf_alloc (vb, &CTX(did_i)->b250, 0, AT_LEAST(did_i), WordIndex, 1, "contexts->b250");
     
     // set estimated number of lines
-    vb->lines.len = vb->lines.len    ? vb->lines.len // already set? don't change (eg 2nd pair FASTQ, bcl_unconsumed)
-                  : segconf.running  ? 10 // low number of avoid memory overallocation for PacBio arrays etc 
-                  : segconf.line_len ? MAX_(1, vb->txt_data.len / segconf.line_len)
-                  :                    1;            // eg DT_GENERIC
+    vb->lines.len32 = vb->lines.len32  ? vb->lines.len32 // already set? don't change (eg 2nd pair FASTQ, bcl_unconsumed)
+                    : segconf.running  ? 10              // low number of avoid memory overallocation for PacBio arrays etc 
+                    : segconf.line_len ? MAX_(1, vb->txt_data.len32 / segconf.line_len)
+                    :                    1;              // eg DT_GENERIC
 
     vb->scratch.name = "scratch"; // initialize so we don't need to worry about it later
     
@@ -1280,11 +1280,11 @@ void seg_all_data_lines (VBlockP vb)
         // collect stats at the approximate 1/3 or 2/3s marks of the file, to help hash_alloc_global create a hash
         // table. note: we do this for every vb, not just 1, because hash_alloc_global runs in the first
         // vb a new field/subfield is introduced
-        if (!hash_hints_set_1_3 && (field_start - vb->txt_data.data) > vb->txt_data.len / 3) {
+        if (!hash_hints_set_1_3 && BNUMtxt (field_start) > vb->txt_data.len32 / 3) {
             seg_set_hash_hints (vb, 1);
             hash_hints_set_1_3 = true;
         }
-        else if (!hash_hints_set_2_3 && (field_start - vb->txt_data.data) > 2 * vb->txt_data.len / 3) {
+        else if (!hash_hints_set_2_3 && BNUMtxt (field_start) > 2 * vb->txt_data.len32 / 3) {
             seg_set_hash_hints (vb, 2);
             hash_hints_set_2_3 = true;
         }
@@ -1292,18 +1292,18 @@ void seg_all_data_lines (VBlockP vb)
         // --head advanced option in ZIP cuts a certain number of first lines from vb=1
         if (vb->vblock_i==1 && (flag.lines_last != NO_LINE) && flag.lines_last == vb->line_i) {
             vb->recon_size -= BREMAINS (vb->txt_data, field_start);
-            vb->lines.len = vb->line_i + 1;
+            vb->lines.len32 = vb->line_i + 1;
             break;
         }
     }
 
     if (segconf.running) {
-        segconf.line_len = (vb->lines.len ? (vb->txt_data.len / vb->lines.len) : 500) + 1; // get average line length (rounded up ; arbitrary 500 if the segconf data ended up not having any lines (example: all lines were non-matching lines dropped by --match in a chain file))
+        segconf.line_len = (vb->lines.len32 ? (vb->txt_data.len32 / vb->lines.len32) : 500) + 1; // get average line length (rounded up ; arbitrary 500 if the segconf data ended up not having any lines (example: all lines were non-matching lines dropped by --match in a chain file))
 
         // limitations: only pre-defined field, not local
         for (Did did_i=0; did_i < DTF(num_fields); did_i++)
-            if (CTX(did_i)->b250.len) 
-                segconf.b250_per_line[did_i] = (float)CTX(did_i)->b250.len / (float)vb->lines.len;
+            if (CTX(did_i)->b250.len32) 
+                segconf.b250_per_line[did_i] = (float)CTX(did_i)->b250.len32 / (float)vb->lines.len32;
     }
 
     DT_FUNC (vb, seg_finalize)(vb); // data-type specific finalization

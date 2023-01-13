@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   buffer.c
-//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
 
 // memory management - when running the same code by the same thread for another VB - we reuse
@@ -84,7 +84,7 @@ char *buf_display (ConstBufferP buf)
     static char str[256]; // NOT thread-safe
 
     sprintf (str, "Buffer %s (%"PRId64"): size=%"PRIu64" len=%"PRIu64" data=%p memory=%p",
-             buf->name, buf->param, (uint64_t)buf->size, STRfb(*buf), buf->memory);
+             buf->name, buf->param, (uint64_t)buf->size, buf->len, buf->data, buf->memory);
     return str;    
 }
 
@@ -373,22 +373,25 @@ static void buf_foreach_buffer (void (*callback)(ConstBufferP, void *arg), void 
     for (VBlockPoolType pool_type=0; pool_type < NUM_POOL_TYPES; pool_type++) {
 
         VBlockPool *vb_pool = vb_get_pool (pool_type, true);
-        if (!vb_pool) return;
+        if (!vb_pool) continue;
 
         // note: we don't cover EVB (only in DEBUG and --show-mem) as it segfaults for an unknown reason (likely the Buffer structure itself resides with a structure
         // that is freed (eg File)). TODO: debug this.
-        for (int vb_id=(flag.debug || flag.show_memory) ? -1 : 0; vb_id < (int)vb_pool->num_allocated_vbs; vb_id++) {
+        for (int vb_id=0; vb_id < (int)vb_pool->num_allocated_vbs; vb_id++) {
 
             VBlockP vb = vb_get_from_pool (vb_pool, vb_id);
             if (!vb) continue;
-            
+
             buf_foreach_buffer_in_vb (vb, callback, arg);
         }
     }
 
-    // non-pool VBs
-    buf_foreach_buffer_in_vb (evb, callback, arg);
-    
+    // non-pool VBs: 
+    // TO DO: add the other non-pool VBs (cache_create_vb, txt_header_vb...)
+    // note: we don't cover EVB (only in DEBUG and --show-mem) as it segfaults for an unknown reason (likely the Buffer structure itself resides with a structure
+    // that is freed (eg File)). TODO: debug this.
+    if (flag.debug || flag.show_memory)          
+        buf_foreach_buffer_in_vb (evb, callback, arg);
 }
 
 static void buf_count_mem_usage (ConstBufferP buf, void *mem_usage)
@@ -891,7 +894,8 @@ void buf_free_do (BufferP buf, FUNCLINE)
 #ifdef __linux__
             // In Windows and Mac, we observe that free() operations are expensive and significantly slow down execution - so we
             // just recycle the same memory
-            if (!buf->overlayable) { // note: possibly lost overlayability in buf_abandon_overlay
+            if (!buf->overlayable &&     // note: possibly lost overlayability in buf_abandon_overlay
+                flag.show_memory != SHOW_MEM_PEAK) { // note: we don't free if --show-memory==PEAK, otherwise we won't report VB memory, only evb
                 buf_low_level_free (buf->memory, func, code_line);
                 buf->memory = NULL;
                 buf->size   = 0;

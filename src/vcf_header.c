@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   header_vcf.c
-//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -839,7 +839,7 @@ static bool vcf_header_set_globals (rom filename, BufferP vcf_header, bool soft_
                       "%.*s"
                       "=======================================\n", 
                       global_cmd, filename, vcf_field_name_line_filename,
-                      vcf_field_name_line_filename, STRbf(vcf_field_name_line),
+                      vcf_field_name_line_filename, STRfb(vcf_field_name_line),
                       filename, vcf_header->len32-i, &vcf_header->data[i]);
                 
                 if (soft_fail) return false;

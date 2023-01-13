@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   flags.h
-//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -110,9 +110,10 @@ typedef struct {
     enum { CNT_NONE, CNT_TOTAL, COUNT_VBs } count; 
     enum { COV_NONE, COV_ALL, COV_CHROM, COV_ONE } show_coverage;
     enum { KRK_NONE, KRK_ALL, KRK_INCLUDED, KRK_EXCLUDED } show_kraken;
-
+    enum { SHOW_MEM_NONE, SHOW_MEM_NORMAL, SHOW_MEM_PEAK } show_memory;
+    
     // stats / debug useful mostly for developers
-    int debug, show_memory, show_sag, show_depn, show_dict, show_b250, show_aliases, show_digest, log_digest, show_recon_plan,
+    int debug, show_sag, show_depn, show_dict, show_b250, show_aliases, show_digest, log_digest, show_recon_plan,
         show_index, show_gheader, show_ref_contigs, show_chain_contigs, show_ref_seq, show_ref_diff,
         show_reference, show_ref_hash, show_ref_index, show_chrom2ref, show_ref_iupacs, show_chain, show_ranges,
         show_codec, 

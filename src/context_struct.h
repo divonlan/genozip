@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   context_struct.h
-//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -142,18 +142,20 @@ typedef struct Context {
 
     union {
     Buffer local_hash;         // ZIP: hash table for entries added by this VB that are not yet in the global (until merge_number)
-                               // obtained by hash function hash(snip) and the rest of linked to them by linked list
+                               // obtained by hash function hash(snip) and contains indices into local_ents
     Buffer history;            // PIZ: used if FlagsCtx.store_per_line and also for lookback (for files compressed starting with v12.0.41) - contains an array of either int64_t (if STORE_INT) or HistoryWord
     };
+    Buffer local_ents;         // ZIP: linked entries - pointed to from local_hash
 
     uint32_t local_hash_prime; // prime number - size of the core (without extensions) has table 
     int32_t num_new_entries_prev_merged_vb; // zctx: updated in every merge - how many new words happened in this VB
                                // vctx: copied from zctx during clone, and used to initialize the size of local_hash
                                //         0 means no VB merged yet with this. if a previous vb had 0 new words, it will still be 1.
     union {
-    Buffer global_hash;        // ZIP: global hash table that is populated during merge in zctx and is overlayed to vctx during clone.
+    Buffer global_hash;        // ZIP: global hash table that is populated during merge in zctx and is overlayed to vctx during clone. contains indices into global_ents.
     Buffer per_line;           // PIZ: data copied from txt_data for fields with textual store_per_line, used in if the line was dropped
     };
+    Buffer global_ents;        // ZIP: pointed to by global cache
 
     uint32_t global_hash_prime;// prime number - size of the core (without extensions) hash table 
 

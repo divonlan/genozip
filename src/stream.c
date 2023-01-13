@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   stream.c
-//   Copyright (C) 2020-2022 Genozip Limited
+//   Copyright (C) 2020-2023 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -310,7 +310,7 @@ StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint3
 
     // store our side of the pipe, and close the side used by the child
     if (from_stream_stdout) {
-        stream->from_stream_stdout = fdopen (stream_stdout_to_genozip[0], READ);
+        stream->from_stream_stdout = fdopen (stream_stdout_to_genozip[0], READ);        
         CLOSE (stream_stdout_to_genozip[1], "stream_stdout_to_genozip[1]", false);
     }
 

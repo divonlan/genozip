@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   ref_make.c
-//   Copyright (C) 2020-2022 Genozip Limited
+//   Copyright (C) 2020-2023 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -171,7 +171,7 @@ void ref_make_finalize (bool unused)
 }
 
 // Get reference file name from FASTA name, and if reference file does not exist, run a separate process to --make-reference
-void ref_fasta_to_ref (File *file)
+void ref_fasta_to_ref (FileP file)
 {
     rom ref_filename = file_get_z_filename (file->name, DT_REF, file->type);
 

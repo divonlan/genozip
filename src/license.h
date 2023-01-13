@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   license.h
-//   Copyright (C) 2020-2022 Genozip Limited
+//   Copyright (C) 2020-2023 Genozip Limited
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -21,6 +21,7 @@ extern rom license_get_one_line (void);
 extern void license_display (void);
 extern bool license_allow_stats (void);
 extern void license_one_file_compressed (DataType dt);
+extern void license_show_deep_notice (void);
 
 typedef struct { char s[16384]; } StrNotice; 
 extern StrNotice license_print_default_notice (void);

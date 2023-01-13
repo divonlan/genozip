@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------
 #   Makefile
-#   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
+#   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
 #   Please see terms and conditions in the file LICENSE.txt
 #
 #   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -459,11 +459,12 @@ push-build:
 	@(git commit -m $(version) ; exit 0) > /dev/null
 	@git push > /dev/null
 
-distribution: clean-distribution increment-version testfiles ../LICENSE.txt $(INSTALLERS)/LICENSE.html $(INSTALLERS)/genozip-linux-x86_64.tar.build $(INSTALLERS)/genozip-installer.exe push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
+distribution:             clean-distribution increment-version testfiles ../LICENSE.txt $(INSTALLERS)/LICENSE.html $(INSTALLERS)/genozip-linux-x86_64.tar.build $(INSTALLERS)/genozip-installer.exe \
+                          push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
 	@(cd $(CONDA_FEEDSTOCK) ; git pull)
 
-distribution-maintenance: clean-distribution increment-version ../LICENSE.txt testfiles $(INSTALLERS)/genozip-linux-x86_64.tar.build $(INSTALLERS)/genozip-installer.exe \
-                          push-build conda/.conda-timestamp genozip-prod.exe genozip-prod
+distribution-maintenance: clean-distribution increment-version testfiles ../LICENSE.txt $(INSTALLERS)/LICENSE.html $(INSTALLERS)/genozip-linux-x86_64.tar.build $(INSTALLERS)/genozip-installer.exe \
+                          push-build conda/.conda-timestamp 
 	@(cd $(CONDA_FEEDSTOCK) ; git pull)
 
 test-backup: genozip.exe

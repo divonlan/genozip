@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   file.h
-//   Copyright (C) 2019-2022 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2023 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -179,11 +179,11 @@ extern DataType last_z_dt; // data_type of last z_file opened
 
 // methods
 extern rom file_get_z_filename (rom txt_filename, DataType dt, FileType txt_ft);
-extern File *file_open (rom filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE */);
+extern FileP file_open (rom filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE */);
 extern void file_close (FileP *file_p, bool index_txt, bool cleanup_memory /* optional */);
 extern void file_write (FileP file, const void *data, unsigned len);
-extern bool file_seek (File *file, int64_t offset, int whence, int soft_fail); // SEEK_SET, SEEK_CUR or SEEK_END
-extern int64_t file_tell_do (File *file, bool soft_fail, FUNCLINE);
+extern bool file_seek (FileP file, int64_t offset, int whence, int soft_fail); // SEEK_SET, SEEK_CUR or SEEK_END
+extern int64_t file_tell_do (FileP file, bool soft_fail, FUNCLINE);
 #define file_tell(file,soft_fail) file_tell_do ((file), (soft_fail), __FUNCLINE) 
 extern void file_set_input_type (rom type_str);
 extern void file_set_input_size (rom size_str);
@@ -203,11 +203,11 @@ extern FileType file_get_z_ft_by_dt (DataType dt);
 extern rom file_plain_ext_by_dt (DataType dt);
 extern void file_remove_codec_ext (char *filename, FileType ft);
 extern rom ft_name (FileType ft);
-extern rom file_guess_original_filename (const File *file);
+extern rom file_guess_original_filename (ConstFileP file);
 extern char *file_get_fastq_pair_filename (rom fn1, rom fn2, bool test_only);
 
 // wrapper operations for operating system files
-extern void file_get_file (VBlockP vb, rom filename, BufferP buf, rom buf_name, bool add_string_terminator);
+extern void file_get_file (VBlockP vb, rom filename, BufferP buf, rom buf_name, bool verify_textual, bool add_string_terminator);
 extern bool file_put_data (rom filename, const void *data, uint64_t len, mode_t mode);
 extern void file_put_data_abort (void);
 
@@ -258,10 +258,10 @@ static inline bool file_is_plain_or_ext_decompressor(ConstFileP file) {
 }
 
 // read the contents and a newline-separated text file and split into lines - creating char **lines, unsigned *line_lens and unsigned n_lines
-#define file_split_lines(fn, name) \
+#define file_split_lines(fn, name, verify_textual) \
     static Buffer data = EMPTY_BUFFER; \
     ASSINP0 (!data.len, "only one instance of a " name " option can be used"); \
-    file_get_file (evb, fn, &data, "file_split_lines__" name, false); \
+    file_get_file (evb, fn, &data, "file_split_lines__" name, verify_textual, false); \
     \
     str_split_enforce (data.data, data.len, 0, '\n', line, true, (name)); \
     ASSINP (!line_lens[n_lines-1], "Expecting %s to end with a newline", (fn)); \

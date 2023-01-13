@@ -2,7 +2,7 @@
 
 # ------------------------------------------------------------------
 #   test.sh
-#   Copyright (C) 2019-2022 Genozip Limited
+#   Copyright (C) 2019-2023 Genozip Limited
 #   Please see terms and conditions in the file LICENSE.txt
 
 start_date=`date`
@@ -1522,11 +1522,11 @@ if (( $1 <= 47 )) ; then  batch_reference_sam          ; fi
 if (( $1 <= 48 )) ; then  batch_reference_vcf          ; fi
 if (( $1 <= 49 )) ; then  batch_many_small_files       ; fi
 if (( $1 <= 50 )) ; then  batch_make_reference         ; fi
-if (( $1 <= 51 )) ; then  batch_reference_backcomp     ; fi
-if (( $1 <= 52 )) ; then  batch_headerless_wrong_ref   ; fi
-if (( $1 <= 53 )) ; then  batch_replace                ; fi
+if (( $1 <= 51 )) ; then  batch_headerless_wrong_ref   ; fi
+if (( $1 <= 52 )) ; then  batch_replace                ; fi
 
 if [[ `basename $PWD` != genozip-prod ]]; then
+    if (( $1 <= 53 )) ; then  batch_reference_backcomp     ; fi
     if (( $1 <= 54 )) ; then  batch_real_world_1_backcomp  ; fi 
     if (( $1 <= 55 )) ; then  batch_real_world_with_ref_backcomp ; fi 
     next=55
