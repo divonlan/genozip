@@ -3,6 +3,12 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+14.0.26 25/Jan/2023
+- FASTQ: Better --optimize-DESC
+- Fix broken genocat --fastq (converting a SAM/BAM file to FASTQ) (broken since v14)
+- Fix broken --idxstats, --coverage, --sex (broken since v14)
+- Implement fix to htscodecs (3rd party library) bug (https://github.com/samtools/htscodecs/pull/71)
+
 14.0.25 13/Jan/2023
 - BAM, VCF: Significantly reduced memory consumption during compression
 - new option: --show-memory=PEAK - shows peak memory usage (normally show memory at end of execution)

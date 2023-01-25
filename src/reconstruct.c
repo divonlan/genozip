@@ -482,6 +482,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
     case SNIP_CONTAINER: {
         STR(prefixes);
         ContainerP con_p = container_retrieve (vb, snip_ctx, word_index, snip+1, snip_len-1, pSTRa(prefixes));
+        ctx_set_encountered (vb, snip_ctx); // indicate this container was encountered, in case it is queried in container_peek_get_idxs
         new_value = container_reconstruct (vb, snip_ctx, con_p, prefixes, prefixes_len); 
         has_new_value = HAS_NEW_VALUE;
         break;
@@ -709,7 +710,7 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i,
     ctx->last_txt = (TxtWord){ .index = last_txt_index,
                                .len   = vb->txt_data.len32 - last_txt_index };
 
-    ctx_set_encountered (vb, ctx); // this is the ONLY place in PIZ where we set encountered
+    ctx_set_encountered (vb, ctx); // this is the normal place in PIZ where we set encountered, but it was already set if we called ctx_set_last_value or in the case of a container
     ctx->last_encounter_was_reconstructed = reconstruct;
 
     // in "store per line" mode, we save one entry per line (possibly a line has no entries if it is an optional field)

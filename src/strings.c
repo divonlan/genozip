@@ -1076,7 +1076,11 @@ StrTime str_time (void)
     len += GetTimeFormatA (LOCALE_USER_DEFAULT, TIME_FORCE24HOURFORMAT, NULL, NULL, &s.s[len], sizeof(s.s)-len-1) - 1;
 
     s.s[len++] = ' ';
-    sprintf (&s.s[len], tzname[daylight != 0], sizeof (s.s) - len - 1);
+
+    TIME_ZONE_INFORMATION tz_info = {};
+    bool is_daylight = (GetTimeZoneInformation (&tz_info) == TIME_ZONE_ID_DAYLIGHT);
+
+    sprintf (&s.s[len], "%ls", is_daylight ? tz_info.DaylightName : tz_info.StandardName);
 
 #else
     time_t now = time (NULL);
@@ -1084,7 +1088,7 @@ StrTime str_time (void)
     localtime_r (&now, &lnow);
 
     static rom month[12] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
-    sprintf (s.s, "%02u-%s-%04u %02u:%02u:%02u UTC%s", 
+    sprintf (s.s, "%02u-%s-%04u %02u:%02u:%02u %s", 
              lnow.tm_mday, month[lnow.tm_mon], lnow.tm_year+1900, lnow.tm_hour, lnow.tm_min, lnow.tm_sec, tzname[daylight != 0]);
 #endif
 

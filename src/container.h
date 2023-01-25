@@ -40,6 +40,7 @@ typedef struct ContainerItem {
     #define CI0_TRANS_NOR    ((uint8_t)0x82) // In translated mode: reconstruct prefix, consume but don't reconstruct value. If item is a sub-container - NOT propagated to this sub-container.
     #define CI0_TRANS_MOVE   ((uint8_t)0x84) // (ORed) in addition: in translated: txt_data.len is moved separator[1] bytes (0-255), after all recontruction and/or translation
     #define CI0_NATIVE_NEXT  ((uint8_t)0x88) // in non-translated mode: separator is in separator[1]
+    #define CI0_TRANS_ALWAYS ((uint8_t)0x90) // in non-translated mode: translate anyway (v14.0.26)
 
     // special values of separator[1]
     #define CI1_NONE         ((uint8_t)0x00) // no seperator 
@@ -114,7 +115,7 @@ extern uint32_t container_peek_repeats (VBlockP vb, ContextP ctx, char repsep);
 extern bool container_peek_has_item (VBlockP vb, ContextP ctx, DictId item_dict_id, bool consume);
 
 typedef struct { Did did; int16_t idx; } ContainerPeekItem;
-extern void container_peek_get_idxs (VBlockP vb, ContextP ctx, Did n_items, ContainerPeekItem *items, bool consume);
+extern ContainerP container_peek_get_idxs (VBlockP vb, ContextP ctx, Did n_items, ContainerPeekItem *items, bool consume);
 
 extern void container_display (ConstContainerP con);
 

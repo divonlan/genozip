@@ -24,4 +24,6 @@ extern bool qname_segconf_discover_fastq_line3_sra_flavor (VBlockP vb, STRp(line
 extern void qname_zip_initialize (Did qname_did_i);
 extern void qname_seg_initialize (VBlockP vb, Did qname_did_i);
 
+extern const rom QNAME_FLAVOR_UNRECOGNIZED; // constant pointer allowing pointer comparison
 extern rom qf_name (QnameFlavor qf);
+extern rom qf2_name (QnameFlavor qf, QnameFlavor qf2);

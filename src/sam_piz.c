@@ -189,7 +189,7 @@ IS_SKIP (sam_piz_is_skip_section)
         case _OPTION_QX_Z:                      case _OPTION_QX_DIVRQUAL: case _OPTION_QX_DOMQRUNS: case _OPTION_QX_QUALMPLX:
             SKIPIFF (cov || cnt);
 
-        case _SAM_MC_Z     : KEEPIFF (flag.out_dt == DT_FASTQ);
+        case _SAM_MC_Z     : KEEPIFF (flag.out_dt == DT_FASTQ || flag.collect_coverage);
         
         case _SAM_BUDDY    : KEEP; // always needed (if any of these are needed: QNAME, FLAG, MAPQ, CIGAR...)
         case _SAM_QNAME    : KEEP; // always needed as it is used to determine whether this line has a buddy
@@ -588,9 +588,10 @@ CONTAINER_FILTER_FUNC (sam_piz_filter)
     if (!VER(14) && sam_piz_filter_up_to_v13_stuff (vb, dict_id, item, &v13_ret_value))
         return v13_ret_value;
      
-    // collect_coverage: rather than reconstructing optional, reconstruct SAM_MC_Z that just consumes MC:Z if it exists
+    // collect_coverage: rather than reconstructing optional, reconstruct SAM_FQ_AUX that just consumes MC:Z if it exists
     else if (dict_id.num == _SAM_AUX) {
         if (flag.collect_coverage) { // filter_repeats is set in theAUX container since v14
+            ASSISLOADED(CTX(SAM_MC_Z));
             reconstruct_from_ctx (vb, SAM_MC_Z, 0, false);
             return false; // don't reconstruct AUX
         }
@@ -743,7 +744,7 @@ void sam_reconstruct_from_buddy_get_textual_snip (VBlockSAMP vb, ContextP ctx, B
 
     ASSPIZ (word.index != 0xffffffff, "Attempting reconstruct from %s.history, but word at %s_line_i=%u doesn't exist",
             ctx->tag_name, buddy_type_name (bt), buddy_line_i);
-            
+
     switch (word.lookup) {
         case LookupTxtData : buf = &vb->txt_data  ; break;
         case LookupDict    : buf = &ctx->dict; 

@@ -139,7 +139,12 @@ void qname_zip_initialize (Did qname_did_i)
                 
                 // verify that the fields are consecutive Q*NAME contexts (except for QmNAME and COPY_Q)
                 else if (dnum != _SAM_QmNAME && dnum != _FASTQ_COPY_Q && (Z_DT(FASTQ) || qfs < &qf[NUM_QFs])) {
-                    ASSERT (next_zctx->dict_id.num == dnum, "Expecting item #%u of %s to have to be %s", item_i, qfs->name, next_zctx->tag_name);
+                    ASSERT (next_zctx->dict_id.num == dnum, "Expecting item #%u of %s to be %s", item_i, qfs->name, next_zctx->tag_name);
+
+                    ASSERT (qfs >= &qf[NUM_QFs] || next_zctx->did_i < qname_did_i + MAX_QNAME_ITEMS,
+                            "Unexpected dict_id=%s in container of flavor %s. Perhaps MAX_QNAME_ITEMS=%u needs updating?", 
+                            dis_dict_id(qfs->con.items[item_i].dict_id).s, qfs->name, MAX_QNAME_ITEMS);
+
                     next_zctx++;
                 }
             }
@@ -262,7 +267,7 @@ void qname_seg_initialize (VBlockP vb, Did qname_did_i)
         qname_seg_initialize_do (vb, segconf.line3_flavor, 0, FASTQ_LINE3, FASTQ_LINE3, MAX_LINE3_ITEMS, 0); 
 }
 
-// note: we run this function only in discovery, not in segging, because it is quite expesive - checking all numerics.
+// note: we run this function only in discovery, not in segging, because it is quite expensive - checking all numerics.
 // returns 0 if qname is indeed the flavor, or error code if not
 int qname_test_flavor (STRp(qname), QnameFlavor qfs,
                        pSTRp (qname2)) // out
@@ -398,7 +403,7 @@ bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, QnameFlavor qfs, STRp(qname),
 
         // case: this is the file is collated by qname - delta against previous
         if ((item_i == qfs->ordered_item1 || item_i == qfs->ordered_item2) && 
-            segconf.is_collated &&
+            (segconf.is_collated || VB_DT(FASTQ) || VB_DT(KRAKEN) || qfs->id == QF_GENOZIP_OPT) &&
             ctx_has_value_in_prev_line_(vb, item_ctx) &&
             !(item_lens[item_i] >= 2 && items[item_i][0] == '0') && // can't yet handle reproducing leading zeros with a delta
             ( (!qfs->is_hex[item_i] && str_get_int_dec (STRi(item, item_i), (uint64_t*)&value)) ||
@@ -433,8 +438,9 @@ bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, QnameFlavor qfs, STRp(qname),
         //     seg_set_last_txt (vb, item_ctx, STRi(item, item_i));
         // }
         
-        else if (item_i == qfs->qname2 && segconf.qname_flavor2) 
-            qname_seg_qf (vb, CTX (FASTQ_QNAME2), segconf.qname_flavor2, STRi(item, item_i), true, 0);
+        else if (item_i == qfs->qname2 && segconf.qname_flavor2 &&  
+                 qname_seg_qf (vb, CTX (FASTQ_QNAME2), segconf.qname_flavor2, STRi(item, item_i), true, 0))
+            {} // fallback to textual item if QNAME2 cannot be segged according to its flavor
 
         else if (item->dict_id.num == _FASTQ_COPY_Q) {
             // for now, this field is marked as an ordered so we never reach here. We will need a SPECIAL to
@@ -461,8 +467,10 @@ void qname_seg (VBlockP vb, Context *qname_ctx, STRp (qname), unsigned add_addit
 {
     START_TIMER;
 
-    // collect the first 6 qnames, if flavor is unknown    
-    if (segconf.running && !segconf.qname_flavor && vb->line_i < 6) 
+    // collect the first 6 qnames / q2names, if flavor is unknown    
+    if (segconf.running && vb->line_i < 6 && 
+        (!segconf.qname_flavor || (segconf.qname_flavor->qname2 && !segconf.qname_flavor2))) // QNAME or QNAME2 unrecognized
+
         memcpy (segconf.unknown_flavor_qnames[vb->line_i], qname, MIN_(qname_len, UNK_QNANE_LEN));
 
     // copy if identical to previous (> 50% of lines in collated) - small improvement in compression and compression time
@@ -486,7 +494,15 @@ done:
     COPY_TIMER (qname_seg);
 }
 
+const rom QNAME_FLAVOR_UNRECOGNIZED = "Unrecognized"; // constant pointer allowing pointer comparison
 rom qf_name (QnameFlavor qf)
 {
-    return qf ? qf->name : "";
+    return qf ? qf->name : QNAME_FLAVOR_UNRECOGNIZED;
+}
+
+rom qf2_name (QnameFlavor qf, QnameFlavor qf2)
+{
+    if (!qf || qf->qname2 == -1) return NULL; //  no QF2
+
+    return qf_name (segconf.qname_flavor2); // actual name or Unrecognized
 }

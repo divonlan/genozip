@@ -260,19 +260,20 @@ typedef struct DtTranslation {
 } DtTranslation;
 
 #define TRANSLATIONS { \
-    /*                           non-bin-dt  binary dst_txt_dt toplevel             factor  txtheader_transl.   trans_con. src_dt is_trans. */ \
-    /* SAM to BAM           */ { DT_SAM,     false, DT_BAM,    { _SAM_TOP2BAM },       1,   sam_header_sam2bam,  true,     false, NULL }, /* BAM is expected to be smaller, edge cases will be handled by buf_alloc in sam_reset_line */ \
-    /* SAM to FASTQ         */ { DT_SAM,     false, DT_FASTQ,  { _SAM_TOP2FQ },        1,   txtheader_sam2fq,    true,     false, NULL }, /* sizes of SEQ, QUAL, QNAME the same */ \
-    /* SAM to FASTQ extend. */ { DT_SAM,     false, DT_FASTQ,  { _SAM_TOP2FQEX },      1.1, txtheader_sam2fq,    true,     false, NULL }, /* very slightly bigger due to added + */ \
-    /* Binary SAM to SAM    */ { DT_SAM,     true,  DT_SAM,    { _SAM_TOPLEVEL },      1.4, sam_header_bam2sam,  false,    false, NULL }, /* BAM stores sequences in 2x and numbers in 1-2.5x; if factor is not sufficient we will buf_alloc in sam_reset_line */ \
-    /* Binary SAM to BAM    */ { DT_SAM,     true,  DT_BAM,    { _SAM_TOP2BAM },       1,   NULL,                true,     true,  NULL }, /* BAM to BAM */ \
-    /* Binary BAM to FASTQ  */ { DT_SAM,     true,  DT_FASTQ,  { _SAM_TOP2FQ },        1.5, txtheader_sam2fq,    true,     false, NULL }, /* sizes of QNAME, QUAL the same, SEQ x2 */ \
-    /* 23andMe to VCF       */ { DT_ME23,    false, DT_VCF,    { _ME23_TOP2VCF },      4,   txtheader_me232vcf,  true,     false, NULL }, \
-    /* FASTA to Phylip      */ { DT_FASTA,   false, DT_PHYLIP, { _FASTA_TOPLEVEL },    1.1, txtheader_fa2phy,    true,     false, NULL }, \
-    /* Phylip to FASTA      */ { DT_PHYLIP,  false, DT_FASTA,  { _PHY_TOP2FASTA },     1.1, txtheader_phy2fa,    true,     false, NULL }, \
-    /* VCF: genocat --luft  */ { DT_VCF,     false, DT_VCF,    { _VCF_TOPLUFT },       1,   NULL,                true,     false, vcf_vb_is_luft }, /* Length of --luft is exactly recon_size_luft*/ \
+    /*                           non-bin-dt  binary dst_txt_dt toplevel             factor  txtheader_transl.   trans_con. src_dt is_trans.             */ \
+    /* SAM to BAM           */ { DT_SAM,     false, DT_BAM,    { _SAM_TOP2BAM },       1,   sam_header_sam2bam,  true,     false, NULL                  }, /* BAM is expected to be smaller, edge cases will be handled by buf_alloc in sam_reset_line */ \
+    /* SAM to FASTQ         */ { DT_SAM,     false, DT_FASTQ,  { _SAM_TOP2FQ },        1,   txtheader_sam2fq,    false,    false, NULL                  }, /* sizes of SEQ, QUAL, QNAME the same */ \
+    /* SAM to FASTQ extend. */ { DT_SAM,     false, DT_FASTQ,  { _SAM_TOP2FQEX },      1.1, txtheader_sam2fq,    false,    false, NULL                  }, /* very slightly bigger due to added + */ \
+    /* Binary SAM to SAM    */ { DT_SAM,     true,  DT_SAM,    { _SAM_TOPLEVEL },      1.4, sam_header_bam2sam,  false,    false, NULL                  }, /* BAM stores sequences in 2x and numbers in 1-2.5x; if factor is not sufficient we will buf_alloc in sam_reset_line */ \
+    /* Binary SAM to BAM    */ { DT_SAM,     true,  DT_BAM,    { _SAM_TOP2BAM },       1,   NULL,                true,     true,  NULL                  }, /* BAM to BAM */ \
+    /* Binary SAM to FASTQ  */ { DT_SAM,     true,  DT_FASTQ,  { _SAM_TOP2FQ },        1.5, txtheader_sam2fq,    false,    false, NULL                  }, /* sizes of QNAME, QUAL the same, SEQ x2 */ \
+    /* Binary SAM to FQ ext.*/ { DT_SAM,     true,  DT_FASTQ,  { _SAM_TOP2FQEX },      1.6, txtheader_sam2fq,    false,    false, NULL                  }, /* sizes of QNAME, QUAL the same, SEQ x2 */ \
+    /* 23andMe to VCF       */ { DT_ME23,    false, DT_VCF,    { _ME23_TOP2VCF },      4,   txtheader_me232vcf,  true,     false, NULL                  }, \
+    /* FASTA to Phylip      */ { DT_FASTA,   false, DT_PHYLIP, { _FASTA_TOPLEVEL },    1.1, txtheader_fa2phy,    true,     false, NULL                  }, \
+    /* Phylip to FASTA      */ { DT_PHYLIP,  false, DT_FASTA,  { _PHY_TOP2FASTA },     1.1, txtheader_phy2fa,    true,     false, NULL                  }, \
+    /* VCF: genocat --luft  */ { DT_VCF,     false, DT_VCF,    { _VCF_TOPLUFT },       1,   NULL,                true,     false, vcf_vb_is_luft        }, /* Length of --luft is exactly recon_size_luft*/ \
     /* genocat --taxid      */ { DT_KRAKEN,  false, DT_NONE,   { _KRAKEN_TOP2TAXID },  1,   NULL,                true,     false, kraken_is_translation }, \
-    /* LOCS reconstruction  */ { DT_LOCS,    true,  DT_LOCS,   { _LOCS_TOPLEVEL },     1,   NULL,                true,     true,  NULL }, \
+    /* LOCS reconstruction  */ { DT_LOCS,    true,  DT_LOCS,   { _LOCS_TOPLEVEL },     1,   NULL,                true,     true,  NULL                  }, \
 }
 
 extern const DtTranslation dt_get_translation (VBlockP vb);

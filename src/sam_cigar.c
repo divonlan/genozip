@@ -845,6 +845,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_cigar_special_CIGAR)
     switch (snip[0]) {
         case COPY_MATE_MC_Z: // copy the snip from mate MC:Z
             sam_reconstruct_from_buddy_get_textual_snip (vb, CTX (OPTION_MC_Z), BUDDY_MATE, pSTRa(snip));
+            ASSPIZ0 (snip_len, "Unable to find buddy MC:Z in history");
             break;
 
         case COPY_PRIM_SA_CIGAR: // copy the predicted alignment in same-vb prim line's SA:Z
@@ -873,7 +874,9 @@ SPECIAL_RECONSTRUCTOR_DT (sam_cigar_special_CIGAR)
     // calculate seq_len (= l_seq, unless l_seq=0), ref_consumed and (if bam) vb->textual_cigar and vb->binary_cigar
     sam_cigar_analyze (vb, STRa(snip), false, &vb->seq_len); 
 
-    if (reconstruct && (flag.out_dt == DT_SAM || (flag.out_dt == DT_FASTQ && flag.extended_translation))) {
+    rom txt = BAFTtxt;
+
+    if ((flag.out_dt == DT_SAM || flag.out_dt == DT_FASTQ) && !vb->preprocessing) {
 
         if (snip[snip_len-1] == '*') // eg "151*" - zip added the "151" to indicate seq_len - we don't reconstruct it, just the '*'
             RECONSTRUCT1 ('*');
@@ -918,9 +921,9 @@ SPECIAL_RECONSTRUCTOR_DT (sam_cigar_special_CIGAR)
         }
     }
     
-    else if (flag.out_dt == DT_FASTQ) {
-        // only analyze, but don't reconstruct CIGAR in FASTQ
-    }
+    // store now (instead of in reconstruct_from_ctx_do) in history if we are not reconstructing (e.g., in --fastq)
+    if (!reconstruct && ctx->flags.store_per_line && vb->txt_data.len32 != BNUMtxt(txt)) 
+        reconstruct_store_history_rollback_recon (VB, ctx, txt);
 
     sam_cigar_restore_S (stoh);
     buf_free (vb->scratch);
@@ -958,12 +961,23 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_COPY_BUDDY_CIGAR)
 
 // invoked from TOP2FQ (but not TOP2FQEX, bc it reconstructs AUX) to consume MC if it exists in this line, in case this line is
 // a mate line of a future line in which case this MC will be copied to the future line's CIGAR 
-SPECIAL_RECONSTRUCTOR (sam_piz_special_CONSUME_MC_Z)
+SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_CONSUME_MC_Z)
 {
+    VBlockSAMP vb = (VBlockSAMP)vb_;
+
+    ContainerPeekItem peek_items[] = { {.did = OPTION_MC_Z}, {.did = OPTION_SA_Z} };
+
+    vb->aux_con = container_peek_get_idxs (VB, CTX(SAM_AUX), ARRAY_LEN(peek_items), peek_items, true);
+
     // if this line has an MC:Z field store it directly history 
     if (CTX(OPTION_MC_Z)->flags.store_per_line && // MC:Z is buddied
-        container_peek_has_item (vb, CTX(SAM_AUX), _OPTION_MC_Z, true)) // line has MC:Z field
-        reconstruct_to_history (vb, CTX(OPTION_MC_Z));
+        peek_items[0].idx != -1) // line has MC:Z field
+        reconstruct_to_history (VB, CTX(OPTION_MC_Z));
+
+    // likewise for SA:Z (needed for reconstruting POS from buddy SA_POS)
+    if (CTX(OPTION_SA_Z)->flags.store_per_line && CTX(OPTION_SA_Z)->is_loaded &&
+        peek_items[1].idx != -1) // line has SA:Z field
+        reconstruct_to_history (VB, CTX(OPTION_SA_Z));
 
     return NO_NEW_VALUE; 
 }

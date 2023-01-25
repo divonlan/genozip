@@ -494,22 +494,23 @@ static void sam_seg_toplevel (VBlockP vb)
         .repeats = vb->lines.len32,
         .is_toplevel = true,
         .callback = true, // drop supplementary alignments and alignments without QUAL data
-        .nitems_lo = 10,
-        .items = { { .dict_id = { _SAM_BUDDY } },
-            { .dict_id = {qname_dict_id}, .separator = "\n"},
-            { .dict_id = { _SAM_RNAME}, .separator = {CI0_TRANS_NOR}},                              // needed for reconstructing seq
-            { .dict_id = { _SAM_POS}, .separator = {CI0_TRANS_NOR}},                                // needed for reconstructing seq
-            { .dict_id = { _SAM_RNEXT}, .separator = {CI0_TRANS_NOR}},                              // needed for reconstructing PNEXT
-            { .dict_id = { _SAM_PNEXT}, .separator = {CI0_TRANS_NOR}},                              // needed for reconstructing POS (in case of BUDDY)
-            { .dict_id = { _SAM_FLAG}, .separator = {CI0_TRANS_NOR}, .translator = SAM2FASTQ_FLAG}, // need to know if seq is reverse complemented & if it is R2 ; reconstructs "1" for R1 and "2" for R2
-            { .dict_id = { _SAM_CIGAR}, .separator = {CI0_TRANS_NOR}},                              // needed for reconstructing seq
-            { .dict_id = { _SAM_MC_Z}, .separator = {CI0_TRANS_NOR}},                               // consumes OPTION_MC_Z if its on this line, might be needed for mate CIGAR
-            { .dict_id = {seq_dict_id}, .separator = "\n", .translator = SAM2FASTQ_SEQ},
-            { .dict_id = {qual_dict_id}, .separator = "\n", .translator = SAM2FASTQ_QUAL}, // also moves fastq "line" to R2 (paired file) if needed
-        }};
+        .nitems_lo = 11,
+        .items       = { { .dict_id = { _SAM_BUDDY    }                                                  },
+                         { .dict_id = { qname_dict_id }, .separator = "\n"                               },
+                         { .dict_id = { _SAM_RNAME    }, .separator = { CI0_INVISIBLE }                  },// needed for reconstructing seq
+                         { .dict_id = { _SAM_POS      }, .separator = { CI0_INVISIBLE }                  },// needed for reconstructing seq
+                         { .dict_id = { _SAM_RNEXT    }, .separator = { CI0_INVISIBLE }                  },// needed for reconstructing PNEXT
+                         { .dict_id = { _SAM_PNEXT    }, .separator = { CI0_INVISIBLE }                  },// needed for reconstructing POS (in case of BUDDY)
+                         { .dict_id = { _SAM_FLAG     }, .separator = { CI0_INVISIBLE }, .translator = SAM2FASTQ_FLAG }, // need to know if seq is reverse complemented & if it is R2 ; reconstructs "1" for R1 and "2" for R2
+                         { .dict_id = { _SAM_CIGAR    }, .separator = { CI0_INVISIBLE }                  },// needed for reconstructing seq and also of SA_CIGAR (need vb->hard_clips[] for de-squanking)
+                         { .dict_id = { _SAM_MC_Z   }, .separator = { CI0_INVISIBLE }                  },// consumes OPTION_MC_Z, OPTION_SA_Z if its on this line, might be needed for mate CIGAR
+                         { .dict_id = { _SAM_SQBITMAP }, .separator = { CI0_TRANS_ALWAYS, '\n' }, .translator = SAM2FASTQ_SEQ  },
+                         { .dict_id = { qual_dict_id  }, .separator = { CI0_TRANS_ALWAYS, '\n' }, .translator = SAM2FASTQ_QUAL }, // also moves fastq "line" to R2 (paired file) if needed
+                      }
+    };
 
     // add a '@' to the description line, use a prefix to add the + line
-    static const char fastq_line_prefix[] = {CON_PX_SEP, CON_PX_SEP, '@', CON_PX_SEP, CON_PX_SEP, CON_PX_SEP,
+    static const char fastq_line_prefix[] = {CON_PX_SEP, CON_PX_SEP, '@', CON_PX_SEP, CON_PX_SEP, CON_PX_SEP, CON_PX_SEP, CON_PX_SEP,
                                              CON_PX_SEP, CON_PX_SEP, CON_PX_SEP, CON_PX_SEP, CON_PX_SEP, '+', '\n', CON_PX_SEP};
 
     container_seg (vb, CTX(SAM_TOP2FQ), (ContainerP)&top_level_fastq, fastq_line_prefix, sizeof (fastq_line_prefix), 0);
@@ -532,13 +533,13 @@ static void sam_seg_toplevel (VBlockP vb)
             { .dict_id = { _SAM_PNEXT}, .separator = "\t"},
             { .dict_id = { _SAM_TLEN}, .separator = "\t"},
             { .dict_id = { _SAM_AUX}, .separator = "\n"},
-            { .dict_id = {seq_dict_id}, .separator = "\n", .translator = SAM2FASTQ_SEQ},
-            { .dict_id = {qual_dict_id}, .separator = "\n", .translator = SAM2FASTQ_QUAL}, // also moves fastq "line" to R2 (paired file) if needed
+            { .dict_id = { _SAM_SQBITMAP }, .separator = { CI0_TRANS_ALWAYS, '\n' }, .translator = SAM2FASTQ_SEQ  },
+            { .dict_id = { qual_dict_id  }, .separator = { CI0_TRANS_ALWAYS, '\n' }, .translator = SAM2FASTQ_QUAL }, // also moves fastq "line" to R2 (paired file) if needed
         }};
 
     // add a '@' to the description line, use a prefix to add the + line
     static const char fastq_ext_line_prefix[] = {
-        CON_PX_SEP, CON_PX_SEP,
+        CON_PX_SEP, CON_PX_SEP, CON_PX_SEP,
         '@', CON_PX_SEP,
         'F', 'L', 'A', 'G', ':', CON_PX_SEP,
         'R', 'N', 'A', 'M', 'E', ':', CON_PX_SEP,

@@ -193,8 +193,11 @@ typedef struct Context {
     #define reconstruct_state_size_formula  ((char*)(&evb->contexts[0].pair_b250_iter + 1) - (char*)(&evb->contexts[0].last_value))
 
     ValueType last_value;      // ZIP/PIZ: last value of this context (it can be a basis for a delta, used for BAM translation, and other uses)
+    union {
     int64_t last_delta;        // last delta value calculated
-    
+    WordIndex last_con_wi;     // PIZ: word index of last container retrieved from this ctx
+    };
+
     #define INVALID_LAST_TXT_INDEX ((uint32_t)-1)
     TxtWord last_txt;          // ZIP/PIZ: index/len into vb->txt_data of last seg/reconstruction (always in PIZ, sometimes in Seg) (introduced 10.0.5)
 

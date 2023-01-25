@@ -289,7 +289,7 @@ VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompITy
     uint32_t vb_id; for (vb_id=0; ; vb_id = (vb_id+1) % pool->num_vbs) {
 
         // case: the VB is allocated to a different data type - change its data type
-        if (pool->vb[vb_id] && z_file && pool->vb[vb_id]->data_type != dt) {
+        if (pool->vb[vb_id] && z_file && pool->vb[vb_id]->data_type != dt && !pool->vb[vb_id]->in_use) {
 
             DataType old_alloced_dt = pool->vb[vb_id]->data_type_alloced;
 

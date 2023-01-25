@@ -288,7 +288,7 @@ static inline bool sam_piz_SA_field_is_line_matches_aln (VBlockSAMP vb, ContextP
         /*pos   */ str_get_int (STRi(item, SA_POS),  &aln_pos)  && aln_pos  == my_pos;
 
     // we also compare MAPQ and NM, unless --coverage or --count in which case these fields are skipped (because NM requires MD which requires SQBITMAP...)
-    if (!flag.collect_coverage && !flag.count)
+    if (!flag.collect_coverage && !flag.count && flag.out_dt != DT_FASTQ)
         found &=
         /*mapq  */ str_get_int (STRi(item, SA_MAPQ), &aln_mapq) && aln_mapq == my_mapq &&
         /*NM:i  */ str_get_int (STRi(item, SA_NM),   &aln_nm)   && aln_nm   == my_nm;

@@ -26,7 +26,8 @@
 #pragma GENDICT SAM_Q7NAME=DTYPE_1=Q7NAME 
 #pragma GENDICT SAM_Q8NAME=DTYPE_1=Q8NAME 
 #pragma GENDICT SAM_Q9NAME=DTYPE_1=Q9NAME 
-#pragma GENDICT SAM_QANAME=DTYPE_1=QANAME // if adding more Q*NAMEs - add to fastq.h and kraken.h too, and update MAX_QNAME_ITEMS
+#pragma GENDICT SAM_QANAME=DTYPE_1=QANAME 
+#pragma GENDICT SAM_QBNAME=DTYPE_1=QBNAME // if adding more Q*NAMEs - add to fastq.h and kraken.h too, and update MAX_QNAME_ITEMS
 #pragma GENDICT SAM_QmNAME=DTYPE_1=QmNAME // QmNAME reserved for mate number (always the last dict_id in the container)
 #pragma GENDICT SAM_FLAG=DTYPE_FIELD=FLAG
 #pragma GENDICT SAM_FLAG0=DTYPE_FIELD=F0LAG0

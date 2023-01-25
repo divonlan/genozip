@@ -499,7 +499,6 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _9D {"optimize-DESC",    no_argument,       &flag.optimize_DESC,    1 }
         #define _al {"add-line-numbers", no_argument,       &flag.add_line_numbers, 1 }
         #define _pe {"pair",             no_argument,       &flag.pair,   PAIR_READ_1 } 
-        //xxx #define _DP {"deep",             no_argument,       &flag.deep,             1 } 
         #define _pt {"dts_paired",       no_argument,       &flag.undocumented_dts_paired, 1 }  // undocumented flag to uncompress paired files older than 9.0.13 when genozip_header.dts_paired was introduced. A user will get an error message instructing her to use it.
         #define _th {"threads",          required_argument, 0, '@'                    }
         #define _u  {"prefix",           required_argument, 0, 'u'                    }

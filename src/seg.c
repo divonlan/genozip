@@ -1298,7 +1298,7 @@ void seg_all_data_lines (VBlockP vb)
     }
 
     if (segconf.running) {
-        segconf.line_len = (vb->lines.len32 ? (vb->txt_data.len32 / vb->lines.len32) : 500) + 1; // get average line length (rounded up ; arbitrary 500 if the segconf data ended up not having any lines (example: all lines were non-matching lines dropped by --match in a chain file))
+        segconf.line_len = (vb->lines.len32 ? ((double)vb->txt_data.len32 / (double)vb->lines.len32) : 500) + 0.999; // get average line length (rounded up ; arbitrary 500 if the segconf data ended up not having any lines (example: all lines were non-matching lines dropped by --match in a chain file))
 
         // limitations: only pre-defined field, not local
         for (Did did_i=0; did_i < DTF(num_fields); did_i++)

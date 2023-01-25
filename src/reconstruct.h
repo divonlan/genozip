@@ -22,6 +22,8 @@ extern PizDisQname piz_dis_qname (VBlockP vb); // for ASSPIZ
 
 // goes into ctx->history if not STORE_INT
 typedef enum __attribute__ ((__packed__)) { LookupTxtData, LookupDict, LookupLocal, LookupPerLine } LookupType;
+#define LOOKUP_TYPE_NAMES { "LookupTxtData", "LookupDict", "LookupLocal", "LookupPerLine" }
+extern rom lookup_type_name (LookupType lookup);
 
 typedef struct __attribute__ ((__packed__)) { // 9 bytes
     TxtWord;           // for TxtData, Local, PerLine - index into buffer. For Dict - word index (note: gcc/clang flag -fms-extensions is needed for this type of anonymous struct use)
@@ -79,6 +81,7 @@ extern int64_t reconstruct_peek_local_int (VBlockP vb, ContextP ctx, int offset)
 // history stuff
 //--------------
 extern void reconstruct_store_history (VBlockP vb, ContextP ctx);
+extern void reconstruct_store_history_rollback_recon (VBlockP vb, ContextP ctx, rom recon_start);
 extern void reconstruct_copy_dropped_line_history (VBlockP vb);
 extern void reconstruct_to_history (VBlockP vb, ContextP ctx);
 

@@ -331,8 +331,8 @@ static void stats_output_file_metadata (void)
 
                 bufprintf (evb, &stats, "Main VBs: %u Prim VBs: %u Depn VBs: %u\n", 
                         sections_get_num_vbs(SAM_COMP_MAIN), sections_get_num_vbs(SAM_COMP_PRIM), sections_get_num_vbs(SAM_COMP_DEPN));
-                REPORT_VBs;
             }
+            REPORT_VBs;
 
             bufprintf (evb, &features, "num_hdr_contigs=%u;", sam_num_header_contigs());
             
@@ -804,8 +804,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
              dt_name (z_file->data_type), str_int_commas (all_txt_len).s, str_int_commas (txt_size).s, 
              (int32_t)(txt_size - all_txt_len)); 
 
-    if (flag.show_stats_comp_i == COMP_NONE && 
-        (flag.show_stats || z_file->disk_so_far > (1<<20))) { // write stats only if z_file is at least 1MB or if requested explicitly, otherwise ~4KB of stats data too much overhead) {
+    if (flag.show_stats_comp_i == COMP_NONE) { 
         
         zfile_compress_section_data (evb, SEC_STATS, &stats);
         zfile_compress_section_data (evb, SEC_STATS, &STATS);

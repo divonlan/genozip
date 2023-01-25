@@ -41,17 +41,36 @@ void reconstruct_copy_dropped_line_history (VBlockP vb)
 void reconstruct_store_history (VBlockP vb, ContextP ctx)
 {
     switch (ctx->flags.store) {
-        case STORE_INT:   *B(int64_t,     ctx->history, vb->line_i) = ctx->last_value.i; break;
+        case STORE_INT:   
+            *B(int64_t, ctx->history, vb->line_i) = ctx->last_value.i; 
+            break;
 
-        case STORE_INDEX: *B(WordIndex,   ctx->history, vb->line_i) = ctx->last_value.i; break;
+        case STORE_INDEX: 
+            *B(WordIndex, ctx->history, vb->line_i) = ctx->last_value.i; 
+            break;
         
-        default:          *B(HistoryWord, ctx->history, vb->line_i) = (HistoryWord){
-                                .lookup       = LookupTxtData, 
-                                .index        = ctx->last_txt.index, 
-                                .len          = ctx->last_txt.len,
-                                .ctx_specific = ctx->history.prm8[0] 
-                          };
+        default:          
+            // store as LookupTxtData, if not already stored by reconstruct_store_history_rollback_recon()
+            if (B(HistoryWord, ctx->history, vb->line_i)->lookup != LookupPerLine) 
+                *B(HistoryWord, ctx->history, vb->line_i) = (HistoryWord)
+                    { .lookup       = LookupTxtData, 
+                      .index        = ctx->last_txt.index, 
+                      .len          = ctx->last_txt.len,
+                      .ctx_specific = ctx->history.prm8[0] };
     }
+}
+
+// store in history (in per_line), and then rollback reconstruction
+void reconstruct_store_history_rollback_recon (VBlockP vb, ContextP ctx, rom recon_start)
+{
+    HistoryWord *hw = B(HistoryWord, ctx->history, vb->line_i);
+    *hw = (HistoryWord){ .index = ctx->per_line.len32, 
+                         .len = (BAFTtxt - recon_start), 
+                         .lookup = LookupPerLine };
+
+    buf_add_more (VB, &ctx->per_line, recon_start, hw->len, "per_line");
+    BNXTc (ctx->per_line) = 0;         // nul-terminate
+    vb->txt_data.len32 = BNUMtxt(recon_start); // remove reconstructed text from txt_data
 }
 
 // consume and store in history the next value in the context without reconstructing it to txt_data
@@ -91,3 +110,9 @@ void reconstruct_to_history (VBlockP vb, ContextP ctx)
     }
 }
 
+rom lookup_type_name (LookupType lookup)
+{
+    static rom names[] = LOOKUP_TYPE_NAMES;
+
+    return (lookup < 0 || lookup >= ARRAY_LEN(names)) ? "Invalid" : names[lookup];
+}
