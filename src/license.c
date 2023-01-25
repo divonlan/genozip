@@ -190,8 +190,7 @@ void license_load (void)
     if (rec.license_num != license_calc_number (&data)) goto reregister;
 
     if (rec.lic_type == LIC_TYPE_EVAL) {
-//xxx        #define BUY "To purchase a Standard or Deep License: " WEBSITE_BUY " or contact " EMAIL_SALES "\n"
-        #define BUY "To purchase a Standard License: " WEBSITE_BUY " or contact " EMAIL_SALES "\n"
+        #define BUY "To purchase a Standard or Deep License: " WEBSITE_BUY " or contact " EMAIL_SALES "\n"
         ASSINP0 (time(0) - rec.machine_time < (30*24*60*60),
                  "You reached the end of the 30 evaluation period of Evaluation License.\n" BUY);
 
@@ -199,11 +198,11 @@ void license_load (void)
                 "You reached the maximum number of files (%u) compressible with the Evaluation License.\n" BUY, EVAL_NUM_FILES);
     }
 
-    //xxx else if (rec.lic_type == LIC_TYPE_ACADEMIC || rec.lic_type == LIC_TYPE_STANDARD) {
-    //     ASSINP (!counter_has_exceeded (filename, EVAL_NUM_FILES),
-    //             "You reached %u --deep compressions, which is the maximum number granted with the %s License.\n"
-    //             "To upgrade to a Deep License: " WEBSITE_BUY " or contact " EMAIL_SALES "\n", EVAL_NUM_FILES, lic_types[rec.lic_type]);
-    // }
+    else if (rec.lic_type == LIC_TYPE_ACADEMIC || rec.lic_type == LIC_TYPE_STANDARD) {
+        ASSINP (!counter_has_exceeded (filename, EVAL_NUM_FILES),
+                "You reached %u --deep compressions, which is the maximum number granted with the %s License.\n"
+                "To upgrade to a Deep License: " WEBSITE_BUY " or contact " EMAIL_SALES "\n", EVAL_NUM_FILES, lic_types[rec.lic_type]);
+    }
 
     rec.initialized = true;
 
@@ -356,8 +355,7 @@ static bool license_verify_name (STRc(response), rom unused)
 
 static bool license_verify_license (STRc(response), rom unused)
 {
-    //xxx return strlen (response) == 1 && (*response >= '1' && *response <= '4');
-    return strlen (response) == 1 && (*response >= '1' && *response <= '3');
+    return strlen (response) == 1 && (*response >= '1' && *response <= '4');
 }
 
 static void license_exit_if_not_confirmed (rom query, DefAnswerType def_answer)
@@ -438,10 +436,9 @@ void license_register (void)
                         "1. Academic License (free): Free for officially recognized research institutions (excluding data obtained commercially)\n\n"
                         "2. Evaluation License (free): Free use for 30-day (limited to " EVAL_NUM_FILES_STR " files)\n\n"
                         "3. Standard License (paid): I have already paid for a Standard License\n\n"
-                        //xxx "4. Deep License (paid): I have already paid for a Deep License\n\n"
+                        "4. Deep License (paid): I have already paid for a Deep License\n\n"
                         "Remember your Mom taught you to be honest!\n\n"
-                        //xxx "Please enter 1, 2, 3 or 4: ",
-                        "Please enter 1, 2 or 3: ",
+                        "Please enter 1, 2, 3 or 4: ",
                         lic_type, sizeof(lic_type), false, license_verify_license, NULL);
     
         rec.lic_type = lic_type[0] - '0';

@@ -12,8 +12,13 @@
 #include "sections.h"
 
 #pragma GENDICT_PREFIX FASTQ
-#pragma GENDICT FASTQ_CONTIG=DTYPE_FIELD=CONTIG // must be first - did_i=0=CHROM
-#pragma GENDICT FASTQ_DESC=DTYPE_FIELD=DESC     // Q?NAME must immediately follow
+
+// -----------------------------------------------------------------------------------------------------------
+// Common contexts of FASTQ and SAM - these MUST be first in same order exactly in SAM/FASTQ for Deep to work.
+// -----------------------------------------------------------------------------------------------------------
+#pragma GENDICT FASTQ_CONTIG=DTYPE_FIELD=RNAME  // must be first - did_i=0=CHROM (up to v14 the dict_id was CONTIG)
+
+#pragma GENDICT FASTQ_DESC=DTYPE_FIELD=QNAME    // Q?NAME must immediately follow (up to v14 the dict_id was DESC)
 #pragma GENDICT FASTQ_Q0NAME=DTYPE_1=Q0NAME     // MAX_QNAME_ITEMS fixed qname items must have a did_i directly after container's (MUST be the same dict_id as in sam.h)
 #pragma GENDICT FASTQ_Q1NAME=DTYPE_1=Q1NAME 
 #pragma GENDICT FASTQ_Q2NAME=DTYPE_1=Q2NAME
@@ -24,8 +29,33 @@
 #pragma GENDICT FASTQ_Q7NAME=DTYPE_1=Q7NAME 
 #pragma GENDICT FASTQ_Q8NAME=DTYPE_1=Q8NAME 
 #pragma GENDICT FASTQ_Q9NAME=DTYPE_1=Q9NAME 
-#pragma GENDICT FASTQ_QANAME=DTYPE_1=QANAME     // if adding more Q*NAMEs - add to kraken.h and sam.h and update MAX_QNAME_ITEMS
+#pragma GENDICT FASTQ_QANAME=DTYPE_1=QANAME     
+#pragma GENDICT FASTQ_QBNAME=DTYPE_1=QBNAME     // if adding more Q*NAMEs - add to kraken.h and sam.h and update MAX_QNAME_ITEMS
 #pragma GENDICT FASTQ_QmNAME=DTYPE_1=QmNAME     // QmNAME reserved for mate number (always the last dict_id in the container)
+
+#pragma GENDICT FASTQ_SQBITMAP=DTYPE_FIELD=SQBITMAP
+#pragma GENDICT FASTQ_NONREF=DTYPE_FIELD=NONREF
+#pragma GENDICT FASTQ_NONREF_X=DTYPE_FIELD=NONREF_X
+#pragma GENDICT FASTQ_GPOS=DTYPE_FIELD=GPOS
+#pragma GENDICT FASTQ_STRAND=DTYPE_FIELD=STRAND
+#pragma GENDICT FASTQ_SEQMIS_A=DTYPE_FIELD=SEQMIS_A // v14: mismatch bases vs the reference, when ref=A
+#pragma GENDICT FASTQ_SEQMIS_C=DTYPE_FIELD=SEQMIS_C
+#pragma GENDICT FASTQ_SEQMIS_G=DTYPE_FIELD=SEQMIS_G
+#pragma GENDICT FASTQ_SEQMIS_T=DTYPE_FIELD=SEQMIS_T
+
+#pragma GENDICT FASTQ_QUAL=DTYPE_FIELD=QUAL 
+#pragma GENDICT FASTQ_DOMQRUNS=DTYPE_FIELD=DOMQRUNS // these 3 must be right after FASTQ_QUAL. DOMQRUNS is also used by LONGR. For backwards compatability, we can never change its name.
+#pragma GENDICT FASTQ_QUALMPLX=DTYPE_FIELD=QUALMPLX // v14.0.0. DOMQUAL alg: dom multiplexer 
+#pragma GENDICT FASTQ_DIVRQUAL=DTYPE_FIELD=DIVRQUAL // v14.0.0. DOMQUAL alg: lines that don't have enough dom. NORMQ codec: lines that are of length other than segconf.sam_seq_len 
+
+#pragma GENDICT FASTQ_TOPLEVEL=DTYPE_FIELD=TOPLEVEL
+#pragma GENDICT FASTQ_BUDDY=DTYPE_FIELD=BUDDY       // v15: deep: SAM vb/line corresponding to this read
+#pragma GENDICT FASTQ_TAXID=DTYPE_FIELD=TAXID
+#pragma GENDICT FASTQ_DEBUG_LINES=DTYPE_FIELD=DBGLINES      // used by --debug-lines
+
+#pragma GENDICT FASTQ_DEEP=DTYPE_FIELD=DpVB
+#pragma GENDICT FASTQ_DEEP_LINE=DTYPE_FIELD=DpLINE
+
 #pragma GENDICT FASTQ_QNAME2=DTYPE_1=QNAME2     // QNAME embedded in DESC (QNAME2 items immediately follow)
 #pragma GENDICT FASTQ_Q0NAME2=DTYPE_1=q0NAME    
 #pragma GENDICT FASTQ_Q1NAME2=DTYPE_1=q1NAME 
@@ -38,25 +68,10 @@
 #pragma GENDICT FASTQ_Q8NAME2=DTYPE_1=q8NAME 
 #pragma GENDICT FASTQ_Q9NAME2=DTYPE_1=q9NAME 
 #pragma GENDICT FASTQ_QANAME2=DTYPE_1=qANAME 
-#pragma GENDICT FASTQ_E1L=DTYPE_FIELD=E1L
-#pragma GENDICT FASTQ_SQBITMAP=DTYPE_FIELD=SQBITMAP
-#pragma GENDICT FASTQ_NONREF=DTYPE_FIELD=NONREF
-#pragma GENDICT FASTQ_NONREF_X=DTYPE_FIELD=NONREF_X
-#pragma GENDICT FASTQ_GPOS=DTYPE_FIELD=GPOS
-#pragma GENDICT FASTQ_STRAND=DTYPE_FIELD=STRAND
-#pragma GENDICT FASTQ_SEQMIS_A=DTYPE_FIELD=SEQMIS_A // v14: mismatch bases vs the reference, when ref=A
-#pragma GENDICT FASTQ_SEQMIS_C=DTYPE_FIELD=SEQMIS_C
-#pragma GENDICT FASTQ_SEQMIS_G=DTYPE_FIELD=SEQMIS_G
-#pragma GENDICT FASTQ_SEQMIS_T=DTYPE_FIELD=SEQMIS_T
-#pragma GENDICT FASTQ_E2L=DTYPE_FIELD=E2L
-#pragma GENDICT FASTQ_QUAL=DTYPE_FIELD=QUAL 
-#pragma GENDICT FASTQ_DOMQRUNS=DTYPE_FIELD=DOMQRUNS // these 3 must be right after FASTQ_QUAL. DOMQRUNS is also used by LONGR. For backwards compatability, we can never change its name.
-#pragma GENDICT FASTQ_QUALMPLX=DTYPE_FIELD=QUALMPLX // v14.0.0. DOMQUAL alg: dom multiplexer 
-#pragma GENDICT FASTQ_DIVRQUAL=DTYPE_FIELD=DIVRQUAL // v14.0.0. DOMQUAL alg: lines that don't have enough dom. NORMQ codec: lines that are of length other than segconf.sam_seq_len 
-#pragma GENDICT FASTQ_TOPLEVEL=DTYPE_FIELD=TOPLEVEL
-#pragma GENDICT FASTQ_TAXID=DTYPE_FIELD=TAXID
-#pragma GENDICT FASTQ_DEBUG_LINES=DTYPE_FIELD=DBGLINES      // used by --debug-lines
+#pragma GENDICT FASTQ_QBNAME2=DTYPE_1=qBNAME 
 
+#pragma GENDICT FASTQ_E1L=DTYPE_FIELD=E1L
+#pragma GENDICT FASTQ_E2L=DTYPE_FIELD=E2L
 
 #pragma GENDICT FASTQ_LINE3=DTYPE_FIELD=LINE3
 #define MAX_LINE3_ITEMS 9
@@ -69,6 +84,10 @@
 #pragma GENDICT FASTQ_T6HIRD=DTYPE_1=t6NAME 
 #pragma GENDICT FASTQ_T7HIRD=DTYPE_1=t7NAME 
 #pragma GENDICT FASTQ_COPY_Q=DTYPE_1=tQcopy 
+
+// -----------------------------------------------------------------------------------------------------------
+// End of common contexts of FASTQ and SAM
+// -----------------------------------------------------------------------------------------------------------
 
 // Txtfile stuff
 extern int32_t fastq_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
@@ -120,9 +139,10 @@ extern void fastq_piz_genozip_header (const SectionHeaderGenozipHeader *header);
 typedef enum { FQ_COMP_R1, FQ_COMP_R2 } FastqComponentType;
 #define FASTQ_COMP_NAMES { "FQR1", "FQR2" }
  
-#define FASTQ_SPECIAL { fastq_special_unaligned_SEQ, fastq_special_PAIR2_GPOS, fastq_special_mate_lookup }
+#define FASTQ_SPECIAL { fastq_special_unaligned_SEQ, fastq_special_PAIR2_GPOS, fastq_special_mate_lookup, fastq_special_set_deep }
 
 SPECIAL (FASTQ, 0,  unaligned_SEQ, fastq_special_unaligned_SEQ); // v14
 SPECIAL (FASTQ, 1,  PAIR2_GPOS,    fastq_special_PAIR2_GPOS);    // v14
 SPECIAL (FASTQ, 2,  mate_lookup,   fastq_special_mate_lookup);   // v14
-#define NUM_FASTQ_SPECIAL 3
+SPECIAL (FASTQ, 3,  set_deep,      fastq_special_set_deep);      // v14
+#define NUM_FASTQ_SPECIAL 4

@@ -732,8 +732,8 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeader *out_header) // optio
                 "password is wrong for file %s", z_name);
     }
 
-    z_file->num_components = header->num_components;
-    if (z_file->num_components < 2) flag.unbind = 0; // override user's prefix if file has only 1 component (bug 326)
+    z_file->num_txt_files = header->num_txt_files;
+    if (z_file->num_txt_files < 2) flag.unbind = 0; // override user's prefix if file has only 1 component (bug 326)
 
     int dts = z_file->z_flags.dt_specific; // save in case its set already (eg dts_paired is set in fastq_piz_is_paired)
     z_file->z_flags = header->flags.genozip_header;
@@ -822,14 +822,14 @@ void zfile_compress_genozip_header (void)
     header.compressed_offset     = BGEN32 (sizeof (SectionHeaderGenozipHeader));
     header.data_uncompressed_len = BGEN32 (z_file->section_list_buf.len * sizeof (SectionEntFileFormat));
     header.codec                 = codec == CODEC_UNKNOWN ? CODEC_NONE : codec;
-    header.genozip_version         = GENOZIP_FILE_FORMAT_VERSION;
-    header.data_type               = BGEN16 ((uint16_t)dt_get_txt_dt (z_file->data_type));
-    header.encryption_type         = is_encrypted ? ENC_AES256 : ENC_NONE;
-    header.recon_size_prim         = BGEN64 (z_file->txt_data_so_far_bind);
-    header.num_lines_bound         = BGEN64 (z_file->num_lines);
-    header.num_sections            = BGEN32 (num_sections); 
-    header.num_components          = z_file->num_txts_so_far;
-    header.vb_size                 = BGEN16 (segconf.vb_size >> 20);
+    header.genozip_version       = GENOZIP_FILE_FORMAT_VERSION;
+    header.data_type             = BGEN16 ((uint16_t)dt_get_txt_dt (z_file->data_type));
+    header.encryption_type       = is_encrypted ? ENC_AES256 : ENC_NONE;
+    header.recon_size_prim       = BGEN64 (z_file->txt_data_so_far_bind);
+    header.num_lines_bound       = BGEN64 (z_file->num_lines);
+    header.num_sections          = BGEN32 (num_sections); 
+    header.num_txt_files         = z_file->num_txts_so_far;
+    header.vb_size               = BGEN16 (segconf.vb_size >> 20);
 
     // when decompressing will require an external reference, we set header.ref_filename to the name of the genozip reference file
     if (IS_REF_EXTERNAL || IS_REF_MAKE_CHAIN) {   

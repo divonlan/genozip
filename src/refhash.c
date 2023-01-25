@@ -13,6 +13,7 @@
 #include "sections.h"
 #include "buffer.h"
 #include "vblock.h"
+#include "filename.h"
 #include "file.h"
 #include "endianness.h"
 #include "dispatcher.h"
@@ -329,7 +330,7 @@ void refhash_load_standalone (void)
     CLEAR_FLAG (test);
 
     z_file = file_open (ref_get_filename (gref), READ, Z_FILE, DT_FASTA);    
-    z_file->basename = file_basename (ref_get_filename (gref), false, "(reference)", NULL, 0);
+    z_file->basename = filename_base (ref_get_filename (gref), false, "(reference)", NULL, 0);
 
     zfile_read_genozip_header (0);
 

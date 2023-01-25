@@ -185,31 +185,35 @@ bool container_peek_has_item (VBlockP vb, ContextP ctx, DictId item_dict_id, boo
 
 // PIZ: peek a context which is normally a container and not yet encountered: get indices of requested items 
 // (-1 if item is not in container). 
-void container_peek_get_idxs (VBlockP vb, ContextP ctx, uint16_t n_items, ContainerPeekItem *req_items, bool consume)
+ContainerP container_peek_get_idxs (VBlockP vb, ContextP ctx, uint16_t n_items, ContainerPeekItem *req_items, bool consume)
 {
     ASSISLOADED(ctx);
-
-    // case: already reconstructed - not yet supported (not too difficult to add support for this case if needed)
-    ASSPIZ (!ctx_encountered (vb, ctx->did_i), "context %s is already encountered", ctx->tag_name);
 
     for (uint16_t req_i=0 ; req_i < n_items; req_i++) {
         req_items[req_i].idx = -1; // initialize
         ASSERT (req_items[req_i].did < 255, "req_items[%u].did=%u but only small dids up to 254 are supported", req_i, req_items[req_i].did); // limitation of ContainerItem.small_did_i
     }
 
-    STR(snip);
-    WordIndex wi = consume ? LOAD_SNIP (ctx->did_i) : PEEK_SNIP (ctx->did_i);
+    ContainerP con;
+    if (ctx_encountered (vb, ctx->did_i)) 
+        con = container_retrieve (vb, ctx, ctx->last_con_wi, 0, 0, 0, 0);
 
-    if (!snip || *snip != SNIP_CONTAINER) return; // not a container, so definitely doesn't contain the item
+    else { 
+        STR(snip);
+        WordIndex wi = consume ? LOAD_SNIP (ctx->did_i) : PEEK_SNIP (ctx->did_i);
+        if (!snip || *snip != SNIP_CONTAINER) return NULL; // not a container, so definitely doesn't contain the item
 
-    ContainerP con = container_retrieve (vb, ctx, wi, snip+1, snip_len-1, 0, 0);
-
+        con = container_retrieve (vb, ctx, wi, snip+1, snip_len-1, 0, 0);
+    }
+    
     for (uint16_t item_i=0; item_i < con_nitems(*con); item_i++) 
         for (uint16_t req_i=0 ; req_i < n_items; req_i++)
             if (req_items[req_i].idx == -1 && con->items[item_i].did_i_small == req_items[req_i].did) {
                 req_items[req_i].idx = item_i;
                 break;
             }
+
+    return con; 
 }
 
 static inline void container_verify_line_integrity (VBlockP vb, ContextP debug_lines_ctx, rom recon_start)
@@ -305,6 +309,11 @@ static inline unsigned container_reconstruct_item_seperator (VBlockP vb, const C
     }
 
     else if (!translating && IS_CI0_SET (CI0_NATIVE_NEXT)) {
+        RECONSTRUCT1 (item->separator[1]);
+        return 1;
+    }
+
+    else if (IS_CI0_SET (CI0_TRANS_ALWAYS) && item->separator[1]) {
         RECONSTRUCT1 (item->separator[1]);
         return 1;
     }
@@ -430,7 +439,8 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
             const ContainerItem *item = &con->items[i];
             Context *item_ctx = item_ctxs[i];
             bool reconstruct = !flag.genocat_no_reconstruct;
-            bool trans_nor = translating && IS_CI0_SET (CI0_TRANS_NOR); // check for prohibition on reconstructing when translating
+            bool trans_item = translating || IS_CI0_SET(CI0_TRANS_ALWAYS); 
+            bool trans_nor = trans_item && IS_CI0_SET (CI0_TRANS_NOR); // check for prohibition on reconstructing when translating
 
             bool show_item = vb->show_containers && item_ctx && (!flag.dict_id_show_containers.num || dict_id_typeless (item_ctx->dict_id).num == flag.dict_id_show_containers.num || 
             dict_id_typeless (ctx->dict_id).num == flag.dict_id_show_containers.num);
@@ -451,7 +461,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
                          vb->preprocessing    ? "preproc " : "",
                          vb->peek_stack_level ? "peeking " : "",
                          vb->vblock_i, vb->line_i, rep_i, ctx->tag_name, ctx->did_i, item_ctx->tag_name, item_ctx->did_i,
-                         translating ? item->translator : 0, 
+                         trans_item ? item->translator : 0, 
                          vb->vb_position_txt_file + vb->txt_data.len, vb->vb_position_txt_file + vb->txt_data.len,
                          reconstruct, reconstruct && !trans_nor);
 
@@ -477,7 +487,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
                     new_value.f += item_ctx->last_value.f;
 
                 // case: reconstructing to a translated format (eg SAM2BAM) - modify the reconstruction ("translate") this item
-                if (translating && item->translator && recon_len != -1 &&
+                if (trans_item && item->translator && recon_len != -1 &&
                     !(flag.missing_contexts_allowed && !item_ctx->dict.len && !item_ctx->local.len)) // skip if missing contexts are allowed, and this context it missing 
                     DT_FUNC(vb, translator)[item->translator](vb, item_ctx, reconstruction_start, recon_len, item_prefix_len, false);  
             }            
@@ -488,10 +498,10 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
 
             // reconstruct separator(s) as needed
             if (reconstruct) 
-                num_preceding_seps = container_reconstruct_item_seperator (vb, item, reconstruction_start, translating);
+                num_preceding_seps = container_reconstruct_item_seperator (vb, item, reconstruction_start, trans_item);
 
             // after all reconstruction and translation is done - move if needed
-            if (translating && IS_CI0_SET (CI0_TRANS_MOVE))
+            if (trans_item && IS_CI0_SET (CI0_TRANS_MOVE))
                 vb->txt_data.len += (uint8_t)item->separator[1];
 
             // display 10 first reconstructed characters, but all characters if just this ctx was requested 
@@ -597,7 +607,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
         const ContainerItem *item = &con->items[last_non_filtered_item_i]; // last_non_filtered_item_i is the last item that survived the filter, of the last repeat
 
         vb->txt_data.len -= CI0_ITEM_HAS_FLAG(item) ? (translating ? 0 : !!IS_CI0_SET (CI0_NATIVE_NEXT))
-                                                   : (!!item->separator[0] + !!item->separator[1]);
+                                                    : (!!item->separator[0] + !!item->separator[1]);
     }
      
     if (con->is_toplevel)   
@@ -708,6 +718,7 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
         *out_prefixes_len = prefixes_len;
     }
 
+    ctx->last_con_wi = word_index;
     return con_p;
 }
 

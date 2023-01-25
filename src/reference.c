@@ -21,6 +21,7 @@
 #include "context.h"
 #include "mutex.h"
 #include "sections.h"
+#include "filename.h"
 #include "file.h"
 #include "regions.h"
 #include "refhash.h"
@@ -1299,7 +1300,7 @@ void ref_load_external_reference (Reference ref, ContextP chrom_ctx)
     flag.show_gheader = false;
 
     z_file = file_open (ref->filename, READ, Z_FILE, DT_FASTA);    
-    z_file->basename = file_basename (ref->filename, false, "(reference)", NULL, 0);
+    z_file->basename = filename_base (ref->filename, false, "(reference)", NULL, 0);
 
     TEMP_VALUE (command, PIZ);
 

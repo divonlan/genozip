@@ -60,6 +60,10 @@ void sam_piz_genozip_header (const SectionHeaderGenozipHeader *header)
         segconf.MD_NM_by_unconverted  = header->sam.segconf_MD_NM_by_un;
         segconf.sam_predict_meth_call = header->sam.segconf_predict_meth;
     }
+
+    if (VER(15)) {
+        flag.deep                     = header->sam.deep;
+    }
 }
 
 // main thread: is it possible that genocat of this file will re-order lines
@@ -105,6 +109,9 @@ IS_SKIP (sam_piz_is_skip_section)
     #define KEEPIF(cond)  ({ if (cond) KEEP; })
     #define SKIPIFF(cond) ({ if (cond) SKIP; else KEEP; })
     #define KEEPIFF(cond) ({ if (cond) KEEP; else SKIP;})
+
+    if (comp_i >= SAM_COMP_FQ00 && comp_i != COMP_NONE)
+        return fastq_piz_is_skip_section (st, comp_i, dict_id, purpose);
 
     // if this is a mux channel of an OPTION - consider its parent instead. Eg. "M0C:Z0", "M1C:Z1" -> "MC:Z"
     if (dict_id.id[3]==':' && dict_id.id[1] == dict_id.id[5]&& !dict_id.id[6])
@@ -189,7 +196,7 @@ IS_SKIP (sam_piz_is_skip_section)
         case _OPTION_QX_Z:                      case _OPTION_QX_DIVRQUAL: case _OPTION_QX_DOMQRUNS: case _OPTION_QX_QUALMPLX:
             SKIPIFF (cov || cnt);
 
-        case _SAM_MC_Z     : KEEPIFF (flag.out_dt == DT_FASTQ);
+        case _SAM_FQ_AUX   : KEEPIFF (flag.out_dt == DT_FASTQ || flag.collect_coverage);
         
         case _SAM_BUDDY    : KEEP; // always needed (if any of these are needed: QNAME, FLAG, MAPQ, CIGAR...)
         case _SAM_QNAME    : KEEP; // always needed as it is used to determine whether this line has a buddy
@@ -198,9 +205,11 @@ IS_SKIP (sam_piz_is_skip_section)
         case _SAM_SAALN    : KEEP;
         case _SAM_AUX      : KEEP; // needed in preproc for container_peek_get_idxs
         case _OPTION_MC_Z  : KEEPIF (preproc || flag.out_dt == DT_FASTQ); // note: CIGAR reconstruction requires MC:Z (mate copy)
+                            //  SKIPIFF ((preproc && IS_SAG_SA) || (cnt && !flag.bases));
                              SKIPIFF (cnt && !flag.bases);
         case _SAM_CIGAR    : KEEPIF (flag.out_dt == DT_FASTQ);
-                             SKIPIFF ((preproc && IS_SAG_SA) || (cnt && !flag.bases));
+                            //  SKIPIFF ((preproc && IS_SAG_SA) || (cnt && !flag.bases));
+                             SKIPIFF (cnt && !flag.bases);
         case _SAM_MAPQ     : // note: MAPQ reconstruction requires MQ:Z (mate copy)
         case _OPTION_MQ_i  : SKIPIFF (preproc || ((cov || cnt) && !flag.bases && !flag.sam_mapq_filter));
         case _SAM_PNEXT    : case _SAM_P0NEXT : case _SAM_P1NEXT : case _SAM_P2NEXT : case _SAM_P3NEXT : 
@@ -590,8 +599,9 @@ CONTAINER_FILTER_FUNC (sam_piz_filter)
      
     // collect_coverage: rather than reconstructing optional, reconstruct SAM_MC_Z that just consumes MC:Z if it exists
     else if (dict_id.num == _SAM_AUX) {
-        if (flag.collect_coverage) { // filter_repeats is set in theAUX container since v14
-            reconstruct_from_ctx (vb, SAM_MC_Z, 0, false);
+        if (flag.collect_coverage) { // filter_repeats is set in the AUX container since v14
+            ASSISLOADED(CTX(SAM_FQ_AUX));
+            reconstruct_from_ctx (vb, SAM_FQ_AUX, 0, false);
             return false; // don't reconstruct AUX
         }
 
@@ -742,8 +752,11 @@ void sam_reconstruct_from_buddy_get_textual_snip (VBlockSAMP vb, ContextP ctx, B
     CharIndex char_index = word.index;
 
     ASSPIZ (word.index != 0xffffffff, "Attempting reconstruct from %s.history, but word at %s_line_i=%u doesn't exist",
-            ctx->tag_name, buddy_type_name (bt), buddy_line_i);
+        ctx->tag_name, buddy_type_name (bt), buddy_line_i);
             
+    ASSPIZ (word.len > 0 || ctx->empty_lookup_ok, "Attempting reconstruct from %s.history, but snip_len=0 at %s_line_i=%u lookup=%s",
+            ctx->tag_name, buddy_type_name (bt), buddy_line_i, lookup_type_name(word.lookup));
+
     switch (word.lookup) {
         case LookupTxtData : buf = &vb->txt_data  ; break;
         case LookupDict    : buf = &ctx->dict; 
@@ -825,4 +838,28 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_COPY_BUDDY)
 
         return NO_NEW_VALUE; 
     }
+}
+
+// invoked from TOP2FQ (but not TOP2FQEX, bc it reconstructs AUX) to consume some AUX fields if they exists 
+// in this line, in case this line - AUX fields that might be needed to reconstruct required fields in 
+// subsequent lines 
+SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_FASTQ_CONSUME_AUX)
+{
+    VBlockSAMP vb = (VBlockSAMP)vb_;
+
+    ContainerPeekItem peek_items[] = { {.did = OPTION_MC_Z}, {.did = OPTION_SA_Z} };
+
+    vb->aux_con = container_peek_get_idxs (VB, CTX(SAM_AUX), ARRAY_LEN(peek_items), peek_items, true);
+
+    // if this line has an MC:Z field store it directly history - might be needed for subsequent line CIGAR
+    if (CTX(OPTION_MC_Z)->flags.store_per_line && CTX(OPTION_MC_Z)->is_loaded && // MC:Z is buddied
+        peek_items[0].idx != -1) // line has MC:Z field
+        reconstruct_to_history (VB, CTX(OPTION_MC_Z));
+
+    // likewise for SA:Z - might be needed for subsequent line POS 
+    if (CTX(OPTION_SA_Z)->flags.store_per_line && CTX(OPTION_SA_Z)->is_loaded &&
+        peek_items[1].idx != -1) // line has SA:Z field
+        reconstruct_to_history (VB, CTX(OPTION_SA_Z));
+
+    return NO_NEW_VALUE; 
 }

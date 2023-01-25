@@ -3,9 +3,13 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+15.0.0
+- Deep
+- GFF: support embedded FASTA
+
 14.0.25 13/Jan/2023
 - BAM, VCF: Significantly reduced memory consumption during compression
-- new option: --show-memory=PEAK - shows peak memory usage (normally show memory at end of execution)
+- new diagnostic option: --show-memory=PEAK - shows peak memory usage (without PEAK, shows memory at it is at the end of the execution)
 
 14.0.24 10/Jan/2023
 - Fix license enforcement bug

@@ -35,7 +35,7 @@ typedef enum __attribute__ ((__packed__)) { XG_S_UNKNOWN, XG_WITHOUT_S, XG_WITH_
 #define XG_INC_S_NAME { "Unknown", "without-S", "with-S"}
 
 // SamMapperType is part of the file format and values should not be changed (new ones can be added)
-typedef enum __attribute__ ((__packed__)) { MP_UNKNOWN, MP_BSBOLT,             MP_bwa,   MP_BWA,   MP_MINIMAP2,   MP_STAR,   MP_BOWTIE2,   MP_DRAGEN,    MP_GEM3,         MP_GEM2SAM,     MP_BISMARK,   MP_BSSEEKER2,     MP_WINNOWMAP,   MP_BAZ2BAM,    MP_BBMAP,   MP_TMAP,   MP_HISAT2,   MP_BOWTIE,   MP_NOVOALIGN,   MP_RAZER3,    MP_BLASR,   MP_NGMLR,           MP_DELVE,   MP_TOPHAT,   MP_CPU,  MP_LONGRANGER,          MP_CLC,             NUM_MAPPERS } SamMapperType;
+typedef enum __attribute__ ((__packed__)) { MP_UNKNOWN, MP_BSBOLT,             MP_bwa,   MP_BWA,   MP_MINIMAP2,   MP_STAR,   MP_BOWTIE2,   MP_DRAGEN,    MP_GEM3,         MP_GEM2SAM,     MP_BISMARK,   MP_BSSEEKER2,     MP_WINNOWMAP,   MP_BAZ2BAM,    MP_BBMAP,   MP_TMAP,   MP_HISAT2,   MP_BOWTIE,   MP_NOVOALIGN,   MP_RAZER3,    MP_BLASR,   MP_NGMLR,           MP_DELVE,   MP_TOPHAT,   MP_CPU,   MP_LONGRANGER,          MP_CLC,             NUM_MAPPERS } SamMapperType;
 #define SAM_MAPPER_NAME             { "Unknown_mapper", "bsbolt",              "bwa",    "BWA",    "minimap2",    "STAR",    "bowtie2",    "dragen",     "gem3",          "gem2sam",      "bismark",    "bsseeker2",      "Winnowmap",    "baz2bam",     "BBMap",    "tmap",    "hisat2",    "Bowtie",    "NovoAlign",    "razers3",    "blasr",    "ngmlr",            "Delve",    "TopHat",    "cpu",    "longranger",           "CLCGenomicsWB",                }
 #define SAM_MAPPER_SIGNATURE        { "Unknown_mapper", "PN:bwa	VN:BSB"/*\t*/, "PN:bwa", "PN:BWA", "PN:minimap2", "PN:STAR", "PN:bowtie2", "ID: DRAGEN", "PN:gem-mapper", "PN:gem-2-sam", "ID:Bismark", "PN:BS Seeker 2", "PN:Winnowmap", "PN:baz2bam",  "PN:BBMap", "ID:tmap", "PN:hisat2", "ID:Bowtie", "PN:novoalign", "PN:razers3", "ID:BLASR", "PN:nextgenmap-lr", "ID:Delve", "ID:TopHat", "PN:cpu", "PN:longranger.lariat", "PN:clcgenomicswb",             }
 
@@ -66,7 +66,8 @@ typedef struct {
     int num_mapped;             // number of segconf reads that are mapped - defined as having (!FLAG.unmapped, RNAME, POS, CIGAR)
     bool sam_is_unmapped;       // false if there is at least one read in segconf with (!FLAG.unmapped, RNAME, POS, CIGAR)
     SamMapperType sam_mapper;       
-    bool is_biobambam2_sort;   // PG records indicate running biobambam tag-creating programs    
+    bool is_biobambam2_sort;    // PG records indicate running biobambam tag-creating programs    
+    bool has_bqsr;              // PG records indicate running GATK ApplyBQSR
     bool NM_is_integer;         // true if NM is integer, false if it binary
     bool has_TLEN_non_zero;
     bool has_DP_before_PL;
@@ -122,6 +123,7 @@ typedef struct {
     bool vcf_is_beagle;
     bool vcf_is_gwas;           // GWAS-VCF format: https://github.com/MRCIEU/gwas-vcf-specification
     bool vcf_illum_gtyping;     // tags from Illumina GenCall genotyping software
+    bool vcf_infinium;
     uint64_t count_dosage[2];   // used to calculate pc_has_dosage
     float pc_has_dosage;        // % of the samples x lines that have a valid (0-2) dosage value [0.0,1.0]
     bool use_null_DP_method;    // A method for predicting GT=./. by DP=.
@@ -143,6 +145,7 @@ typedef struct {
 
     // GFF stuff
     int gff_version;
+    bool has_embdedded_fasta;
 
     // Chain stuff
     bool chain_mismatches_ref;  // Some contigs mismatch the reference files, so this chain file cannot be used with --chain

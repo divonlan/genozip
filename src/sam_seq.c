@@ -19,6 +19,7 @@
 #include "regions.h"
 #include "codec.h"
 #include "refhash.h"
+#include "deep.h"
 
 //---------------
 // Shared ZIP/PIZ
@@ -636,6 +637,9 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq), unsigned
                               :                           vb->bisulfite_strand,
                               '0'+force_verbatim },
                 8, SAM_SQBITMAP, add_bytes); 
+
+    if (flag.deep) 
+        deep_sam_set_SEQ_hash (vb, dl, STRa(textual_seq));
 
     COPY_TIMER (sam_seg_SEQ);
 }

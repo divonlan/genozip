@@ -66,8 +66,10 @@ static void stats_submit_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
                 bufprintf (evb, &hash_occ, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter ((char *)ctx_snip_from_zf_nodes (zctx, words[i], 0, 0), sizeof(UrlStr), ',', -127)).s); 
         }
 
-    // in case of unknown qname flavor, we send the first 6 qnames
-    if (!segconf.qname_flavor && (Z_DT(SAM) || Z_DT(BAM) || Z_DT(FASTQ) || Z_DT(KRAKEN))) {
+    // we send the first 6 qnames in case of unrecognized QNAME flavor or in case of existing by unrecognized QNAME2 flavor
+    if ((Z_DT(SAM) || Z_DT(BAM) || Z_DT(FASTQ) || Z_DT(KRAKEN)) &&
+        (!segconf.qname_flavor || qf2_name (segconf.qname_flavor, segconf.qname_flavor2) == QNAME_FLAVOR_UNRECOGNIZED)) {
+
         bufprintf (evb, &hash_occ, "%sQNAME%%2C%%2C%%2C", need_sep++ ? "%3B" : "");
 
         for (int i=0; i < NUM_COLLECTED_WORDS; i++)
@@ -105,7 +107,7 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
 {
     #define SUBMIT_MAX_URL_LEN 8100 // approx. limit for submission to Forms
 
-    if (all_txt_len < 65536 && !flag.make_reference) goto done; // don't bother for really small files (in make-ref all_txt_len=0)
+    if (all_txt_len < 65536 && !flag.debug_submit && !flag.make_reference) goto done; // don't bother for really small files (in make-ref all_txt_len=0)
 
 #ifndef _WIN32
     // run submission in a separate process to not stall the main process 
@@ -158,7 +160,7 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
     for (uint32_t i=0, need_sep=0; i < num_stats; i++) 
         if (sbl[i].z_size) 
             bufprintf (evb, &url_buf, "%s%s%%2C%.1f%%25%%2C%.1fX", 
-                    need_sep++ ? "%3B" : "", url_esc_non_valid_charsS(sbl[i].name).s, sbl[i].pc_of_z, (float)sbl[i].txt_len / (float)sbl[i].z_size); // ratio z vs txt
+                       need_sep++ ? "%3B" : "", url_esc_non_valid_charsS(sbl[i].name).s, sbl[i].pc_of_z, (float)sbl[i].txt_len / (float)sbl[i].z_size); // ratio z vs txt
 
     // Flags. Eg "best,reference=INTERNAL"
     bufprint0 (evb, &url_buf, "&entry.1369097179=");     
@@ -273,10 +275,16 @@ static void stats_get_compressed_sizes (StatsByLine *sbl)
 
 static void stats_output_file_metadata (void)
 {
-    #define FEATURE(cond,stats_str,features_str)        \
-    if (cond) {                                         \
-        bufprint0 (evb, &stats, stats_str "\n");        \
-        bufprint0 (evb, &features, features_str ";");   \
+    #define FEATURE0(cond,stats_str,features_str)                       \
+    if (cond) {                                                         \
+        bufprint0 (evb, &stats, stats_str "\n");                        \
+        bufprint0 (evb, &features, features_str ";");                   \
+    }
+
+    #define FEATURE(cond,stats_format,features_format,...)              \
+    if (cond) {                                                         \
+        bufprintf (evb, &stats, stats_format "\n", __VA_ARGS__);        \
+        bufprintf (evb, &features, features_format ";", __VA_ARGS__);   \
     }
 
     bufprintf (evb, &features, "VBs=%u X %s;", z_file->num_vbs, str_size (segconf.vb_size).s);
@@ -306,18 +314,13 @@ static void stats_output_file_metadata (void)
                    DTPZ (line_name), str_int_commas (z_file->num_lines).s, num_used_ctxs, \
                    z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), z_file->section_list_buf.len32); })
 
-    #define REPORT_QNAME ({ \
-        if (z_file->num_lines && segconf.qname_flavor) { \
-            bufprintf (evb, &stats, "Read name style: %s%s%s\n",  \
-                    qf_name(segconf.qname_flavor), segconf.qname_flavor2 ? " + " : "", segconf.qname_flavor2 ? qf_name(segconf.qname_flavor2) : ""); \
-            bufprintf (evb, &features, "Qname=%s%s%s;", \
-                    qf_name(segconf.qname_flavor), segconf.qname_flavor2 ? "+" : "", segconf.qname_flavor2 ? qf_name(segconf.qname_flavor2) : ""); \
-        } \
-        else if (z_file->num_lines) \
-            bufprint0 (evb, &features, "Flavor=unrecognized;");   })
+    rom flavor  = qf_name (segconf.qname_flavor);
+    rom flavor2 = qf2_name (segconf.qname_flavor, segconf.qname_flavor2);
+    #define REPORT_QNAME \
+        FEATURE (z_file->num_lines, "Read name style: %s%s%s", "Qname=%s%s%s", flavor, flavor2 ? " + " : "", flavor2 ? flavor2 : "")
 
     #define REPORT_KRAKEN \
-        FEATURE (kraken_is_loaded, "Features: Per-line taxonomy ID data", "taxonomy_data")
+        FEATURE0 (kraken_is_loaded, "Features: Per-line taxonomy ID data", "taxonomy_data")
 
     switch (z_file->data_type) {
 
@@ -331,24 +334,21 @@ static void stats_output_file_metadata (void)
 
                 bufprintf (evb, &stats, "Main VBs: %u Prim VBs: %u Depn VBs: %u\n", 
                         sections_get_num_vbs(SAM_COMP_MAIN), sections_get_num_vbs(SAM_COMP_PRIM), sections_get_num_vbs(SAM_COMP_DEPN));
-                REPORT_VBs;
             }
+            REPORT_VBs;
 
             bufprintf (evb, &features, "num_hdr_contigs=%u;", sam_num_header_contigs());
             
             if (z_file->num_lines) {
-                FEATURE (segconf.is_sorted && !segconf.sam_is_unmapped, "Sorting: Sorted by POS", "Sorted");        
-                FEATURE (segconf.is_sorted && segconf.sam_is_unmapped, "Sorting: Unmapped", "Unmapped");        
-                FEATURE (segconf.is_collated, "Sorting: Collated by QNAME", "Collated");
-                FEATURE (!segconf.is_sorted && !segconf.is_collated, "Sorting: Not sorted or collated", "Not_sorted_or_collated");
+                FEATURE0 (segconf.is_sorted && !segconf.sam_is_unmapped, "Sorting: Sorted by POS", "Sorted");        
+                FEATURE0 (segconf.is_sorted && segconf.sam_is_unmapped, "Sorting: Unmapped", "Unmapped");        
+                FEATURE0 (segconf.is_collated, "Sorting: Collated by QNAME", "Collated");
+                FEATURE0 (!segconf.is_sorted && !segconf.is_collated, "Sorting: Not sorted or collated", "Not_sorted_or_collated");
             }
                         
-            rom mapper_name = sam_mapper_name (segconf.sam_mapper);
-            bufprintf (evb, &stats, "Aligner: %s\n", mapper_name); 
-            bufprintf (evb, &features, "Mapper=%s;", mapper_name);
-
-            FEATURE (segconf.sam_bisulfite, "Feature: Bisulfite", "Bisulfite");
-            FEATURE (segconf.is_paired, "Feature: Paired-End", "Paired-End");
+            FEATURE (true, "Aligner: %s", "Mapper=%s", sam_mapper_name (segconf.sam_mapper)); 
+            FEATURE0 (segconf.sam_bisulfite, "Feature: Bisulfite", "Bisulfite");
+            FEATURE0 (segconf.is_paired, "Feature: Paired-End", "Paired-End");
             REPORT_KRAKEN;
 
             if (segconf.sam_ms_type && segconf.has[OPTION_ms_i]) {
@@ -366,9 +366,8 @@ static void stats_output_file_metadata (void)
                 double saggy_near_pc = 100.0 * (double)z_file->saggy_near_count / (double)z_file->num_lines;
                 double prim_far_pc   = 100.0 * (double)z_file->prim_far_count   / (double)z_file->num_lines;
                 #define PREC(f) ((f && f<10) ? (1 + ((f)<1)) : 0)
-                bufprintf (evb, &stats, "Buddying: sag_type=%s mate=%.*f%% saggy_near=%.*f%% prim_far=%.*f%%\n", 
-                        sag_type_name (segconf.sag_type), PREC(mate_line_pc), mate_line_pc, PREC(saggy_near_pc), saggy_near_pc, PREC(prim_far_pc), prim_far_pc);
-                bufprintf (evb, &features, "sag_type=%s;mate=%.*f%%;saggy_near=%.*f%%;prim_far=%.*f%%;", 
+                FEATURE(true, "Buddying: sag_type=%s mate=%.*f%% saggy_near=%.*f%% prim_far=%.*f%%",
+                        "sag_type=%s;mate=%.*f%%;saggy_near=%.*f%%;prim_far=%.*f%%",
                         sag_type_name (segconf.sag_type), PREC(mate_line_pc), mate_line_pc, PREC(saggy_near_pc), saggy_near_pc, PREC(prim_far_pc), prim_far_pc);
 
                 REPORT_QNAME;
@@ -377,7 +376,7 @@ static void stats_output_file_metadata (void)
 
         case DT_VCF:
         case DT_BCF:
-            bufprintf (evb, &stats, "Samples: %u   ", vcf_header_get_num_samples());
+            bufprintf (evb, &stats, "Samples: %u   ", vcf_header_get_num_samples()); //  no newline
             bufprintf (evb, &features, "num_samples=%u;", vcf_header_get_num_samples());
 
             if (z_is_dvcf)
@@ -394,11 +393,11 @@ static void stats_output_file_metadata (void)
                 bufprint0 (evb, &features, "DVCF;");
             }
 
-            FEATURE (segconf.vcf_is_beagle,     "Feature: Beagle", "Beagle");
-            FEATURE (segconf.vcf_is_varscan,    "Feature: VarScan", "VarScan");
-            FEATURE (segconf.vcf_is_gwas,       "Feature: GWAS-VCF", "GWAS-VCF");
-            FEATURE (segconf.vcf_is_gvcf,       "Feature: GVCF", "GVCF");
-            FEATURE (segconf.vcf_illum_gtyping, "Feature: Illumina Genotyping", "Illumina Genotyping");
+            FEATURE0 (segconf.vcf_is_beagle,     "Feature: Beagle", "Beagle");
+            FEATURE0 (segconf.vcf_is_varscan,    "Feature: VarScan", "VarScan");
+            FEATURE0 (segconf.vcf_is_gwas,       "Feature: GWAS-VCF", "GWAS-VCF");
+            FEATURE0 (segconf.vcf_is_gvcf,       "Feature: GVCF", "GVCF");
+            FEATURE0 (segconf.vcf_illum_gtyping, "Feature: Illumina Genotyping", "Illumina Genotyping");
             break;
 
         case DT_KRAKEN: {
@@ -432,22 +431,26 @@ static void stats_output_file_metadata (void)
             break;
 
         case DT_FASTA:
-            FEATURE (segconf.seq_type==SQT_AMINO, "Sequence type: Amino acids",      "Amino_acids");
-            FEATURE (segconf.seq_type==SQT_NUKE,  "Sequence type: Nucleotide bases", "Nucleotide_bases");
+            FEATURE0 (segconf.seq_type==SQT_AMINO, "Sequence type: Amino acids",      "Amino_acids");
+            FEATURE0 (segconf.seq_type==SQT_NUKE,  "Sequence type: Nucleotide bases", "Nucleotide_bases");
+            FEATURE (true, "Sequences: %"PRIu64, "num_sequences=%"PRIu64, z_file->num_sequences);
+            REPORT_VBs;
             REPORT_KRAKEN;
             break;
 
         case DT_GFF:
-            bufprintf (evb, &stats, "GFF version: %d\n", segconf.gff_version); 
-            bufprintf (evb, &features, "GFF_version=%d;", segconf.gff_version);
+            REPORT_VBs;
+            FEATURE (true, "GFF version: %d", "GFF_version=%d", segconf.gff_version); 
+            FEATURE (segconf.has_embdedded_fasta, "FASTA Sequences: %"PRIu64, "num_fasta_sequences=%"PRIu64, z_file->num_sequences);
             break;
             
         case DT_REF: 
-            bufprintf (evb, &stats, "Contigs: %u\nBases: %"PRIu64"\n",        ref_contigs_get_num_contigs(gref), ref_contigs_get_genome_nbases(gref)); 
-            bufprintf (evb, &features, "num_contigs=%u;num_bases=%"PRIu64";", ref_contigs_get_num_contigs(gref), ref_contigs_get_genome_nbases(gref)); 
+            FEATURE (true, "Contigs: %u", "num_contigs=%u", ref_contigs_get_num_contigs(gref));
+            FEATURE (true, "Bases: %"PRIu64, "num_bases=%"PRIu64, ref_contigs_get_genome_nbases(gref));
             break;
 
         case DT_GENERIC:
+            REPORT_VBs;
             bufprintf (evb, &stats, "Vblocks: %u x %u MB  Sections: %u\n", 
                     z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), z_file->section_list_buf.len32);
     
@@ -559,8 +562,10 @@ static void stats_output_stats (StatsByLine *s, unsigned num_stats, float src_co
     bufprintf (evb, &stats, "NAME                   GENOZIP      %%       TXT      %%   RATIO\n%s", "");
 
     // if -W or -w appear multiple times, we print the stats header to stderr to allow use with "| grep"
-    if (flag.show_stats == STATS_SHORT_GREP) 
+    if (flag.show_stats == STATS_SHORT_GREP) { 
         fprintf (stderr, "NAME                   GENOZIP      %%       TXT      %%   RATIO\n%s", "");
+        fflush (stderr);
+    }
 
     for (uint32_t i=0; i < num_stats; i++, s++)
         if (s->z_size)
@@ -772,7 +777,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
                                "LINEMETA", "CONTIG", "COORDS", "SAG", "SAALN",
                                ST_NAME (SEC_DICT_ID_ALIASES), ST_NAME (SEC_RECON_PLAN),
                                ST_NAME (SEC_VB_HEADER), ST_NAME (SEC_BGZF), ST_NAME(SEC_TXT_HEADER)/*must be last*/);
-    
+        
     stats_consolidate_non_ctx (sbl, num_stats, "RandomAccessIndex", 2, ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_REF_RAND_ACC));
     
     ASSERTW (all_txt_len == txt_size || flag.make_reference || // all_txt_len=0 in make-ref as there are no contexts
@@ -804,8 +809,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
              dt_name (z_file->data_type), str_int_commas (all_txt_len).s, str_int_commas (txt_size).s, 
              (int32_t)(txt_size - all_txt_len)); 
 
-    if (flag.show_stats_comp_i == COMP_NONE && 
-        (flag.show_stats || z_file->disk_so_far > (1<<20))) { // write stats only if z_file is at least 1MB or if requested explicitly, otherwise ~4KB of stats data too much overhead) {
+    if (flag.show_stats_comp_i == COMP_NONE) { 
         
         zfile_compress_section_data (evb, SEC_STATS, &stats);
         zfile_compress_section_data (evb, SEC_STATS, &STATS);

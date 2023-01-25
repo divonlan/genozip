@@ -182,8 +182,8 @@ rom url_get_status (rom url, bool *is_file_exists, int64_t *file_size)
     } 
         
     rom len_start = NULL;
-    if      ((len_start = strstr (response, "content-length:"))) len_start += sizeof "content-length:" -1;
-    else if ((len_start = strstr (response, "Content-Length:"))) len_start += sizeof "Content-Length:" -1;
+    if      ((len_start = strstr (response, "content-length:"))) len_start += STRLEN("content-length:");
+    else if ((len_start = strstr (response, "Content-Length:"))) len_start += STRLEN("Content-Length:");
 
     // Case: we got the file length - file exists even if we didn't get an HTTP status (eg because URL is not http)
     if (len_start) {

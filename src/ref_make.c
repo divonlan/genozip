@@ -16,6 +16,7 @@
 #include "refhash.h"
 #include "random_access.h"
 #include "context.h"
+#include "filename.h"
 #include "file.h"
 #include "ref_iupacs.h"
 #include "contigs.h"
@@ -173,7 +174,7 @@ void ref_make_finalize (bool unused)
 // Get reference file name from FASTA name, and if reference file does not exist, run a separate process to --make-reference
 void ref_fasta_to_ref (FileP file)
 {
-    rom ref_filename = file_get_z_filename (file->name, DT_REF, file->type);
+    rom ref_filename = filename_z_normal (file->name, DT_REF, file->type);
 
     // if file reference doesn't exist yet - --make-reference now, in a separate process
     if (!file_exists (ref_filename)) {

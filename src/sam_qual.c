@@ -16,6 +16,7 @@
 #include "reconstruct.h"
 #include "optimize.h"
 #include "codec.h"
+#include "deep.h"
 #include "htscodecs/rANS_static4x16.h"
 
 rom bam_qual_display (bytes qual, uint32_t l_seq) // caller should free memory
@@ -225,6 +226,9 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual_data)/*always te
     bool diff_aborted = false;             // quality scores are too different, we're better off not diffing (added 14.0.10)
 
     vb->has_qual |= !vb->qual_missing;
+
+    if (flag.deep && !segconf.running)
+        deep_sam_set_QUAL_hash (vb, dl, STRa(qual_data));
 
     // note: if prim (of either type) has no QUAL, we don't attempt to diff - bc piz wouldn't be able to know whether 
     // the current line has QUAL or not

@@ -12,6 +12,11 @@
 #include "sections.h"
 
 #pragma GENDICT_PREFIX FASTA
+
+// -----------------------------------------------------------------------------------------------------------
+// Common contexts of FASTA and GFF - these MUST be first; in same order; same dict_id
+// -----------------------------------------------------------------------------------------------------------
+
 #pragma GENDICT FASTA_CONTIG=DTYPE_FIELD=CONTIG
 #pragma GENDICT FASTA_LINEMETA=DTYPE_FIELD=LINEMETA
 #pragma GENDICT FASTA_EOL=DTYPE_FIELD=EOL
@@ -23,13 +28,17 @@
 #pragma GENDICT FASTA_TAXID=DTYPE_FIELD=TAXID
 #pragma GENDICT FASTA_DEBUG_LINES=DTYPE_FIELD=DBGLINES      // used by --debug-lines
 
+// -----------------------------------------------------------------------------------------------------------
+// End of common contexts of FASTA and GFF
+// -----------------------------------------------------------------------------------------------------------
+
 // Txtfile stuff
 extern int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
 
 // ZIP Stuff
 extern void fasta_zip_initialize (void);
 COMPRESSOR_CALLBACK(fasta_zip_seq);
-extern void vcf_zip_after_compute (VBlockP vb);
+extern void fasta_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeader *vb_header);
 
 // SEG Stuff
 extern void fasta_seg_initialize(VBlockP vb);

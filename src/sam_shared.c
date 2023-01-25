@@ -77,6 +77,7 @@ void sam_vb_release_vb (VBlockSAMP vb)
     buf_free (vb->qname_count);
     buf_free (vb->unconverted_bitmap);
     buf_free (vb->meth_call);
+    buf_free (vb->deep_data);
 }
 
 void sam_vb_destroy_vb (VBlockSAMP vb)
@@ -95,6 +96,7 @@ void sam_vb_destroy_vb (VBlockSAMP vb)
     buf_destroy (vb->qname_count);
     buf_destroy (vb->unconverted_bitmap);
     buf_destroy (vb->meth_call);
+    buf_destroy (vb->deep_data);
 }
 
 // initialization of the line

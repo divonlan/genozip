@@ -72,7 +72,7 @@ typedef struct File {
     // Used for READING GENOZIP files
     uint8_t genozip_version;           // GENOZIP_FILE_FORMAT_VERSION of the genozip file being read
         
-    CompIType num_components;          // PIZ z_file: set from genozip header 
+    CompIType num_txt_files;          // PIZ z_file: set from genozip header 
 
     struct FlagsGenozipHeader z_flags; // z_file: genozip file flags as read from SectionHeaderGenozipHeader.flags
     struct FlagsTxtHeader txt_flags;   // txt_file PIZ: genozip file flags as read from SectionHeaderTxtHeader.flags
@@ -105,7 +105,7 @@ typedef struct File {
 
     // section list - used for READING and WRITING genozip files
     Buffer section_list_buf;           // section list to be written as the payload of the genotype header section
-    Buffer section_list_vb1;           // a copy of the section_list of vb_i=1, bc it might be removed from section_list_buf due to recon plan.
+    Buffer section_list_save;          // a copy of the section_list in case it is modified due to recon plan.
     CompIType num_txts_so_far;         // ZIP z_file: number of txt files compressed into this z_file - each becomes a component
                                        // PIZ z_file: number of txt files written from this z_file - each generated from one or more components 
 
@@ -140,6 +140,11 @@ typedef struct File {
     
     uint64_t saggy_near_count, mate_line_count, prim_far_count; // Z_FILE ZIP: SAM: for stats
 
+    // Z_FILE: Deep
+    Buffer deep_hash;                  // Z_FILE: ZIP: hash table - indices into deep ents 
+    Buffer deep_ents;                  // Z_FILE: ZIP: entries of type ZipZDeep
+    Mutex deep_populate_ents_mutex;
+
     // Z_FILE: DVCF stuff
     Buffer rejects_report;             // Z_FILE ZIP --chain: human readable report about rejects
     Buffer apriori_tags;               // Z_FILE ZIP DVCF: used for INFO/FORMAT tag renaming. Data from command line options if --chain, or VCF header if DVCF
@@ -147,6 +152,9 @@ typedef struct File {
     // TXT_FILE: DVCF stuff
     uint8_t coords;                    // TXT_FILE ZIP: DVCF: Set from ##dual_coordinates and immutable thereafter
     uint64_t reject_bytes;             // ZIP DVCF: number of bytes in lines originating from ##primary_only/##luft_only, not yet assigned to a VB
+
+    // Z_FILE: FASTA
+    uint64_t num_sequences;            // ZIP: for stats
 
     // Reconstruction plan, for reconstructing in sorted order if --sort: [0] is primary coords, [1] is luft coords
     Mutex recon_plan_mutex[2];         // TXT_FILE ZIP: VCF: protect vb_info and line_info during merging of VB data
@@ -178,7 +186,6 @@ typedef struct File {
 extern DataType last_z_dt; // data_type of last z_file opened
 
 // methods
-extern rom file_get_z_filename (rom txt_filename, DataType dt, FileType txt_ft);
 extern FileP file_open (rom filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE */);
 extern void file_close (FileP *file_p, bool index_txt, bool cleanup_memory /* optional */);
 extern void file_write (FileP file, const void *data, unsigned len);
@@ -193,8 +200,6 @@ extern DataType file_get_data_type (FileType ft, bool is_input);
 extern Codec file_get_codec_by_txt_ft (DataType dt, FileType txt_ft, bool source);
 extern rom file_plain_text_ext_of_dt (DataType dt);
 extern void file_get_raw_name_and_type (char *filename, char **raw_name, FileType *ft);
-extern bool file_has_ext (rom filename, rom extension);
-extern rom file_basename (rom filename, bool remove_exe, rom default_basename, char *basename, unsigned basename_size);
 extern void file_assert_ext_decompressor (void);
 extern void file_kill_external_compressors (void);
 extern FileType file_get_z_ft_by_txt_in_ft (DataType dt, FileType txt_ft);
@@ -203,8 +208,6 @@ extern FileType file_get_z_ft_by_dt (DataType dt);
 extern rom file_plain_ext_by_dt (DataType dt);
 extern void file_remove_codec_ext (char *filename, FileType ft);
 extern rom ft_name (FileType ft);
-extern rom file_guess_original_filename (ConstFileP file);
-extern char *file_get_fastq_pair_filename (rom fn1, rom fn2, bool test_only);
 
 // wrapper operations for operating system files
 extern void file_get_file (VBlockP vb, rom filename, BufferP buf, rom buf_name, bool verify_textual, bool add_string_terminator);

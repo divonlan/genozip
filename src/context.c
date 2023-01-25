@@ -413,6 +413,8 @@ WordIndex ctx_create_node_do (VBlockP vb, ContextP vctx, STRp(snip), bool *is_ne
 {
     ASSERTNOTNULL (vctx);
     ASSERT (vctx->dict_id.num, "vctx has no dict_id (did_i=%u)", (unsigned)(vctx - vb->contexts));
+    ASSERT (snip || !snip_len, "vctx=%s: snip=NULL but snip_len=%u", vctx->tag_name, snip_len);
+    
     WordIndex node_index;
     #define RETURN(ni) { node_index=(ni); goto done; }
 
@@ -912,6 +914,17 @@ void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vctx, bool is_lcodec, bool
     }           
 
     mutex_unlock (zctx->mutex);
+}
+
+void ctx_reset_codec_commits (void)
+{
+    for_zctx {
+        if (zctx->lcodec && !zctx->lcodec_non_inherited) 
+            zctx->lcodec_non_inherited = zctx->lcodec; // for stats
+        
+        zctx->lcodec = zctx->bcodec = CODEC_UNKNOWN; 
+        zctx->lcodec_count = zctx->bcodec_count = 0;
+    }
 }
 
 static inline void ctx_drop_all_the_same (VBlockP vb, ContextP zctx, ContextP vctx)

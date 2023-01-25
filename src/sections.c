@@ -268,6 +268,7 @@ static void sections_create_index (bool force)
         }
     }
 }
+
 static inline void sections_create_index_if_needed(void) 
 { 
     if (!z_file->comp_sections_index.len) sections_create_index (false);
@@ -311,7 +312,7 @@ fail:
 
 Section sections_one_before (Section sec) 
 { 
-    return (sec == B1ST (SectionEnt, z_file->section_list_buf)) ? NULL : sec-1; 
+    return (!sec || sec == B1ST (SectionEnt, z_file->section_list_buf)) ? NULL : sec-1; 
 }
 
 // PIZ
@@ -421,7 +422,7 @@ void sections_list_memory_to_file_format (bool in_place) // in place, or to evb-
     for (uint32_t i=0; i < file_sec_len; i++) {
         file_sec[i] = (SectionEntFileFormat){
             .vblock_i    = BGEN32 (mem_sec[i].vblock_i),
-            .comp_i      = mem_sec[i].comp_i != COMP_NONE ? mem_sec[i].comp_i : 0, // since v14
+            .comp_i      = mem_sec[i].comp_i,  // since v14. in v14 comp_i was 2 bits so COMP_NONE was 0, since v15 comp_i is 8 bits.
             .offset      = BGEN64 (mem_sec[i].offset),
             .st_specific = mem_sec[i].st_specific, 
             .st          = mem_sec[i].st,
@@ -439,23 +440,22 @@ void sections_list_memory_to_file_format (bool in_place) // in place, or to evb-
 void sections_list_file_to_memory_format (SectionHeaderGenozipHeader *genozip_header)
 {
     struct FlagsGenozipHeader f = genozip_header->flags.genozip_header;
-    int V = genozip_header->genozip_version;
     DataType dt = BGEN16 (genozip_header->data_type);
 
     // For files v13 and earlier, we can only read them if they are a single component, or two paired FASTQs, or DVCF
     // Other bound files need to be decompressed with Genozip v13
     uint32_t v13_num_components = BGEN32 (genozip_header->v13_num_components);
-    ASSINP (V >= 14 || 
+    ASSINP (VER(14) || 
             v13_num_components == 1 || // single file
             (dt == DT_VCF && f.has_gencomp) || // DVCF
-            (dt == DT_FASTQ && (f.dts_paired || V <= 9) && v13_num_components == 2) || // Paired FASTQs (the dts_paired flag was introduced in V9.0.13)
+            (dt == DT_FASTQ && (f.dts_paired || !VER(10)) && v13_num_components == 2) || // Paired FASTQs (the dts_paired flag was introduced in V9.0.13)
             is_genols ||
             flags_is_genocat_global_area_only(), // only show meta-data (can't use flag.genocat_global_area_only bc flags are not set yet)
-            "%s is comprised of %u files bound together. The bound file feature was discontinued in Genozip v14. To decompress this file, use Genozip v13",
-            z_name, v13_num_components);
+            "%s is comprised of %u %s files bound together. The bound file feature was discontinued in Genozip v14. To decompress this file, use Genozip v13",
+            z_name, v13_num_components, dt_name (BGEN16(genozip_header->data_type)));
     
     // treat V8/V9 genozip files containing two FASTQ components as paired (the dts_paired flag was introduced in V9.0.13)    
-    if (dt == DT_FASTQ && V <= 9 && v13_num_components == 2) 
+    if (dt == DT_FASTQ && !VER(10) && v13_num_components == 2) 
         z_file->z_flags.dts_paired = true; 
 
     z_file->section_list_buf.len /= sizeof (SectionEntFileFormat); // fix len
@@ -474,8 +474,8 @@ void sections_list_file_to_memory_format (SectionHeaderGenozipHeader *genozip_he
             .st_specific = sec.st_specific,  
             .vblock_i    = BGEN32 (sec.vblock_i),
             .st          = sec.st,
-            .comp_i      = (V >= 14 && IS_COMP_SEC(sec.st)) ? sec.comp_i : COMP_NONE, // note: in file format, COMP_NONE sections have 0, as comp_i is just 2 bit
-            .flags       = (V >= 12) ? sec.flags  : (SectionFlags){} // flags were introduced in v12
+            .comp_i      = (VER(14) && IS_COMP_SEC(sec.st)) ? sec.comp_i : COMP_NONE, // note: in file format v14, COMP_NONE sections have 0, as comp_i is just 2 bit. Since v15, ccmp_i is 8 bit and COMP_NONE is 255.
+            .flags       = VER(12) ? sec.flags  : (SectionFlags){} // flags were introduced in v12
         };
 
         if (mem_sec[i].st == SEC_VB_HEADER) 
@@ -486,7 +486,7 @@ void sections_list_file_to_memory_format (SectionHeaderGenozipHeader *genozip_he
     }
 
     // comp_i was introduced V14, for V<=13, get comp_i by the component's relative position in the file. 
-    if (V <= 13) {
+    if (!VER(14)) {
         CompIType comp_i_by_consecutive = COMP_NONE; 
 
         for (int i=0; i < mem_sec_len; i++) {
@@ -508,24 +508,32 @@ void sections_list_file_to_memory_format (SectionHeaderGenozipHeader *genozip_he
     // Up to V11, top_level_repeats existed (called num_lines) but was not populated
     // in V12-13 num_lines was transmitted through the VbHeader.top_level_repeats
     // Since V14, num_lines is transmitted through SectionEntFileFormat
-    if (V >= 12 && V <= 13) 
+    if (VER(12) && !VER(14)) 
         for (VBIType vb_i=1; vb_i <= z_file->num_vbs; vb_i++) {
             SectionEntModifiable *sec = (SectionEntModifiable *)sections_vb_header (vb_i, false);
             SectionHeaderUnion header = zfile_read_section_header (evb, sec->offset, vb_i, SEC_VB_HEADER);
             sec->num_lines = BGEN32 (header.vb_header.v13_top_level_repeats);
         }
 
-    // copy vb_i=1 sections to section_list_vb1, because they are needed for setting the default context
-    // flags, and vb_i=1 may be eliminated by the recon_plan (for example, FASTQ with --R2)
-    if (z_file->num_vbs >= 1) { // note: some files have no VBs, eg DT_REF, or a header-only file
-        Section first_sec_vb1 = sections_vb_header (1, false);
+    // save sections to section_list_save, because they are needed for setting the default context
+    // flags, and vb_i=1 may be eliminated by the recon_plan (for example, FASTQ with --R2). Also, we need to recover between txt_files.
+    buf_copy (evb, &z_file->section_list_save, &z_file->section_list_buf, SectionEnt, 0, 0, "z_file->section_list_save");
 
-        uint32_t first_sec_i = BNUM (z_file->section_list_buf, first_sec_vb1);
-        uint32_t num_secs = BNUM (z_file->section_list_buf, sections_vb_last (1)) - first_sec_i + 1;
-
-        buf_copy (evb, &z_file->section_list_vb1, &z_file->section_list_buf, SectionEnt, first_sec_i, num_secs, "z_file->section_list_vb1");
+    if (z_file->num_vbs >= 1) {
+        z_file->section_list_save.prm32[0] = BNUM (z_file->section_list_buf, sections_vb_header (1, false)); // VB=1 first_sec_i
+        z_file->section_list_save.prm32[1] = BNUM (z_file->section_list_buf, sections_vb_last(1));           // VB=1 last_sec_i
     }
+    else
+        z_file->section_list_save.param = 0;
 }
+
+// PIZ unbinding: revert back to saved list (becore recon_plan modifications)
+//xxx void sections_list_revert (void)
+// {
+//     buf_copy (evb, &z_file->section_list_buf, &z_file->section_list_save, SectionEnt, 0, 0, NULL);
+//     buf_free (z_file->vb_sections_index);
+//     buf_free (z_file->comp_sections_index);
+// }
 
 rom st_name (SectionType sec_type)
 {
@@ -536,10 +544,12 @@ rom st_name (SectionType sec_type)
 
 rom comp_name (CompIType comp_i)
 {
-    static int max_comps_by_dt[NUM_DATATYPES] = { [DT_VCF]=3, [DT_BCF]=3, [DT_SAM]=3, [DT_BAM]=3, [DT_FASTQ]=2 };
-    static rom comp_names[NUM_DATATYPES][3] = { [DT_VCF] = VCF_COMP_NAMES, [DT_BCF] = VCF_COMP_NAMES,
-                                                [DT_SAM] = SAM_COMP_NAMES, [DT_BAM] = SAM_COMP_NAMES,
-                                                [DT_FASTQ] = FASTQ_COMP_NAMES };
+    static int max_comps_by_dt[NUM_DATATYPES] = { [DT_VCF]=3, [DT_BCF]=3, [DT_SAM]=5, [DT_BAM]=5, [DT_FASTQ]=2 };
+    
+    static rom comp_names[NUM_DATATYPES][5]   = { [DT_VCF] = VCF_COMP_NAMES, [DT_BCF] = VCF_COMP_NAMES,
+                                                  [DT_SAM] = SAM_COMP_NAMES, [DT_BAM] = SAM_COMP_NAMES,
+                                                  [DT_FASTQ] = FASTQ_COMP_NAMES };
+    
     if (!z_file) return "EMEM"; // can happen if another thread is busy exiting the process
     
     DataType dt = z_file->data_type;
@@ -695,7 +705,8 @@ VBIType sections_get_first_vb_i (CompIType comp_i)
 
 Section sections_get_comp_txt_header_sec (CompIType comp_i)
 {
-    return sections_get_comp_index_ent (comp_i)->txt_header_sec;
+    Section txt_header_sec = sections_get_comp_index_ent (comp_i)->txt_header_sec;
+    return txt_header_sec;
 }
 
 Section sections_get_comp_recon_plan_sec (CompIType comp_i, bool is_luft_plan)
@@ -839,8 +850,8 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
                      digest_display_ex (h->chain.prim_file_md5, DD_MD5).s);
 
         else if ((dt == DT_SAM || dt == DT_BAM) && v14)
-            sprintf (dt_specific, SEC_TAB "segconf=(sorted=%u,collated=%u,seq_len=%u,seq_len_to_cm=%u,ms_type=%u,has_MD_or_NM=%u,bisulfite=%u,MD_NM_by_unconverted=%u,predict_meth=%u,is_paired=%u,sag_type=%s,sag_has_AS=%u,pysam_qual=%u,cellranger=%u,SA_HtoS=%u,seq_len_dict_id=%s)\n", 
-                     h->sam.segconf_is_sorted, h->sam.segconf_is_collated, BGEN32 (h->sam.segconf_seq_len), h->sam.segconf_seq_len_cm, h->sam.segconf_ms_type, h->sam.segconf_has_MD_or_NM, 
+            sprintf (dt_specific, SEC_TAB "deep=%u segconf=(sorted=%u,collated=%u,seq_len=%u,seq_len_to_cm=%u,ms_type=%u,has_MD_or_NM=%u,bisulfite=%u,MD_NM_by_unconverted=%u,predict_meth=%u,is_paired=%u,sag_type=%s,sag_has_AS=%u,pysam_qual=%u,cellranger=%u,SA_HtoS=%u,seq_len_dict_id=%s)\n", 
+                     h->sam.deep, h->sam.segconf_is_sorted, h->sam.segconf_is_collated, BGEN32 (h->sam.segconf_seq_len), h->sam.segconf_seq_len_cm, h->sam.segconf_ms_type, h->sam.segconf_has_MD_or_NM, 
                      h->sam.segconf_bisulfite, h->sam.segconf_MD_NM_by_un, h->sam.segconf_predict_meth, 
                      h->sam.segconf_is_paired, sag_type_name(h->sam.segconf_sag_type), h->sam.segconf_sag_has_AS, 
                      h->sam.segconf_pysam_qual, h->sam.segconf_cellranger, h->sam.segconf_SA_HtoS, dis_dict_id(h->sam.segconf_seq_len_dict_id).s);
@@ -852,12 +863,12 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
             sprintf (dt_specific, SEC_TAB "bound_digest=%s segconf_seq_len_dict_id=%s\n", 
                      digest_display (h->FASTQ_v13_digest_bound).s, dis_dict_id(h->fastq.segconf_seq_len_dict_id).s);
 
-        sprintf (str, "\n"SEC_TAB "ver=%u enc=%s dt=%s usize=%"PRIu64" lines=%"PRIu64" secs=%u comps=%u vb_size=%u\n" 
+        sprintf (str, "\n"SEC_TAB "ver=%u enc=%s dt=%s usize=%"PRIu64" lines=%"PRIu64" secs=%u txts=%u vb_size=%u\n" 
                       SEC_TAB "%s ref=\"%.*s\" md5ref=%s\n"
                       "%s" // dt_specific, if there is any
                       SEC_TAB "created=\"%.*s\"\n",
                  h->genozip_version, encryption_name (h->encryption_type), dt_name (dt), 
-                 BGEN64 (h->recon_size_prim), BGEN64 (h->num_lines_bound), BGEN32 (h->num_sections), BGEN32 (h->num_components),
+                 BGEN64 (h->recon_size_prim), BGEN64 (h->num_lines_bound), BGEN32 (h->num_sections), h->num_txt_files,
                  BGEN16(h->vb_size), sections_dis_flags (f, st, dt).s,
                  REF_FILENAME_LEN, h->ref_filename, digest_display_ex (h->ref_file_md5, DD_MD5).s,
                  dt_specific, 
@@ -1035,7 +1046,7 @@ void sections_show_gheader (const SectionHeaderGenozipHeader *header)
         iprintf ("  recon_size_prim: %s\n",         str_int_commas (BGEN64 (header->recon_size_prim)).s);
         iprintf ("  num_lines_bound: %"PRIu64"\n",  BGEN64 (header->num_lines_bound));
         iprintf ("  num_sections: %u\n",            z_file->section_list_buf.len32);
-        iprintf ("  num_components: %u\n",          header->num_components);
+        iprintf ("  num_txt_files: %u\n",           header->num_txt_files);
         if (dt == DT_REF)
             iprintf ("  REF_fasta_md5: %s\n",           digest_display (header->REF_fasta_md5).s);
         iprintf ("  created: %*s\n",                -FILE_METADATA_LEN, header->created);

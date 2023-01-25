@@ -1103,7 +1103,7 @@ void buf_copy_do (VBlockP dst_vb, BufferP dst, ConstBufferP src,
     if (!bytes_per_entry) bytes_per_entry=1;
     
     if (num_entries) {
-        buf_alloc (dst_vb, dst, 0, num_entries * bytes_per_entry, char, 1, dst_name ? dst_name : src->name); // use realloc rather than malloc to allocate exact size
+        buf_alloc (dst_vb, dst, 0, num_entries * bytes_per_entry, char, 1, dst_name ? dst_name : src->name); 
 
         if (dst != src || src_start_entry >= num_entries)
             memcpy (dst->data, &src->data[src_start_entry * bytes_per_entry], num_entries * bytes_per_entry);

@@ -288,7 +288,7 @@ static inline bool sam_piz_SA_field_is_line_matches_aln (VBlockSAMP vb, ContextP
         /*pos   */ str_get_int (STRi(item, SA_POS),  &aln_pos)  && aln_pos  == my_pos;
 
     // we also compare MAPQ and NM, unless --coverage or --count in which case these fields are skipped (because NM requires MD which requires SQBITMAP...)
-    if (!flag.collect_coverage && !flag.count)
+    if (!flag.collect_coverage && !flag.count && flag.out_dt != DT_FASTQ)
         found &=
         /*mapq  */ str_get_int (STRi(item, SA_MAPQ), &aln_mapq) && aln_mapq == my_mapq &&
         /*NM:i  */ str_get_int (STRi(item, SA_NM),   &aln_nm)   && aln_nm   == my_nm;
@@ -383,12 +383,14 @@ void sam_piz_SA_get_prim_item (VBlockSAMP vb, int sa_item, pSTRp(out))
     *out_len = item_lens[sa_item];
 }
 
-SPECIAL_RECONSTRUCTOR (sam_piz_special_COPY_PRIM)
+SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_COPY_PRIM)
 {
+    VBlockSAMP vb = (VBlockSAMP)vb_;
+
     int item_i = snip[0]-'0';
 
     STR(item);
-    sam_piz_SA_get_prim_item (VB_SAM, item_i, pSTRa(item));
+    sam_piz_SA_get_prim_item (vb, item_i, pSTRa(item));
     if (reconstruct) RECONSTRUCT (item, item_len);   
 
     if (item_i == SA_POS || item_i == SA_MAPQ)

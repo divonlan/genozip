@@ -64,6 +64,8 @@ VBlockP wvb = NULL;
 
 static ThreadId writer_thread = THREAD_ID_NONE;
 
+static uint64_t start_comp_in_plan[MAX_NUM_COMPS + 1];
+
 // --------------------------------
 // VBlock and Txt Header properties
 // --------------------------------
@@ -218,7 +220,7 @@ static VBIType writer_init_txt_header_info (void)
            || comp_i == VCF_COMP_MAIN)
         &&
            (  !Z_DT(SAM) // This clause only limits SAM/BAM
-           || comp_i == SAM_COMP_MAIN);               // Show only the txt header of the MAIN component
+           || (comp_i != SAM_COMP_PRIM && comp_i != SAM_COMP_DEPN)); // Show only the txt header of the MAIN and any (deep) FASTQ components
 
         if (comp->needs_write) {
             // mutex: locked:    here (at initialization)
@@ -654,11 +656,11 @@ static void writer_add_trivial_plan (CompIType comp_i)
 
 // PIZ main thread: add interleave entry for each VB of the component
 // also interleaves VBs of the two components and eliminates the second TXT_HEADER entry
-static void writer_add_interleaved_plan (void)
+static void writer_add_interleaved_plan (CompIType comp_1, CompIType comp_2)
 {
     // expecting both componenets to have the same number of VBs
-    VBIType R1_num_vbs = sections_get_num_vbs (FQ_COMP_R1);
-    VBIType R2_num_vbs = sections_get_num_vbs (FQ_COMP_R2);
+    VBIType R1_num_vbs = sections_get_num_vbs (comp_1);
+    VBIType R2_num_vbs = sections_get_num_vbs (comp_2);
     
     ASSERT (R1_num_vbs == R2_num_vbs, "R1 has %u VBs, but R2 has %u VBs - expecting them to be equal when --interleaved",
              R1_num_vbs, R2_num_vbs);
@@ -669,8 +671,8 @@ static void writer_add_interleaved_plan (void)
 
     for (VBIType i=0; i < R1_num_vbs; i++) {
 
-        VBIType vb1_i = i + sections_get_first_vb_i (FQ_COMP_R1);
-        VBIType vb2_2 = i + sections_get_first_vb_i (FQ_COMP_R2);
+        VBIType vb1_i = i + sections_get_first_vb_i (comp_1);
+        VBIType vb2_2 = i + sections_get_first_vb_i (comp_2);
         
         VbInfo *v1 = VBINFO(vb1_i);
         VbInfo *v2 = VBINFO(vb2_2);
@@ -738,6 +740,8 @@ static void writer_add_plan_from_recon_section (CompIType comp_i, bool is_luft,
 // they will be needed by writer.
 void writer_create_plan (void)
 {  
+    memset (start_comp_in_plan, 0, sizeof start_comp_in_plan);
+
     writer_init_vb_info();
 
     uint32_t vblock_mb=0;
@@ -745,14 +749,37 @@ void writer_create_plan (void)
 
     ASSINP (!flag.interleaved || txt_header_info.len == 2, "--interleave cannot be used because %s was not compressed with --pair", z_name);
 
-    // case: SAM with PRIM/DEPN
-    if (z_sam_gencomp) {        
+    // case: SAM with PRIM/DEPN - either non-deep or deep and --sam or --bam specified
+    if (Z_DT(SAM) && z_sam_gencomp && (!flag.deep || flag.one_component==1)) {         
         writer_add_txtheader_plan (SAM_COMP_MAIN);
-
         writer_add_plan_from_recon_section (SAM_COMP_MAIN, false, &z_file->max_conc_writing_vbs, &vblock_mb);
-
-        z_file->num_components  = 1; // one txt_file
     }
+
+    // case: unbinding --deep
+    else if (Z_DT(SAM) && flag.unbind && flag.deep) {  // with gencomp or not
+        // SAM components
+        writer_add_txtheader_plan (SAM_COMP_MAIN);
+        if (z_sam_gencomp) 
+            writer_add_plan_from_recon_section (SAM_COMP_MAIN, false, &z_file->max_conc_writing_vbs, &vblock_mb);
+        else
+            writer_add_trivial_plan (COMP_MAIN);
+        start_comp_in_plan[SAM_COMP_MAIN + 1] = z_file->recon_plan.len; // "after"
+
+        // FASTQ components
+        for (int i=0; i < z_file->num_txt_files - 1; i++) {
+            start_comp_in_plan[SAM_COMP_FQ00 + i] = z_file->recon_plan.len;
+            writer_add_txtheader_plan (SAM_COMP_FQ00 + i); // reading the txt_header is required when unbinding (it contains the filename, digest...)
+            writer_add_trivial_plan (SAM_COMP_FQ00 + i);   
+        }
+    }
+
+    // case: --deep with --R1 or --R2
+    else if (Z_DT(SAM) && flag.deep && flag.one_component >= 4)
+        writer_add_trivial_plan (flag.one_component-1); // one_component is copm_i+1
+
+    // case: --deep - FASTQ to be written interleaved 
+    else if (Z_DT(SAM) && flag.deep && flag.interleaved) 
+        writer_add_interleaved_plan (SAM_COMP_FQ00, SAM_COMP_FQ01); // single txt_file, recon_plan with PLAN_INTERLEAVE to interleave pairs of VBs
 
     // case: DVCF
     else if (z_is_dvcf) {
@@ -774,7 +801,7 @@ void writer_create_plan (void)
 
     // case: paired FASTQ to be written interleaved 
     else if (Z_DT(FASTQ) && flag.interleaved) 
-        writer_add_interleaved_plan(); // single txt_file, recon_plan with PLAN_INTERLEAVE to interleave pairs of VBs
+        writer_add_interleaved_plan(FQ_COMP_R1, FQ_COMP_R2); // single txt_file, recon_plan with PLAN_INTERLEAVE to interleave pairs of VBs
 
     // case: paired FASTQ with --R1 or --R2
     else if (Z_DT(FASTQ) && flag.one_component) 
@@ -784,8 +811,8 @@ void writer_create_plan (void)
     else if (Z_DT(FASTQ) && flag.unbind) {
         writer_add_txtheader_plan (FQ_COMP_R1); // reading the txt_header is required when unbinding (it contains the filename, digest...)
         writer_add_trivial_plan (FQ_COMP_R1); // we sort the entire plan in the next call
-        z_file->recon_plan.count = z_file->recon_plan.len; // count = length of plan of R1
-
+        
+        start_comp_in_plan[FQ_COMP_R2] = z_file->recon_plan.len; 
         writer_add_txtheader_plan (FQ_COMP_R2);
         writer_add_trivial_plan (FQ_COMP_R2);
     }
@@ -894,6 +921,8 @@ static bool writer_output_one_processed_bgzf (Dispatcher dispatcher, bool blocki
 
 static void writer_flush_vb (Dispatcher dispatcher, VBlockP vb, bool is_txt_header, bool is_last)
 {
+    ASSERTNOTNULL(vb);
+    
     if (!vb->txt_data.len32 && !is_last) return; // no data to flush
 
     if (!flag.no_writer) { // note: we might have a writer thread despite no writing - eg for calculated the digest if we have SAM gencomp
@@ -1203,12 +1232,18 @@ static void writer_start_writing (CompIType unbind_comp_i)
     if (writer_thread != THREAD_ID_NONE || flag.no_writer_thread) return;
 
     // copy the portion of the reconstruction plan 
-    if (!flag.unbind)
-        buf_copy (evb, &txt_file->recon_plan, &z_file->recon_plan, ReconPlanItem, 0, 0, 0);
-    else if (unbind_comp_i == FQ_COMP_R1) 
-        buf_copy (evb, &txt_file->recon_plan, &z_file->recon_plan, ReconPlanItem, 0, z_file->recon_plan.count, 0); // param = length of R1
-    else // FQ_COMP_R2
-        buf_copy (evb, &txt_file->recon_plan, &z_file->recon_plan, ReconPlanItem, z_file->recon_plan.count, 0, 0);
+    uint64_t start = flag.unbind ? start_comp_in_plan[unbind_comp_i] : 0;
+    uint64_t after = (flag.unbind && start_comp_in_plan[unbind_comp_i+1]) ? start_comp_in_plan[unbind_comp_i+1] : z_file->recon_plan.len;
+
+    buf_copy (evb, &txt_file->recon_plan, &z_file->recon_plan, ReconPlanItem, start, after - start, 0); 
+    
+    //xxx if (!flag.unbind)
+    //     buf_copy (evb, &txt_file->recon_plan, &z_file->recon_plan, ReconPlanItem, 0, 0, 0);
+    //    
+    //xxx if (unbind_comp_i == FQ_COMP_R1) 
+    //     buf_copy (evb, &txt_file->recon_plan, &z_file->recon_plan, ReconPlanItem, 0, z_file->recon_plan.count, 0); // param = length of R1
+    // else // FQ_COMP_R2
+    //     buf_copy (evb, &txt_file->recon_plan, &z_file->recon_plan, ReconPlanItem, z_file->recon_plan.count, 0, 0);
 
     wvb = vb_get_vb (POOL_MAIN, WRITER_TASK_NAME, 0, COMP_NONE);
     writer_thread = threads_create (writer_main_loop, wvb);

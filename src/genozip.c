@@ -20,6 +20,7 @@
 #include "piz.h"
 #include "crypt.h"
 #include "file.h"
+#include "filename.h"
 #include "vblock.h"
 #include "url.h"
 #include "strings.h"
@@ -247,13 +248,31 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
 
     // generate txt_file(s)
     if (dispatcher) {
-        piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, flag.unbind ? FQ_COMP_R1 : COMP_NONE);
-        file_close (&txt_file, flag.index_txt, flag.unbind || !is_last_z_file); 
-
-        if (flag.unbind) { // R2 in case of unbinding paired FASTQ files
-            piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, FQ_COMP_R2);
+        if (!flag.unbind) {    // single txt_file
+            piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, COMP_MAIN, COMP_MAIN);
             file_close (&txt_file, flag.index_txt, !is_last_z_file); 
         }
+
+        else if (Z_DT(FASTQ))  // paired FASTQ
+            for (CompIType comp_i=FQ_COMP_R1; comp_i <= FQ_COMP_R2; comp_i++) {
+                piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, comp_i, comp_i);
+                file_close (&txt_file, flag.index_txt, comp_i==FQ_COMP_R1 || !is_last_z_file); 
+            }
+
+        else if (Z_DT(SAM) && flag.deep)    // Deep: one SAM/BAM and one or more FASTQ
+            for (CompIType comp_i=SAM_COMP_MAIN; comp_i < z_file->num_txt_files + 2; comp_i++) {
+                if (comp_i==SAM_COMP_MAIN) {
+                    piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, SAM_COMP_MAIN, SAM_COMP_DEPN);
+                    comp_i += 2;
+                }
+                else
+                    piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, comp_i, comp_i);
+
+                file_close (&txt_file, flag.index_txt, comp_i < z_file->num_txt_files + 1 || !is_last_z_file); // skip cleanup in final component, except if there are more z_files
+            }
+
+        else
+            ABORT0 ("Invalid unbinding mode");
     }
 
     tip_dt_encountered (z_file->data_type);
@@ -389,7 +408,6 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
 
 static void main_genozip (rom txt_filename, 
                           rom next_txt_filename,      // ignored unless we are of pair_1 in a --pair
-                          rom z_filename,
                           unsigned txt_file_i,        // 0-based
                           unsigned n_txt_files,
                           bool is_last_user_txt_file) // very last file in this execution 
@@ -398,8 +416,8 @@ static void main_genozip (rom txt_filename,
     
     SAVE_FLAGS;
 
-    ASSINP (!z_filename || !url_is_url (z_filename), 
-            "output files must be regular files, they cannot be a URL: %s", z_filename);
+    ASSINP (!flag.out_filename || !url_is_url (flag.out_filename), 
+            "output files must be regular files, they cannot be a URL: %s", flag.out_filename);
 
     // get input file
     if (!txt_file)  // open the file - possibly already open from main_load_reference
@@ -426,28 +444,31 @@ static void main_genozip (rom txt_filename,
     // get output FILE
     if (!z_file) { // skip if we're the second file onwards in bind mode, or pair_2 in unbound list of pairs - nothing to do        
         
-        z_filename = z_filename                 ? z_filename // given with --output
-                   : (flag.pair && !z_filename) ? file_get_fastq_pair_filename (txt_filename, next_txt_filename, false) // first file in a FASTQ pair
-                   :                              file_get_z_filename (txt_file->name, txt_file->data_type, txt_file->type);
+        rom z_filename = flag.out_filename                 ? filename_z_by_flag() // given with --output
+                       : (flag.pair && !flag.out_filename) ? filename_z_pair (txt_filename, next_txt_filename, false) // first file in a FASTQ pair
+                       : (flag.deep && !flag.out_filename) ? filename_z_deep (txt_file->name) // SAM/BAM file in --deep
+                       :                                     filename_z_normal (txt_file->name, txt_file->data_type, txt_file->type);
 
         z_file = file_open (z_filename, flag.pair ? WRITEREAD : WRITE, Z_FILE, txt_file->data_type);
     }
 
-    if (!flag.zip_comp_i) {
+    if (flag.zip_comp_i == COMP_MAIN) {
         stats_add_txt_name (txt_name); // add txt_name (inluding stdin) to stats data stored in z_file
         flags_update_zip_one_file();
     }
     
     ASSERT0 (flag.bind || !has_zfile, "Unexpectedly, z_file was already open despite BIND_NONE");
 
-    if (flag.bind == BIND_FQ_PAIR) {
-        flag.zip_comp_i = txt_file_i % 2;
-        z_file->z_closes_after_me = (flag.zip_comp_i == FQ_COMP_R2);
-    }
-    else
-        z_file->z_closes_after_me = true;
+    z_file->z_closes_after_me = (flag.bind == BIND_FQ_PAIR) ? (flag.zip_comp_i == FQ_COMP_R2)
+                              : (flag.bind == BIND_DEEP)    ? is_last_user_txt_file
+                              :                               true;
 
     zip_one_file (txt_file->basename, is_last_user_txt_file);
+
+    // increment zip_comp_i for next file 
+    flag.zip_comp_i = (flag.bind == BIND_FQ_PAIR) ? (flag.zip_comp_i + 1) % 2
+                    : (flag.bind == BIND_DEEP)    ? ((SamComponentType[]){ SAM_COMP_MAIN, SAM_COMP_FQ00, SAM_COMP_FQ01, COMP_MAIN })[txt_file_i + 1]
+                    :                               COMP_MAIN;
 
     tip_dt_encountered (z_file->data_type);
 
@@ -464,7 +485,7 @@ static void main_genozip (rom txt_filename,
     if (!flag.to_stdout && z_file && z_file->z_closes_after_me) {
 
         // take over the name 
-        z_filename = z_file->name; 
+        rom z_filename = z_file->name; 
         z_file->name = NULL;
         DataType z_dt = z_file->data_type; 
 
@@ -475,6 +496,8 @@ static void main_genozip (rom txt_filename,
         // test the compression, if the user requested --test
         if (flag.test) 
             main_test_after_genozip (z_filename, z_dt, is_last_user_txt_file, is_chain);
+
+        FREE (z_filename); // allocated in filename_z_*
     }
 
     // remove after test (if any) was successful
@@ -497,16 +520,22 @@ static void main_genozip (rom txt_filename,
         }
     }
 
-done: {
-    SAVE_FLAG (data_modified); // propagate up
-    SAVE_FLAG (aligner_available);
-    SAVE_FLAG (no_tip);
-    RESTORE_FLAGS;    
+done: 
+    // if next file is a fresh file, restore flags
+    if (flag.zip_comp_i == COMP_MAIN) { // next file
+        SAVE_FLAG (data_modified); // propagate up
+        SAVE_FLAG (aligner_available);
+        SAVE_FLAG (no_tip);
+        SAVE_FLAG (bind);
+        
+        RESTORE_FLAGS; // overwrite all flags with saved flag struct
 
-    if (flag.bind) RESTORE_FLAG (data_modified); 
-    RESTORE_FLAG (aligner_available);
-    RESTORE_FLAG (no_tip);
-} }
+        if (flag.bind) RESTORE_FLAG (data_modified); 
+        RESTORE_FLAG (aligner_available);
+        RESTORE_FLAG (no_tip);
+        RESTORE_FLAG (bind);
+    }
+} 
 
 static inline DataType main_get_file_dt (rom filename)
 {   
@@ -598,9 +627,11 @@ static void main_get_filename_list (unsigned num_files, char **filenames,  // in
     *num_z_files = flag.pair ? (fn_buf->len / 2) : fn_buf->len; // note: flag.pair is only available in ZIP
 
     // sort files by data type to improve VB re-using, and refhash-using files in the end to improve reference re-using
-    SET_FLAG (quiet); // suppress warnings
-    qsort (B1ST (char *, *fn_buf), fn_buf->len, sizeof (char *), main_sort_input_filenames);
-    RESTORE_FLAG (quiet);
+    if (!flag.deep) {
+        SET_FLAG (quiet); // suppress warnings
+        qsort (B1ST (char *, *fn_buf), fn_buf->len, sizeof (char *), main_sort_input_filenames);
+        RESTORE_FLAG (quiet);
+    }
 }
 
 static void main_load_reference (rom filename, bool is_first_file, bool is_last_z_file)
@@ -649,7 +680,7 @@ static void main_load_reference (rom filename, bool is_first_file, bool is_last_
 
 static void set_exe_type (rom argv0)
 {
-    rom bn = file_basename (argv0, false, NULL, NULL, 0);
+    rom bn = filename_base (argv0, false, NULL, NULL, 0);
     
     if      (strstr (bn, "genols"))    exe_type = EXE_GENOLS;
     else if (strstr (bn, "genocat"))   exe_type = EXE_GENOCAT;
@@ -666,7 +697,7 @@ int main (int argc, char **argv)
     // When debugging with Visual Studio Code, its debugger wrapper adds 3 args: "2>CON", "1>CON", "<CON". We remove them.
     if (argc >= 4 && !strcmp (argv[argc-1], "<CON")) argc -= 3;
 
-    global_cmd = file_basename (argv[0], true, "(executable)", NULL, 0); // global var
+    global_cmd = filename_base (argv[0], true, "(executable)", NULL, 0); // global var
 
     set_exe_type(argv[0]);
     info_stream = stdout; // may be changed during intialization
@@ -811,7 +842,7 @@ int main (int argc, char **argv)
         switch (command) {
             case ZIP  : main_genozip (next_input_file, 
                                       (next_input_file && file_i < input_files_len-1) ? input_files[file_i+1] : NULL, // file name of next file, if there is one
-                                      flag.out_filename, file_i, n_files, !next_input_file || is_last_txt_file); 
+                                      file_i, n_files, !next_input_file || is_last_txt_file); 
                         break;
 
             case PIZ  : main_genounzip (next_input_file, flag.out_filename, file_i, is_last_z_file); 

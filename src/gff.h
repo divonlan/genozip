@@ -15,7 +15,25 @@
 
 #pragma GENDICT_PREFIX GFF
 
-#pragma GENDICT GFF_SEQID=DTYPE_FIELD=SEQID
+// -----------------------------------------------------------------------------------------------------------
+// Common contexts of FASTA and GFF - these MUST be first; in same order; same dict_id
+// -----------------------------------------------------------------------------------------------------------
+
+#pragma GENDICT GFF_SEQID=DTYPE_FIELD=SEQID             // must be 1st as this is GFF's CHROM. We don't use FASTA_CONTIG for gff-embedded FASTAs
+#pragma GENDICT GFF_FASTA_LINEMETA=DTYPE_FIELD=LINEMETA
+#pragma GENDICT GFF_EOL=DTYPE_FIELD=EOL
+#pragma GENDICT GFF_FASTA_DESC=DTYPE_FIELD=DESC
+#pragma GENDICT GFF_COMMENT=DTYPE_FIELD=COMMENT
+#pragma GENDICT GFF_FASTA_NONREF=DTYPE_FIELD=NONREF 
+#pragma GENDICT GFF_FASTA_NONREF_X=DTYPE_FIELD=NONREF_X
+#pragma GENDICT GFF_TOPLEVEL=DTYPE_FIELD=TOPLEVEL
+#pragma GENDICT GFF_FASTA_TAXID=DTYPE_FIELD=TAXID
+#pragma GENDICT GFF_DEBUG_LINES=DTYPE_FIELD=DBGLINES    // used by --debug-lines
+
+// -----------------------------------------------------------------------------------------------------------
+// End of common contexts of FASTA and GFF
+// -----------------------------------------------------------------------------------------------------------
+
 #pragma GENDICT GFF_SOURCE=DTYPE_FIELD=SOURCE
 #pragma GENDICT GFF_TYPE=DTYPE_FIELD=TYPE
 #pragma GENDICT GFF_START=DTYPE_FIELD=START
@@ -24,10 +42,6 @@
 #pragma GENDICT GFF_STRAND=DTYPE_FIELD=STRAND
 #pragma GENDICT GFF_PHASE=DTYPE_FIELD=PHASE
 #pragma GENDICT GFF_ATTRS=DTYPE_FIELD=ATTRS
-#pragma GENDICT GFF_EOL=DTYPE_FIELD=EOL
-#pragma GENDICT GFF_TOPLEVEL=DTYPE_FIELD=TOPLEVEL
-#pragma GENDICT GFF_COMMENT=DTYPE_FIELD=COMMENT
-#pragma GENDICT GFF_DEBUG_LINES=DTYPE_FIELD=DBGLINES      // used by --debug-lines
 
 // standard GFF3 attributes defined in https://github.com/The-Sequence-Ontology/Specifications/blob/master/gff3.md
 #pragma GENDICT ATTR_ID=DTYPE_1=ID
@@ -80,6 +94,7 @@
 extern void gff_zip_initialize (void);
 extern bool is_gff (STRp(header), bool *need_more);
 extern bool gff_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags);
+extern int32_t gff_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
 extern rom gff_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_len, bool *has_special_eol);
 extern void gff_seg_initialize (VBlockP vb_);
 extern void gff_seg_finalize (VBlockP vb);
@@ -91,6 +106,7 @@ extern void gff_vb_destroy_vb();
 extern unsigned gff_vb_size (DataType dt);
 
 // PIZ stuff
+extern bool gff_piz_init_vb (VBlockP vb, const SectionHeaderVbHeader *header, uint32_t *txt_data_so_far_single_0_increment);
 extern CONTAINER_FILTER_FUNC (gff_piz_filter);
 extern CONTAINER_CALLBACK (gff_piz_container_cb);
 

@@ -41,7 +41,8 @@ typedef enum { STATS_NONE=0, STATS_SHORT=1, STATS_LONG=2, STATS_SHORT_GREP=-1, S
 typedef struct {
     
     // genozip options that affect the compressed file
-    int fast, best, make_reference, multiseq, md5, deep;
+    int fast, best, make_reference, multiseq, md5, 
+        deep; // deep is set with --deep in ZIP and from SectionHeaderGenozipHeader.sam.deep in PIZ
     rom vblock;
     
     // ZIP: data modifying options
@@ -85,7 +86,7 @@ typedef struct {
     int bytes;
 
     // options affecting the software interaction (but not the file contents)
-    int force, quiet, no_tip, show_filename,
+    int force, quiet, explicit_quiet, no_tip, show_filename,
         to_stdout,   // set implicitly if genocat without --output
         replace, 
         lic_width,   // width of license output, 0=dynamic (undocumented parameter of --license)
@@ -184,7 +185,7 @@ typedef struct {
     rom unbind;
     rom log_filename;  // output to info_stream goes here
 
-    enum { BIND_NONE, BIND_FQ_PAIR, BIND_DVCF, BIND_SAM } bind; // ZIP: cases where we have more than one txt_file bound in a z_file
+    enum { BIND_NONE, BIND_FQ_PAIR, BIND_DVCF, BIND_SAM, BIND_DEEP } bind; // ZIP: cases where we have more than one txt_file bound in a z_file
     uint64_t stdin_size;
     unsigned longest_filename; // length of longest filename of the txt/z files on the command line
     

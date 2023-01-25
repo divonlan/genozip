@@ -1000,13 +1000,8 @@ void sam_zip_generate_recon_plan (void)
 {
     START_TIMER;
 
-    // case: recon_plan is just FULL_VBs, meaning we have no PRIM or DEPN lines. 
-    // This file will have just one (main) component with no recon_plan
-    if (sam_zip_recon_plan_full_vb_only()) 
-        flag.bind = BIND_NONE; // no PRIM or DEPN lines found - single-component SAM/BAM without a recon_plan
-
     // case: MAIN component (not all full VBs - we have some PRIM and/or DEPN lines) - plan that incorporates everything 
-    else {
+    if (!sam_zip_recon_plan_full_vb_only()) {
         // recon_plan may have VBs out of order - fix that now
         recon_plan_sort_by_vb (txt_file); 
 
@@ -1016,7 +1011,12 @@ void sam_zip_generate_recon_plan (void)
         // output the SEC_RECON_PLAN section
         recon_plan_compress (conc_writing_vbs, false);
     }
-    
+
+    // case: recon_plan is just FULL_VBs, meaning we have no PRIM or DEPN lines. 
+    // This file will have just one (main) component with no recon_plan
+    else if (flag.bind == BIND_SAM)
+        flag.bind = BIND_NONE; // no PRIM or DEPN lines found - single-component SAM/BAM without a recon_plan (but don't change if BIND_DEEP)
+
     COPY_TIMER_VB (evb, generate_recon_plan);
 }
 

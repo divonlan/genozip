@@ -48,6 +48,41 @@ static SmallContainer con_illumina_7i = {
                    { .dict_id = { _SAM_QmNAME }, .separator = { CI0_SKIP } } } 
 };
 
+// Example: A00180:28:HC3F5DRXX:2:2110:27453:21981_1:N:0:ATTACTCGATCT+GGCTCTGA
+// Observed only as QNAME2 in an SRR FASTQ QNAME
+static SmallContainer con_illumina_full = {
+    .repeats   = 1,
+    .nitems_lo = 13,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = ":"          },  
+                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q4NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q5NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q6NAME }, .separator = "_"          },
+                   { .dict_id = { _SAM_Q7NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q8NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q9NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_QANAME }, .separator = "+"          },
+                   { .dict_id = { _SAM_QBNAME },                           },
+                   { .dict_id = { _SAM_QmNAME }, .separator = { CI0_SKIP } } } 
+};
+
+// Example: SDF-02:GFH-0166::1:13435:2311:1233:GTAGCCAATCA
+static SmallContainer con_illumina_7c = {
+    .repeats   = 1,
+    .nitems_lo = 9,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = ":"          },  
+                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q4NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q5NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q6NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q7NAME },                           },
+                   { .dict_id = { _SAM_QmNAME }, .separator = { CI0_SKIP } } } 
+};
+
 // Example: ATATA-ATGCATAG|ab|A00488:61:HMLGNDSXX:4:1101:4345:1000|1
 static SmallContainer con_illumina_7_gs = {
     .repeats   = 1,
@@ -353,7 +388,7 @@ static SmallContainer con_bamsurgeon = {
 
 
 // example: SRR11215720.1_1_length=120: items 1 and 2 are usually equal, item 3 equals seq_len
-static SmallContainer con_ncbi_sra_len = {
+static SmallContainer con_ncbi_sra_L = {
     .repeats             = 1,
     .nitems_lo           = 5,
     .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = "."                    }, 
@@ -376,7 +411,7 @@ static SmallContainer con_ncbi_sra = {
 };
 
 // example: ERR811170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template length=52
-static SmallContainer con_ncbi_sra_fq = {
+static SmallContainer con_ncbi_sra_fq_L = {
     .repeats             = 1,
     .nitems_lo           = 7,
     .items               = { { .dict_id = { _FASTQ_Q0NAME }, .separator = { CI0_FIXED_0_PAD, 3 } },  // three letters - usually all-the-same
@@ -389,7 +424,7 @@ static SmallContainer con_ncbi_sra_fq = {
 };
 
 // example: ERR811170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template BOWDEN04_20151016_MN15199_FAA67113_BOWDEN04_MdC_MARC_Phase2a_4833_1_ch19_file1_strand length=52
-static SmallContainer con_ncbi_sraP_fq = {
+static SmallContainer con_ncbi_sraP_fq_L = {
     .repeats             = 1,
     .nitems_lo           = 8,
     .items               = { { .dict_id = { _FASTQ_Q0NAME }, .separator = { CI0_FIXED_0_PAD, 3 } },  // three letters - usually all-the-same
@@ -400,6 +435,16 @@ static SmallContainer con_ncbi_sraP_fq = {
                              { .dict_id = { _FASTQ_Q3NAME }, .separator = " "                    },  // additional info 
                              { .dict_id = { _FASTQ_Q4NAME }, .separator = "="                    },  // "length" (can't be a prefix, because no fixed_i)
                              { .dict_id = { _FASTQ_Q5NAME },                                     } } // length value
+};
+
+static SmallContainer con_ncbi_sraP_fq = {
+    .repeats             = 1,
+    .nitems_lo           = 5,
+    .items               = { { .dict_id = { _FASTQ_Q0NAME }, .separator = { CI0_FIXED_0_PAD, 3 } },  // three letters - usually all-the-same
+                             { .dict_id = { _FASTQ_Q1NAME }, .separator = "."                    },  // SRA number - usually all-the-same - seg as snip and not numeric
+                             { .dict_id = { _FASTQ_Q2NAME }, .separator = " "                    },  // sequential number 
+                             { .dict_id = { _FASTQ_QNAME2 },                                     },  // original qname 
+                             { .dict_id = { _FASTQ_QmNAME }, .separator = { CI0_SKIP }           } }
 };
 
 // example: ERR2708427.1.1
@@ -414,7 +459,7 @@ static SmallContainer con_ncbi_sra2 = {
 };
 
 // example: ERR2708427.1.1 51e7525d-fa50-4b1a-ad6d-4f4ae25c1df7 length=1128
-static SmallContainer con_ncbi_sra2_fq = {
+static SmallContainer con_ncbi_sra2_fq_L = {
     .repeats             = 1,
     .nitems_lo           = 8,
     .items               = { { .dict_id = { _FASTQ_Q0NAME }, .separator = { CI0_FIXED_0_PAD, 3 } },  // three letters - usually all-the-same
@@ -443,7 +488,7 @@ static SmallContainer con_ncbi_sra2P_fq = {
 };
 
 // example: SRR12345678.5 5   <--- it seems that the final two numbers are always the same
-// to do: this should be con_ncbi_sraP_fq + con_integer
+// to do: this should be con_ncbi_sraP_fq_L + con_integer
 static SmallContainer con_ncbi_srr_fq = {
     .repeats             = 1,
     .nitems_lo           = 4,
@@ -572,10 +617,13 @@ static SmallContainer con_ncbi_sra2P_l3 = {
 
 //--------------------------------------------------------------------------------------------------------
 
-#define MAX_QNAME_ITEMS 12 // mate + 10 others (matching Q?NAME defined in sam.h, fastq.h, kraken.h) 
+#define MAX_QNAME_ITEMS 13 // mate + normal (matching Q?NAME defined in sam.h, fastq.h, kraken.h) 
 #define QFS_MAX_EXAMPLES 5
 
+typedef enum { QF_NO_ID, QF_GENOZIP_OPT } QnameFlavorId;
+
 typedef struct QnameFlavorStruct {
+    QnameFlavorId id;                     // optional; required only if referenced in the code
     char name[16]; 
     char example[QFS_MAX_EXAMPLES][256];
     SeqTech tech;                         // The sequencing technology used to generate this data
@@ -601,71 +649,77 @@ typedef struct QnameFlavorStruct {
 } QnameFlavorStruct;
 
 static QnameFlavorStruct qf[] = { 
-/*  mate   name             example                                       tech    fq_only  con_template       #sp  integer_items   numeric_items   in-local        hex_items       ord1,2 rng    sqln len px_strs      */
-    {},  { "Illumina-fastq",{ "A00488:61:HMLGNDSXX:4:1101:4345:1000 2:N:0:CTGAAGCT+ATAGAGGC" },
-                                                                          TECH_ILLUM_7, 1, &con_illumina_7_fq, 7,  {1,3,4,5,6,-1}, {-1},           {1,3,-1},       {-1},           5,6,   -1,-1, -1,                   }, // mate added v14.0.0  
-         { "Illumina-ex",   { "A00488:61:HMLGNDSXX:4:1101:4345:1000_2:N:0" },
-                                                                          TECH_ILLUM_7, 0, &con_illumina_7_ex, 7,  {1,3,4,5,6,-1}, {-1},           {1,3,-1},       {-1},           5,6,   -1,-1, -1,                   }, // v14.0.17  
-    {},  { "Illumina",      { "A00488:61:HMLGNDSXX:4:1101:4345:1000" },   TECH_ILLUM_7, 0, &con_illumina_7,    6,  {1,3,4,5,6,-1}, {-1},           {1,3,-1},       {-1},           5,6,   -1,-1, -1,                   },
-    {},  { "Illumina#",     { "A00488:61:HMLGNDSXX:4:1101:4345:1000#CTGGGAAG" }, 
-                                                                          TECH_ILLUM_7, 0, &con_illumina_7i,   7,  {1,3,4,5,6,-1}, {-1},           {1,3,-1},       {-1},           5,6,   -1,-1, -1,                   },
-    {},  { "Illumina-gs",   { "ATATA-ATGCATAG|ab|A00488:61:HMLGNDSXX:4:1101:4345:1000|1" },   
-                                                                          TECH_ILLUM_7, 0, &con_illumina_7_gs, 10, {4,6,7,8,9,-1}, {-1},           {4,6,-1},       {-1},           8,9,   -1,-1, -1,                   },
-    {},  { "BGI-R6",        { "8A_V100004684L3C001R029011637", "V300014293BL2C001R027005967", "V300003413L4C001R016000000" },          
-                                                                          TECH_BGI,     0, &con_bgi_R6,        3,  {-1},           {1,2,3,4,-1},   {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_bgi_R     },
-    {},  { "BGI-R7",        { "V300017009_8AL2C001R0030001805", "V300022116L2C001R0010002968", "V300014296L2C001R0010000027", "E100001117L1C001R0030000000", "E1000536L1C002R0020000005" },         
-                                                                          TECH_BGI,     0, &con_bgi_R7,        3,  {-1},           {1,2,3,4,-1},   {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_bgi_R     },
-    {},  { "BGI-R8",        { "V300046476L1C001R00100001719" },           TECH_BGI,     0, &con_bgi_R8,        3,  {-1},           {1,2,3,4,-1},   {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_bgi_R     },
-    {},  { "BGI-LL7",       { "DP8400010271TLL1C005R0511863479" },        TECH_BGI,     0, &con_bgi_LL7,       4,  {-1},           {1,2,3,4,-1},   {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_bgi_LL    },
-    {},  { "BGI-CL",        { "CL100025298L1C002R050_244547" },           TECH_BGI,     0,&con_bgi_CL,        4,  {4,-1},         {1,2,3,-1},     {-1},           {-1},           4,-1,  -1,-1, -1,  0,  PX_bgi_CL    }, 
-    // {},  { "IonTorrent",    { "ZEWTM:10130:07001" },                      TECH_IONTORR, 0, &con_ion_torrent_3, 2,  {-1},           {1,2,-1},       {-1},           {-1},           -1,-1, -1,-1, -1,  17, PX_ion_torrent_3 },
-    {},  { "IonTorrent",    { "ZEWTM:10130:07001" },                      TECH_IONTORR, 0,&con_ion_torrent_3, 2,  {-1},           {-1},           {-1},           {-1},           -1,-1, -1,-1, -1,  17               },
-    {},  { "Illumina-o-fq", { "SOLEXA6_0104:3:1:1852:13550 1:N:0:0" },    TECH_ILLUM_5, 1, &con_illumina_5_fq, 5,  {1,2,3,4,-1},   {-1},           {-1},           {-1},           -1,-1, -1,-1, -1,                   }, // v14.0.0
-    {},  { "Illumina-old#", { "HWI-ST550_0201:3:1101:1626:2216#ACAGTG" }, TECH_ILLUM_5, 0, &con_illumina_5i,   5,  {1,2,3,4,-1},   {-1},           {-1},           {-1},           -1,-1, -1,-1, -1,                   },
-    {},  { "Illumina-old",  { "SOLEXA-1GA-1_4_FC20ENL:7:258:737:870" },   TECH_ILLUM_5, 0, &con_illumina_5,    4,  {1,2,3,4,-1},   {-1},           {1,2,3,4-1},    {-1},           -1,-1, -1,-1, -1,                   },
-    {},  { "Roche-454",     { "000050_1712_0767" },                       TECH_454,     0, &con_roche_454,     2,  {-1},           {0,1,2,-1},     {-1},           {-1},           -1,-1, -1,-1, -1,  16, PX_roche_454 },
-    {},  { "Helicos",       { "VHE-242383071011-15-1-0-2" },              TECH_HELICOS, 0, &con_helicos,       5,  {2,3,4,5,-1},   {-1},           {-1},           {-1},           -1,-1, -1,-1, -1,                   },
-    {},  { "PacBio-3",      { "56cdb76f_70722_4787" },                    TECH_PACBIO,  0, &con_pacbio_3,      2,  {1,2,-1},       {-1},           {1,2,-1},       {0,-1},         -1,-1, -1,-1, -1,                   },
-    {},  { "PacBio-Range",  { "m130802_221257_00127_c100560082550000001823094812221334_s1_p0/128361/872_4288" },
-                                                                          TECH_PACBIO,  0, &con_pacbio_range,  4,  {1,2,3,-1},     {-1},           {-1},           {-1},           1,-1,   3,-1, -1,  0,  PX_pacbio    },
-    {},  { "PacBio-Label",  { "m64136_200621_234916/18/ccs" },            TECH_PACBIO,  0, &con_pacbio_label,  3,  {1,-1},         {-1},           {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_pacbio    },
-    {},  { "PacBio-Plain",  { "m64136_200621_234916/18" },                TECH_PACBIO,  0, &con_pacbio_plain,  2,  {1,-1},         {-1},           {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_pacbio    },
-    // {},  { "Nanopore",      { "af84b0c1-6945-4323-9193-d9f6f2c38f9a" },   TECH_ONP,     0, &con_nanopore,      4,  {-1},           {-1},           {0,1,2,3,4,-1}, {-1},           -1,-1, -1,-1, -1,  36,           },
-    {},  { "Nanopore",      { "af84b0c1-6945-4323-9193-d9f6f2c38f9a" },   TECH_ONP,     0, &con_nanopore,      4,  {-1},           {0,1,2,3,4-1},  {0,1,2,3,4,-1}, {0,1,2,3,4,-1}, -1,-1, -1,-1, -1,  36, PX_nanopore  },
-    // {},  { "Nanopore-ext",  { "2a228edf-d8bc-45d4-9c96-3d613b8530dc_Basecall_2D_000_template" },
+/*  mate   name             example                                                       tech    fq_only  con_template       #sp  integer_items   numeric_items   in-local        hex_items       ord1,2 rng    sqln len px_strs      */
+    {},  { QF_NO_ID,       "Illumina-fastq",{ "A00488:61:HMLGNDSXX:4:1101:4345:1000 2:N:0:CTGAAGCT+ATAGAGGC" },
+                                                                                          TECH_ILLUM_7, 1, &con_illumina_7_fq, 7,  {1,3,4,5,6,-1}, {-1},           {1,3,-1},       {-1},           5,6,   -1,-1, -1,                   }, // mate added v14.0.0  
+         { QF_NO_ID,       "Illumina:full", { "A00180:28:HC3F5DRXX:2:2110:27453:21981_1:N:0:ATTACTCGATCT+GGCTCTGA" }, 
+                                                                                          TECH_ILLUM_7, 0, &con_illumina_full, 11, {1,3,4,5,6,7,9,-1}, {-1},       {1,3,7,8,9,-1}, {-1},           5,6,   -1,-1, -1,                   },
+         { QF_NO_ID,       "Illumina-ex",   { "A00488:61:HMLGNDSXX:4:1101:4345:1000_2:N:0" },
+                                                                                          TECH_ILLUM_7, 0, &con_illumina_7_ex, 7,  {1,3,4,5,6,-1}, {-1},           {1,3,-1},       {-1},           5,6,   -1,-1, -1,                   }, // v14.0.17  
+    {},  { QF_NO_ID,       "Illumina",      { "A00488:61:HMLGNDSXX:4:1101:4345:1000" },   TECH_ILLUM_7, 0, &con_illumina_7,    6,  {1,3,4,5,6,-1}, {-1},           {1,3,-1},       {-1},           5,6,   -1,-1, -1,                   },
+    {},  { QF_NO_ID,       "Illumina#bc",   { "A00488:61:HMLGNDSXX:4:1101:4345:1000#CTGGGAAG" }, 
+                                                                                          TECH_ILLUM_7, 0, &con_illumina_7i,   7,  {1,3,4,5,6,-1}, {-1},           {1,3,-1},       {-1},           5,6,   -1,-1, -1,                   },
+    {},  { QF_NO_ID,       "Illumina:bc",   { "SDF-02:GFH-0166::1:13435:2311:1233:GTAGCCAATCA" }, 
+                                                                                          TECH_ILLUM_7, 0, &con_illumina_7c,   7,  {3,4,5,6,-1},   {-1},           {3,-1},         {-1},           5,6,   -1,-1, -1,                   },
+    {},  { QF_NO_ID,       "Illumina-gs",   { "ATATA-ATGCATAG|ab|A00488:61:HMLGNDSXX:4:1101:4345:1000|1" },   
+                                                                                          TECH_ILLUM_7, 0, &con_illumina_7_gs, 10, {4,6,7,8,9,-1}, {-1},           {4,6,-1},       {-1},           8,9,   -1,-1, -1,                   },
+    {},  { QF_NO_ID,       "BGI-R6",        { "8A_V100004684L3C001R029011637", "V300014293BL2C001R027005967", "V300003413L4C001R016000000" },          
+                                                                                          TECH_BGI,     0, &con_bgi_R6,        3,  {-1},           {1,2,3,4,-1},   {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_bgi_R     },
+    {},  { QF_NO_ID,       "BGI-R7",        { "V300017009_8AL2C001R0030001805", "V300022116L2C001R0010002968", "V300014296L2C001R0010000027", "E100001117L1C001R0030000000", "E1000536L1C002R0020000005" },         
+                                                                                          TECH_BGI,     0, &con_bgi_R7,        3,  {-1},           {1,2,3,4,-1},   {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_bgi_R     },
+    {},  { QF_NO_ID,       "BGI-R8",        { "V300046476L1C001R00100001719" },           TECH_BGI,     0, &con_bgi_R8,        3,  {-1},           {1,2,3,4,-1},   {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_bgi_R     },
+    {},  { QF_NO_ID,       "BGI-LL7",       { "DP8400010271TLL1C005R0511863479" },        TECH_BGI,     0, &con_bgi_LL7,       4,  {-1},           {1,2,3,4,-1},   {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_bgi_LL    },
+    {},  { QF_NO_ID,       "BGI-CL",        { "CL100025298L1C002R050_244547" },           TECH_BGI,     0, &con_bgi_CL,        4,  {4,-1},         {1,2,3,-1},     {-1},           {-1},           4,-1,  -1,-1, -1,  0,  PX_bgi_CL    }, 
+    // {},  { QF_NO_ID,       "IonTorrent",    { "ZEWTM:10130:07001" },                      TECH_IONTORR, 0, &con_ion_torrent_3, 2,  {-1},           {1,2,-1},       {-1},           {-1},           -1,-1, -1,-1, -1,  17, PX_ion_torrent_3 },
+    {},  { QF_NO_ID,       "IonTorrent",    { "ZEWTM:10130:07001" },                      TECH_IONTORR, 0, &con_ion_torrent_3, 2,  {-1},           {-1},           {-1},           {-1},           -1,-1, -1,-1, -1,  17               },
+    {},  { QF_NO_ID,       "Illumina-o-fq", { "SOLEXA6_0104:3:1:1852:13550 1:N:0:0" },    TECH_ILLUM_5, 1, &con_illumina_5_fq, 5,  {1,2,3,4,-1},   {-1},           {-1},           {-1},           -1,-1, -1,-1, -1,                   }, // v14.0.0
+    {},  { QF_NO_ID,       "Illumina-old#", { "HWI-ST550_0201:3:1101:1626:2216#ACAGTG" }, TECH_ILLUM_5, 0, &con_illumina_5i,   5,  {1,2,3,4,-1},   {-1},           {-1},           {-1},           -1,-1, -1,-1, -1,                   },
+    {},  { QF_NO_ID,       "Illumina-old",  { "SOLEXA-1GA-1_4_FC20ENL:7:258:737:870" },   TECH_ILLUM_5, 0, &con_illumina_5,    4,  {1,2,3,4,-1},   {-1},           {1,2,3,4-1},    {-1},           -1,-1, -1,-1, -1,                   },
+    {},  { QF_NO_ID,       "Roche-454",     { "000050_1712_0767" },                       TECH_454,     0, &con_roche_454,     2,  {-1},           {0,1,2,-1},     {-1},           {-1},           -1,-1, -1,-1, -1,  16, PX_roche_454 },
+    {},  { QF_NO_ID,       "Helicos",       { "VHE-242383071011-15-1-0-2" },              TECH_HELICOS, 0, &con_helicos,       5,  {2,3,4,5,-1},   {-1},           {-1},           {-1},           -1,-1, -1,-1, -1,                   },
+    {},  { QF_NO_ID,       "PacBio-3",      { "56cdb76f_70722_4787" },                    TECH_PACBIO,  0, &con_pacbio_3,      2,  {1,2,-1},       {-1},           {1,2,-1},       {0,-1},         -1,-1, -1,-1, -1,                   },
+    {},  { QF_NO_ID,       "PacBio-Range",  { "m130802_221257_00127_c100560082550000001823094812221334_s1_p0/128361/872_4288" },
+                                                                                          TECH_PACBIO,  0, &con_pacbio_range,  4,  {1,2,3,-1},     {-1},           {-1},           {-1},           1,-1,   3,-1, -1,  0,  PX_pacbio    },
+    {},  { QF_NO_ID,       "PacBio-Label",  { "m64136_200621_234916/18/ccs" },            TECH_PACBIO,  0, &con_pacbio_label,  3,  {1,-1},         {-1},           {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_pacbio    },
+    {},  { QF_NO_ID,       "PacBio-Plain",  { "m64136_200621_234916/18" },                TECH_PACBIO,  0, &con_pacbio_plain,  2,  {1,-1},         {-1},           {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_pacbio    },
+    // {},  { QF_NO_ID,       "Nanopore",      { "af84b0c1-6945-4323-9193-d9f6f2c38f9a" },   TECH_ONP,     0, &con_nanopore,      4,  {-1},           {-1},           {0,1,2,3,4,-1}, {-1},           -1,-1, -1,-1, -1,  36,           },
+    {},  { QF_NO_ID,       "Nanopore",      { "af84b0c1-6945-4323-9193-d9f6f2c38f9a" },   TECH_ONP,     0, &con_nanopore,      4,  {-1},           {0,1,2,3,4-1},  {0,1,2,3,4,-1}, {0,1,2,3,4,-1}, -1,-1, -1,-1, -1,  36, PX_nanopore  },
+    // {},  { QF_NO_ID,       "Nanopore-ext",  { "2a228edf-d8bc-45d4-9c96-3d613b8530dc_Basecall_2D_000_template" },
     //                                                                       TECH_ONP,     0, &con_nanopore_ext,  5,  {-1},           {-1},           {0,1,2,3,4,-1}, {-1},           -1,-1, -1,-1, -1,                },
-    {},  { "Nanopore-ext",  { "2a228edf-d8bc-45d4-9c96-3d613b8530dc_Basecall_2D_000_template" },
-                                                                          TECH_ONP,     0, &con_nanopore_ext,  5,  {-1},           {0,1,2,3,4,-1}, {0,1,2,3,4,-1}, {0,1,2,3,4,-1}, -1,-1, -1,-1, -1,  0,  PX_nanopore_ext },
-    {},  { "BamSurgeon",    { "22:33597495-34324994_726956_727496_0:0:0_0:0:0_2963e" },   
-                                                                          TECH_UNKNOWN, 0, &con_bamsurgeon,    7,  {1,2,3,4,-1},   {-1},           {1,3,7,-1},     {7,-1},         1,3,   2,4,   -1,                   },
-    {},  { "NCBI_SRA_LEN",  { "SRR11215720.1_1_length=120" },             TECH_UNKNOWN, 0, &con_ncbi_sra_len,  10, {1,2,-1},       {-1},           {-1},           {-1},           1,-1,  2,-1,  3,   0,  PX_sra_len   },
-    {},  { "NCBI-SRA2+-FQ", { "ERR2708427.1.1 51e7525d-fa50-4b1a-ad6d-4f4ae25c1df7 someextradata length=1128" },
-                                                                          TECH_UNKNOWN, 2, &con_ncbi_sra2P_fq, 6,  {2,3,8,-1},     {-1},           {2,3,-1},       {-1},           3,-1,  -1,-1, 8,                    },
-    {},  { "NCBI-SRA+-FQ",  { "ERR811170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template BOWDEN04_20151016_MN15199_FAA67113_BOWDEN04_MdC_MARC_Phase2a_4833_1_ch19_file1_strand length=52" },
-                                                                          TECH_UNKNOWN, 2, &con_ncbi_sraP_fq,  5,  {2,7,-1},       {-1},           {-1},           {-1},           2,-1,  -1,-1, 7,                    },
-    {},  { "NCBI-SRA2-FQ",  { "ERR2708427.1.1 51e7525d-fa50-4b1a-ad6d-4f4ae25c1df7 length=1128" },
-                                                                          TECH_UNKNOWN, 2, &con_ncbi_sra2_fq,  5,  {2,3,7,-1},     {-1},           {2,3,-1},       {-1},           3,-1,  -1,-1, 7,                    },
-    {},  { "NCBI-SRA-FQ",   { "ERR811170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template length=52" },
-                                                                          TECH_UNKNOWN, 2, &con_ncbi_sra_fq,   4,  {2,6,-1},       {-1},           {-1},           {-1},           2,-1,  -1,-1, 6,                    },
-    {},  { "NCBI-SRR-FQ",   { "SRR12345678.5 5" },                        TECH_UNKNOWN, 2, &con_ncbi_srr_fq,   2,  {1,2,-1},       {-1},           {-1},           {-1},           1,2,   -1,-1, -1,                   },
-    {},  { "NCBI-SRA2",     { "ERR2708427.1.1" },                         TECH_UNKNOWN, 0, &con_ncbi_sra2,     2,  {2,3,-1},       {-1},           {2,3,-1},       {-1},           3,-1,  -1,-1, -1,                   },
-    {},  { "NCBI-SRA",      { "SRR001666.1" },                            TECH_UNKNOWN, 0, &con_ncbi_sra,      1,  {2,-1},         {-1},           {2,-1},         {-1},           2,-1,  -1,-1, -1,                   },
-    {},  { "seqan",         { "adeno-reads100.fasta.000000008" },         TECH_UNKNOWN, 0, &con_seqan,         2,  {-1},           {2, -1},        {-1},           {-1},           2,-1,  -1,-1, -1,   0,  PX_seqan    },
-    {},  { "CLC-GW",        { "umi64163_count1" },                        TECH_UNKNOWN, 0, &con_clc_gw,        9,  {0,1,-1},       {-1},           {0,1,-1},       {-1},           -1,-1, -1,-1, -1,   0,  PX_clc_gw   },
-    {},  { "hex_chr",       { "30cf_chr10" }, /* wgsim simulator? */      TECH_UNKNOWN, 0, &con_hex_chr,       1,  {-1},           {-1},           {-1},           {0,-1},         -1,-1,  -1,-1, -1,                  }, // added v14
-    {},  { "Integer",       { "123" },                                    TECH_UNKNOWN, 0, &con_integer,       0,  {0,-1},         {-1},           {0,-1},         {-1},           0,-1,  -1,-1, -1,                   }, 
-    {},  { "Str_Integer",   { "read_1" },   /* eg CLC */                  TECH_UNKNOWN, 0, &con_str_integer,   1,  {1,-1},         {-1},           {1,-1},         {-1},           1,-1,  -1,-1, -1,                   },
-    {},  { "Genozip-opt",   { "basic.1" },  /* must be last */            TECH_UNKNOWN, 0, &con_genozip_opt,   1,  {1,-1},         {-1},           {1,-1},         {-1},           1,-1,  -1,-1, -1,                   },
+    {},  { QF_NO_ID,       "Nanopore-ext",  { "2a228edf-d8bc-45d4-9c96-3d613b8530dc_Basecall_2D_000_template" },
+                                                                                          TECH_ONP,     0, &con_nanopore_ext,  5,  {-1},           {0,1,2,3,4,-1}, {0,1,2,3,4,-1}, {0,1,2,3,4,-1}, -1,-1, -1,-1, -1,  0,  PX_nanopore_ext },
+    {},  { QF_NO_ID,       "BamSurgeon",    { "22:33597495-34324994_726956_727496_0:0:0_0:0:0_2963e" },   
+                                                                                          TECH_UNKNOWN, 0, &con_bamsurgeon,    7,  {1,2,3,4,-1},   {-1},           {1,3,7,-1},     {7,-1},         1,3,   2,4,   -1,                   },
+    {},  { QF_NO_ID,       "NCBI_SRA_L",    { "SRR11215720.1_1_length=120" },             TECH_UNKNOWN, 0, &con_ncbi_sra_L,    10, {1,2,-1},       {-1},           {-1},           {-1},           1,-1,  2,-1,  3,   0,  PX_sra_len   },
+    {},  { QF_NO_ID,       "NCBI-SRA2+-FQ", { "ERR2708427.1.1 51e7525d-fa50-4b1a-ad6d-4f4ae25c1df7 someextradata length=1128" },
+                                                                                          TECH_UNKNOWN, 2, &con_ncbi_sra2P_fq, 6,  {2,3,8,-1},     {-1},           {2,3,-1},       {-1},           3,-1,  -1,-1, 8,                    },
+    {},  { QF_NO_ID,       "NCBI-SRA+-FQ_L",{ "ERR811170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template BOWDEN04_20151016_MN15199_FAA67113_BOWDEN04_MdC_MARC_Phase2a_4833_1_ch19_file1_strand length=52" },
+                                                                                          TECH_UNKNOWN, 2, &con_ncbi_sraP_fq_L,5,  {2,7,-1},       {-1},           {-1},           {-1},           2,-1,  -1,-1, 7,                    },
+    {},  { QF_NO_ID,       "NCBI-SRA+-FQ",  { "SRR14137848.3 A00180:28:HC3F5DRXX:2:2110:27453:21981_1:N:0:ATTACTCGATCT+GGCTCTGA" },
+                                                                                          TECH_UNKNOWN, 2, &con_ncbi_sraP_fq,  2,  {2,-1},         {-1},           {-1},           {-1},           2,-1,  -1,-1, -1,                   },
+    {},  { QF_NO_ID,       "NCBI-SRA2-FQ_L",{ "ERR2708427.1.1 51e7525d-fa50-4b1a-ad6d-4f4ae25c1df7 length=1128" },
+                                                                                          TECH_UNKNOWN, 2, &con_ncbi_sra2_fq_L,5,  {2,3,7,-1},     {-1},           {2,3,-1},       {-1},           3,-1,  -1,-1, 7,                    },
+    {},  { QF_NO_ID,       "NCBI-SRA-FQ_L", { "ERR811170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template length=52" },
+                                                                                          TECH_UNKNOWN, 2, &con_ncbi_sra_fq_L, 4,  {2,6,-1},       {-1},           {-1},           {-1},           2,-1,  -1,-1, 6,                    },
+    {},  { QF_NO_ID,       "NCBI-SRR-FQ",   { "SRR12345678.5 5" },                        TECH_UNKNOWN, 2, &con_ncbi_srr_fq,   2,  {1,2,-1},       {-1},           {-1},           {-1},           1,2,   -1,-1, -1,                   },
+    {},  { QF_NO_ID,       "NCBI-SRA2",     { "ERR2708427.1.1" },                         TECH_UNKNOWN, 0, &con_ncbi_sra2,     2,  {2,3,-1},       {-1},           {2,3,-1},       {-1},           3,-1,  -1,-1, -1,                   },
+    {},  { QF_NO_ID,       "NCBI-SRA",      { "SRR001666.1" },                            TECH_UNKNOWN, 0, &con_ncbi_sra,      1,  {2,-1},         {-1},           {2,-1},         {-1},           2,-1,  -1,-1, -1,                   },
+    {},  { QF_NO_ID,       "seqan",         { "adeno-reads100.fasta.000000008" },         TECH_UNKNOWN, 0, &con_seqan,         2,  {-1},           {2, -1},        {-1},           {-1},           2,-1,  -1,-1, -1,   0,  PX_seqan    },
+    {},  { QF_NO_ID,       "CLC-GW",        { "umi64163_count1" },                        TECH_UNKNOWN, 0, &con_clc_gw,        9,  {0,1,-1},       {-1},           {0,1,-1},       {-1},           -1,-1, -1,-1, -1,   0,  PX_clc_gw   },
+    {},  { QF_NO_ID,       "hex_chr",       { "30cf_chr10" }, /* wgsim simulator? */      TECH_UNKNOWN, 0, &con_hex_chr,       1,  {-1},           {-1},           {-1},           {0,-1},         -1,-1,  -1,-1, -1,                  }, // added v14
+    {},  { QF_NO_ID,       "Integer",       { "123" },                                    TECH_UNKNOWN, 0, &con_integer,       0,  {0,-1},         {-1},           {0,-1},         {-1},           0,-1,  -1,-1, -1,                   }, 
+    {},  { QF_NO_ID,       "Str_Integer",   { "read_1" },   /* eg CLC */                  TECH_UNKNOWN, 0, &con_str_integer,   1,  {1,-1},         {-1},           {1,-1},         {-1},           1,-1,  -1,-1, -1,                   },
+    {},  { QF_GENOZIP_OPT, "Genozip-opt",   { "basic.1" },  /* must be last */            TECH_UNKNOWN, 0, &con_genozip_opt,   1,  {1,-1},         {-1},           {1,-1},         {-1},           1,-1,  -1,-1, -1,                   },
 
     // FASTQ Line3 QFs
-         { "NCBI-SRA2+-L3", { "ERR2708427.1.1 51e7525d-fa50-4b1a-ad6d-4f4ae25c1df7 someextradata length=1128" },
-                                                                          TECH_UNKNOWN, 2, &con_ncbi_sra2P_l3, 6, {2,3,7,-1},     {-1},            {2,3,-1},       {-1},           3,4,   -1,-1,  -1,                  },
-         { "NCBI-SRA+-L3",  { "ERR811170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template BOWDEN04_20151016_MN15199_FAA67113_BOWDEN04_MdC_MARC_Phase2a_4833_1_ch19_file1_strand length=52" },
-                                                                          TECH_UNKNOWN, 2, &con_ncbi_sraP_l3,  5, {2,6,-1},       {-1},            {-1},           {-1},           2,3,   -1,-1,  -1,                  },
-         { "NCBI-SRA2-L3",  { "ERR2708427.1.1 51e7525d-fa50-4b1a-ad6d-4f4ae25c1df7 length=0, 1128" },
-                                                                          TECH_UNKNOWN, 2, &con_ncbi_sra2_l3,  5, {2,3,6,-1},     {-1},            {2,3,-1},       {-1},           3,4,   -1,-1,  -1,                  },
-         { "NCBI-SRA-L3",   { "ERR811170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template length=52" },
-                                                                          TECH_UNKNOWN, 2, &con_ncbi_sra_l3,   4, {2,5,-1},       {-1},            {-1},           {-1},           2,3,   -1,-1,  -1,                  },
+         { QF_NO_ID,       "NCBI-SRA2+-L3", { "ERR2708427.1.1 51e7525d-fa50-4b1a-ad6d-4f4ae25c1df7 someextradata length=1128" },
+                                                                                          TECH_UNKNOWN, 2, &con_ncbi_sra2P_l3, 6, {2,3,7,-1},     {-1},            {2,3,-1},       {-1},           3,4,   -1,-1,  -1,                  },
+         { QF_NO_ID,       "NCBI-SRA+-L3",  { "ERR811170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template BOWDEN04_20151016_MN15199_FAA67113_BOWDEN04_MdC_MARC_Phase2a_4833_1_ch19_file1_strand length=52" },
+                                                                                          TECH_UNKNOWN, 2, &con_ncbi_sraP_l3,  5, {2,6,-1},       {-1},            {-1},           {-1},           2,3,   -1,-1,  -1,                  },
+         { QF_NO_ID,       "NCBI-SRA2-L3",  { "ERR2708427.1.1 51e7525d-fa50-4b1a-ad6d-4f4ae25c1df7 length=0, 1128" },
+                                                                                          TECH_UNKNOWN, 2, &con_ncbi_sra2_l3,  5, {2,3,6,-1},     {-1},            {2,3,-1},       {-1},           3,4,   -1,-1,  -1,                  },
+         { QF_NO_ID,       "NCBI-SRA-L3",   { "ERR811170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template length=52" },
+                                                                                          TECH_UNKNOWN, 2, &con_ncbi_sra_l3,   4, {2,5,-1},       {-1},            {-1},           {-1},           2,3,   -1,-1,  -1,                  },
 };
 
 #define NUM_QF_L3s 4

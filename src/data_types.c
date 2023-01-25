@@ -23,26 +23,28 @@ const DtTranslation dt_get_translation (VBlockP vb) // vb=NULL relates to the tx
 {
     static DtTranslation translations[] = TRANSLATIONS;
     bool i_am_binary = z_file->z_flags.txt_is_bin;
+    DataType z_dt = vb ? vb->data_type : z_file->data_type; // note: vb is NULL when called with txtheader 
 
+    // exception: no SAM->FASTQ translation if deep
     for (unsigned i=0; i < ARRAY_LEN (translations); i++) {
-/*if (i==ARRAY_LEN (translations)-1) { printf ("translations[i].src_z_non_bin_dt=%u z_file->data_type=%u " 
+/*if (i==ARRAY_LEN (translations)-1) { printf ("translations[i].src_z_non_bin_dt=%u z_dt=%u " 
             "translations[i].src_z_is_binary=%u i_am_binary=%u "
             "translations[i].dst_txt_dt=%u  flag.out_dt=%u "
             "translations[i].is_translation=%u *translations[i].is_translation=%u\n", 
-            translations[i].src_z_non_bin_dt , z_file->data_type ,
+            translations[i].src_z_non_bin_dt , z_dt ,
             translations[i].src_z_is_binary  , i_am_binary ,
             translations[i].dst_txt_dt       , flag.out_dt ,
             translations[i].is_translation , *translations[i].is_translation); exit_ok();}
 */
-        if (translations[i].src_z_non_bin_dt == z_file->data_type &&
+        if (translations[i].src_z_non_bin_dt == z_dt &&
             translations[i].src_z_is_binary  == i_am_binary &&
             translations[i].dst_txt_dt       == flag.out_dt &&
             (!translations[i].is_translation || translations[i].is_translation (vb))) // if non-NULL, this flag determines if it is a translation
             return translations[i + flag.extended_translation]; // get next one if extended
-}
+    }
 
     // translation not found - return a non-translation "translation"
-    return (DtTranslation){ .dst_txt_dt      = z_file->data_type, 
+    return (DtTranslation){ .dst_txt_dt      = z_dt, 
                             .factor          = 1, 
                             .is_src_dt       = true, 
                             .src_z_is_binary = i_am_binary, 
@@ -59,6 +61,16 @@ DataType dt_get_txt_dt (DataType dt)
             return txt_dt;
 
     ABORT_R ("cannot find textual type for binary data type %s", dt_name (dt));
+}
+
+// update dt_fields for backward compatability
+void dt_piz_update_for_backcomp (void)
+{
+    // In v15, we changed the CHROM (did_i=0) dict_id in FASTQ from CONTIG to RNAME (needs to be the same as SAM for Deep)
+    // when pizzing older files, we update it to CONTIG, so that the CONTIG loads to did_i=0.
+    // If file is >=v15, we set it to RNAME, in case previous PIZzed file set it to CONTIG
+    dt_fields[DT_FASTQ].predefined[FASTQ_CONTIG].dict_id = 
+        VER(15) ? dict_id_make (cSTR("RNAME"), DTYPE_FIELD) : dict_id_make (cSTR("CONTIG"), DTYPE_FIELD);
 }
 
 rom dt_name (DataType dt)

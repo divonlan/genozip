@@ -497,6 +497,10 @@ static inline void sam_load_groups_add_grps (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
     if (CTX(OPTION_MC_Z)->is_loaded) // if we're going to reconstruct MC:Z into txt_data
         buf_alloc (vb, &vb->txt_data, 0, vb->recon_size, char, 0, "txt_data");
 
+    // if MC:Z attempts to copy an earlier CIGAR, it will get an empty snip bc CIGAR is not in txt_data. 
+    // That's ok, bc this means this MC:Z will not be used to reconstruct its mate's CIGAR as its mate already appeared (and we don't use MC:Z for anything else during pre-processing)
+    CTX(SAM_CIGAR)->empty_lookup_ok = true; 
+
     // every alignment in the Primary VB represents a grp
     for (SAGroup grp_i=0; grp_i < plsg->num_grps ; grp_i++) {
         Sag *g = &vb_grps[grp_i];
@@ -587,9 +591,9 @@ static inline void sam_load_groups_add_grps (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
             g->as = CAP_SA_AS (vb->last_int(OPTION_AS_i));  // [0,255] capped at 0 and 255
         }
 
-        // if line contains MC:Z - reconstruct is into txt_data, as our mate's CIGAR might copy it
+        // if line contains MC:Z - reconstruct it into txt_data, as our mate's CIGAR might copy it
         // note: a better way to do this would be using reconstruct_to_history
-        if (CTX(OPTION_MC_Z)->is_loaded && idxs[1].idx != -1/*this line has MC:Z */)  
+        if (CTX(OPTION_MC_Z)->is_loaded && idxs[1].idx != -1/*this line has MC:Z*/)  
             reconstruct_from_ctx (VB, OPTION_MC_Z, 0, true);
 
         total_seq_len += vb->seq_len;

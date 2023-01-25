@@ -13,8 +13,11 @@
 
 #pragma GENDICT_PREFIX SAM
 
-// Main fields
+// -----------------------------------------------------------------------------------------------------------
+// Common contexts of FASTQ and SAM - these MUST be first; in same order; same dict_id; for Deep to work.
+// -----------------------------------------------------------------------------------------------------------
 #pragma GENDICT SAM_RNAME=DTYPE_FIELD=RNAME // RNAME must be first
+
 #pragma GENDICT SAM_QNAME=DTYPE_FIELD=QNAME // MAX_QNAME_ITEMS
 #pragma GENDICT SAM_Q0NAME=DTYPE_1=Q0NAME // must have a did_i directly after container's 
 #pragma GENDICT SAM_Q1NAME=DTYPE_1=Q1NAME 
@@ -26,8 +29,71 @@
 #pragma GENDICT SAM_Q7NAME=DTYPE_1=Q7NAME 
 #pragma GENDICT SAM_Q8NAME=DTYPE_1=Q8NAME 
 #pragma GENDICT SAM_Q9NAME=DTYPE_1=Q9NAME 
-#pragma GENDICT SAM_QANAME=DTYPE_1=QANAME // if adding more Q*NAMEs - add to fastq.h and kraken.h too, and update MAX_QNAME_ITEMS
+#pragma GENDICT SAM_QANAME=DTYPE_1=QANAME 
+#pragma GENDICT SAM_QBNAME=DTYPE_1=QBNAME // if adding more Q*NAMEs - add to fastq.h and kraken.h too, and update MAX_QNAME_ITEMS
 #pragma GENDICT SAM_QmNAME=DTYPE_1=QmNAME // QmNAME reserved for mate number (always the last dict_id in the container)
+
+#pragma GENDICT SAM_SQBITMAP=DTYPE_FIELD=SQBITMAP
+#pragma GENDICT SAM_NONREF=DTYPE_FIELD=NONREF     // these 4 fields must be in this order, right after SAM_SQBITMAP
+#pragma GENDICT SAM_NONREF_X=DTYPE_FIELD=NONREF_X
+#pragma GENDICT SAM_GPOS=DTYPE_FIELD=GPOS
+#pragma GENDICT SAM_STRAND=DTYPE_FIELD=STRAND
+#pragma GENDICT SAM_SEQMIS_A=DTYPE_FIELD=SEQMIS_A // v14: mismatch bases vs the reference, when ref=A
+#pragma GENDICT SAM_SEQMIS_C=DTYPE_FIELD=SEQMIS_C // v14: mismatch bases vs the reference, when ref=A
+#pragma GENDICT SAM_SEQMIS_G=DTYPE_FIELD=SEQMIS_G // v14: mismatch bases vs the reference, when ref=A
+#pragma GENDICT SAM_SEQMIS_T=DTYPE_FIELD=SEQMIS_T // v14: mismatch bases vs the reference, when ref=A
+
+#pragma GENDICT SAM_QUAL=DTYPE_FIELD=QUAL 
+#pragma GENDICT SAM_DOMQRUNS=DTYPE_FIELD=DOMQRUNS // these 3 must be right after SAM_QUAL. DOMQRUNS is also used by LONGR. For backwards compatability, we can never change its name.
+#pragma GENDICT SAM_QUALMPLX=DTYPE_FIELD=QUALMPLX // v14.0.0. DOMQUAL codec: dom multiplexer 
+#pragma GENDICT SAM_DIVRQUAL=DTYPE_FIELD=DIVRQUAL // v14.0.0. DOMQUAL codec: lines that don't have enough dom.
+
+#pragma GENDICT SAM_TOPLEVEL=DTYPE_FIELD=TOPLEVEL // must be called TOPLEVEL
+#pragma GENDICT SAM_TAXID=DTYPE_FIELD=TAXID
+#pragma GENDICT SAM_DEBUG_LINES=DTYPE_FIELD=DBGLINES      // used by --debug-lines
+
+// contexts that exist in FASTQ and not SAM - we put them here to reserve the DidI so its not 
+// occupied by another SAM contexts causing dictionaries to become mingled in Deep
+
+#pragma GENDICT UNUSED_FASTQ_DEEP_VB=DTYPE_FIELD=DpVB
+#pragma GENDICT UNUSED_FASTQ_DEEP_LINE=DTYPE_FIELD=DpLINE
+
+#pragma GENDICT UNUSED_FASTQ_QNAME2=DTYPE_1=QNAME2     // QNAME embedded in DESC (QNAME2 items immediately follow)
+#pragma GENDICT UNUSED_FASTQ_Q0NAME2=DTYPE_1=q0NAME    
+#pragma GENDICT UNUSED_FASTQ_Q1NAME2=DTYPE_1=q1NAME 
+#pragma GENDICT UNUSED_FASTQ_Q2NAME2=DTYPE_1=q2NAME
+#pragma GENDICT UNUSED_FASTQ_Q3NAME2=DTYPE_1=q3NAME
+#pragma GENDICT UNUSED_FASTQ_Q4NAME2=DTYPE_1=q4NAME
+#pragma GENDICT UNUSED_FASTQ_Q5NAME2=DTYPE_1=q5NAME
+#pragma GENDICT UNUSED_FASTQ_Q6NAME2=DTYPE_1=q6NAME 
+#pragma GENDICT UNUSED_FASTQ_Q7NAME2=DTYPE_1=q7NAME 
+#pragma GENDICT UNUSED_FASTQ_Q8NAME2=DTYPE_1=q8NAME 
+#pragma GENDICT UNUSED_FASTQ_Q9NAME2=DTYPE_1=q9NAME 
+#pragma GENDICT UNUSED_FASTQ_QANAME2=DTYPE_1=qANAME 
+
+#pragma GENDICT UNUSED_FASTQ_E1L=DTYPE_FIELD=E1L
+#pragma GENDICT UNUSED_FASTQ_E2L=DTYPE_FIELD=E2L
+
+#pragma GENDICT UNUSED_FASTQ_LINE3=DTYPE_FIELD=LINE3
+#define MAX_LINE3_ITEMS 9
+#pragma GENDICT UNUSED_FASTQ_T0HIRD=DTYPE_1=t0NAME    // must be directly after FASTQ_LINE3
+#pragma GENDICT UNUSED_FASTQ_T1HIRD=DTYPE_1=t1NAME 
+#pragma GENDICT UNUSED_FASTQ_T2HIRD=DTYPE_1=t2NAME
+#pragma GENDICT UNUSED_FASTQ_T3HIRD=DTYPE_1=t3NAME
+#pragma GENDICT UNUSED_FASTQ_T4HIRD=DTYPE_1=t4NAME
+#pragma GENDICT UNUSED_FASTQ_T5HIRD=DTYPE_1=t5NAME
+#pragma GENDICT UNUSED_FASTQ_T6HIRD=DTYPE_1=t6NAME 
+#pragma GENDICT UNUSED_FASTQ_T7HIRD=DTYPE_1=t7NAME 
+#pragma GENDICT UNUSED_FASTQ_COPY_Q=DTYPE_1=tQcopy 
+
+// -----------------------------------------------------------------------------------------------------------
+// End of common contexts of FASTQ and SAM
+// -----------------------------------------------------------------------------------------------------------
+
+// -----------------------------------------------------------------------------------------------------------
+// Contexts that are unique to SAM - not in FASTQ - these must start after the highest possible FASTQ Did
+// -----------------------------------------------------------------------------------------------------------
+
 #pragma GENDICT SAM_FLAG=DTYPE_FIELD=FLAG
 #pragma GENDICT SAM_FLAG0=DTYPE_FIELD=F0LAG0
 #pragma GENDICT SAM_FLAG1=DTYPE_FIELD=F1LAG1
@@ -42,37 +108,21 @@
 #pragma GENDICT SAM_P3NEXT=DTYPE_FIELD=P3NEXT
 #pragma GENDICT SAM_TLEN=DTYPE_FIELD=TLEN
 #pragma GENDICT SAM_AUX=DTYPE_FIELD=AUX
-#pragma GENDICT SAM_SQBITMAP=DTYPE_FIELD=SQBITMAP
-#pragma GENDICT SAM_NONREF=DTYPE_FIELD=NONREF     // these 4 fields must be in this order, right after SAM_SQBITMAP
-#pragma GENDICT SAM_NONREF_X=DTYPE_FIELD=NONREF_X
-#pragma GENDICT SAM_GPOS=DTYPE_FIELD=GPOS
-#pragma GENDICT SAM_STRAND=DTYPE_FIELD=STRAND
-#pragma GENDICT SAM_SEQMIS_A=DTYPE_FIELD=SEQMIS_A // v14: mismatch bases vs the reference, when ref=A
-#pragma GENDICT SAM_SEQMIS_C=DTYPE_FIELD=SEQMIS_C // v14: mismatch bases vs the reference, when ref=A
-#pragma GENDICT SAM_SEQMIS_G=DTYPE_FIELD=SEQMIS_G // v14: mismatch bases vs the reference, when ref=A
-#pragma GENDICT SAM_SEQMIS_T=DTYPE_FIELD=SEQMIS_T // v14: mismatch bases vs the reference, when ref=A
-#pragma GENDICT SAM_QUAL=DTYPE_FIELD=QUAL 
-#pragma GENDICT SAM_DOMQRUNS=DTYPE_FIELD=DOMQRUNS // these 3 must be right after SAM_QUAL. DOMQRUNS is also used by LONGR. For backwards compatability, we can never change its name.
-#pragma GENDICT SAM_QUALMPLX=DTYPE_FIELD=QUALMPLX // v14.0.0. DOMQUAL codec: dom multiplexer 
-#pragma GENDICT SAM_DIVRQUAL=DTYPE_FIELD=DIVRQUAL // v14.0.0. DOMQUAL codec: lines that don't have enough dom.
 #pragma GENDICT SAM_QNAMESA=DTYPE_FIELD=QNAMESA   // v14.0.0. PRIM: copy from SA Group
 #pragma GENDICT SAM_QUALSA=DTYPE_FIELD=QUALSA     // v14.0.0. DEPN: Qual diff vs SA Group PRIM: copy from SA Group 
-#pragma GENDICT SAM_QUAL_FLANK=DTYPE_FIELD=QUALFLNK  // v14.0.0. DEPN: Flanking regions of QUAL that are not diffed
+#pragma GENDICT SAM_QUAL_FLANK=DTYPE_FIELD=QUALFLNK  // v14.0.0. DEPN: Flanking regions of QUAL that are not diff'ed
 #pragma GENDICT SAM_QUAL_FLANK_DOMQRUNS=DTYPE_2=Q0F_DOMQ // these 3 must be right after SAM_QUAL_FLANK. 
 #pragma GENDICT SAM_QUAL_FLANK_QUALMPLX=DTYPE_2=Q1F_MPLX 
 #pragma GENDICT SAM_QUAL_FLANK_DIVRQUAL=DTYPE_2=Q2F_DIVR 
 #pragma GENDICT SAM_EOL=DTYPE_FIELD=EOL
 #pragma GENDICT SAM_BAM_BIN=DTYPE_FIELD=BAM_BIN
-#pragma GENDICT SAM_TOPLEVEL=DTYPE_FIELD=TOPLEVEL // must be called TOPLEVEL
 #pragma GENDICT SAM_TOP2BAM=DTYPE_FIELD=TOP2BAM
 #pragma GENDICT SAM_TOP2FQ=DTYPE_FIELD=TOP2FQ
 #pragma GENDICT SAM_TOP2FQEX=DTYPE_FIELD=TOP2FQEX
-#pragma GENDICT SAM_TAXID=DTYPE_FIELD=TAXID
-#pragma GENDICT SAM_BUDDY=DTYPE_FIELD=BUDDY  // note: this MUST be the same dict_id ("BUDDY") for all data_types using buddy (they will have different did_i though), expected by sam_reconstruct_from_buddy 
+#pragma GENDICT SAM_BUDDY=DTYPE_FIELD=BUDDY  // must be called BUDDY, expected by sam_reconstruct_from_buddy 
 #pragma GENDICT SAM_SAG=DTYPE_FIELD=SAG      // PRIM and DEPN: the sag from which to copy data
 #pragma GENDICT SAM_SAALN=DTYPE_FIELD=SAALN  // DEPN: sags: the alignment within sag which is this line (not needed for PRIM, as the aln_i is always 0)
-#pragma GENDICT SAM_MC_Z=DTYPE_FIELD=MC_Z    // used for consuming OPTION_MC_Z in case of translation to FASTQ
-#pragma GENDICT SAM_DEBUG_LINES=DTYPE_FIELD=DBGLINES      // used by --debug-lines
+#pragma GENDICT SAM_FQ_AUX=DTYPE_FIELD=MC_Z  // used for consuming some AUX fields in case of translation to FASTQ (name is "MC_Z" for as up to 14.0.25 it was called SAM_MC_Z)
 
 // Standard AUX fields - section 1.1 here: https://samtools.github.io/hts-specs/SAMtags.pdf
 #pragma GENDICT OPTION_AM_i=DTYPE_2=AM:i     // The smallest template-independent mapping quality in the template
@@ -359,6 +409,15 @@
 #pragma GENDICT OPTION_sz_A=DTYPE_2=sz_A     // scrap read: ZMW classification annotation, one of N:=Normal, C:=Control, M:=Malformed, or S:=Sentinel
 #pragma GENDICT OPTION_sc_A=DTYPE_2=sc_A     // scrap read: Scrap region-type annotation, one of A:=Adapter, B:=Barcode, L:=LQRegion, or F:=Filtered
 
+// PacBio Lima tags: https://lima.how/output/bam.html
+#pragma GENDICT OPTION_bc_B_S=DTYPE_2=bc:B:S // Barcode pair indices, integer codes represent 0-based position in the FASTA file of barcodes
+#pragma GENDICT OPTION_bq_i=DTYPE_2=bq:i     // Barcode score / quality, normalized between 0 and 100
+#pragma GENDICT OPTION_bl_Z=DTYPE_2=bl:Z     // Barcode sequence clipped from leading end
+#pragma GENDICT OPTION_bt_Z=DTYPE_2=bt:Z     // Barcode sequence clipped from trailing end
+#pragma GENDICT OPTION_ql_Z=DTYPE_2=ql:Z     // Qualities of barcode bases clipped from leading end, stored as a FASTQ string
+#pragma GENDICT OPTION_qt_Z=DTYPE_2=qt:Z     // Qualities of barcode bases clipped from trailing end, stored as a FASTQ string
+#pragma GENDICT OPTION_bx_B_i=DTYPE_2=bx_B_i // Pair of clipped barcode sequence lengths
+
 // samtools non-standard tags
 #pragma GENDICT OPTION_ms_i=DTYPE_2=ms:i     // mate score. Produced by samtools fixmate -m. Sum of those QUAL scores of mate that are >= 15. See calc_mate_score in samtools source.
 
@@ -545,7 +604,7 @@ extern void sam_reset_line (VBlockP vb);
                       sam_piz_special_MD_old, bam_piz_special_FLOAT, bam_piz_special_BIN, sam_piz_special_NM,   \
                       sam_piz_special_MD, sam_piz_special_REF_CONSUMED, \
                       sam_piz_special_PNEXT_IS_PREV_POS_old, sam_piz_special_COPY_MATE_FLAG, sam_piz_special_COPY_MATE_TLEN_old, \
-                      sam_piz_special_COPY_BUDDY_CIGAR, sam_piz_special_CONSUME_MC_Z, sam_piz_special_TLEN, sam_piz_special_QUAL,\
+                      sam_piz_special_COPY_BUDDY_CIGAR, sam_piz_special_FASTQ_CONSUME_AUX, sam_piz_special_TLEN, sam_piz_special_QUAL,\
                       sam_piz_special_pull_from_sag, sam_piz_special_SEQ, \
                       sam_piz_special_PRIM_QNAME, sam_piz_special_SQUANK, \
                       sam_piz_special_BSSEEKER2_XO, sam_piz_special_BSSEEKER2_XG, sam_piz_special_BSSEEKER2_XM,\
@@ -573,7 +632,7 @@ SPECIAL (SAM, 10, PNEXT_IS_PREV_POS_old, sam_piz_special_PNEXT_IS_PREV_POS_old);
 SPECIAL (SAM, 11, COPY_MATE_FLAG,        sam_piz_special_COPY_MATE_FLAG);      // introduced 12.0.41
 SPECIAL (SAM, 12, COPY_MATE_TLEN_old,    sam_piz_special_COPY_MATE_TLEN_old);  // Used in 12.0.41 and 12.0.42
 SPECIAL (SAM, 13, COPY_BUDDY_CIGAR,      sam_piz_special_COPY_BUDDY_CIGAR);    // introduced 12.0.41
-SPECIAL (SAM, 14, CONSUME_MC_Z,          sam_piz_special_CONSUME_MC_Z);        // introduced 12.0.41
+SPECIAL (SAM, 14, FASTQ_CONSUME_AUX,     sam_piz_special_FASTQ_CONSUME_AUX);   // introduced 12.0.41 (up to 14.0.25 called CONSUME_MC_Z)
 SPECIAL (SAM, 15, TLEN,                  sam_piz_special_TLEN);                // introduced 13.0.1
 SPECIAL (SAM, 16, QUAL,                  sam_piz_special_QUAL);                // introduced 13.0.1
 SPECIAL (SAM, 17, SAG,                   sam_piz_special_pull_from_sag);       // introduced 14.0.0
@@ -665,7 +724,7 @@ TXTHEADER_TRANSLATOR (sam_header_sam2bam);
 TXTHEADER_TRANSLATOR (txtheader_sam2fq);
 
 #define SAM_DICT_ID_ALIASES                    \
-    /*         alias          maps to      */  \
+    /*         alias         maps to       */  \
     { DT_SAM,  _OPTION_UB_Z, _OPTION_BX_Z },   /* 10xGenomics tags - CellRanger: UB/UR/UY = LongRanger BX/RX/QX */ \
     { DT_SAM,  _OPTION_UR_Z, _OPTION_RX_Z },   \
     { DT_SAM,  _OPTION_UY_Z, _OPTION_QX_Z },  
@@ -678,8 +737,8 @@ TXTHEADER_TRANSLATOR (txtheader_sam2fq);
 
 #define SAM_CONTIG_FMT "@SQ	SN:%.*s	LN:%"PRId64
 
-typedef enum { SAM_COMP_NONE=255, SAM_COMP_MAIN=0, SAM_COMP_PRIM=1, SAM_COMP_DEPN=2 } SamComponentType;
-#define SAM_COMP_NAMES { "MAIN", "PRIM", "DEPN" }
+typedef enum { SAM_COMP_NONE=255, SAM_COMP_MAIN=0, SAM_COMP_PRIM=1, SAM_COMP_DEPN=2, SAM_COMP_FQ00=3, SAM_COMP_FQ01=4 } SamComponentType;
+#define SAM_COMP_NAMES { "MAIN", "PRIM", "DEPN", "FQ00", "FQ01" }
 
 #define sam_is_main_vb (vb->comp_i == SAM_COMP_MAIN)
 #define sam_is_prim_vb (vb->comp_i == SAM_COMP_PRIM)

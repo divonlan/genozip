@@ -71,6 +71,7 @@ bool is_gff (STRp(header), bool *need_more)
     SAFE_NULT (header);
 
     bool is_gff = (header_len >= 13 && !memcmp (header, "##gff-version", 13)) || // must appear for GFF3/GTF
+                  (header_len >= 10 && !memcmp (header, "## mirGFF3", 10))    || // mirGFF, a specific type of GFF3
                    strstr (header, "#!genome-build")                          || // normally appears in GTF / GVF
                    strstr (header, "#!genome-version");                          // normally appears in GTF / GVF
 
@@ -86,12 +87,44 @@ bool gff_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
     if (txt_header->len >= 15 && !memcmp (B1STc(*txt_header), "##gff-version", 13))
         segconf.gff_version = atoi (Bc(*txt_header, 14));
 
+    else if (txt_header->len >= 10 && !memcmp (B1STc(*txt_header), "## mirGFF3", 10))
+        segconf.gff_version = 3;
+
     else if (txt_header->len >= 14 && !memcmp (B1STc(*txt_header), "#gtf-version", 12))
         segconf.gff_version = 2;
 
     SAFE_RESTORE;
 
     return true;
+}
+
+// search for last newline, and also search for embedded FASTA
+int32_t gff_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
+{
+    ASSERT (*i >= 0 && *i < vb->txt_data.len, "*i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
+
+    int32_t final_i = *i;
+    int32_t last_newline = -1;
+
+    for (int32_t j=first_i; j <= final_i; j++)
+        if (*Btxt(j) == '\n') {
+            last_newline = j;
+
+            if (j < final_i && *Btxt(j+1) == '>') {
+                if (!segconf.running) segconf.has_embdedded_fasta = true;
+                break; // terminate VB (and component) at this newline - next line is FASTA
+            }
+        }
+
+    if (last_newline != -1) {
+        *i = last_newline;
+        return vb->txt_data.len32-1 - last_newline;
+    }
+
+    else { // no newline found
+        *i = (int32_t)first_i - 1;
+        return -1; // cannot find \n in the data starting first_i
+    }
 }
 
 // called from seg_all_data_lines
@@ -588,8 +621,8 @@ rom gff_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_txt_l
         (remaining_txt_len >= 6 && !memcmp (next_field, "track ", 6))) { // Ensembl GTF track lines, eg: “track name=coords description="Chromosome coordinates list" priority=2"”
         SEG_NEXT_ITEM_NL (GFF_COMMENT);
 
-        // TO DO: support embedded FASTA, bug 392
-        ASSINP (!str_issame_ (STRd(GFF_COMMENT), "##FASTA", 7), "%s contains a ##FASTA directive. To compress it use --input=generic", txt_name);
+//xxx        // TO DO: support embedded FASTA, bug 392
+//        ASSINP (!str_issame_ (STRd(GFF_COMMENT), "##FASTA", 7), "%s contains a ##FASTA directive. To compress it use --input=generic", txt_name);
         
         goto eol; // if we have a comment, then during piz, the other fields will be filtered out
     }
@@ -638,6 +671,14 @@ eol:
 //----------
 // PIZ stuff
 //----------
+
+bool gff_piz_init_vb (VBlockP vb, const SectionHeaderVbHeader *header, uint32_t *txt_data_so_far_single_0_increment)
+{
+    if (vb->flags.gff.embedded_fasta) 
+        vb->data_type = DT_FASTA;
+
+    return true;
+}
 
 // filter is called before reconstruction of a repeat or an item, and returns true if item should be reconstructed. if not reconstructed, contexts are not consumed.
 CONTAINER_FILTER_FUNC (gff_piz_filter)

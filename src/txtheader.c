@@ -11,6 +11,7 @@
 #include "digest.h"
 #include "flags.h"
 #include "data_types.h"
+#include "filename.h"
 #include "file.h"
 #include "sections.h"
 #include "txtfile.h"
@@ -96,7 +97,7 @@ void txtheader_compress (BufferP txt_header,
     if (txt_file->codec == CODEC_BGZF) 
         bgzf_sign (txt_file->disk_size, section_header.codec_info);
         
-    file_basename (txt_file->name, false, FILENAME_STDIN, section_header.txt_filename, TXT_FILENAME_LEN);
+    filename_base (txt_file->name, false, FILENAME_STDIN, section_header.txt_filename, TXT_FILENAME_LEN);
     file_remove_codec_ext (section_header.txt_filename, txt_file->type); // eg "xx.fastq.gz -> xx.fastq"
 
     txt_header_buf = txt_header;
@@ -152,7 +153,7 @@ int64_t txtheader_zip_read_and_compress (int64_t *txt_header_offset, CompIType c
 
     // note: we always write the txt_header for comp_i=0 even if we don't actually have a header, because the
     // section header contains the data about the file. Special case: we don't write headers of SAM DEPN
-    if (z_file && !flag.seg_only && !flag.make_reference && !(z_sam_gencomp && comp_i)) {
+    if (z_file && !flag.seg_only && !flag.make_reference && !(z_sam_gencomp && (comp_i == SAM_COMP_PRIM || comp_i == SAM_COMP_DEPN))) {
         *txt_header_offset = z_file->disk_so_far; // offset of first (vb=1) TXT_HEADER fragment
         txtheader_compress (&evb->txt_data, txt_header_size, header_digest, is_first_txt, comp_i); 
     }
@@ -291,8 +292,8 @@ void txtheader_piz_read_and_reconstruct (Section sec)
 
         // load the source file isize if we have it and we are attempting to reconstruct an unmodifed file identical to the source
         bool loaded = false;
-        if (!flag.data_modified    
-        && (z_file->num_components == 1 || flag.unbind))  // not concatenating multiple files
+        if (!flag.data_modified)     
+//xxx        && (z_file->num_components == 1 || flag.unbind))  // not concatenating multiple files
             loaded = bgzf_load_isizes (sec); // also sets txt_file->bgzf_flags
 
         // case: user wants to see this section header, despite not needing BGZF data

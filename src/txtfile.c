@@ -14,6 +14,7 @@
 #include "genozip.h"
 #include "txtfile.h"
 #include "vblock.h"
+#include "filename.h"
 #include "file.h"
 #include "strings.h"
 #include "progress.h"
@@ -374,10 +375,13 @@ int32_t def_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
 {
     ASSERT (*i >= 0 && *i < vb->txt_data.len, "*i=%d is out of range [0,%"PRIu64"]", *i, vb->txt_data.len);
 
-    for (; *i >= (int32_t)first_i; (*i)--) 
-        if (vb->txt_data.data[*i] == '\n') 
-            return vb->txt_data.len-1 - *i;
+    int32_t j; for (j=*i; j >= (int32_t)first_i; j--) // use j - automatic var - for speed 
+        if (*Btxt(j) == '\n') {
+            *i = j;
+            return vb->txt_data.len32 -1 - j;
+        }
 
+    *i = j;
     return -1; // cannot find \n in the data starting first_i
 }
 
@@ -406,7 +410,7 @@ static uint32_t txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb)
     }
 
     // test remaining txt_data including passed-down data from previous VB
-    pass_to_next_vb_len = (DT_FUNC(txt_file, unconsumed)(vb, 0, &last_i));
+    pass_to_next_vb_len = (DT_FUNC(vb, unconsumed)(vb, 0, &last_i));
 
     // case: we're testing memory and this VB is too small for a single line - return and caller will try again with a larger VB
     if (segconf.running && pass_to_next_vb_len < 0) return (uint32_t)-1;
@@ -538,7 +542,7 @@ void txtfile_read_vblock (VBlockP vb)
         // if there is room left for only a partial BGZF block (we can't read partial blocks)
         uint32_t filled_up = max_memory_per_vb - (txt_file->codec == CODEC_BGZF) * BGZF_MAX_BLOCK_SIZE;
 
-        if (!len || vb->txt_data.len >= filled_up) {  // EOF or we have filled up the allocated memory
+        if (!len || vb->txt_data.len32 >= filled_up) {  // EOF or we have filled up the allocated memory
 
             // case: this is the 2nd file of a fastq pair - make sure it has at least as many fastq "lines" as the first file
             uint32_t my_lines, her_lines;
@@ -643,7 +647,7 @@ rom txtfile_piz_get_filename (rom orig_name,rom prefix, bool is_orig_name_genozi
                               EXT2_MATCHES_TRANSLATE (DT_ME23, DT_VCF,   ".txt");
 
     // case: new directory - take only the basename
-    if (dn_len) orig_name = file_basename (orig_name, 0,0,0,0); 
+    if (dn_len) orig_name = filename_base (orig_name, 0,0,0,0); 
     
     sprintf ((char *)txt_filename, "%s%s%s%.*s%s%s", prefix,
                 (dn_len ? flag.out_dirname : ""), (dn_len ? "/" : ""), 

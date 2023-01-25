@@ -294,7 +294,7 @@ static void sam_header_zip_build_hdr_PGs (rom hdr, rom after)
 
     uint32_t last_PG_i=0, last_PG_len=0; // last PG added
     while (hdr < after) {
-        str_split_by_tab (hdr, after - hdr, 10, NULL, false);
+        str_split_by_tab (hdr, after - hdr, 10, NULL, false); // also advances hdr to after the newline
         if (!hdr || n_flds < 2 || fld_lens[0] != 3 || !EQ3(flds[0], "@PG")) break;
 
         bool added = false;
@@ -371,16 +371,8 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
     ASSERT0 (ARRAY_LEN(map_sigs) == NUM_MAPPERS, "Invalid SAM_MAPPER_SIGNATURE array length - perhaps missing commas between strings?");
 
     for (int i=1; i < ARRAY_LEN(map_sigs); i++) // skip 0=unknown
-        if (strstr (hdr, map_sigs[i])) {
+        if (strstr (hdr, map_sigs[i])) { // scans header starting first PG line
             segconf.sam_mapper = i;
-            break;
-        }
-
-    // a small subset of biobambam2 programs - only those that generate ms:i / mc:i tags
-    static rom biobambam_programs[] = { "bamsormadup", "bamsort", "bamtagconversion" }; 
-    for (int i=0; i < ARRAY_LEN(biobambam_programs); i++) 
-        if (strstr (hdr, biobambam_programs[i])) {
-            segconf.is_biobambam2_sort = true;
             break;
         }
 
@@ -394,6 +386,16 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
 
     // build buffer of unique PN+ID fields, for stats
     sam_header_zip_build_hdr_PGs (hdr, after);
+    
+    if (stats_programs.len) {
+
+        #define SCAN(program) (!!strstr (B1STc(stats_programs), (program)))
+
+        // a small subset of biobambam2 programs - only those that generate ms:i / mc:i tags
+        segconf.is_biobambam2_sort = SCAN("bamsormadup") || SCAN("bamsort") || SCAN("bamtagconversion");
+
+        segconf.has_bqsr = SCAN("ApplyBQSR");
+    }
 
 done:
     SAFE_RESTORE;

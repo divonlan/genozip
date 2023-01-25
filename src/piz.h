@@ -23,7 +23,7 @@ extern bool piz_default_skip_section (SectionType st, DictId dict_id);
 
 extern Dispatcher piz_z_file_initialize (void);
 extern DataType piz_read_global_area (Reference ref);
-extern bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last_z_file, CompIType unbind_comp_i);
+extern bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last_z_file, CompIType first_comp_i, CompIType last_comp_i);
 extern void piz_read_all_ctxs (VBlockP vb, Section *sec, bool is_pair_data);
 extern uint32_t piz_uncompress_all_ctxs (VBlockP vb);
 extern bool piz_read_one_vb (VBlockP vb, bool for_reconstruction);

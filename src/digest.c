@@ -13,6 +13,7 @@
 #include "md5.h"
 #include "vblock.h"
 #include "mutex.h"
+#include "filename.h"
 #include "file.h"
 #include "codec.h"
 #include "txtfile.h"
@@ -131,7 +132,7 @@ static void digest_piz_verify_one_vb (VBlockP vb)
                   DIGEST_NAME, digest_display (piz_digest).s, 
                   DIGEST_NAME, digest_display (vb->expected_digest).s, 
                   recon_size_warn,
-                  txtfile_dump_vb (vb, z_name), vb->vblock_i, file_guess_original_filename (txt_file));
+                  txtfile_dump_vb (vb, z_name), vb->vblock_i, filename_guess_original (txt_file));
 
             if (flag.test) exit_on_error (false);
 
@@ -230,7 +231,7 @@ Digest digest_txt_header (BufferP data, Digest piz_expected_digest)
                   "If this is unexpected, please contact support@genozip.com.\n", 
                   digest_name(),
                   dt_name (z_file->data_type), digest_display (digest).s, digest_display (piz_expected_digest).s,
-                  txtfile_dump_vb (data->vb, z_name), file_guess_original_filename (txt_file));
+                  txtfile_dump_vb (data->vb, z_name), filename_guess_original (txt_file));
 
             if (flag.test) exit_on_error(false);
         }

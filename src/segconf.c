@@ -203,7 +203,7 @@ void segconf_calculate (void)
     segconf.running = true;
 
     uint64_t save_vb_size = segconf.vb_size;
-    VBlockP vb = vb_initialize_nonpool_vb (VB_ID_SEGCONF, z_file->data_type, "segconf");
+    VBlockP vb = vb_initialize_nonpool_vb (VB_ID_SEGCONF, txt_file->data_type, "segconf");
 
     // note: in case of BZ2, needs to be big enough to overcome the block nature of BZ2 (64K block -> 200-800K text) to get a reasonable size estimate
     uint32_t vb_sizes[] = { 300000, 1500000, 5000000 };

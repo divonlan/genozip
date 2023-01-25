@@ -35,6 +35,8 @@
 #define CRAM_          ".cram"
 #define BAM_GENOZIP_   ".bam.genozip" 
 
+#define DEEP_GENOZIP_  ".deep.genozip"
+
 // BCF
 #define BCF_           ".bcf"
 #define BCF_GZ_        ".bcf.gz"

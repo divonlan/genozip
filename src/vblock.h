@@ -39,9 +39,9 @@
     /* memory management  */\
     Buffer buffer_list;           /* a buffer containing an array of pointers to all buffers allocated for this VB (either by the main thread or its compute thread). param=is_sorted */\
     \
-    DispatchStatus dispatch;      /* line data is read, and dispatcher can dispatch this VB to a compute thread */\
-    bool is_processed;            /* thread completed processing this VB - it is ready for outputting */\
-    bool in_use;                  /* this vb is in use */\
+    volatile DispatchStatus dispatch; /* line data is read, and dispatcher can dispatch this VB to a compute thread */\
+    volatile bool is_processed;   /* thread completed processing this VB - it is ready for outputting */\
+    volatile bool in_use;         /* this vb is in use */\
     \
     /* tracking lines */\
     Buffer lines;                 /* ZIP: An array of *DataLine* - the lines in this VB */\

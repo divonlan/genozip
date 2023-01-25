@@ -887,12 +887,13 @@ void zip_one_file (rom txt_basename,
     if (gencomp_comp_eligible_for_digest(NULL)) // if generated component - keep digest to display in progress after the last component
         z_file->digest_ctx = DIGEST_CONTEXT_NONE;
 
-    if (!flag.bind || flag.zip_comp_i==0) 
+    if (!flag.bind || flag.zip_comp_i == COMP_MAIN) {
         prev_file_first_vb_i = prev_file_last_vb_i = 0; // reset if we're not binding
+        
+        segconf_initialize(); // before txtheader 
+    }
 
     uint32_t first_vb_i = prev_file_last_vb_i + 1;
-
-    segconf_initialize(); // before txtheader 
 
     // initalize pre-defined ctxs after reading header 
     // note: in case of GENERIC, generic_is_header_done may change the data type and re-initialize the contexts
@@ -969,8 +970,12 @@ finish:
     z_file->disk_size = z_file->disk_so_far;
 
     prev_file_first_vb_i = first_vb_i;
-    dispatcher_finish (&dispatcher, &prev_file_last_vb_i, z_file->z_closes_after_me && !is_last_user_txt_file,
-                       flag.show_memory && z_file->z_closes_after_me && is_last_user_txt_file);
-                            
+    dispatcher_finish (&dispatcher, &prev_file_last_vb_i, 
+                       z_file->z_closes_after_me && !is_last_user_txt_file,
+                       flag.show_memory && z_file->z_closes_after_me && is_last_user_txt_file); // show memory
+
+    if (!z_file->z_closes_after_me)
+        ctx_reset_codec_commits(); //xxx
+
     DT_FUNC (txt_file, zip_finalize)(is_last_user_txt_file);
 }

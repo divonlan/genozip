@@ -208,17 +208,33 @@ test_translate_sam_to_bam_to_sam() # $1 bam file $2 genozip options $3 genocat o
     cleanup
 }
 
+verify_is_fastq() # $1 fastq file name
+{
+    local pluses=`egrep "^\+$" $fastq | wc -l`
+    local lines=`cat $fastq | wc -l`
+
+    if (( $pluses * 4 != $lines )); then 
+        echo "After converting $1 to FASTQ: $fastq has $pluses '+' lines and $lines lines, but expecting $(($pluses * 4)) lines"
+        exit 1
+    fi
+}
+
 # note: only runs it to see that it doesn't crash, doesn't validate results
-test_translate_sambam_to_fastq() # $1 sam or bam file 
+test_translate_sambam_to_fastq() # $1 sam or bam file $1
 {
     test_header "$1 - translate SAM/BAM to FASTQ"
 
     local sambam=$TESTDIR/$1
-    local fastq=$OUTDIR/copy.fastq.gz
+    local fastq=$OUTDIR/copy.fastq
     if [ ! -f $sambam ] ; then echo "$sambam: File not found"; exit 1; fi
 
     $genozip -f $sambam -o $output || exit 1
+    
     $genocat $output -fo $fastq    || exit 1
+    verify_is_fastq $fastq
+
+    $genocat $output -fo $fastq --fq=all || exit 1
+    verify_is_fastq $fastq
 
     cleanup
 }
@@ -674,12 +690,56 @@ batch_sam_fq_translations()
                  special.depn.bam        # depn/prim with/without QUAL
                  special.NA12878.bam 
                  special.pacbio.ccs.bam  # unaligned SAM/BAM with no SQ records
-                 special.human2.bam)
+                 special.human2.bam
+                 special.collated.bam)
     local file
     for file in ${files[@]}; do
         test_translate_sambam_to_fastq $file
         test_translate_sambam_to_fastq ${file%.bam}.sam
     done
+}
+
+# Test --coverage, --idxstats and --sex - not testing correctness, only that it doesn't crash
+batch_coverage_idxstats_sex()
+{
+    batch_print_header
+
+    # note: we have these files in both sam and bam versions generated with samtools
+    local files=(special.buddy.bam 
+                 special.depn.bam        # depn/prim with/without QUAL
+                 special.NA12878.bam 
+                 special.pacbio.ccs.bam  # unaligned SAM/BAM with no SQ records
+                 special.human2.bam
+                 special.collated.bam)
+    local file
+    for file in ${files[@]}; do
+        $genozip -f $TESTDIR/$file -o $output                || exit 1
+        $genocat $output --idxstats > $OUTDIR/$file.idxstats || exit 1
+        $genocat $output --coverage > $OUTDIR/$file.coverage || exit 1
+        $genocat $output --sex      > $OUTDIR/$file.sex      || exit 1
+    done
+
+    cleanup
+}
+
+batch_qname_flavors()
+{
+    batch_print_header
+
+    local files=( `cd $TESTDIR; ls -1 flavor.* | \
+                   grep -v .genozip | grep -v .md5 | grep -v .bad ` ) 
+
+    local file
+    for file in ${files[@]}; do
+        test_header "Testing QNAME flavor of $file"
+        $genozip $TESTDIR/$file -Wft -o $output > $OUTDIR/stats || exit 1
+        if (( `grep QNAME $OUTDIR/stats | grep OKEN | wc -l` )); then
+            echo "$file: QNAME flavor not identified"
+            exit 1
+        fi
+    done
+
+    cleanup
 }
 
 # Test 23andMe translations
@@ -1524,12 +1584,14 @@ if (( $1 <= 49 )) ; then  batch_many_small_files       ; fi
 if (( $1 <= 50 )) ; then  batch_make_reference         ; fi
 if (( $1 <= 51 )) ; then  batch_headerless_wrong_ref   ; fi
 if (( $1 <= 52 )) ; then  batch_replace                ; fi
+if (( $1 <= 53 )) ; then  batch_coverage_idxstats_sex  ; fi
+if (( $1 <= 54 )) ; then  batch_qname_flavors          ; fi
 
 if [[ `basename $PWD` != genozip-prod ]]; then
-    if (( $1 <= 53 )) ; then  batch_reference_backcomp     ; fi
-    if (( $1 <= 54 )) ; then  batch_real_world_1_backcomp  ; fi 
-    if (( $1 <= 55 )) ; then  batch_real_world_with_ref_backcomp ; fi 
-    next=55
+    if (( $1 <= 55 )) ; then  batch_reference_backcomp     ; fi
+    if (( $1 <= 56 )) ; then  batch_real_world_1_backcomp  ; fi 
+    if (( $1 <= 57 )) ; then  batch_real_world_with_ref_backcomp ; fi 
+    next=57
     if (( $1 <= $next + $num_batch_prod_compatability_tests )) ; then batch_prod_compatability $1 $next ; fi
 fi
 

@@ -164,6 +164,12 @@ void fasta_zip_initialize (void)
 {
 }
 
+void fasta_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeader *vb_header)
+{
+    if (Z_DT(GFF))
+        vb_header->flags.vb_header.gff.embedded_fasta = true;
+}
+
 // callback function for compress to get data of one line 
 COMPRESSOR_CALLBACK (fasta_zip_seq)
 {
@@ -183,7 +189,7 @@ void fasta_seg_initialize (VBlockP vb)
     START_TIMER;
 
     ASSINP (vb->vblock_i > 1 || *B1STtxt == '>' || *B1STtxt == ';',
-            "Error: expecting FASTA file %s to start with a '>' or a ';'", txt_name);
+            "Error: expecting FASTA file %s to start with a '>' or a ';' but seeing \"%.*s\"", txt_name, MIN_(64, vb->txt_data.len32), B1STtxt);
 
     CTX(FASTA_TOPLEVEL)->no_stons  = true; // keep in b250 so it can be eliminated as all_the_same
     CTX(FASTA_CONTIG)->flags.store = STORE_INDEX; // since v12
@@ -230,7 +236,7 @@ void fasta_seg_finalize (VBlockP vb)
             .callback     = true,
             .nitems_lo    = 2,
             .items        = { { .dict_id = { _FASTA_LINEMETA }  },
-                            { .dict_id = { _FASTA_EOL }, .translator = FASTA2PHYLIP_EOL } }
+                              { .dict_id = { _FASTA_EOL      }, .translator = FASTA2PHYLIP_EOL } }
         };
 
         container_seg (vb, CTX(FASTA_TOPLEVEL), (ContainerP)&top_level, 0, 0, 0);
@@ -254,6 +260,8 @@ void fasta_seg_finalize (VBlockP vb)
         #define MAX_CONTIGS_IN_FILE 1000000 
         segconf.fasta_has_contigs &= (num_contigs_this_vb == 1 || // the entire VB is a single contig
                                       est_num_contigs_in_file <  MAX_CONTIGS_IN_FILE); 
+
+        segconf.fasta_has_contigs &= !TXT_DT(GFF); // GFF3-embedded FASTA doesn't have contigs, because did=0 is reserved for GFF's SEQID
 
         ASSINP0 (!flag.make_reference || segconf.fasta_has_contigs, "Can't use --make-reference on this file, because Genozip can't find the contig names in the FASTA description lines");
     }
@@ -279,6 +287,8 @@ static void fasta_seg_desc_line (VBlockFASTAP vb, rom line_start, uint32_t line_
     unsigned chrom_name_len = strcspn (line_start + 1, " \t\r\n");
 
     ASSSEG0 (chrom_name_len, line_start, "contig is missing a name");
+
+    __atomic_add_fetch (&z_file->num_sequences, (uint64_t)1, __ATOMIC_RELAXED);
 
     if (!flag.make_reference) {
         if (segconf.fasta_has_contigs) 

@@ -57,6 +57,8 @@ typedef union SamFlags {
     uint16_t value;
 } SamFlags;
 
+#define FLAG_IS_PRIMARY(f) (!(f).secondary && !(f).supplementary)
+
 typedef union {
     struct {
         uint32_t op : 4;  // BamCigarOpType values
@@ -310,6 +312,9 @@ typedef struct VBlockSAM {
     // QUAL stuff
     bool qual_codec_no_longr;      // true if we can compress qual with CODEC_LONGR
     bool has_qual;                 // Seg: This VB has at least one line with non-missing qual
+
+    // Deep stuff
+    Buffer deep_data;              // Seg: ZipDeep entry for each non-sec/supp line
 } VBlockSAM;
 
 #define VB_SAM ((VBlockSAMP)vb)
@@ -773,7 +778,28 @@ extern DisFlagsStr sam_dis_flags (SamFlags flags);
 
 extern const uint8_t aux_width[256];
 
-extern char taxid_redirection_snip[], copy_AS_snip[], copy_NM_snip[], copy_GX_snip[], copy_RX_snip[], copy_POS_snip[], copy_mate_CIGAR_snip[], copy_mate_MAPQ_snip[], copy_mate_YS_snip[], copy_mate_AS_snip[], XA_lookback_snip[], TX_lookback_snip[], AN_lookback_snip[], copy_mate_PNEXT_snip[], copy_saggy_PNEXT_snip[], copy_mate_POS_snip[], copy_mate_MQ_snip[], copy_mate_ms_snip[], copy_mate_nM_snip[], copy_buddy_NH_snip[], copy_buddy_Z_snips[NUM_MATED_Z_TAGS][30], redirect_to_CR_X_snip[], redirect_to_RX_X_snip[], redirect_to_GR_X_snip[], redirect_to_GY_X_snip[];
-extern unsigned taxid_redirection_snip_len, copy_AS_snip_len, copy_NM_snip_len, copy_GX_snip_len, copy_RX_snip_len, copy_POS_snip_len, copy_mate_CIGAR_snip_len, copy_mate_MAPQ_snip_len, copy_mate_YS_snip_len, copy_mate_AS_snip_len, XA_lookback_snip_len, TX_lookback_snip_len, AN_lookback_snip_len, copy_mate_PNEXT_snip_len, copy_saggy_PNEXT_snip_len, copy_mate_POS_snip_len, copy_mate_MQ_snip_len, copy_mate_ms_snip_len, copy_mate_nM_snip_len, copy_buddy_NH_snip_len, copy_buddy_Z_snip_lens[NUM_MATED_Z_TAGS], redirect_to_CR_X_snip_len, redirect_to_RX_X_snip_len, redirect_to_GR_X_snip_len, redirect_to_GY_X_snip_len;
-
 extern rom ERR_ANALYZE_RANGE_NOT_AVAILABLE, ERR_ANALYZE_DEPN_NOT_IN_REF, ERR_ANALYZE_INCORRECT_REF_BASE;
+
+eSTRl(taxid_redirection_snip);
+eSTRl(copy_NM_snip);
+eSTRl(copy_GX_snip);
+eSTRl(copy_POS_snip);
+eSTRl(copy_mate_CIGAR_snip);
+eSTRl(copy_mate_MAPQ_snip);
+eSTRl(copy_mate_MQ_snip);
+eSTRl(XA_lookback_snip);
+eSTRl(TX_lookback_snip);
+eSTRl(AN_lookback_snip);
+eSTRl(copy_mate_YS_snip);
+eSTRl(copy_mate_AS_snip);
+eSTRl(copy_mate_PNEXT_snip);
+eSTRl(copy_saggy_PNEXT_snip);
+eSTRl(copy_mate_POS_snip);
+eSTRl(copy_mate_ms_snip);
+eSTRl(copy_mate_nM_snip);
+eSTRl(copy_buddy_NH_snip);
+eSTRl(redirect_to_CR_X_snip);
+eSTRl(redirect_to_GR_X_snip);
+eSTRl(redirect_to_GY_X_snip);
+eSTRl(redirect_to_RX_X_snip);
+extern char copy_buddy_Z_snips[NUM_MATED_Z_TAGS][30]; extern unsigned copy_buddy_Z_snip_lens[NUM_MATED_Z_TAGS];

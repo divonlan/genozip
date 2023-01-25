@@ -34,6 +34,7 @@
 #include "tar.h"
 #include "writer.h"
 #include "version.h"
+#include "filename.h"
 
 // globals
 FileP z_file   = NULL;
@@ -154,9 +155,9 @@ FileType file_get_type (rom filename)
 
     // 23andme files have the format "genome_Firstname_Lastname_optionalversion_timestamp.txt" or .zip
     if (strstr (filename, "genome") && strstr (filename, "Full")) {
-        if (file_has_ext (filename, ".txt")) return ME23;
-        if (file_has_ext (filename, ".zip")) return ME23_ZIP;
-        if (file_has_ext (filename, ".txt.genozip")) return ME23_GENOZIP;
+        if (filename_has_ext (filename, ".txt")) return ME23;
+        if (filename_has_ext (filename, ".zip")) return ME23_ZIP;
+        if (filename_has_ext (filename, ".txt.genozip")) return ME23_GENOZIP;
     }
 
     for (FileType ft=UNKNOWN_FILE_TYPE+1; ft < AFTER_LAST_FILE_TYPE; ft++) {
@@ -164,7 +165,7 @@ FileType file_get_type (rom filename)
         // files that end with .txt/.txt.genozip/.zip are not classified as ME23, we already handled ME23 above
         if (ft == ME23 || ft == ME23_ZIP || ft == ME23_GENOZIP) continue; 
 
-        if (file_has_ext (filename, file_exts[ft])) 
+        if (filename_has_ext (filename, file_exts[ft])) 
             return ft;
     }
 
@@ -202,51 +203,6 @@ void file_get_raw_name_and_type (char *filename, char **raw_name, FileType *out_
         (*raw_name)[len - strlen (file_exts[ft])] = 0;
 
     if (out_ft) *out_ft = ft;
-}
-
-// rules for pair filename: two filenames need to differ by exactly one character, which is '1' and '2',
-// if test_only we validate the rule
-// if !test_only, only fn1 needs to be provided, we assume the rule is valid, and we create the output file with "1+2"
-char *file_get_fastq_pair_filename (rom fn1, rom fn2, bool test_only)
-{
-    FileType ft1, ft2;
-    char *rn1, *rn2;
-
-    // case: new directory - take only the basename
-    unsigned dn_len = flag.out_dirname ? strlen (flag.out_dirname) : 0;
-    if (dn_len) {
-        fn1 = file_basename (fn1, 0,0,0,0);
-        fn2 = file_basename (fn2, 0,0,0,0);
-    }
-
-    file_get_raw_name_and_type ((char *)fn1, &rn1, &ft1);
-    file_get_raw_name_and_type ((char *)fn2, &rn2, &ft2);
-    
-    unsigned len = strlen (rn1);
-    if (len != strlen (rn2)) return NULL;
-
-    int df = -1;
-    for (unsigned i=0; i < len; i++)
-        if (rn1[i] != rn2[i]) {
-            if (df >= 0) return NULL; // 2nd differing character
-            df = i;
-        }
-
-    if (!((rn1[df] == '1' && rn2[df] == '2') || (rn1[df] == '2' && rn2[df] == '1'))) return NULL; // one of them must be '1' and the other '2'
-
-    if (test_only) return (char *)1;
-
-    char *pair_fn = MALLOC (len + dn_len + 20);
-    sprintf (pair_fn, "%s%s%.*s1+2%s" FASTQ_GENOZIP_, 
-             (dn_len ? flag.out_dirname : ""), (dn_len ? "/" : ""), 
-             df, rn1, &rn1[df+1]);
-    
-    if (dn_len) {
-        FREE (fn1);
-        FREE (fn2);
-    }
-
-    return pair_fn;
 }
 
 void file_set_input_size (rom size_str)
@@ -378,7 +334,7 @@ static bool file_open_txt_read_test_valid_dt (ConstFileP file)
     if (file->data_type == DT_NONE) { 
 
         if (flag.multiple_files || tar_is_tar()) {
-            if (file_has_ext (file->name, ".genozip")) {
+            if (filename_has_ext (file->name, ".genozip")) {
             
                 // case: compressing into a tar file - include .genozip files verbatim
                 if (tar_is_tar()) {
@@ -394,7 +350,7 @@ static bool file_open_txt_read_test_valid_dt (ConstFileP file)
                     file_printname (file));
         }
         else {
-            ASSINP (!file_has_ext (file->name, ".genozip"), 
+            ASSINP (!filename_has_ext (file->name, ".genozip"), 
                     "cannot compress %s because it is already compressed", file_printname(file));
 
             ABORT0 ("Unexpectedly, data_type==DT_NONE"); // not expecting to ever reach here, bc if file is not recognized, it should have been set to GENERIC
@@ -607,8 +563,8 @@ static bool file_open_txt_write (FileP file)
     if (file_get_data_type (file->type, false) == DT_NONE) {
 
         // case: output file has a .gz extension not necessarily related to a file type (eg file.gz rather than file.vcf.gz)
-        if ((file_has_ext (file->name, ".gz") || file_has_ext (file->name, ".bgz")) &&  
-             file_has_ext (file_exts[txt_out_ft_by_dt[file->data_type][1]], ".gz")) { // data type supports .gz txt output
+        if ((filename_has_ext (file->name, ".gz") || filename_has_ext (file->name, ".bgz")) &&  
+             filename_has_ext (file_exts[txt_out_ft_by_dt[file->data_type][1]], ".gz")) { // data type supports .gz txt output
             
             file->type = txt_out_ft_by_dt[file->data_type][1]; 
             if (flag.bgzf == BGZF_NOT_INITIALIZED) flag.bgzf = BGZF_COMP_LEVEL_DEFAULT; // default unless user specified otherwise
@@ -723,7 +679,7 @@ static void file_initialize_bufs (FileP file)
     INIT (chrom2ref_map);
     INIT (ref2chrom_map);
     INIT (section_list_buf);
-    INIT (section_list_vb1);
+    INIT (section_list_save);
     INIT (bound_txt_names);
     INIT (recon_plan);
     INIT (recon_plan_index);
@@ -751,6 +707,8 @@ static void file_initialize_bufs (FileP file)
     INIT (coverage);
     INIT (read_count);
     INIT (unmapped_read_count);
+    INIT (deep_hash);
+    INIT (deep_ents);    
 }
 
 // we insert all the z_file buffers into the buffer list in advance, to avoid this 
@@ -791,42 +749,6 @@ static void file_initialize_txt_file_data (FileP file)
 
 #undef INIT
 
-rom file_get_z_filename (rom txt_filename, DataType dt, FileType txt_ft)
-{
-    if (!txt_filename && (flag.biopsy || flag.biopsy_line.line_i != NO_LINE))
-        txt_filename = "dummy"; // we don't have a txt_filename, but that's ok, because we don't need it
-
-    ASSINP0 (txt_filename, "use --output to specify the output filename (with a .genozip extension)");
-
-    unsigned dn_len = flag.out_dirname ? strlen (flag.out_dirname) : 0;
-    bool is_url = url_is_url (txt_filename);
-    rom basename = (is_url || dn_len) ? file_basename (txt_filename, false, "", 0,0) : NULL;
-    rom local_txt_filename = basename ? basename : txt_filename; 
-
-    unsigned fn_len = strlen (local_txt_filename);
-
-    char *z_filename = (char *)MALLOC (fn_len + dn_len + 30); // add enough the genozip extension e.g. 23andme.genozip
-
-    // if the file has an extension matching its type, replace it with the genozip extension, if not, just add the genozip extension
-    rom genozip_ext = file_exts[file_get_z_ft_by_txt_in_ft (dt, txt_ft)];
-
-    if (chain_is_loaded && (TXT_DT(VCF) || TXT_DT(BCF)))
-        genozip_ext = DVCF_GENOZIP_;
-
-    if (file_has_ext (local_txt_filename, file_exts[txt_ft]))
-        sprintf (z_filename, "%s%s%.*s%s", 
-                 (dn_len ? flag.out_dirname : ""), (dn_len ? "/" : ""), 
-                 (int)(fn_len - strlen (file_exts[txt_ft])), local_txt_filename, genozip_ext); 
-    else 
-        sprintf (z_filename, "%s%s%s%s", 
-                 (dn_len ? flag.out_dirname : ""), (dn_len ? "/" : ""), 
-                 local_txt_filename, genozip_ext); 
-
-    FREE (basename);
-
-    return z_filename;
-}
-
 // returns true if successful
 static bool file_open_z (FileP file)
 {
@@ -841,12 +763,12 @@ static bool file_open_z (FileP file)
         if (flag.reading_reference && (file_get_data_type (file_get_type (file->name), true) == DT_FASTA) && (file_get_type (file->name) != FASTA_GENOZIP))
             ref_fasta_to_ref (file);
 
-        ASSINP (!flag.reading_reference || file_has_ext (file->name, REF_GENOZIP_), 
+        ASSINP (!flag.reading_reference || filename_has_ext (file->name, REF_GENOZIP_), 
                 "You specified file \"%s\", however with --reference or --REFERENCE, you must specify a reference file (%s file or FASTA file)\n"
                 "Tip: To create a genozip reference file from a FASTA file, use 'genozip --make-reference myfasta.fa'",
                 file->name, REF_GENOZIP_);
 
-        ASSINP (!flag.reading_chain || file_has_ext (file->name, GENOZIP_EXT), 
+        ASSINP (!flag.reading_chain || filename_has_ext (file->name, GENOZIP_EXT), 
                 "You specified file \"%s\", however with %s, you must specify a genozip chain file (%s extension)\n"
                 "Tip: To create a genozip chain file from a chain file, use e.g. 'genozip my-chain-file.chain.gz --reference target-coord-ref.ref.genozip'",
                 file->name, (command==ZIP) ? "--chain" : "--show-chain", GENOZIP_EXT);
@@ -918,7 +840,7 @@ static bool file_open_z (FileP file)
         file->data_type = DT_NONE; // we will get the data type from the genozip header, not by the file name
     }
     else { // WRITE or WRITEREAD - data_type is already set by file_open
-        ASSINP (file_has_ext (file->name, GENOZIP_EXT), 
+        ASSINP (filename_has_ext (file->name, GENOZIP_EXT), 
                 "file %s must have a " GENOZIP_EXT " extension", file_printname (file));
         
         // set file->type according to the data type, overriding the previous setting - i.e. if the user
@@ -926,7 +848,10 @@ static bool file_open_z (FileP file)
         file->type = file_get_z_ft_by_txt_in_ft (file->data_type, txt_file->type); 
 
         mutex_initialize (file->dicts_mutex);
-    
+
+        if (flag.deep)
+            mutex_initialize (file->deep_populate_ents_mutex);
+
         if (!flag.seg_only && !flag.show_bam) {
 
             if (flag.force && !tar_is_tar()) 
@@ -1045,7 +970,7 @@ FileP file_open (rom filename, FileMode mode, FileSupertype supertype, DataType 
         file->type = txt_out_ft_by_dt[data_type][flag.bgzf >= 1]; // plain file or .gz file
     }
 
-    file->basename = file_basename (file->name, false, mode==READ ? FILENAME_STDIN : FILENAME_STDOUT, NULL, 0);
+    file->basename = filename_base (file->name, false, mode==READ ? FILENAME_STDIN : FILENAME_STDOUT, NULL, 0);
 
     bool success=false;
     switch (supertype) {
@@ -1153,6 +1078,7 @@ void file_close (FileP *file_p,
         mutex_destroy (file->dicts_mutex);
         mutex_destroy (file->recon_plan_mutex[0]);
         mutex_destroy (file->recon_plan_mutex[1]);
+        mutex_destroy (file->deep_populate_ents_mutex);
             
         // always destroy all buffers even if unused - for saftey
         for (unsigned i=0; i < MAX_DICTS; i++) // we need to destory all even if unused, because they were initialized in file_initialize_z_file_data
@@ -1163,7 +1089,7 @@ void file_close (FileP *file_p,
         buf_destroy (file->chrom2ref_map);
         buf_destroy (file->ref2chrom_map);
         buf_destroy (file->section_list_buf);
-        buf_destroy (file->section_list_vb1);
+        buf_destroy (file->section_list_save);
         buf_destroy (file->unconsumed_txt);
         buf_destroy (file->unconsumed_bgzf_blocks);        
         buf_destroy (file->bgzf_isizes);
@@ -1191,6 +1117,8 @@ void file_close (FileP *file_p,
         buf_destroy (file->apriori_tags);
         buf_destroy (file->vb_sections_index);
         buf_destroy (file->comp_sections_index);
+        buf_destroy (file->deep_hash);
+        buf_destroy (file->deep_ents);
 
         FREE (file->name);
         FREE (file->basename);
@@ -1273,45 +1201,6 @@ bool file_exists (rom filename)
 #endif
 
     return exists;
-}
-
-bool file_has_ext (rom filename, rom extension)
-{
-    if (!filename) return false;
-
-    unsigned ext_len = strlen (extension);
-    unsigned fn_len  = strlen (filename);
-    
-    return fn_len >= ext_len && !strncmp (&filename[fn_len-ext_len], extension, ext_len);
-}
-
-// get basename of a filename - we write our own basename for Visual C and Windows compatibility
-rom file_basename (rom filename, bool remove_exe, rom default_basename,
-                   char *basename /* optional pre-allocated memory */, unsigned basename_size /* basename bytes */)
-{
-    if (!filename) filename = default_basename;
-
-    unsigned len = strlen (filename);
-    if (remove_exe && file_has_ext (filename, ".exe")) len -= 4; // for Windows
-
-    // get start of basename
-    rom start = filename;
-    for (int i=len-1; i >= 0; i--)
-        if (filename[i]=='/' || filename[i]=='\\') {
-            start = &filename[i+1];
-            break;
-        }
-
-    len = len - (start-filename);
-
-    if (!basename) 
-        basename = (char *)MALLOC (len + 1); // +1 for \0
-    else
-        len = MIN_(len, basename_size-1);
-
-    sprintf (basename, "%.*s", (int)len, start);
-
-    return basename;
 }
 
 // returns true if successful. depending on soft_fail, a failure will either emit an error 
@@ -1557,33 +1446,6 @@ void file_kill_external_compressors (void)
 rom ft_name (FileType ft)
 {
     return type_name (ft, &file_exts[ft], ARRAY_LEN(file_exts));
-}
-
-// PIZ: guess original filename from uncompressed txt filename and compression algoritm (allocated memory)
-rom file_guess_original_filename (ConstFileP file)
-{
-    if (file->codec == CODEC_NONE) return file->name;
-
-    unsigned len = strlen (file->name) + 10;
-    char *org_name = MALLOC (len);
-    strcpy (org_name, file->name);
-
-    rom ext = codec_args[file->codec].ext;
-
-    // remove existing extension if needed (eg when replacing .sam with .bam)
-    if (ext[0] == '-') {
-        char *last_dot = strrchr (org_name, '.');
-        if (last_dot) *last_dot = 0;
-    }
-
-    int org_len = strlen (org_name); 
-    if (org_len >= 4 && !strcmp (&org_name[org_len-4], ".bam")) {
-        // don't add extension to .bam
-    }
-    else if (!file_has_ext (org_name, &ext[1])) // add new extension
-        strcpy (&org_name[org_len], &ext[1]);
-
-    return org_name;
 }
 
 rom file_plain_ext_by_dt (DataType dt)

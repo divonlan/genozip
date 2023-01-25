@@ -13,6 +13,7 @@
 
 #include "genozip.h"
 #include "genols.h"
+#include "filename.h"
 #include "file.h"
 #include "buffer.h"
 #include "flags.h"
@@ -95,7 +96,7 @@ void genols (rom z_filename, bool finalize, rom subdir, bool recursive)
         first_file = false;
     }
     
-    if (!file_has_ext (z_filename, GENOZIP_EXT) || !file_exists (z_filename)) {
+    if (!filename_has_ext (z_filename, GENOZIP_EXT) || !file_exists (z_filename)) {
         files_ignored++;
         goto finish;
     }
@@ -146,7 +147,7 @@ void genols (rom z_filename, bool finalize, rom subdir, bool recursive)
     files_listed++;
 
     // if --list, OR if the user did genols on one file (not a directory), show bound components, if there are any
-    if (flag.list || (!flag.multiple_files && !recursive && z_file->num_components >= 2)) {
+    if (flag.list || (!flag.multiple_files && !recursive && z_file->num_txt_files >= 2)) {
         buf_append_string (evb, &str_buf, "Components:\n");
         Section sl_ent = NULL;
         uint64_t num_lines_count=0;

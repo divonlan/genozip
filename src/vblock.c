@@ -189,7 +189,7 @@ void vb_destroy_vb_do (VBlockP *vb_p, rom func)
         vb->data_type = vb->data_type_alloced = 0; 
         vb->id = 0;
         vb->profile.buf_remove_from_buffer_list = 0; // this profile field changes as a result of removing buffers,
-        vb->in_use = false;
+        __atomic_store_n (&vb->in_use, (bool)0, __ATOMIC_SEQ_CST);   // released the VB back into the pool - it may now be reused 
         
         for (char *c=(char*)vb; c < (char*)(vb) + sizeof_vb; c++)
             if (*c) {
@@ -273,9 +273,13 @@ VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompITy
     
     VBlockPool *pool = vb_get_pool (type, false);
 
-    DataType dt = type == POOL_BGZF ? DT_NONE
-                : IS_ZIP            ? (txt_file ? txt_file->data_type : DT_NONE)
-                :                     (z_file   ? z_file->data_type   : DT_NONE);
+    DataType dt = (type == POOL_BGZF)            ? DT_NONE
+                : (flag.deep && flag.zip_comp_i) ? DT_FASTQ
+                : (IS_ZIP && segconf.has_embdedded_fasta) ? DT_FASTA // GFF3 with embedded FASTA
+                : (IS_ZIP && txt_file)           ? txt_file->data_type
+       /*xxx*/         : (IS_PIZ && z_file && flag.deep && comp_i >= SAM_COMP_FQ00) ? DT_FASTQ
+                : (IS_PIZ && z_file)             ? z_file->data_type  
+                :                                  DT_NONE;
     
     uint64_t sizeof_vb = (dt != DT_NONE && dt_props[dt].sizeof_vb) ? dt_props[dt].sizeof_vb(dt) : sizeof (VBlock);
 
@@ -289,7 +293,7 @@ VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompITy
     uint32_t vb_id; for (vb_id=0; ; vb_id = (vb_id+1) % pool->num_vbs) {
 
         // case: the VB is allocated to a different data type - change its data type
-        if (pool->vb[vb_id] && z_file && pool->vb[vb_id]->data_type != dt) {
+        if (pool->vb[vb_id] && z_file && pool->vb[vb_id]->data_type != dt && !pool->vb[vb_id]->in_use) {
 
             DataType old_alloced_dt = pool->vb[vb_id]->data_type_alloced;
 
@@ -318,7 +322,6 @@ VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompITy
         if (!pool->vb[vb_id]) { // VB is not allocated - allocate it
             pool->vb[vb_id] = CALLOC (sizeof_vb); 
             pool->num_allocated_vbs++;
-            pool->vb[vb_id]->data_type = dt;
             pool->vb[vb_id]->data_type_alloced = alloc_dt;
         }
 
@@ -341,6 +344,7 @@ VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompITy
 
     // initialize VB fields that need to be a value other than 0
     vb->id                = vb_id;
+    vb->data_type         = dt;
     vb->vblock_i          = vblock_i;
     vb->comp_i            = comp_i;
     vb->buffer_list.vb    = vb;
@@ -393,7 +397,7 @@ void vb_cleanup_memory_one_vb (VBlockPoolP pool, VBIType vb_i)
     VBlockP vb = pool->vb[vb_i];
     
     if (vb && 
-        vb->data_type == z_file->data_type && // skip VBs that were initialized by a previous file of a different data type and not used by this file
+/*xxx?*/        vb->data_type == z_file->data_type && // skip VBs that were initialized by a previous file of a different data type and not used by this file
         DTPZ(cleanup_memory))        
         DTPZ(cleanup_memory)(vb);
 }

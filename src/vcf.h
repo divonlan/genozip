@@ -270,6 +270,11 @@
 #pragma GENDICT FORMAT_X=DTYPE_2=X         // <ID=X,Number=1,Type=Integer,Description="Raw X intensity">
 #pragma GENDICT FORMAT_Y=DTYPE_2=Y         // <ID=Y,Number=1,Type=Integer,Description="Raw Y intensity">
 
+// infiniumFinalReportConverter
+#pragma GENDICT INFO_INFINIUM_CR=DTYPE_1=CR  // <ID=CR,Number=.,Type=Float,Description="SNP Callrate"
+#pragma GENDICT INFO_INFINIUM_GentrainScore=DTYPE_1=GentrainScore // <ID=GentrainScore,Number=.,Type=Float,Description="Gentrain Score">
+#pragma GENDICT INFO_INFINIUM_HW=DTYPE_1=HW  // <ID=HW,Number=.,Type=Float,Description="Hardy-Weinberg Equilibrium">
+
 // Beagle. See: https://faculty.washington.edu/browning/beagle/beagle_5.0_26May18.pdf
 #pragma GENDICT INFO_AR2=DTYPE_1=AR2       // <ID=AR2,Number=1,Type=Float,Description="Allelic R-Squared: estimated squared correlation between most probable REF dose and true REF dose">
 #pragma GENDICT INFO_DR2=DTYPE_1=DR2       // <ID=DR2,Number=1,Type=Float,Description="Dosage R-Squared: estimated squared correlation between estimated REF dose [P(RA) + 2*P(RR)] and true REF dose">

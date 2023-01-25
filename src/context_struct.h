@@ -114,8 +114,10 @@ typedef struct Context {
     bool counts_section;       // output a SEC_COUNTS section for this context
     bool line_is_luft_trans;   // Seg: true if current line, when reconstructed with --luft, should be translated with luft_trans (false if no
                                //      trans_luft exists for this context, or it doesn't trigger for this line, or line is already in LUFT coordinates)
+    union {
     bool lcodec_hard_coded;    // ZIP: lcodec is hard-coded and should not be reassigned
-
+    bool empty_lookup_ok;      // PIZ: 
+    };
     enum __attribute__ ((__packed__)) { DEP_L0, DEP_L1, DEP_L2, NUM_LOCAL_DEPENDENCY_LEVELS } local_dep; // ZIP: this local is created when another local is compressed (each NONREF_X is created with NONREF is compressed) (value=0,1,2)
     bool is_loaded;            // PIZ: either dict or local or b250 are loaded (not skipped) so context can be reconstructed
     bool is_initialized;       // ZIP / PIZ: context-specific initialization has been done
@@ -193,7 +195,10 @@ typedef struct Context {
     #define reconstruct_state_size_formula  ((char*)(&evb->contexts[0].pair_b250_iter + 1) - (char*)(&evb->contexts[0].last_value))
 
     ValueType last_value;      // ZIP/PIZ: last value of this context (it can be a basis for a delta, used for BAM translation, and other uses)
+    union {
     int64_t last_delta;        // last delta value calculated
+    WordIndex last_con_wi;     // PIZ: word index of last container retrieved
+    };
     
     #define INVALID_LAST_TXT_INDEX ((uint32_t)-1)
     TxtWord last_txt;          // ZIP/PIZ: index/len into vb->txt_data of last seg/reconstruction (always in PIZ, sometimes in Seg) (introduced 10.0.5)

@@ -15,6 +15,7 @@
 #include "genozip.h"
 #include "flags.h"
 #include "data_types.h"
+#include "filename.h"
 #include "file.h"
 #include "regions.h"
 #include "dict_id.h"
@@ -337,6 +338,9 @@ static void flag_set_out_filename (char *optarg)
     // case: not a directory - treat as a filename
     else
         flag.out_filename = optarg;
+
+    // in genocat, cannot specify just a directory
+    ASSINP (!is_genocat || flag.out_filename, "Error: %s is a direcotry", flag.out_dirname);
 }
 
 static void flag_set_head (rom optarg)
@@ -499,7 +503,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _9D {"optimize-DESC",    no_argument,       &flag.optimize_DESC,    1 }
         #define _al {"add-line-numbers", no_argument,       &flag.add_line_numbers, 1 }
         #define _pe {"pair",             no_argument,       &flag.pair,   PAIR_READ_1 } 
-        //xxx #define _DP {"deep",             no_argument,       &flag.deep,             1 } 
+        #define _DP {"deep",             no_argument,       &flag.deep,             1 } 
         #define _pt {"dts_paired",       no_argument,       &flag.undocumented_dts_paired, 1 }  // undocumented flag to uncompress paired files older than 9.0.13 when genozip_header.dts_paired was introduced. A user will get an error message instructing her to use it.
         #define _th {"threads",          required_argument, 0, '@'                    }
         #define _u  {"prefix",           required_argument, 0, 'u'                    }
@@ -805,7 +809,7 @@ static void flags_warn_if_duplicates (int num_files, rom *filenames)
     char basenames[num_files * BASENAME_LEN];
 
     for (unsigned i=0; i < num_files; i++)
-        file_basename (filenames[i], false, "", &basenames[i*BASENAME_LEN], BASENAME_LEN);
+        filename_base (filenames[i], false, "", &basenames[i*BASENAME_LEN], BASENAME_LEN);
 
     qsort (basenames, num_files, BASENAME_LEN, (int (*)(const void *, const void *))strcmp);
 
@@ -899,6 +903,10 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
     CONFLICT (flag.show_stats,  flag.samples,        OT("stats", "w"),     OT("samples", "s"));
     CONFLICT (flag.biopsy,      flag.out_filename,   "--biopsy",           OT("output", "o"));
     CONFLICT (flag.biopsy_line.line_i>=0, flag.out_filename, "--biopsy-line", OT("output", "o"));
+    CONFLICT (flag.deep,        flag.pair,           OT("deep", "3"),      OT("pair", "2"));
+    CONFLICT (flag.deep,        flag.subdirs,        OT("deep", "3"),      OT("subdirs", "D"));
+    CONFLICT (flag.deep,        tar_is_tar(),        OT("deep", "3"),      "tar");
+    CONFLICT (flag.deep,        flag.multiseq,       OT("deep", "3"),      "multiseq");
     
     if (IS_PIZ) {
         CONFLICT (flag.test, flag.out_filename,      OT("output", "o"),    OT("test", "t"));
@@ -918,8 +926,6 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
 
     // some genozip flags are allowed only in combination with --decompress 
     if (is_genozip && IS_ZIP) {
-        CONFLICT (flag.pair, flag.deep,      OT("pair", "2"),    OT("deep", "3"));
-
         char s[20] = {};
         NEED_DECOMPRESS (flag.bgzf != BGZF_NOT_INITIALIZED, OT("bgzf", "z"));
         NEED_DECOMPRESS (flag.out_dt != DT_NONE, str_tolower (dt_name (flag.out_dt), s));
@@ -955,7 +961,7 @@ static void flags_verify_pair_rules (unsigned num_files, rom *filenames)
     // if which --output is missing, we check if every pair of files has a consistent name
     if (!flag.out_filename) 
         for (unsigned i=0; i < num_files; i += 2) 
-            ASSINP (file_get_fastq_pair_filename (filenames[i], filenames[i+1], true),  
+            ASSINP (filename_z_pair (filenames[i], filenames[i+1], true),  
                     "to use %s without specifying --output, the naming of the files needs to be consistent and include the numbers 1 and 2 respectively, but these files don't: %s %s", 
                     OT("pair", "2"), filenames[i], filenames[i+1]);
 }
@@ -963,20 +969,29 @@ static void flags_verify_pair_rules (unsigned num_files, rom *filenames)
 // ZIP: --deep: verify conditions
 static void flags_verify_deep_rules (unsigned num_files, rom *filenames)
 {
-    ASSERT (flag.is_linux, "%s allows co-compression of related FASTQ and BAM files, however it is available only on Genozip for Linux", OT("deep", "3"));
+    ASSERT (flag.is_linux || flag.debug, "%s allows co-compression of related FASTQ and BAM files, however it is available only in Genozip for Linux", OT("deep", "3"));
 
     // verify one or two fastq files and one sam/bam/cram file and no stdin (bc we can't confirm its data type yet)
-    int n_dt[NUM_DATATYPES];
-    for (int i=0; i < num_files; i++) 
-        n_dt[txtfile_get_file_dt(filenames[i])]++;
+    int n_dt[NUM_DATATYPES] = {};
+    int sam_i=-1;
+    for (int i=0; i < num_files; i++) {
+        DataType dt = txtfile_get_file_dt(filenames[i]);
+        n_dt[dt]++;
 
-    ASSERT (n_dt[DT_SAM] + n_dt[DT_BAM] == 1 && 
+        if (dt == DT_SAM || dt == DT_BAM) sam_i = i;
+    }
+
+    ASSINP (n_dt[DT_SAM] + n_dt[DT_BAM] == 1 && 
             (n_dt[DT_FASTQ] == 1 || n_dt[DT_FASTQ] == 2) &&
             n_dt[DT_SAM] + n_dt[DT_BAM] + n_dt[DT_FASTQ] == num_files,
             "when using %s, expecting one SAM/BAM/CRAM and either one or two FASTQ files", OT("deep", "3"));
 
     ASSINP (flag.reference, "either --reference or --REFERENCE must be specified when using %s", OT("deep", "3"));
 
+    // move SAM/BAM to be first
+    if (sam_i == 1) { SWAP (filenames[0], filenames[1]); }
+    if (sam_i == 2) { SWAP (filenames[1], filenames[2]); SWAP (filenames[0], filenames[1]); }
+    
     license_show_deep_notice();
 }
 
@@ -1006,9 +1021,10 @@ void flags_update (unsigned num_files, rom *filenames)
 
     // verify stuff needed for --pair and --deep
     if (flag.pair) flags_verify_pair_rules (num_files, filenames); // --pair and --deep are only available in ZIP
-    if (flag.deep) flags_verify_deep_rules (num_files, filenames); 
+    if (flag.deep && IS_ZIP) flags_verify_deep_rules (num_files, filenames); 
 
     // don't show progress for flags that output throughout the process. no issue with flags that output only in the end
+    flag.explicit_quiet = flag.quiet;
     if (flag.show_dict || flag.show_b250 || flag.show_headers || flag.show_threads || flag.show_bgzf || flag.show_mutex ||
         flag.dict_id_show_one_b250.num || flag.show_one_dict || flag.show_one_counts.num || flag.show_sag || flag.show_depn || 
         flag.show_reference || flag.show_digest || flag.list_chroms || flag.show_coverage == COV_ONE || flag.show_ranges ||
@@ -1096,7 +1112,7 @@ void flags_update_zip_one_file (void)
     if (flag.optimize) switch (dt) {
         case DT_BCF   :
         case DT_VCF   : flag.GP_to_PP = flag.GL_to_PL = flag.optimize_phred = flag.optimize_VQSLOD = flag.optimize_sort = true; break;
-        case DT_GFF  : flag.optimize_sort = flag.optimize_Vf = true; break;
+        case DT_GFF   : flag.optimize_sort = flag.optimize_Vf = true; break;
         case DT_BAM   :
         case DT_SAM   : flag.optimize_QUAL = flag.optimize_ZM = true; break;
         case DT_FASTQ : flag.optimize_QUAL = flag.optimize_DESC = true; break;
@@ -1134,9 +1150,10 @@ void flags_update_zip_one_file (void)
 
     ASSINP0 (!flag.match_chrom_to_reference || flag.reference, "--match-chrom-to-reference requires using --reference as well"); 
 
-    flag.bind = (dt == DT_FASTQ && flag.pair)     ? BIND_FQ_PAIR 
-              : (dt == DT_SAM || dt == DT_BAM)    ? BIND_SAM
-              : (dt == DT_VCF && chain_is_loaded) ? BIND_DVCF
+    flag.bind = flag.deep                         ? BIND_DEEP    // one SAM/BAM (1-3 components) and one or two FASTQs
+              : (dt == DT_FASTQ && flag.pair)     ? BIND_FQ_PAIR // FQ_COMP_R1 and FQ_COMP_R2 components
+              : (dt == DT_SAM || dt == DT_BAM)    ? BIND_SAM     // SAM_COMP_MAIN component and possibly SAM_COMP_PRIM and/or SAM_COMP_DEPN. If no PRIM/DEPN lines exist, we will cancel it sam_zip_generate_recon_plan
+              : (dt == DT_VCF && chain_is_loaded) ? BIND_DVCF    // VCF_COMP_MAIN component and possibly VCF_COMP_PRIM_ONLY and/or VCF_COMP_LUFT_ONLY
               :                                     BIND_NONE;
 
     // if biopsy, we seg only for speed. current limitation: in paired files we do the whole thing. TO DO: fix this.
@@ -1161,14 +1178,12 @@ void flags_update_zip_one_file (void)
                  "--" Fname " is not supported for " #dt1 " files");
 
     // SAM
-    FLAG_ONLY_FOR_DT(SAM,          show_bam,      "show_bam");
+    FLAG_ONLY_FOR_DT(BAM,          show_bam,      "show_bam");
     FLAG_ONLY_FOR_DT(SAM,          optimize_ZM,   "optimize-ZM");
     FLAG_ONLY_FOR_2DTs(SAM, FASTQ, optimize_QUAL, "optimize-QUAL");
-    if (dt == DT_SAM || dt == DT_BAM) {
-        flag.bind = BIND_SAM; // initialized here, if no PRIM/DEPN lines exist, we will cancel it sam_zip_generate_recon_plan
-        if (flag.show_bam) 
-            flag.seg_only = flag.xthreads = flag.quiet = true; 
-    }
+
+    if (flag.show_bam) 
+        flag.seg_only = flag.xthreads = flag.quiet = true; 
     
     // FASTQ
     FLAG_ONLY_FOR_DT(FASTQ, pair,           "pair");
@@ -1251,10 +1266,11 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
     // genounzip not possible on dual coord files (bc it unbinds and we need to concatenate)
     ASSINP (!z_is_dvcf || is_genocat, "Cannot access dual-coordinates file %s with genounzip, use genocat instead", z_name);
                 
-    ASSINP0 (exe_type != EXE_GENOUNZIP || !flag.to_stdout, "Cannot use --stdout with genounzip, use genocat instead");
+    ASSINP0 (!is_genounzip || !flag.to_stdout, "Cannot use --stdout with genounzip, use genocat instead");
 
-    ASSINP (exe_type != EXE_GENOUNZIP || !flag.out_filename || 
-            z_file->num_components <= (1 + z_is_dvcf + 2 * z_sam_gencomp), // allow single-component, DVCF, and SAM with genocomp
+    ASSINP (!is_genounzip || !flag.out_filename || 
+            //xxx z_file->num_txt_files <= (1 + z_is_dvcf + 2 * z_sam_gencomp), // allow single-component, DVCF, and SAM with gencomp
+            z_file->num_txt_files == 1, 
             "Cannot use --output because %s is a bound file containing multiple components. Use --prefix to set a prefix for output filenames, use genocat to output as a single concatenated file, or use genols to see the components' metadata",
             z_name);
              
@@ -1278,9 +1294,10 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
 
     // Check if the reconstructed data type is the same as the source data type
     bool is_binary = z_file->z_flags.txt_is_bin;
-    flag.reconstruct_as_src = (flag.out_dt == DT_SAM && dt==DT_SAM && !is_binary) || 
-                              (flag.out_dt == DT_BAM && dt==DT_SAM && is_binary ) ||
-                              (flag.out_dt == dt     && dt!=DT_SAM);
+    flag.reconstruct_as_src = (flag.out_dt == DT_SAM   && dt==DT_SAM && !is_binary) || 
+                              (flag.out_dt == DT_BAM   && dt==DT_SAM && is_binary ) ||
+                              (flag.out_dt == DT_FASTQ && dt==DT_SAM && flag.deep ) ||
+                              (flag.out_dt == dt       && dt!=DT_SAM);
 
     ASSINP (is_genocat || flag.reconstruct_as_src, 
             "genozip file %s is of type %s, but output file is of type %s. Translating between types is not possible in genounzip, use genocat instead",
@@ -1344,9 +1361,8 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
 
     flag.maybe_txt_header_modified = is_genocat && 
         (flag.no_header || flag.lines_first != NO_LINE || // options that may cause dropping of the txt header
-         flag.luft ||                               // --luft modifies the txt header
-         (dt == DT_VCF && (flag.header_one || flag.samples || flag.drop_genotypes)) || // VCF specific options that modify the txt header
-         (z_file->num_components > (1 + z_is_dvcf))); // txtheaders are dropped if concatenating
+         (dt == DT_VCF && (flag.header_one || flag.samples || flag.drop_genotypes || flag.luft || flag.single_coord))); // VCF specific options that modify the txt header
+         //xxx (z_file->num_components > (1 + z_is_dvcf))); // txtheaders are dropped if concatenating
 
     flag.maybe_vb_dropped_by_writer = is_genocat && // dropped by piz_dispatch_one_vb
         (flag.lines_first != NO_LINE || // decided by writer_create_plan
@@ -1443,10 +1459,16 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
         if (is_genounzip && is_paired_fastq && !flag.unbind)
             flag.unbind = ""; 
     }
+
+    else if (flag.deep) {
+        if (is_genounzip && !flag.unbind)
+            flag.unbind = ""; 
+    }
+
     else {
-        ASSINP  (!flag.one_component, "--R%c is supported only for FASTQ files", '0'+flag.one_component);
-        ASSINP0 (!flag.interleaved, "--interleaved is supported only for FASTQ files");
-        ASSINP0 (!flag.unbind, "--prefix is supported only for FASTQ files");
+        ASSINP  (!flag.one_component, "--R%c is supported only for FASTQ files and files compressed with --deep", '0'+flag.one_component);
+        ASSINP0 (!flag.interleaved, "--interleaved is supported only for FASTQ files and files compressed with --deep");
+        ASSINP0 (!flag.unbind, "--prefix is supported only for files and files compressed with --deep");
     }
 
     // downsample not possible for Generic or Chain
@@ -1483,8 +1505,8 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
     ASSINP (!flag.seq_only  || flag.out_dt == DT_FASTQ, "--seq-only is not supported for %s because it only works on FASTQ data, but this file has %s data", z_name, dt_name (dt));
     ASSINP (!flag.qual_only || flag.out_dt == DT_FASTQ, "--qual-only is not supported for %s because it only works on FASTQ data, but this file has %s data", z_name, dt_name (dt));
 
-    // --unbind and --component not allowed in SAM/BAM starting v14
-    if (Z_DT(SAM) && VER(14)) {
+    // --unbind and --component not allowed in SAM/BAM starting v14 (but are allowed starting v15 with --deep)
+    if (Z_DT(SAM) && VER(14) && !(VER(15) && flag.deep)) {
         ASSERT0 (!flag.unbind, "--unbind not supported for SAM/BAM files");
         ASSERT0 (!flag.one_component, "--component not supported for SAM/BAM files");
     }
@@ -1522,6 +1544,32 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
 
     ASSINP0 (flag.out_dt != DT_FASTQ || dt == DT_FASTQ || dt == DT_SAM || dt == DT_BAM,
              "--fastq is only allowed for SAM or BAM files");
+
+    // limitations when genocatting a deep file: user must select between --sam, --bam, --fastq (=interleaved), --interleaved, --R1 or --R2
+    if (is_genocat && flag.deep && !flag.no_writer) {
+        bool sam   = flag.explicit_out_dt && flag.out_dt == DT_SAM;
+        bool bam   = flag.explicit_out_dt && flag.out_dt == DT_BAM;
+        bool fastq = flag.explicit_out_dt && flag.out_dt == DT_FASTQ;
+
+        ASSINP0 (sam || bam || fastq || flag.one_component || flag.interleaved, "This file was compressed with --deep. Therefore, genocat requires one of these options: --R1, --R2, --interleaved, --fastq, --sam, --bam");
+
+        CONFLICT (flag.one_component==1, sam, "--R1", "--sam");
+        CONFLICT (flag.one_component==1, bam, "--R1", "--bam");
+        CONFLICT (flag.one_component==2, sam, "--R2", "--sam");
+        CONFLICT (flag.one_component==2, bam, "--R2", "--bam");
+        CONFLICT (flag.interleaved, sam, "--sequential", "--sam");
+        CONFLICT (flag.interleaved, bam, "--sequential", "--bam");
+        
+        if (flag.one_component) flag.one_component += 3; // --R1 or --R2 --> adjust to SAM_COMP_FQ00 or SAM_COMP_FQ01
+        
+        if (sam || bam) flag.one_component = SAM_COMP_MAIN + 1;
+        
+        if (!flag.interleaved && fastq) {
+            flag.interleaved = INTERLEAVE_BOTH;
+            flag.one_component = SAM_COMP_FQ00;
+        }
+    }
+
 
     // version limitations
 

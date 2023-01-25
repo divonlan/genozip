@@ -28,20 +28,38 @@
 #include "lookback.h"
 #include "gencomp.h"
 #include "tip.h"
+#include "deep.h"
 #include "libdeflate/libdeflate.h"
 
 typedef enum { QNAME, FLAG, RNAME, POS, MAPQ, CIGAR, RNEXT, PNEXT, TLEN, SEQ, QUAL, AUX } SamFields __attribute__((unused)); // quick way to define constants
 
-char taxid_redirection_snip[100], copy_AS_snip[30], copy_NM_snip[30], copy_GX_snip[30], copy_POS_snip[30], copy_mate_CIGAR_snip[30],
-    copy_mate_MAPQ_snip[30], copy_mate_MQ_snip[30], XA_lookback_snip[30], TX_lookback_snip[30], AN_lookback_snip[30], copy_mate_RNEXT_snip[30], copy_mate_RNAME_snip[30], copy_saggy_RNAME_snip[30],
-    copy_mate_YS_snip[30], copy_mate_AS_snip[30], copy_mate_PNEXT_snip[100], copy_saggy_PNEXT_snip[100], copy_mate_POS_snip[100],
-    copy_mate_ms_snip[30], copy_mate_nM_snip[30], copy_buddy_NH_snip[30], copy_buddy_Z_snips[NUM_MATED_Z_TAGS][30],
-    redirect_to_CR_X_snip[30], redirect_to_GR_X_snip[30], redirect_to_GY_X_snip[30], redirect_to_RX_X_snip[30];
-unsigned taxid_redirection_snip_len, copy_AS_snip_len, copy_NM_snip_len, copy_GX_snip_len, copy_POS_snip_len, copy_mate_CIGAR_snip_len,
-    copy_mate_MAPQ_snip_len, copy_mate_MQ_snip_len, XA_lookback_snip_len, TX_lookback_snip_len, AN_lookback_snip_len, copy_mate_RNEXT_snip_len, copy_mate_RNAME_snip_len, copy_saggy_RNAME_snip_len,
-    copy_mate_YS_snip_len, copy_mate_AS_snip_len, copy_mate_PNEXT_snip_len, copy_saggy_PNEXT_snip_len, copy_mate_POS_snip_len,
-    copy_mate_ms_snip_len, copy_mate_nM_snip_len, copy_buddy_NH_snip_len, copy_buddy_Z_snip_lens[NUM_MATED_Z_TAGS],
-    redirect_to_CR_X_snip_len, redirect_to_RX_X_snip_len, redirect_to_GR_X_snip_len, redirect_to_GY_X_snip_len;
+STRl(taxid_redirection_snip, 100);
+STRl(copy_NM_snip, 30);
+STRl(copy_GX_snip, 30);
+STRl(copy_POS_snip, 30);
+STRl(copy_mate_CIGAR_snip, 30);
+STRl(copy_mate_MAPQ_snip, 30);
+STRl(copy_mate_MQ_snip, 30);
+STRl(XA_lookback_snip, 30);
+STRl(TX_lookback_snip, 30);
+STRl(AN_lookback_snip, 30);
+sSTRl(copy_mate_RNEXT_snip, 30);
+sSTRl(copy_mate_RNAME_snip, 30);
+sSTRl(copy_saggy_RNAME_snip, 30);
+STRl(copy_mate_YS_snip, 30);
+STRl(copy_mate_AS_snip, 30);
+STRl(copy_mate_PNEXT_snip, 100);
+STRl(copy_saggy_PNEXT_snip, 100);
+STRl(copy_mate_POS_snip, 100);
+STRl(copy_mate_ms_snip, 30);
+STRl(copy_mate_nM_snip, 30);
+STRl(copy_buddy_NH_snip, 30);
+STRl(redirect_to_CR_X_snip, 30);
+STRl(redirect_to_GR_X_snip, 30);
+STRl(redirect_to_GY_X_snip, 30);
+STRl(redirect_to_RX_X_snip, 30);
+char copy_buddy_Z_snips[NUM_MATED_Z_TAGS][30]; unsigned copy_buddy_Z_snip_lens[NUM_MATED_Z_TAGS];
+
 WordIndex xa_lookback_strand_word_index = WORD_INDEX_NONE, xa_lookback_rname_word_index = WORD_INDEX_NONE;
 
 Did buddied_Z_dids[NUM_MATED_Z_TAGS] = MATED_Z_DIDs;
@@ -94,7 +112,6 @@ void sam_zip_initialize (void)
     qname_zip_initialize (SAM_QNAME);
 
     seg_prepare_snip_other (SNIP_COPY, _SAM_POS, false, 0, copy_POS_snip);
-    seg_prepare_snip_other (SNIP_COPY, _OPTION_AS_i, false, 0, copy_AS_snip);
     seg_prepare_snip_other (SNIP_COPY, _OPTION_NM_i, false, 0, copy_NM_snip);
     seg_prepare_snip_other (SNIP_COPY, _OPTION_GX_Z, false, 0, copy_GX_snip);
     seg_prepare_snip_other (SNIP_LOOKBACK, _OPTION_XA_LOOKBACK, false, 0, XA_lookback_snip);
@@ -192,6 +209,7 @@ void sam_zip_genozip_header (SectionHeaderGenozipHeader *header)
     header->sam.segconf_seq_len_dict_id = segconf.qname_seq_len_dict_id; // v14
     header->sam.segconf_MD_NM_by_un     = segconf.MD_NM_by_unconverted;  // v14
     header->sam.segconf_predict_meth    = segconf.sam_predict_meth_call; // v14
+    header->sam.deep                    = flag.deep;                     // v15
 }
 
 // initialize SA and OA
@@ -203,7 +221,7 @@ static void sam_seg_0X_initialize (VBlockP vb, Did strand_did_i)
     CTX(strand_did_i)->no_vb1_sort = true; // keep them in this ^ order
 }
 
-static void sam_seg_qname_initialize (VBlockSAMP vb)
+static void sam_seg_QNAME_initialize (VBlockSAMP vb)
 {
     CTX(SAM_QNAME)->no_stons = true;             // no singletons, bc sam_piz_special_SET_BUDDY uses PEEK_SNIP
     CTX(SAM_QNAME)->flags.store_per_line = true; // 12.0.41
@@ -220,7 +238,7 @@ static void sam_seg_qname_initialize (VBlockSAMP vb)
     }
 
     // all-the-same for SAM_BUDDY
-    seg_by_did (VB, (char[]){SNIP_SPECIAL, SAM_SPECIAL_SET_BUDDY}, 2, SAM_BUDDY, 0);
+    seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_SET_BUDDY}, 2, SAM_BUDDY, 0);
 }
 
 void sam_seg_initialize (VBlockP vb_)
@@ -333,7 +351,7 @@ void sam_seg_initialize (VBlockP vb_)
     ctx_consolidate_stats (VB, OPTION_CR_Z, OPTION_CR_Z_X, DID_EOL);
     ctx_consolidate_stats (VB, OPTION_GR_Z, OPTION_GR_Z_X, DID_EOL);
     ctx_consolidate_stats (VB, OPTION_GY_Z, OPTION_GY_Z_X, DID_EOL);
-    ctx_consolidate_stats (VB, SAM_AUX, SAM_MC_Z, DID_EOL); // note: this is *not* OPTION_MC_Z
+    ctx_consolidate_stats (VB, SAM_AUX, SAM_FQ_AUX, DID_EOL); // note: this is *not* OPTION_MC_Z
     ctx_consolidate_stats (VB, SAM_QNAME, SAM_BUDDY, SAM_QNAMESA, DID_EOL);
     ctx_consolidate_stats (VB, OPTION_BD_BI, OPTION_BI_Z, OPTION_BD_Z, DID_EOL);
 
@@ -344,7 +362,7 @@ void sam_seg_initialize (VBlockP vb_)
 
     codec_acgt_comp_init (VB, SAM_NONREF);
 
-    sam_seg_qname_initialize (vb);
+    sam_seg_QNAME_initialize (vb);
     sam_seg_QUAL_initialize (vb);
     sam_seg_SEQ_initialize (vb);
     sam_seg_cigar_initialize (vb);
@@ -418,6 +436,8 @@ void sam_seg_initialize (VBlockP vb_)
         segconf.SA_HtoS = segconf.depn_CIGAR_can_have_H && // set when segging MAIN component
                           !segconf.SA_CIGAR_can_have_H;    // set when segging PRIM component
 
+    if (flag.deep) deep_sam_seg_initialize (vb);
+
     COPY_TIMER(seg_initialize);
 #undef T
 }
@@ -428,8 +448,7 @@ static void sam_seg_toplevel (VBlockP vb)
     // reconstructs QNAMESA, SEQSA, QUALSA to copy from SA Groups. In contrast, in DEPN, copy from SA Groups
     // occurs (if needed) when reconstructing QNAME / SQBITMAP / QUAL.
     uint64_t qname_dict_id = (sam_is_prim_vb ? _SAM_QNAMESA : _SAM_QNAME);
-    uint64_t seq_dict_id = _SAM_SQBITMAP;
-    uint64_t qual_dict_id = (sam_is_prim_vb ? _SAM_QUALSA : _SAM_QUAL);
+    uint64_t qual_dict_id  = (sam_is_prim_vb ? _SAM_QUALSA  : _SAM_QUAL );
 
     // top level snip - reconstruction as SAM
     SmallContainer top_level_sam = {
@@ -448,7 +467,7 @@ static void sam_seg_toplevel (VBlockP vb)
                    { .dict_id = { _SAM_RNEXT    }, .separator = "\t" },
                    { .dict_id = { _SAM_PNEXT    }, .separator = "\t" },
                    { .dict_id = { _SAM_TLEN     }, .separator = "\t" },
-                   { .dict_id = { seq_dict_id   }, .separator = "\t" },
+                   { .dict_id = { _SAM_SQBITMAP }, .separator = "\t" },
                    { .dict_id = { qual_dict_id  }, .separator = "\t" },
                    { .dict_id = { _SAM_AUX      }                    },
                    { .dict_id = { _SAM_EOL      }                    }}};
@@ -476,10 +495,11 @@ static void sam_seg_toplevel (VBlockP vb)
                           { .dict_id = { qname_dict_id }, .separator = { CI0_TRANS_NUL                     }                   }, // normal
                           { .dict_id = { _SAM_CIGAR    }, .separator = ""                                                      }, // handle in special reconstructor - translate textual to BAM CIGAR format + reconstruct l_read_name, n_cigar_op, l_seq
                           { .dict_id = { _SAM_TLEN     }, .separator = { CI0_TRANS_NOR                     }, SAM2BAM_TLEN     }, // must be after CIGAR bc sam_piz_special_TLEN_old needs vb->seq_num
-                          { .dict_id = { seq_dict_id   }, .separator = "",                                    SAM2BAM_SEQ      }, // Translate - textual format to BAM format
+                          { .dict_id = { _SAM_SQBITMAP }, .separator = "",                                    SAM2BAM_SEQ      }, // Translate - textual format to BAM format
                           { .dict_id = { qual_dict_id  }, .separator = "",                                    SAM2BAM_QUAL     }, // Translate - textual format to BAM format, set block_size
                           { .dict_id = { _SAM_AUX      }, .separator = { CI0_TRANS_NOR                     }                   }, // up to v11, this had the SAM2BAM_AUX translator
-                        }};
+                        }
+    };
 
     // no container wide-prefix, skip l_name with a 4-character prefix
     static const char bam_line_prefix[] = {CON_PX_SEP,                      // has prefix
@@ -491,55 +511,56 @@ static void sam_seg_toplevel (VBlockP vb)
 
     // top level snip - reconstruction as FASTQ
     SmallContainer top_level_fastq = {
-        .repeats = vb->lines.len32,
+        .repeats     = vb->lines.len32,
         .is_toplevel = true,
-        .callback = true, // drop supplementary alignments and alignments without QUAL data
-        .nitems_lo = 10,
-        .items = { { .dict_id = { _SAM_BUDDY } },
-            { .dict_id = {qname_dict_id}, .separator = "\n"},
-            { .dict_id = { _SAM_RNAME}, .separator = {CI0_TRANS_NOR}},                              // needed for reconstructing seq
-            { .dict_id = { _SAM_POS}, .separator = {CI0_TRANS_NOR}},                                // needed for reconstructing seq
-            { .dict_id = { _SAM_RNEXT}, .separator = {CI0_TRANS_NOR}},                              // needed for reconstructing PNEXT
-            { .dict_id = { _SAM_PNEXT}, .separator = {CI0_TRANS_NOR}},                              // needed for reconstructing POS (in case of BUDDY)
-            { .dict_id = { _SAM_FLAG}, .separator = {CI0_TRANS_NOR}, .translator = SAM2FASTQ_FLAG}, // need to know if seq is reverse complemented & if it is R2 ; reconstructs "1" for R1 and "2" for R2
-            { .dict_id = { _SAM_CIGAR}, .separator = {CI0_TRANS_NOR}},                              // needed for reconstructing seq
-            { .dict_id = { _SAM_MC_Z}, .separator = {CI0_TRANS_NOR}},                               // consumes OPTION_MC_Z if its on this line, might be needed for mate CIGAR
-            { .dict_id = {seq_dict_id}, .separator = "\n", .translator = SAM2FASTQ_SEQ},
-            { .dict_id = {qual_dict_id}, .separator = "\n", .translator = SAM2FASTQ_QUAL}, // also moves fastq "line" to R2 (paired file) if needed
-        }};
+        .callback    = true, // drop supplementary alignments and alignments without QUAL data
+        .nitems_lo   = 11,
+        .items       = { { .dict_id = { _SAM_BUDDY    }                                                  },
+                         { .dict_id = { qname_dict_id }, .separator = "\n"                               },
+                         { .dict_id = { _SAM_RNAME    }, .separator = { CI0_INVISIBLE }                  },// needed for reconstructing seq
+                         { .dict_id = { _SAM_POS      }, .separator = { CI0_INVISIBLE }                  },// needed for reconstructing seq
+                         { .dict_id = { _SAM_RNEXT    }, .separator = { CI0_INVISIBLE }                  },// needed for reconstructing PNEXT
+                         { .dict_id = { _SAM_PNEXT    }, .separator = { CI0_INVISIBLE }                  },// needed for reconstructing POS (in case of BUDDY)
+                         { .dict_id = { _SAM_FLAG     }, .separator = { CI0_INVISIBLE }, .translator = SAM2FASTQ_FLAG }, // need to know if seq is reverse complemented & if it is R2 ; reconstructs "1" for R1 and "2" for R2
+                         { .dict_id = { _SAM_CIGAR    }, .separator = { CI0_INVISIBLE }                  },// needed for reconstructing seq and also of SA_CIGAR (need vb->hard_clips[] for de-squanking)
+                         { .dict_id = { _SAM_FQ_AUX   }, .separator = { CI0_INVISIBLE }                  },// consumes OPTION_MC_Z, OPTION_SA_Z if its on this line, might be needed for mate CIGAR
+                         { .dict_id = { _SAM_SQBITMAP }, .separator = { CI0_TRANS_ALWAYS, '\n' }, .translator = SAM2FASTQ_SEQ  },
+                         { .dict_id = { qual_dict_id  }, .separator = { CI0_TRANS_ALWAYS, '\n' }, .translator = SAM2FASTQ_QUAL }, // also moves fastq "line" to R2 (paired file) if needed
+                      }
+    };
 
     // add a '@' to the description line, use a prefix to add the + line
-    static const char fastq_line_prefix[] = {CON_PX_SEP, CON_PX_SEP, '@', CON_PX_SEP, CON_PX_SEP, CON_PX_SEP,
+    static const char fastq_line_prefix[] = {CON_PX_SEP, CON_PX_SEP, '@', CON_PX_SEP, CON_PX_SEP, CON_PX_SEP, CON_PX_SEP, CON_PX_SEP,
                                              CON_PX_SEP, CON_PX_SEP, CON_PX_SEP, CON_PX_SEP, CON_PX_SEP, '+', '\n', CON_PX_SEP};
 
     container_seg (vb, CTX(SAM_TOP2FQ), (ContainerP)&top_level_fastq, fastq_line_prefix, sizeof (fastq_line_prefix), 0);
 
     // top level snip - reconstruction as FASTQ "extended" - with all the SAM fields in the description line
     SmallContainer top_level_fastq_ext = {
-        .repeats = vb->lines.len32,
+        .repeats     = vb->lines.len32,
         .is_toplevel = true,
-        .callback = true, // drop non-primary chimeric reads and reads without QUAL data
-        .nitems_lo = 13,
-        .items = {
-            { .dict_id = { _SAM_BUDDY} },
-            { .dict_id = {qname_dict_id}, .separator = "\t"},
-            { .dict_id = { _SAM_FLAG}, .separator = "\t", .translator = SAM2FASTQ_FLAG}, // need to know if seq is reverse complemented & if it is R2 ; reconstructs "1" for R1 and "2" for R2
-            { .dict_id = { _SAM_RNAME}, .separator = "\t"},
-            { .dict_id = { _SAM_POS}, .separator = "\t"},
-            { .dict_id = { _SAM_MAPQ}, .separator = "\t"},
-            { .dict_id = { _SAM_CIGAR}, .separator = "\t"},
-            { .dict_id = { _SAM_RNEXT}, .separator = "\t"},
-            { .dict_id = { _SAM_PNEXT}, .separator = "\t"},
-            { .dict_id = { _SAM_TLEN}, .separator = "\t"},
-            { .dict_id = { _SAM_AUX}, .separator = "\n"},
-            { .dict_id = {seq_dict_id}, .separator = "\n", .translator = SAM2FASTQ_SEQ},
-            { .dict_id = {qual_dict_id}, .separator = "\n", .translator = SAM2FASTQ_QUAL}, // also moves fastq "line" to R2 (paired file) if needed
-        }};
+        .callback    = true, // drop non-primary chimeric reads and reads without QUAL data
+        .nitems_lo   = 13,
+        .items       = { { .dict_id = { _SAM_BUDDY    }                                                  },
+                         { .dict_id = { qname_dict_id }, .separator = "\t"                               },
+                         { .dict_id = { _SAM_FLAG     }, .separator = "\t", .translator = SAM2FASTQ_FLAG }, // need to know if seq is reverse complemented & if it is R2 ; reconstructs "1" for R1 and "2" for R2
+                         { .dict_id = { _SAM_RNAME    }, .separator = "\t"                               },
+                         { .dict_id = { _SAM_POS      }, .separator = "\t"                               },
+                         { .dict_id = { _SAM_MAPQ     }, .separator = "\t"                               },
+                         { .dict_id = { _SAM_CIGAR    }, .separator = "\t"                               },
+                         { .dict_id = { _SAM_RNEXT    }, .separator = "\t"                               },
+                         { .dict_id = { _SAM_PNEXT    }, .separator = "\t"                               },
+                         { .dict_id = { _SAM_TLEN     }, .separator = "\t"                               },
+                         { .dict_id = { _SAM_AUX      }, .separator = "\n"                               },
+                         { .dict_id = { _SAM_SQBITMAP }, .separator = { CI0_TRANS_ALWAYS, '\n' }, .translator = SAM2FASTQ_SEQ  },
+                         { .dict_id = { qual_dict_id  }, .separator = { CI0_TRANS_ALWAYS, '\n' }, .translator = SAM2FASTQ_QUAL }, // also moves fastq "line" to R2 (paired file) if needed
+                       }
+    };
 
     // add a '@' to the description line, use a prefix to add the + line
     static const char fastq_ext_line_prefix[] = {
-        CON_PX_SEP, CON_PX_SEP,
-        '@', CON_PX_SEP,
+        CON_PX_SEP, CON_PX_SEP, CON_PX_SEP, 
+        '@', CON_PX_SEP, 
         'F', 'L', 'A', 'G', ':', CON_PX_SEP,
         'R', 'N', 'A', 'M', 'E', ':', CON_PX_SEP,
         'P', 'O', 'S', ':', CON_PX_SEP,
@@ -548,7 +569,7 @@ static void sam_seg_toplevel (VBlockP vb)
         'R', 'N', 'E', 'X', 'T', ':', CON_PX_SEP,
         'P', 'N', 'E', 'X', 'T', ':', CON_PX_SEP,
         'T', 'L', 'E', 'N', ':', CON_PX_SEP,
-        CON_PX_SEP,             // optional
+        CON_PX_SEP,             // AUX
         CON_PX_SEP,             // SEQ
         '+', '\n', CON_PX_SEP}; // QUAL
 
@@ -670,6 +691,13 @@ static void sam_seg_finalize_segconf (VBlockP vb)
     // we just copy all reference contigs. this are not needed for decompression, just for --coverage/--sex/--idxstats
     if (z_file->num_txts_so_far == 1 && flag.aligner_available && IS_REF_EXTERNAL)
         ctx_populate_zf_ctx_from_contigs (gref, SAM_RNAME, ref_get_ctgs (gref));
+
+    // Aplogize to user for not doing a good job with PacBio subreads files
+    if (MP(BAZ2BAM) && segconf.has[OPTION_ip_B_C] && segconf.has[OPTION_pw_B_C]) {
+        TEMP_FLAG(quiet, flag.explicit_quiet); // note: quiet is set to true in segconf
+        WARN0 ("FYI: Genozip currently doesn't do a very good job at compressing PacBio subreads BAM files. This is because we haven't figured out yet a good method to compress the ip:B and pw:B fields. Sorry!\n");
+        RESTORE_FLAG(quiet);
+    }
 }
 
 void sam_seg_finalize (VBlockP vb)
@@ -1187,8 +1215,12 @@ void sam_seg_QNAME(VBlockSAMP vb, ZipDataLineSAM *dl, STRp (qname), unsigned add
         goto normal_seg;
     }
 
-    uint32_t my_hash = QNAME_HASH(qname, qname_len, dl->FLAG.is_last) & MAXB(vb->qname_hash.prm8[0]);
+    uint32_t qname_hash = QNAME_HASH(qname, qname_len, dl->FLAG.is_last);
+    uint32_t my_hash = qname_hash & MAXB(vb->qname_hash.prm8[0]);
     bool insert_to_hash = false;
+
+    if (flag.deep) 
+        deep_sam_set_QNAME_hash (vb, dl, qname_hash);
 
     BuddyType bt = sam_seg_mate (vb, dl->FLAG, STRa (qname), my_hash, &insert_to_hash) | // bitwise or
                    sam_seg_saggy (vb, dl->FLAG, STRa (qname), my_hash, &insert_to_hash);
@@ -1450,23 +1482,23 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
         sam_seg_RNAME(vb, dl, STRfld (RNAME), true, fld_lens[RNAME] + 1);
     }
 
-    sam_seg_QNAME(vb, dl, STRfld (QNAME), 1);
+    sam_seg_QNAME (vb, dl, STRfld (QNAME), 1);
 
-    sam_seg_FLAG(vb, dl, fld_lens[FLAG] + 1);
+    sam_seg_FLAG (vb, dl, fld_lens[FLAG] + 1);
 
     // note: pos can have a value even if RNAME="*" - this happens if a SAM with a RNAME that is not in the header is converted to BAM with samtools
-    sam_seg_POS(vb, dl, prev_line_chrom, fld_lens[POS] + 1);
+    sam_seg_POS (vb, dl, prev_line_chrom, fld_lens[POS] + 1);
 
     if (fld_lens[RNAME] != 1 || *flds[RNAME] != '*')
-        sam_seg_verify_RNAME(vb, flds[RNAME]);
+        sam_seg_verify_RNAME (vb, flds[RNAME]);
 
-    sam_seg_MAPQ(vb, dl, fld_lens[MAPQ] + 1);
+    sam_seg_MAPQ (vb, dl, fld_lens[MAPQ] + 1);
 
-    dl->RNEXT = sam_seg_RNEXT(vb, dl, STRfld (RNEXT), fld_lens[RNEXT] + 1);
+    dl->RNEXT = sam_seg_RNEXT (vb, dl, STRfld (RNEXT), fld_lens[RNEXT] + 1);
 
     vb->RNEXT_is_equal = ((fld_lens[RNEXT] == 1 && *flds[RNEXT] == '=') || str_issame_(STRfld (RNAME), STRfld (RNEXT)));
 
-    sam_seg_PNEXT(vb, dl, STRfld (PNEXT), 0, fld_lens[PNEXT] + 1);
+    sam_seg_PNEXT (vb, dl, STRfld (PNEXT), 0, fld_lens[PNEXT] + 1);
 
     sam_seg_init_bisulfite (vb, dl);
 
@@ -1474,10 +1506,10 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
     if (has_MD)
         sam_seg_MD_Z_analyze (vb, dl, STRauxZ(MD_Z, false), dl->POS);
 
-    seg_set_last_txt (VB, CTX(SAM_SQBITMAP), STRfld (SEQ));
+    seg_set_last_txt (VB, CTX (SAM_SQBITMAP), STRfld (SEQ));
 
     // calculate diff vs. reference (denovo or loaded)
-    sam_seg_SEQ(vb, dl, STRfld (SEQ), fld_lens[SEQ] + 1);
+    sam_seg_SEQ (vb, dl, STRfld (SEQ), fld_lens[SEQ] + 1);
 
     ASSSEG (str_is_in_range (flds[QUAL], fld_lens[QUAL], 33, 126), flds[QUAL], "Invalid QUAL - it contains non-Phred characters: \"%.*s\"",
            STRfi (fld, QUAL));
@@ -1486,13 +1518,13 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
         vb->qual_codec_no_longr = true; // we cannot compress QUAL with CODEC_LONGR in this case
 
     // finally we can seg CIGAR now
-    sam_seg_CIGAR(vb, dl, fld_lens[CIGAR], STRfld (SEQ), STRfld (QUAL), fld_lens[CIGAR] + 1 /*\t*/);
+    sam_seg_CIGAR (vb, dl, fld_lens[CIGAR], STRfld (SEQ), STRfld (QUAL), fld_lens[CIGAR] + 1 /*\t*/);
 
     // note: can only be called after sam_seg_CIGAR updates SEQ.len
-    sam_seg_QUAL(vb, dl, STRfld (QUAL), fld_lens[QUAL] + 1);
+    sam_seg_QUAL (vb, dl, STRfld (QUAL), fld_lens[QUAL] + 1);
 
     // add BIN so this file can be reconstructed as BAM
-    bam_seg_BIN(vb, dl, 0, false);
+    bam_seg_BIN (vb, dl, 0, false);
 
     // AUX fields - up to MAX_FIELDS of them
     sam_seg_aux_all (vb, dl);
@@ -1514,7 +1546,7 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
 
     sam_seg_TLEN (vb, dl, STRfld (TLEN), 0, is_rname_rnext_same);
 
-    SEG_EOL(SAM_EOL, false); /* last field accounted for \n */
+    SEG_EOL (SAM_EOL, false); /* last field accounted for \n */
     SAFE_RESTORE;            // restore \t after CIGAR
 
     return next_line;

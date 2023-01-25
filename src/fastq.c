@@ -234,9 +234,10 @@ static void fastq_tip_if_should_be_pair (void)
             strcpy (other_bn, bn);
             other_bn[mm_i] = '2';
 
-            TIP ("Using --pair to compress paired-end FASTQs can reduce the compressed file's size by 10%%. E.g.:\n"
-                 "genozip --reference %s --pair %s %s%s%s\n",
-                  ref_get_filename (gref), txt_name, (is_cd ? "" : dir_name), (is_cd ? "" : "/"), other_bn);
+            if (!flag.deep)
+                TIP ("Using --pair to compress paired-end FASTQs can reduce the compressed file's size by 10%%. E.g.:\n"
+                    "genozip --reference %s --pair %s %s%s%s\n",
+                    ref_get_filename (gref), txt_name, (is_cd ? "" : dir_name), (is_cd ? "" : "/"), other_bn);
 
             segconf.r1_or_r2 = PAIR_READ_1;
             break;
@@ -345,9 +346,13 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
         CTX(FASTQ_TAXID)->counts_section = true; 
     }
 
+    // all-the-same for FASTQ_DEEP
+    seg_by_did (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_set_deep }, 2, FASTQ_DEEP, 0);
+
     // consolidate stats for --stats,
     ctx_consolidate_stats (VB, FASTQ_SQBITMAP, FASTQ_NONREF, FASTQ_NONREF_X, FASTQ_GPOS, FASTQ_STRAND, FASTQ_SEQMIS_A, FASTQ_SEQMIS_C, FASTQ_SEQMIS_G, FASTQ_SEQMIS_T, DID_EOL);
-    ctx_consolidate_stats(VB, FASTQ_QUAL, FASTQ_DOMQRUNS, FASTQ_QUALMPLX, FASTQ_DIVRQUAL, DID_EOL);
+    ctx_consolidate_stats (VB, FASTQ_QUAL, FASTQ_DOMQRUNS, FASTQ_QUALMPLX, FASTQ_DIVRQUAL, DID_EOL);
+    ctx_consolidate_stats (VB, FASTQ_DEEP, FASTQ_DEEP_LINE, DID_EOL);
 
     COPY_TIMER (seg_initialize);
 }
@@ -362,21 +367,22 @@ void fastq_seg_finalize (VBlockP vb)
 
     // top level snip
     SmallContainer top_level = { 
-        .repeats        = vb->lines.len,
+        .repeats        = vb->lines.len32,
         .is_toplevel    = true,
         .filter_items   = true,
         .filter_repeats = true,
         .callback       = true,
-        .nitems_lo      = 8,
-        .items          = { 
-            { .dict_id = { _FASTQ_DESC },     },
-            { .dict_id = { _FASTQ_E1L },      }, // note: we have 2 EOL contexts, so we can show the correct EOL if in case of --header-only
+        .nitems_lo      = 9,
+        .items          = {
+            { .dict_id = { _FASTQ_DEEP     }, }, 
+            { .dict_id = { _FASTQ_DESC     }, },
+            { .dict_id = { _FASTQ_E1L      }, }, // note: we have 2 EOL contexts, so we can show the correct EOL if in case of --header-only
             { .dict_id = { _FASTQ_SQBITMAP }, },
-            { .dict_id = { _FASTQ_E2L },      },
-            { .dict_id = { _FASTQ_LINE3 },    }, // added in 12.0.14, before '+' was a separator of the previous E2L
-            { .dict_id = { _FASTQ_E2L },      },
-            { .dict_id = { _FASTQ_QUAL },     },
-            { .dict_id = { _FASTQ_E2L },      } 
+            { .dict_id = { _FASTQ_E2L      }, },
+            { .dict_id = { _FASTQ_LINE3    }, }, // added in 12.0.14, before '+' was a separator of the previous E2L
+            { .dict_id = { _FASTQ_E2L      }, },
+            { .dict_id = { _FASTQ_QUAL     }, },
+            { .dict_id = { _FASTQ_E2L      }, } 
         }
     };
 
@@ -744,7 +750,9 @@ IS_SKIP (fastq_piz_is_skip_section)
 // inspects z_file flags and if needed reads additional data, and returns true if the z_file consists of FASTQs compressed with --pair
 bool fastq_piz_is_paired (void)
 {
-    if (z_file->data_type != DT_FASTQ || z_file->num_components % 2) return false; // quick check to avoid the need for zfile_is_paired is most cases that dts_paired is missing
+    if (z_file->data_type != DT_FASTQ || 
+        (VER(15) && flag.deep)        ||         // --deep files are not paired
+        z_file->num_txt_files == 1) return false; // note: %2 and not ==1 for back-comp for concatenated files up to v13
 
     // this is a FASTQ genozip file. Now we can check dts_paired
     if (z_file->z_flags.dts_paired) return true;  

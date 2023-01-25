@@ -84,7 +84,7 @@ typedef union SectionFlags {
     union FlagsVbHeader {
         struct FlagsVbHeaderVcf {
             uint8_t coords             : 2; // DC_PRIMARY if it contains TOPLEVEL container, DC_LUFT if LUFT toplevel container, or DC_BOTH if both (DC_NONE prior to v12)
-            uint8_t use_null_DP_method : 1; // since 13.0.5 canceled v14: "null_DP" method is used
+            uint8_t use_null_DP_method : 1; // "null_DP" method is used (13.0.5)
             uint8_t unused             : 5;
         } vcf;
         struct FlagsVbHeaderSam {
@@ -93,6 +93,10 @@ typedef union SectionFlags {
             uint8_t v13_is_collated    : 1; // Likely collated (copied from segconf.is_collated) - introduced 13.0.3 and canceled v14
             uint8_t unused2            : 4;
         } sam;
+        struct FlagsVbHeaderGff {
+            uint8_t embedded_fasta     : 1; // this VB consists embedded FASTA and has data_type=DT_FASTA (v15)
+            uint8_t unused             : 7;
+        } gff;
     } vb_header;
 
     struct FlagsBgzf {
@@ -168,7 +172,7 @@ typedef struct {
         struct {                       // v14
             uint16_t vb_size;          // segconf.vb_size >> 20 (i.e. size in MB)
             char unused;                       
-            CompIType num_components;  // number of txt bound components in this file (1 if no binding)
+            CompIType num_txt_files;  // number of txt bound components in this file (1 if no binding). We don't count generated components (gencomp).
         };
         uint32_t v13_num_components;
     };
@@ -207,11 +211,12 @@ typedef struct {
             uint8_t segconf_is_collated  : 1; // SAM: v14
             uint8_t segconf_MD_NM_by_un  : 1; // SAM: v14
             uint8_t segconf_predict_meth : 1; // SAM: v14
-            uint8_t unused_bits          : 2;
+            uint8_t deep                 : 1; // SAM: v15
+            uint8_t unused_bits          : 1;
             char unused[256];
         } sam;
 
-        struct {
+        struct { 
             DictId segconf_seq_len_dict_id;   // FASTQ: dict_id of one of the Q?NAME contexts, which is expected to hold the seq_len for this read. 0 if there is no such item. copied from segconf.qname_seq_len_dict_id. added v14.
             char unused[264];
         } fastq;
@@ -378,11 +383,11 @@ extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
 // used for SEC_LOCAL and SEC_B250
 typedef struct {
     SectionHeader;
-    LocalType ltype;        // populated in both SEC_B250 and SEC_LOCAL: goes into ctx.ltype - type of data for the ctx.local buffer
-    uint8_t param;          // Three options: 1. goes into ctx.local.param. (until v13: if flags.copy_local_param. since v14: always, except if ltype=LT_BITMAP) 
-                            //                2. given to comp_uncompress as a codec parameter
-                            //                3. starting 9.0.11 for ltype=LT_BITMAP: number of unused bits in top bitarray word
-    B250Size b250_size : 2; // b250 sections only: size of each b250 element (v14)
+    LocalType ltype;           // populated in both SEC_B250 and SEC_LOCAL: goes into ctx.ltype - type of data for the ctx.local buffer
+    uint8_t param;             // Three options: 1. goes into ctx.local.param. (until v13: if flags.copy_local_param. since v14: always, except if ltype=LT_BITMAP) 
+                               //                2. given to comp_uncompress as a codec parameter
+                               //                3. starting 9.0.11 for ltype=LT_BITMAP: number of unused bits in top bitarray word
+    B250Size b250_size : 2;    // b250 sections only: size of each b250 element (v14)
     uint8_t unused2    : 6;
     uint8_t unused;
     DictId dict_id;           
@@ -426,40 +431,39 @@ typedef enum { PLAN_RANGE=0, PLAN_FULL_VB=2, PLAN_INTERLEAVE=3/*PIZ-only*/, PLAN
 typedef struct {
     VBIType vb_i;               
     union {
-        uint32_t start_line; // used for RANGE
-        uint32_t vb2_i;      // used for INTERLEAVE
-        uint32_t comp_i;     // used for TXTHEADER
-        uint32_t word2;      // generic access to the value
+        uint32_t start_line;   // used for RANGE
+        uint32_t vb2_i;        // used for INTERLEAVE
+        uint32_t comp_i;       // used for TXTHEADER
+        uint32_t word2;        // generic access to the value
     }; 
-    uint32_t num_lines : 29; // used by RANGE, FULL_VB (writer only, not file), INTERLEAVE, DOWNSAMPLE. note: in v12/13 END_OF_VB, this field was all 1s.
+    uint32_t num_lines : 29;   // used by RANGE, FULL_VB (writer only, not file), INTERLEAVE, DOWNSAMPLE. note: in v12/13 END_OF_VB, this field was all 1s.
     PlanFlavor flavor  : 3;  
 } ReconPlanItem;
 
 // the data of SEC_SECTION_LIST is an array of the following type, as is the z_file->section_list_buf
 typedef struct SectionEntFileFormat {
-    uint64_t offset;         // offset of this section in the file
-    union {                  // Section-Type-specific field
-        DictId dict_id;      // DICT, LOCAL, B250 or COUNT sections
+    uint64_t offset;           // offset of this section in the file
+    union {                    // Section-Type-specific field
+        DictId dict_id;        // DICT, LOCAL, B250 or COUNT sections
         struct { 
-            uint32_t num_lines; // VB_HEADER sections - number of lines in this VB. 
+            uint32_t num_lines;// VB_HEADER sections - number of lines in this VB. 
             uint32_t unused;
         };
-        uint64_t st_specific;   // generic access to the value
+        uint64_t st_specific;  // generic access to the value
     };
-    VBIType vblock_i;        // 1-based
-    SectionType st;          // 1 byte
-    SectionFlags flags;      // same flags as in section header (since v12, previously "unused")
-    uint8_t comp_i  : 2;     // used for component-related sections, 0-based (since v14, previously "unused"), (0 if COMP_NONE)
-    uint8_t unused1 : 6;
+    VBIType vblock_i;          // 1-based
+    SectionType st;            // 1 byte
+    SectionFlags flags;        // same flags as in section header (since v12, previously "unused")
+    CompIType comp_i;          // used for component-related sections, 0-based (v15: 8 bits, COMP_NONE is 255. v14: 2 bits - COMP_NONE was 0. up to v13: "unused")
     uint8_t unused2;         
 } SectionEntFileFormat;
 
 // the data of SEC_RANDOM_ACCESS is an array of the following type, as is the z_file->ra_buf and vb->ra_buf
 // we maintain one RA entry per vb per every chrom in the the VB
 typedef struct RAEntry {
-    VBIType vblock_i;        // the vb_i in which this range appears
-    WordIndex chrom_index;   // before merge: node index into chrom context nodes, after merge - word index in CHROM dictionary
-    PosType min_pos, max_pos;// POS field value of smallest and largest POS value of this chrom in this VB (regardless of whether the VB is sorted)
+    VBIType vblock_i;          // the vb_i in which this range appears
+    WordIndex chrom_index;     // before merge: node index into chrom context nodes, after merge - word index in CHROM dictionary
+    PosType min_pos, max_pos;  // POS field value of smallest and largest POS value of this chrom in this VB (regardless of whether the VB is sorted)
 } RAEntry; 
 
 // the data of SEC_REF_IUPACS (added v12)
@@ -499,20 +503,20 @@ typedef union {
 
 // in-memory section 
 typedef const struct SectionEnt {
-    uint64_t offset;         // offset of this section in the file
-    union {                  // Section-Type-specific field
-        DictId dict_id;      // DICT, LOCAL, B250 or COUNT sections
+    uint64_t offset;            // offset of this section in the file
+    union {                     // Section-Type-specific field
+        DictId dict_id;         // DICT, LOCAL, B250 or COUNT sections
         struct {
             uint32_t num_lines; // VB_HEADER sections - number of lines in this VB. 
             uint32_t unused;
         };
         uint64_t st_specific;   // generic access to the value
     };
-    VBIType vblock_i;        // 1-based
+    VBIType vblock_i;           // 1-based
     uint32_t size;        
-    CompIType comp_i;        // 0-based. value is 0-3 (see FlagsTxtHeader.comp_i), or 255 if COMP_NONE
-    SectionType st;          // 1 byte
-    SectionFlags flags;      // same flags as in section header, since v12 (before was "unused")
+    CompIType comp_i;           // 0-based. 255 if COMP_NONE.
+    SectionType st;             // 1 byte
+    SectionFlags flags;         // same flags as in section header, since v12 (before was "unused")
 } SectionEnt;
 
 // ---------
@@ -561,6 +565,7 @@ extern void sections_commit_new_list (BufferP new_list);
 
 extern void sections_list_memory_to_file_format (bool in_place);
 extern void sections_list_file_to_memory_format (SectionHeaderGenozipHeader *genozip_header);
+//xxx extern void sections_list_revert (void);
 
 #define sections_has_dict_id(st) ((st) == SEC_B250 || (st) == SEC_LOCAL || (st) == SEC_DICT || (st) == SEC_COUNTS)
 extern SectionType sections_st_by_name (char *name);

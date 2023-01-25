@@ -17,6 +17,7 @@
 #include "seg.h"
 #include "vblock.h"
 #include "context.h"
+#include "filename.h"
 #include "file.h"
 #include "reference.h"
 #include "endianness.h"
@@ -790,7 +791,7 @@ void chain_load (void)
             "%s is unsuitable for use with %s because its contigs mismatch those of the references. To fix, recreate it using the --match-chrom-to-reference option. See: " WEBSITE_CHAIN,
             z_name, OT("chain", "C"));
 
-    z_file->basename = file_basename (flag.reading_chain, false, "(chain-file)", NULL, 0);
+    z_file->basename = filename_base (flag.reading_chain, false, "(chain-file)", NULL, 0);
 
     TEMP_VALUE (command, PIZ);
 
@@ -815,7 +816,7 @@ void chain_load (void)
     flag.quiet = true; // don't show progress indicator for the chain file - it is very fast 
     flag.maybe_vb_modified_by_reconstructor = true; // we drop all the lines
 
-    piz_one_txt_file (dispachter, false, false, COMP_NONE);
+    piz_one_txt_file (dispachter, false, false, COMP_MAIN, COMP_MAIN);
 
     // --show-chain-contigs
     if (flag.show_chain_contigs) {

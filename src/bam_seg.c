@@ -61,7 +61,7 @@ static int32_t bam_unconsumed_scan_forwards (VBlockP vb)
         return -1; // this VB doesn't not even contain one single full alignment
 
     else if (i == txt_len)
-        return 0;  // will will consume all data - nothing to pass to next VB
+        return 0;  // we will consume all data - nothing to pass to next VB
     
     else 
         return aln_size - (i - txt_len); // we pass the data of the final, partial, alignment to the next VB

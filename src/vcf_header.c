@@ -656,14 +656,18 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
     if (stats_programs.len) *BAFTc (stats_programs) = 0; // nul-terminate
 
     SAFE_NUL (BAFTc (*txt_header));
-    if (strstr (txt_header->data, "VarScan"))            segconf.vcf_is_varscan    = true;
-    if (strstr (txt_header->data, "GenotypeGVCFs"))      segconf.vcf_is_gvcf       = true;  
-    if (strstr (txt_header->data, "CombineGVCFs"))       segconf.vcf_is_gvcf       = true;  
-    if (strstr (txt_header->data, "beagle"))             segconf.vcf_is_beagle     = true;    
-    if (strstr (txt_header->data, "Illumina GenCall") ||
-        strstr (txt_header->data, "Log R Ratio"))        segconf.vcf_illum_gtyping = true;    
-    if (strstr (txt_header->data, "Number of cases used to estimate genetic effect") || // v1.0
-        strstr (txt_header->data, "##trait")) /*v1.2*/   segconf.vcf_is_gwas       = true;
+    #define IF_IN_SOURCE(signature, segcf) if (strstr (stats_programs.data, signature)) segconf.segcf = true
+    #define IF_IN_HEADER(signature, segcf) if (strstr (txt_header->data   , signature)) segconf.segcf = true
+    
+    IF_IN_SOURCE ("infiniumFinalReportConverter", vcf_infinium);
+    IF_IN_SOURCE ("VarScan", vcf_is_varscan);
+    IF_IN_HEADER ("GenotypeGVCFs", vcf_is_gvcf);
+    IF_IN_HEADER ("CombineGVCFs", vcf_is_gvcf);
+    IF_IN_HEADER ("beagle", vcf_is_beagle);
+    IF_IN_HEADER ("Illumina GenCall", vcf_illum_gtyping);
+    IF_IN_HEADER ("Log R Ratio", vcf_illum_gtyping);
+    IF_IN_HEADER ("Number of cases used to estimate genetic effect", vcf_is_gwas); // v1.0
+    IF_IN_HEADER ("##trait", vcf_is_gwas); /*v1.2*/
     
     bool has_PROBE = !!strstr (txt_header->data, "##INFO=<ID=PROBE_A");
     SAFE_RESTORE;
@@ -736,7 +740,8 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
     if ((chain_is_loaded || txt_file->coords) && evb->comp_i == VCF_COMP_MAIN)
         vcf_header_zip_update_to_dual_coords (txt_header);
 
-    if (z_file && !z_file->num_components)  // first component 
+    //xxx if (z_file && !z_file->num_txt_files)  // first component 
+    if (z_file)
         z_file->z_flags.has_gencomp |= (txt_file->coords != DC_NONE);  // note: in case of --chain, z_flags.dual_coords is set in file_open_z
 
     return true; // all good

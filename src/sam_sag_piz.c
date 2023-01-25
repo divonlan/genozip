@@ -99,6 +99,8 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_pull_from_sag)
     const CCAln   *cc_aln   = NULL;
     const SoloAln *solo_aln = NULL;
 
+    ASSERTNOTZERO (segconf.sag_type, "");
+    
     if    (IS_SAG_SOLO) ASSERTNOTNULL ((solo_aln = vb->solo_aln));  // pointer into z_file->sag_alns
     else if (IS_SAG_SA) ASSERTNOTNULL ((sa_aln = vb->sa_aln));  
     else if (IS_SAG_CC) ASSERTNOTNULL ((cc_aln = vb->cc_aln)); 

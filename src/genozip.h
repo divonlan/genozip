@@ -121,7 +121,7 @@ typedef enum { DTYPE_FIELD, DTYPE_1, DTYPE_2 } DictIdType;
 #define DICT_ID_LEN    ((int)sizeof(uint64_t))    // VCF/GFF3 specs don't limit the field name (tag) length, we limit it to 8 chars. zero-padded. (note: if two fields have the same 8-char prefix - they will just share the same dictionary)
 typedef union DictId {
     uint64_t num;             // num is just for easy comparisons - it doesn't have a numeric value and endianity should not be changed
-    uint8_t id[DICT_ID_LEN];  // \0-padded IDs 
+    uint8_t id[DICT_ID_LEN];  // \0-padded ID
     uint16_t map_key[4];      // we use the first two bytes ([0]) as they key into vb/z_file->dict_id_mapper
 
     struct {
@@ -146,7 +146,7 @@ typedef uint16_t Did;    // index of a context in vb->contexts or z_file->contex
 typedef uint8_t CompIType;    // comp_i 
 #define COMP_MAIN ((CompIType)0)
 #define COMP_NONE ((CompIType)255)
-#define MAX_NUM_COMPS 3       // can be increased if needed
+#define MAX_NUM_COMPS 5       // can be increased if needed
 
 typedef uint32_t VBIType;     // vblock_i
 typedef uint64_t CharIndex;   // index within dictionary

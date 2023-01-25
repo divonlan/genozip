@@ -330,8 +330,11 @@ void piz_read_all_ctxs (VBlockP vb, Section *sec/*first VB section after VB_HEAD
         ctx_initialize_predefined_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_contexts);
 
         // ctx.flags defaults to vb_i=1 flags, overridden if a b250 or local section is read. this will not be overridden if all_the_same, i.e. no b250/local sections.
-        // note: we use section_list_vb1 and not section_list_buf, because the latter might not contain vb=1, if removed by writer_create_plan
-        for (Section sec = B1ST (SectionEnt, z_file->section_list_vb1)+1; sec < BAFT (SectionEnt, z_file->section_list_vb1); sec++) {
+        // note: we use section_list_save and not section_list_buf, because the latter might not contain vb=1, if removed by writer_create_plan
+        Section vb_1_first_sec = B(SectionEnt, z_file->section_list_save, z_file->section_list_save.prm32[0]);
+        Section vb_1_last_sec  = B(SectionEnt, z_file->section_list_save, z_file->section_list_save.prm32[1]);
+
+        for (Section sec = vb_1_first_sec+1; sec <= vb_1_last_sec; sec++) {
             ContextP ctx = ECTX (sec->dict_id); // will exist if it has a dict (all_the_same sections always have a dict)
             if (ctx) ctx->flags = sec->flags.ctx;
         }
@@ -672,6 +675,9 @@ static void piz_handle_reconstructed_vb (Dispatcher dispatcher, VBlockP vb, uint
 
 Dispatcher piz_z_file_initialize (void)
 {
+    // update data types table for old values if z_file is old
+    dt_piz_update_for_backcomp ();
+
     // read all non-VB non-TxtHeader sections
     DataType data_type = piz_read_global_area (gref);
     if (data_type == DT_NONE || flag.reading_reference) 
@@ -708,7 +714,7 @@ Dispatcher piz_z_file_initialize (void)
 // main thread: called once per txt_file created: i.e. once, except if unbinding a paired FASTQ.
 // returns true if piz completed, false if piz aborted by piz_initialize
 bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last_z_file,
-                       CompIType unbind_comp_i) // COMP_NONE unless flag.unbind
+                       CompIType first_comp_i, CompIType last_comp_i) // COMP_NONE unless flag.unbind
 {
     dispatcher_start_wallclock();
     
@@ -720,7 +726,10 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
     bool header_only_file = true; // initialize - true until we encounter a VB header
     uint64_t num_nondrop_lines = 0;
 
-    Section sec = unbind_comp_i != COMP_NONE ? sections_one_before (sections_get_comp_txt_header_sec (unbind_comp_i)) : NULL;
+    Section txt_header_sec = sections_get_comp_txt_header_sec (first_comp_i);
+    ASSERTNOTNULL (txt_header_sec);
+
+    Section sec = sections_one_before (txt_header_sec);
 
     // traverse section list as re-arranged by writer_create_plan
     while (!dispatcher_is_done (dispatcher)) {
@@ -736,9 +745,10 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
             achieved_something = true;
 
             bool found_header = sections_next_sec2 (&sec, SEC_TXT_HEADER, SEC_VB_HEADER);
+            bool is_sec_in_comp = (first_comp_i==COMP_NONE || (sec->comp_i >= first_comp_i && sec->comp_i <= last_comp_i));
 
             // case SEC_TXT_HEADER
-            if (found_header && sec->st == SEC_TXT_HEADER && (unbind_comp_i==COMP_NONE || unbind_comp_i==sec->comp_i)) { 
+            if (found_header && sec->st == SEC_TXT_HEADER && is_sec_in_comp) { 
 
                 if (!writer_does_txtheader_need_recon (sec)) continue;
 
@@ -752,7 +762,7 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
             }
 
             // case SEC_VB_HEADER
-            else if (found_header && sec->st == SEC_VB_HEADER && (unbind_comp_i==COMP_NONE || unbind_comp_i==sec->comp_i)) {
+            else if (found_header && sec->st == SEC_VB_HEADER && is_sec_in_comp) {
                 
                 if (!writer_does_vb_need_recon (sec->vblock_i)) {
                     dispatcher_increment_progress ("vb_no_recon", 3); // skipped reading, reconstructing, writing
@@ -801,7 +811,7 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
     z_file->num_txts_so_far++;
 
     // finish writing the txt_file (note: the writer thread also calculates digest in SAM/BAM with PRIM/DEPN)
-    writer_finish_writing (z_file->num_txts_so_far == (flag.unbind ? 2 : 1));
+    writer_finish_writing (z_file->num_txts_so_far == z_file->num_txt_files);
 
     // verifies reconstructed file against MD5 (if compressed with --md5 or --test) or Adler2 and/or codec_args (if bgzf)
     Digest decompressed_file_digest = piz_one_verify_digest();
@@ -817,12 +827,14 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
         if (flag.count == CNT_TOTAL) iprintf ("%"PRIu64"\n", num_nondrop_lines);
     }
 
-    if (z_file->num_txts_so_far == (flag.unbind ? 2 : 1)) 
+    if (z_file->num_txts_so_far == z_file->num_txt_files) 
         dispatcher_finish (&dispatcher, NULL, !is_last_z_file || flag.test,
                            flag.show_memory && is_last_z_file);
-    else                  
+    else {
+        //xxx sections_list_revert();   
         dispatcher_pause (dispatcher); // we're unbinding and still have more txt_files
-     
+    }
+    
     DT_FUNC (z_file, piz_finalize)();
 
     if (flag.show_vblocks) 
