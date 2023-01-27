@@ -106,8 +106,8 @@ static void digest_piz_verify_one_vb (VBlockP vb)
     static bool failed = false; // we report only the first fail
 
     // if testing, compare digest up to this VB to that calculated on the original file and transferred through SectionHeaderVbHeader
-    // note: we cannot test this unbind mode, because the digests are commulative since the beginning of the bound file
-    if (!failed && !flag.unbind && !v8_digest_is_zero (vb->expected_digest)) {
+    // note: for files <=V13 we cannot test this unbind mode, because the digests are commulative since the beginning of the bound file
+    if (!failed && (!flag.unbind || VER(14)) && !v8_digest_is_zero (vb->expected_digest)) {
 
         Digest piz_digest = (VER(14) && IS_ADLER) ? vb->digest  // stand-alone digest of this VB
                                                   : digest_snapshot (&z_file->digest_ctx, NULL); // commulative digest so far

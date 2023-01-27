@@ -3,11 +3,21 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+14.0.27 27/Jan/2023
+- Important bug fix: A bug introduced in 14.0.3 occurred when compressing FASTQ files with --pair and --test and resulted in
+  falsely reporting that the file was verified despite not actually verifying it. 
+  Details: The --test logic decompressed the file in memory, calculated the digest of the decompressed file, but then, in an edge
+  scenario triggered by --pair, skipped comparing it to the digest of the original file, and absent digest discrepency issues, 
+  proceeded to report that the files were verified successfully. This failure to verify also occured when running 
+  genounzip or genounzip --test on FASTQ files compressed with --pair.
+  There are no known issues with the actual compression of the files, and the correct digest of the original file was 
+  written correctly to the genozip file, therefore it is now possible to go back and verify affected files with genounzip --test.
+ 
 14.0.26 25/Jan/2023
 - FASTQ: Better --optimize-DESC
 - Fix broken genocat --fastq (converting a SAM/BAM file to FASTQ) (broken since v14)
 - Fix broken --idxstats, --coverage, --sex (broken since v14)
-- Implement fix to htscodecs (3rd party library) bug (https://github.com/samtools/htscodecs/pull/71)
+- Implement fix to minor htscodecs (3rd party library) bug (https://github.com/samtools/htscodecs/pull/71)
 
 14.0.25 13/Jan/2023
 - BAM, VCF: Significantly reduced memory consumption during compression
