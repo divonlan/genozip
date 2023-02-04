@@ -22,8 +22,6 @@
 
 static inline bool vcf_is_use_DP_by_DP (void); // forward
 sSTRl(RAW_MQandDP_snip, 64 + 2 * 16);     
-sSTRl(copy_ID_snip, 32);
-sSTRl(copy_POS_snip, 32);
 
 static SmallContainer RAW_MQandDP_con = {
     .nitems_lo = 2, 
@@ -36,8 +34,7 @@ void vcf_info_zip_initialize (void)
 {
     container_prepare_snip ((ContainerP)&RAW_MQandDP_con, 0, 0, qSTRa(RAW_MQandDP_snip));
 
-    seg_prepare_snip_other (SNIP_OTHER_DELTA, _VCF_ID,  true, 0, copy_ID_snip);
-    seg_prepare_snip_other (SNIP_OTHER_DELTA, _VCF_POS, true, 0, copy_POS_snip);
+    vcf_dbsnp_zip_initialize();
 }
 
 void vcf_info_seg_initialize (VBlockVCFP vb) 
@@ -1010,48 +1007,6 @@ static inline void vcf_seg_INFO_ANN (VBlockVCFP vb, ContextP ctx, STRp(value))
     seg_array_of_struct (VB, ctx, ann, STRa(value), (SegCallback[]){vcf_seg_INFO_allele,0,0,0,0,0,0,0,0,vcf_seg_INFO_HGVS,0,0,0,0,0,0}, value_len);
 }
 
-// ##INFO=<ID=RS,Number=1,Type=Integer,Description="dbSNP ID (i.e. rs number)">
-// *might* be the same as the numeric value of the ID
-static inline void vcf_seg_INFO_RS (VBlockVCFP vb, ContextP ctx, STRp(rs))
-{
-    // case: eg ID=rs3844233 RS=3844233. We use a SNIP_DELTA_OTHER with delta=0 to copy last_value from ID.
-    // (can't use SNIP_COPY bc it would copy the entire txt "rs3844233")
-    int64_t rs_value;
-    if (ctx_has_value_in_line_(VB, CTX(VCF_ID)) &&
-        str_get_int (STRa(rs), &rs_value) &&
-        rs_value == CTX(VCF_ID)->last_value.i) {
-
-        seg_by_ctx (VB, STRa(copy_ID_snip), ctx, rs_len);
-    }
-    
-    else 
-        seg_integer_or_not (VB, ctx, STRa(rs), rs_len);
-}
-
-// ##INFO=<ID=RSPOS,Number=1,Type=Integer,Description="Chr position reported in dbSNP">
-// *might* be the same as POS
-static inline void vcf_seg_INFO_RSPOS (VBlockVCFP vb, ContextP ctx, STRp(rspos))
-{
-    // case: eg ID=rs3844233 RS=3844233. We use a SNIP_DELTA_OTHER with delta=0 to copy last_value from ID.
-    // (can't use SNIP_COPY bc it would copy the entire txt "rs3844233")
-    int64_t rspos_value;
-    if (ctx_has_value_in_line_(VB, CTX(VCF_POS)) &&
-        str_get_int (STRa(rspos), &rspos_value)) {
-
-        if (rspos_value == CTX(VCF_POS)->last_value.i) // shortcut for most common case
-            seg_by_ctx (VB, STRa(copy_POS_snip), ctx, rspos_len);
-
-        else {
-            STRli(snip, 32);
-            seg_prepare_snip_other (SNIP_OTHER_DELTA, _VCF_POS, true, rspos_value - CTX(VCF_POS)->last_value.i, snip);
-            seg_by_ctx (VB, STRa(snip), ctx, rspos_len);            
-        }
-    }
-    
-    else 
-        seg_integer_or_not (VB, ctx, STRa(rspos), rspos_len);
-}
-
 // ##INFO=<ID=RAW_MQandDP,Number=2,Type=Integer,Description="Raw data (sum of squared MQ and total depth) for improved RMS Mapping Quality calculation. Incompatible with deprecated RAW_MQ formulation.">
 // comma-seperated two numbers: RAW_MQandDP=720000,200: 1. sum of squared MQ values and 2. total reads over variant genotypes (note: INFO/MQ is sqrt(#1/#2))
 static inline void vcf_seg_INFO_RAW_MQandDP (VBlockVCFP vb, ContextP ctx, STRp(value))
@@ -1313,27 +1268,9 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_ALLELEID:
             CALL (seg_integer_or_not (VB, ctx, STRa(value), value_len));
 
-        // ##INFO=<ID=dbSNPBuildID,Number=1,Type=Integer,Description="First dbSNP Build for RS">
-        case _INFO_dbSNPBuildID:
-            CALL (seg_integer_or_not (VB, ctx, STRa(value), value_len));
-
         // ##INFO=<ID=RSID,Number=1,Type=String,Description="dbSNP identifier">
         case _INFO_RSID:
             CALL (seg_id_field_do (VB, ctx, STRa(value)));
-
-        // ##INFO=<ID=RS,Number=.,Type=String,Description="dbSNP ID (i.e. rs number)">
-        case _INFO_RS:
-            CALL (vcf_seg_INFO_RS (vb, ctx, STRa(value)));
-
-        // ##INFO=<ID=RSPOS,Number=1,Type=Integer,Description="Chr position reported in dbSNP">
-        case _INFO_RSPOS:
-            CALL (vcf_seg_INFO_RSPOS (vb, ctx, STRa(value)));
-
-        // ##INFO=<ID=GENEINFO,Number=1,Type=String,Description="Pairs each of gene symbol:gene id.  The gene symbol and id are delimited by a colon (:) and each pair is delimited by a vertical bar (|)">
-        case _INFO_GENEINFO:
-            CALL (seg_array (VB, ctx, INFO_GENEINFO, STRa(value), '|', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
-
-        // case _INFO_TOPMED: // better leave as simple snip as the items are allele frequencies which are correleted
 
         // ##INFO=<ID=ANN,Number=.,Type=String,Description="Functional annotations: 'Allele | Annotation | Annotation_Impact | Gene_Name | Gene_ID | Feature_Type | Feature_ID | Transcript_BioType | Rank | HGVS.c | HGVS.p | cDNA.pos / cDNA.length | CDS.pos / CDS.length | AA.pos / AA.length | Distance | ERRORS / WARNINGS / INFO'">
         case _INFO_ANN: 
@@ -1343,6 +1280,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_RAW_MQandDP:
             CALL (vcf_seg_INFO_RAW_MQandDP (vb, ctx, STRa(value)));
 
+        // Illumina genotyping
         case _INFO_PROBE_A:         CALL_IF (segconf.vcf_illum_gtyping, vcf_seg_PROBE_A      (vb, ctx, STRa(value)));
         case _INFO_PROBE_B:         CALL_IF (segconf.vcf_illum_gtyping, vcf_seg_PROBE_B      (vb, ctx, STRa(value)));
         case _INFO_ALLELE_A:        CALL_IF (segconf.vcf_illum_gtyping, vcf_seg_ALLELE_A     (vb, ctx, STRa(value)));
@@ -1351,6 +1289,14 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_ILLUMINA_POS:    CALL_IF (segconf.vcf_illum_gtyping, vcf_seg_ILLUMINA_POS (vb, ctx, STRa(value)));
         case _INFO_ILLUMINA_STRAND: CALL_IF (segconf.vcf_illum_gtyping, vcf_seg_ILLUMINA_STRAND (vb, ctx, STRa(value)));
         case _INFO_refSNP:          CALL_IF (segconf.vcf_illum_gtyping, seg_id_field_do      (VB, ctx, STRa(value)));
+
+        // dbSNP
+        case _INFO_dbSNPBuildID:    CALL_IF (segconf.vcf_dbSNP, seg_integer_or_not (VB, ctx, STRa(value), value_len));
+        case _INFO_RS:              CALL_IF (segconf.vcf_dbSNP, vcf_seg_INFO_RS (vb, ctx, STRa(value)));
+        case _INFO_RSPOS:           CALL_IF (segconf.vcf_dbSNP, vcf_seg_INFO_RSPOS (vb, ctx, STRa(value)));
+        case _INFO_GENEINFO:        CALL_IF (segconf.vcf_dbSNP, seg_array (VB, ctx, INFO_GENEINFO, STRa(value), '|', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
+        case _INFO_VC:              CALL_IF (segconf.vcf_dbSNP, vcf_seg_INFO_VC (vb, ctx, STRa(value)));
+        // case _INFO_TOPMED: // better leave as simple snip as the items are allele frequencies which are correleted
 
         default: standard_seg:
             seg_by_ctx (VB, STRa(value), ctx, value_len);

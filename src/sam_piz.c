@@ -59,10 +59,8 @@ void sam_piz_genozip_header (const SectionHeaderGenozipHeader *header)
         segconf.qname_seq_len_dict_id = header->sam.segconf_seq_len_dict_id; 
         segconf.MD_NM_by_unconverted  = header->sam.segconf_MD_NM_by_un;
         segconf.sam_predict_meth_call = header->sam.segconf_predict_meth;
-    }
-
-    if (VER(15)) {
-        flag.deep                     = header->sam.deep;
+        segconf.deep_no_qname         = header->sam.segconf_deep_no_qname;
+        segconf.deep_no_qual          = header->sam.segconf_deep_no_qual;
     }
 }
 
@@ -76,6 +74,11 @@ bool sam_piz_init_vb (VBlockP vb, const SectionHeaderVbHeader *header, uint32_t 
 {
     if (vb->comp_i == SAM_COMP_PRIM)
         VB_SAM->plsg_i = sam_piz_get_plsg_i (vb->vblock_i);
+
+    if (VER(15)) VB_SAM->longest_seq_len = BGEN32 (header->sam_longest_seq_len);
+
+    if (VER(15) && z_file->z_flags.dts2_deep)
+        sam_piz_deep_init_vb (VB_SAM, header);
 
     return true; // all good
 }
@@ -93,6 +96,19 @@ void sam_piz_recon_init (VBlockP vb)
 // PIZ: piz_after_recon callback: called by the compute thread from piz_reconstruct_one_vb. order of VBs is arbitrary
 void sam_piz_after_recon (VBlockP vb)
 {
+}
+
+// PIZ: piz_process_recon callback: called by the main thread, in the order of VBs
+void sam_piz_process_recon (VBlockP vb)
+{
+    if (flag.collect_coverage)    
+        coverage_add_one_vb (vb);
+    
+    if (flag.reading_kraken)
+        kraken_piz_handover_data (vb);
+
+    if (flag.deep)
+        sam_piz_deep_grab_deep_ents (VB_SAM);
 }
 
 void sam_piz_finalize (void)
@@ -597,7 +613,7 @@ CONTAINER_FILTER_FUNC (sam_piz_filter)
     if (!VER(14) && sam_piz_filter_up_to_v13_stuff (vb, dict_id, item, &v13_ret_value))
         return v13_ret_value;
      
-    // collect_coverage: rather than reconstructing optional, reconstruct SAM_MC_Z that just consumes MC:Z if it exists
+    // collect_coverage: rather than reconstructing optional, reconstruct SAM_FQ_AUX that just consumes MC:Z if it exists
     else if (dict_id.num == _SAM_AUX) {
         if (flag.collect_coverage) { // filter_repeats is set in the AUX container since v14
             ASSISLOADED(CTX(SAM_FQ_AUX));
@@ -696,12 +712,12 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SET_BUDDY)
         // note: if both mate and saggy are available, the first one in BUDDY.local is mate
 
         if (bt & BUDDY_MATE) { // has mate
-            int32_t num_lines_back = reconstruct_from_local_int (VB, buddy_ctx, 0, false);
+            int32_t num_lines_back = reconstruct_from_local_int (VB, buddy_ctx, 0, RECON_OFF);
             vb->mate_line_i = vb->line_i - num_lines_back;
         }
 
         if (bt & BUDDY_SAGGY) { // has saggy
-            int32_t num_lines_back = reconstruct_from_local_int (VB, buddy_ctx, 0, false);
+            int32_t num_lines_back = reconstruct_from_local_int (VB, buddy_ctx, 0, RECON_OFF);
             vb->saggy_line_i  = vb->line_i - num_lines_back;
             vb->saggy_is_prim = !sam_is_depn ((SamFlags){ .value = history64(SAM_FLAG, vb->saggy_line_i)});
         }
@@ -724,7 +740,7 @@ void sam_piz_set_buddy_v13 (VBlockP vb)
 
     ContextP buddy_ctx = CTX(SAM_BUDDY);
 
-    int32_t num_lines_back = reconstruct_from_local_int (vb, buddy_ctx, 0, false);
+    int32_t num_lines_back = reconstruct_from_local_int (vb, buddy_ctx, 0, RECON_OFF);
 
     // a bug that existed 12.0.41-13.0.1 (bug 367): we stored buddy in machine endianty instead of BGEN32.
     // v13 starting 13.0.2 set SAM_BUDDY.local.prm8[0] so can detect buggy files by local.prm8[0]=0 and convert it back to machine endianity.

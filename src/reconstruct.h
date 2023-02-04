@@ -31,13 +31,13 @@ typedef struct __attribute__ ((__packed__)) { // 9 bytes
     uint8_t ctx_specific : 6;
 } HistoryWord;
 
-extern int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i, char sep, bool reconstruct, rom func);
+extern int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i, char sep, ReconType reconstruct, rom func);
 #define reconstruct_from_ctx(vb,did_i,sep,reconstruct) reconstruct_from_ctx_do ((VBlockP)(vb),(did_i),(sep),(reconstruct), __FUNCTION__)
 
-extern void reconstruct_one_snip (VBlockP vb, ContextP ctx, WordIndex word_index, STRp(snip), bool reconstruct);
-extern uint32_t reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, STRp(snip), bool reconstruct);
-extern int64_t reconstruct_from_local_int (VBlockP vb, ContextP ctx, char separator /* 0 if none */, bool reconstruct);
-extern HasNewValue reconstruct_demultiplex (VBlockP vb, ContextP ctx, STRp(snip), int channel_i, ValueType *new_value, bool reconstruct);
+extern void reconstruct_one_snip (VBlockP vb, ContextP ctx, WordIndex word_index, STRp(snip), ReconType reconstruct);
+extern uint32_t reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, STRp(len_str), ReconType reconstruct);
+extern int64_t reconstruct_from_local_int (VBlockP vb, ContextP ctx, char separator /* 0 if none */, ReconType reconstruct);
+extern HasNewValue reconstruct_demultiplex (VBlockP vb, ContextP ctx, STRp(snip), int channel_i, ValueType *new_value, ReconType reconstruct);
 
 extern ContextP reconstruct_get_other_ctx_from_snip (VBlockP vb, ContextP ctx, pSTRp (snip));
 

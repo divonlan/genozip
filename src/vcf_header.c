@@ -66,7 +66,7 @@ void vcf_header_piz_init (void)
 }
 
 static void vcf_header_subset_samples (BufferP vcf_header);
-static bool vcf_header_set_globals (rom filename, BufferP vcf_header, bool soft_fail);
+static bool vcf_header_set_globals (rom filename, BufferP vcf_header, FailType soft_fail);
 static void vcf_header_trim_field_name_line (BufferP vcf_header);
 
 // returns the length of the first line, if it starts with ##fileformat, or 0
@@ -656,11 +656,12 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
     if (stats_programs.len) *BAFTc (stats_programs) = 0; // nul-terminate
 
     SAFE_NUL (BAFTc (*txt_header));
-    #define IF_IN_SOURCE(signature, segcf) if (strstr (stats_programs.data, signature)) segconf.segcf = true
+    #define IF_IN_SOURCE(signature, segcf) if (stats_programs.len && strstr (stats_programs.data, signature)) segconf.segcf = true
     #define IF_IN_HEADER(signature, segcf) if (strstr (txt_header->data   , signature)) segconf.segcf = true
     
     IF_IN_SOURCE ("infiniumFinalReportConverter", vcf_infinium);
     IF_IN_SOURCE ("VarScan", vcf_is_varscan);
+    IF_IN_SOURCE ("dbSNP", vcf_dbSNP);
     IF_IN_HEADER ("GenotypeGVCFs", vcf_is_gvcf);
     IF_IN_HEADER ("CombineGVCFs", vcf_is_gvcf);
     IF_IN_HEADER ("beagle", vcf_is_beagle);
@@ -804,7 +805,7 @@ bool vcf_inspect_txt_header (VBlockP txt_header_vb, BufferP txt_header, struct F
                             : vcf_inspect_txt_header_piz (txt_header_vb, txt_header, txt_header_flags);
 }
 
-static bool vcf_header_set_globals (rom filename, BufferP vcf_header, bool soft_fail)
+static bool vcf_header_set_globals (rom filename, BufferP vcf_header, FailType soft_fail)
 {
     static rom vcf_field_name_line_filename = NULL; // file from which the header line was taken
 

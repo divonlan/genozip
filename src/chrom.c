@@ -87,7 +87,7 @@ void chrom_2ref_compress (Reference ref)
 
 void chrom_2ref_load (Reference ref)
 {
-    Section sl = sections_last_sec (SEC_CHROM2REF_MAP, true);
+    Section sl = sections_last_sec (SEC_CHROM2REF_MAP, SOFT_FAIL);
     if (!sl) return; // we don't have alternate chroms
 
     zfile_get_global_section (SectionHeader, sl, &evb->scratch, "scratch");

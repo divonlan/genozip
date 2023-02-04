@@ -76,7 +76,7 @@ bool sam_seg_peek_int_field (VBlockSAMP vb, Did did_i, int16_t idx, int32_t min_
         }
     }
 
-    else if (idx != -1 && sam_seg_get_aux_int (vb, idx, value ? value : &my_value, IS_BAM_ZIP, min_value, max_value, true)) {
+    else if (idx != -1 && sam_seg_get_aux_int (vb, idx, value ? value : &my_value, IS_BAM_ZIP, min_value, max_value, SOFT_FAIL)) {
         if (set_last_value)
             ctx_set_last_value (VB, ctx, (int64_t)(value ? *value : my_value));
         return true;
@@ -1339,7 +1339,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
 
         case _OPTION_mc_i: COND (segconf.is_biobambam2_sort, sam_seg_mc_i (vb, numeric.i, add_bytes));
 
-        case _OPTION_ms_i: COND (segconf.sam_ms_type == ms_BIOBAMBAM, sam_seg_ms_i (vb, dl, numeric.i, add_bytes)); // ms:i produced by biobambam or samtools
+        case _OPTION_ms_i: COND (segconf.sam_ms_type == ms_BIOBAMBAM && !flag.optimize_QUAL, sam_seg_ms_i (vb, dl, numeric.i, add_bytes)); // ms:i produced by biobambam or samtools
 
         case _OPTION_s1_i: COND (is_minimap2(), sam_seg_s1_i (vb, dl, numeric.i, add_bytes));
 
@@ -1357,8 +1357,8 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_YH_Z: COND (MP(NOVOALIGN), seg_add_to_local_text (VB, CTX(OPTION_YH_Z), STRa(value), LOOKUP_NONE, add_bytes)); break;
         case _OPTION_YQ_Z: COND (MP(NOVOALIGN), seg_add_to_local_text (VB, CTX(OPTION_YQ_Z), STRa(value), LOOKUP_NONE, add_bytes)); break;
 
-        case _OPTION_qs_i: COND (segconf.tech == TECH_PACBIO, sam_seg_SEQ_END (vb, dl, CTX(OPTION_qs_i), numeric.i, "0+00", add_bytes));
-        case _OPTION_qe_i: COND (segconf.tech == TECH_PACBIO, sam_seg_SEQ_END (vb, dl, CTX(OPTION_qe_i), numeric.i, "++00", add_bytes));
+        case _OPTION_qs_i: COND (TECH(PACBIO), sam_seg_SEQ_END (vb, dl, CTX(OPTION_qs_i), numeric.i, "0+00", add_bytes));
+        case _OPTION_qe_i: COND (TECH(PACBIO), sam_seg_SEQ_END (vb, dl, CTX(OPTION_qe_i), numeric.i, "++00", add_bytes));
 
         case _OPTION_QS_i: COND (MP(NGMLR), sam_seg_SEQ_END (vb, dl, CTX(OPTION_QS_i), numeric.i, "00+0", add_bytes));
         case _OPTION_QE_i: COND (MP(NGMLR), sam_seg_SEQ_END (vb, dl, CTX(OPTION_QE_i), numeric.i, "+00-", add_bytes));

@@ -15,8 +15,9 @@
 #include "file.h"
 #include "tar.h"
 
-static char magic[8] = {}; // first 8 bytes of the generic file
-static char ext[11]  = {}; // nul-terminated txt filename extension
+#define MAGIC_SIZE 32
+static char magic[MAGIC_SIZE] = {}; // first 8 bytes of the generic file
+static char ext[11]   = {}; // nul-terminated txt filename extension
 
 // all data is always consumed
 int32_t generic_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
@@ -79,8 +80,8 @@ void generic_seg_initialize (VBlockP vb)
 {
     // capture the first 8 bytes and the extension to be reported in stats
     if (vb->vblock_i == 1) {
-        memset (magic, 0, sizeof (magic));
-        memcpy (magic, B1STtxt, MIN_(sizeof (magic), vb->txt_data.len32));
+        memset (magic, 0, MAGIC_SIZE);
+        memcpy (magic, B1STtxt, MIN_(MAGIC_SIZE, vb->txt_data.len32));
 
         memset (ext, 0, sizeof (ext));
         rom last_dot = txt_file->name ? strrchr (txt_file->name, '.') : NULL;
@@ -117,7 +118,7 @@ SPECIAL_RECONSTRUCTOR (generic_piz_TOPLEVEL)
 
 rom generic_get_magic (void)
 {
-    static char s[128];
+    static char s[MAGIC_SIZE * 4 + 10];
     s[0] = '"';
     str_to_printable (magic, sizeof(magic), &s[1]);
 

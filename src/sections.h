@@ -72,7 +72,8 @@ typedef union SectionFlags {
         uint8_t has_gencomp      : 1;  // VCF: file supports dual coordinates - last two components are the "liftover rejects" data (v12)
                                        // SAM/BAM: PRIM and/or DEPN components exist (v14)
         uint8_t has_taxid        : 1;  // each line in the file has Taxonomic ID information (v12)
-        uint8_t unused           : 1; 
+        #define dts2_deep        dt_specific2 // SAM: this file is compressed with --deep (v15)
+        uint8_t dt_specific2     : 1;  // this flag has a different meaning depending on the data_type, may be one of the above ^ 
     } genozip_header;
 
     struct FlagsTxtHeader {
@@ -211,8 +212,8 @@ typedef struct {
             uint8_t segconf_is_collated  : 1; // SAM: v14
             uint8_t segconf_MD_NM_by_un  : 1; // SAM: v14
             uint8_t segconf_predict_meth : 1; // SAM: v14
-            uint8_t deep                 : 1; // SAM: v15
-            uint8_t unused_bits          : 1;
+            uint8_t segconf_deep_no_qname: 1; // SAM: v15
+            uint8_t segconf_deep_no_qual : 1; // SAM: v15
             char unused[256];
         } sam;
 
@@ -243,7 +244,7 @@ typedef struct {
     uint32_t max_lines_per_vb;         // upper bound on how many data lines a VB can have in this file
     Codec    src_codec;                // codec of original txt file (none, bgzf, gz, bz2...)
     uint8_t  codec_info[3];            // codec specific info: for CODEC_BGZF, these are the LSB, 2nd-LSB, 3rd-LSB of the source BGZF-compressed file size
-    Digest   digest;                   // digest of original single txt file (except modified or DVCF). v8: 0 if compressed without --md5. starting v14: only if md5, not alder32
+    Digest   digest;                   // digest of original single txt file (except modified or DVCF). v8: 0 if compressed without --md5. starting v14: only if md5, not alder32 (adler32 digest, starting v14, is stored per VB)
     Digest   digest_header;            // MD5 or Adler32 of header
 #define TXT_FILENAME_LEN 256
     char     txt_filename[TXT_FILENAME_LEN]; // filename of this single component. without path, 0-terminated. always in base form like .vcf or .sam, even if the original is compressed .vcf.gz or .bam
@@ -265,7 +266,7 @@ typedef struct {
     uint32_t longest_line_len;         // length of the longest line in this vblock 
     Digest   digest;                   // stand-alone Adler32 or commulative MD5 up to and including this VB. Up to v13: Adler32 was commulative too.
     union {
-        uint32_t v13_num_lines_prim;   // v12/13: number of lines in default reconstruction in PRIMARY coords (v12)
+        uint32_t v13_num_lines_prim;   // v12/13: number of lines in default reconstruction (DVCF: in PRIMARY coords) (v12)
         uint32_t sam_prim_first_grp_i; // SAM PRIM: the index of first group of this PRIM VB, in z_file->sag_grps (v14)
     };
     
@@ -283,6 +284,7 @@ typedef struct {
         uint32_t sam_prim_comp_cigars_len; // SAM PRIM SAG_BY_SA: total size of sag's CIGARs, as compressed in-memory in ZIP (i.e. excluding CIGARs stored in OPTION_SA_CIGAR.dict) (v14)
         uint32_t sam_prim_solo_data_len;   // SAM PRIM SAG_BY_SOLO: size of solo_data
     };
+    uint32_t sam_longest_seq_len;      // SAM: largest seq_len in this VB (v15)
 } SectionHeaderVbHeader; 
 
 typedef struct {
@@ -447,7 +449,7 @@ typedef struct SectionEntFileFormat {
         DictId dict_id;        // DICT, LOCAL, B250 or COUNT sections
         struct { 
             uint32_t num_lines;// VB_HEADER sections - number of lines in this VB. 
-            uint32_t unused;
+            uint32_t num_deep_lines; // VB_HEADER SAM: number of lines in this VB that are deepable, i.e. not SUPPLEMENTARY or SECONDARY (v15), not monochar and with SEQ.len>0 
         };
         uint64_t st_specific;  // generic access to the value
     };
@@ -508,7 +510,7 @@ typedef const struct SectionEnt {
         DictId dict_id;         // DICT, LOCAL, B250 or COUNT sections
         struct {
             uint32_t num_lines; // VB_HEADER sections - number of lines in this VB. 
-            uint32_t unused;
+            uint32_t num_deep_lines; // VB_HEADER SAM: number of lines in this VB that are not SUPPLEMENTARY or SECONDARY (v15) 
         };
         uint64_t st_specific;   // generic access to the value
     };
@@ -533,8 +535,8 @@ extern void sections_list_concat (VBlockP vb);
 
 extern Section section_next (Section sec);
 
-extern Section sections_first_sec (SectionType st, bool soft_fail);
-extern Section sections_last_sec (SectionType st, bool soft_fail);
+extern Section sections_first_sec (SectionType st, FailType soft_fail);
+extern Section sections_last_sec (SectionType st, FailType soft_fail);
 extern bool sections_next_sec2 (Section *sl_ent, SectionType st1, SectionType st2);
 #define sections_next_sec(sl_ent,st) sections_next_sec2((sl_ent),(st),SEC_NONE)
 extern bool sections_prev_sec2 (Section *sl_ent, SectionType st1, SectionType st2);
@@ -546,7 +548,7 @@ extern Section sections_last_sec4 (Section sec, SectionType st1, SectionType st2
 extern uint32_t sections_count_sections_until (SectionType st, Section first_sec, SectionType until_encountering);
 static inline uint32_t sections_count_sections (SectionType st) { return sections_count_sections_until (st, 0, SEC_NONE); }
 
-extern Section sections_vb_header (VBIType vb_i, bool soft_fail);
+extern Section sections_vb_header (VBIType vb_i, FailType soft_fail);
 extern Section sections_vb_last (VBIType vb_i);
 
 extern CompIType sections_get_num_comps (void);

@@ -69,6 +69,7 @@ void sections_add_to_list (VBlockP vb, ConstSectionHeaderP header)
         .offset    = vb->z_data.len,  // this is a partial offset (within d) - we will correct it later
         .flags     = header->flags,
         .num_lines = st==SEC_VB_HEADER ? vb->lines.len32 : 0, 
+        .num_deep_lines = (st==SEC_VB_HEADER && (VB_DT(SAM) || VB_DT(BAM))) ? vb->lines.count : 0, // alignments that are not SUPPLEMENTARY or SECONDARY
         .size      = BGEN32 (header->compressed_offset) + BGEN32 (header->data_compressed_len)
     };
 
@@ -275,35 +276,23 @@ static inline void sections_create_index_if_needed(void)
 }
 
 // ZIP / PIZ: returns the SEC_VB_HEADER section, or NULL if this vb_i doesn't exist
-Section sections_vb_header (VBIType vb_i, bool soft_fail)
+Section sections_vb_header (VBIType vb_i, FailType soft_fail)
 {
-    sections_create_index (false);
+    // note regarding use in ZIP: creates index in the first call only, but that's ok for our use cases in 
+    // --pair (called in R2 to enquire about the R1 VBs) and --deep (called zip_finalize of the SAM txt file to enquire about the SAM VBs)
+    sections_create_index (false); 
     
-    if (IS_PIZ) {
-        ASSERTNOTEMPTY (z_file->vb_sections_index);
-        
-        if (vb_i <= z_file->num_vbs) {
-            Section sec = B(SectionsVbIndexEnt, z_file->vb_sections_index, vb_i)->first_sec;
-            if (!sec) goto fail;
+    ASSERTNOTEMPTY (z_file->vb_sections_index);
+    
+    if (vb_i <= z_file->num_vbs) {
+        Section sec = B(SectionsVbIndexEnt, z_file->vb_sections_index, vb_i)->first_sec;
+        if (!sec) goto fail;
 
-            ASSBISVALID (z_file->section_list_buf, sec);
-            return sec;
-        }
-        else 
-            return NULL;
-    }
-
-    else {
-        Section sec=NULL;
-        uint32_t i=0; for (; i < z_file->section_list_buf.len32; i++) {
-            sec = B(SectionEnt, z_file->section_list_buf, i);
-            if (sec->st == SEC_VB_HEADER && sec->vblock_i == vb_i) break; // found!
-        }
-
-        if (i >= z_file->section_list_buf.len) goto fail;
-        
+        ASSBISVALID (z_file->section_list_buf, sec);
         return sec;
     }
+    else 
+        return NULL;
 
 fail:
     if (soft_fail) return NULL;
@@ -429,8 +418,10 @@ void sections_list_memory_to_file_format (bool in_place) // in place, or to evb-
             .flags       = mem_sec[i].flags    // since v12
         };
     
-        if (mem_sec[i].st == SEC_VB_HEADER) 
-            file_sec[i].num_lines = BGEN32 (file_sec[i].num_lines);
+        if (mem_sec[i].st == SEC_VB_HEADER) {
+            file_sec[i].num_lines      = BGEN32 (file_sec[i].num_lines);
+            file_sec[i].num_deep_lines = BGEN32 (file_sec[i].num_deep_lines);
+        }
     }
 
     out->len *= sizeof (SectionEntFileFormat); // change to counting bytes
@@ -478,8 +469,10 @@ void sections_list_file_to_memory_format (SectionHeaderGenozipHeader *genozip_he
             .flags       = VER(12) ? sec.flags  : (SectionFlags){} // flags were introduced in v12
         };
 
-        if (mem_sec[i].st == SEC_VB_HEADER) 
-            mem_sec[i].num_lines = BGEN32 (mem_sec[i].num_lines);        
+        if (mem_sec[i].st == SEC_VB_HEADER) {
+            mem_sec[i].num_lines      = BGEN32 (mem_sec[i].num_lines);        
+            mem_sec[i].num_deep_lines = BGEN32 (mem_sec[i].num_deep_lines);  
+        }      
 
         if (i < file_sec_len-1)
             mem_sec[i].size = mem_sec[i+1].offset - mem_sec[i].offset;
@@ -510,7 +503,7 @@ void sections_list_file_to_memory_format (SectionHeaderGenozipHeader *genozip_he
     // Since V14, num_lines is transmitted through SectionEntFileFormat
     if (VER(12) && !VER(14)) 
         for (VBIType vb_i=1; vb_i <= z_file->num_vbs; vb_i++) {
-            SectionEntModifiable *sec = (SectionEntModifiable *)sections_vb_header (vb_i, false);
+            SectionEntModifiable *sec = (SectionEntModifiable *)sections_vb_header (vb_i, HARD_FAIL);
             SectionHeaderUnion header = zfile_read_section_header (evb, sec->offset, vb_i, SEC_VB_HEADER);
             sec->num_lines = BGEN32 (header.vb_header.v13_top_level_repeats);
         }
@@ -520,7 +513,7 @@ void sections_list_file_to_memory_format (SectionHeaderGenozipHeader *genozip_he
     buf_copy (evb, &z_file->section_list_save, &z_file->section_list_buf, SectionEnt, 0, 0, "z_file->section_list_save");
 
     if (z_file->num_vbs >= 1) {
-        z_file->section_list_save.prm32[0] = BNUM (z_file->section_list_buf, sections_vb_header (1, false)); // VB=1 first_sec_i
+        z_file->section_list_save.prm32[0] = BNUM (z_file->section_list_buf, sections_vb_header (1, HARD_FAIL)); // VB=1 first_sec_i
         z_file->section_list_save.prm32[1] = BNUM (z_file->section_list_buf, sections_vb_last(1));           // VB=1 last_sec_i
     }
     else
@@ -630,8 +623,9 @@ uint32_t st_header_size (SectionType sec_type)
     ASSERT (sec_type >= SEC_NONE && sec_type < NUM_SEC_TYPES, "sec_type=%u out of range [-1,%u]", sec_type, NUM_SEC_TYPES-1);
 
     return sec_type == SEC_NONE ? 0 
-         : sec_type == SEC_VB_HEADER      && command != ZIP && !VER(12) ? sizeof (SectionHeaderVbHeader) - 4*sizeof(uint32_t) // in v8-11, SectionHeaderVbHeader was shorter by 4 32b words
-         : sec_type == SEC_VB_HEADER      && command != ZIP && !VER(14) ? sizeof (SectionHeaderVbHeader) - 1*sizeof(uint32_t) // in v12-13, SectionHeaderVbHeader was shorter by 1 32b word
+         : sec_type == SEC_VB_HEADER      && command != ZIP && !VER(12) ? sizeof (SectionHeaderVbHeader) - 5*sizeof(uint32_t) // in v8-11, SectionHeaderVbHeader was shorter by 5 32b words
+         : sec_type == SEC_VB_HEADER      && command != ZIP && !VER(14) ? sizeof (SectionHeaderVbHeader) - 2*sizeof(uint32_t) // in v12-13, SectionHeaderVbHeader was shorter by 2 32b word
+         : sec_type == SEC_VB_HEADER      && command != ZIP && !VER(15) ? sizeof (SectionHeaderVbHeader) - 1*sizeof(uint32_t) // in v14, SectionHeaderVbHeader was shorter by 1 32b word
          : sec_type == SEC_TXT_HEADER     && command != ZIP && !VER(12) ? sizeof (SectionHeaderTxtHeader) -  sizeof(uint64_t) // in v8-11, SectionHeaderTxtHeader was shorter
          : sec_type == SEC_GENOZIP_HEADER && command != ZIP && !VER(12) ? sizeof (SectionHeaderGenozipHeader) -  REF_FILENAME_LEN - sizeof(Digest) // in v8-11, SectionHeaderTxtHeader was shorter
          : abouts[sec_type].header_size;
@@ -646,7 +640,7 @@ Section section_next (Section sec)
 }
 
 // called by PIZ main thread
-Section sections_first_sec (SectionType st, bool soft_fail)
+Section sections_first_sec (SectionType st, FailType soft_fail)
 {
     ARRAY (SectionEnt, sec, z_file->section_list_buf);
 
@@ -659,7 +653,7 @@ Section sections_first_sec (SectionType st, bool soft_fail)
 }
 
 // called by ZIP, PIZ main thread
-Section sections_last_sec (SectionType st, bool soft_fail)
+Section sections_last_sec (SectionType st, FailType soft_fail)
 {
     ARRAY (SectionEnt, sec, z_file->section_list_buf);
 
@@ -749,16 +743,18 @@ rom store_type_name (StoreType store)
 typedef struct { char s[128]; } FlagStr;
 static FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt)
 {
-    static rom dts[NUM_DATATYPES] = { [DT_FASTQ]="dts_paired", [DT_SAM]="dts_ref_internal", [DT_CHAIN]="dts_mismatch" };
+    static rom dts[NUM_DATATYPES]  = { [DT_FASTQ]="dts_paired", [DT_SAM]="dts_ref_internal", [DT_CHAIN]="dts_mismatch" };
+    static rom dts2[NUM_DATATYPES] = { [DT_SAM]="dts2_deep" };
 
     FlagStr str = {};
 
     switch (st) {
         case SEC_GENOZIP_HEADER:
-            sprintf (str.s, "%s=%u aligner=%u txt_is_bin=%u bgzf=%u adler=%u has_gencomp=%u has_taxid=%u",
-                     dts[dt] ? dts[dt] : "dt_specitic", f.genozip_header.dt_specific, f.genozip_header.aligner, 
-                     f.genozip_header.txt_is_bin, f.genozip_header.bgzf, f.genozip_header.adler, f.genozip_header.has_gencomp,
-                     f.genozip_header.has_taxid);
+            sprintf (str.s, "%s=%u %s=%u aligner=%u txt_is_bin=%u bgzf=%u adler=%u has_gencomp=%u has_taxid=%u",
+                     dts[dt]  ? dts[dt]  : "dt_specific",  f.genozip_header.dt_specific, 
+                     dts2[dt] ? dts2[dt] : "dt_specific2", f.genozip_header.dt_specific2, 
+                     f.genozip_header.aligner, f.genozip_header.txt_is_bin, f.genozip_header.bgzf, 
+                     f.genozip_header.adler, f.genozip_header.has_gencomp,f.genozip_header.has_taxid);
             break;
 
         case SEC_TXT_HEADER:
@@ -850,11 +846,12 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
                      digest_display_ex (h->chain.prim_file_md5, DD_MD5).s);
 
         else if ((dt == DT_SAM || dt == DT_BAM) && v14)
-            sprintf (dt_specific, SEC_TAB "deep=%u segconf=(sorted=%u,collated=%u,seq_len=%u,seq_len_to_cm=%u,ms_type=%u,has_MD_or_NM=%u,bisulfite=%u,MD_NM_by_unconverted=%u,predict_meth=%u,is_paired=%u,sag_type=%s,sag_has_AS=%u,pysam_qual=%u,cellranger=%u,SA_HtoS=%u,seq_len_dict_id=%s)\n", 
-                     h->sam.deep, h->sam.segconf_is_sorted, h->sam.segconf_is_collated, BGEN32 (h->sam.segconf_seq_len), h->sam.segconf_seq_len_cm, h->sam.segconf_ms_type, h->sam.segconf_has_MD_or_NM, 
+            sprintf (dt_specific, SEC_TAB "segconf=(sorted=%u,collated=%u,seq_len=%u,seq_len_to_cm=%u,ms_type=%u,has_MD_or_NM=%u,bisulfite=%u,MD_NM_by_unconverted=%u,predict_meth=%u,is_paired=%u,sag_type=%s,sag_has_AS=%u,pysam_qual=%u,cellranger=%u,SA_HtoS=%u,seq_len_dict_id=%s,deep_no_qname=%u,deep_no_qual=%u)\n", 
+                     h->sam.segconf_is_sorted, h->sam.segconf_is_collated, BGEN32 (h->sam.segconf_seq_len), h->sam.segconf_seq_len_cm, h->sam.segconf_ms_type, h->sam.segconf_has_MD_or_NM, 
                      h->sam.segconf_bisulfite, h->sam.segconf_MD_NM_by_un, h->sam.segconf_predict_meth, 
                      h->sam.segconf_is_paired, sag_type_name(h->sam.segconf_sag_type), h->sam.segconf_sag_has_AS, 
-                     h->sam.segconf_pysam_qual, h->sam.segconf_cellranger, h->sam.segconf_SA_HtoS, dis_dict_id(h->sam.segconf_seq_len_dict_id).s);
+                     h->sam.segconf_pysam_qual, h->sam.segconf_cellranger, h->sam.segconf_SA_HtoS, dis_dict_id(h->sam.segconf_seq_len_dict_id).s,
+                     h->sam.segconf_deep_no_qname, h->sam.segconf_deep_no_qual);
 
         else if (dt == DT_REF)
             sprintf (dt_specific, SEC_TAB "fast_md5=%s\n", digest_display (h->REF_fasta_md5).s);

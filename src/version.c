@@ -73,6 +73,8 @@ void version_print_notice_if_has_newer (void)
                      str_query_user_yn ("Do you want to upgrade now?", QDEF_YES))
                 system ("conda update genozip");
 #endif
+            else 
+                iprintf ("Installation instructions: %s\n", WEBSITE_INSTALLING);
         }
         flag.no_tip = true; // printed - no more tips
     }

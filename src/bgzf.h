@@ -47,7 +47,7 @@ extern void bgzf_sign (uint64_t disk_size, uint8_t *signature);
 #define BGZF_BLOCK_GZIP_NOT_BGZIP -1
 #define BGZF_BLOCK_IS_NOT_GZIP    -2
 #define BGZF_ABRUBT_EOF           -3 // EOF without an EOF block
-extern int32_t bgzf_read_block (FileP file, uint8_t *block, uint32_t *block_size, bool soft_fail);
+extern int32_t bgzf_read_block (FileP file, uint8_t *block, uint32_t *block_size, FailType soft_fail);
 extern void bgzf_uncompress_vb (VBlockP vb);
 extern void bgzf_uncompress_one_block (VBlockP vb, BgzfBlockZip *bb);
 extern void bgzf_reread_uncompress_vb_as_prescribed (VBlockP vb, FILE *file);

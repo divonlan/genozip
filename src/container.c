@@ -438,7 +438,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
         for (unsigned i=0; i < num_items; i++) {
             const ContainerItem *item = &con->items[i];
             Context *item_ctx = item_ctxs[i];
-            bool reconstruct = !flag.genocat_no_reconstruct;
+            ReconType reconstruct = !flag.genocat_no_reconstruct;
             bool trans_item = translating || IS_CI0_SET(CI0_TRANS_ALWAYS); 
             bool trans_nor = trans_item && IS_CI0_SET (CI0_TRANS_NOR); // check for prohibition on reconstructing when translating
 
@@ -515,7 +515,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
         container_reconstruct_prefix (vb, con, &item_prefixes, &remaining_prefix_len, false, ctx->dict_id, DICT_ID_NONE, show_non_item); 
 
         // remove final separator, if we need to (introduced v12)
-        if (con->drop_final_item_sep && last_non_filtered_item_i >= 0) {
+    if (con->drop_final_item_sep && last_non_filtered_item_i >= 0) {
             const ContainerItem *item = &con->items[last_non_filtered_item_i]; // last_non_filtered_item_i is the last item that survived the filter, of the last repeat
 
             vb->txt_data.len -= CI0_ITEM_HAS_FLAG(item) ? (translating ? 0 : !!IS_CI0_SET (CI0_NATIVE_NEXT))

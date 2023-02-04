@@ -350,9 +350,9 @@ static bool chain_seg_is_duplicate (ChainAlignment aln)
     return false; // not duplicate
 }
 
-bool chain_zip_dts_flag (void)
+bool chain_zip_dts_flag (int dts)
 {
-    return segconf.chain_mismatches_ref;
+    return (dts==1) ? segconf.chain_mismatches_ref : 0;
 }
 
 rom chain_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts

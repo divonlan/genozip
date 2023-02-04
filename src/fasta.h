@@ -47,6 +47,7 @@ extern bool fasta_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern rom fasta_seg_txt_line();
 
 // PIZ Stuff
+extern void fasta_piz_process_recon (VBlockP vb);
 extern bool fasta_piz_is_vb_needed (VBIType vb_i);
 extern bool fasta_piz_init_vb (VBlockP vb, const SectionHeaderVbHeader *header, uint32_t *txt_data_so_far_single_0_increment);
 extern void fasta_reconstruct_vb(); // no parameter - implicit casting of VBlockP

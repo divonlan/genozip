@@ -77,7 +77,7 @@ static inline void codec_acgt_pack (BitsP packed, rom data, uint64_t data_len)
     uint64_t next_bit = packed->nbits;
     packed->nbits += data_len * 2;
     packed->nwords = roundup_bits2words64 (packed->nbits);
-    
+
     // pack nucleotides - each character is packed into 2 bits
     for (uint64_t i=0 ; i < data_len ; i++, next_bit += 2)       
         bits_assign2 (packed, next_bit, acgt_encode[(uint8_t)data[i]]);
@@ -136,10 +136,8 @@ COMPRESS (codec_acgt_compress)
         buf_alloc (vb, &nonref_x_ctx->local, 0, *uncompressed_len, uint8_t, CTX_GROWTH, "contexts->local");
         for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
 
-            char *data_1=0;
-            uint32_t data_1_len=0;
-            
-            get_line_cb (vb, ctx, line_i, &data_1, &data_1_len, *uncompressed_len - nonref_x_ctx->local.len32, NULL);
+            STRw0(data_1);
+            get_line_cb (vb, ctx, line_i, pSTRa(data_1), *uncompressed_len - nonref_x_ctx->local.len32, NULL);
 
             PACK (data_1, data_1_len);
 
@@ -149,6 +147,8 @@ COMPRESS (codec_acgt_compress)
     }
     else 
         ABORT ("%s: \"%s\": neither src_data nor callback is provided", VB_NAME, name);
+
+    bits_clear_excess_bits_in_top_word (packed); // for good measure (V15)
 
     // get codec for NONREF_X header->lcodec remains CODEC_XCGT, and we set subcodec to the codec discovered in assign, and set to nonref_ctx->lcode
     Codec z_lcodec = ZCTX(nonref_x_ctx->did_i)->lcodec;

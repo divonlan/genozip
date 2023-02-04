@@ -169,7 +169,7 @@ static void buf_find_underflow_culprit (rom memory, rom msg)
 {
     bool found=false;
     for (VBlockPoolType type=POOL_MAIN; type <= POOL_BGZF; type++) {
-        VBlockPool *vb_pool = vb_get_pool (type, true);
+        VBlockPool *vb_pool = vb_get_pool (type, SOFT_FAIL);
         if (!vb_pool) continue;
     
         for (int vb_id=-1; vb_id < (int)vb_pool->num_vbs; vb_id++) {
@@ -209,7 +209,7 @@ static void buf_test_overflows_all_other_vb(ConstVBlockP caller_vb, rom msg)
 
     fprintf (stderr, "Testing all other VBs:\n");
     for (VBlockPoolType type=POOL_MAIN; type <= POOL_BGZF; type++) {
-        VBlockPool *vb_pool = vb_get_pool (type, true);
+        VBlockPool *vb_pool = vb_get_pool (type, SOFT_FAIL);
         if (!vb_pool) continue;
 
         for (int vb_id=-1; vb_id < (int)vb_pool->num_vbs; vb_id++) {
@@ -372,7 +372,7 @@ static void buf_foreach_buffer (void (*callback)(ConstBufferP, void *arg), void 
 {
     for (VBlockPoolType pool_type=0; pool_type < NUM_POOL_TYPES; pool_type++) {
 
-        VBlockPool *vb_pool = vb_get_pool (pool_type, true);
+        VBlockPool *vb_pool = vb_get_pool (pool_type, SOFT_FAIL);
         if (!vb_pool) continue;
 
         // note: we don't cover EVB (only in DEBUG and --show-mem) as it segfaults for an unknown reason (likely the Buffer structure itself resides with a structure
@@ -452,8 +452,8 @@ void buf_show_memory (bool memory_full, unsigned max_threads, unsigned used_thre
     uint64_t total_bytes=0;
     for (unsigned i=0; i< num_stats; i++) total_bytes += stats[i].bytes;
 
-    uint32_t num_allocated_vbs = (vb_get_pool (POOL_MAIN, true) ? vb_get_pool (POOL_MAIN, false)->num_allocated_vbs : 0)
-                               + (vb_get_pool (POOL_BGZF, true) ? vb_get_pool (POOL_BGZF, false)->num_allocated_vbs : 0);
+    uint32_t num_allocated_vbs = (vb_get_pool (POOL_MAIN, SOFT_FAIL) ? vb_get_pool (POOL_MAIN, HARD_FAIL)->num_allocated_vbs : 0)
+                               + (vb_get_pool (POOL_BGZF, SOFT_FAIL) ? vb_get_pool (POOL_BGZF, HARD_FAIL)->num_allocated_vbs : 0);
 
     fprintf (memory_full ? stderr : info_stream, "Total bytes: %s in %u buffers in %u buffer lists. global_max_threads=%u\n", 
              str_size (total_bytes).s, num_buffers, num_allocated_vbs, global_max_threads);
@@ -554,7 +554,7 @@ uint64_t buf_alloc_do (VBlockP vb, BufferP buf, uint64_t requested_size,
     ASSERT (requested_size <= MAX_BUFFER_SIZE, "called from %s:%u: Requested %s bytes which is beyond the Buffer maximum of %s",
             func, code_line, str_int_commas (requested_size).s, str_int_commas (MAX_BUFFER_SIZE).s);
 
-#define REQUEST_TOO_BIG_THREADSHOLD (3ULL << 30) // 3 GB
+#define REQUEST_TOO_BIG_THREADSHOLD (3 GB)
     if (requested_size > REQUEST_TOO_BIG_THREADSHOLD && !buf->can_be_big) // use WARN instead of ASSERTW to have a place for breakpoint
         WARN ("Warning: buf_alloc called from %s:%u requested %s. This is suspiciously high and might indicate a bug. vb->vblock_i=%u buf=%s line_i=%d",
               func, code_line, str_size (requested_size).s, vb->vblock_i, buf_desc (buf).s, vb->line_i);
@@ -766,8 +766,8 @@ static void *buf_background_load_mmap_buf (void *buf_)
     uint64_t checksum = 0; 
 
     int64_t after = (int64_t)(1 + buf->size / sizeof (uint64_t));
-    for (int64_t i=-1; i < after; i += 1<<20) { // including underflow/overflow region (note: size is always a multiple of 8)
-        for (int64_t j=i; j < i + (1<<20) && j < after; j++)
+    for (int64_t i=-1; i < after; i += 1 MB) { // including underflow/overflow region (note: size is always a multiple of 8)
+        for (int64_t j=i; j < i + (1 MB) && j < after; j++)
             checksum ^= data[j];
         
         // check if buf_terminate_background_loading told us to terminate

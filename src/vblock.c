@@ -27,7 +27,7 @@ static const rom pool_names[] = POOL_NAMES;
 
 VBlockP evb = NULL; // outside a pool
 
-VBlockPool *vb_get_pool (VBlockPoolType type, bool soft_fail)
+VBlockPool *vb_get_pool (VBlockPoolType type, FailType soft_fail)
 {
     ASSERT (pools[type] || soft_fail, "VB Pool %s is not allocated", pool_names[type]);
     return pools[type];
@@ -271,7 +271,7 @@ VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompITy
 {
     START_TIMER;
     
-    VBlockPool *pool = vb_get_pool (type, false);
+    VBlockPool *pool = vb_get_pool (type, HARD_FAIL);
 
     DataType dt = (type == POOL_BGZF)            ? DT_NONE
                 : (flag.deep && flag.zip_comp_i) ? DT_FASTQ
@@ -369,14 +369,14 @@ VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompITy
 // therefore, this function may return true when pool is actually no longer full.
 bool vb_pool_is_full (VBlockPoolType type)
 {
-    VBlockPool *pool = vb_get_pool (type, false);
+    VBlockPool *pool = vb_get_pool (type, HARD_FAIL);
     return __atomic_load_n (&pool->num_in_use, __ATOMIC_SEQ_CST) == pool->num_vbs; // atomic as for POOL_MAIN, writer thread might update concurrently.
 }
 
 // Note: As in vb_pool_is_full, if the function returns false (not empty) the pool might in fact already be empty
 bool vb_pool_is_empty (VBlockPoolType type)
 {
-    VBlockPool *pool = vb_get_pool (type, false);
+    VBlockPool *pool = vb_get_pool (type, HARD_FAIL);
     return __atomic_load_n (&pool->num_in_use, __ATOMIC_SEQ_CST) == 0; 
 }
 

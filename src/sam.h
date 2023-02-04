@@ -19,7 +19,7 @@
 #pragma GENDICT SAM_RNAME=DTYPE_FIELD=RNAME // RNAME must be first
 
 #pragma GENDICT SAM_QNAME=DTYPE_FIELD=QNAME // MAX_QNAME_ITEMS
-#pragma GENDICT SAM_Q0NAME=DTYPE_1=Q0NAME // must have a did_i directly after container's 
+#pragma GENDICT SAM_Q0NAME=DTYPE_1=Q0NAME // must have a did_i directly after QNAME
 #pragma GENDICT SAM_Q1NAME=DTYPE_1=Q1NAME 
 #pragma GENDICT SAM_Q2NAME=DTYPE_1=Q2NAME
 #pragma GENDICT SAM_Q3NAME=DTYPE_1=Q3NAME
@@ -30,7 +30,7 @@
 #pragma GENDICT SAM_Q8NAME=DTYPE_1=Q8NAME 
 #pragma GENDICT SAM_Q9NAME=DTYPE_1=Q9NAME 
 #pragma GENDICT SAM_QANAME=DTYPE_1=QANAME 
-#pragma GENDICT SAM_QBNAME=DTYPE_1=QBNAME // if adding more Q*NAMEs - add to fastq.h and kraken.h too, and update MAX_QNAME_ITEMS
+#pragma GENDICT SAM_QBNAME=DTYPE_1=QBNAME // if adding more Q*NAMEs - add to fastq.h and kraken.h too, and update MAX_QNAME_SEGMENTS
 #pragma GENDICT SAM_QmNAME=DTYPE_1=QmNAME // QmNAME reserved for mate number (always the last dict_id in the container)
 
 #pragma GENDICT SAM_SQBITMAP=DTYPE_FIELD=SQBITMAP
@@ -52,13 +52,12 @@
 #pragma GENDICT SAM_TAXID=DTYPE_FIELD=TAXID
 #pragma GENDICT SAM_DEBUG_LINES=DTYPE_FIELD=DBGLINES      // used by --debug-lines
 
-// contexts that exist in FASTQ and not SAM - we put them here to reserve the DidI so its not 
+// contexts that exist in FASTQ and not SAM - we put them here to reserve the Did so its not 
 // occupied by another SAM contexts causing dictionaries to become mingled in Deep
 
-#pragma GENDICT UNUSED_FASTQ_DEEP_VB=DTYPE_FIELD=DpVB
-#pragma GENDICT UNUSED_FASTQ_DEEP_LINE=DTYPE_FIELD=DpLINE
+#pragma GENDICT UNUSED_FASTQ_DEEP_VB=DTYPE_FIELD=DEEP
 
-#pragma GENDICT UNUSED_FASTQ_QNAME2=DTYPE_1=QNAME2     // QNAME embedded in DESC (QNAME2 items immediately follow)
+#pragma GENDICT UNUSED_FASTQ_QNAME2=DTYPE_1=QNAME2     // QNAME2 is embedded in QNAME (QNAME2 items immediately follow)
 #pragma GENDICT UNUSED_FASTQ_Q0NAME2=DTYPE_1=q0NAME    
 #pragma GENDICT UNUSED_FASTQ_Q1NAME2=DTYPE_1=q1NAME 
 #pragma GENDICT UNUSED_FASTQ_Q2NAME2=DTYPE_1=q2NAME
@@ -75,7 +74,6 @@
 #pragma GENDICT UNUSED_FASTQ_E2L=DTYPE_FIELD=E2L
 
 #pragma GENDICT UNUSED_FASTQ_LINE3=DTYPE_FIELD=LINE3
-#define MAX_LINE3_ITEMS 9
 #pragma GENDICT UNUSED_FASTQ_T0HIRD=DTYPE_1=t0NAME    // must be directly after FASTQ_LINE3
 #pragma GENDICT UNUSED_FASTQ_T1HIRD=DTYPE_1=t1NAME 
 #pragma GENDICT UNUSED_FASTQ_T2HIRD=DTYPE_1=t2NAME
@@ -84,6 +82,10 @@
 #pragma GENDICT UNUSED_FASTQ_T5HIRD=DTYPE_1=t5NAME
 #pragma GENDICT UNUSED_FASTQ_T6HIRD=DTYPE_1=t6NAME 
 #pragma GENDICT UNUSED_FASTQ_T7HIRD=DTYPE_1=t7NAME 
+#pragma GENDICT UNUSED_FASTQ_T8HIRD=DTYPE_1=t8NAME 
+#pragma GENDICT UNUSED_FASTQ_T9HIRD=DTYPE_1=t9NAME 
+#pragma GENDICT UNUSED_FASTQ_TAHIRD=DTYPE_1=tANAME 
+#pragma GENDICT UNUSED_FASTQ_TBHIRD=DTYPE_1=tBNAME 
 #pragma GENDICT UNUSED_FASTQ_COPY_Q=DTYPE_1=tQcopy 
 
 // -----------------------------------------------------------------------------------------------------------
@@ -533,7 +535,7 @@ COMPRESSOR_CALLBACK(sam_zip_BD_BI);
 extern void sam_zip_initialize (void);
 extern void sam_set_sag_type (void);
 extern void sam_zip_finalize (bool is_last_user_txt_file);
-extern bool sam_zip_dts_flag (void);
+extern bool sam_zip_dts_flag (int dts);
 extern void sam_zip_after_compute (VBlockP vb);
 extern void sam_zip_after_vbs (void);
 extern void sam_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeader *vb_header);
@@ -562,6 +564,7 @@ extern void sam_zip_init_vb (VBlockP vb);
 extern void sam_zip_after_compress (VBlockP vb);
 extern void sam_stats_reallocate (void);
 extern void sam_zip_genozip_header (SectionHeaderGenozipHeader *header);
+extern void sam_deep_merge (VBlockP vb);
 
 // PIZ Stuff
 extern void sam_piz_genozip_header (const SectionHeaderGenozipHeader *header);
@@ -571,15 +574,17 @@ extern bool sam_piz_maybe_reorder_lines (void);
 extern bool sam_piz_init_vb (VBlockP vb, const SectionHeaderVbHeader *header, uint32_t *txt_data_so_far_single_0_increment);
 extern void sam_piz_recon_init (VBlockP vb);
 extern void sam_piz_after_recon (VBlockP vb);
+extern void sam_piz_process_recon (VBlockP vb);
 extern CONTAINER_FILTER_FUNC (sam_piz_filter);
-extern void sam_reconstruct_SEQ_vs_ref (VBlockP vb, ContextP ctx, rom unused, unsigned unused2, bool reconstruct);
+extern void sam_reconstruct_SEQ_vs_ref (VBlockP vb, ContextP ctx, rom unused, unsigned unused2, ReconType reconstruct);
 extern void sam_set_FLAG_filter (rom optarg);
 extern void sam_set_MAPQ_filter (rom optarg);
 extern void sam_piz_load_sags (void);
 extern bool sam_piz_dispatch_one_load_sag_vb (Dispatcher dispatcher);
-extern void sam_reconstruct_missing_quality (VBlockP vb, bool reconstruct);
+extern void sam_reconstruct_missing_quality (VBlockP vb, ReconType reconstruct);
 extern void sam_piz_xtra_line_data (VBlockP vb);
 extern void sam_piz_after_preproc (VBlockP vb);
+extern CONTAINER_ITEM_CALLBACK (sam_piz_con_item_cb);
 
 // BAM Stuff
 extern void bam_seg_initialize (VBlockP vb);
@@ -711,13 +716,14 @@ TRANSLATOR (SAM, BAM,   15, AUX_SELF,   sam_piz_sam2bam_AUX_SELF)   // transform
 TRANSLATOR (SAM, FASTQ, 16, SEQ,        sam_piz_sam2fastq_SEQ)      // reverse-complement the sequence if needed, and drop if "*"
 TRANSLATOR (SAM, FASTQ, 17, QUAL,       sam_piz_sam2fastq_QUAL)     // reverse the QUAL if reverse-complemented and drop fastq records with QUAL="*"
 TRANSLATOR (SAM, FASTQ, 18, FLAG,       sam_piz_sam2fastq_FLAG)     // emit 1 if (FLAGS & 0x40) or 2 of (FLAGS & 0x80)
+TRANSLATOR (SAM, BAM,   19, QNAME,      sam_piz_sam2bam_QNAME)      // v15: if --deep: add QNAME to vb->deep_ents in case of BAM
+#define NUM_SAM_TRANS   20 // including "none"
 
-#define NUM_SAM_TRANS   19 // including "none"
 #define SAM_TRANSLATORS { NULL /* none */, container_translate_I8, container_translate_U8, container_translate_LTEN_I16, \
                           container_translate_LTEN_U16, container_translate_LTEN_I32, container_translate_LTEN_U32, \
                           sam_piz_sam2bam_FLOAT, sam_piz_sam2bam_ARRAY_SELF, sam_piz_sam2bam_RNAME, sam_piz_sam2bam_POS, sam_piz_sam2bam_SEQ, \
                           sam_piz_sam2bam_QUAL, sam_piz_sam2bam_TLEN, sam_piz_sam2bam_AUX, sam_piz_sam2bam_AUX_SELF, \
-                          sam_piz_sam2fastq_SEQ, sam_piz_sam2fastq_QUAL, sam_piz_sam2fastq_FLAG }
+                          sam_piz_sam2fastq_SEQ, sam_piz_sam2fastq_QUAL, sam_piz_sam2fastq_FLAG, sam_piz_sam2bam_QNAME }
 
 TXTHEADER_TRANSLATOR (sam_header_bam2sam);
 TXTHEADER_TRANSLATOR (sam_header_sam2bam);

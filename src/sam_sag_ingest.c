@@ -20,6 +20,7 @@
 #include "writer.h"
 #include "sections.h"
 #include "codec.h"
+#include "qname.h"
 #include "compressor.h"
 #include "libdeflate/libdeflate.h"
 #include "htscodecs/rANS_static4x16.h"
@@ -92,7 +93,7 @@ static uint32_t sam_zip_prim_ingest_vb_compress_qual (VBlockSAMP vb, Sag *vb_grp
     if (!total_qual_len) return 0;
 
     // note: in an unlikely case, the compressed size might be beyond this - in which case we will abandon the compression.
-    uint32_t max_comp_len = MIN_(total_qual_len / 1.2 + rans_compress_bound_4x16(vb_grps[0].seq_len, X_NOSZ), MAX_SA_SEQ_LEN); // heuristic (we don't want this to be unnecessarily too big - bigger than allocated to z_data)
+    uint32_t max_comp_len = MIN_(total_qual_len / 1.2 + rans_compress_bound_4x16 (vb_grps[0].seq_len, X_NOSZ), MAX_SA_SEQ_LEN); // heuristic (we don't want this to be unnecessarily too big - bigger than allocated to z_data)
     buf_alloc (vb, underlying_buf, max_comp_len, 0, char, 0, "z_data"); // likely already allocated
     buf_overlay_partial (vb, comp_qual_buf, underlying_buf, underlying_buf->len/*after packed_seq_buf*/, "comp_qual_buf");
 
@@ -103,7 +104,7 @@ static uint32_t sam_zip_prim_ingest_vb_compress_qual (VBlockSAMP vb, Sag *vb_grp
 
         uint32_t comp_len = rans_compress_bound_4x16 (vb_grp->seq_len, X_NOSZ);
         if (comp_qual_buf->len + comp_len <= max_comp_len)  { // still room to compress
-            uint8_t *qual = B8 (vb->txt_data, vb_grp->qual); // always in SAM format
+            uint8_t *qual = B8 (vb->txt_data, vb_grp->qual);  // always in SAM format
             ASSERT (rans_compress_to_4x16 (evb, qual, vb_grp->seq_len, BAFT(uint8_t, *comp_qual_buf), &comp_len, X_NOSZ) && comp_len,
                     "%s: Failed to compress PRIM qual: qual_len=%u", LN_NAME, vb_grp->seq_len);
         }

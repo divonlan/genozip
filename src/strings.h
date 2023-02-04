@@ -135,6 +135,16 @@ static inline uint64_t str_count_char (rom str, uint64_t len, char c)
     return count;
 }
 
+// true if entire string is a single character
+static inline bool str_is_monochar (STRp(str))
+{
+    char mono = str[0];
+    for (int i=1; i < str_len; i++)
+        if (str[i] != mono) return false;
+    
+    return true;
+}
+
 // count the number of consecutive occurances of a character
 static inline uint64_t str_count_consecutive_char (rom str, uint64_t len, char c)
 {

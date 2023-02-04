@@ -93,7 +93,7 @@ void reconstruct_to_history (VBlockP vb, ContextP ctx)
         // not a textual snip (eg SNIP_SPECIAL) - reconstruct and then copy
         else { 
             rom txt = BAFTtxt;
-            reconstruct_one_snip (vb, ctx, wi, STRa(snip), true);
+            reconstruct_one_snip (vb, ctx, wi, STRa(snip), RECON_ON);
             
             *hw = (HistoryWord){ .index = ctx->per_line.len32, .len = (BAFTtxt - txt), .lookup = LookupPerLine };
 

@@ -159,6 +159,7 @@ test_optimize()
     test_header "$1 --optimize - NOT checking correctness, just that it doesn't crash"
     local file=$TESTDIR/$1
     $genozip $file -f --optimize -o $output || exit 1
+    $genounzip $output -fo $OUTDIR/recon || exit 1 # just testing that it doesn't error
     cleanup
 }
 

@@ -10,6 +10,7 @@
 #include "file.h"
 #include "codec.h"
 #include "url.h"
+#include "tar.h"
 
 rom filename_z_by_flag (void)
 {
@@ -24,7 +25,8 @@ rom filename_z_normal (rom txt_filename, DataType dt, FileType txt_ft)
     if (!txt_filename && (flag.biopsy || flag.biopsy_line.line_i != NO_LINE))
         txt_filename = "dummy"; // we don't have a txt_filename, but that's ok, because we don't need it
 
-    ASSINP0 (txt_filename, "use --output to specify the output filename (with a .genozip extension)");
+    ASSINP0 (txt_filename || !tar_is_tar(), "Piping from stdin is not supported when using --tar");
+    ASSINP0 (txt_filename, "Use --output to specify the output filename (with a .genozip extension)");
 
     unsigned dn_len = flag.out_dirname ? strlen (flag.out_dirname) : 0;
     bool is_url = url_is_url (txt_filename);

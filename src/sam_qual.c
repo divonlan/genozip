@@ -87,10 +87,6 @@ COMPRESSOR_CALLBACK (sam_zip_qual)
     if (dl->QUAL.len == 1 && (*line_data)[0] == '*') 
         *line_data = " "; // pointer to static string
 
-    // note - we optimize just before compression - hopefully the string will remain in L1 cache
-    else if (flag.optimize_QUAL) 
-        optimize_phred_quality_string (STRa(*line_data));
-
     if (is_rev) *is_rev = dl->FLAG.rev_comp;
 }
 
@@ -227,8 +223,12 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual_data)/*always te
 
     vb->has_qual |= !vb->qual_missing;
 
-    if (flag.deep && !segconf.running)
-        deep_sam_set_QUAL_hash (vb, dl, STRa(qual_data));
+    // case --optimize_QUAL: optimize in place, must be done before sam_deep_set_QUAL_hash calculates a hash
+    if (flag.optimize_QUAL) 
+        optimize_phred_quality_string ((char*)STRa(qual_data));
+
+    if ((flag.deep || flag.debug_deep == 2) && !segconf.running)
+        sam_deep_set_QUAL_hash (vb, dl, STRa(qual_data));
 
     // note: if prim (of either type) has no QUAL, we don't attempt to diff - bc piz wouldn't be able to know whether 
     // the current line has QUAL or not
@@ -292,7 +292,7 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual_data)/*always te
         seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_QUAL, '0' + prim_has_qual_but_i_dont, '0' + diff_aborted }, 4, SAM_QUAL, 0); 
 
     // get QUAL score, consumed by mate ms:i
-    if (!segconf.running && segconf.sam_ms_type == ms_BIOBAMBAM)
+    if (!segconf.running && segconf.sam_ms_type == ms_BIOBAMBAM && !flag.optimize_QUAL)
         dl->QUAL_score = sam_get_QUAL_score (vb, STRa(qual_data));
  
     // get stats on qual scores
@@ -324,7 +324,7 @@ void sam_seg_other_qual (VBlockSAMP vb, TxtWord *dl_word, Did did_i, STRp(qual),
 // QUAL PIZ
 //---------
 
-static void sam_piz_QUAL_undiff_vs_primary (VBlockSAMP vb, STRp (prim_qual), bool prim_revcomp, const CigarAnalItem *saggy_anal, bool prim_is_bam, bool reconstruct)
+static void sam_piz_QUAL_undiff_vs_primary (VBlockSAMP vb, STRp (prim_qual), bool prim_revcomp, const CigarAnalItem *saggy_anal, bool prim_is_bam, ReconType reconstruct)
 {
     bool xstrand = (last_flags.rev_comp != prim_revcomp);
 
@@ -390,7 +390,7 @@ static void sam_piz_QUAL_primary (VBlockSAMP vb)
     buf_free (vb->scratch);
 }
 
-void sam_reconstruct_missing_quality (VBlockP vb, bool reconstruct)
+void sam_reconstruct_missing_quality (VBlockP vb, ReconType reconstruct)
 {
     if (reconstruct) 
         RECONSTRUCT1 ('*');
@@ -492,6 +492,10 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
 TRANSLATOR_FUNC (sam_piz_sam2bam_QUAL)
 {
     START_TIMER;
+
+    // before translating - add to Deep if needed
+    if (flag.deep && IS_DEEPABLE (last_flags))
+        sam_piz_deep_add_qual (VB_SAM, STRa(recon));
 
     // if QUAL is "*" there are two options:
     // 1. If l_seq is 0, the QUAL is empty

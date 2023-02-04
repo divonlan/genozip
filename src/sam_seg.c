@@ -65,9 +65,9 @@ WordIndex xa_lookback_strand_word_index = WORD_INDEX_NONE, xa_lookback_rname_wor
 Did buddied_Z_dids[NUM_MATED_Z_TAGS] = MATED_Z_DIDs;
 
 // called by zfile_compress_genozip_header to set FlagsGenozipHeader.dt_specific
-bool sam_zip_dts_flag (void)
+bool sam_zip_dts_flag (int dts)
 {
-    return IS_REF_INTERNAL;
+    return (dts==1) ? IS_REF_INTERNAL : flag.deep;
 }
 
 // ----------------------
@@ -157,6 +157,9 @@ void sam_zip_finalize (bool is_last_user_txt_file)
 
     if (segconf.sag_type) 
         gencomp_destroy();
+
+    if (flag.deep)
+        sam_deep_zip_finalize();
 }
 
 // called by main thread after reading txt of one vb into vb->txt_data
@@ -209,7 +212,8 @@ void sam_zip_genozip_header (SectionHeaderGenozipHeader *header)
     header->sam.segconf_seq_len_dict_id = segconf.qname_seq_len_dict_id; // v14
     header->sam.segconf_MD_NM_by_un     = segconf.MD_NM_by_unconverted;  // v14
     header->sam.segconf_predict_meth    = segconf.sam_predict_meth_call; // v14
-    header->sam.deep                    = flag.deep;                     // v15
+    header->sam.segconf_deep_no_qname   = segconf.deep_no_qname;         // v15
+    header->sam.segconf_deep_no_qual    = segconf.deep_no_qual;          // v15
 }
 
 // initialize SA and OA
@@ -233,7 +237,7 @@ static void sam_seg_QNAME_initialize (VBlockSAMP vb)
 
     // initial allocations based on segconf data
     else {
-        vb->qname_hash.prm8[0] = MIN_(20, MAX_(14, 32 - __builtin_clzl (vb->lines.len32 * 5))); // between 14 and 20 bits - tested - no additional compression benefit beyond 20 bits
+        vb->qname_hash.prm8[0] = MIN_(20, MAX_(14, 32 - __builtin_clz (vb->lines.len32 * 5))); // between 14 and 20 bits - tested - no additional compression benefit beyond 20 bits
         buf_alloc_255(vb, &vb->qname_hash, 0, (1ULL << vb->qname_hash.prm8[0]), int32_t, 1, "qname_hash");
     }
 
@@ -259,7 +263,7 @@ void sam_seg_initialize (VBlockP vb_)
                    OPTION_tx_i, OPTION_YS_i, OPTION_XC_i, OPTION_AM_i, OPTION_SM_i, OPTION_X0_i, OPTION_X1_i, OPTION_CP_i,
                    OPTION_OP_i, OPTION_NH_i, OPTION_HI_i, OPTION_UQ_i, OPTION_cm_i, 
                    OPTION_SA_POS, OPTION_OA_POS,
-                   T(segconf.tech == TECH_PACBIO, OPTION_qs_i), T(segconf.tech == TECH_PACBIO, OPTION_qe_i),
+                   T(TECH(PACBIO), OPTION_qs_i), T(TECH(PACBIO), OPTION_qe_i),
                    T(MP(BLASR), OPTION_XS_i), T(MP(BLASR), OPTION_XE_i), T(MP(BLASR), OPTION_XQ_i), T(MP(BLASR), OPTION_XL_i), T(MP(BLASR), OPTION_FI_i),
                    T(MP(NGMLR), OPTION_QS_i), T(MP(NGMLR), OPTION_QE_i), T(MP(NGMLR), OPTION_XR_i),
                    T(is_minimap2(), OPTION_s1_i), OPTION_ZS_i, OPTION_nM_i,
@@ -303,7 +307,7 @@ void sam_seg_initialize (VBlockP vb_)
     ctx_set_ltype (VB, LT_DYN_INT, SAM_BUDDY, OPTION_HI_i, OPTION_NM_i, OPTION_NH_i, OPTION_XM_i, OPTION_X1_i,
                    OPTION_AS_i, OPTION_XS_i, OPTION_ZS_i, OPTION_cm_i, OPTION_ms_i, OPTION_nM_i, OPTION_UQ_i,
                    T(segconf.has_TLEN_non_zero, SAM_TLEN), // note: we don't set if !has_TLEN_non_zero, bc values are stored in b250 and may require singletons
-                   T(segconf.tech == TECH_PACBIO, OPTION_qs_i), T(segconf.tech == TECH_PACBIO, OPTION_qe_i),
+                   T(TECH(PACBIO), OPTION_qs_i), T(TECH(PACBIO), OPTION_qe_i),
                    T(MP(BLASR), OPTION_XS_i), T(MP(BLASR), OPTION_XE_i), T(MP(BLASR), OPTION_XQ_i), T(MP(BLASR), OPTION_XL_i), T(MP(BLASR), OPTION_FI_i),
                    T(MP(NGMLR), OPTION_QS_i), T(MP(NGMLR), OPTION_QE_i), T(MP(NGMLR), OPTION_XR_i),
                    DID_EOL);
@@ -425,7 +429,7 @@ void sam_seg_initialize (VBlockP vb_)
         segconf.QT_con_snip_len = sizeof (segconf.QT_con_snip);
         segconf.CB_con_snip_len = sizeof (segconf.CB_con_snip);
     }
-
+        
     // get counts of qnames in the VB, that will allow us to leave lines in th  e VB for saggy instead of gencomp
     // note: for SAG_BY_SA in --best, we send all prim/depn to gencomp (see bug 629)
     if (vb->check_for_gc && !flag.force_gencomp && (/*IS_SAG_SA ||*/ IS_SAG_NH || IS_SAG_SOLO)) // SA still doesn't work well with saggy - not even QUAL
@@ -435,8 +439,6 @@ void sam_seg_initialize (VBlockP vb_)
     if (vb->comp_i == SAM_COMP_DEPN && IS_SAG_SA && segconf.SA_HtoS == unknown)
         segconf.SA_HtoS = segconf.depn_CIGAR_can_have_H && // set when segging MAIN component
                           !segconf.SA_CIGAR_can_have_H;    // set when segging PRIM component
-
-    if (flag.deep) deep_sam_seg_initialize (vb);
 
     COPY_TIMER(seg_initialize);
 #undef T
@@ -450,6 +452,8 @@ static void sam_seg_toplevel (VBlockP vb)
     uint64_t qname_dict_id = (sam_is_prim_vb ? _SAM_QNAMESA : _SAM_QNAME);
     uint64_t qual_dict_id  = (sam_is_prim_vb ? _SAM_QUALSA  : _SAM_QUAL );
 
+    uint8_t deep_cb = flag.deep ? CI1_ITEM_CB : 0;
+
     // top level snip - reconstruction as SAM
     SmallContainer top_level_sam = {
         .repeats      = vb->lines.len32,
@@ -457,20 +461,20 @@ static void sam_seg_toplevel (VBlockP vb)
         .callback     = true,
         .filter_items = true,
         .nitems_lo    = 14,
-        .items = { { .dict_id = { _SAM_BUDDY    }                    },
-                   { .dict_id = { qname_dict_id }, .separator = "\t" },
-                   { .dict_id = { _SAM_FLAG     }, .separator = "\t" },
-                   { .dict_id = { _SAM_RNAME    }, .separator = "\t" },
-                   { .dict_id = { _SAM_POS      }, .separator = "\t" },
-                   { .dict_id = { _SAM_MAPQ     }, .separator = "\t" },
-                   { .dict_id = { _SAM_CIGAR    }, .separator = "\t" },
-                   { .dict_id = { _SAM_RNEXT    }, .separator = "\t" },
-                   { .dict_id = { _SAM_PNEXT    }, .separator = "\t" },
-                   { .dict_id = { _SAM_TLEN     }, .separator = "\t" },
-                   { .dict_id = { _SAM_SQBITMAP }, .separator = "\t" },
-                   { .dict_id = { qual_dict_id  }, .separator = "\t" },
-                   { .dict_id = { _SAM_AUX      }                    },
-                   { .dict_id = { _SAM_EOL      }                    }}};
+        .items = { { .dict_id = { _SAM_BUDDY    }                                 },
+                   { .dict_id = { qname_dict_id }, .separator = { '\t', deep_cb } },
+                   { .dict_id = { _SAM_FLAG     }, .separator = "\t"              },
+                   { .dict_id = { _SAM_RNAME    }, .separator = "\t"              },
+                   { .dict_id = { _SAM_POS      }, .separator = "\t"              },
+                   { .dict_id = { _SAM_MAPQ     }, .separator = "\t"              },
+                   { .dict_id = { _SAM_CIGAR    }, .separator = "\t"              },
+                   { .dict_id = { _SAM_RNEXT    }, .separator = "\t"              },
+                   { .dict_id = { _SAM_PNEXT    }, .separator = "\t"              },
+                   { .dict_id = { _SAM_TLEN     }, .separator = "\t"              },
+                   { .dict_id = { _SAM_SQBITMAP }, .separator = { '\t', deep_cb } },
+                   { .dict_id = { qual_dict_id  }, .separator = { '\t', deep_cb } },
+                   { .dict_id = { _SAM_AUX      }                                 },
+                   { .dict_id = { _SAM_EOL      }                                 }}};
                    
     container_seg (vb, CTX(SAM_TOPLEVEL), (ContainerP)&top_level_sam, 0, 0, 0);
 
@@ -492,11 +496,11 @@ static void sam_seg_toplevel (VBlockP vb)
                           { .dict_id = { _SAM_FLAG     }, .separator = { CI0_TRANS_NOR | CI0_TRANS_MOVE, 4 }, SAM2BAM_LTEN_U16 }, // Translate - textual to binary number
                           { .dict_id = { _SAM_RNEXT    }, .separator = { CI0_TRANS_NOR                     }, SAM2BAM_RNAME    }, // Translate - output word_index instead of string
                           { .dict_id = { _SAM_PNEXT    }, .separator = { CI0_TRANS_NOR | CI0_TRANS_MOVE, 4 }, SAM2BAM_POS      }, // Translate - output little endian POS-1
-                          { .dict_id = { qname_dict_id }, .separator = { CI0_TRANS_NUL                     }                   }, // normal
+                          { .dict_id = { qname_dict_id }, .separator = { CI0_TRANS_NUL                     }, (flag.deep ? SAM2BAM_QNAME : 0) }, 
                           { .dict_id = { _SAM_CIGAR    }, .separator = ""                                                      }, // handle in special reconstructor - translate textual to BAM CIGAR format + reconstruct l_read_name, n_cigar_op, l_seq
                           { .dict_id = { _SAM_TLEN     }, .separator = { CI0_TRANS_NOR                     }, SAM2BAM_TLEN     }, // must be after CIGAR bc sam_piz_special_TLEN_old needs vb->seq_num
-                          { .dict_id = { _SAM_SQBITMAP }, .separator = "",                                    SAM2BAM_SEQ      }, // Translate - textual format to BAM format
-                          { .dict_id = { qual_dict_id  }, .separator = "",                                    SAM2BAM_QUAL     }, // Translate - textual format to BAM format, set block_size
+                          { .dict_id = { _SAM_SQBITMAP }, .separator = "",                                    SAM2BAM_SEQ      }, // Translate - textual format to BAM format ; if --deep, store in deep_ents
+                          { .dict_id = { qual_dict_id  }, .separator = "",                                    SAM2BAM_QUAL     }, // Translate - textual format to BAM format ; set block_size ; if --deep, store in deep_ents
                           { .dict_id = { _SAM_AUX      }, .separator = { CI0_TRANS_NOR                     }                   }, // up to v11, this had the SAM2BAM_AUX translator
                         }
     };
@@ -596,7 +600,7 @@ static void sam_seg_finalize_segconf (VBlockP vb)
 
     // evidence of STARsolo or cellranger (this is also detected in the SAM header)
     if ((MP(STAR) || MP(UNKNOWN)) &&
-        ((segconf.has[OPTION_RX_Z] + segconf.has[OPTION_QX_Z] + segconf.has[OPTION_BX_Z] >= 2) ||
+        ((segconf.has[OPTION_UB_Z] + segconf.has[OPTION_UR_Z] + segconf.has[OPTION_UY_Z] >= 2) ||
          (segconf.has[OPTION_gn_Z] && segconf.has[OPTION_gx_Z]) ||
          (segconf.has[OPTION_GN_Z] && segconf.has[OPTION_GX_Z]) ||
          (segconf.has[OPTION_2R_Z] && segconf.has[OPTION_2Y_Z]) ||
@@ -964,7 +968,7 @@ static rom sam_seg_get_aux (VBlockSAMP vb, int16_t idx, uint32_t *value_len, Val
 uint32_t sam_seg_get_aux_int (VBlockSAMP vb, int16_t idx,
                               int32_t *number, // modified only if integer is parsed
                               bool is_bam,
-                              int32_t min_value, int32_t max_value, bool soft_fail)
+                              int32_t min_value, int32_t max_value, FailType soft_fail)
 {
     ASSERT (min_value <= max_value, "%s: expecting idx=%u expecting min_value=%d <= max_value=%d", LN_NAME, idx, min_value, max_value);
 
@@ -1205,7 +1209,7 @@ static inline void sam_seg_QNAME_segconf (VBlockSAMP vb, ContextP ctx, STRp (qna
         qname_segconf_discover_flavor (VB, SAM_QNAME, STRa (qname));
 }
 
-void sam_seg_QNAME(VBlockSAMP vb, ZipDataLineSAM *dl, STRp (qname), unsigned add_additional_bytes)
+void sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp (qname), unsigned add_additional_bytes)
 {
     ContextP ctx = CTX(SAM_QNAME);
 
@@ -1219,8 +1223,8 @@ void sam_seg_QNAME(VBlockSAMP vb, ZipDataLineSAM *dl, STRp (qname), unsigned add
     uint32_t my_hash = qname_hash & MAXB(vb->qname_hash.prm8[0]);
     bool insert_to_hash = false;
 
-    if (flag.deep) 
-        deep_sam_set_QNAME_hash (vb, dl, qname_hash);
+    if (flag.deep || flag.debug_deep == 2) 
+        sam_deep_set_QNAME_hash (vb, dl, STRa(qname));
 
     BuddyType bt = sam_seg_mate (vb, dl->FLAG, STRa (qname), my_hash, &insert_to_hash) | // bitwise or
                    sam_seg_saggy (vb, dl->FLAG, STRa (qname), my_hash, &insert_to_hash);
@@ -1468,12 +1472,12 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
     SAFE_NUL(&vb->last_cigar[fld_lens[CIGAR]]); // nul-terminate CIGAR string
 
     if (has_NM)
-        dl->NM_len = sam_seg_get_aux_int (vb, vb->idx_NM_i, &dl->NM, false, MIN_NM_i, MAX_NM_i, false) + 1; // +1 for \t or \n
+        dl->NM_len = sam_seg_get_aux_int (vb, vb->idx_NM_i, &dl->NM, false, MIN_NM_i, MAX_NM_i, HARD_FAIL) + 1; // +1 for \t or \n
 
     if (!sam_is_main_vb) {
         // set dl->AS needed by sam_seg_prim_add_sag
         if (sam_is_prim_vb && has_AS)
-            sam_seg_get_aux_int (vb, vb->idx_AS_i, &dl->AS, false, MIN_AS_i, MAX_AS_i, false);
+            sam_seg_get_aux_int (vb, vb->idx_AS_i, &dl->AS, false, MIN_AS_i, MAX_AS_i, HARD_FAIL);
 
         sam_seg_sag_stuff (vb, dl, STRfld (CIGAR), flds[SEQ], false);
 
@@ -1548,6 +1552,8 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
 
     SEG_EOL (SAM_EOL, false); /* last field accounted for \n */
     SAFE_RESTORE;            // restore \t after CIGAR
+
+    if (dl->SEQ.len > vb->longest_seq_len) vb->longest_seq_len = dl->SEQ.len;
 
     return next_line;
 

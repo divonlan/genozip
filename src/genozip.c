@@ -265,8 +265,10 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
                     piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, SAM_COMP_MAIN, SAM_COMP_DEPN);
                     comp_i += 2;
                 }
-                else
+                else {
+                    flag.out_dt = DT_FASTQ;
                     piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, comp_i, comp_i);
+                }
 
                 file_close (&txt_file, flag.index_txt, comp_i < z_file->num_txt_files + 1 || !is_last_z_file); // skip cleanup in final component, except if there are more z_files
             }
@@ -280,7 +282,7 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
     file_close (&z_file, false, false);
     is_first_z_file = false;
 
-    if (piz_digest_failed) exit_on_error (false); // error message already displayed in piz_one_verify_digest
+    if (piz_digest_failed) exit_on_error (false); // error message already displayed in piz_verify_digest_one_txt_file
     
     // case --replace: now that the file was reconstructed, we can remove the genozip file
     if (flag.replace && (txt_filename || flag.unbind) && z_filename) file_remove (z_filename, true); 
@@ -689,7 +691,8 @@ static void set_exe_type (rom argv0)
 
     FREE (bn);
 }
-#include "md5.h"
+
+#include "deep.h"
 int main (int argc, char **argv)
 {    
     MAIN0 ("Starting main");
@@ -786,6 +789,11 @@ int main (int argc, char **argv)
     ASSINP (input_files_len || !isatty(0) || command != PIZ, "missing input file. Example: %s myfile.bam.genozip", global_cmd);
 
     primary_command = command; 
+
+#ifdef DISTUNZIPMSG
+    if (is_genounzip && strlen (DISTUNZIPMSG))
+        iprintf ("%s\n\n", DISTUNZIPMSG);
+#endif
 
     // we test for a newer version if its a single file compression (if --test is used, we test after PIZ - check_for_newer is set)
     if (!flag.quiet && ((IS_ZIP && input_files_len == 1 && !flag.test) || (IS_PIZ && flag.check_latest/*PIZ - test after compress*/)))

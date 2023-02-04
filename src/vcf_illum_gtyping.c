@@ -132,7 +132,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_PROBE_A)
 {    
     if (!reconstruct) goto done;
 
-    ConstRangeP range = ref_piz_get_range (vb, gref, false);
+    ConstRangeP range = ref_piz_get_range (vb, gref, HARD_FAIL);
 
     WordIndex strand = CTX(INFO_ILLUMINA_STRAND)->last_value.i;
     PosType pos = vb->last_int(INFO_ILLUMINA_POS);

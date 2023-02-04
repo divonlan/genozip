@@ -330,7 +330,7 @@ done:
 }
 
 // PIZ: SEQ reconstruction - only for reads compressed with the aligner
-void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len, bool is_pair_2, bool is_perfect_alignment, bool reconstruct)
+void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len, bool is_pair_2, bool is_perfect_alignment, ReconType reconstruct)
 {
     START_TIMER;
 

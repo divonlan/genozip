@@ -23,7 +23,7 @@
                uint32_t *uncompressed_len,                                          \
                LocalGetLineCB get_line_cb,  /* option 2 - call back to get lines */ \
                char *compressed, uint32_t *compressed_len/* in/out */,              \
-               bool soft_fail, rom name)    
+               FailType soft_fail, rom name)    
 
 typedef COMPRESS (CodecCompress);
 

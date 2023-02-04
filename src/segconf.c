@@ -163,16 +163,15 @@ static void segconf_set_vb_size (ConstVBlockP vb, uint64_t curr_vb_size)
 // this function is called to set is_long_reads, and may be also called while running segconf before is_long_reads is set
 bool segconf_is_long_reads(void) 
 { 
-    return segconf.tech == TECH_PACBIO    || 
-           segconf.tech == TECH_ONP       || 
+    return TECH(PACBIO) || TECH(ONP) || 
            segconf.longest_seq_len > 2000 ||
            flag.debug_LONG;
 }
 
-
 static bool segconf_no_calculate (void)
 {
-    return (Z_DT(FASTQ) && flag.pair == PAIR_READ_2); // FASTQ: no recalculating for 2nd pair 
+    return (Z_DT(FASTQ) && flag.pair == PAIR_READ_2) || // FASTQ: no recalculating for 2nd pair 
+           ((Z_DT(SAM) || Z_DT(BAM)) && flag.deep && flag.zip_comp_i >= SAM_COMP_FQ01); // --deep: no recalculating for second (or more) FASTQ file
 }
 
 void segconf_initialize (void)
@@ -188,6 +187,26 @@ void segconf_initialize (void)
         segconf.vb_size = save_vb_size; // components after first inherit vb_size from first
 
     mutex_initialize (segconf.PL_mux_by_DP_mutex);
+}
+
+static void segconf_show_has (void)
+{
+    iprint0 ("Fields recorded in segconf.has:\n");
+
+    bool found = false;
+    for_zctx 
+        if (segconf.has[zctx->did_i]) {
+            if (TXT_DT(VCF) || TXT_DT(BCF))
+                iprintf ("%s/%s ", dict_id_display_type (txt_file->data_type, zctx->dict_id), zctx->tag_name);
+            else
+                iprintf ("%s ", zctx->tag_name);
+            
+            found = true;
+        }
+
+    iprint0 (found ? "\n" : "None\n");
+
+    exit_ok();
 }
 
 // ZIP: Seg a small sample of data of the beginning of the data, to pre-calculate several Seg configuration parameters
@@ -239,6 +258,9 @@ void segconf_calculate (void)
     SAVE_FLAG (aligner_available); // might have been set in sam_seg_finalize_segconf
     RESTORE_FLAGS;
     RESTORE_FLAG (aligner_available);
+
+    if (flag.show_segconf_has) 
+        segconf_show_has();
 
     segconf_set_vb_size (vb, save_vb_size);
 
@@ -294,10 +316,18 @@ void segconf_update_qual (STRp (qual))
         }
 }
 
-rom sam_mapper_name (SamMapperType mp)
+rom segconf_sam_mapper_name (void)
 {
     rom mapper_name[] = SAM_MAPPER_NAME;
     ASSERT0 (ARRAY_LEN(mapper_name) == NUM_MAPPERS, "Invalid SAM_MAPPER_NAME array length - perhaps missing commas between strings?");
 
-    return (mp >= 0 && mp < NUM_MAPPERS) ? mapper_name[mp] : "INVALID_MAPPER";
+    return (segconf.sam_mapper >= 0 && segconf.sam_mapper < NUM_MAPPERS) ? mapper_name[segconf.sam_mapper] : "INVALID_MAPPER";
+}
+
+rom segconf_tech_name (void)
+{
+    rom tech_name[] = TECH_NAME;
+    ASSERT0 (ARRAY_LEN(tech_name) == NUM_TECHS, "Invalid TECH_NAME array length - perhaps missing commas between strings?");
+
+    return (segconf.tech >= 0 && segconf.tech < NUM_TECHS) ? tech_name[segconf.tech] : "INVALID_MAPPER";
 }

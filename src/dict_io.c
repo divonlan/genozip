@@ -105,7 +105,7 @@ static void dict_io_prepare_for_compress (VBlockP vb)
 
             // frag_size is set by default 1MB, but must be at least double the longest snip, or it will cause
             // mis-calculation of size_upper_bound in dict_io_read_one_vb
-            frag_size = 1<<20; // 1MB
+            frag_size = 1 MB;
             for (const CtxNode *node=B1ST (CtxNode, frag_ctx->nodes); node <= BLST (CtxNode, frag_ctx->nodes); node++)
                 if (node->snip_len * 2 > frag_size)
                     frag_size = 2 * roundup2pow (node->snip_len); // must be power of 2 for dict_io_read_one_vb

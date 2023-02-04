@@ -391,7 +391,7 @@ DataType piz_read_global_area (Reference ref)
     if (!success) return DT_NONE;
 
     // check if the genozip file includes a reference
-    bool has_ref_sections = !!sections_last_sec (SEC_REFERENCE, true);
+    bool has_ref_sections = !!sections_last_sec (SEC_REFERENCE, SOFT_FAIL);
 
     ASSERTW (!has_ref_sections || !IS_REF_EXTERNAL || flag.reading_reference, 
              "%s: ignoring reference file %s because it was not compressed with --reference", z_name, ref_get_filename (ref));
@@ -505,7 +505,7 @@ bool piz_read_one_vb (VBlockP vb, bool for_reconstruction)
 {
     START_TIMER; 
    
-    Section sec = sections_vb_header (vb->vblock_i, false); 
+    Section sec = sections_vb_header (vb->vblock_i, HARD_FAIL); 
     
     int32_t vb_header_offset = zfile_read_section (z_file, vb, vb->vblock_i, &vb->z_data, "z_data", SEC_VB_HEADER, sec++); 
     ASSERT0 (vb_header_offset >= 0, "Unexpectedly VB_HEADER section was skipped");
@@ -561,18 +561,34 @@ bool piz_read_one_vb (VBlockP vb, bool for_reconstruction)
     return ok_to_compute;
 }
 
-static Digest piz_one_verify_digest (void)
+static Digest piz_verify_digest_one_txt_file (unsigned txt_file_i)
 {
     char s[200];  
 
     // since v14, if Alder32, we verify each VB, but we don't create a cumulative digest for the entire file. 
     // if we reached here, txt header and all VBs are verified.
     if (VER(14) && z_file->z_flags.adler) {
+        
+        CompIType comp_i = (flag.deep && txt_file_i==1)             ? SAM_COMP_FQ00
+                         : (flag.deep && txt_file_i==2)             ? SAM_COMP_FQ01
+                         : (fastq_piz_is_paired() && txt_file_i==1) ? FQ_COMP_R2
+                         :                                            COMP_MAIN;
+
+        uint32_t expected_vbs_verified = sections_get_num_vbs (comp_i);
+
+        ASSERT (z_file->num_vbs_verified == expected_vbs_verified, "Expected to have verified (adler32) all %u VBlocks, but verified only %u",
+                expected_vbs_verified, z_file->num_vbs_verified);
+
+        if (flag.show_digest)
+            iprintf ("Txt file #%u: %u VBs verified\n", txt_file_i, z_file->num_vbs_verified);
+
         if (flag.test) { 
             sprintf (s, "verified as identical to the original %s", dt_name (txt_file->data_type));
             progress_finalize_component (s); 
         }
 
+        z_file->num_vbs_verified = 0; // reset for next component
+        
         return DIGEST_NONE; // we can't calculate the digest for some reason
     }
 
@@ -631,7 +647,7 @@ static void piz_dispatch_one_vb (Dispatcher dispatcher, Section sec)
     VBlockP next_vb = dispatcher_generate_next_vb (dispatcher, sec->vblock_i, sec->comp_i);
 
     // read one VB's data from z_file
-    bool reconstruct = piz_read_one_vb (next_vb, true)  // read even if no_reconstruct
+    ReconType reconstruct = piz_read_one_vb (next_vb, true)  // read even if no_reconstruct
                     && !flag.genocat_no_reconstruct; 
 
     if (reconstruct) {
@@ -662,12 +678,8 @@ static void piz_handle_reconstructed_vb (Dispatcher dispatcher, VBlockP vb, uint
         iprintf ("vb=%s lines=%u nondropped_lines=%u txt_data.len=%u\n", 
                   VB_NAME, vb->lines.len32, vb->num_nondrop_lines, vb->txt_data.len32);
 
-    if (flag.collect_coverage)    
-        coverage_add_one_vb (vb);
+    DT_FUNC (z_file, piz_process_recon)(vb);
     
-    else if (flag.reading_kraken)
-        kraken_piz_handover_data (vb);
-
     z_file->txt_data_so_far_single += vb->recon_size; 
 
     piz_handover_or_discard_vb (dispatcher, &vb);
@@ -814,7 +826,7 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
     writer_finish_writing (z_file->num_txts_so_far == z_file->num_txt_files);
 
     // verifies reconstructed file against MD5 (if compressed with --md5 or --test) or Adler2 and/or codec_args (if bgzf)
-    Digest decompressed_file_digest = piz_one_verify_digest();
+    Digest decompressed_file_digest = piz_verify_digest_one_txt_file (z_file->num_txts_so_far - 1);
 
     if (!flag.test) 
         progress_finalize_component_time ("Done", decompressed_file_digest);

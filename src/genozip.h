@@ -31,6 +31,10 @@ typedef _Bool bool;
 
 typedef enum __attribute__ ((__packed__)) { no=0, yes=1, unknown=2 } thool; // three-way "bool"
 
+typedef enum __attribute__ ((__packed__)) { HARD_FAIL, SOFT_FAIL } FailType;
+
+typedef enum __attribute__ ((__packed__)) { RECON_OFF, RECON_ON } ReconType;
+
 // -----------------
 // system parameters
 // -----------------
@@ -45,6 +49,8 @@ typedef enum __attribute__ ((__packed__)) { no=0, yes=1, unknown=2 } thool; // t
 #define DEFAULT_MAX_THREADS 8 // used if num_cores is not discoverable and the user didn't specifiy --threads
 
 #define MEMORY_WARNING_THREASHOLD 0x100000000  // (4 GB) warning in some cases that we predict that user choices would cause us to consume more than this
+
+#define MAX_QNAME_SEGMENTS 12 
 
 #define NO_CALLBACK NULL
 
@@ -175,6 +181,7 @@ typedef union { // 64 bit
     int64_t i;
     double f;
     TxtWord; // index into in txt_data (note: gcc/clang flag -fms-extensions is needed for this type of anonymous struct use)
+    void *p; 
 } ValueType __attribute__((__transparent_union__));
 #define NO_VALUE ((ValueType){})
 
@@ -268,6 +275,12 @@ typedef unsigned __int128 uint128_t;
 typedef          __int128 int128_t;
 
 #define VER(n) (z_file->genozip_version >= (n))
+
+#define KB *((uint64_t)1<<10)
+#define MB *((uint64_t)1<<20)
+#define GB *((uint64_t)1<<30)
+#define TB *((uint64_t)1<<40)
+#define PB *((uint64_t)1<<50)
 
 // macros with arguments that evaluate only once 
 #define MIN_(a, b) ({ __typeof__(a) _a_=(a); __typeof__(b) _b_=(b); (_a_ < _b_) ? _a_ : _b_; }) // GCC / clang "statement expressions" extesion: https://gcc.gnu.org/onlinedocs/gcc/Statement-Exprs.html#Statement-Exprs
@@ -376,6 +389,8 @@ typedef SORTER ((*Sorter));
 #define STRcpy(dst,src)    ({ if (src##_len) { memcpy(dst,src,src##_len) ; dst##_len = src##_len; } })
 #define STRcpyi(dst,i,src) ({ if (src##_len) { memcpy(dst##s[i],src,src##_len) ; dst##_lens[i] = src##_len; } })
 #define STRset(dst,src)    ({ dst=src; dst##_len=src##_len; })
+#define STRtxtset(dst,src)    ({ dst=Btxt((src).index); dst##_len=(src).len; })
+#define STRinc(x) ({ x++; x##_len--; })
 #define STRLEN(string_literal) (sizeof string_literal - 1)
 #define STRtxt(x) Btxt (x), x##_len
 #define STRtxtw(txtword) Btxt ((txtword).index), (txtword).len // used with TxtWord
@@ -392,8 +407,8 @@ typedef SORTER ((*Sorter));
 
 // returns true if new_value has been set
 typedef enum { NO_NEW_VALUE, HAS_NEW_VALUE } HasNewValue;
-#define SPECIAL_RECONSTRUCTOR(func) HasNewValue func (VBlockP vb, ContextP ctx, rom snip, uint32_t snip_len, ValueType *new_value, bool reconstruct)
-#define SPECIAL_RECONSTRUCTOR_DT(func) HasNewValue func (VBlockP vb_/*vb_ instead of vb*/, ContextP ctx, rom snip, uint32_t snip_len, ValueType *new_value, bool reconstruct)
+#define SPECIAL_RECONSTRUCTOR(func) HasNewValue func (VBlockP vb, ContextP ctx, rom snip, uint32_t snip_len, ValueType *new_value, ReconType reconstruct)
+#define SPECIAL_RECONSTRUCTOR_DT(func) HasNewValue func (VBlockP vb_/*vb_ instead of vb*/, ContextP ctx, rom snip, uint32_t snip_len, ValueType *new_value, ReconType reconstruct)
 typedef SPECIAL_RECONSTRUCTOR ((*PizSpecialReconstructor));
 
 #define SPECIAL(dt,num,name,func) \
@@ -409,6 +424,8 @@ typedef uint8_t TranslatorId;
 #define TRANSLATOR(src_dt,dst_dt,num,name,func)\
     extern TRANSLATOR_FUNC(func); \
     enum { src_dt##2##dst_dt##_##name = num }; // define constant
+    
+typedef struct { uint32_t qname, seq, qual; } DeepHash;
 
 // filter is called before reconstruction of a repeat or an item, and returns false if item should 
 // not be processed. if not processed, contexts are not consumed. if we need the contexts consumed,

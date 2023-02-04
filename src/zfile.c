@@ -797,7 +797,8 @@ void zfile_compress_genozip_header (void)
 
     header.flags.genozip_header  = (struct FlagsGenozipHeader) {
         .txt_is_bin   = DTPT (is_binary),
-        .dt_specific  = (DT_FUNC (z_file, zip_dts_flag)()),
+        .dt_specific  = (DT_FUNC (z_file, zip_dts_flag)(1)),
+        .dt_specific2 = (DT_FUNC (z_file, zip_dts_flag)(2)),
         .aligner      = (flag.aligner_available > 0),
         .bgzf         = (txt_file->codec == CODEC_BGZF || txt_file->codec == CODEC_GZ), // note: if txt file is compressed with GZ, we will reconstruct it with BGZF
         .adler        = !flag.md5,
@@ -976,7 +977,9 @@ void zfile_output_processed_vb (VBlockP vb)
 
     sections_list_concat (vb);
     
-    file_write (z_file, STRb(vb->z_data));
+    if (!flag.zip_no_z_file) 
+        file_write (z_file, STRb(vb->z_data));
+
     COPY_TIMER (write);
 
     z_file->disk_so_far += vb->z_data.len;

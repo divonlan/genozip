@@ -93,6 +93,7 @@ typedef struct VBlockVCF {
     MULTIPLEXER(MAX_DP_FOR_MUX) mux_RGQ;   
 
     MULTIPLEXER(2) mux_QUAL, mux_INFO; // multiplex by has_RGQ (in GVCF)
+    MULTIPLEXER(3) mux_VC;             // multiplex dbSNP's INFO/VC by VARTYPE
 
     #define after_mux hapmat_helper_index_buf
     // used by CODEC_HAPM (for VCF haplotype matrix) 
@@ -363,6 +364,12 @@ extern void vcf_seg_ILLUMINA_STRAND (VBlockVCFP vb, ContextP ctx, STRp(strand));
 extern void vcf_seg_ALLELE_A (VBlockVCFP vb, ContextP ctx, STRp(value));
 extern void vcf_seg_ALLELE_B (VBlockVCFP vb, ContextP ctx, STRp(value));
 extern void vcf_seg_mux_by_adjusted_dosage (VBlockVCFP vb, ContextP ctx, STRp(baf), const DosageMultiplexer *mux);
+
+// dbSNP
+extern void vcf_dbsnp_zip_initialize (void);
+extern void vcf_seg_INFO_RS (VBlockVCFP vb, ContextP ctx, STRp(rs));
+extern void vcf_seg_INFO_RSPOS (VBlockVCFP vb, ContextP ctx, STRp(rspos));
+extern void vcf_seg_INFO_VC (VBlockVCFP vb, ContextP ctx, STRp(vc));
 
 // GWAS-VCF stuff
 extern void vcf_gwas_zip_initialize (void);

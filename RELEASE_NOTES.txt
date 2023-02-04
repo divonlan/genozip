@@ -6,6 +6,15 @@ Note on versioning:
 15.0.0
 - Deep
 - GFF: support embedded FASTA
+- VCF: better compression of dbSNP field INFO/VC
+ADD to website: --show-segconf-has ; debug_deep and debug_deep=qname_hash,seq_hash,qual_hash(works also without --deep)
+Physical Memory - test for Mac + update website of stats-collected
+
+14.0.26 25/Jan/2023
+- FASTQ: Better --optimize-DESC
+- Fix broken genocat --fastq (converting a SAM/BAM file to FASTQ) (broken since v14)
+- Fix broken --idxstats, --coverage, --sex (broken since v14)
+- Implement fix to htscodecs (3rd party library) bug (https://github.com/samtools/htscodecs/pull/71)
 
 14.0.25 13/Jan/2023
 - BAM, VCF: Significantly reduced memory consumption during compression
@@ -723,7 +732,7 @@ Note: some versions numbers are skipped due to failed conda builds (every build 
 - Improved help text
 
 2.1.0 9/March/2020
-- Rewrote VCF file data reader to avoid redudant copies and passes on the data
+- Rewrote VCF file data reader to avoid redundant copies and passes on the data
 - Moved to size-constained rather than number-of-lines constrained variant blocks - change in --vblocks logic.
 - Make MD5 calculation non-default, requires --md5. genounzip --test possible only if file was compressed with --md5
 - Improved memory consumption for large VCFs with a single or small number of samples

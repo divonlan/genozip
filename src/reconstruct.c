@@ -52,7 +52,7 @@ static int64_t reconstruct_from_delta (VBlockP vb,
                                        ContextP my_ctx,   // use and store last_delta
                                        ContextP base_ctx, // get last_value
                                        STRp(delta_snip),
-                                       bool reconstruct) 
+                                       ReconType reconstruct) 
 {
     ASSISLOADED (base_ctx);
     ASSPIZ0 (delta_snip, "delta_snip is NULL");
@@ -97,7 +97,7 @@ static int64_t reconstruct_from_delta (VBlockP vb,
             "unexpected end of ctx->local data in %s (len=%u next_local=%u ltype=%s lcodec=%s did_i=%u, preprocessing=%u)", \
             ctx->tag_name, ctx->local.len32, ctx->next_local, lt_name (ctx->ltype), codec_name (ctx->lcodec), ctx->did_i, vb->preprocessing)
 
-static uint32_t reconstruct_from_local_text (VBlockP vb, ContextP ctx, bool reconstruct)
+static uint32_t reconstruct_from_local_text (VBlockP vb, ContextP ctx, ReconType reconstruct)
 {
     uint32_t start = ctx->next_local; 
     ARRAY (char, data, ctx->local);
@@ -114,7 +114,7 @@ static uint32_t reconstruct_from_local_text (VBlockP vb, ContextP ctx, bool reco
     return snip_len;
 }
 
-static void reconstruct_from_diff (VBlockP vb, ContextP ctx, STRp(snip), bool reconstruct)
+static void reconstruct_from_diff (VBlockP vb, ContextP ctx, STRp(snip), ReconType reconstruct)
 {
     ContextP base_ctx;
     if (snip_len >= 10) // a base64 dict_id is of length 14, larger than the largest uint32_t = 10  
@@ -162,7 +162,7 @@ static void reconstruct_from_diff (VBlockP vb, ContextP ctx, STRp(snip), bool re
     vb->txt_data.len32 += diff_len;
 }
 
-int64_t reconstruct_from_local_int (VBlockP vb, ContextP ctx, char separator /* 0 if none */, bool reconstruct)
+int64_t reconstruct_from_local_int (VBlockP vb, ContextP ctx, char separator /* 0 if none */, ReconType reconstruct)
 {
     ASSERT_IN_BOUNDS;
 
@@ -228,7 +228,7 @@ int64_t reconstruct_peek_local_int (VBlockP vb, ContextP ctx, int offset /*0=nex
 
 static double reconstruct_from_local_float (VBlockP vb, ContextP ctx, 
                                             STRp(format), // required unless not reconstructing (eg a binary field - CI0_TRANS_NOR in the container)
-                                            char separator /* 0 if none */, bool reconstruct)
+                                            char separator /* 0 if none */, ReconType reconstruct)
 {   
     ASSERT_IN_BOUNDS;
 
@@ -259,11 +259,11 @@ static double reconstruct_from_local_float (VBlockP vb, ContextP ctx,
 // two options: 1. the length maybe given (textually) in snip/snip_len. in that case, it is used and vb->seq_len is updated.
 // if snip_len==0, then the length is taken from vb->seq_len.
 // NOTE: this serves nucleotide sequences AND qual. Bad design. Should have been two separate things.
-uint32_t reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, STRp(snip), bool reconstruct)
+uint32_t reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, STRp(len_str), ReconType reconstruct)
 {
     ASSERTNOTNULL (ctx);
 
-    uint32_t len = snip_len ? atoi (snip) : vb->seq_len;
+    uint32_t len = len_str_len ? atoi (len_str) : vb->seq_len;
 
     if (!ctx->is_loaded) return len;
 
@@ -327,7 +327,7 @@ ContextP recon_multi_dict_id_get_ctx_first_time (VBlockP vb, ContextP ctx, STRp(
     return (*B(ContextP, ctx->con_cache, ctx_i) = ECTX (item_dict_id)); // NULL if no data was segged to this channel    
 }
 
-static ValueType reconstruct_from_lookback (VBlockP vb, ContextP ctx, STRp(snip), bool reconstruct)
+static ValueType reconstruct_from_lookback (VBlockP vb, ContextP ctx, STRp(snip), ReconType reconstruct)
 {   
     ContextP lb_ctx = SCTX(snip);
     int64_t lookback = lb_ctx->last_value.i;
@@ -367,7 +367,7 @@ static ValueType reconstruct_from_lookback (VBlockP vb, ContextP ctx, STRp(snip)
 }
 
 // called from SPECIAL demultiplexor
-HasNewValue reconstruct_demultiplex (VBlockP vb, ContextP ctx, STRp(snip), int channel_i, ValueType *new_value, bool reconstruct)
+HasNewValue reconstruct_demultiplex (VBlockP vb, ContextP ctx, STRp(snip), int channel_i, ValueType *new_value, ReconType reconstruct)
 {
     ContextP channel_ctx = MCTX (channel_i, snip, snip_len);
     ASSPIZ (channel_ctx, "Cannot find channel context of channel_i=%d of multiplexed context %s", channel_i, ctx->tag_name);
@@ -381,9 +381,9 @@ HasNewValue reconstruct_demultiplex (VBlockP vb, ContextP ctx, STRp(snip), int c
     return HAS_NEW_VALUE; 
 }
 
-static HasNewValue reconstruct_numeric (VBlockP vb, ContextP ctx, STRp(snip), ValueType *new_value, bool reconstruct)
+static HasNewValue reconstruct_numeric (VBlockP vb, ContextP ctx, STRp(snip), ValueType *new_value, ReconType reconstruct)
 {
-    new_value->i = reconstruct_from_local_int (vb, ctx, 0, false);
+    new_value->i = reconstruct_from_local_int (vb, ctx, 0, RECON_OFF);
     
     if (reconstruct) {
         char format[32] = "%.*s%0*";
@@ -408,7 +408,7 @@ static HasNewValue reconstruct_numeric (VBlockP vb, ContextP ctx, STRp(snip), Va
 
 void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx, 
                            WordIndex word_index, // WORD_INDEX_NONE if not used.
-                           STRp(snip), bool reconstruct) // if false, calculates last_value but doesn't output to vb->txt_data)
+                           STRp(snip), ReconType reconstruct) // if false, calculates last_value but doesn't output to vb->txt_data)
 {
     ValueType new_value = {};
     HasNewValue has_new_value = NO_NEW_VALUE;
@@ -612,7 +612,7 @@ done:
 // returns reconstructed length or -1 if snip is missing and previous separator should be deleted
 int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i, 
                                  char sep, // if non-zero, outputs after the reconstruction
-                                 bool reconstruct, // if false, calculates last_value but doesn't output to vb->txt_data
+                                 ReconType reconstruct, // if false, calculates last_value but doesn't output to vb->txt_data
                                  rom func)
 {
     ASSPIZ (did_i < vb->num_contexts, "called from: %s: did_i=%u out of range: vb->num_contexts=%u", func, did_i, vb->num_contexts);

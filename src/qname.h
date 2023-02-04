@@ -9,6 +9,7 @@
 #pragma once
 
 #include "genozip.h"
+#include "libdeflate/libdeflate.h"
 
 #define dict_id_is_qname_sf dict_id_is_type_1
 #define dict_id_qname_sf dict_id_type_1
@@ -27,3 +28,16 @@ extern void qname_seg_initialize (VBlockP vb, Did qname_did_i);
 extern const rom QNAME_FLAVOR_UNRECOGNIZED; // constant pointer allowing pointer comparison
 extern rom qf_name (QnameFlavor qf);
 extern rom qf2_name (QnameFlavor qf, QnameFlavor qf2);
+
+// ZIP only: a good hash function for QNAMEs. This is not part of the file format and can be changed any time.
+static inline uint32_t QNAME_HASH (rom qname, unsigned qname_len, int is_last /*0/1 or -1 if not used*/) 
+{
+    uint8_t data[qname_len];
+    for (int i=0; i < qname_len; i++)
+        data[i] = ((((uint8_t *)qname)[i]-33) & 0x3f) | ((((uint8_t *)qname)[qname_len-i-1] & 0x3) << 6);
+
+    uint32_t hash = crc32 (0, data, qname_len);
+    if (is_last >= 0) hash = (hash & 0xfffffffe) | is_last;
+
+    return hash;
+}

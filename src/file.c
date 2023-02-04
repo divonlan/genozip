@@ -411,7 +411,7 @@ fallthrough_from_cram: {}
 
             ASSERTNOTINUSE (evb->scratch);
 
-            int32_t bgzf_uncompressed_size = bgzf_read_block (file, block, &block_size, true);
+            int32_t bgzf_uncompressed_size = bgzf_read_block (file, block, &block_size, SOFT_FAIL);
 
             // case: this is indeed a bgzf - we put the still-compressed data in vb->scratch for later consumption
             // in txtfile_read_block_bgzf
@@ -439,9 +439,6 @@ fallthrough_from_cram: {}
                 ASSINP (!flags_pipe_in_process_died(), // only works for Linux
                         "Pipe-in process %s (pid=%u) died without sending any data",
                         flags_pipe_in_process_name(), flags_pipe_in_pid());
-
-                // bug 748: we observe that at about the 1000th CRAM file, we get empty input on the pipe
-                ASSINP0 (file->source_codec != CODEC_CRAM, "Error: Known issue - too many CRAM files in a single genozip command line. Solution: split the files to multiple separate genozip commands"); 
 
                 ABORTINP ("No data exists in input file %s", file->name ? file->name : FILENAME_STDIN);
             }
@@ -707,6 +704,7 @@ static void file_initialize_bufs (FileP file)
     INIT (coverage);
     INIT (read_count);
     INIT (unmapped_read_count);
+    INIT (vb_start_deep_line);
     INIT (deep_hash);
     INIT (deep_ents);    
 }
@@ -848,9 +846,7 @@ static bool file_open_z (FileP file)
         file->type = file_get_z_ft_by_txt_in_ft (file->data_type, txt_file->type); 
 
         mutex_initialize (file->dicts_mutex);
-
-        if (flag.deep)
-            mutex_initialize (file->deep_populate_ents_mutex);
+        mutex_initialize (file->custom_merge_mutex);
 
         if (!flag.seg_only && !flag.show_bam) {
 
@@ -861,7 +857,7 @@ static bool file_open_z (FileP file)
             if (tar_is_tar())
                 file->file = tar_open_file (file->name);
 
-            else {
+            else if (!flag.zip_no_z_file) {
                 file->file = fopen (file->name, file->mode);
 #ifndef _WIN32
                 // set z_file permissions to be the same as the txt_file permissions (if possible)
@@ -885,7 +881,7 @@ static bool file_open_z (FileP file)
     if (file->data_type != DT_REF && file->data_type != DT_NONE) 
         last_z_dt = file->data_type;
 
-    return file->file != 0 || flag.seg_only || flag.show_bam;
+    return file->file != 0 || flag.zip_no_z_file;
 }
 
 FileP file_open (rom filename, FileMode mode, FileSupertype supertype, DataType data_type /* only needed for WRITE or WRITEREAD */)
@@ -936,10 +932,9 @@ FileP file_open (rom filename, FileMode mode, FileSupertype supertype, DataType 
         if ((mode == WRITE || mode == WRITEREAD) && 
             is_file_exists && 
             !(!file->is_remote && !file->redirected && file_is_fifo (filename)) && // a fifo can be "overwritten" (that's just normal writing to a fifo)
-            !flag.force && !flag.biopsy && flag.biopsy_line.line_i == NO_LINE &&
+            !flag.force && 
             !(supertype==TXT_FILE && flag.test)   && // not testing piz
-            !(supertype==Z_FILE && flag.seg_only) && // not zip with --seg-only
-            !(supertype==Z_FILE && flag.show_bam) && // not zip with --show-bam
+            !(supertype==Z_FILE && flag.zip_no_z_file) && // not zip with --seg-only
             !(supertype==Z_FILE && tar_is_tar()))    // not z_file is within a tar file
 
             file_ask_user_to_confirm_overwrite (filename); // function doesn't return if user responds "no"
@@ -1078,7 +1073,7 @@ void file_close (FileP *file_p,
         mutex_destroy (file->dicts_mutex);
         mutex_destroy (file->recon_plan_mutex[0]);
         mutex_destroy (file->recon_plan_mutex[1]);
-        mutex_destroy (file->deep_populate_ents_mutex);
+        mutex_destroy (file->custom_merge_mutex);
             
         // always destroy all buffers even if unused - for saftey
         for (unsigned i=0; i < MAX_DICTS; i++) // we need to destory all even if unused, because they were initialized in file_initialize_z_file_data
@@ -1117,6 +1112,12 @@ void file_close (FileP *file_p,
         buf_destroy (file->apriori_tags);
         buf_destroy (file->vb_sections_index);
         buf_destroy (file->comp_sections_index);
+        buf_destroy (file->vb_start_deep_line);
+        
+        if (IS_PIZ && flag.deep) { // in this case, deep_index and deep_ents are Buffers containing arrays of Buffers
+            for_buf (Buffer, buf, file->deep_index) buf_destroy (*buf);
+            for_buf (Buffer, buf, file->deep_ents)  buf_destroy (*buf);            
+        }
         buf_destroy (file->deep_hash);
         buf_destroy (file->deep_ents);
 
@@ -1236,7 +1237,7 @@ bool file_seek (FileP file, int64_t offset,
     return !ret;
 }
 
-int64_t file_tell_do (FileP file, bool soft_fail, rom func, unsigned line)
+int64_t file_tell_do (FileP file, FailType soft_fail, rom func, unsigned line)
 {
     if (IS_ZIP && file->supertype == TXT_FILE && file->codec == CODEC_GZ)
         return gzconsumed64 ((gzFile)file->file); 
@@ -1288,12 +1289,13 @@ void file_mkdir (rom dirname)
 
 // reads an entire file into a buffer. if filename is "-", reads from stdin
 void file_get_file (VBlockP vb, rom filename, BufferP buf, rom buf_name,
+                    uint64_t max_size, // 0 to read entire file, or specify for max size
                     bool verify_textual/*plain ascii*/, bool add_string_terminator)
 {
-    #define MAX_STDIN_DATA_SIZE 10000000
     bool is_stdin = !strcmp (filename, "-");
-
-    uint64_t size = is_stdin ? MAX_STDIN_DATA_SIZE : file_get_size (filename);
+    if (is_stdin && !max_size) max_size = 10000000; // max size for stdin
+    
+    uint64_t size = max_size ? max_size : file_get_size (filename);
 
     buf_alloc (vb, buf, 0, size + add_string_terminator, char, 1, buf_name);
 
@@ -1301,8 +1303,7 @@ void file_get_file (VBlockP vb, rom filename, BufferP buf, rom buf_name,
     ASSINP (file, "cannot open \"%s\": %s", filename, strerror (errno));
 
     buf->len = fread (buf->data, 1, size, file);
-    ASSERT (is_stdin || buf->len == size, "Error reading file %s: %s", filename, strerror (errno));
-    ASSERT (!is_stdin || buf->len < MAX_STDIN_DATA_SIZE, "Error reading from stdin: too much data for stdin (beyond maximum of %u bytes). Try placing the data in a file instead.", MAX_STDIN_DATA_SIZE-1);
+    ASSERT (is_stdin || max_size || buf->len == size, "Error reading file %s: %s", filename, strerror (errno));
 
     ASSINP (!verify_textual || str_is_printable (STRb(*buf)), "Expecting \"%s\" to be a textual file", filename);
 

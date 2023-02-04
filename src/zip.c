@@ -887,11 +887,10 @@ void zip_one_file (rom txt_basename,
     if (gencomp_comp_eligible_for_digest(NULL)) // if generated component - keep digest to display in progress after the last component
         z_file->digest_ctx = DIGEST_CONTEXT_NONE;
 
-    if (!flag.bind || flag.zip_comp_i == COMP_MAIN) {
+    if (!flag.bind || flag.zip_comp_i == COMP_MAIN) 
         prev_file_first_vb_i = prev_file_last_vb_i = 0; // reset if we're not binding
-        
-        segconf_initialize(); // before txtheader 
-    }
+
+    segconf_initialize(); // before txtheader 
 
     uint32_t first_vb_i = prev_file_last_vb_i + 1;
 
@@ -945,7 +944,7 @@ void zip_one_file (rom txt_basename,
 
     // if this a non-bound file, or the last component of a bound file - write the genozip header, random access and dictionaries
 finish:   
-    if (!flag.zip_comp_i || Z_DT(FASTQ)) // in paired FASTQ we count found files
+    if (!flag.zip_comp_i || Z_DT(FASTQ) || flag.deep) // in paired FASTQ or --deep we count found files
         z_file->txt_disk_so_far_bind += (int64_t)txt_file->disk_so_far + (txt_file->codec==CODEC_BGZF)*BGZF_EOF_LEN;
 
     // reconstruction plan (for VCF - for DVCF or --sort, for SAM - re-integrate supp/secondary alignments)

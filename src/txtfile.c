@@ -160,7 +160,7 @@ static inline uint32_t txtfile_read_block_bgzf (VBlockP vb, int32_t max_uncomp /
             if (!vb->bgzf_blocks.len)
                 vb->vb_bgzf_i = txt_file->bgzf_isizes.len; // first bgzf block number for this VB
 
-            block_uncomp_len = (uint32_t)bgzf_read_block (txt_file, BAFT8 (vb->scratch), &block_comp_len, false);
+            block_uncomp_len = (uint32_t)bgzf_read_block (txt_file, BAFT8 (vb->scratch), &block_comp_len, HARD_FAIL);
             
             // check for corrupt data - at this point we've already confirm the file is BGZF so not expecting a different block
             if (block_uncomp_len == BGZF_BLOCK_GZIP_NOT_BGZIP || block_uncomp_len == BGZF_BLOCK_IS_NOT_GZIP) {
@@ -226,22 +226,17 @@ static uint32_t txtfile_read_block (VBlockP vb, uint32_t max_bytes,
 
     uint32_t bytes_read=0;
 
-    if (file_is_plain_or_ext_decompressor (txt_file)) 
-        bytes_read = txtfile_read_block_plain (vb, max_bytes);
-    
-    // BGZF: we read *compressed* data into vb->scratch - that will be decompressed later. we read
+    // BGZF note: we read *compressed* data into vb->scratch - that will be decompressed later. we read
     // data with a *decompressed* size up to max_bytes. vb->scratch always contains only full BGZF blocks
-    else if (txt_file->codec == CODEC_BGZF) 
-        bytes_read = txtfile_read_block_bgzf (vb, max_bytes, uncompress); // bytes_read is in uncompressed terms
 
-    else if (txt_file->codec == CODEC_GZ) 
-        bytes_read = txtfile_read_block_gz (vb, max_bytes);
+    switch (txt_file->codec) {
+        case CODEC_NONE : bytes_read = txtfile_read_block_plain (vb, max_bytes); break;
+        case CODEC_BGZF : bytes_read = txtfile_read_block_bgzf  (vb, max_bytes, uncompress); break; // bytes_read is in uncompressed terms
+        case CODEC_GZ   : bytes_read = txtfile_read_block_gz    (vb, max_bytes); break;
+        case CODEC_BZ2  : bytes_read = txtfile_read_block_bz2   (vb, max_bytes); break;
 
-    else if (txt_file->codec == CODEC_BZ2) 
-        bytes_read = txtfile_read_block_bz2 (vb, max_bytes);
-    
-    else 
-        ABORT ("txtfile_read_block: Invalid file type %s (codec=%s)", ft_name (txt_file->type), codec_name (txt_file->codec));
+        default: ABORT ("txtfile_read_block: Invalid file type %s (codec=%s)", ft_name (txt_file->type), codec_name (txt_file->codec));
+    }
 
     COPY_TIMER_VB (evb, read);
     return bytes_read;
@@ -334,7 +329,7 @@ void txtfile_read_header (bool is_first_txt)
     uint32_t bytes_read=1 /* non-zero */;
 
     // read data from the file until either 1. EOF is reached 2. end of txt header is reached
-    #define HEADER_BLOCK (256*1024) // we have no idea how big the header will be... read this much at a time
+    #define HEADER_BLOCK (256 KB) // we have no idea how big the header will be... read this much at a time
     while ((header_len = (DT_FUNC (txt_file, is_header_done)(bytes_read==0))) < 0) { // we might have data here from txtfile_test_data
         
         if (!bytes_read) {
@@ -454,7 +449,7 @@ static void txtfile_set_seggable_size (void)
                 source_comp_ratio = 4;
             else {    
                 double plain_len  = txt_file->txt_data_so_far_single + txt_file->unconsumed_txt.len;
-                double gz_bz2_len = file_tell (txt_file, false); // should always work for bz2 or gz. For BZ2 this includes up to 64K read from disk but still in its internal buffers
+                double gz_bz2_len = file_tell (txt_file, HARD_FAIL); // should always work for bz2 or gz. For BZ2 this includes up to 64K read from disk but still in its internal buffers
                 
                 // case: header is whole BGZF blocks - remove header from calculation to get a better estimate of the seggable compression ratio
                 if (txt_file->header_size_bgzf) { 
@@ -530,7 +525,7 @@ void txtfile_read_vblock (VBlockP vb)
 
     for (bool first=true; ; first=false) {
 
-        uint32_t len = max_memory_per_vb > vb->txt_data.len ? txtfile_read_block (vb, MIN_(max_memory_per_vb - vb->txt_data.len, 1<<30 /* read() can't handle more */), always_uncompress) 
+        uint32_t len = max_memory_per_vb > vb->txt_data.len ? txtfile_read_block (vb, MIN_(max_memory_per_vb - vb->txt_data.len, 1 GB /* read() can't handle more */), always_uncompress) 
                                                             : 0;
         if (!len && first && !vb->txt_data.len) {
             if (vb->vblock_i <= 1) txt_file->header_only = true; // header-only file (the header was already read, and there is no additional data)
@@ -549,7 +544,7 @@ void txtfile_read_vblock (VBlockP vb)
             if (flag.pair == PAIR_READ_2 &&  // we are reading the second file of a fastq file pair (with --pair)
                 !fastq_txtfile_have_enough_lines (vb, &pass_to_next_vb_len, &my_lines, &her_lines)) { // we don't yet have all the data we need
 
-                ASSINP (len, "File %s has less FASTQ reads than its R1 counterpart (vb=%s has %u lines while counterpart has %u lines)", 
+                ASSINP (len, "Error: File %s has less FASTQ reads than its R1 counterpart (vb=%s has %u lines while counterpart has %u lines)", 
                         txt_name, VB_NAME, my_lines, her_lines);
 
                 ASSERT (vb->txt_data.len, "txt_data.len=0 when reading pair_2 vb=%s", VB_NAME);

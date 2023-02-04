@@ -35,6 +35,7 @@ typedef struct {
         scan_index_qnames_preprocessing, sam_piz_sam2fastq_QUAL, sam_piz_sam2bam_QUAL,
         sam_seg_sag_stuff, sam_cigar_binary_to_textual, squank_seg, bam_seq_to_sam, aligner_seg_seq,
         sam_header_add_contig, contigs_create_index, sam_header_zip_inspect_PG_lines, sam_header_zip_inspect_HD_line, ref_initialize_ranges,
+        sam_deep_merge,
         txtheader_zip_read_and_compress, txtheader_compress, txtheader_compress_one_fragment, txtheader_piz_read_and_reconstruct,
         digest, digest_txt_header,
         dict_io_compress_dictionaries, dict_io_assign_codecs, dict_io_compress_one_fragment, 

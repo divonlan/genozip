@@ -44,7 +44,7 @@ static bool codec_hts_compress (VBlockP vb, ContextP ctx,
                                 LocalGetLineCB get_line_cb, // option 2 - compress data one line at a time
                                 STRe(compressed),           // in/out 
                                 unsigned char *(*func)(VBlockP vb, unsigned char *in, unsigned int in_size, unsigned char *out, unsigned int *out_size, int order),                                
-                                int order, bool soft_fail, rom name)
+                                int order, FailType soft_fail, rom name)
 {
     START_TIMER;
 

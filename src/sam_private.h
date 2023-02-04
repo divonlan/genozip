@@ -57,8 +57,6 @@ typedef union SamFlags {
     uint16_t value;
 } SamFlags;
 
-#define FLAG_IS_PRIMARY(f) (!(f).secondary && !(f).supplementary)
-
 typedef union {
     struct {
         uint32_t op : 4;  // BamCigarOpType values
@@ -74,8 +72,6 @@ typedef enum __attribute__ ((__packed__)) {
 #define BAM_CIGAR_OP_NONE ((BamCigarOp){ .op=BC_NONE })
 
 extern const char cigar_op_to_char[16]; // BAM to SAM cigar op
-
-#define MP(x) (segconf.sam_mapper == MP_##x)
 
 #pragma pack()
 
@@ -150,6 +146,8 @@ typedef struct {
             TxtWord solo_z_fields[NUM_SOLO_TAGS];
         };
     };
+
+    DeepHash deep_hash;            // Set for primary (i.e. not supplementary or secondary) alignments
     TxtWord QUAL, OQ, TQ, _2Y, GY, U2, BD_BI[2], SA, QNAME, MC;// coordinates in txt_data 
     TxtWord CIGAR;                 // SAM: coordinates in txt_data (always); BAM: coordinates in vb->line_textual_cigars
     TxtWord SEQ;                   // coordinates in txt_data. Note: len is actual sequence length in bases (not bytes) determined from any or or of: CIGAR, SEQ, QUAL. If more than one contains the length, they must all agree
@@ -168,6 +166,7 @@ typedef struct {
     uint8_t NM_len;                
     uint8_t MAPQ, MQ;              // MAPQ is 8 bit by BAM specification, and MQ is mate MAPQ by SAMtags specification
     bool no_seq             : 1;   // SEQ is missing for this line
+    bool monochar_seq       : 1;   // SEQ is entirely a single character ("base") 
     bool no_qual            : 1;   // QUAL is missing this line
     bool dont_compress_QUAL : 1;   // don't compress QUAL in this line
     bool dont_compress_OQ   : 1;   // don't compress OQ in this line
@@ -184,9 +183,12 @@ typedef struct VBlockSAM {
     VBLOCK_COMMON_FIELDS
 
     Buffer textual_seq;            // ZIP/PIZ: BAM: contains the textual SEQ (PIZ: used only in some cases)
+    uint32_t longest_seq_len;      // ZIP/PIZ: largest seq_len of textual SEQ in this VB. Transmitted through SectionHeaderVbHeader.sam_longest_seq_len
+    uint32_t rans_compress_bound_longest_seq_len; // PIZ
 
     // current line
     bool seq_missing;              // ZIP/PIZ: current line: SAM "*" BAM: l_seq=0
+    bool seq_is_monochar;          // PIZ only
     bool cigar_missing;            // ZIP/PIZ: current line: SAM "*" BAM: n cigar op=0
     bool qual_missing;             // ZIP/PIZ: current line: SAM "*" BAM: l_seq=0 or QUAL all 0xff (of if segconf.pysam_qual: 0xff followed by 0s
     bool RNEXT_is_equal;           // RNEXT represents the same contig as RNAME (though the word index may differ in SAM, or RNEXT might be "=")
@@ -244,7 +246,10 @@ typedef struct VBlockSAM {
                                    // PIZ: bsseeker2 XG:Z field with the underscores removed, as reconstructed when peeking during XM:Z special recon
     XgIncSType XG_inc_S;           // Seg: whether to include soft_clip[0]
 
+    union {
     Buffer bd_bi_line;             // ZIP: interlaced BD and BI data for one line
+    Buffer deep_index;             // PIZ: entry per prim_line - uint32_t index into deep_ents
+    };
 
     #define first_mux mux_XS
     Multiplexer4 mux_XS;
@@ -267,9 +272,14 @@ typedef struct VBlockSAM {
     uint32_t hard_clip[2];         // [0]=hard clip at start [1]=hard clip at end of this line
     uint32_t deletions;
     uint32_t insertions;
-                 
+
+    union {      
+    // Deep (continued)
+    Buffer deep_ents;              // PIZ: QNAME(plain), SEQ(packed) and QUAL(compressed) for each reconstructed list
+
     // Bisulfite conversion stuff
     Buffer unconverted_bitmap;     // ZIP: mismatches vs unconverted reference - used for MD:Z prediction
+    };
     Buffer meth_call;              // ZIP/PIZ: prediction of methylation call in Bismark format: z/Z: unmethylated/methylated C in CpG ; x/X in CHG h/H in CHH ; u/U unknown context ; . not C. prm8[0] is bisulfite_strand ('C' or 'G') 
     
     // sag stuff
@@ -312,9 +322,6 @@ typedef struct VBlockSAM {
     // QUAL stuff
     bool qual_codec_no_longr;      // true if we can compress qual with CODEC_LONGR
     bool has_qual;                 // Seg: This VB has at least one line with non-missing qual
-
-    // Deep stuff
-    Buffer deep_data;              // Seg: ZipDeep entry for each non-sec/supp line
 } VBlockSAM;
 
 #define VB_SAM ((VBlockSAMP)vb)
@@ -396,8 +403,6 @@ typedef struct __attribute__ ((__packed__)) CCAln {
     WordIndex rname;  // RNAME of prim alignment (alignment with NH>2 but no CC,CP) ; sometimes WORD_INDEX_NONE if rname is not in sam header / ref file
     SamPosType pos;   // POS of prim alignment
 } CCAln;
-
-
 
 // PIZ: history of cigar analysis - one item per line
 typedef struct __attribute__ ((__packed__)) CigarAnalItem {
@@ -498,8 +503,8 @@ extern void bam_get_one_aux (VBlockSAMP vb, int16_t idx, rom *tag, char *type, c
 extern void sam_seg_idx_aux (VBlockSAMP vb);
 extern bool sam_piz_line_has_aux_field (VBlockSAMP vb, DictId dict_id);
 
-extern uint32_t sam_seg_get_aux_int (VBlockSAMP vb, int16_t idx, int32_t *number, bool is_bam, int32_t min_value, int32_t max_value, bool soft_fail);
-#define sam_seg_get_aux_int_(vb,tag) ({ int32_t value; sam_seg_get_aux_int (vb, vb->idx_##tag, &value, IS_BAM_ZIP, -0x80000000, 0x7fffffff, false); value; })
+extern uint32_t sam_seg_get_aux_int (VBlockSAMP vb, int16_t idx, int32_t *number, bool is_bam, int32_t min_value, int32_t max_value, FailType soft_fail);
+#define sam_seg_get_aux_int_(vb,tag) ({ int32_t value; sam_seg_get_aux_int (vb, vb->idx_##tag, &value, IS_BAM_ZIP, -0x80000000, 0x7fffffff, HARD_FAIL); value; })
 
 extern void sam_seg_get_aux_Z (VBlockSAMP vb, int16_t idx, pSTRp (snip), bool is_bam);
 extern char sam_seg_get_aux_A (VBlockSAMP vb, int16_t idx, bool is_bam);
@@ -552,7 +557,7 @@ static inline void sam_cigar_restore_S (StoH stoh) { if (stoh.is_binary) { if (s
 extern bool sam_cigar_has_H (STRp(cigar)); // textual
 
 extern uint32_t sam_cigar_get_MC_ref_consumed (STRp(mc));
-extern void sam_reconstruct_main_cigar_from_sag (VBlockSAMP vb, bool do_htos, bool reconstruct);
+extern void sam_reconstruct_main_cigar_from_sag (VBlockSAMP vb, bool do_htos, ReconType reconstruct);
 extern void sam_reconstruct_SA_cigar_from_SA_Group (VBlockSAMP vb, SAAln *a);
 
 extern CigarSignature cigar_sign (STRp(cigar));
@@ -567,7 +572,7 @@ extern rom sam_piz_display_aln_cigar (const SAAln *a);
 extern void sam_seg_SEQ_initialize (VBlockSAMP vb);
 extern void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(seq), unsigned add_bytes);
 extern void sam_zip_prim_ingest_vb_pack_seq (VBlockSAMP vb, Sag *vb_grps, uint32_t vb_grps_len, BufferP underlying_buf, BufferP packed_seq_buf, bool is_bam_format);
-extern bool sam_sa_native_to_acgt (VBlockSAMP vb, Bits *packed, uint64_t next_bit, STRp(seq), bool bam_format, bool revcomp, bool soft_fail);
+extern bool sam_seq_pack (VBlockSAMP vb, Bits *packed, uint64_t next_bit, STRp(seq), bool bam_format, bool revcomp, FailType soft_fail);
 extern rom sam_seg_analyze_set_one_ref_base (VBlockSAMP vb, bool is_depn, SamPosType pos, char base, uint32_t ref_consumed, RangeP *range_p, RefLock *lock);
 
 // BAM sequence format
@@ -583,9 +588,20 @@ extern void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, rom qual, uint32_t 
 extern rom bam_qual_display (bytes qual, uint32_t l_seq); 
 extern void sam_seg_other_qual (VBlockSAMP vb, TxtWord *dl_word, Did did_i, STRp(qual), bool len_is_seq_len, unsigned add_bytes);
 
+// --deep stuff
+// Stuff that happens during SAM seg
+extern void sam_deep_zip_finalize (void);
+extern void sam_deep_set_QNAME_hash (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qname));
+extern void sam_deep_set_SEQ_hash (VBlockSAMP vb,ZipDataLineSAM *dl, STRp(textual_seq));
+extern void sam_deep_set_QUAL_hash (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual));
+extern void sam_piz_deep_init_vb (VBlockSAMP vb, const SectionHeaderVbHeader *header);
+extern void sam_piz_deep_add_seq (VBlockSAMP vb, STRp(seq));
+extern void sam_piz_deep_add_qual (VBlockSAMP vb, STRp(qual));
+extern void sam_piz_deep_grab_deep_ents (VBlockSAMP vb);
+
 // fields by mapper
-static inline bool is_bwa (void) { return MP(BWA) || MP(BSBOLT) || MP (CPU); }             // aligners based on bwa
-static inline bool is_minimap2 (void) { return MP(MINIMAP2) || MP(WINNOWMAP); }            // aligners based on minimap2
+static inline bool is_bwa (void) { return MP(BWA) || MP(BSBOLT) || MP (CPU); }                // aligners based on bwa
+static inline bool is_minimap2 (void) { return MP(MINIMAP2) || MP(WINNOWMAP) || MP(PBMM2); }  // aligners based on minimap2
 static inline bool is_bowtie2 (void)  { return MP(BOWTIE2) || MP(HISAT2) || MP(TOPHAT) || MP(BISMARK) || MP(BSSEEKER2) ; }  // aligners based on bowtie2
 
 static inline bool sam_has_SA_Z (void) { return is_bwa() || is_minimap2() || MP(NGMLR); /*|| MP(LONGRANGER); non-standard SA:Z format (POS is off by 1, main-field NM is missing) */ }
@@ -694,7 +710,8 @@ extern void sam_seg_mc_i (VBlockSAMP vb, int64_t mc, unsigned add_bytes);
 static inline bool sam_seg_has_sag_by_SA (VBlockSAMP vb)    { return  IS_SAG_SA && ((sam_is_depn_vb && vb->sa_aln) || sam_is_prim_vb); }
 static inline bool sam_seg_has_sag_by_nonSA (VBlockSAMP vb) { return !IS_SAG_SA && ((sam_is_depn_vb && vb->sag)    || sam_is_prim_vb); }
 
-#define QNAME_HASH(qname,qname_len,is_last) ((crc32 (0, (qname), (qname_len)) & 0xfffffffe) | is_last) // note: adler32 is not good for qnames - since qnames in a SAM tend to be similar, many can end of up with the same hash and adler32 will use only a tiny bit of its 32b space
+//#define QNAME_HASH(qname,qname_len,is_last) ((crc32 (0, (qname), (qname_len)) & 0xfffffffe) | is_last) // note: adler32 is not good for qnames - since qnames in a SAM tend to be similar, many can end of up with the same hash and adler32 will use only a tiny bit of its 32b space
+
 extern void sam_sag_zip_init_vb (VBlockP vb);
 extern void sam_seg_gc_initialize (VBlockSAMP vb);
 extern bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(alignment), bool is_bam);

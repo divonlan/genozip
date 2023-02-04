@@ -922,7 +922,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_LIFT_REF)
     ContextP refalt_ctx = (VB_VCF->vb_coords == DC_LUFT ? CTX (VCF_REFALT) : CTX (VCF_oREFALT));
 
     snip = BAFTtxt;
-    reconstruct_from_ctx (vb, refalt_ctx->did_i, 0, true);
+    reconstruct_from_ctx (vb, refalt_ctx->did_i, 0, RECON_ON);
     snip_len = (unsigned)(BAFTtxt - snip);
 
     rom after_ref = memchr (snip, '\t', snip_len);
@@ -950,7 +950,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_main_REFALT)
     if (snip[0] == '-' || snip[1] == '-') { 
         VcfPosType pos = CTX (VCF_POS)->last_value.i;
 
-        ConstRangeP range = ref_piz_get_range (vb, gref, false);
+        ConstRangeP range = ref_piz_get_range (vb, gref, HARD_FAIL);
         
         uint32_t idx = pos - range->first_pos;
 

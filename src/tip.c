@@ -82,6 +82,9 @@ void tip_print (void)
     if (!flag.best && !flag.make_reference) 
         valid_tips[n++] = "Tip: to achieve the best compression, use --best";
 
+    if (license_is_eval() && !flag.show_stats)
+        valid_tips[n++] = "Tip: to see detailed compression statistics, use --stats";
+
     iprintf ("\n%s\n", valid_tips[time(0) % n]); // "randomly" select one of the valid tips
 
     flag.no_tip = true;

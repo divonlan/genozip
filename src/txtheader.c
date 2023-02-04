@@ -153,7 +153,7 @@ int64_t txtheader_zip_read_and_compress (int64_t *txt_header_offset, CompIType c
 
     // note: we always write the txt_header for comp_i=0 even if we don't actually have a header, because the
     // section header contains the data about the file. Special case: we don't write headers of SAM DEPN
-    if (z_file && !flag.seg_only && !flag.make_reference && !(z_sam_gencomp && (comp_i == SAM_COMP_PRIM || comp_i == SAM_COMP_DEPN))) {
+    if (z_file && !flag.zip_no_z_file && !flag.make_reference && !(z_sam_gencomp && (comp_i == SAM_COMP_PRIM || comp_i == SAM_COMP_DEPN))) {
         *txt_header_offset = z_file->disk_so_far; // offset of first (vb=1) TXT_HEADER fragment
         txtheader_compress (&evb->txt_data, txt_header_size, header_digest, is_first_txt, comp_i); 
     }
@@ -281,6 +281,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     // DVCF: always zero. 
     // FASTQ: flag.data_modified when interleaving, or just one file if --R1/2. 
     // V8: zero if not compressed with --md5
+    // since V14: zero if compressed with adler32 (with adler32, digest is only at the VB level)
     if (!digest_is_zero(header.digest) && !flag.data_modified) 
         z_file->digest = header.digest; 
 

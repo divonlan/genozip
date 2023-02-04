@@ -22,6 +22,7 @@
 #include "compressor.h"
 #include "bits.h"
 #include "flags.h"
+#include "qname.h"
 #include "recon_plan_io.h"
 #include "libdeflate/libdeflate.h"
 
@@ -334,7 +335,7 @@ bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(alignment), boo
             }
             
             else if (has_SA && has_NM &&
-                     sam_seg_get_aux_int (vb, vb->idx_NM_i, &NM, is_bam, MIN_NM_i, MAX_NM_i, true) &&
+                     sam_seg_get_aux_int (vb, vb->idx_NM_i, &NM, is_bam, MIN_NM_i, MAX_NM_i, SOFT_FAIL) &&
                      (n_alns = sam_seg_prim_add_sag_SA (vb, dl, STRauxZ (SA_Z, is_bam), NM, is_bam)))  // testing to see if we can successfully add a sag based on SA
                 comp_i = SAM_COMP_PRIM;
             break;
@@ -345,7 +346,7 @@ bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(alignment), boo
             if (sam_seg_peek_int_field (vb, OPTION_IH_i, vb->idx_IH_i, 1, 1, false, NULL))
                 goto done;
 
-            if (has_NH && sam_seg_get_aux_int (vb, vb->idx_NH_i, &n_alns, is_bam, 2/*at least*/, MAX_HI_NH, true)) {
+            if (has_NH && sam_seg_get_aux_int (vb, vb->idx_NH_i, &n_alns, is_bam, 2/*at least*/, MAX_HI_NH, SOFT_FAIL)) {
                 
                 if (sam_line_is_depn(dl)) 
                     comp_i = SAM_COMP_DEPN;
@@ -356,7 +357,7 @@ bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(alignment), boo
             break;
             
         case SAG_BY_CC:
-            if (has_NH && sam_seg_get_aux_int (vb, vb->idx_NH_i, &n_alns, is_bam, 2, MAX_HI_NH, true)) {  // not out of range, i.e. at least 2
+            if (has_NH && sam_seg_get_aux_int (vb, vb->idx_NH_i, &n_alns, is_bam, 2, MAX_HI_NH, SOFT_FAIL)) {  // not out of range, i.e. at least 2
 
                 if (has_CC && has_CP)
                     comp_i = SAM_COMP_DEPN;
@@ -612,7 +613,7 @@ static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAM *d
     SAAln my_alns[n_my_alns];
 
     // get alignments of this DEPN line ([0]=main field [1...]=SA alignments)
-    if (has_NM) sam_seg_get_aux_int (vb, vb->idx_NM_i, &my_nm, is_bam, MIN_NM_i, MAX_NM_i, false);
+    if (has_NM) sam_seg_get_aux_int (vb, vb->idx_NM_i, &my_nm, is_bam, MIN_NM_i, MAX_NM_i, HARD_FAIL);
 
     if (!sam_sa_seg_depn_get_my_SA_alns (vb, vb->chrom_node_index, dl->POS, dl->MAPQ, STRa(textual_cigar), my_nm, revcomp, 
                                         STRauxZ(SA_Z, is_bam), n_my_alns, my_alns))
@@ -670,8 +671,8 @@ static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAM *dl
     STR0(cc); cc="";
     int32_t hi=-1; // stays -1 if the line has no HI:i
     if (flag.show_depn) {
-        if (has_HI) sam_seg_get_aux_int (vb, vb->idx_HI_i, &hi, is_bam, 1, 0x7fffffff, true);
-        if (has_CP) sam_seg_get_aux_int (vb, vb->idx_CP_i, &cp, is_bam, 0, MAX_POS_SAM, true);
+        if (has_HI) sam_seg_get_aux_int (vb, vb->idx_HI_i, &hi, is_bam, 1, 0x7fffffff, SOFT_FAIL);
+        if (has_CP) sam_seg_get_aux_int (vb, vb->idx_CP_i, &cp, is_bam, 0, MAX_POS_SAM, SOFT_FAIL);
         if (has_CC) sam_seg_get_aux_Z (vb, vb->idx_CC_Z, pSTRa(cc), is_bam);
     }
 
@@ -688,7 +689,7 @@ static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAM *dl
     }
     
     int32_t nh;
-    if ((IS_SAG_NH || IS_SAG_SOLO || IS_SAG_CC) && !sam_seg_get_aux_int (vb, vb->idx_NH_i, &nh, is_bam, 1, 0x7fffffff, true)) {
+    if ((IS_SAG_NH || IS_SAG_SOLO || IS_SAG_CC) && !sam_seg_get_aux_int (vb, vb->idx_NH_i, &nh, is_bam, 1, 0x7fffffff, SOFT_FAIL)) {
         if (flag.show_depn) iprintf ("vb=%u FAIL:NO_VALID_NH QNAME=\"%.*s\"(%08x) HI=%d CC=\"%.*s\" CP=%d\n", vb->vblock_i, STRfw(dl->QNAME), qname_hash, hi, STRf(cc), cp);
         return; // missing or invalid NH:i in depn line
     }
@@ -847,6 +848,8 @@ void sam_zip_gc_after_compute_main (VBlockSAMP vb)
 // Main thread, PRIM VB. Set sam_prim fields of VB_HEADER. Callback from zfile_compress_vb_header
 void sam_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeader *vb_header)
 {
+    vb_header->sam_longest_seq_len = BGEN32 (VB_SAM->longest_seq_len); // since v15
+
     if (sam_is_prim_vb) {
         uint32_t total_seq_len=0, total_qname_len=0;
         for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {

@@ -77,7 +77,7 @@ static BgzfBlockStr display_bb (BgzfBlockZip *bb)
 // ZIP: reads and validates a BGZF block, and returns the uncompressed size or (only if soft_fail) an error
 static int32_t bgzf_read_block_raw (FILE *file, // txt_file is not yet assigned when called from file_open_txt_read
                                     uint8_t *block /* must be BGZF_MAX_BLOCK_SIZE in size */, uint32_t *block_size /* out */,
-                                    rom basename, bool is_remote, bool soft_fail) 
+                                    rom basename, bool is_remote, FailType soft_fail) 
 {
     BgzfHeader *h = (BgzfHeader *)block;
 
@@ -121,7 +121,7 @@ static int32_t bgzf_read_block_raw (FILE *file, // txt_file is not yet assigned 
 // ZIP: reads and validates a BGZF block, and returns the uncompressed size or (only if soft_fail) an error
 int32_t bgzf_read_block (FileP file, // txt_file is not yet assigned when called from file_open_txt_read
                          uint8_t *block /* must be BGZF_MAX_BLOCK_SIZE in size */, uint32_t *block_size /* out */,
-                         bool soft_fail)
+                         FailType soft_fail)
 {
     int ret = bgzf_read_block_raw ((FILE *)file->file, block, block_size, file->basename, file->is_remote, soft_fail);
     if (ret == BGZF_BLOCK_IS_NOT_GZIP || ret == BGZF_BLOCK_GZIP_NOT_BGZIP) return ret; // happens only if soft_fail
@@ -279,7 +279,7 @@ void bgzf_reread_uncompress_vb_as_prescribed (VBlockP vb, FILE *file)
                         "%s: fseeko64 on %s failed while rereading BGZF depn lines: %s", VB_NAME, txt_file->name, strerror(errno));
 
                 STRl (bgzf_block, BGZF_MAX_BLOCK_SIZE);
-                bgzf_read_block_raw (file, (uint8_t*)qSTRa(bgzf_block), txt_file->basename, false, false);
+                bgzf_read_block_raw (file, (uint8_t*)qSTRa(bgzf_block), txt_file->basename, false, HARD_FAIL);
             
                 bgzf_uncompress_one_prescribed_block (vb, STRa(bgzf_block), uncomp_block, isize, line->offset.bb_i);
             

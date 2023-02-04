@@ -122,11 +122,11 @@ StrText str_size (uint64_t size)
 {
     StrText s;
 
-    if      (size >= (1LL << 50)) sprintf (s.s, "%3.1lf PB", ((double)size) / (double)(1LL << 50));
-    else if (size >= (1LL << 40)) sprintf (s.s, "%3.1lf TB", ((double)size) / (double)(1LL << 40));
-    else if (size >= (1LL << 30)) sprintf (s.s, "%3.1lf GB", ((double)size) / (double)(1LL << 30));
-    else if (size >= (1LL << 20)) sprintf (s.s, "%3.1lf MB", ((double)size) / (double)(1LL << 20));
-    else if (size >= (1LL << 10)) sprintf (s.s, "%3.1lf KB", ((double)size) / (double)(1LL << 10));
+    if      (size >= 1 PB) sprintf (s.s, "%3.1lf PB", ((double)size) / (double)(1 PB));
+    else if (size >= 1 TB) sprintf (s.s, "%3.1lf TB", ((double)size) / (double)(1 TB));
+    else if (size >= 1 GB) sprintf (s.s, "%3.1lf GB", ((double)size) / (double)(1 GB));
+    else if (size >= 1 MB) sprintf (s.s, "%3.1lf MB", ((double)size) / (double)(1 MB));
+    else if (size >= 1 KB) sprintf (s.s, "%3.1lf KB", ((double)size) / (double)(1 KB));
     else if (size >  0          ) sprintf (s.s, "%3d B"    ,     (int)size)                       ;
     else                          sprintf (s.s, "-"                       )                       ;
 
@@ -406,13 +406,13 @@ StrText str_uint_commas_limit (uint64_t n, uint64_t limit)
 
     StrText s;
 
-    if      (n >= (1LL << 50)) sprintf (s.s, "%3.1lfP", ((double)n) / 1000000000000000.0);
-    else if (n >= (1LL << 40)) sprintf (s.s, "%3.1lfT", ((double)n) / 1000000000000.0);
-    else if (n >= (1LL << 30)) sprintf (s.s, "%3.1lfG", ((double)n) / 1000000000.0);
-    else if (n >= (1LL << 20)) sprintf (s.s, "%3.1lfM", ((double)n) / 1000000.0);
-    else if (n >= (1LL << 10)) sprintf (s.s, "%3.1lfK", ((double)n) / 1000.0);
-    else if (n >  0          ) sprintf (s.s, "%3d",     (int)n);
-    else                       sprintf (s.s, "-");
+    if      (n >= 1000000000000000ULL) sprintf (s.s, "%3.1lfP", ((double)n) / 1000000000000000.0);
+    else if (n >=    1000000000000ULL) sprintf (s.s, "%3.1lfT", ((double)n) / 1000000000000.0);
+    else if (n >=       1000000000ULL) sprintf (s.s, "%3.1lfG", ((double)n) / 1000000000.0);
+    else if (n >=          1000000ULL) sprintf (s.s, "%3.1lfM", ((double)n) / 1000000.0);
+    else if (n >=                1000) sprintf (s.s, "%3.1lfK", ((double)n) / 1000.0);
+    else if (n >                    0) sprintf (s.s, "%3d",     (int)n);
+    else                               sprintf (s.s, "-");
 
     return s;
 }
@@ -1076,7 +1076,11 @@ StrTime str_time (void)
     len += GetTimeFormatA (LOCALE_USER_DEFAULT, TIME_FORCE24HOURFORMAT, NULL, NULL, &s.s[len], sizeof(s.s)-len-1) - 1;
 
     s.s[len++] = ' ';
-    sprintf (&s.s[len], tzname[daylight != 0], sizeof (s.s) - len - 1);
+
+    TIME_ZONE_INFORMATION tz_info = {};
+    bool is_daylight = (GetTimeZoneInformation (&tz_info) == TIME_ZONE_ID_DAYLIGHT);
+
+    sprintf (&s.s[len], "%ls", is_daylight ? tz_info.DaylightName : tz_info.StandardName);
 
 #else
     time_t now = time (NULL);
@@ -1084,7 +1088,7 @@ StrTime str_time (void)
     localtime_r (&now, &lnow);
 
     static rom month[12] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
-    sprintf (s.s, "%02u-%s-%04u %02u:%02u:%02u UTC%s", 
+    sprintf (s.s, "%02u-%s-%04u %02u:%02u:%02u %s", 
              lnow.tm_mday, month[lnow.tm_mon], lnow.tm_year+1900, lnow.tm_hour, lnow.tm_min, lnow.tm_sec, tzname[daylight != 0]);
 #endif
 

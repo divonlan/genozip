@@ -214,7 +214,7 @@ typedef struct VBlockPool {
 } VBlockPool;
 
 extern void vb_create_pool (VBlockPoolType type);
-extern VBlockPool *vb_get_pool (VBlockPoolType type, bool soft_fail);
+extern VBlockPool *vb_get_pool (VBlockPoolType type, FailType soft_fail);
 extern VBlockP vb_get_from_pool (VBlockPoolP pool, int32_t vb_id);
 extern VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompIType comp_i);
 extern void vb_destroy_pool_vbs (VBlockPoolType type);

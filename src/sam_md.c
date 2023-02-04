@@ -294,7 +294,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_MD)
                         // usually vb->range set in sam_reconstruct_SEQ_vs_ref, except if no base in SEQ matched the reference. In that case, we set it here
                         if (!vb->range) 
                             // note: if this throws an error, it is possibly related to private/defects/SAM-MD-external-ref-contig-with-no-ref.txt
-                            vb->range = (RangeP)ref_piz_get_range (VB, gref, false);
+                            vb->range = (RangeP)ref_piz_get_range (VB, gref, HARD_FAIL);
 
                         if (reconstruct) RECONSTRUCT_INT (count_match); // flush matches before reconstructing mismatch
                         count_match=0;
@@ -316,7 +316,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_MD)
                 if (reconstruct) RECONSTRUCT1 ('^');
 
                 if (!vb->range) 
-                    vb->range = (RangeP)ref_piz_get_range (VB, gref, false);
+                    vb->range = (RangeP)ref_piz_get_range (VB, gref, HARD_FAIL);
 
                 while (n) { 
                     if (reconstruct) RECONSTRUCT1 (ref_base_by_pos (vb->range, pos)); 

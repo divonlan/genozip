@@ -64,7 +64,8 @@ typedef struct File {
     Serializer digest_serializer;      // ZIP/PIZ: used for serializing VBs so they are MD5ed in order (not used for Adler32)
     DigestContext digest_ctx;          // ZIP/PIZ: z_file: digest context of txt file being compressed / reconstructed (used for MD5 and, in v9-13, for Adler32)
     Digest digest;                     // ZIP: z_file: digest of txt data read from input file  PIZ: z_file: as read from TxtHeader section (used for MD5 and, in v9-13, for Adler32)
-
+    bool vb_digest_failed;             // PIZ: txt_file: At least one VB has an unexpected digest when decompressing
+    
     // Used for READING & WRITING txt files - but stored in the z_file structure for zip to support bindenation (and in the txt_file structure for piz)
     uint32_t max_lines_per_vb;         // ZIP & PIZ - in ZIP, discovered while segmenting, in PIZ - given by SectionHeaderTxtHeader
     bool piz_header_init_has_run;      // PIZ: true if we called piz_header_init to initialize (only once per outputted txt_file, even if concatenated)
@@ -141,9 +142,14 @@ typedef struct File {
     uint64_t saggy_near_count, mate_line_count, prim_far_count; // Z_FILE ZIP: SAM: for stats
 
     // Z_FILE: Deep
-    Buffer deep_hash;                  // Z_FILE: ZIP: hash table - indices into deep ents 
+    Buffer vb_start_deep_line;         // Z_FILE: ZIP/PIZ: for each SAM VB, the first prim_line_i of that VB (0-based, uint64_t)
     Buffer deep_ents;                  // Z_FILE: ZIP: entries of type ZipZDeep
-    Mutex deep_populate_ents_mutex;
+                                       // Z_FILE: PIZ: an array of Buffers, one for each SAM VB, containing QNAME,SEQ,QUAL of all reconstructed lines
+    union {
+    Buffer deep_hash;                  // Z_FILE: ZIP: hash table - indices into deep ents 
+    Buffer deep_index;                 // Z_FILE: PIZ: an array of Buffers, one for each SAM VB, each containing an array of uint32_t - one for each primary line - index into deep_ents[vb_i] of PizZDeep of that line
+    };
+    Mutex custom_merge_mutex;          // Z_FILE: ZIP: used to merge deep, but in the future could be used for other custom merges
 
     // Z_FILE: DVCF stuff
     Buffer rejects_report;             // Z_FILE ZIP --chain: human readable report about rejects
@@ -168,6 +174,7 @@ typedef struct File {
     Buffer recon_plan_index;           // TXT_FILE ZIP / Z_FILE PIZ: An array of BufWord, one for each VB: start and length of VB in recon_plan
     Buffer txt_header_info;            // Z_FILE   PIZ: used by writer
     uint64_t lines_written_so_far;     // TXT_FILE PIZ: number of textual lines (excluding the header) that passed all filters except downsampling, and is to be written to txt_file, or downsampled-out
+    uint32_t num_vbs_verified;         // Z_FILE   PIZ: number of VBs verified so far
     
     // Z_FILE 
     Buffer bound_txt_names;            // ZIP: Stats data: a concatenation of all bound txt_names that contributed to this genozip file
@@ -190,7 +197,7 @@ extern FileP file_open (rom filename, FileMode mode, FileSupertype supertype, Da
 extern void file_close (FileP *file_p, bool index_txt, bool cleanup_memory /* optional */);
 extern void file_write (FileP file, const void *data, unsigned len);
 extern bool file_seek (FileP file, int64_t offset, int whence, int soft_fail); // SEEK_SET, SEEK_CUR or SEEK_END
-extern int64_t file_tell_do (FileP file, bool soft_fail, FUNCLINE);
+extern int64_t file_tell_do (FileP file, FailType soft_fail, FUNCLINE);
 #define file_tell(file,soft_fail) file_tell_do ((file), (soft_fail), __FUNCLINE) 
 extern void file_set_input_type (rom type_str);
 extern void file_set_input_size (rom size_str);
@@ -210,7 +217,7 @@ extern void file_remove_codec_ext (char *filename, FileType ft);
 extern rom ft_name (FileType ft);
 
 // wrapper operations for operating system files
-extern void file_get_file (VBlockP vb, rom filename, BufferP buf, rom buf_name, bool verify_textual, bool add_string_terminator);
+extern void file_get_file (VBlockP vb, rom filename, BufferP buf, rom buf_name, uint64_t max_size, bool verify_textual, bool add_string_terminator);
 extern bool file_put_data (rom filename, const void *data, uint64_t len, mode_t mode);
 extern void file_put_data_abort (void);
 
@@ -245,7 +252,7 @@ extern char *file_make_unix_filename (char *filename);
 // ---------------------------
 
 static inline bool file_is_read_via_ext_decompressor(ConstFileP file) { 
-    return file->supertype == TXT_FILE && (file->codec == CODEC_XZ || file->codec == CODEC_ZIP || file->codec == CODEC_BCF || file->codec == CODEC_CRAM);
+    return file->supertype == TXT_FILE && (file->source_codec == CODEC_XZ || file->source_codec == CODEC_ZIP || file->source_codec == CODEC_BCF || file->source_codec == CODEC_CRAM);
 }
 
 static inline bool file_is_read_via_int_decompressor(ConstFileP file) {
@@ -256,15 +263,11 @@ static inline bool file_is_written_via_ext_compressor(ConstFileP file) {
     return file->supertype == TXT_FILE && (file->codec == CODEC_BCF || file->codec == CODEC_GZ);
 }
 
-static inline bool file_is_plain_or_ext_decompressor(ConstFileP file) {
-    return file->supertype == TXT_FILE && (file->codec == CODEC_NONE || file_is_read_via_ext_decompressor(file));
-}
-
 // read the contents and a newline-separated text file and split into lines - creating char **lines, unsigned *line_lens and unsigned n_lines
 #define file_split_lines(fn, name, verify_textual) \
     static Buffer data = EMPTY_BUFFER; \
     ASSINP0 (!data.len, "only one instance of a " name " option can be used"); \
-    file_get_file (evb, fn, &data, "file_split_lines__" name, verify_textual, false); \
+    file_get_file (evb, fn, &data, "file_split_lines__" name, 0, verify_textual, false); \
     \
     str_split_enforce (data.data, data.len, 0, '\n', line, true, (name)); \
     ASSINP (!line_lens[n_lines-1], "Expecting %s to end with a newline", (fn)); \

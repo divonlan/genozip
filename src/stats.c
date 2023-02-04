@@ -141,10 +141,11 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
     bufprintf (evb, &url_buf, "&entry.984213484=%s%%2C%"PRIu64, url_esc_non_valid_charsS (all_txt_len/*--make-ref is 0*/ ? str_size (all_txt_len).s : "0 B").s, z_file->txt_disk_so_far_bind); // Txt size,z_size. eg "50 GB,2342442046"
     bufprintf (evb, &url_buf, "&entry.960659059=%s%%2C%.1f", codec_name (txt_file->source_codec), src_comp_ratio);  // Source codec/gain eg "GZ,4.3"
     bufprintf (evb, &url_buf, "&entry.621670070=%.1f", all_comp_ratio);                                      // Genozip gain over source txt eg "5.4"
-    bufprintf (evb, &url_buf, "&entry.1635780209=OS=%s%%3Bdist=%s%%3Bcores=%u%%3Bruntime=%s", 
+    bufprintf (evb, &url_buf, "&entry.1635780209=OS=%s%%3Bdist=%s%%3Bcores=%u%%3Bphysical_GB=%.1f%%3Bruntime=%s", 
                url_esc_non_valid_charsS(arch_get_os()).s, 
                url_esc_non_valid_charsS(arch_get_distribution()).s, 
-               arch_get_num_cores(), 
+               arch_get_num_cores(),
+               arch_get_physical_mem_size(), 
                url_esc_non_valid_charsS(arch_get_run_time()).s); 
     bufprintf (evb, &url_buf, "&entry.2140634550=%s", features.len ? url_esc_non_valid_charsS (B1STc(features)).s : "NONE");            // Features. Eg "Sorted"
     
@@ -346,7 +347,7 @@ static void stats_output_file_metadata (void)
                 FEATURE0 (!segconf.is_sorted && !segconf.is_collated, "Sorting: Not sorted or collated", "Not_sorted_or_collated");
             }
                         
-            FEATURE (true, "Aligner: %s", "Mapper=%s", sam_mapper_name (segconf.sam_mapper)); 
+            FEATURE (true, "Aligner: %s", "Mapper=%s", segconf_sam_mapper_name()); 
             FEATURE0 (segconf.sam_bisulfite, "Feature: Bisulfite", "Bisulfite");
             FEATURE0 (segconf.is_paired, "Feature: Paired-End", "Paired-End");
             REPORT_KRAKEN;
@@ -425,6 +426,8 @@ static void stats_output_file_metadata (void)
         case DT_FASTQ:
             REPORT_VBs;
             REPORT_QNAME;
+            if (flag.optimize_DESC) FEATURE (z_file->num_lines, "Sequencer: %s", "Sequencer=%s", segconf_tech_name());\
+
             REPORT_KRAKEN;
             if (segconf.r1_or_r2) bufprintf (evb, &features, "R1_or_R2=R%d;", (segconf.r1_or_r2 == PAIR_READ_1) ? 1 : 2);
 
@@ -789,7 +792,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
 
     // source compression, eg BGZF, against txt before any modifications
     float src_comp_ratio = (float)txt_size_0 / 
-                           (float)((flag.bind != BIND_FQ_PAIR && txt_file->disk_size) ? txt_file->disk_size : z_file->txt_disk_so_far_bind); 
+                           (float)((flag.bind != BIND_FQ_PAIR && !flag.deep && txt_file->disk_size) ? txt_file->disk_size : z_file->txt_disk_so_far_bind); 
 
     stats_output_stats (sbl, num_stats, src_comp_ratio, txt_file->source_codec, all_txt_len, txt_size_0, all_z_size, all_pc_of_txt, all_pc_of_z, all_comp_ratio);
     
@@ -815,7 +818,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
         zfile_compress_section_data (evb, SEC_STATS, &STATS);
 
         // store stats overhead, for stats_display (because when stats_display runs, section list won't be accessible since it is already converted to SectionEntFileFormat)
-        Section sec = sections_last_sec (SEC_STATS, false) - 1; // first stats section     
+        Section sec = sections_last_sec (SEC_STATS, HARD_FAIL) - 1; // first stats section     
         stats.count = z_file->disk_so_far - sec->offset;
     }
 
@@ -836,7 +839,7 @@ void stats_display (void)
 
     buf_print (buf , false);
 
-    if (stats.count && z_file->disk_size < (1<<20) && command==ZIP)  // no need to print this note if z size > 1MB, as the 2-4KB of overhead is rounded off anyway
+    if (stats.count && z_file->disk_size < 1 MB && command==ZIP)  // no need to print this note if z size > 1MB, as the 2-4KB of overhead is rounded off anyway
         // stats text doesn't include SEC_STATS and SEC_GENOZIP_HEADER - the last 3 sections in the file - since stats text is generated before these sections are compressed
         iprintf ("\nNote: ZIP total file size excludes overhead of %s\n", str_size (stats.count).s);
 
@@ -845,7 +848,7 @@ void stats_display (void)
 
 void stats_read_and_display (void)
 {
-    Section sec = sections_last_sec (SEC_STATS, true);
+    Section sec = sections_last_sec (SEC_STATS, SOFT_FAIL);
     if (!sec) {
         iprint0 ("No stats available for this file.\n"); // possibly the file was compressed with --cstats or --CSTATS
         return; // genozip file does not contain stats sections (SEC_STATS was introduced in v 7.0.5)

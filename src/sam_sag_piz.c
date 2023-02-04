@@ -54,7 +54,7 @@ void sam_piz_set_sag (VBlockSAMP vb)
     // set vb->sag
     if (sam_is_depn_vb) {
         // get the PRIM VB and the sag within it which are the SA Group of this DEPN line
-        int64_t sa_grp_i = reconstruct_from_local_int (VB, CTX(SAM_SAG), 0, false);
+        int64_t sa_grp_i = reconstruct_from_local_int (VB, CTX(SAM_SAG), 0, RECON_OFF);
 
         ASSPIZ (sa_grp_i < z_file->sag_grps.len, "sa_grp_i=%"PRId64" is out of range [0,%"PRId64"]", sa_grp_i, z_file->sag_grps.len-1);
         vb->sag = B(const Sag, z_file->sag_grps, sa_grp_i);
@@ -70,7 +70,7 @@ void sam_piz_set_sag (VBlockSAMP vb)
     // set vb->sa_aln (only for SA:Z-type SA Groups)
     if (IS_SAG_SA) {
         // The primary alignment is the first alignment, then the alignments from the SA Groups
-        int64_t sa_aln_i = vb->sag->first_aln_i + (sam_is_depn_vb ? reconstruct_from_local_int (VB, CTX(SAM_SAALN), 0, false) : 0);
+        int64_t sa_aln_i = vb->sag->first_aln_i + (sam_is_depn_vb ? reconstruct_from_local_int (VB, CTX(SAM_SAALN), 0, RECON_OFF) : 0);
 
         ASSPIZ (sa_aln_i < z_file->sag_alns.len, "sa_aln_i=%"PRId64" is out of range [0,%"PRIu64"]", sa_aln_i, z_file->sag_alns.len-1);
         vb->sa_aln = B(const SAAln, z_file->sag_alns, sa_aln_i);

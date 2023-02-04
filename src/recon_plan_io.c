@@ -35,7 +35,7 @@ void recon_plan_show (FileP file, bool is_luft, uint32_t conc_writing_vbs, uint3
 
     for (uint32_t i=0; i < file->recon_plan.len32; i++) {
         ReconPlanItem *p = B(ReconPlanItem, file->recon_plan, i);
-        rom comp = p->vb_i ? comp_name(sections_vb_header(p->vb_i, false)->comp_i) : NULL;
+        rom comp = p->vb_i ? comp_name(sections_vb_header(p->vb_i, HARD_FAIL)->comp_i) : NULL;
         rom flav = recon_plan_flavors[p->flavor];
 
         switch (p->flavor) {
@@ -46,7 +46,7 @@ void recon_plan_show (FileP file, bool is_luft, uint32_t conc_writing_vbs, uint3
             case PLAN_DOWNSAMPLE : iprintf ("%-10s vb=%s/%u\tnum_lines=%u\n", flav, comp, p->vb_i, p->num_lines); break;
             case PLAN_END_OF_VB  : iprintf ("%-10s vb=%s/%u\n", flav, comp, p->vb_i); break;
             case PLAN_INTERLEAVE : iprintf ("%-10s vb1=%s/%u\tvb2=%s/%u", flav, comp, p->vb_i,
-                                            comp_name(sections_vb_header(p->vb2_i, false)->comp_i), p->vb2_i); 
+                                            comp_name(sections_vb_header(p->vb2_i, HARD_FAIL)->comp_i), p->vb2_i); 
                                    iprintf (command==PIZ ? "\tnum_lines=%u\n" : "\n", p->num_lines); // num_lines populated by writer in PIZ
                                    break;
             default              : ABORT ("Unknown flavor %u", p->flavor);

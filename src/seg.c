@@ -120,10 +120,11 @@ void seg_lookup_with_length (VBlockP vb, ContextP ctx, int32_t length/*can be ne
 }
 
 rom seg_get_next_item (void *vb_, rom str, int *str_len, 
-                               GetNextAllow newline, GetNextAllow tab, GetNextAllow space,
-                               unsigned *len, char *separator, 
-                               bool *has_13, // out - only modified if '\r' detected ; only needed if newline=GN_SEP
-                               rom item_name)
+                       GetNextAllow newline, GetNextAllow tab, GetNextAllow space,
+                       unsigned *len, 
+                       char *separator,  // optional out
+                       bool *has_13,     // out - only modified if '\r' detected ; only needed if newline=GN_SEP
+                       rom item_name)
 {
     VBlockP vb = (VBlockP)vb_;
 
@@ -133,7 +134,7 @@ rom seg_get_next_item (void *vb_, rom str, int *str_len,
             (newline == GN_SEP && c == '\n') ||
             (space   == GN_SEP && c == ' ')) {
                 *len = i;
-                *separator = c;
+                if (separator) *separator = c;
                 *str_len -= i+1;
 
                 // check for Windows-style '\r\n' end of line 
@@ -1298,7 +1299,7 @@ void seg_all_data_lines (VBlockP vb)
     }
 
     if (segconf.running) {
-        segconf.line_len = (vb->lines.len32 ? (vb->txt_data.len32 / vb->lines.len32) : 500) + 1; // get average line length (rounded up ; arbitrary 500 if the segconf data ended up not having any lines (example: all lines were non-matching lines dropped by --match in a chain file))
+        segconf.line_len = (vb->lines.len32 ? ((double)vb->txt_data.len32 / (double)vb->lines.len32) : 500) + 0.999; // get average line length (rounded up ; arbitrary 500 if the segconf data ended up not having any lines (example: all lines were non-matching lines dropped by --match in a chain file))
 
         // limitations: only pre-defined field, not local
         for (Did did_i=0; did_i < DTF(num_fields); did_i++)

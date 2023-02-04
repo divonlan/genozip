@@ -47,7 +47,7 @@ extern void chain_seg_initialize (VBlockP vb);
 extern void chain_seg_finalize (VBlockP vb);
 extern rom chain_seg_txt_line (VBlockP vb, rom line, uint32_t remaining_txt_len, bool *has_13);
 extern bool chain_seg_is_small (ConstVBlockP vb, DictId dict_id);
-extern bool chain_zip_dts_flag (void);
+extern bool chain_zip_dts_flag (int dts);
 
 // piz of a chain file
 extern bool chain_piz_initialize (void);

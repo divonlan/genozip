@@ -365,7 +365,7 @@ void sam_seg_BWA_XS_i (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, int64_t xs,
         }
 
         else if (xs && // XS can be before or after AS
-                 (dl->AS || sam_seg_get_aux_int (vb, vb->idx_AS_i, &dl->AS, IS_BAM_ZIP, MIN_AS_i, MAX_AS_i, true))) { 
+                 (dl->AS || sam_seg_get_aux_int (vb, vb->idx_AS_i, &dl->AS, IS_BAM_ZIP, MIN_AS_i, MAX_AS_i, SOFT_FAIL))) { 
             
             CTX(OPTION_AS_i)->last_value.i = dl->AS;
             seg_delta_vs_other_do (VB, channel_ctx, CTX(OPTION_AS_i), NULL, 0, xs, -1, add_bytes);

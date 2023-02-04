@@ -10,8 +10,6 @@
 
 #include "genozip.h"
 
-typedef enum __attribute__ ((__packed__))/*1 byte*/ { LIC_TYPE_NONE, LIC_TYPE_ACADEMIC, LIC_TYPE_EVAL, LIC_TYPE_STANDARD, LIC_TYPE_DEEP, NUM_LIC_TYPES } LicenseType; 
-
 extern void license_register (void);
 extern bool license_is_registered (void);
 extern void license_set_filename (rom filename);
@@ -22,6 +20,7 @@ extern void license_display (void);
 extern bool license_allow_stats (void);
 extern void license_one_file_compressed (DataType dt);
 extern void license_show_deep_notice (void);
+extern bool license_is_eval (void);
 
 typedef struct { char s[16384]; } StrNotice; 
 extern StrNotice license_print_default_notice (void);

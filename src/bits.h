@@ -191,7 +191,9 @@ static inline void ASSERT_excess_bits_are_0 (ConstBitsP bits) // divon
 }
 
 
-// Allocate using existing struct
+extern Bits bits_init_do (uint64_t nbits, uint8_t *data, uint64_t data_len, bool clear, FUNCLINE);
+#define bits_init(nbits, data, data_len, clear) bits_init_do ((nbits), (data), (data_len), (clear), __FUNCLINE)
+
 extern Bits bits_alloc_do (uint64_t nbits, bool clear, FUNCLINE);
 #define bits_alloc(nbits, clear) bits_alloc_do ((nbits), (clear), __FUNCLINE)
 

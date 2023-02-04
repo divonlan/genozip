@@ -38,11 +38,12 @@ void sam_vb_release_vb (VBlockSAMP vb)
     vb->last_cigar = NULL;
     vb->ref_consumed = vb->ref_and_seq_consumed = vb->soft_clip[0] = vb->soft_clip[1] = 0;
     vb->mismatch_bases_by_SEQ = vb->mismatch_bases_by_MD = vb->hard_clip[0] = vb->hard_clip[1] = vb->deletions = vb->insertions = 0;
+    vb->longest_seq_len = vb->rans_compress_bound_longest_seq_len = 0;
     vb->a_bases = vb->x_bases = vb->y_bases = 0;
     vb->a_index = vb->x_index = vb->y_index = 0;
     vb->md_verified = 0;
     vb->qual_codec_no_longr = vb->has_qual = vb->saggy_is_prim = false;
-    vb->qual_missing = vb->seq_missing = vb->cigar_missing = vb->check_for_gc = vb->RNEXT_is_equal = 0;
+    vb->qual_missing = vb->seq_missing = vb->seq_is_monochar = vb->cigar_missing = vb->check_for_gc = vb->RNEXT_is_equal = 0;
     vb->sag = 0;
     vb->sa_aln = 0;
     vb->comp_qual_len = vb->comp_cigars_len = 0;
@@ -77,7 +78,6 @@ void sam_vb_release_vb (VBlockSAMP vb)
     buf_free (vb->qname_count);
     buf_free (vb->unconverted_bitmap);
     buf_free (vb->meth_call);
-    buf_free (vb->deep_data);
 }
 
 void sam_vb_destroy_vb (VBlockSAMP vb)
@@ -96,7 +96,6 @@ void sam_vb_destroy_vb (VBlockSAMP vb)
     buf_destroy (vb->qname_count);
     buf_destroy (vb->unconverted_bitmap);
     buf_destroy (vb->meth_call);
-    buf_destroy (vb->deep_data);
 }
 
 // initialization of the line
@@ -105,7 +104,7 @@ void sam_reset_line (VBlockP vb_)
     VBlockSAMP vb = (VBlockSAMP)vb_;
 
     vb->textual_cigar.len = vb->binary_cigar.len = vb->binary_cigar.next = 0;
-    vb->qual_missing = vb->seq_missing = vb->cigar_missing = false;
+    vb->qual_missing = vb->seq_missing = vb->seq_is_monochar = vb->cigar_missing = false;
     vb->XG.len = 0;
     vb->seq_len = 0;
     vb->ref_consumed = vb->ref_and_seq_consumed = 0;

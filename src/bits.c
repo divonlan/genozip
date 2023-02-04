@@ -259,6 +259,28 @@ static inline void _set_region (BitsP bits, uint64_t start, uint64_t length, Fil
 // Constructor
 //
 
+// initializes bits for an existing allocation
+Bits bits_init_do (uint64_t nbits, uint8_t *data, uint64_t data_len/*in bytes*/, bool clear, FUNCLINE)
+{
+    ASSERT (data_len >= roundup_bits2bytes64 (nbits), "called from %s:%u: data_len=%"PRIu64" too short for nbits=%"PRIu64, 
+            func, code_line, data_len, nbits);
+
+    ASSERT (!((uint64_t)data % sizeof (uint64_t)), "called from %s:%u: data=%p is not word-aligned", func, code_line, data);
+
+    Bits bits = { .type   = BITARR_STANDALONE, // standalone Bits that is not part of a Buffer
+                  .nbits  = nbits,
+                  .nwords = roundup_bits2words64(nbits),
+                  .words  = (uint64_t *)data };
+
+    // zero the bits in the top word that are beyond nbits (if not already cleared)
+    if (clear) 
+        memset (data, roundup_bits2bytes64 (nbits), data_len);
+    else
+        bits_clear_excess_bits_in_top_word (&bits);
+
+    return bits;
+}
+
 // allocates a STANDALONE bit array
 Bits bits_alloc_do (uint64_t nbits, bool clear, FUNCLINE)
 {

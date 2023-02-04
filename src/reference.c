@@ -140,7 +140,7 @@ void ref_destroy_reference (Reference ref, bool destroy_only_if_not_mmap)
 }
 
 // PIZ: returns a range which is the entire contig
-ConstRangeP ref_piz_get_range (VBlockP vb, Reference ref, bool soft_fail)
+ConstRangeP ref_piz_get_range (VBlockP vb, Reference ref, FailType soft_fail)
 {
     ASSERTISALLOCED (ref->ranges);
 
@@ -1330,7 +1330,7 @@ static void overlay_ranges_on_loaded_genome (Reference ref, RangesType type)
     for_buf (Range, r, ref->ranges) {
         r->chrom = BNUM (ref->ranges, r);
         const Contig *rc = (type == RT_DENOVO) ? B(Contig, ref->ctgs.contigs, r->chrom)
-                                               : ref_contigs_get_contig_by_ref_index (ref, r->chrom, true); // binary-search
+                                               : ref_contigs_get_contig_by_ref_index (ref, r->chrom, SOFT_FAIL); // binary-search
 
         if (rc) { // this chromosome has reference data 
             r->gpos           = rc->gpos;

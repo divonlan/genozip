@@ -960,7 +960,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_COPY_BUDDY_CIGAR)
 }
 
 // called from sam_piz_special_pull_from_sag for reconstructing the main CIGAR field of a PRIM / DEPN line
-void sam_reconstruct_main_cigar_from_sag (VBlockSAMP vb, bool do_htos, bool reconstruct)
+void sam_reconstruct_main_cigar_from_sag (VBlockSAMP vb, bool do_htos, ReconType reconstruct)
 {
     // we generate the CIGAR in vb->scratch. sam_cigar_special_CIGAR will reconstruct it (possibly binary) in txt_data. 
     ASSERTNOTINUSE (vb->scratch);

@@ -617,7 +617,7 @@ static SmallContainer con_ncbi_sra2P_l3 = {
 
 //--------------------------------------------------------------------------------------------------------
 
-#define MAX_QNAME_ITEMS 13 // mate + normal (matching Q?NAME defined in sam.h, fastq.h, kraken.h) 
+#define MAX_QNAME_ITEMS (1+MAX_QNAME_SEGMENTS) // mate + normal (matching Q?NAME defined in sam.h, fastq.h, kraken.h) 
 #define QFS_MAX_EXAMPLES 5
 
 typedef enum { QF_NO_ID, QF_GENOZIP_OPT } QnameFlavorId;
@@ -664,12 +664,12 @@ static QnameFlavorStruct qf[] = {
     {},  { QF_NO_ID,       "Illumina-gs",   { "ATATA-ATGCATAG|ab|A00488:61:HMLGNDSXX:4:1101:4345:1000|1" },   
                                                                                           TECH_ILLUM_7, 0, &con_illumina_7_gs, 10, {4,6,7,8,9,-1}, {-1},           {4,6,-1},       {-1},           8,9,   -1,-1, -1,                   },
     {},  { QF_NO_ID,       "BGI-R6",        { "8A_V100004684L3C001R029011637", "V300014293BL2C001R027005967", "V300003413L4C001R016000000" },          
-                                                                                          TECH_BGI,     0, &con_bgi_R6,        3,  {-1},           {1,2,3,4,-1},   {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_bgi_R     },
+                                                                                          TECH_MGI,     0, &con_bgi_R6,        3,  {-1},           {1,2,3,4,-1},   {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_bgi_R     },
     {},  { QF_NO_ID,       "BGI-R7",        { "V300017009_8AL2C001R0030001805", "V300022116L2C001R0010002968", "V300014296L2C001R0010000027", "E100001117L1C001R0030000000", "E1000536L1C002R0020000005" },         
-                                                                                          TECH_BGI,     0, &con_bgi_R7,        3,  {-1},           {1,2,3,4,-1},   {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_bgi_R     },
-    {},  { QF_NO_ID,       "BGI-R8",        { "V300046476L1C001R00100001719" },           TECH_BGI,     0, &con_bgi_R8,        3,  {-1},           {1,2,3,4,-1},   {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_bgi_R     },
-    {},  { QF_NO_ID,       "BGI-LL7",       { "DP8400010271TLL1C005R0511863479" },        TECH_BGI,     0, &con_bgi_LL7,       4,  {-1},           {1,2,3,4,-1},   {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_bgi_LL    },
-    {},  { QF_NO_ID,       "BGI-CL",        { "CL100025298L1C002R050_244547" },           TECH_BGI,     0, &con_bgi_CL,        4,  {4,-1},         {1,2,3,-1},     {-1},           {-1},           4,-1,  -1,-1, -1,  0,  PX_bgi_CL    }, 
+                                                                                          TECH_MGI,     0, &con_bgi_R7,        3,  {-1},           {1,2,3,4,-1},   {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_bgi_R     },
+    {},  { QF_NO_ID,       "BGI-R8",        { "V300046476L1C001R00100001719" },           TECH_MGI,     0, &con_bgi_R8,        3,  {-1},           {1,2,3,4,-1},   {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_bgi_R     },
+    {},  { QF_NO_ID,       "BGI-LL7",       { "DP8400010271TLL1C005R0511863479" },        TECH_MGI,     0, &con_bgi_LL7,       4,  {-1},           {1,2,3,4,-1},   {-1},           {-1},           1,-1,  -1,-1, -1,  0,  PX_bgi_LL    },
+    {},  { QF_NO_ID,       "BGI-CL",        { "CL100025298L1C002R050_244547" },           TECH_MGI,     0, &con_bgi_CL,        4,  {4,-1},         {1,2,3,-1},     {-1},           {-1},           4,-1,  -1,-1, -1,  0,  PX_bgi_CL    }, 
     // {},  { QF_NO_ID,       "IonTorrent",    { "ZEWTM:10130:07001" },                      TECH_IONTORR, 0, &con_ion_torrent_3, 2,  {-1},           {1,2,-1},       {-1},           {-1},           -1,-1, -1,-1, -1,  17, PX_ion_torrent_3 },
     {},  { QF_NO_ID,       "IonTorrent",    { "ZEWTM:10130:07001" },                      TECH_IONTORR, 0, &con_ion_torrent_3, 2,  {-1},           {-1},           {-1},           {-1},           -1,-1, -1,-1, -1,  17               },
     {},  { QF_NO_ID,       "Illumina-o-fq", { "SOLEXA6_0104:3:1:1852:13550 1:N:0:0" },    TECH_ILLUM_5, 1, &con_illumina_5_fq, 5,  {1,2,3,4,-1},   {-1},           {-1},           {-1},           -1,-1, -1,-1, -1,                   }, // v14.0.0

@@ -423,7 +423,7 @@ uint32_t random_access_verify_all_contigs_same_length (void)
 // PIZ: read SEC_RANDOM_ACCESS. If --luft - read the luft section instead.
 void random_access_load_ra_section (SectionType sec_type, Did chrom_did_i, BufferP ra_buf, rom buf_name, rom show_index_msg)
 {
-    Section ra_sl = sections_first_sec (sec_type, true);
+    Section ra_sl = sections_first_sec (sec_type, SOFT_FAIL);
     if (!ra_sl) return; // section doesn't exist
 
     // if we're pizzing as lift-over, get the next section which has the Luft random access info (zfile_get_global_section will verify)

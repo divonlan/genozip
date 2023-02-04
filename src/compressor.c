@@ -41,7 +41,7 @@ uint32_t comp_compress (VBlockP vb,
 
     ASSERT (!data_uncompressed_len || uncompressed_data || callback, "\"%s\": data_uncompressed_len!=0 but neither uncompressed_data nor callback are provided", name);
 
-    ASSERTW (data_uncompressed_len < (1<<30), "%s: Excessive uncompressed_data_len=%u: %s. Please report to support@genozip.com", 
+    ASSERTW (data_uncompressed_len < 1 GB, "%s: Excessive uncompressed_data_len=%u: %s. Please report to support@genozip.com", 
              VB_NAME, data_uncompressed_len, name); // compressing a buffer over 1GB is likely an indication of not handling some edge case well
 
     bool is_encrypted = false;

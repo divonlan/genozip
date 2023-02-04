@@ -52,11 +52,11 @@ static rom license[] = {
 
     "4. Severely unauthorized use of Genozip. Use which is non-compliant with sections 2, 3a, 3c, 3e shall be considered severely unauthorized use of Genozip. In this case, You agree that Licensor shall be eligible to 20% ownership of any revenue generated and intellectual property created that involved the severely unauthorized use of Genozip.",
 
-    "5. Data collected",
+    "5. Data collected. You consent to the following data collection:",
     
     "   a. At registration time: registration information provided by you and details about your hardware, operating system and IP address as displayed at end of the registration process.",
     
-    "   b. When a file is compressed: aggregate statistical information about the performance of the compression algorithm and associated metadata. This data is collected when using an Academic or Evaluation license. When using a Standard (i.e. paid) License, YOU WILL BE ASKED TO CHOOSE WHETHER OR NOT YOU ALLOW THIS DATA TO BE COLLECTED. Details can be found here: " WEBSITE_STATS". ",
+    "   b. When a file is compressed: a log record containing aggregate statistical information about the performance of the compression algorithm and associated metadata. This logging occurs when using an Academic or Evaluation license. When using a Standard (i.e. paid) License, YOU WILL BE ASKED TO CHOOSE WHETHER OR NOT YOU ALLOW THIS LOGGING. Details can be found here: " WEBSITE_LOGS". ",
  
     "6. Trademarks. This License does not grant permission to use the trade names, trademarks, service marks, or product names of the Licensor, except as required for reasonable and customary use in describing the origin of the Genozip",
     

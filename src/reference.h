@@ -69,7 +69,7 @@ extern void ref_set_reference (Reference ref, rom filename, ReferenceType ref_ty
 extern void ref_set_ref_file_info (Reference ref, Digest md5, rom fasta_name, uint8_t genozip_version);
 extern void ref_unload_reference (Reference ref);
 extern void ref_destroy_reference (Reference ref, bool destroy_only_if_not_mmap);
-extern ConstRangeP ref_piz_get_range (VBlockP vb, Reference ref, bool soft_fail);
+extern ConstRangeP ref_piz_get_range (VBlockP vb, Reference ref, FailType soft_fail);
 extern RangeP ref_get_range_by_ref_index (VBlockP vb, Reference ref, WordIndex ref_contig_index);
 extern rom ref_get_cram_ref (const Reference ref);
 extern void ref_generate_reverse_complement_genome (Reference ref);
@@ -103,7 +103,7 @@ extern void ref_remove_cache (Reference ref);
 
 // contigs stuff
 extern void ref_contigs_populate_aligned_chroms (void);
-extern WordIndex ref_contigs_get_by_name (const Reference ref, STRp(chrom_name), bool alt_ok, bool soft_fail);
+extern WordIndex ref_contigs_get_by_name (const Reference ref, STRp(chrom_name), bool alt_ok, FailType soft_fail);
 extern WordIndex ref_contigs_get_matching (const Reference ref, PosType LN, STRp(txt_chrom), STRp(*ref_contig), bool strictly_alt, bool *is_alt, int32_t *chrom_name_growth);
 extern rom ref_contigs_get_name (const Reference ref, WordIndex ref_index, unsigned *contig_name_len);
 extern ContigPkgP ref_get_ctgs (Reference ref);

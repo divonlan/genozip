@@ -213,7 +213,7 @@ uint32_t hash_get_estimated_entries (VBlockP merging_vb, ContextP zctx, ConstCon
     // at a low rate throughout. We add words at 10% of what we viewed in n3 - for the entire file
     if (n3_lines) estimated_entries += n3_density * estimated_num_lines * 0.10;
 
-    #define BIG_SIZE (1<<20)
+    #define BIG_SIZE (1 MB)
     if (estimated_entries < BIG_SIZE && (DT_FUNC(merging_vb, seg_is_big)(merging_vb, zctx->dict_id))) 
         estimated_entries = BIG_SIZE; 
 

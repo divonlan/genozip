@@ -372,9 +372,9 @@ COMPRESS (codec_domq_compress)
 
     // this is usually enough, but might not be in some edge cases
     // note: qual_buf->len is the total length of all qual lines
-    buf_alloc (vb, non_dom_buf, 0, 1 + qual_buf->len / 5, char, 1, "contexts->local"); 
-    buf_alloc (vb, qdomruns_buf, 0, 1 + qual_buf->len / 10, char, 1, "contexts->local");
-    buf_alloc (vb, &qualmplx_ctx->local, 0, 1 + vb->lines.len, char, 0, "contexts->local");
+    buf_alloc (vb, non_dom_buf,          0, 1 + qual_buf->len / 5,  char, 1, "contexts->local"); 
+    buf_alloc (vb, qdomruns_buf,         0, 1 + qual_buf->len / 10, char, 1, "contexts->local");
+    buf_alloc (vb, &qualmplx_ctx->local, 0, 1 + vb->lines.len,      char, 0, "contexts->local");
     
     if (qual_ctx->local.prm8[1]) // has_diverse
         buf_alloc (vb, &divrqual_ctx->local, 0, 1 + qual_buf->len / 5, char, 1, "contexts->local");
@@ -498,7 +498,7 @@ static inline uint32_t shorten_run (uint8_t *run, uint32_t full_num_bytes, uint3
 }
 
 // reconstructed a run of the dominant character
-static inline uint32_t codec_domq_reconstruct_dom_run (VBlockP vb, ContextP domqruns_ctx, char dom, uint32_t max_len, bool reconstruct)
+static inline uint32_t codec_domq_reconstruct_dom_run (VBlockP vb, ContextP domqruns_ctx, char dom, uint32_t max_len, ReconType reconstruct)
 {
     START_TIMER;
 
@@ -537,7 +537,7 @@ static inline uint32_t codec_domq_reconstruct_dom_run (VBlockP vb, ContextP domq
     return runlen;
 }
 
-static inline void codec_domq_reconstruct_do_v13 (VBlockP vb, ContextP qual_ctx, bool reconstruct)
+static inline void codec_domq_reconstruct_do_v13 (VBlockP vb, ContextP qual_ctx, ReconType reconstruct)
 {
     ContextP domqruns_ctx = qual_ctx + 1;   // the qdomruns context is always one after qual context
 
@@ -608,7 +608,7 @@ static inline bytes codec_domq_piz_get_denorm (VBlockP vb, ContextP domqruns_ctx
 //    codec_domq_reconstruct, which combines data from the local buffers of QUAL and DOMQRUNS to reconstruct the original QUAL field.
 // 3) Starting v14, the resulting data is de-normalized
 static inline void codec_domq_reconstruct_do (VBlockP vb, ContextP qual_ctx, ContextP domqruns_ctx, 
-                                              uint32_t len, uint8_t dom_i, uint8_t num_norm_qs, bool reconstruct)
+                                              uint32_t len, uint8_t dom_i, uint8_t num_norm_qs, ReconType reconstruct)
 {
     bytes denormalize = codec_domq_piz_get_denorm (vb, domqruns_ctx, dom_i, num_norm_qs);
 
@@ -675,7 +675,7 @@ CODEC_RECONSTRUCT (codec_domq_reconstruct)
 
     ContextP declare_domq_contexts (ctx);
 
-    bool reconstruct = true;
+    ReconType reconstruct = true;
 
     // case: up to v13, all reads were compressed with the same dom (no multiplexing)
     if (!VER(14)) 

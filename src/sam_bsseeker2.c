@@ -203,7 +203,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_BSSEEKER2_XG)
     XgIncSType XG_inc_S = snip[0] - '0';
     int32_t inc_soft_clip = (XG_inc_S  == XG_WITH_S) ? vb->soft_clip[0] : 0; // soft clip length, if we need to include it
 
-    ConstRangeP range = ref_piz_get_range (VB, gref, false);
+    ConstRangeP range = ref_piz_get_range (VB, gref, HARD_FAIL);
 
     uint32_t idx = CTX(SAM_POS)->last_value.i - range->first_pos - inc_soft_clip;
 

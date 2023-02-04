@@ -134,6 +134,7 @@ void profiler_add (ConstVBlockP vb)
     ADD (sam_seg_GY_Z);
     ADD (qname_seg);
     ADD (ctx_merge_in_vb_ctx);
+    ADD (sam_deep_merge);
     ADD (codec_hapmat_count_alt_alleles);
     ADD (digest);
     ADD (ctx_clone);
@@ -356,6 +357,7 @@ void profiler_print_report (void)
         PRINT (vcf_linesort_merge_vb, 1);
         PRINT (ctx_sort_dictionaries_vb_1, 1); 
         PRINT (ctx_merge_in_vb_ctx, 1);
+        PRINT (sam_deep_merge, 2);
         PRINT (zip_compress_ctxs, 1);
         PRINT (zip_generate_b250, 2);
         PRINT (zip_generate_local, 2);

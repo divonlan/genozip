@@ -82,7 +82,7 @@ void ref_iupacs_compress (void)
 
 void ref_iupacs_load (Reference ref)
 {
-    Section sec = sections_last_sec (SEC_REF_IUPACS, true);
+    Section sec = sections_last_sec (SEC_REF_IUPACS, SOFT_FAIL);
     if (!sec) {
         if (flag.show_ref_iupacs) 
             iprintf ("\nThere are no IUPACs in %s\n", z_name);

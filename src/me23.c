@@ -151,17 +151,17 @@ rom me23_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_txt_
 // creates VCF file header
 TXTHEADER_TRANSLATOR (txtheader_me232vcf)
 {
-    #define VCF_HEAD_1 "##fileformat=VCFv4.1\n" \
-                       "##FILTER=<ID=PASS,Description=\"All filters passed\">\n" \
+    #define VCF_HEAD_1 "##FILTER=<ID=PASS,Description=\"All filters passed\">\n" \
                        "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n" \
                        "##genozip_reference=%s\n"
                        
     #define VCF_HEAD_2 "##contig=<ID=%s,length=%"PRId64">\n"
     
-    #define VCF_HEAD_3p1 "##co= Converted 23andMe to VCF format by genozip v%s: %s\n"  \
+    #define VCF_HEAD_3p1 "##fileformat=VCFv4.1\n" \
+                         "##source=Genozip_v%s %s\n"  \
                          "##genozip_Command=\"" 
-    #define VCF_HEAD_3p2                       "\"\n" \
-                         "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t%.*s\n"
+    
+    #define VCF_HEAD_3p2 "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t%.*s\n"
     
     // move the me23 and header to the side for a sec
     buf_move (comp_vb, &comp_vb->scratch, comp_vb, txtheader_buf);
@@ -171,9 +171,14 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
     uint32_t num_chroms = ctx->word_list.len32;
     
     buf_alloc (comp_vb, txtheader_buf, 0, 
-               1.3*comp_vb->scratch.len + (sizeof VCF_HEAD_1 - 1) + (sizeof VCF_HEAD_3p1 - 1) + (sizeof VCF_HEAD_3p2 - 1)+80 + num_chroms * (sizeof VCF_HEAD_2 + 100), 
+               1.3*comp_vb->scratch.len32 + STRLEN(VCF_HEAD_1) + STRLEN(VCF_HEAD_3p1) + STRLEN(VCF_HEAD_3p2) +80 + num_chroms * (STRLEN (VCF_HEAD_2) + 100), 
                char, 1, "txt_data");
     
+    // add genozip stuff
+    bufprintf (comp_vb, txtheader_buf, VCF_HEAD_3p1, GENOZIP_CODE_VERSION, GENOZIP_URL);
+    buf_append_string (comp_vb, txtheader_buf, flags_command_line());
+    bufprint0 (comp_vb, txtheader_buf, "\"\n");
+
     bufprintf (comp_vb, txtheader_buf, VCF_HEAD_1, ref_get_filename (gref));
     
     // add contigs used in this file
@@ -214,9 +219,6 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
         sample_name_len = after - start;
     }
 
-    // add final lines - the command line length is unbound, careful not to put it in a bufprintf
-    bufprintf (comp_vb, txtheader_buf, VCF_HEAD_3p1, GENOZIP_CODE_VERSION, GENOZIP_URL);
-    buf_append_string (comp_vb, txtheader_buf, flags_command_line());
     bufprintf (comp_vb, txtheader_buf, VCF_HEAD_3p2, sample_name_len, sample_name);
 
     buf_free (comp_vb->scratch);
@@ -235,7 +237,7 @@ TRANSLATOR_FUNC (sam_piz_m232vcf_GENOTYPE)
     vb->chrom_node_index = ref_contigs_get_by_name (gref, vb->chrom_name, vb->chrom_name_len, true, false);
 
     // get the value of the loaded reference at this position    
-    ConstRangeP range = ref_piz_get_range (vb, gref, false);
+    ConstRangeP range = ref_piz_get_range (vb, gref, HARD_FAIL);
     vb->chrom_node_index = save_chrom_node_index; // restore
 
     uint32_t idx = pos - range->first_pos;

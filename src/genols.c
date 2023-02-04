@@ -118,7 +118,7 @@ void genols (rom z_filename, bool finalize, rom subdir, bool recursive)
         digest = header.FASTQ_v13_digest_bound;
 
     else if (!(Z_DT(FASTQ) && z_file->z_flags.dts_paired) // digest for bound fastqs will be shown only with --list 
-        && (txt_header_sec = sections_first_sec (SEC_TXT_HEADER, true))) 
+        && (txt_header_sec = sections_first_sec (SEC_TXT_HEADER, SOFT_FAIL))) 
         digest = zfile_read_section_header (evb, txt_header_sec->offset, txt_header_sec->vblock_i, SEC_TXT_HEADER).txt_header.digest;
 
     float ratio = z_file->disk_size ? ((float)z_file->txt_data_so_far_bind / (float)z_file->disk_size) : 0;

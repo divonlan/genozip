@@ -104,11 +104,11 @@ static void digest_update_do (VBlockP vb, DigestContext *ctx, rom data, uint64_t
 
 static void digest_piz_verify_one_vb (VBlockP vb)
 {
-    static bool failed = false; // we report only the first fail
-
     // if testing, compare digest up to this VB to that calculated on the original file and transferred through SectionHeaderVbHeader
-    // note: we cannot test this unbind mode, because the digests are commulative since the beginning of the bound file
-    if (!failed && !flag.unbind && !v8_digest_is_zero (vb->expected_digest)) {
+    // note: 
+    if ((!txt_file->vb_digest_failed || IS_ADLER) && // note: for MD5, we report only the first failed VB, bc the digest is commulative, so all subsequent VBs will fail for sure
+        (!flag.unbind || VER(14)) &&                 // note: for files <= v13, we cannot test per-VB digest in unbind mode, because the digests (MD5 and Adler32) are commulative since the beginning of the bound file. However, we still test component-wide digest in piz_verify_digest_one_txt_file.
+        !v8_digest_is_zero (vb->expected_digest)) {  // note: in v8 files compressed without --md5 or --test, we had no digest.
 
         Digest piz_digest = (VER(14) && IS_ADLER) ? vb->digest  // stand-alone digest of this VB
                                                   : digest_snapshot (&z_file->digest_ctx, NULL); // commulative digest so far
@@ -120,26 +120,31 @@ static void digest_piz_verify_one_vb (VBlockP vb)
 
             char recon_size_warn[100] = "";
             if (vb->recon_size != vb->txt_data.len)
-                sprintf (recon_size_warn, "expecting: VB_HEADER.recon_size=%u == txt_data.len=%"PRIu64"\n", vb->recon_size, vb->txt_data.len);
+                sprintf (recon_size_warn, "Expecting: VB_HEADER.recon_size=%u == txt_data.len=%"PRIu64"\n", vb->recon_size, vb->txt_data.len);
 
-            // dump bad vb to disk
-            WARN ("reconstructed vblock=%s/%u, (%s=%s) differs from original file (%s=%s).\n%s"
-                  "Bad reconstructed vblock has been dumped to: %s.gz\n"
-                  "To see the same data in the original file:\n"
-                  "genozip --biopsy %u %s (+any parameters used to compress this file)\n"
-                  "If this is unexpected, please contact support@genozip.com.\n", 
+            WARN ("reconstructed vblock=%s/%u, (%s=%s) differs from original file (%s=%s).\n%s\n"
                   comp_name (vb->comp_i), vb->vblock_i, 
                   DIGEST_NAME, digest_display (piz_digest).s, 
                   DIGEST_NAME, digest_display (vb->expected_digest).s, 
-                  recon_size_warn,
-                  txtfile_dump_vb (vb, z_name), vb->vblock_i, filename_guess_original (txt_file));
+                  recon_size_warn);
+
+            // case: first bad VB: dump bad VB to disk
+            if (!txt_file->vb_digest_failed)
+                WARN ("Bad reconstructed vblock has been dumped to: %s.gz\n"
+                      "To see the same data in the original file:\n"
+                      "genozip --biopsy %u %s (+any parameters used to compress this file)\n"
+                      "If this is unexpected, please contact support@genozip.com.\n", 
+                    txtfile_dump_vb (vb, z_name), vb->vblock_i, filename_guess_original (txt_file));
 
             if (flag.test) exit_on_error (false);
 
             RESTORE_FLAG (quiet);
 
-            failed = true; // no point in test the rest of the vblocks as they will all fail - MD5 is commulative
+            txt_file->vb_digest_failed = true;
         }
+
+        else
+            __atomic_fetch_add (&z_file->num_vbs_verified, (uint32_t)1, __ATOMIC_RELAXED); // count VBs verified so far
     }
 }
 

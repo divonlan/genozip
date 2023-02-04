@@ -35,6 +35,7 @@
 #include "sections.h"
 #include "flags.h"
 #include "strings.h"
+#include "file.h"
 
 static rom argv0 = NULL;
 
@@ -125,6 +126,12 @@ void arch_initialize (rom argv0)
     ASSERT0 (sizeof (LocalType)     == 1,  "expecting sizeof (LocalType)==1");
     ASSERT0 (sizeof (uint128_t)     == 16, "expecting sizeof (uint128_t)==16");
     ASSERT0 (sizeof (ReconPlanItem) == 12, "expecting sizeof (ReconPlanItem)==12");
+    ASSERT0 (sizeof (void *)        == 8,  "expecting sizeof (void *)==8");
+    ASSERT0 (sizeof (ValueType)     == 8,  "expecting sizeof (ValueType)==8");
+
+    // Note: __builtin_clzl is inconsistent between Windows and Linux, even on the same host, so we don't use it
+    ASSERT0 (__builtin_clz(5)   == 29, "expecting __builtin_clz to be 32 bit");
+    ASSERT0 (__builtin_clzll(5) == 61, "expecting __builtin_clzll to be 64 bit");
 
     // verify that order of bit fields in a structure is as expected (this is compiler-implementation dependent, and we go by gcc)
     // it might be endianity-dependent, and we haven't implemented big-endian yet, see: http://mjfrazer.org/mjfrazer/bitfields/
@@ -195,6 +202,38 @@ unsigned arch_get_num_cores (void)
 
     return cpu_count;
 #endif
+}
+
+// physical RAM size in GB
+double arch_get_physical_mem_size (void)
+{
+    static double mem_size = 0;
+    if (mem_size) return mem_size;
+
+#ifdef __linux__    
+    static Buffer meminfo = {};
+    file_get_file (evb, "/proc/meminfo", &meminfo, "meminfo", 100, false, true);
+
+    int num_start = strcspn (B1STc(meminfo), "0123456789");
+    int kb = atoi (Bc(meminfo, num_start));
+    buf_destroy (meminfo);
+
+#elif defined _WIN32
+    ULONGLONG kb = 0;
+    GetPhysicallyInstalledSystemMemory (&kb);
+
+#elif defined __APPLE__
+    int64_t kb = 0;
+    size_t length = sizeof (int64_t);
+    sysctl((int[]){ CTL_HW, HW_MEMSIZE }, 2, &kb, &length, NULL, 0);
+
+#else
+    return 0;
+
+#endif
+
+    mem_size = (double)kb / (1024.0*1024.0);
+    return mem_size;
 }
 
 rom arch_get_os (void)

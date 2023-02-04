@@ -18,6 +18,7 @@
 #include "dispatcher.h"
 #include "profiler.h"
 #include "txtfile.h"
+#include "qname.h"
 #include "bgzf.h"
 #include "libdeflate/libdeflate.h"
 

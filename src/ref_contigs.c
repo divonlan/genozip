@@ -288,7 +288,7 @@ static void ref_contigs_load_uncompact (BufferP compact, BufferP contigs)
 // read and uncompress a contigs section (when pizzing the reference file or pizzing a data file with a stored reference)
 void ref_contigs_load_contigs (Reference ref)
 {
-    Section sl = sections_last_sec (SEC_REF_CONTIGS, true);
+    Section sl = sections_last_sec (SEC_REF_CONTIGS, SOFT_FAIL);
     if (!sl) return; // section doesn't exist
 
     if (sl->flags.ref_contigs.compacted) { // non-reference-file generated in v14.0.10 or later
@@ -330,7 +330,7 @@ void ref_contigs_load_contigs (Reference ref)
 
 // binary search for this chrom in ref->ctgs. we count on gcc tail recursion optimization to keep this fast.
 // looks in Reference contigs if ref is provided, or in CHROM if ref=NULL
-WordIndex ref_contigs_get_by_name (const Reference ref, rom chrom_name, uint32_t chrom_name_len, bool alt_ok, bool soft_fail)
+WordIndex ref_contigs_get_by_name (const Reference ref, rom chrom_name, uint32_t chrom_name_len, bool alt_ok, FailType soft_fail)
 {
     return alt_ok ? contigs_get_matching (&ref->ctgs, STRa(chrom_name), 0, false, NULL)
                   : contigs_get_by_name (&ref->ctgs, STRa(chrom_name));
@@ -360,7 +360,7 @@ rom ref_contigs_get_name (Reference ref, WordIndex ref_index, unsigned *contig_n
 
 rom ref_contigs_get_name_by_ref_index (Reference ref, WordIndex ref_index, rom *snip, uint32_t *snip_len)
 {
-    const Contig *contig = ref_contigs_get_contig_by_ref_index (ref, ref_index, false);
+    const Contig *contig = ref_contigs_get_contig_by_ref_index (ref, ref_index, HARD_FAIL);
     rom my_snip = B(const char, ref->ctgs.dict, contig->char_index);
     
     if (snip) *snip = my_snip;
@@ -442,7 +442,7 @@ static const Contig *ref_contigs_get_contig_do (const Reference ref, WordIndex r
         return ref_contigs_get_contig_do (ref, ref_index, mid_i+1, end_i);
 }
 
-const Contig *ref_contigs_get_contig_by_ref_index (const Reference ref, WordIndex ref_index, bool soft_fail)
+const Contig *ref_contigs_get_contig_by_ref_index (const Reference ref, WordIndex ref_index, FailType soft_fail)
 {
     ASSERTISALLOCED (ref->ctgs.contigs);
 

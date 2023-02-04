@@ -1098,7 +1098,7 @@ static bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx)
         zctx->dict_len_excessive = true; // warn only once (per context)
         WARN ("WARNING: excessive zctx dictionary size - causing slow compression and decompression and reduced compression ratio. Please report this to support@genozip.com.\n"
               "sam_mapper=%s data_type=%s ctx=%s vb=%s vb_size=%"PRIu64" zctx->dict.len=%"PRIu64" version=%s. First 1000 bytes: ", 
-              sam_mapper_name (segconf.sam_mapper), dt_name (z_file->data_type), zctx->tag_name, VB_NAME, segconf.vb_size, zctx->dict.len, GENOZIP_CODE_VERSION);
+              segconf_sam_mapper_name(), dt_name (z_file->data_type), zctx->tag_name, VB_NAME, segconf.vb_size, zctx->dict.len, GENOZIP_CODE_VERSION);
         str_print_dict (stderr, zctx->dict.data, 1000, false, false);
     }
 
@@ -1123,6 +1123,8 @@ void ctx_merge_in_vb_ctx (VBlockP vb)
     
     // merge all contexts 
     bool all_merged=false;
+    bool custom_merge_pending = !!DTP(zip_custom_merge);
+
     while (!all_merged) {
 
         all_merged=true; // unless proven otherwise
@@ -1142,6 +1144,20 @@ void ctx_merge_in_vb_ctx (VBlockP vb)
                 all_merged &= vctx->dict_merged;
                 any_merged |= vctx->dict_merged;
             }
+        }
+
+        // data-type specific non-context merge. advantage of running logic here vs zip_after_compress is that it merges
+        // contexts while the custom mutex is locked by another thread.
+        if (custom_merge_pending) {
+            if (mutex_trylock (z_file->custom_merge_mutex)) {
+                DTP(zip_custom_merge)(vb);
+                mutex_unlock (z_file->custom_merge_mutex);
+                any_merged = true;
+                custom_merge_pending = false;
+            }
+
+            else
+                all_merged = false;
         }
         
         // case: couldn't merge any - perhaps the one large final vctx is busy - sleep a bit rather than busy-wait

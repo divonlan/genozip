@@ -162,10 +162,10 @@ static inline void sam_load_groups_add_qname (VBlockSAMP vb, PlsgVbInfo *plsg, S
     for (vb->line_i=0; vb->line_i < plsg->num_grps ; vb->line_i++) {
         sam_reset_line (VB);
 
-        reconstruct_from_ctx (vb, SAM_BUDDY, 0, false); // set buddy (false = don't consume QNAME)
+        reconstruct_from_ctx (vb, SAM_BUDDY, 0, RECON_OFF); // set buddy (false = don't consume QNAME)
 
         vb_grps[vb->line_i].qname = plsg->qname_start + vb->txt_data.len;
-        reconstruct_from_ctx (vb, SAM_QNAME, 0, true); // reconstructs into vb->txt_data, sets vb->buddy_line_i if SNIP_COPY_BUDDY
+        reconstruct_from_ctx (vb, SAM_QNAME, 0, RECON_ON); // reconstructs into vb->txt_data, sets vb->buddy_line_i if SNIP_COPY_BUDDY
         vb_grps[vb->line_i].qname_len = vb->txt_data.len - (vb_grps[vb->line_i].qname - plsg->qname_start); // 64 bit arithmetic
     }
 
@@ -259,7 +259,7 @@ static inline void sam_load_groups_add_seq (VBlockSAMP vb, PlsgVbInfo *plsg, Sag
     vb->txt_data = (Buffer){};
     buf_overlay (vb, &vb->txt_data, &vb->textual_seq, "txt_data");
 
-    reconstruct_from_ctx (vb, SAM_SQBITMAP, 0, true);
+    reconstruct_from_ctx (vb, SAM_SQBITMAP, 0, RECON_ON);
     vb->textual_seq.len32 = vb->txt_data.len32;
     buf_free (vb->txt_data); // un-overlay
     vb->txt_data = save_txt_data;
@@ -268,7 +268,7 @@ static inline void sam_load_groups_add_seq (VBlockSAMP vb, PlsgVbInfo *plsg, Sag
 
     // pack SEQ data into z_file->sag_seq
     Bits *z_sa_seq = (BitsP)&z_file->sag_seq;
-    sam_sa_native_to_acgt (vb, z_sa_seq, z_seq_start * 2, B1STc(vb->textual_seq), vb->seq_len, false, false, false); 
+    sam_seq_pack (vb, z_sa_seq, z_seq_start * 2, B1STc(vb->textual_seq), vb->seq_len, false, false, HARD_FAIL); 
 }
 
 // compress QUAL data for in-memory storage, using fast rans codec.
@@ -285,7 +285,7 @@ static inline void sam_load_groups_add_qual (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
     buf_overlay (vb, &vb->txt_data, &vb->codec_bufs[0], "txt_data");
 
     // Reconstruct QUAL of one line into txt_data which is overlaid on codec_bufs[0]
-    reconstruct_from_ctx (vb, SAM_QUAL, 0, true); // reconstructs into vb->txt_data
+    reconstruct_from_ctx (vb, SAM_QUAL, 0, RECON_ON); // reconstructs into vb->txt_data
     vb->codec_bufs[0].len = vb->txt_data.len;
     g->no_qual = vb->qual_missing;
     buf_free (vb->txt_data); // un-overlay
@@ -416,7 +416,7 @@ static inline ZWord reconstruct_to_solo_aln (VBlockSAMP vb, Did did_i, uint64_t 
     if (!ctx->is_loaded) return (ZWord){};
 
     uint64_t recon_start = vb->txt_data.len;
-    reconstruct_from_ctx (VB, did_i, 0, true); 
+    reconstruct_from_ctx (VB, did_i, 0, RECON_ON); 
     uint64_t recon_len = vb->txt_data.len - recon_start;
 
     // if identical, UR and UB, CR and CB, point to the same data in solo_data
@@ -455,7 +455,7 @@ static inline void sam_load_groups_add_solo_data (VBlockSAMP vb, PlsgVbInfo *pls
 
     for (vb->line_i=0; vb->line_i < plsg->num_grps ; vb->line_i++) {
         sam_reset_line (VB);
-        reconstruct_from_ctx (VB, SAM_BUDDY, 0, true); // set buddy (true = consume QNAME)
+        reconstruct_from_ctx (VB, SAM_BUDDY, 0, RECON_ON); // set buddy (true = consume QNAME)
 
         // get the index of the tag in this alignment's AUX container. we're really interested if they exist or not.
         container_peek_get_idxs (VB, CTX(SAM_AUX), ARRAY_LEN(idxs), idxs, true);
@@ -508,7 +508,7 @@ static inline void sam_load_groups_add_grps (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
         vb->line_i = grp_i;
         sam_reset_line (VB);
 
-        reconstruct_from_ctx (VB, SAM_BUDDY, 0, true); // set buddy (true = consume QNAME)
+        reconstruct_from_ctx (VB, SAM_BUDDY, 0, RECON_ON); // set buddy (true = consume QNAME)
 
         // if this is an SA:Z-defined SAG, load primary alignment
         if (IS_SAG_SA) {
@@ -542,7 +542,7 @@ static inline void sam_load_groups_add_grps (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
         else {
             // case: SAG_NH, SAG_CC, SAG_SOLO: we get num_alns from NH:i
             if (IS_SAG_NH || IS_SAG_CC || IS_SAG_SOLO) {
-                reconstruct_from_ctx (VB, OPTION_NH_i, 0, false);
+                reconstruct_from_ctx (VB, OPTION_NH_i, 0, RECON_OFF);
                 g->num_alns = vb->last_int (OPTION_NH_i);
             }
 
@@ -550,17 +550,17 @@ static inline void sam_load_groups_add_grps (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
             CTX(SAM_FLAG)->last_value.i = g->revcomp ? SAM_FLAG_REV_COMP : 0; // needed by codec_longr_reconstruct - g->revcomp was populated in sam_load_groups_add_flags
 
             // set vb->chrom_* (needed to reconstruct SEQ)
-            reconstruct_from_ctx (VB, SAM_RNAME, 0, false);
+            reconstruct_from_ctx (VB, SAM_RNAME, 0, RECON_OFF);
             vb->chrom_node_index = vb->last_int (SAM_RNAME);
             ctx_get_snip_by_word_index (CTX(SAM_RNAME), vb->chrom_node_index, vb->chrom_name);
 
             // set POS.last_value (which also requires RNEXT and PNEXT)
-            reconstruct_from_ctx (VB, SAM_POS,   0, false);
-            reconstruct_from_ctx (VB, SAM_RNEXT, 0, false); // needed by PNEXT...
-            reconstruct_from_ctx (VB, SAM_PNEXT, 0, false); // store in history, in case POS of future-line mates needs it (if copy_buddy(PNEXT))
+            reconstruct_from_ctx (VB, SAM_POS,   0, RECON_OFF);
+            reconstruct_from_ctx (VB, SAM_RNEXT, 0, RECON_OFF); // needed by PNEXT...
+            reconstruct_from_ctx (VB, SAM_PNEXT, 0, RECON_OFF); // store in history, in case POS of future-line mates needs it (if copy_buddy(PNEXT))
 
             // analyze CIGAR (setting vb->seq_len, vb->ref_consumed etc)
-            reconstruct_from_ctx (VB, SAM_CIGAR, 0, false);
+            reconstruct_from_ctx (VB, SAM_CIGAR, 0, RECON_OFF);
 
             if (IS_SAG_CC) 
                 cc_alns[grp_i] = (CCAln){ .rname = vb->chrom_node_index, 
@@ -587,14 +587,14 @@ static inline void sam_load_groups_add_grps (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
             CTX(OPTION_AS_i)->is_loaded && // we didn't skip AS:i due to subsetting command line options
             idxs[0].idx != -1) {           // this line has AS:i
 
-            reconstruct_from_ctx (VB, OPTION_AS_i, 0, false);
+            reconstruct_from_ctx (VB, OPTION_AS_i, 0, RECON_OFF);
             g->as = CAP_SA_AS (vb->last_int(OPTION_AS_i));  // [0,255] capped at 0 and 255
         }
 
         // if line contains MC:Z - reconstruct it into txt_data, as our mate's CIGAR might copy it
         // note: a better way to do this would be using reconstruct_to_history
         if (CTX(OPTION_MC_Z)->is_loaded && idxs[1].idx != -1/*this line has MC:Z*/)  
-            reconstruct_from_ctx (VB, OPTION_MC_Z, 0, true);
+            reconstruct_from_ctx (VB, OPTION_MC_Z, 0, RECON_ON);
 
         total_seq_len += vb->seq_len;
         
@@ -635,7 +635,7 @@ static inline void sam_load_groups_add_SA_alns (VBlockSAMP vb, PlsgVbInfo *plsg,
 
         // RNAME
         if (rname_ctx->is_loaded) { // RNAME not skipped
-            reconstruct_from_ctx (vb, OPTION_SA_RNAME, 0, false);  // don't reconstruct, only set last_value to word_index
+            reconstruct_from_ctx (vb, OPTION_SA_RNAME, 0, RECON_OFF);  // don't reconstruct, only set last_value to word_index
             a->rname = rname_ctx->last_value.i;         // WordIndex into OPTION_SA_RNAME, NOT RNAME!
 
             ASSERT (a->rname >= 0 && a->rname < sa_rname_len, 
@@ -644,25 +644,25 @@ static inline void sam_load_groups_add_SA_alns (VBlockSAMP vb, PlsgVbInfo *plsg,
 
         // POS
         if (CTX(OPTION_SA_POS)->is_loaded) {
-            reconstruct_from_ctx (vb, OPTION_SA_POS, 0, false);    // don't reconstruct, only set last_value to pos
+            reconstruct_from_ctx (vb, OPTION_SA_POS, 0, RECON_OFF);    // don't reconstruct, only set last_value to pos
             a->pos = CTX(OPTION_SA_POS)->last_value.i;
         }
 
         // STRAND - nodes initialized in sam_seg_0X_initialize to 0="-" 1="+"
         if (CTX(OPTION_SA_STRAND)->is_loaded) {
-            reconstruct_from_ctx (vb, OPTION_SA_STRAND, 0, false); // don't reconstruct, only set last_value to word_index
+            reconstruct_from_ctx (vb, OPTION_SA_STRAND, 0, RECON_OFF); // don't reconstruct, only set last_value to word_index
             a->revcomp = !CTX(OPTION_SA_STRAND)->last_value.i;
         }
         
         // MAPQ
         if (CTX(OPTION_SA_MAPQ)->is_loaded) { // MAPQ is not skipped
-            reconstruct_from_ctx (vb, OPTION_SA_MAPQ, 0, false);   // don't reconstruct, only set last_value to pos
+            reconstruct_from_ctx (vb, OPTION_SA_MAPQ, 0, RECON_OFF);   // don't reconstruct, only set last_value to pos
             a->mapq = CTX(OPTION_SA_MAPQ)->last_value.i;
         }
 
         // NM
         if (CTX(OPTION_SA_NM)->is_loaded) { // NM is not skipped
-            reconstruct_from_ctx (vb, OPTION_SA_NM, 0, false);     // don't reconstruct, only set last_value to pos
+            reconstruct_from_ctx (vb, OPTION_SA_NM, 0, RECON_OFF);     // don't reconstruct, only set last_value to pos
             a->nm = CTX(OPTION_SA_NM)->last_value.i;
         }
     }

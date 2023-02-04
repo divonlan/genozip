@@ -16,9 +16,11 @@
 
 // Range in developer options eg --vblock 10000B 
 #define ABSOLUTE_MIN_VBLOCK_MEMORY ((uint64_t)1000) // in Bytes
-#define ABSOLUTE_MAX_VBLOCK_MEMORY ((uint64_t)MAX_VBLOCK_MEMORY<<20)
+#define ABSOLUTE_MAX_VBLOCK_MEMORY ((uint64_t)MAX_VBLOCK_MEMORY MB)
 
-typedef enum __attribute__ ((__packed__)) { TECH_UNKNOWN, TECH_ILLUM_7, TECH_ILLUM_5, TECH_PACBIO, TECH_ONP, TECH_454, TECH_BGI, TECH_IONTORR, TECH_HELICOS } SeqTech;
+typedef enum __attribute__ ((__packed__)) { TECH_UNKNOWN,   TECH_ILLUM_7, TECH_ILLUM_5, TECH_PACBIO, TECH_ONP,          TECH_454, TECH_MGI,   TECH_IONTORR, TECH_HELICOS, NUM_TECHS } SeqTech;
+#define TECH_NAME                         { "Unknown_tech", "Illumina-7", "Illumina-5", "PacBio",    "Oxford_Nanopore", "454",    "MGI_Tech", "IonTorrent", "Helicos"               }
+#define TECH(x) (segconf.tech == TECH_##x)
 
 typedef enum __attribute__ ((__packed__)) { SQT_UNKNOWN, SQT_NUKE, SQT_AMINO, SQT_NUKE_OR_AMINO } SeqType;
 
@@ -35,9 +37,10 @@ typedef enum __attribute__ ((__packed__)) { XG_S_UNKNOWN, XG_WITHOUT_S, XG_WITH_
 #define XG_INC_S_NAME { "Unknown", "without-S", "with-S"}
 
 // SamMapperType is part of the file format and values should not be changed (new ones can be added)
-typedef enum __attribute__ ((__packed__)) { MP_UNKNOWN, MP_BSBOLT,             MP_bwa,   MP_BWA,   MP_MINIMAP2,   MP_STAR,   MP_BOWTIE2,   MP_DRAGEN,    MP_GEM3,         MP_GEM2SAM,     MP_BISMARK,   MP_BSSEEKER2,     MP_WINNOWMAP,   MP_BAZ2BAM,    MP_BBMAP,   MP_TMAP,   MP_HISAT2,   MP_BOWTIE,   MP_NOVOALIGN,   MP_RAZER3,    MP_BLASR,   MP_NGMLR,           MP_DELVE,   MP_TOPHAT,   MP_CPU,   MP_LONGRANGER,          MP_CLC,             NUM_MAPPERS } SamMapperType;
-#define SAM_MAPPER_NAME             { "Unknown_mapper", "bsbolt",              "bwa",    "BWA",    "minimap2",    "STAR",    "bowtie2",    "dragen",     "gem3",          "gem2sam",      "bismark",    "bsseeker2",      "Winnowmap",    "baz2bam",     "BBMap",    "tmap",    "hisat2",    "Bowtie",    "NovoAlign",    "razers3",    "blasr",    "ngmlr",            "Delve",    "TopHat",    "cpu",    "longranger",           "CLCGenomicsWB",                }
-#define SAM_MAPPER_SIGNATURE        { "Unknown_mapper", "PN:bwa	VN:BSB"/*\t*/, "PN:bwa", "PN:BWA", "PN:minimap2", "PN:STAR", "PN:bowtie2", "ID: DRAGEN", "PN:gem-mapper", "PN:gem-2-sam", "ID:Bismark", "PN:BS Seeker 2", "PN:Winnowmap", "PN:baz2bam",  "PN:BBMap", "ID:tmap", "PN:hisat2", "ID:Bowtie", "PN:novoalign", "PN:razers3", "ID:BLASR", "PN:nextgenmap-lr", "ID:Delve", "ID:TopHat", "PN:cpu", "PN:longranger.lariat", "PN:clcgenomicswb",             }
+typedef enum __attribute__ ((__packed__)) { MP_UNKNOWN, MP_BSBOLT,             MP_bwa,   MP_BWA,   MP_MINIMAP2,   MP_STAR,   MP_BOWTIE2,   MP_DRAGEN,    MP_GEM3,         MP_GEM2SAM,     MP_BISMARK,   MP_BSSEEKER2,     MP_WINNOWMAP,   MP_BAZ2BAM,    MP_BBMAP,   MP_TMAP,   MP_HISAT2,   MP_BOWTIE,   MP_NOVOALIGN,   MP_RAZER3,    MP_BLASR,   MP_NGMLR,           MP_DELVE,   MP_TOPHAT,   MP_CPU,  MP_LONGRANGER,          MP_CLC,              MP_PBMM2,   MP_CCS,   NUM_MAPPERS } SamMapperType;
+#define SAM_MAPPER_NAME             { "Unknown_mapper", "bsbolt",              "bwa",    "BWA",    "minimap2",    "STAR",    "bowtie2",    "dragen",     "gem3",          "gem2sam",      "bismark",    "bsseeker2",      "Winnowmap",    "baz2bam",     "BBMap",    "tmap",    "hisat2",    "Bowtie",    "NovoAlign",    "razers3",    "blasr",    "ngmlr",            "Delve",    "TopHat",    "cpu",    "longranger",           "CLCGenomicsWB",    "pbmm2",    "ccs",                }
+#define SAM_MAPPER_SIGNATURE        { "Unknown_mapper", "PN:bwa	VN:BSB"/*\t*/, "PN:bwa", "PN:BWA", "PN:minimap2", "PN:STAR", "PN:bowtie2", "ID: DRAGEN", "PN:gem-mapper", "PN:gem-2-sam", "ID:Bismark", "PN:BS Seeker 2", "PN:Winnowmap", "PN:baz2bam",  "PN:BBMap", "ID:tmap", "PN:hisat2", "ID:Bowtie", "PN:novoalign", "PN:razers3", "ID:BLASR", "PN:nextgenmap-lr", "ID:Delve", "ID:TopHat", "PN:cpu", "PN:longranger.lariat", "PN:clcgenomicswb", "PN:pbmm2", "PN:ccs",             }
+#define MP(x) (segconf.sam_mapper == MP_##x)
 
 // seg configuration set prior to starting to seg a file during segconfig_calculate or txtheader_zip_read_and_compress
 typedef struct {
@@ -99,9 +102,9 @@ typedef struct {
     bool SA_CIGAR_can_have_H;   // some SA_CIGARs have H (set while segging MAIN)
     thool SA_HtoS;              // when a DEPN CIGAR has H, the corresponding SA_CIGAR has S
     bool sag_has_AS;            // sag store the AS:i values of prim lines that have them. Set if its beneficial to seg AS:i in depn lines against prim
-    uint32_t sam_cigar_len;     // approx average CIGAR len rounded up (during running==true - total len)
-    uint32_t sam_seq_len;       // ZIP/PIZ: approx average (SEQ.len+hard-clips) rounded to the nearest (during running - total len)
-    uint32_t seq_len_to_cm;     // ZIP/PIZ: approx average of (seq_len/cm:i) (during running - cumulative)
+    uint32_t sam_cigar_len;     // approx average CIGAR len rounded up (during segconf.running==true - total len)
+    uint32_t sam_seq_len;       // ZIP/PIZ: approx average (SEQ.len+hard-clips) rounded to the nearest (during segconf.running - total len)
+    uint32_t seq_len_to_cm;     // ZIP/PIZ: approx average of (seq_len/cm:i) (during segconf.running - cumulative)
     char CR_CB_seperator;       // ZIP: seperator within CR:Z and CB:Z fields
     bool abort_gencomp;         // ZIP: vb=1 found out that the file actually has no depn or no prim, so we stop sending lines to prim/depn
     bool has_cellranger;        // ZIP/PIZ: if TX:Z and/or AN:Z fields are present, they were generated by cellranger
@@ -124,6 +127,7 @@ typedef struct {
     bool vcf_is_gwas;           // GWAS-VCF format: https://github.com/MRCIEU/gwas-vcf-specification
     bool vcf_illum_gtyping;     // tags from Illumina GenCall genotyping software
     bool vcf_infinium;
+    bool vcf_dbSNP;
     uint64_t count_dosage[2];   // used to calculate pc_has_dosage
     float pc_has_dosage;        // % of the samples x lines that have a valid (0-2) dosage value [0.0,1.0]
     bool use_null_DP_method;    // A method for predicting GT=./. by DP=.
@@ -137,7 +141,16 @@ typedef struct {
     FastqLine3Type line3;       // format of line3
     QnameFlavor line3_flavor;   // in case of L3_QF 
     int r1_or_r2;               // in case compression is WITHOUT --pair: our guess of whether this file is R1 or R2
-    
+    bool deep_no_qname;         // Deep: true if for some segconf lines which have Deep, qname doesn't match (eg, bc of QNAME modifications between FASTQ and SAM)
+    bool deep_no_qual;          // Deep: true if for some segconf lines which have Deep, qual doesn't match (eg, bc of undocumented BQSR)
+    unsigned n_full_mch;        // Deep: count segconf lines where hash matches with at least one SAM line - QNAME, SEQ, QUAL
+    unsigned n_seq_qual_mch;    // Deep: count segconf lines where hash matches with at least one SAM line - SEQ and QUAL
+    unsigned n_seq_qname_mch;   // Deep: count segconf lines where hash matches with at least one SAM line - SEQ and QNAME 
+    unsigned n_seq_mch;         // Deep: count segconf lines where hash matches with at least one SAM line - SEQ
+    unsigned n_no_mch;          // Deep: count segconf lines that don't match any SAM line (perhaps because SAM is filtered)
+    STRl (deep_desc_con_snip, 48); // Deep: container for producing DESC = QNAME + whitespace + more DESC
+    char deep_desc_con_snip_sep;// Deep: separator between the two items of deep_desc_con_snip
+
     // FASTA stuff
     bool fasta_has_contigs;     // the sequences in this FASTA represent contigs (as opposed to reads) - in which case we have a FASTA_CONTIG dictionary and RANDOM_ACCESS
     SeqType seq_type;           // nucleotide or protein
@@ -159,5 +172,6 @@ extern void segconf_calculate (void);
 extern void segconf_update_qual (STRp (qual));
 extern bool segconf_is_long_reads(void);
 extern void segconf_mark_as_used (VBlockP vb, unsigned num_ctxs, ...);
-extern rom sam_mapper_name (SamMapperType mp);
+extern rom segconf_sam_mapper_name (void);
+extern rom segconf_tech_name (void);
 

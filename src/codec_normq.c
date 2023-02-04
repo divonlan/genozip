@@ -6,7 +6,7 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
-// fallback compression algorithm for SAM QUAL values LONGR and DOMQ are not applicable
+// fallback compression algorithm for SAM/FASTQ QUAL values if LONGR and DOMQ are not applicable
 
 #include "vblock.h"
 #include "data_types.h"
@@ -73,7 +73,7 @@ CODEC_RECONSTRUCT (codec_normq_reconstruct)
 {   
     if (!ctx->is_loaded) return;
 
-    bool reconstruct = true;
+    ReconType reconstruct = true;
 
     rom next_qual = Bc(ctx->local, ctx->next_local);
     uint32_t len = snip_len ? atoi(snip) : vb->seq_len;

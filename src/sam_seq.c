@@ -46,7 +46,7 @@ static bool sam_analyze_copied_SEQ (VBlockSAMP vb, STRp(seq), const SamPosType p
 
     ConstRangeP range = IS_ZIP ? ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos, ref_consumed, WORD_INDEX_NONE, seq, 
                                                     IS_REF_EXTERNAL ? NULL : &lock)
-                               : ref_piz_get_range (VB, gref, true);
+                               : ref_piz_get_range (VB, gref, SOFT_FAIL);
     if (!range) goto fail; // can happen in ZIP/REF_INTERNAL due to contig cache contention ; in ZIP/PIZ with an external reference - contig is not in the reference
 
     uint32_t pos_index = pos - range->first_pos;
@@ -555,6 +555,9 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq), unsigned
         return; 
     }
 
+    if (flag.deep || flag.debug_deep == 2)
+        sam_deep_set_SEQ_hash (vb, dl, STRa(textual_seq));
+
     // case: unmapped line and we have refhash: align to reference
     if (unmapped && flag.aligner_available) {
         use_aligner:
@@ -638,14 +641,11 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq), unsigned
                               '0'+force_verbatim },
                 8, SAM_SQBITMAP, add_bytes); 
 
-    if (flag.deep) 
-        deep_sam_set_SEQ_hash (vb, dl, STRa(textual_seq));
-
     COPY_TIMER (sam_seg_SEQ);
 }
 
 // converts native SAM/BAM format to 2bit ACGT - if soft_fail, returns false if any base is not A,C,G or T 
-bool sam_sa_native_to_acgt (VBlockSAMP vb, Bits *packed, uint64_t next_bit, STRp(seq), bool bam_format, bool revcomp, bool soft_fail)
+bool sam_seq_pack (VBlockSAMP vb, Bits *packed, uint64_t next_bit, STRp(seq), bool bam_format, bool revcomp, FailType soft_fail)
 {
     if (bam_format) {
         if (!revcomp)
@@ -769,7 +769,7 @@ void sam_zip_prim_ingest_vb_pack_seq (VBlockSAMP vb, Sag *vb_grps, uint32_t vb_g
         buf_extend_bits (packed_seq_buf, vb_grp->seq_len * 2); // extend now 
         Bits *sag_seq = (BitsP)packed_seq_buf;
 
-        sam_sa_native_to_acgt (vb, sag_seq, next_bit, Bc (vb->txt_data, vb_grp->seq), vb_grp->seq_len, is_bam_format, false, false);
+        sam_seq_pack (vb, sag_seq, next_bit, Bc (vb->txt_data, vb_grp->seq), vb_grp->seq_len, is_bam_format, false, HARD_FAIL);
         vb_grp->seq = next_bit / 2; // update from an index into txt_data to an index (bases not bits) into sag_seq
     }
 }
@@ -806,7 +806,7 @@ static inline uint8_t *sam_reconstruct_SEQ_get_ref_bytemap (VBlockSAMP vb, Conte
                             (v14 || // v14: we always have is_set for all the ref data (mismatches use it for SEQMIS)
                              bits_num_set_bits_region ((BitsP)&bitmap_ctx->local, bitmap_ctx->next_local, vb->ref_and_seq_consumed) > 0);
 
-    vb->range = uses_ref_data ? (RangeP)ref_piz_get_range (VB, gref, true) : NULL; 
+    vb->range = uses_ref_data ? (RangeP)ref_piz_get_range (VB, gref, SOFT_FAIL) : NULL; 
     if (!vb->range) return NULL; 
 
     SamPosType range_len = vb->range ? (vb->range->last_pos - vb->range->first_pos + 1) : 0;
@@ -840,7 +840,7 @@ static inline uint8_t *sam_reconstruct_SEQ_get_ref_bytemap (VBlockSAMP vb, Conte
 }
 
 // PIZ: SEQ reconstruction 
-void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, ContextP bitmap_ctx, STRp(snip), bool reconstruct)
+void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, ContextP bitmap_ctx, STRp(snip), ReconType reconstruct)
 {
     START_TIMER;
 
@@ -1049,7 +1049,7 @@ static void reconstruct_SEQ_acgt (VBlockSAMP vb, BitsP seq_2bits, uint64_t start
     vb->txt_data.len32 += seq_len;
 }
 
-static void reconstruct_SEQ_copy_sag_prim (VBlockSAMP vb, ContextP ctx, BitsP prim, uint64_t prim_start_base, uint32_t prim_seq_len, bool xstrand, bool reconstruct, bool force_no_analyze_depn_SEQ)
+static void reconstruct_SEQ_copy_sag_prim (VBlockSAMP vb, ContextP ctx, BitsP prim, uint64_t prim_start_base, uint32_t prim_seq_len, bool xstrand, ReconType reconstruct, bool force_no_analyze_depn_SEQ)
 {
     START_TIMER;
     
@@ -1070,7 +1070,7 @@ static void reconstruct_SEQ_copy_sag_prim (VBlockSAMP vb, ContextP ctx, BitsP pr
     COPY_TIMER (reconstruct_SEQ_copy_sag_prim);
 }
 
-static void reconstruct_SEQ_copy_saggy (VBlockSAMP vb, ContextP ctx, bool reconstruct, bool force_no_analyze_depn_SEQ)
+static void reconstruct_SEQ_copy_saggy (VBlockSAMP vb, ContextP ctx, ReconType reconstruct, bool force_no_analyze_depn_SEQ)
 {
     if (!reconstruct || !ctx->is_loaded) return;
 
@@ -1161,10 +1161,10 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SEQ)
 // SAM-to-BAM translator: translate SAM ASCII sequence characters to BAM's 4-bit characters:
 TRANSLATOR_FUNC (sam_piz_sam2bam_SEQ)
 {
-    // the characters "=ACMGRSVTWYHKDBN" are mapped to BAM 0->15, in this matrix we add 0x80 as a validity bit. All other characters are 0x00 - invalid
-    static const uint8_t sam2bam_seq_map[256] = { ['=']=0x80, ['A']=0x81, ['C']=0x82, ['M']=0x83, ['G']=0x84, ['R']=0x85, ['S']=0x86, ['V']=0x87, 
-                                                  ['T']=0x88, ['W']=0x89, ['Y']=0x8a, ['H']=0x8b, ['K']=0x8c, ['D']=0x8d, ['B']=0x8e, ['N']=0x8f };
-
+    // before translating - add to Deep if needed
+    if (flag.deep && IS_DEEPABLE (last_flags))
+        sam_piz_deep_add_seq (VB_SAM, STRa(recon));
+    
     BAMAlignmentFixed *alignment = (BAMAlignmentFixed *)Bc (vb->txt_data, vb->line_start);
     uint32_t l_seq = LTEN32 (alignment->l_seq);
 
@@ -1191,6 +1191,10 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_SEQ)
 
     // if l_seq is odd, 0 the next byte that will be half of our last result byte
     if (l_seq % 2) *BAFTtxt = 0; 
+
+    // the characters "=ACMGRSVTWYHKDBN" are mapped to BAM 0->15, in this matrix we add 0x80 as a validity bit. All other characters are 0x00 - invalid
+    static const uint8_t sam2bam_seq_map[256] = { ['=']=0x80, ['A']=0x81, ['C']=0x82, ['M']=0x83, ['G']=0x84, ['R']=0x85, ['S']=0x86, ['V']=0x87, 
+                                                  ['T']=0x88, ['W']=0x89, ['Y']=0x8a, ['H']=0x8b, ['K']=0x8c, ['D']=0x8d, ['B']=0x8e, ['N']=0x8f };
 
     uint8_t *seq_before=(uint8_t *)recon, *seq_after=(uint8_t *)recon; 
     for (uint32_t i=0; i < (l_seq+1)/2; i++, seq_after++, seq_before += 2) {

@@ -43,7 +43,7 @@ typedef struct {
     VBIType vblock_i;      // this is the same as the index of this entry, and also of vb->vblock_i (after vb is loaded). for convenience.
     VBIType pair_vb_i;     // vb_i of pair vb, or 0 if there isn't any. if pair_vb_i > vblock_i then we are pair_1
     uint32_t num_lines;    // number of lines in this VB - readed from VB header only if needed
-    CompIType comp_i;      // comp_i of this VB (0-3)
+    CompIType comp_i;      // comp_i of this VB 
     bool is_loaded;        // has data moving to txt_data completed
     bool needs_recon;      // VB/TXT_HEADER should be reconstructed, but writing it depends on needs_write
     bool needs_write;      // VB/TXT_HEADER is written to output file, and hence is in recon_plan
@@ -52,7 +52,7 @@ typedef struct {
     bool encountered;      // used by writer_update_section_list
     bool fasta_contig_grepped_out; // FASTA: a VB that starts with SEQ data, inherits this from the last contig of the previous VB 
     Buffer is_dropped_buf; // a bitarray with a bit set is the line is marked for dropping
-    BitsP is_dropped;  // pointer into is_dropped_buf
+    BitsP is_dropped;      // pointer into is_dropped_buf
 } VbInfo; // used both for VBs and txt headers
 
 #define VBINFO(vb_i) B(VbInfo, vb_info, (vb_i))
@@ -259,7 +259,7 @@ static void writer_init_vb_info (void)
 
     for (VBIType vb_i=1; vb_i <= z_file->num_vbs; vb_i++) {
 
-        Section sec = sections_vb_header (vb_i, false);
+        Section sec = sections_vb_header (vb_i, HARD_FAIL);
             
         VbInfo *v = VBINFO(vb_i); 
         v->vblock_i  = vb_i;
@@ -881,8 +881,8 @@ void writer_create_plan (void)
 // Writer thread stuff
 // -------------------
 
-#define BGZF_FLUSH_THRESHOLD  (32*1024*1024) 
-#define PLAIN_FLUSH_THRESHOLD (4 *1024*1024) 
+#define BGZF_FLUSH_THRESHOLD  (32 MB) 
+#define PLAIN_FLUSH_THRESHOLD (4 MB) 
 #define FLUSH_THRESHOLD ((txt_file->codec == CODEC_BGZF) ? BGZF_FLUSH_THRESHOLD : PLAIN_FLUSH_THRESHOLD)
 
 static void writer_write (BufferP buf, uint64_t txt_data_len)

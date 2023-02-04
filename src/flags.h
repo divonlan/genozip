@@ -42,7 +42,7 @@ typedef struct {
     
     // genozip options that affect the compressed file
     int fast, best, make_reference, multiseq, md5, 
-        deep; // deep is set with --deep in ZIP and from SectionHeaderGenozipHeader.sam.deep in PIZ
+        deep; // deep is set with --deep in ZIP and from SectionHeaderGenozipHeader.flags.genozip_header.dts2_deep in PIZ
     rom vblock;
     
     // ZIP: data modifying options
@@ -122,7 +122,7 @@ typedef struct {
         show_vblocks, show_threads, show_uncompress, biopsy,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
         debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sag, debug_gencomp, debug_lines, debug_latest,
-        debug_peek, submit_stats, debug_submit, 
+        debug_peek, submit_stats, debug_submit, debug_deep, show_segconf_has,
         debug_debug, // ad-hoc debug printing in prod
         no_gencomp, force_gencomp, no_domqual, verify_codec, seg_only, show_bam, xthreads, show_flags, show_rename_tags,
         #define SHOW_CONTAINERS_ALL_VBs (-1)
@@ -131,6 +131,7 @@ typedef struct {
         show_headers; // (1 + SectionType to display) or 0=flag off or -1=all sections
     rom help, dump_section, show_is_set, show_time, show_mutex;
     struct biopsy_line { VBIType vb_i; int32_t line_i/*within vb*/; } biopsy_line; // argument of --biopsy-line (line_i=-1 means: not used)
+    DeepHash debug_deep_hash; // qname, seq, qual hashes
     
     DictId dict_id_show_one_b250,   // argument of --show-b250-one
            show_one_counts,

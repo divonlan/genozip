@@ -231,6 +231,9 @@ void vcf_seg_initialize (VBlockP vb_)
         seg_mux_init (VB, CTX(VCF_INFO), 2, VCF_SPECIAL_MUX_BY_HAS_RGQ, false, (MultiplexerP)&vb->mux_INFO, "01");        
     }
 
+    if (segconf.vcf_dbSNP)
+        seg_mux_init (VB, CTX(INFO_VC), 3, VCF_SPECIAL_MUX_BY_VARTYPE, true, (MultiplexerP)&vb->mux_VC, "012");
+
     vcf_info_seg_initialize(vb);
     vcf_samples_seg_initialize(vb);
 

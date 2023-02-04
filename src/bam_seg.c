@@ -436,13 +436,13 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     }
 
     if (has_NM) 
-        dl->NM_len = sam_seg_get_aux_int (vb, vb->idx_NM_i, &dl->NM, true, MIN_NM_i, MAX_NM_i, false);
+        dl->NM_len = sam_seg_get_aux_int (vb, vb->idx_NM_i, &dl->NM, true, MIN_NM_i, MAX_NM_i, HARD_FAIL);
 
     if (!sam_is_main_vb) {
 
         // set dl->AS needed by sam_seg_prim_add_sag
         if (sam_is_prim_vb && has_AS)
-            sam_seg_get_aux_int (vb, vb->idx_AS_i, &dl->AS, true, MIN_AS_i, MAX_AS_i, false);
+            sam_seg_get_aux_int (vb, vb->idx_AS_i, &dl->AS, true, MIN_AS_i, MAX_AS_i, HARD_FAIL);
 
         sam_seg_sag_stuff (vb, dl, STRb(vb->textual_cigar), B1STc(vb->textual_seq), true);
     }
@@ -504,6 +504,8 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
         else if (IS_SAG_FLAG) sam_seg_prim_add_sag (vb, dl, 0, true);
         else if (IS_SAG_SOLO) sam_seg_prim_add_sag_SOLO (vb, dl);
     }
+
+    if (dl->SEQ.len > vb->longest_seq_len) vb->longest_seq_len = dl->SEQ.len;
 
 done: {}
 

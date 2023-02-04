@@ -16,10 +16,10 @@
 // -----------------------------------------------------------------------------------------------------------
 // Common contexts of FASTQ and SAM - these MUST be first in same order exactly in SAM/FASTQ for Deep to work.
 // -----------------------------------------------------------------------------------------------------------
-#pragma GENDICT FASTQ_CONTIG=DTYPE_FIELD=RNAME  // must be first - did_i=0=CHROM (up to v14 the dict_id was CONTIG)
+#pragma GENDICT FASTQ_CONTIG=DTYPE_FIELD=RNAME      // must be first - did_i=0=CHROM (up to v14 the dict_id was CONTIG)
 
-#pragma GENDICT FASTQ_DESC=DTYPE_FIELD=QNAME    // Q?NAME must immediately follow (up to v14 the dict_id was DESC)
-#pragma GENDICT FASTQ_Q0NAME=DTYPE_1=Q0NAME     // MAX_QNAME_ITEMS fixed qname items must have a did_i directly after container's (MUST be the same dict_id as in sam.h)
+#pragma GENDICT FASTQ_DESC=DTYPE_FIELD=QNAME        // Q?NAME must immediately follow (up to v14 the dict_id was DESC)
+#pragma GENDICT FASTQ_Q0NAME=DTYPE_1=Q0NAME         // MAX_QNAME_ITEMS fixed qname items must have a did_i directly after container's (MUST be the same dict_id as in sam.h)
 #pragma GENDICT FASTQ_Q1NAME=DTYPE_1=Q1NAME 
 #pragma GENDICT FASTQ_Q2NAME=DTYPE_1=Q2NAME
 #pragma GENDICT FASTQ_Q3NAME=DTYPE_1=Q3NAME
@@ -30,9 +30,8 @@
 #pragma GENDICT FASTQ_Q8NAME=DTYPE_1=Q8NAME 
 #pragma GENDICT FASTQ_Q9NAME=DTYPE_1=Q9NAME 
 #pragma GENDICT FASTQ_QANAME=DTYPE_1=QANAME     
-#pragma GENDICT FASTQ_QBNAME=DTYPE_1=QBNAME     // if adding more Q*NAMEs - add to kraken.h and sam.h and update MAX_QNAME_ITEMS
-#pragma GENDICT FASTQ_QmNAME=DTYPE_1=QmNAME     // QmNAME reserved for mate number (always the last dict_id in the container)
-
+#pragma GENDICT FASTQ_QBNAME=DTYPE_1=QBNAME         // if adding more Q*NAMEs - add to kraken.h and sam.h and update MAX_QNAME_SEGMENTS
+#pragma GENDICT FASTQ_QmNAME=DTYPE_1=QmNAME         // QmNAME reserved for mate number (always the last dict_id in the container)
 #pragma GENDICT FASTQ_SQBITMAP=DTYPE_FIELD=SQBITMAP
 #pragma GENDICT FASTQ_NONREF=DTYPE_FIELD=NONREF
 #pragma GENDICT FASTQ_NONREF_X=DTYPE_FIELD=NONREF_X
@@ -53,10 +52,9 @@
 #pragma GENDICT FASTQ_TAXID=DTYPE_FIELD=TAXID
 #pragma GENDICT FASTQ_DEBUG_LINES=DTYPE_FIELD=DBGLINES      // used by --debug-lines
 
-#pragma GENDICT FASTQ_DEEP=DTYPE_FIELD=DpVB
-#pragma GENDICT FASTQ_DEEP_LINE=DTYPE_FIELD=DpLINE
+#pragma GENDICT FASTQ_DEEP=DTYPE_FIELD=DEEP
 
-#pragma GENDICT FASTQ_QNAME2=DTYPE_1=QNAME2     // QNAME embedded in DESC (QNAME2 items immediately follow)
+#pragma GENDICT FASTQ_QNAME2=DTYPE_1=QNAME2         // QNAME embedded in DESC (QNAME2 items immediately follow)
 #pragma GENDICT FASTQ_Q0NAME2=DTYPE_1=q0NAME    
 #pragma GENDICT FASTQ_Q1NAME2=DTYPE_1=q1NAME 
 #pragma GENDICT FASTQ_Q2NAME2=DTYPE_1=q2NAME
@@ -74,8 +72,9 @@
 #pragma GENDICT FASTQ_E2L=DTYPE_FIELD=E2L
 
 #pragma GENDICT FASTQ_LINE3=DTYPE_FIELD=LINE3
-#define MAX_LINE3_ITEMS 9
-#pragma GENDICT FASTQ_T0HIRD=DTYPE_1=t0NAME    // must be directly after FASTQ_LINE3
+
+#define MAX_LINE3_ITEMS (MAX_QNAME_SEGMENTS+1)      // +1 for COPY_Q
+#pragma GENDICT FASTQ_T0HIRD=DTYPE_1=t0NAME         // must be directly after FASTQ_LINE3
 #pragma GENDICT FASTQ_T1HIRD=DTYPE_1=t1NAME 
 #pragma GENDICT FASTQ_T2HIRD=DTYPE_1=t2NAME
 #pragma GENDICT FASTQ_T3HIRD=DTYPE_1=t3NAME
@@ -83,6 +82,10 @@
 #pragma GENDICT FASTQ_T5HIRD=DTYPE_1=t5NAME
 #pragma GENDICT FASTQ_T6HIRD=DTYPE_1=t6NAME 
 #pragma GENDICT FASTQ_T7HIRD=DTYPE_1=t7NAME 
+#pragma GENDICT FASTQ_T8HIRD=DTYPE_1=t8NAME 
+#pragma GENDICT FASTQ_T9HIRD=DTYPE_1=t9NAME 
+#pragma GENDICT FASTQ_TAHIRD=DTYPE_1=tANAME 
+#pragma GENDICT FASTQ_TBHIRD=DTYPE_1=tBNAME 
 #pragma GENDICT FASTQ_COPY_Q=DTYPE_1=tQcopy 
 
 // -----------------------------------------------------------------------------------------------------------
@@ -96,9 +99,10 @@ extern bool is_fastq (STRp(header), bool *need_more);
 
 // ZIP Stuff
 extern void fastq_zip_initialize (void);
+extern void fastq_segconf_set_r1_or_r2 (void);
 extern void fastq_zip_finalize (bool is_last_user_txt_file);
 extern void fastq_zip_init_vb (VBlockP vb);
-extern bool fastq_zip_dts_flag (void);
+extern bool fastq_zip_dts_flag (int dts);
 COMPRESSOR_CALLBACK (fastq_zip_seq);
 COMPRESSOR_CALLBACK(fastq_zip_qual); // used by codec_longr_compress
 
@@ -110,12 +114,13 @@ extern rom fastq_seg_txt_line();
 extern void fastq_seg_pair2_gpos (VBlockP vb, PosType pair1_pos, PosType pair2_gpos);
 
 // PIZ Stuff
+extern void fastq_piz_process_recon (VBlockP vb);
 extern bool fastq_piz_is_paired (void);
 extern bool fastq_piz_maybe_reorder_lines (void);
 extern bool fastq_piz_init_vb (VBlockP vb, const SectionHeaderVbHeader *header, uint32_t *txt_data_so_far_single_0_increment);
 CONTAINER_FILTER_FUNC (fastq_piz_filter);
 extern IS_SKIP (fastq_piz_is_skip_section);
-extern void fastq_recon_aligned_SEQ (VBlockP vb, ContextP bitmap_ctx, STRp(seq_len_str), bool reconstruct);
+extern void fastq_recon_aligned_SEQ (VBlockP vb, ContextP bitmap_ctx, STRp(seq_len_str), ReconType reconstruct);
 extern CONTAINER_CALLBACK (fastq_piz_container_cb);
 
 // VBlock stuff
@@ -139,10 +144,13 @@ extern void fastq_piz_genozip_header (const SectionHeaderGenozipHeader *header);
 typedef enum { FQ_COMP_R1, FQ_COMP_R2 } FastqComponentType;
 #define FASTQ_COMP_NAMES { "FQR1", "FQR2" }
  
-#define FASTQ_SPECIAL { fastq_special_unaligned_SEQ, fastq_special_PAIR2_GPOS, fastq_special_mate_lookup, fastq_special_set_deep }
+#define FASTQ_SPECIAL { fastq_special_unaligned_SEQ, fastq_special_PAIR2_GPOS, fastq_special_mate_lookup, \
+                        fastq_special_set_deep, fastq_special_copy_deep, fastq_special_QUAL }
 
 SPECIAL (FASTQ, 0,  unaligned_SEQ, fastq_special_unaligned_SEQ); // v14
 SPECIAL (FASTQ, 1,  PAIR2_GPOS,    fastq_special_PAIR2_GPOS);    // v14
 SPECIAL (FASTQ, 2,  mate_lookup,   fastq_special_mate_lookup);   // v14
-SPECIAL (FASTQ, 3,  set_deep,      fastq_special_set_deep);      // v14
-#define NUM_FASTQ_SPECIAL 4
+SPECIAL (FASTQ, 3,  set_deep,      fastq_special_set_deep);      // v15
+SPECIAL (FASTQ, 4,  copy_deep,     fastq_special_copy_deep);     // v15
+SPECIAL (FASTQ, 5,  QUAL,          fastq_special_QUAL);          // v15: used only for --deep files
+#define NUM_FASTQ_SPECIAL 6
