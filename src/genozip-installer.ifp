@@ -2,7 +2,7 @@
 ProjectFileVersion = "1.1"
 [General]
 Program name = Genozip
-Program version = 14.0.28
+Program version = 14.0.29
 Windows 2000 = 0
 Windows XP = 0
 Windows Server 2003 = 0
@@ -88,14 +88,14 @@ C:\Users\divon\Projects\genozip\src\windows\LICENSE.for-installer.txt
 9.3 KB
 txt
 [Licence_Begin]
-10713
+10528
 {\rtf1\ansi\ansicpg1252\deff0{\fonttbl{\f0\fnil\fcharset0 Arial;}}
 {\colortbl ;\red0\green0\blue0;}
 \viewkind4\uc1\pard\cf1\lang1033\fs20 This program, "Genozip", which includes four tools \par
 (genozip, genounzip, genocat and genols), source code,\par
 object code, executables, documentation and other files,\par
 was developed by Divon Lan ("Developer") and is copyright \par
-(C) 2019-2022 Genozip Limited ("Licensor"). All rights\par
+(C) 2019-2023 Genozip Limited ("Licensor"). All rights\par
 reserved. Patent pending.\par
 \par
 TERMS AND CONDITIONS FOR USE\par
@@ -229,21 +229,21 @@ agree that Licensor shall be eligible to 20% ownership of\par
 any revenue generated and intellectual property created\par
 that involved the severely unauthorized use of Genozip.\par
 \par
-5. Data collected\par
+5. Data collected. You consent to the following data\par
+collection:\par
 \par
    a. At registration time: registration information\par
 provided by you and details about your hardware, operating\par
 system and IP address as displayed at end of the\par
 registration process.\par
 \par
-   b. When a file is compressed: aggregate statistical\par
-information about the performance of the compression\par
-algorithm and associated metadata. This data is collected\par
-when using an Academic or Evaluation license. When using a\par
-Standard (i.e. paid) License, YOU WILL BE ASKED TO CHOOSE\par
-WHETHER OR NOT YOU ALLOW THIS DATA TO BE COLLECTED. Details\par
-can be found here: https://genozip.com/stats-collected. \par
-Trademarks. This License does not grant permission to use the trade names, trademarks, service marks, or product names of the Licensor, except as required for reasonable and customary use in describing the origin of the Genozip\par
+   b. When a file is compressed: a log record containing\par
+aggregate statistical information about the performance of\par
+the compression algorithm and associated metadata. This\par
+logging occurs when using an Academic or Evaluation license\par
+. When using a Standard (i.e. paid) License, YOU WILL BE\par
+ASKED TO CHOOSE WHETHER OR NOT YOU ALLOW THIS LOGGING.\par
+Details can be found here: https://genozip.com/logs. \par
 \par
 6. Trademarks. This License does not grant permission to\par
 use the trade names, trademarks, service marks, or product\par
@@ -251,7 +251,7 @@ names of the Licensor, except as required for reasonable\par
 and customary use in describing the origin of the Genozip\par
 \par
 7. Survival. The limitations of liability and ownership\par
-rights of Genozip contained herein and Licensee\'e2\'80\'99s\par
+rights of Genozip contained herein and Licensee\rquote s\par
 obligations following termination of this Agreement will\par
 survive the termination of this Agreement for any reason.\par
 \par
@@ -264,7 +264,7 @@ Health or any other regulatory entity in any country for\par
 any specific intended use, whether research, commercial,\par
 diagnostic, or otherwise, and (ii) Licensee must ensure it\par
 has any regulatory approvals that are necessary for\par
-Licensee\'e2\'80\'99s intended uses of Genozip. Licensee will comply\par
+Licensee\rquote s intended uses of Genozip. Licensee will comply\par
 with all applicable laws and regulations when using and\par
 maintaining Genozip.\par
 \par
@@ -301,7 +301,8 @@ ESSENTIAL PURPOSE.\par
 \par
 END OF TERMS AND CONDITIONS\par
 \par
-Genozip license version: 14.0.26\par
+Genozip license version: 14.0.29\par
+\par
 }
  [Licence_End]
 [Registry]
