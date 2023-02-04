@@ -410,7 +410,7 @@ conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld
 	@echo "  (7) In ~30 minutes users will be able to 'conda update genozip'"
 
 # Building Windows InstallForge with distribution flag: we delete arch.o to force it to re-compile with DISTRIBUTION=InstallForge.
-windows/%.exe: CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"InstallForge\" # note: matches the name in version.c
+windows/%.exe: CFLAGS += $(OPTFLAGS) # -DDISTRIBUTION=\"InstallForge\" # note: matches the name in version.c
 windows/%.exe: $(OBJS) %.exe
 	@echo Linking $@
 	@(mkdir windows >& /dev/null ; exit 0)
@@ -423,7 +423,7 @@ windows/LICENSE.for-installer.txt: genozip$(EXE) version.h
 
 refresh_arch_o : 
 	@if [ -f $(OBJDIR)/arch.o ]; then rm -f $(OBJDIR)/arch.o >& /dev/null ; fi # remove this arch.o which contains DISTRIBUTION
-	@$(MAKE) $(OBJDIR)/arch.o
+	@DISTRIBUTION=InstallForge $(MAKE) $(OBJDIR)/arch.o
 
 WINDOWS_INSTALLER_OBJS = windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe windows/LICENSE.for-installer.txt ../LICENSE.txt
 
