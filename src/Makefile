@@ -142,7 +142,7 @@ OBJDIR_WINDOWS=objdir.windows
 OBJDIR_MAC=objdir.mac
 
 ifeq ($(OS),Windows_NT)
-EXE = .exe
+	EXE = .exe
 	LDFLAGS += -static -static-libgcc
 	OBJDIR=$(OBJDIR_WINDOWS)
 	WSL=wsl
@@ -169,7 +169,7 @@ EXECUTABLES       = genozip$(EXE)       genounzip$(EXE)       genocat$(EXE)     
 DEBUG_EXECUTABLES = genozip-debug$(EXE) genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE)
 OPT_EXECUTABLES   = genozip-opt$(EXE)   genounzip-opt$(EXE)   genocat-opt$(EXE)   genols-opt$(EXE)
 
-all   : CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"$(DISTRIBUTION)\"  
+all   : CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"$(DISTRIBUTION)\" -DDISTUNZIPMSG=\"$(DISTUNZIPMSG)\"   
 all   : $(OBJDIR) $(EXECUTABLES) 
 	@chmod +x test.sh
 
@@ -226,17 +226,17 @@ dict_id_gen.h : $(shell grep -w "pragma GENDICT" *.h | cut -d: -f1 | uniq) dict_
 
 endif # ugly hack to avoid conda failure due to bash issues in dict_id_gen.sh - pre-generate on Windows and check in to github
 
-genozip$(EXE): dict_id_gen.h $(OBJS)
+genozip$(EXE): sync_wsl_clock dict_id_gen.h $(OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $(OBJS) $(CFLAGS) $(LDFLAGS)
 	@ln -f $@ ../$@
  
-genozip-debug$(EXE): dict_id_gen.h $(DEBUG_OBJS)
+genozip-debug$(EXE): sync_wsl_clock dict_id_gen.h $(DEBUG_OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $(DEBUG_OBJS) $(CFLAGS) $(LDFLAGS) 
 	@ln -f $@ ../$@
 
-genozip-opt$(EXE): dict_id_gen.h $(OPT_OBJS)
+genozip-opt$(EXE): sync_wsl_clock dict_id_gen.h $(OPT_OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $(OPT_OBJS) $(CFLAGS) $(LDFLAGS)
 	@ln -f $@ ../$@
@@ -258,6 +258,15 @@ genounzip-opt$(EXE) genocat-opt$(EXE) genols-opt$(EXE): genozip-opt$(EXE)
 	@rm -f $@ 
 	@ln -f $^ $@
 	@ln -f $@ ../$@
+
+# WSL2 clock is out of sync with Windows (and hence the NTFS filesystem) every time the computer sleeps
+# For this to work, first "sudo chmod u+s /usr/sbin/hwclock"
+ifneq ($(OS),Windows_NT)
+sync_wsl_clock:
+	@if `uname -a | grep microsoft-standard > /dev/null`; then hwclock -s > /dev/null 2>&1; fi || echo -n 
+else
+sync_wsl_clock:
+endif
 
 ../LICENSE.txt: text_license.h version.h # not dependent on genozip.exe, so we don't generate it every compilation
 	@$(MAKE) genozip$(EXE) # recursive call to make genozip.exe with the latest version
@@ -315,7 +324,10 @@ clean: clean-installers clean-test
 	@rm -R $(OBJDIR)
 	@mkdir $(OBJDIR) $(addprefix $(OBJDIR)/, $(SRC_DIRS))
 
-.PHONY: clean clean-debug clean-optimized clean-installers clean-distribution git-pull macos mac/.remote_mac_timestamp delete-arch testfiles test-backup genozip-linux-x86_64/clean genozip-prod genozip-prod.exe dict_id_gen$(EXE) push-build increment-version $(INSTALLERS)/LICENSE.html refresh_arch_o genozip-linux-x86_64/clean
+.PHONY: clean clean-debug clean-optimized clean-installers clean-distribution \
+        git-pull macos mac/.remote_mac_timestamp delete-arch testfiles test-backup \
+		genozip-linux-x86_64/clean genozip-prod genozip-prod.exe dict_id_gen$(EXE) sync_wsl_clock \
+		push-build increment-version $(INSTALLERS)/LICENSE.html refresh_arch_o genozip-linux-x86_64/clean
 
 # builds prod for local OS
 genozip-prod$(EXE): 
