@@ -215,7 +215,7 @@ static void sam_seg_qname_initialize (VBlockSAMP vb)
 
     // initial allocations based on segconf data
     else {
-        vb->qname_hash.prm8[0] = MIN_(20, MAX_(14, 32 - __builtin_clzl (vb->lines.len32 * 5))); // between 14 and 20 bits - tested - no additional compression benefit beyond 20 bits
+        vb->qname_hash.prm8[0] = MIN_(20, MAX_(14, 32 - __builtin_clz (vb->lines.len32 * 5))); // between 14 and 20 bits - tested - no additional compression benefit beyond 20 bits
         buf_alloc_255(vb, &vb->qname_hash, 0, (1ULL << vb->qname_hash.prm8[0]), int32_t, 1, "qname_hash");
     }
 
@@ -576,7 +576,7 @@ static void sam_seg_finalize_segconf (VBlockP vb)
 
     // evidence of STARsolo or cellranger (this is also detected in the SAM header)
     if ((MP(STAR) || MP(UNKNOWN)) &&
-        ((segconf.has[OPTION_RX_Z] + segconf.has[OPTION_QX_Z] + segconf.has[OPTION_BX_Z] >= 2) ||
+        ((segconf.has[OPTION_UB_Z] + segconf.has[OPTION_UR_Z] + segconf.has[OPTION_UY_Z] >= 2) ||
          (segconf.has[OPTION_gn_Z] && segconf.has[OPTION_gx_Z]) ||
          (segconf.has[OPTION_GN_Z] && segconf.has[OPTION_GX_Z]) ||
          (segconf.has[OPTION_2R_Z] && segconf.has[OPTION_2Y_Z]) ||

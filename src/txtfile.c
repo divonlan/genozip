@@ -225,7 +225,7 @@ static uint32_t txtfile_read_block (VBlockP vb, uint32_t max_bytes,
 
     uint32_t bytes_read=0;
 
-    if (file_is_plain_or_ext_decompressor (txt_file)) 
+    if (txt_file->codec == CODEC_NONE) 
         bytes_read = txtfile_read_block_plain (vb, max_bytes);
     
     // BGZF: we read *compressed* data into vb->scratch - that will be decompressed later. we read

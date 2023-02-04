@@ -484,9 +484,6 @@ fallthrough_from_cram: {}
                         "Pipe-in process %s (pid=%u) died without sending any data",
                         flags_pipe_in_process_name(), flags_pipe_in_pid());
 
-                // bug 748: we observe that at about the 1000th CRAM file, we get empty input on the pipe
-                ASSINP0 (file->source_codec != CODEC_CRAM, "Error: Known issue - too many CRAM files in a single genozip command line. Solution: split the files to multiple separate genozip commands"); 
-
                 ABORTINP ("No data exists in input file %s", file->name ? file->name : FILENAME_STDIN);
             }
 
@@ -796,7 +793,8 @@ rom file_get_z_filename (rom txt_filename, DataType dt, FileType txt_ft)
     if (!txt_filename && (flag.biopsy || flag.biopsy_line.line_i != NO_LINE))
         txt_filename = "dummy"; // we don't have a txt_filename, but that's ok, because we don't need it
 
-    ASSINP0 (txt_filename, "use --output to specify the output filename (with a .genozip extension)");
+    ASSINP0 (txt_filename || !tar_is_tar(), "Piping from stdin is not supported when using --tar");
+    ASSINP0 (txt_filename, "Use --output to specify the output filename (with a .genozip extension)");
 
     unsigned dn_len = flag.out_dirname ? strlen (flag.out_dirname) : 0;
     bool is_url = url_is_url (txt_filename);
@@ -1121,7 +1119,7 @@ void file_close (FileP *file_p,
         else if (file->mode == READ && file_is_read_via_ext_decompressor (file)) 
             stream_close (&input_decompressor, STREAM_WAIT_FOR_PROCESS);
 
-        else if (file->mode == WRITE && file_is_written_via_ext_compressor (file))
+        else if (file->mode == WRITE && file_is_written_via_ext_compressor (file)) 
             stream_close (&output_compressor, STREAM_WAIT_FOR_PROCESS);
 
         // if its stdout - just flush, don't close - we might need it for the next file
@@ -1399,12 +1397,13 @@ void file_mkdir (rom dirname)
 
 // reads an entire file into a buffer. if filename is "-", reads from stdin
 void file_get_file (VBlockP vb, rom filename, BufferP buf, rom buf_name,
+                    uint64_t max_size, // 0 to read entire file, or specify for max size
                     bool verify_textual/*plain ascii*/, bool add_string_terminator)
 {
-    #define MAX_STDIN_DATA_SIZE 10000000
     bool is_stdin = !strcmp (filename, "-");
-
-    uint64_t size = is_stdin ? MAX_STDIN_DATA_SIZE : file_get_size (filename);
+    if (is_stdin && !max_size) max_size = 10000000; // max size for stdin
+    
+    uint64_t size = max_size ? max_size : file_get_size (filename);
 
     buf_alloc (vb, buf, 0, size + add_string_terminator, char, 1, buf_name);
 
@@ -1412,8 +1411,7 @@ void file_get_file (VBlockP vb, rom filename, BufferP buf, rom buf_name,
     ASSINP (file, "cannot open \"%s\": %s", filename, strerror (errno));
 
     buf->len = fread (buf->data, 1, size, file);
-    ASSERT (is_stdin || buf->len == size, "Error reading file %s: %s", filename, strerror (errno));
-    ASSERT (!is_stdin || buf->len < MAX_STDIN_DATA_SIZE, "Error reading from stdin: too much data for stdin (beyond maximum of %u bytes). Try placing the data in a file instead.", MAX_STDIN_DATA_SIZE-1);
+    ASSERT (is_stdin || max_size || buf->len == size, "Error reading file %s: %s", filename, strerror (errno));
 
     ASSINP (!verify_textual || str_is_printable (STRb(*buf)), "Expecting \"%s\" to be a textual file", filename);
 

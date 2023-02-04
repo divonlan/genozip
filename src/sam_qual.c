@@ -288,7 +288,7 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual_data)/*always te
         seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_QUAL, '0' + prim_has_qual_but_i_dont, '0' + diff_aborted }, 4, SAM_QUAL, 0); 
 
     // get QUAL score, consumed by mate ms:i
-    if (!segconf.running && segconf.sam_ms_type == ms_BIOBAMBAM)
+    if (!segconf.running && segconf.sam_ms_type == ms_BIOBAMBAM && !flag.optimize_QUAL)
         dl->QUAL_score = sam_get_QUAL_score (vb, STRa(qual_data));
  
     // get stats on qual scores

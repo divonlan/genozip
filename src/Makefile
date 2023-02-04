@@ -307,6 +307,7 @@ clean-optimized:
 	@rm -f $(OBJS) $(EXECUTABLES) $(OBJDIR)/*.o
 
 clean-distribution: # clean all platforms
+	@$(SH_VERIFY_ALL_COMMITTED)
 	@echo Cleaning up all platforms for distribution
 	@rm -f $(OBJDIR_LINUX)/*.o $(OBJDIR_LINUX)/*.d $(OBJDIR_WINDOWS)/*.o $(OBJDIR_WINDOWS)/*.d $(OBJDIR_MAC)/*.o $(OBJDIR_MAC)/*.d 
 

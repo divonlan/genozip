@@ -484,8 +484,8 @@
 #define _OPTION_we_i ((uint64_t)1765434743)
 #define _OPTION_zm_i ((uint64_t)1765436794)
 #define _OPTION_np_i ((uint64_t)1765437550)
-#define _OPTION_ec_f ((uint64_t)1765434213)
-#define _OPTION_rq_f ((uint64_t)1765437810)
+#define _OPTION_ec_f ((uint64_t)1715102565)
+#define _OPTION_rq_f ((uint64_t)1715106162)
 #define _OPTION_sn_B_f ((uint64_t)112400405261939)
 #define _OPTION_dq_Z ((uint64_t)1513779556)
 #define _OPTION_dt_Z ((uint64_t)1513780324)
@@ -1211,8 +1211,8 @@ typedef enum { SAM_RNAME, SAM_QNAME, SAM_Q0NAME, SAM_Q1NAME, SAM_Q2NAME, SAM_Q3N
     [OPTION_we_i] = { { _OPTION_we_i }, TAG(we:i) }, \
     [OPTION_zm_i] = { { _OPTION_zm_i }, TAG(zm:i) }, \
     [OPTION_np_i] = { { _OPTION_np_i }, TAG(np:i) }, \
-    [OPTION_ec_f] = { { _OPTION_ec_f }, TAG(ec:i) }, \
-    [OPTION_rq_f] = { { _OPTION_rq_f }, TAG(rq:i) }, \
+    [OPTION_ec_f] = { { _OPTION_ec_f }, TAG(ec:f) }, \
+    [OPTION_rq_f] = { { _OPTION_rq_f }, TAG(rq:f) }, \
     [OPTION_sn_B_f] = { { _OPTION_sn_B_f }, TAG(sn:B:f) }, \
     [OPTION_dq_Z] = { { _OPTION_dq_Z }, TAG(dq:Z) }, \
     [OPTION_dt_Z] = { { _OPTION_dt_Z }, TAG(dt:Z) }, \

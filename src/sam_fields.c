@@ -1339,7 +1339,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
 
         case _OPTION_mc_i: COND (segconf.is_biobambam2_sort, sam_seg_mc_i (vb, numeric.i, add_bytes));
 
-        case _OPTION_ms_i: COND (segconf.sam_ms_type == ms_BIOBAMBAM, sam_seg_ms_i (vb, dl, numeric.i, add_bytes)); // ms:i produced by biobambam or samtools
+        case _OPTION_ms_i: COND (segconf.sam_ms_type == ms_BIOBAMBAM && !flag.optimize_QUAL, sam_seg_ms_i (vb, dl, numeric.i, add_bytes)); // ms:i produced by biobambam or samtools
 
         case _OPTION_s1_i: COND (is_minimap2(), sam_seg_s1_i (vb, dl, numeric.i, add_bytes));
 

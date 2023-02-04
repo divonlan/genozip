@@ -207,7 +207,7 @@ extern rom file_guess_original_filename (ConstFileP file);
 extern char *file_get_fastq_pair_filename (rom fn1, rom fn2, bool test_only);
 
 // wrapper operations for operating system files
-extern void file_get_file (VBlockP vb, rom filename, BufferP buf, rom buf_name, bool verify_textual, bool add_string_terminator);
+extern void file_get_file (VBlockP vb, rom filename, BufferP buf, rom buf_name, uint64_t max_size, bool verify_textual, bool add_string_terminator);
 extern bool file_put_data (rom filename, const void *data, uint64_t len, mode_t mode);
 extern void file_put_data_abort (void);
 
@@ -242,7 +242,7 @@ extern char *file_make_unix_filename (char *filename);
 // ---------------------------
 
 static inline bool file_is_read_via_ext_decompressor(ConstFileP file) { 
-    return file->supertype == TXT_FILE && (file->codec == CODEC_XZ || file->codec == CODEC_ZIP || file->codec == CODEC_BCF || file->codec == CODEC_CRAM);
+    return file->supertype == TXT_FILE && (file->source_codec == CODEC_XZ || file->source_codec == CODEC_ZIP || file->source_codec == CODEC_BCF || file->source_codec == CODEC_CRAM);
 }
 
 static inline bool file_is_read_via_int_decompressor(ConstFileP file) {
@@ -253,15 +253,11 @@ static inline bool file_is_written_via_ext_compressor(ConstFileP file) {
     return file->supertype == TXT_FILE && (file->codec == CODEC_BCF || file->codec == CODEC_GZ);
 }
 
-static inline bool file_is_plain_or_ext_decompressor(ConstFileP file) {
-    return file->supertype == TXT_FILE && (file->codec == CODEC_NONE || file_is_read_via_ext_decompressor(file));
-}
-
 // read the contents and a newline-separated text file and split into lines - creating char **lines, unsigned *line_lens and unsigned n_lines
 #define file_split_lines(fn, name, verify_textual) \
     static Buffer data = EMPTY_BUFFER; \
     ASSINP0 (!data.len, "only one instance of a " name " option can be used"); \
-    file_get_file (evb, fn, &data, "file_split_lines__" name, verify_textual, false); \
+    file_get_file (evb, fn, &data, "file_split_lines__" name, 0, verify_textual, false); \
     \
     str_split_enforce (data.data, data.len, 0, '\n', line, true, (name)); \
     ASSINP (!line_lens[n_lines-1], "Expecting %s to end with a newline", (fn)); \

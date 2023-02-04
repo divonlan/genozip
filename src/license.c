@@ -447,8 +447,9 @@ void license_register (void)
         rec.lic_type = lic_type[0] - '0';
     
         if (rec.lic_type == LIC_TYPE_STANDARD) {
-            bool stats_consent = str_query_user_yn ("\nGenozip optionally collects aggregate statistics and metadata, helping us improve our compression algorithms (see "WEBSITE_STATS"). "
-                                                    "This helps us a lot. May we have your permission for this? ", QDEF_NONE);
+            bool stats_consent = str_query_user_yn ("\nGenozip optionally logs aggregate statistics and metadata on the Genozip server,\n"
+                                                    "helping us provide you with technical support if needed, and also improve our compression algorithms\n"
+                                                    "(see "WEBSITE_LOGS"). May we have your permission for this? ", QDEF_NONE);
             strcpy (rec.allow_stats, stats_consent ? "Yes" : "No");
         }
         else
@@ -559,7 +560,7 @@ void license_display (void)
     static Buffer license_data = {};
     
     if (file_exists (filename) && !flag.force) 
-        file_get_file (evb, filename, &license_data, "license_data", false/*bc we allow UTF-8*/, true);
+        file_get_file (evb, filename, &license_data, "license_data", 0, false/*bc we allow UTF-8*/, true);
 
     bool html = (flag.lic_width < 0);
     int width = ABS(flag.lic_width);

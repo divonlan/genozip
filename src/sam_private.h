@@ -579,8 +579,8 @@ extern rom bam_qual_display (bytes qual, uint32_t l_seq);
 extern void sam_seg_other_qual (VBlockSAMP vb, TxtWord *dl_word, Did did_i, STRp(qual), bool len_is_seq_len, unsigned add_bytes);
 
 // fields by mapper
-static inline bool is_bwa (void) { return MP(BWA) || MP(BSBOLT) || MP (CPU); }             // aligners based on bwa
-static inline bool is_minimap2 (void) { return MP(MINIMAP2) || MP(WINNOWMAP); }            // aligners based on minimap2
+static inline bool is_bwa (void) { return MP(BWA) || MP(BSBOLT) || MP (CPU); }                // aligners based on bwa
+static inline bool is_minimap2 (void) { return MP(MINIMAP2) || MP(WINNOWMAP) || MP(PBMM2); }  // aligners based on minimap2
 static inline bool is_bowtie2 (void)  { return MP(BOWTIE2) || MP(HISAT2) || MP(TOPHAT) || MP(BISMARK) || MP(BSSEEKER2) ; }  // aligners based on bowtie2
 
 static inline bool sam_has_SA_Z (void) { return is_bwa() || is_minimap2() || MP(NGMLR); /*|| MP(LONGRANGER); non-standard SA:Z format (POS is off by 1, main-field NM is missing) */ }

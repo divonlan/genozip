@@ -206,9 +206,8 @@ FILE *tar_open_file (rom z_fn)
     }
 
     // copy mode, uid, gid, uname, gname, mtime from an existing file
-    if (!txt_file)                                         tar_copy_metadata_from_file (z_fn);     // case: we're copying an exiting genozip file - take from that genozip file
-    else if (file_is_read_via_ext_decompressor (txt_file)) tar_copy_metadata_from_file (tar_name); // case: streaming from a decompressor - take from the tar file
-    else                                                   tar_copy_metadata_from_file (txt_name); // case: zipping a txt_file on disk - take from that txt file
+    if (!txt_file) tar_copy_metadata_from_file (z_fn);     // case: we're copying an exiting genozip file - take from that genozip file
+    else           tar_copy_metadata_from_file (txt_name); // case: zipping a txt_file on disk - take from that txt file
 
     ASSERT (fwrite (&hdr, 512, 1, tar_file) == 1, "failed to write header of %s to %s", z_fn, tar_name); // place holder - we will update this upon close
     file_offset += 512; // past tar header

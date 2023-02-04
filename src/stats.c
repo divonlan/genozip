@@ -136,13 +136,15 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
     bufprintf (evb, &url_buf, "&entry.1014872627=%u", license_get_number());                                 // license #. Eg "32412351324"
     bufprintf (evb, &url_buf, "&entry.1861722167=%s", url_esc_non_valid_chars (arch_get_user_host()));       // user@host. Eg "john@hpc"
     bufprintf (evb, &url_buf, "&entry.441046403=%s", dt_name (z_file->data_type));                           // data type. Eg "VCF"
-    bufprintf (evb, &url_buf, "&entry.984213484=%s%%2C%"PRIu64, url_esc_non_valid_charsS (all_txt_len/*--make-ref is 0*/ ? str_size (all_txt_len).s : "0 B").s, z_file->txt_disk_so_far_bind); // Txt size,z_size. eg "50 GB,2342442046"
+    bufprintf (evb, &url_buf, "&entry.984213484=%s%%2C%"PRIu64, url_esc_non_valid_charsS (all_txt_len/*--make-ref is 0*/ ? str_size (all_txt_len).s : "0 B").s, 
+               (file_is_read_via_ext_decompressor(txt_file) && txt_file->disk_size) ? txt_file->disk_size : z_file->txt_disk_so_far_bind); // Txt size,z_size. eg "50 GB,2342442046"
     bufprintf (evb, &url_buf, "&entry.960659059=%s%%2C%.1f", codec_name (txt_file->source_codec), src_comp_ratio);  // Source codec/gain eg "GZ,4.3"
     bufprintf (evb, &url_buf, "&entry.621670070=%.1f", all_comp_ratio);                                      // Genozip gain over source txt eg "5.4"
-    bufprintf (evb, &url_buf, "&entry.1635780209=OS=%s%%3Bdist=%s%%3Bcores=%u%%3Bruntime=%s", 
+    bufprintf (evb, &url_buf, "&entry.1635780209=OS=%s%%3Bdist=%s%%3Bcores=%u%%3Bphysical_GB=%.1f%%3Bruntime=%s", 
                url_esc_non_valid_charsS(arch_get_os()).s, 
                url_esc_non_valid_charsS(arch_get_distribution()).s, 
-               arch_get_num_cores(), 
+               arch_get_num_cores(),
+               arch_get_physical_mem_size(), 
                url_esc_non_valid_charsS(arch_get_run_time()).s); 
     bufprintf (evb, &url_buf, "&entry.2140634550=%s", features.len ? url_esc_non_valid_charsS (B1STc(features)).s : "NONE");            // Features. Eg "Sorted"
     

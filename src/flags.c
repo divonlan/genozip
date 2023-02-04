@@ -1440,11 +1440,8 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
             flag.interleaved = INTERLEAVE_BOTH;
 
         // genounzip paired FASTQ: always unbind - if user didn't specify prefix, then no prefix
-        if (is_genounzip && is_paired_fastq) {
+        if (is_genounzip && is_paired_fastq) 
             if (!flag.unbind) flag.unbind = ""; 
-
-            ASSINP (VER(14) || !flag.test, "Limitation: Genozip v%u cannot --test files compressed with --pair using versions of Genozip up to v13. Please use Genozip v13 to --test this file", GENOZIP_FILE_FORMAT_VERSION);
-        }
     }
     else {
         ASSINP  (!flag.one_component, "--R%c is supported only for FASTQ files", '0'+flag.one_component);

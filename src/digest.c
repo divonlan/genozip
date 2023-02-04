@@ -106,7 +106,8 @@ static void digest_piz_verify_one_vb (VBlockP vb)
     static bool failed = false; // we report only the first fail
 
     // if testing, compare digest up to this VB to that calculated on the original file and transferred through SectionHeaderVbHeader
-    // note: for files <=V13 we cannot test this unbind mode, because the digests are commulative since the beginning of the bound file
+    // note: for files <= v13, we cannot test per-VB MD5 in unbind mode, because the digests are commulative since the beginning of the 
+    // bound file. However, we still test component-wide digest in piz_verify_digest_one_txt_file.
     if (!failed && (!flag.unbind || VER(14)) && !v8_digest_is_zero (vb->expected_digest)) {
 
         Digest piz_digest = (VER(14) && IS_ADLER) ? vb->digest  // stand-alone digest of this VB

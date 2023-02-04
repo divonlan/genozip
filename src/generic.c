@@ -15,8 +15,9 @@
 #include "file.h"
 #include "tar.h"
 
-static char magic[8] = {}; // first 8 bytes of the generic file
-static char ext[11]  = {}; // nul-terminated txt filename extension
+#define MAGIC_SIZE 32
+static char magic[MAGIC_SIZE] = {}; // first 8 bytes of the generic file
+static char ext[32] = {}; // nul-terminated txt filename extension
 
 // all data is always consumed
 int32_t generic_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
@@ -77,15 +78,27 @@ int32_t generic_is_header_done (bool is_eof)
 
 void generic_seg_initialize (VBlockP vb)
 {
-    // capture the first 8 bytes and the extension to be reported in stats
+    // capture the first MAGIC_SIZE bytes and the extension to be reported in stats
     if (vb->vblock_i == 1) {
-        memset (magic, 0, sizeof (magic));
-        memcpy (magic, B1STtxt, MIN_(sizeof (magic), vb->txt_data.len32));
+        memset (magic, 0, MAGIC_SIZE);
+        memcpy (magic, B1STtxt, MIN_(MAGIC_SIZE, vb->txt_data.len32));
 
+        // copy return last component if it is not the whole filename, and short (we want the extension that indicates the file type, not the part of the filename that indicates the data)
         memset (ext, 0, sizeof (ext));
         rom last_dot = txt_file->name ? strrchr (txt_file->name, '.') : NULL;
-        if (last_dot && strlen (last_dot+1) < sizeof(ext)) // only return last component if it is not the whole filename, and short (we want the extension that indicates the file type, not the part of the filename that indicates the data)
-            strcpy (ext, last_dot+1);
+        if (last_dot) { 
+
+            // if extension is gz, bz2 or xz - add the prior filename component
+            rom last_dot2 = NULL;
+printf ("xxx \"%s\"\n", last_dot+1);
+            if (!strcmp (last_dot+1, "gz") || !strcmp (last_dot+1, "bz2") || !strcmp (last_dot+1, "xz")) {
+                SAFE_NUL(last_dot);
+                last_dot2 = strrchr (txt_file->name, '.');
+                SAFE_RESTORE;
+            }
+         
+            strncpy (ext, (last_dot2 ? last_dot2 : last_dot) + 1, sizeof(ext)-1);
+        }
     }
 }
 
@@ -117,7 +130,7 @@ SPECIAL_RECONSTRUCTOR (generic_piz_TOPLEVEL)
 
 rom generic_get_magic (void)
 {
-    static char s[128];
+    static char s[MAGIC_SIZE * 4 + 10];
     s[0] = '"';
     str_to_printable (magic, sizeof(magic), &s[1]);
 

@@ -226,7 +226,7 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
     }
 
     flags_update_piz_one_file (z_file_i);
-    
+   
     // set txt_filename from genozip file name (inc. extensions if translating or --bgzf)
     if (!txt_filename && !flag.to_stdout && !flag.unbind) 
         txt_filename = txtfile_piz_get_filename (z_filename, "", true);
@@ -755,6 +755,11 @@ int main (int argc, char **argv)
     ASSINP (input_files_len || !isatty(0) || command != PIZ, "missing input file. Example: %s myfile.bam.genozip", global_cmd);
 
     primary_command = command; 
+
+#ifdef DISTUNZIPMSG
+    if (is_genounzip && strlen (DISTUNZIPMSG))
+        iprintf ("%s\n\n", DISTUNZIPMSG);
+#endif
 
     // we test for a newer version if its a single file compression (if --test is used, we test after PIZ - check_for_newer is set)
     if (!flag.quiet && ((IS_ZIP && input_files_len == 1 && !flag.test) || (IS_PIZ && flag.check_latest/*PIZ - test after compress*/)))

@@ -280,6 +280,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     // DVCF: always zero. 
     // FASTQ: flag.data_modified when interleaving, or just one file if --R1/2. 
     // V8: zero if not compressed with --md5
+    // since V14: zero if compressed with adler32 (with adler32, digest is only at the VB level)
     if (!digest_is_zero(header.digest) && !flag.data_modified) 
         z_file->digest = header.digest; 
 

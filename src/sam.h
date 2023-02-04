@@ -332,7 +332,7 @@
 #pragma GENDICT OPTION_XQ_i=DTYPE_2=XQ:i     // query read length
 #pragma GENDICT OPTION_XT_i=DTYPE_2=XT:i     // # of continues reads, always 1 for blasr
     
-// PacBio tags. Source: https://pacbiofileformats.readthedocs.io/en/10.0/BAM.html and https://pacbiofileformats.readthedocs.io/en/3.0/BAM.html
+// PacBio tags. Source: https://pacbiofileformats.readthedocs.io/en/10.0/BAM.html
 #pragma GENDICT OPTION_cx_i=DTYPE_2=cx:i     // per-read: Subread local context Flags: enum LocalContextFlags { ADAPTER_BEFORE = 1, ADAPTER_AFTER = 2, BARCODE_BEFORE = 4, BARCODE_AFTER = 8, FORWARD_PASS = 16, REVERSE_PASS = 32 }
 #pragma GENDICT OPTION_qs_i=DTYPE_2=qs:i     // per-read: 0-based start of query in the ZMW read (absent in CCS)
 #pragma GENDICT OPTION_qe_i=DTYPE_2=qe:i     // per-read: 0-based end of query in the ZMW read (absent in CCS)
@@ -340,8 +340,8 @@
 #pragma GENDICT OPTION_we_i=DTYPE_2=we:i     // per-read: Start of last base of the query (‘qe - 1’) in approximate raw frame count since start of movie. For a CCS read, the start of the last base of the last incorporated subread.
 #pragma GENDICT OPTION_zm_i=DTYPE_2=zm:i     // per-read: ZMW hole number
 #pragma GENDICT OPTION_np_i=DTYPE_2=np:i     // per-read: NumPasses (1 for subreads, variable for CCS—encodes number of complete passes of the insert)
-#pragma GENDICT OPTION_ec_f=DTYPE_2=ec:i     // per-read: Effective coverage for CCS reads, the average subread coverage across all windows (only present in CCS reads)
-#pragma GENDICT OPTION_rq_f=DTYPE_2=rq:i     // per-read: Float in [0, 1] encoding expected accuracy
+#pragma GENDICT OPTION_ec_f=DTYPE_2=ec:f     // per-read: Effective coverage for CCS reads, the average subread coverage across all windows (only present in CCS reads)
+#pragma GENDICT OPTION_rq_f=DTYPE_2=rq:f     // per-read: Float in [0, 1] encoding expected accuracy
 #pragma GENDICT OPTION_sn_B_f=DTYPE_2=sn:B:f // per-read: 4 floats for the average signal-to-noise ratio of A, C, G, and T (in that order) over the HQRegion
 #pragma GENDICT OPTION_dq_Z=DTYPE_2=dq:Z     // per-base: DeletionQV
 #pragma GENDICT OPTION_dt_Z=DTYPE_2=dt:Z     // per-base: DeletionTag

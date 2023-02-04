@@ -3,12 +3,15 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+14.0.28 4/Feb/2023
+- Minor bug fixes and improvements
+
 14.0.27 27/Jan/2023
-- Important bug fix: A bug introduced in 14.0.3 occurred when compressing FASTQ files with --pair and --test and resulted in
-  falsely reporting that the file was verified despite not actually verifying it. This also occurred when running 
-  genounzip or genounzip --test on affected files.
+- Major bug fix: A bug introduced in 14.0.3 occurred when compressing FASTQ files with --pair but without --md5 and resulted 
+  in falsely reporting that the file was verified despite not actually verifying it. This also occurred when running 
+  genounzip or genounzip --test on such files.
   There are no known issues with the actual compression of the files and it is now possible to go back and verify affected 
-  files with (fixed) genounzip --test.
+  files with (the fixed) genounzip --test. 
  
 14.0.26 25/Jan/2023
 - FASTQ: Better --optimize-DESC
@@ -30,7 +33,7 @@ Note on versioning:
 - Change binaries in genozip-linux-x86_64.tar to be dynamically linked 
 
 14.0.21 28/Dec/2022
-- bug fixes
+- Minor bug fixes
 
 14.0.19 21/Dec/2022
 - Registration flow adjustments for new website
@@ -48,7 +51,7 @@ Note on versioning:
 - Obsolete genounzip option --no-PG is canceled (it remains for genocat)
 - VCF: Better compression of INFO/QD
 - KRAKEN: new option: genozip --no-kmers - drop kmer info that is not needed for subsequent use of this file with --kraken 
-- Bug fixes
+- Minor bug fixes
 
 14.0.16 19/Oct/2022
 - Fix bug introduced in a recent release that caused a segfault on some CPUs
@@ -66,7 +69,7 @@ Note on versioning:
 14.0.12 12/Oct/2022
 - VCF: Better compression for sturctural variant fields: INFO/CIPOS and INFO/CIEND, INFO/SVTYPE
 - VCF: Better compression for Illumina genotyping VCFs
-- Bug fixes
+- Minor bug fixes
 
 14.0.11 5/Oct/2022
 - Same as 14.0.10, just conda pipeline issues
@@ -75,31 +78,31 @@ Note on versioning:
 - BAM: Compression improvements for DRAGEN-created files 
 - BAM: better compression of UQ:i
 - BAM: better support for files with a very large number (millions) of @SQ records 
-- Bug fixes
+- Minor bug fixes
 
 14.0.9 1/Oct/2022
-- Bug fixes
+- Minor bug fixes
 
 14.0.8 28/Sep/2022
 - BAM: better compression of uBAM (unaligned BAM)
 - VCF: better compression of INFO/MLEAC
-- Bug fixes
+- Minor bug fixes
 
 14.0.7 23/Sep/2022
 - Allow kraken files to be specified as plain files in addition to genozipped files
-- Bug fixes
+- Minor bug fixes
 - New option: --no-tip
 
 14.0.6 23/Sep/2022
-- Bug fixes
+- Minor bug fixes
 
 14.0.5 22/Sep/2022
 - Allow reference files to be specified as FASTA in addition to ref.genozip
-- Bug fixes
+- Minor bug fixes
 
 14.0.4 15/Sep/2022
 - VCF: better compression of INFO/RAW_MQandDP, INFO/RS, INFO/RSPOS
-- Bug fixes
+- Minor bug fixes
 
 14.0.3 12/Sep/2022
 Summary: significant compression improvements for FASTQ, BAM, VCF in a wide range of cases. Compression and decompression are also faster.
@@ -131,7 +134,7 @@ Discontinued functionality:
 - The little-used yet difficult to maintain feature allowing "Binding" of multiples files of the same type using eg "genozip file1.vcf file2.vcf --output bound.vcf.genozip" is no longer supported. This does NOT affect the --tar option, and also does not affect genozip files which contain two FASTQ files compressed with --pair. To compress multiple files into a single "archive" file, use "genozip --tar". To decompress existing genozip files compressed with the Binding feature, use Genozip v13. 
 
 13.0.21 21/August/2022
-- Bug fix related to re-generation of reference files: compression using a reference file of 1. FASTQ files and 2. unaligned SAM/BAM files (unaligned SAM/BAM files are SAM/BAM files which have no contigs (@SQ lines) listed in their header): up to version 13.0.20, generating a Genozip reference file with "genozip --make-reference" unintentionally generated a unique reference file in each execution. It was therefore required to compress and decompress files using the same reference file,
+- Major bug fix related to re-generation of reference files: compression using a reference file of 1. FASTQ files and 2. unaligned SAM/BAM files (unaligned SAM/BAM files are SAM/BAM files which have no contigs (@SQ lines) listed in their header): up to version 13.0.20, generating a Genozip reference file with "genozip --make-reference" unintentionally generated a unique reference file in each execution. It was therefore required to compress and decompress files using the same reference file,
 and re-generation of the reference file from FASTA data was not possible. Starting 13.0.21 genozip --make-reference always generates the same reference file for the same FASTA data. 
 
 13.0.20 13/July/2022
