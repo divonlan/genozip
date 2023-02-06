@@ -7,7 +7,7 @@ Note on versioning:
 - Minor bug fixes and improvements
 
 14.0.27 27/Jan/2023
-- Major bug fix: A bug introduced in 14.0.3 occurred when compressing FASTQ files with --pair but without --md5 and resulted 
+- Bug fix: A bug introduced in 14.0.3 occurred when compressing FASTQ files with --pair but without --md5 and resulted 
   in falsely reporting that the file was verified despite not actually verifying it. This also occurred when running 
   genounzip or genounzip --test on such files.
   There are no known issues with the actual compression of the files and it is now possible to go back and verify affected 
@@ -134,7 +134,7 @@ Discontinued functionality:
 - The little-used yet difficult to maintain feature allowing "Binding" of multiples files of the same type using eg "genozip file1.vcf file2.vcf --output bound.vcf.genozip" is no longer supported. This does NOT affect the --tar option, and also does not affect genozip files which contain two FASTQ files compressed with --pair. To compress multiple files into a single "archive" file, use "genozip --tar". To decompress existing genozip files compressed with the Binding feature, use Genozip v13. 
 
 13.0.21 21/August/2022
-- Major bug fix related to re-generation of reference files: compression using a reference file of 1. FASTQ files and 2. unaligned SAM/BAM files (unaligned SAM/BAM files are SAM/BAM files which have no contigs (@SQ lines) listed in their header): up to version 13.0.20, generating a Genozip reference file with "genozip --make-reference" unintentionally generated a unique reference file in each execution. It was therefore required to compress and decompress files using the same reference file,
+- Bug fix related to re-generation of reference files: compression using a reference file of 1. FASTQ files and 2. unaligned SAM/BAM files (unaligned SAM/BAM files are SAM/BAM files which have no contigs (@SQ lines) listed in their header): up to version 13.0.20, generating a Genozip reference file with "genozip --make-reference" unintentionally generated a unique reference file in each execution. It was therefore required to compress and decompress files using the same reference file,
 and re-generation of the reference file from FASTA data was not possible. Starting 13.0.21 genozip --make-reference always generates the same reference file for the same FASTA data. 
 
 13.0.20 13/July/2022
