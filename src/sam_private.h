@@ -396,7 +396,8 @@ typedef struct __attribute__ ((__packed__)) CCAln {
 
 // PIZ: history of cigar analysis - one item per line
 typedef struct __attribute__ ((__packed__)) CigarAnalItem {
-    uint32_t seq_len;  // equivalent to dl->SEQ.len in ZIP - set if ANY of SEQ, QUAL, CIGAR-implied-seq-consumed have it
+    uint32_t seq_len      : 31;  // equivalent to dl->SEQ.len in ZIP - set if ANY of SEQ, QUAL, CIGAR-implied-seq-consumed have it
+    uint32_t qual_missing : 1;   // this alignment has no QUAL (or '*')
     uint32_t ref_consumed;
     uint32_t hard_clip[2];
 } CigarAnalItem;

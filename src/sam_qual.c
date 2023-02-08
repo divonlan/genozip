@@ -324,19 +324,30 @@ static void sam_piz_QUAL_undiff_vs_primary (VBlockSAMP vb, STRp (prim_qual), boo
 {
     bool xstrand = (last_flags.rev_comp != prim_revcomp);
 
-    uint32_t qual_len = prim_qual_len + (saggy_anal ? (saggy_anal->hard_clip[0] + saggy_anal->hard_clip[1]) : 0)
-                      - (vb->hard_clip[0] + vb->hard_clip[1]);
+    int32_t qual_len = prim_qual_len + (saggy_anal ? (saggy_anal->hard_clip[0] + saggy_anal->hard_clip[1]) : 0)
+                     - (vb->hard_clip[0] + vb->hard_clip[1]);
+
+    ASSERT (qual_len >= 0, "qual_len=%d: prim_qual_len=%u saggy_anal->hard_clip=[%u,%u] vb->hard_clip=[%u,%u]", 
+            qual_len, prim_qual_len, saggy_anal ? saggy_anal->hard_clip[0] : 0, saggy_anal ? saggy_anal->hard_clip[1] : 0, vb->hard_clip[0], vb->hard_clip[1]);
 
     uint32_t flank[2] = { saggy_anal ? MIN_(qual_len, MAX_((int32_t)saggy_anal->hard_clip[xstrand]  - (int32_t)vb->hard_clip[0], 0)) : 0,   // left-flanking
                           saggy_anal ? MIN_(qual_len, MAX_((int32_t)saggy_anal->hard_clip[!xstrand] - (int32_t)vb->hard_clip[1], 0)) : 0 }; // right-flanking
 
-    uint32_t overlap_len = qual_len - flank[0] - flank[1];
+    int32_t overlap_len = qual_len - flank[0] - flank[1];
+
+    ASSPIZ (overlap_len >= 0, "Expecting qual_len=%u >= flank=[%u,%u] xstrand=%u saggy_anal->hard_clip=[%u,%u] vb->hard_clip=[%u,%u] CIGAR=\"%.*s\" vb->saggy_line_i=%u is_depn_vb=%s has_saggy=%s",
+            qual_len, flank[0], flank[1], xstrand, saggy_anal ? saggy_anal->hard_clip[0] : 0, saggy_anal ? saggy_anal->hard_clip[1] : 0, 
+            vb->hard_clip[0], vb->hard_clip[1], STRfb(vb->textual_cigar), vb->saggy_line_i, TF(sam_is_depn_vb), TF(sam_has_saggy));
+    
 
     rom diff = 0;
     if (overlap_len) {
         ContextP qualsa_ctx = LOADED_CTX(SAM_QUALSA);
         diff = Bc (qualsa_ctx->local, qualsa_ctx->next_local);
         qualsa_ctx->next_local += overlap_len;
+
+        ASSPIZ (qualsa_ctx->next_local <= qualsa_ctx->local.len32, "Out of diff-vs-primary data in QUALSA.local: overlap_len=%u qual_len=%u flank=[%u,%u] QUALSA.local.len=%u is_depn_vb=%s has_saggy=%s", 
+                overlap_len, qual_len, flank[0], flank[1], qualsa_ctx->local.len32, TF(sam_is_depn_vb), TF(sam_has_saggy)); 
     }
 
     char *qual = BAFTtxt;
@@ -352,6 +363,10 @@ static void sam_piz_QUAL_undiff_vs_primary (VBlockSAMP vb, STRp (prim_qual), boo
 
     if (overlap_len && !xstrand && reconstruct) {
         uint32_t first_prim_overlap = flank[0] ? 0 : (vb->hard_clip[0] - (saggy_anal ? saggy_anal->hard_clip[0] : 0));
+        
+        ASSPIZ (first_prim_overlap + overlap_len <= prim_qual_len, "prim_qual overflow: expecting first_prim_overlap=%u + overlap_len=%u <= prim_qual_len=%u. flank[0]=%u vb->hard_clip[0]=%u saggy_anal->seq_len=%u saggy_anal->hard_clip[0]=%u is_depn_vb=%s has_saggy=%s bam_bump=%d",
+                first_prim_overlap, overlap_len, prim_qual_len, flank[0], vb->hard_clip[0], saggy_anal->seq_len, saggy_anal->hard_clip[0], TF(sam_is_depn_vb), TF(sam_has_saggy), bam_bump);
+
         prim_qual += first_prim_overlap;
         
         for (uint32_t i=0; i < overlap_len; i++) 
@@ -362,6 +377,10 @@ static void sam_piz_QUAL_undiff_vs_primary (VBlockSAMP vb, STRp (prim_qual), boo
 
     else if (overlap_len && xstrand && reconstruct) {
         uint32_t last_prim_overlap = prim_qual_len - 1 - (flank[0] ? 0 : (vb->hard_clip[0] - (saggy_anal ? saggy_anal->hard_clip[1] : 0)));
+
+        ASSPIZ (last_prim_overlap >= overlap_len-1, "prim_qual underflow: expecting last_prim_overlap=%u >= overlap_len=%u-1. flank[0]=%u vb->hard_clip[0]=%u saggy_anal->seq_len=%d saggy_anal->hard_clip[1]=%d is_depn_vb=%s has_saggy=%s bam_bump=%d",
+                last_prim_overlap, overlap_len, flank[0], vb->hard_clip[0], saggy_anal ? saggy_anal->seq_len : -1, saggy_anal ? saggy_anal->hard_clip[1] : -1, TF(sam_is_depn_vb), TF(sam_has_saggy), bam_bump);
+
         prim_qual += last_prim_overlap;
 
         for (int32_t/*signed*/ i=0; i < overlap_len; i++) 
@@ -392,6 +411,9 @@ void sam_reconstruct_missing_quality (VBlockP vb, bool reconstruct)
         RECONSTRUCT1 ('*');
 
     VB_SAM->qual_missing = true;
+
+    if (!vb->preprocessing) 
+        B(CigarAnalItem, CTX(SAM_CIGAR)->cigar_anal_history, vb->line_i)->qual_missing = true;
 }
 
 // Note: in PRIM, it is called with ctx=QUALSA, in MAIN and DEPN with ctx=QUAL
@@ -430,6 +452,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
     // case: MAIN component, reconstruct depn line against prim line in this VB
     else if (sam_has_saggy && // only appears in the MAIN component and only since v14 (see sam_seg_saggy)
              ({ saggy_anal = B(CigarAnalItem, CTX(SAM_CIGAR)->cigar_anal_history, vb->saggy_line_i);
+                !saggy_anal->qual_missing &&
                 // note: we've seen cases in the wild where a depn without hard clips is shorter than its prim (eg in test.NA12878.chr22.1x.bam), possibly due to GATK IndelRealigner
                 vb->hard_clip[0] + vb->hard_clip[1] + vb->seq_len == saggy_anal->hard_clip[0] + saggy_anal->hard_clip[1] + saggy_anal->seq_len; })) {
 

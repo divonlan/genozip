@@ -904,7 +904,8 @@ batch_real_world_1_adler32() # $1 extra genozip argument
                    test.*fq* test.*fa* \
                    basic.phy* test.*gvf* test.*gtf* test.*gff* test.*locs* \
                    test.*txt* test.*kraken* | \
-                   grep -v "$filter_out" | grep -v headerless | grep -v .genozip | grep -v .md5 | grep -v .bad ` ) 
+                   grep -v "$filter_out" | grep -v headerless | grep -v .genozip | grep -v .md5 | grep -v .bad |\
+                   grep -v test.embedded-fasta.gff.gz` ) 
 
     for f in ${files[@]}; do rm -f ${f}.genozip; done
 
@@ -932,7 +933,7 @@ batch_real_world_genounzip() # $1 extra genozip argument
                    test.*fq* test.*fa* \
                    basic.phy* test.*gvf* test.*gtf* test.*gff* test.*locs* \
                    test.*txt* test.*kraken* | \
-                   grep -v "$filter_out" | grep -v headerless | grep -v .genozip | grep -v .md5 | grep -v .bad | grep -v .xz | grep -v .bz2` )
+                   grep -v "$filter_out" | grep -v headerless | grep -v .genozip | grep -v .md5 | grep -v .bad | grep -v .xz | grep -v .bz2 | grep -v test.embedded-fasta.gff.gz` )
     
     # test full genounzip (not --test), including generation of BZGF
     for f in ${files[@]}; do 
@@ -1505,6 +1506,7 @@ make -j -C $TESTDIR --quiet || exit 1
 # only if doing a full test (starting from 0) - delete genome and hash caches
 sparkling_clean()
 {
+    batch_print_header
     rm -f ${hg19}.*cache* ${hs37d5}.*cache* ${GRCh38}.*cache* ${TESTDIR}/*.genozip ${TESTDIR}/basic-subdirs/*.genozip ${TESTDIR}/*rejects* ${TESTDIR}/*.DEPN
 }
 

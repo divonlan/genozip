@@ -938,11 +938,14 @@ static bool file_open_z (FileP file)
                 file->file = fopen (file->name, file->mode);
 #ifndef _WIN32
                 // set z_file permissions to be the same as the txt_file permissions (if possible)
-                struct stat st;
-                if (txt_file && txt_file->file && !txt_file->redirected && !txt_file->is_remote &&
-                    !fstat (fileno (txt_file->file), &st))
-    
-                    fchmod (fileno (file->file), st.st_mode); // ignore errors (e.g. this doesn't work on NTFS)
+                if (file->file && txt_file && txt_file->name && !txt_file->redirected && !txt_file->is_remote) {
+                    struct stat st;
+                    if (stat (txt_file->name, &st))
+                        WARN ("FYI: Failed to set permissions of %s because failed to stat(%s): %s", file->name, txt_file->name, strerror(errno));
+                    
+                    else
+                        chmod (file->name, st.st_mode); // ignore errors (e.g. this doesn't work on NTFS)
+                }
 #endif
             }
         }

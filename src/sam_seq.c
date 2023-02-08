@@ -615,7 +615,7 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq), unsigned
 
     // set vb->md_verified and vb->mismatch_bases_by_SEQ needed by MD:Z and NM:i
     bool force_no_analyze_depn_SEQ = false;
-    if (vs_prim && segconf.has_MD_or_NM && !vb->cigar_missing && 
+    if (vs_prim && segconf.has_MD_or_NM && !vb->cigar_missing && !vb->seq_missing &&
         !sam_analyze_copied_SEQ (vb, STRa(textual_seq), dl->POS, dl->FLAG.rev_comp, vb->ref_consumed, vb->ref_and_seq_consumed, &vb->codec_bufs[0]))
             force_no_analyze_depn_SEQ = true;
 
@@ -1142,8 +1142,9 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SEQ)
     }
 
     // case: copy from saggy line in this VB
-    else if (sam_has_saggy && !B(CigarAnalItem, CTX(SAM_CIGAR)->cigar_anal_history, vb->saggy_line_i)->hard_clip[0] 
-                           && !B(CigarAnalItem, CTX(SAM_CIGAR)->cigar_anal_history, vb->saggy_line_i)->hard_clip[1])
+    else if (sam_has_saggy && !vb->seq_missing &&
+             !B(CigarAnalItem, CTX(SAM_CIGAR)->cigar_anal_history, vb->saggy_line_i)->hard_clip[0] &&
+             !B(CigarAnalItem, CTX(SAM_CIGAR)->cigar_anal_history, vb->saggy_line_i)->hard_clip[1])
         reconstruct_SEQ_copy_saggy (vb, ctx, reconstruct, snip[SEQ_SNIP_NO_ANALYZE_DEPN_SEQ]-'0');
 
     // case: reconstruct sequence directly

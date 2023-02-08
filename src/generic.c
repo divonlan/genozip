@@ -51,10 +51,6 @@ int32_t generic_is_header_done (bool is_eof)
     if (new_dt != DT_NONE) {
         txt_file->data_type = z_file->data_type = new_dt;
 
-        // release pre-defined GENERIC contexts
-        for_zctx ctx_destroy_context (zctx, zctx->did_i);
-        z_file->num_contexts = 0;
-
         // recreate predefined contexts
         ctx_initialize_predefined_ctxs (z_file->contexts, new_dt, z_file->dict_id_to_did_i_map, &z_file->num_contexts);
         
@@ -90,7 +86,6 @@ void generic_seg_initialize (VBlockP vb)
 
             // if extension is gz, bz2 or xz - add the prior filename component
             rom last_dot2 = NULL;
-printf ("xxx \"%s\"\n", last_dot+1);
             if (!strcmp (last_dot+1, "gz") || !strcmp (last_dot+1, "bz2") || !strcmp (last_dot+1, "xz")) {
                 SAFE_NUL(last_dot);
                 last_dot2 = strrchr (txt_file->name, '.');

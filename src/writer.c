@@ -124,7 +124,7 @@ bool writer_does_txtheader_need_write (Section sec)
     ASSERT (sec->st == SEC_TXT_HEADER, "sec->st=%s is not SEC_TXT_HEADER", st_name (sec->st));
     ASSERT (sec->comp_i < txt_header_info.len, "sec->comp_i=%u out of range [0,%d]", sec->comp_i, (int)txt_header_info.len-1);
     
-    bool needs_write = B(VbInfo, txt_header_info, sec->comp_i)->needs_write;
+    bool needs_write = !flag.no_writer_thread && B(VbInfo, txt_header_info, sec->comp_i)->needs_write;
     return needs_write;                             
 }
 

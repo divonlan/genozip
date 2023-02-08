@@ -95,7 +95,7 @@ bool is_fastq (STRp(header), bool *need_more)
     str_split (header, header_len, num_newlines+1, '\n', line, false);
 
     return line_lens[1] > 0 && line_lens[1] == line_lens[3] && // SEQ and QUAL lines are of equal length
-           line_lens[3] > 0 && lines[3][0] == '+';
+           line_lens[3] > 0 && lines[2][0] == '+';
 }
 
 // returns true if txt_data[txt_i] (which is a \n) is the end of a FASTQ record (= block of 4 lines in the file); -1 if out of data

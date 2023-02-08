@@ -55,9 +55,11 @@ static void sam_header_add_contig (STRp (contig_name), PosType LN, void *out_ref
 
         // case --match-chrom-to-reference
         if (flag.match_chrom_to_reference) {
-            if (ref_index != WORD_INDEX_NONE) // udpate contig name, if this contig is in the reference
+            if (ref_index != WORD_INDEX_NONE) { // udpate contig name, if this contig is in the reference
+                z_file->header_size -= (int32_t)contig_name_len;
                 contig_name = ref_contigs_get_name (gref, ref_index, &contig_name_len);
-
+                z_file->header_size += contig_name_len; // header_size now has the growth in the size due to --match. the base will be added in txtheader_zip_read_and_compress
+            }
             *(WordIndex*)out_ref_index = ref_index;
         }
     }

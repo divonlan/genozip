@@ -1403,7 +1403,9 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
     if (vb->check_for_gc || !sam_is_main_vb)
         seg_create_rollback_point (VB, NULL, 1, SAM_RNAME);
 
-    dl->RNAME = sam_seg_RNAME(vb, dl, STRfld (RNAME), false, fld_lens[RNAME] + 1);
+    int32_t rname_shrinkage = vb->recon_size;
+    dl->RNAME = sam_seg_RNAME (vb, dl, STRfld (RNAME), false, fld_lens[RNAME] + 1);
+    rname_shrinkage -= vb->recon_size; // number of characters RNAME was reduced by, due to --match-chrom-to-reference
 
     ASSSEG (str_get_int_range32(STRfld (POS), 0, MAX_POS_SAM, &dl->POS),
             flds[POS], "Invalid POS \"%.*s\": expecting an integer [0,%d]", STRfi (fld, POS), (int)MAX_POS_SAM);
@@ -1448,6 +1450,7 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
 
         // re-seg rname, against SA group
         seg_rollback (VB);
+        vb->recon_size += rname_shrinkage; // grow back, as we will shrink it again when re-segging
         sam_seg_RNAME(vb, dl, STRfld (RNAME), true, fld_lens[RNAME] + 1);
     }
 
@@ -1523,5 +1526,7 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
 rollback_and_done:
     memset (dl, 0, sizeof (ZipDataLineSAM));
     seg_rollback (VB); // cancelling segging of RNAME
+    vb->recon_size += rname_shrinkage; // grow back, as the change in recon_size due to the change in RNAME, will be accounted for by the PRIM/DEPN VB to which this alignment belongs was sent
+
     return next_line;
 }

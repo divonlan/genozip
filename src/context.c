@@ -1239,6 +1239,7 @@ void ctx_initialize_predefined_ctxs (Context *contexts /* an array */,
                                      Did *num_contexts)
 {
     *num_contexts = MAX_(dt_fields[dt].num_fields, *num_contexts);
+    memset (dict_id_to_did_i_map, 0xff, 65536 * 2); // reset, in case data_type changed
 
     for (int did_i=0; did_i < dt_fields[dt].num_fields; did_i++) {
         DictId dict_id = dt_fields[dt].predefined[did_i].dict_id;

@@ -669,7 +669,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
 
         if (st == SEC_DICT || st == SEC_B250 || st == SEC_LOCAL || st == SEC_COUNTS) continue; // these are covered by individual contexts
 
-        s->txt_len    = st == SEC_TXT_HEADER  ? z_file->header_size : 0; // note: MAIN header only, ie excluding generated headers for DVCF
+        s->txt_len    = st == SEC_TXT_HEADER  ? z_file->header_size : 0; // note: excluding generated headers for DVCF
         s->type       = (st==SEC_REFERENCE || st==SEC_REF_IS_SET || st==SEC_REF_CONTIGS || st == SEC_CHROM2REF_MAP || st==SEC_REF_IUPACS) ? "SEQUENCE" 
                       : (st==SEC_RANDOM_ACCESS || st==SEC_REF_RAND_ACC)                                                                   ? "RandomAccessIndex"
                       :                                                                                                                     "Other"; // note: some contexts appear as "Other" in --stats, but in --STATS their parent is themself, not "Other"
