@@ -154,6 +154,18 @@
 #define LOCS_XZ_        ".locs.xz"
 #define LOCS_GENOZIP_   ".locs" GENOZIP_EXT
 
+// bed files
+#define BED_            ".bed" 
+#define BED_GZ_         ".bed.gz"
+#define BED_BZ2_        ".bed.bz2"
+#define BED_XZ_         ".bed.xz"
+#define BED_GENOZIP_    ".bed" GENOZIP_EXT
+#define TRACK_          ".track" 
+#define TRACK_GZ_       ".track.gz"
+#define TRACK_BZ2_      ".track.bz2"
+#define TRACK_XZ_       ".track.xz"
+#define TRACK_GENOZIP_  ".track" GENOZIP_EXT
+
 // generic files
 #define GNRIC_           ""
 #define GNRIC_GZ_        ".gz"
@@ -189,6 +201,8 @@ typedef enum FileType { UNKNOWN_FILE_TYPE,
                         LOCS,  LOCS_GZ,  LOCS_BZ2,  LOCS_XZ,      LOCS_GENOZIP,
                         BAM,   BAM_GZ,   BAM_BGZF, CRAM,          BAM_GENOZIP,
                         BCF,   BCF_GZ,   BCF_BGZF,                BCF_GENOZIP,  
+                        BED,   BED_GZ,   BED_BZ2,   BED_XZ,       BED_GENOZIP,
+                        TRACK, TRACK_GZ, TRACK_BZ2, TRACK_XZ,     TRACK_GENOZIP,
                         // the GNRIC row *must* be the last row, as it consists catch-all extensions (*.gz etc)
                         GNRIC_GZ, GNRIC_BZ2, GNRIC_XZ, GNRIC_ZIP, GNRIC_GENOZIP, GNRIC, // GNRIC *must* be the very last as it is a catch-all ""
                         AFTER_LAST_FILE_TYPE } FileType;
@@ -218,6 +232,8 @@ typedef enum FileType { UNKNOWN_FILE_TYPE,
                    LOCS_,     LOCS_GZ_,           LOCS_BZ2_,   LOCS_XZ_,                LOCS_GENOZIP_,          \
                    BAM_,      BAM_GZ_, BAM_BGZF_, CRAM_,                                BAM_GENOZIP_,           \
                    BCF_,      BCF_GZ_, BCF_BGZF_,                                       BCF_GENOZIP_,           \
+                   BED_,      BED_GZ_,            BED_BZ2_,    BED_XZ_,                 BED_GENOZIP_,           \
+                   TRACK_,    TRACK_GZ_,          TRACK_BZ2_,  TRACK_XZ_,               TRACK_GENOZIP_,         \
                               GNRIC_GZ_,          GNRIC_BZ2_,  GNRIC_XZ_,   GNRIC_ZIP_, GNRIC_GENOZIP_, GNRIC_, /* GNRIC_ is catch all */ \
                    "stdin", "stdout" }
 extern rom file_exts[];
@@ -267,7 +283,7 @@ extern rom file_exts[];
                              { GTF_BZ2,    CODEC_BZ2,  GTF_GENOZIP    }, { GTF_XZ,    CODEC_XZ,  GTF_GENOZIP    }, { } },\
                            { { ME23,       CODEC_NONE, ME23_GENOZIP   }, { ME23_ZIP,  CODEC_ZIP, ME23_GENOZIP   }, { } },\
                            { { BAM,        CODEC_BGZF, BAM_GENOZIP    }, { BAM_GZ,    CODEC_GZ,  BAM_GENOZIP    }, { BAM_BGZF, CODEC_BGZF, BAM_GENOZIP  }, { CRAM, CODEC_CRAM, BAM_GENOZIP }, { } }, \
-                           { { BCF,        CODEC_BCF,  BCF_GENOZIP    }, { BCF_GZ,    CODEC_BCF, BCF_GENOZIP    }, { BCF_BGZF, CODEC_BCF,  BCF_GENOZIP  }, { } }, \
+                           { { BCF,        CODEC_BCF,  BCF_GENOZIP    }, { } }, \
                            { { GNRIC,      CODEC_NONE, GNRIC_GENOZIP  }, { GNRIC_GZ,  CODEC_GZ,  GNRIC_GENOZIP  },\
                              { GNRIC_BZ2,  CODEC_BZ2,  GNRIC_GENOZIP  }, { GNRIC_XZ,  CODEC_XZ,  GNRIC_GENOZIP  },\
                              { GNRIC_ZIP,  CODEC_ZIP,  GNRIC_GENOZIP  }, { } },\
@@ -279,25 +295,30 @@ extern rom file_exts[];
                              { KRAKEN_BZ2, CODEC_BZ2,  KRAKEN_GENOZIP }, { KRAKEN_XZ, CODEC_XZ,  KRAKEN_GENOZIP }, { } },\
                            { { LOCS,       CODEC_NONE, LOCS_GENOZIP   }, { LOCS_GZ,   CODEC_GZ,  LOCS_GENOZIP   },\
                              { LOCS_BZ2,   CODEC_BZ2,  LOCS_GENOZIP   }, { LOCS_XZ,   CODEC_XZ,  LOCS_GENOZIP   }, { } },\
+                           { { BED,        CODEC_NONE, BED_GENOZIP    }, { BED_GZ,    CODEC_GZ,  BED_GENOZIP    },\
+                             { BED_BZ2,    CODEC_BZ2,  BED_GENOZIP    }, { BED_XZ,    CODEC_XZ,  BED_GENOZIP    },\
+                             { TRACK,      CODEC_NONE, TRACK_GENOZIP  }, { TRACK_GZ,  CODEC_GZ,  TRACK_GENOZIP  },\
+                             { TRACK_BZ2,  CODEC_BZ2,  TRACK_GENOZIP  }, { TRACK_XZ,  CODEC_XZ,  TRACK_GENOZIP  }, { } },\
                         }
 
 // Ordered by data_type: Supported output formats for genounzip
 // plain file MUST appear first on the list - this will be the default output when redirecting 
 // GZ file, if it is supported MUST be 2nd on the list - we use this type if the user outputs to eg xx.gz instead of xx.vcf.gz (see file_open_txt_write)
 #define TXT_OUT_FT_BY_DT { { 0 }, /* a reference file cannot be uncompressed */  \
-                           { VCF, VCF_GZ, VCF_BGZF, BCF, 0 },  \
-                           { SAM, SAM_GZ, BAM, 0 },     \
-                           { FASTQ, FASTQ_GZ, FQ, FQ_GZ, 0 }, \
+                           { VCF, VCF_GZ, VCF_BGZF, BCF, 0 },       \
+                           { SAM, SAM_GZ, BAM, 0 },                 \
+                           { FASTQ, FASTQ_GZ, FQ, FQ_GZ, 0 },       \
                            { FASTA, FASTA_GZ, FA, FA_GZ, FAA, FAA_GZ, FFN, FFN_GZ, FNN, FNN_GZ, FNA, FNA_GZ, FRN, FRN_GZ, FAS, FAS_GZ, 0 },\
                            { GFF3, GFF3_GZ, GFF, GFF_GZ, GVF, GVF_GZ, GTF, GTF_GZ, 0 }, \
                            { ME23, ME23 /* no GZ */, ME23_ZIP, 0 }, \
                            { BAM }, /* There are no data_type=DT_BAM genozip files - .bam.genozip have data_type=DT_SAM */ \
                            { 0 }, /* There are no data_type=DT_BCF genozip files - .bam.genozip have data_type=DT_VCF */ \
-                           { GNRIC, GNRIC_GZ, 0 }, \
-                           { PHY, PHY_GZ, 0 }, \
-                           { CHAIN, CHAIN_GZ, 0 }, \
-                           { KRAKEN, KRAKEN_GZ, 0 }, \
-                           { LOCS, LOCS_GZ, 0 }, \
+                           { GNRIC, GNRIC_GZ, 0 },                  \
+                           { PHY, PHY_GZ, 0 },                      \
+                           { CHAIN, CHAIN_GZ, 0 },                  \
+                           { KRAKEN, KRAKEN_GZ, 0 },                \
+                           { LOCS, LOCS_GZ, 0 },                    \
+                           { BED, BED_GZ, TRACK, TRACK_GZ, 0 },     \
                          }                        
 
 // Ordered by data_type
@@ -315,4 +336,5 @@ extern rom file_exts[];
                      { CHAIN_GENOZIP, 0 },                  \
                      { KRAKEN_GENOZIP, 0 },                 \
                      { LOCS_GENOZIP, 0 },                   \
+                     { BED_GENOZIP, TRACK_GENOZIP, 0 },     \
                    } 

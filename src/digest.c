@@ -104,8 +104,8 @@ static void digest_update_do (VBlockP vb, DigestContext *ctx, rom data, uint64_t
 
 static void digest_piz_verify_one_vb (VBlockP vb)
 {
-    // if testing, compare digest up to this VB to that calculated on the original file and transferred through SectionHeaderVbHeader
-    // note: 
+    // Compare digest up to this VB transmitted through SectionHeaderVbHeader. If Adler32, it is a stand-alone
+    // digest of the VB, and if MD5, it is a commulative digest up to this VB.
     if ((!txt_file->vb_digest_failed || IS_ADLER) && // note: for MD5, we report only the first failed VB, bc the digest is commulative, so all subsequent VBs will fail for sure
         (!flag.unbind || VER(14)) &&                 // note: for files <= v13, we cannot test per-VB digest in unbind mode, because the digests (MD5 and Adler32) are commulative since the beginning of the bound file. However, we still test component-wide digest in piz_verify_digest_one_txt_file.
         !v8_digest_is_zero (vb->expected_digest)) {  // note: in v8 files compressed without --md5 or --test, we had no digest.
@@ -122,7 +122,7 @@ static void digest_piz_verify_one_vb (VBlockP vb)
             if (vb->recon_size != vb->txt_data.len)
                 sprintf (recon_size_warn, "Expecting: VB_HEADER.recon_size=%u == txt_data.len=%"PRIu64"\n", vb->recon_size, vb->txt_data.len);
 
-            WARN ("reconstructed vblock=%s/%u, (%s=%s) differs from original file (%s=%s).\n%s\n"
+            WARN ("reconstructed vblock=%s/%u, (%s=%s) differs from original file (%s=%s).\n%s",
                   comp_name (vb->comp_i), vb->vblock_i, 
                   DIGEST_NAME, digest_display (piz_digest).s, 
                   DIGEST_NAME, digest_display (vb->expected_digest).s, 

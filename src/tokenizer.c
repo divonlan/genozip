@@ -144,7 +144,7 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
 
         if (ci->is_int) {
             
-            PosType delta;
+            PosType64 delta;
             if (ctx_has_value_in_prev_line_(vb, item_ctx) && 
                 ABS((delta = ci->value - item_ctx->last_value.i)) < MAX_TOKENIZER_DETLA &&
                 (delta || !item_ctx->flags.all_the_same)) { // don't do delta if it can ruin the all-the-same

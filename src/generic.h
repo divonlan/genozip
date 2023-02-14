@@ -21,6 +21,7 @@ extern void generic_seg_finalize (VBlockP vb);
 extern bool generic_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern rom generic_get_magic (void);
 extern rom generic_get_ext (void);
+extern rom fallback_to_generic (VBlockP vb);
 
 #define GNRIC_SPECIAL { generic_piz_TOPLEVEL }
 SPECIAL (GNRIC, 0, TOPLEVEL, generic_piz_TOPLEVEL);

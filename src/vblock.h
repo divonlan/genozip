@@ -128,12 +128,12 @@
     int16_t z_next_header_i;      /* next header of this VB to be encrypted or decrypted */\
     \
     /* dictionaries stuff - we use them for 1. subfields with genotype data, 2. fields 1-9 of the VCF file 3. infos within the info field */\
-    Did num_contexts;        /* total number of dictionaries of all types */\
-    Context contexts[MAX_DICTS];    \
-    Did dict_id_to_did_i_map[65536 * 2]; /* map for quick look up of did_i from dict_id : 64K for key_map, 64K for alt_map */\
+    Did num_contexts;             /* total number of dictionaries of all types */\
+    ContextArray contexts;    \
+    DictIdtoDidMap d2d_map; /* map for quick look up of did_i from dict_id : 64K for key_map, 64K for alt_map */\
     \
     bool has_ctx_index; \
-    ContextIndex ctx_index[MAX_DICTS];   /* PIZ VB: sorted index into contexts for binary-search lookup if dict_id_to_did_i_map fails */\
+    ContextIndex ctx_index[MAX_DICTS]; /* PIZ VB: sorted index into contexts for binary-search lookup if d2d_map fails */\
     \
     /* reference stuff */ \
     Reference ref;                /* used by VBs created by dispatchers for uncompressing / compressing internal or external references. NOT used by VBs of the data type itself. */ \
@@ -152,7 +152,7 @@
     \
     /* ref_iupac quick lookup */\
     ConstRangeP iupacs_last_range[2]; /* [0]=prim_ref [1]=gref */ \
-    PosType iupacs_last_pos[2], iupacs_next_pos[2]; \
+    PosType64 iupacs_last_pos[2], iupacs_next_pos[2]; \
     \
     /* Information content stats - how many bytes does this section have more than the corresponding part of the vcf file */\
     Buffer show_headers_buf;      /* ZIP only: we collect header info, if --show-headers is requested, during compress, but show it only when the vb is written so that it appears in the same order as written to disk */\
@@ -218,6 +218,7 @@ extern VBlockPool *vb_get_pool (VBlockPoolType type, FailType soft_fail);
 extern VBlockP vb_get_from_pool (VBlockPoolP pool, int32_t vb_id);
 extern VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompIType comp_i);
 extern void vb_destroy_pool_vbs (VBlockPoolType type);
+extern uint32_t vb_pool_get_num_in_use (VBlockPoolType type);
 extern bool vb_pool_is_full (VBlockPoolType type);
 extern bool vb_pool_is_empty (VBlockPoolType type);
 

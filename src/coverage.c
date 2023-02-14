@@ -74,7 +74,7 @@ static float coverage_get_autosome_depth (ConstContigPkgP contigs, WordIndex ind
         STR(cn);
         ctx_get_snip_by_word_index (ZCTX(CHROM), i, cn);
         
-        PosType len = contigs_get_LN (contigs, i);
+        PosType64 len = contigs_get_LN (contigs, i);
 
         if (cn_len > 5 || len <= (1>>20)) continue; // not primary autosome (note: in SAM/BAM compression with REF_INTERNAL the minimum length of a contig 1MB)
 
@@ -178,7 +178,7 @@ void coverage_sex_classifier (bool is_first_z_file)
     fflush (info_stream); // in case output is redirected
 }
 
-typedef struct { WordIndex chrom; STR (chrom_name); uint64_t coverage, read_count; PosType LN; } CovDis;
+typedef struct { WordIndex chrom; STR (chrom_name); uint64_t coverage, read_count; PosType64 LN; } CovDis;
 
 static __attribute__((unused)) DESCENDING_SORTER (sort_by_LN, CovDis, LN)
 
@@ -241,7 +241,7 @@ void coverage_show_coverage (void)
     // no sorting for now - keep in order of header or reference (to do: sort by numeric component chrom number)
     // qsort (STRb(evb->scratch)), sizeof (CovDis), sort_by_LN);
 
-    PosType genome_nbases = 0;
+    PosType64 genome_nbases = 0;
 
     for_buf (CovDis, ctg, evb->scratch) {
         if (flag.show_coverage == COV_ALL || (flag.show_coverage == COV_CHROM && ctg->chrom_name_len <= 5))
@@ -299,7 +299,7 @@ void coverage_show_idxstats (void)
         STR(chrom_name);
         ctx_get_snip_by_word_index (ZCTX(CHROM), i, chrom_name);
 
-        PosType len = IS_ASTERISK (chrom_name) ? 0 : contigs_get_LN (contigs, i);
+        PosType64 len = IS_ASTERISK (chrom_name) ? 0 : contigs_get_LN (contigs, i);
 
         iprintf ("%.*s\t%"PRIu64"\t%"PRId64"\t%"PRIu64"\n", chrom_name_len, chrom_name, len, read_count[i], unmapped_read_count[i]);
     }

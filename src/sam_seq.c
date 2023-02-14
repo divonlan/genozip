@@ -29,7 +29,7 @@
 
 // called when SEQ in a prim or supp/sec line is segged against ref against prim: 
 // Sets vb->mismatch_bases_by_SEQ. ZIP: also sets vb->md_verified and. PIZ: also returns sqbitmap of this line in line_sqbitmap 
-static bool sam_analyze_copied_SEQ (VBlockSAMP vb, STRp(seq), const SamPosType pos, bool is_revcomp,
+static bool sam_analyze_copied_SEQ (VBlockSAMP vb, STRp(seq), const PosType32 pos, bool is_revcomp,
                                     uint32_t ref_consumed, uint32_t ref_and_seq_consumed,
                                     BufferP line_sqbitmap)
 {
@@ -268,7 +268,7 @@ static void sam_seg_bisulfite_M (VBlockSAMP vb,
 // - Edge case: no CIGAR (it is "*") - we just store the sequence in SAM_NONREF
 // - Edge case: no SEQ (it is "*") - we '*' in SAM_NONREF and indicate "different from reference" in the bitmap. We store a
 //   single entry, regardless of the number of entries indicated by CIGAR
-static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(seq), const SamPosType pos, bool is_revcomp,
+static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(seq), const PosType32 pos, bool is_revcomp,
                                        uint32_t ref_consumed, uint32_t ref_and_seq_consumed, bool no_lock)
 {
     START_TIMER;
@@ -619,7 +619,7 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq), unsigned
 
     // set vb->md_verified and vb->mismatch_bases_by_SEQ needed by MD:Z and NM:i
     bool force_no_analyze_depn_SEQ = false;
-    if (vs_prim && segconf.has_MD_or_NM && !vb->cigar_missing && 
+    if (vs_prim && segconf.has_MD_or_NM && !vb->cigar_missing && !vb->seq_missing &&
         !sam_analyze_copied_SEQ (vb, STRa(textual_seq), dl->POS, dl->FLAG.rev_comp, vb->ref_consumed, vb->ref_and_seq_consumed, &vb->codec_bufs[0]))
             force_no_analyze_depn_SEQ = true;
 
@@ -706,7 +706,7 @@ bool sam_seq_pack (VBlockSAMP vb, Bits *packed, uint64_t next_bit, STRp(seq), bo
 rom ERR_ANALYZE_RANGE_NOT_AVAILABLE = "Range not available";
 rom ERR_ANALYZE_DEPN_NOT_IN_REF     = "Depn alignment base not is_set in reference";
 rom ERR_ANALYZE_INCORRECT_REF_BASE  = "incorrect reference base";
-rom sam_seg_analyze_set_one_ref_base (VBlockSAMP vb, bool is_depn, SamPosType pos, char base, 
+rom sam_seg_analyze_set_one_ref_base (VBlockSAMP vb, bool is_depn, PosType32 pos, char base, 
                                       uint32_t ref_consumed, // remaining ref_consumed starting at pos                                      
                                       RangeP *range_p, RefLock *lock)
 {
@@ -799,7 +799,7 @@ COMPRESSOR_CALLBACK (sam_zip_seq)
 
 // get a bytemap of ref_consumed values. returns NULL if no range exists. get 2 bases before and after
 // in case needed for methylation calling.
-static inline uint8_t *sam_reconstruct_SEQ_get_ref_bytemap (VBlockSAMP vb, ContextP bitmap_ctx, bool v14, SamPosType pos, bool predict_meth_call)
+static inline uint8_t *sam_reconstruct_SEQ_get_ref_bytemap (VBlockSAMP vb, ContextP bitmap_ctx, bool v14, PosType32 pos, bool predict_meth_call)
 {
     // note: in an edge case, when all is_set bits are zero, the range might not even be written to the file
     bool uses_ref_data = vb->ref_consumed && 
@@ -809,7 +809,7 @@ static inline uint8_t *sam_reconstruct_SEQ_get_ref_bytemap (VBlockSAMP vb, Conte
     vb->range = uses_ref_data ? (RangeP)ref_piz_get_range (VB, gref, SOFT_FAIL) : NULL; 
     if (!vb->range) return NULL; 
 
-    SamPosType range_len = vb->range ? (vb->range->last_pos - vb->range->first_pos + 1) : 0;
+    PosType32 range_len = vb->range ? (vb->range->last_pos - vb->range->first_pos + 1) : 0;
     uint32_t num_bases = vb->ref_consumed + (predict_meth_call ? 4 : 0); // 2 bases before and after in case needed for methylation
 
     ASSERTNOTINUSE (vb->scratch);
@@ -846,7 +846,7 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, ContextP bitmap_ctx, STRp(snip), R
 
     #define adjusted(base_i) ((base_i) + (predict_meth_call ? 2 : 0))
     #define verify_is_set(base_i) ASSPIZ (!flag.debug || IS_REF_EXTERNAL || (adjusted(base_i) < vb->piz_is_set.len32 && *Bc(vb->piz_is_set, adjusted(base_i)) == 1), \
-                                          "Expecting POS=%u + base_i=%u to have is_set=1", (SamPosType)vb->contexts[SAM_POS].last_value.i, (base_i))
+                                          "Expecting POS=%u + base_i=%u to have is_set=1", (PosType32)vb->contexts[SAM_POS].last_value.i, (base_i))
 
     VBlockSAMP vb = (VBlockSAMP)vb_;
 
@@ -857,7 +857,7 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, ContextP bitmap_ctx, STRp(snip), R
     Context *seqmis_ctx   = CTX(SAM_SEQMIS_A);
     rom nonref            = Bc (nonref_ctx->local, nonref_ctx->next_local); // possibly, this VB has no nonref (i.e. everything is ref), in which case nonref would be an invalid pointer. That's ok, as it will not be accessed.
     rom nonref_start      = nonref;
-    const SamPosType pos  = vb->last_int(SAM_POS);
+    const PosType32 pos  = vb->last_int(SAM_POS);
     unsigned seq_consumed=0, ref_consumed=0;
 
     // note: prim alignments (loaded in preprocessing) are always mapped - enforced by sam_seg_is_gc_line
@@ -1146,8 +1146,9 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SEQ)
     }
 
     // case: copy from saggy line in this VB
-    else if (sam_has_saggy && !B(CigarAnalItem, CTX(SAM_CIGAR)->cigar_anal_history, vb->saggy_line_i)->hard_clip[0] 
-                           && !B(CigarAnalItem, CTX(SAM_CIGAR)->cigar_anal_history, vb->saggy_line_i)->hard_clip[1])
+    else if (sam_has_saggy && !vb->seq_missing &&
+             !B(CigarAnalItem, CTX(SAM_CIGAR)->cigar_anal_history, vb->saggy_line_i)->hard_clip[0] &&
+             !B(CigarAnalItem, CTX(SAM_CIGAR)->cigar_anal_history, vb->saggy_line_i)->hard_clip[1])
         reconstruct_SEQ_copy_saggy (vb, ctx, reconstruct, snip[SEQ_SNIP_NO_ANALYZE_DEPN_SEQ]-'0');
 
     // case: reconstruct sequence directly

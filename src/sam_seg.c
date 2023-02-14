@@ -166,6 +166,7 @@ void sam_zip_finalize (bool is_last_user_txt_file)
 void sam_zip_init_vb (VBlockP vb)
 {
     vb->chrom_node_index = NODE_INDEX_NONE;
+    VB_SAM->XG_inc_S = unknown;
 
     // note: we test for sorted and not collated, because we want non-sorted long read files (which are collated)
     // to seg depn against same-VB prim (i.e. not gencomp) - as the depn lines will follow the prim line
@@ -266,7 +267,7 @@ void sam_seg_initialize (VBlockP vb_)
                    T(TECH(PACBIO), OPTION_qs_i), T(TECH(PACBIO), OPTION_qe_i),
                    T(MP(BLASR), OPTION_XS_i), T(MP(BLASR), OPTION_XE_i), T(MP(BLASR), OPTION_XQ_i), T(MP(BLASR), OPTION_XL_i), T(MP(BLASR), OPTION_FI_i),
                    T(MP(NGMLR), OPTION_QS_i), T(MP(NGMLR), OPTION_QE_i), T(MP(NGMLR), OPTION_XR_i),
-                   T(is_minimap2(), OPTION_s1_i), OPTION_ZS_i, OPTION_nM_i,
+                   T(segconf.is_minimap2, OPTION_s1_i), OPTION_ZS_i, OPTION_nM_i,
                    T(kraken_is_loaded, SAM_TAXID),
                    DID_EOL);
 
@@ -275,7 +276,7 @@ void sam_seg_initialize (VBlockP vb_)
 
     // when reconstructing these contexts against another context (DELTA_OTHER or XOR_DIFF) the other may be before or after
     ctx_set_same_line (VB, OPTION_AS_i, OPTION_s1_i, // AS may be DELTA_OTHER vs ms:i ; s1 vs AS ; XS vs AS
-                       T(sam_has_BWA_XS_i(), OPTION_XS_i),
+                       T(segconf.sam_has_BWA_XS_i, OPTION_XS_i),
                        OPTION_RX_Z, OPTION_CR_Z, // whe UR and CR are reconstruted as XOR_DIFF against UB and CB respectively, we search for the values on the same line (befor or after)
                        DID_EOL);
 
@@ -374,9 +375,6 @@ void sam_seg_initialize (VBlockP vb_)
     sam_seg_0X_initialize (VB, OPTION_SA_STRAND);
     sam_seg_0X_initialize (VB, OPTION_OA_STRAND);
 
-    if (sam_has_BWA_XA_Z())
-        sam_seg_BWA_XA_initialize (vb);
-
     if (segconf.has_cellranger) {
         sam_seg_TX_AN_initialize (vb, OPTION_TX_Z);
         sam_seg_TX_AN_initialize (vb, OPTION_AN_Z);
@@ -384,7 +382,7 @@ void sam_seg_initialize (VBlockP vb_)
 
     ctx_set_store (VB, STORE_INDEX, OPTION_XA_Z, DID_EOL); // for containers this stores repeats - used by sam_piz_special_X1->container_peek_repeats
 
-    if (sam_has_BWA_XS_i()) // XS:i is as defined some aligners
+    if (segconf.sam_has_BWA_XS_i) // XS:i is as defined some aligners
         seg_mux_init (VB, CTX(OPTION_XS_i), 4, SAM_SPECIAL_BWA_XS, false, (MultiplexerP)&vb->mux_XS, "0123");
 
     else if (MP(HISAT2)) // ZS:i is like BWA's XS:i
@@ -418,17 +416,6 @@ void sam_seg_initialize (VBlockP vb_)
 
     for (MatedZFields f = 0; f < NUM_MATED_Z_TAGS; f++)
         seg_mux_init (VB, CTX(buddied_Z_dids[f]), 2, SAM_SPECIAL_DEMUX_BY_BUDDY, false, (MultiplexerP)&vb->mux_mated_z_fields[f], "01");
-
-    if (segconf.running) {
-        segconf.is_sorted = segconf.is_collated = segconf.MAPQ_has_single_value =
-            segconf.NM_after_MD = segconf.nM_after_MD = true; // initialize optimistically
-        segconf.sam_is_unmapped = true;                       // we will reset this if finding a line with POS>0
-        segconf.SA_HtoS = unknown;
-
-        segconf.CY_con_snip_len = sizeof (segconf.CY_con_snip);
-        segconf.QT_con_snip_len = sizeof (segconf.QT_con_snip);
-        segconf.CB_con_snip_len = sizeof (segconf.CB_con_snip);
-    }
         
     // get counts of qnames in the VB, that will allow us to leave lines in th  e VB for saggy instead of gencomp
     // note: for SAG_BY_SA in --best, we send all prim/depn to gencomp (see bug 629)
@@ -648,10 +635,8 @@ static void sam_seg_finalize_segconf (VBlockP vb)
     }
 
     else {
-        // case: if we haven't found any pair of consecutive lines with the same RNAME and non-descreasing POS, this is not a sorted file, despite no evidence of "not sorted". eg could be unique RNAMEs.
-        if (!segconf.evidence_of_sorted)
-            segconf.is_sorted = false;
-
+        segconf_finalize_is_sorted();
+        
         // we have at leaest one pair of lines with the same QNAME, and the file is not sorted
         if (!segconf.is_sorted && segconf.evidence_of_collated)
             segconf.is_collated = true;
@@ -670,7 +655,7 @@ static void sam_seg_finalize_segconf (VBlockP vb)
     if (segconf.is_biobambam2_sort && segconf.is_paired) 
         segconf.sam_ms_type = ms_BIOBAMBAM;
 
-    else if (is_minimap2())
+    else if (segconf.is_minimap2)
         segconf.sam_ms_type = ms_MINIMAP2; 
 
     // if we have no conclusive evidence of either minimap2 or biobambam, this is likely samtools, which has the same logic as biobambam
@@ -697,9 +682,11 @@ static void sam_seg_finalize_segconf (VBlockP vb)
         ctx_populate_zf_ctx_from_contigs (gref, SAM_RNAME, ref_get_ctgs (gref));
 
     // Aplogize to user for not doing a good job with PacBio subreads files
-    if (MP(BAZ2BAM) && segconf.has[OPTION_ip_B_C] && segconf.has[OPTION_pw_B_C]) {
+    if ((MP(BAZ2BAM) || TECH(PACBIO)) && 
+            (segconf.has[OPTION_ip_B_C] || segconf.has[OPTION_pw_B_C] || segconf.has[OPTION_fi_B_C] || 
+             segconf.has[OPTION_fp_B_C] || segconf.has[OPTION_ri_B_C] || segconf.has[OPTION_rp_B_C])) {
         TEMP_FLAG(quiet, flag.explicit_quiet); // note: quiet is set to true in segconf
-        WARN0 ("FYI: Genozip currently doesn't do a very good job at compressing PacBio subreads BAM files. This is because we haven't figured out yet a good method to compress the ip:B and pw:B fields. Sorry!\n");
+        WARN0 ("FYI: Genozip currently doesn't do a very good job at compressing PacBio kinetic BAM files. This is because we haven't figured out yet a good method to compress kinetic data - the ip:B, pw:B, fi:B, fp:B, ri:B, rp:B fields. Sorry!\n");
         RESTORE_FLAG(quiet);
     }
 }
@@ -781,6 +768,12 @@ void sam_seg_finalize (VBlockP vb)
 // main thread: called after all VBs, before compressing global sections
 void sam_zip_after_vbs (void)
 {
+    // case: header-only file, completely get rid of RNAME, RNEXT
+    if (!sections_count_sections (SEC_VB_HEADER)) {
+        ZCTX(SAM_RNAME)->dict.len = ZCTX(SAM_RNAME)->nodes.len = 
+        ZCTX(SAM_RNEXT)->dict.len = ZCTX(SAM_RNEXT)->nodes.len = 0;
+    }
+    
     // shorten unused words in dictionary strings to "" (dict pre-populated in sam_zip_initialize)
     if (!IS_REF_INTERNAL) // TO DO: this doesn't work for REF_INTERNAL for example with test.transcriptome.bam
         ctx_shorten_unused_dict_words (SAM_RNAME);
@@ -1438,7 +1431,9 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
     if (vb->check_for_gc || !sam_is_main_vb)
         seg_create_rollback_point (VB, NULL, 1, SAM_RNAME);
 
+    int32_t rname_shrinkage = vb->recon_size;
     dl->RNAME = sam_seg_RNAME(vb, dl, STRfld (RNAME), false, fld_lens[RNAME] + 1);
+    rname_shrinkage -= vb->recon_size; // number of characters RNAME was reduced by, due to --match-chrom-to-reference
 
     ASSSEG (str_get_int_range32(STRfld (POS), 0, MAX_POS_SAM, &dl->POS),
             flds[POS], "Invalid POS \"%.*s\": expecting an integer [0,%d]", STRfi (fld, POS), (int)MAX_POS_SAM);
@@ -1483,6 +1478,7 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
 
         // re-seg rname, against SA group
         seg_rollback (VB);
+        vb->recon_size += rname_shrinkage; // grow back, as we will shrink it again when re-segging
         sam_seg_RNAME(vb, dl, STRfld (RNAME), true, fld_lens[RNAME] + 1);
     }
 
@@ -1560,5 +1556,7 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
 rollback_and_done:
     memset (dl, 0, sizeof (ZipDataLineSAM));
     seg_rollback (VB); // cancelling segging of RNAME
+    vb->recon_size += rname_shrinkage; // grow back, as the change in recon_size due to the change in RNAME, will be accounted for by the PRIM/DEPN VB to which this alignment belongs was sent
+
     return next_line;
 }

@@ -28,7 +28,7 @@
 // Lookup buffer
 #define lookback_value last_value.i
 
-void sam_seg_BWA_XA_initialize (VBlockSAMP vb)
+static void sam_seg_BWA_XA_initialize (VBlockSAMP vb)
 {
     ContextP rname_ctx    = CTX(OPTION_XA_RNAME);
     ContextP strand_ctx   = CTX(OPTION_XA_STRAND);
@@ -38,7 +38,7 @@ void sam_seg_BWA_XA_initialize (VBlockSAMP vb)
     pos_ctx->ltype       = LT_DYN_INT;
     pos_ctx->flags.store = STORE_INT;
 
-    if (segconf.is_sorted) {
+    if (segconf.is_sorted && !segconf.running) {
 
         // note: we need to allocate lookback even if reps_per_line=0, lest an XA shows up despite not being in segconf
         rname_ctx->no_stons         = true;  // as we store by index
@@ -67,6 +67,31 @@ void sam_seg_BWA_XA_initialize (VBlockSAMP vb)
     // case: we're not going to use lookback - create an all-the-same XA_LOOKBACK dict
     else
         ctx_create_node (VB, OPTION_XA_LOOKBACK, "0", 1);   // word_index=0
+
+    CTX(OPTION_XA_Z)->is_initialized = true;
+}
+
+static bool sam_seg_verify_BWA_XA (VBlockSAMP vb, STRp(xa))
+{
+    // set only if not already set by another thread
+    #define SET_XA(x) __atomic_compare_exchange_n (&segconf.sam_has_BWA_XA_Z, &expected, (x), false, __ATOMIC_RELAXED, __ATOMIC_RELAXED)
+    thool expected = unknown;
+
+    str_split (xa, xa_len, 0, ';', rep, false); // verify at least one semicolon
+    if (n_reps < 2) 
+        SET_XA(no);
+
+    else { // test first repeat
+        str_split (reps[0], rep_lens[0], 4, ',', item, true);
+
+        // verify 4 items, and POS is a -/+ followed by an integer. note: GEM3 XA format will be a "not". TO DO: recognize GEM3 format 
+        if (n_items != 4 || item_lens[1] < 2 || (items[1][0] != '+' && items[1][0] != '-') || !str_is_int (&items[1][1], item_lens[1]-1)) 
+            SET_XA(no);
+        else
+            SET_XA(yes);
+    }
+
+    return (segconf.sam_has_BWA_XA_Z == yes); // as set by this thread, or perhaps another thread that beat us to it
 }
 
 static bool sam_seg_BWA_XA_strand_cb (VBlockP vb, ContextP ctx, STRp(strand), uint32_t rep)
@@ -94,7 +119,7 @@ static bool sam_seg_BWA_XA_pos_cb (VBlockP vb, ContextP ctx, STRp(pos_str), uint
     // look back for a node with this index and a similar POS - we use word_index to store the original rname_node_index, pos
     WordIndex rname_index = LASTb250(rname_ctx);
     int64_t lookback = 0;
-    SamPosType pos = -MAX_POS_DISTANCE; // initial to "invalid pos" - value chosen so we can store it in poses, in lieu of an invalid non-integer value, without a future pos being considered close to it
+    PosType32 pos = -MAX_POS_DISTANCE; // initial to "invalid pos" - value chosen so we can store it in poses, in lieu of an invalid non-integer value, without a future pos being considered close to it
 
     WordIndex strand_wi = LASTb250(strand_ctx);
 
@@ -103,7 +128,7 @@ static bool sam_seg_BWA_XA_pos_cb (VBlockP vb, ContextP ctx, STRp(pos_str), uint
         int64_t iterator = -1;
         while ((lookback = lookback_get_next (vb, lb_ctx, rname_ctx, rname_index, &iterator))) {
 
-            SamPosType lookback_pos = lookback_get_value (vb, lb_ctx, pos_ctx, lookback).i;
+            PosType32 lookback_pos = lookback_get_value (vb, lb_ctx, pos_ctx, lookback).i;
 
             // case: we found a lookback - same rname and close enough pos
             if (ABS (pos-lookback_pos) < MAX_POS_DISTANCE) {
@@ -156,6 +181,16 @@ static bool sam_seg_SA_no_lookback_cb (VBlockP vb, ContextP ctx, STRp(snip), uin
 void sam_seg_BWA_XA_Z (VBlockSAMP vb, STRp(xa), unsigned add_bytes)
 {
     START_TIMER;
+
+    // case: still "unknown". set to "yes" or "no" and proceed accordingly.
+    if (segconf.sam_has_BWA_XA_Z == unknown && !sam_seg_verify_BWA_XA (vb, STRa(xa))) {
+        seg_by_did (VB, STRa(xa), OPTION_XA_Z, add_bytes); // fallback;
+        return;
+    }
+
+    // case: first encounter with XA in this VB, possibly after this thread or another thread set "sam_has_BWA_XA_Z" to "yes" in sam_seg_verify_BWA_XA 
+    if (!CTX(OPTION_XA_Z)->is_initialized)
+        sam_seg_BWA_XA_initialize (vb);
 
     static const MediumContainer container_XA = {
         .repeats      = 0, 

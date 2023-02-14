@@ -127,8 +127,8 @@ static void vcf_piz_replace_pos_with_gpos (VBlockVCFP vb)
     // remove CHROM and POS and two \t
     vb->txt_data.len -= pos_ctx->last_txt.len + vb->last_txt_len (chrom_did_i) + 2; // remove main CHROM\tPOS\t
 
-    PosType pos = pos_ctx->last_value.i;
-    PosType gpos = (r && pos >= r->first_pos && pos <= r->last_pos) ? r->gpos + (pos - r->first_pos) : 0; 
+    PosType64 pos = pos_ctx->last_value.i;
+    PosType64 gpos = (r && pos >= r->first_pos && pos <= r->last_pos) ? r->gpos + (pos - r->first_pos) : 0; 
 
     // if CHROM exists in the reference, POS must fit withing it
     ASSPIZ (!r || (pos >= r->first_pos && pos <= r->last_pos), "POS=%"PRId64" is out of bounds for reference of CHROM: [%"PRId64",%"PRId64"]", 

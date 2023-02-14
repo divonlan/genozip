@@ -124,20 +124,26 @@ FileType file_get_z_ft_by_dt (DataType dt)
 // possible arguments for --input
 char *file_compressible_extensions (bool plain_only)
 {
-    static char s[1000] = {0};
+    static char s[1000];
         
+    int len = 0;
     for (DataType dt=1; dt < NUM_DATATYPES; dt++) { // start from 1, excluding DT_REFERENCE
         
         if (dt == DT_GENERIC || dt == DT_ME23) continue;
 
         if (plain_only) 
-            sprintf (&s[strlen(s)], "%s ", &file_exts[txt_in_ft_by_dt[dt][0].in][1]);
+            for (unsigned i=0; txt_in_ft_by_dt[dt][i].in; i++) {
+                Codec codec = txt_in_ft_by_dt[dt][i].codec;
+                if (codec != CODEC_BGZF && codec != CODEC_GZ && codec != CODEC_BZ2 && codec != CODEC_XZ && codec != CODEC_ZIP)
+                    len += sprintf (&s[len], "%s ", &file_exts[txt_in_ft_by_dt[dt][i].in][1]);
+            }
+            // sprintf (&s[strlen(s)], "%s ", &file_exts[txt_in_ft_by_dt[dt][0].in][1]);
     
         else {
             sprintf (&s[strlen (s)], "\n%-8s: ", dt_name (dt));
 
             for (unsigned i=0; txt_in_ft_by_dt[dt][i].in; i++)
-                sprintf (&s[strlen(s)], "%s ", &file_exts[txt_in_ft_by_dt[dt][i].in][1]);
+                len += sprintf (&s[len], "%s ", &file_exts[txt_in_ft_by_dt[dt][i].in][1]);
         }
     }
 
@@ -231,12 +237,12 @@ void file_set_input_type (rom type_str)
 
     else if (!strcmp (ext, ".generic")) {
         flag.stdin_type = GNRIC;
-        flag.exlicitly_generic = true;
+        flag.explicitly_generic = true;
     }
 
     else {
         flag.stdin_type = file_get_type (ext); // we don't enforce 23andMe name format - any .txt or .zip will be considered ME23
-        if (flag.stdin_type == GNRIC && !flag.exlicitly_generic) 
+        if (flag.stdin_type == GNRIC && !flag.explicitly_generic) 
             flag.stdin_type = UNKNOWN_FILE_TYPE; // This is an unknown input name - not generic
     }
 
@@ -244,11 +250,6 @@ void file_set_input_type (rom type_str)
 
     // the user's argument is not an accepted input file type - print error message
     ABORT ("%s: --input (or -i) must be ones of these: %s", global_cmd, file_compressible_extensions(false));
-}
-    
-FileType file_get_stdin_type (void)
-{
-    return flag.stdin_type;
 }
 
 static void file_ask_user_to_confirm_overwrite (rom filename)
@@ -726,7 +727,7 @@ static void file_initialize_z_add_to_buf_list (BufferP buf, FUNCLINE)
 
 static void file_initialize_z_file_data (FileP file)
 {
-    memset (file->dict_id_to_did_i_map, 0xff, sizeof(file->dict_id_to_did_i_map)); // DID_NONE
+    init_dict_id_to_did_map (file->d2d_map); 
 
     for (unsigned i=0; i < MAX_DICTS; i++) 
         ctx_foreach_buffer (&file->contexts[i], true, file_initialize_z_add_to_buf_list);
@@ -861,11 +862,14 @@ static bool file_open_z (FileP file)
                 file->file = fopen (file->name, file->mode);
 #ifndef _WIN32
                 // set z_file permissions to be the same as the txt_file permissions (if possible)
-                struct stat st;
-                if (txt_file && txt_file->file && !txt_file->redirected && !txt_file->is_remote &&
-                    !fstat (fileno (txt_file->file), &st))
-    
-                    fchmod (fileno (file->file), st.st_mode); // ignore errors (e.g. this doesn't work on NTFS)
+                if (file->file && txt_file && txt_file->name && !txt_file->redirected && !txt_file->is_remote) {
+                    struct stat st;
+                    if (stat (txt_file->name, &st))
+                        WARN ("FYI: Failed to set permissions of %s because failed to stat(%s): %s", file->name, txt_file->name, strerror(errno));
+                    
+                    else
+                        chmod (file->name, st.st_mode); // ignore errors (e.g. this doesn't work on NTFS)
+                }
 #endif
             }
         }
@@ -1041,7 +1045,7 @@ void file_close (FileP *file_p,
         else if (file->mode == READ && file_is_read_via_ext_decompressor (file)) 
             stream_close (&input_decompressor, STREAM_WAIT_FOR_PROCESS);
 
-        else if (file->mode == WRITE && file_is_written_via_ext_compressor (file))
+        else if (file->mode == WRITE && file_is_written_via_ext_compressor (file)) 
             stream_close (&output_compressor, STREAM_WAIT_FOR_PROCESS);
 
         // if its stdout - just flush, don't close - we might need it for the next file

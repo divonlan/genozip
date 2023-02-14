@@ -303,7 +303,7 @@ WordIndex contigs_get_by_ref_index (ConstContigPkgP ctgs,WordIndex ref_index)
 // if length is given, it is verified.
 // note that the function must always return the same result with the same name (so txtheader, seg and chrom_2ref_compress 
 // are all consistent), whether or not LN is provided, so we cannot use LN in the decision making.
-WordIndex contigs_get_matching (ConstContigPkgP ctgs, STRp(name), PosType LN, /* optional */
+WordIndex contigs_get_matching (ConstContigPkgP ctgs, STRp(name), PosType64 LN, /* optional */
                                 bool strictly_alt, // only tests for differnet names
                                 bool *is_alt) // if not NULL, also search for as-is, and return whether its alt or not
 {

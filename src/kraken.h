@@ -63,7 +63,7 @@ extern bool kraken_is_translation (VBlockP vb);
 extern bool kraken_piz_initialize (void);
 extern IS_SKIP (kraken_piz_is_skip_section);
 extern CONTAINER_CALLBACK (kraken_piz_container_cb);
-extern void kraken_piz_handover_data (VBlockP vb);
+extern void kraken_piz_process_recon (VBlockP vb);
 
 // using the kraken data in genocat --kraken
 extern void kraken_set_taxid (rom optarg);

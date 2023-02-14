@@ -54,7 +54,7 @@ void sam_seg_bismark_XM_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl)
     RangeP range = NULL;
     RefLock lock = REFLOCK_NONE;
     uint32_t ref_consumed = vb->ref_consumed; // M/=/X and D
-    SamPosType pos = dl->POS;
+    PosType32 pos = dl->POS;
 
     for_buf (BamCigarOp, op, vb->binary_cigar) 
         if (op->op==BC_M || op->op==BC_E || op->op==BC_X) 

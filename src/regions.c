@@ -21,14 +21,14 @@
 // region as parsed from the --regions option
 typedef struct {
     rom chrom;        // NULL means all chromosomes (i.e. not a specific chromosome)
-    PosType start_pos;       // if the user did specify pos then start_pos=0 and end_pos=MAX_POS
-    PosType end_pos;         // the region searched will include both the start and the end
+    PosType64 start_pos;       // if the user did specify pos then start_pos=0 and end_pos=MAX_POS
+    PosType64 end_pos;         // the region searched will include both the start and the end
 } Region;
 
 // region of a specific chromosome
 typedef struct {
-    PosType start_pos;       // if the user did specify pos then start_pos=0 and end_pos=MAX_POS
-    PosType end_pos;         // the region searched will include both the start and the end
+    PosType64 start_pos;       // if the user did specify pos then start_pos=0 and end_pos=MAX_POS
+    PosType64 end_pos;         // the region searched will include both the start and the end
     bool revcomp;            // display the region in reverse complement
 } Chreg; // = Chromosome Region
 
@@ -70,7 +70,7 @@ static bool regions_parse_pos (rom str, Region *reg)
     sep = strchr (str, '+');
     if (sep) {
         if (!str_get_int (str, sep - str, &reg->start_pos)) return false;
-        PosType region_len;
+        PosType64 region_len;
         if (!str_get_int (sep+1, str+len-(sep+1), &region_len)) return false;
         reg->end_pos = reg->start_pos + region_len - 1;
         return true;
@@ -207,7 +207,7 @@ void regions_add_by_file (rom regions_filename)
         
         bool has_len = num_fields == 3 && fields[2][0] == '+';
         
-        PosType start_pos, end_pos, len;
+        PosType64 start_pos, end_pos, len;
         ASSINP (str_get_int (fields[1], field_lens[1], &start_pos), "Invalid start pos (column 2 in a tab-separated file) in %s line %u: \"%.*s\"", regions_filename, i+1, field_lens[1], fields[1]);
         
         ASSINP (has_len || num_fields == 2 || str_get_int_range64 (fields[2], field_lens[2], start_pos, MAX_POS, &end_pos), 
@@ -343,7 +343,7 @@ void regions_transform_negative_to_positive_complement()
 // PIZ: we calculate which regions (specified in the command line -r/-R) intersect with 
 // the ra (=a range of a single chrome within a vb) (represented by the parameters of this funciton) - 
 // filling in a bytemap of the intersection, and returning true if there is any intersection at all
-bool regions_get_ra_intersection (WordIndex chrom_word_index, PosType min_pos, PosType max_pos)
+bool regions_get_ra_intersection (WordIndex chrom_word_index, PosType64 min_pos, PosType64 max_pos)
 {
     if (!flag.regions) return true; // nothing to do
 
@@ -364,8 +364,8 @@ unsigned regions_get_num_range_intersections (WordIndex chrom_word_index)
 }
 
 // used by ref_display_ref. if an intersection was found - returns the min,max pos and true, otherwise returns false
-bool regions_get_range_intersection (WordIndex chrom_word_index, PosType min_pos, PosType max_pos, unsigned intersect_i,
-                                     PosType *intersect_min_pos, PosType *intersect_max_pos, bool *revcomp) // out
+bool regions_get_range_intersection (WordIndex chrom_word_index, PosType64 min_pos, PosType64 max_pos, unsigned intersect_i,
+                                     PosType64 *intersect_min_pos, PosType64 *intersect_max_pos, bool *revcomp) // out
 {
     if (!flag.regions) { // if no regions are specified, the entire range "intersects"
         *intersect_min_pos = min_pos;
@@ -396,7 +396,7 @@ bool regions_is_site_included (VBlockP vb)
     Did pos_did_i   = flag.luft ? DTF(luft_pos)   : DTF(pos);
 
     WordIndex chrom = vb->last_index (chrom_did_i);
-    PosType pos = (pos_did_i == DID_NONE)          ? 1 
+    PosType64 pos = (pos_did_i == DID_NONE)          ? 1 
                 : CTX(pos_did_i)->rback_last_value.i ? CTX(pos_did_i)->rback_last_value.i // use saved value if one exists (used in VCF, bc VCF_POS.last_value might be modified by a INFO/END)
                 :                                      CTX(pos_did_i)->last_value.i;
     
@@ -416,7 +416,7 @@ bool regions_is_site_included (VBlockP vb)
 }
 
 // PIZ: check if a range (chrom,start_pos,end_pos) overlaps with an included region. used when loading reference ranges.
-bool regions_is_range_included (WordIndex chrom_word_index, PosType start_pos, PosType end_pos, bool completely_included)
+bool regions_is_range_included (WordIndex chrom_word_index, PosType64 start_pos, PosType64 end_pos, bool completely_included)
 {
     ASSERT (chrom_word_index >= 0 && chrom_word_index < num_chroms, "chrom_word_index=%d is out of range. num_chroms=%u", 
             chrom_word_index, num_chroms);

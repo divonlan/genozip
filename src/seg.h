@@ -53,8 +53,8 @@ extern void seg_numeric_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned 
 #define SPF_ZERO_IS_BAD     2  // whether 0 is considered a bad POS (if true and POS is 0, to be handled according to seg_bad_snips_too)
 #define SPF_UNLIMITED_DELTA 4  // Always use delta, even if larger than MAX_POS_DELTA
 #define SPF_NO_DELTA        8  // All integer data goes into local
-extern PosType seg_pos_field (VBlockP vb, Did snip_did_i, Did base_did_i, unsigned opt, 
-                              char missing, STRp(pos_str), PosType this_pos, unsigned add_bytes);
+extern PosType64 seg_pos_field (VBlockP vb, Did snip_did_i, Did base_did_i, unsigned opt, 
+                              char missing, STRp(pos_str), PosType64 this_pos, unsigned add_bytes);
 extern bool seg_pos_field_cb (VBlockP vb, ContextP ctx, STRp(pos_str), uint32_t repeat);
 
 extern void seg_id_field_init (ContextP ctx);
@@ -298,8 +298,8 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux
                          "\n%d characters before to %d characters after (in quotes): \"%.*s\""                      \
                          "\nTo get vblock: genozip --biopsy %u %s",                                                 \
                                      str_time().s, txt_name, LN_NAME, __VA_ARGS__,                                  \
-            /* pos_in_vb:         */ (PosType)(p_into_txt ? ((rom)p_into_txt - vb->txt_data.data) : -1),            \
-            /* pos_in_file:       */ (PosType)(p_into_txt ? (vb->vb_position_txt_file + ((rom)p_into_txt - vb->txt_data.data)) : -1),\
+            /* pos_in_vb:         */ (PosType64)(p_into_txt ? ((rom)p_into_txt - vb->txt_data.data) : -1),            \
+            /* pos_in_file:       */ (PosType64)(p_into_txt ? (vb->vb_position_txt_file + ((rom)p_into_txt - vb->txt_data.data)) : -1),\
             /* +- 10 char snip    */                                                                                \
             /* chars before:      */ p_into_txt ? MIN_(10, (unsigned)((rom)p_into_txt - vb->txt_data.data)) : -1,   \
             /* chars after:       */ p_into_txt ? MIN_(10, (unsigned)(vb->txt_data.data + vb->txt_data.len - (rom)p_into_txt)) : -1,\

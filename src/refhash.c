@@ -85,7 +85,7 @@ static inline uint32_t refhash_get_word (const Range *r, int64_t base_i)
     // * larger than 0, smaller than BITS_PER_HASH if HOOK is in this range, 
     //   and some bits in this range and some in next
     // * BITS_PER_HASH if HOOK and all bits are in this range
-    PosType num_bits_this_range = MIN_(bits_per_hash, (PosType)r->ref.nbits - base_i*2);
+    PosType64 num_bits_this_range = MIN_(bits_per_hash, (PosType64)r->ref.nbits - base_i*2);
     uint32_t refhash_word = 0;
 
     // if the are any of the 29 bits in this range, use them
@@ -109,8 +109,8 @@ static inline uint32_t refhash_get_word (const Range *r, int64_t base_i)
 // towards the end of the range, we might have hash values that start in this range and end in the next range.
 void refhash_calc_one_range (const Range *r, const Range *next_r /* NULL if r is the last range */)
 {
-    PosType this_range_size = ref_size (r);
-    PosType next_range_size = ref_size (next_r);
+    PosType64 this_range_size = ref_size (r);
+    PosType64 next_range_size = ref_size (next_r);
     
     ASSERT (this_range_size * 2 == r->ref.nbits, 
             "mismatch between this_range_size=%"PRId64" (x2 = %"PRId64") and r->ref.nbits=%"PRIu64". Expecting the latter to be exactly double the former. chrom=%s r->first_pos=%"PRId64" r->last_pos=%"PRId64" r->range_id=%u", 
@@ -119,9 +119,9 @@ void refhash_calc_one_range (const Range *r, const Range *next_r /* NULL if r is
             
     // number of bases - considering the availability of bases in the next range, as we will overflow to it at the
     // end of this one (note: we only look at one next range - even if it is very short, we will not overflow to the next one after)
-    PosType num_bases = this_range_size - (nukes_per_hash - MIN_(next_range_size, nukes_per_hash) ); // take up to NUKES_PER_HASH bases from the next range, if available
+    PosType64 num_bases = this_range_size - (nukes_per_hash - MIN_(next_range_size, nukes_per_hash) ); // take up to NUKES_PER_HASH bases from the next range, if available
 
-    for (PosType base_i=0; base_i < num_bases; base_i++)
+    for (PosType64 base_i=0; base_i < num_bases; base_i++)
 
         // take only the final hook in a polymer string of hooks (i.e. the last G in a e.g. GGGGG)
         if (GET_BASE(base_i) == HOOK && GET_BASE(base_i+1) != HOOK) {
@@ -251,12 +251,14 @@ static void refhash_create_cache (VBlockP unused)
     buf_dump_to_file (refhash_get_cache_fn(), &refhash_buf, 1, true, false, false, false);
 }
 
+#define REFHASH_CACHE_TASK "create_reference_cache"
+
 static void refhash_create_cache_in_background (void)
 {
     if (flag.regions) return; // can't create cache as reference isn't fully loaded
 
     cache_create_vb = vb_initialize_nonpool_vb (VB_ID_HCACHE_CREATE, DT_NONE, "refhash_create_cache_in_background");
-    cache_create_vb->compute_task = "create_refhash_cache";
+    cache_create_vb->compute_task = REFHASH_CACHE_TASK;
 
     refhash_get_cache_fn(); // generate name before we close z_file
     refhash_cache_creation_thread_id = threads_create (refhash_create_cache, cache_create_vb);
@@ -265,7 +267,7 @@ static void refhash_create_cache_in_background (void)
 void refhash_create_cache_join (bool free_mem)
 {
     if (refhash_cache_creation_thread_id != THREAD_ID_NONE) // not already joined
-        threads_join (&refhash_cache_creation_thread_id);   
+        threads_join (&refhash_cache_creation_thread_id, REFHASH_CACHE_TASK);   
 
     if (free_mem && cache_create_vb) 
         vb_destroy_vb (&cache_create_vb);

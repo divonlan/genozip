@@ -73,7 +73,7 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c lice
 		  sam_bwa.c sam_bowtie2.c sam_bsseeker2.c sam_bsbolt.c sam_bismark.c sam_gem3.c sam_tmap.c sam_hisat2.c \
 		  sam_blasr.c sam_minimap2.c sam_cellranger.c sam_biobambam.c sam_pos.c	sam_deep.c 						\
 		  fastq.c fastq_seq.c fastq_qual.c fastq_deep.c deep.c													\
-		  fasta.c gff.c me23.c phylip.c chain.c kraken.c locs.c generic.c 										\
+		  fasta.c gff.c bed.c me23.c phylip.c chain.c kraken.c locs.c generic.c 								\
 		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c lookback.c 				\
 		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c	\
 		  codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c codec_normq.c    							\
@@ -107,7 +107,7 @@ CONDA_INCS = dict_id_gen.h aes.h dispatcher.h optimize.h profiler.h dict_id.h tx
 			 lookback.h tokenizer.h codec_longr_alg.c gencomp.h dict_io.h recon_plan_io.h tip.h deep.h filename.h \
 			 reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h bgzf.h coverage.h threads.h \
 			 arch.h license.h file_types.h data_types.h base64.h txtheader.h writer.h bases_filter.h genols.h contigs.h chrom.h \
-			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h gff.h phylip.h chain.h kraken.h locs.h generic.h \
+			 vcf.h vcf_private.h sam.h sam_private.h me23.h fasta.h fasta_private.h gff.h bed.h phylip.h chain.h kraken.h locs.h generic.h \
 			 fastq.h fastq_private.h \
              compatibility/mac_gettime.h  \
 			 zlib/gzguts.h zlib/inffast.h zlib/inffixed.h zlib/inflate.h zlib/inftrees.h zlib/zconf.h \
@@ -144,7 +144,7 @@ OBJDIR_WINDOWS=objdir.windows
 OBJDIR_MAC=objdir.mac
 
 ifeq ($(OS),Windows_NT)
-EXE = .exe
+	EXE = .exe
 	LDFLAGS += -static -static-libgcc
 	OBJDIR=$(OBJDIR_WINDOWS)
 	WSL=wsl
@@ -228,17 +228,17 @@ dict_id_gen.h : $(shell grep -w "pragma GENDICT" *.h | cut -d: -f1 | uniq) dict_
 
 endif # ugly hack to avoid conda failure due to bash issues in dict_id_gen.sh - pre-generate on Windows and check in to github
 
-genozip$(EXE): dict_id_gen.h $(OBJS)
+genozip$(EXE): sync_wsl_clock dict_id_gen.h $(OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $(OBJS) $(CFLAGS) $(LDFLAGS)
 	@ln -f $@ ../$@
  
-genozip-debug$(EXE): dict_id_gen.h $(DEBUG_OBJS)
+genozip-debug$(EXE): sync_wsl_clock dict_id_gen.h $(DEBUG_OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $(DEBUG_OBJS) $(CFLAGS) $(LDFLAGS) 
 	@ln -f $@ ../$@
 
-genozip-opt$(EXE): dict_id_gen.h $(OPT_OBJS)
+genozip-opt$(EXE): sync_wsl_clock dict_id_gen.h $(OPT_OBJS)
 	@echo Linking $@
 	@$(CC) -o $@ $(OPT_OBJS) $(CFLAGS) $(LDFLAGS)
 	@ln -f $@ ../$@
@@ -260,6 +260,15 @@ genounzip-opt$(EXE) genocat-opt$(EXE) genols-opt$(EXE): genozip-opt$(EXE)
 	@rm -f $@ 
 	@ln -f $^ $@
 	@ln -f $@ ../$@
+
+# WSL2 clock is out of sync with Windows (and hence the NTFS filesystem) every time the computer sleeps
+# For this to work, first "sudo chmod u+s /usr/sbin/hwclock"
+ifneq ($(OS),Windows_NT)
+sync_wsl_clock:
+	@if `uname -a | grep microsoft-standard > /dev/null`; then hwclock -s > /dev/null 2>&1; fi || echo -n 
+else
+sync_wsl_clock:
+endif
 
 ../LICENSE.txt: text_license.h version.h # not dependent on genozip.exe, so we don't generate it every compilation
 	@$(MAKE) genozip$(EXE) # recursive call to make genozip.exe with the latest version
@@ -300,6 +309,7 @@ clean-optimized:
 	@rm -f $(OBJS) $(EXECUTABLES) $(OBJDIR)/*.o
 
 clean-distribution: # clean all platforms
+	@$(SH_VERIFY_ALL_COMMITTED)
 	@echo Cleaning up all platforms for distribution
 	@rm -f $(OBJDIR_LINUX)/*.o $(OBJDIR_LINUX)/*.d $(OBJDIR_WINDOWS)/*.o $(OBJDIR_WINDOWS)/*.d $(OBJDIR_MAC)/*.o $(OBJDIR_MAC)/*.d 
 
@@ -317,7 +327,10 @@ clean: clean-installers clean-test
 	@rm -R $(OBJDIR)
 	@mkdir $(OBJDIR) $(addprefix $(OBJDIR)/, $(SRC_DIRS))
 
-.PHONY: clean clean-debug clean-optimized clean-installers clean-distribution git-pull macos mac/.remote_mac_timestamp delete-arch testfiles test-backup genozip-linux-x86_64/clean genozip-prod genozip-prod.exe dict_id_gen$(EXE) push-build increment-version $(INSTALLERS)/LICENSE.html refresh_arch_o genozip-linux-x86_64/clean
+.PHONY: clean clean-debug clean-optimized clean-installers clean-distribution \
+        git-pull macos mac/.remote_mac_timestamp delete-arch testfiles test-backup \
+		genozip-linux-x86_64/clean genozip-prod genozip-prod.exe dict_id_gen$(EXE) sync_wsl_clock \
+		push-build increment-version $(INSTALLERS)/LICENSE.html refresh_arch_o genozip-linux-x86_64/clean
 
 # builds prod for local OS
 genozip-prod$(EXE): 
@@ -399,7 +412,7 @@ conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld
 	@echo "  (7) In ~30 minutes users will be able to 'conda update genozip'"
 
 # Building Windows InstallForge with distribution flag: we delete arch.o to force it to re-compile with DISTRIBUTION=InstallForge.
-windows/%.exe: CFLAGS += $(OPTFLAGS) -DDISTRIBUTION=\"InstallForge\" # note: matches the name in version.c
+windows/%.exe: CFLAGS += $(OPTFLAGS) # -DDISTRIBUTION=\"InstallForge\" # note: matches the name in version.c
 windows/%.exe: $(OBJS) %.exe
 	@echo Linking $@
 	@(mkdir windows >& /dev/null ; exit 0)
@@ -412,7 +425,7 @@ windows/LICENSE.for-installer.txt: genozip$(EXE) version.h
 
 refresh_arch_o : 
 	@if [ -f $(OBJDIR)/arch.o ]; then rm -f $(OBJDIR)/arch.o >& /dev/null ; fi # remove this arch.o which contains DISTRIBUTION
-	@$(MAKE) $(OBJDIR)/arch.o
+	@DISTRIBUTION=InstallForge $(MAKE) $(OBJDIR)/arch.o
 
 WINDOWS_INSTALLER_OBJS = windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe windows/LICENSE.for-installer.txt ../LICENSE.txt
 

@@ -638,14 +638,14 @@ static void sam_cigar_update_random_access (VBlockSAMP vb, ZipDataLineSAM *dl)
 {
     if (IS_ASTERISK (vb->chrom_name) || dl->POS <= 0) return;
 
-    SamPosType last_pos = dl->POS + vb->ref_consumed - 1;
+    PosType32 last_pos = dl->POS + vb->ref_consumed - 1;
 
     if (IS_REF_INTERNAL && last_pos >= 1)
         random_access_update_last_pos (VB, 0, last_pos);
 
     else { // external ref
         WordIndex ref_index = chrom_2ref_seg_get (gref, VB, vb->chrom_node_index); 
-        PosType LN = ref_contigs_get_contig_length (gref, ref_index, 0, 0, false); // -1 if no ref_index
+        PosType64 LN = ref_contigs_get_contig_length (gref, ref_index, 0, 0, false); // -1 if no ref_index
 
         if (LN == -1) {}
             
@@ -737,7 +737,7 @@ void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAM *dl, uint32_t last_cigar_len, 
     }
 
     // case: copy from same-vb prim (note: saggy_line_i can only be set in the MAIN component)
-    else if (has_SA && sam_has_SA_Z() && sam_has_prim && sam_cigar_seg_is_predicted_by_saggy_SA (vb, vb->last_cigar, last_cigar_len)) {
+    else if (has_SA && segconf.sam_has_SA_Z && sam_has_prim && sam_cigar_seg_is_predicted_by_saggy_SA (vb, vb->last_cigar, last_cigar_len)) {
         cigar_snip[cigar_snip_len++] = COPY_PRIM_SA_CIGAR; // always at cigar_snip[2]
         seg_by_did (VB, STRa(cigar_snip), SAM_CIGAR, add_bytes); 
     }
@@ -913,8 +913,8 @@ SPECIAL_RECONSTRUCTOR_DT (sam_cigar_special_CIGAR)
         if (sam_bam_bin_ctx->semaphore) {
             sam_bam_bin_ctx->semaphore = false;
 
-            SamPosType pos = CTX(SAM_POS)->last_value.i;
-            SamPosType last_pos = last_flags.unmapped ? pos : (pos + vb->ref_consumed - 1);
+            PosType32 pos = CTX(SAM_POS)->last_value.i;
+            PosType32 last_pos = last_flags.unmapped ? pos : (pos + vb->ref_consumed - 1);
             
             uint16_t bin = bam_reg2bin (pos, last_pos); // zero-based, half-closed half-open [start,end)
             alignment->bin = LTEN16 (bin); // override the -1 previously set by the translator

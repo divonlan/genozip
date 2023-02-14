@@ -111,7 +111,11 @@ int32_t gff_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
             last_newline = j;
 
             if (j < final_i && *Btxt(j+1) == '>') {
-                if (!segconf.running) segconf.has_embdedded_fasta = true;
+                if (!segconf.running) {
+                    segconf.has_embdedded_fasta = true;
+                    segconf.fasta_has_contigs = false; // GFF3-embedded FASTA doesn't have contigs, because did=0 is reserved for GFF's SEQID
+                }
+
                 break; // terminate VB (and component) at this newline - next line is FASTA
             }
         }
@@ -160,7 +164,7 @@ void gff_seg_finalize (VBlockP vb)
 
     // top level snip
     SmallContainer top_level = { 
-        .repeats      = vb->lines.len,
+        .repeats      = vb->lines.len32,
         .is_toplevel  = true,
         .filter_items = true,
         .nitems_lo    = 11,
@@ -620,9 +624,6 @@ rom gff_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_txt_l
     if (next_field[0] == '#' || next_field[0] == '\n' || next_field[0] == '\r' ||
         (remaining_txt_len >= 6 && !memcmp (next_field, "track ", 6))) { // Ensembl GTF track lines, eg: “track name=coords description="Chromosome coordinates list" priority=2"”
         SEG_NEXT_ITEM_NL (GFF_COMMENT);
-
-//xxx        // TO DO: support embedded FASTA, bug 392
-//        ASSINP (!str_issame_ (STRd(GFF_COMMENT), "##FASTA", 7), "%s contains a ##FASTA directive. To compress it use --input=generic", txt_name);
         
         goto eol; // if we have a comment, then during piz, the other fields will be filtered out
     }
@@ -674,7 +675,7 @@ eol:
 
 bool gff_piz_init_vb (VBlockP vb, const SectionHeaderVbHeader *header, uint32_t *txt_data_so_far_single_0_increment)
 {
-    if (vb->flags.gff.embedded_fasta) 
+    if (VER(15) && vb->flags.gff.embedded_fasta) 
         vb->data_type = DT_FASTA;
 
     return true;

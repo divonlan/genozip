@@ -166,7 +166,7 @@ int64_t txtheader_zip_read_and_compress (int64_t *txt_header_offset, CompIType c
     // DVCF note: we don't account for rejects files as txt_len - the variant lines are already accounted for in the main file, and the added header lines are duplicates of the main header
     // SAM/BAM note: we don't account for PRIM/DEPN txt headers generated in gencomp_initialize
     if (!comp_i) 
-        z_file->header_size = txt_file->header_size; 
+        z_file->header_size += txt_file->header_size; // note: header_size already contains the length difference if --match-chrom
 
     z_file->num_txts_so_far++; // when compressing
 
@@ -327,8 +327,10 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     ASSERT (txt_file->bgzf_flags.library >= 0 && txt_file->bgzf_flags.library < NUM_BGZF_LIBRARIES, "txt_file->bgzf_flags.library=%u out of range [0,%u]", 
             txt_file->bgzf_flags.level, NUM_BGZF_LIBRARIES-1);
 
+    bool needs_write = writer_does_txtheader_need_write (sec);
+
     // count header-lines (for --lines etc): before data-modifying inspect_txt_header
-    if (writer_does_txtheader_need_write (sec)) {
+    if (needs_write) {
         if (flag.header_one && (Z_DT(VCF) || Z_DT(BCF)))
             txt_file->num_lines += 1;
         else if (!DTPT (is_binary))
@@ -339,7 +341,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
         DT_FUNC_OPTIONAL (z_file, inspect_txt_header, true)(txt_header_vb, &txt_header_vb->txt_data, header.flags.txt_header); // ignore return value
 
     // hand-over txt header if it is needed (it won't be if flag.no_header)
-    if (writer_does_txtheader_need_write (sec)) {
+    if (needs_write) {
 
         // if we're translating from one data type to another (SAM->BAM, BAM->FASTQ, ME23->VCF etc) translate the txt header 
         // note: in a header-less SAM, after translating to BAM, we will have a header
@@ -351,19 +353,18 @@ void txtheader_piz_read_and_reconstruct (Section sec)
             uint32_t num_textual_lines = str_count_char (STRb(txt_header_vb->txt_data), '\n');
             writer_set_num_txtheader_lines (sec->comp_i, num_textual_lines);
         }
-
-        if (piz_need_digest) 
-            digest_txt_header (&txt_header_vb->txt_data, header.digest_header);
-
-        writer_handover_txtheader (&txt_header_vb); // handover data to writer thread (even if the header is empty, as the writer thread is waiting for it)
-
-        // accounting for data as in original source file - affects vb->vb_position_txt_file of next VB
-        txt_file->txt_data_so_far_single_0 = !VER(12) ? BGEN32 (header.data_uncompressed_len) : BGEN64 (header.txt_header_size); 
     }
+    
+    if (piz_need_digest) 
+        digest_txt_header (&txt_header_vb->txt_data, header.digest_header);
 
-    // case: component is not in plan - discard the VB
+    // accounting for data as in original source file - affects vb->vb_position_txt_file of next VB
+    txt_file->txt_data_so_far_single_0 = !VER(12) ? BGEN32 (header.data_uncompressed_len) : BGEN64 (header.txt_header_size); 
+
+    if (needs_write) 
+        writer_handover_txtheader (&txt_header_vb);    // handover data to writer thread (even if the header is empty, as the writer thread is waiting for it)
     else
-        vb_release_vb (&txt_header_vb, PIZ_TASK_NAME);    
+        vb_release_vb (&txt_header_vb, PIZ_TASK_NAME); // not handing over, so release here  
     
     if (!flag.reading_chain && !flag.reading_reference)
         is_first_txt = false;

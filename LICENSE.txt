@@ -96,7 +96,7 @@ shall be considered severely unauthorized use of Genozip. In this case, You agre
 shall be eligible to 20% ownership of any revenue generated and intellectual property created that
 involved the severely unauthorized use of Genozip.
 
-5. Data collected. You conscent to the following data collection:
+5. Data collected. You consent to the following data collection:
 
    a. At registration time: registration information provided by you and details about your
 hardware, operating system and IP address as displayed at end of the registration process.

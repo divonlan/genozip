@@ -152,7 +152,7 @@ bool gencomp_comp_eligible_for_digest (VBlockP vb)
     CompIType comp_i = vb ? vb->comp_i : flag.zip_comp_i;
     
     return (comp_i == COMP_MAIN) || 
-           (vb && vb->data_type == DT_FASTQ) || (!vb && z_file->data_type == DT_FASTQ); // FASTQ comp_i==1 is R2 and not a generated component
+           (vb && VB_DT(FASTQ)) || (!vb && Z_DT(FASTQ)); // FASTQ comp_i==1 is R2 and not a generated component
 }
 
 static void debug_gencomp (rom msg, bool needs_lock)

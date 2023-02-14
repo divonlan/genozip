@@ -15,7 +15,7 @@
 extern void chrom_2ref_load (Reference ref);
 
 // seg
-extern WordIndex chrom_seg_ex (VBlockP vb, Did did_i, STRp(chrom), PosType LN, bool *is_alt_out, int add_bytes, bool recon_changes_if_match, bool *is_new);
+extern WordIndex chrom_seg_ex (VBlockP vb, Did did_i, STRp(chrom), PosType64 LN, bool *is_alt_out, int add_bytes, bool recon_changes_if_match, bool *is_new);
 static inline WordIndex chrom_seg (VBlockP vb, STRp(chrom)) { return chrom_seg_ex (vb, CHROM, STRa(chrom), 0, 0, chrom_len+1, true, NULL); }
 static inline WordIndex chrom_seg_by_did_i (VBlockP vb, Did did_i, STRp(chrom), unsigned add_bytes) 
     { return chrom_seg_ex (vb, did_i, STRa(chrom), 0, 0, add_bytes, true, NULL); }

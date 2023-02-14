@@ -96,8 +96,8 @@ typedef struct File {
     Mutex dicts_mutex;                 // this mutex protects contexts and num_contexts from concurrent adding of a new dictionary
     Did num_contexts;                  // length of populated subfield_ids and mtx_ctx;
     
-    Did dict_id_to_did_i_map[65536 * 2]; // map for quick look up of did_i from dict_id : 64K for key_map, 64K for alt_map 
-    Context contexts[MAX_DICTS];       // a merge of dictionaries of all VBs
+    DictIdtoDidMap d2d_map; // map for quick look up of did_i from dict_id : 64K for key_map, 64K for alt_map 
+    ContextArray contexts;             // a merge of dictionaries of all VBs
     Buffer ra_buf;                     // ZIP/PIZ:  RAEntry records: ZIP: of DC_PRIMARY ; PIZ - PRIMARY or LUFT depending on flag.luft
     Buffer ra_buf_luft;                // ZIP only: RAEntry records of DC_LUFT
     
@@ -202,7 +202,6 @@ extern int64_t file_tell_do (FileP file, FailType soft_fail, FUNCLINE);
 extern void file_set_input_type (rom type_str);
 extern void file_set_input_size (rom size_str);
 extern FileType file_get_type (rom filename);
-extern FileType file_get_stdin_type (void);
 extern DataType file_get_data_type (FileType ft, bool is_input);
 extern Codec file_get_codec_by_txt_ft (DataType dt, FileType txt_ft, bool source);
 extern rom file_plain_text_ext_of_dt (DataType dt);

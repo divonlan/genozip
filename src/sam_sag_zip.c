@@ -73,7 +73,7 @@ void sam_set_sag_type (void)
 
     // SAG_BY_SA: the preferd Sag method - by SA:Z
     // we identify a PRIM line - if it (1) has SA:Z and (2) supp/secondary flags are clear
-    else if (sam_has_SA_Z() || (segconf.has[OPTION_SA_Z])) // longranger has non-standard SA:Z format
+    else if (segconf.sam_has_SA_Z || (segconf.has[OPTION_SA_Z])) // longranger has non-standard SA:Z format
         segconf.sag_type = SAG_BY_SA;
 
     // SAG_BY_NH: STAR and other aligners with NH:i/HI:i instead of SA:Z
@@ -529,7 +529,7 @@ static inline bool sam_seg_depn_find_SA_aln (VBlockSAMP vb, const Sag *g,
 
 // parse my SA field, and build my alignments based on my main fields data + SA data
 static inline bool sam_sa_seg_depn_get_my_SA_alns (VBlockSAMP vb,
-                                                   WordIndex my_rname_contig, SamPosType my_pos, uint8_t my_mapq, 
+                                                   WordIndex my_rname_contig, PosType32 my_pos, uint8_t my_mapq, 
                                                    STRp(my_cigar), int64_t my_nm, bool my_revcomp, 
                                                    STRp(SA), // 0,0 if no SA (eg STAR alignment) 
                                                    uint32_t n_my_alns, 
@@ -667,7 +667,7 @@ static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAM *dl
     uint32_t qname_hash;
     const Sag *g = sam_sa_get_first_group_by_qname_hash (vb, STRtxtw(dl->QNAME), dl->FLAG.is_last, &grp_index_i, &qname_hash);
 
-    SamPosType cp = -1;
+    PosType32 cp = -1;
     STR0(cc); cc="";
     int32_t hi=-1; // stays -1 if the line has no HI:i
     if (flag.show_depn) {

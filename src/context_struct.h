@@ -247,3 +247,11 @@ typedef struct {
     DictId dict_id;
     Did did_i;
 } ContextIndex;
+
+typedef Did DictIdtoDidMap[65536 * 2];
+static inline void init_dict_id_to_did_map (DictIdtoDidMap d2d_map)
+{
+    memset (d2d_map, 0xff, sizeof (DictIdtoDidMap)); // DID_NONE
+}
+
+typedef Context ContextArray[MAX_DICTS];

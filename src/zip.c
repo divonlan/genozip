@@ -647,7 +647,7 @@ static void zip_write_global_area (void)
 
     // store a mapping of the file's chroms to the reference's contigs, if they are any different
     // note: not needed in REF_EXT_STORE, as we convert the stored ref_contigs to use chrom_index of the file's CHROM
-    if (IS_REF_EXTERNAL) 
+    if (IS_REF_EXTERNAL && DTFZ(prim_chrom) != DID_NONE) 
         chrom_2ref_compress(gref);
 
     // output reference, if needed
@@ -793,7 +793,7 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
         // case we need to clone (i.e. create all contexts before we can read the pair file data)
         ctx_clone (vb); 
     
-        uint32_t pair_vb_i = prev_file_first_vb_i + (vb->vblock_i - prev_file_last_vb_i - 1);
+        uint32_t pair_vb_i = prev_file_first_vb_i + (vb->vblock_i-1 - prev_file_last_vb_i);
         
         if (pair_vb_i > prev_file_last_vb_i || // false if there is no vb with vb_i in the previous file
             !fastq_read_pair_1_data (vb, pair_vb_i, false)) { // read here, decompressed in fastq_seg_initialize
@@ -895,9 +895,9 @@ void zip_one_file (rom txt_basename,
     uint32_t first_vb_i = prev_file_last_vb_i + 1;
 
     // initalize pre-defined ctxs after reading header 
-    // note: in case of GENERIC, generic_is_header_done may change the data type and re-initialize the contexts
+    // note: generic_is_header_done and well as segconf may change the data type and re-initialize the contexts
     if (z_file->num_txts_so_far == 0)  // first component of this z_file 
-        ctx_initialize_predefined_ctxs (z_file->contexts, txt_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts);
+        ctx_initialize_predefined_ctxs (z_file->contexts, txt_file->data_type, z_file->d2d_map, &z_file->num_contexts);
 
     // read the txt header, assign the global variables, and write the compressed header to the GENOZIP file
     int64_t txt_header_offset = -1;

@@ -17,13 +17,11 @@
 #define VCF_FIELD_NAMES "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO"
 #define VCF_FIELD_NAMES_LONG VCF_FIELD_NAMES "\tFORMAT"
 
-typedef int32_t VcfPosType;      // per VCF v4.3 spec 1.6.1
-
 // IMPORTANT: if changing fields in DataLine, also update vb_release_vb
 typedef struct {
     WordIndex chrom[2];          // Seg: enter as node_index ; Merge: convert to word_index
-    VcfPosType pos[2];           // arrays of [2] - { primary-coord, luft-coord } 
-    VcfPosType end_delta;        // Delta of INFO/END vs POS (same in both coordinates) - used in case chrom and pos are the same
+    PosType32 pos[2];           // arrays of [2] - { primary-coord, luft-coord } 
+    PosType32 end_delta;        // Delta of INFO/END vs POS (same in both coordinates) - used in case chrom and pos are the same
     uint32_t tie_breaker;        // tie-breaker in case chrom, pos and end are the same
     
     bool has_haplotype_data : 1; // FORMAT field contains GT
@@ -409,7 +407,7 @@ extern void vcf_lo_zip_initialize (void);
 extern void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl);
 extern void vcf_lo_set_rollback_point (VBlockVCFP vb);
 extern void vcf_lo_seg_rollback_and_reject (VBlockVCFP vb, LiftOverStatus ostatus, Context *ctx);
-extern LiftOverStatus vcf_lo_get_liftover_coords (VBlockVCFP vb, VcfPosType pos, WordIndex *dst_contig_index, VcfPosType *dst_1pos, bool *xstrand, uint32_t *aln_i); // out
+extern LiftOverStatus vcf_lo_get_liftover_coords (VBlockVCFP vb, PosType32 pos, WordIndex *dst_contig_index, PosType32 *dst_1pos, bool *xstrand, uint32_t *aln_i); // out
 extern void vcf_lo_seg_INFO_LUFT_and_PRIM (VBlockVCFP vb, ContextP ctx, STRp(value));
 extern void vcf_lo_seg_INFO_REJX (VBlockVCFP vb, ContextP ctx, STRp(value));
 extern bool vcf_lo_seg_cross_render_to_primary (VBlockVCFP vb, ContextP ctx, STRp (this_value), qSTRp (primary_snip), bool validate_only);
@@ -418,7 +416,7 @@ extern bool vcf_lo_seg_cross_render_to_primary (VBlockVCFP vb, ContextP ctx, STR
 typedef struct {
     WordIndex chrom_wi; 
     uint32_t tie_breaker;
-    VcfPosType start_pos, end_pos;
+    PosType32 start_pos, end_pos;
 } LineCmpInfo; 
 extern bool vcf_is_sorting (CompIType comp_i);
 extern int vcf_linesort_cmp (LineCmpInfo a, LineCmpInfo b);

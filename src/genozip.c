@@ -227,7 +227,7 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
     }
 
     flags_update_piz_one_file (z_file_i);
-    
+   
     // set txt_filename from genozip file name (inc. extensions if translating or --bgzf)
     if (!txt_filename && !flag.to_stdout && !flag.unbind) 
         txt_filename = txtfile_piz_get_filename (z_filename, "", true);
@@ -249,7 +249,7 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
     // generate txt_file(s)
     if (dispatcher) {
         if (!flag.unbind) {    // single txt_file
-            piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, COMP_MAIN, COMP_MAIN);
+            piz_one_txt_file (dispatcher, is_first_z_file, is_last_z_file, COMP_NONE, COMP_NONE);
             file_close (&txt_file, flag.index_txt, !is_last_z_file); 
         }
 
@@ -536,6 +536,8 @@ done:
         RESTORE_FLAG (aligner_available);
         RESTORE_FLAG (no_tip);
         RESTORE_FLAG (bind);
+        RESTORE_FLAG (bind);
+        flag.zip_comp_i = COMP_MAIN; // re-assign in case RESTORE_FLAG modified
     }
 } 
 

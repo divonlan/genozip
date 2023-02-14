@@ -319,8 +319,11 @@ IS_SKIP (kraken_piz_is_skip_section)
     return false;
 }
 
-void kraken_piz_handover_data (VBlockP vb)
+// PIZ: piz_process_recon callback: called by the main thread, in the order of VBs
+void kraken_piz_process_recon (VBlockP vb)
 {
+    if (!flag.reading_kraken) return;
+
     uint64_t dict_start = qname_dict.len;
     buf_add_buf (evb, &qname_dict, &vb->txt_data, char, "qname_dict");
 
@@ -328,7 +331,7 @@ void kraken_piz_handover_data (VBlockP vb)
     for (uint64_t i=0; i < nodes_len; i++)
         nodes[i].char_index += dict_start;
 
-buf_add_buf (evb, &qname_nodes, &CTX(KRAKEN_QNAME)->qname_nodes, QnameNode, "qname_nodes");
+    buf_add_buf (evb, &qname_nodes, &CTX(KRAKEN_QNAME)->qname_nodes, QnameNode, "qname_nodes");
 }
 
 // callback called after every repeat of TOP2HASH, i.e. when run with --taxid
@@ -360,7 +363,7 @@ CONTAINER_CALLBACK (kraken_piz_container_cb)
             ASSERT (snip_len <= MAX_SNIP_LEN, "Length of QNAME \"%.*s\" exceeds maximum of %u", snip_len, recon, MAX_SNIP_LEN);
 
             BNXT (QnameNode, CTX(KRAKEN_QNAME)->qname_nodes) = (QnameNode){ 
-                .char_index = BNUMtxt(recon), // will be updated in kraken_piz_handover_data
+                .char_index = BNUMtxt(recon), // will be updated in kraken_piz_process_recon
                 .snip_len   = snip_len,
                 .hash       = hash_do (qname_hashtab.len, recon, snip_len),
                 .is_paired  = (z_file->num_txt_files == 2 || is_paired),
@@ -434,7 +437,7 @@ bool kraken_piz_initialize (void)
     // allocate
     qname_nodes.can_be_big = qname_dict.can_be_big = true; // we're might be allocating a huge amount of memory - suppress buf_alloc warning
     buf_alloc (evb, &qname_nodes, 0, num_non_dom_seqs, QnameNode, 0, "qname_nodes"); 
-    buf_alloc (evb, &qname_dict,  0, num_non_dom_seqs, char[one_qname_length+2],  0, "qname_dict"); // approximate (+2), might grow if needed in kraken_piz_handover_data
+    buf_alloc (evb, &qname_dict,  0, num_non_dom_seqs, char[one_qname_length+2],  0, "qname_dict"); // approximate (+2), might grow if needed in kraken_piz_process_recon
 
     qname_hashtab.len = hash_next_size_up (3 * num_non_dom_seqs, true);
 
@@ -513,7 +516,7 @@ void kraken_load (void)
     z_file->basename = filename_base (flag.reading_kraken, false, "(kraken-file)", NULL, 0);
 
     Dispatcher dispachter = piz_z_file_initialize();
-    bool kraken_loaded = piz_one_txt_file (dispachter, false, false, COMP_MAIN, COMP_MAIN);
+    bool kraken_loaded = piz_one_txt_file (dispachter, false, false, COMP_NONE, COMP_NONE);
 
     kraken_filename = file_make_unix_filename (z_name); // full-path unix-style filename, allocates memory
 

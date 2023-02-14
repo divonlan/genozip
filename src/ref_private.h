@@ -16,7 +16,7 @@
 
 typedef struct {
     Bits *is_set;
-    PosType first_bit, len;
+    PosType64 first_bit, len;
 } RegionToSet;
 
 typedef enum { CHROM_STYLE_UNKNOWN, CHROM_STYLE_chr22, CHROM_STYLE_22 } RefChromeStyle;
@@ -40,7 +40,7 @@ typedef struct RefStruct {
     Buffer genome_buf, emoneg_buf, genome_is_set_buf, genome_cache;
     Bits *genome, *emoneg/*reverse compliment*/, *genome_is_set;
 
-    PosType genome_nbases;
+    PosType64 genome_nbases;
 
     Buffer ref_external_ra;       // Random Access data of the external reference file
     Buffer ref_file_section_list; // Section List of the external reference file

@@ -96,7 +96,7 @@ typedef struct {
         list;        // a genols option
     rom threads_str, out_filename, out_dirname, files_from, do_register;
     FileType stdin_type; // set by the --input command line option
-    bool exlicitly_generic; // user explicitly set the type to generic
+    bool explicitly_generic; // user explicitly set the type to generic
      
     ReferenceType reference;
 
@@ -119,7 +119,7 @@ typedef struct {
         show_reference, show_ref_hash, show_ref_index, show_chrom2ref, show_ref_iupacs, show_chain, show_ranges,
         show_codec, 
         show_alleles, show_bgzf, show_txt_contigs, show_lines,
-        show_vblocks, show_threads, show_uncompress, biopsy,
+        show_vblocks, show_threads, show_uncompress, biopsy, show_data_type,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
         debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sag, debug_gencomp, debug_lines, debug_latest,
         debug_peek, submit_stats, debug_submit, debug_deep, show_segconf_has,
@@ -139,7 +139,7 @@ typedef struct {
            dump_one_local_dict_id,  // argument of --dump-local-one
            dict_id_show_containers, // argument of --show-containers
            dict_id_debug_seg;       // argument of --debug-seg
-    rom show_one_dict;      // argument of --show-dict-one
+    rom show_one_dict;              // argument of --show-dict-one
 
     #define HAS_DEBUG_SEG(ctx) (flag.debug_seg && (!flag.dict_id_debug_seg.num || dict_id_typeless ((ctx)->dict_id).num == flag.dict_id_debug_seg.num))
 

@@ -494,7 +494,7 @@ int32_t zfile_read_section_do (FileP file,
             "called from %s:%u: invalid header when reading %s - expecting compressed_offset to be %u but found %u. section_type=%s", 
             func, code_line, z_name, header_size, compressed_offset, st_name(header->section_type));
 
-    // allocate more memory for the rest of the header + data (note: after this realloc, header pointer is no longer valid)
+    // allocate more memory for the rest of the header + data 
     buf_alloc (vb, data, 0, header_offset + compressed_offset + data_len, uint8_t, 2, "zfile_read_section");
     data->param = 2;
     header = (SectionHeaderP)Bc(*data, header_offset); // update after realloc
@@ -707,6 +707,11 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeader *out_header) // optio
         z_file->type      = file_get_z_ft_by_dt (z_file->data_type);  
 
         if (data_type != DT_REF) last_z_dt = data_type;
+
+        if (flag.show_data_type) {
+            iprintf ("%s\n", dt_name (z_file->data_type));
+            exit_ok();
+        }
     }
     else
         ASSINP (z_file->data_type == data_type, "%s - file extension indicates this is a %s file, but according to its contents it is a %s", 

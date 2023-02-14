@@ -208,7 +208,7 @@ static void dict_io_read_one_vb (VBlockP vb)
     // a container filter)
     bool new_ctx = (!dict_ctx || dict_sec->dict_id.num != dict_ctx->dict_id.num);
     if (new_ctx)
-        dict_ctx = ctx_get_ctx_do (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts, dict_sec->dict_id, 0, 0);
+        dict_ctx = ctx_get_ctx_do (z_file->contexts, z_file->data_type, z_file->d2d_map, &z_file->num_contexts, dict_sec->dict_id, 0, 0);
 
     if (piz_is_skip_section (SEC_DICT, COMP_NONE, dict_sec->dict_id, SKIP_PURPOSE_RECON)) {
         if (flag.debug_read_ctxs)
@@ -336,7 +336,7 @@ void dict_io_read_all_dictionaries (void)
 {
     START_TIMER;
 
-    ctx_initialize_predefined_ctxs (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts);
+    ctx_initialize_predefined_ctxs (z_file->contexts, z_file->data_type, z_file->d2d_map, &z_file->num_contexts);
 
     dict_sec = NULL;
     dict_ctx = NULL;

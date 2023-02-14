@@ -39,7 +39,7 @@ static inline void vcf_refalt_seg_ref_alt_snp (VBlockVCFP vb, char ref, char alt
     // if we have a reference, we use it (we treat the reference as PRIMARY)
     // except: if --match-chrom, we assume the user just wants to match, and we don't burden him with needing the reference to decompress
     if (((IS_REF_EXTERNAL && !flag.match_chrom_to_reference) || IS_REF_EXT_STORE) && vb->line_coords == DC_PRIMARY) {
-        VcfPosType pos = vb->last_int(VCF_POS);
+        PosType32 pos = vb->last_int(VCF_POS);
 
         RefLock lock = REFLOCK_NONE;
 
@@ -157,7 +157,7 @@ void vcf_refalt_seg_main_ref_alt (VBlockVCFP vb, STRp(ref), STRp(alt))
 #define SAME_AS_LUFT_REF(vcf_base) is_same_base (vb, luft_range, opos, (vcf_base), is_xstrand, 0)
 #define SAME_AS_LUFT_REF2(vcf_base, is_iupac) is_same_base (vb, luft_range, opos, (vcf_base), is_xstrand, (is_iupac))
 
-static inline bool is_same_base (VBlockVCFP vb, const Range *luft_range, VcfPosType opos, char vcf_base, bool is_xstrand,
+static inline bool is_same_base (VBlockVCFP vb, const Range *luft_range, PosType32 opos, char vcf_base, bool is_xstrand,
                                  bool *out_is_iupac) // optional out - only set when function returns true 
 {
     int is_iupac = -1; // not tested yet
@@ -177,12 +177,12 @@ static inline bool is_same_base (VBlockVCFP vb, const Range *luft_range, VcfPosT
 }
 
 // false is not the same or if either goes beyond the end of the range 
-static inline bool is_same_seq (Reference ref, VBlockVCFP vb, const Range *range, VcfPosType pos, rom seq, VcfPosType seq_len, bool is_xstrand)
+static inline bool is_same_seq (Reference ref, VBlockVCFP vb, const Range *range, PosType32 pos, rom seq, PosType32 seq_len, bool is_xstrand)
 {
     if (!is_xstrand) {
         if (pos + seq_len - 1 > range->last_pos) return false; // seq goes beyond the end of range
 
-        for (VcfPosType i=0; i < seq_len ; i++) {
+        for (PosType32 i=0; i < seq_len ; i++) {
             char vcf_base = UPPER_CASE (seq[i]);
             char ref_base = ref_base_by_pos (range, pos + i);
             if (ref_base != vcf_base && !ref_iupacs_is_included (ref, VB, range, pos, vcf_base)) return false;
@@ -191,7 +191,7 @@ static inline bool is_same_seq (Reference ref, VBlockVCFP vb, const Range *range
     else { // xstrand
         if (pos < seq_len) return false; // seq goes beyond the start of range
 
-        for (VcfPosType i=0; i < seq_len ; i++) {
+        for (PosType32 i=0; i < seq_len ; i++) {
             char vcf_base = UPPER_COMPLEM[(int)seq[i]];
             char ref_base = ref_base_by_pos (range, pos - i);
             if (ref_base != vcf_base && !ref_iupacs_is_included (ref, VB, range, pos, vcf_base)) return false;
@@ -202,8 +202,8 @@ static inline bool is_same_seq (Reference ref, VBlockVCFP vb, const Range *range
 }
 
 // false is not the same or if either goes beyond the end of the range 
-static inline bool is_same_refs (const Range *prim_range, VcfPosType prim_pos, 
-                                 const Range *luft_range, VcfPosType luft_pos, 
+static inline bool is_same_refs (const Range *prim_range, PosType32 prim_pos, 
+                                 const Range *luft_range, PosType32 luft_pos, 
                                  unsigned seq_len, bool is_xstrand) 
 {
     if (prim_pos + seq_len - 1 > prim_range->last_pos) return false; // seq goes beyond the end of range
@@ -211,13 +211,13 @@ static inline bool is_same_refs (const Range *prim_range, VcfPosType prim_pos,
     if (!is_xstrand) {
         if (luft_pos + seq_len - 1 > luft_range->last_pos) return false; // seq goes beyond the end of range
 
-        for (VcfPosType i=0; i < seq_len ; i++) 
+        for (PosType32 i=0; i < seq_len ; i++) 
             if (ref_base_by_pos (prim_range, prim_pos + i) != ref_base_by_pos (luft_range, luft_pos + i)) return false;
     }
     else { // xstrand
         if (luft_pos < seq_len) return false; // seq goes beyond the start of range
 
-        for (VcfPosType i=0; i < seq_len ; i++)
+        for (PosType32 i=0; i < seq_len ; i++)
             if (ref_base_by_pos (prim_range, prim_pos + i) != COMPLEM[(int)ref_base_by_pos (luft_range, luft_pos - i)]) return false;
     }
 
@@ -225,15 +225,15 @@ static inline bool is_same_refs (const Range *prim_range, VcfPosType prim_pos,
 }
 
 // counts repeated bases (forwards or backwards depending on direction)
-static unsigned vcf_refalt_lift_get_repeats (const Range *range, rom payload, VcfPosType payload_len, VcfPosType pos, bool revcomp)
+static unsigned vcf_refalt_lift_get_repeats (const Range *range, rom payload, PosType32 payload_len, PosType32 pos, bool revcomp)
 {
     unsigned num_reps = 0;
     if (!revcomp) {
-        for (VcfPosType p=pos; p <= range->last_pos; p++, num_reps++) 
+        for (PosType32 p=pos; p <= range->last_pos; p++, num_reps++) 
             if (ref_base_by_pos (range, p) != payload[num_reps % payload_len]) break;
     }
     else {
-        for (VcfPosType p=pos; p >= 1; p--, num_reps++) 
+        for (PosType32 p=pos; p >= 1; p--, num_reps++) 
             if (ref_base_by_pos (range, p) != COMPLEM[(int)payload[num_reps % payload_len]]) break;
     }
 
@@ -242,8 +242,8 @@ static unsigned vcf_refalt_lift_get_repeats (const Range *range, rom payload, Vc
 
 // we accept an INDEL for REF⇄ALT switch if (1) it is short enough (2) flanking regions are the same
 static bool vcf_refalt_lift_same_flanking_regions (bool is_xstrand,
-                                                   const Range *prim_range, VcfPosType pos, VcfPosType ref_len,
-                                                   const Range *luft_range, VcfPosType opos, VcfPosType alt_len)
+                                                   const Range *prim_range, PosType32 pos, PosType32 ref_len,
+                                                   const Range *luft_range, PosType32 opos, PosType32 alt_len)
 {
     if (ref_len > MAX_LEN_REF_ALT_SWITCH_INDEL_BASED_ON_FLANKING || alt_len > MAX_LEN_REF_ALT_SWITCH_INDEL_BASED_ON_FLANKING)
         return false; // INDEL too long to be considered for REF⇄ALT switch on basis of flanking regions
@@ -262,10 +262,10 @@ static bool vcf_refalt_lift_same_flanking_regions (bool is_xstrand,
 // risk data corruption, see Supplamentary Information for an explanation why
 static inline LiftOverStatus 
     vcf_refalt_xstrand_flip_anchor (VBlockVCFP vb, 
-                                    const Range *prim_range, VcfPosType pos, unsigned ref_len,
-                                    const Range *luft_range, VcfPosType opos)
+                                    const Range *prim_range, PosType32 pos, unsigned ref_len,
+                                    const Range *luft_range, PosType32 opos)
 {
-    VcfPosType luft_new_left_anchor = opos - ref_len;
+    PosType32 luft_new_left_anchor = opos - ref_len;
 
     REJECTIF (luft_new_left_anchor < 1, LO_NO_MAPPING_IN_CHAIN_ANCHOR,
               ".\tNew left-anchor base (after reverse-complementing) is before beginning of the chromosome: luft_new_left_anchor=%d", luft_new_left_anchor);
@@ -282,10 +282,10 @@ static inline LiftOverStatus
     }
 
 static inline LiftOverStatus vcf_refalt_lift_report_indel_outcome (VBlockVCFP vb, STRp(alt),
-                                                                   const Range *prim_range, VcfPosType pos, const Range *luft_range, VcfPosType opos,
+                                                                   const Range *prim_range, PosType32 pos, const Range *luft_range, PosType32 opos,
                                                                    unsigned n_alts, bool has_missing_alts, bool is_xstrand,
                                                                    int rep_len_prim, int rep_len_luft, bool all_same, int switch_alt_i, int maybe_switch_alt_i,
-                                                                   VcfPosType ref_len, VcfPosType switch_alt_len, VcfPosType maybe_switch_alt_len,
+                                                                   PosType32 ref_len, PosType32 switch_alt_len, PosType32 maybe_switch_alt_len,
                                                                    bool is_del)
 {    
     // we can lift a Insertion IF: either - all ALTs agree that it is REF_SAME ; or - single ALT and REF⇄ALT switch
@@ -341,13 +341,13 @@ static inline LiftOverStatus vcf_refalt_lift_report_indel_outcome (VBlockVCFP vb
 
 // returns true is REF is the "same" taking into account that is is_xstrand the anchor base shifts sides, and the payload rev-comps
 static bool vcf_refalt_is_REF_same_in_luft (VBlockVCFP vb, STRp(ref), bool is_xstrand,
-                                            const Range *prim_range, VcfPosType pos,
-                                            const Range *luft_range, VcfPosType opos)
+                                            const Range *prim_range, PosType32 pos,
+                                            const Range *luft_range, PosType32 opos)
 {
     // if LUFT and PRIMARY is not the same for ref_len bases: example: "GAC G" Primary: "GAC" 
     // Luft=GTT: REF⇄ALT switch: "G GAC"
     char anchor = is_xstrand ? ref_base_by_pos (prim_range, pos + ref_len) : ref[0]; // if is_xstrand, we re-anchor REF to be right-anchored
-    VcfPosType anchor_opos = is_xstrand ? opos - ref_len : opos; 
+    PosType32 anchor_opos = is_xstrand ? opos - ref_len : opos; 
 
     bool same_anchor  = is_same_base (vb, luft_range, anchor_opos, anchor, is_xstrand, 0); 
     bool same_payload = ref_len > 1 ? is_same_seq (gref, vb, luft_range, opos + (is_xstrand ? -1 : 1), ref+1, ref_len-1, is_xstrand) : true;
@@ -356,12 +356,12 @@ static bool vcf_refalt_is_REF_same_in_luft (VBlockVCFP vb, STRp(ref), bool is_xs
 }
 
 // when --chain: handle a Deletion
-static LiftOverStatus vcf_refalt_lift_deletion (VBlockVCFP vb, rom ref, VcfPosType ref_len,
+static LiftOverStatus vcf_refalt_lift_deletion (VBlockVCFP vb, rom ref, PosType32 ref_len,
                                                 unsigned n_alts, // always 1 - the Deletion anchor - or multiple identical ALTs
                                                 bool has_missing_alts, rom *alts, STRp(alt), 
                                                 bool is_xstrand,
-                                                const Range *prim_range, VcfPosType pos, 
-                                                const Range *luft_range, VcfPosType opos)                                        
+                                                const Range *prim_range, PosType32 pos, 
+                                                const Range *luft_range, PosType32 opos)                                        
 {
     if (!vcf_refalt_is_REF_same_in_luft (vb, STRa(ref), is_xstrand, prim_range, pos, luft_range, opos)) {
         REJECTIF (has_missing_alts, LO_NEW_ALLELE_DEL_REF_CHANGED_MISSING, 
@@ -392,7 +392,7 @@ static LiftOverStatus vcf_refalt_lift_deletion (VBlockVCFP vb, rom ref, VcfPosTy
     // now we know that REF is stringwise the same as the reference, but we need to test for repeats
 
     rom payload = ref + 1;
-    VcfPosType payload_len = ref_len-1;
+    PosType32 payload_len = ref_len-1;
     
     unsigned rep_len_prim=0, rep_len_luft=0;
     bool all_same=true;
@@ -428,8 +428,8 @@ static LiftOverStatus vcf_refalt_lift_deletion (VBlockVCFP vb, rom ref, VcfPosTy
 static LiftOverStatus vcf_refalt_lift_insertion (VBlockVCFP vb, STRp(ref), /* must be 1 - needed for macros */ 
                                                  bool has_missing_alts, STRps(alt), STRp(alt), 
                                                  bool is_xstrand,
-                                                 const Range *prim_range, VcfPosType pos, 
-                                                 const Range *luft_range, VcfPosType opos)
+                                                 const Range *prim_range, PosType32 pos, 
+                                                 const Range *luft_range, PosType32 opos)
                                                 
 {    
     DEF_PRIM (1); DEF_LUFT (1);
@@ -462,7 +462,7 @@ static LiftOverStatus vcf_refalt_lift_insertion (VBlockVCFP vb, STRp(ref), /* mu
             // PRIM: GACACACACT (4 repeats) LUFT: GACACT       (2- repeats) -> new allele: G GAC,GACAC   (old REF was a 4-repeats: now GACAC ; old ALT was a 3-repeats: now GAC)
 
             rom payload = alts[alt_i] + 1;
-            VcfPosType payload_len = alt_lens[alt_i]-1;
+            PosType32 payload_len = alt_lens[alt_i]-1;
 
             rep_len_prim +=               vcf_refalt_lift_get_repeats (prim_range, payload, payload_len, pos  + 1, false); 
             rep_len_luft += !is_xstrand ? vcf_refalt_lift_get_repeats (luft_range, payload, payload_len, opos + 1, false)
@@ -496,8 +496,8 @@ static LiftOverStatus vcf_refalt_lift_insertion (VBlockVCFP vb, STRp(ref), /* mu
 static LiftOverStatus vcf_refalt_lift_with_sym_allele (VBlockVCFP vb, STRp(ref), 
                                           bool has_missing_alts, STRps(alt), STRp(alt),
                                           bool is_xstrand,
-                                          const Range *prim_range, VcfPosType pos, 
-                                          const Range *luft_range, VcfPosType opos)
+                                          const Range *prim_range, PosType32 pos, 
+                                          const Range *luft_range, PosType32 opos)
 {
     REJECTIF (is_xstrand, LO_XSTRAND_SV, ALTF "Variant with a symbolic allele is mapped to the reverse strand" XSTRANDF, ALT, XSTRAND);
 
@@ -515,8 +515,8 @@ static LiftOverStatus vcf_refalt_lift_with_sym_allele (VBlockVCFP vb, STRp(ref),
 static LiftOverStatus vcf_refalt_lift_complex (VBlockVCFP vb, STRp(ref), 
                                                bool has_missing_alts, STRps(alt), STRp(alt),
                                                bool is_xstrand, bool is_left_anchored,
-                                               const Range *prim_range, VcfPosType pos, 
-                                               const Range *luft_range, VcfPosType opos)
+                                               const Range *prim_range, PosType32 pos, 
+                                               const Range *luft_range, PosType32 opos)
 {
     // case: complex variant - but REF is unchanged (note: we don't check flanking regions, it is debatable if we should)
     if (vcf_refalt_is_REF_same_in_luft (vb, ref, ref_len, is_xstrand, prim_range, pos, luft_range, opos)) {
@@ -590,8 +590,8 @@ static double vcf_refalt_get_INFO (VBlockVCFP vb, rom tag)
 static LiftOverStatus vcf_refalt_lift_snp (VBlockVCFP vb, STRp(ref)/* must be 1 */, 
                                            bool has_missing_alts, STRps(alt), STRp(alt),
                                            bool is_xstrand,
-                                           const Range *prim_range, VcfPosType pos, 
-                                           const Range *luft_range, VcfPosType opos)
+                                           const Range *prim_range, PosType32 pos, 
+                                           const Range *luft_range, PosType32 opos)
 {
     char oref = ref_base_by_pos (luft_range, opos); // range is 0-based
     bool is_iupac;
@@ -665,8 +665,8 @@ LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool is
 {
     ASSERT0 (luft_ref_index != WORD_INDEX_NONE, "not expecting luft_ref_index=WORD_INDEX_NONE");
 
-    VcfPosType pos  = dl->pos[0];
-    VcfPosType opos = dl->pos[1];
+    PosType32 pos  = dl->pos[0];
+    PosType32 opos = dl->pos[1];
     const unsigned ref_len = vb->main_ref_len;
     const unsigned alt_len = vb->main_alt_len;
     char ref[ref_len], alt[alt_len];
@@ -698,7 +698,7 @@ LiftOverStatus vcf_refalt_lift (VBlockVCFP vb, const ZipDataLineVCF *dl, bool is
     // check that the whole REF is mapped in LUFT to the same alignment
     if (ref_len > 1) {
         uint32_t last_ref_aln_i;
-        VcfPosType last_pos_in_ref = vb->last_int(VCF_POS) + ref_len - 1;
+        PosType32 last_pos_in_ref = vb->last_int(VCF_POS) + ref_len - 1;
         LiftOverStatus last_ref_ostatus = vcf_lo_get_liftover_coords (vb, last_pos_in_ref, NULL, NULL, NULL, &last_ref_aln_i); // uses vb->chrom_node_index and POS->last_int
 
         // Exception: a Deletion that has the anchor base on the alignment, and the rest of REF entirely in the gap after the alignment - 
@@ -948,7 +948,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_main_REFALT)
     char ref_value = 0;
     
     if (snip[0] == '-' || snip[1] == '-') { 
-        VcfPosType pos = CTX (VCF_POS)->last_value.i;
+        PosType32 pos = CTX (VCF_POS)->last_value.i;
 
         ConstRangeP range = ref_piz_get_range (vb, gref, HARD_FAIL);
         

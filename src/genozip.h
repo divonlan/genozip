@@ -40,7 +40,7 @@ typedef enum __attribute__ ((__packed__)) { RECON_OFF, RECON_ON } ReconType;
 // -----------------
 #define GENOZIP_EXT ".genozip"
 
-#define MAX_POS ((PosType)UINT32_MAX) // maximum allowed value for POS (constraint: fit into uint32 ctx.local). Note: in SAM the limit is 2^31-1
+#define MAX_POS ((PosType64)UINT32_MAX) // maximum allowed value for POS (constraint: fit into uint32 ctx.local). Note: in SAM the limit is 2^31-1
 
 #define MAX_DICTS 2048
 
@@ -116,7 +116,7 @@ typedef enum { EXE_GENOZIP, EXE_GENOUNZIP, EXE_GENOLS, EXE_GENOCAT, NUM_EXE_TYPE
 typedef enum { DT_NONE=-1, // used in the code logic, never written to the file
                DT_REF=0, DT_VCF=1, DT_SAM=2, DT_FASTQ=3, DT_FASTA=4, DT_GFF=5, DT_ME23=6, // these values go into SectionHeaderGenozipHeader.data_type
                DT_BAM=7, DT_BCF=8, DT_GENERIC=9, DT_PHYLIP=10, DT_CHAIN=11, DT_KRAKEN=12, 
-               DT_LOCS=13, NUM_DATATYPES } DataType; 
+               DT_LOCS=13, DT_BED=14, NUM_DATATYPES } DataType; 
 #define Z_DT(dt)   (z_file->data_type   == (DT_##dt))
 #define TXT_DT(dt) (txt_file->data_type == (DT_##dt))
 #define VB_DT(dt)  (vb->data_type       == (DT_##dt))
@@ -128,7 +128,7 @@ typedef enum { DTYPE_FIELD, DTYPE_1, DTYPE_2 } DictIdType;
 typedef union DictId {
     uint64_t num;             // num is just for easy comparisons - it doesn't have a numeric value and endianity should not be changed
     uint8_t id[DICT_ID_LEN];  // \0-padded ID
-    uint16_t map_key[4];      // we use the first two bytes ([0]) as they key into vb/z_file->dict_id_mapper
+    uint16_t map_key[4];      // we use the map_key[0] as the key into vb/z_file->d2d_map
 
     struct {
         #define ALT_KEY(d) (0x10000 | ((d).alt_key.b0_4 << 11) | ((d).alt_key.b5_9 << 6) | ((d).alt_key.b10_14 << 1) | (d).alt_key.b15)
@@ -157,7 +157,10 @@ typedef uint8_t CompIType;    // comp_i
 typedef uint32_t VBIType;     // vblock_i
 typedef uint64_t CharIndex;   // index within dictionary
 typedef int32_t WordIndex;    // used for word and node indices
-typedef int64_t PosType;      // used for position coordinate within a genome
+typedef int64_t PosType64;    // used for position coordinate within a genome
+typedef int32_t PosType32;    // per VCF v4.3 spec 1.6.1
+#define MAX_POS32 ((PosType64)0x7fffffff)
+
 typedef int32_t LineIType;
 typedef const char *rom;      // "read-only memory"
 typedef const uint8_t *bytes; // read-only array of bytes
@@ -432,7 +435,7 @@ typedef struct { uint32_t qname, seq, qual; } DeepHash;
 // the filter can either set *reconstruct=false and return true, or use a callback instead which is called after reconstruction,
 // and erase the reconstructed txt_data.
 // NOTE: for a callback to be called on items of a container, the Container.callback flag needs to be set
-#define CONTAINER_FILTER_FUNC(func) bool func(VBlockP vb, DictId dict_id, ConstContainerP con, unsigned rep, int item, bool *reconstruct)
+#define CONTAINER_FILTER_FUNC(func) bool func(VBlockP vb, DictId dict_id, ConstContainerP con, unsigned rep, int item, ReconType *reconstruct)
 
 // called after reconstruction of each repeat, IF Container.callback or Container.is_top_level is set
 #define CONTAINER_CALLBACK(func) void func(VBlockP vb, DictId dict_id, bool is_top_level, unsigned rep, ConstContainerP con, \

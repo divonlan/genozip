@@ -221,7 +221,7 @@ void ref_contigs_compress_stored (Reference ref)
         // if gpos of the first range in this contig has been increased due to removing flanking regions and is no longer 64-aligned,
         // we start the contig a little earlier to be 64-aligned (note: this is guaranteed to be within the original contig before 
         // compacting, because the original contig had a 64-aligned gpos)
-        PosType delta = r->gpos % 64;
+        PosType64 delta = r->gpos % 64;
 
         WordIndex chrom = IS_REF_EXT_STORE ? *B(WordIndex, z_file->ref2chrom_map, r->chrom) : r->chrom; // the CHROM corresponding to this ref_index, even if a different version of the chrom name 
 
@@ -337,7 +337,7 @@ WordIndex ref_contigs_get_by_name (const Reference ref, rom chrom_name, uint32_t
 }
 
 // ZIP: gets matching contig in the reference (same or alt). Returns ref_index if a match was found, or WORD_INDEX_NONE
-WordIndex ref_contigs_get_matching (const Reference ref, PosType LN, STRp(txt_chrom), // in
+WordIndex ref_contigs_get_matching (const Reference ref, PosType64 LN, STRp(txt_chrom), // in
                                     STRp(*ref_contig),          // out - contig name
                                     bool strictly_alt,          // in - only tests for differnet names
                                     bool *is_alt,               // out - true if ref_contig is an alternate chrom different than txt_chrom
@@ -372,7 +372,7 @@ rom ref_contigs_get_name_by_ref_index (Reference ref, WordIndex ref_index, rom *
 // ZIP SAM/BAM and VCF: verify that we have the specified chrom (name & last_pos) loaded from the reference at the same index. 
 // called by sam_header_add_contig, vcf_header_consume_contig. returns true if contig is in reference
 WordIndex ref_contigs_ref_chrom_from_header_chrom (Reference ref, STRp(chrom_name), 
-                                                   PosType *hdr_LN) // if 0, set from reference, otherwise verify
+                                                   PosType64 *hdr_LN) // if 0, set from reference, otherwise verify
 {               
     WordIndex ref_contig_index = ref_contigs_get_by_name (ref, STRa(chrom_name), true, true); // including alts
         
@@ -385,7 +385,7 @@ WordIndex ref_contigs_ref_chrom_from_header_chrom (Reference ref, STRp(chrom_nam
     }
 
     if (buf_is_alloc (&ref->ranges)) { // it is not allocated in --sex/coverage
-        PosType ref_LN = B(Range, ref->ranges, ref_contig_index)->last_pos; // get from ranges because Contig.LN=0 - we don't populate it at reference creation
+        PosType64 ref_LN = B(Range, ref->ranges, ref_contig_index)->last_pos; // get from ranges because Contig.LN=0 - we don't populate it at reference creation
         
         // case: file header is missing length, update from reference
         if (! *hdr_LN) *hdr_LN = ref_LN;
@@ -410,7 +410,7 @@ WordIndex ref_contigs_ref_chrom_from_header_chrom (Reference ref, STRp(chrom_nam
 
 // get length of contig according to ref_contigs (loaded or stored reference) - used in piz when generating
 // a file header of a translated data type eg SAM->BAM or ME23->VCF
-PosType ref_contigs_get_contig_length (const Reference ref,
+PosType64 ref_contigs_get_contig_length (const Reference ref,
                                        WordIndex ref_index, // option 1 
                                        STRp(chrom_name),    // option 2
                                        bool enforce)
@@ -458,7 +458,7 @@ uint32_t ref_contigs_get_num_contigs (Reference ref)
     return flag.make_reference ? ZCTX(CHROM)->nodes.len32 : ref->ctgs.contigs.len32;
 }
 
-PosType ref_contigs_get_genome_nbases (const Reference ref)
+PosType64 ref_contigs_get_genome_nbases (const Reference ref)
 {
     if (flag.make_reference)
         return B(Range, ref->ranges, ref->ranges.len-1)->gpos +
@@ -480,8 +480,8 @@ PosType ref_contigs_get_genome_nbases (const Reference ref)
     return rc_with_largest_gpos->gpos + (rc_with_largest_gpos->max_pos - rc_with_largest_gpos->min_pos + 1);
 }
 
-WordIndex ref_contig_get_by_gpos (const Reference ref, PosType gpos,
-                                  PosType *pos) // optional out, POS within the CHROM matching gpos
+WordIndex ref_contig_get_by_gpos (const Reference ref, PosType64 gpos,
+                                  PosType64 *pos) // optional out, POS within the CHROM matching gpos
 {
     // note: contigs are sorted by chrom and then pos within chrom, NOT by gpos! (chroms might have been added out of order during reference creation)
     for_buf2 (Contig, rc, ref_index, ref->ctgs.contigs) 

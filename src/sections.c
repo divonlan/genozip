@@ -209,6 +209,10 @@ static CompIType sections_calculate_num_comps (void)
 // from the section list by the recon_plan (eg in DVCF we remove the unneeded component for the rendition) 
 static void sections_create_index (bool force)
 {
+    // case: section_list_buf has been realloced: re-create the index
+    if (z_file->comp_sections_index.len && z_file->section_list_buf.data != z_file->comp_sections_index.pointer) 
+        z_file->comp_sections_index.len = z_file->vb_sections_index.len = 0; // un=create indices
+
     if (!force && z_file->comp_sections_index.len) return; // already created
 
     if (!z_file->num_vbs)
@@ -219,7 +223,9 @@ static void sections_create_index (bool force)
     ARRAY_alloc (SectionsVbIndexEnt, vb_index, z_file->num_vbs + 1, true, z_file->vb_sections_index, evb, "z_file->vb_sections_index");
     ARRAY_alloc (SectionsCompIndexEnt, comp_index, num_comps, true, z_file->comp_sections_index, evb, "z_file->comp_sections_index");
     ARRAY (SectionEnt, sec, z_file->section_list_buf);
-        
+
+    z_file->comp_sections_index.pointer = z_file->section_list_buf.data; // used to detect reallocs
+
     for (uint32_t sec_i=0; sec_i < sec_len; sec_i++) {
     
         CompIType comp_i = sec[sec_i].comp_i;
@@ -244,7 +250,7 @@ static void sections_create_index (bool force)
             case SEC_VB_HEADER : {
                 VBIType vb_i = sec[sec_i].vblock_i;
                 
-                ASSERT (vb_i>=1 && vb_i <= z_file->num_vbs, "Bad vb_i=%u, max is %u", vb_i, z_file->num_vbs);
+                ASSERT (IS_ZIP || (vb_i>=1 && vb_i <= z_file->num_vbs), "Bad vb_i=%u, max is %u", vb_i, z_file->num_vbs);
                 
                 vb_index[vb_i] = (SectionsVbIndexEnt){
                     .first_sec = &sec[sec_i],
@@ -270,11 +276,6 @@ static void sections_create_index (bool force)
     }
 }
 
-static inline void sections_create_index_if_needed(void) 
-{ 
-    if (!z_file->comp_sections_index.len) sections_create_index (false);
-}
-
 // ZIP / PIZ: returns the SEC_VB_HEADER section, or NULL if this vb_i doesn't exist
 Section sections_vb_header (VBIType vb_i, FailType soft_fail)
 {
@@ -288,7 +289,6 @@ Section sections_vb_header (VBIType vb_i, FailType soft_fail)
         Section sec = B(SectionsVbIndexEnt, z_file->vb_sections_index, vb_i)->first_sec;
         if (!sec) goto fail;
 
-        ASSBISVALID (z_file->section_list_buf, sec);
         return sec;
     }
     else 
@@ -667,14 +667,14 @@ Section sections_last_sec (SectionType st, FailType soft_fail)
 
 CompIType sections_get_num_comps (void)
 {
-    sections_create_index_if_needed();
+    sections_create_index (false);
 
     return z_file->comp_sections_index.len;
 }
 
 static const SectionsCompIndexEnt *sections_get_comp_index_ent (CompIType comp_i)
 {
-    sections_create_index_if_needed();
+    sections_create_index (false);
 
     ASSERTNOTEMPTY(z_file->comp_sections_index);
     ASSERT (comp_i < z_file->comp_sections_index.len, "comp_i=%u out of range [0,%u]", comp_i, (int)z_file->comp_sections_index.len-1);
@@ -685,7 +685,7 @@ static const SectionsCompIndexEnt *sections_get_comp_index_ent (CompIType comp_i
 
 VBIType sections_get_num_vbs (CompIType comp_i) 
 { 
-    sections_create_index_if_needed();
+    sections_create_index (false);
 
     if (comp_i >= z_file->comp_sections_index.len) return 0; // this component doesn't exist (can happen eg when checking for gencomp that doesn't exist in this file)
 

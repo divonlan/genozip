@@ -54,11 +54,11 @@ void ref_iupacs_compress (void)
 
     if (flag.show_ref_iupacs) iprintf ("\nIUPACs found in %s:\n", z_name);
 
-    PosType last_gpos = 0;
+    PosType64 last_gpos = 0;
     for (uint64_t i=0; i < make_iupacs_len; i++) {
         const Range *r = B(Range, gref->ranges, make_iupacs[i].vblock_i-1);
 
-        PosType gpos = r->gpos + make_iupacs[i].idx;
+        PosType64 gpos = r->gpos + make_iupacs[i].idx;
 
         if (flag.show_ref_iupacs)   
             iprintf ("IUPAC=%c\nCHROM=%s\tPOS=%"PRIu64"\tGPOS=%"PRIu64"\n", 
@@ -102,7 +102,7 @@ void ref_iupacs_load (Reference ref)
         iupacs[i].gpos = (i ? iupacs[i-1].gpos : 0) + BGEN64 (iupacs[i].gpos);
 
         if (flag.show_ref_iupacs)  {
-            PosType pos;
+            PosType64 pos;
             WordIndex chrom_index = ref_contig_get_by_gpos (ref, iupacs[i].gpos, &pos);
             iprintf ("IUPAC=%c\tCHROM=%s\tPOS=%"PRIu64"\tGPOS=%"PRIu64"\n", 
                      iupacs[i].iupac, ctx_get_snip_by_word_index0 (ZCTX(FASTA_CONTIG), chrom_index), pos, iupacs[i].gpos);
@@ -113,7 +113,7 @@ done:
     if (is_genocat && flag.show_ref_iupacs) exit_ok();
 }
 
-static const Iupac *ref_iupacs_find (Iupac *iupacs, int64_t first, int64_t last, PosType gpos)
+static const Iupac *ref_iupacs_find (Iupac *iupacs, int64_t first, int64_t last, PosType64 gpos)
 {
     if (first > last) return &iupacs[first]; // gpos not found in iupacs - return one after (possibly beyond end of array)
 
@@ -146,9 +146,9 @@ static const char IUPAC_IS_INCLUDED[128][128] = { ['R']={ ['A']=1, ['G']=1, ['a'
                                                   ['V']={ ['A']=1, ['C']=1, ['G']=1, ['a']=1, ['c']=1, ['g']=1 },
                                                   ['v']={ ['A']=1, ['C']=1, ['G']=1, ['a']=1, ['c']=1, ['g']=1 } };
 
-bool ref_iupacs_is_included_do (Reference ref, VBlockP vb, const Range *r, PosType pos, char vcf_base)
+bool ref_iupacs_is_included_do (Reference ref, VBlockP vb, const Range *r, PosType64 pos, char vcf_base)
 {
-    PosType gpos = r->gpos + (pos - r->first_pos);
+    PosType64 gpos = r->gpos + (pos - r->first_pos);
     unsigned ref_i = (ref==gref); // [0]=prim_ref [1]=gref
 
     ARRAY (Iupac, iupacs, ref->iupacs_buf);
@@ -182,8 +182,8 @@ bool ref_iupacs_is_included_do (Reference ref, VBlockP vb, const Range *r, PosTy
 
 // iterator to check if there is a IUPAC at a position. Can be called in a sequence of calls - next call can be delayed until next_pos,
 // this way this function is called scarcely. returns iupac if found (or 0). 
-char ref_iupacs_get (Reference ref, const Range *r, PosType pos, bool reverse,
-                     PosType *next_pos) // out 
+char ref_iupacs_get (Reference ref, const Range *r, PosType64 pos, bool reverse,
+                     PosType64 *next_pos) // out 
 {
     #define IUPAC2POS(iup) (r->first_pos + (iup)->gpos - r->gpos)
 
@@ -194,7 +194,7 @@ char ref_iupacs_get (Reference ref, const Range *r, PosType pos, bool reverse,
     }
 
     const Iupac *last = BLST(const Iupac, ref->iupacs_buf);
-    PosType gpos = r->gpos + (pos - r->first_pos);
+    PosType64 gpos = r->gpos + (pos - r->first_pos);
     
     const Iupac *iupac = ref_iupacs_find (B1ST(Iupac, ref->iupacs_buf), 0, ref->iupacs_buf.len-1, gpos);
 

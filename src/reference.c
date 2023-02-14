@@ -54,7 +54,7 @@ Digest ref_get_file_md5 (const Reference ref)         { return ref->file_md5;   
 ContigPkgP ref_get_ctgs (Reference ref)               { return &ref->ctgs;              }
 uint32_t ref_num_contigs (Reference ref)              { return ref->ctgs.contigs.len32; }
 
-void ref_get_genome (Reference ref, const Bits **genome, const Bits **emoneg, PosType *genome_nbases)
+void ref_get_genome (Reference ref, const Bits **genome, const Bits **emoneg, PosType64 *genome_nbases)
 {
     ASSERT0 (ref->genome, "Reference file not loaded");
     
@@ -63,7 +63,7 @@ void ref_get_genome (Reference ref, const Bits **genome, const Bits **emoneg, Po
     *genome_nbases = ref->genome_nbases;
 }
 
-void ref_set_genome_is_used (Reference ref, PosType gpos, uint32_t len)
+void ref_set_genome_is_used (Reference ref, PosType64 gpos, uint32_t len)
 {
     if (len == 1)
         bits_set (ref->genome_is_set, gpos); 
@@ -128,6 +128,7 @@ void ref_destroy_reference (Reference ref, bool destroy_only_if_not_mmap)
 
     // note: we keep ref->filename, in case it needs to be loaded again
     rom save_filename = ref->filename;
+    rom save_ctgs_name = ref->ctgs.name; // "gref" or "prim_ref"
 
     // ref contig stuff
     contigs_destroy (&ref->ctgs);
@@ -137,6 +138,8 @@ void ref_destroy_reference (Reference ref, bool destroy_only_if_not_mmap)
 
     memset (ref, 0, sizeof (RefStruct));
     ref->filename = save_filename;
+    ref->ctgs.name = save_ctgs_name; 
+    ref->ref_cache_creation_thread_id = THREAD_ID_NONE;
 }
 
 // PIZ: returns a range which is the entire contig
@@ -264,7 +267,7 @@ static void ref_show_sequence (Reference ref)
         RangeP r = B(Range, ref->ranges, range_i);
 
         // get first pos and last pos, potentially modified by --regions
-        PosType first_pos, last_pos;
+        PosType64 first_pos, last_pos;
         bool revcomp; // to do: implement
         if (!r->ref.nbits ||
             !regions_get_range_intersection (r->chrom, r->first_pos, r->last_pos, 0, &first_pos, &last_pos, &revcomp)) continue;
@@ -291,11 +294,11 @@ static void ref_uncompress_one_range (VBlockP vb)
 
     WordIndex chrom          = (WordIndex)BGEN32 (header->chrom_word_index);
     uint32_t uncomp_len      = BGEN32 (header->data_uncompressed_len);
-    PosType ref_sec_pos      = (PosType)BGEN64 (header->pos);
-    PosType ref_sec_gpos     = (PosType)BGEN64 (header->gpos); // this is equal to sec_start_gpos. However up to 12.0.3 we had a bug in case of compacted ranges in a SAM/BAM DENOVO reference with start flanking regions - GPOS in the section header of a didn't reflect the flanking removal, so header->gpos cannot be trusted as correct for older SAM/BAM DENOVO reference files
-    PosType ref_sec_len      = (PosType)BGEN32 (header->num_bases);
-    PosType ref_sec_last_pos = ref_sec_pos + ref_sec_len - 1;
-    PosType compacted_ref_len=0, initial_flanking_len=0, final_flanking_len=0; 
+    PosType64 ref_sec_pos      = (PosType64)BGEN64 (header->pos);
+    PosType64 ref_sec_gpos     = (PosType64)BGEN64 (header->gpos); // this is equal to sec_start_gpos. However up to 12.0.3 we had a bug in case of compacted ranges in a SAM/BAM DENOVO reference with start flanking regions - GPOS in the section header of a didn't reflect the flanking removal, so header->gpos cannot be trusted as correct for older SAM/BAM DENOVO reference files
+    PosType64 ref_sec_len      = (PosType64)BGEN32 (header->num_bases);
+    PosType64 ref_sec_last_pos = ref_sec_pos + ref_sec_len - 1;
+    PosType64 compacted_ref_len=0, initial_flanking_len=0, final_flanking_len=0; 
 
     ASSERT0 (chrom != WORD_INDEX_NONE, "Unexpected reference section with chrom=WORD_INDEX_NONE");
 
@@ -303,9 +306,9 @@ static void ref_uncompress_one_range (VBlockP vb)
     RangeP r = ref_get_range_by_chrom (vb->ref, chrom, &chrom_name);
     ASSERT (r->last_pos, "unexpectedly, r->last_pos=0: r=%s", ref_display_range (r).s);
 
-    PosType sec_start_within_contig = ref_sec_pos - r->first_pos;
-    PosType sec_start_gpos          = r->gpos + sec_start_within_contig;
-    PosType sec_end_within_contig   = sec_start_within_contig + ref_sec_len - 1;
+    PosType64 sec_start_within_contig = ref_sec_pos - r->first_pos;
+    PosType64 sec_start_gpos          = r->gpos + sec_start_within_contig;
+    PosType64 sec_end_within_contig   = sec_start_within_contig + ref_sec_len - 1;
     
     bool is_compacted = (header->section_type == SEC_REF_IS_SET); // we have a SEC_REF_IS_SET if SEC_REFERENCE was compacted
 
@@ -368,7 +371,7 @@ static void ref_uncompress_one_range (VBlockP vb)
                      vb->vblock_i, st_name (header->section_type), BGEN32 (header->chrom_word_index), STRf (r->chrom_name), BGEN64 (header->gpos), 
                      BGEN64 (header->pos), BGEN32 (header->num_bases), BGEN32 (header->data_compressed_len) + (uint32_t)sizeof (SectionHeaderReference));
 
-        compacted_ref_len  = (PosType)BGEN32(header->num_bases);
+        compacted_ref_len  = (PosType64)BGEN32(header->num_bases);
         uncomp_len         = BGEN32 (header->data_uncompressed_len);
 
         ASSERT (uncomp_len == roundup_bits2bytes64 (compacted_ref_len*2), 
@@ -598,6 +601,8 @@ static void ref_create_cache (VBlockP cache_create_vb)
     buf_dump_to_file (ref_get_cache_fn(cache_create_vb->ref), &cache_create_vb->ref->genome_cache, 1, true, false, false, false);
 }
 
+#define REFERENCE_CACHE_TASK "create_reference_cache"
+
 // initiate creating the the genome cache in a background thread
 void ref_create_cache_in_background (Reference ref)
 {
@@ -605,7 +610,7 @@ void ref_create_cache_in_background (Reference ref)
 
     ref->cache_create_vb = vb_initialize_nonpool_vb (VB_ID_GCACHE_CREATE, DT_NONE, "ref_create_cache_in_background");
     ref->cache_create_vb->ref = ref;
-    ref->cache_create_vb->compute_task = "create_reference_cache";
+    ref->cache_create_vb->compute_task = REFERENCE_CACHE_TASK;
 
     ref_get_cache_fn (ref); // generate name before closing z_file
     ref->ref_cache_creation_thread_id = threads_create (ref_create_cache, ref->cache_create_vb);
@@ -614,7 +619,7 @@ void ref_create_cache_in_background (Reference ref)
 void ref_create_cache_join (Reference ref, bool free_mem)
 {
     if (ref->ref_cache_creation_thread_id != THREAD_ID_NONE) // not already joined
-        threads_join (&ref->ref_cache_creation_thread_id);
+        threads_join (&ref->ref_cache_creation_thread_id, REFERENCE_CACHE_TASK);
 
     if (ref->cache_create_vb && free_mem) 
         vb_destroy_vb (&ref->cache_create_vb);
@@ -630,7 +635,7 @@ void ref_create_cache_join (Reference ref, bool free_mem)
 // case 2: ZIP: SAM and VCF with REF_EXTERNAL: when segging a SAM_SEQ or VCF_REFALT field
 // if range is found, returns a locked range, and its the responsibility of the caller to unlock it. otherwise, returns NULL
 RangeP ref_seg_get_range (VBlockP vb, Reference ref, WordIndex chrom, STRp(chrom_name), 
-                          PosType pos, uint32_t ref_consumed, 
+                          PosType64 pos, uint32_t ref_consumed, 
                           WordIndex ref_index, // if known (mandatory if not prim_chrom), WORD_INDEX_NONE if not                                
                           rom field,     // used for ASSSEG 
                           RefLock *lock) // optional if RT_LOADED/RT_CACHED
@@ -658,7 +663,7 @@ RangeP ref_seg_get_range (VBlockP vb, Reference ref, WordIndex chrom, STRp(chrom
     }
 
     if (lock) {        
-        PosType gpos = range->gpos + (pos - range->first_pos);
+        PosType64 gpos = range->gpos + (pos - range->first_pos);
         *lock = ref_lock (ref, gpos, ref_consumed);
     }
 
@@ -755,10 +760,10 @@ static void ref_copy_compressed_sections_from_reference_file (Reference ref)
     for (uint32_t i=0; i < ref->ref_external_ra.len32; i++) {
 
         RangeP contig_r = B(Range, ref->ranges, sec_reference[i].chrom_index);
-        PosType SEC_REFERENCE_start_in_contig_r = sec_reference[i].min_pos - contig_r->first_pos; // the start of the SEC_REFERENCE section (a bit less than 1MB) within the full-contig range
+        PosType64 SEC_REFERENCE_start_in_contig_r = sec_reference[i].min_pos - contig_r->first_pos; // the start of the SEC_REFERENCE section (a bit less than 1MB) within the full-contig range
 
-        PosType SEC_REFERNECE_len = sec_reference[i].max_pos - sec_reference[i].min_pos + 1;
-        PosType bits_is_set = contig_r->is_set.nbits ? bits_num_set_bits_region (&contig_r->is_set, SEC_REFERENCE_start_in_contig_r, SEC_REFERNECE_len) : 0;
+        PosType64 SEC_REFERNECE_len = sec_reference[i].max_pos - sec_reference[i].min_pos + 1;
+        PosType64 bits_is_set = contig_r->is_set.nbits ? bits_num_set_bits_region (&contig_r->is_set, SEC_REFERENCE_start_in_contig_r, SEC_REFERNECE_len) : 0;
 
         // if this at least 95% of the RA is covered, just copy the corresponding FASTA section to our file, and
         // mark all the ranges as is_set=false indicating that they don't need to be compressed individually
@@ -1137,7 +1142,7 @@ void ref_display_ref (Reference ref)
         
         for (unsigned inter_i=0; inter_i < num_intersections; inter_i++) {
          
-            PosType display_first_pos, display_last_pos;
+            PosType64 display_first_pos, display_last_pos;
             bool revcomp;
             
             ASSERT0 (regions_get_range_intersection (r->chrom, r->first_pos, r->last_pos, inter_i, &display_first_pos, &display_last_pos, &revcomp), 
@@ -1152,7 +1157,7 @@ void ref_display_ref (Reference ref)
                 else
                     iprintf ("%"PRIu64"-%"PRIu64"\t", display_first_pos + adjust, display_last_pos + adjust);
 
-                for (PosType pos=display_first_pos, next_iupac_pos=display_first_pos ; pos <= display_last_pos ; pos++) {
+                for (PosType64 pos=display_first_pos, next_iupac_pos=display_first_pos ; pos <= display_last_pos ; pos++) {
                     char iupac = (pos==next_iupac_pos) ? ref_iupacs_get (gref, r, pos, false, &next_iupac_pos) : 0;
                     char base = iupac ? iupac : ref_base_by_pos (r, pos);
                     fputc (base, stdout);
@@ -1166,7 +1171,7 @@ void ref_display_ref (Reference ref)
                 else 
                     iprintf ("COMPLEM %"PRIu64"-%"PRIu64"\t", display_last_pos + adjust, display_first_pos + adjust);
 
-                for (PosType pos=display_last_pos, next_iupac_pos=display_last_pos; pos >= display_first_pos; pos--) {
+                for (PosType64 pos=display_last_pos, next_iupac_pos=display_last_pos; pos >= display_first_pos; pos--) {
                     char iupac = (pos==next_iupac_pos) ? ref_iupacs_get (gref, r, pos, true, &next_iupac_pos) : 0;
                     char base = iupac ? iupac : ref_base_by_pos (r, pos);
                     fputc (COMPLEM[(int)base], stdout);
@@ -1214,11 +1219,11 @@ void ref_diff_ref (void)
         }
         
         uint32_t num_diffs=0;
-        PosType next_iupac_pos1=r1->first_pos;
-        PosType next_iupac_pos2=r2->first_pos;
+        PosType64 next_iupac_pos1=r1->first_pos;
+        PosType64 next_iupac_pos2=r2->first_pos;
         
         #define MAX_NUM_DIFFS 100
-        for (PosType pos=r1->first_pos ; pos <= r1->last_pos ; pos++) {
+        for (PosType64 pos=r1->first_pos ; pos <= r1->last_pos ; pos++) {
             char iupac1 = (pos==next_iupac_pos1) ? ref_iupacs_get (gref,     r1, pos, false, &next_iupac_pos1) : 0;
             char iupac2 = (pos==next_iupac_pos2) ? ref_iupacs_get (prim_ref, r2, pos, false, &next_iupac_pos2) : 0;
 
@@ -1345,7 +1350,7 @@ static void overlay_ranges_on_loaded_genome (Reference ref, RangesType type)
             else
                 ref_contigs_get_name_by_ref_index (ref, r->chrom, pSTRa(r->chrom_name));
 
-            PosType nbases = rc->max_pos - rc->min_pos + 1;
+            PosType64 nbases = rc->max_pos - rc->min_pos + 1;
 
             ASSERT (r->gpos + nbases <= ref->genome->nbits / 2, "adding range \"%s\": r->gpos(%"PRId64") + nbases(%"PRId64") (=%"PRId64") is beyond genome_nbases=%"PRId64,
                     r->chrom_name, r->gpos, nbases, r->gpos+nbases, ref->genome_nbases);
@@ -1436,7 +1441,7 @@ void ref_initialize_ranges (Reference ref, RangesType type)
     COPY_TIMER_VB (evb, ref_initialize_ranges);
 }
 
-typedef struct { PosType min_pos, max_pos; } MinMax;
+typedef struct { PosType64 min_pos, max_pos; } MinMax;
 
 //---------------------------------------
 // Printing
@@ -1465,7 +1470,7 @@ void ref_display_all_ranges (Reference ref)
         iprint0 ("reference has no ranges\n");
 }
 
-void ref_print_subrange (rom msg, ConstRangeP r, PosType start_pos, PosType end_pos, FILE *file) /* start_pos=end_pos=0 if entire ref */
+void ref_print_subrange (rom msg, ConstRangeP r, PosType64 start_pos, PosType64 end_pos, FILE *file) /* start_pos=end_pos=0 if entire ref */
 {
     uint64_t start_idx = start_pos ? start_pos - r->first_pos : 0;
     uint64_t end_idx   = (end_pos ? MIN_(end_pos, r->last_pos) : r->last_pos) - r->first_pos;
@@ -1478,10 +1483,10 @@ void ref_print_subrange (rom msg, ConstRangeP r, PosType start_pos, PosType end_
 }
 
 // outputs in seq, a nul-terminated string of up to (len-1) bases
-char *ref_dis_subrange (Reference ref, ConstRangeP r, PosType start_pos, PosType len, char *seq, bool revcomp) // in_reference allocated by caller to length len
+char *ref_dis_subrange (Reference ref, ConstRangeP r, PosType64 start_pos, PosType64 len, char *seq, bool revcomp) // in_reference allocated by caller to length len
 {
     if (!revcomp) {
-        PosType next_iupac_pos, pos, end_pos = MIN_(start_pos + len - 1 - 1, r->last_pos);  // -1 to leave room for \0
+        PosType64 next_iupac_pos, pos, end_pos = MIN_(start_pos + len - 1 - 1, r->last_pos);  // -1 to leave room for \0
         for (pos=start_pos, next_iupac_pos=start_pos ; pos <= end_pos; pos++) {
             char iupac = (pos==next_iupac_pos) ? ref_iupacs_get (ref, r, pos, false, &next_iupac_pos) : 0;
             seq[pos - start_pos] = iupac ? iupac : ref_base_by_pos (r, pos);
@@ -1491,7 +1496,7 @@ char *ref_dis_subrange (Reference ref, ConstRangeP r, PosType start_pos, PosType
 
     // revcomp: display the sequence starting at start_pos and going backwards - complemented
     else {
-        PosType next_iupac_pos, pos, end_pos = MAX_(start_pos - (len - 1) + 1, r->first_pos);  // -1 to leave room for \0
+        PosType64 next_iupac_pos, pos, end_pos = MAX_(start_pos - (len - 1) + 1, r->first_pos);  // -1 to leave room for \0
         for (pos=start_pos, next_iupac_pos=start_pos ; pos >= end_pos; pos--) {
             char iupac = (pos==next_iupac_pos) ? ref_iupacs_get (gref, r, pos, true, &next_iupac_pos) : 0;
             seq[start_pos - pos] = iupac ? iupac : COMPLEM[(int)ref_base_by_pos (r, pos)];
@@ -1503,10 +1508,10 @@ char *ref_dis_subrange (Reference ref, ConstRangeP r, PosType start_pos, PosType
 }
 
 void ref_print_is_set (ConstRangeP r,
-                       PosType around_pos,  // display around this neighborhoud ; -1 means entire range
+                       PosType64 around_pos,  // display around this neighborhoud ; -1 means entire range
                        FILE *file)
 {
-#   define neighborhood (PosType)10000
+#   define neighborhood (PosType64)10000
 
     fprintf (file, "\n\nRegions set for ref_index %d \"%.*s\" [%"PRId64"-%"PRId64"] according to range.is_set (format- \"first_pos-last_pos (len)\")\n", 
              r->chrom, STRf(r->chrom_name), r->first_pos, r->last_pos);
@@ -1524,7 +1529,7 @@ void ref_print_is_set (ConstRangeP r,
         bool found = bits_find_next_clear_bit (&r->is_set, i, &next);
         if (!found) next = r->is_set.nbits;
 
-        bool in_neighborhood = (around_pos - (PosType)(r->first_pos+i) > -neighborhood) && (around_pos - (PosType)(r->first_pos+i) < neighborhood);
+        bool in_neighborhood = (around_pos - (PosType64)(r->first_pos+i) > -neighborhood) && (around_pos - (PosType64)(r->first_pos+i) < neighborhood);
         if (next > i && (around_pos == -1 || in_neighborhood)) {
             if (next - i > 1)
                 fprintf (file, "%"PRId64"-%"PRIu64"(%u)\t", r->first_pos + i, r->first_pos + next-1, (uint32_t)(next - i));

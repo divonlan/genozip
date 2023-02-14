@@ -538,7 +538,7 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
     set_last_txt_(VCF_POS, VCF_POS_str, VCF_POS_len); // consumed by vcf_seg_FORMAT_PS, vcf_seg_ILLUMINA_POS
 
     if (vb->line_coords == DC_PRIMARY) {
-        PosType pos = dl->pos[0] = seg_pos_field (vb_, VCF_POS, VCF_POS, 0, '.', STRd(VCF_POS), 0, VCF_POS_len+1);
+        PosType64 pos = dl->pos[0] = seg_pos_field (vb_, VCF_POS, VCF_POS, 0, '.', STRd(VCF_POS), 0, VCF_POS_len+1);
 
         if (pos == 0 && !(*VCF_POS_str == '.' && VCF_POS_len == 1)) // POS == 0 - invalid value return from seg_pos_field
             WARN_ONCE ("FYI: invalid POS=%"PRId64" value in chrom=%.*s vb_i=%u vb_line_i=%d: line will be compressed, but not indexed", 
@@ -558,7 +558,7 @@ rom vcf_seg_txt_line (VBlockP vb_, rom field_start_line, uint32_t remaining_txt_
     if (flag.add_line_numbers) 
         vcf_seg_add_line_number (vb, VCF_ID_len);
     else {
-        seg_id_field (vb_, CTX(VCF_ID), VCF_ID_str, VCF_ID_len, true);
+        seg_id_field (VB, CTX(VCF_ID), VCF_ID_str, VCF_ID_len, true);
         seg_set_last_txt (VB, CTX(VCF_ID), STRd(VCF_ID));
     }
 

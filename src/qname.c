@@ -311,8 +311,9 @@ void qname_segconf_discover_flavor (VBlockP vb, Did qname_did_i, STRp(qname))
     segconf.qname_flavor = 0; // unknown
     STR0(qname2);
 
-    for (QnameFlavor qfs=&qf[0]; qfs < &qf[NUM_QFs]; qfs++) 
-        if ((VB_DT(FASTQ) || !qfs->fq_only) && !qname_test_flavor (STRa(qname), qfs, pSTRa(qname2))) {
+    for (QnameFlavor qfs=&qf[0]; qfs < &qf[NUM_QFs]; qfs++) {
+        int reason = 0;
+        if ((VB_DT(FASTQ) || !qfs->fq_only) && !(reason = qname_test_flavor (STRa(qname), qfs, pSTRa(qname2)))) {
             segconf.qname_flavor = qfs;
             segconf.tech = qfs->tech;
             
@@ -332,6 +333,10 @@ void qname_segconf_discover_flavor (VBlockP vb, Did qname_did_i, STRp(qname))
             break;
         }
 
+        else if (flag.debug_qname && reason) 
+            iprintf ("%.*s is not flavor \"%s\". Reason: %d\n", STRf(qname), qfs->name, reason);
+    }
+
     // when optimizing qname with --optimize_DESC - capture the correct TECH ^ but set flavor to Genozip-opt
     if (flag.optimize_DESC) {
         segconf.qname_flavor = &qf[NUM_QFs-1]; // Genozip-opt is last
@@ -345,7 +350,7 @@ void qname_segconf_discover_flavor (VBlockP vb, Did qname_did_i, STRp(qname))
                 unsigned example_len = strlen(qfs->example[i]);
                 if (!example_len) break;
 
-                if (flag.debug_qname) iprintf ("Testing qname flavor=\"%s\" example=\"%s\"\n", qfs->name, qfs->example[i]);
+                if (flag.debug_qname) iprintf ("Unit-testing qname flavor=\"%s\" example=\"%s\"\n", qfs->name, qfs->example[i]);
                 int res = qname_test_flavor (qfs->example[i], example_len, qfs, 0, 0); 
                 ASSERT (!res, "Failed to identify qname \"%s\" as %s: res=%d", qfs->example[i], qfs->name, res);
             }
@@ -404,7 +409,7 @@ bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, QnameFlavor qfs, STRp(qname),
         // case: this is the file is collated by qname - delta against previous
         if ((item_i == qfs->ordered_item1 || item_i == qfs->ordered_item2) && 
             (segconf.is_collated || VB_DT(FASTQ) || VB_DT(KRAKEN) || qfs->id == QF_GENOZIP_OPT) &&
-            ctx_has_value_in_prev_line_(vb, item_ctx) &&
+            (ctx_has_value_in_prev_line_(vb, item_ctx) || vb->line_i==0) &&
             !(item_lens[item_i] >= 2 && items[item_i][0] == '0') && // can't yet handle reproducing leading zeros with a delta
             ( (!qfs->is_hex[item_i] && str_get_int_dec (STRi(item, item_i), (uint64_t*)&value)) ||
               ( qfs->is_hex[item_i] && str_get_int_hex (STRi(item, item_i), true, false, (uint64_t*)&value)))) // lower-case hex
@@ -467,12 +472,6 @@ void qname_seg (VBlockP vb, Context *qname_ctx, STRp (qname), unsigned add_addit
 {
     START_TIMER;
 
-    // collect the first 6 qnames / q2names, if flavor is unknown    
-    if (segconf.running && vb->line_i < 6 && 
-        (!segconf.qname_flavor || (segconf.qname_flavor->qname2 && !segconf.qname_flavor2))) // QNAME or QNAME2 unrecognized
-
-        memcpy (segconf.unknown_flavor_qnames[vb->line_i], qname, MIN_(qname_len, UNK_QNANE_LEN));
-
     // copy if identical to previous (> 50% of lines in collated) - small improvement in compression and compression time
     // no need in is_sorted, as already handled in sam_seg_QNAME with buddy 
     if (!segconf.is_sorted && vb->line_i && !flag.optimize_DESC && is_same_last_txt (vb, qname_ctx, STRa(qname))) {
@@ -488,6 +487,14 @@ void qname_seg (VBlockP vb, Context *qname_ctx, STRp (qname), unsigned add_addit
         tokenizer_seg (VB, qname_ctx, STRa(qname), 
                        VB_DT(FASTQ) ? sep_with_space : sep_without_space, 
                        add_additional_bytes);
+
+    if (segconf.running) {
+        // collect the first 6 qnames / q2names, if flavor is unknown    
+        if (vb->line_i < 6 && 
+            (!segconf.qname_flavor || (segconf.qname_flavor->qname2 && !segconf.qname_flavor2))) // QNAME or QNAME2 unrecognized
+
+            memcpy (segconf.unknown_flavor_qnames[vb->line_i], qname, MIN_(qname_len, UNK_QNANE_LEN));
+    }
 
 done:
     seg_set_last_txt (vb, qname_ctx, STRa(qname)); // needed also for kraken in sam

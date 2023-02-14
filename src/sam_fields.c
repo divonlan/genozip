@@ -247,12 +247,12 @@ COMPRESSOR_CALLBACK (sam_zip_BD_BI)
 {
     ZipDataLineSAM *dl = DATA_LINE (vb_line_i);
     
-    rom bd = dl->BD_BI[0].index ? Bc (vb->txt_data, dl->BD_BI[0].index) : NULL;
-    rom bi = dl->BD_BI[1].index ? Bc (vb->txt_data, dl->BD_BI[1].index) : NULL;
+    rom bd = dl->BD_BI[0].index ? Btxt (dl->BD_BI[0].index) : NULL;
+    rom bi = dl->BD_BI[1].index ? Btxt (dl->BD_BI[1].index) : NULL;
     
     if (!bd && !bi) return; // no BD or BI on this line
 
-    ASSERT (bd && bi, "%s: A line has one of the BD:Z/BI:Z pair - Genozip can only compress lines that have either both BD:Z and BI:Z or neither", LN_NAME); 
+    ASSERT (bd && bi, "%s/%u: A line has one of the BD:Z/BI:Z pair - Genozip can only compress lines that have either both BD:Z and BI:Z or neither", VB_NAME, vb_line_i); 
     
     // note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec
     *line_data_len  = MIN_(maximum_size, dl->SEQ.len * 2);
@@ -260,12 +260,12 @@ COMPRESSOR_CALLBACK (sam_zip_BD_BI)
 
     if (!line_data) return; // only length was requested
 
-    buf_alloc (vb, &VB_SAM->bd_bi_line, 0, dl->SEQ.len * 2, uint8_t, 2, "bd_bi_line");
+    buf_alloc_exact (vb, VB_SAM->bd_bi_line, dl->SEQ.len * 2, uint8_t, "bd_bi_line");
 
-    // calculate character-wise delta
-    for (unsigned i=0; i < dl->SEQ.len; i++) {
-        *B8 (VB_SAM->bd_bi_line, i*2    ) = bd[i];
-        *B8 (VB_SAM->bd_bi_line, i*2 + 1) = bi[i] - (bd ? bd[i] : 0);
+    uint8_t *next = B1ST8 (VB_SAM->bd_bi_line);
+    for (uint32_t i=0; i < dl->SEQ.len; i++) {
+        *next++ = bd[i];
+        *next++ = bi[i] - bd[i];
     }
 
     *line_data = B1STc (VB_SAM->bd_bi_line);
@@ -762,7 +762,7 @@ static inline void sam_seg_AS_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t as, 
         sam_seg_against_sa_group_int (vb, CTX(OPTION_AS_i), (int64_t)vb->sag->as - as, add_bytes);
 
     // in bowtie2-like data, we might be able to copy from mate
-    else if (is_bowtie2()) {
+    else if (segconf.is_bowtie2) {
         ASSERT (as >= MIN_AS_i && as <= MAX_AS_i, "%s: AS=%"PRId64" is out of range [%d,%d]", LN_NAME, as, MIN_AS_i, MAX_AS_i);    
         
         ZipDataLineSAM *mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
@@ -1048,7 +1048,7 @@ void sam_seg_buddied_i_fields (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i,
             "Error in %s: Expecting E2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
             txt_name, dl->SEQ.len, field_len, field_len, field);
 
-    SamPosType this_pos = vb->last_int(SAM_POS);
+    PosType32 this_pos = vb->last_int(SAM_POS);
 
     sam_seg_SEQ (vb, OPTION_E2_Z, (char *)STRa(field), this_pos, vb->last_cigar, vb->ref_consumed, vb->ref_and_seq_consumed, 0, field_len, // remove const bc SEQ data is actually going to be modified
                         vb->last_cigar, add_bytes); 
@@ -1303,19 +1303,19 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
         // ---------------------
         // Non-standard fields
         // ---------------------
-        case _OPTION_XA_Z: COND (sam_has_BWA_XA_Z(), sam_seg_BWA_XA_Z (vb, STRa(value), add_bytes));
+        case _OPTION_XA_Z: COND (segconf.sam_has_BWA_XA_Z != no, sam_seg_BWA_XA_Z (vb, STRa(value), add_bytes)); // yes or unknown
         
-        case _OPTION_XS_i: COND0 (sam_has_BWA_XS_i(), sam_seg_BWA_XS_i (vb, dl, OPTION_XS_i, numeric.i, add_bytes))
+        case _OPTION_XS_i: COND0 (segconf.sam_has_BWA_XS_i, sam_seg_BWA_XS_i (vb, dl, OPTION_XS_i, numeric.i, add_bytes))
                            COND (MP(BLASR), sam_seg_SEQ_END (vb, dl, CTX(OPTION_XS_i), numeric.i, "0+00", add_bytes)); 
 
-        case _OPTION_XC_i: COND (sam_has_BWA_XC_i(), sam_seg_BWA_XC_i (vb, dl, numeric.i, add_bytes)); 
+        case _OPTION_XC_i: COND (segconf.sam_has_BWA_XC_i, sam_seg_BWA_XC_i (vb, dl, numeric.i, add_bytes)); 
 
-        case _OPTION_XT_A: COND (sam_has_BWA_XT_A(), sam_seg_BWA_XT_A (vb, value[0], add_bytes));
+        case _OPTION_XT_A: COND (segconf.sam_has_BWA_XT_A, sam_seg_BWA_XT_A (vb, value[0], add_bytes));
 
-        case _OPTION_XM_i: COND0 (sam_has_BWA_XM_i(), sam_seg_BWA_XM_i (vb, numeric, add_bytes))
+        case _OPTION_XM_i: COND0 (segconf.sam_has_BWA_XM_i, sam_seg_BWA_XM_i (vb, numeric, add_bytes))
                            COND (MP(TMAP), sam_seg_TMAP_XM_i (vb, numeric, add_bytes));
 
-        case _OPTION_X1_i: COND (sam_has_BWA_X0_X1_i(), sam_seg_BWA_X1_i (vb, numeric.i, add_bytes)); break;
+        case _OPTION_X1_i: COND (segconf.sam_has_BWA_X01_i, sam_seg_BWA_X1_i (vb, numeric.i, add_bytes)); break;
 
         case _OPTION_ZS_i: COND (MP(HISAT2), sam_seg_BWA_XS_i (vb, dl, OPTION_ZS_i, numeric.i, add_bytes)); 
 
@@ -1341,9 +1341,9 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
 
         case _OPTION_ms_i: COND (segconf.sam_ms_type == ms_BIOBAMBAM && !flag.optimize_QUAL, sam_seg_ms_i (vb, dl, numeric.i, add_bytes)); // ms:i produced by biobambam or samtools
 
-        case _OPTION_s1_i: COND (is_minimap2(), sam_seg_s1_i (vb, dl, numeric.i, add_bytes));
+        case _OPTION_s1_i: COND (segconf.is_minimap2, sam_seg_s1_i (vb, dl, numeric.i, add_bytes));
 
-        case _OPTION_cm_i: COND (is_minimap2(), sam_seg_cm_i (vb, dl, numeric.i, add_bytes));
+        case _OPTION_cm_i: COND (segconf.is_minimap2, sam_seg_cm_i (vb, dl, numeric.i, add_bytes));
 
         // tx:i: - we seg this as a primary field SAM_TAX_ID
         case _OPTION_tx_i: seg_by_did (VB, taxid_redirection_snip, taxid_redirection_snip_len, OPTION_tx_i, add_bytes); break;

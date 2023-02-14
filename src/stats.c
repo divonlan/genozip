@@ -68,7 +68,8 @@ static void stats_submit_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
 
     // we send the first 6 qnames in case of unrecognized QNAME flavor or in case of existing by unrecognized QNAME2 flavor
     if ((Z_DT(SAM) || Z_DT(BAM) || Z_DT(FASTQ) || Z_DT(KRAKEN)) &&
-        (!segconf.qname_flavor || qf2_name (segconf.qname_flavor, segconf.qname_flavor2) == QNAME_FLAVOR_UNRECOGNIZED)) {
+        (!segconf.qname_flavor || qf2_name (segconf.qname_flavor, segconf.qname_flavor2) == QNAME_FLAVOR_UNRECOGNIZED) &&
+        sections_count_sections (SEC_VB_HEADER)) { // not header-only file
 
         bufprintf (evb, &hash_occ, "%sQNAME%%2C%%2C%%2C", need_sep++ ? "%3B" : "");
 
@@ -138,7 +139,8 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
     bufprintf (evb, &url_buf, "&entry.1014872627=%u", license_get_number());                                 // license #. Eg "32412351324"
     bufprintf (evb, &url_buf, "&entry.1861722167=%s", url_esc_non_valid_chars (arch_get_user_host()));       // user@host. Eg "john@hpc"
     bufprintf (evb, &url_buf, "&entry.441046403=%s", dt_name (z_file->data_type));                           // data type. Eg "VCF"
-    bufprintf (evb, &url_buf, "&entry.984213484=%s%%2C%"PRIu64, url_esc_non_valid_charsS (all_txt_len/*--make-ref is 0*/ ? str_size (all_txt_len).s : "0 B").s, z_file->txt_disk_so_far_bind); // Txt size,z_size. eg "50 GB,2342442046"
+    bufprintf (evb, &url_buf, "&entry.984213484=%s%%2C%"PRIu64, url_esc_non_valid_charsS (all_txt_len/*--make-ref is 0*/ ? str_size (all_txt_len).s : "0 B").s, 
+               (file_is_read_via_ext_decompressor(txt_file) && txt_file->disk_size) ? txt_file->disk_size : z_file->txt_disk_so_far_bind); // Txt size,z_size. eg "50 GB,2342442046"
     bufprintf (evb, &url_buf, "&entry.960659059=%s%%2C%.1f", codec_name (txt_file->source_codec), src_comp_ratio);  // Source codec/gain eg "GZ,4.3"
     bufprintf (evb, &url_buf, "&entry.621670070=%.1f", all_comp_ratio);                                      // Genozip gain over source txt eg "5.4"
     bufprintf (evb, &url_buf, "&entry.1635780209=OS=%s%%3Bdist=%s%%3Bcores=%u%%3Bphysical_GB=%.1f%%3Bruntime=%s", 
@@ -177,7 +179,7 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
     F(debug_lines) ; F(show_sag) ; F(show_depn) ; F(no_domqual) ; F(show_aligner) ; F(show_qual) ;
     F(show_stats) ; F(show_threads) ; F(debug_threads) ; F(show_vblocks) ; F(show_codec) ;
     F(show_headers) ; F(show_dict) ; F(show_b250) ; F(show_gheader) ; F(show_recon_plan) ;
-    F(show_ref_contigs) ; F(show_digest) ; F(debug_gencomp) ; F(quiet) 
+    F(show_ref_contigs) ; F(show_digest) ; F(debug_gencomp) ; F(quiet) ; F(explicitly_generic);
     #undef F
 
     #define F(name,fmt,none_value) if (flag.name != (none_value)) bufprintf (evb, &url_buf, #name "=" fmt "%%3B", flag.name);
@@ -192,7 +194,7 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
     if (crypt_have_password())         bufprint0 (evb, &url_buf, "encrypted%3B");    
     if (tar_is_tar())                  bufprint0 (evb, &url_buf, "tar%3B");    
     if (flag.kraken_taxid!=TAXID_NONE) bufprint0 (evb, &url_buf, "taxid%3B");    
-    if (file_get_stdin_type())         bufprintf (evb, &url_buf, "stdin_type=%s%%3B", ft_name(file_get_stdin_type()));    
+    if (flag.stdin_type)               bufprintf (evb, &url_buf, "stdin_type=%s%%3B", ft_name(flag.stdin_type));    
     if (flag.show_one_counts.num)      bufprintf (evb, &url_buf, "show_counts=%s%%3B", url_esc_non_valid_charsS (dis_dict_id(flag.show_one_counts).s).s);
 
     // Contexts - keep URL beneath 8100 - if needed, trim some little-used contexts 
@@ -256,7 +258,7 @@ static void stats_get_compressed_sizes (StatsByLine *sbl)
             
         else if ((flag.show_stats_comp_i == COMP_NONE || flag.show_stats_comp_i == sec->comp_i) && 
                  (sec->st == SEC_B250 || sec->st == SEC_DICT || sec->st == SEC_LOCAL || sec->st == SEC_COUNTS)) {
-            Did did_i = ctx_get_existing_did_i_do (sec->dict_id, z_file->contexts, z_file->dict_id_to_did_i_map,
+            Did did_i = ctx_get_existing_did_i_do (sec->dict_id, z_file->contexts, z_file->d2d_map,
                                                         ctx_index, z_file->num_contexts);
 
             // accumulate z_size for its context in its local/b250/dict.param
@@ -350,6 +352,7 @@ static void stats_output_file_metadata (void)
             FEATURE (true, "Aligner: %s", "Mapper=%s", segconf_sam_mapper_name()); 
             FEATURE0 (segconf.sam_bisulfite, "Feature: Bisulfite", "Bisulfite");
             FEATURE0 (segconf.is_paired, "Feature: Paired-End", "Paired-End");
+            FEATURE0 (segconf.has_cellranger, "Feature: cellranger-style fields", "has_cellranger");
             REPORT_KRAKEN;
 
             if (segconf.sam_ms_type && segconf.has[OPTION_ms_i]) {
@@ -357,10 +360,8 @@ static void stats_output_file_metadata (void)
                 bufprintf (evb, &features, "ms:i_type=%s;", names[segconf.sam_ms_type]);
             }
 
-            if (segconf.sam_XG_inc_S) {
-                rom names[] = XG_INC_S_NAME;
-                bufprintf (evb, &features, "XG_include_S=%s;", names[segconf.sam_XG_inc_S]);
-            }
+            if (segconf.sam_XG_inc_S != unknown) 
+                bufprintf (evb, &features, "XG_include_S=%s;", TF(segconf.sam_XG_inc_S));
 
             if (z_file->num_lines) {
                 double mate_line_pc  = 100.0 * (double)z_file->mate_line_count  / (double)z_file->num_lines;
@@ -447,6 +448,13 @@ static void stats_output_file_metadata (void)
             FEATURE (segconf.has_embdedded_fasta, "FASTA Sequences: %"PRIu64, "num_fasta_sequences=%"PRIu64, z_file->num_sequences);
             break;
             
+        case DT_BED:
+            if (z_file->num_lines) {
+                FEATURE (true, "Columns: %u", "columns=%u", segconf.bed_num_columns);
+                FEATURE0 (segconf.is_sorted, "Sorting: Sorted", "Sorted");        
+            }
+            break;
+            
         case DT_REF: 
             FEATURE (true, "Contigs: %u", "num_contigs=%u", ref_contigs_get_num_contigs(gref));
             FEATURE (true, "Bases: %"PRIu64, "num_bases=%"PRIu64, ref_contigs_get_genome_nbases(gref));
@@ -455,7 +463,7 @@ static void stats_output_file_metadata (void)
         case DT_GENERIC:
             REPORT_VBs;
             bufprintf (evb, &stats, "Vblocks: %u x %u MB  Sections: %u\n", 
-                    z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), z_file->section_list_buf.len32);
+                       z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), z_file->section_list_buf.len32);
     
             bufprintf (evb, &features, "magic=%s;extension=\"%s\";", generic_get_magic(), generic_get_ext());
             break;
@@ -675,7 +683,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
 
         if (st == SEC_DICT || st == SEC_B250 || st == SEC_LOCAL || st == SEC_COUNTS) continue; // these are covered by individual contexts
 
-        s->txt_len    = st == SEC_TXT_HEADER  ? z_file->header_size : 0; // note: MAIN header only, ie excluding generated headers for DVCF
+        s->txt_len    = st == SEC_TXT_HEADER  ? z_file->header_size : 0; // note: excluding generated headers for DVCF
         s->type       = (st==SEC_REFERENCE || st==SEC_REF_IS_SET || st==SEC_REF_CONTIGS || st == SEC_CHROM2REF_MAP || st==SEC_REF_IUPACS) ? "SEQUENCE" 
                       : (st==SEC_RANDOM_ACCESS || st==SEC_REF_RAND_ACC)                                                                   ? "RandomAccessIndex"
                       :                                                                                                                     "Other"; // note: some contexts appear as "Other" in --stats, but in --STATS their parent is themself, not "Other"

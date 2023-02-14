@@ -609,7 +609,7 @@ void txtfile_read_vblock (VBlockP vb)
 
 DataType txtfile_get_file_dt (rom filename)
 {
-    FileType ft = file_get_stdin_type(); // check for --input option
+    FileType ft = flag.stdin_type; // check for --input option
 
     if (ft == UNKNOWN_FILE_TYPE) // no --input - get file type from filename
         ft = file_get_type (filename);

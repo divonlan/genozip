@@ -17,27 +17,11 @@
 #include "segconf.h"
 #include "codec.h"
 
-static void sam_seg_POS_segconf (VBlockSAMP vb, WordIndex prev_line_chrom, SamPosType pos, SamPosType prev_line_pos)
-{
-    // evidence of not being sorted: our RNAME is the same as the previous line, but POS has decreased
-    if (segconf.is_sorted && prev_line_chrom == vb->chrom_node_index && prev_line_pos > pos)
-        segconf.is_sorted = false;
-
-    // evidence of not being sorted: our RNAME is different than previous line, but we encountered it before
-    if (segconf.is_sorted && (prev_line_chrom != NODE_INDEX_NONE) && (prev_line_chrom != vb->chrom_node_index) && 
-        *B32 (CTX(SAM_RNAME)->counts, vb->chrom_node_index) > 1) // 1 if it has been segged on this line for the first time
-        segconf.is_sorted = false;
-    
-    // evidence of being sorted: same RNAME, increasing POS
-    if (prev_line_chrom == vb->chrom_node_index && prev_line_pos <= pos)
-        segconf.evidence_of_sorted = true;
-}
-
-SamPosType sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM *dl, WordIndex prev_line_chrom, unsigned add_bytes)
+PosType32 sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM *dl, WordIndex prev_line_chrom, unsigned add_bytes)
 {
     ZipDataLineSAM *mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
-    SamPosType pos = dl->POS;
-    SamPosType prev_line_pos = vb->line_i ? (dl-1)->POS : 0;
+    PosType32 pos = dl->POS;
+    PosType32 prev_line_pos = vb->line_i ? (dl-1)->POS : 0;
 
     bool do_mux = sam_is_main_vb && segconf.is_paired; // for simplicity. To do: also for prim/depn components
     int channel_i = sam_has_mate?1 : sam_has_prim?2 : 0;
@@ -77,7 +61,7 @@ SamPosType sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM *dl, WordIndex prev_line_c
 
     random_access_update_pos (VB, 0, SAM_POS);
 
-    if (segconf.running) sam_seg_POS_segconf (vb, prev_line_chrom, pos, prev_line_pos);
+    if (segconf.running) segconf_test_sorted (VB, prev_line_chrom, pos, prev_line_pos);
 
     return pos;
 }
@@ -87,7 +71,7 @@ static inline int sam_PNEXT_get_mux_channel (VBlockSAMP vb, bool rnext_is_equal)
     return sam_has_mate?0 : sam_has_prim?1 : rnext_is_equal?2 : 3;
 }
 
-void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pnext_str)/* option 1 */, SamPosType pnext/* option 2 */, unsigned add_bytes)
+void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(pnext_str)/* option 1 */, PosType32 pnext/* option 2 */, unsigned add_bytes)
 {
     if (pnext_str) 
         ASSSEG (str_get_int_range32 (STRa(pnext_str), 0, MAX_POS_SAM, &pnext), pnext_str,

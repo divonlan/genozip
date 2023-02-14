@@ -148,7 +148,7 @@ missing:
 }
 
 // ZIP: VCF main component (rejects components txt headers don't have contigs)
-static void vcf_header_consume_contig (STRp (contig_name), PosType *LN, bool is_luft_contig)
+static void vcf_header_consume_contig (STRp (contig_name), PosType64 *LN, bool is_luft_contig)
 {
     WordIndex ref_index = WORD_INDEX_NONE;
 
@@ -372,7 +372,7 @@ static void vcf_header_zip_convert_header_to_dc_add_lines (BufferP new_header)
     for (unsigned i=0; i < dst_contig_len; i++) {
         if (i && dst_contig[i] == dst_contig[i-1]) continue; // skip duplicate
 
-        PosType length;
+        PosType64 length;
         rom luft_contig = chain_get_luft_contig (dst_contig[i], &length);
 
         if (length) bufprintf (evb, new_header, HK_LUFT_CONTIG"<ID=%s,length=%"PRId64">\n", luft_contig, length);
@@ -558,7 +558,7 @@ static bool vcf_header_handle_contigs (STRp(line), void *new_txt_header_, void *
 
     ASSERT0 (!chain_is_loaded || (!is_lo_contig && !is_lb_contig), "Cannot use --chain on this file because it already contains \""HK_LUFT_CONTIG"\" or \"" HK_PRIM_CONTIG"\" lines in its header");
 
-    PosType LN = 0;
+    PosType64 LN = 0;
     unsigned key_len = is_contig    ? STRLEN (HK_CONTIG)
                      : is_lb_contig ? STRLEN (HK_PRIM_CONTIG)
                      :                STRLEN (HK_LUFT_CONTIG);
@@ -591,8 +591,12 @@ static bool vcf_header_handle_contigs (STRp(line), void *new_txt_header_, void *
                 LN = ref_contigs_get_contig_length (ref, ref_index, 0, 0, true);   // update - we check later that it is consistent
             }
 
+            int32_t len_before = new_txt_header->len32; 
             bufprintf (evb, new_txt_header, "%.*s<ID=%.*s,length=%"PRIu64">\n", key_len, line, STRf(contig_name), LN);
             printed = true;
+
+            int32_t new_line_len = (int32_t)new_txt_header->len32 - len_before;
+            z_file->header_size += new_line_len - (int32_t)line_len; // header_size now has the growth in the size due to --match. the base will be added in txtheader_zip_read_and_compress
         }
 
         vcf_header_consume_contig (STRa (contig_name), &LN, false); // also verifies / updates length

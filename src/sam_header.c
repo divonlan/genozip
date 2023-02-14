@@ -40,12 +40,12 @@ uint32_t sam_num_header_contigs (void)
     return sam_hdr_contigs ? sam_hdr_contigs->contigs.len32 : 0;
 }
 
-static void sam_header_get_ref_index (STRp (contig_name), PosType LN, void *ref_index)
+static void sam_header_get_ref_index (STRp (contig_name), PosType64 LN, void *ref_index)
 {
     *(WordIndex *)ref_index = ref_contigs_ref_chrom_from_header_chrom (gref, STRa(contig_name), &LN); // also verifies LN
 }
 
-static void sam_header_add_contig (STRp (contig_name), PosType LN, void *out_ref_index)
+static void sam_header_add_contig (STRp (contig_name), PosType64 LN, void *out_ref_index)
 {
     WordIndex ref_index;
 
@@ -55,8 +55,11 @@ static void sam_header_add_contig (STRp (contig_name), PosType LN, void *out_ref
 
         // case --match-chrom-to-reference
         if (flag.match_chrom_to_reference) {
-            if (ref_index != WORD_INDEX_NONE) // udpate contig name, if this contig is in the reference
+            if (ref_index != WORD_INDEX_NONE) { // udpate contig name, if this contig is in the reference
+                z_file->header_size -= (int32_t)contig_name_len;
                 contig_name = ref_contigs_get_name (gref, ref_index, &contig_name_len);
+                z_file->header_size += contig_name_len; // header_size now has the growth in the size due to --match. the base will be added in txtheader_zip_read_and_compress
+            }
 
             *(WordIndex*)out_ref_index = ref_index;
         }
@@ -67,7 +70,7 @@ static void sam_header_add_contig (STRp (contig_name), PosType LN, void *out_ref
 
     // In case of REF_INTERNAL compression, and we have a header contigs - we calculate their GPOS
     Contig *prev = sam_hdr_contigs->contigs.len ? B(Contig, sam_hdr_contigs->contigs, sam_hdr_contigs->contigs.len-1) : NULL;
-    PosType gpos = (IS_REF_INTERNAL && prev) ? ROUNDUP64 (prev->gpos + prev->max_pos) : 0; // similar to ref_make_prepare_range_for_compress
+    PosType64 gpos = (IS_REF_INTERNAL && prev) ? ROUNDUP64 (prev->gpos + prev->max_pos) : 0; // similar to ref_make_prepare_range_for_compress
 
     // add to contigs. note: index is sam_hdr_contigs is by order of appearance in header, not the same as the reference
     BNXT (Contig, sam_hdr_contigs->contigs) = (Contig){ 
@@ -128,7 +131,7 @@ static void foreach_textual_SQ_line (rom txt_header, // nul-terminated string if
                 unsigned chrom_name_len = strcspn (&chrom_name[3], "\t\n\r");
                 rom after_chrom = chrom_name + chrom_name_len + STRLEN("SN:");
 
-                PosType last_pos = (PosType)strtoull (&pos_str[3], NULL, 10);
+                PosType64 last_pos = (PosType64)strtoull (&pos_str[3], NULL, 10);
 
                 ASSINP (last_pos <= MAX_POS_SAM, "Error: @SQ record in header contains LN:%"PRId64" which is beyond the maximum permitted by the SAM spec of %"PRId64,
                         last_pos, MAX_POS_SAM);
@@ -382,7 +385,20 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
 
     // note: this file *might* be of bisulfite-treated reads. 
     // This variable might be reset after segconf if it fails additonal conditions 
-    segconf.sam_bisulfite = MP(BISMARK) || MP(BSSEEKER2) || MP(DRAGEN) || MP(BSBOLT) || MP(GEM3);
+    segconf.sam_bisulfite     = MP(BISMARK) || MP(BSSEEKER2) || MP(DRAGEN) || MP(BSBOLT) || MP(GEM3);
+    segconf.is_bwa            = MP(BWA) || MP(BSBOLT) || MP (CPU);            // aligners based on bwa
+    segconf.is_minimap2       = MP(MINIMAP2) || MP(WINNOWMAP) || MP(PBMM2);   // aligners based on minimap2
+    segconf.is_bowtie2        = MP(BOWTIE2) || MP(HISAT2) || MP(TOPHAT) || MP(BISMARK) || MP(BSSEEKER2); // aligners based on bowtie2
+
+    segconf.sam_has_SA_Z      = segconf.is_bwa || segconf.is_minimap2 || MP(NGMLR); /*|| MP(LONGRANGER); non-standard SA:Z format (POS is off by 1, main-field NM is missing) */ 
+    segconf.sam_has_BWA_XA_Z  = (segconf.is_bwa || MP(GEM3) || MP(GEM2SAM) || MP(DELVE) || MP(DRAGEN)) ? yes 
+                              : MP(TMAP)                                                               ? no 
+                              :                                                                          unknown;
+    segconf.sam_has_BWA_XS_i  = segconf.is_bwa || MP(TMAP) || MP(GEM3) || (segconf.is_bowtie2 && !MP(HISAT2)) || MP(CPU) || MP(LONGRANGER) || MP(DRAGEN);
+    segconf.sam_has_BWA_XM_i  = segconf.is_bwa || segconf.is_bowtie2 || MP(NOVOALIGN) || MP(DRAGEN);
+    segconf.sam_has_BWA_XT_A  = segconf.is_bwa || MP(DRAGEN);
+    segconf.sam_has_BWA_XC_i  = segconf.is_bwa || MP(DRAGEN);
+    segconf.sam_has_BWA_X01_i = segconf.is_bwa || MP(DRAGEN);
 
     // build buffer of unique PN+ID fields, for stats
     sam_header_zip_build_hdr_PGs (hdr, after);
@@ -404,7 +420,7 @@ done:
 }
 
 typedef struct { uint32_t n_contigs, dict_len; } ContigsCbParam;
-static void sam_header_count_contigs_cb (STRp(chrom_name), PosType last_pos, void *cb_param)
+static void sam_header_count_contigs_cb (STRp(chrom_name), PosType64 last_pos, void *cb_param)
 {
     // note: for simplicity, we consider contigs to be in the range [0, last_pos] even though POS=0 doesn't exist - last_pos+1 loci
     ((ContigsCbParam*)cb_param)->n_contigs++;
@@ -621,12 +637,12 @@ TXTHEADER_TRANSLATOR (sam_header_bam2sam)
     sam_header_add_PG (txtheader_buf);
 }
 
-static void sam_header_sam2bam_count_sq (rom chrom_name, unsigned chrom_name_len, PosType last_pos, void *callback_param)
+static void sam_header_sam2bam_count_sq (rom chrom_name, unsigned chrom_name_len, PosType64 last_pos, void *callback_param)
 {
     (*(uint32_t *)callback_param)++;
 }
 
-static void sam_header_sam2bam_ref_info (STRp (ref_contig_name), PosType last_pos, void *callback_param)
+static void sam_header_sam2bam_ref_info (STRp (ref_contig_name), PosType64 last_pos, void *callback_param)
 {
     BufferP txtheader_buf = (BufferP )callback_param;
 

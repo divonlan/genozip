@@ -16,7 +16,7 @@
 // -----------------------------------------------------------------------------------------------------------
 // Common contexts of FASTQ and SAM - these MUST be first in same order exactly in SAM/FASTQ for Deep to work.
 // -----------------------------------------------------------------------------------------------------------
-#pragma GENDICT FASTQ_CONTIG=DTYPE_FIELD=RNAME      // must be first - did_i=0=CHROM (up to v14 the dict_id was CONTIG)
+#pragma GENDICT FASTQ_CONTIG=DTYPE_FIELD=CONTIG     // must be first - did_i=0=CHROM. Note: not used in --deep, bc conflicts with SAM's RNAME
 
 #pragma GENDICT FASTQ_DESC=DTYPE_FIELD=QNAME        // Q?NAME must immediately follow (up to v14 the dict_id was DESC)
 #pragma GENDICT FASTQ_Q0NAME=DTYPE_1=Q0NAME         // MAX_QNAME_ITEMS fixed qname items must have a did_i directly after container's (MUST be the same dict_id as in sam.h)
@@ -111,7 +111,7 @@ extern void fastq_seg_initialize();
 extern void fastq_seg_finalize();
 extern bool fastq_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern rom fastq_seg_txt_line();
-extern void fastq_seg_pair2_gpos (VBlockP vb, PosType pair1_pos, PosType pair2_gpos);
+extern void fastq_seg_pair2_gpos (VBlockP vb, PosType64 pair1_pos, PosType64 pair2_gpos);
 
 // PIZ Stuff
 extern void fastq_piz_process_recon (VBlockP vb);

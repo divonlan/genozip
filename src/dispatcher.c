@@ -26,6 +26,7 @@
 typedef struct DispatcherData {
     rom task_name;
     VBlockPoolType pool_type;
+    uint32_t pool_in_use_at_init;  // Used to verify that all VBs allocated by dispatcher are released by finish time
     uint32_t max_vb_id_so_far; 
     VBlockP vbs[MAX_COMPUTED_VBS]; // VBs currently in the pipeline (with a compute thread or just before or after)
     VBlockP processed_vb;     // processed VB returned to caller (VB moved from the "vbs" field to this field)
@@ -113,6 +114,8 @@ Dispatcher dispatcher_init (rom task_name, VBlockPoolType pool_type, uint32_t ma
     if (!flag.unbind && filename) // note: for flag.unbind (in main file), we print this in dispatcher_resume() 
         d->progress_prefix = progress_new_component (filename, prog_msg, test_mode); 
 
+    d->pool_in_use_at_init = vb_pool_get_num_in_use (pool_type); // we need to return the pool after dispatcher in the condition we received it...
+
     return d;
 }
 
@@ -166,6 +169,10 @@ void dispatcher_finish (Dispatcher *dd_p, uint32_t *last_vb_i, bool cleanup_afte
     if (last_vb_i) *last_vb_i = d->next_vb_i; // for continuing vblock_i count between subsequent bound files
 
     if (main_dispatcher == *dd_p) main_dispatcher = 0;
+
+    uint32_t pool_in_use_at_finish = vb_pool_get_num_in_use (d->pool_type);
+    ASSERT (pool_in_use_at_finish == d->pool_in_use_at_init, "Dispatcher \"%s\" leaked VBs: pool_in_use_at_init=%u pool_in_use_at_finish=%u",
+            d->task_name, d->pool_in_use_at_init, pool_in_use_at_finish);
 
     FREE (d->progress_prefix);
     FREE (*dd_p);
@@ -262,7 +269,7 @@ VBlockP dispatcher_get_processed_vb (Dispatcher d, bool *is_final, bool blocking
 
         if (nj == -1) return NULL; // blocking=false and no processed VBs 
 
-        threads_join (&d->vbs[nj]->compute_thread_id); // blocking if no processed VB yet and blocking=true
+        threads_join (&d->vbs[nj]->compute_thread_id, d->vbs[nj]->preprocessing ? PREPROCESSING_TASK_NAME : d->task_name); // blocking if no processed VB yet and blocking=true
         d->last_joined = nj;
     }
 

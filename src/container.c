@@ -123,7 +123,7 @@ static uint32_t count_repsep (STRp (str), char repsep)
 }
 
 // PIZ: peek a context, which is normally a container: if it is a container, return the number of
-// repeats. If it is not a container, or if the container is already reconstructedm
+// repeats. If it is not a container, or if the container is already reconstructed,
 // calculate repeats by counting the number of repsep's (and adding +1 if repsep isn't the final character)
 uint32_t container_peek_repeats (VBlockP vb, ContextP ctx, char repsep)
 {

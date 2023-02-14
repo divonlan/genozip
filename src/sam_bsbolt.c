@@ -59,7 +59,7 @@ void sam_seg_bsbolt_XB_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl)
     RangeP range = NULL;
     RefLock lock = REFLOCK_NONE;
     uint32_t ref_consumed = vb->ref_consumed; // M/=/X and D
-    SamPosType pos = dl->POS;
+    PosType32 pos = dl->POS;
     uint32_t number=0;
 
     #define set_number ({ if (!number) {                                \

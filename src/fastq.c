@@ -52,18 +52,13 @@ bool is_fastq (STRp(header), bool *need_more)
 {
     if (!header_len || header[0] != '@' || !str_is_printable (STRa(header))) return false;
 
-    int num_newlines = str_count_char (STRa(header), '\n');
-    if (num_newlines > 10000) return false; // if num_newlines is huge (for a HEADER_BLOCK=256K header), this is most likely not FASTQ, and we end here as this might cause a stack overflow
-
-    if (num_newlines < 4) {
+    str_split (header, header_len, 0, '\n', line, false); // 4 (maybe) FASTQ lines and everything else if the 5th line
+    if (n_lines < 4) {
         *need_more = true; // we can't tell yet - need more data
         return false;
     }
 
-    str_split (header, header_len, num_newlines+1, '\n', line, false);
-
-    return line_lens[1] > 0 && line_lens[1] == line_lens[3] && // SEQ and QUAL lines are of equal length
-           line_lens[3] > 0 && lines[3][0] == '+';
+    return line_lens[1] > 0 && line_lens[1] == line_lens[3] && lines[2][0] == '+'; // SEQ and QUAL lines are of equal length
 }
 
 // returns true if txt_data[txt_i] (which is a \n) is the end of a FASTQ record (= block of 4 lines in the file); -1 if out of data
@@ -236,7 +231,7 @@ void fastq_zip_initialize (void)
 
     // with REF_EXTERNAL, we don't know which chroms are seen (bc unlike REF_EXT_STORE, we don't use is_set), so
     // we just copy all reference contigs. this are not needed for decompression, just for --coverage/--sex/--idxstats
-    if (IS_REF_EXTERNAL && z_file->num_txts_so_far == 1) // first file
+    if (IS_REF_EXTERNAL && z_file->num_txts_so_far == 1 && !flag.deep) // first file
         ctx_populate_zf_ctx_from_contigs (gref, FASTQ_CONTIG, ref_get_ctgs (gref)); 
 
     qname_zip_initialize (FASTQ_DESC);
@@ -260,7 +255,8 @@ void fastq_seg_initialize (VBlockFASTQP vb)
 {
     START_TIMER;
 
-    CTX(FASTQ_CONTIG)->flags.store = STORE_INDEX; // since v12
+    if (!flag.deep)
+        CTX(FASTQ_CONTIG)->flags.store = STORE_INDEX; // since v12
 
     Context *gpos_ctx     = CTX(FASTQ_GPOS);
     Context *strand_ctx   = CTX(FASTQ_STRAND);
@@ -276,6 +272,11 @@ void fastq_seg_initialize (VBlockFASTQP vb)
         
         sqbitmap_ctx->ltype     = LT_BITMAP; // implies no_stons
         sqbitmap_ctx->local_always = true;
+
+        // cannot all_the_same with no b250 for PAIR_1 - SQBITMAP.b250 is tested in fastq_get_pair_1_gpos_strand
+        // See defect 2023-02-11. We rely on this "no_drop_b250" in fastq_piz_get_pair2_is_forward 
+        if (vb->comp_i == FQ_COMP_R1)
+            sqbitmap_ctx->no_drop_b250 = true; 
 
         buf_alloc (vb, &sqbitmap_ctx->local, 1, vb->txt_data.len / 4, uint8_t, 0, "contexts->local"); 
         buf_alloc (vb, &strand_ctx->local, 0, roundup_bits2bytes64 (vb->lines.len), uint8_t, 0, "contexts->local"); 
@@ -393,7 +394,7 @@ bool fastq_seg_is_small (ConstVBlockP vb, DictId dict_id)
 // returns true if successful, false if there isn't a vb with vb_i in the previous file
 bool fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i, bool must_have)
 {
-    VBlockFASTQP vb = (VBlockFASTQP )vb_;
+    VBlockFASTQP vb = (VBlockFASTQP)vb_;
     uint64_t save_disk_so_far = z_file->disk_so_far;
 
     vb->pair_vb_i = pair_vb_i;
@@ -631,9 +632,6 @@ void fastq_piz_process_recon (VBlockP vb)
 {
     if (flag.collect_coverage)    
         coverage_add_one_vb (vb);
-    
-    if (flag.reading_kraken)
-        kraken_piz_handover_data (vb);
 }
 
 // returns true if section is to be skipped reading / uncompressing

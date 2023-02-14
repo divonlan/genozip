@@ -61,7 +61,7 @@ WordIndex seg_known_node_index (VBlockP vb, ContextP ctx, WordIndex node_index, 
     return node_index;
 }
 
-WordIndex seg_duplicate_last(VBlockP vb, ContextP ctx, unsigned add_bytes) 
+WordIndex seg_duplicate_last (VBlockP vb, ContextP ctx, unsigned add_bytes) 
 { 
     ASSERTISALLOCED (ctx->b250);
     return seg_known_node_index (vb, ctx, LASTb250(ctx), add_bytes); 
@@ -349,10 +349,10 @@ ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux, uint3
 
 // scans a pos field - in case of non-digit or not in the range [0,MAX_POS], either returns -1
 // (if allow_nonsense) or errors
-static PosType seg_scan_pos_snip (VBlockP vb, rom snip, unsigned snip_len, bool zero_is_bad, 
+static PosType64 seg_scan_pos_snip (VBlockP vb, rom snip, unsigned snip_len, bool zero_is_bad, 
                                   SegError *err) // out - if NULL, exception if error
 {
-    PosType value=0;
+    PosType64 value=0;
     bool is_int = str_get_int (snip, snip_len, &value); // value unchanged if not integer
 
     if (is_int && value >= !!zero_is_bad && value <= MAX_POS) {
@@ -368,14 +368,14 @@ static PosType seg_scan_pos_snip (VBlockP vb, rom snip, unsigned snip_len, bool 
 }
 
 // returns POS value if a valid pos, or 0 if not
-PosType seg_pos_field (VBlockP vb, 
-                       Did snip_did_i,    // mandatory: the ctx the snip belongs to
-                       Did base_did_i,    // mandatory: base for delta
-                       unsigned opt,      // a combination of SPF_* options
-                       char missing,      // a character allowed (meaning "missing value"), segged as SNIP_DONT_STORE
-                       STRp(pos_str),     // option 1
-                       PosType this_pos,  // option 2
-                       unsigned add_bytes)     
+PosType64 seg_pos_field (VBlockP vb, 
+                         Did snip_did_i,    // mandatory: the ctx the snip belongs to
+                         Did base_did_i,    // mandatory: base for delta
+                         unsigned opt,      // a combination of SPF_* options
+                         char missing,      // a character allowed (meaning "missing value"), segged as SNIP_DONT_STORE
+                         STRp(pos_str),     // option 1
+                         PosType64 this_pos,  // option 2
+                         unsigned add_bytes)     
 {
     ContextP snip_ctx = CTX(snip_did_i);
     ContextP base_ctx = CTX(base_did_i);
@@ -416,7 +416,7 @@ PosType seg_pos_field (VBlockP vb,
         }
     }
 
-    PosType pos_delta = this_pos - base_ctx->last_value.i;
+    PosType64 pos_delta = this_pos - base_ctx->last_value.i;
     
     ctx_set_last_value (vb, snip_ctx, this_pos);
 
@@ -832,6 +832,14 @@ WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_
     if (use_integer_delta || container_ctx->flags.store == STORE_INT) 
         arr_ctx->flags.store = STORE_INT;
 
+    // case: value ends with a separator
+    if (value[value_len-1] == sep) {
+        con->drop_final_repsep = false;
+        value_len--;
+    }
+    else
+        con->drop_final_repsep = true;
+
     // count repeats (1 + number of seperators)
     con->repeats=1;
     for (int32_t i=0; i < value_len; i++) 
@@ -890,7 +898,7 @@ WordIndex seg_array (VBlockP vb, ContextP container_ctx, Did stats_conslidation_
         value++;
     }
 
-    return container_seg (vb, container_ctx, (ContainerP)con, 0, 0, con->repeats-1 + additional_bytes); // acount for separators and additional bytes
+    return container_seg (vb, container_ctx, (ContainerP)con, 0, 0, con->repeats - con->drop_final_repsep + additional_bytes); // acount for separators and additional bytes
 }
 
 bool seg_do_nothing_cb (VBlockP vb, ContextP ctx, STRp(field), uint32_t rep)
@@ -1030,7 +1038,8 @@ bool seg_by_container (VBlockP vb, ContextP ctx, ContainerP con, STRp(value),
 void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, STRp(data), bool add_nul, Lookup lookup_type, bool is_singleton, unsigned add_bytes) 
 {
 #ifdef DEBUG
-    ASSERT (is_singleton || ctx->no_stons || ctx->ltype != LT_TEXT, "ctx %s requires no_stons or should have an ltype other than LT_TEXT", ctx->tag_name);
+    ASSERT (is_singleton || ctx->no_stons || ctx->ltype != LT_TEXT || segconf.running, 
+            "%s: ctx %s requires no_stons or should have an ltype other than LT_TEXT", LN_NAME, ctx->tag_name);
 #endif
 
     buf_alloc (vb, &ctx->local, data_len + add_nul, 100000, char, CTX_GROWTH, "contexts->local");
@@ -1192,7 +1201,7 @@ void seg_all_data_lines (VBlockP vb)
     ASSERT (!vb->txt_data.len || vb->reread_prescription.len || *BLSTtxt == '\n' || !DTP(vb_end_nl), "%s: %s txt_data unexpectedly doesn't end with a newline. Last 10 chars: \"%10s\"", 
             VB_NAME, dt_name(vb->data_type), Btxt (vb->txt_data.len32 - MIN_(10,vb->txt_data.len32)));
 
-    ctx_initialize_predefined_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_contexts); // Create ctx for the fields in the correct order 
+    ctx_initialize_predefined_ctxs (vb->contexts, vb->data_type, vb->d2d_map, &vb->num_contexts); // Create ctx for the fields in the correct order 
  
     // allocate the b250 for the fields which each have num_lines entries
     for (Did did_i=0; did_i < DTF(num_fields); did_i++)

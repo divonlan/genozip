@@ -105,17 +105,17 @@ Bits aligner_seq_to_bitmap (rom seq, uint64_t seq_len,
 // returns gpos aligned with seq with M (as in CIGAR) length, containing the longest match to the reference. 
 // returns false if no match found.
 // note: matches that imply a negative GPOS (i.e. their beginning is aligned to before the start of the genome), aren't consisdered
-static inline PosType aligner_best_match (VBlockP vb, STRp(seq), PosType pair_gpos,
-                                          ConstBitsP genome, ConstBitsP emoneg, PosType genome_nbases,
+static inline PosType64 aligner_best_match (VBlockP vb, STRp(seq), PosType64 pair_gpos,
+                                          ConstBitsP genome, ConstBitsP emoneg, PosType64 genome_nbases,
                                           bool *is_forward, bool *is_all_ref) // out
 {
     START_TIMER;
 
     int32_t/*signed*/ longest_len=0; // longest number of bits (not bases!) that match
     uint32_t refhash_word;
-    const PosType seq_len_64 = (PosType)seq_len; // 64 bit version of seq_len
+    const PosType64 seq_len_64 = (PosType64)seq_len; // 64 bit version of seq_len
     
-    PosType gpos = NO_GPOS, best_gpos = NO_GPOS; // match not found yet
+    PosType64 gpos = NO_GPOS, best_gpos = NO_GPOS; // match not found yet
     bool best_is_forward = false;
     
     // convert seq to a bitmap
@@ -148,7 +148,7 @@ static inline PosType aligner_best_match (VBlockP vb, STRp(seq), PosType pair_gp
             seq[i] == HOOK && seq[i+1] != HOOK &&  // take the G - if there is a polymer GGGG... take the last one
             aligner_get_word_from_seq (vb, &seq[i+1], &refhash_word, 1)) { 
 
-            gpos = (PosType)BGEN32 (refhashs[0][refhash_word & layer_bitmask[0]]); // position of the start of the G... sequence in the genome
+            gpos = (PosType64)BGEN32 (refhashs[0][refhash_word & layer_bitmask[0]]); // position of the start of the G... sequence in the genome
             
             if (gpos != NO_GPOS) {
                 gpos -= i; // gpos is the first base on the reference, that aligns to the first base of seq
@@ -160,7 +160,7 @@ static inline PosType aligner_best_match (VBlockP vb, STRp(seq), PosType pair_gp
             seq[i] == HOOK_REV && seq[i-1] != HOOK_REV &&  // take the G - if there is a polymer GGGG... take the last one
             aligner_get_word_from_seq (vb, &seq[i-1], &refhash_word, -1)) { 
 
-            gpos = (PosType)BGEN32 (refhashs[0][refhash_word & layer_bitmask[0]]); // position of the start of the G... sequence in the FORWARD genome
+            gpos = (PosType64)BGEN32 (refhashs[0][refhash_word & layer_bitmask[0]]); // position of the start of the G... sequence in the FORWARD genome
             
             if (gpos != NO_GPOS) {
                 gpos -= seq_len_64-1 - i; // gpos is the first base of the reference, that aligns wit the LAST base of seq
@@ -202,7 +202,7 @@ static inline PosType aligner_best_match (VBlockP vb, STRp(seq), PosType pair_gp
 
             if (finds[find_i].found == NOT_FOUND) continue;
 
-            gpos = (PosType)BGEN32 (refhashs[layer_i][finds[find_i].refhash_word & layer_bitmask[layer_i]]); 
+            gpos = (PosType64)BGEN32 (refhashs[layer_i][finds[find_i].refhash_word & layer_bitmask[layer_i]]); 
 
             if (gpos == NO_GPOS) {
                 finds[find_i].found = NOT_FOUND; // if we can't find it in this layer, we won't find it in the next layers either
@@ -227,12 +227,12 @@ done:
 }
 
 MappingType aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq), bool no_bitmap_if_perfect,
-                             bool is_pair_2, PosType pair_gpos, bool pair_is_forward)
+                             bool is_pair_2, PosType64 pair_gpos, bool pair_is_forward)
 {
     START_TIMER;
 
     ConstBitsP genome, emoneg;
-    PosType genome_nbases;
+    PosType64 genome_nbases;
     ref_get_genome (gref, &genome, &emoneg, &genome_nbases);
 
     // these 4 contexts are consecutive and in the same order for all relevant data_types in data_types.h
@@ -244,7 +244,7 @@ MappingType aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq), bool no
 
     // our aligner algorithm only works for short reads - long reads tend to have many Indel differences (mostly errors) vs the reference
     #define MAX_SHORT_READ_LEN 2500
-    PosType gpos = (seq_len <= MAX_SHORT_READ_LEN && !segconf.running) 
+    PosType64 gpos = (seq_len <= MAX_SHORT_READ_LEN && !segconf.running) 
                  ? aligner_best_match (VB, STRa(seq), pair_gpos, genome, emoneg, genome_nbases, &is_forward, &is_all_ref) : NO_GPOS; 
 
     if (gpos == NO_GPOS || gpos > genome_nbases - seq_len || gpos > MAX_ALIGNER_GPOS - seq_len || gpos < 0/*never happens*/) {
@@ -255,7 +255,7 @@ MappingType aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq), bool no
     if (flag.show_aligner)
         iprintf ("%s: gpos=%"PRId64" forward=%s\n", LN_NAME, gpos, TF(is_forward));
 
-    Bits *bitmap = (BitsP)&bitmap_ctx->local;
+    BitsP bitmap = (BitsP)&bitmap_ctx->local;
 
     // allocate bitmaps - don't provide name to avoid re-writing param which would overwrite nbits that overlays it 
     if (!no_bitmap_if_perfect || !is_all_ref) {
@@ -272,7 +272,7 @@ MappingType aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq), bool no
     buf_alloc (vb, &gpos_ctx->local, 1, 0, uint32_t, CTX_GROWTH, NULL); 
 
     buf_add_bit (&strand_ctx->local, pair_gpos == NO_GPOS ? is_forward // pair 1 is unaligned - just store the strand
-                                   :                        (is_forward == pair_is_forward)); // pair 1 is aligned aligned - store equality, expected to he 1 in most cases
+                                                          : (is_forward == pair_is_forward)); // pair 1 is aligned aligned - store equality, expected to he 1 in most cases
             
     if (is_pair_2) 
         fastq_seg_pair2_gpos (vb, pair_gpos, gpos);
@@ -306,7 +306,7 @@ MappingType aligner_seg_seq (VBlockP vb, ContextP bitmap_ctx, STRp(seq), bool no
         // case our seq is identical to the reference at this site
         char seq_base = is_forward ? seq[i] : complement[(uint8_t)seq[i]];
         
-        PosType ref_i = gpos + (is_forward ? i : seq_len-1-i);
+        PosType64 ref_i = gpos + (is_forward ? i : seq_len-1-i);
         
         uint8_t ref_base_2bit = bits_get2 (genome, ref_i * 2);
         char ref_base = acgt_decode(ref_base_2bit);
@@ -344,7 +344,7 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
     if (is_perfect_alignment || buf_is_alloc (&bitmap_ctx->local)) { // not all non-ref
 
         bool is_forward;
-        PosType gpos;
+        PosType64 gpos;
 
         // first file of a pair ("pair 1") or a non-pair fastq or sam
         if (!is_pair_2) {
@@ -365,7 +365,7 @@ void aligner_reconstruct_seq (VBlockP vb, ContextP bitmap_ctx, uint32_t seq_len,
             iprintf ("%s: gpos=%"PRId64" forward=%s\n", LN_NAME, gpos, TF(is_forward));
 
         const Bits *genome=NULL;
-        PosType genome_nbases;
+        PosType64 genome_nbases;
         
         if (gpos != NO_GPOS) { 
             ref_get_genome (gref, &genome, NULL, &genome_nbases);

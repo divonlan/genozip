@@ -18,8 +18,33 @@
 #include "arch.h"
 #include "bgzf.h"
 #include "tip.h"
+#include "qname.h"
 
 SegConf segconf = {}; // system-wide global
+
+// figure out if file is sorted or not
+void segconf_test_sorted (VBlockP vb, WordIndex prev_line_chrom, PosType32 pos, PosType32 prev_line_pos)
+{
+    // evidence of not being sorted: our CHROM is the same as the previous line, but POS has decreased
+    if (segconf.is_sorted && prev_line_chrom == vb->chrom_node_index && prev_line_pos > pos)
+        segconf.is_sorted = false;
+
+    // evidence of not being sorted: our CHROM is different than previous line, but we encountered it before
+    if (segconf.is_sorted && (prev_line_chrom != NODE_INDEX_NONE) && (prev_line_chrom != vb->chrom_node_index) && 
+        *B32 (CTX(CHROM)->counts, vb->chrom_node_index) > 1) // 1 if it has been segged on this line for the first time
+        segconf.is_sorted = false;
+    
+    // evidence of being sorted: same RNAME, increasing POS
+    if (prev_line_chrom == vb->chrom_node_index && prev_line_pos <= pos)
+        segconf.evidence_of_sorted = true;
+}
+
+void segconf_finalize_is_sorted (void)
+{
+    // case: if we haven't found any pair of consecutive lines with the same CHROM and non-descreasing POS, this is not a sorted file, despite no evidence of "not sorted". eg could be unique CHROMs.
+    if (!segconf.evidence_of_sorted)
+        segconf.is_sorted = false;
+}
 
 // mark contexts as used, for calculation of vb_size
 void segconf_mark_as_used (VBlockP vb, unsigned num_ctxs, ...)
@@ -177,15 +202,28 @@ static bool segconf_no_calculate (void)
 void segconf_initialize (void)
 {
     if (segconf_no_calculate()) return;
-
-    uint64_t save_vb_size = segconf.vb_size;
-    segconf = (SegConf){};
     
-    // note: data-type specific segconf values are initialized in *_seg_initialize
-    
-    if (z_file->num_txts_so_far > 0)
-        segconf.vb_size = save_vb_size; // components after first inherit vb_size from first
+    segconf = (SegConf){
+        .vb_size          = z_file->num_txts_so_far ? segconf.vb_size : 0, // components after first inherit vb_size from first
+        .is_sorted        = true,       // initialize optimistically
+        
+        // SAM stuff
+        .is_collated      = true,       // initialize optimistically
+        .MAPQ_has_single_value = true, // initialize optimistically
+        .NM_after_MD      = true,       // initialize optimistically
+        .nM_after_MD      = true,       // initialize optimistically
+        .sam_is_unmapped  = true,       // we will reset this if finding a line with POS>0
+        .SA_HtoS          = unknown,
+        .sam_XG_inc_S     = unknown,
+        .sam_has_BWA_XA_Z = unknown,
+        .CY_con_snip_len  = sizeof (segconf.CY_con_snip),
+        .QT_con_snip_len  = sizeof (segconf.QT_con_snip),
+        .CB_con_snip_len  = sizeof (segconf.CB_con_snip),
 
+        // FASTA stuff
+        .fasta_has_contigs = true, // initialize optimistically
+    };
+    
     mutex_initialize (segconf.PL_mux_by_DP_mutex);
 }
 
@@ -330,4 +368,9 @@ rom segconf_tech_name (void)
     ASSERT0 (ARRAY_LEN(tech_name) == NUM_TECHS, "Invalid TECH_NAME array length - perhaps missing commas between strings?");
 
     return (segconf.tech >= 0 && segconf.tech < NUM_TECHS) ? tech_name[segconf.tech] : "INVALID_MAPPER";
+}
+
+rom segconf_qf_name (void)
+{
+    return segconf.qname_flavor ? qf_name (segconf.qname_flavor) : "N/A";
 }

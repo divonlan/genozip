@@ -177,7 +177,7 @@ void chrom_calculate_ref2chrom (uint64_t num_ref_contigs)
 
 WordIndex chrom_seg_ex (VBlockP vb, Did did_i, 
                         STRp(chrom), 
-                        PosType LN,       // Optional, if readily known
+                        PosType64 LN,       // Optional, if readily known
                         bool *is_alt_out, // need iff flag.match_chrom_to_reference.
                         int add_bytes,    // must be signed
                         bool recon_changes_if_match, // whether reconstruction changes in case of change in chrom name due to --match-chrom

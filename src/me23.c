@@ -187,7 +187,7 @@ TXTHEADER_TRANSLATOR (txtheader_me232vcf)
         // get contig length from loaded reference
         STR(chrom_name);
         ctx_get_snip_by_word_index (ctx, chrom_i, chrom_name);
-        PosType contig_len = ref_contigs_get_contig_length (gref, WORD_INDEX_NONE, chrom_name, chrom_name_len, true);
+        PosType64 contig_len = ref_contigs_get_contig_length (gref, WORD_INDEX_NONE, chrom_name, chrom_name_len, true);
 
         bufprintf (comp_vb, txtheader_buf, VCF_HEAD_2, chrom_name, contig_len);
     }
@@ -230,7 +230,7 @@ TRANSLATOR_FUNC (sam_piz_m232vcf_GENOTYPE)
     // Genotype length expected to be 2 or 1 (for MT, Y)
     ASSERT (recon_len==1 || recon_len==2, "bad recon_len=%u", recon_len);
 
-    PosType pos = CTX(ME23_POS)->last_value.i;
+    PosType64 pos = CTX(ME23_POS)->last_value.i;
 
     // chroms don't have the same index in the ME23 z_file and in the reference file - we need to translate chrom_index
     WordIndex save_chrom_node_index = vb->chrom_node_index;

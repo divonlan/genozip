@@ -68,7 +68,7 @@ void vcf_seg_ILLUMINA_POS (VBlockVCFP vb, ContextP ctx, STRp(pos))
     else
         seg_by_ctx (VB, STRa(pos), ctx, pos_len);
 
-    PosType illumina_pos;
+    PosType64 illumina_pos;
     if (str_get_int (STRa(pos), &illumina_pos))
         ctx_set_last_value (VB, ctx, illumina_pos);
 }
@@ -88,7 +88,7 @@ void vcf_seg_PROBE_A (VBlockVCFP vb, ContextP ctx, STRp(probe))
         ctx_has_value (VB, INFO_ILLUMINA_STRAND)) {
 
         WordIndex strand = CTX(INFO_ILLUMINA_STRAND)->last_value.i;
-        PosType pos = vb->last_int(INFO_ILLUMINA_POS);
+        PosType64 pos = vb->last_int(INFO_ILLUMINA_POS);
         
         Range *range = ref_seg_get_range (VB, gref, vb->chrom_node_index, STRa(vb->chrom_name), pos - probe_len, probe_len*2 + 1, 
                                           WORD_INDEX_NONE, NULL, (IS_REF_EXT_STORE ? &lock : NULL));
@@ -96,7 +96,7 @@ void vcf_seg_PROBE_A (VBlockVCFP vb, ContextP ctx, STRp(probe))
         
         // test_fwd:
         bool is_rev = false;
-        PosType probe_pos = pos - probe_len + (strand==2 || strand==3);
+        PosType64 probe_pos = pos - probe_len + (strand==2 || strand==3);
         for (uint32_t i=0; i < probe_len; i++)
             if (probe[i] != REFp (probe_pos + i)) 
                 goto test_rev;
@@ -135,7 +135,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_PROBE_A)
     ConstRangeP range = ref_piz_get_range (vb, gref, HARD_FAIL);
 
     WordIndex strand = CTX(INFO_ILLUMINA_STRAND)->last_value.i;
-    PosType pos = vb->last_int(INFO_ILLUMINA_POS);
+    PosType64 pos = vb->last_int(INFO_ILLUMINA_POS);
     
     uint32_t probe_len;
     str_get_uint32 (snip+1, snip_len-1, &probe_len);
@@ -143,7 +143,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_PROBE_A)
     
     // forward
     if (*snip == '0') {
-        PosType probe_pos = pos - probe_len + (strand==2 || strand==3);
+        PosType64 probe_pos = pos - probe_len + (strand==2 || strand==3);
 
         for (uint32_t i=0; i < probe_len; i++)
             probe[i] = REFp (probe_pos+i);
@@ -151,7 +151,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_PROBE_A)
 
     // reverse complement
     else {
-        PosType probe_pos = pos + 1 - (strand==2 || strand==3);
+        PosType64 probe_pos = pos + 1 - (strand==2 || strand==3);
 
         for (uint32_t i=0; i < probe_len; i++)
             probe[probe_len - i - 1] = COMPLEM[(uint8_t)REFp (probe_pos + i)];

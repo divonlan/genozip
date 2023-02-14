@@ -192,7 +192,7 @@ TranslatorId vcf_lo_luft_trans_id (DictId dict_id, char number)
 }
 
 // SEG: map coordinates primary->luft. In case of failure, sets luft_ref_index, dst_1pos, xstrand to 0.
-LiftOverStatus vcf_lo_get_liftover_coords (VBlockVCFP vb, VcfPosType pos, WordIndex *luft_ref_index, VcfPosType *dst_1pos, bool *xstrand, uint32_t *aln_i) // out
+LiftOverStatus vcf_lo_get_liftover_coords (VBlockVCFP vb, PosType32 pos, WordIndex *luft_ref_index, PosType32 *dst_1pos, bool *xstrand, uint32_t *aln_i) // out
 {
     WordIndex prim_ref_index = chrom_2ref_seg_get (prim_ref, VB, vb->chrom_node_index);
     if (prim_ref_index == WORD_INDEX_NONE) { // primary CHROM is not in primary reference
@@ -204,9 +204,9 @@ LiftOverStatus vcf_lo_get_liftover_coords (VBlockVCFP vb, VcfPosType pos, WordIn
     }
     
     else {
-        PosType dst_1pos_64;
+        PosType64 dst_1pos_64;
         bool mapping_ok = chain_get_liftover_coords (prim_ref_index, pos, luft_ref_index, &dst_1pos_64, xstrand, aln_i); // if failure, sets output to 0.
-        if (dst_1pos) *dst_1pos = (VcfPosType)dst_1pos_64;
+        if (dst_1pos) *dst_1pos = (PosType32)dst_1pos_64;
         return mapping_ok ? LO_OK : LO_NO_MAPPING_IN_CHAIN_REF; // note: we call this function for testing the first and last POS of REF
     }
 }                                
@@ -350,7 +350,7 @@ void vcf_lo_set_rollback_point (VBlockVCFP vb)
 void vcf_lo_seg_generate_INFO_DVCF (VBlockVCFP vb, ZipDataLineVCF *dl)
 {
     bool is_xstrand;
-    VcfPosType pos = vb->last_int(VCF_POS);
+    PosType32 pos = vb->last_int(VCF_POS);
 
     WordIndex luft_ref_index; // note: chain file contigs are copied from the reference, so have the same indices
     LiftOverStatus ostatus = vcf_lo_get_liftover_coords (vb, pos, &luft_ref_index, &dl->pos[1], &is_xstrand, &vb->pos_aln_i);
@@ -444,7 +444,7 @@ static inline bool vcf_lo_is_same_seq (rom seq1, unsigned seq1_len, rom seq2, un
     if (seq1_len != seq2_len) return false;
 
     if (!is_xstrand) {
-        for (PosType i=0; i < seq1_len ; i++)
+        for (PosType64 i=0; i < seq1_len ; i++)
             if (UPPER_CASE (seq1[i]) != UPPER_CASE (seq2[i])) return false;
     }
     else { 
@@ -453,7 +453,7 @@ static inline bool vcf_lo_is_same_seq (rom seq1, unsigned seq1_len, rom seq2, un
             seq1++; seq1_len--; // the anchor is currently on the left
             seq2++; seq2_len--; // a different anchor is currently on the right
         }
-        for (PosType i=0; i < seq1_len ; i++)
+        for (PosType64 i=0; i < seq1_len ; i++)
             if (UPPER_CASE (seq1[i]) != UPPER_COMPLEM[(int)seq2[seq1_len-i-1]]) return false;
     }
 

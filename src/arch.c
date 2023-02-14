@@ -126,7 +126,7 @@ void arch_initialize (rom argv0)
     ASSERT0 (sizeof (LocalType)     == 1,  "expecting sizeof (LocalType)==1");
     ASSERT0 (sizeof (uint128_t)     == 16, "expecting sizeof (uint128_t)==16");
     ASSERT0 (sizeof (ReconPlanItem) == 12, "expecting sizeof (ReconPlanItem)==12");
-    ASSERT0 (sizeof (void *)        == 8,  "expecting sizeof (void *)==8");
+    ASSERT0 (sizeof (void *)        <= 8,  "expecting sizeof (void *)<=8"); // important bc void* is a member of ValueType
     ASSERT0 (sizeof (ValueType)     == 8,  "expecting sizeof (ValueType)==8");
 
     // Note: __builtin_clzl is inconsistent between Windows and Linux, even on the same host, so we don't use it
@@ -215,24 +215,25 @@ double arch_get_physical_mem_size (void)
     file_get_file (evb, "/proc/meminfo", &meminfo, "meminfo", 100, false, true);
 
     int num_start = strcspn (B1STc(meminfo), "0123456789");
-    int kb = atoi (Bc(meminfo, num_start));
+    mem_size = (double)atoi(Bc(meminfo, num_start)) / (1024.0*1024.0);
     buf_destroy (meminfo);
 
 #elif defined _WIN32
     ULONGLONG kb = 0;
     GetPhysicallyInstalledSystemMemory (&kb);
+    mem_size = (double)kb / (1024.0*1024.0);
 
 #elif defined __APPLE__
-    int64_t kb = 0;
+    int64_t bytes = 0;
     size_t length = sizeof (int64_t);
-    sysctl((int[]){ CTL_HW, HW_MEMSIZE }, 2, &kb, &length, NULL, 0);
+    sysctl((int[]){ CTL_HW, HW_MEMSIZE }, 2, &bytes, &length, NULL, 0);
+    mem_size = (double)bytes / (1024.0*1024.0*1024.0);
 
 #else
     return 0;
 
 #endif
 
-    mem_size = (double)kb / (1024.0*1024.0);
     return mem_size;
 }
 

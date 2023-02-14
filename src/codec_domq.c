@@ -663,7 +663,7 @@ static inline void codec_domq_reconstruct_do (VBlockP vb, ContextP qual_ctx, Con
         sam_reconstruct_missing_quality (vb, reconstruct);
     }
     
-    ASSPIZ (qual_len == expected_qual_len, "expecting qual_len(%u) == expected_qual_len(%u) in ctx=%s", 
+    ASSPIZ (qual_len == expected_qual_len, "expecting qual_len=%u == expected_qual_len=%u in ctx=%s", 
             qual_len, expected_qual_len, qual_ctx->tag_name);   
 }
 

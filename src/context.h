@@ -118,7 +118,7 @@ static inline uint8_t NEXTLOCAL2BITS(ContextP ctx) { uint8_t ret = bits_get ((Bi
 static inline char *last_txt (VBlockP vb, Did did_i) { return last_txtx (vb, CTX(did_i)); }
 #define last_txt_len(did_i) contexts[did_i].last_txt.len
 
-#define set_last_txt_(did_i,value, value_len) CTX(did_i)->last_txt = (TxtWord){ .index = BNUMtxt (value), .len = value_len }
+#define set_last_txt_(did_i, value, value_len) CTX(did_i)->last_txt = (TxtWord){ .index = BNUMtxt (value), .len = value_len }
 #define set_last_txt(did_i, value) set_last_txt_(did_i, value, value##_len)
 
 #define history64(did_i, line_i) (*B(int64_t, CTX(did_i)->history, (line_i)))
@@ -156,10 +156,10 @@ extern void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vctx, bool is_lcode
 extern void ctx_reset_codec_commits (void);
 extern void ctx_convert_generated_b250_to_mate_lookup (VBlockP vb, ContextP vctx);
 
-extern ContextP ctx_get_unmapped_ctx (ContextP contexts, DataType dt, Did *dict_id_to_did_i_map, Did *num_contexts, DictId dict_id, STRp(tag_name));
+extern ContextP ctx_get_unmapped_ctx (ContextArray contexts, DataType dt, DictIdtoDidMap d2d_map, Did *num_contexts, DictId dict_id, STRp(tag_name));
 
 // returns did_i of dict_id if it is found in the map, or DID_NONE if not
-static inline Did get_matching_did_i_from_map (const Context *contexts, const Did *map, DictId dict_id)
+static inline Did get_matching_did_i_from_map (const ContextArray contexts, const Did *map, DictId dict_id)
 {
     Did did_i = map[dict_id.map_key[0]];
     if (did_i != DID_NONE && contexts[did_i].dict_id.num == dict_id.num) 
@@ -173,28 +173,28 @@ static inline Did get_matching_did_i_from_map (const Context *contexts, const Di
 }
 
 // inline function for quick operation typically called several billion times in a typical file and > 99.9% can be served by the inline
-#define ctx_get_ctx(vb,dict_id) ctx_get_ctx_do (((VBlockP)(vb))->contexts, ((VBlockP)(vb))->data_type, ((VBlockP)(vb))->dict_id_to_did_i_map, &((VBlockP)(vb))->num_contexts, (dict_id), 0, 0)
-#define ctx_get_ctx_tag(vb,dict_id,tag_name,tag_name_len) ctx_get_ctx_do (((VBlockP)(vb))->contexts, ((VBlockP)(vb))->data_type, ((VBlockP)(vb))->dict_id_to_did_i_map, &((VBlockP)(vb))->num_contexts, (dict_id), (tag_name), (tag_name_len))
-static inline ContextP ctx_get_ctx_do (Context *contexts, DataType dt, Did *dict_id_to_did_i_map, Did *num_contexts, DictId dict_id, STRp(tag_name))
+#define ctx_get_ctx(vb,dict_id) ctx_get_ctx_do (((VBlockP)(vb))->contexts, ((VBlockP)(vb))->data_type, ((VBlockP)(vb))->d2d_map, &((VBlockP)(vb))->num_contexts, (dict_id), 0, 0)
+#define ctx_get_ctx_tag(vb,dict_id,tag_name,tag_name_len) ctx_get_ctx_do (((VBlockP)(vb))->contexts, ((VBlockP)(vb))->data_type, ((VBlockP)(vb))->d2d_map, &((VBlockP)(vb))->num_contexts, (dict_id), (tag_name), (tag_name_len))
+static inline ContextP ctx_get_ctx_do (ContextArray contexts, DataType dt, DictIdtoDidMap d2d_map, Did *num_contexts, DictId dict_id, STRp(tag_name))
 {
-    Did did_i = get_matching_did_i_from_map (contexts, dict_id_to_did_i_map, dict_id);
+    Did did_i = get_matching_did_i_from_map (contexts, d2d_map, dict_id);
     if (did_i != DID_NONE) 
         return &contexts[did_i];
     else    
-        return ctx_get_unmapped_ctx (contexts, dt, dict_id_to_did_i_map, num_contexts, dict_id, STRa(tag_name));
+        return ctx_get_unmapped_ctx (contexts, dt, d2d_map, num_contexts, dict_id, STRa(tag_name));
 }
 
-extern Did ctx_get_unmapped_existing_did_i (const Context *contexts, const ContextIndex *ctx_index, Did num_contexts, DictId dict_id);
+extern Did ctx_get_unmapped_existing_did_i (const ContextArray contexts, const ContextIndex *ctx_index, Did num_contexts, DictId dict_id);
 
-static inline Did ctx_get_existing_did_i_do (DictId dict_id, const Context *contexts, Did *dict_id_to_did_i_map, const ContextIndex *ctx_index, Did num_contexts)
+static inline Did ctx_get_existing_did_i_do (DictId dict_id, const ContextArray contexts, DictIdtoDidMap d2d_map, const ContextIndex *ctx_index, Did num_contexts)
 {
-    Did did_i = get_matching_did_i_from_map (contexts, dict_id_to_did_i_map, dict_id);
+    Did did_i = get_matching_did_i_from_map (contexts, d2d_map, dict_id);
     if (did_i != DID_NONE)
         return did_i;
     else
         return ctx_get_unmapped_existing_did_i (contexts, ctx_index, num_contexts, dict_id);
 }    
-#define ctx_get_existing_did_i(vb,dict_id) ctx_get_existing_did_i_do (dict_id, vb->contexts, vb->dict_id_to_did_i_map, (vb->has_ctx_index ? vb->ctx_index : NULL), vb->num_contexts)
+#define ctx_get_existing_did_i(vb,dict_id) ctx_get_existing_did_i_do (dict_id, vb->contexts, vb->d2d_map, (vb->has_ctx_index ? vb->ctx_index : NULL), vb->num_contexts)
 
 static inline ContextP ctx_get_existing_ctx_do (VBlockP vb, DictId dict_id)  // returns NULL if context doesn't exist
 {
@@ -231,7 +231,7 @@ extern rom ctx_snip_from_zf_nodes (ConstContextP zctx, WordIndex node_index, pST
 
 extern WordIndex ctx_get_ol_node_index_by_snip (VBlockP vb, ContextP ctx, STRp(snip)); 
 
-extern void ctx_initialize_predefined_ctxs (ContextP contexts /* an array */, DataType dt, Did *dict_id_to_did_i_map, Did *num_contexts);
+extern void ctx_initialize_predefined_ctxs (ContextArray contexts, DataType dt, DictIdtoDidMap d2d_map, Did *num_contexts);
 
 extern void ctx_shorten_unused_dict_words (Did did_i);
 extern void ctx_read_all_counts (void);
@@ -372,7 +372,7 @@ extern void ctx_set_store_per_line (VBlockP vb, ...);
 extern void ctx_set_ltype (VBlockP vb, int ltype, ...);
 extern void ctx_consolidate_stats (VBlockP vb, int parent, ...);
 extern void ctx_consolidate_statsN(VBlockP vb, Did parent, Did first_dep, unsigned num_deps);
-extern void ctx_consolidate_stats_(VBlockP vb, Did parent, unsigned num_deps, ContextP *dep_ctxs);
+extern void ctx_consolidate_stats_(VBlockP vb, Did parent, unsigned num_deps, ContextP dep_ctxs[]);
 
 extern rom dyn_type_name (DynType dyn_type);
 

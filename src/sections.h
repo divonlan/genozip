@@ -73,7 +73,7 @@ typedef union SectionFlags {
                                        // SAM/BAM: PRIM and/or DEPN components exist (v14)
         uint8_t has_taxid        : 1;  // each line in the file has Taxonomic ID information (v12)
         #define dts2_deep        dt_specific2 // SAM: this file is compressed with --deep (v15)
-        uint8_t dt_specific2     : 1;  // this flag has a different meaning depending on the data_type, may be one of the above ^ 
+        uint8_t dt_specific2     : 1;  // this flag has a different meaning depending on the data_type, may be one of the above ^ (v15, "unused" up to v14)
     } genozip_header;
 
     struct FlagsTxtHeader {
@@ -404,8 +404,8 @@ typedef struct {
 // SEC_REFERENCE (in both cases) contains 2 bits per base, and SEC_REF_IS_SET contains 1 bit per location.
 typedef struct {
     SectionHeader;
-    PosType pos;               // first pos within chrom (1-based) of this range         
-    PosType gpos;              // first pos within genome (0-based) of this range
+    PosType64 pos;               // first pos within chrom (1-based) of this range         
+    PosType64 gpos;              // first pos within genome (0-based) of this range
     uint32_t num_bases;        // number of bases (nucleotides) in this range
     uint32_t chrom_word_index; // index in contexts[CHROM].word_list of the chrom of this reference range    
 } SectionHeaderReference;
@@ -465,12 +465,12 @@ typedef struct SectionEntFileFormat {
 typedef struct RAEntry {
     VBIType vblock_i;          // the vb_i in which this range appears
     WordIndex chrom_index;     // before merge: node index into chrom context nodes, after merge - word index in CHROM dictionary
-    PosType min_pos, max_pos;  // POS field value of smallest and largest POS value of this chrom in this VB (regardless of whether the VB is sorted)
+    PosType64 min_pos, max_pos;  // POS field value of smallest and largest POS value of this chrom in this VB (regardless of whether the VB is sorted)
 } RAEntry; 
 
 // the data of SEC_REF_IUPACS (added v12)
 typedef struct Iupac {
-    PosType gpos;
+    PosType64 gpos;
     char iupac;
 } Iupac;
 

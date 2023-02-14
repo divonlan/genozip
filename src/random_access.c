@@ -120,7 +120,7 @@ void random_access_update_pos (VBlockP vb, int ra_i, Did did_i_pos)
         return;
     }
     
-    PosType this_pos = vb->last_int (did_i_pos);
+    PosType64 this_pos = vb->last_int (did_i_pos);
 
     if (this_pos <= 0) return; // ignore pos<=0 (in SAM, 0 means unmapped POS)
 
@@ -135,7 +135,7 @@ void random_access_update_pos (VBlockP vb, int ra_i, Did did_i_pos)
 }
 
 // ZIP: update increment reference pos
-void random_access_increment_last_pos (VBlockP vb, int ra_i, PosType increment)
+void random_access_increment_last_pos (VBlockP vb, int ra_i, PosType64 increment)
 {
     ASSERTISALLOCED (vb->ra_buf[ra_i]);
 
@@ -146,7 +146,7 @@ void random_access_increment_last_pos (VBlockP vb, int ra_i, PosType increment)
 }
 
 // ZIP: update last reference pos
-void random_access_update_last_pos (VBlockP vb, int ra_i, PosType last_pos)
+void random_access_update_last_pos (VBlockP vb, int ra_i, PosType64 last_pos)
 {
     ASSERTISALLOCED (vb->ra_buf[ra_i]);
     
@@ -158,7 +158,7 @@ void random_access_update_first_last_pos (VBlockP vb, int ra_i, WordIndex chrom_
 {
     ASSERTISALLOCED (vb->ra_buf[ra_i]);
 
-    PosType first_pos_value, last_pos_value;    
+    PosType64 first_pos_value, last_pos_value;    
     if (!str_get_int (STRa(first_pos), &first_pos_value)) return; // fail silently
     if (!str_get_int (STRa(last_pos),  &last_pos_value )) return; 
     
@@ -167,7 +167,7 @@ void random_access_update_first_last_pos (VBlockP vb, int ra_i, WordIndex chrom_
     if (last_pos_value  > ra_ent->max_pos) ra_ent->max_pos = last_pos_value;
 }
 
-void random_access_update_to_entire_chrom (VBlockP vb, int ra_i, PosType first_pos_of_chrom, PosType last_pos_of_chrom)
+void random_access_update_to_entire_chrom (VBlockP vb, int ra_i, PosType64 first_pos_of_chrom, PosType64 last_pos_of_chrom)
 {
     ASSERTISALLOCED (vb->ra_buf[ra_i]);
     
@@ -400,12 +400,12 @@ uint32_t random_access_verify_all_contigs_same_length (void)
 {
     static Buffer max_lens_buf = EMPTY_BUFFER;
     const Context *ctx = ZCTX(CHROM);
-    buf_alloc (evb, &max_lens_buf, 0, ctx->word_list.len, PosType, 1, "max_lens");
+    buf_alloc (evb, &max_lens_buf, 0, ctx->word_list.len, PosType64, 1, "max_lens");
     buf_zero (&max_lens_buf);
 
-    ARRAY (PosType, max_lens, max_lens_buf);
+    ARRAY (PosType64, max_lens, max_lens_buf);
 
-    PosType max_of_maxes=0;
+    PosType64 max_of_maxes=0;
     for_buf (const RAEntry, ra, z_file->ra_buf) {
         max_lens[ra->chrom_index] = MAX_(ra->max_pos, max_lens[ra->chrom_index]);
         max_of_maxes = MAX_(max_of_maxes, max_lens[ra->chrom_index]);
@@ -446,7 +446,7 @@ void random_access_load_ra_section (SectionType sec_type, Did chrom_did_i, Buffe
 }
 
 // returns true if successful
-void random_access_get_ra_info (VBIType vblock_i, WordIndex *chrom_index, PosType *min_pos, PosType *max_pos)
+void random_access_get_ra_info (VBIType vblock_i, WordIndex *chrom_index, PosType64 *min_pos, PosType64 *max_pos)
 {
     const RAEntry *ra = random_access_get_first_ra_of_vb (vblock_i);
     ASSERT (ra, "vblock_i=%u has no RAEntry", vblock_i);

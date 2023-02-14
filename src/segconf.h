@@ -18,7 +18,7 @@
 #define ABSOLUTE_MIN_VBLOCK_MEMORY ((uint64_t)1000) // in Bytes
 #define ABSOLUTE_MAX_VBLOCK_MEMORY ((uint64_t)MAX_VBLOCK_MEMORY MB)
 
-typedef enum __attribute__ ((__packed__)) { TECH_UNKNOWN,   TECH_ILLUM_7, TECH_ILLUM_5, TECH_PACBIO, TECH_ONP,          TECH_454, TECH_MGI,   TECH_IONTORR, TECH_HELICOS, NUM_TECHS } SeqTech;
+typedef enum __attribute__ ((__packed__)) { TECH_UNKNOWN,   TECH_ILLUM_7, TECH_ILLUM_5, TECH_PACBIO, TECH_ONP,          TECH_454, TECH_BGI,   TECH_IONTORR, TECH_HELICOS, NUM_TECHS } SeqTech;
 #define TECH_NAME                         { "Unknown_tech", "Illumina-7", "Illumina-5", "PacBio",    "Oxford_Nanopore", "454",    "MGI_Tech", "IonTorrent", "Helicos"               }
 #define TECH(x) (segconf.tech == TECH_##x)
 
@@ -32,9 +32,6 @@ typedef enum __attribute__ ((__packed__)) { ms_NONE, ms_BIOBAMBAM, ms_MINIMAP2 }
 typedef enum __attribute__ ((__packed__)) { DP_DEFAULT, by_AD, by_SDP } FormatDPMethod;
 
 typedef enum __attribute__ ((__packed__)) { L3_UNKNOWN, L3_EMPTY, L3_COPY_DESC, L3_QF, NUM_L3s } FastqLine3Type;
-
-typedef enum __attribute__ ((__packed__)) { XG_S_UNKNOWN, XG_WITHOUT_S, XG_WITH_S } XgIncSType;
-#define XG_INC_S_NAME { "Unknown", "without-S", "with-S"}
 
 // SamMapperType is part of the file format and values should not be changed (new ones can be added)
 typedef enum __attribute__ ((__packed__)) { MP_UNKNOWN, MP_BSBOLT,             MP_bwa,   MP_BWA,   MP_MINIMAP2,   MP_STAR,   MP_BOWTIE2,   MP_DRAGEN,    MP_GEM3,         MP_GEM2SAM,     MP_BISMARK,   MP_BSSEEKER2,     MP_WINNOWMAP,   MP_BAZ2BAM,    MP_BBMAP,   MP_TMAP,   MP_HISAT2,   MP_BOWTIE,   MP_NOVOALIGN,   MP_RAZER3,    MP_BLASR,   MP_NGMLR,           MP_DELVE,   MP_TOPHAT,   MP_CPU,  MP_LONGRANGER,          MP_CLC,              MP_PBMM2,   MP_CCS,   NUM_MAPPERS } SamMapperType;
@@ -80,6 +77,16 @@ typedef struct {
     bool is_paired;             // file has a least one read that is marked as "last" in FLAG
     bool evidence_of_sorted;    // during segconf: at least a one pair of consecutive lines has the same RNAME and increasing POS
     bool sam_multi_RG;          // evidence that file has more than one type of RG
+    bool is_bwa;                // aligner used is based on bwa
+    bool is_minimap2;           // aligner used is based on minimap2
+    bool is_bowtie2;            // aligner used is based on bowtie2
+    bool sam_has_SA_Z;
+    thool sam_has_BWA_XA_Z;
+    bool sam_has_BWA_XS_i;
+    bool sam_has_BWA_XM_i;
+    bool sam_has_BWA_XT_A ;
+    bool sam_has_BWA_XC_i;
+    bool sam_has_BWA_X01_i;
     bool sam_bisulfite;         // this BAM file is of reads that have been treated with bisulfite to detect methylation
     bool sam_predict_meth_call; // ZIP/PIZ: true if segging SEQ should also predict the methylation call in vb->meth_call
     bool bs_strand_not_by_rev_comp; // true if vb->bisulfite_strand cannot be predicted by FLAG.rev_comp
@@ -95,7 +102,7 @@ typedef struct {
     uint8_t MAPQ_value;         // used during segconf.running to calculate sam_mapq_has_single_value
     bool MAPQ_has_single_value; // all non-0 MAPQ have the same value
     msType sam_ms_type;         // ZIP/PIZ: type of ms:i 
-    XgIncSType sam_XG_inc_S;    // Does XG include soft_clip[0]
+    thool sam_XG_inc_S;         // Does XG include soft_clip[0]
     bool is_long_reads;
     SagType sag_type;           // Type of sag
     bool depn_CIGAR_can_have_H; // some DEPN CIGARs (of alignments with SA:Z) have H (set while segging MAIN)
@@ -162,6 +169,9 @@ typedef struct {
 
     // Chain stuff
     bool chain_mismatches_ref;  // Some contigs mismatch the reference files, so this chain file cannot be used with --chain
+
+    // BED stuff
+    int bed_num_columns;
 } SegConf;
 
 extern SegConf segconf; // ZIP: set based on segging a sample of a few first lines of the file
@@ -174,4 +184,6 @@ extern bool segconf_is_long_reads(void);
 extern void segconf_mark_as_used (VBlockP vb, unsigned num_ctxs, ...);
 extern rom segconf_sam_mapper_name (void);
 extern rom segconf_tech_name (void);
-
+extern void segconf_test_sorted (VBlockP vb, WordIndex prev_line_chrom, PosType32 pos, PosType32 prev_line_pos);
+extern void segconf_finalize_is_sorted (void);
+extern rom segconf_qf_name (void);

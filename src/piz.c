@@ -327,7 +327,7 @@ void piz_read_all_ctxs (VBlockP vb, Section *sec/*first VB section after VB_HEAD
 {
     if (!is_pair_data) {
         // ctxs that have dictionaries are already initialized, but others (eg local data only) are not
-        ctx_initialize_predefined_ctxs (vb->contexts, vb->data_type, vb->dict_id_to_did_i_map, &vb->num_contexts);
+        ctx_initialize_predefined_ctxs (vb->contexts, vb->data_type, vb->d2d_map, &vb->num_contexts);
 
         // ctx.flags defaults to vb_i=1 flags, overridden if a b250 or local section is read. this will not be overridden if all_the_same, i.e. no b250/local sections.
         // note: we use section_list_save and not section_list_buf, because the latter might not contain vb=1, if removed by writer_create_plan
@@ -349,7 +349,7 @@ void piz_read_all_ctxs (VBlockP vb, Section *sec/*first VB section after VB_HEAD
         ASSERT (is_pair_data || vb->vblock_i == (*sec)->vblock_i, "expecting vb->vblock_i=%u == sec->vblock_i=%u", vb->vblock_i, (*sec)->vblock_i); // sanity
 
         // create a context even if section is skipped, for containers to work (skipping a section should be mirrored in a container filter)
-        ContextP zctx = ctx_get_ctx_do (z_file->contexts, z_file->data_type, z_file->dict_id_to_did_i_map, &z_file->num_contexts, (*sec)->dict_id, 0, 0);
+        ContextP zctx = ctx_get_ctx_do (z_file->contexts, z_file->data_type, z_file->d2d_map, &z_file->num_contexts, (*sec)->dict_id, 0, 0);
         ContextP vctx = ctx_get_ctx (vb, zctx->dict_id);
 
         int32_t offset = zfile_read_section (z_file, vb, (*sec)->vblock_i, &vb->z_data, "z_data", (*sec)->st, *sec); // returns 0 if section is skipped
@@ -576,7 +576,13 @@ static Digest piz_verify_digest_one_txt_file (unsigned txt_file_i)
 
         uint32_t expected_vbs_verified = sections_get_num_vbs (comp_i);
 
-        ASSERT (z_file->num_vbs_verified == expected_vbs_verified, "Expected to have verified (adler32) all %u VBlocks, but verified only %u",
+        ASSERT (!txt_file                                         ||  // not creating txt_file (eg loading auxilliary file)
+                z_file->num_vbs_verified == expected_vbs_verified ||  // success
+                txt_file->vb_digest_failed                        ||  // failure already announced
+                flag.data_modified                                ||  // not tested
+                (flag.unbind && !VER(14))                         ||  // for files <= v13, we cannot test per-VB digest in unbind mode, because the digests (MD5 and Adler32) are commulative since the beginning of the bound file. However, we still test component-wide digest in piz_verify_digest_one_txt_file.
+                !VER(9),                                              // for in v8 files compressed without --md5 or --test, we had no digest.
+                "Expected to have verified (adler32) all %u VBlocks, but verified only %u",
                 expected_vbs_verified, z_file->num_vbs_verified);
 
         if (flag.show_digest)
@@ -687,9 +693,6 @@ static void piz_handle_reconstructed_vb (Dispatcher dispatcher, VBlockP vb, uint
 
 Dispatcher piz_z_file_initialize (void)
 {
-    // update data types table for old values if z_file is old
-    dt_piz_update_for_backcomp ();
-
     // read all non-VB non-TxtHeader sections
     DataType data_type = piz_read_global_area (gref);
     if (data_type == DT_NONE || flag.reading_reference) 
@@ -712,7 +715,7 @@ Dispatcher piz_z_file_initialize (void)
     Dispatcher dispatcher = dispatcher_init (flag.reading_chain     ? "piz-chain"
                                             :flag.reading_reference ? "piz-ref"
                                             :flag.reading_kraken    ? "piz-kraken"
-                                            :flag.preprocessing     ? "preprocessing"
+                                            :flag.preprocessing     ? PREPROCESSING_TASK_NAME
                                             :                         PIZ_TASK_NAME, // also referred to in dispatcher_recycle_vbs()
                                              POOL_MAIN,
                                              flag.xthreads ? 1 : global_max_threads, 0, 
@@ -738,8 +741,8 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
     bool header_only_file = true; // initialize - true until we encounter a VB header
     uint64_t num_nondrop_lines = 0;
 
-    Section txt_header_sec = sections_get_comp_txt_header_sec (first_comp_i);
-    ASSERTNOTNULL (txt_header_sec);
+    // note: may be NULL if txt_header was removed by writer, eg when loading auxillary files
+    Section txt_header_sec = (first_comp_i != COMP_NONE) ? sections_get_comp_txt_header_sec (first_comp_i) : NULL;
 
     Section sec = sections_one_before (txt_header_sec);
 
@@ -764,7 +767,7 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
 
                 if (!writer_does_txtheader_need_recon (sec)) continue;
 
-                if (sec->vblock_i >= 2) continue; // fragments >= 2 where already handled together with the first fragment
+                if (sec->vblock_i >= 2) continue; // fragments >= 2 were already handled together with the first fragment
                 
                 // note: also starts writer, and if unbinding, also opens the txt file and hands data over to the writer
                 txtheader_piz_read_and_reconstruct (sec); 

@@ -11,8 +11,8 @@
 extern void threads_initialize (void);
 
 extern ThreadId threads_create (void (*func)(VBlockP), VBlockP vb);
-extern void threads_join_do (ThreadId *thread_id, rom func);
-#define threads_join(threads_id) threads_join_do((threads_id), __FUNCTION__)
+extern void threads_join_do (ThreadId *thread_id, rom expected_task, rom func);
+#define threads_join(threads_id, expected_task) threads_join_do((threads_id), (expected_task), __FUNCTION__)
 extern void threads_cancel_other_threads (void);
 extern bool threads_am_i_main_thread (void);
 extern void threads_print_call_stack (void);

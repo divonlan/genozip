@@ -19,14 +19,14 @@
 extern void random_access_initialize(void);
 extern void random_access_update_chrom (VBlockP vb, int ra_i, WordIndex chrom_node_index, STRp(chrom_name));
 extern void random_access_update_pos (VBlockP vb, int ra_i, Did did_i_pos);
-extern void random_access_increment_last_pos (VBlockP vb, int ra_i, PosType increment);
-extern void random_access_update_last_pos (VBlockP vb, int ra_i, PosType last_pos);
+extern void random_access_increment_last_pos (VBlockP vb, int ra_i, PosType64 increment);
+extern void random_access_update_last_pos (VBlockP vb, int ra_i, PosType64 last_pos);
 extern void random_access_update_first_last_pos (VBlockP vb, int ra_i, WordIndex chrom_node_index, STRp (first_pos), STRp (last_pos));
-extern void random_access_update_to_entire_chrom (VBlockP vb, int ra_i, PosType first_pos_of_chrom, PosType last_pos_of_chrom);
+extern void random_access_update_to_entire_chrom (VBlockP vb, int ra_i, PosType64 first_pos_of_chrom, PosType64 last_pos_of_chrom);
 extern void random_access_merge_in_vb (VBlockP vb, int ra_i);
 extern void random_access_finalize_entries (BufferP ra_buf);
 extern Codec random_access_compress (ConstBufferP ra_buf, SectionType sec_type, Codec codec, int ra_i, rom msg);
-extern void random_access_get_ra_info (VBIType vblock_i, WordIndex *chrom_index, PosType *min_pos, PosType *max_pos);
+extern void random_access_get_ra_info (VBIType vblock_i, WordIndex *chrom_index, PosType64 *min_pos, PosType64 *max_pos);
 
 // PIZ
 extern bool random_access_has_filter (void);

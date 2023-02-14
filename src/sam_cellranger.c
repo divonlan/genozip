@@ -563,19 +563,19 @@ static bool sam_seg_TX_AN_pos (VBlockP vb, ContextP pos_ctx, STRp(pos), uint32_t
 
     int64_t lookback = container_ctx->lookback_value; // set here in sam_seg_TX_AN_gene
 
-    PosType this_sam_pos = DATA_LINE(vb->line_i)->POS;
+    PosType64 this_sam_pos = DATA_LINE(vb->line_i)->POS;
 
-    PosType this_pos; 
+    PosType64 this_pos; 
     if (!str_get_int (STRa(pos), &this_pos)) return false; // not the format we're expecting
     bool negative=0;
 
     if (lookback) {
-        PosType lookback_pos     = lookback_get_value (vb, lb_ctx, pos_ctx,      lookback).i;
-        PosType lookback_sam_pos = lookback_get_value (vb, lb_ctx, sam_pos_ctx,  lookback).i; 
+        PosType64 lookback_pos     = lookback_get_value (vb, lb_ctx, pos_ctx,      lookback).i;
+        PosType64 lookback_sam_pos = lookback_get_value (vb, lb_ctx, sam_pos_ctx,  lookback).i; 
         bool lookback_negative   = lookback_get_index (vb, lb_ctx, negative_ctx, lookback);
 
-        PosType pos_delta = this_pos - lookback_pos; // can be positive or negative
-        PosType sam_pos_delta = this_sam_pos - lookback_sam_pos; // always non-negative         
+        PosType64 pos_delta = this_pos - lookback_pos; // can be positive or negative
+        PosType64 sam_pos_delta = this_sam_pos - lookback_sam_pos; // always non-negative         
 
         negative = pos_delta < 0;
         if (negative) pos_delta = -pos_delta;
@@ -620,13 +620,13 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_TX_AN_POS)
 
     int64_t lookback = lb_ctx->last_value.i;
 
-    PosType lookback_pos     = lookback_get_value (vb, lb_ctx, ctx, lookback).i;
-    PosType lookback_sam_pos = lookback_get_value (vb, lb_ctx, sam_pos_ctx, lookback).i;
-    PosType this_sam_pos     = CTX(SAM_POS)->last_value.i;
+    PosType64 lookback_pos     = lookback_get_value (vb, lb_ctx, ctx, lookback).i;
+    PosType64 lookback_sam_pos = lookback_get_value (vb, lb_ctx, sam_pos_ctx, lookback).i;
+    PosType64 this_sam_pos     = CTX(SAM_POS)->last_value.i;
     bool negative            = negative_ctx->last_value.i; // note: stores index, which conveniently is 1 for the snip "-" and 0 for "+"
 
-    PosType sam_pos_delta = this_sam_pos - lookback_sam_pos;         
-    PosType pos_delta = (sam_pos_delta + atoi (&snip[1])) * (negative ? -1 : 1);
+    PosType64 sam_pos_delta = this_sam_pos - lookback_sam_pos;         
+    PosType64 pos_delta = (sam_pos_delta + atoi (&snip[1])) * (negative ? -1 : 1);
 
     new_value->i = lookback_pos + pos_delta;
     

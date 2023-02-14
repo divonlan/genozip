@@ -83,9 +83,6 @@ void vb_release_vb_do (VBlockP *vb_p, rom task_name, rom func)
 
     threads_log_by_vb (vb, vb->compute_task ? vb->compute_task : func, "RELEASING VB", 0);
 
-    if (flag.show_vblocks) 
-        iprintf ("VB_RELEASE(task=%s id=%d) vb=%s caller=%s\n", task_name, vb->id, VB_NAME, func);
-
     if (flag.show_time) 
         profiler_add (vb);
 
@@ -135,7 +132,7 @@ void vb_release_vb_do (VBlockP *vb_p, rom task_name, rom func)
     vb->line_bgzf_uoffset = 0;
 
     memset(&vb->profile, 0, sizeof (vb->profile));
-    memset(vb->dict_id_to_did_i_map, 0, sizeof(vb->dict_id_to_did_i_map));
+    memset(vb->d2d_map, 0, sizeof(vb->d2d_map));
     memset(vb->ctx_index, 0, sizeof(vb->ctx_index));
     vb->iupacs_last_range[0] = vb->iupacs_last_range[1] = NULL;
     vb->iupacs_last_pos[0] = vb->iupacs_last_pos[1] = vb->iupacs_next_pos[0] = vb->iupacs_next_pos[1] = 0;
@@ -149,14 +146,19 @@ void vb_release_vb_do (VBlockP *vb_p, rom task_name, rom func)
     // last change, and do so atomically
 
     // case: this VB is from the pool (i.e. not evb)
+    int32_t num_in_use = -1;
     if (vb != evb) {
         // Logic: num_in_use is always AT LEAST sum(vb)->in_use. i.e. pessimistic. (it can be mometarily less between these too updates)
         __atomic_store_n (&vb->in_use, (bool)0, __ATOMIC_SEQ_CST);   // released the VB back into the pool - it may now be reused 
-        if (vb->id >= 0) __atomic_fetch_sub (&vb->pool->num_in_use, 1, __ATOMIC_SEQ_CST); // atomic to prevent concurrent update by writer thread and main thread (must be after update of in_use)
+        if (vb->id >= 0) 
+            num_in_use = __atomic_sub_fetch (&vb->pool->num_in_use, 1, __ATOMIC_SEQ_CST); // atomic to prevent concurrent update by writer thread and main thread (must be after update of in_use)
         *vb_p = NULL;
     }
 
-    buf_compact_buf_list (vb);
+    if (flag.show_vblocks) 
+        iprintf (vb->id >= 0 ? "VB_RELEASE(task=%s id=%d) vb=%s caller=%s in_use=%d/%d\n"
+                             : "VB_RELEASE(task=%s id=%d) vb=%s caller=%s\n", 
+                 task_name, vb->id, VB_NAME, func, num_in_use, (vb->id >= 0 ? vb->pool->num_vbs : -1));
 
     if (vb->id >= 0) COPY_TIMER_VB (evb, vb_release_vb_do)
 }
@@ -259,7 +261,7 @@ VBlockP vb_initialize_nonpool_vb (int vb_id, DataType dt, rom task)
     vb->in_use            = true;
     vb->data_type_alloced = dt;
     vb->comp_i            = COMP_NONE;
-    memset (vb->dict_id_to_did_i_map, 0xff, sizeof(vb->dict_id_to_did_i_map)); // DID_NONE
+    init_dict_id_to_did_map (vb->d2d_map); 
     
     nonpool_vbs[NUM_NONPOOL_VBs + vb_id] = vb; // vb_id is a negative integer
 
@@ -351,7 +353,7 @@ VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompITy
     vb->compute_thread_id = THREAD_ID_NONE;
     vb->compute_task      = task_name;
     vb->pool              = pool;
-    memset (vb->dict_id_to_did_i_map, 0xff, sizeof(vb->dict_id_to_did_i_map)); // DID_NONE
+    init_dict_id_to_did_map (vb->d2d_map);
 
     if (flag.show_vblocks) 
         iprintf ("VB_GET_VB(task=%s id=%u) vb_i=%s/%d in_use=%u/%u\n", 
@@ -364,20 +366,23 @@ VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompITy
     return vb;
 }
 
+uint32_t vb_pool_get_num_in_use (VBlockPoolType type)
+{
+    VBlockPool *pool = vb_get_pool (type, HARD_FAIL);
+    return __atomic_load_n (&pool->num_in_use, __ATOMIC_SEQ_CST); // atomic, be for POOL_MAIN, writer thread might update concurrently.
+}
 
 // Note: num_in_use is always AT LEAST sum(vb)->in_use (it can be mometarily less than sum(vb)->in_use as they are getting updated)
 // therefore, this function may return true when pool is actually no longer full.
 bool vb_pool_is_full (VBlockPoolType type)
 {
-    VBlockPool *pool = vb_get_pool (type, HARD_FAIL);
-    return __atomic_load_n (&pool->num_in_use, __ATOMIC_SEQ_CST) == pool->num_vbs; // atomic as for POOL_MAIN, writer thread might update concurrently.
+    return vb_pool_get_num_in_use (type) == vb_get_pool(type, HARD_FAIL)->num_vbs;
 }
-
+ 
 // Note: As in vb_pool_is_full, if the function returns false (not empty) the pool might in fact already be empty
 bool vb_pool_is_empty (VBlockPoolType type)
 {
-    VBlockPool *pool = vb_get_pool (type, HARD_FAIL);
-    return __atomic_load_n (&pool->num_in_use, __ATOMIC_SEQ_CST) == 0; 
+    return vb_pool_get_num_in_use (type) == 0;
 }
 
 bool vb_is_valid (VBlockP vb)
@@ -413,7 +418,8 @@ void vb_cleanup_memory (void)
     if (z_file->data_type != DT_NONE && DTPZ(cleanup_memory))
         DTPZ(cleanup_memory)(evb);
 
-    if (IS_ZIP && (IS_REF_INTERNAL || IS_REF_EXT_STORE))
+    if ((IS_ZIP && (IS_REF_INTERNAL || IS_REF_EXT_STORE)) ||
+        (IS_PIZ && IS_REF_STORED_PIZ))
         ref_unload_reference (gref);
 }
 

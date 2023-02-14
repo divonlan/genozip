@@ -286,17 +286,17 @@ static bool license_verify_email (STRc(response), rom unused)
 
     if (domain_len < 5 || !strchr (response, '.')) return false;
 
-    static rom disposanle_email_domains[] = { // https://gist.github.com/nocturnalgeek/1b8fa44283314544c487
+    static rom disposable_email_domains[] = { // https://gist.github.com/nocturnalgeek/1b8fa44283314544c487
         "mailinator.com", "binkmail.com", "bobmail.info", "chammy.info", "devnullmail.com",
         "letthemeatspam.com", "mailinater.com", "mailinator.net", "mailinator2.com", "notmailinator.com",
         "reallymymail.com", "reconmail.com", "safetymail.info", "sendspamhere.com", "sogetthis.com",
         "spambooger.com", "spamherelots.com", "spamhereplease.com", "spamthisplease.com",
         "streetwisemail.com", "suremail.info", "thisisnotmyrealemail.com", "tradermail.info",
-        "veryrealemail.com", "zippymail.info"
+        "veryrealemail.com", "zippymail.info", "keshitv.com"
     };
 
-    for (int i=0; i < ARRAY_LEN(disposanle_email_domains); i++)
-        if (!strcmp (domain, disposanle_email_domains[i])) {   
+    for (int i=0; i < ARRAY_LEN(disposable_email_domains); i++)
+        if (!strcmp (domain, disposable_email_domains[i])) {   
             fprintf (stderr, "\nHey, we worked very hard to build this software. Please respect us by providing your real email address.\n");
             return false;
         }
@@ -332,16 +332,16 @@ static bool license_is_consumer_email (rom email)
 
     static rom consumer_domains[] = { // except multi-domainers: yahoo, live, hotmail
         "gmail.com", "googlemail.com", "outlook.com", "protonmail.com", "msn.com", 
-        "rediffmail.com", "ymail.com", "icloud.com",   // Global
-        "aol.com", "comcast.net",                      // US
-        "qq.com", "163.com",                           // China 
-        "web.de", "gmx.de",                            // Germany 
-        "wanadoo.fr", "orange.fr", "free.fr",          // France
-        "hanmail.net", "naver.com",                    // Korea
-        "list.ru", "mail.ru", "inbox.ru", "yandex.ru", // Russia 
-        "yaani.com",                                   // Turkey
-        "libero.it",                                   // Italy
-        "uol.com.br", "bol.com.br",                    // Brazil
+        "rediffmail.com", "ymail.com", "icloud.com",                    // Global
+        "aol.com", "comcast.net",                                       // US
+        "qq.com", "163.com",                                            // China 
+        "web.de", "gmx.de",                                             // Germany 
+        "wanadoo.fr", "orange.fr", "free.fr",                           // France
+        "hanmail.net", "naver.com",                                     // Korea
+        "list.ru", "mail.ru", "inbox.ru", "yandex.ru", "rambler.ru",    // Russia 
+        "yaani.com",                                                    // Turkey
+        "libero.it",                                                    // Italy
+        "uol.com.br", "bol.com.br",                                     // Brazil
     };
 
     for (int i=0; i < ARRAY_LEN(consumer_domains); i++)
@@ -429,7 +429,7 @@ void license_register (void)
 
         str_query_user ("\nYour name: ", rec.name, sizeof(rec.name), false, license_verify_name, NULL);
         
-        str_query_user ("\nYour email address: ", rec.email, sizeof(rec.email), false, license_verify_email, NULL);
+        str_query_user ("\nYour email address (we will send your verification code to this email):\n", rec.email, sizeof(rec.email), false, license_verify_email, NULL);
         int len = strlen (rec.email);
         
         if (license_is_consumer_email (rec.email) && len < sizeof (rec.email)-20) {
@@ -465,16 +465,16 @@ void license_register (void)
 
         license_exit_if_not_confirmed ("Do you accept the terms and conditions of the license?", QDEF_NONE);
 
-        os           = arch_get_os();              printf ("."); // breadcrumbs to catch an ellusive bug
-        dist         = arch_get_distribution();    printf ("."); 
-        cores        = arch_get_num_cores();       printf ("."); 
-        endianity    = arch_get_endianity();       printf ("."); 
-        user_host    = arch_get_user_host();       printf ("."); 
-        memcpy (rec.ip, arch_get_ip_addr ("Failed to register the license"), ARCH_IP_LEN); printf ("."); 
+        os           = arch_get_os();          
+        dist         = arch_get_distribution();
+        cores        = arch_get_num_cores();
+        endianity    = arch_get_endianity();
+        user_host    = arch_get_user_host();
+        memcpy (rec.ip, arch_get_ip_addr ("Failed to register the license"), ARCH_IP_LEN);  
     }
 
-    rec.timestamp = str_time();   printf ("."); 
-    rec.machine_time = time (0);  printf ("."); 
+    rec.timestamp = str_time();    
+    rec.machine_time = time (0);   
 
     static Buffer license_data = EMPTY_BUFFER;
     license_generate (&license_data);
@@ -507,11 +507,13 @@ void license_register (void)
              "(which is hosted on a Google server) is not accessible. If this problem persists, you can register manually by "
              "sending an email to register@genozip.com - copy & paste the lines between the \"======\" into the email message.\n");
 
-    char query[sizeof(rec.email)+64];
-    char code[7] = "";
-    sprintf (query, "\nA 6-digit verification code was emailed to %s. Please enter it: ", rec.email);
-    str_query_user (query, code, sizeof(code), false, license_verify_code, NULL);
-
+    if (!flag.do_register[0]) {
+        char query[sizeof(rec.email)+64];
+        char code[7] = "";
+        sprintf (query, "\nA 6-digit verification code was emailed to %s. Please enter it: ", rec.email);
+        str_query_user (query, code, sizeof(code), false, license_verify_code, NULL);
+    }
+    
     ASSINP (file_put_data (filename, STRb(license_data), S_IRUSR | S_IRGRP), 
             "Failed to write license file %s: %s. If this is unexpected, email "EMAIL_SUPPORT" for help.", filename, strerror (errno));
 

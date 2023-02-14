@@ -450,8 +450,8 @@ static void vcf_seg_INFO_END (VBlockVCFP vb, ContextP end_ctx, rom end_str, unsi
     if (chain_is_loaded && LO_IS_OK (last_ostatus)) { 
 
         bool is_xstrand = (vb->last_index (VCF_oXSTRAND) > 0); // set in vcf_lo_seg_generate_INFO_DVCF
-        PosType aln_last_pos = chain_get_aln_prim_last_pos (vb->pos_aln_i); 
-        PosType end = vb->last_int (VCF_POS); 
+        PosType64 aln_last_pos = chain_get_aln_prim_last_pos (vb->pos_aln_i); 
+        PosType64 end = vb->last_int (VCF_POS); 
 
         // case: we don't yet handle END translation in case of a reverse strand
         if (is_xstrand)            
@@ -461,7 +461,7 @@ static void vcf_seg_INFO_END (VBlockVCFP vb, ContextP end_ctx, rom end_str, unsi
         else if (vb->is_del_sv && end > aln_last_pos) {
 
             // case: END goes beyond end of alignment
-            PosType gap_after = chain_get_aln_gap_after (vb->pos_aln_i);
+            PosType64 gap_after = chain_get_aln_gap_after (vb->pos_aln_i);
             
             // case: END falls in the gap after - <DEL> is still valid but translated END needs to be closer to POS to avoid gap - 
             // we don't yet do this
@@ -491,13 +491,13 @@ TRANSLATOR_FUNC (vcf_piz_luft_END)
     // ZIP liftover validation: postpone to vcf_seg_INFO_END
     if (validate_only) return true; 
 
-    PosType translated_end;
+    PosType64 translated_end;
     ContextP pos_ctx  = CTX (VCF_POS);
     ContextP opos_ctx = CTX (VCF_oPOS);
     
     // ZIP liftback (POS is always before END, because we seg INFO/LIFTOVER first)
     if (IS_ZIP && VB_VCF->line_coords == DC_LUFT) { // liftback
-        PosType oend;
+        PosType64 oend;
         if (!str_get_int_range64 (STRa(recon), 0, MAX_POS, &oend))
             return false;
 
@@ -638,7 +638,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_SVTYPE)
 // SNP case: "NC_000023.10:g.154507173T>G"
 static bool vcf_seg_INFO_HGVS_snp (VBlockVCFP vb, ContextP ctx, STRp(value))
 {
-    PosType pos = DATA_LINE (vb->line_i)->pos[0]; // data in variant
+    PosType64 pos = DATA_LINE (vb->line_i)->pos[0]; // data in variant
     char pos_str[30];
     unsigned pos_str_len = str_int (pos, pos_str);
 
@@ -730,7 +730,7 @@ static bool vcf_seg_INFO_HGVS_indel (VBlockVCFP vb, ContextP ctx, STRp(value), r
 
     str_split (start_pos, op-start_pos, 2, '_', pos, false);
 
-    PosType pos[2];
+    PosType64 pos[2];
     if (!str_get_int (poss[0], pos_lens[0], &pos[0])) return false;
     
     if (n_poss == 2) {
@@ -836,8 +836,8 @@ static void vcf_piz_special_INFO_HGVS_INDEL_END_POS (VBlockP vb, HgvsType t)
     rom alt   = tab + 1;
     rom after = &refalt[refalt_len];
 
-    PosType start_pos = ECTX (start_pos_dnum[t])->last_value.i;
-    PosType end_pos = (t == DEL) ? (start_pos + tab - refalt - 2)
+    PosType64 start_pos = ECTX (start_pos_dnum[t])->last_value.i;
+    PosType64 end_pos = (t == DEL) ? (start_pos + tab - refalt - 2)
                     : (t == INS) ? (start_pos + after - alt - 2)
                     : /* DELINS */ (start_pos + after - alt - 1);
 
@@ -867,7 +867,7 @@ static void vcf_piz_special_INFO_HGVS_INDEL_PAYLOAD (VBlockP vb, HgvsType t)
                         : (t == INS) ? (alt + 1)    // ALT except for the anchor base
                         : /* DELINS */ alt;         // the entire ALT
 
-    PosType payload_len = (t == DEL) ? (tab - refalt - 1)
+    PosType64 payload_len = (t == DEL) ? (tab - refalt - 1)
                         : (t == INS) ? (after - alt - 1)
                         : /* DELINS */ (after - alt);
 

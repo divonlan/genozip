@@ -23,7 +23,7 @@
 static inline bool sam_seg_predict_TLEN (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_rname_rnext_same,
                                          SamTlenType *predicted_tlen)
 {
-    SamPosType pnext_pos_delta = dl->PNEXT - dl->POS;
+    PosType32 pnext_pos_delta = dl->PNEXT - dl->POS;
 
     if (dl->FLAG.supplementary || dl->FLAG.next_unmapped) 
         *predicted_tlen = 0;
@@ -113,7 +113,7 @@ void sam_seg_TLEN (VBlockSAMP vb, ZipDataLineSAM *dl,
 // PIZ
 //---------
 
-static inline SamPosType sam_piz_predict_TLEN (VBlockSAMP vb, bool has_mc)
+static inline PosType32 sam_piz_predict_TLEN (VBlockSAMP vb, bool has_mc)
 {
     if (last_flags.supplementary || last_flags.next_unmapped) return 0;
 
@@ -129,7 +129,7 @@ static inline SamPosType sam_piz_predict_TLEN (VBlockSAMP vb, bool has_mc)
     if (flag.out_dt == DT_SAM && !IS_EQUAL_SIGN (last_rnext) &&
         (last_rname_len != last_rnext_len || memcmp (last_rname, last_rnext, last_rnext_len))) return 0;
 
-    SamPosType pnext_pos_delta = (SamPosType)CTX(SAM_PNEXT)->last_value.i - (SamPosType)CTX(SAM_POS)->last_value.i;
+    PosType32 pnext_pos_delta = (PosType32)CTX(SAM_PNEXT)->last_value.i - (PosType32)CTX(SAM_POS)->last_value.i;
 
     if (!last_flags.rev_comp && last_flags.next_rev_comp) {
 

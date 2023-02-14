@@ -77,7 +77,7 @@ bool sam_piz_init_vb (VBlockP vb, const SectionHeaderVbHeader *header, uint32_t 
 
     if (VER(15)) VB_SAM->longest_seq_len = BGEN32 (header->sam_longest_seq_len);
 
-    if (VER(15) && z_file->z_flags.dts2_deep)
+    if (flag.deep)
         sam_piz_deep_init_vb (VB_SAM, header);
 
     return true; // all good
@@ -104,9 +104,6 @@ void sam_piz_process_recon (VBlockP vb)
     if (flag.collect_coverage)    
         coverage_add_one_vb (vb);
     
-    if (flag.reading_kraken)
-        kraken_piz_handover_data (vb);
-
     if (flag.deep)
         sam_piz_deep_grab_deep_ents (VB_SAM);
 }

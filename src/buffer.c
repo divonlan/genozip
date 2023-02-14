@@ -556,7 +556,7 @@ uint64_t buf_alloc_do (VBlockP vb, BufferP buf, uint64_t requested_size,
 
 #define REQUEST_TOO_BIG_THREADSHOLD (3 GB)
     if (requested_size > REQUEST_TOO_BIG_THREADSHOLD && !buf->can_be_big) // use WARN instead of ASSERTW to have a place for breakpoint
-        WARN ("Warning: buf_alloc called from %s:%u requested %s. This is suspiciously high and might indicate a bug. vb->vblock_i=%u buf=%s line_i=%d",
+        WARN ("Warning: buf_alloc called from %s:%u requested %s. This is suspiciously high and might indicate a bug - please report to " EMAIL_SUPPORT ". vb->vblock_i=%u buf=%s line_i=%d",
               func, code_line, str_size (requested_size).s, vb->vblock_i, buf_desc (buf).s, vb->line_i);
 
     // sanity checks

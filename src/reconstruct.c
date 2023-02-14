@@ -355,7 +355,7 @@ static ValueType reconstruct_from_lookback (VBlockP vb, ContextP ctx, STRp(snip)
     else { 
         ValueType back_value = lookback_get_value (vb, lb_ctx, ctx, lookback);
 
-        PosType delta;
+        PosType64 delta;
         ASSPIZ  (str_get_int (STRa(snip), &delta), "Invalid delta snip \"%.*s\"", STRf(snip));
 
         value.i = back_value.i + delta;

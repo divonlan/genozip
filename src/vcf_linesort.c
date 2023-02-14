@@ -39,7 +39,7 @@ typedef struct {
     LineCmpInfo info;
     uint32_t start_line, num_lines;
     WordIndex prim_chrom_wi;
-    VcfPosType prim_start_pos;
+    PosType32 prim_start_pos;
 } LineInfo;
 
 bool vcf_is_sorting (CompIType comp_i)
@@ -69,7 +69,7 @@ static void vcf_linesort_merge_vb_do (VBlockP vb, bool is_luft)
 
     for (uint32_t line_i=0 ; line_i < vb->lines.len32 ; line_i++) {
         ZipDataLineVCF *dl = (ZipDataLineVCF *)(&vb->lines.data[dl_size * line_i]);
-        PosType pos = dl->pos[is_luft];
+        PosType64 pos = dl->pos[is_luft];
         WordIndex chrom_word_index = node_word_index (vb, (is_luft ? DTF(luft_chrom) : DTF(prim_chrom)), dl->chrom[is_luft]);
 
         // exclude rejected lines (we exclude here if sorted, and in vcf_lo_piz_TOPLEVEL_cb_filter_line if not sorted)

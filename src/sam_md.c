@@ -24,7 +24,7 @@
 //---------
 
 // called when segging SEQ
-void sam_MD_Z_verify_due_to_seq (VBlockSAMP vb, STRp(seq), SamPosType pos, BitsP sqbitmap, uint64_t sqbitmap_start)
+void sam_MD_Z_verify_due_to_seq (VBlockSAMP vb, STRp(seq), PosType32 pos, BitsP sqbitmap, uint64_t sqbitmap_start)
 {
     BitsP M_is_ref = (BitsP)&vb->md_M_is_ref;
 
@@ -44,7 +44,7 @@ void sam_MD_Z_verify_due_to_seq (VBlockSAMP vb, STRp(seq), SamPosType pos, BitsP
     vb->md_verified = bitmap_matches_MD;
 }
 
-static inline rom sam_md_consume_D (VBlockSAMP vb, bool is_depn, char **md_in_out, uint32_t *M_D_bases, SamPosType *pos, int D_bases, 
+static inline rom sam_md_consume_D (VBlockSAMP vb, bool is_depn, char **md_in_out, uint32_t *M_D_bases, PosType32 *pos, int D_bases, 
                                     RangeP *range_p, RefLock *lock, bool *critical_error)
 {
     char *md = *md_in_out;
@@ -77,7 +77,7 @@ static inline rom sam_md_consume_D (VBlockSAMP vb, bool is_depn, char **md_in_ou
 }
 
 // verifies that the reference matches as required, and updates reference bases if missing
-static inline rom sam_md_consume_M (VBlockSAMP vb, bool is_depn, char **md_in_out, uint32_t *M_D_bases, SamPosType *pos, int M_bases,
+static inline rom sam_md_consume_M (VBlockSAMP vb, bool is_depn, char **md_in_out, uint32_t *M_D_bases, PosType32 *pos, int M_bases,
                                     Bits *M_is_ref, uint64_t *M_is_ref_i,
                                     RangeP *range_p, RefLock *lock, bool *critical_error)
 {
@@ -139,7 +139,7 @@ static inline rom sam_md_consume_M (VBlockSAMP vb, bool is_depn, char **md_in_ou
 //   sam_seg_SEQ will conduct the final verification step of comparing this bitmap to the one calculated from the SEQ data.
 // Note: a correct MD:Z may still appear sometimes as "unverified" in REF_INTERNAL, if the locus in the internal reference was populated
 // by an earlier read with a base different than the base in the reference with which this SAM file was generated.
-void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(md), SamPosType pos)
+void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(md), PosType32 pos)
 {
     START_TIMER;
 
@@ -252,7 +252,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_MD)
     VBlockSAMP vb = (VBlockSAMP)vb_;
     bool perfect_match = VER(14) && !vb->mismatch_bases_by_SEQ; // "perfect" encoding introduced v14
 
-    SamPosType pos = LOADED_CTX(SAM_POS)->last_value.i;
+    PosType32 pos = LOADED_CTX(SAM_POS)->last_value.i;
 
     ASSERTNOTEMPTY (vb->binary_cigar);
     ARRAY (BamCigarOp, cigar, vb->binary_cigar);

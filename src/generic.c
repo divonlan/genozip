@@ -14,10 +14,12 @@
 #include "dict_id.h"
 #include "file.h"
 #include "tar.h"
+#include "threads.h"
+#include "tip.h"
 
 #define MAGIC_SIZE 32
 static char magic[MAGIC_SIZE] = {}; // first 8 bytes of the generic file
-static char ext[11]   = {}; // nul-terminated txt filename extension
+static char ext[32] = {}; // nul-terminated txt filename extension
 
 // all data is always consumed
 int32_t generic_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i)
@@ -37,56 +39,74 @@ int32_t generic_is_header_done (bool is_eof)
     
     SAFE_NUL(&header[header_len]);
     bool need_more = false;
+    bool is_cram = false;
 
     // search for a data type who's signature is in this header
-    if (!flag.exlicitly_generic)
-        for (DataType dt=0; dt < NUM_DATATYPES; dt++)
-            if (dt_props[dt].is_data_type && dt_props[dt].is_data_type (STRa(header), &need_more)) {
-                new_dt = dt;
-                break;
-            }
+    if (!flag.explicitly_generic) {
+
+        // test explicitly for CRAM - as it is not a data type
+        if (header_len >= 4 && !memcmp (header, "CRAM", 4)) 
+            is_cram = true;
+
+        else
+            for (DataType dt=0; dt < NUM_DATATYPES; dt++) 
+                if (dt_props[dt].is_data_type && dt_props[dt].is_data_type (STRa(header), &need_more)) {
+                    new_dt = dt;
+                    break;
+                }
+    }
 
     SAFE_RESTORE;
 
     if (new_dt != DT_NONE) {
         txt_file->data_type = z_file->data_type = new_dt;
 
-        // release pre-defined GENERIC contexts
-        for_zctx ctx_destroy_context (zctx, zctx->did_i);
-        z_file->num_contexts = 0;
-
         // recreate predefined contexts
-        ctx_initialize_predefined_ctxs (z_file->contexts, new_dt, z_file->dict_id_to_did_i_map, &z_file->num_contexts);
+        ctx_initialize_predefined_ctxs (z_file->contexts, new_dt, z_file->d2d_map, &z_file->num_contexts);
         
         return HEADER_DATA_TYPE_CHANGED;
     }
 
-    else if (need_more && !is_eof) // header too short to determine - we need more data
-        return HEADER_NEED_MORE;
+    else if (need_more && !is_eof) // note: need_more=true, if no data type was identified, and at least one data type requested more data
+        return HEADER_NEED_MORE;   
 
-    else {
-        // if we can't recognize a piped-in file, then we require the user to tell us what it is with --input
-        ASSINP (!txt_file->redirected || flag.stdin_type, 
-                "to pipe data in, please use --input (or -i) to specify its type, which can be one of the following:\n%s", file_compressible_extensions (true));
-        
-        if (!flag.stdin_type && !tar_is_tar()) 
-            WARN_ONCE ("FYI: genozip doesn't recognize %s file's type, so it will be compressed as GENERIC. In the future, you may specify the type with \"--input <type>\". To suppress this warning, use \"--input generic\".", txt_name);
+    if (flag.explicitly_generic)
+        {} // no message
 
-        return 0;
-    }
+    else if (tar_is_tar() || !txt_file->redirected) 
+        WARN_ONCE ("FYI: genozip doesn't recognize %s file's type, so it will be compressed as GENERIC. In the future, you may specify the type with \"--input <type>\". To suppress this warning, use \"--input generic\".", txt_name);
+
+    else if (!is_cram)
+        ABORTINP ("to pipe data in, please use --input (or -i) to specify its type, which can be one of the following:\n%s", file_compressible_extensions (true));
+    
+    else
+        ABORTINP0 ("This appears to be a CRAM file. Please re-run and add the command line option \"--input cram\"");
+
+    return 0;
 }
 
 void generic_seg_initialize (VBlockP vb)
 {
-    // capture the first 8 bytes and the extension to be reported in stats
+    // capture the first MAGIC_SIZE bytes and the extension to be reported in stats
     if (vb->vblock_i == 1) {
         memset (magic, 0, MAGIC_SIZE);
         memcpy (magic, B1STtxt, MIN_(MAGIC_SIZE, vb->txt_data.len32));
 
+        // copy return last component if it is not the whole filename, and short (we want the extension that indicates the file type, not the part of the filename that indicates the data)
         memset (ext, 0, sizeof (ext));
         rom last_dot = txt_file->name ? strrchr (txt_file->name, '.') : NULL;
-        if (last_dot && strlen (last_dot+1) < sizeof(ext)) // only return last component if it is not the whole filename, and short (we want the extension that indicates the file type, not the part of the filename that indicates the data)
-            strcpy (ext, last_dot+1);
+        if (last_dot) { 
+
+            // if extension is gz, bz2 or xz - add the prior filename component
+            rom last_dot2 = NULL;
+            if (!strcmp (last_dot+1, "gz") || !strcmp (last_dot+1, "bz2") || !strcmp (last_dot+1, "xz")) {
+                SAFE_NUL(last_dot);
+                last_dot2 = strrchr (txt_file->name, '.');
+                SAFE_RESTORE;
+            }
+         
+            strncpy (ext, (last_dot2 ? last_dot2 : last_dot) + 1, sizeof(ext)-1);
+        }
     }
 }
 
@@ -136,3 +156,21 @@ rom generic_get_ext (void)
     return ext;
 }
  
+// to be called from segconf of other data types, if it is discovered that the file is not actually of that data type
+rom fallback_to_generic (VBlockP vb) // vb is optional
+{
+    ASSERT0 (threads_am_i_main_thread(), "fallback_to_generic can only be called by the main thread");
+
+    SAVE_FLAG(quiet);
+
+    if (!flag.explicit_quiet) flag.quiet = false; // cancel segconf's quietness
+    WARN ("%s is not a valid %s file, compressing as GENERIC", txt_name, dt_name(txt_file->data_type));
+    
+    z_file->data_type = txt_file->data_type = DT_GENERIC;
+
+    // recreate predefined contexts
+    ctx_initialize_predefined_ctxs (z_file->contexts, DT_GENERIC, z_file->d2d_map, &z_file->num_contexts);
+
+    RESTORE_FLAG(quiet);
+    return vb ? BAFTtxt : NULL;
+}

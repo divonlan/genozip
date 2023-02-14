@@ -63,16 +63,6 @@ DataType dt_get_txt_dt (DataType dt)
     ABORT_R ("cannot find textual type for binary data type %s", dt_name (dt));
 }
 
-// update dt_fields for backward compatability
-void dt_piz_update_for_backcomp (void)
-{
-    // In v15, we changed the CHROM (did_i=0) dict_id in FASTQ from CONTIG to RNAME (needs to be the same as SAM for Deep)
-    // when pizzing older files, we update it to CONTIG, so that the CONTIG loads to did_i=0.
-    // If file is >=v15, we set it to RNAME, in case previous PIZzed file set it to CONTIG
-    dt_fields[DT_FASTQ].predefined[FASTQ_CONTIG].dict_id = 
-        VER(15) ? dict_id_make (cSTR("RNAME"), DTYPE_FIELD) : dict_id_make (cSTR("CONTIG"), DTYPE_FIELD);
-}
-
 rom dt_name (DataType dt)
 {
     if (dt == DT_NONE) return "NONE";

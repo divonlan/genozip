@@ -38,8 +38,8 @@ typedef struct Contig {
     CharIndex char_index;        // char index in CHROM dictionary of this contig
     uint32_t snip_len;
     WordIndex ref_index;         // index in reference
-    PosType min_pos, max_pos;    // POS field value of smallest and largest POS value of this contig
-    PosType gpos;                // The GPOS in genome matching min_pos in contig.
+    PosType64 min_pos, max_pos;    // POS field value of smallest and largest POS value of this contig
+    PosType64 gpos;                // The GPOS in genome matching min_pos in contig.
     ContigMetadata metadata;
 } Contig; 
 
@@ -47,7 +47,7 @@ typedef struct Contig {
 typedef struct CompactContig {
     WordIndex ref_index;         // index in reference. zero if sequential_ref_index=true
     uint32_t min_pos, max_pos;   // POS field value of smallest and largest POS value of this contig
-    PosType gpos;
+    PosType64 gpos;
 } CompactContig; 
 
 #pragma pack()
@@ -78,14 +78,14 @@ extern void contigs_destroy (ContigPkg *ctg);
 #define WORD_INDEX_NOT_UNIQUE (-2)
 extern WordIndex contigs_get_by_name (ConstContigPkgP ctgs, STRp(contig_name));
 static inline ContigP contigs_get_by_index (ConstContigPkgP ctgs, WordIndex index) { return B(Contig, ctgs->contigs, index); }
-extern WordIndex contigs_get_matching (ConstContigPkgP ctgs, STRp(name), PosType LN /* optional */, bool strictly_alt, bool *is_alt);
+extern WordIndex contigs_get_matching (ConstContigPkgP ctgs, STRp(name), PosType64 LN /* optional */, bool strictly_alt, bool *is_alt);
 extern rom contigs_get_name (ConstContigPkgP ctgs, WordIndex index, unsigned *contig_name_len /* optional */);
 extern WordIndex contigs_get_by_ref_index (ConstContigPkgP ctgs,WordIndex ref_index);
-static inline PosType contigs_get_LN (ConstContigPkgP ctgs, WordIndex index) { return index < ctgs->contigs.len32 ? B(Contig, ctgs->contigs, index)->max_pos : 0; }
-static inline PosType contigs_get_gpos (ConstContigPkgP ctgs, WordIndex index) { return B(Contig, ctgs->contigs, index)->gpos; }
+static inline PosType64 contigs_get_LN (ConstContigPkgP ctgs, WordIndex index) { return index < ctgs->contigs.len32 ? B(Contig, ctgs->contigs, index)->max_pos : 0; }
+static inline PosType64 contigs_get_gpos (ConstContigPkgP ctgs, WordIndex index) { return B(Contig, ctgs->contigs, index)->gpos; }
 
 // iterator
-typedef void (*ContigsIteratorCallback)(STRp(contig_name), PosType last_pos, void *callback_param);
+typedef void (*ContigsIteratorCallback)(STRp(contig_name), PosType64 last_pos, void *callback_param);
 extern void foreach_contig (ConstContigPkgP ctgs, ContigsIteratorCallback callback, void *callback_param);
 
 // accession numbers

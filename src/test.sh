@@ -106,10 +106,27 @@ test_redirected() { # $1=filename  $2...$N=optional extra genozip arg
     local args=( "$@" )
 
     # instead of passing the input, we pass the filename. that works, because the code compares extensions
-    local input=${file#*.}
-    if [[ $input == genome_Full.me23.txt ]]; then input=23andme; fi
+    local ext=${file##*.}
+    if [[ $ext == 'gz' || $ext == 'bz2' || $ext == 'xz' ]]; then
+        local f=${file##*.} # remove .gz etc
+        local ext=${f##*.}
+    fi
 
-    cat $file | $genozip ${args[@]:1} --test --force --output $output --input $input - || exit 1
+    # file name extension of basic.* has is_data_type callback defined in DATA_TYPE_PROPERTIES
+    local has_is_data_type=( vcf sam fastq fq gff gvf gtf bam bed me23 )
+    local input=""
+    if [[ ! " ${has_is_data_type[*]} " =~ " $ext " ]]; then
+        input="--input ${file#*.}"
+    fi
+
+    cat $file | $genozip ${args[@]:1} $input --test --force --output $output - || exit 1
+
+    # verify not generic
+    if [[ $input != "" ]] && [[ $input != "--input generic" ]] && [[ `$genocat $output --show-data-type` == "GENERIC" ]]; then
+        echo "data_type of $file unexpectedly not recognized and compressed as GENERIC"
+        exit 1
+    fi
+
     cleanup
 }
 
@@ -261,7 +278,7 @@ batch_print_header()
 batch_minimal()
 {
     batch_print_header
-    local files=(minimal.vcf minimal.sam minimal.fq minimal.fa minimal.gvf minimal.genome_Full.me23.txt minimal.kraken)
+    local files=(minimal.vcf minimal.sam minimal.fq minimal.fa minimal.gvf minimal.me23 minimal.kraken)
     local file
     for file in ${files[@]}; do
         test_standard " " " " $file
@@ -481,7 +498,7 @@ batch_match_chrom()
     batch_print_header
     
     # hg19 tests
-    local files=(basic-dvcf-source.vcf basic.genome_Full.me23.txt special.match.sam special.match.bam test.homo_sapiens_incl_consequences-chrY.gvf)
+    local files=(basic-dvcf-source.vcf basic.me23 special.match.sam special.match.bam test.homo_sapiens_incl_consequences-chrY.gvf test.cigar-no-seq-qual.bam)
     local file f
     for f in ${files[@]}; do
 
@@ -888,7 +905,7 @@ batch_prod_compatability()
     if [ ! -d ../genozip-prod ]; then return; fi
     
     save_genozip=$genozip
-    genozip=$genozip_prod -m
+    genozip=$genozip_latest -m
 
     if (( $1 <= $2 + 0  )) ; then batch_basic basic.vcf     ; fi
     if (( $1 <= $2 + 1  )) ; then batch_dvcf                ; fi
@@ -899,7 +916,7 @@ batch_prod_compatability()
     if (( $1 <= $2 + 6  )) ; then batch_basic basic.fa      ; fi
     if (( $1 <= $2 + 7  )) ; then batch_basic basic.chain   ; fi
     if (( $1 <= $2 + 8  )) ; then batch_basic basic.gvf     ; fi
-    if (( $1 <= $2 + 9  )) ; then batch_basic basic.genome_Full.me23.txt ; fi
+    if (( $1 <= $2 + 9  )) ; then batch_basic basic.me23    ; fi
     if (( $1 <= $2 + 10 )) ; then batch_kraken " " "-K$kraken"           ; fi
     if (( $1 <= $2 + 11 )) ; then batch_basic basic.phy     ; fi
     if (( $1 <= $2 + 12 )) ; then batch_basic basic.generic ; fi
@@ -932,11 +949,19 @@ batch_real_world_1_adler32() # $1 extra genozip argument
     echo "subsets of real world files (without reference)"
     test_standard "-f $1 --show-filename" " " ${files[*]}
 
-    # don't remove .genozip files as we will use them in batch_real_world_genounzip
+    # don't remove .genozip files as we will use them in batch_real_world_genounzip_*
     #for f in ${files[@]}; do rm -f ${f}.genozip; done
 }
 
-batch_real_world_genounzip() # $1 extra genozip argument
+# test genounzip with many files of different types in a single process
+batch_real_world_genounzip_single_process() # $1 extra genozip argument
+{
+    batch_print_header
+
+    $genounzip ${TESTDIR}/*.genozip --test || exit 1
+}
+
+batch_real_world_genounzip_compare_file() # $1 extra genozip argument
 {
     batch_print_header
 
@@ -986,58 +1011,59 @@ batch_real_world_genounzip() # $1 extra genozip argument
     cleanup 
 }
 
-batch_real_world_1_backcomp()
-{
-    batch_print_header
+# batch_real_world_1_backcomp()
+# {
+#     batch_print_header
 
-    cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
+#     cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
 
-    local filter_out=nothing
-    if [ ! -x "$(command -v xz)" ] ; then # xz unavailable
-        local filter_out=.xz
-    fi
+#     local filter_out=nothing
+#     if [ ! -x "$(command -v xz)" ] ; then # xz unavailable
+#         local filter_out=.xz
+#     fi
 
-    # without reference
-    local files=(  `cd $TESTDIR; ls -1 test.*vcf test.*vcf.gz test.*sam test.*sam.gz test.*bam \
-                   test.*fq test.*fq.gz test.*fa test.*fa.gz test.*fasta test.*fasta.gz \
-                   basic.phy test.*gvf test.*gvf.gz test.*gtf test.*gtf.gz test.*gff test.*gff.gz test.*locs \
-                   test.*txt test.*txt.gz test.*kraken test.*kraken.gz \
-                   | grep -v headerless.sam` ) 
+#     # without reference
+#     local files=(  `cd $TESTDIR; ls -1 test.*vcf test.*vcf.gz test.*sam test.*sam.gz test.*bam \
+#                    test.*fq test.*fq.gz test.*fa test.*fa.gz test.*fasta test.*fasta.gz \
+#                    basic.phy test.*gvf test.*gvf.gz test.*gtf test.*gtf.gz test.*gff test.*gff.gz test.*locs \
+#                    test.*txt test.*txt.gz test.*kraken test.*kraken.gz \
+#                    | grep -v test.embedded-fasta.gff.gz \
+#                    | grep -v headerless.sam` ) 
 
-    local i=0
-    for f in ${files[@]}; do 
-        i=$(( i + 1 ))
+#     local i=0
+#     for f in ${files[@]}; do 
+#         i=$(( i + 1 ))
 
-        # exceptions - supported in 14.0.0 but not earlier
-        # if [[ $f == test.3rd-line-sra.fq ]]; then continue; fi 
-        # if [[ $f == test.bsseeker2-pysam-qual.bam ]]; then continue; fi
-        # if [[ $f == test.covid.gisaid.nuke.fasta.gz ]]; then continue; fi
-        # if [[ $f == test.transcriptome.bam ]]; then continue; fi
+#         # exceptions - supported in 14.0.0 but not earlier
+#         # if [[ $f == test.3rd-line-sra.fq ]]; then continue; fi 
+#         # if [[ $f == test.bsseeker2-pysam-qual.bam ]]; then continue; fi
+#         # if [[ $f == test.covid.gisaid.nuke.fasta.gz ]]; then continue; fi
+#         # if [[ $f == test.transcriptome.bam ]]; then continue; fi
 
-        # exceptions - supported in 14.0.5 but not earlier
-        # if [[ $f == test.novoalign.bam ]]; then continue; fi
+#         # exceptions - supported in 14.0.5 but not earlier
+#         # if [[ $f == test.novoalign.bam ]]; then continue; fi
 
-        # exceptions - supported in 14.0.7 but not earlier
-        # if [[ $f == test.ubam.bam ]]; then continue; fi
+#         # exceptions - supported in 14.0.7 but not earlier
+#         # if [[ $f == test.ubam.bam ]]; then continue; fi
 
-        # exceptions - supported in 14.0.9 but not earlier
-        # if [[ $f == test.MC_Z_in_prim.sam ]]; then continue; fi
-        # if [[ $f == test.10M-contigs.sam.bz2 ]]; then continue; fi
-        # if [[ $f == test.unmapped-is-saggy.sam ]]; then continue; fi
+#         # exceptions - supported in 14.0.9 but not earlier
+#         # if [[ $f == test.MC_Z_in_prim.sam ]]; then continue; fi
+#         # if [[ $f == test.10M-contigs.sam.bz2 ]]; then continue; fi
+#         # if [[ $f == test.unmapped-is-saggy.sam ]]; then continue; fi
 
-        # exceptions - supported in 14.0.10 but not earlier
-        # if [[ $f == test.minimap2+biobambam.bam ]]; then continue; fi
-        # if [[ $f == test.saggy-alns-with-and-without-CIGAR.sam.gz ]]; then continue; fi
-        # if [[ $f == test.novoalign-SA+omit-NM=0.sam ]]; then continue; fi
+#         # exceptions - supported in 14.0.10 but not earlier
+#         # if [[ $f == test.minimap2+biobambam.bam ]]; then continue; fi
+#         # if [[ $f == test.saggy-alns-with-and-without-CIGAR.sam.gz ]]; then continue; fi
+#         # if [[ $f == test.novoalign-SA+omit-NM=0.sam ]]; then continue; fi
 
-        # exceptions - supported in 14.0.12 but not earlier
-        if [[ $f == test.NM-binary-then-integer.bam ]]; then continue; fi
+#         # exceptions - supported in 14.0.12 but not earlier
+#         if [[ $f == test.NM-binary-then-integer.bam ]]; then continue; fi
             
-        test_header "$f - backward compatability with prod ($i/${#files[@]})"
-        $genozip_prod private/test/$f --md5 -fo $output || exit 1
-        $genounzip -t $output || exit 1
-    done
-}
+#         test_header "$f - backward compatability with prod ($i/${#files[@]})"
+#         $genozip_latest private/test/$f --md5 -fo $output || exit 1
+#         $genounzip -t $output || exit 1
+#     done
+# }
 
 batch_real_world_with_ref_md5() # $1 extra genozip argument
 {
@@ -1052,7 +1078,7 @@ batch_real_world_with_ref_md5() # $1 extra genozip argument
                     test.human.fq.gz test.human2.bam test.pacbio.clr.bam \
                     test.human2-R1.100K.fq.bz2 test.pacbio.ccs.10k.bam test.unmapped.sam.gz \
                     test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq test.pacbio-blasr.bam \
-                    test.human2.filtered.snp.vcf test.solexa-headerless.sam )
+                    test.human2.filtered.snp.vcf test.solexa-headerless.sam test.cigar-no-seq-qual.bam )
 
     local files38=( test.1KG-38.vcf.gz test.human-collated-headerless.sam test.human-sorted-headerless.sam )
 
@@ -1066,47 +1092,79 @@ batch_real_world_with_ref_md5() # $1 extra genozip argument
 }
 
 
-batch_real_world_with_ref_backcomp()
-{
-    if [ "$i_am_prod" == "1" ]; then return; fi 
+# batch_real_world_with_ref_backcomp()
+# {
+#     if [ "$i_am_prod" == "1" ]; then return; fi 
 
-    batch_print_header
+#     batch_print_header
+
+#     cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
+
+#     # with a reference
+#     local files37=( test.IonXpress.sam.gz \
+#                     test.human.fq.gz test.human2.bam test.pacbio.clr.bam \
+#                     test.human2-R1.100K.fq.bz2 test.pacbio.ccs.10k.bam \
+#                     test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq  \
+#                     test.human2.filtered.snp.vcf test.solexa-headerless.sam )
+
+#     local files38=( test.1KG-38.vcf.gz test.human-collated-headerless.sam test.cigar-no-seq-qual.bam)
+
+#     local filesT2T1_1=( test.nanopore.t2t_v1_1.bam )
+
+#     local total=$(( ${#files37[@]} + ${#files38[@]} + ${#filesT2T1_1[@]} ))
+
+#     local i=0
+#     for f in ${files37[@]}; do     
+#         i=$(( i + 1 ))
+#         test_header "$f - backward compatability with prod (with reference) - 37 ($i/$total)"
+#         $genozip_latest private/test/$f -mf -e $hs37d5 -o $output || exit 1
+#         $genounzip -t $output || exit 1
+#     done
+
+#     for f in ${files38[@]}; do 
+#         i=$(( i + 1 ))
+#         test_header "$f - backward compatability with prod (with reference) - 38 ($i/$total)"
+#         $genozip_latest private/test/$f -mf -e $GRCh38 -o $output || exit 1
+#         $genounzip -t $output || exit 1
+#     done
+
+#     for f in ${filesT2T1_1[@]}; do 
+#         i=$(( i + 1 ))
+#         test_header "$f - backward compatability with prod (with reference) - T2T ($i/$total)"
+#         $genozip_latest private/test/$f -mf -e $T2T1_1 -o $output || exit 1
+#         $genounzip -t $output || exit 1
+#     done
+# }
+
+made_versions=0
+batch_real_world_backcomp()
+{
+    batch_print_header $1
 
     cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
 
-    # with a reference
-    local files37=( test.IonXpress.sam.gz \
-                    test.human.fq.gz test.human2.bam test.pacbio.clr.bam \
-                    test.human2-R1.100K.fq.bz2 test.pacbio.ccs.10k.bam \
-                    test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq  \
-                    test.human2.filtered.snp.vcf test.solexa-headerless.sam )
+    if (( ! made_versions )); then
+        make -C $TESTDIR versions  # generate files listed in "files"
+        made_versions=1
+    fi
 
-    local files38=( test.1KG-38.vcf.gz test.human-collated-headerless.sam )
+    local files=( $TESTDIR/$1/*.genozip )
+    
+    # remove reference file from list
+    files=( ${files[@]/"$TESTDIR/$1/hs37d5.ref.genozip"} ) 
 
-    local filesT2T1_1=( test.nanopore.t2t_v1_1.bam )
-
-    local total=$(( ${#files37[@]} + ${#files38[@]} + ${#filesT2T1_1[@]} ))
+    # remove 0-size files - test/Makefile sets file size to 0, if old Genozip version failed on this (in compression or test)
+    for f in ${files[@]}; do     
+        if [ ! -s $f ]; then 
+            files=( ${files[@]/"$f"} ) 
+        fi
+    done
 
     local i=0
-    for f in ${files37[@]}; do     
-        i=$(( i + 1 ))
-        test_header "$f - backward compatability with prod (with reference) - 37 ($i/$total)"
-        $genozip_prod private/test/$f -mf -e $hs37d5 -o $output || exit 1
-        $genounzip -t $output || exit 1
-    done
-
-    for f in ${files38[@]}; do 
-        i=$(( i + 1 ))
-        test_header "$f - backward compatability with prod (with reference) - 38 ($i/$total)"
-        $genozip_prod private/test/$f -mf -e $GRCh38 -o $output || exit 1
-        $genounzip -t $output || exit 1
-    done
-
-    for f in ${filesT2T1_1[@]}; do 
-        i=$(( i + 1 ))
-        test_header "$f - backward compatability with prod (with reference) - T2T ($i/$total)"
-        $genozip_prod private/test/$f -mf -e $T2T1_1 -o $output || exit 1
-        $genounzip -t $output || exit 1
+    for f in ${files[@]}; do     
+        i=$(( i + 1 ))            
+        echo "$f - backcomp with $1 ($i/${#files[@]})"
+        $genounzip -t $f -e $TESTDIR/$1/hs37d5.ref.genozip || exit 1
     done
 }
 
@@ -1282,6 +1340,14 @@ batch_make_reference()
     #cleanup - no cleanup, we need the reference for batch_reference_backcomp
 }
 
+update_latest()
+{
+    pushd ../genozip-latest
+    git pull
+    make genozip$exe
+    popd
+}
+
 # compress with prod and prod-created ref file, uncompress with new version and new version-created ref file
 # ref files are expected have the same MD5
 batch_reference_backcomp()
@@ -1298,16 +1364,18 @@ batch_reference_backcomp()
         $genozip --make-reference $fa_file --force -o $ref_file || exit 1
     fi
 
+    update_latest
+
     if [ ! -f $prod_ref_file ]; then
         echo "Making prod reference"
-        $genozip_prod --make-reference $fa_file --force -o $prod_ref_file || exit 1
+        $genozip_latest --make-reference $fa_file --force -o $prod_ref_file || exit 1
     fi
 
     local files38=( test.human.fq.gz test.human-collated-headerless.sam test.1KG-38.vcf.gz )
 
     for f in ${files38[@]}; do 
         test_header "$f - reference file backward compatability with prod"
-        $genozip_prod private/test/$f -mf -e $prod_ref_file -o $output || exit 1
+        $genozip_latest private/test/$f -mf -e $prod_ref_file -o $output || exit 1
         $genounzip -t $output -e $ref_file || exit 1
     done
 
@@ -1476,31 +1544,29 @@ fi
 # platform settings
 # -----------------
 if [ -n "$is_windows" ]; then
-    genozip_exe=$dir/genozip${debug_zip}.exe
-    genozip_prod_exe=$dir/genozip-prod.exe
-    genounzip_exe=$dir/genounzip${debug_nonzip}.exe
-    genocat_exe=$dir/genocat${debug_nonzip}.exe
-    genols_exe=$dir/genols${debug_nonzip}.exe 
+    exe=.exe
+    path=`pwd| cut -c3-|tr / '\\\\'`\\
 #    zip_threads="-@3"
 #    piz_threads="-@5"
-    path=`pwd| cut -c3-|tr / '\\\\'`\\
 else
-    genozip_exe=$dir/genozip${debug_zip}
-    genozip_prod_exe=$dir/genozip-prod
-    genounzip_exe=$dir/genounzip${debug_nonzip}
-    genocat_exe=$dir/genocat${debug_nonzip}
-    genols_exe=$dir/genols${debug_nonzip} 
+    exe=""
     path=$PWD/
 fi
 
+genozip_exe=$dir/genozip${debug_zip}$exe
+genozip_latest_exe=../genozip-latest/genozip$exe
+genounzip_exe=$dir/genounzip${debug_nonzip}$exe
+genocat_exe=$dir/genocat${debug_nonzip}$exe
+genols_exe=$dir/genols${debug_nonzip}$exe
+
 genozip="$genozip_exe --echo $2 $zip_threads"
-genozip_prod="$genozip_prod_exe --echo $2 $zip_threads"
+genozip_latest="$genozip_latest_exe --echo $2 $zip_threads"
 genounzip="$genounzip_exe --echo $2 $piz_threads"
 genocat_no_echo="$genocat_exe $2 $piz_threads"
 genocat="$genocat_exe --echo $2 $piz_threads"
 genols=$genols_exe 
 
-basics=(basic.vcf basic.chain basic.sam basic.vcf basic.bam basic.fq basic.fa basic.gvf basic.gtf basic.genome_Full.me23.txt \
+basics=(basic.vcf basic.chain basic.sam basic.vcf basic.bam basic.fq basic.fa basic.gvf basic.gtf basic.me23 \
         basic.kraken basic.phy basic.locs basic.generic)
 
 exes=($genozip_exe $genounzip_exe $genocat_exe $genols_exe)
@@ -1520,12 +1586,13 @@ fi
 mkdir $OUTDIR >& /dev/null
 cleanup
 
-make -j -C $TESTDIR --quiet || exit 1
+make -C $TESTDIR --quiet -j sync_wsl_clock generated md5s || exit 1
 
 # only if doing a full test (starting from 0) - delete genome and hash caches
 sparkling_clean()
 {
-    rm -f ${hg19}.*cache* ${hs37d5}.*cache* ${GRCh38}.*cache* ${TESTDIR}/*.genozip ${TESTDIR}/basic-subdirs/*.genozip ${TESTDIR}/*rejects* ${TESTDIR}/*.DEPN
+    batch_print_header
+    rm -f ${hg19}.*cache* ${hs37d5}.*cache* ${GRCh38}.*cache* ${TESTDIR}/*.genozip ${TESTDIR}/*.bad ${TESTDIR}/*.bad.gz ${TESTDIR}/basic-subdirs/*.genozip ${TESTDIR}/*rejects* ${TESTDIR}/*.DEPN
 }
 
 # unfortunately Mac's bash doesn't support "case" with fall-through ( ;& )
@@ -1542,7 +1609,7 @@ if (( $1 <= 6  )) ; then  batch_basic basic.fa         ; fi
 if (( $1 <= 7  )) ; then  batch_basic basic.chain      ; fi
 if (( $1 <= 8  )) ; then  batch_basic basic.gvf        ; fi
 if (( $1 <= 9  )) ; then  batch_basic basic.gtf        ; fi
-if (( $1 <= 10 )) ; then  batch_basic basic.genome_Full.me23.txt ; fi
+if (( $1 <= 10 )) ; then  batch_basic basic.me23       ; fi
 if (( $1 <= 11 )) ; then  batch_basic basic.kraken     ; fi
 if (( $1 <= 12 )) ; then  batch_basic basic.phy        ; fi
 if (( $1 <= 13 )) ; then  batch_basic basic.generic    ; fi
@@ -1569,31 +1636,30 @@ if (( $1 <= 33 )) ; then  batch_tar_files_from         ; fi
 if (( $1 <= 34 )) ; then  batch_gencomp_depn_methods   ; fi 
 if (( $1 <= 35 )) ; then  batch_real_world_small_vbs   ; fi 
 if (( $1 <= 36 )) ; then  batch_real_world_1_adler32   ; fi 
-if (( $1 <= 37 )) ; then  batch_real_world_genounzip   ; fi 
-if (( $1 <= 38 )) ; then  batch_real_world_1_adler32 "--best -f" ; fi 
-if (( $1 <= 39 )) ; then  batch_real_world_1_adler32 --fast    ; fi 
-if (( $1 <= 40 )) ; then  batch_real_world_with_ref_md5; fi 
-if (( $1 <= 41 )) ; then  batch_real_world_with_ref_md5 --best ; fi 
-if (( $1 <= 42 )) ; then  batch_multiseq               ; fi
-if (( $1 <= 43 )) ; then  batch_external_cram          ; fi
-if (( $1 <= 44 )) ; then  batch_external_bcf           ; fi
-if (( $1 <= 45 )) ; then  batch_external_unzip         ; fi
-if (( $1 <= 46 )) ; then  batch_reference_fastq        ; fi
-if (( $1 <= 47 )) ; then  batch_reference_sam          ; fi
-if (( $1 <= 48 )) ; then  batch_reference_vcf          ; fi
-if (( $1 <= 49 )) ; then  batch_many_small_files       ; fi
-if (( $1 <= 50 )) ; then  batch_make_reference         ; fi
-if (( $1 <= 51 )) ; then  batch_headerless_wrong_ref   ; fi
-if (( $1 <= 52 )) ; then  batch_replace                ; fi
-if (( $1 <= 53 )) ; then  batch_coverage_idxstats_sex  ; fi
-if (( $1 <= 54 )) ; then  batch_qname_flavors          ; fi
-
-if [[ `basename $PWD` != genozip-prod ]]; then
-    if (( $1 <= 55 )) ; then  batch_reference_backcomp     ; fi
-    if (( $1 <= 56 )) ; then  batch_real_world_1_backcomp  ; fi 
-    if (( $1 <= 57 )) ; then  batch_real_world_with_ref_backcomp ; fi 
-    next=57
-    if (( $1 <= $next + $num_batch_prod_compatability_tests )) ; then batch_prod_compatability $1 $next ; fi
-fi
+if (( $1 <= 37 )) ; then  batch_real_world_genounzip_single_process ; fi 
+if (( $1 <= 38 )) ; then  batch_real_world_genounzip_compare_file   ; fi 
+if (( $1 <= 39 )) ; then  batch_real_world_1_adler32 "--best -f" ; fi 
+if (( $1 <= 40 )) ; then  batch_real_world_1_adler32 --fast    ; fi 
+if (( $1 <= 41 )) ; then  batch_real_world_with_ref_md5; fi 
+if (( $1 <= 42 )) ; then  batch_real_world_with_ref_md5 --best ; fi 
+if (( $1 <= 43 )) ; then  batch_multiseq               ; fi
+if (( $1 <= 44 )) ; then  batch_external_cram          ; fi
+if (( $1 <= 45 )) ; then  batch_external_bcf           ; fi
+if (( $1 <= 46 )) ; then  batch_external_unzip         ; fi
+if (( $1 <= 47 )) ; then  batch_reference_fastq        ; fi
+if (( $1 <= 48 )) ; then  batch_reference_sam          ; fi
+if (( $1 <= 49 )) ; then  batch_reference_vcf          ; fi
+if (( $1 <= 50 )) ; then  batch_many_small_files       ; fi
+if (( $1 <= 51 )) ; then  batch_make_reference         ; fi
+if (( $1 <= 52 )) ; then  batch_headerless_wrong_ref   ; fi
+if (( $1 <= 53 )) ; then  batch_replace                ; fi
+if (( $1 <= 54 )) ; then  batch_coverage_idxstats_sex  ; fi
+if (( $1 <= 55 )) ; then  batch_qname_flavors          ; fi
+if (( $1 <= 56 )) ; then  batch_reference_backcomp     ; fi
+if (( $1 <= 57 )) ; then  batch_real_world_backcomp 12.0.42 ; fi # note: versions must match VERSIONS in test/Makefile
+if (( $1 <= 58 )) ; then  batch_real_world_backcomp 13.0.21 ; fi 
+if (( $1 <= 59 )) ; then  batch_real_world_backcomp latest  ; fi 
+next=59
+if (( $1 <= $next + $num_batch_prod_compatability_tests )) ; then batch_prod_compatability $1 $next ; fi
 
 printf "\nALL GOOD! \nstart: $start_date\nend:   `date`\n"

@@ -105,8 +105,6 @@
 #pragma GENDICT INFO_VQSLOD=DTYPE_1=VQSLOD          // <ID=VQSLOD,Number=1,Type=Float,Description="Log odds of being a true variant versus being false under the trained Gaussian mixture model">
 #pragma GENDICT INFO_MQ=DTYPE_1=MQ                  // <ID=MQ,Number=1,Type=Integer,Description="Root-mean-square mapping quality of covering reads">    
 #pragma GENDICT INFO_MQ0=DTYPE_1=MQ0                // <ID=MQ0,Number=1,Type=Integer,Description="Total Mapping Quality Zero Reads"> (VCF spec: "Number of MAPQ == 0 reads covering this record")
-#pragma GENDICT INFO_CIPOS=DTYPE_1=CIPOS            // <ID=CIPOS,Number=2,Type=Integer,Description="Confidence interval around POS for imprecise variants">
-#pragma GENDICT INFO_CIEND=DTYPE_1=CIEND            // <ID=CIEND,Number=2,Type=Integer,Description="Confidence interval around END for imprecise variants">
 #pragma GENDICT INFO_NS=DTYPE_1=NS                  // <ID=NS,Number=1,Type=Integer,Description="Number of Samples With Data">
 
 #pragma GENDICT INFO_LDAF=DTYPE_1=LDAF              // <ID=LDAF,Number=1,Type=Float,Description="MLE Allele Frequency Accounting for LD">
@@ -243,6 +241,16 @@
 // Structural variants (also uses INFO/END): https://www.internationalgenome.org/wiki/Analysis/Variant%20Call%20Format/VCF%20(Variant%20Call%20Format)%20version%204.0/encoding-structural-variants/
 #pragma GENDICT INFO_SVLEN=DTYPE_1=SVLEN
 #pragma GENDICT INFO_SVTYPE=DTYPE_1=SVTYPE
+#pragma GENDICT INFO_CIPOS=DTYPE_1=CIPOS            // <ID=CIPOS,Number=2,Type=Integer,Description="Confidence interval around POS for imprecise variants">
+#pragma GENDICT INFO_CIEND=DTYPE_1=CIEND            // <ID=CIEND,Number=2,Type=Integer,Description="Confidence interval around END for imprecise variants">
+
+// PacBio pbsv
+#pragma GENDICT INFO_SVANN=DTYPE_1=SVANN            // <ID=SVANN,Number=.,Type=String,Description="Repeat annotation of structural variant">
+#pragma GENDICT INFO_MATEID=DTYPE_1=MATEID          // <ID=MATEID,Number=.,Type=String,Description="ID of mate breakends">
+#pragma GENDICT INFO_MATEDIST=DTYPE_1=MATEDIST      // <ID=MATEDIST,Number=1,Type=Integer,Description="Distance to the mate breakend for mates on the same contig">
+#pragma GENDICT INFO_MATEDIST=DTYPE_1=MATEDIST      // <ID=IMPRECISE,Number=0,Type=Flag,Description="Imprecise structural variation">
+#pragma GENDICT INFO_SHADOWED=DTYPE_1=SHADOWED      // <ID=SHADOWED,Number=0,Type=Flag,Description="CNV overlaps with or is encapsulated by deletion">
+#pragma GENDICT FORMAT_CN=DTYPE_2=CN                // <ID=CN,Number=1,Type=Integer,Description="Copy number genotype for imprecise events">
 
 // VarScan FORMAT and INFO fields: http://varscan.sourceforge.net/using-varscan.html
 #pragma GENDICT FORMAT_RDF=DTYPE_2=RDF              // <ID=RDF,Number=1,Type=Integer,Description="Depth of reference-supporting bases on forward strand (reads1plus)">
@@ -405,7 +413,7 @@ extern rom vcf_coords_name (int coord);
 #define INFO_LUFT_NAME  "LUFT"
 #define INFO_PRIM_NAME  "PRIM"
 #define INFO_LREJ_NAME  "Lrej"
-#define INFO_PREJ_NAME  "Prej" // lower case so Prej doesn't have the same first 2 chars as PRIM (to not conflict in dict_id_to_did_i_map)
+#define INFO_PREJ_NAME  "Prej" // lower case so Prej doesn't have the same first 2 chars as PRIM (to not conflict in d2d_map)
 #define INFO_DVCF_LEN (sizeof INFO_LUFT_NAME - 1) // these 4 must be the same length
 
 #define VCF_CONTIG_FMT "##contig=<ID=%.*s,length=%"PRId64">"

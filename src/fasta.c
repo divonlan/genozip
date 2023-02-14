@@ -219,9 +219,6 @@ void fasta_seg_initialize (VBlockP vb)
 
     // in --stats, consolidate stats into FASTA_NONREF
     ctx_consolidate_stats (vb, FASTA_NONREF, FASTA_NONREF_X, DID_EOL);
-
-    if (segconf.running)
-        segconf.fasta_has_contigs = true; // initialize optimistically
         
     COPY_TIMER (seg_initialize);
 }
@@ -260,8 +257,6 @@ void fasta_seg_finalize (VBlockP vb)
         #define MAX_CONTIGS_IN_FILE 1000000 
         segconf.fasta_has_contigs &= (num_contigs_this_vb == 1 || // the entire VB is a single contig
                                       est_num_contigs_in_file <  MAX_CONTIGS_IN_FILE); 
-
-        segconf.fasta_has_contigs &= !TXT_DT(GFF); // GFF3-embedded FASTA doesn't have contigs, because did=0 is reserved for GFF's SEQID
 
         ASSINP0 (!flag.make_reference || segconf.fasta_has_contigs, "Can't use --make-reference on this file, because Genozip can't find the contig names in the FASTA description lines");
     }
@@ -669,13 +664,6 @@ bool fasta_piz_is_vb_needed (VBIType vb_i)
 
     RESTORE_FLAG (show_containers);
     return needed;
-}
-
-// PIZ: piz_process_recon callback: called by the main thread, in the order of VBs
-void fasta_piz_process_recon (VBlockP vb)
-{
-    if (flag.reading_kraken)
-        kraken_piz_handover_data (vb);
 }
 
 // Phylip format mandates exactly 10 space-padded characters: http://scikit-bio.org/docs/0.2.3/generated/skbio.io.phylip.html

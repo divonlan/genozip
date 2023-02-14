@@ -14,8 +14,8 @@
 #define HOOK 'G'
 #define HOOK_REV 'C' // complement of HOOK
 
-#define MAX_ALIGNER_GPOS ((PosType)0xfffffffe)
-#define NO_GPOS  ((PosType)0xffffffff)
+#define MAX_ALIGNER_GPOS ((PosType64)0xfffffffe)
+#define NO_GPOS  ((PosType64)0xffffffff)
 
 extern unsigned num_layers;
 extern bool bits_per_hash_is_odd;  // true bits_per_hash is odd

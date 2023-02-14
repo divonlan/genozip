@@ -39,10 +39,10 @@
 
 typedef struct {
     WordIndex prim_chrom; // index in CHAIN_NAMEPRIM
-    PosType prim_first_1pos, prim_last_1pos;
+    PosType64 prim_first_1pos, prim_last_1pos;
 
     WordIndex luft_chrom; // index in CHAIN_NAMELUFT - the nodes+dicts copied to the genozipped file (eg as VCF_oCHROM)
-    PosType luft_first_1pos, luft_last_1pos;
+    PosType64 luft_first_1pos, luft_last_1pos;
 
     bool is_xstrand;
 
@@ -69,7 +69,7 @@ char *chain_filename = NULL; // global - chain filename
 // IMPORTANT: if changing fields in VBlockFASTQ, also update vb_fast_release_vb 
 typedef struct VBlockCHAIN {
     VBLOCK_COMMON_FIELDS
-    PosType next_luft_0pos, next_prim_0pos; // used for loading chain
+    PosType64 next_luft_0pos, next_prim_0pos; // used for loading chain
 } VBlockCHAIN;
 
 unsigned chain_vb_size (DataType dt) { return sizeof (VBlockCHAIN); }
@@ -169,7 +169,7 @@ static void chain_verify_references_not_reversed (VBlockP vb)
     str_split (vb->txt_data.data, newline - vb->txt_data.data, 13, ' ', item, true);
     if (!n_items) return;
 
-    PosType prim_len_ref, prim_len_chain, luft_len_ref, luft_len_chain;
+    PosType64 prim_len_ref, prim_len_chain, luft_len_ref, luft_len_chain;
     if (!str_get_int (STRi(item, 3), &prim_len_chain)) return;
     if (!str_get_int (STRi(item, 8), &luft_len_chain)) return;
 
@@ -275,7 +275,7 @@ static void chain_seg_luft_end_field (VBlockCHAIN *vb, rom field_start, int fiel
 
 // returns false if length is inconsistent with reference, and true if length is the same or contig doesn't exist in reference
 // returns *mismatch=true if contig doesn't exist with the exact name in the reference
-static bool chain_seg_verify_contig (VBlockCHAIN *vb, Reference ref, WordIndex name_index, bool *once, STRp(name), STRp(last_name), PosType size_according_to_chain,
+static bool chain_seg_verify_contig (VBlockCHAIN *vb, Reference ref, WordIndex name_index, bool *once, STRp(name), STRp(last_name), PosType64 size_according_to_chain,
                                      bool *mismatch) // out
 {
     WordIndex ref_index = name_index;
@@ -294,7 +294,7 @@ static bool chain_seg_verify_contig (VBlockCHAIN *vb, Reference ref, WordIndex n
     // case: contig is in the reference - verify its size
     else if (name_index < ref_num_contigs (ref)) {
         
-        PosType size_according_to_ref = ref_contigs_get_contig_length (ref, ref_index, 0, 0, true);
+        PosType64 size_according_to_ref = ref_contigs_get_contig_length (ref, ref_index, 0, 0, true);
 
         if (size_according_to_chain != size_according_to_ref) {
             // output error in the first alignment of this contig
@@ -311,7 +311,7 @@ static bool chain_seg_verify_contig (VBlockCHAIN *vb, Reference ref, WordIndex n
 static WordIndex chain_seg_name_and_size (VBlockCHAIN *vb, Reference ref, bool is_luft, Did did_i_name, STRp(name), Did did_i_size, STRp(size), 
                                           bool *mismatch, bool *verified) // out
 {
-    PosType size_value=0;
+    PosType64 size_value=0;
     ASSSEG (str_get_int_range64 (STRa(size), 1, 1000000000000000, &size_value),
             size, "Invalid size field of \"%.*s\": %.*s", STRf(name), STRf(size));;
 
@@ -648,9 +648,9 @@ static inline void chain_piz_filter_ingest_alignmet (VBlockCHAIN *vb)
             *last_txt(VB, CHAIN_STRNDLUFT));
 
     bool is_xstrand = (*last_txt(VB, CHAIN_STRNDLUFT) == '-');
-    PosType last_prim_0pos = vb->next_prim_0pos + size - 1; // last POS of the dst alignment, 0-based
-    PosType last_luft_0pos = vb->next_luft_0pos + size - 1; // last POS of the dst alignment, 0-based
-    PosType size_dst = vb->last_int (CHAIN_SIZELUFT);  // contig LN
+    PosType64 last_prim_0pos = vb->next_prim_0pos + size - 1; // last POS of the dst alignment, 0-based
+    PosType64 last_luft_0pos = vb->next_luft_0pos + size - 1; // last POS of the dst alignment, 0-based
+    PosType64 size_dst = vb->last_int (CHAIN_SIZELUFT);  // contig LN
 
     // note on negative strand: the source region (the source always has a positive strand), is aligned to a region on the destination
     // contig, but the positions given are counting starting from end of the contig (the last base of the contig is 0), and the sequence
@@ -736,7 +736,7 @@ CONTAINER_FILTER_FUNC (chain_piz_filter)
 }
 
 // main thread: ZIP with --chain, reading txt header: returns null-terminated string of contig, or NULL if contig_i is out of range
-rom chain_get_luft_contig (uint32_t contig_i, PosType *length)
+rom chain_get_luft_contig (uint32_t contig_i, PosType64 *length)
 {
     if (contig_i >= luft_ctgs.contigs.len) return NULL;
 
@@ -816,7 +816,7 @@ void chain_load (void)
     flag.quiet = true; // don't show progress indicator for the chain file - it is very fast 
     flag.maybe_vb_modified_by_reconstructor = true; // we drop all the lines
 
-    piz_one_txt_file (dispachter, false, false, COMP_MAIN, COMP_MAIN);
+    piz_one_txt_file (dispachter, false, false, COMP_NONE, COMP_NONE);
 
     // --show-chain-contigs
     if (flag.show_chain_contigs) {
@@ -878,7 +878,7 @@ static ChainAlignment *chain_get_first_aln (WordIndex prim_ref_index, int32_t st
 }
 
 // append luft_contigs buffer with all dst chroms indicies for which there exists alignment with prim_chrom
-void chain_append_all_luft_ref_index (rom prim_contig_name, unsigned prim_contig_name_len, PosType LN, BufferP luft_contigs)
+void chain_append_all_luft_ref_index (rom prim_contig_name, unsigned prim_contig_name_len, PosType64 LN, BufferP luft_contigs)
 {
     WordIndex prim_ref_index = contigs_get_matching (&prim_ctgs, STRa(prim_contig_name), LN, false, NULL);
     WordIndex prev_dst = WORD_INDEX_NONE;
@@ -897,9 +897,9 @@ void chain_append_all_luft_ref_index (rom prim_contig_name, unsigned prim_contig
 
 // get luft_contig, prim_pos from prim_contig, luft_pos (binary search on chain)
 // returns true if successful
-static bool chain_get_liftover_coords_do (WordIndex prim_ref_index, PosType prim_1pos, 
+static bool chain_get_liftover_coords_do (WordIndex prim_ref_index, PosType64 prim_1pos, 
                                           int32_t start, int32_t end,
-                                          WordIndex *luft_ref_index, PosType *luft_1pos, bool *is_xstrand, uint32_t *aln_i) // out
+                                          WordIndex *luft_ref_index, PosType64 *luft_1pos, bool *is_xstrand, uint32_t *aln_i) // out
 {
     // case: no mapping
     if (end < start) {
@@ -918,7 +918,7 @@ static bool chain_get_liftover_coords_do (WordIndex prim_ref_index, PosType prim
         aln->prim_last_1pos >= prim_1pos) {
             if (luft_ref_index) *luft_ref_index = aln->luft_chrom;
             
-            PosType pos_offset = prim_1pos - aln->prim_first_1pos; // offset of POS from the beginning of the src (src is always positive strand)
+            PosType64 pos_offset = prim_1pos - aln->prim_first_1pos; // offset of POS from the beginning of the src (src is always positive strand)
             if (luft_1pos) *luft_1pos = aln->is_xstrand ? (aln->luft_last_1pos  - pos_offset)  // dst is reverse strand - offset is from the end of the alignment, going back
                                                       : (aln->luft_first_1pos + pos_offset); // dst is positive strand - offset is from the start of the alignment
             
@@ -937,13 +937,13 @@ static bool chain_get_liftover_coords_do (WordIndex prim_ref_index, PosType prim
         return chain_get_liftover_coords_do (prim_ref_index, prim_1pos, mid+1, end, luft_ref_index, luft_1pos, is_xstrand, aln_i);
 }
 
-bool chain_get_liftover_coords (WordIndex prim_ref_index, PosType prim_1pos, 
-                                WordIndex *luft_ref_index, PosType *luft_1pos, bool *is_xstrand, uint32_t *aln_i) // out
+bool chain_get_liftover_coords (WordIndex prim_ref_index, PosType64 prim_1pos, 
+                                WordIndex *luft_ref_index, PosType64 *luft_1pos, bool *is_xstrand, uint32_t *aln_i) // out
 {
     return chain_get_liftover_coords_do (prim_ref_index, prim_1pos, 0, chain.len-1, luft_ref_index, luft_1pos, is_xstrand, aln_i);
 }
 
-PosType chain_get_aln_gap_after (uint32_t aln_i)
+PosType64 chain_get_aln_gap_after (uint32_t aln_i)
 {
     const ChainAlignment *aln = B(const ChainAlignment, chain, aln_i);
 
@@ -956,7 +956,7 @@ PosType chain_get_aln_gap_after (uint32_t aln_i)
         return (aln+1)->prim_first_1pos - aln->prim_last_1pos - 1;
 }
 
-PosType chain_get_aln_prim_last_pos (uint32_t aln_i)
+PosType64 chain_get_aln_prim_last_pos (uint32_t aln_i)
 {
     return B(const ChainAlignment, chain, aln_i)->prim_last_1pos;
 }

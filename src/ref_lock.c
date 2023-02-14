@@ -40,9 +40,9 @@ void ref_lock_free (Reference ref)
 }
 
 // lock a region that includes the region given and the flanking regions 
-RefLock ref_lock (Reference ref, PosType gpos_start, uint32_t seq_len)
+RefLock ref_lock (Reference ref, PosType64 gpos_start, uint32_t seq_len)
 {
-    PosType last_gpos = MIN_(ref->genome_nbases, gpos_start + (PosType)seq_len - 1);
+    PosType64 last_gpos = MIN_(ref->genome_nbases, gpos_start + (PosType64)seq_len - 1);
     gpos_start = MAX_(0, gpos_start);
 
     RefLock lock = { .first_mutex = gpos_start / GENOME_BASES_PER_MUTEX,

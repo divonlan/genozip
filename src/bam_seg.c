@@ -197,8 +197,8 @@ uint32_t bam_split_aux (VBlockSAMP vb, rom alignment, rom aux, rom after_aux, ro
 
 void bam_seg_BIN (VBlockSAMP vb, ZipDataLineSAM *dl, uint16_t bin /* used only in bam */, bool is_bam)
 {
-    SamPosType this_pos = dl->POS;
-    SamPosType last_pos = dl->FLAG.unmapped ? this_pos : (this_pos + vb->ref_consumed - 1);
+    PosType32 this_pos = dl->POS;
+    PosType32 last_pos = dl->FLAG.unmapped ? this_pos : (this_pos + vb->ref_consumed - 1);
     uint16_t reg2bin = bam_reg2bin (this_pos, last_pos); // zero-based, half-closed half-open [start,end)
 
     if (!is_bam || (last_pos <= MAX_POS_SAM && reg2bin == bin))
@@ -366,7 +366,7 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     dl->FLAG.value       = NEXT_UINT16;              // not to be confused with our global var "flag"
     uint32_t l_seq       = NEXT_UINT32;              // note: we stick with the same logic as SAM for consistency - dl->SEQ.len is determined by CIGAR 
     dl->RNEXT            = (int32_t)NEXT_UINT32;     // corresponding to CHROMs in the BAM header
-    SamPosType next_pos  = 1 + (int32_t)NEXT_UINT32; // pos in BAM is 0 based, -1 for unknown
+    PosType32 next_pos  = 1 + (int32_t)NEXT_UINT32; // pos in BAM is 0 based, -1 for unknown
     SamTlenType tlen     = (SamTlenType)NEXT_UINT32;
     rom read_name        = next_field;
     dl->QNAME            = (TxtWord){ .index = BNUMtxt (read_name), .len = l_read_name-1 }; // -1 don't count \0

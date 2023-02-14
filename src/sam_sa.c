@@ -268,7 +268,7 @@ bool sam_seg_0A_mapq_cb (VBlockP vb, ContextP ctx, STRp (mapq_str), uint32_t rep
 }
 
 static inline bool sam_piz_SA_field_is_line_matches_aln (VBlockSAMP vb, ContextP ctx,
-                                                         STRp(my_rname), SamPosType my_pos, char my_strand, int64_t my_mapq, int64_t my_nm, 
+                                                         STRp(my_rname), PosType32 my_pos, char my_strand, int64_t my_mapq, int64_t my_nm, 
                                                          STRp(aln))
 {
     str_split (aln, aln_len, NUM_SA_ITEMS, ',', item, true);

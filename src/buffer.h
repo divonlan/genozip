@@ -37,6 +37,7 @@ typedef struct Buffer { // 64 bytes
         uint32_t prm32[2];
         uint16_t prm16[4];
         uint8_t  prm8 [8];
+        void *pointer;
 #ifdef _WIN32
         void *mmap_handle;     // handle to memory mmaped object, used by BUF_MMAP and BUF_MMAP_RO (Windows)
 #endif        

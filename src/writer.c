@@ -126,7 +126,7 @@ bool writer_does_txtheader_need_write (Section sec)
     ASSERT (sec->st == SEC_TXT_HEADER, "sec->st=%s is not SEC_TXT_HEADER", st_name (sec->st));
     ASSERT (sec->comp_i < txt_header_info.len, "sec->comp_i=%u out of range [0,%d]", sec->comp_i, (int)txt_header_info.len-1);
     
-    bool needs_write = B(VbInfo, txt_header_info, sec->comp_i)->needs_write;
+    bool needs_write = !flag.no_writer_thread && B(VbInfo, txt_header_info, sec->comp_i)->needs_write;
     return needs_write;                             
 }
 
@@ -1255,7 +1255,7 @@ void writer_finish_writing (bool is_last_txt_file)
     if (flag.no_writer_thread || !txt_file || writer_thread == THREAD_ID_NONE) return;
 
     // wait for thread to complete (possibly it completed already)
-    threads_join (&writer_thread); // also sets writer_thread=THREAD_ID_NONE
+    threads_join (&writer_thread, WRITER_TASK_NAME); // also sets writer_thread=THREAD_ID_NONE
     
     // all mutexes destroyed by main thread, that created them (because we will proceed to freeing z_file in which they live)    
     if (is_last_txt_file) {
