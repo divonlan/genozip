@@ -1370,6 +1370,13 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_FI_i: COND (MP(BLASR), sam_seg_blasr_FI_i (vb, dl, numeric.i, add_bytes));
 
         case _OPTION_fx_Z: COND (segconf.has_cellranger, sam_seg_fx_Z (vb, dl, STRa(value), add_bytes));
+
+        case _OPTION_dq_Z: COND (segconf.tech == TECH_PACBIO, seg_add_to_local_text (VB, CTX(OPTION_dq_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
+        case _OPTION_dt_Z: COND (segconf.tech == TECH_PACBIO, seg_add_to_local_text (VB, CTX(OPTION_dt_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
+        case _OPTION_iq_Z: COND (segconf.tech == TECH_PACBIO, seg_add_to_local_text (VB, CTX(OPTION_iq_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
+        case _OPTION_mq_Z: COND (segconf.tech == TECH_PACBIO, seg_add_to_local_text (VB, CTX(OPTION_mq_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
+        case _OPTION_sq_Z: COND (segconf.tech == TECH_PACBIO, seg_add_to_local_text (VB, CTX(OPTION_sq_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
+        case _OPTION_st_Z: COND (segconf.tech == TECH_PACBIO, seg_add_to_local_text (VB, CTX(OPTION_st_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
         
         default: fallback:
             

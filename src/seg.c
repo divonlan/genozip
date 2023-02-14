@@ -1029,7 +1029,8 @@ bool seg_by_container (VBlockP vb, ContextP ctx, ContainerP con, STRp(value),
 void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, STRp(data), bool add_nul, Lookup lookup_type, bool is_singleton, unsigned add_bytes) 
 {
 #ifdef DEBUG
-    ASSERT (is_singleton || ctx->no_stons || ctx->ltype != LT_TEXT, "ctx %s requires no_stons or should have an ltype other than LT_TEXT", ctx->tag_name);
+    ASSERT (is_singleton || ctx->no_stons || ctx->ltype != LT_TEXT || segconf.running, 
+            "%s: ctx %s requires no_stons or should have an ltype other than LT_TEXT", LN_NAME, ctx->tag_name);
 #endif
 
     buf_alloc (vb, &ctx->local, data_len + add_nul, 100000, char, CTX_GROWTH, "contexts->local");

@@ -307,6 +307,11 @@ void fastq_seg_initialize (VBlockFASTQ *vb)
         sqbitmap_ctx->ltype     = LT_BITMAP; // implies no_stons
         sqbitmap_ctx->local_always = true;
 
+        // cannot all_the_same with no b250 for PAIR_1 - SQBITMAP.b250 is tested in fastq_get_pair_1_gpos_strand
+        // See defect 2023-02-11. We rely on this "no_drop_b250" in fastq_piz_get_pair2_is_forward 
+        if (vb->comp_i == FQ_COMP_R1)
+            sqbitmap_ctx->no_drop_b250 = true; 
+
         buf_alloc (vb, &sqbitmap_ctx->local, 1, vb->txt_data.len / 4, uint8_t, 0, "contexts->local"); 
         buf_alloc (vb, &strand_ctx->local, 0, roundup_bits2bytes64 (vb->lines.len), uint8_t, 0, "contexts->local"); 
 
@@ -498,7 +503,7 @@ static void fastq_get_pair_1_gpos_strand (VBlockFASTQ *vb, PosType *pair_gpos, b
     ContextP bitmap_ctx = CTX(FASTQ_SQBITMAP);
 
     // case: we are pair-1 OR we are pair-2, but this line in pair-1 is not aligned
-    if (!bitmap_ctx->pair_b250 || 
+    if (vb->comp_i == FQ_COMP_R1 || 
         ({ STR(snip); ctx_get_next_snip (VB, bitmap_ctx, true, pSTRa(snip)); *snip != SNIP_LOOKUP; })) { // note: SNIP_LOOKUP in case of aligned, SNIP_SPECIAL in case of unaligned
 
         *pair_gpos = NO_GPOS;
@@ -956,8 +961,12 @@ bool fastq_piz_get_pair2_is_forward (VBlockP vb)
 {
     ContextP ctx = CTX(FASTQ_STRAND);
 
+    // defect 2023-02-11: until 14.0.30, we allowed dropping SQBITMAP.b250 sections if all the same (since 14.0.31, we 
+    // set no_drop_b250). Due to the defect, if b250 is dropped, we always segged is_forward verbatim and not as a diff to PAIR1.
+    bool defect_2023_02_11 = !CTX(FASTQ_SQBITMAP)->pair.len32; // can only happen up to 14.0.30
+
     // case: paired read (including all reads in up to v13) - diff vs pair1
-    if (CTX(FASTQ_SQBITMAP)->pair1_is_aligned == PAIR1_ALIGNED) { // always true for files up to v13 and all lines had a is_forward value
+    if (!defect_2023_02_11 && CTX(FASTQ_SQBITMAP)->pair1_is_aligned == PAIR1_ALIGNED) { // always true for files up to v13 and all lines had a is_forward value
 
         bool is_forward_pair_1 = VER(14) ? bits_get ((BitsP)&ctx->pair, CTX(FASTQ_GPOS)->pair.next) // since v14, gpos_ctx->pair.next is an iterator for both gpos and strand, and is incremented in fastq_special_PAIR2_GPOS
                                          : bits_get ((BitsP)&ctx->pair, vb->line_i);                // up to v13, all lines had strand, which was 0 if unmapped

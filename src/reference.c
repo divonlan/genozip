@@ -127,6 +127,7 @@ void ref_destroy_reference (Reference ref, bool destroy_only_if_not_mmap)
 
     // note: we keep ref->filename, in case it needs to be loaded again
     rom save_filename = ref->filename;
+    rom save_ctgs_name = ref->ctgs.name;
 
     // ref contig stuff
     contigs_destroy (&ref->ctgs);
@@ -136,6 +137,8 @@ void ref_destroy_reference (Reference ref, bool destroy_only_if_not_mmap)
 
     memset (ref, 0, sizeof (RefStruct));
     ref->filename = save_filename;
+    ref->ctgs.name = save_ctgs_name;
+    ref->ref_cache_creation_thread_id = THREAD_ID_NONE;
 }
 
 // PIZ: returns a range which is the entire contig

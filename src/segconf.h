@@ -156,5 +156,6 @@ extern void segconf_calculate (void);
 extern void segconf_update_qual (STRp (qual));
 extern bool segconf_is_long_reads(void);
 extern void segconf_mark_as_used (VBlockP vb, unsigned num_ctxs, ...);
-extern rom sam_mapper_name (SamMapperType mp);
+extern rom sam_mapper_name (void);
+extern rom segconf_qf_name (void);
 

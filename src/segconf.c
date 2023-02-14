@@ -18,6 +18,7 @@
 #include "arch.h"
 #include "bgzf.h"
 #include "tip.h"
+#include "qname.h"
 
 SegConf segconf = {}; // system-wide global
 
@@ -294,10 +295,15 @@ void segconf_update_qual (STRp (qual))
         }
 }
 
-rom sam_mapper_name (SamMapperType mp)
+rom sam_mapper_name (void)
 {
     rom mapper_name[] = SAM_MAPPER_NAME;
     ASSERT0 (ARRAY_LEN(mapper_name) == NUM_MAPPERS, "Invalid SAM_MAPPER_NAME array length - perhaps missing commas between strings?");
 
-    return (mp >= 0 && mp < NUM_MAPPERS) ? mapper_name[mp] : "INVALID_MAPPER";
+    return (segconf.sam_mapper >= 0 && segconf.sam_mapper < NUM_MAPPERS) ? mapper_name[segconf.sam_mapper] : "INVALID_MAPPER";
+}
+
+rom segconf_qf_name (void)
+{
+    return segconf.qname_flavor ? qf_name (segconf.qname_flavor) : "N/A";
 }

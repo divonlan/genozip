@@ -176,7 +176,7 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
     F(debug_lines) ; F(show_sag) ; F(show_depn) ; F(no_domqual) ; F(show_aligner) ; F(show_qual) ;
     F(show_stats) ; F(show_threads) ; F(debug_threads) ; F(show_vblocks) ; F(show_codec) ;
     F(show_headers) ; F(show_dict) ; F(show_b250) ; F(show_gheader) ; F(show_recon_plan) ;
-    F(show_ref_contigs) ; F(show_digest) ; F(debug_gencomp) ; F(quiet) 
+    F(show_ref_contigs) ; F(show_digest) ; F(debug_gencomp) ; F(quiet) ; F(explicitly_generic) ;
     #undef F
 
     #define F(name,fmt,none_value) if (flag.name != (none_value)) bufprintf (evb, &url_buf, #name "=" fmt "%%3B", flag.name);
@@ -345,7 +345,7 @@ static void stats_output_file_metadata (void)
                 FEATURE (!segconf.is_sorted && !segconf.is_collated, "Sorting: Not sorted or collated", "Not_sorted_or_collated");
             }
                         
-            rom mapper_name = sam_mapper_name (segconf.sam_mapper);
+            rom mapper_name = sam_mapper_name();
             bufprintf (evb, &stats, "Aligner: %s\n", mapper_name); 
             bufprintf (evb, &features, "Mapper=%s;", mapper_name);
 

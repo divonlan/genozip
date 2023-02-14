@@ -314,6 +314,9 @@ void sam_seg_initialize (VBlockP vb_)
     if (kraken_is_loaded)
         CTX(SAM_TAXID)->counts_section = true;
 
+    if (segconf.tech == TECH_PACBIO)
+        ctx_set_no_stons (VB, OPTION_dq_Z, OPTION_dt_Z, OPTION_iq_Z, OPTION_mq_Z, OPTION_sq_Z, OPTION_st_Z, DID_EOL);
+        
     // in --stats, consolidate stats
     ctx_consolidate_stats (VB, SAM_SQBITMAP, SAM_NONREF, SAM_NONREF_X, SAM_GPOS, SAM_STRAND, SAM_SEQMIS_A, SAM_SEQMIS_C, SAM_SEQMIS_G, SAM_SEQMIS_T, DID_EOL);
     ctx_consolidate_stats (VB, SAM_QUAL, SAM_DOMQRUNS, SAM_QUALMPLX, SAM_DIVRQUAL, SAM_QUALSA,
