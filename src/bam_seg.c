@@ -435,13 +435,13 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
         vb->qual_missing = dl->no_qual = true;
     }
 
-    if (has_NM) 
+    if (has(NM_i)) 
         dl->NM_len = sam_seg_get_aux_int (vb, vb->idx_NM_i, &dl->NM, true, MIN_NM_i, MAX_NM_i, HARD_FAIL);
 
     if (!sam_is_main_vb) {
 
         // set dl->AS needed by sam_seg_prim_add_sag
-        if (sam_is_prim_vb && has_AS)
+        if (sam_is_prim_vb && has(AS_i))
             sam_seg_get_aux_int (vb, vb->idx_AS_i, &dl->AS, true, MIN_AS_i, MAX_AS_i, HARD_FAIL);
 
         sam_seg_sag_stuff (vb, dl, STRb(vb->textual_cigar), B1STc(vb->textual_seq), true);

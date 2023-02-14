@@ -64,7 +64,7 @@ void sam_vb_release_vb (VBlockSAMP vb)
     memset (&vb->first_idx, 0, (char*)&vb->after_idx - (char*)&vb->first_idx); // all idx's 
     memset (&vb->first_mux, 0, (char*)&vb->after_mux - (char*)&vb->first_mux); // all mux's 
     
-    buf_free (vb->bd_bi_line);
+    buf_free (vb->interlaced);
     buf_free (vb->XG);
     buf_free (vb->textual_cigar);
     buf_free (vb->binary_cigar);
@@ -82,7 +82,7 @@ void sam_vb_release_vb (VBlockSAMP vb)
 
 void sam_vb_destroy_vb (VBlockSAMP vb)
 {
-    buf_destroy (vb->bd_bi_line);
+    buf_destroy (vb->interlaced);
     buf_destroy (vb->XG);
     buf_destroy (vb->textual_cigar);
     buf_destroy (vb->binary_cigar);

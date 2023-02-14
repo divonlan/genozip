@@ -301,7 +301,8 @@ void sam_seg_initialize (VBlockP vb_)
                    DID_EOL);
 
     // initialize these to LT_SEQUENCE, the qual-type ones might be changed later to LT_CODEC (eg domq, longr)
-    ctx_set_ltype (VB, LT_SEQUENCE, SAM_QUAL, SAM_QUAL_FLANK, OPTION_BD_BI, OPTION_QX_Z, OPTION_CY_ARR, OPTION_QT_ARR,
+    ctx_set_ltype (VB, LT_SEQUENCE, SAM_QUAL, SAM_QUAL_FLANK, OPTION_BD_BI, OPTION_iq_sq_dq, 
+                   OPTION_QX_Z, OPTION_CY_ARR, OPTION_QT_ARR,
                    OPTION_CR_Z_X, OPTION_RX_Z_X, OPTION_2R_Z, OPTION_TR_Z, DID_EOL);
 
     // set ltype=LT_DYN_INT to allow use of seg_integer
@@ -337,9 +338,20 @@ void sam_seg_initialize (VBlockP vb_)
     if (kraken_is_loaded)
         CTX(SAM_TAXID)->counts_section = true;
 
+    if (TECH(PACBIO)) {
+        ctx_set_no_stons (VB, OPTION_dt_Z, OPTION_mq_Z, OPTION_st_Z, 
+                          OPTION_dq_Z, OPTION_sq_Z, OPTION_iq_Z, DID_EOL); // Following BD_BI logic: we can't use local for singletons as next_local is used to point into iq_sq_dq
+
+        if (segconf.use_pacbio_iqsqdq) {
+            ctx_set_ltype (VB, LT_SEQUENCE, OPTION_dq_Z, OPTION_iq_Z, OPTION_sq_Z, DID_EOL);
+
+            ctx_consolidate_stats (VB, OPTION_iq_sq_dq, OPTION_dq_Z, OPTION_iq_Z, OPTION_sq_Z, DID_EOL);
+        }
+    }
+
     // in --stats, consolidate stats
     ctx_consolidate_stats (VB, SAM_SQBITMAP, SAM_NONREF, SAM_NONREF_X, SAM_GPOS, SAM_STRAND, SAM_SEQMIS_A, SAM_SEQMIS_C, SAM_SEQMIS_G, SAM_SEQMIS_T, DID_EOL);
-    ctx_consolidate_stats (VB, SAM_QUAL, SAM_DOMQRUNS, SAM_QUALMPLX, SAM_DIVRQUAL, SAM_QUALSA,
+    ctx_consolidate_stats (VB, SAM_QUAL, SAM_DOMQRUNS, SAM_QUALMPLX, SAM_DIVRQUAL, SAM_QUALSA, SAM_QUAL_PACBIO_DIFF,
                            SAM_QUAL_FLANK, SAM_QUAL_FLANK_DOMQRUNS, SAM_QUAL_FLANK_QUALMPLX, SAM_QUAL_FLANK_DIVRQUAL, DID_EOL);
     ctx_consolidate_stats (VB, OPTION_OQ_Z, OPTION_OQ_DOMQRUNS, OPTION_OQ_QUALMPLX, OPTION_OQ_DIVRQUAL, DID_EOL);
     ctx_consolidate_stats (VB, OPTION_TQ_Z, OPTION_TQ_DOMQRUNS, OPTION_TQ_QUALMPLX, OPTION_TQ_DIVRQUAL, DID_EOL);
@@ -681,6 +693,9 @@ static void sam_seg_finalize_segconf (VBlockP vb)
     if (z_file->num_txts_so_far == 1 && flag.aligner_available && IS_REF_EXTERNAL)
         ctx_populate_zf_ctx_from_contigs (gref, SAM_RNAME, ref_get_ctgs (gref));
 
+    if (TECH(PACBIO) && segconf.has[OPTION_dq_Z] == vb->lines.len32 && segconf.has[OPTION_iq_Z] == vb->lines.len32 && segconf.has[OPTION_sq_Z] == vb->lines.len32)
+        segconf.use_pacbio_iqsqdq = true;
+
     // Aplogize to user for not doing a good job with PacBio subreads files
     if ((MP(BAZ2BAM) || TECH(PACBIO)) && 
             (segconf.has[OPTION_ip_B_C] || segconf.has[OPTION_pw_B_C] || segconf.has[OPTION_fi_B_C] || 
@@ -904,35 +919,42 @@ void sam_seg_idx_aux (VBlockSAMP vb)
         char c2 = vb->auxs[f][1];
         char c3 = is_bam ? sam_seg_bam_type_to_sam_type (vb->auxs[f][2]) : vb->auxs[f][3];
 
-#define TEST_AUX(name, f1, f2, f3)        \
-    if (c1 == f1 && c2 == f2 && c3 == f3) \
-    vb->idx_##name = f
+        #define AUXval(c1,c2,c3) (((uint32_t)(c1)) << 16 | ((uint32_t)(c2)) << 8 | ((uint32_t)(c3)))
 
-             TEST_AUX(NM_i, 'N', 'M', 'i');
-        else TEST_AUX(NH_i, 'N', 'H', 'i');
-        else TEST_AUX(MD_Z, 'M', 'D', 'Z');
-        else TEST_AUX(SA_Z, 'S', 'A', 'Z');
-        else TEST_AUX(HI_i, 'H', 'I', 'i');
-        else TEST_AUX(IH_i, 'I', 'H', 'i');
-        else TEST_AUX(XG_Z, 'X', 'G', 'Z');
-        else TEST_AUX(XM_Z, 'X', 'M', 'Z');
-        else TEST_AUX(X0_i, 'X', '0', 'i');
-        else TEST_AUX(X1_i, 'X', '1', 'i');
-        else TEST_AUX(XA_Z, 'X', 'A', 'Z');
-        else TEST_AUX(AS_i, 'A', 'S', 'i');
-        else TEST_AUX(CC_Z, 'C', 'C', 'Z');
-        else TEST_AUX(CP_i, 'C', 'P', 'i');
-        else TEST_AUX(ms_i, 'm', 's', 'i');
-        else TEST_AUX(SM_i, 'S', 'M', 'i');
-        else TEST_AUX(UB_Z, 'U', 'B', 'Z');
-        else TEST_AUX(BX_Z, 'B', 'X', 'Z');
-        else TEST_AUX(CB_Z, 'C', 'B', 'Z');
-        else TEST_AUX(CR_Z, 'C', 'R', 'Z');
-        else TEST_AUX(CY_Z, 'C', 'Y', 'Z');
-        else TEST_AUX(XO_Z, 'X', 'O', 'Z');
-        else TEST_AUX(YS_Z, 'Y', 'S', 'Z');
-        else TEST_AUX(XB_A, 'X', 'B', 'A');
-        else TEST_AUX(XB_Z, 'X', 'B', 'Z');
+        #define TEST_AUX(name, c1, c2, c3)        \
+            case AUXval(c1,c2,c3): vb->idx_##name = f; break;
+
+        switch (AUXval(c1, c2, c3)) {
+            TEST_AUX(NM_i, 'N', 'M', 'i');
+            TEST_AUX(NH_i, 'N', 'H', 'i');
+            TEST_AUX(MD_Z, 'M', 'D', 'Z');
+            TEST_AUX(SA_Z, 'S', 'A', 'Z');
+            TEST_AUX(HI_i, 'H', 'I', 'i');
+            TEST_AUX(IH_i, 'I', 'H', 'i');
+            TEST_AUX(XG_Z, 'X', 'G', 'Z');
+            TEST_AUX(XM_Z, 'X', 'M', 'Z');
+            TEST_AUX(X0_i, 'X', '0', 'i');
+            TEST_AUX(X1_i, 'X', '1', 'i');
+            TEST_AUX(XA_Z, 'X', 'A', 'Z');
+            TEST_AUX(AS_i, 'A', 'S', 'i');
+            TEST_AUX(CC_Z, 'C', 'C', 'Z');
+            TEST_AUX(CP_i, 'C', 'P', 'i');
+            TEST_AUX(ms_i, 'm', 's', 'i');
+            TEST_AUX(SM_i, 'S', 'M', 'i');
+            TEST_AUX(UB_Z, 'U', 'B', 'Z');
+            TEST_AUX(BX_Z, 'B', 'X', 'Z');
+            TEST_AUX(CB_Z, 'C', 'B', 'Z');
+            TEST_AUX(CR_Z, 'C', 'R', 'Z');
+            TEST_AUX(CY_Z, 'C', 'Y', 'Z');
+            TEST_AUX(XO_Z, 'X', 'O', 'Z');
+            TEST_AUX(YS_Z, 'Y', 'S', 'Z');
+            TEST_AUX(XB_A, 'X', 'B', 'A');
+            TEST_AUX(XB_Z, 'X', 'B', 'Z');
+            TEST_AUX(dq_Z, 'd', 'q', 'Z');
+            TEST_AUX(iq_Z, 'i', 'q', 'Z');
+            TEST_AUX(sq_Z, 's', 'q', 'Z');
+            default: {}
+        }
     }
 }
 
@@ -1384,11 +1406,11 @@ void sam_seg_init_bisulfite (VBlockSAMP vb, ZipDataLineSAM *dl)
     // note: we calculate it always to avoid needless adding entropy in the snip
     vb->bisulfite_strand =  !segconf.sam_bisulfite    ? 0 
                             : IS_REF_INTERNAL         ? 0 // bug 648
-                            : MP(BISMARK)   && has_XG ? sam_seg_get_aux_A (vb, vb->idx_XG_Z, IS_BAM_ZIP)
-                            : MP(DRAGEN)    && has_XG ? sam_seg_get_aux_A (vb, vb->idx_XG_Z, IS_BAM_ZIP)
-                            : MP(BSSEEKER2) && has_XO ? "CG"[sam_seg_get_aux_A (vb, vb->idx_XO_Z, IS_BAM_ZIP) == '-']
-                            : MP(BSBOLT)    && has_YS ? "CG"[sam_seg_get_aux_A (vb, vb->idx_YS_Z, IS_BAM_ZIP) == 'C']
-                            : MP(GEM3)      && has_XB_A ? sam_seg_get_aux_A (vb, vb->idx_XB_A, IS_BAM_ZIP)
+                            : MP(BISMARK)   && has(XG_Z) ? sam_seg_get_aux_A (vb, vb->idx_XG_Z, IS_BAM_ZIP)
+                            : MP(DRAGEN)    && has(XG_Z) ? sam_seg_get_aux_A (vb, vb->idx_XG_Z, IS_BAM_ZIP)
+                            : MP(BSSEEKER2) && has(XO_Z) ? "CG"[sam_seg_get_aux_A (vb, vb->idx_XO_Z, IS_BAM_ZIP) == '-']
+                            : MP(BSBOLT)    && has(YS_Z) ? "CG"[sam_seg_get_aux_A (vb, vb->idx_YS_Z, IS_BAM_ZIP) == 'C']
+                            : MP(GEM3)      && has(XB_A) ? sam_seg_get_aux_A (vb, vb->idx_XB_A, IS_BAM_ZIP)
                             :                           0;
 
     // enter the converted bases into the reference, in case of REF_INTERNAL 
@@ -1432,16 +1454,16 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
         seg_create_rollback_point (VB, NULL, 1, SAM_RNAME);
 
     int32_t rname_shrinkage = vb->recon_size;
-    dl->RNAME = sam_seg_RNAME(vb, dl, STRfld (RNAME), false, fld_lens[RNAME] + 1);
+    dl->RNAME = sam_seg_RNAME (vb, dl, STRfld (RNAME), false, fld_lens[RNAME] + 1);
     rname_shrinkage -= vb->recon_size; // number of characters RNAME was reduced by, due to --match-chrom-to-reference
 
-    ASSSEG (str_get_int_range32(STRfld (POS), 0, MAX_POS_SAM, &dl->POS),
+    ASSSEG (str_get_int_range32 (STRfld (POS), 0, MAX_POS_SAM, &dl->POS),
             flds[POS], "Invalid POS \"%.*s\": expecting an integer [0,%d]", STRfi (fld, POS), (int)MAX_POS_SAM);
 
-    ASSSEG (str_get_int_range8(STRfld (MAPQ), 0, 255, &dl->MAPQ),
+    ASSSEG (str_get_int_range8 (STRfld (MAPQ), 0, 255, &dl->MAPQ),
             flds[MAPQ], "Invalid MAPQ \"%.*s\": expecting an integer [0,255]", STRfi (fld, MAPQ));
 
-    ASSSEG (str_get_int_range16(STRfld (FLAG), 0, SAM_MAX_FLAG, &dl->FLAG.value), flds[FLAG], "invalid FLAG field: \"%.*s\"", STRfi (fld, FLAG));
+    ASSSEG (str_get_int_range16 (STRfld (FLAG), 0, SAM_MAX_FLAG, &dl->FLAG.value), flds[FLAG], "invalid FLAG field: \"%.*s\"", STRfi (fld, FLAG));
 
     // analyze (but don't seg yet) CIGAR
     uint32_t seq_consumed;
@@ -1466,12 +1488,12 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
     vb->last_cigar = flds[CIGAR];
     SAFE_NUL(&vb->last_cigar[fld_lens[CIGAR]]); // nul-terminate CIGAR string
 
-    if (has_NM)
+    if (has(NM_i))
         dl->NM_len = sam_seg_get_aux_int (vb, vb->idx_NM_i, &dl->NM, false, MIN_NM_i, MAX_NM_i, HARD_FAIL) + 1; // +1 for \t or \n
 
     if (!sam_is_main_vb) {
         // set dl->AS needed by sam_seg_prim_add_sag
-        if (sam_is_prim_vb && has_AS)
+        if (sam_is_prim_vb && has(AS_i))
             sam_seg_get_aux_int (vb, vb->idx_AS_i, &dl->AS, false, MIN_AS_i, MAX_AS_i, HARD_FAIL);
 
         sam_seg_sag_stuff (vb, dl, STRfld (CIGAR), flds[SEQ], false);

@@ -694,7 +694,6 @@ static void set_exe_type (rom argv0)
     FREE (bn);
 }
 
-#include "deep.h"
 int main (int argc, char **argv)
 {    
     MAIN0 ("Starting main");

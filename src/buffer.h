@@ -92,7 +92,9 @@ extern uint64_t buf_alloc_do (VBlockP vb,
                               rom name);
 
 #define buf_alloc(alloc_vb, buf, more, at_least, type, grow_at_least_factor, name) ({\
-    uint64_t new_req_size = MAX_((at_least), ((buf)->len+(more)))*sizeof(type); /* make copy to allow ++ */ \
+    uint64_t new_more = (more); /* avoid evaluating twice */   \
+    uint64_t if_more = new_more ? ((buf)->len + new_more) : 0; \
+    uint64_t new_req_size = MAX_((at_least), if_more) * sizeof(type); /* make copy to allow ++ */ \
     ((!(buf)->data || (buf)->size < (new_req_size)) ? buf_alloc_do (((alloc_vb) ? ((VBlockP)alloc_vb) : (buf)->vb), (buf), (new_req_size), (grow_at_least_factor), __FUNCLINE, (name)) \
                                                     : (buf)->size); })
 

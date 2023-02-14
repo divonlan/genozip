@@ -220,6 +220,7 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual_data)/*always te
     ZipDataLineSAM *saggy_dl;
     bool prim_has_qual_but_i_dont = false; // will be set if this line has no QUAL, but its prim line does (very rare)
     bool diff_aborted = false;             // quality scores are too different, we're better off not diffing (added 14.0.10)
+    bool pacbio_diff = false;
 
     vb->has_qual |= !vb->qual_missing;
 
@@ -279,6 +280,14 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual_data)/*always te
         goto done;
     }
 
+    // case: predict QUAL from dq, iq, sq
+    else if (!dl->no_qual && segconf.use_pacbio_iqsqdq &&
+             sam_seg_pacbio_qual (vb, STRa (qual_data), add_bytes)) {
+        
+        pacbio_diff = true;
+        dl->dont_compress_QUAL = true; // don't compress this line with QUAL codec
+    }
+
     // case: standard
     // Note: in PRIM, QUAL is not reconstructed (as QUAL is not in TOPLEVEL container) - it is consumed when loading SA Groups
     //       Instead, all-the-same QUALSA is reconstructed (SPECIAL copying from the SA Group)
@@ -289,7 +298,7 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual_data)/*always te
 
     // seg SPECIAL. note: prim this is all-the-same and segged in sam_seg_QUAL_initialize
     if (!sam_is_prim_vb) 
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_QUAL, '0' + prim_has_qual_but_i_dont, '0' + diff_aborted }, 4, SAM_QUAL, 0); 
+        seg_by_did (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_QUAL, '0' + prim_has_qual_but_i_dont, '0' + diff_aborted, '0' + pacbio_diff }, 5, SAM_QUAL, 0); 
 
     // get QUAL score, consumed by mate ms:i
     if (!segconf.running && segconf.sam_ms_type == ms_BIOBAMBAM && !flag.optimize_QUAL)
@@ -366,7 +375,6 @@ static void sam_piz_QUAL_undiff_vs_primary (VBlockSAMP vb, STRp (prim_qual), boo
 
     if (overlap_len && !xstrand && reconstruct) {
         uint32_t first_prim_overlap = flank[0] ? 0 : (vb->hard_clip[0] - (saggy_anal ? saggy_anal->hard_clip[0] : 0));
-
         ASSPIZ (first_prim_overlap + overlap_len <= prim_qual_len, "prim_qual overflow: expecting first_prim_overlap=%u + overlap_len=%u <= prim_qual_len=%u. flank[0]=%u vb->hard_clip[0]=%u saggy_anal->seq_len=%u saggy_anal->hard_clip[0]=%u is_depn_vb=%s has_saggy=%s bam_bump=%d",
                 first_prim_overlap, overlap_len, prim_qual_len, flank[0], vb->hard_clip[0], saggy_anal->seq_len, saggy_anal->hard_clip[0], TF(sam_is_depn_vb), TF(sam_has_saggy), bam_bump);
 
@@ -429,11 +437,16 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
     const Sag *g = vb->sag;
     bool prim_has_qual_but_i_dont = (snip[0] == '1');
     bool diff_aborted             = (snip[1] == '1');
+    bool pacbio_diff              = (snip_len >= 3 && snip[2] == '1'); // v15
 
     const CigarAnalItem *saggy_anal;
 
+    // case: diff against prediction based on PacBio dq, iq, sq fields
+    if (pacbio_diff)
+        sam_recon_pacbio_qual (vb, ctx, reconstruct);
+
     // case: reconstruct by copying from sag (except if we are depn and group has no qual)
-    if (SAM_PIZ_HAS_SAG && (sam_is_prim_vb || (sam_is_depn_vb && !g->no_qual))) {
+    else if (SAM_PIZ_HAS_SAG && (sam_is_prim_vb || (sam_is_depn_vb && !g->no_qual))) {
       
         if (!reconstruct) {}
 

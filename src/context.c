@@ -36,6 +36,7 @@
 #include "chrom.h"
 #include "buffer.h"
 #include "version.h"
+#include "segconf.h"
 
 #define INITIAL_NUM_NODES 10000
 

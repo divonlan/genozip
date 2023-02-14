@@ -280,10 +280,10 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_BWA_XC)
 // ----------------------------------------------------------------------------------------------------------
 void sam_seg_BWA_XT_A (VBlockSAMP vb, char XT, unsigned add_bytes)
 {
-    int64_t X0 = has_X0 ? sam_seg_get_aux_int_(vb, X0_i) : 0;
+    int64_t X0 = has(X0_i) ? sam_seg_get_aux_int_(vb, X0_i) : 0;
     
     // predict based on the existance and value of X0
-    char prediction = !has_X0 ? 'M'  // Mate Smith-Waterman used for mapping. Note: could also be 'N', but we set our prediction to 'M' as it is very much more common
+    char prediction = !has(X0_i) ? 'M'  // Mate Smith-Waterman used for mapping. Note: could also be 'N', but we set our prediction to 'M' as it is very much more common
                     : X0 == 1 ? 'U'  // Unique mapping
                     :           'R'; // Repeat (i.e. not unique)
 
@@ -311,13 +311,13 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_BWA_XT)
 // ----------------------------------------------------------------------------------------------------------
 void sam_seg_BWA_X1_i (VBlockSAMP vb, int64_t X1, unsigned add_bytes)
 {
-    if (!has_X0) goto fallback; // need X0 to calculate prediction
+    if (!has(X0_i)) goto fallback; // need X0 to calculate prediction
 
     int64_t prediction = 0;
 
     // in some files, where XA:Z includes sub-optimal alignments, this is usually true: 
     // (X0 + X1 = 1 + XA.repeats), and (X0 >= 1)
-    if (has_XA) {
+    if (has(XA_Z)) {
         STR(xa);
         sam_seg_get_aux_Z (vb, vb->idx_XA_Z, pSTRa(xa), IS_BAM_ZIP);
 
@@ -388,7 +388,7 @@ void sam_seg_BWA_XS_i (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, int64_t xs,
     START_TIMER;
 
     // "Suboptimal alignment score" - multiplex by MAPQ and (sometimes) delta vs AS
-    if (has_AS && ABS(xs) < 10000) {
+    if (has(AS_i) && ABS(xs) < 10000) {
 
         int channel_i = sam_XS_get_mux_channel (dl->MAPQ);
         ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_XS_i, (MultiplexerP)&vb->mux_XS, channel_i);

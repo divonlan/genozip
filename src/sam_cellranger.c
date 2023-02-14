@@ -82,7 +82,7 @@ void sam_seg_CB_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(cb), unsigned add_byt
 static void sam_seg_CR_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(cr), unsigned add_bytes)
 {
     // diff against CB if possible
-    if (has_CB) {
+    if (has(CB_Z)) {
         STR(cb);
         sam_seg_get_aux_Z (vb, vb->idx_CB_Z, pSTRa(cb), IS_BAM_ZIP); // base field can be before or after
         seg_set_last_txt (VB, CTX(OPTION_CB_Z), STRa(cb));
@@ -188,9 +188,9 @@ bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, SoloTag
 static void sam_seg_RX_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(rx), unsigned add_bytes)
 {
     // diff against UB, but not if length is 1 (in STARsolo, UB is always "-" in this case while UR is a single base)
-    if (rx_len > 1 && (has_UB || has_BX)) {
+    if (rx_len > 1 && (has(UB_Z) || has(BX_Z))) {
         STR(bx);
-        sam_seg_get_aux_Z (vb, has_BX ? vb->idx_BX_Z : vb->idx_UB_Z, pSTRa(bx), IS_BAM_ZIP); // base field can be before or after
+        sam_seg_get_aux_Z (vb, has(BX_Z) ? vb->idx_BX_Z : vb->idx_UB_Z, pSTRa(bx), IS_BAM_ZIP); // base field can be before or after
         seg_set_last_txt (VB, CTX(OPTION_BX_Z), STRa(bx));
 
         if (bx_len < rx_len) goto fallback; // can't diff
@@ -377,7 +377,7 @@ void sam_seg_GR_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(gr), unsigned add_byt
     START_TIMER;
 
     // diff against CR if possible
-    if (has_CR) {
+    if (has(CR_Z)) {
         STR(cr);
         sam_seg_get_aux_Z (vb, vb->idx_CR_Z, pSTRa(cr), IS_BAM_ZIP); // base field can be before or after
         seg_set_last_txt (VB, CTX(OPTION_CR_Z), STRa(cr));
@@ -409,7 +409,7 @@ void sam_seg_GY_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(gy), unsigned add_byt
     START_TIMER;
 
     // diff against CY if possible
-    if (has_CY) {
+    if (has(CY_Z)) {
         STR(cy);
         sam_seg_get_aux_Z (vb, vb->idx_CY_Z, pSTRa(cy), IS_BAM_ZIP); // base field can be before or after
         seg_set_last_txt (VB, CTX(OPTION_CY_Z), STRa(cy));

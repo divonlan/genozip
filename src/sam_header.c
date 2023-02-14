@@ -60,7 +60,6 @@ static void sam_header_add_contig (STRp (contig_name), PosType64 LN, void *out_r
                 contig_name = ref_contigs_get_name (gref, ref_index, &contig_name_len);
                 z_file->header_size += contig_name_len; // header_size now has the growth in the size due to --match. the base will be added in txtheader_zip_read_and_compress
             }
-
             *(WordIndex*)out_ref_index = ref_index;
         }
     }

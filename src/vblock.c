@@ -136,7 +136,7 @@ void vb_release_vb_do (VBlockP *vb_p, rom task_name, rom func)
     memset(vb->ctx_index, 0, sizeof(vb->ctx_index));
     vb->iupacs_last_range[0] = vb->iupacs_last_range[1] = NULL;
     vb->iupacs_last_pos[0] = vb->iupacs_last_pos[1] = vb->iupacs_next_pos[0] = vb->iupacs_next_pos[1] = 0;
-    vb->num_rollback_ctxs=0;
+    vb->num_rollback_ctxs = 0;
     memset (vb->rollback_ctxs, 0, sizeof(vb->rollback_ctxs));
     mutex_destroy (vb->ready_for_compute);
 
@@ -159,6 +159,8 @@ void vb_release_vb_do (VBlockP *vb_p, rom task_name, rom func)
         iprintf (vb->id >= 0 ? "VB_RELEASE(task=%s id=%d) vb=%s caller=%s in_use=%d/%d\n"
                              : "VB_RELEASE(task=%s id=%d) vb=%s caller=%s\n", 
                  task_name, vb->id, VB_NAME, func, num_in_use, (vb->id >= 0 ? vb->pool->num_vbs : -1));
+
+    buf_compact_buf_list (vb);
 
     if (vb->id >= 0) COPY_TIMER_VB (evb, vb_release_vb_do)
 }

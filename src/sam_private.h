@@ -148,6 +148,7 @@ typedef struct {
 
     DeepHash deep_hash;            // Set for primary (i.e. not supplementary or secondary) alignments
     TxtWord QUAL, OQ, TQ, _2Y, GY, U2, BD_BI[2], SA, QNAME, MC;// coordinates in txt_data 
+    TxtWord dq, iq, sq;            // PacBio - coordinates in txt_data
     TxtWord CIGAR;                 // SAM: coordinates in txt_data (always); BAM: coordinates in vb->line_textual_cigars
     TxtWord SEQ;                   // coordinates in txt_data. Note: len is actual sequence length in bases (not bytes) determined from any or or of: CIGAR, SEQ, QUAL. If more than one contains the length, they must all agree
     int32_t QUAL_score;            // used by ms:i
@@ -209,32 +210,10 @@ typedef struct VBlockSAM {
             idx_X0_i, idx_X1_i, idx_XA_Z, idx_AS_i, 
             idx_CC_Z, idx_CP_i, idx_ms_i, idx_SM_i,
             idx_UB_Z, idx_BX_Z, idx_CB_Z, idx_GX_Z, idx_CR_Z, idx_CY_Z,
-            idx_XO_Z, idx_YS_Z, idx_XB_A, idx_XM_Z, idx_XB_Z;
-    #define has_NM   (vb->idx_NM_i != -1)
-    #define has_MD   (vb->idx_MD_Z != -1 && segconf.has[OPTION_MD_Z])
-    #define has_SA   (vb->idx_SA_Z != -1)
-    #define has_XG   (vb->idx_XG_Z != -1)
-    #define has_XM   (vb->idx_XG_Z != -1)
-    #define has_NH   (vb->idx_NH_i != -1)
-    #define has_HI   (vb->idx_HI_i != -1)
-    #define has_IH   (vb->idx_IH_i != -1)
-    #define has_X0   (vb->idx_X0_i != -1)
-    #define has_X1   (vb->idx_X1_i != -1)
-    #define has_XA   (vb->idx_XA_Z != -1)
-    #define has_AS   (vb->idx_AS_i != -1)
-    #define has_CC   (vb->idx_CC_Z != -1)
-    #define has_CP   (vb->idx_CP_i != -1)
-    #define has_ms   (vb->idx_ms_i != -1)
-    #define has_SM   (vb->idx_SM_i != -1)
-    #define has_UB   (vb->idx_UB_Z != -1)
-    #define has_BX   (vb->idx_BX_Z != -1)
-    #define has_CB   (vb->idx_CB_Z != -1)
-    #define has_CR   (vb->idx_CR_Z != -1)
-    #define has_CY   (vb->idx_CY_Z != -1)
-    #define has_XO   (vb->idx_XO_Z != -1)
-    #define has_YS   (vb->idx_YS_Z != -1)
-    #define has_XB_A (vb->idx_XB_A != -1)
-    #define has_XB_Z (vb->idx_XB_Z != -1)
+            idx_XO_Z, idx_YS_Z, idx_XB_A, idx_XM_Z, idx_XB_Z,
+            idx_dq_Z, idx_iq_Z, idx_sq_Z;
+    #define has(f)   (vb->idx_##f  != -1)
+    #define has_MD   (has(MD_Z) && segconf.has[OPTION_MD_Z])
 
     // data set by sam_seg_analyze_MD
     #define after_idx md_verified
@@ -246,7 +225,7 @@ typedef struct VBlockSAM {
     thool XG_inc_S;                // Seg: whether to include soft_clip[0]
 
     union {
-    Buffer bd_bi_line;             // ZIP: interlaced BD and BI data for one line
+    Buffer interlaced;             // ZIP: interlaced BD and BI data for one line
     Buffer deep_index;             // PIZ: entry per prim_line - uint32_t index into deep_ents
     };
 
@@ -583,6 +562,16 @@ extern rom bam_seq_display (bytes seq, uint32_t seq_len);
 extern uint32_t sam_seq_copy (char *dst, rom src, uint32_t src_start_base, uint32_t n_bases, bool revcomp, bool is_bam_format);
 
 // QUAL stuff
+#define QUAL_ZIP_CALLBACK(tag, f, may_be_revcomped)             \
+COMPRESSOR_CALLBACK (sam_zip_##tag)                             \
+{                                                               \
+    ZipDataLineSAM *dl = DATA_LINE (vb_line_i);                 \
+    *line_data_len = dl->dont_compress_##tag ? 0 : MIN_(maximum_size, dl->f.len); /* note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec */ \
+    if (!line_data || ! *line_data_len) return; /* no data, or only lengths were requested */   \
+    *line_data = Btxt(dl->f.index);                             \
+    if (is_rev) *is_rev = may_be_revcomped ? dl->FLAG.rev_comp : false;\
+}                               
+
 extern void sam_seg_QUAL_initialize (VBlockSAMP vb);
 extern void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM *dl, rom qual, uint32_t qual_data_len, unsigned add_bytes);
 extern rom bam_qual_display (bytes qual, uint32_t l_seq); 
@@ -630,6 +619,11 @@ static inline bool sam_has_bowtie2_YS_i (void) { return MP(BOWTIE2) || MP(BSSEEK
 // minimap2 stuff
 extern void sam_seg_s1_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t s1, unsigned add_bytes);
 extern void sam_seg_cm_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t cm, unsigned add_bytes);
+
+// PacBio stuff
+extern void sam_seg_pacbio_xq (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, TxtWord *dl_word, STRp(value), unsigned add_bytes);
+extern bool sam_seg_pacbio_qual (VBlockSAMP vb, STRp(qual), unsigned add_bytes);
+extern void sam_recon_pacbio_qual (VBlockSAMP vb, ContextP ctx, bool reconstruct);
 
 // hisat2 stuff
 extern void sam_seg_HISAT2_Zs_Z (VBlockSAMP vb, STRp(zs), unsigned add_bytes);

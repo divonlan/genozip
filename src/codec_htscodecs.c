@@ -52,7 +52,7 @@ static bool codec_hts_compress (VBlockP vb, ContextP ctx,
         uncompressed = codec_alloc (vb, *uncompressed_len, 1);
         
         for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
-            char *line; uint32_t line_len;
+            STRw (line);
             get_line_cb (vb, ctx, line_i, pSTRa(line), *uncompressed_len - vb->codec_bufs[0].len, NULL);
             
             if (line_len)

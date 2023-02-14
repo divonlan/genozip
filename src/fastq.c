@@ -533,7 +533,6 @@ static void fastq_seg_kraken_tax_id (VBlockFASTQP vb, STRp(qname))
 
         kraken_seg_taxid (VB, FASTQ_TAXID, STRa(qname), true); // this fails if missing
     }
-
 }
 
 static rom fastq_seg_get_lines (VBlockFASTQP vb, rom line, int32_t remaining, 

@@ -248,7 +248,7 @@
 #pragma GENDICT INFO_SVANN=DTYPE_1=SVANN            // <ID=SVANN,Number=.,Type=String,Description="Repeat annotation of structural variant">
 #pragma GENDICT INFO_MATEID=DTYPE_1=MATEID          // <ID=MATEID,Number=.,Type=String,Description="ID of mate breakends">
 #pragma GENDICT INFO_MATEDIST=DTYPE_1=MATEDIST      // <ID=MATEDIST,Number=1,Type=Integer,Description="Distance to the mate breakend for mates on the same contig">
-#pragma GENDICT INFO_MATEDIST=DTYPE_1=MATEDIST      // <ID=IMPRECISE,Number=0,Type=Flag,Description="Imprecise structural variation">
+#pragma GENDICT INFO_IMPRECISE=DTYPE_1=IMPRECISE    // <ID=IMPRECISE,Number=0,Type=Flag,Description="Imprecise structural variation">
 #pragma GENDICT INFO_SHADOWED=DTYPE_1=SHADOWED      // <ID=SHADOWED,Number=0,Type=Flag,Description="CNV overlaps with or is encapsulated by deletion">
 #pragma GENDICT FORMAT_CN=DTYPE_2=CN                // <ID=CN,Number=1,Type=Integer,Description="Copy number genotype for imprecise events">
 

@@ -941,7 +941,8 @@ batch_real_world_1_adler32() # $1 extra genozip argument
                    test.*fq* test.*fa* \
                    basic.phy* test.*gvf* test.*gtf* test.*gff* test.*locs* \
                    test.*txt* test.*kraken* | \
-                   grep -v "$filter_out" | grep -v headerless | grep -v .genozip | grep -v .md5 | grep -v .bad ` ) 
+                   grep -v "$filter_out" | grep -v headerless | grep -v .genozip | grep -v .md5 | grep -v .bad |\
+                   grep -v test.embedded-fasta.gff.gz` ) 
 
     for f in ${files[@]}; do rm -f ${f}.genozip; done
 
@@ -977,7 +978,7 @@ batch_real_world_genounzip_compare_file() # $1 extra genozip argument
                    test.*fq* test.*fa* \
                    basic.phy* test.*gvf* test.*gtf* test.*gff* test.*locs* \
                    test.*txt* test.*kraken* | \
-                   grep -v "$filter_out" | grep -v headerless | grep -v .genozip | grep -v .md5 | grep -v .bad | grep -v .xz | grep -v .bz2` )
+                   grep -v "$filter_out" | grep -v headerless | grep -v .genozip | grep -v .md5 | grep -v .bad | grep -v .xz | grep -v .bz2 | grep -v test.embedded-fasta.gff.gz` )
     
     # test full genounzip (not --test), including generation of BZGF
     for f in ${files[@]}; do 

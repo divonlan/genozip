@@ -1751,7 +1751,7 @@ rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t *len, char *next
     for (int sf_i=0; sf_i < con_nitems(samples); sf_i++) {
         ctxs[sf_i]->sf_i = sf_i;
 
-        if (segconf.running) segconf.has[ctxs[sf_i]->did_i] = true;
+        if (segconf.running) segconf.has[ctxs[sf_i]->did_i]++;
     }
 
     // initialize LOOKBACK if we have PS or PID

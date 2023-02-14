@@ -1355,7 +1355,7 @@ void vcf_seg_info_subfields (VBlockVCFP vb, rom info_str, unsigned info_len)
         
         if (z_is_dvcf && !vb->is_rejects_vb) vcf_tags_add_tag (vb, ii.ctx, DTYPE_VCF_INFO, pairs[i], tag_name_len);
 
-        if (segconf.running) segconf.has[ii.ctx->did_i] = true;
+        if (segconf.running) segconf.has[ii.ctx->did_i]++;
 
         ASSVCF (!z_is_dvcf || 
                   (((dict_id.num != _INFO_LUFT && dict_id.num != _INFO_LREJ) || vb->line_coords == DC_PRIMARY) && 

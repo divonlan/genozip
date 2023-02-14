@@ -45,7 +45,7 @@ void sam_seg_bismark_XM_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl)
 {
     if (!IS_REF_INTERNAL || // analyzing sets bases in an internal reference - not needed if not internal
         has_MD ||           // analyzing MD sets the same bases
-        !has_XM || !vb->bisulfite_strand || vb->comp_i != SAM_COMP_MAIN) return;
+        !has(XM_Z) || !vb->bisulfite_strand || vb->comp_i != SAM_COMP_MAIN) return;
 
     STR(xm);
     sam_seg_get_aux_Z (vb, vb->idx_XM_Z, pSTRa(xm), IS_BAM_ZIP);

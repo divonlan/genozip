@@ -737,7 +737,7 @@ void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAM *dl, uint32_t last_cigar_len, 
     }
 
     // case: copy from same-vb prim (note: saggy_line_i can only be set in the MAIN component)
-    else if (has_SA && segconf.sam_has_SA_Z && sam_has_prim && sam_cigar_seg_is_predicted_by_saggy_SA (vb, vb->last_cigar, last_cigar_len)) {
+    else if (has(SA_Z) && segconf.sam_has_SA_Z && sam_has_prim && sam_cigar_seg_is_predicted_by_saggy_SA (vb, vb->last_cigar, last_cigar_len)) {
         cigar_snip[cigar_snip_len++] = COPY_PRIM_SA_CIGAR; // always at cigar_snip[2]
         seg_by_did (VB, STRa(cigar_snip), SAM_CIGAR, add_bytes); 
     }

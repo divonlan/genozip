@@ -585,6 +585,7 @@ static bool vcf_header_handle_contigs (STRp(line), void *new_txt_header_, void *
         // behaving the same
         if (flag.match_chrom_to_reference) {
             Reference ref = chain_is_loaded ? prim_ref : gref;
+                        
             WordIndex ref_index = ref_contigs_get_by_name (ref , STRa(contig_name), true, true);
             if (ref_index != WORD_INDEX_NONE) {
                 contig_name = ref_contigs_get_name (ref, ref_index, &contig_name_len); // this contig as its called in the reference
@@ -593,6 +594,8 @@ static bool vcf_header_handle_contigs (STRp(line), void *new_txt_header_, void *
 
             int32_t len_before = new_txt_header->len32; 
             bufprintf (evb, new_txt_header, "%.*s<ID=%.*s,length=%"PRIu64">\n", key_len, line, STRf(contig_name), LN);
+            
+            z_file->header_size += (int32_t)new_txt_header->len32 - (int32_t)len_before - (int32_t)line_len; // header_size now has the growth in the size due to --match. the base will be added in txtheader_zip_read_and_compress
             printed = true;
 
             int32_t new_line_len = (int32_t)new_txt_header->len32 - len_before;

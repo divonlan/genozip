@@ -116,6 +116,7 @@
 #pragma GENDICT SAM_QUAL_FLANK_DOMQRUNS=DTYPE_2=Q0F_DOMQ // these 3 must be right after SAM_QUAL_FLANK. 
 #pragma GENDICT SAM_QUAL_FLANK_QUALMPLX=DTYPE_2=Q1F_MPLX 
 #pragma GENDICT SAM_QUAL_FLANK_DIVRQUAL=DTYPE_2=Q2F_DIVR 
+#pragma GENDICT SAM_QUAL_PACBIO_DIFF=DTYPE_2=Q3F_PACB 
 #pragma GENDICT SAM_EOL=DTYPE_FIELD=EOL
 #pragma GENDICT SAM_BAM_BIN=DTYPE_FIELD=BAM_BIN
 #pragma GENDICT SAM_TOP2BAM=DTYPE_FIELD=TOP2BAM
@@ -394,11 +395,12 @@
 #pragma GENDICT OPTION_ec_f=DTYPE_2=ec:f     // per-read: Effective coverage for CCS reads, the average subread coverage across all windows (only present in CCS reads)
 #pragma GENDICT OPTION_rq_f=DTYPE_2=rq:f     // per-read: Float in [0, 1] encoding expected accuracy
 #pragma GENDICT OPTION_sn_B_f=DTYPE_2=sn:B:f // per-read: 4 floats for the average signal-to-noise ratio of A, C, G, and T (in that order) over the HQRegion
-#pragma GENDICT OPTION_dq_Z=DTYPE_2=dq:Z     // per-base: DeletionQV
 #pragma GENDICT OPTION_dt_Z=DTYPE_2=dt:Z     // per-base: DeletionTag
-#pragma GENDICT OPTION_iq_Z=DTYPE_2=iq:Z     // per-base: InsertionQV
 #pragma GENDICT OPTION_mq_Z=DTYPE_2=mq:Z     // per-base: MergeQV
+#pragma GENDICT OPTION_dq_Z=DTYPE_2=dq:Z     // per-base: DeletionQV
+#pragma GENDICT OPTION_iq_Z=DTYPE_2=iq:Z     // per-base: InsertionQV
 #pragma GENDICT OPTION_sq_Z=DTYPE_2=sq:Z     // per-base: SubstitutionQV
+#pragma GENDICT OPTION_iq_sq_dq=DTYPE_2=iq_sq_dq
 #pragma GENDICT OPTION_st_Z=DTYPE_2=st:Z     // per-base: SubstitutionTag
 #pragma GENDICT OPTION_ip_B_C=DTYPE_2=ip:B:C // per-base: Interpulse duration (IPD) measured in frames (raw frames or codec V1)
 #pragma GENDICT OPTION_pw_B_C=DTYPE_2=pw:B:C // per-base: PulseWidth measured in frames (raw frames or codec V1)
@@ -531,6 +533,7 @@ COMPRESSOR_CALLBACK(sam_zip_TQ);
 COMPRESSOR_CALLBACK(sam_zip_QX);
 COMPRESSOR_CALLBACK(sam_zip_2Y);
 COMPRESSOR_CALLBACK(sam_zip_U2);
+COMPRESSOR_CALLBACK(sam_zip_iq_sq_dq);
 COMPRESSOR_CALLBACK(sam_zip_BD_BI);
 extern void sam_zip_initialize (void);
 extern void sam_set_sag_type (void);
@@ -621,7 +624,7 @@ extern void sam_reset_line (VBlockP vb);
                       sam_piz_special_BISMARK_XG, sam_piz_special_HI, sam_piz_special_DEMUX_BY_BUDDY_MAP, sam_piz_special_SEQ_LEN,\
                       sam_piz_special_FI, sam_piz_special_cm, sam_piz_special_COPY_BUDDY, sam_piz_special_SET_BUDDY, \
                       sam_piz_special_TX_AN_POS, sam_piz_special_COPY_TEXTUAL_CIGAR, sam_piz_special_BISMARK_XM, \
-                      sam_piz_special_BSBOLT_XB, sam_piz_special_UQ \
+                      sam_piz_special_BSBOLT_XB, sam_piz_special_UQ, sam_piz_special_iq_sq_dq \
                     }
 SPECIAL (SAM, 0,  CIGAR,                 sam_cigar_special_CIGAR);
 SPECIAL (SAM, 1,  TLEN_old,              sam_piz_special_TLEN_old);            // used up to 12.0.42
@@ -675,7 +678,8 @@ SPECIAL (SAM, 48, COPY_TEXTUAL_CIGAR,    sam_piz_special_COPY_TEXTUAL_CIGAR);  /
 SPECIAL (SAM, 49, BISMARK_XM,            sam_piz_special_BISMARK_XM);          // introduced 14.0.0
 SPECIAL (SAM, 50, BSBOLT_XB,             sam_piz_special_BSBOLT_XB);           // introduced 14.0.0
 SPECIAL (SAM, 51, UQ,                    sam_piz_special_UQ);                  // introduced 14.0.10
-#define NUM_SAM_SPECIAL 52
+SPECIAL (SAM, 52, iqsqdq,                sam_piz_special_iq_sq_dq);            // 15.0.0
+#define NUM_SAM_SPECIAL 53
  
 #define SAM_LOCAL_GET_LINE_CALLBACKS                          \
     { DT_SAM, _OPTION_BD_BI,       sam_zip_BD_BI           }, \
@@ -684,7 +688,9 @@ SPECIAL (SAM, 51, UQ,                    sam_piz_special_UQ);                  /
     { DT_SAM, _OPTION_OQ_Z,        sam_zip_OQ              }, \
     { DT_SAM, _OPTION_TQ_Z,        sam_zip_TQ              }, \
     { DT_SAM, _OPTION_QX_Z,        sam_zip_QX              }, \
-    { DT_SAM, _OPTION_2Y_Z,        sam_zip_2Y              }, 
+    { DT_SAM, _OPTION_2Y_Z,        sam_zip_2Y              }, \
+    { DT_SAM, _OPTION_iq_sq_dq,    sam_zip_iq_sq_dq        }, 
+
 
 #define BAM_LOCAL_GET_LINE_CALLBACKS                          \
     { DT_BAM, _OPTION_BD_BI,       sam_zip_BD_BI           }, \
@@ -693,7 +699,8 @@ SPECIAL (SAM, 51, UQ,                    sam_piz_special_UQ);                  /
     { DT_BAM, _OPTION_OQ_Z,        sam_zip_OQ              }, \
     { DT_BAM, _OPTION_TQ_Z,        sam_zip_TQ              }, \
     { DT_BAM, _OPTION_QX_Z,        sam_zip_QX              }, \
-    { DT_BAM, _OPTION_2Y_Z,        sam_zip_2Y              }, 
+    { DT_BAM, _OPTION_2Y_Z,        sam_zip_2Y              }, \
+    { DT_BAM, _OPTION_iq_sq_dq,    sam_zip_iq_sq_dq        }, 
     
 // Important: Numbers (and order) of translators cannot be changed, as they are part of the file format
 // (they are included in the TOP2BAM container)

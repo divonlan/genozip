@@ -209,7 +209,7 @@ COMPRESSOR_CALLBACK (sam_zip_U2)
 
     if (!line_data) return; // only lengths were requested
 
-    *line_data = Bc (vb->txt_data, dl->U2.index);
+    *line_data = Btxt (dl->U2.index);
 
     if (flag.optimize_QUAL)
         optimize_phred_quality_string (*line_data, *line_data_len);
@@ -234,9 +234,7 @@ static void sam_seg_BD_BI_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(field), Dic
     dl->BD_BI[is_bi] = TXTWORD (field);
 
     CTX(OPTION_BD_BI)->txt_len += add_bytes; 
-
-    if (!dl->BD_BI[!is_bi].index) // the first of BD and BI increments local.len, so it is incremented even if just one of BD/BI appears
-        CTX(OPTION_BD_BI)->local.len += field_len * 2;
+    CTX(OPTION_BD_BI)->local.len32 += field_len;
 
     seg_by_ctx (VB, ((char[]){ SNIP_SPECIAL, SAM_SPECIAL_BDBI }), 2, this_ctx, 0);
 }
@@ -260,15 +258,15 @@ COMPRESSOR_CALLBACK (sam_zip_BD_BI)
 
     if (!line_data) return; // only length was requested
 
-    buf_alloc_exact (vb, VB_SAM->bd_bi_line, dl->SEQ.len * 2, uint8_t, "bd_bi_line");
+    buf_alloc_exact (vb, VB_SAM->interlaced, dl->SEQ.len * 2, uint8_t, "interlaced");
 
-    uint8_t *next = B1ST8 (VB_SAM->bd_bi_line);
+    uint8_t *next = B1ST8 (VB_SAM->interlaced);
     for (uint32_t i=0; i < dl->SEQ.len; i++) {
         *next++ = bd[i];
         *next++ = bi[i] - bd[i];
     }
 
-    *line_data = B1STc (VB_SAM->bd_bi_line);
+    *line_data = B1STc (VB_SAM->interlaced);
 }   
 
 // BD and BI - reconstruct from BD_BI context which contains interlaced BD and BI data. 
@@ -517,7 +515,7 @@ static void sam_seg_AM_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t AM, unsigne
 
     // note: currently we only support for this algorithm AM appearing after SM. Easily fixable if ever needed.
     // AM is often one of 3 options: 0, =SM =MAPQ-SM. If SM=0 then AM is expected to be 0.
-    if (has_SM && 
+    if (has(SM_i) && 
         AM >= 0 && AM <= 255 &&   // valid value
         AM != 253 && AM != 254) { // note: 253,254 are valid, but highly improbable values
 
@@ -1059,8 +1057,8 @@ static void sam_seg_U2_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(field), unsign
 {
     ASSSEG0 (dl->SEQ.len, field, "U2 tag without a SEQ"); 
     ASSINP (field_len == dl->SEQ.len, 
-            "Error in %s: Expecting U2 data to be of length %u as indicated by CIGAR, but it is %u. U2=%.*s",
-            txt_name, dl->SEQ.len, field_len, field_len, field);
+            "%s: Expecting U2 data to be of length %u as indicated by CIGAR, but it is %u. U2=%.*s",
+            LN_NAME, dl->SEQ.len, field_len, STRf(field));
 
     dl->U2 = TXTWORD (field);
     CTX(OPTION_U2_Z)->txt_len   += add_bytes;
@@ -1217,7 +1215,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
     #define COND(condition,  seg) if (condition) { seg; break; } else goto fallback; 
 
     if (segconf.running)
-        segconf.has[ctx_get_ctx (VB, dict_id)->did_i] = true;
+        segconf.has[ctx_get_ctx (VB, dict_id)->did_i]++;
 
     switch (dict_id.num) {
 
@@ -1370,6 +1368,19 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_FI_i: COND (MP(BLASR), sam_seg_blasr_FI_i (vb, dl, numeric.i, add_bytes));
 
         case _OPTION_fx_Z: COND (segconf.has_cellranger, sam_seg_fx_Z (vb, dl, STRa(value), add_bytes));
+
+        case _OPTION_dq_Z: COND0 (segconf.use_pacbio_iqsqdq, sam_seg_pacbio_xq (vb, dl, OPTION_dq_Z, &dl->dq, STRa(value), add_bytes))
+                           COND (TECH(PACBIO), seg_add_to_local_text (VB, CTX(OPTION_dq_Z), STRa(value), LOOKUP_SIMPLE, add_bytes)); 
+        
+        case _OPTION_iq_Z: COND0 (segconf.use_pacbio_iqsqdq, sam_seg_pacbio_xq (vb, dl, OPTION_iq_Z, &dl->iq, STRa(value), add_bytes));
+                           COND (TECH(PACBIO), seg_add_to_local_text (VB, CTX(OPTION_iq_Z), STRa(value), LOOKUP_SIMPLE, add_bytes)); 
+        
+        case _OPTION_sq_Z: COND0 (segconf.use_pacbio_iqsqdq, sam_seg_pacbio_xq (vb, dl, OPTION_sq_Z, &dl->sq, STRa(value), add_bytes));
+                           COND (TECH(PACBIO), seg_add_to_local_text (VB, CTX(OPTION_sq_Z), STRa(value), LOOKUP_SIMPLE, add_bytes)); 
+        
+        case _OPTION_dt_Z: COND (TECH(PACBIO), seg_add_to_local_text (VB, CTX(OPTION_dt_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
+        case _OPTION_mq_Z: COND (TECH(PACBIO), seg_add_to_local_text (VB, CTX(OPTION_mq_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
+        case _OPTION_st_Z: COND (TECH(PACBIO), seg_add_to_local_text (VB, CTX(OPTION_st_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
         
         default: fallback:
             

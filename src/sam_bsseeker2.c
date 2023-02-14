@@ -92,7 +92,7 @@ void sam_seg_bsseeker2_XG_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(XG)
 {
     START_TIMER;
 
-    if (!has_XG) return;
+    if (!has(XG_Z)) return;
     
     RefLock lock = REFLOCK_NONE;
     rom result = NULL; // initialize to "success"
