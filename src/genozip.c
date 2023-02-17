@@ -322,6 +322,8 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
                                       flag.show_buddy    ? "--show-buddy"    : SKIP_ARG,
                                       flag.no_tip        ? "--no-tip"        : SKIP_ARG,
                                       flag.debug_latest  ? "--debug-latest"  : SKIP_ARG,
+                                      flag.license_filename           ? "--licfile"            : SKIP_ARG,
+                                      flag.license_filename           ? flag.license_filename  : SKIP_ARG,
                                       is_last_txt_file && !flag.debug ? "--check-latest"       : SKIP_ARG,
                                       IS_REF_EXTERNAL && !is_chain    ? "--reference"          : SKIP_ARG, // normal pizzing of a chain file doesn't require a reference
                                       IS_REF_EXTERNAL && !is_chain    ? ref_get_filename(gref) : SKIP_ARG, 
@@ -369,6 +371,7 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
         if (flag.show_buddy)    argv[argc++] = "--show-buddy";
         if (flag.no_tip)        argv[argc++] = "--no-tip";
         if (flag.debug_latest)  argv[argc++] = "--debug-latest";
+        if (flag.license_filename) { argv[argc++] = "--licfile"; argv[argc++] = flag.license_filename; }
         if (is_last_txt_file && !flag.debug) 
                                 argv[argc++] = "--check-latest";
         if (IS_REF_EXTERNAL && !is_chain) 

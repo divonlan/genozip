@@ -754,6 +754,8 @@ void sam_piz_after_preproc (VBlockP vb)
 // PIZ main thread: a callback of piz_after_global_area 
 void sam_piz_load_sags (void)
 {
+    next_plsg_i = num_prim_vbs_loaded = 0; // reset for new z_file
+
     if (sections_get_num_comps() == 1 || // no PRIM/DEPN in this z_file
         flag.genocat_no_reconstruct) return; 
 
@@ -833,8 +835,6 @@ void sam_piz_load_sags (void)
 
     mutex_initialize (copy_qual_mutex);
     mutex_initialize (num_prim_vbs_loaded_mutex);
-
-    next_plsg_i = num_prim_vbs_loaded = 0; // initialize for pizzing of THIS z_file
 
     save_flag = flag; // save in global variable
 

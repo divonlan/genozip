@@ -34,7 +34,7 @@ typedef struct {
 typedef struct {
     Section txt_header_sec, bgzf_sec, recon_plan_sec[2];
     uint32_t first_vb_i, num_vbs;
-    SectionsVbIndexEnt *first_vb_index_ent, *last_vb_index_ent; // first and last VB in this component
+    SectionsVbIndexEnt *first_vb_index_ent, *last_vb_index_ent;  // first and last VB in this component - in the order the appear in the section list (not necessarily consecutive vb_i)
 } SectionsCompIndexEnt;
 
 // ZIP only: create section list that goes into the genozip header, as we are creating the sections. returns offset
@@ -250,10 +250,11 @@ static void sections_create_index (bool force)
                     .last_sec  = sections_last_sec4 (&sec[sec_i], SEC_B250, SEC_LOCAL, SEC_NONE, SEC_NONE)
                 };
 
-                if (!comp_index[comp_i].first_vb_i) {
-                    comp_index[comp_i].first_vb_index_ent = &vb_index[vb_i];
-                    comp_index[comp_i].first_vb_i = vb_i;
-                }
+                if (!comp_index[comp_i].first_vb_i || vb_i < comp_index[comp_i].first_vb_i) 
+                    comp_index[comp_i].first_vb_i = vb_i; // first vb_i in numerical order of vb_i
+
+                if (!comp_index[comp_i].first_vb_index_ent)
+                    comp_index[comp_i].first_vb_index_ent = &vb_index[vb_i]; // first VB in the order it appears in the section list (not necessarily the lowest vb_i)
 
                 else // link to previous VB in this component (not necessarily consecutive in the file)
                     comp_index[comp_i].last_vb_index_ent->next_vb_same_comp_sec = &sec[sec_i];
@@ -703,6 +704,7 @@ Section sections_get_comp_recon_plan_sec (CompIType comp_i, bool is_luft_plan)
     return sections_get_comp_index_ent (comp_i)->recon_plan_sec[is_luft_plan];
 }
 
+// get next VB_HEADER in the order they appear in the section list (not necessarily consecutive vb_i)
 Section sections_get_next_vb_of_comp_sec (CompIType comp_i, Section *vb_sec)
 {
     const SectionsCompIndexEnt *comp_index_ent = sections_get_comp_index_ent (comp_i);

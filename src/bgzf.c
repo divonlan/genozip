@@ -391,7 +391,10 @@ void bgzf_zip_advance_index (VBlockP vb, uint32_t line_len)
 
     // udpate current_bb_i and bgzf_offset (note: line_len might span multiple bgzf blocks)
     BgzfBlockZip *bb;
-    for (bb = B(BgzfBlockZip, vb->bgzf_blocks, vb->bgzf_blocks.current_bb_i); vb->line_bgzf_uoffset >= bb->txt_size; bb++) 
+    for (bb = B(BgzfBlockZip, vb->bgzf_blocks, vb->bgzf_blocks.current_bb_i); 
+         vb->line_bgzf_uoffset && vb->line_bgzf_uoffset >= bb->txt_size; // note: careful to also terminate on the edge case that line_bgzf_uoffset==0 and in the final VB block bb->txt_size==0 
+         bb++) 
+
         vb->line_bgzf_uoffset -= bb->txt_size; // index into the next BGZF block
 
     vb->bgzf_blocks.current_bb_i = BNUM(vb->bgzf_blocks, bb);

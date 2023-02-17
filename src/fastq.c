@@ -731,13 +731,13 @@ IS_SKIP (fastq_piz_is_skip_section)
         return true;
 
     // no need for the TAXID data if user didn't specify --taxid
-    if (flag.kraken_taxid==TAXID_NONE && dict_id.num == _FASTQ_TAXID)
+    if (!flag.kraken_taxid && dict_id.num == _FASTQ_TAXID)
         return true;
 
     // if --count, we only need TOPLEVEL and the fields needed for the available filters (--taxid, --kraken, --grep, --bases)
     if (flag.count && !flag.grep && sections_has_dict_id (st) &&
          (dict_id.num != _FASTQ_TOPLEVEL && 
-         (dict_id.num != _FASTQ_TAXID    || flag.kraken_taxid == TAXID_NONE) && 
+         (dict_id.num != _FASTQ_TAXID    || !flag.kraken_taxid) && 
          (!flag.bases || !dict_id_is_in (dict_id, _FASTQ_SQBITMAP, _FASTQ_NONREF, _FASTQ_NONREF_X, _FASTQ_GPOS, _FASTQ_STRAND, _FASTQ_SEQMIS_A, _FASTQ_SEQMIS_C, _FASTQ_SEQMIS_G, _FASTQ_SEQMIS_T, DICT_ID_NONE)) &&
          (dict_id.num != _FASTQ_DESC     || !kraken_is_loaded) && 
          (!dict_id_is_fastq_desc_sf(dict_id) || !kraken_is_loaded))) 
@@ -891,7 +891,7 @@ CONTAINER_CALLBACK (fastq_piz_container_cb)
         if (!kraken_is_loaded && !kraken_is_included_stored (vb, FASTQ_TAXID, false))
             vb->drop_curr_line = "taxid";
         
-        else if (kraken_is_loaded && flag.kraken_taxid != TAXID_NONE) {
+        else if (kraken_is_loaded) {
             rom qname = last_txt (vb, FASTQ_DESC) + !prefixes_len; // +1 to skip the "@", if '@' is in DESC and not in prefixes (for files up to version 12.0.13)
             unsigned qname_len = strcspn (qname, " \t\n\r");
 

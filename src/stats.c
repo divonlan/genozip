@@ -190,7 +190,7 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
     if (chain_is_loaded)               bufprint0 (evb, &url_buf, "chain%3B");    
     if (crypt_have_password())         bufprint0 (evb, &url_buf, "encrypted%3B");    
     if (tar_is_tar())                  bufprint0 (evb, &url_buf, "tar%3B");    
-    if (flag.kraken_taxid!=TAXID_NONE) bufprint0 (evb, &url_buf, "taxid%3B");    
+    if (flag.kraken_taxid)             bufprint0 (evb, &url_buf, "taxid%3B");    
     if (file_get_stdin_type())         bufprintf (evb, &url_buf, "stdin_type=%s%%3B", ft_name(file_get_stdin_type()));    
     if (flag.show_one_counts.num)      bufprintf (evb, &url_buf, "show_counts=%s%%3B", url_esc_non_valid_charsS (dis_dict_id(flag.show_one_counts).s).s);
 

@@ -42,7 +42,6 @@
 #pragma GENDICT KRAKEN_TOP2TAXID=DTYPE_FIELD=TOP2HASH
 #pragma GENDICT KRAKEN_DEBUG_LINES=DTYPE_FIELD=DBGLINES      // used by --debug-lines
 
-typedef int32_t TaxonomyId;
 #define TAXID_NONE         ((TaxonomyId)-1)
 #define TAXID_UNCLASSIFIED ((TaxonomyId)-0)
 

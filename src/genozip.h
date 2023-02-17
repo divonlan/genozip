@@ -31,6 +31,8 @@ typedef _Bool bool;
 
 typedef enum __attribute__ ((__packed__)) { no=0, yes=1, unknown=2 } thool; // three-way "bool"
 
+typedef int32_t TaxonomyId;
+
 // -----------------
 // system parameters
 // -----------------

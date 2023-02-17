@@ -452,7 +452,7 @@ static void writer_drop_item_lines_from_end (ReconPlanItem *p, uint32_t drop_lin
         case PLAN_INTERLEAVE: {
             VbInfo *v2 = VBINFO(p->vb2_i);
             writer_drop_lines (v, v->num_lines - drop_lines/2, drop_lines/2);           // round down in case of odd number
-            writer_drop_lines (v2, v2->num_lines + (drop_lines+1)/2, (drop_lines+1)/2); // round up in case of odd number
+            writer_drop_lines (v2, v2->num_lines - (drop_lines+1)/2, (drop_lines+1)/2); // round up in case of odd number
             break;
         }
         

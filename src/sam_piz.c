@@ -491,7 +491,7 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
             vb->drop_curr_line = "not_primary";
 
         // --taxid: filter out by Kraken taxid (SAM, BAM, FASTQ)
-        if (flag.kraken_taxid != TAXID_NONE && !vb->drop_curr_line 
+        if (flag.kraken_taxid && !vb->drop_curr_line 
         && (   (kraken_is_loaded  && !kraken_is_included_loaded (vb, last_txt(vb, SAM_QNAME), vb->last_txt_len (SAM_QNAME)))// +1 in case of FASTQ to skip "@"
             || (!kraken_is_loaded && !kraken_is_included_stored (vb, SAM_TAXID, !flag.collect_coverage && !flag.count)))) 
             vb->drop_curr_line = "taxid";

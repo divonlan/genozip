@@ -47,8 +47,6 @@
 
 #include "text_license.h"
 
-static rom license_filename = NULL;  // non-standard filename set with --licfile
-
 static struct {
     bool initialized;
     LicenseType lic_type; 
@@ -103,12 +101,12 @@ void license_set_filename (rom filename)
     struct stat sb;
     ASSINP (!stat (filename, &sb), "Failed to access license file %s: %s", filename, strerror (errno));
 
-    license_filename = filename;
+    flag.license_filename = filename;
 }
 
 static rom license_get_filename (bool create_folder_if_needed)
 {
-    if (license_filename) return license_filename; // non-standard filename set with --licfile
+    if (flag.license_filename) return flag.license_filename; // non-standard filename set with --licfile
 
 #ifdef _WIN32
     ASSINP0 (getenv ("APPDATA"), "cannot store license, because APPDATA env var is not defined");
@@ -584,7 +582,7 @@ StrNotice license_print_default_notice (void)
     StrNotice notice = {}; 
 
     if (IS_PIZ) license_load(); // happens when PIZ is run in --test after ZIP
-    
+
     if (rec.lic_type == LIC_TYPE_ACADEMIC)
         sprintf (notice.s, "Genozip is licensed to %s for use by %s, for academic research purposes only (see "WEBSITE_PRICING_FAQ"). Other use is prohibited. To get a non-academic license, email " EMAIL_SALES ".",
                  rec.institution, rec.name);
