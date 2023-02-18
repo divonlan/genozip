@@ -573,7 +573,7 @@ IS_SKIP (fasta_piz_is_skip_section)
         return true;
 
     // no need for the TAXID data if user didn't specify --taxid
-    if (flag.kraken_taxid == TAXID_NONE && dict_id.num == _FASTA_TAXID)
+    if (!flag.kraken_taxid && dict_id.num == _FASTA_TAXID)
         return true;
 
     return false;
@@ -752,7 +752,7 @@ SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_DESC)
     
     if (CTX(FASTA_CONTIG)->is_loaded) { // some FASTAs may not have contigs
         // --taxid: grep out by Kraken taxid 
-        if (flag.kraken_taxid != TAXID_NONE) 
+        if (flag.kraken_taxid) 
             vb->contig_grepped_out |= 
                 ((!kraken_is_loaded && !kraken_is_included_stored (VB, FASTA_TAXID, false)) ||
                 ( kraken_is_loaded && !kraken_is_included_loaded (VB, desc_start + 1, chrom_name_len)));

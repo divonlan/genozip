@@ -588,7 +588,7 @@ StrNotice license_print_default_notice (void)
     StrNotice notice = {}; 
 
     if (IS_PIZ) license_load(); // happens when PIZ is run in --test after ZIP
-    
+
     if (rec.lic_type == LIC_TYPE_ACADEMIC)
         sprintf (notice.s, "Genozip is licensed to %s for use by %s, for academic research purposes only (see "WEBSITE_PRICING_FAQ"). Other use is prohibited. To get a non-academic license, email " EMAIL_SALES ".",
                  rec.institution, rec.name);

@@ -35,6 +35,8 @@ typedef enum __attribute__ ((__packed__)) { HARD_FAIL, SOFT_FAIL } FailType;
 
 typedef enum __attribute__ ((__packed__)) { RECON_OFF, RECON_ON } ReconType;
 
+typedef int32_t TaxonomyId;
+
 // -----------------
 // system parameters
 // -----------------

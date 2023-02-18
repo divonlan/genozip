@@ -69,8 +69,8 @@ typedef struct {
         seq_only, qual_only, single_coord, 
         regions, gpos, samples, 
         drop_genotypes, gt_only, luft, sort, unsorted, snps_only, indels_only, // VCF options
-        sequential, no_pg, extended_translation,  one_component,
-        kraken_taxid;
+        sequential, no_pg, extended_translation, one_component;
+    TaxonomyId *kraken_taxid;
     rom regions_file;
     int64_t lines_first, lines_last, tail;  // set by --head, --tail, --lines 
     rom grep; int grepw; unsigned grep_len; // set by --grep and --grep-w

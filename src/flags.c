@@ -53,7 +53,7 @@ Flags flag = {
 #endif
     .out_dt       = DT_NONE, 
     .bgzf         = BGZF_NOT_INITIALIZED, 
-    .kraken_taxid = TAXID_NONE,
+    .kraken_taxid = NULL,
     .lines_first  = NO_LINE, 
     .lines_last   = NO_LINE,
     .biopsy_line  = { .line_i = NO_LINE },
@@ -119,7 +119,7 @@ static void flags_show_flags (void)
     iprintf ("luft=%s\n", TF_(luft));
     iprintf ("sort=%s\n", TF_(sort));
     iprintf ("unsorted=%s\n", TF_(unsorted));
-    iprintf ("kraken_taxid=%d\n", flag.kraken_taxid);
+    iprintf ("kraken_taxid=%p\n", flag.kraken_taxid);
     iprintf ("grep=%s grepw=%s grep_len=%u\n", S_(grep), TF_(grepw), flag.grep_len);
     iprintf ("lines_first=%"PRId64"\n", flag.lines_first);
     iprintf ("lines_last=%"PRId64"\n", flag.lines_last);
@@ -923,7 +923,7 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
     CONFLICT (flag.show_stats,  flag.FLAG,           OT("stats", "w"),     "--FLAG");
     CONFLICT (flag.show_stats,  flag.one_component,  OT("stats", "w"),     "--R1/--R2");
     CONFLICT (flag.show_stats,  flag.one_vb,         OT("stats", "w"),     "--one-vb");
-    CONFLICT (flag.show_stats,  flag.kraken_taxid != TAXID_NONE, OT("stats", "w"), "--taxid");
+    CONFLICT (flag.show_stats,  flag.kraken_taxid,   OT("stats", "w"),     "--taxid");
     CONFLICT (flag.show_stats,  flag.sequential,     OT("stats", "w"),     "--sequential");
     CONFLICT (flag.show_stats,  flag.tail,           OT("stats", "w"),     "--tail");
     CONFLICT (flag.show_stats,  flag.drop_genotypes, OT("stats", "w"),     OT("drop-genotypes", "G"));
@@ -1420,7 +1420,7 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
          // SAM specific line droppers
          (Z_DT(SAM)   && (flag.sam_flag_filter || flag.sam_mapq_filter || flag.bases || OUT_DT(FASTQ))) || 
          // General filters
-         flag.kraken_taxid != TAXID_NONE || flag.grep || flag.regions || 
+         flag.kraken_taxid || flag.grep || flag.regions || 
          // no-writer, but nevertheless modify the txt_data
          flag.collect_coverage || flag.count);
 
