@@ -49,8 +49,6 @@
 
 typedef enum __attribute__ ((__packed__))/*1 byte*/ { LIC_TYPE_NONE, LIC_TYPE_ACADEMIC, LIC_TYPE_EVAL, LIC_TYPE_STANDARD, LIC_TYPE_DEEP, NUM_LIC_TYPES } LicenseType; 
 
-static rom license_filename = NULL;  // non-standard filename set with --licfile
-
 static struct {
     bool initialized;
     LicenseType lic_type; 
@@ -105,12 +103,12 @@ void license_set_filename (rom filename)
     struct stat sb;
     ASSINP (!stat (filename, &sb), "Failed to access license file %s: %s", filename, strerror (errno));
 
-    license_filename = filename;
+    flag.license_filename = filename;
 }
 
 static rom license_get_filename (bool create_folder_if_needed)
 {
-    if (license_filename) return license_filename; // non-standard filename set with --licfile
+    if (flag.license_filename) return flag.license_filename; // non-standard filename set with --licfile
 
 #ifdef _WIN32
     ASSINP0 (getenv ("APPDATA"), "cannot store license, because APPDATA env var is not defined");
@@ -206,7 +204,7 @@ void license_load (void)
     }
 
     else if (rec.lic_type == LIC_TYPE_ACADEMIC || rec.lic_type == LIC_TYPE_STANDARD) {
-        ASSINP (!counter_has_exceeded (filename, EVAL_NUM_FILES),
+        ASSINP (!flag.deep || !counter_has_exceeded (filename, EVAL_NUM_FILES),
                 "You reached %u --deep compressions, which is the maximum number granted with the %s License.\n"
                 "To upgrade to a Deep License: " WEBSITE_BUY " or contact " EMAIL_SALES "\n", EVAL_NUM_FILES, lic_types[rec.lic_type]);
     }

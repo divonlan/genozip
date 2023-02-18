@@ -602,26 +602,26 @@ uint32_t str_split_do (STRp(str),
 // splits a string by tab, ending with the first \n or \r\n. 
 // Returns the address of the byte after the \n if successful, or NULL if not.
 rom str_split_by_tab_do (STRp(str), 
-                         uint32_t *n_items, // in / out
-                         rom *items, uint32_t *item_lens, // out - array of char* of length max_items - one more than the number of separators
+                         uint32_t *n_flds, // in / out
+                         rom *flds, uint32_t *fld_lens, // out - array of char* of length max_flds - one more than the number of separators
                          bool *has_13,      // optional out - true if line is terminated by \r\n instead of \n
-                         bool enforce_msg)  // failure handling: if false return NULL ; if true ABORT
-
+                         bool exactly,      // line should have exactly this number of flds
+                         bool enforce_msg)
 {
     ASSERTNOTNULL (str);
-    ASSERTNOTZERO (*n_items, "");
+    ASSERTNOTZERO (*n_flds, "");
 
-    items[0] = str;
-    uint32_t item_i = 1;
+    flds[0] = str;
+    uint32_t fld_i = 1; 
     uint32_t str_i;
     bool my_has_13;
 
     for (str_i=0 ; str_i < str_len ; str_i++) {
         char c = str[str_i]; 
         if (c == '\t') {
-            ASSSPLIT (item_i < *n_items, "expecting up to %u items but found more", *n_items);
+            ASSSPLIT (fld_i < *n_flds, "expecting up to %u fields but found more", *n_flds);
 
-            items[item_i++] = &str[str_i+1];
+            flds[fld_i++] = &str[str_i+1];
         }
 
         else if (c == '\r') {
@@ -638,15 +638,39 @@ rom str_split_by_tab_do (STRp(str),
 
     ASSSPLIT (str_i < str_len, "Line not terminated by newline (str_len=%u)", str_len);
 
-    for (uint32_t i=0; i < item_i-1; i++)    
-        item_lens[i] = items[i+1] - items[i] - 1; 
+    for (uint32_t i=0; i < fld_i-1; i++)    
+        fld_lens[i] = flds[i+1] - flds[i] - 1; 
         
-    item_lens[item_i-1] = &str[str_i] - items[item_i-1];
-    *n_items = item_i;
+    fld_lens[fld_i-1] = &str[str_i] - flds[fld_i-1];
+
+    ASSSPLIT (!exactly || fld_i == *n_flds, "expecting %u fields but found more", *n_flds);
+
+    *n_flds = fld_i;
 
     if (has_13) *has_13 = my_has_13;
 
     return &str[str_i + 1 + my_has_13]; // byte after \n
+}
+
+// get up to n_lines from str. ignores subsequent lines.
+// returns lines, with their lengths excluding \n and \r
+uint32_t str_split_by_lines_do (STRp(str), uint32_t max_lines, rom *lines, uint32_t *line_lens)
+{
+    rom after = str + str_len;
+    uint32_t i; for (i=0; i < max_lines && str < after; i++) {
+        rom nl = memchr (str, '\n', after - str);
+        if (nl) {
+            lines[i] = str;
+            line_lens[i] = nl - str;
+            if (nl != str && nl[-1] == '\r') line_lens[i]--;
+
+            str = nl + 1;
+        }
+        else 
+            break; // we're done
+    }
+
+    return i;
 }
 
 // splits a string based on container items (doesn't need to be nul-terminated). 

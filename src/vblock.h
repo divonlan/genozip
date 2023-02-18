@@ -60,6 +60,7 @@
     uint32_t longest_line_len;    /* length of longest line of text line in this vb. calculated by seg_all_data_lines */\
     uint32_t sample_i;            /* ZIP/PIZ: VCF: current sample in line (0-based) */ \
     LineIType line_i;             /* ZIP/PIZ: current line in VB (0-based) being segmented/reconstructed */\
+    Did curr_field;               /* PIZ: current field (e.g. toplevel, SAM/AUX, VCF/INFO...) item being reconstructed */ \
     int64_t rback_id;             /* ZIP: sequential number of current rollback point */ \
     uint32_t line_start;          /* ZIP/PIZ: position of start of line currently being segged / reconstructed in vb->txt_data */\
     uint32_t line_bgzf_uoffset;   /* ZIP: offset in uncompressed bgzf block of the start of the current line (current_bb_i) */  \

@@ -450,7 +450,7 @@ static void stats_output_file_metadata (void)
             
         case DT_BED:
             if (z_file->num_lines) {
-                FEATURE (true, "Columns: %u", "columns=%u", segconf.bed_num_columns);
+                FEATURE (true, "Columns: %u", "columns=%u", segconf.bed_num_flds);
                 FEATURE0 (segconf.is_sorted, "Sorting: Sorted", "Sorted");        
             }
             break;

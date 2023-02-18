@@ -92,10 +92,6 @@ void sam_zip_free_end_of_z (void)
 // main thread, called for each component. called before segconf.
 void sam_zip_initialize (void)
 {
-    if (flag.reference == REF_INTERNAL && !txt_file->redirected)
-        TIP ("compressing a %s file using a reference file can reduce the size by 7%%-30%%%s.\nUse: \"genozip --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
-             dt_name (txt_file->data_type), MP(UNKNOWN) ? " (even for unaligned files)" : "", txt_file->name);
-
     bool has_hdr_contigs = sam_hdr_contigs && sam_hdr_contigs->contigs.len;
 
     // Copy header contigs to RNAME and RNEXT upon first component. This is in the order of the
@@ -184,7 +180,7 @@ void sam_zip_after_compress (VBlockP vb)
         gencomp_absorb_vb_gencomp_lines (vb);
 }
 
-// called main thread, as VBs complete (might be out-of-order)
+// called by main thread, as VBs complete (might be out-of-order)
 void sam_zip_after_compute (VBlockP vb)
 {
     if (vb->comp_i == SAM_COMP_MAIN)
@@ -704,6 +700,10 @@ static void sam_seg_finalize_segconf (VBlockP vb)
         WARN0 ("FYI: Genozip currently doesn't do a very good job at compressing PacBio kinetic BAM files. This is because we haven't figured out yet a good method to compress kinetic data - the ip:B, pw:B, fi:B, fp:B, ri:B, rp:B fields. Sorry!\n");
         RESTORE_FLAG(quiet);
     }
+
+    if (flag.reference == REF_INTERNAL && !txt_file->redirected && (!segconf.sam_is_unmapped || !segconf.is_long_reads))
+        TIP ("compressing a %s file using a reference file can reduce the size by 7%%-30%%%s.\nUse: \"genozip --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
+             dt_name (txt_file->data_type), MP(UNKNOWN) ? " (even for unaligned files)" : "", txt_file->name);
 }
 
 void sam_seg_finalize (VBlockP vb)
@@ -1431,11 +1431,17 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
     VBlockSAMP vb = (VBlockSAMP)vb_;
     sam_reset_line (VB);
 
+    ASSERT (!((remaining_txt_len==1 && *next_line=='\n') || (remaining_txt_len==2 && next_line[1]=='\n')),
+            "%s: Bad SAM file - empty line detected", LN_NAME);
+
     WordIndex prev_line_chrom = vb->chrom_node_index;
 
     ZipDataLineSAM *dl = DATA_LINE(vb->line_i);
 
-    str_split_by_tab (next_line, remaining_txt_len, MAX_FIELDS + AUX, has_13, true); // also advances next_line to next line
+    str_split_by_tab (next_line, remaining_txt_len, MAX_FIELDS + AUX, has_13, false, true); // also advances next_line to next line
+    
+    ASSSEG (n_flds >= 11, next_line, "%s: Bad SAM file: alignment expected to have at least 11 fields, but found only %u", LN_NAME, n_flds);
+
     vb->n_auxs = n_flds - AUX;
     vb->auxs = &flds[AUX]; // note: pointers to data on the stack
     vb->aux_lens = &fld_lens[AUX];

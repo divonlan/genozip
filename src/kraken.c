@@ -173,7 +173,7 @@ void kraken_seg_finalize (VBlockP vb)
     container_seg (vb, CTX(KRAKEN_TOP2TAXID), (ContainerP)&top2taxid, 0, 0, 0);
 }
 
-// ZIP: called by main thread after compute has finished. 
+// called by main thread, as VBs complete (might be out-of-order)
 void kraken_zip_after_compute (VBlockP vb)
 {
     // add up the total length of all QNAMEs in the file - will be transferred to PIZ via SectionHeaderCounts.nodes_param of TAXID

@@ -179,9 +179,9 @@ static void main_print_version()
     iprintf ("version=%s distribution=%s\n", GENOZIP_CODE_VERSION, arch_get_distribution());  
 }
 
-static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool is_last_z_file)
+static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, unsigned n_z_files, bool is_last_z_file)
 {
-    MAIN ("main_genounzip: %s", z_filename);
+    MAIN ("main_genounzip (%u/%u): %s", z_file_i+1, n_z_files, z_filename);
 
     // save flag as it might be modified - so that next file has the same flags
     SAVE_FLAGS;
@@ -343,6 +343,8 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
                                       flag.show_buddy    ? "--show-buddy"    : SKIP_ARG,
                                       flag.no_tip        ? "--no-tip"        : SKIP_ARG,
                                       flag.debug_latest  ? "--debug-latest"  : SKIP_ARG,
+                                      flag.license_filename           ? "--licfile"            : SKIP_ARG,
+                                      flag.license_filename           ? flag.license_filename  : SKIP_ARG,
                                       is_last_txt_file && !flag.debug ? "--check-latest"       : SKIP_ARG,
                                       IS_REF_EXTERNAL && !is_chain    ? "--reference"          : SKIP_ARG, // normal pizzing of a chain file doesn't require a reference
                                       IS_REF_EXTERNAL && !is_chain    ? ref_get_filename(gref) : SKIP_ARG, 
@@ -390,6 +392,7 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
         if (flag.show_buddy)    argv[argc++] = "--show-buddy";
         if (flag.no_tip)        argv[argc++] = "--no-tip";
         if (flag.debug_latest)  argv[argc++] = "--debug-latest";
+        if (flag.license_filename) { argv[argc++] = "--licfile"; argv[argc++] = flag.license_filename; }
         if (is_last_txt_file && !flag.debug) 
                                 argv[argc++] = "--check-latest";
         if (IS_REF_EXTERNAL && !is_chain) 
@@ -854,7 +857,7 @@ int main (int argc, char **argv)
                                       file_i, n_files, !next_input_file || is_last_txt_file); 
                         break;
 
-            case PIZ  : main_genounzip (next_input_file, flag.out_filename, file_i, is_last_z_file); 
+            case PIZ  : main_genounzip (next_input_file, flag.out_filename, file_i, n_files, is_last_z_file); 
                         break;           
 
             case SHOW_HEADERS : genocat_show_headers(next_input_file); break;

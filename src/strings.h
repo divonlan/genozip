@@ -237,25 +237,22 @@ extern uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(
     uint32_t name##_lens[MAX_(con_nitems(*container), 1)]; \
     uint32_t n_##name##s = str_split_by_container_do ((str), (str_len), (ConstContainerP)(container), (prefix), (prefix_len), name##s, name##_lens, NULL)
 
-extern rom str_split_by_tab_do (STRp(str), uint32_t *n_items, rom *items, uint32_t *item_lens, bool *has_13, bool enforce);
-
-#define str_split_by_tab(str,max_len,max_items,has_13,enforce) \
-    rom flds[(max_items)];   \
-    uint32_t fld_lens[(max_items)];  \
-    uint32_t n_flds = (max_items);   \
-    str = str_split_by_tab_do ((str), (max_len), &n_flds, flds, fld_lens, (has_13), (enforce))
+extern rom str_split_by_tab_do (STRp(str), uint32_t *n_flds, rom *flds, uint32_t *fld_lens, bool *has_13, bool exactly, bool enforce);
+#define str_split_by_tab(str,max_len,max_flds,has_13,exactly,enforce) \
+    rom flds[(max_flds)];   \
+    uint32_t fld_lens[(max_flds)];  \
+    uint32_t n_flds = (max_flds);   \
+    str = str_split_by_tab_do ((str), (max_len), &n_flds, flds, fld_lens, (has_13), (exactly), (enforce))
 #define STRfld(i) STRi(fld,(i))
 
-extern void str_remove_CR_do (uint32_t n_lines, pSTRp(line));
-#define str_remove_CR(name) str_remove_CR_do (n_##name##s, name##s, name##_lens)
-
-extern void str_nul_separate_do (STRps(item));
-#define str_nul_separate(name) str_nul_separate_do (n_##name##s, name##s, name##_lens)
-
-extern uint32_t str_remove_whitespace (STRp(in), char *out);
-extern void str_trim (STRe(str));
+extern uint32_t str_split_by_lines_do (STRp(str), uint32_t max_lines, rom *lines, uint32_t *line_lens);
+#define str_split_by_lines(str,str_len,max_lines) \
+    rom lines[(max_lines)];   \
+    uint32_t line_lens[(max_lines)];  \
+    uint32_t n_lines = str_split_by_lines_do ((str), (str_len), max_lines, lines, line_lens)
 
 extern uint32_t str_split_ints_do (STRp(str), uint32_t max_items, char sep, bool exactly, int64_t *items);
+
 #define str_split_ints(str,str_len,max_items,sep,name,exactly) \
     uint32_t n_##name##s = (max_items) ? (max_items) : str_count_char ((str), (str_len), (sep)) + 1; \
     int64_t name##s[n_##name##s]; \
@@ -266,6 +263,15 @@ extern uint32_t str_split_floats_do (STRp(str), uint32_t max_items, char sep, bo
     uint32_t n_##name##s = (max_items) ? (max_items) : str_count_char ((str), (str_len), (sep)) + 1; \
     double name##s[n_##name##s]; \
     n_##name##s = str_split_floats_do ((str), (str_len), n_##name##s, (sep), (exactly), name##s); 
+
+extern void str_remove_CR_do (uint32_t n_lines, pSTRp(line));
+#define str_remove_CR(name) str_remove_CR_do (n_##name##s, name##s, name##_lens)
+
+extern void str_nul_separate_do (STRps(item));
+#define str_nul_separate(name) str_nul_separate_do (n_##name##s, name##s, name##_lens)
+
+extern uint32_t str_remove_whitespace (STRp(in), char *out);
+extern void str_trim (STRe(str));
 
 extern rom type_name (uint32_t item, 
                       rom  const *name, // the address in which a pointer to name is found, if item is in range

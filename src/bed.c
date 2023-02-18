@@ -106,10 +106,10 @@ void bed_seg_finalize (VBlockP vb)
     };
 
     // BED can have between 3 and 12 columns - remove redundant columns
-    if (segconf.bed_num_columns < 12) {
-        memmove (&top_level.items[segconf.bed_num_columns], &top_level.items[12], sizeof (ContainerItem));
-        top_level.nitems_lo = segconf.bed_num_columns + 1;
-        top_level.items[segconf.bed_num_columns-1].separator[0] = 0;    
+    if (segconf.bed_num_flds < 12) {
+        memmove (&top_level.items[segconf.bed_num_flds], &top_level.items[12], sizeof (ContainerItem));
+        top_level.nitems_lo = segconf.bed_num_flds + 1;
+        top_level.items[segconf.bed_num_flds-1].separator[0] = 0;    
     }
 
     container_seg (vb, CTX(BED_TOPLEVEL), (Container *)&top_level, 0, 0, 0);
@@ -164,89 +164,73 @@ SPECIAL_RECONSTRUCTOR (bed_piz_special_BCOUNT)
     return HAS_NEW_VALUE;
 }
 
-bool bed_segconf_set_n_columns (STRp(line))
-{
-    str_split (line, line_len, 13, '\t', column, false); // 13 and not 12, to detect lines that have more than 12 columns
-
-    static int valid_num_columns[] = { 3, 4, 5, 6, 8, 9, 12 };
-    for (int i=0; i < ARRAY_LEN(valid_num_columns); i++)
-        if (n_columns == valid_num_columns[i]) {
-            segconf.bed_num_columns = n_columns;
-            return true; // judging by the number of columns, so far this is a valid standard BED file
-        }
-
-    return false; // invalid number of columns for a standard BED file
-}
-
 rom bed_seg_txt_line (VBlockP vb, rom line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
 {
     typedef enum { BED_CHROM, START, END, NAME, SCORE, STRAND, TSTART, TEND, RGB, BCOUNT, BSIZES, BSTARTS } Columns __attribute__((unused));
-    #define MAYBE_END_HERE(f) if (segconf.bed_num_columns == (f)+1) goto eol;
+    #define MAYBE_END_HERE(f) if (segconf.bed_num_flds == (f)+1) goto eol;
 
-    int line_len = (rom)memchr (line, '\n', remaining_txt_len) - line;
-    if (line[line_len-1] == '\r') {
-        *has_13 = true;
-        line_len--;
+    str_split_by_tab (line, remaining_txt_len, segconf.bed_num_flds ? segconf.bed_num_flds : 12, 
+                      has_13, !!segconf.bed_num_flds, true); // also advances line to next line
+
+    // per BED specification, all lines must have the same number of columns
+    if (segconf.running && vb->line_i == 0) {
+        if (n_flds==3 || n_flds==4 || n_flds==5 || n_flds==6 || n_flds==8 || n_flds==9 || n_flds==12)
+            segconf.bed_num_flds = n_flds;
+        else
+            return fallback_to_generic (vb); // not a valid number of columns
     }
-
-    if (segconf.running && vb->line_i == 0 && !bed_segconf_set_n_columns (STRa(line)))
-        return fallback_to_generic (vb);
-
-    str_split (line, line_len, segconf.bed_num_columns, '\t', column, false);
-    ASSSEG (n_columns == segconf.bed_num_columns, line, "Invalid BED sequence: expecting %u tab-separated columns, but found %u", 
-            segconf.bed_num_columns, n_columns);
 
     // CHROM
     WordIndex prev_line_chrom = vb->chrom_node_index;
-    chrom_seg (vb, STRi(column, BED_CHROM));
+    chrom_seg (vb, STRfld(BED_CHROM));
 
     // START
-    bed_seg_START (vb, STRi(column, START), prev_line_chrom);
+    bed_seg_START (vb, STRfld(START), prev_line_chrom);
 
     // END
-    seg_pos_field (vb, BED_END, BED_START, 0, 0, STRi(column, END), 0, column_lens[END] + 1);
+    seg_pos_field (vb, BED_END, BED_START, 0, 0, STRfld(END), 0, fld_lens[END] + 1);
     MAYBE_END_HERE(END);
 
     // NAME
-    seg_add_to_local_text (vb, CTX(BED_NAME), STRi(column, NAME), LOOKUP_NONE, column_lens[NAME] + 1);
+    seg_add_to_local_text (vb, CTX(BED_NAME), STRfld(NAME), LOOKUP_NONE, fld_lens[NAME] + 1);
     MAYBE_END_HERE(NAME);
 
     // SCORE
     int64_t score;
-    ASSSEG (str_get_int (STRi(column, SCORE), &score), columns[SCORE], "Invalid SCORE=\"%.*s\"", STRfi(column,SCORE));
-    seg_add_to_local_resizable (vb, CTX(BED_SCORE), score, column_lens[SCORE]+1);
+    ASSSEG (str_get_int (STRfld(SCORE), &score), flds[SCORE], "Invalid SCORE=\"%.*s\"", STRfi(fld,SCORE));
+    seg_add_to_local_resizable (vb, CTX(BED_SCORE), score, fld_lens[SCORE]+1);
     MAYBE_END_HERE(SCORE);
 
     // STRAND
-    seg_by_did (vb, STRi(column,STRAND), BED_STRAND, column_lens[STRAND] + 1);
+    seg_by_did (vb, STRfld(STRAND), BED_STRAND, fld_lens[STRAND] + 1);
     MAYBE_END_HERE(STRAND);
 
     // TSTART + TEND
-    bed_seg_TSTART_TEND (vb, BED_TSTART, BED_START, STRi(column, TSTART), STRa(copy_TSTART_snip));
-    bed_seg_TSTART_TEND (vb, BED_TEND, BED_END, STRi(column, TEND), STRa(copy_TEND_snip));
+    bed_seg_TSTART_TEND (vb, BED_TSTART, BED_START, STRfld(TSTART), STRa(copy_TSTART_snip));
+    bed_seg_TSTART_TEND (vb, BED_TEND, BED_END, STRfld(TEND), STRa(copy_TEND_snip));
     MAYBE_END_HERE(TEND);
 
     // RGB
-    seg_by_did (vb, STRi(column,RGB), BED_RGB, column_lens[RGB] + 1);
+    seg_by_did (vb, STRfld(RGB), BED_RGB, fld_lens[RGB] + 1);
     MAYBE_END_HERE(RGB);
 
     // BCOUNT
-    int64_t predicted_bcount = 1 + str_count_char (STRi(column,BSIZES)-1, ','); // without last char, to avoid counting a terminating ,
+    int64_t predicted_bcount = 1 + str_count_char (STRfld(BSIZES)-1, ','); // without last char, to avoid counting a terminating ,
     int64_t bcount;
 
-    if (!str_get_int(STRi(column,BCOUNT), &bcount) || bcount != predicted_bcount) {
+    if (!str_get_int(STRfld(BCOUNT), &bcount) || bcount != predicted_bcount) {
         if (segconf.running) return fallback_to_generic (vb);
-        ASSSEG (false, columns[BCOUNT], "Encountered BCOUNT=\"%.*s\" - but expecting it to be the number of items in BSIZES which is %u", STRfi(column,BCOUNT), (unsigned)predicted_bcount);
+        ASSSEG (false, flds[BCOUNT], "Encountered BCOUNT=\"%.*s\" - but expecting it to be the number of items in BSIZES which is %u", STRfi(fld,BCOUNT), (unsigned)predicted_bcount);
     }
 
-    seg_by_did (vb, (char[]){ SNIP_SPECIAL, BED_SPECIAL_BCOUNT }, 2, BED_BCOUNT, column_lens[BED_BCOUNT] + 1);
+    seg_by_did (vb, (char[]){ SNIP_SPECIAL, BED_SPECIAL_BCOUNT }, 2, BED_BCOUNT, fld_lens[BED_BCOUNT] + 1);
 
     // BSIZES + BSTARTS
-    seg_array (vb, CTX(BED_BSIZES),  BED_BSIZES,  STRi(column,BSIZES),  ',', 0, false, true, DICT_ID_NONE, column_lens[BSIZES]  + 1);
-    seg_array (vb, CTX(BED_BSTARTS), BED_BSTARTS, STRi(column,BSTARTS), ',', 0, true,  true, DICT_ID_NONE, column_lens[BSTARTS] + 1);
+    seg_array (vb, CTX(BED_BSIZES),  BED_BSIZES,  STRfld(BSIZES),  ',', 0, false, true, DICT_ID_NONE, fld_lens[BSIZES]  + 1);
+    seg_array (vb, CTX(BED_BSTARTS), BED_BSTARTS, STRfld(BSTARTS), ',', 0, true,  true, DICT_ID_NONE, fld_lens[BSTARTS] + 1);
 
 eol:             
     SEG_EOL (BED_EOL, false);
 
-    return &line[line_len] + 1;
+    return line;
 }

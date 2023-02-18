@@ -34,6 +34,7 @@
 
 // Txtfile stuff
 extern int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i);
+extern bool is_fasta (STRp(header), bool *need_more);
 
 // ZIP Stuff
 extern void fasta_zip_initialize (void);
@@ -45,6 +46,7 @@ extern void fasta_seg_initialize(VBlockP vb);
 extern void fasta_seg_finalize (VBlockP vb);
 extern bool fasta_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern rom fasta_seg_txt_line();
+extern bool fasta_seg_is_big (ConstVBlockP vb, DictId dict_id);
 
 // PIZ Stuff
 extern void fasta_piz_process_recon (VBlockP vb);

@@ -80,6 +80,7 @@ typedef struct {
     enum { INTERLEAVE_NONE, INTERLEAVE_EITHER, INTERLEAVE_BOTH } interleaved;
     uint16_t FLAG; // the value for sam_flag_filter
     uint8_t MAPQ;  // the value for sam_mapq_filter
+    bool explicit_head;
     enum { IUP_NONE, IUP_POSITIVE, IUP_NEGATIVE } bases;
 
     // genols options
@@ -97,6 +98,7 @@ typedef struct {
     rom threads_str, out_filename, out_dirname, files_from, do_register;
     FileType stdin_type; // set by the --input command line option
     bool explicitly_generic; // user explicitly set the type to generic
+    rom license_filename;
      
     ReferenceType reference;
 

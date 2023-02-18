@@ -246,7 +246,7 @@ uint32_t piz_uncompress_all_ctxs (VBlockP vb)
         else if (!is_pair_section) // b250
             ctx->b250_uncompressed = true;
 
-        if ((VER(14) && ctx->ltype != LT_BITMAP) ||                // starting v14: assign to all except LT_BITMAP (in which param is used to determine nbits)
+        if ((VER(14) && ctx->ltype != LT_BITMAP) ||               // starting v14: assign to all except LT_BITMAP (in which param is used to determine nbits)
             (!VER(14) && header->flags.ctx.v13_copy_local_param)) // up to v13: copy if v13_copy_local_param is set
             target_buf->prm8[0] = header->param;
 
@@ -653,8 +653,8 @@ static void piz_dispatch_one_vb (Dispatcher dispatcher, Section sec)
     VBlockP next_vb = dispatcher_generate_next_vb (dispatcher, sec->vblock_i, sec->comp_i);
 
     // read one VB's data from z_file
-    ReconType reconstruct = piz_read_one_vb (next_vb, true)  // read even if no_reconstruct
-                    && !flag.genocat_no_reconstruct; 
+    ReconType reconstruct = piz_read_one_vb (next_vb, true) && // read even if no_reconstruct
+                            !flag.genocat_no_reconstruct; 
 
     if (reconstruct) {
         dispatcher_compute (dispatcher, piz_reconstruct_one_vb);

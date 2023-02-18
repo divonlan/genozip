@@ -283,7 +283,7 @@ extern rom file_exts[];
                              { GTF_BZ2,    CODEC_BZ2,  GTF_GENOZIP    }, { GTF_XZ,    CODEC_XZ,  GTF_GENOZIP    }, { } },\
                            { { ME23,       CODEC_NONE, ME23_GENOZIP   }, { ME23_ZIP,  CODEC_ZIP, ME23_GENOZIP   }, { } },\
                            { { BAM,        CODEC_BGZF, BAM_GENOZIP    }, { BAM_GZ,    CODEC_GZ,  BAM_GENOZIP    }, { BAM_BGZF, CODEC_BGZF, BAM_GENOZIP  }, { CRAM, CODEC_CRAM, BAM_GENOZIP }, { } }, \
-                           { { BCF,        CODEC_BCF,  BCF_GENOZIP    }, { } }, \
+                           { { BCF,        CODEC_BCF,  BCF_GENOZIP    }, { BCF_GZ,    CODEC_GZ,  BCF_GENOZIP    }, { BCF_BGZF, CODEC_BGZF, BCF_GENOZIP  }, { } }, \
                            { { GNRIC,      CODEC_NONE, GNRIC_GENOZIP  }, { GNRIC_GZ,  CODEC_GZ,  GNRIC_GENOZIP  },\
                              { GNRIC_BZ2,  CODEC_BZ2,  GNRIC_GENOZIP  }, { GNRIC_XZ,  CODEC_XZ,  GNRIC_GENOZIP  },\
                              { GNRIC_ZIP,  CODEC_ZIP,  GNRIC_GENOZIP  }, { } },\

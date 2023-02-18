@@ -50,15 +50,23 @@ void fastq_vb_destroy_vb (VBlockFASTQP vb)
 // detect if a generic file is actually a FASTQ - we call based on first character being '@', line 3 starting with '+', and line 1 and 3 being the same length
 bool is_fastq (STRp(header), bool *need_more)
 {
-    if (!header_len || header[0] != '@' || !str_is_printable (STRa(header))) return false;
+    if (!header_len || header[0] != '@' || !str_is_printable (STRa(header))) return false; // fail fast
 
-    str_split (header, header_len, 0, '\n', line, false); // 4 (maybe) FASTQ lines and everything else if the 5th line
-    if (n_lines < 4) {
+    #define NUM_TEST_READS 3
+    str_split_by_lines (header, header_len, 4 * NUM_TEST_READS);
+    n_lines = (n_lines / 4) * 4; // round to whole reads
+
+    if (!n_lines) {
         *need_more = true; // we can't tell yet - need more data
         return false;
     }
 
-    return line_lens[1] > 0 && line_lens[1] == line_lens[3] && lines[2][0] == '+'; // SEQ and QUAL lines are of equal length
+    for (int i=0; i < n_lines; i += 4)
+        if (!line_lens[i+0] || lines[i+0][0] != '@' ||
+            !line_lens[i+2] || lines[i+2][0] != '+' ||
+            !line_lens[i+1] || line_lens[i+1] == line_lens[i+3]) return false; // SEQ and QUAL lines are of equal length
+
+    return true;
 }
 
 // returns true if txt_data[txt_i] (which is a \n) is the end of a FASTQ record (= block of 4 lines in the file); -1 if out of data
@@ -400,7 +408,7 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i, bool must_have)
     vb->pair_vb_i = pair_vb_i;
 
     Section sec = sections_vb_header (pair_vb_i, SOFT_FAIL);
-    ASSERT (!must_have || sec, "file unexpectedly does not contain data for pair 1 vb_i=%u", pair_vb_i);
+    ASSERT (!must_have || sec, "Cannot find VB_HEADER of vb_i=%u section for pair 1", pair_vb_i);
     if (!sec) return false;
 
     vb->pair_num_lines = sec->num_lines;
@@ -731,7 +739,7 @@ CONTAINER_FILTER_FUNC (fastq_piz_filter)
 CONTAINER_CALLBACK (fastq_piz_container_cb)
 {
     // --taxid: filter out by Kraken taxid 
-    if (flag.kraken_taxid && is_top_level) {
+    if (flag.kraken_taxid != TAXID_NONE && is_top_level) {
         
         if (!kraken_is_loaded && !kraken_is_included_stored (vb, FASTQ_TAXID, false))
             vb->drop_curr_line = "taxid";

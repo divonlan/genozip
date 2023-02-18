@@ -17,7 +17,7 @@ extern PizDisCoords piz_dis_coords (VBlockP vb); // for ASSPIZ
 typedef struct { char s[100]; } PizDisQname; 
 extern PizDisQname piz_dis_qname (VBlockP vb); // for ASSPIZ
 
-#define ASSPIZ(condition, format, ...) ({ if (!(condition)) { progress_newline(); fprintf (stderr, "%s %s: Error in %s:%u line_in_file(1-based)=%"PRIu64" %s%s%s%s: ", str_time().s, LN_NAME, __FUNCLINE, writer_get_txt_line_i ((VBlockP)(vb)), ((Z_DT(VCF) || Z_DT(BCF)) ? " sample_i=" : ""), ((Z_DT(VCF) || Z_DT(BCF)) ? str_int_s (vb->sample_i).s : ""), piz_dis_coords((VBlockP)(vb)).s, piz_dis_qname((VBlockP)(vb)).s); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }})
+#define ASSPIZ(condition, format, ...) ({ if (!(condition)) { progress_newline(); fprintf (stderr, "%s %s/%s: Error in %s:%u line_in_file(1-based)=%"PRIu64" %s%s%s%s: ", str_time().s, LN_NAME, CTX(vb->curr_field)->tag_name, __FUNCLINE, writer_get_txt_line_i ((VBlockP)(vb)), ((Z_DT(VCF) || Z_DT(BCF)) ? " sample_i=" : ""), ((Z_DT(VCF) || Z_DT(BCF)) ? str_int_s (vb->sample_i).s : ""), piz_dis_coords((VBlockP)(vb)).s, piz_dis_qname((VBlockP)(vb)).s); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }})
 #define ASSPIZ0(condition, string) ASSPIZ (condition, string "%s", "")
 
 // goes into ctx->history if not STORE_INT

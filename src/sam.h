@@ -138,6 +138,8 @@
 #pragma GENDICT OPTION_H1_i=DTYPE_2=H1:i     // Number of 1-difference hits (see also NM)
 #pragma GENDICT OPTION_H2_i=DTYPE_2=H2:i     // Number of 2-difference hits
 #pragma GENDICT OPTION_MC_Z=DTYPE_2=MC:Z     // CIGAR string for mate/next segment
+#pragma GENDICT OPTION_MC0_Z=DTYPE_2=M0C:Z0     
+#pragma GENDICT OPTION_MC1_Z=DTYPE_2=M1C:Z1     
 #pragma GENDICT OPTION_MD_Z=DTYPE_2=MD:Z     // String encoding mismatched and deleted reference bases
 #pragma GENDICT OPTION_MQ_i=DTYPE_2=MQ:i     // Mapping quality of the mate/next segment
 #pragma GENDICT OPTION_NH_i=DTYPE_2=NH:i     // Number of reported alignments that contain the query in the current record
@@ -384,7 +386,7 @@
 #pragma GENDICT OPTION_XQ_i=DTYPE_2=XQ:i     // query read length
 #pragma GENDICT OPTION_XT_i=DTYPE_2=XT:i     // # of continues reads, always 1 for blasr
     
-// PacBio tags. Source: https://pacbiofileformats.readthedocs.io/en/10.0/BAM.html
+// PacBio tags. Source: https://pacbiofileformats.readthedocs.io/en/11.0/BAM.html
 #pragma GENDICT OPTION_cx_i=DTYPE_2=cx:i     // per-read: Subread local context Flags: enum LocalContextFlags { ADAPTER_BEFORE = 1, ADAPTER_AFTER = 2, BARCODE_BEFORE = 4, BARCODE_AFTER = 8, FORWARD_PASS = 16, REVERSE_PASS = 32 }
 #pragma GENDICT OPTION_qs_i=DTYPE_2=qs:i     // per-read: 0-based start of query in the ZMW read (absent in CCS)
 #pragma GENDICT OPTION_qe_i=DTYPE_2=qe:i     // per-read: 0-based end of query in the ZMW read (absent in CCS)
@@ -396,12 +398,12 @@
 #pragma GENDICT OPTION_rq_f=DTYPE_2=rq:f     // per-read: Float in [0, 1] encoding expected accuracy
 #pragma GENDICT OPTION_sn_B_f=DTYPE_2=sn:B:f // per-read: 4 floats for the average signal-to-noise ratio of A, C, G, and T (in that order) over the HQRegion
 #pragma GENDICT OPTION_dt_Z=DTYPE_2=dt:Z     // per-base: DeletionTag
+#pragma GENDICT OPTION_st_Z=DTYPE_2=st:Z     // per-base: SubstitutionTag
 #pragma GENDICT OPTION_mq_Z=DTYPE_2=mq:Z     // per-base: MergeQV
 #pragma GENDICT OPTION_dq_Z=DTYPE_2=dq:Z     // per-base: DeletionQV
 #pragma GENDICT OPTION_iq_Z=DTYPE_2=iq:Z     // per-base: InsertionQV
 #pragma GENDICT OPTION_sq_Z=DTYPE_2=sq:Z     // per-base: SubstitutionQV
 #pragma GENDICT OPTION_iq_sq_dq=DTYPE_2=iq_sq_dq
-#pragma GENDICT OPTION_st_Z=DTYPE_2=st:Z     // per-base: SubstitutionTag
 #pragma GENDICT OPTION_ip_B_C=DTYPE_2=ip:B:C // per-base: Interpulse duration (IPD) measured in frames (raw frames or codec V1)
 #pragma GENDICT OPTION_pw_B_C=DTYPE_2=pw:B:C // per-base: PulseWidth measured in frames (raw frames or codec V1)
 #pragma GENDICT OPTION_fi_B_C=DTYPE_2=fi:B:C // per-base (Hi-Fi kinetic info): Forward IPD (codec V1)

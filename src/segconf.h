@@ -172,7 +172,7 @@ typedef struct {
     bool chain_mismatches_ref;  // Some contigs mismatch the reference files, so this chain file cannot be used with --chain
 
     // BED stuff
-    int bed_num_columns;
+    int bed_num_flds;
 } SegConf;
 
 extern SegConf segconf; // ZIP: set based on segging a sample of a few first lines of the file

@@ -349,6 +349,8 @@ static void flag_set_out_filename (char *optarg)
 
 static void flag_set_head (rom optarg)
 {
+    flag.explicit_head = true;
+
     if (!optarg) 
         flag_set_lines ("1-10"); // default
 
@@ -683,8 +685,8 @@ void flags_init_from_command_line (int argc, char **argv)
 
         typedef const struct option Option;
         static Option genozip_lo[]    = { _lg, _i, _I, _d, _f, _h,     _D,    _L1, _L2, _q, _Q, _qq, _t, _Nt, _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th,     _o, _p, _e, _E, _ch,                                                                                                _sl, _sL, _ss, _SS,      _sd, _sT,  _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn,               _B, _xt, _dm, _dp, _dL, _dD, _dq, _dB, _dt, _dw, _dM, _dr, _dR, _dP, _dG, _dN, _dF, _dQ, _dl, _dc, _dg,                     _sy,    _dh,_dS, _bS, _9, _99, _9s, _9P, _9G, _9g, _9V, _9Q, _9f, _9Z, _9D, _pe,      _fa, _bs,                              _nh, _rg, _sR,      _sC,           _hC, _rA, _rI, _rS, _me, _mf, _mF,     _s5, _S5, _sM, _sA, _sB, _sP, _sc, _AL, _sI, _cn,                                    _so, _SO, _s6, _kr,         _oe, _aa, _al, _Lf, _dd, _T, _TT, _Xr, _Xd, _XS, _MR, _wM, _wm, _WM, _WB, _bi, _bl, _VV, _DV,      _Ds, _DS, _DD, _NK, _DP, _SH, _Dd,      _00 };
-        static Option genounzip_lo[]  = { _lg,         _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q, _qq, _t,      _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                                                                                                   _ss, _SS, _sG, _sd, _sT,  _sF,      _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn, _ov,              _xt, _dm, _dp,      _dD,      _dB, _dt,                _dR,                               _dc,                          _sy,                                                                             _pt,                                                  _sR,      _sC,           _hC, _rA,      _rS, _me,               _s5, _S5, _sM, _sA, _sB,           _AL, _sI, _cn, _pg,      _sx, _SX, _ix,                     _s6,              _oe,                _dd, _T,                                                                  _Dp,           _DD,                          _00 };
-        static Option genocat_lo[]    = { _lg,         _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q, _qq,               _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p, _e,           _lo, _il, _r, _R, _Rg, _s, _sf, _sq, _G, _1, _H0, _H1, _H2, _H3, _Gt, _So, _Io, _IU, _iu, _GT,          _ss, _SS, _sG, _sd, _sT,  _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sH, _sn, _ov, _R1, _R2,    _xt, _dm, _dp,      _dD,      _dB, _dt,                _dR,                               _dc,      _ds, _sS, _SC, _sY, _sy,                                                                             _pt,                 _fs, _g, _gw, _n, _nt, _nh,      _sR,      _sC, _sD, _cC, _hC, _rA, _rI, _rS, _me,               _s5, _S5, _sM, _sA, _sB,           _AL, _sI, _cn, _pg, _PG, _sx, _SX, _ix, _ct, _vl,      _SO, _s6, _kr, _kR,    _oe,      _al,      _dd, _T,                                                                  _Dp,           _DD,                     _DT, _00 };
+        static Option genounzip_lo[]  = { _lg,         _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q, _qq, _t,      _DL, _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY, _m, _th, _u, _o, _p, _e,                                                                                                                   _ss, _SS, _sG, _sd, _sT,  _sF,      _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv,      _sn, _ov,              _xt, _dm, _dp,      _dD,      _dB, _dt,                _dR,                               _dc,                          _sy,                                                                             _pt,                                                  _sR,      _sC,           _hC, _rA,      _rS, _me,               _s5, _S5, _sM, _sA, _sB,           _AL, _sI, _cn, _pg,                                         _s6,              _oe,                _dd, _T,                                                                  _Dp,           _DD,                          _00 };
+        static Option genocat_lo[]    = { _lg,         _d, _f, _h,     _D,    _L1, _L2, _q, _Q, _qq,               _V, _z, _zb, _zB, _zs, _zS, _zq, _zQ, _za, _zA, _zf, _zF, _zc, _zC, _zv, _zV, _zy, _zY,     _th,     _o, _p, _e,           _lo, _il, _r, _R, _Rg, _s, _sf, _sq, _G, _1, _H0, _H1, _H2, _H3, _Gt, _So, _Io, _IU, _iu, _GT,          _ss, _SS, _sG, _sd, _sT,  _sF, _sK, _sb, _lc, _lh, _lH, _s2, _s7, _S7, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _su, _sv, _sH, _sn, _ov, _R1, _R2,    _xt, _dm, _dp,      _dD,      _dB, _dt,                _dR,                               _dc,      _ds, _sS, _SC, _sY, _sy,                                                                             _pt,                 _fs, _g, _gw, _n, _nt, _nh,      _sR,      _sC, _sD, _cC, _hC, _rA, _rI, _rS, _me,               _s5, _S5, _sM, _sA, _sB,           _AL, _sI, _cn, _pg, _PG, _sx, _SX, _ix, _ct, _vl,      _SO, _s6, _kr, _kR,    _oe,      _al,      _dd, _T,                                                                  _Dp,           _DD,                     _DT, _00 };
         static Option genols_lo[]     = { _lg,             _f, _h,        _l, _L1, _L2, _q,                        _V,                                                                                                      _p,                                                                                                                                                 _sF,                                                        _st, _sm,                                                                     _dm,                          _dt,                                                                                                                                                                                                                                                                                        _S5, _sM,                                                                                               _b, _oe,                _dd, _T,                                                                                      _DD,                          _00 };
         static Option *long_options[] = { genozip_lo, genounzip_lo, genols_lo, genocat_lo }; // same order as ExeType
 
@@ -853,16 +855,16 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
     CONFLICT (flag.unbind,      flag.out_filename,   OT("unbind", "u"),    OT("output", "o"));
     CONFLICT (flag.subdirs,     flag.out_filename,   OT("subdirs", "D"),   OT("output", "o")); 
     CONFLICT (flag.to_stdout,   flag.index_txt,      OT("stdout", "c"),    OT("index", "x"));
-    CONFLICT (flag.one_vb,      flag.interleaved,     "--interleaved",       "--one-vb");
-    CONFLICT (flag.one_component, flag.interleaved,   "--interleaved",       "--R1/--R2");
+    CONFLICT (flag.one_vb,      flag.interleaved,    "--interleaved",      "--one-vb");
+    CONFLICT (flag.one_component, flag.interleaved,  "--interleaved",      "--R1/--R2");
     CONFLICT (flag.one_component, flag.luft,         OT("luft", "v"),      "--R1/--R2");
-    CONFLICT (flag.xthreads,    flag.interleaved,     "--interleaved",       "--xthreads");
+    CONFLICT (flag.xthreads,    flag.interleaved,    "--interleaved",      "--xthreads");
     CONFLICT (flag.snps_only,   flag.indels_only,    "--snps_only",        "--indels-only");
     CONFLICT (flag.header_only, flag.seq_only,       "--seq-only",         "--header-only");
     CONFLICT (flag.header_only, flag.qual_only,      "--qual-only",        "--header-only");
     CONFLICT (flag.seq_only,    flag.qual_only,      "--seq-only",         "--qual-only");
-    CONFLICT (flag.header_only, flag.interleaved,     "--interleaved",       "--header-only");
-    CONFLICT (flag.regions,     flag.interleaved,     "--interleaved",       "--regions");
+    CONFLICT (flag.header_only, flag.interleaved,    "--interleaved",      "--header-only");
+    CONFLICT (flag.regions,     flag.interleaved,    "--interleaved",      "--regions");
     CONFLICT (flag.header_only, flag.no_header==1,   OT("no-header", "H"), "--header-only");
     CONFLICT (flag.no_header,   flag.header_one,     OT("no-header", "H"), OT("header-one", "1"));
     CONFLICT (flag.quiet,       option_noisy,        OT("quiet", "q"),     OT("noisy", "Q"));
@@ -902,6 +904,10 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
     CONFLICT (flag.count,       flag.out_filename,   "--count",            OT("output", "o"));
     CONFLICT (flag.count,       flag.header_only,    "--count",            OT("header-only", "H"));
     CONFLICT (flag.count,       flag.header_one,     "--count",            OT("header-one", "1"));
+    CONFLICT (flag.count,       flag.downsample,     "--count",            "--downsample"); // --downsample, --head, --tail and --lines happen in writer - doesn't happen at all with --count, as lines are not written
+    CONFLICT (flag.count,       flag.explicit_head,  "--count",            "--head"); 
+    CONFLICT (flag.count,       flag.tail,           "--count",            "--tail"); 
+    CONFLICT (flag.count,       flag.lines_first != NO_LINE, "--count",    OT("lines", "n")); 
     CONFLICT (flag.test,        flag.make_reference, "--make-reference",   OT("test", "t"));
     CONFLICT (flag.sort,        flag.unsorted,       "--sort",             "--unsorted");
     CONFLICT (flag.show_ostatus,flag.show_dvcf,      "--show-ostatus",     "--show-dvcf");
@@ -910,7 +916,7 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
     CONFLICT (flag.no_gencomp,  flag.force_gencomp,  "--no-gencomp",       "--force-gencomp");
     CONFLICT (flag.dump_one_b250_dict_id.num, flag.dump_one_local_dict_id.num, "--dump-one-b250", "--dump-one-local");
     CONFLICT (flag.show_stats,  flag.grep,           OT("stats", "w"),     OT("grep", "g"));
-    CONFLICT (flag.show_stats,  flag.lines_first != NO_LINE, OT("stats", "w"),     OT("lines", "n"));
+    CONFLICT (flag.show_stats,  flag.lines_first != NO_LINE, OT("stats", "w"), OT("lines", "n"));
     CONFLICT (flag.show_stats,  flag.downsample,     OT("stats", "w"),     "--downsample");
     CONFLICT (flag.show_stats,  flag.header_only,    OT("stats", "w"),     "--header-only");
     CONFLICT (flag.show_stats,  flag.MAPQ,           OT("stats", "w"),     "--MAPQ");
@@ -1051,7 +1057,7 @@ void flags_update (unsigned num_files, rom *filenames)
         flag.dict_id_show_one_b250.num || flag.show_one_dict || flag.show_one_counts.num || flag.show_sag || flag.show_depn || 
         flag.show_reference || flag.show_digest || flag.list_chroms || flag.show_coverage == COV_ONE || flag.show_ranges ||
         flag.show_alleles || flag.show_vblocks || flag.show_codec || flag.debug_gencomp || flag.show_qual || flag.show_aligner ||
-        flag.show_buddy || flag.debug_peek || flag.debug_deep || (flag.show_index && command==PIZ))
+        flag.show_buddy || flag.debug_peek || flag.debug_deep || (flag.show_index && command==PIZ) || flag.count)
         flag.quiet=true; // don't show progress or warnings
 
     // override these ^ if user chose to be --noisy
@@ -1108,7 +1114,7 @@ void flags_update (unsigned num_files, rom *filenames)
          flag.dump_one_b250_dict_id.num || // all other sections (except CHROM) are blocked from reading in piz_default_skip_section
          flag.show_index || flag.dump_section || flag.show_one_counts.num || flag.show_flags || flag.show_data_type ||
          flag.show_aliases || flag.show_txt_contigs || flag.show_gheader || flag.show_recon_plan || flag.show_ref_contigs ||
-         (flag.count && !flag.bases) ||
+         (flag.count && !flag.bases && !flag.grep) ||
          flag.collect_coverage); // note: this is updated in flags_update_piz_one_file
 
     flag.no_tip |= flag.quiet || getenv ("GENOZIP_TEST") ||

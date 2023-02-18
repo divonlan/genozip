@@ -201,7 +201,10 @@ void progress_concatenated_md5 (rom me, Digest md5)
 {
     ASSERT0 (!component_name, "expecting component_name=NULL");
 
-    FINALIZE ("Bound %s", me);
+    FINALIZE (flag.pair ? "Paired %s"
+            : flag.deep ? "Deep %s + FASTQ" // SAM or BAM
+            :             "Unexpeced"
+            , me);
 }
 
 

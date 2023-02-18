@@ -5,10 +5,10 @@ Note on versioning:
 
 15.0.0
 - Deep
-- GFF: support embedded FASTA
-- VCF: better compression of dbSNP field INFO/VC
+- GFF: support compressing GFF3 files with embedded FASTA
 - BED: native support for compressing BED files - significantly better and faster compression.
-- BAM: ~10% better compression for PacBio files with  iq / dq / sq tags.
+- BAM: ~20% better compression for PacBio files with  iq / dq / sq tags.
+- VCF: better compression of dbSNP field INFO/VC
 ADD to website: --show-segconf-has ; debug_deep and debug_deep=qname_hash,seq_hash,qual_hash(works also without --deep), 
 ADD: BED files (.bed, .track) - limitations: only BEDn, not BEDn+m
 ADD genocat --show-data-type

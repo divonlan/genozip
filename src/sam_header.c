@@ -296,7 +296,7 @@ static void sam_header_zip_build_hdr_PGs (rom hdr, rom after)
 
     uint32_t last_PG_i=0, last_PG_len=0; // last PG added
     while (hdr < after) {
-        str_split_by_tab (hdr, after - hdr, 10, NULL, false); // also advances hdr to after the newline
+        str_split_by_tab (hdr, after - hdr, 10, NULL, false, false); // also advances hdr to after the newline
         if (!hdr || n_flds < 2 || fld_lens[0] != 3 || !EQ3(flds[0], "@PG")) break;
 
         bool added = false;

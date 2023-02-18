@@ -689,7 +689,7 @@ static uint64_t zfile_read_genozip_header_get_offset (void)
 // returns false if file should be skipped
 bool zfile_read_genozip_header (SectionHeaderGenozipHeader *out_header) // optional outs
 {
-    SectionEnt sec = { .st = SEC_GENOZIP_HEADER, 
+    SectionEnt sec = { .st     = SEC_GENOZIP_HEADER, 
                        .offset = zfile_read_genozip_header_get_offset() };
     
     if (!sec.offset) goto error;

@@ -113,7 +113,7 @@ test_redirected() { # $1=filename  $2...$N=optional extra genozip arg
     fi
 
     # file name extension of basic.* has is_data_type callback defined in DATA_TYPE_PROPERTIES
-    local has_is_data_type=( vcf sam fastq fq gff gvf gtf bam bed me23 )
+    local has_is_data_type=( vcf sam fastq fq fa gff gvf gtf bam bed me23 )
     local input=""
     if [[ ! " ${has_is_data_type[*]} " =~ " $ext " ]]; then
         input="--input ${file#*.}"
@@ -541,11 +541,12 @@ test_kraken() { # $1 file and genozip args ; $2 1st genocat arguments ; $3 2nd g
     local lines_minus=`$genocat_no_echo $output -Hq $3 --count`
     if [ "$lines_minus" == "" ] || [ "$lines_minus" -eq 0 ]; then echo "genocat error - \$lines_minus=\"$lines_minus\""; exit 1; fi
     
-    local lines=`$genocat_no_echo -Hq $output --count`
+    local fastq=`echo $2 | tr " " "\n" | grep "\-\-fastq"` # this is "--fastq" if it appears in $2 or "" if not
+    local lines=`$genocat_no_echo $fastq -Hq $output --count`
     if [ "$lines" == "" ] || [ "$lines" -eq 0 ]; then echo "genocat error - \$lines=\"$lines\""; exit 1; fi
     
     echo "$file : lines_plus=$lines_plus lines_minus=$lines_minus lines=$lines"
-    if [ $(($lines_plus + $lines_minus)) -ne $lines ]; then
+    if (( $lines_plus == 0 )) || (( $lines_minus == 0 )) || [ $(($lines_plus + $lines_minus)) -ne $lines ]; then
         echo "$file: adding up kraken positive- and negative- filtered data, isn't the size of the original file"
         exit 1
     fi        
@@ -587,6 +588,25 @@ batch_kraken() # $1 genozip arguments #2 genocat (one of them must include --kra
     test_kraken "${TESTDIR}/basic.bam $1"\
                 "-k570+0 $2" \
                 "-k^570+0 $2"
+
+    # testing multiple taxids
+    test_kraken "${TESTDIR}/basic.bam $1"\
+                "-k570,500 $2" \
+                "-k^570,500 $2"
+
+    test_kraken "${TESTDIR}/basic.bam $1"\
+                "-k570,500+0 $2" \
+                "-k^570,500+0 $2"
+                
+    # testing multiple taxids
+    test_kraken "${TESTDIR}/basic.bam $1"\
+                "-k570,500 $2" \
+                "-k^570,500 $2"
+
+    test_kraken "${TESTDIR}/basic.bam $1"\
+                "-k570,500+0 $2" \
+                "-k^570,500+0 $2"
+                
     cleanup
 }
 
@@ -598,7 +618,9 @@ batch_copy_ref_section()
     #created with -r1:9660000-10650000, and contains 99% of vb=11 of hs37d5.ref.genozip which is 3867649-4834572
     local file=${TESTDIR}/unit-test.-E.copy-ref-section.sam.gz
 
-    $genozip -E $hs37d5 -p 123 -ft $file || exit 1
+    $genozip -E $hs37d5 -p 123 -ft $file -fo $output || exit 1
+
+    cleanup
 }    
 
 # test -@1 - different code paths
@@ -745,7 +767,7 @@ batch_qname_flavors()
     batch_print_header
 
     local files=( `cd $TESTDIR; ls -1 flavor.* | \
-                   grep -v .genozip | grep -v .md5 | grep -v .bad ` ) 
+                   grep -vF .genozip | grep -vF .md5 | grep -vF .bad ` ) 
 
     local file
     for file in ${files[@]}; do
@@ -835,6 +857,14 @@ batch_genocat_tests()
     test_count_genocat_lines "--pair -E $GRCh38 $file $file" "--R1" $(( 4 * $num_lines )) 
     test_count_genocat_lines "--pair -E $GRCh38 $file $file" "--R2" $(( 4 * $num_lines ))
 
+    # BED genocat tests
+    test_count_genocat_lines $file "--header-only" 3
+    test_count_genocat_lines $file "--no-header" 7
+    test_count_genocat_lines $file "--grep UBXN11 --no-header" 2
+    test_count_genocat_lines $file "--lines=2-4 --no-header" 3
+    test_count_genocat_lines $file "--head=2 --no-header" 2
+    test_count_genocat_lines $file "--tail=2 --no-header" 2
+
     # test --interleave and with --grep
     sed "s/PRFX/prfx/g" $file > $OUTDIR/prfx.fq
     test_count_genocat_lines "--pair -E $GRCh38 $file $OUTDIR/prfx.fq" "--interleave=either --grep PRFX" 8
@@ -887,6 +917,61 @@ batch_grep_count_lines()
     test_count_genocat_lines "$TESTDIR/basic.vcf" "--regions 13:207237509-207237510,1:207237250 -H" 7
 }
 
+assert() # $1 result $2 expected
+{
+    echo \"$1\" \"$2\"
+    if ! [[ "$1" =~ ^[0-9]+$ ]] ; then
+        echo "Failed" # genocat failed and hence didn't return a number - error message is already displayed
+        exit 1
+    fi
+
+    if ! [[ "$2" =~ ^[0-9]+$ ]] ; then
+        echo "Bad comparison argument, expecting \$2 to be an integer" # genocat failed and hence didn't return a number - error message is already displayed
+        exit 1
+    fi
+
+    if (( "$1" != "$2" )); then 
+        echo "Failed: result is $1 but expecting $2"
+        exit 1
+    fi
+}
+
+batch_bam_subsetting()
+{
+    batch_print_header
+
+    # note: we use a sorted file with SA:Z to activate the gencomp codepaths
+    local file=$TESTDIR/test.human2.bam.genozip
+    $genozip $TESTDIR/test.human2.bam -fXB4 || exit 1
+
+    # (almost) all SAM/BAM subseting options according to: https://www.genozip.com/compressing-bam
+    # the one missing, --taxid, is tested in batch_kraken
+    assert "`$genocat $file --header-only | wc -l`" 93
+    assert "`$genocat $file -r 1 --no-header | wc -l`" 99909 # test --regions in presence of gencomp, but entire file is one contig
+    assert "`$genocat $file -r 1 --count`" 99909
+    assert "`$genocat $file --grep AS:i:150 --count`" 12297
+    assert "`$genocat $file --grep-w 1000 --count`" 24
+    assert "`$genocat $file --bases N --count`" 2              
+    assert "`$genocat $file --bases ^ACGT --count`" 76
+    assert "`$genocat $file --downsample 2 --no-header | wc -l`" 49955  # note: --downsample, --head, --tail, --lines are incomptaible with --count
+    assert "`$genocat $file --downsample 2,1 --no-header | wc -l`" 49954
+    assert "`$genocat $file --lines 5000-19999 --no-header | wc -l`" 15000 # spans more than one VB
+    assert "`$genocat $file --head=15000 --no-header | wc -l`" 15000       # spans more than one VB
+    assert "`$genocat $file --tail=15000 --no-header | wc -l`" 15000       # spans more than one VB
+    assert "`$genocat $file --FLAG=+SUPPLEMENTARY --count`" 58 # should be the same as samtools' "-f SUPPLEMENTARY"
+    assert "`$genocat $file --FLAG=^48 --count`" 99816         # should be the same as samtools' "-G 48"
+    assert "`$genocat $file --FLAG=-0x0030 --count`" 315       # should be the same as samtools' "-F 0x0030"
+    assert "`$genocat $file --MAPQ 20 --count`" 8753
+    assert "`$genocat $file --MAPQ ^20 --count`" 91156
+
+    file=$TESTDIR/test.human3-collated.bam.genozip
+    if [ ! -f $file ]; then $genozip $TESTDIR/test.human3-collated.bam -fXB4 || exit 1; fi
+    assert "`$genocat $file -r chr1 --no-header | wc -l`" 4709 # test --regions - real subsetting, but no gencomp as it is collated
+    assert "`$genocat $file -r chr1 --count`" 4709
+
+    # TO DO: combinations of subsetting flags
+}
+
 batch_backward_compatability()
 {
     batch_print_header
@@ -898,6 +983,7 @@ batch_backward_compatability()
     done
 }
 
+num_batch_prod_compatability_tests=14
 batch_prod_compatability()
 {
     if [ "$i_am_prod" == "1" ]; then return; fi 
@@ -920,10 +1006,11 @@ batch_prod_compatability()
     if (( $1 <= $2 + 10 )) ; then batch_kraken " " "-K$kraken"           ; fi
     if (( $1 <= $2 + 11 )) ; then batch_basic basic.phy     ; fi
     if (( $1 <= $2 + 12 )) ; then batch_basic basic.generic ; fi
+    if (( $1 <= $2 + 13 )) ; then batch_basic basic.bed     ; fi
+    # if adding tests, update num_batch_prod_compatability_tests
 
     genozip=$save_genozip
 }
-num_batch_prod_compatability_tests=13
     
 batch_real_world_1_adler32() # $1 extra genozip argument
 {
@@ -939,9 +1026,9 @@ batch_real_world_1_adler32() # $1 extra genozip argument
     # without reference
     local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*sam* test.*bam \
                    test.*fq* test.*fa* \
-                   basic.phy* test.*gvf* test.*gtf* test.*gff* test.*locs* \
+                   basic.phy* test.*gvf* test.*gtf* test.*gff* test.*locs* test.*bed* \
                    test.*txt* test.*kraken* | \
-                   grep -v "$filter_out" | grep -v headerless | grep -v .genozip | grep -v .md5 | grep -v .bad |\
+                   grep -v "$filter_out" | grep -v headerless | grep -vF .genozip | grep -vF .md5 | grep -vF .bad |\
                    grep -v test.embedded-fasta.gff.gz` ) 
 
     for f in ${files[@]}; do rm -f ${f}.genozip; done
@@ -959,7 +1046,14 @@ batch_real_world_genounzip_single_process() # $1 extra genozip argument
 {
     batch_print_header
 
-    $genounzip ${TESTDIR}/*.genozip --test || exit 1
+    local files=( `cd $TESTDIR; ls -1 test.*.vcf.genozip test.*.sam test.*.bam.genozip \
+                   test.*.fq.genozip test.*.fa.genozip \
+                   basic.phy.genozip test.*.gvf.genozip test.*.gtf.genozip test.*gff*.genozip \
+                   test.*.locs.genozip test.*.bed.genozip \
+                   test.*txt.genozip test.*kraken.genozip |
+                   grep -vF .d.vcf`)
+
+    $genounzip ${files[@]/#/$TESTDIR/} --test || exit 1
 }
 
 batch_real_world_genounzip_compare_file() # $1 extra genozip argument
@@ -976,9 +1070,9 @@ batch_real_world_genounzip_compare_file() # $1 extra genozip argument
     # without reference
     local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*sam* test.*bam \
                    test.*fq* test.*fa* \
-                   basic.phy* test.*gvf* test.*gtf* test.*gff* test.*locs* \
+                   basic.phy* test.*gvf* test.*gtf* test.*gff* test.*locs* test.*bed* \
                    test.*txt* test.*kraken* | \
-                   grep -v "$filter_out" | grep -v headerless | grep -v .genozip | grep -v .md5 | grep -v .bad | grep -v .xz | grep -v .bz2 | grep -v test.embedded-fasta.gff.gz` )
+                   grep -v "$filter_out" | grep -v headerless | grep -vF .genozip | grep -Fv .md5 | grep -Fv .bad | grep -Fv .xz | grep -Fv .bz2 | grep -v test.embedded-fasta.gff.gz` )
     
     # test full genounzip (not --test), including generation of BZGF
     for f in ${files[@]}; do 
@@ -1244,9 +1338,37 @@ batch_reference_fastq()
     echo "paired FASTQ with --reference, --password (BZ2), --md5, -B1"
     test_standard "CONCAT -e$GRCh38 -p 123 --pair -mB1" "-p123" test.human2-R1.100K.fq.bz2 test.human2-R2.100K.fq.bz2
 
+    # test --grep (regression test for bug 788)
+    local n=`$genocat --grep "@A00910:85:HYGWJDSXX:1:1101:9028:1000" -p 123 $output --count || exit 1`
+    if (( n != 2 )); then
+        echo "Expecting 2 reads to be grepped in paired FASTQ"
+        exit 1
+    fi
+
+    # test single-line --head (only pair-1 is expressed)
+    local n=`$genocat --head=1 -p 123 $output --count || exit 1`
+    if (( n != 1 )); then
+        echo "Expecting 1 read to be counted with --head=1 in paired FASTQ"
+        exit 1
+    fi
+
+    # test single-line --tail (only pair-2 expressed)
+    local n=`$genocat --tail=1 -p 123 $output --count || exit 1`
+    if (( n != 1 )); then
+        echo "Expecting 1 reads to be counted with --tail=1 in paired FASTQ"
+        exit 1
+    fi
+
+    # test --bases
+    local n=`$genocat --bases=N -p 123 $output --count || exit 1`
+    if (( n != 99 )); then
+        echo "Expecting 99 reads to be counted with --bases=N in this paired FASTQ"
+        exit 1
+    fi
+
     echo "4 paired FASTQ with --REFERENCE (BGZF, decompress concatenated, password)"
     test_standard "COPY -E$GRCh38 -2 -p 123" " " test.human2-R1.100K.fq.gz test.human2-R2.100K.fq.gz
-
+    
     # solexa read style
     test_standard "-e$GRCh38 --pair" "" special.solexa-R1.fq special.solexa-R2.fq
 }
@@ -1568,7 +1690,7 @@ genocat="$genocat_exe --echo $2 $piz_threads"
 genols=$genols_exe 
 
 basics=(basic.vcf basic.chain basic.sam basic.vcf basic.bam basic.fq basic.fa basic.gvf basic.gtf basic.me23 \
-        basic.kraken basic.phy basic.locs basic.generic)
+        basic.kraken basic.phy basic.locs basic.bed basic.generic)
 
 exes=($genozip_exe $genounzip_exe $genocat_exe $genols_exe)
 for exe in ${exes[@]}; do
@@ -1607,60 +1729,62 @@ if (( $1 <= 3  )) ; then  batch_basic basic.bam        ; fi
 if (( $1 <= 4  )) ; then  batch_basic basic.sam        ; fi
 if (( $1 <= 5  )) ; then  batch_basic basic.fq         ; fi
 if (( $1 <= 6  )) ; then  batch_basic basic.fa         ; fi
-if (( $1 <= 7  )) ; then  batch_basic basic.chain      ; fi
-if (( $1 <= 8  )) ; then  batch_basic basic.gvf        ; fi
-if (( $1 <= 9  )) ; then  batch_basic basic.gtf        ; fi
-if (( $1 <= 10 )) ; then  batch_basic basic.me23       ; fi
-if (( $1 <= 11 )) ; then  batch_basic basic.kraken     ; fi
-if (( $1 <= 12 )) ; then  batch_basic basic.phy        ; fi
-if (( $1 <= 13 )) ; then  batch_basic basic.generic    ; fi
-if (( $1 <= 14 )) ; then  batch_precompressed          ; fi
-if (( $1 <= 15 )) ; then  batch_bgzf                   ; fi
-if (( $1 <= 16 )) ; then  batch_subdirs                ; fi
-if (( $1 <= 17 )) ; then  batch_special_algs           ; fi
-if (( $1 <= 18 )) ; then  batch_dvcf                   ; fi
-if (( $1 <= 19 )) ; then  batch_sam_bam_translations   ; fi
-if (( $1 <= 20 )) ; then  batch_sam_fq_translations    ; fi
-if (( $1 <= 21 )) ; then  batch_23andMe_translations   ; fi
-if (( $1 <= 22 )) ; then  batch_phylip_translations    ; fi
-if (( $1 <= 23 )) ; then  batch_genocat_tests          ; fi
-if (( $1 <= 24 )) ; then  batch_grep_count_lines       ; fi
-if (( $1 <= 25 )) ; then  batch_backward_compatability ; fi
-if (( $1 <= 26 )) ; then  batch_match_chrom            ; fi
-if (( $1 <= 27 )) ; then  batch_kraken " " "-K$kraken" ; fi   # genocat loads kraken data
-if (( $1 <= 28 )) ; then  batch_kraken "-K$kraken" " " ; fi   # genozip loads kraken data
-if (( $1 <= 29 )) ; then  batch_single_thread          ; fi 
-if (( $1 <= 30 )) ; then  batch_copy_ref_section       ; fi 
-if (( $1 <= 31 )) ; then  batch_iupac                  ; fi 
-if (( $1 <= 32 )) ; then  batch_genols                 ; fi
-if (( $1 <= 33 )) ; then  batch_tar_files_from         ; fi
-if (( $1 <= 34 )) ; then  batch_gencomp_depn_methods   ; fi 
-if (( $1 <= 35 )) ; then  batch_real_world_small_vbs   ; fi 
-if (( $1 <= 36 )) ; then  batch_real_world_1_adler32   ; fi 
-if (( $1 <= 37 )) ; then  batch_real_world_genounzip_single_process ; fi 
-if (( $1 <= 38 )) ; then  batch_real_world_genounzip_compare_file   ; fi 
-if (( $1 <= 39 )) ; then  batch_real_world_1_adler32 "--best -f" ; fi 
-if (( $1 <= 40 )) ; then  batch_real_world_1_adler32 --fast    ; fi 
-if (( $1 <= 41 )) ; then  batch_real_world_with_ref_md5; fi 
-if (( $1 <= 42 )) ; then  batch_real_world_with_ref_md5 --best ; fi 
-if (( $1 <= 43 )) ; then  batch_multiseq               ; fi
-if (( $1 <= 44 )) ; then  batch_external_cram          ; fi
-if (( $1 <= 45 )) ; then  batch_external_bcf           ; fi
-if (( $1 <= 46 )) ; then  batch_external_unzip         ; fi
-if (( $1 <= 47 )) ; then  batch_reference_fastq        ; fi
-if (( $1 <= 48 )) ; then  batch_reference_sam          ; fi
-if (( $1 <= 49 )) ; then  batch_reference_vcf          ; fi
-if (( $1 <= 50 )) ; then  batch_many_small_files       ; fi
-if (( $1 <= 51 )) ; then  batch_make_reference         ; fi
-if (( $1 <= 52 )) ; then  batch_headerless_wrong_ref   ; fi
-if (( $1 <= 53 )) ; then  batch_replace                ; fi
-if (( $1 <= 54 )) ; then  batch_coverage_idxstats_sex  ; fi
-if (( $1 <= 55 )) ; then  batch_qname_flavors          ; fi
-if (( $1 <= 56 )) ; then  batch_reference_backcomp     ; fi
-if (( $1 <= 57 )) ; then  batch_real_world_backcomp 12.0.42 ; fi # note: versions must match VERSIONS in test/Makefile
-if (( $1 <= 58 )) ; then  batch_real_world_backcomp 13.0.21 ; fi 
-if (( $1 <= 59 )) ; then  batch_real_world_backcomp latest  ; fi 
-next=59
+if (( $1 <= 7  )) ; then  batch_basic basic.bed        ; fi
+if (( $1 <= 8  )) ; then  batch_basic basic.chain      ; fi
+if (( $1 <= 9  )) ; then  batch_basic basic.gvf        ; fi
+if (( $1 <= 10 )) ; then  batch_basic basic.gtf        ; fi
+if (( $1 <= 11 )) ; then  batch_basic basic.me23       ; fi
+if (( $1 <= 12 )) ; then  batch_basic basic.kraken     ; fi
+if (( $1 <= 13 )) ; then  batch_basic basic.phy        ; fi
+if (( $1 <= 14 )) ; then  batch_basic basic.generic    ; fi
+if (( $1 <= 15 )) ; then  batch_precompressed          ; fi
+if (( $1 <= 16 )) ; then  batch_bgzf                   ; fi
+if (( $1 <= 17 )) ; then  batch_subdirs                ; fi
+if (( $1 <= 18 )) ; then  batch_special_algs           ; fi
+if (( $1 <= 19 )) ; then  batch_dvcf                   ; fi
+if (( $1 <= 20 )) ; then  batch_sam_bam_translations   ; fi
+if (( $1 <= 21 )) ; then  batch_sam_fq_translations    ; fi
+if (( $1 <= 22 )) ; then  batch_23andMe_translations   ; fi
+if (( $1 <= 23 )) ; then  batch_phylip_translations    ; fi
+if (( $1 <= 24 )) ; then  batch_genocat_tests          ; fi
+if (( $1 <= 25 )) ; then  batch_grep_count_lines       ; fi
+if (( $1 <= 26 )) ; then  batch_bam_subsetting         ; fi
+if (( $1 <= 27 )) ; then  batch_backward_compatability ; fi
+if (( $1 <= 28 )) ; then  batch_match_chrom            ; fi
+if (( $1 <= 29 )) ; then  batch_kraken " " "-K$kraken" ; fi   # genocat loads kraken data
+if (( $1 <= 30 )) ; then  batch_kraken "-K$kraken" " " ; fi   # genozip loads kraken data
+if (( $1 <= 31 )) ; then  batch_single_thread          ; fi 
+if (( $1 <= 32 )) ; then  batch_copy_ref_section       ; fi 
+if (( $1 <= 33 )) ; then  batch_iupac                  ; fi 
+if (( $1 <= 34 )) ; then  batch_genols                 ; fi
+if (( $1 <= 35 )) ; then  batch_tar_files_from         ; fi
+if (( $1 <= 36 )) ; then  batch_gencomp_depn_methods   ; fi 
+if (( $1 <= 37 )) ; then  batch_real_world_small_vbs   ; fi 
+if (( $1 <= 38 )) ; then  batch_real_world_1_adler32   ; fi 
+if (( $1 <= 39 )) ; then  batch_real_world_genounzip_single_process ; fi 
+if (( $1 <= 40 )) ; then  batch_real_world_genounzip_compare_file   ; fi 
+if (( $1 <= 41 )) ; then  batch_real_world_1_adler32 "--best -f" ; fi 
+if (( $1 <= 42 )) ; then  batch_real_world_1_adler32 --fast    ; fi 
+if (( $1 <= 43 )) ; then  batch_real_world_with_ref_md5; fi 
+if (( $1 <= 44 )) ; then  batch_real_world_with_ref_md5 --best ; fi 
+if (( $1 <= 45 )) ; then  batch_multiseq               ; fi
+if (( $1 <= 46 )) ; then  batch_external_cram          ; fi
+if (( $1 <= 47 )) ; then  batch_external_bcf           ; fi
+if (( $1 <= 48 )) ; then  batch_external_unzip         ; fi
+if (( $1 <= 49 )) ; then  batch_reference_fastq        ; fi
+if (( $1 <= 50 )) ; then  batch_reference_sam          ; fi
+if (( $1 <= 51 )) ; then  batch_reference_vcf          ; fi
+if (( $1 <= 52 )) ; then  batch_many_small_files       ; fi
+if (( $1 <= 53 )) ; then  batch_make_reference         ; fi
+if (( $1 <= 54 )) ; then  batch_headerless_wrong_ref   ; fi
+if (( $1 <= 55 )) ; then  batch_replace                ; fi
+if (( $1 <= 56 )) ; then  batch_coverage_idxstats_sex  ; fi
+if (( $1 <= 57 )) ; then  batch_qname_flavors          ; fi
+if (( $1 <= 58 )) ; then  batch_reference_backcomp     ; fi
+if (( $1 <= 59 )) ; then  batch_real_world_backcomp 12.0.42 ; fi # note: versions must match VERSIONS in test/Makefile
+if (( $1 <= 60 )) ; then  batch_real_world_backcomp 13.0.21 ; fi 
+if (( $1 <= 61 )) ; then  batch_real_world_backcomp latest  ; fi 
+next=61
 if (( $1 <= $next + $num_batch_prod_compatability_tests )) ; then batch_prod_compatability $1 $next ; fi
 
 printf "\nALL GOOD! \nstart: $start_date\nend:   `date`\n"

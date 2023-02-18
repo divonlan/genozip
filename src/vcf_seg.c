@@ -78,9 +78,8 @@ bool is_vcf (STRp(header), bool *need_more)
 // main thread: writing data-type specific fields to genozip header
 void vcf_zip_genozip_header (SectionHeaderGenozipHeader *header)
 {
-    header->vcf.segconf_has_RGQ = segconf.has[FORMAT_RGQ]; // introduced in v14
+    header->vcf.segconf_has_RGQ = segconf.has[FORMAT_RGQ] > 0; // introduced in v14
 }
-
 
 void vcf_zip_init_vb (VBlockP vb_)
 {
@@ -117,10 +116,11 @@ bool vcf_zip_vb_has_count (VBlockP vb)
     return !VB_VCF->is_rejects_vb;  // don't count DVCF rejects VB - these are duplicate lines counted in the normal VBs.
 }
 
-// ZIP main thread, in order of VBs
+// called by main thread, as VBs complete (might be out-of-order)
 void vcf_zip_after_compute (VBlockP vb)
 {
-    if (chain_is_loaded && VB_VCF->rejects_report.len) 
+    // note: VBs are out of order, impacting the neatness of the report. To solve, move to end of compute thread with serializer.
+    if (chain_is_loaded && VB_VCF->rejects_report.len)
         buf_add_buf (evb, &z_file->rejects_report, &VB_VCF->rejects_report, char, "rejects_report");
 }   
 

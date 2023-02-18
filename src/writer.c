@@ -430,8 +430,31 @@ static void writer_drop_item_lines_from_start (ReconPlanItem *p, uint32_t drop_l
             break;
         
         case PLAN_INTERLEAVE:
-            writer_drop_lines (v, 0, (drop_lines+1) / 2);           // round up in case of odd number
+            writer_drop_lines (v, 0, (drop_lines+1) / 2);            // round up in case of odd number
             writer_drop_lines (VBINFO(p->vb2_i), 0, drop_lines / 2); // round down in case of odd number
+
+            // case: pair-1 is removed in its entirety and pair-2 only the last line surviving: update plan item to single line
+            if (drop_lines + 1 == p->num_lines) {             
+                    uint32_t plan_i = BNUM (z_file->recon_plan, p);
+                    ReconPlanItem old_p = *p;
+
+                    // We still need to keep pair-1 in the section list, because we need it for reconstructing pair-2. 
+                    // So we insert a zero-line PLAN_RANGE for pair-1
+                    buf_insert (NULL, z_file->recon_plan, ReconPlanItem, plan_i, 
+                                (&(ReconPlanItem){ .flavor = PLAN_RANGE,
+                                                   .vb_i = old_p.vb_i,
+                                                   .start_line = 0,
+                                                   .num_lines = 0 }), 
+                                1, NULL);
+
+                    *B(ReconPlanItem, z_file->recon_plan, plan_i + 1) = (ReconPlanItem){
+                        .flavor     = PLAN_RANGE,
+                        .vb_i       = old_p.vb2_i,
+                        .start_line = old_p.num_lines / 2 - 1, // each of the two VBs has (old_p.num_lines / 2) lines
+                        .num_lines  = 1                 
+                };
+            }
+
             break;
 
         default: ABORT0 ("invalid flavor");
@@ -454,7 +477,19 @@ static void writer_drop_item_lines_from_end (ReconPlanItem *p, uint32_t drop_lin
         case PLAN_INTERLEAVE: {
             VbInfo *v2 = VBINFO(p->vb2_i);
             writer_drop_lines (v, v->num_lines - drop_lines/2, drop_lines/2);           // round down in case of odd number
-            writer_drop_lines (v2, v2->num_lines + (drop_lines+1)/2, (drop_lines+1)/2); // round up in case of odd number
+            writer_drop_lines (v2, v2->num_lines - (drop_lines+1)/2, (drop_lines+1)/2); // round up in case of odd number
+
+            // case: pair-2 is removed in its entirety and pair-1 has only the first line surviving: update plan item to single line
+            if (drop_lines + 1 == p->num_lines) {       
+                VBINFO (p->vb2_i)->needs_recon = VBINFO (p->vb2_i)->needs_write = false;
+                *p = (ReconPlanItem){
+                    .flavor     = PLAN_RANGE,
+                    .vb_i       = p->vb_i,
+                    .start_line = 0,
+                    .num_lines  = 1                 
+                };
+            }
+
             break;
         }
         
@@ -539,7 +574,8 @@ static void writer_cleanup_recon_plan_after_filtering (void)
     // VBs that have all their lines dropped - make sure they're marked with !need_recon
     for (VBIType vb_i=1; vb_i <= z_file->num_vbs; vb_i++) {
         VbInfo *v = VBINFO(vb_i);
-        if (v->needs_recon && v->is_dropped && bits_is_fully_set (v->is_dropped))
+        if (v->needs_recon && v->is_dropped && bits_is_fully_set (v->is_dropped) &&
+            (v->pair_vb_i < vb_i/*not paired, or vb_i is pair-2*/ || bits_is_fully_set (VBINFO(v->pair_vb_i)->is_dropped))) // if paired, drop a pair_1 only if its pair_2 is dropped as well (for example, in --tail=1 we need the last read of pair_2, so we can't drop pair_1 either) 
             v->needs_recon = false;
     }
 
@@ -555,11 +591,30 @@ static void writer_cleanup_recon_plan_after_filtering (void)
                 
             if (old_i != new_i) // no need to copy if already in place
                 plan[new_i] = *old_p;
-            new_i++;
+
+            // possibly merge RANGE with previous line
+            if (new_i && 
+                plan[new_i].vb_i == plan[new_i-1].vb_i &&
+                plan[new_i].flavor == PLAN_RANGE && plan[new_i-1].flavor == PLAN_RANGE &&
+                plan[new_i].start_line == plan[new_i-1].start_line + plan[new_i-1].num_lines)
+
+                plan[new_i-1].num_lines += plan[new_i].num_lines; // just add the lines to the previous plan item
+
+            else // no merge - keep added item
+                new_i++;
         }
     }
 
     z_file->recon_plan.len = new_i;
+}
+
+static void writer_add_entire_component_section_list (BufferP section_list, CompIType comp_i)
+{
+    Section vb_header = NULL;
+
+    while (sections_get_next_vb_of_comp_sec (comp_i, &vb_header))
+        if (!VBINFO(vb_header->vblock_i)->encountered)  // VB not already add bc it is in recon_plan
+            sections_new_list_add_vb (section_list, vb_header->vblock_i);
 }
 
 static void writer_update_section_list (void)
@@ -591,15 +646,20 @@ static void writer_update_section_list (void)
             }
         }
 
-    // case: SAM - add all PRIM VBs that need to be loaded
-    // case: FASTQ with --R2 - add R1 VBs needed for pair lookup 
-    if ((Z_DT(SAM) && sections_get_num_vbs (SAM_COMP_PRIM)) ||
-        (Z_DT(FASTQ) && flag.one_component == 2)) {
-        Section vb_header = NULL;
-        while (sections_get_next_vb_of_comp_sec ((Z_DT(SAM) ? SAM_COMP_PRIM : FQ_COMP_R1), &vb_header)) 
-            if (!VBINFO(vb_header->vblock_i)->encountered)  // VB not already add bc it is in recon_plan
-                sections_new_list_add_vb (new_list, vb_header->vblock_i);
+    // case: Deep file with --R1 or --R2 - add SAM components
+    if (flag.deep && (flag.one_component == SAM_COMP_FQ00+1 || flag.one_component == SAM_COMP_FQ01+1)) {
+        writer_add_entire_component_section_list (new_list, SAM_COMP_MAIN);
+        writer_add_entire_component_section_list (new_list, SAM_COMP_PRIM);
+        writer_add_entire_component_section_list (new_list, SAM_COMP_DEPN);
     }
+
+    // case: SAM - add all PRIM VBs that need to be loaded
+    else if (Z_DT(SAM) && sections_get_num_vbs (SAM_COMP_PRIM)) 
+        writer_add_entire_component_section_list (new_list, SAM_COMP_PRIM);
+        
+    // case: FASTQ with --R2 - add R1 VBs needed for pair lookup
+    else if (Z_DT(FASTQ) && flag.one_component == FQ_COMP_R2+1)  // flag.one_component is comp_i+1
+        writer_add_entire_component_section_list (new_list, FQ_COMP_R1);
 
     // add SEC_BGZF of all components that have it
     sections_new_list_add_bgzf (new_list);
@@ -801,7 +861,7 @@ void writer_create_plan (void)
 
     // case: paired FASTQ to be written interleaved 
     else if (Z_DT(FASTQ) && flag.interleaved) 
-        writer_add_interleaved_plan(FQ_COMP_R1, FQ_COMP_R2); // single txt_file, recon_plan with PLAN_INTERLEAVE to interleave pairs of VBs
+        writer_add_interleaved_plan (FQ_COMP_R1, FQ_COMP_R2); // single txt_file, recon_plan with PLAN_INTERLEAVE to interleave pairs of VBs
 
     // case: paired FASTQ with --R1 or --R2
     else if (Z_DT(FASTQ) && flag.one_component) 

@@ -359,10 +359,21 @@ static void container_set_lines (VBlockP vb, uint32_t line_i)
     }
 }
 
+// is "toplevel level field" (i.e. as defined in the data type's file format)
+static inline bool container_is_field (VBlockP vb, ContextP ctx, bool is_toplevel)
+{
+    return is_toplevel || 
+           (VB_DT(SAM) && ctx->did_i == SAM_AUX) || 
+           (VB_DT(VCF) && (ctx->did_i == VCF_INFO || ctx->did_i == VCF_FORMAT)) ||
+           (VB_DT(GFF) && ctx->did_i == GFF_ATTRS);
+}
+
 ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, STRp(prefixes))
 {
     TimeSpecType profiler_timer = {}; 
-    if (flag.show_time && con->is_toplevel) 
+    bool is_toplevel = con->is_toplevel; // copy to automatic
+
+    if (flag.show_time && is_toplevel) 
         clock_gettime (CLOCK_REALTIME, &profiler_timer);
     
     int32_t last_non_filtered_item_i = -1;
@@ -397,7 +408,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
                  vb->vblock_i, dis_dict_id (ctx->dict_id).s, con->repeats, con_nitems(*con), con->filter_items, con->filter_repeats, con->callback);
 
     ContextP debug_lines_ctx = NULL;
-    if (con->is_toplevel) {
+    if (is_toplevel) {
         buf_alloc (vb, &vb->lines, 0, con->repeats+1, uint32_t, 1.1, "lines"); // note: lines.len was set in piz_read_one_vb
         vb->is_dropped = writer_get_is_dropped (vb->vblock_i);
 
@@ -408,7 +419,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
     for (uint32_t rep_i=0; rep_i < con->repeats; rep_i++) {
 
         // case this is the top-level snip: initialize line
-        if (con->is_toplevel) {
+        if (is_toplevel) {
             vb->line_i         = rep_i;
             vb->line_start     = vb->txt_data.len;
             vb->drop_curr_line = NULL;    
@@ -435,6 +446,8 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
                      vb->peek_stack_level ? "peeking " : "",
                      vb->vblock_i, vb->line_i, rep_i, con->repeats-1, ctx->tag_name);
 
+        bool is_field = container_is_field (vb, ctx, is_toplevel);
+
         for (unsigned i=0; i < num_items; i++) {
             const ContainerItem *item = &con->items[i];
             Context *item_ctx = item_ctxs[i];
@@ -444,6 +457,9 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
 
             bool show_item = vb->show_containers && item_ctx && (!flag.dict_id_show_containers.num || dict_id_typeless (item_ctx->dict_id).num == flag.dict_id_show_containers.num || 
             dict_id_typeless (ctx->dict_id).num == flag.dict_id_show_containers.num);
+
+            if (is_field && item_ctx)
+                vb->curr_field = item_ctx->did_i; // for ASSPIZ
 
             // an item filter may filter items in two ways:
             // - returns true - item is filter out, and data is not consumed
@@ -529,15 +545,15 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
         }
 
         // call callback if needed now that repeat reconstruction is done (always callback for top level)
-        if (con->callback || (con->is_toplevel && DTP (container_cb)))
-            DT_FUNC(vb, container_cb)(vb, ctx->dict_id, con->is_toplevel, rep_i, con, rep_reconstruction_start, 
+        if (con->callback || (is_toplevel && DTP (container_cb)))
+            DT_FUNC(vb, container_cb)(vb, ctx->dict_id, is_toplevel, rep_i, con, rep_reconstruction_start, 
                     BAFTtxt - rep_reconstruction_start, prefixes, prefixes_len);
 
         if (con->items[0].separator[1] == CI1_LOOKBACK)
             lookback_insert_container (vb, con, num_items, item_ctxs);
 
         // in top level: after consuming the line's data, if it is not to be outputted - drop it
-        if (con->is_toplevel) {
+        if (is_toplevel) {
 
             if (debug_lines_ctx) 
                 container_verify_line_integrity (vb, debug_lines_ctx, rep_reconstruction_start);
@@ -594,7 +610,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
         }
     } // repeats loop
 
-    if (con->is_toplevel) {
+    if (is_toplevel) {
         // sanity checks
         ASSERT (vb->lines.len == con->repeats, "Expected vb->lines.len=%"PRIu64" == con->repeats=%u", vb->lines.len, con->repeats);
 
@@ -610,7 +626,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
                                                     : (!!item->separator[0] + !!item->separator[1]);
     }
      
-    if (con->is_toplevel)   
+    if (is_toplevel)   
         COPY_TIMER (reconstruct_vb);
 
     if (ctx->flags.store == STORE_INDEX) // STORE_INDEX for a container means store number of repeats (since 13.0.5)

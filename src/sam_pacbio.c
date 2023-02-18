@@ -37,7 +37,7 @@ bool sam_seg_pacbio_qual (VBlockSAMP vb, STRp(qual)/*textual*/, unsigned add_byt
 {
     ContextP diff_ctx = CTX(SAM_QUAL_PACBIO_DIFF);
 
-    ASSINP0 (has(dq_Z) && has(iq_Z) && has(sq_Z), "%s: Expecting line to have dq:Z, iq:Z and sq:Z but some are missing");
+    ASSINP (has(dq_Z) && has(iq_Z) && has(sq_Z), "%s: Expecting line to have dq:Z, iq:Z and sq:Z but some are missing", LN_NAME);
 
     STR(iq); sam_seg_get_aux_Z (vb, vb->idx_iq_Z, pSTRa(iq), IS_BAM_ZIP);
     STR(sq); sam_seg_get_aux_Z (vb, vb->idx_sq_Z, pSTRa(sq), IS_BAM_ZIP);

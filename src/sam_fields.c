@@ -1372,10 +1372,10 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM *dl, bool is_bam,
         case _OPTION_dq_Z: COND0 (segconf.use_pacbio_iqsqdq, sam_seg_pacbio_xq (vb, dl, OPTION_dq_Z, &dl->dq, STRa(value), add_bytes))
                            COND (TECH(PACBIO), seg_add_to_local_text (VB, CTX(OPTION_dq_Z), STRa(value), LOOKUP_SIMPLE, add_bytes)); 
         
-        case _OPTION_iq_Z: COND0 (segconf.use_pacbio_iqsqdq, sam_seg_pacbio_xq (vb, dl, OPTION_iq_Z, &dl->iq, STRa(value), add_bytes));
+        case _OPTION_iq_Z: COND0 (segconf.use_pacbio_iqsqdq, sam_seg_pacbio_xq (vb, dl, OPTION_iq_Z, &dl->iq, STRa(value), add_bytes))
                            COND (TECH(PACBIO), seg_add_to_local_text (VB, CTX(OPTION_iq_Z), STRa(value), LOOKUP_SIMPLE, add_bytes)); 
         
-        case _OPTION_sq_Z: COND0 (segconf.use_pacbio_iqsqdq, sam_seg_pacbio_xq (vb, dl, OPTION_sq_Z, &dl->sq, STRa(value), add_bytes));
+        case _OPTION_sq_Z: COND0 (segconf.use_pacbio_iqsqdq, sam_seg_pacbio_xq (vb, dl, OPTION_sq_Z, &dl->sq, STRa(value), add_bytes))
                            COND (TECH(PACBIO), seg_add_to_local_text (VB, CTX(OPTION_sq_Z), STRa(value), LOOKUP_SIMPLE, add_bytes)); 
         
         case _OPTION_dt_Z: COND (TECH(PACBIO), seg_add_to_local_text (VB, CTX(OPTION_dt_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));

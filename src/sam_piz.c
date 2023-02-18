@@ -138,12 +138,14 @@ IS_SKIP (sam_piz_is_skip_section)
     bool is_prim = (comp_i == SAM_COMP_PRIM) && !preproc;
     bool is_main = (comp_i == SAM_COMP_MAIN);
     bool cov  = flag.collect_coverage;
-    bool cnt  = flag.count && !flag.grep; // we skip based on --count, but not if --grep, because grepping requires full reconstruction
+    bool cnt  = flag.count && !flag.grep; // we skip if we're only counting, but not also if based on --count, but not if --grep, because grepping requires full reconstruction
+    bool filter = flag.regions || flag.bases || flag.sam_mapq_filter || flag.sam_flag_filter || flag.grep || flag.kraken_taxid; // subsetting lines based on their content
+    bool cnt_no_filter = cnt && !filter;
     
     switch (dnum) {
         case _SAM_SQBITMAP : 
             SKIPIFF ((cov || cnt) && !flag.bases);
-            KEEPIFF (st == SEC_B250);
+            //KEEPIFF (st == SEC_B250);
             
         case _SAM_NONREF   : case _SAM_NONREF_X : case _SAM_GPOS     : case _SAM_STRAND :
         case _SAM_SEQMIS_A : case _SAM_SEQMIS_C : case _SAM_SEQMIS_G : case _SAM_SEQMIS_T : 
@@ -161,9 +163,6 @@ IS_SKIP (sam_piz_is_skip_section)
         case _SAM_BAM_BIN :
             SKIPIFF (preproc || cov || (cnt && !(flag.bases && flag.out_dt == DT_BAM)));
 
-        case _SAM_RNEXT   :
-            SKIPIFF ((preproc && IS_SAG_SA) || (cnt && !flag.bases)); // needed to reconstruct RNAME from a mate
-
         case _SAM_Q1NAME : case _SAM_QNAMESA :
             KEEPIF (preproc || dict_needed_for_preproc || (cnt && flag.bases && flag.out_dt == DT_BAM)); // if output is BAM we need the entire BAM record to correctly analyze the SEQ for IUPAC, as it is a structure.
             SKIPIFF (is_prim);                                         
@@ -172,28 +171,23 @@ IS_SKIP (sam_piz_is_skip_section)
         case _OPTION_SA_MAIN :
             KEEPIF (IS_SAG_SA && preproc && st == SEC_LOCAL);
             SKIPIF (IS_SAG_SA && is_prim && st == SEC_LOCAL);
-            SKIPIFF (cnt && !flag.bases);
+            KEEP; // need to reconstruct fields (RNAME, POS etc) against saggy
                      
         case _OPTION_SA_RNAME  :    
         case _OPTION_SA_POS    :    
+        case _OPTION_SA_NM     :
         case _OPTION_SA_CIGAR  :
         case _OPTION_SA_STRAND : 
-        case _OPTION_SA_NM     :
             KEEPIF (IS_SAG_SA && (preproc || dict_needed_for_preproc));
-            SKIPIF (cnt && !flag.bases); 
+            // SKIPIF (cnt_no_filter); 
             KEEPIF (is_main || st == SEC_DICT); // need to reconstruct from prim line
             SKIPIFF (IS_SAG_SA && is_prim);    
 
         case _OPTION_SA_MAPQ : 
             KEEPIF (IS_SAG_SA && (preproc || dict_needed_for_preproc));
             KEEPIF (is_main || st == SEC_DICT);
-            SKIPIF (cnt && !flag.sam_mapq_filter);
             KEEPIF (is_main || st == SEC_DICT);
             SKIPIFF (IS_SAG_SA && is_prim);                                         
-        
-        case _SAM_FLAG     : 
-            KEEPIF (preproc || dict_needed_for_preproc);            
-            SKIPIFF (cnt && !flag.sam_flag_filter && !flag.bases);
             
         case _OPTION_AS_i  : // we don't skip AS in preprocessing unless it is entirely skipped
             SKIPIF (preproc && !segconf.sag_has_AS);
@@ -211,22 +205,24 @@ IS_SKIP (sam_piz_is_skip_section)
 
         case _SAM_FQ_AUX   : KEEPIFF (flag.out_dt == DT_FASTQ || flag.collect_coverage);
         
+        case _SAM_FLAG     : KEEP; // needed for demultiplexing by has_prim
         case _SAM_BUDDY    : KEEP; // always needed (if any of these are needed: QNAME, FLAG, MAPQ, CIGAR...)
         case _SAM_QNAME    : KEEP; // always needed as it is used to determine whether this line has a buddy
         case _SAM_RNAME    : KEEP;
         case _SAM_SAG      : KEEP;
         case _SAM_SAALN    : KEEP;
         case _SAM_AUX      : KEEP; // needed in preproc for container_peek_get_idxs
-        case _OPTION_MC_Z  : KEEPIF (preproc || flag.out_dt == DT_FASTQ); // note: CIGAR reconstruction requires MC:Z (mate copy)
+        
+        case _OPTION_MC_Z  : case _OPTION_MC0_Z : case _OPTION_MC1_Z :         
+        case _SAM_CIGAR    : SKIPIFF (preproc && IS_SAG_SA);
+                            //xxx KEEPIF (flag.out_dt == DT_FASTQ);
                             //  SKIPIFF ((preproc && IS_SAG_SA) || (cnt && !flag.bases));
-                             SKIPIFF (cnt && !flag.bases);
-        case _SAM_CIGAR    : KEEPIF (flag.out_dt == DT_FASTQ);
-                            //  SKIPIFF ((preproc && IS_SAG_SA) || (cnt && !flag.bases));
-                             SKIPIFF (cnt && !flag.bases);
+                            //  SKIPIFF (cnt_no_filter);
         case _SAM_MAPQ     : // note: MAPQ reconstruction requires MQ:Z (mate copy)
         case _OPTION_MQ_i  : SKIPIFF (preproc || ((cov || cnt) && !flag.bases && !flag.sam_mapq_filter));
-        case _SAM_PNEXT    : case _SAM_P0NEXT : case _SAM_P1NEXT : case _SAM_P2NEXT : case _SAM_P3NEXT : 
-        case _SAM_POS      : SKIPIFF ((preproc && IS_SAG_SA) || (cnt && !flag.regions && !flag.bases));
+        case _SAM_RNEXT    : // Required by RNAME and PNEXT
+        case _SAM_PNEXT    : case _SAM_P0NEXT : case _SAM_P1NEXT : case _SAM_P2NEXT : case _SAM_P3NEXT : // PNEXT is required by POS
+        case _SAM_POS      : SKIPIFF ((preproc && IS_SAG_SA) || cnt_no_filter);
         case _SAM_TOPLEVEL : SKIPIFF (preproc || flag.out_dt == DT_BAM || flag.out_dt == DT_FASTQ);
         case _SAM_TOP2BAM  : SKIPIFF (preproc || flag.out_dt == DT_SAM || flag.out_dt == DT_FASTQ);
         case _SAM_TOP2FQ   : SKIPIFF (preproc || flag.out_dt == DT_SAM || flag.out_dt == DT_BAM || flag.extended_translation);

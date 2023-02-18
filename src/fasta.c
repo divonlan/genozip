@@ -25,6 +25,21 @@
 #include "tokenizer.h"
 #include "writer.h" 
 
+// we determine the type by characters that discriminate between protein and nucleotides, 
+// according to: https://www.bioinformatics.org/sms/iupac.html and https://en.wikipedia.org/wiki/FASTA_format
+// A,C,D,G,H,K,M,N,R,S,T,V,W,Y are can be either nucleoide or protein - in particular all of A,C,G,T,N can
+static bool uniq_amino[256]    = { ['E']=true, ['F']=true, ['I']=true, ['L']=true, ['P']=true, ['Q']=true, 
+                                   ['X']=true, ['Z']=true,  // may be protein according to the FASTA_format page
+                                   ['e']=true, ['f']=true, ['i']=true, ['l']=true, ['p']=true, ['q']=true, 
+                                   ['x']=true, ['z']=true };
+                                    
+static bool nuke_or_amino[256] = { ['A']=true, ['C']=true, ['D']=true, ['G']=true, ['H']=true, ['K']=true, ['M']=true, 
+                                   ['N']=true, ['R']=true, ['S']=true, ['T']=true, ['V']=true, ['W']=true, ['Y']=true,
+                                   ['U']=true, ['B']=true, // may be protein according to the FASTA_format page (in addition to standard nuke IUPACs)
+                                   ['a']=true, ['c']=true, ['d']=true, ['g']=true, ['h']=true, ['k']=true, ['m']=true, 
+                                   ['n']=true, ['r']=true, ['s']=true, ['t']=true, ['v']=true, ['w']=true, ['y']=true,
+                                   ['u']=true, ['b']=true };
+
 #define dict_id_is_fasta_desc_sf dict_id_is_type_1
 #define dict_id_fasta_desc_sf dict_id_type_1
 
@@ -61,6 +76,44 @@ void fasta_get_data_line (VBlockP vb, uint32_t line_i, uint32_t *seq_data_start,
 //-------------------------
 // TXTFILE stuff
 //-------------------------
+
+// detect if a generic file is actually a FASTA - 
+// we call based on first character being '>', and subsequent lines being equal-length nuke or amino characters
+// note: this doesn't detect old-style FASTAs starting with ; instead of > as they are rare nowadays
+bool is_fasta (STRp(header), bool *need_more)
+{
+    if (!header_len || header[0] != '>' || !str_is_printable (STRa(header))) return false; // fail fast
+
+    #define NUM_TEST_LINES 10
+    str_split_by_lines (header, header_len, NUM_TEST_LINES);
+
+    if (n_lines < 2) {
+        *need_more = true; // we can't tell yet - need more data
+        return false;
+    }
+
+    // line 1 must contain sequence
+    if (!line_lens[1] || lines[1][0] == '>') return false;
+
+    for (int line_i=1; line_i < n_lines; line_i++) {
+        // we arrived at next contig - we're done
+        if (!line_lens[line_i] || lines[line_i][0] == '>') break;
+
+        // all sequence lines, except for the last of the contig, must be equal length
+        if (line_lens[line_i] != line_lens[1] && // line is different length than first line of contig
+            line_i != n_lines-1 && line_lens[line_i+1] && lines[line_i+1][0] != '>') // and we are sure that it is not the last line of the contig
+            return false;
+
+        // entire line must be nukes or aminos, except last that may be a '*'
+        rom after_c = lines[line_i] + line_lens[line_i]; 
+        for (rom c=lines[line_i]; c < after_c; c++)
+            if (!nuke_or_amino[(int)*c] && !uniq_amino[(int)*c] && 
+                !(*c == '*' && c==after_c-1)) 
+                return false; 
+    }
+
+    return true;
+}
 
 // returns true if txt_data[txt_i] is the end of a FASTA contig (= next char is '>' or end-of-file), false if not, 
 // and -1 if more data (lower first_i) is needed 
@@ -271,6 +324,11 @@ bool fasta_seg_is_small (ConstVBlockP vb, DictId dict_id)
            dict_id.num == _FASTA_EOL;
 }
 
+bool fasta_seg_is_big (ConstVBlockP vb, DictId dict_id)
+{
+    return dict_id.num == _FASTA_CONTIG; // some FASTAs have lots of contigs. Since the FASTA data type has very few contexts, we can be generous here.
+}
+
 // description line - we segment it to its components
 // note: we store the DESC container in its own ctx rather than just directly in LINEMETA, to make it easier to grep
 static void fasta_seg_desc_line (VBlockFASTAP vb, rom line_start, uint32_t line_len, bool *has_13)
@@ -358,22 +416,7 @@ static void fast_seg_comment_line (VBlockFASTAP vb, rom line_start, uint32_t lin
 
 // ZIP: main thread during segconf.running
 static SeqType fasta_get_seq_type (STRp(seq))
-{
-    // we determine the type by characters that discriminate between protein and nucleotides, 
-    // according to: https://www.bioinformatics.org/sms/iupac.html and https://en.wikipedia.org/wiki/FASTA_format
-    // A,C,D,G,H,K,M,N,R,S,T,V,W,Y are can be either nucleoide or protein - in particular all of A,C,G,T,N can
-    static bool uniq_amino[256]    = { ['E']=true, ['F']=true, ['I']=true, ['L']=true, ['P']=true, ['Q']=true, 
-                                       ['X']=true, ['Z']=true,  // may be protein according to the FASTA_format page
-                                       ['e']=true, ['f']=true, ['i']=true, ['l']=true, ['p']=true, ['q']=true, 
-                                       ['x']=true, ['z']=true };
-                                      
-    static bool nuke_or_amino[256] = { ['A']=true, ['C']=true, ['D']=true, ['G']=true, ['H']=true, ['K']=true, ['M']=true, 
-                                       ['N']=true, ['R']=true, ['S']=true, ['T']=true, ['V']=true, ['W']=true, ['Y']=true,
-                                       ['U']=true, ['B']=true, // may be protein according to the FASTA_format page (in addition to standard nuke IUPACs)
-                                       ['a']=true, ['c']=true, ['d']=true, ['g']=true, ['h']=true, ['k']=true, ['m']=true, 
-                                       ['n']=true, ['r']=true, ['s']=true, ['t']=true, ['v']=true, ['w']=true, ['y']=true,
-                                       ['u']=true, ['b']=true };
-    
+{    
     bool evidence_of_amino=false, evidence_of_both=false;
 
     for (uint32_t i=0; i < seq_len; i++) {
