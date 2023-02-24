@@ -513,6 +513,7 @@ void txtfile_read_vblock (VBlockP vb)
     }
 
     bgzf_zip_init_vb (vb); 
+    vb->comp_i = flag.zip_comp_i;  // needed for VB_NAME
 
     bool always_uncompress = flag.pair == PAIR_READ_2 || // if we're reading the 2nd paired file, fastq_txtfile_have_enough_lines needs the whole data
                              flag.make_reference      || // unconsumed callback for make-reference needs to inspect the whole data
@@ -535,7 +536,8 @@ void txtfile_read_vblock (VBlockP vb)
 
         // when reading BGZF, we might be filled up even without completely filling max_memory_per_vb 
         // if there is room left for only a partial BGZF block (we can't read partial blocks)
-        uint32_t filled_up = max_memory_per_vb - (txt_file->codec == CODEC_BGZF) * BGZF_MAX_BLOCK_SIZE;
+        bool is_bgzf = (txt_file->codec == CODEC_BGZF);
+        uint32_t filled_up = max_memory_per_vb - (is_bgzf ? BGZF_MAX_BLOCK_SIZE : 0);
 
         if (!len || vb->txt_data.len32 >= filled_up) {  // EOF or we have filled up the allocated memory
 
@@ -544,13 +546,13 @@ void txtfile_read_vblock (VBlockP vb)
             if (flag.pair == PAIR_READ_2 &&  // we are reading the second file of a fastq file pair (with --pair)
                 !fastq_txtfile_have_enough_lines (vb, &pass_to_next_vb_len, &my_lines, &her_lines)) { // we don't yet have all the data we need
 
-                ASSINP (len, "Error: File %s has less FASTQ reads than its R1 counterpart (vb=%s has %u lines while counterpart has %u lines)", 
+                ASSINP (len || max_memory_per_vb == vb->txt_data.len, "Error: File %s has less FASTQ reads than its R1 mate (vb=%s has %u lines while its mate has %u lines)", 
                         txt_name, VB_NAME, my_lines, her_lines);
 
                 ASSERT (vb->txt_data.len, "txt_data.len=0 when reading pair_2 vb=%s", VB_NAME);
 
                 // if we need more lines - increase memory and keep on reading
-                max_memory_per_vb *= 1.1; 
+                max_memory_per_vb += MAX_((is_bgzf ? BGZF_MAX_BLOCK_SIZE : 0), 1.1 * max_memory_per_vb); 
                 buf_alloc (vb, &vb->txt_data, 0, max_memory_per_vb, char, 1, "txt_data");    
             }
             else
@@ -589,7 +591,6 @@ void txtfile_read_vblock (VBlockP vb)
         txt_file->is_eof = false;
     }
 
-    vb->comp_i = flag.zip_comp_i;
     vb->vb_position_txt_file = txt_file->txt_data_so_far_single;
     vb->is_eof = txt_file->is_eof;
     txt_file->txt_data_so_far_single += vb->txt_data.len;

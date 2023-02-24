@@ -110,7 +110,7 @@ static QdPredType vcf_seg_is_QD_predictable (VBlockVCFP vb, ContextP ctx, STRp(q
 // called after all samples have been segged, and sum_dp_with_dosage is set
 void vcf_seg_INFO_QD (VBlockVCFP vb)
 {
-    ContextP ctx = CTX(INFO_QD);
+    decl_ctx (INFO_QD);
 
     rom qd = last_txt (VB, INFO_QD); 
     uint32_t qd_len = vb->last_txt_len (INFO_QD);
@@ -131,7 +131,7 @@ void vcf_seg_INFO_QD (VBlockVCFP vb)
 // called from toplevel callback
 void vcf_piz_insert_QD (VBlockVCFP vb)
 {
-    ContextP ctx = CTX(INFO_QD);
+    decl_ctx (INFO_QD);
     QdPredType type = ctx->qd.pred_type;
 
     double qual_value = CTX(VCF_QUAL)->last_value.f;

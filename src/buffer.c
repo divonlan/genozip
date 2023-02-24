@@ -999,7 +999,7 @@ static void buf_remove_from_buffer_list (BufferP buf)
     VBlockP vb = buf->vb;
     
     if (!vb_is_valid (vb)) { // this is bug 576
-        if (flag.debug || getenv ("GENOZIP_TEST")) {
+        if (flag.debug_or_test) {
             WARN ("Unexpected, but unharmful: cannot remove buf=%p from buffer list, because buf->vb=%p refers to a VB that no longer exists", buf, vb);
             WARN ("%s allocated in %s:%u", buf->name, buf->func, buf->code_line); // separate line in case it segfaults if buf is corrupt
         }

@@ -411,7 +411,7 @@ static void sam_load_groups_add_grp_cigars (VBlockSAMP vb, PlsgVbInfo *plsg, Sag
 
 static inline ZWord reconstruct_to_solo_aln (VBlockSAMP vb, Did did_i, uint64_t solo_data_start, bool check_copy)
 {
-    ContextP ctx = CTX(did_i);
+    decl_ctx (did_i);
 
     if (!ctx->is_loaded) return (ZWord){};
 
@@ -448,16 +448,12 @@ static inline void sam_load_groups_add_solo_data (VBlockSAMP vb, PlsgVbInfo *pls
     buf_overlay_partial (vb, &vb->txt_data, &z_file->solo_data, solo_data_start, "txt_data");
     vb->txt_data.len = 0;
 
-    // initialize the array passed to get idxs of the fields
-    ContainerPeekItem idxs[NUM_SOLO_TAGS] = {};
-    for (SoloTags tag_i=0; tag_i < NUM_SOLO_TAGS; tag_i++)
-        idxs[tag_i].did = solo_props[tag_i].did_i;
-
     for (vb->line_i=0; vb->line_i < plsg->num_grps ; vb->line_i++) {
         sam_reset_line (VB);
         reconstruct_from_ctx (VB, SAM_BUDDY, 0, RECON_ON); // set buddy (true = consume QNAME)
 
         // get the index of the tag in this alignment's AUX container. we're really interested if they exist or not.
+        ContainerPeekItem idxs[NUM_SOLO_TAGS] = SOLO_CON_PEEK_ITEMS;
         container_peek_get_idxs (VB, CTX(SAM_AUX), ARRAY_LEN(idxs), idxs, true);
 
         for (SoloTags tag_i=0; tag_i < NUM_SOLO_TAGS; tag_i++)
@@ -579,7 +575,7 @@ static inline void sam_load_groups_add_grps (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
             sam_load_groups_add_qual (vb, plsg, g);
 
         // get the index of the tag in this alignment's AUX container. we're really interested if they exist or not.
-        ContainerPeekItem idxs[2] = { { .did = OPTION_AS_i }, { .did = OPTION_MC_Z } };
+        ContainerPeekItem idxs[2] = { { _OPTION_AS_i, -1 }, { _OPTION_MC_Z, -1 } };
         container_peek_get_idxs (VB, CTX(SAM_AUX), ARRAY_LEN(idxs), idxs, true);
 
         // set AS.last_value, unless AS:i is skipped entirely

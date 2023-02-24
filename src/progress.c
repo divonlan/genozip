@@ -170,11 +170,11 @@ void progress_finalize_component (rom status)
 #define FINALIZE(format, ...) { \
     char s[500]; \
     sprintf (s, format, __VA_ARGS__);  \
-    if (!digest_is_zero (md5) && flag.md5) sprintf (&s[strlen(s)], "\t%s = %s", digest_name(), digest_display (md5).s); \
+    if (IS_ZIP && flag.md5) sprintf (&s[strlen(s)], "\t%s = %s", digest_name(), digest_display (md5).s); \
     progress_finalize_component (s);  \
 }
 
-void progress_finalize_component_time (rom status, Digest md5)
+void progress_finalize_component_time (rom status, Digest md5/*ZIP only*/)
 {
     FINALIZE ("%s (%s)", status, progress_ellapsed_time (false));
 }

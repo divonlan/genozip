@@ -56,7 +56,7 @@ void sam_piz_genozip_header (const SectionHeaderGenozipHeader *header)
         segconf.SA_HtoS               = header->sam.segconf_SA_HtoS;
         segconf.is_sorted             = header->sam.segconf_is_sorted;
         segconf.is_collated           = header->sam.segconf_is_collated;
-        segconf.qname_seq_len_dict_id = header->sam.segconf_seq_len_dict_id; 
+        segconf.seq_len_dict_id = header->sam.segconf_seq_len_dict_id; 
         segconf.MD_NM_by_unconverted  = header->sam.segconf_MD_NM_by_un;
         segconf.sam_predict_meth_call = header->sam.segconf_predict_meth;
         segconf.deep_no_qname         = header->sam.segconf_deep_no_qname;
@@ -139,8 +139,6 @@ IS_SKIP (sam_piz_is_skip_section)
     bool is_main = (comp_i == SAM_COMP_MAIN);
     bool cov  = flag.collect_coverage;
     bool cnt  = flag.count && !flag.grep; // we skip if we're only counting, but not also if based on --count, but not if --grep, because grepping requires full reconstruction
-    bool filter = flag.regions || flag.bases || flag.sam_mapq_filter || flag.sam_flag_filter || flag.grep || flag.kraken_taxid; // subsetting lines based on their content
-    bool cnt_no_filter = cnt && !filter;
     
     switch (dnum) {
         case _SAM_SQBITMAP : 
@@ -173,21 +171,11 @@ IS_SKIP (sam_piz_is_skip_section)
             SKIPIF (IS_SAG_SA && is_prim && st == SEC_LOCAL);
             KEEP; // need to reconstruct fields (RNAME, POS etc) against saggy
                      
-        case _OPTION_SA_RNAME  :    
-        case _OPTION_SA_POS    :    
-        case _OPTION_SA_NM     :
-        case _OPTION_SA_CIGAR  :
-        case _OPTION_SA_STRAND : 
+        case _OPTION_SA_RNAME  : case _OPTION_SA_POS : case _OPTION_SA_NM : case _OPTION_SA_CIGAR :
+        case _OPTION_SA_STRAND : case _OPTION_SA_MAPQ : 
             KEEPIF (IS_SAG_SA && (preproc || dict_needed_for_preproc));
-            // SKIPIF (cnt_no_filter); 
             KEEPIF (is_main || st == SEC_DICT); // need to reconstruct from prim line
             SKIPIFF (IS_SAG_SA && is_prim);    
-
-        case _OPTION_SA_MAPQ : 
-            KEEPIF (IS_SAG_SA && (preproc || dict_needed_for_preproc));
-            KEEPIF (is_main || st == SEC_DICT);
-            KEEPIF (is_main || st == SEC_DICT);
-            SKIPIFF (IS_SAG_SA && is_prim);                                         
             
         case _OPTION_AS_i  : // we don't skip AS in preprocessing unless it is entirely skipped
             SKIPIF (preproc && !segconf.sag_has_AS);
@@ -212,17 +200,15 @@ IS_SKIP (sam_piz_is_skip_section)
         case _SAM_SAG      : KEEP;
         case _SAM_SAALN    : KEEP;
         case _SAM_AUX      : KEEP; // needed in preproc for container_peek_get_idxs
-        
+
+        case _OPTION_MQ_i  :       // needed for MAPQ reconstruction (mate copy)
+        case _SAM_MAPQ     : SKIPIFF (preproc); // required for SA:Z reconstruction, which is required for RNAME, POS etc if segged against saggy
+
         case _OPTION_MC_Z  : case _OPTION_MC0_Z : case _OPTION_MC1_Z :         
         case _SAM_CIGAR    : SKIPIFF (preproc && IS_SAG_SA);
-                            //xxx KEEPIF (flag.out_dt == DT_FASTQ);
-                            //  SKIPIFF ((preproc && IS_SAG_SA) || (cnt && !flag.bases));
-                            //  SKIPIFF (cnt_no_filter);
-        case _SAM_MAPQ     : // note: MAPQ reconstruction requires MQ:Z (mate copy)
-        case _OPTION_MQ_i  : SKIPIFF (preproc || ((cov || cnt) && !flag.bases && !flag.sam_mapq_filter));
         case _SAM_RNEXT    : // Required by RNAME and PNEXT
         case _SAM_PNEXT    : case _SAM_P0NEXT : case _SAM_P1NEXT : case _SAM_P2NEXT : case _SAM_P3NEXT : // PNEXT is required by POS
-        case _SAM_POS      : SKIPIFF ((preproc && IS_SAG_SA) || cnt_no_filter);
+        case _SAM_POS      : SKIPIFF (preproc && IS_SAG_SA);
         case _SAM_TOPLEVEL : SKIPIFF (preproc || flag.out_dt == DT_BAM || flag.out_dt == DT_FASTQ);
         case _SAM_TOP2BAM  : SKIPIFF (preproc || flag.out_dt == DT_SAM || flag.out_dt == DT_FASTQ);
         case _SAM_TOP2FQ   : SKIPIFF (preproc || flag.out_dt == DT_SAM || flag.out_dt == DT_BAM || flag.extended_translation);
@@ -856,7 +842,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_FASTQ_CONSUME_AUX)
 {
     VBlockSAMP vb = (VBlockSAMP)vb_;
 
-    ContainerPeekItem peek_items[] = { {.did = OPTION_MC_Z}, {.did = OPTION_SA_Z} };
+    ContainerPeekItem peek_items[] = { { _OPTION_MC_Z, -1 }, { _OPTION_SA_Z, -1 } };
 
     vb->aux_con = container_peek_get_idxs (VB, CTX(SAM_AUX), ARRAY_LEN(peek_items), peek_items, true);
 

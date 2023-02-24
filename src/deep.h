@@ -42,13 +42,14 @@ static inline uint32_t deep_qname_hash (STRp(qname)) { return QNAME_HASH (STRa(q
 // PizZDeep structure:
 // Part A:
 // PizZDeepFlags - 0: is_seq_compressed : 0=SEQ packed 1=SEQ compressed
-//                 1: is_long_seq (if long - len is 4B, if not, it is 1B)
+//                 1: is_long_seq (if long - seq_len is 4B, if not, it is 1B)
 //                 2: is_long_seq_comp  
 //                 3: is_long_qual_comp
 //
 // Part B: exists unless segconf.deep_no_qname
 // 1 Byte           : qname_len (up to 254 by BAM spec)
 // qname_len bytes  : QNAME (not compressed, not nul-terminated)
+//
 // 1 or 4 bytes     : seq_len (of uncompressed SEQ)
 //
 // Part C:  (if is_seq_compressed=0) 

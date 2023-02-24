@@ -556,6 +556,36 @@ SectionHeaderUnion zfile_read_section_header (VBlockP vb, uint64_t offset,
     return header;
 }
 
+// up to v14, we had no explicit "has_digest" flag - we calculate it here by searching for proof of digest.
+// since a digest might be 0 by chance, a 0 is not a proof of non-digest, however several 0s are strong enough evidence.
+static bool zfile_get_has_digest_up_to_v14 (SectionHeaderGenozipHeader *header)
+{
+    // proof: a file was compressed with --md5 (zip verifies --md5 conflicts)
+    if (VER(9) && !header->flags.genozip_header.adler) return true;
+
+    // proof: a file is up to v13 with digest_bound 
+    if (!VER(14) && !digest_is_zero (header->FASTQ_v13_digest_bound)) return true;
+
+    // search for a non-0 digest in the first 3 TXT/VB headers
+    Section sec = NULL;
+    for (int i=0 ; i < 3 && sections_next_sec2 (&sec, SEC_TXT_HEADER, SEC_VB_HEADER); i++) {
+        SectionHeaderUnion header = zfile_read_section_header (evb, sec->offset, sec->vblock_i, sec->st);
+        
+        // proof: a TXT_HEADER has a digest of the txt_header (0 if file has no header) or 
+        // digest of the entire file. 
+        if (sec->st == SEC_TXT_HEADER &&              
+               (!digest_is_zero (header.txt_header.digest) || 
+                // backward compatability note: in v8 we had a bug in which header.txt_header.digest had junk data if they user didn't --md5 or --test, so we can't use it as evidence
+                (VER(9) && !digest_is_zero (header.txt_header.digest_header)))) 
+            return true; 
+    
+        // proof: a VB has a digest
+        if (sec->st == SEC_VB_HEADER && !digest_is_zero (header.vb_header.digest)) return true;
+    }
+
+    return false; // no proof of digest
+}
+
 // check if reference filename exists in the absolute or relative path from the chain header, and if not, 
 // check the relative path from the chain file
 static rom zfile_read_genozip_header_get_ref_filename (rom header_fn)
@@ -582,7 +612,7 @@ static void zfile_read_genozip_header_handle_ref_info (const SectionHeaderGenozi
 {
     ASSERT0 (!flag.reading_reference, "we should not be here");
 
-    if (md5_is_zero (header->ref_file_md5)) return; // no reference info in header - we're done
+    if (digest_is_zero (header->ref_file_md5)) return; // no reference info in header - we're done
 
     if (flag.show_reference) {
         iprintf ("%s was compressed using the reference file:\nName: %s\nMD5: %s\n",
@@ -742,6 +772,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeader *out_header) // optio
 
     int dts = z_file->z_flags.dt_specific; // save in case its set already (eg dts_paired is set in fastq_piz_is_paired)
     z_file->z_flags = header->flags.genozip_header;
+
     z_file->z_flags.dt_specific |= dts; 
     z_file->num_lines = BGEN64 (header->num_lines_bound);
     z_file->txt_data_so_far_bind = BGEN64 (header->recon_size_prim);
@@ -761,6 +792,11 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeader *out_header) // optio
 
         z_file->section_list_buf.param = 1;
     }
+
+    if (VER(15)) 
+        z_file->z_flags_ext = header->flags_ext; // flags_ext field introduced v15
+    else
+        z_file->z_flags_ext.has_digest = zfile_get_has_digest_up_to_v14 (header);
 
     // case: we are reading a file expected to be the reference file itself
     if (flag.reading_reference) {
@@ -811,6 +847,10 @@ void zfile_compress_genozip_header (void)
         .has_taxid    = kraken_is_loaded,
     };
 
+    header.flags_ext = (struct FlagsGenozipHeaderExt){
+        .has_digest   = zip_need_digest,
+    };
+
     // "manually" add the genozip section to the section list - normally it is added in comp_compress()
     // but in this case the genozip section containing the list will already be ready...
     sections_add_to_list (evb, (SectionHeaderP)&header);
@@ -835,7 +875,7 @@ void zfile_compress_genozip_header (void)
     header.num_lines_bound       = BGEN64 (z_file->num_lines);
     header.num_sections          = BGEN32 (num_sections); 
     header.num_txt_files         = z_file->num_txts_so_far;
-    header.vb_size               = BGEN16 (segconf.vb_size >> 20);
+    header.vb_size               = BGEN16 (ROUNDUP1M (segconf.vb_size) >> 20);
 
     // when decompressing will require an external reference, we set header.ref_filename to the name of the genozip reference file
     if (IS_REF_EXTERNAL || IS_REF_MAKE_CHAIN) {   

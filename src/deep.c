@@ -14,7 +14,7 @@
 
 #define MAX_AUTO_READ_LEN 20000 // not too long, so that the "longer reads" code path also gets some mileage
 
-// hash function is the crc32 of the 2-bit representation of the forward sequence
+// hash of a SEQ field in the forward direction 
 // note: I tested crc32 after converting seq to 2-bit. No advantage - Almost identical linked-list-length histogram.
 uint32_t deep_seq_hash (VBlockP vb, STRp(seq), bool is_revcomp)
 {
@@ -33,7 +33,7 @@ uint32_t deep_seq_hash (VBlockP vb, STRp(seq), bool is_revcomp)
             buf_alloc (vb, &vb->scratch, 0, seq_len, char, 0, "scratch");
             rc = B1STc (vb->scratch);
         }
-        str_revcomp_in_out (rc, STRa(seq));
+        str_revcomp (rc, STRa(seq));
         seq = rc;
     }
 
@@ -45,6 +45,7 @@ uint32_t deep_seq_hash (VBlockP vb, STRp(seq), bool is_revcomp)
     return hash;
 }
 
+// hash of a QUAL field in the forward direction 
 uint32_t deep_qual_hash (VBlockP vb, STRp(qual), bool is_revcomp)
 {
     char short_read_data[MAX_AUTO_READ_LEN] = {};
@@ -66,7 +67,7 @@ uint32_t deep_qual_hash (VBlockP vb, STRp(qual), bool is_revcomp)
         qual = rev;
     }
 
-    uint32_t hash = crc32 (0, qual, qual_len);
+    uint32_t hash = crc32 (0, STRa(qual));
     
     // note: qual_hash=0 means "QUAL not hashed", so both crc32=0 and crc32=1 get mapped to hash=1
     if (hash == 0) hash = 1;

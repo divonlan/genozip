@@ -115,6 +115,17 @@ extern Did buddied_Z_dids[NUM_MATED_Z_TAGS];
     { OPTION_QT_Z, false }, \
 }
 
+#define SOLO_CON_PEEK_ITEMS { /* in the order of SoloTags */ \
+    { _OPTION_BX_Z, -1 }, \
+    { _OPTION_RX_Z, -1 }, \
+    { _OPTION_CB_Z, -1 }, \
+    { _OPTION_CR_Z, -1 }, \
+    { _OPTION_BC_Z, -1 }, \
+    { _OPTION_QX_Z, -1 }, \
+    { _OPTION_CY_Z, -1 }, \
+    { _OPTION_QT_Z, -1 }, \
+}
+
 // Alignment used from SAG_BY_SOLO
 typedef struct __attribute__ ((__packed__)) SoloAln {
     ZWord word[NUM_SOLO_TAGS]; // references into vb->solo_data (we can add more at any time, but not remove)

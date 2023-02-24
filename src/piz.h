@@ -32,5 +32,3 @@ extern bool piz_read_one_vb (VBlockP vb, bool for_reconstruction);
 extern bool piz_grep_match (rom start, rom after);
 
 #define ASSISLOADED(ctx) ASSPIZ((ctx)->is_loaded, "%s is not loaded", ctx->tag_name)
-
-extern bool piz_digest_failed;

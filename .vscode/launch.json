@@ -15,10 +15,12 @@
             //"program": "${workspaceFolder}/src/genozip.exe",
             //"program": "${workspaceFolder}/src/genounzip.exe",
             //"program": "${workspaceFolder}/src/genols-debug.exe",
+
+            "args" : ["--decompress", "--test", "--echo", "--no-tip", "private/test/test.cellranger-3.0.0.bam.genozip"],
             
-            // "args" : ["--show-codec", "-f", "private/test/test.human2.bam"],
-            "args" : ["-f", "bug.bam"],
-            // "args" : ["--decompress", "--test", "--echo", "--no-tip", "bug.bam.genozip"],
+            // "args" : ["bug.fq.genozip", "-@1"],
+            // "args" : ["--deep", "-tf", "-e", "data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip", "btest.deep.sam", "btest.deep.R1.fq", "btest.deep.R2.fq"],
+            // "args" : ["--decompress", "-oout/", "-f", "--echo", "--reference", "data/GRCh38_full_analysis_set_plus_decoy_hla.ref.genozip", "btest.deep.deep.genozip"],            
 
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

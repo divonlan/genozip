@@ -198,7 +198,7 @@ void sam_seg_SEQ_initialize (VBlockSAMP vb)
 // so that LZMA can catch their identicality. (note: as of v13, we assign a codec rather than hard-coding LZMA, but it is usually LZMA anyway)
 static inline void sam_seg_SEQ_pad_nonref (VBlockSAMP vb)
 {
-    ContextP ctx = CTX(SAM_NONREF);
+    decl_ctx (SAM_NONREF);
     uint32_t add_chars = (4 - (ctx->local.len32 & 3)) & 3;
     if (add_chars) buf_add (&ctx->local, "AAA", add_chars); // add 1 to 3 As
 }
@@ -823,14 +823,14 @@ static inline uint8_t *sam_reconstruct_SEQ_get_ref_bytemap (VBlockSAMP vb, Conte
     int32_t idx = RR_IDX ((int32_t)(pos - vb->range->first_pos) - (predict_meth_call ? 2 : 0)); // two bases before pos in case needed for methylation 
 
     uint32_t num_ref_bases = MIN_(num_bases, range_len - idx);
-    bits_base_to_byte (ref, &vb->range->ref, idx, num_ref_bases); // entries with is_set=0 will be garbage
+    bits_2bit_to_byte (ref, &vb->range->ref, idx, num_ref_bases); // entries with is_set=0 will be garbage
 
     if (flag.debug && !IS_REF_EXTERNAL)
         bits_bit_to_byte (B1ST8(vb->piz_is_set), &vb->range->is_set, idx, num_ref_bases); 
  
     // if ref_consumed goes beyond end of range, take the rest from the beginning of range (i.e. circling around)
     if (num_ref_bases < num_bases) {
-        bits_base_to_byte (&ref[num_ref_bases], &vb->range->ref, 0, num_bases - num_ref_bases); 
+        bits_2bit_to_byte (&ref[num_ref_bases], &vb->range->ref, 0, num_bases - num_ref_bases); 
 
         if (flag.debug && !IS_REF_EXTERNAL)
             bits_bit_to_byte (B8(vb->piz_is_set, num_ref_bases), &vb->range->is_set, 0, num_bases - num_ref_bases); 
@@ -1086,7 +1086,7 @@ static void reconstruct_SEQ_copy_saggy (VBlockSAMP vb, ContextP ctx, ReconType r
 
     if (!IS_RECON_BAM) {
         if (xstrand)
-            str_revcomp_in_out (seq, saggy_seq + vb->hard_clip[1], seq_len);
+            str_revcomp (seq, saggy_seq + vb->hard_clip[1], seq_len);
         else
             memcpy (seq, saggy_seq + vb->hard_clip[0], seq_len);
     
@@ -1098,7 +1098,7 @@ static void reconstruct_SEQ_copy_saggy (VBlockSAMP vb, ContextP ctx, ReconType r
         bam_seq_to_sam (vb, (uint8_t*)saggy_seq + clip/2, seq_len, clip%2, false, &vb->txt_data);
 
         if (xstrand)
-            str_revcomp_in_out (seq, seq, seq_len);
+            str_revcomp (seq, seq, seq_len);
     }
 
     // in needed, get vb->mismatch_bases_by_SEQ and line_sqbitmap for use in reconstructing MD:Z and NM:i
@@ -1231,7 +1231,7 @@ TRANSLATOR_FUNC (sam_piz_sam2fastq_SEQ)
 
     // case: this sequence is reverse complemented - reverse-complement it
     else if (sam_flag & SAM_FLAG_REV_COMP) 
-        str_revcomp (STRa(recon));
+        str_revcomp_in_place (STRa(recon));
 
     return 0;
 }

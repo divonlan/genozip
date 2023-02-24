@@ -242,7 +242,7 @@ static int exon_number_prediction (VBlockGFFP vb, ContextP ctx)
 // transcript name eg UBE2J2-219 consists of the gene name (UBE2J2) and an integer
 static void gff_seg_transcript_name (VBlockGFFP vb, STRp(transcript_name))
 {
-    ContextP ctx = CTX(ATTR_transcript_name);
+    decl_ctx (ATTR_transcript_name);
 
     str_split (transcript_name, transcript_name_len, 2, '-', item, true);
     
@@ -262,7 +262,7 @@ static void gff_seg_transcript_name (VBlockGFFP vb, STRp(transcript_name))
 
 static void gff_seg_exon_number (VBlockGFFP vb, STRp(exon_number))
 {
-    ContextP ctx = CTX(ATTR_exon_number);
+    decl_ctx (ATTR_exon_number);
 
     int64_t en;
     ASSSEG (str_get_int (STRa(exon_number), &en), exon_number, "expecting exon_number=\"%.*s\" to be an integer", STRf(exon_number));

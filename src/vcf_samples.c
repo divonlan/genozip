@@ -1420,7 +1420,7 @@ static inline void vcf_seg_validate_luft_trans_all_samples (VBlockVCFP vb, uint3
     for (char separator=0 ; separator != '\n'; vb->sample_i++) {
 
         field_start = next_field;
-        next_field = seg_get_next_item (vb, field_start, &len, GN_SEP, GN_SEP, GN_IGNORE, &field_len, &separator, &has_13, "sample-subfield");
+        next_field = seg_get_next_item (VB, field_start, &len, GN_SEP, GN_SEP, GN_IGNORE, &field_len, &separator, &has_13, "sample-subfield");
         ASSVCF (field_len, "unexpected tab character after sample # %u", vb->sample_i);
 
         ContextP failed_ctx = vcf_seg_validate_luft_trans_one_sample (vb, ctxs, n_items, (char *)field_start, field_len);
@@ -1765,7 +1765,7 @@ rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF *dl, int32_t *len, char *next
     for (char separator=0 ; separator != '\n'; samples.repeats++) {
 
         field_start = next_field;
-        next_field = (char *)seg_get_next_item (vb, field_start, len, GN_SEP, GN_SEP, GN_IGNORE, &field_len, &separator, has_13, "sample-subfield");
+        next_field = (char *)seg_get_next_item (VB, field_start, len, GN_SEP, GN_SEP, GN_IGNORE, &field_len, &separator, has_13, "sample-subfield");
 
         ASSVCF (field_len, "Error: invalid VCF file - expecting sample data for sample # %u, but found a tab character", 
                 samples.repeats+1);

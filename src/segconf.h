@@ -18,8 +18,8 @@
 #define ABSOLUTE_MIN_VBLOCK_MEMORY ((uint64_t)1000) // in Bytes
 #define ABSOLUTE_MAX_VBLOCK_MEMORY ((uint64_t)MAX_VBLOCK_MEMORY MB)
 
-typedef enum __attribute__ ((__packed__)) { TECH_UNKNOWN,   TECH_ILLUM_7, TECH_ILLUM_5, TECH_PACBIO, TECH_ONP,          TECH_454, TECH_BGI,   TECH_IONTORR, TECH_HELICOS, NUM_TECHS } SeqTech;
-#define TECH_NAME                         { "Unknown_tech", "Illumina-7", "Illumina-5", "PacBio",    "Oxford_Nanopore", "454",    "MGI_Tech", "IonTorrent", "Helicos"               }
+typedef enum __attribute__ ((__packed__)) { NO_QNAME2=-1, TECH_UNKNOWN=0,   TECH_ILLUM, TECH_PACBIO, TECH_ONP,          TECH_454, TECH_BGI,   TECH_IONTORR, TECH_HELICOS, TECH_NCBI, NUM_TECHS } SeqTech;
+#define TECH_NAME                         {               "Unknown_tech",   "Illumina", "PacBio",    "Oxford_Nanopore", "454",    "MGI_Tech", "IonTorrent", "Helicos",    "NCBI"               }
 #define TECH(x) (segconf.tech == TECH_##x)
 
 typedef enum __attribute__ ((__packed__)) { SQT_UNKNOWN, SQT_NUKE, SQT_AMINO, SQT_NUKE_OR_AMINO } SeqType;
@@ -31,7 +31,7 @@ typedef enum __attribute__ ((__packed__)) { ms_NONE, ms_BIOBAMBAM, ms_MINIMAP2 }
 
 typedef enum __attribute__ ((__packed__)) { DP_DEFAULT, by_AD, by_SDP } FormatDPMethod;
 
-typedef enum __attribute__ ((__packed__)) { L3_UNKNOWN, L3_EMPTY, L3_COPY_DESC, L3_QF, NUM_L3s } FastqLine3Type;
+typedef enum __attribute__ ((__packed__)) { L3_UNKNOWN, L3_EMPTY, L3_COPY_LINE1, L3_NCBI, NUM_L3s } FastqLine3Type;
 
 // SamMapperType is part of the file format and values should not be changed (new ones can be added)
 typedef enum __attribute__ ((__packed__)) { MP_UNKNOWN, MP_BSBOLT,             MP_bwa,   MP_BWA,   MP_MINIMAP2,   MP_STAR,   MP_BOWTIE2,   MP_DRAGEN,    MP_GEM3,         MP_GEM2SAM,     MP_BISMARK,   MP_BSSEEKER2,     MP_WINNOWMAP,   MP_BAZ2BAM,    MP_BBMAP,   MP_TMAP,   MP_HISAT2,   MP_BOWTIE,   MP_NOVOALIGN,   MP_RAZER3,    MP_BLASR,   MP_NGMLR,           MP_DELVE,   MP_TOPHAT,   MP_CPU,  MP_LONGRANGER,          MP_CLC,              MP_PBMM2,   MP_CCS,   NUM_MAPPERS } SamMapperType;
@@ -51,15 +51,16 @@ typedef struct {
     #define AT_LEAST(did_i) ((uint64_t)(10.0 + (segconf.b250_per_line[did_i] * (float)(vb->lines.len32))))
 
     // read characteristics (SAM/BAM, KRAKEN and FASTQ)
-    QnameFlavor qname_flavor, qname_flavor2;  
+    QnameFlavor qname_flavor[NUM_QTYPES]; // 0-QNAME 1-QNAME2 (FASTQ) 2=NCBI LINE3 (FASTQ)
     SeqTech tech;
 
     // SAM/BAM and FASTQ
     uint32_t longest_seq_len;   // length of the longest seq_len in the segconf data 
-    DictId qname_seq_len_dict_id; // dict_id of one of the Q?NAME contexts, which is expected to hold the seq_len for this read. 0 if there is no such item.
-    #define UNK_QNANE_LEN 127
+    DictId seq_len_dict_id;     // dict_id of one of the QNAME/QNAME2/LINE3/FASTQ_AUX contexts, which is expected to hold the seq_len for this read. 0 if there is no such item.
+    #define UNK_QNANE_LEN 191
     #define NUM_COLLECTED_WORDS 6
-    char unknown_flavor_qnames[NUM_COLLECTED_WORDS][UNK_QNANE_LEN+1];
+    char unknown_flavor_qnames[NUM_QTYPES][NUM_COLLECTED_WORDS][UNK_QNANE_LEN+1];
+    bool nontrivial_qual;       // true if we know that not all QUAL values are the same (as they are in newer PacBio files)
 
     // SAM/BAM stuff
     STRl (std_cigar, 16);       // first CIGAR in the file - used in case all CIGARs in the file are the same
@@ -125,9 +126,6 @@ typedef struct {
     STRl(QT_con_snip, 64);
     STRl(CB_con_snip, 64 + SMALL_CON_NITEMS * 16);     
 
-    // SAM/BAM and FASTQ
-    bool nontrivial_qual;       // true if we know that not all QUAL values are the same (as they are in newer PacBio files)
-
     // VCF stuff
     bool vcf_is_varscan;        // this VCF file was produced by VarScan
     bool vcf_is_gvcf;
@@ -146,8 +144,21 @@ typedef struct {
     bool GQ_by_PL, GQ_by_GP;
     
     // FASTQ
+    union {
+        struct {            
+            uint8_t has_desc   : 3; // non-zero if any of the 3 bitfields are set
+            uint8_t unused     : 5;
+        };
+        struct {
+            uint8_t has_qname2 : 1;               
+            uint8_t has_extra  : 1;
+            uint8_t has_aux    : 1;
+            uint8_t desc_is_l3 : 1; // either L1 or L3 can have these properties, but not both
+            uint8_t unused2    : 4;
+        };
+    };
+
     FastqLine3Type line3;       // format of line3
-    QnameFlavor line3_flavor;   // in case of L3_QF 
     int r1_or_r2;               // in case compression is WITHOUT --pair: our guess of whether this file is R1 or R2
     bool deep_no_qname;         // Deep: true if for some segconf lines which have Deep, qname doesn't match (eg, bc of QNAME modifications between FASTQ and SAM)
     bool deep_no_qual;          // Deep: true if for some segconf lines which have Deep, qual doesn't match (eg, bc of undocumented BQSR)
@@ -156,8 +167,6 @@ typedef struct {
     unsigned n_seq_qname_mch;   // Deep: count segconf lines where hash matches with at least one SAM line - SEQ and QNAME 
     unsigned n_seq_mch;         // Deep: count segconf lines where hash matches with at least one SAM line - SEQ
     unsigned n_no_mch;          // Deep: count segconf lines that don't match any SAM line (perhaps because SAM is filtered)
-    STRl (deep_desc_con_snip, 48); // Deep: container for producing DESC = QNAME + whitespace + more DESC
-    char deep_desc_con_snip_sep;// Deep: separator between the two items of deep_desc_con_snip
 
     // FASTA stuff
     bool fasta_has_contigs;     // the sequences in this FASTA represent contigs (as opposed to reads) - in which case we have a FASTA_CONTIG dictionary and RANDOM_ACCESS
@@ -187,4 +196,3 @@ extern rom segconf_sam_mapper_name (void);
 extern rom segconf_tech_name (void);
 extern void segconf_test_sorted (VBlockP vb, WordIndex prev_line_chrom, PosType32 pos, PosType32 prev_line_pos);
 extern void segconf_finalize_is_sorted (void);
-extern rom segconf_qf_name (void);

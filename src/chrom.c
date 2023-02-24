@@ -184,7 +184,7 @@ WordIndex chrom_seg_ex (VBlockP vb, Did did_i,
                         bool *is_new_out) // optional out
 {
     ASSERTNOTZERO (chrom_len,"");
-    ContextP ctx = CTX(did_i);
+    decl_ctx (did_i);
     bool is_primary = did_i == DTF(prim_chrom);
     bool is_luft    = did_i == DTF(luft_chrom);
     bool has_chain  = chain_is_loaded || IS_REF_MAKE_CHAIN;

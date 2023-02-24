@@ -60,7 +60,7 @@ bool sam_seg_peek_int_field (VBlockSAMP vb, Did did_i, int16_t idx, int32_t min_
                              bool set_last_value, // set last value if not already set (only if returning true)
                              int32_t *value)      // optional out
 {
-    ContextP ctx = CTX(did_i);
+    decl_ctx (did_i);
     int32_t my_value;
 
     if (idx == -1)
@@ -468,7 +468,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_NM)
 // ----------------------------------------------------------------------------------------------------------
 static void sam_seg_SM_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t SM, unsigned add_bytes)
 {
-    ContextP ctx = CTX(OPTION_SM_i);
+    decl_ctx (OPTION_SM_i);
 
     if (SM >= 0 && SM <= 255 && 
         SM != 254 &&           // note: 254 is a valid, but highly improbable value - we use 254 for "copy from MAPQ" so a actual 254 is segged as an exception
@@ -511,7 +511,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_SM)
 // ----------------------------------------------------------------------------------------------------------
 static void sam_seg_AM_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t AM, unsigned add_bytes)
 {
-    ContextP ctx = CTX(OPTION_AM_i);
+    decl_ctx (OPTION_AM_i);
 
     // note: currently we only support for this algorithm AM appearing after SM. Easily fixable if ever needed.
     // AM is often one of 3 options: 0, =SM =MAPQ-SM. If SM=0 then AM is expected to be 0.
@@ -600,7 +600,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_UQ)
 
 static inline void sam_seg_NH_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t nh, unsigned add_bytes)
 {
-    ContextP ctx = CTX(OPTION_NH_i);
+    decl_ctx (OPTION_NH_i);
 
     dl->NH = nh; 
     ctx_set_encountered (VB, ctx);  // needed by sam_seg_HI_i
@@ -629,7 +629,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_BY_BUDDY_MAP)
 
 static inline void sam_seg_HI_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t hi, unsigned add_bytes)
 {
-    ContextP ctx = CTX(OPTION_HI_i);
+    decl_ctx (OPTION_HI_i);
 
     if (segconf.is_collated) {
         int64_t last = ctx->last_value.i;
@@ -987,7 +987,7 @@ void sam_seg_buddied_i_fields (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i,
                                STRp(copy_snip),   // buddy_type embedded in snip needs to be consistent with mux->special_code
                                unsigned add_bytes)
 {
-    ContextP ctx = CTX(did_i);
+    decl_ctx (did_i);
 
     ASSERT (ctx->flags.store_per_line || ctx->flags.spl_custom || segconf.running,  
             "%s: expecting ctx=%s to have store_per_line=true or spl_custom=true", LN_NAME, ctx->tag_name);

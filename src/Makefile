@@ -72,7 +72,7 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c stats.c arch.c lice
 		  sam_seq.c sam_qual.c sam_sag_zip.c sam_sag_piz.c sam_sag_load.c sam_sag_ingest.c sam_sag_scan.c    	\
 		  sam_bwa.c sam_bowtie2.c sam_bsseeker2.c sam_bsbolt.c sam_bismark.c sam_gem3.c sam_tmap.c sam_hisat2.c \
 		  sam_blasr.c sam_minimap2.c sam_cellranger.c sam_biobambam.c sam_pos.c	sam_deep.c 						\
-		  fastq.c fastq_seq.c fastq_qual.c fastq_deep.c deep.c													\
+		  fastq.c fastq_desc.c fastq_seq.c fastq_qual.c fastq_deep.c deep.c										\
 		  fasta.c gff.c bed.c me23.c phylip.c chain.c kraken.c locs.c generic.c 								\
 		  buffer.c random_access.c sections.c base64.c bgzf.c coverage.c txtheader.c lookback.c 				\
 		  compressor.c codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_hapmat.c codec_bsc.c	\

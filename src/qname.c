@@ -21,6 +21,13 @@
 
 static STRl(copy_qname, 50);
 
+static inline Did did_by_q (QType q) 
+{
+    ASSERT (q >= 0 && q < NUM_QTYPES, "Invalid q=%d", q);
+
+    return (Did[]){ FASTQ_QNAME, FASTQ_QNAME2, FASTQ_LINE3 }[q]; // note: SAM, KRAKEN and FASTQ have the same dids for QNAMEs
+}
+
 static inline unsigned qname_get_px_str_len (QnameFlavorStruct *qfs)
 {
     unsigned i=0; 
@@ -28,31 +35,28 @@ static inline unsigned qname_get_px_str_len (QnameFlavorStruct *qfs)
     return i;
 }
 
-static void qname_remove_skip (SmallContainerP con_no_skip, uint32_t *prefix_no_skip_len, 
-                               ConstSmallContainerP con, STRp (con_prefix)) // out
+// remove an unused mate item (i.e. one that still have a CI0_SKIP) from the container
+static void qname_remove_skipped_mate (SmallContainerP con_no_skip, uint32_t *prefix_no_skip_len, 
+                                       ConstSmallContainerP con, STRp (con_prefix)) // out
 {
-    // all container data, except for items
-    memcpy (con_no_skip, con, sizeof (MiniContainer) - sizeof (ContainerItem));
-    con_no_skip->nitems_lo = 0;
+    // remove last item, if it is an unused QmNAME (i.e. with a CI0_SKIP) 
+    *con_no_skip = *con;
+    if (con->items[con->nitems_lo-1].separator[0] == CI0_SKIP) {
+        con_no_skip->nitems_lo--;
 
-    // copy items, except SKIP items    
-    for (int item_i=0; item_i < con->nitems_lo; item_i++)
-        if (con->items[item_i].separator[0] != CI0_SKIP) 
-            con_no_skip->items[con_no_skip->nitems_lo++] = con->items[item_i];
-
-    // copy prefix, except last item if it is a SKIP (we only support SKIP for final prefix items)
-    rom px_skip = con_prefix ? memchr (con_prefix, CI0_SKIP, con_prefix_len) : 0;
-    *prefix_no_skip_len = px_skip ? (px_skip - con_prefix) : *prefix_no_skip_len;
+        // copy prefix, except last item if it is a SKIP 
+        rom px_skip = con_prefix ? memchr (con_prefix, CI0_SKIP, con_prefix_len) : 0;
+        *prefix_no_skip_len = px_skip ? (px_skip - con_prefix) : *prefix_no_skip_len;
+    }
 }
 
 static void qname_genarate_qfs_with_mate (QnameFlavorStruct *qfs)
 {
-    // find mate item (can't be item 0 ; usually, but not always, its the last item)
-    int mate_item_i;
-    for (mate_item_i=qfs->con.nitems_lo-1; mate_item_i >= 1; mate_item_i--)
-        if (qfs->con.items[mate_item_i].dict_id.num == _SAM_QmNAME) break;
+    // mate item is always the final item
+    int mate_item_i = qfs->con.nitems_lo-1;
 
-    ASSERT (mate_item_i, "Can't find mate item for qfs=%s", qfs->name);
+    ASSERT (qfs->con.items[mate_item_i].dict_id.num == _SAM_QmNAME, "Expecting the last item of qfs=%s to be a mate item", qfs->name);
+    ASSERT (qfs->con.items[mate_item_i].separator[0] == CI0_SKIP, "Expecting QmNAME of %s to have a CI0_SKIP separator", qfs->name);
 
     // replace CI0_SKIP with fixed-len of length 1
     qfs->con.items[mate_item_i].separator[0] = CI0_FIXED_0_PAD;
@@ -66,16 +70,7 @@ static void qname_genarate_qfs_with_mate (QnameFlavorStruct *qfs)
         unsigned example_len = strlen(qfs->example[i]);
         if (!example_len) break;
 
-        char *after = &qfs->example[i][example_len];
-        if (!qfs->fq_only)
-            strcpy (after, "/1");
-        else {
-            str_split (qfs->example[i], example_len, 0, ' ', str, false);
-            char *slash = (char *)strs[qfs->fq_only-1] + str_lens[qfs->fq_only-1];
-            memmove (slash+2, slash, after - slash);
-            slash[0] = '/';
-            slash[1] = '1';
-        }
+        strcpy (&qfs->example[i][example_len], "/1");
     }
 
     // case 1: previous item is not fixed - move its separator (possibly 0) to the mate item and make it '/'
@@ -87,8 +82,8 @@ static void qname_genarate_qfs_with_mate (QnameFlavorStruct *qfs)
 
     // case 2: previous item is fixed - add / as a prefix. 
     else { // eg con_roche_454
-        // qfs must already have prefix item for the mate item - initially empty string
-        ASSERT (qname_get_px_str_len (qfs) > mate_item_i, "QnameFlavor=%s: expecting prefix to exist for mate_item_i=%u",
+        // qfs must already a PX_MATE prefix item for the mate item, if previous item is fixed
+        ASSERT (qname_get_px_str_len (qfs) > mate_item_i, "QnameFlavor=%s: expecting PX_MATE prefix item to exist for mate_item_i=%u",
                 qfs->name, mate_item_i);
 
         qfs->px_strs[mate_item_i] = "/";
@@ -106,16 +101,12 @@ static void qname_genarate_qfs_with_mate (QnameFlavorStruct *qfs)
         qfs->fixed_len += 2;
 }
 
-// note: we need to re-initialize in each file, lest the data type has changed
-void qname_zip_initialize (Did qname_did_i)
+// we need to prepare the containers only once and they can serve data types, as the containers
+// are data-type independent (since all data types use the dict_id for QNAMEs)
+void qname_zip_initialize (void)
 {
-    ContextP qname_zctx = ZCTX(qname_did_i);
-    ContextP line3_zctx = ZCTX(FASTQ_LINE3);
-
-    // we need to prepare the containers only once and they can serve all files, as the containers
-    // are data-type independent (since all data types use the dict_id Q?NAME for qnames)
     DO_ONCE {
-        for (QnameFlavorStruct *qfs=&qf[0]; qfs < &qf[NUM_QFs + NUM_QF_L3s]; qfs++) {
+        for (QnameFlavorStruct *qfs=&qf[0]; qfs < &qf[NUM_QFs]; qfs++) {
 
             // case: this qfs version of the next qfs, just with room for /1 /2 - generate it now
             if (!qfs->name[0]) { 
@@ -126,26 +117,26 @@ void qname_zip_initialize (Did qname_did_i)
             else
                 qfs->con = *qfs->con_template; // create container
 
-            qfs->qname2 = -1; // initialize pessimistically
-            ContextP next_zctx = (qfs < &qf[NUM_QFs] ? qname_zctx : line3_zctx) + 1;
+            // verify that the fields are consecutive Q*NAME contexts, and verify QmNAME requirements
+            ContextP expected_zctx = ZCTX(SAM_Q0NAME);
             for (int item_i=0; item_i < qfs->con.nitems_lo; item_i++) {
                 uint64_t dnum = qfs->con.items[item_i].dict_id.num;
-                
-                // set qname2
-                if (dnum == _FASTQ_QNAME2) {
-                    ASSERT0 (qfs->fq_only && qfs->tech==TECH_UNKNOWN, "Bad embedded qname2 definition"); // a con with FASTQ_QNAME2 must have these properties
-                    qfs->qname2 = item_i;
-                }
-                
-                // verify that the fields are consecutive Q*NAME contexts (except for QmNAME and COPY_Q)
-                else if (dnum != _SAM_QmNAME && dnum != _FASTQ_COPY_Q && (Z_DT(FASTQ) || qfs < &qf[NUM_QFs])) {
-                    ASSERT (next_zctx->dict_id.num == dnum, "Expecting item #%u of %s to be %s", item_i, qfs->name, next_zctx->tag_name);
 
-                    ASSERT (qfs >= &qf[NUM_QFs] || next_zctx->did_i < qname_did_i + MAX_QNAME_ITEMS,
+                // verify QmNAME requirements
+                if (dnum == _SAM_QmNAME) 
+                    ASSERT (item_i == qfs->con.nitems_lo - 1, "Item=%d QmNAME of %s is not the last item in the container", item_i, qfs->name);
+
+                // veriry Q*NAME requirements
+                else { 
+                    ASSERT (dnum, "dnum=0 for item_i=%u in qfs=\"%s\"", item_i, qfs->name);
+
+                    ASSERT (dnum == expected_zctx->dict_id.num, "Expecting item #%u of %s to be %s", item_i, qfs->name, expected_zctx->tag_name);
+
+                    ASSERT (expected_zctx->did_i < SAM_Q0NAME + MAX_QNAME_ITEMS,
                             "Unexpected dict_id=%s in container of flavor %s. Perhaps MAX_QNAME_ITEMS=%u needs updating?", 
                             dis_dict_id(qfs->con.items[item_i].dict_id).s, qfs->name, MAX_QNAME_ITEMS);
 
-                    next_zctx++;
+                    expected_zctx++;
                 }
             }
 
@@ -162,25 +153,25 @@ void qname_zip_initialize (Did qname_did_i)
                 }
             } 
 
-            // remove SKIP item, if one exists, from container and prefix
+            // remove QmNAME from the container if not mated 
             SmallContainer con_no_skip = qfs->con; // copy
             uint32_t prefix_no_skip_len=qfs->con_prefix_len;
-            qname_remove_skip (&con_no_skip, &prefix_no_skip_len, &qfs->con, STRa (qfs->con_prefix));
+            qname_remove_skipped_mate (&con_no_skip, &prefix_no_skip_len, &qfs->con, STRa (qfs->con_prefix));
             
-            // prepare container snip for this QF
-            qfs->con_snip_len = sizeof (qfs->con_snip);            
-            container_prepare_snip ((Container*)&con_no_skip, qfs->con_prefix, prefix_no_skip_len, qfs->con_snip, &qfs->con_snip_len);
+            // prepare container snips - with correct dict_ids for each QType
+            for (QType q=QNAME1; q < NUM_QTYPES; q++) {
+                Did first_did_i = did_by_q (q);
+                
+                for (unsigned item_i=0; item_i < con_no_skip.nitems_lo; item_i++) 
+                    if (con_no_skip.items[item_i].dict_id.num != _SAM_QmNAME) 
+                        con_no_skip.items[item_i].dict_id = dt_fields[DT_FASTQ].predefined[first_did_i + item_i + 1].dict_id; 
+                    else
+                        con_no_skip.items[item_i].dict_id = dt_fields[DT_FASTQ].predefined[first_did_i + MAX_QNAME_ITEMS].dict_id; 
 
-            // prepare snip of identical container, except dict_ids are of QNAME2
-            Did next_qname2_did_i = FASTQ_Q0NAME2;
-            for (unsigned item_i=0; item_i < con_no_skip.nitems_lo; item_i++) 
-                if (con_no_skip.items[item_i].dict_id.num != _SAM_QmNAME && con_no_skip.items[item_i].dict_id.num != _FASTQ_QNAME2) {
-                    con_no_skip.items[item_i].dict_id = dt_fields[DT_FASTQ].predefined[next_qname2_did_i].dict_id; // only FASTQ has QNAME2 dict_ids, this is not necessarily the current data type
-                    next_qname2_did_i++;
-                }
-
-            qfs->con_snip2_len = sizeof (qfs->con_snip2);            
-            container_prepare_snip ((Container*)&con_no_skip, qfs->con_prefix, prefix_no_skip_len, qfs->con_snip2, &qfs->con_snip2_len);
+                // prepare container snip for this QF
+                qfs->con_snip_lens[q] = sizeof (qfs->con_snips[0]);            
+                container_prepare_snip ((Container*)&con_no_skip, qfs->con_prefix, prefix_no_skip_len, qSTRi(qfs->con_snip,q));
+            }
 
             // in qname_flavors.h, we keep lists in the form of index lists, for maintenanbility. now
             // we convert them to a bitmap for ease of segging.
@@ -212,33 +203,28 @@ void qname_zip_initialize (Did qname_did_i)
             ASSERT (qfs->ordered_item1 == -1 || qfs->is_int[qfs->ordered_item1] || qfs->is_numeric[qfs->ordered_item1] || qfs->is_hex[qfs->ordered_item1], 
                     "Error in definition of QNAME flavor=%s: item=%u is one of \"ordered_item\" - expecting it to be is_integer or is_numeric or is_hex", qfs->name, qfs->ordered_item1);
         }
-    }
 
-    // prepare copy_qname snip - every time, as container_did_i changes between data types
-    seg_prepare_snip_other (SNIP_COPY, qname_zctx->dict_id, false, 0, copy_qname); // QNAME dict_id is the same for SAM, FASTQ, KRAKEN
+        seg_prepare_snip_other (SNIP_COPY, (DictId)_SAM_QNAME, false, 0, copy_qname); // QNAME dict_id is the same for SAM, FASTQ, KRAKEN
+    }
 }
 
-static void qname_seg_initialize_do (VBlockP vb, QnameFlavor qfs, QnameFlavor qfs2, Did qname_did_i, Did st_did_i, unsigned num_qname_items, int pairing)
+void qname_seg_initialize (VBlockP vb, QType q, int pairing)
 {
+    QnameFlavor qfs = segconf.qname_flavor[q];
     if (!qfs) return;
 
-    // consolidate all items under QNAME in --stats
-    ContextP qname_ctxs[num_qname_items+1];
-    for (int i=0; i < num_qname_items+1; i++) {
-        qname_ctxs[i] = CTX(qname_did_i + i);
+    Did did_q = did_by_q (q);
 
-        if (pairing) {
-            qname_ctxs[i]->no_stons = true; // prevent singletons, so pair_1 and pair_2 are comparable based on b250 only
-            
-            if (pairing == PAIR_READ_2)
-                ctx_create_node (vb, qname_did_i + i, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_mate_lookup }, 2); // required by ctx_convert_generated_b250_to_mate_lookup
-        }
-    }
+    // initialize for pairing if needed
+    if (pairing) 
+        for (int i=0; i < MAX_QNAME_ITEMS + 1; i++) 
+            fastq_initialize_ctx_for_pairing (vb, did_q + i);
 
-    ctx_consolidate_stats_(vb, st_did_i, num_qname_items+1, qname_ctxs); 
+    // consolidate all items under did_q in --stats
+    ctx_consolidate_statsN (vb, did_q, did_q + 1, MAX_QNAME_ITEMS); 
 
     // set STORE_INT as appropriate
-    int ctx_delta = (qname_did_i == FASTQ_QNAME2 ? (FASTQ_QNAME2 - FASTQ_DESC) : 0); // con.items[] are expressed relative to QNAME, for QNAME2, we need to shift this much
+    int ctx_delta = did_q - SAM_QNAME;
     if (qfs->ordered_item1   != -1) (ctx_delta + ctx_get_ctx (vb, qfs->con.items[qfs->ordered_item1].dict_id))    ->flags.store = STORE_INT; 
     if (qfs->ordered_item2   != -1) (ctx_delta + ctx_get_ctx (vb, qfs->con.items[qfs->ordered_item2].dict_id))    ->flags.store = STORE_INT; 
     if (qfs->range_end_item1 != -1) (ctx_delta + ctx_get_ctx (vb, qfs->con.items[qfs->range_end_item1-1].dict_id))->flags.store = STORE_INT; 
@@ -254,158 +240,123 @@ static void qname_seg_initialize_do (VBlockP vb, QnameFlavor qfs, QnameFlavor qf
     for (int i=0; qfs->hex_items[i] != -1; i++)
         if (qfs->is_in_local[qfs->hex_items[i]] && (qfs->is_int[qfs->hex_items[i]] || qfs->is_numeric[qfs->hex_items[i]]))
             (ctx_delta + ctx_get_ctx (vb, qfs->con.items[qfs->hex_items[i]].dict_id))->ltype = LT_DYN_INT_h;
-
-    if (qfs->qname2 != -1 && qfs2)
-        qname_seg_initialize_do (vb, qfs2, NULL, FASTQ_QNAME2, st_did_i, num_qname_items-1/*-1 bc no mate*/, pairing);
-}
-
-void qname_seg_initialize (VBlockP vb, Did qname_did_i) 
-{   
-    qname_seg_initialize_do (vb, segconf.qname_flavor, segconf.qname_flavor2, qname_did_i, qname_did_i, MAX_QNAME_ITEMS, flag.pair); 
-
-    if (segconf.line3_flavor) // true for FASTQ with SRA line3, but not SRA qname
-        qname_seg_initialize_do (vb, segconf.line3_flavor, 0, FASTQ_LINE3, FASTQ_LINE3, MAX_LINE3_ITEMS, 0); 
 }
 
 // note: we run this function only in discovery, not in segging, because it is quite expensive - checking all numerics.
 // returns 0 if qname is indeed the flavor, or error code if not
-int qname_test_flavor (STRp(qname), QnameFlavor qfs,
-                       pSTRp (qname2)) // out
+
+QnameTestResult qname_test_flavor (STRp(qname), QType q, QnameFlavor qfs, bool quiet) // out
 {
-    if (!qname_len) return -1;
+    // return embedded qname2, eg "82a6ce63-eb2d-4812-ad19-136092a95f3d" in "@ERR3278978.1 82a6ce63-eb2d-4812-ad19-136092a95f3d/1"
+    if (q != QANY && qfs->only_q != QANY && qfs->only_q != q
+        && !(qfs->only_q == Q1or3 && (q == QNAME1 || QLINE3))) return QTR_WRONG_Q; 
+
+    if (q==QNAME2 && segconf.tech != qfs->qname1_tech) 
+        return QTR_TECH_MISMATCH;
+
+    if (!qname_len) return QTR_QNAME_LEN_0;
 
     // test fixed length, if applicable
-    if (qfs->fixed_len && qname_len != qfs->fixed_len) return -2;
+    if (qfs->fixed_len && qname_len != qfs->fixed_len) return QTR_FIXED_LEN_MISMATCH;
 
-    str_split_by_container (qname, qname_len, &qfs->con, qfs->con_prefix, qfs->con_prefix_len, item);
-    if (!n_items) return -4; // failed to split according to container - qname is not of this flavor
+    str_split_by_container (qname, qname_len, &qfs->con, qfs->con_prefix, qfs->con_prefix_len, item, quiet ? NULL : qfs->name);
+    if (!n_items) return QTR_CONTAINER_MISMATCH; // failed to split according to container - qname is not of this flavor
 
     // items cannot include whitespace or non-printable chars
     for (uint32_t item_i=0; item_i < n_items; item_i++)
-        if (!str_is_no_ws (STRi(item, item_i))) return -6;
+        if (!str_is_no_ws (STRi(item, item_i))) return QTR_BAD_CHARS;
 
     // check that all the items expected to be numeric (leading zeros ok) are indeed so
     for (const int *item_i = qfs->numeric_items; *item_i != -1; item_i++)
-        if (!qfs->is_hex[*item_i] && !str_is_numeric (STRi(item, *item_i))) return -7;
+        if (!qfs->is_hex[*item_i] && !str_is_numeric (STRi(item, *item_i))) return QTR_BAD_NUMERIC;
 
     // check that all the items expected to be lower case hexadecimal are indeed so
     for (const int *item_i = qfs->hex_items; *item_i != -1; item_i++)
-        if (!str_is_hexlo (STRi(item, *item_i))) return -8;
+        if (!str_is_hexlo (STRi(item, *item_i))) return QTR_BAD_HEX;
 
     // check that all the items expected to be integer (no leading zeros) are indeed so
     for (const int *item_i = qfs->integer_items; *item_i != -1; item_i++)
-        if (!qfs->is_hex[*item_i] && !str_is_int (STRi(item, *item_i))) return -9;
+        if (!qfs->is_hex[*item_i] && !str_is_int (STRi(item, *item_i))) return QTR_BAD_INTEGER;
 
-    // return embedded qname2, eg "82a6ce63-eb2d-4812-ad19-136092a95f3d" in "@ERR3278978.1 82a6ce63-eb2d-4812-ad19-136092a95f3d/1"
-    if (qname2 && qfs->qname2 != -1) {
-        *qname2 = items[qfs->qname2];
-        *qname2_len = item_lens[qfs->qname2];
-    }
-
-    return 0; // yes, qname is of this flavor
+    return QTR_SUCCESS; // yes, qname is of this flavor
 }
 
 // called for the first line in segconf.running
-void qname_segconf_discover_flavor (VBlockP vb, Did qname_did_i, STRp(qname))
+void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
 {
-    segconf.qname_flavor = 0; // unknown
-    STR0(qname2);
+    ASSERTNOTZERO (segconf.running, "");
+
+    static rom reasons[] = QTR_NAME;
+
+    segconf.qname_flavor[q] = NULL; // unknown
 
     for (QnameFlavor qfs=&qf[0]; qfs < &qf[NUM_QFs]; qfs++) {
-        int reason = 0;
-        if ((VB_DT(FASTQ) || !qfs->fq_only) && !(reason = qname_test_flavor (STRa(qname), qfs, pSTRa(qname2)))) {
-            segconf.qname_flavor = qfs;
-            segconf.tech = qfs->tech;
+        QnameTestResult reason = QTR_SUCCESS;
+        if (!(reason = qname_test_flavor (STRa(qname), q, qfs, true))) {
+            segconf.qname_flavor[q] = qfs;
+            segconf.tech = qfs->tech; // note: if this is QNAME2, we update tech according to QNAME2 (instead of NCBI)
             
             if (qfs->seq_len_item != -1) 
-                segconf.qname_seq_len_dict_id = qfs->con.items[qfs->seq_len_item].dict_id;
+                segconf.seq_len_dict_id = qfs->con.items[qfs->seq_len_item].dict_id;
             
-            // if it has an embedded qname2 - find the true tech from qname2 (only possible for FASTQ, in SAM we can't find the tech from NCBI qname)
-            if (qname2) 
-                for (QnameFlavor qf2=&qf[0]; qf2 < &qf[NUM_QFs]; qf2++) 
-                    if (!qf2->fq_only && !qname_test_flavor (STRa (qname2), qf2, 0, 0)) { // qname2 cannot be "fq_only"
-                        segconf.qname_flavor2 = qf2;
-                        segconf.tech = qf2->tech;
-                        break;
-                    }
+            qname_seg_initialize (vb, q, 0); // so the rest of segconf.running can seg fast using the discovered container
 
-            qname_seg_initialize (vb, qname_did_i); // so the rest of segconf.running can seg fast using the discovered container
+            if (flag.debug_qname) 
+                iprintf ("%.*s is DISCOVERED as %s - for %s\n", STRf(qname), qfs->name, qtype_name(q));
+            
             break;
         }
 
         else if (flag.debug_qname && reason) 
-            iprintf ("%.*s is not flavor \"%s\". Reason: %d\n", STRf(qname), qfs->name, reason);
+            iprintf ("%.*s is not flavor \"%s\". Reason: %s\n", STRf(qname), qfs->name, reasons[reason]);
     }
+
+    if (flag.debug_qname && !segconf.qname_flavor[q])
+        iprintf ("%.*s - flavor is NOT DISCOVERED - for %s\n", STRf(qname), qtype_name(q));
 
     // when optimizing qname with --optimize_DESC - capture the correct TECH ^ but set flavor to Genozip-opt
-    if (flag.optimize_DESC) {
-        segconf.qname_flavor = &qf[NUM_QFs-1]; // Genozip-opt is last
-        segconf.qname_flavor2 = NULL;
-    }
+    if (flag.optimize_DESC) 
+        segconf.qname_flavor[q] = (q==QNAME1) ? &qf[NUM_QFs-1] : NULL; // relying on Genozip-opt being last
 
-    if (flag.debug || flag.debug_qname) // unit test
+    DO_ONCE // unit test
+    if (flag.debug || flag.debug_qname)
         for (QnameFlavor qfs=&qf[0]; qfs < &qf[NUM_QFs]; qfs++) {
 
             for (int i=0; i < QFS_MAX_EXAMPLES; i++) {
-                unsigned example_len = strlen(qfs->example[i]);
-                if (!example_len) break;
+                if (!qfs->example[i][0]) break;
 
                 if (flag.debug_qname) iprintf ("Unit-testing qname flavor=\"%s\" example=\"%s\"\n", qfs->name, qfs->example[i]);
-                int res = qname_test_flavor (qfs->example[i], example_len, qfs, 0, 0); 
-                ASSERT (!res, "Failed to identify qname \"%s\" as %s: res=%d", qfs->example[i], qfs->name, res);
+                QnameTestResult reason = qname_test_flavor (qfs->example[i], strlen(qfs->example[i]), QANY, qfs, !flag.debug_qname); 
+                ASSERT (reason == QTR_SUCCESS, "Failed to identify qname \"%s\" as %s: reason=%s", qfs->example[i], qfs->name, reasons[reason]);
             }
         }
 }
 
-// called for the first line in segconf.running
-bool qname_segconf_discover_fastq_line3_sra_flavor (VBlockP vb, STRp(line3))
-{
-    segconf.line3_flavor = 0; // unknown
-    STR0(line3_2);
-
-    for (QnameFlavor qfs=&qf[FIRST_QF_L3]; qfs < &qf[NUM_QFs + NUM_QF_L3s]; qfs++) 
-        if (!qname_test_flavor (STRa(line3), qfs, pSTRa(line3_2))) {
-
-            segconf.line3_flavor = qfs;
-            qname_seg_initialize_do (vb, qfs, 0, FASTQ_LINE3, FASTQ_LINE3, MAX_LINE3_ITEMS, 0); 
-            return true;
-        }
-
-    return false;
-}
-
 // attempt to seg according to the qf - return true if successful
-bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, QnameFlavor qfs, STRp(qname), bool use_qname2,
-                   unsigned add_additional_bytes)
+bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additional_bytes)
 {
-    str_split_by_container (qname, qname_len, &qfs->con, qfs->con_prefix, qfs->con_prefix_len, item);
+    QnameFlavor qfs = segconf.qname_flavor[q];
+    ASSERTNOTNULL (qfs);
+    
+    str_split_by_container (qname, qname_len, &qfs->con, qfs->con_prefix, qfs->con_prefix_len, item, NULL);
     if (!n_items) return false; // failed to split according to container - qname is not of this flavor
 
     // seg
     int64_t value, prev_value;
-
+    ContextP qname_ctx = CTX(did_by_q(q));
+    
     // seg container
-    if (!use_qname2)
-        seg_by_ctx (vb, STRa(qfs->con_snip),  qname_ctx, qfs->num_seps + add_additional_bytes); // account for container separators, prefixes and caller-requested add_additional_bytes 
-    else
-        seg_by_ctx (vb, STRa(qfs->con_snip2), qname_ctx, qfs->num_seps + add_additional_bytes); 
+    seg_by_ctx (vb, STRi(qfs->con_snip, q),  qname_ctx, qfs->num_seps + add_additional_bytes); // account for container separators, prefixes and caller-requested add_additional_bytes 
 
-    int encountered_mName=0, encountered_QNAME2=0;
     for (unsigned item_i=0; item_i < qfs->con.nitems_lo; item_i++) {
 
         // get item ctx - Q?NAME did_i are immediately following QNAME, and QmNAME si the last.
         const ContainerItem *item = &qfs->con.items[item_i];
         value=-1;
 
-        // calculate context - a bit messy, but faster than looking up by dict_id
-        ContextP item_ctx = (item->dict_id.num == _SAM_QmNAME)   ? (qname_ctx + MAX_QNAME_ITEMS) 
-                          : (item->dict_id.num == _FASTQ_QNAME2) ? CTX(FASTQ_QNAME2)
-                          : (item->dict_id.num == _FASTQ_COPY_Q) ? CTX(FASTQ_COPY_Q)
-                          :                                        (qname_ctx + 1+item_i - encountered_mName - encountered_QNAME2);
+        // calculate context - a bit messy, but faster than looking up by dict_id (relying on Q?NAME being sequential in the container)
+        ContextP item_ctx = qname_ctx + ((item->dict_id.num == _SAM_QmNAME) ? MAX_QNAME_ITEMS : (1+item_i)); // note: QmName, if exists, is always the last item
                         
-        encountered_mName  |= item->dict_id.num == _SAM_QmNAME;
-        encountered_QNAME2 |= item->dict_id.num == _FASTQ_QNAME2 || item->dict_id.num == _FASTQ_COPY_Q;
-
         // case: this is the file is collated by qname - delta against previous
         if ((item_i == qfs->ordered_item1 || item_i == qfs->ordered_item2) && 
             (segconf.is_collated || VB_DT(FASTQ) || VB_DT(KRAKEN) || qfs->id == QF_GENOZIP_OPT) &&
@@ -437,22 +388,6 @@ bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, QnameFlavor qfs, STRp(qname),
                 seg_add_to_local_text (vb, item_ctx, STRi(item, item_i), LOOKUP_SIMPLE, item_lens[item_i]);
         }
 
-        // TO DO - add field xor_diff allowing specifying xor_diff method (if we find a case where its useful)
-        // else if (xor_diff[item_i] && !flag.pair) {
-        //    seg_diff (vb, item_ctx, STRi(item, item_i), item_ctx->flags.all_the_same, item_lens[item_i]);
-        //     seg_set_last_txt (vb, item_ctx, STRi(item, item_i));
-        // }
-        
-        else if (item_i == qfs->qname2 && segconf.qname_flavor2 &&  
-                 qname_seg_qf (vb, CTX (FASTQ_QNAME2), segconf.qname_flavor2, STRi(item, item_i), true, 0))
-            {} // fallback to textual item if QNAME2 cannot be segged according to its flavor
-
-        else if (item->dict_id.num == _FASTQ_COPY_Q) {
-            // for now, this field is marked as an ordered so we never reach here. We will need a SPECIAL to
-            // copy from DESC, because we need to potentially remove the /1 /2
-            ABORT0 ("Copy from DESC not supported yet"); 
-        }
-
         else if (item->separator[0] == CI0_SKIP)
             {} // no segging a skipped item
 
@@ -468,20 +403,23 @@ bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, QnameFlavor qfs, STRp(qname),
     return true;
 }
 
-void qname_seg (VBlockP vb, Context *qname_ctx, STRp (qname), unsigned add_additional_bytes)  // account for characters in addition to the field
+void qname_seg (VBlockP vb, QType q, STRp (qname), unsigned add_additional_bytes)  // account for characters in addition to the field
 {
     START_TIMER;
 
-    // copy if identical to previous (> 50% of lines in collated) - small improvement in compression and compression time
+    QnameFlavor flavor = segconf.qname_flavor[q];
+    ContextP qname_ctx = CTX(did_by_q(q)); 
+
+    // copy if identical to previous (> 50% of lines in collated SAM/BAM) - small improvement in compression and compression time
     // no need in is_sorted, as already handled in sam_seg_QNAME with buddy 
-    if (!segconf.is_sorted && vb->line_i && !flag.optimize_DESC && is_same_last_txt (vb, qname_ctx, STRa(qname))) {
+    if ((VB_DT(SAM) || VB_DT(BAM)) && !segconf.is_sorted && vb->line_i && is_same_last_txt (vb, qname_ctx, STRa(qname))) {
         seg_by_ctx (vb, STRa(copy_qname), qname_ctx, qname_len + add_additional_bytes);
         goto done;
     }
 
     bool success = false;
-    if (segconf.qname_flavor)
-        success = qname_seg_qf (VB, qname_ctx, segconf.qname_flavor, STRa(qname), false, add_additional_bytes);
+    if (flavor)
+        success = qname_seg_qf (vb, q, STRa(qname), add_additional_bytes);
 
     if (!success) 
         tokenizer_seg (VB, qname_ctx, STRa(qname), 
@@ -490,10 +428,8 @@ void qname_seg (VBlockP vb, Context *qname_ctx, STRp (qname), unsigned add_addit
 
     if (segconf.running) {
         // collect the first 6 qnames / q2names, if flavor is unknown    
-        if (vb->line_i < 6 && 
-            (!segconf.qname_flavor || (segconf.qname_flavor->qname2 && !segconf.qname_flavor2))) // QNAME or QNAME2 unrecognized
-
-            memcpy (segconf.unknown_flavor_qnames[vb->line_i], qname, MIN_(qname_len, UNK_QNANE_LEN));
+        if (vb->line_i < 6 && !flavor) // unrecognized flavor
+            memcpy (segconf.unknown_flavor_qnames[q][vb->line_i], qname, MIN_(qname_len, UNK_QNANE_LEN));
     }
 
 done:
@@ -501,15 +437,19 @@ done:
     COPY_TIMER (qname_seg);
 }
 
-const rom QNAME_FLAVOR_UNRECOGNIZED = "Unrecognized"; // constant pointer allowing pointer comparison
-rom qf_name (QnameFlavor qf)
+rom segconf_qf_name (QType q)
 {
-    return qf ? qf->name : QNAME_FLAVOR_UNRECOGNIZED;
+    return segconf.qname_flavor[q] ? segconf.qname_flavor[q]->name : "N/A";
 }
 
-rom qf2_name (QnameFlavor qf, QnameFlavor qf2)
+QnameFlavorId segconf_qf_id (QType q)
 {
-    if (!qf || qf->qname2 == -1) return NULL; //  no QF2
+    return segconf.qname_flavor[q]->id;
+}
 
-    return qf_name (segconf.qname_flavor2); // actual name or Unrecognized
+rom qtype_name (QType q)
+{
+    static rom qtype_names[] = QTYPE_NAME;
+    
+    return (q >= 0 && q < ARRAY_LEN (qtype_names)) ? qtype_names[q] : "Invalid qtype";
 }

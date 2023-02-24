@@ -119,15 +119,13 @@ void seg_lookup_with_length (VBlockP vb, ContextP ctx, int32_t length/*can be ne
     seg_by_ctx (VB, STRa(snip), ctx, add_bytes);
 }
 
-rom seg_get_next_item (void *vb_, rom str, int *str_len, 
+rom seg_get_next_item (VBlockP vb, rom str, int *str_len, 
                        GetNextAllow newline, GetNextAllow tab, GetNextAllow space,
                        unsigned *len, 
                        char *separator,  // optional out
                        bool *has_13,     // out - only modified if '\r' detected ; only needed if newline=GN_SEP
                        rom item_name)
 {
-    VBlockP vb = (VBlockP)vb_;
-
     unsigned i=0; for (; i < *str_len; i++) {
         char c = str[i];
         if ((tab     == GN_SEP && c == '\t') ||
@@ -162,13 +160,11 @@ rom seg_get_next_item (void *vb_, rom str, int *str_len,
 }
 
 // returns first character after current line
-rom seg_get_next_line (void *vb_, rom str, 
-                               int *remaining_len, // in/out
-                               unsigned *len,      // out - length of line exluding \r and \n
-                               bool must_have_newline, bool *has_13 /* out */, rom item_name)
+rom seg_get_next_line (VBlockP vb, rom str, 
+                       int *remaining_len, // in/out
+                       unsigned *len,      // out - length of line exluding \r and \n
+                       bool must_have_newline, bool *has_13 /* out */, rom item_name)
 {
-    VBlockP vb = (VBlockP)vb_;
-
     rom after = str + *remaining_len;
     for (rom s=str; s < after; s++)
         if (*s == '\n') {
@@ -942,7 +938,7 @@ int32_t seg_array_of_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp
     for (unsigned r=0; r < n_repeats; r++) {
 
         // get items in each repeat
-        str_split_by_container (repeats[r], repeat_lens[r], &con, NULL, 0, item);
+        str_split_by_container (repeats[r], repeat_lens[r], &con, NULL, 0, item, NULL);
         
         if (n_items != con.nitems_lo) 
             goto badly_formatted;
@@ -1000,7 +996,7 @@ bool seg_by_container (VBlockP vb, ContextP ctx, ContainerP con, STRp(value),
 {
     ASSERT (con->repeats == 1, "repeats=%u, but currently only supports repeats=1", con->repeats);
 
-    str_split_by_container (value, value_len, con, 0, 0, item);
+    str_split_by_container (value, value_len, con, 0, 0, item, NULL);
 
     // case: value doesn't match the container
     if (!n_items) {
@@ -1136,7 +1132,7 @@ static void seg_set_hash_hints (VBlockP vb, int third_num)
 
     for (Did did_i=0; did_i < vb->num_contexts; did_i++) {
 
-        ContextP ctx = CTX(did_i);
+        decl_ctx (did_i);
         if (!ctx->nodes.len32 || ctx->global_hash_prime) continue; // our service is not needed - global_hash for this dict already exists or no nodes
 
         if (third_num == 1) ctx->nodes_len_at_1_3 = ctx->nodes.len32;
@@ -1173,7 +1169,7 @@ static void seg_verify_file_size (VBlockP vb)
 
         fprintf (stderr, "context.txt_len for vb=%s:\n", VB_NAME);
         for (Did sf_i=0; sf_i < vb->num_contexts; sf_i++) {
-            ContextP ctx = CTX(sf_i);
+            decl_ctx (sf_i);
             if (ctx->nodes.len || ctx->local.len || ctx->txt_len)
                 fprintf (stderr, "%s: %u\n", ctx_tag_name_ex (ctx).s, (uint32_t)ctx->txt_len);
         }
@@ -1323,7 +1319,7 @@ void seg_all_data_lines (VBlockP vb)
 
     dispatcher_increment_progress ("seg_final", (int64_t)vb->txt_size - prev_increment); // txt_size excludes lines moved to gencomp. increment might be negative
 
-    if (flag.debug) buf_test_overflows(vb, __FUNCTION__); 
+    if (flag.debug_or_test) buf_test_overflows(vb, __FUNCTION__); 
 
     COPY_TIMER (seg_all_data_lines);
 }

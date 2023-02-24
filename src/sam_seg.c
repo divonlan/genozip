@@ -105,7 +105,7 @@ void sam_zip_initialize (void)
 
     seg_prepare_snip_other (SNIP_REDIRECTION, _SAM_TAXID, false, 0, taxid_redirection_snip);
 
-    qname_zip_initialize (SAM_QNAME);
+    qname_zip_initialize();
 
     seg_prepare_snip_other (SNIP_COPY, _SAM_POS, false, 0, copy_POS_snip);
     seg_prepare_snip_other (SNIP_COPY, _OPTION_NM_i, false, 0, copy_NM_snip);
@@ -206,7 +206,7 @@ void sam_zip_genozip_header (SectionHeaderGenozipHeader *header)
     header->sam.segconf_is_collated     = segconf.is_collated;           // v14
     header->sam.segconf_pysam_qual      = segconf.pysam_qual;            // v14
     header->sam.segconf_cellranger      = segconf.has_cellranger;        // v14
-    header->sam.segconf_seq_len_dict_id = segconf.qname_seq_len_dict_id; // v14
+    header->sam.segconf_seq_len_dict_id = segconf.seq_len_dict_id; // v14
     header->sam.segconf_MD_NM_by_un     = segconf.MD_NM_by_unconverted;  // v14
     header->sam.segconf_predict_meth    = segconf.sam_predict_meth_call; // v14
     header->sam.segconf_deep_no_qname   = segconf.deep_no_qname;         // v15
@@ -227,10 +227,10 @@ static void sam_seg_QNAME_initialize (VBlockSAMP vb)
     CTX(SAM_QNAME)->no_stons = true;             // no singletons, bc sam_piz_special_SET_BUDDY uses PEEK_SNIP
     CTX(SAM_QNAME)->flags.store_per_line = true; // 12.0.41
 
-    qname_seg_initialize (VB, SAM_QNAME);
+    qname_seg_initialize (VB, QNAME1, 0); 
 
     if (segconf.running)
-        segconf.qname_flavor = 0; // unknown
+        segconf.qname_flavor[0] = 0; // unknown
 
     // initial allocations based on segconf data
     else {
@@ -447,7 +447,7 @@ static void sam_seg_toplevel (VBlockP vb)
     uint64_t qname_dict_id = (sam_is_prim_vb ? _SAM_QNAMESA : _SAM_QNAME);
     uint64_t qual_dict_id  = (sam_is_prim_vb ? _SAM_QUALSA  : _SAM_QUAL );
 
-    uint8_t deep_cb = flag.deep ? CI1_ITEM_CB : 0;
+    uint8_t deep_cb = flag.deep && (vb->comp_i != SAM_COMP_DEPN) ? CI1_ITEM_CB : 0; // note: DEPN alignments don't participate in Deep
 
     // top level snip - reconstruction as SAM
     SmallContainer top_level_sam = {
@@ -1070,7 +1070,7 @@ void sam_seg_aux_all (VBlockSAMP vb, ZipDataLineSAM *dl)
 
     const bool is_bam = IS_BAM_ZIP;
     Container con = { .repeats = 1, .filter_repeats = true /* v14 */};
-    char prefixes[MAX_FIELDS * 6 + 3];                    // each name is 5 characters per SAM specification, eg "MC:Z:" followed by CON_PX_SEP ; +3 for the initial CON_PX_SEP
+    char prefixes[(vb->n_auxs + 1) * 6 + 3];                // each name is 5 characters per SAM specification, eg "MC:Z:" followed by CON_PX_SEP ; +3 for the initial CON_PX_SEP. +1 for kraken
     prefixes[0] = prefixes[1] = prefixes[2] = CON_PX_SEP; // initial CON_PX_SEP follow by separator of empty Container-wide prefix followed by separator for empty prefix for translator-only item[0]
     unsigned prefixes_len = 3;
 
@@ -1221,12 +1221,12 @@ static inline void sam_seg_QNAME_segconf (VBlockSAMP vb, ContextP ctx, STRp (qna
     }
 
     if (vb->line_i == 0)
-        qname_segconf_discover_flavor (VB, SAM_QNAME, STRa (qname));
+        qname_segconf_discover_flavor (VB, QNAME1, STRa (qname));
 }
 
 void sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp (qname), unsigned add_additional_bytes)
 {
-    ContextP ctx = CTX(SAM_QNAME);
+    decl_ctx (SAM_QNAME);
 
     // in segconf, identify if this file is collated (each QNAME appears in two or more consecutive lines)
     if (segconf.running) {
@@ -1268,7 +1268,7 @@ void sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAM *dl, STRp (qname), unsigned ad
         sam_seg_against_sa_group (vb, ctx, qname_len + add_additional_bytes);
 
     else normal_seg:
-        qname_seg (VB, ctx, STRa (qname), add_additional_bytes); // note: for PRIM component, this will be consumed with loading SA
+        qname_seg (VB, QNAME1, STRa (qname), add_additional_bytes); // note: for PRIM component, this will be consumed with loading SA
 
     // case: PRIM: additional seg against SA Group - store in SAM_QNAMESA - Reconstruct will take from here in PRIM per Toplevel container
     if (sam_is_prim_vb)

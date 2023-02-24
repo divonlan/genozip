@@ -13,6 +13,7 @@
 #pragma GENDICT_PREFIX KRAKEN
 
 #pragma GENDICT KRAKEN_CU=DTYPE_FIELD=CU
+
 #pragma GENDICT KRAKEN_QNAME=DTYPE_FIELD=QNAME
 #pragma GENDICT KRAKEN_Q0NAME=DTYPE_1=Q0NAME // MAX_QNAME_ITEMS - fixed qname items must have a did_i directly after container's (MUST be the same dict_id as in sam.h)
 #pragma GENDICT KRAKEN_Q1NAME=DTYPE_1=Q1NAME 
@@ -25,7 +26,7 @@
 #pragma GENDICT KRAKEN_Q8NAME=DTYPE_1=Q8NAME 
 #pragma GENDICT KRAKEN_Q9NAME=DTYPE_1=Q9NAME 
 #pragma GENDICT KRAKEN_QANAME=DTYPE_1=QANAME 
-#pragma GENDICT KRAKEN_QBNAME=DTYPE_1=QBNAME // if adding more Q*NAMEs - add to fastq.h and sam.h and update MAX_QNAME_SEGMENTS
+#pragma GENDICT KRAKEN_QBNAME=DTYPE_1=QBNAME // if adding more Q*NAMEs - add to fastq.h and sam.h and update MAX_QNAME_ITEMS
 #pragma GENDICT KRAKEN_QmNAME=DTYPE_1=QmNAME // QmNAME reserved for mate number (always the last dict_id in the container)
 
 #pragma GENDICT KRAKEN_TAXID=DTYPE_FIELD=TAXID
@@ -78,7 +79,7 @@ extern unsigned kraken_seg_taxid (VBlockP vb, Did did_i_taxid, STRp(qname), bool
 // misc
 extern void kraken_set_show_kraken (rom optarg);
 extern char *kraken_filename; // global
-#define kraken_is_loaded ((bool)kraken_filename)
+#define kraken_is_loaded ((bool)(kraken_filename != NULL))
 
 #define KRAKEN_SPECIAL {  }
 

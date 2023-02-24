@@ -119,8 +119,8 @@ static inline char *str_replace_letter (STRc(str), char before, char after)
     return str;
 }
 
-extern char *str_revcomp_in_out (char *dst_seq, rom src_seq, uint32_t seq_len);
-static inline char *str_revcomp (STRc(seq)) { return str_revcomp_in_out (seq, seq, seq_len); }
+extern char *str_revcomp (char *dst_seq, rom src_seq, uint32_t seq_len);
+static inline char *str_revcomp_in_place (STRc(seq)) { return str_revcomp (seq, seq, seq_len); }
 extern char *str_revcomp_actg (char *dst_seq, rom src_seq, uint32_t seq_len);
 
 // count the number of occurances of a character in a string
@@ -232,10 +232,10 @@ extern uint32_t str_split_do (STRp(str), uint32_t max_items, char sep, rom *item
 
 extern uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(con_prefixes), rom *items, uint32_t *item_lens, rom enforce_msg);
 
-#define str_split_by_container(str,str_len,container,prefix,prefix_len,name) \
+#define str_split_by_container(str,str_len,container,prefix,prefix_len,name,enforce_msg) \
     rom name##s[MAX_(con_nitems(*container), 1)];  \
     uint32_t name##_lens[MAX_(con_nitems(*container), 1)]; \
-    uint32_t n_##name##s = str_split_by_container_do ((str), (str_len), (ConstContainerP)(container), (prefix), (prefix_len), name##s, name##_lens, NULL)
+    uint32_t n_##name##s = str_split_by_container_do ((str), (str_len), (ConstContainerP)(container), (prefix), (prefix_len), name##s, name##_lens, (enforce_msg))
 
 extern rom str_split_by_tab_do (STRp(str), uint32_t *n_flds, rom *flds, uint32_t *fld_lens, bool *has_13, bool exactly, bool enforce);
 #define str_split_by_tab(str,max_len,max_flds,has_13,exactly,enforce) \

@@ -116,8 +116,8 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, Did did_i, DictI
 
 #define RECONSTRUCT(s,s_len)                                                    \
     ({ uint32_t new_len = (uint32_t)(s_len); /* copy in case caller uses ++ */  \
-       ASSPIZ (vb->txt_data.len + new_len <= vb->txt_data.size, "RECONSTRUCT: txt_data overflow: txt_data.len=%u str_len=%u", \
-               vb->txt_data.len32, new_len);                                    \
+       ASSPIZ (vb->txt_data.len + new_len <= vb->txt_data.size, "RECONSTRUCT: txt_data overflow: txt_data.len=%"PRIu64" str_len=%u vb->txt_data.size=%u", \
+               vb->txt_data.len, new_len, (uint32_t)vb->txt_data.size);       \
        memcpy (&vb->txt_data.data[vb->txt_data.len32], s, new_len);             \
        vb->txt_data.len32 += new_len; })
 

@@ -61,6 +61,8 @@ typedef union {
 extern Digest digest_snapshot (const DigestContext *ctx, rom msg);
 extern Digest digest_txt_header (BufferP data, Digest piz_expected_digest);
 extern bool digest_one_vb (VBlockP vb, bool is_compute_thread, BufferP data);
+extern void digest_piz_verify_one_txt_file (unsigned txt_file_i);
+extern bool digest_piz_has_it_failed (void);
 
 typedef struct { char s[34]; } DigestDisplay;
 extern DigestDisplay digest_display (Digest digest);
@@ -70,13 +72,11 @@ extern DigestDisplay digest_display_ex (const Digest digest, DigestDisplayMode m
 extern rom digest_name (void);
 
 #define digest_is_equal(digest1,digest2) ((digest1).w128 == (digest2).w128)
-extern bool digest_recon_is_equal (const Digest recon_digest, const Digest expected_digest);
 extern void digest_verify_ref_is_equal (const Reference ref, rom header_ref_filename, const Digest header_md5);
 
-#define md5_is_zero(digest) (!(digest).w128)
-#define v8_digest_is_zero(digest) (IS_PIZ && !VER(9) && md5_is_zero(digest))
-#define digest_is_zero md5_is_zero
-
-#define piz_need_digest (!v8_digest_is_zero (z_file->digest) && !flag.data_modified && !flag.reading_chain) 
+#define digest_is_zero(digest) (!(digest).w128)
 
 // backward compatability note: in v8 files compressed without --md5 or --test, we had no digest. starting v9, we have Adler32
+#define piz_need_digest (z_file->z_flags_ext.has_digest && !flag.data_modified && !flag.genocat_no_reconstruct && !flag_loading_auxiliary) 
+
+#define zip_need_digest (!flag.make_reference && !flag.data_modified)

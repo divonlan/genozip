@@ -173,7 +173,7 @@ void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(sa), unsigned add_byt
                                                                  { .dict_id = { _OPTION_SA_MAPQ   }, .separator = {','} },  
                                                                  { .dict_id = { _OPTION_SA_NM     },                  } } };
 
-    ContextP ctx = CTX(OPTION_SA_Z);
+    decl_ctx (OPTION_SA_Z);
     bool has_prim = sam_has_prim;
 
     if (!IS_SAG_SA) goto fallback;

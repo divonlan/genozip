@@ -215,12 +215,12 @@ static void ref_uncompact_ref (RangeP r, int64_t first_bit, int64_t last_bit, co
 // Compute thread: called by ref_uncompress_one_range
 RangeP ref_get_range_by_chrom (Reference ref, WordIndex chrom, rom *chrom_name)
 {
-    ContextP ctx = ZCTX(CHROM);
-    ASSERT (chrom >= 0 && chrom < ctx->word_list.len, "chrom=%d out of range - ctx->word_list.len=%u",
-            chrom, ctx->word_list.len32);
+    decl_zctx (CHROM);
+    ASSERT (chrom >= 0 && chrom < zctx->word_list.len, "chrom=%d out of range - ctx->word_list.len=%u",
+            chrom, zctx->word_list.len32);
 
     if (chrom_name)
-        *chrom_name = ctx_get_words_snip (ctx, chrom);
+        *chrom_name = ctx_get_words_snip (zctx, chrom);
 
     ASSERT (chrom < ref->ranges.len, "expecting chrom=%d < ranges.len=%"PRIu64, chrom, ref->ranges.len);
     
@@ -455,6 +455,8 @@ static void ref_uncompress_one_range (VBlockP vb)
 finish:
     vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined. 
 
+    if (flag.debug_or_test) buf_test_overflows(vb, __FUNCTION__); 
+
     COPY_TIMER (ref_uncompress_one_range);
 }
 
@@ -502,6 +504,8 @@ static void ref_read_one_range (VBlockP vb)
         vb->z_data.len = 0; // roll back if we're only showing headers
 
     vb->dispatch = READY_TO_COMPUTE; // to simplify the code, we will dispatch the thread even if we skip the data, but we will return immediately. 
+
+    if (flag.debug_or_test) buf_test_overflows(vb, __FUNCTION__); 
 
     COPY_TIMER (ref_read_one_range);
 }
@@ -724,11 +728,11 @@ static void ref_copy_one_compressed_section (Reference ref, FileP ref_file, cons
     z_file->disk_so_far += ref_seq_section.len;   // length of GENOZIP data writen to disk
 
     if (flag.show_reference) {
-        ContextP ctx = ZCTX(CHROM);
-        CtxNode *node = B(CtxNode, ctx->nodes, BGEN32 (header->chrom_word_index));
+        decl_zctx (CHROM);
+        CtxNode *node = B(CtxNode, zctx->nodes, BGEN32 (header->chrom_word_index));
         iprintf ("Copying SEC_REFERENCE from %s: chrom=%u (%s) gpos=%"PRId64" pos=%"PRId64" num_bases=%u section_size=%u\n", 
                  ref->filename, BGEN32 (header->chrom_word_index), 
-                 Bc (ctx->dict, node->char_index), 
+                 Bc (zctx->dict, node->char_index), 
                  BGEN64 (header->gpos), BGEN64 (header->pos), 
                  BGEN32 (header->num_bases), 
                  BGEN32 (header->data_compressed_len) + BGEN32 (header->compressed_offset));

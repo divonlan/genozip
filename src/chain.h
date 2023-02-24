@@ -71,4 +71,4 @@ SPECIAL (CHAIN, 2, SIZE,      chain_piz_special_SIZE);
 #define NUM_CHAIN_SPECIAL 3
 
 extern char *chain_filename; // global
-#define chain_is_loaded ((bool)chain_filename)
+#define chain_is_loaded ((bool)(chain_filename != NULL))

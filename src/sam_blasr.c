@@ -20,7 +20,7 @@
 // read alignment start position (1 based)
 void sam_seg_blasr_FI_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t fi, unsigned add_bytes)
 {
-    ContextP ctx = CTX(OPTION_FI_i);
+    decl_ctx (OPTION_FI_i);
 
     // check if prediction is correct (it is often correct, but not always)
     if (fi == 1 + vb->soft_clip[dl->FLAG.rev_comp])

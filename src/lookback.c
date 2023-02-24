@@ -38,7 +38,7 @@ void lookback_init (VBlockP vb, ContextP lb_ctx, ContextP ctx, StoreType store_t
 // Seg and PIZ
 void lookback_insert (VBlockP vb, Did lb_did_i, Did did_i, bool copy_last_value, ValueType value)
 {
-    ContextP ctx = CTX(did_i);
+    decl_ctx (did_i);
     BufferP buf = lookback_buf(ctx);
     uint32_t lb_size = lookback_size (CTX(lb_did_i));
 

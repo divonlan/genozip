@@ -22,12 +22,10 @@
 #include "tokenizer.h"
 #include "coverage.h"
 
-#define dict_id_is_fastq_desc_sf dict_id_is_type_1
-#define dict_id_fastq_desc_sf dict_id_type_1
+#define dict_id_is_fastq_qname_sf dict_id_is_type_1
+#define dict_id_fastq_qname_sf dict_id_type_1
 
-// Used by Seg
-static char copy_desc_snip[30];
-static unsigned copy_desc_snip_len;
+sSTRl (copy_qname_snip, 30);
 
 unsigned fastq_vb_size (DataType dt) { return sizeof (VBlockFASTQ); }
 unsigned fastq_vb_zip_dl_size (void) { return sizeof (ZipDataLineFASTQ); }
@@ -36,6 +34,8 @@ void fastq_vb_release_vb (VBlockFASTQP vb)
 {
     vb->pair_num_lines = vb->pair_vb_i = vb->optimized_desc_len = 0;
     vb->first_line = 0;
+    vb->has_extra = 0;
+    memset (vb->item_filter, 0, sizeof(vb->item_filter));
     FREE (vb->optimized_desc);
 }
 
@@ -64,7 +64,7 @@ bool is_fastq (STRp(header), bool *need_more)
     for (int i=0; i < n_lines; i += 4)
         if (!line_lens[i+0] || lines[i+0][0] != '@' ||
             !line_lens[i+2] || lines[i+2][0] != '+' ||
-            !line_lens[i+1] || line_lens[i+1] == line_lens[i+3]) return false; // SEQ and QUAL lines are of equal length
+            !line_lens[i+1] || line_lens[i+1] != line_lens[i+3]) return false; // SEQ and QUAL lines are of equal length
 
     return true;
 }
@@ -108,6 +108,7 @@ int32_t fastq_unconsumed (VBlockP vb, uint32_t first_i, int32_t *i /* in/out */)
 out_of_data:
     return -1; // cannot find end-of-line in the data starting first_i
 }
+
 // called by txtfile_read_vblock when reading the 2nd file in a fastq pair - counts the number of fastq "lines" (each being 4 textual lines),
 // comparing to the number of lines in the first file of the pair
 // returns true if we have at least as much as needed, and sets unconsumed_len to the amount of excess characters read
@@ -131,7 +132,7 @@ bool fastq_txtfile_have_enough_lines (VBlockP vb_, uint32_t *unconsumed_len,
         next++; // skip newline
     }
 
-    vb->lines.len = line_i/4;
+    vb->lines.len = line_i / 4;
     *unconsumed_len = after - next;
     return true;
 }
@@ -235,14 +236,14 @@ void fastq_zip_initialize (void)
     ZCTX(FASTQ_STRAND)->lcodec = CODEC_UNKNOWN;
     ZCTX(FASTQ_GPOS  )->lcodec = CODEC_UNKNOWN;
 
-    seg_prepare_snip_other (SNIP_COPY, _FASTQ_DESC, 0, 0, copy_desc_snip);
+    seg_prepare_snip_other (SNIP_COPY, _FASTQ_QNAME, 0, 0, copy_qname_snip);
 
     // with REF_EXTERNAL, we don't know which chroms are seen (bc unlike REF_EXT_STORE, we don't use is_set), so
     // we just copy all reference contigs. this are not needed for decompression, just for --coverage/--sex/--idxstats
     if (IS_REF_EXTERNAL && z_file->num_txts_so_far == 1 && !flag.deep) // first file
         ctx_populate_zf_ctx_from_contigs (gref, FASTQ_CONTIG, ref_get_ctgs (gref)); 
 
-    qname_zip_initialize (FASTQ_DESC);
+    qname_zip_initialize();
 }
 
 // called by main thread after each txt file compressing is done
@@ -258,10 +259,20 @@ bool fastq_zip_dts_flag (int dts)
     return (dts==1) ? (flag.pair != NOT_PAIRED_END) : 0;
 }
 
+void fastq_initialize_ctx_for_pairing (VBlockP vb, Did did_i)
+{
+    CTX(did_i)->no_stons = true; // prevent singletons, so pair_1 and pair_2 are comparable based on b250 only
+    
+    if (flag.pair == PAIR_READ_2)
+        ctx_create_node (vb, did_i, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_mate_lookup }, 2); // required by ctx_convert_generated_b250_to_mate_lookup
+}
+
 // called by Compute thread at the beginning of this VB
 void fastq_seg_initialize (VBlockFASTQP vb)
 {
     START_TIMER;
+
+    vb->has_extra = segconf.has_extra; // VB-private copy
 
     if (!flag.deep)
         CTX(FASTQ_CONTIG)->flags.store = STORE_INDEX; // since v12
@@ -313,7 +324,9 @@ void fastq_seg_initialize (VBlockFASTQP vb)
         vb->z_data.len32 = 0; // we've finished reading the pair file z_data, next, we're going to write to z_data our compressed output
     }
 
-    qname_seg_initialize (VB, FASTQ_DESC);
+    if (!segconf.running)  // note: if segconf.running, we initialize in qname_segconf_discover_flavor
+        for (QType q=QNAME1; q < NUM_QTYPES; q++)
+            qname_seg_initialize (VB, q, flag.pair); 
 
     if (vb->comp_i == FQ_COMP_R2)
         ctx_create_node (VB, FASTQ_SQBITMAP, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_mate_lookup }, 2); // required by ctx_convert_generated_b250_to_mate_lookup
@@ -329,6 +342,9 @@ void fastq_seg_initialize (VBlockFASTQP vb)
 
     if (flag.deep)
         fastq_deep_seg_initialize (VB);
+
+    if (segconf.seq_len_dict_id.num)
+        ctx_set_store (VB, STORE_INT, ECTX(segconf.seq_len_dict_id)->did_i, DID_EOL);
 
     // consolidate stats for --stats
     ctx_consolidate_stats (VB, FASTQ_SQBITMAP, FASTQ_NONREF, FASTQ_NONREF_X, FASTQ_GPOS, FASTQ_STRAND, FASTQ_SEQMIS_A, FASTQ_SEQMIS_C, FASTQ_SEQMIS_G, FASTQ_SEQMIS_T, DID_EOL);
@@ -347,7 +363,7 @@ void fastq_seg_finalize (VBlockP vb)
 
     // assign the QUAL codec
     codec_assign_best_qual_codec (vb, FASTQ_QUAL, fastq_zip_qual, false, false);
-
+    
     // top level snip
     SmallContainer top_level = { 
         .repeats        = vb->lines.len32,
@@ -355,44 +371,80 @@ void fastq_seg_finalize (VBlockP vb)
         .filter_items   = true,
         .filter_repeats = true,
         .callback       = true,
-        .nitems_lo      = 8 + flag.deep,
+        .nitems_lo      = 16, // initial before removals
         .items          = {
-            { .dict_id = { _FASTQ_DEEP     }, }, // note: will be removed below if not --deep
-            { .dict_id = { _FASTQ_DESC     }, },
-            { .dict_id = { _FASTQ_E1L      }, }, // note: we have 2 EOL contexts, so we can show the correct EOL if in case of --header-only
-            { .dict_id = { _FASTQ_SQBITMAP }, },
-            { .dict_id = { _FASTQ_E2L      }, },
-            { .dict_id = { _FASTQ_LINE3    }, }, // added in 12.0.14, before '+' was a separator of the previous E2L
-            { .dict_id = { _FASTQ_E2L      }, },
-            { .dict_id = { _FASTQ_QUAL     }, },
-            { .dict_id = { _FASTQ_E2L      }, } 
+            { .dict_id = { _FASTQ_DEEP     }, .separator = { CI0_INVISIBLE } }, // 0:  note: will be removed if not --deep. added v15
+            { .dict_id = { _FASTQ_QNAME    },                                }, // 1:
+            { .dict_id = { _FASTQ_QNAME2   },                                }, // 2:  note: removed if not needed. added v15
+            { .dict_id = { _FASTQ_EXTRA    },                                }, // 3:  note: removed if not needed. added v15
+            { .dict_id = { _FASTQ_AUX      },                                }, // 4:  note: removed if not needed. added v15
+            { .dict_id = { _FASTQ_E1L      },                                }, // 5:  note: we have 2 EOL contexts, so we can show the correct EOL if in case of --header-only
+            { .dict_id = { _FASTQ_SQBITMAP },                                }, // 6:  
+            { .dict_id = { _FASTQ_E2L      },                                }, // 7:
+            { .dict_id = { _FASTQ_LINE3    },                                }, // 8:  added in 12.0.14, before '+' was a separator of the previous E2L. v15: note: removed if not needed
+            { .dict_id = { _FASTQ_QNAME2   },                                }, // 9:  note: removed if not needed. added v15
+            { .dict_id = { _FASTQ_EXTRA    },                                }, // 10: note: removed if not needed. added v15
+            { .dict_id = { _FASTQ_AUX      },                                }, // 11: note: removed if not needed. added v15
+            { .dict_id = { _FASTQ_E2L      },                                }, // 12:
+            { .dict_id = { _FASTQ_QUAL     },                                }, // 13:
+            { .dict_id = { _FASTQ_E2L      },                                }, // 14:
+            { segconf.seq_len_dict_id,        .separator = { CI0_INVISIBLE } }  // 15: reconstruct for seq_len in case QNAME and LINE3 are dropped with --seq-only or --qual-only. See logic in fastq_piz_initialize_item_filter
         }
     };
 
+    ASSERT0 (top_level.nitems_lo <= sizeof (VB_FASTQ->item_filter), "length of VBlockFASTQ.item_filter needs increasing");
+
     // prefixes in this container were added in 12.0.14, before, '@' was part of DESC and '+' was a separator
-    char prefixes[] = { CON_PX_SEP,        // initial
-                        CON_PX_SEP,        // terminator for empty container-wide prefix
-                        CON_PX_SEP,        // empty DEEP line prefix. note: will be removed below if not --deep
-                        '@', CON_PX_SEP,   // DESC prefix
-                        CON_PX_SEP,        // empty E1L line prefix
-                        CON_PX_SEP,        // empty SQBITMAP line prefix
-                        CON_PX_SEP,        // empty E2L line prefix
-                        '+', CON_PX_SEP,   // third line prefix
-                        CON_PX_SEP      }; // END of prefixes
+    char prefixes[] = { CON_PX_SEP,        // 0:  initial
+                        CON_PX_SEP,        // 1:  terminator for empty container-wide prefix
+                        CON_PX_SEP,        // 2:  empty DEEP line prefix. note: will be removed below if not --deep
+                        '@', CON_PX_SEP,   // 3:  QNAME prefix
+                        ' ', CON_PX_SEP,   // 5:  QNAME2 prefix
+                        ' ', CON_PX_SEP,   // 7:  EXTRA prefix
+                        ' ', CON_PX_SEP,   // 9:  AUX prefix
+                        CON_PX_SEP,        // 11: empty E1L line prefix
+                        CON_PX_SEP,        // 12: empty SQBITMAP line prefix
+                        CON_PX_SEP,        // 13: empty E2L line prefix
+                        '+', CON_PX_SEP,   // 14: LINE3 prefix
+                        ' ', CON_PX_SEP,   // 16: QNAME2 prefix
+                        ' ', CON_PX_SEP,   // 18: EXTRA prefix
+                        ' ', CON_PX_SEP,   // 20: AUX prefix
+                        CON_PX_SEP,        // 22: E2L prefix
+                        CON_PX_SEP,        // 23: seq_len_dict_id prefix
+                        CON_PX_SEP      }; // 24: END of prefixes
 
-    // if not --deep, remove from container and prefixes to avoid unnecessary overhead in PIZ
-    if (!flag.deep) {
-        memmove (&top_level.items[0], &top_level.items[1], top_level.nitems_lo * sizeof (ContainerItem));
-        memmove (&prefixes[0], &prefixes[1], sizeof (prefixes)-1);
-    }
+    int prefixes_len = sizeof (prefixes);
 
-    container_seg (vb, CTX(FASTQ_TOPLEVEL), (ContainerP)&top_level, prefixes, sizeof (prefixes) - !flag.deep, 0); // note: the '@' and '+' are accounted for in the DESC and LINE3 fields respectively
+    #define REMOVE(item_i,px_i,px_len) ({ \
+        memmove (&top_level.items[item_i], &top_level.items[item_i+1], (top_level.nitems_lo - item_i - 1) * sizeof (ContainerItem)); \
+        top_level.nitems_lo--; \
+        memmove (&prefixes[px_i], &prefixes[px_i+px_len], sizeof (prefixes)-(px_i+px_len)); \
+        prefixes_len -= px_len; })
+
+    bool has_line3  = segconf.line3 != L3_EMPTY;
+    bool has_qname2 = segconf.has_qname2  && !flag.optimize_DESC;
+    bool has_extra  = VB_FASTQ->has_extra && !flag.optimize_DESC;
+    bool has_aux    = segconf.has_aux     && !flag.optimize_DESC;
+    bool desc_is_l3 = segconf.desc_is_l3; // whether the Description (QNAME + DESC + AUX) appears on line 1 or line 3 (note: if on both, the line 3 is just a copy snip from line 1)
+
+    // remove unneeded container and prefix items - in reverse order
+    if (!segconf.seq_len_dict_id.num) REMOVE (15, 23, 1);
+    if (!desc_is_l3 || !has_aux)      REMOVE (11, 20, 2);
+    if (!desc_is_l3 || !has_extra)    REMOVE (10, 18, 2);
+    if (!desc_is_l3 || !has_qname2)   REMOVE (9,  16, 2);
+    if (!has_line3)                   REMOVE (8,  15, 1); // removing CON_PX_SEP the '+' now becomes the prefix of E2L (as QNAME2, EXTRA, AUX have already been removed)
+    if (desc_is_l3  || !has_aux)      REMOVE (4,  9,  2);
+    if (desc_is_l3  || !has_extra)    REMOVE (3,  7,  2);
+    if (desc_is_l3  || !has_qname2)   REMOVE (2,  5,  2);
+    if (!flag.deep)                   REMOVE (0,  2,  1);
+
+    container_seg (vb, CTX(FASTQ_TOPLEVEL), (ContainerP)&top_level, prefixes, prefixes_len, 0); // note: the '@', '+' and ' ' are accounted for in the QNAME, QNAME2/EXTRA/AUX and LINE3 fields respectively
 }
 
 bool fastq_seg_is_small (ConstVBlockP vb, DictId dict_id)
 {
     return dict_id.num == _FASTQ_TOPLEVEL ||
-           dict_id.num == _FASTQ_DESC     ||
+           dict_id.num == _FASTQ_QNAME    ||
            dict_id.num == _FASTQ_TAXID    ||
            dict_id.num == _FASTQ_E1L      ||
            dict_id.num == _FASTQ_E2L;
@@ -413,7 +465,7 @@ bool fastq_read_pair_1_data (VBlockP vb_, uint32_t pair_vb_i, bool must_have)
 
     vb->pair_num_lines = sec->num_lines;
 
-    // read into ctx->pair the data we need from our pair: DESC and its components, GPOS and STRAND
+    // read into ctx->pair the data we need from our pair: QNAME,QNAME2,LINE3 and its components, EXTRA, GPOS and STRAND
     buf_alloc (vb, &vb->z_section_headers, MAX_FIELDS + 10, MAX_DICTS * 2 + 50, uint32_t, 0, "z_section_headers"); // room for section headers  
 
     sec++;
@@ -445,90 +497,7 @@ bool fastq_piz_init_vb (VBlockP vb_, const SectionHeaderVbHeader *header, uint32
     return true;
 }
 
-static void fastq_seg_DESC (VBlockFASTQP vb, STRp(desc), unsigned qname_len, bool deep)
-{
-    // case: --optimize_DESC: we replace the description with "filename.line_i" (optimized string stored in vb->optimized_desc)
-    unsigned optimized_len = 0; 
-    if (flag.optimize_DESC) {
-        optimized_len  = vb->optimized_desc_len + str_int (vb->first_line + vb->line_i, &vb->optimized_desc[vb->optimized_desc_len]);   
-        vb->recon_size -= desc_len - optimized_len;
-
-        desc = vb->optimized_desc;
-        desc_len = qname_len = optimized_len;
-    }
-
-    // case: segconf && deep && DESC is made out of qname followed a whitespace and more DESC - prepare container
-    if (segconf.running && flag.deep && !segconf.deep_desc_con_snip_len && desc_len != qname_len) {
-        SmallContainer con = { .repeats   = 1,
-                               .nitems_lo = 1,
-                               .items     = { { .dict_id = { _FASTQ_Q0NAME }, .separator = { desc[qname_len] } },
-                                              { .dict_id = { _FASTQ_QNAME2 }                                   } } };
-
-        segconf.deep_desc_con_snip_len = sizeof (segconf.deep_desc_con_snip);
-        container_prepare_snip ((ContainerP)&con, 0, 0, qSTRa(segconf.deep_desc_con_snip));
-        segconf.deep_desc_con_snip_sep = desc[qname_len];
-    }
-
-    // case: deep: desc is the same as SAM's qname
-    if (deep && desc_len == qname_len)
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_copy_deep }, 2, FASTQ_DESC, qname_len + 1); // +1 for '@'
-
-    // case: deep + qname is the same as SAM's qname, but is followed by a whitespace and more DESC - and matches deep_desc_con_snip
-    else if (deep && segconf.deep_desc_con_snip_len && desc[qname_len] == segconf.deep_desc_con_snip_sep) {
-        seg_by_did (VB, STRa(segconf.deep_desc_con_snip), FASTQ_DESC, 2);                                  // container: 2 = container item sep and '@'        
-        seg_by_did (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_copy_deep }, 2, FASTQ_Q0NAME, qname_len);    // QNAME part
-        tokenizer_seg (VB, CTX(FASTQ_QNAME2), &desc[qname_len+1], desc_len - qname_len - 1, sep_with_space, 0); // non-QNAME part
-    }
-
-    // case: normal seg: attempt to parse the desciption line as qname, and fallback to tokenizer desc mismatches the flavor
-    else
-        qname_seg (VB, CTX(FASTQ_DESC), STRa(desc), 1); // account for the '@' (segged as a toplevel container prefix)
-}
-
-static void fastq_seg_LINE3 (VBlockFASTQP vb, STRp(line3), STRp(desc))
-{
-    // first line of segconf VB - discover line3 type
-    if (segconf.running && vb->line_i==0) {
-
-        if (line3_len==0 || flag.optimize_DESC) 
-            segconf.line3 = L3_EMPTY;
-
-        else if (str_issame_(STRa(line3), STRa(desc)))
-            segconf.line3 = L3_COPY_DESC;
-
-        else if (qname_segconf_discover_fastq_line3_sra_flavor (VB, STRa(line3)))
-            segconf.line3 = L3_QF;
-
-        else 
-            ASSSEG (false, line3, "Invalid FASTQ file format: expecting middle line to be a \"+\" with or without a copy of the description, but it is \"%.*s\"",
-                    line3_len+1, line3-1);
-    }
-
-    if (flag.optimize_DESC) {
-        seg_by_did (VB, "", 0, FASTQ_LINE3, 1); // account for the '+' (segged as a toplevel container prefix)
-        vb->recon_size -= line3_len; 
-    }
-    
-    else if (segconf.line3 == L3_EMPTY) {
-        ASSSEG (!line3_len || flag.optimize_DESC, line3, "Invalid FASTQ file format: expecting middle line to be a \"+\", but it is \"%.*s\"", line3_len+1, line3-1);
-        seg_by_did (VB, "", 0, FASTQ_LINE3, 1); // account for the '+' (segged as a toplevel container prefix)
-    }
-    
-    else if (segconf.line3 == L3_COPY_DESC) {
-        ASSSEG (str_issame_(STRa(line3), STRa(desc)), line3, 
-                "Invalid FASTQ file format: expecting middle line to be a \"+\" followed by a copy of the description line, but it is \"%.*s\"", line3_len+1, line3-1); 
-        seg_by_did (VB, STRa(copy_desc_snip), FASTQ_LINE3, 1 + line3_len); // +1 - account for the '+' (segged as a toplevel container prefix)
-    }
-
-    else if (segconf.line3 == L3_QF) 
-        ASSSEG (qname_seg_qf (VB, CTX(FASTQ_LINE3), segconf.line3_flavor, STRa(line3), false, 1), line3, // +1 - account for the '+' (segged as a toplevel container prefix)
-                "Invalid FASTQ file format: expecting middle line to be a \"+\" followed by a \"%s\" flavor, but it is \"%.*s\"", qf_name(segconf.line3_flavor), line3_len+1, line3-1); 
-
-    else 
-        ASSSEG (false, line3, "Invalid FASTQ file format: expecting middle line to be a \"+\" with or without a copy of the description, but it is \"%.*s\"",
-                line3_len+1, line3-1);
-}
-
+// seg taxid, or abort
 static void fastq_seg_kraken_tax_id (VBlockFASTQP vb, STRp(qname))
 {
     unsigned taxid_found = kraken_seg_taxid (VB, FASTQ_TAXID, STRa(qname), false);
@@ -544,27 +513,92 @@ static void fastq_seg_kraken_tax_id (VBlockFASTQP vb, STRp(qname))
 }
 
 static rom fastq_seg_get_lines (VBlockFASTQP vb, rom line, int32_t remaining, 
-                                pSTRp(desc), pSTRp(seq), pSTRp(line3), pSTRp(qual), bool *has_13) // out
+                                pSTRp(qname), pSTRp(desc), pSTRp(seq), pSTRp(line3), pSTRp(qual), uint32_t *line1_len, bool *has_13) // out
 {
     ASSSEG0 (*line != '\n', line, "Invalid FASTQ file format: unexpected newline");
 
     ASSSEG (*line == '@', line, "Invalid FASTQ file format: expecting description line to start with @ but it starts with %c", *line);     
 
-    *desc = line+1; remaining--; // skip the '@' - its already included in the container prefix
+    *qname = line+1; remaining--; // skip the '@' - its already included in the container prefix
     
-    // get DESC line
-    *seq = seg_get_next_line (vb, *desc, &remaining, desc_len, true, &has_13[0], "DESC");
+    bool analyze = segconf.running && vb->line_i==0;
+
+    // get QNAME + DESC line
+    *seq = seg_get_next_line (VB, *qname, &remaining, line1_len, true, &has_13[0], "LINE1");
     
+    // analyze Line1 (segconf)
+    if (analyze) {
+        *desc = memchr (*qname, ' ', *line1_len);
+
+        // Discover the QNAME flavor. Also discovers the original TECH, even when optimize_DESC
+        qname_segconf_discover_flavor (VB, QNAME1, *qname, (*desc ? *desc - *qname : *line1_len)); 
+
+        if (*desc) fastq_segconf_analyze_DESC (vb, *desc + 1, *qname + *line1_len - *desc - 1);
+    }
+
+    if (segconf.has_desc && !segconf.desc_is_l3 &&
+        (*desc = memchr (*qname, ' ', *line1_len))) {
+        
+        (*desc)++; // skip space
+        *desc_len = *qname + *line1_len - *desc; 
+        *qname_len = *line1_len - *desc_len - 1;
+    }
+
+    // entire line will be segged in seg_qname. hopefully it only contains a qname, but if not - it will be tokenized
+    else {
+        *qname_len = *line1_len;
+        *desc_len = 0;
+    }
+
     // get SEQ line
-    *line3 = seg_get_next_item (vb, *seq, &remaining, GN_SEP, GN_IGNORE, GN_IGNORE, seq_len, NULL, &has_13[1], "SEQ");
+    *line3 = seg_get_next_item (VB, *seq, &remaining, GN_SEP, GN_IGNORE, GN_IGNORE, seq_len, NULL, &has_13[1], "SEQ");
     ASSSEG (remaining && (*line3)[0] == '+', *line3, "Invalid FASTQ file format: expecting middle line to be a \"+\", but it starts with a '%c'", (*line3)[0]);
     (*line3)++; // skip '+';
 
     // get LINE3
-    *qual = seg_get_next_line (vb, *line3, &remaining, line3_len, true, &has_13[2], "LINE3");
+    *qual = seg_get_next_line (VB, *line3, &remaining, line3_len, true, &has_13[2], "LINE3");
+
+    // analyze Line3 (segconf)
+    if (analyze) {
+        if (*line3_len==0 || flag.optimize_DESC) 
+            segconf.line3 = L3_EMPTY;
+
+        else if (fastq_is_line3_copy_of_line1 (STRa(*qname), STRa(*line3), *desc_len))
+            segconf.line3 = L3_COPY_LINE1;
+
+        // test for e.g. Line1: "@3/1" Line3: "+SRR2982101.3 3 length=101"
+        else if (!segconf.has_desc) {
+            *desc = memchr (*line3, ' ', *line3_len);
+
+            qname_segconf_discover_flavor (VB, QLINE3, *line3, *desc - *line3);
+
+            if (*desc) fastq_segconf_analyze_DESC (vb, *desc + 1, *line3 + *line3_len - *desc - 1);
+
+            segconf.desc_is_l3 = true; // DESC appears on line 3 rather than line 1
+            segconf.line3 = L3_NCBI;
+        }
+
+        else 
+            ABORT ("Unsupported FASTQ file format: expecting middle line to be a \"+\" with or without a copy of the description, or NCBI, but it is \"%.*s\"",
+                    (*line3_len)+1, (*line3)-1);
+    }
     
+    if (segconf.has_desc && segconf.desc_is_l3) {
+        *desc = memchr (*line3, ' ', *line3_len);
+        if (*desc) {
+            (*desc)++; // skip space
+            *desc_len = *line3 + *line3_len - *desc;
+            *line3_len -= *desc_len + 1; // just QLINE3 remaining
+        }
+        else
+            *desc_len = 0;
+    }
+    else {
+        // entire line will be segged in seg_qname. hopefully it only contains a qname, but if not - it will be tokenized
+    }
+
     // get QUAL line
-    rom after = seg_get_next_item (vb, *qual, &remaining, GN_SEP, GN_FORBIDEN, GN_IGNORE, qual_len, NULL, &has_13[3], "QUAL"); 
+    rom after = seg_get_next_item (VB, *qual, &remaining, GN_SEP, GN_FORBIDEN, GN_IGNORE, qual_len, NULL, &has_13[3], "QUAL"); 
 
     ASSSEG (*qual_len == *seq_len, *qual, "Invalid FASTQ file format: sequence_len=%u and quality_len=%u. Expecting them to be the same.\nSEQ = %.*s\nQUAL= %.*s",
             *seq_len, *qual_len, STRf(*seq), STRf(*qual));
@@ -580,28 +614,23 @@ static rom fastq_seg_get_lines (VBlockFASTQP vb, rom line, int32_t remaining,
 rom fastq_seg_txt_line (VBlockFASTQP vb, rom line_start, uint32_t remaining, bool *has_13)     // index in vb->txt_data where this line starts
 {
     // Split read to to desc, seq, line3 and qual (excluding the '@' and '+')
-    STR(desc); STR (seq); STR(line3); STR(qual);
+    STR0(qname); STR0(desc); STR0(seq); STR0(line3); STR0(qual);
     bool line_has_13[4] = {};
-    rom after = fastq_seg_get_lines (vb, line_start, remaining, pSTRa(desc), pSTRa(seq), pSTRa(line3), pSTRa(qual), line_has_13);
+    uint32_t line1_len;
+    rom after = fastq_seg_get_lines (vb, line_start, remaining, pSTRa(qname), pSTRa(desc), pSTRa(seq), pSTRa(line3), pSTRa(qual), 
+                                     &line1_len, line_has_13);
     
     // case segconf: gather data
-    if (segconf.running) {
+    if (segconf.running) 
         segconf.longest_seq_len = MAX_(seq_len, segconf.longest_seq_len);
         
-        segconf_update_qual (STRa(qual)); // get stats on qual scores
-        
-        if (vb->line_i==0) qname_segconf_discover_flavor (VB, FASTQ_DESC, STRa(desc)); // discover the original TECH, even when optimize_DESC
-    }
-
     // set dl fields, consumed by fastq_zip_qual/seq
     ZipDataLineFASTQ *dl = DATA_LINE (vb->line_i);
     dl->seq = TXTWORD(seq); 
     dl->qual_index = BNUMtxt (qual);
 
-    unsigned qname_len = strcspn (desc, " \t\r\n"); 
-
     if (kraken_is_loaded) 
-        fastq_seg_kraken_tax_id (vb, desc, qname_len);
+        fastq_seg_kraken_tax_id (vb, STRa(qname));
 
     // case --optimize_QUAL: optimize in place, must be done before fastq_seg_deep calculates a hash
     if (flag.optimize_QUAL) optimize_phred_quality_string ((char *)STRa(qual));
@@ -609,23 +638,31 @@ rom fastq_seg_txt_line (VBlockFASTQP vb, rom line_start, uint32_t remaining, boo
     dl->monobase = str_is_monochar (STRa(seq)); // set dl->monobase
 
     // case --deep: compare DESC, SEQ and QUAL to the SAM/BAM data
-    bool deep_desc=false, deep_seq=false, deep_qual=false;
+    bool deep_qname=false, deep_seq=false, deep_qual=false;
     if (flag.deep || flag.debug_deep == 2)
-        fastq_seg_deep (vb, dl, desc, qname_len, STRa(seq), STRa(qual), &deep_desc, &deep_seq, &deep_qual);
+        fastq_seg_deep (vb, dl, desc, qname_len, STRa(seq), STRa(qual), &deep_qname, &deep_seq, &deep_qual);
 
-    fastq_seg_DESC (vb, STRa(desc), qname_len, deep_desc);
+    fastq_seg_QNAME (vb, STRa(qname), line1_len, deep_qname);
+
+    // seg DESC (i.e. QNAME2 + EXTRA + AUX), it might have come either from line1 or from line3
+    if (segconf.has_desc && !flag.optimize_DESC)
+        fastq_seg_DESC (vb, STRa(desc));
+
+    fastq_seg_LINE3 (vb, STRa(line3), STRa(qname), STRa(desc)); // before SEQ, in case it as a segconf_seq_len_dict_id field
 
     fastq_seg_SEQ (vb, dl, STRa(seq), deep_seq);
 
-    fastq_seg_LINE3 (vb, STRa(line3), STRa(desc)); // note: LINE3 can be either empty or a copy of the desc
-
-    fastq_seg_QUAL (vb, dl, qual_len, deep_qual);
+    fastq_seg_QUAL (vb, dl, STRa(qual), deep_qual);
 
     // 4 end of lines. note: we have 2 EOL contexts, so we can show the correct EOL if in case of --header-only
     for (int i=0; i < 4; i++) {
         *has_13 = line_has_13[i]; 
         SEG_EOL (i==0 ? FASTQ_E1L : FASTQ_E2L, true);
     }
+
+    // if seq_len_dict_id was detected in segconf line 0, it must appear in all lines
+    ASSERT (!segconf.seq_len_dict_id.num || ctx_has_value_in_line (VB, segconf.seq_len_dict_id, NULL), 
+            "Line missing length component (ctx=%s qname=\"%.*s\")", ECTX(segconf.seq_len_dict_id)->tag_name, STRf(qname));
 
     return after;
 }
@@ -646,51 +683,53 @@ IS_SKIP (fastq_piz_is_skip_section)
 {
     if (st != SEC_LOCAL && st != SEC_B250 && st != SEC_DICT) return false; // we only skip contexts
 
+    if (dict_id.num == _FASTA_TAXID && flag.kraken_taxid) return false; // TAXID normally skipped in --seq-only etc, but not if filtering for taxid
+
     // case: this is pair-2 loading pair-1 sections
     if (purpose == SKIP_PURPOSE_PREPROC)  
-        return !(dict_id_is_fastq_desc_sf (dict_id) || 
-                 dict_id_is_in (dict_id, _FASTQ_DESC, _FASTQ_GPOS, _FASTQ_STRAND, DICT_ID_NONE) ||
+        return !(dict_id_is_fastq_qname_sf (dict_id) || 
+                 dict_id_is_in (dict_id, _FASTQ_QNAME, _FASTQ_QNAME2, _FASTQ_LINE3, _FASTQ_GPOS, _FASTQ_STRAND, DICT_ID_NONE) ||
                  (dict_id.num == _FASTQ_SQBITMAP && st != SEC_LOCAL));
 
+    #define LINE3_dicts _FASTQ_LINE3,  _FASTQ_T0HIRD, _FASTQ_T1HIRD, _FASTQ_T2HIRD, _FASTQ_T3HIRD, _FASTQ_T4HIRD, _FASTQ_T5HIRD, \
+                        _FASTQ_T6HIRD, _FASTQ_T7HIRD, _FASTQ_T8HIRD, _FASTQ_T9HIRD, _FASTQ_TAHIRD, _FASTQ_TBHIRD, _FASTQ_TmHIRD /* just line3, not all qnames */
+
+    // we always keep the seq_len context, if we have one
+    if (dict_id.num && dict_id.num == segconf.seq_len_dict_id.num) return false;
+
     // note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast: skip all items but DESC and E1L (except if we need them for --grep)
-    if (flag.header_only_fast && !flag.grep &&
-        dict_id_is_in (dict_id, _FASTQ_E2L, _FASTQ_TAXID, _FASTQ_DEBUG_LINES,
+    if (flag.header_only_fast && 
+        dict_id_is_in (dict_id, _FASTQ_E2L, _FASTQ_DEBUG_LINES, LINE3_dicts,
                        _FASTQ_SQBITMAP, _FASTQ_NONREF, _FASTQ_NONREF_X, _FASTQ_GPOS, _FASTQ_STRAND,
                        _FASTQ_SEQMIS_A, _FASTQ_SEQMIS_C, _FASTQ_SEQMIS_G, _FASTQ_SEQMIS_T, 
                        _FASTQ_QUAL, _FASTQ_DOMQRUNS, _FASTQ_QUALMPLX, _FASTQ_DIVRQUAL, DICT_ID_NONE))
         return true;
 
-    if (flag.seq_only && !flag.grep && 
-        (   dict_id_is_in (dict_id, _FASTQ_E1L, _FASTQ_DESC, _FASTQ_TAXID, _FASTQ_DEBUG_LINES, _FASTQ_LINE3,
+    if (flag.seq_only && 
+        (   dict_id_is_in (dict_id, _FASTQ_E1L, _FASTQ_QNAME, _FASTQ_QNAME2, _FASTQ_LINE3, _FASTQ_EXTRA, _FASTQ_TAXID, _FASTQ_DEBUG_LINES, _FASTQ_LINE3,
                            _FASTQ_QUAL, _FASTQ_DOMQRUNS, _FASTQ_QUALMPLX, _FASTQ_DIVRQUAL, DICT_ID_NONE)  
-         || dict_id_is_fastq_desc_sf(dict_id))) // we don't need the DESC line 
+         || dict_id_is_fastq_qname_sf(dict_id))) // we don't need the DESC line 
         return true;
 
-    if (flag.qual_only && !flag.grep &&
-        (   dict_id_is_in (dict_id, _FASTQ_E1L, _FASTQ_DESC, _FASTQ_TAXID, _FASTQ_DEBUG_LINES, DICT_ID_NONE) 
-         || dict_id_is_fastq_desc_sf(dict_id) 
-         || (!flag.bases && dict_id_is_in (dict_id, _FASTQ_NONREF, _FASTQ_NONREF_X, _FASTQ_GPOS, _FASTQ_STRAND, _FASTQ_SEQMIS_A, _FASTQ_SEQMIS_C, _FASTQ_SEQMIS_G, _FASTQ_SEQMIS_T, DICT_ID_NONE)))) // we don't need the SEQ line 
+    // note: we need SQBITMAP to extract seq_len. We even needs its local, bc otherwise SNIP_LOOKUP won't work.
+    if (flag.qual_only && 
+        (   dict_id_is_in (dict_id, _FASTQ_E1L, _FASTQ_QNAME, _FASTQ_QNAME2, _FASTQ_LINE3, _FASTQ_EXTRA, _FASTQ_TAXID, _FASTQ_DEBUG_LINES, DICT_ID_NONE) 
+         || dict_id_is_fastq_qname_sf(dict_id) 
+         || dict_id_is_in (dict_id, _FASTQ_NONREF, _FASTQ_NONREF_X, _FASTQ_GPOS, _FASTQ_STRAND, _FASTQ_SEQMIS_A, _FASTQ_SEQMIS_C, _FASTQ_SEQMIS_G, _FASTQ_SEQMIS_T, DICT_ID_NONE))) // we don't need the SEQ line 
         return true;
 
     // if we're doing --sex/coverage, we only need TOPLEVEL, FASTQ_SQBITMAP and GPOS
     if (flag.collect_coverage && 
-        (   dict_id_is_in (dict_id, _FASTQ_DESC, _FASTQ_TAXID, _FASTQ_DEBUG_LINES, _FASTQ_LINE3,
+        (   dict_id_is_in (dict_id, _FASTQ_QNAME, _FASTQ_QNAME2, _FASTQ_LINE3, _FASTQ_EXTRA, _FASTQ_TAXID, _FASTQ_DEBUG_LINES,
                            _FASTQ_QUAL, _FASTQ_DOMQRUNS, _FASTQ_QUALMPLX, _FASTQ_DIVRQUAL, DICT_ID_NONE)
-         || dict_id_is_fastq_desc_sf(dict_id) 
+         || dict_id_is_fastq_qname_sf(dict_id) 
          || (!flag.bases && dict_id_is_in (dict_id, _FASTQ_NONREF, _FASTQ_NONREF_X, _FASTQ_STRAND, _FASTQ_SEQMIS_A, _FASTQ_SEQMIS_C, _FASTQ_SEQMIS_G, _FASTQ_SEQMIS_T, DICT_ID_NONE))))
         return true;
 
-    // no need for the TAXID data if user didn't specify --taxid
-    if (!flag.kraken_taxid && dict_id.num == _FASTQ_TAXID)
-        return true;
-
-    // if --count, we only need TOPLEVEL and the fields needed for the available filters (--taxid, --kraken, --grep, --bases)
-    if (flag.count && !flag.grep && sections_has_dict_id (st) &&
-         (dict_id.num != _FASTQ_TOPLEVEL && 
-         (dict_id.num != _FASTQ_TAXID    || !flag.kraken_taxid) && 
-         (!flag.bases || !dict_id_is_in (dict_id, _FASTQ_SQBITMAP, _FASTQ_NONREF, _FASTQ_NONREF_X, _FASTQ_GPOS, _FASTQ_STRAND, _FASTQ_SEQMIS_A, _FASTQ_SEQMIS_C, _FASTQ_SEQMIS_G, _FASTQ_SEQMIS_T, DICT_ID_NONE)) &&
-         (dict_id.num != _FASTQ_DESC     || !kraken_is_loaded) && 
-         (!dict_id_is_fastq_desc_sf(dict_id) || !kraken_is_loaded))) 
+    // note: we don't SKIP for --count with an additional filter. Logic is too complicated and buggy.
+    if (flag.count && !flag.grep && sections_has_dict_id (st) && 
+        !flag.bases && !flag.regions && !flag.kraken_taxid && !kraken_is_loaded &&
+        dict_id.num != _FASTQ_TOPLEVEL) 
         return true;
 
     return false;
@@ -714,22 +753,58 @@ bool fastq_piz_is_paired (void)
     return flag.undocumented_dts_paired; 
 }
 
+// called before reconstructing first repeat of toplevel container
+static inline void fastq_piz_initialize_item_filter (VBlockFASTQP vb, ConstContainerP con)
+{
+    ASSERT (sizeof (vb->item_filter) >= con->nitems_lo, "top_level.nitems_lo=%u by item_filter is only %u", con->nitems_lo, (int)sizeof (vb->item_filter));
+
+    memset (vb->item_filter, true, sizeof (vb->item_filter)); // default - reconstruct all items
+
+    // find newline items
+    int nl[4];
+    int n_nl = 0;
+    for (int i=0; i < con->nitems_lo && n_nl < 4/*safety*/; i++)
+        if (con->items[i].did_i_small == FASTQ_E1L || con->items[i].did_i_small == FASTQ_E2L)
+            nl[n_nl++] = i;
+
+    ASSERT0 (n_nl == 4, "expecting 4 newlines in a FASTQ container");
+
+    #define KEEP_ITEMS(first_item, last_item) \
+        ({ memset (vb->item_filter, false, first_item); \
+           memset (&vb->item_filter[last_item+1], false, con->nitems_lo - (last_item+1)); })
+
+    // --header-only: keep items up to and including first newline
+    if (flag.header_only_fast) KEEP_ITEMS (0, nl[0]);
+
+    // --seg-only: keep items after first newline, up to second newline
+    if (flag.seq_only) KEEP_ITEMS(nl[0]+1, nl[1]);
+
+    // --qual-only: keep items after third newline, up to forth newline
+    if (flag.qual_only) {
+        ASSINP0 (CTX(FASTQ_QUAL)->lcodec != CODEC_LONGR, 
+                 "Genozip limitation: --qual-only cannot be used on this file, because base quality scores were compressed with the LONGR codec that requires sequence data to reconstruct correctly.");
+
+        KEEP_ITEMS(nl[2]+1, nl[3]);
+        vb->item_filter[nl[0]+1] = true; // keep SQBITMAP to extract seq_len, but fastq_recon_aligned_SEQ / fastq_special_unaligned_SEQ skip reconstructing if qual_only
+    }
+
+    // case: we have a seq_len item. we keep it if and only if we are dropping the first and third lines, that normally contain it
+    if (nl[3] != con->nitems_lo - 1) // can only happen since v15
+        vb->item_filter[con->nitems_lo-1] = (flag.seq_only || flag.qual_only); 
+}
+
 // filtering during reconstruction: called by container_reconstruct_do for each fastq record (repeat) and each toplevel item
 CONTAINER_FILTER_FUNC (fastq_piz_filter)
 {
     if (dict_id.num == _FASTQ_TOPLEVEL) {
         
-        // case: --header-only: dont show items 2+. note that flags_update_piz_one_file rewrites --header-only as flag.header_only_fast
-        if (flag.header_only_fast && !flag.grep && item >= 2) 
-            return false; // don't reconstruct this item (non-header textual)
-
-        // note: for seq_only and qual_only we show a newline from E2L, but we don't consume the other two newlines produced by this
-        // read, so we are going to show a newline from another line. only a potenial but highly unlikely problem if some lines have \n and some \r\n.
-        else if (flag.seq_only && !flag.grep && item != -1 && item != 2 && item != 3) 
-            return false; 
-
-        else if (flag.qual_only && !flag.grep && item != -1 && item != 2 && item != 6 && item != 7) 
-            return false; 
+        // initialize item filter
+        if (item == -1 && rep == 0)
+            fastq_piz_initialize_item_filter (VB_FASTQ, con);
+        
+        // keep or drop toplevel item based on item filter
+        else if (item >= 0) 
+            return VB_FASTQ->item_filter[item];
     }
 
     return true; // reconstruct
@@ -739,14 +814,21 @@ CONTAINER_FILTER_FUNC (fastq_piz_filter)
 CONTAINER_CALLBACK (fastq_piz_container_cb)
 {
     // --taxid: filter out by Kraken taxid 
-    if (flag.kraken_taxid != TAXID_NONE && is_top_level) {
+    if (flag.kraken_taxid && is_top_level) {
         
-        if (!kraken_is_loaded && !kraken_is_included_stored (vb, FASTQ_TAXID, false))
+        if (!kraken_is_loaded && !kraken_is_included_stored (vb, FASTQ_TAXID, !flag.seq_only && !flag.qual_only))
             vb->drop_curr_line = "taxid";
         
         else if (kraken_is_loaded) {
-            rom qname = last_txt (vb, FASTQ_DESC) + !prefixes_len; // +1 to skip the "@", if '@' is in DESC and not in prefixes (for files up to version 12.0.13)
-            unsigned qname_len = strcspn (qname, " \t\n\r");
+            STR(qname);
+
+            if (VER(15)) 
+                CTXlast (qname, CTX(FASTQ_QNAME));
+            
+            else { // up to 14 the entire line1 was segged in FASTQ_EXTRA
+                qname = last_txt (vb, FASTQ_EXTRA) + !prefixes_len; // +1 to skip the "@", if '@' is in DESC and not in prefixes (for files up to version 12.0.13)
+                qname_len = strcspn (qname, " \t\n\r");
+            }
 
             if (!kraken_is_included_loaded (vb, STRa(qname))) 
                 vb->drop_curr_line = "taxid";
@@ -788,10 +870,10 @@ void fastq_reset_line (VBlockP vb)
 
 void fastq_zip_genozip_header (SectionHeaderGenozipHeader *header)
 {
-    header->fastq.segconf_seq_len_dict_id = segconf.qname_seq_len_dict_id; // v14
+    header->fastq.segconf_seq_len_dict_id = segconf.seq_len_dict_id; // v14
 }
 
 void fastq_piz_genozip_header (const SectionHeaderGenozipHeader *header)
 {
-    if (VER(14)) segconf.qname_seq_len_dict_id = header->fastq.segconf_seq_len_dict_id; 
+    if (VER(14)) segconf.seq_len_dict_id = header->fastq.segconf_seq_len_dict_id; 
 }

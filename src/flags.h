@@ -116,7 +116,7 @@ typedef struct {
     enum { SHOW_MEM_NONE, SHOW_MEM_NORMAL, SHOW_MEM_PEAK } show_memory;
     
     // stats / debug useful mostly for developers
-    int debug, show_sag, show_depn, show_dict, show_b250, show_aliases, show_digest, log_digest, show_recon_plan,
+    int debug, debug_or_test, show_sag, show_depn, show_dict, show_b250, show_aliases, show_digest, log_digest, show_recon_plan,
         show_index, show_gheader, show_ref_contigs, show_chain_contigs, show_ref_seq, show_ref_diff,
         show_reference, show_ref_hash, show_ref_index, show_chrom2ref, show_ref_iupacs, show_chain, show_ranges,
         show_codec, 

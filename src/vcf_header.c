@@ -599,7 +599,7 @@ static bool vcf_header_handle_contigs (STRp(line), void *new_txt_header_, void *
             printed = true;
 
             int32_t new_line_len = (int32_t)new_txt_header->len32 - len_before;
-            z_file->header_size += new_line_len - (int32_t)line_len; // header_size now has the growth in the size due to --match. the base will be added in txtheader_zip_read_and_compress
+            z_file->header_size += new_line_len - (int32_t)line_len; // header_size has growth in the size due to --match. the base will be added in txtheader_zip_read_and_compress
         }
 
         vcf_header_consume_contig (STRa (contig_name), &LN, false); // also verifies / updates length
@@ -620,8 +620,17 @@ static void vcf_header_add_FORMAT_lines (BufferP txt_header)
 {
     txt_header->len -= vcf_field_name_line.len; // remove field name line
 
-    if (flag.GP_to_PP) buf_add_moreC (evb, txt_header, "##FORMAT=<ID=PP,Number=G,Type=Integer,Description=\"Phred-scaled genotype posterior probabilities rounded to the closest integer\">\n", "txt_data");
-    if (flag.GL_to_PL) buf_add_moreC (evb, txt_header, "##FORMAT=<ID=PL,Number=G,Type=Integer,Description=\"Phred-scaled genotype likelihoods rounded to the closest integer\">\n", "txt_data");
+    if (flag.GP_to_PP) {
+        #define FORMAT_PP "##FORMAT=<ID=PP,Number=G,Type=Integer,Description=\"Phred-scaled genotype posterior probabilities rounded to the closest integer\">\n"
+        buf_add_moreC (evb, txt_header, FORMAT_PP, "txt_data");
+        z_file->header_size += STRLEN(FORMAT_PP); // header_size has grown
+    }
+
+    if (flag.GL_to_PL) {
+        #define FORMAT_PL "##FORMAT=<ID=PL,Number=G,Type=Integer,Description=\"Phred-scaled genotype likelihoods rounded to the closest integer\">\n"
+        buf_add_moreC (evb, txt_header, FORMAT_PL, "txt_data");
+        z_file->header_size += STRLEN(FORMAT_PL); // header_size has grown
+    }
 
     // add back the field name (#CHROM) line
     buf_add_more (evb, txt_header, STRb(vcf_field_name_line), "txt_data");

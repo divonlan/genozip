@@ -90,7 +90,7 @@ void sam_seg_bismark_XM_Z (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, int spe
     START_TIMER
 
     XmSnip xm_type = XM_AS_PREDICTED; // optimistic
-    ContextP ctx = CTX(did_i);
+    decl_ctx (did_i);
 
     if (segconf.running) goto no_diff;
 

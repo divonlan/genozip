@@ -15,22 +15,21 @@
 #define dict_id_qname_sf dict_id_type_1
 
 extern const char sep_with_space[], sep_without_space[];
-extern void qname_seg (VBlockP vb, ContextP qname_ctx, STRp(qname), unsigned add_additional_bytes);
-extern bool qname_seg_qf (VBlockP vb, ContextP qname_ctx, QnameFlavor qfs, STRp(qname), bool use_qname2, unsigned add_additional_bytes);
-extern int qname_test_flavor (STRp(qname), QnameFlavor qf, pSTRp (qname2));
+extern void qname_seg (VBlockP vb, QType q, STRp(qname), unsigned add_additional_bytes);
+extern bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additional_bytes);
+extern void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname));
 
-extern void qname_segconf_discover_flavor (VBlockP vb, Did qname_did_i, STRp(qname));
-extern bool qname_segconf_discover_fastq_line3_sra_flavor (VBlockP vb, STRp(line3));
+extern void qname_zip_initialize (void);
+extern void qname_seg_initialize (VBlockP vb, QType q,  int pairing);
 
-extern void qname_zip_initialize (Did qname_did_i);
-extern void qname_seg_initialize (VBlockP vb, Did qname_did_i);
+typedef enum { QTR_SUCCESS, QTR_QNAME_LEN_0, QTR_FIXED_LEN_MISMATCH, QTR_WRONG_Q, QTR_CONTAINER_MISMATCH, QTR_BAD_INTEGER, QTR_BAD_CHARS, QTR_BAD_NUMERIC, QTR_BAD_HEX, QTR_TECH_MISMATCH, NUM_QTRs } QnameTestResult;
+#define QTR_NAME             { "SUCCESS",   "QNAME_LEN=0",   "FIXED_LEN_MISMATCH",   "WRONG_Q",   "CONTAINER_MISMATCH",   "BAD_INTEGER",   "BAD_CHARS",   "BAD_NUMERIC",   "BAD_HEX",   "TECH_MISMATCH" }
+extern QnameTestResult qname_test_flavor (STRp(qname), QType q, QnameFlavor qf, bool quiet);
 
-extern const rom QNAME_FLAVOR_UNRECOGNIZED; // constant pointer allowing pointer comparison
-extern rom qf_name (QnameFlavor qf);
-extern rom qf2_name (QnameFlavor qf, QnameFlavor qf2);
+typedef enum { QF_NO_ID, QF_INTEGER, QF_GENOZIP_OPT } QnameFlavorId;
 
 // ZIP only: a good hash function for QNAMEs. This is not part of the file format and can be changed any time.
-static inline uint32_t QNAME_HASH (rom qname, unsigned qname_len, int is_last /*0/1 or -1 if not used*/) 
+static inline uint32_t QNAME_HASH (STRp(qname), int is_last /*0/1 or -1 if not used*/) 
 {
     uint8_t data[qname_len];
     for (int i=0; i < qname_len; i++)
@@ -41,3 +40,8 @@ static inline uint32_t QNAME_HASH (rom qname, unsigned qname_len, int is_last /*
 
     return hash;
 }
+
+// these segconf functions are here and not in segconf.h to prevent segconf.h #including qname_flavors.h for QnameFlavorId
+extern rom segconf_qf_name (QType q);
+extern QnameFlavorId segconf_qf_id (QType q);
+extern rom qtype_name (QType q);

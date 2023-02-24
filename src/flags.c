@@ -852,93 +852,106 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
     #define NEED_DECOMPRESS(flag1, text) \
         ASSINP (!(flag1), "option %s can only be used if --decompress is used too", text);
 
-    CONFLICT (flag.unbind,      flag.out_filename,   OT("unbind", "u"),    OT("output", "o"));
     CONFLICT (flag.subdirs,     flag.out_filename,   OT("subdirs", "D"),   OT("output", "o")); 
     CONFLICT (flag.to_stdout,   flag.index_txt,      OT("stdout", "c"),    OT("index", "x"));
-    CONFLICT (flag.one_vb,      flag.interleaved,    "--interleaved",      "--one-vb");
-    CONFLICT (flag.one_component, flag.interleaved,  "--interleaved",      "--R1/--R2");
-    CONFLICT (flag.one_component, flag.luft,         OT("luft", "v"),      "--R1/--R2");
-    CONFLICT (flag.xthreads,    flag.interleaved,    "--interleaved",      "--xthreads");
-    CONFLICT (flag.snps_only,   flag.indels_only,    "--snps_only",        "--indels-only");
-    CONFLICT (flag.header_only, flag.seq_only,       "--seq-only",         "--header-only");
-    CONFLICT (flag.header_only, flag.qual_only,      "--qual-only",        "--header-only");
-    CONFLICT (flag.seq_only,    flag.qual_only,      "--seq-only",         "--qual-only");
-    CONFLICT (flag.header_only, flag.interleaved,    "--interleaved",      "--header-only");
-    CONFLICT (flag.regions,     flag.interleaved,    "--interleaved",      "--regions");
-    CONFLICT (flag.header_only, flag.no_header==1,   OT("no-header", "H"), "--header-only");
-    CONFLICT (flag.no_header,   flag.header_one,     OT("no-header", "H"), OT("header-one", "1"));
     CONFLICT (flag.quiet,       option_noisy,        OT("quiet", "q"),     OT("noisy", "Q"));
     CONFLICT (flag.test,        flag.no_test,        OT("test", "t"),      "--no-test");
-    CONFLICT (flag.test,        flag.biopsy,         OT("test", "t"),      "--biopsy");
     CONFLICT (flag.test,        flag.bgzf != BGZF_NOT_INITIALIZED, OT("test", "t"),      OT("bgzf", "z"));
-    CONFLICT (flag.test,        tar_is_tar(),        OT("test", "t"),    "--tar"); // bug 722
-    CONFLICT (flag.test,        flag.add_line_numbers, OT("test", "t"),    "--add-line-numbers");
-    CONFLICT (flag.md5,         flag.add_line_numbers, OT("md5", "m"),     "--add-line-numbers");
-    CONFLICT (flag.test,        flag.optimize,       OT("test", "t"),      OT("optimize", "9"));
-    CONFLICT (flag.md5,         flag.optimize,       OT("md5", "m"),       OT("optimize", "9"));
-    CONFLICT (flag.test,        flag.match_chrom_to_reference, OT("test", "t"), "--match-chrom-to-reference");
-    CONFLICT (flag.md5,         flag.match_chrom_to_reference, OT("md5", "m"),  "--match-chrom-to-reference");
-    CONFLICT (flag.test,        flag.no_kmers,       OT("test", "t"),      "--no-kmers");
-    CONFLICT (flag.md5,         flag.no_kmers,       OT("md5", "m"),       "--no-kmers");
-    CONFLICT (flag.test,        flag.reading_chain,  OT("test", "t"),      OT("chain", "C"));
-    CONFLICT (flag.md5,         flag.reading_chain,  OT("md5", "m"),       OT("chain", "C"));
-    CONFLICT (flag.make_reference, flag.reading_chain, "--make-reference", OT("chain", "C"));
-    CONFLICT (flag.samples,     flag.drop_genotypes, OT("samples", "s"),   OT("drop-genotypes", "G"));
-    CONFLICT (flag.best,        flag.fast,           OT("best", "b"),      OT("fast", "F"));
-    CONFLICT (flag.show_sex,    flag.regions==1,     "--sex",              OT("regions", "r"));
-    CONFLICT (flag.show_sex,    flag.out_filename,   "--sex",              OT("output", "o"));
-    CONFLICT (flag.show_sex,    flag.grep,           "--sex",              OT("grep", "g"));
-    CONFLICT (flag.show_sex,    flag.idxstats,       "--sex",              "--idxstats");
-    CONFLICT (flag.show_sex,    flag.count,          "--sex",              "--count");
-    CONFLICT (flag.show_sex,    flag.test,           "--show_sex",         OT("test", "t"));
-    CONFLICT (flag.show_coverage, flag.idxstats,     "--coverage",         "--idxstats");
-    CONFLICT (flag.show_coverage, flag.regions==1,   "--coverage",         OT("regions", "r"));
-    CONFLICT (flag.show_coverage, flag.out_filename, "--coverage",         OT("output", "o"));
-    CONFLICT (flag.show_coverage, flag.grep,         "--coverage",         OT("grep", "g"));
-    CONFLICT (flag.show_coverage, flag.count,        "--coverage",         "--count");
-    CONFLICT (flag.show_coverage, flag.test,         "--coverage",         OT("test", "t"));
-    CONFLICT (flag.idxstats,    flag.test,           "--idxstats",         OT("test", "t"));
-    CONFLICT (flag.idxstats,    flag.count,          "--idxstats",         "--count");
-    CONFLICT (flag.idxstats,    flag.show_sex,       "--idxstats",         "--sex");
-    CONFLICT (flag.idxstats,    flag.show_coverage,  "--idxstats",         "--coverage");
-    CONFLICT (flag.count,       flag.out_filename,   "--count",            OT("output", "o"));
-    CONFLICT (flag.count,       flag.header_only,    "--count",            OT("header-only", "H"));
-    CONFLICT (flag.count,       flag.header_one,     "--count",            OT("header-one", "1"));
-    CONFLICT (flag.count,       flag.downsample,     "--count",            "--downsample"); // --downsample, --head, --tail and --lines happen in writer - doesn't happen at all with --count, as lines are not written
-    CONFLICT (flag.count,       flag.explicit_head,  "--count",            "--head"); 
-    CONFLICT (flag.count,       flag.tail,           "--count",            "--tail"); 
-    CONFLICT (flag.count,       flag.lines_first != NO_LINE, "--count",    OT("lines", "n")); 
-    CONFLICT (flag.test,        flag.make_reference, "--make-reference",   OT("test", "t"));
     CONFLICT (flag.sort,        flag.unsorted,       "--sort",             "--unsorted");
     CONFLICT (flag.show_ostatus,flag.show_dvcf,      "--show-ostatus",     "--show-dvcf");
-    CONFLICT (flag.multiseq,    flag.make_reference, "--make-reference",   "--multiseq");
-    CONFLICT (flag.reference,   flag.make_reference, "--make-reference",   OT("reference", "e"));
-    CONFLICT (flag.no_gencomp,  flag.force_gencomp,  "--no-gencomp",       "--force-gencomp");
     CONFLICT (flag.dump_one_b250_dict_id.num, flag.dump_one_local_dict_id.num, "--dump-one-b250", "--dump-one-local");
-    CONFLICT (flag.show_stats,  flag.grep,           OT("stats", "w"),     OT("grep", "g"));
-    CONFLICT (flag.show_stats,  flag.lines_first != NO_LINE, OT("stats", "w"), OT("lines", "n"));
-    CONFLICT (flag.show_stats,  flag.downsample,     OT("stats", "w"),     "--downsample");
-    CONFLICT (flag.show_stats,  flag.header_only,    OT("stats", "w"),     "--header-only");
-    CONFLICT (flag.show_stats,  flag.MAPQ,           OT("stats", "w"),     "--MAPQ");
-    CONFLICT (flag.show_stats,  flag.FLAG,           OT("stats", "w"),     "--FLAG");
-    CONFLICT (flag.show_stats,  flag.one_component,  OT("stats", "w"),     "--R1/--R2");
-    CONFLICT (flag.show_stats,  flag.one_vb,         OT("stats", "w"),     "--one-vb");
     CONFLICT (flag.show_stats,  flag.kraken_taxid,   OT("stats", "w"),     "--taxid");
-    CONFLICT (flag.show_stats,  flag.sequential,     OT("stats", "w"),     "--sequential");
-    CONFLICT (flag.show_stats,  flag.tail,           OT("stats", "w"),     "--tail");
-    CONFLICT (flag.show_stats,  flag.drop_genotypes, OT("stats", "w"),     OT("drop-genotypes", "G"));
-    CONFLICT (flag.show_stats,  flag.regions,        OT("stats", "w"),     OT("regions", "r"));
-    CONFLICT (flag.show_stats,  flag.samples,        OT("stats", "w"),     OT("samples", "s"));
-    CONFLICT (flag.biopsy,      flag.out_filename,   "--biopsy",           OT("output", "o"));
-    CONFLICT (flag.biopsy_line.line_i>=0, flag.out_filename, "--biopsy-line", OT("output", "o"));
-    CONFLICT (flag.deep,        flag.pair,           OT("deep", "3"),      OT("pair", "2"));
-    CONFLICT (flag.deep,        flag.subdirs,        OT("deep", "3"),      OT("subdirs", "D"));
-    CONFLICT (flag.deep,        tar_is_tar(),        OT("deep", "3"),      "tar");
-    CONFLICT (flag.deep,        flag.multiseq,       OT("deep", "3"),      "multiseq");
-    
+
+    if (IS_ZIP) {
+        #define CONFLICT_NO_DIGEST(f,opt) \
+            CONFLICT (flag.test, flag.f, OT("test", "t"), opt); \
+            CONFLICT (flag.md5,  flag.f, OT("md5", "m"),  opt);
+
+        CONFLICT_NO_DIGEST (add_line_numbers, "--add-line-numbers");
+        CONFLICT_NO_DIGEST (optimize, "optimize");
+        CONFLICT_NO_DIGEST (optimize_sort, "optimize-sort");
+        CONFLICT_NO_DIGEST (optimize_phred, "optimize-phred");
+        CONFLICT_NO_DIGEST (GL_to_PL, "GL-to-PL");
+        CONFLICT_NO_DIGEST (GP_to_PP, "GP-to-PP");
+        CONFLICT_NO_DIGEST (optimize_VQSLOD, "optimize-VQSLOD");
+        CONFLICT_NO_DIGEST (optimize_QUAL, "optimize-QUAL");
+        CONFLICT_NO_DIGEST (optimize_Vf, "optimize-Vf");
+        CONFLICT_NO_DIGEST (optimize_ZM, "optimize-ZM");
+        CONFLICT_NO_DIGEST (optimize_DESC, "--optimize-DESC");
+        CONFLICT_NO_DIGEST (match_chrom_to_reference, "--match-chrom-to-reference");
+        CONFLICT_NO_DIGEST (no_kmers, "--no-kmers");
+        CONFLICT_NO_DIGEST (reading_chain, "chain");
+
+        CONFLICT (flag.make_reference, flag.reading_chain, "--make-reference", OT("chain", "C"));
+        CONFLICT (flag.test,        flag.biopsy,         OT("test", "t"),      "--biopsy");
+        CONFLICT (flag.test,        tar_is_tar(),        OT("test", "t"),    "--tar"); // bug 722
+        CONFLICT (flag.best,        flag.fast,           OT("best", "b"),      OT("fast", "F"));
+        CONFLICT (flag.test,        flag.make_reference, "--make-reference",   OT("test", "t"));
+        CONFLICT (flag.multiseq,    flag.make_reference, "--make-reference",   "--multiseq");
+        CONFLICT (flag.reference,   flag.make_reference, "--make-reference",   OT("reference", "e"));
+        CONFLICT (flag.no_gencomp,  flag.force_gencomp,  "--no-gencomp",       "--force-gencomp");
+        CONFLICT (flag.biopsy,      flag.out_filename,   "--biopsy",           OT("output", "o"));
+        CONFLICT (flag.biopsy_line.line_i>=0, flag.out_filename, "--biopsy-line", OT("output", "o"));
+        CONFLICT (flag.deep,        flag.pair,           OT("deep", "3"),      OT("pair", "2"));
+        CONFLICT (flag.deep,        flag.subdirs,        OT("deep", "3"),      OT("subdirs", "D"));
+        CONFLICT (flag.deep,        tar_is_tar(),        OT("deep", "3"),      "tar");
+        CONFLICT (flag.deep,        flag.multiseq,       OT("deep", "3"),      "multiseq");
+        CONFLICT (flag.deep,        flag.optimize_DESC,  OT("deep", "3"),      "optimize-DESC");
+    }
+
     if (IS_PIZ) {
+        CONFLICT (flag.unbind,      flag.out_filename,   OT("unbind", "u"),    OT("output", "o"));
+        CONFLICT (flag.xthreads,    flag.interleaved,    "--interleaved",      "--xthreads");
+        CONFLICT (flag.samples,     flag.drop_genotypes, OT("samples", "s"),   OT("drop-genotypes", "G"));
+        CONFLICT (flag.one_vb,      flag.interleaved,    "--interleaved",      "--one-vb");
+        CONFLICT (flag.one_component, flag.interleaved,  "--interleaved",      "--R1/--R2");
+        CONFLICT (flag.one_component, flag.luft,         OT("luft", "v"),      "--R1/--R2");
+        CONFLICT (flag.snps_only,   flag.indels_only,    "--snps_only",        "--indels-only");
+        CONFLICT (flag.header_only, flag.seq_only,       "--seq-only",         "--header-only");
+        CONFLICT (flag.header_only, flag.qual_only,      "--qual-only",        "--header-only");
+        CONFLICT (flag.seq_only,    flag.qual_only,      "--seq-only",         "--qual-only");
+        CONFLICT (flag.header_only, flag.interleaved,    "--interleaved",      "--header-only");
+        CONFLICT (flag.regions,     flag.interleaved,    "--interleaved",      "--regions");
+        CONFLICT (flag.header_only, flag.no_header==1,   OT("no-header", "H"), "--header-only");
+        CONFLICT (flag.no_header,   flag.header_one,     OT("no-header", "H"), OT("header-one", "1"));
         CONFLICT (flag.test, flag.out_filename,      OT("output", "o"),    OT("test", "t"));
         CONFLICT (flag.test, flag.replace,           OT("replace", "^"),   OT("test", "t"));
+        CONFLICT (flag.show_sex,    flag.regions==1,     "--sex",              OT("regions", "r"));
+        CONFLICT (flag.show_sex,    flag.out_filename,   "--sex",              OT("output", "o"));
+        CONFLICT (flag.show_sex,    flag.grep,           "--sex",              OT("grep", "g"));
+        CONFLICT (flag.show_sex,    flag.idxstats,       "--sex",              "--idxstats");
+        CONFLICT (flag.show_sex,    flag.count,          "--sex",              "--count");
+        CONFLICT (flag.show_sex,    flag.test,           "--show_sex",         OT("test", "t"));
+        CONFLICT (flag.show_coverage, flag.idxstats,     "--coverage",         "--idxstats");
+        CONFLICT (flag.show_coverage, flag.regions==1,   "--coverage",         OT("regions", "r"));
+        CONFLICT (flag.show_coverage, flag.out_filename, "--coverage",         OT("output", "o"));
+        CONFLICT (flag.show_coverage, flag.grep,         "--coverage",         OT("grep", "g"));
+        CONFLICT (flag.show_coverage, flag.count,        "--coverage",         "--count");
+        CONFLICT (flag.show_coverage, flag.test,         "--coverage",         OT("test", "t"));
+        CONFLICT (flag.idxstats,    flag.test,           "--idxstats",         OT("test", "t"));
+        CONFLICT (flag.idxstats,    flag.count,          "--idxstats",         "--count");
+        CONFLICT (flag.idxstats,    flag.show_sex,       "--idxstats",         "--sex");
+        CONFLICT (flag.idxstats,    flag.show_coverage,  "--idxstats",         "--coverage");
+        CONFLICT (flag.count,       flag.out_filename,   "--count",            OT("output", "o"));
+        CONFLICT (flag.count,       flag.header_only,    "--count",            OT("header-only", "H"));
+        CONFLICT (flag.count,       flag.header_one,     "--count",            OT("header-one", "1"));
+        CONFLICT (flag.count,       flag.downsample,     "--count",            "--downsample"); // --downsample, --head, --tail and --lines happen in writer - doesn't happen at all with --count, as lines are not written
+        CONFLICT (flag.count,       flag.explicit_head,  "--count",            "--head"); 
+        CONFLICT (flag.count,       flag.tail,           "--count",            "--tail"); 
+        CONFLICT (flag.count,       flag.lines_first != NO_LINE, "--count",    OT("lines", "n")); 
+        CONFLICT (flag.show_stats,  flag.grep,           OT("stats", "w"),     OT("grep", "g"));
+        CONFLICT (flag.show_stats,  flag.lines_first != NO_LINE, OT("stats", "w"), OT("lines", "n"));
+        CONFLICT (flag.show_stats,  flag.downsample,     OT("stats", "w"),     "--downsample");
+        CONFLICT (flag.show_stats,  flag.header_only,    OT("stats", "w"),     "--header-only");
+        CONFLICT (flag.show_stats,  flag.MAPQ,           OT("stats", "w"),     "--MAPQ");
+        CONFLICT (flag.show_stats,  flag.FLAG,           OT("stats", "w"),     "--FLAG");
+        CONFLICT (flag.show_stats,  flag.one_component,  OT("stats", "w"),     "--R1/--R2");
+        CONFLICT (flag.show_stats,  flag.one_vb,         OT("stats", "w"),     "--one-vb");
+        CONFLICT (flag.show_stats,  flag.sequential,     OT("stats", "w"),     "--sequential");
+        CONFLICT (flag.show_stats,  flag.tail,           OT("stats", "w"),     "--tail");
+        CONFLICT (flag.show_stats,  flag.drop_genotypes, OT("stats", "w"),     OT("drop-genotypes", "G"));
+        CONFLICT (flag.show_stats,  flag.regions,        OT("stats", "w"),     OT("regions", "r"));
+        CONFLICT (flag.show_stats,  flag.samples,        OT("stats", "w"),     OT("samples", "s"));
 
         // options that require --reference
         if (!flag.reference) {
@@ -1045,6 +1058,7 @@ void flags_update (unsigned num_files, rom *filenames)
     
     flags_test_conflicts (num_files);
 
+    flag.debug_or_test = flag.debug || getenv ("GENOZIP_TEST");
     flag.debug_top = flag.echo || getenv ("GENOZIP_TEST");
 
     // verify stuff needed for --pair and --deep
@@ -1147,7 +1161,7 @@ void flags_update_zip_one_file (void)
         case DT_GFF   : flag.optimize_sort = flag.optimize_Vf = true; break;
         case DT_BAM   :
         case DT_SAM   : flag.optimize_QUAL = flag.optimize_ZM = true; break;
-        case DT_FASTQ : flag.optimize_QUAL = flag.optimize_DESC = true; break;
+        case DT_FASTQ : flag.optimize_QUAL = flag.optimize_DESC = true; break; // note: optimize_DESC is not turned on by --optimize when --deep, bc DT=SAM
         default: break;
     }
     
@@ -1164,7 +1178,7 @@ void flags_update_zip_one_file (void)
                       || flag.no_kmers
                       || (chain_is_loaded && dt == DT_VCF) // converting a standard VCF to a dual-coordinates VCF
                       || (flag.add_line_numbers && dt == DT_VCF)
-                      || (kraken_is_loaded && (dt == DT_SAM || dt == DT_BAM)) // adding a tx:i optional field
+                      || (kraken_is_loaded && (dt == DT_SAM || dt == DT_BAM || dt == DT_FASTQ)) // adding a tx:i optional field
                       || flag.lines_last != NO_LINE  // --head advanced option to compress only a few lines
                       || flag.biopsy_line.line_i != NO_LINE;
 
@@ -1172,7 +1186,7 @@ void flags_update_zip_one_file (void)
     flag.explicit_test = flag.test;
     flag.test |= !flag.no_test && !flag.make_reference && !flag.data_modified && !flag.biopsy && flag.biopsy_line.line_i == NO_LINE &&
                  !flag.show_bam && !tar_is_tar()/*bug 722*/ &&
-                 !flag.debug && !getenv("GENOZIP_TEST") && !flag.show_time && !flag.show_memory;
+                 !flag.debug_or_test && !flag.show_time && !flag.show_memory;
 
     if (chain_is_loaded && dt == DT_VCF && !flag.show_one_counts.num && !flag.quiet)
         flag.show_one_counts = dict_id_typeless (_VCF_oSTATUS);
@@ -1278,6 +1292,9 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
         else
             flag.out_dt = z_file->data_type;
     }
+
+    ASSINP (!flag.test || z_file->z_flags_ext.has_digest, 
+            "--test cannot be used with %s, as it was compressed without a digest. See " WEBSITE_DIGEST, z_name);
 
     if (flag.bgzf == BGZF_NOT_INITIALIZED && !flag.test)
         flag.bgzf = (is_genocat && !flag.out_filename) ? 0 : BGZF_COMP_LEVEL_DEFAULT;
@@ -1700,12 +1717,12 @@ void flags_store_command_line (int argc, char **argv)
     if (IS_ZIP && !isatty(0))
         flags_store_piped_in_details();    
 
-    if (flag.echo || getenv ("GENOZIP_TEST") || flag.debug) {
+    if (flag.echo || flag.debug_or_test) {
         fprintf (stderr, "\n%s: %s\n", str_time().s, command_line.data);
         flag.echo = 2; // done
     }
 
-    if (getenv ("GENOZIP_TEST") || flag.debug) 
+    if (flag.debug_or_test) 
         fprintf (stderr, "%s\n", debugger_params.data);
 }
 

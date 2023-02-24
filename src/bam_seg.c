@@ -111,9 +111,9 @@ static int32_t bam_unconsumed_scan_backwards (VBlockP vb, uint32_t first_i, int3
             if (l_seq != seq_len_by_cigar) continue;
         }
         
-        // final test option 2: in case we know the qname flavor
-        else if (segconf.qname_flavor) {
-            if (qname_test_flavor (aln->read_name, aln->l_read_name-1, segconf.qname_flavor, 0, 0)) // not qname_flavor
+        // final test option 2: if QNAME is of a known flavor - test for that flavor
+        else if (segconf.qname_flavor[QNAME1]) {
+            if (qname_test_flavor (aln->read_name, aln->l_read_name-1, QNAME1, segconf.qname_flavor[QNAME1], true)) // >0 if not qname_flavor
                 continue;
         }
 

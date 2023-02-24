@@ -12,8 +12,10 @@ Note on versioning:
 ADD to website: --show-segconf-has ; debug_deep and debug_deep=qname_hash,seq_hash,qual_hash(works also without --deep), 
 ADD: BED files (.bed, .track) - limitations: only BEDn, not BEDn+m
 ADD genocat --show-data-type
+ADD to kraken and genozip pages  --kraken for FASTQ adds taxid= field to FASTQ first line
 Physical Memory - test for Mac + update website of stats-collected
 Diagnostics: new option: genocat --show-data-type
+--kraken adds eg taxid=570 to DESC
 
 14.0.32 17/Feb/2023
 - FASTQ: Fixed bug in genocat of FASTQ files compressed with --pair which sometimes caused skipping displaying 

@@ -71,6 +71,9 @@
 #define B250_MAX_WI_2BYTES ((0xFA << 8)  - 1) // same, for 2 bytes
 #define B250_MAX_WI_3BYTES ((0xFA << 16) - 1) // same, for 3 bytes
 
+#define decl_ctx(did_i) ContextP ctx = CTX(did_i)
+#define decl_zctx(did_i) ContextP zctx = ZCTX(did_i)
+
 // ZIP only
 typedef struct CtxNode {
     CharIndex char_index;     // character index into dictionary array
@@ -274,7 +277,7 @@ static inline bool ctx_can_have_singletons (ContextP ctx)
 
 // returns true if dict_id was *previously* segged on this line, and we stored a valid last_value (int or float)
 #define ctx_has_value_in_line_(vb, ctx) ((ctx)->last_line_i == (vb)->line_i)
-#define ctx_has_value_in_prev_line_(vb, ctx) ((ctx)->last_line_i+1 == (vb)->line_i)
+#define ctx_has_value_in_prev_line_(vb, ctx) ((ctx)->last_line_i != NO_LINE && (ctx)->last_line_i+1 == (vb)->line_i)
 
 static inline bool ctx_has_value_in_line_do (VBlockP vb, DictId dict_id, ContextP *p_ctx /* optional out */) 
 { 
@@ -323,13 +326,13 @@ static inline void ctx_unset_encountered (VBlockP vb, ContextP ctx)
 // returns true if dict_id was *previously* segged on this line (last_value may be valid or not)
 static inline bool ctx_encountered_in_line (VBlockP vb, Did did_i) 
 { 
-    ContextP ctx = CTX(did_i); 
+    decl_ctx (did_i); 
     return ((ctx->last_line_i == vb->line_i) || (ctx->last_line_i == -(int64_t)vb->line_i - 1)); 
 }
 
 static inline bool ctx_encountered_in_prev_line (VBlockP vb, Did did_i) 
 { 
-    ContextP ctx = CTX(did_i); 
+    decl_ctx (did_i); 
     return ((ctx->last_line_i == vb->line_i-1) || (ctx->last_line_i == -(int64_t)(vb->line_i-1) - 1)); 
 }
 
@@ -344,7 +347,7 @@ static inline bool ctx_encountered_in_line_by_dict_id (VBlockP vb, DictId dict_i
 // we are sure its not VCF/FORMAT, they are a bit more efficient.
 static inline bool ctx_encountered (VBlockP vb, Did did_i) 
 { 
-    ContextP ctx = CTX(did_i);
+    decl_ctx (did_i);
     return ctx_encountered_in_line(vb, ctx->did_i) && ctx->last_sample_i == vb->sample_i; 
 }
 
@@ -353,7 +356,7 @@ static inline bool ctx_encountered_by_dict_id (VBlockP vb, DictId dict_id, Conte
     
 static inline bool ctx_has_value (VBlockP vb, Did did_i) 
 {   
-    ContextP ctx = CTX(did_i);
+    decl_ctx (did_i);
     return ctx_has_value_in_line_(vb, ctx) && ctx->last_sample_i == vb->sample_i; 
 }
 

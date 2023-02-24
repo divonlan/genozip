@@ -660,16 +660,16 @@ static void sam_cigar_update_random_access (VBlockSAMP vb, ZipDataLineSAM *dl)
 static inline bool sam_cigar_seggable_by_qname (VBlockSAMP vb)
 {
     // note: last_value.i might an earlier line - if this line QNAME was copied from mate or prim - that's ok, PIZ follows the same logic
-    return segconf.qname_seq_len_dict_id.num                                                && // QNAME flavor has "length=""
+    return segconf.seq_len_dict_id.num                                                && // QNAME flavor has "length=""
            vb->binary_cigar.len32 == 1 && B1ST(BamCigarOp, vb->binary_cigar)->op == BC_M    && // this CIGAR is a single-op M
-           B1ST(BamCigarOp, vb->binary_cigar)->n == ECTX(segconf.qname_seq_len_dict_id)->last_value.i; // length is equal to CIGAR op
+           B1ST(BamCigarOp, vb->binary_cigar)->n == ECTX(segconf.seq_len_dict_id)->last_value.i; // length is equal to CIGAR op
 }
 
 void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAM *dl, uint32_t last_cigar_len, STRp(seq_data), STRp(qual_data), uint32_t add_bytes)
 {
     START_TIMER
     
-    ContextP ctx = CTX(SAM_CIGAR);
+    decl_ctx (SAM_CIGAR);
     bool seq_is_available = !IS_ASTERISK (seq_data);
 
     ASSSEG (!(seq_is_available && *seq_data=='*'), seq_data, "seq_data=%.*s (seq_len=%u), but expecting a missing seq to be \"*\" only (1 character)", 
@@ -861,7 +861,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_cigar_special_CIGAR)
 
         case COPY_QNAME_LENGTH: // copy from QNAME item with "length="
             buf_alloc (vb, &vb->scratch, 0, 10, char, 0, "scratch");
-            vb->scratch.len32 = str_int (ECTX(segconf.qname_seq_len_dict_id)->last_value.i, B1STc (vb->scratch));
+            vb->scratch.len32 = str_int (ECTX(segconf.seq_len_dict_id)->last_value.i, B1STc (vb->scratch));
             BNXTc (vb->scratch) = 'M';
 
             snip     = vb->scratch.data;
@@ -887,7 +887,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_cigar_special_CIGAR)
         // case: copy from QNAME item with "length="
         else if (snip[0] == COPY_QNAME_LENGTH) {
             ContextP qname_seq_len_ctx;
-            ASSPIZ (ctx_has_value_in_line (vb, segconf.qname_seq_len_dict_id, &qname_seq_len_ctx), "Expecing value in line for %s", dis_dict_id (segconf.qname_seq_len_dict_id).s);
+            ASSPIZ (ctx_has_value_in_line (vb, segconf.seq_len_dict_id, &qname_seq_len_ctx), "Expecing value in line for %s", dis_dict_id (segconf.seq_len_dict_id).s);
             RECONSTRUCT_INT (qname_seq_len_ctx->last_value.i);
             RECONSTRUCT1 ('M');
         }
@@ -1042,11 +1042,11 @@ rom sam_piz_display_aln_cigar (const SAAln *a)
     memset (cigar, 0, sizeof(cigar));
 
     if (a->cigar.piz.is_word) {
-        ContextP ctx = ZCTX(OPTION_SA_CIGAR);
+        decl_zctx (OPTION_SA_CIGAR);
 
-        if (a->cigar.piz.index < ctx->word_list.len) {
+        if (a->cigar.piz.index < zctx->word_list.len) {
             STR(cigarS);
-            ctx_get_snip_by_word_index (ctx, a->cigar.piz.index, cigarS);
+            ctx_get_snip_by_word_index (zctx, a->cigar.piz.index, cigarS);
             memcpy (cigar, cigarS, MIN_(cigarS_len, SA_CIGAR_DISPLAY_LEN));
         }
         else

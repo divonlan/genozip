@@ -303,7 +303,7 @@ ThreadId threads_create (void (*func)(VBlockP), VBlockP vb)
 }
 
 // returns success if joined (which is always the case if blocking)
-void threads_join_do (ThreadId *thread_id, rom expected_task, rom func)
+void threads_join_do (ThreadId *thread_id, rom expected_task, rom expected_task2, rom func)
 {
     ASSERT (*thread_id != THREAD_ID_NONE, "called from %s: thread not created or already joined", func);
 
@@ -313,7 +313,8 @@ void threads_join_do (ThreadId *thread_id, rom expected_task, rom func)
 
     ASSERT (*thread_id < threads.len32, "thread_id=%u out of range [0,%u]", *thread_id, threads.len32);
     ASSERT (ent.task_name, "entry for thread_id=%u has task_name=NULL", *thread_id);
-    ASSERT (!strcmp (ent.task_name, expected_task), "Expected thread_id=%u to have task=\"%s\", but it has \"%s\"", *thread_id, expected_task, ent.task_name);
+    ASSERT (!strcmp (ent.task_name, expected_task) || !strcmp (ent.task_name, expected_task2), 
+            "Expected thread_id=%u to have task=\"%s\" or task=\"%s\", but it has \"%s\"", *thread_id, expected_task, expected_task2, ent.task_name);
 
     static ThreadId last_joining = THREAD_ID_NONE;
     if (*thread_id != last_joining) { // show only once in a busy wait

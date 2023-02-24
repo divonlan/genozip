@@ -67,14 +67,15 @@ static void stats_submit_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
         }
 
     // we send the first 6 qnames in case of unrecognized QNAME flavor or in case of existing by unrecognized QNAME2 flavor
-    if ((Z_DT(SAM) || Z_DT(BAM) || Z_DT(FASTQ) || Z_DT(KRAKEN)) &&
-        (!segconf.qname_flavor || qf2_name (segconf.qname_flavor, segconf.qname_flavor2) == QNAME_FLAVOR_UNRECOGNIZED) &&
-        sections_count_sections (SEC_VB_HEADER)) { // not header-only file
+    for (QType q=QNAME1; q < NUM_QTYPES; q++) {
+        if (!segconf.qname_flavor && segconf.unknown_flavor_qnames[q][0][0]) { // at least 1 instance of QNAME2 exists
 
-        bufprintf (evb, &hash_occ, "%sQNAME%%2C%%2C%%2C", need_sep++ ? "%3B" : "");
+            bufprintf (evb, &hash_occ, "%s%s%%2C%%2C%%2C", need_sep++ ? "%3B" : "", qtype_name(q));
 
-        for (int i=0; i < NUM_COLLECTED_WORDS; i++)
-            bufprintf (evb, &hash_occ, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.unknown_flavor_qnames[i], strlen(segconf.unknown_flavor_qnames[i]), ',', -127)).s); 
+            for (int i=0; i < NUM_COLLECTED_WORDS; i++)
+                if (segconf.unknown_flavor_qnames[q][i][0])
+                    bufprintf (evb, &hash_occ, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.unknown_flavor_qnames[q][i], strlen(segconf.unknown_flavor_qnames[q][i]), ',', -127)).s); 
+        }
     }
 }
 
@@ -188,14 +189,14 @@ static void stats_submit (StatsByLine *sbl, unsigned num_stats, uint64_t all_txt
     F(vblock, "%s", NULL);
     #undef F
 
-    if (flag.reference)                bufprintf (evb, &url_buf, "reference=%s%%3B", ref_type_name());    
-    if (kraken_is_loaded)              bufprint0 (evb, &url_buf, "kraken%3B");    
-    if (chain_is_loaded)               bufprint0 (evb, &url_buf, "chain%3B");    
-    if (crypt_have_password())         bufprint0 (evb, &url_buf, "encrypted%3B");    
-    if (tar_is_tar())                  bufprint0 (evb, &url_buf, "tar%3B");    
-    if (flag.kraken_taxid!=TAXID_NONE) bufprint0 (evb, &url_buf, "taxid%3B");    
-    if (flag.stdin_type)               bufprintf (evb, &url_buf, "stdin_type=%s%%3B", ft_name(flag.stdin_type));    
-    if (flag.show_one_counts.num)      bufprintf (evb, &url_buf, "show_counts=%s%%3B", url_esc_non_valid_charsS (dis_dict_id(flag.show_one_counts).s).s);
+    if (flag.reference)           bufprintf (evb, &url_buf, "reference=%s%%3B", ref_type_name());    
+    if (kraken_is_loaded)         bufprint0 (evb, &url_buf, "kraken%3B");    
+    if (chain_is_loaded)          bufprint0 (evb, &url_buf, "chain%3B");    
+    if (crypt_have_password())    bufprint0 (evb, &url_buf, "encrypted%3B");    
+    if (tar_is_tar())             bufprint0 (evb, &url_buf, "tar%3B");    
+    if (flag.kraken_taxid)        bufprint0 (evb, &url_buf, "taxid%3B");    
+    if (flag.stdin_type)          bufprintf (evb, &url_buf, "stdin_type=%s%%3B", ft_name(flag.stdin_type));    
+    if (flag.show_one_counts.num) bufprintf (evb, &url_buf, "show_counts=%s%%3B", url_esc_non_valid_charsS (dis_dict_id(flag.show_one_counts).s).s);
 
     // Contexts - keep URL beneath 8100 - if needed, trim some little-used contexts 
     if (url_buf.len <= SUBMIT_MAX_URL_LEN) { 
@@ -313,14 +314,14 @@ static void stats_output_file_metadata (void)
         if (zctx->nodes.len || zctx->txt_len) num_used_ctxs++;
 
     #define REPORT_VBs ({ \
-        bufprintf (evb, &stats, "%ss: %s   Contexts: %u   Vblocks: %u x %u MB  Sections: %u\n",  \
+        bufprintf (evb, &stats, "%ss: %s   Contexts: %u   Vblocks: %u x %s   Sections: %u\n",  \
                    DTPZ (line_name), str_int_commas (z_file->num_lines).s, num_used_ctxs, \
-                   z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), z_file->section_list_buf.len32); })
+                   z_file->num_vbs, str_size (segconf.vb_size).s, z_file->section_list_buf.len32); })
 
-    rom flavor  = qf_name (segconf.qname_flavor);
-    rom flavor2 = qf2_name (segconf.qname_flavor, segconf.qname_flavor2);
     #define REPORT_QNAME \
-        FEATURE (z_file->num_lines, "Read name style: %s%s%s", "Qname=%s%s%s", flavor, flavor2 ? " + " : "", flavor2 ? flavor2 : "")
+        FEATURE (z_file->num_lines, "Read name style: %s%s%s", "Qname=%s%s%s", \
+                 segconf_qf_name (0), \
+                 segconf.qname_flavor[1] ? " + " : "", segconf.qname_flavor[1] ? segconf_qf_name (1) : "")
 
     #define REPORT_KRAKEN \
         FEATURE0 (kraken_is_loaded, "Features: Per-line taxonomy ID data", "taxonomy_data")
@@ -793,7 +794,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     
     ASSERTW (all_txt_len == txt_size || flag.make_reference || // all_txt_len=0 in make-ref as there are no contexts
              z_is_dvcf, // temporarily remove DVCF - our header data accounting is wrong (bug 681)
-             "Expecting all_txt_len=%"PRId64" == txt_size=%"PRId64, all_txt_len, txt_size);
+             "Expecting all_txt_len=%"PRId64" == txt_size=%"PRId64" (diff=%"PRId64")", all_txt_len, txt_size, (int64_t)txt_size - all_txt_len);
 
     // short form stats from --stats    
     qsort (sbl, num_stats, sizeof (sbl[0]), stats_sort_by_z_size);  // re-sort after consolidation
@@ -833,7 +834,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     if (flag.show_stats_comp_i != COMP_NONE) 
         iprint0 ("\nNote: Components stats don't include global sections like SEC_DICT, SEC_REFERENCE etc\n");
 
-    if (flag.submit_stats || flag.debug_submit || (license_allow_stats() && !flag.debug && !getenv ("GENOZIP_TEST")))
+    if (flag.submit_stats || flag.debug_submit || (license_allow_stats() && !flag.debug_or_test))
         stats_submit (sbl, num_stats, all_txt_len, src_comp_ratio, all_comp_ratio); 
 
     buf_free (sbl_buf);

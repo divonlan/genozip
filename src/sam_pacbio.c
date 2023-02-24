@@ -105,7 +105,7 @@ void sam_recon_pacbio_qual (VBlockSAMP vb, ContextP ctx, bool reconstruct)
 
 void sam_seg_pacbio_xq (VBlockSAMP vb, ZipDataLineSAM *dl, Did did_i, TxtWord *dl_word, STRp(value), unsigned add_bytes)    
 {                                                          
-    ContextP ctx = CTX(did_i);
+    decl_ctx (did_i);
 
     ASSINP (value_len == dl->SEQ.len, "%s: Expecting %s.len=%u == SEQ.len=%u. %s=\"%.*s\"",       
             LN_NAME, ctx->tag_name, value_len, dl->SEQ.len, ctx->tag_name, STRf(value));     

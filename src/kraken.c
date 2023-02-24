@@ -115,7 +115,7 @@ void kraken_zip_initialize (void)
 {
     seg_prepare_snip_other (SNIP_COPY, _KRAKEN_TAXID, 0, 0, copy_taxid_snip);
 
-    qname_zip_initialize (KRAKEN_QNAME);
+    qname_zip_initialize();
 }
 
 void kraken_seg_initialize (VBlockP vb)
@@ -128,7 +128,7 @@ void kraken_seg_initialize (VBlockP vb)
     
     ctx_consolidate_stats (vb, KRAKEN_KMERS, KRAKEN_KMERTAX, KRAKEN_KMERLEN, DID_EOL);
 
-    qname_seg_initialize (VB, KRAKEN_QNAME);
+    qname_seg_initialize (VB, QNAME1, 0); 
 }
 
 void kraken_seg_finalize (VBlockP vb)
@@ -253,9 +253,9 @@ rom kraken_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_tx
     GET_NEXT_ITEM (KRAKEN_QNAME);
 
     if (segconf.running && vb->line_i==0) 
-        qname_segconf_discover_flavor (VB, KRAKEN_QNAME, STRd(KRAKEN_QNAME));
+        qname_segconf_discover_flavor (VB, QNAME1, STRd(KRAKEN_QNAME));
 
-    qname_seg (VB, CTX(KRAKEN_QNAME), field_start, field_len, 1 /* \t */);
+    qname_seg (VB, QNAME1, field_start, field_len, 1 /* \t */);
 
     vb->last_int(KRAKEN_QNAME) += field_len+1; // count total QNAME lengths in this VB (+1 for separator)
 

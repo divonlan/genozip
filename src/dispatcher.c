@@ -25,6 +25,7 @@
 #define MAX_COMPUTED_VBS 4096
 typedef struct DispatcherData {
     rom task_name;
+    rom preproc_task_name;
     VBlockPoolType pool_type;
     uint32_t pool_in_use_at_init;  // Used to verify that all VBs allocated by dispatcher are released by finish time
     uint32_t max_vb_id_so_far; 
@@ -81,7 +82,9 @@ void dispatcher_start_wallclock (void)
     clock_gettime (CLOCK_REALTIME, &profiler_timer);
 }
 
-Dispatcher dispatcher_init (rom task_name, VBlockPoolType pool_type, uint32_t max_threads, uint32_t previous_vb_i,
+Dispatcher dispatcher_init (rom task_name, 
+                            rom preproc_task_name, // if different
+                            VBlockPoolType pool_type, uint32_t max_threads, uint32_t previous_vb_i,
                             bool out_of_order, // completed VBs may be retrieved out of order
                             bool test_mode, 
                             rom filename, // filename, or NULL if filename is unchanged
@@ -90,6 +93,7 @@ Dispatcher dispatcher_init (rom task_name, VBlockPoolType pool_type, uint32_t ma
 {
     DispatcherData *d  = (DispatcherData *)CALLOC (sizeof(DispatcherData));
     d->task_name       = task_name;
+    d->preproc_task_name = preproc_task_name ? preproc_task_name : task_name; 
     d->next_vb_i       = previous_vb_i;  // used if we're binding files - the vblock_i will continue from one file to the next
     d->max_threads     = MIN_(max_threads, MAX_COMPUTED_VBS);
     d->progress_type   = prog_msg?PROGRESS_MESSAGE : target_progress?PROGRESS_PERCENT : PROGRESS_NONE;
@@ -269,7 +273,7 @@ VBlockP dispatcher_get_processed_vb (Dispatcher d, bool *is_final, bool blocking
 
         if (nj == -1) return NULL; // blocking=false and no processed VBs 
 
-        threads_join (&d->vbs[nj]->compute_thread_id, d->vbs[nj]->preprocessing ? PREPROCESSING_TASK_NAME : d->task_name); // blocking if no processed VB yet and blocking=true
+        threads_join2 (&d->vbs[nj]->compute_thread_id, d->preproc_task_name, d->task_name); // blocking if no processed VB yet and blocking=true
         d->last_joined = nj;
     }
 
@@ -362,7 +366,7 @@ Dispatcher dispatcher_fan_out_task (rom task_name,
                                     uint32_t idle_sleep_microsec,
                                     DispatcherFunc prepare, DispatcherFunc compute, DispatcherFunc output)
 {
-    Dispatcher d = dispatcher_init (task_name, POOL_MAIN, force_single_thread ? 1 : global_max_threads, 
+    Dispatcher d = dispatcher_init (task_name, NULL, POOL_MAIN, force_single_thread ? 1 : global_max_threads, 
                                     previous_vb_i, out_of_order, test_mode, filename, target_progress, 
                                     (prog_msg || target_progress) ? prog_msg : "0%");
 

@@ -171,15 +171,18 @@ typedef struct {
     uint32_t num_sections;             // number sections in this file (including this one)
     union {
         struct {                       // v14
-            uint16_t vb_size;          // segconf.vb_size >> 20 (i.e. size in MB)
-            char unused;                       
-            CompIType num_txt_files;  // number of txt bound components in this file (1 if no binding). We don't count generated components (gencomp).
+            uint16_t vb_size;          // segconf.vb_size in MB (if not exact MB in zip - rounded up to nearest MB)
+            struct FlagsGenozipHeaderExt {
+                uint8_t has_digest : 1;    // true if compressed with digest (i.e. not --optimize etc) (v15) 
+                uint8_t unused     : 7;                
+            } flags_ext; // more flags (v15)
+            CompIType num_txt_files;   // number of txt bound components in this file (1 if no binding). We don't count generated components (gencomp).
         };
         uint32_t v13_num_components;
     };
     union { // 16 bytes
-        Digest REF_fasta_md5;          // DT_REF: MD5 of original FASTA file
-        Digest FASTQ_v13_digest_bound; // DT_FASTQ: up to v13: digest of concatenated pair of FQ (regarding other bound files in v13 - DVCF has digest 0, and other bound files are not reconstructable with v14+)    
+        Digest REF_fasta_md5;          // DT_REF: MD5 of original FASTA file (v14)
+        Digest FASTQ_v13_digest_bound; // DT_FASTQ: up to v13 "digest_bound": digest of concatenated pair of FQ (regarding other bound files in v13 - DVCF has digest 0, and other bound files are not reconstructable with v14+)    
     };
     uint8_t  password_test[16];        // short encrypted block - used to test the validy of a password
 #define FILE_METADATA_LEN 72
@@ -218,7 +221,7 @@ typedef struct {
         } sam;
 
         struct { 
-            DictId segconf_seq_len_dict_id;   // FASTQ: dict_id of one of the Q?NAME contexts, which is expected to hold the seq_len for this read. 0 if there is no such item. copied from segconf.qname_seq_len_dict_id. added v14.
+            DictId segconf_seq_len_dict_id;   // FASTQ: dict_id of one of the Q?NAME contexts, which is expected to hold the seq_len for this read. 0 if there is no such item. copied from segconf.seq_len_dict_id. added v14.
             char unused[264];
         } fastq;
 

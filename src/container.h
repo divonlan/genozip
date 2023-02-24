@@ -28,7 +28,7 @@ typedef struct ContainerItem {
 
     // special values of seperator[0]
     #define CI0_NONE         ((uint8_t)0x00) // no seperator 
-    #define CI0_INVISIBLE    ((uint8_t)0x01) // this item does not appear in the original or reconstructed text. it should be consumed with reconstruct=false
+    #define CI0_INVISIBLE    ((uint8_t)0x01) // this item does not appear in the original or reconstructed text. it is consumed with reconstruct=false
     #define CI0_FIXED_0_PAD  ((uint8_t)0x02) // fixed width, zero-left-padded, width in sep[2] (introduced v13)
     #define CI0_SKIP         ((uint8_t)0x03) // instruct str_split to skip this item - Seg side only, needs to be removed with container_remove_skip
     #define CI0_DIGIT        ((uint8_t)0x04) // item is terminated by first digit (the digit will belong to the next item)
@@ -114,7 +114,7 @@ extern bool container_has_item (ContextP ctx, DictId dict_id);
 extern uint32_t container_peek_repeats (VBlockP vb, ContextP ctx, char repsep);
 extern bool container_peek_has_item (VBlockP vb, ContextP ctx, DictId item_dict_id, bool consume);
 
-typedef struct { Did did; int16_t idx; } ContainerPeekItem;
+typedef struct { uint64_t dnum; int16_t idx; } ContainerPeekItem;
 extern ContainerP container_peek_get_idxs (VBlockP vb, ContextP ctx, Did n_items, ContainerPeekItem *items, bool consume);
 
 extern void container_display (ConstContainerP con);

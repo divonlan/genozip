@@ -11,6 +11,8 @@
 #include "seg.h"
 #include "piz.h"
 #include "reconstruct.h"
+#include "bits.h"
+#include "htscodecs/rANS_static4x16.h"
 
 //-----------------------------------------------------------
 // Convert file-wide txt_deep_line_i to/from vb_i+deep_line_i
@@ -25,13 +27,16 @@ static uint64_t vb_line_to_txt_line (VBIType vb_i, uint32_t line_i)
     return VB_start_deep_line(vb_i) + line_i;
 }
 
+// binary search for vb_i+vb_deepable_line_i from txt_deepable_line_i
 static void txt_line_to_vb_line (uint64_t txt_deepable_line_i, 
                                  VBIType first_vb_i, VBIType last_vb_i,       // for binary search
                                  VBIType *vb_i, uint32_t *vb_deepable_line_i) // out
 {
-    if (first_vb_i > last_vb_i || VB_start_deep_line(first_vb_i) > txt_deepable_line_i) {
-        *vb_i = first_vb_i - 1;
-        *vb_deepable_line_i = txt_deepable_line_i - VB_start_deep_line (first_vb_i) - 1;
+printf ("xxx VB_start_deep_line(first_vb_i)=%u\n", VB_start_deep_line(first_vb_i));    
+    if (first_vb_i > last_vb_i /*xxx|| VB_start_deep_line(first_vb_i) > txt_deepable_line_i*/) {
+        *vb_i = last_vb_i;
+        *vb_deepable_line_i = txt_deepable_line_i - VB_start_deep_line (last_vb_i);
+        return;
     }
         
     VBIType mid_vb_i = (first_vb_i + last_vb_i) / 2;
@@ -57,7 +62,7 @@ void fastq_deep_seg_initialize (VBlockP vb)
     // all-the-same for FASTQ_DEEP
     seg_by_did (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_set_deep }, 2, FASTQ_DEEP, 0);
     ctx_set_ltype (vb, LT_DYN_INT, FASTQ_DEEP, DID_EOL);
-    ctx_set_store (vb, STORE_INT, DID_EOL); // actually, we store a pointer into one of the Buffers in z_file->deep_ents, but we treat it as an int
+    ctx_set_store (vb, STORE_INT, FASTQ_DEEP, DID_EOL); // actually, we store a pointer into one of the Buffers in z_file->deep_ents, but we treat it as an int
 }
 
 void fastq_deep_show_entries_stats (void) 
@@ -282,7 +287,7 @@ SPECIAL_RECONSTRUCTOR (fastq_special_set_deep)
 
     VBIType vb_i;
     uint32_t vb_deepable_line_i;
-    txt_line_to_vb_line (txt_deepable_line_i, 0, z_file->vb_start_deep_line.len32-1, &vb_i, &vb_deepable_line_i);
+    txt_line_to_vb_line (txt_deepable_line_i, 1, z_file->vb_start_deep_line.len32, &vb_i, &vb_deepable_line_i);
 
     // get this VB's data
     BufferP deep_ents  = B(Buffer, z_file->deep_ents, vb_i-1);
@@ -296,6 +301,102 @@ SPECIAL_RECONSTRUCTOR (fastq_special_set_deep)
     return HAS_NEW_VALUE; 
 }
 
-SPECIAL_RECONSTRUCTOR (fastq_special_copy_deep)
+SPECIAL_RECONSTRUCTOR (fastq_special_deep_copy_QNAME)
 {
+    if (reconstruct) {
+        uint8_t *deep_ent = CTX(FASTQ_DEEP)->last_value.p;
+
+        int qname_len = deep_ent[1];
+
+        RECONSTRUCT (&deep_ent[2], qname_len);
+    }
+
+    return NO_NEW_VALUE;    
+}
+
+SPECIAL_RECONSTRUCTOR (fastq_special_deep_copy_SEQ)
+{
+    if (!reconstruct) return NO_NEW_VALUE;
+
+    uint8_t *deep_ent = CTX(FASTQ_DEEP)->last_value.p;
+    PizZDeepFlags f = *(PizZDeepFlags *)deep_ent;
+
+    deep_ent += segconf.deep_no_qname ? 1                // skip flags
+                                      : 2 + deep_ent[1]; // skip flags, qname_len and qname 
+
+    vb->seq_len = f.is_long_seq ? GET_UINT32 (deep_ent) : *deep_ent;
+    deep_ent += f.is_long_seq ? 4 : 1;
+
+    // case: SEQ is compressed (bc it contains non-ACGT)
+    if (f.is_seq_compressed) {
+        uint32_t comp_len = f.is_long_seq_comp ? GET_UINT32 (deep_ent) : *deep_ent;
+        deep_ent += f.is_seq_compressed ? 4 : 1;
+
+        unsigned out_len = vb->seq_len;        
+        ASSPIZ (rans_uncompress_to_4x16 (vb, deep_ent, comp_len, (uint8_t*)BAFTtxt, &out_len) && out_len == vb->seq_len,
+                "Failed rans_uncompress_to_4x16 SEQ copied from SAM: compressed_len=%u uncompressed_len=%u (expected: %u)", 
+                comp_len, out_len, vb->seq_len);
+    }
+
+    // case: SEQ is packed
+    else {
+        // case: shortish reads - can fit on stack 
+        #define SHORTISH_READ_SIZE 1024
+        if ((ROUNDUP32(vb->seq_len) / 4 <= SHORTISH_READ_SIZE)) {
+            uint8_t data[SHORTISH_READ_SIZE]; // not too long, so code path gets mileage
+            memcpy (data, deep_ent, ROUNDUP4(vb->seq_len) / 4); // copy to word-align
+            
+            Bits pack = bits_init (vb->seq_len * 2, data, sizeof(data), false);
+            bits_2bit_to_ACGT (BAFTtxt, &pack, 0, vb->seq_len);
+        }
+
+        // case: too long for stack - allocate on heap
+        else {
+            ASSERTNOTINUSE (vb->scratch);
+            Bits pack = bits_alloc (vb->seq_len*2, true);
+            memcpy (pack.words, deep_ent, ROUNDUP4(vb->seq_len) / 4);
+
+            bits_2bit_to_ACGT (BAFTtxt, &pack, 0, vb->seq_len);
+            bits_free (&pack);
+        }
+    }
+
+    vb->txt_data.len32 += vb->seq_len;
+
+    return NO_NEW_VALUE;    
+}
+
+SPECIAL_RECONSTRUCTOR (fastq_special_deep_copy_QUAL)
+{
+    if (!reconstruct) return NO_NEW_VALUE;
+
+    uint8_t *deep_ent = CTX(FASTQ_DEEP)->last_value.p;
+    PizZDeepFlags f = *(PizZDeepFlags *)deep_ent;
+
+    // skip flags, qname_len and qname 
+    deep_ent += segconf.deep_no_qname ? 1 
+                                      : 2 + deep_ent[1]; 
+
+    // skip seq_len
+    deep_ent += f.is_long_seq ? 4 : 1;
+    
+    // skip seq
+    if (f.is_seq_compressed) {
+        uint32_t seq_comp_len = f.is_long_seq_comp ? GET_UINT32 (deep_ent) : *deep_ent;
+        deep_ent += (f.is_long_seq_comp ? 4 : 1) + seq_comp_len;
+    }
+    else
+        deep_ent += ROUNDUP4(vb->seq_len) / 4; // packed
+
+    uint32_t qual_comp_len = f.is_long_qual_comp ? GET_UINT32 (deep_ent) : *deep_ent;
+    deep_ent += (f.is_long_qual_comp ? 4 : 1);
+
+    unsigned out_len = vb->seq_len;        
+    ASSPIZ (rans_uncompress_to_4x16 (vb, deep_ent, qual_comp_len, (uint8_t *)BAFTtxt, &out_len) && out_len == vb->seq_len,
+            "Failed rans_uncompress_to_4x16 SEQ copied from SAM: compressed_len=%u uncompressed_len=%u (expected: %u)", 
+            qual_comp_len, out_len, vb->seq_len);
+
+    vb->txt_data.len32 += out_len;
+
+    return NO_NEW_VALUE;
 }

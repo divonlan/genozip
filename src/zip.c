@@ -696,7 +696,7 @@ static void zip_compress_one_vb (VBlockP vb)
         bgzf_uncompress_vb (vb);    // some of the blocks might already have been decompressed while reading - we decompress the remaining
 
     // calculate the digest contribution of this VB, and the digest snapshot of this VB
-    if (!flag.make_reference && !flag.data_modified) 
+    if (zip_need_digest) 
         digest_one_vb (vb, true, NULL); // serializes VBs in order
 
     // allocate memory for the final compressed data of this vb. allocate 33% of the
@@ -837,6 +837,8 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
         ASSINP0 (vb->vblock_i > 1 || txt_file->txt_data_so_far_single /* txt header data */, 
                  "Error: Cannot compress stdin data because its size is 0");
         
+        if (flag.debug_or_test) buf_test_overflows(vb, __FUNCTION__); 
+
         return;
     }
 

@@ -185,14 +185,11 @@ bool container_peek_has_item (VBlockP vb, ContextP ctx, DictId item_dict_id, boo
 
 // PIZ: peek a context which is normally a container and not yet encountered: get indices of requested items 
 // (-1 if item is not in container). 
-ContainerP container_peek_get_idxs (VBlockP vb, ContextP ctx, uint16_t n_items, ContainerPeekItem *req_items, bool consume)
+ContainerP container_peek_get_idxs (VBlockP vb, ContextP ctx, uint16_t n_items, 
+                                    ContainerPeekItem *req_items, // caller must initialize all items' idx=-1
+                                    bool consume)
 {
     ASSISLOADED(ctx);
-
-    for (uint16_t req_i=0 ; req_i < n_items; req_i++) {
-        req_items[req_i].idx = -1; // initialize
-        ASSERT (req_items[req_i].did < 255, "req_items[%u].did=%u but only small dids up to 254 are supported", req_i, req_items[req_i].did); // limitation of ContainerItem.small_did_i
-    }
 
     ContainerP con;
     if (ctx_encountered (vb, ctx->did_i)) 
@@ -208,7 +205,7 @@ ContainerP container_peek_get_idxs (VBlockP vb, ContextP ctx, uint16_t n_items, 
     
     for (uint16_t item_i=0; item_i < con_nitems(*con); item_i++) 
         for (uint16_t req_i=0 ; req_i < n_items; req_i++)
-            if (req_items[req_i].idx == -1 && con->items[item_i].did_i_small == req_items[req_i].did) {
+            if (req_items[req_i].idx == -1 && con->items[item_i].dict_id.num == req_items[req_i].dnum) {
                 req_items[req_i].idx = item_i;
                 break;
             }
@@ -273,6 +270,47 @@ static inline uint32_t container_reconstruct_prefix (VBlockP vb, ConstContainerP
     return len;
 }
 
+// in top level: called after recontructing line, to potentially drop it based on command line options
+static inline void container_toplevel_filter (VBlockP vb, uint32_t rep_i, rom recon, bool show_non_item)
+{
+    // filtered out by writer based on --lines, --head or --tail
+    bool dropped_by_writer = false;
+    if (!vb->drop_curr_line && vb->is_dropped && bits_get (vb->is_dropped, rep_i)) {
+        vb->drop_curr_line = "lines/head/tail";
+        dropped_by_writer = true;
+    }
+
+    // filter by --regions
+    else if (!vb->drop_curr_line && flag.regions && !regions_is_site_included (vb)) 
+        vb->drop_curr_line = "regions";
+
+    // filter by --grep (but not for FASTA - it implements its own logic)
+    else if (!vb->drop_curr_line && flag.grep && !TXT_DT(FASTA) && !piz_grep_match (recon, BAFTtxt))
+        vb->drop_curr_line = "grep";
+
+    if (vb->drop_curr_line) {
+        ASSPIZ (flag.maybe_vb_modified_by_reconstructor || dropped_by_writer, 
+                "Attempting drop_curr_line=\"%s\", but lines cannot be dropped because flag.maybe_vb_modified_by_reconstructor=false. This is bug in the code", 
+                vb->drop_curr_line);
+
+        // remove reconstructed text (to save memory and allow writer_flush_vb()), except if...
+        if (!flag.interleaved &&               // if --interleave, as we might un-drop the line 
+            !(VB_DT(SAM) && sam_is_prim_vb)) // if SAM:PRIM line, we still need it to reconstruct its DEPNs
+            vb->txt_data.len = vb->line_start;
+
+        bits_set (vb->is_dropped, rep_i);
+
+        reconstruct_copy_dropped_line_history (vb);
+    }
+    else
+        vb->num_nondrop_lines++;
+        
+    if (show_non_item && vb->drop_curr_line) // show container reconstruction 
+        iprintf ("%s%sVB=%u Line=%d dropped due to \"%s\"\n", 
+                    vb->preprocessing    ? "preproc " : "", 
+                    vb->peek_stack_level ? "peeking " : "",
+                    vb->vblock_i, vb->line_i, vb->drop_curr_line);
+}
 
 CONTAINER_FILTER_FUNC (container_no_filter)
 {
@@ -349,14 +387,10 @@ static inline unsigned container_reconstruct_item_seperator (VBlockP vb, const C
 
 static void container_set_lines (VBlockP vb, uint32_t line_i)
 {
-    if ((*B(uint32_t, vb->lines, line_i) = BAFTtxt - B1STtxt) >= 0x80000000) {
-        if (!vb->translation.is_src_dt)
-            // This can happen eg if a BAM was compressed with -B2048 and then reconstructed as SAM.
-            ABORTINP0 ("Reconstructed VB exceeds the maximum permitted 2GB. Use genounzip instead");
-        else
-            // This should never happen
-            ABORT ("%s: Reconstructed VB exceeds the maximum permitted 2GB", LN_NAME);
-    }
+    ASSINP (vb->txt_data.len < 2 GB, "%s: Reconstructed VB exceeds the maximum permitted 2GB%s (len=%"PRIu64")", LN_NAME,
+            !vb->translation.is_src_dt ? ". Use genounzip instead": "", vb->txt_data.len);
+
+    *B32(vb->lines, line_i) = vb->txt_data.len32;
 }
 
 // is "toplevel level field" (i.e. as defined in the data type's file format)
@@ -552,61 +586,12 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
         if (con->items[0].separator[1] == CI1_LOOKBACK)
             lookback_insert_container (vb, con, num_items, item_ctxs);
 
-        // in top level: after consuming the line's data, if it is not to be outputted - drop it
+        // in top level: after reconstructing line, verify it and filter it
         if (is_toplevel) {
-
             if (debug_lines_ctx) 
                 container_verify_line_integrity (vb, debug_lines_ctx, rep_reconstruction_start);
 
-            // filtered out by writer based on --lines, --head or --tail
-            bool dropped_by_writer = false;
-            if (!vb->drop_curr_line && vb->is_dropped && bits_get (vb->is_dropped, rep_i)) {
-                vb->drop_curr_line = "lines/head/tail";
-                dropped_by_writer = true;
-            }
-
-            // filter by --regions
-            else if (!vb->drop_curr_line && flag.regions && !regions_is_site_included (vb)) 
-                vb->drop_curr_line = "regions";
-
-            // filter by --grep (but not for FASTQ or FASTA - they implement their own logic)
-            else if (!vb->drop_curr_line && flag.grep && txt_file->data_type != DT_FASTA /*&& txt_file->data_type != DT_FASTQ*/
-                && !piz_grep_match (rep_reconstruction_start, BAFTtxt))
-                vb->drop_curr_line = "grep";
-
-            else if (!vb->drop_curr_line && flag.out_dt == DT_FASTQ) {
-
-                // in FASTQ --header-only - remove the 3 non-header lines (only after --grep)
-                if (flag.header_only_fast) 
-                    vb->txt_data.len = BNUMtxt (strchr (rep_reconstruction_start, '\n') + 1);
-
-                else if (flag.seq_only) {} // TO DO 
-
-                else if (flag.qual_only) {} // TO DO 
-            }
-
-            if (vb->drop_curr_line) {
-                ASSPIZ (flag.maybe_vb_modified_by_reconstructor || dropped_by_writer, 
-                        "Attempting drop_curr_line=\"%s\", but lines cannot be dropped because flag.maybe_vb_modified_by_reconstructor=false. This is bug in the code", 
-                        vb->drop_curr_line);
-
-                // remove reconstructed text (to save memory and allow writer_flush_vb()), except if...
-                if (!flag.interleaved &&               // if --interleave, as we might un-drop the line 
-                    !(VB_DT(SAM) && sam_is_prim_vb)) // if SAM:PRIM line, we still need it to reconstruct its DEPNs
-                    vb->txt_data.len = vb->line_start;
-
-                bits_set (vb->is_dropped, rep_i);
-
-                reconstruct_copy_dropped_line_history (vb);
-            }
-            else
-                vb->num_nondrop_lines++;
-                
-            if (show_non_item && vb->drop_curr_line) // show container reconstruction 
-                iprintf ("%s%sVB=%u Line=%d dropped due to \"%s\"\n", 
-                         vb->preprocessing    ? "preproc " : "", 
-                         vb->peek_stack_level ? "peeking " : "",
-                         vb->vblock_i, vb->line_i, vb->drop_curr_line);
+            container_toplevel_filter (vb, rep_i, rep_reconstruction_start, show_non_item);
         }
     } // repeats loop
 

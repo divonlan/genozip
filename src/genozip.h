@@ -52,7 +52,7 @@ typedef int32_t TaxonomyId;
 
 #define MEMORY_WARNING_THREASHOLD 0x100000000  // (4 GB) warning in some cases that we predict that user choices would cause us to consume more than this
 
-#define MAX_QNAME_SEGMENTS 12 
+#define MAX_QNAME_ITEMS 13 // mate + normal (matching Q?NAME defined in sam.h, fastq.h, kraken.h) 
 
 #define NO_CALLBACK NULL
 
@@ -358,12 +358,13 @@ typedef SORTER ((*Sorter));
 #define STRw0(x) char *x=NULL; uint32_t x##_len=0  // writeable, initialized
 #define sSTRl(name,len) static char name[len]; static uint32_t name##_len = (len)
 #define STRl(name,len) char name[len]; uint32_t name##_len
+#define mSTRl(name,multi,len) char name##s[multi][len]; uint32_t name##_len##s[multi]
 #define STRli(name,len) uint32_t name##_len = (len) ; char name[name##_len] // avoid evaluating len twice
 #define eSTRl(x) extern char x[]; extern uint32_t x##_len
 
 #define ASSERT_LAST_TXT_VALID(ctx) ASSERT (is_last_txt_valid(ctx), "%s.last_txt is INVALID", (ctx)->tag_name)
-#define STRlast(name,ctx)  ASSERT_LAST_TXT_VALID(ctx); rom name = last_txtx((VBlockP)(vb), (ctx)); unsigned name##_len = (ctx)->last_txt.len
-#define CTXlast(name,ctx)  ({ ASSERT_LAST_TXT_VALID(ctx); name = last_txtx((VBlockP)(vb), (ctx)); name##_len = (ctx)->last_txt.len; })
+#define STRlast(name,ctx)     ASSERT_LAST_TXT_VALID(ctx); rom name = last_txtx((VBlockP)(vb), (ctx)); unsigned name##_len = (ctx)->last_txt.len
+#define CTXlast(name,ctx)  ({ ASSERT_LAST_TXT_VALID(ctx);     name = last_txtx((VBlockP)(vb), (ctx));          name##_len = (ctx)->last_txt.len; })
 
 // Strings - function parameters
 #define STRp(x)  rom x,   uint32_t x##_len    
@@ -380,6 +381,7 @@ typedef SORTER ((*Sorter));
 #define STRd(x)     x##_str, x##_len                   
 #define STRb(buf)   (buf).data, (buf).len                  
 #define STRi(x,i)   x##s[i], x##_lens[i]             
+#define qSTRi(x,i)  x##s[i], &x##_lens[i]             
 #define pSTRa(x)    &x, &x##_len                      
 #define qSTRa(x)    x, &x##_len                      
 #define cSTR(x)     x, sizeof x-1                 // a use with a string literal
@@ -431,6 +433,14 @@ typedef uint8_t TranslatorId;
     enum { src_dt##2##dst_dt##_##name = num }; // define constant
     
 typedef struct { uint32_t qname, seq, qual; } DeepHash;
+
+typedef enum { Q1or3  = -2, // used in "only_q"
+               QANY   = -1, 
+               QNAME1 = 0,   // QNAME is SAM/BAM, KRAKEN, line1 of FASTQ up to first space
+               QNAME2 = 1,   // FASTQ: either: the remainder of line1, but excluding AUX (name=value) data, OR the second (original) QNAME on an NCBI line3, but only if different than line1  
+               QLINE3 = 2,   // FASTQ: The NCBI QNAME on line3, but only if different than line1 
+               NUM_QTYPES } QType; 
+#define QTYPE_NAME {    "QNAME", "QNAME2", "LINE3" }
 
 // filter is called before reconstruction of a repeat or an item, and returns false if item should 
 // not be processed. if not processed, contexts are not consumed. if we need the contexts consumed,

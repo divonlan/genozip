@@ -526,13 +526,13 @@ bool chain_piz_initialize (void)
 
 SPECIAL_RECONSTRUCTOR (chain_piz_special_BACKSPACE)
 {
-    ASSERT0 (vb->txt_data.len, "vb->txt_data.len is 0");
+    ASSERTNOTZERO (vb->txt_data.len, "");
     vb->txt_data.len--;
 
     Context *gaps_ctx = CTX(CHAIN_GAPS); // note: we can't rely on the constants CHAIN_* in PIZ
     gaps_ctx->last_value.i = gaps_ctx->local.param = 0; // no prim_gap and luft_gap
 
-    return false;
+    return NO_NEW_VALUE;
 }
 
 SPECIAL_RECONSTRUCTOR (chain_piz_special_ENDLUFT)
@@ -542,14 +542,14 @@ SPECIAL_RECONSTRUCTOR (chain_piz_special_ENDLUFT)
                    CTX(CHAIN_STARTPRIM)->last_value.i;
                    
     RECONSTRUCT_INT (new_value->i);
-    return true; // new_value has been set
+    return HAS_NEW_VALUE;
 }
 
 SPECIAL_RECONSTRUCTOR (chain_piz_special_SIZE)
 {
     new_value->i = CTX(CHAIN_ENDPRIM)->last_value.i - CTX(CHAIN_STARTPRIM)->last_value.i;
     RECONSTRUCT_INT (new_value->i);
-    return true; // new_value has been set
+    return HAS_NEW_VALUE; 
 }
 
 // ---------------------------------------

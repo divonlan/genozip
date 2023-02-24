@@ -67,6 +67,8 @@ void profiler_add (ConstVBlockP vb)
     ADD (codec_longr_reconstruct);
     ADD (codec_domq_reconstruct);
     ADD (codec_domq_reconstruct_dom_run);    
+    ADD (fastq_seg_SEQ);
+    ADD (fastq_seg_QUAL);    
     ADD (sam_seg_SEQ);
     ADD (sam_seg_QUAL);
     ADD (sam_seg_is_gc_line);
@@ -197,9 +199,9 @@ static void print_ctx_compressor_times (void)
 // this prints the compressor time for each context. temporarily disabled bc we moved profile to be global rather than file by file
 // TO DO: revive this, when compressing a single file
 /*    for (Did did_i=0; did_i < z_file->num_contexts; did_i++) {
-        ContextP ctx = ZCTX(did_i);
-        if (ms(ctx->compressor_time))
-            iprintf ("      %s: %u\n", ctx->tag_name, ms(ctx->compressor_time));
+        decl_zctx (did_i);
+        if (ms(zctx->compressor_time))
+            iprintf ("      %s: %u\n", zctx->tag_name, ms(zctx->compressor_time));
     }
 */
 }
@@ -313,6 +315,7 @@ void profiler_print_report (void)
         PRINT (qname_seg, 2);
         PRINT (sam_cigar_seg, 2);
         PRINT (squank_seg, 3);
+        PRINT (fastq_seg_SEQ, 2);
         PRINT (sam_seg_SEQ, 2);
         PRINT (sam_seg_SEQ_vs_ref, 3);
         PRINT (sam_seg_bisulfite_M, 4);
@@ -323,6 +326,7 @@ void profiler_print_report (void)
         PRINT (aligner_get_match_len, last_z_dt == DT_FASTQ ? 3 : 4);
         PRINT (aligner_get_word_from_seq, last_z_dt == DT_FASTQ ? 3 : 4);
         PRINT (bam_seq_to_sam, 2);
+        PRINT (fastq_seg_QUAL, 2);
         PRINT (sam_seg_QUAL, 2);
         PRINT (sam_seg_is_gc_line, 2);
         PRINT (sam_seg_MD_Z_analyze, 2);

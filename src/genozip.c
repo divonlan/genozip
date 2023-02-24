@@ -110,7 +110,7 @@ void main_exit (bool show_stack, bool is_error)
         // cancel all other threads before closing z_file, so other threads don't attempt to access it 
         // (eg. z_file->data_type) and get a segmentation fault.
         threads_cancel_other_threads();
-    }
+}
 
     // if we're in ZIP - rename failed genozip file (but not in PIZ - as its not expected to change the file)
     if (primary_command == ZIP && z_file && z_file->name && !flag_loading_auxiliary) {
@@ -123,7 +123,7 @@ void main_exit (bool show_stack, bool is_error)
 
         // note: logic to avoid a race condition causing the file not to be removed - if another thread seg-faults
         // because it can't access a z_file filed after z_file is freed, and threads_sigsegv_handler aborts
-        if (is_error && !getenv ("GENOZIP_TEST") && !flag.debug && file_exists (save_name)) 
+        if (is_error && !flag.debug_or_test && file_exists (save_name)) 
             file_remove (save_name, true);
     }
 
@@ -181,7 +181,8 @@ static void main_print_version()
 
 static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, unsigned n_z_files, bool is_last_z_file)
 {
-    MAIN ("main_genounzip (%u/%u): %s", z_file_i+1, n_z_files, z_filename);
+    if (n_z_files > 1) MAIN ("main_genounzip (%u/%u): %s", z_file_i+1, n_z_files, z_filename);
+    else               MAIN ("main_genounzip: %s", z_filename);
 
     // save flag as it might be modified - so that next file has the same flags
     SAVE_FLAGS;
@@ -282,7 +283,7 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, unsi
     file_close (&z_file, false, false);
     is_first_z_file = false;
 
-    if (piz_digest_failed) exit_on_error (false); // error message already displayed in piz_verify_digest_one_txt_file
+    if (digest_piz_has_it_failed()) exit_on_error (false); // error message already displayed in piz_verify_digest_one_txt_file
     
     // case --replace: now that the file was reconstructed, we can remove the genozip file
     if (flag.replace && (txt_filename || flag.unbind) && z_filename) file_remove (z_filename, true); 
@@ -417,7 +418,8 @@ static void main_genozip (rom txt_filename,
                           unsigned n_txt_files,
                           bool is_last_user_txt_file) // very last file in this execution 
 {
-    MAIN ("main_genozip (%u/%u): %s", txt_file_i+1, n_txt_files, txt_filename ? txt_filename : "stdin");
+    if (n_txt_files > 1) MAIN ("main_genozip (%u/%u): %s", txt_file_i+1, n_txt_files, txt_filename ? txt_filename : "stdin");
+    else                 MAIN ("main_genozip: %s", txt_filename ? txt_filename : "stdin");
     
     SAVE_FLAGS;
 

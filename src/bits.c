@@ -987,7 +987,7 @@ void bits_bit_to_byte (uint8_t *dst, ConstBitsP src_bits, uint64_t src_bit, uint
 }
 
 // convert a Bits containing a series of 2-bits, to a byte array of values 0-3
-void bits_base_to_byte (uint8_t *dst, ConstBitsP src_bits, uint64_t base_i, uint32_t num_bases)
+void bits_2bit_to_byte (uint8_t *dst, ConstBitsP src_bits, uint64_t base_i, uint32_t num_bases)
 {
     ASSERT (2*(base_i + num_bases) <= src_bits->nbits, "Expecting 2*(base_is=%"PRIu64" + num_bases=%u) <= nbits=%"PRIu64,
             base_i, num_bases, src_bits->nbits);
@@ -996,6 +996,19 @@ void bits_base_to_byte (uint8_t *dst, ConstBitsP src_bits, uint64_t base_i, uint
 
     for (uint32_t i=0; i < num_bases; i++) 
         *dst++ = BASE_NEXT_FWD;
+}
+
+// convert a Bits containing a series of 2-bits, to a byte array of values 0-3
+void bits_2bit_to_ACGT (char *dst, ConstBitsP src_bits, uint64_t base_i, uint32_t num_bases)
+{
+    ASSERT (2*(base_i + num_bases) <= src_bits->nbits, "Expecting 2*(base_is=%"PRIu64" + num_bases=%u) <= nbits=%"PRIu64,
+            base_i, num_bases, src_bits->nbits);
+
+    BASE_ITER_INIT (src_bits, base_i, num_bases, true);
+
+    static char acgt[4] = { 'A', 'C', 'G', 'T' };
+    for (uint32_t i=0; i < num_bases; i++) 
+        *dst++ = acgt[BASE_NEXT_FWD];
 }
 
 //

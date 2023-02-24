@@ -85,7 +85,7 @@ static void vcf_seg_INFO_DP (VBlockVCFP vb, ContextP ctx, STRp(value_str))
 // used for multi-sample VCFs, IF FORMAT/DP is segged as a simple integer
 static void vcf_seg_INFO_DP_by_FORMAT_DP (VBlockVCFP vb)
 {
-    ContextP ctx = CTX(INFO_DP);
+    decl_ctx (INFO_DP);
 
     int value_len = str_int_len (ctx->last_value.i);
 

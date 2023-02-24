@@ -243,7 +243,7 @@ void sam_piz_XA_field_insert_lookback_v13 (VBlockP vb)
 // ----------------------------------------------------------------------------------------------------------
 void sam_seg_BWA_XC_i (VBlockSAMP vb, ZipDataLineSAM *dl, int64_t XC, unsigned add_bytes)
 {
-    ContextP ctx = CTX(OPTION_XC_i);
+    decl_ctx (OPTION_XC_i);
     int64_t prediction = dl->SEQ.len - vb->soft_clip[!dl->FLAG.rev_comp || dl->FLAG.unmapped];
 
     if (XC == prediction) 

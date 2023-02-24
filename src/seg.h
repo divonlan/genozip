@@ -19,10 +19,10 @@ typedef enum { ERR_SEG_NO_ERROR=0, ERR_SEG_OUT_OF_RANGE, ERR_SEG_NOT_INTEGER } S
 extern void seg_all_data_lines (VBlockP vb); 
 
 typedef enum { GN_FORBIDEN, GN_SEP, GN_IGNORE } GetNextAllow;
-extern rom seg_get_next_item (void *vb, rom str, int *str_len, GetNextAllow newline, GetNextAllow tab, GetNextAllow space,
+extern rom seg_get_next_item (VBlockP vb, rom str, int *str_len, GetNextAllow newline, GetNextAllow tab, GetNextAllow space,
                               unsigned *len, char *separator, bool *has_13, // out
                               rom item_name);
-extern rom seg_get_next_line (void *vb_, rom str, int *str_len, unsigned *len, bool must_have_newline, bool *has_13 /* out */, rom item_name);
+extern rom seg_get_next_line (VBlockP vb, rom str, int *str_len, unsigned *len, bool must_have_newline, bool *has_13 /* out */, rom item_name);
 
 extern WordIndex seg_by_ctx_ex (VBlockP vb, STRp(snip), ContextP ctx, uint32_t add_bytes, bool *is_new);
 static inline WordIndex seg_by_ctx (VBlockP vb, STRp(snip), ContextP ctx, unsigned add_bytes)                      { return seg_by_ctx_ex (vb, STRa(snip), ctx, add_bytes, NULL); }
@@ -226,7 +226,7 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux
 
 #define GET_NEXT_ITEM(f) \
     field_start = next_field; \
-    next_field = seg_get_next_item (vb, field_start, &len, GN_FORBIDEN, GN_SEP, GN_IGNORE, &field_len, &separator, NULL, #f); \
+    next_field = seg_get_next_item (VB, field_start, &len, GN_FORBIDEN, GN_SEP, GN_IGNORE, &field_len, &separator, NULL, #f); \
     FIELD (f)
 
 #define SEG_NEXT_ITEM(f) \
@@ -235,7 +235,7 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux
 
 #define GET_LAST_ITEM(f) \
     field_start = next_field; \
-    next_field = seg_get_next_item (vb, field_start, &len, GN_SEP, GN_FORBIDEN, GN_IGNORE, &field_len, &separator, has_13, #f); \
+    next_field = seg_get_next_item (VB, field_start, &len, GN_SEP, GN_FORBIDEN, GN_IGNORE, &field_len, &separator, has_13, #f); \
     FIELD (f)
 
 #define SEG_LAST_ITEM(f) \
@@ -244,7 +244,7 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux
 
 #define GET_MAYBE_LAST_ITEM(f) \
     field_start = next_field; \
-    next_field = seg_get_next_item (vb, field_start, &len, GN_SEP, GN_SEP, GN_IGNORE, &field_len, &separator, has_13, #f); \
+    next_field = seg_get_next_item (VB, field_start, &len, GN_SEP, GN_SEP, GN_IGNORE, &field_len, &separator, has_13, #f); \
     FIELD (f)
 
 #define SEG_MAYBE_LAST_ITEM(f)  \
@@ -255,7 +255,7 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux
 
 #define GET_NEXT_ITEM_SP(f) \
     field_start = next_field; \
-    next_field = seg_get_next_item (vb, field_start, &len, GN_FORBIDEN, GN_SEP, GN_SEP, &field_len, &separator, NULL, #f); \
+    next_field = seg_get_next_item (VB, field_start, &len, GN_FORBIDEN, GN_SEP, GN_SEP, &field_len, &separator, NULL, #f); \
     FIELD (f)
 
 #define SEG_NEXT_ITEM_SP(f) \
@@ -264,7 +264,7 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux
 
 #define GET_LAST_ITEM_SP(f)  \
     field_start = next_field; \
-    next_field = seg_get_next_item (vb, field_start, &len, GN_SEP, GN_FORBIDEN, GN_FORBIDEN, &field_len, &separator, has_13, #f); \
+    next_field = seg_get_next_item (VB, field_start, &len, GN_SEP, GN_FORBIDEN, GN_FORBIDEN, &field_len, &separator, has_13, #f); \
     FIELD (f)
 
 #define SEG_LAST_ITEM_SP(f)  \
@@ -273,7 +273,7 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux
 
 #define GET_MAYBE_LAST_ITEM_SP(f)  \
     field_start = next_field; \
-    next_field = seg_get_next_item (vb, field_start, &len, GN_SEP, GN_SEP, GN_SEP, &field_len, &separator, has_13, #f); \
+    next_field = seg_get_next_item (VB, field_start, &len, GN_SEP, GN_SEP, GN_SEP, &field_len, &separator, has_13, #f); \
     FIELD (f)
 
 #define SEG_MAYBE_LAST_ITEM_SP(f)  \
@@ -284,7 +284,7 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux
 
 #define GET_NEXT_ITEM_NL(f) \
     field_start = next_field; \
-    next_field = seg_get_next_item (vb, field_start, &len, GN_SEP, GN_IGNORE, GN_IGNORE, &field_len, &separator, has_13, #f); \
+    next_field = seg_get_next_item (VB, field_start, &len, GN_SEP, GN_IGNORE, GN_IGNORE, &field_len, &separator, has_13, #f); \
     FIELD (f)
 
 #define SEG_NEXT_ITEM_NL(f)  \

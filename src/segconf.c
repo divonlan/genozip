@@ -18,7 +18,6 @@
 #include "arch.h"
 #include "bgzf.h"
 #include "tip.h"
-#include "qname.h"
 
 SegConf segconf = {}; // system-wide global
 
@@ -168,12 +167,12 @@ static void segconf_set_vb_size (ConstVBlockP vb, uint64_t curr_vb_size)
                      "   --quiet to silence this warning",
                      global_max_threads, (uint32_t)(segconf.vb_size >> 20));
         }
+
+        segconf.vb_size = ROUNDUP1M (segconf.vb_size);
     }
     
     if (flag.best && !flag.vblock)
         segconf.vb_size = MAX_(segconf.vb_size, VBLOCK_MEMORY_BEST);
-
-    segconf.vb_size = ROUNDUP1M (segconf.vb_size);
 
     if (flag.show_memory && num_used_contexts) {
         if (Z_DT(VCF) || Z_DT(BCF))
@@ -202,27 +201,29 @@ static bool segconf_no_calculate (void)
 void segconf_initialize (void)
 {
     if (segconf_no_calculate()) return;
-    
-    segconf = (SegConf){
-        .vb_size          = z_file->num_txts_so_far ? segconf.vb_size : 0, // components after first inherit vb_size from first
-        .is_sorted        = true,       // initialize optimistically
-        
-        // SAM stuff
-        .is_collated      = true,       // initialize optimistically
-        .MAPQ_has_single_value = true, // initialize optimistically
-        .NM_after_MD      = true,       // initialize optimistically
-        .nM_after_MD      = true,       // initialize optimistically
-        .sam_is_unmapped  = true,       // we will reset this if finding a line with POS>0
-        .SA_HtoS          = unknown,
-        .sam_XG_inc_S     = unknown,
-        .sam_has_BWA_XA_Z = unknown,
-        .CY_con_snip_len  = sizeof (segconf.CY_con_snip),
-        .QT_con_snip_len  = sizeof (segconf.QT_con_snip),
-        .CB_con_snip_len  = sizeof (segconf.CB_con_snip),
 
-        // FASTA stuff
-        .fasta_has_contigs = true, // initialize optimistically
-    };
+    // note: in Deep, we re-segconf the first FASTQ component, but don't remove the SAM segconf data    
+    if (!((Z_DT(SAM) || Z_DT(BAM)) && flag.deep && flag.zip_comp_i == SAM_COMP_FQ00))
+        segconf = (SegConf){
+            .vb_size          = z_file->num_txts_so_far ? segconf.vb_size : 0, // components after first inherit vb_size from first
+            .is_sorted        = true,       // initialize optimistically
+            
+            // SAM stuff
+            .is_collated      = true,       // initialize optimistically
+            .MAPQ_has_single_value = true, // initialize optimistically
+            .NM_after_MD      = true,       // initialize optimistically
+            .nM_after_MD      = true,       // initialize optimistically
+            .sam_is_unmapped  = true,       // we will reset this if finding a line with POS>0
+            .SA_HtoS          = unknown,
+            .sam_XG_inc_S     = unknown,
+            .sam_has_BWA_XA_Z = unknown,
+            .CY_con_snip_len  = sizeof (segconf.CY_con_snip),
+            .QT_con_snip_len  = sizeof (segconf.QT_con_snip),
+            .CB_con_snip_len  = sizeof (segconf.CB_con_snip),
+
+            // FASTA stuff
+            .fasta_has_contigs = true, // initialize optimistically
+        };
     
     mutex_initialize (segconf.PL_mux_by_DP_mutex);
 }
@@ -370,7 +371,3 @@ rom segconf_tech_name (void)
     return (segconf.tech >= 0 && segconf.tech < NUM_TECHS) ? tech_name[segconf.tech] : "INVALID_MAPPER";
 }
 
-rom segconf_qf_name (void)
-{
-    return segconf.qname_flavor ? qf_name (segconf.qname_flavor) : "N/A";
-}

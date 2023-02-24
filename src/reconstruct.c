@@ -617,7 +617,7 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i,
 {
     ASSPIZ (did_i < vb->num_contexts, "called from: %s: did_i=%u out of range: vb->num_contexts=%u", func, did_i, vb->num_contexts);
 
-    ContextP ctx = CTX(did_i);
+    decl_ctx (did_i);
 
     // if we're peeking, freeze the context
     if (vb->peek_stack_level) 

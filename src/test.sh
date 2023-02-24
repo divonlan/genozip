@@ -850,20 +850,14 @@ batch_genocat_tests()
     file=$TESTDIR/basic.fq
     local num_lines=`grep + $file | wc -l`
     test_count_genocat_lines $file "--header-only" $num_lines 
+    test_count_genocat_lines $file "--seq-only" $num_lines 
+    test_count_genocat_lines $file "--qual-only" $num_lines 
     test_count_genocat_lines $file "--downsample 2" $(( 4 * $num_lines / 2 )) 
     test_count_genocat_lines "--pair -E $GRCh38 $file $file" "--interleave" $(( 4 * $num_lines * 2 )) 
     test_count_genocat_lines "--pair -E $GRCh38 $file $file" "--interleave --downsample=5,4" $(( 4 * $num_lines / 5 * 2 )) 
     test_count_genocat_lines "--pair -E $GRCh38 $file $file" "--grep PRFX --header-only" 2
     test_count_genocat_lines "--pair -E $GRCh38 $file $file" "--R1" $(( 4 * $num_lines )) 
     test_count_genocat_lines "--pair -E $GRCh38 $file $file" "--R2" $(( 4 * $num_lines ))
-
-    # BED genocat tests
-    test_count_genocat_lines $file "--header-only" 3
-    test_count_genocat_lines $file "--no-header" 7
-    test_count_genocat_lines $file "--grep UBXN11 --no-header" 2
-    test_count_genocat_lines $file "--lines=2-4 --no-header" 3
-    test_count_genocat_lines $file "--head=2 --no-header" 2
-    test_count_genocat_lines $file "--tail=2 --no-header" 2
 
     # test --interleave and with --grep
     sed "s/PRFX/prfx/g" $file > $OUTDIR/prfx.fq
@@ -872,6 +866,16 @@ batch_genocat_tests()
 
     # grep without pairing
     test_count_genocat_lines $file "--grep line5 --header-only" 1
+
+    # BED genocat tests
+    file=$TESTDIR/basic.bed
+    test_count_genocat_lines $file "--header-only" 3
+    test_count_genocat_lines $file "--no-header" 7
+    test_count_genocat_lines $file "--grep UBXN11 --no-header" 2
+    test_count_genocat_lines $file "--lines=2-4 --no-header" 3
+    test_count_genocat_lines $file "--head=2 --no-header" 2
+    test_count_genocat_lines $file "--tail=2 --no-header" 2
+
 }
 
 # test --grep, --count, --lines
@@ -1106,7 +1110,7 @@ batch_real_world_genounzip_compare_file() # $1 extra genozip argument
     cleanup 
 }
 
-# batch_real_world_1_backcomp()
+# batch_real_world_1_backcomp() # replaced with more comprehensive back comp testing
 # {
 #     batch_print_header
 
@@ -1149,7 +1153,7 @@ batch_real_world_genounzip_compare_file() # $1 extra genozip argument
 #         # exceptions - supported in 14.0.10 but not earlier
 #         # if [[ $f == test.minimap2+biobambam.bam ]]; then continue; fi
 #         # if [[ $f == test.saggy-alns-with-and-without-CIGAR.sam.gz ]]; then continue; fi
-#         # if [[ $f == test.novoalign-SA+omit-NM=0.sam ]]; then continue; fi
+#         # if [[ $f == test.novoalign-SA-omit-NM-0.sam ]]; then continue; fi
 
 #         # exceptions - supported in 14.0.12 but not earlier
 #         if [[ $f == test.NM-binary-then-integer.bam ]]; then continue; fi
@@ -1345,16 +1349,16 @@ batch_reference_fastq()
         exit 1
     fi
 
-    # test single-line --head (only pair-1 is expressed)
-    local n=`$genocat --head=1 -p 123 $output --count || exit 1`
-    if (( n != 1 )); then
+    # test single-line --head (only pair-1 is expressed) - note: cannot use --count with --head
+    local n=`$genocat --head=1 -p 123 $output | wc -l`
+    if (( n != 4 )); then
         echo "Expecting 1 read to be counted with --head=1 in paired FASTQ"
         exit 1
     fi
 
-    # test single-line --tail (only pair-2 expressed)
-    local n=`$genocat --tail=1 -p 123 $output --count || exit 1`
-    if (( n != 1 )); then
+    # test single-line --tail (only pair-2 expressed) - note: cannot use --count with --tail
+    local n=`$genocat --tail=1 -p 123 $output | wc -l`
+    if (( n != 4 )); then
         echo "Expecting 1 reads to be counted with --tail=1 in paired FASTQ"
         exit 1
     fi

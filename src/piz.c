@@ -39,8 +39,6 @@
 #include "base64.h"
 #include "dict_io.h"
 
-bool piz_digest_failed = false;
-
 // output coordinates of current line (for error printing) - very carefully as we are in an error condition - we can't assume anything
 PizDisCoords piz_dis_coords (VBlockP vb)
 {
@@ -279,6 +277,8 @@ uint32_t piz_uncompress_all_ctxs (VBlockP vb)
         vb->has_ctx_index = true;
     }
 
+    if (flag.debug_or_test) buf_test_overflows(vb, __FUNCTION__); 
+
     return section_i;
 }
 
@@ -319,6 +319,8 @@ static void piz_reconstruct_one_vb (VBlockP vb)
     if (DTPZ(piz_after_recon)) DTPZ(piz_after_recon)(vb);
 
     vb_set_is_processed (vb); /* tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway */ 
+
+    if (flag.debug_or_test) buf_test_overflows(vb, __FUNCTION__); 
 
     COPY_TIMER (compute);
 }
@@ -375,6 +377,8 @@ void piz_read_all_ctxs (VBlockP vb, Section *sec/*first VB section after VB_HEAD
         
         (*sec)++;                             
     }
+
+    if (flag.debug_or_test) buf_test_overflows(vb, __FUNCTION__); 
 
     if (is_pair_data) vb->preprocessing = false;
 }
@@ -561,74 +565,6 @@ bool piz_read_one_vb (VBlockP vb, bool for_reconstruction)
     return ok_to_compute;
 }
 
-static Digest piz_verify_digest_one_txt_file (unsigned txt_file_i)
-{
-    char s[200];  
-
-    // since v14, if Alder32, we verify each VB, but we don't create a cumulative digest for the entire file. 
-    // if we reached here, txt header and all VBs are verified.
-    if (VER(14) && z_file->z_flags.adler) {
-        
-        CompIType comp_i = (flag.deep && txt_file_i==1)             ? SAM_COMP_FQ00
-                         : (flag.deep && txt_file_i==2)             ? SAM_COMP_FQ01
-                         : (fastq_piz_is_paired() && txt_file_i==1) ? FQ_COMP_R2
-                         :                                            COMP_MAIN;
-
-        uint32_t expected_vbs_verified = sections_get_num_vbs (comp_i);
-
-        ASSERT (!txt_file                                         ||  // not creating txt_file (eg loading auxilliary file)
-                z_file->num_vbs_verified == expected_vbs_verified ||  // success
-                txt_file->vb_digest_failed                        ||  // failure already announced
-                flag.data_modified                                ||  // not tested
-                (flag.unbind && !VER(14))                         ||  // for files <= v13, we cannot test per-VB digest in unbind mode, because the digests (MD5 and Adler32) are commulative since the beginning of the bound file. However, we still test component-wide digest in piz_verify_digest_one_txt_file.
-                !VER(9),                                              // for in v8 files compressed without --md5 or --test, we had no digest.
-                "Expected to have verified (adler32) all %u VBlocks, but verified only %u",
-                expected_vbs_verified, z_file->num_vbs_verified);
-
-        if (flag.show_digest)
-            iprintf ("Txt file #%u: %u VBs verified\n", txt_file_i, z_file->num_vbs_verified);
-
-        if (flag.test) { 
-            sprintf (s, "verified as identical to the original %s", dt_name (txt_file->data_type));
-            progress_finalize_component (s); 
-        }
-
-        z_file->num_vbs_verified = 0; // reset for next component
-        
-        return DIGEST_NONE; // we can't calculate the digest for some reason
-    }
-
-    if (v8_digest_is_zero (z_file->digest) || digest_is_zero (z_file->digest) || 
-        flag.genocat_no_reconstruct || flag.data_modified || flag_loading_auxiliary) 
-        return DIGEST_NONE; // we can't calculate the digest for some reason
-
-    Digest decompressed_file_digest = digest_snapshot (&z_file->digest_ctx, "file"); 
-
-    if (digest_recon_is_equal (decompressed_file_digest, z_file->digest)) {
-        if (flag.test) { 
-            sprintf (s, "verified as identical to the original %s (%s=%s)", 
-                     dt_name (txt_file->data_type), digest_name(), digest_display (decompressed_file_digest).s);
-            progress_finalize_component (s); 
-        }
-    }
-    
-    else if (flag.test) {
-        progress_finalize_component ("FAILED!");
-        ABORT ("Error: %s of original file=%s is different than decompressed file=%s\n",
-               digest_name(), digest_display (z_file->digest).s, digest_display (decompressed_file_digest).s);
-    }
-
-    // if decompressed incorrectly - warn, but still give user access to the decompressed file
-    else if (!digest_is_zero (z_file->digest)) { // its ok if we decompressed only a partial file
-        piz_digest_failed = true; // inspected by main_genounzip
-        WARN ("File integrity error: %s of decompressed file %s is %s, but %s of the original %s file was %s", 
-              digest_name(), txt_file->name, digest_display (decompressed_file_digest).s, digest_name(), 
-              dt_name (txt_file->data_type), digest_display (z_file->digest).s);
-    }
-
-    return decompressed_file_digest;
-}
-
 static void piz_handover_or_discard_vb (Dispatcher dispatcher, VBlockP *vb)
 {
     // add up context decompress time
@@ -715,8 +651,8 @@ Dispatcher piz_z_file_initialize (void)
     Dispatcher dispatcher = dispatcher_init (flag.reading_chain     ? "piz-chain"
                                             :flag.reading_reference ? "piz-ref"
                                             :flag.reading_kraken    ? "piz-kraken"
-                                            :flag.preprocessing     ? PREPROCESSING_TASK_NAME
                                             :                         PIZ_TASK_NAME, // also referred to in dispatcher_recycle_vbs()
+                                             PREPROCESSING_TASK_NAME, 
                                              POOL_MAIN,
                                              flag.xthreads ? 1 : global_max_threads, 0, 
                                              flag.test && flag.no_writer_thread, // out-of-order if --test with no writer thread (note: SAM gencomp always have writer thread to do digest). 
@@ -828,11 +764,12 @@ bool piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
     // finish writing the txt_file (note: the writer thread also calculates digest in SAM/BAM with PRIM/DEPN)
     writer_finish_writing (z_file->num_txts_so_far == z_file->num_txt_files);
 
-    // verifies reconstructed file against MD5 (if compressed with --md5 or --test) or Adler2 and/or codec_args (if bgzf)
-    Digest decompressed_file_digest = piz_verify_digest_one_txt_file (z_file->num_txts_so_far - 1);
+    // verifies reconstructed file against MD5 or Adler2 and/or codec_args (if bgzf)
+    if (piz_need_digest)
+        digest_piz_verify_one_txt_file (z_file->num_txts_so_far - 1);
 
     if (!flag.test) 
-        progress_finalize_component_time ("Done", decompressed_file_digest);
+        progress_finalize_component_time ("Done", DIGEST_NONE);
 
     // --sex and --coverage - output results
     if (txt_file && !flag_loading_auxiliary) {

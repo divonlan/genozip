@@ -1029,8 +1029,8 @@ const char COMPLEM[256] = "-------------------------------- !\"#$\%&'()*+,-./012
 // same as COMPLEM[UPPER_CASE(c)]
 const char UPPER_COMPLEM[256] = "-------------------------------- !\"#$\%&'()*+,-./0123456789:;<=>?@TVGHEFCDIJMLKNOPQYSAUBWXRZ[\\]^_`TVGHEFCDIJMLKNOPQYSAUBWXRZ{|}~";
 
-// reverse-complements a string in-place
-char *str_revcomp_in_out (char *dst_seq, rom src_seq, uint32_t seq_len)
+// reverse-complements a string (possibly in-place)
+char *str_revcomp (char *dst_seq, rom src_seq, uint32_t seq_len)
 {
     for (uint32_t i=0; i < seq_len / 2; i++) {
         char l_base = src_seq[i];
@@ -1046,7 +1046,7 @@ char *str_revcomp_in_out (char *dst_seq, rom src_seq, uint32_t seq_len)
     return dst_seq;
 }
 
-// reverse-complements a string in-place - complements A,C,G,T characters and leaves others intact. set dst_seq=src_seq to output in-place.
+// reverse-complements a string (possibly in-place) - complements A,C,G,T characters and leaves others intact. set dst_seq=src_seq to output in-place.
 char *str_revcomp_actg (char *dst_seq, rom src_seq, uint32_t seq_len)
 {
     for (uint32_t i=0; i < seq_len / 2; i++) {

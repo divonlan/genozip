@@ -74,8 +74,10 @@ typedef struct File {
     uint8_t genozip_version;           // GENOZIP_FILE_FORMAT_VERSION of the genozip file being read
         
     CompIType num_txt_files;          // PIZ z_file: set from genozip header 
+    
+    struct FlagsGenozipHeader z_flags; // z_file piz: genozip file flags as read from SectionHeaderGenozipHeader.flags
+    struct FlagsGenozipHeaderExt z_flags_ext; // z_file piz: genozip file flags as read from SectionHeaderGenozipHeader.flags_ext
 
-    struct FlagsGenozipHeader z_flags; // z_file: genozip file flags as read from SectionHeaderGenozipHeader.flags
     struct FlagsTxtHeader txt_flags;   // txt_file PIZ: genozip file flags as read from SectionHeaderTxtHeader.flags
 
     Buffer vb_sections_index;          // PIZ z_file: an index into VB sections
@@ -142,7 +144,7 @@ typedef struct File {
     uint64_t saggy_near_count, mate_line_count, prim_far_count; // Z_FILE ZIP: SAM: for stats
 
     // Z_FILE: Deep
-    Buffer vb_start_deep_line;         // Z_FILE: ZIP/PIZ: for each SAM VB, the first prim_line_i of that VB (0-based, uint64_t)
+    Buffer vb_start_deep_line;         // Z_FILE: ZIP/PIZ: for each SAM VB, the first deepable_line_i of that VB (0-based, uint64_t)
     Buffer deep_ents;                  // Z_FILE: ZIP: entries of type ZipZDeep
                                        // Z_FILE: PIZ: an array of Buffers, one for each SAM VB, containing QNAME,SEQ,QUAL of all reconstructed lines
     union {

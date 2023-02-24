@@ -11,7 +11,7 @@
 #include "genozip.h"
 #include "buffer.h"
 
-extern Dispatcher dispatcher_init (rom task_name, VBlockPoolType pool_type, unsigned max_threads, unsigned previous_vb_i,
+extern Dispatcher dispatcher_init (rom task_name, rom preproc_task_name, VBlockPoolType pool_type, unsigned max_threads, unsigned previous_vb_i,
                                    bool out_of_order, bool test_mode, rom filename, uint64_t target_progress, rom prog_msg);
 extern void dispatcher_start_wallclock (void);
 extern void dispatcher_pause (Dispatcher dispatcher);

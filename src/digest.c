@@ -21,11 +21,26 @@
 #include "strings.h"
 #include "endianness.h"
 #include "profiler.h"
+#include "progress.h"
 
 #define IS_ADLER (IS_ZIP ? !flag.md5 : z_file->z_flags.adler)
 #define DIGEST_NAME (IS_ADLER ? "Adler32" : "MD5")
 
 #define DIGEST_LOG_FILENAME (command==ZIP ? "digest.zip.log" : "digest.piz.log")
+
+static bool digest_recon_is_equal (const Digest recon_digest, const Digest expected_digest) 
+{
+    if (VER(12)) return digest_is_equal (recon_digest, expected_digest);
+
+    // in v6-v11 we had a bug were the 2nd 32b of an MD5 digest was a copy of the first 32b
+    return recon_digest.words[0] == expected_digest.words[0] &&
+           (recon_digest.words[0] == expected_digest.words[1] /* buggy md5 */ || !recon_digest.words[1] /* adler */) &&
+           recon_digest.words[2] == expected_digest.words[2] &&
+           recon_digest.words[3] == expected_digest.words[3]; 
+}
+
+static bool piz_digest_failed = false;
+bool digest_piz_has_it_failed (void) { return piz_digest_failed; }
 
 // get digest of data so far
 Digest digest_snapshot (const DigestContext *ctx, rom msg)
@@ -102,19 +117,77 @@ static void digest_update_do (VBlockP vb, DigestContext *ctx, rom data, uint64_t
     COPY_TIMER_VB (vb, digest);
 }
 
+void digest_piz_verify_one_txt_file (unsigned txt_file_i/* 0-based */)
+{
+    char s[200];  
+
+    // since v14, if Alder32, we verify each TxtHeader and VB, but we don't create a cumulative digest for the entire file. 
+    // now, we just confirm that all VBs were verified as expected.
+    if (VER(14) && z_file->z_flags.adler) {
+        
+        CompIType comp_i = (flag.deep && txt_file_i==1)             ? SAM_COMP_FQ00
+                         : (flag.deep && txt_file_i==2)             ? SAM_COMP_FQ01
+                         : (fastq_piz_is_paired() && txt_file_i==1) ? FQ_COMP_R2
+                         :                                            COMP_MAIN;
+
+        uint32_t expected_vbs_verified = sections_get_num_vbs (comp_i);
+
+        ASSERT (z_file->num_vbs_verified == expected_vbs_verified ||  // success
+                txt_file->vb_digest_failed,                           // failure already announced
+                "Expected to have verified (adler32) all %u VBlocks, but verified only %u",
+                expected_vbs_verified, z_file->num_vbs_verified);
+
+        if (flag.show_digest)
+            iprintf ("Txt file #%u: %u VBs verified\n", txt_file_i, z_file->num_vbs_verified);
+
+        if (flag.test) { 
+            sprintf (s, "verified as identical to the original %s", dt_name (txt_file->data_type));
+            progress_finalize_component (s); 
+        }
+
+        z_file->num_vbs_verified = 0; // reset for next component
+    }
+
+    // txt file commulative digest: MD5, and up to v13, also Adler32
+    else {
+        Digest decompressed_file_digest = digest_snapshot (&z_file->digest_ctx, "file"); 
+
+        if (digest_recon_is_equal (decompressed_file_digest, z_file->digest)) {
+            if (flag.test) { 
+                sprintf (s, "verified as identical to the original %s (%s=%s)", 
+                        dt_name (txt_file->data_type), digest_name(), digest_display (decompressed_file_digest).s);
+                progress_finalize_component (s); 
+            }
+        }
+        
+        else if (flag.test) {
+            progress_finalize_component ("FAILED!");
+            ABORT ("Error: %s of original file=%s is different than decompressed file=%s\n",
+                digest_name(), digest_display (z_file->digest).s, digest_display (decompressed_file_digest).s);
+        }
+
+        // if decompressed incorrectly - warn, but still give user access to the decompressed file
+        else { 
+            piz_digest_failed = true; // inspected by main_genounzip
+            WARN ("File integrity error: %s of decompressed file %s is %s, but %s of the original %s file was %s", 
+                digest_name(), txt_file->name, digest_display (decompressed_file_digest).s, digest_name(), 
+                dt_name (txt_file->data_type), digest_display (z_file->digest).s);
+        }
+    }
+}
+
 static void digest_piz_verify_one_vb (VBlockP vb)
 {
     // Compare digest up to this VB transmitted through SectionHeaderVbHeader. If Adler32, it is a stand-alone
     // digest of the VB, and if MD5, it is a commulative digest up to this VB.
     if ((!txt_file->vb_digest_failed || IS_ADLER) && // note: for MD5, we report only the first failed VB, bc the digest is commulative, so all subsequent VBs will fail for sure
-        (!flag.unbind || VER(14)) &&                 // note: for files <= v13, we cannot test per-VB digest in unbind mode, because the digests (MD5 and Adler32) are commulative since the beginning of the bound file. However, we still test component-wide digest in piz_verify_digest_one_txt_file.
-        !v8_digest_is_zero (vb->expected_digest)) {  // note: in v8 files compressed without --md5 or --test, we had no digest.
+        (VER(14) || !flag.unbind)) {                 // note: for files <= v13, we cannot test per-VB digest in unbind mode, because the digests (MD5 and Adler32) are commulative since the beginning of the bound file. However, we still test component-wide digest in piz_verify_digest_one_txt_file.
 
         Digest piz_digest = (VER(14) && IS_ADLER) ? vb->digest  // stand-alone digest of this VB
                                                   : digest_snapshot (&z_file->digest_ctx, NULL); // commulative digest so far
 
         // warn if VB is bad, but don't exit, so file reconstruction is complete and we can debug it
-        if (!digest_recon_is_equal (piz_digest, vb->expected_digest) && !digest_is_zero (vb->expected_digest)) {
+        if (!digest_recon_is_equal (piz_digest, vb->expected_digest)) { 
 
             TEMP_FLAG (quiet, flag.quiet && !flag.show_digest);
 
@@ -210,7 +283,7 @@ Digest digest_txt_header (BufferP data, Digest piz_expected_digest)
 
     Digest digest;
     
-    // starting V14, if adler32, we digest each VB stand-alone.
+    // starting V14, if adler32, we digest each TXT_HEADER stand-alone.
     if (IS_ADLER && VER(14))
         digest = digest_do (STRb(*data), "TXT_HEADER");
 
@@ -220,14 +293,10 @@ Digest digest_txt_header (BufferP data, Digest piz_expected_digest)
         digest = digest_snapshot (&z_file->digest_ctx, NULL);
     }
 
-    // backward compatability note: For v8 files, we don't test against MD5 for the header, as we had a bug 
-    // in which we included a junk MD5 if they user didn't --md5 or --test. any file integrity problem will
-    // be discovered though on the whole-file MD5 so no harm in skipping this.
-    if (IS_PIZ && VER(9)) {  
+    if (IS_PIZ) {  
         TEMP_FLAG (quiet, flag.quiet && !flag.show_digest);
 
-        if (!digest_is_zero (piz_expected_digest) &&
-            !digest_recon_is_equal (digest, piz_expected_digest)) {
+        if (!digest_recon_is_equal (digest, piz_expected_digest)) {
             
             WARN ("%s of reconstructed %s header (%s) differs from original file (%s)\n"
                   "Bad reconstructed header has been dumped to: %s\n"
@@ -247,17 +316,6 @@ Digest digest_txt_header (BufferP data, Digest piz_expected_digest)
     COPY_TIMER_VB (evb, digest_txt_header);
 
     return digest;
-}
-
-bool digest_recon_is_equal (const Digest recon_digest, const Digest expected_digest) 
-{
-    if (VER(12)) return digest_is_equal (recon_digest, expected_digest);
-
-    // in v6-v11 we had a bug were the 2nd 32b of an MD5 digest was a copy of the first 32b
-    return recon_digest.words[0] == expected_digest.words[0] &&
-           (recon_digest.words[0] == expected_digest.words[1] /* buggy md5 */ || !recon_digest.words[1] /* adler */) &&
-           recon_digest.words[2] == expected_digest.words[2] &&
-           recon_digest.words[3] == expected_digest.words[3]; 
 }
 
 void digest_verify_ref_is_equal (const Reference ref, rom header_ref_filename, const Digest header_md5)
@@ -281,17 +339,17 @@ DigestDisplay digest_display_ex (const Digest digest, DigestDisplayMode mode)
 
     bytes b = digest.bytes; 
     
-    if ((mode == DD_NORMAL && !IS_ADLER && md5_is_zero (digest)) ||
-        (mode == DD_MD5                 && md5_is_zero (digest)) || 
-        (mode == DD_MD5_IF_MD5 && (IS_ADLER || md5_is_zero (digest)))) 
+    if ((mode == DD_NORMAL && !IS_ADLER && digest_is_zero (digest)) ||
+        (mode == DD_MD5                 && digest_is_zero (digest)) || 
+        (mode == DD_MD5_IF_MD5 && (IS_ADLER || digest_is_zero (digest)))) 
         sprintf (dis.s, "N/A                             ");
 
     else if ((mode == DD_NORMAL || mode == DD_SHORT) && IS_ADLER)
         sprintf (dis.s, "%-10u", BGEN32 (digest.adler_bgen));
 
-    else if ((mode == DD_NORMAL && !IS_ADLER && !md5_is_zero (digest)) ||
-        (mode == DD_MD5                 && !md5_is_zero (digest)) || 
-        (mode == DD_MD5_IF_MD5 && !IS_ADLER && !md5_is_zero (digest)))
+    else if ((mode == DD_NORMAL && !IS_ADLER && !digest_is_zero (digest)) ||
+        (mode == DD_MD5                 && !digest_is_zero (digest)) || 
+        (mode == DD_MD5_IF_MD5 && !IS_ADLER && !digest_is_zero (digest)))
         sprintf (dis.s, "%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x%2.2x", 
                  b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]);    
     
@@ -303,3 +361,4 @@ DigestDisplay digest_display_ex (const Digest digest, DigestDisplayMode mode)
 DigestDisplay digest_display (const Digest digest) { return digest_display_ex (digest, DD_NORMAL); }
 
 rom digest_name (void) { return DIGEST_NAME; }
+

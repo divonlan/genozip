@@ -35,6 +35,7 @@ void sam_deep_zip_finalize (void)
 
 #define MAX_ENTRIES 0xfffffffe // our current implementation is limited to 4G reads
 
+// ZIP compute thread while segging SEQ
 void sam_deep_set_QNAME_hash (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qname))
 {
     if (IS_DEEPABLE(dl->FLAG)) {
@@ -43,7 +44,7 @@ void sam_deep_set_QNAME_hash (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qname))
     }
 }
 
-// set hash of forward SEQ (i.e. as it would appear in the FASTQ file) 
+// ZIP compute thread while segging SEQ: set hash of forward SEQ (i.e. as it would appear in the FASTQ file) 
 void sam_deep_set_SEQ_hash (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq))
 {
     if (!IS_DEEPABLE(dl->FLAG) || (!dl->SEQ.len && textual_seq_len <= 1)) return; // note: SEQ.len=0 also for unmapped reads, but we do want to include them
@@ -56,7 +57,7 @@ void sam_deep_set_SEQ_hash (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(textual_seq)
         dl->deep_hash.seq = deep_seq_hash (VB, STRa(textual_seq), dl->FLAG.rev_comp);
 }
 
-// hash of forward QUAL (i.e. as it would appear in the FASTQ file) for Deep 
+// ZIP compute thread while segging QUAL: hash of forward QUAL (i.e. as it would appear in the FASTQ file) for Deep 
 void sam_deep_set_QUAL_hash (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual))
 {
     if (!IS_DEEPABLE(dl->FLAG) || !vb->has_qual || segconf.has_bqsr || dl->monochar_seq) return; // dl->deep_qual_hash remains 0
@@ -68,7 +69,7 @@ void sam_deep_set_QUAL_hash (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(qual))
                 LN_NAME, DEEPHASHf(dl->deep_hash), STRfw(dl->QNAME), STRfb(vb->textual_seq), STRfw(dl->QUAL));
 }
 
-// callback from ctx_merge_in_vb_ctx during merge
+// ZIP compute thread: callback from ctx_merge_in_vb_ctx during merge: add VB's deep_hash to z_file->deep_hash/deep_ents
 void sam_deep_merge (VBlockP vb_)
 {
     if (!flag.deep) return;
@@ -201,16 +202,27 @@ static void sam_piz_deep_add_qname (VBlockSAMP vb, STRp(qname))
 }
 
 // compress QUAL or SEQ - adding a 1B or 4B length
-static bool sam_piz_deep_compress (VBlockSAMP vb, STRp(data))
+static bool sam_piz_deep_compress (VBlockSAMP vb, STRp(data), bool is_seq)
 {
+    // reverse if needed
+    if (last_flags.rev_comp) {
+        ASSERTNOTINUSE (vb->scratch);
+        buf_alloc_exact (vb, vb->scratch, data_len, char, "scratch");
+
+        if (is_seq) str_revcomp (B1STc(vb->scratch), STRa(data));
+        else        str_reverse (B1STc(vb->scratch), STRa(data));
+    
+        data = B1STc(vb->scratch);
+    }
+
     sam_piz_alloc_deep_ents (vb, 4 + vb->rans_compress_bound_longest_seq_len);
 
     uint8_t *next = BAFT8 (vb->deep_ents);
 
     uint32_t comp_len = vb->rans_compress_bound_longest_seq_len;
     
-    bool len_is_1_byte = (data_len < 512); // just a guess for now
-    uint8_t *guess_addr = next + (len_is_1_byte ?  1 : 4); // we don't know comp_len yet, so just a guess
+    bool len_is_1_byte = (data_len < (is_seq ? 1024 : 512)); // just a guess for now
+    uint8_t *guess_addr = next + (len_is_1_byte ?  1 : 4);   // we don't know comp_len yet, so just a guess
     ASSPIZ (rans_compress_to_4x16 (evb, (uint8_t *)STRa(data), guess_addr, &comp_len, X_NOSZ) && comp_len,
             "%s: Failed to compress data: data_len=%u", LN_NAME, data_len);
 
@@ -226,14 +238,15 @@ static bool sam_piz_deep_compress (VBlockSAMP vb, STRp(data))
     else  // 4B length
         memcpy (next, &comp_len, 4); // memcpy bc non-aligned
 
-    next += comp_len + (len_is_1_byte ? 1 : 4);
+    vb->deep_ents.len32 += comp_len + (len_is_1_byte ? 1 : 4);
 
-    vb->deep_ents.len32 = BNUM (vb->deep_ents, next);
+    if (last_flags.rev_comp)   
+        buf_free (vb->scratch);
 
     return !len_is_1_byte; // true long length
 }
 
-// pack SEQ into 2-bit and into deep_ents or compress if it has Ns
+// pack SEQ into 2-bit and into deep_ents or compress if it has non-ACGT (eg N)
 void sam_piz_deep_add_seq (VBlockSAMP vb, STRp(seq))
 {
     vb->seq_is_monochar = str_is_monochar (STRa(seq));
@@ -266,7 +279,9 @@ void sam_piz_deep_add_seq (VBlockSAMP vb, STRp(seq))
         sam_seq_pack (vb, &pack, 0, STRa(seq), false, last_flags.rev_comp, HARD_FAIL);
 
         uint32_t bytes = roundup_bits2bytes (pack.nbits);
-        memmove (BAFT8 (vb->deep_ents), pack.words, bytes); // move back to (unaligned) place
+
+        if (BAFT8 (vb->deep_ents) != (uint8_t*)pack.words)
+            memmove (BAFT8 (vb->deep_ents), pack.words, bytes); // move back to (unaligned) place
 
         vb->deep_ents.len32 += bytes;
     }
@@ -275,18 +290,18 @@ void sam_piz_deep_add_seq (VBlockSAMP vb, STRp(seq))
     else {
         deep_flags->is_seq_compressed = true;
      
-        deep_flags->is_long_seq_comp = sam_piz_deep_compress (vb, STRa(seq));
+        deep_flags->is_long_seq_comp = sam_piz_deep_compress (vb, STRa(seq), true);
     }
 }
 
 // compress QUAL into deep_ents
 void sam_piz_deep_add_qual (VBlockSAMP vb, STRp(qual))
 {
-    if (vb->seq_missing || vb->seq_is_monochar) return; // not a deepable alignment after all
+    if (vb->seq_missing || vb->seq_is_monochar || VB_SAM->qual_missing) return; // not a deepable alignment or no QUAL
 
     PizZDeepFlags *deep_flags = B(PizZDeepFlags, vb->deep_ents, *BLST32(vb->deep_index));
 
-    deep_flags->is_long_qual_comp = sam_piz_deep_compress (vb, STRa(qual));
+    deep_flags->is_long_qual_comp = sam_piz_deep_compress (vb, STRa(qual), false);
 }
 
 
@@ -299,7 +314,8 @@ CONTAINER_ITEM_CALLBACK (sam_piz_con_item_cb)
         case SAM_QNAME    : 
         case SAM_QNAMESA  : sam_piz_deep_add_qname (VB_SAM, STRa(recon)); break;
         case SAM_SQBITMAP : sam_piz_deep_add_seq   (VB_SAM, STRa(recon)); break;
-        case SAM_QUAL     : sam_piz_deep_add_qual  (VB_SAM, STRa(recon)); break;
+        case SAM_QUAL     : // note: QUAL is in toplevel in MAIN QUALSA is toplevel in PRIM. DEPN VBs don't have this callback.
+        case SAM_QUALSA   : sam_piz_deep_add_qual  (VB_SAM, STRa(recon)); break; 
         default           : ASSPIZ (false, "Invalid con_item=%s", dis_dict_id (con_item->dict_id).s);
     }
 }
@@ -327,8 +343,7 @@ void sam_piz_deep_grab_deep_ents (VBlockSAMP vb)
 
         buf_alloc_exact_zero (evb, z_file->vb_start_deep_line, num_sam_vbs, uint64_t, "z_file->vb_start_deep_line");
         buf_alloc_exact_zero (evb, z_file->deep_ents,          num_sam_vbs, Buffer,   "z_file->deep_ents"); 
-        buf_alloc_exact_zero (evb, z_file->deep_index,         num_sam_vbs, Buffer,   "z_file->deep_ents");        
-
+        buf_alloc_exact_zero (evb, z_file->deep_index,         num_sam_vbs, Buffer,   "z_file->deep_index");        
     }
 
     // set start for next VB - after lines of current VB (start for vb_i=1 remains 0)

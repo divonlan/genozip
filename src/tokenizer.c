@@ -149,8 +149,8 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
                 ABS((delta = ci->value - item_ctx->last_value.i)) < MAX_TOKENIZER_DETLA &&
                 (delta || !item_ctx->flags.all_the_same)) { // don't do delta if it can ruin the all-the-same
 
-                seg_self_delta (vb, item_ctx, ci->value, 0, ci->item_len);
                 item_ctx->flags.store = STORE_INT;
+                seg_self_delta (vb, item_ctx, ci->value, 0, ci->item_len);
             }
             else {
                 ci->leading_zeros = 0; // we store the snip as-is

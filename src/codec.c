@@ -325,7 +325,7 @@ done:
 void codec_assign_best_qual_codec (VBlockP vb, Did did_i,  
                                    LocalGetLineCB callback, bool no_longr, bool maybe_revcomped)
 {
-    ContextP ctx = CTX(did_i);
+    decl_ctx (did_i);
 
     if (segconf.running) {
         if (!flag.fast && segconf.nontrivial_qual && !no_longr && segconf_is_long_reads()) // note: we can't use segconf.is_long_reads (variable) because it is not set yet 

@@ -138,7 +138,7 @@ int64_t txtheader_zip_read_and_compress (int64_t *txt_header_offset, CompIType c
         txtfile_read_header (is_first_txt); // reads into evb->txt_data and evb->lines.len
 
         // get header digest if needed
-        if (!flag.data_modified) 
+        if (zip_need_digest) 
             header_digest = digest_txt_header (&evb->txt_data, DIGEST_NONE);
     }
 
@@ -277,17 +277,6 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     if (txt_file->codec == CODEC_BGZF)
         memcpy (txt_file->bgzf_signature, header.codec_info, 3);
         
-    // SAM: only the main component has a TxtHeader section. 
-    // DVCF: always zero. 
-    // FASTQ: flag.data_modified when interleaving, or just one file if --R1/2. 
-    // V8: zero if not compressed with --md5
-    // since V14: zero if compressed with adler32 (with adler32, digest is only at the VB level)
-    if (!digest_is_zero(header.digest) && !flag.data_modified) 
-        z_file->digest = header.digest; 
-
-    ASSINP (!flag.test || !digest_is_zero(header.digest) || z_file->z_flags.adler, 
-            "--test cannot be used with %s, as it was compressed without a digest. See " WEBSITE_DIGEST, z_name);
-
     // case: we need to reconstruct (or not) the BGZF following the instructions from the z_file
     if (flag.bgzf == BGZF_BY_ZFILE) {
 
@@ -355,8 +344,14 @@ void txtheader_piz_read_and_reconstruct (Section sec)
         }
     }
     
-    if (piz_need_digest) 
-        digest_txt_header (&txt_header_vb->txt_data, header.digest_header);
+    if (piz_need_digest) {
+        // store txt-file-wide digest. If its 0, then the file-wide digest is not coming from this component
+        // e.g. non-main component in SAM. If is also 0 if file not digested (--optimize, DVCF, v8 without --md5/--test...) or, since v14, if Adler32
+        if (!digest_is_zero(header.digest)) 
+            z_file->digest = header.digest; 
+
+        digest_txt_header (&txt_header_vb->txt_data, header.digest_header); // verify txt header digest
+    }
 
     // accounting for data as in original source file - affects vb->vb_position_txt_file of next VB
     txt_file->txt_data_so_far_single_0 = !VER(12) ? BGEN32 (header.data_uncompressed_len) : BGEN64 (header.txt_header_size); 

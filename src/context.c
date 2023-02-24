@@ -36,7 +36,7 @@
 #include "chrom.h"
 #include "buffer.h"
 #include "version.h"
-#include "segconf.h"
+#include "qname.h"
 
 #define INITIAL_NUM_NODES 10000
 
@@ -614,7 +614,7 @@ void ctx_clone (VBlockP vb)
             if (cloned[did_i]) continue;
 
             ContextP vctx = CTX(did_i);
-            ContextP zctx = ZCTX(did_i);
+            decl_zctx (did_i);
 
             // case: this context doesn't really exist (happens when incrementing num_contexts when adding RNAME and RNEXT in ctx_populate_zf_ctx_from_contigs)
             if (!zctx->mutex.initialized) goto did_i_cloned;
@@ -1111,8 +1111,8 @@ static bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx)
     if (zctx->dict.len > EXCESSIVE_DICT_SIZE && !zctx->dict_len_excessive) {
         zctx->dict_len_excessive = true; // warn only once (per context)
         WARN ("WARNING: excessive zctx dictionary size - causing slow compression and decompression and reduced compression ratio. Please report this to support@genozip.com.\n"
-              "sam_mapper=%s qf_name=%s data_type=%s ctx=%s vb=%s vb_size=%"PRIu64" zctx->dict.len=%"PRIu64" version=%s. First 1000 bytes: ", 
-              segconf_sam_mapper_name(), segconf_qf_name(), dt_name (z_file->data_type), zctx->tag_name, VB_NAME, segconf.vb_size, zctx->dict.len, GENOZIP_CODE_VERSION);
+              "sam_mapper=%s segconf_qf_name=%s data_type=%s ctx=%s vb=%s vb_size=%"PRIu64" zctx->dict.len=%"PRIu64" version=%s. First 1000 bytes: ", 
+              segconf_sam_mapper_name(), segconf_qf_name(QNAME1), dt_name (z_file->data_type), zctx->tag_name, VB_NAME, segconf.vb_size, zctx->dict.len, GENOZIP_CODE_VERSION);
         str_print_dict (stderr, zctx->dict.data, 1000, false, false);
     }
 
@@ -1928,6 +1928,7 @@ void ctx_consolidate_stats_(VBlockP vb, Did parent, unsigned num_deps, ContextP 
     CTX(parent)->is_stats_parent = true;
 }
 
+// consolidate a consecutive block of Dids
 void ctx_consolidate_statsN (VBlockP vb, Did parent, Did first_dep, unsigned num_deps)
 {
     for (ContextP ctx=CTX(first_dep); ctx < CTX(first_dep + num_deps); ctx++)

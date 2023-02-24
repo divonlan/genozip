@@ -521,7 +521,7 @@ void sections_list_file_to_memory_format (SectionHeaderGenozipHeader *genozip_he
         z_file->section_list_save.param = 0;
 }
 
-// PIZ unbinding: revert back to saved list (becore recon_plan modifications)
+// PIZ unbinding: revert back to saved list (becofe recon_plan modifications)
 //xxx void sections_list_revert (void)
 // {
 //     buf_copy (evb, &z_file->section_list_buf, &z_file->section_list_save, SectionEnt, 0, 0, NULL);
@@ -817,7 +817,8 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
 
     char str[2048];
     #define PRINT { if (vb) buf_append_string (vb, &vb->show_headers_buf, str); else iprintf ("%s", str); } 
-    #define SEC_TAB "            ++  "
+    
+    rom SEC_TAB = isatty(1) ? "            ++  " : " "; // single line if not terminal - eg for grepping
 
     sprintf (str, "%c %s%-*"PRIu64" %-19s %-4.4s %-4.4s vb=%-3u z_off=%-6u txt_len=%-7u z_len=%-7u enc_len=%-7u%s ",
              rw, 
@@ -844,44 +845,46 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
         char dt_specific[REF_FILENAME_LEN + 200] = "";
 
         if (dt == DT_CHAIN)
-            sprintf (dt_specific, SEC_TAB "prim=\"%.*s\" md5=%s\n", REF_FILENAME_LEN, h->chain.prim_filename, 
+            sprintf (dt_specific, "%sprim=\"%.*s\" md5=%s\n", 
+                     SEC_TAB, REF_FILENAME_LEN, h->chain.prim_filename, 
                      digest_display_ex (h->chain.prim_file_md5, DD_MD5).s);
 
         else if ((dt == DT_SAM || dt == DT_BAM) && v14)
-            sprintf (dt_specific, SEC_TAB "segconf=(sorted=%u,collated=%u,seq_len=%u,seq_len_to_cm=%u,ms_type=%u,has_MD_or_NM=%u,bisulfite=%u,MD_NM_by_unconverted=%u,predict_meth=%u,is_paired=%u,sag_type=%s,sag_has_AS=%u,pysam_qual=%u,cellranger=%u,SA_HtoS=%u,seq_len_dict_id=%s,deep_no_qname=%u,deep_no_qual=%u)\n", 
-                     h->sam.segconf_is_sorted, h->sam.segconf_is_collated, BGEN32 (h->sam.segconf_seq_len), h->sam.segconf_seq_len_cm, h->sam.segconf_ms_type, h->sam.segconf_has_MD_or_NM, 
+            sprintf (dt_specific, "%2segconf=(sorted=%u,collated=%u,seq_len=%u,seq_len_to_cm=%u,ms_type=%u,has_MD_or_NM=%u,bisulfite=%u,MD_NM_by_unconverted=%u,predict_meth=%u,is_paired=%u,sag_type=%s,sag_has_AS=%u,pysam_qual=%u,cellranger=%u,SA_HtoS=%u,seq_len_dict_id=%s,deep_no_qname=%u,deep_no_qual=%u)\n", 
+                     SEC_TAB, h->sam.segconf_is_sorted, h->sam.segconf_is_collated, BGEN32 (h->sam.segconf_seq_len), h->sam.segconf_seq_len_cm, h->sam.segconf_ms_type, h->sam.segconf_has_MD_or_NM, 
                      h->sam.segconf_bisulfite, h->sam.segconf_MD_NM_by_un, h->sam.segconf_predict_meth, 
                      h->sam.segconf_is_paired, sag_type_name(h->sam.segconf_sag_type), h->sam.segconf_sag_has_AS, 
                      h->sam.segconf_pysam_qual, h->sam.segconf_cellranger, h->sam.segconf_SA_HtoS, dis_dict_id(h->sam.segconf_seq_len_dict_id).s,
                      h->sam.segconf_deep_no_qname, h->sam.segconf_deep_no_qual);
 
         else if (dt == DT_REF)
-            sprintf (dt_specific, SEC_TAB "fast_md5=%s\n", digest_display (h->REF_fasta_md5).s);
+            sprintf (dt_specific, "%sfast_md5=%s\n", SEC_TAB, digest_display (h->REF_fasta_md5).s);
 
-        else if (dt == DT_FASTQ && h->genozip_version <= 13) 
-            sprintf (dt_specific, SEC_TAB "bound_digest=%s segconf_seq_len_dict_id=%s\n", 
-                     digest_display (h->FASTQ_v13_digest_bound).s, dis_dict_id(h->fastq.segconf_seq_len_dict_id).s);
+        else if (dt == DT_FASTQ && v14) 
+            sprintf (dt_specific, "%sFASTQ_v13_digest_bound=%s segconf_seq_len_dict_id=%s\n", 
+                     SEC_TAB, digest_display (h->FASTQ_v13_digest_bound).s, dis_dict_id(h->fastq.segconf_seq_len_dict_id).s);
 
-        sprintf (str, "\n"SEC_TAB "ver=%u enc=%s dt=%s usize=%"PRIu64" lines=%"PRIu64" secs=%u txts=%u vb_size=%u\n" 
-                      SEC_TAB "%s ref=\"%.*s\" md5ref=%s\n"
+        sprintf (str, "\n%sver=%u enc=%s dt=%s usize=%"PRIu64" lines=%"PRIu64" secs=%u txts=%u vb_size=%u\n" 
+                      "%s%s ref=\"%.*s\" md5ref=%s\n"
                       "%s" // dt_specific, if there is any
-                      SEC_TAB "created=\"%.*s\"\n",
-                 h->genozip_version, encryption_name (h->encryption_type), dt_name (dt), 
+                      "%screated=\"%.*s\"\n",
+                 SEC_TAB, h->genozip_version, encryption_name (h->encryption_type), dt_name (dt), 
                  BGEN64 (h->recon_size_prim), BGEN64 (h->num_lines_bound), BGEN32 (h->num_sections), h->num_txt_files,
-                 BGEN16(h->vb_size), sections_dis_flags (f, st, dt).s,
+                 BGEN16(h->vb_size), 
+                 SEC_TAB, sections_dis_flags (f, st, dt).s,
                  REF_FILENAME_LEN, h->ref_filename, digest_display_ex (h->ref_file_md5, DD_MD5).s,
                  dt_specific, 
-                 FILE_METADATA_LEN, h->created);
+                 SEC_TAB, FILE_METADATA_LEN, h->created);
         break;
     }
 
     case SEC_TXT_HEADER: {
         SectionHeaderTxtHeader *h = (SectionHeaderTxtHeader *)header;
-        sprintf (str, "\n"SEC_TAB "txt_data_size=%"PRIu64" txt_header_size=%"PRIu64" lines=%"PRIu64" max_lines_per_vb=%u digest=%s digest_header=%s\n" 
-                      SEC_TAB "txt_codec=%s (args=0x%02X.%02X.%02X) %s txt_filename=\"%.*s\"\n",
-                 BGEN64 (h->txt_data_size), v12 ? BGEN64 (h->txt_header_size) : 0, BGEN64 (h->txt_num_lines), BGEN32 (h->max_lines_per_vb), 
+        sprintf (str, "\n%stxt_data_size=%"PRIu64" txt_header_size=%"PRIu64" lines=%"PRIu64" max_lines_per_vb=%u digest=%s digest_header=%s\n" 
+                 "%stxt_codec=%s (args=0x%02X.%02X.%02X) %s txt_filename=\"%.*s\"\n",
+                 SEC_TAB, BGEN64 (h->txt_data_size), v12 ? BGEN64 (h->txt_header_size) : 0, BGEN64 (h->txt_num_lines), BGEN32 (h->max_lines_per_vb), 
                  digest_display (h->digest).s, digest_display (h->digest_header).s, 
-                 codec_name (h->src_codec), h->codec_info[0], h->codec_info[1], h->codec_info[2], 
+                 SEC_TAB, codec_name (h->src_codec), h->codec_info[0], h->codec_info[1], h->codec_info[2], 
                  sections_dis_flags (f, st, dt).s, TXT_FILENAME_LEN, h->txt_filename);
         break;
     }
@@ -890,14 +893,14 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
         SectionHeaderVbHeader *h = (SectionHeaderVbHeader *)header;
         if (Z_DT(VCF) || Z_DT(BCF)) 
             sprintf (str, 
-                    "\n"SEC_TAB "recon_size=(PRIM:%u, LUFT:%u) longest_line=%u z_data_bytes=%u digest=%s %s\n",
-                    BGEN32 (h->recon_size_prim), v12 ? BGEN32 (h->dvcf_recon_size_luft) : 0, 
+                    "\n%srecon_size=(PRIM:%u, LUFT:%u) longest_line=%u z_data_bytes=%u digest=%s %s\n",
+                    SEC_TAB, BGEN32 (h->recon_size_prim), v12 ? BGEN32 (h->dvcf_recon_size_luft) : 0, 
                     BGEN32 (h->longest_line_len), 
                     BGEN32 (h->z_data_bytes), digest_display (h->digest).s, sections_dis_flags (f, st, dt).s);
         else if (Z_DT(SAM))
             sprintf (str, 
-                    "\n"SEC_TAB "recon_size=%u longest_line=%u z_data_bytes=%u digest=%s prim=(seq=%u comp_qual=%u qname=%u num_alns=%u first_grp_i=%u %s=%u) %s\n", 
-                    BGEN32 (h->recon_size_prim),  BGEN32 (h->longest_line_len), 
+                    "\n%srecon_size=%u longest_line=%u z_data_bytes=%u digest=%s prim=(seq=%u comp_qual=%u qname=%u num_alns=%u first_grp_i=%u %s=%u) %s\n", 
+                    SEC_TAB, BGEN32 (h->recon_size_prim),  BGEN32 (h->longest_line_len), 
                     BGEN32 (h->z_data_bytes), digest_display (h->digest).s, 
                     v14 ? BGEN32 (h->sam_prim_seq_len)          : 0,
                     v14 ? BGEN32 (h->sam_prim_comp_qual_len)    : 0,
@@ -909,8 +912,8 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
                     sections_dis_flags (f, st, dt).s);
         else
             sprintf (str, 
-                    "\n"SEC_TAB "recon_size=%u longest_line=%u z_data_bytes=%u digest=%s %s\n",
-                    BGEN32 (h->recon_size_prim),BGEN32 (h->longest_line_len), 
+                    "\n%srecon_size=%u longest_line=%u z_data_bytes=%u digest=%s %s\n",
+                    SEC_TAB, BGEN32 (h->recon_size_prim),BGEN32 (h->longest_line_len), 
                     BGEN32 (h->z_data_bytes), digest_display (h->digest).s, sections_dis_flags (f, st, dt).s);
 
         break;
@@ -944,7 +947,7 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
         
     case SEC_BGZF:
     case SEC_RANDOM_ACCESS: {
-        sprintf (str, SEC_TAB "%s\n", sections_dis_flags (f, st, dt).s); 
+        sprintf (str, "%s%s\n", SEC_TAB, sections_dis_flags (f, st, dt).s); 
         break;
     }
     
@@ -979,6 +982,9 @@ void sections_show_header (ConstSectionHeaderP header, VBlockP vb /* optional if
     default: 
         str[0] = '\n'; str[1] = 0; 
     }
+
+    // if not going directly to the terminal, replace non-final newlines with \t, to allow grep etc
+    if (!isatty(1)) str_replace_letter (str, strlen(str)-1, '\n', '\t');
 
     PRINT;
 }

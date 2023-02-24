@@ -124,7 +124,7 @@ bool bed_seg_is_small (ConstVBlockP vb, DictId dict_id)
 static void bed_seg_START (VBlockP vb, STRp(start), WordIndex prev_line_chrom)
 {
     PosType32 start_val;
-    ContextP ctx = CTX(BED_START);
+    decl_ctx (BED_START);
 
     if (segconf.is_sorted && !segconf.running)
         start_val = seg_pos_field (VB, BED_START, BED_END, 0, 0, STRa(start), 0, start_len+1);

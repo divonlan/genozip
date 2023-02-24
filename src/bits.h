@@ -285,7 +285,8 @@ extern void bits_set_all(BitsP bits);
 extern void bits_clear_all(BitsP bits);
 
 extern void bits_bit_to_byte  (uint8_t *dst, ConstBitsP src_bits, uint64_t src_bit,  uint32_t num_bits);
-extern void bits_base_to_byte (uint8_t *dst, ConstBitsP src_bits, uint64_t base_i, uint32_t num_2bits);
+extern void bits_2bit_to_byte (uint8_t *dst, ConstBitsP src_bits, uint64_t base_i, uint32_t num_2bits);
+extern void bits_2bit_to_ACGT (char *dst, ConstBitsP src_bits, uint64_t base_i, uint32_t num_bases);
 
 //
 // Get and set words (low level -- no bounds checking)

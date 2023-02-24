@@ -20,6 +20,8 @@
     gpos_ctx   = CTX(FASTQ_GPOS),                               \
     strand_ctx = CTX(FASTQ_STRAND)
 
+#define SEQ_LEN_BY_QNAME 0x7fffffff
+
 static void fastq_get_pair_1_gpos_strand (VBlockFASTQP vb, PosType64 *pair_gpos, bool *pair_is_forward)
 {
     declare_seq_contexts;
@@ -41,13 +43,14 @@ static void fastq_get_pair_1_gpos_strand (VBlockFASTQP vb, PosType64 *pair_gpos,
 
 static inline bool seq_len_by_qname (VBlockFASTQP vb, uint32_t seq_len)
 {
-    // TO DO: add seq_len_by_qname also to the case of aligned sequence ^ 
-    return segconf.qname_seq_len_dict_id.num &&  // QNAME flavor has "length=""
-           seq_len == ECTX(segconf.qname_seq_len_dict_id)->last_value.i; // length is equal seq_len
+    return segconf.seq_len_dict_id.num &&  // QNAME or FASTQ_AUX have a length (eg "length=")
+           seq_len == ECTX(segconf.seq_len_dict_id)->last_value.i; // length is equal seq_len
 }
 
 void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), bool deep)
 {
+    START_TIMER;
+
     declare_seq_contexts;
 
     // get pair-1 gpos and is_forward, but only if we are pair-2 and the corresponding pair-1 line is aligned
@@ -63,18 +66,22 @@ void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), bool deep)
         seg_by_ctx (VB, STRa(snip), bitmap_ctx, 0); 
         nonref_ctx->txt_len += seq_len; // account for the txt data in NONREF        
 // printf ("xxx ZIP: monobase: %s %c\n", LN_NAME, seq[0]);
-        return;
+        goto done;
     }
             
     if (deep) { 
-        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_copy_deep }, 2, bitmap_ctx, seq_len); 
-        return;
+        seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, FASTQ_SPECIAL_deep_copy_SEQ }, 2, bitmap_ctx, seq_len); 
+        goto done;
     }
                
     // case: aligned - lookup from SQBITMAP
     MappingType aln_res;
-    if (flag.aligner_available && ((aln_res = aligner_seg_seq (VB, bitmap_ctx, STRa(seq), true, (vb->comp_i == FQ_COMP_R2), pair_gpos, pair_is_forward)))) 
-        seg_lookup_with_length (VB, bitmap_ctx, (aln_res==MAPPING_PERFECT ? -(int32_t)seq_len : (int32_t)seq_len), seq_len);
+    if (flag.aligner_available && ((aln_res = aligner_seg_seq (VB, bitmap_ctx, STRa(seq), true, (vb->comp_i == FQ_COMP_R2), pair_gpos, pair_is_forward)))) {
+    
+        int32_t pseudo_seq_len = seq_len_by_qname (vb, seq_len) ? SEQ_LEN_BY_QNAME : seq_len;    
+
+        seg_lookup_with_length (VB, bitmap_ctx, (aln_res==MAPPING_PERFECT ? -(int32_t)pseudo_seq_len : (int32_t)pseudo_seq_len), seq_len);
+    }
 
     // case: not aligned - just add data to NONREF
     else {
@@ -88,6 +95,9 @@ void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), bool deep)
         seg_by_ctx (VB, STRa(snip), bitmap_ctx, 0); // note: FASTQ_SQBITMAP is always segged whether read is aligned or not
         nonref_ctx->txt_len += seq_len; // account for the txt data in NONREF
     }
+
+done:
+    COPY_TIMER (fastq_seg_SEQ);
 }
 
 COMPRESSOR_CALLBACK (fastq_zip_seq) 
@@ -210,7 +220,7 @@ static void fastq_update_coverage_aligned (VBlockFASTQP vb)
         (*B64 (vb->read_count, ref_index))++;
 }
 
-// PIZ: aligned SEQ reconstruction - called by reconstructing FASTQ_SQBITMAP which is a LOOKUP (either directly, or via fastq_special_mate_lookup)
+// PIZ: reconstruct_seq callback: aligned SEQ reconstruction - called by reconstructing FASTQ_SQBITMAP which is a LOOKUP (either directly, or via fastq_special_mate_lookup)
 void fastq_recon_aligned_SEQ (VBlockP vb_, ContextP bitmap_ctx, STRp(seq_len_str), ReconType reconstruct)
 {
     VBlockFASTQP vb = (VBlockFASTQP )vb_;
@@ -222,6 +232,9 @@ void fastq_recon_aligned_SEQ (VBlockP vb_, ContextP bitmap_ctx, STRp(seq_len_str
     if (perfect_alignment) { seq_len_str++; seq_len_str_len--; }
 
     ASSERT (str_get_int_range32 (STRa(seq_len_str), 0, 0x7fffffff, (int32_t*)&vb->seq_len), "seq_len_str=\"%.*s\" out range [0,0x7fffffff]", STRf(seq_len_str));
+
+    if (vb->seq_len == SEQ_LEN_BY_QNAME) // introduced v15
+        vb->seq_len = reconstruct_peek_by_dict_id (VB, segconf.seq_len_dict_id, 0, 0).i; // peek, since length can come from either line1 or line3
 
     // just update coverage
     if (flag.collect_coverage) 
@@ -262,14 +275,17 @@ SPECIAL_RECONSTRUCTOR (fastq_special_unaligned_SEQ)
             if (snip[0] != ' ') monobase = snip[0];
             STRinc (snip);
         }
-
+        
         if (snip_len==1 && *snip=='0') 
-            vb->seq_len = ECTX(segconf.qname_seq_len_dict_id)->last_value.i;
+            vb->seq_len = reconstruct_peek_by_dict_id (vb, segconf.seq_len_dict_id, 0, 0).i; // peek, since length can come from either line1 or line3
         else
             vb->seq_len = atoi(snip);
 
+        // --qual-only: only set vb->seq_len without reconstructing
+        if (flag.qual_only) {}
+
         // case: take seq_len from DESC item with length=
-        if (!monobase) 
+        else if (!monobase) 
             reconstruct_from_local_sequence (vb, nonref_ctx, 0, 0, reconstruct);
 
         else {

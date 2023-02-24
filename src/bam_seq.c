@@ -207,7 +207,7 @@ uint32_t sam_seq_copy (char *dst, rom src, uint32_t src_start_base, uint32_t n_b
 {
     if (!is_bam_format) {
         if (revcomp)
-            str_revcomp_in_out (dst, src, n_bases);
+            str_revcomp (dst, src, n_bases);
         else
             memcpy (dst, src, n_bases);
     }

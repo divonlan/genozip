@@ -1172,7 +1172,7 @@ static void writer_main_loop (VBlockP wvb) // same as wvb global variable
 
     // if we need to BGZF-compress, we will dispatch the compression workload to compute threads
     Dispatcher dispatcher = (!flag.no_writer && txt_file->codec == CODEC_BGZF) ? 
-        dispatcher_init ("bgzf", POOL_BGZF, writer_get_max_bgzf_threads(), 0, false, false, NULL, 0, NULL) : NULL;
+        dispatcher_init ("bgzf", NULL, POOL_BGZF, writer_get_max_bgzf_threads(), 0, false, false, NULL, 0, NULL) : NULL;
         
     bool do_digest = piz_need_digest && z_has_gencomp;
 

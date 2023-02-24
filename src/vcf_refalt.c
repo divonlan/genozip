@@ -832,9 +832,9 @@ static void vcf_reconstruct_other_REFALT_do (VBlockP vb, STRp(snip), char xstran
 
     // case: we need to rev-comp
     if (xstrand != '-') {
-        str_revcomp ((char*)ref, ref_len);
+        str_revcomp_in_place ((char*)ref, ref_len);
         for (unsigned alt_i = 0; alt_i < n_alts; alt_i++)
-            str_revcomp ((char*)alts[alt_i], alt_lens[alt_i]);
+            str_revcomp_in_place ((char*)alts[alt_i], alt_lens[alt_i]);
     }
 
     // parse snip - an integer followed by an optional nucleotide sequence
