@@ -1159,7 +1159,7 @@ batch_real_world_genounzip_compare_file() # $1 extra genozip argument
 #         if [[ $f == test.NM-binary-then-integer.bam ]]; then continue; fi
             
 #         test_header "$f - backward compatability with prod ($i/${#files[@]})"
-#         $genozip_latest private/test/$f --md5 -fo $output || exit 1
+#         $genozip_latest $TESTDIR/$f --md5 -fo $output || exit 1
 #         $genounzip -t $output || exit 1
 #     done
 # }
@@ -1216,21 +1216,21 @@ batch_real_world_with_ref_md5() # $1 extra genozip argument
 #     for f in ${files37[@]}; do     
 #         i=$(( i + 1 ))
 #         test_header "$f - backward compatability with prod (with reference) - 37 ($i/$total)"
-#         $genozip_latest private/test/$f -mf -e $hs37d5 -o $output || exit 1
+#         $genozip_latest $TESTDIR/$f -mf -e $hs37d5 -o $output || exit 1
 #         $genounzip -t $output || exit 1
 #     done
 
 #     for f in ${files38[@]}; do 
 #         i=$(( i + 1 ))
 #         test_header "$f - backward compatability with prod (with reference) - 38 ($i/$total)"
-#         $genozip_latest private/test/$f -mf -e $GRCh38 -o $output || exit 1
+#         $genozip_latest $TESTDIR/$f -mf -e $GRCh38 -o $output || exit 1
 #         $genounzip -t $output || exit 1
 #     done
 
 #     for f in ${filesT2T1_1[@]}; do 
 #         i=$(( i + 1 ))
 #         test_header "$f - backward compatability with prod (with reference) - T2T ($i/$total)"
-#         $genozip_latest private/test/$f -mf -e $T2T1_1 -o $output || exit 1
+#         $genozip_latest $TESTDIR/$f -mf -e $T2T1_1 -o $output || exit 1
 #         $genounzip -t $output || exit 1
 #     done
 # }
@@ -1501,9 +1501,13 @@ batch_reference_backcomp()
     local files38=( test.human.fq.gz test.human-collated-headerless.sam test.1KG-38.vcf.gz )
 
     for f in ${files38[@]}; do 
+        # old file, old reference, new genounzip
         test_header "$f - reference file backward compatability with prod"
-        $genozip_latest private/test/$f -mf -e $prod_ref_file -o $output || exit 1
+        $genozip_latest $TESTDIR/$f -mf -e $prod_ref_file -o $output || exit 1
         $genounzip -t $output -e $ref_file || exit 1
+
+        # new file, old reference, new genounzip
+        $genozip $TESTDIR/$f -mft -e $prod_ref_file -o $output || exit 1
     done
 
     cleanup

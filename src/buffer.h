@@ -57,17 +57,14 @@ typedef struct Buffer { // 64 bytes
     //------------------------------------------------------------------------------------------------------
     uint64_t overlayable : 1;  // this buffer may be fully overlaid by one or more overlay buffers
     uint64_t can_be_big  : 1;  // do not display warning if buffer grows very big
-    #define BG_LOADING_BIT 5   // bit # of bg_loading within the uint64_t 
-    uint64_t bg_loading  : 1;  // mmap thread is loading in the background
     uint64_t code_line   : 12; // the allocating line number in source code file (up to 4095)
-    #define MAX_BUFFER_SIZE ((1ULL<<46)-1) // according to bits of "size" (64 TB)
-    uint64_t size        : 46; // number of bytes available to the user (i.e. not including the allocated overhead). 
+    #define MAX_BUFFER_SIZE ((1ULL<<47)-1) // according to bits of "size" (64 TB)
+    uint64_t size        : 47; // number of bytes available to the user (i.e. not including the allocated overhead). 
 
     VBlockP vb;                // vb that owns this buffer, and which this buffer is in its buf_list
 
     rom name;                  // name of allocator - used for memory debugging & statistics.
     rom func;                  // the allocating function
-    pthread_t bg_loader;       // thread loading mmap data (used by BUF_MMAP and BUF_MMAP_RO)
 
     char *memory;              // memory allocated to this buffer - amount is: size + 2*sizeof(longlong) to allow for OVERFLOW and UNDERFLOW)
 

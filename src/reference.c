@@ -33,8 +33,7 @@
 #include "chrom.h"
 #include "crypt.h"
 
-static RefStruct refs[2] = { { .ctgs.name = "gref",     .ref_cache_creation_thread_id = THREAD_ID_NONE }, 
-                             { .ctgs.name = "prim_ref", .ref_cache_creation_thread_id = THREAD_ID_NONE } };
+static RefStruct refs[2] = { { .ctgs.name = "gref" }, { .ctgs.name = "prim_ref" } };
 Reference gref     = &refs[0]; // global reference 
 Reference prim_ref = &refs[1]; // chain file primary coordinates reference
 
@@ -80,8 +79,6 @@ static inline bool ref_has_is_set (void)
 // free memory allocations between files, when compressing multiple non-bound files or decompressing multiple files
 void ref_unload_reference (Reference ref)
 {
-    ref_create_cache_join (ref, true); // wait for cache to finish writing, if applicable
-    
     // case: the reference has been modified and we can't use it for the next file
     if (IS_REF_INTERNAL || IS_REF_EXT_STORE || IS_REF_STORED_PIZ) {
         buf_free (ref->genome_buf);
@@ -102,13 +99,9 @@ void ref_unload_reference (Reference ref)
     ref->external_ref_is_loaded = false;
 }
 
-void ref_destroy_reference (Reference ref, bool destroy_only_if_not_mmap)
+void ref_destroy_reference (Reference ref)
 {
     if (!buf_is_alloc (&ref->ranges)) return;
-
-    if (destroy_only_if_not_mmap && ref->ranges.rtype == RT_CACHED) return;
-
-    ref_create_cache_join (ref, true); // wait for cache to finish writing, if applicable
 
     // locks stuff
     ref_lock_free (ref);
@@ -139,7 +132,6 @@ void ref_destroy_reference (Reference ref, bool destroy_only_if_not_mmap)
     memset (ref, 0, sizeof (RefStruct));
     ref->filename = save_filename;
     ref->ctgs.name = save_ctgs_name; 
-    ref->ref_cache_creation_thread_id = THREAD_ID_NONE;
 }
 
 // PIZ: returns a range which is the entire contig
@@ -567,69 +559,6 @@ void ref_load_stored_reference (Reference ref)
     COPY_TIMER_VB (evb, ref_load_stored_reference);
 }
 
-// ---------------------
-// Cache stuff
-// ---------------------
-
-static inline rom ref_get_cache_fn (Reference ref)
-{
-    if (!ref->cache_fn) {
-        ref->cache_fn = MALLOC (strlen (z_name) + 20);
-        sprintf ((char *)ref->cache_fn, "%s.gcache", z_name); // constant thereafter
-    }
-
-    return ref->cache_fn;
-}
-
-void ref_remove_cache (Reference ref)
-{
-    file_remove (ref_get_cache_fn(ref), true);
-}
-
-// mmap the reference cached file, as copy-on-write - modifications are private to process and not written to the file
-bool ref_mmap_cached_reference (Reference ref)
-{  
-    if (!buf_is_alloc (&ref->ranges)) {  // possibly already loaded from previous file
-        if (!file_exists (ref_get_cache_fn(ref))) return false; // file doesn't exist
-
-        ref_initialize_ranges (ref, RT_CACHED); // also does the actual buf_mmap
-    }
-
-    if (flag.show_ref_seq) ref_show_sequence (ref);
-
-    return true;
-}
-
-static void ref_create_cache (VBlockP cache_create_vb) 
-{
-    buf_dump_to_file (ref_get_cache_fn(cache_create_vb->ref), &cache_create_vb->ref->genome_cache, 1, true, false, false, false);
-}
-
-#define REFERENCE_CACHE_TASK "create_reference_cache"
-
-// initiate creating the the genome cache in a background thread
-void ref_create_cache_in_background (Reference ref)
-{
-    if (flag.regions) return; // we can't create cache as we haven't loaded the entire reference
-
-    ref->cache_create_vb = vb_initialize_nonpool_vb (VB_ID_GCACHE_CREATE, DT_NONE, "ref_create_cache_in_background");
-    ref->cache_create_vb->ref = ref;
-    ref->cache_create_vb->compute_task = REFERENCE_CACHE_TASK;
-
-    ref_get_cache_fn (ref); // generate name before closing z_file
-    ref->ref_cache_creation_thread_id = threads_create (ref_create_cache, ref->cache_create_vb);
-}
-
-void ref_create_cache_join (Reference ref, bool free_mem)
-{
-    if (ref->ref_cache_creation_thread_id != THREAD_ID_NONE) // not already joined
-        threads_join (&ref->ref_cache_creation_thread_id, REFERENCE_CACHE_TASK);
-
-    if (ref->cache_create_vb && free_mem) 
-        vb_destroy_vb (&ref->cache_create_vb);
-}
-
-
 // ------------------------------------
 // ZIP side
 // ------------------------------------
@@ -642,7 +571,7 @@ RangeP ref_seg_get_range (VBlockP vb, Reference ref, WordIndex chrom, STRp(chrom
                           PosType64 pos, uint32_t ref_consumed, 
                           WordIndex ref_index, // if known (mandatory if not prim_chrom), WORD_INDEX_NONE if not                                
                           rom field,     // used for ASSSEG 
-                          RefLock *lock) // optional if RT_LOADED/RT_CACHED
+                          RefLock *lock) // optional if RT_LOADED
 {
     // sanity checks
     ASSERT0 (vb->chrom_name, "vb->chrom_name=NULL");
@@ -894,7 +823,7 @@ static void ref_compress_one_range (VBlockP vb)
         header.section_type          = SEC_REF_IS_SET;  // most of the header is the same as ^
         header.codec                 = CODEC_BZ2;
         header.data_uncompressed_len = BGEN32 (r->is_set.nwords * sizeof (uint64_t));
-        header.num_bases               = BGEN32 ((uint32_t)ref_size (r)); // full length, after flanking regions removed
+        header.num_bases             = BGEN32 ((uint32_t)ref_size (r)); // full length, after flanking regions removed
         comp_compress (vb, NULL, &vb->z_data, (SectionHeader*)&header, (char *)r->is_set.words, NO_CALLBACK, "SEC_REF_IS_SET");
 
         if (flag.show_reference && r) 
@@ -908,10 +837,10 @@ static void ref_compress_one_range (VBlockP vb)
     if (r) LTEN_bits (&r->ref);
 
     header.section_type          = SEC_REFERENCE;
-    header.codec                 = flag.fast ? CODEC_RANS8 : CODEC_LZMA; // LZMA better than BSC: slightly better compression and compression speed, 2.5X faster decompression
+    header.codec                 = (flag.make_reference || flag.fast) ? CODEC_RANS8 : CODEC_LZMA; // LZMA compresses a bit better, but RANS decompresses *much* faster, so better for reference files
     header.compressed_offset     = BGEN32 (sizeof(header)); // reset compressed offset - if we're encrypting - REF_IS_SET was encrypted and compressed_offset padded, by REFERENCE is never encrypted
     header.data_uncompressed_len = r ? BGEN32 (r->ref.nwords * sizeof (uint64_t)) : 0;
-    header.num_bases               = r ? BGEN32 (r->ref.nbits / 2) : 0; // less than ref_size(r) if compacted
+    header.num_bases             = r ? BGEN32 (r->ref.nbits / 2) : 0; // less than ref_size(r) if compacted
     comp_compress (vb, NULL, &vb->z_data, (SectionHeader*)&header, r ? (char *)r->ref.words : NULL, NO_CALLBACK, "SEC_REFERENCE");
 
     if (flag.show_reference && r) 
@@ -934,7 +863,7 @@ static void ref_compress_one_range (VBlockP vb)
 
     // insert this range sequence into the ref_hash (included in the reference file, for use to compress of FASTQ, unaligned SAM and FASTA)
     if (flag.make_reference)
-        refhash_calc_one_range (r, BISLST (gref->ranges, r) ? NULL : r+1);
+        refhash_calc_one_range (vb, r, BISLST (gref->ranges, r) ? NULL : r+1);
 
     vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
 
@@ -992,8 +921,6 @@ void ref_compress_ref (void)
 {
     if (!buf_is_alloc (&gref->ranges)) return;
 
-    ref_create_cache_join (gref, true); // finish dumping reference to cache before we modify it via compacting
-
     START_TIMER;
 
     // calculate z_file->ref2chrom_map, the inverse of z_file->chrom2ref_map
@@ -1011,7 +938,7 @@ void ref_compress_ref (void)
 
     // copy already-compressed SEC_REFERENCE sections from the genozip reference file, but only such sections that are almost entirely
     // covered by ranges with is_set=true. we mark these ranges affected as is_set=false.
-    if (gref->ranges.rtype == RT_LOADED || gref->ranges.rtype == RT_CACHED)
+    if (gref->ranges.rtype == RT_LOADED)
         ref_copy_compressed_sections_from_reference_file (gref);
 
     buf_alloc (evb, &gref->stored_ra, 0, gref->ranges.len, RAEntry, 1, "stored_ra");
@@ -1105,7 +1032,7 @@ void ref_set_reference (Reference ref, rom filename, ReferenceType ref_type, boo
             if (!strcmp (filename, ref->filename)) return; // same file - we're done
 
             // in case a different reference is loaded - destroy it
-            ref_destroy_reference (ref, false);
+            ref_destroy_reference (ref);
         }
     
         flag.reference    = ref_type; 
@@ -1418,16 +1345,6 @@ void ref_initialize_ranges (Reference ref, RangesType type)
 
     // we protect genome->ref while uncompressing reference data, and genome->is_set while segging
     ref_lock_initialize (ref);
-
-    if (type == RT_CACHED) {
-        if (!buf_mmap (evb, &ref->genome_cache, ref_get_cache_fn(ref), 
-                        !IS_REF_EXT_STORE, // in EXT_STORE, buffer is not read-only bc we compact it before storing
-                        "genome_cache")) {
-            // this happens eg if the process writing the cache was aborted
-            ref_remove_cache (ref);
-            type = RT_LOADED;
-        }
-    }
 
     bool has_emoneg = !IS_REF_INTERNAL;
     ref->genome_cache.can_be_big = true; // supress warning in case of an extra large genome (eg plant genomes)

@@ -70,10 +70,6 @@ static uint32_t next_task_start_within_layer = 0;
 const char complement[256] =  { ['A']='T', ['C']='G', ['G']='C', ['T']='A',  // complement A,C,G,T, others are 4
                                 [0 ...'@']=4, ['B']=4, ['D'...'F']=4, ['U'...255]=0 };
 
-// cache stuff
-static ThreadId refhash_cache_creation_thread_id = THREAD_ID_NONE;
-static VBlockP cache_create_vb = NULL;
-
 // ------------------------------------------------------
 // stuff related to creating the refhash
 // ------------------------------------------------------
@@ -107,8 +103,11 @@ static inline uint32_t refhash_get_word (const Range *r, int64_t base_i)
 
 // make-reference: generate the refhash data for one range of the reference. called by ref_compress_one_range (compute thread)
 // towards the end of the range, we might have hash values that start in this range and end in the next range.
-void refhash_calc_one_range (const Range *r, const Range *next_r /* NULL if r is the last range */)
+void refhash_calc_one_range (VBlockP vb, // VB of reference compression dispatcher
+                             const Range *r, const Range *next_r /* NULL if r is the last range */)
 {
+    START_TIMER;
+
     PosType64 this_range_size = ref_size (r);
     PosType64 next_range_size = ref_size (next_r);
     
@@ -159,6 +158,8 @@ void refhash_calc_one_range (const Range *r, const Range *next_r /* NULL if r is
                 refhashs[layer_i][idx] = BGEN32 (r->gpos + base_i); // replace one layer in random
             }
         }
+
+    COPY_TIMER(refhash_calc_one_range);
 }
 
 // compress the reference - one section at the time, using Dispatcher to do them in parallel (make_ref version)
@@ -183,6 +184,8 @@ static void refhash_prepare_for_compress (VBlockP vb)
 // part of --make-reference - compute thread for compressing part of the hash
 static void refhash_compress_one_vb (VBlockP vb)
 {
+    START_TIMER;
+
     uint32_t uncompressed_size = MIN_(make_ref_vb_size, layer_size[vb->refhash_layer] - vb->refhash_start_in_layer);
     const uint32_t *hash_data = &refhashs[vb->refhash_layer][vb->refhash_start_in_layer / sizeof (uint32_t)];
 
@@ -209,11 +212,15 @@ static void refhash_compress_one_vb (VBlockP vb)
                  vb->vblock_i, header.num_layers, header.layer_i, header.layer_bits, vb->refhash_start_in_layer, uncompressed_size, BGEN32 (header.data_compressed_len) + (uint32_t)sizeof (SectionHeaderRefHash));
 
     vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
+
+    COPY_TIMER(refhash_compress_one_vb);
 }
 
 // ZIP-FASTA-make-reference: called by main thread in zip_write_global_area
 void refhash_compress_refhash (void)
 {
+    START_TIMER;
+
     next_task_layer = 0;
     next_task_start_within_layer = 0;
 
@@ -222,55 +229,8 @@ void refhash_compress_refhash (void)
                              refhash_prepare_for_compress, 
                              refhash_compress_one_vb, 
                              zfile_output_processed_vb);
-}
 
-// -----------------------------------
-// stuff related to refhash cache file
-// -----------------------------------
-
-static inline rom refhash_get_cache_fn (void)
-{
-    static char *cache_fn = NULL;
-
-    if (!cache_fn) {
-        cache_fn = MALLOC (strlen (z_name) + 20);
-        sprintf (cache_fn, "%s.hcache", z_name);
-    }
-
-    return cache_fn;
-}
-
-void refhash_remove_cache (void)
-{
-    file_remove (refhash_get_cache_fn(), true);
-}
-
-// thread entry for creating refhash cache
-static void refhash_create_cache (VBlockP unused)
-{
-    buf_dump_to_file (refhash_get_cache_fn(), &refhash_buf, 1, true, false, false, false);
-}
-
-#define REFHASH_CACHE_TASK "create_reference_cache"
-
-static void refhash_create_cache_in_background (void)
-{
-    if (flag.regions) return; // can't create cache as reference isn't fully loaded
-
-    cache_create_vb = vb_initialize_nonpool_vb (VB_ID_HCACHE_CREATE, DT_NONE, "refhash_create_cache_in_background");
-    cache_create_vb->compute_task = REFHASH_CACHE_TASK;
-
-    refhash_get_cache_fn(); // generate name before we close z_file
-    refhash_cache_creation_thread_id = threads_create (refhash_create_cache, cache_create_vb);
-}
-
-void refhash_create_cache_join (bool free_mem)
-{
-    if (refhash_cache_creation_thread_id != THREAD_ID_NONE) // not already joined
-        threads_join (&refhash_cache_creation_thread_id, REFHASH_CACHE_TASK);   
-
-    if (free_mem && cache_create_vb) 
-        vb_destroy_vb (&cache_create_vb);
+    COPY_TIMER_VB (evb, refhash_compress_refhash);
 }
 
 // ----------------------------------------------------------------------------------------------
@@ -280,6 +240,8 @@ void refhash_create_cache_join (bool free_mem)
 // entry point of compute thread of refhash decompression
 static void refhash_uncompress_one_vb (VBlockP vb)
 {
+    START_TIMER;
+
     SectionHeaderRefHash *header = (SectionHeaderRefHash *)vb->z_data.data;
     uint32_t start = BGEN32 (header->start_in_layer);
     uint32_t size  = BGEN32 (header->data_uncompressed_len);
@@ -303,10 +265,14 @@ static void refhash_uncompress_one_vb (VBlockP vb)
     zfile_uncompress_section (vb, header, &copy, NULL, 0, SEC_REF_HASH);
 
     vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
+
+    COPY_TIMER (refhash_uncompress_one_vb);
 }
 
 static void refhash_read_one_vb (VBlockP vb)
 {
+    START_TIMER;
+
     buf_alloc (vb, &vb->z_section_headers, 0, 1, int32_t, 0, "z_section_headers"); // room for 1 section header
 
     if (!sections_next_sec (&sl_ent, SEC_REF_HASH))
@@ -320,6 +286,8 @@ static void refhash_read_one_vb (VBlockP vb)
     BNXT (int32_t, vb->z_section_headers) = section_offset;
 
     vb->dispatch = READY_TO_COMPUTE;
+
+    COPY_TIMER (refhash_read_one_vb);
 }
 
 void refhash_load_standalone (void)
@@ -336,7 +304,7 @@ void refhash_load_standalone (void)
 
     zfile_read_genozip_header (0);
 
-    refhash_initialize (NULL);
+    refhash_initialize();
 
     file_close (&z_file, false, false);
     file_close (&txt_file, false, false); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open called from txtheader_piz_read_and_reconstruct.
@@ -365,14 +333,29 @@ static void refhash_initialize_refhashs_array (void)
     }
 }
 
+static void refhash_load (uint64_t refhash_size)
+{
+    START_TIMER;
+
+    // allocate memory - base layer size is 1GB, and every layer is half the size of its predecessor, so total less than 2GB
+    buf_alloc (evb, &refhash_buf, 0, refhash_size, uint8_t, 1, "refhash_buf"); 
+    refhash_initialize_refhashs_array();
+
+    sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
+    dispatcher_fan_out_task ("load_refhash", ref_get_filename (gref),
+                             0, 0, true, flag.test, false, 0, 100,
+                             refhash_read_one_vb, 
+                             refhash_uncompress_one_vb, 
+                             NO_CALLBACK);
+    
+    COPY_TIMER_VB (evb, refhash_load);
+}
+
 // called by the main thread - piz_read_global_area when reading the reference file, ahead of compressing a fasta or fastq file. 
-// returns true if mapped cache
-void refhash_initialize (bool *dispatcher_invoked)
+void refhash_initialize (void)
 {
     uint32_t base_layer_bits;
     
-    if (dispatcher_invoked) *dispatcher_invoked = false; // initialize
-
     if (buf_is_alloc (&refhash_buf)) return; // already loaded from a previous file
 
     // case 1: called from ref_make_ref_init - initialize for making a reference file
@@ -400,29 +383,8 @@ void refhash_initialize (bool *dispatcher_invoked)
     bits_per_hash_is_odd = bits_per_hash % 2;
     nukes_per_hash = (1 + bits_per_hash) / 2; // round up
 
-    // if not making reference - we try to load - first from cache, then from reference file
-    if (!flag.make_reference) {
-
-        // attempt to mmap the cache, but if it doesn't exist read from the reference and create the cache
-        bool mapped_cache = buf_mmap (evb, &refhash_buf, refhash_get_cache_fn(), true, "refhash_buf");
-        if (!mapped_cache) { 
-            // allocate memory - base layer size is 1GB, and every layer is half the size of its predecessor, so total less than 2GB
-            buf_alloc (evb, &refhash_buf, 0, refhash_size, uint8_t, 1, "refhash_buf"); 
-            refhash_initialize_refhashs_array();
-
-            sl_ent = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
-            dispatcher_fan_out_task ("load_refhash", ref_get_filename (gref),
-                                     0, "Reading and caching reference hash table...",
-                                     true, flag.test, false, 0, 100,
-                                     refhash_read_one_vb, 
-                                     refhash_uncompress_one_vb, 
-                                     NO_CALLBACK);
- 
-            refhash_create_cache_in_background();
-            
-            if (dispatcher_invoked) *dispatcher_invoked = true;
-        }
-    }
+    if (!flag.make_reference) 
+        refhash_load (refhash_size);
 
     else { // make_reference
         // set all entries to NO_GPOS. note: no need to set in ZIP, as we will be reading the data from the refernce file
@@ -441,8 +403,6 @@ void refhash_destroy (bool destroy_only_if_not_mmap)
 {
     if (refhash_buf.type == BUF_UNALLOCATED || 
         (refhash_buf.type == BUF_MMAP_RO && destroy_only_if_not_mmap)) return;
-
-    refhash_create_cache_join (true); // wait for cache writing, if we're writing
 
     buf_destroy (refhash_buf);
     FREE (refhashs);

@@ -975,17 +975,18 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
         NEED_DECOMPRESS (flag.show_is_set, "--show_is_set");
     }
 
-    ASSINP (!IS_REF_EXT_STORE || exe_type != EXE_GENOCAT, "option %s supported only for viewing the reference file itself", OT("REFERENCE", "E"));
+    ASSINP (!IS_REF_EXT_STORE || !is_genocat, "option %s supported only for viewing the reference file itself", OT("REFERENCE", "E"));
 
     // --output only allowed with a single file, or two FASTQs and --pair, or 3 files and deep
-    ASSINP0 (!flag.out_filename || num_files <= 1 || (num_files==2 && flag.pair) || (num_files==3 && flag.deep), 
-        flag.out_dt == DT_FASTQ ? "--output can only be used with a single input file, or using --pair and two input files. Use --tar to archive multiple files. See " WEBSITE_ARCHIVING
-                                : "--output can only be used with a single input file. Use --tar to archive multiple files. See " WEBSITE_ARCHIVING);
+    ASSINP0 (!flag.out_filename || num_files <= 1 || (IS_ZIP && num_files==2 && flag.pair) || (IS_ZIP && num_files==3 && flag.deep),     
+        IS_PIZ                  ? "--output can only be used with a single input file"
+      : flag.out_dt == DT_FASTQ ? "--output can only be used with a single input file, or using --pair and two input files. Use --tar to archive multiple files. See " WEBSITE_ARCHIVING
+      :                           "--output can only be used with a single input file. Use --tar to archive multiple files. See " WEBSITE_ARCHIVING);
 
     ASSINP0 (flag.reading_chain || !flag.dvcf_rename, "--dvcf-rename can only be used in combination with --chain. See: " WEBSITE_DVCF);
     ASSINP0 (flag.reading_chain || !flag.dvcf_drop, "--dvcf-drop can only be used in combination with --chain. See: " WEBSITE_DVCF);
 
-    ASSINP0 (exe_type!=EXE_GENOUNZIP || !flag.one_vb || flag.test, "--one-vb can only be used with: (1) genocat, or (2) genounzip --test");
+    ASSINP0 (!is_genounzip || !flag.one_vb || flag.test, "--one-vb can only be used with: (1) genocat, or (2) genounzip --test");
 }
 
 // ZIP: --pair: verify an even number of fastq files, --output, and --reference/--REFERENCE
@@ -1320,7 +1321,7 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
             z_file->num_txt_files == 1, 
             "Cannot use --output because %s is a bound file containing multiple components. Use --prefix to set a prefix for output filenames, use genocat to output as a single concatenated file, or use genols to see the components' metadata",
             z_name);
-             
+    
     // --phylip implies sequential and header_one
     if (Z_DT(FASTA) && OUT_DT(PHYLIP)) {
         flag.sequential = 1;
@@ -1484,7 +1485,7 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
     if (pg_line_added_to_header && !flag.no_pg && is_genocat) 
         flag.maybe_txt_header_modified = flag.data_modified = true;
 
-    ASSINP0 (exe_type != EXE_GENOUNZIP || !flag.data_modified, "Data modification flags are not allowed in genounzip, use genocat instead");
+    ASSINP0 (!is_genounzip || !flag.data_modified, "Data modification flags are not allowed in genounzip, use genocat instead");
 
     ASSINP0 (!flag.test || !flag.data_modified, "--test cannot be used when other flags specify data modification. See " WEBSITE_DIGEST);
 

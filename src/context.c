@@ -1782,7 +1782,7 @@ void ctx_read_all_counts (void)
         }
     }
 
-    ASSINP (counts_shown || !flag.show_one_counts.num || exe_type != EXE_GENOCAT, "There is no SEC_COUNTS section for %s", dis_dict_id (flag.show_one_counts).s);
+    ASSINP (counts_shown || !flag.show_one_counts.num || !is_genocat, "There is no SEC_COUNTS section for %s", dis_dict_id (flag.show_one_counts).s);
 }
 
 TagNameEx ctx_tag_name_ex (ConstContextP ctx)

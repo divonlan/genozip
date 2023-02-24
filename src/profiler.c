@@ -159,6 +159,12 @@ void profiler_add (ConstVBlockP vb)
     ADD (ref_uncompress_one_range);
     ADD (ref_compress_ref);
     ADD (ref_compress_one_range);
+    ADD (refhash_calc_one_range);
+    ADD (refhash_compress_refhash);
+    ADD (refhash_compress_one_vb);
+    ADD (refhash_load);
+    ADD (refhash_uncompress_one_vb);
+    ADD (refhash_read_one_vb);
     ADD (ref_copy_compressed_sections_from_reference_file);
     ADD (sam_sa_prim_finalize_ingest);
     ADD (sam_zip_prim_ingest_vb);
@@ -209,7 +215,7 @@ static void print_ctx_compressor_times (void)
 void profiler_print_report (void)
 {
     static rom space = "                                                   ";
-#   define PRINT(x, level) if (ms(profile.x)) iprintf ("%.*s" #x ": %s\n", level*3, space, str_int_commas (ms(profile.x)).s);
+#   define PRINT(x, level) if (ms(profile.x)) iprintf ("%.*s" #x ": %s\n", (level)*3, space, str_int_commas (ms(profile.x)).s);
     
     rom os = flag.is_windows ? "Windows"
            : flag.is_mac     ? "MacOS"
@@ -225,11 +231,11 @@ void profiler_print_report (void)
     if (command != ZIP) { // this is a uncompress operation
 
         iprint0 ("GENOUNZIP main thread (piz_one_txt_file):\n");
-        PRINT (piz_read_global_area, 1);
-        PRINT (ref_load_stored_reference, 2);
-        PRINT (ref_initialize_ranges, 3);
-        PRINT (ref_read_one_range, 3);
-        PRINT (ref_uncompress_one_range, 3);
+        PRINT (ref_load_stored_reference, 1);
+        PRINT (ref_initialize_ranges, 2);
+        PRINT (ref_read_one_range, 2);
+        PRINT (ref_uncompress_one_range, 2);
+        PRINT (piz_read_global_area, 1); // sometimes also includes ref_load_stored_reference, but usually not
         PRINT (dict_io_read_all_dictionaries, 2);
         PRINT (dict_io_build_word_lists, 3);
         PRINT (txtheader_piz_read_and_reconstruct, 1);
@@ -286,6 +292,12 @@ void profiler_print_report (void)
     }
     else { // compress
         iprint0 ("GENOZIP main thread (zip_one_file):\n");
+        PRINT (ref_load_stored_reference, 1);
+        PRINT (ref_read_one_range, 2);
+        PRINT (ref_uncompress_one_range, 2);
+        PRINT (refhash_load, 1);
+        PRINT (refhash_read_one_vb, 2);
+        PRINT (refhash_uncompress_one_vb, 2);
         PRINT (txtheader_zip_read_and_compress, 1);
         PRINT (txtfile_read_header, 2);
         PRINT (sam_header_add_contig, 2); 
@@ -385,6 +397,9 @@ void profiler_print_report (void)
         PRINT (recon_plan_compress_one_fragment, 2);
         PRINT (ref_compress_ref, 1);
         PRINT (ref_compress_one_range, 2);
+        PRINT (refhash_calc_one_range, 3);
+        PRINT (refhash_compress_refhash, 1);
+        PRINT (refhash_compress_one_vb, 2);
         PRINT (ref_copy_compressed_sections_from_reference_file, 2);
         PRINT (random_access_finalize_entries, 1);
         PRINT (random_access_compress, 1);

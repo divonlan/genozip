@@ -210,7 +210,7 @@ extern Flags flag;
     flag.show_sex = flag.show_coverage = flag.idxstats = flag.collect_coverage = 0; /* int */ \
     flag.bases = IUP_NONE; \
     flag.interleaved = INTERLEAVE_NONE; \
-    flag.grep = flag.show_time = flag.unbind = flag.show_one_dict = flag.out_filename = NULL; /* char* */ \
+    flag.grep = flag.unbind = flag.show_one_dict = flag.out_filename = NULL; /* char* */ \
     flag.dict_id_show_one_b250 = flag.dump_one_b250_dict_id = flag.dump_one_local_dict_id = DICT_ID_NONE; /* DictId */ 
     
 #define SAVE_FLAG(f) typeof(flag.f) save_##f = flag.f 

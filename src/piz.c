@@ -222,7 +222,7 @@ uint32_t piz_uncompress_all_ctxs (VBlockP vb)
                                   BGEN32 (header->vblock_i),
                                   header->section_type); 
 
-        if (flag.show_time && exe_type != EXE_GENOZIP)
+        if (flag.show_time && !is_genozip)
             ctx->compressor_time = CHECK_TIMER;
 
         ctx_add_compressor_time_to_zf_ctx (vb);
@@ -401,8 +401,8 @@ DataType piz_read_global_area (Reference ref)
              "%s: ignoring reference file %s because it was not compressed with --reference", z_name, ref_get_filename (ref));
 
     if (!flag.reading_reference && has_ref_sections) {
-        ref_destroy_reference (ref, false);  // destroy an old reference, if one is loaded
-        flag.reference = REF_STORED;         // possibly override REF_EXTERNAL (it will be restored for the next file in )
+        ref_destroy_reference (ref);  // destroy an old reference, if one is loaded
+        flag.reference = REF_STORED;  // possibly override REF_EXTERNAL (it will be restored for the next file in )
     }
 
     // read all dictionaries - CHROM/RNAME is needed for regions_make_chregs(). 
@@ -454,19 +454,12 @@ DataType piz_read_global_area (Reference ref)
             if (is_genocat && (flag.show_sex || flag.show_coverage || flag.idxstats)) 
                 goto done;  
 
-            bool dispatcher_invoked = false;
-
-            // attempt to mmap a cached reference, and if one doesn't exist, uncompress the reference file and cache it
+            bool showing_dispatcher_progress = false;
             if (!flag.genocat_no_ref_file) {
-                if (!ref_mmap_cached_reference (ref)) {
-                    ref_load_stored_reference (ref);
-                    ref_generate_reverse_complement_genome (ref);
+                ref_load_stored_reference (ref);
+                ref_generate_reverse_complement_genome (ref);
 
-                    // start creating the genome cache now in a background thread, but only if we loaded the entire reference
-                    if (!flag.regions) ref_create_cache_in_background (ref); 
-
-                    dispatcher_invoked = true;
-                }
+                showing_dispatcher_progress = true;
             }
 
             // load the IUPACs list of the reference (rare non-ACGT "bases")
@@ -474,15 +467,13 @@ DataType piz_read_global_area (Reference ref)
 
             // load the refhash, if we are compressing FASTA or FASTQ, or if user requested to see it
             if (  (primary_command == ZIP && flag.aligner_available) ||
-                  (flag.show_ref_hash && is_genocat)) {
-                
-                refhash_initialize (&dispatcher_invoked);
-            }
+                  (flag.show_ref_hash && is_genocat))
+                refhash_initialize();
 
             // exit now if all we wanted was just to see the reference (we've already shown it)
             if ((flag.show_reference || flag.show_is_set || flag.show_ref_hash) && is_genocat) exit_ok();
 
-            if (dispatcher_invoked) progress_finalize_component ("Done");
+            if (showing_dispatcher_progress) progress_finalize_component ("Done");
         }
 
         // case: non-reference file has stored reference sections

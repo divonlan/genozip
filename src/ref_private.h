@@ -55,8 +55,6 @@ typedef struct RefStruct {
 
     char *ref_fasta_name;
 
-    ThreadId ref_cache_creation_thread_id;
-    VBlockP cache_create_vb;
     bool external_ref_is_loaded;
 
     // contigs loaded from a reference file

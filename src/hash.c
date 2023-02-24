@@ -98,8 +98,8 @@ static void hash_alloc_local (VBlockP segging_vb, ContextP vctx)
     vctx->local_ents.len = 0;
 }
 
-// ZIP merge: allocating the global cache for a dictionary, when merging the first VB that encountered it
-// an attempt is made to set the cache size according to the expected needs. for this, we use data
+// ZIP merge: allocating the global hash for a context, when merging the first VB that encountered it
+// an attempt is made to set the hash size according to the expected needs. for this, we use data
 // about how many entries were added in the first half of the vb vs the second half, as well as the file size,
 // to extrapolate the expected growth
 // it is very important to get this as accurate as possible: merge is our bottleneck for core-count scalability

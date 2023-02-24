@@ -52,11 +52,10 @@ static inline RangeP ref_seg_renew_locked_range (VBlockP vb, Reference ref, Rang
     return (!range || range->last_pos < pos) ? ref_seg_renew_locked_range_do (vb, ref, range, pos, seq_len, lock) : range/*same range*/;
 }
 
-typedef enum { RT_NONE,      // value of ranges.param if ranges is unallocated
-               RT_MAKE_REF,  // used in --make-ref one range per vb of fasta reference file - ranges in order of the fasta file
-               RT_DENOVO,    // used in SAM with REF_INTERNAL 
-               RT_LOADED,    // one Range per chrom (contig), overlayed on genome
-               RT_CACHED     // same as RT_LOADED, but data is mmap'ed to a cache file
+typedef enum { RT_NONE,     // value of ranges.param if ranges is unallocated
+               RT_MAKE_REF, // used in --make-ref one range per vb of fasta reference file - ranges in order of the fasta file
+               RT_DENOVO,   // used in SAM with REF_INTERNAL 
+               RT_LOADED    // one Range per chrom (contig), overlayed on genome
              } RangesType;
               
 extern void ref_initialize_ranges (Reference ref, RangesType type);
@@ -68,7 +67,7 @@ extern void ref_diff_ref (void);
 extern void ref_set_reference (Reference ref, rom filename, ReferenceType ref_type, bool is_explicit);
 extern void ref_set_ref_file_info (Reference ref, Digest md5, rom fasta_name, uint8_t genozip_version);
 extern void ref_unload_reference (Reference ref);
-extern void ref_destroy_reference (Reference ref, bool destroy_only_if_not_mmap);
+extern void ref_destroy_reference (Reference ref);
 extern ConstRangeP ref_piz_get_range (VBlockP vb, Reference ref, FailType soft_fail);
 extern RangeP ref_get_range_by_ref_index (VBlockP vb, Reference ref, WordIndex ref_contig_index);
 extern rom ref_get_cram_ref (const Reference ref);
@@ -93,13 +92,6 @@ extern ConstBufferP ref_make_get_contig_metadata (void);
 extern void ref_make_genozip_header (SectionHeaderGenozipHeader *header);
 extern void ref_make_finalize (bool unused);
 extern void ref_fasta_to_ref (FileP file);
-
-
-// cache stuff
-extern bool ref_mmap_cached_reference (Reference ref);
-extern void ref_create_cache_in_background (Reference ref);
-extern void ref_create_cache_join (Reference ref, bool free_mem);
-extern void ref_remove_cache (Reference ref);
 
 // contigs stuff
 extern void ref_contigs_populate_aligned_chroms (void);

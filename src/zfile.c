@@ -620,7 +620,7 @@ static void zfile_read_genozip_header_handle_ref_info (const SectionHeaderGenozi
         if (is_genocat) exit_ok(); // in genocat --show-reference, we only show the reference, not the data
     }
 
-    if (exe_type != EXE_GENOLS) { // note: we don't need the reference for genols
+    if (!is_genols) { // note: we don't need the reference for genols
 
         rom gref_fn = ref_get_filename (gref);
 

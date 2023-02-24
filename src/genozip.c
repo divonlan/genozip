@@ -71,12 +71,7 @@ void main_exit (bool show_stack, bool is_error)
 {
     buf_set_cleanup_on_exit();  
 
-    // finish dumping reference and/or refhash to cache
     if (!is_error) {
-        ref_create_cache_join (gref, false);
-        ref_create_cache_join (prim_ref, false);
-        refhash_create_cache_join(false);
-        
         version_print_notice_if_has_newer();
 
         if (flag.show_time && !flag.show_time[0]) { // show-time without the optional parameter 
@@ -298,16 +293,11 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
 {
     rom password = crypt_get_password();
 
-    // finish dumping reference and/or refhash to cache before destroying it...
-    ref_create_cache_join (gref, true);
-    ref_create_cache_join (prim_ref, true);
-    refhash_create_cache_join (false);
-
     // On Windows and Mac that usually have limited memory, if ZIP consumed more than 2GB, free memory before PIZ. 
     // Note: on Windows, freeing memory takes considerable time.
     if ((flag.is_windows || flag.is_mac || flag.is_wsl) && buf_get_memory_usage () > (1ULL<<31)) {
-        ref_destroy_reference (gref, true); // on Windows I observed a race condition: if we unmap mapped memory here, and remap it in the test process, and the system is very slow due to low memory, then "MapViewOfFile" in the test processs will get "Access is Denied". That's why destroy_only_if_not_mmap=true.
-        ref_destroy_reference (prim_ref, true); 
+        ref_destroy_reference (gref); // on Windows I observed a race condition: if we unmap mapped memory here, and remap it in the test process, and the system is very slow due to low memory, then "MapViewOfFile" in the test processs will get "Access is Denied". That's why destroy_only_if_not_mmap=true.
+        ref_destroy_reference (prim_ref); 
         refhash_destroy (true);
         kraken_destroy();
         chain_destroy();

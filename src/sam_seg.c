@@ -149,7 +149,7 @@ void sam_zip_finalize (bool is_last_user_txt_file)
     if (is_last_user_txt_file) return; // no need to waste time freeing if this is the last file - the process will die momentarily
 
     if (IS_REF_INTERNAL || IS_REF_EXT_STORE) 
-        ref_destroy_reference (gref, false);
+        ref_destroy_reference (gref);
 
     if (segconf.sag_type) 
         gencomp_destroy();

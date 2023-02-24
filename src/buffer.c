@@ -387,7 +387,7 @@ static void buf_foreach_buffer (void (*callback)(ConstBufferP, void *arg), void 
     }
 
     // non-pool VBs: 
-    // TO DO: add the other non-pool VBs (cache_create_vb, txt_header_vb...)
+    // TO DO: add the other non-pool VBs (txt_header_vb...)
     // note: we don't cover EVB (only in DEBUG and --show-mem) as it segfaults for an unknown reason (likely the Buffer structure itself resides with a structure
     // that is freed (eg File)). TODO: debug this.
     if (flag.debug || flag.show_memory)          
@@ -742,44 +742,6 @@ void buf_overlay_do (VBlockP vb,
     mutex_unlock (overlay_mutex);
 }
 
-
-static void buf_terminate_background_loading (BufferP buf)
-{
-    if (!buf->bg_loading) return; // not background-loading 
-
-    // reset buf->bg_loading. if thread is still running, this will also instruct it to exit
-    __atomic_or_fetch (((uint64_t*)buf)+2, ~(uint64_t)(1 << BG_LOADING_BIT), __ATOMIC_RELAXED); 
-
-    pthread_join (buf->bg_loader, NULL); 
-}
-
-// thread entry point: access all the memory-mapped buffer's memory, forcing loading from disk to shared memory.
-// note: without this, the code random-accesses very small regions of the memory each time - 
-// this is very slow (guess as to why: the OS only populates the small amount of memory requested,
-// not the entire disk block read, causing repeated reads of the same block)
-volatile uint64_t prevent_optimizer;
-static void *buf_background_load_mmap_buf (void *buf_)
-{
-    BufferP buf = (BufferP)buf_;
-    ARRAY (uint64_t, data, *buf);
-
-    uint64_t checksum = 0; 
-
-    int64_t after = (int64_t)(1 + buf->size / sizeof (uint64_t));
-    for (int64_t i=-1; i < after; i += 1 MB) { // including underflow/overflow region (note: size is always a multiple of 8)
-        for (int64_t j=i; j < i + (1 MB) && j < after; j++)
-            checksum ^= data[j];
-        
-        // check if buf_terminate_background_loading told us to terminate
-        bool bg_loading = (__atomic_load_n (((uint64_t*)buf)+2, __ATOMIC_RELAXED) >> BG_LOADING_BIT) & 1;
-        if (!bg_loading) return 0; 
-    }
-
-    prevent_optimizer = checksum; // prevent optimizer optimizing out the loop
-
-    return NULL;
-}
-
 // creates a file mapping: data is mapping from a read-only file, any modifications are private
 // to the process and not written back to the file. buf->param is used for mmapping.
 bool buf_mmap_do (VBlockP vb, BufferP buf, rom filename, 
@@ -833,14 +795,7 @@ bool buf_mmap_do (VBlockP vb, BufferP buf, rom filename,
     // reset overlay counter. 
     if (!read_only_buffer)
         *(uint16_t *)(buf->data + buf->size + sizeof (uint64_t)) = 1;
-
-    // load buffer to memory in a background thread
-    buf->bg_loading = true;
     
-    int err;
-    ASSERT (!(err = pthread_create (&buf->bg_loader, NULL, buf_background_load_mmap_buf, buf)), 
-            "failed to create background load thread thread: %s", strerror(err));
-
     COPY_TIMER (buf_mmap_do);
     
     return true;
@@ -938,8 +893,6 @@ void buf_free_do (BufferP buf, FUNCLINE)
 
         case BUF_MMAP_RO:
         case BUF_MMAP:
-            buf_terminate_background_loading (buf);
-
             // note: we don't support overlayed buffers continuing to use the mmaped memory after MMAP buffer is freed
 #ifdef _WIN32
             ASSERT (UnmapViewOfFile (buf->memory), "called from %s:%u: UnmapViewOfFile failed: %s", buf->func, buf->code_line, str_win_error());
@@ -1281,8 +1234,7 @@ uint64_t buf_extend_bits (BufferP buf, int64_t num_new_bits)
 }
 
 // writes a buffer to a file, return true if successful
-// note: this is run as separate thread from ref_create_cache_in_background and refhash_create_cache_in_background
-// so it cannot allocate any buffers
+// note: this is designed to run in any there, so it cannot create any buffers in evb
 bool buf_dump_to_file (rom filename, ConstBufferP buf, unsigned buf_word_width, bool including_control_region, 
                        bool no_dirs, bool verbose, bool do_gzip)
 {

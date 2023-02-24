@@ -1336,7 +1336,7 @@ bool file_put_data (rom filename, const void *data, uint64_t len,
 
     char *tmp_filename = MALLOC (fn_len+5);
     // we first write to tmp_filename, and after we complete and flush, we rename to the final name
-    // this is important, eg for the reference cache files - if a file exists (in its final name) - then it is fully written
+    // so that if a file exists (in its final name) - then its guaranteed to be fully written
     sprintf (tmp_filename, "%s.tmp", filename);
 
     file_remove (filename, true);

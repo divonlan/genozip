@@ -226,10 +226,9 @@ void vb_destroy_vb_do (VBlockP *vb_p, rom func)
 void vb_create_pool (VBlockPoolType type)
 {
     // only main-thread dispatcher can create a pool. other dispatcher (eg writer's bgzf compression) can must existing pool
-    uint32_t num_vbs = (type == POOL_MAIN) ? MAX_(1, global_max_threads) +                         // compute thread VBs
-                                             (IS_PIZ ? 2 : 0)    +                         // txt header VB and wvb (for PIZ)
-                                             (IS_PIZ ? z_file->max_conc_writing_vbs : 0) + // thread-less VBs handed over to the writer thread
-                                             2                                                     // background cache creation of (gref + primref) or (gref + gref refhash)
+    uint32_t num_vbs = (type == POOL_MAIN) ? MAX_(1, global_max_threads) +               // compute thread VBs
+                                             (IS_PIZ ? 2 : 0)    +                       // txt header VB and wvb (for PIZ)
+                                             (IS_PIZ ? z_file->max_conc_writing_vbs : 0) // thread-less VBs handed over to the writer thread
                                            : writer_get_max_bgzf_threads();
     if (flag.show_vblocks) 
         iprintf ("CREATING_VB_POOL: type=%s global_max_threads=%u max_conc_writing_vbs=%u num_vbs=%u\n", 
@@ -425,7 +424,7 @@ void vb_cleanup_memory (void)
         ref_unload_reference (gref);
 }
 
-// frees memory of all VBs, except for non-pool VBs (evb, cache_create_vb, segconf...)
+// frees memory of all VBs, except for non-pool VBs (evb, segconf...)
 void vb_destroy_pool_vbs (VBlockPoolType type)
 {
     if (!pools[type]) return;
