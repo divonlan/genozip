@@ -13,6 +13,8 @@
 <!--                                                                                                      -->
 <!-- To preview in Visual Studio Code: Ctrl+Shift+V with the "HTML Preview" extension                     -->
 
+[![GitHub Downloads](https://img.shields.io/github/downloads/divonlan/genozip/total?label=GitHub%20Downloads)](https://github.com/divonlan/genozip/releases)
+
 <h1>Genozip</h1><br>
 <br>
 <b>Genozip</b> is a compressor for BAM / SAM / CRAM, FASTQ, VCF and <a href="https://www.genozip.com/compression">other genomic files</a> - see https://genozip.com<br>
