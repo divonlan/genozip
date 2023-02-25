@@ -13,7 +13,7 @@
 <!--                                                                                                      -->
 <!-- To preview in Visual Studio Code: Ctrl+Shift+V with the "HTML Preview" extension                     -->
 
-[![Current Release](https://img.shields.io/github/v/release/divonlan/genozip "Current Release")](https://github.com/divonlan/genozip/releases/latest) [![GitHub Downloads](https://img.shields.io/github/downloads/divonlan/genozip/total?label=GitHub%20Downloads)](https://github.com/divonlan/genozip/releases) [![Conda Downloads](https://img.shields.io/conda/dn/conda-forge/genozip?label=Conda%20Downloads&style=flat-square)](https://anaconda.org/conda-forge/genozip)
+[![Current Release](https://img.shields.io/github/v/release/divonlan/genozip "Current Release")](https://github.com/divonlan/genozip/releases/latest) (https://github.com/divonlan/genozip/releases) [![Conda Downloads](https://img.shields.io/conda/dn/conda-forge/genozip?label=Conda%20Downloads&style=flat-square)](https://anaconda.org/conda-forge/genozip)
 
 <h1>Genozip</h1><br>
 <br>
