@@ -155,7 +155,7 @@ Section sections_last_sec4 (Section sec, SectionType st1, SectionType st2, Secti
     ASSERT (!sec || (sec >= B1ST(SectionEnt, z_file->section_list_buf) && sec <= BLST(SectionEnt, z_file->section_list_buf)),
            "Invalid sec: st1=%s st2=%s st3=%s st4=%s", st_name (st1), st_name (st2), st_name (st3), st_name (st4));
 
-    while (sec < BAFT (SectionEnt, z_file->section_list_buf)) {
+    while (sec < BLST (SectionEnt, z_file->section_list_buf)) {
 
         sec = sec ? (sec + 1) : B1ST (SectionEnt, z_file->section_list_buf); 
 

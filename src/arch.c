@@ -215,7 +215,7 @@ double arch_get_physical_mem_size (void)
     file_get_file (evb, "/proc/meminfo", &meminfo, "meminfo", 100, false, true);
 
     int num_start = strcspn (B1STc(meminfo), "0123456789");
-    mem_size = (double)atoi(Bc(meminfo, num_start)) / (1024.0*1024.0);
+    mem_size = (double)atoll(Bc(meminfo, num_start)) / (1024.0*1024.0);
     buf_destroy (meminfo);
 
 #elif defined _WIN32

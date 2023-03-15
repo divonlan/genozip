@@ -445,7 +445,7 @@ COMPRESS (codec_domq_compress)
     
     // all diverse - compress 1 byte in local anyway, just so codec_domq_reconstruct gets called
     if (!qual_ctx->local.len32) {
-        qual_ctx->local.len32 = 1;
+        BNXTc(qual_ctx->local) = 'X';
         header->sub_codec = CODEC_NONE;
     }
 

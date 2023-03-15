@@ -675,22 +675,23 @@ RangeP ref_seg_get_range (VBlockP vb, Reference ref, WordIndex chrom, STRp(chrom
 // ----------------------------------------------
 
 // ZIP main thread
-static void ref_copy_one_compressed_section (Reference ref, FileP ref_file, const RAEntry *ra, Section *sl)
+static void ref_copy_one_compressed_section (Reference ref, FileP ref_file, const RAEntry *ra)
 {
+    ASSERTNOTINUSE (evb->scratch);
+
     // get section list entry from ref_file_section_list - which will be used by zfile_read_section to seek to the correct offset
-    while (*sl < BAFT (SectionEnt, ref->ref_file_section_list) && 
-           !((*sl)->vblock_i == ra->vblock_i && (*sl)->st == SEC_REFERENCE)) 
-        (*sl)++;
-
-    ASSERT (*sl < BAFT (SectionEnt, ref->ref_file_section_list), "cannot find FASTA_NONREF of vb_i=%u in section list of reference file", ra->vblock_i);
-
-    static Buffer ref_seq_section = EMPTY_BUFFER;
-
     CLEAR_FLAG (show_headers);
-    zfile_read_section (ref_file, evb, ra->vblock_i, &ref_seq_section, "ref_seq_section", SEC_REFERENCE, *sl);
+
+    for_buf (SectionEnt, sl, ref->ref_file_section_list) // note: VBs are out of order in reference file
+        if (sl->vblock_i == ra->vblock_i && sl->st == SEC_REFERENCE) {
+            zfile_read_section (ref_file, evb, ra->vblock_i, &evb->scratch, "scratch", SEC_REFERENCE, sl);
+            break;
+        }
+    ASSERT (evb->scratch.len, "cannot find SEC_REFERENCE of vb_i=%u in section list of reference file", ra->vblock_i);
+
     RESTORE_FLAG (show_headers);
 
-    SectionHeaderReference *header = (SectionHeaderReference *)ref_seq_section.data;
+    SectionHeaderReference *header = (SectionHeaderReference *)B1ST8(evb->scratch);
 
     WordIndex ref_index = BGEN32 (header->chrom_word_index);
     ASSERT0 (ref_index == ra->chrom_index && BGEN64 (header->pos) == ra->min_pos, "RA and Section don't agree on chrom or pos");
@@ -715,23 +716,23 @@ static void ref_copy_one_compressed_section (Reference ref, FileP ref_file, cons
     // Note on encryption: reference sections originating from an external reference are never encrypted - not
     // by us here, and not in the source reference fasta (because with disallow --make-reference in combination with --password)
     START_TIMER;
-    file_write (z_file, STRb(ref_seq_section));
+    file_write (z_file, STRb(evb->scratch));
     COPY_TIMER_VB (evb, write);
 
-    z_file->disk_so_far += ref_seq_section.len;   // length of GENOZIP data writen to disk
+    z_file->disk_so_far += evb->scratch.len;   // length of GENOZIP data writen to disk
 
     if (flag.show_reference) {
-        ContextP ctx = ZCTX(CHROM);
-        CtxNode *node = B(CtxNode, ctx->nodes, BGEN32 (header->chrom_word_index));
+        ContextP zctx = ZCTX(CHROM);
+        CtxNode *node = B(CtxNode, zctx->nodes, BGEN32 (header->chrom_word_index));
         iprintf ("Copying SEC_REFERENCE from %s: chrom=%u (%s) gpos=%"PRId64" pos=%"PRId64" num_bases=%u section_size=%u\n", 
                  ref->filename, BGEN32 (header->chrom_word_index), 
-                 Bc (ctx->dict, node->char_index), 
+                 Bc (zctx->dict, node->char_index), 
                  BGEN64 (header->gpos), BGEN64 (header->pos), 
                  BGEN32 (header->num_bases), 
                  BGEN32 (header->data_compressed_len) + BGEN32 (header->compressed_offset));
     }
 
-    buf_free (ref_seq_section);
+    buf_free (evb->scratch);
 }
 
 // ZIP copying parts of external reference to fine - called by main thread from zip_write_global_area->ref_compress_ref
@@ -748,7 +749,6 @@ static void ref_copy_compressed_sections_from_reference_file (Reference ref)
     // and, since this is ZIP with EXT_STORE, also exactly one range per contig. We loop one RA at a time and:
     // 1. If 95% of the ref file RA is set in the zfile contig range - we copy the compressed reference section directly from the ref FASTA
     // 2. If we copied from the FASTA, we mark those region covered by the RA as "is_set=0", so that we don't compress it later
-    Section sl = B1ST (SectionEnt, ref->ref_file_section_list);
     ARRAY (RAEntry, sec_reference, ref->ref_external_ra);
 
     chrom_index_by_name (CHROM);
@@ -765,7 +765,7 @@ static void ref_copy_compressed_sections_from_reference_file (Reference ref)
         // if this at least 95% of the RA is covered, just copy the corresponding FASTA section to our file, and
         // mark all the ranges as is_set=false indicating that they don't need to be compressed individually
         if ((float)bits_is_set / (float)SEC_REFERNECE_len >= 0.95) {
-            ref_copy_one_compressed_section (ref, ref_file, &sec_reference[i], &sl);
+            ref_copy_one_compressed_section (ref, ref_file, &sec_reference[i]);
             bits_clear_region (&contig_r->is_set, SEC_REFERENCE_start_in_contig_r, SEC_REFERNECE_len);
 
             if (contig_r->num_set != -1) contig_r->num_set -= bits_is_set;
@@ -1327,6 +1327,8 @@ void ref_load_external_reference (Reference ref, ContextP chrom_ctx)
 
 static void overlay_ranges_on_loaded_genome (Reference ref, RangesType type)
 {
+    uint32_t total_dirty=0; 
+
     // overlay all chromosomes (range[i] goes to chrom_index=i) - note some chroms might not have a contig in 
     // which case their range is not initialized
     for_buf (Range, r, ref->ranges) {
@@ -1354,10 +1356,20 @@ static void overlay_ranges_on_loaded_genome (Reference ref, RangesType type)
 
             bits_overlay (&r->ref, ref->genome, r->gpos*2, nbases*2);
 
+            uint32_t gap = ROUNDUP64(r->gpos + nbases) - (r->gpos + nbases);
+            uint32_t dirty_bits = bits_num_set_bits_region (ref->genome, r->gpos*2 + nbases*2, gap*2);
+            total_dirty += dirty_bits;
+            //if (dirty_bits) printf ("xxx bits after %.*s: %u dirty=%u\n", STRf(r->chrom_name), gap*2, dirty_bits);
+
             if (ref_has_is_set()) 
                 bits_overlay (&r->is_set, ref->genome_is_set, r->gpos, nbases);
         }
     }
+
+    // test for "defect 2023-03-10"
+    ASSERTW (!total_dirty, "WARNING: %s has %u dirty gap bits due to a bug in an earlier version of Genozip. Files compressed with this gcache must also be decompressed with it, and this gcache"
+             " file should never be deleted - it can not be re-created. Contact support@genozip.com for more details.",
+             ref->cache_fn, total_dirty);
 }
 
 // case 1: in case of ZIP with external reference, called by ref_load_stored_reference during piz_read_global_area of the reference file
@@ -1424,7 +1436,7 @@ void ref_initialize_ranges (Reference ref, RangesType type)
 
     bool has_emoneg = !IS_REF_INTERNAL;
     ref->genome_cache.can_be_big = true; // supress warning in case of an extra large genome (eg plant genomes)
-    buf_alloc (evb, &ref->genome_cache, 0, ref->genome_nbases / 4 * (1 + has_emoneg), uint8_t, 1, "genome_cache"); // contains both forward and rev. compliment
+    buf_alloc_zero (evb, &ref->genome_cache, 0, ref->genome_nbases / 4 * (1 + has_emoneg), uint8_t, 1, "genome_cache"); // contains both forward and rev. compliment. zero since 14.0.33 - see defect "2023-03-10 uninitialized edge of external reference.txt"
 
     // overlay genome and emoneg. we do it this was so we can use just a single file
     buf_set_overlayable (&ref->genome_cache);

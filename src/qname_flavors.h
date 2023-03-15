@@ -118,6 +118,22 @@ static SmallContainer con_illumina_7_fq = {
                    { .dict_id = { _SAM_Q9NAME },                                     } } // second barcode
 };
 
+// Example: A00488:61:HMLGNDSXX:4:1101:4345:1000 2:N:0:CTGAAGCT
+static SmallContainer con_illumina_7_fq1 = {
+    .repeats   = 1,
+    .nitems_lo = 10,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = ":"                    },  
+                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"                    },
+                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"                    },
+                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"                    },
+                   { .dict_id = { _SAM_Q4NAME }, .separator = ":"                    },
+                   { .dict_id = { _SAM_Q5NAME }, .separator = ":"                    },
+                   { .dict_id = { _SAM_Q6NAME }, .separator = " "                    },
+                   { .dict_id = { _SAM_QmNAME }, .separator = { CI0_SKIP           } },
+                   { .dict_id = { _SAM_Q7NAME }, .separator = { CI0_FIXED_0_PAD, 6 } },  // eg "2:N:0:"
+                   { .dict_id = { _SAM_Q8NAME },                                     } } // barcode
+};
+
 // Example: A00888:112:TASFASET4:2:1101:8757:1000:NAGACAAACTGGACGGACTAAAGCG 2:N:0:GATATTAC
 static SmallContainer con_illumina_bc_fq = {
     .repeats   = 1,
@@ -687,6 +703,8 @@ static QnameFlavorStruct qf[] = {
 /*  mate   name             example                                                       tech    fq_only  con_template       #sp  integer_items       numeric_items   in-local            hex_items       ord1,2 rng    sqln len px_strs           */
     {},  { QF_NO_ID,       "Illumina-fastq",{ "A00488:61:HMLGNDSXX:4:1101:4345:1000 2:N:0:CTGAAGCT+ATAGAGGC" }, 
                                                                                           TECH_ILLUM_7, 1, &con_illumina_7_fq, 8,  {1,3,4,5,6,-1},     {-1},           {1,3,-1},           {-1},           5,6,   -1,-1, -1,                        }, // mate added v14.0.0, seg barcodes 14.0.31  
+    {},  { QF_NO_ID,       "Illumina-fq1bc",{ "A00488:61:HMLGNDSXX:4:1101:4345:1000 2:N:0:CTGAAGCT" }, 
+                                                                                          TECH_ILLUM_7, 1, &con_illumina_7_fq1,7,  {1,3,4,5,6,-1},     {-1},           {1,3,-1},           {-1},           5,6,   -1,-1, -1,                        }, // added 14.0.33
     {},  { QF_NO_ID,       "Illumina-bc-fq",{ "A00888:112:TASFASET4:2:1101:8757:1000:NAGACAAACTGGACGGACTAAAGCG 2:N:0:GATATTAC" }, 
                                                                                           TECH_ILLUM_7, 1, &con_illumina_bc_fq,8,  {1,3,4,5,6,-1},     {-1},           {1,3,-1},           {-1},           5,6,   -1,-1, -1,                        }, // added 14.0.31
          { QF_NO_ID,       "Illumina:full", { "A00180:28:HC3F5DRXX:2:2110:27453:21981_1:N:0:ATTACTCGATCT+GGCTCTGA" }, 
@@ -755,7 +773,7 @@ static QnameFlavorStruct qf[] = {
                                                                                           TECH_UNKNOWN, 2, &con_ncbi_sra2P_l3, 6, {2,3,7,-1},         {-1},            {2,3,-1},           {-1},           3,4,   -1,-1,  -1,                       },
          { QF_NO_ID,       "NCBI-SRA+-L3",  { "ERR811170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template BOWDEN04_20151016_MN15199_FAA67113_BOWDEN04_MdC_MARC_Phase2a_4833_1_ch19_file1_strand length=52" },
                                                                                           TECH_UNKNOWN, 2, &con_ncbi_sraP_l3,  5, {2,6,-1},           {-1},            {-1},               {-1},           2,3,   -1,-1,  -1,                       },
-         { QF_NO_ID,       "NCBI-SRA2-L3",  { "ERR2708427.1.1 51e7525d-fa50-4b1a-ad6d-4f4ae25c1df7 length=0, 1128" },
+         { QF_NO_ID,       "NCBI-SRA2-L3",  { "ERR2708427.1.1 51e7525d-fa50-4b1a-ad6d-4f4ae25c1df7 length=1128" },
                                                                                           TECH_UNKNOWN, 2, &con_ncbi_sra2_l3,  5, {2,3,6,-1},         {-1},            {2,3,-1},           {-1},           3,4,   -1,-1,  -1,                       },
          { QF_NO_ID,       "NCBI-SRA-L3",   { "ERR811170.1 07dc4948-eb0c-45f2-9b40-a933a9bd5cf7_Basecall_2D_000_template length=52" },
                                                                                           TECH_UNKNOWN, 2, &con_ncbi_sra_l3,   4, {2,5,-1},           {-1},            {-1},               {-1},           2,3,   -1,-1,  -1,                       },

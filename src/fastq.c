@@ -151,7 +151,7 @@ bool fastq_txtfile_have_enough_lines (VBlockP vb_, uint32_t *unconsumed_len,
     rom after = BAFTtxt;
 
     uint32_t line_i; for (line_i=0; line_i < vb->pair_num_lines * 4; line_i++) {
-        while (*next != '\n' && next < after) next++; 
+        while (next < after && *next != '\n') next++; 
         if (next >= after) {
             *my_lines  = line_i;
             *her_lines = vb->pair_num_lines * 4;

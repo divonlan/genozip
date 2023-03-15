@@ -115,7 +115,7 @@ void threads_initialize (void)
 #ifdef __linux__
 
     // block some signals - we will wait for them explicitly in threads_signal_handler(). this is inherited by all threads
-    sigset_t sigset;
+    static sigset_t sigset = {}; // consumed in threads_signal_handler - needs to survive after this function completes
     sigemptyset (&sigset);
     sigaddset (&sigset, SIGSEGV);
     sigaddset (&sigset, SIGHUP);

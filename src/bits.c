@@ -1424,9 +1424,11 @@ uint32_t bits_hamming_distance (ConstBitsP bits_1, uint64_t index_1,
 {
     const uint64_t *words_1 = &bits_1->words[index_1 >> 6];
     uint8_t shift_1 = index_1 & bitmask64(6); // word 1 contributes (64-shift) most-significant bits, word 2 contribute (shift) least significant bits
+    uint64_t *after_1 = bits_1->words + bits_1->nwords;
 
     const uint64_t *words_2 = &bits_2->words[index_2 >> 6];
     uint8_t shift_2 = index_2 & bitmask64(6); // word 1 contributes (64-shift) most-significant bits, word 2 contribute (shift) least significant bits
+    uint64_t *after_2 = bits_2->words + bits_2->nwords;
 
     uint64_t word=0;
     uint32_t nonmatches=0; 
@@ -1434,8 +1436,8 @@ uint32_t bits_hamming_distance (ConstBitsP bits_1, uint64_t index_1,
 
     for (uint32_t i=0; i < nwords; i++) {
 
-        uint64_t word_1 = shift_1 ? _bits_combined_word (words_1[i], words_1[i+1], shift_1) : words_1[i];
-        uint64_t word_2 = shift_2 ? _bits_combined_word (words_2[i], words_2[i+1], shift_2) : words_2[i];
+        uint64_t word_1 = shift_1 ? _bits_combined_word (words_1[i], (&words_1[i+1] < after_1 ? words_1[i+1] : 0), shift_1) : words_1[i];
+        uint64_t word_2 = shift_2 ? _bits_combined_word (words_2[i], (&words_2[i+1] < after_2 ? words_2[i+1] : 0), shift_2) : words_2[i];
         
         word = word_1 ^ word_2; // xor the words - resulting in 1 in each position they differ and 0 where they're equal
 

@@ -927,7 +927,7 @@ static uint32_t sam_zip_recon_plan_add_gc_lines (void)
 
     // byte-map of set when a VB is accessed
     ASSERTNOTINUSE (evb->scratch);
-    ARRAY_alloc (bool, vb_in_use, z_file->num_vbs, true, evb->scratch, evb, "scratch");
+    ARRAY_alloc (bool, vb_in_use, z_file->num_vbs+1, true, evb->scratch, evb, "scratch");
 
     for (uint64_t i=0; i < txt_file->recon_plan.len; i++) { // note: recon_plan may get extended within the loop with INSERBtxtAFTER
 

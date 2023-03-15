@@ -114,9 +114,10 @@ static void digest_piz_verify_one_vb (VBlockP vb)
                                                   : digest_snapshot (&z_file->digest_ctx, NULL); // commulative digest so far
 
         // warn if VB is bad, but don't exit, so file reconstruction is complete and we can debug it
-        if (!digest_recon_is_equal (piz_digest, vb->expected_digest) && !digest_is_zero (vb->expected_digest)) {
+        TEMP_FLAG (quiet, flag.quiet && !flag.show_digest);
 
-            TEMP_FLAG (quiet, flag.quiet && !flag.show_digest);
+        bool equal = digest_recon_is_equal (piz_digest, vb->expected_digest);
+        if (!equal && !digest_is_zero (vb->expected_digest)) {
 
             char recon_size_warn[100] = "";
             if (vb->recon_size != vb->txt_data.len)
@@ -136,10 +137,13 @@ static void digest_piz_verify_one_vb (VBlockP vb)
 
             if (flag.test) exit_on_error (false);
 
-            RESTORE_FLAG (quiet);
-
             failed = true; // no point in test the rest of the vblocks as they will all fail - MD5 is commulative
         }
+
+        if (flag.show_digest && equal)
+            iprintf ("%s: verfied digest\n", VB_NAME);
+
+        RESTORE_FLAG (quiet);
     }
 }
 

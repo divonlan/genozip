@@ -78,7 +78,7 @@ extern unsigned kraken_seg_taxid (VBlockP vb, Did did_i_taxid, STRp(qname), bool
 // misc
 extern void kraken_set_show_kraken (rom optarg);
 extern char *kraken_filename; // global
-#define kraken_is_loaded ((bool)kraken_filename)
+#define kraken_is_loaded ((bool)(kraken_filename != NULL))
 
 #define KRAKEN_SPECIAL {  }
 

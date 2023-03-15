@@ -51,7 +51,7 @@ static void stats_submit_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
     int need_sep=0;
 
     for (uint32_t i=0; i < num_stats; i++) 
-        if (sbl[i].pc_hash_occupancy > 60) { // > 60%
+        if (sbl[i].pc_hash_occupancy > 75) { // > 75%
             ContextP zctx = ZCTX(sbl[i].my_did_i);
              
             // in case of an over-populated hash table, we send the first 3 and last 3 words in the dictionary, which will help debugging the issue

@@ -1495,8 +1495,6 @@ void flags_update_piz_one_file (int z_file_i /* -1 if unknown */)
         WARN_ONCE0 ("Warning: Outputting a BAM without a header. This will not be a valid BAM file. Use --quiet to suppress this warning.");
     }
 
-    ASSINP0 (flag.out_dt != DT_BAM || z_file_i <= 0 || flag.test, "Cannot concatenate multiple BAM files. Try using --sam."); // TODO: bug 349
-
     // -- grep doesn't work with binary files
     ASSINP (!flag.grep || !out_dt_is_binary, "--grep is not supported when outputting %s data%s", 
             dt_name (flag.out_dt), flag.out_dt == DT_BAM ? ". Tip: add --sam": "");

@@ -457,6 +457,9 @@ void sam_header_finalize (void)
     }
     else
         sam_hdr_contigs = NULL; // memory will be freed when we destroy gref
+
+    sam_hd_so = HD_SO_UNKNOWN;
+    sam_hd_go = HD_GO_UNKNOWN;
 }
 
 // ZIP

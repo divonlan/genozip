@@ -865,7 +865,7 @@ static void zip_complete_processing_one_vb (VBlockP vb)
 
     dispatcher_increment_progress ("z_write", vb->txt_size); // writing done.
 
-    z_file->num_vbs++;
+    z_file->num_vbs = MAX_(z_file->num_vbs, vb->vblock_i); // note: VBs are written out of order, so this can increase by 0, 1, or more than 1 (a correct intermediate number is needed for sections_create_index when using --pair)
     txt_file->num_vbs++;
 }
 
